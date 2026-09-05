@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=a04275d532b11a839d6d84377ca4577350591ad1 -->
+<!-- changelog-auto: last-commit=28e3420b36bda19d9b733f13edb2058f47ed0d2d -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -65,6 +65,7 @@
 - 20:37 批次4 code-review 修正：指纹返回约定统一/enroll 补 100ms 稳定拍/syscfg 注释去矛盾/rc522 时序注释诚实化/spec 勘误对齐实现
 - 21:25 批次5「I2C 增强件」四模块入库（工单 wiki-modules-batch5/01-04）：ads1115 四通道 16bit 外扩 ADC、tcs34725 颜色识别（RGB→HSL）、mlx90614 非接触红外测温（SMBus 0.02 系数）、at24c02 EEPROM（页写/随机读）——均软 I2C 位操作（AHT10 先例，不占硬件 I2C 外设/TIMER），默认脚按同选概率最低重叠且四件互不相撞，单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）；词表感知传感器 +3 方案与存储/数据记录新分类，词表段预算校准（WORDLIST_PROMPT_BYTES 4700→5200、REFERENCE_FULLTEXT_BYTES 63000→62500）；CONTEXT 平台行补录
 - 21:25 批次5 收尾：19 件（batch1-5）code-review 全库一致性快检脚本（ADR0009/verified/wordlist 挂接/kit/source_url 逐件扫描）
+- 22:42 批次6/01 ds18b20 单总线温度模块入库（mspm0）：1-Wire 位时序（DQ 方向运行时切换，delay 模块忙等不占 TIMER，位槽 62-64us 落页面 60-70us），ds18b20_init 器件检测 + ds18b20_read_temp 出℃（0.0625 系数、负温补码、转换等待 750ms），默认 DATA=PA7（与 DC_MOTOR BIN2/SERVO/RC522 CS 重叠——同选概率最低，刻意不叠温湿度/显示/语音件与 I2C_0 PA0/PA1——i2c_bus_share 测试互扰批次5 先例）；剔除页面 DS18B20_Reset 无定义声明；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）；词表感知传感器 +DS18B20；CONTEXT 平台行待批次收尾补录
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
