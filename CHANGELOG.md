@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=47e1ec11346ea532ba27c8758d20ce2bfd56b88f -->
+<!-- changelog-auto: last-commit=4575146c102ede85968ccb4d9d24d66d67dfd3a8 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-09-06
+- 00:07 批次7/01 mq135 空气质量传感器模块入库（mspm0）：ADC 模拟量独立 MEM4 通道（ir_distance 先例而非 mq2 的 MEM0 薄封装——多路气体同选时各器件物理通道独立、无共读冲突），母版 syscfg ADC12_0 sequence 加第 5 通道（endAdd 3→4、adcMem4chansel=CHAN_6、adcPin6=PB20）；mq135_init + mq135_read_percent 出 0-100% 相对浓度（页面 4095/100 原式、30 次→5 次快平均）；页面 ADC 中断（IRQHandler + gCheckADC）改经 adc 模块 API 轮询（共享实例强符号唯一）；adc 模块 adc_get 通道守卫扩展至 MEM5（注释/枚举同步）；页面 DO（LM393 阈值）宏未用不声明；notes 写明与 mq2 的通道方案差异与 MQ 系相对值非 ppm 精标+预热限制；默认 PB20（与 DC_MOTOR BB/SYN6288 TX 重叠——同选概率最低）；词表感知传感器 +MQ-135；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
@@ -72,6 +75,9 @@
 - 22:54 批次6 收尾（词表预算 + 平台行）：感知传感器 +4 方案（DS18B20/SHT30/MQ-2/TTP224）后默认词表完整 wire 实测 5201 > 旧 fit 上限 5034（方案名被截、选中判决依据折损）——WORDLIST_PROMPT_BYTES 5200→5400（fit 上限 5234 ≥ 5201 全量送达 + 33B 余量；词表段全量 5201 比旧截断形态 5200 仅多 1B，全文预算 62500 不动）；CONTEXT 平台行补录批次6 四件（DS18B20 单总线/SHT30 软 I2C/MQ2 ADC 薄封装/TTP224 触摸，默认脚 PA7/PA28-PA31/PA24/PA22-PA27 与重叠全景）
 - 23:02 批次6 code-review 收尾修正：ds18b20 移除未调用的位槽 inline 纯函数（smell：Speculative Generality——时间轴钉死改由测试侧按常量计算，纯函数单测语义保留）；工单/spec/test docstring 残留 PA1 笔误更正为 PA7；sht30 失败码粒度文档对齐（1-5 = 页面失败码，0=成功）并注明 ack 页面原式冗余写；新增 23 件（批次1-6）一致性快检脚本 sweep_23_modules.py（ADR0009/verified/hardware_bound/依赖正检/wordlist 挂接/kit/source_url，全 OK）
 - 23:39 批次7/01 mq135 空气质量传感器模块入库（mspm0）：ADC 模拟量独立 MEM4 通道（ir_distance 先例而非 mq2 的 MEM0 薄封装——多路气体同选时各器件物理通道独立、无共读冲突），endAdd 3→4、adcMem4chansel=CHAN_6、adcPin6=PB20；mq135_init + mq135_read_percent 出 0-100% 相对浓度（页面 4095/100 原式、30 次→5 次快平均）；页面 ADC 中断（IRQHandler + gCheckADC）改经 adc 模块 API 轮询（共享实例强符号唯一）；adc 模块 adc_get 通道守卫扩展至 MEM5（注释/枚举同步）；页面 DO（LM393 阈值）宏未用不声明；notes 写明与 mq2 的通道方案差异与 MQ 系相对值非 ppm 精标+预热限制；默认 PB20（与 DC_MOTOR BB/SYN6288 TX 重叠——同选概率最低）；词表感知传感器 +MQ-135；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）
+- 23:43 批次7/02 mq5 液化气/天然气传感器模块入库（mspm0）：ADC 模拟量独立 MEM5 通道（同 mq135 独立 MEM 模式——多路气体同选时物理通道独立、无共读冲突），endAdd 4→5、adcMem5chansel=CHAN_5、adcPin5=PB24；mq5_init + mq5_read_percent 出 0-100% 相对浓度（页面 4095/100 原式、30 次→5 次快平均）；页面 ADC 中断改经 adc 模块 API 轮询；页面 DO 宏未用不声明；notes 写明与 mq2 的通道方案差异与 MQ 系相对值非 ppm 精标+预热限制（选 PB24 不选 PA14（板载 LED2+15k 负载不适合作 ADC 输入）与 PA22（调试/巡线/无线/触摸与气体检测同框概率更高））；词表感知传感器 +MQ-5；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）
+- 23:46 批次7/03 sgp30 空气质量传感器模块入库（mspm0）：软 I2C 位操作（2 GPIO，SDA 方向运行时切换，不占硬件 I2C 外设/TIMER，延时走 delay 模块）；sgp30_init 发 0x2003 初始化空气特征基准 + sgp30_read 出 TVOC（ppb）/CO2 当量（ppm）双出参（0x2008 测量命令 + 6 字节回包 + 状态码 0/1-5）；**CRC8 器件正确性修正**：数据手册要求 CRC8（0x31/0xFF）——页面缺校验且只读 5 字节漏 TVOC CRC 字节（crc = crc 即弃），按 ir_remote 修正先例补读满 6 字节 + 两组校验（notes 记录）；上电预热 15s（CO2=400/TVOC=0 恒定）判定归调用方循环；默认软 I2C 脚 PA18/PB9（与双电机/大数字显示/读卡重叠——同选概率最低；刻意不叠温湿度/光照/OLED/语音/按键/报警/无线/批次5八脚）；词表感知传感器 +SGP30；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）
+- 23:49 批次7/04 ags10 有害气体传感器模块入库（mspm0）：软 I2C 位操作（2 GPIO，SDA 方向运行时切换，不占硬件 I2C 外设/TIMER，延时走 delay 模块）；ags10_init（空实现占位——器件无初始化序列）+ ags10_read 出 TVOC（ppb，0-99999 量程，24bit + CRC8 校验——页面 Calc_CRC8 初值 0xFF/多项式 0x31 自包含保留）；**上游缺陷修正**：① 页面读地址重试比较方向写反（循环一次即退、超时分支永不触发）→ 按函数注释 ≤50×1ms 语义修正；② 页面返回值 = TVOC 值/错误码 1-4 混用 → 出参+状态收敛（mlx90614 先例）；页面 I2C 原语族（AGS10_IIC_*）收敛为模块内静态；页面规格 ≤15kHz 与页面代码时序 ~100kHz 不一致按页面实现（notes 注明）；默认软 I2C 脚 PB18/PA14（与双电机/大数字显示/步进脉冲（风机）/灯带/读卡重叠——同选概率最低；避让原则同 sgp30）；词表感知传感器 +AGS10；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
