@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=f281baffafc2ae3c03c66628ab609bcaecf55c02 -->
+<!-- changelog-auto: last-commit=52654bc6215cd1518df8ac23ea74fc465ec9871a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -30,6 +30,7 @@
 - 14:54 ws2812 幻彩灯模块（工单 wiki-materials/03）：从立创 wiki 手册提炼，仅 mspm0
 - 14:59 hx711 称重传感器模块（工单 wiki-materials/04）：从立创 wiki 手册提炼，仅 mspm0
 - 15:04 aht10 温湿度传感器模块（工单 wiki-materials/05）：从立创 wiki 手册提炼，仅 mspm0
+- 15:12 sr04 超声波模块（工单 wiki-materials/06）：从立创 wiki 手册提炼，仅 mspm0
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
