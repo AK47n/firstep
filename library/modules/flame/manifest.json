@@ -1,0 +1,28 @@
+{
+  "slug": "flame",
+  "description": "红外火焰传感器驱动（mspm0 纯驱动切片，ADR 0009）：ADC 模拟量独立通道读取（ADC12_0 MEM6，红外光强反向映射——光越强 ADC 值越小、百分比越高），flame_init + flame_read_percent 出 0-100% 火焰强度（相对值非绝对值）；适用于火源探测、灭火机器人、火警报警联动、燃烧检测等赛题功能。",
+  "dependencies": [
+    "adc"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/flame.c",
+        "code/flame.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**独立 MEM 通道（mq135/mq5 模式）**：ADC12_0 sequence 开 MEM6（endAdd 5→6、adcMem6chansel=CHAN_7、adcPin7=PA22——地猛星板上 ADC0 剩余通道（PA22/PA14）中取 PA22：火焰 AO 直接取自光电二极管端子（高阻电流源），PA14 板载 LED2+15k 负载会分流（mq5 选脚判据先例）；与 HUIDU L1（巡线）/DEBUG_UART RX/NRF24L01 IRQ/TTP224 OUT1 重叠——火警/灭火与巡线/无线/触摸不同框、同选概率最低，同选时经引脚绑定消解）。页面原脚 PA27（A0_0）已归 ir_distance MEM3——复现手册接线需经引脚绑定换通道（绑 PA27 = 改写 adcPin7→adcPin0 + adcMem6chansel→CHAN_0）。读数经 adc 模块 API（dependencies=[\"adc\"]：adc_get(ADC_1, ADC_Channel_6)——busy 忙等单点实现在 adc 模块；adc_get 通道守卫随本件扩展至 ADC_Channel_6）。**换算 = 页面原式反向映射**：percent = (1 − value/4095)×100（页面 Get_FLAME_Percentage_value 原式——页面「外界红外光越强，数值越小、红外光越弱数值越大」：红外光越强 ADC 值越小、百分比越高；**相对强度非绝对值**，受环境红外干扰/器件差异影响）。页面 Get_Adc_FLAME_Value 30 次累加改 5 次快速平均（mq2/us016 快平均先例）。页面 ADC 中断（ADC12_0_INST_IRQHandler + gCheckADC 标志位）改依赖 adc 模块轮询（共享实例 IRQHandler 强符号唯一）。页面 Get_FLAME_Do_value/GET_DO 宏（LM393 阈值比较数字量）未声明 DO 角色（mq2 同策略——阈值由模块可调电阻控制，需要时经引脚绑定 GPIO 输入自行读取）。探测范围 700-1000nm 红外（灵敏度峰值 880nm、探测角度 60°、探测距离 ~1m——页面规格；对日光/非火源热源可能误判）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--flame-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/flame-sensor.html；网盘资料 https://pan.baidu.com/s/14rzP9Gx7AjbmRSqD_A5Pyw 提取码 risv；移植成功案例 https://pan.baidu.com/s/1A8RenYd7L_N2X9lh5EYmRg?pwd=1x05 提取码 1x05）。改造要点：去掉 main.c 演示与 printf；函数名规范化（flame_init/read_percent，去 ADC_FLAME_Init/ADC_GET/Get_Adc_FLAME_Value/Get_FLAME_Percentage_value 命名）；ADC 中断改轮询；DO 宏未用不声明；SAMPLES 30→5 快平均；SYSCFG_DL_init 重复调用删除（模板 main 已调）。与库内同类分工：ir_distance（MEM3 红外测距，近距测距）为距离件、本件为火源强度件——同为红外波段但用途不同；mq2/us016 为 MEM0 薄封装共读（同槽），本件为独立通道（与 ADC 其它独立通道件同选时物理通道独立、无共读冲突）。\nwiki-modules-batch8/01 编译矩阵（2026-09-09）：单选生成 → SysConfig CLI（sequence endAdd=6 七通道合法）→ gmake 0 error、0 warning；未上板（ADC 换算/反向映射真机验证留后续）。",
+      "kit": "红外火焰传感器模块（4Pin：VCC/GND/DO/AO；工作 3.3-5V；AO 模拟量输出（光电二极管端子直出）、DO 数字量阈值由 LM393 + 板载可变电阻控制；探测 700-1000nm 红外、角度 60°、距离 ~1m、灵敏度峰值 880nm）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/flame-sensor.html",
+      "pins": [
+        {
+          "id": "FLAME_AO_CH6",
+          "type": "adc",
+          "default": "PA22",
+          "required": true
+        }
+      ]
+    }
+  }
+}

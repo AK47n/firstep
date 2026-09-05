@@ -1,7 +1,7 @@
 """mq5 液化气/天然气传感器模块：真实库 + 真实母版不变量与 mspm0 单选生成。
 
 与 mq135 同款结构测试：manifest 形状（仅 mspm0、依赖 adc、单角色
-MQ5_AO_CH5 = adc PB24——ADC12_0 sequence 六通道 MEM5 独立通道，与 mq2
+MQ5_AO_CH5 = adc PB24——ADC12_0 sequence 七通道 MEM5 独立通道，与 mq2
 的 MEM0 薄封装不同：多路气体同选时物理通道独立、无共读冲突）、mspm0 单选
 生成（syscfg 裁剪保留 ADC12_0、mq5 + 依赖 adc 模块文件落盘、main.c 调
 init/read_percent 过静态门禁）。百分比公式与「无 ADC 中断」源码守卫钉死
@@ -62,16 +62,16 @@ def test_mq5_manifest_shape_mspm0():
 
 
 def test_mq5_mspm0_master_syscfg_shared_facts():
-    """母版 ADC12_0 六通道共享事实（endAdd 4→5、adcMem5chansel=CHAN_5、
+    """母版 ADC12_0 七通道共享事实（endAdd 5→6、adcMem5chansel=CHAN_5、
     adcPin5=PB24 归 mq5——mq135/ir_distance/joystick 相关断言同步）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
-    assert 'ADC12_0.endAdd                     = 5;' in syscfg
+    assert 'ADC12_0.endAdd                     = 6;' in syscfg
     assert 'ADC12_0.adcMem5chansel             = "DL_ADC12_INPUT_CHAN_5";' in syscfg
     assert 'ADC12_0.peripheral.adcPin5.$assign = "PB24";' in syscfg
 
 
 def test_mq5_mspm0_single_select_generation(tmp_path):
-    """mq5 mspm0 单选生成：syscfg 保留 ADC12_0（六通道 + mq5 通道行）、
+    """mq5 mspm0 单选生成：syscfg 保留 ADC12_0（七通道 + mq5 通道行）、
     mq5 + 依赖 adc 模块文件落盘、静态门禁过；无独立 GPIO 实例。"""
     resolved = resolve_selection(MODULES, PLATFORM_MSPM0, ["mq5"])
     assert {m.slug for m in resolved.manifests} == {"mq5", "adc"}
@@ -86,7 +86,7 @@ def test_mq5_mspm0_single_select_generation(tmp_path):
     )
     syscfg = (out / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const ADC12_0 = ADC12.addInstance();" in syscfg
-    assert 'ADC12_0.endAdd                     = 5;' in syscfg
+    assert 'ADC12_0.endAdd                     = 6;' in syscfg
     assert 'ADC12_0.adcMem5chansel             = "DL_ADC12_INPUT_CHAN_5";' in syscfg
     assert 'ADC12_0.peripheral.adcPin5.$assign = "PB24";' in syscfg
     assert "const MQ5 = " not in syscfg  # 无独立 GPIO 实例（独立 ADC 通道）

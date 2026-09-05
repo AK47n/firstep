@@ -530,9 +530,9 @@ def test_module_code_has_no_pin_literals():
     syscfg 生成宏的一部分）。adc/us016/ir_distance/mq2/mq135/mq5 豁免
     ADC_Channel_N 模式：mspm0 侧枚举成员名复用 ml_adc 的 ADCINx_enum 形态是
     双平台 API 对偶契约（b1-adc-servo/01，语义 = ADC12 MEM 索引而非引脚）；
-    us016/mq2 薄封装与 ir_distance/mq135/mq5 独立通道均经 adc 模块 API 读，
+    us016/mq2 薄封装与 ir_distance/mq135/mq5/flame/soil 独立通道均经 adc 模块 API 读，
     ADC_Channel_N 是 API 参数（wiki-modules-batch2/02/04、batch6/03、
-    batch7/01/02）。"""
+    batch7/01/02、batch8/01/02）。"""
     hits: list[str] = []
     for path in sorted(LIBRARY_MODULES.rglob("*")):
         if not path.is_file() or path.suffix.lower() not in (".c", ".h"):
@@ -543,7 +543,7 @@ def test_module_code_has_no_pin_literals():
             if (
                 pattern == r"\bADC_Channel_\d+\b"
                 and path.relative_to(LIBRARY_MODULES).parts[0]
-                in ("adc", "us016", "ir_distance", "mq2", "mq135", "mq5")
+                in ("adc", "us016", "ir_distance", "mq2", "mq135", "mq5", "flame", "soil")
             ):
                 continue  # API 对偶枚举（见 docstring）
             for m in re.finditer(pattern, stripped):
