@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=d9073b66b8a8fb159660558707aea18741ff421d -->
+<!-- changelog-auto: last-commit=af9da2e92d87a26ad6970e5ddec9ea64ece38e03 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -16,6 +16,7 @@
 - 02:14 词表「感知传感器」补红外对射方案并挂库内 ir_beam（工单 ir-beam-module/02）
 - 10:30 应用内一键更新·发布侧——更新包打包脚本(v1.1.0 实跑通过) + 两级发版流程(工单 auto-update/01-02 收尾)
 - 10:30 应用内一键更新·后端——检查更新端点 + 更新器脚本(工单 auto-update/03-04)
+- 10:30 应用内一键更新·应用端点 + 前端设置页 + 启动器保护(工单 auto-update/05-06)
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
