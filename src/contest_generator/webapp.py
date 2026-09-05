@@ -222,6 +222,7 @@ from .master_store import (
 )
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 from .patchers import UnknownPlatformError
+from .md_library import list_markdowns, read_markdown
 from .pdf_library import list_pdfs, pdf_page_count, resolve_pdf, trash_pdf
 from .pin_bindings import (
     PinBindingError,
@@ -4953,6 +4954,25 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             resolve_pdf(materials_dir(config.module_library_dir), rel_path),
             media_type="application/pdf",
         )
+
+    # ------------------------------------------------------------------
+    # Markdown 资料库（给人看的资料库）：素材库全量 .md 浏览 / 搜索 / 渲染预览
+    # ------------------------------------------------------------------
+
+    @app.get("/api/materials-md")
+    @_map_errors
+    def materials_md(name: str = "") -> list[dict]:
+        """浏览素材库 Markdown：全量清单（批次 / 文件名 / 大小 / 修改时间），名字串过滤。"""
+        config = _require_config(context)
+        return list_markdowns(materials_dir(config.module_library_dir), name=name)
+
+    @app.get("/api/materials-md/{rel_path:path}")
+    @_map_errors
+    def materials_md_file(rel_path: str) -> dict:
+        """Markdown 全文（前端拿文本页内渲染预览）：路径安全 / 超限 / 缺失 → 400。"""
+        config = _require_config(context)
+        return read_markdown(materials_dir(config.module_library_dir), rel_path)
+
 
     # ------------------------------------------------------------------
     # 版本更新记录（工单 version-changelog/03）：VERSIONS.md → 定稿版本要点

@@ -7099,6 +7099,88 @@ def test_pdfs_entries_have_int_mtime(client, context, tmp_path):
     assert all(isinstance(p["mtime"], int) and p["mtime"] > 0 for p in pdfs)
 
 
+# ---------------------------------------------------------------------------
+# Markdown 资料库（给人看的资料库）：素材库 .md 浏览 / 搜索 / 渲染预览全文
+# ---------------------------------------------------------------------------
+
+def _make_materials_mds(tmp_path) -> None:
+    """素材镜像搭 Markdown 批次（lckfb-地猛星移植手册）+ 干扰文件。
+
+    write_bytes 而非 write_text：Windows 上 write_text 默认 newline=None 会把
+    \n 转成 \r\n（大小断言按字节数算，必须确定论）。
+    """
+    a = tmp_path / "sources" / "materials" / "lckfb-地猛星移植手册"
+    a.mkdir(parents=True)
+    (a / "sensor--mpu6050-six-axis-sensor.md").write_bytes(
+        "# mpu6050\n\n正文内容\n".encode("utf-8")
+    )
+    (a / "模块索引.md").write_bytes("# 索引\n".encode("utf-8"))
+    (a / "readme.txt").write_bytes(b"not a md")
+    b = tmp_path / "sources" / "materials" / "2026_06_电赛视觉资料"
+    b.mkdir(parents=True)
+    (b / "笔记.MD").write_bytes("# 大写扩展名\n".encode("utf-8"))
+
+
+def test_materials_md_lists_all_sorted_with_batch_and_size(client, context, tmp_path):
+    _make_materials_mds(tmp_path)
+    mds = client.get("/api/materials-md").json()
+    assert [p["name"] for p in mds] == [
+        "笔记.MD", "sensor--mpu6050-six-axis-sensor.md", "模块索引.md",
+    ]
+    assert [p["batch"] for p in mds] == [
+        "2026_06_电赛视觉资料", "lckfb-地猛星移植手册", "lckfb-地猛星移植手册",
+    ]
+    assert mds[1]["size_bytes"] == len("# mpu6050\n\n正文内容\n".encode("utf-8"))
+    assert mds[1]["rel_path"].endswith("lckfb-地猛星移植手册/sensor--mpu6050-six-axis-sensor.md")
+
+
+def test_materials_md_filters_by_name(client, context, tmp_path):
+    _make_materials_mds(tmp_path)
+    hit = client.get("/api/materials-md", params={"name": "mpu6050"}).json()
+    assert [p["name"] for p in hit] == ["sensor--mpu6050-six-axis-sensor.md"]
+    by_batch = client.get("/api/materials-md", params={"name": "地猛星"}).json()
+    assert sorted(p["name"] for p in by_batch) == [
+        "sensor--mpu6050-six-axis-sensor.md", "模块索引.md",
+    ]
+    assert client.get("/api/materials-md", params={"name": "不存在"}).json() == []
+
+
+def test_materials_md_file_serves_full_content(client, context, tmp_path):
+    _make_materials_mds(tmp_path)
+    url = "/api/materials-md/" + quote(
+        "lckfb-地猛星移植手册/sensor--mpu6050-six-axis-sensor.md", safe="/",
+    )
+    resp = client.get(url)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["name"] == "sensor--mpu6050-six-axis-sensor.md"
+    assert data["content"] == "# mpu6050\n\n正文内容\n"
+    assert data["size_bytes"] == len("# mpu6050\n\n正文内容\n".encode("utf-8"))
+
+
+def test_materials_md_file_rejects_unsafe_paths(client, context, tmp_path, ):
+    _make_materials_mds(tmp_path)
+    resp = client.get("/api/materials-md/" + quote("../secret.md", safe=""))
+    assert resp.status_code == 400
+    assert "非法文件路径" in resp.json()["detail"]
+
+
+def test_materials_md_file_missing_returns_400(client, context, tmp_path):
+    _make_materials_mds(tmp_path)
+    resp = client.get("/api/materials-md/" + quote("不存在/资料.md", safe="/"))
+    assert resp.status_code == 400
+    assert "不存在" in resp.json()["detail"]
+
+
+def test_materials_md_file_rejects_oversize(client, context, tmp_path):
+    _make_materials_mds(tmp_path)
+    big = tmp_path / "sources" / "materials" / "lckfb-地猛星移植手册" / "大文件.md"
+    big.write_bytes(b"a" * (1024 * 1024 + 1))
+    resp = client.get("/api/materials-md/" + quote("lckfb-地猛星移植手册/大文件.md", safe="/"))
+    assert resp.status_code == 400
+    assert "文件过大" in resp.json()["detail"]
+
+
 def test_pdf_pages_route_returns_page_count(client, context, tmp_path):
     _make_materials_pdfs(tmp_path)
     from tests.topic_pdf_fakes import make_multi_page_pdf
