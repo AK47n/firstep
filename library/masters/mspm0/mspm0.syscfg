@@ -406,6 +406,24 @@ AT24C02.associatedPins[1].direction    = "OUTPUT";
 AT24C02.associatedPins[1].initialValue = "CLEARED";
 AT24C02.associatedPins[1].pin.$assign  = "PB8";
 
+// SHT30 温湿度软 I2C（sht30 模块：SCL 输出 / SDA 双向运行时切换；
+// 位操作不占硬件 I2C 外设，照 AHT10 先例——半周期 5us ≈ 100kHz 级。
+// 默认 SCL=PA28 / SDA=PA31——与 IMU601 UART0（+FINGERPRINT_UART）、
+// HX711 SCK/DT 重叠：温湿度与姿态/称重/身份采集不同框、同选概率最低
+// （刻意不叠 PB6/PB7——aht10 温湿度互替；不叠批次 5 八脚），同选时经引脚
+// 绑定消解；软 I2C 需板上/模块自带上拉）
+const SHT30 = GPIO.addInstance();
+SHT30.$name = "SHT30";
+SHT30.associatedPins.create(2);
+SHT30.associatedPins[0].$name        = "SCL";
+SHT30.associatedPins[0].direction    = "OUTPUT";
+SHT30.associatedPins[0].initialValue = "CLEARED";
+SHT30.associatedPins[0].pin.$assign  = "PA28";
+SHT30.associatedPins[1].$name        = "SDA";
+SHT30.associatedPins[1].direction    = "OUTPUT";
+SHT30.associatedPins[1].initialValue = "CLEARED";
+SHT30.associatedPins[1].pin.$assign  = "PA31";
+
 // 双轴摇杆按键（joystick 模块：SW 输入上拉低有效；实例名 JOYSTICK →
 // JOYSTICK_PORT 宏；引脚名 SW → JOYSTICK_SW_PIN；默认 PA9——仅与
 // DIGIT_UART RX 默认重叠（K230 视觉串口），同选时经引脚绑定消解。
