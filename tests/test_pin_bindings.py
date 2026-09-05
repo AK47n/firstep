@@ -291,10 +291,13 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
     for value in values:
         counts[value] = counts.get(value, 0) + 1
     assert {v: c for v, c in counts.items() if c != 1} == {
-        "PB6": 3,
-        "PB7": 4,  # AHT10 SDA（aht10 默认脚）+ STEP_MOTOR DIR2 + HUIDU R4
+        "PB6": 4,  # STEP_MOTOR SLP2 + HUIDU R3 + AHT10 SCL + PCA9685 SCL
+        # （pca9685 默认脚——16 路舵机多自由度执行与温湿度/步进/巡线同选概率
+        # 最低故叠此脚，同选时经引脚绑定消解）
+        "PB7": 5,  # AHT10 SDA（aht10 默认脚）+ STEP_MOTOR DIR2 + HUIDU R4
         # + DHT11 DATA（dht11 默认脚；DHT11 与 AHT10 温湿度互替、同选概率最低，
-        # 温湿度与步进/巡线同选概率最低故叠此脚，同选时经引脚绑定消解）
+        # 温湿度与步进/巡线同选概率最低故叠此脚，同选时经引脚绑定消解）+
+        # PCA9685 SDA（同上——软 I2C 同型）
         "PA22": 3,
         "PA23": 5,  # HUIDU L2 + UWB_UART TX + DEBUG_UART TX + HC05_UART TX
         # （hc05 默认脚）+ NRF24L01 CE（nrf24l01 默认脚；蓝牙/2.4G 与 UWB/
@@ -332,6 +335,15 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # 同选概率最低故叠此脚，同选时经引脚绑定消解）
         "PB24": 3,  # STEP_MOTOR RST2 + SR04 TRIG + HC05 KEY（hc05 默认脚；
         # AT 切换不常用，故叠此脚，同选时经引脚绑定消解）
+        "PB9": 2,  # DC_MOTOR AIN1 + MAX7219 DIN（max7219 默认脚；大数字显示/
+        # 计分计时与双电机小车同选概率最低故叠此脚，同选时经引脚绑定消解）
+        "PA18": 2,  # DC_MOTOR AIN2 + MAX7219 CLK（同上；PA18 兼 BSL 排针脚，
+        # 作输出无碍）
+        "PB18": 2,  # DC_MOTOR BIN1 + MAX7219 CS（同上）
+        "PA0": 2,  # I2C_0 sdaPin（ml_mpu6050 默认脚；板载 LED 共用）+ IR_TX OUT
+        # （ir_remote_tx 默认脚——红外发射链与姿态采集同选概率最低故叠此脚，
+        # 且与 ir_remote 默认 PA26 刻意错开（发/收常配对），同选时经引脚绑定
+        # 消解；板载 LED 随 38kHz 载波闪烁可作发射指示）
         "UART2": 3,  # UWB_UART 与 DEBUG_UART 默认同外设 + HC05_UART（用户改绑消解）
     }
 

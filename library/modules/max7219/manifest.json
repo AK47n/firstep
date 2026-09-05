@@ -1,0 +1,38 @@
+{
+  "slug": "max7219",
+  "description": "MAX7219 数码管/点阵显示驱动（mspm0 纯驱动，ADR 0009）：软 SPI 位操作 3 脚（DIN/CLK/CS，不必占硬件 SPI 外设），同一芯片双显示形态——8 位数码管（BCD 译码：max7219_write_digit 按位写 0-9/符号/0x0F 熄灭，级联可扩 16/24/32 位）与 4合1 点阵（无译码：max7219_write_matrix 逐行写 8×8 字模 × 1-4 片级联）；max7219_init 按形态配译码方式/亮度/扫描界限；适用于计分/计时/大数字显示、点阵文字与图形等赛题功能。",
+  "dependencies": [],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/max7219.c",
+        "code/max7219.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg：MAX7219 GPIO 实例（3 输出 DIN/CLK/CS，宏 MAX7219_PORT/MAX7219_DIN_PIN/MAX7219_CLK_PIN/MAX7219_CS_PIN；CS initialValue SET = 片选空闲高）。默认 DIN=PB9（与 DC_MOTOR AIN1 重叠）/CLK=PA18（与 DC_MOTOR AIN2 重叠——PA18 兼 BSL 排针脚，作输出无碍）/CS=PB18（与 DC_MOTOR BIN1 重叠）——大数字显示（计分/计时/数据牌类固定装置）与双电机小车同选概率最低（小车状态显示惯走 OLED），同选时经引脚绑定消解。**不占硬件 SPI 外设**（位操作 GPIO 直驱；MAX7219 时钟上限 10MHz > GPIO 翻转速度，无需延时，依赖空）；**不占 TIMER**（无时序延时需求；地猛星 TIMER 已被全占）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/screen--8-bit-led-tube.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/screen/8-bit-led-tube.html；资料 https://pan.baidu.com/s/15TcV9HevtfVBWcm7pgRNTw 提取码 e1q5 / 效果 https://pan.baidu.com/s/1-butixB64YlI5apjZIl3xQ?pwd=et5o）+ screen--max7219-matrix-display.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/screen/max7219-matrix-display.html；资料 https://pan.baidu.com/s/19WdOd8D2QlPi1Q_EWlb3fQ 提取码 b822 / 效果 https://pan.baidu.com/s/1Wev0ZiQ9gdMiPedLsIK5JA?pwd=kvv8）。改造要点：**两页合并为单模块双形态**（同芯片同驱动内核——重复内核 + 同选链接重复定义风险，规格书取单模块；形态差异 = 译码方式 0xFF/0x00）；去掉 main.c 演示与 printf；函数名规范化（Write_Max7219_byte/Write_Max7219/Write_Max7219_2/Write_Max7219_AllOff/Max7219_Lock/Max7219_display → max7219_write_byte（静态）/write_reg/write_digit/write_matrix/clear/init；Write_Max7219_2 的「先发数据再发 0x00/0x00」级联写法统一进 write_reg_chain 的按片寻址）；**级联链序修正**：16 位包沿 DOUT→DIN 链移位、首包落最远片——4合1 页 Max7219_display 按「第一~四点阵」发送序写（首包命名为第一片，与物理链序相反），本实现先发最远片、rows[0] = 距 MCU 最近片；**锁存修正**：页内 Max7219_Lock = CS(1) 后立刻 CS(0) 的脉冲沿行锁存、且点阵页 Write_Max7219 无 CS 处理，本实现按标准 CS(0) 发包 → CS(1) 锁存；**扫描界限**：页注释「4 个数码管显示」与代码 0x07 矛盾（0x03 才是 4 位），按 0x07 = 8 位/行全开；**显示测试**：数码管页 init 写 0x0F=0x01（全亮测试）靠 main 再关，init 直接写 0x00；演示字模表（disp1 12 组）不随库入库——字模属界面数据，骨架/用户自备。未上板（级联链序/锁存行为真机验证留后续）。\nwiki-modules-batch3/01 编译矩阵（2026-09-05）：单选生成 → SysConfig CLI 校验 → gmake 0 error、0 module warning。",
+      "kit": "MAX7219 控制 8 位数码管模块（0.36 寸）或 MAX7219 4合1 点阵模块",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/screen/8-bit-led-tube.html",
+      "pins": [
+        {
+          "id": "MAX7219_DIN",
+          "type": "gpio_out",
+          "default": "PB9",
+          "required": true
+        },
+        {
+          "id": "MAX7219_CLK",
+          "type": "gpio_out",
+          "default": "PA18",
+          "required": true
+        },
+        {
+          "id": "MAX7219_CS",
+          "type": "gpio_out",
+          "default": "PB18",
+          "required": true
+        }
+      ]
+    }
+  }
+}
