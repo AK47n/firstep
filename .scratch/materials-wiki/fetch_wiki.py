@@ -2,16 +2,18 @@
 """立创·地猛星 MSPM0G3507 wiki 模块移植手册批量抓取（工单 materials-wiki/01）。
 
 从 wiki.lckfb.com 抓取全部模块页（screen/sensor/rf/control 四个分类）：
-- 每页：标题 / 分类 / 正文纯文本（保留章节结构）/ 代码块（C 源码文本）/
-  图片（下载到 images/<slug>/）/ 百度网盘链接与提取码
+- 每页：标题 / 正文规范 Markdown（按原页顺序，wiki_md 转换）/ 图片（下载到
+  images/<slug>/）/ 百度网盘链接与提取码
 - 输出目录：资料库批次 sources/materials/lckfb-地猛星移植手册/
-  - <slug>.md          单页转文档（正文+代码+网盘索引）
+  - <slug>.md          单页转文档（元数据头 + 正文 + 网盘索引）
   - images/<slug>/    页面图片
   - 模块索引.md        全部模块清单（分类/名称/链接/图片数/代码块数/网盘）
   - 网盘索引.md        全部网盘链接+提取码汇总
 
-运行：python .scratch/materials-wiki/fetch_wiki.py [--limit N] [--only slug]
-幂等：已存在的 .md 跳过（--force 重抓）；失败重试 3 次；日志打印进度。
+运行：python .scratch/materials-wiki/fetch_wiki.py [--limit N] [--only slug] [--force]
+幂等：已存在的 .md 跳过（--force 重抓）；已存在的图片跳过；失败重试 3 次；
+日志打印进度。转换器 = contest_generator.wiki_md（Shiki 逐行还原 / 原页顺序 /
+行号 wrapper 隔离），见 src/contest_generator/wiki_md.py。
 """
 
 from __future__ import annotations
@@ -22,6 +24,11 @@ import sys
 import time
 import urllib.request
 from pathlib import Path
+
+# 允许本脚本直接运行时导入仓库域模块（sys.path[0] = 脚本目录，不含仓库根）
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from contest_generator.wiki_md import build_markdown, code_block_count, img_ext, parse_main  # noqa: E402
 
 # Windows 控制台默认 GBK：打印中文/UTF-8 字符（如 URL 中的非 ASCII）会
 # UnicodeEncodeError 崩溃 —— 强制 UTF-8 输出（Py3.7+ 支持 reconfigure）
@@ -59,59 +66,6 @@ def slug_of(url: str) -> tuple[str, str]:
     return cat, slug
 
 
-def clean_text(html: str) -> str:
-    """HTML → 纯文本（保留换行与空格；解码实体）。"""
-    import html as html_mod
-
-    text = re.sub(r"<script[\s\S]*?</script>", " ", html, flags=re.I)
-    text = re.sub(r"<style[\s\S]*?</style>", " ", text, flags=re.I)
-    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.I)
-    text = re.sub(r"</(p|div|h[1-6]|li|tr|pre)>", "\n", text, flags=re.I)
-    text = re.sub(r"<[^>]+>", " ", text)
-    text = html_mod.unescape(text)
-    text = re.sub(r"[ \t]+", " ", text)
-    text = re.sub(r"\n\s*\n+", "\n", text)
-    return text.strip()
-
-
-def extract_codes(html: str) -> list[str]:
-    """提取所有 <pre><code> 代码块文本（去除 span/行号噪音）。"""
-    blocks = re.findall(r"<pre[^>]*><code[^>]*>([\s\S]*?)</code></pre>", html, flags=re.I)
-    codes = []
-    for block in blocks:
-        # 去掉 <span ...> 标签（shiki 高亮），保留文本
-        text = re.sub(r"</span>", "\n", block)
-        text = re.sub(r"<span[^>]*>", "", text)
-        text = re.sub(r"<[^>]+>", "", text)
-        import html as html_mod
-
-        codes.append(html_mod.unescape(text).strip())
-    return codes
-
-
-def extract_imgs(html: str) -> list[str]:
-    """提取正文图片 URL（绝对或相对路径）；过滤 logo/图标。"""
-    imgs = re.findall(r'src="([^"]+\.(?:png|jpg|jpeg|webp|gif))"', html, flags=re.I)
-    out = []
-    for src in imgs:
-        if "logo" in src.lower() or "icon" in src.lower():
-            continue
-        if src.startswith("//"):
-            src = "https:" + src
-        elif src.startswith("/"):
-            src = BASE + src
-        elif not src.startswith("http"):
-            src = BASE + "/" + src
-        out.append(src)
-    # 去重保序
-    seen, dedup = set(), []
-    for u in out:
-        if u not in seen:
-            seen.add(u)
-            dedup.append(u)
-    return dedup
-
-
 def extract_pan_links(html: str) -> list[str]:
     """提取百度网盘链接（含 ?pwd= 提取码）。"""
     links = re.findall(r"https?://pan\.baidu\.com/s/[A-Za-z0-9_\-?=]+", html)
@@ -132,64 +86,37 @@ def download_img(url: str, dest: Path, retries: int = 2) -> bool:
     return True
 
 
-def parse_page(html: str) -> dict:
-    """单页解析：标题 / 正文 / 代码 / 图片 / 网盘。
+def parse_page(html: str, slug: str) -> dict:
+    """单页解析：标题 / 正文（wiki_md 转换）/ 图片 / 网盘。
 
     正文边界 = `<main class="main">`（VuePress 真实内容区，含四章节 /
-    代码 / 网盘；`content-body` 是全页壳不可用）。
+    代码 / 图片 / 网盘；`content-body` 是全页壳不可用）。正文与图片由
+    contest_generator.wiki_md 统一转换（Shiki 逐行还原 / 原页顺序），
+    客户端懒加载图片（SSR HTML 中是 <!---->）抓不到，属已知局限。
     """
     title_m = re.search(r"<title>(.*?)</title>", html, flags=re.I | re.S)
     title = title_m.group(1).strip() if title_m else ""
 
     main_m = re.search(r"<main[^>]*>([\s\S]*?)</main>", html, flags=re.I)
-    body_html = main_m.group(1) if main_m else html
+    main_html = main_m.group(1) if main_m else html
 
-    # 正文纯文本
-    body_text = clean_text(body_html)
-    codes = extract_codes(body_html)
-    imgs = extract_imgs(body_html)
-    pans = extract_pan_links(body_html)
-    return {"title": title, "body": body_text, "codes": codes, "imgs": imgs, "pans": pans}
+    md_body, img_urls = parse_main(main_html, slug)
+    pan_links = extract_pan_links(main_html)
+    return {"title": title, "md_body": md_body, "img_urls": img_urls,
+            "pan_links": pan_links}
 
 
 def build_md(slug: str, cat: str, page: dict, url: str) -> str:
-    lines = [
-        f"# {slug}",
-        "",
-        f"- 分类：{cat}",
-        f"- 来源：{url}",
-        f"- 标题：{page['title']}",
-        f"- 代码块：{len(page['codes'])} 个 · 图片：{len(page['imgs'])} 张",
-        "",
-        "## 正文",
-        "",
-        page["body"] or "（正文提取为空）",
-        "",
-        "## 代码块",
-        "",
-    ]
-    for i, code in enumerate(page["codes"], 1):
-        lines.append(f"### 代码 {i}")
-        lines.append("")
-        lines.append("```c")
-        lines.append(code)
-        lines.append("```")
-        lines.append("")
-    if page["pans"]:
-        lines.append("## 百度网盘下载")
-        lines.append("")
-        for link in page["pans"]:
-            lines.append(f"- {link}")
-        lines.append("")
-    lines.append("## 图片")
-    lines.append("")
-    if page["imgs"]:
-        for i, img in enumerate(page["imgs"], 1):
-            lines.append(f"- ![img{i}](images/{slug}/img{i}.png)")
-    else:
-        lines.append("（无）")
-    lines.append("")
-    return "\n".join(lines)
+    """单篇手册：元数据头 + 正文（原页顺序）+ 网盘小节（wiki_md 统一组装）。"""
+    return build_markdown(
+        slug=slug,
+        cat=cat,
+        url=BASE + url,
+        title=page["title"],
+        md_body=page["md_body"],
+        img_urls=page["img_urls"],
+        pan_links=page["pan_links"],
+    )
 
 
 def main() -> int:
@@ -224,19 +151,22 @@ def main() -> int:
             fail += 1
             continue
         html = raw.decode("utf-8", errors="replace")
-        page = parse_page(html)
-        # 下载图片
+        page = parse_page(html, slug)
+        # 下载图片（与 wiki_md 同规则命名：img{序号}{扩展名}；已存在跳过——幂等）
         img_ok = 0
-        if page["imgs"]:
-            for i, img_url in enumerate(page["imgs"], 1):
-                ext = Path(img_url.split("?")[0]).suffix or ".png"
-                dest = OUT_ROOT / "images" / slug / f"img{i}{ext}"
+        if page["img_urls"]:
+            for i, img_url in enumerate(page["img_urls"], 1):
+                dest = OUT_ROOT / "images" / slug / f"img{i}{img_ext(img_url)}"
+                if dest.exists():
+                    img_ok += 1
+                    continue
                 if download_img(img_url, dest):
                     img_ok += 1
-        md_path.write_text(build_md(slug, cat, page, BASE + url), encoding="utf-8")
+        md_path.write_text(build_md(slug, cat, page, url), encoding="utf-8")
         manifest.append({"slug": slug, "cat": cat, "url": url,
-                         "codes": len(page["codes"]), "imgs": img_ok,
-                         "pans": page["pans"]})
+                         "codes": code_block_count(page["md_body"]),
+                         "imgs": img_ok,
+                         "pan_links": page["pan_links"]})
         ok += 1
         if idx % 5 == 0:
             print(f"  进度 {idx}/{len(urls)}（成功 {ok}，失败 {fail}）")
@@ -254,15 +184,15 @@ def main() -> int:
             for m in sorted(by_cat[cat], key=lambda x: x["slug"]):
                 index_lines.append(
                     f"- {m['slug']}：[原页]({BASE + m['url']})｜代码 {m.get('codes', 0)}｜"
-                    f"图 {m.get('imgs', 0)}｜网盘 {len(m.get('pans') or [])}"
+                    f"图 {m.get('imgs', 0)}｜网盘 {len(m.get('pan_links') or [])}"
                 )
             index_lines.append("")
         (OUT_ROOT / "模块索引.md").write_text("\n".join(index_lines), encoding="utf-8")
 
         pan_lines = ["# 网盘下载索引（百度网盘，需登录下载）", "",
-                     f"- 共 {sum(len(m.get('pans') or []) for m in manifest)} 个网盘链接", ""]
+                     f"- 共 {sum(len(m.get('pan_links') or []) for m in manifest)} 个网盘链接", ""]
         for m in sorted(manifest, key=lambda x: (x["cat"], x["slug"])):
-            for link in m.get("pans") or []:
+            for link in m.get("pan_links") or []:
                 pan_lines.append(f"- [{m['slug']}] {link}")
         (OUT_ROOT / "网盘索引.md").write_text("\n".join(pan_lines), encoding="utf-8")
     else:
