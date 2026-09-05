@@ -866,6 +866,26 @@
   #tab-pdf th:nth-child(6), #tab-pdf td:nth-child(6) { width: 180px; }
   #tab-pdf td { overflow-wrap: break-word; }
   #tab-pdf td:nth-child(6) { white-space: nowrap; }
+  /* Markdown 资料表（wiki-materials/02）：布局照 tab-pdf（固定列宽 /
+     文件名单行截断 + tooltip / 横向滚动），预览弹窗正文复用 code-md-preview */
+  #tab-md table { table-layout: fixed; min-width: 900px; }
+  #tab-md .card { overflow-x: auto; }
+  #tab-md th:nth-child(1), #tab-md td:nth-child(1) { width: auto; }
+  #tab-md th:nth-child(2), #tab-md td:nth-child(2) { width: 110px; }
+  #tab-md th:nth-child(3), #tab-md td:nth-child(3) { width: 150px; }
+  #tab-md th:nth-child(4), #tab-md td:nth-child(4) { width: 90px; }
+  #tab-md th:nth-child(5), #tab-md td:nth-child(5) { width: 140px; }
+  #tab-md th:nth-child(6), #tab-md td:nth-child(6) { width: 230px; }
+  #tab-md td { overflow-wrap: break-word; }
+  #tab-md td:nth-child(6) { white-space: nowrap; }
+  .md-preview-modal { width: min(1080px, 94vw); max-height: 86vh; display: flex;
+                      flex-direction: column; }
+  .md-preview-body { margin-top: var(--space-3); overflow: auto; flex: 1;
+                     background: var(--code-bg); border: 1px solid var(--border);
+                     border-radius: var(--radius-md); padding: 12px 16px; }
+  .md-preview-body .code-md-preview { color: var(--text); }
+  .md-preview-status { padding: 18px 16px; font-size: 13px; }
+  .md-preview-status.danger { color: var(--danger, #e5484d); }
   pre.result { background: var(--code-bg); color: var(--code-text); border: 1px solid var(--border);
                border-radius: var(--radius-md); padding: 14px 16px; font-family: var(--mono); font-size: 12px;
                line-height: 1.7; overflow: auto; max-height: 320px;
@@ -2929,6 +2949,7 @@
       <button data-tab="library" role="tab" aria-selected="false" aria-controls="tab-library" tabindex="0" title="管理可复用模块（查看 / 补录 / 编辑 / 删除）；做题时 AI 推荐自动匹配，一般不用手动操作。">模块库</button>
       <button data-tab="reference" role="tab" aria-selected="false" aria-controls="tab-reference" tabindex="-1" title="套件例程 / 说明书等配套资料，生成时作学习素材；管理入口，做题用不到。">参考文件库</button>
       <button data-tab="pdf" role="tab" aria-selected="false" aria-controls="tab-pdf" tabindex="-1" title="素材根目录全部 PDF 的浏览与整理（含疑似重复清理）；管理入口，做题用不到。">PDF 资料库</button>
+      <button data-tab="md" role="tab" aria-selected="false" aria-controls="tab-md" tabindex="-1" title="素材根目录全部 Markdown 的浏览与页内渲染预览（立创地猛星移植手册等）；管理入口，做题用不到。">Markdown 资料</button>
       <button data-tab="master" role="tab" aria-selected="false" aria-controls="tab-master" tabindex="-1" title="stm32 / mspm0 两平台基础工程浏览与体检；管理入口，做题用不到。">母版</button>
     </div>
     <div class="tab-group" role="tablist" aria-label="指南">
@@ -3897,6 +3918,33 @@
     </div>
   </section>
 
+  <!-- ============================ Markdown 资料 ============================ -->
+  <section id="tab-md" class="page">
+    <div class="card">
+      <h2>Markdown 资料库 <span class="muted">（素材库全部 Markdown 的直通入口——给人看的资料库；点「预览」页内渲染正文与代码块）</span></h2>
+      <div class="lib-toolbar">
+        <input type="search" id="md-filter" placeholder="搜索文件名 / 批次 / 目录 / 路径…">
+        <select id="md-sort" title="排序维度">
+          <option value="name">按文件名</option>
+          <option value="batch">按批次</option>
+          <option value="subdir">按目录</option>
+          <option value="size">按大小</option>
+          <option value="mtime" selected>按修改时间（默认）</option>
+        </select>
+        <button id="md-sort-dir">↓ 降序（默认）</button>
+        <button id="md-refresh">刷新</button>
+        <button id="md-filter-clear">清空过滤</button>
+      </div>
+      <div class="lib-chips-row"><span class="muted">批次</span><span id="md-batch-chips"></span></div>
+      <div id="md-stats" class="lib-stats"></div>
+      <table class="lib-table" style="margin-top: var(--space-3)">
+        <thead><tr><th>文件名</th><th>批次</th><th>目录</th><th>大小</th><th>修改时间</th><th>操作</th></tr></thead>
+        <tbody id="md-rows"></tbody>
+      </table>
+      <div id="md-msg" class="error"></div>
+    </div>
+  </section>
+
   <!-- ============================ 赛题库页 ============================ -->
   <section id="tab-topic" class="page">
     <div class="card">
@@ -4345,6 +4393,7 @@ import { makeProgressPanel } from "/js/ui/progress.js";
 import { renderUsageStats } from "/js/ui/usage.js";
 import { loadMasters, loadChangelog, renderNewPlatformOptions } from "/js/ui/master.js";
 import { loadPdfs, initPdfToolbar } from "/js/ui/pdf.js";
+import { loadMds, initMdToolbar } from "/js/ui/md.js";
 import { addFileRow, collectFiles, readPickedText, pickFilesInto, bindFilePicker } from "/js/ui/files.js";
 import { renderPlatforms, renderModulePool, renderSelected, renderWarnings, renderRecommendResult, startRecommend, loadReferencePicker, chosenPlatform, selectedSlugs, expanded, lastRecommend, currentTopicId, selectedReferenceIds, autoReferenceIds, pythonTemplates, scorePoints, setChosenPlatform, setSelectedSlugs, setCurrentTopicId, setRecommendClarifications, setClusterDeps } from "/js/ui/generate-recommend.js";
 import { stepCard, markStepDone, markStepUndone, syncStep7, stepDoneSet, STEP_NAV_CARD_SELECTOR, initCardCollapse, setOnStepChange } from "/js/ui/step-state.js";
@@ -4431,6 +4480,7 @@ document.querySelectorAll("nav button[data-tab]").forEach((btn) => {
     if (btn.dataset.tab === "library") loadLibrary();
     if (btn.dataset.tab === "reference") { loadReferences(); loadKitVocabulary(); loadTopicTypes(); }
     if (btn.dataset.tab === "pdf") loadPdfs();
+    if (btn.dataset.tab === "md") loadMds();
     if (btn.dataset.tab === "topic") { loadTopics(); loadTopicGroupVocabulary(); }
     if (btn.dataset.tab === "master") loadMasters();
     if (btn.dataset.tab === "changelog") loadChangelog();
@@ -4805,6 +4855,7 @@ initLibraryToolbar();  // 模块库工具栏（工单 02）：搜索 / 排序 / 
 initAddSections();  // 添加模块分区折叠（工单 07）：分区头点击切换（DOM 已就绪）
 initReferenceToolbar();  // 参考库工具栏（工单 02）：防抖搜索 / 排序 / chips 事件绑定（DOM 已就绪）
 initPdfToolbar();  // PDF 资料库工具栏（工单 02）：防抖搜索 / 排序 / 批次 chips 事件绑定（DOM 已就绪）
+initMdToolbar();  // Markdown 资料工具栏（工单 wiki-materials/02）：防抖搜索 / 排序 / 批次 chips 事件绑定（DOM 已就绪）
 </script>
 <div id="toast-root"></div>
 </body>

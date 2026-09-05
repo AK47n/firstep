@@ -5,6 +5,6 @@
 // nav-tabs-guard.test.mjs（读 HTML 断言 GROUPS），并在其中锁定本清单与之相等。
 export const NAV_TAB_KEYS = [
   "generate", "topic", "code", "settings",
-  "library", "reference", "pdf", "master",
+  "library", "reference", "pdf", "md", "master",
   "guide", "changelog",
 ];
