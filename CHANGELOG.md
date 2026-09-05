@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=8895e8bdc0123e188884ca5196c33a0e0b2e1676 -->
+<!-- changelog-auto: last-commit=511020805fbbb302496b0ec9c667a48a84e55ada -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -59,6 +59,7 @@
 - 20:09 批次4/01：jq8900 语音播报模块入库（软 UART 单发 TX 新先例）
 - 20:12 批次4/02：syn6288 语音合成模块入库（软 UART 单发 TX）
 - 20:16 批次4/03：rc522 RFID IC 卡识别模块入库（软 SPI 5 脚）
+- 20:20 批次4/04：fingerprint 指纹识别模块入库（真实 UART 轮询）
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
