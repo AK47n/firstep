@@ -92,6 +92,8 @@ def test_prune_shared_instance_kept_by_any_consumer():
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "JQ8900")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["syn6288"]), "SYN6288")
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "SYN6288")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["rc522"]), "RC522")
+    _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "RC522")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["dht11"]), "DHT11")
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "DHT11")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["bh1750"]), "BH1750")

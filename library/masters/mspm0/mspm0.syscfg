@@ -466,6 +466,35 @@ SYN6288.associatedPins[0].direction    = "OUTPUT";
 SYN6288.associatedPins[0].initialValue = "SET";
 SYN6288.associatedPins[0].pin.$assign  = "PB20";
 
+// RC522 射频 IC 卡识别（rc522 模块：软 SPI 位操作 5 脚——CS/RST/SCK/MOSI
+// 输出 + MISO 输入，单 RC522_PORT 宏；不占硬件 SPI 外设（nrf24l01 先例）。
+// 默认 CS=PA7（DC_MOTOR BIN2 + SERVO_PWM 重叠）/RST=PA18（DC_MOTOR AIN2 +
+// MAX7219 CLK）/SCK=PA14（DCC_100_PWM2 + WS2812 IN）/MOSI=PA16（编码器
+// AA）/MISO=PA17（编码器 AB）——读卡与车类（双电机/舵机/步进）同选概率
+// 最低，同选时经引脚绑定消解；五脚全 GPIOA 单口，与同批语音/指纹默认不撞）
+const RC522 = GPIO.addInstance();
+RC522.$name = "RC522";
+RC522.associatedPins.create(5);
+RC522.associatedPins[0].$name        = "CS";
+RC522.associatedPins[0].direction    = "OUTPUT";
+RC522.associatedPins[0].initialValue = "SET";
+RC522.associatedPins[0].pin.$assign  = "PA7";
+RC522.associatedPins[1].$name        = "RST";
+RC522.associatedPins[1].direction    = "OUTPUT";
+RC522.associatedPins[1].initialValue = "SET";
+RC522.associatedPins[1].pin.$assign  = "PA18";
+RC522.associatedPins[2].$name        = "SCK";
+RC522.associatedPins[2].direction    = "OUTPUT";
+RC522.associatedPins[2].initialValue = "SET";
+RC522.associatedPins[2].pin.$assign  = "PA14";
+RC522.associatedPins[3].$name        = "MOSI";
+RC522.associatedPins[3].direction    = "OUTPUT";
+RC522.associatedPins[3].initialValue = "CLEARED";
+RC522.associatedPins[3].pin.$assign  = "PA16";
+RC522.associatedPins[4].$name        = "MISO";
+RC522.associatedPins[4].direction    = "INPUT";
+RC522.associatedPins[4].pin.$assign  = "PA17";
+
 // LED/蜂鸣器输出（PA15；原 LaunchPad 值 PA3 = 32.768k 晶振脚，地猛星排针未引出）
 LED_BEEP.$name = "LED_BEEP";
 LED_BEEP.associatedPins.create(1);

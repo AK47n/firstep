@@ -225,8 +225,16 @@
   },
   {
     "category": "无线通信模块",
-    "models": ["ESP8266", "蓝牙模块", "NRF24L01"],
+    "models": ["ESP8266", "蓝牙模块", "NRF24L01", "RC522"],
     "solutions": [
+      {
+        "name": "RC522 射频 IC 卡读卡器（MFRC522）",
+        "interface": "软 SPI 位操作（CS/RST/SCK/MOSI/MISO 5 脚，免硬件 SPI 外设）",
+        "price": "￥5-15/套（含 S50 卡）",
+        "note": "库内 rc522 已打通（mspm0：rc522_init + read_card 出 4 字节卡号 + auth_block/read_block/write_block 认证读写 16 字节数据块，默认 PA7/PA18/PA14/PA16/PA17——同选时经引脚绑定消解）；支持 M1 S50/S70/UltraLight 等；读卡请求重试节奏由调用方控制（页面演示循环归生成骨架）；卡片写入须按扇区默认密码 FF FF FF FF FF FF（KEYA/KEYB 页面默认）",
+        "suitable": "RFID 卡号读取/身份识别/门禁刷卡/考勤打卡",
+        "lib_modules": ["rc522"]
+      },
       {
         "name": "NRF24L01 2.4G 点对点",
         "interface": "软 SPI（CLK/MOSI/MISO/CSN/CE/IRQ 六脚位操作）",

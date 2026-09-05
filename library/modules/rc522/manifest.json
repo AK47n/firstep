@@ -1,0 +1,52 @@
+{
+  "slug": "rc522",
+  "description": "MFRC522 射频 IC 卡识别模块驱动（mspm0 纯驱动，ADR 0009）：软 SPI 位操作（CS/RST/SCK/MOSI/MISO 五脚，单 PORT 宏，不占硬件 SPI 外设）——rc522_init 后 read_card 出 4 字节卡号，auth_block/read_block/write_block 认证读写 16 字节数据块，halt 休眠；页面 Pcd* 通信族全套保留在驱动内；适用于 RFID 卡号读取、身份识别、门禁刷卡、考勤打卡等赛题功能。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/rc522.c",
+        "code/rc522.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg：RC522 GPIO 实例（5 associatedPins 全 GPIOA 单口——CS/RST/SCK/MOSI 输出 + MISO 输入，CS/RST/SCK 初始 SET、MOSI 初始 CLEARED；默认 CS=PA7（DC_MOTOR BIN2 + SERVO_PWM）、RST=PA18（DC_MOTOR AIN2 + MAX7219 CLK）、SCK=PA14（DCC_100_PWM2 + WS2812 IN）、MOSI=PA16（编码器 AA）、MISO=PA17（编码器 AB）——读卡与车类（双电机/舵机/步进）同选概率最低，同选时经引脚绑定消解；五脚与同批 jq8900/syn6288/fingerprint 默认不撞）。软 SPI 位操作照 nrf24l01 先例（不占硬件 SPI 外设）；页面 200us 半周期位时序保留（慢但稳，真机验证留后续）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/rf--rc522-rf-ic-card-identification-module.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/rf/rc522-rf-ic-card-identification-module.html；网盘完整工程 https://pan.baidu.com/s/1pfsYlhmAB6qVwSskVMzsyw?pwd=j38y / 资料 https://pan.baidu.com/s/1pGSaohXnOi8tu6M3i3KFcQ 提取码 suah）。改造要点：页内 bsp_rc522.c/h 全套保留（软 SPI 原语 + 寄存器读写族 + 天线/复位/工作方式 + PcdComMF522/PcdRequest/PcdAnticoll/PcdSelect/PcdAuthState/PcdWrite/PcdRead/PcdHalt/CalulateCRC）收敛为静态内部函数（_ 前缀），对外服务函数 rc522_init/read_card/auth_block/read_block/write_block/halt（寻卡+防冲突内联进 read_card——页面 main 演示的重复寻卡/printf/memset 全剔除）；去 u8/u16/u32 宏换 stdint；引脚宏参数化（RC522_PORT + RC522_<PIN>_PIN）；延时走 delay 模块。**上游缺陷记录**：① 页面 PcdAuthState 复制序列号用 `for (uc = 0; uc < 6; uc++)`（应为 4——从 key 循环复制粘贴错，越界读 pSnr[4..5]，demo 里 ucArray_ID 仅 4 字节）→ 按标准 MIFARE 寻钥命令（mode + block + 6 字节密钥 + 4 字节 UID = 12 字节数据）修正；② 页面拼写 CalulateCRC（应为 Calculate）/RC522_Rese（应为 Reset）——上游原文，内部函数按原拼写保留（公众号/网盘例程同源）。**流程控制归生成骨架（ADR 0009）**：认证/读块/写块由服务函数调用方编排（页面 main 的循环演示不落模块）。\nwiki-modules-batch4/03 编译矩阵（2026-09-05）：单选生成 → SysConfig CLI 校验 → gmake 0 error、0 module warning（PASS）；未上板（软 SPI 时序/卡片交互真机验证留后续）。",
+      "kit": "MFRC522（RC522）RFID IC 卡感应模块（含 S50 复旦卡/钥匙扣）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/rf/rc522-rf-ic-card-identification-module.html",
+      "pins": [
+        {
+          "id": "RC522_CS",
+          "type": "gpio_out",
+          "default": "PA7",
+          "required": true
+        },
+        {
+          "id": "RC522_RST",
+          "type": "gpio_out",
+          "default": "PA18",
+          "required": true
+        },
+        {
+          "id": "RC522_SCK",
+          "type": "gpio_out",
+          "default": "PA14",
+          "required": true
+        },
+        {
+          "id": "RC522_MOSI",
+          "type": "gpio_out",
+          "default": "PA16",
+          "required": true
+        },
+        {
+          "id": "RC522_MISO",
+          "type": "gpio_in",
+          "default": "PA17",
+          "required": true
+        }
+      ]
+    }
+  }
+}

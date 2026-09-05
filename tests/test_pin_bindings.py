@@ -349,6 +349,16 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         "PB20": 2,  # DC_MOTOR 编码器 BB + SYN6288 TX（syn6288 默认脚——语音
         # 合成与双电机小车同选概率最低故叠此脚，且与 jq8900 默认 PB19 刻意错开
         # （语音两件常同选，默认即不撞），同选时经引脚绑定消解）
+        "PA7": 3,   # DC_MOTOR BIN2 + SERVO_PWM ccp0Pin（servo 默认脚）+
+        # RC522 CS（rc522 默认脚；读卡与车类（双电机/舵机）同选概率最低故叠
+        # 此脚，同选时经引脚绑定消解）
+        "PA18": 3,  # DC_MOTOR AIN2 + MAX7219 CLK（同上）+ RC522 RST（同上）
+        "PA14": 3,  # DCC_100_PWM2 ccp0Pin（step_motor 默认脚）+ WS2812 IN
+        # （ws2812 默认脚）+ RC522 SCK（rc522 默认脚——读卡与步进/灯带同选
+        # 概率最低故叠此脚，同选时经引脚绑定消解）
+        "PA16": 2,  # DC_MOTOR 编码器 AA + RC522 MOSI（rc522 默认脚——读卡与
+        # 双电机同选概率最低故叠此脚，同选时经引脚绑定消解）
+        "PA17": 2,  # DC_MOTOR 编码器 AB + RC522 MISO（同上）
         "UART2": 3,  # UWB_UART 与 DEBUG_UART 默认同外设 + HC05_UART（用户改绑消解）
     }
 
