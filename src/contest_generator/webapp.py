@@ -14,14 +14,19 @@ from __future__ import annotations
 import base64
 import contextlib
 import functools
+import hashlib
 import inspect
 import json
 import os
+import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Sequence
@@ -266,8 +271,74 @@ from .topic_library import (
     topic_health,
     update_topic,
 )
+from .update import check_for_update
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+# ---------------------------------------------------------------------------
+# 应用内一键更新：下载 / 拉起更新器（工单 auto-update/05；端点薄调，
+# 模块级函数 = 测试 monkeypatch 接缝）
+# ---------------------------------------------------------------------------
+
+
+def tool_root() -> Path:
+    """工具根目录（webapp.py 位于 src/contest_generator/ 下）。"""
+    return Path(__file__).resolve().parent.parent
+
+
+def download_to(url: str, dest: Path, timeout: float = 300.0) -> str:
+    """流式下载 url 到 dest（256 KB 分块，不占大内存），返回 SHA256 hex。
+
+    失败抛 urllib.error / OSError（调用方转中文 400）；dest 由调用方在
+    失败时清理（本函数不负责删半成品）。
+    """
+    digest = hashlib.sha256()
+    request = urllib.request.Request(url, headers={"User-Agent": "firstep-updater"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        with open(dest, "wb") as handle:
+            while True:
+                chunk = response.read(256 * 1024)
+                if not chunk:
+                    break
+                handle.write(chunk)
+                digest.update(chunk)
+    return digest.hexdigest()
+
+
+def spawn_updater(
+    data_dir: Path, zip_path: Path, removed_path: Path | None
+) -> None:
+    """以独立进程（detached）拉起更新器，不阻塞请求、不随 webapp 退出。
+
+    解释器 = `.venv\\Scripts\\python.exe` 优先、系统 Python 兜底；stdout
+    丢弃（更新器自身写 updates\\updater.log）。
+    """
+    root = tool_root()
+    updater = root / "tools" / "update-app.py"
+    if not updater.is_file():
+        raise HTTPException(500, "更新器脚本缺失，请联系发布者")
+    python = root / ".venv" / "Scripts" / "python.exe"
+    interpreter = str(python) if python.is_file() else sys.executable
+    command = [
+        interpreter,
+        str(updater),
+        "--zip", str(zip_path),
+        "--root", str(root),
+        "--data-dir", str(data_dir),
+    ]
+    if removed_path is not None:
+        command += ["--removed", str(removed_path)]
+    flags = 0
+    if os.name == "nt":
+        flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS  # type: ignore[attr-defined]
+    subprocess.Popen(
+        command,
+        creationflags=flags,
+        close_fds=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
 # 任务执行注册表（工单 stuck-doing-recover/01）：task_id → 正在执行。
 # 模块级 = 测试可注入/断言；单进程本地工具的语义：进程活着 = 注册表有记录 =
@@ -1018,6 +1089,105 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.get("/api/health")
     def health() -> dict:
         return {"app": "contest-generator", "version": __version__, "ok": True}
+
+    # 检查更新（工单 auto-update/03）：GitHub Releases API + 本地版本比对；
+    # 网络不可达 / 无更新包资产 → 200 级 error/message 中文提示，不 500
+    @app.get("/api/update/check")
+    @_map_errors
+    def update_check() -> dict:
+        return check_for_update(__version__)
+
+    # 一键更新：下载 → SHA256 校验 → 写待更新标记 → 拉起独立更新器
+    # （工单 auto-update/05）；替换动作绝不在 webapp 进程内执行
+    @app.post("/api/update/apply")
+    @_map_errors
+    def update_apply(payload: dict) -> dict:
+        zip_url = payload.get("zip_url")
+        sha256 = payload.get("sha256")
+        version = payload.get("version")
+        removed_url = payload.get("removed_url") or ""
+        if not isinstance(zip_url, str) or not zip_url.strip():
+            raise HTTPException(400, "缺少更新包下载地址")
+        if not isinstance(sha256, str) or not re.fullmatch(
+            r"[0-9a-fA-F]{64}", sha256.strip()
+        ):
+            raise HTTPException(400, "缺少更新包校验值（SHA256）")
+        if not isinstance(version, str) or not re.fullmatch(
+            r"[A-Za-z0-9._-]+", version.strip()
+        ):
+            raise HTTPException(400, "版本号格式非法")
+        updates_dir = context.config_path.parent / "updates"
+        updates_dir.mkdir(parents=True, exist_ok=True)
+        zip_path = updates_dir / f"firstep-update-{version.strip()}.zip"
+        try:
+            actual = download_to(zip_url.strip(), zip_path)
+        except Exception:
+            zip_path.unlink(missing_ok=True)
+            raise HTTPException(400, "更新包下载失败，请检查网络后重试")
+        if actual.lower() != sha256.strip().lower():
+            zip_path.unlink(missing_ok=True)
+            raise HTTPException(
+                400, "更新包校验失败（SHA256 不匹配），已删除下载文件"
+            )
+        removed_path: Path | None = None
+        if removed_url.strip():
+            removed_target = updates_dir / f"firstep-update-{version.strip()}.removed.txt"
+            try:
+                download_to(removed_url.strip(), removed_target)
+                removed_path = removed_target
+            except Exception:
+                # 删除清单拉取失败不阻断：更新器跳过删除，仅残留废弃文件
+                removed_path = None
+        pending = updates_dir / "pending-update.json"
+        pending.write_text(
+            json.dumps(
+                {
+                    "version": version.strip(),
+                    "zip": str(zip_path),
+                    "removed": str(removed_path) if removed_path else "",
+                    "started_at": time.time(),
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        spawn_updater(context.config_path.parent, zip_path, removed_path)
+        return {
+            "started": True,
+            "message": "已开始更新，工具将自动重启（配置与资料库不受影响）",
+        }
+
+    # 更新状态轮询（工单 auto-update/05）：applying / failed / done / idle
+    @app.get("/api/update/status")
+    def update_status() -> dict:
+        updates_dir = context.config_path.parent / "updates"
+        lock = updates_dir / "updating.lock"
+        pending = updates_dir / "pending-update.json"
+        result = updates_dir / "last-update.json"
+        if lock.exists():
+            return {
+                "state": "applying",
+                "message": "更新正在进行，完成后工具将自动重启",
+                "result": None,
+            }
+        if pending.exists():
+            try:
+                pending_data = json.loads(pending.read_text(encoding="utf-8"))
+            except Exception:
+                pending_data = {}
+            return {
+                "state": "failed",
+                "message": "上次更新未完成，请查看 updates\\updater.log 后重试",
+                "result": None,
+                "pending": pending_data,
+            }
+        if result.exists():
+            try:
+                data = json.loads(result.read_text(encoding="utf-8"))
+            except Exception:
+                data = {"status": "unknown"}
+            return {"state": "done", "message": "", "result": data}
+        return {"state": "idle", "message": "", "result": None}
 
     # 全局状态：平台可用性 / 配置状态 / 工作目录
     @app.get("/api/state")
