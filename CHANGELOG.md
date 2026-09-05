@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=60cc2d180f195b55e187197b0992cf047787b84e -->
+<!-- changelog-auto: last-commit=d457a55a9ce9dfbc5e1a87ef23220ec45e54529b -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -48,6 +48,7 @@
 - 17:47 wiki-modules-batch1 code-review 收尾修正（批次 1 四件）
 - 18:10 dht11 温湿度传感器模块（工单 wiki-modules-batch2/01）：立创 wiki 手册提炼，仅 mspm0
 - 18:12 us016 模拟量超声波测距模块（工单 wiki-modules-batch2/02）：立创 wiki 手册提炼，仅 mspm0
+- 18:14 bh1750 光照强度传感器模块（工单 wiki-modules-batch2/03）：立创 wiki 手册提炼，仅 mspm0
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
