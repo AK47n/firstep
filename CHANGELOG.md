@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=bcaf0ee0016de6e84fcc9668d3e2ca80643e7053 -->
+<!-- changelog-auto: last-commit=c964c73c9d94facffbcacb09ea0b401a083da94d -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -43,6 +43,7 @@
 - 17:31 hc05 蓝牙串口模块（工单 wiki-modules-batch1/02）：立创 wiki 手册提炼，仅 mspm0
 - 17:36 nrf24l01 2.4G 无线模块（工单 wiki-modules-batch1/03）：立创 wiki 手册提炼，仅 mspm0
 - 17:36 ir_remote 红外遥控接收模块（工单 wiki-modules-batch1/04）：立创 wiki 手册提炼，仅 mspm0
+- 17:36 补录默认脚映射（工单 wiki-modules-batch1/03、04）：test_pins MSPM0_DEFAULT_MAP 增 nrf24l01 六角色 + ir_remote 单角色
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
