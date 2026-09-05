@@ -1,0 +1,34 @@
+{
+  "slug": "sht30",
+  "description": "SHT30 温湿度传感器驱动（mspm0 纯驱动，ADR 0009）：软 I2C 位操作读取（不占硬件 I2C 外设，2 GPIO + SDA 方向运行时切换），sht30_init 设周期测量模式 + sht30_read/read_temperature/read_humidity 出温度（℃，0.01 系数按页面，±0.2℃ 典型精度）与相对湿度（%RH），带 CRC8 校验；适用于环境温湿度采集、恒温恒湿监测、农业/仓储环境机等赛题功能。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/sht30.c",
+        "code/sht30.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg GPIO 实例 SHT30（SCL 宏 SHT30_SCL_PIN / SDA 宏 SHT30_SDA_PIN / IOMUX 宏 SHT30_SCL_IOMUX / SHT30_SDA_IOMUX——SysConfig 命名 <实例>_<引脚名>_IOMUX，aht10 编译矩阵实测；SCL/SDA 均 OUTPUT 初值 CLEARED）。软 I2C：SDA 方向运行时切换（SHT30_SDA_OUT/IN 宏，照 AHT10 先例；节点需板上/模块自带上拉）；位操作半周期 5us ≈ 100kHz 级（页面原值，SHT30 规格 ≤400kHz），延时走 delay 模块，不占 TIMER。默认 SCL=PA28 / SDA=PA31——与 IMU601 UART0（+FINGERPRINT_UART）、HX711 SCK/DT 重叠：温湿度与姿态/称重/身份采集不同框、同选概率最低（刻意不叠 PB6/PB7——aht10 温湿度互替；不叠批次 5 八脚 PA16/PA17/PA23/PA24/PA9/PA8/PB24/PB8），同选时经引脚绑定消解；地猛星 2×20 排针 31 个 IO 全被默认布局占用（IR_BEAM/PA8 先例）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--sht30-temp-humi-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/sht30-temp-humi-sensor.html；网盘资料 https://pan.baidu.com/s/1kisMJspcV6Qdr1ye9ElOlQ；移植成功案例 https://pan.baidu.com/s/192dmEWwSI2ak9PleDP6qLg?pwd=0j41 提取码 0j41）。改造要点：去掉 main.c 演示与 printf；函数名规范化（sht30_init/read/read_temperature/read_humidity）；IIC 原语静态化（sht30_iic_start/stop/send_ack/wait_ack/send_byte/read_byte）；页外 `extern double Temperature, Humidity` 全局收敛为出参（float）；SHT31_Write_mode → sht30_write_mode（页面注释掉 IIC_Stop——重复起始，按页面原样不补 STOP）；SHT30_Read → sht30_read（返回 0=成功、1-5=页面失败码）；读地址应答重试 ≤20×2ms 保留页面；CRC8（0x31/0xFF 原式）两组校验保留；换算按页面 0.01 系数（温度 = data/65535×175−45、湿度 = data/65535×100）。与库内同类分工：aht10（软 I2C，精度/分辨率同档、便宜、温湿度一体）为默认温湿度件、dht11（单总线 ±2℃/±5%RH、更便宜）为低成本互替、mlx90614（非接触红外测温单点）为不接触场景——sht30 相对 aht10 为典型 ±0.2℃/±2%RH（SHT30 数据手册；页面标注 ±0.3℃/±2%RH）、宽温 -40~125℃，环境站按需任选，同选互不冲突（各自默认脚不同）。\nwiki-modules-batch6/02 编译矩阵（2026-09-07）：单选生成 → SysConfig CLI → gmake 0 error、0 warning（PASS）；未上板（软 I2C 时序真机验证留后续）。",
+      "kit": "GY-SHT31-D 数字温湿度传感器模块（4Pin I2C，ADDR 接地地址 0x44；-40~125℃、±0.3℃（典型 ±0.2℃）/±2%RH）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/sht30-temp-humi-sensor.html",
+      "pins": [
+        {
+          "id": "SHT30_SCL",
+          "type": "gpio_out",
+          "default": "PA28",
+          "required": true
+        },
+        {
+          "id": "SHT30_SDA",
+          "type": "gpio_out",
+          "default": "PA31",
+          "required": true
+        }
+      ]
+    }
+  }
+}

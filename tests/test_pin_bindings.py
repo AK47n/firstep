@@ -375,11 +375,14 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # 外挂 4 通道），同选时经引脚绑定消解）
         "PA17": 3,  # DC_MOTOR 编码器 AB + RC522 MISO（同上）+ ADS1115 SDA
         # （同上）
-        "PA28": 3,  # IMU601 TX + HX711 SCK（hx711 默认脚；称重与姿态同选
+        "PA28": 4,  # IMU601 TX + HX711 SCK（hx711 默认脚；称重与姿态同选
         # 概率最低故叠此脚，同选时经引脚绑定消解）+ FINGERPRINT_UART TX
         # （fingerprint 默认脚——身份与姿态同选概率最低故叠此脚，同选时经
-        # 引脚绑定换实例消解）
-        "PA31": 3,  # IMU601 RX + HX711 DT（同上）+ FINGERPRINT_UART RX（同上）
+        # 引脚绑定换实例消解）+ SHT30 SCL（sht30 默认脚——温湿度与姿态/称重/
+        # 身份采集不同框、同选概率最低故叠此脚（不叠 PB6/PB7 温湿度互替与
+        # 批次 5 八脚），同选时经引脚绑定消解）
+        "PA31": 4,  # IMU601 RX + HX711 DT（同上）+ FINGERPRINT_UART RX（同上）
+        # + SHT30 SDA（同上）
         "PA12": 3,  # PWMAB ccp0Pin（motor 双路 PWM）+ BH1750 SCL（bh1750 默认
         # 脚；光照度监测/台灯类与双电机驱动同选概率最低故叠此脚，同选时经
         # 引脚绑定消解）+ FINGERPRINT TOUCH（fingerprint 默认脚——指纹与
