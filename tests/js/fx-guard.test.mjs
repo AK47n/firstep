@@ -83,6 +83,12 @@ const DOMAINS = {
     pdfTrashBodyHTML: "fn", pdfRefsUrl: "fn", pdfTrashMessage: "fn",
     pdfFileUrl: "fn",
   },
+  "md.js": {
+    mdEncodedPath: "fn", mdSubdir: "fn", formatMtime: "fn",
+    mdFilterEntries: "fn", mdSortEntries: "fn", mdStats: "fn",
+    mdStatsText: "fn", mdChipRowHTML: "fn", mdRowHTML: "fn",
+    mdPreviewShellHTML: "fn", mdFileUrl: "fn",
+  },
   "reference.js": {
     referencePlatformChip: "fn",
     referenceTopicTypeChip: "fn",

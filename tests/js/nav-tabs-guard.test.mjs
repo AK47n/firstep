@@ -18,9 +18,10 @@ const html = readFileSync(
 );
 
 // 分组定义（与 index.html 顶部导航的标记契约）：组内顺序 = 组内按钮出现顺序。
+// 工单 wiki-materials/02 增「Markdown 资料」tab（PDF 旁，素材管理组内第 4 个）。
 const GROUPS = [
   { label: "做题", keys: ["generate", "topic", "code", "settings"] },
-  { label: "资料管理", keys: ["library", "reference", "pdf", "master"] },
+  { label: "资料管理", keys: ["library", "reference", "pdf", "md", "master"] },
   { label: "指南", keys: ["guide", "changelog"] },
 ];
 const ALL_KEYS = GROUPS.flatMap((g) => g.keys);
@@ -74,7 +75,7 @@ test("tab 按钮 ARIA：role=tab + aria-selected + aria-controls + roving tabind
   }
 });
 
-test("10 个 tab 键在顶部导航内各恰好一次，无多余/缺失", () => {
+test("11 个 tab 键在顶部导航内各恰好一次，无多余/缺失", () => {
   const nav = headerNavHTML();
   for (const key of ALL_KEYS) {
     assert.equal(countOccurrences(nav, 'data-tab="' + key + '"'), 1,
@@ -89,7 +90,7 @@ test("10 个 tab 键在顶部导航内各恰好一次，无多余/缺失", () =>
     "nav-tabs-shared.mjs 的键清单应与分组结构定义一致（改导航需三处同步）");
 });
 
-test("组归属与组内顺序：做题 4 个、资料管理 4 个、指南 2 个，无串组", () => {
+test("组归属与组内顺序：做题 4 个、资料管理 5 个、指南 2 个，无串组", () => {
   for (const g of GROUPS) {
     const inner = groupInnerHTML(g.label);
     const keys = [...inner.matchAll(/data-tab="([^"]+)"/g)].map((m) => m[1]);
@@ -120,7 +121,7 @@ test("组先后顺序：做题组在资料管理组之前，指南组在最后�
   assert.ok(lib < guide, "组顺序应为「指南」在「资料管理」之后（工单 beginner-guide/01 契约）");
 });
 
-test("tab 按钮 title 覆盖：10 个均有非空中文 title（长度 ≥8）", () => {
+test("tab 按钮 title 覆盖：11 个均有非空中文 title（长度 ≥8）", () => {
   const nav = headerNavHTML();
   const CJK = /[\u4e00-\u9fff]/;
   for (const key of ALL_KEYS) {
