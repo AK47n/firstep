@@ -1,0 +1,28 @@
+{
+  "slug": "ir_remote",
+  "description": "红外遥控接收解码驱动（mspm0 纯驱动，ADR 0009）：GPIO 输入接收 NEC 协议（38kHz 接收头），ir_remote_poll 阻塞解码一帧（地址码 + 命令码 + 重复码判定，反码校验），ir_remote_get_code/address 读结果、has_data/clear 消费——解码用 CPU 忙等测脉宽（20us 步进、560us 级位宽），不占 TIMER；适用于红外遥控启动/停车/模式切换、免接触按键等赛题功能。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/ir_remote.c",
+        "code/ir_remote.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg：IR_REMOTE GPIO 输入实例（OUT = PA26 上拉，宏 IR_REMOTE_PORT/IR_REMOTE_OUT_PIN）。默认 PA26——与 ZIGBEE_UART TX / joystick X（adc）/ NRF24L01 CLK 默认重叠：红外遥控与其它无线链路（Zigbee/2.4G）及手动摇杆互为替代控制方案、同选概率最低，同选时经引脚绑定消解。**不注册 GPIO 中断**：MSPM0 全部 GPIO 中断共用 GROUP1 一个向量且已被 motor 编码器独占（motor.c 定义 GROUP1_IRQHandler）——红外+电机是经典组合、无法共存第二个 GROUP1_IRQHandler；本模块改主循环轮询解码（ir_remote_poll 阻塞等待引导码 + 忙等整帧 ~50ms），与手册（GROUP1 中断内同步解码整帧）行为等价——手册中断触发时机由轮询的「等待空闲高→等待下降沿」代替（无信号时单次 poll 忙等 ≤10ms）。**不占 TIMER**：地猛星 SysConfig TIMER 仅暴露 TIMG0/6/7/8/12 且已被 motor/pid/ntb_time/servo/step_motor 全占（sr04/ws2812 先例）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/rf--infrared-receiving-module.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/rf/infrared-receiving-module.html；网盘完整工程 https://pan.baidu.com/s/14r65Dk5erRgtfNtBH3UiNg?pwd=qym5 / 资料 https://pan.baidu.com/s/1dEWVMIFDWb7k1NcsRy5hHA 提取码 uucv）。改造要点：去掉 main.c 演示与 printf；函数名规范化（infrared_config→ir_remote_init、receiving_infrared_data→ir_remote_poll、get_infrared_command→ir_remote_get_code、clear_infrared_command→ir_remote_clear，另增 get_address/has_data）；GROUP1 中断改主循环轮询（理由见上）；GET_OUT 宏改 _level() 函数（宏 + 引脚宏参数化）；**原版 infrared_data_true_judgment 反码判定错乱**（地址反码不等返回 0、命令反码不等返回 1 却仍落库保存——实际把反码校验结果当返回值混用）——修正为严格校验（~地址反码==地址 && ~命令反码==命令 才保存）；`%x %x %x %x` printf 移除；解码阈值（20us 拍）与手册逐字一致（引导低 400-500、引导高 100-250、重复高 100-150、位低 20-60、位高 1=60-100 / 0=10-50）；位序 MSB 先（value[g]<<=1|bit）保持。\nwiki-modules-batch1/04 编译矩阵（2026-09-05）：单选生成 → SysConfig CLI 校验 → gmake 0 error、0 module warning；未上板。",
+      "kit": "红外遥控接收头 VS1838B（38kHz NEC）+ 家用遥控器类",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/rf/infrared-receiving-module.html",
+      "pins": [
+        {
+          "id": "IR_REMOTE_OUT",
+          "type": "gpio_in",
+          "default": "PA26",
+          "required": true
+        }
+      ]
+    }
+  }
+}

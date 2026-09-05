@@ -258,10 +258,11 @@
     "solutions": [
       {
         "name": "红外遥控接收头 VS1838B",
-        "interface": "GPIO 中断 + NEC 解码（需自写解码，约 20 行）",
+        "interface": "GPIO 输入 + NEC 解码（CPU 忙等测脉宽，免定时器）",
         "price": "￥2-5/套（接收头+遥控器）",
-        "note": "视距 ~8m、需对准；占 1 个定时器；现场防误触需加校验",
+        "note": "视距 ~8m、需对准；库内 ir_remote 已打通（mspm0：ir_remote_poll 解码 NEC 帧 + get_code/address，20us 步进忙等不占 TIMER；默认 PA26——同选时经引脚绑定消解）；解码为阻塞式 ~50ms/帧，适合主循环轮询；现场防误触需加校验",
         "suitable": "现场遥控启动/停车/模式切换；室内无遮挡",
+        "lib_modules": ["ir_remote"],
         "recommended": true
       },
       {
