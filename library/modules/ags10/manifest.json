@@ -1,0 +1,34 @@
+{
+  "slug": "ags10",
+  "description": "AGS10 有害气体传感器驱动（mspm0 纯驱动切片，ADR 0009）：软 I2C 位操作读取（不占硬件 I2C 外设，2 GPIO + SDA 方向运行时切换），ags10_init（空实现占位——器件无初始化序列）+ ags10_read 出 TVOC 浓度（ppb，24bit，带 CRC8 校验）；适用于有害气体（TVOC）检测、空气污染监测、空气质量报警、净化/通风联动等赛题功能。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/ags10.c",
+        "code/ags10.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg GPIO 实例 AGS10（SCL 宏 AGS10_SCL_PORT/PIN/IOMUX、SDA 宏 AGS10_SDA_PORT/PIN/IOMUX——SCL/SDA 跨 GPIOB/GPIOA 两端口，生成器按引脚名分派各口宏（max7219 先例），SysConfig 命名 <实例>_<引脚名>_IOMUX；SCL/SDA 均 OUTPUT 初值 CLEARED）。软 I2C：SDA 方向运行时切换（AGS10_SDA_OUT/IN 宏，照 AHT10 先例；节点需板上/模块自带上拉）；位操作半周期 5us ≈ 100kHz 级（页面原值——**页面规格表注明 I2C 接口速率 ≤15kHz 与页面代码时序不一致**，按页面代码实现，真机通信异常时调慢 SCL 半周期延时即可（唯一时序宏点））；延时走 delay 模块，不占 TIMER、不注册 GPIO 中断。API = ags10_init（**空实现占位**——AGS10 无独立初始化序列（页面演示上电直接读；模块预热 ≥120s 期间读数起步属器件特性，等待归调用方），mlx90614/at24c02 先例）+ ags10_read(&voc_ppb)（写寄存器 0x00（地址 0x34）→ 读地址 0x35 应答重试（≤50×1ms）→ 5 字节回包 = 状态 + TVOC 24bit（data[1..3]）+ CRC（data[4]）→ CRC8 校验（页面 Calc_CRC8 原式：初值 0xFF/多项式 0x31——自包含保留）→ TVOC = (data[1]<<16)|(data[2]<<8)|data[3]（ppb；0-99999 量程、25℃/50%RH 典型精度 25% 读数、采样周期 ≥2s——页面规格）；返回 0=成功（出参带回）、1=通信失败、2=发送失败、3=等待超时、4=CRC 校验失败（页面失败码语义）。**上游缺陷修正**（ir_remote 反码校验/和 nrf24l01 上游缺陷先例）：① 页面读地址重试 `while((WaitAck()==1) && (timeout >= 50))` 条件写反（应为 `timeout < 50`——原式循环一次即退、超时分支 `return 3` 永不触发），按函数注释「等读地址应答 ≤50×1ms、超时返回 3」语义修正；② 页面返回值 = TVOC 值/错误码 1-4 混用（TVOC=1 ppb 与错误码语义冲突）→ 出参+状态（mlx90614 先例——页面 `ags10_read()` 直接返回 TVOC 值作为主返回，本实现收敛）。默认 SCL=PB18 / SDA=PA14——与 DC_MOTOR BIN1（双电机）、MAX7219 CS（大数字显示）、DCC_100_PWM2（step_motor 步进脉冲——风机排烟联动）、WS2812 IN（灯带指示）、RC522 SCK（读卡门禁）重叠：气体传感与运动控制/读卡/灯带低频同框、同选概率最低（避让原则同 sgp30：不叠温湿度（AHT10 PB6/PB7、DHT11 PB7、DS18B20 PA7、SHT30 PA28/PA31）、光照（PA12/PA13）、OLED 显示（PB2/PB3）、语音（PB19/PB20）、按键（PA2、PA22-27）、报警（PA15）、无线（PA8/PA9/PA23/PA24）、批次 5 八脚），同选时经引脚绑定消解；与同批默认（PB20/PB24/PA18/PB9）不撞。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--ags10-harmful-gas-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/ags10-harmful-gas-sensor.html；模块代码网盘 https://pan.baidu.com/s/1PMb5bFHRhmIujXx97FZePg?pwd=2z5o 提取码 2z5o；采购 https://item.taobao.com/item.htm?spm=a21n57.1.0.0.148e523cqcVeUq&id=709434114260&ns=1&abbucket=8#detail）。改造要点：去掉 main.c 演示与 printf；函数名规范化（ags10_init/read）；IIC 原语族静态化（ags10_iic_start/stop/send_ack/send_nack/wait_ack/send_byte/read_byte——页面 AGS10_IIC_* 收敛）；Calc_CRC8 静态化为 ags10_crc8（初值 0xFF/多项式 0x31 原式保留）；重试条件修正（见上）；返回值与错误码混用收敛为出参+状态；SYSCFG_DL_init 重复调用删除（模板 main 已调）。与库内同类分工（**气体**）：mq2/mq135/mq5（ADC 模拟量 MQ 系——相对值非 ppm 精标、需预热标定）为模拟量气体件；SGP30（软 I2C，TVOC 0-60000ppb + CO2e 400-60000ppm、预热 ~15s、采样周期 ≥1s）为 TVOC+CO2e 双向数字量件；本件 = 单 TVOC 数字量（0-99999ppb、预热 ≥120s、采样周期 ≥2s、约 25% 精度）——要 CO2e 用 SGP30、只要 TVOC 用本件（价更省），与温湿度件（aht10/dht11/sht30）同为环境站常配（默认脚刻意错开）。\nwiki-modules-batch7/04 编译矩阵（2026-09-08）：单选生成 → SysConfig CLI → gmake 0 error、0 warning；未上板（软 I2C 时序/CRC 校验/15kHz 规格真机验证留后续）。",
+      "kit": "AGS10 有害气体传感器模块（5Pin I2C，地址 0x1A；3.0-6.0V 供电、典型 75mW；TVOC 0-99999ppb、预热 ≥120s、采样周期 ≥2s；标准测试气体乙醇）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/ags10-harmful-gas-sensor.html",
+      "pins": [
+        {
+          "id": "AGS10_SCL",
+          "type": "gpio_out",
+          "default": "PB18",
+          "required": true
+        },
+        {
+          "id": "AGS10_SDA",
+          "type": "gpio_out",
+          "default": "PA14",
+          "required": true
+        }
+      ]
+    }
+  }
+}

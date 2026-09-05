@@ -451,6 +451,26 @@ SGP30.associatedPins[1].direction    = "OUTPUT";
 SGP30.associatedPins[1].initialValue = "CLEARED";
 SGP30.associatedPins[1].pin.$assign  = "PB9";
 
+// AGS10 有害气体（TVOC）传感（ags10 模块：软 I2C 位操作 2 脚 SCL/SDA——
+// 照 AHT10 先例不占硬件 I2C 外设；SDA 方向运行时切换（写 = 输出、读 ACK =
+// 输入）。默认 SCL=PB18 / SDA=PA14——与 DC_MOTOR BIN1（双电机）、MAX7219 CS
+// （大数字显示）、DCC_100_PWM2（step_motor 步进脉冲——风机排烟联动）、
+// WS2812 IN（灯带指示）、RC522 SCK（读卡门禁）重叠：气体传感与运动控制/读卡/
+// 灯带低频同框、同选概率最低（避让原则同 SGP30：不叠温湿度/光照/OLED/语音/
+// 按键/报警/无线/批次 5 八脚），同选时经引脚绑定消解；软 I2C 需板上/模块
+// 自带上拉）
+const AGS10 = GPIO.addInstance();
+AGS10.$name = "AGS10";
+AGS10.associatedPins.create(2);
+AGS10.associatedPins[0].$name        = "SCL";
+AGS10.associatedPins[0].direction    = "OUTPUT";
+AGS10.associatedPins[0].initialValue = "CLEARED";
+AGS10.associatedPins[0].pin.$assign  = "PB18";
+AGS10.associatedPins[1].$name        = "SDA";
+AGS10.associatedPins[1].direction    = "OUTPUT";
+AGS10.associatedPins[1].initialValue = "CLEARED";
+AGS10.associatedPins[1].pin.$assign  = "PA14";
+
 // TTP224 4 路电容触摸按键（ttp224 模块：OUT1-4 输入 + 内部上拉——页面
 // 「上拉输入」；电平直读无去抖/无 GPIO 中断（GROUP1 仍被 motor 编码器独占，
 // 页面同为电平直读）。默认 OUT1=PA22 / OUT2=PA25 / OUT3=PA26 / OUT4=PA27——

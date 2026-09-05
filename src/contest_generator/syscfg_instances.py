@@ -44,6 +44,7 @@ INSTANCE_CONSUMERS: dict[str, tuple[str, ...]] = {
     "DS18B20": ("ds18b20",),
     "SHT30": ("sht30",),
     "SGP30": ("sgp30",),
+    "AGS10": ("ags10",),
     "TTP224": ("ttp224",),
     "BH1750": ("bh1750",),
     "SR04": ("sr04",),
