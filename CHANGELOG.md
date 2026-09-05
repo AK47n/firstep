@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=4575146c102ede85968ccb4d9d24d66d67dfd3a8 -->
+<!-- changelog-auto: last-commit=9f818c839763e3b725b324b2c3c246f619a0b33e -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -6,6 +6,7 @@
 
 ## 2026-09-06
 - 00:07 批次7/01 mq135 空气质量传感器模块入库（mspm0）：ADC 模拟量独立 MEM4 通道（ir_distance 先例而非 mq2 的 MEM0 薄封装——多路气体同选时各器件物理通道独立、无共读冲突），母版 syscfg ADC12_0 sequence 加第 5 通道（endAdd 3→4、adcMem4chansel=CHAN_6、adcPin6=PB20）；mq135_init + mq135_read_percent 出 0-100% 相对浓度（页面 4095/100 原式、30 次→5 次快平均）；页面 ADC 中断（IRQHandler + gCheckADC）改经 adc 模块 API 轮询（共享实例强符号唯一）；adc 模块 adc_get 通道守卫扩展至 MEM5（注释/枚举同步）；页面 DO（LM393 阈值）宏未用不声明；notes 写明与 mq2 的通道方案差异与 MQ 系相对值非 ppm 精标+预热限制；默认 PB20（与 DC_MOTOR BB/SYN6288 TX 重叠——同选概率最低）；词表感知传感器 +MQ-135；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）
+- 00:09 批次7/02 mq5 液化气/天然气传感器模块入库（mspm0）：ADC 模拟量独立 MEM5 通道（同 mq135 独立 MEM 模式——多路气体同选时物理通道独立、无共读冲突），母版 syscfg ADC12_0 sequence 加第 6 通道（endAdd 4→5、adcMem5chansel=CHAN_5、adcPin5=PB24——选 PB24 不选 PA14（板载 LED2+15k 负载不适合作 ADC 输入）与 PA22（调试/巡线/无线/触摸与气体检测同框概率更高））；mq5_init + mq5_read_percent 出 0-100% 相对浓度（页面 4095/100 原式、30 次→5 次快平均）；页面 ADC 中断改经 adc 模块 API 轮询；页面 DO 宏未用不声明；notes 写明与 mq2 的通道方案差异与 MQ 系相对值非 ppm 精标+预热限制；词表感知传感器 +MQ-5；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
