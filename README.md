@@ -19,7 +19,7 @@
 - 命名规则：`v主版本.次版本.修订号`——新增功能/资料增补 → 次版本 +1；小修小补 → 修订号 +1；破坏性重构 → 主版本 +1
 - **两级发布**：
   - **小发版**（代码 / 模块库 / 文档变更，不用重下 6 GB）：GitHub Releases 发布轻量更新包（几百 MB 以内），工具内「设置 → 软件更新」→「检查更新」→「一键更新」，自动完成下载 / 校验 / 替换 / 重启；DeepSeek key、任务状态与 6 GB 电赛资料库原样保留
-  - **大发版**（`sources/materials` 资料库增删改）：发布新完整包（6 GB 分卷），低频，仍从 [GitHub Releases](https://github.com/AK47n/firstep/releases) 下载
+  - **大发版**（`sources/materials` 资料库增删改）：GitHub Releases 发布**资料库增量包**（按批次分卷、只含新增/修改文件，tag `materials-vX.Y.Z`），工具内「设置 → 资料库更新」→「检查资料库更新」→ 弹窗勾选批次（可只下需要的）→ 下载（进度 / 断点续传）→ 自动解压落位备份，**不再需要下完整包**；首次无基线时提示走完整包
 - `git clone` 用户不受影响：`git pull` 始终拿到最新代码，与更新包路线平级
 - 详细发版流程见 `docs/agents/releasing.md`（含打包命令与 gh 发布步骤）
 
@@ -66,7 +66,8 @@
 - **没装编译工具链 / 想自动编译**：「设置」页填 Keil 的 `uv4_path` 或 `gmake` 工具链路径（「检查环境」会直接提示缺哪一项）。
 - **体检提示「模块库 / 母版未就绪」**：「设置」→「库目录」，把两项分别填到工具包根目录（含 `install.bat` 的文件夹，如 `C:\...\firstep`）下的 `library\modules` 与 `library\masters`；赛题库 / 参考文件库自动跟随（`library\topics`、`library\references`，与模块库同级）。
 - **怎么更新到新版**：打开工具 →「设置」→「软件更新」→「检查更新」→「一键更新」。完成后自动重启，配置与资料库不受影响；不用重下 6 GB 完整包。
-- **更新失败怎么办**：更新会先把被覆盖的文件备份到 `%USERPROFILE%\.contest_generator\updates\backup\`，失败后旧版本仍可用；到「设置 → 软件更新」重新点「一键更新」，或查看日志 `%USERPROFILE%\.contest_generator\updates\updater.log`。
+- **资料库（电赛资料）更新**：打开工具 →「设置」→「资料库更新」→「检查资料库更新」→ 弹窗勾选批次（默认全选，可只挑需要的）→「开始下载」，进度/速度/剩余时间实时显示，下载完成自动解压落位；失败或取消后重试，已完成部分不重复下载。
+- **更新失败怎么办**：更新会先把被覆盖的文件备份到 `%USERPROFILE%\.contest_generator\updates\backup\`（资料库更新备份在 `updates\materials-backup\`），失败后旧版本仍可用；到「设置 → 软件更新」重新点「一键更新」，或查看日志 `%USERPROFILE%\.contest_generator\updates\updater.log`。
 - **更新期间双击启动器提示「更新中」**：更新正在后台进行，完成后会自动打开浏览器，不要手动干预；若提示「上次更新未完成」，按提示重新检查更新即可。
 - **更新后配置 / 任务还在吗**：在。DeepSeek key、任务状态、对话记录都在工具目录外的 `%USERPROFILE%\.contest_generator\`，更新不碰；6 GB 电赛资料库也不在更新包内，原样保留。
 - **想停掉服务**：双击 `stop-firstep.bat`。
