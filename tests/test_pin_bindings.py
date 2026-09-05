@@ -304,6 +304,9 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         "PA14": 2,  # DCC_100_PWM2 ccp0Pin（step_motor 默认脚）+ WS2812 IN
         # （ws2812 默认脚；地猛星排针 31 IO 全占，步进与灯带同选概率最低故
         # 叠此脚，同选时经引脚绑定消解）
+        "PA28": 2,  # IMU601 TX + HX711 SCK（hx711 默认脚；称重与姿态同选
+        # 概率最低故叠此脚，同选时经引脚绑定消解）
+        "PA31": 2,  # IMU601 RX + HX711 DT（同上）
         "UART2": 2,  # UWB_UART 与 DEBUG_UART 默认同外设（用户改绑消解）
     }
 

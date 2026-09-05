@@ -92,6 +92,14 @@
         "lib_modules": ["ws2812"]
       },
       {
+        "name": "HX711 称重传感器（压阻半桥）",
+        "interface": "GPIO 双线时序（SCK 串行时钟 + DT 数据）",
+        "price": "￥5-15/套（含称重平台）",
+        "note": "库内 hx711 已打通（mspm0：hx711_tare 去皮 + hx711_get_gram 出克数，默认 PA28/PA31——同选时经引脚绑定消解）；每克计数 HX711_GAP_VALUE 需按实际秤校准（默认 207.00，偏大则增大、偏小则减小）；砝码垫平、避开振动台面",
+        "suitable": "电子称重/拉力压力检测/重量阈值判断",
+        "lib_modules": ["hx711"]
+      },
+      {
         "name": "磁力计指南针（QMC5883L）",
         "interface": "I2C（QMC/IST 系列同寄存器族）",
         "price": "￥5-15/个",
