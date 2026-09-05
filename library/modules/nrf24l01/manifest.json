@@ -1,0 +1,58 @@
+{
+  "slug": "nrf24l01",
+  "description": "NRF24L01 2.4G 无线收发驱动（mspm0 纯驱动，ADR 0009）：软 SPI 位操作（CLK/MOSI/MISO/CSN/CE/IRQ 六脚，无硬件 SPI 依赖），nrf24l01_init + 地址/信道/速率/功率/模式配置 + tx_packet/rx_packet 收发 + FIFO 手动清零——接收用 STATUS 位轮询（IRQ 脚只读状态，不注册 GPIO 中断，原因见 notes）；适用于双车遥控、无线数据通信、遥测上报等赛题功能。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/nrf24l01.c",
+        "code/nrf24l01.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg：NRF24L01 GPIO 实例（6 associatedPins 全 GPIOA——CLK/MOSI/CSN/CE 输出 + MISO/IRQ 输入，单 NRF24L01_PORT 宏：CLK=PA26/MOSI=PA25/MISO=PA9/CSN=PA24/CE=PA23/IRQ=PA22）。默认脚按「与既有模块同选概率最低」分配：全部落在 ZIGBEE_UART（PA26/PA25）、UWB/DEBUG_UART（PA24/PA23/PA22）、HUIDU 巡线（PA22-27）、joystick X/Y、adc（PA24）、DIGIT_UART（PA9）默认重叠脚上——2.4G 与其它无线链路（Zigbee/UWB/蓝牙）及巡线/手动输入互为替代方案，同选概率最低；同选时经引脚绑定消解。**IRQ 输入不配 GPIO 中断**：MSPM0 全部 GPIO 中断共用 GROUP1 一个向量且已被 motor 编码器独占（motor.c 定义 GROUP1_IRQHandler），NRF+电机是双车标配组合、无法共存第二个 handler——按手册「轮询方式接收」实现（rx_packet 轮询 STATUS.RX_DR 位，IRQ 脚仅作状态只读；软 SPI 位操作不占 SPI 外设、忙等不占 TIMER）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/rf--nrf24l01-2-4-g-control-module.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/rf/nrf24l01-2-4-g-control-module.html；网盘完整工程 https://pan.baidu.com/s/16P9UbBAPJC93P6PCWhOeZA?pwd=iw40 / 资料 https://pan.baidu.com/s/1CUQ3SOdnmD8xSXMdR4YopA 提取码 1234）。改造要点：硬件 SPI（drv_spi.c DL_SPI_*）改软 SPI GPIO 位操作（SPI 模式 0，上升沿采样）；页内 30+ 函数收敛为库风格子集（寄存器原语静态化，对外 init/set_channel/set_address/set_speed/set_power/set_mode/tx_packet/rx_packet/flush_*）；去掉 printf/main.c 演示（NRF24L01_check 自检演示删除——初始化失败不阻塞编译，调用方用 tx/rx 返回值判定）；**上游缺陷记录**：`#if DYNAMIC_PACKET==0` 分支引用页外 `L01_WriteSingleReg`（应为 NRF24L01_Write_Reg，上游残留 bug）→ 整枝剔除、DYNAMIC_PACKET 归一为 1（动态包长路径）；另页内多处 `NRF24L01_Write_Reg(FLUSH_*, 0xff)` 误把 FLUSH 命令当寄存器地址（顺带多写一字节）——统一改显式 flush 命令（CS 低 + 单命令字节）；TxPacket 500ms 超时后原版重新 init 设备——改为直接返回 NRF24L01_TX_ERR（驱动不自复位，避免半途重配打断链路，重试策略归调用方）。\nwiki-modules-batch1/03 编译矩阵（2026-09-05）：单选生成 → SysConfig CLI 校验 → gmake 0 error、0 module warning；未上板。",
+      "kit": "NRF24L01+ 无线收发模块（2.4G，改进功率加强版）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/rf/nrf24l01-2-4-g-control-module.html",
+      "pins": [
+        {
+          "id": "NRF24L01_CLK",
+          "type": "gpio_out",
+          "default": "PA26",
+          "required": true
+        },
+        {
+          "id": "NRF24L01_MOSI",
+          "type": "gpio_out",
+          "default": "PA25",
+          "required": true
+        },
+        {
+          "id": "NRF24L01_MISO",
+          "type": "gpio_in",
+          "default": "PA9",
+          "required": true
+        },
+        {
+          "id": "NRF24L01_CSN",
+          "type": "gpio_out",
+          "default": "PA24",
+          "required": true
+        },
+        {
+          "id": "NRF24L01_CE",
+          "type": "gpio_out",
+          "default": "PA23",
+          "required": true
+        },
+        {
+          "id": "NRF24L01_IRQ",
+          "type": "gpio_in",
+          "default": "PA22",
+          "required": true
+        }
+      ]
+    }
+  }
+}
