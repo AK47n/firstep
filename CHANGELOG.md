@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=113c73142360b12ca26a77e18f5525aa1b6f4d79 -->
+<!-- changelog-auto: last-commit=9c14f93c7556189c2bafd20cdf3263b53cb120b1 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -40,6 +40,7 @@
 - 16:33 手册标题与分类中文化（工单 wiki-md-repair/05）：h1 中文名 + 分类映射 + 重抓 70 篇
 - 16:33 Markdown 列表中文标题（工单 wiki-md-repair/06）：清单 title 字段 + 行渲染主行标题文件名小字
 - 17:15 joystick 双轴摇杆模块（工单 wiki-modules-batch1/01）：立创 wiki 手册提炼，仅 mspm0
+- 17:31 hc05 蓝牙串口模块（工单 wiki-modules-batch1/02）：立创 wiki 手册提炼，仅 mspm0
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
