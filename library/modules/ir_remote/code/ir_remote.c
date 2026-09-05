@@ -86,7 +86,7 @@ uint8_t ir_remote_poll(void)
     if (high < 100 || high > 250) {
         return 0;
     }
-    if (high < 150) {
+    if (high > 100 && high < 150) {
         _repeat = 1;
         _have = 1;
         return 2; /* 重复码：上一帧代码不变 */
@@ -101,12 +101,13 @@ uint8_t ir_remote_poll(void)
                 return 0; /* 位间隔不在 0.56ms 附近 */
             }
             high = _measure(1, 100);
-            if (high >= 60 && high <= 100) {
+            if (high >= 60 && high < 100) {
                 value[group] = (uint8_t)((value[group] << 1) | 1u);
-            } else if (high >= 10 && high <= 50) {
+            } else if (high >= 10 && high < 50) {
                 value[group] = (uint8_t)((value[group] << 1) | 0u);
             } else {
-                return 0; /* 位高电平不在 0/1 码窗口内 */
+                return 0; /* 位高电平不在 0/1 码窗口内（手册此处沿用上一 bit
+                           * 值不判错；实现按整帧失败处理，更严——见 notes） */
             }
         }
     }

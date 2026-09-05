@@ -6,7 +6,7 @@
 
 **状态：** resolved
 
-**结论：** 2026-09-05 完成并提交。关键发现（已写入母版注释与 manifest notes）：SysConfig ADC12 单发（single）模式只启用 `startAdd` 槽位，多 MEM 通道必须 `samplingOperationMode = "sequence"` + startAdd/endAdd——原 adc 模块注释「LQFP-64(PM) 无 adcPinN 槽位」系误判，2026-09-05 SysConfig CLI 实证；摇杆 X/Y 与 adc 模块共享 ADC12_0 实例（MEM1=PA26/A0_1、MEM2=PA25/A0_2，SW=PA9 上拉），单选生成 → gmake 0 error / 0 warning（PASS），全量 3362 测试通过。
+**结论：** 2026-09-05 完成并提交。关键发现（已写入母版注释与 manifest notes）：SysConfig ADC12 单发（single）模式只启用 `startAdd` 槽位，多 MEM 通道必须 `samplingOperationMode = "sequence"` + startAdd/endAdd——原 adc 模块注释「LQFP-64(PM) 无 adcPinN 槽位」系误判，2026-09-05 SysConfig CLI 实证；摇杆 X/Y 与 adc 模块共享 ADC12_0 实例（MEM1=PA26/A0_1、MEM2=PA25/A0_2，SW=PA9 上拉），单选生成 → gmake 0 error / 0 warning（PASS），全量 3362 测试通过。**code-review 收尾修正**：adc 模块 manifest notes + adc_mspm0.c 注释与共享事实同步（原「MEM1 未绑引脚、adc_channel=1 返回 0」已过时——MEM1 现为摇杆同读通道，文档按 sequence 三通道 + 共享语义更正）。
 
 - [ ] 代码提炼：从 `sources/materials/lckfb-地猛星移植手册/control--two-axis-keystroke-rocker-module.md` 「代码块」章节抽完整 `bsp_*.c/h` → 改造为 `code/joystick.c` + `code/joystick.h`：去 main/printf、函数名规范化（`joystick_init/joystick_read_x/joystick_read_y/joystick_read_sw`）、全局缓存改出参或封装读数、ADC 断点中断改轮询（无状态机，ADR 0009）
 - [ ] 两轴读取决策：首选依赖库内 `adc` 模块（`dependencies: ["adc"]`）读 MEM0/MEM1 双通道；若 adc 模块接口只覆盖单通道，则在**本工单内**扩展 adc 模块（通道参数化 + 补其生成级测试，不动其他既有用例）
