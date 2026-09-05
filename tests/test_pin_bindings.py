@@ -448,7 +448,7 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         "PA0": 2,  # I2C_0 sdaPin（ml_mpu6050 默认脚；板载 LED 共用）+ IR_TX OUT
         # （ir_remote_tx 默认脚——红外发射链与姿态采集同选概率最低故叠此脚，
         # 且与 ir_remote 默认 PA26 刻意错开（发/收常配对），同选时经引脚绑定
-        # 消解；板载 LED 随 38kHz 载波闪烁可作发射指示；2026-09-09 SysConfig
+        # 消解；板载 LED 随 38kHz 载波闪烁可作发射指示；2026-09-06 SysConfig
         # CLI 实证 PA0/PA1 不在 GPIO 输入实例 pin 选项内——GPIO 输入件不得用）
         "PA31": 5,  # IMU601 RX + HX711 DT（hx711 默认脚；称重与姿态同选
         # + SHT30 SDA（同上）+ MICROWAVE OUT（microwave_radar 默认脚——微波

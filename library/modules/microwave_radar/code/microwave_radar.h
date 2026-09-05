@@ -8,7 +8,7 @@
  * 引脚 = 母版 syscfg 实例 MICROWAVE：OUT（输入 + 内部上拉，默认 PA31——与
  * IMU601 RX（姿态）/HX711 DT（称重）/FINGERPRINT_UART RX（身份）/SHT30 SDA
  * （温湿度）重叠：微波雷达（自动门/车流/倒车）与姿态/称重/身份/温湿度采集
- * 不同框、同选概率最低（2026-09-09 SysConfig CLI 实证 PA0/PA1 不在 GPIO 输入
+ * 不同框、同选概率最低（2026-09-06 SysConfig CLI 实证 PA0/PA1 不在 GPIO 输入
  * 实例 pin 选项内——原拟 PA0 板载 LED 指示作废，改选 PA31）；与同批
  * human_ir（PB8）刻意错开（人体红外+微波组合常同选，默认即不撞）；同选时
  * 经引脚绑定消解）。
