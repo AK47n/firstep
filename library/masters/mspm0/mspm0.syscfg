@@ -52,6 +52,7 @@ const GPIO    = scripting.addModule("/ti/driverlib/GPIO", {}, false);
 const DC_MOTOR = GPIO.addInstance();
 const HUIDU   = GPIO.addInstance();
 const KEY     = GPIO.addInstance();
+const WS2812 = GPIO.addInstance();
 const LED_BEEP = GPIO.addInstance();
 const STEP_MOTOR = GPIO.addInstance();
 const IR_BEAM = GPIO.addInstance();
@@ -183,6 +184,17 @@ IR_BEAM.associatedPins[0].$name            = "OUT";
 IR_BEAM.associatedPins[0].direction        = "INPUT";
 IR_BEAM.associatedPins[0].internalResistor = "PULL_UP";
 IR_BEAM.associatedPins[0].pin.$assign      = "PA8";
+
+// WS2812 幻彩灯带数据脚（ws2812 模块：单 GPIO 强推挽输出，位操作时序；
+// 默认 PA14——与 DCC_100_PWM2（step_motor 脉冲）默认重叠，同选时经引脚
+// 绑定消解。地猛星 2×20 排针 31 个 IO 已被母版默认布局全占，新模块默认
+// 脚按「与同选概率最低者重叠」分配，IR_BEAM/PA8 先例）
+WS2812.$name = "WS2812";
+WS2812.associatedPins.create(1);
+WS2812.associatedPins[0].$name        = "IN";
+WS2812.associatedPins[0].direction    = "OUTPUT";
+WS2812.associatedPins[0].initialValue = "CLEARED";
+WS2812.associatedPins[0].pin.$assign  = "PA14";
 
 // LED/蜂鸣器输出（PA15；原 LaunchPad 值 PA3 = 32.768k 晶振脚，地猛星排针未引出）
 LED_BEEP.$name = "LED_BEEP";

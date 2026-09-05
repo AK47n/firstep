@@ -23,6 +23,7 @@ INSTANCE_CONSUMERS: dict[str, tuple[str, ...]] = {
     "HUIDU": ("huidu", "pid", "xunji"),
     "KEY": ("key",),
     "IR_BEAM": ("ir_beam",),
+    "WS2812": ("ws2812",),
     "LED_BEEP": ("led",),
     "STEP_MOTOR": ("step_motor",),
     "IMU601": ("imu_uart",),

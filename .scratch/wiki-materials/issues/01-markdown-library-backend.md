@@ -4,7 +4,9 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** claimed
+**状态：** resolved
+
+**结论：** 2026-09-05 完成并提交（33194e8e）。md_library.py 三函数 + webapp 两端点 + tests/test_md_library.py 16 例 + tests/test_webapp.py 6 例；全量 3303 通过；真机素材根冒烟：wiki 批次 72 篇全在清单、最大 84KB < 1MB 上限。
 
 - [ ] 新域模块 `md_library.py`：`list_markdowns(root, name)` → `[{rel_path, name, batch, size_bytes, mtime}]`（递归收集 .md 扩展名大小写不敏感；批次 = 第一级目录；按 (batch, rel_path) 排序；素材根缺失 = 空清单；过滤命中文件名/批次/完整路径任一）
 - [ ] `resolve_markdown(root, rel_path)`：`is_unsafe_path` 校验 + 存在性 + .md 后缀，失败抛 ReferenceError（webapp 映射 400，与 pdf_library 同通道）

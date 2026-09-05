@@ -70,7 +70,7 @@ class ValidationResult:
 
 BANNED_TOPIC_WORDS = ("2021F", "2024H", "2026C", "2026H", "钥匙", "锁")
 
-CAPABILITY_WORDS = ("巡线", "循迹", "PID", "灰度")
+CAPABILITY_WORDS = ("巡线", "循迹", "PID", "灰度", "锁存")
 
 
 def find_topic_word_hits(
