@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=687f82ec8887e0932366e7b1b88d0f357e914d75 -->
+<!-- changelog-auto: last-commit=4cd1836225b3142b1fa1728f2defb0255ac22a36 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -8,6 +8,7 @@
 - 00:07 批次7/01 mq135 空气质量传感器模块入库（mspm0）：ADC 模拟量独立 MEM4 通道（ir_distance 先例而非 mq2 的 MEM0 薄封装——多路气体同选时各器件物理通道独立、无共读冲突），母版 syscfg ADC12_0 sequence 加第 5 通道（endAdd 3→4、adcMem4chansel=CHAN_6、adcPin6=PB20）；mq135_init + mq135_read_percent 出 0-100% 相对浓度（页面 4095/100 原式、30 次→5 次快平均）；页面 ADC 中断（IRQHandler + gCheckADC）改经 adc 模块 API 轮询（共享实例强符号唯一）；adc 模块 adc_get 通道守卫扩展至 MEM5（注释/枚举同步）；页面 DO（LM393 阈值）宏未用不声明；notes 写明与 mq2 的通道方案差异与 MQ 系相对值非 ppm 精标+预热限制；默认 PB20（与 DC_MOTOR BB/SYN6288 TX 重叠——同选概率最低）；词表感知传感器 +MQ-135；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）
 - 00:09 批次7/02 mq5 液化气/天然气传感器模块入库（mspm0）：ADC 模拟量独立 MEM5 通道（同 mq135 独立 MEM 模式——多路气体同选时物理通道独立、无共读冲突），母版 syscfg ADC12_0 sequence 加第 6 通道（endAdd 4→5、adcMem5chansel=CHAN_5、adcPin5=PB24——选 PB24 不选 PA14（板载 LED2+15k 负载不适合作 ADC 输入）与 PA22（调试/巡线/无线/触摸与气体检测同框概率更高））；mq5_init + mq5_read_percent 出 0-100% 相对浓度（页面 4095/100 原式、30 次→5 次快平均）；页面 ADC 中断改经 adc 模块 API 轮询；页面 DO 宏未用不声明；notes 写明与 mq2 的通道方案差异与 MQ 系相对值非 ppm 精标+预热限制；词表感知传感器 +MQ-5；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）
 - 00:09 批次7/03 sgp30 空气质量传感器模块入库（mspm0）：软 I2C 位操作（2 GPIO，SDA 方向运行时切换，不占硬件 I2C 外设/TIMER，延时走 delay 模块）；sgp30_init 发 0x2003 初始化空气特征基准 + sgp30_read 出 TVOC（ppb）/CO2 当量（ppm）双出参（0x2008 测量命令 + 6 字节回包 + 状态码 0/1-5）；**CRC8 器件正确性修正**：数据手册要求 CRC8（0x31/0xFF）——页面缺校验且只读 5 字节漏 TVOC CRC 字节（crc = crc 即弃），按 ir_remote 修正先例补读满 6 字节 + 两组校验（notes 记录）；上电预热 15s（CO2=400/TVOC=0 恒定）判定归调用方循环；默认软 I2C 脚 PA18/PB9（与双电机/大数字显示/读卡重叠——同选概率最低；刻意不叠温湿度/光照/OLED/语音/按键/报警/无线/批次5八脚）；词表感知传感器 +SGP30；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）
+- 00:10 批次7/04 ags10 有害气体传感器模块入库（mspm0）：软 I2C 位操作（2 GPIO，SDA 方向运行时切换，不占硬件 I2C 外设/TIMER，延时走 delay 模块）；ags10_init（空实现占位——器件无初始化序列）+ ags10_read 出 TVOC（ppb，0-99999 量程，24bit + CRC8 校验——页面 Calc_CRC8 初值 0xFF/多项式 0x31 自包含保留）；**上游缺陷修正**：① 页面读地址重试比较方向写反（循环一次即退、超时分支永不触发）→ 按函数注释 ≤50×1ms 语义修正；② 页面返回值 = TVOC 值/错误码 1-4 混用 → 出参+状态收敛（mlx90614 先例）；页面 I2C 原语族（AGS10_IIC_*）收敛为模块内静态；页面规格 ≤15kHz 与页面代码时序 ~100kHz 不一致按页面实现（notes 注明）；默认软 I2C 脚 PB18/PA14（与双电机/大数字显示/步进脉冲（风机）/灯带/读卡门禁重叠——同选概率最低；避让原则同 sgp30）；词表感知传感器 +AGS10；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
