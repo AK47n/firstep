@@ -40,8 +40,9 @@
 void rc522_init(void);
 
 /* 寻卡 + 防冲突：读一张卡的 4 字节 UID 到 uid[]。
- * 返回 RC522_OK / RC522_NOTAGERR / RC522_ERR（无卡/失败由调用方决定
- * 重试节奏，本函数不忙等长延时）。 */
+ * 返回 RC522_OK / RC522_NOTAGERR / RC522_ERR；忙等时间 = 软 SPI 寄存器
+ * 轮询（页面 1000 轮上限，无卡时通常 IdleIRq 早退、最坏 ~9.6s——页面原样，
+ * 真机确认留验证），重试节奏由调用方决定。 */
 uint8_t rc522_read_card(uint8_t uid[4]);
 
 /* 密码认证（页面 PcdAuthState）：auth_mode = RC522_AUTH_KEYA/KEYB；

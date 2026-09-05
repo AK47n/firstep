@@ -199,7 +199,9 @@ static uint8_t _com_mf522(
         _set_bit_reg(0x0Du, 0x80u);                /* BitFramingReg：StartSend */
     }
 
-    ul = 1000; /* 等待最大时间（M1 卡 25ms） */
+    ul = 1000; /* 页面原样轮询上限（页面注释称 M1 卡 25ms——按软 SPI 实际位
+                * 时序每轮 ~9.6ms，无卡时通常 ComIrq 的 IdleIRq 早退，最坏
+                * ~9.6s；真机确认留验证） */
     do {
         n = _read_reg(0x04); /* ComIrqReg */
         ul--;
