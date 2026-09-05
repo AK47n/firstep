@@ -7,7 +7,7 @@
  * （u1_recv_flag），本件改**轮询接收**：FINGERPRINT_UART 独立实例（UART0 默认，
  * enabledInterrupts 空——无 ISR 强符号、与其它 UART 模块零冲突），
  * DL_UART_isRXFIFOEmpty 忙等 + 响应帧长度精确收齐；页内 FPM10A_* 命令数组
- * 与校验和按页面原样（默认地址 0x0100、PID 0x07？——页面数组逐字节保留）；
+ * 与校验和按页面原样（指令段 = 地址/命令/参数/校验和，逐字节保留）；
  * 流程控制（触摸时序/按键菜单）归生成骨架（ADR 0009），页面
  * key_scanf/printf/main 演示全剔除。 */
 
