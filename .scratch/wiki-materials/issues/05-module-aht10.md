@@ -4,7 +4,9 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** ready-for-agent
+**状态：** resolved
+
+**结论：** 2026-09-05 完成并提交（23b3c9b0 前置提交）。gmake 0 error / 0 module warning（首版 IOMUX 宏名猜错编译失败，实测为 <实例>_<引脚>_IOMUX 后通过）；PB6/PB7 默认重叠入 test_pin_bindings 刻意重叠表。
 
 - [ ] 代码提炼：从 `sources/materials/lckfb-地猛星移植手册/sensor--aht10-temp-humi-sensor.md`「代码块」章节抽全文（soft I2C 起始/停止/应答/读写字节原语 + 温湿度命令/换算）→ 模块规范改写（`code/aht10.c/h`；delay_us 走 delay 依赖；去掉 main.c 演示/printf；无状态机）
 - [ ] 母版 `mspm0.syscfg` 加 GPIO 实例（命名 AHT10，2 associatedPins：SCL 输出 + SDA 双向，地猛星排针空闲脚不与默认布局重叠）；`syscfg_instances.py` 登记（共享/冲突判据：AHT10 为软 I2C 专属 GPIO，不与硬件 I2C 实例共享）

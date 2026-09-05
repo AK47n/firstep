@@ -4,7 +4,9 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** ready-for-agent
+**状态：** resolved
+
+**结论：** 2026-09-05 完成并提交（cc488ef1 前置提交）。gmake 0 error / 0 module warning（PASS）；结构测试对齐（PA28/PA31 默认重叠入 test_pin_bindings 刻意重叠表）。
 
 - [ ] 代码提炼：从 `sources/materials/lckfb-地猛星移植手册/sensor--hx711-weighing-sensor.md`「代码块」章节抽 `bsp_hx711.c/h` 全文 → 模块规范改写（`code/hx711.c/h`，delay_us 走 delay 依赖；去皮/均值等按手册算法保留为纯函数服务接口；去 printf；无状态机）
 - [ ] 母版 `mspm0.syscfg` 加 GPIO 实例（命名 HX711，2 associatedPins：SCK 输出 + DT 输入，地猛星排针空闲脚不与默认布局重叠）；`syscfg_instances.py` 登记

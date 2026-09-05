@@ -362,6 +362,8 @@ MSPM0_DEFAULT_MAP = {
     ("hx711", "HX711_DT"): ("HX711", "DT"),
     ("aht10", "AHT10_SCL"): ("AHT10", "SCL"),
     ("aht10", "AHT10_SDA"): ("AHT10", "SDA"),
+    ("sr04", "SR04_TRIG"): ("SR04", "TRIG"),
+    ("sr04", "SR04_ECHO"): ("SR04", "ECHO"),
     ("coord_detect", "COORD_DETECT_UART_TX"): ("DIGIT_UART", "txPin"),
     ("coord_detect", "COORD_DETECT_UART_RX"): ("DIGIT_UART", "rxPin"),
     ("led", "LED"): ("LED_BEEP", "LED"),
