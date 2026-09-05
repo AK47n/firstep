@@ -4,9 +4,9 @@
 
 **被谁阻塞：** 无——可立即开始（母版 syscfg 改序列通道影响面最大，置于第 04 件实施并跑相关全量测试）。
 
-**状态：** pending
+**状态：** resolved
 
-**结论：** 待完成。
+**结论：** 2026-09-05 完成。通道策略落地：us016 已占 MEM0 槽位 → 本件走独立通道 MEM3——母版 syscfg ADC12_0 sequence 加第 4 通道（endAdd 2→3、adcMem3chansel=CHAN_0、adcPin0=PA27 手册原脚；SysConfig CLI 校验通过）；默认 PA27 与 HUIDU R2 重叠（红外测距与 8 路灰度巡线同选概率最低），同选经引脚绑定消解；轮询读 MEM3（10 次平均、IRQHandler 强符号唯一）；换算 60.374×V^(-1.16)（GP2Y0A02YK0F 官方公式）+ 全 0 采样防护（防 pow 溢出）。joystick 相关断言同步：test_shared_groups 纯灰度 PA27 组恢复测试（ir_distance 绑走恢复）+ test_module_joystick/docstring 四通道共享事实。单选生成 → SysConfig CLI → gmake 0 error / 0 warning（PASS）；未上板。
 
 - [ ] 通道决策：us016 已按薄封装占 MEM0（同一槽位两个角色同选经绑定无法消解——binding 槽位冲突检查强制同脚）→ ir_distance 走独立通道：母版 syscfg `ADC12_0.endAdd` 2→3 + `adcMem3chansel="DL_ADC12_INPUT_CHAN_0"` + `adcPin0.$assign="PA27"`（**手册原脚**，A0_0 槽位——SysConfig CLI 实证命名 adcPin<N>=通道号、adcMem<N>chansel 对 MEM 索引，seq-mem0-1-2 先例）；**同步 joystick 相关测试断言**：核查 test_module_joystick / test_pin_bindings 的共享事实注释（无 endAdd 断言需改；PA27 刻意表 1→2 新条目）
 - [ ] 代码提炼：从 `sources/materials/lckfb-地猛星移植手册/sensor--Infrared-distance-sensor.md` 「代码块」章节抽完整 `bsp_IRdistance.c/h` → 改造为 `code/ir_distance.c` + `code/ir_distance.h`：去 main/printf、函数名规范化（`ir_distance_init/read_distance_cm`）、ADC 中断（IRQHandler + gCheckADC 标志位）改轮询（照 joystick 直接读 ADC12_0 MEM3，`DL_ADC12_getStatus` 忙等——IRQHandler 强符号唯一性）；`dependencies: []`（无 delay 需求；math.h pow 为标准库）

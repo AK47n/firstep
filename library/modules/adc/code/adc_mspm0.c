@@ -2,8 +2,10 @@
 #include "ti_msp_dl_config.h"
 
 /* 模拟采样（mspm0，轮询多通道）：ADC12_0 实例由母版 syscfg 提供
- * （sequence 三通道：MEM0=PA24/A0_3 归本模块，MEM1=PA26/A0_1 与
- * MEM2=PA25/A0_2 与 joystick 摇杆共享——wiki-modules-batch1/01；
+ * （sequence 四通道：MEM0=PA24/A0_3 归本模块（us016 薄封装共读同槽——
+ * wiki-modules-batch2/02），MEM1=PA26/A0_1 与 MEM2=PA25/A0_2 与
+ * joystick 摇杆共享（wiki-modules-batch1/01），MEM3=PA27/A0_0 归
+ * ir_distance（wiki-modules-batch2/04）；
  * 绑定换引脚时生成器改写 adcPin*.$assign + adcMem*chansel，模块代码零改动；
  * adc_get 通道 0/1 = MEM0/MEM1，MEM1 与 joystick_read_x 同读一通道）。 */
 

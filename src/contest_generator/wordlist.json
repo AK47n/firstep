@@ -85,6 +85,14 @@
         "suitable": "撞墙检测/近距避障/边界判定"
       },
       {
+        "name": "红外测距传感器（GP2Y0A02YK0F）",
+        "interface": "模拟量输出（ADC 电压→距离）",
+        "price": "￥20-40/个",
+        "note": "库内 ir_distance 已打通（mspm0：ir_distance_read_distance_cm 出 cm，10 次平均；独立 ADC12_0 MEM3 通道、默认 PA27——同选时经引脚绑定消解；与 us016 同属模拟量测距，同选可无冲突共读）；20-150cm 段、材质/温度不影响精度（三角测量法）；<15cm 电压跌落非线性（安装勿入盲区）；输出曲线非线性，精密场景按官方公式标定",
+        "suitable": "避障/非接触测距/近距开关量替代",
+        "lib_modules": ["ir_distance"]
+      },
+      {
         "name": "红外对射传感器（遮挡检测）",
         "interface": "GPIO 数字量（三线制 VCC/GND/OUT）",
         "price": "￥3-10/套",

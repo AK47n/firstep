@@ -308,6 +308,9 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         "PA26": 5,  # HUIDU R1 + ZIGBEE_UART TX + ADC12_0 adcPin1（joystick X
         # 默认脚，同上）+ NRF24L01 CLK + IR_REMOTE OUT（ir_remote 默认脚；
         # 红外与其它无线/手动输入互替）
+        "PA27": 2,  # HUIDU R2 + ADC12_0 adcPin0（ir_distance 默认脚；
+        # 红外测距与 8 路灰度巡线同选概率最低故叠此脚，同选时经引脚绑定消解；
+        # 手册原脚）
         "PA8": 3,   # DIGIT_UART TX + IR_BEAM OUT（ir_beam 默认脚）+ HC05 STATE
         # （hc05 默认脚；蓝牙与 K230 视觉/红外对射链路互替，同选时经引脚
         # 绑定消解）
@@ -923,9 +926,11 @@ def test_shared_groups_marks_gpio_default_overlap_conflict():
 
 
 def test_shared_groups_marks_same_sensor_instance_share():
-    """同一器件实例（HUIDU 灰度 8 路：huidu/pid/xunji 同脚读数）→ 合法共享
-    （纯灰度组 PA27；PA22 等混入 UART/ADC 的同脚组 = 冲突，见下一条）。"""
-    result = _auto("mspm0", {})
+    """同一器件实例（HUIDU 灰度 8 路：huidu/pid/xunji 同脚读数）→ 合法共享。
+    纯灰度组 PA27：默认已被 ir_distance 占用（wiki-modules-batch2/04——红外
+    测距与 8 路灰度巡线同选概率最低叠此脚），测试把 ir_distance 绑走恢复
+    纯灰度组（原默认 PA27 纯灰度性质随新默认脚消失，见下一测试）。"""
+    result = _auto("mspm0", {"ir_distance.IR_DIST_OUT_CH3": "PA14"})
 
     group = next(
         (s for s in result.shared
@@ -934,6 +939,7 @@ def test_shared_groups_marks_same_sensor_instance_share():
     )
     assert group is not None
     assert group["kind"] == "share"
+    assert "ir_distance.IR_DIST_OUT_CH3" not in group["roles"]
 
 
 def test_shared_groups_marks_mixed_resource_same_pin_conflict():
