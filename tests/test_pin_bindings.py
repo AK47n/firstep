@@ -423,6 +423,13 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # （ws2812 默认脚）+ RC522 SCK（rc522 默认脚——读卡与步进/灯带同选
         # 概率最低故叠此脚，同选时经引脚绑定消解）+ AGS10 SDA（ags10 默认脚
         # ——同上，同选时经引脚绑定消解）
+        "PA22": 5,  # HUIDU L1 + DEBUG_UART RX + NRF24L01 IRQ + TTP224 OUT1
+        # （ttp224 默认脚——触摸按键与无线链路/手动输入互替、与巡线不同框、
+        # 同选概率最低故叠此脚，同选时经引脚绑定消解）+ ADC12_0 adcPin7
+        # （flame 默认脚——火焰传感独立 MEM6 通道 A0_7；地猛星板上剩余 ADC
+        # 通道中唯一无负载脚（PA14 板载 LED2+15k 会分流高阻光电二极管源，
+        # mq5 选脚判据先例）；与巡线/无线/触摸不同框、同选概率最低故叠此脚，
+        # 同选时经引脚绑定消解）
     }
 
 

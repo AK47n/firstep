@@ -1,9 +1,9 @@
 """ir_distance 红外测距模块：真实库 + 真实母版不变量与 mspm0 单选生成。
 
-与 joystick / us016 同款结构测试：manifest 形状（仅 mspm0、无依赖、单角色
-IR_DIST_OUT_CH3 = adc PA27——ADC12_0 sequence 六通道 MEM3）、母版 syscfg
-共享事实（endAdd=5 / adcMem3chansel=CHAN_0 / adcPin0=PA27，与 adc/joystick/
-us016/mq135/mq5 同实例）、mspm0 单选生成（syscfg 裁剪保留 ADC12_0、模块文件落盘、
+与 joystick / us016 同款结构测试：manifest 形状（仅 mspm0、依赖 adc、单角色
+IR_DIST_OUT_CH3 = adc PA27——ADC12_0 sequence 七通道 MEM3）、母版 syscfg
+共享事实（endAdd=6 / adcMem3chansel=CHAN_0 / adcPin0=PA27，与 adc/joystick/
+us016/mq135/mq5/flame 同实例）、mspm0 单选生成（syscfg 裁剪保留 ADC12_0、模块文件落盘、
 main.c 调 init/读距离过静态门禁）。全程无 LLM、无服务。
 """
 
@@ -57,25 +57,28 @@ def test_ir_distance_manifest_shape_mspm0():
 
 
 def test_ir_distance_mspm0_master_syscfg_shared_facts():
-    """母版 ADC12_0 六通道共享事实（JOYSTICK 相关断言同步：endAdd 4→5（mq5
-    MEM5 开通道后）、adcMem3=CHAN_0、adcPin0=PA27 归 ir_distance——手册原脚；
-    MEM4=PB20/A0_6 归 mq135、MEM5=PB24/A0_5 归 mq5——wiki-modules-batch7）。"""
+    """母版 ADC12_0 七通道共享事实（JOYSTICK 相关断言同步：endAdd 5→6（flame
+    MEM6 开通道后）、adcMem3=CHAN_0、adcPin0=PA27 归 ir_distance——手册原脚；
+    MEM4=PB20/A0_6 归 mq135、MEM5=PB24/A0_5 归 mq5——wiki-modules-batch7；
+    MEM6=PA22/A0_7 归 flame——wiki-modules-batch8）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert 'ADC12_0.samplingOperationMode      = "sequence";' in syscfg
     assert 'ADC12_0.startAdd                   = 0;' in syscfg
-    assert 'ADC12_0.endAdd                     = 5;' in syscfg
+    assert 'ADC12_0.endAdd                     = 6;' in syscfg
     assert 'ADC12_0.adcMem0chansel             = "DL_ADC12_INPUT_CHAN_3";' in syscfg
     assert 'ADC12_0.adcMem1chansel             = "DL_ADC12_INPUT_CHAN_1";' in syscfg
     assert 'ADC12_0.adcMem2chansel             = "DL_ADC12_INPUT_CHAN_2";' in syscfg
     assert 'ADC12_0.adcMem3chansel             = "DL_ADC12_INPUT_CHAN_0";' in syscfg
     assert 'ADC12_0.adcMem4chansel             = "DL_ADC12_INPUT_CHAN_6";' in syscfg
     assert 'ADC12_0.adcMem5chansel             = "DL_ADC12_INPUT_CHAN_5";' in syscfg
+    assert 'ADC12_0.adcMem6chansel             = "DL_ADC12_INPUT_CHAN_7";' in syscfg
     assert 'ADC12_0.peripheral.adcPin3.$assign = "PA24";' in syscfg
     assert 'ADC12_0.peripheral.adcPin1.$assign  = "PA26";' in syscfg
     assert 'ADC12_0.peripheral.adcPin2.$assign  = "PA25";' in syscfg
     assert 'ADC12_0.peripheral.adcPin0.$assign = "PA27";' in syscfg
     assert 'ADC12_0.peripheral.adcPin6.$assign = "PB20";' in syscfg
     assert 'ADC12_0.peripheral.adcPin5.$assign = "PB24";' in syscfg
+    assert 'ADC12_0.peripheral.adcPin7.$assign = "PA22";' in syscfg
 
 
 def test_ir_distance_mspm0_single_select_generation(tmp_path):
@@ -94,7 +97,7 @@ def test_ir_distance_mspm0_single_select_generation(tmp_path):
     )
     syscfg = (out / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const ADC12_0 = ADC12.addInstance();" in syscfg
-    assert 'ADC12_0.endAdd                     = 5;' in syscfg
+    assert 'ADC12_0.endAdd                     = 6;' in syscfg
     assert 'ADC12_0.peripheral.adcPin0.$assign = "PA27";' in syscfg
     for drop in (
         "STEP_MOTOR", "HUIDU", "KEY", "LED_BEEP", "IR_BEAM", "WS2812",
