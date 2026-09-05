@@ -71,6 +71,8 @@ static void sgp30_iic_stop(void)
 
 static void sgp30_iic_send_ack(uint8_t ack)
 {
+    /* 参数 0=发送应答、1=发送非应答（页面 IIC_Send_Ack 语义——0/1 与直觉
+     * 相反，命名照页面保留）；SDA(0) 打底再按 ack 重设 = 页面原式冗余写 */
     SGP30_SDA_OUT();
     SGP30_SCL(0);
     SGP30_SDA(0);
