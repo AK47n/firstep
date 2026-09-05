@@ -153,6 +153,7 @@ class ApplyTask:
         batches: list[dict[str, Any]],
         download: Callable[[str, Path, Callable[[int], None]], str] | None = None,
         snapshot_interval: float = SNAPSHOT_INTERVAL_SECONDS,
+        on_complete: Callable[[], None] | None = None,
     ) -> None:
         self.task_dir = task_dir
         # 批次形状：check 响应的批次（slug/name/size_bytes/parts）→ 任务内部
@@ -176,6 +177,7 @@ class ApplyTask:
         if download is None:
             download = download_part
         self._download = download
+        self._on_complete = on_complete
         self._snapshot_interval = snapshot_interval
         self._lock = threading.Lock()
         self._cancel = threading.Event()
@@ -241,7 +243,11 @@ class ApplyTask:
                     part.downloaded_bytes = part.size
 
     def run(self) -> None:
-        """执行下载：逐批次逐卷 → 下载 + 校验 + 完成标记；分卷边界响应取消。"""
+        """执行下载：逐批次逐卷 → 下载 + 校验 + 完成标记；分卷边界响应取消。
+
+        全部卷就绪后调 `on_complete`（应用器挂钩：解压 / 备份 / 删除 / 写
+        基线——应用器失败也记为该任务 failed，保留备份与中文错误）。
+        """
         if self._cancel.is_set():
             self._state = TaskState.CANCELLED
             self._write_snapshot(force=True)
@@ -259,11 +265,21 @@ class ApplyTask:
                         continue
                     self._current_part_name = part.name
                     self._download_one(part, batch)
+            # 下载全部完成 → 应用（挂钩抛错 = 失败态）
+            if self._on_complete is not None:
+                self._state = TaskState.APPLYING
+                self._write_snapshot(force=True)
+                self._current_part_name = ""
+                self._on_complete()
             self._state = TaskState.DONE
             self._error = ""
         except Exception as exc:
-            self._state = TaskState.FAILED
-            self._error = f"下载失败（卷 {self._current_part_name}）：{exc}"
+            if self._state is TaskState.APPLYING:
+                self._state = TaskState.FAILED
+                self._error = f"应用失败：{exc}"
+            else:
+                self._state = TaskState.FAILED
+                self._error = f"下载失败（卷 {self._current_part_name}）：{exc}"
         self._write_snapshot(force=True)
 
     def _download_one(self, part: _PartState, batch: _BatchState) -> None:

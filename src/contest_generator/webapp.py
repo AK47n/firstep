@@ -282,6 +282,7 @@ from .materials_task import (
     task_status,
     write_task_snapshot,
 )
+from .materials_apply import apply_materials_update
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -1158,7 +1159,38 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "downloading", "applying",
         ):
             raise HTTPException(400, "已有资料库更新任务在进行中，请稍候")
-        task = ApplyTask(updates_dir, selected)
+        # 重建新基线清单（应用期写回 .materials-manifest.json）：
+        # 选中批次取 check 的 files / removed / zip_names；version = 线上版本
+        new_manifest = {
+            "version": str(check.get("latest_version") or ""),
+            "published_at": "",
+            "batches": [
+                {
+                    "slug": b["slug"],
+                    "name": b["name"],
+                    "files": b.get("files", []),
+                    "removed": b.get("removed", []),
+                    "parts": [
+                        {"zip_name": zn, "size": 0, "sha256": ""}
+                        for zn in b.get("zip_names", [])
+                    ],
+                }
+                for b in selected
+            ],
+        }
+        materials_root = materials_library_dir()
+        old_manifest = load_local_manifest(materials_root)
+
+        def _apply() -> None:
+            apply_materials_update(
+                materials_root=materials_root,
+                manifest=new_manifest,
+                zip_dir=updates_dir / "materials",
+                backup_dir=updates_dir / "materials-backup",
+                old_manifest=old_manifest,
+            )
+
+        task = ApplyTask(updates_dir, selected, on_complete=_apply)
         _materials_task = task
         worker = threading.Thread(target=task.run, daemon=True)
         worker.start()
