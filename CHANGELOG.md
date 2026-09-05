@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=af9da2e92d87a26ad6970e5ddec9ea64ece38e03 -->
+<!-- changelog-auto: last-commit=26b91cd454552536a90f980fe4b5ab771362cc17 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -17,6 +17,7 @@
 - 10:30 应用内一键更新·发布侧——更新包打包脚本(v1.1.0 实跑通过) + 两级发版流程(工单 auto-update/01-02 收尾)
 - 10:30 应用内一键更新·后端——检查更新端点 + 更新器脚本(工单 auto-update/03-04)
 - 10:30 应用内一键更新·应用端点 + 前端设置页 + 启动器保护(工单 auto-update/05-06)
+- 10:42 启动器误弹「正在更新中」——检测标签块穿透主流程(工单 auto-update/06 回归)
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
