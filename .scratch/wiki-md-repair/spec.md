@@ -81,11 +81,15 @@ wiki 页代码块真实结构（实测抓包确认）：
 - 提示块：`> **<标题>**：<正文>`（标题用页面自带的 `p.custom-block-title` 文本，如 WARNING/TIP/INFO）。
 - 图片引用：相对路径 `images/<slug>/imgN.png`（基于批次根目录），与旧抓取同构；外链图片（http(s)）直接保留原 URL。
 - 新图片端点 `GET /api/materials-md-assets/{rel_path:path}`：`md_library.resolve_md_asset()`（复用 `is_unsafe_path` +
-  存在性校验 + 16MB 上限，返回 Path），webapp 按扩展名回 Content-Type（png/jpg/jpeg/webp/gif/svg），
-  非法/缺失 → 400 中文文案（同 md 端点通道）。
-- 前端：`fx/md.js` 新增 `mdImageUrl(mdRelPath, src)`（http(s) 原样返回；否则 `md 所在目录 + "/" + src`；
-  `../` 越界由 `fx/markdown.js isSafeImageSrc` 先拒，回调不复判）；`ui/md.js openMdPreview` 传
-  `{ imageUrl: (src) => mdImageUrl(m.rel_path, src) }`。
+  存在性校验 + 仅放行图片扩展名 + 16MB 上限，返回 Path），webapp 按扩展名回 Content-Type
+  （png/jpg/jpeg/webp/gif/svg），非法/缺失/超限/非图片 → 400 中文文案（同 md 端点通道）。
+- 前端：`fx/md.js` 新增 `mdAssetImageUrl(mdRelPath, src)`（http(s) 原样返回；否则按标准
+  Markdown 语义「相对 .md 所在目录」归一，`./` 前缀剥除；`../` 越界由
+  `fx/markdown.js isSafeImageSrc` 先拒，回调不复判。命名以 mdAsset 前缀区别于
+  ui/codeeditor.js 的本地 mdImageUrl（/api/code/raw 预览图，签名/端点均不同））；
+  `ui/md.js openMdPreview` 传 `{ imageUrl: (src) => mdAssetImageUrl(m.rel_path, src) }`。
+  归一基准说明：wiki 手册约定 md 在批次根、图片在批次根 `images/` 下，此时
+  「按 md 目录归一」与「按批次根归一」等价；子目录 md 按所在目录归一（标准语义）。
 - 章节空（SSR 无内容）不编造：转换器忠实输出所见。
 
 ## 测试决策

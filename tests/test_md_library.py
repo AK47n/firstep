@@ -14,10 +14,13 @@ from pathlib import Path
 import pytest
 
 from contest_generator.md_library import (
+    MD_ASSET_MAX_BYTES,
     MD_FILE_MAX_BYTES,
+    asset_media_type,
     list_markdowns,
     read_markdown,
     resolve_markdown,
+    resolve_md_asset,
 )
 from contest_generator.reference_library import ReferenceError
 
@@ -138,3 +141,55 @@ def test_read_markdown_rejects_missing(tmp_path):
     root = _make_materials(tmp_path / "materials")
     with pytest.raises(ReferenceError):
         read_markdown(root, "不存在.md")
+
+
+# —— 附属资源（手册图片等）：resolve_md_asset / asset_media_type ——
+
+
+def test_resolve_md_asset_happy_path(tmp_path):
+    root = _make_materials(tmp_path / "materials")
+    (root / "lckfb-地猛星移植手册" / "images").mkdir()
+    (root / "lckfb-地猛星移植手册" / "images" / "img1.png").write_bytes(b"\x89PNG")
+    rel = "lckfb-地猛星移植手册/images/img1.png"
+    assert resolve_md_asset(root, rel).is_file()
+    assert asset_media_type(resolve_md_asset(root, rel)) == "image/png"
+
+
+@pytest.mark.parametrize(
+    "bad", ["../secret.png", "..\\secret.png", "/etc/passwd", "a//b.png", "c:/win.png", ".."]
+)
+def test_resolve_md_asset_rejects_unsafe_paths(tmp_path, bad):
+    root = _make_materials(tmp_path / "materials")
+    with pytest.raises(ReferenceError, match="非法文件路径"):
+        resolve_md_asset(root, bad)
+
+
+def test_resolve_md_asset_missing_raises(tmp_path):
+    root = _make_materials(tmp_path / "materials")
+    with pytest.raises(ReferenceError, match="不存在"):
+        resolve_md_asset(root, "lckfb-地猛星移植手册/images/无.png")
+
+
+def test_resolve_md_asset_rejects_non_image_ext(tmp_path):
+    root = _make_materials(tmp_path / "materials")
+    (root / "lckfb-地猛星移植手册" / "images").mkdir()
+    (root / "lckfb-地猛星移植手册" / "images" / "page.html").write_text("<html>", encoding="utf-8")
+    with pytest.raises(ReferenceError, match="不支持的资源类型"):
+        resolve_md_asset(root, "lckfb-地猛星移植手册/images/page.html")
+
+
+def test_resolve_md_asset_rejects_oversize(tmp_path):
+    root = _make_materials(tmp_path / "materials")
+    d = root / "lckfb-地猛星移植手册" / "images"
+    d.mkdir(parents=True)
+    (d / "大图.png").write_bytes(b"a" * (MD_ASSET_MAX_BYTES + 1))
+    with pytest.raises(ReferenceError, match="文件过大"):
+        resolve_md_asset(root, "lckfb-地猛星移植手册/images/大图.png")
+
+
+def test_asset_media_type_mapping():
+    assert asset_media_type(Path("x.gif")) == "image/gif"
+    assert asset_media_type(Path("x.JPG")) == "image/jpeg"
+    assert asset_media_type(Path("x.webp")) == "image/webp"
+    assert asset_media_type(Path("x.svg")) == "image/svg+xml"
+    assert asset_media_type(Path("x.bin")) == "application/octet-stream"

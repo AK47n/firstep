@@ -7181,6 +7181,56 @@ def test_materials_md_file_rejects_oversize(client, context, tmp_path):
     assert "文件过大" in resp.json()["detail"]
 
 
+def test_materials_md_asset_serves_image(client, context, tmp_path):
+    _make_materials_mds(tmp_path)
+    img = tmp_path / "sources" / "materials" / "lckfb-地猛星移植手册" / "images" / "img1.gif"
+    img.parent.mkdir(parents=True)
+    img.write_bytes(b"GIF89a")
+    url = "/api/materials-md-assets/" + quote(
+        "lckfb-地猛星移植手册/images/img1.gif", safe="/",
+    )
+    resp = client.get(url)
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("image/gif")
+    assert resp.content == b"GIF89a"
+
+
+def test_materials_md_asset_rejects_unsafe_paths(client, context, tmp_path):
+    _make_materials_mds(tmp_path)
+    resp = client.get("/api/materials-md-assets/" + quote("../secret.png", safe=""))
+    assert resp.status_code == 400
+    assert "非法文件路径" in resp.json()["detail"]
+
+
+def test_materials_md_asset_missing_returns_400(client, context, tmp_path):
+    _make_materials_mds(tmp_path)
+    resp = client.get("/api/materials-md-assets/" + quote("lckfb-地猛星移植手册/images/无.png", safe="/"))
+    assert resp.status_code == 400
+    assert "不存在" in resp.json()["detail"]
+
+
+def test_materials_md_asset_rejects_oversize(client, context, tmp_path):
+    from contest_generator.md_library import MD_ASSET_MAX_BYTES
+
+    _make_materials_mds(tmp_path)
+    big = tmp_path / "sources" / "materials" / "lckfb-地猛星移植手册" / "images" / "大图.png"
+    big.parent.mkdir(parents=True)
+    big.write_bytes(b"a" * (MD_ASSET_MAX_BYTES + 1))
+    resp = client.get("/api/materials-md-assets/" + quote("lckfb-地猛星移植手册/images/大图.png", safe="/"))
+    assert resp.status_code == 400
+    assert "文件过大" in resp.json()["detail"]
+
+
+def test_materials_md_asset_rejects_non_image(client, context, tmp_path):
+    _make_materials_mds(tmp_path)
+    html = tmp_path / "sources" / "materials" / "lckfb-地猛星移植手册" / "images" / "page.html"
+    html.parent.mkdir(parents=True)
+    html.write_text("<html>", encoding="utf-8")
+    resp = client.get("/api/materials-md-assets/" + quote("lckfb-地猛星移植手册/images/page.html", safe="/"))
+    assert resp.status_code == 400
+    assert "不支持的资源类型" in resp.json()["detail"]
+
+
 def test_pdf_pages_route_returns_page_count(client, context, tmp_path):
     _make_materials_pdfs(tmp_path)
     from tests.topic_pdf_fakes import make_multi_page_pdf

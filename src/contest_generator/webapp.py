@@ -222,7 +222,7 @@ from .master_store import (
 )
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 from .patchers import UnknownPlatformError
-from .md_library import list_markdowns, read_markdown
+from .md_library import asset_media_type, list_markdowns, read_markdown, resolve_md_asset
 from .pdf_library import list_pdfs, pdf_page_count, resolve_pdf, trash_pdf
 from .pin_bindings import (
     PinBindingError,
@@ -4973,6 +4973,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         config = _require_config(context)
         return read_markdown(materials_dir(config.module_library_dir), rel_path)
 
+    @app.get("/api/materials-md-assets/{rel_path:path}")
+    @_map_errors
+    def materials_md_asset(rel_path: str) -> FileResponse:
+        """Markdown 手册的附属资源（图片等）：路径安全 / 超限 / 缺失 → 400，
+        按扩展名回 Content-Type（webapp 只透传，语义在 md_library）。"""
+        config = _require_config(context)
+        path = resolve_md_asset(materials_dir(config.module_library_dir), rel_path)
+        return FileResponse(path, media_type=asset_media_type(path))
 
     # ------------------------------------------------------------------
     # 版本更新记录（工单 version-changelog/03）：VERSIONS.md → 定稿版本要点
