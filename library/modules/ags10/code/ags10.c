@@ -70,8 +70,8 @@ static void ags10_iic_stop(void)
 
 static void ags10_iic_send_nack(void)
 {
-    /* 页面 AGS10_IIC_Send_Nack 原式：SDA(0) 打底再置 1（冗余二次写，
-     * 末值 = 高电平 = 非应答），照页面保留 */
+    /* 页面 Send_Nack 原式：SDA(0) 打底再置 1（冗余二次写，末值 = 高电平 =
+     * 非应答），照页面保留 */
     AGS10_SDA_OUT();
     AGS10_SCL(0);
     AGS10_SDA(0);
@@ -84,8 +84,8 @@ static void ags10_iic_send_nack(void)
 
 static void ags10_iic_send_ack(void)
 {
-    /* 页面 AGS10_IIC_Send_Ack 原式：SDA(1) 打底再置 0（冗余二次写，
-     * 末值 = 低电平 = 应答），照页面保留 */
+    /* 页面 Send_Ack 原式：SDA(1) 打底再置 0（冗余二次写，末值 = 低电平 =
+     * 应答），照页面保留 */
     AGS10_SDA_OUT();
     AGS10_SCL(0);
     AGS10_SDA(1);
