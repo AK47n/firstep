@@ -29,6 +29,19 @@ BASE = "https://wiki.lckfb.com"
 # 行内标记符（开/闭文本相同：**、*、~~）
 _INLINE_MARKS = {"strong": "**", "em": "*", "del": "~~"}
 
+# wiki 四分类 → 中文类名（wiki 页面自身的分类中文名；未知回退原码）
+_CAT_LABELS = {
+    "sensor": "传感器类",
+    "screen": "显示类",
+    "rf": "无线通信类",
+    "control": "控制类",
+}
+
+
+def cat_label(cat: str) -> str:
+    """分类码 → 中文类名（未知回退原码，slug 仍在文件名/链接里不丢）。"""
+    return _CAT_LABELS.get(cat, cat)
+
 # 正文行内文本需转义的 Markdown 特殊字符（我们的渲染器支持反斜杠转义）。
 # 注意：_ 不转义——标识符里的词内下划线（bsp_sht30.h）按 CommonMark 词内
 # 规则在标准渲染器与本 app 渲染器中都按字面处理，转义反而污染原文可读性。
@@ -98,6 +111,8 @@ class _WikiToMD(HTMLParser):
         self.base = base
         self.blocks: list[str] = []        # 已完成块
         self.img_urls: list[str] = []      # 图片绝对 URL（去重保序）
+        self.title = ""                    # 页面 h1 中文名（剥锚点/\u200b；无 h1 为空）
+        self._title_buf: list[str] = []
         self._cur: list[str] = []          # 当前行内片段缓冲
         self._heading = 0                  # 0=非标题；2..6=hN 收集模式
         self._hd_buf: list[str] = []
@@ -249,6 +264,8 @@ class _WikiToMD(HTMLParser):
     def handle_endtag(self, tag):
         if tag == "h1":
             self._skip_h1 = False
+            self.title = "".join(self._title_buf).strip()
+            self._title_buf = []
             return
         if tag in ("h2", "h3", "h4", "h5", "h6"):
             self._flush_para()
@@ -338,6 +355,7 @@ class _WikiToMD(HTMLParser):
         if self._in_num_wrapper:
             return
         if self._skip_h1:
+            self._title_buf.append(data.replace("\u200b", ""))
             return
         if self._lang_capture:
             self._pre_lang = data.strip() or self._pre_lang
@@ -370,12 +388,13 @@ class _WikiToMD(HTMLParser):
             self._emit_block("---")
 
 
-def parse_main(main_html: str, slug: str, base: str = BASE) -> tuple[str, list[str]]:
-    """<main> 内容区 HTML → (Markdown 正文, 图片绝对 URL 有序列表)。
+def parse_main(main_html: str, slug: str, base: str = BASE) -> tuple[str, list[str], str]:
+    """<main> 内容区 HTML → (Markdown 正文, 图片绝对 URL 有序列表, 页面 h1 标题)。
 
     按原页顺序输出：标题（剥锚点/\\u200b）、段落（块间空行）、列表（连续 li
     合并、编号取 <ol start>）、代码围栏（Shiki 逐行还原）、提示块（> **标题**：正文）、
     内嵌图片（images/<slug>/imgN.ext 相对批次根，去重编号）。转换失败/无内容 → 空串。
+    第三返回值 = 页面 h1 中文名（无 h1 为 ""，正文不含 h1——H1 由 build_markdown 组装）。
     """
     parser = _WikiToMD(slug, base)
     parser.feed(main_html or "")
@@ -383,7 +402,7 @@ def parse_main(main_html: str, slug: str, base: str = BASE) -> tuple[str, list[s
     parser.finish()
     text = "\n\n".join(b for b in parser.blocks if b.strip())
     text = re.sub(r"\n{3,}", "\n\n", text)
-    return text, parser.img_urls
+    return text, parser.img_urls, parser.title
 
 
 def build_markdown(
@@ -397,16 +416,18 @@ def build_markdown(
 ) -> str:
     """组装单篇手册：元数据头 + 正文（原页顺序）+ 「百度网盘下载」小节。
 
+    顶部标题 = 中文名 title（页面 h1；空则回退 slug）；分类 = cat_label 中文类名；
     代码块数 / 图片数按实际计数写入元数据（图片数 = 抓取到的内嵌图片数）。
     """
     body = md_body.strip() or "（正文提取为空）"
     fences = code_block_count(body)
+    name = title.strip() or slug
     lines = [
-        f"# {slug}",
+        f"# {name}",
         "",
-        f"- 分类：{cat}",
+        f"- 分类：{cat_label(cat)}",
         f"- 来源：{url}",
-        f"- 标题：{title}",
+        f"- 标题：{name}",
         f"- 代码块：{fences} 个 · 图片：{len(img_urls)} 张",
         "",
         body,
