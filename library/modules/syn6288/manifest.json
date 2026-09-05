@@ -1,0 +1,28 @@
+{
+  "slug": "syn6288",
+  "description": "SYN6288E 中文语音合成模块驱动（mspm0 纯驱动，ADR 0009）：软 UART 单发 TX（GPIO 位操作 9600 8N1，不占 UART 外设/TIMER）——syn6288_init 后 speak(text) 文本转语音播报（帧 = 0xFD 帧头+数据长度+命令字+参数+文本+异或校验，按页面原样），另有 stop/pause/resume 控制；适用于语音合成播报、状态语音提示、门禁/考勤语音提示等赛题功能。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/syn6288.c",
+        "code/syn6288.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg：SYN6288 GPIO 实例（TX 输出，初始 SET = 空闲高；默认 PB20——DC_MOTOR 编码器 BB 脚，语音合成与双电机小车同选概率最低，且与同批 jq8900 默认 PB19 刻意错开（语音两件常同选，默认即不撞），同选时经引脚绑定消解）。SYN6288 走软 UART 单发 TX（位操作 9600 8N1、每段 ~104us，不占 UART 外设/TIMER）——批次 4 UART 可行性调研实证依据同 jq8900：SysConfig CLI 拒绝同一 UART 外设多实例（`UART2 is already in use by DEBUG_UART` Resource conflict；UART 实例上限 4），语音主控→模块单向发指令帧为主，故走软 UART（库内新先例，jq8900 先行）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/control--syn6288-speech-synthesis-broadcast-module.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/control/syn6288-speech-synthesis-broadcast-module.html；网盘完整工程 https://pan.baidu.com/s/1PSTv6W_kKLE2fuhdlWpzcg?pwd=up1l / 资料 https://pan.baidu.com/s/1Kb8RA9aksd3o8Q-A8WqmNA 提取码 1234）。改造要点：页内硬件 UART（UART_1_INST + DL_UART_Main_transmitData + IRQHandler RX 缓冲）改软 UART 位操作（起始位低→8 数据位 LSB 先→停止位高，delay_us(104) 走 delay 模块）；sprintf 去 stdio 改流式逐字节发送（帧结构与页面 SYN6288_Send_Cmd 逐字节一致：0xFD + Data_Len(文本+3) 高低位在前 + CmdType + CmdPar + 文本 + 异或校验——异或对象 = 帧头到文本逐字节 ^，最后发送异或值）；去 main.c/printf 演示；函数名规范化（SYN6288_Init→syn6288_init、SYN6288_Send_Cmd→syn6288_send_cmd、SYN6288_Send_Bit/send_String→内部 _tx_byte/_tx_bit）；Get_SYN6288RX_BUFF/Clear_SYN6288RX_BUFF/IRQHandler（状态回传 0x4A/0x41/0x45/0x4E/0x4F 缓冲）随软 UART 裁剪——单向 TX 无 RX，需接收状态回传请接真实 UART（notes 记录）；文本上限 SYN6288_TEXT_MAX=200（页面 Send_Buff[210]，帧最大 206 字节防越界）；命令字/参数（CmdPar 低 3 位：0=GB2312、1=GBK、2=BIG5、3=UNICODE——页面注释原样保留）。\nwiki-modules-batch4/02 编译矩阵（2026-09-05）：单选生成 → SysConfig CLI 校验 → gmake 0 error、0 module warning（PASS）；未上板（软 UART 位时序/GB2312 编码真机验证留后续）。",
+      "kit": "SYN6288 语音合成模块（中文 TTS 真人发音模块）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/control/syn6288-speech-synthesis-broadcast-module.html",
+      "pins": [
+        {
+          "id": "SYN6288_TX",
+          "type": "gpio_out",
+          "default": "PB20",
+          "required": true
+        }
+      ]
+    }
+  }
+}

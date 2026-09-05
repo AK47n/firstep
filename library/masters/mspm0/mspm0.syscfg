@@ -454,6 +454,18 @@ JQ8900.associatedPins[0].direction    = "OUTPUT";
 JQ8900.associatedPins[0].initialValue = "SET";
 JQ8900.associatedPins[0].pin.$assign  = "PB19";
 
+// SYN6288 语音合成（syn6288 模块：软 UART 单发 TX——同 jq8900 先例，不占
+// UART 外设/TIMER；TX 输出初始 SET = 空闲高。默认 PB20——DC_MOTOR 编码器
+// BB 脚：语音合成与双电机小车同选概率最低；与同批 jq8900 默认 PB19 刻意
+// 错开（语音两件常同选，默认即不撞），同选时经引脚绑定消解）
+const SYN6288 = GPIO.addInstance();
+SYN6288.$name = "SYN6288";
+SYN6288.associatedPins.create(1);
+SYN6288.associatedPins[0].$name        = "TX";
+SYN6288.associatedPins[0].direction    = "OUTPUT";
+SYN6288.associatedPins[0].initialValue = "SET";
+SYN6288.associatedPins[0].pin.$assign  = "PB20";
+
 // LED/蜂鸣器输出（PA15；原 LaunchPad 值 PA3 = 32.768k 晶振脚，地猛星排针未引出）
 LED_BEEP.$name = "LED_BEEP";
 LED_BEEP.associatedPins.create(1);

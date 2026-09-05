@@ -43,6 +43,14 @@
         "note": "库内 jq8900 已打通（mspm0：jq8900_init + play(index)/next/prev/stop/pause/resume/set_volume——软 UART 位操作 9600 8N1，不占 UART 外设/TIMER，默认 PB19——同选时经引脚绑定消解）；SPI-FLASH 直接模拟 U 盘拷贝语音（按 00001.. 命名），出厂自带 10 首；播放指定曲目要求语音文件按 5 位数字命名；命令字见模块头注释（以厂家说明书/真机为准）",
         "suitable": "语音播报提示/状态语音/门禁考勤语音提示",
         "lib_modules": ["jq8900"]
+      },
+      {
+        "name": "SYN6288 语音合成模块（中文 TTS）",
+        "interface": "两线 UART 9600（库内走软 UART 单发 TX，2 线 3 脚）",
+        "price": "￥10-25/个",
+        "note": "库内 syn6288 已打通（mspm0：syn6288_init + speak(text) 文本转语音 + stop/pause/resume——帧 = 0xFD+长度+命令字+参数+文本+异或校验，软 UART 位操作 9600 8N1 不占 UART 外设/TIMER，默认 PB20——同选时经引脚绑定消解）；文本 GB2312 编码（页面注释：CmdPar 低 3 位可切 GBK/BIG5/UNICODE）；只能播报不能识别/录音；与 JQ8900 区别：JQ8900 播的是 FLASH 里预存的音频文件，SYN6288 直接合成任意文本",
+        "suitable": "文本转语音播报/动态播报内容/语音提示",
+        "lib_modules": ["syn6288"]
       }
     ]
   },

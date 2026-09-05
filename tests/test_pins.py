@@ -376,6 +376,7 @@ MSPM0_DEFAULT_MAP = {
     ("pca9685", "PCA9685_SDA"): ("PCA9685", "SDA"),
     ("ir_remote_tx", "IR_TX_OUT"): ("IR_TX", "OUT"),
     ("jq8900", "JQ8900_TX"): ("JQ8900", "TX"),
+    ("syn6288", "SYN6288_TX"): ("SYN6288", "TX"),
     ("ws2812", "WS2812_IN"): ("WS2812", "IN"),
     ("hx711", "HX711_SCK"): ("HX711", "SCK"),
     ("hx711", "HX711_DT"): ("HX711", "DT"),
