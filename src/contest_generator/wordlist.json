@@ -269,6 +269,15 @@
         "price": "￥10-20/个",
         "note": "手机 App 直接控，免自写协议；现场手机信号干扰需注意；HC-05 是主从一体",
         "suitable": "日常调试 / 手机方案 / 数据透传"
+      },
+      {
+        "name": "双轴摇杆按键（PS2 手柄摇杆电位器式）",
+        "interface": "X/Y 模拟量 ADC + 按键 GPIO",
+        "price": "￥3-8/个",
+        "note": "板载 10k 电位器、X/Y 0-3.3V、按下低电平；库内 joystick 已打通（mspm0：joystick_read_x/y 出 12bit 原始值、read_x_percent/y_percent 出 0-100%、read_sw 出按下；默认 PA26/PA25/PA9，同选时经引脚绑定消解）",
+        "suitable": "手动遥控/云台方向/模拟量参数调节",
+        "lib_modules": ["joystick"],
+        "recommended": true
       }
     ]
   }
