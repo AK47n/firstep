@@ -395,6 +395,13 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         "UART0": 2,  # IMU601 与 FINGERPRINT_UART 默认同外设（用户改绑消解，
         # 批次 4 指纹独立实例——SysConfig 拒绝同外设多实例，单选裁剪后独占）
         "UART2": 3,  # UWB_UART 与 DEBUG_UART 默认同外设 + HC05_UART（用户改绑消解）
+        "PB20": 3,  # DC_MOTOR 编码器 BB + SYN6288 TX（syn6288 默认脚——语音
+        # 合成与双电机小车同选概率最低故叠此脚，且与 jq8900 默认 PB19 刻意错开
+        # （语音两件常同选，默认即不撞））+ ADC12_0 adcPin6（mq135 默认脚——
+        # MQ-135 独立 MEM4 通道 A0_6；地猛星板上 ADC0 剩余通道中与既有默认
+        # 同选概率最低：与双电机编码器/语音报警不同框、同选概率最低故叠此脚，
+        # 多路气体同选时物理通道独立、无共读冲突（mq2 为 MEM0 薄封装共读），
+        # 同选时经引脚绑定消解）
     }
 
 
