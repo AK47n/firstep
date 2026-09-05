@@ -4,7 +4,9 @@
 
 **被谁阻塞：** 01 — Markdown 资料库后端（需要 /api/materials-md 两端点）。
 
-**状态：** ready-for-agent
+**状态：** resolved
+
+**结论：** 2026-09-05 完成并提交（acecec55 前置提交）。fx/md.js + ui/md.js + nav 11 tab（nav-tabs-guard/shared 同步）；JS 全量 1351 + Python 全量 3315 通过。浏览器端到端待服务重启后人工核验（运行中的 8000 端口服务是旧代码，重启即生效）。
 
 - [ ] `fx/md.js` 纯函数组（对偶 fx/pdf.js）：`mdFilterEntries`（文件名/批次/目录/路径四合一子串过滤）/ `mdSortEntries`（文件名/批次/目录/大小/修改时间 ± 方向）/ `mdStats` + `mdStatsText` / `mdChipRowHTML`（批次 chips）/ `mdRowHTML`（文件名 + 批次 chip + 目录 + 大小 + 修改时间 + 预览/复制路径钮）/ `mdEncodedPath`（逐段编码）/ 预览 URL 构造
 - [ ] `ui/md.js` DOM 胶水（对偶 ui/pdf.js）：加载/过滤/排序/统计渲染、批次 chips 事件、预览弹窗（ref-files-overlay 遮罩 + Esc/遮罩点击关闭）、全文懒取 memo（按 rel_path，400 落缓存可重试、网络/500 不缓存）、复制相对路径
