@@ -283,7 +283,10 @@ class ApplyTask:
         self._write_snapshot(force=True)
 
     def _download_one(self, part: _PartState, batch: _BatchState) -> None:
-        dest = self.task_dir / "materials" / f"{batch.slug}-{part.name}.zip"
+        # 文件名 = part.name（即 zip_name / URL 尾段），与应用器按
+        # manifest parts[].zip_name 找文件的口径一致（勿加 slug 前缀，
+        # 否则双缀导致应用器找不到）。
+        dest = self.task_dir / "materials" / part.name
         dest.parent.mkdir(parents=True, exist_ok=True)
         part.dest = str(dest)
         part.downloaded_bytes = 0
