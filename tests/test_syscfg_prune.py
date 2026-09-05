@@ -75,6 +75,13 @@ def test_prune_shared_instance_kept_by_any_consumer():
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["digit_uart"]), "ZIGBEE_UART")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["ir_beam"]), "IR_BEAM")
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["key"]), "IR_BEAM")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "HC05_UART")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "HC05")
+    _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["uwb_uart"]), "HC05_UART")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["nrf24l01"]), "NRF24L01")
+    _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "NRF24L01")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["ir_remote"]), "IR_REMOTE")
+    _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "IR_REMOTE")
 
 
 def test_every_master_instance_is_registered_in_consumer_map():

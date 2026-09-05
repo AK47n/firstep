@@ -1,0 +1,44 @@
+{
+  "slug": "hc05",
+  "description": "HC-05 蓝牙串口透传驱动（mspm0 纯驱动，ADR 0009）：hc05_init 开 RX 中断 + 环形缓冲，send_char/string/buffer 发送、receive/available 读走蓝牙数据、is_connected 读 STATE 引脚连接状态、at_mode_enter/exit 驱动 KEY 引脚切 AT 模式（重上电生效）；9600 8N1 透传——适用于手机遥控、上位机无线通信、数据透传等赛题功能。",
+  "dependencies": [],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/hc05.c",
+        "code/hc05.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg：HC05_UART UART 实例（UART2 共享 DEBUG+UWB 同一外设——UART0-3 全被 IMU601/DIGIT_UART/DEBUG+UWB/ZIGBEE 占用，按 DEBUG+UWB 同 UART2 共享先例挂靠；targetBaudRate=9600（HC05 模块出厂默认，其余 UART 实例 115200——每个实例独立 targetBaudRate 无冲突）；RX 中断、FIFO 关闭；默认 PA23(TX)/PA24(RX)——用 UWB_UART 同脚对：蓝牙手机遥控与 UWB 室内定位链路互替、同选概率最低，同选时经引脚绑定换实例消解）。HC05 GPIO 实例（STATE 输入默认 PA8——与 DIGIT_UART TX/IR_BEAM OUT 默认重叠（蓝牙与 K230 视觉/红外对射链路互替），KEY 输出默认 PB24——与 STEP_MOTOR RST2/SR04 TRIG 重叠（AT 切换不常用），同选时经引脚绑定消解）。SYSCFG_DL_init() 后调 hc05_init() 开 NVIC；HC05_UART_INST_IRQHandler（UART2_IRQHandler）在模块内已定义，main.c 无需再定义。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/rf--hc05-bluetooth-module.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/rf/hc05-bluetooth-module.html；网盘完整工程 https://pan.baidu.com/s/1WjZsU1nNSf9wA0TG3QCS0g?pwd=5qhw）。改造要点：去掉 main.c 演示与 printf；函数名规范化（Bluetooth_Init→hc05_init、BLE_send_*→hc05_send_*、Get_Bluetooth_ConnectFlag→hc05_is_connected、Bluetooth_Mode 内联进 is_connected、Receive_Bluetooth_Data 演示 printf 移除——读侧改环形缓冲 + receive/available）；页内 BLERX_BUFF[200]+单 FLAG 缓冲改环形缓冲（每字节覆盖改为环形，溢出丢新字节）；AT 模式切换/连接状态定为服务函数（KEY 引脚高+重上电进 AT——HC05 硬件行为，注释说明）；9600 波特率保持手册默认（非 115200——HC05 需先经 AT 指令设为 9600 或出厂 9600，与其余 UART 实例独立配置无冲突）。\nwiki-modules-batch1/02 编译矩阵（2026-09-05）：单选生成 → SysConfig CLI 校验 → gmake 0 error、0 module warning；未上板。",
+      "kit": "HC-05 主从一体蓝牙串口透传模块（带清除键）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/rf/hc05-bluetooth-module.html",
+      "pins": [
+        {
+          "id": "HC05_TX",
+          "type": "uart_tx",
+          "default": "PA23",
+          "required": true
+        },
+        {
+          "id": "HC05_RX",
+          "type": "uart_rx",
+          "default": "PA24",
+          "required": true
+        },
+        {
+          "id": "HC05_STATE",
+          "type": "gpio_in",
+          "default": "PA8",
+          "required": true
+        },
+        {
+          "id": "HC05_KEY",
+          "type": "gpio_out",
+          "default": "PB24",
+          "required": true
+        }
+      ]
+    }
+  }
+}

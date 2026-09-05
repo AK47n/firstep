@@ -25,6 +25,22 @@
  *   MEM2 = PA25(A0_2) 归 joystick 摇杆 X/Y（与 ZIGBEE_UART 默认重叠——
  *   手动摇杆与无线身份/信标同选概率最低，同选时经引脚绑定消解；多 MEM
  *   必须 sequence 模式，2026-09-05 SysConfig CLI 实证）
+ *   HC05：HC05_UART = UART2 共享（9600——HC05 出厂默认波特率，与 DEBUG+UWB
+ *   同外设；默认 PA23/PA24 与 UWB 同脚——蓝牙与 UWB 链路互替、同选概率
+ *   最低，同选时经引脚绑定换实例消解）；STATE = PA8 输入（连接状态，
+ *   高有效；与 DIGIT_UART TX/IR_BEAM OUT 重叠——蓝牙与 K230 视觉/红外对射
+ *   链路互替）、KEY = PB24 输出（AT 模式切换，与 STEP_MOTOR RST2/SR04 TRIG
+ *   重叠——AT 切换不常用，同选经引脚绑定消解）
+ *   NRF24L01：软 SPI 6 脚全 GPIOA（CLK=PA26/MOSI=PA25/MISO=PA9/
+ *   CSN=PA24/CE=PA23/IRQ=PA22，单 NRF24L01_PORT 宏）——与 ZIGBEE_UART/
+ *   UWB/DEBUG_UART/HUIDU 巡线/joystick/adc/DIGIT 默认重叠：NRF 与其它无线
+ *   链路互替、同选概率最低，同选时经引脚绑定消解；IRQ 输入不配中断（GPIO
+ *   中断只有 GROUP1 一路且被 motor 编码器独占，第二个 GROUP1_IRQHandler 会
+ *   链接期冲突——按手册轮询方式接收，见 nrf24l01 模块注释）
+ *   IR_REMOTE：OUT = PA26 输入（红外接收头，NEC 忙等解码不占 TIMER；
+ *   与 ZIGBEE_TX/joystick X/NRF24L01 CLK 重叠——红外与其它无线/手动输入
+ *   互替、同选概率最低，同选时经引脚绑定消解；主循环轮询解码，不注册
+ *   GPIO 中断，原因同 NRF24L01）
  * 板上固定占用：CH340E PA10/PA11、Flash PB14-17、晶振 PA3-6、板载 LED PA0/PA1、
  * VREF- PA21 直连地、BSL PA18（47k 到 BSL 排针）、SWD PA19/PA20（独立 DEBUG 排针，
  * 用户实物未在 2×20P 上找到 A19/A20）、NRST。2026-08-20 用户实物核验：芯片丝印
@@ -63,6 +79,9 @@ const HX711 = GPIO.addInstance();
 const AHT10 = GPIO.addInstance();
 const SR04 = GPIO.addInstance();
 const JOYSTICK = GPIO.addInstance();
+const HC05 = GPIO.addInstance();
+const NRF24L01 = GPIO.addInstance();
+const IR_REMOTE = GPIO.addInstance();
 const LED_BEEP = GPIO.addInstance();
 const STEP_MOTOR = GPIO.addInstance();
 const IR_BEAM = GPIO.addInstance();
@@ -262,6 +281,67 @@ JOYSTICK.associatedPins[0].direction        = "INPUT";
 JOYSTICK.associatedPins[0].internalResistor = "PULL_UP";
 JOYSTICK.associatedPins[0].pin.$assign  = "PA9";
 
+// HC05 蓝牙（hc05 模块：STATE 输入 = 连接状态指示（模块 STATE 脚高 = 手机
+// 已连接；默认 PA8——与 DIGIT_UART TX / IR_BEAM OUT 默认重叠：K230 视觉/
+// 红外对射与蓝牙链路互替，同选时经引脚绑定消解）；KEY 输出 = AT 模式切换
+// 按键（KEY 高 + 重上电 = AT 命令模式；默认 PB24——与 STEP_MOTOR RST2 /
+// SR04 TRIG 重叠，AT 切换不常用，同选时经引脚绑定消解））
+HC05.$name = "HC05";
+HC05.associatedPins.create(2);
+HC05.associatedPins[0].$name            = "STATE";
+HC05.associatedPins[0].direction        = "INPUT";
+HC05.associatedPins[0].pin.$assign      = "PA8";
+HC05.associatedPins[1].$name            = "KEY";
+HC05.associatedPins[1].direction        = "OUTPUT";
+HC05.associatedPins[1].initialValue     = "CLEARED";
+HC05.associatedPins[1].pin.$assign      = "PB24";
+
+// NRF24L01 2.4G 无线（nrf24l01 模块：软 SPI 位操作 6 脚——CLK/MOSI/CSN/CE
+// 输出 + MISO/IRQ 输入；IRQ 输入不配中断（GPIO 中断只有 GROUP1 一路且被
+// motor 编码器独占——NRF+电机是双车标配组合，定义第二个 GROUP1_IRQHandler
+// 会链接期冲突，按手册轮询方式接收）。默认全 GPIOA 单口：CLK=PA26/MOSI=PA25/
+// MISO=PA9/CSN=PA24/CE=PA23/IRQ=PA22——与 ZIGBEE_UART（PA26/PA25）、
+// UWB/DEBUG_UART（PA23/PA24/PA22）、HUIDU 巡线（PA22-26）、joystick X/Y、
+// adc、DIGIT_UART（PA9）默认重叠：NRF 与其它无线/巡线/手动输入互替、同选
+// 概率最低，同选时经引脚绑定消解）
+NRF24L01.$name = "NRF24L01";
+NRF24L01.associatedPins.create(6);
+NRF24L01.associatedPins[0].$name        = "CLK";
+NRF24L01.associatedPins[0].direction    = "OUTPUT";
+NRF24L01.associatedPins[0].initialValue = "CLEARED";
+NRF24L01.associatedPins[0].pin.$assign  = "PA26";
+NRF24L01.associatedPins[1].$name        = "MOSI";
+NRF24L01.associatedPins[1].direction    = "OUTPUT";
+NRF24L01.associatedPins[1].initialValue = "CLEARED";
+NRF24L01.associatedPins[1].pin.$assign  = "PA25";
+NRF24L01.associatedPins[2].$name        = "MISO";
+NRF24L01.associatedPins[2].direction    = "INPUT";
+NRF24L01.associatedPins[2].pin.$assign  = "PA9";
+NRF24L01.associatedPins[3].$name        = "CSN";
+NRF24L01.associatedPins[3].direction    = "OUTPUT";
+NRF24L01.associatedPins[3].initialValue = "SET";
+NRF24L01.associatedPins[3].pin.$assign  = "PA24";
+NRF24L01.associatedPins[4].$name        = "CE";
+NRF24L01.associatedPins[4].direction    = "OUTPUT";
+NRF24L01.associatedPins[4].initialValue = "CLEARED";
+NRF24L01.associatedPins[4].pin.$assign  = "PA23";
+NRF24L01.associatedPins[5].$name        = "IRQ";
+NRF24L01.associatedPins[5].direction    = "INPUT";
+NRF24L01.associatedPins[5].pin.$assign  = "PA22";
+
+// 红外遥控接收（ir_remote 模块：OUT 输入（接收头输出直接接 GPIO，上拉 = 无
+// 信号高电平、有信号拉低）；NEC 解码用 CPU 忙等采样（delay 模块 20us 步进），
+// 不占 TIMER（TIMG 全占，sr04 先例）；主循环轮询解码、不注册 GPIO 中断
+// （GROUP1 只有一路且被 motor 编码器独占——红外+电机是经典组合）。默认
+// PA26——与 ZIGBEE_TX/joystick X/NRF24L01 CLK 默认重叠（红外与其它无线/
+// 手动输入互替、同选概率最低），同选时经引脚绑定消解）
+IR_REMOTE.$name = "IR_REMOTE";
+IR_REMOTE.associatedPins.create(1);
+IR_REMOTE.associatedPins[0].$name            = "OUT";
+IR_REMOTE.associatedPins[0].direction        = "INPUT";
+IR_REMOTE.associatedPins[0].internalResistor = "PULL_UP";
+IR_REMOTE.associatedPins[0].pin.$assign      = "PA26";
+
 // LED/蜂鸣器输出（PA15；原 LaunchPad 值 PA3 = 32.768k 晶振脚，地猛星排针未引出）
 LED_BEEP.$name = "LED_BEEP";
 LED_BEEP.associatedPins.create(1);
@@ -365,6 +445,24 @@ ZIGBEE_UART.enabledInterrupts = ["RX"];
 ZIGBEE_UART.enableFIFO        = false;
 ZIGBEE_UART.peripheral.rxPin.$assign = "PA25";
 ZIGBEE_UART.peripheral.txPin.$assign = "PA26";
+
+// HC05 蓝牙串口（hc05 模块：9600 8N1 透传——HC05 模块出厂默认波特率，与
+// 其余 UART 实例 115200 独立无冲突；RX 中断 + FIFO 关闭；与 DEBUG_UART/
+// UWB_UART 默认同 UART2 外设——两模块同选时经引脚绑定换实例消解；默认
+// TX=PA23/RX=PA24 与 UWB_UART 同脚：蓝牙手机遥控与 UWB 定位链路互替、
+// 同选概率最低，同选时经引脚绑定消解）
+const HC05_UART = UART.addInstance();
+HC05_UART.$name             = "HC05_UART";
+HC05_UART.profile           = "CONFIG_PROFILE_1";
+HC05_UART.peripheral.$assign = "UART2";
+HC05_UART.uartClkSrc        = "BUSCLK";
+HC05_UART.ovsRate           = "16";
+HC05_UART.targetBaudRate    = 9600;
+HC05_UART.enableInternalLoopback = false;
+HC05_UART.enabledInterrupts = ["RX"];
+HC05_UART.enableFIFO        = false;
+HC05_UART.peripheral.rxPin.$assign = "PA24";
+HC05_UART.peripheral.txPin.$assign = "PA23";
 
 // OLED（I2C 控制器）
 OLED.$name                         = "OLED";
