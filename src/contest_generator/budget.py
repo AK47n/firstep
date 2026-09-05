@@ -113,7 +113,7 @@ SKELETON_REFERENCE_TOTAL_BYTES = 40000
 # wiki-modules-batch7 增补气体/空气 4 方案后完整 wire 实测 5495，预算升
 # 5700——全量送达 + 余量，2026-09-08；
 # wiki-modules-batch8 增补环境类第二组 4 方案（火焰/土壤湿度/人体红外/微波
-# 雷达）后完整 wire 实测 5900，预算升 6100——全量送达 + 余量，2026-09-09）
+# 雷达）后完整 wire 实测 5900，预算升 6100——全量送达 + 余量，2026-09-06）
 # + 澄清历史
 # （CLARIFICATION_HISTORY_CAP=2500 字符 × 6 ≈ 15KB + 标注）+ 契约文本 ≈ 1KB
 # + 系统提示词 ≈ 3.3KB + JSON 壳 ≈ 0.1KB + 参考清单 / 全文段壳 ≈ 0.5KB ≈
@@ -129,7 +129,7 @@ SKELETON_REFERENCE_TOTAL_BYTES = 40000
 # 词表段变更配套（2026-09-08，wiki-modules-batch7）：词表完整 wire 实测 5495、
 # 预算 5400→5700 → 词表段全量 5495 比截断形态 5300 多 195B → 全文降 500B 回
 # 62000 保 2KB 边界余量（同 batch5 口径；红证见 worst-case 结构测试实测）。
-# 词表段变更配套（2026-09-09，wiki-modules-batch8）：词表完整 wire 实测 5900、
+# 词表段变更配套（2026-09-06，wiki-modules-batch8）：词表完整 wire 实测 5900、
 # 预算 5700→6100 → 词表段全量 5900 比截断形态 5700 多 200B → 全文降 500B 回
 # 61500 保 2KB 边界余量（同 batch5/7 口径；红证见 worst-case 结构测试实测）。
 REFERENCE_FULLTEXT_BYTES = 61500

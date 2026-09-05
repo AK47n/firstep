@@ -5,7 +5,7 @@
 
 /* 红外火焰传感器驱动（mspm0 纯驱动切片，ADR 0009）：
  * - **独立 ADC 通道**：经库内 adc 模块 API 读 ADC12_0 MEM6（adc_get(ADC_1,
- *   ADC_Channel_6)，默认 PA22/A0_7，母版 sequence 七通道 endAdd=6）——
+ *   ADC_Channel_6)，默认 PA22/A0_7，母版 sequence 八通道 endAdd=7）——
  *   与 mq2/us016 的 MEM0 薄封装不同：火焰与其它模拟量件同选时物理通道
  *   独立、无共读冲突（本件取剩余 MEM 槽位 MEM6）；
  * - 探测范围 700-1000nm 红外（灵敏度峰值 880nm、探测角度 60°），`红外光

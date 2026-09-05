@@ -61,7 +61,7 @@
 - `tests/test_pins.py`：
   - `MSPM0_DEFAULT_MAP` 增 2 条（human_ir OUT → HUMAN_IR/OUT、microwave_radar OUT → MICROWAVE/OUT——GPIO 组角色；flame/soil 的 adc 角色无 GPIO 组/外设字段落点，由 test_pin_bindings 落点唯一性覆盖——mq135/mq5 先例）；
   - `test_module_code_has_no_pin_literals` 豁免元组 `("adc","us016","ir_distance","mq2","mq135","mq5")` 增 `"flame","soil"`（ADC_Channel_N 为 API 对偶枚举）；
-- `tests/test_pin_bindings.py` 刻意重叠表更新（PA22 4→5、PA14 4→5、PB8 3→4、PA0 2→3，注释补新件）；
+- `tests/test_pin_bindings.py` 刻意重叠表更新（PA22 4→5、PA14 4→5、PB8 3→4、PA31 4→5、PA0 保持 2（GPIO 输入不可用不计入——实现定稿），注释补新件）；
 - `tests/test_syscfg_prune.py` 增 HUMAN_IR/MICROWAVE 实例与 ADC12_0 新消费方（flame/soil）保留/裁剪断言；
 - 新增 `tests/test_module_flame.py` / `test_module_soil.py` / `test_module_human_ir.py` / `test_module_microwave_radar.py`：manifest 结构（仅 mspm0 + 依赖）+ mspm0 单选生成（syscfg 含实例/通道 + 模块文件落盘 + main.c 调 init/服务函数过静态门禁）；
 - **旧断言全量同步**（ADC 换通道）：`test_module_ir_distance.py`、`test_module_joystick.py`、`test_module_mq135.py`、`test_module_mq5.py` 的 endAdd/adcMem/adcPin/docstring 断言随母版演进逐一同步（endAdd 5→6（flame）→7（soil）；adc 模块注释与 `test_module_mq135` 的 `> ADC_Channel_5` 守卫断言同步扩展为 `> ADC_Channel_7`）；
