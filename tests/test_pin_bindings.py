@@ -291,33 +291,38 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
     for value in values:
         counts[value] = counts.get(value, 0) + 1
     assert {v: c for v, c in counts.items() if c != 1} == {
-        "PB6": 2,
-        "PB7": 2,
-        "PA22": 2,
-        "PA23": 3,  # HUIDU L2 + UWB_UART TX + DEBUG_UART TX
-        "PA24": 3,  # HUIDU L3 + UWB_UART RX + ADC12_0 adcPin3（adc 默认脚）
-        "PA25": 3,  # HUIDU L4 + ZIGBEE_UART RX + ADC12_0 adcPin2（joystick Y
-        # 默认脚；摇杆与无线身份/信标同选概率最低故叠此脚，同选时经引脚绑定消解）
-        "PA26": 3,  # HUIDU R1 + ZIGBEE_UART TX + ADC12_0 adcPin1（joystick X
-        # 默认脚，同上）
-        "PA9": 2,   # DIGIT_UART RX + JOYSTICK SW（joystick 默认脚；手动摇杆与
-        # K230 视觉串口同选概率最低故叠此脚，同选时经引脚绑定消解）
+        "PB6": 3,
+        "PB7": 3,
+        "PA22": 3,
+        "PA23": 5,  # HUIDU L2 + UWB_UART TX + DEBUG_UART TX + HC05_UART TX
+        # （hc05 默认脚）+ NRF24L01 CE（nrf24l01 默认脚；蓝牙/2.4G 与 UWB/
+        # DEBUG 链路互替，同选概率最低故叠此脚，同选时经引脚绑定消解）
+        "PA24": 5,  # HUIDU L3 + UWB_UART RX + ADC12_0 adcPin3（adc 默认脚）+
+        # HC05_UART RX + NRF24L01 CSN（同上——HC05/NRF 与 UWB 无线链路互替）
+        "PA25": 4,  # HUIDU L4 + ZIGBEE_UART RX + ADC12_0 adcPin2（joystick Y
+        # 默认脚；摇杆与无线身份/信标同选概率最低故叠此脚，同选时经引脚绑定
+        # 消解）+ NRF24L01 MOSI（2.4G 与 Zigbee 链路互替）
+        "PA26": 5,  # HUIDU R1 + ZIGBEE_UART TX + ADC12_0 adcPin1（joystick X
+        # 默认脚，同上）+ NRF24L01 CLK + IR_REMOTE OUT（ir_remote 默认脚；
+        # 红外与其它无线/手动输入互替）
+        "PA8": 3,   # DIGIT_UART TX + IR_BEAM OUT（ir_beam 默认脚）+ HC05 STATE
+        # （hc05 默认脚；蓝牙与 K230 视觉/红外对射链路互替，同选时经引脚
+        # 绑定消解）
+        "PA9": 3,   # DIGIT_UART RX + JOYSTICK SW（joystick 默认脚；手动摇杆与
+        # K230 视觉串口同选概率最低故叠此脚，同选时经引脚绑定消解）+
+        # NRF24L01 MISO（2.4G 与视觉/手动输入互替）
         "PA7": 2,  # DC_MOTOR BIN2 + SERVO_PWM ccp0Pin（servo 默认脚）
-        "PA8": 2,  # DIGIT_UART TX + IR_BEAM OUT（ir_beam 默认脚；K230 视觉与
-        # 遮挡检测同选时经引脚绑定消解）
         "PA14": 2,  # DCC_100_PWM2 ccp0Pin（step_motor 默认脚）+ WS2812 IN
         # （ws2812 默认脚；地猛星排针 31 IO 全占，步进与灯带同选概率最低故
         # 叠此脚，同选时经引脚绑定消解）
         "PA28": 2,  # IMU601 TX + HX711 SCK（hx711 默认脚；称重与姿态同选
         # 概率最低故叠此脚，同选时经引脚绑定消解）
         "PA31": 2,  # IMU601 RX + HX711 DT（同上）
-        "PB6": 3,  # STEP_MOTOR SLP2 + HUIDU R3 + AHT10 SCL（aht10 默认脚；
-        # 温湿度与步进/巡线同选概率最低故叠此脚，同选时经引脚绑定消解）
-        "PB7": 3,  # STEP_MOTOR DIR2 + HUIDU R4 + AHT10 SDA（同上）
         "PB8": 2,  # STEP_MOTOR DCY2 + SR04 ECHO（sr04 默认脚；测距与步进
         # 同选概率最低故叠此脚，同选时经引脚绑定消解）
-        "PB24": 2,  # STEP_MOTOR RST2 + SR04 TRIG（同上）
-        "UART2": 2,  # UWB_UART 与 DEBUG_UART 默认同外设（用户改绑消解）
+        "PB24": 3,  # STEP_MOTOR RST2 + SR04 TRIG + HC05 KEY（hc05 默认脚；
+        # AT 切换不常用，故叠此脚，同选时经引脚绑定消解）
+        "UART2": 3,  # UWB_UART 与 DEBUG_UART 默认同外设 + HC05_UART（用户改绑消解）
     }
 
 
