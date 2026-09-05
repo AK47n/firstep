@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=c5336bc474f584a836eb6360cf21c89539984ed0 -->
+<!-- changelog-auto: last-commit=33194e8e55004539166b990fff18fe75cf032b9a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -26,6 +26,7 @@
 - 11:29 资料库更新前端（工单 materials-update/06）：设置页卡+批次选择弹窗+下载进度
 - 11:33 资料库更新端到端冒烟与文档（工单 materials-update/07）+ 修复下载文件名双缀与 MaterialApplyError 异常登记
 - 12:00 立创地猛星wiki模块移植手册抓取工具（materials-wiki/01）：70页文档+网盘索引已归档资料库
+- 14:30 Markdown 资料库后端（工单 wiki-materials/01）：素材根全量 .md 清单与全文端点 + 测试
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
