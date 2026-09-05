@@ -18,9 +18,9 @@ typedef enum
 
 typedef enum
 {
-    ADC_Channel_0, /* MEM0（默认 PA24 / A0_3；v1 只绑此通道） */
-    ADC_Channel_1, /* MEM1（未绑引脚，v1 不可用——LQFP-64(PM) 无 adcPinN 槽位） */
-    ADC_Channel_2,
+    ADC_Channel_0, /* MEM0（默认 PA24 / A0_3；adc 模块 + us016 薄封装共读） */
+    ADC_Channel_1, /* MEM1（PA26 / A0_1——与 joystick 摇杆 X 共享同读一通道） */
+    ADC_Channel_2, /* MEM2（PA25 / A0_2——归 joystick 摇杆 Y，adc_get 不开放） */
     ADC_Channel_3,
     ADC_Channel_4,
     ADC_Channel_5,

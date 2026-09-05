@@ -38,7 +38,7 @@
       ],
       "verified": true,
       "hardware_bound": false,
-      "notes": "母版 syscfg ADC12_0 实例（sequence 三通道轮询读取：MEM0=PA24/A0_3 归本模块、MEM1=PA26/A0_1、MEM2=PA25/A0_2 与 joystick 摇杆共享——wiki-modules-batch1/01，本模块 adc_get 通道 0/1 对应 MEM0/MEM1，MEM1 与 joystick_read_x 同读一通道同数据源；绑定换引脚 = 改写 adcPin*.$assign + adcMem*chansel（A0_* 通道组），模块代码零改动）。多 MEM 必须 samplingOperationMode=\"sequence\" + startAdd/endAdd——单发（single）模式只启用 startAdd 槽位、adcPin1/2 槽位由此不可用（原「LQFP-64(PM) 无 adcPinN 槽位」注释系误判，2026-09-05 SysConfig CLI 实证已更正）。通道枚举值 = ADC12 MEM 索引（0=本模块默认脚、1/2=摇杆共享通道，adc_get 只开放 0/1）。",
+      "notes": "母版 syscfg ADC12_0 实例（sequence 三通道轮询读取：MEM0=PA24/A0_3 归本模块（us016 模拟量超声薄封装共读同槽——wiki-modules-batch2/02）、MEM1=PA26/A0_1、MEM2=PA25/A0_2 与 joystick 摇杆共享——wiki-modules-batch1/01，本模块 adc_get 通道 0/1 对应 MEM0/MEM1，MEM1 与 joystick_read_x 同读一通道同数据源；绑定换引脚 = 改写 adcPin*.$assign + adcMem*chansel（A0_* 通道组），模块代码零改动）。多 MEM 必须 samplingOperationMode=\"sequence\" + startAdd/endAdd——单发（single）模式只启用 startAdd 槽位、adcPin1/2 槽位由此不可用（原「LQFP-64(PM) 无 adcPinN 槽位」注释系误判，2026-09-05 SysConfig CLI 实证已更正）。通道枚举值 = ADC12 MEM 索引（0=本模块默认脚、1=摇杆 X 共享通道，adc_get 只开放 0/1）。",
       "kit": "",
       "source_url": "",
       "pins": [
