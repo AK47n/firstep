@@ -1,0 +1,34 @@
+{
+  "slug": "ads1115",
+  "description": "ADS1115 四通道 16bit 外扩 ADC 驱动（mspm0 纯驱动，ADR 0009）：软 I2C 位操作（不占硬件 I2C 外设），MUX 通道选择（AIN0-3 单端）、PGA 增益（±6.144V~±0.256V 六档）、数据率（8~860SPS）可配——ads1115_init 写默认配置（AIN0/±4.096V/连续 128SPS）、ads1115_read(ch) 出 16bit 有符号原始值、ads1115_read_voltage(ch) 出换算电压、set_gain/set_data_rate/set_address 配置服务；适用于多路模拟量采集、称重/电压/电流监测、分离供电多传感器等赛题功能（与库内 adc 板载 12bit 分工：adc = 板载单通道，本件 = I2C 外挂 4 通道 16bit）。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/ads1115.c",
+        "code/ads1115.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg GPIO 实例 ADS1115（SCL 宏 ADS1115_SCL_PIN / SDA 宏 ADS1115_SDA_PIN / IOMUX 宏 ADS1115_SCL_IOMUX / ADS1115_SDA_IOMUX——SysConfig 命名 <实例>_<引脚名>_IOMUX，aht10 编译矩阵实测确认）。软 I2C：SDA 方向运行时切换（ADS1115_SDA_OUT/IN 宏，不用硬件 I2C 外设；节点需板上/模块自带上拉）。默认 SCL=PA16 / SDA=PA17——与 DC_MOTOR 编码器 AA/AB、RC522 MOSI/MISO 默认重叠（外扩多通道 ADC 与双电机闭环车/读卡门禁同选概率最低），同选时经引脚绑定消解；地猛星 2×20 排针 31 个 IO 全被默认布局占用（IR_BEAM/PA8 先例）。**与库内 adc 模块（板载 12bit）分工**：adc = 板载 ADC12_0 单通道轮询（MEM0 默认 PA24，us016 共读同槽；改绑走 type 级通道迁移），ads1115 = I2C 外挂 4 通道 16bit（MUX 任选 AIN0-3，补码符号位，FSR 六档增益）；多路模拟量/多传感器分离供电用 ads1115、单路板载用 adc，两件同选互不冲突（不同总线/引脚）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--ads1115-multichannel-a-to-d-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/ads1115-multichannel-a-to-d-sensor.html；网盘完整工程 https://pan.baidu.com/s/1DSzFuyTioy2EsKwDGmNNXA?pwd=5vej）。改造要点：去掉 main.c 演示与 printf；函数名规范化（WriteADS1115→ads1115_write_register（按 add 寄存器通用保留）/ReadADS1115→ads1115_read(ch)（16bit 原始值）+ads1115_read_voltage（换算电压）/ADS1115_Init→ads1115_init（写默认配置 0xC283 同页面））；IIC 原语静态化（ads1115_iic_start/stop/send_ack/wait_ack/send_byte/read_byte 照 aht10）；**页面负数换算缺陷修正**：页面 `if(num>32768) ret=(65535-num)*0.000125`（未含 32768，且 65535-num 近似）——本实现按 int16_t 补码正确换算 `raw/32768*FSR`（页面分辨率式 0.000125=4.096/2^15 正确）；**页面返回 -1 失败语义**：ReadADS1115 返回 float -1 与原始值冲突，本实现 int16_t 失败返回 0（notes 说明，切换配置失败/重试 20 次超时，连续模式极少见）；页面 do-while 读重试（≤20 次 ×1ms 走 delay_ms）保留（从机忙时不响应）；页面比较器阈值/ALERT-RDY 引脚未用不实现（页面明确「用不到」）；配置寄存器位域（OS/MUX/PGA/MODE/DR/比较器）按页面寄存器说明实现，set_address 按页面器件地址表（ADDR=GND→0x48、VDD→0x49、SDA→0x4A、SCL→0x4B，默认 0x48<<1）。未上板（软 I2C 时序/MUX 切换真机验证留后续）。\nwiki-modules-batch5/01 编译矩阵（2026-09-06）：单选生成 → SysConfig CLI → gmake 0 error、0 warning（warning 核查脚本串行复跑确认）。",
+      "kit": "ADS1115 超小型 16 位模数转换器 ADC 4 通道（I2C）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/ads1115-multichannel-a-to-d-sensor.html",
+      "pins": [
+        {
+          "id": "ADS1115_SCL",
+          "type": "gpio_out",
+          "default": "PA16",
+          "required": true
+        },
+        {
+          "id": "ADS1115_SDA",
+          "type": "gpio_out",
+          "default": "PA17",
+          "required": true
+        }
+      ]
+    }
+  }
+}

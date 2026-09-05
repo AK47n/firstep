@@ -103,9 +103,11 @@ SKELETON_REFERENCE_TOTAL_BYTES = 40000
 # 256001 字节 > 120832）。
 #
 # 取值反推（全中文最坏口径，与修复侧同款推导）：题面（4000 截断上限）× 6
-# ≈ 24KB + 摘要 14 条 ≈ 7.6KB + 词表 ≈ 4.7KB（WORDLIST_PROMPT_BYTES
+# ≈ 24KB + 摘要 14 条 ≈ 7.6KB + 词表 ≈ 5.2KB（WORDLIST_PROMPT_BYTES
 # 段级预算——工单 buy-guide/01 后词表行含选购方案名、体积过 3KB；
-# wiki-modules-batch4 增补语音/身份方案后实测 4521，预算升 4700）+ 澄清历史
+# wiki-modules-batch4 增补语音/身份方案后实测 4521，预算升 4700；
+# wiki-modules-batch5 增补 I2C 增强件 4 方案 + 存储/数据记录新分类后完整
+# wire 实测 4925，预算升 5200——全量送达 + 余量，2026-09-06）+ 澄清历史
 # （CLARIFICATION_HISTORY_CAP=2500 字符 × 6 ≈ 15KB + 标注）+ 契约文本 ≈ 1KB
 # + 系统提示词 ≈ 3.3KB + JSON 壳 ≈ 0.1KB + 参考清单 / 全文段壳 ≈ 0.5KB ≈
 # 60.3KB → 全文预算 = 128KB − 10KB 目标余量 − 60.3KB − 全文段壳 / 截断标注
@@ -114,7 +116,10 @@ SKELETON_REFERENCE_TOTAL_BYTES = 40000
 # ≈128252，距 MAX_REQUEST_BYTES−2KB 边界余 ≈770B；改大即红，见
 # tests/test_llm.py::test_selection_prompt_worst_case_fits_request_budget）。
 # 超出的截头带标注（TRUNCATION_NOTICE 文案沿用），不静默丢内容。
-REFERENCE_FULLTEXT_BYTES = 63000
+# 词表段变更配套（2026-09-06，wiki-modules-batch5）：词表完整 wire 实测 4925、
+# 预算 4700→5200 → 词表段全量 4925 比截断形态 4700 多 225B → 全文降 500B 回
+# 62500 保 2KB 边界余量（红证见 worst-case 结构测试实测）。
+REFERENCE_FULLTEXT_BYTES = 62500
 
 # 相关候选清单段合计 wire 字节预算（工单 02 相关候选自动扩容）：recommend
 # 启 15 条相关候选后，清单段现实形态 ≈4.7KB（真实库简介 194-348 字/条，

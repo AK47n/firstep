@@ -299,12 +299,16 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # 温湿度与步进/巡线同选概率最低故叠此脚，同选时经引脚绑定消解）+
         # PCA9685 SDA（同上——软 I2C 同型）
         "PA22": 3,
-        "PA23": 5,  # HUIDU L2 + UWB_UART TX + DEBUG_UART TX + HC05_UART TX
+        "PA23": 6,  # HUIDU L2 + UWB_UART TX + DEBUG_UART TX + HC05_UART TX
         # （hc05 默认脚）+ NRF24L01 CE（nrf24l01 默认脚；蓝牙/2.4G 与 UWB/
-        # DEBUG 链路互替，同选概率最低故叠此脚，同选时经引脚绑定消解）
-        "PA24": 5,  # HUIDU L3 + UWB_UART RX + ADC12_0 adcPin3（adc 默认脚，
+        # DEBUG 链路互替，同选概率最低故叠此脚，同选时经引脚绑定消解）+
+        # TCS34725 SCL（tcs34725 默认脚——颜色识别与无线链路/巡线/板载 ADC
+        # 同选概率最低故叠此脚（视觉类与 K230 互替，刻意不叠显示件），同选
+        # 时经引脚绑定消解）
+        "PA24": 6,  # HUIDU L3 + UWB_UART RX + ADC12_0 adcPin3（adc 默认脚，
         # us016 薄封装共享同槽——wiki-modules-batch2/02，无新 $assign 行）+
-        # HC05_UART RX + NRF24L01 CSN（同上——HC05/NRF 与 UWB 无线链路互替）
+        # HC05_UART RX + NRF24L01 CSN（同上——HC05/NRF 与 UWB 无线链路互替）+
+        # TCS34725 SDA（同上）
         "PA25": 4,  # HUIDU L4 + ZIGBEE_UART RX + ADC12_0 adcPin2（joystick Y
         # 默认脚；摇杆与无线身份/信标同选概率最低故叠此脚，同选时经引脚绑定
         # 消解）+ NRF24L01 MOSI（2.4G 与 Zigbee 链路互替）
@@ -314,12 +318,14 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         "PA27": 2,  # HUIDU R2 + ADC12_0 adcPin0（ir_distance 默认脚；
         # 红外测距与 8 路灰度巡线同选概率最低故叠此脚，同选时经引脚绑定消解；
         # 手册原脚）
-        "PA8": 3,   # DIGIT_UART TX + IR_BEAM OUT（ir_beam 默认脚）+ HC05 STATE
+        "PA8": 4,   # DIGIT_UART TX + IR_BEAM OUT（ir_beam 默认脚）+ HC05 STATE
         # （hc05 默认脚；蓝牙与 K230 视觉/红外对射链路互替，同选时经引脚
-        # 绑定消解）
-        "PA9": 3,   # DIGIT_UART RX + JOYSTICK SW（joystick 默认脚；手动摇杆与
+        # 绑定消解）+ MLX90614 SDA（mlx90614 默认脚——非接触测温与视觉/手动
+        # 输入/蓝牙/2.4G 链路同选概率最低故叠此脚（刻意不叠温湿度/光照/显示
+        # ——测温与传感站/显示为常见搭配），同选时经引脚绑定消解）
+        "PA9": 4,   # DIGIT_UART RX + JOYSTICK SW（joystick 默认脚；手动摇杆与
         # K230 视觉串口同选概率最低故叠此脚，同选时经引脚绑定消解）+
-        # NRF24L01 MISO（2.4G 与视觉/手动输入互替）
+        # NRF24L01 MISO（2.4G 与视觉/手动输入互替）+ MLX90614 SCL（同上）
         "PA7": 2,  # DC_MOTOR BIN2 + SERVO_PWM ccp0Pin（servo 默认脚）
         "PA12": 2,  # PWMAB ccp0Pin（motor 双路 PWM）+ BH1750 SCL（bh1750 默认
         # 脚；光照度监测/台灯类与双电机驱动同选概率最低故叠此脚，同选时经
@@ -331,10 +337,13 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         "PA28": 2,  # IMU601 TX + HX711 SCK（hx711 默认脚；称重与姿态同选
         # 概率最低故叠此脚，同选时经引脚绑定消解）
         "PA31": 2,  # IMU601 RX + HX711 DT（同上）
-        "PB8": 2,  # STEP_MOTOR DCY2 + SR04 ECHO（sr04 默认脚；测距与步进
-        # 同选概率最低故叠此脚，同选时经引脚绑定消解）
-        "PB24": 3,  # STEP_MOTOR RST2 + SR04 TRIG + HC05 KEY（hc05 默认脚；
-        # AT 切换不常用，故叠此脚，同选时经引脚绑定消解）
+        "PB8": 3,  # STEP_MOTOR DCY2 + SR04 ECHO（sr04 默认脚；测距与步进
+        # 同选概率最低故叠此脚，同选时经引脚绑定消解）+ AT24C02 SDA
+        # （at24c02 默认脚——EEPROM 存储记录与运动类同选概率最低故叠此脚
+        # （记录+传感站类同选时与同批默认不撞），同选时经引脚绑定消解）
+        "PB24": 4,  # STEP_MOTOR RST2 + SR04 TRIG + HC05 KEY（hc05 默认脚；
+        # AT 切换不常用，故叠此脚，同选时经引脚绑定消解）+ AT24C02 SCL
+        # （同上）
         "PB9": 2,  # DC_MOTOR AIN1 + MAX7219 DIN（max7219 默认脚；大数字显示/
         # 计分计时与双电机小车同选概率最低故叠此脚，同选时经引脚绑定消解）
         "PA18": 2,  # DC_MOTOR AIN2 + MAX7219 CLK（同上；PA18 兼 BSL 排针脚，
@@ -356,9 +365,13 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         "PA14": 3,  # DCC_100_PWM2 ccp0Pin（step_motor 默认脚）+ WS2812 IN
         # （ws2812 默认脚）+ RC522 SCK（rc522 默认脚——读卡与步进/灯带同选
         # 概率最低故叠此脚，同选时经引脚绑定消解）
-        "PA16": 2,  # DC_MOTOR 编码器 AA + RC522 MOSI（rc522 默认脚——读卡与
-        # 双电机同选概率最低故叠此脚，同选时经引脚绑定消解）
-        "PA17": 2,  # DC_MOTOR 编码器 AB + RC522 MISO（同上）
+        "PA16": 3,  # DC_MOTOR 编码器 AA + RC522 MOSI（rc522 默认脚——读卡与
+        # 双电机同选概率最低故叠此脚，同选时经引脚绑定消解）+ ADS1115 SCL
+        # （ads1115 默认脚——外扩多通道 ADC 与双电机闭环车/读卡门禁同选概率
+        # 最低故叠此脚（与库内 adc 板载单通道分工：adc=MEM0 板载、ads1115=I2C
+        # 外挂 4 通道），同选时经引脚绑定消解）
+        "PA17": 3,  # DC_MOTOR 编码器 AB + RC522 MISO（同上）+ ADS1115 SDA
+        # （同上）
         "PA28": 3,  # IMU601 TX + HX711 SCK（hx711 默认脚；称重与姿态同选
         # 概率最低故叠此脚，同选时经引脚绑定消解）+ FINGERPRINT_UART TX
         # （fingerprint 默认脚——身份与姿态同选概率最低故叠此脚，同选时经
