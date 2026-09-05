@@ -403,6 +403,24 @@ def test_cli_diff_local_baseline(tmp_path: Path) -> None:
     assert data["batches"][0]["parts"][0]["zip_name"] == "firstep-materials-v1.1.0-k230.zip"
 
 
+def test_cli_diff_baseline_with_bom_tolerated(tmp_path: Path) -> None:
+    """Windows 常见带 BOM 的 UTF-8 清单（PS 5.1 / 编辑器写出）须容忍。"""
+    tree = tmp_path / "materials"
+    _make_tree(tree, {"k230资料/a.bin": b"aaa"})
+    baseline = tmp_path / "baseline.json"
+    baseline.write_bytes(
+        b"\xef\xbb\xbf"
+        + json.dumps(_manifest("v1.0.0", [
+            _batch("k230", "k230资料", [_file("k230资料/a.bin", 3, "x" * 64)]),
+        ]), ensure_ascii=False).encode("utf-8")
+    )
+    code = main([
+        "--tree", str(tree), "--version", "v1.1.0", "--out", str(tmp_path / "out"),
+        "--mode", "diff", "--baseline", str(baseline),
+    ])
+    assert code == 0
+
+
 def test_cli_bad_version_rejected(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     tree = tmp_path / "materials"
     _make_tree(tree, {"k230资料/a.bin": b"aaa"})

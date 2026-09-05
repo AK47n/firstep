@@ -393,7 +393,8 @@ def _load_prev_manifest(location: str) -> dict[str, Any]:
     target = Path(location)
     if not target.is_file():
         raise FileNotFoundError(f"上一版清单不存在：{target}")
-    return json.loads(target.read_text(encoding="utf-8"))
+    # utf-8-sig 容忍 BOM：Windows 上 PS 5.1 / 部分编辑器写的 UTF-8 清单常带 BOM
+    return json.loads(target.read_text(encoding="utf-8-sig"))
 
 
 def _write_manifest(manifest: dict[str, Any], out_dir: Path, version: str) -> Path:
