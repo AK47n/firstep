@@ -47,7 +47,7 @@ MAIN_C_MSPM0 = (
 
 def test_hc05_manifest_shape_mspm0():
     """hc05：仅 mspm0 平台条目；无依赖；TX(uart_tx PA23) + RX(uart_rx PA24) +
-    STATE(gpio_in PA27) + KEY(gpio_out PB24)。"""
+    STATE(gpio_in PA8) + KEY(gpio_out PB24)。"""
     manifest = ModuleManifest.load(MODULES / "hc05")
     assert manifest.slug == "hc05"
     assert manifest.dependencies == ()

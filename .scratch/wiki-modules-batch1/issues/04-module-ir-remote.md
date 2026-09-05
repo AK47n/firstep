@@ -6,7 +6,7 @@
 
 **状态：** resolved
 
-**结论：** 2026-09-05 完成并提交。slug 定为 `ir_remote`；GPIO 输入实例 IR_REMOTE（OUT=PA26 上拉）；**计时用 CPU 忙等（delay 模块 20us 步进）不占 TIMER**；**手册 GROUP1 中断内解码整帧改主循环轮询解码**——MSPM0 全部 GPIO 中断共用 GROUP1 一个向量且被 motor 编码器独占（红外+电机是经典组合，无法共存第二个 GROUP1_IRQHandler），poll 的「等待空闲高→等待下降沿」替代中断触发时机，解码行为等价（同步忙等 ~50ms/帧、无信号时单次 ≤10ms）；**修正原版 infrared_data_true_judgment 反码校验错乱**（命令反码不等时竟返回 1 并落库）——严格校验后才保存；单选生成 → gmake 0 error / 0 warning（PASS）。
+**结论：** 2026-09-05 完成并提交。slug 定为 `ir_remote`；GPIO 输入实例 IR_REMOTE（OUT=PA26 上拉）；**计时用 CPU 忙等（delay 模块 20us 步进）不占 TIMER**；**手册 GROUP1 中断内解码整帧改主循环轮询解码**——MSPM0 全部 GPIO 中断共用 GROUP1 一个向量且被 motor 编码器独占（红外+电机是经典组合，无法共存第二个 GROUP1_IRQHandler），poll 的「等待空闲高→等待下降沿」替代中断触发时机，解码行为等价（同步忙等 ~50ms/帧、无信号时单次 ≤10ms）；**修正原版 infrared_data_true_judgment 反码校验错乱**（命令反码不等时竟返回 1 并落库）——严格校验后才保存；单选生成 → gmake 0 error / 0 warning（PASS）。**code-review 收尾修正**：位判定阈值边界改为手册闭开区间口径（位高 1=<100→<100、位高 0=<50→<50、重复码 <150→(>100)&&(<150)——20us 量化下不影响实践，逐字对齐）；位判定两窗口皆不中时手册沿用上一 bit 值——实现保持整帧失败（更严），notes 已记录。
 
 - [x] 代码提炼：从 `sources/materials/lckfb-地猛星移植手册/rf--infrared-receiving-module.md` 「代码块」章节抽完整驱动 → 改造为 `code/ir_remote.c` + `code/ir_remote.h`：去 main/printf、API 规范化（`ir_remote_init/ir_remote_get_code/ir_remote_has_data` 等，另增 get_address），解码状态机收敛为驱动内部静态 + 出参结果（ADR 0009 无外部调度）
 - [x] **计时方案**：脉宽测量（NEC 位 560us 级）用 CPU 忙等 + delay 换算（**不占 TIMER 实例**——TIMG 全占，sr04 先例）；**GROUP1 中断改主循环轮询**（GROUP1 被 motor 编码器独占——轮询与中断解码行为等价，原手册 TIMER 捕获不适用，见结论与 manifest notes）

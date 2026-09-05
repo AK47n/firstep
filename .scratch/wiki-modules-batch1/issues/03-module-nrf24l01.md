@@ -6,7 +6,7 @@
 
 **状态：** resolved
 
-**结论：** 2026-09-05 完成并提交。软 SPI 位操作 6 脚全 GPIOA（单 NRF24L01_PORT 宏：CLK=PA26/MOSI=PA25/MISO=PA9/CSN=PA24/CE=PA23/IRQ=PA22）；**上游缺陷处理**：`#if DYNAMIC_PACKET==0` 分支引用页外 L01_WriteSingleReg——整枝剔除、动态包长归一 1，另修正页内多处 `Write_Reg(FLUSH_*, 0xff)` 误把 FLUSH 命令当寄存器地址（改显式 flush 命令）；**IRQ 用轮询不注册 GPIO 中断**（MSPM0 GPIO 中断共 GROUP1 一个向量且被 motor 编码器独占——NRF+电机双车标配无法共存第二个 handler，按手册轮询方式接收）；单选生成 → gmake 0 error / 0 warning（PASS）。
+**结论：** 2026-09-05 完成并提交。软 SPI 位操作 6 脚全 GPIOA（单 NRF24L01_PORT 宏：CLK=PA26/MOSI=PA25/MISO=PA9/CSN=PA24/CE=PA23/IRQ=PA22）；**上游缺陷处理**：`#if DYNAMIC_PACKET==0` 分支引用页外 L01_WriteSingleReg——整枝剔除、动态包长归一 1，另修正页内多处 `Write_Reg(FLUSH_*, 0xff)` 误把 FLUSH 命令当寄存器地址（改显式 flush 命令）；**IRQ 用轮询不注册 GPIO 中断**（MSPM0 GPIO 中断共 GROUP1 一个向量且被 motor 编码器独占——NRF+电机双车标配无法共存第二个 handler，按手册轮询方式接收）；单选生成 → gmake 0 error / 0 warning（PASS）。**code-review 收尾修正**：`_write_buf/_read_buf` 补 NRF_WRITE_REG/NRF_READ_REG 命令位（首版把裸寄存器地址 TX_ADDR/RX_ADDR_P0 当命令发出=读命令，默认/自定义地址写不进、保持复位值——Spec 轴发现，已修，多车编组地址配置现可用）；FEATRUE→FEATURE 改名；flush 纯转发中间层去掉。
 
 - [x] 代码提炼：从 `sources/materials/lckfb-地猛星移植手册/rf--nrf24l01-2-4-g-control-module.md` 「代码块」章节抽完整驱动 → 改造为 `code/nrf24l01.c` + `code/nrf24l01.h`：去 main/printf、软 SPI 原语静态化（spi_read_write_byte 等）、API 规范化（`nrf24l01_init/set_channel/set_address/set_speed/set_power/tx_packet/rx_packet/irq_clear` 等，页内 30+ 函数收敛为库风格子集）、IRQ 中断或轮询二选一（**改为轮询**——GROUP1 中断被 motor 编码器独占，NRF+电机双车组合无法共存第二个 handler；轮询 STATUS.RX_DR 位，IRQ 脚只读状态）
 - [x] **上游缺陷处理**：`#if DYNAMIC_PACKET==0` 分支引用页外 `L01_WriteSingleReg`（上游残留 bug）→ **整枝剔除**（DYNAMIC_PACKET 归一为 1 动态包长路径），缺陷记入 manifest notes（spec 范围外条款：按手册源码提炼、编译过即可，缺陷只记录不修复上游）

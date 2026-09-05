@@ -80,7 +80,7 @@ static uint8_t _spi_read_write_byte(uint8_t tx)
 #define RX_ADDR_P0      0x0A
 #define TX_ADDR         0x10
 #define DYNPD           0x1C
-#define FEATRUE         0x1D
+#define FEATURE         0x1D /* 手册/上游拼写 FEATRUE（原文误拼），此处按惯例拼 FEATURE */
 
 #define EN_CRC          3
 #define PWR_UP          1
@@ -130,10 +130,13 @@ static void _write_reg(uint8_t addr, uint8_t value)
     _cs_high();
 }
 
+/* 多字节命令：cmd 可能是裸寄存器地址（TX_ADDR/RX_ADDR_P0 等，须补写位）也
+ * 可能是完整命令（WR_TX_PLOAD=0xA0 等，已含 bit5——OR 幂等，两用安全）。
+ * 上游写 Buf 时先 OR NRF_WRITE_REG|RegAddr（见手册 NRF24L01_Write_Buf）。 */
 static void _write_buf(uint8_t cmd, const uint8_t *buf, uint8_t len)
 {
     _cs_low();
-    _spi_read_write_byte(cmd);
+    _spi_read_write_byte(NRF_WRITE_REG | cmd);
     for (uint8_t i = 0; i < len; i++) {
         _spi_read_write_byte(buf[i]);
     }
@@ -143,24 +146,10 @@ static void _write_buf(uint8_t cmd, const uint8_t *buf, uint8_t len)
 static void _read_buf(uint8_t cmd, uint8_t *buf, uint8_t len)
 {
     _cs_low();
-    _spi_read_write_byte(cmd);
+    _spi_read_write_byte(NRF_READ_REG | cmd);
     for (uint8_t i = 0; i < len; i++) {
         buf[i] = _spi_read_write_byte(0xFF);
     }
-    _cs_high();
-}
-
-static void _flush_tx(void)
-{
-    _cs_low();
-    _spi_read_write_byte(FLUSH_TX);
-    _cs_high();
-}
-
-static void _flush_rx(void)
-{
-    _cs_low();
-    _spi_read_write_byte(FLUSH_RX);
     _cs_high();
 }
 
@@ -183,7 +172,7 @@ void nrf24l01_init(void)
     /* 动态包长（DYNAMIC_PACKET 归一为 1——上游 `#if DYNAMIC_PACKET==0`
      * 分支引用页外符号 L01_WriteSingleReg，属残留 bug，整枝剔除） */
     _write_reg(DYNPD, (1 << DPL_P0));
-    _write_reg(FEATRUE, 0x07);  /* EN_DPL | EN_ACK_PAY | EN_DYN_ACK */
+    _write_reg(FEATURE, 0x07);  /* EN_DPL | EN_ACK_PAY | EN_DYN_ACK */
 
     _write_reg(CONFIG, (1 << EN_CRC) | (1 << PWR_UP));
     _write_reg(EN_AA, (1 << ENAA_P0));
@@ -254,7 +243,7 @@ uint8_t nrf24l01_tx_packet(const uint8_t *buf, uint8_t len)
         return NRF24L01_TX_ERR;
     }
 
-    _flush_tx();
+    nrf24l01_flush_tx();
     _ce_low();
     _write_buf(WR_TX_PLOAD, buf, len);
     _ce_high();                 /* CE 脉冲启动发送 */
@@ -272,7 +261,7 @@ uint8_t nrf24l01_tx_packet(const uint8_t *buf, uint8_t len)
     _write_reg(STATUS, status); /* 写 1 清 TX_DS / MAX_RT 标志 */
 
     if (status & NRF24L01_MAX_TX) {
-        _flush_tx();
+        nrf24l01_flush_tx();
         return NRF24L01_MAX_TX;
     }
     if (status & NRF24L01_TX_OK) {
@@ -294,7 +283,7 @@ uint8_t nrf24l01_rx_packet(uint8_t *buf, uint8_t max_len)
         if (width > 0) {
             _read_buf(RD_RX_PLOAD, buf, width);
         }
-        _flush_rx();
+        nrf24l01_flush_rx();
         return width;
     }
     return 0;
@@ -302,10 +291,14 @@ uint8_t nrf24l01_rx_packet(uint8_t *buf, uint8_t max_len)
 
 void nrf24l01_flush_rx(void)
 {
-    _flush_rx();
+    _cs_low();
+    _spi_read_write_byte(FLUSH_RX);
+    _cs_high();
 }
 
 void nrf24l01_flush_tx(void)
 {
-    _flush_tx();
+    _cs_low();
+    _spi_read_write_byte(FLUSH_TX);
+    _cs_high();
 }

@@ -13,7 +13,11 @@ from __future__ import annotations
 # 共享实例：DC_MOTOR 只归 motor（编码器计数已从 key 迁入 motor，
 # module-dep-cleanup/02），HUIDU 由 huidu/pid(mspm0 GRAY_D1-8)/xunji
 # 共用（灰度槽位）；DIGIT_UART 由 digit_uart/coord_detect 共用（K230 视觉），
-# ZIGBEE_UART 由 zigbee_uart（收）/zigbee_uart_key（发）共用。
+# ZIGBEE_UART 由 zigbee_uart（收）/zigbee_uart_key（发）/zigbee_link 共用
+# （同一路 RX 单消费者——zigbee_uart 与 zigbee_link 硬互斥）；
+# HC05_UART 与 DEBUG_UART/UWB_UART 共享 UART2 外设（HC05 9600 独立波特率；
+# 三实例各自定义 UART2_IRQHandler 强符号——同选且未换实例 = 链接期重复定义，
+# 消解 = 引脚绑定换实例，其余 UART0/1/3 同样被占，先例 DEBUG+UWB）。
 INSTANCE_CONSUMERS: dict[str, tuple[str, ...]] = {
     "PWMAB": ("motor",),
     "DCC_100_PWM2": ("step_motor",),
