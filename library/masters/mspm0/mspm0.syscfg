@@ -270,6 +270,20 @@ AHT10.associatedPins[1].$name        = "SDA";
 AHT10.associatedPins[1].direction    = "OUTPUT";
 AHT10.associatedPins[1].initialValue = "CLEARED";
 AHT10.associatedPins[1].pin.$assign  = "PB7";
+
+// DHT11 单总线温湿度（dht11 模块：DATA 双向——输出起始信号/释放总线、
+// 输入采样响应与 40bit 数据位，方向运行时切换（照 AHT10_SDA 先例）；
+// 位时序 CPU 忙等 + delay 模块换算，不占 TIMER。默认 DATA=PB7——与
+// AHT10 SDA（温湿度互替、同选概率最低）/STEP_MOTOR DIR2/HUIDU R4
+// 重叠（温湿度与步进/巡线同选概率最低，AHT10 先例），同选时经引脚绑定消解）
+const DHT11 = GPIO.addInstance();
+DHT11.$name = "DHT11";
+DHT11.associatedPins.create(1);
+DHT11.associatedPins[0].$name        = "DATA";
+DHT11.associatedPins[0].direction    = "OUTPUT";
+DHT11.associatedPins[0].initialValue = "SET";
+DHT11.associatedPins[0].pin.$assign  = "PB7";
+
 // 双轴摇杆按键（joystick 模块：SW 输入上拉低有效；实例名 JOYSTICK →
 // JOYSTICK_PORT 宏；引脚名 SW → JOYSTICK_SW_PIN；默认 PA9——仅与
 // DIGIT_UART RX 默认重叠（K230 视觉串口），同选时经引脚绑定消解。

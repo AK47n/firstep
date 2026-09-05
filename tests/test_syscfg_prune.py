@@ -82,6 +82,8 @@ def test_prune_shared_instance_kept_by_any_consumer():
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "NRF24L01")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["ir_remote"]), "IR_REMOTE")
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "IR_REMOTE")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["dht11"]), "DHT11")
+    _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "DHT11")
 
 
 def test_every_master_instance_is_registered_in_consumer_map():

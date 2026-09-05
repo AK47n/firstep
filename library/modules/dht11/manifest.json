@@ -1,0 +1,28 @@
+{
+  "slug": "dht11",
+  "description": "DHT11 温湿度传感器驱动（mspm0 纯驱动，ADR 0009）：单总线位时序读取（一根数据线双向，方向运行时切换），dht11_read 一次出温度（℃）与湿度（%RH，湿度整数+小数 0-100%，温度 0-50℃），带校验和与应答超时防护；适用于环境温湿度采集、恒温恒湿监测、农业/仓储环境机等赛题功能。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/dht11.c",
+        "code/dht11.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg GPIO 实例 DHT11（DATA 宏 DHT11_DATA_PIN / IOMUX 宏 DHT11_DATA_IOMUX——SysConfig 命名 <实例>_<引脚名>_IOMUX，aht10 编译矩阵实测；direction OUTPUT、initialValue SET = 空闲高电平）。单总线：数据线方向运行时切换（DHT11_DATA_OUT/IN，照 AHT10_SDA 先例；模块板自带上拉电阻），位时序 CPU 忙等 + delay 模块换算（delay_ms(19) 起始、delay_us(20/28/80 步进)，页外 delay_uus 工具函数替换为 delay_us），不占 TIMER（sr04 先例）。默认 DATA=PB7——与 AHT10 SDA（温湿度互替：与 AHT10 功能替代、同选概率最低）/STEP_MOTOR DIR2/HUIDU R4 重叠（温湿度与步进/巡线同选概率最低，AHT10 先例），同选时经引脚绑定消解；地猛星 2×20 排针 31 个 IO 全被默认布局占用（IR_BEAM/PA8 先例）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--dht11-temp-humi-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/dht11-temp-humi-sensor.html；网盘完整工程 https://pan.baidu.com/s/1lkXoNCUENntTzERcGEUsiQ?pwd=1fo8；厂家资料 https://pan.baidu.com/s/1HQEL699-Yl5Jh3Hp87_FlQ 提取码 2sgq）。改造要点：去掉 main.c 演示与 printf；函数名规范化（dht11_init/read/read_temperature/read_humidity）；全局温湿度缓存改出参（read 带指针，read_temperature/read_humidity 便捷封装）；返回语义反转并统一（原版校验失败 return 0、成功返回 val——改为库内 aht10 惯例 0=成功 1=失败）；应答超时防护（无应答/回应超时立即返回 1，原版遇坏线仍读垃圾数据）；去掉未调用的 DHT11_RST（起始时序已并入 read）；CHECK_TIME 28us 与位超时 80 步进保留立创原值。采样间隔建议 ≥1s（器件自发热/湿度响应慢）。\nwiki-modules-batch2/01 编译矩阵（2026-09-05）：单选生成 → gmake 0 error、0 warning；未上板。",
+      "kit": "DHT11 温湿度传感器模块（3Pin 单总线，模块板带 4.7k~10k 上拉）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/dht11-temp-humi-sensor.html",
+      "pins": [
+        {
+          "id": "DHT11_DATA",
+          "type": "gpio_out",
+          "default": "PB7",
+          "required": true
+        }
+      ]
+    }
+  }
+}
