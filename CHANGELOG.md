@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=074359a7ee949a2539f5d720dbbe6cb7815df302 -->
+<!-- changelog-auto: last-commit=0596dbbb8b86f8b14f01be85c4c78657bd3a8ae9 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -51,6 +51,7 @@
 - 18:14 bh1750 光照强度传感器模块（工单 wiki-modules-batch2/03）：立创 wiki 手册提炼，仅 mspm0
 - 18:18 ir_distance 红外测距传感器模块（工单 wiki-modules-batch2/04）：立创 wiki 手册提炼，仅 mspm0
 - 18:18 CONTEXT 平台行补录 wiki-modules-batch2/01-04 四模块：DHT11 单总线、US016 薄封装共读 MEM0、BH1750 软 I2C、IR_DIST sequence MEM3（endAdd 2→3，ADC12_0 四通道共享事实同步）
+- 18:34 wiki-modules-batch2 code-review 收尾修正（批次 1+2 八件）
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
