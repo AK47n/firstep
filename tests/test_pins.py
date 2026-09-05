@@ -360,6 +360,8 @@ MSPM0_DEFAULT_MAP = {
     ("ws2812", "WS2812_IN"): ("WS2812", "IN"),
     ("hx711", "HX711_SCK"): ("HX711", "SCK"),
     ("hx711", "HX711_DT"): ("HX711", "DT"),
+    ("aht10", "AHT10_SCL"): ("AHT10", "SCL"),
+    ("aht10", "AHT10_SDA"): ("AHT10", "SDA"),
     ("coord_detect", "COORD_DETECT_UART_TX"): ("DIGIT_UART", "txPin"),
     ("coord_detect", "COORD_DETECT_UART_RX"): ("DIGIT_UART", "rxPin"),
     ("led", "LED"): ("LED_BEEP", "LED"),

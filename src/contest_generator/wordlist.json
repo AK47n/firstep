@@ -100,6 +100,14 @@
         "lib_modules": ["hx711"]
       },
       {
+        "name": "AHT10 温湿度传感器",
+        "interface": "I2C（软 I2C 占 2 GPIO，不必硬件外设）",
+        "price": "￥5-10/个",
+        "note": "库内 aht10 已打通（mspm0：aht10_read 读温度℃/湿度%RH，默认 PB6/PB7——同选时经引脚绑定消解）；上电等 50ms 稳定后校准；模块板自带或总线上拉电阻；长时间连续测量建议 2s 以上间隔（器件自发热）",
+        "suitable": "环境温湿度采集/恒温恒湿监测/仓储农业环境机",
+        "lib_modules": ["aht10"]
+      },
+      {
         "name": "磁力计指南针（QMC5883L）",
         "interface": "I2C（QMC/IST 系列同寄存器族）",
         "price": "￥5-15/个",
