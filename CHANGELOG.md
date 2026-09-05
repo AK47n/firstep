@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=f8d8af5cd355c5c093724bd6a70ec760d04d2420 -->
+<!-- changelog-auto: last-commit=2bacb368bcab0f5ad152cdf62b8ce7d9126affd4 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -23,6 +23,7 @@
 - 11:16 资料库检查更新端点（工单 materials-update/03）：本地基线+线上清单对比，四态中文降级
 - 11:21 资料库下载任务与apply/status/cancel端点（工单 materials-update/04）：后台线程+卷级断点
 - 11:24 资料库应用器（工单 materials-update/05）：安全解压+备份+删除+写基线，任务完成后自动应用
+- 11:29 资料库更新前端（工单 materials-update/06）：设置页卡+批次选择弹窗+下载进度
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
