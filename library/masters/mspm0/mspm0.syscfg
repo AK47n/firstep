@@ -54,6 +54,7 @@ const HUIDU   = GPIO.addInstance();
 const KEY     = GPIO.addInstance();
 const WS2812 = GPIO.addInstance();
 const HX711 = GPIO.addInstance();
+const AHT10 = GPIO.addInstance();
 const LED_BEEP = GPIO.addInstance();
 const STEP_MOTOR = GPIO.addInstance();
 const IR_BEAM = GPIO.addInstance();
@@ -211,6 +212,21 @@ HX711.associatedPins[1].$name        = "DT";
 HX711.associatedPins[1].direction    = "INPUT";
 HX711.associatedPins[1].internalResistor = "PULL_UP";
 HX711.associatedPins[1].pin.$assign  = "PA31";
+
+// AHT10 温湿度软 I2C（aht10 模块：SCL 输出 / SDA 双向运行时切换；
+// 位操作不占硬件 I2C 外设。默认 SCL=PB6（与 STEP_MOTOR SLP2 / HUIDU R3
+// 重叠）、SDA=PB7（与 STEP_MOTOR DIR2 / HUIDU R4 重叠）——温湿度与步进/
+// 巡线同选概率最低，同选时经引脚绑定消解；软 I2C 需板上/模块自带上拉）
+AHT10.$name = "AHT10";
+AHT10.associatedPins.create(2);
+AHT10.associatedPins[0].$name        = "SCL";
+AHT10.associatedPins[0].direction    = "OUTPUT";
+AHT10.associatedPins[0].initialValue = "CLEARED";
+AHT10.associatedPins[0].pin.$assign  = "PB6";
+AHT10.associatedPins[1].$name        = "SDA";
+AHT10.associatedPins[1].direction    = "OUTPUT";
+AHT10.associatedPins[1].initialValue = "CLEARED";
+AHT10.associatedPins[1].pin.$assign  = "PB7";
 
 // LED/蜂鸣器输出（PA15；原 LaunchPad 值 PA3 = 32.768k 晶振脚，地猛星排针未引出）
 LED_BEEP.$name = "LED_BEEP";

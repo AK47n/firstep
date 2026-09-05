@@ -1,0 +1,34 @@
+{
+  "slug": "aht10",
+  "description": "AHT10 温湿度传感器驱动（mspm0 纯驱动，ADR 0009）：软 I2C 位操作读取（不占硬件 I2C 外设），aht10_read 一次出温度（℃）与相对湿度（%RH），带软复位与校准；适用于环境温湿度采集、恒温恒湿监测、农业/仓储环境机等赛题功能。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/aht10.c",
+        "code/aht10.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg GPIO 实例 AHT10（SCL 宏 AHT10_SCL_PIN / SDA 宏 AHT10_SDA_PIN / IOMUX 宏 AHT10_SCL_IOMUX / AHT10_SDA_IOMUX——SysConfig 命名 <实例>_<引脚名>_IOMUX，编译矩阵实测确认）。软 I2C：SDA 方向运行时切换（AHT10_SDA_OUT/IN 宏，不用硬件 I2C 外设；节点需板上/模块自带上拉电阻）。默认 SCL=PB6 / SDA=PB7——与 STEP_MOTOR SLP2/DIR2、HUIDU R3/R4 默认重叠（温湿度与步进/巡线同选概率最低），同选时经引脚绑定消解；地猛星 2×20 排针 31 个 IO 全被默认布局占用（IR_BEAM/PA8 先例）。延时走 delay 模块（软 I2C 半周期 2us ≈ 100kHz 级）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--aht10-temp-humi-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/aht10-temp-humi-sensor.html；网盘完整工程 https://pan.baidu.com/s/1xTX_QCmEmy8DWgxgtgXXFw / https://pan.baidu.com/s/1jVicGsVI5zxcbZracdj6VA?pwd=trjc）。改造要点：去掉 main.c 演示与 printf；函数名规范化（aht10_init/read/read_temperature/read_humidity）；I2C 原语静态化（iic_start/stop/ack/wait_ack/send_byte/read_byte）；全局温湿度缓存改出参（aht10_read 带指针，read_temperature/read_humidity 便捷封装）；AHT10Reset + AHT10_Init 检查合并进 init（原实现每次读后重复复位初始化，省去冗余）；地址 0x38 << 1 直接写 0x70 保留原式。\nwiki-materials/05 编译矩阵（2026-09-05）：gmake 0 error、0 module warning（首版 IOMUX 宏名猜测错误编译失败，改 <实例>_<引脚名>_IOMUX 后通过）；未上板。",
+      "kit": "AHT10 温湿度传感器（3.3V I2C）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/aht10-temp-humi-sensor.html",
+      "pins": [
+        {
+          "id": "AHT10_SCL",
+          "type": "gpio_out",
+          "default": "PB6",
+          "required": true
+        },
+        {
+          "id": "AHT10_SDA",
+          "type": "gpio_out",
+          "default": "PB7",
+          "required": true
+        }
+      ]
+    }
+  }
+}
