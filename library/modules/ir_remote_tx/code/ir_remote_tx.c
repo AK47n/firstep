@@ -22,18 +22,19 @@ static void ir_tx_carrier_off(void)
 }
 
 /* 38kHz 载波 burst：半周期 = 1/(2×38000) ≈ 13.16us —— 按 CPUCLK_FREQ 精确
- * 换算（ws2812 同款 delay_cycles 先例），CPU 忙等翻转不占 TIMER */
+ * 换算（ws2812 同款 delay_cycles 先例），CPU 忙等翻转不占 TIMER；每轮循环 =
+ * 一完整周期（一高半 + 一低半 26.3us），周期数 = us×38000/1000000 */
 #define IR_TX_HALF_CYCLES() delay_cycles(CPUCLK_FREQ / (IR_TX_FREQ_HZ * 2u))
 
 static void ir_tx_burst(uint32_t us)
 {
-    uint32_t half = us / 2u; /* 取整到半周期对（每对 = 一高半周期 + 一低半周期） */
-    while (half > 0) {
+    uint32_t cycles = (uint32_t)((uint64_t)us * IR_TX_FREQ_HZ / 1000000u);
+    while (cycles > 0) {
         ir_tx_carrier_on();
         IR_TX_HALF_CYCLES();
         ir_tx_carrier_off();
         IR_TX_HALF_CYCLES();
-        half--;
+        cycles--;
     }
 }
 

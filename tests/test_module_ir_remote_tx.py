@@ -93,3 +93,16 @@ def test_ir_remote_tx_mspm0_single_select_generation(tmp_path):
     assert (out / "modules/ir_remote_tx/code/ir_remote_tx.h").is_file()
     assert (out / "modules/delay/code/delay.c").is_file()
     assert (out / "modules/delay/code/delay.h").is_file()
+
+
+def test_ir_remote_tx_burst_cycle_formula_guard():
+    """载波 burst 时长公式守卫（code-review 收尾修正）：每轮循环 = 一完整 38kHz
+    周期（26.3us），周期数必须按 us×38000/1000000 换算——早产实现按「us/2 轮」
+    循环曾把引导码 9ms 放大到 118ms、位载波 560us 放大到 7.37ms（ir_remote
+    解码阈值窗口 0.4-1.2ms 全面超窗，收发无法配对）；编译矩阵只验编译不验
+    时序，此处以源码文本守卫钉死。"""
+    source = (MODULES / "ir_remote_tx" / "code" / "ir_remote_tx.c").read_text(
+        encoding="utf-8"
+    )
+    assert "us * IR_TX_FREQ_HZ / 1000000u" in source
+    assert "us / 2u" not in source

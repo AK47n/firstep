@@ -9,7 +9,7 @@
  * `ir_tx_send_repeat()` 发 NEC 重复码（长按节奏由调用方循环控制——本模块
  * 无状态机）。载波 = CPU 忙等翻转（半周期 13.2us，delay_cycles 按
  * CPUCLK_FREQ 精确换算——ws2812 先例），**不占 TIMER**；单帧发射阻塞
- * ~65ms。
+ * 约 50-90ms（视位密度，38kHz 位时序全码 1 最坏 ≈86ms）。
  * **与批次 1 ir_remote 接收配对**：同一套 NEC 口径（引导 9ms/4.5ms、位低
  * 560us、位高 0=560us/1=1680us、重复码 9ms/2.25ms、反码校验、字节内位序
  * MSB 先——ir_remote 的解码阈值按 20us 拍全部落在本发射脉宽中央），
@@ -36,7 +36,7 @@
 void ir_tx_init(void);
 
 /* ir_tx_send：发一帧 NEC 数据（地址 + 命令，各带反码校验位）；阻塞
- * ~65ms（38000Hz 忙等）。 */
+ * 约 50-90ms（38000Hz 忙等，视位密度）。 */
 void ir_tx_send(uint8_t address, uint8_t command);
 
 /* ir_tx_send_repeat：发 NEC 重复码（9ms 载波 + 2.25ms 空闲 + 560us 载波）；
