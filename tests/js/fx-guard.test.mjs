@@ -243,6 +243,9 @@ const DOMAINS = {
     guidePanelFor: "fn", guideTabNext: "fn",
     guideBlockHTML: "fn", guideChapterHTML: "fn", guideBlocksOf: "fn",
   },
+  "update.js": {
+    updateStateText: "fn", updateCheckCardHTML: "fn", updateStatusHTML: "fn",
+  },
 };
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

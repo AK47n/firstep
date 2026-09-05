@@ -10,7 +10,7 @@ const html = readFileSync(resolve(root, "src/contest_generator/static/index.html
 const appJs = readFileSync(resolve(root, "src/contest_generator/static/js/app.js"), "utf8");
 
 const NAMES = ["rocket", "code", "sparkles", "doc", "clipboard", "wrench",
-  "save", "copy", "check", "upload", "wand", "trash"];
+  "save", "copy", "check", "upload", "download", "wand", "trash"];
 
 test("12 个图标名均返回 SVG 且为 btn-ico 类", () => {
   for (const n of NAMES) {

@@ -13,6 +13,7 @@ export function btnIcon(name) {
     copy: '<rect x="2.5" y="6" width="9" height="8.5" rx="1"/><rect x="5.5" y="2.5" width="9" height="8.5" rx="1"/>',
     check: '<path d="M2.5 8.5 L6 12 L13.5 4"/>',
     upload: '<path d="M8 3 V10.5 M4.5 6.5 L8 3 L11.5 6.5 M3 13.5 H13"/>',
+    download: '<path d="M8 3 V10.5 M4.5 7 L8 10.5 L11.5 7 M3 13.5 H13"/>',
     wand: '<path d="M4.5 11.5 L11.5 4.5"/><path d="M6.5 2.5 V4.5 M5.5 3.5 H7.5 M12.5 7 V9 M11.5 8 H13.5"/>',
     trash: '<path d="M3 4.5 H13 M5.5 4.5 V2.5 H10.5 V4.5 M4.5 4.5 L5 13.5 H11 L11.5 4.5"/>',
   };
