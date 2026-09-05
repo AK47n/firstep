@@ -33,6 +33,20 @@
     "models": ["LED", "蜂鸣器"]
   },
   {
+    "category": "语音模块",
+    "models": ["JQ8900 语音播报", "SYN6288 语音合成"],
+    "solutions": [
+      {
+        "name": "JQ8900 语音播报模块（16P 订制语音）",
+        "interface": "一线串行 / 两线 UART 9600（库内走软 UART 单发 TX，2 线 3 脚）",
+        "price": "￥5-15/个",
+        "note": "库内 jq8900 已打通（mspm0：jq8900_init + play(index)/next/prev/stop/pause/resume/set_volume——软 UART 位操作 9600 8N1，不占 UART 外设/TIMER，默认 PB19——同选时经引脚绑定消解）；SPI-FLASH 直接模拟 U 盘拷贝语音（按 00001.. 命名），出厂自带 10 首；播放指定曲目要求语音文件按 5 位数字命名；命令字见模块头注释（以厂家说明书/真机为准）",
+        "suitable": "语音播报提示/状态语音/门禁考勤语音提示",
+        "lib_modules": ["jq8900"]
+      }
+    ]
+  },
+  {
     "category": "感知传感器",
     "models": ["编码器", "MPU6050", "红外传感器", "超声波传感器", "磁力计", "DHT11", "BH1750", "US-016"],
     "solutions": [

@@ -1,0 +1,106 @@
+Running script...
+Validating...
+error: KEY(/ti/driverlib/GPIO) $name: Duplicate name: 'KEY' also exists on instance(s) of MSPM0 GPIO Pin
+error: HC05(/ti/driverlib/GPIO) associatedPins[1].$name: Duplicate name: 'KEY' also exists on instance(s) of GPIO
+error: IR_BEAM(/ti/driverlib/GPIO) associatedPins[0].$name: Duplicate name: 'OUT' also exists on instance(s) of MSPM0 GPIO Pin
+error: IR_REMOTE(/ti/driverlib/GPIO) associatedPins[0].$name: Duplicate name: 'OUT' also exists on instance(s) of MSPM0 GPIO Pin
+error: IR_TX(/ti/driverlib/GPIO) associatedPins[0].$name: Duplicate name: 'OUT' also exists on instance(s) of MSPM0 GPIO Pin
+error: AHT10(/ti/driverlib/GPIO) associatedPins[0].$name: Duplicate name: 'SCL' also exists on instance(s) of MSPM0 GPIO Pin
+error: BH1750(/ti/driverlib/GPIO) associatedPins[0].$name: Duplicate name: 'SCL' also exists on instance(s) of MSPM0 GPIO Pin
+error: PCA9685(/ti/driverlib/GPIO) associatedPins[0].$name: Duplicate name: 'SCL' also exists on instance(s) of MSPM0 GPIO Pin
+error: AHT10(/ti/driverlib/GPIO) associatedPins[1].$name: Duplicate name: 'SDA' also exists on instance(s) of MSPM0 GPIO Pin
+error: BH1750(/ti/driverlib/GPIO) associatedPins[1].$name: Duplicate name: 'SDA' also exists on instance(s) of MSPM0 GPIO Pin
+error: PCA9685(/ti/driverlib/GPIO) associatedPins[1].$name: Duplicate name: 'SDA' also exists on instance(s) of MSPM0 GPIO Pin
+error: NRF24L01(/ti/driverlib/GPIO) associatedPins[0].$name: Duplicate name: 'CLK' also exists on instance(s) of MSPM0 GPIO Pin
+error: MAX7219(/ti/driverlib/GPIO) associatedPins[1].$name: Duplicate name: 'CLK' also exists on instance(s) of MSPM0 GPIO Pin
+error: IMU601(/ti/driverlib/UART): Maximum of 4 instance(s) allowed.
+error: DIGIT_UART(/ti/driverlib/UART): Maximum of 4 instance(s) allowed.
+error: DEBUG_UART(/ti/driverlib/UART): Maximum of 4 instance(s) allowed.
+error: UWB_UART(/ti/driverlib/UART): Maximum of 4 instance(s) allowed.
+error: ZIGBEE_UART(/ti/driverlib/UART): Maximum of 4 instance(s) allowed.
+error: HC05_UART(/ti/driverlib/UART): Maximum of 4 instance(s) allowed.
+error: DC_MOTOR(/ti/driverlib/GPIO) associatedPins[3].pin: Resource conflict
+	PA7/49 is currently in use by SERVO_PWM(/ti/driverlib/PWM) peripheral.ccp0Pin
+error: WS2812(/ti/driverlib/GPIO) associatedPins[0].pin: Resource conflict
+	PA14/7 is currently in use by DCC_100_PWM2(/ti/driverlib/PWM) peripheral.ccp0Pin
+error: AHT10(/ti/driverlib/GPIO) associatedPins[0].pin: Resource conflict
+	PB6/58 is currently in use by HUIDU(/ti/driverlib/GPIO) associatedPins[6].pin
+error: AHT10(/ti/driverlib/GPIO) associatedPins[1].pin: Resource conflict
+	PB7/59 is currently in use by HUIDU(/ti/driverlib/GPIO) associatedPins[7].pin
+error: DHT11(/ti/driverlib/GPIO) associatedPins[0].pin: Resource conflict
+	PB7/59 is currently in use by HUIDU(/ti/driverlib/GPIO) associatedPins[7].pin
+error: BH1750(/ti/driverlib/GPIO) associatedPins[0].pin: Resource conflict
+	PA12/5 is currently in use by PWMAB(/ti/driverlib/PWM) peripheral.ccp0Pin
+error: BH1750(/ti/driverlib/GPIO) associatedPins[1].pin: Resource conflict
+	PA13/6 is currently in use by PWMAB(/ti/driverlib/PWM) peripheral.ccp1Pin
+error: HC05(/ti/driverlib/GPIO) associatedPins[0].pin: Resource conflict
+	PA8/54 is currently in use by IR_BEAM(/ti/driverlib/GPIO) associatedPins[0].pin
+error: HC05(/ti/driverlib/GPIO) associatedPins[1].pin: Resource conflict
+	PB24/23 is currently in use by SR04(/ti/driverlib/GPIO) associatedPins[0].pin
+error: NRF24L01(/ti/driverlib/GPIO) associatedPins[0].pin: Resource conflict
+	PA26/30 is currently in use by HUIDU(/ti/driverlib/GPIO) associatedPins[4].pin
+error: NRF24L01(/ti/driverlib/GPIO) associatedPins[1].pin: Resource conflict
+	PA25/26 is currently in use by HUIDU(/ti/driverlib/GPIO) associatedPins[3].pin
+error: NRF24L01(/ti/driverlib/GPIO) associatedPins[2].pin: Resource conflict
+	PA9/55 is currently in use by JOYSTICK(/ti/driverlib/GPIO) associatedPins[0].pin
+error: NRF24L01(/ti/driverlib/GPIO) associatedPins[3].pin: Resource conflict
+	PA24/25 is currently in use by HUIDU(/ti/driverlib/GPIO) associatedPins[2].pin
+error: NRF24L01(/ti/driverlib/GPIO) associatedPins[4].pin: Resource conflict
+	PA23/24 is currently in use by HUIDU(/ti/driverlib/GPIO) associatedPins[1].pin
+error: NRF24L01(/ti/driverlib/GPIO) associatedPins[5].pin: Resource conflict
+	PA22/18 is currently in use by HUIDU(/ti/driverlib/GPIO) associatedPins[0].pin
+error: IR_REMOTE(/ti/driverlib/GPIO) associatedPins[0].pin: Resource conflict
+	PA26/30 is currently in use by HUIDU(/ti/driverlib/GPIO) associatedPins[4].pin
+error: MAX7219(/ti/driverlib/GPIO) associatedPins[0].pin: Resource conflict
+	PB9/61 is currently in use by DC_MOTOR(/ti/driverlib/GPIO) associatedPins[0].pin
+error: MAX7219(/ti/driverlib/GPIO) associatedPins[1].pin: Resource conflict
+	PA18/11 is currently in use by DC_MOTOR(/ti/driverlib/GPIO) associatedPins[1].pin
+error: MAX7219(/ti/driverlib/GPIO) associatedPins[2].pin: Resource conflict
+	PB18/15 is currently in use by DC_MOTOR(/ti/driverlib/GPIO) associatedPins[2].pin
+error: PCA9685(/ti/driverlib/GPIO) associatedPins[0].pin: Resource conflict
+	PB6/58 is currently in use by HUIDU(/ti/driverlib/GPIO) associatedPins[6].pin
+error: PCA9685(/ti/driverlib/GPIO) associatedPins[1].pin: Resource conflict
+	PB7/59 is currently in use by HUIDU(/ti/driverlib/GPIO) associatedPins[7].pin
+error: STEP_MOTOR(/ti/driverlib/GPIO) associatedPins[0].pin: Resource conflict
+	PB24/23 is currently in use by SR04(/ti/driverlib/GPIO) associatedPins[0].pin
+error: STEP_MOTOR(/ti/driverlib/GPIO) associatedPins[1].pin: Resource conflict
+	PB6/58 is currently in use by HUIDU(/ti/driverlib/GPIO) associatedPins[6].pin
+error: STEP_MOTOR(/ti/driverlib/GPIO) associatedPins[2].pin: Resource conflict
+	PB7/59 is currently in use by HUIDU(/ti/driverlib/GPIO) associatedPins[7].pin
+error: STEP_MOTOR(/ti/driverlib/GPIO) associatedPins[3].pin: Resource conflict
+	PB8/60 is currently in use by SR04(/ti/driverlib/GPIO) associatedPins[1].pin
+error: IMU601(/ti/driverlib/UART) peripheral.rxPin: Resource conflict
+	PA31/39 is currently in use by HX711(/ti/driverlib/GPIO) associatedPins[1].pin
+error: IMU601(/ti/driverlib/UART) peripheral.txPin: Resource conflict
+	PA28/35 is currently in use by HX711(/ti/driverlib/GPIO) associatedPins[0].pin
+error: DIGIT_UART(/ti/driverlib/UART) peripheral.rxPin: Resource conflict
+	PA9/55 is currently in use by JOYSTICK(/ti/driverlib/GPIO) associatedPins[0].pin
+error: DIGIT_UART(/ti/driverlib/UART) peripheral.txPin: Resource conflict
+	PA8/54 is currently in use by IR_BEAM(/ti/driverlib/GPIO) associatedPins[0].pin
+error: DEBUG_UART(/ti/driverlib/UART) peripheral.rxPin: Resource conflict
+	PA22/18 is currently in use by HUIDU(/ti/driverlib/GPIO) associatedPins[0].pin
+error: DEBUG_UART(/ti/driverlib/UART) peripheral.txPin: Resource conflict
+	PA23/24 is currently in use by HUIDU(/ti/driverlib/GPIO) associatedPins[1].pin
+error: UWB_UART(/ti/driverlib/UART) peripheral.$assign: Resource conflict
+	UART2 is already in use by DEBUG_UART(/ti/driverlib/UART) peripheral
+error: ZIGBEE_UART(/ti/driverlib/UART) peripheral.rxPin: Resource conflict
+	PA25/26 is currently in use by HUIDU(/ti/driverlib/GPIO) associatedPins[3].pin
+error: ZIGBEE_UART(/ti/driverlib/UART) peripheral.txPin: Resource conflict
+	PA26/30 is currently in use by HUIDU(/ti/driverlib/GPIO) associatedPins[4].pin
+error: HC05_UART(/ti/driverlib/UART) peripheral.$assign: Resource conflict
+	UART2 is already in use by DEBUG_UART(/ti/driverlib/UART) peripheral
+error: I2C_0(/ti/driverlib/I2C) peripheral.sdaPin: Resource conflict
+	PA0/33 is currently in use by IR_TX(/ti/driverlib/GPIO) associatedPins[0].pin
+error: ADC12_0(/ti/driverlib/ADC12) peripheral.adcPin3: Resource conflict
+	PA24/25 is currently in use by HUIDU(/ti/driverlib/GPIO) associatedPins[2].pin
+error: ADC12_0(/ti/driverlib/ADC12) peripheral.adcPin1: Resource conflict
+	PA26/30 is currently in use by HUIDU(/ti/driverlib/GPIO) associatedPins[4].pin
+error: ADC12_0(/ti/driverlib/ADC12) peripheral.adcPin2: Resource conflict
+	PA25/26 is currently in use by HUIDU(/ti/driverlib/GPIO) associatedPins[3].pin
+error: ADC12_0(/ti/driverlib/ADC12) peripheral.adcPin0: Resource conflict
+	PA27/31 is currently in use by HUIDU(/ti/driverlib/GPIO) associatedPins[5].pin
+info: ZIGBEE_UART(/ti/driverlib/UART): Peripheral does not retain register contents in STOP or STANDBY modes. User should take care to save and restore register configuration in application. See Retention Configuration section for more details.
+info: ADC12_0(/ti/driverlib/ADC12) totalConversionRate: When Power Down Mode is set to Auto, ADC wakeup time may need to be considered in each sample window. Refer to the device specific data sheet for specifications on the ADC Wakeup Time.
+info: MOTOR_PID(/ti/driverlib/TIMER): Peripheral does not retain register contents in STOP or STANDBY modes. User should take care to save and restore register configuration in application. See Retention Configuration section for more details.
+info: NTB(/ti/driverlib/TIMER): Peripheral does not retain register contents in STOP or STANDBY modes. User should take care to save and restore register configuration in application. See Retention Configuration section for more details.
+59 error(s), 0 warning(s)
