@@ -7,6 +7,7 @@ import { esc, formatSize } from "../../src/contest_generator/static/js/fx/core.j
 import {
   mdEncodedPath, mdSubdir, formatMtime, mdFilterEntries, mdSortEntries,
   mdStats, mdStatsText, mdChipRowHTML, mdRowHTML, mdPreviewShellHTML, mdFileUrl,
+  mdAssetUrl, mdAssetImageUrl,
 } from "../../src/contest_generator/static/js/fx/md.js";
 
 const mds = [
@@ -54,6 +55,45 @@ test("mdFileUrl：/api/materials-md/ + 段编码路径", () => {
     mdFileUrl("lckfb-地猛星移植手册/模块索引.md"),
     "/api/materials-md/lckfb-%E5%9C%B0%E7%8C%9B%E6%98%9F%E7%A7%BB%E6%A4%8D%E6%89%8B%E5%86%8C/%E6%A8%A1%E5%9D%97%E7%B4%A2%E5%BC%95.md"
   );
+});
+
+test("mdAssetUrl：/api/materials-md-assets/ + 段编码路径", () => {
+  assert.equal(
+    mdAssetUrl("lckfb-地猛星移植手册/images/0-96-color-screen/img1.gif"),
+    "/api/materials-md-assets/lckfb-%E5%9C%B0%E7%8C%9B%E6%98%9F%E7%A7%BB%E6%A4%8D%E6%89%8B%E5%86%8C/images/0-96-color-screen/img1.gif"
+  );
+});
+
+test("mdAssetImageUrl：相对路径按 .md 所在目录归一为资产端点", () => {
+  assert.equal(
+    mdAssetImageUrl("lckfb-地猛星移植手册/sensor--mpu6050-six-axis-sensor.md", "images/0-96-color-screen/img1.gif"),
+    "/api/materials-md-assets/lckfb-%E5%9C%B0%E7%8C%9B%E6%98%9F%E7%A7%BB%E6%A4%8D%E6%89%8B%E5%86%8C/images/0-96-color-screen/img1.gif"
+  );
+});
+
+test("mdAssetImageUrl：./ 前缀归一（不产出 /./ 段）", () => {
+  assert.equal(
+    mdAssetImageUrl("lckfb-地猛星移植手册/sensor--x.md", "./images/x/img1.png"),
+    "/api/materials-md-assets/lckfb-%E5%9C%B0%E7%8C%9B%E6%98%9F%E7%A7%BB%E6%A4%8D%E6%89%8B%E5%86%8C/images/x/img1.png"
+  );
+});
+
+test("mdAssetImageUrl：批次根 md（rel_path 无 /）直接相对资产根", () => {
+  assert.equal(
+    mdAssetImageUrl("sensor--x.md", "images/x/img1.png"),
+    "/api/materials-md-assets/images/x/img1.png"
+  );
+});
+
+test("mdAssetImageUrl：http(s) 外链透传", () => {
+  assert.equal(
+    mdAssetImageUrl("lckfb-地猛星移植手册/sensor--x.md", "https://wiki.lckfb.com/storage/x/y.png"),
+    "https://wiki.lckfb.com/storage/x/y.png"
+  );
+});
+
+test("mdAssetImageUrl：空 src → 空串", () => {
+  assert.equal(mdAssetImageUrl("lckfb-地猛星移植手册/sensor--x.md", ""), "");
 });
 
 test("mdSubdir：批次内子目录；批次根为空串", () => {

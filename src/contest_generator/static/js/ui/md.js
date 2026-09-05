@@ -10,7 +10,7 @@ import { esc } from "/js/fx/core.js";
 import { parseMarkdownBlocks, markdownPreviewHTML } from "/js/fx/markdown.js";
 import {
   mdFilterEntries, mdSortEntries, mdStats, mdStatsText, mdChipRowHTML,
-  mdRowHTML, mdFileUrl, mdPreviewShellHTML,
+  mdRowHTML, mdFileUrl, mdAssetImageUrl, mdPreviewShellHTML,
 } from "/js/fx/md.js";
 
 // —— 工具栏状态与渲染（对偶 pdf 系列）——
@@ -70,7 +70,8 @@ function renderMds() {
 
 // —— 预览弹窗：markdown 渲染复用 code-viewer 管线——正文由服务端全文端点
 // 拉取（懒取 memo，400 缓存可重试 / 网络 500 不缓存），渲染 = 弹窗壳 +
-// 正文滚动区。opts.imageUrl 置空（wiki 正文图 0，无相对路径图片）。 ——
+// 正文滚动区。opts.imageUrl 走 fx/md.js mdAssetImageUrl：相对图片（手册内嵌图，
+// 如图片 images/<slug>/imgN.ext）按 .md 所在目录归一到素材库资产端点；http(s) 外链透传。 ——
 const mdPreviewCache = new Map(); // rel_path → Promise<{content} | "error">
 // 大小上限与后端一致（1MB）——超限文件不拉正文，行内已标 ⚠；预览仍可开
 // （弹窗显示元数据 + 明确提示超限，不渲染正文）。
@@ -87,9 +88,11 @@ function loadMdText(relPath) {
   return mdPreviewCache.get(relPath);
 }
 
-function renderMdBlocks(content) {
+function renderMdBlocks(content, m) {
   const blocks = parseMarkdownBlocks(content || "");
-  return markdownPreviewHTML(blocks, {});
+  return markdownPreviewHTML(blocks, {
+    imageUrl: (src) => mdAssetImageUrl((m && m.rel_path) || "", src),
+  });
 }
 
 function openMdPreview(m) {
@@ -123,7 +126,7 @@ function openMdPreview(m) {
       body.innerHTML = '<div class="md-preview-status danger">无法读取该文件（缺失/非法/超限），可点「打开」重试原文。</div>';
       return;
     }
-    body.innerHTML = renderMdBlocks(d.content);
+    body.innerHTML = renderMdBlocks(d.content, m);
   });
 }
 
