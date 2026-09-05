@@ -445,6 +445,18 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # HUMAN_IR OUT（human_ir 默认脚——人体红外感应：与步进/测距/存储
         # 不同框、同选概率最低故叠此脚（刻意不叠温湿度/光照/显示/语音/无线/
         # 按键/蜂鸣——感应灯/防盗报警标配组合），同选时经引脚绑定消解）
+        "PA0": 2,  # I2C_0 sdaPin（ml_mpu6050 默认脚；板载 LED 共用）+ IR_TX OUT
+        # （ir_remote_tx 默认脚——红外发射链与姿态采集同选概率最低故叠此脚，
+        # 且与 ir_remote 默认 PA26 刻意错开（发/收常配对），同选时经引脚绑定
+        # 消解；板载 LED 随 38kHz 载波闪烁可作发射指示；2026-09-09 SysConfig
+        # CLI 实证 PA0/PA1 不在 GPIO 输入实例 pin 选项内——GPIO 输入件不得用）
+        "PA31": 5,  # IMU601 RX + HX711 DT（hx711 默认脚；称重与姿态同选
+        # + SHT30 SDA（同上）+ MICROWAVE OUT（microwave_radar 默认脚——微波
+        # 雷达与姿态/称重/身份/温湿度采集不同框、同选概率最低故叠此脚
+        # （PA0/PA1 不可作 GPIO 输入——SysConfig CLI 实证；自动门/车流惯配
+        # 电机/显示/蜂鸣/无线/超声——刻意不叠），与 human_ir 默认 PB8 刻意
+        # 错开（人体红外+微波双判据常同选，默认即不撞），同选时经引脚绑定
+        # 消解）
     }
 
 
