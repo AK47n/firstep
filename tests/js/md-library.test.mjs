@@ -216,6 +216,15 @@ test("mdRowHTML：文件名链接 + tooltip + 批次 chip + 大小/时间 + 操�
   assert.match(big, /超预览上限/);
 });
 
+test("mdRowHTML：有 title 时主行显示中文标题 + 文件名小字；无 title 回退文件名", () => {
+  const withTitle = mdRowHTML({ ...mds[0], title: "MPU6050 六轴传感器" });
+  assert.match(withTitle, />MPU6050 六轴传感器</);
+  assert.match(withTitle, /md-row-file">sensor--mpu6050-six-axis-sensor\.md</);
+  const noTitle = mdRowHTML(mds[0]);
+  assert.match(noTitle, />sensor--mpu6050-six-axis-sensor\.md</);
+  assert.ok(!noTitle.includes("md-row-file"));
+});
+
 test("mdPreviewShellHTML：元数据行 + 转义（标题/路径/大小/时间）", () => {
   const html = mdPreviewShellHTML(mds[3]);
   assert.match(html, /ref-detail-title">模块索引\.md</);

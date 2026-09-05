@@ -17,10 +17,11 @@ from contest_generator.md_library import (
     MD_ASSET_MAX_BYTES,
     MD_FILE_MAX_BYTES,
     asset_media_type,
+    first_heading_title,
     list_markdowns,
     read_markdown,
-    resolve_markdown,
     resolve_md_asset,
+    resolve_markdown,
 )
 from contest_generator.reference_library import ReferenceError
 
@@ -83,7 +84,7 @@ def test_list_markdowns_missing_root_returns_empty(tmp_path):
     assert list_markdowns(tmp_path / "不存在") == []
 
 
-def test_list_markdowns_each_entry_has_int_mtime(tmp_path):
+def test_list_markdowns_each_entry_has_int_mtime_and_title(tmp_path):
     root = _make_materials(tmp_path / "materials")
     rel = "lckfb-地猛星移植手册/sensor--mpu6050-six-axis-sensor.md"
     os.utime(root / rel, (1_000_000_000, 1_000_000_000))
@@ -91,6 +92,16 @@ def test_list_markdowns_each_entry_has_int_mtime(tmp_path):
     assert all(isinstance(p["mtime"], int) for p in mds)
     by_name = {p["name"]: p for p in mds}
     assert by_name["sensor--mpu6050-six-axis-sensor.md"]["mtime"] == 1_000_000_000
+    # 标题 = 首页 # 行（mpu6050 夹具首行）；无 # 行回退空串（前端回退文件名）
+    assert by_name["sensor--mpu6050-six-axis-sensor.md"]["title"] == "mpu6050"
+    assert by_name["模块索引.md"]["title"] == "索引"
+
+
+def test_first_heading_title_extracts_and_fallback():
+    assert first_heading_title("# SHT30温湿度传感器\n\n正文".encode("utf-8")) == "SHT30温湿度传感器"
+    assert first_heading_title("# 标题 #\n\n正文".encode("utf-8")) == "标题"
+    assert first_heading_title("无标题文件\n\n内容".encode("utf-8")) == ""
+    assert first_heading_title("```c\n#include \"x.h\"\n```".encode("utf-8")) == ""  # 围栏 #include 不误判
 
 
 def test_resolve_markdown_happy_path(tmp_path):
