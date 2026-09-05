@@ -92,9 +92,10 @@ uint8_t fingerprint_check_device(void)
     }
     _send_packet(_cmd_check_device, 10u);
     if (_receive_response(12u) != 0) {
-        return 0;
+        return 1u;
     }
-    return _response_ok() == 0 ? 1u : 0u;
+    /* 统一约定：0 = 成功（页面 Device_Check 返回 1=成功，已按库风格统一） */
+    return _response_ok();
 }
 
 uint8_t fingerprint_is_touched(void)
@@ -183,6 +184,7 @@ uint8_t fingerprint_enroll(uint16_t store_id)
     if (fingerprint_get_image() != 0) {
         return 1u;
     }
+    delay_ms(100); /* 页面确认成功后 100ms 稳定拍（原样保留） */
     if (fingerprint_img_to_buffer(1u) != 0) {
         return 1u;
     }
