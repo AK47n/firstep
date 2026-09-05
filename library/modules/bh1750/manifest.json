@@ -1,0 +1,34 @@
+{
+  "slug": "bh1750",
+  "description": "BH1750 光照强度传感器驱动（mspm0 纯驱动，ADR 0009）：软 I2C 位操作读取（不占硬件 I2C 外设），bh1750_init 上电 + bh1750_start_measure 启动连续高分辨率测量 + bh1750_read_lux 出光照度（lx，16bit 原始值 /1.2）；适用于环境光照度采集、光照控制/显示、台灯调光、农业大棚补光监测等赛题功能。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/bh1750.c",
+        "code/bh1750.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg GPIO 实例 BH1750（SCL 宏 BH1750_SCL_PIN / SDA 宏 BH1750_SDA_PIN / IOMUX 宏 BH1750_SCL_IOMUX / BH1750_SDA_IOMUX——SysConfig 命名 <实例>_<引脚名>_IOMUX，aht10 编译矩阵实测）。软 I2C：SDA 方向运行时切换（BH1750_SDA_OUT/IN 宏，不用硬件 I2C 外设；节点需板上/模块自带上拉电阻）。默认 SCL=PA12 / SDA=PA13——与 PWMAB C0/C1（motor 双路 PWM）默认重叠（光照度监测/台灯类与双电机驱动同选概率最低；故意不叠 AHT10 的 PB6/PB7——温湿度+光照=环境监测站常见组合）；同选时经引脚绑定消解；地猛星 2×20 排针 31 个 IO 全被默认布局占用（IR_BEAM/PA8 先例）。延时走 delay 模块（软 I2C 半周期 2us ≈ 100kHz 级；测量等待 ≥120ms 由调用方按 BH1750_MEASURE_DELAY_MS 执行）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--bh1750-light-intensity-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/bh1750-light-intensity-sensor.html；网盘完整工程 https://pan.baidu.com/s/190wOfvWO4Du8fhwTuJNCXg?pwd=2p69；厂家资料 https://pan.baidu.com/s/13bVmmj0eM22mT8pBusjIyQ?pwd=8889）。改造要点：去掉 main.c 演示与 printf；函数名规范化（bh1750_init/start_measure/read_lux，去 GY30_/IIC_/Single_Write_BH1750/Multiple_read_BH1750 菜市场命名）；I2C 原语静态化（iic_start/stop/ack/wait_ack/send_byte/read_byte，照 aht10）；等待应答超时防护（无应答返回 1，原版 Single_Write 返回 1/2 歧义已统一）；0x10 命令由 start_measure 独立暴露（原版 GY30_Init 只上电，测量命令散在 main 循环）。未上板（软 I2C 时序真机验证留后续）。\nwiki-modules-batch2/03 编译矩阵（2026-09-05）：单选生成 → gmake 0 error、0 warning；未上板。",
+      "kit": "BH1750 光照强度传感器模块（GY-30，I2C，ALT ADDRESS 接地 = 地址 0x46）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/bh1750-light-intensity-sensor.html",
+      "pins": [
+        {
+          "id": "BH1750_SCL",
+          "type": "gpio_out",
+          "default": "PA12",
+          "required": true
+        },
+        {
+          "id": "BH1750_SDA",
+          "type": "gpio_out",
+          "default": "PA13",
+          "required": true
+        }
+      ]
+    }
+  }
+}

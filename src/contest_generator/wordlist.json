@@ -125,6 +125,14 @@
         "lib_modules": ["dht11"]
       },
       {
+        "name": "BH1750 光照度传感器",
+        "interface": "I2C（软 I2C 占 2 GPIO，不必硬件外设）",
+        "price": "￥3-8/个",
+        "note": "库内 bh1750 已打通（mspm0：bh1750_init 上电 + start_measure 启动连续高分辨率 + read_lux 出 lx，默认 PA12/PA13——同选时经引脚绑定消解）；0-65535 lx、1 lx 分辨率、测量 ~120ms（调用方按 BH1750_MEASURE_DELAY_MS 等待）；模块板自带上拉；台灯调光/农业补光监测/环境光照采集",
+        "suitable": "环境光照度采集/光照控制与显示/自动调光",
+        "lib_modules": ["bh1750"]
+      },
+      {
         "name": "磁力计指南针（QMC5883L）",
         "interface": "I2C（QMC/IST 系列同寄存器族）",
         "price": "￥5-15/个",

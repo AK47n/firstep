@@ -315,6 +315,10 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # K230 视觉串口同选概率最低故叠此脚，同选时经引脚绑定消解）+
         # NRF24L01 MISO（2.4G 与视觉/手动输入互替）
         "PA7": 2,  # DC_MOTOR BIN2 + SERVO_PWM ccp0Pin（servo 默认脚）
+        "PA12": 2,  # PWMAB ccp0Pin（motor 双路 PWM）+ BH1750 SCL（bh1750 默认
+        # 脚；光照度监测/台灯类与双电机驱动同选概率最低故叠此脚，同选时经
+        # 引脚绑定消解）
+        "PA13": 2,  # PWMAB ccp1Pin（motor 双路 PWM）+ BH1750 SDA（同上）
         "PA14": 2,  # DCC_100_PWM2 ccp0Pin（step_motor 默认脚）+ WS2812 IN
         # （ws2812 默认脚；地猛星排针 31 IO 全占，步进与灯带同选概率最低故
         # 叠此脚，同选时经引脚绑定消解）
