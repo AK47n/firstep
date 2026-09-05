@@ -430,6 +430,14 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # 通道中唯一无负载脚（PA14 板载 LED2+15k 会分流高阻光电二极管源，
         # mq5 选脚判据先例）；与巡线/无线/触摸不同框、同选概率最低故叠此脚，
         # 同选时经引脚绑定消解）
+        "PA14": 5,  # DCC_100_PWM2 ccp0Pin（step_motor 默认脚）+ WS2812 IN
+        # （ws2812 默认脚）+ RC522 SCK（rc522 默认脚——读卡与步进/灯带同选
+        # 概率最低故叠此脚，同选时经引脚绑定消解）+ AGS10 SDA（ags10 默认脚
+        # ——同上，同选时经引脚绑定消解）+ ADC12_0 adcPin12（soil 默认脚——
+        # 土壤湿度独立 MEM7 通道 A0_12；**最后一个 MEM 槽位（8/8 用满）**——
+        # 剩余通道只剩 PA14（板载 LED2+15k 固定比率衰减：读数系统偏小、单调
+        # 性保留，notes 写明限制），与运动/读卡/气体不同框、同选概率最低故叠
+        # 此脚，同选时经引脚绑定消解）
     }
 
 

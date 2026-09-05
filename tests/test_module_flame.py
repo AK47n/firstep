@@ -1,7 +1,7 @@
 """flame 红外火焰传感器模块：真实库 + 真实母版不变量与 mspm0 单选生成。
 
 与 mq135 同款结构测试：manifest 形状（仅 mspm0、依赖 adc、单角色
-FLAME_AO_CH6 = adc PA22——ADC12_0 sequence 七通道 MEM6 独立通道）、mspm0
+FLAME_AO_CH6 = adc PA22——ADC12_0 sequence 八通道 MEM6 独立通道）、mspm0
 单选生成（syscfg 裁剪保留 ADC12_0、flame + 依赖 adc 模块文件落盘、main.c 调
 init/read_percent 过静态门禁）。百分比公式（页面原式**反向映射**
 （1 − value/4095）×100）与「无 ADC 中断」源码守卫钉死（页面 ADC 中断改轮询
@@ -61,17 +61,17 @@ def test_flame_manifest_shape_mspm0():
 
 
 def test_flame_mspm0_master_syscfg_shared_facts():
-    """母版 ADC12_0 七通道共享事实（endAdd 5→6（flame MEM6 开通道后）、
+    """母版 ADC12_0 八通道共享事实（endAdd 6→7（soil MEM7 开通道后）、
     adcMem6chansel=CHAN_7、adcPin7=PA22 归 flame——ir_distance/joystick/mq135
     相关断言同步）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
-    assert 'ADC12_0.endAdd                     = 6;' in syscfg
+    assert 'ADC12_0.endAdd                     = 7;' in syscfg
     assert 'ADC12_0.adcMem6chansel             = "DL_ADC12_INPUT_CHAN_7";' in syscfg
     assert 'ADC12_0.peripheral.adcPin7.$assign = "PA22";' in syscfg
 
 
 def test_flame_mspm0_single_select_generation(tmp_path):
-    """flame mspm0 单选生成：syscfg 保留 ADC12_0（七通道 + flame 通道行）、
+    """flame mspm0 单选生成：syscfg 保留 ADC12_0（八通道 + flame 通道行）、
     flame + 依赖 adc 模块文件落盘、静态门禁过；无独立 GPIO 实例。"""
     resolved = resolve_selection(MODULES, PLATFORM_MSPM0, ["flame"])
     assert {m.slug for m in resolved.manifests} == {"flame", "adc"}
@@ -86,7 +86,7 @@ def test_flame_mspm0_single_select_generation(tmp_path):
     )
     syscfg = (out / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const ADC12_0 = ADC12.addInstance();" in syscfg
-    assert 'ADC12_0.endAdd                     = 6;' in syscfg
+    assert 'ADC12_0.endAdd                     = 7;' in syscfg
     assert 'ADC12_0.adcMem6chansel             = "DL_ADC12_INPUT_CHAN_7";' in syscfg
     assert 'ADC12_0.peripheral.adcPin7.$assign = "PA22";' in syscfg
     assert "const FLAME = " not in syscfg  # 无独立 GPIO 实例（独立 ADC 通道）
@@ -122,4 +122,4 @@ def test_flame_percent_formula_guard():
     adc_source = (MODULES / "adc" / "code" / "adc_mspm0.c").read_text(
         encoding="utf-8"
     )
-    assert "> ADC_Channel_6" in adc_source  # adc_get 守卫扩展至 MEM6
+    assert "> ADC_Channel_7" in adc_source  # adc_get 守卫扩展至 MEM7
