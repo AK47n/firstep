@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=075909953795a95032c1bcc41a4e38ad326dc6b6 -->
+<!-- changelog-auto: last-commit=89c76534cc4fc59749d189ae94f81d45350f218c -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -69,6 +69,7 @@
 - 22:45 批次6/02 sht30 温湿度模块入库（mspm0）：软 I2C 位操作（照 aht10 先例，SDA 方向运行时切换，延时走 delay 模块不占硬件 I2C 外设/TIMER），sht30_init 设周期模式（0x2130）+ sht30_read 出温度℃/湿度%RH（0.01 系数按页面、CRC8 0x31/0xFF 原式保留、读应答重试 ≤20×2ms）+ read_temperature/read_humidity 出参封装；页外 extern 温湿度全局收敛为出参；页面 SHT31_Write_mode 不补 STOP 按页面原样；默认 SCL=PA28/SDA=PA31（与 IMU601/HX711/FINGERPRINT 重叠——不同框同选概率最低，不叠 PB6/PB7 与批次5 八脚）；笔记写明与库内 aht10/dht11/mlx90614 分工；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）；词表感知传感器 +SHT30
 - 22:48 批次6/03 mq2 烟雾/可燃气体模块入库（mspm0）：ADC 薄封装——依赖 adc 模块共享 ADC12_0 MEM0 槽位（默认 PA24，无新  行），mq2_init + mq2_read_percent 出 0-100% 相对浓度（页面 4095/100 原式、5 次快平均）；页面 ADC 中断（IRQHandler + gCheckADC）改依赖 adc 模块轮询（共享实例强符号唯一）；页面 GET_DO 宏未用不声明 DO 角色；notes 写明 MQ 系读数是相对值非 ppm 精标 + 预热要求；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）；词表感知传感器 +MQ-2
 - 22:50 批次6/04 ttp224 4路电容触摸模块入库（mspm0）：GPIO 薄封装——4 × 输入 + 内部上拉，ttp224_init + ttp224_read(ch 1-4) 返回 1=触摸 + ttp224_read_all 返回 bit0-3 位掩码（支持多点）；页面 4 个 Key_IN1-4_Scanf 收敛；极性按页面资料（引脚高=触摸）单点反相宏 TTP224_TOUCH_LEVEL（TTP224N 实物常低有效按需改 0）；默认 OUT1-4=PA22/PA25/PA26/PA27（与巡线/无线/手动输入/测距重叠——同选概率最低，四脚与同批默认不撞）；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）；词表感知传感器 +TTP224
+- 22:54 批次6 收尾（词表预算 + 平台行）：感知传感器 +4 方案（DS18B20/SHT30/MQ-2/TTP224）后默认词表完整 wire 实测 5201 > 旧 fit 上限 5034（方案名被截、选中判决依据折损）——WORDLIST_PROMPT_BYTES 5200→5400（fit 上限 5234 ≥ 5201 全量送达 + 33B 余量；词表段全量 5201 比旧截断形态 5200 仅多 1B，全文预算 62500 不动）；CONTEXT 平台行补录批次6 四件（DS18B20 单总线/SHT30 软 I2C/MQ2 ADC 薄封装/TTP224 触摸，默认脚 PA7/PA28-PA31/PA24/PA22-PA27 与重叠全景）
 
 ## 2026-09-04
 - 12:45 feat：滚动 rAF 节流 + 折叠与窗口三层组合 + 对齐矩阵回归（工单 editor-textarea-viewport/04）
