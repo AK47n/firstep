@@ -1033,6 +1033,22 @@
   .ref-files-viewer pre { margin: 0; padding: 12px 14px; max-height: 320px; overflow: auto;
                           font-size: 12px; font-family: var(--mono); background: var(--code-bg);
                           white-space: pre-wrap; word-break: break-all; }
+  /* ---- 资料库更新（工单 materials-update/06）：批次勾选弹窗 + 下载进度 ---- */
+  .materials-pick-list { max-height: 300px; overflow-y: auto; margin: var(--space-2) 0;
+                         border: 1px solid var(--border); border-radius: var(--radius-sm); }
+  .materials-batch-row { display: flex; align-items: baseline; gap: 8px; padding: 6px 10px;
+                         font-size: 13px; cursor: pointer; border-bottom: 1px solid var(--border); }
+  .materials-batch-row:last-child { border-bottom: none; }
+  .materials-batch-row:hover { background: var(--panel-2); }
+  .materials-batch-name { font-weight: 600; }
+  .materials-batch-meta { color: var(--muted); font-size: 12px; margin-left: auto; }
+  .materials-pick-footer { display: flex; align-items: center; gap: 10px;
+                           justify-content: flex-end; margin-top: var(--space-2); }
+  .materials-progress .progress { height: 10px; border-radius: 5px; overflow: hidden;
+                                  background: var(--panel-2); margin: var(--space-1) 0; }
+  .materials-progress .progress-fill { height: 100%; background: var(--accent); transition: width .5s; }
+  .materials-part-row { display: flex; justify-content: space-between; font-size: 12px;
+                        color: var(--muted); font-family: var(--mono); padding: 2px 0; }
   .ref-matched { margin-top: var(--space-1); font-size: 12px; font-family: var(--mono);
                  line-height: 1.7; }
   .ref-matched a { color: var(--accent); text-decoration: none; cursor: pointer;
@@ -4241,6 +4257,15 @@
       <div id="update-results" class="muted"></div>
     </div>
 
+    <div class="card" data-collapse-id="materials-update">
+      <h2>资料库更新</h2>
+      <div class="row" style="align-items:center;margin-bottom:var(--space-2)">
+        <button id="btn-materials-check" type="button" data-ico="download">检查资料库更新</button>
+        <span class="muted" style="flex:1">电赛资料库（<code>sources\materials</code>，5 GB+）随大发版更新；增量包按批次只传变化部分，几 GB 级更新也能选批次下载，不用重下完整包。</span>
+      </div>
+      <div id="materials-update-results" class="muted"></div>
+    </div>
+
     <div class="card" data-collapse-id="reset-records">
       <h2>重置本地记录</h2>
       <div class="row" style="align-items:center">
@@ -4346,6 +4371,7 @@ import { loadReferences, loadKitVocabulary, loadTopicTypes, initReferenceToolbar
 import { loadTopics, loadTopicGroupVocabulary, initTopicToolbar, viewTopicDetail, viewTopicEdit, deleteTopic, renderProofreadRows } from "/js/ui/topic.js";
 import { loadSettings, loadRecentWorkflows, initSettingsCollapse, renderPriceReference, setSettingsDeps } from "/js/ui/settings.js";
 import { initUpdatePanel } from "/js/ui/update.js";  // 设置页「软件更新」区（工单 auto-update/06）
+import { initMaterialsUpdate } from "/js/ui/materials-update.js";  // 设置页「资料库更新」区（工单 materials-update/06）
 import { renderRecentList, refreshRecent, reportRecentStatus, initRecent } from "/js/ui/recent.js";
 import { initCodeViewer, checkCodeDiskChanges } from "/js/ui/codeview.js";  // 代码查看器（code-viewer/04-06）：init 加载模块，openCodeViewer 由 recent.js 直接 import；checkCodeDiskChanges = 磁盘基线感知（code-ide-flow/02）
 import { initCodeAiChat } from "/js/ui/code-ai-chat.js";  // AI 对话面板（code-ide-ai/03）：选中代码问 AI + 对话历史
@@ -4774,6 +4800,7 @@ initResourceBoard();  // 资源总览视图切换（resource-overview-polish/02�
 initWiringToggle();  // 接线图「显示全部接线」开关（task-wiring-diagram/04）：document 级 change 委托
 initSettingsCollapse();  // 设置页折叠：DOM 已就绪，读盘应用默认/记忆状态（首帧前同步执行）
 initUpdatePanel();  // 设置页「软件更新」区（工单 auto-update/06）：当前版本 + 检查更新按钮接线
+initMaterialsUpdate();  // 设置页「资料库更新」区（工单 materials-update/06）：检查 + 选择弹窗 + 进度
 initLibraryToolbar();  // 模块库工具栏（工单 02）：搜索 / 排序 / 过滤 chips 事件绑定（DOM 已就绪）
 initAddSections();  // 添加模块分区折叠（工单 07）：分区头点击切换（DOM 已就绪）
 initReferenceToolbar();  // 参考库工具栏（工单 02）：防抖搜索 / 排序 / chips 事件绑定（DOM 已就绪）
