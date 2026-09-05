@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=c3b65abd18585c20b9374054897c9da0bef89c27 -->
+<!-- changelog-auto: last-commit=2748762eed7227b3fed2c1c3996caf2e41866c75 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -12,6 +12,7 @@
 - 00:11 批次7 code-review 收尾修正：sgp30.h 返回码文档对齐实现（1/2/3=写命令地址/命令字节应答失败、4=读地址应答失败、5=CRC 校验失败——原文档与实际不符）；sgp30/ags10 的 IIC send_ack/send_nack 补充页面原式冗余二次写注释（0=应答 1=非应答按页面语义，sht30 先例样）；test_module_mq135 文档串 sequence 五通道→六通道（mq5 开 MEM5 后）；词表预算实测 5495 上调 WORDLIST_PROMPT_BYTES 5400→5700（fit 上限 5534 全量送达+39B 余量）并降 REFERENCE_FULLTEXT_BYTES 62500→62000（最坏形态 +195B 保 2KB 边界余量，batch5 口径）；CONTEXT 平台行补录批次7 四件（MQ135 独立 MEM4/MQ5 独立 MEM5/SGP30 软 I2C+CRC8 器件修正/AGS10 软 I2C+上游缺陷修正，默认脚 PB20/PB24/PA18-PB9/PB18-PA14 与重叠全景）；新增 sweep_27_modules.py（批次1-7 27 件一致性快检：ADR0009/verified/hardware_bound/依赖正检/wordlist 挂接/kit/source_url，全 OK）
 - 00:16 批次7 收尾修正补丁：ags10 源码注释改用页面函数名简写（避免与「原语族静态化」守卫字面量 AGS10_IIC_ 相撞——守卫防页面残留命名，注释引述不可带前缀字面量）
 - 00:20 批次7 收尾：四张工单标记 resolved（结论含提交号/关键发现/code-review 修正指向）；spec 补 sgp30 失败码定稿（1/2/3=写命令地址/命令字节应答失败、4=读地址应答失败、5=CRC 校验失败）
+- 00:39 批次8/01 火焰传感器模块入库（mspm0）：ADC 模拟量独立 MEM6 通道（mq135/mq5 模式——与 mq2 的 MEM0 薄封装不同：与其它模拟量件同选时物理通道独立、无共读冲突），母版 syscfg ADC12_0 sequence 加第 7 通道（endAdd 5→6、adcMem6chansel=CHAN_7、adcPin7=PA22——地猛星板上剩余 ADC 通道中唯一无负载脚（PA14 板载 LED2+15k 会分流高阻光电二极管源，mq5 选脚判据先例）；与 HUIDU L1/DEBUG_UART RX/NRF24L01 IRQ/TTP224 OUT1 重叠——同选概率最低）；flame_init + flame_read_percent 出 0-100% 火焰强度（页面原式反向映射（1−value/4095）×100——红外光越强 ADC 值越小、百分比越高，30 次→5 次快平均）；页面 ADC 中断（IRQHandler + gCheckADC）改经 adc 模块 API 轮询（共享实例强符号唯一）；adc 模块 adc_get 通道守卫扩展至 MEM6（注释/枚举同步）；页面 DO（LM393 阈值）宏未用不声明；notes 写明 700-1000nm 波段/反向映射/相对强度非绝对值；默认 PA22；词表感知传感器 +火焰传感器；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）；旧断言同步（endAdd 5→6：ir_distance/mq135/mq5/joystick）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
