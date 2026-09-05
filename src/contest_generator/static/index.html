@@ -4232,6 +4232,15 @@
       <div class="muted" style="margin-top: var(--space-2)">token 数为模型服务商上报（provider-reported）；费用 = 按上方单价估算的参考值，以官方账单为准；本地默认 0 成本。</div>
     </div>
 
+    <div class="card" data-collapse-id="software-update">
+      <h2>软件更新</h2>
+      <div class="row" style="align-items:center;margin-bottom:var(--space-2)">
+        <button id="btn-update-check" type="button" data-ico="download">检查更新</button>
+        <span class="muted" style="flex:1">当前版本：<span id="update-current-version">…</span>。发现新版可一键更新（轻量更新包，几百 MB），不用重下 6.2 GB 完整包；DeepSeek key、任务状态与电赛资料库自动保留。</span>
+      </div>
+      <div id="update-results" class="muted"></div>
+    </div>
+
     <div class="card" data-collapse-id="reset-records">
       <h2>重置本地记录</h2>
       <div class="row" style="align-items:center">
@@ -4336,6 +4345,7 @@ import { loadLibrary, initLibraryToolbar, initAddSections, editModule, deleteMod
 import { loadReferences, loadKitVocabulary, loadTopicTypes, initReferenceToolbar, deleteReference, editReference, openReferenceFile, viewReferenceDetail } from "/js/ui/reference.js";
 import { loadTopics, loadTopicGroupVocabulary, initTopicToolbar, viewTopicDetail, viewTopicEdit, deleteTopic, renderProofreadRows } from "/js/ui/topic.js";
 import { loadSettings, loadRecentWorkflows, initSettingsCollapse, renderPriceReference, setSettingsDeps } from "/js/ui/settings.js";
+import { initUpdatePanel } from "/js/ui/update.js";  // 设置页「软件更新」区（工单 auto-update/06）
 import { renderRecentList, refreshRecent, reportRecentStatus, initRecent } from "/js/ui/recent.js";
 import { initCodeViewer, checkCodeDiskChanges } from "/js/ui/codeview.js";  // 代码查看器（code-viewer/04-06）：init 加载模块，openCodeViewer 由 recent.js 直接 import；checkCodeDiskChanges = 磁盘基线感知（code-ide-flow/02）
 import { initCodeAiChat } from "/js/ui/code-ai-chat.js";  // AI 对话面板（code-ide-ai/03）：选中代码问 AI + 对话历史
@@ -4763,6 +4773,7 @@ initReviseTabs();  // 第11步卡内页签（工单 step11-tabs-ui/01）：DOM �
 initResourceBoard();  // 资源总览视图切换（resource-overview-polish/02）：document 级委托
 initWiringToggle();  // 接线图「显示全部接线」开关（task-wiring-diagram/04）：document 级 change 委托
 initSettingsCollapse();  // 设置页折叠：DOM 已就绪，读盘应用默认/记忆状态（首帧前同步执行）
+initUpdatePanel();  // 设置页「软件更新」区（工单 auto-update/06）：当前版本 + 检查更新按钮接线
 initLibraryToolbar();  // 模块库工具栏（工单 02）：搜索 / 排序 / 过滤 chips 事件绑定（DOM 已就绪）
 initAddSections();  // 添加模块分区折叠（工单 07）：分区头点击切换（DOM 已就绪）
 initReferenceToolbar();  // 参考库工具栏（工单 02）：防抖搜索 / 排序 / chips 事件绑定（DOM 已就绪）
