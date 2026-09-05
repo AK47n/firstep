@@ -1,0 +1,37 @@
+#ifndef HUMAN_IR_H
+#define HUMAN_IR_H
+
+#include <stdint.h>
+
+/* HC-SR501 人体红外感应模块驱动（mspm0，纯驱动切片，ADR 0009）：1 × GPIO
+ * 输入（内部上拉），human_ir_read() 返回 1=感应到人体、0=未感应到。引脚 =
+ * 母版 syscfg 实例 HUMAN_IR：OUT（输入 + 内部上拉，默认 PB8——与
+ * STEP_MOTOR DCY2 / SR04 ECHO / AT24C02 SDA 重叠：人体红外与步进/测距/存储
+ * 不同框、同选概率最低（刻意不叠温湿度/光照/显示/语音/无线/按键/蜂鸣——
+ * 感应灯/防盗报警标配组合），同选时经引脚绑定消解）。
+ * 极性（按模块介绍文字与规格）：人被感应到 = 输出**高电平**（「人进入其
+ * 感应范围则输出高电平」+ 规格「电平输出：高3.3V/低0V」；页面函数注释
+ * 「0=感应到人体红外」与介绍/规格矛盾——按 ir_remote 修正先例以介绍文字
+ * 为准，库内注释记录）；实物若低有效，把 HUMAN_IR_TRIGGER_LEVEL 改为 0
+ * 即可反相，其余零改动（单点反相宏，TTP224_TOUCH_LEVEL 先例）。
+ * 模块特性（页面说明）：上电 ~1 分钟初始化期间间隔输出 0-3 次（初始化期
+ * 勿作判定）；可重复/不可重复触发跳线、板载延时与灵敏度旋钮；避免灯光
+ * 直射透镜与流动风、双元探头安装方向与人体活动方向平行。
+ * 对应手册：sources/materials/lckfb-地猛星移植手册/sensor--human-body-infrared-sensor.md
+ * （立创 wiki 地猛星移植手册；代码按模块库规范改写：去 main/printf、页面
+ * Get_HumanIR/GET 宏收敛为 init/read + 极性单宏）。 */
+
+/* 感应判定电平（单点反相宏）：1 = 引脚高 = 感应到（模块介绍/规格，HC-SR501
+ * 器件标准）；0 = 引脚低 = 感应到（实物反相时改此宏，其余零改动）。 */
+#define HUMAN_IR_TRIGGER_LEVEL 1u
+
+/* human_ir_init：GPIO 输入由 SYSCFG_DL_init() 配置（内部上拉），空实现占位
+ * 保持 API 一致（ttp224/ir_beam 先例）。 */
+void human_ir_init(void);
+
+/* human_ir_read：读感应状态。返回 1 = 感应到人体、0 = 未感应到（按
+ * HUMAN_IR_TRIGGER_LEVEL 极性；电平直读无去抖/无 GPIO 中断——GROUP1 仍被
+ * motor 编码器独占，页面同为电平直读，骨架侧按需滤波，ttp224 先例）。 */
+uint8_t human_ir_read(void);
+
+#endif /* HUMAN_IR_H */

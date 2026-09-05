@@ -410,6 +410,7 @@ MSPM0_DEFAULT_MAP = {
     ("ttp224", "TTP224_OUT2"): ("TTP224", "OUT2"),
     ("ttp224", "TTP224_OUT3"): ("TTP224", "OUT3"),
     ("ttp224", "TTP224_OUT4"): ("TTP224", "OUT4"),
+    ("human_ir", "HUMAN_IR_OUT"): ("HUMAN_IR", "OUT"),
     ("bh1750", "BH1750_SCL"): ("BH1750", "SCL"),
     ("bh1750", "BH1750_SDA"): ("BH1750", "SDA"),
     ("sr04", "SR04_TRIG"): ("SR04", "TRIG"),

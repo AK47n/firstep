@@ -505,6 +505,22 @@ TTP224.associatedPins[3].direction        = "INPUT";
 TTP224.associatedPins[3].internalResistor = "PULL_UP";
 TTP224.associatedPins[3].pin.$assign      = "PA27";
 
+// 人体红外感应输入（human_ir 模块：OUT 输入 + 内部上拉——HC-SR501 模块被
+// 感应到人体时输出高电平（模块介绍「人进入其感应范围则输出高电平」+ 规格
+// 「电平输出：高3.3V/低0V」；页面函数注释「0=感应到」与介绍矛盾——按
+// HC-SR501 器件标准高=检测到修正，模块 notes 记录）；电平直读无去抖/无
+// GPIO 中断（GROUP1 仍被 motor 编码器独占，页面同为电平直读）。默认 PB8——
+// 与 STEP_MOTOR DCY2 / SR04 ECHO / AT24C02 SDA 重叠：人体红外与步进/测距/
+// 存储不同框、同选概率最低（感应灯/防盗报警惯配温湿度/光照/显示/语音/无线/
+// 按键/蜂鸣——刻意不叠），同选时经引脚绑定消解）
+const HUMAN_IR = GPIO.addInstance();
+HUMAN_IR.$name = "HUMAN_IR";
+HUMAN_IR.associatedPins.create(1);
+HUMAN_IR.associatedPins[0].$name            = "OUT";
+HUMAN_IR.associatedPins[0].direction        = "INPUT";
+HUMAN_IR.associatedPins[0].internalResistor = "PULL_UP";
+HUMAN_IR.associatedPins[0].pin.$assign      = "PB8";
+
 // 双轴摇杆按键（joystick 模块：SW 输入上拉低有效；实例名 JOYSTICK →
 // JOYSTICK_PORT 宏；引脚名 SW → JOYSTICK_SW_PIN；默认 PA9——仅与
 // DIGIT_UART RX 默认重叠（K230 视觉串口），同选时经引脚绑定消解。
