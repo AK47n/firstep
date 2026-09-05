@@ -4,9 +4,9 @@
 
 **被谁阻塞：** 无——可立即开始（照 aht10 先例，机械复制度高）。
 
-**状态：** pending
+**状态：** resolved
 
-**结论：** 待完成。
+**结论：** 2026-09-05 完成。软 I2C 照 aht10 先例（SDA 方向运行时切换、半周期 2us；delay 模块依赖）；API 规范化（bh1750_init/start_measure/read_lux，等待应答超时统一 0=成功 1=失败，0x10 测量命令独立暴露）；母版 syscfg 新 GPIO 实例 BH1750/SCL+SDA 默认 PA12/PA13（与 PWMAB C0/C1 重叠——光照度与双电机驱动同选概率最低；故意不叠 AHT10 的 PB6/PB7——温湿度+光照为环境监测常见组合）；不占硬件 I2C 外设与 TIMER。单选生成 → gmake 0 error / 0 warning（PASS）；未上板。另：test_pins 引脚字面量验收的 ADC_Channel_N 豁免扩至 us016（薄封装 API 参数非引脚字面量）。
 
 - [ ] 代码提炼：从 `sources/materials/lckfb-地猛星移植手册/sensor--bh1750-light-intensity-sensor.md` 「代码块」章节抽完整 `bsp_gy30.c/h` → 改造为 `code/bh1750.c` + `code/bh1750.h`：去 main/printf、函数名规范化（`bh1750_init/start_measure/read_lux`，去掉 `IIC_`/`Single_Write_BH1750`/`Multiple_read_BH1750`/`GY30_Init` 菜市场命名）、I2C 原语静态化（iic_start/stop/ack/wait_ack/send_byte/read_byte，照 aht10）
 - [ ] 软 I2C 照 aht10 先例：2 GPIO 位操作（SDA_OUT/SDA_IN 运行时切换；半周期 2us ≈ 100kHz 级；节点需板上/模块自带上拉）；延时全部走库内 `delay` 模块（`dependencies: ["delay"]`）；不占硬件 I2C 外设
