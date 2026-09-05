@@ -277,6 +277,11 @@ from .materials_update import (
     load_local_manifest,
     materials_library_dir,
 )
+from .materials_task import (
+    ApplyTask,
+    task_status,
+    write_task_snapshot,
+)
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -1054,6 +1059,14 @@ def _resolve_generation_output_dir(
 
 
 
+# 资料库更新会话态（工单 materials-update/03+04，模块级单例）：
+# - _MATERIALS_LAST_CHECK：最近一次 check 结果（apply 的批次白名单来源；dict 就地
+#   update，跨 create_app 实例共享——多个 TestClient 同进程复用）
+# - _materials_task：进行中的下载任务实例（进程死 = 任务自然终止；快照落盘可恢复）
+_MATERIALS_LAST_CHECK: dict = {}
+_materials_task: ApplyTask | None = None
+
+
 def create_app(ctx: AppContext | None = None) -> FastAPI:
     context = ctx or AppContext()
     app = FastAPI(title="电赛工程生成器")
@@ -1096,13 +1109,75 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         return {"app": "contest-generator", "version": __version__, "ok": True}
 
     # 资料库检查更新（工单 materials-update/03）：本地基线 + 线上清单对比；
-    # 与软件检查更新平级（独立 tag `materials-vX.Y.Z`），不依赖 releases/latest
+    # 与软件检查更新平级（独立 tag `materials-vX.Y.Z`），不依赖 releases/latest。
+    # 结果缓存进模块级 _MATERIALS_LAST_CHECK（apply 端点的批次白名单来源）。
     @app.get("/api/update/materials/check")
     @_map_errors
     def materials_update_check() -> dict:
-        return check_for_materials_update(
+        global _MATERIALS_LAST_CHECK
+        result = check_for_materials_update(
             load_local_manifest(materials_library_dir())
         )
+        _MATERIALS_LAST_CHECK.update(result)
+        return result
+
+    # 资料库下载任务（工单 materials-update/04）：后台线程 + 卷级断点。
+
+    def _materials_tasks_dir() -> Path:
+        return context.config_path.parent / "updates"
+
+    @app.post("/api/update/materials/apply")
+    @_map_errors
+    def materials_update_apply(payload: dict) -> dict:
+        global _materials_task
+        slugs = payload.get("batches")
+        if not isinstance(slugs, list) or not slugs:
+            raise HTTPException(400, "缺少所选批次（batches）")
+        if not all(isinstance(s, str) for s in slugs):
+            raise HTTPException(400, "批次列表格式非法")
+        check = _MATERIALS_LAST_CHECK
+        allowed = {b["slug"] for b in check.get("batches", [])}
+        unknown = [s for s in slugs if s not in allowed]
+        if unknown:
+            raise HTTPException(400, f"未知批次：{'、'.join(unknown)}")
+        selected = [b for b in check["batches"] if b["slug"] in set(slugs)]
+        total_bytes = sum(b["size_bytes"] for b in selected)
+        # 磁盘空间校验：下载卷 + 解压后备份余量（备份大小 ≈ 被覆盖文件，
+        # 上限取下载量的 1.5 倍，不足则拒绝）
+        updates_dir = _materials_tasks_dir()
+        updates_dir.mkdir(parents=True, exist_ok=True)
+        free = shutil.disk_usage(str(updates_dir.anchor)).free if updates_dir.anchor else 0
+        needed = int(total_bytes * 1.5) + 16 * 1024 * 1024
+        if free < needed:
+            raise HTTPException(
+                400,
+                f"磁盘空间不足：需要约 {needed // (1024 * 1024)} MB，"
+                f"剩余 {free // (1024 * 1024)} MB，请清理后重试",
+            )
+        if _materials_task is not None and _materials_task.state.value in (
+            "downloading", "applying",
+        ):
+            raise HTTPException(400, "已有资料库更新任务在进行中，请稍候")
+        task = ApplyTask(updates_dir, selected)
+        _materials_task = task
+        worker = threading.Thread(target=task.run, daemon=True)
+        worker.start()
+        return {"started": True, "message": "已开始下载资料库增量包"}
+
+    @app.get("/api/update/materials/status")
+    def materials_update_status() -> dict:
+        return task_status(_materials_task)
+
+    @app.post("/api/update/materials/cancel")
+    def materials_update_cancel() -> dict:
+        global _materials_task
+        if _materials_task is None or _materials_task.state.value not in (
+            "downloading", "applying",
+        ):
+            return {"cancelled": False, "message": "当前没有进行中的下载"}
+        _materials_task.cancel()
+        write_task_snapshot(_materials_task)
+        return {"cancelled": True, "message": "已请求取消，将在当前卷下载完成后停止"}
 
     # 检查更新（工单 auto-update/03）：GitHub Releases API + 本地版本比对；
     # 网络不可达 / 无更新包资产 → 200 级 error/message 中文提示，不 500
