@@ -18,6 +18,11 @@ from __future__ import annotations
 # HC05_UART 与 DEBUG_UART/UWB_UART 共享 UART2 外设（HC05 9600 独立波特率；
 # 三实例各自定义 UART2_IRQHandler 强符号——同选且未换实例 = 链接期重复定义，
 # 消解 = 引脚绑定换实例，其余 UART0/1/3 同样被占，先例 DEBUG+UWB）。
+# 批次 4 更正（2026-09-05 SysConfig CLI 实证）：同一 UART 外设多实例实为
+# SysConfig 级 Resource conflict（"UART2 is already in use by DEBUG_UART"），
+# 生成前裁剪保证每工程至多一个实例——所谓「共享」是裁剪后独占；FINGERPRINT_UART
+# 默认 UART0（与 IMU601 同外设默认，同选时经引脚绑定换实例消解）；语音模块
+# （jq8900/syn6288）走软 UART 单发 TX（GPIO 位操作，不占 UART 实例）。
 INSTANCE_CONSUMERS: dict[str, tuple[str, ...]] = {
     "PWMAB": ("motor",),
     "DCC_100_PWM2": ("step_motor",),
@@ -50,6 +55,8 @@ INSTANCE_CONSUMERS: dict[str, tuple[str, ...]] = {
     "DEBUG_UART": ("debug_uart",),
     "UWB_UART": ("uwb_uart",),
     "HC05_UART": ("hc05",),
+    "FINGERPRINT_UART": ("fingerprint",),
+    "FINGERPRINT": ("fingerprint",),
     "ZIGBEE_UART": ("zigbee_uart", "zigbee_uart_key", "zigbee_link"),
     "OLED": ("oled",),
     "I2C_0": ("ml_mpu6050",),

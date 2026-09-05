@@ -495,6 +495,17 @@ RC522.associatedPins[4].$name        = "MISO";
 RC522.associatedPins[4].direction    = "INPUT";
 RC522.associatedPins[4].pin.$assign  = "PA17";
 
+// 指纹模块触摸感应输入（fingerprint 模块：模块 5 脚触摸信号输出高 = 检测到
+// 触摸，VTI 接 3.3V——直连 GPIO 输入即可。默认 PA12——PWMAB C0（motor 双路
+// PWM）+ BH1750 SCL 重叠：指纹与双电机/光照同选概率最低，同选时经引脚绑定
+// 消解；与同批 jq8900/syn6288/rc522 默认不撞）
+const FINGERPRINT = GPIO.addInstance();
+FINGERPRINT.$name = "FINGERPRINT";
+FINGERPRINT.associatedPins.create(1);
+FINGERPRINT.associatedPins[0].$name        = "TOUCH";
+FINGERPRINT.associatedPins[0].direction    = "INPUT";
+FINGERPRINT.associatedPins[0].pin.$assign  = "PA12";
+
 // LED/蜂鸣器输出（PA15；原 LaunchPad 值 PA3 = 32.768k 晶振脚，地猛星排针未引出）
 LED_BEEP.$name = "LED_BEEP";
 LED_BEEP.associatedPins.create(1);
@@ -616,6 +627,25 @@ HC05_UART.enabledInterrupts = ["RX"];
 HC05_UART.enableFIFO        = false;
 HC05_UART.peripheral.rxPin.$assign = "PA24";
 HC05_UART.peripheral.txPin.$assign = "PA23";
+
+// 指纹识别（fingerprint 模块：AS608 串口双向——独立 UART 实例，批次 4 UART
+// 可行性调研实证 SysConfig CLI 拒绝同一 UART 外设多实例，故不共享；默认
+// UART0（IMU601 原脚 PA28/PA31——身份与姿态同选概率最低，单选裁剪后独占
+// UART0，同选时经引脚绑定换实例消解）；57600 = 页面注释 AS608 默认波特率
+// （市售 9600 出厂版改 targetBaudRate 一行即可，协议与波特率无关）；
+// enabledInterrupts 空 = **轮询接收**（不注册 UART 中断、无 ISR 强符号）
+const FINGERPRINT_UART = UART.addInstance();
+FINGERPRINT_UART.$name             = "FINGERPRINT_UART";
+FINGERPRINT_UART.profile           = "CONFIG_PROFILE_1";
+FINGERPRINT_UART.peripheral.$assign = "UART0";
+FINGERPRINT_UART.uartClkSrc        = "BUSCLK";
+FINGERPRINT_UART.ovsRate           = "16";
+FINGERPRINT_UART.targetBaudRate    = 57600;
+FINGERPRINT_UART.enableInternalLoopback = false;
+FINGERPRINT_UART.enabledInterrupts = [];
+FINGERPRINT_UART.enableFIFO        = false;
+FINGERPRINT_UART.peripheral.rxPin.$assign = "PA31";
+FINGERPRINT_UART.peripheral.txPin.$assign = "PA28";
 
 // OLED（I2C 控制器）
 OLED.$name                         = "OLED";

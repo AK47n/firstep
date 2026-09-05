@@ -1,0 +1,40 @@
+{
+  "slug": "fingerprint",
+  "description": "AS608 光学指纹识别模块驱动（mspm0 纯驱动，ADR 0009）：真实 UART 双向（独立 FINGERPRINT_UART 实例、轮询接收不注册中断）+ 触摸检测 GPIO——fingerprint_init 后 check_device 口令验证、get_image/img_to_buffer/reg_model/save_finger 采集合成、search 比对返回指纹 ID、enroll 录入固定序列、delete_all 删库；帧封装（6 字节包头 0xEF01FFFFFFF + 指令/参数/校验和）按页面原样；流程控制（先触摸→采集→比对、按键菜单）归生成骨架；适用于指纹采集、身份验证、指纹门禁/考勤打卡等赛题功能。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/fingerprint.c",
+        "code/fingerprint.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg：FINGERPRINT_UART UART 实例（peripheral=UART0——批次 4 UART 可行性调研：SysConfig CLI 实证拒绝同一 UART 外设多实例（`UART2 is already in use by DEBUG_UART` Resource conflict、UART 实例上限 4），指纹必须双向收发故走**独立实例**（单选裁剪后独占 UART0，与 IMU601 同选时经引脚绑定换实例消解——HC05/DEBUG+UWB 同先例）；targetBaudRate=57600（页面注释「as608 的默认波特率是 57600」——市售 9600 出厂版改 syscfg 一行即可，服务函数与波特率无关，真机核对）；enabledInterrupts=[]（**轮询接收**——页面 UART_1_INST_IRQHandler + u1_recv_flag 中断缓冲改 DL_UART_isRXFIFOEmpty 忙等 + 响应帧长度精确收齐，不注册 UART 中断、无 IRQHandler 强符号，与其它 UART 模块零冲突；页面「中断置位+delay_ms(100) 稳定等待」在精确计数收齐后不再需要，真机行为差异见下）；默认 TX=PA28/RX=PA31（IMU601 原脚——身份与姿态同选概率最低，单选裁剪后独占）。FINGERPRINT GPIO 实例（TOUCH 输入，默认 PA12——PWMAB C0/BH1750 SCL 重叠：指纹与双电机/光照同选概率最低，同选时经引脚绑定消解；模块 5 脚触摸感应输出高=检测到触摸，VTI 接 3.3V，直连 GPIO 即可）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--fingerprint-recognition-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/fingerprint-recognition-sensor.html；网盘完整工程 https://pan.baidu.com/s/1HVBShqN2U08CXIDiznsF3Q?pwd=u61d / 资料 https://pan.baidu.com/s/1mCDdiU5nwtooxmHiPfYTFA 提取码 kj8o）。改造要点：去 main.c/printf/key_scanf 菜单（页面 FPM10A_Add_Fingerprint/Find_Fingerprint/Delete_All_Fingerprint 的 Yes/No 控制台交互、printf 全剔除——流程控制归生成骨架 ADR 0009）；中断接收改**轮询**（见上）；函数名规范化（as608_config→fingerprint_init、Device_Check→fingerprint_check_device、get_as608_touch→fingerprint_is_touched、FPM10A_Cmd_Get_Img→fingerprint_get_image、FPM10A_Cmd_Img_To_Buffer1/2→fingerprint_img_to_buffer、FPM10A_Cmd_Reg_Model→fingerprint_reg_model、FPM10A_Cmd_Search_Finger→fingerprint_search、FPM10A_Cmd_Save_Finger→fingerprint_save_finger、FPM10A_Cmd_Delete_All_Model→fingerprint_delete_all）；**帧封装按页面原样**（包头 EF 01 FF FF FF FF + 指令段——默认地址 0x0100、PID? 等页面数组逐字节保留；校验和 = 指令段逐字节求和 &0xFF，Save_Finger 的 ID 动态填充与校验和计算按页面）；响应判定页面 FPM10A_RECEICE_BUFFER[9]==0（确认码），search 响应 16 字节、其余 12 字节（页面 FPM10A_Receive_Data 参数原样）；范围外：图像上传/下载（72K 图像缓冲 UART 传输）本件不提供——只做采集/录入/比对/删库；指纹库 300 枚（ID 0-299，页面备注）；get_as608_touch 的 TOUCH 宏参数化（FINGERPRINT_PORT/FINGERPRINT_TOUCH_PIN）。\nwiki-modules-batch4/04 编译矩阵（2026-09-05）：单选生成 → SysConfig CLI 校验 → gmake 0 error、0 module warning（PASS）；未上板（指纹帧协议/57600 波特率/轮询时序真机验证留后续）。",
+      "kit": "AS608 光学指纹识别模块（串口/USB 双接口，指纹门禁考勤）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/fingerprint-recognition-sensor.html",
+      "pins": [
+        {
+          "id": "FINGERPRINT_TX",
+          "type": "uart_tx",
+          "default": "PA28",
+          "required": true
+        },
+        {
+          "id": "FINGERPRINT_RX",
+          "type": "uart_rx",
+          "default": "PA31",
+          "required": true
+        },
+        {
+          "id": "FINGERPRINT_TOUCH",
+          "type": "gpio_in",
+          "default": "PA12",
+          "required": true
+        }
+      ]
+    }
+  }
+}
