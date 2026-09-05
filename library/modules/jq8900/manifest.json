@@ -1,0 +1,28 @@
+{
+  "slug": "jq8900",
+  "description": "JQ8900-16P 语音播报模块驱动（mspm0 纯驱动，ADR 0009）：软 UART 单发 TX（GPIO 位操作 9600 8N1，不占 UART 外设/TIMER）——jq8900_init 后 send_cmd 发 0xAA+命令+数据+校验和指令帧，提供播放指定曲目/下一曲/上一曲/停止/暂停/继续/音量设置等语音播报服务函数；适用于语音播报提示、状态语音播报、门禁/考勤语音提示等赛题功能。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/jq8900.c",
+        "code/jq8900.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg：JQ8900 GPIO 实例（TX 输出，初始 SET = 空闲高；默认 PB19——DC_MOTOR 编码器 BA 脚，语音播报与双电机小车同选概率最低，同选时经引脚绑定消解）。JQ8900 走软 UART 单发 TX（位操作 9600 8N1、每段 ~104us，不占 UART 外设/TIMER）——批次 4 UART 可行性调研实证依据：SysConfig CLI 直接校验母版全量 mspm0.syscfg 报 `UART2 is already in use by DEBUG_UART` Resource conflict（同一 UART 外设不接受多实例；UART 实例上限 4=外设数）；批次 1 HC05「UART2 共享 DEBUG+UWB」只有单选编译实证（裁剪后独占，从未多实例同选实证）——故语音主控→模块单向发指令帧走软 UART（库内新先例），指纹双向走独立真实 UART（另见 fingerprint 模块）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/control--jq8900-voice-broadcast-module.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/control/jq8900-voice-broadcast-module.html；网盘完整工程 https://pan.baidu.com/s/16zbuw3DYBsYCmvJiyCTOaw?pwd=4gmy）。改造要点：页内硬件 UART（UART_1_INST + DL_UART_Main_transmitData + IRQHandler RX 缓冲）改软 UART 位操作（起始位低→8 数据位 LSB 先→停止位高，delay_us(104) 走 delay 模块）；去 main.c/printf 演示；函数名规范化（JQ8900_Init→jq8900_init、JQ8900_USART_Send_Bit/send_String→内部 _tx_byte/_tx_bit、SendData 一线串行不收纳）；页面 JQ8900_Init 只开 UART 中断（RX 缓冲/播放完成反馈）随软 UART 裁剪——单向 TX 无 RX，需状态回传请接真实 UART；命令帧结构按页面 demo {0xAA,0x06,0x00,0xB0} 实证（0xAA+cmd+data+前 3 字节求和&0xFF 校验和）；命令字（0x01 播放指定曲目/0x07 上曲/0x08 停止/0x09 暂停/0x0A 继续/0x0B 音量设置/0x0C/0x0D 音量±）取自 JQ8900-16P 两线串口说明书指令表，页面仅实证 0x06=下一曲——**命令字以厂家说明书/真机为准**（notes 记录，未上板）。\nwiki-modules-batch4/01 编译矩阵（2026-09-05）：单选生成 → SysConfig CLI 校验 → gmake 0 error、0 module warning（PASS）；未上板（软 UART 位时序 ~104us/bit 逼近 9600 理论值，真机验证留后续）。",
+      "kit": "JQ8900-16P 语音播报模块（定制音乐智能语音播报 USB 串口 MP3 模块）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/control/jq8900-voice-broadcast-module.html",
+      "pins": [
+        {
+          "id": "JQ8900_TX",
+          "type": "gpio_out",
+          "default": "PB19",
+          "required": true
+        }
+      ]
+    }
+  }
+}

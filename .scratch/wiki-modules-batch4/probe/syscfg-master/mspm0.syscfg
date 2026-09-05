@@ -441,19 +441,6 @@ IR_TX.associatedPins[0].direction    = "OUTPUT";
 IR_TX.associatedPins[0].initialValue = "CLEARED";
 IR_TX.associatedPins[0].pin.$assign  = "PA0";
 
-// JQ8900 语音播报（jq8900 模块：软 UART 单发 TX——GPIO 位操作 9600 8N1，
-// 不占 UART 外设/TIMER（批次 4 UART 可行性调研：SysConfig CLI 拒绝同一
-// UART 外设多实例，语音单向发指令帧走软 UART）；TX 输出初始 SET = 空闲高。
-// 默认 PB19——DC_MOTOR 编码器 BA 脚：语音播报与双电机小车同选概率最低，
-// 同选时经引脚绑定消解；与同批 syn6288 默认 PB20 刻意错开（语音两件常同选））
-const JQ8900 = GPIO.addInstance();
-JQ8900.$name = "JQ8900";
-JQ8900.associatedPins.create(1);
-JQ8900.associatedPins[0].$name        = "TX";
-JQ8900.associatedPins[0].direction    = "OUTPUT";
-JQ8900.associatedPins[0].initialValue = "SET";
-JQ8900.associatedPins[0].pin.$assign  = "PB19";
-
 // LED/蜂鸣器输出（PA15；原 LaunchPad 值 PA3 = 32.768k 晶振脚，地猛星排针未引出）
 LED_BEEP.$name = "LED_BEEP";
 LED_BEEP.associatedPins.create(1);

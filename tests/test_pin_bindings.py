@@ -344,6 +344,8 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # （ir_remote_tx 默认脚——红外发射链与姿态采集同选概率最低故叠此脚，
         # 且与 ir_remote 默认 PA26 刻意错开（发/收常配对），同选时经引脚绑定
         # 消解；板载 LED 随 38kHz 载波闪烁可作发射指示）
+        "PB19": 2,  # DC_MOTOR 编码器 BA + JQ8900 TX（jq8900 默认脚——语音
+        # 播报与双电机小车同选概率最低故叠此脚，同选时经引脚绑定消解）
         "UART2": 3,  # UWB_UART 与 DEBUG_UART 默认同外设 + HC05_UART（用户改绑消解）
     }
 
