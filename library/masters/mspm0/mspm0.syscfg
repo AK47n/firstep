@@ -564,6 +564,26 @@ AGS10.associatedPins[1].direction    = "OUTPUT";
 AGS10.associatedPins[1].initialValue = "CLEARED";
 AGS10.associatedPins[1].pin.$assign  = "PA14";
 
+// BMP180 气压/温度/海拔软 I2C（bmp180 模块：SCL 输出 / SDA 双向运行时切换；
+// 位操作不占硬件 I2C 外设/TIMER，照 SHT30/SGP30 先例。默认 SCL=PA23 /
+// SDA=PA24——与 HUIDU L2/L3（巡线）、UWB/HC05 链路、NRF24L01 CSN/MOSI、
+// TCS34725 SCL/SDA、ADC12_0 板载共读槽（adc 默认脚 PA24/A0_3）重叠：气压/
+// 海拔与巡线车控/无线链路/色觉不同框、同选概率最低（刻意不叠温湿度/光照/
+// 气体等环境件与显示/语音——气压+环境站/显示为常见搭配；与互替件 ms5611
+// 刻意错开），同选时经引脚绑定消解；PA0/PA1 不可作软 I2C SDA（预设事实
+// ④——2026-09-06 SysConfig CLI 实证仅禁输入；软 I2C 需板上/模块自带上拉）
+const BMP180 = GPIO.addInstance();
+BMP180.$name = "BMP180";
+BMP180.associatedPins.create(2);
+BMP180.associatedPins[0].$name        = "SCL";
+BMP180.associatedPins[0].direction    = "OUTPUT";
+BMP180.associatedPins[0].initialValue = "CLEARED";
+BMP180.associatedPins[0].pin.$assign  = "PA23";
+BMP180.associatedPins[1].$name        = "SDA";
+BMP180.associatedPins[1].direction    = "OUTPUT";
+BMP180.associatedPins[1].initialValue = "CLEARED";
+BMP180.associatedPins[1].pin.$assign  = "PA24";
+
 // TTP224 4 路电容触摸按键（ttp224 模块：OUT1-4 输入 + 内部上拉——页面
 // 「上拉输入」；电平直读无去抖/无 GPIO 中断（GROUP1 仍被 motor 编码器独占，
 // 页面同为电平直读）。默认 OUT1=PA22 / OUT2=PA25 / OUT3=PA26 / OUT4=PA27——

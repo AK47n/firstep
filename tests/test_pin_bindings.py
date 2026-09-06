@@ -555,6 +555,16 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # 无线数传互替、同选概率最低故叠——同选时经引脚绑定换实例/换脚消解，
         # 单选裁剪后独占；UART 实例上限 4——UART 类 4 件以上同选 = CLI 拒绝；
         # wiki-modules-batch13/02）
+        "PA23": 7,  # HUIDU L2 + UWB_UART TX + DEBUG_UART TX + HC05_UART TX
+        # + NRF24L01 CE + TCS34725 SCL + BMP180 SCL（bmp180 默认脚——气压/
+        # 海拔与巡线车控/无线链路/色觉不同框、同选概率最低故叠此脚（刻意
+        # 不叠温湿度/光照/气体等环境件与显示/语音——气压+环境站/显示为常见
+        # 搭配；与互替件 ms5611 刻意错开），同选时经引脚绑定消解；
+        # wiki-modules-batch13/03）
+        "PA24": 7,  # HUIDU L3 + UWB_UART RX + ADC12_0 adcPin3（adc 默认脚，
+        # us016/mq2/批次9 薄封装四件/批次 11 MQ 系同构快补共读同槽）+
+        # HC05_UART RX + NRF24L01 CSN + TCS34725 SDA + BMP180 SDA（bmp180
+        # 默认脚——同上，同选时经引脚绑定消解；wiki-modules-batch13/03）
     }
 
 

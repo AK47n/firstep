@@ -426,6 +426,8 @@ MSPM0_DEFAULT_MAP = {
     ("as32", "AS32_UART_RX"): ("AS32_UART", "rxPin"),
     ("sgp30", "SGP30_SCL"): ("SGP30", "SCL"),
     ("sgp30", "SGP30_SDA"): ("SGP30", "SDA"),
+    ("bmp180", "BMP180_SCL"): ("BMP180", "SCL"),
+    ("bmp180", "BMP180_SDA"): ("BMP180", "SDA"),
     ("ags10", "AGS10_SCL"): ("AGS10", "SCL"),
     ("ags10", "AGS10_SDA"): ("AGS10", "SDA"),
     ("ttp224", "TTP224_OUT1"): ("TTP224", "OUT1"),
