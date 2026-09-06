@@ -87,6 +87,9 @@ WHITELIST = {
     # human_ir 默认 PB7 与 pid 灰度 GRAY_D8 重叠（人体红外≠巡线灰度；
     # 刻意避让声光/按键/门禁组合 BUZZER/KEY/SERVO）
     "PB7": {"pid.GRAY_D8", "human_ir.HUMAN_IR_OUT"},
+    # microwave_radar 默认 PA4 与 motor 编码器 B 相 EXTI 重叠（微波雷达≠
+    # 编码器闭环；刻意避让声光/门禁/传感站组合件；本件轮询不注册 EXTI）
+    "PA4": {"motor.MOTOR_B_ENC", "microwave_radar.MICROWAVE_OUT"},
 }
 
 

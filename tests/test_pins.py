@@ -250,6 +250,12 @@ STM32_MACRO_VALUES = {
     # 绑定消解；页面默认 PA1 弃用——被 adc/motor PWM/编码器线占用）
     "HUMAN_IR_GPIO": "GPIO_B",
     "HUMAN_IR_PIN": "Pin_7",
+    # wiki-stm32-batch1/04：microwave_radar 微波雷达（GPIO 输入默认 PA4——与
+    # motor 编码器 B 相 EXTI（MOTOR_B_ENC EXTI_PA4）重叠：微波雷达与编码器
+    # 闭环不同框、同选概率最低，同选经引脚绑定消解；本件轮询不注册 EXTI；
+    # 页面默认 PA1 弃用——叠 adc ADC_CH1 + MOTOR_B_PWM 常备件）
+    "MICROWAVE_GPIO": "GPIO_A",
+    "MICROWAVE_PIN": "Pin_4",
 }
 
 

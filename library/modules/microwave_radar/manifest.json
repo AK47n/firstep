@@ -21,6 +21,29 @@
           "required": true
         }
       ]
+    },
+    "stm32": {
+      "files": [
+        "code/microwave_radar_stm32.c",
+        "code/microwave_radar_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**GPIO 迷你驱动（页面 OUTPIN_Scanf 返回 OUT_IN 宏 + header + main 完整；页面 main 演示含开/关门时序逻辑——归生成骨架，ADR 0009）**：F1 口径页面（stm32f10x.h + RCC_APB2PeriphClockCmd + GPIO_Mode_IPU + GPIO_Speed_50MHz + GPIO_ReadInputDataBit），换算 = GPIO_Init→gpio_init（IU 上拉输入；页面 Speed_50MHz 对输入模式冗余不保留）+ GPIO_ReadInputDataBit→gpio_get。**极性按页面（自一致）**：页面注释「1=未检测到物体移动、0=检测到物体移动」+ main 演示 `if (OUTPIN_Scanf() == 0)` 判移动——检测到移动 = OUT 低电平，默认沿用页面（MICROWAVE_TRIGGER_LEVEL 默认 0u = 引脚低=检测到；正文未声明极性——HB100 带底板 OUTPUT 极性因底板而异，**未上板**，实物输出反相改 1 即可反相，照 ttp224 TTP224_TOUCH_LEVEL 先例，宏放 .h）。**宏名前缀**：页面宏名无前缀（RCC_OUT/PORT_OUT/GPIO_OUT/OUT_IN）多模块同编译易撞名 → 本件统一 MICROWAVE_ 前缀（MICROWAVE_GPIO/MICROWAVE_PIN，notes 记录）。型号命名不一致（页面标题/采购 HB100 vs 代码文件名/函数 MH100X）——wiki 自身命名，记录不裁决。**引脚宏**MICROWAVE_GPIO/MICROWAVE_PIN（pin_config.h 单源）；默认 OUT=**PA4**——页面默认脚 PA1 **不采用**（叠 adc ADC_CH1 + MOTOR_B_PWM 常备件）；与 motor 编码器 B 相 EXTI（MOTOR_B_ENC EXTI_PA4）默认重叠（微波雷达与「带编码器闭环的电机控制」不同框、同选概率最低；刻意避让声光/门禁/传感站组合件），同选经引脚绑定消解；本件轮询不注册 EXTI，与编码器线共享正交（异口同线此时不冲突）。模块特性（页面说明，记 notes 不落码）：多普勒原理检测**物体运动**（不局限于人体、不受环境温度影响、探测距离 2-16m 连续可调、5V±0.25V 供电、30-50mA；页面推荐与人体红外传感器组合做双判据；对静止人体不敏感）。**未上板**（极性/灵敏度真机验证留后续）。\nwiki-stm32-batch1/04 编译矩阵（2026-09-06）：stm32 单选生成 → UV4（C:/Keil5 V5.06u7）0 error、0 module warning（exit 0，PASS）；未上板。\n来源：sources/materials/lckfb-地阔星移植手册/sensor--microwave-doppler-radar-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/microwave-doppler-radar-sensor.html；网盘资料 https://pan.baidu.com/s/110NZE7hM3ifS1ho53fxmoA 提取码 2cz6 + 移植成功案例 https://pan.baidu.com/s/11U5xL-6Z1cpHIPnOxzXypQ?pwd=kt5s 提取码 kt5s；采购链接 [微波多普勒无线雷达探测器探头传感器模块 10.525GHz HB100 带底板] https://item.taobao.com/item.htm?spm=a1z10.3-c-s.w4002-19589090137.12.706136b40EmwBc&id=643727489100）。与 mspm0 条目分工：mspm0 侧为 syscfg GPIO 输入实例 + DL_GPIO API（默认 PA31 叠 IMU601/HX711/指纹/SHT30），本条目为 ml_gpio API + pin_config.h 宏段（默认 PA4 叠编码器 EXTI），API 同名同语义、零交叉改动。",
+      "kit": "微波多普勒无线雷达探测器探头传感器模块（10.525GHz HB100 带底板，3Pin：VCC(5V)/GND/OUT；工作 5V±0.25V、30-50mA；探测距离 2-16m 连续可调、R=30.6mm；多普勒原理检测物体运动）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/microwave-doppler-radar-sensor.html",
+      "pins": [
+        {
+          "id": "MICROWAVE_OUT",
+          "type": "gpio_in",
+          "default": "PA4",
+          "required": true,
+          "macros": [
+            "MICROWAVE_GPIO",
+            "MICROWAVE_PIN"
+          ]
+        }
+      ]
     }
   }
 }
