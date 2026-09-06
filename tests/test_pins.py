@@ -261,6 +261,15 @@ STM32_MACRO_VALUES = {
     # motor MOTOR_B_ENC_DIR（编码器方向输入）——火焰与编码器闭环不同框、
     # 同选概率最低，同选经引脚绑定消解）
     "FLAME_AO_CH": "ADC_Channel_5",
+    # wiki-stm32-batch1/05：ttp224 四路触摸（4 × GPIO 输入下拉，默认
+    # PB12/13/14/15——与 config DIP0-3 + pid GRAY_D1-4 重叠：触摸按键与拨码
+    # 配置/巡线灰度不同框、同选概率最低，同选经引脚绑定消解——四脚同口约束
+    # 共享 TTP224_GPIO 宏，换口需整组迁移；页面默认 PA1-4 弃用）
+    "TTP224_GPIO": "GPIO_B",
+    "TTP224_OUT1_PIN": "Pin_12",
+    "TTP224_OUT2_PIN": "Pin_13",
+    "TTP224_OUT3_PIN": "Pin_14",
+    "TTP224_OUT4_PIN": "Pin_15",
 }
 
 
