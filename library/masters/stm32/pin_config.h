@@ -153,6 +153,29 @@
  * LM393 阈值由模块可调电阻控制）---- */
 #define FLAME_AO_CH           ADC_Channel_5
 
+/* ---- 批次 5（wiki-stm32-batch5）：ADC 薄封装群一 8 件（mq2/mq135/mq5/
+ * photoresistance/rain/s12sd/soil/gp2y1014au——AO 模拟量 + 百分比/档位换算
+ * 同构件，页面 ADC 序列代码全部收敛 ml_adc）----
+ * 默认 AO 全 = ADC_Channel_5 = PA5（页面原脚即共读点——用户照页面接线
+ * 即插即用）；**ADC 共享组**：8 件与 flame 共读 PA5（ml_adc 的 adc_get
+ * 每次先写 SQR3 选通道再触发转换，顺序调用互不干扰——flame 先例注释确认；
+ * 同一物理脚只能接一件器件，多件同测需外部分路器/分时切换——mspm0 MEM0
+ * 共读同口径；stm32 可达 ADC 脚 PA0-7/PB0-1 全被既有角色占用，页面原脚
+ * 即共读点），同选经引脚绑定消解（换其它 ADC 脚）；
+ * gp2y1014au LED 驱动（器件必需——低有效脉冲）：默认 PB5（页面原脚
+ * PA2 = DEBUG_UART TX 常备件不照抄；PB5 叠 hx711 SCK + MOTOR_A_ENC——
+ * 粉尘与称重/光电编码器闭环不同框、同选概率最低）。 */
+#define MQ2_AO_CH             ADC_Channel_5
+#define MQ135_AO_CH           ADC_Channel_5
+#define MQ5_AO_CH             ADC_Channel_5
+#define PHOTORESISTANCE_AO_CH ADC_Channel_5
+#define RAIN_AO_CH            ADC_Channel_5
+#define S12SD_AO_CH           ADC_Channel_5
+#define SOIL_AO_CH            ADC_Channel_5
+#define GP2Y1014_AO_CH        ADC_Channel_5
+#define GP2Y1014_LED_GPIO     GPIO_B
+#define GP2Y1014_LED_PIN      Pin_5
+
 /* ---- TTP224 四路电容触摸（ttp224 模块：4 × GPIO 输入下拉，OUT1-4 默认
  * PB12/13/14/15——与 config DIP0-3（拨码 ID）+ pid 灰度 GRAY_D1-4 默认重叠：
  * 触摸按键与「拨码系统配置/巡线灰度」不同框、同选概率最低（触摸+无线链路

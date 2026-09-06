@@ -90,7 +90,22 @@ WHITELIST = {
     # flame 默认 PA5 与 motor 编码器方向输入 MOTOR_B_ENC_DIR 重叠（火焰≠
     # 编码器闭环；stm32 ADC 可达脚 PA0-7/PB0-1 全被既有角色占用——取最
     # 「不同框」的 PA5（避让 PWM 主脚 PA0/1、debug PA2/3、编码器 EXTI PA4/PB5））
-    "PA5": {"motor.MOTOR_B_ENC_DIR", "flame.FLAME_AO"},
+    # **wiki-stm32-batch5 起 PA5 为 ADC 共享组**：本批 8 件（mq2/mq135/mq5/
+    # photoresistance/rain/s12sd/soil/gp2y1014au）与 flame 共读 PA5——页面原脚
+    # 即共读点（页面 ADC 序列收敛 ml_adc，ml_adc 顺序调用互不干扰）；同一物理
+    # 脚只能接一件器件，多件同测需外部分路器/分时切换（mspm0 MEM0 共读同口径）
+    "PA5": {
+        "motor.MOTOR_B_ENC_DIR",
+        "flame.FLAME_AO",
+        "mq2.MQ2_AO",
+        "mq135.MQ135_AO",
+        "mq5.MQ5_AO",
+        "photoresistance.PHOTORESISTANCE_AO",
+        "rain.RAIN_AO",
+        "s12sd.S12SD_AO",
+        "soil.SOIL_AO",
+        "gp2y1014au.GP2Y1014_AO",
+    },
     # ttp224 默认 PB12-15 与 config DIP0-3 + pid GRAY_D1-4 重叠（触摸按键≠
     # 拨码配置/巡线灰度；四脚同口约束——换口需整组迁移，同选经引脚绑定消解）
     "PB12": {"pid.GRAY_D1", "config.DIP0", "ttp224.TTP224_OUT1"},
@@ -102,7 +117,10 @@ WHITELIST = {
     # 不同框）；PB0 与 TB6612 B 相方向 MOTOR_B_DIR 重叠（电机方向与称重
     # 不同框）——刻意不叠采集类/声光件（称重+传感站/报警常见组合），
     # 同选经引脚绑定消解
-    "PB5": {"motor.MOTOR_A_ENC", "hx711.HX711_SCK"},
+    # **wiki-stm32-batch5/08**：gp2y1014au LED 驱动（器件必需——低有效脉冲）
+    # 默认 PB5（页面原脚 PA2=DEBUG_UART TX 不照抄）——粉尘与称重/光电编码器
+    # 闭环不同框、同选概率最低，同选经引脚绑定消解
+    "PB5": {"motor.MOTOR_A_ENC", "hx711.HX711_SCK", "gp2y1014au.GP2Y1014_LED"},
     "PB0": {"motor.MOTOR_B_DIR", "hx711.HX711_DT"},
     # ds18b20 默认 PB1 与 MOTOR_B_DIR2 重叠（wiki-stm32-batch4/04：测温与
     # 单电机方向不同框、同选概率最低；页面默认 PB0 不采用 = MOTOR_B_DIR；
