@@ -360,8 +360,10 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # （ir_remote_tx 默认脚——红外发射链与姿态采集同选概率最低故叠此脚，
         # 且与 ir_remote 默认 PA26 刻意错开（发/收常配对），同选时经引脚绑定
         # 消解；板载 LED 随 38kHz 载波闪烁可作发射指示）
-        "PB19": 2,  # DC_MOTOR 编码器 BA + JQ8900 TX（jq8900 默认脚——语音
+        "PB19": 3,  # DC_MOTOR 编码器 BA + JQ8900 TX（jq8900 默认脚——语音
         # 播报与双电机小车同选概率最低故叠此脚，同选时经引脚绑定消解）
+        # + LCD CS（lcd 默认脚——彩屏与语音播报互替、同选概率最低故叠此脚，
+        # 同选时经引脚绑定消解）
         "PB20": 2,  # DC_MOTOR 编码器 BB + SYN6288 TX（syn6288 默认脚——语音
         # 合成与双电机小车同选概率最低故叠此脚，且与 jq8900 默认 PB19 刻意错开
         # （语音两件常同选，默认即不撞），同选时经引脚绑定消解）
@@ -397,13 +399,15 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         "UART0": 2,  # IMU601 与 FINGERPRINT_UART 默认同外设（用户改绑消解，
         # 批次 4 指纹独立实例——SysConfig 拒绝同外设多实例，单选裁剪后独占）
         "UART2": 3,  # UWB_UART 与 DEBUG_UART 默认同外设 + HC05_UART（用户改绑消解）
-        "PB20": 3,  # DC_MOTOR 编码器 BB + SYN6288 TX（syn6288 默认脚——语音
+        "PB20": 4,  # DC_MOTOR 编码器 BB + SYN6288 TX（syn6288 默认脚——语音
         # 合成与双电机小车同选概率最低故叠此脚，且与 jq8900 默认 PB19 刻意错开
         # （语音两件常同选，默认即不撞））+ ADC12_0 adcPin6（mq135 默认脚——
         # MQ-135 独立 MEM4 通道 A0_6；地猛星板上 ADC0 剩余通道中与既有默认
         # 同选概率最低：与双电机编码器/语音报警不同框、同选概率最低故叠此脚，
         # 多路气体同选时物理通道独立、无共读冲突（mq2 为 MEM0 薄封装共读），
-        # 同选时经引脚绑定消解）
+        # 同选时经引脚绑定消解）+ LCD BLK（lcd 默认脚——彩屏背光与语音合成/
+        # MQ-135 气体报警不同框、同选概率最低故叠此脚（彩屏+语音播报常同选——
+        # 与 jq8900 默认 PB19 刻意错开，默认即不撞），同选时经引脚绑定消解）
         "PB24": 5,  # STEP_MOTOR RST2 + SR04 TRIG + HC05 KEY（hc05 默认脚；
         # AT 切换不常用，故叠此脚，同选时经引脚绑定消解）+ AT24C02 SCL
         # （同上）+ ADC12_0 adcPin5（mq5 默认脚——MQ-5 独立 MEM5 通道 A0_5；
@@ -425,12 +429,14 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # （ws2812 默认脚）+ RC522 SCK（rc522 默认脚——读卡与步进/灯带同选
         # 概率最低故叠此脚，同选时经引脚绑定消解）+ AGS10 SDA（ags10 默认脚
         # ——同上，同选时经引脚绑定消解）
-        "PA22": 5,  # HUIDU L1 + DEBUG_UART RX + NRF24L01 IRQ + TTP224 OUT1
+        "PA22": 6,  # HUIDU L1 + DEBUG_UART RX + NRF24L01 IRQ + TTP224 OUT1
         # （ttp224 默认脚——触摸按键与无线链路/手动输入互替、与巡线不同框、
         # 同选概率最低故叠此脚，同选时经引脚绑定消解）+ ADC12_0 adcPin7
         # （flame 默认脚——火焰传感独立 MEM6 通道 A0_7；地猛星板上剩余 ADC
         # 通道中唯一无负载脚（PA14 板载 LED2+15k 会分流高阻光电二极管源，
         # mq5 选脚判据先例）；与巡线/无线/触摸不同框、同选概率最低故叠此脚，
+        # 同选时经引脚绑定消解）+ LCD DC（lcd 默认脚——IPS 彩屏与 8 路灰度
+        # 巡线/无线/触摸不同框、同选概率最低故叠此脚（巡线车惯走 OLED），
         # 同选时经引脚绑定消解）
         "PA14": 5,  # DCC_100_PWM2 ccp0Pin（step_motor 默认脚）+ WS2812 IN
         # （ws2812 默认脚）+ RC522 SCK（rc522 默认脚——读卡与步进/灯带同选
@@ -464,12 +470,16 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # ——ir_remote_tx 先例）+ GP2Y1014 LED（gp2y1014au 默认脚——粉尘监测
         # 与姿态采集不同框、同选概率最低故叠此脚（PA1 同型经编译矩阵 CLI 实证；
         # LED 驱动为器件必需——薄封装仅指 ADC），同选时经引脚绑定消解）
-        "PA16": 4,  # DC_MOTOR 编码器 AA + RC522 MOSI（rc522 默认脚）+ ADS1115 SCL
+        "PA16": 5,  # DC_MOTOR 编码器 AA + RC522 MOSI（rc522 默认脚）+ ADS1115 SCL
         # （同上）+ SHT20 SCL（sht20 默认脚——温湿度与闭环车/读卡/外扩多路模拟
         # 采集不同框、同选概率最低故叠此脚（刻意不叠温湿度互替件与光照件，
         # 环境站常见搭配），同选时经引脚绑定消解；wiki-modules-batch10/01）
-        "PA17": 4,  # DC_MOTOR 编码器 AB + RC522 MISO（同上）+ ADS1115 SDA
-        # （同上）+ SHT20 SDA（同上）
+        # + LCD SCL（lcd 默认脚——IPS 彩屏与闭环车/读卡门禁/温湿度采集不同框、
+        # 同选概率最低故叠此脚（车内仪表惯走 OLED/max7219），同选时经引脚绑定
+        # 消解；wiki-modules-batch12/01）
+        "PA17": 5,  # DC_MOTOR 编码器 AB + RC522 MISO（同上）+ ADS1115 SDA
+        # （同上）+ SHT20 SDA（同上）+ LCD SDA（lcd 默认脚——同上，同选时经
+        # 引脚绑定消解；wiki-modules-batch12/01）
         "PA28": 5,  # IMU601 TX + HX711 SCK + FINGERPRINT_UART TX + SHT30 SCL
         # （同上）+ JY61P SCL（jy61p 默认脚——姿态测量与身份/称重/温湿度/微波
         # 采集不同框、同选概率最低故叠此脚（姿态惯配双电机/舵机/显示/无线，
@@ -485,10 +495,12 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # + ADC12_0 adcPin5（mq5 默认脚）+ L298N_PWM ccp1Pin（l298n 默认脚——
         # 同上，与 DCC_100_PWM2 同 TIMG12 外设：L298N 与步进驱动互替、同选
         # 概率最低故叠，同选时经引脚绑定换实例/换脚消解）
-        "PA27": 4,  # HUIDU R2 + ADC12_0 adcPin0（ir_distance 默认脚）+ TTP224 OUT4
+        "PA27": 5,  # HUIDU R2 + ADC12_0 adcPin0（ir_distance 默认脚）+ TTP224 OUT4
         # + L298N EN（l298n 默认脚——使能脚与 8 路灰度巡线（巡线车惯用轻量
         # TB6612，与大电流驱动不同框）/模拟测距/触摸面板不同框、同选概率最低
         # 故叠此脚，同选时经引脚绑定消解；wiki-modules-batch10/03）
+        # + LCD RES（lcd 默认脚——IPS 彩屏与巡线/测距/触摸面板不同框、同选
+        # 概率最低故叠此脚，同选时经引脚绑定消解）
         "PA8": 5,   # DIGIT_UART TX + IR_BEAM OUT + HC05 STATE + MLX90614 SDA
         # + OPENMV4_UART TX（open_mv4 默认脚——OpenMV4 与 K230 视觉互替、
         # 同选概率最低故叠此脚（页面原接线 PA8/PA9 附加串口 1），同选时经引脚
@@ -1100,14 +1112,16 @@ def test_shared_groups_marks_gpio_default_overlap_conflict():
 def test_shared_groups_marks_same_sensor_instance_share():
     """同一器件实例（HUIDU 灰度 8 路：huidu/pid/xunji 同脚读数）→ 合法共享。
     纯灰度组 PA27：默认已被 ir_distance（wiki-modules-batch2/04）与
-    TTP224 OUT4（wiki-modules-batch6/04）、l298n EN（wiki-modules-batch10/03）
-    占用——红外测距/触摸按键/大电流驱动使能与 8 路灰度巡线同选概率最低叠此
-    脚，测试把三者绑走恢复纯灰度组（原默认 PA27 纯灰度性质随新默认脚消失，
+    TTP224 OUT4（wiki-modules-batch6/04）、l298n EN（wiki-modules-batch10/03）、
+    lcd RES（wiki-modules-batch12/01——IPS 彩屏与 8 路灰度巡线不同框）占用——
+    红外测距/触摸按键/大电流驱动使能/彩屏与 8 路灰度巡线同选概率最低叠此脚，
+    测试把四者绑走恢复纯灰度组（原默认 PA27 纯灰度性质随新默认脚消失，
     见下一测试）。"""
     result = _auto("mspm0", {
         "ir_distance.IR_DIST_OUT_CH3": "PA14",
         "ttp224.TTP224_OUT4": "PB2",
         "l298n.L298N_EN": "PA15",
+        "lcd.LCD_RES": "PA13",
     })
 
     group = next(
@@ -1119,6 +1133,7 @@ def test_shared_groups_marks_same_sensor_instance_share():
     assert group["kind"] == "share"
     assert "ir_distance.IR_DIST_OUT_CH3" not in group["roles"]
     assert "ttp224.TTP224_OUT4" not in group["roles"]
+    assert "lcd.LCD_RES" not in group["roles"]
 
 
 def test_shared_groups_marks_mixed_resource_same_pin_conflict():

@@ -35,3 +35,4 @@ sources/materials/
 # 资料库更新探针产物（浏览器冒烟 profile / 截图，不入库）
 .scratch/materials-update/chrome-profile/
 .scratch/materials-update/*.png
+.scratch/wiki-modules-batch12/matrix/
