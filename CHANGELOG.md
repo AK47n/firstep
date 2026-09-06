@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=7399947ec43609df74bf2bef86ccd98b860658f0 -->
+<!-- changelog-auto: last-commit=1813c5a9b392f1849b77040724bdecdc212d5412 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -54,6 +54,7 @@
 - 17:49 模块：human_ir 人体红外传感器 stm32 平台条目（wiki-stm32-batch1/03，页面极性注释矛盾按规格修正 + UV4 矩阵 0 error/0 warning）
 - 17:51 模块：microwave_radar 微波多普勒雷达 stm32 平台条目（wiki-stm32-batch1/04，页面默认 PA1 弃用改 PA4 + UV4 矩阵 0 error/0 warning）
 - 17:54 模块：flame 火焰传感器 stm32 平台条目（wiki-stm32-batch1/02，ADC 独立通道页面原脚 PA5 + 页面缺陷清单修正 + UV4 矩阵 0 error/0 warning）
+- 17:56 模块：ttp224 四路电容触摸 stm32 平台条目（wiki-stm32-batch1/05，页面原式 IPD 下拉输入 + 4 键收敛 read/read_all + UV4 矩阵 0 error/0 warning）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
