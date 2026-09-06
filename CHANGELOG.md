@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=3b3f0503fe4bc664221d9f52da80afb6ea541c7f -->
+<!-- changelog-auto: last-commit=a62b94a3d1374dcfeed0f703091ea50677e74e01 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -96,6 +96,7 @@
 - 22:06 工单：wiki-stm32-batch5/04 photoresistance 实施完成回填（结论 + 状态 resolved）
 - 22:06 工单：wiki-stm32-batch5/05 rain 实施完成回填（结论 + 状态 resolved）
 - 22:06 工单：wiki-stm32-batch5/06 s12sd 实施完成回填（结论 + 状态 resolved）
+- 22:06 工单：wiki-stm32-batch5/07 soil 实施完成回填（结论 + 状态 resolved）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
