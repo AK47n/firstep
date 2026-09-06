@@ -176,6 +176,21 @@
 #define GP2Y1014_LED_GPIO     GPIO_B
 #define GP2Y1014_LED_PIN      Pin_5
 
+/* ---- 批次 6（wiki-stm32-batch6）：MQ 系收尾 7 件（mq3/mq4/mq6/mq7/mq8/mq9/
+ * ms1100——同构 AO 模拟量 + 百分比换算，页面 ADC 序列代码全部收敛 ml_adc）----
+ * 默认 AO 全 = ADC_Channel_5 = PA5（页面原脚即共读点——与批次 5 件同策略）；
+ * **ADC 共享组**：本批 7 件并入 batch5 的 PA5 共读组（flame + 8 + 7 = 16 ADC
+ * 角色同脚——ml_adc 顺序调用互不干扰；同一物理脚只能接一件器件，多件同测
+ * 需外部分路器/分时切换——mspm0 MEM0 共读同口径；stm32 可达 ADC 脚全被既有
+ * 角色占用，页面原脚即共读点），同选经引脚绑定消解。 */
+#define MQ3_AO_CH             ADC_Channel_5
+#define MQ4_AO_CH             ADC_Channel_5
+#define MQ6_AO_CH             ADC_Channel_5
+#define MQ7_AO_CH             ADC_Channel_5
+#define MQ8_AO_CH             ADC_Channel_5
+#define MQ9_AO_CH             ADC_Channel_5
+#define MS1100_AO_CH          ADC_Channel_5
+
 /* ---- TTP224 四路电容触摸（ttp224 模块：4 × GPIO 输入下拉，OUT1-4 默认
  * PB12/13/14/15——与 config DIP0-3（拨码 ID）+ pid 灰度 GRAY_D1-4 默认重叠：
  * 触摸按键与「拨码系统配置/巡线灰度」不同框、同选概率最低（触摸+无线链路
