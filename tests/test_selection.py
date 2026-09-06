@@ -13,6 +13,7 @@ from typing import Mapping, Sequence
 
 import pytest
 
+from contest_generator.budget import MIN_PRESELECT, MODULE_SUMMARY_BYTES
 from contest_generator.events import (
     EVENT_CONVERGED,
     EVENT_DONE,
@@ -60,6 +61,7 @@ from contest_generator.selection import (
     filter_manifests_by_platform,
     manual_reference_admission,
     parse_score_points,
+    preselect_module_summaries,
     reference_suggestions,
     resolve_dependencies,
     resolve_selection,
@@ -67,7 +69,7 @@ from contest_generator.selection import (
     select_modules_convergent,
 )
 from contest_generator.sse import SseEmitter
-from contest_generator.wordlist import HardwareWordGroup, SolutionOption
+from contest_generator.wordlist import HardwareWordGroup, SolutionOption, load_wordlist
 from tests.fakes import FakeLLM
 from tests.generate_wiring_fakes import (
     KIT_REFERENCE_ID,
@@ -2913,7 +2915,6 @@ def _ps_summary(slug: str, description: str, kits: tuple[str, ...] = ()) -> Mani
 
 def test_preselect_hits_rank_first_then_slug_order():
     """题面「循迹」→ 描述含「巡线/循迹」的模块得分 1 排最前；0 分模块按 slug 序。"""
-    from contest_generator.selection import preselect_module_summaries
 
     summaries = [
         _ps_summary("mod_b", "温湿度传感器采集与显示"),
@@ -2923,12 +2924,13 @@ def test_preselect_hits_rank_first_then_slug_order():
     result = preselect_module_summaries(summaries, "小车沿黑线循迹行驶", (), 100000)
     assert result.total == 3
     assert result.truncated is False
-    assert [s.slug for s in result.summaries] == ["mod_a", "mod_b", "mod_c"]
+    assert [s.slug for s in result.summaries] == ["mod_a", "mod_b", "mod_c"], (
+        f"命中者应排最前、0 分按 slug 序：{[s.slug for s in result.summaries]}"
+    )
 
 
 def test_preselect_synonym_group_counts_once():
     """题面同义词组双词命中（循迹+巡线）只计 1 分（组去重），不重复加分。"""
-    from contest_generator.selection import preselect_module_summaries
 
     summaries = [
         _ps_summary("xunji", "巡线循迹模块"),
@@ -2949,12 +2951,15 @@ def test_preselect_synonym_group_counts_once():
 
 
 def test_preselect_ascii_term_boundary_and_slug_digits():
-    """英文词边界：题面 canmv 不激活 camera 组（字母边界）；adc 命中 slug
-    adc12（数字尾巴兼容）、不命中描述中粘连词。"""
-    from contest_generator.selection import preselect_module_summaries
+    """英文词边界与 slug 数字尾巴（spec 词项规则同构）：题面 canmv 不激活
+    camera 组（字母边界）；adc 命中 slug adc12（前缀+纯数字尾巴——描述故意
+    不含独立 ADC 词，钉死 slug 路径而非描述文本命中）；zadc12 前缀非边界
+    不命中（负例）。"""
 
     summaries = [
-        _ps_summary("adc12", "ADC 采样（12 位）"),
+        # 描述无独立 ADC 词：命中只能来自 slug 数字尾巴
+        _ps_summary("adc12", "12 位采样前端"),
+        _ps_summary("zadc12", "12 位采样前端"),
         _ps_summary("k230", "视觉识别模块（摄像头画面）"),
         _ps_summary("oled", "OLED 显示"),
     ]
@@ -2963,15 +2968,17 @@ def test_preselect_ascii_term_boundary_and_slug_digits():
         summaries, "canmv 识别数字并显示", (), 100000
     )
     assert no_hit.truncated is False
-    # adc 题面：slug 数字尾巴命中 adc12 → 排最前
+    # adc 题面：slug 数字尾巴命中 adc12（排最前）——zadc12 前缀非边界不命中
     hit = preselect_module_summaries(summaries, "使用 adc 采集电压", (), 100000)
-    assert [s.slug for s in hit.summaries][0] == "adc12"
+    assert [s.slug for s in hit.summaries][0] == "adc12", (
+        f"adc12 应靠 slug 数字尾巴命中排最前：{[s.slug for s in hit.summaries]}"
+    )
+    assert hit.summaries[1].slug != "zadc12"  # zadc12 0 分（slug 序在其后）
 
 
 def test_preselect_wordlist_lib_modules_boost():
     """词表 lib_modules 挂接：题面命中词表行类别/型号 → 挂接 slug 直接得分
     （描述无词表词也能被带出——批次 13 气压件正是此路径）。"""
-    from contest_generator.selection import preselect_module_summaries
 
     wordlist = (
         HardwareWordGroup(
@@ -2990,9 +2997,11 @@ def test_preselect_wordlist_lib_modules_boost():
     ]
     result = preselect_module_summaries(summaries, "测量海拔与气压传感器", wordlist, 100000)
     assert [s.slug for s in result.summaries][:2] == ["bmp180", "ms5611"]
-    # 词表行 models 名直接命中（题面写 BMP180 型号）
-    by_model = preselect_module_summaries(summaries, "BMP180 气压计", wordlist, 100000)
-    assert by_model.summaries[0].slug == "bmp180"
+    # 词表行 models 名直接命中（题面只写型号、无中文场景词——大小写归一：
+    # BMP180 词表大写 vs 题面小写 / 大写均命中）
+    for topic in ("BMP180 气压计", "采用 bmp180 芯片", "用 BMP180 测数据"):
+        by_model = preselect_module_summaries(summaries, topic, wordlist, 100000)
+        assert by_model.summaries[0].slug == "bmp180", topic
     # 题面无词表行命中：零增量
     no_hit = preselect_module_summaries(summaries, "甲乙丙丁", wordlist, 100000)
     assert no_hit.truncated is False
@@ -3001,8 +3010,6 @@ def test_preselect_wordlist_lib_modules_boost():
 
 def test_preselect_budget_truncates_by_lines_with_min_floor():
     """预算按行截断（不劈半行）；截断后不足 MIN_PRESELECT 时保底扩到前 20 条。"""
-    from contest_generator.budget import MIN_PRESELECT
-    from contest_generator.selection import preselect_module_summaries
 
     assert MIN_PRESELECT == 20
     summaries = [
@@ -3015,15 +3022,18 @@ def test_preselect_budget_truncates_by_lines_with_min_floor():
     # 预算只够 3 条完整行 → 截断，但保底 20 条扩回
     result = preselect_module_summaries(summaries, "小车沿黑线循迹", (), 10)
     assert result.truncated is True
-    assert len(result.summaries) == MIN_PRESELECT
+    assert len(result.summaries) == MIN_PRESELECT, (
+        f"保底应扩到 {MIN_PRESELECT} 条，实际 {len(result.summaries)}"
+    )
     # 命中者全部在保底内（排最前），保底尾部 = 无命中者按 slug 序
-    assert [s.slug for s in result.summaries[:5]] == [f"hit_{i:02d}" for i in range(5)]
+    assert [s.slug for s in result.summaries[:5]] == [f"hit_{i:02d}" for i in range(5)], (
+        "命中集应全部排在最前"
+    )
     assert result.summaries[5].slug == "rest_00"
 
 
 def test_preselect_deterministic_and_line_integrity():
     """同输入两次调用逐字段一致；输出行内每行完整（不以截断半行）。"""
-    from contest_generator.selection import preselect_module_summaries
 
     summaries = [
         _ps_summary(f"m{i:02d}", "温湿度传感器驱动") for i in range(30)
@@ -3039,8 +3049,6 @@ def test_preselect_deterministic_and_line_integrity():
 def test_preselect_real_wordlist_relay_smoke():
     """真实词表冒烟：题面「继电器」→ 词表执行机构行命中 → relay 挂接 slug
     排前（批次 13 入库件被预筛规则自然覆盖）。"""
-    from contest_generator.selection import preselect_module_summaries
-    from contest_generator.wordlist import load_wordlist
 
     summaries = [
         _ps_summary("relay", "GPIO 输出驱动"),
