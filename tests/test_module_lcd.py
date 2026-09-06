@@ -161,3 +161,11 @@ def test_lcd_no_platform_deps_and_model_contract():
     assert "{1, {240, 240, 240, 240}, {240, 240, 240, 240}," in init_c
     assert "lcd_seq_169" in init_c
     assert "{1, {240, 240, 280, 280}, {280, 280, 240, 240}," in init_c
+    # 1.28（GC9A01 240×240 圆屏）/1.47（ST7789V3 172×320）/1.8（ST7735S 128×160）
+    assert "lcd_seq_128" in init_c
+    assert "lcd_seq_147" in init_c
+    assert "{1, {172, 172, 320, 320}, {320, 320, 172, 172}," in init_c
+    assert "lcd_seq_180" in init_c
+    assert "{1, {128, 128, 160, 160}, {160, 160, 128, 128}," in init_c
+    # 六型号全部实现（无占位空行——valid=0 表项消失）
+    assert "[0, 0, 0, 0]}, {0, 0, 0, 0}, 0, NULL, 0" not in init_c
