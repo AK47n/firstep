@@ -67,6 +67,13 @@
  *   I2C_0 SDA（ml_mpu6050 姿态）/板载 LED 重叠：红外发射链与姿态采集同选
  *   概率最低，板载 LED 随载波闪烁可作发射指示；与 IR_REMOTE 默认 PA26 刻意
  *   错开——发射/接收常配对，双选默认即不撞，同选时经引脚绑定消解）
+ *   LCD：软 SPI 6 脚全输出（SCL=PA16/SDA=PA17/RES=PA27/DC=PA22/CS=PB19/
+ *   BLK=PB20——与 DC_MOTOR 编码器 AA/AB、RC522、ADS1115/SHT20 SCL/SDA、HUIDU
+ *   L1/R2、NRF IRQ、ZIGBEE/DEBUG RX、TTP224、flame、JQ8900/SYN6288、mq135
+ *   默认重叠：彩屏与巡线车/无线链路/语音播报/触摸/读卡/气体互替不同框、同选
+ *   概率最低（刻意不叠显示族与环境站/PA0-PA1——i2c_bus_share 测试互扰，
+ *   批次 5 实测先例），同选时经引脚绑定消解；六屏合一模块（ST7735/ST7789/
+ *   GC9A01），软 SPI 位操作不占硬件 SPI 外设——max7219 先例）
  * 板上固定占用：CH340E PA10/PA11、Flash PB14-17、晶振 PA3-6、板载 LED PA0/PA1、
  * VREF- PA21 直连地、BSL PA18（47k 到 BSL 排针）、SWD PA19/PA20（独立 DEBUG 排针，
  * 用户实物未在 2×20P 上找到 A19/A20）、NRST。2026-08-20 用户实物核验：芯片丝印
@@ -108,6 +115,7 @@ const JOYSTICK = GPIO.addInstance();
 const HC05 = GPIO.addInstance();
 const NRF24L01 = GPIO.addInstance();
 const IR_REMOTE = GPIO.addInstance();
+const LCD = GPIO.addInstance();
 const LED_BEEP = GPIO.addInstance();
 const STEP_MOTOR = GPIO.addInstance();
 const IR_BEAM = GPIO.addInstance();
@@ -696,6 +704,46 @@ NRF24L01.associatedPins[4].pin.$assign  = "PA23";
 NRF24L01.associatedPins[5].$name        = "IRQ";
 NRF24L01.associatedPins[5].direction    = "INPUT";
 NRF24L01.associatedPins[5].pin.$assign  = "PA22";
+
+// IPS 彩屏（lcd 模块，批次 12 决策 A：六屏合一单模块——ST7735/ST7735S/
+// ST7789V2/ST7789V3/GC9A01 差异 = 初始化序列+分辨率+偏移表，lcd_init(型号,
+// 方向) 运行时选择；软 SPI 位操作不占硬件 SPI 外设/TIMER——nrf24l01/max7219
+// 先例）。六脚全输出：SCL=PA16（与 DC_MOTOR 编码器 AA/RC522 MOSI/ADS1115 SCL/
+// SHT20 SCL 重叠）、SDA=PA17（编码器 AB/RC522 MISO/ADS1115 SDA/SHT20 SDA）、
+// RES=PA27（与 HUIDU R2/ADC ir_distance/TTP224 OUT4 重叠）、DC=PA22（与 HUIDU
+// L1/NRF24L01 IRQ/ZIGBEE DEBUG RX/TTP224 OUT1/flame 重叠）、CS=PB19（与
+// JQ8900 语音重叠）、BLK=PB20（与 SYN6288 语音/mq135 重叠）——各对按「同选
+// 概率最低者与既有默认重叠」：彩屏与巡线车/无线链路/语音播报/触摸/读卡/
+// 气体互替不同框（刻意不叠显示族 oled/max7219/ws2812/led 与环境站温湿度/
+// 光照/红外测温/粉尘——彩屏显示环境数据是常见组合；不叠 PA0/PA1——
+// i2c_bus_share 测试互扰，批次 5 实测先例），同选时经引脚绑定消解；CS/BLK
+// 初始 SET（片选空闲/开背光），其余输出初始 CLEARED。
+LCD.$name = "LCD";
+LCD.associatedPins.create(6);
+LCD.associatedPins[0].$name        = "SCL";
+LCD.associatedPins[0].direction    = "OUTPUT";
+LCD.associatedPins[0].initialValue = "CLEARED";
+LCD.associatedPins[0].pin.$assign  = "PA16";
+LCD.associatedPins[1].$name        = "SDA";
+LCD.associatedPins[1].direction    = "OUTPUT";
+LCD.associatedPins[1].initialValue = "CLEARED";
+LCD.associatedPins[1].pin.$assign  = "PA17";
+LCD.associatedPins[2].$name        = "RES";
+LCD.associatedPins[2].direction    = "OUTPUT";
+LCD.associatedPins[2].initialValue = "CLEARED";
+LCD.associatedPins[2].pin.$assign  = "PA27";
+LCD.associatedPins[3].$name        = "DC";
+LCD.associatedPins[3].direction    = "OUTPUT";
+LCD.associatedPins[3].initialValue = "CLEARED";
+LCD.associatedPins[3].pin.$assign  = "PA22";
+LCD.associatedPins[4].$name        = "CS";
+LCD.associatedPins[4].direction    = "OUTPUT";
+LCD.associatedPins[4].initialValue = "SET";
+LCD.associatedPins[4].pin.$assign  = "PB19";
+LCD.associatedPins[5].$name        = "BLK";
+LCD.associatedPins[5].direction    = "OUTPUT";
+LCD.associatedPins[5].initialValue = "SET";
+LCD.associatedPins[5].pin.$assign  = "PB20";
 
 // 红外遥控接收（ir_remote 模块：OUT 输入（接收头输出直接接 GPIO，上拉 = 无
 // 信号高电平、有信号拉低）；NEC 解码用 CPU 忙等采样（delay 模块 20us 步进），
