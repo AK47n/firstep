@@ -23,6 +23,12 @@ NOTE_TEXT = (
 )
 
 
+# 合规判定窗口（单源）：来源注释块注入位置 = 文件头部，故「已注入」判定只看
+# 顶部 HEAD_WINDOW 字符（与结构测试同口径——头部无块而正文中部出现 URL 不算
+# 已标注；脚本幂等判据与测试共用本常量，防「脚本报 0 变更 / 测试亮红灯」漂移）。
+HEAD_WINDOW = 600
+
+
 def source_note_block(url: str, title: str) -> str:
     """标准来源注释块（纯函数）：标题 + 原页 URL + 改写与版权要求说明。
 
@@ -38,11 +44,14 @@ def source_note_block(url: str, title: str) -> str:
 
 
 def inject_source_note(text: str, url: str, title: str) -> str:
-    """注入纯函数：文本已含 URL → 原样返回（幂等）；否则顶部插入注释块。
+    """注入纯函数：顶部 HEAD_WINDOW 内已含 URL → 原样返回（幂等）；否则顶部
+    插入注释块。
 
-    换行风格跟随原文（\r\n 文件用 \r\n 连接，避免混行）。
+    换行风格跟随原文（\r\n 字符串用 \r\n 连接，避免混行）。调用方（脚本）须用
+    open(newline="") 读盘保留原始换行——read_text() 的 universal newlines
+    会把 \r\n 归一化为 \n，CRLF 分支将永不触发（code-review c1 判例）。
     """
-    if url in text:
+    if url in text[:HEAD_WINDOW]:
         return text
     block = source_note_block(url, title)
     if "\r\n" in text:

@@ -40,7 +40,7 @@ from typing import TYPE_CHECKING, Mapping, Sequence
 # manifest 是轻量模型模块（先例：既有运行时依赖），PinDeclaration 随
 # ModuleManifest 同源引入；pin_bindings / selection 较重，仅注解需用
 # → TYPE_CHECKING（selection.py 先例）。
-from .manifest import ModuleManifest, PinDeclaration, is_wiki_source_url
+from .manifest import WIKI_DMX_HOMEPAGE, ModuleManifest, PinDeclaration, is_wiki_source_url
 
 if TYPE_CHECKING:
     from .pin_bindings import ResolvedBinding
@@ -189,18 +189,50 @@ SKELETON_NOTICES: dict[str, str] = {
 # 单源（测试定位锚 / 渲染共同消费）+ 固定话术（含原文与链接，与 source_notes
 # 注释块同义）。只列 wiki 来源模块（判据 = manifest.is_wiki_source_url），
 # 非 wiki 模块不硬标（错标比不标更糟）。
+# 首行按「本次工程是否含 wiki 派生模块」分两种措辞：有 → 如实说明来源与
+# 清单行；无（空模块集 / 仅母版 / 非 wiki 模块）→ 只说引用义务，不谎称
+# 「本工程的部分模块改写自……」（错标/不实陈述违背 spec「避免错标」口径）。
 SOURCE_NOTICE_HEADING = "## 第三方素材来源"
 
-SOURCE_NOTICE_LINES: tuple[str, ...] = (
+SOURCE_NOTICE_INTRO_HAS_WIKI = (
     "本工程的部分模块驱动改写自立创开发板技术文档中心（wiki.lckfb.com）"
     "「地猛星 MSPM0G3507 模块移植手册」（清单行已附原页链接）。立创官网版权"
-    "声明第三条要求：",
-    "",
-    "> 请大家务必尊重贡献者的智力劳动成果：任何使用该文件的个人或组织，如需使用或者参考手册中的模块资料，"
-    "将其复制、传播、修改、公开展示或在其他网站上使用，都需要在使用时清楚的标明文件的来源以及链接。",
-    "",
-    "来源：https://wiki.lckfb.com/zh-hans/dmx/",
+    "声明第三条要求："
 )
+
+SOURCE_NOTICE_INTRO_NO_WIKI = (
+    "本工程引用的模块驱动未使用立创开发板技术文档中心（wiki.lckfb.com）"
+    "「地猛星 MSPM0G3507 模块移植手册」资料；如后续引用，请遵循立创官网版权"
+    "声明第三条要求："
+)
+
+SOURCE_NOTICE_QUOTE = (
+    "> 请大家务必尊重贡献者的智力劳动成果：任何使用该文件的个人或组织，如需使用或者参考手册中的模块资料，"
+    "将其复制、传播、修改、公开展示或在其他网站上使用，都需要在使用时清楚的标明文件的来源以及链接。"
+)
+
+SOURCE_NOTICE_SOURCE_LINE = "来源：" + WIKI_DMX_HOMEPAGE
+
+
+def source_notice_lines(manifests: Sequence[ModuleManifest], platform: str) -> tuple[str, ...]:
+    """声明段正文（纯函数）：按模块集是否含 wiki 派生模块选首行措辞。
+
+    platform = 当前生成平台（模块清单来源按该平台条目判——同一模块不同平台
+    source_url 独立）。返回 tuple 由渲染方 lines.extend 消费（测试同构直测）。
+    """
+    has_wiki = any(
+        is_wiki_source_url(manifest.platforms.get(platform).source_url)
+        for manifest in manifests
+        if manifest.platforms.get(platform) is not None
+    )
+    intro = SOURCE_NOTICE_INTRO_HAS_WIKI if has_wiki else SOURCE_NOTICE_INTRO_NO_WIKI
+    return (
+        intro,
+        "",
+        SOURCE_NOTICE_QUOTE,
+        "",
+        SOURCE_NOTICE_SOURCE_LINE,
+    )
 
 
 def sort_verification_order(
@@ -299,10 +331,11 @@ def render_readme(
     lines.append("")
 
     # 第三方素材来源声明段（工单 lckfb-attribution/02）：常驻所有生成工程，
-    # 空模块集也渲染（生成工程可能只用母版，声明义务不因此豁免）。
+    # 空模块集也渲染（生成工程可能只用母版，声明义务不因此豁免）；首行措辞按
+    # 是否含 wiki 派生模块分两版（source_notice_lines 纯函数，如实陈述）。
     lines.append(SOURCE_NOTICE_HEADING)
     lines.append("")
-    lines.extend(SOURCE_NOTICE_LINES)
+    lines.extend(source_notice_lines(manifests, platform))
     lines.append("")
 
     if score_points:

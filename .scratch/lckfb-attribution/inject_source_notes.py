@@ -56,7 +56,13 @@ def wiki_title_of(cat: str, slug: str) -> str:
 
 
 def iter_plan() -> list[tuple[Path, str, str, str]]:
-    """(文件路径, source_url, 标题, 原文本)——所有待注入文件（顺序确定）。"""
+    """(文件路径, source_url, 标题, 原文本)——所有待注入文件（顺序确定）。
+
+    读盘用 open(newline="") 保留原始换行（read_text 的 universal newlines
+    会把 \r\n 归一化为 \n——CRLF 文件被整文件重写为 LF 违反「仅插入注释」）。
+    幂等判定（头部 HEAD_WINDOW 窗内含 URL = 已带来源块）与结构测试同口径，
+    由注入纯函数执行（inject_source_note 返回原文本 = 已合规，不改写）。
+    """
     plan: list[tuple[Path, str, str, str]] = []
     for manifest_path in sorted(LIBRARY_MODULES.glob("*/manifest.json")):
         manifest = ModuleManifest.load(manifest_path.parent)
@@ -72,7 +78,8 @@ def iter_plan() -> list[tuple[Path, str, str, str]]:
                 f = manifest_path.parent / rel
                 if not f.is_file():
                     continue
-                text = f.read_text(encoding="utf-8", errors="replace")
+                with open(f, encoding="utf-8", errors="replace", newline="") as fh:
+                    text = fh.read()
                 plan.append((f, entry.source_url, title, text))
     return plan
 
@@ -91,7 +98,8 @@ def main() -> int:
         changed += 1
         print(f"[{'check' if args.check else 'inject'}] {f.relative_to(LIBRARY_MODULES)}")
         if not args.check:
-            f.write_text(new, encoding="utf-8")
+            with open(f, "w", encoding="utf-8", newline="") as fh:
+                fh.write(new)
     print(f"待注入 {len(plan)} 文件 / 将变更 {changed}")
     return 0
 
