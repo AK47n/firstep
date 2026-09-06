@@ -14,16 +14,23 @@ test_pin_bindings.py 守）、mspm0 单选生成（syscfg 裁剪保留 MS5611 + 
 from __future__ import annotations
 
 import math
+import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from contest_generator.clex import strip_comments
 from contest_generator.manifest import ModuleManifest
 
 LIBRARY_ROOT = Path(__file__).resolve().parents[1] / "library"
 MODULES = LIBRARY_ROOT / "modules"
 MSPM0_MASTER = LIBRARY_ROOT / "masters" / "mspm0"
+STM32_MASTER = LIBRARY_ROOT / "masters" / "stm32"
 
 from contest_generator.generator import generate  # noqa: E402
-from contest_generator.platforms import PLATFORM_MSPM0  # noqa: E402
+from contest_generator.platforms import (  # noqa: E402
+    PLATFORM_MSPM0,
+    PLATFORM_STM32,
+)
 from contest_generator.selection import resolve_selection  # noqa: E402
 
 MAIN_C_MSPM0 = (
@@ -44,6 +51,36 @@ MAIN_C_MSPM0 = (
     "    }\n"
     "}\n"
 )
+MAIN_C_STM32 = (
+    '#include "headfile.h"\n'
+    '#include "ms5611_stm32.h"\n'
+    "\n"
+    "int main(void)\n"
+    "{\n"
+    "    float t = 0.0f, p = 0.0f;\n"
+    "    ms5611_init();\n"
+    "    (void)ms5611_read(&t, &p);\n"
+    "    (void)ms5611_read_altitude(p);\n"
+    "    while (1)\n"
+    "    {\n"
+    "    }\n"
+    "}\n"
+)
+
+# 换算/规范字面量守卫：剥离注释后不得出现（标准库/寄存器/演示残留/
+# 母版 ml_i2c 调用）。
+BANNED_CODE_PATTERNS = [
+    (r"\bprintf\b", "printf"),
+    (r"\bmain\b", "main"),
+    (r"\bboard_init\b", "board_init"),
+    (r"\bGPIO_Init\b", "GPIO_Init"),
+    (r"\bRCC_\w+\s*\(", "RCC_ 调用"),
+    (r"stm32f4xx\.h", "stm32f4xx.h"),
+    (r"stm32f10x\.h", "stm32f10x.h"),
+    (r"\bI2C_Init\b|\bI2C_Start\b|\bI2C_Stop\b|\bI2C_SendByte\b", "母版 ml_i2c 调用"),
+    (r"\bGPIO_ReadInputDataBit\b", "GPIO_ReadInputDataBit"),
+    (r"\bGPIO_WriteBit\b", "GPIO_WriteBit"),
+]
 
 
 def ms5611_altitude(pa: float) -> float:
@@ -116,11 +153,12 @@ def test_ms5611_altitude_formula_matches_baseline():
 
 
 def test_ms5611_manifest_shape_mspm0():
-    """ms5611：仅 mspm0 平台条目；依赖 delay；SCL/SDA 双角色（gpio_out）。"""
+    """ms5611：双平台条目（mspm0 原样 + stm32 批次 4 新增）；依赖 delay；
+    SCL/SDA 双角色（gpio_out）。"""
     manifest = ModuleManifest.load(MODULES / "ms5611")
     assert manifest.slug == "ms5611"
     assert manifest.dependencies == ("delay",)
-    assert set(manifest.platforms) == {"mspm0"}
+    assert set(manifest.platforms) == {"mspm0", "stm32"}
 
     mspm0 = manifest.platforms["mspm0"]
     assert [Path(f).name for f in mspm0.files] == ["ms5611.c", "ms5611.h"]
@@ -211,3 +249,165 @@ def test_ms5611_source_guards():
     assert "0.01℃" in header or "0.01℃" in source
     assert "printf(" not in source and "printf(" not in header
     assert "IRQHandler" not in source and "main(" not in source
+
+
+# ---------------------------------------------------------------------------
+# 批次 4（wiki-stm32-batch4/02）：stm32 平台条目（64 位换算核心件）
+# ---------------------------------------------------------------------------
+
+
+def test_ms5611_stm32_manifest_shape():
+    """ms5611 stm32 条目：双平台文件齐；stm32 双角色 = i2c_scl/i2c_sda
+    （SCL=PA6/SDA=PA7，macros 逐脚端口宏）；mspm0 条目原样零改动。"""
+    manifest = ModuleManifest.load(MODULES / "ms5611")
+    assert manifest.dependencies == ("delay",)
+
+    stm32 = manifest.platforms["stm32"]
+    assert [Path(f).name for f in stm32.files] == [
+        "ms5611_stm32.c",
+        "ms5611_stm32.h",
+    ]
+    for rel in stm32.files:
+        assert (MODULES / "ms5611" / rel).is_file(), rel
+    assert [(p.id, p.type, p.default, p.required, p.macros) for p in stm32.pins] == [
+        ("MS5611_SCL", "i2c_scl", "PA6", True, ("MS5611_SCL_GPIO", "MS5611_SCL_PIN")),
+        ("MS5611_SDA", "i2c_sda", "PA7", True, ("MS5611_SDA_GPIO", "MS5611_SDA_PIN")),
+    ]
+    assert stm32.verified is True
+    assert stm32.hardware_bound is False
+    assert stm32.kit != ""
+    assert stm32.source_url == (
+        "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/"
+        "module/sensor/ms5611-pressure-sensor.html"
+    )
+    for needle in (
+        "lckfb-地阔星移植手册/sensor--ms5611-pressure-sensor.md",
+        "long long",
+        "bmp180",
+        "0.01℃",
+        "未上板",
+    ):
+        assert needle in stm32.notes
+
+    # mspm0 条目零改动（文件齐 + 默认脚不变）
+    mspm0 = manifest.platforms["mspm0"]
+    assert [Path(f).name for f in mspm0.files] == ["ms5611.c", "ms5611.h"]
+    assert [(p.id, p.type, p.default, p.required, p.macros) for p in mspm0.pins] == [
+        ("MS5611_SCL", "gpio_out", "PA28", True, ()),
+        ("MS5611_SDA", "gpio_out", "PA31", True, ()),
+    ]
+
+
+def test_ms5611_stm32_macros_defined_in_pin_config():
+    """stm32 接线单源：MS5611_SCL_GPIO/_SCL_PIN/_SDA_GPIO/_SDA_PIN 必须在
+    母版 pin_config.h（默认 PA6/PA7 = 共总线）。"""
+    text = (STM32_MASTER / "pin_config.h").read_text(encoding="utf-8")
+    assert re.search(r"#define\s+MS5611_SCL_GPIO\s+GPIO_A", text)
+    assert re.search(r"#define\s+MS5611_SCL_PIN\s+Pin_6", text)
+    assert re.search(r"#define\s+MS5611_SDA_GPIO\s+GPIO_A", text)
+    assert re.search(r"#define\s+MS5611_SDA_PIN\s+Pin_7", text)
+
+
+def test_ms5611_stm32_single_select_generation(tmp_path):
+    """ms5611 stm32 单选生成：静态门禁通过、模块文件按 manifest 落盘、
+    uvprojx 注册 ms5611_stm32.c、pin_config.h 在工程根。"""
+    resolved = resolve_selection(MODULES, PLATFORM_STM32, ["ms5611"])
+    out = tmp_path / "out"
+    generate(
+        platform=PLATFORM_STM32,
+        manifests=resolved.manifests,
+        module_library_dir=MODULES,
+        master_project_dir=STM32_MASTER,
+        output_dir=out,
+        main_c_content=MAIN_C_STM32,
+    )
+    assert (out / "modules/ms5611/code/ms5611_stm32.c").is_file()
+    assert (out / "modules/ms5611/code/ms5611_stm32.h").is_file()
+    uvprojx = next(out.rglob("*.uvprojx"))
+    root = ET.parse(uvprojx).getroot()
+    groups = root.findall("Targets/Target/Groups/Group")
+    modules = next(g for g in groups if g.findtext("GroupName") == "modules")
+    paths = [f.findtext("FilePath") for f in modules.findall("Files/File")]
+    assert any("ms5611_stm32.c" in p for p in paths)
+    assert (out / "pin_config.h").is_file()
+
+
+def test_ms5611_stm32_code_guards():
+    """stm32 代码层守卫：剥离注释后零标准库/寄存器/演示残留、零 ml_i2c
+    调用；软 I2C 原语自实现（SDA 方向切换 = gpio_init OUT_OD/IU）；页面原式
+    地址/命令/换算保留；**64 位换算防回潮**（dT 声明 long long、无 uint32_t
+    dT 式、dT 表达式还原）；**页面缺陷防回潮**（TEMP/100.0 出 0.01℃、出 Pa、
+    PROM 应答检查返回 3、段间 2×10ms、无 printf）。"""
+    c = (MODULES / "ms5611" / "code" / "ms5611_stm32.c").read_text(encoding="utf-8")
+    h = (MODULES / "ms5611" / "code" / "ms5611_stm32.h").read_text(encoding="utf-8")
+    full = c + "\n" + h
+
+    code_only = strip_comments(full, keep_preprocessor=True)
+    for pattern, label in BANNED_CODE_PATTERNS:
+        assert not re.search(pattern, code_only), f"代码残留 {label}"
+    # mspm0 零改动：stm32 源码不含 DL_GPIO 调用
+    assert "DL_GPIO" not in code_only
+
+    # 软 I2C 原语族静态化 + 方向切换（页面原式 OD 输出 / IPU 输入 → OUT_OD/IU）
+    assert re.search(
+        r"#define\s+MS5611_SDA_OUT\(\)\s+gpio_init\(MS5611_SDA_GPIO", code_only
+    )
+    assert re.search(
+        r"MS5611_SDA_IN\(\)\s+gpio_init\(MS5611_SDA_GPIO, MS5611_SDA_PIN, IU\)",
+        code_only,
+    )
+    assert re.search(r"#define\s+MS5611_SDA\(x\)\s+gpio_set", code_only)
+    assert "ms5611_iic_start" in code_only and "ms5611_iic_wait_ack" in code_only
+
+    # 页面原式保留：复位 0x1E / PROM 0xA0 / 转换命令 0x48 0x58
+    assert "MS5611_CMD_RESET" in code_only and "MS5611_CMD_D1" in code_only
+    assert "MS5611_CMD_D2" in code_only and "MS5611_PROM_BASE" in code_only
+
+    # **64 位换算防回潮**：dT 声明 long long（无 uint32_t dT 式）+ 换算系数
+    assert "long long dT = 0;" in code_only
+    assert re.search(r"long long\s+dT|long long dT", code_only)
+    assert "uint32_t dT" not in code_only
+    assert "256.0" in code_only and "8388608.0" in code_only
+    assert "65536.0" in code_only and "32768.0" in code_only
+    assert "2097152.0" in code_only
+    # 温度出参 TEMP/100.0（0.01℃——页面整数℃截断修正）
+    assert "temp / 100.0f" in code_only
+    # 气压出参 Pa（注释记录 P 单位 0.01mbar == 1Pa）
+    assert "0.01mbar" in c
+    assert "(float)p" in code_only
+    # PROM 应答检查（逐段 return 3）
+    assert "return 3;" in code_only
+    # 段间 2×10ms（10ms 转换等待共 4 处：段内×2 + 段间×2）
+    assert c.count("delay_ms(MS5611_CONV_WAIT_MS)") == 4
+    # 返回码 0/1/2/3 齐
+    assert "return 3;" in code_only and "return 2;" in code_only
+    assert "return 1;" in code_only
+
+
+def test_ms5611_stm32_scl_init_guard():
+    """SCL 初始化防回潮（批次 3/01）：init 必须含 gpio_init(MS5611_SCL_GPIO,
+    MS5611_SCL_PIN, OUT_OD) + 置高——F1 复位后浮空输入、ODR 写入无效。"""
+    c = (MODULES / "ms5611" / "code" / "ms5611_stm32.c").read_text(encoding="utf-8")
+    code_only = strip_comments(c, keep_preprocessor=True)
+    assert re.search(
+        r"gpio_init\(MS5611_SCL_GPIO, MS5611_SCL_PIN, OUT_OD\)", code_only
+    )
+    assert "MS5611_SCL(1)" in code_only
+
+
+def test_ms5611_stm32_int64_mirror_regression():
+    """stm32 版 64 位换算镜像回归（与 mspm0 共用 ms5611_pressure int64 镜像
+    ——mspm0 批 13 先例）：负温 dT 向量（int64 基线）钉死——防 uint32_t 回潮
+    （32 位形态在 ±3.6e6 偏差 ~18kPa）。"""
+    cal = [0, 40127, 36924, 29016, 33123, 29022, 16437, 0]  # 典型量级系数
+    # dT=+3.6e6（高温）
+    dT, temp, p = ms5611_pressure(8000000, 29022 * 256 + 3600000, cal)
+    assert dT == 3600000
+    assert round(temp, 1) == 9054.0
+    assert p == 98296
+    # dT=-3.6e6（低温——32 位 uint32_t 回绕路径）
+    dT, temp, p = ms5611_pressure(8000000, 29022 * 256 - 3600000, cal)
+    assert dT == -3600000
+    assert round(temp, 1) == -5054.0
+    assert p == 60152
+    assert p > 50000  # 合理气压量级（32 位形态会偏差 ~18kPa 出界）
