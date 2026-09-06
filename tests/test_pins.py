@@ -378,6 +378,24 @@ STM32_MACRO_VALUES = {
     # 不采用 = MOTOR_B_DIR；单总线件不叠软 I2C 总线 PA6/PA7）
     "DS18B20_GPIO": "GPIO_B",
     "DS18B20_PIN": "Pin_1",
+    # wiki-stm32-batch5/01-08：ADC 薄封装群一 8 件（mq2/mq135/mq5/
+    # photoresistance/rain/s12sd/soil/gp2y1014au——AO 模拟量 + 百分比/档位
+    # 换算同构件，页面 ADC 序列收敛 ml_adc）——默认 AO 全 = ADC_Channel_5 =
+    # PA5（页面原脚即共读点；**ADC 共享组**：8 件与 flame 共读 PA5，ml_adc
+    # 顺序调用无扰；同一物理脚只能接一件器件，多件同测需外部分路器/分时切换；
+    # stm32 可达 ADC 脚全被既有角色占用——同选经引脚绑定消解）；gp2y1014au
+    # LED 驱动（器件必需——低有效脉冲）默认 PB5（页面原脚 PA2=DEBUG_UART TX
+    # 不照抄；PB5 叠 hx711 SCK + MOTOR_A_ENC——粉尘与称重/编码器闭环不同框）
+    "MQ2_AO_CH": "ADC_Channel_5",
+    "MQ135_AO_CH": "ADC_Channel_5",
+    "MQ5_AO_CH": "ADC_Channel_5",
+    "PHOTORESISTANCE_AO_CH": "ADC_Channel_5",
+    "RAIN_AO_CH": "ADC_Channel_5",
+    "S12SD_AO_CH": "ADC_Channel_5",
+    "SOIL_AO_CH": "ADC_Channel_5",
+    "GP2Y1014_AO_CH": "ADC_Channel_5",
+    "GP2Y1014_LED_GPIO": "GPIO_B",
+    "GP2Y1014_LED_PIN": "Pin_5",
 }
 
 

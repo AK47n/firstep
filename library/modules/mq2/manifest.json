@@ -23,6 +23,28 @@
           "required": true
         }
       ]
+    },
+    "stm32": {
+      "files": [
+        "code/mq2_stm32.c",
+        "code/mq2_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**ADC 薄封装（页面 ADC 序列代码收敛 ml_adc）**：F1 口径页面（stm32f10x.h + RCC_APB2PeriphClockCmd + GPIO_Mode_AIN + ADC_RegularChannelConfig + SoftwareStartConvCmd + GetConversionValue）——页面 Adc_Init + Get_Adc_Value 整体收敛为母版 ml_adc 的 adc_init（内部完成 AIN 引脚配置 + APB2 时钟 + 6 分频 12MHz + 复位校准——等效页面流程；采样时间 239.5cyc vs 页面 55.5cyc，功能等价差异记录）+ ADC_GetConversionValue→adc_get（软件触发轮询）。**ADC 共享组**：默认 AO=PA5（=页面原脚 ADC_Channel_5，用户照页面接线即插即用）；本批 8 件与 flame 共读 PA5（ml_adc 的 adc_get 每次先写 SQR3 选通道，顺序调用互不干扰）；**同一物理脚只能接一件器件，多件同测需外部分路器/分时切换**（mspm0 MEM0 共读同口径；stm32 通道 10/10 全被既有角色占用——同选经引脚绑定消解）。**页面缺陷/修正**：① SAMPLES 30 次无延时累加改 5 次快平均（us016/mq2 mspm0 先例）；② 页面 L50「PA27 的附加ADC功能」=地猛星（MSPM0）残留——STM32F103C8T6 无 PA27 引脚、代码实际 PA5——notes 记录不落码；③ 页面 L219 原型重复一行 + L209-215 注释旧原型（ADC_Init/Get_ADC_Value 旧命名）——页内瑕疵不落码。DO 数字量未声明：页面 GPIO_MQ2_DO（PA1）仅宏、无初始化无读取函数（mspm0 先例「未用不声明」——LM393 阈值由模块可调电阻控制，需要时经引脚绑定 GPIO 输入自行读取）。换算 = 页面原式正向映射 value/4095×100（**相对值非 ppm 精标**：MQ 系读数随加热/环境/老化漂移，真实 ppm 需标准气体标定；模块上电必须预热一段时间否则输出不准；检测 100-10000ppm 级烟雾/可燃气体）。\nwiki 手册来源：sources/materials/lckfb-地阔星移植手册/sensor--mq-2-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/mq-2-sensor.html；网盘资料 https://pan.baidu.com/s/1ETxqg03p5fEjKS7AZ2kV6w 提取码 dfr1；移植成功案例 https://pan.baidu.com/s/1j9OvgMqMXEhNmfQDwBK8cg?pwd=2ie0 提取码 2ie0）。改造要点：去掉 main.c 演示与 printf；函数名规范化（mq2_init/read_percent，去 Adc_Init/Get_Adc_Value/Get_MQ2_Percentage_value 命名）；页面 ADC 序列收敛 ml_adc；DO 宏未用不声明；SAMPLES 30→5 快平均。\nwiki-stm32-batch5/01 编译矩阵（2026-09-06）：stm32 单选生成（依赖 adc 展开）→ UV4（C:/Keil5 V5.06u7）0 error、0 module warning（exit 0，PASS）；未上板（ADC 换算/预热真机验证留后续）。",
+      "kit": "MQ-2 烟雾传感器模块（4Pin：VCC/GND/DO/AO；工作 5V、150mA；AO 模拟量输出，DO 数字量阈值由模块可调电阻控制；检测 100-10000ppm 级可燃气体/烟雾）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/mq-2-sensor.html",
+      "pins": [
+        {
+          "id": "MQ2_AO",
+          "type": "adc",
+          "default": "PA5",
+          "required": true,
+          "macros": [
+            "MQ2_AO_CH"
+          ]
+        }
+      ]
     }
   }
 }
