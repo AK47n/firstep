@@ -48,13 +48,15 @@ static void ms5611_iic_stop(void)
     delay_us(5);
 }
 
-static void ms5611_iic_send_ack(uint8_t ack)
+static void ms5611_iic_send_ack(uint8_t is_nack)
 {
     MS5611_SDA_OUT();
     MS5611_SCL(0);
     MS5611_SDA(0);
     delay_us(5);
-    if (!ack) {
+    if (!is_nack) { /* 0 = 应答 / 1 = 非应答（页面 IIC_Send_Ack 原式——
+                     * 先置 0 再按 is_nack 重设，is_nack=0 时同值二次写，
+                     * 按页面原样保留——aht10 同款注释口径） */
         MS5611_SDA(0);
     } else {
         MS5611_SDA(1);

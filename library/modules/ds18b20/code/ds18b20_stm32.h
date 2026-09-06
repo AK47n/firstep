@@ -40,7 +40,8 @@
  *  ③ 页面注释串台（L51-66 三标题错位、L107「MLX90614」、L143 DQ_OUT
  *     注释相反）→ 不落/注释正确化（页面串台记录 notes）；
  *  ④ 位槽时间轴常量单源本头（源码不散写字面量）；
- *  ⑤ 读毕释放总线（init 与 read 尾部 gpio_init IU——防总线占用）；
+ *  ⑤ 读毕释放总线（init 与 read 尾部 DS18B20_DATA_OUT + DATA_SET(1)——驱动
+ *     空闲高电平，mspm0 同款机制）；
  *  ⑥ 函数名规范化（页面 GetTemperture 拼写 → read_temp）。
  * 对应手册：sources/materials/lckfb-地阔星移植手册/sensor--ds18b20-temp-sensor.md
  * （立创 wiki 地阔星移植手册；代码按模块库规范改写：去 main.c 演示与 printf、
