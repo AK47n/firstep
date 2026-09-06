@@ -270,6 +270,12 @@ STM32_MACRO_VALUES = {
     "TTP224_OUT2_PIN": "Pin_13",
     "TTP224_OUT3_PIN": "Pin_14",
     "TTP224_OUT4_PIN": "Pin_15",
+    # wiki-stm32-batch1/06：ws2812 幻彩灯带（GPIO 输出位时序，DIN 默认 PA8——
+    # 与 ir_beam 对射 + pid GRAY_D5 重叠：幻彩灯带与「红外对射/巡线」不同框、
+    # 同选概率最低（刻意不叠灯族 LED PC13-15），同选经引脚绑定消解；
+    # 页面默认 PB12 弃用——ttp224 四脚 + DIP/GRAY 已占）
+    "WS2812_GPIO": "GPIO_A",
+    "WS2812_PIN": "Pin_8",
 }
 
 

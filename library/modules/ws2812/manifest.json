@@ -23,6 +23,29 @@
           "required": true
         }
       ]
+    },
+    "stm32": {
+      "files": [
+        "code/ws2812_stm32.c",
+        "code/ws2812_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**位时序打样件（页面 4 代码块：原理示例 + bsp_ws2812.c + bsp_ws2812.h + main 演示）**：F1 口径页面（stm32f10x.h + RCC_APB2PeriphClockCmd + GPIO_Mode_Out_PP + GPIO_Speed_50MHz + GPIO_WriteBit），换算 = GPIO_Init→gpio_init（**OUT_PP 强推挽**——页面注释「需要配置为强推挽输出」，ml_gpio OUT_PP 即推挽；速度 50MHz 由 ml_gpio 内定）+ GPIO_WriteBit→gpio_set（L/H 宏）+ delay_us 同名（页面 RGB_LED_Reset 的 delay_us(285)）。**页面缺陷清单（4 条，全部 notes + 测试守卫防回潮）**：① **延时循环条件写反 ×4**——`for(k = 0; i < 0; i++);`（L74/L83 原理示例段、L225/L234 实现段——0 次迭代、脉宽全丢，照抄灯不亮；j/k 计数变量错乱）→ 时序整体重写不采用；② **越界 off-by-one**——`LedId > ledsCount`（L155）应为 `>=`（LedId=8 越界写 LedsArray[24..26]，数组仅 WS2812_MAX*3=24 字节）→ 修正 `>=`（与 mspm0 版「越界忽略」语义同）；③ **时序按 12MHz 标注（全部作废）**——L52/L280「NOP×5≈0.26-0.32us」「@12MHz 每个机器周期 83ns」而本工程 **72MHz**（SystemInit；NOP×5≈69ns）→ 按数据手册 + mspm0 版结构重写：位 1 = 高 delay_us(1)+低 0.25us、位 0 = 高 0.25us+低 delay_us(1)；0.25us@72MHz = 18×__NOP()（WS2812_DELAY_QUARTER_US 宏）；位周期 ≈1.25us（800kHz 标准；页面宣称 1.0us/1.08us 短于标准）；真机时序微调留 notes（「若实测灯不亮再微调两处延时」——板级行为不属于编译级验证）；④ **.h 声明无定义**——setLedCount/getLedCount/RGB_LED_Write1（L281-282/L289）页面上游残留 → 不声明不实现（实现 = 本模块 set_led_count/led_count/refresh 对齐 API）。**颜色/GRB 位序正确**：0xRRGGBB 数值宏 + 发送序 GRB（set_color 内 R/G 换位——页面「将绿和红色进行颠倒」+ L159-161 实现，与 mspm0 版一致）；演示数据（buff 颜色数组/流水灯序列）不入库；`delay_0_30us`/`LedsArray/ledsCount/nbLedsBytes` 全局非 static（页面未修，本实现 static 收敛）。**引脚宏**WS2812_GPIO/WS2812_PIN（pin_config.h 单源）；默认 DIN=**PA8**——页面默认 PB12 **不采用**（本批 ttp224 四脚 + DIP/GRAY 三重叠已占，且灯带与拨码/巡线同框概率低于 ttp224）；与 ir_beam（对射）+ pid GRAY_D5（巡线灰度）默认重叠（幻彩灯带与「红外对射/巡线」不同框、同选概率最低；刻意不叠灯族 LED PC13-15 板载灯——彩灯常代替板载灯做指示，同框概率高，与声光件亦不叠），同选经引脚绑定消解；PA8 无特殊引脚阻塞，72MHz 忙等 1.25us/位（24 位/灯 × 8 灯 ≈ 240us/刷新）不占 TIM/PWM、不注册中断，与调度共存安全。依赖 [\"delay\"]（顶层已有，mspm0 侧同）。**未上板**（800kHz 位时序精度真机验证留后续）。\nwiki-stm32-batch1/06 编译矩阵（2026-09-06）：stm32 单选生成 → UV4（C:/Keil5 V5.06u7）0 error、0 module warning（exit 0，PASS）；未上板。\n来源：sources/materials/lckfb-地阔星移植手册/control--ws2812-color-rgb-led.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/control/ws2812-color-rgb-led.html；网盘资料 https://pan.baidu.com/s/1OkCpw8ooDyuw947V0b89Rw 提取码 AB12 + 移植成功案例 https://pan.baidu.com/s/1yfvVxWYerUSPGo3F7_xKBw?pwd=cfeh 提取码 cfeh；采购链接 [8位WS2812 RGB全彩LED模块 5050LED灯珠内置全彩驱动直板DIY] https://item.taobao.com/item.htm?spm=a1z10.3-c-s.w4002-24706531953.16.223a6a4bKqBE02&id=558408103026）。与 mspm0 条目分工：mspm0 侧为 syscfg GPIO 输出实例 + DL_GPIO API（默认 PA14 叠 DCC_100_PWM2），本条目为 ml_gpio API + pin_config.h 宏段（默认 PA8 叠 IR_BEAM/GRAY_D5），API 同名同语义（init/set_led_count/led_count/set_color/set_rgb/refresh + WS2812_MAX 8）、零交叉改动。",
+      "kit": "8 位 WS2812 RGB 全彩 LED 模块（5050 LED 灯珠内置全彩驱动直板 DIY，4Pin：VCC/GND/DIN/DO；工作 3.7-5.3V、16mA；单总线控制）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/control/ws2812-color-rgb-led.html",
+      "pins": [
+        {
+          "id": "WS2812_DIN",
+          "type": "gpio_out",
+          "default": "PA8",
+          "required": true,
+          "macros": [
+            "WS2812_GPIO",
+            "WS2812_PIN"
+          ]
+        }
+      ]
     }
   }
 }

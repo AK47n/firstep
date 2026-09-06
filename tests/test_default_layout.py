@@ -60,12 +60,7 @@ WHITELIST = {
         "zigbee_uart_key.ZIGBEE_UART_RX",
         "zigbee_link.ZIGBEE_UART_RX",
     },
-    # wiki-stm32-batch1/05（ttp224 四脚）并入后：PB12-15 三共享
-    # （DIP×GRAY×TTP224——见下方批次 1 注释块）
-    "PB12": {"pid.GRAY_D1", "config.DIP0", "ttp224.TTP224_OUT1"},
-    "PB13": {"pid.GRAY_D2", "config.DIP1", "ttp224.TTP224_OUT2"},
-    "PB14": {"pid.GRAY_D3", "config.DIP2", "ttp224.TTP224_OUT3"},
-    "PB15": {"pid.GRAY_D4", "config.DIP3", "ttp224.TTP224_OUT4"},
+    # PB12-15 三共享（DIP×GRAY×TTP224——wiki-stm32-batch1/05，见下方批次 1 注释块）
     # key stm32 默认 PB3 与 pid.GRAY_D6 重叠（蓝药丸无板载按键，PB3 = JTDO
     # 复位后可用；实际接线经引脚绑定消解——module-functionalize/04）
     "PB3": {"key.KEY_START", "pid.GRAY_D6"},
@@ -77,12 +72,10 @@ WHITELIST = {
     # servo 默认 PB6 与 pid.GRAY_D7 重叠（b1-adc-servo/02）：蓝药丸可 PWM 脚
     # 全被占用，无空闲可挪——实际接线经引脚绑定消解
     "PB6": {"pid.GRAY_D7", "servo.SERVO_PWM_C0"},
-    # ir_beam 默认 PA8 与 pid.GRAY_D5 重叠（ir-beam-module/01）：蓝药丸无空闲
-    # 通用 GPIO 可挪——门类/载物检测题目与巡线 PID 不同选，同选经引脚绑定消解
-    "PA8": {"pid.GRAY_D5", "ir_beam.IR_BEAM_OUT"},
-    # wiki-stm32-batch1/01-06（立创 wiki 地阔星手册 stm32 线批次 1，六件
-    # GPIO 迷你件）：默认脚全部无法独立（F103C8T6 排针被既有默认占满），
-    # 按「同选概率最低」重叠 + 引脚绑定消解——
+    # PA8 三共享（ir_beam×pid.GRAY_D5 为 ir-beam-module/01 残留；ws2812 为
+    # wiki-stm32-batch1/06 批次 1 新增——幻彩灯带与「红外对射/巡线」不同框、
+    # 同选概率最低（刻意不叠灯族 LED PC13-15），同选经引脚绑定消解）
+    "PA8": {"pid.GRAY_D5", "ir_beam.IR_BEAM_OUT", "ws2812.WS2812_DIN"},
     # relay 默认 PB4 与 motor 编码器方向输入重叠（继电器≠编码器闭环；
     # 刻意不叠声光/执行件 LED/BUZZER/电机 PWM/方向）
     "PB4": {"motor.MOTOR_A_ENC_DIR", "relay.RELAY_OUT"},
