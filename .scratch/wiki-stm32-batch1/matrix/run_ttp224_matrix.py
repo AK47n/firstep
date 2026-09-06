@@ -23,8 +23,9 @@ from contest_generator.selection import resolve_selection  # noqa: E402
 MAIN_C = (
     '#include "headfile.h"\n'
     '#include "ttp224_stm32.h"\n'
-    "int main(void) { ttp224_init(); (void)ttp224_read(1); (void)ttp224_read(4); "
-    "(void)ttp224_read_all(); while (1); }\n"
+    "int main(void) { ttp224_init(); (void)ttp224_read(1); (void)ttp224_read(2); "
+    "(void)ttp224_read(3); (void)ttp224_read(4); (void)ttp224_read_all(); "
+    "while (1); }\n"
 )
 
 uv4 = find_uv4()

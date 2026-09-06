@@ -52,6 +52,8 @@ MAIN_C_STM32 = (
     "{\n"
     "    ttp224_init();\n"
     "    (void)ttp224_read(1);\n"
+    "    (void)ttp224_read(2);\n"
+    "    (void)ttp224_read(3);\n"
     "    (void)ttp224_read(4);\n"
     "    (void)ttp224_read_all();\n"
     "    while (1)\n"
