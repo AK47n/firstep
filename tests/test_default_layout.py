@@ -90,6 +90,10 @@ WHITELIST = {
     # microwave_radar 默认 PA4 与 motor 编码器 B 相 EXTI 重叠（微波雷达≠
     # 编码器闭环；刻意避让声光/门禁/传感站组合件；本件轮询不注册 EXTI）
     "PA4": {"motor.MOTOR_B_ENC", "microwave_radar.MICROWAVE_OUT"},
+    # flame 默认 PA5 与 motor 编码器方向输入 MOTOR_B_ENC_DIR 重叠（火焰≠
+    # 编码器闭环；stm32 ADC 可达脚 PA0-7/PB0-1 全被既有角色占用——取最
+    # 「不同框」的 PA5（避让 PWM 主脚 PA0/1、debug PA2/3、编码器 EXTI PA4/PB5））
+    "PA5": {"motor.MOTOR_B_ENC_DIR", "flame.FLAME_AO"},
 }
 
 

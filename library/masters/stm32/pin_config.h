@@ -144,6 +144,15 @@
 #define MICROWAVE_GPIO        GPIO_A
 #define MICROWAVE_PIN         Pin_4
 
+/* ---- 火焰传感器（flame 模块：AO 模拟输出 → ADC1 通道，默认
+ * ADC_Channel_5 = PA5——**页面原脚**（用户照页面接线即插即用）；独立通道
+ * ——与 adc 模块 ADC_CH0/1 不共读（ml_adc 的 adc_get 每次先写 SQR3 选通道，
+ * 顺序调用互不干扰）；PA5 现状叠 motor MOTOR_B_ENC_DIR（编码器方向输入，
+ * gpio_in）——火焰与「带编码器闭环的电机控制」不同框、同选概率最低，同选
+ * 经引脚绑定消解（换其它 ADC 脚 PA0-7/PB0-1；页面 DO=PA6 未用不声明——
+ * LM393 阈值由模块可调电阻控制）---- */
+#define FLAME_AO_CH           ADC_Channel_5
+
 /* ---- UWB 基站串口（config.h 并入：UART_1 = PA9 TX / PA10 RX，115200）---- */
 #define UWB_UART          UART_1
 #define UWB_UART_INST     USART1

@@ -256,6 +256,11 @@ STM32_MACRO_VALUES = {
     # 页面默认 PA1 弃用——叠 adc ADC_CH1 + MOTOR_B_PWM 常备件）
     "MICROWAVE_GPIO": "GPIO_A",
     "MICROWAVE_PIN": "Pin_4",
+    # wiki-stm32-batch1/02：flame 火焰传感器（ADC 通道默认 ADC_Channel_5 =
+    # PA5——页面原脚；独立通道与 adc 模块 ADC_CH0/1 不共读；PA5 现状叠
+    # motor MOTOR_B_ENC_DIR（编码器方向输入）——火焰与编码器闭环不同框、
+    # 同选概率最低，同选经引脚绑定消解）
+    "FLAME_AO_CH": "ADC_Channel_5",
 }
 
 

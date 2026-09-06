@@ -23,6 +23,28 @@
           "required": true
         }
       ]
+    },
+    "stm32": {
+      "files": [
+        "code/flame_stm32.c",
+        "code/flame_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**ADC 通道件（页面 ADC_FLAME_Init + Get_Adc_FLAME_Value + Get_FLAME_Percentage_value + Get_FLAME_Do_value 完整）**：F1 口径页面（stm32f10x.h + RCC_APB2PeriphClockCmd + GPIO_Mode_AIN/IPU + ADC_RegularChannelConfig + SoftwareStartConvCmd + GetConversionValue），换算 = 页面 ADC 初始化整体收敛为母版 ml_adc 的 adc_init（内部完成 AIN 引脚配置 + APB2 时钟 + 6 分频 12MHz + 复位校准——等效页面流程；采样时间 239.5cyc vs 页面 55.5cyc，功能等价差异记录）+ ADC_GetConversionValue→adc_get（软件触发轮询）。**页面缺陷清单（notes + 测试守卫）**：① `delay_1ms(20)`（页面 Get_Adc_FLAME_Value 内）——ml_delay 无 delay_1ms，换算 delay_ms(20)；本实现按快平均语义省略采样延时（notes 记录）；② main 演示 `printf(\"%d%%\", ...)` 用 %d 打 unsigned int——演示段剔除不落码；③ SAMPLES 30×25ms 采样过慢（~750ms/次）——改 5 次快平均（mq2/us016/mspm0 版先例，真机行为差异 notes）。**换算 = 页面原式反向映射**：percent = (1 − value/4095)×100（页面 Get_FLAME_Percentage_value 原式——页面「红外光越强数值越小、越弱数值越大」：百分比越高火源红外越强；**相对强度非绝对值**）。**DO 数字量未声明**：页面 Get_FLAME_Do_value + DO 宏（LM393 阈值比较）——阈值由模块可调电阻控制（mspm0 先例「未用不声明」= 同策略），需要时骨架经 gpio 直读。**引脚宏**FLAME_AO_CH（pin_config.h 单源，adc 角色渲染照 test_module_adc 先例：PAx→ADC_Channel_N）；默认 AO=**PA5**（=页面原脚 ADC_Channel_5，用户照页面接线即插即用）；**独立通道**——与 adc 模块 ADC_CH0/1 不共读（与 mspm0 版独立 MEM6 语义同构：ml_adc 的 adc_get 每次先写 SQR3 选通道，顺序调用互不干扰）；PA5 现状叠 motor MOTOR_B_ENC_DIR（编码器方向输入，gpio_in）——火焰与「带编码器闭环的电机控制」不同框、同选概率最低（stm32 ADC 可达脚 PA0-7/PB0-1 全被既有角色占用，取最「不同框」的 PA5），同选经引脚绑定消解。依赖 [\"adc\"]（stm32 侧——母版 ml_adc API，adc 模块 stm32 条目 files=[] 内嵌母版，解析照常）。模块特性（页面说明）：探测 700-1000nm 红外、角度 60°、距离 ~1m、灵敏度峰值 880nm、AO/DO 双输出（DO 阈值可变电阻）；对日光/非火源热源可能误判。**未上板**（ADC 换算/反向映射真机验证留后续）。\nwiki-stm32-batch1/02 编译矩阵（2026-09-06）：stm32 单选生成（依赖 adc 展开）→ UV4（C:/Keil5 V5.06u7）0 error、0 module warning（exit 0，PASS）；未上板。\n来源：sources/materials/lckfb-地阔星移植手册/sensor--flame-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/flame-sensor.html；网盘资料 https://pan.baidu.com/s/14rzP9Gx7AjbmRSqD_A5Pyw 提取码 risv + 移植成功案例 https://pan.baidu.com/s/1Z4gne7Vo3IFngSZHwfmC4g?pwd=8dho 提取码 8dho；采购链接 [(4线制)火光/火焰传感器模块火源探测 红外接收传感器 智能车配件] https://item.taobao.com/item.htm?spm=a21n57.1.0.0.4c52523cd1r9Zc&id=35124127482&ns=1&abbucket=0#detail）。与 mspm0 条目分工：mspm0 侧为 ADC12_0 MEM6 独立通道 + adc 模块 API（默认 PA22 叠 HUIDU/DEBUG/NRF/TTP224），本条目为 ml_adc API + pin_config.h 宏段（默认 PA5 独立通道、页面原脚），API 同名同语义、零交叉改动。",
+      "kit": "红外火焰传感器模块（4Pin：VCC/GND/DO/AO；工作 3.3-5V；AO 模拟量输出（光电二极管端子直出）、DO 数字量阈值由 LM393 + 板载可变电阻控制；探测 700-1000nm 红外、角度 60°、距离 ~1m、灵敏度峰值 880nm）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/flame-sensor.html",
+      "pins": [
+        {
+          "id": "FLAME_AO",
+          "type": "adc",
+          "default": "PA5",
+          "required": true,
+          "macros": [
+            "FLAME_AO_CH"
+          ]
+        }
+      ]
     }
   }
 }
