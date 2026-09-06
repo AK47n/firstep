@@ -54,6 +54,7 @@ INSTANCE_CONSUMERS: dict[str, tuple[str, ...]] = {
     "SGP30": ("sgp30",),
     "AGS10": ("ags10",),
     "BMP180": ("bmp180",),
+    "MS5611": ("ms5611",),
     "TTP224": ("ttp224",),
     "HUMAN_IR": ("human_ir",),
     "MICROWAVE": ("microwave_radar",),

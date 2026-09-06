@@ -565,6 +565,14 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # us016/mq2/批次9 薄封装四件/批次 11 MQ 系同构快补共读同槽）+
         # HC05_UART RX + NRF24L01 CSN + TCS34725 SDA + BMP180 SDA（bmp180
         # 默认脚——同上，同选时经引脚绑定消解；wiki-modules-batch13/03）
+        "PA28": 8,  # IMU601 TX + HX711 SCK + FINGERPRINT_UART TX + SHT30 SCL
+        # + JY61P SCL + TP_XPT2046_DOUT + OLED_SPI_SCL + MS5611 SCL（ms5611
+        # 默认脚——高精度气压与姿态/定高同框概率最高故叠此脚（低频采集池
+        # 同池先例 jy61p；刻意与互替件 bmp180 错开——PA23/PA24），同选时经
+        # 引脚绑定消解；wiki-modules-batch13/04）
+        "PA31": 8,  # IMU601 RX + HX711 DT + FINGERPRINT_UART RX + SHT30 SDA
+        # + MICROWAVE OUT + JY61P SDA + OLED_SPI_SDA + MS5611 SDA（ms5611
+        # 默认脚——同上，同选时经引脚绑定消解；wiki-modules-batch13/04）
     }
 
 
