@@ -292,6 +292,13 @@ STM32_MACRO_VALUES = {
     "BH1750_SCL_PIN": "Pin_6",
     "BH1750_SDA_GPIO": "GPIO_A",
     "BH1750_SDA_PIN": "Pin_7",
+    # wiki-stm32-batch2/03：sht20 温湿度（软 I2C 总线件——六件共总线 PA6/PA7；
+    # 与 motor 电机方向重叠：温湿度与「带电机方向的小车运动控制」不同框；
+    # 页面默认 SDA=PB9/SCL=PB8（=OLED 段）不采用；注意 pca9685 同址 0x40）
+    "SHT20_SCL_GPIO": "GPIO_A",
+    "SHT20_SCL_PIN": "Pin_6",
+    "SHT20_SDA_GPIO": "GPIO_A",
+    "SHT20_SDA_PIN": "Pin_7",
 }
 
 
