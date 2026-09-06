@@ -14,7 +14,7 @@
 - [x] 词表 lib_modules 挂接参与打分：题面命中词表行 category/models → 该行 solutions 的 lib_modules slug 计命中分（照词表行与题面文本的子串判定）
 - [x] 打分 = 命中词项数（去重、同义词组计一次），不做加权；输出排序 = 得分降序 → slug 字典序
 - [x] 截断：join 后按 `_fit_segment_wire` 以预算截断带标注（Truncation 契约照现有）；不足 `MIN_PRESELECT`（20）条时扩到前 20 条
-- [x] 零命中（激活词集为空）：返回原全量（逐条原样保序）
+- [x] 零命中（激活词集为空）：排序退化为 slug 序（零增量语义——预算内全量原样保序；超预算照常 slug 序截断 + truncated=True，物理约束不豁免）
 - [x] `budget.py` 新增 `MODULE_SUMMARY_BYTES = 40000`（候选值）、`MIN_PRESELECT = 20`（保底下限），附推导注释指向 spec
 - [x] `tests/test_selection.py` 纯函数测试：打分 / 排序确定性 / 截断标注 / 保底 / 零命中零增量 / lib_modules 挂接 / 中英文词规则；全部通过
 - [x] 既有全量测试（test_selection.py / test_llm.py）无回归

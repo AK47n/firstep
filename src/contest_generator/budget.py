@@ -148,7 +148,7 @@ SKELETON_REFERENCE_TOTAL_BYTES = 40000
 # 预算两级上调 7500→7900（7600/7800 中间步）→ 词表段全量 7692 比旧截断形态
 # 7334 多 358B → 全文两级降 100B 回 60100 保 2KB 边界余量（同 batch5/7/8/9/12
 # 口径；红证见 worst-case 结构测试实测）。
-# 模块摘要段入账（2026-09-xx，wiki-modules-batch13 + module-preselect/02）：
+# 模块摘要段入账（2026-09-06，wiki-modules-batch13 + module-preselect/02）：
 # 摘要段从预算推导的「14 条 ≈ 7.6KB」涨为真实库 mspm0 84 条 ≈ 73.1KB wire
 # （stm32 24 条 ≈ 12.2KB），**该增长从未入账**——旧推导只记账词表段逐批
 # 增长。现状（摘要 73.1KB + 全文 60100）最坏形态实测：mspm0 195000B 超限

@@ -50,6 +50,7 @@ from .reference_library import (
     _activated_terms,
     _is_ascii_term,
     _synonym_group,
+    _term_matches_token,
     _text_has_term,
     get_reference,
     platform_matches,
@@ -437,11 +438,10 @@ def preselect_module_summaries(
         for summary in ordered
     ]
     scored.sort(key=lambda item: (-item[0], item[1].slug))
-    kept = _fit_summaries_by_wire(
-        [summary for _, summary in scored], budget_bytes
-    )
+    scored_summaries = [summary for _, summary in scored]
+    kept = _fit_summaries_by_wire(scored_summaries, budget_bytes)
     if len(kept) < MIN_PRESELECT and len(scored) > len(kept):
-        kept = [summary for _, summary in scored][:MIN_PRESELECT]
+        kept = scored_summaries[:MIN_PRESELECT]
     return PreselectResult(tuple(kept), len(ordered), len(kept) < len(ordered))
 
 
@@ -450,16 +450,26 @@ def _preselect_score(
     activated: frozenset[str],
     lib_boost: frozenset[str],
 ) -> int:
-    """模块摘要的预筛得分：激活语义组命中匹配面数 + lib_modules 挂接命中数。"""
-    match_text = " ".join(
-        (summary.slug, summary.description, *summary.kits)
-    ).lower()
+    """模块摘要的预筛得分：激活语义组命中匹配面数 + lib_modules 挂接命中数。
+
+    模块匹配面两层（spec 词项规则同构）：
+    - slug 走 token 级规则（reference_library._term_matches_token：精确 /
+      前缀 + 纯数字尾巴（adc → adc12）——数字尾巴是描述文本边界规则
+      （(?![a-z0-9])）覆盖不到的形态，slug 独立成 token 按题目词项命中；
+    - description + kits 拼接文本走连续文本边界规则（_text_has_term：
+      英文词边界独立出现、中文子串）。
+    """
+    match_text = " ".join((summary.description, *summary.kits)).lower()
     score = 0
     for term in activated:
+        synonyms = _synonym_group(term)
         if any(
             _text_has_term(match_text, synonym)
-            for synonym in _synonym_group(term)
+            for synonym in synonyms
         ):
+            score += 1
+            continue
+        if any(_term_matches_token(synonym, summary.slug) for synonym in synonyms):
             score += 1
     if summary.slug in lib_boost:
         score += 1
@@ -507,15 +517,29 @@ def _wordlist_hit_slugs(
 
 
 def _term_matches_topic(text_lower: str, term: str) -> bool:
-    """词表行词面项命中题面文本（英文边界规则；中文/混合项双向子串滑窗）。"""
+    """词表行词面项命中题面文本（大小写不敏感；英文边界 + 中文双向子串）。
+
+    词表项常含大写型号 / 缩写（BMP180 / K230 / ESP8266 / LoRa——词表行词面
+    与 PERIPHERAL_TERMS 不同源，无「全小写」约定），先整体小写归一再判：
+    - 判归后全 ascii 项（含原大写型号）：_text_has_term 边界规则
+      （`BMP180` 在题面 `使用 bmp180` 独立出现 → 命中；canmv 内 cam 不命中）；
+    - 含中文的混合项：整体子串（`lora 数传` 题面原文照写）→ 中文连续段
+      2-4 字滑窗反向查题面（题面短词 ⊂ 词表长词：题面「气压」命中方案名
+      「MS5611 高精度气压计」）→ ascii 连续段边界（题面「AS32」命中
+      「AS32-TTL-100 LoRa...」的 ascii 段）。
+    """
     term = term.strip()
     if not term:
         return False
-    if _is_ascii_term(term):
-        return _text_has_term(text_lower, term)
-    if term in text_lower:
+    lower_term = term.lower()
+    if _is_ascii_term(lower_term):
+        return _text_has_term(text_lower, lower_term)
+    if lower_term in text_lower:
         return True
-    for seg in re.findall(r"[\u4e00-\u9fff]{2,}", term):
+    for seg in re.findall(r"[a-z0-9]+", lower_term):
+        if _text_has_term(text_lower, seg):
+            return True
+    for seg in re.findall(r"[\u4e00-\u9fff]{2,}", lower_term):
         for width in (2, 3, 4):
             for index in range(max(0, len(seg) - width + 1)):
                 if seg[index:index + width] in text_lower:
@@ -529,6 +553,11 @@ def _fit_summaries_by_wire(
     """摘要行按 wire 预算截断（行边界，不劈半行）：累积 join 前缀 wire 字节，
     装不下的行整行裁掉；单行本身超预算时保留该行（预算边界由上层兜底，不
     静默丢大头模块——现实库单行 ≈ 0.3-1.5KB，远小于 MODULE_SUMMARY_BYTES）。
+
+    截断契约：本函数是机械截断器（零文案）；「截了要明说」由调用方承担——
+    PreselectResult.truncated = True 时调用方在提示词标题带注记（模型侧可见，
+    工单 module-preselect/03），函数自身不带标注（摘要行是结构化清单，
+    行内插标注会污染模型解析）。
     """
     total = 0
     kept: list[ManifestSummary] = []

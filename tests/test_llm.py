@@ -27,10 +27,12 @@ from contest_generator.events import (
     ProgressEvent,
 )
 from contest_generator.budget import (
+    MODULE_SUMMARY_BYTES,
     REFERENCE_SUGGESTIONS_MAX_WIRE_BYTES,
     SKELETON_RELATED_LIMIT,
     wire_size,
 )
+from contest_generator.library import list_modules
 from contest_generator.fix_errors import FixSuggestion, read_file_contexts
 from contest_generator.wiring import WiringEntry
 from contest_generator.llm import (
@@ -105,7 +107,10 @@ from contest_generator.selection import (
     ModuleInstance,
     ModuleSelection,
     ReferenceSuggestion,
+    filter_manifests_by_platform,
+    preselect_module_summaries,
 )
+from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from contest_generator.manifest import (
     ExclusiveGroupSpec,
     ManifestSummary,
@@ -5560,14 +5565,6 @@ def test_recommend_real_library_budget():
     REFERENCE_FULLTEXT_BYTES 必须先红证校准再改断言（照 budget.py 词表段
     先例：每涨必红、保 2KB 边界余量）。
     """
-    from contest_generator.budget import MODULE_SUMMARY_BYTES
-    from contest_generator.library import list_modules
-    from contest_generator.selection import (
-        filter_manifests_by_platform,
-        preselect_module_summaries,
-    )
-    from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
-
     lib = Path(__file__).resolve().parents[1] / "library" / "modules"
     modules = list_modules(lib)
     problem = "设" * EMBEDDED_CONTENT_CAP  # 题面截断上限（零命中最坏形态）

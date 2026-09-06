@@ -31,12 +31,12 @@
 
 ## 实现决策
 
-- **预筛纯函数**放 `selection.py`（模块推荐域，与 `related_references` 同层）：`preselect_module_summaries(summaries, topic_text, hardware_words, budget_bytes) -> tuple[ManifestSummary, ...]`。输入全量摘要（已按平台过滤）、题面、词表、预算；输出预筛后子集（保序）。
-- **词源复用单点**：`PERIPHERAL_TERMS`（reference_library.py 单源，selection 层 re-export——题面侧激活规则照 `related_references` 既有实现：英文词独立出现 / 中文子串 / 同义词组去重）。
-- **模块侧匹配面** = `slug + description + kits` 拼接文本；词项匹配规则照 related_references 的 token 规则同构（英文词边界 + 数字尾巴兼容如 adc→adc12，中文子串）。零新词表——84 个模块全面覆盖靠描述的自然语言内容，批次 13 的 description 已写题面场景关键词（实测四件均含）。
+- **预筛纯函数**放 `selection.py`（模块推荐域，与 `related_references` 同层）：`preselect_module_summaries(summaries, topic_text, hardware_words, budget_bytes) -> PreselectResult`（结果对象，见下），输入全量摘要（已按平台过滤）、题面、词表、预算；输出预筛后子集（保序）。返回到 `PreselectResult(summaries, total, truncated)`——truncated/total 供调用方「按题面初筛 N/M」注记两态判定（工单 03；spec 原「返回 tuple」为推导初稿，注记契约要求结果对象，已记录在案）。
+- **词源复用单点**：`PERIPHERAL_TERMS`（reference_library.py 单源——题面侧激活规则照 `related_references` 既有实现：英文词独立出现 / 中文子串 / 同义词组去重；selection 经同包私有互导复用 `_activated_terms` / `_text_has_term` / `_term_matches_token` / `_synonym_group` / `_is_ascii_term`，events._emit 先例，单源意图保留）。
+- **模块侧匹配面** = 两层：slug 走 token 级规则（`_term_matches_token` 精确 / 前缀 + 纯数字尾巴（adc → adc12；描述文本边界规则覆盖不到数字尾巴形态））+ description + kits 拼接文本走连续文本规则（`_text_has_term` 英文词边界 / 中文子串）。零新词表——84 个模块全面覆盖靠描述的自然语言内容，批次 13 的 description 已写题面场景关键词（实测四件均含）。
 - **词表 lib_modules 挂接**：题面词命中词表行的 category / models（或方案名——方案级精确优先、行级兜底：题面「继电器」→「1 路 5V 继电器模块」方案 → 仅 relay；题面只写型号且无方案名命中 → 该行全部方案的 lib_modules 并集；中文双向子串：题面「气压」命中方案名「MS5611 高精度气压计」，中文连续段 2-4 字滑窗，短侧 ≥ 2 字）→ 挂接 slug 计命中分（词表行与题面文本的子串判定，中文语义；这是入库流程 already 维护的数据，批次 13 已配套更新）。
 - **打分**：命中词项数（去重后，同义词组计一次）；1 词 1 分，不做加权；得分相同则按 slug 字典序（确定性，与 `list_modules` 排序同构）。
-- **截断与保底**：预筛后按「命中得分降序 → slug 序」排列，join 后用 `_fit_segment_wire` 按 `MODULE_SUMMARY_BYTES` 截断带标注（Truncation 契约照现有）；**保底下限 MIN_PRESELECT = 20 条**——截断后不足 20 条时扩到前 20 条（覆盖下界，防命中稀少时清单过短）。
+- **截断与保底**：预筛后按「命中得分降序 → slug 序」排列，新 `_fit_summaries_by_wire` **行级** wire 预算截断（不劈半行——spec 原「`_fit_segment_wire` 字节前缀截断」会劈半行，实现取行边界变体，有益偏差）；「截了要明说」契约由调用方承担：`PreselectResult.truncated = True` 时调用方在提示词标题带注记（模型侧可见），截断器自身零文案（摘要行是结构化清单，行内插标注污染模型解析）；**保底下限 MIN_PRESELECT = 20 条**——截断后不足 20 条时扩到前 20 条（覆盖下界，防命中稀少时清单过短）。
 - **预算常量**：`MODULE_SUMMARY_BYTES`（**定值 40000**，红证实测：mspm0 预筛 46/84 条、stm32 24 条全量）放 budget.py（摘要段入账本）；`REFERENCE_FULLTEXT_BYTES` **60100 → 27000**（红证实测校准：28000 时 mspm0 最坏 128605B 距 129024 边界仅 419B 过紧，取 27000 保 ~3KB 呼吸；单篇全文 ≈4500 中文字，两级注入契约下足够；照词表段逐批先例每涨必红证、保 2KB 边界余量）。固定项（题面 24KB + 历史 15KB + 词表 7.9KB + 清单 4.1KB + 系统提示 ~3.8KB + 壳/契约 ~1.7KB ≈ 56.5KB）；`MIN_PRESELECT` **定值 20**（保底下限，现实库 20 条 ≈17KB ≪ 预算）。
 - **接入点**：webapp `/api/recommend` 路由，`_assemble_topic_context` 之后、`library_fingerprint` 之前：预筛结果**替换** `topic.manifest_summaries`（或经 `run_recommendation` 新可选参数透传，默认 topic 全量——二选一在工单 02 定，倾向 replace 后同对象，`_default_instances_for` 同源受益）。指纹 `library_fingerprint` 改用预筛后列表（模型实际所见；确定性函数保证同题面同指纹，缓存语义不变——同题面同预筛，换题面指纹自然变）。
 - **提示词契约**：`_selection_user_prompt` 的「模块库可用模块：」标题携带预筛注记（如「（按题面初筛 46/84 条，仅展示前 40000 wire 字节）」）；**未预筛 / 全量未截断时标题逐字节不变**（向后兼容，stm32 线与既有测试零影响）。注记仅在中标段发生实际变化（截断 or 子集 < 全量）时输出。
