@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=78622b505640c237b68c5d25ce6aa57a3ebb6979 -->
+<!-- changelog-auto: last-commit=d36741b45979a1ac91c2f8ca2d6aecd313d4da08 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -79,6 +79,7 @@
 - 21:06 工单：wiki-stm32-batch4/02 ms5611 实施完成回填（结论 + 状态 resolved）
 - 21:09 模块：dht11 温湿度传感器 stm32 平台条目（wiki-stm32-batch4/03：单总线位时序件——DATA 默认 PB3（叠 KEY+GRAY_D6 不同框）+ 页面缺陷修正（响应/位等待超时无错误汇报改超时返回 1、返回语义归一 0=成功、delay_uus 页外函数改 delay_us、RCU_DHT11 未用宏不落、extern 全局泄漏收敛 static 缓存+出参）+ 时间轴常量单源 .h（19ms/28us/54+27/74us/80 步进）+ 校验和 0.1 系数 + UV4 矩阵 0 error/0 module warning → verified=true）
 - 21:09 工单：wiki-stm32-batch4/03 dht11 实施完成回填（结论 + 状态 resolved）
+- 21:12 模块：ds18b20 单总线温度传感器 stm32 平台条目（wiki-stm32-batch4/04：单总线位时序件——DATA 默认 PB1（叠 MOTOR_B_DIR2 不同框）+ **0x44 后补 750ms 转换等待（主缺陷——页面未等首次读回 85℃默认值，mspm0 批 6 修正沿用）+ 页外声明未实现复位函数剔除 + 位槽时间轴常量单源 .h（750/15/200/240/2+60/2+12+50）+ 读毕释放总线 + 页面注释串台记录（MLX90614/标题错位/DQ_OUT 注释相反）不落** + 负温补码 0.0625 系数 + UV4 矩阵 0 error/0 module warning → verified=true）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
