@@ -122,6 +122,7 @@ WHITELIST = {
         "mlx90614.MLX90614_SCL",
         "sgp30.SGP30_SCL",
         "pca9685.PCA9685_SCL",
+        "bmp180.BMP180_SCL",
     },
     "PA7": {
         "motor.MOTOR_A_DIR2",
@@ -136,6 +137,7 @@ WHITELIST = {
         "mlx90614.MLX90614_SDA",
         "sgp30.SGP30_SDA",
         "pca9685.PCA9685_SDA",
+        "bmp180.BMP180_SDA",
     },
 }
 

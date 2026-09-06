@@ -352,6 +352,14 @@ STM32_MACRO_VALUES = {
     "HX711_SCK_PIN": "Pin_5",
     "HX711_DT_GPIO": "GPIO_B",
     "HX711_DT_PIN": "Pin_0",
+    # wiki-stm32-batch4/01：bmp180 气压（软 I2C 总线件——共总线 PA6/PA7；
+    # 与 motor 电机方向重叠：气压/海拔与「带电机方向的小车运动控制」不同框；
+    # 页面默认 SDA=PB9/SCL=PB8（=OLED 段）不采用；地址 0xEE 与既有 11 件
+    # 全异、与 ms5611 同址 0xEE 互替不可同挂）
+    "BMP180_SCL_GPIO": "GPIO_A",
+    "BMP180_SCL_PIN": "Pin_6",
+    "BMP180_SDA_GPIO": "GPIO_A",
+    "BMP180_SDA_PIN": "Pin_7",
 }
 
 

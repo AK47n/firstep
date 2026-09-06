@@ -244,6 +244,20 @@
 #define HX711_DT_GPIO         GPIO_B
 #define HX711_DT_PIN          Pin_0
 
+/* ---- 批次 4（wiki-stm32-batch4）：气压组两件（软 I2C，共挂批次 2/3
+ * 总线 PA6/PA7）----
+ * bmp180/ms5611 默认 SCL=PA6/SDA=PA7——地址 0xEE（7bit 0x77）与既有 11 件
+ * 0x38/0x23/0x40/0x44/0x50/0x1A/0x48/0x29/0x5A/0x58/0x40 全异 = 合法共挂；
+ * **bmp180 × ms5611 同址 0xEE = 互替件不可同挂**（同一总线同址双选必冲突
+ * ——选一只；同选时经引脚绑定换独立总线或换件）；与 motor MOTOR_A_DIR/
+ * DIR2（TB6612 A 相方向）默认重叠：气压/海拔与「带电机方向的小车运动
+ * 控制」不同框、同选概率最低，同选经引脚绑定消解；页面默认 PB8/PB9
+ * （=OLED 段）不采用（批次 2 先例）。 */
+#define BMP180_SCL_GPIO       GPIO_A
+#define BMP180_SCL_PIN        Pin_6
+#define BMP180_SDA_GPIO       GPIO_A
+#define BMP180_SDA_PIN        Pin_7
+
 /* ---- UWB 基站串口（config.h 并入：UART_1 = PA9 TX / PA10 RX，115200）---- */
 #define UWB_UART          UART_1
 #define UWB_UART_INST     USART1
