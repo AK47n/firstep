@@ -18,10 +18,6 @@
 /* 快速平均采样次数（页面 SAMPLES 30 次 × 5ms，us016 快平均先例改 5 次） */
 #define S12SD_ADC_SAMPLES 5u
 
-/* UV 指数档位上限阈值（页面 Get_Ultraviolet_Intensity 原式——[0,上限) 区间，
- * 0 档 = ADC < 227、11 档 = ADC >= 1170） */
-#define S12SD_UV_INDEX_MAX 11u
-
 /* s12sd_init：使能 ADC12_0 转换（薄封装——adc_init 即 MEM0 轮询初始化）。 */
 void s12sd_init(void);
 

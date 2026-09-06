@@ -100,8 +100,6 @@ def test_s12sd_uv_index_threshold_guard():
     source = (MODULES / "s12sd" / "code" / "s12sd.c").read_text(encoding="utf-8")
     header = (MODULES / "s12sd" / "code" / "s12sd.h").read_text(encoding="utf-8")
     assert "S12SD_ADC_SAMPLES" in header
-    assert "S12SD_UV_INDEX_MAX" in header
-    assert "11u" in header
     for threshold in ("227u", "318u", "795u", "1079u", "1170u"):
         assert threshold in source, threshold
     assert "ADC_Channel_0" in source

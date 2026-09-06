@@ -23,9 +23,6 @@
  * 周期，页面时序本就不自洽；us016 快平均先例改 5 次，单次读回到 ~0.3ms 级） */
 #define GP2Y1014_ADC_SAMPLES 5u
 
-/* 12bit ADC 满量程（页面 Filter 入参为 12bit 计数） */
-#define GP2Y1014_ADC_MAX 4095u
-
 /* 页面 Filter 滑动平均窗口（10 值环形缓冲——首次调用以首值填满窗口） */
 #define GP2Y1014_FILTER_WINDOW 10u
 
