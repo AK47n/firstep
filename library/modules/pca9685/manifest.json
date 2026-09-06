@@ -29,6 +29,39 @@
           "required": true
         }
       ]
+    },
+    "stm32": {
+      "files": [
+        "code/pca9685_stm32.c",
+        "code/pca9685_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "软 I2C 总线件（**control 分类**；SDA 方向运行时切换，不占硬件 I2C 外设/TIMER——PWM 由芯片内部 25MHz 振荡器生成，主控只写寄存器；不用母版 ml_i2c，spec 决策①）。页面 = **F1 标准库**（stm32f10x.h + RCC_APB2PeriphClockCmd + Mode_Out_OD/IPU + WriteBit/ReadInputDataBit + <math.h> floor——非 F4 嫌疑页）；电平 = Out_OD + IPU（页面无 SetBits，本实现 init 置高 = 总线空闲）。**页面缺陷清单（已取证 + 修正 + notes + 守卫）**：① **两套角度映射不一致（主缺陷）**：setAngle `off=158+angle*2.2` vs Init `off=145+angle*2.4`（0° → 158 vs 145、180° → 554 vs 577——页面直接控角度无标准脉宽语义）→ 统一照 mspm0（0.5-2.5ms 脉宽→0-180° 单式，50Hz 下 102.4-512 tick，与库内 servo 模块同口径；无 `* 2.2f`/`* 2.4f` 残留）；② **main 60Hz vs 正文 50Hz** → 默认 50Hz（PCA9685_DEFAULT_FREQ_HZ=50；页面演示 60Hz 是搬 Adafruit 例程遗留）；③ **delay_1ms(5)/(100) 库内无** → delay_ms(5)（init 结束等待页面原为 delay_1ms(100) 演示节拍——本实现 init 不做 100ms 演示等待，唤醒 5ms 保留）；④ **NACK 全丢** → wait_ack 超时内部发停止（void API 无失败码，mspm0 同款——差异记录）；⑤ 正文频率公式 `(50+1)` 错误（代码 `25e6/4096/freq-1` 正确——按代码记录）；⑥ Excel FLOOR 注释污染（不落）；⑦ 页面直接控角度（API 保留 set_pwm+set_angle 两级——角度层归一、PWM 层透传，同 mspm0）。换算实现：引脚 gpio_init(OUT_OD) + **SCL init 补 gpio_init(PCA9685_SCL_GPIO, PCA9685_SCL_PIN, OUT_OD)+置高**（批次 3 回修口径——F1 复位浮空输入，ODR 写入无效）；SDA 方向切换 gpio_init(SDA, OUT_OD/IU)（页面原式 OD+IPU）；原语族 pca9685_iic_*（SCL 半周期 2us——页面 5us 按 mspm0 值统一 2us，PCA9685 规格 400kHz+ 裕量足）；API 全对齐 mspm0：init(freq)（复位 MODE1=0x00「没有这步不工作」+ set_freq + 16 路归零——页面 Init 的 angle 参数取消：16 路同时摆角是演示行为，归调用方逐路 set_angle）+ set_pwm(ch,width)（ON=0，12bit，4096=常亮）+ set_angle(ch,angle)（0-180 钳位，0.5-2.5ms 线性映射按当前频率）+ set_freq(freq)（prescale 浮点 round；freq=0 防护为 1）+ set_address(a5)（a5≤0x3F；写地址=(0x40+a5)<<1）。**默认脚 = PA6（SCL）/PA7（SDA）**——页面默认 SDA=PA5/SCL=PA6 不采用（PA5=flame/编码器方向、PA6=总线 SCL）；与 motor MOTOR_A_DIR/DIR2（电机方向）默认重叠：16 路舵机驱动与「带电机方向的小车运动控制」不同框、同选概率最低；**与批次 2 六件共挂同一软 I2C 总线**（⚠️ **地址 0x40 × 批次 2 sht20 0x40 同址**——同选时 pca9685_set_address(1)（0x41，A5 接线）或绑定换独立总线（sht20 地址不可改），spec 裁决，notes 明示不强制；白名单登记）；与既有 I2C_GPIO（PA11/12）/OLED_GPIO（PB8/9）零重叠；同选经引脚绑定消解。与 mspm0 条目分工：mspm0 侧 syscfg 实例 + DL_GPIO（默认 PB6/PB7），本条目 ml_gpio + pin_config.h 宏段（默认 PA6/PA7），API 同名同语义、零交叉改动。\n来源：sources/materials/lckfb-地阔星移植手册/control--16-ch-servo-drive-module.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/control/16-ch-servo-drive-module.html；资料网盘 https://pan.baidu.com/s/1FjoAuJm387bxaZxS6g9HEg + 完整工程 https://pan.baidu.com/s/1n3rW1I138Kf2nFQjmyFb0w?pwd=ugk5；采购 16路PWM Servo 舵机驱动板机器人控制器IIC接口驱动器模块PCA9685 https://detail.tmall.com/item.htm?_u=52t4uge5cc3d&id=624960039615&spm=a1z09.2.0.0.47582e8dqqFD4i）。**未上板**（软 I2C 时序/频率/角度真机验证留后续）。\nwiki-stm32-batch3/06 编译矩阵（2026-09）：stm32 单选生成 → UV4（C:/Keil5 V5.06u7）0 error、0 module warning（exit 0，PASS）。",
+      "kit": "PCA9685 16 路 PWM 舵机驱动板（I2C 接口；默认 0x40，A5..A0 可改址最多 62 板）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/control/16-ch-servo-drive-module.html",
+      "pins": [
+        {
+          "id": "PCA9685_SCL",
+          "type": "i2c_scl",
+          "default": "PA6",
+          "required": true,
+          "macros": [
+            "PCA9685_SCL_GPIO",
+            "PCA9685_SCL_PIN"
+          ]
+        },
+        {
+          "id": "PCA9685_SDA",
+          "type": "i2c_sda",
+          "default": "PA7",
+          "required": true,
+          "macros": [
+            "PCA9685_SDA_GPIO",
+            "PCA9685_SDA_PIN"
+          ]
+        }
+      ]
     }
   }
 }
