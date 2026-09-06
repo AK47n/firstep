@@ -21,6 +21,29 @@
           "required": true
         }
       ]
+    },
+    "stm32": {
+      "files": [
+        "code/relay_stm32.c",
+        "code/relay_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**GPIO 迷你驱动（页面 Set_Relay_Switch + RELAY_OUT 宏完整，10 分钟级）**：⚠️ **页面 = F4 口径，与 F103 标题自相矛盾（F4 嫌疑页甄别样本）**——页面代码 stm32f4xx.h + RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA) + GPIO_Mode_OUT + GPIO_OType_PP + GPIO_PuPd_UP + GPIO_Speed_100MHz，疑似从 F4 板页面复制未迁移；按 F1 换算表逐行翻译（RCC_AHB1PeriphClockCmd→RCC_APB2PeriphClockCmd；GPIO_Mode_OUT+OType_PP+PuPd_UP+Speed_100MHz→GPIO_Mode_Out_PP+Speed_50MHz——F1 无 OType/PuPd 字段；GPIO_WriteBit 同名，F1 标准库存在）；本实现直接走母版 ml_gpio（gpio_init 内部使能 APB2 时钟 + 推挽输出 50MHz + 初始电平），零寄存器/标准库调用。**极性归一化**：API 语义 1=吸合/0=断开；页面 Set_Relay_Switch 0=吸合/1=断开（页面注释「0继电器吸合 1继电器断开」与代码/原理自洽）——对照 Set_Relay_Switch(s) ≡ relay_set(1-s)；RELAY_ON_LEVEL 0u（默认引脚低=吸合——页面「低电平吸合」模块：IN1 低→光耦导通→三极管导通→线圈得电→触点吸合；实物高电平吸合改 1）。初始断开（relay_init 置断开；页面演示「上电即吸合」归生成骨架）。**引脚宏**RELAY_GPIO/RELAY_PIN（pin_config.h 单源）；默认 OUT=**PB4**——页面默认脚 PA2 **不采用**（DEBUG_UART TX 常备件）；与 motor MOTOR_A_ENC_DIR 默认重叠（编码器闭环不同框、同选概率最低；刻意不叠声光/执行件 LED/BUZZER/电机 PWM/方向——继电器+蜂鸣报警/电灯控制为常见组合），同选经引脚绑定消解。页面小瑕疵（记录不修正）：正文「该模块有3个引脚」与规格「管脚数量：4 Pin」矛盾、规格「可控制的交流电压范围：可达30V，10A」应为直流笔误。模块特性（页面说明）：5V 工作、光耦隔离保护 MCU 引脚、三极管驱动、4Pin 2.54mm 排针、可控 250V/10A AC；继电器为感性负载——开关瞬态反电动势与触点电弧注意事项（线圈侧建议续流二极管、触点侧外接负载），真机验证留后续。**未上板**。\nwiki-stm32-batch1/01 编译矩阵（2026-09-06）：stm32 单选生成 → UV4（C:/Keil5 V5.06u7）0 error、0 module warning（exit 0，PASS）；**未上板**（继电器吸合/断开时序、低电平驱动真机验证留后续——模块 5V 供电，IN1 低电平吸合）。\n来源：sources/materials/lckfb-地阔星移植手册/control--relay-module.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/control/relay-module.html；网盘资料 https://pan.baidu.com/s/19jZtYAES7y5n5AlhTYRCSA?pwd=4s00 提取码 4s00 + 旧资料分享 http://pan.baidu.com/share/link?shareid=3950641169&uk=2302102993；采购链接 [1路5V继电器模块 光耦隔离/低电平吸合 智能小车] https://item.taobao.com/item.htm?spm=a1z10.5-c-s.w4002-24706531925.33.886b4450Jc12tZ&id=546724904969）。与 mspm0 条目分工：mspm0 侧为 syscfg GPIO 输出实例 + DL_GPIO API（默认 PA1 叠 I2C_0 scl/GP2Y1014 LED），本条目为 ml_gpio API + pin_config.h 宏段（默认 PB4），API 同名同语义、零交叉改动。",
+      "kit": "1 路 5V 继电器模块（光耦隔离/低电平吸合，4Pin 2.54mm 排针；工作 5V；可控 250V/10A AC + 30V/10A DC；三极管驱动）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/control/relay-module.html",
+      "pins": [
+        {
+          "id": "RELAY_OUT",
+          "type": "gpio_out",
+          "default": "PB4",
+          "required": true,
+          "macros": [
+            "RELAY_GPIO",
+            "RELAY_PIN"
+          ]
+        }
+      ]
     }
   }
 }

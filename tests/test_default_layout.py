@@ -78,6 +78,12 @@ WHITELIST = {
     # ir_beam 默认 PA8 与 pid.GRAY_D5 重叠（ir-beam-module/01）：蓝药丸无空闲
     # 通用 GPIO 可挪——门类/载物检测题目与巡线 PID 不同选，同选经引脚绑定消解
     "PA8": {"pid.GRAY_D5", "ir_beam.IR_BEAM_OUT"},
+    # wiki-stm32-batch1/01-06（立创 wiki 地阔星手册 stm32 线批次 1，六件
+    # GPIO 迷你件）：默认脚全部无法独立（F103C8T6 排针被既有默认占满），
+    # 按「同选概率最低」重叠 + 引脚绑定消解——
+    # relay 默认 PB4 与 motor 编码器方向输入重叠（继电器≠编码器闭环；
+    # 刻意不叠声光/执行件 LED/BUZZER/电机 PWM/方向）
+    "PB4": {"motor.MOTOR_A_ENC_DIR", "relay.RELAY_OUT"},
 }
 
 
