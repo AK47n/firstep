@@ -64,13 +64,15 @@ static void bmp180_iic_stop(void)
     delay_us(5);
 }
 
-static void bmp180_iic_send_ack(uint8_t ack)
+static void bmp180_iic_send_ack(uint8_t is_nack)
 {
     BMP180_SDA_OUT();
     BMP180_SCL(0);
     BMP180_SDA(0);
     delay_us(5);
-    if (!ack) {
+    if (!is_nack) { /* 0 = 应答 / 1 = 非应答（页面 IIC_Send_Ack 原式——
+                     * 先置 0 再按 is_nack 重设，is_nack=0 时同值二次写，
+                     * 按页面原样保留——aht10 同款注释口径） */
         BMP180_SDA(0);
     } else {
         BMP180_SDA(1);
