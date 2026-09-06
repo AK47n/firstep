@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=f142a19e5f779515ea36a2b61cba6e6cba4becf3 -->
+<!-- changelog-auto: last-commit=148c9df30d7321a8027f22b2e98e8c3ba8df5ce4 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -58,6 +58,7 @@
 - 17:59 模块：ws2812 幻彩灯带 stm32 平台条目（wiki-stm32-batch1/06，页面缺陷 4 条修正——反写循环/越界/12MHz 时序弃用/声明无定义 + UV4 矩阵 0 error/0 warning）
 - 18:10 收尾：wiki-stm32-batch1 批次 1 收官——CONTEXT 平台行补录 stm32 线批次 1 块 + 一致性快检 sweep_6_modules 6/6 OK + code-review 两轴结果回填（标准轴 0 硬违反/spec 轴主代理自查闭环）+ pin_config 注释避渲染残留断言 + 矩阵/测试 read(1..4) 全通道
 - 18:41 模块：aht10 温湿度传感器 stm32 平台条目（wiki-stm32-batch2/01 软 I2C 总线件打样：六件共总线 PA6/PA7 定稿 + 页面缺陷 6 条修正——每读后重复复位/init 无应答检查/超时不判失败/注释与值矛盾等 + UV4 矩阵 0 error/0 module warning → verified=true）
+- 18:42 接线与测试：aht10 stm32 宏段（pin_config.h 六件共总线 24 宏一次落位）+ test_module_aht10 双平台 + STM32_MACRO_VALUES/test_default_layout 白名单（PA6/PA7 总线共享组登记）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
