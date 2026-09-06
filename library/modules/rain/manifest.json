@@ -23,6 +23,28 @@
           "required": true
         }
       ]
+    },
+    "stm32": {
+      "files": [
+        "code/rain_stm32.c",
+        "code/rain_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**ADC 薄封装（页面 ADC 序列代码收敛 ml_adc）+ 百分比方向修正（本批核心修正件）**：F1 口径页面（stm32f10x.h + RCC_APB2PeriphClockCmd + GPIO_Mode_AIN/IPU + ADC_RegularChannelConfig + SoftwareStartConvCmd + GetConversionValue）——页面 raindrop_gpio_config + get_adc_value 整体收敛为母版 ml_adc 的 adc_init（内部完成 AIN 引脚配置 + APB2 时钟 + 6 分频 12MHz + 复位校准——等效页面流程；采样时间 239.5cyc vs 页面 55.5cyc，功能等价差异记录）+ ADC_GetConversionValue→adc_get（软件触发轮询）。**ADC 共享组**：默认 AO=PA5（=页面原脚 ADC_Channel_5，用户照页面接线即插即用）；本批 8 件与 flame 共读 PA5（ml_adc 的 adc_get 每次先写 SQR3 选通道，顺序调用互不干扰）；**同一物理脚只能接一件器件，多件同测需外部分路器/分时切换**（mspm0 MEM0 共读同口径；stm32 通道 10/10 全被既有角色占用——同选经引脚绑定消解）。**★ 百分比公式方向修正（核心）**：页面原式 `(1 − value/4095)×100` 与正文 L50「雨水越大，电阻值越小，模拟值转化为的数字值越大」矛盾（照原式雨越大百分比反而越低）；物理取证：两电极间水滴短路导电板 → 电阻下降 → AO 分压升高 → ADC 增大（mspm0 批 9 同款修正），按正文改正向映射 `value/4095×100`——公式 + 注释 + notes 三处一致；**守卫：percent 公式不得出现 `1.0f - `（反向式防回潮），与 photoresistance 的必须出现对仗**。**页面缺陷/修正**：① 页面 3 次 × delay_1ms(100) + get_adc_value 内 delay_ms(20)（≈460ms/次）改 5 次快平均（us016 先例）；② delay_1ms 母版无此原语（ml_delay 无 delay_1ms——flame 先例「换算 delay_ms(20)」，本实现按快平均语义省略）；③ 页面 L97/102「初始化GPIOC/GPIOE」串台（端口实际全 GPIOA——其它板型复制残留）——notes 记录不落码；④ 页面 C99 循环声明改 uint8_t i；⑤ 页面 get_raindrop_do_value / get_adc_value .h 未声明（.h 仅 2 原型）——不落码。DO 数字量未声明：页面 get_raindrop_do_value（PA6，IPU——本批唯一 DO=PA6 页）main 未用且 .h 未声明（LM393 阈值由模块可调电阻控制——mspm0 先例「未用不声明」，需要时经引脚绑定 GPIO 输入自行读取或骨架用 adc 原始值自行判断阈值）。**相对值非绝对值/非线性**：雨滴板脏污/氧化/放置方式改变基线电阻（页面原话「不同的值对应是降雨量的多少毫米，则需要实体测量，雨滴板的放置方式不同结果都不同」——需标定）；若实物分压方向相反（模块批次差异/接法不同）改公式一处即可（反向改回 `1 − value/4095`）。\nwiki 手册来源：sources/materials/lckfb-地阔星移植手册/sensor--rain-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/rain-sensor.html；网盘资料 https://pan.baidu.com/s/10bjbsmcOh2N7YGDS3PquPw 提取码 psfm；移植成功案例 https://pan.baidu.com/s/1NovN1-zz2BUPAmmYkJV5aA?pwd=6aqg 提取码 6aqg）。改造要点：去掉 main.c 演示与 printf；函数名规范化（rain_init/read_percent，去 raindrop_config/get_adc_value/get_raindrop_percentage_value 命名）；**百分比公式方向修正为正向映射（正文取证）并注释说明**；页面 ADC 序列收敛 ml_adc；DO 宏未用不声明；页面 3 次 × 100ms 间隔改 5 次快平均；delay_ms(20)/delay_1ms 去除。\nwiki-stm32-batch5/05 编译矩阵（2026-09-06）：stm32 单选生成（依赖 adc 展开）→ UV4（C:/Keil5 V5.06u7）0 error、0 module warning（exit 0，PASS）；未上板（换算方向/真机验证留后续）。",
+      "kit": "雨滴传感器模块（4Pin：VCC/GND/DO/AO；工作 3.3-5V；雨滴板（镍质梳状电极，线形涂覆）+ LM393 控制板（PWR-LED + DO-LED + 蓝色可调灵敏度电阻）；AO = 雨滴板分压模拟量输出（雨水越大电阻越小、电压越高——页面正文）、DO = LM393 阈值数字量（无雨高/滴上低））",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/rain-sensor.html",
+      "pins": [
+        {
+          "id": "RAIN_AO",
+          "type": "adc",
+          "default": "PA5",
+          "required": true,
+          "macros": [
+            "RAIN_AO_CH"
+          ]
+        }
+      ]
     }
   }
 }
