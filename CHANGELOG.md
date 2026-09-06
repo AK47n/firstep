@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=59e419eff9e9009224ede63790578017a6240bc8 -->
+<!-- changelog-auto: last-commit=88b1d73a2bdb85f43e6b37f4f5853f9915d37242 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -63,6 +63,7 @@
 - 18:49 模块：sht20 温湿度传感器 stm32 平台条目（wiki-stm32-batch2/03：软 I2C 总线件——六件共总线 PA6/PA7 + 页面缺陷 5 类修正（裸轮询无上限/状态位&0xFFFC 掩码/0xE3 0xE5 注释矛盾/printf 后继续/char 死变量）+ UV4 矩阵 0 error/0 module warning → verified=true）
 - 18:53 模块：sht30 温湿度传感器 stm32 平台条目（wiki-stm32-batch2/04：软 I2C 总线件 + CRC8——六件共总线 PA6/PA7 + 页面缺陷 6 类修正（ADS1115 串台/extern 泄漏/命令表 0x2126 分歧/u8 宏污染/char 死变量/校验失败 printf）+ UV4 矩阵 0 error/0 module warning → verified=true）
 - 18:56 模块：at24c02 EEPROM 存储器 stm32 平台条目（wiki-stm32-batch2/05：软 I2C 总线件·读写件——六件共总线 PA6/PA7 + 页面缺陷 6 类修正（地址宏名颠倒 READ/WRITE/应答全丢弃/48 66 注释/写周期 5ms 未封装/页写连续读代码未实现）+ UV4 矩阵 0 error/0 module warning → verified=true）
+- 18:59 模块：ags10 有害气体传感器 stm32 平台条目（wiki-stm32-batch2/06：软 I2C 总线件 + CRC8——六件共总线 PA6/PA7 收口 + 页面致命缺陷修正（读地址重试条件写反 timeout>=50/timeout < AGS10_RETRY_MAX、返回码与 TVOC 值混用→出参+状态码、delay_1us/1ms 库内不存在改写、规格 ≤15kHz 分歧记录）+ UV4 矩阵 0 error/0 module warning → verified=true）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
