@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=87360a702c1f55e5035199c1dcfca47f1656e8b3 -->
+<!-- changelog-auto: last-commit=d018fe80670f09e17e4b8ef9990acf738990dae3 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -20,6 +20,7 @@
 - 01:03 批次8 code-review 收尾修正：flame.h 头注释通道数快照同步（七通道 endAdd=6→八通道 endAdd=7——soil 开 MEM7 后）；human_ir/microwave_radar manifest notes 残留「PB8/PA0」改「PB8/PA31」（PA0/PA1 不可作 GPIO 输入实证同步）；soil.c 精度措辞补「无剩余 ADC 脚」限定；词表预算注释日期勘误（budget.py/llm.py 2026-09-09→2026-09-06）；spec 测试决策段 PA0 2→3 改为 PA31 4→5 + PA0 保持 2（与实现/冲突矩阵定稿一致）
 - 10:48 批次9/01 光敏电阻传感器模块入库（mspm0）：ADC 模拟量薄封装（依赖 adc 模块共享 ADC12_0 MEM0 槽位、默认 PA24——无新通道/实例/无新 \ 行，mq2 方式）；photoresistance_init + photoresistance_read_percent 出 0-100% 亮度百分比（页面原式反向映射（1−value/4095）×100——页面备注「最亮 100 最暗 0」自洽：光越强阻值越小、分压 ADC 值越小、百分比越高；页面 10 次累加改 5 次快平均）；页面 ADC 中断（IRQHandler + gCheckADC）改经 adc 模块 API 轮询（共享实例强符号唯一）；页面 DO（LM393 阈值）宏未用不声明；notes 写明非线性/需标定 + 与库内 bh1750（数字光照）分工（光敏=廉价模拟件、非线性、需标定）+ 页面工作电流 1MA 按 1mA 理解；词表感知传感器 +光敏电阻传感器；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）
 - 10:53 批次9/02 雨滴传感器模块入库（mspm0）：ADC 模拟量薄封装（依赖 adc 模块共享 ADC12_0 MEM0 槽位、默认 PA24——无新通道/实例，mq2 方式）；rain_init + rain_read_percent 出 0-100% 雨量百分比（**正向映射** value/4095×100——雨越大百分比越高；页面 get_raindrop_percentage_value 原式 (1−value/4095)×100 与页面正文「雨水越大→ADC 值越大」矛盾（照原式雨越大百分比反而越低，疑同光敏页反向式复制残留），按「强度=水分覆盖=ADC 值关系」取证以正文为准修正为正向映射，notes 记录修正与依据）；页面 3 次×100ms 间隔与 get_adc_value 内 delay_ms(20) 去除改 5 次快平均；页面 ADC 中断改经 adc 模块 API 轮询（共享实例强符号唯一）；页面 DO（LM393 阈值）宏未用不声明；notes 写明非线性/干净度影响（基线电阻随脏污/氧化/放置方式变化——相对值非精标，页面原话「降雨量多少毫米需实体测量」）；词表感知传感器 +雨滴传感器；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）
+- 10:53 批次9/04 S12SD 紫外线传感器模块入库（mspm0）：ADC 模拟量薄封装（依赖 adc 模块共享 ADC12_0 MEM0 槽位、默认 PA24——无新通道/实例，mq2 方式）；s12sd_init + s12sd_read_uv_index 出 0-11 级 UV 指数（页面 Get_Ultraviolet_Intensity 阈值表原式：<227→0、227-317→1、318-407→2、408-502→3、503-605→4、606-695→5、696-794→6、795-880→7、881-975→8、976-1078→9、1079-1169→10、>=1170→11——0 低 11 高）；页面 SAMPLES 30×5ms 改 5 次快平均；页面 ADC 中断改经 adc 模块 API 轮询（共享实例强符号唯一）；notes 写明量程/UV-A 波段（检测波长 240-370nm——UV-B/UV-C 不响应、测量角度 130°、温漂 0.08%/℃、工作 2.7-5V/1mA、板载 LM358 放大 1% 精度）与档位标定限制（页面实测室内 0 级——户外/遮挡/器件差异会偏移）；词表感知传感器 +紫外线传感器；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
