@@ -163,10 +163,13 @@ static uint8_t sht30_write_mode(uint16_t dat)
 
 void sht30_init(void)
 {
-    /* 引脚配置 = 页面 SHT30_GPIO_Init 原式（推挽输出——页面无 SetBits，
-     * 总线空闲电平由 Start 序列拉起——页面原样）；随后周期模式命令 */
-    gpio_init(SHT30_SCL_GPIO, SHT30_SCL_PIN, OUT_PP);
+    /* 引脚配置：SCL 按批次 3/01 回修口径统一为开漏输出 + 置高（F1 复位后
+     * 浮空输入、ODR 写入无效——总线空闲电平必须显式置高；页面原式为推挽
+     * 输出无 SetBits，差异记录 notes）；SDA 保持页面原式推挽+浮空（全批
+     * 唯一一派，工作前提 = 模块自带 1k-10k 上拉）。随后周期模式命令 */
+    gpio_init(SHT30_SCL_GPIO, SHT30_SCL_PIN, OUT_OD);
     gpio_init(SHT30_SDA_GPIO, SHT30_SDA_PIN, OUT_PP);
+    gpio_set(SHT30_SCL_GPIO, SHT30_SCL_PIN, 1);
     (void)sht30_write_mode(SHT30_CMD_PERIODIC); /* 周期模式：每秒 1 次高重复 */
 }
 

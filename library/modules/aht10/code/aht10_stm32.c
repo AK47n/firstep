@@ -123,6 +123,11 @@ static uint8_t aht10_iic_read_byte(void)
 
 void aht10_init(void)
 {
+    /* ⚠️ 回修（批次 3/01）：SCL 必须显式 gpio_init 为开漏输出 + 置高——F1
+     * 复位后 GPIO 为浮空输入，ODR 写入无效（页面原式只对 SDA 做方向切换，
+     * SCL 从未初始化——真机总线必死，批次 2 编译绿未上板未暴露）。 */
+    gpio_init(AHT10_SCL_GPIO, AHT10_SCL_PIN, OUT_OD);
+    AHT10_SCL(1);
     delay_ms(50); /* 上电/复位后等待稳定 */
     aht10_iic_start();
     aht10_iic_send_byte(0x70); /* 器件地址 0x38 << 1 + 写 */

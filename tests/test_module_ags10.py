@@ -222,3 +222,15 @@ def test_ags10_stm32_code_guards():
     assert "AGS10_RETRY_MAX" in code_only and "AGS10_RETRY_MAX" in h
     assert "uint8_t ags10_read(uint32_t *voc_ppb)" in h
     assert "return 1;" in code_only and "return 4;" in code_only
+
+
+def test_ags10_stm32_scl_init_guard():
+    """SCL 初始化防回潮（批次 3/01）：init 必须含 gpio_init(AGS10_SCL_GPIO,
+    AGS10_SCL_PIN, OUT_OD) + 置高——F1 复位后浮空输入、ODR 写入无效，
+    不初始化 = 总线死（批次 2 六件 SCL 从未初始化的真 bug 回修）。"""
+    c = (MODULES / "ags10" / "code" / "ags10_stm32.c").read_text(encoding="utf-8")
+    code_only = strip_comments(c, keep_preprocessor=True)
+    assert re.search(
+        r"gpio_init\(AGS10_SCL_GPIO, AGS10_SCL_PIN, OUT_OD\)", code_only
+    )
+    assert "AGS10_SCL(1)" in code_only
