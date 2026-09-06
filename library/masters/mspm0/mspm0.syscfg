@@ -584,6 +584,26 @@ BMP180.associatedPins[1].direction    = "OUTPUT";
 BMP180.associatedPins[1].initialValue = "CLEARED";
 BMP180.associatedPins[1].pin.$assign  = "PA24";
 
+// MS5611 高精度气压/温度软 I2C（ms5611 模块：SCL 输出 / SDA 双向运行时切换；
+// 位操作不占硬件 I2C 外设/TIMER，照 SHT30/SGP30/BMP180 先例。默认 SCL=PA28 /
+// SDA=PA31——低频采集池（IMU601/FINGERPRINT_UART/HX711/SHT30/JY61P/
+// MICROWAVE/TP_XPT2046/OLED_SPI——姿态/称重/身份/温湿度/微波/显示，jy61p
+// 同池先例；MS5611 高精度件与姿态/飞行器定高同框概率最高——池内重叠、同选
+// 时经引脚绑定消解；刻意与互替件 bmp180 错开），同选时经引脚绑定消解；
+// PA0/PA1 不可作软 I2C SDA（既定事实④——2026-09-06 SysConfig CLI 实证仅禁
+// 输入；软 I2C 需板上/模块自带上拉）
+const MS5611 = GPIO.addInstance();
+MS5611.$name = "MS5611";
+MS5611.associatedPins.create(2);
+MS5611.associatedPins[0].$name        = "SCL";
+MS5611.associatedPins[0].direction    = "OUTPUT";
+MS5611.associatedPins[0].initialValue = "CLEARED";
+MS5611.associatedPins[0].pin.$assign  = "PA28";
+MS5611.associatedPins[1].$name        = "SDA";
+MS5611.associatedPins[1].direction    = "OUTPUT";
+MS5611.associatedPins[1].initialValue = "CLEARED";
+MS5611.associatedPins[1].pin.$assign  = "PA31";
+
 // TTP224 4 路电容触摸按键（ttp224 模块：OUT1-4 输入 + 内部上拉——页面
 // 「上拉输入」；电平直读无去抖/无 GPIO 中断（GROUP1 仍被 motor 编码器独占，
 // 页面同为电平直读）。默认 OUT1=PA22 / OUT2=PA25 / OUT3=PA26 / OUT4=PA27——

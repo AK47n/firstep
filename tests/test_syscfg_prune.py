@@ -159,6 +159,8 @@ def test_prune_shared_instance_kept_by_any_consumer():
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "AS32_UART")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["bmp180"]), "BMP180")
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "BMP180")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["ms5611"]), "MS5611")
+    _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "MS5611")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["mq3"]), "ADC12_0")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["mq4"]), "ADC12_0")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["mq6"]), "ADC12_0")
