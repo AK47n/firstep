@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=3fa5a448cfdfad8651c916354aed94bc5edc6007 -->
+<!-- changelog-auto: last-commit=42c6faa9318e05765a1e464688894dcdfe98c68f -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -108,6 +108,7 @@
 - 22:20 模块：ms1100 VOC 气体检测传感器 stm32 平台条目（wiki-stm32-batch6/07：ADC 薄封装件——页面 ADC 序列收敛 ml_adc + 默认 AO=PA5（页面原脚即共读点，ADC 共享组）+ **页面无百分比函数——由 demo 电压式 value/4095×3.3 推导归一 read_percent（Vref 3.3V，notes 记录推导）** + 正向 value/4095×100（VOC/甲醛/苯系相对值非 ppm 精标；预热 3-5 分钟）+ DOUT 未用不声明（4K 可调电阻比较）+ 与 sgp30/ags10 数字量 VOC 分工 + SAMPLES 30×3ms→5 快平均 + UV4 矩阵 0/0 → verified=true）
 - 22:21 工单：wiki-stm32-batch6/01 mq3 实施完成回填（结论 + 状态 resolved）
 - 22:21 工单：wiki-stm32-batch6/02 mq4 实施完成回填（结论 + 状态 resolved）
+- 22:21 工单：wiki-stm32-batch6/03 mq6 实施完成回填（结论 + 状态 resolved）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
