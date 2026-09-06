@@ -119,6 +119,11 @@ def test_slot_path_matches_spot_cases():
         ("pwm", "PWMAB_C0", "motor", "PWMAB.peripheral.ccp1Pin", False),
         ("pwm", "PWMAB_C1", "motor", "PWMAB.peripheral.ccp1Pin", True),
         ("pwm", "DCC_100_PWM2_C0", "step_motor", "DCC_100_PWM2.peripheral.ccp0Pin", True),
+        # 同 TIMG 双 PWM 实例同脚区分（wiki-modules-batch10/03：DCC_100_PWM2
+        # 与 L298N_PWM 同 TIMG12/PA14——按 slug 反查实例名区分）
+        ("pwm", "L298N_PWM_C0", "l298n", "L298N_PWM.peripheral.ccp0Pin", True),
+        ("pwm", "L298N_PWM_C0", "l298n", "DCC_100_PWM2.peripheral.ccp0Pin", False),
+        ("pwm", "DCC_100_PWM2_C0", "step_motor", "DCC_100_PWM2.peripheral.ccp0Pin", True),
     ]
     for decl_type, role_id, slug, path, expected in cases:
         assert syscfg_path_matches(decl_type, role_id, slug, path) is expected, (

@@ -22,7 +22,9 @@ from __future__ import annotations
 # 独占（批次 1 仅单选编译实证，从未多实例同选）；同选且未换实例 = SysConfig
 # 生成失败，消解 = 引脚绑定换实例（其余 UART0/1/3 同样被占，先例 DEBUG+UWB）。
 # FINGERPRINT_UART 默认 UART0（与 IMU601 同外设默认，同选时经引脚绑定换实例
-# 消解，_receive_response 轮询无 IRQHandler）；语音模块（jq8900/syn6288）
+# 消解，_receive_response 轮询无 IRQHandler）；OPENMV4_UART 默认 UART1
+# （与 DIGIT_UART 同外设同脚——OpenMV4 与 K230 视觉互替，同选时经引脚绑定
+# 换实例/换脚消解，帧解析轮询无 IRQHandler）；语音模块（jq8900/syn6288）
 # 走软 UART 单发 TX（GPIO 位操作，不占 UART 实例）。
 INSTANCE_CONSUMERS: dict[str, tuple[str, ...]] = {
     "PWMAB": ("motor",),
@@ -43,6 +45,10 @@ INSTANCE_CONSUMERS: dict[str, tuple[str, ...]] = {
     "DHT11": ("dht11",),
     "DS18B20": ("ds18b20",),
     "SHT30": ("sht30",),
+    "SHT20": ("sht20",),
+    "JY61P": ("jy61p",),
+    "L298N_PWM": ("l298n",),
+    "L298N": ("l298n",),
     "SGP30": ("sgp30",),
     "AGS10": ("ags10",),
     "TTP224": ("ttp224",),
@@ -69,6 +75,7 @@ INSTANCE_CONSUMERS: dict[str, tuple[str, ...]] = {
     "HC05_UART": ("hc05",),
     "FINGERPRINT_UART": ("fingerprint",),
     "FINGERPRINT": ("fingerprint",),
+    "OPENMV4_UART": ("open_mv4",),
     "ZIGBEE_UART": ("zigbee_uart", "zigbee_uart_key", "zigbee_link"),
     "OLED": ("oled",),
     "I2C_0": ("ml_mpu6050",),

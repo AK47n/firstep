@@ -1,0 +1,38 @@
+{
+  "slug": "l298n",
+  "description": "L298N 大电流电机驱动（mspm0 纯驱动，ADR 0009）：方向 + 调速形态（页面 AO_Control 原样——IN1/IN2 双通道 PWM + EN 使能 GPIO，三脚一组），l298n_init + l298n_set_duty + l298n_set_direction；独立模块不并入 motor：适用于大电流/多路电机、无编码器闭环场景（平衡车/推车/闸机/重载底盘）。",
+  "dependencies": [],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/l298n.c",
+        "code/l298n.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg：PWM 实例 L298N_PWM（TIMG12、clockPrescale=1、timerCount=2000——32MHz BUSCLK/2000 ≈ 16kHz PWM 频率；C0=PA14/C1=PB24，宏 GPIO_L298N_PWM_C0_IDX/C1_IDX——motor PWMAB 命名先例）+ GPIO 实例 L298N（EN 输出初始 SET = 使能高,宏 L298N_EN_PIN/PORT）。与 DCC_100_PWM2（step_motor 步进脉冲）默认同 TIMG12 外设/PA14 脚：**L298N 与步进驱动互替、同选概率最低故叠（同选时经引脚绑定换实例/换脚消解——TIMGx 同族迁移先例，裁剪后独占编译实测）**；C1=PB24 与 STEP_MOTOR RST2/SR04 TRIG/HC05 KEY/AT24C02 SCL/mq5 重叠——大电流驱动与步进/测距/存储/蓝牙切换/气体不同框、同选概率最低故叠此脚；EN=PA27 与 HUIDU R2/ADC12_0 adcPin0（ir_distance MEM3）/TTP224 OUT4 重叠——使能脚与 8 路灰度巡线（巡线车惯用轻量 TB6612，与大电流驱动不同框）/模拟测距/触摸面板不同框、同选概率最低故叠此脚；**刻意与 motor 默认 10 脚（PA12/PA13/PB9/PA18/PB18/PA7/PA16/PA17/PB19/PB20）错开——两驱动（TB6612 小电机 + L298N 大电机）同选概率低但可能并排使用，默认即不撞**；也不叠显示（PB9/PA18/PB18/PB2/PB3）、无线（PA8/PA9/PA23/PA24）、温湿度/光照（PA12/PA13/PA28/PA31/PB6/PB7）、语音（PB19/PB20）、蜂鸣（PA15）——车类惯配组合；同选时经引脚绑定消解；地猛星 2×20 排针 31 个 IO 全被默认布局占用（IR_BEAM/PA8 先例）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/control--l298n-motor-drive-module.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/control/l298n-motor-drive-module.html；模块代码 https://pan.baidu.com/s/13XA0QLbT3L-NPImYaDzyxw?pwd=a8ee 提取码 a8ee；采购链接 https://item.taobao.com/item.htm?id=691582716758）。改造要点：去掉 main.c 演示与 printf；AO_Control(dir, speed) 按库风格拆分为 l298n_set_direction(dir)（1 正转/0 反转——页面 dir 语义）+ l298n_set_duty(duty)（0~per-1，限幅 L298N_PWM_PERIOD-1——页面「speed 范围 0~per-1」语义；内部保留 duty 状态、方向切换重应用，两函数组合与页面 AO_Control 逐拍等价）；页面 DL_TimerG_setCaptureCompareValue 按 motor.c 先例用 DL_Timer_setCaptureCompareValue（SDK 2.11 同义 API——motor 编译实测）；页面未实现的 EN 使能（页面「5V 使能高电平有效，常态跳线帽接 VCC；PWM 调速时取下跳线帽」——取帽后 GPIO 驱动，l298n_init 置高 + 初始双通道 0 + 计数器启动）。**范围说明**：页面仅实现 A 端口（IN1/IN2，「IN3/IN4 内容类似」），B 端口（IN3/IN4/ENB）同构扩展留后续/多实例机制——单件 = L298N 双 H 桥 1 路电机（A 端口）；页面规格：驱动 5-24V、持续 2A（峰值 3A）、逻辑 5V/36mA、额定 25W、HV 接线 7-12V 用板载 78M05、>12V 断板载 5V 使能外接逻辑电源——页内原文（接线细节记 notes 不落码）；L298N 无编码器脚（无闭环 API——速度闭环需另配编码器 + pid 模块，notes 说明）。**与库内 motor(TB6612) 分工**：motor = TB6612 1.2A 轻量双路驱动（8 脚 + 4 编码器脚、带编码器闭环 API motor_set_duty/motor_set_direction/motor_encoder_read——循迹/PID 车首选）；l298n = 2A 大电流双 H 桥（三脚一组、压降 ~1.5V、发热大需散热片、5V 逻辑电平输入、无细分）——**大电流/多路电机、无编码器闭环场景首选**（重载底盘/推车/闸机/平衡车不带码盘），两件同选互不冲突（默认脚各不相同、不同 TIMG 外设）。\nwiki-modules-batch10/03 编译矩阵：单选生成 → SysConfig CLI（PWM 实例 TIMG12 + PA14/PB24 + EN PA27 合法性实证）→ gmake 0 error、0 warning（PASS）；未上板（PWM 频率/接线真机验证留后续）。",
+      "kit": "L298N 双路电机驱动板（ST L298N 双 H 桥，驱动 5-24V/持续 2A（峰值 3A）、逻辑 5V，双路直流或 1 台两相/四相步进）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/control/l298n-motor-drive-module.html",
+      "pins": [
+        {
+          "id": "L298N_PWM_C0",
+          "type": "pwm",
+          "default": "PA14",
+          "required": true
+        },
+        {
+          "id": "L298N_PWM_C1",
+          "type": "pwm",
+          "default": "PB24",
+          "required": true
+        },
+        {
+          "id": "L298N_EN",
+          "type": "gpio_out",
+          "default": "PA27",
+          "required": true
+        }
+      ]
+    }
+  }
+}

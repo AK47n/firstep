@@ -1,0 +1,34 @@
+{
+  "slug": "jy61p",
+  "description": "JY61P 六轴姿态传感器驱动（mspm0 纯驱动，ADR 0009）：软 I2C 位操作读取（不占硬件 I2C 外设，2 GPIO + SDA 方向运行时切换），器件内卡尔曼融合直接输出三轴角度，jy61p_init 器件初始化序列（Z 轴/角度归零）+ jy61p_read_angles 出 roll/pitch/yaw（°，±180°）与 jy61p_read_raw 原始数据（可选）；适用于平衡车姿态、云台角度、姿态预警/倾斜报警等赛题功能。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/jy61p.c",
+        "code/jy61p.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg GPIO 实例 JY61P（SCL 宏 JY61P_SCL_PIN / SDA 宏 JY61P_SDA_PIN / IOMUX 宏 JY61P_SCL_IOMUX / JY61P_SDA_IOMUX——SysConfig 命名 <实例>_<引脚名>_IOMUX，aht10 编译矩阵实测；SCL/SDA 均 OUTPUT 初值 CLEARED）。软 I2C：SDA 方向运行时切换（JY61P_SDA_OUT/IN 宏，照 AHT10/SHT30 先例；模块板自带上拉——页面模块 12Pin 排针 IIC 两线直连）；位操作半周期 5us ≈ 100kHz 级（sht30 同款归一），延时走 delay 模块，不占 TIMER/硬件 I2C 外设。默认 SCL=PA28 / SDA=PA31——与 IMU601 UART0（imu_uart 姿态互替）、FINGERPRINT_UART（身份）、HX711（称重）、SHT30 SDA（温湿度）、MICROWAVE（微波雷达）重叠：姿态测量与身份/称重/温湿度/微波采集不同框、同选概率最低（姿态惯配双电机/舵机/显示/无线——刻意不叠 motor 10 脚（PA12/PA13/PB9/PA18/PB18/PA7）与编码器 4 脚（PA16/PA17/PB19/PB20）、servo PA7、step_motor PB24/PB6/PB7/PB8、显示 max7219 PB9/PA18/PB18、OLED PB2/PB3、无线 PA8/PA9/PA23/PA24/PA26/PA25、触摸/摇杆 PA22-27/PA9、语音 PB19/PB20、气体 PB18/PA14/PB9/PA18/PB20/PB24、报警 PA15、红外发射/接收 PA0/PA26——平衡车/云台惯配组合默认即不撞；也不叠 I2C_0 硬 I2C 脚 PA0/PA1——软 I2C×硬 I2C 同脚 = 物理冲突分组，批次 5 先例），同选时经引脚绑定消解；地猛星 2×20 排针 31 个 IO 全被默认布局占用（IR_BEAM/PA8 先例）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--jy61p-measurement-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/jy61p-measurement-sensor.html；移植成功案例 https://pan.baidu.com/s/1Rh_qMSrTtxkwjKnj9LBO1w?pwd=5t75 提取码 5t75；上位机 https://wit-motion.yuque.com/wumwnr/aqvq6y/qngktvx5grz81zkq；产品规格书/寄存器表 https://wit-motion.yuque.com/wumwnr/docs/agok0k 与 https://wit-motion.yuque.com/wumwnr/ltst03/vl3tpy）。改造要点：去掉 main.c 演示与 printf/GYRO_DEBUG 调试块；get_angle → jy61p_read_angles（roll/pitch/yaw 出参——页面返回 YawZ 单值形态改三轴出参；页面 Gyro_Structure 全局收敛出参）；jy61pInit → jy61p_init（初始化序列原样：解锁→Z 轴归零→保存→解锁→角度归零→保存，各步 200ms（页面「官方建议 3s、实验 200ms 也行」取页面值）；写入失败返回值统一约定 0=成功（页面 writeDataJy61p 注释「返回 0 则写入成功」与代码返回 1 矛盾——按代码与页首注释 1=成功统一，服务函数失败返回 1）；writeDataJy61p 私有化为寄存器写原语（jy61p_write_reg）；readDataJy61p 保留 → jy61p_read_angles/jy61p_read_raw 使用（0x3D 起 6 字节 LSB 先）；换算保留页面 get_angle 原式（raw/32768.0×180.0 + ±180° 回绕——页面 unsigned 原式：0x8000 恰值 180 不分 ±180，页面自一致按原样，notes 记录）；IIC 原语静态化（jy61p_iic_start/stop/send_ack/wait_ack/send_byte/read_byte）；页面 `YAW_REG_ADDR 0x3F` 未用且标注有误（0x3F 为 Pitch 低字节）不声明（页面 DO 宏未用不声明同例）。**人工复核修正**：页面 I2C_WaitAck 在 while 轮询前未拉高 SCL（SDA 采样须在 SCL 高电平窗口——页面靠从机提前拉低 SDA 也能工作、真机演示可用），本件照 sht20/sht30 正确版实现（先拉高 SCL 再采样、10×5us 超时），行为等价、真机留验证。与库内同类分工：**ml_mpu6050（硬 I2C 原始数据——需主控自行 DMP/四元数融合；I2C_0 硬 I2C PA0/PA1）、imu_uart（UART 601 帧原始数据 + 主控换算，UART0 PA28/PA31）——JY61P 是模块化姿态传感器，器件内卡尔曼融合直接出角度（200Hz 回传速率、±180°），取用姿态角场景首选**；同选互不冲突（ml_mpu6050 走硬 I2C 其它脚、imu_uart 走 UART 实例、本件软 I2C 默认脚各自不同——与 imu_uart 同选时注意本件默认 PA28/PA31 重叠，经引脚绑定解消）。\nwiki-modules-batch10/02 编译矩阵：单选生成 → SysConfig CLI → gmake 0 error、0 warning（PASS）；未上板（软 I2C 时序/初始化序列/运算换算真机验证留后续）。",
+      "kit": "WIT-MOTION JY61P 三维姿态测量传感器（12Pin I2C/串口双方式，5V 供电，器件内卡尔曼融合，200Hz 回传，默认 I2C 地址 0x50）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/jy61p-measurement-sensor.html",
+      "pins": [
+        {
+          "id": "JY61P_SCL",
+          "type": "gpio_out",
+          "default": "PA28",
+          "required": true
+        },
+        {
+          "id": "JY61P_SDA",
+          "type": "gpio_out",
+          "default": "PA31",
+          "required": true
+        }
+      ]
+    }
+  }
+}

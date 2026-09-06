@@ -463,6 +463,43 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # ——ir_remote_tx 先例）+ GP2Y1014 LED（gp2y1014au 默认脚——粉尘监测
         # 与姿态采集不同框、同选概率最低故叠此脚（PA1 同型经编译矩阵 CLI 实证；
         # LED 驱动为器件必需——薄封装仅指 ADC），同选时经引脚绑定消解）
+        "PA16": 4,  # DC_MOTOR 编码器 AA + RC522 MOSI（rc522 默认脚）+ ADS1115 SCL
+        # （同上）+ SHT20 SCL（sht20 默认脚——温湿度与闭环车/读卡/外扩多路模拟
+        # 采集不同框、同选概率最低故叠此脚（刻意不叠温湿度互替件与光照件，
+        # 环境站常见搭配），同选时经引脚绑定消解；wiki-modules-batch10/01）
+        "PA17": 4,  # DC_MOTOR 编码器 AB + RC522 MISO（同上）+ ADS1115 SDA
+        # （同上）+ SHT20 SDA（同上）
+        "PA28": 5,  # IMU601 TX + HX711 SCK + FINGERPRINT_UART TX + SHT30 SCL
+        # （同上）+ JY61P SCL（jy61p 默认脚——姿态测量与身份/称重/温湿度/微波
+        # 采集不同框、同选概率最低故叠此脚（姿态惯配双电机/舵机/显示/无线，
+        # 刻意不叠），同选时经引脚绑定消解；wiki-modules-batch10/02）
+        "PA31": 6,  # IMU601 RX + HX711 DT + FINGERPRINT_UART RX + SHT30 SDA
+        # + MICROWAVE OUT（同上）+ JY61P SDA（同上）
+        "PA14": 6,  # DCC_100_PWM2 ccp0Pin（step_motor 默认脚）+ WS2812 IN
+        # + RC522 SCK + AGS10 SDA + ADC12_0 adcPin12（soil 默认脚）+ L298N_PWM
+        # ccp0Pin（l298n 默认脚——大电流驱动与步进（互替）/灯带/读卡/气体不同
+        # 框、同选概率最低故叠此脚（刻意与 motor 默认 10 脚错开——两驱动可能
+        # 并排使用），同选时经引脚绑定消解；wiki-modules-batch10/03）
+        "PB24": 6,  # STEP_MOTOR RST2 + SR04 TRIG + HC05 KEY + AT24C02 SCL
+        # + ADC12_0 adcPin5（mq5 默认脚）+ L298N_PWM ccp1Pin（l298n 默认脚——
+        # 同上，与 DCC_100_PWM2 同 TIMG12 外设：L298N 与步进驱动互替、同选
+        # 概率最低故叠，同选时经引脚绑定换实例/换脚消解）
+        "PA27": 4,  # HUIDU R2 + ADC12_0 adcPin0（ir_distance 默认脚）+ TTP224 OUT4
+        # + L298N EN（l298n 默认脚——使能脚与 8 路灰度巡线（巡线车惯用轻量
+        # TB6612，与大电流驱动不同框）/模拟测距/触摸面板不同框、同选概率最低
+        # 故叠此脚，同选时经引脚绑定消解；wiki-modules-batch10/03）
+        "PA8": 5,   # DIGIT_UART TX + IR_BEAM OUT + HC05 STATE + MLX90614 SDA
+        # + OPENMV4_UART TX（open_mv4 默认脚——OpenMV4 与 K230 视觉互替、
+        # 同选概率最低故叠此脚（页面原接线 PA8/PA9 附加串口 1），同选时经引脚
+        # 绑定换实例/换脚消解；wiki-modules-batch10/04）
+        "PA9": 5,   # DIGIT_UART RX + JOYSTICK SW + NRF24L01 MISO + MLX90614 SCL
+        # + OPENMV4_UART RX（同上）
+        "UART1": 2,  # DIGIT_UART 与 OPENMV4_UART 默认同外设（OpenMV4 与 K230
+        # 视觉互替、同选概率最低故叠——同选时经引脚绑定换实例/换脚消解，
+        # 单选裁剪后独占；UART 实例上限 4——UART 类 4 件以上同选 = CLI 拒绝）
+        "TIMG12": 2,  # DCC_100_PWM2（step_motor）与 L298N_PWM（l298n）默认
+        # 同外设——L298N 与步进驱动互替、同选概率最低故叠，同选时经引脚绑定
+        # 换实例消解（TIMGx 同族迁移先例；裁剪后独占编译实测）
     }
 
 
@@ -1062,12 +1099,14 @@ def test_shared_groups_marks_gpio_default_overlap_conflict():
 def test_shared_groups_marks_same_sensor_instance_share():
     """同一器件实例（HUIDU 灰度 8 路：huidu/pid/xunji 同脚读数）→ 合法共享。
     纯灰度组 PA27：默认已被 ir_distance（wiki-modules-batch2/04）与
-    TTP224 OUT4（wiki-modules-batch6/04）占用——红外测距/触摸按键与 8 路灰度
-    巡线同选概率最低叠此脚，测试把两者绑走恢复纯灰度组（原默认 PA27 纯灰度
-    性质随新默认脚消失，见下一测试）。"""
+    TTP224 OUT4（wiki-modules-batch6/04）、l298n EN（wiki-modules-batch10/03）
+    占用——红外测距/触摸按键/大电流驱动使能与 8 路灰度巡线同选概率最低叠此
+    脚，测试把三者绑走恢复纯灰度组（原默认 PA27 纯灰度性质随新默认脚消失，
+    见下一测试）。"""
     result = _auto("mspm0", {
         "ir_distance.IR_DIST_OUT_CH3": "PA14",
         "ttp224.TTP224_OUT4": "PB2",
+        "l298n.L298N_EN": "PA15",
     })
 
     group = next(

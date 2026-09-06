@@ -52,6 +52,10 @@ UART_SWAP_BINDINGS = {
     "coord_detect.COORD_DETECT_UART_RX": "PA31",
     "fingerprint.FINGERPRINT_TX": "PA8",
     "fingerprint.FINGERPRINT_RX": "PA9",
+    # 批次 10 open_mv4（默认 UART1/PA8/PA9——与 digit_uart 同默认槽位）——
+    # 换位场景按「同默认脚须同绑」规则随槽位族一并迁到 UART0（PA28/PA31）
+    "open_mv4.OPENMV4_UART_TX": "PA28",
+    "open_mv4.OPENMV4_UART_RX": "PA31",
 }
 
 

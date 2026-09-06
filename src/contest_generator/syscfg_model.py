@@ -302,11 +302,21 @@ def syscfg_path_matches(
         instance = path.split(".peripheral.", 1)[0]
         return instance in INSTANCES_BY_SLUG.get(slug, ())
     if decl_type == "pwm":
+        # 外设角色默认值同脚时（wiki-modules-batch10/03：DCC_100_PWM2 与
+        # L298N_PWM 同 TIMG12/PA14），仅尾字段（ccp0Pin 等）不再唯一——按
+        # slug 反查 syscfg 实例名区分（与 uart/i2c 同款；C0/C1 通道判据先
+        # 行保留）。
         if role_id.endswith("_C0"):
-            return path.endswith(".ccp0Pin")
-        if role_id.endswith("_C1"):
-            return path.endswith(".ccp1Pin")
-        return path.endswith((".ccp0Pin", ".ccp1Pin"))
+            tail_ok = path.endswith(".ccp0Pin")
+        elif role_id.endswith("_C1"):
+            tail_ok = path.endswith(".ccp1Pin")
+        else:
+            tail_ok = path.endswith((".ccp0Pin", ".ccp1Pin"))
+        instance = path.split(".peripheral.", 1)[0]
+        known = INSTANCES_BY_SLUG.get(slug, ())
+        if known:
+            return tail_ok and instance in known
+        return tail_ok
     if decl_type == "adc":
         # adc 落点 = `<实例>.peripheral.adcPin<N>`（N = 通道号，TI 命名）；
         # 实例名（ADC12_0）从消费表反查，多实例时按 slug 过滤。
