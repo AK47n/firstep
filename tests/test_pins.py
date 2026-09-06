@@ -373,6 +373,11 @@ STM32_MACRO_VALUES = {
     # 最低；页面默认 PB0 不采用 = MOTOR_B_DIR；单总线件不叠软 I2C 总线 PA6/PA7）
     "DHT11_GPIO": "GPIO_B",
     "DHT11_PIN": "Pin_3",
+    # wiki-stm32-batch4/04：ds18b20 测温（单总线件——DATA 默认 PB1，叠
+    # MOTOR_B_DIR2：测温与单电机方向不同框、同选概率最低；页面默认 PB0
+    # 不采用 = MOTOR_B_DIR；单总线件不叠软 I2C 总线 PA6/PA7）
+    "DS18B20_GPIO": "GPIO_B",
+    "DS18B20_PIN": "Pin_1",
 }
 
 
