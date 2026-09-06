@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=81cec088f963276236c30704565b0df37a678df6 -->
+<!-- changelog-auto: last-commit=c3e23c278d9b8ffa9dc5dfbe031781cf467ed798 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -75,6 +75,7 @@
 - 20:27 收尾：wiki-stm32-batch3 批次 3 收官——CONTEXT 平台行补录 stm32 线批次 3 块 + 一致性快检 sweep_7_modules.py 6/6 OK + code-review 两轴结果回填（标准轴 0 硬违反/spec 轴通过零范围蔓延）+ 判断项整改（send_ack 参数名统一 is_nack、矩阵脚本 EOF 空行清理）+ pytest 3633 / node 1359 全绿
 - 21:01 模块：bmp180 气压/温度/海拔传感器 stm32 平台条目（wiki-stm32-batch4/01：软 I2C 总线件——共总线 PA6/PA7 + 页面缺陷修正（Get_Pressure 内嵌 Get_Temperature 二次转换重读合并 B5 复用、NACK 仅 printf 改状态码 0/1/2、char ack 死变量剔除、B7 uint32_t 双分支保留非恒真、无 & 0xFFFC 掩码反向守卫）+ init 含 SCL OUT_OD 初始化置高 + 与 ms5611 同址 0xEE 互替提醒 + 海拔 44330 公式 math.h/pow + UV4 矩阵 0 error/0 module warning → verified=true）
 - 21:01 工单：wiki-stm32-batch4/01 bmp180 实施完成回填（结论 + 状态 resolved）
+- 21:05 模块：ms5611 高精度气压/温度传感器 stm32 平台条目（wiki-stm32-batch4/02：软 I2C 总线件——共总线 PA6/PA7 + **64 位换算核心修正：dT 改有符号 long long（页面 uint32_t 负温回绕 + C4×dT/128、C3×dT/256.0 32 位乘法溢出——mspm0 批 13 同款）+ 温度出参 TEMP/100.0（0.01℃ 页面整数截断修正）+ 气压出 Pa（页面 /100=hPa 修正）+ PROM 读逐段应答检查（返 3）+ Get_pressure 内嵌 Get_TEMP 二次重读合并 + 段间 2×10ms 保留** + init 含 SCL OUT_OD 初始化置高 + 与 bmp180 同址 0xEE 互替提醒 + int64 镜像单测（负温向量钉死）+ UV4 矩阵 0 error/0 module warning → verified=true）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
