@@ -29,6 +29,39 @@
           "required": true
         }
       ]
+    },
+    "stm32": {
+      "files": [
+        "code/mlx90614_stm32.c",
+        "code/mlx90614_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "软 I2C（SMBus 兼容）总线件（SDA 方向运行时切换，不占硬件 I2C 外设/TIMER——不用母版 ml_i2c，spec 决策①）。页面 = **F1 标准库**（stm32f10x.h + RCC_APB2PeriphClockCmd + Mode_Out_PP/IPU + WriteBit/ReadInputDataBit——非 F4 嫌疑页）；**引脚电平裁决**：页面注释「MLX90614 是 5V，开发板 3.3V 输出，必须设置开漏模式」与代码 Out_PP 直接矛盾 → 按总线协议与页面注释统一 **OUT_OD**（SDA_IN = IU 上拉——页面 IPU、mspm0 版推挽/浮空语义等价，均需外上拉；页面代码 PP 差异记录 notes ④）。**页面缺陷清单（已取证 + 修正 + notes + 守卫）**：① **PEC/CRC 整体禁用**（PEC_Calculation 定义从未调用、读时序无 PEC 字节——与正文 L52 矛盾；按 mspm0 先例剔除 PEC，notes 记录「页面演示无 PEC 也通」）；② **失败 return 0.0 与合法 0℃ 混用** → 出参 + 状态码（0=成功/1=通信失败，出参不变——mspm0 API 已如此）；③ 注释 MLX90615 笔误（不落）；④ **开漏注释 vs 代码 Out_PP** → 统一 OUT_OD（见上）；⑤ **写-读间 delay_ms(1) 被页面注释掉 → 加回**（SMBus 最小空闲时序点——mspm0 版保留页面省略，差异记录）；⑥ 无温补/发射率修正（mspm0 同，出厂校验器件，notes）。换算实现：引脚 gpio_init(OUT_OD) + **SCL init 补 gpio_init(MLX90614_SCL_GPIO, MLX90614_SCL_PIN, OUT_OD)+置高**（批次 3 回修口径——F1 复位浮空输入，ODR 写入无效）；SDA 方向切换 gpio_init(SDA, OUT_OD/IU)；原语族 mlx90614_iic_*（SCL 半周期 2us 标称 ≈250kHz——高于 SMBus 100kHz 规约但无硬件抓错、页面原时序 1us 更超且演示可通；真机如失败按注释将 delay_us(2) 提至 5us 降速）；API 全对齐 mspm0：init（**非空实现**——承担引脚配置（无 syscfg 生成器）；mspm0 版为空占位（syscfg 代配），差异记录 notes）+ read_object_temp（寄存器 0x07）+ read_ambient_temp（寄存器 0x06）（0=成功/1=失败；℃ = raw×0.02−273.15 页面公式；出参判空用 0——F1 头无 NULL）。**默认脚 = PA6（SCL）/PA7（SDA）**——页面默认 SCL=PA0/SDA=PA1 不采用（= adc ADC_CH0/1 + MOTOR_A/B PWM 常备件）；与 motor MOTOR_A_DIR/DIR2（电机方向）默认重叠：非接触测温与「带电机方向的小车运动控制」不同框、同选概率最低；**与批次 2 六件共挂同一软 I2C 总线**（地址 0x5A 与 0x38/0x23/0x40/0x44/0x50/0x1A 全异——测温+环境站合法共挂，白名单登记）；与既有 I2C_GPIO（PA11/12）/OLED_GPIO（PB8/9）零重叠；同选经引脚绑定消解。与 mspm0 条目分工：mspm0 侧 syscfg 实例 + DL_GPIO（默认 PA9/PA8），本条目 ml_gpio + pin_config.h 宏段（默认 PA6/PA7），API 同名同语义、零交叉改动。\n来源：sources/materials/lckfb-地阔星移植手册/sensor--mlx90614-non-contact-temp-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/mlx90614-non-contact-temp-sensor.html；资料网盘 https://pan.baidu.com/s/1AsEBvVCiNAvTKqTeGSA60w + 完整工程 https://pan.baidu.com/s/1d4JqCsP6LPl2sPIMj7WPQg?pwd=jpg6；采购 GY-906 MLX90614ESF BAA BCC DCI IR红外测温传感器模块温度采集 https://item.taobao.com/item.htm?spm=a1z09.2.0.0.204e2e8d2hPeAl&id=609920555320&_u=h2t4uge53d5e）。**未上板**（软 I2C 时序/0.02 系数真机验证留后续）。\nwiki-stm32-batch3/04 编译矩阵（2026-09）：stm32 单选生成 → UV4（C:/Keil5 V5.06u7）0 error、0 module warning（exit 0，PASS——首版 NULL 未定义修正（F1 头无 NULL → 出参判空用 0））。",
+      "kit": "GY-906 MLX90614ESF BAA/BCC/DCI IR 红外测温传感器模块（I2C/SMBus；地址 0x5A）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/mlx90614-non-contact-temp-sensor.html",
+      "pins": [
+        {
+          "id": "MLX90614_SCL",
+          "type": "i2c_scl",
+          "default": "PA6",
+          "required": true,
+          "macros": [
+            "MLX90614_SCL_GPIO",
+            "MLX90614_SCL_PIN"
+          ]
+        },
+        {
+          "id": "MLX90614_SDA",
+          "type": "i2c_sda",
+          "default": "PA7",
+          "required": true,
+          "macros": [
+            "MLX90614_SDA_GPIO",
+            "MLX90614_SDA_PIN"
+          ]
+        }
+      ]
     }
   }
 }
