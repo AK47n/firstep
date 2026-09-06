@@ -1,0 +1,28 @@
+{
+  "slug": "rain",
+  "description": "雨滴传感器驱动（mspm0 纯驱动薄封装，ADR 0009）：依赖库内 adc 模块共享 ADC12_0 MEM0 槽位读数（不新开 ADC 通道），rain_init + rain_read_percent 出 0-100% 雨量百分比（正向映射——雨越大百分比越高，页面原式方向经正文取证修正；相对值非绝对值、受干净度影响）；适用于雨感雨刷、晾衣架联动、降雨报警、车窗雨感等赛题功能。",
+  "dependencies": [
+    "adc"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/rain.c",
+        "code/rain.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**ADC 薄封装**：无独立 syscfg 实例——依赖 adc 模块共享 ADC12_0 实例 MEM0 槽位（默认 PA24/A0_3，与 adc/us016/mq2/本批薄封装件共读同槽；绑定换引脚 = 改写 adcPin*.$assign + adcMem*chansel，模块零改动；手册原脚 PA27/A0_0 经绑定即可复现——绑 PA27 时改写器按通道号换 adcPin3→adcPin0 + adcMem0chansel→CHAN_0）。轮询读取（adc_get 忙等）无 ADC 中断——共享 ADC12_0 实例，IRQHandler 强符号须唯一（joystick/adc 先例）。换算 percent = value/4095×100（**正向映射：雨越大百分比越高**——页面正文「雨水越大，电阻值越小，模拟值转化为的数字值越大」（雨水把梳状电极间导电板短路、电阻下降、AO 分压升高 → ADC 值增大）与页面 get_raindrop_percentage_value 原式 `(1−value/4095)×100` 矛盾（照页面原式雨越大百分比反而越低——疑同光敏页反向式复制残留）→ 按「强度=水分覆盖=ADC 值关系」取证以正文为准修正为正向映射；实物若分压方向相反（模块批次差异/接法不同）改公式一处即可（反向改回 `1 − value/4095`）。**相对值非绝对值/非线性**：雨滴板脏污/氧化/放置方式改变基线电阻（页面原话「不同的值对应是降雨量的多少毫米，则需要实体测量，雨滴板的放置方式不同结果都不同」——需标定）；页面 get_adc_value 内 delay_ms(20) 与百分比循环 3 次 × 100ms 间隔改 5 次快速平均（us016 快平均先例）。页面 ADC 中断（ADC12_0_INST_IRQHandler + gCheckADC 标志位）改依赖 adc 模块轮询（共享实例 IRQHandler 强符号唯一）。页面 get_raindrop_do_value/GET_DO 宏（LM393 阈值比较数字量——无雨高/滴上低、DO-LED 有雨亮）未用于演示 → 不声明 DO 角色（阈值由模块可调电阻控制，需要时经引脚绑定 GPIO 输入自行读取或骨架用 adc 原始值自行判断阈值）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--rain-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/rain-sensor.html；网盘资料 https://pan.baidu.com/s/10bjbsmcOh2N7YGDS3PquPw 提取码 psfm；移植成功案例 https://pan.baidu.com/s/1NovN1-zz2BUPAmmYkJV5aA?pwd=6aqg 提取码 6aqg）。改造要点：去掉 main.c 演示与 printf；函数名规范化（rain_init/read_percent，去 raindrop_config/ADC_GET/get_adc_value/get_raindrop_percentage_value 命名）；**百分比公式方向修正为正向映射（正文取证）并注释说明**；ADC 中断改轮询；DO 宏未用不声明；页面 3 次 × 100ms 间隔改 5 次快平均；页面 get_adc_value 内 delay_ms(20) 去除。\nwiki-modules-batch9/02 编译矩阵（2026-09-09）：单选生成 → SysConfig CLI → gmake 0 error、0 warning（PASS）；未上板（换算方向/真机验证留后续）。",
+      "kit": "雨滴传感器模块（4Pin：VCC/GND/DO/AO；工作 3.3-5V；雨滴板（镍质梳状电极，线形涂覆）+ LM393 控制板（PWR-LED + DO-LED + 蓝色可调灵敏度电阻）；AO = 雨滴板分压模拟量输出（雨水越大电阻越小、电压越高——页面正文）、DO = LM393 阈值数字量（无雨高/滴上低））",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/rain-sensor.html",
+      "pins": [
+        {
+          "id": "RAIN_AO_CH0",
+          "type": "adc",
+          "default": "PA24",
+          "required": true
+        }
+      ]
+    }
+  }
+}
