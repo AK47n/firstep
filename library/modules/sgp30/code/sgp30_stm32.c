@@ -43,15 +43,17 @@ static void sgp30_iic_stop(void)
     delay_us(5);
 }
 
-static void sgp30_iic_send_ack(uint8_t ack)
+static void sgp30_iic_send_ack(uint8_t is_nack)
 {
     /* 参数 0=发送应答、1=发送非应答（页面 IIC_Send_Ack 语义——0/1 与直觉
-     * 相反，命名照页面保留）；SDA(0) 打底再按 ack 重设 = 页面原式冗余写 */
+     * 相反；参数名统一 is_nack（批次 2 code-review 判断项口径——同本批
+     * ads1115/tcs34725/mlx90614））；SDA(0) 打底再按 is_nack 重设 = 页面
+     * 原式冗余写 */
     SGP30_SDA_OUT();
     SGP30_SCL(0);
     SGP30_SDA(0);
     delay_us(5);
-    if (!ack) {
+    if (!is_nack) {
         SGP30_SDA(0);
     } else {
         SGP30_SDA(1);

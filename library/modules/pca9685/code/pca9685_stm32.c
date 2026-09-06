@@ -51,13 +51,13 @@ static void pca9685_iic_stop(void)
     delay_us(4);
 }
 
-static void pca9685_iic_send_ack(uint8_t ack)
+static void pca9685_iic_send_ack(uint8_t is_nack)
 {
     PCA9685_SDA_OUT();
     PCA9685_SCL(0);
     PCA9685_SDA(0);
     delay_us(2);
-    if (!ack) {
+    if (!is_nack) {
         PCA9685_SDA(0);
     } else {
         PCA9685_SDA(1);
