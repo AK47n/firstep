@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=aaf98f3b36cdf0da826741da032133859a635bcb -->
+<!-- changelog-auto: last-commit=ebff2079aab1936287d06967c605c90ab36ac53b -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -44,6 +44,7 @@
 - 14:05 批次13 收官小批收尾：CONTEXT.md 平台行补录批次 13 块 + spec 实施结论回填 + 一致性快检 52 件版：
 - 14:12 批次13 code-review 两轴审查整改（Standards/Spec）：
 - 15:49 模块推荐候选预筛：题面驱动压摘要段入预算账本（工单 module-preselect/01-03）
+- 15:58 module-preselect code-review 双轴整改（Standards/Spec，工单 04）：
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
