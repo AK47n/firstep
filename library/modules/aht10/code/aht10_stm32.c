@@ -41,15 +41,15 @@ static void aht10_iic_stop(void)
     delay_us(4);
 }
 
-/* ack = 0 应答 / 1 非应答（页面 IIC_Send_Ack 原式：先置 0 再按 ack 重设——
- * ack=0 时同值二次写，保留原式） */
-static void aht10_iic_send_ack(uint8_t ack)
+/* is_nack = 0 应答 / 1 非应答（页面 IIC_Send_Ack 原式：先置 0 再按 is_nack
+ * 重设——is_nack=0 时同值二次写，保留原式） */
+static void aht10_iic_send_ack(uint8_t is_nack)
 {
     AHT10_SDA_OUT();
     AHT10_SCL(0);
     AHT10_SDA(0);
     delay_us(2);
-    if (!ack) {
+    if (!is_nack) {
         AHT10_SDA(0);
     } else {
         AHT10_SDA(1);

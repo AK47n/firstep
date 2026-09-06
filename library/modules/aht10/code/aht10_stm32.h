@@ -44,7 +44,7 @@ void aht10_init(void);
 
 /* aht10_read：触发一次测量并读取，返回 0 = 成功、1 = 超时/无应答（页面
  * 返回 0 恒成功——缺陷③修正：超时后不再读垃圾数据）；成功后温度/湿度经
- * 出参带回（单位 ℃ / %RH，出参可传 NULL）。 */
+ * 出参带回（单位 ℃ / %RH，出参判空用 0——F1 头无 NULL）。 */
 uint8_t aht10_read(float *temperature_c, float *humidity_rh);
 
 /* aht10_read_temperature：读取温度（℃）；内部自动完成一次测量。 */
