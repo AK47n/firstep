@@ -117,6 +117,7 @@ def test_gp2y1014au_formula_and_timing_guard():
     assert "GP2Y1014_LED_SAMPLE_TAIL_US 40u" in header
     assert "GP2Y1014_LED_CYCLE_TAIL_US 9680u" in header
     assert "delay_us(GP2Y1014_LED_SETTLE_US)" in source
+    assert "delay_us(GP2Y1014_LED_SAMPLE_TAIL_US)" in source
     assert "delay_us(GP2Y1014_LED_CYCLE_TAIL_US)" in source
     assert "ADC_Channel_0" in source
     assert "ADC12_0_INST_IRQHandler" not in source  # 中断改轮询

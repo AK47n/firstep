@@ -4,7 +4,9 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** ready-for-agent
+**状态：** resolved
+
+**结论：** 2026-09-09 完成并提交（3c63969d）。光敏电阻 ADC 模拟量薄封装（mq2 方式——依赖 adc 模块共读 ADC12_0 MEM0、默认 PA24，无新通道/实例/无新 $assign 行）；`photoresistance_init` + `photoresistance_read_percent` 出 0-100% 亮度百分比（页面原式反向映射（1−value/4095）×100——页面备注「最亮 100 最暗 0」自洽；页面 10 次累加改 5 次快平均）；页面 ADC 中断（IRQHandler + gCheckADC）改经 adc 模块 API 轮询（共享实例强符号唯一）；页面 DO（LM393 阈值）宏 `Get_DO_In`/`GET_DO_IN` 未用不声明；notes 写明非线性/需标定 + 与库内 bh1750 数字光照分工 + 页面「1MA」按 1mA 理解；词表感知传感器 +光敏电阻传感器；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）；code-review（README 标准轴+规格轴）通过。
 
 - [ ] 代码提炼：从 `sources/materials/lckfb-地猛星移植手册/sensor--photoresistance-sensor.md` 「代码块」章节抽完整 `bsp_illume.c/h` → 改造为 `code/photoresistance.c` + `code/photoresistance.h`：去 main/printf、函数名规范化（`photoresistance_init/read_percent`，去 `Illume_Init/ADC_GET/Get_Adc_Value/Get_illume_Percentage_value` 命名）、ADC 中断（IRQHandler + gCheckADC）改经 adc 模块 API 轮询（无 IRQHandler 强符号）、`Get_DO_In`/`GET_DO_IN` 不声明（mq2 同策略，notes）
 - [ ] `manifest.json`：`dependencies: ["adc"]`；mspm0 平台条目（files/verified 初始 false/hardware_bound false/kit+source_url 手册原页/notes 含手册路径+原页+网盘链接（资料 y8jw/案例 ma8z）+改造要点+**反向映射（最亮 100 最暗 0）与非线性/需标定说明+与 bh1750 分工**）；pins：`PHOTORESISTANCE_AO_CH0` = adc 默认 PA24 照 mq2；简介判据：能力方向（光控调光/环境光强检测）+ 无题绑定 + ADR 0009

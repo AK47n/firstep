@@ -4,7 +4,9 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** ready-for-agent
+**状态：** resolved
+
+**结论：** 2026-09-09 完成并提交（cfeafd8f）。GP2Y1014AU 粉尘 = ADC 模拟量薄封装（依赖 adc 模块共读 ADC12_0 MEM0、默认 PA24）+ **LED 驱动 GPIO 输出实例 GP2Y1014/LED 默认 PA1（薄封装唯一例外：器件必需——内置红外 LED 必须主控脉冲驱动（页面 Read_dust_concentration 时序：LED 亮→280us→采样→40us→LED 关→9680us 的 10ms 周期），无此脚传感器不工作；PA0/PA1 不可作 GPIO 输入（2026-09-06 实证），GPIO 输出可配 PA0——ir_remote_tx 先例，PA1 同型经编译矩阵 SysConfig CLI 实证合法；默认 PA1 与 I2C_0 SCL 重叠——粉尘与姿态不同框、同选概率最低）**；`gp2y1014_init` + `gp2y1014_read_dust` 出浓度估算值（页面原式 0.17×value−0.1——相对估算非精标：页面公式对演示值/ADC 量程标定不明确（0.17×4095−0.1≈696 超出常规 mg/m³ 量程）、红外漫反射对烟尘/水汽同样响应（烟/尘区分不能）、绝对浓度需标准粉尘标定）；页面 Filter（10 点静态滑动平均、首次以首值填满窗口）内嵌为模块内静态环形缓冲（照库依赖先例取舍不依赖库内 filter 可选配套件）；页面 SAMPLES 30×2ms（≈62ms 远超 10ms LED 周期——页面时序本不自洽）改 5 次快平均；页面 ADC 中断改轮询（共享实例强符号唯一）；dependencies [adc, delay]（LED 时序走 delay 模块忙等不占 TIMER）；词表感知传感器 +粉尘传感器；单选生成 → SysConfig CLI（PA1 合法）→ gmake 0 error/0 warning（verified=true）；i2c_bus_share 测试按 ir_distance/ttp224 绑走先例恢复纯 I2C 共享组（gp2y1014au LED 默认 PA1 混入 I2C 总线组时）；code-review 通过。
 
 - [ ] 代码提炼：从 `sources/materials/lckfb-地猛星移植手册/sensor--gp2y1014au-dust-sensor.md` 「代码块」章节抽完整 `bsp_dust.c/h` → 改造为 `code/gp2y1014au.c` + `code/gp2y1014au.h`：去 main/printf、函数名规范化（`gp2y1014_init/read_dust`，去 `Dust_Init/ADC_GET/Get_ADC_Value/Filter/Read_dust_concentration` 命名）、页面 ADC 中断改轮询、LED 脉冲时序按页面原样（clearPins = LED 亮 + delay_us(280) + 5 次快平均采样 + delay_us(40) + setPins = LED 关 + delay_us(9680)）、Filter 10 点滑动平均内嵌（static 环形缓冲，首次 10 份填充——页面语义保留、`sum / 10` 整数截断语义保留）
 - [ ] 母版 `mspm0.syscfg`：新 GPIO 输出实例 `GP2Y1014`/LED（direction OUTPUT、initialValue SET——LED 空闲 = 关（引脚高，页面 clear=亮/set=关极性原样）、默认 `PA1`——PA1 现状仅 I2C_0 sclPin（ml_mpu6050）1 个默认用户：粉尘监测与姿态采集不同框、同选概率最低；GPIO 输出可配 PA0/PA1（2026-09-06 实证仅输入不可，ir_remote_tx PA0 先例）；编译矩阵 SysConfig CLI 实证，拒绝则改次选脚；与 PA0 IR_TX 刻意错开）；实例注释写薄封装例外与器件必需性
