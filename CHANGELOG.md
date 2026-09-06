@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=145f2638288971af5bbe8a2530881cc59a4aa62e -->
+<!-- changelog-auto: last-commit=6b3a4f43be271c49a19b529fc8eab6b160a7c52b -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -99,6 +99,7 @@
 - 22:06 工单：wiki-stm32-batch5/07 soil 实施完成回填（结论 + 状态 resolved）
 - 22:06 工单：wiki-stm32-batch5/08 gp2y1014au 实施完成回填（结论 + 状态 resolved）
 - 22:14 收尾：wiki-stm32-batch5 批次 5 收官——CONTEXT 平台行补录 stm32 线批次 5 块（ADC 薄封装群一：页面 ADC 序列收敛 ml_adc/ADC 共享组 PA5 共读/rain×photo 方向成对守卫/s12sd 档位表/gp2y LED 时序/8×AO_CH+LED 2 宏/矩阵 0-0）+ code-review 两轴结果回填（标准轴 0 硬违规、判断项 5 条——工单 06 deps 文档偏差已整改 + 4 条按 mspm0 对齐保留；spec 轴零硬违反、流程性 1 条已落定）+ 收尾报告（全量 pytest 3686 通过/sweep_8_modules.py 8/8 OK/UV4 八件 0/0）+ 矩阵脚本与一致性快检入库；遗留：双平台 description 措辞批量更新（并入批 6）+ 上板真机验证
+- 22:20 模块：mq3 酒精检测传感器 stm32 平台条目（wiki-stm32-batch6/01：ADC 薄封装件——页面 ADC 序列收敛 ml_adc（adc_init(ADC_1, MQ3_AO_CH) + 5 次 adc_get 快平均）+ 默认 AO=ADC_Channel_5（PA5 页面原脚即共读点——ADC 共享组：本批 7 件并入 batch5 的 PA5 共读组，flame+8+7=16 ADC 角色同脚，同一物理脚只能接一件器件——多件同测需外部分路器/分时切换）+ 正向 value/4095×100（酒精/汽油蒸汽，相对值非 ppm 精标）+ DO 未用不声明 + SAMPLES 30→5 快平均 + UV4 矩阵 0 error/0 module warning → verified=true；test_pins 宏表 +7、test_default_layout PA5 白名单组 +7）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
