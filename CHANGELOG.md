@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=c9e898d695ad3002ae737fe353dd487ad3fcd5af -->
+<!-- changelog-auto: last-commit=e346776ac69ed385194d9d9bde7f9a7eadb2df52 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -32,6 +32,7 @@
 - 12:15 ﻿批次11「MQ 系同构快补收尾」七件入库（mq3/mq4/mq6/mq7/mq8/mq9/ms1100，仅 mspm0，ADC 薄封装共读 MEM0 照 mq2/批次9 先例——无新通道/实例/无新 $assign 行）： - 7 模块条目（manifest.json + code/*.c/h）：xxx_init + xxx_read_percent（价值/4095×100 正向映射页面原式 + 正文取证、30→5 次快平均、ADC 中断改经 adc 模块 API 轮询（无 IRQHandler 强符号）、页面 DO（LM393）宏未用不声明）；ms1100 页面无百分比函数——read_percent 由 demo 电压式 value/4095×3.3 推导归一；notes 统一写明 MQ 系相对值非 ppm 精标 + 预热 3-5 分钟/湿度影响 + 多路气体同选共读 MEM0 物理通道限制（MEM 8/8 已满）+ 手册原脚 PA27 绑定复现 + mq9 双温循环原理/与 mq7/mq6 分工； - wordlist 感知传感器 +7 方案（lib_modules 挂接）+ models；词表完整 wire 实测 7051（> 6634 fit 上限）→ WORDLIST_PROMPT_BYTES 6800→7300、REFERENCE_FULLTEXT_BYTES 61000→60500（llm.py/budget.py 记账链同步，测试红证线跑绿）； - 测试：7 × test_module_*.py（照 test_module_mq2.py：manifest/单选生成/公式与无 IRQHandler 守卫/notes 守卫）；test_pins 豁免元组 + test_pin_bindings PA24 注释 + test_syscfg_prune ADC12_0 消费方断言； - 编译矩阵：7 × run_*_matrix.py 单选生成 → SysConfig CLI → gmake 0 error/0 warning（PASS），verified=true 回写； - 46 件一致性快检 sweep_46_modules.py 全 OK；全量测试 3528 pytest + 1358 node 全绿； - code-review 双轴：随机抽 ms1100/mq8 深审 + 其余 5 件同构对仗核对（同构批量豁免逐件深审，spec 记录）； - CONTEXT 平台行补录批次 11 块；母版 syscfg ADC 段注释同步。
 - 12:17 ﻿批次11 wordlist.json 最小 diff 还原：修复词表整卷重排噪音——json.dump(ensure_ascii=False, indent=2) 会把全库 models/lib_modules 数组重排为多行（375 行噪音 diff），现恢复既有紧凑格式并保留语义改动（感知传感器 +7 方案（MQ-3/4/6/7/8/9、MS1100，lib_modules 挂接）+ models +7 + MQ 六件供电口径 3.3-5V 与页面/kit 统一）；净 diff 58 行（+58/-1），词表完整 wire 7051 不变，词表/预算/库结构测试 110 用例全绿。
 - 12:48 ﻿批次12/01 lcd 彩屏模块打样（ST7735 0.96 寸 80×160）入库——六屏合一决策 A 首件：
+- 12:51 批次12/02 lcd 补 ST7789V2 双型号表项（1.3 寸 240×240 带字库版 + 1.69 寸 240×280）：
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
