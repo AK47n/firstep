@@ -30,6 +30,38 @@
           "required": true
         }
       ]
+    },
+    "stm32": {
+      "files": [
+        "code/gp2y1014au_stm32.c",
+        "code/gp2y1014au_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**ADC 薄封装（页面 ADC 序列代码收敛 ml_adc）+ LED 驱动 GPIO 输出（器件必需例外——本批最重件）**：F1 口径页面（stm32f10x.h + RCC_APB2PeriphClockCmd + GPIO_Mode_AIN/Out_PP + GPIO_Speed_50MHz + ADC_RegularChannelConfig + SoftwareStartConvCmd + GetConversionValue）——页面 Dust_GPIO_Init + Get_ADC_Value 的 ADC 部分整体收敛为母版 ml_adc 的 adc_init（内部完成 AIN 引脚配置 + APB2 时钟 + 6 分频 12MHz + 复位校准——等效页面流程；采样时间 239.5cyc vs 页面 55.5cyc，功能等价差异记录）+ ADC_GetConversionValue→adc_get（软件触发轮询）；**LED 驱动 GPIO 输出**经母版 ml_gpio（gpio_init OUT_PP + gpio_set——页面 GPIO_WriteBit 同语义，低电平 = LED 亮）。**ADC 共享组**：默认 AO=PA5（=页面原脚 ADC_Channel_5，用户照页面接线即插即用）；本批 8 件与 flame 共读 PA5（ml_adc 的 adc_get 每次先写 SQR3 选通道，顺序调用互不干扰）；**同一物理脚只能接一件器件，多件同测需外部分路器/分时切换**（mspm0 MEM0 共读同口径；stm32 通道 10/10 全被既有角色占用——同选经引脚绑定消解）。**LED 默认脚 = PB5（页面原脚 PA2 不照抄）**：页面默认 LED=PA2，但 PA2 是母版 DEBUG_UART TX 常备件（pin_config.h 默认 UART_2/PA2）——stm32 侧 LED 默认脚**不能照抄页面 PA2**；改默认 **PB5**（GPIO 输出可配 + 与「称重（hx711 SCK）/光电编码器闭环（MOTOR_A_ENC）」不同框、同选概率最低——粉尘监测与称重/编码器闭环不同框；同选经引脚绑定消解）。**★ 页面 SAMPLES/10ms 周期矛盾（核心缺陷）→ 5 次快平均**：Get_ADC_Value SAMPLES=30 × delay_ms(2) ≈ 62ms 采样——而 LED 脉冲时序 10ms 周期（亮窗仅 280+40=320us，采样循环跨 LED 关断持续约 61.7ms——页面时序本就不自洽）；改 5 次快平均（~0.3ms 级，在 280us 亮窗内完成——ml_adc adc_get 单次转换 ≈10-25us 级，5 次 ≈125us 级 <280us 可容纳）——mspm0 批 9 同款修正。**LED 脉冲时序**按页面原样（Read_dust_concentration：clear = LED 亮 → 280us → 采样 → 40us → set = LED 关 → 9680us，周期 10ms——页面极性低有效同数据手册）；时序常量参数化（280u/40u/9680u 宏族）。**页面 Filter**（10 点静态滑动平均、首次以首值填满窗口并返回 m——页面 flag_first 语义、整数截断语义保留）**内嵌**为模块内 static 环形缓冲（页面 Filter 全局符号泄漏收敛 static）。**换算 = 页面原式 0.17×value − 0.1（相对估算非精标）**：系数直接作用于 12bit ADC 码（0.17×4095−0.1 ≈ 696 超出常规 mg/m³ 量程——页面正文「电压-浓度线性」与公式「ADC 码-浓度线性」口径脱节；红外漫反射原理对烟尘/水汽同样响应——**烟/尘区分不能**；绝对浓度需标准粉尘源/浊度计标定）。**页面缺陷/修正**：① SAMPLES 30×2ms 与 10ms 周期矛盾（核心——改 5 次快平均，见上）；② 页面 L62 `#include \"stdio.h\"` 残余剔除（.c 无 printf）；③ 页面 Filter 全局符号泄漏收敛 static；④ 页面无 DO（4 线：VCC/GND/LED/AOUT）；⑤ 页面无资料下载链接（仅移植成功案例——与其余 7 页不同）。规格（页面）：工作 5-7V、最大 20mA、最小粒子检出 0.8um、灵敏度 0.5V/(0.1mg/m³)、清洁空气 ~0.9V（典型）。调用间隔 ≥ 10ms（LED 采样周期），连续读时勿快于周期。\nwiki 手册来源：sources/materials/lckfb-地阔星移植手册/sensor--gp2y1014au-dust-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/gp2y1014au-dust-sensor.html；移植成功案例 https://pan.baidu.com/s/1GSvVBKWHfZHVk1lZ4HXpzA?pwd=jclk 提取码 jclk——页面无资料下载链接）。改造要点：去掉 main.c 演示与 printf；函数名规范化（gp2y1014_init/read_dust，去 Dust_Init/Get_ADC_Value/Filter/Read_dust_concentration 命名）；页面 ADC 序列收敛 ml_adc；SAMPLES 30×2ms 改 5 次快平均；时序常量参数化；Filter 内嵌 static；LED 脉冲时序/极性按页面原样并注释。\nwiki-stm32-batch5/08 编译矩阵（2026-09-06）：stm32 单选生成（依赖 adc+delay 展开）→ UV4（C:/Keil5 V5.06u7）0 error、0 module warning（exit 0，PASS）；未上板（LED 时序/0.17 系数/真机验证留后续）。",
+      "kit": "GP2Y1014AU 粉尘传感器模块（4 线：VCC/GND/LED/AOUT；工作 5-7V、最大 20mA；内置红外发光二极管 + 光电晶体管（居中孔洞空气流通），最小粒子检出 0.8um、灵敏度 0.5V/(0.1mg/m³)、清洁空气 ~0.9V（典型）；LED 需主控脉冲驱动（10ms 周期））",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/gp2y1014au-dust-sensor.html",
+      "pins": [
+        {
+          "id": "GP2Y1014_AO",
+          "type": "adc",
+          "default": "PA5",
+          "required": true,
+          "macros": [
+            "GP2Y1014_AO_CH"
+          ]
+        },
+        {
+          "id": "GP2Y1014_LED",
+          "type": "gpio_out",
+          "default": "PB5",
+          "required": true,
+          "macros": [
+            "GP2Y1014_LED_GPIO",
+            "GP2Y1014_LED_PIN"
+          ]
+        }
+      ]
     }
   }
 }
