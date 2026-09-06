@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=94272241318026fd3a5ec74e0312fa08e0079fc0 -->
+<!-- changelog-auto: last-commit=fa00f9053ceab461612a07f845cc1fef4152c0d5 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -37,6 +37,7 @@
 - 12:57 批次12/06 tp_xpt2046 独立触摸模块入库（XPT2046 电阻触摸，1.8 寸屏配套件）：
 - 13:03 批次12/07 oled SPI 总线变体（决策 B：同芯片同 API，仅总线层不同）——0.96 SPI 单色屏：
 - 13:06 批次12 收尾：CONTEXT.md 平台行补录 + spec 实施结论/工单结论回填 + code-review 整改（lcd_show_float 文档语义修正）：
+- 13:35 批次13/01 relay 1 路 5V 继电器模块入库（GPIO 迷你驱动——低电平吸合）：
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
