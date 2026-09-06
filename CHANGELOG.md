@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=25f963d80be7fa8b181076f777a2698f469b7e68 -->
+<!-- changelog-auto: last-commit=45c60941dd6f11367fc10258c66066cf47ae0a0e -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -65,6 +65,7 @@
 - 18:56 模块：at24c02 EEPROM 存储器 stm32 平台条目（wiki-stm32-batch2/05：软 I2C 总线件·读写件——六件共总线 PA6/PA7 + 页面缺陷 6 类修正（地址宏名颠倒 READ/WRITE/应答全丢弃/48 66 注释/写周期 5ms 未封装/页写连续读代码未实现）+ UV4 矩阵 0 error/0 module warning → verified=true）
 - 18:59 模块：ags10 有害气体传感器 stm32 平台条目（wiki-stm32-batch2/06：软 I2C 总线件 + CRC8——六件共总线 PA6/PA7 收口 + 页面致命缺陷修正（读地址重试条件写反 timeout>=50/timeout < AGS10_RETRY_MAX、返回码与 TVOC 值混用→出参+状态码、delay_1us/1ms 库内不存在改写、规格 ≤15kHz 分歧记录）+ UV4 矩阵 0 error/0 module warning → verified=true）
 - 19:09 收尾：wiki-stm32-batch2 批次 2 收官——CONTEXT 平台行补录 stm32 线批次 2 块 + 一致性快检 sweep_6_modules 6/6 OK + code-review 两轴结果回填（标准轴 0 硬违反/spec 轴全通过）+ 判断项整改（send_ack 参数名统一 is_nack、aht10 头注释 NULL→判空用 0，三件矩阵复跑 exit 0）+ pytest 3614 / node 1359 全绿
+- 19:32 回修：批次 2 软 I2C 六件 SCL 未初始化缺陷——补 SCL 开漏输出初始化 + 矩阵复跑 + 防回潮守卫
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
