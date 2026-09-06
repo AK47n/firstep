@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=8e94267e4c9d95fb1f2c4bb0dd72b5ec340dfd20 -->
+<!-- changelog-auto: last-commit=7069975908716775477df5b38b8d120da968a2e1 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -51,6 +51,7 @@
 - 16:36 整改：来源标注 code-review 双轴发现（Standards/Spec）
 - 16:57 合规：塔克 R3 资料下架 + 自写知识总结（tark-removal 03/04）
 - 17:47 模块：relay 继电器 stm32 平台条目（wiki-stm32-batch1/01，地阔星 F4 页面甄别换算 + UV4 矩阵 0 error/0 warning）
+- 17:49 模块：human_ir 人体红外传感器 stm32 平台条目（wiki-stm32-batch1/03，页面极性注释矛盾按规格修正 + UV4 矩阵 0 error/0 warning）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
