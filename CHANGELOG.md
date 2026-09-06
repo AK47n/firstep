@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=42c6faa9318e05765a1e464688894dcdfe98c68f -->
+<!-- changelog-auto: last-commit=cf590befdbe26b21656953d58e68836606889d90 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -109,6 +109,7 @@
 - 22:21 工单：wiki-stm32-batch6/01 mq3 实施完成回填（结论 + 状态 resolved）
 - 22:21 工单：wiki-stm32-batch6/02 mq4 实施完成回填（结论 + 状态 resolved）
 - 22:21 工单：wiki-stm32-batch6/03 mq6 实施完成回填（结论 + 状态 resolved）
+- 22:21 工单：wiki-stm32-batch6/04 mq7 实施完成回填（结论 + 状态 resolved）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
