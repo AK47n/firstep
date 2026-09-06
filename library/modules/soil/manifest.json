@@ -23,6 +23,28 @@
           "required": true
         }
       ]
+    },
+    "stm32": {
+      "files": [
+        "code/soil_stm32.c",
+        "code/soil_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**ADC 薄封装（页面 ADC 序列代码收敛 ml_adc）**：F1 口径页面（stm32f10x.h + RCC_APB2PeriphClockCmd + GPIO_Mode_AIN/IPU + ADC_RegularChannelConfig + SoftwareStartConvCmd + GetConversionValue）——页面 ADC_SOILHUMIDITY_Init + Get_Adc_Value 整体收敛为母版 ml_adc 的 adc_init（内部完成 AIN 引脚配置 + APB2 时钟 + 6 分频 12MHz + 复位校准——等效页面流程；采样时间 239.5cyc vs 页面 55.5cyc，功能等价差异记录）+ ADC_GetConversionValue→adc_get（软件触发轮询）。**ADC 共享组**：默认 AO=PA5（=页面原脚 ADC_Channel_5，用户照页面接线即插即用）；本批 8 件与 flame 共读 PA5（ml_adc 的 adc_get 每次先写 SQR3 选通道，顺序调用互不干扰）；**同一物理脚只能接一件器件，多件同测需外部分路器/分时切换**（mspm0 MEM0 共读同口径；stm32 通道 10/10 全被既有角色占用——同选经引脚绑定消解）。**stm32 侧无 mspm0 板 PA14 的板载 LED2+15k 固定衰减问题**（mspm0 默认脚 PA14 板载 LED2+15k 固定负载 = 固定比率衰减——读数系统性偏小、单调性保留；**本 stm32 默认 PA5 为排针 ADC 脚无板载负载**——页面本身无此问题，该问题源于 mspm0 默认脚物理特性，notes 澄清两平台默认脚物理差异；若用户真机接 PA0/PA1（板载 LED 分流）再考虑衰减——脚本提示）。**页面缺陷/修正**：① SAMPLES 30 次 × delay_ms(5) 改 5 次快平均（us016 先例）；② 页面 L138-140 表头注释「Get_Adc_Dma_Value/对DMA保存的数据进行平均值计算后输出/CHx 第几个扫描的数据」——DMA 函数名残留 + DMA 说明与轮询实现不符（实际函数为 Get_Adc_Value）——notes 记录不落码；③ 页面 L186「0=未检测到高于灵敏度的可燃气体值」——MQ 气体模板串台（土壤湿度页）——notes 记录不落码。DO 数字量未声明：页面 Get_SH_DO_value + DO 宏（PA1，IPU）main 未用（LM393 阈值由模块板载蓝色电位器控制（顺时针调节、控制的湿度阈值越大——页面说明）——mspm0 先例「未用不声明」，需要时经引脚绑定 GPIO 输入自行读取）。换算 = 页面原式正向映射 value/4095×100（页面 Get_SH_Percentage_value 原式——土壤水分越足电导越高、AO 电压越大、百分比越高；**相对湿度非绝对值**，与土壤类型/压实度/器件差异有关；页面说明「模拟量输出更精确」相对 DO 阈值而言）。\nwiki 手册来源：sources/materials/lckfb-地阔星移植手册/sensor--soil-moisture-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/soil-moisture-sensor.html；网盘资料 https://pan.baidu.com/s/1HJ3WhTG6dpNf-BdgW3zLlg?pwd=8889 提取码 8889；移植成功案例 https://pan.baidu.com/s/1Zo1GitadhD6nMRYqFcZS4Q?pwd=5mtq 提取码 5mtq）。改造要点：去掉 main.c 演示与 printf；函数名规范化（soil_init/read_percent，去 ADC_SOILHUMIDITY_Init/Get_Adc_Value/Get_SH_Percentage_value 命名）；页面 ADC 序列收敛 ml_adc；DO 宏未用不声明；SAMPLES 30→5 快平均。\nwiki-stm32-batch5/07 编译矩阵（2026-09-06）：stm32 单选生成（依赖 adc 展开）→ UV4（C:/Keil5 V5.06u7）0 error、0 module warning（exit 0，PASS）；未上板（ADC 换算/真机验证留后续）。",
+      "kit": "土壤湿度传感器/土壤湿度计检测模块（4Pin：VCC/GND/DO/AO；工作 3.3-5V、150mA；AO 模拟量输出（叉子两端电导分压）、DO 数字量阈值由 LM393 + 板载蓝色电位器控制；表面镀镍叉子、感测面积宽，插入土壤测水分）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/soil-moisture-sensor.html",
+      "pins": [
+        {
+          "id": "SOIL_AO",
+          "type": "adc",
+          "default": "PA5",
+          "required": true,
+          "macros": [
+            "SOIL_AO_CH"
+          ]
+        }
+      ]
     }
   }
 }
