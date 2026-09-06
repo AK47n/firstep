@@ -208,6 +208,41 @@
 #define AGS10_SCL_PIN         Pin_6
 #define AGS10_SDA_GPIO        GPIO_A
 #define AGS10_SDA_PIN         Pin_7
+/* ---- 批次 3（wiki-stm32-batch3）：软 I2C 器件库五件 + HX711 称重 ----
+ * I2C 五件（ads1115/tcs34725/mlx90614/sgp30/pca9685）默认与批次 2 六件
+ * 共挂同一软 I2C 总线 PA6/PA7（地址 0x48/0x29/0x5A/0x58/0x40 与既有
+ * 0x38/0x23/0x40/0x44/0x50/0x1A 全异——**pca9685 0x40 × sht20 0x40 同址**：
+ * 同选时 pca9685_set_address(1)（0x41，A5 接线）或绑定换独立总线；
+ * 与 motor MOTOR_A_DIR/DIR2 默认重叠：传感/驱动与「带电机方向的小车
+ * 运动控制」不同框、同选概率最低，同选经引脚绑定消解）；
+ * HX711 独立 GPIO 双线 默认 SCK=PB5 / DT=PB0（PB5 叠 MOTOR_A_ENC——
+ * 光电编码器闭环小车与静态称重/电子秤不同框；PB0 叠 MOTOR_B_DIR——
+ * TB6612 B 相方向与称重不同框；刻意不叠本批 I2C 件与采集类（flame/
+ * ir_beam/human_ir 等——称重+传感站常见组合）与声光件）。 */
+#define ADS1115_SCL_GPIO      GPIO_A
+#define ADS1115_SCL_PIN       Pin_6
+#define ADS1115_SDA_GPIO      GPIO_A
+#define ADS1115_SDA_PIN       Pin_7
+#define TCS34725_SCL_GPIO     GPIO_A
+#define TCS34725_SCL_PIN      Pin_6
+#define TCS34725_SDA_GPIO     GPIO_A
+#define TCS34725_SDA_PIN      Pin_7
+#define MLX90614_SCL_GPIO     GPIO_A
+#define MLX90614_SCL_PIN      Pin_6
+#define MLX90614_SDA_GPIO     GPIO_A
+#define MLX90614_SDA_PIN      Pin_7
+#define SGP30_SCL_GPIO        GPIO_A
+#define SGP30_SCL_PIN         Pin_6
+#define SGP30_SDA_GPIO        GPIO_A
+#define SGP30_SDA_PIN         Pin_7
+#define PCA9685_SCL_GPIO      GPIO_A
+#define PCA9685_SCL_PIN       Pin_6
+#define PCA9685_SDA_GPIO      GPIO_A
+#define PCA9685_SDA_PIN       Pin_7
+#define HX711_SCK_GPIO        GPIO_B
+#define HX711_SCK_PIN         Pin_5
+#define HX711_DT_GPIO         GPIO_B
+#define HX711_DT_PIN          Pin_0
 
 /* ---- UWB 基站串口（config.h 并入：UART_1 = PA9 TX / PA10 RX，115200）---- */
 #define UWB_UART          UART_1
