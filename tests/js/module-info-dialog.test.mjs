@@ -61,6 +61,24 @@ test("全量渲染：每平台区块（文件/备注/套件/链接/引脚表）"
   assert.ok(out.includes("COLOR_PWM"));
 });
 
+test("来源标签：wiki 原页 → 来源（立创 wiki），非 wiki → 购买链接（lckfb-attribution/03）", () => {
+  const wiki = moduleInfoHTML({
+    slug: "aht10",
+    description: "AHT10 温湿度传感器驱动",
+    platforms: { mspm0: {
+      files: [], verified: true, hardware_bound: false, notes: "", kit: "AHT10 传感器",
+      source_url: "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/aht10-temp-humi-sensor.html",
+      pins: [],
+    } },
+  }, "mspm0");
+  assert.ok(wiki.includes("来源（立创 wiki）"));
+  assert.ok(!wiki.includes("购买链接"));
+
+  const buy = moduleInfoHTML(full, "stm32");
+  assert.ok(buy.includes("购买链接"));
+  assert.ok(!buy.includes("来源（立创 wiki）"));
+});
+
 test("转义：描述与字段含 HTML 字符被转义", () => {
   const out = moduleInfoHTML({
     slug: "x",

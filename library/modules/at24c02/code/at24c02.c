@@ -1,3 +1,9 @@
+/* 来源：立创开发板技术文档中心（wiki.lckfb.com）《AT24C02-EEPROM存储器》
+ * 页面：https://wiki.lckfb.com/zh-hans/dmx/module/control/at24c02-eeprom-memory.html
+ * 本代码按模块库规范改写（去演示与调试输出、函数名规范化、
+ * 引脚宏参数化等）；使用 / 复制 / 修改 / 传播请遵循立创版权要求：
+ * 标明来源与链接。 */
+
 #include "at24c02.h"
 #include "delay.h" /* delay_ms：软 I2C 位操作延时与写周期等待 */
 #include "ti_msp_dl_config.h" /* AT24C02_PORT / AT24C02_SCL_PIN / AT24C02_SDA_PIN /

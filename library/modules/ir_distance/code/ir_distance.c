@@ -1,3 +1,9 @@
+/* 来源：立创开发板技术文档中心（wiki.lckfb.com）《红外测距传感器》
+ * 页面：https://wiki.lckfb.com/zh-hans/dmx/module/sensor/Infrared-distance-sensor.html
+ * 本代码按模块库规范改写（去演示与调试输出、函数名规范化、
+ * 引脚宏参数化等）；使用 / 复制 / 修改 / 传播请遵循立创版权要求：
+ * 标明来源与链接。 */
+
 #include "ir_distance.h"
 #include <math.h> /* pow：GP2Y0A02YK0F 电压→距离换算 */
 #include "adc_mspm0.h" /* adc_get：共享 ADC12_0 MEM3（数据所有权归 adc 模块） */

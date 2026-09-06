@@ -1,3 +1,9 @@
+/* 来源：立创开发板技术文档中心（wiki.lckfb.com）《OpenMV4摄像头》
+ * 页面：https://wiki.lckfb.com/zh-hans/dmx/module/rf/open-mv4-camera.html
+ * 本代码按模块库规范改写（去演示与调试输出、函数名规范化、
+ * 引脚宏参数化等）；使用 / 复制 / 修改 / 传播请遵循立创版权要求：
+ * 标明来源与链接。 */
+
 #include "open_mv4.h"
 
 /* OpenMV4 主控侧 UART 帧解析（mspm0 纯驱动切片，ADR 0009）：

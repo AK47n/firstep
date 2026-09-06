@@ -258,8 +258,13 @@ export function moduleInfoHTML(module, platform) {
       : '<li class="muted">实现内嵌母版（随母版进工程，不复制文件、不重复）</li>';
     const notes = e.notes ? '<div class="mi-note">备注：' + escHtml(e.notes) + "</div>" : "";
     const kit = e.kit ? '<div class="mi-note">套件：' + escHtml(e.kit) + "</div>" : "";
+    // 来源链接标签（工单 lckfb-attribution/03）：wiki 手册原页 → 「来源（立创 wiki）」，
+    // 其余（购买链接等）维持「购买链接」——打开链接前即知链接性质。
+    // 判据与后端 is_wiki_source_url 同构（单一前缀常量，勿各自定义变体）。
+    const isWiki = String(e.source_url || "").startsWith("https://wiki.lckfb.com/");
     const source = e.source_url ? '<div class="mi-note"><a href="' + escHtml(e.source_url)
-      + '" target="_blank" rel="noopener">购买链接</a></div>' : "";
+      + '" target="_blank" rel="noopener">' + (isWiki ? "来源（立创 wiki）" : "购买链接")
+      + "</a></div>" : "";
     const pins = (e.pins && e.pins.length)
       ? '<table class="mi-pins"><thead><tr><th>角色</th><th>类型</th><th>默认引脚</th>'
         + '<th>必接</th><th>宏名</th></tr></thead><tbody>'

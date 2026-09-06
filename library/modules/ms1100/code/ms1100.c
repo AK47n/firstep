@@ -1,3 +1,9 @@
+/* 来源：立创开发板技术文档中心（wiki.lckfb.com）《MS1100气体传感器》
+ * 页面：https://wiki.lckfb.com/zh-hans/dmx/module/sensor/ms1100-gas-sensor.html
+ * 本代码按模块库规范改写（去演示与调试输出、函数名规范化、
+ * 引脚宏参数化等）；使用 / 复制 / 修改 / 传播请遵循立创版权要求：
+ * 标明来源与链接。 */
+
 #include "ms1100.h"
 #include "adc_mspm0.h" /* adc_init / adc_get：共享 ADC12_0 MEM0（薄封装） */
 
