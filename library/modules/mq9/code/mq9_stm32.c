@@ -25,8 +25,7 @@
  *   mq2/us016/mspm0 版先例；无采样延时）；
  * - DO 数字量未声明：页面 Get_MQ9_DO_value（PA1，IPU）演示未用（LM393
  *   阈值由模块可调电阻控制——mspm0 先例「未用不声明」= 同策略，不落 pins、
- *   不落码；页面注释「酒精值」系 MQ-3 模板残留——notes 记录不落码），需要
- *   时骨架经 gpio 直读。 */
+ *   不落码；页面 DO 注释串台记录见 manifest notes），需要时骨架经 gpio 直读。 */
 
 void mq9_init(void)
 {

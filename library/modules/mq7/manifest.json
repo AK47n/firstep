@@ -1,6 +1,6 @@
 {
   "slug": "mq7",
-  "description": "MQ-7 一氧化碳检测传感器驱动（mspm0 纯驱动薄封装，ADR 0009）：依赖库内 adc 模块共享 ADC12_0 MEM0 槽位读数（不新开 ADC 通道），mq7_init + mq7_read_percent 出 0-100% 浓度百分比（相对值非 ppm 精标）；适用于一氧化碳检测、CO 报警、燃气不完全燃烧监测（相对值）等赛题功能。",
+  "description": "MQ-7 一氧化碳检测传感器驱动（双平台纯驱动薄封装，ADR 0009）：依赖库内 adc 模块读 ADC 通道（mspm0 共享 ADC12_0 MEM0 槽位、stm32 经 ml_adc 共读 PA5），mq7_init + mq7_read_percent 出 0-100% 浓度百分比（相对值非 ppm 精标）；适用于一氧化碳检测、CO 报警、燃气不完全燃烧监测（相对值）等赛题功能。",
   "dependencies": [
     "adc"
   ],
