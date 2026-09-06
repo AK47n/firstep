@@ -29,6 +29,39 @@
           "required": true
         }
       ]
+    },
+    "stm32": {
+      "files": [
+        "code/bmp180_stm32.c",
+        "code/bmp180_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "软 I2C 总线件（SDA 方向运行时切换，不占硬件 I2C 外设/TIMER——不用母版 ml_i2c）。页面 = **F1 标准库**（stm32f10x.h + RCC_APB2PeriphClockCmd——非 F4 嫌疑页）；**电平配置 = 页面原式 GPIO_Mode_Out_OD（开漏输出）+ GPIO_Mode_IPU（上拉输入）**→ ml_gpio OUT_OD/IU（与 aht10/sht20 等主流一派，模块板自带上拉）。**页面缺陷清单（已取证 + 修正 + notes + 守卫）**：① **Get_Pressure 内嵌 Get_Temperature 二次转换重读合并**（页面 Get_Pressure 内嵌调 Get_Temperature() 的二次温度读取省去——B5 复用页面计算结果，结果与页面等价，notes 记录）；② **NACK 仅 printf → 状态码**（页面 Write_Cmd 零段/Read16 写段 NACK 仅 printf 不中断——本件 Write_Cmd/Read16 返回 1/2/3，bmp180_read 段级映射 0=成功/1=温度段失败/2=气压段失败）；③ **char ack 死变量剔除**（页面 IIC_WaitAck `char ack` 只读未写恒 0）；④ **B7 uint32_t 双分支保留**（页面 L410-422——B7 = ((uint32)UP−(uint32)B3)×50000 可达 ≥2^31，else 分支（先除后移）不可删；按页面/标准保留真/假双分支 + 注释，mspm0 批 13 判定同款沿用）；⑤ **掩码 & 0xFFFC 不得出现**（BMP180 无此掩码——反向守卫：Read16 len==3 `(d0<<16|d1<<8|d2)>>8` 与标准 `>>(8-oss)`（oss=0）一致，按页面保留）；⑥ **页面默认脚 SDA=PB9/SCL=PB8 不照抄**（=母版 OLED 段——批次 2 先例）。换算原式照 mspm0：T=((B5+8)/16)×0.1℃、p 全套 32 位原式（Pa）、海拔 44330（math.h/pow——ARMCC 标准库自动含 math，ir_distance/pid 先例，uvprojx 无需显式链接项）；oss 固定 0（ultra low power 页面默认，参数化范围外）。**默认脚 = PA6（SCL）/PA7（SDA）**——共挂批次 2/3 软 I2C 总线（地址 0xEE 与既有 11 件 0x38/0x23/0x40/0x44/0x50/0x1A/0x48/0x29/0x5A/0x58/0x40 全异 = 合法共挂；**与 ms5611 同址 0xEE → 两件互替不可同挂**——同一总线同址双选必冲突：默认脚各取一挂 PA6/PA7、选一只，同选经引脚绑定换独立总线或换件，notes 记录；与 motor MOTOR_A_DIR/DIR2 默认重叠：气压/海拔与「带电机方向的小车运动控制」不同框、同选概率最低，同选经引脚绑定消解）。**init 含 SCL OUT_OD 初始化 + 置高**（批次 3/01 回修口径——页面 GPIO_Init 本身已 Out_OD+SetBits（合规），stm32 版显式保留）；与 mspm0 条目 API 同名同语义（bmp180_init/read/read_altitude、同返回码、同出参单位 ℃/Pa），mspm0 侧零改动。\n来源：sources/materials/lckfb-地阔星移植手册/sensor--bmp180-pressure-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/bmp180-pressure-sensor.html；网盘资料 https://pan.baidu.com/s/1EyqGBpfKUX3XO2BKvf37Tw?pwd=pyyt 提取码 pyyt；旧资料 https://pan.baidu.com/s/1miTIphm；采购 https://detail.tmall.com/item.htm?abbucket=0&id=521331189285&ns=1&spm=a21n57.1.0.0.71d8523cm3qMhZ（GY-68 BMP180 新款 BOSCH 换代替 BMP085））。改造要点：去 main.c 演示与 printf；函数名规范化（bmp180_init/read/read_altitude）；IIC 原语静态化（bmp180_iic_start/stop/send_ack/wait_ack/send_byte/read_byte）；校准读取封装 init（页面 Get_param 序列 0xAA..0xBE 入模块静态）；全局 param/B5 收敛模块静态；延时走 delay 模块。\nwiki-stm32-batch4/01 编译矩阵（2026-09-06）：单选生成 → UV4 0 error、0 module warning（PASS）；未上板（软 I2C 时序真机验证留后续）。",
+      "kit": "GY-68 BMP180 气压模块（BOSCH，BMP085 换代——3Pin I2C；工作 1.8-3.6V、0.1-1000uA、300-1100hPa ±1hPa、温度精度 ±1℃、0-65℃；地址 0xEE 写/0xEF 读）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/bmp180-pressure-sensor.html",
+      "pins": [
+        {
+          "id": "BMP180_SCL",
+          "type": "i2c_scl",
+          "default": "PA6",
+          "required": true,
+          "macros": [
+            "BMP180_SCL_GPIO",
+            "BMP180_SCL_PIN"
+          ]
+        },
+        {
+          "id": "BMP180_SDA",
+          "type": "i2c_sda",
+          "default": "PA7",
+          "required": true,
+          "macros": [
+            "BMP180_SDA_GPIO",
+            "BMP180_SDA_PIN"
+          ]
+        }
+      ]
     }
   }
 }
