@@ -95,6 +95,15 @@ WHITELIST = {
     "PB13": {"pid.GRAY_D2", "config.DIP1", "ttp224.TTP224_OUT2"},
     "PB14": {"pid.GRAY_D3", "config.DIP2", "ttp224.TTP224_OUT3"},
     "PB15": {"pid.GRAY_D4", "config.DIP3", "ttp224.TTP224_OUT4"},
+    # PA6/PA7 软 I2C 总线共享组（wiki-stm32-batch2/01 起，六件共总线：
+    # aht10/bh1750/sht20/sht30/at24c02/ags10 默认 SCL=PA6/SDA=PA7——器件
+    # 地址 0x38/0x23/0x40/0x44/0x50/0x1A 全异、多挂协议允许 = 合法共享
+    # （_shared_groups 判 kind=share「I2C 总线共享」），随工单逐个入组；
+    # 与 motor MOTOR_A_DIR/DIR2（TB6612 A 相方向）重叠：环境传感/存储记录
+    # 与「带电机方向的小车运动控制」不同框、同选概率最低（刻意不叠显示/
+    # 声光/输入/串口/无线/USB/SWD 组），同选经引脚绑定消解）
+    "PA6": {"motor.MOTOR_A_DIR", "aht10.AHT10_SCL"},
+    "PA7": {"motor.MOTOR_A_DIR2", "aht10.AHT10_SDA"},
 }
 
 

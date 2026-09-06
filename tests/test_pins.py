@@ -276,6 +276,15 @@ STM32_MACRO_VALUES = {
     # 页面默认 PB12 弃用——ttp224 四脚 + DIP/GRAY 已占）
     "WS2812_GPIO": "GPIO_A",
     "WS2812_PIN": "Pin_8",
+    # wiki-stm32-batch2/01：aht10 温湿度（软 I2C 总线件：SCL=PA6/SDA=PA7——
+    # 六件共总线（地址 0x38/0x23/0x40/0x44/0x50/0x1A 全异、多挂合法）；
+    # 与 motor MOTOR_A_DIR/DIR2（电机方向）默认重叠：环境传感与「带电机
+    # 方向的小车运动控制」不同框、同选概率最低，同选经引脚绑定消解；
+    # 页面默认 PB8/PB9（= OLED 段）不采用）
+    "AHT10_SCL_GPIO": "GPIO_A",
+    "AHT10_SCL_PIN": "Pin_6",
+    "AHT10_SDA_GPIO": "GPIO_A",
+    "AHT10_SDA_PIN": "Pin_7",
 }
 
 

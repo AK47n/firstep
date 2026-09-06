@@ -174,6 +174,41 @@
 #define WS2812_GPIO           GPIO_A
 #define WS2812_PIN            Pin_8
 
+/* ---- 软 I2C 总线件（aht10/bh1750/sht20/sht30/at24c02/ags10 六件，macros
+ * 逐脚端口宏——SCL/SDA 可分别绑定任意脚，无同口约束）：默认共挂一总线
+ * PA6（SCL）/PA7（SDA）——六件器件地址 0x38/0x23/0x40/0x44/0x50/0x1A 全异、
+ * 多挂协议允许 = 合法共享（test_default_layout 白名单登记）；PA6/PA7 与
+ * motor MOTOR_A_DIR/DIR2（TB6612 A 相方向）默认重叠：环境传感/存储记录与
+ * 「带电机方向的小车运动控制」不同框、同选概率最低（刻意不叠显示/声光/
+ * 输入/串口/无线/USB(PA11/12)/SWD(PA13/14) 组——见 wiki-stm32-batch2
+ * spec 默认脚推理；与既有 I2C_GPIO（PA11/12）、OLED_GPIO（PB8/9）零重叠
+ * 独立并存，同选 = 三总线各自独立），同选时经引脚绑定消解；**页面默认脚
+ * 全不照抄**（aht10 页面 PB8/PB9 = OLED 段、其余页面默认见各件 notes）---- */
+#define AHT10_SCL_GPIO        GPIO_A
+#define AHT10_SCL_PIN         Pin_6
+#define AHT10_SDA_GPIO        GPIO_A
+#define AHT10_SDA_PIN         Pin_7
+#define BH1750_SCL_GPIO       GPIO_A
+#define BH1750_SCL_PIN        Pin_6
+#define BH1750_SDA_GPIO       GPIO_A
+#define BH1750_SDA_PIN        Pin_7
+#define SHT20_SCL_GPIO        GPIO_A
+#define SHT20_SCL_PIN         Pin_6
+#define SHT20_SDA_GPIO        GPIO_A
+#define SHT20_SDA_PIN         Pin_7
+#define SHT30_SCL_GPIO        GPIO_A
+#define SHT30_SCL_PIN         Pin_6
+#define SHT30_SDA_GPIO        GPIO_A
+#define SHT30_SDA_PIN         Pin_7
+#define AT24C02_SCL_GPIO      GPIO_A
+#define AT24C02_SCL_PIN       Pin_6
+#define AT24C02_SDA_GPIO      GPIO_A
+#define AT24C02_SDA_PIN       Pin_7
+#define AGS10_SCL_GPIO        GPIO_A
+#define AGS10_SCL_PIN         Pin_6
+#define AGS10_SDA_GPIO        GPIO_A
+#define AGS10_SDA_PIN         Pin_7
+
 /* ---- UWB 基站串口（config.h 并入：UART_1 = PA9 TX / PA10 RX，115200）---- */
 #define UWB_UART          UART_1
 #define UWB_UART_INST     USART1
