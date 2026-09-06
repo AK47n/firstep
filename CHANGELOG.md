@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=f7b3a3dbae26a22785a9d71d7f24b7d724533e20 -->
+<!-- changelog-auto: last-commit=14e4a7e37089c2e0e2b4f8b1e8cb56be73440d3a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -91,6 +91,7 @@
 - 22:05 模块：soil 土壤湿度传感器 stm32 平台条目（wiki-stm32-batch5/07：ADC 薄封装件——页面 ADC 序列收敛 ml_adc + 默认 AO=ADC_Channel_5（PA5 页面原脚即共读点，ADC 共享组）+ 正向 value/4095×100（相对湿度非绝对值）+ **stm32 无 mspm0 板 PA14 板载 15k 固定衰减问题澄清**（默认脚物理差异）+ 页面 L138-140 DMA 函数名残留/L186 可燃气体串台 notes 记录不落码 + SAMPLES 30→5 快平均 + DO 未用不声明 + UV4 矩阵 0 error/0 module warning → verified=true）
 - 22:05 模块：gp2y1014au 粉尘传感器 stm32 平台条目（wiki-stm32-batch5/08：ADC 薄封装 + LED 驱动 GPIO 输出（器件必需——低有效脉冲 280us/40us/9680us 时序宏族，与 mspm0 .c 逐行对齐）——页面 ADC 序列收敛 ml_adc + 默认 AO=ADC_Channel_5（PA5 页面原脚即共读点，ADC 共享组）+ **LED 默认 PB5**（页面原脚 PA2=DEBUG_UART TX 常备件不照抄——叠 hx711 SCK/MOTOR_A_ENC 不同框）+ 页面 SAMPLES 30×2ms≈62ms 与 10ms LED 周期矛盾 → 5 次快平均 + 10 点滑动平均内嵌 static（Filter 全局符号收敛）+ 0.17×value−0.1 系数量纲脱节 notes（相对估算非精标）+ 依赖 [adc,delay] + UV4 矩阵 0 error/0 module warning → verified=true）
 - 22:06 工单：wiki-stm32-batch5/01 mq2 实施完成回填（结论 + 状态 resolved）
+- 22:06 工单：wiki-stm32-batch5/02 mq135 实施完成回填（结论 + 状态 resolved）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
