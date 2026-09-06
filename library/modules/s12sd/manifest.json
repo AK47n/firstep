@@ -1,0 +1,28 @@
+{
+  "slug": "s12sd",
+  "description": "S12SD 紫外线传感器驱动（mspm0 纯驱动薄封装，ADR 0009）：依赖库内 adc 模块共享 ADC12_0 MEM0 槽位读数（不新开 ADC 通道），s12sd_init + s12sd_read_uv_index 出 0-11 级 UV 指数（页面阈值表原式——240-370nm UV-A 波段）；适用于紫外线强度检测、UV 指数监测、防晒提醒等赛题功能。",
+  "dependencies": [
+    "adc"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/s12sd.c",
+        "code/s12sd.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**ADC 薄封装**：无独立 syscfg 实例——依赖 adc 模块共享 ADC12_0 实例 MEM0 槽位（默认 PA24/A0_3，与 adc/us016/mq2/本批薄封装件共读同槽；绑定换引脚 = 改写 adcPin*.$assign + adcMem*chansel，模块零改动；手册原脚 PA27/A0_0 经绑定即可复现——绑 PA27 时改写器按通道号换 adcPin3→adcPin0 + adcMem0chansel→CHAN_0）。轮询读取（adc_get 忙等）无 ADC 中断——共享 ADC12_0 实例，IRQHandler 强符号须唯一（joystick/adc 先例）。换算 = 页面 Get_Ultraviolet_Intensity 阈值表原式（12bit ADC 值分档：<227→0 级、227-317→1、318-407→2、408-502→3、503-605→4、606-695→5、696-794→6、795-880→7、881-975→8、976-1078→9、1079-1169→10、≥1170→11——「0~11 紫外线强度等级由低到高，11 最高」页面原式，0 低 11 高）。**量程/波段**：检测波长 240-370nm（**UV-A 波段**——UV-B/UV-C 不响应；组件采用氮化镓基肖特基光电二极管 + 板载 LM358 放大、1% 精度元器件），测量角度 130°、温漂 0.08%/℃、工作 2.7-5V/1mA（页面规格）。**档位为页面标定值**（页面实测「测量室内紫外线强度为 0 级」）——户外强日光/遮挡/器件个体差异会偏移，按相对档位使用；页面 Get_ADC_Value 备注「误差 80mV 左右」。页面 SAMPLES 30 次 × delay_ms(5) 改 5 次快速平均（us016 快平均先例）。页面 ADC 中断（ADC12_0_INST_IRQHandler + gCheckADC 标志位）改依赖 adc 模块轮询（共享实例 IRQHandler 强符号唯一）。页面无 DO（3 Pin：VCC/GND/SIG——SIG 为放大模拟电压输出，非数字量）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--s12sd-uv-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/s12sd-uv-sensor.html；网盘资料 https://pan.baidu.com/s/1YuwoCsbiJPaYH-8TaHEwVg 提取码 8888；移植成功案例 https://pan.baidu.com/s/1RP-wVQ_UDaeR_eYP5W-dqg?pwd=pri6 提取码 pri6）。改造要点：去掉 main.c 演示与 printf；函数名规范化（s12sd_init/read_uv_index，去 ULTRAVIOLET_Init/ADC_GET/Get_ADC_Value/Get_Ultraviolet_Intensity 命名 + 页面参数式 value 改模块内自读）；ADC 中断改轮询；SAMPLES 30×5ms 改 5 次快平均；SYSCFG_DL_init 重复调用删除（模板 main 已调）。\nwiki-modules-batch9/04 编译矩阵（2026-09-09）：单选生成 → SysConfig CLI → gmake 0 error、0 warning（PASS）；未上板（UV 档位/真机验证留后续）。",
+      "kit": "S12SD 高灵敏 UV 紫外线传感器模块（3Pin：VCC/GND/SIG；工作 2.7-5V、1mA；氮化镓基肖特基光电二极管 + 板载 LM358 放大器（1% 精度元器件）；SIG 放大模拟电压输出；检测波长 240-370nm（UV-A）、测量角度 130°、温漂 0.08%/℃）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/s12sd-uv-sensor.html",
+      "pins": [
+        {
+          "id": "S12SD_AO_CH0",
+          "type": "adc",
+          "default": "PA24",
+          "required": true
+        }
+      ]
+    }
+  }
+}
