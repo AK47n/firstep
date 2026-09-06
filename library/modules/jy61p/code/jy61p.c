@@ -228,48 +228,37 @@ void jy61p_init(void)
     delay_ms(JY61P_INIT_DELAY_MS);
 }
 
+/* 角度换算（页面 get_angle 原式：raw/32768.0×180.0 + ±180° 回绕——
+ * 2 字节 LSB 先的数据字） */
+static float jy61p_angle_from_raw(uint16_t raw)
+{
+    float angle = (float)raw / 32768.0f * 180.0f;
+
+    if (angle > 180.0f) {
+        angle -= 360.0f;
+    } else if (angle < -180.0f) {
+        angle += 360.0f;
+    }
+    return angle;
+}
+
 uint8_t jy61p_read_angles(float *roll_deg, float *pitch_deg, float *yaw_deg)
 {
     uint8_t data[JY61P_ANGLE_BYTES] = {0};
-    float roll_x;
-    float pitch_y;
-    float yaw_z;
 
     if (jy61p_read_reg(JY61P_REG_ROLL_LOW, data, JY61P_ANGLE_BYTES) != 0) {
         return 1;
     }
 
-    /* 页面 get_angle 换算原式：raw/32768.0×180.0 + ±180° 回绕
-     * （2 字节 LSB 先） */
-    roll_x = (float)(((uint16_t)data[1] << 8) | data[0]) / 32768.0f * 180.0f;
-    if (roll_x > 180.0f) {
-        roll_x -= 360.0f;
-    } else if (roll_x < -180.0f) {
-        roll_x += 360.0f;
-    }
-
-    pitch_y = (float)(((uint16_t)data[3] << 8) | data[2]) / 32768.0f * 180.0f;
-    if (pitch_y > 180.0f) {
-        pitch_y -= 360.0f;
-    } else if (pitch_y < -180.0f) {
-        pitch_y += 360.0f;
-    }
-
-    yaw_z = (float)(((uint16_t)data[5] << 8) | data[4]) / 32768.0f * 180.0f;
-    if (yaw_z > 180.0f) {
-        yaw_z -= 360.0f;
-    } else if (yaw_z < -180.0f) {
-        yaw_z += 360.0f;
-    }
-
+    /* 页面 get_angle 换算原式：raw/32768.0×180.0 + ±180° 回绕 */
     if (roll_deg != NULL) {
-        *roll_deg = roll_x;
+        *roll_deg = jy61p_angle_from_raw((uint16_t)(((uint16_t)data[1] << 8) | data[0]));
     }
     if (pitch_deg != NULL) {
-        *pitch_deg = pitch_y;
+        *pitch_deg = jy61p_angle_from_raw((uint16_t)(((uint16_t)data[3] << 8) | data[2]));
     }
     if (yaw_deg != NULL) {
-        *yaw_deg = yaw_z;
+        *yaw_deg = jy61p_angle_from_raw((uint16_t)(((uint16_t)data[5] << 8) | data[4]));
     }
     return 0;
 }

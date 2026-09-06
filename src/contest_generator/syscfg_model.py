@@ -288,7 +288,9 @@ def syscfg_path_matches(
     GPIO 组角色（gpio_out/gpio_in/enc）落在 `<实例>.associatedPins[n].pin`，
     同值多行时用 slug 反查消费实例名（syscfg_instances 单源表）区分——
     STEP_MOTOR SLP2 只认 STEP_MOTOR.*，HUIDU R3 只认 HUIDU.*。外设角色
-    落点路径尾字段唯一（txPin/rxPin/sclPin/sdaPin/ccp0Pin/ccp1Pin）。
+    落点路径尾字段（txPin/rxPin/sclPin/sdaPin/ccp0Pin/ccp1Pin）按 slug
+    反查消费实例区分（批次 4 ESPCI 前次；批量 10 DCC_100_PWM2/L298N_PWM
+    同 TIMG12/PA14——pwm 尾字段不再唯一）。
     """
     if decl_type in ("gpio_out", "gpio_in", "enc"):
         if not (".associatedPins[" in path and path.endswith(".pin")):
@@ -305,7 +307,8 @@ def syscfg_path_matches(
         # 外设角色默认值同脚时（wiki-modules-batch10/03：DCC_100_PWM2 与
         # L298N_PWM 同 TIMG12/PA14），仅尾字段（ccp0Pin 等）不再唯一——按
         # slug 反查 syscfg 实例名区分（与 uart/i2c 同款；C0/C1 通道判据先
-        # 行保留）。
+        # 行保留；带 pwm 角色的 slug 必须已入 INSTANCE_CONSUMERS——
+        # 未登记 = 数据漂移，此处大声失败而非掩蔽）。
         if role_id.endswith("_C0"):
             tail_ok = path.endswith(".ccp0Pin")
         elif role_id.endswith("_C1"):
@@ -313,10 +316,7 @@ def syscfg_path_matches(
         else:
             tail_ok = path.endswith((".ccp0Pin", ".ccp1Pin"))
         instance = path.split(".peripheral.", 1)[0]
-        known = INSTANCES_BY_SLUG.get(slug, ())
-        if known:
-            return tail_ok and instance in known
-        return tail_ok
+        return tail_ok and instance in INSTANCES_BY_SLUG[slug]
     if decl_type == "adc":
         # adc 落点 = `<实例>.peripheral.adcPin<N>`（N = 通道号，TI 命名）；
         # 实例名（ADC12_0）从消费表反查，多实例时按 slug 过滤。

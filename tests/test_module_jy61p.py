@@ -121,8 +121,10 @@ def test_jy61p_init_sequence_and_conversion_guards():
     header = (MODULES / "jy61p" / "code" / "jy61p.h").read_text(
         encoding="utf-8"
     )
-    # 地址与寄存器常量（头文件单源）
+    # 地址与寄存器常量（头文件单源；写 0xA0/读 0xA1 = 0x50<<1 形态）
     assert re.search(r"JY61P_ADDR\s+0x50u", header)
+    assert "(JY61P_ADDR << 1) | 0u" in source  # 写地址（页面 0xA0 形态）
+    assert "(JY61P_ADDR << 1) | 1u" in source  # 读地址（页面 0xA1 形态）
     assert re.search(r"JY61P_REG_UN\s+0x69u", header)
     assert re.search(r"JY61P_REG_SAVE\s+0x00u", header)
     assert re.search(r"JY61P_REG_ANGLE_REFER\s+0x01u", header)
