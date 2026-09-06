@@ -226,3 +226,15 @@ def test_aht10_stm32_code_guards():
     assert "return 1;" in code_only
     # ④ 读地址 = 0x38<<1|1（注释记录页面笔误）
     assert "0x38 << 1 | 1" in code_only and "0x38 << 1 | 0" in code_only
+
+
+def test_aht10_stm32_scl_init_guard():
+    """SCL 初始化防回潮（批次 3/01）：init 必须含 gpio_init(AHT10_SCL_GPIO,
+    AHT10_SCL_PIN, OUT_OD) + 置高——F1 复位后浮空输入、ODR 写入无效，
+    不初始化 = 总线死（批次 2 六件 SCL 从未初始化的真 bug 回修）。"""
+    c = (MODULES / "aht10" / "code" / "aht10_stm32.c").read_text(encoding="utf-8")
+    code_only = strip_comments(c, keep_preprocessor=True)
+    assert re.search(
+        r"gpio_init\(AHT10_SCL_GPIO, AHT10_SCL_PIN, OUT_OD\)", code_only
+    )
+    assert "AHT10_SCL(1)" in code_only

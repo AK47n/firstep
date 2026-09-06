@@ -226,3 +226,15 @@ def test_sht30_stm32_code_guards():
     assert "static uint8_t sht30_crc8" in code_only
     assert "return 4;" in code_only and "return 5;" in code_only
     assert code_only.count("return ") >= 4
+
+
+def test_sht30_stm32_scl_init_guard():
+    """SCL 初始化防回潮（批次 3/01）：init 必须含 gpio_init(SHT30_SCL_GPIO,
+    SHT30_SCL_PIN, OUT_OD) + 置高——F1 复位后浮空输入、ODR 写入无效；
+    本件按回修口径把页面原式推挽输出（全批唯一一派）统一为开漏输出+置高。"""
+    c = (MODULES / "sht30" / "code" / "sht30_stm32.c").read_text(encoding="utf-8")
+    code_only = strip_comments(c, keep_preprocessor=True)
+    assert re.search(
+        r"gpio_init\(SHT30_SCL_GPIO, SHT30_SCL_PIN, OUT_OD\)", code_only
+    )
+    assert "SHT30_SCL(1)" in code_only
