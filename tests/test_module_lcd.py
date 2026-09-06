@@ -156,4 +156,8 @@ def test_lcd_no_platform_deps_and_model_contract():
     # 0.96 型号表项：默认方向 = 2（横屏），w[2]=160 / h[2]=80，竖屏 80×160
     assert "lcd_seq_096" in init_c
     assert "{1, {80, 80, 160, 160}, {160, 160, 80, 80}," in init_c
-    assert "2," in init_c  # default_dir 字段（096 = 2 横屏——厂家 USE_HORIZONTAL=2）
+    # 1.3（ST7789V2 240×240，默认方向 0 竖屏）+ 1.69（ST7789V2 240×280）表项
+    assert "lcd_seq_130" in init_c
+    assert "{1, {240, 240, 240, 240}, {240, 240, 240, 240}," in init_c
+    assert "lcd_seq_169" in init_c
+    assert "{1, {240, 240, 280, 280}, {280, 280, 240, 240}," in init_c

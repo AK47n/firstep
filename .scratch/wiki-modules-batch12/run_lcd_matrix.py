@@ -27,6 +27,8 @@ MAIN_C = (
     "int main(void)\n"
     "{\n"
     "    lcd_init(LCD_MODEL_096, LCD_DIR_DEFAULT);\n"
+    "    lcd_init(LCD_MODEL_130, LCD_DIR_DEFAULT);\n"
+    "    lcd_init(LCD_MODEL_169, LCD_DIR_DEFAULT);\n"
     "    lcd_clear(BLACK);\n"
     "    lcd_fill(0, 0, 40, 20, RED);\n"
     "    lcd_draw_point(10, 10, GREEN);\n"
