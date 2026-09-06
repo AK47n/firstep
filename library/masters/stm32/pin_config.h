@@ -119,6 +119,15 @@
 #define IR_BEAM_GPIO          GPIO_A
 #define IR_BEAM_PIN           Pin_8
 
+/* ---- 继电器（relay 模块：GPIO 输出 1 脚，OUT 默认 PB4——与 motor 编码器
+ * 方向输入 MOTOR_A_ENC_DIR 默认重叠：继电器与「带编码器闭环的电机控制」
+ * 不同框、同选概率最低（刻意不叠声光/执行件 LED/BUZZER/电机 PWM/方向——
+ * 继电器+蜂鸣报警/电灯控制为常见组合），同选时经引脚绑定消解；PB4 非
+ * PWM/ADC 主用脚，推挽输出无扰。页面（地阔星 F4 口径）默认 PA2 不采用
+ * ——DEBUG_UART TX 常备件）---- */
+#define RELAY_GPIO            GPIO_B
+#define RELAY_PIN             Pin_4
+
 /* ---- UWB 基站串口（config.h 并入：UART_1 = PA9 TX / PA10 RX，115200）---- */
 #define UWB_UART          UART_1
 #define UWB_UART_INST     USART1

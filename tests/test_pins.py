@@ -240,6 +240,11 @@ STM32_MACRO_VALUES = {
     "OLED_GPIO": "GPIO_B",
     "OLED_SCL_Pin": "Pin_8",
     "OLED_SDA_Pin": "Pin_9",
+    # wiki-stm32-batch1/01：relay 继电器（GPIO 输出默认 PB4——与 motor 编码器
+    # 方向输入 MOTOR_A_ENC_DIR 重叠：继电器与编码器闭环不同框、同选概率最低，
+    # 同选经引脚绑定消解；页面 F4 口径默认 PA2 弃用——DEBUG_UART TX 常备件）
+    "RELAY_GPIO": "GPIO_B",
+    "RELAY_PIN": "Pin_4",
 }
 
 
