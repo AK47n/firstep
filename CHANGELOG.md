@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=965b9f763ea3f6e6375143800c4cb705a9603482 -->
+<!-- changelog-auto: last-commit=3dbd589d33f6fcbd65fb5cfcd8fcd72dd80ed4b3 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -113,6 +113,7 @@
 - 22:21 工单：wiki-stm32-batch6/05 mq8 实施完成回填（结论 + 状态 resolved）
 - 22:21 工单：wiki-stm32-batch6/06 mq9 实施完成回填（结论 + 状态 resolved）
 - 22:21 工单：wiki-stm32-batch6/07 ms1100 实施完成回填（结论 + 状态 resolved）
+- 22:29 收尾：wiki-stm32-batch6 批次 6 收官——CONTEXT 平台行补录 stm32 线批次 6 块（MQ 系收尾：页面 ADC 序列收敛 ml_adc/16 ADC 角色 PA5 共享组/各件检测对象与 mq7 高低温循环/mq9 双温循环/ms1100 推导+预热/7 宏/矩阵 0-0）+ code-review 两轴结果回填（标准轴 0 硬违规、判断项 6 条——description 双平台措辞/ms1100 stdio 行号/测试 docstring 3 条已整改 + 3 条按先例保留；spec 轴对页核实零失实、缺失 3 条——ms1100 电压式防回潮守卫/收尾闭环/description 已整改、轻微 1 条——mq4/6/7/8/9 .c 注释去「酒精值」串台字样（严格不落码口径））+ 收尾报告（全量 pytest 3714 通过/sweep_7_modules.py 7/7 OK/UV4 七件 0/0）+ 矩阵脚本与一致性快检入库；遗留：存量模块 description 措辞统一 + 上板真机验证
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
