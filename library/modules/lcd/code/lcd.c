@@ -255,8 +255,9 @@ void lcd_show_num(uint16_t x, uint16_t y, uint16_t num, uint8_t len,
     }
 }
 
-/* 显示带 1 位小数的浮点（厂家 ShowFloatNum1 语义：num×100 按 len 位拆，
- * 小数点落在倒数第 2 位——num×100 溢出上限 655，使用注意） */
+/* 显示带 2 位小数的浮点（厂家 ShowFloatNum1 语义：num×100 按 len 位拆、
+ * 小数点落在倒数第 2 位——3.14 → "03.14"（len=5）；num×100 溢出上限
+ * 655，使用注意） */
 void lcd_show_float(uint16_t x, uint16_t y, float num, uint8_t len,
                     uint16_t fc, uint16_t bc, uint8_t sizey)
 {

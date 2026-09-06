@@ -4,7 +4,9 @@
 
 **被谁阻塞：** 无（独立；实现顺序按 spec 建议在 01-06 后，oled 回归可与 01 并行观察）。
 
-**状态：** pending
+**状态：** resolved
+
+**结论：** 2026-09-12 完成并提交。oled SPI 总线变体（决策 B）：OLED_SPI_Init（软 SPI 5 脚——母版新 OLED_SPI 实例，默认 PA28/PA31/PA13/PB18/PA22）+ OLED_WR_Byte 总线模式分发（s_bus_spi 静态态——I2C 路径零行为变化）+ 初始化序列公共化 oled_drv_init（厂家 SPI/I2C 例程序列同参逐字核对）；零回归：既有 API/签名/I2C 代码不动（回归断言 + I2C 变体编译矩阵重跑 PASS）；0.91 128×32 核验结论 = 原驱动 MUX 0x3F/COM 0x12 不适配 → 新增 oled_set_res(OLED_RES_128X32)（初始化前调用；GRAM 不变、超行面板忽略）；0.96 IIC/1.3 单色核对记录（同家族不提炼）；已知取舍：SPI 模式下 I2C1（PB2/PB3）保留（不引入变体感知裁剪）；SPI 变体矩阵 PASS（0 error/0 warning）；未上板。
 
 **验收：**
 

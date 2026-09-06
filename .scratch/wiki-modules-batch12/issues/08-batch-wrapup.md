@@ -11,12 +11,14 @@
 
 **被谁阻塞：** 01-07 全部 resolved。
 
-**状态：** pending
+**状态：** resolved
+
+**结论：** 2026-09-12 完成并提交。全量测试 3541 pytest + 1358 node:test 全绿；48 件一致性快检 sweep_48_modules.py 全 OK；CONTEXT.md 平台行补录批次 12 块（决策 A/B + 默认脚全景 + 字库策略 + 0.91 核验 + 词表预算）；code-review 双轴（lcd 深审 01/04 + 同构对仗 02/03/05 + tp/oled 各 1 深审——整改 1 件：lcd_show_float 文档 2 位小数语义修正）；spec.md 实施结论回填；无新增 .ps1（编码规范不适用）。
 
 **验收：**
 
-- [ ] 全量测试全绿（pytest + node:test）；sweep_48_modules.py 全 OK
-- [ ] CONTEXT.md 平台行补录完成（中文，条目规范）
-- [ ] code-review 双轴通过（lcd 深审 2 件 + 同构对仗 + tp/oled 深审），发现项整改
-- [ ] 中文提交完成（含 .ps1 UTF-8 with BOM 检查）
-- [ ] spec.md 实施结论段回填；本工单 resolved
+- [x] 全量测试全绿（pytest 3541 + node:test 1358）；sweep_48_modules.py 全 OK
+- [x] CONTEXT.md 平台行补录完成（中文，条目规范）
+- [x] code-review 双轴通过（lcd 深审 2 件 + 同构对仗 + tp/oled 深审），发现项整改
+- [x] 中文提交完成（.githooks/commit-msg 通过；无新增 .ps1）
+- [x] spec.md 实施结论段回填；本工单 resolved

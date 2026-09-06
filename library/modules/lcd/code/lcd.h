@@ -102,9 +102,10 @@ void lcd_show_string(uint16_t x, uint16_t y, const uint8_t *p, uint16_t fc,
 /* 显示无符号整数 len 位（高位零抑制——厂家原语义：len 位左补空格）。 */
 void lcd_show_num(uint16_t x, uint16_t y, uint16_t num, uint8_t len,
                   uint16_t fc, uint16_t bc, uint8_t sizey);
-/* 显示浮点（厂家 ShowFloatNum1 语义：num×100 取整数再按 len 位拆，固定
- * 1 位小数——len = 总位数（含小数点前整数位+1）；max = 655/len=4 时整数
- * 部分上限 655，超出截断为 1 位小数+1 位整数，使用注意）。 */
+/* 显示浮点（厂家 ShowFloatNum1 语义：num×100 取整数再按 len 位拆、小数点
+ * 落在倒数第 2 位——固定 2 位小数；len = 显示前总位数（含小数点，如
+ * 3.14 → "03.14" 传 len=5）；num×100 上限 655（整数部分 ≤6，超截断
+ * 为 2 位小数+1 位整数，使用注意）。 */
 void lcd_show_float(uint16_t x, uint16_t y, float num, uint8_t len,
                     uint16_t fc, uint16_t bc, uint8_t sizey);
 /* 显示单个汉字（16×16）：s 指向 GBK 双字节编码（如 "中" = 0xD6 0xD0），
