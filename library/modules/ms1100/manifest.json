@@ -23,6 +23,28 @@
           "required": true
         }
       ]
+    },
+    "stm32": {
+      "files": [
+        "code/ms1100_stm32.c",
+        "code/ms1100_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**ADC 薄封装（页面 ADC 序列代码收敛 ml_adc）+ 公式推导**：F1 口径页面——页面 MS1100_Init + Get_ADC_Value 整体收敛为母版 ml_adc 的 adc_init（等效页面流程；采样时间 239.5cyc vs 页面 55.5cyc，功能等价差异记录）+ ADC_GetConversionValue→adc_get。**ADC 共享组**：默认 AO=PA5（=页面原脚 ADC_Channel_5，用户照页面接线即插即用）；本批 7 件与 batch5 八件 + flame 共读 PA5（ml_adc 的 adc_get 每次先写 SQR3 选通道，顺序调用互不干扰）；**同一物理脚只能接一件器件，多件同测需外部分路器/分时切换**（mspm0 MEM0 共读同口径；stm32 通道 10/10 全被既有角色占用——同选经引脚绑定消解）。**公式推导（页面无百分比函数）**：页面 demo 电压式 `voltage=(value/4095)×3.3`（Vref 3.3V）→ percent = voltage/3.3×100 = value/4095×100——**正向映射**：VOC 浓度越高 AOUT 电压越高、百分比越高（正文「AOUT 为芯片检测到的气体量对应的电压值变化」「清洁空气中电压 < 1V」）；**相对值非 ppm 精标**：页面未给电压-浓度换算表（对应关系为图片无图注），真实浓度需标定；**模块上电必须预热 3-5 分钟（页面原文）否则输出不准**。**页面缺陷/修正**：① SAMPLES 30 次 × 3ms 改 5 次快平均（us016 先例）；② 页面 C99 循环声明改 uint8_t i；③ 页面 stdio 残余剔除（如有）。DOUT 数字量未声明：页面 Get_DO_Num/MS1100_DO（AOUT 与 4K 可调电阻比较——页面仅述可调电阻比较）未用于演示（mspm0 先例「未用不声明」，需要时经引脚绑定 GPIO 输入自行读取）。与库内分工：MS1100 对甲醛/甲苯/苯等 VOC 灵敏（半导体型、5V、<50uA、可侦测 0.1ppm 以上），sgp30/ags10 为数字量 ppb/ppm 绝对读数（要数字绝对量用后两者、只要相对报警/低成本用本件）；MQ 系偏可燃气体。\nwiki 手册来源：sources/materials/lckfb-地阔星移植手册/sensor--ms1100-gas-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/ms1100-gas-sensor.html；网盘资料 https://pan.baidu.com/s/16hOBTKXWejzmklAeRxfmTg 提取码 ixqv；移植成功案例 https://pan.baidu.com/s/1upHo8zWHao9Hj80uPWB6Pg?pwd=2ale 提取码 2ale）。改造要点：去掉 main.c 演示与 printf；函数名规范化（ms1100_init/read_percent）；页面 ADC 序列收敛 ml_adc；SAMPLES 30→5 快平均；页面 demo 电压式推导归一 read_percent；DOUT 未用不声明。\nwiki-stm32-batch6/07 编译矩阵（2026-09-06）：stm32 单选生成（依赖 adc 展开）→ UV4（C:/Keil5 V5.06u7）0 error、0 module warning（exit 0，PASS）；未上板（ADC 换算/预热真机验证留后续）。",
+      "kit": "CJMCU-1100 MS1100 VOC 气体传感器模块（4Pin：VCC/GND/DOUT/AOUT；工作 5V、<50uA；AOUT 模拟量输出，DOUT 数字量阈值与 4K 可调电阻比较；对甲醛/甲苯/苯等 VOC 灵敏、可侦测 0.1ppm 以上）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/ms1100-gas-sensor.html",
+      "pins": [
+        {
+          "id": "MS1100_AO",
+          "type": "adc",
+          "default": "PA5",
+          "required": true,
+          "macros": [
+            "MS1100_AO_CH"
+          ]
+        }
+      ]
     }
   }
 }
