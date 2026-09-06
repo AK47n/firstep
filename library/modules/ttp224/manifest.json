@@ -39,6 +39,59 @@
           "required": true
         }
       ]
+    },
+    "stm32": {
+      "files": [
+        "code/ttp224_stm32.c",
+        "code/ttp224_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**GPIO 迷你驱动（页面 TTP224_GPIO_Init + 4 个 Key_INx_Scanf 完整）**：F1 口径页面（stm32f10x.h + RCC_APB2PeriphClockCmd + **GPIO_Mode_IPD 下拉输入** + GPIO_ReadInputDataBit），换算 = GPIO_Init→gpio_init（**ID 下拉**——与 mspm0 版上拉 IU 差异：模块推挽输出，上下拉不影响判定，notes 记录平台差异与理由）+ GPIO_ReadInputDataBit→gpio_get。页面 L85 GPIO_ResetBits 对输入脚冗余（IPD 已含下拉），不保留。**页面 4 个 Key_IN1-4_Scanf 收敛为 ttp224_read(ch)/read_all**（mspm0 批次先例；read_all 低 4 位掩码 bit0=通道1…bit3=通道4，支持多点）。**极性按页面资料**：页面正文（TTP223B 描述）与页面代码 KEY_INx 宏均按「引脚高 = 触摸」——TTP224_TOUCH_LEVEL 1u；TTP224N 实物输出常为低有效，如遇反相改 0 即可（单点反相宏）。**页面杂项（记录不修正）**：正文器件描述为 TTP223B（单路点动型）——标题/采购/代码均为 TTP224（4 路），文案串台；规格「100Ms」（应为 ms）、「GOIO」（应为 GPIO）拼写误。**引脚宏**TTP224_GPIO + TTP224_OUT1..4_PIN（pin_config.h 单源）；默认 OUT1-4=**PB12/13/14/15**——页面默认 PA1-4 不采用（全被既有角色占用）；与 config DIP0-3（拨码 ID）+ pid GRAY_D1-4（巡线灰度）默认重叠：触摸按键与「拨码系统配置/巡线灰度」不同框、同选概率最低（触摸+无线链路互替/手动输入同框低），同选时经引脚绑定消解——**同口绑定约束：四脚须同 GPIO 口（共享 TTP224_GPIO 宏），换口需整组迁移**（pinwriter 共享端口宏校验同值放行，I2C_GPIO 先例）。模块特性（页面说明）：4 路电容式触摸开关、点动型、可隔塑料/玻璃/薄纸触摸、低功耗模式（12s 无触摸切换）、工作 2.4-5.5V、2.5~9uA、最快响应 ~100ms；页面无去抖（电容触摸 IC 输出，直读）。**未上板**（触摸极性真机验证留后续）。\nwiki-stm32-batch1/05 编译矩阵（2026-09-06）：stm32 单选生成 → UV4（C:/Keil5 V5.06u7）0 error、0 module warning（exit 0，PASS）；未上板。\n来源：sources/materials/lckfb-地阔星移植手册/sensor--ttp224-touch-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/ttp224-touch-sensor.html；网盘资料 https://pan.baidu.com/s/1lBksfqx_dT4uIyABkHVm3Q 提取码 hj2n + 移植成功案例 https://pan.baidu.com/s/1E6KqttXmkq5UfCeeedWSXw?pwd=e2d7 提取码 e2d7；采购链接 [TTP224 4路 电容式 触摸开关 数字触摸传感器模块] https://item.taobao.com/item.htm?spm=a1z10.3-c-s.w4002-24706531953.10.37476a4b0lAfi7&id=522552731734）。与 mspm0 条目分工：mspm0 侧为 syscfg GPIO 输入实例 + DL_GPIO API（默认 PA22/25/26/27 叠 HUIDU/DEBUG/NRF/ZIGBEE/joystick/IR_REMOTE/ADC MEM3），本条目为 ml_gpio API + pin_config.h 宏段（默认 PB12-15 叠 DIP/GRAY），API 同名同语义、零交叉改动。",
+      "kit": "TTP224 4 路电容式触摸开关模块（6Pin：VCC/GND + OUT1-4；工作 2.4-5.5V、2.5~9uA；点动型，可隔塑料/玻璃触摸；最快响应 ~100ms）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/ttp224-touch-sensor.html",
+      "pins": [
+        {
+          "id": "TTP224_OUT1",
+          "type": "gpio_in",
+          "default": "PB12",
+          "required": true,
+          "macros": [
+            "TTP224_GPIO",
+            "TTP224_OUT1_PIN"
+          ]
+        },
+        {
+          "id": "TTP224_OUT2",
+          "type": "gpio_in",
+          "default": "PB13",
+          "required": true,
+          "macros": [
+            "TTP224_GPIO",
+            "TTP224_OUT2_PIN"
+          ]
+        },
+        {
+          "id": "TTP224_OUT3",
+          "type": "gpio_in",
+          "default": "PB14",
+          "required": true,
+          "macros": [
+            "TTP224_GPIO",
+            "TTP224_OUT3_PIN"
+          ]
+        },
+        {
+          "id": "TTP224_OUT4",
+          "type": "gpio_in",
+          "default": "PB15",
+          "required": true,
+          "macros": [
+            "TTP224_GPIO",
+            "TTP224_OUT4_PIN"
+          ]
+        }
+      ]
     }
   }
 }

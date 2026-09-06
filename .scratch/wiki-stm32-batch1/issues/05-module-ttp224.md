@@ -17,16 +17,22 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** claimed
+**状态：** resolved
 
 **实施清单：**
-- [ ] `library/modules/ttp224/code/ttp224_stm32.c/.h`（UTF-8；.c include 本模块 .h + pin_config.h + headfile.h；零引脚字面量；TTP224_TOUCH_LEVEL 1u + TTP224_CHANNELS 4u 宏）
-- [ ] manifest.json platforms 增 stm32：files `[code/ttp224_stm32.c, code/ttp224_stm32.h]`、verified false、hardware_bound false、pins 4 角色如上、kit（TTP224 套件名）、source_url `https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/ttp224-touch-sensor.html`、notes（手册路径+原页+网盘+采购 + 页面原式 IPD 下拉输入（与 mspm0 上拉差异）+ 触摸=高电平自洽 + 共享宏同口约束 + 默认脚推理 + 未上板）
-- [ ] pin_config.h 增 `TTP224_GPIO/TTP224_OUT1..4_PIN`（5 宏）
-- [ ] 测试 `tests/test_module_ttp224.py`：形状（4 pins 元组）+ 母版宏存在（5 条断言）+ stm32 单选生成全流程 + 守卫（TTP224_TOUCH_LEVEL 1u、ID 模式 `, ID)` 出现、无 printf/main/GPIO_Init/RCC_、read_all 掩码语义注释）
-- [ ] test_pins.py STM32_MACRO_VALUES 补 5 宏；test_default_layout.py 白名单 ttp224×config+pid（PB12-15 重叠，含 DIP/GRAY 四对）
-- [ ] 编译矩阵 UV4 0/0（MAIN_C 调 ttp224_init+read(1..4)+read_all，(void) 化）→ verified=true
-- [ ] wordlist 感知传感器/触控输入分类；词表预算链
-- [ ] 中文提交 → resolved → 结论回填
+- [x] `library/modules/ttp224/code/ttp224_stm32.c/.h`（UTF-8；.c include 本模块 .h + pin_config.h + headfile.h；零引脚字面量；TTP224_TOUCH_LEVEL 1u + TTP224_CHANNELS 4u 宏）
+- [x] manifest.json platforms 增 stm32：files `[code/ttp224_stm32.c, code/ttp224_stm32.h]`、verified false、hardware_bound false、pins 4 角色如上、kit（TTP224 套件名）、source_url `https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/ttp224-touch-sensor.html`、notes（手册路径+原页+网盘+采购 + 页面原式 IPD 下拉输入（与 mspm0 上拉差异）+ 触摸=高电平自洽 + 共享宏同口约束 + 默认脚推理 + 未上板）
+- [x] pin_config.h 增 `TTP224_GPIO/TTP224_OUT1..4_PIN`（5 宏）
+- [x] 测试 `tests/test_module_ttp224.py`：形状（4 pins 元组）+ 母版宏存在（5 条断言）+ stm32 单选生成全流程 + 守卫（TTP224_TOUCH_LEVEL 1u、ID 模式 `, ID)` 出现、无 printf/main/GPIO_Init/RCC_、read_all 掩码语义注释）
+- [x] test_pins.py STM32_MACRO_VALUES 补 5 宏；test_default_layout.py 白名单 ttp224×config+pid（PB12-15 重叠，含 DIP/GRAY 四对）
+- [x] 编译矩阵 UV4 0/0（MAIN_C 调 ttp224_init+read(1..4)+read_all，(void) 化）→ verified=true
+- [x] wordlist 感知传感器/触控输入分类；词表预算链（slug 已挂接，零改动）
+- [x] 中文提交 → resolved → 结论回填
+
+**验收记录：**
+- 矩阵 PASS：UV4 V5.06u7 `-j0 -r -b` exit 0，`0 Error(s), 0 Warning(s)`；编译日志 `.scratch/wiki-stm32-batch1/matrix/ttp224/build.log`。
+- 页面原式 IPD 下拉（ml_gpio `ID`）——与 mspm0 上拉差异记录（模块推挽输出，上下拉不影响判定）；页面 GPIO_ResetBits 对输入脚冗余不保留；页面 4 个 Key_INx_Scanf 收敛 read(ch)/read_all（低 4 位掩码）。
+- 页面杂项记录不修正：正文 TTP223B 文案串台（标题/采购/代码均 TTP224 4 路）、规格「100Ms」「GOIO」拼写误。
+- 测试：test_module_ttp224 7 passed（双平台形状 + 5 宏存在 + stm32/mspm0 单选生成 + 守卫）；test_pins/test_default_layout 全绿（27 passed 组合跑）。
 
 **验收标准：** 全部 checkbox；pytest 绿；矩阵 exit 0。

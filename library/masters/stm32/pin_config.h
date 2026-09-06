@@ -153,6 +153,18 @@
  * LM393 阈值由模块可调电阻控制）---- */
 #define FLAME_AO_CH           ADC_Channel_5
 
+/* ---- TTP224 四路电容触摸（ttp224 模块：4 × GPIO 输入下拉，OUT1-4 默认
+ * PB12/13/14/15——与 config DIP0-3（拨码 ID）+ pid 灰度 GRAY_D1-4 默认重叠：
+ * 触摸按键与「拨码系统配置/巡线灰度」不同框、同选概率最低（触摸+无线链路
+ * 互替/手动输入同框低），同选时经引脚绑定消解——**同口绑定约束：四脚须同
+ * GPIO 口（共享 TTP224_GPIO 宏），换口需整组迁移**；页面默认 PA1-4 不采用
+ * ——全被既有角色占用）---- */
+#define TTP224_GPIO           GPIO_B
+#define TTP224_OUT1_PIN       Pin_12
+#define TTP224_OUT2_PIN       Pin_13
+#define TTP224_OUT3_PIN       Pin_14
+#define TTP224_OUT4_PIN       Pin_15
+
 /* ---- UWB 基站串口（config.h 并入：UART_1 = PA9 TX / PA10 RX，115200）---- */
 #define UWB_UART          UART_1
 #define UWB_UART_INST     USART1

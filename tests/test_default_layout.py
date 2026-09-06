@@ -60,10 +60,12 @@ WHITELIST = {
         "zigbee_uart_key.ZIGBEE_UART_RX",
         "zigbee_link.ZIGBEE_UART_RX",
     },
-    "PB12": {"pid.GRAY_D1", "config.DIP0"},
-    "PB13": {"pid.GRAY_D2", "config.DIP1"},
-    "PB14": {"pid.GRAY_D3", "config.DIP2"},
-    "PB15": {"pid.GRAY_D4", "config.DIP3"},
+    # wiki-stm32-batch1/05（ttp224 四脚）并入后：PB12-15 三共享
+    # （DIP×GRAY×TTP224——见下方批次 1 注释块）
+    "PB12": {"pid.GRAY_D1", "config.DIP0", "ttp224.TTP224_OUT1"},
+    "PB13": {"pid.GRAY_D2", "config.DIP1", "ttp224.TTP224_OUT2"},
+    "PB14": {"pid.GRAY_D3", "config.DIP2", "ttp224.TTP224_OUT3"},
+    "PB15": {"pid.GRAY_D4", "config.DIP3", "ttp224.TTP224_OUT4"},
     # key stm32 默认 PB3 与 pid.GRAY_D6 重叠（蓝药丸无板载按键，PB3 = JTDO
     # 复位后可用；实际接线经引脚绑定消解——module-functionalize/04）
     "PB3": {"key.KEY_START", "pid.GRAY_D6"},
@@ -94,6 +96,12 @@ WHITELIST = {
     # 编码器闭环；stm32 ADC 可达脚 PA0-7/PB0-1 全被既有角色占用——取最
     # 「不同框」的 PA5（避让 PWM 主脚 PA0/1、debug PA2/3、编码器 EXTI PA4/PB5））
     "PA5": {"motor.MOTOR_B_ENC_DIR", "flame.FLAME_AO"},
+    # ttp224 默认 PB12-15 与 config DIP0-3 + pid GRAY_D1-4 重叠（触摸按键≠
+    # 拨码配置/巡线灰度；四脚同口约束——换口需整组迁移，同选经引脚绑定消解）
+    "PB12": {"pid.GRAY_D1", "config.DIP0", "ttp224.TTP224_OUT1"},
+    "PB13": {"pid.GRAY_D2", "config.DIP1", "ttp224.TTP224_OUT2"},
+    "PB14": {"pid.GRAY_D3", "config.DIP2", "ttp224.TTP224_OUT3"},
+    "PB15": {"pid.GRAY_D4", "config.DIP3", "ttp224.TTP224_OUT4"},
 }
 
 
