@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=1813c5a9b392f1849b77040724bdecdc212d5412 -->
+<!-- changelog-auto: last-commit=5acc54201b8524de1d0c3975f9b5e4df4fb97042 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -55,6 +55,7 @@
 - 17:51 模块：microwave_radar 微波多普勒雷达 stm32 平台条目（wiki-stm32-batch1/04，页面默认 PA1 弃用改 PA4 + UV4 矩阵 0 error/0 warning）
 - 17:54 模块：flame 火焰传感器 stm32 平台条目（wiki-stm32-batch1/02，ADC 独立通道页面原脚 PA5 + 页面缺陷清单修正 + UV4 矩阵 0 error/0 warning）
 - 17:56 模块：ttp224 四路电容触摸 stm32 平台条目（wiki-stm32-batch1/05，页面原式 IPD 下拉输入 + 4 键收敛 read/read_all + UV4 矩阵 0 error/0 warning）
+- 17:59 模块：ws2812 幻彩灯带 stm32 平台条目（wiki-stm32-batch1/06，页面缺陷 4 条修正——反写循环/越界/12MHz 时序弃用/声明无定义 + UV4 矩阵 0 error/0 warning）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
