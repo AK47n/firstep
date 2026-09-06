@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """aht10 stm32 编译矩阵（wiki-stm32-batch3/01）：单选生成 → UV4 真编译
 （0 error/0 module warning 硬门槛 = exit 0）。照 wiki-stm32-batch1
 run_relay_matrix.py 配方改 slug；产物在 .scratch/wiki-stm32-batch3/matrix/aht10/。"""
@@ -63,4 +63,3 @@ print("compile_passed:", passed)
 print("exit_code:", log.run.exit_code)
 print(output[-3000:])
 sys.exit(0 if passed else 1)
-
