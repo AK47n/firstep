@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=526917c069a67ad8276724efce3fc2fbbd27c46f -->
+<!-- changelog-auto: last-commit=f81a31d41e92f229ba08e550cfa7056158b0bbf4 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -26,6 +26,7 @@
 - 11:05 批次9 收尾：四张工单标记 resolved（结论含提交号/关键发现）；spec 补实施结论（矩阵全 PASS/rain 正向映射定稿/gp2y1014au LED 例外/词表预算实测）与 code-review 两轴结果；CONTEXT 平台行补录批次9 四件（ADC 薄封装群共读 MEM0 + gp2y1014au LED 输出实例 PA1——薄封装唯一例外）；词表预算按实测 wire 6341（> 5934 fit 上限）上调 WORDLIST_PROMPT_BYTES 6100→6600（fit 上限 6434 全量送达 + 93B 余量）并降 REFERENCE_FULLTEXT_BYTES 61500→61000（词表段 +241B 保 2KB 边界余量，batch5/7/8 口径，llm.py/budget.py 记账链同步）；gp2y1014au verified 回写 true（评审硬违规整改）；40u 时序守卫断言补强（评审弱观察）；新增 sweep_35_modules.py（批次1-9 35 件一致性快检全 OK）
 - 11:39 批次10/01-04 四件模块入库（sht20/jy61p/l298n/open_mv4，仅 mspm0）：
 - 11:40 批次10 收尾：四张工单标记 resolved（结论含提交号/关键发现/UART 放置决策落定方案①）；spec 补实施结论（四件矩阵全 PASS/l298n TIMG12 实证/open_mv4 UART1 实证/词表预算实测 6565 上调 6800/39 件快检）与 code-review 待填位；新增 sweep_39_modules.py（批次1-10 39 件一致性快检全 OK）；CONTEXT 平台行补录批次10 四件（SHT20/JY61P 软 I2C 默认脚与地址冲突提醒、L298N 独立模块 TIMG12+EN、OPENMV4_UART UART1 轮询——指纹裁剪后独占先例 + 实例上限现实约束与不并 coord_detect 帧格式差异）
+- 11:41 批次10 词表预算记账链同步：budget.py 补 batch10 口径注释（词表完整 wire 6565、预算 6600→6800、词表段全量 6565 比旧截断形态 6600 少 35B——最坏形态总量 -35B，REFERENCE_FULLTEXT_BYTES 61000 不动；llm.py 同款）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
