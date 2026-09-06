@@ -272,6 +272,8 @@
  * 环境站为常见搭配；页面默认 PB0 不采用 = MOTOR_B_DIR）。 */
 #define DHT11_GPIO            GPIO_B
 #define DHT11_PIN             Pin_3
+#define DS18B20_GPIO          GPIO_B
+#define DS18B20_PIN           Pin_1
 
 /* ---- UWB 基站串口（config.h 并入：UART_1 = PA9 TX / PA10 RX，115200）---- */
 #define UWB_UART          UART_1

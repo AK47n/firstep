@@ -104,6 +104,10 @@ WHITELIST = {
     # 同选经引脚绑定消解
     "PB5": {"motor.MOTOR_A_ENC", "hx711.HX711_SCK"},
     "PB0": {"motor.MOTOR_B_DIR", "hx711.HX711_DT"},
+    # ds18b20 默认 PB1 与 MOTOR_B_DIR2 重叠（wiki-stm32-batch4/04：测温与
+    # 单电机方向不同框、同选概率最低；页面默认 PB0 不采用 = MOTOR_B_DIR；
+    # 单总线件不叠软 I2C 总线件与传感站/声光组合）
+    "PB1": {"motor.MOTOR_B_DIR2", "ds18b20.DS18B20_DATA"},
     # PA6/PA7 软 I2C 总线共享组（wiki-stm32-batch2/01 起，六件共总线：
     # aht10/bh1750/sht20/sht30/at24c02/ags10 默认 SCL=PA6/SDA=PA7——器件
     # 地址 0x38/0x23/0x40/0x44/0x50/0x1A 全异、多挂协议允许 = 合法共享

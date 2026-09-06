@@ -23,6 +23,29 @@
           "required": true
         }
       ]
+    },
+    "stm32": {
+      "files": [
+        "code/ds18b20_stm32.c",
+        "code/ds18b20_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "单总线位时序件（一根数据线双向：发送=gpio_init OUT_PP、读位=gpio_init IU + gpio_get——方向运行时重配；忙等 delay_us——不占 TIMER/sr04 先例）。页面 = **F1 标准库**（stm32f10x.h + RCC_APB2PeriphClockCmd——非 F4 嫌疑页）；**电平配置 = 页面原式 GPIO_Mode_Out_PP（推挽输出）+ GPIO_Mode_IPU（上拉输入）**→ ml_gpio OUT_PP/IU（模块板自带 4.7k 上拉——空闲必须高电平）。**页面缺陷清单（已取证 + 修正 + notes + 守卫）**：① **0x44 后无转换等待（主缺陷）**——12bit 最长 750ms，页面 GetTemperture L265-266 发 0x44 后立即 Check+0xBE → 首次读回上电默认 85℃ 或不稳定值；本件补 **DS18B20_CONVERT_MS 750 等待**（mspm0 批 6 修正沿用）；② **.h 页外声明 DS18B20_Reset(void) 无定义**（页面 L330——链接错误风险）→ 剔除；③ **页面注释串台**（L51-66 三标题与内容错位（「初始化」内容=读时序等）、L107「MLX90614的引脚初始化」、L143 `DQ_OUT();//设置为输入模式` 注释与代码相反、L63「穿越火线」错别字）→ 不落/注释正确化（页面串台仅 notes 记录，源码零串台——测试守卫）；④ **位槽常量单源 ds18b20_stm32.h**（复位 750/释放 15/应答 200/释放 240/写 2+60/60+2/读 2+12+50——源码不散写字面量）；⑤ **读毕释放总线**（init 与 read 尾部 DATA_OUT+SET(1)——防总线占用）；⑥ 函数名规范化（页面 GetTemperture 拼写 → read_temp；DQ_* 宏前缀化 DS18B20_DATA_*）。换算：12bit 默认分辨率 0.0625℃/LSB（未写 CONFIG 寄存器——按页面「不进行修改」，参数化范围外）；负温补码 `(~temp)+1` × −0.0625（页面原式）；页面只读 2 字节、未读第 9 字节 CRC → 按页面不加 CRC 校验；命令 0xCC 跳过 ROM（单器件）/0x44 转换/0xBE 读暂存器；读槽 2+12+50=64us、写槽 2+60/60+2=62us——落页面 60-70us 区间；复位 750us、释放 15us；**采样间隔建议 ≥1s**（转换 750ms + 器件自发热——归调用方）。**默认脚 = PB1**——与 MOTOR_B_DIR2（TB6612 B 相第二方向脚）默认重叠：测温与单电机方向不同框、同选概率最低（刻意不叠声光/传感站/总线环境件——测温+声光/环境站为常见搭配；单总线件与软 I2C 总线件 PA6/PA7 不共脚；页面默认 PB0 不采用 = MOTOR_B_DIR，同选经引脚绑定消解）。与 mspm0 条目 API 同名同语义（ds18b20_init/read_temp、同返回码 0=检测到/1=失败、失败语义照 mspm0 .h 注释——read_temp 无应答时按读回数据换算返回页面语义、器件缺席由 init 报告），mspm0 侧零改动。\n来源：sources/materials/lckfb-地阔星移植手册/sensor--ds18b20-temp-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/ds18b20-temp-sensor.html；网盘资料 https://pan.baidu.com/s/1L83uG8So6k1NG_QznraoFQ；网盘完整工程 https://pan.baidu.com/s/1-vUJ7IIgATpAuoS84dehJw?pwd=2xzg 提取码 2xzg；采购 DS18B20 测温模块 https://item.taobao.com/item.htm?spm=a1z10.3-c-s.w4002-19589090137.12.179936b41D2Vd1&id=610859288168）。改造要点：去 main.c 演示与 printf；函数名规范化（GetTemperture→read_temp）；DS18B20_Check/Start/Write_Byte/Read_Byte 归一模块内静态；页面 .h 未实现声明 DS18B20_Reset 剔除；DQ_* 宏前缀化 DS18B20_DATA_*；stdio.h 页面未用剔除；引脚宏参数化；延时走 delay 模块。\nwiki-stm32-batch4/04 编译矩阵（2026-09-06）：单选生成 → UV4 0 error、0 module warning（PASS）；未上板（单总线位时序真机验证留后续）。",
+      "kit": "DS18B20 测温模块（3Pin 单总线，模块板带 4.7k 上拉；-55~+125℃、±0.5℃ 精度、9-12bit 可编程分辨率默认 12bit）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/ds18b20-temp-sensor.html",
+      "pins": [
+        {
+          "id": "DS18B20_DATA",
+          "type": "gpio_out",
+          "default": "PB1",
+          "required": true,
+          "macros": [
+            "DS18B20_GPIO",
+            "DS18B20_PIN"
+          ]
+        }
+      ]
     }
   }
 }
