@@ -245,6 +245,11 @@ STM32_MACRO_VALUES = {
     # 同选经引脚绑定消解；页面 F4 口径默认 PA2 弃用——DEBUG_UART TX 常备件）
     "RELAY_GPIO": "GPIO_B",
     "RELAY_PIN": "Pin_4",
+    # wiki-stm32-batch1/03：human_ir 人体红外（GPIO 输入默认 PB7——与 pid
+    # 灰度 GRAY_D8 重叠：人体红外与巡线灰度不同框、同选概率最低，同选经引脚
+    # 绑定消解；页面默认 PA1 弃用——被 adc/motor PWM/编码器线占用）
+    "HUMAN_IR_GPIO": "GPIO_B",
+    "HUMAN_IR_PIN": "Pin_7",
 }
 
 

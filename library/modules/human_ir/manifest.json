@@ -21,6 +21,29 @@
           "required": true
         }
       ]
+    },
+    "stm32": {
+      "files": [
+        "code/human_ir_stm32.c",
+        "code/human_ir_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**GPIO 迷你驱动（页面 Get_HumanIR 返回 GET 宏 + header + main 完整）**：F1 口径页面（stm32f10x.h + RCC_APB2PeriphClockCmd + GPIO_Mode_IPU + GPIO_ReadInputDataBit），换算 = GPIO_Init→gpio_init（IU 上拉输入）+ GPIO_ReadInputDataBit→gpio_get。**极性缺陷修正（定论，与 mspm0 批同口径）**：页面 L102 函数注释「0=感应到人体红外、1=未感应到」与正文（L44「人进入其感应范围则输出高电平」）/规格（L28「电平输出：高3.3V/低0V」）矛盾，页面代码 L108 实际按高=1 实现（GPIO_ReadInputDataBit ? Bit_SET : Bit_RESET）——按 HC-SR501 器件标准「高=感应到」修正，HUMAN_IR_TRIGGER_LEVEL 1u，notes 记录。**引脚宏**HUMAN_IR_GPIO/HUMAN_IR_PIN（pin_config.h 单源）；默认 OUT=**PB7**——页面默认脚 PA1 **不采用**（被 adc ADC_CH1/motor PWM/编码器线占用）；与 pid GRAY_D8 默认重叠（人体红外与巡线灰度不同框、同选概率最低；刻意避让声光/按键/门禁组合 BUZZER/KEY/SERVO），同选经引脚绑定消解。轮询不注册 EXTI（HC-SR501 输出脉冲慢速；mspm0 线「共享实例 ISR 唯一」先例）。模块特性（页面说明，记 notes 不落码）：上电 ~1 分钟初始化期间间隔输出 0-3 次（初始化期勿作判定）；可重复/不可重复触发跳线、板载延时与灵敏度旋钮；避免灯光直射透镜与流动风、双元探头安装方向与人体活动方向平行；工作 4.5-20V、<50uA、<100° 锥角。**未上板**（极性/感应角真机验证留后续）。\nwiki-stm32-batch1/03 编译矩阵（2026-09-06）：stm32 单选生成 → UV4（C:/Keil5 V5.06u7）0 error、0 module warning（exit 0，PASS）；未上板。\n来源：sources/materials/lckfb-地阔星移植手册/sensor--human-body-infrared-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/human-body-infrared-sensor.html；网盘资料 https://pan.baidu.com/s/1Bu0DL-1quXvY1Ede4c9ELw 提取码 8888 + 移植成功案例 https://pan.baidu.com/s/1E8iOqQoQvwZ43YMrw-J6lw?pwd=5nye 提取码 5nye；采购链接 [HC-SR501 人体红外感应模块 热释电 红外传感器] https://item.taobao.com/item.htm?spm=a1z10.3-c-s.w4002-19589090137.18.2b9836b4sjtBQL&id=608680529121）。与 mspm0 条目分工：mspm0 侧为 syscfg GPIO 输入实例 + DL_GPIO API（默认 PB8 叠 STEP_MOTOR/SR04/AT24C02），本条目为 ml_gpio API + pin_config.h 宏段（默认 PB7 叠 GRAY_D8），API 同名同语义、零交叉改动。",
+      "kit": "HC-SR501 人体红外感应模块（热释电，3Pin：VCC/GND/OUT；工作 4.5-20V、<50uA、输出高 3.3V/低 0V；感应角度 <100° 锥角；可重复/不可重复触发跳线、板载延时与灵敏度旋钮；探测窗口圆形透镜）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/human-body-infrared-sensor.html",
+      "pins": [
+        {
+          "id": "HUMAN_IR_OUT",
+          "type": "gpio_in",
+          "default": "PB7",
+          "required": true,
+          "macros": [
+            "HUMAN_IR_GPIO",
+            "HUMAN_IR_PIN"
+          ]
+        }
+      ]
     }
   }
 }
