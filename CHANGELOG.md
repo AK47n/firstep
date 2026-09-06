@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=e346776ac69ed385194d9d9bde7f9a7eadb2df52 -->
+<!-- changelog-auto: last-commit=7e4692499811bcb64b4e5da678a938bd31f1e8b3 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -33,6 +33,7 @@
 - 12:17 ﻿批次11 wordlist.json 最小 diff 还原：修复词表整卷重排噪音——json.dump(ensure_ascii=False, indent=2) 会把全库 models/lib_modules 数组重排为多行（375 行噪音 diff），现恢复既有紧凑格式并保留语义改动（感知传感器 +7 方案（MQ-3/4/6/7/8/9、MS1100，lib_modules 挂接）+ models +7 + MQ 六件供电口径 3.3-5V 与页面/kit 统一）；净 diff 58 行（+58/-1），词表完整 wire 7051 不变，词表/预算/库结构测试 110 用例全绿。
 - 12:48 ﻿批次12/01 lcd 彩屏模块打样（ST7735 0.96 寸 80×160）入库——六屏合一决策 A 首件：
 - 12:51 批次12/02 lcd 补 ST7789V2 双型号表项（1.3 寸 240×240 带字库版 + 1.69 寸 240×280）：
+- 12:53 批次12/03-05 lcd 补齐 ST7789V3/GC9A01/ST7735S 三型号表项——六屏全实现：
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
