@@ -136,7 +136,7 @@
 #define HUMAN_IR_PIN          Pin_7
 
 /* ---- 微波多普勒雷达（microwave_radar 模块：HB100 三线制，OUT 默认 PA4——
- * 与 motor 编码器 B 相 EXTI（MOTOR_B_ENC EXTI_PA4）默认重叠：微波雷达与
+ * 与 motor 编码器 B 相（MOTOR_B_ENC，EXTI 线 4/PA4）默认重叠：微波雷达与
  * 「带编码器闭环的电机控制」不同框、同选概率最低（刻意避让声光/门禁/传感
  * 站组合件），同选时经引脚绑定消解；本件轮询不注册 EXTI，与编码器线共享
  * 正交（异口同线此时不冲突）；页面默认 PA1 不采用——叠 adc ADC_CH1 +

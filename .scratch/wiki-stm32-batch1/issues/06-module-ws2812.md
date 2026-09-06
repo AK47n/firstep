@@ -31,7 +31,7 @@
 - [x] 测试 `tests/test_module_ws2812.py`：形状 + 母版宏存在 + stm32 单选生成全流程 + 守卫（`delay_us` 出现、GRB 换位注释、WS2812_MAX 8、无 printf/main/GPIO_Init/RCC_/TIM/PWM 调用、无 IRQHandler、**无 `for(k = 0; i < ` 页面反写式、无 `LedId > ` 越界式**、编译产物无 `setLedCount`/`RGB_LED_Write1` 残留）
 - [x] test_pins.py STM32_MACRO_VALUES 补两宏；test_default_layout.py 白名单 ws2812×ir_beam+pid（PA8 重叠）
 - [x] 编译矩阵 UV4 0/0（MAIN_C 调 init+set_led_count+set_color(0,0xFF0000)+refresh，(void) 化）→ verified=true
-- [x] wordlist 显示模块分类；词表预算链（slug 已挂接，零改动）
+- [x] wordlist 显示模块分类；词表预算链（slug 已挂接，零改动——注：ws2812 现挂「感知传感器」组（mspm0 批历史分类），spec 决策 7 的「显示模块」分类未迁移；词表行移动会引预算链重测且工单明示「不重复挂」，按 mspm0 口径保持，分类偏差作词表维护记录）
 - [x] 中文提交 → resolved → 结论回填
 
 **验收记录：**
