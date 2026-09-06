@@ -23,6 +23,28 @@
           "required": true
         }
       ]
+    },
+    "stm32": {
+      "files": [
+        "code/s12sd_stm32.c",
+        "code/s12sd_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**ADC 薄封装（页面 ADC 序列代码收敛 ml_adc）+ 档位表换算（无百分比）**：F1 口径页面（stm32f10x.h + RCC_APB2PeriphClockCmd + GPIO_Mode_AIN + ADC_RegularChannelConfig + SoftwareStartConvCmd + GetConversionValue）——页面 ULTRAVIOLET_GPIO_Init + Get_ADC_Value 整体收敛为母版 ml_adc 的 adc_init（内部完成 AIN 引脚配置 + APB2 时钟 + 6 分频 12MHz + 复位校准——等效页面流程；采样时间 239.5cyc vs 页面 55.5cyc，功能等价差异记录）+ ADC_GetConversionValue→adc_get（软件触发轮询）。**ADC 共享组**：默认 SIG=PA5（=页面原脚 ADC_Channel_5，用户照页面接线即插即用）；本批 8 件与 flame 共读 PA5（ml_adc 的 adc_get 每次先写 SQR3 选通道，顺序调用互不干扰）；**同一物理脚只能接一件器件，多件同测需外部分路器/分时切换**（mspm0 MEM0 共读同口径；stm32 通道 10/10 全被既有角色占用——同选经引脚绑定消解）。**换算 = 页面 Get_Ultraviolet_Intensity 阈值表原式**（12bit ADC 值分档：<227→0 级、227-317→1、318-407→2、408-502→3、503-605→4、606-695→5、696-794→6、795-880→7、881-975→8、976-1078→9、1079-1169→10、≥1170→11——「0~11 紫外线强度等级由低到高，11 最高」页面原式，0 低 11 高）——**非百分比**（本件与本批其余 7 件换算形态不同）；页面形参式 Get_Ultraviolet_Intensity(uint16_t value) 收敛为模块内自读。**量程/波段**：检测波长 240-370nm（**UV-A 波段**——UV-B/UV-C 不响应；氮化镓基肖特基光电二极管 + 板载 LM358 放大、1% 精度元器件）、测量角度 130°、温漂 0.08%/℃、工作 2.7-5V/1mA（页面规格）；档位为页面标定值（页面实测「测量室内紫外线强度为 0 级」）——户外强日光/遮挡/器件个体差异会偏移，按相对档位使用；页面 Get_ADC_Value 备注「误差 80mV 左右」。**页面缺陷/修正**：① SAMPLES 30 次 × delay_ms(5) 改 5 次快平均（us016 先例）；② 页面 L289 main 演示「IRtracking demo start」——IR 巡线模板串台（.c/.h 注释与代码一致无串台）——notes 记录不落码；③ 页面 L133-135 表头「函 数 形 参：num采集次数」残留（函数实际 void——形参已删除表头未更新）——不落码；④ 页面 C99 循环声明改 uint8_t i。无 DO（3 Pin：VCC/GND/SIG——页面无 DO 宏/函数）。\nwiki 手册来源：sources/materials/lckfb-地阔星移植手册/sensor--s12sd-uv-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/s12sd-uv-sensor.html；网盘资料 https://pan.baidu.com/s/1YuwoCsbiJPaYH-8TaHEwVg 提取码 8888；移植成功案例 https://pan.baidu.com/s/1RP-wVQ_UDaeR_eYP5W-dqg?pwd=pri6 提取码 pri6）。改造要点：去掉 main.c 演示与 printf；函数名规范化（s12sd_init/read_uv_index，去 ULTRAVIOLET_Init/Get_ADC_Value/Get_Ultraviolet_Intensity 命名）；页面 ADC 序列收敛 ml_adc；SAMPLES 30×5ms 改 5 次快平均。\nwiki-stm32-batch5/06 编译矩阵（2026-09-06）：stm32 单选生成（依赖 adc 展开）→ UV4（C:/Keil5 V5.06u7）0 error、0 module warning（exit 0，PASS）；未上板（UV 档位/真机验证留后续）。",
+      "kit": "S12SD 高灵敏 UV 紫外线传感器模块（3Pin：VCC/GND/SIG；工作 2.7-5V、1mA；氮化镓基肖特基光电二极管 + 板载 LM358 放大器（1% 精度元器件）；SIG 放大模拟电压输出；检测波长 240-370nm（UV-A）、测量角度 130°、温漂 0.08%/℃）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/s12sd-uv-sensor.html",
+      "pins": [
+        {
+          "id": "S12SD_AO",
+          "type": "adc",
+          "default": "PA5",
+          "required": true,
+          "macros": [
+            "S12SD_AO_CH"
+          ]
+        }
+      ]
     }
   }
 }
