@@ -1,0 +1,47 @@
+#ifndef GP2Y1014AU_H
+#define GP2Y1014AU_H
+
+#include <stdint.h>
+
+/* GP2Y1014AU 粉尘传感器驱动（mspm0 纯驱动薄封装，ADR 0009）：
+ * - ADC 薄封装：依赖库内 adc 模块读 ADC12_0 MEM0（adc_get(ADC_1,
+ *   ADC_Channel_0)），不新开 ADC 通道——与 adc/us016/mq2 共享 MEM0 槽位
+ *   （默认 PA24/A0_3）；
+ * - **LED 驱动 GPIO 输出（器件必需例外）**：GP2Y1014AU 内置红外 LED 必须由
+ *   主控按页面时序脉冲驱动（LED 亮 → 280us → 采样 → 40us → LED 关 →
+ *   9680us，周期 10ms）才能测量，无此脚传感器不工作——薄封装仅指 ADC 部分；
+ * - 换算 f = 0.17×value − 0.1（页面 Read_dust_concentration 原式——
+ *   相对估算非精标：页面公式对演示值/ADC 量程标定不明确）；
+ * - 页面 Filter（10 点静态滑动平均）内嵌为模块内静态环形缓冲（页面滤波
+ *   逻辑简单——照库依赖先例取舍不依赖库内 filter 可选配套件）；
+ * - 轮询读取（无 ADC 中断——共享 ADC12_0 实例，IRQHandler 强符号须唯一）。
+ * 对应手册：sources/materials/lckfb-地猛星移植手册/sensor--gp2y1014au-dust-sensor.md
+ * （立创 wiki 地猛星移植手册；代码按模块库规范改写：去 main/printf、函数名
+ * 规范化、ADC 中断改轮询、页面 SAMPLES 30×2ms 改 5 次快平均）。 */
+
+/* 快速平均采样次数（页面 SAMPLES 30 次 × 2ms ≈ 62ms——远超 10ms LED 脉冲
+ * 周期，页面时序本就不自洽；us016 快平均先例改 5 次，单次读回到 ~0.3ms 级） */
+#define GP2Y1014_ADC_SAMPLES 5u
+
+/* 12bit ADC 满量程（页面 Filter 入参为 12bit 计数） */
+#define GP2Y1014_ADC_MAX 4095u
+
+/* 页面 Filter 滑动平均窗口（10 值环形缓冲——首次调用以首值填满窗口） */
+#define GP2Y1014_FILTER_WINDOW 10u
+
+/* LED 脉冲时序（页面 Read_dust_concentration 原值——10ms 采样周期）：
+ * LED 亮 → 280us 电压建立/采样点 → 采样 → 40us → LED 关 → 9680us 尾段 */
+#define GP2Y1014_LED_SETTLE_US 280u
+#define GP2Y1014_LED_SAMPLE_TAIL_US 40u
+#define GP2Y1014_LED_CYCLE_TAIL_US 9680u
+
+/* gp2y1014_init：LED 空闲 = 关（引脚高）+ 使能 ADC12_0 转换。 */
+void gp2y1014_init(void);
+
+/* gp2y1014_read_dust：按页面 LED 脉冲时序采样并返回粉尘浓度**估算值**
+ * （页面原式 0.17×value − 0.1——相对参考值非精标：红外漫反射对烟尘/水汽
+ *  同样响应（烟/尘区分不能），绝对浓度需标准粉尘标定；调用间隔 ≥ 10ms
+ *  （LED 周期），连续读时勿快于周期）。 */
+float gp2y1014_read_dust(void);
+
+#endif /* GP2Y1014AU_H */

@@ -134,6 +134,9 @@ def test_prune_shared_instance_kept_by_any_consumer():
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["photoresistance"]), "ADC12_0")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["rain"]), "ADC12_0")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["s12sd"]), "ADC12_0")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["gp2y1014au"]), "ADC12_0")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["gp2y1014au"]), "GP2Y1014")
+    _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "GP2Y1014")
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "ADC12_0")
 
 
