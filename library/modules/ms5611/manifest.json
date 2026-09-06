@@ -29,6 +29,39 @@
           "required": true
         }
       ]
+    },
+    "stm32": {
+      "files": [
+        "code/ms5611_stm32.c",
+        "code/ms5611_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "软 I2C 总线件（SDA 方向运行时切换，不占硬件 I2C 外设/TIMER——不用母版 ml_i2c）。页面 = **F1 标准库**（stm32f10x.h + RCC_APB2PeriphClockCmd——非 F4 嫌疑页）；**电平配置 = 页面原式 GPIO_Mode_Out_OD（开漏输出）+ GPIO_Mode_IPU（上拉输入）**→ ml_gpio OUT_OD/IU（与 aht10/sht20 等主流一派，模块板自带上拉）。**页面缺陷清单（已取证 + 修正 + notes + 守卫）**：① **dT 改有符号 64 位 long long**（页面 L375 `uint32_t dT`——低于 20℃ 负值回绕；且 L422-423 `Cal_C1_6[4]*dT/128`、`Cal_C1_6[3]*dT/256.0` 以 uint16_t×uint32_t 在 **32 位 unsigned int 乘法**评估溢出（积可达 5.5e11 ≫ 2^32，全温区多数读数偏差数十 hPa）——**本件核心**，mspm0 批 13 修正同款沿用，表达式不变（int64 口径），测试 int64 镜像基线钉死）；② **温度出参 TEMP/100.0**（0.01℃ 分辨率——页面 Get_TEMP 整数℃截断 dat=(TEMP/1000)*10+(TEMP/100%10) 丢小数修正）；③ **气压出参 Pa**（页面 `return P/100.0` = hPa 修正——P 单位 0.01mbar == 1Pa）；④ **PROM 读补逐段应答检查**（页面 L305/307/314 `I2C_WaitAck()` 无判断应答丢弃——本件逐段检查、失败返回 3 = PROM 读应答失败）；⑤ **段间 2×10ms 等待保留**（页面 Get_TEMP L384/386 两次转换间各有 delay_ms(10)）；⑥ **Get_pressure 内嵌重复调 Get_TEMP 二次重读合并**（单次 D1/D2 + 一次全换算——省 ~50ms+/轮，结果等价）；⑦ NACK printf→状态码（页面 L343-361 仅 printf 不中断——本件 1-5 中断返回，段级映射 0=成功/1=D1 段失败/2=D2 段失败/3=数据读失败）；⑧ char ack 死变量剔除。换算原式照 mspm0（dT=D2−C5×256、TEMP=2000+dT×C6/2^23、OFF=C2×2^16+C4×dT/128、SENS=C1×2^15+C3×dT/256、P=(D1×SENS/2^21−OFF)/2^15）；OSR 固定 4096（0x48/0x58，页面固定，参数化范围外）；海拔 44330（math.h/pow，与 bmp180 共用公式——ARMCC 标准库自动含 math，uvprojx 无需显式链接项）。**默认脚 = PA6（SCL）/PA7（SDA）**——共挂批次 2/3 软 I2C 总线（地址 0xEE 与既有 11 件全异 = 合法共挂；**与 bmp180 同址 0xEE → 两件互替不可同挂**——同一总线同址双选必冲突：默认脚各取一挂 PA6/PA7、选一只，同选经引脚绑定换独立总线或换件，notes 记录；与 motor MOTOR_A_DIR/DIR2 默认重叠：气压/海拔与「带电机方向的小车运动控制」不同框、同选概率最低，同选经引脚绑定消解）。**init 含 SCL OUT_OD 初始化 + 置高**（批次 3/01 回修口径）；与 mspm0 条目 API 同名同语义（ms5611_init/read/read_altitude、同返回码 0/1/2/3、同出参单位 ℃ 0.01 分辨率/Pa），mspm0 侧零改动。\n来源：sources/materials/lckfb-地阔星移植手册/sensor--ms5611-pressure-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/ms5611-pressure-sensor.html；网盘资料 https://pan.baidu.com/s/1vq-J_LDxRc7vQkX98ucFMA?pwd=rxcq 提取码 rxcq；旧资料 https://pan.baidu.com/s/1QOrpiggCE6mBpqabJXUufg；采购 GY-63 MS5611-01BA03 气压/高度模块 https://item.taobao.com/item.htm?spm=a230r.1.14.18.c2c52122lnx328&id=522572301522&ns=1&abbucket=19#detail）。改造要点：去 main.c 演示与 printf；函数名规范化（ms5611_init/read/read_altitude）；IIC 原语静态化（ms5611_iic_*）；main 序列封装 init（复位+300ms+PROM 8 字）；全局 Cal_C1_6/D1/D2/dT 收敛模块静态；延时走 delay 模块。\nwiki-stm32-batch4/02 编译矩阵（2026-09-06）：单选生成 → UV4 0 error、0 module warning（PASS）；未上板（软 I2C 时序真机验证留后续）。",
+      "kit": "GY-63 MS5611-01BA03 气压/高度模块（3Pin I2C——PS 上拉 = I2C 模式；工作 1.8-3.6V、0.25-23uA、10-1200mbar ±1.5mbar、温度精度 ±0.8℃、-40~85℃；地址 0xEE 写/0xEF 读（CSB 高）；本件 I2C 模式、SPI 未用）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/ms5611-pressure-sensor.html",
+      "pins": [
+        {
+          "id": "MS5611_SCL",
+          "type": "i2c_scl",
+          "default": "PA6",
+          "required": true,
+          "macros": [
+            "MS5611_SCL_GPIO",
+            "MS5611_SCL_PIN"
+          ]
+        },
+        {
+          "id": "MS5611_SDA",
+          "type": "i2c_sda",
+          "default": "PA7",
+          "required": true,
+          "macros": [
+            "MS5611_SDA_GPIO",
+            "MS5611_SDA_PIN"
+          ]
+        }
+      ]
     }
   }
 }

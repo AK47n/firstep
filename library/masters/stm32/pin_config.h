@@ -257,6 +257,10 @@
 #define BMP180_SCL_PIN        Pin_6
 #define BMP180_SDA_GPIO       GPIO_A
 #define BMP180_SDA_PIN        Pin_7
+#define MS5611_SCL_GPIO       GPIO_A
+#define MS5611_SCL_PIN        Pin_6
+#define MS5611_SDA_GPIO       GPIO_A
+#define MS5611_SDA_PIN        Pin_7
 
 /* ---- UWB 基站串口（config.h 并入：UART_1 = PA9 TX / PA10 RX，115200）---- */
 #define UWB_UART          UART_1
