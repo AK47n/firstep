@@ -555,6 +555,7 @@ class _RecordingConvergenceLLM(FakeLLM):
             ]
         ] = []
         self.clarifications: list[tuple[tuple[str, str], ...]] = []
+        self.notes: list[str] = []  # 预筛注记（工单 module-preselect/03）
 
     def select_modules(
         self,
@@ -564,6 +565,7 @@ class _RecordingConvergenceLLM(FakeLLM):
         reference_fulltexts: Mapping[str, str] | None = None,
         manual_fulltexts: Mapping[str, str] | None = None,
         clarifications: Sequence[tuple[str, str]] = (),
+        preselect_note: str = "",
     ) -> ModuleSelection:
         self.calls.append(
             (
@@ -575,6 +577,7 @@ class _RecordingConvergenceLLM(FakeLLM):
             )
         )
         self.clarifications.append(tuple(clarifications))
+        self.notes.append(preselect_note)
         return self._queue.pop(0)
 
 
@@ -898,6 +901,29 @@ def test_convergent_without_clarifications_keeps_old_signature():
     select_modules_convergent(fake, "赛题", ["- dht11: 温湿度"])
 
     assert fake.clarifications == [(), ()]
+
+
+def test_convergent_passes_preselect_note_every_round():
+    """预筛注记透传（工单 module-preselect/03）：preselect_note 非空时收敛循环
+    每轮 select_modules 都收到同一份（提示词标题行带「按题面初筛 N/M」）；
+    缺省空 = 零变化（不传该关键字，旧假 LLM 零改动）。"""
+    note = "（按题面初筛 46/84 条，仅展示前 40000 wire 字节）"
+    fake = _RecordingConvergenceLLM(
+        [_selection_with("识别数字"), _selection_with("识别数字")]
+    )
+
+    select_modules_convergent(
+        fake, "送药小车。识别数字。", ["- dht11: 温湿度"], preselect_note=note
+    )
+
+    assert len(fake.calls) == 2
+    assert fake.notes == [note, note]  # 每轮同一份
+
+    plain = _RecordingConvergenceLLM(
+        [_selection_with("识别数字"), _selection_with("识别数字")]
+    )
+    select_modules_convergent(plain, "赛题", ["- dht11: 温湿度"])
+    assert plain.notes == ["", ""]  # 缺省空串 = 零变化
 
 
 def test_convergent_round_events_tolerate_failing_emitter():
@@ -2873,3 +2899,152 @@ def test_parse_decision_wordlist_unknown_values_corrected():
     assert d is not None
     assert d.source == "custom"
     assert d.verdict == ""
+
+
+# ---------------------------------------------------------------------------
+# 模块推荐候选预筛（工单 module-preselect/01）：题面词激活 → 模块打分 →
+# 命中降序 + slug 序 → 预算截断 + 保底；零命中零增量；lib_modules 挂接。
+# ---------------------------------------------------------------------------
+
+
+def _ps_summary(slug: str, description: str, kits: tuple[str, ...] = ()) -> ManifestSummary:
+    return ManifestSummary(slug=slug, description=description, kits=kits)
+
+
+def test_preselect_hits_rank_first_then_slug_order():
+    """题面「循迹」→ 描述含「巡线/循迹」的模块得分 1 排最前；0 分模块按 slug 序。"""
+    from contest_generator.selection import preselect_module_summaries
+
+    summaries = [
+        _ps_summary("mod_b", "温湿度传感器采集与显示"),
+        _ps_summary("mod_a", "循迹巡线模块（灰度/红外）"),
+        _ps_summary("mod_c", "LCD 显示屏"),
+    ]
+    result = preselect_module_summaries(summaries, "小车沿黑线循迹行驶", (), 100000)
+    assert result.total == 3
+    assert result.truncated is False
+    assert [s.slug for s in result.summaries] == ["mod_a", "mod_b", "mod_c"]
+
+
+def test_preselect_synonym_group_counts_once():
+    """题面同义词组双词命中（循迹+巡线）只计 1 分（组去重），不重复加分。"""
+    from contest_generator.selection import preselect_module_summaries
+
+    summaries = [
+        _ps_summary("xunji", "巡线循迹模块"),
+        _ps_summary("other", "温湿度传感器"),
+    ]
+    result = preselect_module_summaries(
+        summaries, "沿黑线循迹并完成巡线任务", (), 100000
+    )
+    assert [s.slug for s in result.summaries][0] == "xunji"
+    # 组去重：xunji 得 1 分而非 2 分——排序上只要求它在 other 前，分数不曝露；
+    # 预算截断验证：预算只装不下任何行时保底全量，命中者仍在首位
+    tiny = preselect_module_summaries(
+        summaries, "沿黑线循迹并完成巡线任务", (), 10
+    )
+    assert tiny.truncated is False  # 2 条 < 保底 20：全量送回（零子集化）
+    assert len(tiny.summaries) == 2
+    assert tiny.summaries[0].slug == "xunji"
+
+
+def test_preselect_ascii_term_boundary_and_slug_digits():
+    """英文词边界：题面 canmv 不激活 camera 组（字母边界）；adc 命中 slug
+    adc12（数字尾巴兼容）、不命中描述中粘连词。"""
+    from contest_generator.selection import preselect_module_summaries
+
+    summaries = [
+        _ps_summary("adc12", "ADC 采样（12 位）"),
+        _ps_summary("k230", "视觉识别模块（摄像头画面）"),
+        _ps_summary("oled", "OLED 显示"),
+    ]
+    # canmv 题面：camera/摄像头组不被激活（cam 在 canmv 内非独立出现）→ 零命中
+    no_hit = preselect_module_summaries(
+        summaries, "canmv 识别数字并显示", (), 100000
+    )
+    assert no_hit.truncated is False
+    # adc 题面：slug 数字尾巴命中 adc12 → 排最前
+    hit = preselect_module_summaries(summaries, "使用 adc 采集电压", (), 100000)
+    assert [s.slug for s in hit.summaries][0] == "adc12"
+
+
+def test_preselect_wordlist_lib_modules_boost():
+    """词表 lib_modules 挂接：题面命中词表行类别/型号 → 挂接 slug 直接得分
+    （描述无词表词也能被带出——批次 13 气压件正是此路径）。"""
+    from contest_generator.selection import preselect_module_summaries
+
+    wordlist = (
+        HardwareWordGroup(
+            category="气压传感器",
+            models=("BMP180", "MS5611"),
+            solutions=(
+                SolutionOption(name="MS5611 高精度气压计", lib_modules=("ms5611", "bmp180")),
+                SolutionOption(name="BMP180 老款气压计", lib_modules=("bmp180",)),
+            ),
+        ),
+    )
+    summaries = [
+        _ps_summary("bmp180", "I2C 传感器驱动"),
+        _ps_summary("ms5611", "I2C 传感器驱动"),
+        _ps_summary("oled", "OLED 显示"),
+    ]
+    result = preselect_module_summaries(summaries, "测量海拔与气压传感器", wordlist, 100000)
+    assert [s.slug for s in result.summaries][:2] == ["bmp180", "ms5611"]
+    # 词表行 models 名直接命中（题面写 BMP180 型号）
+    by_model = preselect_module_summaries(summaries, "BMP180 气压计", wordlist, 100000)
+    assert by_model.summaries[0].slug == "bmp180"
+    # 题面无词表行命中：零增量
+    no_hit = preselect_module_summaries(summaries, "甲乙丙丁", wordlist, 100000)
+    assert no_hit.truncated is False
+    assert [s.slug for s in no_hit.summaries] == ["bmp180", "ms5611", "oled"]
+
+
+def test_preselect_budget_truncates_by_lines_with_min_floor():
+    """预算按行截断（不劈半行）；截断后不足 MIN_PRESELECT 时保底扩到前 20 条。"""
+    from contest_generator.budget import MIN_PRESELECT
+    from contest_generator.selection import preselect_module_summaries
+
+    assert MIN_PRESELECT == 20
+    summaries = [
+        _ps_summary(f"hit_{i:02d}", "巡线循迹传感器模块")
+        for i in range(5)
+    ] + [
+        _ps_summary(f"rest_{i:02d}", "温湿度传感器驱动")
+        for i in range(20)
+    ]
+    # 预算只够 3 条完整行 → 截断，但保底 20 条扩回
+    result = preselect_module_summaries(summaries, "小车沿黑线循迹", (), 10)
+    assert result.truncated is True
+    assert len(result.summaries) == MIN_PRESELECT
+    # 命中者全部在保底内（排最前），保底尾部 = 无命中者按 slug 序
+    assert [s.slug for s in result.summaries[:5]] == [f"hit_{i:02d}" for i in range(5)]
+    assert result.summaries[5].slug == "rest_00"
+
+
+def test_preselect_deterministic_and_line_integrity():
+    """同输入两次调用逐字段一致；输出行内每行完整（不以截断半行）。"""
+    from contest_generator.selection import preselect_module_summaries
+
+    summaries = [
+        _ps_summary(f"m{i:02d}", "温湿度传感器驱动") for i in range(30)
+    ]
+    a = preselect_module_summaries(summaries, "温湿度采集", (), 3000)
+    b = preselect_module_summaries(summaries, "温湿度采集", (), 3000)
+    assert a == b
+    assert all(s.description for s in a.summaries)
+    # 每行都是完整 ManifestSummary（无半行续写）——截断发生在行边界
+    assert a.total == 30
+
+
+def test_preselect_real_wordlist_relay_smoke():
+    """真实词表冒烟：题面「继电器」→ 词表执行机构行命中 → relay 挂接 slug
+    排前（批次 13 入库件被预筛规则自然覆盖）。"""
+    from contest_generator.selection import preselect_module_summaries
+    from contest_generator.wordlist import load_wordlist
+
+    summaries = [
+        _ps_summary("relay", "GPIO 输出驱动"),
+        _ps_summary("motor", "电机驱动"),
+    ]
+    result = preselect_module_summaries(summaries, "控制继电器开关电灯", load_wordlist(), 100000)
+    assert result.summaries[0].slug == "relay"

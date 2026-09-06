@@ -5569,6 +5569,23 @@ def test_recommend_carries_requirements_and_isolates_suggestions(client, context
     assert "不存在" in resp.json()["detail"]
 
 
+def test_recommend_preselect_fits_keeps_full_catalog_and_no_note(client, context):
+    """预筛未子集化（假库全量 ≪ MODULE_SUMMARY_BYTES）：topic 零变化——
+    FakeLLM 收到全量摘要 slug 集、preselect_note 空串（工单 module-preselect/03；
+    真实库 stm32 线 24 条同形态 = 向后兼容零变化）。截断形态的注记两态由
+    test_selection_prompt_preselect_note_two_states 钉死。"""
+    holder = context[1]
+    holder["llm"] = FakeLLM(
+        selection=ModuleSelection(modules=("dht11",), reasons={"dht11": "测温湿度"})
+    )
+    _recommend_done(client, {"problem_text": "温湿度采集", "platform": PLATFORM_MSPM0})
+    calls = holder["llm"].select_calls
+    assert calls, "推荐应至少触发一轮 select_modules"
+    _problem, slugs, note = calls[0]
+    assert note == ""
+    assert {"dht11", "delay"} <= set(slugs)  # mspm0 线假库全量（oled 仅 stm32 不进）
+
+
 def test_skeleton_smoke_mode_generates_smoke_main(client, context):
     """main_mode="smoke"：走 generate_smoke_main（假 LLM 冒烟出稿 + 同款占位兜底）。"""
     context[1]["llm"]._smoke_skeleton = (

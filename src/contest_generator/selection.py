@@ -32,6 +32,7 @@ from .events import (
     _emit,
 )
 from .boards import Board, pin_supports
+from .budget import MIN_PRESELECT, MODULE_SUMMARY_BYTES, wire_size
 from .entry_store import StoreError
 from .library import list_modules
 from .manifest import (
@@ -46,6 +47,10 @@ from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from .reference_library import (
     ReferenceEntry,
     ReferenceError,
+    _activated_terms,
+    _is_ascii_term,
+    _synonym_group,
+    _text_has_term,
     get_reference,
     platform_matches,
     search_references,
@@ -376,6 +381,165 @@ def manual_reference_admission(
 # （report.py 先例：llm 层依赖模型层而非反向），本层对 LLM 协议仅 TYPE_CHECKING
 # （library.py 先例，避免 llm ↔ selection 运行时环）。
 # ---------------------------------------------------------------------------
+
+# 模块推荐候选预筛（工单 module-preselect/01）：题面词激活 → 模块打分 →
+# 命中降序 + slug 序 → 预算截断 + 保底。与 reference_library.related_references
+# 同族（题面 → 词表单源 PERIPHERAL_TERMS，激活规则照 _activated_terms），
+# 区别：匹配面 = 模块摘要（slug / description / kits）而非条目标题，另加词表
+# lib_modules 挂接加分（题面命中词表行 → 挂接 slug 直接得分——批次 13 气压件
+# 正是此路径：方案名「MS5611 高精度气压计」命中题面「气压」，带出
+# bmp180 / ms5611）。词表私有辅助经同包私有互导复用（events._emit 先例）。
+
+
+@dataclass(frozen=True)
+class PreselectResult:
+    """预筛结果（工单 module-preselect/01）：子集 + 全量条数 + 是否子集化。
+
+    truncated = 模型实际所见少于全量（预算截断发生，或保底扩回后仍小于
+    全量）；全量送达（预算内 / 零命中且预算足够）= False——调用方据此决定
+    「按题面初筛 N/M」注记是否出现（工单 03）。
+    """
+
+    summaries: tuple[ManifestSummary, ...]
+    total: int
+    truncated: bool
+
+
+def preselect_module_summaries(
+    summaries: Sequence[ManifestSummary],
+    topic_text: str,
+    hardware_words: Sequence[HardwareWordGroup] = (),
+    budget_bytes: int = MODULE_SUMMARY_BYTES,
+) -> PreselectResult:
+    """题面驱动的推荐候选预筛：排序 + 预算截断，不做过滤（覆盖零折损）。
+
+    语义：
+    - 排序 = 命中得分降序 → slug 字典序（确定性，同 related_references）；
+    - 得分 = 题面激活的 PERIPHERAL_TERMS 语义组命中「模块匹配面」
+      （slug + description + kits 拼接文本，英文词边界 / 中文子串照
+      reference_library._text_has_term；slug 走 token 语义——数字尾巴兼容
+      adc → adc12）数，加题面命中的词表行 lib_modules 挂接 slug 命中数
+      （每语义组 / 每行 1 分，不做加权）；
+    - 预算截断发生在行边界（不劈半行）：按 wire 字节预算保留前缀完整行
+      （MODULE_SUMMARY_BYTES，账本见 budget.py）；
+    - 保底：截断后不足 MIN_PRESELECT 条 → 扩到排序后前 MIN_PRESELECT 条
+      （覆盖保底——命中稀少时清单不过短；现实库 20 条 ≈ 17KB 远小于预算）；
+    - 零命中（激活词集空 + 词表零命中）→ 排序退化为 slug 序（零增量语义）；
+    - 输入空列表 → 空结果（total=0, truncated=False）。
+    """
+    ordered = list(summaries)
+    if not ordered:
+        return PreselectResult((), 0, False)
+    activated = _activated_terms(topic_text, ())
+    lib_boost = _wordlist_hit_slugs(topic_text, hardware_words)
+    scored = [
+        (_preselect_score(summary, activated, lib_boost), summary)
+        for summary in ordered
+    ]
+    scored.sort(key=lambda item: (-item[0], item[1].slug))
+    kept = _fit_summaries_by_wire(
+        [summary for _, summary in scored], budget_bytes
+    )
+    if len(kept) < MIN_PRESELECT and len(scored) > len(kept):
+        kept = [summary for _, summary in scored][:MIN_PRESELECT]
+    return PreselectResult(tuple(kept), len(ordered), len(kept) < len(ordered))
+
+
+def _preselect_score(
+    summary: ManifestSummary,
+    activated: frozenset[str],
+    lib_boost: frozenset[str],
+) -> int:
+    """模块摘要的预筛得分：激活语义组命中匹配面数 + lib_modules 挂接命中数。"""
+    match_text = " ".join(
+        (summary.slug, summary.description, *summary.kits)
+    ).lower()
+    score = 0
+    for term in activated:
+        if any(
+            _text_has_term(match_text, synonym)
+            for synonym in _synonym_group(term)
+        ):
+            score += 1
+    if summary.slug in lib_boost:
+        score += 1
+    return score
+
+
+def _wordlist_hit_slugs(
+    topic_text: str, hardware_words: Sequence[HardwareWordGroup]
+) -> frozenset[str]:
+    """题面命中的词表方案 → 挂接 slug 集（方案级精确优先，行级兜底）。
+
+    词表行词面判定：英文/数字项按边界独立出现（_text_has_term）；中文/混合项
+    双向子串——题面含词表词（「气压计」出现）或词表词含题面词（题面「气压」
+    命中方案名「MS5611 高精度气压计」，中文连续段 2-4 字滑窗，短侧 ≥ 2 字；
+    覆盖题面写短词、词表写长词的常见形态）。
+
+    命中语义两级：
+    - 方案级（精确）：题面命中方案名 → 只带出**该方案**的 lib_modules
+      （题面「继电器」→「1 路 5V 继电器模块」方案 → 仅 relay；不给同行的
+      motor / l298n / pca9685 加分——装错件加分只影响排序，但按题面词的
+      语义精度就该方案级落地）；
+    - 行级（兜底）：题面只命中类别/型号（如题面「BMP180」写行 models 名）
+      且无任何方案名命中 → 整行 solutions 的 lib_modules 并集（宁多勿漏：
+      预筛是排序不是过滤，多 1 分只影响排序）。
+    """
+    hits: set[str] = set()
+    text_lower = topic_text.lower()
+    for group in hardware_words:
+        row_hit = any(
+            _term_matches_topic(text_lower, term)
+            for term in (group.category, *group.models)
+        )
+        named = [
+            solution
+            for solution in group.solutions
+            if _term_matches_topic(text_lower, solution.name)
+        ]
+        if named:
+            for solution in named:
+                hits.update(solution.lib_modules)
+        elif row_hit:
+            for solution in group.solutions:
+                hits.update(solution.lib_modules)
+    return frozenset(hits)
+
+
+def _term_matches_topic(text_lower: str, term: str) -> bool:
+    """词表行词面项命中题面文本（英文边界规则；中文/混合项双向子串滑窗）。"""
+    term = term.strip()
+    if not term:
+        return False
+    if _is_ascii_term(term):
+        return _text_has_term(text_lower, term)
+    if term in text_lower:
+        return True
+    for seg in re.findall(r"[\u4e00-\u9fff]{2,}", term):
+        for width in (2, 3, 4):
+            for index in range(max(0, len(seg) - width + 1)):
+                if seg[index:index + width] in text_lower:
+                    return True
+    return False
+
+
+def _fit_summaries_by_wire(
+    summaries: Sequence[ManifestSummary], budget_bytes: int
+) -> list[ManifestSummary]:
+    """摘要行按 wire 预算截断（行边界，不劈半行）：累积 join 前缀 wire 字节，
+    装不下的行整行裁掉；单行本身超预算时保留该行（预算边界由上层兜底，不
+    静默丢大头模块——现实库单行 ≈ 0.3-1.5KB，远小于 MODULE_SUMMARY_BYTES）。
+    """
+    total = 0
+    kept: list[ManifestSummary] = []
+    for summary in summaries:
+        line_wire = wire_size(summary.to_line())
+        if total + line_wire > budget_bytes and kept:
+            break
+        kept.append(summary)
+        total += line_wire + 1  # join 分隔符 \n
+    return kept
+
 
 # 模块推荐收敛循环（工单 10）：连续两轮功能需求层一致即收敛，上限这么轮防
 # 死循环（ADR 0007：质量优先，成本为 2-4 轮 × 2-4K token，DeepSeek 可承受）。
@@ -1138,6 +1302,7 @@ def select_modules_convergent(
     manual_fulltexts: Mapping[str, str] | None = None,
     clarifications: Sequence[tuple[str, str]] = (),
     qa_material: str = "",
+    preselect_note: str = "",
 ) -> ModuleSelection:
     """题面驱动的收敛循环：功能需求层两轮一致即停，上限 max_rounds 轮。
 
@@ -1181,6 +1346,9 @@ def select_modules_convergent(
         **({"manual_fulltexts": manual_fulltexts} if manual_fulltexts else {}),
         **({"clarifications": clarifications} if clarifications else {}),
         **({"qa_material": qa_material} if qa_material else {}),
+        # 预筛注记（工单 module-preselect/03）：模块候选预筛后标题行携带
+        # 「按题面初筛 N/M」告知模型清单不是全量；空串 = 零变化（未预筛）
+        **({"preselect_note": preselect_note} if preselect_note else {}),
     }
     for round_no in range(1, max_rounds + 1):
         _emit(
@@ -1388,6 +1556,7 @@ def run_recommendation(
     platform: str = "",
     qa_material: str = "",
     vision_qa: Callable[[str], str | None] | None = None,
+    preselect_note: str = "",
 ) -> None:
     """/api/recommend 的两阶段编排（工单 01 推荐先澄清后收敛）。
 
@@ -1442,6 +1611,7 @@ def run_recommendation(
             clarifications=clarifs,  # 澄清历史贯穿收敛循环（题面后独立段）
             max_rounds=max_rounds,  # 轮数上限可配置（工单 01，设置项透传）
             qa_material=qa_material,  # 赛题答疑 Q&A（工单 qa-material/01）
+            preselect_note=preselect_note,  # 预筛注记（工单 module-preselect/03）
         )
 
     if not clarifications:

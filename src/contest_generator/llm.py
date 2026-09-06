@@ -1477,6 +1477,7 @@ class LLM(Protocol):
         manual_fulltexts: Mapping[str, str] | None = None,
         clarifications: Sequence[tuple[str, str]] = (),
         qa_material: str = "",
+        preselect_note: str = "",
     ) -> ModuleSelection: ...
 
     def clarify(
@@ -1829,6 +1830,7 @@ class DeepSeekLLM:
         manual_fulltexts: Mapping[str, str] | None = None,
         clarifications: Sequence[tuple[str, str]] = (),
         qa_material: str = "",
+        preselect_note: str = "",
     ) -> ModuleSelection:
         """赛题 → 模块选择（工单 03 起带参考文件两级注入的清单 / 全文两个形态）。
 
@@ -1912,6 +1914,7 @@ class DeepSeekLLM:
                 self._hardware_words,
                 clarifications,
                 qa_material,
+                preselect_note=preselect_note,
             ),
             parse=parse,
             label="模块选择",
@@ -3589,6 +3592,7 @@ class RoutingLLM:
         manual_fulltexts: Mapping[str, str] | None = None,
         clarifications: Sequence[tuple[str, str]] = (),
         qa_material: str = "",
+        preselect_note: str = "",
     ) -> ModuleSelection:
         return self._remote.select_modules(
             problem_text,
@@ -3598,6 +3602,7 @@ class RoutingLLM:
             manual_fulltexts,
             clarifications,
             qa_material,
+            preselect_note=preselect_note,
         )
 
     def clarify(
@@ -4939,10 +4944,17 @@ def _selection_user_prompt(
     hardware_words: Sequence[HardwareWordGroup] = (),
     clarifications: Sequence[tuple[str, str]] = (),
     qa_material: str = "",
+    preselect_note: str = "",
 ) -> str:
     # 提示词必须含小写 "json"：DeepSeek 的 json_object 模式要求
+    # preselect_note（工单 module-preselect/03）：模块候选预筛注记——调用方
+    # 在预筛发生（截断 / 子集化）时给定（如「（按题面初筛 46/84 条，仅展示
+    # 前 40000 wire 字节）」），模型据此知道清单不是全量；空串 = 标题逐字节
+    # 不变（未预筛 / 全量送达的向后兼容零变化）。
     prompt = _build_user_prompt(
-        problem_text, "模块库可用模块：", [s.to_line() for s in manifest_summaries]
+        problem_text,
+        f"模块库可用模块{preselect_note}：",
+        [s.to_line() for s in manifest_summaries],
     )
     if references:
         # 清单行来源标注（单点查表：source → 标注；锚定 auto = 无标注尾巴）

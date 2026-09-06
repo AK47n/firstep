@@ -27,7 +27,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
@@ -37,7 +37,11 @@ from fastapi.staticfiles import StaticFiles
 
 from . import __version__  # 工具版本（上下文清单 tool_version 字段）
 from .boards import BOARDS_DIR, board_for_platform, load_boards
-from .budget import RELATED_CANDIDATES_LIMIT, SKELETON_RELATED_LIMIT
+from .budget import (
+    MODULE_SUMMARY_BYTES,
+    RELATED_CANDIDATES_LIMIT,
+    SKELETON_RELATED_LIMIT,
+)
 from .changelog import load_versions
 from .codeview import (
     apply_code_diff,
@@ -251,6 +255,7 @@ from .selection import (
     multi_instance_variants,
     parse_instances,
     parse_score_points,
+    preselect_module_summaries,
     resolve_dependencies,
     resolve_selection,
     run_recommendation,
@@ -273,6 +278,7 @@ from .topic_library import (
     update_topic,
 )
 from .update import check_for_update
+from .wordlist import DEFAULT_WORDLIST
 from .materials_update import (
     check_for_materials_update,
     load_local_manifest,
@@ -1696,9 +1702,32 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         clarify_maps = [{"question": q, "answer": a} for q, a in clarifications]
         # 收敛轮数上限（工单 recommend-speedup-v2/01）：设置项透传，缺省 4
         max_rounds = config.recommend_max_rounds
+        # 模块候选预筛（工单 module-preselect/03）：题面驱动的摘要行子集化
+        # （命中降序 + MODULE_SUMMARY_BYTES 预算截断 + 保底）——真实库 mspm0
+        # 84 条摘要 73.1KB wire 全量注入已超 128KB 网关预算（账本推导按
+        # 「摘要 14 条」记账，批次 13 后必须入账，见 budget.py）。预筛结果
+        # 替换 topic.manifest_summaries（run_recommendation 内部收敛循环与
+        # _default_instances_for 同源受益——命中模块必在子集内）；未发生
+        # 子集化（预算内全量，如 stm32 线 24 条）→ topic 零变化、无注记。
+        # 保底/截断发生 = 模型实际所见少于全量 → 注记告知（提示词标题行）。
+        presel = preselect_module_summaries(
+            topic.manifest_summaries,
+            topic.problem_text,
+            DEFAULT_WORDLIST,
+            MODULE_SUMMARY_BYTES,
+        )
+        preselect_note = ""
+        if presel.truncated:
+            topic = replace(topic, manifest_summaries=presel.summaries)
+            preselect_note = (
+                f"（按题面初筛 {len(presel.summaries)}/{presel.total} 条，"
+                f"仅展示前 {MODULE_SUMMARY_BYTES} wire 字节）"
+            )
         # 模块库指纹（工单 recommend-cache-fingerprint/01）：模型看到的摘要行
         # 排序 hash——库变（模块增删/简介/能力/多实例标注）缓存失效走真实推荐；
-        # 装配点已产出 manifest_summaries，写缓存与校验同源一次计算两用
+        # 装配点已产出 manifest_summaries，写缓存与校验同源一次计算两用。
+        # 预筛后指纹 = 模型实际所见（预筛是题面的确定性函数：同题面同子集
+        # 同指纹，换题面指纹自然变，缓存语义不变）
         lib_fp = library_fingerprint(topic.manifest_summaries)
         # 按需视觉问答（工单 recommend-vision-qa/02）：视觉已配置（effective
         # key 非空——含主 key 复用）且条目带原 PDF → 注入供给回调（澄清 /
@@ -1782,6 +1811,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                         platform=platform or "",
                         qa_material=qa_text or "",
                         vision_qa=vision_qa,
+                        preselect_note=preselect_note,
                     )
             finally:
                 context.recent_llm_workflows.add_completed(collector)

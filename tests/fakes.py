@@ -613,6 +613,9 @@ class FakeLLM:
         param_list: ParamList | None = None,
     ) -> None:
         self._selection = selection or ModuleSelection(modules=(), reasons={})
+        # select_modules 输入记录（工单 module-preselect/03：预筛注记 / 摘要清单
+        # 是否被调用方透传的断言锚——production 预筛直接决定这两项）
+        self.select_calls: list[tuple[str, tuple[str, ...], str]] = []
         self._main_skeleton = main_skeleton
         self._smoke_skeleton = smoke_skeleton
         self._summary = summary
@@ -743,7 +746,20 @@ class FakeLLM:
         manual_fulltexts: Mapping[str, str] | None = None,
         clarifications: Sequence[tuple[str, str]] = (),
         qa_material: str = "",
+        preselect_note: str = "",
     ) -> ModuleSelection:
+        self.select_calls.append(
+            (
+                problem_text,
+                tuple(
+                    # 兼容旧契约字符串清单行（test_convergent_without_references_
+                    # uses_old_signature 等按旧签名传字符串行）
+                    s.slug if isinstance(s, ManifestSummary) else str(s)
+                    for s in manifest_summaries
+                ),
+                preselect_note,
+            )
+        )
         return self._selection
 
     def clarify(
@@ -1107,6 +1123,7 @@ class RecordingLLM:
         manual_fulltexts: Mapping[str, str] | None = None,
         clarifications: Sequence[tuple[str, str]] = (),
         qa_material: str = "",
+        preselect_note: str = "",
     ) -> ModuleSelection:
         self._record("select_modules")
         return ModuleSelection(modules=(), reasons={})
