@@ -29,6 +29,39 @@
           "required": true
         }
       ]
+    },
+    "stm32": {
+      "files": [
+        "code/sgp30_stm32.c",
+        "code/sgp30_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "软 I2C 总线件（SDA 方向运行时切换，不占硬件 I2C 外设/TIMER——不用母版 ml_i2c，spec 决策①）。页面 = **F1 标准库**（stm32f10x.h + RCC_APB2PeriphClockCmd + Mode_Out_OD/IPU + WriteBit/ReadInputDataBit+SetBits——非 F4 嫌疑页）；电平 = Out_OD + IPU + init SetBits 拉高（页面标准开漏配置）。**页面缺陷清单（已取证 + 修正 + notes + 守卫）**：① **CRC 缺失（主缺陷）**：页面 `crc = Read_Byte(); IIC_Send_Ack(0); crc = crc;`（自赋值丢弃）+ **只读 5 字节**（漏 TVOC CRC 第 6 字节随 NACK+Stop 丢失）→ 修正：**读满 6 字节**（CO2 高/低 + CRC + TVOC 高/低 + CRC）+ **两组 CRC8**（多项式 0x31/初值 0xFF，同 SHT30/AGS10 系）校验（失败返回 5——器件正确性修正，mspm0 同）；② **读写路径 NACK 全丢**（SGP30_Write_cmd 三处 + SGP30_Read 读地址应答全部丢弃）→ 补检查与失败码（1/2/3 = 写命令地址/命令字节应答失败、4 = 读地址应答失败——按 sht30 风格补，mspm0 同）；③ 正文「最低位为 0 是读、为 1 是写」**语义写反**（示例/代码均 0=写 0xB0/1=读 0xB1——记录不裁决）；④ **15s 预热判定仅正文未实现** → 归调用方（notes：预热期 CO2=400ppm/TVOC=0ppb 恒定，读到 TVOC≠0 且 CO2≠400 才算就绪）；⑤ 页面默认脚与 ADS1115 页互换（SDA=PB8/SCL=PB9 记录不裁决）+ 正文「0ppd」笔误（记录）。换算实现：引脚 gpio_init(OUT_OD) + **SCL init 补 gpio_init(SGP30_SCL_GPIO, SGP30_SCL_PIN, OUT_OD)+置高**（批次 3 回修口径——F1 复位浮空输入，ODR 写入无效）；SDA 方向切换 gpio_init(SDA, OUT_OD/IU)（页面原式 OD+IPU）；原语族 sgp30_iic_*（5us 半周期原值 ≈100kHz 级，SGP30 ≤400kHz 裕量足）；sgp30_crc8 静态（0x31/0xFF——同 SHT30/AGS10 系先例）；API 全对齐 mspm0：init（引脚配置 + 发 0x2003 初始化空气基准）+ read（发 0x2008（内嵌 delay_ms(100) 覆盖测量时长）→ 读 6 字节回包 + 两组 CRC8 校验 → CO2/TVOC 双出参（ppb/ppm；出参判空用 0——F1 头无 NULL）；返回 0=成功/1-5=失败码）。**默认脚 = PA6（SCL）/PA7（SDA）**——页面默认 SDA=PB8/SCL=PB9 不采用（= 母版 OLED_GPIO 段）；与 motor MOTOR_A_DIR/DIR2（电机方向）默认重叠：空气质量传感与「带电机方向的小车运动控制」不同框、同选概率最低；**与批次 2 六件共挂同一软 I2C 总线**（地址 0x58 与 0x38/0x23/0x40/0x44/0x50/0x1A 全异——空气质量站（气体+温湿度+光照+记录）合法共挂，白名单登记）；与既有 I2C_GPIO（PA11/12）/OLED_GPIO（PB8/9）零重叠；同选经引脚绑定消解。与 mspm0 条目分工：mspm0 侧 syscfg 实例（跨口 PA18/PB9）+ DL_GPIO，本条目 ml_gpio + pin_config.h 宏段（默认 PA6/PA7），API 同名同语义、零交叉改动。\n来源：sources/materials/lckfb-地阔星移植手册/sensor--sgp30-gas-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/sgp30-gas-sensor.html；资料网盘 https://pan.baidu.com/s/16ITjdV34J8K2Wu24sB_iPg + 完整工程 https://pan.baidu.com/s/1i_1sN06wn78x3c0ujBtm8g?pwd=aalj；采购 GY-SGP30 气体传感器 空气质量 TVOC eCO2 二氧化碳测量甲醛模块 https://item.taobao.com/item.htm?spm=a21n57.1.0.0.1925523cK81vXF&id=629652345522&ns=1&abbucket=0#detail）。**未上板**（软 I2C 时序/CRC8 校验真机验证留后续）。\nwiki-stm32-batch3/05 编译矩阵（2026-09）：stm32 单选生成 → UV4（C:/Keil5 V5.06u7）0 error、0 module warning（exit 0，PASS）。",
+      "kit": "GY-SGP30 气体传感器模块（4Pin I2C，地址 0x58；3.3V 供电 40mA；TVOC 0-60000ppb、CO2e 400-60000ppm）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/sgp30-gas-sensor.html",
+      "pins": [
+        {
+          "id": "SGP30_SCL",
+          "type": "i2c_scl",
+          "default": "PA6",
+          "required": true,
+          "macros": [
+            "SGP30_SCL_GPIO",
+            "SGP30_SCL_PIN"
+          ]
+        },
+        {
+          "id": "SGP30_SDA",
+          "type": "i2c_sda",
+          "default": "PA7",
+          "required": true,
+          "macros": [
+            "SGP30_SDA_GPIO",
+            "SGP30_SDA_PIN"
+          ]
+        }
+      ]
     }
   }
 }

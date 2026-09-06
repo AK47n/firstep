@@ -113,6 +113,7 @@ WHITELIST = {
         "ads1115.ADS1115_SCL",
         "tcs34725.TCS34725_SCL",
         "mlx90614.MLX90614_SCL",
+        "sgp30.SGP30_SCL",
     },
     "PA7": {
         "motor.MOTOR_A_DIR2",
@@ -125,6 +126,7 @@ WHITELIST = {
         "ads1115.ADS1115_SDA",
         "tcs34725.TCS34725_SDA",
         "mlx90614.MLX90614_SDA",
+        "sgp30.SGP30_SDA",
     },
 }
 
