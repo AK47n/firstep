@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=3c63969d2991c27a576a99a9538acfa151d33695 -->
+<!-- changelog-auto: last-commit=87360a702c1f55e5035199c1dcfca47f1656e8b3 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -19,6 +19,7 @@
 - 00:55 批次8 收尾：四张工单标记 resolved（结论含提交号/关键发现/日期勘误说明）；spec 补 PA0/PA1 GPIO 输入不可用实证（2026-09-06 SysConfig CLI）与「MEM 槽位已满（8/8）」决策；CONTEXT 平台行补录批次8 四件（FLAME 独立 MEM6/SOIL 独立 MEM7（槽位 8/8 用满——后续 ADC 类件一律薄封装共读 MEM0 模式）/HUMAN_IR 极性修正（感应到=高）/MICROWAVE 默认 PA31（PA0/PA1 不可作 GPIO 输入实证）+ 四件默认互不相撞）；词表预算实测 5900 上调 WORDLIST_PROMPT_BYTES 5700→6100（fit 上限 5934 全量送达+34B 余量）并降 REFERENCE_FULLTEXT_BYTES 62000→61500（最坏形态 +200B 保 2KB 边界余量，batch5/7 口径）；日期勘误：本批次各 manifest/断言/CONTEXT 记录 2026-09-09 改为 2026-09-06（系统时钟）；新增 sweep_31_modules.py（批次1-8 31 件一致性快检：ADR0009/verified/hardware_bound/依赖正检/wordlist 挂接/kit/source_url/仅 mspm0 条目，全 OK）
 - 01:03 批次8 code-review 收尾修正：flame.h 头注释通道数快照同步（七通道 endAdd=6→八通道 endAdd=7——soil 开 MEM7 后）；human_ir/microwave_radar manifest notes 残留「PB8/PA0」改「PB8/PA31」（PA0/PA1 不可作 GPIO 输入实证同步）；soil.c 精度措辞补「无剩余 ADC 脚」限定；词表预算注释日期勘误（budget.py/llm.py 2026-09-09→2026-09-06）；spec 测试决策段 PA0 2→3 改为 PA31 4→5 + PA0 保持 2（与实现/冲突矩阵定稿一致）
 - 10:48 批次9/01 光敏电阻传感器模块入库（mspm0）：ADC 模拟量薄封装（依赖 adc 模块共享 ADC12_0 MEM0 槽位、默认 PA24——无新通道/实例/无新 \ 行，mq2 方式）；photoresistance_init + photoresistance_read_percent 出 0-100% 亮度百分比（页面原式反向映射（1−value/4095）×100——页面备注「最亮 100 最暗 0」自洽：光越强阻值越小、分压 ADC 值越小、百分比越高；页面 10 次累加改 5 次快平均）；页面 ADC 中断（IRQHandler + gCheckADC）改经 adc 模块 API 轮询（共享实例强符号唯一）；页面 DO（LM393 阈值）宏未用不声明；notes 写明非线性/需标定 + 与库内 bh1750（数字光照）分工（光敏=廉价模拟件、非线性、需标定）+ 页面工作电流 1MA 按 1mA 理解；词表感知传感器 +光敏电阻传感器；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）
+- 10:53 批次9/02 雨滴传感器模块入库（mspm0）：ADC 模拟量薄封装（依赖 adc 模块共享 ADC12_0 MEM0 槽位、默认 PA24——无新通道/实例，mq2 方式）；rain_init + rain_read_percent 出 0-100% 雨量百分比（**正向映射** value/4095×100——雨越大百分比越高；页面 get_raindrop_percentage_value 原式 (1−value/4095)×100 与页面正文「雨水越大→ADC 值越大」矛盾（照原式雨越大百分比反而越低，疑同光敏页反向式复制残留），按「强度=水分覆盖=ADC 值关系」取证以正文为准修正为正向映射，notes 记录修正与依据）；页面 3 次×100ms 间隔与 get_adc_value 内 delay_ms(20) 去除改 5 次快平均；页面 ADC 中断改经 adc 模块 API 轮询（共享实例强符号唯一）；页面 DO（LM393 阈值）宏未用不声明；notes 写明非线性/干净度影响（基线电阻随脏污/氧化/放置方式变化——相对值非精标，页面原话「降雨量多少毫米需实体测量」）；词表感知传感器 +雨滴传感器；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
