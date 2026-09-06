@@ -108,6 +108,7 @@ WHITELIST = {
         "bh1750.BH1750_SCL",
         "sht20.SHT20_SCL",
         "sht30.SHT30_SCL",
+        "at24c02.AT24C02_SCL",
     },
     "PA7": {
         "motor.MOTOR_A_DIR2",
@@ -115,6 +116,7 @@ WHITELIST = {
         "bh1750.BH1750_SDA",
         "sht20.SHT20_SDA",
         "sht30.SHT30_SDA",
+        "at24c02.AT24C02_SDA",
     },
 }
 

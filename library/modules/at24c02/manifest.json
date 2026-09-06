@@ -29,6 +29,39 @@
           "required": true
         }
       ]
+    },
+    "stm32": {
+      "files": [
+        "code/at24c02_stm32.c",
+        "code/at24c02_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "软 I2C 总线件·**EEPROM 读写件**（SDA 方向运行时切换，不占硬件 I2C 外设/TIMER——不用母版 ml_i2c，spec 决策①）。页面 = **F1 标准库**（stm32f10x.h + RCC_APB2PeriphClockCmd + Mode_Out_OD/IPU + WriteBit/ReadInputDataBit——非 F4 嫌疑页）。**页面缺陷清单（已取证 + 修正 + notes + 守卫）**：① **地址宏名颠倒（主缺陷）**：页面「SLAVE ADDRESS+W为0xA0…+R为0xA1」+ `AT24C02_ADDRESS_READ 0xA0`/`AT24C02_ADDRESS_WRITE 0xA1`（宏名与语义互换，功能因调用名称恰好反着用而正确）→ `AT24C02_ADDR_WRITE (0x50<<1)=0xA0`/`ADDR_READ (0x50<<1|1)=0xA1` 纠正命名、值保留页面原式（mspm0 版已同）；② **读写路径应答全丢弃**（WriteByte void 页面原式保留——mspm0 同款（调用方按业务判定/先写后读验证）；read_byte 无应答返回 0xFF 页面同款（与合法 0xFF 不可分）；**write_page/read_block 补 2=通信无应答返回**）；③ 注释 48/66 不符（main 演示——不落库）；④ main %d 打 unsigned char（演示——不落库）；⑤ **写周期 5ms 未封装**（main 裸 delay_ms(5)）→ at24c02_wait_write_done 封装；⑥ **页写/连续读正文有述、代码未实现** → 按正文补齐（跨页边界/len>16 拒收——页面「超过 P+1 字节地址计数器自动翻转、先前数据被覆盖」防患；连续读首字节 ACK/末字节 NACK、256 边界翻转）。换算实现：引脚 gpio_init(OUT_OD)（页面原式）+ init 两脚置高（页面无 SetBits——本实现置高 = 总线空闲电平）；SDA 方向切换 gpio_init(SDA, OUT_OD/IU)（页面原式 OD+IPU）；原语族 at24c02_iic_*（**页面 delay_us(1)/5/5 混合半周期统一为 2us（aht10 先例——mspm0 版同款归一）** ≈100kHz 级，400kHz 规格裕量足）；API 全对齐 mspm0：init（空占位——I2C 存储器无初始化序列，即插即用；引脚配置由 init 完成）+ write_byte（void 页面原式）+ read_byte（0xFF 页面同款）+ wait_write_done（delay_ms(5) 封装）+ write_page（0=成功/1=参数错/2=无应答）+ read_block（0=成功/1=参数错/2=无应答——len 上限 255，跨 256 边界读完整圈需两次调用）；**默认脚 = PA6（SCL）/PA7（SDA）**——页面默认 SDA=PB8/SCL=PB9 不采用（= 母版 OLED 段）；与 motor MOTOR_A_DIR/DIR2（电机方向）默认重叠：存储记录与「带电机方向的小车运动控制」不同框、同选概率最低（记录类与运动类不同框——mspm0 侧同判）；**六件软 I2C 件默认共挂此总线**（地址 0x50 与 0x38/0x23/0x40/0x44/0x1A 全异——环境记录站（温湿度+光照+EEPROM 掉电参数）合法共挂，白名单登记）；与既有 I2C_GPIO（PA11/12）/OLED_GPIO（PB8/9）零重叠；同选经引脚绑定消解。与 mspm0 条目分工：mspm0 侧 syscfg 实例 + DL_GPIO（默认 PB24/PB8），本条目 ml_gpio + pin_config.h 宏段（默认 PA6/PA7），API 同名同语义、零交叉改动。WP 写保护脚由硬件接线管理（VCC 读保护/GND 可写），驱动不控制。\n来源：sources/materials/lckfb-地阔星移植手册/control--at24c02-eeprom-memory.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/control/at24c02-eeprom-memory.html；成功案例 https://pan.baidu.com/s/1-X1eg-Ck0jsKpvPGePH0VQ?pwd=z9zh（本页无资料下载段）；采购 EEPROM存储模块器AT24C02/04/08/16/32/64/128/256可选I2C接口 https://detail.tmall.com/item.htm?abbucket=0&id=698591628199&ns=1&spm=a21n57.1.0.0.7edf523co7QMUt）。**未上板**（软 I2C 2us 半周期时序/5ms 写周期/页写连续读真机验证留后续）。\nwiki-stm32-batch2/05 编译矩阵（2026-09）：stm32 单选生成 → UV4（C:/Keil5 V5.06u7）0 error、0 module warning（exit 0，PASS）。",
+      "kit": "AT24C02 EEPROM 存储模块（I2C 接口；1.8-5.5V、256 字节、页写 16 字节）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/control/at24c02-eeprom-memory.html",
+      "pins": [
+        {
+          "id": "AT24C02_SCL",
+          "type": "i2c_scl",
+          "default": "PA6",
+          "required": true,
+          "macros": [
+            "AT24C02_SCL_GPIO",
+            "AT24C02_SCL_PIN"
+          ]
+        },
+        {
+          "id": "AT24C02_SDA",
+          "type": "i2c_sda",
+          "default": "PA7",
+          "required": true,
+          "macros": [
+            "AT24C02_SDA_GPIO",
+            "AT24C02_SDA_PIN"
+          ]
+        }
+      ]
     }
   }
 }

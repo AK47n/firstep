@@ -306,6 +306,13 @@ STM32_MACRO_VALUES = {
     "SHT30_SCL_PIN": "Pin_6",
     "SHT30_SDA_GPIO": "GPIO_A",
     "SHT30_SDA_PIN": "Pin_7",
+    # wiki-stm32-batch2/05：at24c02 EEPROM（软 I2C 总线件·读写件——六件共
+    # 总线 PA6/PA7；与 motor 电机方向重叠：存储记录与「带电机方向的小车运动
+    # 控制」不同框；页面默认 SDA=PB8/SCL=PB9（=OLED 段）不采用）
+    "AT24C02_SCL_GPIO": "GPIO_A",
+    "AT24C02_SCL_PIN": "Pin_6",
+    "AT24C02_SDA_GPIO": "GPIO_A",
+    "AT24C02_SDA_PIN": "Pin_7",
 }
 
 
