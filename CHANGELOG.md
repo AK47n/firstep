@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=77a1a8ccc88ed55b0b299edec3c39bb088ebb787 -->
+<!-- changelog-auto: last-commit=7243e5b2b104625de57359725fe41d259cb2f012 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -28,6 +28,7 @@
 - 11:40 批次10 收尾：四张工单标记 resolved（结论含提交号/关键发现/UART 放置决策落定方案①）；spec 补实施结论（四件矩阵全 PASS/l298n TIMG12 实证/open_mv4 UART1 实证/词表预算实测 6565 上调 6800/39 件快检）与 code-review 待填位；新增 sweep_39_modules.py（批次1-10 39 件一致性快检全 OK）；CONTEXT 平台行补录批次10 四件（SHT20/JY61P 软 I2C 默认脚与地址冲突提醒、L298N 独立模块 TIMG12+EN、OPENMV4_UART UART1 轮询——指纹裁剪后独占先例 + 实例上限现实约束与不并 coord_detect 帧格式差异）
 - 11:41 批次10 词表预算记账链同步：budget.py 补 batch10 口径注释（词表完整 wire 6565、预算 6600→6800、词表段全量 6565 比旧截断形态 6600 少 35B——最坏形态总量 -35B，REFERENCE_FULLTEXT_BYTES 61000 不动；llm.py 同款）
 - 11:43 批次10/04 open_mv4 帧解析整数溢出防护：open_mv4_parse_int 加 9 位上限（页面坐标 ≤3 位、int 溢出防护——超长数字按坏帧丢弃）；测试镜像同步 + 超长伪帧用例
+- 11:47 批次10 code-review 整改（双轴 + 39 件收尾评审结果回填 spec）：
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
