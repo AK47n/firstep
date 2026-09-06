@@ -1,0 +1,10 @@
+﻿批次12/01 lcd 彩屏模块打样（ST7735 0.96 寸 80×160）入库——六屏合一决策 A 首件：
+
+- 模块 library/modules/lcd/（仅 mspm0，依赖 delay）：lcd.c/lcd.h/lcd_init.c/lcd_init.h/lcdfont.h——软 SPI 位操作 6 脚（SCL/SDA/RES/DC/CS/BLK，不占硬件 SPI 外设/TIMER，max7219/nrf24l01 先例）；API = lcd_init(型号, 方向) 运行时选芯片（LCD_DIR_DEFAULT=厂家默认 096 横 2）+ 画点/线/圆/矩形/填充/字符（6×12+8×16）/字符串/整数/一位小数浮点/汉字（tfont16 GBK 索引）/图片；0x36 MADCTL 藏序列占位按方向替换；lcd_models[6] 表驱动（096 已实装，128/130/147/169/180 由工单 02-05 补录）；
+- 字库裁剪（spec 决策 A）：lcdfont.h 15.2KB——ASCII 仅 1206/1608 两套 + tfont16 5 字（厂家演示 中/景/园/电/子，GBK 双字节索引；2412/3216 与 tfont12/24/32 裁剪；pic.h 不入库）；上游命中 continue 矛盾改 break（仅 16x16 保留）；
+- 母版 syscfg 新增 LCD GPIO 实例（6 脚全输出，CS/BLK 初始 SET；默认 SCL=PA16/SDA=PA17/RES=PA27/DC=PA22/CS=PB19/BLK=PB20——与编码器/读卡/灰度/无线/语音/气体互替不同框、刻意不叠显示族与环境站与 PA0/PA1（i2c_bus_share 测试互扰，批次 5 先例））+ INSTANCE_CONSUMERS「LCD」；
+- manifest（dependencies delay、六角色 gpio_out、kit/source_url=screen--0-96-color-screen.md 原页、notes 含 wiki 页+网盘+厂家目录路径+字库策略+改造要点+未上板）；
+- wordlist 显示模块 +1 方案（IPS 彩屏六屏合一，lib_modules lcd——tp_xpt2046 待工单 06 补挂）+ models +4（ST7735/ST7789/GC9A01/XPT2046）；词表完整 wire 实测 7239（> 7134 fit 上限）→ WORDLIST_PROMPT_BYTES 7300→7500、REFERENCE_FULLTEXT_BYTES 60500→60400（llm.py/budget.py 记账链同步）；
+- 测试：test_module_lcd.py（manifest 形状/单选生成/字库体积≤16KB+裁剪断言/无平台依赖守卫+型号常量完整性）；test_pins 默认映射 +test_pin_bindings 刻意重叠表（PA16/PA17/PA27/PA22/PB19/PB20 计数与注释）+ 灰度共享组绑走 lcd RES +test_syscfg_prune LCD 消费方断言；
+- 编译矩阵 .scratch/wiki-modules-batch12/run_lcd_matrix.py：单选生成（lcd+delay）→ SysConfig CLI → gmake 0 error/0 warning（PASS），verified=true 回写；
+- 全量测试 3533 pytest 全绿；spec.md + 工单 01-08 建立（spec 含决策 A/B 拍板论证与取舍记录）。

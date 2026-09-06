@@ -6,7 +6,9 @@
 
 **被谁阻塞：** 无（与 05 并行——触摸源码独立于 lcd 文件；实现顺序按 spec 建议在 05 后）。本件时把 wordlist「IPS 彩屏」solution 的 lib_modules 由 ["lcd"] 补为 ["lcd", "tp_xpt2046"]（01 工单暂只挂 lcd——词表引用必须命中库内 slug，结构测试约束）。
 
-**状态：** pending
+**状态：** resolved
+
+**结论：** 2026-09-12 完成并提交。tp_xpt2046 独立模块（仅 mspm0，依赖 delay）：软 SPI 5 脚（CS/CLK/DIN 输出 + DOUT/PEN 输入，不占硬件 SPI 外设/TIMER——XPT2046 时钟上限 ~2.3MHz，位节拍 delay_us(1/6) 走库 delay）；xpt2046_init（出厂预设方向 1）+ read_raw（5 次中值滤波 12 位原始 0-4095）+ read_xy（校准系数换算屏幕坐标）+ set_calibration + is_pressed（PEN 轮询无 IRQ——GROUP1 单向量先例）；决策 A 独立件：与 lcd 零耦合（默认脚刻意不叠 LCD 六脚）；vendor TP_Scan/TP_Adjust 状态机与校准演示流程不随库入库（ADR 0009，校准交互归骨架）；上游「下降沿有效」注释与代码行为矛盾——按代码保留并记录；母版 syscfg TP_XPT2046 实例（默认 PA8/PA13/PA9/PA28/PB24）+ INSTANCE_CONSUMERS；wordlist lib_modules 补 tp_xpt2046；测试 + 矩阵 PASS（0 error/0 warning）+ verified 回写；未上板。
 
 **验收：**
 

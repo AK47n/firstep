@@ -6,7 +6,9 @@
 
 **被谁阻塞：** 无——可立即开始（批次 12 首件，先打样验证管线 + API 定稿）。
 
-**状态：** pending
+**状态：** resolved
+
+**结论：** 2026-09-12 完成并提交（c9e898d6）。lcd 模块（仅 mspm0，依赖 delay）打样件：软 SPI 位操作 6 脚（母版新 GPIO 实例 LCD，CS/BLK 初始 SET；默认 SCL=PA16/SDA=PA17/RES=PA27/DC=PA22/CS=PB19/BLK=PB20——与编码器/读卡/灰度/无线/语音/气体互替不同框、刻意不叠显示族与环境站与 PA0/PA1（i2c_bus_share 测试互扰批次 5 先例））；API 定稿 = lcd_init(LCD_MODEL_096, LCD_DIR_DEFAULT) + 绘制/文本全套（对齐 oled 风格）；lcd_models[6] 表驱动（096 实装——厂家序列原样 + 0x36 占位按方向替换 + 偏移/madctl/分辨率四方向表）；字库裁剪 lcdfont.h 15.2KB（ASCII 1206+1608 两套 + tfont16 5 字 GBK 字节索引；2412/3216 与 tfont12/24/32、pic.h 裁剪；tfont16 typedef/GBK 字节/双括号经编译矩阵修正——上游「命中 continue」矛盾改 break）；wordlist 显示模块 +1 方案 + models +4，词表 wire 7239 → WORDLIST_PROMPT_BYTES 7500、REFERENCE_FULLTEXT_BYTES 60400；测试 test_module_lcd.py 5 例 + test_pins/test_pin_bindings（含灰度共享组绑走 lcd RES）/test_syscfg_prune 断言；编译矩阵 PASS（0 error/0 warning），verified=true；全量 3533 pytest 全绿；未上板。
 
 **验收：**
 

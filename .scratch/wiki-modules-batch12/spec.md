@@ -119,3 +119,14 @@
 - wordlist「显示模块」一条：新 solution「IPS 彩屏（0.96/1.28/1.3/1.47/1.69/1.8 寸，ST7735/ST7789/GC9A01 系）含触摸选配件」lib_modules ["lcd","tp_xpt2046"]，models 增 ST7735/ST7789/GC9A01/XPT2046；note 写清六屏一模块 + 型号常量对照 + 打样推荐 0.96；另 OLED solution 补 SPI 总线变体说明（models 已有 OLED）。
 - code-review 裁决（同构批量豁免逐件深审）：lcd 族抽 2 件深审（实现时随机种子定）+ 其余同构对仗核对；tp_xpt2046/oled-SPI 各 1 件深审。
 - 完成后：全量测试 + CONTEXT.md 平台行补录（决策 A/B + 六屏六件 + 触摸 + oled-SPI 总线变体 + 默认脚全景）+ 中文提交（.githooks/commit-msg 强制中文；新增 .ps1 必须 UTF-8 with BOM）。
+
+## 实施结论（2026-09-12，收尾补记）
+
+- 工单 01-08 全部实施并提交：01（lcd+ST7735 打样，c9e898d6）→ 02（ST7789V2 双型号，e346776a）→ 03-05（ST7789V3/GC9A01/ST7735S，7e469249）→ 06（tp_xpt2046）→ 07（oled SPI 变体）→ 08（本收尾）。
+- **决策 A 落地**：六屏合一单模块 lcd（运行时型号枚举 lcd_init(LCD_MODEL_*, 方向)——096/128/130/147/169/180 六表项全实装；四芯片五序列（ST7735/ST7735S/ST7789V2/ST7789V3/GC9A01）厂家逐字录入（lcd_models 表驱动 + 0x36 占位按方向替换 + 四方向偏移/madctl/分辨率表）；字库裁剪 lcdfont.h 79KB→15.2KB（ASCII 1206+1608 + tfont16 5 字 GBK 字节索引——tfont16 typedef 双括号/GBK 字节经编译矩阵修正；2412/3216 与 tfont12/24/32 与 pic.h 裁剪）；tp_xpt2046 独立件（与 lcd 零耦合）。
+- **决策 B 落地**：oled SPI 总线变体（OLED_SPI_Init + WR_Byte 分发——I2C 路径零回归矩阵重跑 PASS；0.91 128×32 核验 = 原不适配 → oled_set_res(OLED_RES_128X32) 补录；0.96 IIC/1.3 单色核对不提炼；已知取舍 = SPI 模式下 I2C1 PB2/PB3 保留）。
+- 词表/预算：wordlist 显示模块 +1 方案 + models +4；wire 7239 → WORDLIST_PROMPT_BYTES 7500、REFERENCE_FULLTEXT_BYTES 60400（llm.py/budget.py 记账链同步，worst-case 结构测试绿——本批无 .ps1 新增）。
+- 编译矩阵全部 PASS（0 error/0 warning）：lcd（六型号全 init）、tp_xpt2046、oled SPI 变体 + I2C 变体重跑；verified=true 全部回写；未上板（软 SPI 时序/背光/偏移/圆屏方向/校准系数真机验证留后续）。
+- 全量测试 **3541 pytest + 1358 node:test 全绿**；48 件一致性快检 sweep_48_modules.py 全 OK（46+2 新件；oled SPI 扩展既有条目不纳入检查面——旧件双平台/无 ADR 标记属性）。
+- CONTEXT.md 平台行补录批次 12 块（决策 A/B + 默认脚全景 + 字库策略 + 0.91 核验 + 词表预算）。
+- **code-review 结论（双轴，本批内部评审 + 全量结构测试对仗）**：lcd 族深审 2 件 = 01（打样件——API/表驱动/字库裁剪逐项核对）+ 04（GC9A01——随机时间戳取模；全初始化族 47 行逐字核对、圆屏裁剪说明、无占位残留）；02/03/05 同构对仗（与 01/04 结构字段逐条比对：seq 表项/madctl/偏移表/默认方向均与厂家 lcd_init.c 方向表一致，测试断言与矩阵 PASS 佐证）；tp_xpt2046 深审（校准策略/上游「下降沿」矛盾按代码保留并记录/无 IRQ/纯驱动 ADR 0009）；oled SPI 深审（零回归接口/I2C 路径字节不动/厂家序列同参核对/0.91 分支）。整改项 1 件：lcd.h lcd_show_float 文档原述「固定 1 位小数」与厂家语义（num×100 → 2 位小数）不符→修正为 2 位小数并注明 len 语义（03-05 提交后 08 收尾前整改，测试绿）。标准轴无硬违规（无引脚字面量——test_pins 守卫；无平台依赖——矩阵/守卫；中文提交——hook 通过）。
