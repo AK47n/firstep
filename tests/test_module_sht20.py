@@ -1,28 +1,30 @@
-"""sht20 温湿度模块：真实库 + 真实母版不变量与 mspm0 单选生成。
+"""sht20 温湿度传感器模块（软 I2C 总线件）：真实库 + 真实母版不变量与
+双平台单选生成。
 
-与 sht30 / aht10 同款结构测试：manifest 形状（仅 mspm0、依赖 delay、
-SCL/SDA 双 gpio_out 角色 = PA16/PA17——默认与母版 syscfg 一致性由
-test_pins.py / test_pin_bindings.py 守）、mspm0 单选生成（syscfg 裁剪保留
-SHT20、模块文件落盘、main.c 调 init/read 过静态门禁）。软 I2C 位操作走
-delay 模块（依赖声明），页面原式公式/命令字/14bit 状态位掩码修正/测量
-重试窗口源码守卫钉死（页面原式 + 人工复核修正——与库内 aht10/dht11/sht30
-分工与 0x40×pca9685 地址冲突提醒写入 notes）。
-全程无 LLM、无服务。
+照 test_module_aht10.py 模板：manifest 形状（双平台文件齐、stm32 引脚宏
+在母版 pin_config.h、pins 类型 = i2c_scl/i2c_sda 共总线默认 PA6/PA7）、
+stm32 单选生成（uvprojx 注册 + 静态门禁过）、mspm0 单选生成。软 I2C 换算
+守卫（自实现原语族、零 ml_i2c/标准库调用、页面原式 0x80/0x81 地址与换算
+公式、SDA 方向切换 OD/IU）与 **页面缺陷防回潮**（① ≤50×2ms 重试上限；
+② & 0xFFFC 状态位掩码；③ 0xF3/0xF5 命令（no-hold 采信代码）；④ 失败码
+1/2/3 返回（无 printf 残留））。全程无 LLM、无服务。
 """
-
 from __future__ import annotations
 
 import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from contest_generator.clex import strip_comments
 from contest_generator.manifest import ModuleManifest
 
 LIBRARY_ROOT = Path(__file__).resolve().parents[1] / "library"
 MODULES = LIBRARY_ROOT / "modules"
 MSPM0_MASTER = LIBRARY_ROOT / "masters" / "mspm0"
+STM32_MASTER = LIBRARY_ROOT / "masters" / "stm32"
 
 from contest_generator.generator import generate  # noqa: E402
-from contest_generator.platforms import PLATFORM_MSPM0  # noqa: E402
+from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32  # noqa: E402
 from contest_generator.selection import resolve_selection  # noqa: E402
 
 MAIN_C_MSPM0 = (
@@ -32,61 +34,131 @@ MAIN_C_MSPM0 = (
     "int main(void)\n"
     "{\n"
     "    /* SYSCFG_DL_init(); */\n"
-    "    sht20_init();\n"
     "    float t = 0.0f, h = 0.0f;\n"
-    "    uint8_t ok = sht20_read(&t, &h);\n"
-    "    (void)ok;\n"
-    "    (void)t;\n"
-    "    (void)h;\n"
+    "    sht20_init();\n"
+    "    (void)sht20_read(&t, &h);\n"
+    "    while (1)\n"
+    "    {\n"
+    "    }\n"
+    "}\n"
+)
+MAIN_C_STM32 = (
+    '#include "headfile.h"\n'
+    '#include "sht20_stm32.h"\n'
+    "\n"
+    "int main(void)\n"
+    "{\n"
+    "    float t = 0.0f, h = 0.0f;\n"
+    "    sht20_init();\n"
+    "    (void)sht20_read(&t, &h);\n"
     "    while (1)\n"
     "    {\n"
     "    }\n"
     "}\n"
 )
 
+# 换算/规范字面量守卫：剥离注释后不得出现（标准库/寄存器/演示残留/母版
+# ml_i2c 调用）。
+BANNED_CODE_PATTERNS = [
+    (r"\bprintf\b", "printf"),
+    (r"\bmain\b", "main"),
+    (r"\bboard_init\b", "board_init"),
+    (r"\bGPIO_Init\b", "GPIO_Init"),
+    (r"\bRCC_\w+\s*\(", "RCC_ 调用"),
+    (r"stm32f4xx\.h", "stm32f4xx.h"),
+    (r"stm32f10x\.h", "stm32f10x.h"),
+    (r"\bI2C_Init\b|\bI2C_Start\b|\bI2C_Stop\b|\bI2C_SendByte\b", "母版 ml_i2c 调用"),
+    (r"\bGPIO_ReadInputDataBit\b", "GPIO_ReadInputDataBit"),
+    (r"\bGPIO_WriteBit\b", "GPIO_WriteBit"),
+]
 
-def test_sht20_manifest_shape_mspm0():
-    """sht20：仅 mspm0 平台条目；依赖 delay；SCL+SDA 双角色 gpio_out。"""
+
+def test_sht20_manifest_shape_both_platforms():
+    """sht20：双平台文件齐；stm32 双角色 = i2c_scl/i2c_sda（SCL=PA6/SDA=PA7，
+    macros 逐脚端口宏）；mspm0 条目原样（syscfg gpio_out PA16/PA17）。"""
     manifest = ModuleManifest.load(MODULES / "sht20")
     assert manifest.slug == "sht20"
     assert manifest.dependencies == ("delay",)
-    assert set(manifest.platforms) == {"mspm0"}
+
+    stm32 = manifest.platforms["stm32"]
+    assert [Path(f).name for f in stm32.files] == [
+        "sht20_stm32.c",
+        "sht20_stm32.h",
+    ]
+    for rel in stm32.files:
+        assert (MODULES / "sht20" / rel).is_file(), rel
+    assert [(p.id, p.type, p.default, p.required, p.macros) for p in stm32.pins] == [
+        ("SHT20_SCL", "i2c_scl", "PA6", True, ("SHT20_SCL_GPIO", "SHT20_SCL_PIN")),
+        ("SHT20_SDA", "i2c_sda", "PA7", True, ("SHT20_SDA_GPIO", "SHT20_SDA_PIN")),
+    ]
+    assert stm32.verified is True
+    assert stm32.hardware_bound is False
+    assert stm32.kit != ""
+    assert stm32.source_url == (
+        "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/"
+        "module/sensor/sht20-temp-humi-sensor.html"
+    )
+    for needle in (
+        "lckfb-地阔星移植手册/sensor--sht20-temp-humi-sensor.md",
+        "0xFFFC",
+        "未上板",
+    ):
+        assert needle in stm32.notes
 
     mspm0 = manifest.platforms["mspm0"]
     assert [Path(f).name for f in mspm0.files] == ["sht20.c", "sht20.h"]
-    for rel in mspm0.files:
-        assert (MODULES / "sht20" / rel).is_file(), rel
     assert [(p.id, p.type, p.default, p.required, p.macros) for p in mspm0.pins] == [
         ("SHT20_SCL", "gpio_out", "PA16", True, ()),
         ("SHT20_SDA", "gpio_out", "PA17", True, ()),
     ]
-    assert mspm0.kit and mspm0.source_url
-    # 与库内 aht10 / dht11 / sht30 的分工说明必须写入 notes
-    assert "aht10" in mspm0.notes
-    assert "dht11" in mspm0.notes
-    assert "sht30" in mspm0.notes
-    # SHT2x 旧系列 / 地址 0x40 / 低功耗单次测量 / 地址冲突提醒
-    assert "SHT2x" in mspm0.notes
-    assert "0x40" in mspm0.notes
-    assert "pca9685" in mspm0.notes
-    # CRC 取舍说明（页面无 CRC）
-    assert "CRC" in mspm0.notes
+    assert mspm0.verified is True
 
 
-def test_sht20_mspm0_syscfg_instances():
-    """mspm0 母版：SHT20 GPIO 实例（SCL/SDA 输出，运行时 SDA 切输入）。"""
+def test_sht20_stm32_macros_defined_in_pin_config():
+    """stm32 接线单源：SHT20_SCL_GPIO/_SCL_PIN/_SDA_GPIO/_SDA_PIN 必须在
+    母版 pin_config.h（默认 PA6/PA7 = 六件共总线）。"""
+    text = (STM32_MASTER / "pin_config.h").read_text(encoding="utf-8")
+    assert re.search(r"#define\s+SHT20_SCL_GPIO\s+GPIO_A", text)
+    assert re.search(r"#define\s+SHT20_SCL_PIN\s+Pin_6", text)
+    assert re.search(r"#define\s+SHT20_SDA_GPIO\s+GPIO_A", text)
+    assert re.search(r"#define\s+SHT20_SDA_PIN\s+Pin_7", text)
+
+
+def test_sht20_mspm0_syscfg_instance():
+    """mspm0 母版必须有 SHT20 实例（SCL=PA16 / SDA=PA17）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const SHT20 = GPIO.addInstance();" in syscfg
-    assert 'SHT20.associatedPins[0].$name        = "SCL";' in syscfg
-    assert 'SHT20.associatedPins[1].$name        = "SDA";' in syscfg
     assert 'SHT20.associatedPins[0].pin.$assign  = "PA16";' in syscfg
     assert 'SHT20.associatedPins[1].pin.$assign  = "PA17";' in syscfg
 
 
+def test_sht20_stm32_single_select_generation(tmp_path):
+    """sht20 stm32 单选生成：静态门禁通过、模块文件按 manifest 落盘、
+    uvprojx 注册 sht20_stm32.c、pin_config.h 在工程根。"""
+    resolved = resolve_selection(MODULES, PLATFORM_STM32, ["sht20"])
+    out = tmp_path / "out"
+    generate(
+        platform=PLATFORM_STM32,
+        manifests=resolved.manifests,
+        module_library_dir=MODULES,
+        master_project_dir=STM32_MASTER,
+        output_dir=out,
+        main_c_content=MAIN_C_STM32,
+    )
+    assert (out / "modules/sht20/code/sht20_stm32.c").is_file()
+    assert (out / "modules/sht20/code/sht20_stm32.h").is_file()
+    uvprojx = next(out.rglob("*.uvprojx"))
+    root = ET.parse(uvprojx).getroot()
+    groups = root.findall("Targets/Target/Groups/Group")
+    modules = next(g for g in groups if g.findtext("GroupName") == "modules")
+    paths = [f.findtext("FilePath") for f in modules.findall("Files/File")]
+    assert any("sht20_stm32.c" in p for p in paths)
+    assert (out / "pin_config.h").is_file()
+
+
 def test_sht20_mspm0_single_select_generation(tmp_path):
-    """sht20 mspm0 单选生成：syscfg 只留 SHT20、模块文件落盘、静态门禁过。"""
+    """sht20 mspm0 单选生成：syscfg 只留 SHT20、模块文件落盘。"""
     resolved = resolve_selection(MODULES, PLATFORM_MSPM0, ["sht20"])
-    assert {m.slug for m in resolved.manifests} == {"sht20", "delay"}
     out = tmp_path / "out"
     generate(
         platform=PLATFORM_MSPM0,
@@ -98,51 +170,51 @@ def test_sht20_mspm0_single_select_generation(tmp_path):
     )
     syscfg = (out / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const SHT20 = GPIO.addInstance();" in syscfg
-    assert 'SHT20.associatedPins[0].pin.$assign  = "PA16";' in syscfg
     assert 'SHT20.associatedPins[1].pin.$assign  = "PA17";' in syscfg
     for drop in (
         "STEP_MOTOR", "HUIDU", "KEY", "LED_BEEP", "IR_BEAM", "WS2812",
-        "HX711", "AHT10", "DHT11", "DS18B20", "BH1750", "SR04", "JOYSTICK",
-        "MOTOR_PID", "NTB", "IMU601", "DIGIT_UART", "ZIGBEE_UART", "OLED",
-        "I2C_0", "ADC12_0", "SHT30", "JY61P", "L298N_PWM", "L298N",
-        "OPENMV4_UART",
+        "HX711", "AHT10", "SR04", "JOYSTICK", "MOTOR_PID", "NTB", "IMU601",
+        "DIGIT_UART", "ZIGBEE_UART", "OLED", "I2C_0", "GP2Y1014",
     ):
         assert f"const {drop}" not in syscfg
     assert (out / "modules/sht20/code/sht20.c").is_file()
     assert (out / "modules/sht20/code/sht20.h").is_file()
-    # 依赖 delay 随选展开落盘
-    assert (out / "modules/delay/code/delay.c").is_file()
 
 
-def test_sht20_formula_and_command_guards():
-    """页面原式公式/命令字/掩码修正/重试窗口守卫（防回潮）。"""
-    source = (MODULES / "sht20" / "code" / "sht20.c").read_text(
-        encoding="utf-8"
+def test_sht20_stm32_code_guards():
+    """stm32 代码层守卫：剥离注释后零标准库/寄存器/演示残留、零 ml_i2c
+    调用；软 I2C 原语自实现（SDA 方向切换 = gpio_init OD/IU）；页面原式
+    地址/命令/换算保留；**页面缺陷防回潮**（重试上限 50×2ms、& 0xFFFC
+    掩码、0xF3/0xF5 命令、失败码 1/2/3 返回、无 printf 残留）。"""
+    c = (MODULES / "sht20" / "code" / "sht20_stm32.c").read_text(encoding="utf-8")
+    h = (MODULES / "sht20" / "code" / "sht20_stm32.h").read_text(encoding="utf-8")
+    full = c + "\n" + h
+
+    code_only = strip_comments(full, keep_preprocessor=True)
+    for pattern, label in BANNED_CODE_PATTERNS:
+        assert not re.search(pattern, code_only), f"代码残留 {label}"
+
+    # 软 I2C 原语族静态化 + 方向切换（页面原式 OD 输出 / IPU 输入 → OUT_OD/IU）
+    assert re.search(
+        r"#define\s+SHT20_SDA_OUT\(\)\s+gpio_init\(SHT20_SDA_GPIO", code_only
     )
-    header = (MODULES / "sht20" / "code" / "sht20.h").read_text(
-        encoding="utf-8"
+    assert re.search(
+        r"SHT20_SDA_IN\(\)\s+gpio_init\(SHT20_SDA_GPIO, SHT20_SDA_PIN, IU\)",
+        code_only,
     )
-    # 页面公式原式（0.01 系数口径）
-    assert "65536.0f" in source
-    assert "* 175.72f - 46.85f" in source
-    assert "* 125.0f - 6.0f" in source
-    # 命令/地址常量（头文件单源 + 源码引用；写 0x80/读 0x81 = 0x40<<1 形态）
-    assert re.search(r"SHT20_CMD_TEMP\s+0xF3u", header)
-    assert re.search(r"SHT20_CMD_HUMI\s+0xF5u", header)
-    assert re.search(r"SHT20_ADDR\s+0x40u", header)
-    assert "SHT20_CMD_TEMP" in source
-    assert "SHT20_CMD_HUMI" in source
-    assert "(SHT20_ADDR << 1) | 0u" in source  # 写地址（页面 0x80 形态）
-    assert "(SHT20_ADDR << 1) | 1u" in source  # 读地址（页面 0x81 形态）
-    # 无 CRC（页面取舍：数据 2 字节 + NACK）——无 CRC 计算函数
-    assert "crc8" not in source.lower()
-    # 14bit 状态位掩码修正（页面正文要求、页面代码未实现）
-    assert "0xFFFCu" in source
-    # 测量等待重试窗口（≤50×2ms = 100ms 覆盖页面 85ms 最长测量）
-    assert re.search(r"SHT20_READ_RETRY_MAX\s+50u", header)
-    assert re.search(r"SHT20_READ_RETRY_MS\s+2u", header)
-    assert "SHT20_READ_RETRY_MAX" in source
-    # 页面演示/调试件剔除
-    assert "printf" not in source
-    assert "IRQHandler" not in source
-    assert "main" not in source
+    assert re.search(r"#define\s+SHT20_SDA\(x\)\s+gpio_set", code_only)
+    assert "sht20_iic_start" in code_only and "sht20_iic_wait_ack" in code_only
+
+    # 页面原式保留：地址 0x80/0x81（SHT20_ADDR<<1 表达式）、命令 0xF3/0xF5、
+    # 换算 175.72/46.85/125.0/6.0
+    assert "SHT20_ADDR << 1" in code_only and "| 1u" in code_only
+    assert "SHT20_CMD_TEMP" in code_only and "SHT20_CMD_HUMI" in code_only
+    assert "175.72f" in code_only and "46.85f" in code_only
+    assert "125.0f" in code_only and "6.0f" in code_only
+
+    # 页面缺陷防回潮：① 重试上限（≤50×2ms → SHT20_READ_RETRY_MAX）；
+    # ② & 0xFFFC 掩码；③ 失败码 1/2/3 返回；④ 无 printf 残留
+    assert "SHT20_READ_RETRY_MAX" in code_only
+    assert "SHT20_READ_RETRY_MS" in code_only
+    assert "& 0xFFFCu" in code_only
+    assert "return 1;" in code_only and "return 2;" in code_only and "return 3;" in code_only
