@@ -95,6 +95,13 @@ WHITELIST = {
     "PB13": {"pid.GRAY_D2", "config.DIP1", "ttp224.TTP224_OUT2"},
     "PB14": {"pid.GRAY_D3", "config.DIP2", "ttp224.TTP224_OUT3"},
     "PB15": {"pid.GRAY_D4", "config.DIP3", "ttp224.TTP224_OUT4"},
+    # hx711 称重默认 SCK=PB5 / DT=PB0（wiki-stm32-batch3/07）：PB5 与电机
+    # 编码器 A 相 MOTOR_A_ENC 重叠（光电编码器闭环小车与静态称重/电子秤
+    # 不同框）；PB0 与 TB6612 B 相方向 MOTOR_B_DIR 重叠（电机方向与称重
+    # 不同框）——刻意不叠采集类/声光件（称重+传感站/报警常见组合），
+    # 同选经引脚绑定消解
+    "PB5": {"motor.MOTOR_A_ENC", "hx711.HX711_SCK"},
+    "PB0": {"motor.MOTOR_B_DIR", "hx711.HX711_DT"},
     # PA6/PA7 软 I2C 总线共享组（wiki-stm32-batch2/01 起，六件共总线：
     # aht10/bh1750/sht20/sht30/at24c02/ags10 默认 SCL=PA6/SDA=PA7——器件
     # 地址 0x38/0x23/0x40/0x44/0x50/0x1A 全异、多挂协议允许 = 合法共享
@@ -157,7 +164,7 @@ def test_default_layout_conflict_groups_resolved():
     """工单 05 五组冲突：四组已解（BUZZER/MOTOR_B_DIR、DEBUG/MOTOR_A_ENC、
     LED/GRAY_D6-8、ZIGBEE/软 I2C）；DIP×GRAY_D1-4 为白名单残留。"""
     grouped = _group_by_pin()
-    assert grouped["PB0"] == {"motor.MOTOR_B_DIR"}
+    assert grouped["PB0"] == {"motor.MOTOR_B_DIR", "hx711.HX711_DT"}
     assert grouped["PA2"] == {"debug_uart.DEBUG_UART_TX"}
     assert grouped["PA3"] == {"debug_uart.DEBUG_UART_RX"}
     assert grouped["PC13"] == {"config.LED_RED"}
