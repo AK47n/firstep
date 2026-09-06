@@ -262,19 +262,22 @@ uint8_t ms5611_read(float *temp_c, float *pressure_pa)
 {
     uint32_t d1 = 0;
     uint32_t d2 = 0;
-    long dT = 0; /* 页面声明 uint32_t——低于 20℃ 时 dT 为负、无符号回绕
-                  * 破坏换算，人工复核修正为有符号 long（公式表达式不变），
-                  * notes 记录 */
+    long long dT = 0; /* 页面声明 uint32_t——低于 20℃ 时 dT 为负、无符号回绕
+                       * 破坏换算，且 C4×dT/128、C3×dT/256.0 在 32 位乘法会
+                       * 有符号溢出（积可达 1e11 ≫ 2^31，全温区多数读数偏差
+                       * 数十 hPa）——人工复核修正为有符号 64 位 long long
+                       * （表达式不变，标准实现 int64 口径），notes 记录 */
     long long temp = 0;
     long long off = 0;
     long long sens = 0;
     long long p = 0;
     uint8_t st;
 
-    /* 2 次转换按页面原式（Get_TEMP 序列：D1 = 0x48、D2 = 0x58，每段内部
-     * 10ms 转换等待 ×2；页面 Get_pressure 内嵌重复调 Get_TEMP 的二次重读
-     * 省去——单次 D1/D2 读取 + 一次全换算，结果等价（页面用全局
-     * D1/D2/dT 复用），notes 记录） */
+    /* 2 次转换按页面原式（Get_TEMP 序列：D1 = 0x48、D2 = 0x58——每段内部
+     * 命令/数据请求各 10ms 等待 + **段间 10ms**（页面 Get_TEMP L384/386
+     * 两次转换间各有 delay_ms(10)，本件按页面保留）；页面 Get_pressure
+     * 内嵌重复调 Get_TEMP 的二次重读省去——单次 D1/D2 读取 + 一次全换算，
+     * 结果等价（页面用全局 D1/D2/dT 复用），notes 记录） */
     st = ms5611_read_d1_d2(MS5611_CMD_D1, &d1);
     if (st == 5) {
         return 3; /* 数据读失败（读地址无应答） */
@@ -282,6 +285,7 @@ uint8_t ms5611_read(float *temp_c, float *pressure_pa)
     if (st != 0) {
         return 1; /* D1 段失败 */
     }
+    delay_ms(MS5611_CONV_WAIT_MS);
     st = ms5611_read_d1_d2(MS5611_CMD_D2, &d2);
     if (st == 5) {
         return 3; /* 数据读失败（读地址无应答） */
@@ -289,10 +293,12 @@ uint8_t ms5611_read(float *temp_c, float *pressure_pa)
     if (st != 0) {
         return 2; /* D2 段失败 */
     }
+    delay_ms(MS5611_CONV_WAIT_MS);
 
     /* 换算按页面原式（dT 表达式不变——页面 `D2 - (Cal_C1_6[5] * 256.0)`；
-     * 页面 dT 声明 uint32_t 低 20℃ 负值回绕，本件取有符号 long） */
-    dT = (long)(d2 - (ms5611_cal[5] * 256.0));
+     * 页面 dT 声明 uint32_t 低 20℃ 负值回绕、乘数 32 位有符号溢出——本件
+     * 取有符号 64 位 long long（标准实现 int64 口径，见上方注释） */
+    dT = (long long)(d2 - (ms5611_cal[5] * 256.0));
     temp = 2000 + ((float)dT * ms5611_cal[6]) / 8388608.0;
     off = (long long)(ms5611_cal[2] * 65536.0 + ms5611_cal[4] * dT / 128);
     sens = (long long)(ms5611_cal[1] * 32768.0 + ms5611_cal[3] * dT / 256.0);

@@ -368,10 +368,10 @@ uint8_t bmp180_read(float *temp_c, float *pa)
 
     b7 = ((uint32_t)up - (uint32_t)b3) * 50000u;
 
-    /* page 原式保留（B7 uint32_t——`B7<0x80000000` 恒真、else 分支不可达；
-     * oss=0 时与标准 BMP180 实现（long B7 + 真/假分支）等价：
-     * `(B7<<1)/B4` ≡ 标准 `(B7*2)/B4`，`B7/B4<<1` 优先级按页面——人工复核
-     * 修正记录，notes 标注） */
+    /* page 原式保留（B7 uint32_t——页面声明；**标准 BMP180 实现用 long B7
+     * 并保留真/假双分支——B7 = ((uint32)UP−(uint32)B3)×50000，高 UP/负 B3
+     * 时可达 ≥2^31，else 分支不可删**；oss=0 时 `(B7<<1)/B4` ≡ 标准
+     * `(B7*2)/B4`、`B7/B4<<1` 优先级按页面——人工复核记录，notes 标注） */
     if (b7 < 0x80000000u) {
         p = (int32_t)((b7 << 1) / (uint32_t)b4);
     } else {

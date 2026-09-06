@@ -14,7 +14,7 @@
  * UART 外设引脚，宏 AS32_UART_INST；与 ZIGBEE_UART 同 UART3 外设同脚：
  * LoRa 与 Zigbee 无线数传**互替件**、同选概率最低——单选裁剪后独占 UART3，
  * 同选时经引脚绑定换实例/换脚消解；OPENMV4_UART×DIGIT_UART 同构先例；
- * HUIDU R2/R3 默认重叠同选时消解）。
+ * 与 HUIDU R1（PA26）/L4（PA25）默认重叠同选时消解）。
  * 页面语义保留（页面 LOAR_USART_send_String/HEX、Anakysis_Data、
  * Clear_LOAR_RX_BUFF、LOAR_RX_LEN_MAX 300）：透传字符串收发、**无帧结构**
  * ——行分帧/校验归调用方骨架（ADR 0009）；页面 UART_1_INST_IRQHandler
