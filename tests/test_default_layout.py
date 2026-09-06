@@ -102,8 +102,16 @@ WHITELIST = {
     # 与 motor MOTOR_A_DIR/DIR2（TB6612 A 相方向）重叠：环境传感/存储记录
     # 与「带电机方向的小车运动控制」不同框、同选概率最低（刻意不叠显示/
     # 声光/输入/串口/无线/USB/SWD 组），同选经引脚绑定消解）
-    "PA6": {"motor.MOTOR_A_DIR", "aht10.AHT10_SCL"},
-    "PA7": {"motor.MOTOR_A_DIR2", "aht10.AHT10_SDA"},
+    "PA6": {
+        "motor.MOTOR_A_DIR",
+        "aht10.AHT10_SCL",
+        "bh1750.BH1750_SCL",
+    },
+    "PA7": {
+        "motor.MOTOR_A_DIR2",
+        "aht10.AHT10_SDA",
+        "bh1750.BH1750_SDA",
+    },
 }
 
 
