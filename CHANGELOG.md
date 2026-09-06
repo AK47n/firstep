@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=faddef2ea61b036230b540b40650856e172e0d9d -->
+<!-- changelog-auto: last-commit=6418e4c4d2323004a2ea148e0ef9696f5f9566dc -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -77,6 +77,7 @@
 - 21:01 工单：wiki-stm32-batch4/01 bmp180 实施完成回填（结论 + 状态 resolved）
 - 21:05 模块：ms5611 高精度气压/温度传感器 stm32 平台条目（wiki-stm32-batch4/02：软 I2C 总线件——共总线 PA6/PA7 + **64 位换算核心修正：dT 改有符号 long long（页面 uint32_t 负温回绕 + C4×dT/128、C3×dT/256.0 32 位乘法溢出——mspm0 批 13 同款）+ 温度出参 TEMP/100.0（0.01℃ 页面整数截断修正）+ 气压出 Pa（页面 /100=hPa 修正）+ PROM 读逐段应答检查（返 3）+ Get_pressure 内嵌 Get_TEMP 二次重读合并 + 段间 2×10ms 保留** + init 含 SCL OUT_OD 初始化置高 + 与 bmp180 同址 0xEE 互替提醒 + int64 镜像单测（负温向量钉死）+ UV4 矩阵 0 error/0 module warning → verified=true）
 - 21:06 工单：wiki-stm32-batch4/02 ms5611 实施完成回填（结论 + 状态 resolved）
+- 21:09 模块：dht11 温湿度传感器 stm32 平台条目（wiki-stm32-batch4/03：单总线位时序件——DATA 默认 PB3（叠 KEY+GRAY_D6 不同框）+ 页面缺陷修正（响应/位等待超时无错误汇报改超时返回 1、返回语义归一 0=成功、delay_uus 页外函数改 delay_us、RCU_DHT11 未用宏不落、extern 全局泄漏收敛 static 缓存+出参）+ 时间轴常量单源 .h（19ms/28us/54+27/74us/80 步进）+ 校验和 0.1 系数 + UV4 矩阵 0 error/0 module warning → verified=true）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
