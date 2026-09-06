@@ -299,6 +299,13 @@ STM32_MACRO_VALUES = {
     "SHT20_SCL_PIN": "Pin_6",
     "SHT20_SDA_GPIO": "GPIO_A",
     "SHT20_SDA_PIN": "Pin_7",
+    # wiki-stm32-batch2/04：sht30 温湿度（软 I2C 总线件——六件共总线 PA6/PA7；
+    # 与 motor 电机方向重叠：温湿度与「带电机方向的小车运动控制」不同框；
+    # 页面默认 SDA=PB8/SCL=PB9（=OLED 段）不采用；本件电平 = 推挽+浮空（全批唯一一派））
+    "SHT30_SCL_GPIO": "GPIO_A",
+    "SHT30_SCL_PIN": "Pin_6",
+    "SHT30_SDA_GPIO": "GPIO_A",
+    "SHT30_SDA_PIN": "Pin_7",
 }
 
 

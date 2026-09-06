@@ -107,12 +107,14 @@ WHITELIST = {
         "aht10.AHT10_SCL",
         "bh1750.BH1750_SCL",
         "sht20.SHT20_SCL",
+        "sht30.SHT30_SCL",
     },
     "PA7": {
         "motor.MOTOR_A_DIR2",
         "aht10.AHT10_SDA",
         "bh1750.BH1750_SDA",
         "sht20.SHT20_SDA",
+        "sht30.SHT30_SDA",
     },
 }
 
