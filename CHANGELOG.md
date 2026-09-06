@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=96f326f0ffab6d356bb9013ab36865d343906da1 -->
+<!-- changelog-auto: last-commit=5a78a3f311ae44e1be6a1dfcb33b99760e62f3b3 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -23,6 +23,7 @@
 - 10:53 批次9/04 S12SD 紫外线传感器模块入库（mspm0）：ADC 模拟量薄封装（依赖 adc 模块共享 ADC12_0 MEM0 槽位、默认 PA24——无新通道/实例，mq2 方式）；s12sd_init + s12sd_read_uv_index 出 0-11 级 UV 指数（页面 Get_Ultraviolet_Intensity 阈值表原式：<227→0、227-317→1、318-407→2、408-502→3、503-605→4、606-695→5、696-794→6、795-880→7、881-975→8、976-1078→9、1079-1169→10、>=1170→11——0 低 11 高）；页面 SAMPLES 30×5ms 改 5 次快平均；页面 ADC 中断改经 adc 模块 API 轮询（共享实例强符号唯一）；notes 写明量程/UV-A 波段（检测波长 240-370nm——UV-B/UV-C 不响应、测量角度 130°、温漂 0.08%/℃、工作 2.7-5V/1mA、板载 LM358 放大 1% 精度）与档位标定限制（页面实测室内 0 级——户外/遮挡/器件差异会偏移）；词表感知传感器 +紫外线传感器；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）
 - 10:54 批次9/03 GP2Y1014AU 粉尘传感器模块入库（mspm0）：ADC 模拟量薄封装（依赖 adc 模块共享 ADC12_0 MEM0 槽位、默认 PA24——无新 ADC 通道）+ **LED 驱动 GPIO 输出（薄封装唯一例外：器件必需**——内置红外 LED 必须主控脉冲驱动（页面 Read_dust_concentration 时序：LED 亮→280us→采样→40us→LED 关→9680us，10ms 周期），无此脚传感器不工作）；母版 syscfg 新 GPIO 输出实例 GP2Y1014/LED（页面极性原样 clear=亮/set=关、初始 SET；**默认 PA1**——与 I2C_0 sclPin（ml_mpu6050 硬 I2C SCL）重叠：粉尘监测与姿态采集不同框、同选概率最低（PA0/PA1 不可作 GPIO 输入——2026-09-06 SysConfig CLI 实证；GPIO 输出可配 PA0——ir_remote_tx 先例，PA1 同型经编译矩阵 CLI 实证），同选时经引脚绑定消解）；gp2y1014_init + gp2y1014_read_dust 出浓度估算值（页面原式 0.17×value−0.1——**相对估算非精标**：页面公式对演示值/ADC 量程标定不明确（0.17×4095−0.1≈696 超出常规 mg/m³ 量程）、红外漫反射对烟尘/水汽同样响应（烟/尘区分不能）、绝对浓度需标准粉尘标定）；页面 Filter（10 点静态滑动平均）内嵌为模块内静态环形缓冲（页面滤波逻辑简单——照库依赖先例取舍不依赖库内 filter 可选配套件）；页面 SAMPLES 30×2ms（≈62ms 远超 10ms LED 周期——页面时序本就不自洽）改 5 次快平均；页面 ADC 中断改经 adc 模块 API 轮询（共享实例强符号唯一）；dependencies [adc, delay]（LED 时序走 delay 模块忙等不占 TIMER）；词表感知传感器 +粉尘传感器；单选生成 → SysConfig CLI（PA1 合法）→ gmake 0 error/0 warning（verified=true）
 - 11:03 批次9 code-review 收尾整改（标准轴）：清理死常量（s12sd.h S12SD_UV_INDEX_MAX / gp2y1014au.h GP2Y1014_ADC_MAX——仅测试引用不入换算，移除并同步守卫断言）
+- 11:05 批次9 收尾：四张工单标记 resolved（结论含提交号/关键发现）；spec 补实施结论（矩阵全 PASS/rain 正向映射定稿/gp2y1014au LED 例外/词表预算实测）与 code-review 两轴结果；CONTEXT 平台行补录批次9 四件（ADC 薄封装群共读 MEM0 + gp2y1014au LED 输出实例 PA1——薄封装唯一例外）；词表预算按实测 wire 6341（> 5934 fit 上限）上调 WORDLIST_PROMPT_BYTES 6100→6600（fit 上限 6434 全量送达 + 93B 余量）并降 REFERENCE_FULLTEXT_BYTES 61500→61000（词表段 +241B 保 2KB 边界余量，batch5/7/8 口径，llm.py/budget.py 记账链同步）；gp2y1014au verified 回写 true（评审硬违规整改）；40u 时序守卫断言补强（评审弱观察）；新增 sweep_35_modules.py（批次1-9 35 件一致性快检全 OK）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
