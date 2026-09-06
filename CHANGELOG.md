@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=4daa102ee2ccd73d4486b5357e2aaa1438afcf90 -->
+<!-- changelog-auto: last-commit=7b70ec4cf9270501156bec8a97b730b16d4ef0b7 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -102,6 +102,7 @@
 - 22:20 模块：mq3 酒精检测传感器 stm32 平台条目（wiki-stm32-batch6/01：ADC 薄封装件——页面 ADC 序列收敛 ml_adc（adc_init(ADC_1, MQ3_AO_CH) + 5 次 adc_get 快平均）+ 默认 AO=ADC_Channel_5（PA5 页面原脚即共读点——ADC 共享组：本批 7 件并入 batch5 的 PA5 共读组，flame+8+7=16 ADC 角色同脚，同一物理脚只能接一件器件——多件同测需外部分路器/分时切换）+ 正向 value/4095×100（酒精/汽油蒸汽，相对值非 ppm 精标）+ DO 未用不声明 + SAMPLES 30→5 快平均 + UV4 矩阵 0 error/0 module warning → verified=true；test_pins 宏表 +7、test_default_layout PA5 白名单组 +7）
 - 22:20 模块：mq4 甲烷/天然气检测传感器 stm32 平台条目（wiki-stm32-batch6/02：ADC 薄封装件——页面 ADC 序列收敛 ml_adc + 默认 AO=PA5（页面原脚即共读点，ADC 共享组）+ 正向 value/4095×100（相对值非 ppm 精标）+ DO 未用不声明 + 页面 DO 注释「酒精值」MQ-3 模板串台 notes 记录不落码 + SAMPLES 30→5 快平均 + UV4 矩阵 0/0 → verified=true）
 - 22:20 模块：mq6 液化气检测传感器 stm32 平台条目（wiki-stm32-batch6/03：ADC 薄封装件——页面 ADC 序列收敛 ml_adc + 默认 AO=PA5（页面原脚即共读点，ADC 共享组）+ 正向 value/4095×100（液化气/丙烷，相对值非 ppm 精标）+ DO 未用不声明 + 页面 DO 注释「酒精值」模板串台 notes 记录不落码 + SAMPLES 30→5 快平均 + UV4 矩阵 0/0 → verified=true）
+- 22:20 模块：mq7 一氧化碳检测传感器 stm32 平台条目（wiki-stm32-batch6/04：ADC 薄封装件——页面 ADC 序列收敛 ml_adc + 默认 AO=PA5（页面原脚即共读点，ADC 共享组）+ 正向 value/4095×100（CO 相对值非 ppm 精标）+ **高低温循环检测但 4Pin AO 单路输出说明**（低温 1.5V 测 CO、高温 5.0V 清洗——本件只读 AO 单路百分比，双通道区分需模块级温控/标定）+ DO 未用不声明 + 「酒精值」串台 notes + SAMPLES 30→5 快平均 + UV4 矩阵 0/0 → verified=true）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
