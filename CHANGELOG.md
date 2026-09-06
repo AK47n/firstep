@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=5b12e1d9700a34113a68fc8566bc2913b9ff524c -->
+<!-- changelog-auto: last-commit=c88e36b2fa83f87f1b108a24a9df3f2043f97818 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -81,6 +81,7 @@
 - 21:09 工单：wiki-stm32-batch4/03 dht11 实施完成回填（结论 + 状态 resolved）
 - 21:12 模块：ds18b20 单总线温度传感器 stm32 平台条目（wiki-stm32-batch4/04：单总线位时序件——DATA 默认 PB1（叠 MOTOR_B_DIR2 不同框）+ **0x44 后补 750ms 转换等待（主缺陷——页面未等首次读回 85℃默认值，mspm0 批 6 修正沿用）+ 页外声明未实现复位函数剔除 + 位槽时间轴常量单源 .h（750/15/200/240/2+60/2+12+50）+ 读毕释放总线 + 页面注释串台记录（MLX90614/标题错位/DQ_OUT 注释相反）不落** + 负温补码 0.0625 系数 + UV4 矩阵 0 error/0 module warning → verified=true）
 - 21:12 工单：wiki-stm32-batch4/04 ds18b20 实施完成回填（结论 + 状态 resolved）
+- 21:20 收尾：wiki-stm32-batch4 批次 4 收官——CONTEXT 平台行补录 stm32 线批次 4 块 + code-review 两轴结果回填（标准轴 0 硬违规/spec 轴零硬违反）+ 判断项整改（send_ack 参数名 ack→is_nack 族规统一——bmp180/ms5611 两件 + 矩阵复跑 0/0）+ spec 轴措辞一致性改进（ds18b20 总线释放统一 OUT+SET(1)——工单 04 更正）+ 收尾报告（全量 pytest 3654 通过/sweep_4_modules.py 4/4 OK/UV4 四件 0/0）+ vl53l0x 待资料状态记录（工单 05 blocked——网盘下载目录不存在，不阻塞批次验收）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
