@@ -368,6 +368,11 @@ STM32_MACRO_VALUES = {
     "MS5611_SCL_PIN": "Pin_6",
     "MS5611_SDA_GPIO": "GPIO_A",
     "MS5611_SDA_PIN": "Pin_7",
+    # wiki-stm32-batch4/03：dht11 温湿度（单总线件——DATA 默认 PB3，叠
+    # key.KEY_START + pid.GRAY_D6：环境件与独立按键/巡线灰度不同框、同选概率
+    # 最低；页面默认 PB0 不采用 = MOTOR_B_DIR；单总线件不叠软 I2C 总线 PA6/PA7）
+    "DHT11_GPIO": "GPIO_B",
+    "DHT11_PIN": "Pin_3",
 }
 
 

@@ -23,6 +23,29 @@
           "required": true
         }
       ]
+    },
+    "stm32": {
+      "files": [
+        "code/dht11_stm32.c",
+        "code/dht11_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "单总线位时序件（一根数据线双向：发送=gpio_init OUT_PP、读位=gpio_init IU + gpio_get——方向运行时重配；忙等 delay_us——不占 TIMER/sr04 先例）。页面 = **F1 标准库**（stm32f10x.h + RCC_APB2PeriphClockCmd——非 F4 嫌疑页）；**电平配置 = 页面原式 GPIO_Mode_Out_PP（推挽输出）+ GPIO_Mode_IPU（上拉输入）**→ ml_gpio OUT_PP/IU（模块板自带 4.7k~10k 上拉——空闲必须高电平）。**页面缺陷清单（已取证 + 修正 + notes + 守卫）**：① **响应/位等待超时无错误汇报**（页面 L270-296 timeout=5000 只减不报——坏线仍读 40bit 垃圾；本件无应答/回应超时立即返回 1——位循环超时仍由校验和兜底（1/256 拦截，mspm0 同款判定可接受））；② **返回语义归一**（页面 0=校验失败/非 0=未处理数据——改为库内 aht10 惯例 0=成功/1=失败）；③ **delay_uus 页外工具函数 → delay_us**（页面片段 L77 `delay_uus(CHECK_TIME)` vs 正式 c L285 `delay_us(CHECK_TIME)` 不一致——正式版采信；delay_uus 为页外函数不落）；④ **RCU_DHT11 未用宏不落**（页面 .h 定义 RCU_DHT11 但 .c L199 直接写 `RCC_APB2Periph_GPIOB`——未用宏剔除）；⑤ **extern float temperature/humidity 全局泄漏收敛**（页面 .h L387-388 extern——本件 static 缓存 + 出参 + 便捷封装）；⑥ 时序常量单源（19ms 起始/28us 分界/54+27/74us 位形/80 步进——本头 DHT11_* 常量，页面 5000 空转步替换为 1us 步进 80 步）。校验 = 前 4 字节和末 8 位 == 第 5 字节（uint8_t 回绕 = mod 256 特性）；换算 0.1 系数（湿度=湿整+湿小×0.1 %RH、温度=温整+温小×0.1 ℃）；规格 湿度 20-90%RH ±5%、温度 0-50℃ ±2℃、8bit 分辨率；**采样节拍 ≥2s 归调用方**（器件自发热/湿度响应慢——notes）。**默认脚 = PB3**——与 key.KEY_START（按键）+ pid.GRAY_D6（巡线灰度）默认重叠：环境件与独立按键/巡线不同框、同选概率最低（刻意不叠声光/显示/传感站组合——温湿度+声光/显示为常见搭配；单总线件与软 I2C 总线件 PA6/PA7 不共脚；页面默认 PB0 不采用 = MOTOR_B_DIR（母版 TB6612 B 相方向），同选经引脚绑定消解）。与 mspm0 条目 API 同名同语义（dht11_init/read/read_temperature/read_humidity、同返回码 0=成功/1=失败、缓存语义同款），mspm0 侧零改动。\n来源：sources/materials/lckfb-地阔星移植手册/sensor--dht11.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/dht11.html；网盘资料 https://pan.baidu.com/s/1HQEL699-Yl5Jh3Hp87_FlQ 提取码 2sgq（厂家资料）；移植成功案例 https://pan.baidu.com/s/1kuNQcCyFYCfuXVIEkJ5_mQ?pwd=le5i 提取码 le5i；采购 DHT11 温湿度模块 https://item.taobao.com/item.htm?spm=a230r.1.14.23.735720126ougj3&id=522553143872&ns=1&abbucket=12#detail）。改造要点：去 main.c 演示与 printf；函数名规范化（DHT11_Read_Data→dht11_read、Get_temperature/Get_humidity→read_temperature/read_humidity 便捷封装）；全局温湿度缓存改出参 + static；返回语义反转统一 0=成功/1=失败；应答超时防护；去掉未调用的 DHT11_RST（起始时序已并入 read）；CHECK_TIME 28us 与位超时 80 步进保留立创原值；延时走 delay 模块。\nwiki-stm32-batch4/03 编译矩阵（2026-09-06）：单选生成 → UV4 0 error、0 module warning（PASS）；未上板（单总线位时序真机验证留后续）。",
+      "kit": "DHT11 温湿度传感器模块（3Pin 单总线，模块板带 4.7k~10k 上拉；湿度 20-90%RH ±5%、温度 0-50℃ ±2℃、8bit 分辨率）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/dht11.html",
+      "pins": [
+        {
+          "id": "DHT11_DATA",
+          "type": "gpio_out",
+          "default": "PB3",
+          "required": true,
+          "macros": [
+            "DHT11_GPIO",
+            "DHT11_PIN"
+          ]
+        }
+      ]
     }
   }
 }
