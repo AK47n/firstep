@@ -285,6 +285,13 @@ STM32_MACRO_VALUES = {
     "AHT10_SCL_PIN": "Pin_6",
     "AHT10_SDA_GPIO": "GPIO_A",
     "AHT10_SDA_PIN": "Pin_7",
+    # wiki-stm32-batch2/02：bh1750 光照（软 I2C 总线件——六件共总线 PA6/PA7，
+    # 与 motor 电机方向重叠：光照与「带电机方向的小车运动控制」不同框，
+    # 同选概率最低；页面默认 SDA=PB8/SCL=PB9（=OLED 段）不采用）
+    "BH1750_SCL_GPIO": "GPIO_A",
+    "BH1750_SCL_PIN": "Pin_6",
+    "BH1750_SDA_GPIO": "GPIO_A",
+    "BH1750_SDA_PIN": "Pin_7",
 }
 
 
