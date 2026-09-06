@@ -84,4 +84,17 @@
 - 审计脚本 `.scratch/wiki-materials/audit_v7.py` 2026-09-09 复跑：真缺 12 篇（nrf24l01、8 篇彩屏、1.3 单色、mpu6050）——本批四件均在全自洽 58 篇内。
 - 工单：`issues/01-module-photoresistance.md` → 02 rain → 03 gp2y1014au → 04 s12sd（互相独立、无共享 ADC 演进（薄封装无 syscfg 改动）；实施按简→繁：photoresistance → rain（含方向修正取证）→ s12sd → gp2y1014au（唯一带 GPIO 实例/delay 依赖/滤波内嵌件））。
 - 完成后：全量测试套件 + 批次 1-9 全部 35 件一致性快检（`.scratch/wiki-modules-batch9/sweep_35_modules.py`）+ 批次 1-9 全部 35 件 code-review 收尾 + CONTEXT.md 平台行补录四件（薄封装共读 MEM0 决策 + gp2y1014au LED 例外）+ 中文提交（.githooks/commit-msg 强制中文；无新增 .ps1）。
-- 词表预算：四件入库后默认词表 wire 实测将超 WORDLIST_PROMPT_BYTES 6100（批次 8 后 fit 上限 5934，批次 8 实测 5900 余 34B——本批四件 +~400B）——按批次 5/6/7/8 先例实测后上调预算并同步 llm.py 注释与全文预算边界（配套降 REFERENCE_FULLTEXT_BYTES 500B 口径，保 2KB 边界余量）。
+- 词表预算（2026-09-09 实测定稿）：四件入库后默认词表完整 wire（json.dumps ensure_ascii 口径，budget.wire_size）实测 **6341**（> 5934 fit 上限 6100−166——尾部类别被截、方案名丢失，test_wordlist_segment 契约红证）→ 按批 5/6/7/8 先例上调 WORDLIST_PROMPT_BYTES **6100→6600**（fit 上限 6434 ≥ 6341 全量送达 + 93B 余量），词表段全量 6341 比旧截断形态 6100 多 241B → REFERENCE_FULLTEXT_BYTES **61500→61000** 保 2KB 边界余量（预判口径「+400B」与实际 +441B 同向）。
+
+## 实施结论（2026-09-09，收尾补记）
+
+- 四件编译矩阵全部 PASS（0 error/0 warning）：photoresistance、rain、gp2y1014au（**GP2Y1014/LED = PA1 经 SysConfig CLI 实证据合法**——2026-09-06 实证的「PA0/PA1 仅 GPIO 输入不可」延伸确认）、s12sd；verified=true 全部回写；未上板（notes 注明）。
+- rain 公式方向定稿为**正向映射**（正文取证修正，实现 + 守卫 + notes 三处一致）；photoresistance 反向映射与页面「最亮 100 最暗 0」自洽。
+- gp2y1014au 的 LED GPIO 实例定稿为默认 PA1（同选概率最低：仅与 I2C_0 SCL 重叠——粉尘与姿态不同框；i2c_bus_share 测试按 ir_distance/ttp224 绑走先例恢复纯 I2C 共享组）。
+- 35 件一致性快检（sweep_35_modules.py）全 OK；词表预算/账目注释随本 spec 同步（llm.py/budget.py 记账链）。
+- 工单 01-04 全部实施完毕（状态待收尾标记 resolved）。
+
+## code-review 结果（2026-09-09，双轴并行评审，固定点 55cad1dc）
+
+- **标准轴**：3 项硬违规（① gp2y1014au verified 提交态 false——已随收尾提交转 true；② 词表预算未随提交上调——已随收尾提交 6100→6600/61500→61000；③ 工单未收尾——已标记 resolved）+ 2 项判断（s12sd `S12SD_UV_INDEX_MAX`、gp2y1014au `GP2Y1014_ADC_MAX` 死常量——已移除并同步守卫断言）；其余合规项（ADR 0009/简介判据/零引脚字面量/薄封装先例/syscfg 风格/中文规范）全部通过。
+- **规格轴**：实现与 spec/工单逐条一致、未发现实现错误；差异项均为未提交收尾项（同标准轴 ①②③，工作区已修正）；范围外提示（010c3df7 系批次 8 收尾修正、i2c_bus_share 绑走用例为保持既有测试绿的必要适应（照 ir_distance/ttp224 先例）、gp2y1014au notes 增补规格/分工）均认可保留；弱观察（40u 时序仅 header 守卫）已补强为调用点断言。

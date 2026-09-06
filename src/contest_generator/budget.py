@@ -132,7 +132,10 @@ SKELETON_REFERENCE_TOTAL_BYTES = 40000
 # 词表段变更配套（2026-09-06，wiki-modules-batch8）：词表完整 wire 实测 5900、
 # 预算 5700→6100 → 词表段全量 5900 比截断形态 5700 多 200B → 全文降 500B 回
 # 61500 保 2KB 边界余量（同 batch5/7 口径；红证见 worst-case 结构测试实测）。
-REFERENCE_FULLTEXT_BYTES = 61500
+# 词表段变更配套（2026-09-09，wiki-modules-batch9）：词表完整 wire 实测 6341、
+# 预算 6100→6600 → 词表段全量 6341 比截断形态 6100 多 241B → 全文降 500B 回
+# 61000 保 2KB 边界余量（同 batch5/7/8 口径；红证见 worst-case 结构测试实测）。
+REFERENCE_FULLTEXT_BYTES = 61000
 
 # 相关候选清单段合计 wire 字节预算（工单 02 相关候选自动扩容）：recommend
 # 启 15 条相关候选后，清单段现实形态 ≈4.7KB（真实库简介 194-348 字/条，
