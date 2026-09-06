@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=17d6d8dfdb2d7d02b0609cc0f82564402eefa1b2 -->
+<!-- changelog-auto: last-commit=54e0d80633c959edec8bcaefd7baac520d5ec878 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -47,6 +47,7 @@
 - 15:58 module-preselect code-review 双轴整改（Standards/Spec，工单 04）：
 - 16:22 合规：立创 wiki 手册素材来源标注（lckfb-attribution 01-04）
 - 16:23 工具：立创来源标注注入与冒烟脚本入库（lckfb-attribution，materials-wiki 先例）
+- 16:24 文档：CONTEXT 补录来源标注判据与消费方（lckfb-attribution）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
