@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=b6a2019918bfe3b69e12d6e3421eb55208e0bfa8 -->
+<!-- changelog-auto: last-commit=09f2d0ef906df00888a27a4cc4df71291142e25b -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -104,6 +104,7 @@
 - 22:20 模块：mq6 液化气检测传感器 stm32 平台条目（wiki-stm32-batch6/03：ADC 薄封装件——页面 ADC 序列收敛 ml_adc + 默认 AO=PA5（页面原脚即共读点，ADC 共享组）+ 正向 value/4095×100（液化气/丙烷，相对值非 ppm 精标）+ DO 未用不声明 + 页面 DO 注释「酒精值」模板串台 notes 记录不落码 + SAMPLES 30→5 快平均 + UV4 矩阵 0/0 → verified=true）
 - 22:20 模块：mq7 一氧化碳检测传感器 stm32 平台条目（wiki-stm32-batch6/04：ADC 薄封装件——页面 ADC 序列收敛 ml_adc + 默认 AO=PA5（页面原脚即共读点，ADC 共享组）+ 正向 value/4095×100（CO 相对值非 ppm 精标）+ **高低温循环检测但 4Pin AO 单路输出说明**（低温 1.5V 测 CO、高温 5.0V 清洗——本件只读 AO 单路百分比，双通道区分需模块级温控/标定）+ DO 未用不声明 + 「酒精值」串台 notes + SAMPLES 30→5 快平均 + UV4 矩阵 0/0 → verified=true）
 - 22:20 模块：mq8 氢气检测传感器 stm32 平台条目（wiki-stm32-batch6/05：ADC 薄封装件——页面 ADC 序列收敛 ml_adc + 默认 AO=PA5（页面原脚即共读点，ADC 共享组）+ 正向 value/4095×100（氢气相对值非 ppm 精标）+ DO 未用不声明 + 「酒精值」串台 notes + SAMPLES 30→5 快平均 + UV4 矩阵 0/0 → verified=true）
+- 22:20 模块：mq9 一氧化碳/可燃气体检测传感器 stm32 平台条目（wiki-stm32-batch6/06：ADC 薄封装件——页面 ADC 序列收敛 ml_adc + 默认 AO=PA5（页面原脚即共读点，ADC 共享组）+ 正向 value/4095×100（CO/可燃气相对值非 ppm 精标）+ **器件双温循环原理说明**（低温 1.5V 测 CO、高温 5.0V 测可燃气并清洗——但页面驱动仅单 AO 单路百分比、4Pin 模块无加热控制脚，双通道区分需模块级温控/标定；与 mq7/mq6 分工）+ DO 未用不声明 + 「酒精值」串台 notes + SAMPLES 30→5 快平均 + UV4 矩阵 0/0 → verified=true）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
