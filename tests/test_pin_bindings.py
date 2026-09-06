@@ -537,6 +537,11 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         "TIMG12": 2,  # DCC_100_PWM2（step_motor）与 L298N_PWM（l298n）默认
         # 同外设——L298N 与步进驱动互替、同选概率最低故叠，同选时经引脚绑定
         # 换实例消解（TIMGx 同族迁移先例；裁剪后独占编译实测）
+        "PA1": 3,   # I2C_0 sclPin（ml_mpu6050 默认脚）+ GP2Y1014 LED
+        # （gp2y1014au 默认脚）+ RELAY OUT（relay 默认脚——1 路 5V 继电器：
+        # 与姿态/粉尘不同框、同选概率最低故叠此脚（刻意不叠声光/执行件
+        # LED_BEEP PA15/电机类——继电器+蜂鸣报警/电灯控制为常见组合，默认
+        # 即不撞），同选时经引脚绑定消解；wiki-modules-batch13/01）
     }
 
 
@@ -1107,6 +1112,9 @@ def test_shared_groups_classifies_i2c_bus_share():
         # 冲突）——绑走恢复纯 I2C 共享组（batch9/03；照 ir_distance/ttp224
         # 绑走恢复纯灰度组先例）
         "gp2y1014au.GP2Y1014_LED": "PA7",
+        # relay OUT 默认 PA1 同上（wiki-modules-batch13/01 刻意重叠：继电器
+        # 与姿态/粉尘不同框、同选概率最低）——绑走恢复纯 I2C 共享组
+        "relay.RELAY_OUT": "PA15",
     })
 
     group = next(

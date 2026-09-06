@@ -433,6 +433,7 @@ MSPM0_DEFAULT_MAP = {
     ("human_ir", "HUMAN_IR_OUT"): ("HUMAN_IR", "OUT"),
     ("microwave_radar", "MICROWAVE_OUT"): ("MICROWAVE", "OUT"),
     ("gp2y1014au", "GP2Y1014_LED"): ("GP2Y1014", "LED"),
+    ("relay", "RELAY_OUT"): ("RELAY", "OUT"),
     ("bh1750", "BH1750_SCL"): ("BH1750", "SCL"),
     ("bh1750", "BH1750_SDA"): ("BH1750", "SDA"),
     ("sr04", "SR04_TRIG"): ("SR04", "TRIG"),

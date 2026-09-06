@@ -648,6 +648,24 @@ GP2Y1014.associatedPins[0].direction        = "OUTPUT";
 GP2Y1014.associatedPins[0].initialValue     = "SET";
 GP2Y1014.associatedPins[0].pin.$assign      = "PA1";
 
+// 1 路 5V 继电器（relay 模块：OUT 输出——光耦隔离/低电平吸合（IN1 低电平 =
+// 光耦导通 = 三极管导通 = 线圈得电 = 触点吸合），5V 驱动 250V/10A 高压负载；
+// initialValue SET = 引脚高 = 初始断开（模块低电平吸合，吸合=引脚低；
+// relay_init 亦置断开，双保险）。默认 PA1——与 I2C_0 scl（ml_mpu6050 姿态）、
+// GP2Y1014 LED（gp2y1014au 粉尘）重叠：继电器与姿态/粉尘不同框、同选概率
+// 最低（刻意不叠声光/执行件 LED_BEEP PA15/电机类/风机控制类——继电器+蜂鸣
+// 报警/电灯控制为常见组合，默认即不撞），同选时经引脚绑定消解；PA1 可作
+// GPIO 输出（2026-09-06 SysConfig CLI 实证仅禁输入——ir_remote_tx 先例；
+// 板载 4.7k 上拉对推挽输出无碍）
+const RELAY = GPIO.addInstance();
+RELAY.$name = "RELAY";
+RELAY.associatedPins.create(1);
+RELAY.associatedPins[0].$name        = "OUT";
+RELAY.associatedPins[0].direction    = "OUTPUT";
+RELAY.associatedPins[0].initialValue = "SET";
+RELAY.associatedPins[0].pin.$assign  = "PA1";
+
+
 // 双轴摇杆按键（joystick 模块：SW 输入上拉低有效；实例名 JOYSTICK →
 // JOYSTICK_PORT 宏；引脚名 SW → JOYSTICK_SW_PIN；默认 PA9——仅与
 // DIGIT_UART RX 默认重叠（K230 视觉串口），同选时经引脚绑定消解。
