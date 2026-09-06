@@ -111,6 +111,7 @@ WHITELIST = {
         "at24c02.AT24C02_SCL",
         "ags10.AGS10_SCL",
         "ads1115.ADS1115_SCL",
+        "tcs34725.TCS34725_SCL",
     },
     "PA7": {
         "motor.MOTOR_A_DIR2",
@@ -121,6 +122,7 @@ WHITELIST = {
         "at24c02.AT24C02_SDA",
         "ags10.AGS10_SDA",
         "ads1115.ADS1115_SDA",
+        "tcs34725.TCS34725_SDA",
     },
 }
 
