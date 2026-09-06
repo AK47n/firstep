@@ -1027,7 +1027,9 @@ I2C_0.peripheral.sclPin.$assign = "PA1";
 // 无负载脚 PA22；与 HUIDU L1/DEBUG_UART RX/NRF24L01 IRQ/TTP224 OUT1 重叠，
 // 与巡线/无线/触摸不同框、同选概率最低），MEM7=PA14/A0_12 归 soil 土壤湿度
 // （独立通道——**MEM 槽位已满（8/8）**：后续 ADC 类件（photoresistance/rain/
-// gp2y1014au/s12sd/ms1100）一律薄封装共读 MEM0（mq2/us016 先例——多件同选
+// gp2y1014au/s12sd/ms1100——wiki-modules-batch9/01-04，mq3/mq4/mq6/mq7/mq8/mq9/
+// ms1100——wiki-modules-batch11/01-07 同构快补）一律薄封装共读 MEM0（mq2/us016
+// 先例——多件同选
 // 同读一物理通道、一次转换一次读、采样节奏按用途自协调）；PA14 板载
 // LED2+15k 为固定比率衰减（读数系统偏小、单调性保留），与 DCC_100_PWM2/
 // WS2812 IN/RC522 SCK/AGS10 SDA 重叠——浇花/智慧农业与运动/读卡/气体不同框、

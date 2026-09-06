@@ -1,0 +1,28 @@
+{
+  "slug": "mq8",
+  "description": "MQ-8 氢气检测传感器驱动（mspm0 纯驱动薄封装，ADR 0009）：依赖库内 adc 模块共享 ADC12_0 MEM0 槽位读数（不新开 ADC 通道），mq8_init + mq8_read_percent 出 0-100% 浓度百分比（相对值非 ppm 精标）；适用于氢气检测、氢能源安全监测、氢气浓度报警（相对值）等赛题功能。",
+  "dependencies": [
+    "adc"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/mq8.c",
+        "code/mq8.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "薄封装：无独立 syscfg 实例——依赖 adc 模块共享 ADC12_0 实例 MEM0 槽位（默认 PA24/A0_3，与 adc/us016/mq2/批次 9 四件共读同槽；绑定换引脚 = 改写 adcPin*.$assign + adcMem*chansel，模块零改动；手册原脚 PA27/A0_0 经绑定即可复现——绑 PA27 时改写器按通道号换 adcPin3→adcPin0 + adcMem0chansel→CHAN_0）。轮询读取（adc_get 忙等）无 ADC 中断——共享 ADC12_0 实例，IRQHandler 强符号须唯一（joystick/adc 先例）。换算 percent = value/4095×100（页面 Get_MQ8_Percentage_value 原式——**正向映射**：氢气浓度越高气敏电导率越大、百分比越高；页面正文取证「传感器的电导率随氢气浓度的增加而增大」与代码一致，与 mq2 定稿方向相同；**相对值非 ppm 精标**：MQ 系读数随加热/环境（湿度）/老化漂移，真实 ppm 需标准气体标定；模块上电必须预热 3-5 分钟否则输出不准）。页面 Get_Adc_MQ8_Value 30 次累加×5ms 改 5 次快速平均（us016 快平均先例）；页面 ADC 中断（ADC12_0_INST_IRQHandler + gCheckADC 标志位）改依赖 adc 模块轮询（共享实例 IRQHandler 强符号唯一）；页面 Get_MQ8_DO_value/MQ_DO 宏（DO 数字量阈值输出，LM393 比较）未用于演示 → 不声明 DO 角色（阈值由模块可调电阻控制，需要经引脚绑定 GPIO 输入自行读取）。页面 Get_MQ8_DO_value 函数注释「酒精值」系 MQ-3 页模板残留错字（本件应为氢气，页面未用于演示、不落码）。**多路气体同选共读 MEM0 物理通道限制**：薄封装模式每路只能接一个器件到 PA24——多路同选场景需外部分路或换独立通道（ADC12_0 MEM 槽位已满 8/8，板上无剩余通道，现实约束）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--mq-8-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/mq-8-sensor.html；网盘资料 https://pan.baidu.com/s/1B8WhPIzTmWwQsFFVayRpAA?pwd=9966 提取码 9966；移植成功案例 https://pan.baidu.com/s/11I33nBFpygcLNb9XM4nWIQ?pwd=kpr3 提取码 kpr3）。改造要点：去掉 main.c 演示与 printf；函数名规范化（mq8_init/read_percent）；ADC_MQ8_Init/ADC_GET/Get_Adc_MQ8_Value/Get_MQ8_Percentage_value 归一；ADC 中断改轮询；DO 宏未用不声明；默认 PA24 与批次 5 tcs34725 SDA 重叠系 ADC12_0 MEM0 槽位唯一所致（同选经引脚绑定消解——tcs34725 SDA 换脚即可）。\nwiki-modules-batch11/05 编译矩阵（2026-09-11）：单选生成 → SysConfig CLI → gmake 0 error、0 warning（PASS）；未上板（ADC 换算/预热真机验证留后续）。\n",
+      "kit": "MQ-8 氢气传感器模块（4Pin：VCC/GND/DO/AO；工作 3.3-5V、150mA；AO 模拟量输出，DO 数字量阈值由模块可调电阻控制；对氢气灵敏度高、可检测氢能源相关泄漏）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/mq-8-sensor.html",
+      "pins": [
+        {
+          "id": "MQ8_AO_CH0",
+          "type": "adc",
+          "default": "PA24",
+          "required": true
+        }
+      ]
+    }
+  }
+}
