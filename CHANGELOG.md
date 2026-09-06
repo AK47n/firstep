@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=a69a8bda10c939945d66040dcb8d5a9da65d3837 -->
+<!-- changelog-auto: last-commit=0bdd155310e597701dec55682a1942ae160555d0 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -72,6 +72,7 @@
 - 20:06 模块：sgp30 空气质量传感器 stm32 平台条目（wiki-stm32-batch3/05：软 I2C + CRC8 器件库件——共总线 PA6/PA7 + 页面缺陷修正（CRC 缺失主缺陷：crc=crc 自赋值+只读 5 字节漏 TVOC CRC → 读满 6 字节+两组 CRC8 0x31/0xFF 校验、NACK 全丢补 1-5 失败码、正文地址语义写反记录、15s 预热判定归调用方）+ SCL OUT_OD 初始化守卫 + UV4 矩阵 0 error/0 module warning → verified=true）
 - 20:09 模块：pca9685 16 路舵机驱动 stm32 平台条目（wiki-stm32-batch3/06：软 I2C 器件库件·control 分类——共总线 PA6/PA7 + 页面缺陷修正（两套角度映射不一致统一 0.5-2.5ms 单式、main 60Hz 改默认 50Hz、delay_1ms(5)/(100) 换算 delay_ms、NACK 全丢 wait_ack 超时中止、正文 (50+1) 公式错误按代码、Excel FLOOR 注释剔除）+ 0x40×sht20 同址提醒（set_address(1) 或换线）+ SCL OUT_OD 初始化守卫 + UV4 矩阵 0 error/0 module warning → verified=true）
 - 20:11 模块：hx711 称重传感器 stm32 平台条目（wiki-stm32-batch3/07：GPIO 双线时序件（非 I2C）——默认 SCK=PB5/DT=PB0 + 页面缺陷修正（while(DT_GET()) 无界轮询主缺陷改 20ms 超时返 0、全局泄漏+Flag_Error 死变量收敛 static、GapValue 207.00 演示常数参数化 HX711_GAP_VALUE、24bit 补码 ^0x800000 保留）+ SCK OUT_PP/DT IU 初始化 + UV4 矩阵 0 error/0 module warning → verified=true）
+- 20:27 收尾：wiki-stm32-batch3 批次 3 收官——CONTEXT 平台行补录 stm32 线批次 3 块 + 一致性快检 sweep_7_modules.py 6/6 OK + code-review 两轴结果回填（标准轴 0 硬违反/spec 轴通过零范围蔓延）+ 判断项整改（send_ack 参数名统一 is_nack、矩阵脚本 EOF 空行清理）+ pytest 3633 / node 1359 全绿
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
