@@ -63,7 +63,9 @@ WHITELIST = {
     # PB12-15 三共享（DIP×GRAY×TTP224——wiki-stm32-batch1/05，见下方批次 1 注释块）
     # key stm32 默认 PB3 与 pid.GRAY_D6 重叠（蓝药丸无板载按键，PB3 = JTDO
     # 复位后可用；实际接线经引脚绑定消解——module-functionalize/04）
-    "PB3": {"key.KEY_START", "pid.GRAY_D6"},
+    # dht11 默认 PB3 三叠（wiki-stm32-batch4/03：环境件与独立按键/巡线不同框、
+    # 同选概率最低；页面默认 PB0 不采用 = MOTOR_B_DIR；单总线件不叠软 I2C 总线）
+    "PB3": {"key.KEY_START", "pid.GRAY_D6", "dht11.DHT11_DATA"},
     # adc 默认 PA0/PA1 与 motor PWM 重叠（b1-adc-servo/01）：蓝药丸 ADC 通道
     # 脚（PA0-7/PB0-1）全部被既有模块占用，无空闲可挪——实际接线经引脚绑定
     # 消解；adc 与 motor 同用时必须改绑

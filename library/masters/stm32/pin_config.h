@@ -262,6 +262,17 @@
 #define MS5611_SDA_GPIO       GPIO_A
 #define MS5611_SDA_PIN        Pin_7
 
+/* ---- 批次 4：单总线件（dht11 温湿度 / ds18b20 测温——单 GPIO 双向，
+ * 方向运行时重配 + delay_us 忙等，不占 TIMER/PWM）----
+ * default DATA：dht11=PB3（叠 key.KEY_START + pid.GRAY_D6——环境件与独立
+ * 按键/巡线灰度不同框、同选概率最低；刻意不叠声光/显示/传感站组合——温
+ * 湿度+声光/显示为常见搭配；单总线件与软 I2C 总线件 PA6/PA7 不共脚；
+ * 页面默认 PB0 不采用 = MOTOR_B_DIR）；ds18b20=PB1（叠 MOTOR_B_DIR2——
+ * 测温与单电机方向不同框；刻意不叠声光/传感站/总线环境件——测温+声光/
+ * 环境站为常见搭配；页面默认 PB0 不采用 = MOTOR_B_DIR）。 */
+#define DHT11_GPIO            GPIO_B
+#define DHT11_PIN             Pin_3
+
 /* ---- UWB 基站串口（config.h 并入：UART_1 = PA9 TX / PA10 RX，115200）---- */
 #define UWB_UART          UART_1
 #define UWB_UART_INST     USART1
