@@ -1,6 +1,6 @@
 {
   "slug": "mq6",
-  "description": "MQ-6 液化气/丙烷检测传感器驱动（mspm0 纯驱动薄封装，ADR 0009）：依赖库内 adc 模块共享 ADC12_0 MEM0 槽位读数（不新开 ADC 通道），mq6_init + mq6_read_percent 出 0-100% 浓度百分比（相对值非 ppm 精标）；适用于液化气/丙烷泄漏检测、燃气安全监测、可燃气体浓度报警（相对值）等赛题功能。",
+  "description": "MQ-6 液化气/丙烷检测传感器驱动（双平台纯驱动薄封装，ADR 0009）：依赖库内 adc 模块读 ADC 通道（mspm0 共享 ADC12_0 MEM0 槽位、stm32 经 ml_adc 共读 PA5），mq6_init + mq6_read_percent 出 0-100% 浓度百分比（相对值非 ppm 精标）；适用于液化气/丙烷泄漏检测、燃气安全监测、可燃气体浓度报警（相对值）等赛题功能。",
   "dependencies": [
     "adc"
   ],

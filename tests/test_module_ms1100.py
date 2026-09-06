@@ -215,8 +215,8 @@ def test_ms1100_stm32_single_select_generation(tmp_path):
 def test_ms1100_stm32_code_guards():
     """stm32 代码层守卫：正向映射原式（页面 demo 电压式 value/4095×3.3
     推导归一——无反向式）；剥离注释后零标准库/寄存器/演示残留/delay_1ms/
-    IRQHandler（页面 demo 电压式字面量不得回潮——read_percent 已收敛为
-    百分比式）；只吃母版 ml_adc API。"""
+    IRQHandler（demo 电压式 3.3 字面量由 `* 100.0f`/`MS1100_ADC_MAX` 正向式
+    断言间接覆盖——read_percent 已收敛为百分比式）；只吃母版 ml_adc API。"""
     c = (MODULES / "ms1100" / "code" / "ms1100_stm32.c").read_text(encoding="utf-8")
     h = (MODULES / "ms1100" / "code" / "ms1100_stm32.h").read_text(encoding="utf-8")
     full = c + "\n" + h
@@ -229,5 +229,9 @@ def test_ms1100_stm32_code_guards():
     assert re.search(r"#define\s+MS1100_ADC_SAMPLES\s+5u", h)
     assert "* 100.0f" in code_only and "/ (float)MS1100_ADC_MAX" in code_only
     assert "1.0f - " not in code_only
+    # demo 电压式防回潮（spec 明文：源码无页面「电压式」字面量残留——
+    # 页面 value/4095.0×3.3 已收敛为百分比式，仅注释/notes 记录推导）
+    assert "3.3" not in code_only
+    assert "4095.0" not in code_only
     assert "adc_init(ADC_1, MS1100_AO_CH)" in code_only
     assert "adc_get(ADC_1, MS1100_AO_CH)" in code_only
