@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=e0090447f1ddabbc9ea5b0f2ed1cd9e1853271b7 -->
+<!-- changelog-auto: last-commit=42cb5f2b3ac177e8e19003dcb933b8426605669f -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -39,6 +39,7 @@
 - 13:06 批次12 收尾：CONTEXT.md 平台行补录 + spec 实施结论/工单结论回填 + code-review 整改（lcd_show_float 文档语义修正）：
 - 13:35 批次13/01 relay 1 路 5V 继电器模块入库（GPIO 迷你驱动——低电平吸合）：
 - 13:41 批次13/02 as32 AS32-TTL-100 LoRa 无线数传模块入库（真实 UART 双向透传）：
+- 13:50 批次13/03 bmp180 气压/温度/海拔传感器模块入库（软 I2C——GY-68/BOSCH 老款）：
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
