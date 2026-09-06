@@ -998,18 +998,33 @@ def test_render_readme_wiki_module_source_line():
 
 def test_render_readme_source_notice_section():
     """第三方素材来源声明段常驻（lckfb-attribution/02）：标题 + 立创第三条原文
-    + wiki 链接；空模块集也有（声明义务不因无模块豁免）。"""
+    + wiki 链接；空模块集也有（声明义务不因无模块豁免），措辞 = 未引用（如实、
+    不谎称「部分模块改写自 wiki」）。"""
     import contest_generator.readme as readme_mod
 
     text = render_readme("stm32", None, [])
     assert readme_mod.SOURCE_NOTICE_HEADING in text
-    assert "立创开发板技术文档中心" in text
+    assert readme_mod.SOURCE_NOTICE_QUOTE in text
     assert "请大家务必尊重贡献者的智力劳动成果" in text
     assert "清楚的标明文件的来源以及链接" in text
     assert "https://wiki.lckfb.com/zh-hans/dmx/" in text
+    assert readme_mod.SOURCE_NOTICE_INTRO_NO_WIKI in text
+    assert readme_mod.SOURCE_NOTICE_INTRO_HAS_WIKI not in text  # 空集不得谎称
     # 章节顺序：模块清单 → 第三方素材来源 → 验证顺序清单
     assert text.index("## 模块清单与依赖") < text.index(readme_mod.SOURCE_NOTICE_HEADING)
     assert text.index(readme_mod.SOURCE_NOTICE_HEADING) < text.index("## 验证顺序清单")
+
+
+def test_render_readme_source_notice_has_wiki_intro():
+    """含 wiki 派生模块时声明段首行 = 如实说明改写来源（HAS_WIKI 措辞）。"""
+    import contest_generator.readme as readme_mod
+
+    wiki_url = "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/aht10-temp-humi-sensor.html"
+    text = render_readme(
+        "stm32", None, [_m("aht10", "AHT10 温湿度传感器驱动", source_url=wiki_url)]
+    )
+    assert readme_mod.SOURCE_NOTICE_INTRO_HAS_WIKI in text
+    assert readme_mod.SOURCE_NOTICE_INTRO_NO_WIKI not in text
 
 
 def test_render_readme_no_pins_falls_back_to_footnote():

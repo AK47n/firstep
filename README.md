@@ -77,8 +77,8 @@
 本工具收录并使用了立创开发板技术文档中心（[https://wiki.lckfb.com/zh-hans/dmx/](https://wiki.lckfb.com/zh-hans/dmx/)）
 「地猛星 MSPM0G3507 模块移植手册」的资料：
 
-- **70 篇模块移植手册**：抓取归档于 `sources/materials/lckfb-地猛星移植手册/`，每篇文首注明原页链接；
-- **56 个派生模块**：模块库（`library/modules/`）中来自该手册的驱动，其 manifest `source_url`
+- **70 篇模块移植手册**（截至本版收录数）：抓取归档于 `sources/materials/lckfb-地猛星移植手册/`，每篇文首注明原页链接；
+- **56 个派生模块**（截至本版收录数）：模块库（`library/modules/`）中来自该手册的驱动，其 manifest `source_url`
   记录了原页链接，每个源码文件头部均有来源注释块（原页 + 改写说明）。
 
 按立创官网版权声明第三条要求，使用本工具生成的工程、或复制/传播/修改上述资料时，请清楚标明

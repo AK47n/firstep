@@ -22,12 +22,15 @@ from .entry_store import (
 
 MANIFEST_FILENAME = "manifest.json"
 
-# 立创开发板技术文档中心（wiki.lckfb.com）来源 URL 前缀（判据单源）。
+# 立创开发板技术文档中心（wiki.lckfb.com）来源 URL 常量（判据单源）。
 # 用于「来源标注」合规面（lckfb-attribution）：模块源码头部注释 / 生成工程
 # README 来源行 / UI 来源标签 / 结构测试兜底共用同一判据，不三处各写一遍。
 # 匹配 = 页面原页 https://wiki.lckfb.com/zh-hans/...（大小写敏感，全库实测
 # 56 个模块命中）。
 WIKI_SOURCE_URL_PREFIX = "https://wiki.lckfb.com/"
+
+# 地猛星栏目首页（声明段「来源：」行引用；与抓取批次目录同源）
+WIKI_DMX_HOMEPAGE = "https://wiki.lckfb.com/zh-hans/dmx/"
 
 
 def is_wiki_source_url(url: str) -> bool:
