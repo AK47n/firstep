@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=129abc978d5bf22d5472a4b905333b25aece2717 -->
+<!-- changelog-auto: last-commit=f70af38b61b584e7187b15d669d081d08112fe9d -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -67,6 +67,7 @@
 - 19:09 收尾：wiki-stm32-batch2 批次 2 收官——CONTEXT 平台行补录 stm32 线批次 2 块 + 一致性快检 sweep_6_modules 6/6 OK + code-review 两轴结果回填（标准轴 0 硬违反/spec 轴全通过）+ 判断项整改（send_ack 参数名统一 is_nack、aht10 头注释 NULL→判空用 0，三件矩阵复跑 exit 0）+ pytest 3614 / node 1359 全绿
 - 19:32 回修：批次 2 软 I2C 六件 SCL 未初始化缺陷——补 SCL 开漏输出初始化 + 矩阵复跑 + 防回潮守卫
 - 20:00 模块：ads1115 四通道 16bit 外扩 ADC stm32 平台条目（wiki-stm32-batch3/02：软 I2C 器件库件——共总线 PA6/PA7 + 页面缺陷修正（负值换算 int16_t 补码正确式无 65535 近似、失败返 -1.0 混用改 int16_t 返 0、注释 3/4 按实际 0/1/2、printf/delay_1ms 剔除换算）+ SCL OUT_OD 初始化守卫 + UV4 矩阵 0 error/0 module warning → verified=true）
+- 20:01 模块：tcs34725 颜色识别传感器 stm32 平台条目（wiki-stm32-batch3/03：软 I2C 器件库件——共总线 PA6/PA7 + 页面缺陷修正（读写路径 NACK 全丢补检查+失败传播、RGBtoHSL c==0 除零防护、extern 全局 rgb/hsl 收敛出参、ID 判定按位或改 ||、TC34725 拼写不落）+ 独立 stm32 头（RGBC/HSL 与 mspm0 同签名）+ SCL OUT_OD 初始化守卫 + UV4 矩阵 0 error/0 module warning → verified=true）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
