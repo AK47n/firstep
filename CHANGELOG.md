@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=51eca14de7acb2c0563d9636a0d7fbf5d1b15c2e -->
+<!-- changelog-auto: last-commit=52bd0276962c7f6486e394fb239cfc2f1c0cc39c -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -85,6 +85,7 @@
 - 22:05 模块：mq2 烟雾检测传感器 stm32 平台条目（wiki-stm32-batch5/01：ADC 薄封装件——页面 ADC 序列代码收敛 ml_adc（adc_init(ADC_1, MQ2_AO_CH) + 5 次 adc_get 快平均，零寄存器/标准库调用）+ 默认 AO=ADC_Channel_5（PA5 页面原脚即共读点，ADC 共享组：与 flame/本批 8 件共读，同一物理脚只能接一件器件——多件同测需外部分路器/分时切换）+ 正向 value/4095×100（相对值非 ppm 精标）+ DO 未用不声明 + 页面 L50 PA27 地猛星串台/L219 原型重复 notes 记录不落码 + UV4 矩阵 0 error/0 module warning → verified=true；test_pins 宏表 + test_default_layout PA5 白名单组登记）
 - 22:05 模块：mq135 空气质量传感器 stm32 平台条目（wiki-stm32-batch5/02：ADC 薄封装件——页面 ADC 序列收敛 ml_adc + 默认 AO=ADC_Channel_5（PA5 页面原脚即共读点，ADC 共享组——同一物理脚只能接一件器件）+ 正向 value/4095×100（相对值非 ppm 精标）+ DO 未用不声明 + 页面 L185 酒精值串台 notes 记录不落码（源码零字面量守卫）+ SAMPLES 30→5 快平均 + C99 for 改 uint8_t + UV4 矩阵 0 error/0 module warning → verified=true）
 - 22:05 模块：mq5 液化气检测传感器 stm32 平台条目（wiki-stm32-batch5/03：ADC 薄封装件——页面 ADC 序列收敛 ml_adc + 默认 AO=ADC_Channel_5（PA5 页面原脚即共读点，ADC 共享组）+ 正向 value/4095×100（相对值非 ppm 精标）+ DO 未用不声明 + 页面 L187 酒精值串台 notes 记录不落码（源码零字面量守卫）+ SAMPLES 30→5 快平均 + C99 for 改 uint8_t + UV4 矩阵 0 error/0 module warning → verified=true）
+- 22:05 模块：photoresistance 光敏电阻 stm32 平台条目（wiki-stm32-batch5/04：ADC 薄封装件——页面 ADC 序列收敛 ml_adc + 默认 AO=ADC_Channel_5（PA5 页面原脚即共读点，ADC 共享组）+ **反向 (1−value/4095)×100 自洽保留**（页面最亮100最暗0——本批唯一反向自洽页，守卫 1.0f - 必须出现 × rain 对仗勿改反）+ Get_Adc_Value(10)→5 次快平均 + 页面 stdio 残余 include 剔除 + DO 未用不声明 + UV4 矩阵 0 error/0 module warning → verified=true）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
