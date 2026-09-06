@@ -128,6 +128,13 @@
 #define RELAY_GPIO            GPIO_B
 #define RELAY_PIN             Pin_4
 
+/* ---- 人体红外传感器（human_ir 模块：HC-SR501 三线制，OUT 默认 PB7——与
+ * pid 灰度 GRAY_D8 默认重叠：人体红外与「巡线灰度」不同框、同选概率最低
+ * （刻意避让声光/按键/门禁组合 BUZZER/KEY/SERVO），同选时经引脚绑定消解；
+ * 页面默认 PA1 不采用——被 adc ADC_CH1/motor PWM/编码器线占用）---- */
+#define HUMAN_IR_GPIO         GPIO_B
+#define HUMAN_IR_PIN          Pin_7
+
 /* ---- UWB 基站串口（config.h 并入：UART_1 = PA9 TX / PA10 RX，115200）---- */
 #define UWB_UART          UART_1
 #define UWB_UART_INST     USART1

@@ -84,6 +84,9 @@ WHITELIST = {
     # relay 默认 PB4 与 motor 编码器方向输入重叠（继电器≠编码器闭环；
     # 刻意不叠声光/执行件 LED/BUZZER/电机 PWM/方向）
     "PB4": {"motor.MOTOR_A_ENC_DIR", "relay.RELAY_OUT"},
+    # human_ir 默认 PB7 与 pid 灰度 GRAY_D8 重叠（人体红外≠巡线灰度；
+    # 刻意避让声光/按键/门禁组合 BUZZER/KEY/SERVO）
+    "PB7": {"pid.GRAY_D8", "human_ir.HUMAN_IR_OUT"},
 }
 
 

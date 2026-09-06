@@ -16,16 +16,21 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** claimed
+**状态：** resolved
 
 **实施清单：**
-- [ ] `library/modules/human_ir/code/human_ir_stm32.c/.h`（UTF-8；.c include 本模块 .h + pin_config.h + headfile.h；零引脚字面量；HUMAN_IR_TRIGGER_LEVEL 1u 宏放 .h）
-- [ ] manifest.json platforms 增 stm32：files `[code/human_ir_stm32.c, code/human_ir_stm32.h]`、verified false、hardware_bound false、pins 如上、kit（HC-SR501 套件名——按页面「模块来源」）、source_url `https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/human-body-infrared-sensor.html`、notes（手册路径+原页+网盘+采购 + 极性依据/修正记录 + 默认脚推理 + 轮询不注册中断 + 未上板）
-- [ ] pin_config.h 增 `HUMAN_IR_GPIO/HUMAN_IR_PIN`
-- [ ] 测试 `tests/test_module_human_ir.py`：形状 + 母版宏存在 + stm32 单选生成全流程 + 守卫（无 printf/main/GPIO_Init/RCC_；HUMAN_IR_TRIGGER_LEVEL 1u；`gpio_get` 出现）
-- [ ] test_pins.py STM32_MACRO_VALUES 补两宏；test_default_layout.py 白名单 human_ir×pid（PB7 重叠）
-- [ ] 编译矩阵 UV4 0/0 → verified=true
-- [ ] wordlist 感知传感器；词表预算链
-- [ ] 中文提交 → resolved → 结论回填
+- [x] `library/modules/human_ir/code/human_ir_stm32.c/.h`（UTF-8；.c include 本模块 .h + pin_config.h + headfile.h；零引脚字面量；HUMAN_IR_TRIGGER_LEVEL 1u 宏放 .h）
+- [x] manifest.json platforms 增 stm32：files `[code/human_ir_stm32.c, code/human_ir_stm32.h]`、verified false、hardware_bound false、pins 如上、kit（HC-SR501 套件名——按页面「模块来源」）、source_url `https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/human-body-infrared-sensor.html`、notes（手册路径+原页+网盘+采购 + 极性依据/修正记录 + 默认脚推理 + 轮询不注册中断 + 未上板）
+- [x] pin_config.h 增 `HUMAN_IR_GPIO/HUMAN_IR_PIN`
+- [x] 测试 `tests/test_module_human_ir.py`：形状 + 母版宏存在 + stm32 单选生成全流程 + 守卫（无 printf/main/GPIO_Init/RCC_；HUMAN_IR_TRIGGER_LEVEL 1u；`gpio_get` 出现）
+- [x] test_pins.py STM32_MACRO_VALUES 补两宏；test_default_layout.py 白名单 human_ir×pid（PB7 重叠）
+- [x] 编译矩阵 UV4 0/0 → verified=true
+- [x] wordlist 感知传感器；词表预算链（slug 已挂接，零改动）
+- [x] 中文提交 → resolved → 结论回填
+
+**验收记录：**
+- 矩阵 PASS：UV4 V5.06u7 `-j0 -r -b` exit 0，`0 Error(s), 0 Warning(s)`；编译日志 `.scratch/wiki-stm32-batch1/matrix/human_ir/build.log`。
+- 极性修正定论：页面 L102 注释「0=感应到人体红外 1=未感应到」与正文（L44「人进入其感应范围则输出高电平」）/规格（L28「高3.3V/低0V」）矛盾、页面代码 L108 实际按高=1 实现——按 HC-SR501 器件标准「高=感应到」修正，HUMAN_IR_TRIGGER_LEVEL 1u（mspm0 批同款修正口径）。
+- 测试：test_module_human_ir 7 passed（双平台形状 + 宏存在 + stm32/mspm0 单选生成 + 守卫）；test_pins/test_default_layout 全绿（27 passed 组合跑）。
 
 **验收标准：** 全部 checkbox；pytest 绿；矩阵 exit 0。
