@@ -144,9 +144,9 @@ def test_bmp180_source_guards():
     # 温度/气压读取地址（页面 0xF6）与换算系数（页面原式）
     assert "0xf6" in source
     assert "32768.0" in source and "2048.0" in source and "0.1f" in source
-    # 气压 B6..B7/p 页面原式（B7 uint32_t 页面声明——恒真分支保留记录）
+    # 气压 B6..B7/p 页面原式（B7 uint32_t 页面声明 + 标准双分支保留记录）
     assert "b6" in source and "b7" in source
-    assert "B7" in source  # 人工复核修正注释（uint32_t 恒真分支）
+    assert "B7" in source  # 人工复核修正注释（B7 可达 ≥2^31——else 分支不可删）
     # 海拔公式（页面 44330/101325/5.255 + math.h/pow）
     assert "44330" in source and "101325.0" in source and "5.255" in source
     assert "pow(" in source and "math.h" in source

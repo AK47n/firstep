@@ -104,11 +104,12 @@
 
 ## 实施结论（2026-09-06 回填）
 
-- **四件全部完成**（70/70 页面全覆盖，as32 未触发砍件路径）——relay（GPIO 迷你驱动，10 分钟级打样）、as32（真实 UART 双向透传——UART3 独立实例/9600/轮询）、bmp180（软 I2C，校准封装 init + 气压段 B5 复用合并）、ms5611（软 I2C，main 序列封装 init + PROM 补应答 + 二次重读合并）。各件 spec 决策与工单验收核对：极性归一化（relay）、UART 放置方案①（as32——方案②软 UART RX 不取/③砍件不触发，与 spec 一致）、人工复核修正记录（bmp180 4 条、ms5611 6 条——超 spec 清单 1 条：ms5611 页面 dT uint32_t 低 20℃ 负值回绕改有符号 long，表达式不变）、默认脚与重叠全景（四件默认互不相撞，test_pin_bindings 刻意重叠表 PA1 2→3、PA23/PA24 6→7、PA28/PA31 7→8、PA25 5→6、PA26 6→7、UART3 新增=2——UART3 实为 2（ZIGBEE+AS32），spec「=1」表述按 UART0/1=2 先例口径修正）。
+- **四件全部完成**（70/70 页面全覆盖，as32 未触发砍件路径）——relay（GPIO 迷你驱动，10 分钟级打样）、as32（真实 UART 双向透传——UART3 独立实例/9600/轮询）、bmp180（软 I2C，校准封装 init + 气压段 B5 复用合并）、ms5611（软 I2C，main 序列封装 init + PROM 补应答 + 二次重读合并）。各件 spec 决策与工单验收核对：极性归一化（relay）、UART 放置方案①（as32——方案②软 UART RX 不取/③砍件不触发，与 spec 一致）、人工复核修正记录（bmp180 4 条、ms5611 6 条——超 spec 清单 1 条：ms5611 页面 dT uint32_t 低 20℃ 负值回绕改**有符号 64 位 long long**（code-review 再核：C4×dT/128、C3×dT/256.0 的 32 位有符号乘法溢出——积可达 1e11 ≫ 2^31，全温区多数读数偏差数十 hPa，标准实现 int64 口径，表达式不变））、默认脚与重叠全景（四件默认互不相撞，test_pin_bindings 刻意重叠表 PA1 2→3、PA23/PA24 6→7、PA28/PA31 7→8、PA25 5→6、PA26 6→7、UART3 新增=2——UART3 实为 2（ZIGBEE+AS32），spec「=1」表述按 UART0/1=2 先例口径修正）。
 - **编译矩阵**：四件全部 PASS（0 error/0 warning）——relay（GPIO 输出 PA1）、as32（UART3/PA26/PA25 过 SysConfig CLI）、bmp180（软 I2C GPIO + pow 链接 math）、ms5611（同）；均未上板（notes 注明）。
 - **测试**：新增 test_module_relay/as32/bmp180/ms5611 4 件（含 bmp180/ms5611 海拔换算纯函数镜像单测——math.pow 基线 ±0.5m）；test_pins +7 行、test_pin_bindings 刻意重叠表 7 项、test_syscfg_prune 4 组断言；全量测试 3559 pytest 全绿。
 - **词表预算链（实测口径，与 spec 预计 7900 吻合）**：默认词表完整 wire 7239→7692（+453B——relay +135B、bmp180 步后 7557、ms5611 步后 7692）→ WORDLIST_PROMPT_BYTES 7500→7900（两级上调：7600（7374 实测）/7800（7557 实测）中间步，commit 记录）→ REFERENCE_FULLTEXT_BYTES 60400→60100（两级 100B）；worst-case 结构测试绿。
 - **一致性快检 52 件版**：`.scratch/wiki-modules-batch13/sweep_52_modules.py`（照 sweep_48_modules.py 更新）——52 件全 OK。
 - **文档**：CONTEXT.md 平台行补录批次 13 块；README 核对（无模块数/覆盖声明需改——未动）。
+- **code-review 两轴审查（Standards/Spec）完成**：Spec 轴 3 项全部整改（as32 注释 HUIDU R2/R3→R1/L4 事实修正、ms5611 缺段间 2×10ms 已补（页面 Get_TEMP L384/386）、budget.py 重复注释删除）；Standards 轴 2 项整改（ms5611 dT 64 位化——真实 32 位溢出 bug + 换算 int64 镜像单测新增、bmp180 B7「恒真」注释改述为「按页面/标准保留双分支」——B7 可达 ≥2^31 不再断言恒真）；残留基线气味 = 软 I2C 原语重复（spec 明示既定取舍，不整改）。
 - 范围外项确认：stm32 条目无（仅 mspm0，批次 1 先例）、全批未上板、as32 AT 配置/MD 脚不落码、bmp180 oss 参数化不做、ms5611 OSR/SPI 模式不做——与 spec 一致。
 

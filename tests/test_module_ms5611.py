@@ -8,7 +8,7 @@ test_pin_bindings.py 守）、mspm0 单选生成（syscfg 裁剪保留 MS5611 + 
 **压力换算纯函数单测（与 bmp180 共用海拔公式镜像——bmp180 先例）**：Python
 镜像 ms5611_altitude(pa)（44330 公式）断言同表（math.pow 基线 ±0.5m）。
 源码守卫（防回潮）：复位/PROM/转换命令/器件地址常量、页面原式系数、
-温度出参 TEMP/100.0（0.01℃ 分辨率修正）、气压出参 Pa、10ms 转换等待 ×2、
+温度出参 TEMP/100.0（0.01℃ 分辨率修正）、气压出参 Pa、10ms 转换等待 ×4（段内×2 转换 + 段间×2）、
 无 printf/IRQHandler/main、页面原式注释。全程无 LLM、无服务。
 """
 from __future__ import annotations
@@ -50,6 +50,55 @@ def ms5611_altitude(pa: float) -> float:
     """C 侧 ms5611_read_altitude 语义镜像（与 bmp180 共用 44330 公式——
     math.pow 基线）。"""
     return 44330.0 * (1.0 - math.pow(pa / 101325.0, 1.0 / 5.255))
+
+
+def ms5611_pressure(d1: int, d2: int, cal: list[int]) -> tuple[int, float, int]:
+    """C 侧 ms5611_read 换算语义镜像（**int64 口径**——页面公式 + 人工复核
+    修正 ⑥：dT 有符号 64 位；TEMP 的 (float)dT×C6 按 float32 单精度（同
+    C）、OFF 的 C4×dT/128 按整数除法向零截断（同 C）、P 的 long long→
+    double 转精确舍入（同 C——IEEE））。返回 (dT, TEMP0.01C, P_Pa)。"""
+    dT = d2 - cal[5] * 256
+    temp = 2000.0 + _f32(float(dT) * cal[6]) / 8388608.0
+    off = cal[2] * 65536.0 + float(_div_tz(cal[4] * dT, 128))
+    sens = cal[1] * 32768.0 + (cal[3] * dT) / 256.0
+    p = int((d1 * sens / 2097152.0 - off) / 32768.0)
+    return dT, temp, p
+
+
+def _f32(x: float) -> float:
+    """float32 舍入（同 C 单精度算术）。"""
+    import struct
+    return struct.unpack("f", struct.pack("f", x))[0]
+
+
+def _div_tz(a: int, b: int) -> int:
+    """C 整数除法（向零截断——Python // 为向下取整，负值不等同）。"""
+    q = abs(a) // abs(b)
+    return q if (a >= 0) == (b >= 0) else -q
+
+
+def test_ms5611_pressure_conversion_int64_regression():
+    """气压换算 int64 回归单测（Standards 轴审查整改——页面 C4×dT/128、
+    C3×dT/256.0 在 32 位有符号乘法溢出（积可达 1e11 ≫ 2^31，全温区多数读数
+    偏差数十 hPa）→ 本件 dT 有符号 64 位 long long（人工复核修正 ⑥）。
+    回归表基线按 Python 精确整数（int64 语义）+ 页面 double/float 表达式
+    计算；用例含 32 位回绕对照会在 dT=±3.6e6 时偏差 ~18kPa（修正前形态）。"""
+    cal = [0, 40127, 36924, 29016, 33123, 29022, 16437, 0]  # 典型量级系数
+    # dT=+3.6e6（高温）：修正前 32 位形态 P≈80093，偏差 18203 Pa
+    dT, temp, p = ms5611_pressure(8000000, 29022 * 256 + 3600000, cal)
+    assert dT == 3600000
+    assert round(temp, 1) == 9054.0  # 0.01℃ 单位（≈90.5℃，页面 float 口径）
+    assert p == 98296
+    # dT=-3.6e6（低温）：修正前 32 位形态 P≈78355，偏差 -18203 Pa
+    dT, temp, p = ms5611_pressure(8000000, 29022 * 256 - 3600000, cal)
+    assert dT == -3600000
+    assert round(temp, 1) == -5054.0
+    assert p == 60152
+    # dT=0（20.00℃ 校准点）：两形态一致（无溢出边界——回归锚点）
+    dT, temp, p = ms5611_pressure(8000000, 29022 * 256, cal)
+    assert dT == 0
+    assert round(temp, 1) == 2000.0
+    assert p == 79224
 
 
 def test_ms5611_altitude_formula_matches_baseline():
@@ -131,7 +180,7 @@ def test_ms5611_mspm0_single_select_generation(tmp_path):
 
 def test_ms5611_source_guards():
     """源码守卫（防回潮）：复位/PROM/转换命令/器件地址常量、页面原式系数、
-    温度出参 0.01℃（TEMP/100.0）、气压出参 Pa、10ms 转换等待 ×2、无
+    温度出参 0.01℃（TEMP/100.0）、气压出参 Pa、10ms 转换等待 ×4、无
     printf/IRQHandler/main。"""
     source = (MODULES / "ms5611" / "code" / "ms5611.c").read_text(encoding="utf-8")
     header = (MODULES / "ms5611" / "code" / "ms5611.h").read_text(encoding="utf-8")
@@ -152,9 +201,10 @@ def test_ms5611_source_guards():
     assert "temp / 100.0f" in source
     # 气压出参 Pa（P 单位 0.01mbar == 1Pa——页面 /100 = hPa 修正）
     assert "pressure_pa" in source and "0.01mbar" in source
-    # 10ms 转换等待 ×2（命令段 + 数据请求段——页面原式）
+    # 10ms 转换等待 ×4（页面原式：每段内部命令/数据请求各 10ms ×2 转换 +
+    # 段间 10ms ×2——Get_TEMP L384/386）
     assert "MS5611_CONV_WAIT_MS 10u" in header
-    assert source.count("delay_ms(MS5611_CONV_WAIT_MS)") == 2
+    assert source.count("delay_ms(MS5611_CONV_WAIT_MS)") == 4
     # 复位后 300ms（页面「等待初始化完成」）
     assert "MS5611_INIT_WAIT_MS 300u" in header
     # 页面原式注释与出参单位说明
