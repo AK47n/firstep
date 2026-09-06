@@ -29,6 +29,39 @@
           "required": true
         }
       ]
+    },
+    "stm32": {
+      "files": [
+        "code/ads1115_stm32.c",
+        "code/ads1115_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "软 I2C 总线件（SDA 方向运行时切换，不占硬件 I2C 外设/TIMER——不用母版 ml_i2c，spec 决策①）。页面 = **F1 标准库**（stm32f10x.h + RCC_APB2PeriphClockCmd + Mode_Out_PP/IN_FLOATING + WriteBit/ReadInputDataBit——非 F4 嫌疑页）。**页面缺陷清单（已取证 + 修正 + notes + 守卫）**：① **负值换算错误（主缺陷）**：页面 `if(num>32768) ret=(65535-num)*0.000125`（未含 32768、且 65535-num 近似）→ 按 mspm0 版 int16_t 补码正确换算 `raw/32768*FSR`（页面分辨率式 0.000125=4.096/2^15 正确）；② **失败返 -1.0 与合法 -1.0V 混用** → mspm0 API 出参+状态码化（int16_t 失败返回 0——切换配置失败/重试 20 次超时，连续模式极少见）；③ 注释 3/4 返回码未实现 → 按实际实现 0/1/2（高/低字节无应答页面忽略，mspm0 同款）；④ printf 残留（页面 error 1/2）剔除；⑤ delay_1ms(1) 库内无 → delay_ms(1)。换算实现：引脚 gpio_init(OUT_OD) + **SCL init 补 gpio_init(ADS1115_SCL_GPIO, ADS1115_SCL_PIN, OUT_OD)+置高**（批次 3 回修口径——F1 复位浮空输入，ODR 写入无效）；SDA 方向切换 gpio_init(SDA, OUT_OD/IU)（页面原式 Out_PP/IN_FLOATING 按批次 2 决策①统一 OD/IU——均需总线外上拉）；原语族 ads1115_iic_*（页面 delay_us(2)/6/4/4 混合半周期统一为 2us（mspm0 版同）≈100kHz 级，ADS1115 ≤400kHz 裕量足）；API 全对齐 mspm0：init（引脚配置 + 写默认配置 0xC283）+ write_register（0/1/2）+ write_config + read（int16_t，MUX=0x04|ch 切通道，读重试 ≤20×1ms，失败返 0）+ read_voltage（raw/32768×FSR，PGA 六档表）+ set_gain/set_data_rate（参数不合法返 1）+ set_address（7 位地址左移 1）。**默认脚 = PA6（SCL）/PA7（SDA）**——页面默认 SCL=PB8/SDA=PB9 不采用（= 母版 OLED_GPIO 段）；与 motor MOTOR_A_DIR/DIR2（电机方向）默认重叠：外扩多通道 ADC 与「带电机方向的小车运动控制」不同框、同选概率最低；**与批次 2 六件共挂同一软 I2C 总线**（地址 0x48 与 0x38/0x23/0x40/0x44/0x50/0x1A 全异——多路模拟采集+环境站合法共挂，白名单登记）；与既有 I2C_GPIO（PA11/12）/OLED_GPIO（PB8/9）零重叠；同选经引脚绑定消解。与 mspm0 条目分工：mspm0 侧 syscfg 实例 + DL_GPIO（默认 PA16/PA17），本条目 ml_gpio + pin_config.h 宏段（默认 PA6/PA7），API 同名同语义、零交叉改动。\n来源：sources/materials/lckfb-地阔星移植手册/sensor--ads1115-multichannel-a-to-d-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/ads1115-multichannel-a-to-d-sensor.html；网盘完整工程 https://pan.baidu.com/s/13wIYOV9eqCdG8jVKsKpfUA?pwd=11ad；采购 ADS1115 超小型 16 位模数转换器 ADC 4 通道 https://item.taobao.com/item.htm?spm=a1z10.3-c-s.w4002-24706531953.13.41746a4bt0fSOS&id=522572645353）。**未上板**（软 I2C 时序/MUX 切换真机验证留后续）。\nwiki-stm32-batch3/02 编译矩阵（2026-09）：stm32 单选生成 → UV4（C:/Keil5 V5.06u7）0 error、0 module warning（exit 0，PASS）。",
+      "kit": "ADS1115 超小型 16 位模数转换器 ADC 4 通道（I2C；地址 0x48、±6.144V 六档增益、8~860SPS）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/ads1115-multichannel-a-to-d-sensor.html",
+      "pins": [
+        {
+          "id": "ADS1115_SCL",
+          "type": "i2c_scl",
+          "default": "PA6",
+          "required": true,
+          "macros": [
+            "ADS1115_SCL_GPIO",
+            "ADS1115_SCL_PIN"
+          ]
+        },
+        {
+          "id": "ADS1115_SDA",
+          "type": "i2c_sda",
+          "default": "PA7",
+          "required": true,
+          "macros": [
+            "ADS1115_SDA_GPIO",
+            "ADS1115_SDA_PIN"
+          ]
+        }
+      ]
     }
   }
 }

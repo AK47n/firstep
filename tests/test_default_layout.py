@@ -110,6 +110,7 @@ WHITELIST = {
         "sht30.SHT30_SCL",
         "at24c02.AT24C02_SCL",
         "ags10.AGS10_SCL",
+        "ads1115.ADS1115_SCL",
     },
     "PA7": {
         "motor.MOTOR_A_DIR2",
@@ -119,6 +120,7 @@ WHITELIST = {
         "sht30.SHT30_SDA",
         "at24c02.AT24C02_SDA",
         "ags10.AGS10_SDA",
+        "ads1115.ADS1115_SDA",
     },
 }
 

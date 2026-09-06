@@ -321,6 +321,37 @@ STM32_MACRO_VALUES = {
     "AGS10_SCL_PIN": "Pin_6",
     "AGS10_SDA_GPIO": "GPIO_A",
     "AGS10_SDA_PIN": "Pin_7",
+    # wiki-stm32-batch3/02-06：软 I2C 器件库五件（ads1115/tcs34725/mlx90614/
+    # sgp30/pca9685——共总线 PA6/PA7，地址 0x48/0x29/0x5A/0x58/0x40；pca9685
+    # 0x40 × sht20 0x40 同址——同选 set_address(1) 或换线；与 motor 方向重叠：
+    # 不同框、同选概率最低，同选经引脚绑定消解）
+    "ADS1115_SCL_GPIO": "GPIO_A",
+    "ADS1115_SCL_PIN": "Pin_6",
+    "ADS1115_SDA_GPIO": "GPIO_A",
+    "ADS1115_SDA_PIN": "Pin_7",
+    "TCS34725_SCL_GPIO": "GPIO_A",
+    "TCS34725_SCL_PIN": "Pin_6",
+    "TCS34725_SDA_GPIO": "GPIO_A",
+    "TCS34725_SDA_PIN": "Pin_7",
+    "MLX90614_SCL_GPIO": "GPIO_A",
+    "MLX90614_SCL_PIN": "Pin_6",
+    "MLX90614_SDA_GPIO": "GPIO_A",
+    "MLX90614_SDA_PIN": "Pin_7",
+    "SGP30_SCL_GPIO": "GPIO_A",
+    "SGP30_SCL_PIN": "Pin_6",
+    "SGP30_SDA_GPIO": "GPIO_A",
+    "SGP30_SDA_PIN": "Pin_7",
+    "PCA9685_SCL_GPIO": "GPIO_A",
+    "PCA9685_SCL_PIN": "Pin_6",
+    "PCA9685_SDA_GPIO": "GPIO_A",
+    "PCA9685_SDA_PIN": "Pin_7",
+    # wiki-stm32-batch3/07：hx711 称重（GPIO 双线——默认 SCK=PB5 / DT=PB0：
+    # PB5 叠 MOTOR_A_ENC（光电编码器闭环小车与静态称重不同框）；PB0 叠
+    # MOTOR_B_DIR（TB6612 B 相方向与称重不同框）；刻意不叠采集/声光件）
+    "HX711_SCK_GPIO": "GPIO_B",
+    "HX711_SCK_PIN": "Pin_5",
+    "HX711_DT_GPIO": "GPIO_B",
+    "HX711_DT_PIN": "Pin_0",
 }
 
 
