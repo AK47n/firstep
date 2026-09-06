@@ -545,7 +545,8 @@ def test_module_code_has_no_pin_literals():
     us016/mq2 薄封装与 ir_distance/mq135/mq5/flame/soil 独立通道均经 adc 模块 API 读，
     ADC_Channel_N 是 API 参数（wiki-modules-batch2/02/04、batch6/03、
     batch7/01/02、batch8/01/02；批次 9 薄封装群 photoresistance/rain/
-    gp2y1014au/s12sd 共读 MEM0——batch9/01-04）。"""
+    gp2y1014au/s12sd 共读 MEM0——batch9/01-04；批次 11 MQ 系同构快补 mq3/mq4/mq6/
+    mq7/mq8/mq9/ms1100 薄封装共读 MEM0——batch11/01-07）。"""
     hits: list[str] = []
     for path in sorted(LIBRARY_MODULES.rglob("*")):
         if not path.is_file() or path.suffix.lower() not in (".c", ".h"):
@@ -559,7 +560,8 @@ def test_module_code_has_no_pin_literals():
                 in (
                     "adc", "us016", "ir_distance", "mq2", "mq135", "mq5",
                     "flame", "soil", "photoresistance", "rain", "gp2y1014au",
-                    "s12sd",
+                    "s12sd", "mq3", "mq4", "mq6", "mq7", "mq8", "mq9",
+                    "ms1100",
                 )
             ):
                 continue  # API 对偶枚举（见 docstring）

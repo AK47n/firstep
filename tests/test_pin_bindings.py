@@ -309,8 +309,9 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # 时经引脚绑定消解）
         "PA24": 6,  # HUIDU L3 + UWB_UART RX + ADC12_0 adcPin3（adc 默认脚，
         # us016/mq2/批次9 薄封装四件（photoresistance/rain/gp2y1014au/s12sd）
-        # 共享同槽——wiki-modules-batch2/02、batch6/03、batch9/01-04，无新
-        # $assign 行）+
+        # 共享同槽——wiki-modules-batch2/02、batch6/03、batch9/01-04；批次 11
+        # MQ 系同构快补 mq3/mq4/mq6/mq7/mq8/mq9/ms1100 共读同槽——batch11/01-07，
+        # 无新 $assign 行）+
         # HC05_UART RX + NRF24L01 CSN（同上——HC05/NRF 与 UWB 无线链路互替）+
         # TCS34725 SDA（同上）
         "PA25": 5,  # HUIDU L4 + ZIGBEE_UART RX + ADC12_0 adcPin2（joystick Y

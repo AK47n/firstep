@@ -147,6 +147,13 @@ def test_prune_shared_instance_kept_by_any_consumer():
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["gp2y1014au"]), "ADC12_0")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["gp2y1014au"]), "GP2Y1014")
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "GP2Y1014")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["mq3"]), "ADC12_0")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["mq4"]), "ADC12_0")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["mq6"]), "ADC12_0")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["mq7"]), "ADC12_0")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["mq8"]), "ADC12_0")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["mq9"]), "ADC12_0")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["ms1100"]), "ADC12_0")
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "ADC12_0")
 
 
