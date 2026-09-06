@@ -132,6 +132,7 @@ def test_prune_shared_instance_kept_by_any_consumer():
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["flame"]), "ADC12_0")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["soil"]), "ADC12_0")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["photoresistance"]), "ADC12_0")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["rain"]), "ADC12_0")
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "ADC12_0")
 
 
