@@ -50,7 +50,8 @@ MAIN_C_MSPM0 = (
 
 
 def _parse_int(s: str, i: int):
-    """解析器镜像（C 侧 open_mv4_parse_int 语义）：返回 (value, next_index) 或 None。"""
+    """解析器镜像（C 侧 open_mv4_parse_int 语义，含 >9 位坏帧防护）：
+    返回 (value, next_index) 或 None。"""
     n = len(s)
     sign = 1
     if i < n and s[i] == "-":
@@ -59,9 +60,13 @@ def _parse_int(s: str, i: int):
     if i >= n or not s[i].isdigit():
         return None
     val = 0
+    digits = 0
     while i < n and s[i].isdigit():
         val = val * 10 + int(s[i])
         i += 1
+        digits += 1
+        if digits > 9:
+            return None  # 九位以上 = 非页面坐标（C 侧 int 溢出防护镜像）
     return val * sign, i
 
 
@@ -182,6 +187,7 @@ def test_open_mv4_frame_parser_pure_function():
     assert openmv4_parse_frame("[12,34") == (False, None, None)
     assert openmv4_parse_frame("[1,2,3]") == (False, None, None)
     assert openmv4_parse_frame("[5, 6]") == (False, None, None)
+    assert openmv4_parse_frame("[12345678901,0]") == (False, None, None)  # 超长
     assert openmv4_parse_frame("no frame here") == (False, None, None)
     assert openmv4_parse_frame("") == (False, None, None)
     # 按 '\n' 分帧序列（页面数据流模拟：前缀帧 → 无检测间隔 → 新帧）

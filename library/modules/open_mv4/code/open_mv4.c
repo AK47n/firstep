@@ -13,13 +13,15 @@ static int open_mv4_frame_cx = 0;         /* 最近解析帧结果（待取） *
 static int open_mv4_frame_cy = 0;
 static uint8_t open_mv4_frame_pending = 0;
 
-/* 整数解析（页面 [%d] 形，支持正负；无 stdio）。
- * 返回 0 = 成功（*out 有效、*pp 前进到首个非数字字符）、1 = 非数字。 */
+/* 整数解析（页面 [%d] 形，支持正负；无 stdio；>9 位数字视为坏帧——int 溢出
+ * 防护，页面坐标 ≤ 3 位）。
+ * 返回 0 = 成功（*out 有效、*pp 前进到首个非数字字符）、1 = 非数字/超长。 */
 static uint8_t open_mv4_parse_int(const char **pp, int *out)
 {
     const char *p = *pp;
     int sign = 1;
     int val = 0;
+    int digits = 0;
 
     if (*p == '-') {
         sign = -1;
@@ -31,6 +33,10 @@ static uint8_t open_mv4_parse_int(const char **pp, int *out)
     while ((*p >= '0') && (*p <= '9')) {
         val = val * 10 + (*p - '0');
         p++;
+        digits++;
+        if (digits > 9) {
+            return 1; /* 九位以上 = 非页面坐标（int 溢出防护） */
+        }
     }
     *out = val * sign;
     *pp = p;
