@@ -126,12 +126,14 @@ def test_sht20_formula_and_command_guards():
     assert "65536.0f" in source
     assert "* 175.72f - 46.85f" in source
     assert "* 125.0f - 6.0f" in source
-    # 命令/地址常量（头文件单源 + 源码引用）
+    # 命令/地址常量（头文件单源 + 源码引用；写 0x80/读 0x81 = 0x40<<1 形态）
     assert re.search(r"SHT20_CMD_TEMP\s+0xF3u", header)
     assert re.search(r"SHT20_CMD_HUMI\s+0xF5u", header)
     assert re.search(r"SHT20_ADDR\s+0x40u", header)
     assert "SHT20_CMD_TEMP" in source
     assert "SHT20_CMD_HUMI" in source
+    assert "(SHT20_ADDR << 1) | 0u" in source  # 写地址（页面 0x80 形态）
+    assert "(SHT20_ADDR << 1) | 1u" in source  # 读地址（页面 0x81 形态）
     # 无 CRC（页面取舍：数据 2 字节 + NACK）——无 CRC 计算函数
     assert "crc8" not in source.lower()
     # 14bit 状态位掩码修正（页面正文要求、页面代码未实现）
