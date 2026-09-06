@@ -29,6 +29,39 @@
           "required": true
         }
       ]
+    },
+    "stm32": {
+      "files": [
+        "code/tcs34725_stm32.c",
+        "code/tcs34725_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "软 I2C 总线件（SDA 方向运行时切换，不占硬件 I2C 外设/TIMER——不用母版 ml_i2c，spec 决策①）。页面 = **F1 标准库**（stm32f10x.h + RCC_APB2PeriphClockCmd + Mode_Out_OD/IPU + WriteBit/ReadInputDataBit+SetBits——非 F4 嫌疑页）；电平 = Out_OD + IPU + init SetBits 拉高（页面全批标准开漏配置）。**页面缺陷清单（已取证 + 修正 + notes + 守卫）**：① **读写路径 NACK 全丢**（TCS34725_I2C_Write 地址/逐字节应答、I2C_Read 地址应答返回值全丢弃）→ 低层 helper 检查应答（0=成功/1=地址无应答/2=数据字节无应答）+ init/read_rgb 失败传播（mspm0 版为 void 保留页面行为——本实现低层补检查、公开 API 签名同 mspm0）；② **RGBtoHSL c==0 除零**（无 Clear 标定基准）→ `rgb->c == 0` 防护（出参不动）；③ **extern 全局 rgb/hsl 泄漏**（.c 文件级 + .h extern）→ 收敛模块内 static + 出参；④ `if(id==0x4D | id==0x44)` **按位或** → `||`（mspm0 同）；⑤ **函数名拼错 TC34725_GPIO_Init**（缺 S）→ 不落（并入 init）；⑥ 页面默认脚与 ADS1115 页互换（SDA=PB8/SCL=PB9 记录不裁决）+ L380 `delay_s(600000)` 笔误注释残留（不落）。换算实现：引脚 gpio_init(OUT_OD) + **SCL init 补 gpio_init(TCS34725_SCL_GPIO, TCS34725_SCL_PIN, OUT_OD)+置高**（批次 3 回修口径——F1 复位浮空输入，ODR 写入无效）；SDA 方向切换 gpio_init(SDA, OUT_OD/IU)（页面原式 OD+IPU）；原语族 tcs34725_iic_*（页面 delay_us(1)/5/5 混合半周期统一为 2us（mspm0 版同）≈100kHz 级，TCS34725 ≤400kHz 裕量足）；API 全对齐 mspm0：init（ID 判 0x44/0x4D + 24ms + 1X + Enable；1=检出/0=未检出）→ read_rgb（STATUS AVALID 判定；1=已更新/0=未完成）+ rgb_to_hsl（c==0 防护）+ set_integration_time/set_gain/enable/disable + write_reg/read_reg（void，签名同 mspm0）/读寄存器低字节在前。**默认脚 = PA6（SCL）/PA7（SDA）**——页面默认 SDA=PB8/SCL=PB9 不采用（= 母版 OLED_GPIO 段）；与 motor MOTOR_A_DIR/DIR2（电机方向）默认重叠：颜色传感与「带电机方向的小车运动控制」不同框、同选概率最低；**与批次 2 六件共挂同一软 I2C 总线**（地址 0x29 与 0x38/0x23/0x40/0x44/0x50/0x1A 全异——颜色识别+环境站合法共挂，白名单登记）；与既有 I2C_GPIO（PA11/12）/OLED_GPIO（PB8/9）零重叠；同选经引脚绑定消解。与 mspm0 条目分工：mspm0 侧 syscfg 实例 + DL_GPIO（默认 PA23/PA24），本条目 ml_gpio + pin_config.h 宏段（默认 PA6/PA7），API 同名同语义、零交叉改动；**RGBC/HSL 类型定义在独立 stm32 头（照 key_stm32.h 先例）**——与 mspm0 .h 同名同字段、互不污染。\n来源：sources/materials/lckfb-地阔星移植手册/sensor--tcs34725-color-recognition-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/tcs34725-color-recognition-sensor.html；资料网盘 https://pan.baidu.com/s/1z_5qOfe-YMbj0TYSbDD-sQ?pwd=6668 + 完整工程 https://pan.baidu.com/s/1Z47LNgGPCcVjkxxde3jhHw?pwd=1uyj；采购 TCS34725 颜色识别传感器 RGB 开发板 IIC 通信颜色识别颜色感应模块 https://detail.tmall.com/item.htm?_u=52t4uge5c554&id=662903315676&spm=a1z09.2.0.0.47582e8dxs1caw）。**未上板**（软 I2C 时序/积分时间真机验证留后续）。\nwiki-stm32-batch3/03 编译矩阵（2026-09）：stm32 单选生成 → UV4（C:/Keil5 V5.06u7）0 error、0 module warning（exit 0，PASS——首版 NULL 未定义修正（F1 头无 NULL → 出参判空用 0））。",
+      "kit": "TCS34725 颜色识别传感器 RGB 开发板（I2C 通信；0x29、RGBC 16bit、24ms 默认积分）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/tcs34725-color-recognition-sensor.html",
+      "pins": [
+        {
+          "id": "TCS34725_SCL",
+          "type": "i2c_scl",
+          "default": "PA6",
+          "required": true,
+          "macros": [
+            "TCS34725_SCL_GPIO",
+            "TCS34725_SCL_PIN"
+          ]
+        },
+        {
+          "id": "TCS34725_SDA",
+          "type": "i2c_sda",
+          "default": "PA7",
+          "required": true,
+          "macros": [
+            "TCS34725_SDA_GPIO",
+            "TCS34725_SDA_PIN"
+          ]
+        }
+      ]
     }
   }
 }
