@@ -40,7 +40,7 @@ from typing import TYPE_CHECKING, Mapping, Sequence
 # manifest 是轻量模型模块（先例：既有运行时依赖），PinDeclaration 随
 # ModuleManifest 同源引入；pin_bindings / selection 较重，仅注解需用
 # → TYPE_CHECKING（selection.py 先例）。
-from .manifest import ModuleManifest, PinDeclaration
+from .manifest import ModuleManifest, PinDeclaration, is_wiki_source_url
 
 if TYPE_CHECKING:
     from .pin_bindings import ResolvedBinding
@@ -184,6 +184,24 @@ SKELETON_NOTICES: dict[str, str] = {
     ),
 }
 
+# 第三方素材来源声明段（工单 lckfb-attribution/02）：生成工程是传播面——
+# 立创版权要求第三条要求使用/参考手册模块资料时标明来源与链接。章节标题
+# 单源（测试定位锚 / 渲染共同消费）+ 固定话术（含原文与链接，与 source_notes
+# 注释块同义）。只列 wiki 来源模块（判据 = manifest.is_wiki_source_url），
+# 非 wiki 模块不硬标（错标比不标更糟）。
+SOURCE_NOTICE_HEADING = "## 第三方素材来源"
+
+SOURCE_NOTICE_LINES: tuple[str, ...] = (
+    "本工程的部分模块驱动改写自立创开发板技术文档中心（wiki.lckfb.com）"
+    "「地猛星 MSPM0G3507 模块移植手册」（清单行已附原页链接）。立创官网版权"
+    "声明第三条要求：",
+    "",
+    "> 请大家务必尊重贡献者的智力劳动成果：任何使用该文件的个人或组织，如需使用或者参考手册中的模块资料，"
+    "将其复制、传播、修改、公开展示或在其他网站上使用，都需要在使用时清楚的标明文件的来源以及链接。",
+    "",
+    "来源：https://wiki.lckfb.com/zh-hans/dmx/",
+)
+
 
 def sort_verification_order(
     manifests: Sequence[ModuleManifest],
@@ -265,13 +283,26 @@ def render_readme(
     lines.append("## 模块清单与依赖")
     lines.append("")
     for manifest in manifests:
+        entry = manifest.platforms.get(platform)
+        source_url = entry.source_url if entry else ""
+        if is_wiki_source_url(source_url):
+            source_tail = f"（来源：{source_url}）"
+        else:
+            source_tail = ""
         if manifest.dependencies:
             lines.append(
                 f"- {manifest.slug}：{manifest.description}"
-                f"（依赖：{'、'.join(manifest.dependencies)}）"
+                f"（依赖：{'、'.join(manifest.dependencies)}）{source_tail}"
             )
         else:
-            lines.append(f"- {manifest.slug}：{manifest.description}")
+            lines.append(f"- {manifest.slug}：{manifest.description}{source_tail}")
+    lines.append("")
+
+    # 第三方素材来源声明段（工单 lckfb-attribution/02）：常驻所有生成工程，
+    # 空模块集也渲染（生成工程可能只用母版，声明义务不因此豁免）。
+    lines.append(SOURCE_NOTICE_HEADING)
+    lines.append("")
+    lines.extend(SOURCE_NOTICE_LINES)
     lines.append("")
 
     if score_points:

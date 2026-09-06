@@ -1,3 +1,9 @@
+/* 来源：立创开发板技术文档中心（wiki.lckfb.com）《16路舵机驱动模块》
+ * 页面：https://wiki.lckfb.com/zh-hans/dmx/module/control/16-ch-servo-drive-module.html
+ * 本代码按模块库规范改写（去演示与调试输出、函数名规范化、
+ * 引脚宏参数化等）；使用 / 复制 / 修改 / 传播请遵循立创版权要求：
+ * 标明来源与链接。 */
+
 #include "pca9685.h"
 #include "delay.h" /* delay_us / delay_ms：软 I2C 位操作与 5ms 唤醒延时 */
 #include "ti_msp_dl_config.h" /* PCA9685_PORT / PCA9685_SCL_PIN / PCA9685_SDA_PIN /

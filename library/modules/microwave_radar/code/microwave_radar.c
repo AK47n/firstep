@@ -1,3 +1,9 @@
+/* 来源：立创开发板技术文档中心（wiki.lckfb.com）《微波多普勒无线雷达传感器》
+ * 页面：https://wiki.lckfb.com/zh-hans/dmx/module/sensor/microwave-doppler-radar-sensor.html
+ * 本代码按模块库规范改写（去演示与调试输出、函数名规范化、
+ * 引脚宏参数化等）；使用 / 复制 / 修改 / 传播请遵循立创版权要求：
+ * 标明来源与链接。 */
+
 #include "microwave_radar.h"
 #include "ti_msp_dl_config.h" /* MICROWAVE_PORT / MICROWAVE_OUT_PIN
                                 * （SysConfig 生成命名：<实例>_<引脚名>_PIN

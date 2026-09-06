@@ -1,3 +1,9 @@
+/* 来源：立创开发板技术文档中心（wiki.lckfb.com）《WS2812彩灯》
+ * 页面：https://wiki.lckfb.com/zh-hans/dmx/module/control/ws2812-color-rgb-led.html
+ * 本代码按模块库规范改写（去演示与调试输出、函数名规范化、
+ * 引脚宏参数化等）；使用 / 复制 / 修改 / 传播请遵循立创版权要求：
+ * 标明来源与链接。 */
+
 #include "ws2812.h"
 #include "delay.h" /* delay_ms / delay_us：时序延时走库内 delay 模块（依赖已声明） */
 #include "ti_msp_dl_config.h" /* WS2812_PORT / WS2812_IN_PIN / CPUCLK_FREQ */

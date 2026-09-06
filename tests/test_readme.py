@@ -565,14 +565,22 @@ def _m(
     *,
     deps: tuple[str, ...] = (),
     pins: tuple[tuple[str, str, str, str, bool], ...] = (),
+    source_url: str = "",
 ) -> ModuleManifest:
     """内存直构 manifest（platform = stm32；pins 形状 = (id, type, default,
-    label, required)——渲染器只读该平台 pins 声明，files 空即可）。"""
+    label, required)——渲染器只读该平台 pins 声明，files 空即可；
+    source_url = 该平台条目的来源链接（lckfb-attribution/02 测试用）。"""
     return ModuleManifest(
         slug=slug,
         description=description,
         dependencies=deps,
-        platforms={PLATFORM_STM32: _entry(pins)},
+        platforms={
+            PLATFORM_STM32: PlatformEntry(
+                files=_entry(pins).files,
+                pins=_entry(pins).pins,
+                source_url=source_url,
+            )
+        },
     )
 
 
@@ -968,6 +976,40 @@ def test_render_readme_dependencies_listed_in_order():
     assert "- delay：软件延时" in text
     assert "- key：独立按键输入（依赖：delay）" in text
     assert text.index("- delay") < text.index("- key")
+
+
+def test_render_readme_wiki_module_source_line():
+    """模块清单章（lckfb-attribution/02）：wiki 来源模块行尾附（来源：URL），
+    非 wiki 来源无来源行（口径 = 仅 wiki 派生模块）。"""
+    wiki_url = "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/dht11-temp-humi-sensor.html"
+    manifests = [
+        _m("dht11", "DHT11 温湿度传感器驱动", source_url=wiki_url),
+        _m("delay", "软件延时"),
+        _m("uwb", "UWB 定位驱动", source_url="https://e.tb.cn/h.abc"),
+    ]
+    text = render_readme("stm32", None, manifests)
+    assert f"- dht11：DHT11 温湿度传感器驱动（来源：{wiki_url}）" in text
+    assert "- delay：软件延时" in text  # 无来源不追加行
+    assert "来源：" not in next(
+        line for line in text.splitlines() if line.startswith("- uwb：")
+    )  # 非 wiki URL 不标
+    assert "- uwb：UWB 定位驱动" in text
+
+
+def test_render_readme_source_notice_section():
+    """第三方素材来源声明段常驻（lckfb-attribution/02）：标题 + 立创第三条原文
+    + wiki 链接；空模块集也有（声明义务不因无模块豁免）。"""
+    import contest_generator.readme as readme_mod
+
+    text = render_readme("stm32", None, [])
+    assert readme_mod.SOURCE_NOTICE_HEADING in text
+    assert "立创开发板技术文档中心" in text
+    assert "请大家务必尊重贡献者的智力劳动成果" in text
+    assert "清楚的标明文件的来源以及链接" in text
+    assert "https://wiki.lckfb.com/zh-hans/dmx/" in text
+    # 章节顺序：模块清单 → 第三方素材来源 → 验证顺序清单
+    assert text.index("## 模块清单与依赖") < text.index(readme_mod.SOURCE_NOTICE_HEADING)
+    assert text.index(readme_mod.SOURCE_NOTICE_HEADING) < text.index("## 验证顺序清单")
 
 
 def test_render_readme_no_pins_falls_back_to_footnote():

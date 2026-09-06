@@ -1,3 +1,9 @@
+/* 来源：立创开发板技术文档中心（wiki.lckfb.com）《TTP224触摸传感器》
+ * 页面：https://wiki.lckfb.com/zh-hans/dmx/module/sensor/ttp224-touch-sensor.html
+ * 本代码按模块库规范改写（去演示与调试输出、函数名规范化、
+ * 引脚宏参数化等）；使用 / 复制 / 修改 / 传播请遵循立创版权要求：
+ * 标明来源与链接。 */
+
 #ifndef TTP224_H
 #define TTP224_H
 

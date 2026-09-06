@@ -1,3 +1,9 @@
+/* 来源：立创开发板技术文档中心（wiki.lckfb.com）《ADS1115多路模数转换器》
+ * 页面：https://wiki.lckfb.com/zh-hans/dmx/module/sensor/ads1115-multichannel-a-to-d-sensor.html
+ * 本代码按模块库规范改写（去演示与调试输出、函数名规范化、
+ * 引脚宏参数化等）；使用 / 复制 / 修改 / 传播请遵循立创版权要求：
+ * 标明来源与链接。 */
+
 #include "ads1115.h"
 #include "delay.h" /* delay_us / delay_ms：软 I2C 位操作与转换等待 */
 #include "ti_msp_dl_config.h" /* ADS1115_PORT / ADS1115_SCL_PIN / ADS1115_SDA_PIN /
