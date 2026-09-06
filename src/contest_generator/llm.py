@@ -851,7 +851,13 @@ def _fit_segment_wire(
 # 预算升 6600（fit 上限 6434 ≥ 6341 全量送达 + 93B 余量；词表段全量 6341 比
 # 旧截断形态 6100 多 241B——最坏形态总量 +241B，全文预算 61500→61000 保 2KB
 # 边界余量（batch5/7/8 先例口径）。
-WORDLIST_PROMPT_BYTES = 6600
+# 2026-09-11（wiki-modules-batch10）：感知传感器 +2 方案（SHT20/JY61P）、
+# 执行机构 L298N 方案补 lib_modules 与 note、视觉模块 OpenMV 方案补
+# lib_modules → 默认词表完整 wire 实测 6565（> 6434 fit 上限 6600−166，尾部
+# 类别被截、方案名丢失——test_wordlist_segment 契约红证），预算升 6800
+# （fit 上限 6634 ≥ 6565 全量送达 + 69B 余量；词表段全量 6565 比旧截断形态
+# 6600 少 35B——最坏形态总量 −35B，全文预算 61000 不动，2KB 边界余量保持）。
+WORDLIST_PROMPT_BYTES = 6800
 
 # 词表段截断标注（单源；不用全局 TRUNCATION_NOTICE——词表截断是科普段压缩
 # （后续类别仍由界面展示加载），与 content 截断契约（题面/参考）语义不同界，

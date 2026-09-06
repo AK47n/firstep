@@ -1,0 +1,34 @@
+{
+  "slug": "sht20",
+  "description": "SHT20 温湿度传感器驱动（mspm0 纯驱动，ADR 0009）：软 I2C 位操作读取（不占硬件 I2C 外设，2 GPIO + SDA 方向运行时切换），低功耗单次测量模式（0xF3/0xF5 no-hold，页面原式），sht20_init + sht20_read 出温度（℃，0.01 系数按页面，±0.3℃ 精度）与相对湿度（%RH，±3%RH）；适用于环境温湿度采集、恒温恒湿监测、农业/仓储环境机等赛题功能。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/sht20.c",
+        "code/sht20.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg GPIO 实例 SHT20（SCL 宏 SHT20_SCL_PIN / SDA 宏 SHT20_SDA_PIN / IOMUX 宏 SHT20_SCL_IOMUX / SHT20_SDA_IOMUX——SysConfig 命名 <实例>_<引脚名>_IOMUX，aht10 编译矩阵实测；SCL/SDA 均 OUTPUT 初值 CLEARED）。软 I2C：SDA 方向运行时切换（SHT20_SDA_OUT/IN 宏，照 AHT10/SHT30 先例；节点需板上/模块自带上拉）；位操作半周期 5us ≈ 100kHz 级（sht30 同款归一——页面本页 2-4us 变体，规格 ≤400kHz 裕量充足），延时走 delay 模块，不占 TIMER/硬件 I2C 外设。默认 SCL=PA16 / SDA=PA17——与 DC_MOTOR 编码器 AA/AB（双电机闭环车）、RC522 MOSI/MISO（读卡门禁）、ADS1115 SCL/SDA（外扩多路 ADC）重叠：温湿度与闭环车/读卡/多路模拟采集不同框、同选概率最低（刻意不叠温湿度互替件 aht10 PB6/PB7、dht11 PB7、sht30 PA28/PA31、ds18b20 PA7、mlx90614 PA9/PA8 与光照 bh1750 PA12/PA13——温湿度+显示/其他传感为环境站常见搭配；PA0/PA1 不可作 GPIO 输入——2026-09-06 SysConfig CLI 实证，软 I2C SDA 需输入模式故不用），同选时经引脚绑定消解；地猛星 2×20 排针 31 个 IO 全被默认布局占用（IR_BEAM/PA8 先例）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--sht20-temp-humi-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/sht20-temp-humi-sensor.html；网盘资料 https://pan.baidu.com/s/1HrQkwECvGgQSHvt_RNdLdA；移植成功案例 https://pan.baidu.com/s/1Yl84ZDRKFyw5sUmtYn3c5g?pwd=sujd 提取码 sujd）。改造要点：去掉 main.c 演示与 printf；SHT20_Read → sht20_read（temperature/humidity 两段合并 & 出参）；IIC 原语静态化（sht20_iic_start/stop/send_ack/wait_ack/send_byte/read_byte）；页面 do-while 裸轮询（每次 ~50us、不覆盖 85ms 最长测量）改 ≤50×2ms 重试（100ms 窗口，页面规格温 85ms/湿 29ms 覆盖）——notes 记录；换算按页面 0.01 系数原式（温度 = raw/65536×175.72−46.85、湿度 = raw/65536×125−6）；**器件正确性修正**（① 14bit 数据低 2 位状态位物理计算前置 0（& 0xFFFC）——页面正文「两个状态位在物理计算前须置 0」但页面代码未掩码，按 SHT2x 手册修正（误差 <0.01℃/0.05%RH），notes 记录；② 页面 IIC_Write 数据位延时与 sht30 归一——行为等价）；**CRC 按页面取舍：无**——页面注释「校验和可以不需要，不需要则数据接收完后返回 NACK」，页面代码即 2 字节 + NACK（无 CRC 字段）；SHT2x 支持 CRC8（多项式 0x31 初值 0xFF，sht30 模块原式），需要时按 sht30 先例补读第 3 字节校验。与库内同类分工：aht10（软 I2C 0x38、精度相近、温湿度一体）、dht11（单总线 ±2℃/±5%RH、更便宜低成本）、sht30（软 I2C 0x44 周期模式 0x2130、±0.2℃ 典型精度）——**sht20 是 SHT2x 旧系列（地址 0x40、低功耗单次测量模式选择——每次读取发测量命令、测完即停省电、no-hold 主机不必等待锁总线），精度档 ±0.3℃/±3%RH**，环境站按需任选，同选互不冲突（各自默认脚不同）。**软 I2C 地址冲突提醒**：多 I2C 模块共总线时需不同地址或同一总线时序共享——本件地址 0x40 与库内 pca9685（0x40）**同址**：同总线双选 = 地址互相寻址冲突，须错开总线或改 pca9685 地址跳线（A0-A5）——sht20 地址为器件固定不可改；其余软 I2C 件地址（aht10 0x38/sht30 0x44/bh1750 0x23/tcs34725 0x29/mlx90614 0x5A/at24c02 0x50/ads1115 0x48/sgp30 0x58/ags10 0x1A）互不相同、同选无冲突，notes 记录。\nwiki-modules-batch10/01 编译矩阵：单选生成 → SysConfig CLI → gmake 0 error、0 warning（PASS）；未上板（软 I2C 时序/测量等待真机验证留后续）。",
+      "kit": "SHT20 温湿度传感器模块（4Pin I2C，地址 0x40；-40~125℃、±0.3℃/±3%RH，SHT2x 旧系列单次测量）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/sht20-temp-humi-sensor.html",
+      "pins": [
+        {
+          "id": "SHT20_SCL",
+          "type": "gpio_out",
+          "default": "PA16",
+          "required": true
+        },
+        {
+          "id": "SHT20_SDA",
+          "type": "gpio_out",
+          "default": "PA17",
+          "required": true
+        }
+      ]
+    }
+  }
+}

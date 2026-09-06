@@ -1,0 +1,32 @@
+{
+  "slug": "open_mv4",
+  "description": "OpenMV4 主控侧 UART 帧解析驱动（mspm0 纯驱动，ADR 0009）：真实 UART 独立实例 OPENMV4_UART（UART1 默认、9600、轮询接收——批次 4 fingerprint 实证的「裁剪后独占」方案），open_mv4_init + open_mv4_read_frame 出中心坐标/置信度（页面 `[cx,cy]`/`[pos]` 帧形态，与 coord_detect 出参形态对齐）；适用于 OpenMV 视觉帧解析、最大色块中心定位、循迹偏差接收等赛题功能（Python 侧脚本为参考素材不落码）。",
+  "dependencies": [],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/open_mv4.c",
+        "code/open_mv4.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg：UART 实例 OPENMV4_UART（$assign=UART1、targetBaudRate=9600（页面案例波特率——独立于其余 115200 实例）、enabledInterrupts=[] 轮询接收——无 IRQHandler 强符号，fingerprint 先例；TX=PA8/RX=PA9 页面原脚，宏 OPENMV4_UART_INST）。**UART 放置决策（关键，依批次 4 fingerprint 结论取证落定方案 ①）**：① 真实 UART 独立实例照 fingerprint「裁剪后独占」先例——SysConfig CLI 实证（2026-09-05）同一 UART 外设多实例 = Resource conflict（\"UART2 is already in use by DEBUG_UART\"；UART 模块实例上限 4 = UART0-3 外设数），母版 UART0-3 全被实例占用（UART0=IMU601+FINGERPRINT_UART、UART1=DIGIT_UART、UART2=DEBUG+UWB+HC05、UART3=ZIGBEE——每工程先裁剪、裁剪后至多 4 实例）——默认挂 UART1（页面原接线「PA8/PA9 附加串口 1」；与 DIGIT_UART 同外设同脚：**OpenMV4 与 K230 视觉互替、同选概率最低**，单选裁剪后独占 UART1，同选时经引脚绑定换实例/换脚消解——FINGERPRINT_UART 挂 UART0 同构）；**现实约束记录**：UART 实例上限 4——open_mv4 与另 3 件 UART 模块（imu_uart/digit_uart/debug_uart/uwb_uart/zigbee_uart/hc05/fingerprint 中任 3 件）同选在限内、4 件以上同选 = SysConfig CLI 拒绝（既有约束类，视觉互替类通常不与多 UART 同选）；② 软 UART RX 边沿采样（无先例、工作量最大——9600 位时序靠 GPIO 边沿 + 忙等采样且与主循环耦合）不开；③ 并入 coord_detect 扩展**不推荐强并**——帧格式差异大：coord_detect = K230 CSV 行帧 `B,<cx>,<cy>,<conf>,<x1>,<y1>,<x2>,<y2>`/`N`（逗号分隔 + 字母帧头 + 115200 + 置信度字段），open_mv4 页面 = `任意前缀 + [<cx>,<cy>] + \\r\\n`（方括号包裹 + 无置信度 + 9600，页面实际发送 \"Maximum color block position : [%d,%d]\\r\\n\"）——两件视觉帧解析各有格式、强并需双格式分支 + 波特率冲突 + 契约漂移风险，本件独立并记 notes 写明差异（骨架按视频帧源选一消费）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/rf--open-mv4-camera.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/rf/open-mv4-camera.html；移植成功案例 https://pan.baidu.com/s/1ypgjtV-mDHPxGCZJAD2rTQ?pwd=t1aa 提取码 t1aa；OpenMV 官方文档 https://book.openmv.cc/python-background.html）。改造要点（主控侧 C 驱动，页内 Python 块只作参考素材、不落码）：去掉 main.c 演示、printf/HardFault_Handler（页面调试件）；OpenMV4_usart_config（NVIC 使能）随轮询裁剪——页面 UART_1_INST_IRQHandler 接收中断缓冲同裁（_receive_response 轮询先例：DL_UART_isRXFIFOEmpty 忙等排空）；Openmv4DataAnalysis → open_mv4_read_frame（「找 '[' 找 ']'」页内原语保留 + **补页面缺失的数值解析**——页面只 printf 子串未提取整数；数据缓冲 200→128 缩编；分帧状态静态化——驱动层分帧非业务状态机，ADR 0009 合规）；置信度出参恒 1.0f（页面帧无置信度字段——OpenMV 侧阈值命中才 `uart.write`，骨架 detected 语义=返回 0；与 coord_detect 出参形态（cx/cy int + confidence float）对齐方便骨架消费）；单值帧 `[%d]`（页面案例二循迹偏差）→ cx=pos、cy=0 占位（notes 说明）；帧格式范围 = 案例一 `[cx,cy]`/案例二 `[pos]` 两种——案例三/四（矩形识别、任意角度矩形角点 LD/RD/RU/LU 与 [x,y] 形态）与案例五（激光定位——IDE print 未走 UART）为不同应用形态，留后续扩展（notes 写明）；页面帧带任意前缀（\"Maximum color block position : \"）自动跳过。**帧协议/波特率真机留验证**（OpenMV 侧由用户按页面 Python 脚本配置 9600；K230 视觉与 OpenMV 二选一互替）。\nwiki-modules-batch10/04 编译矩阵：单选生成 → SysConfig CLI（UART1/9600/PA8/PA9 合法实证）→ gmake 0 error、0 warning（PASS）；未上板（帧解析真机验证留后续；与 DIGIT_UART 同选时绑定换实例后注意波特率/时钟配置）。",
+      "kit": "OpenMV4 H7 摄像头（OpenMV Cam H7，MicroPython；与开发板串口 UART 连线，OpenMV 串口 3 9600——页面案例）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/rf/open-mv4-camera.html",
+      "pins": [
+        {
+          "id": "OPENMV4_UART_TX",
+          "type": "uart_tx",
+          "default": "PA8",
+          "required": true
+        },
+        {
+          "id": "OPENMV4_UART_RX",
+          "type": "uart_rx",
+          "default": "PA9",
+          "required": true
+        }
+      ]
+    }
+  }
+}

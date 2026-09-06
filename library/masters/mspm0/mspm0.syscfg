@@ -144,6 +144,41 @@ DCC_100_PWM2.peripheral.ccp0Pin.$assign = "PA14";
 DCC_100_PWM2.PWM_CHANNEL_0.$name        = "ti_driverlib_pwm_DCC100_CC0";
 DCC_100_PWM2.PWM_CHANNEL_0.dutyCycle    = 50;
 
+// L298N 大电流电机驱动（l298n 模块：IN1/IN2 双通道 PWM 方向+调速（页面
+// AO_Control 原样：dir=1 → C0=0/C1=duty、dir=0 → C0=duty/C1=0）+ EN 使能
+// GPIO（三脚一组）。L298N_PWM = TIMG12（32MHz BUSCLK/1 预分频/2000 计数 ≈
+// 16kHz——与 DCC_100_PWM2 同外设：L298N 与步进驱动互替、同选概率最低，
+// 同选时经引脚绑定换实例消解）；默认 C0=PA14 / C1=PB24——与 DCC_100_PWM2
+// （步进脉冲）、WS2812 IN（灯带）、SR04 TRIG（测距）、RC522 SCK（读卡）、
+// AGS10 SDA/soil（气体/土壤）、HC05 KEY、AT24C02 SCL、mq5、STEP_MOTOR RST2
+// 重叠：大电流驱动与步进/测距/读卡/存储/气体不同框、同选概率最低（刻意
+// 与 motor 默认 10 脚错开——两驱动同选概率低但可能并排使用，默认即不撞）
+const L298N_PWM = PWM.addInstance();
+L298N_PWM.$name              = "L298N_PWM";
+L298N_PWM.clockPrescale      = 1;
+L298N_PWM.timerCount         = 2000;
+L298N_PWM.peripheral.$assign = "TIMG12";
+L298N_PWM.peripheral.ccp0Pin.$assign = "PA14";
+L298N_PWM.peripheral.ccp1Pin.$assign = "PB24";
+L298N_PWM.PWM_CHANNEL_0.$name        = "ti_driverlib_pwm_L298N_CC0";
+L298N_PWM.PWM_CHANNEL_0.dutyCycle    = 0;
+L298N_PWM.PWM_CHANNEL_1.$name        = "ti_driverlib_pwm_L298N_CC1";
+L298N_PWM.PWM_CHANNEL_1.dutyCycle    = 0;
+
+// L298N 使能脚（l298n 模块：EN 输出高有效——页面「5V 使能高电平有效，常态
+// 下跳线帽接 VCC」；本件 l298n_init 置高（配合取跳线帽 + GPIO 使能），初始
+// SET = 使能。默认 PA27——与 HUIDU R2（8 路灰度巡线）、ADC12_0 adcPin0
+// （ir_distance MEM3）、TTP224 OUT4（触摸按键）重叠：使能脚与巡线（巡线车
+// 惯用轻量 TB6612，与大电流驱动不同框）/模拟测距/触摸面板不同框、同选概率
+// 最低，同选时经引脚绑定消解）
+const L298N = GPIO.addInstance();
+L298N.$name = "L298N";
+L298N.associatedPins.create(1);
+L298N.associatedPins[0].$name            = "EN";
+L298N.associatedPins[0].direction        = "OUTPUT";
+L298N.associatedPins[0].initialValue     = "SET";
+L298N.associatedPins[0].pin.$assign      = "PA27";
+
 // 电机 PID 调度定时器（10ms 周期中断，pid 模块用；编译闭环只需宏存在）
 MOTOR_PID.$name              = "MOTOR_PID";
 MOTOR_PID.profile            = "Basic_Periodic";
@@ -435,6 +470,47 @@ SHT30.associatedPins[1].$name        = "SDA";
 SHT30.associatedPins[1].direction    = "OUTPUT";
 SHT30.associatedPins[1].initialValue = "CLEARED";
 SHT30.associatedPins[1].pin.$assign  = "PA31";
+
+// SHT20 温湿度软 I2C（sht20 模块：SCL 输出 / SDA 双向运行时切换；
+// 位操作不占硬件 I2C 外设，照 AHT10 先例——半周期 5us ≈ 100kHz 级；
+// 单次测量模式（0xF3 温度/0xF5 湿度 no-hold、低功耗），与 sht30 周期模式
+// 分工。默认 SCL=PA16 / SDA=PA17——与 DC_MOTOR 编码器 AA/AB（双电机闭环车）、
+// RC522 MOSI/MISO（读卡门禁）、ADS1115 SCL/SDA（外扩多路 ADC）重叠：温湿度
+// 与闭环车/读卡/多路模拟采集不同框、同选概率最低（刻意不叠温湿度互替件
+// aht10 PB6/PB7、dht11 PB7、sht30 PA28/PA31、ds18b20 PA7、mlx90614 PA9/PA8
+// 与光照 bh1750 PA12/PA13——温湿度+显示/其他传感为环境站常见搭配），同选时
+// 经引脚绑定消解；软 I2C 需板上/模块自带上拉）
+const SHT20 = GPIO.addInstance();
+SHT20.$name = "SHT20";
+SHT20.associatedPins.create(2);
+SHT20.associatedPins[0].$name        = "SCL";
+SHT20.associatedPins[0].direction    = "OUTPUT";
+SHT20.associatedPins[0].initialValue = "CLEARED";
+SHT20.associatedPins[0].pin.$assign  = "PA16";
+SHT20.associatedPins[1].$name        = "SDA";
+SHT20.associatedPins[1].direction    = "OUTPUT";
+SHT20.associatedPins[1].initialValue = "CLEARED";
+SHT20.associatedPins[1].pin.$assign  = "PA17";
+
+// JY61P 六轴姿态传感器软 I2C（jy61p 模块：SCL 输出 / SDA 双向运行时切换；
+// 位操作不占硬件 I2C 外设，照 AHT10 先例。默认 SCL=PA28 / SDA=PA31——与
+// IMU601 UART0（imu_uart 姿态互替）、FINGERPRINT_UART（身份）、HX711（称重）、
+// SHT30 SDA（温湿度）、MICROWAVE（微波雷达）重叠：姿态测量与身份/称重/温湿度/
+// 微波采集不同框、同选概率最低（姿态惯配双电机/舵机/显示/无线——刻意不叠
+// motor/step_motor/servo/显示/无线/触摸/语音/气体/报警/红外件与 I2C_0 硬 I2C
+// 的 PA0/PA1——软 I2C×硬 I2C 同脚 = 物理冲突分组，批次 5 先例），同选时经
+// 引脚绑定消解；软 I2C 需板上/模块自带上拉）
+const JY61P = GPIO.addInstance();
+JY61P.$name = "JY61P";
+JY61P.associatedPins.create(2);
+JY61P.associatedPins[0].$name        = "SCL";
+JY61P.associatedPins[0].direction    = "OUTPUT";
+JY61P.associatedPins[0].initialValue = "CLEARED";
+JY61P.associatedPins[0].pin.$assign  = "PA28";
+JY61P.associatedPins[1].$name        = "SDA";
+JY61P.associatedPins[1].direction    = "OUTPUT";
+JY61P.associatedPins[1].initialValue = "CLEARED";
+JY61P.associatedPins[1].pin.$assign  = "PA31";
 
 // SGP30 空气 TVOC/CO2e 气体传感（sgp30 模块：软 I2C 位操作 2 脚 SCL/SDA——
 // 照 AHT10 先例不占硬件 I2C 外设；SDA 方向运行时切换（写 = 输出、读 ACK =
@@ -893,6 +969,29 @@ FINGERPRINT_UART.enabledInterrupts = [];
 FINGERPRINT_UART.enableFIFO        = false;
 FINGERPRINT_UART.peripheral.rxPin.$assign = "PA31";
 FINGERPRINT_UART.peripheral.txPin.$assign = "PA28";
+
+// OpenMV4 视觉串口（open_mv4 模块：主控侧 UART 帧解析 `[cx,cy]`——真实 UART
+// 独立实例照 fingerprint「裁剪后独占」先例（批次 4 UART 可行性调研：SysConfig
+// CLI 拒绝同一 UART 外设多实例、UART 实例上限 4 = UART0-3 外设数——母版 7 个
+// UART 实例定义每工程先裁剪、裁剪后至多 4 实例，open_mv4 与另 ≤3 件 UART
+// 模块同选在限内、4 件以上同选 = CLI 拒绝（既有约束类，notes 写明）；
+// 同外设多实例同选时经引脚绑定换实例/换脚消解）；默认挂 UART1（页面原接线
+// 「PA8/PA9 附加串口 1」，与 DIGIT_UART（K230 视觉）同外设同脚——OpenMV4 与
+// K230 视觉互替、同选概率最低，单选裁剪后独占 UART1）；9600 = 页面案例波特率
+// （独立于其余 115200 实例）；enabledInterrupts 空 = **轮询接收**（无 ISR
+// 强符号——照 fingerprint 先例）
+const OPENMV4_UART = UART.addInstance();
+OPENMV4_UART.$name             = "OPENMV4_UART";
+OPENMV4_UART.profile           = "CONFIG_PROFILE_1";
+OPENMV4_UART.peripheral.$assign = "UART1";
+OPENMV4_UART.uartClkSrc        = "BUSCLK";
+OPENMV4_UART.ovsRate           = "16";
+OPENMV4_UART.targetBaudRate    = 9600;
+OPENMV4_UART.enableInternalLoopback = false;
+OPENMV4_UART.enabledInterrupts = [];
+OPENMV4_UART.enableFIFO        = false;
+OPENMV4_UART.peripheral.rxPin.$assign = "PA9";
+OPENMV4_UART.peripheral.txPin.$assign = "PA8";
 
 // OLED（I2C 控制器）
 OLED.$name                         = "OLED";
