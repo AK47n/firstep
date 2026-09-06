@@ -5,6 +5,91 @@
 
 u8 OLED_GRAM[144][8];
 
+/* ===========================================================================
+ * SPI 总线变体（批次 12/07 决策 B）：软 SPI 位操作 5 脚 SCL/SDA/DC/CS/RES
+ * （母版 syscfg 实例 OLED_SPI——宏 OLED_SPI_<引脚名>_PORT/PIN 由 SysConfig
+ * 按引脚名分派各口；不占硬件 SPI 外设/TIMER，nrf24l01/max7219 先例——
+ * SSD1306 SPI ≤10MHz，GPIO 翻转速度满足、无需节拍延时）
+ * =========================================================================== */
+
+#define OLED_SPI_SCL(x)                                                \
+    do {                                                               \
+        if (x) {                                                       \
+            DL_GPIO_setPins(OLED_SPI_SCL_PORT, OLED_SPI_SCL_PIN);      \
+        } else {                                                       \
+            DL_GPIO_clearPins(OLED_SPI_SCL_PORT, OLED_SPI_SCL_PIN);    \
+        }                                                              \
+    } while (0)
+
+#define OLED_SPI_SDA(x)                                                \
+    do {                                                               \
+        if (x) {                                                       \
+            DL_GPIO_setPins(OLED_SPI_SDA_PORT, OLED_SPI_SDA_PIN);      \
+        } else {                                                       \
+            DL_GPIO_clearPins(OLED_SPI_SDA_PORT, OLED_SPI_SDA_PIN);    \
+        }                                                              \
+    } while (0)
+
+#define OLED_SPI_DC(x)                                                 \
+    do {                                                               \
+        if (x) {                                                       \
+            DL_GPIO_setPins(OLED_SPI_DC_PORT, OLED_SPI_DC_PIN);        \
+        } else {                                                       \
+            DL_GPIO_clearPins(OLED_SPI_DC_PORT, OLED_SPI_DC_PIN);      \
+        }                                                              \
+    } while (0)
+
+#define OLED_SPI_CS(x)                                                 \
+    do {                                                               \
+        if (x) {                                                       \
+            DL_GPIO_setPins(OLED_SPI_CS_PORT, OLED_SPI_CS_PIN);        \
+        } else {                                                       \
+            DL_GPIO_clearPins(OLED_SPI_CS_PORT, OLED_SPI_CS_PIN);      \
+        }                                                              \
+    } while (0)
+
+#define OLED_SPI_RES(x)                                                \
+    do {                                                               \
+        if (x) {                                                       \
+            DL_GPIO_setPins(OLED_SPI_RES_PORT, OLED_SPI_RES_PIN);      \
+        } else {                                                       \
+            DL_GPIO_clearPins(OLED_SPI_RES_PORT, OLED_SPI_RES_PIN);    \
+        }                                                              \
+    } while (0)
+
+/* 总线模式静态态：0 = I2C1 硬件 I2C（默认，OLED_Init）、1 = SPI 位操作
+ * （OLED_SPI_Init）；两种模式共用同一初始化序列与显存 API（厂家 SPI/I2C
+ * 例程同参核对）。 */
+static uint8_t s_bus_spi = 0;
+
+/* 分辨率静态态：0 = 128×64（默认）、1 = 128×32（0.91 寸，oled_set_res）。 */
+static uint8_t s_res = OLED_RES_128X64;
+
+/* SPI 位操作写一个字节（vendor SPI 例程 OLED_WR_Byte：DC 按 mode 控、
+ * CS 每字节选通/释放——SCL 上升沿采样 SPI 模式 0） */
+static void oled_spi_write_byte(uint8_t dat, uint8_t mode)
+{
+    uint8_t i;
+    if (mode) {
+        OLED_SPI_DC(1);
+    } else {
+        OLED_SPI_DC(0);
+    }
+    OLED_SPI_CS(0);
+    for (i = 0; i < 8; i++) {
+        OLED_SPI_SCL(0);
+        if (dat & 0x80u) {
+            OLED_SPI_SDA(1);
+        } else {
+            OLED_SPI_SDA(0);
+        }
+        OLED_SPI_SCL(1);
+        dat <<= 1;
+    }
+    OLED_SPI_CS(1);
+    OLED_SPI_DC(1);
+}
+
 //反显函数
 void OLED_ColorTurn(u8 i)
 {
@@ -30,6 +115,11 @@ void OLED_DisplayTurn(u8 i)
 void OLED_WR_Byte(uint8_t dat, uint8_t mode)
 {
     uint8_t txData[2];
+
+    if (s_bus_spi) { /* SPI 总线变体：位操作（零回归——I2C 路径不进入） */
+        oled_spi_write_byte(dat, mode);
+        return;
+    }
 
     // 控制字节: 0x00为命令, 0x40为数据
     txData[0] = mode ? 0x40 : 0x00;
@@ -311,11 +401,39 @@ void OLED_Test(void)
 }
 
 //OLED的初始化
+static void oled_drv_init(void); /* 初始化序列（总线无关，定义在下方） */
+
 void OLED_Init(void)
 {
 	// 4针OLED没有RST引脚，直接延时等待屏幕内部RC电路上电复位完成
+	s_bus_spi = 0; /* I2C 路径（缺省；OLED_SPI_Init 曾调用时可切回） */
 	delay_ms(100);
-	
+	oled_drv_init();
+}
+
+/* SPI 总线变体初始化（批次 12/07 决策 B：同序列同 API，仅总线层不同；
+ * 复位走 RES 引脚——厂家 SPI 例程 RES 200ms 低脉冲） */
+void OLED_SPI_Init(void)
+{
+	s_bus_spi = 1;
+	OLED_SPI_RES(0);
+	delay_ms(200);
+	OLED_SPI_RES(1);
+	oled_drv_init();
+}
+
+/* 分辨率设置（128×32 = 0.91 寸屏；须在初始化前调用——初始化序列的
+ * MUX/COM 参数随 s_res 分支） */
+void oled_set_res(uint8_t res)
+{
+	s_res = res ? OLED_RES_128X32 : OLED_RES_128X64;
+}
+
+/* 初始化序列（总线无关——OLED_WR_Byte 按 s_bus_spi 分发；厂家 I2C/SPI
+ * 例程同参核对：0xAE/0xA8 0x3F/0xDA 0x12/0x8D 0x14…逐字节一致，仅总线
+ * 层不同；128×32 按厂家 0.91 例程 MUX=0x1F/COM=0x00 分支） */
+static void oled_drv_init(void)
+{
 	OLED_WR_Byte(0xAE,OLED_CMD);//--turn off oled panel
 	OLED_WR_Byte(0x00,OLED_CMD);//---set low column address
 	OLED_WR_Byte(0x10,OLED_CMD);//---set high column address
@@ -326,7 +444,7 @@ void OLED_Init(void)
 	OLED_WR_Byte(0xC8,OLED_CMD);//Set COM/Row Scan Direction   0xc0上下反置 0xc8正常
 	OLED_WR_Byte(0xA6,OLED_CMD);//--set normal display
 	OLED_WR_Byte(0xA8,OLED_CMD);//--set multiplex ratio(1 to 64)
-	OLED_WR_Byte(0x3f,OLED_CMD);//--1/64 duty
+	OLED_WR_Byte((s_res == OLED_RES_128X32) ? 0x1F : 0x3F, OLED_CMD);//1/64 duty（128×32 = 1/32）
 	OLED_WR_Byte(0xD3,OLED_CMD);//-set display offset	Shift Mapping RAM Counter (0x00~0x3F)
 	OLED_WR_Byte(0x00,OLED_CMD);//-not offset
 	OLED_WR_Byte(0xd5,OLED_CMD);//--set display clock divide ratio/oscillator frequency
@@ -334,7 +452,7 @@ void OLED_Init(void)
 	OLED_WR_Byte(0xD9,OLED_CMD);//--set pre-charge period
 	OLED_WR_Byte(0xF1,OLED_CMD);//Set Pre-Charge as 15 Clocks & Discharge as 1 Clock
 	OLED_WR_Byte(0xDA,OLED_CMD);//--set com pins hardware configuration
-	OLED_WR_Byte(0x12,OLED_CMD);
+	OLED_WR_Byte((s_res == OLED_RES_128X32) ? 0x00 : 0x12, OLED_CMD);
 	OLED_WR_Byte(0xDB,OLED_CMD);//--set vcomh
 	OLED_WR_Byte(0x40,OLED_CMD);//Set VCOM Deselect Level
 	OLED_WR_Byte(0x20,OLED_CMD);//-Set Page Addressing Mode (0x00/0x01/0x02)

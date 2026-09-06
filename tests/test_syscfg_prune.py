@@ -88,6 +88,8 @@ def test_prune_shared_instance_kept_by_any_consumer():
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "LCD")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["tp_xpt2046"]), "TP_XPT2046")
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "TP_XPT2046")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["oled"]), "OLED_SPI")
+    _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "OLED_SPI")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["pca9685"]), "PCA9685")
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "PCA9685")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["ir_remote_tx"]), "IR_TX")

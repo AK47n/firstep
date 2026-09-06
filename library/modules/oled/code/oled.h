@@ -9,6 +9,14 @@
 #define OLED_CMD  0	//写命令
 #define OLED_DATA 1	//写数据
 
+/* 分辨率选择（0.91 寸 SSD1306 128×32 支持——批次 12/07 核验补录：厂家
+ * 0.91 例程 MUX=0x1F/COM=0x00，与 0.96/1.3 的 1/64 duty 不同；库内原
+ * OLED_Init 按 128×64 硬配（MUX 0x3F/COM 0x12）——128×32 屏需先
+ * oled_set_res(OLED_RES_128X32) 再初始化（默认 128×64 零行为变化：
+ * s_res 缺省 = OLED_RES_128X64）。 */
+#define OLED_RES_128X64 0
+#define OLED_RES_128X32 1
+
 typedef unsigned char u8;
 typedef unsigned int  u32;
 
@@ -325,6 +333,25 @@ void OLED_ShowPicture(u8 x0,u8 y0,u8 x1,u8 y1,u8 BMP[]);
  * - 初始化完成后通常会清屏
  */
 void OLED_Init(void);
+
+/**
+ * @brief 设置 OLED 分辨率（128×64 默认 / 128×32——0.91 寸屏；须在
+ *        OLED_Init / OLED_SPI_Init 之前调用）。
+ */
+void oled_set_res(uint8_t res);
+
+/**
+ * @brief SPI 总线变体初始化（批次 12/07 决策 B：同芯片同 API，仅总线
+ *        初始化/写字节不同——0.96 SPI 单色屏 SSD1306 128×64，软 SPI
+ *        位操作 5 脚 SCL/SDA/DC/CS/RES（母版 syscfg 实例 OLED_SPI，
+ *        不占硬件 SPI 外设/TIMER——nrf24l01/max7219 先例）；调用后
+ *        OLED_WR_Byte 走位操作路径，全部绘制/文本/显存 API 与 I2C 版
+ *        逐字节一致（OLED_GRAM/Refresh 语义不变）。
+ * @note 与 OLED_Init（I2C1 硬件 I2C 路径）互斥：最后一次调用决定总线；
+ *       两者共用同一份初始化序列（厂家 SPI/I2C 例程序列一致，逐字核对
+ *       0xAE/0xA8 0x3F/0xDA 0x12/0x8D 0x14…参数同参——仅总线层不同）。
+ */
+void OLED_SPI_Init(void);
 
 /**
  * @brief OLED 自检：显示文字、图形，验证接线是否正确
