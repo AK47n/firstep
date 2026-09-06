@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=4aca2bbd160e198ae1617ba35421b885d7c4586e -->
+<!-- changelog-auto: last-commit=0e48047e01d4925027b33d43a2a3540790fa0477 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -70,6 +70,7 @@
 - 20:01 模块：tcs34725 颜色识别传感器 stm32 平台条目（wiki-stm32-batch3/03：软 I2C 器件库件——共总线 PA6/PA7 + 页面缺陷修正（读写路径 NACK 全丢补检查+失败传播、RGBtoHSL c==0 除零防护、extern 全局 rgb/hsl 收敛出参、ID 判定按位或改 ||、TC34725 拼写不落）+ 独立 stm32 头（RGBC/HSL 与 mspm0 同签名）+ SCL OUT_OD 初始化守卫 + UV4 矩阵 0 error/0 module warning → verified=true）
 - 20:04 模块：mlx90614 非接触红外测温 stm32 平台条目（wiki-stm32-batch3/04：软 I2C/SMBus 器件库件——共总线 PA6/PA7 + 页面缺陷修正（PEC/CRC 禁用剔除、失败 return 0.0 混用改出参+状态码、开漏注释 vs Out_PP 统一 OUT_OD、写-读间 delay_ms(1) 页面注释掉加回、MLX90615 笔误不落）+ init 非空实现（引脚配置）+ SCL OUT_OD 初始化守卫 + UV4 矩阵 0 error/0 module warning → verified=true）
 - 20:06 模块：sgp30 空气质量传感器 stm32 平台条目（wiki-stm32-batch3/05：软 I2C + CRC8 器件库件——共总线 PA6/PA7 + 页面缺陷修正（CRC 缺失主缺陷：crc=crc 自赋值+只读 5 字节漏 TVOC CRC → 读满 6 字节+两组 CRC8 0x31/0xFF 校验、NACK 全丢补 1-5 失败码、正文地址语义写反记录、15s 预热判定归调用方）+ SCL OUT_OD 初始化守卫 + UV4 矩阵 0 error/0 module warning → verified=true）
+- 20:09 模块：pca9685 16 路舵机驱动 stm32 平台条目（wiki-stm32-batch3/06：软 I2C 器件库件·control 分类——共总线 PA6/PA7 + 页面缺陷修正（两套角度映射不一致统一 0.5-2.5ms 单式、main 60Hz 改默认 50Hz、delay_1ms(5)/(100) 换算 delay_ms、NACK 全丢 wait_ack 超时中止、正文 (50+1) 公式错误按代码、Excel FLOOR 注释剔除）+ 0x40×sht20 同址提醒（set_address(1) 或换线）+ SCL OUT_OD 初始化守卫 + UV4 矩阵 0 error/0 module warning → verified=true）
 
 ## 2026-09-05
 - 00:01 版本记录发布首版 v1.0.0（按 GitHub Release 2026-08-30 定稿首版简介）+ 工具版本号对齐 1.0.0
