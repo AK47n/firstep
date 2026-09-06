@@ -542,6 +542,26 @@ MICROWAVE.associatedPins[0].direction        = "INPUT";
 MICROWAVE.associatedPins[0].internalResistor = "PULL_UP";
 MICROWAVE.associatedPins[0].pin.$assign      = "PA31";
 
+// GP2Y1014AU 粉尘传感器 LED 驱动输出（gp2y1014au 模块：LED 脉冲驱动——页面
+// Read_dust_concentration 时序：clear（LED 亮）→ 280us → 采样 → 40us → set
+// （LED 关）→ 9680us，10ms 周期；**器件必需**——GP2Y1014AU 内置红外 LED
+// 必须由主控脉冲驱动才能测量，无此脚传感器不工作（薄封装件唯一例外：ADC 仍
+// 薄封装共读 MEM0（见 ADC 段），LED 为 GPIO 输出实例）。页面极性原样：
+// clear = LED 亮、set = LED 关（空闲高 = 关闭）。默认 PA1——与 I2C_0 sclPin
+// （ml_mpu6050 硬 I2C SCL）重叠：粉尘浓度监测与姿态采集不同框、同选概率
+// 最低故叠此脚（PA0/PA1 不可作 GPIO 输入——2026-09-06 SysConfig CLI 实证；
+// GPIO 输出可配 PA0——ir_remote_tx 先例，PA1 同型经编译矩阵 CLI 实证），
+// 同选时经引脚绑定消解；刻意不叠传感站标配（温湿度/光照/气体/显示）、
+// 报警（PA15 蜂鸣）、无线/触摸/运动/语音件——粉尘监测站 = 显示 + 报警 +
+// 温湿度 + 无线遥测常见组合，默认即不撞）
+const GP2Y1014 = GPIO.addInstance();
+GP2Y1014.$name = "GP2Y1014";
+GP2Y1014.associatedPins.create(1);
+GP2Y1014.associatedPins[0].$name            = "LED";
+GP2Y1014.associatedPins[0].direction        = "OUTPUT";
+GP2Y1014.associatedPins[0].initialValue     = "SET";
+GP2Y1014.associatedPins[0].pin.$assign      = "PA1";
+
 // 双轴摇杆按键（joystick 模块：SW 输入上拉低有效；实例名 JOYSTICK →
 // JOYSTICK_PORT 宏；引脚名 SW → JOYSTICK_SW_PIN；默认 PA9——仅与
 // DIGIT_UART RX 默认重叠（K230 视觉串口），同选时经引脚绑定消解。

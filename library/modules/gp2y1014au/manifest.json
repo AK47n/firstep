@@ -1,0 +1,35 @@
+{
+  "slug": "gp2y1014au",
+  "description": "GP2Y1014AU 粉尘传感器驱动（mspm0 纯驱动薄封装，ADR 0009）：ADC 薄封装依赖库内 adc 模块共享 ADC12_0 MEM0 槽位读数（不新开 ADC 通道）+ LED 驱动 GPIO 输出（器件必需例外——主控脉冲驱动内置红外 LED，页面 280us/40us/9680us 时序），gp2y1014_init + gp2y1014_read_dust 出粉尘浓度估算值（页面原式 0.17×value−0.1 + 10 点滑动平均内嵌；相对估算非精标）；适用于 PM2.5/粉尘浓度监测、空气净化联动、扬尘报警等赛题功能。",
+  "dependencies": [
+    "adc",
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/gp2y1014au.c",
+        "code/gp2y1014au.h"
+      ],
+      "verified": false,
+      "hardware_bound": false,
+      "notes": "**ADC 薄封装 + LED 驱动 GPIO 输出（薄封装唯一例外）**：ADC 部分依赖 adc 模块共享 ADC12_0 实例 MEM0 槽位（默认 PA24/A0_3，与 adc/us016/mq2/本批薄封装件共读同槽；绑定换引脚 = 改写 adcPin*.$assign + adcMem*chansel，模块零改动；手册原脚 PA27/A0_0 经绑定即可复现——绑 PA27 时改写器按通道号换 adcPin3→adcPin0 + adcMem0chansel→CHAN_0）。**LED 驱动为器件必需**（页面 Read_dust_concentration 时序：LED 亮 → 280us → 采样 → 40us → LED 关 → 9680us 的 10ms 周期——GP2Y1014AU 内置红外 LED 必须由主控脉冲驱动才能测量，无此脚传感器不工作）→ 母版新 GPIO 输出实例 GP2Y1014/LED（页面极性原样：clear = LED 亮、set = LED 关；**默认 PA1**——与 I2C_0 sclPin（ml_mpu6050 硬 I2C SCL）重叠：粉尘监测与姿态采集不同框、同选概率最低故叠此脚（PA0/PA1 不可作 GPIO 输入——2026-09-06 SysConfig CLI 实证；GPIO 输出可配 PA0——ir_remote_tx 先例，PA1 同型经编译矩阵 CLI 实证），同选时经引脚绑定消解）。换算 f = 0.17×value − 0.1（页面 Read_dust_concentration 原式——**相对估算非精标**：页面公式对演示值/ADC 量程标定不明确（12bit 4095 满量程下 0.17×4095−0.1 ≈ 696 超出常规 mg/m³ 量程）；红外漫反射原理对烟尘/水汽同样响应——**烟/尘区分不能**；绝对浓度需标准粉尘源/浊度计标定）。页面 Filter（10 点静态滑动平均、首次以首值填满窗口）**内嵌**为模块内静态环形缓冲（页面滤波逻辑简单——照库依赖先例取舍不依赖库内 filter 可选配套件（uwb_uart 场景），记 notes 定案）。页面 SAMPLES 30×2ms（≈62ms，远超 10ms LED 周期——页面时序本就不自洽）改 5 次快速平均（us016 快平均先例，单次读回到 ~0.3ms 级）。页面 ADC 中断（ADC12_0_INST_IRQHandler + gCheckADC 标志位）改依赖 adc 模块轮询（共享实例 IRQHandler 强符号唯一）。页面无 DO（4 线：VCC/GND/LED/AOUT）。规格（页面）：工作 5-7V、最大 20mA、最小粒子检出 0.8um、灵敏度 0.5V/(0.1mg/m³)、清洁空气 ~0.9V（典型）。调用间隔 ≥ 10ms（LED 采样周期）；模拟输出经 adc 模块读取——与其它 MEM0 共读件同选时一次转换一次读、采样节奏按用途自协调。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--gp2y1014au-dust-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/gp2y1014au-dust-sensor.html；移植成功案例 https://pan.baidu.com/s/1GSvVBKWHfZHVk1lZ4HXpzA?pwd=jclk 提取码 jclk——页面无资料下载链接）。改造要点：去掉 main.c 演示与 printf；函数名规范化（gp2y1014_init/read_dust，去 Dust_Init/ADC_GET/Get_ADC_Value/Filter/Read_dust_concentration 命名）；ADC 中断改轮询；SAMPLES 30×2ms 改 5 次快平均；Filter 内嵌（页面自洽——static 环形缓冲语义保留）；LED 脉冲时序/极性按页面原样并注释；**与库内同类分工**：smoke 类（mq2 烟雾/可燃气体——电化学式、ppm 级气体）与本件（光学式、粒径 0.8um 以上悬浮颗粒）量纲不同不可互替；ads1115（I2C 外扩 ADC）与本件不冲突（本件走板载 MEM0）。\nwiki-modules-batch9/03 编译矩阵（2026-09-09）：单选生成 → SysConfig CLI（GP2Y1014/LED = PA1 合法）→ gmake 0 error、0 warning（PASS）；未上板（LED 时序/换算真机验证留后续）。",
+      "kit": "GP2Y1014AU 粉尘传感器模块（4 线：VCC/GND/LED/AOUT；工作 5-7V、最大 20mA；内置红外发光二极管 + 光电晶体管（居中孔洞空气流通），最小粒子检出 0.8um、灵敏度 0.5V/(0.1mg/m³)、清洁空气 ~0.9V（典型）；LED 需主控脉冲驱动（10ms 周期））",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/gp2y1014au-dust-sensor.html",
+      "pins": [
+        {
+          "id": "GP2Y1014_AO_CH0",
+          "type": "adc",
+          "default": "PA24",
+          "required": true
+        },
+        {
+          "id": "GP2Y1014_LED",
+          "type": "gpio_out",
+          "default": "PA1",
+          "required": true
+        }
+      ]
+    }
+  }
+}

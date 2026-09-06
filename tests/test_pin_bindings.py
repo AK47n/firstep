@@ -458,6 +458,11 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # 电机/显示/蜂鸣/无线/超声——刻意不叠），与 human_ir 默认 PB8 刻意
         # 错开（人体红外+微波双判据常同选，默认即不撞），同选时经引脚绑定
         # 消解）
+        "PA1": 2,  # I2C_0 sclPin（ml_mpu6050 默认脚；板载 LED 共用——PA0/PA1
+        # 不可作 GPIO 输入（2026-09-06 SysConfig CLI 实证），GPIO 输出可配 PA0
+        # ——ir_remote_tx 先例）+ GP2Y1014 LED（gp2y1014au 默认脚——粉尘监测
+        # 与姿态采集不同框、同选概率最低故叠此脚（PA1 同型经编译矩阵 CLI 实证；
+        # LED 驱动为器件必需——薄封装仅指 ADC），同选时经引脚绑定消解）
     }
 
 
@@ -1024,6 +1029,10 @@ def test_shared_groups_classifies_i2c_bus_share():
         "ml_mpu6050.I2C_0_SDA": "PA0",
         "oled.OLED_SCL": "PA1",
         "oled.OLED_SDA": "PA0",
+        # gp2y1014au LED 默认 PA1 会混入 I2C 总线组（gpio_out × i2c_scl =
+        # 冲突）——绑走恢复纯 I2C 共享组（batch9/03；照 ir_distance/ttp224
+        # 绑走恢复纯灰度组先例）
+        "gp2y1014au.GP2Y1014_LED": "PA7",
     })
 
     group = next(
