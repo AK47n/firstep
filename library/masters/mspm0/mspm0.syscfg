@@ -116,6 +116,7 @@ const HC05 = GPIO.addInstance();
 const NRF24L01 = GPIO.addInstance();
 const IR_REMOTE = GPIO.addInstance();
 const LCD = GPIO.addInstance();
+const TP_XPT2046 = GPIO.addInstance();
 const LED_BEEP = GPIO.addInstance();
 const STEP_MOTOR = GPIO.addInstance();
 const IR_BEAM = GPIO.addInstance();
@@ -744,6 +745,40 @@ LCD.associatedPins[5].$name        = "BLK";
 LCD.associatedPins[5].direction    = "OUTPUT";
 LCD.associatedPins[5].initialValue = "SET";
 LCD.associatedPins[5].pin.$assign  = "PB20";
+
+// XPT2046 电阻触摸（tp_xpt2046 模块，批次 12/06——1.8 寸屏配套独立件，与
+// lcd 零耦合：共用 SCLK/MOSI 接线由引脚绑定自选，默认脚独立互不相撞）。
+// 五脚：CLK/DIN/CS 输出（CS 初始 SET=片选空闲）+ DOUT/PEN 输入。默认
+// CS=PA8（与 DIGIT_UART TX/IR_BEAM/HC05 STATE/MLX90614 SDA/OPENMV4 TX 重叠
+// ——触摸与视觉/红外对射/蓝牙链路互替、同选概率最低）、CLK=PA13（与
+// PWMAB C1/BH1750 SDA 重叠）、DIN=PA9（与 DIGIT_UART RX/JOYSTICK SW/NRF
+// MISO/MLX90614 SCL/OPENMV4 RX 重叠）、DOUT=PA28（与 IMU601/HX711/
+// FINGERPRINT_UART/SHT30/JY61P 重叠——姿态/称重/温湿度采集不同框）、
+// PEN=PB24（与 STEP_MOTOR RST2/SR04 TRIG/HC05 KEY/AT24C02 SCL/mq5 ADC/
+// L298N PWM2 重叠——步进/测距/存储/气体不同框）——各对按「同选概率最低者
+// 与既有默认重叠」：触摸与视觉链路/手动输入/姿态/步进不同框，且刻意不叠
+// LCD 六脚（PA16/PA17/PA27/PA22/PB19/PB20——触摸与彩屏常同选，默认即不
+// 撞），同选时经引脚绑定消解。
+TP_XPT2046.$name = "TP_XPT2046";
+TP_XPT2046.associatedPins.create(5);
+TP_XPT2046.associatedPins[0].$name        = "CS";
+TP_XPT2046.associatedPins[0].direction    = "OUTPUT";
+TP_XPT2046.associatedPins[0].initialValue = "SET";
+TP_XPT2046.associatedPins[0].pin.$assign  = "PA8";
+TP_XPT2046.associatedPins[1].$name        = "CLK";
+TP_XPT2046.associatedPins[1].direction    = "OUTPUT";
+TP_XPT2046.associatedPins[1].initialValue = "CLEARED";
+TP_XPT2046.associatedPins[1].pin.$assign  = "PA13";
+TP_XPT2046.associatedPins[2].$name        = "DIN";
+TP_XPT2046.associatedPins[2].direction    = "OUTPUT";
+TP_XPT2046.associatedPins[2].initialValue = "CLEARED";
+TP_XPT2046.associatedPins[2].pin.$assign  = "PA9";
+TP_XPT2046.associatedPins[3].$name        = "DOUT";
+TP_XPT2046.associatedPins[3].direction    = "INPUT";
+TP_XPT2046.associatedPins[3].pin.$assign  = "PA28";
+TP_XPT2046.associatedPins[4].$name        = "PEN";
+TP_XPT2046.associatedPins[4].direction    = "INPUT";
+TP_XPT2046.associatedPins[4].pin.$assign  = "PB24";
 
 // 红外遥控接收（ir_remote 模块：OUT 输入（接收头输出直接接 GPIO，上拉 = 无
 // 信号高电平、有信号拉低）；NEC 解码用 CPU 忙等采样（delay 模块 20us 步进），

@@ -337,7 +337,10 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         "PA12": 2,  # PWMAB ccp0Pin（motor 双路 PWM）+ BH1750 SCL（bh1750 默认
         # 脚；光照度监测/台灯类与双电机驱动同选概率最低故叠此脚，同选时经
         # 引脚绑定消解）
-        "PA13": 2,  # PWMAB ccp1Pin（motor 双路 PWM）+ BH1750 SDA（同上）
+        "PA13": 3,  # PWMAB ccp1Pin（motor 双路 PWM）+ BH1750 SDA（同上）
+        # + TP_XPT2046_CLK（tp_xpt2046 默认脚——XPT2046 触摸与双电机/光照不同
+        # 框、同选概率最低故叠此脚（刻意不叠 LCD 六脚——触摸与彩屏常同选，
+        # 默认即不撞），同选时经引脚绑定消解；wiki-modules-batch12/06）
         "PA14": 2,  # DCC_100_PWM2 ccp0Pin（step_motor 默认脚）+ WS2812 IN
         # （ws2812 默认脚；地猛星排针 31 IO 全占，步进与灯带同选概率最低故
         # 叠此脚，同选时经引脚绑定消解）
@@ -480,10 +483,13 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         "PA17": 5,  # DC_MOTOR 编码器 AB + RC522 MISO（同上）+ ADS1115 SDA
         # （同上）+ SHT20 SDA（同上）+ LCD SDA（lcd 默认脚——同上，同选时经
         # 引脚绑定消解；wiki-modules-batch12/01）
-        "PA28": 5,  # IMU601 TX + HX711 SCK + FINGERPRINT_UART TX + SHT30 SCL
+        "PA28": 6,  # IMU601 TX + HX711 SCK + FINGERPRINT_UART TX + SHT30 SCL
         # （同上）+ JY61P SCL（jy61p 默认脚——姿态测量与身份/称重/温湿度/微波
         # 采集不同框、同选概率最低故叠此脚（姿态惯配双电机/舵机/显示/无线，
         # 刻意不叠），同选时经引脚绑定消解；wiki-modules-batch10/02）
+        # + TP_XPT2046_DOUT（tp_xpt2046 默认脚——XPT2046 触摸与姿态/称重/身份/
+        # 温湿度采集不同框、同选概率最低故叠此脚（刻意不叠 LCD 六脚——触摸与
+        # 彩屏常同选，默认即不撞），同选时经引脚绑定消解；wiki-modules-batch12/06）
         "PA31": 6,  # IMU601 RX + HX711 DT + FINGERPRINT_UART RX + SHT30 SDA
         # + MICROWAVE OUT（同上）+ JY61P SDA（同上）
         "PA14": 6,  # DCC_100_PWM2 ccp0Pin（step_motor 默认脚）+ WS2812 IN
@@ -491,22 +497,29 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # ccp0Pin（l298n 默认脚——大电流驱动与步进（互替）/灯带/读卡/气体不同
         # 框、同选概率最低故叠此脚（刻意与 motor 默认 10 脚错开——两驱动可能
         # 并排使用），同选时经引脚绑定消解；wiki-modules-batch10/03）
-        "PB24": 6,  # STEP_MOTOR RST2 + SR04 TRIG + HC05 KEY + AT24C02 SCL
+        "PB24": 7,  # STEP_MOTOR RST2 + SR04 TRIG + HC05 KEY + AT24C02 SCL
         # + ADC12_0 adcPin5（mq5 默认脚）+ L298N_PWM ccp1Pin（l298n 默认脚——
         # 同上，与 DCC_100_PWM2 同 TIMG12 外设：L298N 与步进驱动互替、同选
         # 概率最低故叠，同选时经引脚绑定换实例/换脚消解）
+        # + TP_XPT2046_PEN（tp_xpt2046 默认脚——XPT2046 触摸与步进/测距/存储/
+        # 气体不同框、同选概率最低故叠此脚（刻意不叠 LCD 六脚——触摸与彩屏
+        # 常同选，默认即不撞），同选时经引脚绑定消解；wiki-modules-batch12/06）
         "PA27": 5,  # HUIDU R2 + ADC12_0 adcPin0（ir_distance 默认脚）+ TTP224 OUT4
         # + L298N EN（l298n 默认脚——使能脚与 8 路灰度巡线（巡线车惯用轻量
         # TB6612，与大电流驱动不同框）/模拟测距/触摸面板不同框、同选概率最低
         # 故叠此脚，同选时经引脚绑定消解；wiki-modules-batch10/03）
         # + LCD RES（lcd 默认脚——IPS 彩屏与巡线/测距/触摸面板不同框、同选
         # 概率最低故叠此脚，同选时经引脚绑定消解）
-        "PA8": 5,   # DIGIT_UART TX + IR_BEAM OUT + HC05 STATE + MLX90614 SDA
+        "PA8": 6,   # DIGIT_UART TX + IR_BEAM OUT + HC05 STATE + MLX90614 SDA
         # + OPENMV4_UART TX（open_mv4 默认脚——OpenMV4 与 K230 视觉互替、
         # 同选概率最低故叠此脚（页面原接线 PA8/PA9 附加串口 1），同选时经引脚
         # 绑定换实例/换脚消解；wiki-modules-batch10/04）
-        "PA9": 5,   # DIGIT_UART RX + JOYSTICK SW + NRF24L01 MISO + MLX90614 SCL
-        # + OPENMV4_UART RX（同上）
+        # + TP_XPT2046_CS（tp_xpt2046 默认脚——XPT2046 触摸与视觉/红外对射/
+        # 蓝牙链路互替、同选概率最低故叠此脚（刻意不叠 LCD 六脚——触摸与彩屏
+        # 常同选，默认即不撞），同选时经引脚绑定消解；wiki-modules-batch12/06）
+        "PA9": 6,   # DIGIT_UART RX + JOYSTICK SW + NRF24L01 MISO + MLX90614 SCL
+        # + OPENMV4_UART RX（同上）+ TP_XPT2046_DIN（tp_xpt2046 默认脚——
+        # 同上，同选时经引脚绑定消解）
         "UART1": 2,  # DIGIT_UART 与 OPENMV4_UART 默认同外设（OpenMV4 与 K230
         # 视觉互替、同选概率最低故叠——同选时经引脚绑定换实例/换脚消解，
         # 单选裁剪后独占；UART 实例上限 4——UART 类 4 件以上同选 = CLI 拒绝）

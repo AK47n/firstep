@@ -1,0 +1,52 @@
+{
+  "slug": "tp_xpt2046",
+  "description": "XPT2046 电阻触摸驱动（mspm0，ADR 0009 纯驱动）：软 SPI 位操作 5 脚（CLK/DIN 输出 + DOUT 输入 + CS 输出 + PEN 输入，不占硬件 SPI 外设/TIMER），12 位触摸 ADC 命令 0xD0/0x90 读 X/Y 原始坐标（0-4095，5 次中值滤波）+ 校准系数换算屏幕坐标 + 触摸状态轮询；1.8 寸彩屏（ZJY180S120TTG01）配套独立件——与 lcd 零耦合（共用 SCLK/MOSI 接线由引脚绑定自选，默认脚独立互不相撞）；适用于触摸交互/菜单点选/触摸绘图等赛题功能。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/tp_xpt2046.c",
+        "code/tp_xpt2046.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg：TP_XPT2046 GPIO 实例（5 脚——CLK/DIN/CS 输出（CS 初始 SET=片选空闲）+ DOUT/PEN 输入（外置偏置/板载先例，PEN 无内部电阻——低压落 0 判按下，level 宏可切）；宏 TP_XPT2046_<引脚名>_PORT/PIN）。默认 CS=PA8/CLK=PA13/DIN=PA9/DOUT=PA28/PEN=PB24——与 DIGIT_UART TX/IR_BEAM/HC05 STATE/MLX90614 SDA/OPENMV4 TX（PA8）、PWMAB C1/BH1750 SDA（PA13）、DIGIT_UART RX/JOYSTICK SW/NRF MISO/MLX90614 SCL/OPENMV4 RX（PA9）、IMU601/HX711/FINGERPRINT_UART/SHT30/JY61P（PA28）、STEP_MOTOR RST2/SR04 TRIG/HC05 KEY/AT24C02 SCL/mq5 ADC/L298N PWM（PB24）默认重叠——触摸与视觉链路/手动输入/姿态/步进不同框、同选概率最低故叠此脚，同选时经引脚绑定消解；刻意不叠 LCD 六脚（PA16/PA17/PA27/PA22/PB19/PB20——触摸与彩屏常同选，默认即不撞，共用 SCLK/MOSI 接线由绑定自选）。**软 SPI 位操作不占硬件 SPI 外设/TIMER**（nrf24l01/max7219 先例；XPT2046 时钟上限 ~2.3MHz——位节拍按 vendor delay_us(1/6) 走库 delay 模块）。**校准**：出厂预设 = vendor Adujust=1 方向 1 出厂值（1.8 寸 128×160 竖屏；四方向预设 XPT2046_CAL_* 常量注释可查，vendor TP_Init 四组预设原值——未随库入库，经 xpt2046_set_calibration 自设）；vendor TP_Adjust 校准演示流程（画点/校验/printf 参数回显）不随库入库（校准交互属题逻辑/骨架，ADR 0009）。**上游缺陷/取舍记录**：vendor TP_Scan 状态机（sta 位掩码/首按记录/x[0]=0xffff 越界哨兵）与 tp_dev 全局结构收敛为模块内静态校准态——按下状态由调用方 xpt2046_is_pressed 轮询 + read_xy 组合复现（无 IRQ，GROUP1 单向量被 motor 编码器独占先例）；vendor CMD_RDX/RDY 按 USE_HORIZONTAL 分支——本实现按方向 1 定序（X=0xD0/Y=0x90），换方向经校准自设（README 级）；vendor TP_Read_AD 采样点（CLK 上升沿后取 DOUT）与注释「下降沿有效」矛盾——按代码行为保留并注释。**厂家源码来源**：C:\\Users\\luoji\\Desktop\\caiping\\中景园ZJY180S120TTG01技术资料\\02-1.8LCD带触摸程序源码.zip（工作区外只读引用，勿拷进 git）→ STM32F103C8T6_SPI带触摸例程 HARDWARE\\TOUCH\\touch.c/h（GBK 源转 UTF-8 提炼；引脚宏 TCLK/TDIN/DOUT/TCS/PEN 在厂家 lcd_init.h——与 LCD 共用 SCLK/MOSI + 独立 CS2=PA7/PEN=PB0 接线）。wiki 手册：sources/materials/lckfb-地猛星移植手册/screen--1-8-touch-color-screen.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/screen/1-8-touch-color-screen.html；资料 https://pan.baidu.com/s/1irnLItBXR3AmaePHwS6nCg?pwd=o1nw 提取码 8888；软件 SPI 同上链接 提取码 o1nw）。改造要点：STM32 平台依赖去除（GPIO 位操作宏化（nrf24l01/max7219 软 SPI 先例）、delay_us → 库 delay 模块、去 stdlib/math/stdio（无 sqrt/printf——校准换算仅四则））；函数名规范化（TP_Write_Byte/TP_Read_AD/TP_Read_XOY/TP_Read_XY/TP_Read_XY2 → xpt2046_write_byte（静态）/read_ad（静态）/read_xoy（静态）/read_raw/read_xy；TP_Init → xpt2046_init + set_calibration；TP_Drow_Touch_Point/TP_Draw_Big_Point/LCD_DrawRoughLine（画点/粗线辅助）不随库入库——绘制归 lcd 模块）；未上板（软 SPI 时序/校准系数真机验证留后续）。\nwiki-modules-batch12/06 编译矩阵（2026-09-12）：单选生成（tp_xpt2046 + delay 依赖展开）→ SysConfig CLI 校验 → gmake 真编译 0 error、0 module warning（`.scratch/wiki-modules-batch12/run_tp_xpt2046_matrix.py`）；未上板。",
+      "kit": "中景园 1.8 寸彩色触摸屏（ZJY180S120TTG01，ST7735S + XPT2046）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/screen/1-8-touch-color-screen.html",
+      "pins": [
+        {
+          "id": "TP_XPT2046_CS",
+          "type": "gpio_out",
+          "default": "PA8",
+          "required": true
+        },
+        {
+          "id": "TP_XPT2046_CLK",
+          "type": "gpio_out",
+          "default": "PA13",
+          "required": true
+        },
+        {
+          "id": "TP_XPT2046_DIN",
+          "type": "gpio_out",
+          "default": "PA9",
+          "required": true
+        },
+        {
+          "id": "TP_XPT2046_DOUT",
+          "type": "gpio_in",
+          "default": "PA28",
+          "required": true
+        },
+        {
+          "id": "TP_XPT2046_PEN",
+          "type": "gpio_in",
+          "default": "PB24",
+          "required": true
+        }
+      ]
+    }
+  }
+}
