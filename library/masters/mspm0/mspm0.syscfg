@@ -116,6 +116,7 @@ const HC05 = GPIO.addInstance();
 const NRF24L01 = GPIO.addInstance();
 const IR_REMOTE = GPIO.addInstance();
 const LCD = GPIO.addInstance();
+const OLED_SPI = GPIO.addInstance();
 const TP_XPT2046 = GPIO.addInstance();
 const LED_BEEP = GPIO.addInstance();
 const STEP_MOTOR = GPIO.addInstance();
@@ -779,6 +780,41 @@ TP_XPT2046.associatedPins[3].pin.$assign  = "PA28";
 TP_XPT2046.associatedPins[4].$name        = "PEN";
 TP_XPT2046.associatedPins[4].direction    = "INPUT";
 TP_XPT2046.associatedPins[4].pin.$assign  = "PB24";
+
+// SPI 总线 OLED 0.96 单色屏（oled 模块 SPI 变体，批次 12/07 决策 B——同芯片
+// SSD1306 同 API，仅总线层不同：5 脚软 SPI 位操作 SCL/SDA/DC/CS/RES，不占
+// 硬件 SPI 外设/TIMER——nrf24l01/max7219 先例；I2C1「OLED」实例与此并存
+// （选任一总线时两实例都保留：已知取舍 = SPI 模式下 I2C1 的 PB2/PB3 仍被
+// 占用，需要时经引脚绑定换脚消解，见 oled manifest notes）。默认
+// SCL=PA28/SDA=PA31（与 IMU601/HX711/FINGERPRINT_UART/SHT30/JY61P/TP DOUT
+// 重叠——单色 SPI 屏与姿态/称重/身份/温湿度采集不同框、同选概率最低）、
+// DC=PA13（与 PWMAB C1/BH1750 SDA/TP CLK 重叠）、CS=PB18（与 MAX7219 CS/
+// AGS10 SCL 重叠——显示互替件同框罕见）、RES=PA22（与 HUIDU L1/NRF IRQ/
+// TTP224/flame/TP… 重叠——巡线/无线不同框）——刻意不叠 oled I2C 的 PB2/PB3
+// 与彩屏 LCD 六脚，同选时经引脚绑定消解；CS/RES 初始 SET（片选空闲/复位
+// 空闲高），其余输出初始 CLEARED。
+OLED_SPI.$name = "OLED_SPI";
+OLED_SPI.associatedPins.create(5);
+OLED_SPI.associatedPins[0].$name        = "SCL";
+OLED_SPI.associatedPins[0].direction    = "OUTPUT";
+OLED_SPI.associatedPins[0].initialValue = "CLEARED";
+OLED_SPI.associatedPins[0].pin.$assign  = "PA28";
+OLED_SPI.associatedPins[1].$name        = "SDA";
+OLED_SPI.associatedPins[1].direction    = "OUTPUT";
+OLED_SPI.associatedPins[1].initialValue = "CLEARED";
+OLED_SPI.associatedPins[1].pin.$assign  = "PA31";
+OLED_SPI.associatedPins[2].$name        = "DC";
+OLED_SPI.associatedPins[2].direction    = "OUTPUT";
+OLED_SPI.associatedPins[2].initialValue = "CLEARED";
+OLED_SPI.associatedPins[2].pin.$assign  = "PA13";
+OLED_SPI.associatedPins[3].$name        = "CS";
+OLED_SPI.associatedPins[3].direction    = "OUTPUT";
+OLED_SPI.associatedPins[3].initialValue = "SET";
+OLED_SPI.associatedPins[3].pin.$assign  = "PB18";
+OLED_SPI.associatedPins[4].$name        = "RES";
+OLED_SPI.associatedPins[4].direction    = "OUTPUT";
+OLED_SPI.associatedPins[4].initialValue = "SET";
+OLED_SPI.associatedPins[4].pin.$assign  = "PA22";
 
 // 红外遥控接收（ir_remote 模块：OUT 输入（接收头输出直接接 GPIO，上拉 = 无
 // 信号高电平、有信号拉低）；NEC 解码用 CPU 忙等采样（delay 模块 20us 步进），

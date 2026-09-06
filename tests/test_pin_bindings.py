@@ -337,10 +337,12 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         "PA12": 2,  # PWMAB ccp0Pin（motor 双路 PWM）+ BH1750 SCL（bh1750 默认
         # 脚；光照度监测/台灯类与双电机驱动同选概率最低故叠此脚，同选时经
         # 引脚绑定消解）
-        "PA13": 3,  # PWMAB ccp1Pin（motor 双路 PWM）+ BH1750 SDA（同上）
+        "PA13": 4,  # PWMAB ccp1Pin（motor 双路 PWM）+ BH1750 SDA（同上）
         # + TP_XPT2046_CLK（tp_xpt2046 默认脚——XPT2046 触摸与双电机/光照不同
         # 框、同选概率最低故叠此脚（刻意不叠 LCD 六脚——触摸与彩屏常同选，
         # 默认即不撞），同选时经引脚绑定消解；wiki-modules-batch12/06）
+        # + OLED_SPI_DC（oled SPI 变体默认脚——单色 SPI 屏与驱动/光照不同框、
+        # 同选概率最低故叠此脚，同选时经引脚绑定消解；wiki-modules-batch12/07）
         "PA14": 2,  # DCC_100_PWM2 ccp0Pin（step_motor 默认脚）+ WS2812 IN
         # （ws2812 默认脚；地猛星排针 31 IO 全占，步进与灯带同选概率最低故
         # 叠此脚，同选时经引脚绑定消解）
@@ -425,14 +427,17 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         "PB9": 3,   # DC_MOTOR AIN1 + MAX7219 DIN（max7219 默认脚；大数字显示/
         # 计分计时与双电机小车同选概率最低故叠此脚，同选时经引脚绑定消解）
         # + SGP30 SDA（sgp30 默认脚——同上，同选时经引脚绑定消解）
-        "PB18": 3,  # DC_MOTOR BIN1 + MAX7219 CS（同上）+ AGS10 SCL（ags10
+        "PB18": 4,  # DC_MOTOR BIN1 + MAX7219 CS（同上）+ AGS10 SCL（ags10
         # 默认脚——软 I2C 气体传感与双电机/大数字显示/步进/灯带/读卡门禁低频
         # 同框、同选概率最低故叠此脚（避让原则同 SGP30），同选时经引脚绑定消解）
+        # + OLED_SPI_CS（oled SPI 变体默认脚——单色 SPI 屏与大数字显示互替
+        # 件/气体不同框、同选概率最低故叠此脚，同选时经引脚绑定消解；
+        # wiki-modules-batch12/07）
         "PA14": 4,  # DCC_100_PWM2 ccp0Pin（step_motor 默认脚）+ WS2812 IN
         # （ws2812 默认脚）+ RC522 SCK（rc522 默认脚——读卡与步进/灯带同选
         # 概率最低故叠此脚，同选时经引脚绑定消解）+ AGS10 SDA（ags10 默认脚
         # ——同上，同选时经引脚绑定消解）
-        "PA22": 6,  # HUIDU L1 + DEBUG_UART RX + NRF24L01 IRQ + TTP224 OUT1
+        "PA22": 7,  # HUIDU L1 + DEBUG_UART RX + NRF24L01 IRQ + TTP224 OUT1
         # （ttp224 默认脚——触摸按键与无线链路/手动输入互替、与巡线不同框、
         # 同选概率最低故叠此脚，同选时经引脚绑定消解）+ ADC12_0 adcPin7
         # （flame 默认脚——火焰传感独立 MEM6 通道 A0_7；地猛星板上剩余 ADC
@@ -440,7 +445,9 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # mq5 选脚判据先例）；与巡线/无线/触摸不同框、同选概率最低故叠此脚，
         # 同选时经引脚绑定消解）+ LCD DC（lcd 默认脚——IPS 彩屏与 8 路灰度
         # 巡线/无线/触摸不同框、同选概率最低故叠此脚（巡线车惯走 OLED），
-        # 同选时经引脚绑定消解）
+        # 同选时经引脚绑定消解）+ OLED_SPI_RES（oled SPI 变体默认脚——单色
+        # SPI 屏与巡线/无线触摸/火焰不同框、同选概率最低故叠此脚，同选时经
+        # 引脚绑定消解；wiki-modules-batch12/07）
         "PA14": 5,  # DCC_100_PWM2 ccp0Pin（step_motor 默认脚）+ WS2812 IN
         # （ws2812 默认脚）+ RC522 SCK（rc522 默认脚——读卡与步进/灯带同选
         # 概率最低故叠此脚，同选时经引脚绑定消解）+ AGS10 SDA（ags10 默认脚
@@ -483,15 +490,19 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         "PA17": 5,  # DC_MOTOR 编码器 AB + RC522 MISO（同上）+ ADS1115 SDA
         # （同上）+ SHT20 SDA（同上）+ LCD SDA（lcd 默认脚——同上，同选时经
         # 引脚绑定消解；wiki-modules-batch12/01）
-        "PA28": 6,  # IMU601 TX + HX711 SCK + FINGERPRINT_UART TX + SHT30 SCL
+        "PA28": 7,  # IMU601 TX + HX711 SCK + FINGERPRINT_UART TX + SHT30 SCL
         # （同上）+ JY61P SCL（jy61p 默认脚——姿态测量与身份/称重/温湿度/微波
         # 采集不同框、同选概率最低故叠此脚（姿态惯配双电机/舵机/显示/无线，
         # 刻意不叠），同选时经引脚绑定消解；wiki-modules-batch10/02）
         # + TP_XPT2046_DOUT（tp_xpt2046 默认脚——XPT2046 触摸与姿态/称重/身份/
         # 温湿度采集不同框、同选概率最低故叠此脚（刻意不叠 LCD 六脚——触摸与
         # 彩屏常同选，默认即不撞），同选时经引脚绑定消解；wiki-modules-batch12/06）
-        "PA31": 6,  # IMU601 RX + HX711 DT + FINGERPRINT_UART RX + SHT30 SDA
-        # + MICROWAVE OUT（同上）+ JY61P SDA（同上）
+        # + OLED_SPI_SCL（oled SPI 变体默认脚——单色 SPI 屏与姿态/称重/身份/
+        # 温湿度采集不同框、同选概率最低故叠此脚（刻意不叠 oled I2C 的 PB2/PB3
+        # 与彩屏 LCD 六脚），同选时经引脚绑定消解；wiki-modules-batch12/07）
+        "PA31": 7,  # IMU601 RX + HX711 DT + FINGERPRINT_UART RX + SHT30 SDA
+        # + MICROWAVE OUT（同上）+ JY61P SDA（同上）+ OLED_SPI_SDA（oled SPI
+        # 变体默认脚——同上，同选时经引脚绑定消解）
         "PA14": 6,  # DCC_100_PWM2 ccp0Pin（step_motor 默认脚）+ WS2812 IN
         # + RC522 SCK + AGS10 SDA + ADC12_0 adcPin12（soil 默认脚）+ L298N_PWM
         # ccp0Pin（l298n 默认脚——大电流驱动与步进（互替）/灯带/读卡/气体不同

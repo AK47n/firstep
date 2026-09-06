@@ -1,6 +1,6 @@
 {
   "slug": "oled",
-  "description": "0.96 寸 OLED（SSD1306）I2C 显示驱动：硬件 I2C 显存式绘图（画点/字符/字符串/汉字，支持反色与 180° 旋转），带 16×8 ASCII 字库。",
+  "description": "0.96 寸 OLED（SSD1306）显示驱动：I2C 硬件总线（默认，OLED_Init）与 SPI 总线变体（批次 12/07 决策 B——软 SPI 位操作 5 脚 SCL/SDA/DC/CS/RES、OLED_SPI_Init，适配 0.96 SPI 单色屏），显存式绘图（画点/字符/字符串/汉字，支持反色与 180° 旋转），带 16×8 ASCII 字库；分辨率支持 128×64（默认）与 128×32（0.91 寸，oled_set_res）。",
   "dependencies": [
     "delay"
   ],
@@ -13,7 +13,7 @@
       ],
       "verified": true,
       "hardware_bound": false,
-      "notes": "SysConfig 需配置 I2C1（命名 OLED，7 位地址 0x3C，TX 方向 2 字节传输）；依赖 delay。\nmodule-polish/04 编译矩阵（2026-08-15）：gmake 0 error、0 module warning；未上板。",
+      "notes": "SysConfig 需配置 I2C1（命名 OLED，7 位地址 0x3C，TX 方向 2 字节传输）；依赖 delay。**SPI 总线变体（批次 12/07 决策 B）**：母版另配 OLED_SPI GPIO 实例（5 脚 SCL/SDA/DC/CS/RES 全输出，CS/RES 初始 SET；默认 SCL=PA28/SDA=PA31/DC=PA13/CS=PB18/RES=PA22——与 IMU601/HX711/FINGERPRINT/SHT30/JY61P/PWMAB C1/BH1750 SDA/MAX7219 CS/AGS10/HUIDU L1/NRF IRQ/TTP224/flame 默认重叠：单色 SPI 屏与姿态/称重/身份/温湿度采集/驱动/气体/巡线不同框、同选概率最低（刻意不叠 oled I2C 的 PB2/PB3 与彩屏 LCD 六脚），同选时经引脚绑定消解），OLED_SPI_Init 后 OLED_WR_Byte 走软 SPI 位操作（不占硬件 SPI 外设/TIMER——nrf24l01/max7219 先例；SSD1306 SPI ≤10MHz、GPIO 翻转满足无需延时），全部绘制/文本/显存 API 与 I2C 版逐字节一致（OLED_GRAM/Refresh 语义不变）；**已知取舍**：oled 选中（任一总线）时 I2C1「OLED」实例保留（SPI 模式下 PB2/PB3 默认脚仍被占用——不引入变体感知裁剪，需要时经引脚绑定换脚消解）。**0.91 寸 128×32 核验（批次 12/07）**：库内原驱动按 128×64 硬配（MUX 0x3F/COM 0x12）不适配 0.91 屏（厂家 0.91 例程 MUX=0x1F/COM=0x00）→ 已补 oled_set_res(OLED_RES_128X32)（初始化前调用；GRAM 仍 [144][8]、超行写入由面板忽略）——核验结论记录；0.96 IIC / 1.3 单色（ZJY096I0400WG01/ZJY130S0700WG01）与库内同家族仅核对不提炼。厂家 SPI 例程来源：C:\\Users\\luoji\\Desktop\\caiping\\中景园电子ZJY096S0700WG01技术资料\\02-0.96OLED程序源码.zip（工作区外只读引用）→ SPI模块例程/STM32例程 HARDWARE\\OLED\\oled.c/h（GBK 转 UTF-8 提炼；厂家 51/STM32 平台代码已按库规范改写：GPIO 位操作宏化、delay 走库 delay、去 printf/main；初始化序列与 I2C 版同参逐字核对——仅总线层不同）。wiki 手册：sources/materials/lckfb-地猛星移植手册/screen--0-96-single-spi-screen.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/screen/0-96-single-spi-screen.html；资料 https://pan.baidu.com/s/1U9r32qeS2jOANB0SNwtwnw 提取码 8888；采购 https://item.taobao.com/item.htm?id=37849023766）。\nmodule-polish/04 编译矩阵（2026-08-15）：gmake 0 error、0 module warning；未上板。\nwiki-modules-batch12/07 编译矩阵（2026-09-12）：I2C 变体重跑 + SPI 变体单选生成 → SysConfig CLI 校验 → gmake 真编译 0 error、0 module warning（.scratch/wiki-modules-batch12/run_oled_spi_matrix.py）；未上板。",
       "kit": "",
       "source_url": "",
       "pins": [
@@ -27,6 +27,36 @@
           "id": "OLED_SDA",
           "type": "i2c_sda",
           "default": "PB3",
+          "required": true
+        },
+        {
+          "id": "OLED_SPI_SCL",
+          "type": "gpio_out",
+          "default": "PA28",
+          "required": true
+        },
+        {
+          "id": "OLED_SPI_SDA",
+          "type": "gpio_out",
+          "default": "PA31",
+          "required": true
+        },
+        {
+          "id": "OLED_SPI_DC",
+          "type": "gpio_out",
+          "default": "PA13",
+          "required": true
+        },
+        {
+          "id": "OLED_SPI_CS",
+          "type": "gpio_out",
+          "default": "PB18",
+          "required": true
+        },
+        {
+          "id": "OLED_SPI_RES",
+          "type": "gpio_out",
+          "default": "PA22",
           "required": true
         }
       ]
