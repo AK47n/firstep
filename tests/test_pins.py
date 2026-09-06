@@ -396,6 +396,18 @@ STM32_MACRO_VALUES = {
     "GP2Y1014_AO_CH": "ADC_Channel_5",
     "GP2Y1014_LED_GPIO": "GPIO_B",
     "GP2Y1014_LED_PIN": "Pin_5",
+    # wiki-stm32-batch6/01-07：MQ 系收尾 7 件（mq3/mq4/mq6/mq7/mq8/mq9/ms1100——
+    # 同构 AO 模拟量 + 百分比换算，页面 ADC 序列收敛 ml_adc）——默认 AO 全 =
+    # ADC_Channel_5 = PA5（页面原脚即共读点；**ADC 共享组**：本批 7 件并入
+    # batch5 的 PA5 共读组（flame + 8 + 7 = 16 ADC 角色同脚），ml_adc 顺序
+    # 调用无扰；同一物理脚只能接一件器件——多件同测需外部分路器/分时切换）
+    "MQ3_AO_CH": "ADC_Channel_5",
+    "MQ4_AO_CH": "ADC_Channel_5",
+    "MQ6_AO_CH": "ADC_Channel_5",
+    "MQ7_AO_CH": "ADC_Channel_5",
+    "MQ8_AO_CH": "ADC_Channel_5",
+    "MQ9_AO_CH": "ADC_Channel_5",
+    "MS1100_AO_CH": "ADC_Channel_5",
 }
 
 

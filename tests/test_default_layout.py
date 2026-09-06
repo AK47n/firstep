@@ -105,6 +105,16 @@ WHITELIST = {
         "s12sd.S12SD_AO",
         "soil.SOIL_AO",
         "gp2y1014au.GP2Y1014_AO",
+        # wiki-stm32-batch6/01-07：MQ 系收尾 7 件并入 PA5 ADC 共享组
+        # （flame + 8 + 7 = 16 ADC 角色同脚——ml_adc 顺序调用无扰；同一物理
+        # 脚只能接一件器件，多件同测需外部分路器/分时切换）
+        "mq3.MQ3_AO",
+        "mq4.MQ4_AO",
+        "mq6.MQ6_AO",
+        "mq7.MQ7_AO",
+        "mq8.MQ8_AO",
+        "mq9.MQ9_AO",
+        "ms1100.MS1100_AO",
     },
     # ttp224 默认 PB12-15 与 config DIP0-3 + pid GRAY_D1-4 重叠（触摸按键≠
     # 拨码配置/巡线灰度；四脚同口约束——换口需整组迁移，同选经引脚绑定消解）
