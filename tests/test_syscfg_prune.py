@@ -155,6 +155,8 @@ def test_prune_shared_instance_kept_by_any_consumer():
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "GP2Y1014")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["relay"]), "RELAY")
     _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "RELAY")
+    _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["as32"]), "AS32_UART")
+    _assert_instance_absent(prune_syscfg(MASTER_SYSCFG, ["hc05"]), "AS32_UART")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["mq3"]), "ADC12_0")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["mq4"]), "ADC12_0")
     _assert_instance_present(prune_syscfg(MASTER_SYSCFG, ["mq6"]), "ADC12_0")

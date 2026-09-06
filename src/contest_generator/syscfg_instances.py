@@ -24,8 +24,10 @@ from __future__ import annotations
 # FINGERPRINT_UART 默认 UART0（与 IMU601 同外设默认，同选时经引脚绑定换实例
 # 消解，_receive_response 轮询无 IRQHandler）；OPENMV4_UART 默认 UART1
 # （与 DIGIT_UART 同外设同脚——OpenMV4 与 K230 视觉互替，同选时经引脚绑定
-# 换实例/换脚消解，帧解析轮询无 IRQHandler）；语音模块（jq8900/syn6288）
-# 走软 UART 单发 TX（GPIO 位操作，不占 UART 实例）。
+# 换实例/换脚消解，帧解析轮询无 IRQHandler）；AS32_UART 默认 UART3
+# （与 ZIGBEE_UART 同外设同脚——LoRa 与 Zigbee 无线数传互替，同选时经引脚
+# 绑定换实例/换脚消解，透传轮询无 IRQHandler——UART3 宿主、批次 13/02）；
+# 语音模块（jq8900/syn6288）走软 UART 单发 TX（GPIO 位操作，不占 UART 实例）。
 INSTANCE_CONSUMERS: dict[str, tuple[str, ...]] = {
     "PWMAB": ("motor",),
     "DCC_100_PWM2": ("step_motor",),
@@ -78,6 +80,7 @@ INSTANCE_CONSUMERS: dict[str, tuple[str, ...]] = {
     "FINGERPRINT_UART": ("fingerprint",),
     "FINGERPRINT": ("fingerprint",),
     "OPENMV4_UART": ("open_mv4",),
+    "AS32_UART": ("as32",),
     "ZIGBEE_UART": ("zigbee_uart", "zigbee_uart_key", "zigbee_link"),
     "OLED": ("oled",),
     "OLED_SPI": ("oled",),

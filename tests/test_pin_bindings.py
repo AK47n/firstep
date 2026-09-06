@@ -542,6 +542,19 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # 与姿态/粉尘不同框、同选概率最低故叠此脚（刻意不叠声光/执行件
         # LED_BEEP PA15/电机类——继电器+蜂鸣报警/电灯控制为常见组合，默认
         # 即不撞），同选时经引脚绑定消解；wiki-modules-batch13/01）
+        "PA25": 6,  # HUIDU L4 + ZIGBEE_UART RX + ADC12_0 adcPin2（joystick Y
+        # 默认脚）+ NRF24L01 MOSI + TTP224 OUT2（ttp224 默认脚——同上）+
+        # AS32_UART RX（as32 默认脚——LoRa 与 Zigbee 无线数传互替、同选概率
+        # 最低故叠此脚（UART3 同外设同脚，open_mv4×digit_uart 同构先例），
+        # 同选时经引脚绑定换实例/换脚消解；wiki-modules-batch13/02）
+        "PA26": 7,  # HUIDU R1 + ZIGBEE_UART TX + ADC12_0 adcPin1（joystick X
+        # 默认脚）+ NRF24L01 CLK + IR_REMOTE OUT + TTP224 OUT3（ttp224 默认
+        # 脚） + AS32_UART TX（as32 默认脚——同上，同选时经引脚绑定换实例/
+        # 换脚消解；wiki-modules-batch13/02）
+        "UART3": 2,  # ZIGBEE_UART 与 AS32_UART 默认同外设（LoRa 与 Zigbee
+        # 无线数传互替、同选概率最低故叠——同选时经引脚绑定换实例/换脚消解，
+        # 单选裁剪后独占；UART 实例上限 4——UART 类 4 件以上同选 = CLI 拒绝；
+        # wiki-modules-batch13/02）
     }
 
 

@@ -422,6 +422,8 @@ MSPM0_DEFAULT_MAP = {
     ("l298n", "L298N_EN"): ("L298N", "EN"),
     ("open_mv4", "OPENMV4_UART_TX"): ("OPENMV4_UART", "txPin"),
     ("open_mv4", "OPENMV4_UART_RX"): ("OPENMV4_UART", "rxPin"),
+    ("as32", "AS32_UART_TX"): ("AS32_UART", "txPin"),
+    ("as32", "AS32_UART_RX"): ("AS32_UART", "rxPin"),
     ("sgp30", "SGP30_SCL"): ("SGP30", "SCL"),
     ("sgp30", "SGP30_SDA"): ("SGP30", "SDA"),
     ("ags10", "AGS10_SCL"): ("AGS10", "SCL"),
