@@ -165,6 +165,15 @@
 #define TTP224_OUT3_PIN       Pin_14
 #define TTP224_OUT4_PIN       Pin_15
 
+/* ---- WS2812 幻彩灯带（ws2812 模块：单 GPIO 位时序输出 1 脚，DIN 默认
+ * PA8——与 ir_beam 对射 + pid 灰度 GRAY_D5 默认重叠：幻彩灯带与「红外对射/
+ * 巡线」不同框、同选概率最低（刻意不叠灯族 LED PC13-15 板载灯——彩灯常
+ * 代替板载灯做指示，同框概率高；与声光件亦不叠），同选时经引脚绑定消解；
+ * 页面默认 PB12 不采用——本批 ttp224 四脚 + DIP/GRAY 三重叠已占；PA8 无
+ * 特殊引脚阻塞，F103 72MHz 忙等 1.25us/位——不占 TIM/PWM）---- */
+#define WS2812_GPIO           GPIO_A
+#define WS2812_PIN            Pin_8
+
 /* ---- UWB 基站串口（config.h 并入：UART_1 = PA9 TX / PA10 RX，115200）---- */
 #define UWB_UART          UART_1
 #define UWB_UART_INST     USART1

@@ -22,16 +22,23 @@
 
 **被谁阻塞：** 无——可立即开始（本批最重件，可后做）。
 
-**状态：** claimed
+**状态：** resolved
 
 **实施清单：**
-- [ ] `library/modules/ws2812/code/ws2812_stm32.c/.h`（UTF-8；.c include 本模块 .h + pin_config.h + headfile.h；零引脚字面量；时序常量与换算宏与 mspm0 版同构；GRB 缓冲序注释保留；页面 WS2812_MAX 8 保留）
-- [ ] manifest.json platforms 增 stm32：files `[code/ws2812_stm32.c, code/ws2812_stm32.h]`、dependencies `["delay"]`（stm32 侧）、verified false、hardware_bound false、pins 如上、kit（8 位 WS2812 RGB 全彩 LED 模块）、source_url `https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/control/ws2812-color-rgb-led.html`、notes（手册路径+原页+网盘+采购 + **页面缺陷清单 4 条**（反写循环 ×4/越界 >=/12MHz 时序弃用/.h 声明无定义）+ 时序实现（800kHz 忙等/72MHz 换算）+ 页面默认 PB12 弃用理由 + 默认脚推理 + 演示数据不入库 + 未上板——真机时序精度留验证）
-- [ ] pin_config.h 增 `WS2812_GPIO/WS2812_PIN`
-- [ ] 测试 `tests/test_module_ws2812.py`：形状 + 母版宏存在 + stm32 单选生成全流程 + 守卫（`delay_us` 出现、GRB 换位注释、WS2812_MAX 8、无 printf/main/GPIO_Init/RCC_/TIM/PWM 调用、无 IRQHandler、**无 `for(k = 0; i < ` 页面反写式、无 `LedId > ` 越界式**、编译产物无 `setLedCount`/`RGB_LED_Write1` 残留）
-- [ ] test_pins.py STM32_MACRO_VALUES 补两宏；test_default_layout.py 白名单 ws2812×ir_beam+pid（PA8 重叠）
-- [ ] 编译矩阵 UV4 0/0（MAIN_C 调 init+set_led_count+set_color(0,0xFF0000)+refresh，(void) 化）→ verified=true
-- [ ] wordlist 显示模块分类；词表预算链
-- [ ] 中文提交 → resolved → 结论回填
+- [x] `library/modules/ws2812/code/ws2812_stm32.c/.h`（UTF-8；.c include 本模块 .h + pin_config.h + headfile.h；零引脚字面量；时序常量与换算宏与 mspm0 版同构；GRB 缓冲序注释保留；页面 WS2812_MAX 8 保留）
+- [x] manifest.json platforms 增 stm32：files `[code/ws2812_stm32.c, code/ws2812_stm32.h]`、dependencies `["delay"]`（stm32 侧）、verified false、hardware_bound false、pins 如上、kit（8 位 WS2812 RGB 全彩 LED 模块）、source_url `https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/control/ws2812-color-rgb-led.html`、notes（手册路径+原页+网盘+采购 + **页面缺陷清单 4 条**（反写循环 ×4/越界 >=/12MHz 时序弃用/.h 声明无定义）+ 时序实现（800kHz 忙等/72MHz 换算）+ 页面默认 PB12 弃用理由 + 默认脚推理 + 演示数据不入库 + 未上板——真机时序精度留验证）
+- [x] pin_config.h 增 `WS2812_GPIO/WS2812_PIN`
+- [x] 测试 `tests/test_module_ws2812.py`：形状 + 母版宏存在 + stm32 单选生成全流程 + 守卫（`delay_us` 出现、GRB 换位注释、WS2812_MAX 8、无 printf/main/GPIO_Init/RCC_/TIM/PWM 调用、无 IRQHandler、**无 `for(k = 0; i < ` 页面反写式、无 `LedId > ` 越界式**、编译产物无 `setLedCount`/`RGB_LED_Write1` 残留）
+- [x] test_pins.py STM32_MACRO_VALUES 补两宏；test_default_layout.py 白名单 ws2812×ir_beam+pid（PA8 重叠）
+- [x] 编译矩阵 UV4 0/0（MAIN_C 调 init+set_led_count+set_color(0,0xFF0000)+refresh，(void) 化）→ verified=true
+- [x] wordlist 显示模块分类；词表预算链（slug 已挂接，零改动）
+- [x] 中文提交 → resolved → 结论回填
+
+**验收记录：**
+- 矩阵 PASS：UV4 V5.06u7 `-j0 -r -b` exit 0，`0 Error(s), 0 Warning(s)`；编译日志 `.scratch/wiki-stm32-batch1/matrix/ws2812/build.log`。
+- 页面缺陷清单回填（全部 notes + 守卫防回潮）：① 反写延时循环 `for(k = 0; i < 0; i++);` ×4（原理示例 L74/L83 + 实现段 L225/L234——0 次迭代脉宽全丢）→ 时序整体重写；② `LedId > ledsCount`（L155）off-by-one → 修正 `>=`（越界忽略）；③ 时序按 12MHz 标注（NOP×5≈69ns@72MHz）全部作废 → 按数据手册 + mspm0 版结构重写（位 1 = 高 delay_us(1)+低 0.25us、位 0 = 高 0.25us+低 delay_us(1)；0.25us@72MHz = 18×__NOP()；位周期 ≈1.25us）；④ .h 声明 setLedCount/getLedCount/RGB_LED_Write1 无定义 → 不声明不实现（实现 = set_led_count/led_count/refresh 对齐 API）。
+- 颜色/GRB 位序正确（0xRRGGBB + set_color 内 R/G 换位，与 mspm0 版一致）；演示数据（buff 数组/流水灯）不入库；页面全局非 static（LedsArray 等）→ static 收敛。
+- 默认脚 PA8（页面默认 PB12 弃用——ttp224 四脚 + DIP/GRAY 已占；PA8 叠 ir_beam + GRAY_D5，同选经绑定消解；72MHz 忙等 1.25us/位 × 24 位 × 8 灯 ≈ 240us/刷新不占 TIM/PWM）。
+- 测试：test_module_ws2812 7 passed（双平台形状 + 宏存在 + stm32/mspm0 单选生成 + 缺陷守卫）；test_pins/test_default_layout 全绿（26 passed 组合跑）。
 
 **验收标准：** 全部 checkbox；pytest 绿；矩阵 exit 0。
