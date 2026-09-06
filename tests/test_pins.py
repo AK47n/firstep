@@ -534,7 +534,8 @@ def test_module_code_has_no_pin_literals():
     双平台 API 对偶契约（b1-adc-servo/01，语义 = ADC12 MEM 索引而非引脚）；
     us016/mq2 薄封装与 ir_distance/mq135/mq5/flame/soil 独立通道均经 adc 模块 API 读，
     ADC_Channel_N 是 API 参数（wiki-modules-batch2/02/04、batch6/03、
-    batch7/01/02、batch8/01/02）。"""
+    batch7/01/02、batch8/01/02；批次 9 薄封装群 photoresistance/rain/
+    gp2y1014au/s12sd 共读 MEM0——batch9/01-04）。"""
     hits: list[str] = []
     for path in sorted(LIBRARY_MODULES.rglob("*")):
         if not path.is_file() or path.suffix.lower() not in (".c", ".h"):
@@ -545,7 +546,11 @@ def test_module_code_has_no_pin_literals():
             if (
                 pattern == r"\bADC_Channel_\d+\b"
                 and path.relative_to(LIBRARY_MODULES).parts[0]
-                in ("adc", "us016", "ir_distance", "mq2", "mq135", "mq5", "flame", "soil")
+                in (
+                    "adc", "us016", "ir_distance", "mq2", "mq135", "mq5",
+                    "flame", "soil", "photoresistance", "rain", "gp2y1014au",
+                    "s12sd",
+                )
             ):
                 continue  # API 对偶枚举（见 docstring）
             for m in re.finditer(pattern, stripped):

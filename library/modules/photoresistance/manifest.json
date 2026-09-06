@@ -1,0 +1,28 @@
+{
+  "slug": "photoresistance",
+  "description": "光敏电阻光照传感器驱动（mspm0 纯驱动薄封装，ADR 0009）：依赖库内 adc 模块共享 ADC12_0 MEM0 槽位读数（不新开 ADC 通道），photoresistance_init + photoresistance_read_percent 出 0-100% 亮度百分比（反向映射——相对强度非绝对值，非线性需标定）；适用于光控调光、环境光强检测、光强阈值报警、自动灯光等赛题功能。",
+  "dependencies": [
+    "adc"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/photoresistance.c",
+        "code/photoresistance.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**ADC 薄封装**：无独立 syscfg 实例——依赖 adc 模块共享 ADC12_0 实例 MEM0 槽位（默认 PA24/A0_3，与 adc/us016/mq2/本批薄封装件共读同槽；绑定换引脚 = 改写 adcPin*.$assign + adcMem*chansel，模块零改动；手册原脚 PA27/A0_0 经绑定即可复现——绑 PA27 时改写器按通道号换 adcPin3→adcPin0 + adcMem0chansel→CHAN_0）。轮询读取（adc_get 忙等）无 ADC 中断——共享 ADC12_0 实例，IRQHandler 强符号须唯一（joystick/adc 先例）。换算 percent = (1 − value/4095)×100（页面 Get_illume_Percentage_value 原式——**反向映射**：页面备注「最亮 100 最暗 0」——光越强光敏电阻阻值越小（5516：光暗 ~1MΩ、光亮 8-20KΩ）、R2/R3 分压 ADC 值越小、百分比越高；**相对强度非绝对值**——阻值-照度对数非线性 + 分压输出非线性，lx 级标定需标准照度源，光敏件仅适合作相对光强/阈值判断；与库内 bh1750（I2C 数字光照度，0-65535 lx、1 lx 分辨率）分工：光敏 = 廉价模拟件（3.3-5V、~1mA）、非线性需标定，bh1750 = 数字绝对量免标定——要 lx 读数用 bh1750、只要相对光强/低成本用本件。页面工作电流「1MA」按 1mA 理解（规格参数页）。页面 Get_Adc_Value(10) 累加改 5 次快速平均（us016 快平均先例）。页面 ADC 中断（ADC12_0_INST_IRQHandler + gCheckADC 标志位）改依赖 adc 模块轮询（共享实例 IRQHandler 强符号唯一）。页面 Get_DO_In/GET_DO_IN 宏（LM393 阈值比较数字量）未用于演示 → 不声明 DO 角色（阈值由模块可调电阻控制，需要时经引脚绑定 GPIO 输入自行读取或骨架用 adc 原始值自行判断阈值）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/sensor--photoresistance-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/sensor/photoresistance-sensor.html；网盘资料 https://pan.baidu.com/s/1VMFN1fVo5jxB80IYTsY67A 提取码 y8jw；移植成功案例 https://pan.baidu.com/s/1eFJO6n4xykISuRPoEYmnlA?pwd=ma8z 提取码 ma8z）。改造要点：去掉 main.c 演示与 printf；函数名规范化（photoresistance_init/read_percent，去 Illume_Init/ADC_GET/Get_Adc_Value/Get_illume_Percentage_value 命名）；ADC 中断改轮询；DO 宏未用不声明；SAMPLES 10→5 快平均；SYSCFG_DL_init 重复调用删除（模板 main 已调）。与库内同类分工：bh1750（数字光照 lx 绝对量）。\nwiki-modules-batch9/01 编译矩阵（2026-09-09）：单选生成 → SysConfig CLI → gmake 0 error、0 warning（PASS）；未上板（ADC 换算/反向映射真机验证留后续）。",
+      "kit": "光敏电阻传感器模块（4Pin：VCC/GND/DO/AO；工作 3.3-5V、~1mA；5516 光敏电阻（光暗 ~1MΩ、光亮 8-20KΩ）+ LM393 比较器；AO = R2/R3 分压模拟量输出（光越强电压越低）、DO = LM393 阈值数字量（板载可变电阻调节））",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/photoresistance-sensor.html",
+      "pins": [
+        {
+          "id": "PHOTORESISTANCE_AO_CH0",
+          "type": "adc",
+          "default": "PA24",
+          "required": true
+        }
+      ]
+    }
+  }
+}

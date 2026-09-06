@@ -308,7 +308,8 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # 同选概率最低故叠此脚（视觉类与 K230 互替，刻意不叠显示件），同选
         # 时经引脚绑定消解）
         "PA24": 6,  # HUIDU L3 + UWB_UART RX + ADC12_0 adcPin3（adc 默认脚，
-        # us016/mq2 薄封装共享同槽——wiki-modules-batch2/02、batch6/03，无新
+        # us016/mq2/批次9 薄封装四件（photoresistance/rain/gp2y1014au/s12sd）
+        # 共享同槽——wiki-modules-batch2/02、batch6/03、batch9/01-04，无新
         # $assign 行）+
         # HC05_UART RX + NRF24L01 CSN（同上——HC05/NRF 与 UWB 无线链路互替）+
         # TCS34725 SDA（同上）
