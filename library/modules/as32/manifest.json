@@ -1,0 +1,32 @@
+{
+  "slug": "as32",
+  "description": "AS32-TTL-100 433MHz LoRa 无线数传模块驱动（mspm0 纯驱动，ADR 0009）：真实 UART 双向透传——独立实例 AS32_UART（UART3 默认、9600、轮询接收，fingerprint/open_mv4「裁剪后独占」先例），as32_send_string/send_hex 发送 + as32_receive 轮询收数（返回字节数、读后清缓冲）+ as32_flush；适用于远距离双端遥控/遥测/组网（3km 级参考距离）、双车协同、无线数据链等赛题功能（AT 配置范围外——页面无 AT 代码）。",
+  "dependencies": [],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/as32.c",
+        "code/as32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**UART 放置决策（方案①，依批次 4 取证落定）**：真实 UART 独立实例照 fingerprint/open_mv4「裁剪后独占」先例——SysConfig CLI 实证（2026-09-05，批次 4 UART 可行性调研存档 .scratch/wiki-modules-batch4/probe/syscfg-master/）：同一 UART 外设多实例 = Resource conflict（\"UART2 is already in use by DEBUG_UART\"；UART 实例上限 4 = UART0-3 外设数），母版 UART0-3 全被实例占用（UART0=IMU601+FINGERPRINT_UART、UART1=DIGIT_UART+OPENMV4_UART、UART2=DEBUG+UWB+HC05、UART3=ZIGBEE——9 个 UART 实例定义，生成前按选中模块裁剪、每工程至多 4 实例且每外设至多 1 实例「裁剪后独占」）。默认挂 UART3（ZIGBEE_UART 宿主——LoRa 与 Zigbee 无线数传**互替件**、同选概率最低，单选裁剪后独占 UART3；同选时经引脚绑定换实例/换脚消解——与 open_mv4×digit_uart 同构）；默认 TX=PA26/RX=PA25（ZIGBEE_UART 原脚——互替件同脚先例：OPENMV4_UART/PA8/PA9 与 DIGIT_UART 同构；与 HUIDU R2/R3 默认重叠同选时消解）；targetBaudRate=9600（页面「默认波特率 9600」+ AS32 出厂默认）；enabledInterrupts=[] **轮询接收**（无 UART_3_INST_IRQHandler 强符号——zigbee_uart 为 RX 中断件，轮询避免同实例名 ISR 重复；fingerprint/open_mv4 轮询先例）。**方案②软 UART TX 不取**：AS32 是双向数传（接收为刚需），软 UART 只覆盖发送半程；软 UART RX（GPIO 边沿采样 + 帧解析）库内无先例、工作量最大（9600 位时序边沿采样 + 与主循环耦合 + 帧同步），页面 RX 中断直改软采样不可行。**方案③砍件不触发**：「UART 资源耗尽不可行」适用前提是\"无空外设\"——现状无空外设但「裁剪后独占」先例成立（8 实例/4 外设现状即实锤），本件按 open_mv4 同构做法挂靠 UART3 即达成。**现实约束记录**：UART 实例上限 4——as32 与另 ≤3 件 UART 模块（imu_uart/digit_uart/debug_uart/uwb_uart/zigbee_uart/hc05/fingerprint/open_mv4 中任 3 件）同选在限内、4 件以上同选 = SysConfig CLI 拒绝；as32×zigbee_uart/zigbee_link 同选 = UART3 双实例 CLI 拒绝——互替件同选概率最低、消解 = 引脚绑定换实例（open_mv4×digit_uart 同款）。\nwiki 手册来源：sources/materials/lckfb-地猛星移植手册/rf--as32-lora-wireless-communication-module.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/rf/as32-lora-wireless-communication-module.html；网盘资料 https://pan.baidu.com/s/1_vM6zLzpOc40qAKlwc7zIg?pwd=qg1m 提取码 qg1m；采购链接 https://item.taobao.com/item.htm?spm=a1z09.2.0.0.a2882e8dnsJF7e&id=623781851754&_u=72t4uge5cec9（AS32-TTL-100 433MHz LoRa 扩频 无线收发模块 http://www.ashining.com/product_view1.aspx?t=93&cid=118#pro；上位机 http://www.ashining.com.cn/relatedsoftware/soft_asds.zip）。改造要点：去掉 main.c 演示与 printf；函数名规范化（as32_init/send_string/send_hex/receive/flush，去 LOAR_/Anakysis_Data/Clear_LOAR_RX_BUFF 命名）；页面「PA8/PA9 附加串口 1」改挂 UART3/PA26/PA25（UART1 已被 DIGIT_UART+OPENMV4_UART 占（视觉互替），UART3=ZIGBEE 宿主（数传互替）、同选概率最低——与 FINGERPRINT_UART/UART0、OPENMV4_UART/UART1 同构）；页面 LOAR_Init 的 NVIC_ClearPendingIRQ/EnableIRQ 段随轮询裁剪（无中断接收）；页面 UART_1_INST_IRQHandler 中断缓冲改轮询排空（open_mv4「IRQHandler 随轮询裁剪」先例：DL_UART_isRXFIFOEmpty 忙等排空）；**截断保护修正**：页面 LOAR_RX_LEN=(LOAR_RX_LEN+1)%LOAR_RX_LEN_MAX 模运算在满缓冲回绕覆盖首字节——人工复核修正为 cap 截断（≤max_len-1 + '\\0' 收尾），notes 记录；页面 Clear_LOAR_RX_BUFF 循环 i<MAX-1 漏清尾字节——修正为全 300 清；全局 LOAR_RX_BUFF/FLAG/LEN 收敛模块静态；页面 LOAR_RX_LEN_MAX 300 保留为 AS32_RX_BUF_MAX；**页面无帧结构**（透传字符串——行分帧/校验归调用方骨架，ADR 0009）；**页面无 AT 指令代码**（「参数的修改是通过上位机进行设置」+ MD0/MD1 硬件模式，页面驱动未接线）——AT 指令模板与 MD0/MD1 模式脚范围外：需要 AT 配置时可经 as32_send_string 在配置模式直发（MD 脚由用户接线）或上位机 soft_asds.zip 预配置再透传。\n与库内同类分工：zigbee_link（串口透传互替——zigbee 2.4G 组网、115200、室内短距）vs as32（LoRa 433MHz、20dBm/2.0-5.5V、参考距离 3km 级超远距离——远距双机/大场地/山野组网选本件）；nrf24l01（SPI 裸寄存器短距 2.4G 20-50m、点对点低速率）；hc05（蓝牙近距、手机直连）；uwb（定位 10cm 级）——按场景选用，默认脚互不相撞（as32 PA26/PA25 × nrf24l01 同脚 CLK/MOSI 默认重叠——无线链路互替、同选时经引脚绑定消解）。\nwiki-modules-batch13/02 编译矩阵（2026-09-06）：单选生成 → SysConfig CLI（UART3/PA26/PA25 合法性——UART3 剥离 ZIGBEE_UART 后独占）→ gmake 0 error、0 warning（PASS）；**未上板**（LoRa 透传距离/波特率真机验证留后续——双端模块配置须一致（空中速度/模块地址/通信信道），经上位机预设）。",
+      "kit": "AS32-TTL-100 433MHz LoRa 扩频无线收发模块（UART 串口透传版；工作 2.0-5.5V、52-104mA、默认 433MHz、20dBm、参考通信距离 3km）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/rf/as32-lora-wireless-communication-module.html",
+      "pins": [
+        {
+          "id": "AS32_UART_TX",
+          "type": "uart_tx",
+          "default": "PA26",
+          "required": true
+        },
+        {
+          "id": "AS32_UART_RX",
+          "type": "uart_rx",
+          "default": "PA25",
+          "required": true
+        }
+      ]
+    }
+  }
+}

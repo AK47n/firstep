@@ -468,7 +468,7 @@
   },
   {
     "category": "无线通信模块",
-    "models": ["ESP8266", "蓝牙模块", "NRF24L01", "RC522"],
+    "models": ["ESP8266", "蓝牙模块", "NRF24L01", "RC522", "AS32"],
     "solutions": [
       {
         "name": "RC522 射频 IC 卡读卡器（MFRC522）",
@@ -511,11 +511,12 @@
         "suitable": "地面站/手机网页监控（200m 内）"
       },
       {
-        "name": "LoRa 数传（SX1278 等）",
-        "interface": "SPI",
+        "name": "LoRa 数传（AS32-TTL 串口版 / SX1278 等）",
+        "interface": "UART 串口透传（AS32-TTL-100，9600——双向收发免帧解析）",
         "price": "￥30-60/对",
-        "note": "超远距离 1-3km、低速率 2.7kbps；丢包重传自写；占 SPI",
-        "suitable": "远距双机通信/大场地"
+        "note": "超远距离 1-3km、433MHz 20dBm（2.0-5.5V 供电）；库内 as32 已打通（mspm0：as32_init + as32_send_string/send_hex 发送 + as32_receive 轮询收数（返回字节数、读后清缓冲）——真实 UART 双向透传、轮询接收（无中断），默认 UART3 PA26/PA25（与 Zigbee 数传互替、同选时经引脚绑定换实例消解）、9600；页面无 AT 指令代码——参数经上位机（soft_asds.zip）预设或配置模式直发）；SX1278 裸芯片 SPI 开发版需自写驱动（页面「占 SPI」措辞按 AS32=串口版修正——本件为串口版免 SPI 免帧解析）；丢包重传自写（透传无帧结构——行分帧归调用方）",
+        "suitable": "远距双机通信/大场地/山野组网",
+        "lib_modules": ["as32"]
       },
       {
         "name": "Zigbee 模块（DL-20 串口透传）",

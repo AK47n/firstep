@@ -1130,6 +1130,32 @@ OPENMV4_UART.enableFIFO        = false;
 OPENMV4_UART.peripheral.rxPin.$assign = "PA9";
 OPENMV4_UART.peripheral.txPin.$assign = "PA8";
 
+// AS32-TTL-100 LoRa 无线数传（as32 模块：真实 UART 双向透传——照
+// fingerprint/open_mv4「裁剪后独占」先例（批次 4 UART 可行性调研：SysConfig
+// CLI 拒绝同一 UART 外设多实例、UART 实例上限 4 = UART0-3 外设数——母版
+// 9 个 UART 实例定义每工程先裁剪、裁剪后至多 4 实例；as32 与另 ≤3 件 UART
+// 模块同选在限内、4 件以上同选 = CLI 拒绝（既有约束类，notes 写明））。
+// 默认挂 UART3（ZIGBEE_UART 宿主——LoRa 与 Zigbee 无线数传互替、同选概率
+// 最低，单选裁剪后独占 UART3；默认 TX=PA26/RX=PA25 = ZIGBEE_UART 原脚，
+// 互替件同脚先例：OPENMV4_UART/PA8/PA9 与 DIGIT_UART 同构，同选时经引脚
+// 绑定换实例/换脚消解）；9600 = 页面/AS32 出厂默认波特率（独立于其余
+// 115200 实例；HC05 9600 先例）；enabledInterrupts 空 = **轮询接收**（无
+// UART_3_INST_IRQHandler 强符号——zigbee_uart 为 RX 中断件，轮询避免同实例
+// 名 ISR 重复；fingerprint/open_mv4 轮询先例，页面 LOAR_Init 的 NVIC 段随
+// 轮询裁剪）；页面无 AT 指令代码（参数经上位机设置——AT 配置范围外）
+const AS32_UART = UART.addInstance();
+AS32_UART.$name             = "AS32_UART";
+AS32_UART.profile           = "CONFIG_PROFILE_1";
+AS32_UART.peripheral.$assign = "UART3";
+AS32_UART.uartClkSrc        = "BUSCLK";
+AS32_UART.ovsRate           = "16";
+AS32_UART.targetBaudRate    = 9600;
+AS32_UART.enableInternalLoopback = false;
+AS32_UART.enabledInterrupts = [];
+AS32_UART.enableFIFO        = false;
+AS32_UART.peripheral.rxPin.$assign = "PA25";
+AS32_UART.peripheral.txPin.$assign = "PA26";
+
 // OLED（I2C 控制器）
 OLED.$name                         = "OLED";
 OLED.basicEnableController         = true;
