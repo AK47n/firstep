@@ -7,6 +7,7 @@ import json
 import logging
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 import pytest
@@ -3624,7 +3625,7 @@ def test_select_prompt_embeds_requested_fulltexts():
     全文原样直传（逐文件截断已由 read_fulltext 完成）。"""
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport)
-    long_text = "长全文" * 2500  # 7500 字符 = 45000 wire 字节：超旧 4000 上限、在 wire 预算内
+    long_text = "长全文" * 1400  # 4200 字符 ≈ 25200 wire 字节：超旧 4000 上限、在新 wire 预算（27000）内
 
     llm.select_modules(
         "赛题",
@@ -3642,13 +3643,13 @@ def test_select_prompt_embeds_requested_fulltexts():
 def test_select_prompt_embeds_fulltext_with_every_file_head():
     """工单 03 回归：注入块含每个文件开头——read_fulltext 逐文件截断后的多文件
     全文在总预算内逐字嵌入（旧 4000 总截断下首个大文件吃光配额、尾部文件不可见）。
-    全文总量保持在 REFERENCE_FULLTEXT_BYTES wire 字节预算内（budget-wire-
-    unification/01 定 67000，3 × 11K 字节 ≈ 33KB < 预算）——超预算的截断断言由
+    全文总量保持在 REFERENCE_FULLTEXT_BYTES wire 字节预算内（module-preselect/02
+    定 27000，3 × 8K 字节 ≈ 24KB < 预算）——超预算的截断断言由
     test_select_prompt_truncates_fulltext_at_relaxed_total_cap 钉死。"""
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport)
     fulltext = "\n".join(
-        f"// ---- f{i}.c ----\n/* f{i}_head */\n" + "c" * 11000 for i in range(3)
+        f"// ---- f{i}.c ----\n/* f{i}_head */\n" + "c" * 8000 for i in range(3)
     )
 
     llm.select_modules(
@@ -5317,9 +5318,10 @@ def test_select_prompt_embeds_manual_fulltexts_with_label():
     wire 字节——预算内原样直传）；清单段手动条目带来源标注（无需点名）。"""
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport)
-    # 1500 份 ≈ 9000 字符：超旧 4000 上限（注入处不再截断）、又低于
-    # REFERENCE_FULLTEXT_BYTES 预算（中文 json.dumps 6 字节/字符 ≈ 54KB）
-    manual_text = "// ---- visual.txt ----\n" + "视觉资料正文" * 1500
+    # 700 份 ≈ 4200 字符：超旧 4000 上限（注入处不再截断）、又低于
+    # REFERENCE_FULLTEXT_BYTES 预算（module-preselect/02 定 27000，中文
+    # json.dumps 6 字节/字符 ≈ 25.2KB）
+    manual_text = "// ---- visual.txt ----\n" + "视觉资料正文" * 700
 
     llm.select_modules(
         "赛题",
@@ -5523,6 +5525,88 @@ def test_selection_prompt_worst_case_fits_request_budget():
     assert (
         f"仅展示前 {REFERENCE_SUGGESTIONS_MAX_WIRE_BYTES} wire 字节" in prompt
     )  # 候选清单段段级截断带标注（15 条现实形态超 4096，截断契约可见）
+
+
+def test_selection_prompt_preselect_note_two_states():
+    """预筛注记（工单 module-preselect/03）：preselect_note 非空 → 标题行带
+    「按题面初筛 N/M」注记（模型知道清单不是全量）；空串 → 标题逐字节不变
+    （未预筛 / 全量送达的向后兼容零变化）。"""
+    summaries = [ManifestSummary("dht11", "温湿度传感器驱动")]
+    noted = _selection_user_prompt(
+        "赛题",
+        summaries,
+        preselect_note="（按题面初筛 46/84 条，仅展示前 40000 wire 字节）",
+    )
+    assert (
+        "模块库可用模块（按题面初筛 46/84 条，仅展示前 40000 wire 字节）："
+        in noted
+    )
+    plain = _selection_user_prompt("赛题", summaries)
+    assert "模块库可用模块：" in plain
+    assert "初筛" not in plain and "wire 字节" not in plain
+
+
+def test_recommend_real_library_budget():
+    """真实库预算回归（工单 module-preselect/02）：扫仓库真实模块库
+    （library/modules）构造 mspm0 / stm32 两平台最坏形态 select 载荷——
+    题面 4000 中文（零命中形态 = 预筛退化 slug 序截断，覆盖最坏截断面）+
+    预筛后真实摘要 + 真实词表 + 20 条长澄清历史 + 15 条相关候选 + 满额参考
+    全文——完整 payload json.dumps 序列化 ≤ MAX_REQUEST_BYTES 且余量 ≥ 2KB。
+
+    模块库每增一个模块（摘要行变长 / 条数变多）此测试即红——照词表段
+    test_wordlist_segment 的红证先例，防「固定 14 条假摘要样例」假绿掩盖
+    真实库增长（预算推导按 14 条 ≈ 7.6KB 记账，批次 13 后 mspm0 84 条
+    ≈ 73KB wire，未修复形态实测 195000B > 131072）。改 MODULE_SUMMARY_BYTES /
+    REFERENCE_FULLTEXT_BYTES 必须先红证校准再改断言（照 budget.py 词表段
+    先例：每涨必红、保 2KB 边界余量）。
+    """
+    from contest_generator.budget import MODULE_SUMMARY_BYTES
+    from contest_generator.library import list_modules
+    from contest_generator.selection import (
+        filter_manifests_by_platform,
+        preselect_module_summaries,
+    )
+    from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
+
+    lib = Path(__file__).resolve().parents[1] / "library" / "modules"
+    modules = list_modules(lib)
+    problem = "设" * EMBEDDED_CONTENT_CAP  # 题面截断上限（零命中最坏形态）
+    clarifications = tuple((f"第{i}问：" + "疑" * 200, "答" * 5000) for i in range(20))
+    references = [
+        _suggestion(
+            f"关联例程{i:02d}", f"TI 外设例程 {i:02d}", "TI MSPM0 SDK 官方例程" * 8,
+            source=REFERENCE_SOURCE_RELATED,
+        )
+        for i in range(15)
+    ] + [_suggestion("big-ref", "大参考文件", "巨型参考")]
+    for platform in (PLATFORM_MSPM0, PLATFORM_STM32):
+        filtered = filter_manifests_by_platform(modules, platform)
+        summaries = build_manifest_summaries(filtered)
+        presel = preselect_module_summaries(
+            summaries, problem, DEFAULT_WORDLIST, MODULE_SUMMARY_BYTES
+        )
+        prompt = _selection_user_prompt(
+            problem,
+            presel.summaries,
+            references=references,
+            reference_fulltexts={"big-ref": "中" * REFERENCE_FULLTEXT_BYTES},
+            clarifications=clarifications,
+            hardware_words=DEFAULT_WORDLIST,
+        )
+        payload = {
+            "model": "deepseek-chat",
+            "messages": [
+                {"role": "system", "content": SELECT_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            "response_format": {"type": "json_object"},
+        }
+        total = len(json.dumps(payload).encode("utf-8"))
+        assert total <= MAX_REQUEST_BYTES - 2 * 1024, (
+            f"{platform} 真实库最坏形态 {total}B > "
+            f"{MAX_REQUEST_BYTES - 2 * 1024}（预算 {MODULE_SUMMARY_BYTES}，"
+            f"摘要 {presel.total} 条预筛后 {len(presel.summaries)} 条）"
+        )
 
 
 def test_skeleton_prompt_worst_case_with_references_fits_request_budget():

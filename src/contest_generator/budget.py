@@ -148,7 +148,21 @@ SKELETON_REFERENCE_TOTAL_BYTES = 40000
 # 预算两级上调 7500→7900（7600/7800 中间步）→ 词表段全量 7692 比旧截断形态
 # 7334 多 358B → 全文两级降 100B 回 60100 保 2KB 边界余量（同 batch5/7/8/9/12
 # 口径；红证见 worst-case 结构测试实测）。
-REFERENCE_FULLTEXT_BYTES = 60100
+# 模块摘要段入账（2026-09-xx，wiki-modules-batch13 + module-preselect/02）：
+# 摘要段从预算推导的「14 条 ≈ 7.6KB」涨为真实库 mspm0 84 条 ≈ 73.1KB wire
+# （stm32 24 条 ≈ 12.2KB），**该增长从未入账**——旧推导只记账词表段逐批
+# 增长。现状（摘要 73.1KB + 全文 60100）最坏形态实测：mspm0 195000B 超限
+# 64KB、stm32 133578B 超限 2506B（.scratch/recommend-covered-check/
+# measure_select_wire.py）；既有结构测试用固定 14 条假摘要因此假绿。修复：
+# 摘要段经题面预筛排序 + MODULE_SUMMARY_BYTES=40000 段级预算截断（工单
+# module-preselect/01，行边界、保底 20 条）→ 摘要段 ≤ 40000 入账；全文段
+# 相应下调：固定段（题面 24K + 历史 15K + 词表 7.9K + 清单 4.1K + 系统
+# 提示 ~3.8K + 壳/契约 ~1.7K ≈ 56.6K）→ 全文预算 = 128K − 2K 目标余量 −
+# 56.6K − 40K（摘要段预算上界）≈ 29.4K → 取 27000（红证实测：校准脚本
+# mspm0 最坏形态 28000 时 128605B ≤ 129024 边界余 419B 过紧；27000 保
+# ~3KB 呼吸，单篇全文 ≈4500 中文字，两级注入「清单 → 点名 → 回读」下
+# 足够——被测大参考文件 160K 字符仍按分段截断契约带标注送达）。
+REFERENCE_FULLTEXT_BYTES = 27000
 
 # 相关候选清单段合计 wire 字节预算（工单 02 相关候选自动扩容）：recommend
 # 启 15 条相关候选后，清单段现实形态 ≈4.7KB（真实库简介 194-348 字/条，
@@ -171,3 +185,23 @@ RELATED_CANDIDATES_LIMIT = 15
 # SKELETON_REFERENCE_TOTAL_BYTES 按篇均分兜底（4 篇 ≈10KB/篇，与既有骨架
 # 最坏 3 篇形态同量级，worst-case 结构测试余量 ≥10KB 保持）。
 SKELETON_RELATED_LIMIT = 4
+
+# 模块摘要段 wire 字节预算（工单 module-preselect/01）：推荐提示词「模块库
+# 可用模块」摘要行全量注入的段级预算——旧预算推导按「摘要 14 条 ≈ 7.6KB」
+# 记账，真实库（批次 13 后 mspm0 84 条）摘要 wire 实测 73123B ≈ 73.1KB，
+# 最坏形态 select 载荷实测 195000B > MAX_REQUEST_BYTES（131072）超限 64KB
+# （stm32 线 24 条 12243B，最坏形态 133578B 亦超限 2506B）；结构测试
+# test_selection_prompt_worst_case_fits_request_budget 用固定 14 条假摘要
+# 样例因此假绿。本预算 = 摘要段的上界（预筛命中降序 + 预算截断，行边界），
+# 截断后摘要段该值以内 + 调低 REFERENCE_FULLTEXT_BYTES 保 2KB 边界余量
+# （红证校准见 test_recommend_real_library_budget，工单 02）。取 40000：
+# 够 mspm0 线命中集常态送达（平均行 wire ≈ 870B，按 46 条 ≤ 预算），
+# 同时给全文段留足；数值以红证实测为准（工单 02 校准）。
+MODULE_SUMMARY_BYTES = 40000
+
+# 预筛保底下限（工单 module-preselect/01）：预算截断后不足本数 → 扩到排序
+# 后前 MIN_PRESELECT 条。覆盖保底：命中稀少时清单不过短（题面证据驱动的
+# 命中集 + 前部常备模块都可见）。现实库形态 20 条 × 平均行 ≈ 17KB，远小于
+# MODULE_SUMMARY_BYTES，保底不破坏预算。改小 = 清单可能过短漏覆盖；改大 =
+# 保底形态接近全量（预筛失去意义），保持 20。
+MIN_PRESELECT = 20
