@@ -49,6 +49,9 @@ WHITELIST = {
         "digit_uart.DIGIT_UART_RX",
         "coord_detect.COORD_DETECT_UART_RX",
         "uwb_uart.UWB_UART_RX",
+        # wiki-stm32-batch7/03：joystick SW——摇杆与视觉/数传链路不同框、
+        # 同选概率最低（mspm0 SW=PA9 同款推理），同选经绑定消解
+        "joystick.JOYSTICK_SW",
     },
     "PB10": {
         "zigbee_uart.ZIGBEE_UART_TX",
@@ -69,8 +72,11 @@ WHITELIST = {
     # adc 默认 PA0/PA1 与 motor PWM 重叠（b1-adc-servo/01）：蓝药丸 ADC 通道
     # 脚（PA0-7/PB0-1）全部被既有模块占用，无空闲可挪——实际接线经引脚绑定
     # 消解；adc 与 motor 同用时必须改绑
-    "PA0": {"motor.MOTOR_A_PWM", "adc.ADC_CH0"},
-    "PA1": {"motor.MOTOR_B_PWM", "adc.ADC_CH1"},
+    # **wiki-stm32-batch7/03**：joystick X/Y 并入 PA1/PA0——与 adc 模块
+    # ADC_CH1/CH0 **ADC 共享组**（mspm0 MEM1/2 与 adc 模块共享实例同构；
+    # 摇杆手动输入与视觉/数传不同框，同选概率最低）
+    "PA0": {"motor.MOTOR_A_PWM", "adc.ADC_CH0", "joystick.JOYSTICK_Y"},
+    "PA1": {"motor.MOTOR_B_PWM", "adc.ADC_CH1", "joystick.JOYSTICK_X"},
     # servo 默认 PB6 与 pid.GRAY_D7 重叠（b1-adc-servo/02）：蓝药丸可 PWM 脚
     # 全被占用，无空闲可挪——实际接线经引脚绑定消解
     "PB6": {"pid.GRAY_D7", "servo.SERVO_PWM_C0"},

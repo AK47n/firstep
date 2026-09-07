@@ -1,6 +1,6 @@
 {
   "slug": "joystick",
-  "description": "双轴摇杆按键驱动（mspm0 纯驱动，ADR 0009）：X/Y 双轴 ADC 采样（12bit 4 次平均，read_x/read_y 出原始值 0-4095，read_x_percent/read_y_percent 出 0-100%），SW 按键上拉低有效（read_sw 出 1=按下）；与 adc 模块共享 ADC12_0 实例（sequence 四通道，MEM3 归 ir_distance）；适用于手动控制、模拟量遥控、云台方向等赛题功能。",
+  "description": "双轴摇杆按键驱动（双平台纯驱动，ADR 0009）：X/Y 双轴 ADC 采样（12bit 4 次平均，read_x/read_y 出原始值 0-4095，read_x_percent/read_y_percent 出 0-100%），SW 按键上拉低有效（read_sw 出 1=按下）；mspm0 与 adc 模块共享 ADC12_0 实例（sequence 四通道，MEM3 归 ir_distance）、stm32 经 ml_adc 读 ADC1 两通道（与 adc 模块 ADC_CH1/CH0 共享组）；适用于手动控制、模拟量遥控、云台方向等赛题功能。",
   "dependencies": [],
   "platforms": {
     "mspm0": {
@@ -31,6 +31,47 @@
           "type": "gpio_in",
           "default": "PA9",
           "required": true
+        }
+      ]
+    },
+    "stm32": {
+      "files": [
+        "code/joystick_stm32.c",
+        "code/joystick_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**双 ADC 通道 + 1 GPIO（页面 ADC 序列代码收敛 ml_adc）**：F1 口径页面（stm32f10x.h + RCC_APB2PeriphClockCmd + GPIO_Mode_AIN + GPIO_Mode_IPU + ADC_RegularChannelConfig + SoftwareStartConvCmd + GetConversionValue）——页面 ADC_Joystick_Init + Get_Adc_Joystick_Value 整体收敛为母版 ml_adc 的 adc_init（内部完成 AIN 引脚配置 + APB2 时钟 + 6 分频 12MHz + 复位校准——等效页面流程）+ ADC_GetConversionValue→adc_get（软件触发轮询）；SW 走 ml_gpio 上拉输入（gpio_init IU + gpio_get——页面 L79-82 GPIO_Mode_IPU 等效）。**默认脚（同选概率最低推理——页面默认 VRX=PA1/VRY=PA2/SW=PA3 全被既有角色占用不照抄）**：X=ADC_Channel_1（PA1）/Y=ADC_Channel_0（PA0）——与 adc 模块 ADC_CH1/CH0 **ADC 共享组**（mspm0 MEM1/2 与 adc 模块共享实例同构；ml_adc 顺序调用互不干扰；PA0/PA1 同时叠 motor PWM 主脚——母版现状性质）+ SW=PA10（gpio_in——叠 DIGIT/COORD/UWB UART RX：摇杆与视觉/数传链路不同框、同选概率最低——mspm0 SW=PA9 同款推理；同选经引脚绑定消解）；**同一物理脚只能接一件器件，多件同测需外部分路器/分时切换**（stm32 通道 10/10 全被既有角色占用）。**页面缺陷/修正**：① 页面每次读轴 SAMPLES 30 × delay_ms(2) ≈ 60ms + 2 次 ADC 校准无超时 → 4 次快平均（mspm0 批 1 口径——JOYSTICK_ADC_SAMPLES 4u）；② **stm32 侧忙等超时口径差异**：mspm0 自持 DL_ADC12 忙等 + JOYSTICK_ADC_TIMEOUT 50 超时（mspm0 joystick.c L18/L26-30），stm32 走母版 ml_adc 的 adc_get（内部 while 等 EOC——无显式超时参数，母版实现——notes 记录）；③ 页面 L149 注释函数名「Get_MQ2_Percentage_value」（MQ2 模板残留——函数体是摇杆）——notes 记录不落码；④ 百分比 = (adc/4095)×100（页面 ×100.f 浮点式归一 **uint16_t 整数**——与 mspm0 joystick_read_x_percent 同名同型 joystick.h L29-30，非 float）；⑤ SW 低有效语义归一（0=按下页面原样 → 1=按下 API 出参——JOYSTICK_SW_PRESSED_LEVEL 0 宏照 mspm0 同名 joystick.h L24，一处反相）；⑥ 页面 h L217-234 宏（GPIO_SW/GPIO_VRX/CHANNEL_VRX_ADC/SAMPLES 等）收敛 pin_config.h 单源 4 宏（JOYSTICK_X_CH/JOYSTICK_Y_CH/JOYSTICK_SW_GPIO/JOYSTICK_SW_PIN，ADR 0010）；页面读轴「2 次 ADC 校准」每次读都校准（L123-134）→ 校准只留在 init（ml_adc 等价）。\nwiki 手册来源：sources/materials/lckfb-地阔星移植手册/control--two-axis-keystroke-rocker-module.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/control/two-axis-keystroke-rocker-module.html）。改造要点：去掉 main.c 演示与 printf；函数名规范化（joystick_init/read_x/read_y/read_x_percent/read_y_percent/read_sw——与 mspm0 joystick.h L26-31 同名同型六函数拉齐）；页面 ADC 序列收敛 ml_adc；30×2ms 采样改 4 次快平均；读轴校准移 init；SW 极性宏化。\nwiki-stm32-batch7/03 编译矩阵（2026-09-07）：stm32 单选生成（依赖内嵌母版——顶层 dependencies [] 保持 mspm0 现状不变）→ UV4（C:/Keil5 V5.06u7）0 error、0 module warning（exit 0，PASS）；未上板（中心值/死区真机校准留后续——页面无中心死区处理，±死区归调用方）。",
+      "kit": "双轴按键摇杆模块（PS2 手柄摇杆电位器式，X/Y 0-3.3V + 按键低电平）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/control/two-axis-keystroke-rocker-module.html",
+      "pins": [
+        {
+          "id": "JOYSTICK_X",
+          "type": "adc",
+          "default": "PA1",
+          "required": true,
+          "macros": [
+            "JOYSTICK_X_CH"
+          ]
+        },
+        {
+          "id": "JOYSTICK_Y",
+          "type": "adc",
+          "default": "PA0",
+          "required": true,
+          "macros": [
+            "JOYSTICK_Y_CH"
+          ]
+        },
+        {
+          "id": "JOYSTICK_SW",
+          "type": "gpio_in",
+          "default": "PA10",
+          "required": true,
+          "macros": [
+            "JOYSTICK_SW_GPIO",
+            "JOYSTICK_SW_PIN"
+          ]
         }
       ]
     }
