@@ -412,6 +412,22 @@
 #define HC05_KEY_GPIO         GPIO_B
 #define HC05_KEY_PIN          Pin_4
 
+/* ---- 批次 8（wiki-stm32-batch8/03）：nrf24l01 2.4G 无线收发（软 SPI）----
+ * 全端口 B（单 NRF24L01_PORT = GPIO_B，同口约束照 ttp224——换口需整组迁移）：
+ * CLK=PB10/MOSI=PB11（ZIGBEE+as32+键盘 COL3/4——无线数传互替件同脚）、
+ * MISO=PB4（RELAY/编码器方向/hc05 KEY）、CSN=PB12/CE=PB13（DIP/GRAY/TTP/
+ * 矩阵人机输入组）、IRQ=PB5（编码器/EC11/称重/GP2Y1014 组）；位操作零延时
+ * （页面硬件 SPI1 9MHz 改 GPIO 位操作——不占硬件 SPI/TIMER）；IRQ 只读不
+ * 注册 EXTI（轮询 STATUS——编码器 EXTI 独占先例）。页面默认（SPI1 四脚 +
+ * CE=PA1 + IRQ=PA2/EXTI2）不照抄——全被既有角色占用。 */
+#define NRF24L01_PORT         GPIO_B
+#define NRF24L01_CLK_PIN      Pin_10
+#define NRF24L01_MOSI_PIN     Pin_11
+#define NRF24L01_MISO_PIN     Pin_4
+#define NRF24L01_CSN_PIN      Pin_12
+#define NRF24L01_CE_PIN       Pin_13
+#define NRF24L01_IRQ_PIN      Pin_5
+
 /* ---- UART 接收中断聚合（isr.c 的 USARTx_IRQHandler 调这些宏，
  * 工单 pin-full-unlock/02）——按各 UART 角色绑定实例重分组：默认
  * UART_1 = DIGIT+COORD+UWB+HC05 共享、UART_2 = DEBUG、UART_3 = ZIGBEE。 ---- */
