@@ -254,6 +254,15 @@ STM32_MACRO_VALUES = {
     "HC05_STATE_PIN": "Pin_8",
     "HC05_KEY_GPIO": "GPIO_B",
     "HC05_KEY_PIN": "Pin_4",
+    # wiki-stm32-batch8/03：nrf24l01 软 SPI 六脚（全端口 B 单共享端口宏——
+    # 同口约束照 ttp224；页面硬件 SPI1 默认脚不照抄）
+    "NRF24L01_PORT": "GPIO_B",
+    "NRF24L01_CLK_PIN": "Pin_10",
+    "NRF24L01_MOSI_PIN": "Pin_11",
+    "NRF24L01_MISO_PIN": "Pin_4",
+    "NRF24L01_CSN_PIN": "Pin_12",
+    "NRF24L01_CE_PIN": "Pin_13",
+    "NRF24L01_IRQ_PIN": "Pin_5",
     # 软 I2C（工单 pin-full-unlock/05：mpu6050 离 PB10/11 让位 Zigbee → PA11/PA12）
     "I2C_GPIO": "GPIO_A",
     "I2C_SCL_GPIO_Pin": "Pin_11",

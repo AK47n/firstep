@@ -1,6 +1,6 @@
 {
   "slug": "nrf24l01",
-  "description": "NRF24L01 2.4G 无线收发驱动（mspm0 纯驱动，ADR 0009）：软 SPI 位操作（CLK/MOSI/MISO/CSN/CE/IRQ 六脚，无硬件 SPI 依赖），nrf24l01_init + 地址/信道/速率/功率/模式配置 + tx_packet/rx_packet 收发 + FIFO 手动清零——接收用 STATUS 位轮询（IRQ 脚只读状态，不注册 GPIO 中断，原因见 notes）；适用于双车遥控、无线数据通信、遥测上报等赛题功能。",
+  "description": "NRF24L01 2.4G 无线收发驱动（双平台纯驱动，ADR 0009）：软 SPI 位操作（CLK/MOSI/MISO/CSN/CE/IRQ 六脚，无硬件 SPI/TIMER 依赖——mspm0 全 GPIOA 单口、stm32 全端口 B 单口），nrf24l01_init + 地址/信道/速率/功率/模式配置 + tx_packet/rx_packet 收发 + FIFO 手动清零——接收用 STATUS 位轮询（IRQ 脚只读状态，不注册 GPIO 中断，原因见 notes）；适用于双车遥控、无线数据通信、遥测上报等赛题功能。",
   "dependencies": [
     "delay"
   ],
@@ -51,6 +51,79 @@
           "type": "gpio_in",
           "default": "PA22",
           "required": true
+        }
+      ]
+    },
+    "stm32": {
+      "files": [
+        "code/nrf24l01_stm32.c",
+        "code/nrf24l01_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**软 SPI 位操作（短距 2.4G 数传）**：页面硬件 SPI1（SCK=PA5/MISO=PA6/MOSI=PA7/NSS=PA4 + CE=PA1 + IRQ=PA2/EXTI2——全被既有角色占用）**不照抄**；默认 **全端口 B（单 NRF24L01_PORT 共享端口宏，同口约束照 ttp224 先例——换口需整组迁移、pinwriter `_check_shared_port_macro_conflicts` 拦异值）**：CLK=PB10 / MOSI=PB11（ZIGBEE_UART+as32+key_matrix COL3/4——**无线数传互替件同脚先例**：2.4G 与 Zigbee/LoRa 二选一接入）+ MISO=PB4（RELAY+编码器方向+hc05 KEY）+ CSN=PB12 / CE=PB13（DIP+GRAY+TTP224+KEY_MATRIX 人机输入组）+ IRQ=PB5（编码器/EC11/称重/GP2Y1014 组）——无线链路与输入/传感不同框、同选概率最低，同选经引脚绑定消解；**位操作零延时**（mspm0 先例：NRF 规格 ≤10MHz，72MHz GPIO 翻转（每次 gpio_set 函数调用）实测级差在规格内——真机异常时按 notes 唯一时序宏点补 delay_us）。**API 与 mspm0 nrf24l01.h 现名全对齐**（init/set_channel/set_speed/set_power/set_address/set_mode/tx_packet/rx_packet/flush_rx/flush_tx + 枚举/返回码/PAYLOAD_MAX 32）。**IRQ 不注册 GPIO 中断**：stm32 EXTI 聚合/编码器独占先例（motor 编码器 EXTI 线 + 本件轮询 STATUS——与 mspm0 GROUP1 独占同判；页面「中断方式接收」范围外，notes 可扩展）。**上游缺陷**：`#if DYNAMIC_PACKET==0` 页外符号 L01_WriteSingleReg 整枝剔除（mspm0 同）；FLUSH 误当寄存器地址 → 显式 flush；多字节收发命令补写位（`_write_buf` OR NRF_WRITE_REG——mspm0 code-review 修正同款）；TxPacket 500ms 超时直接返回 TX_ERR（驱动不自复位）。**F1 换算**：StdPeriph GPIO_Init/WriteBit/ReadInputDataBit → ml_gpio（gpio_init/gpio_set/gpio_get——gpio_init 内部使能 RCC 时钟），零引脚字面量。\nwiki 手册来源：sources/materials/lckfb-地阔星移植手册/rf--nrf24l01-2-4-g-control-module.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/rf/nrf24l01-2-4-g-control-module.html；网盘资料同 mspm0 条：https://pan.baidu.com/s/16P9UbBAPJC93P6PCWhOeZA?pwd=iw40）。改造要点：硬件 SPI1 改软 SPI GPIO 位操作、30+ 函数收敛库风格子集、去 printf/main 演示、引脚宏参数化。\nwiki-stm32-batch8/03 编译矩阵（2026-09-07）：stm32 单选生成（依赖 delay 展开——stm32 侧 files=[] 内嵌母版 ml_delay）→ UV4 0 error、0 module warning（exit 0，PASS）；未上板（SPI 位时序真机标定留后续）。",
+      "kit": "NRF24L01+ 无线收发模块（2.4G，改进功率加强版）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/rf/nrf24l01-2-4-g-control-module.html",
+      "pins": [
+        {
+          "id": "NRF24L01_CLK",
+          "type": "gpio_out",
+          "default": "PB10",
+          "required": true,
+          "macros": [
+            "NRF24L01_PORT",
+            "NRF24L01_CLK_PIN"
+          ]
+        },
+        {
+          "id": "NRF24L01_MOSI",
+          "type": "gpio_out",
+          "default": "PB11",
+          "required": true,
+          "macros": [
+            "NRF24L01_PORT",
+            "NRF24L01_MOSI_PIN"
+          ]
+        },
+        {
+          "id": "NRF24L01_MISO",
+          "type": "gpio_in",
+          "default": "PB4",
+          "required": true,
+          "macros": [
+            "NRF24L01_PORT",
+            "NRF24L01_MISO_PIN"
+          ]
+        },
+        {
+          "id": "NRF24L01_CSN",
+          "type": "gpio_out",
+          "default": "PB12",
+          "required": true,
+          "macros": [
+            "NRF24L01_PORT",
+            "NRF24L01_CSN_PIN"
+          ]
+        },
+        {
+          "id": "NRF24L01_CE",
+          "type": "gpio_out",
+          "default": "PB13",
+          "required": true,
+          "macros": [
+            "NRF24L01_PORT",
+            "NRF24L01_CE_PIN"
+          ]
+        },
+        {
+          "id": "NRF24L01_IRQ",
+          "type": "gpio_in",
+          "default": "PB5",
+          "required": true,
+          "macros": [
+            "NRF24L01_PORT",
+            "NRF24L01_IRQ_PIN"
+          ]
         }
       ]
     }

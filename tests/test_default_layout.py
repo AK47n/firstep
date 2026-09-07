@@ -76,6 +76,9 @@ WHITELIST = {
         # wiki-stm32-batch8/01：as32 TX——LoRa 与 Zigbee 无线数传**互替件
         # 同脚先例**（二选一接入无需另消解；罕见同选经绑定换实例/换脚）
         "as32.AS32_UART_TX",
+        # wiki-stm32-batch8/03：nrf24l01 CLK——2.4G 与 Zigbee/LoRa 无线数传
+        # 互替件同脚（与键盘 COL3 并列，无线链路与手动输入不同框）
+        "nrf24l01.NRF24L01_CLK",
     },
     "PB11": {
         "zigbee_uart.ZIGBEE_UART_RX",
@@ -86,6 +89,8 @@ WHITELIST = {
         "key_matrix.KEY_MATRIX_COL4",
         # wiki-stm32-batch8/01：as32 RX——与 TX 同策略（无线数传互替同脚）
         "as32.AS32_UART_RX",
+        # wiki-stm32-batch8/03：nrf24l01 MOSI——与 CLK 同策略（无线互替同脚）
+        "nrf24l01.NRF24L01_MOSI",
     },
     # PB12-15 三共享（DIP×GRAY×TTP224——wiki-stm32-batch1/05，见下方批次 1 注释块）
     # key stm32 默认 PB3 与 pid.GRAY_D6 重叠（蓝药丸无板载按键，PB3 = JTDO
@@ -123,6 +128,9 @@ WHITELIST = {
         "motor.MOTOR_A_ENC_DIR",
         "relay.RELAY_OUT",
         "hc05.HC05_KEY",
+        # wiki-stm32-batch8/03：nrf24l01 MISO——2.4G 无线与继电器/编码器方向
+        # 不同框、同选概率最低（软 SPI 输入脚同为低频组合）
+        "nrf24l01.NRF24L01_MISO",
     },
     # human_ir 默认 PB7 与 pid 灰度 GRAY_D8 重叠（人体红外≠巡线灰度；
     # 刻意避让声光/按键/门禁组合 BUZZER/KEY/SERVO）
@@ -181,12 +189,17 @@ WHITELIST = {
         "config.DIP0",
         "ttp224.TTP224_OUT1",
         "key_matrix.KEY_MATRIX_ROW1",
+        # wiki-stm32-batch8/03：nrf24l01 CSN——2.4G 无线与拨码/灰度/触摸/矩阵
+        # 输入不同框、同选概率最低（无线链路常用脚避开人机输入组合）
+        "nrf24l01.NRF24L01_CSN",
     },
     "PB13": {
         "pid.GRAY_D2",
         "config.DIP1",
         "ttp224.TTP224_OUT2",
         "key_matrix.KEY_MATRIX_ROW2",
+        # wiki-stm32-batch8/03：nrf24l01 CE——与 CSN 同策略
+        "nrf24l01.NRF24L01_CE",
     },
     "PB14": {
         "pid.GRAY_D3",
@@ -216,6 +229,10 @@ WHITELIST = {
         "hx711.HX711_SCK",
         "gp2y1014au.GP2Y1014_LED",
         "ec11.EC11_B",
+        # wiki-stm32-batch8/03：nrf24l01 IRQ（轮询只读）——2.4G 无线与编码器/
+        # 旋钮/称重/粉尘不同框、同选概率最低；本件不注册 EXTI（与编码器线
+        # 共享正交、EXTI 门禁默认组合不拦）
+        "nrf24l01.NRF24L01_IRQ",
     },
     "PB0": {
         "motor.MOTOR_B_DIR",
@@ -310,6 +327,7 @@ def test_default_layout_conflict_groups_resolved():
         "zigbee_link.ZIGBEE_UART_TX",
         "key_matrix.KEY_MATRIX_COL3",
         "as32.AS32_UART_TX",
+        "nrf24l01.NRF24L01_CLK",
     }
     assert grouped["PB11"] == {
         "zigbee_uart.ZIGBEE_UART_RX",
@@ -317,4 +335,5 @@ def test_default_layout_conflict_groups_resolved():
         "zigbee_link.ZIGBEE_UART_RX",
         "key_matrix.KEY_MATRIX_COL4",
         "as32.AS32_UART_RX",
+        "nrf24l01.NRF24L01_MOSI",
     }
