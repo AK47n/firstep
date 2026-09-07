@@ -419,6 +419,26 @@
 #define HC05_KEY_GPIO         GPIO_B
 #define HC05_KEY_PIN          Pin_4
 
+/* ---- 批次 9（wiki-stm32-batch9/03）：fingerprint 指纹识别（真实 UART）----
+ * 默认 UART_1 = UWB_UART 宿主（指纹与 K230 视觉**身份识别互替**、同选概率
+ * 最低——互替件同脚先例）；TX=PA9/RX=PA10 = UART_1 原脚（与 DIGIT/COORD/
+ * UWB/HC05 并列默认共享 = 合法先例）；57600（AS608 出厂默认——uart_pin_init_ex
+ * 默认 115200 后 uart_baud_config 重配；同实例其它角色 115200——双选默认时
+ * 后 init 定波特率、另一角色静默失效（hc05 先例已记录），同选经绑定换实例
+ * 成对消解）；RX 中断状态机（fingerprint_rx_handler 经 isr.c
+ * USART1_IRQ_CALLS 聚合调用——pinwriter _UART_CALLS_ROLES 已登记）；
+ * TOUCH=PB5（gpio_in 上拉——编码器 A 相/称重/粉尘/旋钮低频重叠：指纹门禁
+ * 与「带编码器闭环小车/静态称重」不同框、同选概率最低；页面 TOUCH=PA1
+ * 不照抄）。 */
+#define FINGERPRINT_UART             UART_1
+#define FINGERPRINT_UART_INST        USART1
+#define FINGERPRINT_UART_TX_GPIO     GPIO_A
+#define FINGERPRINT_UART_TX_Pin      Pin_9
+#define FINGERPRINT_UART_RX_GPIO     GPIO_A
+#define FINGERPRINT_UART_RX_Pin      Pin_10
+#define FINGERPRINT_TOUCH_GPIO       GPIO_B
+#define FINGERPRINT_TOUCH_PIN        Pin_5
+
 /* ---- 批次 8（wiki-stm32-batch8/03）：nrf24l01 2.4G 无线收发（软 SPI）----
  * 全端口 B（单 NRF24L01_PORT = GPIO_B，同口约束照 ttp224——换口需整组迁移）：
  * CLK=PB10/MOSI=PB11（ZIGBEE+as32+键盘 COL3/4——无线数传互替件同脚）、
@@ -489,7 +509,7 @@
 /* ---- UART 接收中断聚合（isr.c 的 USARTx_IRQHandler 调这些宏，
  * 工单 pin-full-unlock/02）——按各 UART 角色绑定实例重分组：默认
  * UART_1 = DIGIT+COORD+UWB+HC05 共享、UART_2 = DEBUG、UART_3 = ZIGBEE。 ---- */
-#define USART1_IRQ_CALLS digit_uart_rx_handler(); coord_detect_rx_handler(); uwb_rx_handler(); hc05_rx_handler();
+#define USART1_IRQ_CALLS digit_uart_rx_handler(); coord_detect_rx_handler(); uwb_rx_handler(); hc05_rx_handler(); fingerprint_rx_handler();
 #define USART2_IRQ_CALLS debug_uart_rx_handler();
 #define USART3_IRQ_CALLS zigbee_rx_handler();
 

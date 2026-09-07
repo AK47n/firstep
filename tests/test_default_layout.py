@@ -56,6 +56,10 @@ WHITELIST = {
         # 不同框、同选概率最低（mspm0 默认 PA0 同型推理）；与 ir_remote 接收
         # 默认 PA10 刻意错开（发/收常配对、双选默认不撞），同选经绑定消解
         "ir_remote_tx.IR_TX_OUT",
+        # wiki-stm32-batch9/03：fingerprint TX——指纹与 K230 视觉**身份识别
+        # 互替件同脚先例**（mspm0 指纹独立实例、K230 视觉 = DIGIT_UART——
+        # stm32 同款推理挂 UART_1 宿主），同选经绑定换实例成对消解
+        "fingerprint.FINGERPRINT_TX",
     },
     "PA10": {
         "digit_uart.DIGIT_UART_RX",
@@ -73,6 +77,8 @@ WHITELIST = {
         # 同选概率最低（mspm0 默认 PA26（UART 族）同型推理；轮询忙等不注册
         # EXTI——与编码器线共享正交不冲突），同选经绑定消解
         "ir_remote.IR_REMOTE_OUT",
+        # wiki-stm32-batch9/03：fingerprint RX——与 TX 同策略（身份识别互替同脚）
+        "fingerprint.FINGERPRINT_RX",
     },
     "PB10": {
         "zigbee_uart.ZIGBEE_UART_TX",
@@ -247,6 +253,10 @@ WHITELIST = {
         # wiki-stm32-batch8/04：rc522 MISO——读卡与编码器/旋钮/称重/粉尘
         # 不同框、同选概率最低
         "rc522.RC522_MISO",
+        # wiki-stm32-batch9/03：fingerprint TOUCH——指纹门禁与「带编码器闭环
+        # 小车/称重/粉尘」不同框、同选概率最低（页面 PA1 不照抄），同选经
+        # 引脚绑定消解
+        "fingerprint.FINGERPRINT_TOUCH",
     },
     "PB0": {
         "motor.MOTOR_B_DIR",
