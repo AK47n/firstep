@@ -24,9 +24,10 @@
  *   代码零引脚字面量；默认 IN1=PA6（TIM3_CH1）/IN2=PA7（TIM3_CH2）=
  *   页面原脚（TIM3 定时器零占用；与 TB6612 motor（TIM2/PA0-1）互替刻意
  *   错开 TIM 与脚；**PA6/PA7 与软 I2C 总线同脚**——L298N×I2C 件同选 =
- *   物理冲突 ⚠（绑定消解）；**TIM 门禁只查用户绑定**——2026H 骨架调度
- *   TIM_3 × 本件默认 TIM_3 属默认×默认不拦（现状口径，同选定骨架 TIM_2
- *   或改绑定换 TIM），notes 记录）。
+ *   物理冲突 ⚠（绑定消解）；**TIM 门禁只查用户绑定**——骨架调度模板默认
+ *   TIM_3 × 本件默认 TIM_3 属默认×默认不拦（现状口径：骨架用 TIM_3 调度
+ *   模板时建议绑 TIM4_CH2/CH3 或改调度模板，见 manifest notes——届时按
+ *   年份模板对照）。
  * 对应手册：sources/materials/lckfb-地阔星移植手册/
  * control--l298n-motor-drive-module.md（立创 wiki 地阔星移植手册；代码按
  * 模块库规范改写：去 main.c 演示与 printf、AO_Control 按库风格拆分为

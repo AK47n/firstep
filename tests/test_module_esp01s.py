@@ -2,7 +2,7 @@
 真实母版不变量与 stm32 单选生成。
 
 与 hc05（UART 中断件）/ ec11（B 类）同款结构测试：manifest 形状（仅 stm32、
-依赖 delay——send_cmd 超时等待、TX/RX = UART_1 宿主）、**isr.c 聚合登记
+无依赖——delay_ms 走母版 ml_delay 内嵌、TX/RX = UART_1 宿主）、**isr.c 聚合登记
 esp01s_rx_handler**（pinwriter _UART_CALLS_ROLES + __weak + USART1_IRQ_CALLS）、
 stm32 单选生成、缺陷守卫（无 % 200 回绕式、IDLE 断串修正、有界扫、缓冲 200
 截断、+IPD 解析）。全程无 LLM、无服务。
@@ -66,7 +66,7 @@ def test_esp01s_manifest_shape_stm32():
     """B 类口径：仅 stm32 平台条目（无 mspm0）；依赖 delay；TX/RX = UART_1。"""
     manifest = ModuleManifest.load(MODULES / "esp01s")
     assert manifest.slug == "esp01s"
-    assert manifest.dependencies == ("delay",)
+    assert manifest.dependencies == ()
     assert set(manifest.platforms) == {"stm32"}
 
     stm32 = manifest.platforms["stm32"]
@@ -148,7 +148,7 @@ def test_esp01s_stm32_pinwriter_roles_registered():
 def test_esp01s_stm32_single_select_generation(tmp_path):
     """stm32 单选生成：模块文件落盘、uvprojx 注册 esp01s_stm32.c。"""
     resolved = resolve_selection(MODULES, PLATFORM_STM32, ["esp01s"])
-    assert {m.slug for m in resolved.manifests} == {"esp01s", "delay"}
+    assert {m.slug for m in resolved.manifests} == {"esp01s"}
     out = tmp_path / "out"
     generate(
         platform=PLATFORM_STM32,

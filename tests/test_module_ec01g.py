@@ -2,7 +2,7 @@
 + 真实母版不变量与 stm32 单选生成。
 
 与 hc05（UART 中断件）/ esp01s（AT 透传件）同款结构测试：manifest 形状
-（仅 stm32、依赖 delay——send_cmd 超时等待、TX/RX = UART_3 宿主与 Zigbee/
+（仅 stm32、无依赖——delay_ms 走母版 ml_delay 内嵌、TX/RX = UART_3 宿主与 Zigbee/
 LoRa 无线互替）、**isr.c 聚合登记 ec01g_rx_handler**（pinwriter
 _UART_CALLS_ROLES + __weak + USART3_IRQ_CALLS）、stm32 单选生成、缺陷守卫
 （空指针保护 NULL 检查、有界扫、%2096 回绕修正、缓冲 256 截断、HTTP/JSON
@@ -64,7 +64,7 @@ def test_ec01g_manifest_shape_stm32():
     """B 类口径：仅 stm32 平台条目（无 mspm0）；依赖 delay；TX/RX = UART_3。"""
     manifest = ModuleManifest.load(MODULES / "ec01g")
     assert manifest.slug == "ec01g"
-    assert manifest.dependencies == ("delay",)
+    assert manifest.dependencies == ()
     assert set(manifest.platforms) == {"stm32"}
 
     stm32 = manifest.platforms["stm32"]
@@ -146,7 +146,7 @@ def test_ec01g_stm32_pinwriter_roles_registered():
 def test_ec01g_stm32_single_select_generation(tmp_path):
     """stm32 单选生成：模块文件落盘、uvprojx 注册 ec01g_stm32.c。"""
     resolved = resolve_selection(MODULES, PLATFORM_STM32, ["ec01g"])
-    assert {m.slug for m in resolved.manifests} == {"ec01g", "delay"}
+    assert {m.slug for m in resolved.manifests} == {"ec01g"}
     out = tmp_path / "out"
     generate(
         platform=PLATFORM_STM32,

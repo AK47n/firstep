@@ -887,7 +887,15 @@ def _fit_segment_wire(
 # 全量 7886 比旧截断形态 7734 多 152B——最坏形态总量 +152B，推荐真实库
 # 预算回归 test_recommend_real_library_budget 实证 ≥2KB 余量不受影响
 # （batch13 口径）。
-WORDLIST_PROMPT_BYTES = 8120
+# 2026-09-08（wiki-stm32-batch9/05-07）：定位模块 GPS 方案补 lib_modules
+# （neo_6m——B 类新 slug 仅 stm32）+ models +1（NEO-6M）；无线通信模块
+# ESP8266 方案补 lib_modules（esp01s）+ models +1（ESP-01S）+ 新增 EC-01G
+# 方案（NB-IoT+GPS AT 底座）+ models +2（NB-IoT/EC-01G）→ 默认词表完整
+# wire 实测 7994（> 7954 fit 上限 8120−166，尾部类别被截、方案名丢失——
+# test_wordlist_segment 契约红证），预算升 8300（fit 上限 8134 ≥ 7994 全量
+# 送达 + 140B 余量；词表段全量 7994 比旧截断形态 7954 多 40B——最坏形态
+# 总量 +40B，全文预算不动 2KB 边界余量保持（batch7 口径：≤200B 不调）。
+WORDLIST_PROMPT_BYTES = 8300
 
 # 词表段截断标注（单源；不用全局 TRUNCATION_NOTICE——词表截断是科普段压缩
 # （后续类别仍由界面展示加载），与 content 截断契约（题面/参考）语义不同界，
