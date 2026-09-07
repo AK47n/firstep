@@ -1,6 +1,6 @@
 {
   "slug": "ir_distance",
-  "description": "GP2Y0A02YK0F 红外测距驱动（mspm0 纯驱动，ADR 0009）：模拟量输出 ADC 电压→距离换算，经 adc 模块 API 读独立通道 ADC12_0 MEM3（默认 PA27/A0_0，与 adc/us016/joystick 共享同一 ADC 实例 sequence 四通道），ir_distance_read_distance_cm 出距离（cm，20-150cm 段，10 次平均）；适用于非接触测距、避障、近距开关量替代、落点检测等赛题功能。",
+  "description": "GP2Y0A02YK0F 红外测距驱动（双平台纯驱动，ADR 0009）：模拟量输出 ADC 电压→距离换算（V=raw/4095×3.3、Distance=60.374×V^(-1.16)，20-150cm 段），mspm0 经 adc 模块 API 读独立通道 ADC12_0 MEM3（默认 PA27/A0_0）、stm32 经 ml_adc 共读 PA5（ADC 共享组，与 us016 互替件同脚），ir_distance_read_distance_cm 出距离（cm，10 次平均）；适用于非接触测距、避障、近距开关量替代、落点检测等赛题功能。",
   "dependencies": [
     "adc"
   ],
@@ -21,6 +21,28 @@
           "type": "adc",
           "default": "PA27",
           "required": true
+        }
+      ]
+    },
+    "stm32": {
+      "files": [
+        "code/ir_distance_stm32.c",
+        "code/ir_distance_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**ADC 薄封装（页面 ADC 序列代码收敛 ml_adc）**：F1 口径页面（stm32f10x.h + RCC_APB2PeriphClockCmd + GPIO_Mode_AIN + ADC_RegularChannelConfig + SoftwareStartConvCmd + GetConversionValue）——页面 IRdistance_GPIO_Init + Get_Adc_Value 整体收敛为母版 ml_adc 的 adc_init（内部完成 AIN 引脚配置 + APB2 时钟 + 6 分频 12MHz + 复位校准——等效页面流程）+ ADC_GetConversionValue→adc_get（软件触发轮询）。**ADC 共享组**：默认 AO=PA5（=页面原脚 ADC_Channel_5，用户照页面接线即插即用）；与 flame/批次 5/6 件共读 PA5（ml_adc 的 adc_get 每次先写 SQR3 选通道，顺序调用互不干扰）；**与 us016 互替件同脚**（两测距件同一物理脚只能接一件——互替同脚先例语义：二选一接入无需另消解；罕见同选两件时经绑定其一换 PA0/PA1）；**同一物理脚只能接一件器件，多件同测需外部分路器/分时切换**（stm32 通道 10/10 全被既有角色占用——同选经引脚绑定消解；mspm0 侧本件独立 MEM3 有槽位——**两平台不同口径：mspm0 独立通道、stm32 共读 PA5——notes 说明**）。**页面缺陷/修正**：① 页面 L160 电压基准硬编码 3.5V（F103 供电 3.3V——页面换算系统偏低约 6%）——照 mspm0 宏化 `IR_DIST_VREF_V 3.3f`（一处改）；② 页面 L44「下图是输出曲线图」实为 0 图（无查表数据）——按官方公式 60.374×V^(-1.16)（注释 L179-182 + 代码 L183 一致，20-150cm 段；<15cm 电压跌落非线性区注释）；③ 页面 Get_Adc_Value 30 次连续累加改 10 次（手册 Get_Adc_Value(10) 原值——宏名照 mspm0 `IR_DIST_ADC_SAMPLES 10`，非 5 次快平均口径）；④ 全 0 采样返回 0.0f（防 pow(0,-1.16) 溢出——原版输出 inf，mspm0 先例）；⑤ 出参 cm 对齐 mspm0（ir_distance_read_distance_cm 同名 L21——页面 main L258 直接打印即 cm）；⑥ stm32 用 powf 单精度（C8T6 无硬件 FPU 软浮点省栈；与 mspm0 double pow 同精度级）；⑦ 页面 h L211-216 宏（IRDISTANCE_ADC/PORT_IRDISTANCE 等）收敛 pin_config.h 单源 IR_DISTANCE_AO_CH（ADR 0010）；3Pin 无 DO——不声明。\nwiki 手册来源：sources/materials/lckfb-地阔星移植手册/sensor--Infrared-distance-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/Infrared-distance-sensor.html——**大小写敏感**；网盘资料 https://pan.baidu.com/s/11dDQHyYJfi0nNyC28vkpoA 提取码 qvpm）。改造要点：去掉 main.c 演示与 printf；函数名规范化（ir_distance_init/read_distance_cm，去 IRdistance_GPIO_Init/Get_Adc_Value/Get_IRdistance_Distance 命名）；页面 ADC 序列收敛 ml_adc；3.5V→3.3V 宏化；30 次→10 次；新增全 0 防护。\nwiki-stm32-batch7/02 编译矩阵（2026-09-07）：stm32 单选生成（依赖 adc 展开）→ UV4（C:/Keil5 V5.06u7）0 error、0 module warning（exit 0，PASS）；未上板（换算系数/公式段真机标定留后续）。",
+      "kit": "GP2Y0A02YK0F 红外测距传感器模块（20-150cm 模拟量输出）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/Infrared-distance-sensor.html",
+      "pins": [
+        {
+          "id": "IR_DISTANCE_AO",
+          "type": "adc",
+          "default": "PA5",
+          "required": true,
+          "macros": [
+            "IR_DISTANCE_AO_CH"
+          ]
         }
       ]
     }

@@ -201,6 +201,7 @@
  * （gpio_in——叠 DIGIT/COORD/UWB UART RX：摇杆与视觉/数传链路不同框、
  * 同选概率最低；mspm0 SW=PA9 同款推理，同选经绑定消解）。 */
 #define US016_AO_CH          ADC_Channel_5
+#define IR_DISTANCE_AO_CH    ADC_Channel_5
 
 /* ---- TTP224 四路电容触摸（ttp224 模块：4 × GPIO 输入下拉，OUT1-4 默认
  * PB12/13/14/15——与 config DIP0-3（拨码 ID）+ pid 灰度 GRAY_D1-4 默认重叠：

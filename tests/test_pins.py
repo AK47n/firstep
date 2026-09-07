@@ -412,6 +412,7 @@ STM32_MACRO_VALUES = {
     # PA5——与 ir_distance 互替件同脚；joystick X=PA1/Y=PA0 与 adc 模块
     # ADC_CH1/CH0 共享组；SW=PA10 叠 DIGIT/COORD/UWB UART RX）
     "US016_AO_CH": "ADC_Channel_5",
+    "IR_DISTANCE_AO_CH": "ADC_Channel_5",
 }
 
 
