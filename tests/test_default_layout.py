@@ -48,6 +48,10 @@ WHITELIST = {
         # 同选概率最低（列输入上拉——UART TX 点复用物理脚不同框），
         # 同选经引脚绑定消解
         "key_matrix.KEY_MATRIX_COL1",
+        # wiki-stm32-batch8/02：hc05 TX——蓝牙与 UWB 室内定位链路**互替件
+        # 同脚先例**（mspm0 定稿同款推理：默认×默认共享合法、门禁只查用户
+        # 绑定），同选经绑定换实例成对消解
+        "hc05.HC05_TX",
     },
     "PA10": {
         "digit_uart.DIGIT_UART_RX",
@@ -59,6 +63,8 @@ WHITELIST = {
         # wiki-stm32-batch7/05：key_matrix COL2——与 joystick SW 并列登记
         # （键盘/摇杆同为输入件、同选概率最低，同选经绑定消解）
         "key_matrix.KEY_MATRIX_COL2",
+        # wiki-stm32-batch8/02：hc05 RX——与 TX 同策略（UWB 互替同脚）
+        "hc05.HC05_RX",
     },
     "PB10": {
         "zigbee_uart.ZIGBEE_UART_TX",
@@ -101,10 +107,23 @@ WHITELIST = {
     # PA8 三共享（ir_beam×pid.GRAY_D5 为 ir-beam-module/01 残留；ws2812 为
     # wiki-stm32-batch1/06 批次 1 新增——幻彩灯带与「红外对射/巡线」不同框、
     # 同选概率最低（刻意不叠灯族 LED PC13-15），同选经引脚绑定消解）
-    "PA8": {"pid.GRAY_D5", "ir_beam.IR_BEAM_OUT", "ws2812.WS2812_DIN"},
+    # **wiki-stm32-batch8/02**：hc05 STATE 并入 PA8——蓝牙连接状态与红外
+    # 对射/灯带/巡线不同框、同选概率最低（mspm0 STATE 同脚 PA8 同款推理）
+    "PA8": {
+        "pid.GRAY_D5",
+        "ir_beam.IR_BEAM_OUT",
+        "ws2812.WS2812_DIN",
+        "hc05.HC05_STATE",
+    },
     # relay 默认 PB4 与 motor 编码器方向输入重叠（继电器≠编码器闭环；
     # 刻意不叠声光/执行件 LED/BUZZER/电机 PWM/方向）
-    "PB4": {"motor.MOTOR_A_ENC_DIR", "relay.RELAY_OUT"},
+    # **wiki-stm32-batch8/02**：hc05 KEY 并入 PB4——AT 切换不常用，与继电器/
+    # 编码器方向低频重叠（蓝牙+继电器控制/编码器闭环不同框）
+    "PB4": {
+        "motor.MOTOR_A_ENC_DIR",
+        "relay.RELAY_OUT",
+        "hc05.HC05_KEY",
+    },
     # human_ir 默认 PB7 与 pid 灰度 GRAY_D8 重叠（人体红外≠巡线灰度；
     # 刻意避让声光/按键/门禁组合 BUZZER/KEY/SERVO）
     "PB7": {"pid.GRAY_D8", "human_ir.HUMAN_IR_OUT"},

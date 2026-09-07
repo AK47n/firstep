@@ -393,10 +393,29 @@
 #define AS32_UART_RX_GPIO     GPIO_B
 #define AS32_UART_RX_Pin      Pin_11
 
+/* ---- 批次 8（wiki-stm32-batch8/02）：hc05 蓝牙串口透传 ----
+ * 默认 UART_1 = UWB_UART 宿主（蓝牙手机遥控与 UWB 定位链路互替件、同选概率
+ * 最低——mspm0 定稿 HC05 与 UWB 同外设共享先例的 stm32 同款推理）；TX=PA9/
+ * RX=PA10 = UWB_UART 原脚（互替件同脚先例，与 DIGIT/COORD 并列默认共享=
+ * 合法先例）；9600（HC05 出厂默认）；RX 中断环形缓冲（hc05_rx_handler 经
+ * isr.c USART1_IRQ_CALLS 聚合调用——pinwriter _UART_CALLS_ROLES 已登记）；
+ * STATE=PA8（gpio_in——IR_BEAM/WS2812/GRAY_D5 低频）、KEY=PB4（gpio_out——
+ * RELAY/编码器方向低频）；页面默认串口2（PA2/PA3）+STATE=PA7 不照抄。 */
+#define HC05_UART             UART_1
+#define HC05_UART_INST        USART1
+#define HC05_UART_TX_GPIO     GPIO_A
+#define HC05_UART_TX_Pin      Pin_9
+#define HC05_UART_RX_GPIO     GPIO_A
+#define HC05_UART_RX_Pin      Pin_10
+#define HC05_STATE_GPIO       GPIO_A
+#define HC05_STATE_PIN        Pin_8
+#define HC05_KEY_GPIO         GPIO_B
+#define HC05_KEY_PIN          Pin_4
+
 /* ---- UART 接收中断聚合（isr.c 的 USARTx_IRQHandler 调这些宏，
  * 工单 pin-full-unlock/02）——按各 UART 角色绑定实例重分组：默认
- * UART_1 = DIGIT+COORD+UWB 共享、UART_2 = DEBUG、UART_3 = ZIGBEE。 ---- */
-#define USART1_IRQ_CALLS digit_uart_rx_handler(); coord_detect_rx_handler(); uwb_rx_handler();
+ * UART_1 = DIGIT+COORD+UWB+HC05 共享、UART_2 = DEBUG、UART_3 = ZIGBEE。 ---- */
+#define USART1_IRQ_CALLS digit_uart_rx_handler(); coord_detect_rx_handler(); uwb_rx_handler(); hc05_rx_handler();
 #define USART2_IRQ_CALLS debug_uart_rx_handler();
 #define USART3_IRQ_CALLS zigbee_rx_handler();
 

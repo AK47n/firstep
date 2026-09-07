@@ -43,12 +43,15 @@ _IRQ_CALLS_MACROS = (
 
 # UART 角色宏根 → rx_handler 函数名（默认分组序 + isr.c __weak 兜底名同源；
 # zigbee_uart_key 与 zigbee_uart 共享 ZIGBEE_* 宏，handler 只列一次）。
+# wiki-stm32-batch8/02：HC05_UART 登记（hc05 RX 中断环形缓冲件）；
+# AS32_UART 轮询件无 rx_handler——不登记（绑定换实例不影响 IRQ 分组）。
 _UART_CALLS_ROLES = (
     ("DIGIT_UART", "digit_uart_rx_handler"),
     ("COORD_DETECT_UART", "coord_detect_rx_handler"),
     ("DEBUG_UART", "debug_uart_rx_handler"),
     ("UWB_UART", "uwb_rx_handler"),
     ("ZIGBEE_UART", "zigbee_rx_handler"),
+    ("HC05_UART", "hc05_rx_handler"),
 )
 
 # pin_config.h 宏行：#define NAME<分隔空白><值 + 注释>——只对绑定角色的宏行
