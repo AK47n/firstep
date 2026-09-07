@@ -230,7 +230,7 @@ STM32_MACRO_VALUES = {
     # UART 接收中断聚合（isr.c USARTx_IRQHandler 调用；默认分组）
     "USART1_IRQ_CALLS": (
         "digit_uart_rx_handler(); coord_detect_rx_handler(); uwb_rx_handler();"
-        " hc05_rx_handler();"
+        " hc05_rx_handler(); fingerprint_rx_handler();"
     ),
     "USART2_IRQ_CALLS": "debug_uart_rx_handler();",
     "USART3_IRQ_CALLS": "zigbee_rx_handler();",
@@ -254,6 +254,17 @@ STM32_MACRO_VALUES = {
     "HC05_STATE_PIN": "Pin_8",
     "HC05_KEY_GPIO": "GPIO_B",
     "HC05_KEY_PIN": "Pin_4",
+    # wiki-stm32-batch9/03：fingerprint 指纹识别（真实 UART 帧协议——UART_1=
+    # K230 视觉身份识别互替同脚；57600 运行期重配；RX 中断状态机精确收帧——
+    # isr.c 聚合登记 fingerprint_rx_handler；TOUCH=PB5 与编码器/称重低频重叠）
+    "FINGERPRINT_UART": "UART_1",
+    "FINGERPRINT_UART_INST": "USART1",
+    "FINGERPRINT_UART_TX_GPIO": "GPIO_A",
+    "FINGERPRINT_UART_TX_Pin": "Pin_9",
+    "FINGERPRINT_UART_RX_GPIO": "GPIO_A",
+    "FINGERPRINT_UART_RX_Pin": "Pin_10",
+    "FINGERPRINT_TOUCH_GPIO": "GPIO_B",
+    "FINGERPRINT_TOUCH_PIN": "Pin_5",
     # wiki-stm32-batch8/03：nrf24l01 软 SPI 六脚（全端口 B 单共享端口宏——
     # 同口约束照 ttp224；页面硬件 SPI1 默认脚不照抄）
     "NRF24L01_PORT": "GPIO_B",

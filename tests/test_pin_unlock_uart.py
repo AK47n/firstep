@@ -279,9 +279,10 @@ def test_render_pin_config_uart_swap_macro_values():
     assert "#define UWB_UART_TX_Pin Pin_2" in out
     assert "#define UWB_UART_RX_GPIO GPIO_A" in out
     assert "#define UWB_UART_RX_Pin Pin_3" in out
-    # 未绑角色不动（DIGIT/COORD 仍 UART_1）
+    # 未绑角色不动（DIGIT/COORD/FINGERPRINT 仍 UART_1——批次 9/03 扩展登记）
     assert "#define DIGIT_UART             UART_1\r\n" in out
     assert "#define COORD_DETECT_UART       UART_1\r\n" in out
+    assert "#define FINGERPRINT_UART             UART_1\r\n" in out
 
 
 def test_render_pin_config_uart_swap_irq_calls_regrouped():
@@ -290,7 +291,7 @@ def test_render_pin_config_uart_swap_irq_calls_regrouped():
     追加）、USART3 = debug。"""
     out = render_pin_config(STM32_MASTER_PIN_CONFIG, _resolve(SWAP_BINDINGS))
     assert (
-        "#define USART1_IRQ_CALLS digit_uart_rx_handler(); coord_detect_rx_handler(); hc05_rx_handler();\r\n"
+        "#define USART1_IRQ_CALLS digit_uart_rx_handler(); coord_detect_rx_handler(); hc05_rx_handler(); fingerprint_rx_handler();\r\n"
         in out
     )
     assert (
@@ -318,7 +319,7 @@ def test_render_pin_config_default_irq_calls_byte_identical():
             ),
         ),
     )
-    assert "#define USART1_IRQ_CALLS digit_uart_rx_handler(); coord_detect_rx_handler(); uwb_rx_handler(); hc05_rx_handler();\r\n" in out
+    assert "#define USART1_IRQ_CALLS digit_uart_rx_handler(); coord_detect_rx_handler(); uwb_rx_handler(); hc05_rx_handler(); fingerprint_rx_handler();\r\n" in out
     assert "#define USART2_IRQ_CALLS debug_uart_rx_handler();\r\n" in out
     assert "#define USART3_IRQ_CALLS zigbee_rx_handler();\r\n" in out
 
