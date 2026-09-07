@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=01f932b9455d70ac75403279c40aef512ce9b02e -->
+<!-- changelog-auto: last-commit=265d09ff9ced6d35b31044fcaf6cbcbf95e12315 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -28,6 +28,7 @@
 - 20:01 工单：wiki-stm32-batch9/02 syn6288 语音合成（stm32 条目：软 UART TX——delay_us(104)+gpio_set 位时序 + 0xFD/长度/命令/文本/XOR 帧 + 200 文本上限防越界，只发不收不占串口实例，默认 PC14 叠 LED_YELLOW 输出指示互替、与 jq8900 PA15 错开；API 与 mspm0 6 函数同名同型；NULL 补 stddef 先例）
 - 20:08 工单：wiki-stm32-batch9/03 fingerprint 指纹识别（stm32 条目：真实 UART 帧协议 UART_1/PA9-10 与 K230 身份识别互替同脚 + 57600 + RX 中断状态机按 Len 精确收 12/16 字节——isr.c 聚合首扩 fingerprint_rx_handler + pinwriter _UART_CALLS_ROLES + 页内 u2_recv_length 无上限越界修正；API 与 mspm0 全族 10 函数同名同型；TOUCH=PB5 终校全族补录）
 - 20:10 工单：wiki-stm32-batch9/04 l298n 大电流电机驱动（stm32 条目：PWM×2 方向互切——TIM3_CH1/CH2=PA6/PA7 页面原脚（TIM3 定时器零占用、与 TB6612 互替刻意错开 TIM）；L298N_PWM_PERIOD 2000u 宏对齐 mspm0 + 限幅修正（页面 speed 无上限）；API 与 mspm0 3 函数同名同型；无 EN 代码（跳线帽范围外）；notes：I2C 总线同脚物理冲突⚠ + TIM 门禁默认×默认不拦（2026H 骨架 TIM_3））
+- 20:15 工单：wiki-stm32-batch9/05 neo_6m GPS 定位（B 类新 slug——仅 stm32 条目：真实 UART 9600 + NMEA $→GPRMC→行尾状态机收帧 + get_position 出十进制度（ddmm 换算/N-S E-W 符号）；默认 UART_1 与 UWB 定位互替同脚；isr.c 聚合 neo_6m_rx_handler + pinwriter 登记；缺陷修正：255 越界→256 缓冲截断、memcpy 无长度检查→截断、帧头全串判定；wordlist 定位模块组补录 NEO-6M）
 
 ## 2026-09-06
 - 00:07 批次7/01 mq135 空气质量传感器模块入库（mspm0）：ADC 模拟量独立 MEM4 通道（ir_distance 先例而非 mq2 的 MEM0 薄封装——多路气体同选时各器件物理通道独立、无共读冲突），母版 syscfg ADC12_0 sequence 加第 5 通道（endAdd 3→4、adcMem4chansel=CHAN_6、adcPin6=PB20）；mq135_init + mq135_read_percent 出 0-100% 相对浓度（页面 4095/100 原式、30 次→5 次快平均）；页面 ADC 中断（IRQHandler + gCheckADC）改经 adc 模块 API 轮询（共享实例强符号唯一）；adc 模块 adc_get 通道守卫扩展至 MEM5（注释/枚举同步）；页面 DO（LM393 阈值）宏未用不声明；notes 写明与 mq2 的通道方案差异与 MQ 系相对值非 ppm 精标+预热限制；默认 PB20（与 DC_MOTOR BB/SYN6288 TX 重叠——同选概率最低）；词表感知传感器 +MQ-135；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）
