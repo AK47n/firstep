@@ -1,6 +1,6 @@
 {
   "slug": "rc522",
-  "description": "MFRC522 射频 IC 卡识别模块驱动（mspm0 纯驱动，ADR 0009）：软 SPI 位操作（CS/RST/SCK/MOSI/MISO 五脚，单 PORT 宏，不占硬件 SPI 外设）——rc522_init 后 read_card 出 4 字节卡号，auth_block/read_block/write_block 认证读写 16 字节数据块，halt 休眠；页面 Pcd* 通信族全套保留在驱动内；适用于 RFID 卡号读取、身份识别、门禁刷卡、考勤打卡等赛题功能。",
+  "description": "MFRC522 射频 IC 卡识别模块驱动（双平台纯驱动，ADR 0009）：软 SPI 位操作（CS/RST/SCK/MOSI/MISO 五脚，单 PORT 宏，不占硬件 SPI 外设——mspm0 全 GPIOA、stm32 全端口 B）——rc522_init 后 read_card 出 4 字节卡号，auth_block/read_block/write_block 认证读写 16 字节数据块，halt 休眠；页面 Pcd* 通信族全套保留在驱动内；适用于 RFID 卡号读取、身份识别、门禁刷卡、考勤打卡等赛题功能。",
   "dependencies": [
     "delay"
   ],
@@ -45,6 +45,69 @@
           "type": "gpio_in",
           "default": "PA17",
           "required": true
+        }
+      ]
+    },
+    "stm32": {
+      "files": [
+        "code/rc522_stm32.c",
+        "code/rc522_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**软 SPI 位操作（RFID 读卡）**：页面默认 CS=PA1/SCK=PA2/MOSI=PA3/RST=PA5/MISO=PA4（全 GPIOA）**不照抄**——全被既有角色占用；默认 **全端口 B（单 RC522_PORT 共享端口宏，同口约束照 ttp224/nrf24l01 先例——换口需整组迁移、pinwriter `_check_shared_port_macro_conflicts` 拦异值）**：CS=PB0（MOTOR_B_DIR+HX711_DT+EC11_SW）/ RST=PB1（MOTOR_B_DIR2+DS18B20）/ SCK=PB6（SERVO+GRAY_D7）/ MOSI=PB4（RELAY+编码器方向+hc05 KEY+nrf MISO）/ MISO=PB5（编码器+EC11_B+HX711_SCK+GP2Y1014+nrf IRQ）——读卡与车类（电机方向/舵机）、旋钮（EC11）、称重（HX711）、粉尘（GP2Y1014）、测温（DS18B20）不同框、同选概率最低，同选经引脚绑定消解；**200us 半周期位时序保留**（页面原样——慢但稳；真机异常时按唯一时序宏点调，notes）。**API 与 mspm0 rc522.h 现名全对齐**（rc522_init/read_card/auth_block/read_block/write_block/halt + RC522_OK/ERR/NOTAGERR + AUTH_KEYA/KEYB）；Pcd* 通信族全套保留在驱动内（静态内部）。**上游缺陷**：① PcdAuthState UID 复制 6 字节→4 字节修正（页面越界读 pSnr[4..5]——mspm0 同）；② CalulateCRC/RC522_Rese 拼写按页面保留；③ 页面 1000 轮忙等上限保留（最坏 ~9.6s 真机确认留验证）。**F1 换算**：StdPeriph GPIO_Init/WriteBit/ReadInputDataBit → ml_gpio（gpio_init/gpio_set/gpio_get——gpio_init 内部使能 RCC 时钟），延时 delay_us 同名，零引脚字面量。\nwiki 手册来源：sources/materials/lckfb-地阔星移植手册/rf--rc522-rf-ic-card-identification-module.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/rf/rc522-rf-ic-card-identification-module.html；网盘资料同 mspm0 条：https://pan.baidu.com/s/1pfsYlhmAB6qVwSskVMzsyw?pwd=j38y）。改造要点：去 main/printf/memset 演示、函数名规范化、引脚宏参数化、GPIO API 换算 ml_gpio。\nwiki-stm32-batch8/04 编译矩阵（2026-09-07）：stm32 单选生成（依赖 delay 展开——stm32 侧 files=[] 内嵌母版 ml_delay）→ UV4 0 error、0 module warning（exit 0，PASS）；未上板（软 SPI 200us 时序/卡片交互真机验证留后续）。",
+      "kit": "MFRC522（RC522）RFID IC 卡感应模块（含 S50 复旦卡/钥匙扣）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/rf/rc522-rf-ic-card-identification-module.html",
+      "pins": [
+        {
+          "id": "RC522_CS",
+          "type": "gpio_out",
+          "default": "PB0",
+          "required": true,
+          "macros": [
+            "RC522_PORT",
+            "RC522_CS_PIN"
+          ]
+        },
+        {
+          "id": "RC522_RST",
+          "type": "gpio_out",
+          "default": "PB1",
+          "required": true,
+          "macros": [
+            "RC522_PORT",
+            "RC522_RST_PIN"
+          ]
+        },
+        {
+          "id": "RC522_SCK",
+          "type": "gpio_out",
+          "default": "PB6",
+          "required": true,
+          "macros": [
+            "RC522_PORT",
+            "RC522_SCK_PIN"
+          ]
+        },
+        {
+          "id": "RC522_MOSI",
+          "type": "gpio_out",
+          "default": "PB4",
+          "required": true,
+          "macros": [
+            "RC522_PORT",
+            "RC522_MOSI_PIN"
+          ]
+        },
+        {
+          "id": "RC522_MISO",
+          "type": "gpio_in",
+          "default": "PB5",
+          "required": true,
+          "macros": [
+            "RC522_PORT",
+            "RC522_MISO_PIN"
+          ]
         }
       ]
     }

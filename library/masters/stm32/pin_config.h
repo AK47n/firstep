@@ -428,6 +428,20 @@
 #define NRF24L01_CE_PIN       Pin_13
 #define NRF24L01_IRQ_PIN      Pin_5
 
+/* ---- 批次 8（wiki-stm32-batch8/04）：rc522 射频 IC 卡读卡（软 SPI）----
+ * 全端口 B（单 RC522_PORT = GPIO_B，同口约束照 ttp224/nrf24l01 换口需整组
+ * 迁移）：CS=PB0（电机方向/HX711 DT/EC11 SW）、RST=PB1（电机方向2/DS18B20）、
+ * SCK=PB6（舵机/灰度 D7）、MOSI=PB4（继电器/编码器方向/hc05 KEY/nrf MISO）、
+ * MISO=PB5（编码器/EC11/HX711 SCK/GP2Y1014/nrf IRQ）——读卡与车类/旋钮/
+ * 称重/粉尘不同框、同选概率最低；200us 半周期位时序（页面原样，不占硬件
+ * SPI/TIMER）。页面默认（PA1/PA2/PA3/PA5/PA4）不照抄——全被既有角色占用。 */
+#define RC522_PORT            GPIO_B
+#define RC522_CS_PIN          Pin_0
+#define RC522_RST_PIN         Pin_1
+#define RC522_SCK_PIN         Pin_6
+#define RC522_MOSI_PIN        Pin_4
+#define RC522_MISO_PIN        Pin_5
+
 /* ---- UART 接收中断聚合（isr.c 的 USARTx_IRQHandler 调这些宏，
  * 工单 pin-full-unlock/02）——按各 UART 角色绑定实例重分组：默认
  * UART_1 = DIGIT+COORD+UWB+HC05 共享、UART_2 = DEBUG、UART_3 = ZIGBEE。 ---- */

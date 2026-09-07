@@ -51,7 +51,7 @@ def test_rc522_manifest_shape_mspm0():
     manifest = ModuleManifest.load(MODULES / "rc522")
     assert manifest.slug == "rc522"
     assert manifest.dependencies == ("delay",)
-    assert set(manifest.platforms) == {"mspm0"}
+    assert set(manifest.platforms) == {"mspm0", "stm32"}
 
     mspm0 = manifest.platforms["mspm0"]
     assert [Path(f).name for f in mspm0.files] == ["rc522.c", "rc522.h"]
@@ -125,3 +125,146 @@ def test_rc522_upstream_defect_fix_guards():
     assert 'for (uc = 0; uc < 6; uc++) {\n        buf[uc + 2] = p_key[uc];' in source
     assert 'for (uc = 0; uc < 4; uc++) {\n        buf[uc + 8] = p_snr[uc];' in source
     assert "_spi_send_byte" in source and "_spi_read_byte" in source
+
+
+# ---------------------------------------------------------------------------
+# wiki-stm32-batch8/04：stm32 平台条目（软 SPI 五脚位操作，全端口 B）
+# ---------------------------------------------------------------------------
+
+import re  # noqa: E402
+import xml.etree.ElementTree as ET  # noqa: E402
+
+from contest_generator.clex import strip_comments  # noqa: E402
+from contest_generator.platforms import PLATFORM_STM32  # noqa: E402
+
+STM32_MASTER = LIBRARY_ROOT / "masters" / "stm32"  # noqa: E402
+
+MAIN_C_STM32 = (
+    '#include "headfile.h"\n'
+    '#include "rc522_stm32.h"\n'
+    "\n"
+    "int main(void)\n"
+    "{\n"
+    "    rc522_init();\n"
+    "    static uint8_t uid[4];\n"
+    "    static uint8_t data[16];\n"
+    "    static const uint8_t key[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};\n"
+    "    (void)rc522_read_card(uid);\n"
+    "    (void)rc522_auth_block(RC522_AUTH_KEYA, 4, key, uid);\n"
+    "    (void)rc522_read_block(6, key, uid, data);\n"
+    "    (void)rc522_write_block(6, key, uid, data);\n"
+    "    rc522_halt();\n"
+    "    while (1)\n"
+    "    {\n"
+    "    }\n"
+    "}\n"
+)
+
+BANNED_CODE_PATTERNS = [
+    (r"\bprintf\b", "printf"),
+    (r"\bmain\b", "main"),
+    (r"\bmemset\b", "memset"),
+    (r"\bboard_init\b", "board_init"),
+    (r"\bGPIO_Init\b", "GPIO_Init"),
+    (r"\bGPIO_WriteBit\b", "GPIO_WriteBit"),
+    (r"\bRCC_\w+\s*\(", "RCC_ 调用"),
+    (r"stm32f10x\.h", "stm32f10x.h"),
+    (r"\bSPI\b", "SPI（硬件 SPI 改软 SPI）"),
+    (r"\bIRQHandler\b", "IRQHandler（轮询件）"),
+]
+
+
+def test_rc522_manifest_shape_stm32():
+    """stm32 条目：五角色（全端口 B 默认），每角色带共享 RC522_PORT + PIN 宏。"""
+    manifest = ModuleManifest.load(MODULES / "rc522")
+    stm32 = manifest.platforms["stm32"]
+    assert [Path(f).name for f in stm32.files] == [
+        "rc522_stm32.c",
+        "rc522_stm32.h",
+    ]
+    for rel in stm32.files:
+        assert (MODULES / "rc522" / rel).is_file(), rel
+    expect = [
+        ("RC522_CS", "gpio_out", "PB0", ("RC522_PORT", "RC522_CS_PIN")),
+        ("RC522_RST", "gpio_out", "PB1", ("RC522_PORT", "RC522_RST_PIN")),
+        ("RC522_SCK", "gpio_out", "PB6", ("RC522_PORT", "RC522_SCK_PIN")),
+        ("RC522_MOSI", "gpio_out", "PB4", ("RC522_PORT", "RC522_MOSI_PIN")),
+        ("RC522_MISO", "gpio_in", "PB5", ("RC522_PORT", "RC522_MISO_PIN")),
+    ]
+    assert [(p.id, p.type, p.default, p.required, p.macros) for p in stm32.pins] == [
+        (pid, ptype, default, True, macros) for pid, ptype, default, macros in expect
+    ]
+    assert stm32.verified is True
+    assert stm32.kit and stm32.source_url == (
+        "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/"
+        "module/rf/rc522-rf-ic-card-identification-module.html"
+    )
+    for needle in (
+        "lckfb-地阔星移植手册/rf--rc522-rf-ic-card-identification-module.md",
+        "软 SPI",
+        "200us",
+        "不同框",
+        "未上板",
+    ):
+        assert needle in stm32.notes
+
+
+def test_rc522_stm32_macros_defined_in_pin_config():
+    """stm32 接线单源：rc522 六宏在母版 pin_config.h（PORT=GPIO_B）。"""
+    text = (STM32_MASTER / "pin_config.h").read_text(encoding="utf-8")
+    assert re.search(r"#define\s+RC522_PORT\s+GPIO_B", text)
+    assert re.search(r"#define\s+RC522_CS_PIN\s+Pin_0", text)
+    assert re.search(r"#define\s+RC522_RST_PIN\s+Pin_1", text)
+    assert re.search(r"#define\s+RC522_SCK_PIN\s+Pin_6", text)
+    assert re.search(r"#define\s+RC522_MOSI_PIN\s+Pin_4", text)
+    assert re.search(r"#define\s+RC522_MISO_PIN\s+Pin_5", text)
+
+
+def test_rc522_stm32_single_select_generation(tmp_path):
+    """stm32 单选生成：依赖 delay 展开（stm32 files=[] 内嵌母版）、uvprojx 注册。"""
+    resolved = resolve_selection(MODULES, PLATFORM_STM32, ["rc522"])
+    assert {m.slug for m in resolved.manifests} == {"rc522", "delay"}
+    out = tmp_path / "out"
+    generate(
+        platform=PLATFORM_STM32,
+        manifests=resolved.manifests,
+        module_library_dir=MODULES,
+        master_project_dir=STM32_MASTER,
+        output_dir=out,
+        main_c_content=MAIN_C_STM32,
+    )
+    assert (out / "modules/rc522/code/rc522_stm32.c").is_file()
+    assert (out / "modules/rc522/code/rc522_stm32.h").is_file()
+    uvprojx = next(out.rglob("*.uvprojx"))
+    root = ET.parse(uvprojx).getroot()
+    groups = root.findall("Targets/Target/Groups/Group")
+    modules = next(g for g in groups if g.findtext("GroupName") == "modules")
+    paths = [f.findtext("FilePath") for f in modules.findall("Files/File")]
+    assert any("rc522_stm32.c" in p for p in paths)
+    assert (out / "pin_config.h").is_file()
+
+
+def test_rc522_stm32_code_guards():
+    """stm32 代码层守卫：200us 半周期软 SPI、UID 4 字节修正、返回码钉值、
+    零引脚字面量、无硬件 SPI 残留。"""
+    c = (MODULES / "rc522" / "code" / "rc522_stm32.c").read_text(encoding="utf-8")
+    h = (MODULES / "rc522" / "code" / "rc522_stm32.h").read_text(encoding="utf-8")
+    full = c + "\n" + h
+
+    assert "#define RC522_OK          0x26u" in h
+    assert "#define RC522_NOTAGERR    0xCCu" in h
+    assert "#define RC522_ERR         0xBBu" in h
+    assert "#define RC522_AUTH_KEYA   0x60u" in h
+
+    code_only = strip_comments(full, keep_preprocessor=True)
+    for pattern, label in BANNED_CODE_PATTERNS:
+        assert not re.search(pattern, code_only), f"代码残留 {label}"
+
+    # 200us 半周期软 SPI 位操作（页面原样）
+    assert "delay_us(200)" in code_only
+    assert "gpio_set(RC522_PORT, RC522_CS_PIN" in code_only
+    assert "gpio_get(RC522_PORT, RC522_MISO_PIN)" in code_only
+    # UID 复制 4 字节修正（页面 6 字节越界 bug——mspm0 同）
+    assert 'for (uc = 0; uc < 6; uc++) {\n        buf[uc + 2] = p_key[uc];' in code_only
+    assert 'for (uc = 0; uc < 4; uc++) {\n        buf[uc + 8] = p_snr[uc];' in code_only
+    assert "PB0" not in code_only

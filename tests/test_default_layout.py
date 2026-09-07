@@ -108,7 +108,8 @@ WHITELIST = {
     "PA1": {"motor.MOTOR_B_PWM", "adc.ADC_CH1", "joystick.JOYSTICK_X"},
     # servo 默认 PB6 与 pid.GRAY_D7 重叠（b1-adc-servo/02）：蓝药丸可 PWM 脚
     # 全被占用，无空闲可挪——实际接线经引脚绑定消解
-    "PB6": {"pid.GRAY_D7", "servo.SERVO_PWM_C0"},
+    # **wiki-stm32-batch8/04**：rc522 SCK 并入 PB6——读卡与舵机/巡线不同框
+    "PB6": {"pid.GRAY_D7", "servo.SERVO_PWM_C0", "rc522.RC522_SCK"},
     # PA8 三共享（ir_beam×pid.GRAY_D5 为 ir-beam-module/01 残留；ws2812 为
     # wiki-stm32-batch1/06 批次 1 新增——幻彩灯带与「红外对射/巡线」不同框、
     # 同选概率最低（刻意不叠灯族 LED PC13-15），同选经引脚绑定消解）
@@ -131,6 +132,8 @@ WHITELIST = {
         # wiki-stm32-batch8/03：nrf24l01 MISO——2.4G 无线与继电器/编码器方向
         # 不同框、同选概率最低（软 SPI 输入脚同为低频组合）
         "nrf24l01.NRF24L01_MISO",
+        # wiki-stm32-batch8/04：rc522 MOSI——读卡与继电器/编码器方向不同框
+        "rc522.RC522_MOSI",
     },
     # human_ir 默认 PB7 与 pid 灰度 GRAY_D8 重叠（人体红外≠巡线灰度；
     # 刻意避让声光/按键/门禁组合 BUZZER/KEY/SERVO）
@@ -233,16 +236,26 @@ WHITELIST = {
         # 旋钮/称重/粉尘不同框、同选概率最低；本件不注册 EXTI（与编码器线
         # 共享正交、EXTI 门禁默认组合不拦）
         "nrf24l01.NRF24L01_IRQ",
+        # wiki-stm32-batch8/04：rc522 MISO——读卡与编码器/旋钮/称重/粉尘
+        # 不同框、同选概率最低
+        "rc522.RC522_MISO",
     },
     "PB0": {
         "motor.MOTOR_B_DIR",
         "hx711.HX711_DT",
         "ec11.EC11_SW",
+        # wiki-stm32-batch8/04：rc522 CS——读卡与电机方向/称重/旋钮不同框
+        "rc522.RC522_CS",
     },
     # ds18b20 默认 PB1 与 MOTOR_B_DIR2 重叠（wiki-stm32-batch4/04：测温与
     # 单电机方向不同框、同选概率最低；页面默认 PB0 不采用 = MOTOR_B_DIR；
     # 单总线件不叠软 I2C 总线件与传感站/声光组合）
-    "PB1": {"motor.MOTOR_B_DIR2", "ds18b20.DS18B20_DATA"},
+    # **wiki-stm32-batch8/04**：rc522 RST 并入 PB1——读卡与测温/电机方向不同框
+    "PB1": {
+        "motor.MOTOR_B_DIR2",
+        "ds18b20.DS18B20_DATA",
+        "rc522.RC522_RST",
+    },
     # PA6/PA7 软 I2C 总线共享组（wiki-stm32-batch2/01 起，六件共总线：
     # aht10/bh1750/sht20/sht30/at24c02/ags10 默认 SCL=PA6/SDA=PA7——器件
     # 地址 0x38/0x23/0x40/0x44/0x50/0x1A 全异、多挂协议允许 = 合法共享
@@ -313,6 +326,7 @@ def test_default_layout_conflict_groups_resolved():
         "motor.MOTOR_B_DIR",
         "hx711.HX711_DT",
         "ec11.EC11_SW",
+        "rc522.RC522_CS",
     }
     assert grouped["PA2"] == {"debug_uart.DEBUG_UART_TX"}
     assert grouped["PA3"] == {"debug_uart.DEBUG_UART_RX"}
