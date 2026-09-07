@@ -44,6 +44,10 @@ WHITELIST = {
         "digit_uart.DIGIT_UART_TX",
         "coord_detect.COORD_DETECT_UART_TX",
         "uwb_uart.UWB_UART_TX",
+        # wiki-stm32-batch7/05：key_matrix COL1——键盘与视觉/数传链路不同框、
+        # 同选概率最低（列输入上拉——UART TX 点复用物理脚不同框），
+        # 同选经引脚绑定消解
+        "key_matrix.KEY_MATRIX_COL1",
     },
     "PA10": {
         "digit_uart.DIGIT_UART_RX",
@@ -52,16 +56,25 @@ WHITELIST = {
         # wiki-stm32-batch7/03：joystick SW——摇杆与视觉/数传链路不同框、
         # 同选概率最低（mspm0 SW=PA9 同款推理），同选经绑定消解
         "joystick.JOYSTICK_SW",
+        # wiki-stm32-batch7/05：key_matrix COL2——与 joystick SW 并列登记
+        # （键盘/摇杆同为输入件、同选概率最低，同选经绑定消解）
+        "key_matrix.KEY_MATRIX_COL2",
     },
     "PB10": {
         "zigbee_uart.ZIGBEE_UART_TX",
         "zigbee_uart_key.ZIGBEE_UART_TX",
         "zigbee_link.ZIGBEE_UART_TX",
+        # wiki-stm32-batch7/05：key_matrix COL3——键盘与无线数传链路不同框、
+        # 同选概率最低，同选经引脚绑定消解
+        "key_matrix.KEY_MATRIX_COL3",
     },
     "PB11": {
         "zigbee_uart.ZIGBEE_UART_RX",
         "zigbee_uart_key.ZIGBEE_UART_RX",
         "zigbee_link.ZIGBEE_UART_RX",
+        # wiki-stm32-batch7/05：key_matrix COL4——键盘与无线数传链路不同框、
+        # 同选概率最低，同选经引脚绑定消解
+        "key_matrix.KEY_MATRIX_COL4",
     },
     # PB12-15 三共享（DIP×GRAY×TTP224——wiki-stm32-batch1/05，见下方批次 1 注释块）
     # key stm32 默认 PB3 与 pid.GRAY_D6 重叠（蓝药丸无板载按键，PB3 = JTDO
@@ -136,10 +149,33 @@ WHITELIST = {
     },
     # ttp224 默认 PB12-15 与 config DIP0-3 + pid GRAY_D1-4 重叠（触摸按键≠
     # 拨码配置/巡线灰度；四脚同口约束——换口需整组迁移，同选经引脚绑定消解）
-    "PB12": {"pid.GRAY_D1", "config.DIP0", "ttp224.TTP224_OUT1"},
-    "PB13": {"pid.GRAY_D2", "config.DIP1", "ttp224.TTP224_OUT2"},
-    "PB14": {"pid.GRAY_D3", "config.DIP2", "ttp224.TTP224_OUT3"},
-    "PB15": {"pid.GRAY_D4", "config.DIP3", "ttp224.TTP224_OUT4"},
+    # **wiki-stm32-batch7/05**：key_matrix ROW1-4 并入 PB12-15——矩阵键盘
+    # （机械）与 ttp224（触摸 4 键）**互替件同脚先例**（二选一接入无需另
+    # 消解；与 DIP/GRAY 不同框、同选概率最低，同选经引脚绑定消解）
+    "PB12": {
+        "pid.GRAY_D1",
+        "config.DIP0",
+        "ttp224.TTP224_OUT1",
+        "key_matrix.KEY_MATRIX_ROW1",
+    },
+    "PB13": {
+        "pid.GRAY_D2",
+        "config.DIP1",
+        "ttp224.TTP224_OUT2",
+        "key_matrix.KEY_MATRIX_ROW2",
+    },
+    "PB14": {
+        "pid.GRAY_D3",
+        "config.DIP2",
+        "ttp224.TTP224_OUT3",
+        "key_matrix.KEY_MATRIX_ROW3",
+    },
+    "PB15": {
+        "pid.GRAY_D4",
+        "config.DIP3",
+        "ttp224.TTP224_OUT4",
+        "key_matrix.KEY_MATRIX_ROW4",
+    },
     # hx711 称重默认 SCK=PB5 / DT=PB0（wiki-stm32-batch3/07）：PB5 与电机
     # 编码器 A 相 MOTOR_A_ENC 重叠（光电编码器闭环小车与静态称重/电子秤
     # 不同框）；PB0 与 TB6612 B 相方向 MOTOR_B_DIR 重叠（电机方向与称重
@@ -246,9 +282,11 @@ def test_default_layout_conflict_groups_resolved():
         "zigbee_uart.ZIGBEE_UART_TX",
         "zigbee_uart_key.ZIGBEE_UART_TX",
         "zigbee_link.ZIGBEE_UART_TX",
+        "key_matrix.KEY_MATRIX_COL3",
     }
     assert grouped["PB11"] == {
         "zigbee_uart.ZIGBEE_UART_RX",
         "zigbee_uart_key.ZIGBEE_UART_RX",
         "zigbee_link.ZIGBEE_UART_RX",
+        "key_matrix.KEY_MATRIX_COL4",
     }

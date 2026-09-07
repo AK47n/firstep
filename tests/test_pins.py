@@ -425,6 +425,25 @@ STM32_MACRO_VALUES = {
     "EC11_B_PIN": "Pin_5",
     "EC11_SW_GPIO": "GPIO_B",
     "EC11_SW_PIN": "Pin_0",
+    # wiki-stm32-batch7/05：key_matrix 4×4 矩阵键盘（B 类——仅 stm32 条目；
+    # 8 脚宏族逐脚宏——行列跨端口无共享端口宏：ROW=PB12-15、COL=PA9/PA10/
+    # PB10/PB11——互替件同脚先例 + 键盘与视觉/数传链路不同框）
+    "KEY_MATRIX_ROW1_GPIO": "GPIO_B",
+    "KEY_MATRIX_ROW1_PIN": "Pin_12",
+    "KEY_MATRIX_ROW2_GPIO": "GPIO_B",
+    "KEY_MATRIX_ROW2_PIN": "Pin_13",
+    "KEY_MATRIX_ROW3_GPIO": "GPIO_B",
+    "KEY_MATRIX_ROW3_PIN": "Pin_14",
+    "KEY_MATRIX_ROW4_GPIO": "GPIO_B",
+    "KEY_MATRIX_ROW4_PIN": "Pin_15",
+    "KEY_MATRIX_COL1_GPIO": "GPIO_A",
+    "KEY_MATRIX_COL1_PIN": "Pin_9",
+    "KEY_MATRIX_COL2_GPIO": "GPIO_A",
+    "KEY_MATRIX_COL2_PIN": "Pin_10",
+    "KEY_MATRIX_COL3_GPIO": "GPIO_B",
+    "KEY_MATRIX_COL3_PIN": "Pin_10",
+    "KEY_MATRIX_COL4_GPIO": "GPIO_B",
+    "KEY_MATRIX_COL4_PIN": "Pin_11",
 }
 
 
