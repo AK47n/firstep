@@ -22,14 +22,20 @@
  *   A 相边沿（一格半脉冲/两格整脉冲，页面 L50-52），真机标定留后续）；
  * - SW 低有效，防抖归调用方节拍（页面 100ms 阻塞消抖不落——驱动零阻塞）。 */
 
-static uint8_t ec11_prev_a = 1;   /* A 相上次电平（上拉输入默认高） */
-static int16_t ec11_accum = 0;    /* 自上次清零以来的净增量（方向+步数） */
+static uint8_t ec11_prev_a;   /* A 相上次电平（init 快照——页面静态初值依赖
+                               * 上拉默认高，上电 A 相已低会误记 1 步） */
+static int16_t ec11_accum = 0;    /* 自上次清零以来的净增量（方向+步数）；
+                                   * int16_t ±32767 = 每格 2 边沿约 1.6 万格
+                                   * 才溢出——调用方节拍轮询不会堆积 */
 
 void ec11_init(void)
 {
     gpio_init(EC11_A_GPIO, EC11_A_PIN, IU);  /* A 相（页面 LCK/CLK）上拉输入 */
     gpio_init(EC11_B_GPIO, EC11_B_PIN, IU);  /* B 相（页面 DT）上拉输入 */
     gpio_init(EC11_SW_GPIO, EC11_SW_PIN, IU);/* SW 上拉输入（按下接地低） */
+    /* 快照初始 A 相电平：跳过上电首拍（A 相机械触点闭合段 = 低电平——
+     * 以 init 时刻为轮询基准，不留虚假首步） */
+    ec11_prev_a = gpio_get(EC11_A_GPIO, EC11_A_PIN) ? 1 : 0;
 }
 
 int16_t ec11_get_delta(void)

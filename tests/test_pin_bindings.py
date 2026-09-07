@@ -1118,8 +1118,18 @@ def test_auto_assign_marks_unrelated_same_pin_as_conflict():
 
 
 def test_shared_groups_classifies_uart_family_share():
-    """同一 UART 实例（zigbee 家族共 ZIGBEE_UART/UART_3）→ 合法共享。"""
-    result = _auto("stm32", {})
+    """同一 UART 实例（zigbee 家族共 ZIGBEE_UART/UART_3）→ 合法共享。
+
+    wiki-stm32-batch7/05：key_matrix COL3/COL4 默认与 zigbee TX/RX 同脚
+    （键盘与无线数传链路不同框、同选概率最低——默认组按资源键标注
+    conflict（gpio_in × uart_tx 物理不通），同选经绑定消解）——绑走恢复
+    纯 zigbee UART 家族共享组（照 gp2y1014au/relay 绑走恢复纯 I2C 共享组
+    先例）。
+    """
+    result = _auto("stm32", {
+        "key_matrix.KEY_MATRIX_COL3": "PA8",
+        "key_matrix.KEY_MATRIX_COL4": "PB6",
+    })
 
     group = next(
         (s for s in result.shared
