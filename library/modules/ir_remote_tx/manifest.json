@@ -1,6 +1,6 @@
 {
   "slug": "ir_remote_tx",
-  "description": "红外编码发射驱动（mspm0 纯驱动，ADR 0009）：单 GPIO 直出 38kHz NEC 载波（半周期 13.2us 忙等翻转，delay_cycles 按 CPUCLK_FREQ 换算，不占 TIMER）——ir_tx_init 置空闲低、ir_tx_send(address, command) 发完整 NEC 帧（引导码 + 地址/反码/命令/反码 4 字节 + 结束位，字节内 MSB 先与批次 1 ir_remote 解码口径一致）、ir_tx_send_repeat 发重复码（长按节奏由调用方循环）；与 ir_remote 接收头配对即插即用；适用于双机红外遥控、模拟家电遥控器（NEC 98% 设备）、红外无线数据链发射端等赛题功能。",
+  "description": "红外编码发射驱动（双平台纯驱动，ADR 0009）：单 GPIO 直出 38kHz NEC 载波（半周期 13.2us 忙等翻转——mspm0 按 CPUCLK_FREQ 换算、stm32 delay_us(13)，不占 TIMER/PWM）——ir_tx_init 置空闲低、ir_tx_send(address, command) 发完整 NEC 帧（引导码 + 地址/反码/命令/反码 4 字节 + 结束位，字节内 MSB 先与批次 1 ir_remote 解码口径一致）、ir_tx_send_repeat 发重复码（长按节奏由调用方循环）；与 ir_remote 接收头配对即插即用（mspm0 默认 PA0/接收 PA26、stm32 默认 PA9/接收 PA10——刻意错开）；适用于双机红外遥控、模拟家电遥控器（NEC 98% 设备）、红外无线数据链发射端等赛题功能。",
   "dependencies": [
     "delay"
   ],
@@ -21,6 +21,29 @@
           "type": "gpio_out",
           "default": "PA0",
           "required": true
+        }
+      ]
+    },
+    "stm32": {
+      "files": [
+        "code/ir_remote_tx_stm32.c",
+        "code/ir_remote_tx_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**38kHz 载波（NEC 发射原语）**：F1 页 = 「MCU+发射头+接收头、**UART 指令**」模块形态（PA8/PA9 附加串口1、USART1 5 字节指令 A1/FA + F1/F2/F3 + 反馈、9600）——**UART 指令解析归生成骨架（ADR 0009）**（骨架 = 接 uart 模块 RX 中断环形缓冲收 5 字节 → 解析 → 调 ir_tx_send，即还原页面「串口→红外发射」形态；notes 给出 F1/F2/F3 语义：F1=发射、F2/F3=改地址/波特率（对模块实物参数命令，本实现无对应硬件不实现））；模块只出 NEC 发射原语（ir_tx_init/send/send_repeat——**API 与 mspm0 ir_remote_tx.h 现名全对齐** + IR_TX_FREQ_HZ 38000u + IR_TX_MSB_FIRST 1）。默认 **OUT=PA9**（gpio_out——mspm0 默认 PA0 同型推理：红外发射与视觉/数传链路（UART1 族）不同框、同选概率最低；**与 ir_remote 接收默认 PA10 刻意错开**——发/收常配对、双选默认不撞；发射管串 100-200Ω 限流、5V 供电、3.3V GPIO 直驱 ~8-16mA 不足时加三极管/MOS——notes 硬件注意）。**载波实现 = delay_us(13) 半周期忙等翻转**（mspm0 delay_cycles(CPUCLK_FREQ/76000)≈13.16us 先例；stm32 无 delay_cycles——delay_us(13) 误差 ±0.5us（载波 ~37.8-38.5kHz，ir_remote 20us 拍阈值全在脉宽中央、配对无碍），notes 记录）；位时序 delay_us（560/1680/2250/4500/9000）；**不占 TIMER/PWM**、不注册中断；单帧阻塞 ~50-90ms（调用方注意调度节拍）。**字节位序**：MSB 先（`IR_TX_MSB_FIRST 1`——与 ir_remote 解码 value[g]<<=1 口径一致；标准 NEC LSB 先差异——控市售设备改宏=0 重编译）。**F1 换算**：StdPeriph GPIO_Init/WriteBit + 页面 USART_*（页面 UART 部分不落模块）→ ml_gpio（gpio_init/gpio_set）+ ml_delay（delay_us），零引脚字面量。\nwiki 手册来源：sources/materials/lckfb-地阔星移植手册/rf--Infrared-decoding-coding-module.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/rf/Infrared-decoding-coding-module.html；资料同 mspm0 条：https://pan.baidu.com/s/1idRcrVCxQ5zWLh59EFpi9g 提取码 n8ud）。改造要点：去 main/printf、函数名规范化、页面 UART 指令形态归骨架、38kHz 载波 = delay_us(13) 忙等（页面完全未给载波生成代码——本实现按 NEC 标准 38kHz 自写）。\nwiki-stm32-batch8/06 编译矩阵（2026-09-07）：stm32 单选生成（依赖 delay 展开——stm32 侧 files=[] 内嵌母版 ml_delay）→ UV4 0 error、0 module warning（exit 0，PASS）；未上板（载波频率/收发配对真机验证留后续）。",
+      "kit": "红外发射头（38kHz NEC 发射管，串限流电阻）+ 红外接收头 VS1838B 配对",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/rf/Infrared-decoding-coding-module.html",
+      "pins": [
+        {
+          "id": "IR_TX_OUT",
+          "type": "gpio_out",
+          "default": "PA9",
+          "required": true,
+          "macros": [
+            "IR_TX_PORT",
+            "IR_TX_OUT_PIN"
+          ]
         }
       ]
     }

@@ -45,7 +45,7 @@ def test_ir_remote_tx_manifest_shape_mspm0():
     manifest = ModuleManifest.load(MODULES / "ir_remote_tx")
     assert manifest.slug == "ir_remote_tx"
     assert manifest.dependencies == ("delay",)
-    assert set(manifest.platforms) == {"mspm0"}
+    assert set(manifest.platforms) == {"mspm0", "stm32"}
 
     mspm0 = manifest.platforms["mspm0"]
     assert [Path(f).name for f in mspm0.files] == ["ir_remote_tx.c", "ir_remote_tx.h"]
@@ -106,3 +106,138 @@ def test_ir_remote_tx_burst_cycle_formula_guard():
     )
     assert "us * IR_TX_FREQ_HZ / 1000000u" in source
     assert "us / 2u" not in source
+
+
+# ---------------------------------------------------------------------------
+# wiki-stm32-batch8/06：stm32 平台条目（38kHz 载波 delay_us(13) 忙等）
+# ---------------------------------------------------------------------------
+
+import re  # noqa: E402
+import xml.etree.ElementTree as ET  # noqa: E402
+
+from contest_generator.clex import strip_comments  # noqa: E402
+from contest_generator.platforms import PLATFORM_STM32  # noqa: E402
+
+STM32_MASTER = LIBRARY_ROOT / "masters" / "stm32"  # noqa: E402
+
+MAIN_C_STM32 = (
+    '#include "headfile.h"\n'
+    '#include "ir_remote_tx_stm32.h"\n'
+    "\n"
+    "int main(void)\n"
+    "{\n"
+    "    ir_tx_init();\n"
+    "    ir_tx_send(0xE0, 0xFD);\n"
+    "    ir_tx_send_repeat();\n"
+    "    while (1)\n"
+    "    {\n"
+    "    }\n"
+    "}\n"
+)
+
+BANNED_CODE_PATTERNS = [
+    (r"\bprintf\b", "printf"),
+    (r"\bmain\b", "main"),
+    (r"\bboard_init\b", "board_init"),
+    (r"\bGPIO_Init\b", "GPIO_Init"),
+    (r"\bGPIO_WriteBit\b", "GPIO_WriteBit"),
+    (r"\bRCC_\w+\s*\(", "RCC_ 调用"),
+    (r"stm32f10x\.h", "stm32f10x.h"),
+    (r"\bUSART\w*\b", "USART（页面 UART 指令形态归骨架）"),
+    (r"\bTIM\d\b", "TIM（不占定时器）"),
+    (r"\bPWM\b", "PWM（不占 PWM 外设）"),
+    (r"\bIRQHandler\b", "IRQHandler（无中断件）"),
+]
+
+
+def test_ir_remote_tx_manifest_shape_stm32():
+    """stm32 条目：单角色 OUT = gpio_out PA9（与接收 PA10 刻意错开）。"""
+    manifest = ModuleManifest.load(MODULES / "ir_remote_tx")
+    stm32 = manifest.platforms["stm32"]
+    assert [Path(f).name for f in stm32.files] == [
+        "ir_remote_tx_stm32.c",
+        "ir_remote_tx_stm32.h",
+    ]
+    for rel in stm32.files:
+        assert (MODULES / "ir_remote_tx" / rel).is_file(), rel
+    assert [(p.id, p.type, p.default, p.required, p.macros) for p in stm32.pins] == [
+        ("IR_TX_OUT", "gpio_out", "PA9", True, ("IR_TX_PORT", "IR_TX_OUT_PIN")),
+    ]
+    assert stm32.verified is True
+    assert stm32.kit and stm32.source_url == (
+        "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/"
+        "module/rf/Infrared-decoding-coding-module.html"
+    )
+    for needle in (
+        "lckfb-地阔星移植手册/rf--Infrared-decoding-coding-module.md",
+        "PA9",
+        "PA10",
+        "delay_us(13)",
+        "未上板",
+    ):
+        assert needle in stm32.notes
+
+
+def test_ir_remote_tx_stm32_macros_defined_in_pin_config():
+    """stm32 接线单源：ir_remote_tx 两宏在母版 pin_config.h（PORT=GPIO_A/Pin_9）。"""
+    text = (STM32_MASTER / "pin_config.h").read_text(encoding="utf-8")
+    assert re.search(r"#define\s+IR_TX_PORT\s+GPIO_A", text)
+    assert re.search(r"#define\s+IR_TX_OUT_PIN\s+Pin_9", text)
+
+
+def test_ir_remote_tx_stm32_single_select_generation(tmp_path):
+    """stm32 单选生成：依赖 delay 展开、uvprojx 注册、pin_config.h 在工程根。"""
+    resolved = resolve_selection(MODULES, PLATFORM_STM32, ["ir_remote_tx"])
+    assert {m.slug for m in resolved.manifests} == {"ir_remote_tx", "delay"}
+    out = tmp_path / "out"
+    generate(
+        platform=PLATFORM_STM32,
+        manifests=resolved.manifests,
+        module_library_dir=MODULES,
+        master_project_dir=STM32_MASTER,
+        output_dir=out,
+        main_c_content=MAIN_C_STM32,
+    )
+    assert (out / "modules/ir_remote_tx/code/ir_remote_tx_stm32.c").is_file()
+    assert (out / "modules/ir_remote_tx/code/ir_remote_tx_stm32.h").is_file()
+    uvprojx = next(out.rglob("*.uvprojx"))
+    root = ET.parse(uvprojx).getroot()
+    groups = root.findall("Targets/Target/Groups/Group")
+    modules = next(g for g in groups if g.findtext("GroupName") == "modules")
+    paths = [f.findtext("FilePath") for f in modules.findall("Files/File")]
+    assert any("ir_remote_tx_stm32.c" in p for p in paths)
+    assert (out / "pin_config.h").is_file()
+
+
+def test_ir_remote_tx_stm32_code_guards():
+    """stm32 代码层守卫：38kHz/周期数公式 + delay_us(13) 半周期 + MSB 先 +
+    无 TIM/PWM/USART 残留、零引脚字面量。"""
+    c = (MODULES / "ir_remote_tx" / "code" / "ir_remote_tx_stm32.c").read_text(
+        encoding="utf-8"
+    )
+    h = (MODULES / "ir_remote_tx" / "code" / "ir_remote_tx_stm32.h").read_text(
+        encoding="utf-8"
+    )
+    full = c + "\n" + h
+
+    assert "#define IR_TX_FREQ_HZ 38000u" in h
+    assert "#define IR_TX_MSB_FIRST 1" in h
+
+    code_only = strip_comments(full, keep_preprocessor=True)
+    for pattern, label in BANNED_CODE_PATTERNS:
+        assert not re.search(pattern, code_only), f"代码残留 {label}"
+
+    # 载波：周期数公式（code-review 修正防回潮）+ delay_us(13) 半周期
+    assert "us * IR_TX_FREQ_HZ / 1000000u" in code_only
+    assert "#define IR_TX_HALF_CYCLES() delay_us(13)" in code_only
+    assert "delay_us(IR_TX_LEADER_HIGH_US)" in code_only
+    assert "delay_us(IR_TX_REPEAT_HIGH_US)" in code_only
+    # 帧格式：引导 9ms/4.5ms + 4 字节反码 + MSB 先 + 结束位 560us
+    assert "IR_TX_LEADER_LOW_US" in code_only
+    assert "(uint8_t)~address" in code_only
+    assert "(uint8_t)~command" in code_only
+    assert "7 - bit" in code_only
+    # 走 ml_gpio/ml_delay（零引脚字面量）
+    assert "gpio_init(IR_TX_PORT, IR_TX_OUT_PIN, OUT_PP)" in code_only
+    assert "gpio_set(IR_TX_PORT, IR_TX_OUT_PIN, 1)" in code_only
+    assert "PA9" not in code_only
