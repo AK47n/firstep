@@ -1146,6 +1146,9 @@ def test_shared_groups_classifies_uart_family_share():
     assert group is not None
     assert group["kind"] == "share"
     assert "串口链路" in str(group["reason"])
+    # wiki-stm32-batch9/07：ec01g 并入 UART_3（无线互替件同脚——同族合法共享；
+    # EC01G_RX 在 PB11 组——本组为 PB10 TX 家族）
+    assert "ec01g.EC01G_TX" in group["roles"]
 
 
 def test_shared_groups_classifies_batch9_uart_family_share():

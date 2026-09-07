@@ -549,12 +549,28 @@
 #define ESP01S_UART_RX_GPIO     GPIO_A
 #define ESP01S_UART_RX_Pin      Pin_10
 
+/* ---- 批次 9（wiki-stm32-batch9/07）：ec01g NB-IoT+GPS 模块（真实 UART + AT）
+ * 默认 UART_3 = ZIGBEE_UART 宿主（NB-IoT 蜂窝无线 × Zigbee/LoRa 无线链路
+ * **互替件同脚先例**、同选概率最低）；TX=PB10/RX=PB11 = UART_3 原脚（与
+ * ZIGBEE/AS32/key matrix COL3/4/nrf CLK/MOSI 并列默认共享 = 合法先例）；
+ * 9600（EC-01G 出厂默认——uart_pin_init_ex 默认 115200 后 uart_baud_config
+ * 重配；同实例其它角色 115200——双选默认时后 init 定波特率（hc05 先例已
+ * 记录），同选经绑定换实例成对消解）；RX 线性缓冲截断（ec01g_rx_handler
+ * 经 isr.c USART3_IRQ_CALLS 聚合调用——pinwriter _UART_CALLS_ROLES 已
+ * 登记）；页面默认串口2（PA2/PA3）不照抄；HTTP 天气/JSON/GPS demo 范围外。 */
+#define EC01G_UART             UART_3
+#define EC01G_UART_INST        USART3
+#define EC01G_UART_TX_GPIO     GPIO_B
+#define EC01G_UART_TX_Pin      Pin_10
+#define EC01G_UART_RX_GPIO     GPIO_B
+#define EC01G_UART_RX_Pin      Pin_11
+
 /* ---- UART 接收中断聚合（isr.c 的 USARTx_IRQHandler 调这些宏，
  * 工单 pin-full-unlock/02）——按各 UART 角色绑定实例重分组：默认
  * UART_1 = DIGIT+COORD+UWB+HC05 共享、UART_2 = DEBUG、UART_3 = ZIGBEE。 ---- */
 #define USART1_IRQ_CALLS digit_uart_rx_handler(); coord_detect_rx_handler(); uwb_rx_handler(); hc05_rx_handler(); fingerprint_rx_handler(); neo_6m_rx_handler(); esp01s_rx_handler();
 #define USART2_IRQ_CALLS debug_uart_rx_handler();
-#define USART3_IRQ_CALLS zigbee_rx_handler();
+#define USART3_IRQ_CALLS zigbee_rx_handler(); ec01g_rx_handler();
 
 /* ---- 软 I2C（ml_i2c / ml_oled 引脚宏，自 ml_libs 头文件迁入）----
  * 参数化后 I2C 角色可绑任意 GPIO（ADR 0011 工单 02）：ml_i2c 默认 PA11 SCL /

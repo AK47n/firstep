@@ -103,6 +103,9 @@ WHITELIST = {
         # wiki-stm32-batch8/03：nrf24l01 CLK——2.4G 与 Zigbee/LoRa 无线数传
         # 互替件同脚（与键盘 COL3 并列，无线链路与手动输入不同框）
         "nrf24l01.NRF24L01_CLK",
+        # wiki-stm32-batch9/07：ec01g TX——NB-IoT 蜂窝无线 × Zigbee/LoRa 无线
+        # 链路**互替件同脚先例**（无线链路二选一接入，同选经绑定消解）
+        "ec01g.EC01G_TX",
     },
     "PB11": {
         "zigbee_uart.ZIGBEE_UART_RX",
@@ -115,6 +118,8 @@ WHITELIST = {
         "as32.AS32_UART_RX",
         # wiki-stm32-batch8/03：nrf24l01 MOSI——与 CLK 同策略（无线互替同脚）
         "nrf24l01.NRF24L01_MOSI",
+        # wiki-stm32-batch9/07：ec01g RX——与 TX 同策略（无线互替同脚）
+        "ec01g.EC01G_RX",
     },
     # PB12-15 三共享（DIP×GRAY×TTP224——wiki-stm32-batch1/05，见下方批次 1 注释块）
     # key stm32 默认 PB3 与 pid.GRAY_D6 重叠（蓝药丸无板载按键，PB3 = JTDO
@@ -395,6 +400,7 @@ def test_default_layout_conflict_groups_resolved():
         "key_matrix.KEY_MATRIX_COL3",
         "as32.AS32_UART_TX",
         "nrf24l01.NRF24L01_CLK",
+        "ec01g.EC01G_TX",
     }
     assert grouped["PB11"] == {
         "zigbee_uart.ZIGBEE_UART_RX",
@@ -403,4 +409,5 @@ def test_default_layout_conflict_groups_resolved():
         "key_matrix.KEY_MATRIX_COL4",
         "as32.AS32_UART_RX",
         "nrf24l01.NRF24L01_MOSI",
+        "ec01g.EC01G_RX",
     }

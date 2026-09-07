@@ -297,7 +297,7 @@ def test_render_pin_config_uart_swap_irq_calls_regrouped():
     assert (
         "#define USART2_IRQ_CALLS uwb_rx_handler(); zigbee_rx_handler();\r\n" in out
     )
-    assert "#define USART3_IRQ_CALLS debug_uart_rx_handler();\r\n" in out
+    assert "#define USART3_IRQ_CALLS debug_uart_rx_handler(); ec01g_rx_handler();\r\n" in out
 
 
 def test_render_pin_config_default_irq_calls_byte_identical():
@@ -321,7 +321,7 @@ def test_render_pin_config_default_irq_calls_byte_identical():
     )
     assert "#define USART1_IRQ_CALLS digit_uart_rx_handler(); coord_detect_rx_handler(); uwb_rx_handler(); hc05_rx_handler(); fingerprint_rx_handler(); neo_6m_rx_handler(); esp01s_rx_handler();\r\n" in out
     assert "#define USART2_IRQ_CALLS debug_uart_rx_handler();\r\n" in out
-    assert "#define USART3_IRQ_CALLS zigbee_rx_handler();\r\n" in out
+    assert "#define USART3_IRQ_CALLS zigbee_rx_handler(); ec01g_rx_handler();\r\n" in out
 
 
 def test_generate_stm32_uart_swap_and_default_byte_identical(tmp_path):

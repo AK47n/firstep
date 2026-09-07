@@ -234,7 +234,7 @@ STM32_MACRO_VALUES = {
         " esp01s_rx_handler();"
     ),
     "USART2_IRQ_CALLS": "debug_uart_rx_handler();",
-    "USART3_IRQ_CALLS": "zigbee_rx_handler();",
+    "USART3_IRQ_CALLS": "zigbee_rx_handler(); ec01g_rx_handler();",
     # wiki-stm32-batch8/01：as32 LoRa 串口数传（UART_3 = ZIGBEE 互替件同脚；
     # 9600 运行期重配；轮询接收——不进 isr.c 聚合表，无 rx_handler 登记）
     "AS32_UART": "UART_3",
@@ -282,6 +282,15 @@ STM32_MACRO_VALUES = {
     "ESP01S_UART_TX_Pin": "Pin_9",
     "ESP01S_UART_RX_GPIO": "GPIO_A",
     "ESP01S_UART_RX_Pin": "Pin_10",
+    # wiki-stm32-batch9/07：ec01g NB-IoT+GPS（真实 UART + AT——UART_3=Zigbee/
+    # LoRa 无线互替同脚；9600 运行期重配；RX 线性缓冲截断——isr.c 聚合登记
+    # ec01g_rx_handler）
+    "EC01G_UART": "UART_3",
+    "EC01G_UART_INST": "USART3",
+    "EC01G_UART_TX_GPIO": "GPIO_B",
+    "EC01G_UART_TX_Pin": "Pin_10",
+    "EC01G_UART_RX_GPIO": "GPIO_B",
+    "EC01G_UART_RX_Pin": "Pin_11",
     # wiki-stm32-batch8/03：nrf24l01 软 SPI 六脚（全端口 B 单共享端口宏——
     # 同口约束照 ttp224；页面硬件 SPI1 默认脚不照抄）
     "NRF24L01_PORT": "GPIO_B",
