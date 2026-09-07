@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=707169eff0876f5cce95227d5ef8ce286116f8d1 -->
+<!-- changelog-auto: last-commit=c3a95a8fd47d4f62ecf8c1d98468d477a8092844 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -31,6 +31,7 @@
 - 20:15 工单：wiki-stm32-batch9/05 neo_6m GPS 定位（B 类新 slug——仅 stm32 条目：真实 UART 9600 + NMEA $→GPRMC→行尾状态机收帧 + get_position 出十进制度（ddmm 换算/N-S E-W 符号）；默认 UART_1 与 UWB 定位互替同脚；isr.c 聚合 neo_6m_rx_handler + pinwriter 登记；缺陷修正：255 越界→256 缓冲截断、memcpy 无长度检查→截断、帧头全串判定；wordlist 定位模块组补录 NEO-6M）
 - 20:18 工单：wiki-stm32-batch9/06 esp01s WiFi（B 类新 slug——仅 stm32 条目：真实 UART 115200 + AT 指令透传——send_cmd 发 AT 行+有界应答匹配（OK 命中/超时）、send_string 透传、available/receive 读走、parse_ipd 解析 +IPD 帧；默认 UART_1 与 HC05 手机遥控互替同脚；isr.c 聚合 esp01s_rx_handler + pinwriter 登记；缺陷修正：%200 回绕→线性截断、IDLE 断串→按长度 NUL 终结、无界扫→有界、buff[50] 截断→上限 200；AT 模板/MQTT 归骨架范围外；wordlist 无线通信组补录 ESP-01S）
 - 20:22 工单：wiki-stm32-batch9/07 ec01g NB-IoT+GPS（B 类新 slug——仅 stm32 条目：真实 UART 9600 + AT 指令透传底座——send_cmd 发 AT 行+有界应答匹配（OK 命中/超时）+ send_string/available/receive 读走；默认 UART_3 与 Zigbee/LoRa 无线互替同脚；isr.c 聚合 ec01g_rx_handler + pinwriter 登记；缺陷修正：rev_buff=NULL 空指针崩溃→NULL 入参守卫、Search_Data 无界扫+补零位错→demo 不落+有界扫描、%2096 回绕→线性截断；HTTP 天气/JSON demo 与 GPS（页面无代码）归范围外；wordlist 无线通信组补录 EC-01G/NB-IoT）
+- 20:34 收尾：wiki-stm32-batch9 批次 9 收官——CONTEXT 平台行补录批次 9 块（软 UART TX 先例 jq8900/syn6288 + fingerprint UART_1 帧协议 isr.c 聚合 + l298n TIM3 PWM×2 + B 类三件 neo_6m/esp01s/ec01g 新 slug 与缺陷修正 + 46 宏）+ 全量 pytest 3802 通过 + sweep 7/7 OK；红证修复：esp01s/ec01g deps []（delay_ms 走母版 ml_delay——模块独立性红线）、l298n 头注释 2026H 题词中性化（普适性红线）、WORDLIST_PROMPT_BYTES 8120→8300（默认词表 wire 7994 > 7954 fit 上限——第 15 次上调）
 
 ## 2026-09-06
 - 00:07 批次7/01 mq135 空气质量传感器模块入库（mspm0）：ADC 模拟量独立 MEM4 通道（ir_distance 先例而非 mq2 的 MEM0 薄封装——多路气体同选时各器件物理通道独立、无共读冲突），母版 syscfg ADC12_0 sequence 加第 5 通道（endAdd 3→4、adcMem4chansel=CHAN_6、adcPin6=PB20）；mq135_init + mq135_read_percent 出 0-100% 相对浓度（页面 4095/100 原式、30 次→5 次快平均）；页面 ADC 中断（IRQHandler + gCheckADC）改经 adc 模块 API 轮询（共享实例强符号唯一）；adc 模块 adc_get 通道守卫扩展至 MEM5（注释/枚举同步）；页面 DO（LM393 阈值）宏未用不声明；notes 写明与 mq2 的通道方案差异与 MQ 系相对值非 ppm 精标+预热限制；默认 PB20（与 DC_MOTOR BB/SYN6288 TX 重叠——同选概率最低）；词表感知传感器 +MQ-135；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）
