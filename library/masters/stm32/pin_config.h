@@ -385,7 +385,12 @@
 #define ZIGBEE_UART_RX_GPIO GPIO_B
 #define ZIGBEE_UART_RX_Pin Pin_11
 
-/* ---- 批次 8（wiki-stm32-batch8/01）：as32 433MHz LoRa 串口数传 ---- */
+/* ---- 批次 8（wiki-stm32-batch8/01）：as32 433MHz LoRa 串口数传 ----
+ * 默认 UART_3 = ZIGBEE_UART 宿主（LoRa 与 Zigbee 无线数传**互替件**、同选
+ * 概率最低——mspm0 定稿同款推理）；TX=PB10/RX=PB11 = ZIGBEE_UART 原脚
+ * （互替件同脚先例）；9600（AS32 出厂默认）；轮询接收（init 关 RXNEIE——
+ * 页面 RX 中断改轮询，不进 isr.c 聚合表）。页面默认串口2（PA2/PA3）=
+ * DEBUG_UART 常备件不照抄。 */
 #define AS32_UART             UART_3
 #define AS32_UART_INST        USART3
 #define AS32_UART_TX_GPIO     GPIO_B
@@ -400,7 +405,9 @@
  * 合法先例）；9600（HC05 出厂默认）；RX 中断环形缓冲（hc05_rx_handler 经
  * isr.c USART1_IRQ_CALLS 聚合调用——pinwriter _UART_CALLS_ROLES 已登记）；
  * STATE=PA8（gpio_in——IR_BEAM/WS2812/GRAY_D5 低频）、KEY=PB4（gpio_out——
- * RELAY/编码器方向低频）；页面默认串口2（PA2/PA3）+STATE=PA7 不照抄。 */
+ * RELAY/编码器方向低频；**PB4 = NJTRST 复用脚，作 GPIO 需 SWJ_CFG 释放
+ * JTAG（保留 SWD）——key(PB3)/relay 先例同一约束，本批 hc05 KEY/nrf MISO/
+ * rc522 MOSI 沿用**）；页面默认串口2（PA2/PA3）+STATE=PA7 不照抄。 */
 #define HC05_UART             UART_1
 #define HC05_UART_INST        USART1
 #define HC05_UART_TX_GPIO     GPIO_A

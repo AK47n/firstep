@@ -190,7 +190,12 @@ void nrf24l01_init(void)
     _write_reg(SETUP_AW, AW_5BYTES);
     _write_reg(SETUP_RETR, ARD_4000US | (REPEAT_CNT & 0x0F));
     _write_reg(RF_CH, 0x00);
-    _write_reg(RF_SETUP, 0x26); /* 1Mbps + 0dBm 初值（后续可经 set_speed/power 改） */
+    _write_reg(RF_SETUP, 0x26); /* 0x26 = RF_DR_LOW 置位（250kbps）+ 0dBm 初值——
+                                 * 上游注释「1Mbps」与位值不符（0x26 置 bit5 =
+                                 * RF_DR_LOW = 250kbps；**与 mspm0 批 1 逐字同源
+                                 * 遗留**，本实现按 mspm0 先例保留 0x26；需要
+                                 * 1Mbps 时调 nrf24l01_set_speed(NRF24L01_SPEED_1M)，
+                                 * 真机复核留后续——manifest notes 记录） */
 
     nrf24l01_set_address(addr, 5);
 }

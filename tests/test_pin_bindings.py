@@ -1125,10 +1125,16 @@ def test_shared_groups_classifies_uart_family_share():
     conflict（gpio_in × uart_tx 物理不通），同选经绑定消解）——绑走恢复
     纯 zigbee UART 家族共享组（照 gp2y1014au/relay 绑走恢复纯 I2C 共享组
     先例）。
+    wiki-stm32-batch8/01/03：as32 TX/RX（uart 族）与 nrf24l01 CLK/MOSI
+    （gpio_out）同为无线数传互替同脚——一并绑走恢复纯 zigbee UART 家族组。
     """
     result = _auto("stm32", {
         "key_matrix.KEY_MATRIX_COL3": "PA8",
         "key_matrix.KEY_MATRIX_COL4": "PB6",
+        "as32.AS32_UART_TX": "PA9",
+        "as32.AS32_UART_RX": "PA10",
+        "nrf24l01.NRF24L01_CLK": "PA8",
+        "nrf24l01.NRF24L01_MOSI": "PB6",
     })
 
     group = next(

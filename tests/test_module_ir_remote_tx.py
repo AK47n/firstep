@@ -229,7 +229,7 @@ def test_ir_remote_tx_stm32_code_guards():
 
     # 载波：周期数公式（code-review 修正防回潮）+ delay_us(13) 半周期
     assert "us * IR_TX_FREQ_HZ / 1000000u" in code_only
-    assert "#define IR_TX_HALF_CYCLES() delay_us(13)" in code_only
+    assert "#define IR_TX_HALF_PERIOD_US() delay_us(13)" in code_only
     assert "delay_us(IR_TX_LEADER_HIGH_US)" in code_only
     assert "delay_us(IR_TX_REPEAT_HIGH_US)" in code_only
     # 帧格式：引导 9ms/4.5ms + 4 字节反码 + MSB 先 + 结束位 560us

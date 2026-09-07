@@ -31,17 +31,19 @@ static void ir_tx_carrier_off(void)
  * （mspm0 版 delay_cycles(CPUCLK_FREQ/(FREQ*2)) 先例），用 delay_us(13)
  * 忙等翻转（误差 ±0.5us、载波 ~37.8-38.5kHz，notes 记录）；**不占 TIMER**；
  * 每轮循环 = 一完整周期（一高半 + 一低半 ≈26us），周期数 = us×38000/1e6
- * （mspm0 code-review 修正公式同款——防早产放大）： */
-#define IR_TX_HALF_CYCLES() delay_us(13)
+ * （mspm0 code-review 修正公式同款——防早产放大）。
+ * 宏名语义：半周期延时（mspm0 版名 IR_TX_HALF_CYCLES——按 delay_cycles
+ * 换算命名；stm32 无该原语、delay_us 命名随语义改）： */
+#define IR_TX_HALF_PERIOD_US() delay_us(13)
 
 static void ir_tx_burst(uint32_t us)
 {
     uint32_t cycles = (uint32_t)((uint64_t)us * IR_TX_FREQ_HZ / 1000000u);
     while (cycles > 0) {
         ir_tx_carrier_on();
-        IR_TX_HALF_CYCLES();
+        IR_TX_HALF_PERIOD_US();
         ir_tx_carrier_off();
-        IR_TX_HALF_CYCLES();
+        IR_TX_HALF_PERIOD_US();
         cycles--;
     }
 }
