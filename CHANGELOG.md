@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=a07d87892daf7e1efc3f44b1cc4776d11c42d833 -->
+<!-- changelog-auto: last-commit=13d6e95145bc61cd3a6687c4b5731a8f1b82636f -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -6,6 +6,7 @@
 
 ## 2026-09-07
 - 12:21 模块：us016 超声波测距传感器 stm32 平台条目（wiki-stm32-batch7/01：ADC 薄封装件——页面 ADC 序列收敛 ml_adc（adc_init(ADC_1, US016_AO_CH) + 5 次 adc_get 快平均）+ 默认 AO=ADC_Channel_5（PA5 页面原脚即共读点——ADC 共享组并入 batch5 PA5 共读组，flame+8+7+1=17 ADC 角色同脚，同一物理脚只能接一件器件——多件同测需外部分路器/分时切换）+ **与 ir_distance 互替件同脚**（互替同脚先例——二选一接入无需另消解）+ 双量程宏 US016_RANGE_1M=0（0=3m 档 0.75f/1=1m 档 0.25f——页面正文 3096 与代码 3072 不一、按代码 0.75，mspm0 批 2 同款）+ Vref/Vcc 修正宏（3.3/3.3）+ 出参 cm 对齐 mspm0（us016_read_distance_cm 同名 L30）+ SAMPLES 50×10ms≈500ms→5 快平均 + Range 量程脚/DO 未用不声明 + UV4 矩阵 0 error/0 module warning → verified=true；test_pins 宏表 +US016_AO_CH、test_default_layout PA5 白名单 +us016.US016_AO；description 双平台化（批 6 遗留措辞统一顺带整改本件））
+- 12:21 工单：wiki-stm32-batch7/01 us016 实施完成回填（结论 + 状态 resolved）
 
 ## 2026-09-06
 - 00:07 批次7/01 mq135 空气质量传感器模块入库（mspm0）：ADC 模拟量独立 MEM4 通道（ir_distance 先例而非 mq2 的 MEM0 薄封装——多路气体同选时各器件物理通道独立、无共读冲突），母版 syscfg ADC12_0 sequence 加第 5 通道（endAdd 3→4、adcMem4chansel=CHAN_6、adcPin6=PB20）；mq135_init + mq135_read_percent 出 0-100% 相对浓度（页面 4095/100 原式、30 次→5 次快平均）；页面 ADC 中断（IRQHandler + gCheckADC）改经 adc 模块 API 轮询（共享实例强符号唯一）；adc 模块 adc_get 通道守卫扩展至 MEM5（注释/枚举同步）；页面 DO（LM393 阈值）宏未用不声明；notes 写明与 mq2 的通道方案差异与 MQ 系相对值非 ppm 精标+预热限制；默认 PB20（与 DC_MOTOR BB/SYN6288 TX 重叠——同选概率最低）；词表感知传感器 +MQ-135；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）
