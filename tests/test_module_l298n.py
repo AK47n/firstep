@@ -41,11 +41,11 @@ MAIN_C_MSPM0 = (
 
 
 def test_l298n_manifest_shape_mspm0():
-    """l298n：仅 mspm0 平台条目；无依赖；PWM C0/C1 + EN 三角色。"""
+    """l298n mspm0 条目（stm32 条目见下方 stm32 段）：无依赖；PWM C0/C1 + EN。"""
     manifest = ModuleManifest.load(MODULES / "l298n")
     assert manifest.slug == "l298n"
     assert manifest.dependencies == ()
-    assert set(manifest.platforms) == {"mspm0"}
+    assert set(manifest.platforms) == {"mspm0", "stm32"}
 
     mspm0 = manifest.platforms["mspm0"]
     assert [Path(f).name for f in mspm0.files] == ["l298n.c", "l298n.h"]
@@ -133,3 +133,135 @@ def test_l298n_ao_control_shapes_and_calls_guards():
     assert "encoder" not in source
     assert "IRQHandler" not in source
     assert "printf" not in source
+
+
+# ---------------------------------------------------------------------------
+# wiki-stm32-batch9/04：stm32 平台条目（PWM×2 方向互切——TIM3_CH1/CH2=PA6/PA7
+# 页面原脚；TIM 门禁默认×默认不拦 notes；I2C 总线同脚冲突 ⚠）
+# ---------------------------------------------------------------------------
+
+import re  # noqa: E402
+import xml.etree.ElementTree as ET  # noqa: E402
+
+from contest_generator.clex import strip_comments  # noqa: E402
+from contest_generator.platforms import PLATFORM_STM32  # noqa: E402
+
+STM32_MASTER = LIBRARY_ROOT / "masters" / "stm32"  # noqa: E402
+
+MAIN_C_STM32 = (
+    '#include "headfile.h"\n'
+    '#include "l298n_stm32.h"\n'
+    "\n"
+    "int main(void)\n"
+    "{\n"
+    "    l298n_init();\n"
+    "    l298n_set_duty(1000);\n"
+    "    l298n_set_direction(1);\n"
+    "    while (1)\n"
+    "    {\n"
+    "    }\n"
+    "}\n"
+)
+
+BANNED_CODE_PATTERNS = [
+    (r"\bprintf\b", "printf"),
+    (r"\bmain\b", "main"),
+    (r"\bboard_init\b", "board_init"),
+    (r"\bGPIO_Init\b", "GPIO_Init"),
+    (r"\bRCC_\w+\s*\(", "RCC_ 调用"),
+    (r"stm32f10x\.h", "stm32f10x.h"),
+    (r"\bTIM_TimeBaseInit\b", "TIM_TimeBaseInit（走 ml_pwm）"),
+    (r"\bTIM_OC1Init\b", "TIM_OC1Init（走 ml_pwm）"),
+    (r"\bEN\b", "EN（页面无 EN 代码——范围外）"),
+]
+
+
+def test_l298n_manifest_shape_stm32():
+    """stm32 条目：IN1(pwm PA6)/IN2(pwm PA7)，各带 TIM/CH 宏。"""
+    manifest = ModuleManifest.load(MODULES / "l298n")
+    stm32 = manifest.platforms["stm32"]
+    assert [Path(f).name for f in stm32.files] == [
+        "l298n_stm32.c",
+        "l298n_stm32.h",
+    ]
+    for rel in stm32.files:
+        assert (MODULES / "l298n" / rel).is_file(), rel
+    assert [(p.id, p.type, p.default, p.required, p.macros) for p in stm32.pins] == [
+        ("L298N_IN1", "pwm", "PA6", True, ("L298N_IN1_TIM", "L298N_IN1_CH")),
+        ("L298N_IN2", "pwm", "PA7", True, ("L298N_IN2_TIM", "L298N_IN2_CH")),
+    ]
+    assert stm32.verified is True
+    assert stm32.kit and stm32.source_url == (
+        "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/"
+        "module/control/l298n-motor-drive-module.html"
+    )
+    for needle in (
+        "lckfb-地阔星移植手册/control--l298n-motor-drive-module.md",
+        "TIM3_CH1",
+        "互替",
+        "物理冲突",
+        "默认×默认不拦",
+        "未上板",
+    ):
+        assert needle in stm32.notes
+
+
+def test_l298n_stm32_macros_defined_in_pin_config():
+    """stm32 接线单源：l298n 四宏在母版 pin_config.h（TIM_3/TIM3_CH1/CH2）。"""
+    text = (STM32_MASTER / "pin_config.h").read_text(encoding="utf-8", newline="")
+    assert re.search(r"#define\s+L298N_IN1_TIM\s+TIM_3", text)
+    assert re.search(r"#define\s+L298N_IN1_CH\s+TIM3_CH1", text)
+    assert re.search(r"#define\s+L298N_IN2_TIM\s+TIM_3", text)
+    assert re.search(r"#define\s+L298N_IN2_CH\s+TIM3_CH2", text)
+
+
+def test_l298n_stm32_single_select_generation(tmp_path):
+    """stm32 单选生成：模块文件落盘、uvprojx 注册 l298n_stm32.c。"""
+    resolved = resolve_selection(MODULES, PLATFORM_STM32, ["l298n"])
+    assert {m.slug for m in resolved.manifests} == {"l298n"}
+    out = tmp_path / "out"
+    generate(
+        platform=PLATFORM_STM32,
+        manifests=resolved.manifests,
+        module_library_dir=MODULES,
+        master_project_dir=STM32_MASTER,
+        output_dir=out,
+        main_c_content=MAIN_C_STM32,
+    )
+    assert (out / "modules/l298n/code/l298n_stm32.c").is_file()
+    assert (out / "modules/l298n/code/l298n_stm32.h").is_file()
+    uvprojx = next(out.rglob("*.uvprojx"))
+    root = ET.parse(uvprojx).getroot()
+    groups = root.findall("Targets/Target/Groups/Group")
+    modules = next(g for g in groups if g.findtext("GroupName") == "modules")
+    paths = [f.findtext("FilePath") for f in modules.findall("Files/File")]
+    assert any("l298n_stm32.c" in p for p in paths)
+    assert (out / "pin_config.h").is_file()
+
+
+def test_l298n_stm32_code_guards():
+    """stm32 代码层守卫：L298N_PWM_PERIOD 2000u、set_duty/set_direction、
+    pwm_init/pwm_update 换算（TIM/CH 宏，零引脚字面量）、无 EN/printf。"""
+    c = (MODULES / "l298n" / "code" / "l298n_stm32.c").read_text(encoding="utf-8")
+    h = (MODULES / "l298n" / "code" / "l298n_stm32.h").read_text(encoding="utf-8")
+    full = c + "\n" + h
+
+    code_only = strip_comments(full, keep_preprocessor=True)
+    for pattern, label in BANNED_CODE_PATTERNS:
+        assert not re.search(pattern, code_only), f"代码残留 {label}"
+
+    assert "#define L298N_PWM_PERIOD 2000u" in h
+    assert "#define L298N_PWM_FREQ   500" in h
+    # 方向互切形态（页面 AO_Control 原样）：dir=1 → CH1=0/CH2=duty
+    assert "l298n_dir == 1" in code_only
+    assert "pwm_update(L298N_IN1_TIM, L298N_IN1_CH, 0);" in code_only
+    assert "pwm_update(L298N_IN2_TIM, L298N_IN2_CH, (uint16_t)l298n_duty);" in code_only
+    assert "L298N_PWM_PERIOD - 1u" in code_only  # 限幅（页面 speed 无上限修正）
+    assert "pwm_init(L298N_IN1_TIM, L298N_IN1_CH, L298N_PWM_FREQ);" in code_only
+    assert "pwm_init(L298N_IN2_TIM, L298N_IN2_CH, L298N_PWM_FREQ);" in code_only
+    # 库 API 三函数
+    for fn in ("l298n_init", "l298n_set_duty", "l298n_set_direction"):
+        assert f"void {fn}(" in code_only, fn
+    assert "PA6" not in code_only and "PA7" not in code_only
+    # TIM 门禁注意项记录在头注释（默认×默认不拦——现状口径）
+    assert "默认×默认不拦" in h

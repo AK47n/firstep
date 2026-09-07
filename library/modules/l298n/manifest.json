@@ -1,6 +1,6 @@
 {
   "slug": "l298n",
-  "description": "L298N 大电流电机驱动（mspm0 纯驱动，ADR 0009）：方向 + 调速形态（页面 AO_Control 原样——IN1/IN2 双通道 PWM + EN 使能 GPIO，三脚一组），l298n_init + l298n_set_duty + l298n_set_direction；独立模块不并入 motor：适用于大电流/多路电机、无编码器闭环场景（平衡车/推车/闸机/重载底盘）。",
+  "description": "L298N 大电流电机驱动（双平台纯驱动，ADR 0009）：方向 + 调速形态（页面 AO_Control 原样——IN1/IN2 双通道 PWM、mspm0 另带 EN 使能 GPIO），l298n_init + l298n_set_duty + l298n_set_direction；独立模块不并入 motor：适用于大电流/多路电机、无编码器闭环场景（平衡车/推车/闸机/重载底盘）。",
   "dependencies": [],
   "platforms": {
     "mspm0": {
@@ -31,6 +31,39 @@
           "type": "gpio_out",
           "default": "PA27",
           "required": true
+        }
+      ]
+    },
+    "stm32": {
+      "files": [
+        "code/l298n_stm32.c",
+        "code/l298n_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**API 与 mspm0 l298n.h 同名同型完全对齐**（l298n_init/set_duty(uint32_t)/set_direction(uint8_t) + L298N_PWM_PERIOD 2000u——3 函数）。**PWM×2 方向互切**：默认 **TIM3_CH1/CH2 = PA6/PA7（页面原脚）**——TIM3 定时器零占用（TIM2=T B6612 电机/TIM4=舵机/TIM1 不在 ml_pwm 枚举，唯一空闲定时器）；与 TB6612 motor（TIM2/PA0-1）**互替刻意错开 TIM 与脚**（一辆车只接一种驱动）；**⚠ PA6/PA7 与软 I2C 总线同脚**（批 2/3/4 共 16 件 SCL/SDA + MOTOR_A_DIR/DIR2）——**l298n×I2C 件同选 = 物理冲突 ⚠（前端标 ⚠ 提示改线）+ 绑定消解**（I2C 总线件可绑其它脚）。**⚠ TIM 门禁默认×默认不拦**：`_check_timer_instance_conflicts` 只查**用户改动 PWM 绑定 × 骨架调度 TIM_2/3/4**——2026H 骨架调度默认 **TIM_3** × 本件默认 TIM_3 = **默认×默认不拦（现状口径）**：双选默认时运行期 ARR/PSC 互覆（编译绿运行坏）——**骨架用 2026H 模板（TIM_3 调度）时建议把 l298n 绑到 TIM4_CH2/CH3（PB7/PB8）或改用 2026C 模板（TIM_2 滴答）**，notes 记录。**换算**：页面 L298N_Init(pre=72,per=1000)（1kHz、1000 步骤）→ ml_pwm（pwm_init/pwm_update——motor_stm32.c 先例）；**本件按 mspm0 定稿 2000 步骤**（L298N_PWM_PERIOD 2000u 宏对齐）→ L298N_PWM_FREQ=500（1MHz 计数/2000——页面 1kHz 与 mspm0 16kHz 差异记录，真机可调 L298N_PWM_FREQ）；duty 限幅 L298N_PWM_PERIOD-1（页面「speed 0~per-1」语义——页面 speed 无上限校验修正，mspm0 同款）。**单路范围**：页面仅实现 A 端口（IN1/IN2「IN3/IN4 内容类似」）——单件 = L298N 双 H 桥 1 路电机；B 端口（IN3/IN4/ENB）范围外留后续；**EN 使能范围外**：页面无 EN 代码（规格「5V 使能高电平有效，常态跳线帽接 VCC；PWM 调速时取帽」——取帽需 GPIO 驱动时经页面规格另接（mspm0 补 EN GPIO、stm32 按页面代码无 EN 保持跳线帽态，notes 记录）。**与库内 motor(TB6612) 分工**：motor = 轻量双路带编码器闭环（循迹/PID 车首选）、本件 = 大电流/重载无闭环（页面 5-24V/2A、压降 ~1.5V、发热大）。\nwiki 手册来源：sources/materials/lckfb-地阔星移植手册/control--l298n-motor-drive-module.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/control/l298n-motor-drive-module.html；网盘资料 https://pan.baidu.com/s/1digF17AGBx1culmUOIG_Aw?pwd=6cp6）。改造要点：去 main.c 演示与 printf、AO_Control 拆 set_direction + set_duty（内部保留 duty 状态、方向切换重应用——页面逐拍等价）、引脚宏参数化（L298N_IN1/IN2_TIM/CH）、L298N_Init 时序换算 ml_pwm。\nwiki-stm32-batch9/04 编译矩阵（2026-09-08）：stm32 单选生成 → UV4（C:/Keil5）0 error、0 module warning（exit 0，PASS——TIM3 CH1/CH2 双通道确认编译）；未上板（500Hz/2000 步骤占空比与 1kHz/1000 步骤页面差异、方向互切逻辑真机验证留后续）。",
+      "kit": "L298N 双路电机驱动板（ST L298N 双 H 桥，驱动 5-24V/持续 2A（峰值 3A）、逻辑 5V，双路直流或 1 台两相/四相步进）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/control/l298n-motor-drive-module.html",
+      "pins": [
+        {
+          "id": "L298N_IN1",
+          "type": "pwm",
+          "default": "PA6",
+          "required": true,
+          "macros": [
+            "L298N_IN1_TIM",
+            "L298N_IN1_CH"
+          ]
+        },
+        {
+          "id": "L298N_IN2",
+          "type": "pwm",
+          "default": "PA7",
+          "required": true,
+          "macros": [
+            "L298N_IN2_TIM",
+            "L298N_IN2_CH"
+          ]
         }
       ]
     }

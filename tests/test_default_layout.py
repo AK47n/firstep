@@ -311,6 +311,11 @@ WHITELIST = {
         "pca9685.PCA9685_SCL",
         "bmp180.BMP180_SCL",
         "ms5611.MS5611_SCL",
+        # wiki-stm32-batch9/04：l298n IN1——**物理冲突 ⚠ 登记**（PWM 输出 ×
+        # I2C SCL/SDA 总线同脚分属不同外设——l298n×I2C 件同选时前端标 ⚠ +
+        # 绑定消解；与 TB6612 motor 互替刻意错开 TIM/脚；TIM 门禁默认×默认
+        # 不拦现状口径）
+        "l298n.L298N_IN1",
     },
     "PA7": {
         "motor.MOTOR_A_DIR2",
@@ -327,6 +332,8 @@ WHITELIST = {
         "pca9685.PCA9685_SDA",
         "bmp180.BMP180_SDA",
         "ms5611.MS5611_SDA",
+        # wiki-stm32-batch9/04：l298n IN2——同上（物理冲突 ⚠ 登记 + 绑定消解）
+        "l298n.L298N_IN2",
     },
 }
 
