@@ -255,8 +255,12 @@ def test_l298n_stm32_code_guards():
     # 方向互切形态（页面 AO_Control 原样）：dir=1 → CH1=0/CH2=duty
     assert "l298n_dir == 1" in code_only
     assert "pwm_update(L298N_IN1_TIM, L298N_IN1_CH, 0);" in code_only
-    assert "pwm_update(L298N_IN2_TIM, L298N_IN2_CH, (uint16_t)l298n_duty);" in code_only
     assert "L298N_PWM_PERIOD - 1u" in code_only  # 限幅（页面 speed 无上限修正）
+    # 占空比刻度换算：页面 0~per-1 → ml_pwm 0~MAX_DUTY(50000) 归一化
+    # （pwm_update 按 duty/MAX_DUTY×(ARR+1) 写 CCR——直传 = 满值仅 ~4% 错位，
+    # code-review 规格轴发现修复）
+    assert "l298n_pwm_duty(l298n_duty)" in code_only
+    assert "(uint32_t)duty * (uint32_t)MAX_DUTY" in code_only
     assert "pwm_init(L298N_IN1_TIM, L298N_IN1_CH, L298N_PWM_FREQ);" in code_only
     assert "pwm_init(L298N_IN2_TIM, L298N_IN2_CH, L298N_PWM_FREQ);" in code_only
     # 库 API 三函数

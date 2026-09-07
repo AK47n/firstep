@@ -567,7 +567,9 @@
 
 /* ---- UART 接收中断聚合（isr.c 的 USARTx_IRQHandler 调这些宏，
  * 工单 pin-full-unlock/02）——按各 UART 角色绑定实例重分组：默认
- * UART_1 = DIGIT+COORD+UWB+HC05 共享、UART_2 = DEBUG、UART_3 = ZIGBEE。 ---- */
+ * UART_1 = DIGIT+COORD+UWB+HC05+FINGERPRINT+NEO_6M+ESP01S 共享（批 8/02
+ * 首扩 hc05、批 9/03/05/06 三扩）、UART_2 = DEBUG、UART_3 = ZIGBEE+EC01G
+ * （批 9/07 首扩——AS32 轮询件无 handler 不登记）。 ---- */
 #define USART1_IRQ_CALLS digit_uart_rx_handler(); coord_detect_rx_handler(); uwb_rx_handler(); hc05_rx_handler(); fingerprint_rx_handler(); neo_6m_rx_handler(); esp01s_rx_handler();
 #define USART2_IRQ_CALLS debug_uart_rx_handler();
 #define USART3_IRQ_CALLS zigbee_rx_handler(); ec01g_rx_handler();
