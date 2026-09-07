@@ -408,6 +408,10 @@ STM32_MACRO_VALUES = {
     "MQ8_AO_CH": "ADC_Channel_5",
     "MQ9_AO_CH": "ADC_Channel_5",
     "MS1100_AO_CH": "ADC_Channel_5",
+    # wiki-stm32-batch7/01-03：测距/输入件 ADC 件（us016/ir_distance 共读
+    # PA5——与 ir_distance 互替件同脚；joystick X=PA1/Y=PA0 与 adc 模块
+    # ADC_CH1/CH0 共享组；SW=PA10 叠 DIGIT/COORD/UWB UART RX）
+    "US016_AO_CH": "ADC_Channel_5",
 }
 
 
