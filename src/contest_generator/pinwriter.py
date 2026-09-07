@@ -47,6 +47,7 @@ _IRQ_CALLS_MACROS = (
 # AS32_UART 轮询件无 rx_handler——不登记（绑定换实例不影响 IRQ 分组）。
 # wiki-stm32-batch9/03：FINGERPRINT_UART 登记（指纹 RX 中断状态机件）。
 # wiki-stm32-batch9/05：NEO_6M_UART 登记（GPS NMEA 中断收帧件）。
+# wiki-stm32-batch9/06：ESP01S_UART 登记（WiFi AT 中断收缓冲件）。
 _UART_CALLS_ROLES = (
     ("DIGIT_UART", "digit_uart_rx_handler"),
     ("COORD_DETECT_UART", "coord_detect_rx_handler"),
@@ -56,6 +57,7 @@ _UART_CALLS_ROLES = (
     ("HC05_UART", "hc05_rx_handler"),
     ("FINGERPRINT_UART", "fingerprint_rx_handler"),
     ("NEO_6M_UART", "neo_6m_rx_handler"),
+    ("ESP01S_UART", "esp01s_rx_handler"),
 )
 
 # pin_config.h 宏行：#define NAME<分隔空白><值 + 注释>——只对绑定角色的宏行
