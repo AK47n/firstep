@@ -230,7 +230,7 @@ STM32_MACRO_VALUES = {
     # UART 接收中断聚合（isr.c USARTx_IRQHandler 调用；默认分组）
     "USART1_IRQ_CALLS": (
         "digit_uart_rx_handler(); coord_detect_rx_handler(); uwb_rx_handler();"
-        " hc05_rx_handler(); fingerprint_rx_handler();"
+        " hc05_rx_handler(); fingerprint_rx_handler(); neo_6m_rx_handler();"
     ),
     "USART2_IRQ_CALLS": "debug_uart_rx_handler();",
     "USART3_IRQ_CALLS": "zigbee_rx_handler();",
@@ -265,6 +265,14 @@ STM32_MACRO_VALUES = {
     "FINGERPRINT_UART_RX_Pin": "Pin_10",
     "FINGERPRINT_TOUCH_GPIO": "GPIO_B",
     "FINGERPRINT_TOUCH_PIN": "Pin_5",
+    # wiki-stm32-batch9/05：neo_6m GPS 定位（真实 UART + NMEA——UART_1=UWB 定位
+    # 互替同脚；9600 运行期重配；RX 中断收帧——isr.c 聚合登记 neo_6m_rx_handler）
+    "NEO_6M_UART": "UART_1",
+    "NEO_6M_UART_INST": "USART1",
+    "NEO_6M_UART_TX_GPIO": "GPIO_A",
+    "NEO_6M_UART_TX_Pin": "Pin_9",
+    "NEO_6M_UART_RX_GPIO": "GPIO_A",
+    "NEO_6M_UART_RX_Pin": "Pin_10",
     # wiki-stm32-batch8/03：nrf24l01 软 SPI 六脚（全端口 B 单共享端口宏——
     # 同口约束照 ttp224；页面硬件 SPI1 默认脚不照抄）
     "NRF24L01_PORT": "GPIO_B",

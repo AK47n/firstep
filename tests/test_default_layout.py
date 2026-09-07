@@ -60,6 +60,9 @@ WHITELIST = {
         # 互替件同脚先例**（mspm0 指纹独立实例、K230 视觉 = DIGIT_UART——
         # stm32 同款推理挂 UART_1 宿主），同选经绑定换实例成对消解
         "fingerprint.FINGERPRINT_TX",
+        # wiki-stm32-batch9/05：neo_6m TX——GPS 室外定位 × UWB 室内定位链路
+        # **互替件同脚先例**（定位互替、同选概率最低；同选经绑定消解）
+        "neo_6m.NEO_6M_TX",
     },
     "PA10": {
         "digit_uart.DIGIT_UART_RX",
@@ -79,6 +82,8 @@ WHITELIST = {
         "ir_remote.IR_REMOTE_OUT",
         # wiki-stm32-batch9/03：fingerprint RX——与 TX 同策略（身份识别互替同脚）
         "fingerprint.FINGERPRINT_RX",
+        # wiki-stm32-batch9/05：neo_6m RX——与 TX 同策略（定位互替同脚）
+        "neo_6m.NEO_6M_RX",
     },
     "PB10": {
         "zigbee_uart.ZIGBEE_UART_TX",

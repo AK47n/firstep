@@ -1148,6 +1148,33 @@ def test_shared_groups_classifies_uart_family_share():
     assert "串口链路" in str(group["reason"])
 
 
+def test_shared_groups_classifies_batch9_uart_family_share():
+    """wiki-stm32-batch9/03/05：fingerprint/neo_6m 并入 UART_1 宿主后，把
+    PA9/PA10 的 gpio 混入角色（key_matrix COL1/2、joystick SW、ir_remote、
+    ir_remote_tx）绑走恢复纯 UART_1 家族共享组——身份识别/定位互替件与
+    DIGIT/COORD/UWB/HC05 同实例（合法共享，kind=share、串口链路）。"""
+    result = _auto("stm32", {
+        "key_matrix.KEY_MATRIX_COL1": "PA8",
+        "key_matrix.KEY_MATRIX_COL2": "PB6",
+        "joystick.JOYSTICK_SW": "PB7",
+        "ir_remote.IR_REMOTE_OUT": "PA8",
+        "ir_remote_tx.IR_TX_OUT": "PB6",
+    })
+
+    group = next(
+        (s for s in result.shared
+         if {"digit_uart.DIGIT_UART_TX", "coord_detect.COORD_DETECT_UART_TX",
+             "uwb_uart.UWB_UART_TX", "hc05.HC05_TX",
+             "fingerprint.FINGERPRINT_TX", "neo_6m.NEO_6M_TX"}
+         <= set(s["roles"])),
+        None,
+    )
+    assert group is not None
+    assert group["kind"] == "share"
+    assert "串口链路" in str(group["reason"])
+    assert "neo_6m.NEO_6M_TX" in group["roles"]
+
+
 def test_shared_groups_classifies_i2c_bus_share():
     """I2C 总线多挂（MPU6050 + 磁力计/OLED 同挂 SCL/SDA）→ 合法共享。"""
     result = _auto("mspm0", {
