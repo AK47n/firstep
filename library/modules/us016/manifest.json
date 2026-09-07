@@ -1,6 +1,6 @@
 {
   "slug": "us016",
-  "description": "US-016 模拟量超声波测距驱动（mspm0 纯驱动，ADR 0009）：依赖库内 adc 模块共享 ADC12_0 MEM0 槽位读数（薄封装，不新开 ADC 通道），us016_read_distance_cm 出距离（cm，3m/1m 双量程编译期宏），5 次快速平均；适用于非接触测距、避障、定高、车位感知等赛题功能。",
+  "description": "US-016 模拟量超声波测距驱动（双平台纯驱动，ADR 0009）：mspm0 依赖库内 adc 模块共享 ADC12_0 MEM0 槽位读数、stm32 经 ml_adc 共读 PA5（ADC 共享组），us016_read_distance_cm 出距离（cm，3m/1m 双量程编译期宏），5 次快速平均；适用于非接触测距、避障、定高、车位感知等赛题功能。",
   "dependencies": [
     "adc"
   ],
@@ -21,6 +21,28 @@
           "type": "adc",
           "default": "PA24",
           "required": true
+        }
+      ]
+    },
+    "stm32": {
+      "files": [
+        "code/us016_stm32.c",
+        "code/us016_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**ADC 薄封装（页面 ADC 序列代码收敛 ml_adc）**：F1 口径页面（stm32f10x.h + RCC_APB2PeriphClockCmd + GPIO_Mode_AIN + ADC_RegularChannelConfig + SoftwareStartConvCmd + GetConversionValue）——页面 US016_GPIO_Init + Get_ADC_Value 整体收敛为母版 ml_adc 的 adc_init（内部完成 AIN 引脚配置 + APB2 时钟 + 6 分频 12MHz + 复位校准——等效页面流程；采样时间 239.5cyc vs 页面 55.5cyc，功能等价差异记录）+ ADC_GetConversionValue→adc_get（软件触发轮询）。**ADC 共享组**：默认 AO=PA5（=页面原脚 ADC_Channel_5，用户照页面接线即插即用）；与 flame/批次 5/6 件共读 PA5（ml_adc 的 adc_get 每次先写 SQR3 选通道，顺序调用互不干扰）；**与 ir_distance 互替件同脚**（两测距件同一物理脚只能接一件——互替同脚先例语义：二选一接入无需另消解；罕见同选两件时经绑定其一换 PA0/PA1）；**同一物理脚只能接一件器件，多件同测需外部分路器/分时切换**（mspm0 MEM0 共读同口径；stm32 通道 10/10 全被既有角色占用——同选经引脚绑定消解）。**页面缺陷/修正**：① 页面正文 L49「3096」与代码/注释「3072」不一（L = A×3072/4096 mm）——按代码 0.75 系数定稿（mspm0 批 2 同款）；② 页面 50 次 × delay_ms(10) ≈ 500ms 阻塞采样改 5 次快平均（mspm0/us016 先例——US016_ADC_SAMPLES 5）；③ 页面 main L254 /10 出 cm 归入 API 出参（出参 cm 对齐 mspm0 us016_read_distance_cm ——与 mspm0 同名 us016.h L30）；④ 双量程宏 US016_RANGE_1M（照 mspm0 us016.h L17-19：0=3m 档系数 0.75/1=1m 档系数 0.25，默认 0）+ Vref/Vcc 修正宏（US016_VREF_V/US016_VCC_V 默认 3.3/3.3——页面 L48/L49 公式与代码分离口径沿 mspm0）；⑤ 页面 Range 量程脚无 GPIO 代码（量程由硬件接线定，编译期宏对应）与 4Pin 无 DO——均不声明；⑥ 页面 h L207-214 宏（RCC_OUT/PORT_OUT/CHANNEL_OUT_ADC 等）收敛 pin_config.h 单源 US016_AO_CH（ADR 0010）。\nwiki 手册来源：sources/materials/lckfb-地阔星移植手册/sensor--us-016-ultrasonic-ranging-sensor.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/us-016-ultrasonic-ranging-sensor.html；网盘资料 http://pan.baidu.com/s/1c08JuBQ）。改造要点：去掉 main.c 演示与 printf；函数名规范化（us016_init/read_distance_cm，去 US016_GPIO_Init/Get_ADC_Value/Get_distance 命名）；页面 ADC 序列收敛 ml_adc；Range 量程脚未用不声明；50 次采样改 5 次快平均。\nwiki-stm32-batch7/01 编译矩阵（2026-09-07）：stm32 单选生成（依赖 adc 展开）→ UV4（C:/Keil5 V5.06u7）0 error、0 module warning（exit 0，PASS）；未上板（0.75 系数/量程真机标定留后续）。",
+      "kit": "US-016 模拟电压输出超声波测距模块（Range 悬空/高 = 3m 量程，低 = 1m）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/us-016-ultrasonic-ranging-sensor.html",
+      "pins": [
+        {
+          "id": "US016_AO",
+          "type": "adc",
+          "default": "PA5",
+          "required": true,
+          "macros": [
+            "US016_AO_CH"
+          ]
         }
       ]
     }

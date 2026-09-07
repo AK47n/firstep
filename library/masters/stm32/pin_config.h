@@ -191,6 +191,17 @@
 #define MQ9_AO_CH             ADC_Channel_5
 #define MS1100_AO_CH          ADC_Channel_5
 
+/* ---- 批次 7（wiki-stm32-batch7）：测距/输入件 ADC 件（us016/ir_distance/
+ * joystick——页面 ADC 序列代码收敛 ml_adc）----
+ * us016/ir_distance：默认 AO 全 = ADC_Channel_5 = PA5（页面原脚即共读点——
+ * 与批次 5/6 件同策略）；**互替件同脚**：两测距件同一物理脚只能接一件
+ * （互替同脚先例——二选一接入无需另消解；罕见同选经绑定其一换 PA0/PA1）；
+ * joystick：X=ADC_Channel_1（PA1）/Y=ADC_Channel_0（PA0）——与 adc 模块
+ * ADC_CH1/CH0 **ADC 共享组**（mspm0 MEM1/2 与 adc 共享同构）、SW=PA10
+ * （gpio_in——叠 DIGIT/COORD/UWB UART RX：摇杆与视觉/数传链路不同框、
+ * 同选概率最低；mspm0 SW=PA9 同款推理，同选经绑定消解）。 */
+#define US016_AO_CH          ADC_Channel_5
+
 /* ---- TTP224 四路电容触摸（ttp224 模块：4 × GPIO 输入下拉，OUT1-4 默认
  * PB12/13/14/15——与 config DIP0-3（拨码 ID）+ pid 灰度 GRAY_D1-4 默认重叠：
  * 触摸按键与「拨码系统配置/巡线灰度」不同框、同选概率最低（触摸+无线链路
