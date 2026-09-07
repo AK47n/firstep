@@ -598,15 +598,16 @@
   },
   {
     "category": "定位模块",
-    "models": ["GPS", "北斗模块"],
+    "models": ["GPS", "北斗模块", "NEO-6M"],
     "solutions": [
       {
         "name": "GPS/北斗（NEO-6M/ATGM336H 等）",
         "interface": "UART（NMEA 0183）",
         "price": "￥20-40/个",
-        "note": "定位 2.5m 级；冷启动 30s-1min；室内无信号——电赛场地多在室内，慎用",
+        "note": "定位 2.5m 级；冷启动 30s-1min；室内无信号——电赛场地多在室内，慎用；库内 neo_6m 已打通（**stm32 纯驱动——B 类仅 stm32 条目，mspm0 缺（选 mspm0 平台报 missing 警告），同选时经引脚绑定消解**：neo_6m_init + read_frame 帧就绪检测 + get_position 出十进制度（ddmm.mmmm 换算、N/S E/W 符号）——NMEA 帧识别 $→GPRMC→行尾状态机收帧（256 缓冲截断保护），默认 UART_1（PA9/PA10，与 UWB 定位互替同脚——GPS 室外 × UWB 室内、同选概率最低）、9600；ATGM336H 等其它型号 NMEA 兼容（语句 ID 判 GP|GN 兼容）",
         "suitable": "室外/开阔场地定位",
-        "recommended": true
+        "recommended": true,
+        "lib_modules": ["neo_6m"]
       },
       {
         "name": "UWB 定位",

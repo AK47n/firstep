@@ -519,10 +519,26 @@
 #define L298N_IN2_TIM         TIM_3
 #define L298N_IN2_CH          TIM3_CH2   /* PA7 */
 
+/* ---- 批次 9（wiki-stm32-batch9/05）：neo_6m GPS 定位（真实 UART + NMEA）----
+ * 默认 UART_1 = UWB_UART 宿主（GPS 室外定位 × UWB 室内定位链路**互替件同脚
+ * 先例**、同选概率最低）；TX=PA9/RX=PA10 = UART_1 原脚（与 DIGIT/COORD/UWB/
+ * HC05/FINGERPRINT 并列默认共享 = 合法先例）；9600（NEO-6M 出厂默认——
+ * uart_pin_init_ex 默认 115200 后 uart_baud_config 重配；同实例其它角色
+ * 115200——双选默认时后 init 定波特率（hc05 先例已记录），同选经绑定换
+ * 实例成对消解）；RX 中断收帧（neo_6m_rx_handler 经 isr.c USART1_IRQ_CALLS
+ * 聚合调用——pinwriter _UART_CALLS_ROLES 已登记）；页面默认串口2
+ * （PA2/PA3）+ 规格栏「SPI」复制错误不照抄。 */
+#define NEO_6M_UART             UART_1
+#define NEO_6M_UART_INST        USART1
+#define NEO_6M_UART_TX_GPIO     GPIO_A
+#define NEO_6M_UART_TX_Pin      Pin_9
+#define NEO_6M_UART_RX_GPIO     GPIO_A
+#define NEO_6M_UART_RX_Pin      Pin_10
+
 /* ---- UART 接收中断聚合（isr.c 的 USARTx_IRQHandler 调这些宏，
  * 工单 pin-full-unlock/02）——按各 UART 角色绑定实例重分组：默认
  * UART_1 = DIGIT+COORD+UWB+HC05 共享、UART_2 = DEBUG、UART_3 = ZIGBEE。 ---- */
-#define USART1_IRQ_CALLS digit_uart_rx_handler(); coord_detect_rx_handler(); uwb_rx_handler(); hc05_rx_handler(); fingerprint_rx_handler();
+#define USART1_IRQ_CALLS digit_uart_rx_handler(); coord_detect_rx_handler(); uwb_rx_handler(); hc05_rx_handler(); fingerprint_rx_handler(); neo_6m_rx_handler();
 #define USART2_IRQ_CALLS debug_uart_rx_handler();
 #define USART3_IRQ_CALLS zigbee_rx_handler();
 
