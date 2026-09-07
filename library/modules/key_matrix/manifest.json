@@ -1,0 +1,100 @@
+{
+  "slug": "key_matrix",
+  "description": "4×4 矩阵键盘驱动（stm32 纯驱动，B 类——仅 stm32 条目，无 mspm0 对照，ADR 0009）：8 脚宏族（4 行输出低有效 + 4 列输入上拉），key_matrix_scan 出键值 0-16（行主序 i×4+j+1，页面原式，0=无键），防抖/连按/释放语义归调用方节拍；适用于多键矩阵输入、键盘面板、菜单选择、密码输入等赛题功能。",
+  "dependencies": [],
+  "platforms": {
+    "stm32": {
+      "files": [
+        "code/key_matrix_stm32.c",
+        "code/key_matrix_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**B 类：无 mspm0 条目（地阔星仅有页面）——仅 stm32 平台条目**（B 类拍板：库内无矩阵键盘模块——从零设计；相近件：key 独立按键（上拉低有效 + 通道表）/ttp224 触摸按键（4 路 OUT）；照批 1 口径 wordlist 补录）。**8 脚分配（stm32 硬约束——页面行列全 GPIOA（行输出=PA7-4 低有效、列输入=PA3-0 上拉）全被既有角色占用不照抄）**：ROW1-4=PB12/13/14/15（叠 DIP0-3+GRAY_D1-4+ttp224——**互替件同脚先例**（open_mv4×digit_uart）：矩阵键盘（机械）与 ttp224（触摸 4 键）互替、同选概率最低、同脚经绑定消解（二选一接入）；刻意不叠人机面板组合（KEY/OLED/数码管——键盘+屏幕/按键同框））+ COL1-4=PA9/PA10/PB10/PB11（叠 DIGIT/COORD/UWB UART + ZIGBEE UART——键盘与视觉/数传链路不同框；PA10 与 joystick SW 并列登记——白名单）。**宏族设计**（行列跨端口 → 逐脚宏，照批 2 UART 先例）：KEY_MATRIX_ROW1..4_GPIO/_PIN + COL1..4_GPIO/_PIN = 16 宏 pin_config.h 单源（页面 port_row/port_col 数组全 GPIOA 组织不照抄）。**扫描**：逐行拉低（低有效）→ 扫 4 列（列被拉低 = 键按下）→ 键值 i×4+j+1（行主序 1-16、0=无键——页面原式）→ 恢复行高 → 命中即整扫退出（页面 behavior——多键同时按只返回首个；键值 1-16 顺序映射，无物理键位映射表——键面字符图由调用方/接线决定）。**防抖/连按/释放语义归调用方节拍**（页面无防抖代码——key_scan 无延时无两次确认；main 500ms 演示节拍会丢键——不落；调用方 10-20ms 采样 + 两次确认 + 沿检测）。**页面缺陷/修正**：① L22「更改为 bsp_mh100x.c 与 bsp_mh100x.h」vs L39 #include「bsp_matrixkey.h」文件名串台（mh100x=他件名残留；h 宏 _BSP_MATRIXKEY_H_ 又对齐 matrixkey）——notes 记录不落码；② 页面 MatrixKey_GPIO_Init 未显式置位行脚（复位 ODR=0 → 初始化后行低 = 首扫「第 0 行被迫选中」）——实现补初始行高（行初始 1，行为等价无回归——扫描原式不变）；③ 页面行/列数组组织（port_row/port_col/gpio_row/gpio_col）收敛逐脚宏族（行列跨端口）；④ main 演示（delay_ms(500) + printf）不落。\nwiki 手册来源：sources/materials/lckfb-地阔星移植手册/sensor--4x4-keyboard.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/4x4-keyboard.html）。改造要点：去掉 main.c 演示与 printf；函数名规范化（key_matrix_init/scan，去 MatrixKey_GPIO_Init/key_scan 命名）；8 脚宏参数化（逐脚端口宏族）；行列数组收敛宏；防抖归调用方（模块零阻塞——纯 GPIO 快扫 ~16 次操作无等待）。\nwiki-stm32-batch7/05 编译矩阵（2026-09-07）：stm32 单选生成 → UV4（C:/Keil5 V5.06u7）0 error、0 module warning（exit 0，PASS）；未上板（键值表/防抖参数真机校准留后续）；mspm0 选本件报 missing 平台警告（B 类口径——生成侧照常拦）。",
+      "kit": "4×4 矩阵键盘（薄膜开关/按键控制面板，4 行 4 列接法）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/4x4-keyboard.html",
+      "pins": [
+        {
+          "id": "KEY_MATRIX_ROW1",
+          "type": "gpio_out",
+          "default": "PB12",
+          "required": true,
+          "macros": [
+            "KEY_MATRIX_ROW1_GPIO",
+            "KEY_MATRIX_ROW1_PIN"
+          ]
+        },
+        {
+          "id": "KEY_MATRIX_ROW2",
+          "type": "gpio_out",
+          "default": "PB13",
+          "required": true,
+          "macros": [
+            "KEY_MATRIX_ROW2_GPIO",
+            "KEY_MATRIX_ROW2_PIN"
+          ]
+        },
+        {
+          "id": "KEY_MATRIX_ROW3",
+          "type": "gpio_out",
+          "default": "PB14",
+          "required": true,
+          "macros": [
+            "KEY_MATRIX_ROW3_GPIO",
+            "KEY_MATRIX_ROW3_PIN"
+          ]
+        },
+        {
+          "id": "KEY_MATRIX_ROW4",
+          "type": "gpio_out",
+          "default": "PB15",
+          "required": true,
+          "macros": [
+            "KEY_MATRIX_ROW4_GPIO",
+            "KEY_MATRIX_ROW4_PIN"
+          ]
+        },
+        {
+          "id": "KEY_MATRIX_COL1",
+          "type": "gpio_in",
+          "default": "PA9",
+          "required": true,
+          "macros": [
+            "KEY_MATRIX_COL1_GPIO",
+            "KEY_MATRIX_COL1_PIN"
+          ]
+        },
+        {
+          "id": "KEY_MATRIX_COL2",
+          "type": "gpio_in",
+          "default": "PA10",
+          "required": true,
+          "macros": [
+            "KEY_MATRIX_COL2_GPIO",
+            "KEY_MATRIX_COL2_PIN"
+          ]
+        },
+        {
+          "id": "KEY_MATRIX_COL3",
+          "type": "gpio_in",
+          "default": "PB10",
+          "required": true,
+          "macros": [
+            "KEY_MATRIX_COL3_GPIO",
+            "KEY_MATRIX_COL3_PIN"
+          ]
+        },
+        {
+          "id": "KEY_MATRIX_COL4",
+          "type": "gpio_in",
+          "default": "PB11",
+          "required": true,
+          "macros": [
+            "KEY_MATRIX_COL4_GPIO",
+            "KEY_MATRIX_COL4_PIN"
+          ]
+        }
+      ]
+    }
+  }
+}

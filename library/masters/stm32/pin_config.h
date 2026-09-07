@@ -223,6 +223,30 @@
 #define EC11_SW_GPIO          GPIO_B
 #define EC11_SW_PIN           Pin_0
 
+/* key_matrix：ROW1-4=PB12/13/14/15（叠 DIP0-3+GRAY_D1-4+ttp224——**互替件
+ * 同脚先例**：机械键盘×触摸 4 键互替、二选一接入无需另消解）+ COL1-4=
+ * PA9/PA10/PB10/PB11（叠 DIGIT/COORD/UWB UART + ZIGBEE UART——键盘与
+ * 视觉/数传链路不同框）；行列跨端口 → **逐脚宏族**（照批 2 UART 先例，
+ * 无共享端口宏/无同口约束——换单脚经绑定行级覆写）；扫描逐行拉低扫列
+ * （低有效 + 列上拉），键值 i×4+j+1（0=无键），防抖归调用方节拍；
+ * 页面默认 PA7-4/PA3-0 全 GPIOA 不照抄（全被既有角色占用）。 */
+#define KEY_MATRIX_ROW1_GPIO  GPIO_B
+#define KEY_MATRIX_ROW1_PIN   Pin_12
+#define KEY_MATRIX_ROW2_GPIO  GPIO_B
+#define KEY_MATRIX_ROW2_PIN   Pin_13
+#define KEY_MATRIX_ROW3_GPIO  GPIO_B
+#define KEY_MATRIX_ROW3_PIN   Pin_14
+#define KEY_MATRIX_ROW4_GPIO  GPIO_B
+#define KEY_MATRIX_ROW4_PIN   Pin_15
+#define KEY_MATRIX_COL1_GPIO  GPIO_A
+#define KEY_MATRIX_COL1_PIN   Pin_9
+#define KEY_MATRIX_COL2_GPIO  GPIO_A
+#define KEY_MATRIX_COL2_PIN   Pin_10
+#define KEY_MATRIX_COL3_GPIO  GPIO_B
+#define KEY_MATRIX_COL3_PIN   Pin_10
+#define KEY_MATRIX_COL4_GPIO  GPIO_B
+#define KEY_MATRIX_COL4_PIN   Pin_11
+
 /* ---- TTP224 四路电容触摸（ttp224 模块：4 × GPIO 输入下拉，OUT1-4 默认
  * PB12/13/14/15——与 config DIP0-3（拨码 ID）+ pid 灰度 GRAY_D1-4 默认重叠：
  * 触摸按键与「拨码系统配置/巡线灰度」不同框、同选概率最低（触摸+无线链路
