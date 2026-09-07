@@ -413,6 +413,10 @@ STM32_MACRO_VALUES = {
     # ADC_CH1/CH0 共享组；SW=PA10 叠 DIGIT/COORD/UWB UART RX）
     "US016_AO_CH": "ADC_Channel_5",
     "IR_DISTANCE_AO_CH": "ADC_Channel_5",
+    "JOYSTICK_X_CH": "ADC_Channel_1",
+    "JOYSTICK_Y_CH": "ADC_Channel_0",
+    "JOYSTICK_SW_GPIO": "GPIO_A",
+    "JOYSTICK_SW_PIN": "Pin_10",
 }
 
 

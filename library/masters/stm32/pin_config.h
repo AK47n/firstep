@@ -202,6 +202,10 @@
  * 同选概率最低；mspm0 SW=PA9 同款推理，同选经绑定消解）。 */
 #define US016_AO_CH          ADC_Channel_5
 #define IR_DISTANCE_AO_CH    ADC_Channel_5
+#define JOYSTICK_X_CH        ADC_Channel_1  /* PA1——与 adc 模块 ADC_CH1 共享组 */
+#define JOYSTICK_Y_CH        ADC_Channel_0  /* PA0——与 adc 模块 ADC_CH0 共享组 */
+#define JOYSTICK_SW_GPIO     GPIO_A
+#define JOYSTICK_SW_PIN      Pin_10
 
 /* ---- TTP224 四路电容触摸（ttp224 模块：4 × GPIO 输入下拉，OUT1-4 默认
  * PB12/13/14/15——与 config DIP0-3（拨码 ID）+ pid 灰度 GRAY_D1-4 默认重叠：
