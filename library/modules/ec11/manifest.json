@@ -1,0 +1,50 @@
+{
+  "slug": "ec11",
+  "description": "EC11 旋转编码器驱动（stm32 纯驱动，B 类——仅 stm32 条目，无 mspm0 对照，ADR 0009）：A/B 相 GPIO 输入轮询判向（A 相跳变采样 B 相，不占 EXTI/TIMER），ec11_get_delta 出旋转净增量（正=顺时针/负=逆时针，清零式），SW 按键低有效（防抖归调用方节拍）；适用于旋钮参数调节、菜单选择、增量计数、人机交互输入等赛题功能。",
+  "dependencies": [],
+  "platforms": {
+    "stm32": {
+      "files": [
+        "code/ec11_stm32.c",
+        "code/ec11_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**B 类：无 mspm0 条目（地阔星仅有页面）——仅 stm32 平台条目**（B 类拍板：库内无旋转编码器模块——唯一旋转件为电机光电编码器，从零设计；照批 1 口径 wordlist 补录）。**轮询优先设计（不用 EXTI/TIMER）**：页面扫描机构 = TIM3 定时器中断（注释 10ms/实际 5ms——PSC 3600-1/ARR 100 矛盾记录）每 5ms 调 Encoder_Scanf；本件改 **调用方节拍轮询 A/B 相**（普通 gpio_in——不注册 GPIO EXTI（避开 _check_exti_line_conflicts 异口同线门禁——微波雷达轮询先例）、不占 TIMER（TIM2/3/4 被 PWM/骨架调度占用——定时器实例冲突门禁；页面 TIM 中断消抖结构改为调用方 10ms 级调度防抖）；快速旋转两次调用间 A 多跳变会漏计——页面定时器扫描同款限制（notes）。**默认脚（同选概率最低推理——页面默认 A=PA6/B=PA4/SW=PA7 全被既有角色占用不照抄）**：A=PA4（叠 microwave/MOTOR_B_ENC——EC11 人机旋钮与微波雷达/光电编码器闭环不同框）、B=PB5（叠 hx711 SCK/MOTOR_A_ENC）、SW=PB0（叠 hx711 DT——与称重不同框）；刻意不叠人机面板组合件（KEY/OLED/数码管——旋钮+屏幕/按键面板标配）与声光件；同选经引脚绑定消解。**EXTI 门禁注意**：默认脚与既有 ENC 角色同脚同线（PA4 线 4/MOTOR_B_ENC、PB5 线 5/MOTOR_A_ENC）——门禁只查「用户绑定改动」默认组合不拦（现状口径）；本件轮询无 ISR 无强符号冲突；EC11 与 motor 同选时经绑定换脚。**页面缺陷/修正**：① 判向矛盾——页面 L60-61 真值表（两相同沿=顺时针——挤坏文本）与正文 L44-46（A↑=B 高=顺时针）、代码 L157-189（A↑+B 1→0=正转/1、B 0→1=反转/2）三方不符——**按代码（A 相跳变采样 B 相）为准**+notes；② **printf 在驱动文件内**（ec11.c L235/255——Encoder_Rotation_left/right 演示计数函数 static 计数 + printf）——剔除（演示语义归调用方骨架）；③ SW 消抖 = delay_ms(100) × 2 分支（每次调用阻塞 100ms）——**防抖归调用方节拍**不落（驱动零阻塞）；④ Encoder_GPIO_Init 内 TIM/NVIC 部分只有定时器中断扫描用——轮询方案不落；⑤ 页内 img1/img2（A/B 相位图/引脚图）未内嵌（波形真值语义从文字+代码还原）；⑥ 增量单位 = A 相边沿事件（转一格半个脉冲/转两格一个完整脉冲——页面 L50-52：每格 2 次 A 相边沿——真机标定留后续，题目常用「旋转 N 格」按除以 2 或真机校准）。\nwiki 手册来源：sources/materials/lckfb-地阔星移植手册/sensor--ec11.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/ec11.html；网盘资料 https://pan.baidu.com/s/18pp1KaT2V_llizWvdIXtKA?pwd=8889 提取码 8889）。改造要点：去掉 main.c 演示与 printf（含驱动内 printf——模块化必须剔除）；函数名规范化（ec11_init/get_delta/read_sw，去 Encoder_GPIO_Init/Encoder_Scanf/Encoder_Sw_Down/Encoder_Rotation_* 命名）；TIM3 中断扫描改轮询（调用方节拍）；SW 100ms 阻塞消抖改调用方防抖；引脚宏参数化（EC11_A/B/SW_GPIO/PIN——逐脚端口宏，页面 A=CLK、B=DT 双名注释）；ec11_get_delta 增量语义（页面 0/1/2 计数语义归一：+1 正转/-1 反转/0 无动作，清零式）。\nwiki-stm32-batch7/04 编译矩阵（2026-09-07）：stm32 单选生成 → UV4（C:/Keil5 V5.06u7）0 error、0 module warning（exit 0，PASS）；未上板（判向/每格边沿数真机校准留后续）；mspm0 选本件报 missing 平台警告（B 类口径——生成侧照常拦）。",
+      "kit": "EC11 旋转编码器模块（工作电压 5V，5Pin：VCC/GND/A/B/SW；360 度旋转、带按键）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/sensor/ec11.html",
+      "pins": [
+        {
+          "id": "EC11_A",
+          "type": "gpio_in",
+          "default": "PA4",
+          "required": true,
+          "macros": [
+            "EC11_A_GPIO",
+            "EC11_A_PIN"
+          ]
+        },
+        {
+          "id": "EC11_B",
+          "type": "gpio_in",
+          "default": "PB5",
+          "required": true,
+          "macros": [
+            "EC11_B_GPIO",
+            "EC11_B_PIN"
+          ]
+        },
+        {
+          "id": "EC11_SW",
+          "type": "gpio_in",
+          "default": "PB0",
+          "required": true,
+          "macros": [
+            "EC11_SW_GPIO",
+            "EC11_SW_PIN"
+          ]
+        }
+      ]
+    }
+  }
+}
