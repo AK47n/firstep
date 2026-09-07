@@ -65,6 +65,10 @@ WHITELIST = {
         "key_matrix.KEY_MATRIX_COL2",
         # wiki-stm32-batch8/02：hc05 RX——与 TX 同策略（UWB 互替同脚）
         "hc05.HC05_RX",
+        # wiki-stm32-batch8/05：ir_remote OUT——红外遥控与视觉/UWB 链路不同框、
+        # 同选概率最低（mspm0 默认 PA26（UART 族）同型推理；轮询忙等不注册
+        # EXTI——与编码器线共享正交不冲突），同选经绑定消解
+        "ir_remote.IR_REMOTE_OUT",
     },
     "PB10": {
         "zigbee_uart.ZIGBEE_UART_TX",

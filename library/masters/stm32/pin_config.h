@@ -442,6 +442,15 @@
 #define RC522_MOSI_PIN        Pin_4
 #define RC522_MISO_PIN        Pin_5
 
+/* ---- 批次 8（wiki-stm32-batch8/05）：ir_remote 红外遥控接收（忙等解码）----
+ * OUT=PA10（gpio_in 上拉——mspm0 默认 PA26（UART 族）同型推理：红外遥控
+ * 与视觉/UWB 链路不同框、同选概率最低；与 ir_remote_tx 默认 PA9 刻意错开
+ * ——发/收常配对、双选默认不撞）；轮询忙等解码（20us 拍，不注册 EXTI——
+ * F1 页默认 PA2/EXTI2 不照抄 = DEBUG_UART TX 常备件；EXTI 聚合/编码器
+ * 独占先例）。 */
+#define IR_REMOTE_PORT        GPIO_A
+#define IR_REMOTE_OUT_PIN     Pin_10
+
 /* ---- UART 接收中断聚合（isr.c 的 USARTx_IRQHandler 调这些宏，
  * 工单 pin-full-unlock/02）——按各 UART 角色绑定实例重分组：默认
  * UART_1 = DIGIT+COORD+UWB+HC05 共享、UART_2 = DEBUG、UART_3 = ZIGBEE。 ---- */

@@ -271,6 +271,10 @@ STM32_MACRO_VALUES = {
     "RC522_SCK_PIN": "Pin_6",
     "RC522_MOSI_PIN": "Pin_4",
     "RC522_MISO_PIN": "Pin_5",
+    # wiki-stm32-batch8/05：ir_remote 红外接收（gpio_in 默认 PA10——mspm0
+    # PA26（UART 族）同型推理，与 ir_remote_tx 默认 PA9 刻意错开）
+    "IR_REMOTE_PORT": "GPIO_A",
+    "IR_REMOTE_OUT_PIN": "Pin_10",
     # 软 I2C（工单 pin-full-unlock/05：mpu6050 离 PB10/11 让位 Zigbee → PA11/PA12）
     "I2C_GPIO": "GPIO_A",
     "I2C_SCL_GPIO_Pin": "Pin_11",
