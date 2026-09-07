@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=3fab7d0c09899ad79b856a5b0443c2a6bd299621 -->
+<!-- changelog-auto: last-commit=573a26299a0eab36ccc9ac6caeb488835e83488c -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -19,6 +19,7 @@
 - 12:45 工单：wiki-stm32-batch7/04 ec11 结论回填补 code-review 整改记录（ec11_init 快照 A 相电平——标准轴判断项②整改）
 - 13:03 工单：wiki-stm32-batch8/01 as32 LoRa 串口数传（stm32 条目：UART_3/ZIGBEE 互替同脚 + 9600 + 关 RXNEIE 轮询接收 + cap 截断修正）
 - 13:06 工单：wiki-stm32-batch8/02 hc05 蓝牙串口透传（stm32 条目：UART_1/UWB 互替同脚 + 9600 + RX 中断环形缓冲入 isr.c 聚合——_UART_CALLS_ROLES/hc05_rx_handler 扩展 + STATE=PA8/KEY=PB4）
+- 13:10 工单：wiki-stm32-batch8/03 nrf24l01 2.4G 无线收发（stm32 条目：软 SPI 六脚位操作全端口 B 单宏——CLK/MOSI 无线互替同脚 + CSN/CE 人机输入组 + MISO/IRQ 低频，不占硬件 SPI/TIMER/EXTI）
 
 ## 2026-09-06
 - 00:07 批次7/01 mq135 空气质量传感器模块入库（mspm0）：ADC 模拟量独立 MEM4 通道（ir_distance 先例而非 mq2 的 MEM0 薄封装——多路气体同选时各器件物理通道独立、无共读冲突），母版 syscfg ADC12_0 sequence 加第 5 通道（endAdd 3→4、adcMem4chansel=CHAN_6、adcPin6=PB20）；mq135_init + mq135_read_percent 出 0-100% 相对浓度（页面 4095/100 原式、30 次→5 次快平均）；页面 ADC 中断（IRQHandler + gCheckADC）改经 adc 模块 API 轮询（共享实例强符号唯一）；adc 模块 adc_get 通道守卫扩展至 MEM5（注释/枚举同步）；页面 DO（LM393 阈值）宏未用不声明；notes 写明与 mq2 的通道方案差异与 MQ 系相对值非 ppm 精标+预热限制；默认 PB20（与 DC_MOTOR BB/SYN6288 TX 重叠——同选概率最低）；词表感知传感器 +MQ-135；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）
