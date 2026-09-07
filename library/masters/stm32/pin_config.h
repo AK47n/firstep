@@ -506,6 +506,19 @@
 #define SYN6288_GPIO          GPIO_C
 #define SYN6288_PIN           Pin_14
 
+/* ---- 批次 9（wiki-stm32-batch9/04）：l298n 大电流电机驱动（PWM×2 方向互切）
+ * IN1=PA6（TIM3_CH1）/IN2=PA7（TIM3_CH2）——**页面原脚**；TIM3 定时器零占用
+ * （TIM2=T B6612 电机/TIM4=舵机——与 TB6612 motor 互替刻意错开 TIM 与脚）；
+ * **⚠ PA6/PA7 与软 I2C 总线同脚**（l298n×I2C 件同选 = 物理冲突，绑定消解）；
+ * **⚠ TIM 门禁默认×默认不拦**：骨架调度默认 2026H=TIM_3 × 本件默认 TIM_3
+ * = 默认×默认不拦（现状口径）——骨架用 2026H 模板时建议绑 TIM4_CH2/CH3
+ * 或改用 2026C 模板（TIM_2 滴答），见 manifest notes；页面 EN/跳线帽范围外
+ * （跳线帽态使用）。 */
+#define L298N_IN1_TIM         TIM_3
+#define L298N_IN1_CH          TIM3_CH1   /* PA6 */
+#define L298N_IN2_TIM         TIM_3
+#define L298N_IN2_CH          TIM3_CH2   /* PA7 */
+
 /* ---- UART 接收中断聚合（isr.c 的 USARTx_IRQHandler 调这些宏，
  * 工单 pin-full-unlock/02）——按各 UART 角色绑定实例重分组：默认
  * UART_1 = DIGIT+COORD+UWB+HC05 共享、UART_2 = DEBUG、UART_3 = ZIGBEE。 ---- */

@@ -298,6 +298,13 @@ STM32_MACRO_VALUES = {
     # 与板载黄灯 LED_YELLOW 输出指示互替同脚、同选概率最低；与 jq8900 PA15 错开）
     "SYN6288_GPIO": "GPIO_C",
     "SYN6288_PIN": "Pin_14",
+    # wiki-stm32-batch9/04：l298n 大电流电机驱动（PWM×2 方向互切——TIM3_CH1/CH2
+    # = PA6/PA7 页面原脚；TIM3 定时器零占用、与 TB6612 互替错开 TIM；与软 I2C
+    # 总线同脚物理冲突 ⚠；TIM 门禁默认×默认不拦 notes）
+    "L298N_IN1_TIM": "TIM_3",
+    "L298N_IN1_CH": "TIM3_CH1",
+    "L298N_IN2_TIM": "TIM_3",
+    "L298N_IN2_CH": "TIM3_CH2",
     # 软 I2C（工单 pin-full-unlock/05：mpu6050 离 PB10/11 让位 Zigbee → PA11/PA12）
     "I2C_GPIO": "GPIO_A",
     "I2C_SCL_GPIO_Pin": "Pin_11",
