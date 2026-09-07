@@ -117,11 +117,11 @@ def test_syn6288_soft_uart_source_guards():
 
 
 def test_syn6288_manifest_shape_mspm0():
-    """syn6288：仅 mspm0 平台条目；依赖 delay；单角色 TX = gpio_out PB20。"""
+    """syn6288 mspm0 条目（stm32 条目见下方 stm32 段）；依赖 delay；TX = gpio_out PB20。"""
     manifest = ModuleManifest.load(MODULES / "syn6288")
     assert manifest.slug == "syn6288"
     assert manifest.dependencies == ("delay",)
-    assert set(manifest.platforms) == {"mspm0"}
+    assert set(manifest.platforms) == {"mspm0", "stm32"}
 
     mspm0 = manifest.platforms["mspm0"]
     assert [Path(f).name for f in mspm0.files] == ["syn6288.c", "syn6288.h"]
@@ -170,3 +170,143 @@ def test_syn6288_mspm0_single_select_generation(tmp_path):
     assert (out / "modules/syn6288/code/syn6288.h").is_file()
     assert (out / "modules/delay/code/delay.c").is_file()
     assert (out / "modules/delay/code/delay.h").is_file()
+
+
+# ---------------------------------------------------------------------------
+# wiki-stm32-batch9/02：stm32 平台条目（软 UART TX——不占串口实例；
+# 默认 PC14 叠 LED_YELLOW 输出指示互替、与 jq8900 PA15 错开）
+# ---------------------------------------------------------------------------
+
+import re  # noqa: E402
+import xml.etree.ElementTree as ET  # noqa: E402
+
+from contest_generator.clex import strip_comments  # noqa: E402
+from contest_generator.platforms import PLATFORM_STM32  # noqa: E402
+
+STM32_MASTER = LIBRARY_ROOT / "masters" / "stm32"  # noqa: E402
+
+MAIN_C_STM32 = (
+    '#include "headfile.h"\n'
+    '#include "syn6288_stm32.h"\n'
+    "\n"
+    "int main(void)\n"
+    "{\n"
+    "    syn6288_init();\n"
+    '    syn6288_send_cmd(0x01, 0x00, "test");\n'
+    '    syn6288_speak("hi");\n'
+    "    syn6288_stop();\n"
+    "    syn6288_pause();\n"
+    "    syn6288_resume();\n"
+    "    while (1)\n"
+    "    {\n"
+    "    }\n"
+    "}\n"
+)
+
+BANNED_CODE_PATTERNS = [
+    (r"\bprintf\b", "printf"),
+    (r"\bmain\b", "main"),
+    (r"\bboard_init\b", "board_init"),
+    (r"\bGPIO_Init\b", "GPIO_Init"),
+    (r"\bRCC_\w+\s*\(", "RCC_ 调用"),
+    (r"stm32f10x\.h", "stm32f10x.h"),
+    (r"\bUSART[123]?\b", "USART 寄存器引用（软 UART 无串口外设）"),
+    (r"\bUART_[123]\b", "UART 实例枚举引用（软 UART 不占实例）"),
+    (r"rx_handler", "rx_handler（RX 未实现）"),
+    (r"stdio\.h", "stdio.h（sprintf 已去流式）"),
+]
+
+
+def test_syn6288_manifest_shape_stm32():
+    """stm32 条目：单角色 TX = gpio_out PC14，宏 SYN6288_GPIO/SYN6288_PIN。"""
+    manifest = ModuleManifest.load(MODULES / "syn6288")
+    stm32 = manifest.platforms["stm32"]
+    assert [Path(f).name for f in stm32.files] == [
+        "syn6288_stm32.c",
+        "syn6288_stm32.h",
+    ]
+    for rel in stm32.files:
+        assert (MODULES / "syn6288" / rel).is_file(), rel
+    assert [(p.id, p.type, p.default, p.required, p.macros) for p in stm32.pins] == [
+        ("SYN6288_TX", "gpio_out", "PC14", True, ("SYN6288_GPIO", "SYN6288_PIN")),
+    ]
+    assert stm32.verified is True
+    assert stm32.kit and stm32.source_url == (
+        "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/"
+        "module/control/syn6288-speech-synthesis-broadcast-module.html"
+    )
+    for needle in (
+        "lckfb-地阔星移植手册/control--syn6288-speech-synthesis-broadcast-module.md",
+        "104us",
+        "200",
+        "互替",
+        "不占串口实例",
+        "未上板",
+    ):
+        assert needle in stm32.notes
+
+
+def test_syn6288_stm32_macros_defined_in_pin_config():
+    """stm32 接线单源：syn6288 两宏在母版 pin_config.h（默认 PC14 = LED 组）。"""
+    text = (STM32_MASTER / "pin_config.h").read_text(encoding="utf-8", newline="")
+    assert re.search(r"#define\s+SYN6288_GPIO\s+GPIO_C", text)
+    assert re.search(r"#define\s+SYN6288_PIN\s+Pin_14", text)
+    assert "syn6288_rx_handler" not in text
+
+
+def test_syn6288_stm32_single_select_generation(tmp_path):
+    """stm32 单选生成：模块文件落盘、uvprojx 注册 syn6288_stm32.c。"""
+    resolved = resolve_selection(MODULES, PLATFORM_STM32, ["syn6288"])
+    assert {m.slug for m in resolved.manifests} == {"syn6288", "delay"}
+    out = tmp_path / "out"
+    generate(
+        platform=PLATFORM_STM32,
+        manifests=resolved.manifests,
+        module_library_dir=MODULES,
+        master_project_dir=STM32_MASTER,
+        output_dir=out,
+        main_c_content=MAIN_C_STM32,
+    )
+    assert (out / "modules/syn6288/code/syn6288_stm32.c").is_file()
+    assert (out / "modules/syn6288/code/syn6288_stm32.h").is_file()
+    uvprojx = next(out.rglob("*.uvprojx"))
+    root = ET.parse(uvprojx).getroot()
+    groups = root.findall("Targets/Target/Groups/Group")
+    modules = next(g for g in groups if g.findtext("GroupName") == "modules")
+    paths = [f.findtext("FilePath") for f in modules.findall("Files/File")]
+    assert any("syn6288_stm32.c" in p for p in paths)
+    assert (out / "pin_config.h").is_file()
+
+
+def test_syn6288_stm32_code_guards():
+    """stm32 代码层守卫：104us/bit、0xFD 帧头 + 异或校验、200 上限、
+    API 6 函数、走 ml_gpio/ml_delay（零引脚字面量）、无 UART 外设/RX/printf。"""
+    c = (MODULES / "syn6288" / "code" / "syn6288_stm32.c").read_text(encoding="utf-8")
+    h = (MODULES / "syn6288" / "code" / "syn6288_stm32.h").read_text(encoding="utf-8")
+    full = c + "\n" + h
+
+    code_only = strip_comments(full, keep_preprocessor=True)
+    for pattern, label in BANNED_CODE_PATTERNS:
+        assert not re.search(pattern, code_only), f"代码残留 {label}"
+
+    # 软 UART 位时序常量与帧（与 mspm0 逐字节一致）
+    assert "SYN6288_UART_BIT_US   104u" in h
+    assert "SYN6288_TEXT_MAX      200u" in h
+    assert "0xFDu" in code_only
+    assert "xor_check = (uint8_t)(xor_check ^ frame_head[i]);" in code_only
+    assert "data_len = (uint16_t)(text_len + 3u);" in code_only
+    # 位时序原语：gpio_set + delay_us（无 UART 外设写 DR）
+    assert "gpio_set(SYN6288_GPIO, SYN6288_PIN, level);" in code_only
+    assert "delay_us(SYN6288_UART_BIT_US);" in code_only
+    assert "gpio_init(SYN6288_GPIO, SYN6288_PIN, OUT_PP);" in code_only
+    # API 全族（6 函数名——与 mspm0 syn6288.h 同名同型）
+    for fn in (
+        "syn6288_init",
+        "syn6288_send_cmd",
+        "syn6288_speak",
+        "syn6288_stop",
+        "syn6288_pause",
+        "syn6288_resume",
+    ):
+        assert f"void {fn}(" in code_only, fn
+    assert "PC14" not in code_only and "PA2" not in code_only

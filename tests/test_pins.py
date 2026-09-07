@@ -283,6 +283,10 @@ STM32_MACRO_VALUES = {
     # 与蜂鸣器 BUZZER 提示输出互替同脚、同选概率最低；与 syn6288 PC14 错开）
     "JQ8900_GPIO": "GPIO_A",
     "JQ8900_PIN": "Pin_15",
+    # wiki-stm32-batch9/02：syn6288 语音合成（软 UART TX——gpio_out 默认 PC14
+    # 与板载黄灯 LED_YELLOW 输出指示互替同脚、同选概率最低；与 jq8900 PA15 错开）
+    "SYN6288_GPIO": "GPIO_C",
+    "SYN6288_PIN": "Pin_14",
     # 软 I2C（工单 pin-full-unlock/05：mpu6050 离 PB10/11 让位 Zigbee → PA11/PA12）
     "I2C_GPIO": "GPIO_A",
     "I2C_SCL_GPIO_Pin": "Pin_11",

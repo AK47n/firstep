@@ -1,6 +1,6 @@
 {
   "slug": "syn6288",
-  "description": "SYN6288E 中文语音合成模块驱动（mspm0 纯驱动，ADR 0009）：软 UART 单发 TX（GPIO 位操作 9600 8N1，不占 UART 外设/TIMER）——syn6288_init 后 speak(text) 文本转语音播报（帧 = 0xFD 帧头+数据长度+命令字+参数+文本+异或校验，按页面原样），另有 stop/pause/resume 控制；适用于语音合成播报、状态语音提示、门禁/考勤语音提示等赛题功能。",
+  "description": "SYN6288E 中文语音合成模块驱动（双平台纯驱动，ADR 0009）：软 UART 单发 TX（GPIO 位操作 9600 8N1，不占串口外设/TIMER）——syn6288_init 后 speak(text) 文本转语音播报（帧 = 0xFD 帧头+数据长度+命令字+参数+文本+异或校验，按页面原样），另有 stop/pause/resume 控制；mspm0 默认 PB20、stm32 默认 PC14（与板载黄灯输出指示互替）；适用于语音合成播报、状态语音提示、门禁/考勤语音提示等赛题功能。",
   "dependencies": [
     "delay"
   ],
@@ -21,6 +21,29 @@
           "type": "gpio_out",
           "default": "PB20",
           "required": true
+        }
+      ]
+    },
+    "stm32": {
+      "files": [
+        "code/syn6288_stm32.c",
+        "code/syn6288_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**API 与 mspm0 syn6288.h 同名同型完全对齐**（syn6288_init/send_cmd(cmd_type, cmd_par, text)/speak(text)/stop/pause/resume——6 函数；帧结构逐字节一致：0xFD + Data_Len(文本+3) 高低位在前 + 命令字 + 参数 + 文本 + 异或校验——异或对象 = 帧头到文本逐字节 ^）。**软 UART TX 定稿**（同 mspm0）：delay_us(104)+gpio_set 位时序（9600 8N1：起始位低→8 数据位 LSB 先→停止位高，104us/bit）——**只发不收，不占串口实例**（stm32 三串口实例全被既有角色占用；语音主控→模块单向发指令帧为主）。**文本上限 SYN6288_TEXT_MAX=200**（页面 strlen 无上限溢 Send_Buff[210] 修正——mspm0 同款；命令帧最大 206 字节留余量）。页面 RX（SYN6288RX_BUFF `(len+1)%255` 回绕覆盖首字节 + IDLE 不清 LEN 无边界——状态回传 0x4A/0x41/0x45/0x4E/0x4F 缓冲）**不实现**——语音件无收需求，需响应回读走真实串口方案（范围外，notes）。**默认脚**：OUT=PC14（gpio_out——与板载黄灯 LED_YELLOW 同脚：语音播报与指示灯为**输出指示互替**（替代而非组合）、同选概率最低，同选经引脚绑定消解；刻意不叠蜂鸣 PA15——与 jq8900 互相错开（语音两件常同选，默认即不撞））；页面默认 PA2/PA3（DEBUG_UART 常备件）不照抄。**换算**：F1 页 StdPeriph USART_*/GPIO_* → ml_gpio（gpio_init/gpio_set）+ ml_delay（delay_us），零引脚字面量、零标准库（sprintf 去 stdio 流式发送——mspm0 同）。\nwiki 手册来源：sources/materials/lckfb-地阔星移植手册/control--syn6288-speech-synthesis-broadcast-module.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/control/syn6288-speech-synthesis-broadcast-module.html；网盘资料 https://pan.baidu.com/s/1Kb8RA9aksd3o8Q-A8WqmNA 提取码 1234）。改造要点：硬件串口发送改软 UART 位操作（同 mspm0 定稿）、去 main.c/printf 演示、函数名规范化（与 mspm0 同名）、引脚宏参数化（SYN6288_GPIO/SYN6288_PIN——默认 PC14）。\nwiki-stm32-batch9/02 编译矩阵（2026-09-08）：stm32 单选生成 → UV4（C:/Keil5）0 error、0 module warning（exit 0，PASS）；未上板（软 UART 位时序/GB2312 编码真机验证留后续）。",
+      "kit": "SYN6288 语音合成模块（中文 TTS 真人发音模块）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/control/syn6288-speech-synthesis-broadcast-module.html",
+      "pins": [
+        {
+          "id": "SYN6288_TX",
+          "type": "gpio_out",
+          "default": "PC14",
+          "required": true,
+          "macros": [
+            "SYN6288_GPIO",
+            "SYN6288_PIN"
+          ]
         }
       ]
     }

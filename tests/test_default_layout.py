@@ -272,6 +272,13 @@ WHITELIST = {
         "config.BUZZER",
         "jq8900.JQ8900_TX",
     },
+    # PC14 黄灯组（wiki-stm32-batch9/02：syn6288 语音合成并入 PC14——语音播报
+    # 与板载指示灯为**输出指示互替**（替代而非组合）、同选概率最低；与
+    # jq8900（PA15）刻意错开（语音两件常同选、默认即不撞），同选经绑定消解）
+    "PC14": {
+        "config.LED_YELLOW",
+        "syn6288.SYN6288_TX",
+    },
     # PA6/PA7 软 I2C 总线共享组（wiki-stm32-batch2/01 起，六件共总线：
     # aht10/bh1750/sht20/sht30/at24c02/ags10 默认 SCL=PA6/SDA=PA7——器件
     # 地址 0x38/0x23/0x40/0x44/0x50/0x1A 全异、多挂协议允许 = 合法共享
@@ -347,7 +354,10 @@ def test_default_layout_conflict_groups_resolved():
     assert grouped["PA2"] == {"debug_uart.DEBUG_UART_TX"}
     assert grouped["PA3"] == {"debug_uart.DEBUG_UART_RX"}
     assert grouped["PC13"] == {"config.LED_RED"}
-    assert grouped["PC14"] == {"config.LED_YELLOW"}
+    assert grouped["PC14"] == {
+        "config.LED_YELLOW",
+        "syn6288.SYN6288_TX",
+    }
     assert grouped["PC15"] == {"config.LED_GREEN"}
     # wiki-stm32-batch8/01：as32 并入 PB10/PB11（与 Zigbee 无线数传**互替件
     # 同脚先例**——门禁只查用户绑定，默认共享合法先例）

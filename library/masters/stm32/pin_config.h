@@ -477,6 +477,15 @@
 #define JQ8900_GPIO           GPIO_A
 #define JQ8900_PIN            Pin_15
 
+/* ---- 批次 9（wiki-stm32-batch9/02）：syn6288 语音合成（软 UART TX）----
+ * OUT=PC14（gpio_out——与板载黄灯 LED_YELLOW 同脚：语音播报与指示灯为
+ * **输出指示互替**（替代而非组合）、同选概率最低，同选经引脚绑定消解；
+ * 刻意不叠蜂鸣 PA15——与 jq8900 互相错开（语音两件常同选，默认即不撞））；
+ * 页面默认 PA2/PA3（DEBUG_UART 常备件）不照抄；软 UART 位时序
+ * delay_us(104)+gpio_set，不占串口实例/TIMER。 */
+#define SYN6288_GPIO          GPIO_C
+#define SYN6288_PIN           Pin_14
+
 /* ---- UART 接收中断聚合（isr.c 的 USARTx_IRQHandler 调这些宏，
  * 工单 pin-full-unlock/02）——按各 UART 角色绑定实例重分组：默认
  * UART_1 = DIGIT+COORD+UWB+HC05 共享、UART_2 = DEBUG、UART_3 = ZIGBEE。 ---- */
