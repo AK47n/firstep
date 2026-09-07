@@ -115,10 +115,11 @@ WHITELIST = {
         "mq8.MQ8_AO",
         "mq9.MQ9_AO",
         "ms1100.MS1100_AO",
-        # wiki-stm32-batch7/01：us016 并入 PA5 ADC 共享组——与 ir_distance
-        # 互替件同脚（同一物理脚只能接一件——互替同脚先例语义：二选一接入
-        # 无需另消解；罕见同选经绑定其一换 PA0/PA1；ir_distance 随工单 02 入组）
+        # wiki-stm32-batch7/01-02：us016/ir_distance 并入 PA5 ADC 共享组——
+        # 两测距件**互替件同脚**（同一物理脚只能接一件——互替同脚先例语义：
+        # 二选一接入无需另消解；罕见同选经绑定其一换 PA0/PA1）
         "us016.US016_AO",
+        "ir_distance.IR_DISTANCE_AO",
     },
     # ttp224 默认 PB12-15 与 config DIP0-3 + pid GRAY_D1-4 重叠（触摸按键≠
     # 拨码配置/巡线灰度；四脚同口约束——换口需整组迁移，同选经引脚绑定消解）
