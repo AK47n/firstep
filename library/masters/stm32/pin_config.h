@@ -451,6 +451,14 @@
 #define IR_REMOTE_PORT        GPIO_A
 #define IR_REMOTE_OUT_PIN     Pin_10
 
+/* ---- 批次 8（wiki-stm32-batch8/06）：ir_remote_tx 红外编码发射（38kHz 载波）
+ * OUT=PA9（gpio_out——mspm0 默认 PA0 同型推理：红外发射与视觉/数传链路不同
+ * 框、同选概率最低；与 ir_remote 接收默认 PA10 刻意错开——发/收常配对、
+ * 双选默认不撞）；载波 = delay_us(13) 半周期忙等（不占 TIMER/PWM；页面
+ * UART 指令形态（PA8/PA9 串口1）解析归生成骨架）。 */
+#define IR_TX_PORT            GPIO_A
+#define IR_TX_OUT_PIN         Pin_9
+
 /* ---- UART 接收中断聚合（isr.c 的 USARTx_IRQHandler 调这些宏，
  * 工单 pin-full-unlock/02）——按各 UART 角色绑定实例重分组：默认
  * UART_1 = DIGIT+COORD+UWB+HC05 共享、UART_2 = DEBUG、UART_3 = ZIGBEE。 ---- */

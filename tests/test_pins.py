@@ -275,6 +275,10 @@ STM32_MACRO_VALUES = {
     # PA26（UART 族）同型推理，与 ir_remote_tx 默认 PA9 刻意错开）
     "IR_REMOTE_PORT": "GPIO_A",
     "IR_REMOTE_OUT_PIN": "Pin_10",
+    # wiki-stm32-batch8/06：ir_remote_tx 红外发射（gpio_out 默认 PA9——mspm0
+    # 默认 PA0 同型推理，与接收 PA10 刻意错开）
+    "IR_TX_PORT": "GPIO_A",
+    "IR_TX_OUT_PIN": "Pin_9",
     # 软 I2C（工单 pin-full-unlock/05：mpu6050 离 PB10/11 让位 Zigbee → PA11/PA12）
     "I2C_GPIO": "GPIO_A",
     "I2C_SCL_GPIO_Pin": "Pin_11",

@@ -52,6 +52,10 @@ WHITELIST = {
         # 同脚先例**（mspm0 定稿同款推理：默认×默认共享合法、门禁只查用户
         # 绑定），同选经绑定换实例成对消解
         "hc05.HC05_TX",
+        # wiki-stm32-batch8/06：ir_remote_tx OUT——红外发射与视觉/数传链路
+        # 不同框、同选概率最低（mspm0 默认 PA0 同型推理）；与 ir_remote 接收
+        # 默认 PA10 刻意错开（发/收常配对、双选默认不撞），同选经绑定消解
+        "ir_remote_tx.IR_TX_OUT",
     },
     "PA10": {
         "digit_uart.DIGIT_UART_RX",
