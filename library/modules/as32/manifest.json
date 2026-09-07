@@ -1,6 +1,6 @@
 {
   "slug": "as32",
-  "description": "AS32-TTL-100 433MHz LoRa 无线数传模块驱动（mspm0 纯驱动，ADR 0009）：真实 UART 双向透传——独立实例 AS32_UART（UART3 默认、9600、轮询接收，fingerprint/open_mv4「裁剪后独占」先例），as32_send_string/send_hex 发送 + as32_receive 轮询收数（返回字节数、读后清缓冲）+ as32_flush；适用于远距离双端遥控/遥测/组网（3km 级参考距离）、双车协同、无线数据链等赛题功能（AT 配置范围外——页面无 AT 代码）。",
+  "description": "AS32-TTL-100 433MHz LoRa 无线数传模块驱动（双平台纯驱动，ADR 0009）：真实 UART 双向透传——mspm0 独立实例 AS32_UART（UART3 默认、9600、轮询接收）；stm32 默认 UART_3（ZIGBEE_UART 宿主，9600、轮询接收），as32_send_string/send_hex 发送 + as32_receive 轮询收数（返回字节数、读后清缓冲）+ as32_flush；适用于远距离双端遥控/遥测/组网（3km 级参考距离）、双车协同、无线数据链等赛题功能（AT 配置范围外——页面无 AT 代码）。",
   "dependencies": [],
   "platforms": {
     "mspm0": {
@@ -25,6 +25,41 @@
           "type": "uart_rx",
           "default": "PA25",
           "required": true
+        }
+      ]
+    },
+    "stm32": {
+      "files": [
+        "code/as32_stm32.c",
+        "code/as32_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**UART 实例仲裁（批次 8 定稿）**：默认 **UART_3/AS32_UART（ZIGBEE_UART 宿主）**——LoRa 与 Zigbee 无线数传**互替件**、同选概率最低（mspm0 定稿同款推理：真实 UART 双向数传、页面无 AT、轮询接收）；默认 TX=PB10/RX=PB11（ZIGBEE_UART 原脚——**互替件同脚先例**：OPENMV4_UART×DIGIT_UART 同构）；**注意 `_check_uart_instance_conflicts` 只查用户绑定**——默认×默认共享 = 合法先例（UWB/DIGIT/COORD 共 UART_1 现状同口径，与 TIM 门禁同「只查用户绑定」）；as32×zigbee_uart 同选默认 = UART_3 双消费者（中断件收走字节、轮询件收不到）——**互替件同选概率最低、同选经引脚绑定换实例成对消解**（mspm0 open_mv4×digit_uart 同款）。**收数 = 轮询**：uart_pin_init_ex 后关 RXNEIE（CR1 bit5）——页面 USART_IT_RXNE/IDLE 中断缓冲改 SR 轮询排空（mspm0 同判：避免与同实例 ISR 强符号/聚合重复；本件不进 isr.c `_UART_CALLS_ROLES` 表、USARTx_IRQ_CALLS 零登记）。**波特率 9600**（页面「默认波特率 9600」+ AS32 出厂默认——`uart_pin_init_ex` 默认 115200 后 `uart_baud_config` 重配，独立于其余 115200 角色）。**页面缺陷/修正**：① 页面接收中断缓冲 `(len+1)%MAX` 模运算满缓冲回绕覆盖首字节 → cap 截断 + '\\0' 收尾（mspm0 同）；② F1 页默认串口2（PA2/PA3）不照抄 = DEBUG_UART 常备件；③ 页面无 AT 指令代码——AT 配置范围外（配置模式下经 as32_send_string 直发或上位机 soft_asds.zip 预设，notes）；④ 页面 RX+IDLE 双中断 → 轮询（无 ISR）。**F1 页换算**：StdPeriph USART_* → 母版 ml_uart（uart_pin_init_ex/uart_baud_config/uart_sendbyte），RX 读 = `AS32_UART_INST->SR/DR`（coord_detect 先例），零引脚字面量。\nwiki 手册来源：sources/materials/lckfb-地阔星移植手册/rf--as32-lora-wireless-communication-module.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/rf/as32-lora-wireless-communication-module.html；厂家资料同 mspm0 条：ashining 页 + 上位机 http://www.ashining.com.cn/relatedsoftware/soft_asds.zip）。改造要点：去 main/printf、函数名规范化（as32_init/send_string/send_hex/receive/flush）、页面 USART2 中断缓冲改轮询、9600 保持。\nwiki-stm32-batch8/01 编译矩阵（2026-09-07）：stm32 单选生成（无模块依赖——ml_uart 母版内嵌）→ UV4 0 error、0 module warning（exit 0，PASS）；未上板（LoRa 透传真机/对码留后续）。",
+      "kit": "AS32-TTL-100 433MHz LoRa 扩频无线收发模块（UART 串口透传版；工作 2.0-5.5V、52-104mA、默认 433MHz、20dBm、参考通信距离 3km）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/rf/as32-lora-wireless-communication-module.html",
+      "pins": [
+        {
+          "id": "AS32_UART_TX",
+          "type": "uart_tx",
+          "default": "PB10",
+          "required": true,
+          "macros": [
+            "AS32_UART",
+            "AS32_UART_INST",
+            "AS32_UART_TX_GPIO",
+            "AS32_UART_TX_Pin"
+          ]
+        },
+        {
+          "id": "AS32_UART_RX",
+          "type": "uart_rx",
+          "default": "PB11",
+          "required": true,
+          "macros": [
+            "AS32_UART_RX_GPIO",
+            "AS32_UART_RX_Pin"
+          ]
         }
       ]
     }

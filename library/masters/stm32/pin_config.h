@@ -385,6 +385,14 @@
 #define ZIGBEE_UART_RX_GPIO GPIO_B
 #define ZIGBEE_UART_RX_Pin Pin_11
 
+/* ---- 批次 8（wiki-stm32-batch8/01）：as32 433MHz LoRa 串口数传 ---- */
+#define AS32_UART             UART_3
+#define AS32_UART_INST        USART3
+#define AS32_UART_TX_GPIO     GPIO_B
+#define AS32_UART_TX_Pin      Pin_10
+#define AS32_UART_RX_GPIO     GPIO_B
+#define AS32_UART_RX_Pin      Pin_11
+
 /* ---- UART 接收中断聚合（isr.c 的 USARTx_IRQHandler 调这些宏，
  * 工单 pin-full-unlock/02）——按各 UART 角色绑定实例重分组：默认
  * UART_1 = DIGIT+COORD+UWB 共享、UART_2 = DEBUG、UART_3 = ZIGBEE。 ---- */

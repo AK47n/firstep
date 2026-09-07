@@ -233,6 +233,14 @@ STM32_MACRO_VALUES = {
     ),
     "USART2_IRQ_CALLS": "debug_uart_rx_handler();",
     "USART3_IRQ_CALLS": "zigbee_rx_handler();",
+    # wiki-stm32-batch8/01：as32 LoRa 串口数传（UART_3 = ZIGBEE 互替件同脚；
+    # 9600 运行期重配；轮询接收——不进 isr.c 聚合表，无 rx_handler 登记）
+    "AS32_UART": "UART_3",
+    "AS32_UART_INST": "USART3",
+    "AS32_UART_TX_GPIO": "GPIO_B",
+    "AS32_UART_TX_Pin": "Pin_10",
+    "AS32_UART_RX_GPIO": "GPIO_B",
+    "AS32_UART_RX_Pin": "Pin_11",
     # 软 I2C（工单 pin-full-unlock/05：mpu6050 离 PB10/11 让位 Zigbee → PA11/PA12）
     "I2C_GPIO": "GPIO_A",
     "I2C_SCL_GPIO_Pin": "Pin_11",

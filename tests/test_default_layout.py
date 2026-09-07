@@ -67,6 +67,9 @@ WHITELIST = {
         # wiki-stm32-batch7/05：key_matrix COL3——键盘与无线数传链路不同框、
         # 同选概率最低，同选经引脚绑定消解
         "key_matrix.KEY_MATRIX_COL3",
+        # wiki-stm32-batch8/01：as32 TX——LoRa 与 Zigbee 无线数传**互替件
+        # 同脚先例**（二选一接入无需另消解；罕见同选经绑定换实例/换脚）
+        "as32.AS32_UART_TX",
     },
     "PB11": {
         "zigbee_uart.ZIGBEE_UART_RX",
@@ -75,6 +78,8 @@ WHITELIST = {
         # wiki-stm32-batch7/05：key_matrix COL4——键盘与无线数传链路不同框、
         # 同选概率最低，同选经引脚绑定消解
         "key_matrix.KEY_MATRIX_COL4",
+        # wiki-stm32-batch8/01：as32 RX——与 TX 同策略（无线数传互替同脚）
+        "as32.AS32_UART_RX",
     },
     # PB12-15 三共享（DIP×GRAY×TTP224——wiki-stm32-batch1/05，见下方批次 1 注释块）
     # key stm32 默认 PB3 与 pid.GRAY_D6 重叠（蓝药丸无板载按键，PB3 = JTDO
@@ -278,15 +283,19 @@ def test_default_layout_conflict_groups_resolved():
     assert grouped["PC13"] == {"config.LED_RED"}
     assert grouped["PC14"] == {"config.LED_YELLOW"}
     assert grouped["PC15"] == {"config.LED_GREEN"}
+    # wiki-stm32-batch8/01：as32 并入 PB10/PB11（与 Zigbee 无线数传**互替件
+    # 同脚先例**——门禁只查用户绑定，默认共享合法先例）
     assert grouped["PB10"] == {
         "zigbee_uart.ZIGBEE_UART_TX",
         "zigbee_uart_key.ZIGBEE_UART_TX",
         "zigbee_link.ZIGBEE_UART_TX",
         "key_matrix.KEY_MATRIX_COL3",
+        "as32.AS32_UART_TX",
     }
     assert grouped["PB11"] == {
         "zigbee_uart.ZIGBEE_UART_RX",
         "zigbee_uart_key.ZIGBEE_UART_RX",
         "zigbee_link.ZIGBEE_UART_RX",
         "key_matrix.KEY_MATRIX_COL4",
+        "as32.AS32_UART_RX",
     }
