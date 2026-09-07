@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=94ee47131e83814fc2e1fb8f6dcb60dfef424155 -->
+<!-- changelog-auto: last-commit=f8720f1e6608d3324fa90c8c7f195e2d0ea56644 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -17,6 +17,7 @@
 - 12:35 工单：wiki-stm32-batch7/05 key_matrix 实施完成回填（结论 + 状态 resolved）
 - 12:45 收尾：wiki-stm32-batch7 批次 7 收官——CONTEXT 平台行补录 stm32 线批次 7 块（测距/输入件：A 类 3 件（us016/ir_distance 互替同脚 + PA5 共读组扩至 18 ADC 角色、joystick 与 adc 模块 ADC_CH1/CH0 共享组 + SW=PA10）+ B 类 2 件（仅 stm32 条目无 mspm0 对照——库内首次单平台模块、mspm0 选件报 missing 平台警告；ec11 轮询 A 相跳变采样 B 不占 EXTI/TIMER + get_delta 增量语义、key_matrix 8 脚宏族 i×4+j+1 防抖归调用方）+ 28 宏 + wordlist B 类首补（WORDLIST_PROMPT_BYTES 7900→8050→8120 两级上调第 14 次）+ 白名单全按 spec 表）+ code-review 两轴结果回填（标准轴 0 硬违规、判断项 7 条——ec11 prev_a 初值依赖上拉默认高已整改（init 快照 A 相电平为轮询基准 + 溢出范围注释）、工单 01 dependencies 回填补纠正、test_pin_bindings 改动随收尾提交，其余 5 条按先例/记录保留；spec 轴主体高度忠实 0 关键错误——核对项 ①-⑧ 全落位、缺失 2 条（CONTEXT 闭环——本提交落地/joystick dependencies 照现状 []）、蔓延 2 条（A 类 3 件 description 双平台化——批 6 遗留顺带整改、us016 notes 239.5cyc 事实无碍）、存疑 2 条按定稿/先例保持）+ 收尾报告（全量 pytest 3739 通过/sweep_5_modules.py 5/5 OK/UV4 五件 0/0——ec11 整改后矩阵重跑 0/0）+ 矩阵脚本与一致性快检入库；遗留：上板真机验证（五件）+ 批次 8 待开展
 - 12:45 工单：wiki-stm32-batch7/04 ec11 结论回填补 code-review 整改记录（ec11_init 快照 A 相电平——标准轴判断项②整改）
+- 13:03 工单：wiki-stm32-batch8/01 as32 LoRa 串口数传（stm32 条目：UART_3/ZIGBEE 互替同脚 + 9600 + 关 RXNEIE 轮询接收 + cap 截断修正）
 
 ## 2026-09-06
 - 00:07 批次7/01 mq135 空气质量传感器模块入库（mspm0）：ADC 模拟量独立 MEM4 通道（ir_distance 先例而非 mq2 的 MEM0 薄封装——多路气体同选时各器件物理通道独立、无共读冲突），母版 syscfg ADC12_0 sequence 加第 5 通道（endAdd 3→4、adcMem4chansel=CHAN_6、adcPin6=PB20）；mq135_init + mq135_read_percent 出 0-100% 相对浓度（页面 4095/100 原式、30 次→5 次快平均）；页面 ADC 中断（IRQHandler + gCheckADC）改经 adc 模块 API 轮询（共享实例强符号唯一）；adc 模块 adc_get 通道守卫扩展至 MEM5（注释/枚举同步）；页面 DO（LM393 阈值）宏未用不声明；notes 写明与 mq2 的通道方案差异与 MQ 系相对值非 ppm 精标+预热限制；默认 PB20（与 DC_MOTOR BB/SYN6288 TX 重叠——同选概率最低）；词表感知传感器 +MQ-135；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）
