@@ -417,6 +417,14 @@ STM32_MACRO_VALUES = {
     "JOYSTICK_Y_CH": "ADC_Channel_0",
     "JOYSTICK_SW_GPIO": "GPIO_A",
     "JOYSTICK_SW_PIN": "Pin_10",
+    # wiki-stm32-batch7/04：ec11 旋转编码器（B 类——仅 stm32 条目；A/B/SW
+    # 逐脚端口宏；轮询不注册 EXTI、不占 TIMER——与编码器线共享正交）
+    "EC11_A_GPIO": "GPIO_A",
+    "EC11_A_PIN": "Pin_4",
+    "EC11_B_GPIO": "GPIO_B",
+    "EC11_B_PIN": "Pin_5",
+    "EC11_SW_GPIO": "GPIO_B",
+    "EC11_SW_PIN": "Pin_0",
 }
 
 

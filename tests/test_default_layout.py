@@ -92,7 +92,14 @@ WHITELIST = {
     "PB7": {"pid.GRAY_D8", "human_ir.HUMAN_IR_OUT"},
     # microwave_radar 默认 PA4 与 motor 编码器 B 相 EXTI 重叠（微波雷达≠
     # 编码器闭环；刻意避让声光/门禁/传感站组合件；本件轮询不注册 EXTI）
-    "PA4": {"motor.MOTOR_B_ENC", "microwave_radar.MICROWAVE_OUT"},
+    # **wiki-stm32-batch7/04**：ec11 A 相并入 PA4——EC11 人机旋钮与微波雷达/
+    # 编码器闭环不同框（本件轮询不注册 EXTI——与编码器线共享正交，EXTI 门禁
+    # 默认组合不拦），同选经引脚绑定消解
+    "PA4": {
+        "motor.MOTOR_B_ENC",
+        "microwave_radar.MICROWAVE_OUT",
+        "ec11.EC11_A",
+    },
     # flame 默认 PA5 与 motor 编码器方向输入 MOTOR_B_ENC_DIR 重叠（火焰≠
     # 编码器闭环；stm32 ADC 可达脚 PA0-7/PB0-1 全被既有角色占用——取最
     # 「不同框」的 PA5（避让 PWM 主脚 PA0/1、debug PA2/3、编码器 EXTI PA4/PB5））
@@ -141,8 +148,20 @@ WHITELIST = {
     # **wiki-stm32-batch5/08**：gp2y1014au LED 驱动（器件必需——低有效脉冲）
     # 默认 PB5（页面原脚 PA2=DEBUG_UART TX 不照抄）——粉尘与称重/光电编码器
     # 闭环不同框、同选概率最低，同选经引脚绑定消解
-    "PB5": {"motor.MOTOR_A_ENC", "hx711.HX711_SCK", "gp2y1014au.GP2Y1014_LED"},
-    "PB0": {"motor.MOTOR_B_DIR", "hx711.HX711_DT"},
+    # **wiki-stm32-batch7/04**：ec11 B 相并入 PB5——EC11 人机旋钮与称重/光电
+    # 编码器闭环不同框（轮询不占 EXTI——PB5 线 5 与 MOTOR_A_ENC 同线同脚
+    # 正交共享），同选经引脚绑定消解
+    "PB5": {
+        "motor.MOTOR_A_ENC",
+        "hx711.HX711_SCK",
+        "gp2y1014au.GP2Y1014_LED",
+        "ec11.EC11_B",
+    },
+    "PB0": {
+        "motor.MOTOR_B_DIR",
+        "hx711.HX711_DT",
+        "ec11.EC11_SW",
+    },
     # ds18b20 默认 PB1 与 MOTOR_B_DIR2 重叠（wiki-stm32-batch4/04：测温与
     # 单电机方向不同框、同选概率最低；页面默认 PB0 不采用 = MOTOR_B_DIR；
     # 单总线件不叠软 I2C 总线件与传感站/声光组合）
@@ -213,7 +232,11 @@ def test_default_layout_conflict_groups_resolved():
     """工单 05 五组冲突：四组已解（BUZZER/MOTOR_B_DIR、DEBUG/MOTOR_A_ENC、
     LED/GRAY_D6-8、ZIGBEE/软 I2C）；DIP×GRAY_D1-4 为白名单残留。"""
     grouped = _group_by_pin()
-    assert grouped["PB0"] == {"motor.MOTOR_B_DIR", "hx711.HX711_DT"}
+    assert grouped["PB0"] == {
+        "motor.MOTOR_B_DIR",
+        "hx711.HX711_DT",
+        "ec11.EC11_SW",
+    }
     assert grouped["PA2"] == {"debug_uart.DEBUG_UART_TX"}
     assert grouped["PA3"] == {"debug_uart.DEBUG_UART_RX"}
     assert grouped["PC13"] == {"config.LED_RED"}

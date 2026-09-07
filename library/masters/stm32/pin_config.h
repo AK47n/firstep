@@ -207,6 +207,22 @@
 #define JOYSTICK_SW_GPIO     GPIO_A
 #define JOYSTICK_SW_PIN      Pin_10
 
+/* ---- 批次 7：输入件（ec11 旋转编码器 / key_matrix 4×4 矩阵键盘——B 类
+ * 新 slug，仅 stm32 条目、无 mspm0 对照；详见各件 manifest notes）----
+ * ec11：A=PA4 / B=PB5 / SW=PB0（页面默认 A=PA6/B=PA4/SW=PA7 全被既有角色
+ * 占用不照抄）——A 叠 microwave/MOTOR_B_ENC、B 叠 hx711 SCK/MOTOR_A_ENC、
+ * SW 叠 hx711 DT：EC11 人机旋钮与微波雷达/称重/光电编码器闭环不同框、同选
+ * 概率最低（刻意不叠人机面板组合件 KEY/OLED/数码管——旋钮+屏幕/按键面板
+ * 标配，与声光件亦不叠），同选经引脚绑定消解；本件**轮询判向不注册 EXTI、
+ * 不占 TIMER**（页面 TIM3 中断扫描消抖改调用方节拍轮询——与编码器线共享
+ * 正交，EXTI 门禁默认组合不拦）；SW 防抖归调用方节拍。 */
+#define EC11_A_GPIO           GPIO_A
+#define EC11_A_PIN            Pin_4
+#define EC11_B_GPIO           GPIO_B
+#define EC11_B_PIN            Pin_5
+#define EC11_SW_GPIO          GPIO_B
+#define EC11_SW_PIN           Pin_0
+
 /* ---- TTP224 四路电容触摸（ttp224 模块：4 × GPIO 输入下拉，OUT1-4 默认
  * PB12/13/14/15——与 config DIP0-3（拨码 ID）+ pid 灰度 GRAY_D1-4 默认重叠：
  * 触摸按键与「拨码系统配置/巡线灰度」不同框、同选概率最低（触摸+无线链路

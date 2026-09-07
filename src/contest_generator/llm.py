@@ -878,7 +878,14 @@ def _fit_segment_wire(
 # 7734 ≥ 7692 全量送达 + 42B 余量；词表段全量 7692 比旧截断形态 7334 多
 # 358B——最坏形态总量 +358B，全文预算 60400→60100（两级 100B）保 2KB 边界
 # 余量（batch5/7/8/9/12 口径）。
-WORDLIST_PROMPT_BYTES = 7900
+# 2026-09-07（wiki-stm32-batch7/04）：感知传感器 +1 方案（EC11 旋转编码器——
+# B 类新 slug 仅 stm32 条目，wordlist 首次补录）+ models +1（EC11 旋转编码器）
+# → 默认词表完整 wire 实测 7812（> 7734 fit 上限 7900−166，尾部类别被截、
+# 方案名丢失——test_wordlist_segment 契约红证），预算升 8050（fit 上限
+# 7884 ≥ 7812 全量送达 + 72B 余量；词表段全量 7812 比旧截断形态 7734 多
+# 78B——最坏形态总量 +78B，推荐真实库预算回归 test_recommend_real_library_budget
+# 实证 ≥2KB 余量不受影响（batch13 口径）。
+WORDLIST_PROMPT_BYTES = 8050
 
 # 词表段截断标注（单源；不用全局 TRUNCATION_NOTICE——词表截断是科普段压缩
 # （后续类别仍由界面展示加载），与 content 截断契约（题面/参考）语义不同界，
