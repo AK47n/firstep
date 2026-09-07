@@ -1165,7 +1165,8 @@ def test_shared_groups_classifies_batch9_uart_family_share():
         (s for s in result.shared
          if {"digit_uart.DIGIT_UART_TX", "coord_detect.COORD_DETECT_UART_TX",
              "uwb_uart.UWB_UART_TX", "hc05.HC05_TX",
-             "fingerprint.FINGERPRINT_TX", "neo_6m.NEO_6M_TX"}
+             "fingerprint.FINGERPRINT_TX", "neo_6m.NEO_6M_TX",
+             "esp01s.ESP01S_TX"}
          <= set(s["roles"])),
         None,
     )

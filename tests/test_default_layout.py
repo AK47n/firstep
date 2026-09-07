@@ -63,6 +63,9 @@ WHITELIST = {
         # wiki-stm32-batch9/05：neo_6m TX——GPS 室外定位 × UWB 室内定位链路
         # **互替件同脚先例**（定位互替、同选概率最低；同选经绑定消解）
         "neo_6m.NEO_6M_TX",
+        # wiki-stm32-batch9/06：esp01s TX——WiFi 手机/上位机遥控 × HC05 蓝牙
+        # = 同手机遥控链路**互替件同脚先例**（同选经绑定消解）
+        "esp01s.ESP01S_TX",
     },
     "PA10": {
         "digit_uart.DIGIT_UART_RX",
@@ -84,6 +87,8 @@ WHITELIST = {
         "fingerprint.FINGERPRINT_RX",
         # wiki-stm32-batch9/05：neo_6m RX——与 TX 同策略（定位互替同脚）
         "neo_6m.NEO_6M_RX",
+        # wiki-stm32-batch9/06：esp01s RX——与 TX 同策略（手机遥控互替同脚）
+        "esp01s.ESP01S_RX",
     },
     "PB10": {
         "zigbee_uart.ZIGBEE_UART_TX",

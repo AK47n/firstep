@@ -500,7 +500,7 @@
   },
   {
     "category": "无线通信模块",
-    "models": ["ESP8266", "蓝牙模块", "NRF24L01", "RC522", "AS32"],
+    "models": ["ESP8266", "ESP-01S", "蓝牙模块", "NRF24L01", "RC522", "AS32"],
     "solutions": [
       {
         "name": "RC522 射频 IC 卡读卡器（MFRC522）",
@@ -539,8 +539,9 @@
         "name": "ESP8266 WiFi 模块",
         "interface": "UART AT 指令",
         "price": "￥8-15/个",
-        "note": "接入路由器发数据；能上云（MQTT）；配网复杂",
-        "suitable": "地面站/手机网页监控（200m 内）"
+        "note": "接入路由器发数据；能上云（MQTT）；配网复杂；库内 esp01s 已打通（**stm32 纯驱动——B 类仅 stm32 条目，mspm0 缺（选 mspm0 平台报 missing 警告），同选时经引脚绑定消解**：esp01s_init + send_cmd 发 AT 行 + 应答匹配（OK 命中/超时）+ send_string 透传负载 + available/receive 读走应答 + parse_ipd 解析 +IPD 帧——AT 模板（CWMODE/CWSAP/CIPSERVER/MQTT）归骨架，模块只出透传原语；默认 UART_1（PA9/PA10，与 HC05 手机遥控互替同脚）、115200；MQTT 固件需单独烧写（页面提示）",
+        "suitable": "地面站/手机网页监控（200m 内）",
+        "lib_modules": ["esp01s"]
       },
       {
         "name": "LoRa 数传（AS32-TTL 串口版 / SX1278 等）",
