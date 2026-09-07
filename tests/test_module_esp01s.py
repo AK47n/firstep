@@ -193,6 +193,10 @@ def test_esp01s_stm32_code_guards():
     # 应答匹配（页面 strstr 原语化——手写 _buf_contains；双引号串在
     # strip_comments 会被吞，按原始源码断言）
     assert '_buf_contains("OK")' in c
+    # 空指针保护（同族 ec01g 同口径——标准轴判例整改）
+    assert "cmd == NULL" in code_only
+    assert "buf == NULL" in code_only
+    assert "out == NULL" in code_only
     # +IPD 载荷拷贝（缓冲上限修正）
     assert "olen < max - 1u" in code_only
     # API 6 函数与 ml_uart/SR 直读换算

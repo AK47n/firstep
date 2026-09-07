@@ -2,9 +2,10 @@
  * UART 接收中断聚合（ADR 0012 工单 02）：每个 USARTx_IRQHandler 调
  * pin_config.h 渲染的 USARTx_IRQ_CALLS 聚合宏——宏按各 UART 角色绑定
  * 实例分组各模块 rx_handler 调用（默认 UART_1 = DIGIT+COORD+UWB+HC05+
- * FINGERPRINT 共享、UART_2 = DEBUG、UART_3 = ZIGBEE；绑定换实例后由
- * 生成器重分组；HC05 为 wiki-stm32-batch8/02 首次扩展的聚合角色、
- * FINGERPRINT 为 wiki-stm32-batch9/03 扩展）。
+ * FINGERPRINT+NEO_6M+ESP01S 共享、UART_2 = DEBUG、UART_3 = ZIGBEE+EC01G；
+ * 绑定换实例后由生成器重分组；HC05 为 wiki-stm32-batch8/02 首次扩展的
+ * 聚合角色、FINGERPRINT/NEO_6M/ESP01S/EC01G 为 wiki-stm32-batch9/03/
+ * 05/06/07 扩展）。
  *
  * __weak 空兜底：未选模块的 handler 缺失时链接不炸（调用进空函数，
  * 收字节静默丢弃）——选中模块的强定义覆盖弱兜底（宁严勿假绿：收字节

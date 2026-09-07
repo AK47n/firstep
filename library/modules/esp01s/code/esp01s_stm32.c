@@ -4,6 +4,7 @@
  * 引脚宏参数化等）；使用 / 复制 / 修改 / 传播请遵循立创版权要求：
  * 标明来源与链接。 */
 
+#include <stddef.h> /* NULL（headfile.h 不含 stddef——ball-detect-null-fix/01 先例） */
 #include "esp01s_stm32.h"
 #include "pin_config.h"
 #include "headfile.h"
@@ -69,6 +70,9 @@ uint8_t esp01s_send_cmd(const char *cmd)
 {
     uint32_t timeout = ESP01S_CMD_TIMEOUT_MS;
 
+    if (cmd == NULL) {
+        return 0u; /* 空指针保护（同族 ec01g 同口径——标准轴判例整改） */
+    }
     _rx_len = 0; /* 发前清缓冲：防陈旧匹配（页面 Send_Cmd 前清 FLAG 同构） */
     _rx[0] = 0;
     esp01s_send_string(cmd);
@@ -88,7 +92,10 @@ uint8_t esp01s_send_cmd(const char *cmd)
 
 void esp01s_send_string(const char *s)
 {
-    while (s && *s) {
+    if (s == NULL) {
+        return; /* 空指针保护 */
+    }
+    while (*s) {
         uart_sendbyte(ESP01S_UART, (uint8_t)*s++);
     }
 }
@@ -103,6 +110,9 @@ uint16_t esp01s_receive(uint8_t *buf, uint16_t max_len)
     uint16_t count = 0;
     uint16_t i;
 
+    if (buf == NULL || max_len == 0u) {
+        return 0u; /* 空指针保护 */
+    }
     for (i = 0; i < _rx_len && count < max_len; i++) {
         buf[count++] = _rx[i];
     }
@@ -117,7 +127,7 @@ uint8_t esp01s_parse_ipd(uint8_t *id, uint16_t *len, uint8_t *out, uint16_t max)
     uint16_t olen = 0;
     uint8_t idv = 0;
 
-    if (max < 1u) {
+    if (out == NULL || max < 1u) {
         return 1u;
     }
     /* 定位 "+IPD,"（有界扫） */
