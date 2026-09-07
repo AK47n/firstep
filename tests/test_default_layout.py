@@ -264,6 +264,14 @@ WHITELIST = {
         "ds18b20.DS18B20_DATA",
         "rc522.RC522_RST",
     },
+    # PA15 蜂鸣器组（wiki-stm32-batch9/01：jq8900 语音播报并入 PA15——语音播报
+    # 与蜂鸣器为**提示输出互替**（替代而非组合）、同选概率最低（互替同脚先例：
+    # ttp224×key_matrix），同选经引脚绑定消解；PA15 = JTDI 复用脚，作 GPIO 需
+    # SWJ_CFG 释放 JTAG（保留 SWD）——key(PB3)/relay/hc05(PB4) 先例同一约束）
+    "PA15": {
+        "config.BUZZER",
+        "jq8900.JQ8900_TX",
+    },
     # PA6/PA7 软 I2C 总线共享组（wiki-stm32-batch2/01 起，六件共总线：
     # aht10/bh1750/sht20/sht30/at24c02/ags10 默认 SCL=PA6/SDA=PA7——器件
     # 地址 0x38/0x23/0x40/0x44/0x50/0x1A 全异、多挂协议允许 = 合法共享

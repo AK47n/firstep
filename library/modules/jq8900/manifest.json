@@ -1,6 +1,6 @@
 {
   "slug": "jq8900",
-  "description": "JQ8900-16P 语音播报模块驱动（mspm0 纯驱动，ADR 0009）：软 UART 单发 TX（GPIO 位操作 9600 8N1，不占 UART 外设/TIMER）——jq8900_init 后 send_cmd 发 0xAA+命令+数据+校验和指令帧，提供播放指定曲目/下一曲/上一曲/停止/暂停/继续/音量设置等语音播报服务函数；适用于语音播报提示、状态语音播报、门禁/考勤语音提示等赛题功能。",
+  "description": "JQ8900-16P 语音播报模块驱动（双平台纯驱动，ADR 0009）：软 UART 单发 TX（GPIO 位操作 9600 8N1，不占串口外设/TIMER）——jq8900_init 后 send_cmd 发 0xAA+命令+数据+校验和指令帧，提供播放指定曲目/下一曲/上一曲/停止/暂停/继续/音量设置等语音播报服务函数；mspm0 默认 PB19、stm32 默认 PA15（与蜂鸣器提示输出互替）；适用于语音播报提示、状态语音播报、门禁/考勤语音提示等赛题功能。",
   "dependencies": [
     "delay"
   ],
@@ -21,6 +21,29 @@
           "type": "gpio_out",
           "default": "PB19",
           "required": true
+        }
+      ]
+    },
+    "stm32": {
+      "files": [
+        "code/jq8900_stm32.c",
+        "code/jq8900_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**API 与 mspm0 jq8900.h 同名同型完全对齐**（jq8900_init/send_cmd/play/play_next/play_prev/stop/pause/resume/set_volume/volume_up/volume_down——11 函数；字节序/校验和/命令字逐字节一致）。**软 UART TX 定稿**（同 mspm0）：delay_us(104)+gpio_set 位时序（9600 8N1：起始位低→8 数据位 LSB 先→停止位高）+ 两线帧 0xAA+cmd+data+求和校验（页面 demo 实证）——**只发不收，不占串口实例**（stm32 三串口实例全被既有角色占用；语音主控→模块单向发指令帧为主）。页面真实串口（两线 9600）与一线 GPIO 时序（SendData 3:1 脉宽，非 8N1）双描述——本件按 mspm0 定稿学**两线帧**、页面 SendData 一线串行不收纳；页面 RX（真实串口接收缓冲/播放完成反馈、`(len+1)%MAX` 回绕覆盖首字节 + IDLE 断串缺陷）**不实现**——语音件无收需求，需响应回读走真实串口方案（范围外，notes）。页面正文 L48「导入 bsp_syn6288.c/h」串台记录（内容实为 jq8900）。**默认脚**：OUT=PA15（gpio_out——与蜂鸣器 BUZZER 同脚：语音播报与蜂鸣器为**提示输出互替**（替代而非组合）、同选概率最低，同选经引脚绑定消解；PA15 = JTDI 复用脚，作 GPIO 需 SWJ_CFG 释放 JTAG（保留 SWD）——key(PB3)/relay/hc05(PB4) 先例同一约束）；与 syn6288（PC14）互相错开（语音两件常同选，默认即不撞）；页面默认 PA2（TX）/PA3（RX）/PA1（一线串行 APP 脚）全被既有角色占用（DEBUG_UART 常备件/电机 PWM——全批通例）不照抄。**换算**：F1 页 StdPeriph USART_*/GPIO_* → ml_gpio（gpio_init/gpio_set）+ ml_delay（delay_us），零引脚字面量、零标准库。\nwiki 手册来源：sources/materials/lckfb-地阔星移植手册/control--jq8900-voice-broadcast-module.md（原页 https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/control/jq8900-voice-broadcast-module.html；网盘资料 https://pan.baidu.com/s/19pgb8M-EkPmksOtvzB3QNw?pwd=qxmw）。改造要点：硬件串口发送改软 UART 位操作（同 mspm0 定稿）、去 main.c/printf 演示、函数名规范化（与 mspm0 同名）、引脚宏参数化（JQ8900_GPIO/JQ8900_PIN——默认 PA15）。\nwiki-stm32-batch9/01 编译矩阵（2026-09-08）：stm32 单选生成 → UV4（C:/Keil5）0 error、0 module warning（exit 0，PASS）；未上板（软 UART 位时序 ~104us/bit 逼近 9600 理论值，真机验证留后续）。",
+      "kit": "JQ8900-16P 语音播报模块（定制音乐智能语音播报 USB 串口 MP3 模块）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/control/jq8900-voice-broadcast-module.html",
+      "pins": [
+        {
+          "id": "JQ8900_TX",
+          "type": "gpio_out",
+          "default": "PA15",
+          "required": true,
+          "macros": [
+            "JQ8900_GPIO",
+            "JQ8900_PIN"
+          ]
         }
       ]
     }

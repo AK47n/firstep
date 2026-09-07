@@ -466,6 +466,17 @@
 #define IR_TX_PORT            GPIO_A
 #define IR_TX_OUT_PIN         Pin_9
 
+/* ---- 批次 9（wiki-stm32-batch9/01）：jq8900 语音播报（软 UART TX）----
+ * OUT=PA15（gpio_out——与蜂鸣器 BUZZER 同脚：语音播报与蜂鸣器为**提示输出
+ * 互替**（替代而非组合）、同选概率最低（互替同脚先例：ttp224×key_matrix），
+ * 同选经引脚绑定消解；PA15 = JTDI 复用脚，作 GPIO 需 SWJ_CFG 释放 JTAG
+ * （保留 SWD）——key(PB3)/relay(PB4)/hc05(PB4) 先例同一约束）；与 syn6288
+ * （PC14）互相错开（语音两件常同选，默认即不撞）；页面默认 PA2/PA3
+ * （DEBUG_UART 常备件）+ PA1（一线串行 APP 脚 = MOTOR_B_PWM）不照抄；
+ * 软 UART 位时序 delay_us(104)+gpio_set，不占串口实例/TIMER。 */
+#define JQ8900_GPIO           GPIO_A
+#define JQ8900_PIN            Pin_15
+
 /* ---- UART 接收中断聚合（isr.c 的 USARTx_IRQHandler 调这些宏，
  * 工单 pin-full-unlock/02）——按各 UART 角色绑定实例重分组：默认
  * UART_1 = DIGIT+COORD+UWB+HC05 共享、UART_2 = DEBUG、UART_3 = ZIGBEE。 ---- */
