@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=6bd0acc3f735494023437a1ef11306ea025425af -->
+<!-- changelog-auto: last-commit=aa8e7cca650f63a6acd80b798fbaed1c82baf050 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -23,6 +23,7 @@
 - 13:13 工单：wiki-stm32-batch8/04 rc522 射频 IC 卡读卡（stm32 条目：软 SPI 五脚位操作全端口 B 单宏——CS/RST/SCK/MOSI/MISO 与车类/旋钮/称重/粉尘不同框，200us 半周期页面时序 + UID 复制 4 字节修正）
 - 13:15 工单：wiki-stm32-batch8/05 ir_remote 红外遥控接收解码（stm32 条目：EXTI 改轮询忙等解码 20us 拍——不占 TIMER/不注册 EXTI，OUT=PA10 与发射 PA9 刻意错开 + 反码严格校验修正）
 - 13:17 工单：wiki-stm32-batch8/06 ir_remote_tx 红外编码发射（stm32 条目：38kHz NEC 载波 delay_us(13) 半周期忙等——不占 TIMER/PWM，OUT=PA9 与接收 PA10 刻意错开 + 页面 UART 指令形态归骨架）
+- 13:33 收尾：wiki-stm32-batch8 批次 8 收官——CONTEXT 平台行补录批次 8 块（无线/红外六件：as32 UART_3 轮询/hc05 UART_1 聚合首扩/软 SPI 全 B 口单宏/红外忙等 + 33 宏）+ code-review 两轴回填（规格轴 3 条 notes 透明记录；标准轴硬违例 1 条整改（as32 pin_config 推理注释）+ 判例整改 3 项（isr.c 头注释 HC05、PB4 NJTRST 约束记录、nrf RF_SETUP 0x26 位值注释+notes）+ ir_remote_tx 宏改名 IR_TX_HALF_PERIOD_US + test_pin_bindings uart 共享组适配）+ 全量 pytest 3765 通过 + sweep 6/6 OK
 
 ## 2026-09-06
 - 00:07 批次7/01 mq135 空气质量传感器模块入库（mspm0）：ADC 模拟量独立 MEM4 通道（ir_distance 先例而非 mq2 的 MEM0 薄封装——多路气体同选时各器件物理通道独立、无共读冲突），母版 syscfg ADC12_0 sequence 加第 5 通道（endAdd 3→4、adcMem4chansel=CHAN_6、adcPin6=PB20）；mq135_init + mq135_read_percent 出 0-100% 相对浓度（页面 4095/100 原式、30 次→5 次快平均）；页面 ADC 中断（IRQHandler + gCheckADC）改经 adc 模块 API 轮询（共享实例强符号唯一）；adc 模块 adc_get 通道守卫扩展至 MEM5（注释/枚举同步）；页面 DO（LM393 阈值）宏未用不声明；notes 写明与 mq2 的通道方案差异与 MQ 系相对值非 ppm 精标+预热限制；默认 PB20（与 DC_MOTOR BB/SYN6288 TX 重叠——同选概率最低）；词表感知传感器 +MQ-135；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）
