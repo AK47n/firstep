@@ -21,6 +21,7 @@ __weak void hc05_rx_handler(void) {}
 __weak void fingerprint_rx_handler(void) {}
 __weak void neo_6m_rx_handler(void) {}
 __weak void esp01s_rx_handler(void) {}
+__weak void ec01g_rx_handler(void) {}
 
 void USART1_IRQHandler(void) { USART1_IRQ_CALLS }
 void USART2_IRQHandler(void) { USART2_IRQ_CALLS }
