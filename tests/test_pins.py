@@ -263,6 +263,14 @@ STM32_MACRO_VALUES = {
     "NRF24L01_CSN_PIN": "Pin_12",
     "NRF24L01_CE_PIN": "Pin_13",
     "NRF24L01_IRQ_PIN": "Pin_5",
+    # wiki-stm32-batch8/04：rc522 软 SPI 五脚（全端口 B 单共享端口宏——
+    # 同口约束照 ttp224/nrf24l01；页面默认 PA1/PA2/PA3/PA5/PA4 不照抄）
+    "RC522_PORT": "GPIO_B",
+    "RC522_CS_PIN": "Pin_0",
+    "RC522_RST_PIN": "Pin_1",
+    "RC522_SCK_PIN": "Pin_6",
+    "RC522_MOSI_PIN": "Pin_4",
+    "RC522_MISO_PIN": "Pin_5",
     # 软 I2C（工单 pin-full-unlock/05：mpu6050 离 PB10/11 让位 Zigbee → PA11/PA12）
     "I2C_GPIO": "GPIO_A",
     "I2C_SCL_GPIO_Pin": "Pin_11",
