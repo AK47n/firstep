@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=b7e230aa2a02a0e89a63b5393db2f212382d43e0 -->
+<!-- changelog-auto: last-commit=6e5a74e613c20bfcf1f8f71baada13ab9892c229 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -9,6 +9,7 @@
 - 12:21 工单：wiki-stm32-batch7/01 us016 实施完成回填（结论 + 状态 resolved）
 - 12:23 模块：ir_distance 红外测距传感器 stm32 平台条目（wiki-stm32-batch7/02：ADC 薄封装件——页面 ADC 序列收敛 ml_adc（adc_init(ADC_1, IR_DISTANCE_AO_CH) + 10 次 adc_get 快平均）+ 默认 AO=ADC_Channel_5（PA5 页面原脚即共读点——ADC 共享组并入 batch5 PA5 共读组）+ **与 us016 互替件同脚**（互替同脚先例——二选一接入无需另消解）+ 换算 V=raw/4095×IR_DIST_VREF_V（3.3f——页面硬编码 3.5V 宏化修正，3.3V 供电下页面换算系统偏低约 6%）+ Distance=60.374×V^(-1.16)（powf 单精度，C8T6 软浮点省栈——mspm0 double pow 同精度级）+ 20-150cm 公式段与 <15cm 电压跌落非线性区说明（页面 L44「下图曲线图」实为 0 图——无查表，按公式）+ 全 0 采样返回 0.0f（防 pow(0,-1.16) 溢出——原版输出 inf）+ IR_DIST_ADC_SAMPLES 10（宏名照 mspm0 无 ANCE、值 10 = 手册 Get_Adc_Value(10) 原值、非 5 次快平均）+ 3Pin 无 DO 不声明 + UV4 矩阵 0 error/0 module warning → verified=true；test_pins 宏表 +IR_DISTANCE_AO_CH、test_default_layout PA5 白名单 +ir_distance.IR_DISTANCE_AO；**两平台不同口径说明**：mspm0 本件独立 MEM3 有槽位、stm32 无空闲通道共读 PA5）
 - 12:23 工单：wiki-stm32-batch7/02 ir_distance 实施完成回填（结论 + 状态 resolved）
+- 12:26 模块：joystick 双轴摇杆按键 stm32 平台条目（wiki-stm32-batch7/03：双 ADC 通道 + 1 GPIO——页面 ADC 序列收敛 ml_adc（adc_init(ADC_1, JOYSTICK_X_CH/Y_CH) 逐通道 + 4 次 adc_get 快平均）+ SW 走 ml_gpio 上拉输入（默认 X=ADC_Channel_1（PA1）/Y=ADC_Channel_0（PA0）——与 adc 模块 ADC_CH1/CH0 **ADC 共享组**（mspm0 MEM1/2 与 adc 模块共享实例同构）+ SW=PA10（gpio_in——叠 DIGIT/COORD/UWB UART RX：摇杆与视觉/数传链路不同框、同选概率最低——mspm0 SW=PA9 同款推理；页面默认 VRX=PA1/VRY=PA2/SW=PA3 全占不照抄）+ 页面每次读轴 30×2ms≈60ms+2 次 ADC 校准无超时 → 4 次快平均（JOYSTICK_ADC_SAMPLES 4u——mspm0 批 1 口径）+ 百分比 = (adc/4095)×100 整数归一（**uint16_t 整数——与 mspm0 joystick.h L29-30 同名同型非 float**）+ SW 低有效语义归一（1=按下——JOYSTICK_SW_PRESSED_LEVEL 0 宏照 mspm0 同名 L24）+ L149「Get_MQ2_Percentage_value」MQ2 串台 notes 不落码 + **API 全套 6 函数与 mspm0 joystick.h L26-31 同名同型（read_x/read_y raw + percent + read_sw）** + 忙等超时口径差异说明（stm32 走母版 ml_adc 无显式超时 vs mspm0 JOYSTICK_ADC_TIMEOUT 50）+ UV4 矩阵 0 error/0 module warning（初版 #188-D 枚举混用警告——helper 参数改 ADCINx_enum 修复）→ verified=true；test_pins 宏表 +4、test_default_layout 白名单 PA1/PA0 +1×2 + PA10 +1；顶层 dependencies=() 保持 mspm0 现状（ml_adc/ml_gpio 内嵌母版））
 
 ## 2026-09-06
 - 00:07 批次7/01 mq135 空气质量传感器模块入库（mspm0）：ADC 模拟量独立 MEM4 通道（ir_distance 先例而非 mq2 的 MEM0 薄封装——多路气体同选时各器件物理通道独立、无共读冲突），母版 syscfg ADC12_0 sequence 加第 5 通道（endAdd 3→4、adcMem4chansel=CHAN_6、adcPin6=PB20）；mq135_init + mq135_read_percent 出 0-100% 相对浓度（页面 4095/100 原式、30 次→5 次快平均）；页面 ADC 中断（IRQHandler + gCheckADC）改经 adc 模块 API 轮询（共享实例强符号唯一）；adc 模块 adc_get 通道守卫扩展至 MEM5（注释/枚举同步）；页面 DO（LM393 阈值）宏未用不声明；notes 写明与 mq2 的通道方案差异与 MQ 系相对值非 ppm 精标+预热限制；默认 PB20（与 DC_MOTOR BB/SYN6288 TX 重叠——同选概率最低）；词表感知传感器 +MQ-135；单选生成 → SysConfig CLI → gmake 0 error/0 warning（verified=true）
