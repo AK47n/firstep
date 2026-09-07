@@ -290,7 +290,7 @@ def test_render_pin_config_uart_swap_irq_calls_regrouped():
     追加）、USART3 = debug。"""
     out = render_pin_config(STM32_MASTER_PIN_CONFIG, _resolve(SWAP_BINDINGS))
     assert (
-        "#define USART1_IRQ_CALLS digit_uart_rx_handler(); coord_detect_rx_handler();\r\n"
+        "#define USART1_IRQ_CALLS digit_uart_rx_handler(); coord_detect_rx_handler(); hc05_rx_handler();\r\n"
         in out
     )
     assert (
@@ -318,7 +318,7 @@ def test_render_pin_config_default_irq_calls_byte_identical():
             ),
         ),
     )
-    assert "#define USART1_IRQ_CALLS digit_uart_rx_handler(); coord_detect_rx_handler(); uwb_rx_handler();\r\n" in out
+    assert "#define USART1_IRQ_CALLS digit_uart_rx_handler(); coord_detect_rx_handler(); uwb_rx_handler(); hc05_rx_handler();\r\n" in out
     assert "#define USART2_IRQ_CALLS debug_uart_rx_handler();\r\n" in out
     assert "#define USART3_IRQ_CALLS zigbee_rx_handler();\r\n" in out
 

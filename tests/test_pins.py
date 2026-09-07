@@ -230,6 +230,7 @@ STM32_MACRO_VALUES = {
     # UART 接收中断聚合（isr.c USARTx_IRQHandler 调用；默认分组）
     "USART1_IRQ_CALLS": (
         "digit_uart_rx_handler(); coord_detect_rx_handler(); uwb_rx_handler();"
+        " hc05_rx_handler();"
     ),
     "USART2_IRQ_CALLS": "debug_uart_rx_handler();",
     "USART3_IRQ_CALLS": "zigbee_rx_handler();",
@@ -241,6 +242,18 @@ STM32_MACRO_VALUES = {
     "AS32_UART_TX_Pin": "Pin_10",
     "AS32_UART_RX_GPIO": "GPIO_B",
     "AS32_UART_RX_Pin": "Pin_11",
+    # wiki-stm32-batch8/02：hc05 蓝牙串口透传（UART_1 = UWB 互替同脚；9600
+    # 运行期重配；RX 中断环形缓冲——isr.c 聚合登记 hc05_rx_handler）
+    "HC05_UART": "UART_1",
+    "HC05_UART_INST": "USART1",
+    "HC05_UART_TX_GPIO": "GPIO_A",
+    "HC05_UART_TX_Pin": "Pin_9",
+    "HC05_UART_RX_GPIO": "GPIO_A",
+    "HC05_UART_RX_Pin": "Pin_10",
+    "HC05_STATE_GPIO": "GPIO_A",
+    "HC05_STATE_PIN": "Pin_8",
+    "HC05_KEY_GPIO": "GPIO_B",
+    "HC05_KEY_PIN": "Pin_4",
     # 软 I2C（工单 pin-full-unlock/05：mpu6050 离 PB10/11 让位 Zigbee → PA11/PA12）
     "I2C_GPIO": "GPIO_A",
     "I2C_SCL_GPIO_Pin": "Pin_11",

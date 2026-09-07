@@ -15,6 +15,7 @@ __weak void coord_detect_rx_handler(void) {}
 __weak void debug_uart_rx_handler(void) {}
 __weak void uwb_rx_handler(void) {}
 __weak void zigbee_rx_handler(void) {}
+__weak void hc05_rx_handler(void) {}
 
 void USART1_IRQHandler(void) { USART1_IRQ_CALLS }
 void USART2_IRQHandler(void) { USART2_IRQ_CALLS }
