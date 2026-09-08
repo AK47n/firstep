@@ -978,22 +978,55 @@ def test_render_readme_dependencies_listed_in_order():
     assert text.index("- delay") < text.index("- key")
 
 
-def test_render_readme_wiki_module_source_line():
-    """模块清单章（lckfb-attribution/02）：wiki 来源模块行尾附（来源：URL），
-    非 wiki 来源无来源行（口径 = 仅 wiki 派生模块）。"""
+def test_render_readme_wiki_module_source_line(tmp_path):
+    """模块清单章（lckfb-attribution/02 + identity-fields/03 修正）：行尾
+    「（来源：URL）」的判据 = **该条目源码头部带来源标注块**（代码事实）且
+    source_url 是 wiki 页。
+
+    修正原因：硬件出处补成 wiki 手册页的原生移植驱动（motor / 内嵌母版的 oled /
+    xunji / pid）代码并非改写自 wiki，不该被错标成「改写自 wiki」；读不到库根
+    （代码事实）时一律不标——宁可少标，不谎称。
+    """
     wiki_url = "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/dht11-temp-humi-sensor.html"
+    # 假库根：dht11 的源码头带来源块（= wiki 派生），motor 的不带（= 原生移植）
+    library = tmp_path / "modules"
+    for slug, head in (
+        ("dht11", f"/* 来源：立创开发板技术文档中心（wiki.lckfb.com）\n * 页面：{wiki_url}\n */\n"),
+        ("motor", "#include \"motor.h\"\n"),
+    ):
+        (library / slug / "code").mkdir(parents=True)
+        (library / slug / "code" / f"{slug}.c").write_text(head, encoding="utf-8")
+
+    def _with_file(slug: str, description: str, source_url: str) -> ModuleManifest:
+        return ModuleManifest(
+            slug=slug,
+            description=description,
+            platforms={
+                PLATFORM_STM32: PlatformEntry(
+                    files=(f"code/{slug}.c",), source_url=source_url
+                )
+            },
+        )
+
     manifests = [
-        _m("dht11", "DHT11 温湿度传感器驱动", source_url=wiki_url),
+        _with_file("dht11", "DHT11 温湿度传感器驱动", wiki_url),
         _m("delay", "软件延时"),
+        _with_file("motor", "TB6612 双路直流电机驱动", wiki_url),  # 无来源块
         _m("uwb", "UWB 定位驱动", source_url="https://e.tb.cn/h.abc"),
     ]
-    text = render_readme("stm32", None, manifests)
+    text = render_readme("stm32", None, manifests, module_library_dir=library)
     assert f"- dht11：DHT11 温湿度传感器驱动（来源：{wiki_url}）" in text
     assert "- delay：软件延时" in text  # 无来源不追加行
+    motor_line = next(line for line in text.splitlines() if line.startswith("- motor："))
+    assert "来源：" not in motor_line, "源码无来源块的条目不该标「来源」"
     assert "来源：" not in next(
         line for line in text.splitlines() if line.startswith("- uwb：")
     )  # 非 wiki URL 不标
-    assert "- uwb：UWB 定位驱动" in text
+    # 读不到库根（缺省）= 代码事实不可得 → 不标（旧调用点零改动、零误标）
+    no_dir = render_readme("stm32", None, manifests)
+    assert "来源：" not in next(
+        line for line in no_dir.splitlines() if line.startswith("- dht11：")
+    )
 
 
 def test_render_readme_source_notice_section():
