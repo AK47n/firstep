@@ -11,8 +11,8 @@
       "verified": true,
       "hardware_bound": false,
       "notes": "基于母版 ml_pwm（pwm_pin_init/pwm_init/pwm_update，MAX_DUTY=50000）：50Hz 周期，0.5ms=1250、2.5ms=6250，角度线性插值。引脚宏 SERVO_PWM_TIM/SERVO_PWM_CH 在母版 pin_config.h（b1-adc-servo/02），绑定改宏值（TIM/通道随引脚）。\n**批 11 C 类核对（2026-09）**：语义同源页面 = 地阔星舵机页（sg90 口径：50Hz/0.5-2.5ms/0-180° 逐项吻合）；control--16-ch-servo-drive-module.md（PCA9685 16 路）对应库内 pca9685 模块（其 notes 已记录该页 7 条缺陷——16 路舵机走 pca9685，非本件）。",
-      "kit": "",
-      "source_url": "",
+      "kit": "SG90/MG90S 9g 舵机（页面采购链接：天猫 id=615779197448）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/control/sg90-steering-engine.html",
       "pins": [
         {
           "id": "SERVO_PWM_C0",

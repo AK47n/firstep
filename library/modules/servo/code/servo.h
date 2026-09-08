@@ -1,3 +1,9 @@
+/* 来源：立创开发板技术文档中心（wiki.lckfb.com）《SG90舵机》
+ * 页面：https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/control/sg90-steering-engine.html
+ * （批 11 C 类核对：本件 = 语义同源页面——50Hz/0.5-2.5ms/0-180° 逐项吻合；
+ * 16 路舵机 PCA9685 页对应库内 pca9685 模块——见 manifest notes）；
+ * 使用 / 复制 / 修改 / 传播请遵循立创版权要求。
+ */
 #ifndef SERVO_H
 #define SERVO_H
 
