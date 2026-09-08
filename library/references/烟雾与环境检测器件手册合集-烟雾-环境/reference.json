@@ -1,0 +1,20 @@
+{
+  "id": "烟雾与环境检测器件手册合集-烟雾-环境",
+  "title": "烟雾与环境检测器件手册合集（烟雾 / 环境）",
+  "type": "器件手册",
+  "description": "环境检测器件移植手册合集：火焰、粉尘、人体红外、微波雷达、雨滴、土壤湿度——骨架阶段选中环境检测类模块时的器件级例程参考。",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "any",
+  "topic_type": "",
+  "files": [
+    "flame.md",
+    "gp2y1014au.md",
+    "human_ir.md",
+    "microwave_radar.md",
+    "rain.md",
+    "soil.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
