@@ -1,23 +1,22 @@
-"""骨架「模块 → 例程」映射守卫（工单 preselect-visibility/03）。
+"""骨架「模块 → 例程」映射守卫（工单 preselect-visibility/03-05）。
 
 背景：骨架阶段按选中模块自动关联参考例程，依据是 `reference_library.
 MODULE_PERIPHERAL_TERMS`（slug → 词项，词项经 `PERIPHERAL_TERMS` 激活条目）。
-实测 93 个模块里只有 20 个有映射，其余选中后关联不到任何例程；且既有映射里
-有 6 个模块的全部词项在参考库标题 0 命中（死映射）。
+修复前 93 个模块里只有 18 个有映射、其中 6 个是死映射（词项在参考库标题 0
+命中），选中其余模块时一条例程都关联不到。
 
-本文件钉住三条契约：
+本文件钉住三条契约（全部现在就绿）：
 
-1. **映射的硬契约（现在就绿）**：每个映射的词项必须在 `PERIPHERAL_TERMS` 里
-   （词表单源）；映射的 slug 必须在库内（防手改漂移）。
-2. **映射不是死的（当前 xfail）**：每个有映射的模块至少有一个词项（含同义词组）
-   命中至少一条参考条目标题——按模块算，不按词项算（`step_motor` 的 `step`
-   0 命中、`motor` 2 命中 = 有效）。补参考条目内容后（工单 04）转绿。
+1. **映射的硬契约**：每个映射的词项必须在 `PERIPHERAL_TERMS` 里（词表单源）；
+   映射的 slug 必须在库内（防手改漂移）。
+2. **映射不是死的**：每个有映射的模块至少有一个词项（含同义词组）命中至少
+   一条参考条目标题——按模块算，不按词项算（`step_motor` 的 `step` 0 命中、
+   `motor` 2 命中 = 有效）。
 3. **不留沉默缺口**：全库每个模块要么有映射、要么在库内数据
    `MODULE_REFERENCE_EXEMPT` 里显式豁免并写明理由；豁免与映射不得同时存在。
-   豁免表结构现在就绿；「全库覆盖」那条在工单 05 补完映射后转绿。
 
 复测探针：`.scratch/library-audit/probe_term_effect.py`、`probe_term_titles.py`、
-`probe_unmapped.py`、`probe_exempt_facts.py`。
+`probe_unmapped.py`、`probe_exempt_facts.py`、`probe_sweep_terms.py`。
 """
 
 from __future__ import annotations
@@ -107,15 +106,6 @@ def test_exempt_and_mapping_are_mutually_exclusive():
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "关联面只覆盖 18/93 个模块：器件模块（有 lckfb 移植手册、可补参考条目"
-        "的 60 个）待工单 04/05 补条目与映射，当前既无映射也未豁免。工单 05"
-        "完成后自动转绿，转绿时摘掉本标记（复测："
-        ".scratch/library-audit/probe_unmapped.py）"
-    ),
-)
 def test_every_module_is_mapped_or_explicitly_exempt():
     """全库模块要么有映射、要么在库内豁免表里（缺口 = 选中它时关联不到例程）。"""
     slugs = _all_slugs()
