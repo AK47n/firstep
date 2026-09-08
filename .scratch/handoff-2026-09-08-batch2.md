@@ -30,7 +30,7 @@
 
 ## 两个已定结论（不要重新论证）
 
-1. **骨架映射（5.4③）不能单独做**：`MODULE_PERIPHERAL_TERMS` 的值必须都在 `PERIPHERAL_TERMS` 里，而 75 个未映射模块需要的词项大多不在词表；且参考库 148 条标题里 **29/57 个词项 0 命中**（oled/lcd/key/led/beep/servo 全 0）。要动就得同时扩词表 + 保证词项能命中参考条目（`probe_term_effect.py`）。
+1. **骨架映射（5.4③）不能单独做**：`MODULE_PERIPHERAL_TERMS` 的值必须都在 `PERIPHERAL_TERMS` 里，而 75 个未映射模块需要的词项大多不在词表；且参考库 148 条标题里 **29/57 个词项 0 命中**（oled/lcd/key/led/beep/servo 全 0）。**且既有 18 个映射里 9 个是死的**（beep/key/led/oled/servo/step_motor/led_beep×2/zigbee_uart_key 的词项 0 命中）。守卫已落盘 `tests/test_skeleton_mapping_coverage.py`（2 xfail strict + 2 绿），复测 `probe_term_effect.py` / `probe_term_titles.py`。要动就得同时扩词表 + 保证词项能命中参考条目。
 2. **词表预算余量已吃紧**：`WORDLIST_PROMPT_BYTES` 8500 → 9200（词表完整 wire 8849）。最坏形态 mspm0 余量 **378B**（旧 727B）、stm32 998B——**后续往词表加内容先瘦身，不要再抬预算**（`probe_budget_headroom.py`）。
 
 ## 待用户拍板的两点（旧会话问了、用户改开新会话，未答）

@@ -64,7 +64,7 @@
 ### 5.4 🟡 P2 三条
 
 - **硬件身份字段 46/170 平台条目为空**（核心件为主：motor/pid/servo/oled/led/key…）——判据②要求新录入必填，老件是历史遗留；需决定补齐还是明确豁免。
-- **骨架「模块→参考例程」映射只覆盖 18/93**（`reference_library.py:406` `MODULE_PERIPHERAL_TERMS`）——**2026-09-08 复核：单独扩映射无效**。75 个未映射模块需要的词项（气压/称重/颜色/气体/光照/指纹/语音/触摸/摇杆…）大部分不在 `PERIPHERAL_TERMS`（57 项）里；且参考库 148 条标题里 **29/57 个词项 0 命中**（oled/lcd/key/led/beep/servo/step/camera/zigbee/wifi 及对应中文词全 0）。真正要动的是词表项 + 参考条目内容，与第 2 批（预筛评分与匹配粒度）同批做才有意义。复测探针 `.scratch/library-audit/probe_term_effect.py`。
+- **骨架「模块→参考例程」映射只覆盖 18/93**（`reference_library.py:406` `MODULE_PERIPHERAL_TERMS`）——**2026-09-08 复核：单独扩映射无效**。75 个未映射模块需要的词项（气压/称重/颜色/气体/光照/指纹/语音/触摸/摇杆…）大部分不在 `PERIPHERAL_TERMS`（57 项）里；且参考库 148 条标题里 **29/57 个词项 0 命中**（oled/lcd/key/led/beep/servo/step/camera/zigbee/wifi 及对应中文词全 0）。**更硬的一条：既有 18 个映射里就有 9 个是死的**（beep/key/led/oled/servo/step_motor/led_beep×2/zigbee_uart_key 的词项在参考库 0 命中——选中这些模块时骨架关联不到任何例程）。真正要动的是词表项 + 参考条目内容，与第 2 批（预筛评分与匹配粒度）同批做才有意义。守卫已落盘：`tests/test_skeleton_mapping_coverage.py`（2 条 xfail strict 记录缺口 + 2 条硬契约现在就绿）。复测探针 `.scratch/library-audit/probe_term_effect.py`、`probe_term_titles.py`。
 - **批次快检脚本没进 CI** —— ✅ 已落地（工单 library-hookup-and-invariants/02，2026-09-08，提交 6ca1139d）：21 个 sweep 脚本里「对全库永远成立」的 7 条搬进 `tests/test_library_invariants.py`（slug 与目录名一致 / 声明文件存在 / 条目文件无重复 / 依赖不悬空 / 依赖无环 / 词表引用存在 / 模块有简介），红证用临时副本注入破坏实测四类全红；批次快照值不进测试（历史快照会失效）。
 
 ### 5.5 已知遗留（CONTEXT 自记，本次复核仍在）
