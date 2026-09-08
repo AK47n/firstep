@@ -3,7 +3,11 @@
 // 不断言完整 HTML 结构（子串断言防脆）。直接 import fx/module.js。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { moduleInfoHTML } from "../../src/contest_generator/static/js/fx/module.js";
+import {
+  moduleInfoHTML,
+  moduleRequiresIdentity,
+  identityExemptLabel,
+} from "../../src/contest_generator/static/js/fx/module.js";
 
 // 全量 fixture：两平台 + 引脚声明 + 依赖 + 多实例 + 互斥组 + 旧形状副产物
 const full = {
@@ -77,6 +81,98 @@ test("来源标签：wiki 原页 → 来源（立创 wiki），非 wiki → 购�
   const buy = moduleInfoHTML(full, "stm32");
   assert.ok(buy.includes("购买链接"));
   assert.ok(!buy.includes("来源（立创 wiki）"));
+});
+
+// 身份字段语义（工单 identity-fields/05）：器件显示「套件：」/来源行；内部件 /
+// 协议切片（kind 经 /api/modules 载荷下发，判据单源 library.MODULE_KIND）不显示
+// 两行空内容，改标「无需购买链接」。旧载荷（无 kind / requires_identity）保守按
+// 器件处理，与旧行为逐字一致。
+const platEntry = (extra) => ({
+  files: [], verified: true, hardware_bound: false, notes: "", kit: "", source_url: "", pins: [],
+  ...extra,
+});
+
+test("内部件：空身份字段不显示空行，改标「无需购买链接（内部件）」", () => {
+  const out = moduleInfoHTML({
+    slug: "delay",
+    description: "软件延时工具",
+    kind: "internal",
+    requires_identity: false,
+    platforms: { stm32: platEntry() },
+  }, "stm32");
+  assert.ok(out.includes("无需购买链接（内部件）"));
+  assert.ok(!out.includes("套件："));
+  assert.ok(!out.includes("购买链接</a>"));
+  assert.ok(!out.includes("来源（立创 wiki）"));
+});
+
+test("协议切片：标注措辞按 kind 区分（协议切片）", () => {
+  const out = moduleInfoHTML({
+    slug: "coord_detect",
+    description: "K230 视觉帧解析",
+    kind: "protocol",
+    requires_identity: false,
+    platforms: { stm32: platEntry() },
+  }, "stm32");
+  assert.ok(out.includes("无需购买链接（协议切片）"));
+  assert.ok(!out.includes("无需购买链接（内部件）"));
+});
+
+test("真实内部件 slug（delay，单源登记）：空身份字段渲染豁免标注", () => {
+  // 与 /api/modules 的真实载荷同形（kind/requires_identity 由后端投影）
+  const out = moduleInfoHTML({
+    slug: "delay",
+    description: "软件延时工具",
+    kind: "internal",
+    requires_identity: false,
+    platforms: { stm32: platEntry() },
+  }, "stm32");
+  assert.ok(out.includes("无需购买链接（内部件）"));
+  assert.ok(!out.includes("套件："));
+});
+
+test("器件：有身份字段照旧显示套件与链接，不出现豁免标注", () => {
+  const out = moduleInfoHTML({
+    slug: "dht11",
+    description: "DHT11 温湿度传感器",
+    kind: "device",
+    requires_identity: true,
+    platforms: { stm32: platEntry({ kit: "DHT11 模块", source_url: "https://example.com/buy/dht11" }) },
+  }, "stm32");
+  assert.ok(out.includes("套件：DHT11 模块"));
+  assert.ok(out.includes('href="https://example.com/buy/dht11"'));
+  assert.ok(!out.includes("无需购买链接"));
+});
+
+test("器件：缺身份字段（待补）仍不渲染空行，也不误标豁免", () => {
+  const out = moduleInfoHTML({
+    slug: "beep",
+    description: "蜂鸣器驱动",
+    kind: "device",
+    requires_identity: true,
+    platforms: { stm32: platEntry() },
+  }, "stm32");
+  assert.ok(!out.includes("套件："));
+  assert.ok(!out.includes("无需购买链接"));
+});
+
+test("旧载荷（无 kind 字段）：按器件处理，有值照旧显示", () => {
+  const out = moduleInfoHTML({
+    slug: "oled",
+    description: "OLED 驱动",
+    platforms: { stm32: platEntry({ kit: "0.96 寸 OLED", source_url: "https://example.com/buy/oled" }) },
+  }, "stm32");
+  assert.ok(out.includes("套件：0.96 寸 OLED"));
+  assert.ok(out.includes("购买链接"));
+  assert.ok(!out.includes("无需购买链接"));
+  assert.equal(moduleRequiresIdentity({ slug: "x" }), true);
+  assert.equal(moduleRequiresIdentity({ slug: "x", kind: "internal" }), false);
+  assert.equal(moduleRequiresIdentity({ slug: "x", kind: "protocol" }), false);
+  assert.equal(moduleRequiresIdentity({ slug: "x", kind: "device" }), true);
+  // 未知 kind 但载荷显式说不需要 → 尊重载荷
+  assert.equal(moduleRequiresIdentity({ slug: "x", kind: "future", requires_identity: false }), false);
+  assert.equal(identityExemptLabel("protocol"), "无需购买链接（协议切片）");
+  assert.equal(identityExemptLabel("internal"), "无需购买链接（内部件）");
 });
 
 test("转义：描述与字段含 HTML 字符被转义", () => {

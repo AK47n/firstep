@@ -209,6 +209,24 @@ export function moduleGridHTML(modules, selectedSet, query, platform) {
 }
 
 // —— 模块详情弹窗（工单 module-info-dialog/01）：零后端，数据 = /api/modules 全量 ──
+// 身份字段语义（工单 identity-fields/05）：模块类别的判据单源在 Python 侧
+// `library.MODULE_KIND`，载荷经 /api/modules 投影为 kind / requires_identity
+// （本文件不写 slug 名单）。`moduleRequiresIdentity` 对旧载荷（无字段）保守判
+// 「器件」——器件空字段语义 = 待补，与旧行为逐字一致。
+export const INTERNAL_KINDS = ["internal", "protocol"];
+
+export function moduleRequiresIdentity(m) {
+  const kind = String((m && m.kind) || "");
+  if (INTERNAL_KINDS.includes(kind)) return false;
+  if (kind === "device") return true;
+  return (m && m.requires_identity) !== false;
+}
+
+// 内部件 / 协议切片的身份字段标注（kind 经载荷下发；空字段 = 「不适用」而非「待补」）
+export function identityExemptLabel(kind) {
+  return kind === "protocol" ? "无需购买链接（协议切片）" : "无需购买链接（内部件）";
+}
+
 export function moduleInfoHTML(module, platform) {
   // 自包含内联 esc（同 moduleGridHTML 范式）
   const escHtml = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
@@ -257,14 +275,26 @@ export function moduleInfoHTML(module, platform) {
         + escHtml(f) + '" title="查看源码（只读）">' + escHtml(f) + "</button></li>").join("")
       : '<li class="muted">实现内嵌母版（随母版进工程，不复制文件、不重复）</li>';
     const notes = e.notes ? '<div class="mi-note">备注：' + escHtml(e.notes) + "</div>" : "";
-    const kit = e.kit ? '<div class="mi-note">套件：' + escHtml(e.kit) + "</div>" : "";
+    // 身份字段（工单 identity-fields/05）：器件 = 有值才显示「套件：」/来源行；
+    // 内部件 / 协议切片 = 不显示两行空内容，改标「无需购买链接」（空值语义是
+    // 「不适用」而非「待补」，见 library.MODULE_KIND）。判据取自载荷 kind，本文件
+    // 不写 slug 名单。
+    const needsIdentity = moduleRequiresIdentity(m);
+    const kit = needsIdentity && e.kit
+      ? '<div class="mi-note">套件：' + escHtml(e.kit) + "</div>" : "";
     // 来源链接标签（工单 lckfb-attribution/03）：wiki 手册原页 → 「来源（立创 wiki）」，
     // 其余（购买链接等）维持「购买链接」——打开链接前即知链接性质。
     // 判据与后端 is_wiki_source_url 同构（单一前缀常量，勿各自定义变体）。
     const isWiki = String(e.source_url || "").startsWith("https://wiki.lckfb.com/");
-    const source = e.source_url ? '<div class="mi-note"><a href="' + escHtml(e.source_url)
-      + '" target="_blank" rel="noopener">' + (isWiki ? "来源（立创 wiki）" : "购买链接")
-      + "</a></div>" : "";
+    const source = needsIdentity && e.source_url
+      ? '<div class="mi-note"><a href="' + escHtml(e.source_url)
+        + '" target="_blank" rel="noopener">' + (isWiki ? "来源（立创 wiki）" : "购买链接")
+        + "</a></div>"
+      : "";
+    const identityNote = needsIdentity
+      ? ""
+      : '<div class="mi-note muted">' + escHtml(identityExemptLabel(String(m.kind || "")))
+        + "</div>";
     const pins = (e.pins && e.pins.length)
       ? '<table class="mi-pins"><thead><tr><th>角色</th><th>类型</th><th>默认引脚</th>'
         + '<th>必接</th><th>宏名</th></tr></thead><tbody>'
@@ -280,7 +310,7 @@ export function moduleInfoHTML(module, platform) {
     return '<section class="mi-plat" data-platform="' + escHtml(p) + '">'
       + "<h4>" + escHtml(moduleGridPlatformLabel(p))
       + ' <span class="mc-plat ' + cls + '">' + status + "</span></h4>"
-      + '<ul class="mi-files">' + files + "</ul>" + notes + kit + source + pins + "</section>";
+      + '<ul class="mi-files">' + files + "</ul>" + notes + kit + source + identityNote + pins + "</section>";
   }).join("");
   return '<div class="module-info-body">'
     + '<div class="module-info-title"><span class="slug">' + escHtml(m.slug || "") + "</span>"
@@ -518,5 +548,5 @@ export function libPlatformKits(modules) {
 }
 
 if (typeof window !== "undefined") {
-  Object.assign(window, { moduleBadges, pythonArtifactSummary, groupOfSlug, applyGroupRadio, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, moduleGridPlatformLabel, moduleGridStatusText, moduleGridBadgeClass, moduleGridFilter, moduleGridCountText, moduleGridHTML, moduleInfoHTML, multiInstanceModules, instancePayload, ensureDefaultInstances, instanceGapCount, libFilterModules, libSortModules, danglingDependencies, libStats, libStatsText, libChipRowHTML, moduleRowHTML, editDescStatus, libIsValidHttpUrl, libPlatformKits });
+  Object.assign(window, { moduleBadges, pythonArtifactSummary, groupOfSlug, applyGroupRadio, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, moduleGridPlatformLabel, moduleGridStatusText, moduleGridBadgeClass, moduleGridFilter, moduleGridCountText, moduleGridHTML, moduleInfoHTML, moduleRequiresIdentity, identityExemptLabel, INTERNAL_KINDS, multiInstanceModules, instancePayload, ensureDefaultInstances, instanceGapCount, libFilterModules, libSortModules, danglingDependencies, libStats, libStatsText, libChipRowHTML, moduleRowHTML, editDescStatus, libIsValidHttpUrl, libPlatformKits });
 }

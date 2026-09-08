@@ -169,9 +169,11 @@ from .library import (
     delete_module,
     draft_description,
     list_modules,
+    module_kind,
     module_mtime,
     read_module_file,
     remove_platform_files,
+    requires_identity,
     update_module_description,
     update_platform_identity,
 )
@@ -4054,10 +4056,21 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @_map_errors
     def modules() -> list[dict]:
         """浏览模块库（磁盘目录即数据库，实时读盘）；每条附 mtime（manifest
-        修改时间，ux-polish-02/07「最近更新」排序用——只进响应，不落盘）。"""
+        修改时间，ux-polish-02/07「最近更新」排序用——只进响应，不落盘）。
+
+        另附模块类别投影（工单 identity-fields/05）：`kind`（device / internal /
+        protocol）与 `requires_identity`（是否需要 kit + source_url）——判据单源
+        仍是 `library.MODULE_KIND`，此处只做投影，前端不另写 slug 名单。详情弹窗
+        据此区分「可补填的身份字段」与「内部件 / 协议切片无需购买链接」。
+        """
         module_root = _library_dir(context)
         return [
-            {**m.to_dict(), "mtime": module_mtime(module_root, m.slug)}
+            {
+                **m.to_dict(),
+                "mtime": module_mtime(module_root, m.slug),
+                "kind": module_kind(m.slug).value,
+                "requires_identity": requires_identity(m.slug),
+            }
             for m in list_modules(module_root)
         ]
 

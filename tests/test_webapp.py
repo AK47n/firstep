@@ -3758,6 +3758,28 @@ def test_module_file_endpoint_missing_module_and_file_400(client):
     assert "文件不存在" in resp.json()["detail"]
 
 
+def test_modules_list_carries_module_kind_for_identity_semantics(client):
+    """列表载荷带模块类别（工单 identity-fields/05）：内部件 / 协议切片的身份字段
+    空值是「不适用」，前端不该把它们渲染成「待补」的两行空内容。
+
+    判据单源仍在 `library.MODULE_KIND`（未登记 = 器件），载荷只做投影：器件
+    `requires_identity=True`（可补填），内部件 / 协议切片 False（无购买链接语义）。
+    """
+    listed = {m["slug"]: m for m in client.get("/api/modules").json()}
+
+    # delay = 内部件（单源登记）；dht11 = 器件（未登记 = 器件默认值）
+    assert listed["delay"]["kind"] == "internal"
+    assert listed["delay"]["requires_identity"] is False
+    assert listed["dht11"]["kind"] == "device"
+    assert listed["dht11"]["requires_identity"] is True
+    # 载荷投影与单源一致（不新写名单）
+    from contest_generator.library import module_kind, requires_identity
+
+    for slug, module in listed.items():
+        assert module["kind"] == module_kind(slug).value
+        assert module["requires_identity"] is requires_identity(slug)
+
+
 def test_add_module_validates_then_stores(client):
     resp = client.post(
         "/api/modules",
