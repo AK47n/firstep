@@ -1,3 +1,8 @@
+/* 来源：立创开发板技术文档中心（wiki.lckfb.com）《TB6612电机驱动模块》
+ * 页面：https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/control/tb6612-motor-drive-module.html
+ * （批 11 C 类核对：本件 = 页面功能超集——PWM 双路 + 编码器；对照结论见
+ * manifest notes）；使用 / 复制 / 修改 / 传播请遵循立创版权要求。
+ */
 #ifndef _MOTOR_STM32_H
 #define _MOTOR_STM32_H
 

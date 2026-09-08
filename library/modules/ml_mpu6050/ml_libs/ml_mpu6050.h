@@ -4,6 +4,10 @@
 #include "ml_i2c.h"
 #include "math.h"
 
+/* 使用前置（批 11 C 类核对）：MPU6050_Init **不初始化引脚/总线**——调用方须
+ * 先调母版 I2C_Init()（ml_i2c，默认 PA11/PA12——见 pin_config.h 硬 I2C 段）；
+ * 页面默认脚 SDA=PB8/SCL=PB9 未照抄（=母版 OLED 段，批次 2 已让位）。 */
+
 #define MPU6050_ADDR	   0xd0 
 #define SMPLRT_DIV       0x19
 #define CONFIG           0x1a
@@ -15,9 +19,10 @@
 #define ACCEL_YOUT_L     0x3e
 #define ACCEL_ZOUT_H     0x3f
 #define ACCEL_ZOUT_L     0x40
-#define TEMP_OUT_H       0x41 /* 温度高字节（页面/MPU6050 寄存器表——原 0x65 为
-                                 错误常量（与 ACCEL_YOUT_L 撞值），本件温度路径
-                                 未启用——订正保留（批 11 C 类核对修） */
+#define TEMP_OUT_H       0x41 /* 温度高字节（MPU6050 寄存器表——原 0x65 为
+                                 非定义寄存器（错误常量；0x65 无对应温度
+                                 寄存器），本件温度路径未启用——订正保留
+                                 （批 11 C 类核对修） */
 #define TEMP_OUT_L       0x42
 #define GYRO_XOUT_H      0x43
 #define GYRO_XOUT_L      0x44

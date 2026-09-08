@@ -895,7 +895,14 @@ def _fit_segment_wire(
 # test_wordlist_segment 契约红证），预算升 8300（fit 上限 8134 ≥ 7994 全量
 # 送达 + 140B 余量；词表段全量 7994 比旧截断形态 7954 多 40B——最坏形态
 # 总量 +40B，全文预算不动 2KB 边界余量保持（batch7 口径：≤200B 不调）。
-WORDLIST_PROMPT_BYTES = 8300
+# 2026-09-12（wiki-stm32-batch11/02）：显示模块 +1 方案（1.14 寸 ST7789
+# 并口屏——B 类新 slug st7789_para）+ models +1（ST7789 并口屏）→ 默认
+# 词表完整 wire 实测 8259（> 8134 fit 上限 8300−166，尾部类别被截、方案名
+# 丢失——test_wordlist_segment 契约红证），预算升 8500（fit 上限 8334 ≥
+# 8259 全量送达 + 75B 余量；词表段全量 8259 比旧截断形态 8134 多 125B——
+# 最坏形态总量 +125B，全文预算视 worst-case 结构测试红证再定（见
+# budget.py 词表段变更配套注释）。
+WORDLIST_PROMPT_BYTES = 8500
 
 # 词表段截断标注（单源；不用全局 TRUNCATION_NOTICE——词表截断是科普段压缩
 # （后续类别仍由界面展示加载），与 content 截断契约（题面/参考）语义不同界，

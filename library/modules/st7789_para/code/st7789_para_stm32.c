@@ -53,7 +53,7 @@ static void st7789_para_writ_bus(uint8_t dat)
     ST7789_PARA_CS(1);
 }
 
-void st7789_para_wr_reg(uint8_t dat) /* 内部：命令（DC=0） */
+static void st7789_para_wr_reg(uint8_t dat) /* 内部：命令（DC=0） */
 {
     ST7789_PARA_DC(0);
     st7789_para_writ_bus(dat);
@@ -65,7 +65,7 @@ static void st7789_para_wr_data8(uint8_t dat)
     st7789_para_writ_bus(dat);
 }
 
-void st7789_para_wr_data(uint16_t dat) /* 内部：RGB565 双字节 */
+static void st7789_para_wr_data(uint16_t dat) /* 内部：RGB565 双字节 */
 {
     st7789_para_writ_bus((uint8_t)(dat >> 8));
     st7789_para_writ_bus((uint8_t)dat);
@@ -84,7 +84,7 @@ static const uint8_t st7789_para_madctl[4] = {0x00u, 0xC0u, 0x70u, 0xA0u};
 static const uint8_t st7789_para_off_x[4] = {52u, 53u, 40u, 40u};
 static const uint8_t st7789_para_off_y[4] = {40u, 40u, 53u, 52u};
 
-void st7789_para_address_set(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2)
+static void st7789_para_address_set(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2)
 {
     uint8_t d = (uint8_t)(s_dir & 0x03u);
 
