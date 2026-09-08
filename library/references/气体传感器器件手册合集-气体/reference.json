@@ -1,0 +1,26 @@
+{
+  "id": "气体传感器器件手册合集-气体",
+  "title": "气体传感器器件手册合集（气体）",
+  "type": "器件手册",
+  "description": "气体检测器件移植手册合集：MQ 系列（2/3/4/5/6/7/8/9/135）、MS1100、AGS10、SGP30——引脚、时序与读数换算，骨架阶段选中气体类模块时的器件级例程参考。",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "any",
+  "topic_type": "",
+  "files": [
+    "mq-2.md",
+    "mq-3.md",
+    "mq-4.md",
+    "mq-5.md",
+    "mq-6.md",
+    "mq-7.md",
+    "mq-8.md",
+    "mq-9.md",
+    "mq-135.md",
+    "ms1100.md",
+    "ags10.md",
+    "sgp30.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
