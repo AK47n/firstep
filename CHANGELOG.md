@@ -32,7 +32,6 @@
 - 22:09 类型：清零 mypy 全树告警（22 处，行为逐字不变）
 - 22:37 判据归位 + 身份字段豁免与回填：缺口 46 → 13（backlog 5.4①，工单 identity-fields/01-04）
 - 22:40 README「来源」行判据同源化：只标真正改写自 wiki 的模块（工单 identity-fields/03 补）
-- 22:57 ﻿待补出处第二轮裁决 + 内部件身份字段 UI 语义（工单 identity-fields/04 续、05）
 - 22:57 待补出处第二轮裁决 + 内部件身份字段 UI 语义（工单 identity-fields/04 续、05）
 
 ## 2026-09-07
@@ -90,9 +89,6 @@
 - 11:41 批次10 词表预算记账链同步：budget.py 补 batch10 口径注释（词表完整 wire 6565、预算 6600→6800、词表段全量 6565 比旧截断形态 6600 少 35B——最坏形态总量 -35B，REFERENCE_FULLTEXT_BYTES 61000 不动；llm.py 同款）
 - 11:43 批次10/04 open_mv4 帧解析整数溢出防护：open_mv4_parse_int 加 9 位上限（页面坐标 ≤3 位、int 溢出防护——超长数字按坏帧丢弃）；测试镜像同步 + 超长伪帧用例
 - 11:47 批次10 code-review 整改（双轴 + 39 件收尾评审结果回填 spec）：
-- 12:15 ﻿批次11「MQ 系同构快补收尾」七件入库（mq3/mq4/mq6/mq7/mq8/mq9/ms1100，仅 mspm0，ADC 薄封装共读 MEM0 照 mq2/批次9 先例——无新通道/实例/无新 $assign 行）： - 7 模块条目（manifest.json + code/*.c/h）：xxx_init + xxx_read_percent（价值/4095×100 正向映射页面原式 + 正文取证、30→5 次快平均、ADC 中断改经 adc 模块 API 轮询（无 IRQHandler 强符号）、页面 DO（LM393）宏未用不声明）；ms1100 页面无百分比函数——read_percent 由 demo 电压式 value/4095×3.3 推导归一；notes 统一写明 MQ 系相对值非 ppm 精标 + 预热 3-5 分钟/湿度影响 + 多路气体同选共读 MEM0 物理通道限制（MEM 8/8 已满）+ 手册原脚 PA27 绑定复现 + mq9 双温循环原理/与 mq7/mq6 分工； - wordlist 感知传感器 +7 方案（lib_modules 挂接）+ models；词表完整 wire 实测 7051（> 6634 fit 上限）→ WORDLIST_PROMPT_BYTES 6800→7300、REFERENCE_FULLTEXT_BYTES 61000→60500（llm.py/budget.py 记账链同步，测试红证线跑绿）； - 测试：7 × test_module_*.py（照 test_module_mq2.py：manifest/单选生成/公式与无 IRQHandler 守卫/notes 守卫）；test_pins 豁免元组 + test_pin_bindings PA24 注释 + test_syscfg_prune ADC12_0 消费方断言； - 编译矩阵：7 × run_*_matrix.py 单选生成 → SysConfig CLI → gmake 0 error/0 warning（PASS），verified=true 回写； - 46 件一致性快检 sweep_46_modules.py 全 OK；全量测试 3528 pytest + 1358 node 全绿； - code-review 双轴：随机抽 ms1100/mq8 深审 + 其余 5 件同构对仗核对（同构批量豁免逐件深审，spec 记录）； - CONTEXT 平台行补录批次 11 块；母版 syscfg ADC 段注释同步。
-- 12:17 ﻿批次11 wordlist.json 最小 diff 还原：修复词表整卷重排噪音——json.dump(ensure_ascii=False, indent=2) 会把全库 models/lib_modules 数组重排为多行（375 行噪音 diff），现恢复既有紧凑格式并保留语义改动（感知传感器 +7 方案（MQ-3/4/6/7/8/9、MS1100，lib_modules 挂接）+ models +7 + MQ 六件供电口径 3.3-5V 与页面/kit 统一）；净 diff 58 行（+58/-1），词表完整 wire 7051 不变，词表/预算/库结构测试 110 用例全绿。
-- 12:48 ﻿批次12/01 lcd 彩屏模块打样（ST7735 0.96 寸 80×160）入库——六屏合一决策 A 首件：
 - 12:51 批次12/02 lcd 补 ST7789V2 双型号表项（1.3 寸 240×240 带字库版 + 1.69 寸 240×280）：
 - 12:53 批次12/03-05 lcd 补齐 ST7789V3/GC9A01/ST7735S 三型号表项——六屏全实现：
 - 12:57 批次12/06 tp_xpt2046 独立触摸模块入库（XPT2046 电阻触摸，1.8 寸屏配套件）：
@@ -785,8 +781,6 @@
 - 13:18 平台卡点击不再误清推荐勾选（工单 platform-click-guard/01）
 - 13:35 main.c 编辑器行号与占位文字重叠 + 取题面 PDF 渲染期占位（工单 ui-polish-10/01,02）
 - 19:20 模块 exclusive_group 声明 + 库级校验 + 摘要行互斥标注（工单 recommend-exclusive-groups/01）
-- 19:35 ﻿feat: 推荐链路功能组选择卡 + hint 兜底（工单 recommend-exclusive-groups/02）
-- 19:45 ﻿feat: 推荐提示词功能组互斥规则段 + 题面核查条（工单 recommend-exclusive-groups/03）
 - 19:59 前端功能组选择卡——单选交换/取消/同组去重/需求灰注/多选警告（工单 recommend-exclusive-groups/04）
 - 20:48 main.c 预览行号逐行显示 + 滚动三同步——三明治布局补齐 white-space/overflow/display/gutter（此前行号 1-9 两两挤行、滚动只动行号列不动代码、尾部 7px 错位）
 - 20:55 main.c 预览加字号缩放（−/＋ 80%-200%，三明治三层 em 同缩 + localStorage 记忆；工单 code-zoom/01）
