@@ -1,0 +1,10 @@
+import { readFileSync } from "node:fs";
+const html = readFileSync("C:/Users/luoji/Desktop/firstep/src/contest_generator/static/index.html", "utf8");
+const stepRe = /<span class="step-no">(\d+)<\/span>/g;
+const all = [];
+let m;
+while ((m = stepRe.exec(html))) all.push(m[1]);
+console.log("total step-no spans:", all.length, " values:", all.join(","));
+const dup = all.filter((v, i) => all.indexOf(v) !== i);
+console.log("duplicates:", dup.join(",") || "(none)");
+const orphan = [...new Set(all)].filter((n) => !/step-no">\d+<\/span>[^<]*<\/h2>\s*<p class="card-purpose">/.test(html.match(/[\s\S]*?/)[0] || ""));

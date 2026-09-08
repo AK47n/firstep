@@ -1,0 +1,13 @@
+整改：来源标注 code-review 双轴发现（Standards/Spec）
+
+- README 声明段措辞条件化：空模块集/仅母版工程不谎称「部分模块改写自 wiki」
+  （source_notice_lines 纯函数：HAS_WIKI / NO_WIKI 两版首行，quote 与来源行共用）
+- manifest.py 增 WIKI_DMX_HOMEPAGE 常量（声明段来源行单源，readme.py 消费）
+- 幂等判据与结构测试统一为头部 HEAD_WINDOW 窗口（source_notes.HEAD_WINDOW 单源，
+  脚本与测试共用——c2 漂移：脚本 0 变更 vs 测试红灯）
+- 注入脚本读盘改 open(newline="")：CRLF 文件不再被 read_text universal
+  newlines 归一化重写为 LF（c1 死代码；新增真实文件 CRLF roundtrip 测试）
+- 新增测试：md 头部来源行断言（资料库存在时，轻量 clone 跳过——spec a1）、
+  跨语言前缀同步（module.js 与 WIKI_SOURCE_URL_PREFIX 逐字一致）、窗口外 URL
+  仍注入（c2 语义）、CRLF 真实路径
+- spec 注记：降级标题对齐实现 FALLBACK_TITLE（a2）、声明段条件化、窗口单源

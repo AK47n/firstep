@@ -1,0 +1,53 @@
+// 高清放大：clip 代码区 L44-58 区域截图（scale 2.5），验证渐变实际绘制位置
+const CDP = 9251;
+const fetchT = async (url, ms = 5000) => {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  try { return await fetch(url, { signal: ctl.signal }); } finally { clearTimeout(t); }
+};
+let targets = null;
+for (let i = 0; i < 50 && !targets; i++) {
+  try { targets = await (await fetchT(`http://127.0.0.1:${CDP}/json/list`)).json(); } catch {}
+  if (!targets || !targets.length) await new Promise((r) => setTimeout(r, 300));
+}
+const page = targets.find((t) => t.type === "page" && t.url.startsWith("http://127.0.0.1:8000/"));
+const ws = new WebSocket(page.webSocketDebuggerUrl);
+await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error("ws error")); });
+let seq = 0;
+const pending = new Map();
+ws.onmessage = (ev) => {
+  const msg = JSON.parse(ev.data);
+  if (msg.id && pending.has(msg.id)) { pending.get(msg.id)(msg); pending.delete(msg.id); }
+};
+const cdp = (method, params = {}) =>
+  new Promise((resolve) => { const id = ++seq; pending.set(id, resolve); ws.send(JSON.stringify({ id, method, params })); });
+const Eval = async (expr) => {
+  const r = await cdp("Runtime.evaluate", { expression: expr, returnByValue: true, awaitPromise: true });
+  if (r.result?.exceptionDetails) throw new Error("eval 失败: " + JSON.stringify(r.result.exceptionDetails));
+  return r.result?.result?.value;
+};
+
+// 定位 L44 与 L58 的 hl 行 rect（页面坐标）
+const rects = await Eval(`(() => {
+  const box = document.getElementById('code-viewer').getBoundingClientRect();
+  const a = document.querySelector('#code-viewer .code-hl-line[data-code-line="44"]');
+  const b = document.querySelector('#code-viewer .code-hl-line[data-code-line="58"]');
+  if (!a || !b) return null;
+  const ra = a.getBoundingClientRect();
+  const rb = b.getBoundingClientRect();
+  return { x: Math.floor(ra.left - 40), y: Math.floor(ra.top - 20),
+    w: Math.ceil(rb.right - ra.left) + 120, h: Math.ceil(rb.bottom - ra.top) + 40,
+    boxX: box.left, boxY: box.top };
+})()`);
+console.log("clip:", JSON.stringify(rects));
+if (rects) {
+  const shot = await cdp("Page.captureScreenshot", {
+    format: "png",
+    clip: { x: rects.x, y: rects.y, width: rects.w, height: rects.h, scale: 2.5 },
+  });
+  const fs = await import("node:fs");
+  const p = "C:/Users/luoji/Desktop/firstep/.scratch/code-page-vscode-overhaul/shot-highres-guides.png";
+  fs.writeFileSync(p, Buffer.from(shot.result.data, "base64"));
+  console.log("高清截图:", p);
+}
+process.exit(0);

@@ -1,0 +1,5 @@
+批次13 收官小批收尾：CONTEXT.md 平台行补录批次 13 块 + spec 实施结论回填 + 一致性快检 52 件版：
+
+- CONTEXT.md 平台行补录 wiki-modules-batch13 块（relay/as32/bmp180/ms5611 四件形态、默认脚与重叠、词表预算链、52 件快检、3559 全绿——70/70 手册页面全覆盖）；
+- spec.md 追加「实施结论」回填（四件完成态/编译矩阵全 PASS/测试全绿/词表预算链实测口径（7239→7692 → 7900/60100）/UART3 计数口径修正（=2，非 spec 初稿 =1）/范围外确认）；
+- .scratch/wiki-modules-batch13/sweep_52_modules.py（照 sweep_48_modules.py 更新——批次 1-13 全部 52 件一致性快检：ADR 0009/verified/hardware_bound/wordlist 挂接/kit/source_url/仅 mspm0/依赖正检，52/52 OK）。
