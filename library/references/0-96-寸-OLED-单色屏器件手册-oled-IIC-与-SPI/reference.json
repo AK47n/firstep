@@ -1,0 +1,16 @@
+{
+  "id": "0-96-寸-OLED-单色屏器件手册-oled-IIC-与-SPI",
+  "title": "0.96 寸 OLED 单色屏器件手册（oled / IIC 与 SPI）",
+  "type": "器件手册",
+  "description": "立创·地猛星移植手册的 0.96 寸单色 OLED 屏移植笔记（IIC 与 SPI 两种接线）：引脚定义、初始化序列、显存式绘图与字库用法——骨架阶段选中 oled 模块时作为器件级例程参考。",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "any",
+  "topic_type": "",
+  "files": [
+    "0-96-iic-single-screen.md",
+    "0-96-single-spi-screen.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
