@@ -1,0 +1,17 @@
+{
+  "id": "指纹与语音器件手册合集-指纹-语音",
+  "title": "指纹与语音器件手册合集（指纹 / 语音）",
+  "type": "器件手册",
+  "description": "指纹与语音器件移植手册合集：AS608 指纹、JQ8900 语音播报、SYN6288 语音合成——串口协议与引脚，骨架阶段选中指纹/语音类模块时的器件级例程参考。",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "any",
+  "topic_type": "",
+  "files": [
+    "fingerprint.md",
+    "jq8900.md",
+    "syn6288.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
