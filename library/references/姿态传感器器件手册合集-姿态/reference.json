@@ -1,0 +1,16 @@
+{
+  "id": "姿态传感器器件手册合集-姿态",
+  "title": "姿态传感器器件手册合集（姿态）",
+  "type": "器件手册",
+  "description": "姿态器件移植手册合集：MPU6050 六轴、JY61P——I2C/UART 读取与姿态解算素材，骨架阶段选中姿态类模块时的器件级例程参考。",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "any",
+  "topic_type": "",
+  "files": [
+    "mpu6050.md",
+    "jy61p.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
