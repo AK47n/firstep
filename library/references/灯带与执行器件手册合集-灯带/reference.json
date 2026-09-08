@@ -1,0 +1,18 @@
+{
+  "id": "灯带与执行器件手册合集-灯带",
+  "title": "灯带与执行器件手册合集（灯带）",
+  "type": "器件手册",
+  "description": "执行器件移植手册合集：WS2812 幻彩灯带、1 路继电器、L298N 电机驱动、PCA9685 16 路舵机驱动——骨架阶段选中灯带/执行类模块时的器件级例程参考。",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "any",
+  "topic_type": "",
+  "files": [
+    "ws2812.md",
+    "relay.md",
+    "l298n.md",
+    "pca9685.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
