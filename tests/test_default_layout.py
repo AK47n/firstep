@@ -394,6 +394,11 @@ WHITELIST = {
     "PA15": {
         "config.BUZZER",
         "jq8900.JQ8900_TX",
+        # beep-pin-declaration/01：beep 补引脚声明（BUZZER_GPIO/BUZZER_PIN，
+        # gpio_out 默认 PA15）后首次进默认布局——与 config.BUZZER 同宏同脚
+        # （config 模块的蜂鸣器角色与 beep 模块为同一物理脚，互替/重复登记）、
+        # 与 jq8900 语音播报为提示输出互替，同选经引脚绑定消解
+        "beep.BUZZER_OUT",
         # wiki-stm32-batch10/02：lcd BLK——显示族与蜂鸣/语音播报为不同框
         # （背光驱动低频输出；P 15 = JTDI 复用脚作 GPIO 需 SWJ_CFG 释放
         # JTAG（保留 SWD）——key(PB3)/relay/hc05(PB4) 先例同一约束），
