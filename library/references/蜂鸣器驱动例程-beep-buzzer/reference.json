@@ -1,0 +1,18 @@
+{
+  "id": "蜂鸣器驱动例程-beep-buzzer",
+  "title": "蜂鸣器驱动例程（beep / buzzer）",
+  "type": "参考例程",
+  "description": "蜂鸣器驱动例程（双平台）：beep_init / beep_on / beep_off / beep_toggle / beep_beep 响 N 声（阻塞式），引脚宏来自板级配置——骨架阶段选中 beep 模块时作为例程参考。",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "any",
+  "topic_type": "",
+  "files": [
+    "beep.c",
+    "beep_stm32.c",
+    "beep.h",
+    "beep_stm32.h"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
