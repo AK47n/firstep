@@ -47,6 +47,69 @@
           "required": true
         }
       ]
+    },
+    "stm32": {
+      "files": [
+        "code/tp_xpt2046_stm32.c",
+        "code/tp_xpt2046_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "stm32 条目（wiki-stm32-batch10/03——mspm0 条目零改动）：软 SPI 5 脚（CLK/DIN/CS 输出 + DOUT/PEN 输入——与 mspm0 版对照：总线层换 gpio_set/gpio_get 位操作 + 电平配置页面原式 Out_PP/IPU 换算；API 与 mspm0 版同名同型完全对齐——tp_xpt2046.h 核验 5 函数：init/set_calibration/read_raw/read_xy/is_pressed；XPT2046 12 位 ADC 命令 0xD0/0x90 + 5 次中值滤波 + PEN 轮询无中断）。页面 = **F1 标准库**（地阔星 screen--1-8-touch-color-screen——1.8 寸 ZJY180S120TTG01 ST7735S + XPT2046 触摸；厂家例程 STM32F103C8T6 版 HARDWARE\\TOUCH\\touch.c/h）；页面 TP_Write_Byte(u16)/TP_Read_AD 为硬件 SPI 改法——stm32 软 SPI 换算（mspm0 版已软 SPI 5 脚，直接对照移植）。**默认脚 = CS=PB12/CLK=PB13/DIN=PB14/DOUT=PB15/PEN=PB0**——CS/CLK/DIN/DOUT 叠 DIP+GRAY+ttp224+key_matrix（**触摸按键×屏幕触摸互替同脚先例**——四键触摸与触摸屏不同框、同选概率最低；键盘 ROW 输入件邻域）；PEN 叠 hx711 DT + EC11 SW + rc522 CS + vl53l0x XSHUT（触摸与称重/旋钮/读卡/ToF 不同框、同选概率最低）；**与 lcd 六脚组刻意错开**（屏+触配套同选——mspm0 批 12 同款；与 LCD 共用 SCLK/MOSI 的接线由引脚绑定自选）；页面默认脚（mspm0 板脚 PA8/PA13/PA9/PA28/PB24）不照抄；**不占硬件 SPI/TIMER**（XPT2046 ~2.3MHz——位时序 delay_us(1/6) 走库 delay 模块，节拍保真）。校准结构照 mspm0：出厂预设（方向 1——1.8 寸厂家默认竖屏 128×160）+ set_calibration 自设（vendor 四方向预设宏 XPT2046_CAL_* 与 TP_Adjust 校准流程不随库入库——校准交互归题逻辑/骨架，ADR 0009）。未上板（软 SPI 时序/校准系数真机验证留后续）。wiki 手册来源：sources/materials/lckfb-地阔星移植手册/screen--1-8-touch-color-screen.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/screen/1-8-touch-color-screen.html；硬件词表已挂接零补录）。改造要点：STM32 平台依赖去除（DL_GPIO→gpio_set/gpio_get/gpio_init、去 ti_msp_dl_config.h）、去 TP_Scan/TP_Adjust 状态机与 printf/main 演示、函数名规范化（TP_Write_Byte/TP_Read_AD/TP_Read_XOY/TP_Read_XY/TP_Read_XY2 → xpt2046_write_byte/read_ad/read_xoy（静态）/read_raw/read_xy、TP_Init → xpt2046_init + set_calibration、TP_Drow_Touch_Point/TP_Draw_Big_Point/LCD_DrawRoughLine（画点/粗线辅助）不随库入库（绘制归 lcd 模块）、全局 tp_dev 结构收敛为模块内静态校准态。**编译矩阵**（wiki-stm32-batch10/03 收官）：单选生成（tp_xpt2046 + delay 依赖展开）→ UV4 真编译（ARMCC V5.06）**0 error/0 warning**（.scratch/wiki-stm32-batch10/matrix/run_tp_xpt2046_matrix.py）；未上板。\\n**编译矩阵补充**（wiki-stm32-batch10/03）：Code=3100/RO=268。",
+      "kit": "中景园 1.8 寸彩色触摸屏（ZJY180S120TTG01，ST7735S + XPT2046）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/screen/1-8-touch-color-screen.html",
+      "pins": [
+        {
+          "id": "TP_XPT2046_CS",
+          "type": "gpio_out",
+          "default": "PB12",
+          "required": true,
+          "macros": [
+            "TP_XPT2046_CS_GPIO",
+            "TP_XPT2046_CS_PIN"
+          ]
+        },
+        {
+          "id": "TP_XPT2046_CLK",
+          "type": "gpio_out",
+          "default": "PB13",
+          "required": true,
+          "macros": [
+            "TP_XPT2046_CLK_GPIO",
+            "TP_XPT2046_CLK_PIN"
+          ]
+        },
+        {
+          "id": "TP_XPT2046_DIN",
+          "type": "gpio_out",
+          "default": "PB14",
+          "required": true,
+          "macros": [
+            "TP_XPT2046_DIN_GPIO",
+            "TP_XPT2046_DIN_PIN"
+          ]
+        },
+        {
+          "id": "TP_XPT2046_DOUT",
+          "type": "gpio_in",
+          "default": "PB15",
+          "required": true,
+          "macros": [
+            "TP_XPT2046_DOUT_GPIO",
+            "TP_XPT2046_DOUT_PIN"
+          ]
+        },
+        {
+          "id": "TP_XPT2046_PEN",
+          "type": "gpio_in",
+          "default": "PB0",
+          "required": true,
+          "macros": [
+            "TP_XPT2046_PEN_GPIO",
+            "TP_XPT2046_PEN_PIN"
+          ]
+        }
+      ]
     }
   }
 }

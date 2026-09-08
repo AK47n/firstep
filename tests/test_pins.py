@@ -291,6 +291,92 @@ STM32_MACRO_VALUES = {
     "EC01G_UART_TX_Pin": "Pin_10",
     "EC01G_UART_RX_GPIO": "GPIO_B",
     "EC01G_UART_RX_Pin": "Pin_11",
+    # wiki-stm32-batch10/01：max7219 数码管/点阵（软 SPI 3 脚——默认
+    # DIN=PC13/CLK=PC14/CS=PC15：叠板载 LED 三灯（显示件与板载指示灯为输出
+    # 指示互替——有数码管/点阵就不用板载灯，互替同脚先例 ttp224×key_matrix）；
+    # 三脚同口逐脚宏族；与 lcd/oled 显示族互替同脚；页面默认脚不照抄）
+    "MAX7219_DIN_GPIO": "GPIO_C",
+    "MAX7219_DIN_PIN": "Pin_13",
+    "MAX7219_CLK_GPIO": "GPIO_C",
+    "MAX7219_CLK_PIN": "Pin_14",
+    "MAX7219_CS_GPIO": "GPIO_C",
+    "MAX7219_CS_PIN": "Pin_15",
+    # wiki-stm32-batch10/02：lcd 六屏合一彩屏（软 SPI 6 脚——默认 SCL=PB4/
+    # SDA=PB5/RES=PA5/DC=PB6/CS=PB7/BLK=PA15：与 oled SPI 五脚组（子集）/
+    # max7219 三脚组显示族互替同脚（一次选一块屏）；各脚叠执行件/采集件
+    # （继电器+编码器方向 PB4、称重+旋钮 PB5、火焰+ADC 组 PA5、舵机+巡线
+    # PB6、人体红外 PB7、蜂鸣 PA15）——不同框同选概率最低；与 tp_xpt2046
+    # 配套件刻意错开；页面默认脚不照抄）
+    "LCD_SCL_GPIO": "GPIO_B",
+    "LCD_SCL_PIN": "Pin_4",
+    "LCD_SDA_GPIO": "GPIO_B",
+    "LCD_SDA_PIN": "Pin_5",
+    "LCD_RES_GPIO": "GPIO_A",
+    "LCD_RES_PIN": "Pin_5",
+    "LCD_DC_GPIO": "GPIO_B",
+    "LCD_DC_PIN": "Pin_6",
+    "LCD_CS_GPIO": "GPIO_B",
+    "LCD_CS_PIN": "Pin_7",
+    "LCD_BLK_GPIO": "GPIO_A",
+    "LCD_BLK_PIN": "Pin_15",
+    # wiki-stm32-batch10/03：tp_xpt2046 触摸屏（软 SPI 5 脚——默认 CS=PB12/
+    # CLK=PB13/DIN=PB14/DOUT=PB15/PEN=PB0：CS/CLK/DIN/DOUT 叠 DIP+GRAY+
+    # ttp224+key_matrix（触摸按键×屏幕触摸互替同脚）；PEN 叠 hx711 DT+ec11
+    # SW+rc522 CS+vl53l0x XSHUT；与 lcd 六脚组刻意错开；页面默认脚不照抄）
+    "TP_XPT2046_CS_GPIO": "GPIO_B",
+    "TP_XPT2046_CS_PIN": "Pin_12",
+    "TP_XPT2046_CLK_GPIO": "GPIO_B",
+    "TP_XPT2046_CLK_PIN": "Pin_13",
+    "TP_XPT2046_DIN_GPIO": "GPIO_B",
+    "TP_XPT2046_DIN_PIN": "Pin_14",
+    "TP_XPT2046_DOUT_GPIO": "GPIO_B",
+    "TP_XPT2046_DOUT_PIN": "Pin_15",
+    "TP_XPT2046_PEN_GPIO": "GPIO_B",
+    "TP_XPT2046_PEN_PIN": "Pin_0",
+    # wiki-stm32-batch10/04-05：oled SPI/SH1106 变体（软 SPI 5 脚——默认
+    # SCL=PB4/SDA=PB5/DC=PB6/CS=PB7/RES=PA5：与 lcd 六脚组互替同脚（大屏/
+    # 小屏一次选一——oled SPI 组 = lcd 组子集）；既有 OLED_SCL/SDA（PB8/PB9，
+    # I2C 内嵌 ml_oled）保留不动；页面/mspm0 板脚不照抄）
+    "OLED_SPI_SCL_GPIO": "GPIO_B",
+    "OLED_SPI_SCL_PIN": "Pin_4",
+    "OLED_SPI_SDA_GPIO": "GPIO_B",
+    "OLED_SPI_SDA_PIN": "Pin_5",
+    "OLED_SPI_DC_GPIO": "GPIO_B",
+    "OLED_SPI_DC_PIN": "Pin_6",
+    "OLED_SPI_CS_GPIO": "GPIO_B",
+    "OLED_SPI_CS_PIN": "Pin_7",
+    "OLED_SPI_RES_GPIO": "GPIO_A",
+    "OLED_SPI_RES_PIN": "Pin_5",
+    # wiki-stm32-batch10/06：ili9341 2.8 寸大屏（B 类新 slug——软 SPI 6 脚：
+    # 默认 = lcd 六脚组同款（ILI 屏×中景园屏互替同脚——一次选一块屏）；
+    # 触摸复用 tp_xpt2046 组；lcdwiki 板默认脚不照抄）
+    "ILI9341_SCL_GPIO": "GPIO_B",
+    "ILI9341_SCL_PIN": "Pin_4",
+    "ILI9341_SDA_GPIO": "GPIO_B",
+    "ILI9341_SDA_PIN": "Pin_5",
+    "ILI9341_RES_GPIO": "GPIO_A",
+    "ILI9341_RES_PIN": "Pin_5",
+    "ILI9341_DC_GPIO": "GPIO_B",
+    "ILI9341_DC_PIN": "Pin_6",
+    "ILI9341_CS_GPIO": "GPIO_B",
+    "ILI9341_CS_PIN": "Pin_7",
+    "ILI9341_BLK_GPIO": "GPIO_A",
+    "ILI9341_BLK_PIN": "Pin_15",
+    # wiki-stm32-batch10/07：ili9488 3.5 寸大屏（B 类新 slug——软 SPI 6 脚：
+    # 默认 = lcd 六脚组同款（ILI 屏×中景园屏互替同脚——一次选一块屏）；
+    # 触摸复用 tp_xpt2046 组；lcdwiki 板默认脚不照抄）
+    "ILI9488_SCL_GPIO": "GPIO_B",
+    "ILI9488_SCL_PIN": "Pin_4",
+    "ILI9488_SDA_GPIO": "GPIO_B",
+    "ILI9488_SDA_PIN": "Pin_5",
+    "ILI9488_RES_GPIO": "GPIO_A",
+    "ILI9488_RES_PIN": "Pin_5",
+    "ILI9488_DC_GPIO": "GPIO_B",
+    "ILI9488_DC_PIN": "Pin_6",
+    "ILI9488_CS_GPIO": "GPIO_B",
+    "ILI9488_CS_PIN": "Pin_7",
+    "ILI9488_BLK_GPIO": "GPIO_A",
+    "ILI9488_BLK_PIN": "Pin_15",
     # wiki-stm32-batch8/03：nrf24l01 软 SPI 六脚（全端口 B 单共享端口宏——
     # 同口约束照 ttp224；页面硬件 SPI1 默认脚不照抄）
     "NRF24L01_PORT": "GPIO_B",
@@ -476,6 +562,19 @@ STM32_MACRO_VALUES = {
     # 不采用 = MOTOR_B_DIR；单总线件不叠软 I2C 总线 PA6/PA7）
     "DS18B20_GPIO": "GPIO_B",
     "DS18B20_PIN": "Pin_1",
+    # wiki-stm32-batch4/05：vl53l0x ToF 激光测距（B 类新 slug——仅 stm32 条目；
+    # 软 I2C 2 脚共总线 PA6/PA7——⚠地址 0x52(8bit)/0x29(7bit) 与 tcs34725
+    # 同址互替不可同挂（tcs34725 同总线同址）；与 motor 电机方向默认重叠
+    # （ToF 测距与「带电机方向的小车运动控制」不同框）；XSHUT=PB0（叠 hx711
+    # DT/ec11 SW/rc522 CS——ToF 与称重/旋钮/读卡不同框；页面默认 PB7 弃用 =
+    # human_ir/灰度组常备；页面默认 SDA=PB8/SCL=PB9（=OLED 段）不照抄；
+    # 电平口径 OUT_OD/IU——页面 Out_PP 换算 + 共总线推挽互斥）
+    "VL53L0X_SCL_GPIO": "GPIO_A",
+    "VL53L0X_SCL_PIN": "Pin_6",
+    "VL53L0X_SDA_GPIO": "GPIO_A",
+    "VL53L0X_SDA_PIN": "Pin_7",
+    "VL53L0X_XSHUT_GPIO": "GPIO_B",
+    "VL53L0X_XSHUT_PIN": "Pin_0",
     # wiki-stm32-batch5/01-08：ADC 薄封装群一 8 件（mq2/mq135/mq5/
     # photoresistance/rain/s12sd/soil/gp2y1014au——AO 模拟量 + 百分比/档位
     # 换算同构件，页面 ADC 序列收敛 ml_adc）——默认 AO 全 = ADC_Channel_5 =
