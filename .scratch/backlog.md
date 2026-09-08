@@ -32,3 +32,39 @@
 - **发现 3（判断项，近硬）：host 残留跨 tab DOM 渲染** —— ✅ 落地（工单 23）：`renderNewPlatformOptions` 导出归 ui/master.js（L676），index.html 启动 IIFE 只留调用（L2635）；IIFE 内其余渲染均已委托簇函数。
 - **发现 4（Duplicated Code，判断项）** —— ✅ 落地（工单 24/25）：generate-steps.js 两按钮重复监听器提 `bindClearDraftButton(btnId)` 共享；generate-mainc.js 滚动三同步提 `syncPanels(ta)`（syncMainCHighlight 与 scroll 监听器共用）。
 - **发现 5（Mysterious Name，弱，判断项）** —— ✅ 落地（工单 24）：`genOverviewWarn(n)` → `genOverviewWarn(stepNo)`；`overviewPlanNow(doneArr)` 经核语义尚可未改。
+
+## 5. 模块库全链路审计（2026-09-08，93 模块 / 86 stm32 条 / 84 mspm0 条）—— 🔶 部分落地
+
+用户问「与模块库环环相扣的每一步有没有出错风险」。审计脚本在 `.scratch/library-audit/`（`audit.py` 全库不变量 / `sim_preselect.py` 真实题面预筛模拟 / `cut_analysis.py` 相关但被砍统计 / `reachability.py` / `gate_sweep.py` 逐模块门禁），全部只读可复跑。
+
+**结论：机械面干净，问题在「库长大了、推荐链路的视野没跟上」。** 干净侧证据：全量 pytest 3838 passed；93 模块 manifest 全可加载；依赖无悬空无成环；平台声明文件全在；无孤儿源文件；默认脚全部在板定义内且能力匹配；373 个 pin_config.h 宏双向对齐零缺失；62 个 syscfg 实例与 INSTANCE_CONSUMERS 一致；**170 个「模块×平台」组合逐一跑生成门禁全过**（含依赖闭包）。
+
+### 5.1 🔴 P0：推荐候选预筛把库砍掉一半，失败静默 —— 🔶 流程中断已修，可见性待修
+
+- **已落地（2026-09-08，工单 preselect-recall-visibility/01-02，提交 8065fbfd）**：判据取源归位——库内合法性改取平台全量（`TopicContext.library_summaries` / `PreselectResult.library_summaries` / `known_summaries` 可选入参），模型推荐「子集外但库内」的模块不再被判成幻觉中断推荐；多实例能力清单与默认实例兜底同源；库指纹取源改全量；覆盖率守卫落盘（`tests/test_preselect_coverage.py`，6 组真实题面 × 平台，当前 xfail strict 记录缺口）。
+- **仍待修（下一批）**：可见性本身没变（2024H/stm32 仍只见 34/86，motor 排名 71）。**复测探针 `.scratch/library-audit/probe_guard_cases.py`**；新发现——摘要行均值 1006B，其中 description 占 72.6%、套件段占 23.5%，瘦身到「首句 + 依赖 + 多实例标记」后全库 ≈ 13.3KB（预算 40000B 可全量装载），可能比调评分更直接地解决截断。
+- **现状**：`budget.py:204` `MODULE_SUMMARY_BYTES=40000`，摘要段实际 stm32 86.7KB / mspm0 78.8KB（197%–217%）。`webapp.py` 用预筛子集替换清单行（判据已不再受影响）。
+- **实测**：20 份真实赛题每次只送进 32–42 条 / 84–86 条；12 个模块（stm32 侧）20 份题面里一次都没进过提示词。
+- **最刺眼一例（2024H 智能小车）**：可见 34 条全是传感器/显示件（ags10/aht10/at24c02/bh1750/bmp180/dht11/ds18b20/flame/gp2y1014au/mq2-9/ms1100/photoresistance…），**motor/pid/servo/xunji/step_motor/key/led 一条都看不见**。模型若凭常识写出 `motor`，`selection.py:966` 抛「模型推荐了库中不存在的模块：motor」，且 `kind=client` **不重试**（`llm.py` 1920-1930）——正确召回被当幻觉硬失败。
+- **根因三叠加**：① `reference_library.py:388` `PERIPHERAL_TERMS` 仅 57 词，无「小车/电机/循迹」，2024H（"小车"出现 33 次）只激活「摄像头」；② `selection.py:479` 词表**行级兜底**给命中行全部 `lib_modules` 各 +1——感知传感器行 49 方案 → 40+ 传感器白得 1 分；③ 结果 46 条并列 1 分、40 条 0 分，预算只装 34 条，tie-break 是 slug 字典序。
+- **守卫缺口**：`tests/test_llm.py:5554` 只断言字节数不超限，不守覆盖。库每加一模块可见比例再降，测试永远绿。
+- **缓解（不解决）**：生成页有 `module-search` + 模块网格，用户可手动搜全库补模块；AI 这一步是主路径，小车题上基本失效。
+- **建议方向**：能力组分桶保底名额（运动控制/视觉/无线/显示/环境各留 N 条）；tie-break 改「词表挂接 > 术语命中 > 常备模块」；`PERIPHERAL_TERMS` 补中文功能词（小车/电机/循迹/编码器/舵机/称重…）；或摘要段改两级名单（命中 + 常备）。
+
+### 5.2 🟠 P1：beep 模块声明 0 引脚，代码却直接驱动 BUZZER_GPIO/PIN —— ✅ 已落地（工单 beep-pin-declaration/01，2026-09-08，提交 96e739d9）
+
+`library/modules/beep/code/beep_stm32.c:10` 用 `BUZZER_GPIO/BUZZER_PIN`（宏归属 `config` 模块，beep 未声明 pins 也未声明依赖）。后果：绑定界面没有蜂鸣器脚、默认布局白名单看不见它、门禁不报冲突——**实测 `beep` + `jq8900` 同吃 PA15 门禁静默通过**。全库扫下来唯一一处（`debug_uart` 也驱动 LED/BUZZER，但声明了 `config` 依赖，链是通的）。修法：补 `pins` 一条（`gpio_out`，`macros=["BUZZER_GPIO","BUZZER_PIN"]`，默认 PA15）+ 加结构测试「模块 .c 用到的 pin_config.h 引脚宏必须被本模块或其依赖声明」。
+
+### 5.3 🟠 P1：20 个模块无选购方案挂接（wordlist lib_modules）
+
+后果：买件指引不标「库内已有」；预筛少一条 lib_boost 加分路径。真正该补：`servo`（舵机）、`step_motor`、`oled`、`ml_mpu6050`、`led`/`beep`/`led_beep`（声光提示器件行 0 方案）、`key`。其余（adc/delay/filter/uart/config/debug_uart/digit_uart/imu_uart/zigbee_*）为内部件可不挂。
+
+### 5.4 🟡 P2 三条
+
+- **硬件身份字段 46/170 平台条目为空**（核心件为主：motor/pid/servo/oled/led/key…）——判据②要求新录入必填，老件是历史遗留；需决定补齐还是明确豁免。
+- **骨架「模块→参考例程」映射只覆盖 18/93**（`reference_library.py:406` `MODULE_PERIPHERAL_TERMS`）——新批次模块自动关联基本失效。
+- **批次快检脚本没进 CI**：`.scratch/wiki-*/sweep_*.py` 钉的不变量（如「用 delay_* 必依赖 delay」）只在批次当时跑过；建议收敛成 `tests/test_library_invariants.py`。
+
+### 5.5 已知遗留（CONTEXT 自记，本次复核仍在）
+
+mq4-9 描述措辞未统一；77 条目全部未上板真机验证；oled 词表方案级缺口；A 类 3 页 mspm0-only 例外。
