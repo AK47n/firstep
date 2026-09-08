@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -249,3 +250,113 @@ def test_beep_declaration_reaches_pin_binding_payload():
         ("BUZZER_OUT", "gpio_out", "PA15")
     ]
     assert pins == entry.pins
+
+
+# ---------------------------------------------------------------------------
+# 批次不变量收敛（工单 library-hookup-and-invariants/02）：21 个
+# `.scratch/wiki-*/sweep_*.py` 里的批次专属快检脚本只在当批次跑过一次，
+# 之后无人守。下面这些「对全库永远成立」的检查搬进 pytest，每跑一次测试就
+# 检查一次；批次快照值（某批次某模块的 files/pins 期望）不进测试——历史
+# 快照会随库演进失效，进测试只会变成维护负担。
+# 判据同源：与只读审计脚本 `.scratch/library-audit/audit.py` 一致，脚本继续
+# 作为人工复跑工具保留。
+# ---------------------------------------------------------------------------
+
+
+def test_module_slug_matches_directory_name():
+    """slug 与目录名一致：库扫描按目录枚举、引用按 slug，两者错位会让
+    「按 slug 找模块」的调用方（选择 / 绑定 / 生成）静默找不到。"""
+    problems = [
+        manifest.slug
+        for manifest in MANIFESTS.values()
+        if not (LIBRARY_MODULES / manifest.slug / "manifest.json").is_file()
+    ]
+    assert not problems, f"slug 与目录名不一致：{'、'.join(sorted(problems))}"
+
+
+def test_declared_platform_files_exist():
+    """平台条目声明的每个文件真实存在（空 files = 内嵌母版形态，跳过）：
+    声明了却不在盘上 = 生成时复制失败，属硬故障。"""
+    problems: list[str] = []
+    for slug, manifest in sorted(MANIFESTS.items()):
+        for platform, entry in sorted(manifest.platforms.items()):
+            for rel in entry.files:
+                if not (LIBRARY_MODULES / slug / rel).is_file():
+                    problems.append(f"{slug}/{platform} 声明了不存在的文件：{rel}")
+    assert not problems, "平台条目声明了不存在的文件：\n- " + "\n- ".join(problems)
+
+
+def test_platform_entry_files_have_no_duplicates():
+    """同一平台条目内文件不重复：重复声明会让生成时同一文件复制两次
+    （覆盖无害但暴露 manifest 手改失误）。"""
+    problems = [
+        f"{slug}/{platform}"
+        for slug, manifest in sorted(MANIFESTS.items())
+        for platform, entry in sorted(manifest.platforms.items())
+        if len(set(entry.files)) != len(entry.files)
+    ]
+    assert not problems, f"平台条目文件重复：{'、'.join(problems)}"
+
+
+def test_module_dependencies_resolve_inside_library():
+    """依赖不悬空：声明的依赖必须命中库内模块（拼错 slug = 生成时依赖展开
+    静默少带模块，工程编不过）。"""
+    problems = [
+        f"{slug} → {dep}"
+        for slug, manifest in sorted(MANIFESTS.items())
+        for dep in manifest.dependencies
+        if dep not in MANIFESTS
+    ]
+    assert not problems, f"依赖指向库外模块：{'、'.join(problems)}"
+
+
+def test_module_dependency_graph_is_acyclic():
+    """依赖图无环：环会让依赖展开（生成 / 绑定 / 门禁共用）无限递归。"""
+    seen: set[str] = set()
+    stack: list[str] = []
+    cycles: list[str] = []
+
+    def walk(slug: str) -> None:
+        if slug in stack:
+            cycles.append(" → ".join([*stack, slug]))
+            return
+        if slug in seen:
+            return
+        stack.append(slug)
+        for dep in MANIFESTS[slug].dependencies:
+            if dep in MANIFESTS:
+                walk(dep)
+        stack.pop()
+        seen.add(slug)
+
+    for slug in sorted(MANIFESTS):
+        walk(slug)
+    assert not cycles, f"依赖成环：{cycles}"
+
+
+def test_wordlist_lib_modules_reference_existing_modules():
+    """词表 `lib_modules` 引用都在库内（买件指引的「库内已有」标注与预筛
+    挂接加分都按 slug 取模块，引用失效 = 标注指向空气）。"""
+    wordlist = json.loads(
+        (REPO_ROOT / "src" / "contest_generator" / "wordlist.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    problems = [
+        f"{group['category']}/{solution['name']} → {slug}"
+        for group in wordlist
+        for solution in group.get("solutions", [])
+        for slug in solution.get("lib_modules", [])
+        if slug not in MANIFESTS
+    ]
+    assert not problems, f"词表引用了库中不存在的模块：{'、'.join(problems)}"
+
+
+def test_modules_have_descriptions():
+    """模块必须有简介：摘要行（喂给 AI 的模块清单）以简介为主干，空的
+    简介等于模型看不见这个模块的用途。"""
+    problems = [
+        slug for slug, manifest in sorted(MANIFESTS.items())
+        if not manifest.description.strip()
+    ]
+    assert not problems, f"模块缺简介：{'、'.join(problems)}"

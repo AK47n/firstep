@@ -251,3 +251,49 @@ def test_default_wordlist_sensor_group_has_ir_beam_lib():
     assert ir.suitable == "门洞/出入口遮挡检测、物体经过计数、防夹、载物在位"
     assert ir.lib_modules == ("ir_beam",)
     assert ir.recommended is False
+
+
+# 器件 vs 内部件（工单 library-hookup-and-invariants/01）：用户会为它单独采购的
+# 器件必须挂接（买件指引标「库内已有」+ 预筛 lib_boost 加分）；库内以头文件/
+# 工具形态存在的内部件不挂（挂了只会让买件清单变噪）。
+_DEVICE_SLUGS = (
+    "servo", "step_motor", "oled", "ml_mpu6050",
+    "led", "beep", "led_beep", "key",
+)
+_INTERNAL_SLUGS = (
+    "adc", "delay", "filter", "uart", "config", "debug_uart", "digit_uart",
+    "imu_uart", "zigbee_uart", "zigbee_uart_key", "huidu", "ntb_time",
+)
+
+
+def _hooked_slugs() -> set[str]:
+    from contest_generator.wordlist import DEFAULT_WORDLIST
+
+    return {
+        slug
+        for group in DEFAULT_WORDLIST
+        for solution in group.solutions
+        for slug in solution.lib_modules
+    }
+
+
+def test_default_wordlist_device_modules_are_hooked():
+    """器件类模块必须被某个选购方案挂接（买件指引能标「库内已有」）。
+
+    回归口径（工单 library-hookup-and-invariants/01）：这 8 个 slug 此前一条
+    方案都没有——用户买舵机/步进电机/OLED/MPU6050/声光件/按键时，指引不说
+    库里已有现成驱动，AI 推荐也少一条词表挂接加分路径。"""
+    hooked = _hooked_slugs()
+    missing = [slug for slug in _DEVICE_SLUGS if slug not in hooked]
+    assert not missing, f"器件类模块未被任何选购方案挂接：{'、'.join(missing)}"
+
+
+def test_default_wordlist_internal_modules_are_not_hooked():
+    """内部件不被挂接（判据的反向守卫）：它们不是用户单独采购的器件。
+
+    adc/delay/filter/uart/config/各 uart 是库内以头文件或工具形态存在的件；
+    huidu/ntb_time 同理（灰度读取与时间戳）。若哪天被顺手挂上，买件清单会
+    混入不需要采购的条目。"""
+    hooked = _hooked_slugs()
+    offenders = [slug for slug in _INTERNAL_SLUGS if slug in hooked]
+    assert not offenders, f"内部件被误挂接：{'、'.join(offenders)}"
