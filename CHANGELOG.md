@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=1e175da53b524bd5d83d6742d1921fa6cf884fd8 -->
+<!-- changelog-auto: last-commit=a05f9e05ee18d66098bc836fcbeb944cac1f65f1 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -7,6 +7,7 @@
 ## 2026-09-08
 - 12:10 工单：wiki-stm32-batch4/05 vl53l0x ToF 激光测距（B 类新 slug——仅 stm32 条目）
 - 12:11 工单：wiki-stm32-batch10/01-07 显示件组 7 件（stm32 线——互替同脚组/字库复用/18bit 打包/SH1106 首次落码）
+- 12:11 收尾：wiki-stm32-batch10 批次 10 收官——CONTEXT 平台行补录批次 10 + 批 4/05 块（显示族互替同脚组/ST 官方 API 最小切片 75 函数/18bit 打包/0x29 同址互替/默认脚表/范围外）+ 收尾报告（8 件全量）/sweep_7_modules.py 快检 + code-review 两轴（规格轴 8 件全兑现——批 4/05 工单闭环补齐；标准轴 7 条低项全部处置）；全量 pytest 3832 passed（三处红证修复：字库副本头基名唯一 + static 化、B 类 deps [] 死依赖、vl53l0x_core 原页 URL 补注入）；UV4 7/7 0 error/0 warning。
 
 ## 2026-09-07
 - 12:21 模块：us016 超声波测距传感器 stm32 平台条目（wiki-stm32-batch7/01：ADC 薄封装件——页面 ADC 序列收敛 ml_adc（adc_init(ADC_1, US016_AO_CH) + 5 次 adc_get 快平均）+ 默认 AO=ADC_Channel_5（PA5 页面原脚即共读点——ADC 共享组并入 batch5 PA5 共读组，flame+8+7+1=17 ADC 角色同脚，同一物理脚只能接一件器件——多件同测需外部分路器/分时切换）+ **与 ir_distance 互替件同脚**（互替同脚先例——二选一接入无需另消解）+ 双量程宏 US016_RANGE_1M=0（0=3m 档 0.75f/1=1m 档 0.25f——页面正文 3096 与代码 3072 不一、按代码 0.75，mspm0 批 2 同款）+ Vref/Vcc 修正宏（3.3/3.3）+ 出参 cm 对齐 mspm0（us016_read_distance_cm 同名 L30）+ SAMPLES 50×10ms≈500ms→5 快平均 + Range 量程脚/DO 未用不声明 + UV4 矩阵 0 error/0 module warning → verified=true；test_pins 宏表 +US016_AO_CH、test_default_layout PA5 白名单 +us016.US016_AO；description 双平台化（批 6 遗留措辞统一顺带整改本件））
