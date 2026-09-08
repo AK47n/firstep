@@ -1,0 +1,16 @@
+{
+  "id": "气压传感器器件手册合集-气压",
+  "title": "气压传感器器件手册合集（气压）",
+  "type": "器件手册",
+  "description": "气压/海拔器件移植手册合集：BMP180、MS5611——I2C 读取与温度补偿，骨架阶段选中气压类模块时的器件级例程参考。",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "any",
+  "topic_type": "",
+  "files": [
+    "bmp180.md",
+    "ms5611.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
