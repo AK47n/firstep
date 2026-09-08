@@ -49,8 +49,8 @@
       "verified": false,
       "hardware_bound": true,
       "notes": "主控侧无自有 C 文件（files 空）：串口解析 + 引脚由依赖 coord_detect 提供（stm32 = USART1/PA9/PA10，模块 coord_detect_stm32.c）。副产物 main.py = K230 侧 CanMV 脚本（K230 UART2、11(TX)/12(RX) 脚与主控 RX/TX 交叉，115200），CSV 帧契约与主控解析同源。未上板真机验证。kit/source_url 由人补填。",
-      "kit": "",
-      "source_url": "",
+      "kit": "立创·庐山派 K230-CanMV 视觉开发板（K230 副控板；本仓资料 sources/materials/k230资料/立创·庐山派K230-CanMV开发板原理图.pdf）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/lushan-pi-k230/",
       "pins": []
     },
     "mspm0": {
@@ -58,8 +58,8 @@
       "verified": false,
       "hardware_bound": true,
       "notes": "主控侧无自有 C 文件（files 空）：串口解析 + 引脚由依赖 coord_detect 提供（mspm0 = 母版 syscfg DIGIT_UART 实例 UART1/PA8/PA9，模块 coord_detect.c）。副产物 main.py 同 stm32 条目（对端可配，脚本与主控平台无关）。未上板真机验证。kit/source_url 由人补填。",
-      "kit": "",
-      "source_url": "",
+      "kit": "立创·庐山派 K230-CanMV 视觉开发板（K230 副控板；本仓资料 sources/materials/k230资料/立创·庐山派K230-CanMV开发板原理图.pdf）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/lushan-pi-k230/",
       "pins": []
     }
   }

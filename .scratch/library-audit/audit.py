@@ -137,20 +137,41 @@ def check_orphan_files(manifests) -> None:
 
 
 def check_identity_fields(manifests) -> None:
-    """硬件身份字段（kit / source_url）覆盖率——判据②。"""
+    """硬件身份字段（kit / source_url）覆盖率——判据②。
+
+    判据单源 = `library.MODULE_KIND`（工单 identity-fields/02）：**器件**必须有
+    kit + source_url，**内部件 / 协议切片**不采购实物、身份字段必须为空（不计缺口）。
+    与 tests/test_library_invariants.py 的守卫同源取判据，两边不会各算各的。
+    """
+    from contest_generator.library import ModuleKind, module_kind
+
     missing_kit: list[str] = []
     missing_url: list[str] = []
     bad_url: list[str] = []
+    exempt_entries = 0
     for m in manifests:
         for platform, entry in m.platforms.items():
-            if not entry.kit:
+            kit = entry.kit.strip()
+            source_url = entry.source_url.strip()
+            if module_kind(m.slug) != ModuleKind.DEVICE:
+                exempt_entries += 1
+                if kit or source_url:
+                    blocker(
+                        f"[身份] {m.slug}/{platform} 是内部件/协议切片，"
+                        f"不该有身份字段（kit={entry.kit!r} source_url={entry.source_url!r}）"
+                    )
+                continue
+            if not kit:
                 missing_kit.append(f"{m.slug}/{platform}")
-            if not entry.source_url:
+            if not source_url:
                 missing_url.append(f"{m.slug}/{platform}")
-            elif not entry.source_url.startswith("http"):
+            elif not source_url.startswith("http"):
                 bad_url.append(f"{m.slug}/{platform}={entry.source_url!r}")
     total = sum(len(m.platforms) for m in manifests)
-    note(f"[身份] 平台条目共 {total}：缺 kit {len(missing_kit)}、缺 source_url {len(missing_url)}")
+    note(
+        f"[身份] 平台条目共 {total}（内部件/协议切片豁免 {exempt_entries}）："
+        f"真器件缺 kit {len(missing_kit)}、缺 source_url {len(missing_url)}"
+    )
     if missing_kit:
         risk(f"[身份] 缺 kit 的平台条目：{'、'.join(sorted(missing_kit)[:40])}")
     if missing_url:

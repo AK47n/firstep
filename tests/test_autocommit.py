@@ -442,6 +442,12 @@ _WRITE_FUNCTION_REGISTRY: dict[str, dict[str, tuple[str, str]]] = {
         # 工单 01（模块普适化）新增的读函数：判据④机械词表扫描（纯文本，不落盘），
         # 结构测试与补录流程共用
         "find_topic_word_hits": ("read", ""),
+        # 工单 identity-fields/01（器件判据单源）新增的读函数：纯查表 / 判据，
+        # 不落盘（词表守卫、参考豁免、身份字段守卫共用）
+        "module_kind": ("read", ""),
+        "requires_identity": ("read", ""),
+        "slugs_of_kind": ("read", ""),
+        "device_slugs": ("read", ""),
     },
     "reference_library": {
         "validate_topic_anchor": ("read", ""),

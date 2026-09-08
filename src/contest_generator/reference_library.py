@@ -506,6 +506,12 @@ MODULE_PERIPHERAL_TERMS: dict[str, tuple[str, ...]] = {
 # 故「内部件 / 协议切片 / 暂无器件条目」的模块豁免；器件模块（工单 04/05 补
 # 条目后）不豁免，靠 MODULE_PERIPHERAL_TERMS 映射。两者不得同时出现
 # （tests/test_skeleton_mapping_coverage.py 断言）。
+# **与 library.MODULE_KIND 的关系**（工单 identity-fields/01）：模块是不是器件
+# 的判据单源在 library.MODULE_KIND（内部件 / 协议切片 = 非器件）；本表是**参考
+# 关联域**的判据，比器件判据多一层「参考库有没有对应条目」。故 INTERNAL /
+# PROTOCOL 必然在此表内（tests/test_library_invariants.py 断言），而 DEVICE 也
+# 可能因「参考库暂无条目」临时在表内（ec01g / esp01s / ir_beam / neo_6m /
+# tp_xpt2046）——两种豁免不同域，允许并存。
 MODULE_REFERENCE_EXEMPT: dict[str, str] = {
     # 内部件：库内以头文件 / 工具形态存在，不是用户会单独采购的器件
     "config": "内部件（板级配置宏）",
@@ -515,17 +521,20 @@ MODULE_REFERENCE_EXEMPT: dict[str, str] = {
     # 协议 / 帧解析切片：与上位器件绑定，参考库无对应条目
     "coord_detect": "协议切片（K230 帧解析）",
     "open_mv4": "协议切片（OpenMV4 帧解析）",
-    "zigbee_link": "协议切片（Zigbee 透传链路）",
     "ir_remote": "协议切片（红外 NEC 接收时序）",
     "ir_remote_tx": "协议切片（红外编码发射时序）",
-    # 器件类但参考库暂无对应条目：这 5 件参考库既无器件手册也无例程，保留豁免
+    # 器件类但参考库暂无对应条目：这 6 件参考库既无器件手册也无例程，保留豁免
     # （若日后补录条目，则从此表移除并加映射）
     "ec01g": "暂无器件条目（NB-IoT+GPS 透传）",
     "esp01s": "暂无器件条目（WiFi 透传）",
-    "huidu": "同传感器切片（灰度读取，关联归 xunji / pid）",
+    "huidu": "内部件（同传感器切片：灰度读取，关联归 xunji / pid）",
     "ir_beam": "暂无器件条目（红外对射）",
     "neo_6m": "暂无器件条目（GPS 定位）",
     "tp_xpt2046": "暂无器件条目（电阻触摸控制器）",
+    # zigbee_link 是器件（DL-20 模块，词表已挂接），豁免理由是「参考库暂无条目」；
+    # 真正的协议切片是 zigbee_uart（接收帧解析）/ zigbee_uart_key（发射组帧）
+    # ——identity-fields/01 判据归位修正，原措辞「协议切片」已过期
+    "zigbee_link": "暂无器件条目（Zigbee DL-20 串口透传）",
 }
 
 # 同义词组（单源）：组内任一词命中（题面侧）→ 整组激活 → 条目侧组内任一

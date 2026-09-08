@@ -1,11 +1,23 @@
 """立创 wiki 素材来源标注结构测试（lckfb-attribution/01）。
 
-遍历真实模块库：凡平台条目 source_url 命中 wiki 判据（manifest.is_wiki_source_url
-单源）→ 该条目每个 .c/.h 文件顶部必须含**该平台条目自己的**原页 URL（立创版权
-要求第三条——复制 / 传播 / 修改 / 公开展示须标明来源与链接的源码面兜底），
-逐条目独立断言、不做跨条目互证；非 wiki 模块不要求。
-注入纯函数（source_notes.inject_source_note）幂等性单测。
+遍历真实模块库：凡**源码头带来源标注块**（`source_notes` 注入的 `/* 来源：…`，
+判据 = 代码事实）的 .c/.h → 该文件的平台条目 `source_url` 必须命中 wiki 判据
+（`manifest.is_wiki_source_url` 单源）且**头部窗口含该条目自己的**原页 URL
+（立创版权要求第三条——复制 / 传播 / 修改 / 公开展示须标明来源与链接的源码面
+兜底），逐条目独立断言、不做跨条目互证；非 wiki 派生模块不要求。
 
+**为什么不按 source_url 反推**（工单 identity-fields/03 修正）：`source_url` 是
+硬件身份字段（购买 / 手册页），它**也能**标注代码来源，但两者不等价——本轮把
+OLED / motor / xunji / pid / servo / k230 的硬件出处补成 wiki 手册页后，若仍按
+`is_wiki_source_url(source_url)` 反推「wiki 派生」，这些**原生移植**的驱动会被
+误要求补来源注释（`motor.c` 来自 2021F 原工程、`oled.c` 内嵌母版 ml_oled）。
+判据改取代码事实（头部来源块）后：**有块 → 条目的 source_url 必须是该块所属的
+wiki 页**（块是「本文件改写自该页」的声明，条目改指别处就是标注与身份脱钩，会红）；
+**没有块 → 不要求**（原生移植代码不受 wiki 版权条款约束）。
+两个方向都守：有块必须有 wiki source_url；条目 source_url 是 wiki 页且源码头部
+引用了该页 → 必须有块。
+
+注入纯函数（source_notes.inject_source_note）幂等性单测。
 不做的事：不断言注入注释块的确切文案（防脆——文案迭代时只断言 URL 存在 +
 「来源」字样）；不遍历 sources/materials 手册（资料库可能轻量 clone 缺失，
 非本库领域；手册头部「来源：」行由 wiki_md.py 抓取期写入，另有抓取测试守）。
@@ -13,6 +25,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -32,42 +45,114 @@ LIBRARY_MODULES = Path(__file__).resolve().parents[1] / "library" / "modules"
 
 WIKI_URL = "https://wiki.lckfb.com/zh-hans/dmx/module/sensor/aht10-temp-humi-sensor.html"
 
+# 来源标注块的机械判据（头部窗口内出现 `来源：` 注释）——与注入文案解耦：
+# 文案改字不影响本判据，只要还是「来源：」注释块。
+SOURCE_NOTE_MARKER = "来源："
+_URL_RE = re.compile(r"https?://\S+")
+
 # 顶部窗口（判定窗，单源 = source_notes.HEAD_WINDOW）：注入块在文件头，窗口取
 # 600 字符足够宽松，防「只标在文件尾部 / notes 里」的伪合规；脚本幂等判据与
 # 本测试共用同一常量（c2 判例：漂移 = 脚本报 0 变更 / 测试红灯）。
 
 
-def _iter_wiki_c_entries():
-    """(模块 slug, 相对文件路径, 文件对象, source_url) 生成器——wiki 条目下的
-    .c/.h，source_url = **该平台条目自己的** URL（逐条目断言，不聚合跨条目）。"""
+def _head(text: str) -> str:
+    return text[:HEAD_WINDOW]
+
+
+def _source_note_files():
+    """(slug, 平台, 相对文件路径, 文件对象, 头部窗口文本) —— 头部带来源标注块的
+    .c/.h（判据 = 代码事实，不按 source_url 反推）。"""
+    for manifest_path in sorted(LIBRARY_MODULES.glob("*/manifest.json")):
+        manifest = ModuleManifest.load(manifest_path.parent)
+        for platform, entry in manifest.platforms.items():
+            for rel in entry.files:
+                if not rel.endswith((".c", ".h")):
+                    continue
+                path = manifest_path.parent / rel
+                if not path.is_file():
+                    yield manifest.slug, platform, rel, path, ""
+                    continue
+                head = _head(path.read_text(encoding="utf-8", errors="replace"))
+                if SOURCE_NOTE_MARKER in head:
+                    yield manifest.slug, platform, rel, path, head
+
+
+def test_wiki_derived_module_sources_carry_page_url():
+    """源码头带来源标注块的文件：其平台条目 `source_url` 必须是 wiki 页（立创
+    版权要求第三条的源码面兜底）。
+
+    逐条目独立断言（不跨条目互证）。「块里写的页 = 条目 source_url 指的页」由
+    `test_single_url_source_note_matches_entry_source_url` 单独守——本轮实测存在
+    合法不等的两类：一个文件改写多页（`oled_extra_stm32.c`）、一条目对应多平台
+    原页（`servo.h` 写 dkx 页、mspm0 条目指 dmx 页），故此处只判「是 wiki 页」。
+    """
+    problems: list[str] = []
+    checked = 0
+    for slug, platform, rel, _path, head in _source_note_files():
+        manifest = ModuleManifest.load(LIBRARY_MODULES / slug)
+        entry = manifest.platforms[platform]
+        checked += 1
+        if not is_wiki_source_url(entry.source_url):
+            problems.append(
+                f"{slug}/{platform}/{rel} 源码标了来源但条目 source_url 不是 wiki 页："
+                f"{entry.source_url!r}"
+            )
+        if not any(is_wiki_source_url(url) for url in _URL_RE.findall(head)):
+            problems.append(f"{slug}/{platform}/{rel} 来源块里没有 wiki 原页 URL")
+    assert checked >= 100, f"带来源标注的 .c/.h 数量异常：{checked}（预期 100+，判据或库漂移）"
+    assert not problems, (
+        "wiki 派生模块源码来源标注与条目 source_url 不一致：\n- " + "\n- ".join(problems)
+    )
+
+
+def test_wiki_source_url_entries_carry_source_note():
+    """反向：条目 source_url 是 wiki 页且源码确实引用了该页（头部出现该 URL）
+    → 头部必须有来源标注块——防「URL 只在正文深处出现、来源声明缺失」。"""
+    problems: list[str] = []
     for manifest_path in sorted(LIBRARY_MODULES.glob("*/manifest.json")):
         manifest = ModuleManifest.load(manifest_path.parent)
         for platform, entry in manifest.platforms.items():
             if not is_wiki_source_url(entry.source_url):
                 continue
             for rel in entry.files:
-                if rel.endswith((".c", ".h")):
-                    yield manifest.slug, rel, manifest_path.parent / rel, entry.source_url
+                if not rel.endswith((".c", ".h")):
+                    continue
+                path = manifest_path.parent / rel
+                if not path.is_file():
+                    continue
+                head = _head(path.read_text(encoding="utf-8", errors="replace"))
+                if entry.source_url in head and SOURCE_NOTE_MARKER not in head:
+                    problems.append(f"{manifest.slug}/{platform}/{rel}")
+    assert not problems, (
+        "源码头部引用了 wiki 原页 URL 但没有来源标注块：\n- " + "\n- ".join(problems)
+    )
 
 
-def test_wiki_derived_module_sources_carry_page_url():
-    """wiki 派生模块（真实库）每个 .c/.h 顶部 600 字符内必须含**该条目**原页 URL。
+def _page_path(url: str) -> str:
+    """wiki URL 的页面路径（去掉 `/zh-hans/<board>` 前缀）——同一页的两平台版本
+    只差板前缀，共享源码文件合法地引用另一平台版本（`servo.h`）。"""
+    match = re.match(r"https://wiki\.lckfb\.com/zh-hans/[^/]+/(.*)$", url)
+    return match.group(1) if match else url
 
-    断言按条目逐文件独立检查（不用 any() 跨 URL 互证——多 wiki 平台条目场景
-    下互证会让漏标条目被同模块另一 URL 蒙混过关）。
-    """
-    missing = []
-    checked = 0
-    for slug, rel, f, url in _iter_wiki_c_entries():
-        if not f.is_file():
-            missing.append(f"{slug}/{rel}（文件不存在）")
-            continue
-        checked += 1
-        text = f.read_text(encoding="utf-8", errors="replace")
-        if url not in text[:HEAD_WINDOW]:
-            missing.append(f"{slug}/{rel}")
-    assert checked >= 100, f"wiki 模块 .c/.h 数量异常：{checked}（预期 100+，判据或库漂移）"
-    assert not missing, f"wiki 派生模块源码缺原页 URL：{missing}"
+
+def test_single_url_source_note_matches_entry_source_url():
+    """来源块只写一个 URL 时，该 URL 必须与条目 source_url 指同一页（写错页 /
+    引用旧页即红；同页的另一平台版本合法）。
+
+    只约束单 URL 块：多 URL 块（`oled_extra_stm32.c` 同时改写两页）合法地不等，
+    强行相等会让测试比事实更严（假红）。"""
+    problems: list[str] = []
+    for slug, platform, rel, _path, head in _source_note_files():
+        entry = ModuleManifest.load(LIBRARY_MODULES / slug).platforms[platform]
+        wiki_urls = [url for url in _URL_RE.findall(head) if is_wiki_source_url(url)]
+        if len(wiki_urls) == 1 and _page_path(wiki_urls[0]) != _page_path(
+            entry.source_url
+        ):
+            problems.append(
+                f"{slug}/{platform}/{rel} 来源块 URL {wiki_urls[0]} 与条目 source_url "
+                f"{entry.source_url!r} 不是同一页"
+            )
+    assert not problems, "来源标注块 URL 与条目 source_url 不一致：\n- " + "\n- ".join(problems)
 
 
 def test_inject_source_note_idempotent():

@@ -125,3 +125,24 @@ def test_mapping_slugs_exist_in_library():
     slugs = _all_slugs()
     problems = [slug for slug in MODULE_PERIPHERAL_TERMS if slug not in slugs]
     assert not problems, f"映射引用了库中不存在的模块：{'、'.join(sorted(problems))}"
+
+
+def test_reference_exempt_reason_kind_matches_module_kind():
+    """豁免理由的类别与器件判据单源一致（工单 identity-fields/01）。
+
+    参考关联是另一个判据（参考库有没有条目），但「这个模块是内部件还是协议切片」
+    的判据单源在 `library.MODULE_KIND`——两处对同一 slug 的类别表述必须一致
+    （豁免理由以「内部件」/「协议切片」开头），措辞各自漂移时这里红。"""
+    from contest_generator.library import MODULE_KIND, ModuleKind
+
+    prefix = {ModuleKind.INTERNAL: "内部件", ModuleKind.PROTOCOL: "协议切片"}
+    problems = [
+        f"{slug}（豁免理由 {MODULE_REFERENCE_EXEMPT[slug]!r} 应以「{prefix[kind]}」开头）"
+        for slug, kind in sorted(MODULE_KIND.items())
+        if kind in prefix
+        and slug in MODULE_REFERENCE_EXEMPT
+        and not MODULE_REFERENCE_EXEMPT[slug].startswith(prefix[kind])
+    ]
+    assert not problems, (
+        "参考豁免理由的类别与器件判据单源不一致：\n- " + "\n- ".join(problems)
+    )
