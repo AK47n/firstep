@@ -1,0 +1,17 @@
+{
+  "id": "测距传感器器件手册合集-测距",
+  "title": "测距传感器器件手册合集（测距）",
+  "type": "器件手册",
+  "description": "测距器件移植手册合集：HC-SR04、US-016 超声波、红外测距——触发/回波与模拟量换算，骨架阶段选中测距类模块时的器件级例程参考。",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "any",
+  "topic_type": "",
+  "files": [
+    "sr04.md",
+    "us016.md",
+    "ir_distance.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
