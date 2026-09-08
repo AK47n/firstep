@@ -1,0 +1,12 @@
+批次13 code-review 两轴审查整改（Standards/Spec）：
+
+Spec 轴（3 项）：
+- as32.h + as32 manifest：HUIDU 重叠注释事实修正（R2/R3 → R1=PA26/L4=PA25——原 ZIGBEE 注释误导沿用）；
+- ms5611_read：补段间 2×10ms（页面 Get_TEMP L384/386——spec 原文「Read_D1_D2(0x48)→delay 10ms→Read_D1_D2(0x58)→delay 10ms」按原式保留），test 守卫改 ×4、manifest 改造要点记段间保留；
+- budget.py：删除重复的 batch12 记账注释（日期 2026-09-06 与保留原注释 09-12 矛盾——纯注释误导）。
+
+Standards 轴（2 项）：
+- **ms5611 dT 32 位溢出真实 bug**：页面 C4×dT/128、C3×dT/256.0 在 32 位有符号乘法溢出（积可达 1e11 ≫ 2^31，全温区多数读数偏差数十 hPa）——dT 改有符号 64 位 long long（标准实现 int64 口径，表达式不变；人工复核修正⑥更新）+ 新增换算 int64 镜像单测（Python 精确整数 + float32 舍入镜像；回归表含 32 位回绕对照：dT=±3.6e6 时旧形态偏差 ±18.2kPa——P 98296/60152/79224 钉死）；ms5611 编译矩阵整改后重跑 PASS；
+- bmp180 B7 注释改述：删除「B7<0x80000000 恒真、else 不可达」未证实断言——按页面/标准保留双分支（B7=((uint32)UP−(uint32)B3)×50000 高 UP/负 B3 时可达 ≥2^31，else 分支不可删），manifest ①/spec 实施结论/工单结论同步改述。
+
+对齐：relay/as32 与 human_ir/ttp224/fingerprint/open_mv4 先例一致；syscfg/INSTANCE_CONSUMERS/wordlist/测试登记齐全；无 .ps1；提交/工单/CHANGELOG 均中文；残留基线气味 = 软 I2C 原语重复（spec 明示既定取舍，不整改）。全量测试 3560 pytest 全绿。

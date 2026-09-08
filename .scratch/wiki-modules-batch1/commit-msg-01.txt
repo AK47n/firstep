@@ -1,0 +1,9 @@
+joystick 双轴摇杆模块（工单 wiki-modules-batch1/01）：立创 wiki 手册提炼，仅 mspm0
+
+- 母版 syscfg：JOYSTICK GPIO 实例（SW=PA9 上拉输入）+ ADC12_0 sequence 三通道
+  （MEM1=PA26/A0_1、MEM2=PA25/A0_2 归摇杆 X/Y，与 adc 模块共享实例）
+- 关键实证：SysConfig ADC12 单发模式只启用 startAdd 槽位，多 MEM 必须
+  samplingOperationMode="sequence"+startAdd/endAdd（原「LQFP-64(PM) 无
+  adcPinN 槽位」注释系误判已更正）
+- manifest + wordlist「遥控接收」补录 + 生成级测试 + 单选编译矩阵
+  gmake 0 error/0 warning（verified=true，未上板）；全量 3362 测试通过
