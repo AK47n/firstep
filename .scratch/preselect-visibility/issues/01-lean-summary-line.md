@@ -4,15 +4,25 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** claimed
+**状态：** resolved
 
-- [ ] `ManifestSummary` 新增瘦身行渲染（唯一实现，字符串只在 prompt 边界渲染一次；不在测试里复制行文法）
-- [ ] 有界首句：只在「。」「；」切分（不切「，」「：」——`motor` 的能力句必须留住），再按 100 字符上限截断
-- [ ] 瘦身行保留决策信息：依赖段、多实例段（上限 + 变体）、副产物模板段、互斥组段；**不含**套件段与采购链接
-- [ ] 行渲染测试进 `tests/test_manifest.py`：断言瘦身行含/不含哪些段、首句切分与截断边界（含 `motor` 首句不被「：」切碎的负例）
-- [ ] 全库字节账测试：真实库（`library/modules`）两平台全量瘦身行 wire 总量 ≤ `MODULE_SUMMARY_BYTES`，并断言余量 ≥ 5KB（库长大到临界要红）
-- [ ] `budget.py` 摘要段记账注释更新为瘦身后真实值（现状 86.6KB 的推导说明保留为历史；不改 `MODULE_SUMMARY_BYTES` 数值）
-- [ ] `python -m pytest -q` 全绿（本张不改预筛装配点，覆盖率 6 条 xfail 应仍是 xfail）
+- [x] `ManifestSummary` 新增瘦身行渲染（唯一实现，字符串只在 prompt 边界渲染一次；不在测试里复制行文法）
+- [x] 有界首句：只在「。」「；」切分（不切「，」「：」——`motor` 的能力句必须留住），再按 100 字符上限截断
+- [x] 瘦身行保留决策信息：依赖段、多实例段（上限 + 变体）、副产物模板段、互斥组段；**不含**套件段与采购链接
+- [x] 行渲染测试进 `tests/test_manifest.py`：断言瘦身行含/不含哪些段、首句切分与截断边界（含 `motor` 首句不被「：」切碎的负例）
+- [x] 全库字节账测试：真实库（`library/modules`）两平台全量瘦身行 wire 总量 ≤ `MODULE_SUMMARY_BYTES`，并断言余量 ≥ 5KB（库长大到临界要红）
+- [x] `budget.py` 摘要段记账注释更新为瘦身后真实值（现状 86.6KB 的推导说明保留为历史；不改 `MODULE_SUMMARY_BYTES` 数值）
+- [x] `python -m pytest -q` 全绿（本张不改预筛装配点，覆盖率 6 条 xfail 应仍是 xfail）
+
+## 状态对齐（2026-09-08 复核补记）
+
+本张的实现在提交 `0f19a513`（「摘要行瘦身形态：全库可装进预筛预算」），验收项已全部达标，此前状态停留在 `claimed` 未翻——本次复核补齐：
+
+- 瘦身行测试：`python -m pytest tests/test_manifest.py -k lean -q` → 5 passed
+- 全库字节账（生产口径复测）：stm32 86 条 **28071B** / mspm0 84 条 **28062B**，预算 `MODULE_SUMMARY_BYTES=40000B`，余量 **11929B / 11938B**（远超 ≥5KB 要求）
+- 可见性验收（工单 02 落地后）：`probe_guard_cases.py` 6 组全 PASS（2024H/stm32 由 34/86 → **86/86**）
+- 全量：`python -m pytest -q` → **3881 passed**（0 xfailed，第 2 批的 8 条缺口全部转绿并摘标记）
+
 
 ## 答复（code-review 双轴整改，2026-09-08）
 
