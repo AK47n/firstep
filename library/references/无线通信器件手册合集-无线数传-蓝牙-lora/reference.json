@@ -1,0 +1,18 @@
+{
+  "id": "无线通信器件手册合集-无线数传-蓝牙-lora",
+  "title": "无线通信器件手册合集（无线数传 / 蓝牙 / lora）",
+  "type": "器件手册",
+  "description": "无线通信器件移植手册合集：AS32 LoRa 数传、HC-05 蓝牙、NRF24L01 2.4G、RC522 射频卡——骨架阶段选中无线类模块时的器件级例程参考。",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "any",
+  "topic_type": "",
+  "files": [
+    "as32.md",
+    "hc05.md",
+    "nrf24l01.md",
+    "rc522.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
