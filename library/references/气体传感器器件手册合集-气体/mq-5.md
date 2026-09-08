@@ -1,0 +1,287 @@
+# MQ-5液化气检测传感器
+
+- 分类：传感器类
+- 来源：https://wiki.lckfb.com/zh-hans/dmx/module/sensor/mq-5-sensor.html
+- 标题：MQ-5液化气检测传感器
+- 代码块：3 个 · 图片：0 张
+
+MQ-5气体传感器所使用的气敏材料是在清洁空气中电导率较低的二氧化锡(Sno2)。当传感器所处环境中存在可燃气体时，传感器的电导率随空气中可燃气体浓度的增加而增大。使用简单的电路即可将电导率的变化转换为该气体浓度相对应的输出信号。MQ-5气体传感器对丁烷、丙烷、甲烷的灵敏度高，对甲烷和丙烷可较好的兼顾。这种传感器可检测多种可燃性气体，特别是天然气，是一款适合多种应用的低成本传感器。
+
+## 一、模块来源
+
+采购链接：
+
+[Risym MQ-5液化气 天然气 城市煤气传感器模块](https://detail.tmall.com/item.htm?abbucket=0&id=16501254145&ns=1&spm=a21n57.1.0.0.5668523c1NVcMb)
+
+资料下载链接：
+
+[https://pan.baidu.com/s/1B8WhPIzTmWwQsFFVayRpAA?pwd=9966](https://pan.baidu.com/s/1B8WhPIzTmWwQsFFVayRpAA?pwd=9966)
+
+资料提取码：9966
+
+## 二、规格参数
+
+**工作电压**：3.3V ~ 5V
+
+**工作电流**：150MA
+
+**输出方式**: DO接口为数字量输出 AO接口为模拟量输出
+
+**读取方式**：ADC
+
+**管脚数量**：4 Pin（2.54mm间距排针）
+
+以上信息见厂家资料文件
+
+## 三、移植过程
+
+我们的目标是将例程移植至MSPM0G3507开发板上【能够判断当前环境状况的功能】。首先要获取资料，查看数据手册应如何实现读取数据，再移植至我们的工程。
+
+### 1、查看资料
+
+MQ-5气体传感器对丁烷、丙烷、甲烷灵敏度高,对甲烷和丙烷可较好的兼顾,这种传感器可检测多种可燃性气体，特别是液化气（丙烷），是一款适合多种应用的低成本传感器。
+
+其对应的原理图，AO输出为MQ传感器直接输出的电压，所以为模拟量；DO为经过LM393进行电压比较后，输出高低电平，所以为数字量。
+
+因此DO引脚可以配置为GPIO的输入模式，AO引脚需要配置为ADC模拟输入模式。
+
+### 2、引脚选择
+
+当前只有AO引脚需要使用到ADC接口，所以DO引脚可以使用开发板上其他的GPIO。**这里选择使用PA27的附加ADC功能**。
+
+### 3、移植至工程
+
+接下来我们配置 **SYSCONFIG**
+
+1. 双击 **empty.syscfg** 文件，打开它。
+2. 在 **empty.syscfg** 文件界面点击 **Tools**，然后点击 **SYSCONFIG** 工具。
+3. 点击 **ADD** 添加配置
+4. 添加配置【根据下方图片进行添加】
+5. 添加GPIO配置【根据下方图片进行添加】
+6. 点击保存
+
+> **WARNING**：出现只要出现下面的框就一定要选择：**`Yes to All`**
+
+7. 然后点击编译（**可能会报错，我们不用管！**）
+8. 然后我们所有设定的引脚和功能就会在 **ti_msp_dl_config.h** 中定义。因为这个文件我们包含进了 **board.h** 所以我们只需要引用 **board.h** 即可。【这里的 **board.h** 就充当了芯片头文件的作用】
+
+移植步骤中的导入.c和.h文件与**传感器章节**的【**DHT11温湿度传感器**】相同，只是将.c和.h文件更改为**bsp_mq5.c**与**bsp_mq5.h**。这里不再过多讲述，移植完成后面修改相关代码。
+
+在文件**bsp_mq5.c**中，编写如下代码。
+
+```c
+/*
+ * 立创开发板软硬件资料与相关扩展板软硬件资料官网全部开源
+ * 开发板官网：www.lckfb.com
+ * 技术支持常驻论坛，任何技术问题欢迎随时交流学习
+ * 立创论坛：https://oshwhub.com/forum
+ * 关注bilibili账号：【立创开发板】，掌握我们的最新动态！
+ * 不靠卖板赚钱，以培养中国工程师为己任
+ * Change Logs:
+ * Date           Author       Notes
+ * 2024-07-03     LCKFB-LP    first version
+ */
+
+#include "bsp_mq5.h"
+#include "stdio.h"
+
+volatile bool gCheckADC;        //ADC采集成功标志位
+
+/******************************************************************
+ * 函 数 名 称：ADC_MQ5_Init
+ * 函 数 说 明：初始化ADC功能
+ * 函 数 形 参：无
+ * 函 数 返 回：无
+ * 作       者：LC
+ * 备       注：无
+******************************************************************/
+void ADC_MQ5_Init(void)
+{
+      //开启ADC中断
+      NVIC_EnableIRQ(ADC12_0_INST_INT_IRQN);
+}
+
+/**********************************************************
+ * 函 数 名 称：ADC_GET
+ * 函 数 功 能：读取一次ADC数据
+ * 传 入 参 数：无
+ * 函 数 返 回：无
+ * 作       者：LC
+ * 备       注：LP
+**********************************************************/
+uint32_t ADC_GET(void)
+{
+      unsigned int gAdcResult = 0;
+
+      int timeout = 20;
+
+      //软件触发ADC开始转换
+      DL_ADC12_startConversion(ADC12_0_INST);
+      //如果当前状态为正在转换中则等待转换结束
+      while (false == gCheckADC)
+      {
+            delay_us(1);
+            timeout--;
+
+            if(timeout <= 0)
+            {
+                  printf("DL_ADC12_startConversion ERROR!! LINE:%d\r\n",__LINE__);
+                  return 1;
+            }
+      }
+
+      //获取数据
+      gAdcResult = DL_ADC12_getMemResult(ADC12_0_INST, ADC12_0_ADCMEM_ADC_CH0);
+
+      //清除标志位
+      gCheckADC = false;
+
+      return gAdcResult;
+}
+/******************************************************************
+ * 函 数 名 称：Get_Adc_MQ5_Value
+ * 函 数 说 明：
+ * 函 数 形 参：
+ * 函 数 返 回：对应扫描的ADC值
+ * 作       者：LC
+ * 备       注：无
+******************************************************************/
+unsigned int Get_Adc_MQ5_Value(void)
+{
+      uint32_t Data = 0;
+
+      for(int i = 0; i < SAMPLES; i++)
+      {
+            Data += ADC_GET();
+
+            delay_ms(5);
+      }
+
+      Data = Data / SAMPLES;
+
+      return Data;
+}
+
+/******************************************************************
+ * 函 数 名 称：Get_MQ5_Percentage_value
+ * 函 数 说 明：读取MQ5值，并且返回百分比
+ * 函 数 形 参：无
+ * 函 数 返 回：返回百分比
+ * 作       者：LC
+ * 备       注：无
+******************************************************************/
+unsigned int Get_MQ5_Percentage_value(void)
+{
+      int adc_max = 4095;
+      int adc_new = 0;
+      int Percentage_value = 0;
+
+      adc_new = Get_Adc_MQ5_Value();
+
+      Percentage_value = ((float)adc_new / (float)adc_max) * 100.f;
+      return Percentage_value;
+}
+
+/******************************************************************
+ * 函 数 名 称：Get_MQ5_DO_value
+ * 函 数 说 明：获取MQ5DO引脚的电平状态
+ * 函 数 形 参：无
+ * 函 数 返 回：0=未检测到高于灵敏度的酒精值 1=检测到高于灵敏度的酒精值
+ * 作       者：LC
+ * 备       注：调整模块上的滑动电阻即可调整灵敏度
+******************************************************************/
+char Get_MQ5_DO_value(void)
+{
+      if( MQ_DO == 0 )
+      {
+            return 0;
+      }
+      else
+      {
+            return 1;
+      }
+}
+
+//ADC中断服务函数
+void ADC12_0_INST_IRQHandler(void)
+{
+      //查询并清除ADC中断
+      switch (DL_ADC12_getPendingInterrupt(ADC12_0_INST))
+      {
+            //检查是否完成数据采集
+            case DL_ADC12_IIDX_MEM0_RESULT_LOADED:
+                      gCheckADC = true;//将标志位置1
+                      break;
+            default:
+                      break;
+      }
+}
+```
+
+在文件**bsp_mq5.h**中，编写如下代码。
+
+```c
+/*
+ * 立创开发板软硬件资料与相关扩展板软硬件资料官网全部开源
+ * 开发板官网：www.lckfb.com
+ * 技术支持常驻论坛，任何技术问题欢迎随时交流学习
+ * 立创论坛：https://oshwhub.com/forum
+ * 关注bilibili账号：【立创开发板】，掌握我们的最新动态！
+ * 不靠卖板赚钱，以培养中国工程师为己任
+ * Change Logs:
+ * Date           Author       Notes
+ * 2024-07-03     LCKFB-LP    first version
+ */
+
+#ifndef _BSP_MQ5_H_
+#define _BSP_MQ5_H_
+
+#include "board.h"
+
+#define MQ_DO   ( ( DL_GPIO_readPins( MQ_PORT, MQ_DO_PIN ) & MQ_DO_PIN ) ? 1 : 0 )
+
+ //采样次数
+#define SAMPLES   30
+
+void ADC_MQ5_Init(void);
+unsigned int Get_Adc_MQ5_Value(void);
+unsigned int Get_MQ5_Percentage_value(void);
+char Get_MQ5_DO_value(void);
+
+#endif
+```
+
+## 四、移植验证
+
+在empty.c中输入代码如下:
+
+```c
+#include "board.h"
+#include <stdio.h>
+#include "bsp_mq5.h"
+
+int main(void)
+{
+      //开发板初始化
+      board_init();
+
+      ADC_MQ5_Init();
+      printf("ADC Demo Start...\r\n");
+      while(1)
+      {
+            printf("液化气体含量 = %d%%\r\n\n", Get_MQ5_Percentage_value() );
+            delay_ms(1000);
+      }
+}
+```
+
+上电效果：
+
+移植成功案例代码下载链接：
+
+> **【百度网盘】**：**链接**：[https://pan.baidu.com/s/189VmyEjpKp9BIaMdWl5vRA?pwd=kddp](https://pan.baidu.com/s/189VmyEjpKp9BIaMdWl5vRA?pwd=kddp)**提取码**：kddp
+
+## 百度网盘下载
+
+- https://pan.baidu.com/s/1B8WhPIzTmWwQsFFVayRpAA?pwd=9966
+- https://pan.baidu.com/s/189VmyEjpKp9BIaMdWl5vRA?pwd=kddp
