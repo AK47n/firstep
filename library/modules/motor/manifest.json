@@ -10,7 +10,7 @@
       ],
       "verified": true,
       "hardware_bound": false,
-      "notes": "mspm0 侧 limit_duty 为兼容遗留（新工程请用 motor_set_duty）；SysConfig 默认布局：PWM 定时器 PWMAB（双通道 C0/C1 接 PA12/PA13）；GPIO 方向 DC_MOTOR（AIN1=PB9 AIN2=PA18 BIN1=PB18 BIN2=PA7）；编码器 AA=PA16 AB=PA17 BA=PB19 BB=PB20，A 相计数在 GROUP1_IRQHandler。纯驱动切片：巡线/PID/姿态等决策逻辑已剥离（见 xunji/pid 模块与参考文件库 car-1-1）。\nmodule-polish/04 编译矩阵（2026-08-15）：gmake 0 error、0 module warning；未上板。",
+      "notes": "mspm0 侧 limit_duty 为兼容遗留（新工程请用 motor_set_duty）；SysConfig 默认布局：PWM 定时器 PWMAB（双通道 C0/C1 接 PA12/PA13）；GPIO 方向 DC_MOTOR（AIN1=PB9 AIN2=PA18 BIN1=PB18 BIN2=PA7）；编码器 AA=PA16 AB=PA17 BA=PB19 BB=PB20，A 相计数在 GROUP1_IRQHandler。**默认 BIN2=PA7 与 servo 的 SERVO_PWM_C0 同脚（电机+舵机同车组合常见、同选经引脚绑定消解）**。纯驱动切片：巡线/PID/姿态等决策逻辑已剥离（见 xunji/pid 模块与参考文件库 car-1-1）。\nmodule-polish/04 编译矩阵（2026-08-15）：gmake 0 error、0 module warning；未上板。",
       "kit": "",
       "source_url": "",
       "pins": [

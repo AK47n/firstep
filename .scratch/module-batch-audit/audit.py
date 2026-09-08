@@ -149,8 +149,9 @@ WIKI_LINE = DMX_SLUGS | DKX_SLUGS
 VERIFIED_EXCEPT = {"k230", "zigbee_link"}   # 既有设计：verified=false
 HW_EXCEPT = {"coord_detect", "k230", "beep", "led_beep", "ml_mpu6050",
              "huidu", "xunji"}              # 既有设计：hardware_bound=true（板载/官方库）
-# 既有件 kit/source_url 缺口（批次前状态；oled 已在收尾报告记录、
-# motor/servo C 类只补了 stm32 侧、huidu/xunji = A 类 mspm0-only 例外）
+# kit/source_url 缺口（批次前状态；**补录实证不可行**——代码源为 21F/car 工程，
+# 挂 wiki URL 会触发 test_lckfb_attribution「wiki 派生模块源码头带原页 URL」断言，
+# 属虚来源宣称；维持缺口直至来源字段重构（区分代码来源与硬件身份））
 KIT_SRC_GAP = {"huidu", "xunji", "motor", "servo", "oled"}
 for slug in all_slugs:
     m = manifest(slug)
