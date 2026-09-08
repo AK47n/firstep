@@ -1,0 +1,16 @@
+{
+  "id": "人体感应与雷达器件手册合集-人体感应-雷达",
+  "title": "人体感应与雷达器件手册合集（人体感应 / 雷达）",
+  "type": "器件手册",
+  "description": "人体感应与雷达器件移植手册合集：HC-SR501 人体红外、HB100 微波多普勒雷达——骨架阶段选中人体感应/雷达类模块时的器件级例程参考。",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "any",
+  "topic_type": "",
+  "files": [
+    "human_ir.md",
+    "microwave_radar.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
