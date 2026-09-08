@@ -513,9 +513,14 @@ def _slugs_of_kind(kind: str) -> list[str]:
 # 标记（tests/conftest.py 对本仓 xfail 一律 strict）。
 #
 # 04 续（2026）：`zigbee_link` 已核实到厂商官方产品页（DL-20 / Hexin）→ 回填双平台
-# 并移出本清单（对应 xfail 用例同步删除）。剩下 6 个 slug 的核不出依据见工单 04
-# Comments（口径：source_url 必须指**同一件实物**的可采购/官方页——教程页、别的板
-# 族的同类页、不同驱动形态的页都不算）。
+# 并移出本清单（对应 xfail 用例同步删除）。
+#
+# 05 续（2026，第三轮取源）：6 个 slug 复核仍全部核不出，**清单不变**——本轮扩面到
+# 立创 wiki 全站 8 个板族模块手册索引（`probe_backlog_sources.py --all-boards`）＋
+# 立创商城商品页 / 厂商页 / 开源板页（HTTP 实测状态码 + 标题），逐条「候选但不算」的
+# 依据见工单 04 Comments「05 续」表。口径仍是 `source_url` 必须指**同一件实物**的
+# 可采购 / 官方页：教程页、别的板族的同类页、不同驱动形态的页、元件级商品页、
+# B2B 批发页都不算；判据不放宽来凑数。
 IDENTITY_BACKLOG: tuple[str, ...] = (
     "beep",
     "ir_beam",
