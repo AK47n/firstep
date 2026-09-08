@@ -507,10 +507,15 @@ def _slugs_of_kind(kind: str) -> list[str]:
     return [slug for slug, value in MODULE_KIND.items() if value == kind]
 
 
-# 真器件身份字段待补（工单 identity-fields/03 实测核不出出处的那批；清单与后续
+# 真器件身份字段待补（工单 identity-fields/03-04 实测核不出出处的那批；清单与后续
 # 核法在工单 04）。**这不是放宽判据**：清单里的 slug 仍按器件要求字段，只是把它们
 # 从「必绿」挪到一条 strict-xfail 用例——数据补齐后该用例 XPASS 判失败，逼你摘
 # 标记（tests/conftest.py 对本仓 xfail 一律 strict）。
+#
+# 04 续（2026）：`zigbee_link` 已核实到厂商官方产品页（DL-20 / Hexin）→ 回填双平台
+# 并移出本清单（对应 xfail 用例同步删除）。剩下 6 个 slug 的核不出依据见工单 04
+# Comments（口径：source_url 必须指**同一件实物**的可采购/官方页——教程页、别的板
+# 族的同类页、不同驱动形态的页都不算）。
 IDENTITY_BACKLOG: tuple[str, ...] = (
     "beep",
     "ir_beam",
@@ -518,7 +523,6 @@ IDENTITY_BACKLOG: tuple[str, ...] = (
     "led",
     "led_beep",
     "step_motor",
-    "zigbee_link",
 )
 
 
@@ -527,8 +531,9 @@ def test_device_modules_declare_identity_fields():
 
     未登记进 `MODULE_KIND` 的库内模块一律按器件算（`module_kind` 默认值）——
     这就是「新录入必填」的机械兜底：新模块缺身份字段直接红。已知待补的 slug 在
-    `IDENTITY_BACKLOG`（单列一条 strict-xfail 用例），本用例只守「不在待补清单里
-    的器件」。"""
+    `IDENTITY_BACKLOG`（核不出出处的依据见工单 04 Comments），本用例只守「不在
+    待补清单里的器件」；清单**恰好等于**当前缺口由
+    `test_identity_backlog_is_exactly_the_current_gap` 守。"""
     from contest_generator.library import MODULE_KIND, ModuleKind
 
     devices = [
@@ -545,18 +550,6 @@ def test_device_modules_declare_identity_fields():
     assert not problems, (
         "器件类条目缺硬件身份字段（kit / source_url）或链接非法：\n- "
         + "\n- ".join(problems)
-    )
-
-
-@pytest.mark.xfail(
-    reason="工单 identity-fields/04 待补：核不出购买出处的器件（清单见工单 Comments）",
-)
-def test_backlogged_device_modules_declare_identity_fields():
-    """待补清单里的器件同样必须齐字段——数据补齐后本用例转 XPASS（conftest 对本仓
-    xfail 一律 strict，XPASS 判失败），届时把 slug 从 `IDENTITY_BACKLOG` 移出并删本用例。"""
-    problems = _missing_identity_problems(IDENTITY_BACKLOG)
-    assert not problems, (
-        "待补器件的身份字段仍未齐（工单 04）：\n- " + "\n- ".join(problems)
     )
 
 
@@ -606,4 +599,29 @@ def test_internal_and_protocol_modules_have_no_identity_fields():
     )
     assert not problems, (
         "内部件/协议切片不该有硬件身份字段（无实物可采购）：\n- " + "\n- ".join(problems)
+    )
+
+
+# ---------------------------------------------------------------------------
+# 类别判据跨语言镜像（工单 identity-fields/05）
+#
+# 详情弹窗按载荷 `kind` 决定身份字段的展示语义（器件 = 可补填；内部件 / 协议切片
+# = 无需购买链接）。JS 不能 import Python 枚举，故照 `test_lckfb_attribution.py`
+# 的「跨语言常量镜像」先例：JS 侧用到的每个类别值必须能在单源里找到——改任一侧
+# 此测试即红（防静默漂移）。
+# ---------------------------------------------------------------------------
+
+
+def test_js_module_kind_vocabulary_mirrors_python_enum():
+    from contest_generator.library import ModuleKind
+
+    js_src = (
+        REPO_ROOT / "src" / "contest_generator" / "static" / "js" / "fx" / "module.js"
+    ).read_text(encoding="utf-8")
+    missing = [
+        kind.value for kind in ModuleKind if f'"{kind.value}"' not in js_src
+    ]
+    assert not missing, (
+        f"fx/module.js 缺单源里的模块类别字面量：{'、'.join(missing)}"
+        "（身份字段展示语义按 kind 分支，词表漂移会让内部件被当成器件）"
     )
