@@ -1,0 +1,19 @@
+{
+  "id": "光照与颜色传感器器件手册合集-光照-颜色",
+  "title": "光照与颜色传感器器件手册合集（光照 / 颜色）",
+  "type": "器件手册",
+  "description": "光照与颜色器件移植手册合集：BH1750、光敏电阻、S12SD 紫外、TCS34725 颜色、MLX90614 红外测温——骨架阶段选中光照/颜色类模块时的器件级例程参考。",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "any",
+  "topic_type": "",
+  "files": [
+    "bh1750.md",
+    "photoresistance.md",
+    "s12sd.md",
+    "tcs34725.md",
+    "mlx90614.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
