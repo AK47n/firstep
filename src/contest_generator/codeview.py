@@ -305,7 +305,9 @@ def _snippet(line: str, needle: str) -> str:
     )
 
 
-def save_code_file(root: Path, rel_path: str, content: str, base_mtime_ns: int | str) -> dict[str, Any]:
+def save_code_file(
+    root: Path, rel_path: str, content: object, base_mtime_ns: int | str | None
+) -> dict[str, Any]:
     """根目录内文本文件写盘（工单 code-viewer-editor/01——「代码」tab 编辑器
     直接保存的唯一写面）。
 
@@ -559,9 +561,13 @@ def apply_code_diff(
 _CODE_NAME_ILLEGAL = set('/\\:*?"<>|')
 
 
-def _validate_entry_name(name: str) -> None:
+def _validate_entry_name(name: object) -> None:
     """单段条目名称校验（tree 操作共用单源）：非空、非纯空白、首尾无空白、
-    ≤120 字符、不为 `.` / `..`、不含 Windows 保留字符 → 违规 400 中文。"""
+    ≤120 字符、不为 `.` / `..`、不含 Windows 保留字符 → 违规 400 中文。
+
+    入参标 object（mypy 基线遗留）：函数本身做 isinstance 收窄，端点把
+    payload 原值直接传进来；标 str 会让调用点被判类型不兼容。
+    """
     if (
         not isinstance(name, str)
         or not name
@@ -575,7 +581,7 @@ def _validate_entry_name(name: str) -> None:
         )
 
 
-def create_code_entry(root: Path, kind: str, rel_path: str) -> dict[str, Any]:
+def create_code_entry(root: Path, kind: object, rel_path: str) -> dict[str, Any]:
     """根目录内新建空文件 / 目录（工单 code-tree-ops/01）。
 
     安全判定与 read_code_file 同源（_resolve_in_root：is_unsafe_path +
@@ -616,7 +622,7 @@ def create_code_entry(root: Path, kind: str, rel_path: str) -> dict[str, Any]:
     return {"path": rel_path}
 
 
-def rename_code_entry(root: Path, rel_path: str, new_name: str) -> dict[str, Any]:
+def rename_code_entry(root: Path, rel_path: str, new_name: object) -> dict[str, Any]:
     """根目录内文件 / 目录改名（工单 code-tree-ops/01）。
 
     new_name 必须**单段**（_validate_entry_name 单源：非空 / 非纯空白 /
@@ -629,6 +635,7 @@ def rename_code_entry(root: Path, rel_path: str, new_name: str) -> dict[str, Any
     （= 改名后现值，作为打开 tab 的保存基准）}；目录返回 {path}。
     """
     _validate_entry_name(new_name)
+    assert isinstance(new_name, str)  # 收窄（上面已校验；mypy 基线遗留）
     src = _resolve_in_root(root, rel_path)
     if not src.exists():
         raise CodeViewError(f"不存在：{rel_path}")

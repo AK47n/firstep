@@ -197,7 +197,9 @@ class PythonArtifactTemplate:
     assets: tuple[AssetSpec, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
-        data = {
+        # 显式标注：字面量初值全是 str，不标注会被推断为 dict[str, str]，
+        # 下面两处可选段（list[str] / list[dict]）即报类型错（mypy 基线遗留）。
+        data: dict[str, Any] = {
             "id": self.id,
             "name": self.name,
             "description": self.description,

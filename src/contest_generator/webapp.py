@@ -1494,7 +1494,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         """
         from .wiring import read_wiring_snapshot, read_wiring_snapshot_legacy
 
-        empty = {"platform": "", "board": None, "rows": []}
+        # 显式标注（mypy 基线遗留）：值类型混合（str / None / list）。
+        empty: dict[str, Any] = {"platform": "", "board": None, "rows": []}
         if not output_dir:
             return empty
         snapshot = read_wiring_snapshot(output_dir)
@@ -3492,6 +3493,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             )
         plan = read_task_plan(output_dir)
         find_task(plan, task_id)  # 先查存在（未拆解 / 任务不存在 → 400 中文）
+        assert plan is not None  # 收窄（find_task 未拆解即抛；mypy 基线遗留）
         updated = update_task_fields(
             plan,
             task_id,

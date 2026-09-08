@@ -276,9 +276,11 @@ def parse_wiring_entries(raw: object) -> tuple[WiringEntry, ...]:
 
 def _board_pin_names(board: Mapping) -> frozenset[str]:
     """板定义 dict 的引脚名集合（含 power/gnd/reset 类，供电线用）。"""
+    # walrus 收窄（mypy 基线遗留）：名不是字符串的条目直接跳过。
     return frozenset(
-        pin.get("name") for pin in (board.get("pins") or ())
-        if isinstance(pin, Mapping) and isinstance(pin.get("name"), str)
+        name
+        for pin in (board.get("pins") or ())
+        if isinstance(pin, Mapping) and isinstance((name := pin.get("name")), str)
     )
 
 

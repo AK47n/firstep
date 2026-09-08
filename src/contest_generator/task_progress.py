@@ -819,7 +819,7 @@ def update_task_fields(
     )
 
 
-def move_task(plan: TaskPlan, task_id: str, direction: str) -> TaskPlan:
+def move_task(plan: TaskPlan | None, task_id: str, direction: str) -> TaskPlan:
     """任务卡上移 / 下移调序（纯函数，工单 idea-suite/03）：数组顺序即展示
     顺序——up = 与前一任务相邻换位，down = 与后一任务相邻换位。
 
@@ -828,6 +828,7 @@ def move_task(plan: TaskPlan, task_id: str, direction: str) -> TaskPlan:
     TaskError；清单未拆解 / 任务不存在 → find_task 语义 400。
     """
     task = find_task(plan, task_id)
+    assert plan is not None  # 收窄（find_task 未拆解即抛；mypy 基线遗留）
     if direction not in ("up", "down"):
         raise TaskError("direction 必须是 up 或 down")
     index = next(i for i, t in enumerate(plan.tasks) if t.id == task_id)
@@ -855,8 +856,12 @@ def move_task(plan: TaskPlan, task_id: str, direction: str) -> TaskPlan:
 # ---------------------------------------------------------------------------
 
 
-def find_task(plan: TaskPlan, task_id: str) -> Task:
-    """按 id 查任务；清单未拆解 / 任务不存在 → TaskError（400 中文）。"""
+def find_task(plan: TaskPlan | None, task_id: str) -> Task:
+    """按 id 查任务；清单未拆解 / 任务不存在 → TaskError（400 中文）。
+
+    入参允许 None（mypy 基线遗留）：未拆解（read_task_plan 返回 None）是
+    预期输入，本函数首行即转成 400 中文——调用点无需各自判空。
+    """
     if plan is None:
         raise TaskError("该目录尚未拆解任务——请先点「拆解任务」生成任务清单")
     for task in plan.tasks:

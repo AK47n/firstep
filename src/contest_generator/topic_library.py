@@ -425,7 +425,8 @@ def topic_health(topic_library_root: Path, entry: TopicEntry) -> TopicHealth:
     （Path.is_dir() 与确认入库同判据，引用指向文件 / 已删目录都算悬空）。"""
     entry_dir = _entry_dir(topic_library_root, entry.key)
     pdf_path = entry_dir / entry.original_pdf if entry.original_pdf else None
-    original_pdf_missing = bool(pdf_path) and not pdf_path.is_file()
+    # 显式收窄（mypy 基线遗留）：无声明 = 不查（None 不算缺失）；有声明才判文件。
+    original_pdf_missing = pdf_path is not None and not pdf_path.is_file()
     programs_missing = tuple(
         program for program in entry.programs if not Path(program).is_dir()
     )
