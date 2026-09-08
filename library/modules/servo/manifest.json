@@ -33,7 +33,7 @@
       ],
       "verified": true,
       "hardware_bound": false,
-      "notes": "母版 syscfg SERVO_PWM 实例（TIMG8 C0 = PA7，b1-adc-servo/02）；周期与脉宽按 SERVO_PWM_INST_CLK_FREQ 运行时计算（照 step_motor 先例，不依赖 ULPCLK 假设）；绑定换引脚 = 改写 ccp0Pin.$assign + peripheral 行（pwm 类型级现成）。",
+      "notes": "母版 syscfg SERVO_PWM 实例（TIMG8 C0 = PA7，b1-adc-servo/02）；周期与脉宽按 SERVO_PWM_INST_CLK_FREQ 运行时计算（照 step_motor 先例，不依赖 ULPCLK 假设）；绑定换引脚 = 改写 ccp0Pin.$assign + peripheral 行（pwm 类型级现成）。**默认 PA7（TIMG8 C0）与 motor BIN2 同脚（电机+舵机同车组合常见、同选经引脚绑定消解）**。",
       "kit": "",
       "source_url": "",
       "pins": [
