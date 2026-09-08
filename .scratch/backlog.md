@@ -55,15 +55,17 @@
 
 `library/modules/beep/code/beep_stm32.c:10` 用 `BUZZER_GPIO/BUZZER_PIN`（宏归属 `config` 模块，beep 未声明 pins 也未声明依赖）。后果：绑定界面没有蜂鸣器脚、默认布局白名单看不见它、门禁不报冲突——**实测 `beep` + `jq8900` 同吃 PA15 门禁静默通过**。全库扫下来唯一一处（`debug_uart` 也驱动 LED/BUZZER，但声明了 `config` 依赖，链是通的）。修法：补 `pins` 一条（`gpio_out`，`macros=["BUZZER_GPIO","BUZZER_PIN"]`，默认 PA15）+ 加结构测试「模块 .c 用到的 pin_config.h 引脚宏必须被本模块或其依赖声明」。
 
-### 5.3 🟠 P1：20 个模块无选购方案挂接（wordlist lib_modules）
+### 5.3 🟠 P1：20 个模块无选购方案挂接（wordlist lib_modules）—— ✅ 已落地（工单 library-hookup-and-invariants/01，2026-09-08，提交 6ca1139d）
 
 后果：买件指引不标「库内已有」；预筛少一条 lib_boost 加分路径。真正该补：`servo`（舵机）、`step_motor`、`oled`、`ml_mpu6050`、`led`/`beep`/`led_beep`（声光提示器件行 0 方案）、`key`。其余（adc/delay/filter/uart/config/debug_uart/digit_uart/imu_uart/zigbee_*）为内部件可不挂。
+
+**已落地**：8 个器件 slug 全部挂接（声光提示器件组补 3 方案、执行机构 +1 方案并给舵机方案挂 servo、显示模块 +1 方案、感知传感器 +2 方案）；两向守卫进测试（器件必挂 / 内部件不许挂）；审计 `[词表] 未被任何选购方案引用的模块` 20 → 12（剩余全是内部件）。配套：默认词表完整 wire 8259 → 8849，`WORDLIST_PROMPT_BYTES` 8500 → 9200（mspm0 最坏形态余量 727B → 378B，已记账；后续加内容应先瘦身）。
 
 ### 5.4 🟡 P2 三条
 
 - **硬件身份字段 46/170 平台条目为空**（核心件为主：motor/pid/servo/oled/led/key…）——判据②要求新录入必填，老件是历史遗留；需决定补齐还是明确豁免。
-- **骨架「模块→参考例程」映射只覆盖 18/93**（`reference_library.py:406` `MODULE_PERIPHERAL_TERMS`）——新批次模块自动关联基本失效。
-- **批次快检脚本没进 CI**：`.scratch/wiki-*/sweep_*.py` 钉的不变量（如「用 delay_* 必依赖 delay」）只在批次当时跑过；建议收敛成 `tests/test_library_invariants.py`。
+- **骨架「模块→参考例程」映射只覆盖 18/93**（`reference_library.py:406` `MODULE_PERIPHERAL_TERMS`）——**2026-09-08 复核：单独扩映射无效**。75 个未映射模块需要的词项（气压/称重/颜色/气体/光照/指纹/语音/触摸/摇杆…）大部分不在 `PERIPHERAL_TERMS`（57 项）里；且参考库 148 条标题里 **29/57 个词项 0 命中**（oled/lcd/key/led/beep/servo/step/camera/zigbee/wifi 及对应中文词全 0）。真正要动的是词表项 + 参考条目内容，与第 2 批（预筛评分与匹配粒度）同批做才有意义。复测探针 `.scratch/library-audit/probe_term_effect.py`。
+- **批次快检脚本没进 CI** —— ✅ 已落地（工单 library-hookup-and-invariants/02，2026-09-08，提交 6ca1139d）：21 个 sweep 脚本里「对全库永远成立」的 7 条搬进 `tests/test_library_invariants.py`（slug 与目录名一致 / 声明文件存在 / 条目文件无重复 / 依赖不悬空 / 依赖无环 / 词表引用存在 / 模块有简介），红证用临时副本注入破坏实测四类全红；批次快照值不进测试（历史快照会失效）。
 
 ### 5.5 已知遗留（CONTEXT 自记，本次复核仍在）
 
