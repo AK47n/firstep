@@ -252,6 +252,11 @@ class TopicContext:
     # 工单 recommend-exclusive-groups/02——平台成员过滤归 build_exclusive_groups）
     hint_module_groups: tuple[str, ...] = ()  # 赛题 manifest 声明的疑似需要组 id
     # （AI 未命中时前端出 hint 卡兜底；no-topic 形恒空）
+    # 平台全量摘要 = 库内合法性判据源（工单 preselect-recall-visibility/01）。
+    # 与 manifest_summaries 的区别只在「网页推荐路由是否用预筛子集替换清单行」：
+    # 清单行是模型看得见的范围（可截断），本字段是「库里有什么」的权威事实
+    # （不可截断）。装配点同源产出，CLI 无预筛时两者逐条相同。
+    library_summaries: tuple[ManifestSummary, ...] = ()
 
 
 def resolve_topic_context(
@@ -419,11 +424,13 @@ def resolve_topic_context(
         *base_suggestions,
         *reference_suggestions(related_extra, source=REFERENCE_SOURCE_RELATED),
     ]
+    summaries = tuple(build_manifest_summaries(candidates))
     return TopicContext(
         key=entry.key,
         problem_text=entry.problem_text,
         references=(*references, *related_extra),
-        manifest_summaries=tuple(build_manifest_summaries(candidates)),
+        manifest_summaries=summaries,
+        library_summaries=summaries,
         suggestions=tuple(suggestions),
         # 回读器键覆盖锚定 ∪ 相关（两级注入第二级：相关候选照旧「清单 →
         # 点名 → 回读」，点名 related id 必须可回读——清单外 id 才大声失败）
@@ -551,6 +558,7 @@ def _no_topic_context(
     # build_exclusive_groups，组定义不随 platform 重复汇总）
     exclusive_groups = tuple(collect_exclusive_groups(candidates))
     candidates = list(filter_manifests_by_platform(candidates, platform))
+    summaries = tuple(build_manifest_summaries(candidates))
     manual_ids = {ref.id for ref in manual_entries}
     related_entries = _related_admission(
         reference_library_dir,
@@ -564,7 +572,8 @@ def _no_topic_context(
         key="",
         problem_text=problem_text,
         references=related_entries,
-        manifest_summaries=tuple(build_manifest_summaries(candidates)),
+        manifest_summaries=summaries,
+        library_summaries=summaries,
         suggestions=(
             *reference_suggestions(manual_entries, source=REFERENCE_SOURCE_MANUAL),
             *reference_suggestions(related_entries, source=REFERENCE_SOURCE_RELATED),

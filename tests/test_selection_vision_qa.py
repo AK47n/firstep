@@ -52,6 +52,7 @@ class _FakeLLM(FakeLLM):
         manual_fulltexts=None,
         clarifications=(),
         qa_material="",
+        **_unused,
     ) -> ModuleSelection:
         self.select_calls.append(problem_text)
         self.clarifications_seen.append(tuple(clarifications))

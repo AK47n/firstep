@@ -62,6 +62,7 @@ from contest_generator.llm import (
     JUDGMENT_SCOPE,
     JUDGMENT_SUMMARY_SYSTEM_PROMPT,
     LLMError,
+    ERROR_KIND_CLIENT,
     LOCAL_LLM_METHODS,
     LOCAL_LLM_LOAD_FAILED_MESSAGE,
     LOCAL_LLM_UNAVAILABLE_MESSAGE,
@@ -141,6 +142,11 @@ from tests.fakes import FakeLLM, FakeTransport, RecordingLLM
 
 SELECTION_JSON = json.dumps(
     {"modules": [{"slug": "dht11", "reason": "赛题要求采集温湿度"}]}
+)
+
+# 推荐清单外但库内的模块（判据取源测试用，工单 preselect-recall-visibility/01）
+SELECTION_MOTOR_JSON = json.dumps(
+    {"modules": [{"slug": "motor", "reason": "小车需要电机驱动"}]}
 )
 
 
@@ -333,6 +339,7 @@ def test_fake_llm_receives_manifest_summaries_with_kit():
             self,
             problem_text: str,
             manifest_summaries: Sequence[ManifestSummary],
+            **_unused: object,
         ) -> ModuleSelection:
             self.received.append(tuple(s.to_line() for s in manifest_summaries))
             return ModuleSelection(modules=(), reasons={})
@@ -5173,6 +5180,40 @@ def test_select_modules_deepseek_parses_new_contract_with_default_wordlist():
     assert result.modules == ("dht11", "oled")
     assert result.requirements[0].requirement == "识别数字"
     assert result.requirements[0].suggestions[0].name == "视觉模块"
+
+
+def test_select_modules_accepts_module_outside_shown_list_but_in_library():
+    """判据取源（工单 preselect-recall-visibility/01）：清单行被预筛截断时，
+    模型推荐「子集外但库内」的模块不再被当幻觉——known_summaries（平台全量）
+    是库内合法性判据，manifest_summaries（清单行）只决定模型看得见什么。"""
+    transport = FakeTransport(body=_api_response(SELECTION_MOTOR_JSON))
+    llm = _llm(transport)
+    shown = [ManifestSummary("dht11", "温湿度")]
+    full = [*shown, ManifestSummary("motor", "TB6612 双路直流电机驱动")]
+
+    result = llm.select_modules("自动行驶小车", shown, known_summaries=full)
+
+    assert result.modules == ("motor",)
+    # 清单行照旧只渲染子集（模型看不见 motor 的简介）
+    _, _, payload, _ = transport.calls[0]
+    assert "motor" not in payload["messages"][1]["content"]
+
+
+def test_select_modules_rejects_hallucinated_module_even_with_library():
+    """真幻觉仍被拒（防线不缩）：库内确实没有的 slug，带 known_summaries 也抛
+    客户端类错误（免重试契约不变）。"""
+    transport = FakeTransport(body=_api_response(SELECTION_MOTOR_JSON))
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError) as excinfo:
+        llm.select_modules(
+            "自动行驶小车",
+            [ManifestSummary("dht11", "温湿度")],
+            known_summaries=[ManifestSummary("dht11", "温湿度")],
+        )
+
+    assert "库中不存在的模块：motor" in str(excinfo.value)
+    assert excinfo.value.kind == ERROR_KIND_CLIENT
 
 
 def test_select_modules_parses_converged_short_marker():

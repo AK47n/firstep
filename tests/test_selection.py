@@ -7,6 +7,7 @@ homing/01）：澄清先行 → 收敛 → done 载荷组装（run_recommendatio
 FakeLLM 记录调用形状断言（不碰网络）。
 """
 
+from dataclasses import replace
 from pathlib import Path
 from queue import Queue
 from typing import Mapping, Sequence
@@ -27,6 +28,7 @@ from contest_generator.manifest import (
     ExclusiveGroupMember,
     ManifestSummary,
     ModuleManifest,
+    MultiInstanceSpec,
     PlatformEntry,
 )
 from contest_generator.reference_library import PLATFORM_ANY, ReferenceEntry, add_reference
@@ -568,6 +570,7 @@ class _RecordingConvergenceLLM(FakeLLM):
         manual_fulltexts: Mapping[str, str] | None = None,
         clarifications: Sequence[tuple[str, str]] = (),
         preselect_note: str = "",
+        **_unused: object,
     ) -> ModuleSelection:
         self.calls.append(
             (
@@ -974,6 +977,7 @@ class _BudgetedRecommendationLLM:
         reference_fulltexts: Mapping[str, str] | None = None,
         manual_fulltexts: Mapping[str, str] | None = None,
         clarifications: Sequence[tuple[str, str]] = (),
+        **_unused: object,
     ) -> ModuleSelection:
         self._consume()
         self.select_calls.append(problem_text)
@@ -2541,6 +2545,88 @@ def test_run_recommendation_default_instances_ai_guess_wins():
     assert data["instances"] == {"led": [{"name": "红", "variant": "red", "pin": ""}]}
 
 
+def _summary(slug: str, *, multi: bool = False) -> ManifestSummary:
+    """最小摘要对象（多实例标记可选）。"""
+    return ManifestSummary(
+        slug=slug,
+        description=f"{slug} 驱动",
+        kits=(),
+        dependencies=(),
+        multi_instance=MultiInstanceSpec(max=8, variant="color") if multi else None,
+    )
+
+
+def test_run_recommendation_passes_library_summaries_as_known():
+    """判据全集（工单 preselect-recall-visibility/01）：topic.library_summaries
+    作为库内合法性全集进收敛循环，清单行仍只渲染 topic.manifest_summaries 的
+    子集——「模型看不见」与「库里没有」两件事分开。"""
+    shown = _summary("dht11")
+    full = (shown, _summary("motor"))
+
+    class _RecordingLLM(FakeLLM):
+        def __init__(self):
+            super().__init__(selection=ModuleSelection(modules=(), reasons={}))
+            self.known: list[tuple[str, ...]] = []
+
+        def select_modules(self, problem_text, manifest_summaries, references=(), **kwargs):
+            self.known.append(tuple(s.slug for s in kwargs.get("known_summaries", ())))
+            return super().select_modules(problem_text, manifest_summaries, references, **kwargs)
+
+    llm = _RecordingLLM()
+    topic = replace(
+        _topic(), manifest_summaries=(shown,), library_summaries=full
+    )
+    events: Queue = Queue()
+    emit = SseEmitter(events, terminal_timeout=1.0)
+
+    run_recommendation(topic, llm, emit=emit)
+
+    assert llm.known and llm.known[0] == ("dht11", "motor")  # 全集
+    assert llm.select_calls[0][1] == ("dht11",)  # 清单行仍是子集
+
+
+def test_run_recommendation_default_instances_use_library_summaries():
+    """清单行截断掉多实例模块后，默认实例兜底仍按库内事实生效（工单
+    preselect-recall-visibility/01）：led 只在 library_summaries 里也兜底。"""
+    llm = FakeLLM(
+        selection=ModuleSelection(modules=("led",), reasons={"led": "声光提示"})
+    )
+    topic = replace(
+        _topic(),
+        manifest_summaries=(_summary("dht11"),),
+        library_summaries=(_summary("dht11"), _summary("led", multi=True)),
+    )
+    events: Queue = Queue()
+    emit = SseEmitter(events, terminal_timeout=1.0)
+
+    run_recommendation(topic, llm, emit=emit, platform=PLATFORM_STM32)
+
+    data = _drain_events(events)[-1][1]
+    assert data["instances"] == {
+        "led": [
+            {"name": "红灯", "variant": "red", "pin": ""},
+            {"name": "黄灯", "variant": "yellow", "pin": ""},
+            {"name": "绿灯", "variant": "green", "pin": ""},
+        ]
+    }
+
+
+def test_run_recommendation_without_library_summaries_keeps_old_behaviour():
+    """空 library_summaries → 判据回落清单行（旧调用零改动）：led 不在清单行
+    → 不兜底、无 instances 键，与修复前逐字节一致。"""
+    llm = FakeLLM(
+        selection=ModuleSelection(modules=("led",), reasons={"led": "声光提示"})
+    )
+    topic = replace(_topic(), manifest_summaries=(_summary("dht11"),))
+    events: Queue = Queue()
+    emit = SseEmitter(events, terminal_timeout=1.0)
+
+    run_recommendation(topic, llm, emit=emit, platform=PLATFORM_STM32)
+
+    data = _drain_events(events)[-1][1]
+    assert "instances" not in data
+
+
 def test_default_instance_plan_single_source():
     """平台默认清单单源（按 slug）：led stm32 红黄绿 / mspm0 单实例 / 未知空；
     key（key-multi-instance/04）双平台各 1 实例（按键 / start）。"""
@@ -2572,12 +2658,13 @@ def test_run_recommendation_passes_qa_material_through():
         def select_modules(
             self, problem_text, manifest_summaries, references=(),
             reference_fulltexts=None, manual_fulltexts=None,
-            clarifications=(), qa_material="",
+            clarifications=(), qa_material="", **kwargs,
         ):
             self.received_qa.append(qa_material)
             return super().select_modules(
                 problem_text, manifest_summaries, references,
                 reference_fulltexts, manual_fulltexts, clarifications, qa_material,
+                **kwargs,
             )
 
     llm = _QaLLM()

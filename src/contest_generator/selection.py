@@ -404,6 +404,11 @@ class PreselectResult:
     summaries: tuple[ManifestSummary, ...]
     total: int
     truncated: bool
+    # 平台全量摘要（工单 preselect-recall-visibility/01）：预筛是「子集 + 全量」
+    # 的唯一出处——summaries = 喂模型的清单行（可截断），library_summaries =
+    # 库内合法性的判据源（平台过滤后全集，不随题面变）。两者分开是「模型看不见」
+    # 与「库里没有」不再被混为一谈的前提；缺省空 = 旧构造兼容（测试直造对象）。
+    library_summaries: tuple[ManifestSummary, ...] = ()
 
 
 def preselect_module_summaries(
@@ -426,11 +431,14 @@ def preselect_module_summaries(
     - 保底：截断后不足 MIN_PRESELECT 条 → 扩到排序后前 MIN_PRESELECT 条
       （覆盖保底——命中稀少时清单不过短；现实库 20 条 ≈ 17KB 远小于预算）；
     - 零命中（激活词集空 + 词表零命中）→ 排序退化为 slug 序（零增量语义）；
-    - 输入空列表 → 空结果（total=0, truncated=False）。
+    - 输入空列表 → 空结果（total=0, truncated=False）；
+    - library_summaries = 输入全量（排序无关）——调用方取它作库内合法性判据
+      （工单 preselect-recall-visibility/01：子集只决定「模型看得见什么」，全量
+      决定「库里有什么」；模型推荐子集外模块不再被当幻觉）。
     """
     ordered = list(summaries)
     if not ordered:
-        return PreselectResult((), 0, False)
+        return PreselectResult((), 0, False, ())
     activated = _activated_terms(topic_text, ())
     lib_boost = _wordlist_hit_slugs(topic_text, hardware_words)
     scored = [
@@ -442,7 +450,9 @@ def preselect_module_summaries(
     kept = _fit_summaries_by_wire(scored_summaries, budget_bytes)
     if len(kept) < MIN_PRESELECT and len(scored) > len(kept):
         kept = scored_summaries[:MIN_PRESELECT]
-    return PreselectResult(tuple(kept), len(ordered), len(kept) < len(ordered))
+    return PreselectResult(
+        tuple(kept), len(ordered), len(kept) < len(ordered), tuple(ordered)
+    )
 
 
 def _preselect_score(
@@ -1332,6 +1342,7 @@ def select_modules_convergent(
     clarifications: Sequence[tuple[str, str]] = (),
     qa_material: str = "",
     preselect_note: str = "",
+    known_summaries: Sequence[ManifestSummary] = (),
 ) -> ModuleSelection:
     """题面驱动的收敛循环：功能需求层两轮一致即停，上限 max_rounds 轮。
 
@@ -1378,6 +1389,15 @@ def select_modules_convergent(
         # 预筛注记（工单 module-preselect/03）：模块候选预筛后标题行携带
         # 「按题面初筛 N/M」告知模型清单不是全量；空串 = 零变化（未预筛）
         **({"preselect_note": preselect_note} if preselect_note else {}),
+        # 库内合法性全集（工单 preselect-recall-visibility/01）：manifest_summaries
+        # 是喂模型的清单行（可能被预筛截断），known_summaries 是判据用的平台
+        # 全量——模型推荐清单外但库内有的模块不再被当幻觉。**两者相同则不传**
+        # （CLI 无预筛、测试直造 topic 的形态零改动：既有假 LLM 不需要新增形参）。
+        **(
+            {"known_summaries": known_summaries}
+            if known_summaries and list(known_summaries) != list(manifest_summaries)
+            else {}
+        ),
     }
     for round_no in range(1, max_rounds + 1):
         _emit(
@@ -1627,6 +1647,13 @@ def run_recommendation(
     # 摊薄"答案没清完疑问"的风险，select_modules 本身仍会补问、不会漏问。
     # 按需视觉问答（工单 recommend-vision-qa/01）：待问问题先过 vision_qa
     # 视觉消化（答案并入澄清历史），剩余才问用户。
+    # 库内合法性全集（工单 preselect-recall-visibility/01）：topic.manifest_summaries
+    # 可能已被预筛截断（网页路由），判据取 topic.library_summaries（装配点产出的
+    # 平台全量）——收敛循环校验推荐合法性、默认实例兜底都吃它；清单行仍只渲染
+    # topic.manifest_summaries（模型看见的范围不变）。空 = 回落清单行（旧装配
+    # 与直造 topic 的测试零改动）。
+    known = topic.library_summaries or topic.manifest_summaries
+
     def _converge(clarifs: Sequence[tuple[str, str]]) -> ModuleSelection:
         """收敛循环局部装配（澄清历史每次带当前值——视觉消化后重跑同参）。"""
         return select_modules_convergent(
@@ -1641,6 +1668,7 @@ def run_recommendation(
             max_rounds=max_rounds,  # 轮数上限可配置（工单 01，设置项透传）
             qa_material=qa_material,  # 赛题答疑 Q&A（工单 qa-material/01）
             preselect_note=preselect_note,  # 预筛注记（工单 module-preselect/03）
+            known_summaries=known,  # 合法性全集（同上；清单行另算）
         )
 
     if not clarifications:
@@ -1690,10 +1718,10 @@ def run_recommendation(
         # 多实例默认兜底（工单 instance-default-fallback/01）：AI 没猜实例
         # （题面无数量）且命中多实例模块 → 按平台默认清单自动填入——与
         # 「不配置 = 单默认实例」的生成结果等价（stm32 红黄绿 / mspm0 单
-        # 实例），实例卡直接可见可改；空 platform / 无多实例命中 = 不落键
-        default_instances = _default_instances_for(
-            selection.modules, topic.manifest_summaries, platform
-        )
+        # 实例），实例卡直接可见可改；空 platform / 无多实例命中 = 不落键。
+        # 多实例能力判据取 known（平台全量，工单 preselect-recall-visibility/01）
+        # ——清单行被预筛截断时，库内确实支持多实例的模块仍要兜底。
+        default_instances = _default_instances_for(selection.modules, known, platform)
         if default_instances:
             result["instances"] = {
                 slug: [instance.to_dict() for instance in instances]

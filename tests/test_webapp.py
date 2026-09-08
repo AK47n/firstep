@@ -144,6 +144,7 @@ class RaisingLLM:
         manifest_summaries: Sequence[ManifestSummary],
         references: Sequence[ReferenceSuggestion] = (),
         reference_fulltexts: Mapping[str, str] | None = None,
+        **_unused: object,
     ) -> ModuleSelection:
         raise LLMError("服务不可用")
 
@@ -257,7 +258,8 @@ class ScriptedDistillLLM:
         self._delay = delay
 
     def select_modules(
-        self, problem_text: str, manifest_summaries: Sequence[ManifestSummary]
+        self, problem_text: str, manifest_summaries: Sequence[ManifestSummary],
+        **_unused: object,
     ) -> ModuleSelection:
         raise LLMError("ScriptedDistillLLM 只服务提炼端点")
 
@@ -575,6 +577,89 @@ def _recommend_done(client, payload) -> dict:
     return done[0]
 
 
+def _drain(events: Queue) -> list:
+    items = []
+    while not events.empty():
+        items.append(events.get_nowait())
+    return items
+
+
+def test_recommend_route_passes_full_library_as_known(client, context):
+    """判据取源（工单 preselect-recall-visibility/01，最高 seam = /api/recommend）：
+    清单行被预筛截断时，路由交给收敛循环的「库内合法性全集」仍是平台全量，
+    因此模型推荐「子集外但库内」的模块能一路走到 done 载荷（不是只走到判据）。
+
+    现场把假库撑过 MODULE_SUMMARY_BYTES 使预筛真的截断，从而区分两份清单；
+    假 LLM 按生产语义用 known_summaries 做域判决（子集外库内模块照收，库内
+    没有的才拒）——修复前路由只给子集，推荐 dht11 之外的库内模块会在这里被拒，
+    断言即红。域判决的逐字红证另见 tests/test_llm.py::test_select_modules_
+    accepts_module_outside_shown_list_but_in_library。
+    """
+    import json as _json
+
+    from contest_generator.selection import SelectionError
+
+    lib = context[0].config.module_library_dir
+    # 每行 ≈ 1.2KB（描述 400 字）→ 120 条 ≈ 144KB，远超 MODULE_SUMMARY_BYTES
+    # （40000 wire 字节），预筛必然截断
+    long_desc = "场景传感器驱动（现场撑大清单行以触发预筛截断）" + "细节" * 130
+    for index in range(120):
+        slug = f"filler_{index:02d}"
+        module_dir = lib / slug
+        module_dir.mkdir(parents=True)
+        (module_dir / "manifest.json").write_text(
+            _json.dumps(
+                {
+                    "slug": slug,
+                    "description": long_desc,
+                    "platforms": {
+                        "stm32": {"files": [f"{slug}.c"], "verified": True}
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        (module_dir / f"{slug}.c").write_text(f"/* {slug} */\n", encoding="utf-8")
+
+    class _DomainJudgmentLLM(FakeLLM):
+        """按生产语义做域判决：合法 slug 取 known_summaries（缺省 = 清单行）。"""
+
+        def __init__(self):
+            super().__init__(
+                selection=ModuleSelection(modules=("dht11",), reasons={})
+            )
+            self.known: list[tuple[str, ...]] = []
+            self.shown: list[tuple[str, ...]] = []
+
+        def select_modules(self, problem_text, manifest_summaries, *args, **kwargs):
+            self.shown.append(tuple(s.slug for s in manifest_summaries))
+            known = kwargs.get("known_summaries") or manifest_summaries
+            self.known.append(tuple(s.slug for s in known))
+            if "dht11" not in set(self.known[-1]):
+                raise SelectionError("模型推荐了库中不存在的模块：dht11")
+            return super().select_modules(
+                problem_text, manifest_summaries, *args, **kwargs
+            )
+
+    llm = _DomainJudgmentLLM()
+    context[1]["llm"] = llm
+
+    done = _recommend_done(
+        client, {"problem_text": "采集温湿度并显示", "platform": "stm32"}
+    )
+
+    assert llm.known, "收敛循环未收到 known_summaries（判据全集没传下去）"
+    known, shown = set(llm.known[0]), set(llm.shown[0])
+    # 前提：预筛确实截断了清单行（否则两份清单同值，本测试无区分力）
+    assert len(known) > len(shown), (
+        f"清单行未被截断（{len(shown)} 条），本测试无法区分子集与全量"
+    )
+    assert shown < known, f"清单行不是全量的真子集：{sorted(known - shown)[:3]}"
+    # 端到端：推荐结果（done 载荷）确实带出模块，判据通过没被拒
+    assert [m["slug"] for m in done["modules"]] == ["dht11"]
+
+
 def test_recommend_done_includes_default_instances_for_multi_module(client, context):
     """多实例默认兜底（工单 instance-default-fallback/01）端到端：命中 led
     （multi_instance）+ stm32 且 AI 没猜实例 → done 载荷带红黄绿默认实例；
@@ -751,7 +836,7 @@ def test_recommend_with_qa_material_flows_through(client, context):
         def select_modules(
             self, problem_text, manifest_summaries, references=(),
             reference_fulltexts=None, manual_fulltexts=None,
-            clarifications=(), qa_material="",
+            clarifications=(), qa_material="", **_unused,
         ):
             received["qa"] = qa_material
             return ModuleSelection(modules=("dht11",), reasons={"dht11": "测温湿度"})
@@ -5172,6 +5257,7 @@ class TopicAwareLLM(FakeLLM):
         reference_fulltexts: Mapping[str, str] | None = None,
         manual_fulltexts: Mapping[str, str] | None = None,
         clarifications: Sequence[tuple[str, str]] = (),
+        **_unused: object,
     ) -> ModuleSelection:
         self.problem_texts.append(problem_text)
         self.manifest_slugs.append(tuple(s.slug for s in manifest_summaries))
@@ -5204,6 +5290,7 @@ class ClarifyHistoryTopicLLM(TopicAwareLLM):
         reference_fulltexts: Mapping[str, str] | None = None,
         manual_fulltexts: Mapping[str, str] | None = None,
         clarifications: Sequence[tuple[str, str]] = (),
+        **kwargs: object,
     ) -> ModuleSelection:
         super().select_modules(
             problem_text,
@@ -5212,6 +5299,7 @@ class ClarifyHistoryTopicLLM(TopicAwareLLM):
             reference_fulltexts,
             manual_fulltexts,
             clarifications,
+            **kwargs,
         )
         if not self._asked and not clarifications:
             self._asked = True
@@ -5369,6 +5457,7 @@ def test_recommend_vision_qa_answers_figure_question(client, context, monkeypatc
             manual_fulltexts=None,
             clarifications=(),
             qa_material="",
+            **_unused,
         ):
             seen["clarifications"] = tuple(clarifications)
             return self._selection
@@ -6684,6 +6773,7 @@ class _EverChangingLLM(TopicAwareLLM):
         reference_fulltexts=None,
         manual_fulltexts=None,
         clarifications=(),
+        **_unused,
     ):
         self.select_calls += 1
         return ModuleSelection(

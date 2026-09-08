@@ -1502,6 +1502,7 @@ class LLM(Protocol):
         clarifications: Sequence[tuple[str, str]] = (),
         qa_material: str = "",
         preselect_note: str = "",
+        known_summaries: Sequence[ManifestSummary] = (),
     ) -> ModuleSelection: ...
 
     def clarify(
@@ -1855,6 +1856,7 @@ class DeepSeekLLM:
         clarifications: Sequence[tuple[str, str]] = (),
         qa_material: str = "",
         preselect_note: str = "",
+        known_summaries: Sequence[ManifestSummary] = (),
     ) -> ModuleSelection:
         """赛题 → 模块选择（工单 03 起带参考文件两级注入的清单 / 全文两个形态）。
 
@@ -1878,6 +1880,12 @@ class DeepSeekLLM:
         标注（ManifestSummary.to_line），模型按题面猜实例数输出 instances，
         解析层按同源能力清单校验（multi_instance_slugs——非多实例模块带
         instances = 幻觉，大声失败）。
+
+        库内合法性全集（工单 preselect-recall-visibility/01）：known_summaries
+        = 平台全量摘要（网页路由预筛截断清单行后，判据仍取全量）——模型推荐
+        清单外但库内有的模块不再被当幻觉拒绝；多实例能力清单同源取它（放行
+        之后配实例不再二次硬失败）。空 = 回落 manifest_summaries（CLI 无预筛
+        与既有调用零变化）。
 
         瞬时失败整次重问（_retry_parse，与归档判定同款兜底）：DeepSeek 偶发
         空内容 / 输出畸形会重问，最多 SUMMARY_RETRY_LIMIT 轮，仍失败大声抛错。
@@ -1904,16 +1912,21 @@ class DeepSeekLLM:
             if isinstance(data, Mapping) and data.get("converged") is True:
                 return ModuleSelection(modules=(), reasons={}, converged=True)
             try:
+                # 判据取源（工单 preselect-recall-visibility/01）：合法 slug /
+                # 多实例能力清单取 known_summaries（平台全量），不取
+                # manifest_summaries（可能已被预筛截断的清单行）——「模型看不见」
+                # 不等于「库里没有」。
+                known = known_summaries or manifest_summaries
                 return build_module_selection(
                     data,
-                    known_slugs=[s.slug for s in manifest_summaries],
+                    known_slugs=[s.slug for s in known],
                     known_reference_ids=[r.id for r in references],
                     hardware_words=self._hardware_words,
                     # 多实例能力清单（工单 module-multi-instance/06）：
                     # ManifestSummary.multi_instance 与清单行标注同源——模型
                     # 只在能力模块上猜实例数，解析层按同清单做能力校验
                     multi_instance_slugs=[
-                        s.slug for s in manifest_summaries if s.multi_instance
+                        s.slug for s in known if s.multi_instance
                     ],
                 )
             except SelectionError as exc:
@@ -3617,6 +3630,7 @@ class RoutingLLM:
         clarifications: Sequence[tuple[str, str]] = (),
         qa_material: str = "",
         preselect_note: str = "",
+        known_summaries: Sequence[ManifestSummary] = (),
     ) -> ModuleSelection:
         return self._remote.select_modules(
             problem_text,
@@ -3627,6 +3641,7 @@ class RoutingLLM:
             clarifications,
             qa_material,
             preselect_note=preselect_note,
+            known_summaries=known_summaries,
         )
 
     def clarify(
