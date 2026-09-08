@@ -765,6 +765,7 @@
       "MAX7219",
       "ST7735",
       "ST7789",
+      "ST7789 并口屏",
       "GC9A01",
       "XPT2046",
       "ILI9341",
@@ -801,6 +802,16 @@
         "lib_modules": [
           "ili9341",
           "ili9488"
+        ]
+      },
+      {
+        "name": "1.14 寸 ST7789 并口屏（135×240，8 位并口 8080）",
+        "interface": "8 位并口位操作（DB0-7/RD/WR/CS/DC/RES/BLK 14 脚，免 FSMC/硬件外设）",
+        "price": "￥10-25/块",
+        "note": "库内 st7789_para 已打通（stm32：init(方向)/fill/clear/draw_point/line/rectangle/circle/show_char/string/num/float/chinese16x16/picture——照 lcd 六合一同构 API；135×240，dir 0/1 竖屏/2/3 横屏（默认横屏）；**库内首个 8 位并口显示件**——8080 时序 GPIO 位操作（8 位数据线并行 + RD/WR 选通，不占 FSMC/TIMER），比软 SPI 快但吃 14 脚；默认脚与显示族互替同脚（一次选一块屏）+ 数据线叠采集/运动件不同框，同选时绑脚消解）；与 lcd/ILI 软 SPI 屏互替（小屏大屏一次选一）",
+        "suitable": "小屏数据显示/仪表/菜单界面/波形曲线",
+        "lib_modules": [
+          "st7789_para"
         ]
       }
     ]
