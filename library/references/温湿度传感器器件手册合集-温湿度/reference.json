@@ -1,0 +1,19 @@
+{
+  "id": "温湿度传感器器件手册合集-温湿度",
+  "title": "温湿度传感器器件手册合集（温湿度）",
+  "type": "器件手册",
+  "description": "温湿度器件移植手册合集：DHT11、DS18B20、SHT20、SHT30、AHT10——单总线与 I2C 两种形态，骨架阶段选中温湿度类模块时的器件级例程参考。",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "any",
+  "topic_type": "",
+  "files": [
+    "dht11.md",
+    "ds18b20.md",
+    "sht20.md",
+    "sht30.md",
+    "aht10.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
