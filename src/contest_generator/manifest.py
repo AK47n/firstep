@@ -7,7 +7,7 @@ files 里，相对模块目录）。
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -846,13 +846,38 @@ def collect_exclusive_groups(
     return result
 
 
+# 瘦身行首句上限（工单 preselect-visibility/01）：按「。」「；」最早出现者切出
+# 第一句后，再硬截断到本字符数。上限的实测依据（.scratch/library-audit/
+# probe_lean_variants.py，早期版本按固定顺序切分）：真实库瘦身行全库 wire
+# 60 字 20.7KB / 100 字 29.6KB / 120 字 33.4KB / 150 字 39.7KB（预算 40000B）
+# ——取 100 留 ≥10KB 余量，同时把 pid 这类能力密集简介的核心能力句保留下来。
+# 改最早切点后生产实测 28071B / 28062B（见 budget.py 摘要段记账）。
+LEAN_SUMMARY_SENTENCE_CHARS = 100
+
+# 首句切分点（不切「，」「：」——「TB6612 …（双平台统一 API）：motor_set_duty
+# 调速…」的「：」后才是能力句，切了等于没写）。
+_LEAN_SENTENCE_BREAKS = ("。", "；")
+
+
+def _bounded_first_sentence(text: str, cap: int = LEAN_SUMMARY_SENTENCE_CHARS) -> str:
+    """简介的有界首句：按「。」「；」**最早出现者**取第一句 → 去空白 → 硬截断。
+
+    取最早切点而非固定顺序（先找「。」再找「；」）：真实库 84/93 条简介
+    「；」先于「。」（如 adc「ADC12 采集：四通道；MEM0 与…」），按固定顺序
+    会得到远超首句的长串。
+    """
+    breaks = [index for mark in _LEAN_SENTENCE_BREAKS if (index := text.find(mark)) >= 0]
+    sentence = text[: min(breaks)] if breaks else text
+    return sentence.strip()[:cap].strip()
+
+
 @dataclass(frozen=True)
 class ManifestSummary:
     """模块库摘要对象（喂给 LLM 的可用模块清单——协议层收对象，字符串只在
     prompt 边界渲染一次，不再有两端解析耦合）。
 
-    行渲染唯一实现 = to_line()（原 build_manifest_summaries 的行文法逐字
-    搬入）；known_slugs 直接取 slug 字段，不再反向解析行。
+    行渲染唯一实现 = to_line()（完整行 / 瘦身行两种形态，由 lean_line 决定，
+    见 to_line 文档）；known_slugs 直接取 slug 字段，不再反向解析行。
     """
 
     slug: str
@@ -862,6 +887,7 @@ class ManifestSummary:
     multi_instance: MultiInstanceSpec | None = None  # 多实例能力（缺省 = 单实例）
     python_artifact: PythonArtifactSpec | None = None  # Python 副产物（缺省 = 无）
     exclusive_group: ExclusiveGroupSpec | None = None  # 功能组互斥（缺省 = 无组）
+    lean_line: bool = False  # 行渲染形态：False = 完整行，True = 瘦身行（见 to_line）
 
     @classmethod
     def from_manifest(cls, manifest: ModuleManifest) -> "ManifestSummary":
@@ -875,15 +901,39 @@ class ManifestSummary:
             exclusive_group=manifest.exclusive_group,
         )
 
-    def to_line(self) -> str:
-        """摘要行：`- slug: description（套件: kit; 依赖: ...）`。
+    def lean_copy(self) -> "ManifestSummary":
+        """同一摘要的瘦身行形态副本（工单 preselect-visibility/02）。
 
-        套件段聚合各平台条目的 kit（去重保序走 collect_kits 单源，有 kit 才
-        显示，AI 靠它分辨"哪个套件的 UWB"）；依赖段有依赖才显示；多实例段
-        （工单 module-multi-instance/06）有 multi_instance 能力才显示——AI
-        据此知道哪些模块可多实例、上限多少（选模块猜实例数的能力证据）。
+        装配点用它把「模型看得见的清单行」切成瘦身形态：下游提示词、库指纹、
+        设计报告草稿、修订影响分析都只经 to_line() 渲染，因此取源换一处即可
+        全链路一致（无需每个渲染点各传一个模式开关）。
+        """
+        if self.lean_line:
+            return self
+        return replace(self, lean_line=True)
+
+    def to_line(self) -> str:
+        """摘要行（唯一渲染出口）：完整形态或瘦身形态，由 lean_line 决定。
+
+        完整行：`- slug: description（套件: kit; 依赖: ...）`——套件段聚合各
+        平台条目的 kit（去重保序走 collect_kits 单源，有 kit 才显示，AI 靠它
+        分辨"哪个套件的 UWB"）；依赖段有依赖才显示；多实例段（工单
+        module-multi-instance/06）有 multi_instance 能力才显示——AI 据此知道
+        哪些模块可多实例、上限多少（选模块猜实例数的能力证据）。
+
+        瘦身行（工单 preselect-visibility/01-02）：`- slug: 有界首句（依赖: …）
+        （多实例：…）（副产物…）（同组互斥…）`——省掉套件段（实测占摘要字节
+        23.5%，且含淘宝/天猫采购链接噪声），使真实库全库装得进
+        MODULE_SUMMARY_BYTES（86598B → 28071B），预筛不再截断；依赖 / 多实例 /
+        副产物模板 / 互斥组四段是选模块后的决策信息，全部保留。
+
+        两种形态共用决策段渲染（_decision_segments），差异只在首段：完整形态
+        带套件段与全简介，瘦身形态带套件段以外的四段 + 有界首句。
+
         行格式的唯一出处——只进 LLM prompt，不再有反向解析方。
         """
+        if self.lean_line:
+            return self._lean_line()
         line = f"- {self.slug}: {self.description}"
         if self.kits:
             line += f"（套件: {'、'.join(self.kits)}"
@@ -892,8 +942,17 @@ class ManifestSummary:
             line += "）"
         elif self.dependencies:
             line += f"（依赖: {', '.join(self.dependencies)}）"
+        return line + self._decision_segments()
+
+    def _decision_segments(self) -> str:
+        """选模块后的决策段（两种行形态共用）：多实例 / 副产物模板 / 互斥组。
+
+        有对应声明才渲染，无声明返回空串——改段落文案只需改这一处，两种行形态
+        不会漂移。
+        """
+        segments = ""
         if self.multi_instance is not None:
-            line += (
+            segments += (
                 f"（多实例：上限 {self.multi_instance.max}，"
                 f"变体 = {self.multi_instance.variant}）"
             )
@@ -901,16 +960,23 @@ class ManifestSummary:
             names = [
                 t.name or t.id for t in self.python_artifact.templates
             ]
-            line += (
+            segments += (
                 f"（副产物模板可选：{'、'.join(names)}，"
                 f"默认 = {self.python_artifact.default_id}）"
             )
         if self.exclusive_group is not None:
-            line += (
+            segments += (
                 f"（{EXCLUSIVE_GROUP_TAG}：{self.exclusive_group.label}，"
                 "组内仅选其一）"
             )
-        return line
+        return segments
+
+    def _lean_line(self) -> str:
+        """瘦身行渲染（to_line 的 lean_line=True 分支，形态说明见 to_line）。"""
+        line = f"- {self.slug}: {_bounded_first_sentence(self.description)}"
+        if self.dependencies:
+            line += f"（依赖: {', '.join(self.dependencies)}）"
+        return line + self._decision_segments()
 
 
 def build_manifest_summaries(
@@ -919,7 +985,8 @@ def build_manifest_summaries(
     """模块库摘要对象（喂给 LLM 的可用模块清单）。
 
     形状归 manifest.ManifestSummary（slug/description/kits/依赖），行渲染
-    唯一实现 = ManifestSummary.to_line()——本函数只是批量投影，协议层不再
-    传字符串、不再有反向解析（_summary_slugs 已删除）。
+    唯一实现 = ManifestSummary.to_line()（完整行；瘦身行经 lean_copy() 切换形态，
+    同一出口）——本函数只是批量投影，协议层不再传字符串、不再有反向解析
+    （_summary_slugs 已删除）。
     """
     return [ManifestSummary.from_manifest(m) for m in manifests]

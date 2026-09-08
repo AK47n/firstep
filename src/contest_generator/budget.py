@@ -201,6 +201,17 @@ SKELETON_RELATED_LIMIT = 4
 # （红证校准见 test_recommend_real_library_budget，工单 02）。取 40000：
 # 够 mspm0 线命中集常态送达（平均行 wire ≈ 870B，按 46 条 ≤ 预算），
 # 同时给全文段留足；数值以红证实测为准（工单 02 校准）。
+#
+# 摘要行瘦身入账（2026-09-08，工单 preselect-visibility/01）：预筛仍截断的根因
+# 不是预算太小而是行太长——完整行含套件段（占摘要字节 23.5%，且带淘宝/天猫
+# 采购链接噪声），全库 stm32 86.6KB / mspm0 78.8KB。一级清单行改瘦身形态
+# （slug + 有界首句 100 字符 + 依赖 + 多实例 + 副产物/互斥标记，套件段不进
+# 一级行，manifest.ManifestSummary.lean_copy + to_line）后实测 stm32 28071B /
+# mspm0 28062B（生产实现量得，非探针自算）——**全库可装，截断消失**（复测
+# .scratch/library-audit/probe_lean_variants.py 走同一实现；不变量
+# test_manifest.py::test_lean_summary_lines_fit_preselect_budget_for_real_library
+# 断言余量 ≥5KB）。
+# 本数值保持 40000 不动：仍是段级上界（库长大到装不下时截断机制照旧兜底）。
 MODULE_SUMMARY_BYTES = 40000
 
 # 预筛保底下限（工单 module-preselect/01）：预算截断后不足本数 → 扩到排序
