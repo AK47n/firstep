@@ -18,7 +18,7 @@ import logging
 import math
 import re
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable
 
 from .ccs import CcsProjectError
 from .codeview import CodeViewConflictError, CodeViewError
@@ -71,7 +71,11 @@ class _ErrorEntry:
 
     exc_types: tuple[type[Exception], ...]
     status: int
-    message: Callable[[Exception], str]
+    # 入参标 Any（mypy 基线遗留）：各行的生成函数按自己的异常类型收窄
+    # （os_error_message 收 OSError 再 getattr winerror/errno），表里存成
+    # 统一的 Exception 签名会让它们被判为不兼容；调用点只会传该行匹配到的
+    # 异常实例，收窄由各生成函数自己负责。
+    message: Callable[[Any], str]
 
 
 _LOG = logging.getLogger(__name__)

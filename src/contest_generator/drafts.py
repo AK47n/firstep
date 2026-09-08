@@ -128,10 +128,14 @@ def _now_stamp() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%S%z")
 
 
-def add_draft(drafts: IdeaDrafts, text: str) -> IdeaDrafts:
+def add_draft(drafts: IdeaDrafts, text: object) -> IdeaDrafts:
     """新增一条草稿（纯函数）：text 空 / 纯空白 → TaskError；strip 后与
     既有草稿同文本 → 原样返回（去重——同文本只存一条，spec 故事 8）；
-    id = uuid4 hex 前 12 位（全局唯一，删除按 id 定位）。"""
+    id = uuid4 hex 前 12 位（全局唯一，删除按 id 定位）。
+
+    入参标 object（mypy 基线遗留）：函数本身做 isinstance 收窄，端点把
+    payload 原值直接传进来；标 str 会让调用点被判类型不兼容。
+    """
     if not isinstance(text, str) or not text.strip():
         raise TaskError("草稿 text 必须是非空字符串")
     cleaned = text.strip()

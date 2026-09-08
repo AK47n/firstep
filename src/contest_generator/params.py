@@ -147,6 +147,9 @@ def build_params(raw: Any, main_c: str) -> ParamList:
         label = raw_item.get("label")
         old_value = raw_item.get("old_value")
         anchor = raw_item.get("anchor")
+        # 逐字段校验后收进 typed dict（mypy 基线遗留）：循环里 isinstance 的
+        # 收窄不会带出循环，后面直接下标取已校验值即可（错误文案与顺序不变）。
+        validated: dict[str, str] = {}
         for field, value in (
             ("name", name),
             ("label", label),
@@ -155,29 +158,33 @@ def build_params(raw: Any, main_c: str) -> ParamList:
         ):
             if not isinstance(value, str) or not value.strip():
                 raise TaskError(f"第 {index} 个参数缺少 {field}（模型未输出或为空串）")
-        if anchor not in main_c:
+            validated[field] = value
+        if validated["anchor"] not in main_c:
             raise TaskError(
-                f"第 {index} 个参数 {name} 的锚不在 main.c 中"
+                f"第 {index} 个参数 {validated['name']} 的锚不在 main.c 中"
                 "——模型输出的 anchor 与源码不一致"
             )
-        if anchor.count(old_value) != 1:
+        if validated["anchor"].count(validated["old_value"]) != 1:
             raise TaskError(
-                f"第 {index} 个参数 {name} 的锚中当前值 {old_value} 出现"
-                f" {anchor.count(old_value)} 次（必须恰好 1 次才能确定性替换）"
+                f"第 {index} 个参数 {validated['name']} 的锚中当前值 "
+                f"{validated['old_value']} 出现"
+                f" {validated['anchor'].count(validated['old_value'])} 次"
+                "（必须恰好 1 次才能确定性替换）"
             )
-        if not _old_value_token_ok(anchor, old_value):
+        if not _old_value_token_ok(validated["anchor"], validated["old_value"]):
             raise TaskError(
-                f"第 {index} 个参数 {name} 的当前值 {old_value} 不是锚中的完整"
+                f"第 {index} 个参数 {validated['name']} 的当前值 "
+                f"{validated['old_value']} 不是锚中的完整"
                 "字面量（如带后缀的 800UL / 1.2f 必须写全）——无法确定性替换"
             )
         unit = raw_item.get("unit")
         range_hint = raw_item.get("range_hint")
         items.append(
             ParamItem(
-                name=name.strip(),
-                label=label.strip(),
-                old_value=old_value,
-                anchor=anchor,
+                name=validated["name"].strip(),
+                label=validated["label"].strip(),
+                old_value=validated["old_value"],
+                anchor=validated["anchor"],
                 unit=unit.strip() if isinstance(unit, str) else "",
                 range_hint=range_hint.strip() if isinstance(range_hint, str) else "",
             )

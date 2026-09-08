@@ -220,10 +220,12 @@ def source_notice_lines(manifests: Sequence[ModuleManifest], platform: str) -> t
     platform = 当前生成平台（模块清单来源按该平台条目判——同一模块不同平台
     source_url 独立）。返回 tuple 由渲染方 lines.extend 消费（测试同构直测）。
     """
+    # 平台条目取一次（walrus 收窄，mypy 基线遗留）：同一模块不同平台
+    # source_url 独立，缺该平台条目 = 不参与判定。
     has_wiki = any(
-        is_wiki_source_url(manifest.platforms.get(platform).source_url)
+        is_wiki_source_url(entry.source_url)
         for manifest in manifests
-        if manifest.platforms.get(platform) is not None
+        if (entry := manifest.platforms.get(platform)) is not None
     )
     intro = SOURCE_NOTICE_INTRO_HAS_WIKI if has_wiki else SOURCE_NOTICE_INTRO_NO_WIKI
     return (

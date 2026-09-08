@@ -484,7 +484,9 @@ def render_pdf_pages(
     try:
         with fitz.open(str(pdf_path)) as doc:
             total = doc.page_count
-            pages: list[dict[str, str]] = []
+            # page_no 是 int、data_url 是 str——值类型混合，标注 dict[str, Any]
+            # （mypy 基线遗留：标 dict[str, str] 会让 int 那条报错）
+            pages: list[dict[str, Any]] = []
             for page_no in range(1, min(total, max_pages) + 1):
                 png = _render_page_png(pdf_path, page_no)
                 if png is None:
