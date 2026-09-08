@@ -57,15 +57,6 @@ def test_module_mapping_terms_are_in_vocabulary():
     assert not problems, f"映射词项不在词表内：{'、'.join(problems)}"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "既有 18 个映射里有 6 个模块的全部词项在参考库标题 0 命中（beep/key/"
-        "led/led_beep/oled/servo——参考库缺这些器件的例程条目），选中这些模块"
-        "时骨架关联不到任何例程。修法是补参考条目内容（工单 04）；修好后自动"
-        "转绿，转绿时摘掉本标记（复测：probe_term_titles.py）"
-    ),
-)
 def test_every_mapped_module_hits_at_least_one_reference_title():
     """每个有映射的模块至少有一个词项（含同义词组）命中参考条目标题。
 
