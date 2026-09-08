@@ -391,6 +391,7 @@ PERIPHERAL_TERMS: tuple[str, ...] = (
     "flash", "rtc", "nvic", "systick", "timer", "pwm", "comp", "cmp",
     "opamp", "oled", "lcd", "key", "button", "led", "beep", "buzzer",
     "servo", "motor", "step", "camera", "cam", "esp32", "k230", "zigbee", "wifi",
+    "pid",
     # 中文外设词（题目常见表述；「巡线」与「循迹」同义——库内例程标题用
     # 「巡线」（21F 巡线送药 / 26H 滚球巡线 / car 1.1 巡线模板），题面多写
     # 「循迹」，两词都收）
@@ -420,8 +421,41 @@ MODULE_PERIPHERAL_TERMS: dict[str, tuple[str, ...]] = {
     "servo": ("servo",),
     "motor": ("motor",),
     "step_motor": ("step", "motor"),
+    # pid 承载灰度读取 + 加权质心巡线（`巡线` 词项关联到 21F / 26H / car 1.1
+    # 三条决策例程；`pid` 本身在参考库 0 命中，但按模块算的判据只需一个词项
+    # 命中——工单 preselect-visibility/03 口径）
+    "pid": ("pid", "巡线"),
     "xunji": ("循迹", "巡线"),
     "k230": ("k230",),
+}
+
+# 模块 → 参考条目关联的显式豁免（工单 preselect-visibility/03）：不参与
+# `related_references` 关联（推荐候选与骨架例程共用同一关联面）的模块，理由
+# 写在这里（库内数据，不再是测试文件里的常量名单）。
+# 判据（与库内事实对齐，不复述 manifest）：**该模块在参考库里没有可关联的
+# 条目**——参考库现阶段只有芯片外设例程与厂商套件资料，没有器件级手册条目，
+# 故「内部件 / 协议切片 / 暂无器件条目」的模块豁免；器件模块（工单 04/05 补
+# 条目后）不豁免，靠 MODULE_PERIPHERAL_TERMS 映射。两者不得同时出现
+# （tests/test_skeleton_mapping_coverage.py 断言）。
+MODULE_REFERENCE_EXEMPT: dict[str, str] = {
+    # 内部件：库内以头文件 / 工具形态存在，不是用户会单独采购的器件
+    "config": "内部件（板级配置宏）",
+    "delay": "内部件（软件延时）",
+    "filter": "内部件（滤波工具）",
+    "ntb_time": "内部件（板载时间基准）",
+    # 协议 / 帧解析切片：与上位器件绑定，参考库无对应条目
+    "coord_detect": "协议切片（K230 帧解析）",
+    "open_mv4": "协议切片（OpenMV4 帧解析）",
+    "zigbee_link": "协议切片（Zigbee 透传链路）",
+    "ir_remote": "协议切片（红外 NEC 接收时序）",
+    "ir_remote_tx": "协议切片（红外编码发射时序）",
+    # 器件类但参考库暂无对应条目：工单 04/05 补条目后转映射（届时从此表移除）
+    "ec01g": "暂无器件条目（NB-IoT+GPS 透传）",
+    "esp01s": "暂无器件条目（WiFi 透传）",
+    "huidu": "同传感器切片（灰度读取，关联归 xunji / pid）",
+    "ir_beam": "暂无器件条目（红外对射）",
+    "neo_6m": "暂无器件条目（GPS 定位）",
+    "tp_xpt2046": "暂无器件条目（电阻触摸控制器）",
 }
 
 # 同义词组（单源）：组内任一词命中（题面侧）→ 整组激活 → 条目侧组内任一

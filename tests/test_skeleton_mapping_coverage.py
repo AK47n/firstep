@@ -1,23 +1,23 @@
-"""骨架「模块 → 例程」映射守卫（第 3 批第 3 项的缺口记录）。
+"""骨架「模块 → 例程」映射守卫（工单 preselect-visibility/03）。
 
 背景：骨架阶段按选中模块自动关联参考例程，依据是 `reference_library.
 MODULE_PERIPHERAL_TERMS`（slug → 词项，词项经 `PERIPHERAL_TERMS` 激活条目）。
-实测只有 **18/93** 个模块有映射，其余模块选中后关联不到任何例程。
+实测 93 个模块里只有 20 个有映射，其余选中后关联不到任何例程；且既有映射里
+有 6 个模块的全部词项在参考库标题 0 命中（死映射）。
 
-本文件把两件事分开钉住：
+本文件钉住三条契约：
 
 1. **映射的硬契约（现在就绿）**：每个映射的词项必须在 `PERIPHERAL_TERMS` 里
-   （词表单源），且**每个词项必须至少命中一条参考条目标题**——写进去却关联不到
-   任何例程的映射等于没写。这条对既有 18 个映射成立，也是后续扩映射的验收线。
-2. **覆盖率缺口（当前 xfail）**：全库模块要么有映射、要么在「明确不映射」名单里。
-   当前 75 个模块既没映射也不在名单里，故标记 `xfail(strict=True)`。
+   （词表单源）；映射的 slug 必须在库内（防手改漂移）。
+2. **映射不是死的（当前 xfail）**：每个有映射的模块至少有一个词项（含同义词组）
+   命中至少一条参考条目标题——按模块算，不按词项算（`step_motor` 的 `step`
+   0 命中、`motor` 2 命中 = 有效）。补参考条目内容后（工单 04）转绿。
+3. **不留沉默缺口**：全库每个模块要么有映射、要么在库内数据
+   `MODULE_REFERENCE_EXEMPT` 里显式豁免并写明理由；豁免与映射不得同时存在。
+   豁免表结构现在就绿；「全库覆盖」那条在工单 05 补完映射后转绿。
 
-为什么覆盖率缺口没在本轮修：扩映射需要词项，而 75 个未映射模块需要的词项
-（气压/称重/颜色/气体/光照/指纹/语音/触摸/摇杆…）大部分不在 `PERIPHERAL_TERMS`，
-且参考库 148 条标题里 29/57 个词项 0 命中（oled/lcd/key/led/beep/servo 全 0）——
-扩词表属「预筛评分与匹配粒度」批次，两者同批做才有意义（见
-`.scratch/library-hookup-and-invariants/spec.md`「范围外」）。复测探针：
-`.scratch/library-audit/probe_term_effect.py`、`probe_term_titles.py`。
+复测探针：`.scratch/library-audit/probe_term_effect.py`、`probe_term_titles.py`、
+`probe_unmapped.py`、`probe_exempt_facts.py`。
 """
 
 from __future__ import annotations
@@ -29,9 +29,10 @@ import pytest
 from contest_generator.library import list_modules
 from contest_generator.reference_library import (
     MODULE_PERIPHERAL_TERMS,
+    MODULE_REFERENCE_EXEMPT,
     PERIPHERAL_TERMS,
+    _entry_score,
     _synonym_group,
-    _text_has_term,
     list_references,
 )
 
@@ -39,21 +40,9 @@ ROOT = Path(__file__).resolve().parents[1]
 MODULES_DIR = ROOT / "library" / "modules"
 REFERENCES_DIR = ROOT / "library" / "references"
 
-# 明确「不映射」的模块：内部件（库内以头文件/工具形态存在，不是用户会挑的
-# 器件，也不该把例程关联引到它们身上）。名单与词表挂接判据同口径
-# （tests/test_wordlist.py::_INTERNAL_SLUGS）。
-NO_MAPPING_SLUGS = (
-    "adc", "delay", "filter", "uart", "config", "debug_uart", "digit_uart",
-    "imu_uart", "zigbee_uart", "zigbee_uart_key", "huidu", "ntb_time",
-)
-
 
 def _all_slugs() -> set[str]:
     return {m.slug for m in list_modules(MODULES_DIR)}
-
-
-def _titles() -> list[str]:
-    return [entry.title for entry in list_references(REFERENCES_DIR)]
 
 
 def test_module_mapping_terms_are_in_vocabulary():
@@ -71,54 +60,81 @@ def test_module_mapping_terms_are_in_vocabulary():
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "既有 18 个映射里有 9 个词项在参考库标题 0 命中（beep/key/led/oled/servo/"
-        "step 及中文同义词——参考库缺这些器件的例程条目），选中这些模块时骨架"
-        "关联不到任何例程。修法是补参考条目内容或改映射口径，属后续批次；"
-        "修好后自动转绿，转绿时摘掉本标记（复测：probe_term_titles.py）"
+        "既有 18 个映射里有 6 个模块的全部词项在参考库标题 0 命中（beep/key/"
+        "led/led_beep/oled/servo——参考库缺这些器件的例程条目），选中这些模块"
+        "时骨架关联不到任何例程。修法是补参考条目内容（工单 04）；修好后自动"
+        "转绿，转绿时摘掉本标记（复测：probe_term_titles.py）"
     ),
 )
-def test_module_mapping_terms_hit_at_least_one_reference_title():
-    """映射的每个词项（或其同义词组）必须至少命中一条参考条目标题。
+def test_every_mapped_module_hits_at_least_one_reference_title():
+    """每个有映射的模块至少有一个词项（含同义词组）命中参考条目标题。
 
-    骨架关联的判据是「激活词项 ∩ 条目标题」——词项在参考库里 0 命中时，这条
-    映射永远关联不到例程，等于没写。命中判定按词项所属同义词组整体算（题面
-    「循迹」经组桥接到标题「巡线」是设计内的命中形态）。扩映射时按此逐项验证
-    （探针：`.scratch/library-audit/probe_term_titles.py`）。"""
-    titles = [title.lower() for title in _titles()]
-    problems = [
-        f"{slug} → {term}"
-        for slug, terms in sorted(MODULE_PERIPHERAL_TERMS.items())
-        for term in terms
-        if not any(
-            _text_has_term(title, synonym)
-            for synonym in _synonym_group(term)
-            for title in titles
-        )
-    ]
-    assert not problems, (
-        "映射词项（含同义词组）在参考库标题里 0 命中（关联不到例程）："
-        + "、".join(problems)
+    判据按**模块**算而不是按词项算：关联的判据是「激活词项 ∩ 条目标题」，
+    模块只要有一个词项能关联到例程，这条映射就不是死的（`step_motor` 的
+    `step` 0 命中、`motor` 2 命中 = 有效；全部词项 0 命中 = 死映射）。
+
+    命中判定**走生产路径**（`_entry_score`，与 `related_references` 同一实现：
+    标题按 `[-_\\s()（）]` 拆 token 后 `_term_matches_token`）——不用
+    `_text_has_term` 另立一套（两者在 `adc12 单次转换` 这类前缀 + 数字尾巴
+    形态上不等价，测试会比生产更严、工单 04 补条目后出假红）。
+    """
+    entries = list_references(REFERENCES_DIR)
+    dead: list[str] = []
+    for slug, terms in sorted(MODULE_PERIPHERAL_TERMS.items()):
+        activated = frozenset(_synonym_group(term)[0] for term in terms)
+        if any(_entry_score(entry, activated) > 0 for entry in entries):
+            continue
+        dead.append(f"{slug}（{'、'.join(terms)} 全 0 命中）")
+    assert not dead, (
+        "以下模块的映射词项（含同义词组）在参考库标题里全部 0 命中，"
+        "选中它关联不到任何例程：" + "；".join(dead)
+    )
+
+
+def test_exempt_slugs_exist_in_library():
+    """豁免表引用的模块必须真实存在（防手改漂移）。"""
+    slugs = _all_slugs()
+    unknown = sorted(slug for slug in MODULE_REFERENCE_EXEMPT if slug not in slugs)
+    assert not unknown, f"豁免表引用了库中不存在的模块：{'、'.join(unknown)}"
+
+
+def test_exempt_entries_state_a_reason():
+    """豁免必须写明理由（空理由 = 沉默缺口，等于没声明）。"""
+    blank = sorted(
+        slug for slug, reason in MODULE_REFERENCE_EXEMPT.items() if not reason.strip()
+    )
+    assert not blank, f"豁免必须写明理由，以下为空：{'、'.join(blank)}"
+
+
+def test_exempt_and_mapping_are_mutually_exclusive():
+    """同一模块不得既豁免又有映射（两边打架 = 库错误）。"""
+    both = sorted(
+        slug for slug in MODULE_REFERENCE_EXEMPT if slug in MODULE_PERIPHERAL_TERMS
+    )
+    assert not both, (
+        f"以下模块既有映射又声明豁免（两边打架，库错误）：{'、'.join(both)}"
     )
 
 
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "骨架映射只覆盖 18/93 个模块：75 个模块既无映射也不在「不映射」名单里。"
-        "扩映射依赖词表项扩展（属预筛评分与匹配粒度批次）——修好后自动转绿，"
-        "转绿时摘掉本标记（复测：.scratch/library-audit/probe_term_effect.py）"
+        "关联面只覆盖 18/93 个模块：器件模块（有 lckfb 移植手册、可补参考条目"
+        "的 60 个）待工单 04/05 补条目与映射，当前既无映射也未豁免。工单 05"
+        "完成后自动转绿，转绿时摘掉本标记（复测："
+        ".scratch/library-audit/probe_unmapped.py）"
     ),
 )
 def test_every_module_is_mapped_or_explicitly_exempt():
-    """全库模块要么有映射、要么在明确「不映射」名单里（缺口 = 选中它时关联不到例程）。"""
+    """全库模块要么有映射、要么在库内豁免表里（缺口 = 选中它时关联不到例程）。"""
     slugs = _all_slugs()
     unmapped = sorted(
         slug
         for slug in slugs
-        if slug not in MODULE_PERIPHERAL_TERMS and slug not in NO_MAPPING_SLUGS
+        if slug not in MODULE_PERIPHERAL_TERMS and slug not in MODULE_REFERENCE_EXEMPT
     )
     assert not unmapped, (
-        f"{len(unmapped)}/{len(slugs)} 个模块无骨架映射且未声明豁免："
+        f"{len(unmapped)}/{len(slugs)} 个模块无映射且未声明豁免："
         f"{'、'.join(unmapped)}"
     )
 
