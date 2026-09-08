@@ -35,6 +35,7 @@ with_master_templates 钉同步——modules/ 与 Debug/ 为生成时创建，�
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import TYPE_CHECKING, Mapping, Sequence
 
 # manifest 是轻量模型模块（先例：既有运行时依赖），PinDeclaration 随
@@ -214,11 +215,49 @@ SOURCE_NOTICE_QUOTE = (
 SOURCE_NOTICE_SOURCE_LINE = "来源：" + WIKI_DMX_HOMEPAGE
 
 
+# 源码「来源标注块」的机械判据（与 tests/test_lckfb_attribution.py 同口径）：
+# 注入块形如 `/* 来源：立创开发板技术文档中心…`——它才是「本文件改写自该页」的
+# 代码事实；source_url 是硬件身份字段（购买 / 手册页），两者不等价（identity-fields/03）。
+SOURCE_NOTE_MARKER = "来源："
+SOURCE_NOTE_HEAD_WINDOW = 600  # 与 source_notes.HEAD_WINDOW 同口径（避免重依赖）
+
+
+def has_source_note(module_library_dir: Path | None, manifest: ModuleManifest, platform: str) -> bool:
+    """该平台条目的源码文件是否带来源标注块（判据 = 代码事实）。
+
+    缺库根 / 条目 / 文件 / 无 .c/.h（内嵌母版形态）= False——宁可少标「来源」，
+    不谎称改写自 wiki（与 `SOURCE_NOTICE_INTRO_HAS_WIKI` 的「如实陈述」同口径）。
+    """
+    if module_library_dir is None:
+        return False
+    entry = manifest.platforms.get(platform)
+    if entry is None:
+        return False
+    for rel in entry.files:
+        if not rel.endswith((".c", ".h")):
+            continue
+        path = module_library_dir / manifest.slug / rel
+        if not path.is_file():
+            continue
+        try:
+            head = path.read_text(encoding="utf-8", errors="replace")[
+                :SOURCE_NOTE_HEAD_WINDOW
+            ]
+        except OSError:
+            continue
+        if SOURCE_NOTE_MARKER in head:
+            return True
+    return False
+
+
 def source_notice_lines(manifests: Sequence[ModuleManifest], platform: str) -> tuple[str, ...]:
-    """声明段正文（纯函数）：按模块集是否含 wiki 派生模块选首行措辞。
+    """声明段正文（纯函数）：按模块集是否含 wiki 来源模块选首行措辞。
 
     platform = 当前生成平台（模块清单来源按该平台条目判——同一模块不同平台
     source_url 独立）。返回 tuple 由渲染方 lines.extend 消费（测试同构直测）。
+    判据保持 source_url 是 wiki 页（**不复用 `has_source_note`**）：本段说的是
+    「本工程引用了立创手册资料」的声明义务，硬件出处指向 wiki 页的模块也在引用
+    范围内；逐模块「（来源：）」行才用代码事实判据（identity-fields/03）。
     """
     # 平台条目取一次（walrus 收窄，mypy 基线遗留）：同一模块不同平台
     # source_url 独立，缺该平台条目 = 不参与判定。
@@ -259,6 +298,7 @@ def render_readme(
     resolved_bindings: Sequence[ResolvedBinding] | None = None,
     instance_plans: Mapping[str, Sequence[ExpandedInstance]] | None = None,
     score_points: Sequence[ScorePoint] | None = None,
+    module_library_dir: Path | None = None,
 ) -> str:
     """渲染工程 README 完整文本（确定性模板；章序见模块 docstring）。
 
@@ -274,6 +314,11 @@ def render_readme(
       通道宏名（LED_RED / LED_1…）、引脚 = 实例 pin，追加在对应模块声明行之后；
     - 两者缺省 / 空 = 工单 01/02 现状逐字节不变（回归护栏）。
     未声明 pins 的模块不硬猜，表尾固定尾注。
+    模块清单章「（来源：…）」行的判据（identity-fields/03 修正）：**该平台条目的
+    源码文件头部带来源标注块**（`has_source_note`，代码事实）且 source_url 是 wiki
+    页——硬件出处补成 wiki 页的原生移植驱动（motor / oled 内嵌母版 / xunji / pid）
+    不再被错标成「改写自 wiki」。`module_library_dir=None` = 读不到代码事实 → 不标
+    （宁可少标不谎称）。
     返回文本恒以单个尾部换行收尾（幂等——同输入两次调用逐字节一致）。
     """
     lines: list[str] = []
@@ -319,7 +364,9 @@ def render_readme(
     for manifest in manifests:
         entry = manifest.platforms.get(platform)
         source_url = entry.source_url if entry else ""
-        if is_wiki_source_url(source_url):
+        if is_wiki_source_url(source_url) and has_source_note(
+            module_library_dir, manifest, platform
+        ):
             source_tail = f"（来源：{source_url}）"
         else:
             source_tail = ""

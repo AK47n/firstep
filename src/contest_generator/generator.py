@@ -1252,6 +1252,7 @@ def generate(
                 resolved_bindings=resolved_bindings,
                 instance_plans=instance_plans,
                 score_points=score_points,
+                module_library_dir=module_library_dir,
             ),
             encoding="utf-8",
         )
