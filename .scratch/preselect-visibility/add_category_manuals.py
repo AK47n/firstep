@@ -174,7 +174,17 @@ ENTRIES: tuple[tuple[str, str, tuple[tuple[str, str], ...], tuple[str, ...]], ..
         (),
     ),
     (
-        "环境检测器件手册合集（气体 / 温度）",
+        "人体感应与雷达器件手册合集（人体感应 / 雷达）",
+        "人体感应与雷达器件移植手册合集：HC-SR501 人体红外、HB100 微波多普勒雷达"
+        "——骨架阶段选中人体感应/雷达类模块时的器件级例程参考。",
+        (
+            ("human_ir.md", "sensor--human-body-infrared-sensor.md"),
+            ("microwave_radar.md", "sensor--microwave-doppler-radar-sensor.md"),
+        ),
+        (),
+    ),
+    (
+        "烟雾与环境检测器件手册合集（烟雾 / 环境）",
         "环境检测器件移植手册合集：火焰、粉尘、人体红外、微波雷达、雨滴、土壤湿度"
         "——骨架阶段选中环境检测类模块时的器件级例程参考。",
         (
@@ -185,10 +195,10 @@ ENTRIES: tuple[tuple[str, str, tuple[tuple[str, str], ...], tuple[str, ...]], ..
             ("rain.md", "sensor--rain-sensor.md"),
             ("soil.md", "sensor--soil-moisture-sensor.md"),
         ),
-        ("ec11", "at24c02", "key_matrix"),
+        (),
     ),
     (
-        "存储与编码器件手册合集（温度）",
+        "存储与编码器件手册合集（存储 / 编码）",
         "存储与旋转编码器件移植手册合集：AT24C02 EEPROM、EC11 旋转编码器、4×4 矩阵"
         "键盘（库内模块代码切片）——骨架阶段选中这几类模块时的例程参考。",
         (),
