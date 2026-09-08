@@ -150,6 +150,19 @@ def _no_real_explorer(monkeypatch):
     monkeypatch.setattr(subprocess, "Popen", guarded_popen)
 
 
+def pytest_collection_modifyitems(config, items):
+    """本仓 `xfail` 一律 strict：XPASS 直接判失败，逼标记随数据落地被摘掉。
+
+    背景（工单 identity-fields/02）：待补器件的身份字段守卫用 xfail 表达「已知缺口」，
+    只有 XPASS 判失败才能保证补齐数据后标记被摘掉。先例口径 = 工单
+    preselect-visibility「从 xfail 转 XPASS 并摘掉标记」。不设全局 `xfail_strict`
+    （历史用例可能依赖宽松语义），只给显式 xfail 补默认 strict。
+    """
+    for item in items:
+        for mark in item.iter_markers(name="xfail"):
+            mark.kwargs.setdefault("strict", True)
+
+
 def pytest_sessionfinish(session, exitstatus):
     """测试会话收尾：清理本会话生成到桌面的测试产物。"""
     removed = cleanup_desktop_test_artifacts(Path.home() / "Desktop")

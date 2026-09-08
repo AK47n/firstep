@@ -16,8 +16,9 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, replace
+from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Iterable, Mapping, Sequence
 from urllib.parse import urlparse
 
 from .autocommit import commit_after_write
@@ -113,6 +114,88 @@ def _inside_capability_word(
                 return True
             j = k + len(word)
     return False
+
+
+# ---------------------------------------------------------------------------
+# 器件 / 内部件 / 协议切片判据（唯一出处）
+#
+# 判据一句话：**用户会为它单独采购的器件** = 器件；库内以头文件 / 工具形态存在的
+# 是内部件；与上位器件绑定、只做帧格式解析的是协议切片。判据此前有三处各自表述
+# （词表守卫测试的 _DEVICE_SLUGS / _INTERNAL_SLUGS、参考关联豁免表
+# MODULE_REFERENCE_EXEMPT、manifest 的 hardware_bound 标记）并已漂移——本表收归
+# 单源，词表挂接判据（tests/test_wordlist.py）、参考关联豁免（reference_library）、
+# 身份字段守卫（tests/test_library_invariants.py）都从这里派生。
+#
+# **未登记的 slug 一律按器件处理**（默认值）：库里绝大多数模块是器件，新增器件
+# 自动进身份字段守卫；内部件 / 协议切片是少数，必须在此登记并写明理由（防「顺手
+# 豁免」）。**不要拿 manifest 的 hardware_bound 当身份判据**——它表达的是「生成前
+# 硬件绑定警告」，与器件判据实测矛盾（beep 的 mspm0=True / stm32=False）。
+# ---------------------------------------------------------------------------
+
+
+class ModuleKind(str, Enum):
+    """模块类别词表（三值）——判据单源，见上方注释。"""
+
+    DEVICE = "device"  # 用户会单独采购的器件：必须有 kit + source_url
+    INTERNAL = "internal"  # 内部件：库内头文件 / 工具形态，无实物，身份字段必须为空
+    PROTOCOL = "protocol"  # 协议切片：与上位器件绑定，实物归上位模块，字段必须为空
+
+
+MODULE_KIND: dict[str, ModuleKind] = {
+    "adc": ModuleKind.INTERNAL,
+    "config": ModuleKind.INTERNAL,
+    "debug_uart": ModuleKind.INTERNAL,
+    "delay": ModuleKind.INTERNAL,
+    "digit_uart": ModuleKind.INTERNAL,
+    "filter": ModuleKind.INTERNAL,
+    "huidu": ModuleKind.INTERNAL,
+    "imu_uart": ModuleKind.INTERNAL,
+    "ntb_time": ModuleKind.INTERNAL,
+    "uart": ModuleKind.INTERNAL,
+    "coord_detect": ModuleKind.PROTOCOL,
+    "zigbee_uart": ModuleKind.PROTOCOL,
+    "zigbee_uart_key": ModuleKind.PROTOCOL,
+}
+
+MODULE_KIND_REASONS: dict[str, str] = {
+    "adc": "内部件（板载 ADC 读取封装，通道随引脚绑定，无独立实物）",
+    "config": "内部件（板级配置宏，引脚 / 时钟宏集合）",
+    "debug_uart": "内部件（调试串口封装，printf 流随母版）",
+    "delay": "内部件（软件延时工具）",
+    "digit_uart": "内部件（数码管识别串口封装，实物在上位件侧）",
+    "filter": "内部件（滤波工具，可选配套）",
+    "huidu": "内部件（同传感器切片：灰度读取，实物归 xunji / pid 条目）",
+    "imu_uart": "内部件（IMU601 串口封装，实物在姿态传感器侧）",
+    "ntb_time": "内部件（板载时间基准，滴答计时无实物）",
+    "uart": "内部件（通用串口封装）",
+    "coord_detect": "协议切片（K230 视觉帧解析，实物归 k230 条目）",
+    "zigbee_uart": "协议切片（Zigbee DL-20 接收帧解析，实物归 zigbee_link 条目）",
+    "zigbee_uart_key": "协议切片（Zigbee DL-20 发射组帧，实物归 zigbee_link 条目）",
+}
+
+
+def module_kind(slug: str) -> ModuleKind:
+    """slug 的模块类别；未登记 = 器件（见上方判据注释）。"""
+    return MODULE_KIND.get(slug, ModuleKind.DEVICE)
+
+
+def requires_identity(slug: str) -> bool:
+    """该 slug 是否必须有硬件身份字段（kit + source_url）。
+
+    判据单源：只有器件类需要身份——内部件 / 协议切片不是用户会采购的实物，
+    给它们填购买链接等于伪造数据。
+    """
+    return module_kind(slug) == ModuleKind.DEVICE
+
+
+def slugs_of_kind(slugs: Iterable[str], kind: ModuleKind) -> tuple[str, ...]:
+    """给定 slug 集里属于 `kind` 的那些（保序去重）——各消费方共用同一筛选。"""
+    return tuple(dict.fromkeys(slug for slug in slugs if module_kind(slug) == kind))
+
+
+def device_slugs(slugs: Iterable[str]) -> tuple[str, ...]:
+    """给定 slug 集里的器件类（`slugs_of_kind(slugs, DEVICE)` 的可读别名）。"""
+    return slugs_of_kind(slugs, ModuleKind.DEVICE)
 
 
 # ---------------------------------------------------------------------------

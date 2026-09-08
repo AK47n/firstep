@@ -11,12 +11,11 @@
         "name": "K230（CanMV）",
         "interface": "UART（CSV 帧给主控）+ 副控板",
         "price": "￥100-200/板",
-        "note": "官方 CanMV 训练；库内 k230+coord_detect 已打通；图像识别/色块/形状",
+        "note": "官方 CanMV 训练；库内 k230 已打通（副产物 main.py 直接生成；主控侧串口解析随依赖 coord_detect 自动带入）；图像识别/色块/形状",
         "suitable": "视觉识别/色块追踪/大模型推理",
         "recommended": true,
         "lib_modules": [
-          "k230",
-          "coord_detect"
+          "k230"
         ]
       },
       {

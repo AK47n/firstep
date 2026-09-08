@@ -253,18 +253,29 @@ def test_default_wordlist_sensor_group_has_ir_beam_lib():
     assert ir.recommended is False
 
 
-# 器件 vs 内部件（工单 library-hookup-and-invariants/01）：用户会为它单独采购的
-# 器件必须挂接（买件指引标「库内已有」+ 预筛 lib_boost 加分）；库内以头文件/
-# 工具形态存在的内部件不挂（挂了只会让买件清单变噪）。
-_DEVICE_SLUGS = (
-    "servo", "step_motor", "oled", "ml_mpu6050",
-    "led", "beep", "led_beep", "key",
-)
-_INTERNAL_SLUGS = (
-    "adc", "delay", "filter", "uart", "config", "debug_uart", "digit_uart",
-    "imu_uart", "zigbee_uart", "zigbee_uart_key", "huidu", "ntb_time",
-)
+# 器件 vs 内部件（工单 library-hookup-and-invariants/01；判据归位 identity-fields/01）：
+# 用户会为它单独采购的器件必须挂接（买件指引标「库内已有」+ 预筛 lib_boost 加分）；
+# 库内以头文件/工具形态存在的内部件不挂（挂了只会让买件清单变噪）。
+# **名单不再手写**：判据单源 = library.MODULE_KIND（未登记 = 器件），本文件从它派生，
+# 新增内部件只改那一处。
+def _device_slugs() -> tuple[str, ...]:
+    """非内部件/协议切片的库内模块（= 器件，需挂接）。"""
+    from contest_generator.library import device_slugs
+    from contest_generator.wordlist import source_module_slugs
 
+    slugs = source_module_slugs() or frozenset()
+    return device_slugs(sorted(slugs))
+
+
+def _internal_slugs() -> tuple[str, ...]:
+    """内部件 + 协议切片（= 不许挂接）。"""
+    from contest_generator.library import MODULE_KIND, ModuleKind
+
+    return tuple(
+        slug
+        for slug, value in MODULE_KIND.items()
+        if value in (ModuleKind.INTERNAL, ModuleKind.PROTOCOL)
+    )
 
 def _hooked_slugs() -> set[str]:
     from contest_generator.wordlist import DEFAULT_WORDLIST
@@ -280,20 +291,26 @@ def _hooked_slugs() -> set[str]:
 def test_default_wordlist_device_modules_are_hooked():
     """器件类模块必须被某个选购方案挂接（买件指引能标「库内已有」）。
 
-    回归口径（工单 library-hookup-and-invariants/01）：这 8 个 slug 此前一条
-    方案都没有——用户买舵机/步进电机/OLED/MPU6050/声光件/按键时，指引不说
-    库里已有现成驱动，AI 推荐也少一条词表挂接加分路径。"""
+    回归口径（工单 library-hookup-and-invariants/01）：8 个 slug 此前一条方案都没有
+    ——用户买舵机/步进电机/OLED/MPU6050/声光件/按键时，指引不说库里已有现成驱动，
+    AI 推荐也少一条词表挂接加分路径。
+
+    名单取源（工单 identity-fields/01）：从库内单源 `library.MODULE_KIND` 派生
+    （未登记 = 器件），不再手写——新增器件自动进本守卫。"""
     hooked = _hooked_slugs()
-    missing = [slug for slug in _DEVICE_SLUGS if slug not in hooked]
+    missing = [slug for slug in _device_slugs() if slug not in hooked]
     assert not missing, f"器件类模块未被任何选购方案挂接：{'、'.join(missing)}"
 
 
 def test_default_wordlist_internal_modules_are_not_hooked():
-    """内部件不被挂接（判据的反向守卫）：它们不是用户单独采购的器件。
+    """内部件/协议切片不被挂接（判据的反向守卫）：它们不是用户单独采购的器件。
 
     adc/delay/filter/uart/config/各 uart 是库内以头文件或工具形态存在的件；
-    huidu/ntb_time 同理（灰度读取与时间戳）。若哪天被顺手挂上，买件清单会
-    混入不需要采购的条目。"""
+    huidu/ntb_time 同理（灰度读取与时间戳）；coord_detect/zigbee_uart(_key) 是与
+    上位器件绑定的帧解析切片（实物归 k230 / zigbee_link）。若哪天被顺手挂上，
+    买件清单会混入不需要采购的条目。
+
+    名单取源同前：库内单源 `library.MODULE_KIND` 的 INTERNAL / PROTOCOL 两类。"""
     hooked = _hooked_slugs()
-    offenders = [slug for slug in _INTERNAL_SLUGS if slug in hooked]
-    assert not offenders, f"内部件被误挂接：{'、'.join(offenders)}"
+    offenders = [slug for slug in _internal_slugs() if slug in hooked]
+    assert not offenders, f"内部件/协议切片被误挂接：{'、'.join(offenders)}"

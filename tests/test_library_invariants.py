@@ -22,6 +22,8 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+
 from contest_generator.clex import strip_comments
 from contest_generator.boards import BOARDS_DIR, load_boards
 from contest_generator.manifest import ModuleManifest
@@ -360,3 +362,248 @@ def test_modules_have_descriptions():
         if not manifest.description.strip()
     ]
     assert not problems, f"模块缺简介：{'、'.join(problems)}"
+
+
+# ---------------------------------------------------------------------------
+# 器件 / 内部件 / 协议切片判据单源（工单 identity-fields/01）
+#
+# 判据单源 = `library.MODULE_KIND`（未登记 = 器件，逐条理由在
+# `MODULE_KIND_REASONS`）。本组断言钉住三件事：单源自身合法（slug 在库内、
+# 有理由）；内部件/协议切片的参考关联豁免关系成立；词表挂接与判据一致。
+# 判据此前散在三处（词表守卫名单 / 参考豁免表 / hardware_bound）并已漂移，
+# 这里让漂移当场红。
+# ---------------------------------------------------------------------------
+
+
+def test_module_kind_map_only_lists_real_modules_with_reasons():
+    """单源登记的 slug 必须都在库内，且每条都有中文理由（空理由 = 沉默豁免）。"""
+    from contest_generator.library import MODULE_KIND, MODULE_KIND_REASONS
+
+    unknown = sorted(slug for slug in MODULE_KIND if slug not in MANIFESTS)
+    assert not unknown, f"判据单源登记了库中不存在的模块：{'、'.join(unknown)}"
+    blank = sorted(
+        slug
+        for slug in MODULE_KIND
+        if not MODULE_KIND_REASONS.get(slug, "").strip()
+    )
+    assert not blank, f"判据单源缺理由（内部件/协议切片必须写明为什么）：{'、'.join(blank)}"
+    extra = sorted(slug for slug in MODULE_KIND_REASONS if slug not in MODULE_KIND)
+    assert not extra, f"理由表登记了判据单源里没有的 slug：{'、'.join(extra)}"
+
+
+def test_internal_and_protocol_slugs_reference_declarations_do_not_contradict():
+    """内部件 / 协议切片与参考关联两表不矛盾。
+
+    参考关联是**另一个判据**（「参考库有没有可关联的条目」），比器件判据多一层：
+    内部件 / 协议切片可能因同名例程（uart / adc / key）有映射而**合法不豁免**，
+    也可能因参考库无条目而豁免——但**不得同时豁免又映射**（两边打架）。豁免理由
+    与判据单源的一致性由 `tests/test_skeleton_mapping_coverage.py`
+    （参考关联域自己的守卫）断言，此处不重复。"""
+    from contest_generator.library import MODULE_KIND, ModuleKind
+    from contest_generator.reference_library import (
+        MODULE_PERIPHERAL_TERMS,
+        MODULE_REFERENCE_EXEMPT,
+    )
+
+    non_devices = {
+        slug
+        for slug, kind in MODULE_KIND.items()
+        if kind in (ModuleKind.INTERNAL, ModuleKind.PROTOCOL)
+    }
+    both = sorted(
+        slug
+        for slug in non_devices
+        if slug in MODULE_REFERENCE_EXEMPT and slug in MODULE_PERIPHERAL_TERMS
+    )
+    assert not both, (
+        f"内部件/协议切片既豁免又有参考映射（两边打架）：{'、'.join(both)}"
+    )
+
+
+def test_wordlist_hooks_are_devices_only():
+    """词表 `lib_modules` 只许挂器件（买件指引的「库内已有」= 用户真会买的那件）。
+
+    反向：内部件 / 协议切片被挂 = 买件清单混入不需要采购的条目。名单两侧都从
+    单源派生（未登记 = 器件），新增内部件只改 `MODULE_KIND` 一处。"""
+    import json
+
+    from contest_generator.library import requires_identity
+
+    wordlist = json.loads(
+        (REPO_ROOT / "src" / "contest_generator" / "wordlist.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    hooked = sorted(
+        {
+            slug
+            for group in wordlist
+            for solution in group.get("solutions", [])
+            for slug in solution.get("lib_modules", [])
+        }
+    )
+    offenders = [slug for slug in hooked if not requires_identity(slug)]
+    assert not offenders, (
+        f"非器件（内部件/协议切片）被词表挂接：{'、'.join(offenders)}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 硬件身份字段双向守卫（工单 identity-fields/02）
+#
+# 判据②（简介四要素之一）要求条目能确认硬件身份：套件型号 kit + 购买链接
+# source_url。判据单源 = `library.MODULE_KIND`（工单 01）：**器件必须齐字段、
+# 内部件/协议切片必须空**（后者不是用户会采购的实物，填链接等于伪造数据）。
+# 双向断言 = 防回潮：给内部件顺手填 kit 会红，清空真器件的 kit 也会红。
+# 豁免的表达形式 = 空值 + 单源理由（不给 manifest 加字段，见 spec）。
+# ---------------------------------------------------------------------------
+
+
+def _missing_identity_problems(slugs) -> list[str]:
+    """器件类里缺身份字段 / 链接非法的条目（点名 slug / 平台 / 具体差异）。"""
+    problems: list[str] = []
+    for slug in sorted(slugs):
+        manifest = MANIFESTS.get(slug)
+        if manifest is None:
+            continue
+        for platform, entry in sorted(manifest.platforms.items()):
+            missing = [
+                field
+                for field, value in (("kit", entry.kit), ("source_url", entry.source_url))
+                if not value.strip()
+            ]
+            if missing:
+                problems.append(f"{slug}/{platform} 缺 {'、'.join(missing)}")
+            elif not entry.source_url.startswith("http"):
+                problems.append(
+                    f"{slug}/{platform} 的 source_url 非 URL：{entry.source_url!r}"
+                )
+    return problems
+
+
+def _forbidden_identity_problems(slugs) -> list[str]:
+    """非器件里被填了身份字段的条目（点名 slug / 平台 / 具体差异）。"""
+    problems: list[str] = []
+    for slug in sorted(slugs):
+        manifest = MANIFESTS.get(slug)
+        if manifest is None:
+            continue
+        for platform, entry in sorted(manifest.platforms.items()):
+            filled = [
+                f"{field}={value!r}"
+                for field, value in (("kit", entry.kit), ("source_url", entry.source_url))
+                if value.strip()
+            ]
+            if filled:
+                problems.append(
+                    f"{slug}/{platform} 不该有身份字段：{'、'.join(filled)}"
+                )
+    return problems
+
+
+def _slugs_of_kind(kind: str) -> list[str]:
+    from contest_generator.library import MODULE_KIND
+
+    return [slug for slug, value in MODULE_KIND.items() if value == kind]
+
+
+# 真器件身份字段待补（工单 identity-fields/03 实测核不出出处的那批；清单与后续
+# 核法在工单 04）。**这不是放宽判据**：清单里的 slug 仍按器件要求字段，只是把它们
+# 从「必绿」挪到一条 strict-xfail 用例——数据补齐后该用例 XPASS 判失败，逼你摘
+# 标记（tests/conftest.py 对本仓 xfail 一律 strict）。
+IDENTITY_BACKLOG: tuple[str, ...] = (
+    "beep",
+    "ir_beam",
+    "key",
+    "led",
+    "led_beep",
+    "step_motor",
+    "zigbee_link",
+)
+
+
+def test_device_modules_declare_identity_fields():
+    """器件类 slug 的每个平台条目必须有 kit 与 source_url（判据②，单源派生）。
+
+    未登记进 `MODULE_KIND` 的库内模块一律按器件算（`module_kind` 默认值）——
+    这就是「新录入必填」的机械兜底：新模块缺身份字段直接红。已知待补的 slug 在
+    `IDENTITY_BACKLOG`（单列一条 strict-xfail 用例），本用例只守「不在待补清单里
+    的器件」。"""
+    from contest_generator.library import MODULE_KIND, ModuleKind
+
+    devices = [
+        slug
+        for slug in _slugs_of_kind(ModuleKind.DEVICE)
+        if slug not in IDENTITY_BACKLOG
+    ]
+    unregistered = [
+        slug
+        for slug in MANIFESTS
+        if slug not in MODULE_KIND and slug not in IDENTITY_BACKLOG
+    ]
+    problems = _missing_identity_problems([*devices, *unregistered])
+    assert not problems, (
+        "器件类条目缺硬件身份字段（kit / source_url）或链接非法：\n- "
+        + "\n- ".join(problems)
+    )
+
+
+@pytest.mark.xfail(
+    reason="工单 identity-fields/04 待补：核不出购买出处的器件（清单见工单 Comments）",
+)
+def test_backlogged_device_modules_declare_identity_fields():
+    """待补清单里的器件同样必须齐字段——数据补齐后本用例转 XPASS（conftest 对本仓
+    xfail 一律 strict，XPASS 判失败），届时把 slug 从 `IDENTITY_BACKLOG` 移出并删本用例。"""
+    problems = _missing_identity_problems(IDENTITY_BACKLOG)
+    assert not problems, (
+        "待补器件的身份字段仍未齐（工单 04）：\n- " + "\n- ".join(problems)
+    )
+
+
+def test_identity_backlog_is_exactly_the_current_gap():
+    """待补清单必须**恰好**等于当前器件身份字段缺口（不增不减）。
+
+    防两种漂移：① 清单只许列器件（内部件/协议切片不该有身份字段）；② 不许把新
+    缺口塞进清单来绕过绿色守卫——凡在清单里就必须真的缺字段，凡缺字段就必须在
+    清单里（`test_device_modules_declare_identity_fields` 只守清单外的器件）。"""
+    from contest_generator.library import MODULE_KIND, ModuleKind, requires_identity
+
+    non_devices = [slug for slug in IDENTITY_BACKLOG if not requires_identity(slug)]
+    assert not non_devices, (
+        f"待补清单混入非器件（内部件/协议切片不该有身份字段）：{'、'.join(non_devices)}"
+    )
+    in_backlog = _missing_identity_problems(IDENTITY_BACKLOG)
+    assert in_backlog, (
+        "待补清单里的器件身份字段已经齐了——请把 slug 移出 `IDENTITY_BACKLOG` 并删除"
+        " xfail 用例（本断言防「清单里留着已补齐的 slug」）"
+    )
+    devices = [
+        *_slugs_of_kind(ModuleKind.DEVICE),
+        *(slug for slug in MANIFESTS if slug not in MODULE_KIND),
+    ]
+    outside = _missing_identity_problems(
+        [slug for slug in devices if slug not in IDENTITY_BACKLOG]
+    )
+    assert not outside, (
+        "清单外的器件出现身份字段缺口——要么补数据，要么**明确**加入"
+        " `IDENTITY_BACKLOG` 并说明为什么核不出（不许静默扩大缺口）：\n- "
+        + "\n- ".join(outside)
+    )
+
+
+def test_internal_and_protocol_modules_have_no_identity_fields():
+    """内部件 / 协议切片的所有平台条目必须没有 kit 与 source_url（判据反向）。
+
+    它们不是用户会单独采购的器件——填了购买链接等于伪造硬件身份，也会让买件
+    指引把它们当成可买件。有人顺手填了这里就红。"""
+    from contest_generator.library import ModuleKind
+
+    problems = _forbidden_identity_problems(
+        [
+            *_slugs_of_kind(ModuleKind.INTERNAL),
+            *_slugs_of_kind(ModuleKind.PROTOCOL),
+        ]
+    )
+    assert not problems, (
+        "内部件/协议切片不该有硬件身份字段（无实物可采购）：\n- " + "\n- ".join(problems)
+    )
