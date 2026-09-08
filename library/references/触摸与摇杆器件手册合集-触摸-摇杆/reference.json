@@ -1,0 +1,16 @@
+{
+  "id": "触摸与摇杆器件手册合集-触摸-摇杆",
+  "title": "触摸与摇杆器件手册合集（触摸 / 摇杆）",
+  "type": "器件手册",
+  "description": "触摸与摇杆器件移植手册合集：TTP224 电容触摸、双轴按键摇杆——骨架阶段选中触摸/摇杆类模块时的器件级例程参考。",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "any",
+  "topic_type": "",
+  "files": [
+    "ttp224.md",
+    "joystick.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
