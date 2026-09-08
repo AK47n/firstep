@@ -1,10 +1,15 @@
 """manifest 数据模型：解析 / 序列化 / 校验。"""
 
 import json
+from pathlib import Path
 
 import pytest
 
+from contest_generator.budget import MODULE_SUMMARY_BYTES, wire_size
+from contest_generator.library import list_modules
+from contest_generator.selection import filter_manifests_by_platform
 from contest_generator.manifest import (
+    LEAN_SUMMARY_SENTENCE_CHARS,
     MANIFEST_FILENAME,
     ManifestError,
     ManifestSummary,
@@ -12,9 +17,12 @@ from contest_generator.manifest import (
     PlatformEntry,
     PythonArtifactSpec,
     PythonArtifactTemplate,
+    build_manifest_summaries,
     collect_exclusive_groups,
     collect_kits,
 )
+
+LIBRARY_MODULES = Path(__file__).resolve().parents[1] / "library" / "modules"
 
 
 def test_serialize_parse_roundtrip_preserves_all_fields():
@@ -662,6 +670,140 @@ def test_summary_to_line_annotates_exclusive_group():
     # 无组声明 = 旧行格式逐字不变（无标注）
     plain = ManifestSummary.from_manifest(_group_manifest("huidu", None))
     assert "同组互斥" not in plain.to_line()
+
+
+# ---------------------------------------------------------------------------
+# 摘要行瘦身形态（工单 preselect-visibility/01）：喂模型的清单行只留
+# 「slug + 有界首句 + 依赖 + 多实例 + 副产物/互斥标记」，套件段与采购链接不进
+# 一级行——全库可装进预筛预算，截断消失。
+# ---------------------------------------------------------------------------
+
+
+def test_lean_summary_line_keeps_first_sentence_and_drops_kit():
+    """瘦身行 = slug + 首句 + 依赖段；套件段（含采购链接）不进一级行。
+
+    首句只在「。」「；」切——`motor` 的「：」后才是能力句，切了就等于没写。
+    """
+    manifest = ModuleManifest.from_dict(
+        {
+            "slug": "motor",
+            "description": (
+                "TB6612 双路直流电机驱动（双平台统一 API）：motor_set_duty 调速"
+                " + motor_set_direction 方向。适用于小车类赛题。"
+            ),
+            "dependencies": ["config"],
+            "platforms": {
+                "stm32": {
+                    "files": ["code/motor.c"],
+                    "verified": True,
+                    "kit": "TB6612FNG 电机驱动模块（页面采购链接：淘宝 id=616285586821）",
+                }
+            },
+        }
+    )
+    line = ManifestSummary.from_manifest(manifest).lean_copy().to_line()
+
+    assert "motor_set_duty 调速" in line, f"「：」后的能力句被切掉了：{line}"
+    assert "适用于小车类赛题" not in line, f"第二句应被切掉：{line}"
+    assert "TB6612FNG" not in line and "采购链接" not in line, f"套件段不应出现：{line}"
+    assert "（依赖: config）" in line, f"依赖段必须保留：{line}"
+    assert line.startswith("- motor: "), f"行首形态错：{line}"
+
+
+def test_lean_summary_line_caps_long_first_sentence():
+    """首句超上限时硬截断到 100 字符（行长度可断言上界，库再长也不失控）。"""
+    manifest = ModuleManifest.from_dict(
+        {
+            "slug": "long_mod",
+            "description": "能" * 300,
+            "platforms": {"stm32": {"files": ["code/long.c"], "verified": True}},
+        }
+    )
+    line = ManifestSummary.from_manifest(manifest).lean_copy().to_line()
+
+    assert line == "- long_mod: " + "能" * LEAN_SUMMARY_SENTENCE_CHARS, (
+        f"未按 {LEAN_SUMMARY_SENTENCE_CHARS} 字符截断：{len(line)}"
+    )
+
+
+def test_lean_summary_line_keeps_decision_markers():
+    """依赖 / 多实例 / 副产物模板 / 互斥组四段决策信息必须保留（选模块后配
+    实例与模板选择靠它们）。"""
+    manifest = ModuleManifest.from_dict(
+        {
+            "slug": "led",
+            "description": "LED 指示灯驱动（双平台）。细节已封装在模块内。",
+            "dependencies": ["config", "delay"],
+            "multi_instance": {"max": 8, "variant": "color"},
+            "python_artifact": {
+                "default": "blob",
+                "templates": [
+                    {"id": "blob", "name": "色块追踪", "template": "a.py", "output": "main.py"},
+                    {"id": "rect", "name": "矩形识别", "template": "b.py", "output": "main.py"},
+                ],
+            },
+            "exclusive_group": {
+                "id": "gray-track",
+                "label": "8 路灰度传感器驱动",
+                "role": "仅读取",
+            },
+            "platforms": {"stm32": {"files": ["code/led.c"], "verified": True}},
+        }
+    )
+    line = ManifestSummary.from_manifest(manifest).lean_copy().to_line()
+
+    assert "（依赖: config, delay）" in line
+    assert "（多实例：上限 8，变体 = color）" in line
+    assert "副产物模板可选：色块追踪、矩形识别，默认 = blob" in line
+    assert "同组互斥：8 路灰度传感器驱动，组内仅选其一" in line
+    assert "细节已封装在模块内" not in line, f"第二句应被切掉：{line}"
+
+
+def test_lean_summary_line_breaks_at_earliest_sentence_mark():
+    """「。」「；」谁先出现就在谁处切——不能按固定顺序只认「。」。
+
+    真实库 84/93 条简介「；」先于「。」（如 adc：「…四通道；MEM0 与…」），
+    按固定顺序切会得到 100 字符长串而非真正的首句。
+    """
+    manifest = ModuleManifest.from_dict(
+        {
+            "slug": "adc",
+            "description": "ADC12 采集：四通道；MEM0 与 us016 共读同槽。第二句在此。",
+            "platforms": {"stm32": {"files": ["code/adc.c"], "verified": True}},
+        }
+    )
+    line = ManifestSummary.from_manifest(manifest).lean_copy().to_line()
+
+    assert line == "- adc: ADC12 采集：四通道", f"未在最早的「；」处切分：{line}"
+
+
+def test_lean_summary_lines_fit_preselect_budget_for_real_library():
+    """真实库全库瘦身行装得进预筛预算（工单 01 的核心不变量）。
+
+    实测依据：现状完整行 stm32 86598B / mspm0 78668B 远超预算，故预筛截断到
+    33–41 条、关键模块不可见；瘦身行 28071B / 28062B 全库可装 → 截断消失
+    （复测 .scratch/library-audit/probe_lean_variants.py，走生产实现）。
+    余量断言 ≥5KB：库继续长大到临界（或首句上限被调大）时这里红，提醒重新
+    记账而不是静默回退到截断。
+
+    与 tests/test_llm.py::test_recommend_real_library_budget 同轴但不同层：
+    那条守「完整 payload ≤ 网关预算」，这条守「摘要段本身装得下全库」——
+    后者是前者的前提，也是本批验收口径。
+    """
+    modules = list_modules(LIBRARY_MODULES)
+    assert modules, "真实模块库为空——测试语料路径错了"
+
+    for platform in ("stm32", "mspm0"):
+        summaries = build_manifest_summaries(
+            filter_manifests_by_platform(modules, platform)
+        )
+        # join 分隔符 +1 与 selection._fit_summaries_by_wire 同口径（预筛实际
+        # 计的就是这个数，不另立账法）
+        total = sum(wire_size(s.lean_copy().to_line()) + 1 for s in summaries)
+        assert total <= MODULE_SUMMARY_BYTES - 5 * 1024, (
+            f"{platform} 全库瘦身行 {total}B 超出预筛预算 {MODULE_SUMMARY_BYTES}B "
+            f"（余量须 ≥5KB，共 {len(summaries)} 条）"
+        )
 
 
 def test_collect_exclusive_groups_aggregates_members_in_order():
