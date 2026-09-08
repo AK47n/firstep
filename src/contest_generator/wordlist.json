@@ -43,6 +43,38 @@
     "models": [
       "LED",
       "蜂鸣器"
+    ],
+    "solutions": [
+      {
+        "name": "LED 指示灯（板载 / 外接）",
+        "interface": "GPIO（推挽输出，串限流电阻）",
+        "price": "￥0.1-1/个",
+        "note": "库内 led 已打通（双平台：led_init/led_on/led_off/led_toggle + 通道宏 LED_RED/LED_YELLOW/LED_GREEN；多实例模块——stm32 默认红黄绿 3 通道，mspm0 默认单通道）",
+        "suitable": "状态指示/声光提示/流水灯",
+        "lib_modules": [
+          "led"
+        ]
+      },
+      {
+        "name": "有源蜂鸣器模块（低电平触发）",
+        "interface": "GPIO（低电平响，模块自带驱动三极管）",
+        "price": "￥1-5/个",
+        "note": "库内 beep 已打通（双平台：beep_init/beep_on/beep_off/beep_toggle + beep_beep 响 N 声；stm32 默认 PA15）",
+        "suitable": "声光提示/报警提示音",
+        "lib_modules": [
+          "beep"
+        ]
+      },
+      {
+        "name": "LED + 蜂鸣器 声光组合套件",
+        "interface": "GPIO（LED 与蜂鸣器各占 1 脚）",
+        "price": "￥2-8/套",
+        "note": "库内 led_beep 已打通（双平台组合模块：led_beep_init/led_beep_on/off/toggle/beep——依赖 led 与 beep，题面写「声光提示」时选它即可）",
+        "suitable": "声光提示/答题器/报警",
+        "lib_modules": [
+          "led_beep"
+        ]
+      }
     ]
   },
   {
@@ -287,6 +319,26 @@
         "suitable": "平衡车俯仰/云台角度/姿态预警/倾斜报警",
         "lib_modules": [
           "jy61p"
+        ]
+      },
+      {
+        "name": "MPU6050 六轴姿态模块（GY-521）",
+        "interface": "I2C（库内走硬件 I2C 总线）",
+        "price": "￥8-20/个",
+        "note": "库内 ml_mpu6050 已打通（双平台：MPU6050 的 I2C 通用驱动，读加速度/角速度原始数据）；器件内部只有原始数据，姿态角需主控自己做互补滤波/卡尔曼融合；与 jy61p（器件内融合直接出角度）/imu_uart（UART 601 帧）分工：练融合算法用本件，要现成角度用 jy61p",
+        "suitable": "姿态解算学习/平衡车/倾角检测/运动状态判定",
+        "lib_modules": [
+          "ml_mpu6050"
+        ]
+      },
+      {
+        "name": "独立轻触按键模块（带上拉）",
+        "interface": "GPIO 输入（上拉低电平按下，可多路独立）",
+        "price": "￥0.5-3/个",
+        "note": "库内 key 已打通（双平台：get_key_state(channel) 按通道读取；多实例模块——多路独立按键，内置变体 start/stop/mode 等；板载启动键同模块）",
+        "suitable": "启动/停止/模式切换/参数调整",
+        "lib_modules": [
+          "key"
         ]
       },
       {
@@ -608,6 +660,7 @@
     "models": [
       "电机",
       "舵机",
+      "步进电机",
       "PCA9685",
       "L298N",
       "继电器"
@@ -658,7 +711,18 @@
         "note": "库内 pca9685 已打通（mspm0：pca9685_init 设频率（默认 50Hz）+ set_angle 0-180°（0.5-2.5ms，与 servo 模块同口径）+ set_pwm 任意脉宽，16 路；默认 PB6/PB7，同选时绑脚消解）；芯片内 25MHz 振荡器生成 PWM、主控只写寄存器不占 TIMER；地址可级联最多 62 块；与 servo（TIMG8 硬件 PWM 单路）互补——单舵机用 servo、多舵机用 pca9685",
         "suitable": "多舵机机械臂/云台/六足机器人/多路 PWM 输出",
         "lib_modules": [
-          "pca9685"
+          "pca9685",
+          "servo"
+        ]
+      },
+      {
+        "name": "脉冲式步进电机 + 驱动板（细分可调）",
+        "interface": "GPIO 方向/使能 + PWM 脉冲（1 脉冲 = 1 步）",
+        "price": "￥15-40/套",
+        "note": "库内 step_motor 已打通（mspm0：GPIO 方向/使能控制 + PWM 脉冲频率控速（1 脉冲 = 0.05625°）+ LOAD 中断计数到位自动停车）；步进电机走位置控制，与直流减速电机（motor）用途不同",
+        "suitable": "精确定位/转台/丝杆/云台俯仰",
+        "lib_modules": [
+          "step_motor"
         ]
       }
     ]
@@ -772,6 +836,16 @@
       "ILI9488"
     ],
     "solutions": [
+      {
+        "name": "0.96 寸 OLED 单色屏（SSD1306，I2C/SPI）",
+        "interface": "I2C（默认，2 脚）或软 SPI 变体（SCL/SDA/RES/DC/CS 5 脚）",
+        "price": "￥8-20/块",
+        "note": "库内 oled 已打通（双平台：OLED_Init + 画点/线/字符/字符串/数字/汉字；默认 I2C 硬件总线，SPI 变体为批次 12/07 决策 B——软 SPI 位操作）；单色小屏，功耗低、刷新快，做状态/数值显示最省事",
+        "suitable": "状态显示/数值显示/简单菜单/调试输出",
+        "lib_modules": [
+          "oled"
+        ]
+      },
       {
         "name": "MAX7219 数码管/点阵（8 位 / 4合1）",
         "interface": "软 SPI 位操作（DIN/CLK/CS 3 脚，免硬件 SPI 外设）",

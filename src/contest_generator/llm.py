@@ -902,7 +902,19 @@ def _fit_segment_wire(
 # 8259 全量送达 + 75B 余量；词表段全量 8259 比旧截断形态 8134 多 125B——
 # 最坏形态总量 +125B，全文预算视 worst-case 结构测试红证再定（见
 # budget.py 词表段变更配套注释）。
-WORDLIST_PROMPT_BYTES = 8500
+# 2026-09-08（library-hookup-and-invariants/01）：器件挂接补全——声光提示
+# 器件组从「有 models 无 solutions」补齐 3 方案（led/beep/led_beep），执行
+# 机构 +1 方案（step_motor）+ 舵机方案挂 servo，显示模块 +1 方案（oled），
+# 感知传感器 +2 方案（ml_mpu6050/key）→ 默认词表完整 wire 实测 8849（>
+# 8334 fit 上限 8500−166，尾部「遥控接收」类别方案名被截——
+# test_wordlist_segment_covers_default_wordlist_and_budget 契约红证），
+# 预算升 9200（fit 上限 9034 ≥ 8849 全量送达 + 185B 余量）。
+# **余量代价（如实记账）**：词表段比旧截断形态多 349B，最坏形态实测 mspm0
+# 128646B / stm32 128026B，距 129024 边界余 378B / 998B（旧值 727B / 1347B）
+# ——两个 worst-case 结构测试仍绿，但 mspm0 侧余量已低于 500B；若后续再往
+# 词表加内容，优先瘦身（方案名/型号去重）而不是继续抬预算，复测工具
+# .scratch/library-audit/probe_budget_headroom.py。
+WORDLIST_PROMPT_BYTES = 9200
 
 # 词表段截断标注（单源；不用全局 TRUNCATION_NOTICE——词表截断是科普段压缩
 # （后续类别仍由界面展示加载），与 content 截断契约（题面/参考）语义不同界，
