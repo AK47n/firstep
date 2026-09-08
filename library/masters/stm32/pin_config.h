@@ -565,6 +565,151 @@
 #define EC01G_UART_RX_GPIO     GPIO_B
 #define EC01G_UART_RX_Pin      Pin_11
 
+/* ---- 批次 4（wiki-stm32-batch4/05）：vl53l0x ToF 激光测距（软 I2C 2 脚 +
+ * XSHUT 复位——B 类新 slug 仅 stm32 条目，驱动 = ST 官方 API 最小切片）----
+ * 默认 SCL=PA6/SDA=PA7（共挂批次 2/3/4 软 I2C 总线——地址 0x52(8bit)/
+ * 0x29(7bit) 与既有 13 件全异 = 合法共挂，**⚠ 0x29 与 tcs34725 同址 = 两件
+ * 互替不可同挂**（同址双选必冲突——选其一，同选经引脚绑定换独立总线或换件；
+ * bmp180×ms5611 0xEE 同款口径）；与 motor MOTOR_A_DIR/DIR2 默认重叠：ToF
+ * 测距与「带电机方向的小车运动控制」不同框、同选概率最低（刻意不叠显示/
+ * 声光/输入/串口/无线/USB(PA11/12)/SWD(PA13/14) 组），同选经引脚绑定消解；
+ * **电平口径 OUT_OD/IU**（页面/移植工程 Out_PP 换算——共总线推挽×开漏互斥，
+ * 模块板自带上拉；bmp180 同款注释口径）+ SCL/SDA 初始化置高（批次 3/01 回修
+ * 口径：F1 复位后浮空输入、ODR 写入无效）；XSHUT=PB0（gpio_out——叠 hx711
+ * DT + EC11 SW + rc522 CS：ToF 与称重/旋钮/读卡不同框、同选概率最低；**页面/
+ * 移植工程默认 PB7 弃用** = human_ir/灰度组常备；页面默认 SDA=PB8/SCL=PB9
+ * （=母版 OLED 段）不照抄）；移植工程 XSHUT 位带宏 PBout(7) → ml_gpio 换算。 */
+#define VL53L0X_SCL_GPIO       GPIO_A
+#define VL53L0X_SCL_PIN        Pin_6
+#define VL53L0X_SDA_GPIO       GPIO_A
+#define VL53L0X_SDA_PIN        Pin_7
+#define VL53L0X_XSHUT_GPIO     GPIO_B
+#define VL53L0X_XSHUT_PIN      Pin_0
+
+/* ---- 批次 10（wiki-stm32-batch10/01）：max7219 数码管/点阵（软 SPI 3 脚）----
+ * 默认 DIN=PC13/CLK=PC14/CS=PC15——叠板载 LED 三灯（LED_PORT=PC13-15）：
+ * 显示件与板载指示灯为**输出指示互替**（有数码管/点阵就不用板载灯——互替
+ * 同脚先例 ttp224×key_matrix），同选经引脚绑定消解；三脚同口（默认组内无
+ * 跨口换脚约束——逐脚宏族，换单脚经绑定行级覆写）；与 lcd 六脚组/oled SPI
+ * 五脚组**显示族互替同脚**（一次选一块屏——大屏/小屏/数码管互替）；页面
+ * 默认脚（mspm0 板脚 PB9/PA18/PB18）不照抄；**不占硬件 SPI/TIMER**（位
+ * 操作 GPIO 直驱——MAX7219 时钟上限 10MHz > GPIO 翻转速度，无需延时）；
+ * PC13-15 = 板载 LED 普通 IO 脚位（蓝药丸无 JTAG 占用冲突）。 */
+#define MAX7219_DIN_GPIO       GPIO_C
+#define MAX7219_DIN_PIN        Pin_13
+#define MAX7219_CLK_GPIO       GPIO_C
+#define MAX7219_CLK_PIN        Pin_14
+#define MAX7219_CS_GPIO        GPIO_C
+#define MAX7219_CS_PIN         Pin_15
+
+/* ---- 批次 10（wiki-stm32-batch10/02）：lcd 六屏合一彩屏（软 SPI 6 脚）----
+ * 默认 SCL=PB4/SDA=PB5/RES=PA5/DC=PB6/CS=PB7/BLK=PA15——**显示族互替同脚组**：
+ * 与 oled SPI 五脚组（本组子集——大屏/小屏一次选一）/max7219 三脚组
+ * （PC13-15——数码管/点阵）互替（一次选一块屏，互替同脚先例 ttp224×
+ * key_matrix）；各脚叠「继电器+编码器方向（PB4）/称重+旋钮+编码器（PB5）/
+ * 火焰+ADC 组（PA5——屏×火焰不同框）/舵机+巡线（PB6）/人体红外（PB7）/
+ * 蜂鸣（PA15）」——显示屏与执行件/采集件不同框、同选概率最低（刻意不叠
+ * 声光/按键/门禁组合 BUZZER/KEY/SERVO），同选经引脚绑定消解；**与
+ * tp_xpt2046（1.8 触摸配套件 = 屏+触同选）刻意错开**（mspm0 批 12 同款）；
+ * 页面默认六脚（mspm0 板脚 PA16/PA17/PA27/PA22/PB19/PB20）不照抄；软 SPI
+ * 位操作不占硬件 SPI/TIMER（彩屏 ~15MHz > GPIO 翻转——无节拍延时）。 */
+#define LCD_SCL_GPIO      GPIO_B
+#define LCD_SCL_PIN       Pin_4
+#define LCD_SDA_GPIO      GPIO_B
+#define LCD_SDA_PIN       Pin_5
+#define LCD_RES_GPIO      GPIO_A
+#define LCD_RES_PIN       Pin_5
+#define LCD_DC_GPIO       GPIO_B
+#define LCD_DC_PIN        Pin_6
+#define LCD_CS_GPIO       GPIO_B
+#define LCD_CS_PIN        Pin_7
+#define LCD_BLK_GPIO      GPIO_A
+#define LCD_BLK_PIN       Pin_15
+
+/* ---- 批次 10（wiki-stm32-batch10/03）：tp_xpt2046 触摸屏（软 SPI 5 脚）----
+ * 默认 CS=PB12/CLK=PB13/DIN=PB14/DOUT=PB15/PEN=PB0——CS/CLK/DIN/DOUT 叠
+ * DIP+GRAY_D1-4+ttp224+key_matrix ROW（**触摸按键×屏幕触摸互替同脚先例**
+ * ——四键触摸与触摸屏不同框、同选概率最低；键盘 ROW 输入件邻域），同选经
+ * 引脚绑定消解；PEN 叠 hx711 DT + EC11 SW + rc522 CS + vl53l0x XSHUT
+ * （触摸与称重/旋钮/读卡/ToF 不同框、同选概率最低）；**与 lcd 六脚组刻意
+ * 错开**（屏+触配套同选——mspm0 批 12 同款）；页面默认脚（mspm0 板脚
+ * PA8/PA13/PA9/PA28/PB24）不照抄；软 SPI 位操作不占硬件 SPI/TIMER
+ * （XPT2046 ~2.3MHz——位时序 delay_us(1/6) 走库 delay 模块，节拍保真）。 */
+#define TP_XPT2046_CS_GPIO    GPIO_B
+#define TP_XPT2046_CS_PIN     Pin_12
+#define TP_XPT2046_CLK_GPIO   GPIO_B
+#define TP_XPT2046_CLK_PIN    Pin_13
+#define TP_XPT2046_DIN_GPIO   GPIO_B
+#define TP_XPT2046_DIN_PIN    Pin_14
+#define TP_XPT2046_DOUT_GPIO  GPIO_B
+#define TP_XPT2046_DOUT_PIN   Pin_15
+#define TP_XPT2046_PEN_GPIO   GPIO_B
+#define TP_XPT2046_PEN_PIN    Pin_0
+
+/* ---- 批次 10（wiki-stm32-batch10/04-05）：oled SPI/SH1106 变体（软 SPI 5 脚）----
+ * 默认 SCL=PB4/SDA=PB5/DC=PB6/CS=PB7/RES=PA5——**与 lcd 六脚组互替同脚**
+ * （大屏/小屏一次选一——oled SPI 组 = lcd 组子集；互替同脚先例 ttp224×
+ * key_matrix）；既有 OLED_SCL/SDA（PB8/PB9，I2C 内嵌 ml_oled）保留不动
+ * （I2C 路径零改动）；页面/mspm0 板脚不照抄；软 SPI 位操作不占硬件 SPI 外设/
+ * TIMER（SSD1306 SPI ≤10MHz——页面 SPI 例程无显式延时，gpio 直驱）。 */
+#define OLED_SPI_SCL_GPIO     GPIO_B
+#define OLED_SPI_SCL_PIN      Pin_4
+#define OLED_SPI_SDA_GPIO     GPIO_B
+#define OLED_SPI_SDA_PIN      Pin_5
+#define OLED_SPI_DC_GPIO      GPIO_B
+#define OLED_SPI_DC_PIN       Pin_6
+#define OLED_SPI_CS_GPIO      GPIO_B
+#define OLED_SPI_CS_PIN       Pin_7
+#define OLED_SPI_RES_GPIO     GPIO_A
+#define OLED_SPI_RES_PIN      Pin_5
+
+/* ---- 批次 10（wiki-stm32-batch10/06）：ili9341 2.8 寸大屏（B 类新 slug，
+ * 软 SPI 6 脚——lcdwiki MSP2807 包直提）----
+ * 默认六脚 = **lcd 六脚组同款**（SCL=PB4/SDA=PB5/RES=PA5/DC=PB6/CS=PB7/
+ * BLK=PA15——**ILI 屏×中景园屏互替同脚**：一次选一块屏（互替同脚先例
+ * ttp224×key_matrix；与 lcd/oled SPI 同时选默认撞脚——互替件二选一接入无需
+ * 另消解，罕见同选经绑定消解）；触摸复用 tp_xpt2046 组（同 tp 默认脚
+ * PB12-15/PB0——触摸配套件需同时选 tp_xpt2046 模块）；lcdwiki 板默认脚
+ * （SPI 硬件 PB13/PB15/PB11/PB10/PB12 + LED PB9 + 触摸 PC0-3/PC10/PC13）
+ * 不照抄；软 SPI 位操作不占硬件 SPI/TIMER（ILI9341 ~10MHz —— gpio 直驱
+ * 无节拍；性能 ≈0.27s 全屏——建议局部刷新）。 */
+#define ILI9341_SCL_GPIO      GPIO_B
+#define ILI9341_SCL_PIN       Pin_4
+#define ILI9341_SDA_GPIO      GPIO_B
+#define ILI9341_SDA_PIN       Pin_5
+#define ILI9341_RES_GPIO      GPIO_A
+#define ILI9341_RES_PIN       Pin_5
+#define ILI9341_DC_GPIO       GPIO_B
+#define ILI9341_DC_PIN        Pin_6
+#define ILI9341_CS_GPIO       GPIO_B
+#define ILI9341_CS_PIN        Pin_7
+#define ILI9341_BLK_GPIO      GPIO_A
+#define ILI9341_BLK_PIN       Pin_15
+
+/* ---- 批次 10（wiki-stm32-batch10/07）：ili9488 3.5 寸大屏（B 类新 slug，
+ * 软 SPI 6 脚——lcdwiki MSP3520 包直提）----
+ * 默认六脚 = **lcd 六脚组同款**（SCL=PB4/SDA=PB5/RES=PA5/DC=PB6/CS=PB7/
+ * BLK=PA15——**ILI 屏×中景园屏互替同脚**：一次选一块屏（互替同脚先例
+ * ttp224×key_matrix；与 lcd/oled SPI/ili9341 同时选默认撞脚——互替件二选
+ * 一接入无需另消解，罕见同选经绑定消解）；触摸复用 tp_xpt2046 组（同 tp
+ * 默认脚 PB12-15/PB0——触摸配套件需同时选 tp_xpt2046 模块）；lcdwiki 板
+ * 默认脚（SPI 硬件 PB13/PB15/PB11/PB10/PB12 + LED PB9 + 触摸
+ * PC0-3/PC10/PC13）不照抄；软 SPI 位操作不占硬件 SPI/TIMER（ILI9488
+ * ~10MHz —— gpio 直驱无节拍；**18bit 打包 3 字节/像素——全屏 ≈0.55s，
+ * 建议局部刷新**）。 */
+#define ILI9488_SCL_GPIO      GPIO_B
+#define ILI9488_SCL_PIN       Pin_4
+#define ILI9488_SDA_GPIO      GPIO_B
+#define ILI9488_SDA_PIN       Pin_5
+#define ILI9488_RES_GPIO      GPIO_A
+#define ILI9488_RES_PIN       Pin_5
+#define ILI9488_DC_GPIO       GPIO_B
+#define ILI9488_DC_PIN        Pin_6
+#define ILI9488_CS_GPIO       GPIO_B
+#define ILI9488_CS_PIN        Pin_7
+#define ILI9488_BLK_GPIO      GPIO_A
+#define ILI9488_BLK_PIN       Pin_15
+
 /* ---- UART 接收中断聚合（isr.c 的 USARTx_IRQHandler 调这些宏，
  * 工单 pin-full-unlock/02）——按各 UART 角色绑定实例重分组：默认
  * UART_1 = DIGIT+COORD+UWB+HC05+FINGERPRINT+NEO_6M+ESP01S 共享（批 8/02

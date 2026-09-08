@@ -1,0 +1,81 @@
+{
+  "slug": "ili9488",
+  "description": "ILI9488 3.5 寸 320×480 彩屏驱动（stm32 纯驱动，B 类——仅 stm32 条目、无 mspm0 对照，ADR 0009）：软 SPI 位操作 6 脚（SCL/SDA/RES/DC/CS/BLK，不占硬件 SPI/TIMER），**18bit 面板 16bit 打包（0x3A 0x66——每像素 3 字节流，包内实现原式）**，API 照 lcd 六合一模块风格（init(dir)/get_width/height/fill/clear/draw_point/line/rectangle/circle/show_char/string/num/float/chinese16x16/picture——不含 lcdwiki 旧壳 POINT_COLOR/LCD_ShowString）；字库复用库内 lcdfont.h（1206/1608 + tfont16 汉字；lcdwiki FONT.H 不入库）；触摸复用 tp_xpt2046 模块（同芯 XPT2046——配套选择、零耦合）；默认脚 = lcd 六脚组同款（ILI 屏×中景园屏互替同脚）；性能：软 SPI 全屏填充 ≈0.55s（18bit 打包 3 字节/像素——建议局部刷新）；适用于大屏数据显示、仪表盘/菜单/界面等赛题功能。",
+  "dependencies": [],
+  "platforms": {
+    "stm32": {
+      "files": [
+        "code/ili9488_stm32.c",
+        "code/ili9488_stm32.h",
+        "code/ili9488_font.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**B 类：无 mspm0 条目（地阔星仅有页面）——仅 stm32 平台条目**（B 类拍板：库内 lcd 六合一不含 ILI 系——差异 = 序列/分辨率/18bit 像素打包；ILI9488 320×480 大屏与中景园六屏/ILI9341 互替、不同框，从零设计；wordlist 显示模块组补录——models + lib_modules）。**资料来源**：wiki 原页 screen--3.5-ili9488-color-screen.md（fetch 手册——**页面 F1 但真·全页外：页内零驱动（连初始化序列都没有）、页内连引脚宏定义表都没有（只有宏名）——默认脚只能从包内 lcd.h 取**；lcdwiki MSP3520 包链接 L12 + 效果图百度盘 L277）→ 驱动/引脚表全部取自 **lcdwiki 包**（用户网盘下载并解压）：sources/materials/lckfb-地阔星移植手册/网盘下载/ili9488/3.5inch_SPI_Module_ILI9488_MSP3520_V1.1/1-Demo/Demo_STM32/Demo_STM32F103RCT6_Software_SPI/HARDWARE/LCD/lcd.c/h（**软 SPI 版例程——直接匹配母版无 ml_spi 约束**；另有 Hardware_SPI 版对照（仅参考）、4-Driver_IC_Data_Sheet/ILI9488 Data Sheet.pdf + 原理图/用户手册/取模工具（参考资料不随库）；FONT.H 是 lcdwiki 自带字库——不入库（GBK 大字号），notes；SYSTEM/sys 位带宏——**换算 ml_gpio 不引入 sys.h**）。**形态**：软 SPI 6 脚位操作（包内 SPIv_WriteData 原式：CS 每字节选通/释放 + SCL 上升沿采样、SPI 模式 0）；API = **ili9488_init(dir)/get_width/height/fill/clear/draw_point/line/rectangle/circle/show_char/string/num/float/chinese16x16/picture**（**照 mspm0 lcd.h 风格——不照 lcdwiki 旧壳**：lcddev/POINT_COLOR/BACK_COLOR/LCD_ShowString 弃用；函数名规范化 LCD_* → ili9488_*；绘制/文本层自 lcd 六合一同构——**与 ili9341 同款接口体验**；MADCTL 方向表 = 包内 LCD_direction 原式（BGR=1：0=0x08/1=0x68/2=0xC8/3=0xA8——dir 0/1 竖屏 320×480、2/3 横屏 480×320，get_width/height 运行时换置零重编译）。**初始化序列** = 包内 LCD_Init 原式完整（0xF7(0xA9 0x51 0x2C 0x82)/0xC0(0x11 0x09)/0xC1(0x41)/0xC5(0x00 0x0A 0x80)/0xB1(0xB0 0x11)/0xB4(0x02)/0xB6(0x02 0x42)/0xB7(0xC6)/0xBE(0x00 0x04)/0xE9(0x00)/0x36(方向表)/0x3A 0x66(18bit)/0xE0(正 gamma 15byte)/0xE1(负 gamma 15byte)/0x11+120ms/0x29/背光开/清屏——全部直提包内）。**⚠ 18bit 面板 16bit 打包（只能按包内实现）**：0x3A 0x66（18bit RGB 接口）+ 包内 Lcd_WriteData_16Bit 原式——每像素 **3 字节流**：RED 5bit（RGB565 高 5 位 &0xF8）/GREEN 6bit（>>3 &0xFC）/BLUE 5bit（<<3）；与 ILI9341（16bit 双字节）不同（notes 记录）；全屏填充字节 = 像素×3——性能 ≈0.55s（局部刷新建议；硬 SPI 范围外）。**引脚宏表取自包内 lcd.h**（页面零引脚表——模块接线图六线 + 触摸 T_* 五线）：**默认脚 = lcd 六脚组同款**（SCL=PB4/SDA=PB5/RES=PA5/DC=PB6/CS=PB7/BLK=PA15——**ILI 屏×中景园屏互替同脚先例**（一次选一块屏——互替同脚先例 ttp224×key_matrix）；触摸复用 tp_xpt2046 组（同 tp 默认脚 PB12-15/PB0——触摸配套件需同时选择 tp_xpt2046 模块（同芯 XPT2046），本模块零触摸耦合（notes））；lcdwiki 板默认脚（SPI 硬件 PB13/PB15/PB11/PB10/PB12 + LED PB9 + 触摸 PC0-3/PC10/PC13）不照抄）。**字库 = 库内 lcdfont.h**（1206/1608 ASCII + tfont16 汉字——与 lcd/ili9341 模块同源同内容；每模块携带副本——notes 记录；**字库副本文件 = code/ili9488_font.h**（头基名全局唯一门禁改名 + 数组 static 化——原件+副本双选无链接重复）；FONT.H 不入库（lcdwiki GBK 大字号——mspm0 口径：汉字走 tfont16 常用集）。**缺陷/取舍**：包内 LCD_ReadReg/ReadPoint 读回支持不移植（MISO 未定义——软 SPI 单向写；页面/包内读点仅调试用）；LCD_LED 三极管背光控制保留（BLK 高亮）；包内 GUI.c（LCD_Show 旧壳族 + 画点/粗线辅助）与 GUI.pic.test/test.c（演示）不随库入库（ADR 0009——绘制 API 统归本模块 lcd.h 风格族）；USE_HORIZONTAL 编译期宏 → 运行时 dir 参数（与 mspm0 lcd 同款）。**未上板**（软 SPI 时序/18bit 打包/背光/真机验证留后续——notes 记录）。\nwiki 手册来源：sources/materials/lckfb-地阔星移植手册/screen--3.5-ili9488-color-screen.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/screen/3.5-ili9488-color-screen.html；lcdwiki 官网例程 http://www.lcdwiki.com/zh/3.5inch_SPI_Module_ILI9488_SKU：MSP3520——notes 双来源）。改造要点：B 类独立 slug（库内 lcd 六合一不含 ILI 系——API 以 lcd.h 风格对齐、序列/MADCTL/18bit 打包自包内直提）、去 main 演示/printf/GUI 旧壳、软 SPI 换算（bit-band → gpio_set/gpio_init）、引脚宏参数化（包内 BSRR/BRR 位带宏 → pin_config.h 12 宏）、函数名规范化 lcd_* → ili9488_*。\\n**编译矩阵**（wiki-stm32-batch10/07 收官）：单选生成（ili9488 + delay 依赖展开）→ UV4 真编译（ARMCC V5.06）**0 error/0 warning**（.scratch/wiki-stm32-batch10/matrix/run_ili9488_matrix.py——Code=4500/RO=3104（含 lcdfont.h 字库））；未上板。",
+      "kit": "3.5 寸 SPI 模块 ILI9488（lcdwiki SKU：MSP3520——320×480 18bit 面板；含 XPT2046 触摸（配套 tp_xpt2046 模块））",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/screen/3.5-ili9488-color-screen.html",
+      "pins": [
+        {
+          "id": "ILI9488_SCL",
+          "type": "gpio_out",
+          "default": "PB4",
+          "required": true,
+          "macros": [
+            "ILI9488_SCL_GPIO",
+            "ILI9488_SCL_PIN"
+          ]
+        },
+        {
+          "id": "ILI9488_SDA",
+          "type": "gpio_out",
+          "default": "PB5",
+          "required": true,
+          "macros": [
+            "ILI9488_SDA_GPIO",
+            "ILI9488_SDA_PIN"
+          ]
+        },
+        {
+          "id": "ILI9488_RES",
+          "type": "gpio_out",
+          "default": "PA5",
+          "required": true,
+          "macros": [
+            "ILI9488_RES_GPIO",
+            "ILI9488_RES_PIN"
+          ]
+        },
+        {
+          "id": "ILI9488_DC",
+          "type": "gpio_out",
+          "default": "PB6",
+          "required": true,
+          "macros": [
+            "ILI9488_DC_GPIO",
+            "ILI9488_DC_PIN"
+          ]
+        },
+        {
+          "id": "ILI9488_CS",
+          "type": "gpio_out",
+          "default": "PB7",
+          "required": true,
+          "macros": [
+            "ILI9488_CS_GPIO",
+            "ILI9488_CS_PIN"
+          ]
+        },
+        {
+          "id": "ILI9488_BLK",
+          "type": "gpio_out",
+          "default": "PA15",
+          "required": true,
+          "macros": [
+            "ILI9488_BLK_GPIO",
+            "ILI9488_BLK_PIN"
+          ]
+        }
+      ]
+    }
+  }
+}

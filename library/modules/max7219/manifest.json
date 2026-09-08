@@ -33,6 +33,49 @@
           "required": true
         }
       ]
+    },
+    "stm32": {
+      "files": [
+        "code/max7219_stm32.c",
+        "code/max7219_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "stm32 条目（wiki-stm32-batch10/01——mspm0 条目零改动）：软 SPI 3 脚（DIN/CLK/CS，与 mspm0 版对照——总线层换 gpio_set 位操作 + 页原式推挽输出 OUT_PP；函数体/寄存器族/级联语义与 mspm0 版逐行对照零偏差），API 与 mspm0 版同名同型完全对齐（max7219_init(form, brightness)/write_digit/write_matrix/write_reg/clear/set_chip_count——max7219.h 核验）。页面 = **F1 标准库**（地阔星两页：screen--8-bit-led-tube + screen--max7219-matrix-display；页内自洽——数码管 BCD 译码无字模表；点阵字模表 disp1[12][8] 页内 L383-408 = 演示数据——**不入库**（mspm0 先例：演示字模不入库，notes））。**默认脚 = PC13（DIN）/PC14（CLK）/PC15（CS）**——叠板载 LED 三灯（PC13-15）：显示件与板载指示灯为**输出指示互替**（有数码管/点阵就不用板载灯——互替同脚先例 ttp224×key_matrix），同选经引脚绑定消解；三脚同口（默认组内无跨口换脚约束——逐脚宏族，换单脚经绑定行级覆写）；与 lcd 六脚组（PB4-7/PA5/PA15）/oled SPI 五脚组**显示族互替同脚**（一次选一块屏——大屏/小屏/数码管互替）；页面默认脚（mspm0 板脚 PB9/PA18/PB18）不照抄；**不占硬件 SPI/TIMER**（位操作 GPIO 直驱；MAX7219 时钟上限 10MHz > GPIO 翻转速度，无需延时）。未上板（级联链序/锁存行为真机验证留后续）。wiki 手册来源：sources/materials/lckfb-地阔星移植手册/screen--8-bit-led-tube.md + sources/materials/lckfb-地阔星移植手册/screen--max7219-matrix-display.md（原页 https://wiki.lckfb.com/zh-hans/dmx/module/screen/8-bit-led-tube.html + https://wiki.lckfb.com/zh-hans/dmx/module/screen/max7219-matrix-display.html；硬件词表已挂接——两页同 slug 单模块双形态）。改造要点：STM32 平台依赖去除（DL_GPIO → gpio_set/gpio_init、去 ti_msp_dl_config.h）、去 printf/main 演示、函数名规范化（Write_Max7219_byte → max7219_write_byte 静态、Write_Max7219/Write_Max7219_2/Write_Max7219_AllOff/Max7219_Lock/Max7219_display → write_reg_all/write_reg_chain/write_reg/clear/init）、演示字模表不随库入库。\\n**编译矩阵**（wiki-stm32-batch10/01 收官）：单选生成（max7219 无依赖展开）→ UV4 真编译（ARMCC V5.06）**0 error/0 warning**（.scratch/wiki-stm32-batch10/matrix/run_max7219_matrix.py——Code=1868）；未上板。",
+      "kit": "MAX7219 控制 8 位数码管模块（0.36 英寸）或 MAX7219 4合1 点阵模块",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/screen/8-bit-led-tube.html",
+      "pins": [
+        {
+          "id": "MAX7219_DIN",
+          "type": "gpio_out",
+          "default": "PC13",
+          "required": true,
+          "macros": [
+            "MAX7219_DIN_GPIO",
+            "MAX7219_DIN_PIN"
+          ]
+        },
+        {
+          "id": "MAX7219_CLK",
+          "type": "gpio_out",
+          "default": "PC14",
+          "required": true,
+          "macros": [
+            "MAX7219_CLK_GPIO",
+            "MAX7219_CLK_PIN"
+          ]
+        },
+        {
+          "id": "MAX7219_CS",
+          "type": "gpio_out",
+          "default": "PC15",
+          "required": true,
+          "macros": [
+            "MAX7219_CS_GPIO",
+            "MAX7219_CS_PIN"
+          ]
+        }
+      ]
     }
   }
 }

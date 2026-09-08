@@ -138,7 +138,16 @@ WHITELIST = {
     # servo 默认 PB6 与 pid.GRAY_D7 重叠（b1-adc-servo/02）：蓝药丸可 PWM 脚
     # 全被占用，无空闲可挪——实际接线经引脚绑定消解
     # **wiki-stm32-batch8/04**：rc522 SCK 并入 PB6——读卡与舵机/巡线不同框
-    "PB6": {"pid.GRAY_D7", "servo.SERVO_PWM_C0", "rc522.RC522_SCK"},
+    "PB6": {"pid.GRAY_D7", "servo.SERVO_PWM_C0", "rc522.RC522_SCK",
+            # wiki-stm32-batch10/02：lcd DC——显示族与舵机/巡线/读卡不同框、
+            # 同选概率最低（与 oled SPI 组互替同脚），同选经引脚绑定消解
+            "lcd.LCD_DC",
+            # wiki-stm32-batch10/04：oled SPI DC——与 lcd DC 同脚（互替同脚）
+            "oled.OLED_SPI_DC",
+            # wiki-stm32-batch10/06：ili9341 DC——与 lcd DC 同脚（ILI×中景园互替）
+            "ili9341.ILI9341_DC",
+            # wiki-stm32-batch10/07：ili9488 DC——与 ili9341 DC 同脚（ILI 屏互替）
+            "ili9488.ILI9488_DC"},
     # PA8 三共享（ir_beam×pid.GRAY_D5 为 ir-beam-module/01 残留；ws2812 为
     # wiki-stm32-batch1/06 批次 1 新增——幻彩灯带与「红外对射/巡线」不同框、
     # 同选概率最低（刻意不叠灯族 LED PC13-15），同选经引脚绑定消解）
@@ -163,10 +172,30 @@ WHITELIST = {
         "nrf24l01.NRF24L01_MISO",
         # wiki-stm32-batch8/04：rc522 MOSI——读卡与继电器/编码器方向不同框
         "rc522.RC522_MOSI",
+        # wiki-stm32-batch10/02：lcd SCL——显示族与执行件/无线链路不同框
+        # （屏×继电器/编码器/读卡不同框、同选概率最低；与 oled SPI 组互替同脚）
+        "lcd.LCD_SCL",
+        # wiki-stm32-batch10/04：oled SPI SCL——与 lcd 同脚**显示族互替同脚**
+        # （大屏/小屏一次选一——oled SPI 组 = lcd 组子集），同选经绑定消解
+        "oled.OLED_SPI_SCL",
+        # wiki-stm32-batch10/06：ili9341 SCL——**ILI 屏×中景园屏互替同脚**
+        # （一次选一块屏），同选经绑定消解
+        "ili9341.ILI9341_SCL",
+        # wiki-stm32-batch10/07：ili9488 SCL——与 ili9341 同脚（ILI 屏互替）
+        "ili9488.ILI9488_SCL",
     },
     # human_ir 默认 PB7 与 pid 灰度 GRAY_D8 重叠（人体红外≠巡线灰度；
     # 刻意避让声光/按键/门禁组合 BUZZER/KEY/SERVO）
-    "PB7": {"pid.GRAY_D8", "human_ir.HUMAN_IR_OUT"},
+    "PB7": {"pid.GRAY_D8", "human_ir.HUMAN_IR_OUT",
+            # wiki-stm32-batch10/02：lcd CS——显示族与巡线/人体红外不同框、
+            # 同选概率最低（与 oled SPI 组互替同脚），同选经引脚绑定消解
+            "lcd.LCD_CS",
+            # wiki-stm32-batch10/04：oled SPI CS——与 lcd CS 同脚（互替同脚）
+            "oled.OLED_SPI_CS",
+            # wiki-stm32-batch10/06：ili9341 CS——与 lcd CS 同脚（ILI×中景园互替）
+            "ili9341.ILI9341_CS",
+            # wiki-stm32-batch10/07：ili9488 CS——与 ili9341 CS 同脚（ILI 屏互替）
+            "ili9488.ILI9488_CS"},
     # microwave_radar 默认 PA4 与 motor 编码器 B 相 EXTI 重叠（微波雷达≠
     # 编码器闭环；刻意避让声光/门禁/传感站组合件；本件轮询不注册 EXTI）
     # **wiki-stm32-batch7/04**：ec11 A 相并入 PA4——EC11 人机旋钮与微波雷达/
@@ -210,6 +239,16 @@ WHITELIST = {
         # 二选一接入无需另消解；罕见同选经绑定其一换 PA0/PA1）
         "us016.US016_AO",
         "ir_distance.IR_DISTANCE_AO",
+        # wiki-stm32-batch10/02：lcd RES——显示族与采集件不同框（PA5 ADC 组
+        # × 屏不同框、同选概率最低——屏 RES 是数字驱动脚非采样脚，与 ADC
+        # 共读组无扰；与 oled SPI 组互替同脚），同选经引脚绑定消解
+        "lcd.LCD_RES",
+        # wiki-stm32-batch10/04：oled SPI RES——与 lcd RES 同脚（互替同脚）
+        "oled.OLED_SPI_RES",
+        # wiki-stm32-batch10/06：ili9341 RES——与 lcd RES 同脚（ILI×中景园互替）
+        "ili9341.ILI9341_RES",
+        # wiki-stm32-batch10/07：ili9488 RES——与 ili9341 RES 同脚（ILI 屏互替）
+        "ili9488.ILI9488_RES",
     },
     # ttp224 默认 PB12-15 与 config DIP0-3 + pid GRAY_D1-4 重叠（触摸按键≠
     # 拨码配置/巡线灰度；四脚同口约束——换口需整组迁移，同选经引脚绑定消解）
@@ -224,6 +263,9 @@ WHITELIST = {
         # wiki-stm32-batch8/03：nrf24l01 CSN——2.4G 无线与拨码/灰度/触摸/矩阵
         # 输入不同框、同选概率最低（无线链路常用脚避开人机输入组合）
         "nrf24l01.NRF24L01_CSN",
+        # wiki-stm32-batch10/03：tp_xpt2046 CS——屏幕触摸与四键触摸/手动输入
+        # 不同框（**触摸按键×屏幕触摸互替同脚先例**），同选经引脚绑定消解
+        "tp_xpt2046.TP_XPT2046_CS",
     },
     "PB13": {
         "pid.GRAY_D2",
@@ -232,18 +274,24 @@ WHITELIST = {
         "key_matrix.KEY_MATRIX_ROW2",
         # wiki-stm32-batch8/03：nrf24l01 CE——与 CSN 同策略
         "nrf24l01.NRF24L01_CE",
+        # wiki-stm32-batch10/03：tp_xpt2046 CLK——与 CS 同策略
+        "tp_xpt2046.TP_XPT2046_CLK",
     },
     "PB14": {
         "pid.GRAY_D3",
         "config.DIP2",
         "ttp224.TTP224_OUT3",
         "key_matrix.KEY_MATRIX_ROW3",
+        # wiki-stm32-batch10/03：tp_xpt2046 DIN——与 CS 同策略
+        "tp_xpt2046.TP_XPT2046_DIN",
     },
     "PB15": {
         "pid.GRAY_D4",
         "config.DIP3",
         "ttp224.TTP224_OUT4",
         "key_matrix.KEY_MATRIX_ROW4",
+        # wiki-stm32-batch10/03：tp_xpt2046 DOUT——与 CS 同策略（输入）
+        "tp_xpt2046.TP_XPT2046_DOUT",
     },
     # hx711 称重默认 SCK=PB5 / DT=PB0（wiki-stm32-batch3/07）：PB5 与电机
     # 编码器 A 相 MOTOR_A_ENC 重叠（光电编码器闭环小车与静态称重/电子秤
@@ -272,6 +320,16 @@ WHITELIST = {
         # 小车/称重/粉尘」不同框、同选概率最低（页面 PA1 不照抄），同选经
         # 引脚绑定消解
         "fingerprint.FINGERPRINT_TOUCH",
+        # wiki-stm32-batch10/02：lcd SDA——显示族与人机/采集件不同框（与
+        # oled SPI 组互替同脚），同选经引脚绑定消解
+        "lcd.LCD_SDA",
+        # wiki-stm32-batch10/04：oled SPI SDA——与 lcd SDA 同脚（互替同脚）
+        "oled.OLED_SPI_SDA",
+        # wiki-stm32-batch10/06：ili9341 SDA——与 lcd SDA 同脚（ILI 屏×中景园屏
+        # 互替同脚），同选经绑定消解
+        "ili9341.ILI9341_SDA",
+        # wiki-stm32-batch10/07：ili9488 SDA——与 ili9341 SDA 同脚（ILI 屏互替）
+        "ili9488.ILI9488_SDA",
     },
     "PB0": {
         "motor.MOTOR_B_DIR",
@@ -279,6 +337,13 @@ WHITELIST = {
         "ec11.EC11_SW",
         # wiki-stm32-batch8/04：rc522 CS——读卡与电机方向/称重/旋钮不同框
         "rc522.RC522_CS",
+        # wiki-stm32-batch4/05：vl53l0x XSHUT——ToF 测距与称重/旋钮/读卡不同框、
+        # 同选概率最低（页面/移植工程默认 PB7 弃用 = human_ir/灰度组常备），
+        # 同选经引脚绑定消解
+        "vl53l0x.VL53L0X_XSHUT",
+        # wiki-stm32-batch10/03：tp_xpt2046 PEN——触摸与称重/旋钮/读卡/ToF
+        # 不同框、同选概率最低（PEN 输入上拉），同选经引脚绑定消解
+        "tp_xpt2046.TP_XPT2046_PEN",
     },
     # ds18b20 默认 PB1 与 MOTOR_B_DIR2 重叠（wiki-stm32-batch4/04：测温与
     # 单电机方向不同框、同选概率最低；页面默认 PB0 不采用 = MOTOR_B_DIR；
@@ -296,13 +361,38 @@ WHITELIST = {
     "PA15": {
         "config.BUZZER",
         "jq8900.JQ8900_TX",
+        # wiki-stm32-batch10/02：lcd BLK——显示族与蜂鸣/语音播报为不同框
+        # （背光驱动低频输出；P 15 = JTDI 复用脚作 GPIO 需 SWJ_CFG 释放
+        # JTAG（保留 SWD）——key(PB3)/relay/hc05(PB4) 先例同一约束），
+        # 同选经引脚绑定消解
+        "lcd.LCD_BLK",
+        # wiki-stm32-batch10/06：ili9341 BLK——与 lcd BLK 同脚（ILI×中景园互替；
+        # 背光驱动低频输出——JTDI 复用脚约束同 lcd BLK 注释）
+        "ili9341.ILI9341_BLK",
+        # wiki-stm32-batch10/07：ili9488 BLK——与 ili9341 BLK 同脚（ILI 屏互替）
+        "ili9488.ILI9488_BLK",
     },
     # PC14 黄灯组（wiki-stm32-batch9/02：syn6288 语音合成并入 PC14——语音播报
     # 与板载指示灯为**输出指示互替**（替代而非组合）、同选概率最低；与
     # jq8900（PA15）刻意错开（语音两件常同选、默认即不撞），同选经绑定消解）
+    # **wiki-stm32-batch10/01**：max7219 CLK 并入 PC14（显示件与板载灯输出
+    # 指示互替——见 PC13 注释块）
     "PC14": {
         "config.LED_YELLOW",
         "syn6288.SYN6288_TX",
+        "max7219.MAX7219_CLK",
+    },
+    # PC13-15 板载 LED 三灯组（wiki-stm32-batch10/01：max7219 数码管/点阵
+    # 并入——显示件与板载指示灯为**输出指示互替**（有数码管/点阵就不用板载
+    # 灯——互替同脚先例 ttp224×key_matrix），同选经引脚绑定消解；与 lcd/oled
+    # 显示族互替同脚；页面默认脚（mspm0 板脚）不照抄）
+    "PC13": {
+        "config.LED_RED",
+        "max7219.MAX7219_DIN",
+    },
+    "PC15": {
+        "config.LED_GREEN",
+        "max7219.MAX7219_CS",
     },
     # PA6/PA7 软 I2C 总线共享组（wiki-stm32-batch2/01 起，六件共总线：
     # aht10/bh1750/sht20/sht30/at24c02/ags10 默认 SCL=PA6/SDA=PA7——器件
@@ -331,6 +421,11 @@ WHITELIST = {
         # 绑定消解；与 TB6612 motor 互替刻意错开 TIM/脚；TIM 门禁默认×默认
         # 不拦现状口径）
         "l298n.L298N_IN1",
+        # wiki-stm32-batch4/05：vl53l0x SCL——ToF 激光测距并入软 I2C 总线共享组
+        # （地址 0x52(8bit)/0x29(7bit) 与既有 13 件全异 = 合法共挂；**⚠ 0x29
+        # 与 tcs34725 同址 = 互替不可同挂**（同址双选必冲突——选其一，同选经
+        # 引脚绑定换独立总线或换件）；电平口径 OUT_OD/IU（页面 Out_PP 换算）
+        "vl53l0x.VL53L0X_SCL",
     },
     "PA7": {
         "motor.MOTOR_A_DIR2",
@@ -349,6 +444,8 @@ WHITELIST = {
         "ms5611.MS5611_SDA",
         # wiki-stm32-batch9/04：l298n IN2——同上（物理冲突 ⚠ 登记 + 绑定消解）
         "l298n.L298N_IN2",
+        # wiki-stm32-batch4/05：vl53l0x SDA——同 PA6 登记（软 I2C 总线共享组）
+        "vl53l0x.VL53L0X_SDA",
     },
 }
 
@@ -382,15 +479,24 @@ def test_default_layout_conflict_groups_resolved():
         "hx711.HX711_DT",
         "ec11.EC11_SW",
         "rc522.RC522_CS",
+        "vl53l0x.VL53L0X_XSHUT",
+        "tp_xpt2046.TP_XPT2046_PEN",
     }
     assert grouped["PA2"] == {"debug_uart.DEBUG_UART_TX"}
     assert grouped["PA3"] == {"debug_uart.DEBUG_UART_RX"}
-    assert grouped["PC13"] == {"config.LED_RED"}
+    assert grouped["PC13"] == {
+        "config.LED_RED",
+        "max7219.MAX7219_DIN",
+    }
     assert grouped["PC14"] == {
         "config.LED_YELLOW",
         "syn6288.SYN6288_TX",
+        "max7219.MAX7219_CLK",
     }
-    assert grouped["PC15"] == {"config.LED_GREEN"}
+    assert grouped["PC15"] == {
+        "config.LED_GREEN",
+        "max7219.MAX7219_CS",
+    }
     # wiki-stm32-batch8/01：as32 并入 PB10/PB11（与 Zigbee 无线数传**互替件
     # 同脚先例**——门禁只查用户绑定，默认共享合法先例）
     assert grouped["PB10"] == {
