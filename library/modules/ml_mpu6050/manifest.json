@@ -46,7 +46,7 @@
       ],
       "verified": true,
       "hardware_bound": false,
-      "notes": "文件来自 21F 且真机编译过（ml_mpu6050.o）。\nmodule-polish/04 编译矩阵（2026-08-15）：UV4/gmake 0 error、0 module warning；未上板。",
+      "notes": "文件来自 21F 且真机编译过（ml_mpu6050.o）。\nmodule-polish/04 编译矩阵（2026-08-15）：UV4/gmake 0 error、0 module warning；未上板。\n**批 11 C 类核对（sensor--mpu6050-six-axis-sensor.md，2026-09）**：① ⚠ 前置 **MPU6050_Init 不初始化引脚——须先调母版 I2C_Init()**（默认 PA11/PA12——页面默认脚 SDA=PB8/SCL=PB9 未照抄（=母版 OLED 段），页面脚不采用记录）；② ⚠ 头文件 TEMP_OUT_H 0x65 订正 0x41（页面 MPU6050 温度高字节——原值与 ACCEL_YOUT_L 撞值且本件温度路径未启用）；③ 页面缺陷记录：`(uint8_t*)(fsr<<3)` 整形转指针（模块已直写 0x18 修正正确）、Init 返回值注释与代码相反、正文 LPF 42Hz vs 代码 20Hz 矛盾、页面 50Hz/DLPF 开 vs 模块 200Hz/DLPF 关（初始化档差异——页面默认未照抄）；④ 页面核心产出 = 官方 DMP 欧拉角 pitch/roll/yaw——stm32 侧无 DMP（inv_mpu 仅在 mspm0 条目——需姿态时按 mspm0 mpu_port 先例移植或改 jy61p/imu_uart 串口姿态模块），模块内 roll/pitch/yaw/Kalman 全局为死声明（21F 残留——未删除仅记录）。",
       "kit": "MPU6050",
       "source_url": "https://e.tb.cn/h.8g1H453ww0r0xH7?tk=Ue5KgBwTvkV",
       "pins": [

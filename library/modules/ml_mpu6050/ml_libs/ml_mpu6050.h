@@ -15,7 +15,9 @@
 #define ACCEL_YOUT_L     0x3e
 #define ACCEL_ZOUT_H     0x3f
 #define ACCEL_ZOUT_L     0x40
-#define TEMP_OUT_H       0x65
+#define TEMP_OUT_H       0x41 /* 温度高字节（页面/MPU6050 寄存器表——原 0x65 为
+                                 错误常量（与 ACCEL_YOUT_L 撞值），本件温度路径
+                                 未启用——订正保留（批 11 C 类核对修） */
 #define TEMP_OUT_L       0x42
 #define GYRO_XOUT_H      0x43
 #define GYRO_XOUT_L      0x44
