@@ -1,0 +1,16 @@
+{
+  "id": "按键摇杆器件手册-key-button",
+  "title": "按键摇杆器件手册（key / button）",
+  "type": "器件手册",
+  "description": "立创·地猛星移植手册的双轴按键摇杆移植笔记：按键（含摇杆按下键）与双轴 ADC 读取——骨架阶段选中 key 模块时作为器件级例程参考。",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "any",
+  "topic_type": "",
+  "files": [
+    "two-axis-keystroke-rocker-module.md",
+    "grayscale-sensor.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
