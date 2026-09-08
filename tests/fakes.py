@@ -747,6 +747,7 @@ class FakeLLM:
         clarifications: Sequence[tuple[str, str]] = (),
         qa_material: str = "",
         preselect_note: str = "",
+        known_summaries: Sequence[ManifestSummary] = (),
     ) -> ModuleSelection:
         self.select_calls.append(
             (
@@ -1124,6 +1125,7 @@ class RecordingLLM:
         clarifications: Sequence[tuple[str, str]] = (),
         qa_material: str = "",
         preselect_note: str = "",
+        known_summaries: Sequence[ManifestSummary] = (),
     ) -> ModuleSelection:
         self._record("select_modules")
         return ModuleSelection(modules=(), reasons={})

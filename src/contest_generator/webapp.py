@@ -1706,10 +1706,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         # （命中降序 + MODULE_SUMMARY_BYTES 预算截断 + 保底）——真实库 mspm0
         # 84 条摘要 73.1KB wire 全量注入已超 128KB 网关预算（账本推导按
         # 「摘要 14 条」记账，批次 13 后必须入账，见 budget.py）。预筛结果
-        # 替换 topic.manifest_summaries（run_recommendation 内部收敛循环与
-        # _default_instances_for 同源受益——命中模块必在子集内）；未发生
-        # 子集化（预算内全量，如 stm32 线 24 条）→ topic 零变化、无注记。
-        # 保底/截断发生 = 模型实际所见少于全量 → 注记告知（提示词标题行）。
+        # 只替换「模型看得见的清单行」（topic.manifest_summaries）；「库里有什么」
+        # 的判据仍取 topic.library_summaries（平台全量，工单
+        # preselect-recall-visibility/01）——所以截断不再等于「子集外模块不可
+        # 推荐」：模型推荐子集外模块合法，只是没读过它的简介。未发生子集化
+        # （预算内全量）→ topic 零变化、无注记。保底/截断发生 = 模型实际所见
+        # 少于全量 → 注记告知（提示词标题行）。
         presel = preselect_module_summaries(
             topic.manifest_summaries,
             topic.problem_text,
@@ -1723,12 +1725,13 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 f"（按题面初筛 {len(presel.summaries)}/{presel.total} 条，"
                 f"仅展示前 {MODULE_SUMMARY_BYTES} wire 字节）"
             )
-        # 模块库指纹（工单 recommend-cache-fingerprint/01）：模型看到的摘要行
-        # 排序 hash——库变（模块增删/简介/能力/多实例标注）缓存失效走真实推荐；
-        # 装配点已产出 manifest_summaries，写缓存与校验同源一次计算两用。
-        # 预筛后指纹 = 模型实际所见（预筛是题面的确定性函数：同题面同子集
-        # 同指纹，换题面指纹自然变，缓存语义不变）
-        lib_fp = library_fingerprint(topic.manifest_summaries)
+        # 模块库指纹（工单 recommend-cache-fingerprint/01）：库内容 hash——库变
+        # （模块增删/简介/能力/多实例标注）缓存失效走真实推荐。取源 = 平台全量
+        # 摘要（工单 preselect-recall-visibility/01 评审整改）：本轮起「库里有什么」
+        # 由全量决定（模型可推荐子集外模块），指纹若仍吃预筛子集，子集外模块的
+        # 增删改不会让缓存失效——陈旧推荐照旧直出。全量取源与判据同源，缓存
+        # 语义不变（同题面同库同指纹）。
+        lib_fp = library_fingerprint(topic.library_summaries)
         # 按需视觉问答（工单 recommend-vision-qa/02）：视觉已配置（effective
         # key 非空——含主 key 复用）且条目带原 PDF → 注入供给回调（澄清 /
         # 补问的图内问题自动消化：渲染题面页 + 视觉模型作答）；否则 None =
