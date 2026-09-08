@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=24b95167e23fa0510d64d4d13cbaf148382daaae -->
+<!-- changelog-auto: last-commit=0f19a5139846e03da3a83f2c2d5edca7aa913789 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -22,6 +22,7 @@
 - 20:35 整理：backlog 记录 5.3 词表挂接与 5.4 批次不变量已落地、5.4 骨架映射复核结论（library-hookup-and-invariants 01-02）
 - 20:37 整理：会话交接文档（第 2 批开工入口——已完成 3 批、两个已定结论、待拍板两点）
 - 20:42 守卫：骨架模块→例程映射缺口落盘（2 xfail strict + 2 硬契约）+ 复核发现既有 18 个映射中 9 个死链
+- 21:06 摘要行瘦身形态：全库可装进预筛预算（工单 preselect-visibility/01）
 
 ## 2026-09-07
 - 12:21 模块：us016 超声波测距传感器 stm32 平台条目（wiki-stm32-batch7/01：ADC 薄封装件——页面 ADC 序列收敛 ml_adc（adc_init(ADC_1, US016_AO_CH) + 5 次 adc_get 快平均）+ 默认 AO=ADC_Channel_5（PA5 页面原脚即共读点——ADC 共享组并入 batch5 PA5 共读组，flame+8+7+1=17 ADC 角色同脚，同一物理脚只能接一件器件——多件同测需外部分路器/分时切换）+ **与 ir_distance 互替件同脚**（互替同脚先例——二选一接入无需另消解）+ 双量程宏 US016_RANGE_1M=0（0=3m 档 0.75f/1=1m 档 0.25f——页面正文 3096 与代码 3072 不一、按代码 0.75，mspm0 批 2 同款）+ Vref/Vcc 修正宏（3.3/3.3）+ 出参 cm 对齐 mspm0（us016_read_distance_cm 同名 L30）+ SAMPLES 50×10ms≈500ms→5 快平均 + Range 量程脚/DO 未用不声明 + UV4 矩阵 0 error/0 module warning → verified=true；test_pins 宏表 +US016_AO_CH、test_default_layout PA5 白名单 +us016.US016_AO；description 双平台化（批 6 遗留措辞统一顺带整改本件））
