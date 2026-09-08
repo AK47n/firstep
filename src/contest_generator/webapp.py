@@ -1703,15 +1703,24 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         # 收敛轮数上限（工单 recommend-speedup-v2/01）：设置项透传，缺省 4
         max_rounds = config.recommend_max_rounds
         # 模块候选预筛（工单 module-preselect/03）：题面驱动的摘要行子集化
-        # （命中降序 + MODULE_SUMMARY_BYTES 预算截断 + 保底）——真实库 mspm0
-        # 84 条摘要 73.1KB wire 全量注入已超 128KB 网关预算（账本推导按
-        # 「摘要 14 条」记账，批次 13 后必须入账，见 budget.py）。预筛结果
-        # 只替换「模型看得见的清单行」（topic.manifest_summaries）；「库里有什么」
-        # 的判据仍取 topic.library_summaries（平台全量，工单
-        # preselect-recall-visibility/01）——所以截断不再等于「子集外模块不可
-        # 推荐」：模型推荐子集外模块合法，只是没读过它的简介。未发生子集化
-        # （预算内全量）→ topic 零变化、无注记。保底/截断发生 = 模型实际所见
-        # 少于全量 → 注记告知（提示词标题行）。
+        # （命中降序 + MODULE_SUMMARY_BYTES 预算截断 + 保底）。预筛结果只替换
+        # 「模型看得见的清单行」（topic.manifest_summaries）；「库里有什么」的
+        # 判据仍取 topic.library_summaries（平台全量，工单
+        # preselect-recall-visibility/01）。未发生子集化（预算内全量）→ 无注记。
+        #
+        # 一级清单行取瘦身形态（工单 preselect-visibility/02）：完整行含套件段
+        # 与采购链接，真实库 stm32 86598B / mspm0 78668B 远超预算 → 预筛把清单
+        # 截断到 33–41 条，motor/pid/servo 等执行件整类不可见（模型没读过简介，
+        # 自然选不出来）。瘦身行（manifest.ManifestSummary.lean_copy + to_line：slug +
+        # 有界首句 + 依赖 + 多实例 + 副产物/互斥标记）实测 28071B / 28062B，
+        # 全库装得下 → 截断消失、全库可见。预筛机制本身照旧保留：库再长大到
+        # 装不下时仍按排序截断并给注记。
+        topic = replace(
+            topic,
+            manifest_summaries=tuple(
+                s.lean_copy() for s in topic.manifest_summaries
+            ),
+        )
         presel = preselect_module_summaries(
             topic.manifest_summaries,
             topic.problem_text,

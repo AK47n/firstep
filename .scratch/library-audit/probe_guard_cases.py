@@ -17,7 +17,8 @@ from contest_generator.selection import preselect_module_summaries  # noqa: E402
 CANDIDATES = [
     ("2024H", "stm32", ("motor", "pid", "servo", "led", "key")),
     ("2024H", "mspm0", ("motor", "pid", "servo", "led", "key")),
-    ("2021F", "stm32", ("motor", "pid", "xunji", "key", "oled")),
+    # 2021F 的循迹核心在 stm32 侧由 pid 承担（xunji 只有 mspm0 条目）
+    ("2021F", "stm32", ("motor", "pid", "key", "oled")),
     ("2026C", "stm32", ("led", "beep", "key", "oled")),
     ("2026A", "mspm0", ("motor", "servo", "led", "key")),
     ("2022C", "stm32", ("motor", "pid", "oled", "key")),
@@ -30,6 +31,9 @@ for topic, platform, probes in CANDIDATES:
     summaries = build_manifest_summaries(
         [m for m in manifests if platform in m.platforms]
     )
+    # 瘦身行形态（工单 preselect-visibility/02）：与路由同源，否则测的不是
+    # 生产路径（完整行会截断，可见性结论完全相反）
+    summaries = [s.lean_copy() for s in summaries]
     text = (ROOT / "library" / "topics" / topic / "topic.md").read_text(
         encoding="utf-8", errors="replace"
     )

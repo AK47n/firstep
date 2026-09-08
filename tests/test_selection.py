@@ -2585,6 +2585,41 @@ def test_run_recommendation_passes_library_summaries_as_known():
     assert llm.select_calls[0][1] == ("dht11",)  # 清单行仍是子集
 
 
+def test_run_recommendation_omits_known_when_only_render_mode_differs():
+    """清单行与判据全集只差行形态（瘦身 vs 完整）时不传 known_summaries
+    （工单 preselect-visibility/02 整改）：瘦身行不截断时两者内容等价，
+    传了只是把同一份库重复塞给收敛循环——旧「相同则不传」短路须按内容判，
+    不能按对象字段相等判（lean_line 标志参与 __eq__ 会恒不相等）。
+    """
+    full = (_summary("dht11"), _summary("led", multi=True))
+
+    class _RecordingLLM(FakeLLM):
+        def __init__(self):
+            super().__init__(selection=ModuleSelection(modules=(), reasons={}))
+            self.known_kwarg: list[object] = []
+
+        def select_modules(self, problem_text, manifest_summaries, references=(), **kwargs):
+            self.known_kwarg.append(kwargs.get("known_summaries"))
+            return super().select_modules(problem_text, manifest_summaries, references, **kwargs)
+
+    llm = _RecordingLLM()
+    topic = replace(
+        _topic(),
+        manifest_summaries=tuple(s.lean_copy() for s in full),
+        library_summaries=full,
+    )
+    events: Queue = Queue()
+    emit = SseEmitter(events, terminal_timeout=1.0)
+
+    run_recommendation(topic, llm, emit=emit)
+
+    assert llm.known_kwarg, "收敛循环没被调用"
+    assert all(known is None for known in llm.known_kwarg), (
+        "清单行与判据全集内容等价时仍传了 known_summaries"
+    )
+    assert llm.select_calls[0][1] == ("dht11", "led")  # 清单行仍是全量
+
+
 def test_run_recommendation_default_instances_use_library_summaries():
     """清单行截断掉多实例模块后，默认实例兜底仍按库内事实生效（工单
     preselect-recall-visibility/01）：led 只在 library_summaries 里也兜底。"""
