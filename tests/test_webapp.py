@@ -660,6 +660,53 @@ def test_recommend_route_passes_full_library_as_known(client, context):
     assert [m["slug"] for m in done["modules"]] == ["dht11"]
 
 
+def test_recommend_route_shows_lean_summary_lines_for_whole_library(client, context):
+    """一级清单行取瘦身形态（工单 preselect-visibility/02，最高 seam =
+    /api/recommend）：模型实际收到的模块清单行不含套件段与采购链接，只留
+    slug + 有界首句 + 依赖，且真实库全量条数都在（预筛不再截断）。
+
+    现场给 dht11 补一条带采购链接的 kit，使「完整行」与「瘦身行」可区分——
+    修复前模型收到的是带 `（套件: …采购链接…）` 的完整行，断言即红。
+    """
+    lib = context[0].config.module_library_dir
+    manifest_path = lib / "dht11" / "manifest.json"
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    data["platforms"]["stm32"]["kit"] = (
+        "DHT11 温湿度模块（页面采购链接：淘宝 id=616285586821）"
+    )
+    manifest_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    class _CapturingLLM(FakeLLM):
+        """记录模型实际收到的清单行（清单段 = 模型看得见的范围）。"""
+
+        def __init__(self):
+            super().__init__(
+                selection=ModuleSelection(modules=("dht11",), reasons={"dht11": "测温湿度"})
+            )
+            self.lines: list[str] = []
+
+        def select_modules(self, problem_text, manifest_summaries, *args, **kwargs):
+            self.lines = [s.to_line() for s in manifest_summaries]
+            return super().select_modules(
+                problem_text, manifest_summaries, *args, **kwargs
+            )
+
+    llm = _CapturingLLM()
+    context[1]["llm"] = llm
+
+    _recommend_done(client, {"problem_text": "采集温湿度并显示", "platform": "stm32"})
+
+    assert llm.lines, "收敛循环没收到清单行"
+    dht11 = [line for line in llm.lines if line.startswith("- dht11: ")]
+    assert len(dht11) == 1, f"dht11 清单行缺失或重复：{llm.lines}"
+    assert "采购链接" not in dht11[0] and "（套件" not in dht11[0], (
+        f"一级清单行仍是完整行（含套件段）：{dht11[0]}"
+    )
+    assert "（依赖: delay）" in dht11[0], f"依赖段应保留：{dht11[0]}"
+    # 全库可见：假库 4 个模块（dht11/oled/delay/broken）stm32 侧全在清单里
+    assert len(llm.lines) == 4, f"清单行未覆盖全库：{llm.lines}"
+
+
 def test_recommend_done_includes_default_instances_for_multi_module(client, context):
     """多实例默认兜底（工单 instance-default-fallback/01）端到端：命中 led
     （multi_instance）+ stm32 且 AI 没猜实例 → done 载荷带红黄绿默认实例；

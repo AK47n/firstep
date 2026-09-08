@@ -1330,6 +1330,41 @@ def _functional_layer_key(selection: ModuleSelection) -> _FunctionalKey:
     )
 
 
+def _same_summary_content(
+    left: Sequence[ManifestSummary], right: Sequence[ManifestSummary]
+) -> bool:
+    """两份摘要清单的**内容**是否等价（工单 preselect-visibility/02）。
+
+    只比「库内事实」字段（slug / 简介 / 套件 / 依赖 / 多实例 / 副产物 / 互斥组），
+    不比行渲染形态（`lean_line` 标志）：清单行取瘦身形态后标志参与 `__eq__`，
+    按对象比较会在网页路径恒不相等——那会让「全量 == 清单行」的旧短路失效，
+    把同一份库重复塞进收敛循环。顺序敏感（装配点两处同源同序）。
+    """
+    if len(left) != len(right):
+        return False
+    return all(
+        (
+            a.slug,
+            a.description,
+            a.kits,
+            a.dependencies,
+            a.multi_instance,
+            a.python_artifact,
+            a.exclusive_group,
+        )
+        == (
+            b.slug,
+            b.description,
+            b.kits,
+            b.dependencies,
+            b.multi_instance,
+            b.python_artifact,
+            b.exclusive_group,
+        )
+        for a, b in zip(left, right)
+    )
+
+
 def select_modules_convergent(
     llm: LLM,
     problem_text: str,
@@ -1391,11 +1426,15 @@ def select_modules_convergent(
         **({"preselect_note": preselect_note} if preselect_note else {}),
         # 库内合法性全集（工单 preselect-recall-visibility/01）：manifest_summaries
         # 是喂模型的清单行（可能被预筛截断），known_summaries 是判据用的平台
-        # 全量——模型推荐清单外但库内有的模块不再被当幻觉。**两者相同则不传**
-        # （CLI 无预筛、测试直造 topic 的形态零改动：既有假 LLM 不需要新增形参）。
+        # 全量——模型推荐清单外但库内有的模块不再被当幻觉。**内容相同则不传**
+        # （CLI 无预筛、测试直造 topic 的形态零改动：既有假 LLM 不需要新增形参）；
+        # 比内容不比对象（工单 preselect-visibility/02 整改）：清单行取瘦身行
+        # 形态后 lean_line 标志参与 __eq__，按对象比会在网页路径恒不相等、
+        # 白白把同一份库重复塞进收敛循环。
         **(
             {"known_summaries": known_summaries}
-            if known_summaries and list(known_summaries) != list(manifest_summaries)
+            if known_summaries
+            and not _same_summary_content(known_summaries, manifest_summaries)
             else {}
         ),
     }
