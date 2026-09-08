@@ -39,17 +39,14 @@
 
 **结论：机械面干净，问题在「库长大了、推荐链路的视野没跟上」。** 干净侧证据：全量 pytest 3838 passed；93 模块 manifest 全可加载；依赖无悬空无成环；平台声明文件全在；无孤儿源文件；默认脚全部在板定义内且能力匹配；373 个 pin_config.h 宏双向对齐零缺失；62 个 syscfg 实例与 INSTANCE_CONSUMERS 一致；**170 个「模块×平台」组合逐一跑生成门禁全过**（含依赖闭包）。
 
-### 5.1 🔴 P0：推荐候选预筛把库砍掉一半，失败静默 —— 🔶 流程中断已修，可见性待修
+### 5.1 🔴 P0：推荐候选预筛把库砍掉一半，失败静默 —— ✅ 已落地（工单 preselect-recall-visibility/01-02 + preselect-visibility/01-02，2026-09-08）
 
-- **已落地（2026-09-08，工单 preselect-recall-visibility/01-02，提交 8065fbfd）**：判据取源归位——库内合法性改取平台全量（`TopicContext.library_summaries` / `PreselectResult.library_summaries` / `known_summaries` 可选入参），模型推荐「子集外但库内」的模块不再被判成幻觉中断推荐；多实例能力清单与默认实例兜底同源；库指纹取源改全量；覆盖率守卫落盘（`tests/test_preselect_coverage.py`，6 组真实题面 × 平台，当前 xfail strict 记录缺口）。
-- **仍待修（下一批）**：可见性本身没变（2024H/stm32 仍只见 34/86，motor 排名 71）。**复测探针 `.scratch/library-audit/probe_guard_cases.py`**；新发现——摘要行均值 1006B，其中 description 占 72.6%、套件段占 23.5%，瘦身到「首句 + 依赖 + 多实例标记」后全库 ≈ 13.3KB（预算 40000B 可全量装载），可能比调评分更直接地解决截断。
-- **现状**：`budget.py:204` `MODULE_SUMMARY_BYTES=40000`，摘要段实际 stm32 86.7KB / mspm0 78.8KB（197%–217%）。`webapp.py` 用预筛子集替换清单行（判据已不再受影响）。
-- **实测**：20 份真实赛题每次只送进 32–42 条 / 84–86 条；12 个模块（stm32 侧）20 份题面里一次都没进过提示词。
-- **最刺眼一例（2024H 智能小车）**：可见 34 条全是传感器/显示件（ags10/aht10/at24c02/bh1750/bmp180/dht11/ds18b20/flame/gp2y1014au/mq2-9/ms1100/photoresistance…），**motor/pid/servo/xunji/step_motor/key/led 一条都看不见**。模型若凭常识写出 `motor`，`selection.py:966` 抛「模型推荐了库中不存在的模块：motor」，且 `kind=client` **不重试**（`llm.py` 1920-1930）——正确召回被当幻觉硬失败。
-- **根因三叠加**：① `reference_library.py:388` `PERIPHERAL_TERMS` 仅 57 词，无「小车/电机/循迹」，2024H（"小车"出现 33 次）只激活「摄像头」；② `selection.py:479` 词表**行级兜底**给命中行全部 `lib_modules` 各 +1——感知传感器行 49 方案 → 40+ 传感器白得 1 分；③ 结果 46 条并列 1 分、40 条 0 分，预算只装 34 条，tie-break 是 slug 字典序。
-- **守卫缺口**：`tests/test_llm.py:5554` 只断言字节数不超限，不守覆盖。库每加一模块可见比例再降，测试永远绿。
-- **缓解（不解决）**：生成页有 `module-search` + 模块网格，用户可手动搜全库补模块；AI 这一步是主路径，小车题上基本失效。
-- **建议方向**：能力组分桶保底名额（运动控制/视觉/无线/显示/环境各留 N 条）；tie-break 改「词表挂接 > 术语命中 > 常备模块」；`PERIPHERAL_TERMS` 补中文功能词（小车/电机/循迹/编码器/舵机/称重…）；或摘要段改两级名单（命中 + 常备）。
+- **已落地（2026-09-08，工单 preselect-recall-visibility/01-02，提交 8065fbfd）**：判据取源归位——库内合法性改取平台全量（`TopicContext.library_summaries` / `PreselectResult.library_summaries` / `known_summaries` 可选入参），模型推荐「子集外但库内」的模块不再被判成幻觉中断推荐；多实例能力清单与默认实例兜底同源；库指纹取源改全量；覆盖率守卫落盘（`tests/test_preselect_coverage.py`，6 组真实题面 × 平台）。
+- **可见性已修（2026-09-08，工单 preselect-visibility/01-02，提交 0f19a513 / 4950d98b）**：根因是**行太长**而非预算太小——完整行含套件段（占摘要字节 23.5%，带淘宝/天猫采购链接噪声），全库 stm32 86598B / mspm0 78668B 装不进 `MODULE_SUMMARY_BYTES=40000`，预筛按排序截断到 33–41 条。一级清单行改瘦身形态（`ManifestSummary.lean_copy`：slug + 有界首句 100 字符 + 依赖 + 多实例/副产物/互斥标记）后 **28071B / 28062B——全库可装、截断消失**；6 组真实题面 86/86、84/84 全部可见（`probe_guard_cases.py`），覆盖率守卫摘 xfail 转常规。复测探针 `.scratch/library-audit/probe_lean_variants.py`。
+- **历史现状记录（修复前）**：`budget.py` `MODULE_SUMMARY_BYTES=40000`，摘要段 stm32 86.6KB / mspm0 78.8KB（197%–217%）；20 份真实赛题每次只送进 32–42 条 / 84–86 条；12 个模块（stm32 侧）20 份题面里一次都没进过提示词。
+- **最刺眼一例（2024H 智能小车，修复前）**：可见 34 条全是传感器/显示件，**motor/pid/servo/xunji/step_motor/key/led 一条都看不见**；模型凭常识写出 `motor` 会被判幻觉且 `kind=client` 不重试——正确召回被当硬失败（该行为已由 8065fbfd 修复，可见性由 0f19a513/4950d98b 修复）。
+- **根因三叠加（修复前）**：① `PERIPHERAL_TERMS` 无「小车/电机/循迹」；② 词表行级兜底给命中行全部 `lib_modules` 各 +1（感知传感器行 49 方案 → 40+ 传感器白得 1 分）；③ 46 条并列 1 分、40 条 0 分，预算只装 34 条，tie-break 是 slug 字典序。
+- **守卫**：`tests/test_preselect_coverage.py`（6 组真实题面关键模块可见 + 全库可见不变量）、`tests/test_manifest.py::test_lean_summary_lines_fit_preselect_budget_for_real_library`（全库瘦身行 ≤ 预算 −5KB）。
 
 ### 5.2 🟠 P1：beep 模块声明 0 引脚，代码却直接驱动 BUZZER_GPIO/PIN —— ✅ 已落地（工单 beep-pin-declaration/01，2026-09-08，提交 96e739d9）
 
@@ -64,7 +61,7 @@
 ### 5.4 🟡 P2 三条
 
 - **硬件身份字段 46/170 平台条目为空**（核心件为主：motor/pid/servo/oled/led/key…）——判据②要求新录入必填，老件是历史遗留；需决定补齐还是明确豁免。
-- **骨架「模块→参考例程」映射只覆盖 18/93**（`reference_library.py:406` `MODULE_PERIPHERAL_TERMS`）——**2026-09-08 复核：单独扩映射无效**。75 个未映射模块需要的词项（气压/称重/颜色/气体/光照/指纹/语音/触摸/摇杆…）大部分不在 `PERIPHERAL_TERMS`（57 项）里；且参考库 148 条标题里 **29/57 个词项 0 命中**（oled/lcd/key/led/beep/servo/step/camera/zigbee/wifi 及对应中文词全 0）。**更硬的一条：既有 18 个映射里就有 9 个是死的**（beep/key/led/oled/servo/step_motor/led_beep×2/zigbee_uart_key 的词项在参考库 0 命中——选中这些模块时骨架关联不到任何例程）。真正要动的是词表项 + 参考条目内容，与第 2 批（预筛评分与匹配粒度）同批做才有意义。守卫已落盘：`tests/test_skeleton_mapping_coverage.py`（2 条 xfail strict 记录缺口 + 2 条硬契约现在就绿）。复测探针 `.scratch/library-audit/probe_term_effect.py`、`probe_term_titles.py`。
+- **骨架「模块→参考例程」映射只覆盖 18/93**（`reference_library.py` `MODULE_PERIPHERAL_TERMS`）—— ✅ 已落地（2026-09-08，工单 preselect-visibility/03-05，提交 1b8c9a35 / 459b0cde）：判据归位为「每模块至少一个词项命中参考条目标题」（按模块算）+ 全库模块必须映射或显式豁免（`MODULE_REFERENCE_EXEMPT`，14 条内部件/协议切片）；参考库补 19 条器件条目（5 条救活 6 个死映射 + 14 条器件类别合集，素材 = lckfb 手册原文 / 库内代码切片），`PERIPHERAL_TERMS` 补 17 个器件类别词，映射 18 → 79 条；`tests/test_skeleton_mapping_coverage.py` 两条 xfail 全部转绿（93 模块全覆盖）。复测探针 `probe_term_effect.py` / `probe_unmapped.py`。
 - **批次快检脚本没进 CI** —— ✅ 已落地（工单 library-hookup-and-invariants/02，2026-09-08，提交 6ca1139d）：21 个 sweep 脚本里「对全库永远成立」的 7 条搬进 `tests/test_library_invariants.py`（slug 与目录名一致 / 声明文件存在 / 条目文件无重复 / 依赖不悬空 / 依赖无环 / 词表引用存在 / 模块有简介），红证用临时副本注入破坏实测四类全红；批次快照值不进测试（历史快照会失效）。
 
 ### 5.5 已知遗留（CONTEXT 自记，本次复核仍在）

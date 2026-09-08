@@ -4,12 +4,18 @@
 
 **被谁阻塞：** 04 — 器件级参考条目入库、死映射复活（条目与词项扩展的路子先跑通）。
 
-**状态：** ready-for-agent
+**状态：** resolved
 
-- [ ] 盘点剩余未映射模块（`python .scratch/library-audit/probe_unmapped.py`），逐模块归到「可映射（有手册/有例程）」或「豁免（协议/板载件，入 `SKELETON_MAPPING_EXEMPT`）」
-- [ ] 词项扩展：按器件类别补 `PERIPHERAL_TERMS`（温湿度 / 气压 / 光照 / 颜色 / 气体 / 测距 / 称重 / 姿态 / 指纹 / 语音 / 触摸 / 摇杆 / 彩屏 / 数码管 / 灯带 / 无线数传 / 蓝牙 / LoRa 等），**每个新词项必须至少命中一条参考条目标题**（判据同 03/04）
-- [ ] 参考条目补录：类别合集的条目承载多个模块（如「气体传感器器件手册合集」承载 mq2…mq9/mq135/ms1100/ags10/sgp30），避免逐器件建条目造成库膨胀；条目素材取自 lckfb 手册原文
-- [ ] `MODULE_PERIPHERAL_TERMS` 按模块补映射；豁免表补齐协议 / 板载件
-- [ ] `tests/test_skeleton_mapping_coverage.py` 第二条 xfail 摘掉转常规守卫
-- [ ] 词表预算复核：`PERIPHERAL_TERMS` / `MODULE_PERIPHERAL_TERMS` 变化是否影响推荐提示词预算（`WORDLIST_PROMPT_BYTES` 余量已吃紧——加词前先看 `probe_budget_headroom.py`）
-- [ ] `python -m pytest -q` 全绿
+- [x] 盘点：59 个未映射模块全部归到「可映射」（`probe_unmapped.py` 复测为空）
+- [x] 词项扩展：`PERIPHERAL_TERMS` 补 16 个器件类别词（气压 / 光照 / 颜色 / 气体 / 测距 / 称重 / 姿态 / 指纹 / 语音 / 触摸 / 摇杆 / 彩屏 / 灯带 / 无线数传 / lora / 温度），每个词项都由新建的类别条目承载（`probe_sweep_terms.py` 逐项验过）
+- [x] 参考条目补录：14 条「器件手册合集」条目（气体 / 温湿度 / 气压 / 光照与颜色 / 测距 / 姿态 / 称重与模数采集 / 指纹与语音 / 触摸与摇杆 / 彩屏与数码管 / 灯带与执行 / 无线通信 / 环境检测 / 存储与编码），素材 = lckfb 手册原文（无手册件取库内代码切片）；脚本 `.scratch/preselect-visibility/add_category_manuals.py`（幂等）
+- [x] `MODULE_PERIPHERAL_TERMS` 补 59 条映射；豁免表保持 14 条（协议 / 内部件）
+- [x] `tests/test_skeleton_mapping_coverage.py` 第二条 xfail 摘掉转常规守卫（**93 个模块全部有映射或豁免，0 xfailed**）
+- [x] 词表预算复核：`PERIPHERAL_TERMS` 不进食 LLM 的词表段（那是 `wordlist.json`），预算余量未变（`probe_budget_headroom.py` 仍 378B / 998B）
+- [x] `python -m pytest -q` 全绿
+
+## 答复（2026-09-08）
+
+- 类别条目而非逐器件条目：59 个模块若逐个建条目会让参考库膨胀（148 → 200+），改为一类一条（14 条），标题承载类别词项 + 英文 slug 词，条目内按器件分文件。
+- 无手册的三个件（`ec11` 旋转编码器、`at24c02` EEPROM、`key_matrix` 4×4 矩阵键盘）取库内模块代码切片，归入「存储与编码器件手册合集」。
+- 映射词项一律指向类别词项（如 `mq2…mq9/mq135/ms1100/ags10/sgp30 → 气体`），`sr04`/`us016` 同时保留 `超声波`，`as32` 同时保留 `lora`，`ds18b20`/`mlx90614` 同时保留 `温度`——多词项不额外计分，只增加关联面。
