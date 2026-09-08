@@ -78,8 +78,18 @@
 「地猛星 MSPM0G3507 模块移植手册」的资料：
 
 - **70 篇模块移植手册**（截至本版收录数）：抓取归档于 `sources/materials/lckfb-地猛星移植手册/`，每篇文首注明原页链接；
-- **56 个派生模块**（截至本版收录数）：模块库（`library/modules/`）中来自该手册的驱动，其 manifest `source_url`
-  记录了原页链接，每个源码文件头部均有来源注释块（原页 + 改写说明）。
+- **58 个派生模块**（截至本版收录数）：模块库（`library/modules/`）中来自该手册的驱动，其 manifest `source_url`
+  记录了原页链接，每个源码文件头部均有来源注释块（原页 + 改写说明）。口径：wiki-modules-batch1-13 共 52 件
+  + wiki-materials 四件（ws2812/aht10/hx711/sr04）+ B 类仅 stm32 条目两件（ili9341/ili9488，地阔星/地猛星页面同名同器件）。
+
+本工具另收录并使用了同站「地阔星 STM32F103C8T6 模块移植手册」
+（[https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/](https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/)）的资料：
+
+- **77 篇模块移植手册**（截至本版收录数）：抓取归档于 `sources/materials/lckfb-地阔星移植手册/`，每篇文首注明原页链接；
+- **74 个 stm32 平台条目**（截至本版收录数）：77 页中 74 页映射为模块库中的 stm32 平台条目
+  （A 类 58 件 + B 类新 slug 9 件 + C 类核对 7 件；映射表、匹配依据与例外见 `.scratch/materials-wiki/dkx-map.tsv`），
+  另 **3 个 A 类页面为 mspm0-only**（huidu/xunji/sr04——stm32 侧能力由 pid/us016 承接，系设计例外而非遗漏）。
+  来源标注与合规措施与上同。
 
 按立创官网版权声明第三条要求，使用本工具生成的工程、或复制/传播/修改上述资料时，请清楚标明
 文件的来源以及链接：
