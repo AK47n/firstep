@@ -1,0 +1,16 @@
+{
+  "id": "称重与模数采集器件手册合集-称重",
+  "title": "称重与模数采集器件手册合集（称重）",
+  "type": "器件手册",
+  "description": "称重与模数采集器件移植手册合集：HX711 称重（24 位串行 ADC）、ADS1115 四通道外扩 ADC——骨架阶段选中称重/外扩采集类模块时的器件级例程参考。",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "any",
+  "topic_type": "",
+  "files": [
+    "hx711.md",
+    "ads1115.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
