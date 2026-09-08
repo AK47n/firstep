@@ -1,0 +1,16 @@
+{
+  "id": "WS2812-幻彩灯带与-8-位-LED-数码管器件手册-led",
+  "title": "WS2812 幻彩灯带与 8 位 LED 数码管器件手册（led）",
+  "type": "器件手册",
+  "description": "立创·地猛星移植手册的 LED 器件移植笔记：WS2812 幻彩 RGB 灯带（单线时序下发）与 8 位 LED 数码管（移位寄存器驱动）——骨架阶段选中 led / led_beep 模块时作为器件级例程参考。",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "any",
+  "topic_type": "",
+  "files": [
+    "ws2812-color-rgb-led.md",
+    "8-bit-led-tube.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
