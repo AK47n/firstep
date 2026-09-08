@@ -1,0 +1,16 @@
+{
+  "id": "SG90-舵机器件手册-servo",
+  "title": "SG90 舵机器件手册（servo）",
+  "type": "器件手册",
+  "description": "立创·地猛星移植手册的 SG90 舵机移植笔记：PWM 周期与脉宽—角度映射、供电与共地注意点——骨架阶段选中 servo 模块时作为器件级例程参考。",
+  "anchor_kind": "none",
+  "anchor_value": "",
+  "platform": "any",
+  "topic_type": "",
+  "files": [
+    "sg90-steering-engine.md",
+    "16-ch-servo-drive-module.md"
+  ],
+  "file_count": 0,
+  "size_bytes": 0
+}
