@@ -12,7 +12,7 @@
 
 **实施清单：**
 - [x] `library/modules/s12sd/code/s12sd_stm32.c/.h`
-- [x] manifest.json platforms 增 stm32：files、dependencies ["adc","delay"]、verified false、hardware_bound false、pins 1 行、kit/source_url（wiki 原页 `.../sensor/s12sd-uv-sensor.html`）、notes（手册路径+原页+网盘+IRtracking 串台+档位表（照 mspm0 逐档）+5 次快平均+ADC 共享组+未上板）
+- [x] manifest.json platforms 增 stm32：files、dependencies ["adc"]、verified true、hardware_bound false、pins 1 行、kit/source_url（wiki 原页 `.../sensor/s12sd-uv-sensor.html`）、notes（手册路径+原页+网盘+IRtracking 串台+档位表（照 mspm0 逐档）+5 次快平均+ADC 共享组+未上板）
 - [x] pin_config.h 增 `S12SD_AO_CH`
 - [x] 测试 `tests/test_module_s12sd.py`：形状+宏存在+单选生成+守卫（档位表上界常量 227/318/408/503/606/696/795/881/976/1079/1170、`S12SD_ADC_SAMPLES 5u`、无 printf/GPIO_Init/RCC_、无「IRtracking」源码字面量）
 - [x] test_pins.py 补宏；test_default_layout.py 白名单 PA5 共享组 +1
