@@ -113,7 +113,7 @@ def test_jq8900_soft_uart_source_guards():
 
 
 def test_jq8900_manifest_shape_mspm0():
-    """jq8900：仅 mspm0 平台条目；依赖 delay；单角色 TX = gpio_out PB19。"""
+    """jq8900 mspm0 条目（stm32 条目见下方 stm32 段）：依赖 delay；TX = gpio_out PB19。"""
     manifest = ModuleManifest.load(MODULES / "jq8900")
     assert manifest.slug == "jq8900"
     assert manifest.dependencies == ("delay",)

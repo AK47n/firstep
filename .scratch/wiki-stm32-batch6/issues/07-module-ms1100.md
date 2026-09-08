@@ -2,7 +2,7 @@
 
 **要做什么：** 模块库 `ms1100` 新增 **stm32 平台条目**（mspm0 零改动）：从地阔星页面提炼 VOC 气体检测驱动为纯驱动切片（ADC 薄封装——页面 ADC 序列收敛 ml_adc），API 与 mspm0 版完全对齐：`ms1100_init()` + `ms1100_read_percent()`（float 0-100% 相对浓度——**页面无百分比函数，由页面 demo 电压式 `value/4095×3.3` 推导归一**（Vref 3.3V）→ `percent = voltage/3.3×100 = value/4095×100`——notes 记录推导）。
 
-**关键事实（批 11 spec + batch5 同构断言）：** F1；页面 AO=PA5/无 DO 或 DO=PA1？——**页面 4Pin：VCC/GND/DOUT/AOUT**（DOUT 4K 可调电阻比较——`Get_DO_Num`/`MS1100_DO` 未用于演示——**不声明**）；页面 30×3ms → 5 次快平均；检测对象：甲醛/甲苯/苯等 VOC（半导体型，工作 5V、<50uA、可侦测 0.1ppm 以上）；**预热 3-5 分钟**（页面原文）；清洁空气 <1V；读数相对值（页面未给 ppm 换算表——「采集到的电压与甲醛甲苯的对应关系」为图片无图注、未落码，真机标定留用户）；与库内 sgp30/ags10（数字量 ppb/ppm VOC）分工：本件廉价模拟相对值、两者数字绝对量。
+**关键事实（批 11 spec + batch5 同构断言）：** F1；页面 AO=PA5/页面 4Pin：VCC/GND/DOUT/AOUT（DOUT 数字量，AOUT 与 4K 可调电阻比较——`Get_DO_Num`/`MS1100_DO` 未用于演示——**不声明**）；页面 30×3ms → 5 次快平均；检测对象：甲醛/甲苯/苯等 VOC（半导体型，工作 5V、<50uA、可侦测 0.1ppm 以上）；**预热 3-5 分钟**（页面原文）；清洁空气 <1V；读数相对值（页面未给 ppm 换算表——「采集到的电压与甲醛甲苯的对应关系」为图片无图注、未落码，真机标定留用户）；与库内 sgp30/ags10（数字量 ppb/ppm VOC）分工：本件廉价模拟相对值、两者数字绝对量。
 
 **引脚：** pins `MS1100_AO`（adc，PA5，macros `[MS1100_AO_CH]`）；pin_config.h：`#define MS1100_AO_CH ADC_Channel_5`。
 
