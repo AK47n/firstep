@@ -377,6 +377,40 @@ STM32_MACRO_VALUES = {
     "ILI9488_CS_PIN": "Pin_7",
     "ILI9488_BLK_GPIO": "GPIO_A",
     "ILI9488_BLK_PIN": "Pin_15",
+    # wiki-stm32-batch11/02：st7789_para 1.14 寸 8 位并口彩屏（B 类新 slug——
+    # **库内首个并口显示件**——8080 GPIO 位操作 14 脚：DB0-7=PB4/5/6/7/
+    # PB0/1/PB3/PA8（数据线叠采集/运动/输入类——不同框同选概率最低）、
+    # RD=PA5/WR=PA4（叠微波+EC11/flame+ADC 组——不同框）、CS/DC/RES=PC13-15
+    # + BLK=PA15（叠板载 LED 三灯+蜂鸣——输出指示互替，max7219 先例）；
+    # 与显示族互替——一次选一块屏；包默认 14 脚全弃用不照抄）
+    "ST7789_PARA_DB0_GPIO": "GPIO_B",
+    "ST7789_PARA_DB0_PIN": "Pin_4",
+    "ST7789_PARA_DB1_GPIO": "GPIO_B",
+    "ST7789_PARA_DB1_PIN": "Pin_5",
+    "ST7789_PARA_DB2_GPIO": "GPIO_B",
+    "ST7789_PARA_DB2_PIN": "Pin_6",
+    "ST7789_PARA_DB3_GPIO": "GPIO_B",
+    "ST7789_PARA_DB3_PIN": "Pin_7",
+    "ST7789_PARA_DB4_GPIO": "GPIO_B",
+    "ST7789_PARA_DB4_PIN": "Pin_0",
+    "ST7789_PARA_DB5_GPIO": "GPIO_B",
+    "ST7789_PARA_DB5_PIN": "Pin_1",
+    "ST7789_PARA_DB6_GPIO": "GPIO_B",
+    "ST7789_PARA_DB6_PIN": "Pin_3",
+    "ST7789_PARA_DB7_GPIO": "GPIO_A",
+    "ST7789_PARA_DB7_PIN": "Pin_8",
+    "ST7789_PARA_RD_GPIO": "GPIO_A",
+    "ST7789_PARA_RD_PIN": "Pin_5",
+    "ST7789_PARA_WR_GPIO": "GPIO_A",
+    "ST7789_PARA_WR_PIN": "Pin_4",
+    "ST7789_PARA_CS_GPIO": "GPIO_C",
+    "ST7789_PARA_CS_PIN": "Pin_13",
+    "ST7789_PARA_DC_GPIO": "GPIO_C",
+    "ST7789_PARA_DC_PIN": "Pin_14",
+    "ST7789_PARA_RES_GPIO": "GPIO_C",
+    "ST7789_PARA_RES_PIN": "Pin_15",
+    "ST7789_PARA_BLK_GPIO": "GPIO_A",
+    "ST7789_PARA_BLK_PIN": "Pin_15",
     # wiki-stm32-batch8/03：nrf24l01 软 SPI 六脚（全端口 B 单共享端口宏——
     # 同口约束照 ttp224；页面硬件 SPI1 默认脚不照抄）
     "NRF24L01_PORT": "GPIO_B",

@@ -1,0 +1,119 @@
+{
+  "slug": "st7789_para",
+  "description": "ST7789V 1.14 寸 135×240 8 位并口（8080 接口）彩屏驱动（stm32 纯驱动，B 类——仅 stm32 条目、无 mspm0 对照，ADR 0009）：**库内首个 8 位并口显示件**——GPIO 位操作 14 脚（DB0-7 八位数据线 + RD/WR/CS/DC/RES/BLK 六控制线，**不用 FSMC/硬件外设/TIMER**——8080 时序 RD/WR 选通忙等），API 照 lcd 六合一模块风格（init(dir)/get_width/height/fill/clear/draw_point/line/rectangle/circle/show_char/string/num/float/chinese16x16/picture——不含 lcdwiki 旧壳 POINT_COLOR/LCD_ShowString）；字库复用库内 lcdfont.h 同源副本（1206/1608 + tfont16 汉字——包内无 ascii_1206 且 API 口径 12/16 字号需要）；默认脚 = 工单重拍 14 脚（包默认 14 脚全弃用——全撞既有占用；数据线叠采集/运动/输入类不同框、控制线叠板载灯+蜂鸣输出指示互替、与显示族互替——一次选一块屏）；性能：并口位操作整屏填充估算 ≈0.2-0.4s（未上板实测——建议局部刷新）；适用于小屏数据显示/仪表盘/菜单界面/波形曲线等赛题功能。",
+  "dependencies": [],
+  "platforms": {
+    "stm32": {
+      "files": [
+        "code/st7789_para_stm32.c",
+        "code/st7789_para_stm32.h",
+        "code/st7789_para_font.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**B 类：无 mspm0 条目（地阔星仅有页面）——仅 stm32 平台条目**（B 类拍板：库内 lcd 六合一不含 8 位并口变体——差异 = 接口形态（软 SPI 6 脚 vs 8080 并口 14 脚）+ 控制器家族（ST7789V 与 lcd 的 V2/V3 同族）；**库内首个 8 位并口显示件**，与 lcd/ILI 软 SPI 族驱动结构不同；wordlist 显示模块组补录——models + lib_modules）。**资料来源**：wiki 原页 screen--1-14-color-screen.md（fetch 手册——页面为移植教程：端口宏表/初始化序列/总线时序全部在教程正文 + 厂家包，页面零独立驱动文件）→ 驱动/引脚表全部取自 **立创移植工程包**（用户网盘下载并解压）：sources/materials/lckfb-地阔星移植手册/网盘下载/st7789_para/STM32F103C8T6_ProjectTemplate/bsp/LCD/lcd.c/h + lcd_init.c/h（ST7789V 135×240 8 位并口；lcd_init.h 含 USE_HORIZONTAL 方向宏 + 14 脚宏表 + BIT_DBx 字符串宏）。**形态**：8 位并口位操作（包内 LCD_Writ_Bus 原式：每字节 CS 低 → WR 低 → 8 位数据线并行置数（DB7..DB0 = dat 位 7..0）→ WR 高（写选通上升沿）→ CS 高；RD 只用于读方向——包内/本件仅写显示，RD 保持高不参与；stm32 版 = gpio_set 位操作——GPIO_WriteBit/BIT_DBx 换算（不引 sys.h 位带宏）；**不用 FSMC/硬件外设/TIMER**）；API = **st7789_para_init(dir)/get_width/height/fill/clear/draw_point/line/rectangle/circle/show_char/string/num/float/chinese16x16/picture**（**照 mspm0 lcd.h 风格——不照 lcdwiki 旧壳**：lcddev/POINT_COLOR/BACK_COLOR/LCD_ShowString(带 fc/bc) 弃用；函数名规范化 LCD_* → st7789_para_*；绘制/文本层自 lcd 六合一同构——与 ili9341/ili9488 同款接口体验；**USE_HORIZONTAL 宏方向化 = 运行时 dir 表**：MADCTL（包内原式 0=0x00/1=0xC0/2=0x70/3=0xA0）+ 地址偏移表（dir 0 列+52/行+40、1 列+53/行+40、2 列+40/行+53、3 列+40/行+52）——dir 0/1 竖屏 135×240、2/3 横屏 240×135，get_width/height 运行时换置零重编译；默认 = 包 USE_HORIZONTAL=2 横屏（ST7789_PARA_DIR_DEFAULT=2））。**初始化序列** = 包内 LCD_Init 原式完整（0x11+120ms/0x36(方向表)/0x3A 0x05(16bit 65K)/0xB2/0xB7/0xBB/0xC0/0xC2/0xC3/0xC4/0xC6/0xD0/0xE0(正 gamma 14byte)/0xE1(负 gamma 14byte)/0x21(反色开——包内原式)/0x29 —复位 100ms×2 + 背光开 + 清屏——全部直提包内；包内未给 0x2A/0x2B 初设——地址窗口由 address_set 每次设置）。**引脚宏表取自包内 lcd_init.h**（页面移植教程 14 脚表——**默认 14 脚 = 工单重拍，包默认全弃用**：包默认 RD=PA5/WR=PA4/CS=PA2/DC=PA3/RES=PA1/BLK=PA0/DB0=PA6/DB1=PA7/DB2=PB0/DB3=PB1/DB4=PB10/DB5=PB11/DB6=PB12/DB7=PB13——**全撞既有占用**（PA2/PA3=DEBUG_UART、PA0/PA1=PWM/ADC、PB10/11=ZIGBEE、PB12/13=DIP/GRAY/TTP、PA6/PA7=I2C 总线、PA4/PA5=编码器/ADC 组）；新默认 DB0-7=**PB4/PB5/PB6/PB7/PB0/PB1/PB3/PA8**（数据线叠「传感/运动/输入」类（relay+编码器方向/hx711+EC11/servo+GRAY/human_ir/称重+旋钮/KEY+GRAY+dht11/ir_beam+WS2812+GRAY——屏（输出）与这些采集/运动/输入件不同框相对最低）、RD=**PA5**/WR=**PA4**（叠微波+EC11/flame+ADC 组——不同框）、CS/DC/RES=**PC13/PC14/PC15**（叠板载 LED 三灯——输出指示互替，max7219 PC13-15 先例）、BLK=**PA15**（叠蜂鸣+语音——输出指示互替）；**与显示族（lcd/oled SPI/max7219/ili 系）互替——一次只选一块屏**（14 脚现实约束：stm32 32 脚全占局面重叠面大、同选冲突经绑定消解为高概率动作；同选默认撞脚口径 = 互替件二选一接入无需另消解，罕见同选经绑定消解）。**字库决策（字符集比对）**：包内 lcdfont.h（ascii_1608/ascii_3216/tfont16/24/32——GBK 索引用 C 字符串字面量写法）与库内 lcdfont.h **同源**（ascii_1608 逐字节一致、tfont16 五汉字同形同阵仅 Index 写法不同——库内 {0xD6,0xD0} 标准形式）；**API 口径（sizey 12/16 + chinese16x16）需要 ascii_1206——包内无此套**，故**采用库内 lcdfont.h 同源副本 st7789_para_font.h**（static 化 + 头基名唯一——跨模块同名文件冲突门禁 UV4 L6200E，**不引包内 lcdfont.h 名**；与 ili9341/ili9488 同款先例）。**pic.h 演示位图不入库**（包内 gImage_1 40×40 演示——mspm0 先例：show_picture 收外部点阵）。**性能**：并口位操作每字节 12 次 gpio_set（8 位数据 + CS/WR 各下上沿）——全屏 135×240×2 字节 ≈0.2-0.4s（**估算——未上板实测留后续**，建议局部刷新；并口快于软 SPI 但 14 脚代价、与 SPI 屏互替）。**未上板**（8080 时序/偏移/反色/背光真机验证留后续——真机清单记录）。",
+      "kit": "1.14 寸 TFT 并口屏（ST7789V 135×240 RGB，8 位并口 8080，16 Pin 2.54mm 排针，3.3V/20mA——页面采购链接：淘宝 1.14寸TFT显示屏ips液晶屏1.14寸st7789并口屏高清TFT LCD135240，id=631853536402）",
+      "source_url": "https://wiki.lckfb.com/zh-hans/dkx-stm32f103c8t6/module/screen/1-14-color-screen.html",
+      "pins": [
+        {
+          "id": "ST7789_PARA_DB0",
+          "type": "gpio_out",
+          "default": "PB4",
+          "required": true,
+          "macros": ["ST7789_PARA_DB0_GPIO", "ST7789_PARA_DB0_PIN"]
+        },
+        {
+          "id": "ST7789_PARA_DB1",
+          "type": "gpio_out",
+          "default": "PB5",
+          "required": true,
+          "macros": ["ST7789_PARA_DB1_GPIO", "ST7789_PARA_DB1_PIN"]
+        },
+        {
+          "id": "ST7789_PARA_DB2",
+          "type": "gpio_out",
+          "default": "PB6",
+          "required": true,
+          "macros": ["ST7789_PARA_DB2_GPIO", "ST7789_PARA_DB2_PIN"]
+        },
+        {
+          "id": "ST7789_PARA_DB3",
+          "type": "gpio_out",
+          "default": "PB7",
+          "required": true,
+          "macros": ["ST7789_PARA_DB3_GPIO", "ST7789_PARA_DB3_PIN"]
+        },
+        {
+          "id": "ST7789_PARA_DB4",
+          "type": "gpio_out",
+          "default": "PB0",
+          "required": true,
+          "macros": ["ST7789_PARA_DB4_GPIO", "ST7789_PARA_DB4_PIN"]
+        },
+        {
+          "id": "ST7789_PARA_DB5",
+          "type": "gpio_out",
+          "default": "PB1",
+          "required": true,
+          "macros": ["ST7789_PARA_DB5_GPIO", "ST7789_PARA_DB5_PIN"]
+        },
+        {
+          "id": "ST7789_PARA_DB6",
+          "type": "gpio_out",
+          "default": "PB3",
+          "required": true,
+          "macros": ["ST7789_PARA_DB6_GPIO", "ST7789_PARA_DB6_PIN"]
+        },
+        {
+          "id": "ST7789_PARA_DB7",
+          "type": "gpio_out",
+          "default": "PA8",
+          "required": true,
+          "macros": ["ST7789_PARA_DB7_GPIO", "ST7789_PARA_DB7_PIN"]
+        },
+        {
+          "id": "ST7789_PARA_RD",
+          "type": "gpio_out",
+          "default": "PA5",
+          "required": true,
+          "macros": ["ST7789_PARA_RD_GPIO", "ST7789_PARA_RD_PIN"]
+        },
+        {
+          "id": "ST7789_PARA_WR",
+          "type": "gpio_out",
+          "default": "PA4",
+          "required": true,
+          "macros": ["ST7789_PARA_WR_GPIO", "ST7789_PARA_WR_PIN"]
+        },
+        {
+          "id": "ST7789_PARA_CS",
+          "type": "gpio_out",
+          "default": "PC13",
+          "required": true,
+          "macros": ["ST7789_PARA_CS_GPIO", "ST7789_PARA_CS_PIN"]
+        },
+        {
+          "id": "ST7789_PARA_DC",
+          "type": "gpio_out",
+          "default": "PC14",
+          "required": true,
+          "macros": ["ST7789_PARA_DC_GPIO", "ST7789_PARA_DC_PIN"]
+        },
+        {
+          "id": "ST7789_PARA_RES",
+          "type": "gpio_out",
+          "default": "PC15",
+          "required": true,
+          "macros": ["ST7789_PARA_RES_GPIO", "ST7789_PARA_RES_PIN"]
+        },
+        {
+          "id": "ST7789_PARA_BLK",
+          "type": "gpio_out",
+          "default": "PA15",
+          "required": true,
+          "macros": ["ST7789_PARA_BLK_GPIO", "ST7789_PARA_BLK_PIN"]
+        }
+      ]
+    }
+  }
+}

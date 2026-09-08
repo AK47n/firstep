@@ -710,6 +710,50 @@
 #define ILI9488_BLK_GPIO      GPIO_A
 #define ILI9488_BLK_PIN       Pin_15
 
+/* ---- 批次 11（wiki-stm32-batch11/02）：st7789_para 1.14 寸 8 位并口彩屏
+ * （B 类新 slug——仅 stm32 条目；**库内首个 8 位并口显示件**——8080 接口
+ * GPIO 位操作 14 脚，不占 FSMC/TIMER/硬件外设）----
+ * 默认 14 脚 = **工单重拍**（包默认 14 脚 RD=PA5/WR=PA4/CS=PA2/DC=PA3/
+ * RES=PA1/BLK=PA0/DB0=PA6/DB1=PA7/DB2=PB0/DB3=PB1/DB4=PB10/DB5=PB11/
+ * DB6=PB12/DB7=PB13 全弃用——全撞既有占用）；
+ * 数据线 DB0-7=PB4/5/6/7/PB0/1/PB3/PA8 叠「传感/运动/输入」类（relay+
+ * 编码器方向/称重+旋钮/舵机+巡线/人体红外/电机方向/测温/按键+灰度+
+ * 温湿度/对射+灯带+灰度——屏（输出）与这些采集/运动/输入件不同框、
+ * 同选概率最低）；RD=PA5/WR=PA4 叠微波+EC11/flame+ADC 组（不同框）；
+ * CS/DC/RES=PC13/PC14/PC15 叠板载 LED 三灯、BLK=PA15 叠蜂鸣+语音
+ * （**输出指示互替**——max7219 PC13-15 先例）；**与显示族（lcd/oled SPI/
+ * max7219/ili 系）互替——一次只选一块屏**（14 脚现实约束：stm32 32 脚
+ * 全占局面重叠面大、同选冲突经绑定消解为高概率动作；互替件二选一接入
+ * 无需另消解——罕见同选经绑定消解）。 */
+#define ST7789_PARA_DB0_GPIO  GPIO_B
+#define ST7789_PARA_DB0_PIN   Pin_4
+#define ST7789_PARA_DB1_GPIO  GPIO_B
+#define ST7789_PARA_DB1_PIN   Pin_5
+#define ST7789_PARA_DB2_GPIO  GPIO_B
+#define ST7789_PARA_DB2_PIN   Pin_6
+#define ST7789_PARA_DB3_GPIO  GPIO_B
+#define ST7789_PARA_DB3_PIN   Pin_7
+#define ST7789_PARA_DB4_GPIO  GPIO_B
+#define ST7789_PARA_DB4_PIN   Pin_0
+#define ST7789_PARA_DB5_GPIO  GPIO_B
+#define ST7789_PARA_DB5_PIN   Pin_1
+#define ST7789_PARA_DB6_GPIO  GPIO_B
+#define ST7789_PARA_DB6_PIN   Pin_3
+#define ST7789_PARA_DB7_GPIO  GPIO_A
+#define ST7789_PARA_DB7_PIN   Pin_8
+#define ST7789_PARA_RD_GPIO   GPIO_A
+#define ST7789_PARA_RD_PIN    Pin_5
+#define ST7789_PARA_WR_GPIO   GPIO_A
+#define ST7789_PARA_WR_PIN    Pin_4
+#define ST7789_PARA_CS_GPIO   GPIO_C
+#define ST7789_PARA_CS_PIN    Pin_13
+#define ST7789_PARA_DC_GPIO   GPIO_C
+#define ST7789_PARA_DC_PIN    Pin_14
+#define ST7789_PARA_RES_GPIO  GPIO_C
+#define ST7789_PARA_RES_PIN   Pin_15
+#define ST7789_PARA_BLK_GPIO  GPIO_A
+#define ST7789_PARA_BLK_PIN   Pin_15
+
 /* ---- UART 接收中断聚合（isr.c 的 USARTx_IRQHandler 调这些宏，
  * 工单 pin-full-unlock/02）——按各 UART 角色绑定实例重分组：默认
  * UART_1 = DIGIT+COORD+UWB+HC05+FINGERPRINT+NEO_6M+ESP01S 共享（批 8/02

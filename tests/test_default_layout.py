@@ -126,7 +126,10 @@ WHITELIST = {
     # 复位后可用；实际接线经引脚绑定消解——module-functionalize/04）
     # dht11 默认 PB3 三叠（wiki-stm32-batch4/03：环境件与独立按键/巡线不同框、
     # 同选概率最低；页面默认 PB0 不采用 = MOTOR_B_DIR；单总线件不叠软 I2C 总线）
-    "PB3": {"key.KEY_START", "pid.GRAY_D6", "dht11.DHT11_DATA"},
+    # **wiki-stm32-batch11/02**：st7789_para DB6 并入 PB3——并口屏数据线与
+    # 独立按键/巡线/温湿度不同框（屏=输出、采集/输入件=输入，同选概率最低）
+    "PB3": {"key.KEY_START", "pid.GRAY_D6", "dht11.DHT11_DATA",
+            "st7789_para.ST7789_PARA_DB6"},
     # adc 默认 PA0/PA1 与 motor PWM 重叠（b1-adc-servo/01）：蓝药丸 ADC 通道
     # 脚（PA0-7/PB0-1）全部被既有模块占用，无空闲可挪——实际接线经引脚绑定
     # 消解；adc 与 motor 同用时必须改绑
@@ -138,6 +141,8 @@ WHITELIST = {
     # servo 默认 PB6 与 pid.GRAY_D7 重叠（b1-adc-servo/02）：蓝药丸可 PWM 脚
     # 全被占用，无空闲可挪——实际接线经引脚绑定消解
     # **wiki-stm32-batch8/04**：rc522 SCK 并入 PB6——读卡与舵机/巡线不同框
+    # **wiki-stm32-batch11/02**：st7789_para DB2 并入 PB6——并口屏数据线与
+    # 舵机/巡线/读卡不同框（屏=输出、执行/采集件不同框，同选概率最低）
     "PB6": {"pid.GRAY_D7", "servo.SERVO_PWM_C0", "rc522.RC522_SCK",
             # wiki-stm32-batch10/02：lcd DC——显示族与舵机/巡线/读卡不同框、
             # 同选概率最低（与 oled SPI 组互替同脚），同选经引脚绑定消解
@@ -147,22 +152,29 @@ WHITELIST = {
             # wiki-stm32-batch10/06：ili9341 DC——与 lcd DC 同脚（ILI×中景园互替）
             "ili9341.ILI9341_DC",
             # wiki-stm32-batch10/07：ili9488 DC——与 ili9341 DC 同脚（ILI 屏互替）
-            "ili9488.ILI9488_DC"},
+            "ili9488.ILI9488_DC",
+            # wiki-stm32-batch11/02：st7789_para DB2——并口屏数据线（互替显示族）
+            "st7789_para.ST7789_PARA_DB2"},
     # PA8 三共享（ir_beam×pid.GRAY_D5 为 ir-beam-module/01 残留；ws2812 为
     # wiki-stm32-batch1/06 批次 1 新增——幻彩灯带与「红外对射/巡线」不同框、
     # 同选概率最低（刻意不叠灯族 LED PC13-15），同选经引脚绑定消解）
     # **wiki-stm32-batch8/02**：hc05 STATE 并入 PA8——蓝牙连接状态与红外
     # 对射/灯带/巡线不同框、同选概率最低（mspm0 STATE 同脚 PA8 同款推理）
+    # **wiki-stm32-batch11/02**：st7789_para DB7 并入 PA8——并口屏数据线与
+    # 对射/灯带/巡线/蓝牙 STATE 不同框（屏=输出、采集/状态件不同框）
     "PA8": {
         "pid.GRAY_D5",
         "ir_beam.IR_BEAM_OUT",
         "ws2812.WS2812_DIN",
         "hc05.HC05_STATE",
+        "st7789_para.ST7789_PARA_DB7",
     },
     # relay 默认 PB4 与 motor 编码器方向输入重叠（继电器≠编码器闭环；
     # 刻意不叠声光/执行件 LED/BUZZER/电机 PWM/方向）
     # **wiki-stm32-batch8/02**：hc05 KEY 并入 PB4——AT 切换不常用，与继电器/
     # 编码器方向低频重叠（蓝牙+继电器控制/编码器闭环不同框）
+    # **wiki-stm32-batch11/02**：st7789_para DB0 并入 PB4——并口屏数据线与
+    # 继电器/编码器方向/无线链路不同框（屏=输出、执行/采集件不同框）
     "PB4": {
         "motor.MOTOR_A_ENC_DIR",
         "relay.RELAY_OUT",
@@ -183,9 +195,13 @@ WHITELIST = {
         "ili9341.ILI9341_SCL",
         # wiki-stm32-batch10/07：ili9488 SCL——与 ili9341 同脚（ILI 屏互替）
         "ili9488.ILI9488_SCL",
+        # wiki-stm32-batch11/02：st7789_para DB0——并口屏数据线（显示族互替）
+        "st7789_para.ST7789_PARA_DB0",
     },
     # human_ir 默认 PB7 与 pid 灰度 GRAY_D8 重叠（人体红外≠巡线灰度；
     # 刻意避让声光/按键/门禁组合 BUZZER/KEY/SERVO）
+    # **wiki-stm32-batch11/02**：st7789_para DB3 并入 PB7——并口屏数据线与
+    # 巡线/人体红外不同框（屏=输出、采集件不同框，同选概率最低）
     "PB7": {"pid.GRAY_D8", "human_ir.HUMAN_IR_OUT",
             # wiki-stm32-batch10/02：lcd CS——显示族与巡线/人体红外不同框、
             # 同选概率最低（与 oled SPI 组互替同脚），同选经引脚绑定消解
@@ -195,16 +211,21 @@ WHITELIST = {
             # wiki-stm32-batch10/06：ili9341 CS——与 lcd CS 同脚（ILI×中景园互替）
             "ili9341.ILI9341_CS",
             # wiki-stm32-batch10/07：ili9488 CS——与 ili9341 CS 同脚（ILI 屏互替）
-            "ili9488.ILI9488_CS"},
+            "ili9488.ILI9488_CS",
+            # wiki-stm32-batch11/02：st7789_para DB3——并口屏数据线（互替显示族）
+            "st7789_para.ST7789_PARA_DB3"},
     # microwave_radar 默认 PA4 与 motor 编码器 B 相 EXTI 重叠（微波雷达≠
     # 编码器闭环；刻意避让声光/门禁/传感站组合件；本件轮询不注册 EXTI）
     # **wiki-stm32-batch7/04**：ec11 A 相并入 PA4——EC11 人机旋钮与微波雷达/
     # 编码器闭环不同框（本件轮询不注册 EXTI——与编码器线共享正交，EXTI 门禁
     # 默认组合不拦），同选经引脚绑定消解
+    # **wiki-stm32-batch11/02**：st7789_para WR 并入 PA4——并口屏写选通与
+    # 微波/EC11/编码器 B 相不同框（屏=输出、采集/输入件不同框）
     "PA4": {
         "motor.MOTOR_B_ENC",
         "microwave_radar.MICROWAVE_OUT",
         "ec11.EC11_A",
+        "st7789_para.ST7789_PARA_WR",
     },
     # flame 默认 PA5 与 motor 编码器方向输入 MOTOR_B_ENC_DIR 重叠（火焰≠
     # 编码器闭环；stm32 ADC 可达脚 PA0-7/PB0-1 全被既有角色占用——取最
@@ -249,6 +270,9 @@ WHITELIST = {
         "ili9341.ILI9341_RES",
         # wiki-stm32-batch10/07：ili9488 RES——与 ili9341 RES 同脚（ILI 屏互替）
         "ili9488.ILI9488_RES",
+        # wiki-stm32-batch11/02：st7789_para RD——并口屏读选通（只读路径未
+        # 启用——本件仅写显示，RD 保持高电平；与 ADC 共读组/屏 RES 不同框）
+        "st7789_para.ST7789_PARA_RD",
     },
     # ttp224 默认 PB12-15 与 config DIP0-3 + pid GRAY_D1-4 重叠（触摸按键≠
     # 拨码配置/巡线灰度；四脚同口约束——换口需整组迁移，同选经引脚绑定消解）
@@ -330,6 +354,9 @@ WHITELIST = {
         "ili9341.ILI9341_SDA",
         # wiki-stm32-batch10/07：ili9488 SDA——与 ili9341 SDA 同脚（ILI 屏互替）
         "ili9488.ILI9488_SDA",
+        # wiki-stm32-batch11/02：st7789_para DB1——并口屏数据线（互替显示族；
+        # 与称重/编码器/粉尘/指纹触摸不同框——屏=输出、采集/输入件不同框）
+        "st7789_para.ST7789_PARA_DB1",
     },
     "PB0": {
         "motor.MOTOR_B_DIR",
@@ -344,15 +371,21 @@ WHITELIST = {
         # wiki-stm32-batch10/03：tp_xpt2046 PEN——触摸与称重/旋钮/读卡/ToF
         # 不同框、同选概率最低（PEN 输入上拉），同选经引脚绑定消解
         "tp_xpt2046.TP_XPT2046_PEN",
+        # wiki-stm32-batch11/02：st7789_para DB4——并口屏数据线（屏=输出、
+        # 与电机方向/称重/旋钮/读卡/ToF/触摸不同框——同选概率最低）
+        "st7789_para.ST7789_PARA_DB4",
     },
     # ds18b20 默认 PB1 与 MOTOR_B_DIR2 重叠（wiki-stm32-batch4/04：测温与
     # 单电机方向不同框、同选概率最低；页面默认 PB0 不采用 = MOTOR_B_DIR；
     # 单总线件不叠软 I2C 总线件与传感站/声光组合）
     # **wiki-stm32-batch8/04**：rc522 RST 并入 PB1——读卡与测温/电机方向不同框
+    # **wiki-stm32-batch11/02**：st7789_para DB5 并入 PB1——并口屏数据线与
+    # 测温/电机方向/读卡不同框（屏=输出、采集/输入件不同框）
     "PB1": {
         "motor.MOTOR_B_DIR2",
         "ds18b20.DS18B20_DATA",
         "rc522.RC522_RST",
+        "st7789_para.ST7789_PARA_DB5",
     },
     # PA15 蜂鸣器组（wiki-stm32-batch9/01：jq8900 语音播报并入 PA15——语音播报
     # 与蜂鸣器为**提示输出互替**（替代而非组合）、同选概率最低（互替同脚先例：
@@ -371,28 +404,40 @@ WHITELIST = {
         "ili9341.ILI9341_BLK",
         # wiki-stm32-batch10/07：ili9488 BLK——与 ili9341 BLK 同脚（ILI 屏互替）
         "ili9488.ILI9488_BLK",
+        # wiki-stm32-batch11/02：st7789_para BLK——并口屏背光（与蜂鸣/语音/
+        # 显示族背光同为输出指示互替——一次选一块屏；JTDI 复用脚约束同先例）
+        "st7789_para.ST7789_PARA_BLK",
     },
     # PC14 黄灯组（wiki-stm32-batch9/02：syn6288 语音合成并入 PC14——语音播报
     # 与板载指示灯为**输出指示互替**（替代而非组合）、同选概率最低；与
     # jq8900（PA15）刻意错开（语音两件常同选、默认即不撞），同选经绑定消解）
     # **wiki-stm32-batch10/01**：max7219 CLK 并入 PC14（显示件与板载灯输出
     # 指示互替——见 PC13 注释块）
+    # **wiki-stm32-batch11/02**：st7789_para DC 并入 PC14——并口屏数据/命令
+    # 选择线（与板载黄灯/语音/数码管同输出指示互替——显示件替代指示）
     "PC14": {
         "config.LED_YELLOW",
         "syn6288.SYN6288_TX",
         "max7219.MAX7219_CLK",
+        "st7789_para.ST7789_PARA_DC",
     },
     # PC13-15 板载 LED 三灯组（wiki-stm32-batch10/01：max7219 数码管/点阵
     # 并入——显示件与板载指示灯为**输出指示互替**（有数码管/点阵就不用板载
     # 灯——互替同脚先例 ttp224×key_matrix），同选经引脚绑定消解；与 lcd/oled
     # 显示族互替同脚；页面默认脚（mspm0 板脚）不照抄）
+    # **wiki-stm32-batch11/02**：st7789_para CS 并入 PC13——并口屏片选
+    # （与板载红灯/数码管 DIN 同输出指示互替——显示件替代指示）
     "PC13": {
         "config.LED_RED",
         "max7219.MAX7219_DIN",
+        "st7789_para.ST7789_PARA_CS",
     },
     "PC15": {
         "config.LED_GREEN",
         "max7219.MAX7219_CS",
+        # wiki-stm32-batch11/02：st7789_para RES——并口屏复位（与板载绿灯/
+        # 数码管 CS 同输出指示互替——显示件替代指示）
+        "st7789_para.ST7789_PARA_RES",
     },
     # PA6/PA7 软 I2C 总线共享组（wiki-stm32-batch2/01 起，六件共总线：
     # aht10/bh1750/sht20/sht30/at24c02/ags10 默认 SCL=PA6/SDA=PA7——器件
@@ -481,21 +526,25 @@ def test_default_layout_conflict_groups_resolved():
         "rc522.RC522_CS",
         "vl53l0x.VL53L0X_XSHUT",
         "tp_xpt2046.TP_XPT2046_PEN",
+        "st7789_para.ST7789_PARA_DB4",
     }
     assert grouped["PA2"] == {"debug_uart.DEBUG_UART_TX"}
     assert grouped["PA3"] == {"debug_uart.DEBUG_UART_RX"}
     assert grouped["PC13"] == {
         "config.LED_RED",
         "max7219.MAX7219_DIN",
+        "st7789_para.ST7789_PARA_CS",
     }
     assert grouped["PC14"] == {
         "config.LED_YELLOW",
         "syn6288.SYN6288_TX",
         "max7219.MAX7219_CLK",
+        "st7789_para.ST7789_PARA_DC",
     }
     assert grouped["PC15"] == {
         "config.LED_GREEN",
         "max7219.MAX7219_CS",
+        "st7789_para.ST7789_PARA_RES",
     }
     # wiki-stm32-batch8/01：as32 并入 PB10/PB11（与 Zigbee 无线数传**互替件
     # 同脚先例**——门禁只查用户绑定，默认共享合法先例）
