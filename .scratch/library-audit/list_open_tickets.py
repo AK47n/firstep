@@ -1,5 +1,12 @@
 """列出 tracker 里状态仍为未完成的工单（标题 + 要做什么 + 阻塞），供人工盘点。
 
+与 `.scratch/tracker-audit/census.py` 的分工（两者不重叠，故并存）：
+- census.py = **数量视角**：扫全库所有工单（含无 Status 的 `(none)` 与 resolved），
+  按 feature 打印各状态计数——回答「还剩多少、分布如何」，不读标题与正文。
+- 本脚本 = **清单视角**：只挑未完成状态（ready-for-agent / claimed / ready-for-human /
+  needs-*），逐张打印状态 + feature/文件名 + 标题 + 要做什么 + 被谁阻塞——回答
+  「剩下的这些是什么、卡在谁身上」。标题与阻塞字段是 census.py 不产出的内容。
+
 用法：$env:PYTHONIOENCODING='utf-8'; python .scratch/library-audit/list_open_tickets.py
 """
 
