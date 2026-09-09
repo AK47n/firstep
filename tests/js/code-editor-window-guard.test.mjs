@@ -54,3 +54,59 @@ test("CDP 冒烟 smoke-01：块选区期望仍在（防悄悄放宽）", () => {
     assert.ok(smoke01.includes(needle), `smoke-01 缺块选区断言：${needle}`);
   }
 });
+
+// ---------------------------------------------------------------------------
+// 第八轮补口（2026-09-09 CDP 实跑发现的两个缺陷）
+// ---------------------------------------------------------------------------
+
+test("marksCache 复用前提含编译错误签名（防重编成功后错误标记残留）", () => {
+  // 缺陷：winRenderMarks 的复用分支把「缓存里带旧 error 段的清单」+「本次
+  // 当前文件的错误段」拼起来；错误清空时 extra 为空 → 缓存里的旧 .code-mark-error
+  // 段被原样复用，直到切标签（renderPane 清缓存）才消失。
+  // 实测：code-editor-refine/smoke-05 场景 5「重编成功后色点/标记清除」FAIL
+  // （gutter 色点清了、标记层残留 4 个 .code-mark-error）。
+  const at = ui.indexOf("function winRenderMarks(");
+  assert.ok(at > 0, "找不到 winRenderMarks");
+  const body = ui.slice(at, at + 2600);
+  assert.ok(body.includes("const compileSig = compileSigOf(errLines);"),
+    "winRenderMarks 未计算编译错误签名");
+  assert.ok(body.includes("&& marksCache.compileSig === compileSig"),
+    "marksCache 复用前提缺编译错误签名：重编成功后旧错误标记会被复用回来");
+  // 写缓存的三个出口都要带上签名（漏一处 = 复用判定永远不命中，退化成每次全量）
+  const writes = ui.match(/marksCache = \{[^}]*\}/g) || [];
+  assert.ok(writes.length >= 3, `marksCache 写入点数量异常：${writes.length}`);
+  for (const w of writes) {
+    assert.ok(w.includes("compileSig"), `marksCache 写入点缺 compileSig：${w}`);
+  }
+});
+
+test("openEditorFile：晚到的旧请求不抢活动标签（openSeq 守卫）", () => {
+  // 缺陷：openEditorFile 是 async 且三处调用点都不 await，快速连点两个文件时
+  // 后发起的请求可能先返回 → 先发起的请求晚到后 activateTab 抢走活动标签
+  // （实测状态 {"tabs":["b.c","a.c"],"active":"a.c","dirty":["a.c"]}）。
+  const at = ui.indexOf("export async function openEditorFile(");
+  assert.ok(at > 0, "找不到 openEditorFile");
+  const body = ui.slice(at, at + 2600);
+  assert.ok(body.includes("const req = ++openSeq;"), "openEditorFile 未登记请求序号");
+  assert.ok(body.includes("const stale = req !== openSeq;"), "openEditorFile 未判定晚到请求");
+  assert.ok(body.includes("if (!stale) activateTab(path);"),
+    "晚到的旧请求仍会 activateTab（抢走用户已切到的文件）");
+  assert.ok(/renderTabs\(\);\s*\n\s*if \(!stale\) activateTab\(path\);/.test(body),
+    "晚到请求新增的标签未渲染：模型 2 个 tab / 标签栏 1 个（smoke-02 检查 0 偶发 FAIL 的另一半）");
+  assert.ok(body.includes("return !stale;"),
+    "openEditorFile 未返回「目标是否已成为活动标签」（editJumpToFile 依赖它）");
+  // editJumpToFile：目标不是活动标签时不跳行（否则跳行落在别的文件上）
+  const jumpAt = ui.indexOf("export async function editJumpToFile(");
+  assert.ok(jumpAt > 0, "找不到 editJumpToFile");
+  const jump = ui.slice(jumpAt, jumpAt + 700);
+  assert.ok(jump.includes("if (active === false) return;"),
+    "editJumpToFile 未守卫晚到请求：跳行会落在别的文件上");
+});
+
+test("CDP 冒烟 smoke-02：开标签后等 b.c 成为活动标签（防并发打开竞态）", () => {
+  const smoke02 = readFileSync(
+    new URL("../../.scratch/code-editor-refine/smoke-02.mjs", import.meta.url), "utf8");
+  assert.ok(smoke02.includes(
+    'await waitFor(`document.querySelector(\'#code-tabs .code-tab.on\')?.dataset.tabPath === "b.c"`);'),
+    "smoke-02 缺「等 b.c 成为活动标签」等待：两次点击并发时会改到 a.c（场景 2 偶发 FAIL）");
+});

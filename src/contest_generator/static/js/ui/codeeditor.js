@@ -322,11 +322,21 @@ let editorFind = { query: "", ranges: [], index: 0 };
 // 热点）；任何结构变更/状态变化（查找/词/括号/错误/换 tab）置 false。
 let markClean = false;
 // marksCache：模型级标记缓存（窗口过滤每次切片）。**缓存键 = (content, 查找
-// 查询)**——查找命中/当前命中是「查询态相关」标记，随 query 变化而变；只按
-// 内容引用命中的旧实现会在「内容变更未经 marksPatch（如直接写 textarea 的
-// 输入路径/外部赋值）→ 清空查询」时把带旧命中段的缓存整体复用，命中高亮清
-// 不掉（2026-09-09 第七轮 CDP 实测：Esc 清空后 .code-mark-hit 仍在）。
-let marksCache = { content: null, findQuery: "", marks: [] };
+// 查询, 编译错误签名)**——查找命中/当前命中与编译错误行都是「状态相关」标记，
+// 随 query / 编译结果变化而变；只按内容引用命中的旧实现会在「内容变更未经
+// marksPatch（如直接写 textarea 的输入路径/外部赋值）→ 清空查询」时把带旧
+// 命中段的缓存整体复用，命中高亮清不掉（2026-09-09 第七轮 CDP 实测：Esc 清空
+// 后 .code-mark-hit 仍在）。编译错误同理（2026-09-09 第八轮 CDP 实测
+// code-editor-refine/smoke-05 场景 5）：重编成功后 gutter 色点清了，但复用
+// 分支把「缓存里带旧错误段的清单」+「本次 0 条」拼起来 → .code-mark-error
+// 残留到切标签为止。故 compileSig 必须进缓存键（错误集变化 → 缓存失效重建）。
+let marksCache = { content: null, findQuery: "", compileSig: "", marks: [] };
+
+// compileSigOf(errLines)：当前文件编译错误行的缓存键（行号+消息，含空态）——
+// 单源供 winRenderMarks 的复用判定与写缓存两处用（错误集变化即失效）。
+function compileSigOf(errLines) {
+  return (errLines || []).map((e) => `${e.line}:${e.message}`).join("\u0001");
+}
 
 // currentMarks(errLines?)：当前应渲染的标记清单（缩进引导线 + 括号彩虹 + 查找
 // 命中 + 当前命中 + 选中词 + 括号配对 + 编译错误行；07 引导线按模型文本逐行
@@ -1269,12 +1279,16 @@ function winRenderMarks() {
   const r = winLast || winWindow();
   const viewText = viewModel ? viewModel.text : (tab ? tab.content : "");
   const errLines = tab ? compileErrorLinesForFile(getCompileErrors(), tab.path) : [];  // 一次映射，标记层与 gutter 共用（评审整改）
+  const compileSig = compileSigOf(errLines);
   // 工单 11：纯字符编辑（markClean）且非折叠态 → 模型级标记缓存直接复用
   //（currentMarks 全量重算 = 缩进引导线 + 括号深度扫描，逐键热点之一）。
   let marks;
-  // 缓存复用前提：内容引用一致 **且** 查找查询一致（查找段是查询态相关标记，
-  // 见 marksCache 注释——否则清空查询后旧命中段会被复用回来）。
-  if (!viewModel && marksCache.content === viewText && marksCache.findQuery === editorFind.query) {
+  // 缓存复用前提：内容引用一致 **且** 查找查询一致 **且** 编译错误签名一致
+  //（查找段/错误段都是状态相关标记，见 marksCache 注释——否则清空查询/重编
+  // 成功后旧命中段/旧错误段会被复用回来）。
+  if (!viewModel && marksCache.content === viewText
+    && marksCache.findQuery === editorFind.query
+    && marksCache.compileSig === compileSig) {
     // 工单 code-editor-opt/02：静态层缓存（引导线/彩虹）已按内容引用增量修补
     // → 无论 markClean 与否都复用（词/查找/错误等状态标记独立于缓存、随状态
     // 追加）；markClean 仅决定行级修补是否可用（其渲染含括号对两段）。
@@ -1306,11 +1320,12 @@ function winRenderMarks() {
       extra.push({ line: er.line, start: 0, end: ln, kind: "error", title: er.message });
     }
     marks = extra.length ? marksCache.marks.concat(extra) : marksCache.marks;
+    marksCache = { content: viewText, findQuery: editorFind.query, compileSig, marks };
   } else if (viewModel) {
     marks = marksForView(errLines);
   } else {
     marks = currentMarks(errLines);
-    marksCache = { content: viewText, findQuery: editorFind.query, marks };
+    marksCache = { content: viewText, findQuery: editorFind.query, compileSig, marks };
   }
   const lines = (winCache && winCache.lines) || viewText.split("\n");
   const windowText = lines.slice(r.start, r.end).join("\n");
@@ -1571,6 +1586,15 @@ function activateTab(path) {
   notifyActive();
 }
 
+// openSeq：打开文件的「最新请求」序号（工单 code-editor-cdp-hang/01 顺带修复的
+// 竞态）——openEditorFile 是 async，树/面包屑/变更清单三处调用点都不 await，
+// 快速连点两个文件时两次 loadFileState 并发：**后发起的请求先返回、先打开的
+// 请求后返回 → 后者 activateTab 抢走活动标签**（用户点 b.c 却在 a.c 里编辑；
+// 2026-09-09 第八轮 CDP 实测 code-editor-refine/smoke-02 场景 2 偶发 FAIL：
+// 状态 {"tabs":["b.c","a.c"],"active":"a.c","dirty":["a.c"]}）。修法 = 只有
+// 「自己仍是最新请求」才 activateTab（晚到的旧请求把标签留在标签栏，不抢活动）。
+let openSeq = 0;
+
 export async function openEditorFile(path, mode) {
   const existing = tabOf(path);
   if (existing) {
@@ -1579,20 +1603,23 @@ export async function openEditorFile(path, mode) {
     } else {
       activateTab(path);
     }
-    return;
+    return true;
   }
   if (tabs.length >= EDITOR_TABS_MAX) {
     toast("error", "已打开 " + EDITOR_TABS_MAX + " 个文件标签：请先关闭不需要的");
-    return;
+    return false;
   }
+  const req = ++openSeq;
   paneBox().innerHTML = '<span class="code-empty">加载中…</span>';
   const cached = await loadFileState(path);
+  const stale = req !== openSeq;   // 期间又发起了更新的打开请求 → 本次不抢活动标签
   if (!cached.ok) {
+    if (stale) return false;       // 晚到的失败不覆盖新请求已渲染的面板
     paneBox().innerHTML = '<div class="code-empty"><div class="error">加载失败：'
       + cached.message
       + '</div><span class="muted">点击左侧文件可重试。</span></div>';
     toastError({ message: cached.message }, "打开文件失败");
-    return;
+    return false;
   }
   const data = cached.data;
   const lang = languageOf(path);
@@ -1612,8 +1639,15 @@ export async function openEditorFile(path, mode) {
     readonly: data.utf8 === false,
   };
   tabs.push(tab);
-  activateTab(path);
+  // 标签栏必须与模型同步：晚到的旧请求虽然不抢活动标签，但它**确实新增了一个
+  // 已打开的标签**——漏渲染会让「模型 2 个 tab / 标签栏 1 个」的错位一直挂到
+  // 下一次 renderTabs（2026-09-09 第八轮 CDP 实测：openSeq 守卫只挡 activateTab
+  // 后，smoke-02 检查 0 仍偶发 FAIL，renderTabs 调用史只有 [0 个, 1 个] 而
+  // openTabPaths() 已是 ["b.c","a.c"]）。
+  renderTabs();
+  if (!stale) activateTab(path);
   notifyLoaded(path, tab.content, tab.mtime_ns);
+  return !stale;   // 目标是否已成为活动标签（editJumpToFile 据此决定跳不跳行）
 }
 
 // setMdMode(path, mode)：.md 两态切换（preview ↔ edit——工单 05 起 edit =
@@ -1874,7 +1908,10 @@ export async function editJumpToFile(path, line) {
   const tab = tabOf(path);
   const isMd = tab ? tab.lang === "md" : languageOf(path) === "md";
   if (tab && isMd && tab.mdMode === "preview") setMdMode(path, "edit");
-  await openEditorFile(path, isMd ? "edit" : undefined);
+  // 打开竞态（openSeq）：本请求晚到（用户已切去别的文件）→ 目标不是活动标签，
+  // 此时跳行会落在别的文件上，直接不跳（工单 code-editor-cdp-hang/01）。
+  const active = await openEditorFile(path, isMd ? "edit" : undefined);
+  if (active === false) return;
   editJumpToLine(line);
 }
 
@@ -2305,7 +2342,10 @@ function applyCachePatches(oldText, newText, span) {
     && indentGuideCache.content === oldText) {
     const patched = marksPatch(marksCache.marks, oldText, newText, span);
     const parts = marksPartition(patched);
-    marksCache = { content: newText, findQuery: marksCache.findQuery, marks: parts.all };
+    // compileSig 原样带过：本分支仅在有错误叠加态（markClean=false）之外的
+    // 纯字符编辑里更新缓存，编辑不改编译错误集；若错误集真的变了，
+    // winRenderMarks 的复用判定会因签名不符而重建（不依赖此处）。
+    marksCache = { content: newText, findQuery: marksCache.findQuery, compileSig: marksCache.compileSig, marks: parts.all };
     bracketRainbowCache = { content: newText, marks: parts.rainbow };
     indentGuideCache = { content: newText, marks: parts.guides };
   } else {
