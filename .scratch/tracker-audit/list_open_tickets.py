@@ -7,7 +7,10 @@
   needs-*），逐张打印状态 + feature/文件名 + 标题 + 要做什么 + 被谁阻塞——回答
   「剩下的这些是什么、卡在谁身上」。标题与阻塞字段是 census.py 不产出的内容。
 
-用法：$env:PYTHONIOENCODING='utf-8'; python .scratch/library-audit/list_open_tickets.py
+位置：2026-09-09 从 `.scratch/library-audit/` 挪入本目录——它读的是 tracker 工单，
+与 library-audit 域无关。
+
+用法：$env:PYTHONIOENCODING='utf-8'; python .scratch/tracker-audit/list_open_tickets.py
 """
 
 from __future__ import annotations

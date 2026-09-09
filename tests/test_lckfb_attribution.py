@@ -15,7 +15,8 @@ OLED / motor / xunji / pid / servo / k230 的硬件出处补成 wiki 手册页�
 wiki 页**（块是「本文件改写自该页」的声明，条目改指别处就是标注与身份脱钩，会红）；
 **没有块 → 不要求**（原生移植代码不受 wiki 版权条款约束）。
 两个方向都守：有块必须有 wiki source_url；条目 source_url 是 wiki 页且源码头部
-引用了该页 → 必须有块。
+引用了该页 → 必须有块。第三个方向是**覆盖面地板**：wiki 来源的模块数与文件数
+不得低于 `WIKI_COVERAGE_FLOOR`（CONTEXT.md 不承诺数字，测试守事实不缩水）。
 
 注入纯函数（source_notes.inject_source_note）幂等性单测。
 不做的事：不断言注入注释块的确切文案（防脆——文案迭代时只断言 URL 存在 +
@@ -53,6 +54,12 @@ _URL_RE = re.compile(r"https?://\S+")
 # 顶部窗口（判定窗，单源 = source_notes.HEAD_WINDOW）：注入块在文件头，窗口取
 # 600 字符足够宽松，防「只标在文件尾部 / notes 里」的伪合规；脚本幂等判据与
 # 本测试共用同一常量（c2 判例：漂移 = 脚本报 0 变更 / 测试红灯）。
+
+# 覆盖面地板（2026-09-09）：CONTEXT.md 不再写死「N 模块 M 文件」——无守卫的计数
+# 必漂（56/115 → 71/268 已漂过一次），文档改述覆盖面口径，由本测试守「覆盖面
+# 不缩水」：wiki 来源模块数与这些条目的 .c/.h 文件数不得低于地板。只判下界，
+# 库增长不触发红；确需下调（模块下架 / 换来源）时改这里 = 显式决定而非静默漂移。
+WIKI_COVERAGE_FLOOR = (71, 268)  # 2026-09-09 实测：71 模块 / 268 文件
 
 
 def _head(text: str) -> str:
@@ -125,6 +132,40 @@ def test_wiki_source_url_entries_carry_source_note():
                     problems.append(f"{manifest.slug}/{platform}/{rel}")
     assert not problems, (
         "源码头部引用了 wiki 原页 URL 但没有来源标注块：\n- " + "\n- ".join(problems)
+    )
+
+
+def _wiki_source_coverage() -> tuple[int, int]:
+    """(wiki 来源模块数, 其平台条目 .c/.h 文件数)——判据单源 is_wiki_source_url。"""
+    modules = files = 0
+    for manifest_path in sorted(LIBRARY_MODULES.glob("*/manifest.json")):
+        manifest = ModuleManifest.load(manifest_path.parent)
+        hit = False
+        for entry in manifest.platforms.values():
+            if not is_wiki_source_url(entry.source_url):
+                continue
+            hit = True
+            files += sum(1 for rel in entry.files if rel.endswith((".c", ".h")))
+        modules += 1 if hit else 0
+    return modules, files
+
+
+def test_wiki_source_coverage_does_not_shrink():
+    """覆盖面地板：wiki 来源的模块数与文件数不得低于冻结下限。
+
+    为什么是地板而不是「文档里写死计数」：计数没有消费方也没有守卫，写进
+    CONTEXT.md 只会漂（56/115 → 71/268）；文档改述覆盖面口径后，真正要守的
+    「覆盖面 = 全部 is_wiki_source_url 命中模块」由本断言兜底——条目 source_url
+    被静默清空、wiki 模块被删都会红。库增长只判下界，不触发红。
+    """
+    modules, files = _wiki_source_coverage()
+    floor_modules, floor_files = WIKI_COVERAGE_FLOOR
+    assert modules >= floor_modules, (
+        f"wiki 来源模块数 {modules} < 地板 {floor_modules}：条目 source_url 被清空"
+        "或 wiki 模块被删？确需下调请显式改 WIKI_COVERAGE_FLOOR 并说明理由"
+    )
+    assert files >= floor_files, (
+        f"wiki 来源条目的 .c/.h 文件数 {files} < 地板 {floor_files}：同上"
     )
 
 
