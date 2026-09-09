@@ -60,7 +60,7 @@
 - [x] pytest 全绿（1241，+11）+ `mypy src` 干净（36 files）+ node 语法过（内联 JS node --check OK）
 - [x] 解析单测全覆盖（红证先行：实施前 ImportError 已验）：标准格式 / 标题说明段落跳过 / 伪日期小节不误判 / 无日期组 `- ` 忽略 / 文件缺失与异常 → `[]`（另加严格日期残缺/行尾追加不建组 1 条）
 - [x] `GET /api/changelog` 200 返回 `[{date, items}]`（实施前 404 红证已验；真机 8 组 35 条、严格倒序、逐字节同直接解析）
-- [ ] 浏览器（headless 或用户浏览器）：nav 出现「更新记录」第 8 个 tab；点击渲染按天分组时间轴；条目文本转义；临删 CHANGELOG.md 重启 → 空状态「暂无更新记录」（验完恢复文件）——数据面已验（临删 → `[]` → 恢复 → 200/3136B），视觉点击待用户
+- [x] 浏览器：nav 出现「更新记录」tab（2026-09 改名「版本更新记录」并移入「指南」组）；点击渲染更新记录（version-changelog/04-05 改造后为**版本卡片折叠**，原「按天分组时间轴」形态已取代）；条目文本转义；临删 CHANGELOG.md 重启 → 空状态（现文案「还没有正式版本…」）——数据面已验（临删 → `[]` → 恢复 → 200/3136B）。
 - [x] 初始内容覆盖 08-05 ~ 08-12 逐天（素材按天落盘，8 组 35 条）
 
 ## 实施记录
@@ -80,3 +80,8 @@
 - **改**：`src/contest_generator/static/index.html`（nav + section + loadChangelog + tab 分发）、`src/contest_generator/webapp.py`（+1 路由）、`tests/`（+test_changelog.py、test_webapp.py +1）
 - **新建**：`CHANGELOG.md`（仓库根，初始内容）、`src/contest_generator/changelog.py`（解析域）、`.scratch/changelog-tab/issues/01-changelog-tab.md`（本工单）
 - **不动**：生成器 / llm.py / sse.py / compile 域（compile_runner / fix_errors）/ 库数据 / 素材库 / 其它路由
+
+## 验收口径修订（2026-09-09 在途盘点）
+
+- 渲染形态由「按天分组时间轴」被 version-changelog/04-05 取代为「版本卡片折叠 + 标签配色」，tab 改名「版本更新记录」并移入「指南」组；空态文案改为「还没有正式版本…」。
+

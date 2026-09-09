@@ -14,23 +14,21 @@ SDK）不必再走「扫描 → AI 提炼 → 报告」全流程。
 
 ## 验收标准
 
-- [ ] master_store 域函数 `import_master_direct(masters_dir, platform,
+- [x] master_store 域函数 `import_master_direct(masters_dir, platform,
   source_dir)`：复用 import_master（结构校验失败不动盘 / 备份回滚 / 占用
   中文说明 / autocommit 自动提交），sources = [源目录名]；平台非法 /
   源目录不存在 → 中文 MasterError
-- [ ] API：POST /api/masters/import（body {platform, project_dir}；
+- [x] API：POST /api/masters/import（body {platform, project_dir}；
   project_dir = 服务器本地路径，与既有 /api/masters/scan 同风险面）；
   结构校验失败 400 中文、成功返回 {platform, sources, warnings}（复用
   MasterMeta 形状）
-- [ ] UI：母版卡「直接导入替换」按钮（卡片1 母版提炼区侧）→ 选文件夹 →
-  平台下拉（复用 renderNewPlatformOptions）→ 确认弹窗（替换警告 + 双钮）
-  → POST → toast + 刷新列表；失败弹窗保留可重试
-- [ ] pytest：test_master_store.py（import_master_direct：成功替换旧母版
+- [x] UI：母版卡「直接导入替换」按钮 → 选文件夹 → 平台下拉（复用 renderNewPlatformOptions）→ 确认弹窗（替换警告 + 双钮）→ POST → toast + 刷新列表；失败弹窗保留可重试。**落位** = 母版库卡顶部工具栏（原写「卡片1 母版提炼区侧」，实施期调整，功能等价）。
+- [x] pytest：test_master_store.py（import_master_direct：成功替换旧母版
   元数据更新 / 结构校验失败零盘面改动 / 平台非法）+ test_webapp.py
   （import 200 / 400 中文）
 - [ ] 冒烟：导入弹窗打开（平台下拉选项数断言）→ 确认按钮存在（**不真导**，
   探针可直接 400 路径：空 project_dir / 非法平台）；零写库
-- [ ] 既有全量回归保持绿；中文提交
+- [x] 既有全量回归保持绿；中文提交
 
 ## 实施记录
 
@@ -73,3 +71,8 @@ SDK）不必再走「扫描 → AI 提炼 → 报告」全流程。
   可接受（confirmModal string 返回/extra、客户端 .git 预滤、按钮落母版库卡
   而非卡片1、文案走「备份+git 兜底」而非「不可恢复」——与 spec 的 git
   回滚表述一致）。
+
+## 验收口径修订（2026-09-09 在途盘点）
+
+- 「直接导入替换」按钮落位 = 母版库卡顶部工具栏（原写「卡片1 母版提炼区侧」，功能等价）；冒烟项（开弹窗 / 下拉选项数 / 400 路径）仍未做实，故留空。
+

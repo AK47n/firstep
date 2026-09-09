@@ -6,10 +6,10 @@
 
 **状态：** resolved
 
-- [ ] `POST /api/update/apply`：按 `check` 给出的 zip_url 下载到 `%USERPROFILE%\.contest_generator\updates\`，流式落盘（不占大内存），下载即校验 SHA256（.sha256.txt 也随更新包发布，校验失败 = 中文 400 且不写标记、不调更新器）
+- [x] `POST /api/update/apply`：按 `check` 给出的 zip_url 下载到 `%USERPROFILE%\.contest_generator\updates\`，流式落盘（不占大内存），下载即校验 SHA256（.sha256.txt 也随更新包发布，校验失败 = 中文 400 且不写标记、不调更新器）
 - [ ] 校验通过 → 写待更新标记（pending-update.json：zip 路径、版本、removed 路径、时间）→ 以独立进程调起更新器（detached，不阻塞请求）→ 立即返回「已开始更新」
-- [ ] `GET /api/update/status`：下载进度 / 校验状态 / 更新器运行状态（进程存活性 / 标记存在性）轮询；更新完成（标记清除）返回 done
-- [ ] 网络中断重试：下载失败允许用户再次点「一键更新」（已下载临时文件可复用或覆盖，无断点续传）
+- [x] `GET /api/update/status`：返回阶段状态机 applying / failed / done / idle（由更新器进程存活与标记存在性推导）；**不含字节级下载进度**（原口径「下载进度」已修订为阶段态——请求期间前端显示「正在下载」）。
+- [x] 网络中断重试：下载失败允许用户再次点「一键更新」（已下载临时文件可复用或覆盖，无断点续传）
 - [ ] 测试：mock 下载源（本地 HTTP）→ 断言校验失败拦截、成功路径写标记并拉起更新器、status 各阶段
 
 ## Comments
@@ -39,3 +39,8 @@
   证明发布侧仍是 zip+sha 两个资产）；
   (b) status 不返回字节级下载进度，改为「请求期间前端显示正在下载 + applying/done/failed
   状态机」（工单字面「下载进度」以阶段替代）。
+
+## 验收口径修订（2026-09-09 在途盘点）
+
+- `/api/update/status` 只返阶段态（applying / failed / done / idle），不做字节级下载进度。
+

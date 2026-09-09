@@ -45,8 +45,8 @@ CSS 类全部复用提炼面板现成的（`.distill-progress` / `.prog-bar` / `
 
 ## 验收清单
 
-- [ ] 全量 pytest 绿 + mypy 绿（后端零改动，绿即验证）
-- [ ] 自查（可选，工单 03 手法）：jsdom 载入整页 + 脚本化假流（`parseSSE` 纯函数，node 喂 `new Response(new ReadableStream(...))`）：round 推进（文本 + 条宽）、计时器跳动与事件后重置、converged 跳满、done 面板收起 + 结果渲染、question 面板收起 + 补问框、error 红字 + 按钮恢复、400（resp.ok false）红字 + 按钮恢复、断线提示 + 按钮恢复
+- [x] 全量 pytest 绿 + mypy 绿（后端零改动，绿即验证）
+- [x] 自查（可选，工单 03 手法）：jsdom 载入整页 + 脚本化假流驱动 39 断言全绿（一次性自查，脚本未入库——仓库前端测试零依赖，不引入 jsdom）。
 - [ ] 真机验收：真实 API 跑 2021F 送药小车（第 2 轮收敛 → 条跳满、死寂期计时器跳动）；补问路径；断线（中途杀服务）；API 未配置 400
 
 **Reference:** `.scratch/recommend-progress-ui/spec.md`、工单 10（`.scratch/contest-project-generator/issues/10-recommend-convergence.md`——事件契约出处）、工单 03 前端进度 UI（`.scratch/distill-progress/issues/03-frontend-progress-ui.md`——显示模式 / 存活证明 / 断线处理先例）、CONTEXT.md「进度事件」词条
@@ -55,3 +55,8 @@ CSS 类全部复用提炼面板现成的（`.distill-progress` / `.prog-bar` / `
 
 - 2026-08-08: grilling 会话（grill-with-docs + domain-modeling）产出，三项决策用户已拍板：① 前端 only（复用现有 round/converged 事件，不动 SSE 契约 + 测试）；② 面板形态 = 条 + 双计时器（无日志——推荐事件 ≤4 条无价值）；③ 卡死修复（resp.ok 检查 + 断线检测）同票并入。
 - 2026-08-08: 已实现（worktree-recommend-progress-ui，唯一文件 index.html）。jsdom 整页载入 + 脚本化假流驱动 39 断言全绿：round 推进（文本 + 条宽 N/T）、双计时器每秒跳动 + 事件到达重置、converged 跳满、done 面板收起 + 结果照常渲染、question 面板收起 + 补问框 + 回答后从第 1 轮重来、error / 400（detail + 非 JSON 回退）/ 断线（EOF + 读流出错）红字提示 + 按钮恢复。全量 pytest 788 绿 + mypy 全绿（未碰任何后端文件）。真机验收待用户（2021F 送药小车第 2 轮收敛、补问路径、杀服务断线、API 未配置 400）。
+
+## 验收口径修订（2026-09-09 在途盘点）
+
+- 「jsdom 假流 39 断言」是工单原文标注的**可选**自查（当时已全绿），脚本未入库；仓库前端测试零依赖（`static/js/package.json` 仅 `{"type":"module"}`），不为此引入 jsdom。真机验收（真实 API 跑 2021F）仍待办。
+

@@ -6,12 +6,12 @@
 
 **状态：** resolved（2026-08-30 实施完成，评审记录见文末）
 
-- [ ] `index.html` 顶部 `<nav>` 内两组容器：`<div class="tab-group" role="group" aria-label="做题">` 与 `<div class="tab-group" role="group" aria-label="资料管理">`，各含组标签 `<span class="tab-group-label" aria-hidden="true">`（文本「做题」「资料管理」，无 `data-tab`、不可点击）。
-- [ ] 归组正确：做题组 = generate / topic / settings；资料管理组 = library / reference / pdf / master / changelog；组内顺序 = 现状顺序；8 个 `<button data-tab>` 原样保留（含 `class="active"` 的 generate）。
-- [ ] 样式：组标签 `--muted` 小字（非按钮外观）、组内按钮间距沿用现状、第二组左侧 `--border` 细分隔线（`:nth` 或 `::before`），窄屏可换行/横向滚动不破。
-- [ ] 既有 `nav button[data-tab]` 绑定选择器字符串与 tab 分发器（loadLibrary 等）零改动；`tab-nav-guard.test.mjs` 继续绿。
-- [ ] 新增 `tests/js/nav-tabs-guard.test.mjs`（node:test，`readFileSync` 读 `index.html`，仿 `tab-nav-guard.test.mjs`）：① `.tab-group-label` 恰好 2 个且文本 = 做题/资料管理；② `nav button[data-tab]` 恰好 8 个、key 集合精确 = {generate, library, reference, pdf, topic, master, changelog, settings}；③ 按 `.tab-group` 容器锚定组归属（3 + 5）；④ `.tab-group-label` 无 `data-tab`。
-- [ ] 手工验收：8 tab 点击切换正常、组标签点击无反应、进度条显隐与既有行为一致、刷新后标签会话记忆恢复原 tab。
+- [x] `index.html` 顶部 `<nav>` 内三组容器（`role="tablist"` 胶囊导航形态，2026-09 导航重构后）：`aria-label` = 做题 / 资料管理 / 指南，组内顺序 = 现状顺序。
+- [x] 归组正确（现状）：做题组 = generate / topic / code / settings；资料管理组 = library / reference / pdf / md / master；指南组 = guide / changelog；共 11 个 `<button data-tab>` 原样保留（含 `class="active"` 的 generate）。
+- [x] 样式：组间 `--border` 细分隔线 + 窄屏 `flex-wrap` 换行不破（原「组标签 `--muted` 小字」随导航重构取消——分组语义现由 `aria-label` + 分隔线表达）。
+- [x] 既有 `nav button[data-tab]` 绑定选择器字符串与 tab 分发器（loadLibrary 等）零改动；`tab-nav-guard.test.mjs` 继续绿。
+- [x] 新增 `tests/js/nav-tabs-guard.test.mjs`：按新契约断言 3 组 / 11 键 / 组归属 / `data-tab` 完整性 / 每按钮非空中文 `title`（原「`.tab-group-label` 恰好 2 个」反转为「出现 0 次」）。
+- [x] 手工验收：11 tab 点击切换正常、刷新后标签会话记忆恢复原 tab（组标签已不存在，无「组标签点击无反应」项）。
 
 ## 实施记录（2026-08-30）
 
@@ -26,3 +26,8 @@
   - 范围蔓延：`@media (max-width:900px) { .tab-group-label { display:none } }` 不在 spec（spec 只要求窄屏换行/滚动不破），且窄屏恰恰是新手最需要组标签识别分组 → **修复**：删除该规则。
   - 弱覆盖：守卫只锁组内顺序、未锁两组先后 → **修复**：补用例 ⑤（做题在资料管理前）。
 - 次要：用例 ④ 额外断言组标签非 `<button>`（超出 spec 「无 data-tab」字面）→ 接受（防分组拆解，与意图一致）。
+
+## 验收口径修订（2026-09-09 在途盘点）
+
+- 本单原验收按「2 组 / 8 tab / 可见组标签 `<span class="tab-group-label">`」写；2026-09 导航重构后现状为「3 组（做题 4 / 资料管理 5 / 指南 2）/ 11 tab / 无组标签（分组语义由 `aria-label` + 分隔线表达）」。上方条目已按现状改写，`tests/js/nav-tabs-guard.test.mjs` 同步反向断言 `.tab-group-label` 出现 0 次。
+
