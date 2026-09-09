@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=75ccea38a63c8fcc3bf2bb4cb0ba0b28b95f7ce3 -->
+<!-- changelog-auto: last-commit=0d361c70aa5d26a17a2e2ee6308a0ab1d0a49aa1 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -20,6 +20,7 @@
 - 13:43 工单修订：14 张过期验收文字按实现现状改写（口径修订段留痕）
 - 13:47 工单：真机验收项集中挂账 real-acceptance/01（62 张来源工单加指针）
 - 19:43 修复：代码页 CDP 冒烟补口（折叠/保存/回车/Tab）+ 两处窗口化渲染缺陷
+- 21:04 ﻿第七轮：CDP 冒烟姿势修复 + 未折叠态折叠箭头
 
 ## 2026-09-08
 - 12:10 工单：wiki-stm32-batch4/05 vl53l0x ToF 激光测距（B 类新 slug——仅 stm32 条目）
