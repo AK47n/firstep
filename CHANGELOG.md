@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=eb86fbb3f509da5f2d4dcb151d6594d81a1bbdcf -->
+<!-- changelog-auto: last-commit=aebfbe4105a89bd5f320d11152e7f8810a763503 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -10,6 +10,7 @@
 - 12:36 整理：CONTEXT 来源标注计数去数字 + 探针脚本分工写进 docstring
 - 12:39 整理：wiki 来源覆盖面加地板守卫 + 探针脚本归位 tracker-audit
 - 12:47 整理：CONTEXT 顶部标注待办真源（tracker + backlog）
+- 12:48 整理：待补器件取源落成人工工单 identity-fields/06（ready-for-human）
 
 ## 2026-09-08
 - 12:10 工单：wiki-stm32-batch4/05 vl53l0x ToF 激光测距（B 类新 slug——仅 stm32 条目）
