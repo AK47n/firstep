@@ -8,8 +8,13 @@
 
 **结论：** 双轴评审均发现同一硬违规——ui/generate-revise.js:368 备份文案拼接被改坏（`修订时间：` 后引号写错，单引号字符串吞掉后续代码 → 模块级语法错误，ES 模块图加载失败）。已整改（a96a68a）：恢复正确拼接，守卫钉住正确闭合引号并拒绝错误字面量形式；另按两轴建议补解析型守卫（fa306fd：改动的 ui 模块逐一 vm.SourceTextModule 解析——includes 静态断言防不住「改文案顺坏拼接」）。其余：规格 5 条验收（文件名不露/写盘改保存/锚改位置/改标改手动调整/任务与备份 id 序号与「已备份」人话化/词表补 TODO、增量/守卫全绿）全部落地；原始 id 可见出口共 9 处（卡头、前置 chips、资源总览、评分点覆盖、板图悬停/软资源/图例、想法受影响任务、前置确认弹窗、下一步提示）全部序号化。全量 tests/js 814 全绿 + tests/test_params.py 27 全绿。
 
-- [ ] 用户可见文案不再直接出现 .contest_tasks.json.bak / .contest_params.json / .contest_ideas.json / .contest_idea_chat.json 原始文件名（用自然语言描述，如「工程内任务文件（自动管理）」）
-- [ ] 「写盘」「锚已失效」「改标」等处改为中文人话（原文可保留在 details/工具提示等隐蔽层，如有）
-- [ ] 任务 id、备份 id 不再以 t1/tN、backup_xxx 原始形态直接展示（用「第 N 个任务」「备份」等）
-- [ ] 新手词表补 TODO、增量 等条目（与改后文案口径一致）
-- [ ] glossary-refs / card-purpose 等相关守卫测试同步并全绿
+- [x] 用户可见文案不再直接出现 .contest_tasks.json.bak / .contest_params.json / .contest_ideas.json / .contest_idea_chat.json 原始文件名（用自然语言描述，如「工程内任务文件（自动管理）」）
+- [x] 「写盘」「锚已失效」「改标」等处改为中文人话（原文可保留在 details/工具提示等隐蔽层，如有）
+- [x] 任务 id、备份 id 不再以 t1/tN、backup_xxx 原始形态直接展示（用「第 N 个任务」「备份」等）
+- [x] 新手词表补 TODO、增量 等条目（与改后文案口径一致）
+- [x] glossary-refs / card-purpose 等相关守卫测试同步并全绿
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

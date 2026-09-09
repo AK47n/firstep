@@ -8,9 +8,14 @@
 
 **验收：** 全部 ✓（词表 / 常量 / from_dict / to_dict / add / update / webapp POST+PUT 全部实现并测试；测试 test_reference_library.py 新增 11 条全绿）。
 
-- [ ] `TOPIC_TYPES` / `TOPIC_TYPE_LINE_FOLLOW` / `TOPIC_TYPE_GENERIC` 常量 + `validate_topic_type`（返回 None / 抛 ReferenceError「非法题型：…（应为 line_follow、generic）」；空串合法 = 未标记）
-- [ ] `ReferenceEntry.from_dict`：`topic_type = data.get("topic_type", "")`，非空走 `validate_topic_type`（词表外 = 元数据损坏，与 anchor_kind 非法同款大声失败）
-- [ ] `to_dict` 输出 `"topic_type": self.topic_type`（向后兼容：旧条目读取 = ""，序列化带出）
-- [ ] `add_reference` / `update_reference` 加 `topic_type: str = ""` 参数 + 校验（词表外 ReferenceError；空 = 未标记合法）
-- [ ] webapp `/api/references`（POST）/ `/api/references/{id}`（PUT）：`topic_type=_optional_str(payload, "topic_type") or ""`
-- [ ] 测试：from_dict 已知/未知/缺省三态；add/update 词表外 400；to_dict 含字段；旧 JSON（无字段）向后兼容读 = ""
+- [x] `TOPIC_TYPES` / `TOPIC_TYPE_LINE_FOLLOW` / `TOPIC_TYPE_GENERIC` 常量 + `validate_topic_type`（返回 None / 抛 ReferenceError「非法题型：…（应为 line_follow、generic）」；空串合法 = 未标记）
+- [x] `ReferenceEntry.from_dict`：`topic_type = data.get("topic_type", "")`，非空走 `validate_topic_type`（词表外 = 元数据损坏，与 anchor_kind 非法同款大声失败）
+- [x] `to_dict` 输出 `"topic_type": self.topic_type`（向后兼容：旧条目读取 = ""，序列化带出）
+- [x] `add_reference` / `update_reference` 加 `topic_type: str = ""` 参数 + 校验（词表外 ReferenceError；空 = 未标记合法）
+- [x] webapp `/api/references`（POST）/ `/api/references/{id}`（PUT）：`topic_type=_optional_str(payload, "topic_type") or ""`
+- [x] 测试：from_dict 已知/未知/缺省三态；add/update 词表外 400；to_dict 含字段；旧 JSON（无字段）向后兼容读 = ""
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

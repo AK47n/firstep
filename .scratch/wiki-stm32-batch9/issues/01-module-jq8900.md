@@ -11,13 +11,13 @@
 **状态：** resolved
 
 **实施清单：**
-- [ ] `library/modules/jq8900/code/jq8900_stm32.c/.h`（独立 stm32 头——API 11 函数与 mspm0 jq8900.h 同名同型；.c 软 UART TX 位时序（start 位低 + LSB 先 + stop 位高，每 bit 104us）；帧 = 0xAA+cmd+data+（cmd+data 求和校验）页面原式；零引脚字面量/零标准库/无 UART 实例字面量）
-- [ ] manifest.json platforms 增 stm32：files `[code/jq8900_stm32.c, code/jq8900_stm32.h]`、dependencies ["delay"]（照 mspm0 现状）、verified false、hardware_bound false、pins 1 行、kit/source_url（wiki 原页 `.../control/jq8900-voice-broadcast-module.html`）、notes（手册路径+原页+网盘+**软 UART TX 定稿（页面两线帧/104us）**+RX 不实现（回绕缺陷记录）+「bps_syn6288」串台+默认脚推理+未上板）
-- [ ] pin_config.h 增 2 宏
-- [ ] 测试 `tests/test_module_jq8900.py`：形状+宏存在（`JQ8900_GPIO\s+GPIO_A`/`JQ8900_PIN\s+Pin_15`）+单选生成+mspm0 零改动+守卫（`104`us、`0xAA` 帧头+求和校验、API 11 函数名断言（play/play_next/play_prev/stop/pause/resume/set_volume/volume_up/volume_down/send_cmd）、无 `UART_`/`USART`/`rx_handler`、无 printf/GPIO_Init/RCC_）
-- [ ] test_pins.py 补 2 宏；test_default_layout.py 白名单 PA15 +1（BUZZER 组）
-- [ ] UV4 矩阵（init+send_cmd+play(1)+play_next+play_prev+stop+pause+resume+set_volume(6)+volume_up+volume_down 全调，(void) 化）→ 0/0 → verified=true
-- [ ] wordlist 零补录复核；中文提交 → resolved → 结论回填
+- [x] `library/modules/jq8900/code/jq8900_stm32.c/.h`（独立 stm32 头——API 11 函数与 mspm0 jq8900.h 同名同型；.c 软 UART TX 位时序（start 位低 + LSB 先 + stop 位高，每 bit 104us）；帧 = 0xAA+cmd+data+（cmd+data 求和校验）页面原式；零引脚字面量/零标准库/无 UART 实例字面量）
+- [x] manifest.json platforms 增 stm32：files `[code/jq8900_stm32.c, code/jq8900_stm32.h]`、dependencies ["delay"]（照 mspm0 现状）、verified false、hardware_bound false、pins 1 行、kit/source_url（wiki 原页 `.../control/jq8900-voice-broadcast-module.html`）、notes（手册路径+原页+网盘+**软 UART TX 定稿（页面两线帧/104us）**+RX 不实现（回绕缺陷记录）+「bps_syn6288」串台+默认脚推理+未上板）
+- [x] pin_config.h 增 2 宏
+- [x] 测试 `tests/test_module_jq8900.py`：形状+宏存在（`JQ8900_GPIO\s+GPIO_A`/`JQ8900_PIN\s+Pin_15`）+单选生成+mspm0 零改动+守卫（`104`us、`0xAA` 帧头+求和校验、API 11 函数名断言（play/play_next/play_prev/stop/pause/resume/set_volume/volume_up/volume_down/send_cmd）、无 `UART_`/`USART`/`rx_handler`、无 printf/GPIO_Init/RCC_）
+- [x] test_pins.py 补 2 宏；test_default_layout.py 白名单 PA15 +1（BUZZER 组）
+- [x] UV4 矩阵（init+send_cmd+play(1)+play_next+play_prev+stop+pause+resume+set_volume(6)+volume_up+volume_down 全调，(void) 化）→ 0/0 → verified=true
+- [x] wordlist 零补录复核；中文提交 → resolved → 结论回填
 
 **验收标准：** 全部 checkbox；pytest 绿；矩阵 exit 0。
 
@@ -47,3 +47,8 @@
   （`tests/test_pins.py`/`tests/test_default_layout.py` 全绿）✓ ⑥ 矩阵
   verified=true（manifest 实况；UV4 矩阵记录在 notes「2026-09-08 stm32 单选生成
   → UV4 0 error / 0 module warning」）✓ ⑦ wordlist 已收录 ✓。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

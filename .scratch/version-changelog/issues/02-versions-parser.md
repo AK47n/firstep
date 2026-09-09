@@ -22,8 +22,13 @@
   清晰重复」（CONTEXT.md 条目库原语）豁免，保留；`kind="其他"` 提为常量
   `_VERSION_KIND_OTHER`；其余气味均为判断项，不整改。
 
-- [ ] parse_versions 正常样例：版本 + 日期 + 主题 + 多条带标签条目
-- [ ] 无标签行 → kind=「其他」且整行文本保留
-- [ ] 非版本 `## ` 小节、HTML 注释、说明段不产生条目
-- [ ] 损坏 / 异常输入 → []（不抛）；load_versions 缺文件 → []
-- [ ] tests/test_changelog.py 全套绿
+- [x] parse_versions 正常样例：版本 + 日期 + 主题 + 多条带标签条目
+- [x] 无标签行 → kind=「其他」且整行文本保留
+- [x] 非版本 `## ` 小节、HTML 注释、说明段不产生条目
+- [x] 损坏 / 异常输入 → []（不抛）；load_versions 缺文件 → []
+- [x] tests/test_changelog.py 全套绿
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

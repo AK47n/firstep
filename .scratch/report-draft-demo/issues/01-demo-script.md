@@ -9,7 +9,7 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** resolved：2026-08-23 实施完成 + code-review 双轴评审整改闭环；
+**状态：** resolved（2026-08-23） 实施完成 + code-review 双轴评审整改闭环；
 
 ## Comments
 

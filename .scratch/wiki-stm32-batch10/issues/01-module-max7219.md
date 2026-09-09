@@ -13,14 +13,19 @@
 **状态：** resolved（2026-09 实施完成）。
 
 **实施清单：**
-- [ ] `library/modules/max7219/code/max7219_stm32.c/.h`（独立 stm32 头——API 6 函数照 mspm0 max7219.h；.c 软 SPI 移位（gpio_set + 位序 MSB 先——照 mspm0 .c 逐行）；零引脚字面量）
-- [ ] manifest.json platforms 增 stm32：files `[code/max7219_stm32.c, code/max7219_stm32.h]`、dependencies ["delay"]（照 mspm0 现状）、verified false、hardware_bound false、pins 3 行、kit/source_url（wiki 原页 `.../screen/8-bit-led-tube.html`——另一页 max7219-matrix-display 同 slug 记 notes）、notes（手册路径×2+原页+网盘+**两页合一（同芯片双形态）**+演示字模不入库+默认脚推理（LED 三灯互替）+未上板）
-- [ ] pin_config.h 增 6 宏
-- [ ] 测试 `tests/test_module_max7219.py`：形状（3 pins）+宏存在（`MAX7219_DIN_GPIO\s+GPIO_C` 等）+单选生成+mspm0 零改动+守卫（`FORM_DIGIT 0u`/`FORM_MATRIX 1u`、`0x09`/`0x0F` 寄存器、无演示字模数组、无 printf/GPIO_Init/RCC_）
-- [ ] test_pins.py 补 6 宏；test_default_layout.py 白名单 PC13-15 组 +3
-- [ ] UV4 矩阵（init(0,2)+write_digit(0,1)+write_matrix(0,0,0,0,0)+write_reg(0,0x0F,0)+clear+set_chip_count(1) 全调，(void) 化）→ 0/0 → verified=true
-- [ ] wordlist 零补录复核；中文提交 → resolved → 结论回填
+- [x] `library/modules/max7219/code/max7219_stm32.c/.h`（独立 stm32 头——API 6 函数照 mspm0 max7219.h；.c 软 SPI 移位（gpio_set + 位序 MSB 先——照 mspm0 .c 逐行）；零引脚字面量）
+- [x] manifest.json platforms 增 stm32：files `[code/max7219_stm32.c, code/max7219_stm32.h]`、dependencies ["delay"]（照 mspm0 现状）、verified false、hardware_bound false、pins 3 行、kit/source_url（wiki 原页 `.../screen/8-bit-led-tube.html`——另一页 max7219-matrix-display 同 slug 记 notes）、notes（手册路径×2+原页+网盘+**两页合一（同芯片双形态）**+演示字模不入库+默认脚推理（LED 三灯互替）+未上板）
+- [x] pin_config.h 增 6 宏
+- [x] 测试 `tests/test_module_max7219.py`：形状（3 pins）+宏存在（`MAX7219_DIN_GPIO\s+GPIO_C` 等）+单选生成+mspm0 零改动+守卫（`FORM_DIGIT 0u`/`FORM_MATRIX 1u`、`0x09`/`0x0F` 寄存器、无演示字模数组、无 printf/GPIO_Init/RCC_）
+- [x] test_pins.py 补 6 宏；test_default_layout.py 白名单 PC13-15 组 +3
+- [x] UV4 矩阵（init(0,2)+write_digit(0,1)+write_matrix(0,0,0,0,0)+write_reg(0,0x0F,0)+clear+set_chip_count(1) 全调，(void) 化）→ 0/0 → verified=true
+- [x] wordlist 零补录复核；中文提交 → resolved → 结论回填
 
 **结论（2026-09 实施完成）**：stm32 条目落地——code/max7219_stm32.c/.h（软 SPI 3 脚 gpio_set 位操作 + 页原式 OUT_PP；API 6 函数与 mspm0 版同名同型完全对齐）；默认脚 DIN=PC13/CLK=PC14/CS=PC15（叠板载 LED 三灯——显示件与板载指示灯输出指示互替）；manifest platforms.stm32（files 2 件、deps 无（无 delay 调用——照 mspm0 现状）、3 pins、kit/source_url 8-bit-led-tube 页、notes 两页合一 + 演示字模不入库 + 未上板）；pin_config.h 6 宏 + test_pins 钉值 + test_default_layout 白名单（PC13-15 组）；测试 test_module_max7219.py stm32 段全绿；UV4 矩阵 0 error/0 warning → verified=true（.scratch/wiki-stm32-batch10/matrix/run_max7219_matrix.py——Code=1868）；wordlist 零补录复核（已挂接）。
 
 **验收标准：** 全部 checkbox；pytest 绿；矩阵 exit 0。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

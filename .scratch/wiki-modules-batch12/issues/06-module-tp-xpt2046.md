@@ -12,9 +12,14 @@
 
 **验收：**
 
-- [ ] 提炼：厂家 1.8 例程 TOUCH/touch.c/h → code/tp_xpt2046.c/h（UTF-8）：去平台依赖（GPIO 位操作宏化、delay 走库、去 printf/main）、去 TP_Adjust/扫描演示逻辑（ADR 0009 纯驱动；校准走 set_calibration 接口）
-- [ ] API：xpt2046_init/read_xy/set_calibration；中值滤波 5 次；软 SPI 忙等不占 TIMER/硬件 SPI；无 IRQHandler
-- [ ] 母版 syscfg TP_XPT2046 实例（5 脚）+ INSTANCE_CONSUMERS 登记
-- [ ] manifest.json：dependencies ["delay"]；pins 5 角色（CS/CLK/DIN/DOUT/IRQ 按能力 gpio_out/in）；kit=1.8 寸带触摸屏配套组（ZJY180S120TTG01）/source_url=screen--1-8-touch-color-screen.md 原页；notes 含 wiki 页+网盘+厂家目录+与 lcd 共用总线说明+校准宏说明+上游 CMD_RDX/RDY 分支核对记录+未上板
-- [ ] 测试 test_module_tp_xpt2046.py + test_pins/test_pin_bindings/test_syscfg_prune 断言
-- [ ] 编译矩阵 PASS 0 error/0 warning → verified + notes；中文提交、工单 resolved
+- [x] 提炼：厂家 1.8 例程 TOUCH/touch.c/h → code/tp_xpt2046.c/h（UTF-8）：去平台依赖（GPIO 位操作宏化、delay 走库、去 printf/main）、去 TP_Adjust/扫描演示逻辑（ADR 0009 纯驱动；校准走 set_calibration 接口）
+- [x] API：xpt2046_init/read_xy/set_calibration；中值滤波 5 次；软 SPI 忙等不占 TIMER/硬件 SPI；无 IRQHandler
+- [x] 母版 syscfg TP_XPT2046 实例（5 脚）+ INSTANCE_CONSUMERS 登记
+- [x] manifest.json：dependencies ["delay"]；pins 5 角色（CS/CLK/DIN/DOUT/IRQ 按能力 gpio_out/in）；kit=1.8 寸带触摸屏配套组（ZJY180S120TTG01）/source_url=screen--1-8-touch-color-screen.md 原页；notes 含 wiki 页+网盘+厂家目录+与 lcd 共用总线说明+校准宏说明+上游 CMD_RDX/RDY 分支核对记录+未上板
+- [x] 测试 test_module_tp_xpt2046.py + test_pins/test_pin_bindings/test_syscfg_prune 断言
+- [x] 编译矩阵 PASS 0 error/0 warning → verified + notes；中文提交、工单 resolved
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

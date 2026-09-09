@@ -13,14 +13,19 @@
 **状态：** resolved（2026-09 实施完成）。
 
 **实施清单：**
-- [ ] `library/modules/lcd/code/lcd_stm32.c/.h`（独立 stm32 头——API 全族照 mspm0 lcd.h；.c 软 SPI 六脚位操作 + 初始化序列表（照 lcd_init.c 模型表——**共享或 stm32 拷贝**按实施分层）；字库 lcdfont.h 复用（files 共享或拷贝——**双平台共享先例**）；零引脚字面量）
-- [ ] manifest.json platforms 增 stm32：files（按分层定：`[code/lcd_stm32.c, code/lcd_stm32.h]` + 共享文件视分层）、dependencies ["delay"]（照 mspm0）、verified false、hardware_bound false、pins 6 行、kit/source_url（wiki 原页——五篇页对应 slug 记 notes 5 条：0-96-color/1-28-round/1-3-color/1-47-color/1-69-color + 1.8 触摸页屏侧）、notes（手册路径×5+原页+网盘×5+**六屏合一（同芯片同 API 变体——mspm0 决策 A）**+F4 混写甄别记录+字库复用（lcdfont.h 库内）+0-96 页无 SCLK/MOSI 宏记录+默认脚推理+未上板）
-- [ ] pin_config.h 增 12 宏
-- [ ] 测试 `tests/test_module_lcd.py`：形状（6 pins/files 含 lcdfont.h）+宏存在+单选生成+mspm0 零改动+守卫（`LCD_MODEL_096`..`LCD_MODEL_180` 六模型、`LCD_DIR_DEFAULT 0xFF`、字库体积 ≤16KB 断言（lcdfont.h 存在——mspm0 先例）、无演示位图数组、无 printf/GPIO_Init/RCC_）
-- [ ] test_pins.py 补 12 宏；test_default_layout.py 白名单 PB4/5/6/7 +4、PA5 +1、PA15 +1（显示组登记）
-- [ ] UV4 矩阵（init(LCD_MODEL_096, LCD_DIR_DEFAULT)+get_width/height+fill+clear+draw_point+line+rectangle+circle+show_char+show_string+show_num+show_float+show_chinese16x16+show_picture 全调，(void) 化）→ 0/0 → verified=true
-- [ ] wordlist 零补录复核；中文提交 → resolved → 结论回填
+- [x] `library/modules/lcd/code/lcd_stm32.c/.h`（独立 stm32 头——API 全族照 mspm0 lcd.h；.c 软 SPI 六脚位操作 + 初始化序列表（照 lcd_init.c 模型表——**共享或 stm32 拷贝**按实施分层）；字库 lcdfont.h 复用（files 共享或拷贝——**双平台共享先例**）；零引脚字面量）
+- [x] manifest.json platforms 增 stm32：files（按分层定：`[code/lcd_stm32.c, code/lcd_stm32.h]` + 共享文件视分层）、dependencies ["delay"]（照 mspm0）、verified false、hardware_bound false、pins 6 行、kit/source_url（wiki 原页——五篇页对应 slug 记 notes 5 条：0-96-color/1-28-round/1-3-color/1-47-color/1-69-color + 1.8 触摸页屏侧）、notes（手册路径×5+原页+网盘×5+**六屏合一（同芯片同 API 变体——mspm0 决策 A）**+F4 混写甄别记录+字库复用（lcdfont.h 库内）+0-96 页无 SCLK/MOSI 宏记录+默认脚推理+未上板）
+- [x] pin_config.h 增 12 宏
+- [x] 测试 `tests/test_module_lcd.py`：形状（6 pins/files 含 lcdfont.h）+宏存在+单选生成+mspm0 零改动+守卫（`LCD_MODEL_096`..`LCD_MODEL_180` 六模型、`LCD_DIR_DEFAULT 0xFF`、字库体积 ≤16KB 断言（lcdfont.h 存在——mspm0 先例）、无演示位图数组、无 printf/GPIO_Init/RCC_）
+- [x] test_pins.py 补 12 宏；test_default_layout.py 白名单 PB4/5/6/7 +4、PA5 +1、PA15 +1（显示组登记）
+- [x] UV4 矩阵（init(LCD_MODEL_096, LCD_DIR_DEFAULT)+get_width/height+fill+clear+draw_point+line+rectangle+circle+show_char+show_string+show_num+show_float+show_chinese16x16+show_picture 全调，(void) 化）→ 0/0 → verified=true
+- [x] wordlist 零补录复核；中文提交 → resolved → 结论回填
 
 **结论（2026-09 实施完成）**：stm32 条目落地——code/lcd_stm32.c/.h（**分层 = 单文件自实现**：mspm0 lcd.c 绘制层纯 C 但 include mspm0 专属 lcd_init.h（不可用）→ 绘制层/序列表/模型表自 mspm0 两件逐行移植零魔改、仅总线层换 gpio_set + 六脚 OUT_PP 初始化；**lcdfont.h 双平台共用同一份文件**（files 含 code/lcdfont.h））；API 与 mspm0 版同名同型完全对齐（lcd.h 核验 14 函数）；默认脚 SCL=PB4/SDA=PB5/RES=PA5/DC=PB6/CS=PB7/BLK=PA15（与 oled SPI 五脚组/max7219 三脚组显示族互替同脚；与 tp 配套件刻意错开）；F4 混写甄别（0-96/1-47 两页软 SPI 块 F4 → F1 改写）记录；pin_config.h 12 宏 + 测试全绿（含字库 ≤16KB 断言）；UV4 矩阵 0 error/0 warning → verified=true（run_lcd_matrix.py——Code=3760/RO=5980）；wordlist 零补录复核。
 
 **验收标准：** 全部 checkbox；pytest 绿；矩阵 exit 0。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

@@ -10,9 +10,14 @@
 
 **验收：**
 
-- [ ] oled.c/h：OLED_WR_Byte 总线模式分发（静态模式变量，OLED_Init → I2C 模式、OLED_SPI_Init → SPI 模式）；SPI 位操作（SCL/SDA/DC/CS/RES 宏参数化 `<实例>_<引脚>_PORT/PIN`）；init 序列 SPI 版逐字核对；OLED_* 既有 API 零改动
-- [ ] manifest.json：mspm0 pins 增 5 SPI 角色（oled 选中时两者共存——I2C 角色保留）；notes 补 SPI 变体说明 + 字段/已知取舍（PB2/PB3 占用）+ wiki 页（screen--0-96-single-spi-screen.md）+ 网盘 + 厂家目录；description 补 SPI 总线
-- [ ] 母版 syscfg OLED_SPI 实例 + INSTANCE_CONSUMERS「OLED_SPI」登记
-- [ ] 0.91 128×32 核验：查库内 oled.c init（0xA8 MUX/0xDA COM/Refresh 页数）——不支持则补 OLED_RES_128X32 宏分支（验证后 notes 记录核验结论）；0.96 IIC/1.3 单色核对记录 notes
-- [ ] 测试：test_module_oled.py 回归（I2C 零变化断言）+ SPI 变体断言 + 0.91 结论守卫；test_pins/test_pin_bindings/test_syscfg_prune 增断言
-- [ ] 编译矩阵：I2C 变体重跑 PASS + SPI 变体单选生成 → SysConfig CLI → gmake 0 error/0 warning；verified=true + notes；中文提交、工单 resolved
+- [x] oled.c/h：OLED_WR_Byte 总线模式分发（静态模式变量，OLED_Init → I2C 模式、OLED_SPI_Init → SPI 模式）；SPI 位操作（SCL/SDA/DC/CS/RES 宏参数化 `<实例>_<引脚>_PORT/PIN`）；init 序列 SPI 版逐字核对；OLED_* 既有 API 零改动
+- [x] manifest.json：mspm0 pins 增 5 SPI 角色（oled 选中时两者共存——I2C 角色保留）；notes 补 SPI 变体说明 + 字段/已知取舍（PB2/PB3 占用）+ wiki 页（screen--0-96-single-spi-screen.md）+ 网盘 + 厂家目录；description 补 SPI 总线
+- [x] 母版 syscfg OLED_SPI 实例 + INSTANCE_CONSUMERS「OLED_SPI」登记
+- [x] 0.91 128×32 核验：查库内 oled.c init（0xA8 MUX/0xDA COM/Refresh 页数）——不支持则补 OLED_RES_128X32 宏分支（验证后 notes 记录核验结论）；0.96 IIC/1.3 单色核对记录 notes
+- [x] 测试：test_module_oled.py 回归（I2C 零变化断言）+ SPI 变体断言 + 0.91 结论守卫；test_pins/test_pin_bindings/test_syscfg_prune 增断言
+- [x] 编译矩阵：I2C 变体重跑 PASS + SPI 变体单选生成 → SysConfig CLI → gmake 0 error/0 warning；verified=true + notes；中文提交、工单 resolved
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

@@ -8,7 +8,7 @@ generate_project 前调用（输入 = 题面 + 功能需求 + 模块摘要 + 引
 
 **被谁阻塞：** 02（往 generate 的 report_draft_text 参数接线）
 
-**状态：** resolved：2026-08-23 实施完成 + code-review 双轴评审整改闭环；
+**状态：** resolved（2026-08-23） 实施完成 + code-review 双轴评审整改闭环；
 
 ## Comments
 

@@ -10,7 +10,12 @@
 
 **验收：**
 
-- [ ] lcd_init.c 补 ST7789V2 双 model 表项（1.3 = 240×240、1.69 = 240×280，各带偏移表与方向表；序列从厂家 lcd_init.c 提炼）
-- [ ] lcd.h LCD_MODEL_130/169 常量；test_module_lcd.py 型号完整性断言更新（6 模型常量最终齐）
-- [ ] manifest notes 补两页信息（screen--1-3-color-screen.md / screen--1-69-color-screen.md + 网盘链接 + 厂家目录 + 字库芯片不入库决策记录）
-- [ ] 编译矩阵重跑 PASS（0 error/0 warning）→ verified 保持 true、notes 补记录；中文提交、工单 resolved
+- [x] lcd_init.c 补 ST7789V2 双 model 表项（1.3 = 240×240、1.69 = 240×280，各带偏移表与方向表；序列从厂家 lcd_init.c 提炼）
+- [x] lcd.h LCD_MODEL_130/169 常量；test_module_lcd.py 型号完整性断言更新（6 模型常量最终齐）
+- [x] manifest notes 补两页信息（screen--1-3-color-screen.md / screen--1-69-color-screen.md + 网盘链接 + 厂家目录 + 字库芯片不入库决策记录）
+- [x] 编译矩阵重跑 PASS（0 error/0 warning）→ verified 保持 true、notes 补记录；中文提交、工单 resolved
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

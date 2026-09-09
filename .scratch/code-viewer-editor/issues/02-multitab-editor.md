@@ -16,11 +16,11 @@ scroll 到选区参数化——不硬编码 #main-c-hl）；非 UTF-8 文件 tab
 
 **状态：** resolved
 
-- [ ] 新 `fx/codeeditor.js` 纯函数：`codeTabStripHTML(tabs, activePath)`（脏点/只读标记/关闭钮 data-tab-close）、`codeEditorHTML(content, lang, opts)`（三明治，opts.readonly）、`caretLineOf(value, pos)`、`indentLines(value, sel)`/`indentOnEnter(value, sel)`；末尾 Object.assign(window, …) 兼容。
-- [ ] 新 `ui/codeeditor.js` 胶水：tab 数组状态（{path, lang, content, savedContent, outline, mtime_ns, utf8, mdMode}）、`openEditorFile(path)`、tab 条/editor 事件委托（激活/关闭/input/scroll/keydown：Tab/Enter/光标行三向同步）、Ctrl+S 占位（本票 toast 提示未接保存或静默，验收以编辑手感为准）。
-- [ ] `ui/codeview.js` 改造：树点击 → openEditorFile；大纲/搜索/文件内查找跳行 → 选区跳转；「只读」文案更新。
-- [ ] `index.html`/CSS：`.code-tabs` 标签条 + 三明治样式（沿 .code-wrap 机制，font 同源 `calc(13px * var(--code-zoom,1))`）；前端单测 codeeditor.test.mjs（tab 条脏点/只读、caretLineOf、indent、跳行越界）。
-- [ ] node --test 全绿；smoke-02 验证：多 tab 开关保留内容、脏点、关闭确认、编辑高亮联动、光标行高亮。
+- [x] 新 `fx/codeeditor.js` 纯函数：`codeTabStripHTML(tabs, activePath)`（脏点/只读标记/关闭钮 data-tab-close）、`codeEditorHTML(content, lang, opts)`（三明治，opts.readonly）、`caretLineOf(value, pos)`、`indentLines(value, sel)`/`indentOnEnter(value, sel)`；末尾 Object.assign(window, …) 兼容。
+- [x] 新 `ui/codeeditor.js` 胶水：tab 数组状态（{path, lang, content, savedContent, outline, mtime_ns, utf8, mdMode}）、`openEditorFile(path)`、tab 条/editor 事件委托（激活/关闭/input/scroll/keydown：Tab/Enter/光标行三向同步）、Ctrl+S 占位（本票 toast 提示未接保存或静默，验收以编辑手感为准）。
+- [x] `ui/codeview.js` 改造：树点击 → openEditorFile；大纲/搜索/文件内查找跳行 → 选区跳转；「只读」文案更新。
+- [x] `index.html`/CSS：`.code-tabs` 标签条 + 三明治样式（沿 .code-wrap 机制，font 同源 `calc(13px * var(--code-zoom,1))`）；前端单测 codeeditor.test.mjs（tab 条脏点/只读、caretLineOf、indent、跳行越界）。
+- [x] node --test 全绿；smoke-02 验证：多 tab 开关保留内容、脏点、关闭确认、编辑高亮联动、光标行高亮。
 
 ## Comments
 
@@ -51,5 +51,6 @@ scroll 到选区参数化——不硬编码 #main-c-hl）；非 UTF-8 文件 tab
   ⑤ node --test 绿 + smoke-02 项覆盖 ✓。附：工单说「本票保存不接」，实际保存链路
   已在同 feature 工单 03 接通（`/api/code/save`），属演进不冲突。
 
-(End of file - total 23 lines)
-</content>
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

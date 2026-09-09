@@ -2,7 +2,7 @@
 
 **要做什么：** generate tab 的「生成执行 + 评分清单 + 交付（handoff）」簇迁入 `static/js/ui/generate-core.js`（generateMain / 成功区渲染 / 桌面输出开关 / 产物树 / 评分清单渲染与同步导出 / 交接说明行）。**被谁阻塞：** 02（app.js）
 
-**状态：** 已实施（resolved）
+**状态：** resolved（resolved）
 
 ## 关键事实（1-based 行号，实施时以 grep 复核）
 

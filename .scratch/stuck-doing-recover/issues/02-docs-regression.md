@@ -1,6 +1,6 @@
 # 僵尸「进行中」恢复（工单 02：文档回归）
 
-Status: pending
+Status: resolved
 
 ## 交付
 

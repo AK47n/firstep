@@ -11,13 +11,13 @@
 **状态：** resolved
 
 **实施清单：**
-- [ ] `library/modules/fingerprint/code/fingerprint_stm32.c/.h`（独立 stm32 头——API 全族照 mspm0 fingerprint.h；.c uart_init/uart_sendbyte + `fingerprint_rx_handler()`（聚合宏调用——`uart_getbyte` 轮询排空收精确 12/16 字节，照 mspm0 `_receive_response` 改进）；帧发送（0xEF 01 FF FF FF + PID + Len + 指令 + 校验和）；零引脚字面量）
-- [ ] manifest.json platforms 增 stm32：files、dependencies ["debug_uart"?——照 mspm0 manifest 现状（fputc 依赖 debug_uart? 指纹无 printf——照 mspm0 dependencies 原样）、verified false、hardware_bound false、pins 2 行（TX/RX）、kit/source_url（wiki 原页 `.../sensor/fingerprint-recognition-sensor.html`）、notes（手册路径+原页+网盘+57600+散文/代码脚矛盾+精确收 12/16+rx_handler 聚合+UART_1 互替共享（波特率互斥）+未上板）
-- [ ] pin_config.h 增 6 宏（五件套+INST）；isr.c 加 `__weak void fingerprint_rx_handler(void) {}` + USART1_IRQ_CALLS 加调用；pinwriter._UART_CALLS_ROLES 登记 FINGERPRINT_UART
-- [ ] 测试 `tests/test_module_fingerprint.py`：形状（TX/RX pins）+宏存在（`FINGERPRINT_UART\s+UART_1` 五件套）+**isr.c 聚合断言**（`fingerprint_rx_handler` __weak + USART1_IRQ_CALLS 含调用）+单选生成+mspm0 零改动+守卫（`57600`、帧头 `0xEF 0x01 0xFF 0xFF 0xFF`、精确收 12/16（无 `u2_recv_length` 无界式）、API ≥10 函数名断言、无 printf/GPIO_Init/RCC_）
-- [ ] test_pins.py 补 6 宏；test_pin_bindings uart 共享组扩充（FINGERPRINT → UART1——照批 8 适配先例）；test_default_layout 白名单 UART1 外设级 +1
-- [ ] UV4 矩阵（init+check_device+is_touched+get_image+img_to_buffer(0)+reg_model+search+save_finger(1)+delete_all+enroll(1) 全调，(void) 化——search 返 uint16_t）→ 0/0 → verified=true
-- [ ] wordlist 零补录复核；中文提交 → resolved → 结论回填
+- [x] `library/modules/fingerprint/code/fingerprint_stm32.c/.h`（独立 stm32 头——API 全族照 mspm0 fingerprint.h；.c uart_init/uart_sendbyte + `fingerprint_rx_handler()`（聚合宏调用——`uart_getbyte` 轮询排空收精确 12/16 字节，照 mspm0 `_receive_response` 改进）；帧发送（0xEF 01 FF FF FF + PID + Len + 指令 + 校验和）；零引脚字面量）
+- [x] manifest.json platforms 增 stm32：files、dependencies ["debug_uart"?——照 mspm0 manifest 现状（fputc 依赖 debug_uart? 指纹无 printf——照 mspm0 dependencies 原样）、verified false、hardware_bound false、pins 2 行（TX/RX）、kit/source_url（wiki 原页 `.../sensor/fingerprint-recognition-sensor.html`）、notes（手册路径+原页+网盘+57600+散文/代码脚矛盾+精确收 12/16+rx_handler 聚合+UART_1 互替共享（波特率互斥）+未上板）
+- [x] pin_config.h 增 6 宏（五件套+INST）；isr.c 加 `__weak void fingerprint_rx_handler(void) {}` + USART1_IRQ_CALLS 加调用；pinwriter._UART_CALLS_ROLES 登记 FINGERPRINT_UART
+- [x] 测试 `tests/test_module_fingerprint.py`：形状（TX/RX pins）+宏存在（`FINGERPRINT_UART\s+UART_1` 五件套）+**isr.c 聚合断言**（`fingerprint_rx_handler` __weak + USART1_IRQ_CALLS 含调用）+单选生成+mspm0 零改动+守卫（`57600`、帧头 `0xEF 0x01 0xFF 0xFF 0xFF`、精确收 12/16（无 `u2_recv_length` 无界式）、API ≥10 函数名断言、无 printf/GPIO_Init/RCC_）
+- [x] test_pins.py 补 6 宏；test_pin_bindings uart 共享组扩充（FINGERPRINT → UART1——照批 8 适配先例）；test_default_layout 白名单 UART1 外设级 +1
+- [x] UV4 矩阵（init+check_device+is_touched+get_image+img_to_buffer(0)+reg_model+search+save_finger(1)+delete_all+enroll(1) 全调，(void) 化——search 返 uint16_t）→ 0/0 → verified=true
+- [x] wordlist 零补录复核；中文提交 → resolved → 结论回填
 
 **验收标准：** 全部 checkbox；pytest 绿；矩阵 exit 0。
 
@@ -42,3 +42,8 @@
   + TOUCH）✓ ③ pin_config 6 宏 + isr __weak + 聚合宏 + pinwriter 登记 ✓
   ④ 测试形状/宏/isr/生成/守卫 ✓ ⑤ test_pins/test_pin_bindings/test_default_layout ✓
   ⑥ 矩阵 verified=true ✓ ⑦ wordlist ✓。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

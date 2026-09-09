@@ -11,13 +11,13 @@
 **状态：** resolved
 
 **实施清单：**
-- [ ] `library/modules/l298n/code/l298n_stm32.c/.h`（独立 stm32 头——3 函数 + L298N_PWM_PERIOD 2000u 宏照 mspm0 l298n.h；.c pwm_init/update + 方向互切（IN1/IN2 占空比交换——照 mspm0 .c 逐行）；零引脚字面量）
-- [ ] manifest.json platforms 增 stm32：files、dependencies ["delay"]（脉宽周期换算——照 mspm0 manifest 现状）、verified false、hardware_bound false、pins 2 行（pwm type）、kit/source_url（wiki 原页 `.../control/l298n-motor-drive-module.html`）、notes（手册路径+原页+网盘+单路形态（B 路未给）+EN 跳线帽范围外+限幅（mspm0 同款）+TIM 门禁默认×默认不拦+PA6/7 与 I2C 冲突⚠+默认 TIM3 推理+未上板）
-- [ ] pin_config.h 增 4 宏
-- [ ] 测试 `tests/test_module_l298n.py`：形状（2 pins pwm）+宏存在（`L298N_IN1_TIM\s+TIM_3`/`L298N_IN1_CH\s+TIM3_CH1`/`L298N_IN2_CH\s+TIM3_CH2`）+单选生成+mspm0 零改动+守卫（`L298N_PWM_PERIOD 2000u`、set_duty/set_direction、无 EN 代码、无 printf/GPIO_Init/RCC_）
-- [ ] test_pins.py 补 4 宏；test_default_layout.py 白名单 PA6/PA7 组 +2（与 I2C 总线冲突组——PWM 外设级登记）
-- [ ] UV4 矩阵（init+set_duty(1000)+set_direction(1)，(void) 化）→ 0/0 → verified=true（**确认 TIM3 CH1/CH2 编译**——gmake 等价 UV4 过）
-- [ ] wordlist 零补录复核；中文提交 → resolved → 结论回填
+- [x] `library/modules/l298n/code/l298n_stm32.c/.h`（独立 stm32 头——3 函数 + L298N_PWM_PERIOD 2000u 宏照 mspm0 l298n.h；.c pwm_init/update + 方向互切（IN1/IN2 占空比交换——照 mspm0 .c 逐行）；零引脚字面量）
+- [x] manifest.json platforms 增 stm32：files、dependencies ["delay"]（脉宽周期换算——照 mspm0 manifest 现状）、verified false、hardware_bound false、pins 2 行（pwm type）、kit/source_url（wiki 原页 `.../control/l298n-motor-drive-module.html`）、notes（手册路径+原页+网盘+单路形态（B 路未给）+EN 跳线帽范围外+限幅（mspm0 同款）+TIM 门禁默认×默认不拦+PA6/7 与 I2C 冲突⚠+默认 TIM3 推理+未上板）
+- [x] pin_config.h 增 4 宏
+- [x] 测试 `tests/test_module_l298n.py`：形状（2 pins pwm）+宏存在（`L298N_IN1_TIM\s+TIM_3`/`L298N_IN1_CH\s+TIM3_CH1`/`L298N_IN2_CH\s+TIM3_CH2`）+单选生成+mspm0 零改动+守卫（`L298N_PWM_PERIOD 2000u`、set_duty/set_direction、无 EN 代码、无 printf/GPIO_Init/RCC_）
+- [x] test_pins.py 补 4 宏；test_default_layout.py 白名单 PA6/PA7 组 +2（与 I2C 总线冲突组——PWM 外设级登记）
+- [x] UV4 矩阵（init+set_duty(1000)+set_direction(1)，(void) 化）→ 0/0 → verified=true（**确认 TIM3 CH1/CH2 编译**——gmake 等价 UV4 过）
+- [x] wordlist 零补录复核；中文提交 → resolved → 结论回填
 
 **验收标准：** 全部 checkbox；pytest 绿；矩阵 exit 0。
 
@@ -40,3 +40,8 @@
   ✓ ③ pin_config 4 宏 ✓ ④ 测试形状+宏+生成+守卫 ✓ ⑤ test_pins/test_default_layout
   （PA6/PA7 组）✓ ⑥ 矩阵 verified=true（notes 记录「2026-09-08 stm32 单选生成 →
   UV4 0 error / 0 module warning」）✓ ⑦ wordlist ✓。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

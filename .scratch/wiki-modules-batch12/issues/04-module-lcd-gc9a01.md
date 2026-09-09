@@ -10,7 +10,12 @@
 
 **验收：**
 
-- [ ] lcd_init.c 补 GC9A01 model 表项（240×240 无偏移；四方向 MADCTL 值照厂家——0x36 参数逐字核对）
-- [ ] lcd.h LCD_MODEL_128 常量；测试断言更新（含圆屏备注）
-- [ ] manifest notes 补 1.28 页信息（wiki 页路径+原页+网盘+厂家目录+圆屏物理特性）
-- [ ] 编译矩阵重跑 PASS；中文提交、工单 resolved
+- [x] lcd_init.c 补 GC9A01 model 表项（240×240 无偏移；四方向 MADCTL 值照厂家——0x36 参数逐字核对）
+- [x] lcd.h LCD_MODEL_128 常量；测试断言更新（含圆屏备注）
+- [x] manifest notes 补 1.28 页信息（wiki 页路径+原页+网盘+厂家目录+圆屏物理特性）
+- [x] 编译矩阵重跑 PASS；中文提交、工单 resolved
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

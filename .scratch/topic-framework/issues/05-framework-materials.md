@@ -8,10 +8,15 @@
 
 **验收：** 全部 ✓（三条例目 reference.json 标 `"topic_type": "line_follow"`（经 update_reference 落盘，lib-autocommit 提交）+ 各写 `framework/main.c`（21F 3866B / 26H 2489B / car-1-1 2062B，均 0 真实接口调用）+ 实测 `build_topic_framework` 三目录返回非 None 且 `read_fulltext` 不含框架内容（控制文件隔离）+ git 追踪确认）。
 
-- [ ] 21F / 26H / car-1-1 三条例目 reference.json 标 `"topic_type": "line_follow"`（经 update_reference 或直写元数据 + 校验）
-- [ ] 各条目写 `framework/main.c`（每条约 60-150 行：状态机枚举 / 调度循环 / TODO 位 / 平台与接口中立——0 个真实接口调用，纯骨架结构）
-- [ ] 框架段可读性：中文注释说明「框架语义」（这是什么题型的决策结构、填什么、改什么）
-- [ ] 手动核验：21F 框架段与真实 pid.c 决策流一致（十字路口 / 药房 / 返程）；26H 与 LAP 一致；car-1-1 与 xunji_template 一致
-- [ ] 实测：`build_topic_framework` 三条目均返回非 None；`read_fulltext` 不含 framework 内容（控制文件隔离）
+- [x] 21F / 26H / car-1-1 三条例目 reference.json 标 `"topic_type": "line_follow"`（经 update_reference 或直写元数据 + 校验）
+- [x] 各条目写 `framework/main.c`（每条约 60-150 行：状态机枚举 / 调度循环 / TODO 位 / 平台与接口中立——0 个真实接口调用，纯骨架结构）
+- [x] 框架段可读性：中文注释说明「框架语义」（这是什么题型的决策结构、填什么、改什么）
+- [x] 手动核验：21F 框架段与真实 pid.c 决策流一致（十字路口 / 药房 / 返程）；26H 与 LAP 一致；car-1-1 与 xunji_template 一致
+- [x] 实测：`build_topic_framework` 三条目均返回非 None；`read_fulltext` 不含 framework 内容（控制文件隔离）
 
 **备注**（本票交付方式）：framework/main.c 内容由 AI 草稿生成，写入后经人工确认（素材入库存档走 lib-autocommit 既例）。三条例目已有锚定 / 平台属性，只补 topic_type 字段与框架文件；不新增条目，不改动其它条目。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

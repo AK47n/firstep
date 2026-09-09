@@ -11,12 +11,17 @@
 **状态：** resolved（2026-09 实施完成）。
 
 **实施清单：**
-- [ ] `library/modules/oled/code/oled_extra_stm32.c/.h` 增 `oled_init_sh1106()`（SH1106 序列 + 列偏移 0x02——页面原式；与 SSD1306 变体同 API 风格）
-- [ ] manifest.json platforms.stm32 notes 追加（SH1106 变体：页内序列完整/列偏移/与 SSD1306 差异说明——mspm0 未提炼（首次））
-- [ ] 测试 `tests/test_module_oled_extra.py` 增：`oled_init_sh1106` 存在 + SH1106 序列守卫（`0xAD`/`0x8B`/`0x33`/列偏移 `0x02`）+ 128×64 分辨率注释
-- [ ] UV4 矩阵增 SH1106 初始化调用（同工单 04 矩阵——两条变体路径都调，(void) 化）→ 0/0（与工单 04 同矩阵/复核）
-- [ ] 中文提交 → resolved → 结论回填（与工单 04 同一提交或紧随——记录）
+- [x] `library/modules/oled/code/oled_extra_stm32.c/.h` 增 `oled_init_sh1106()`（SH1106 序列 + 列偏移 0x02——页面原式；与 SSD1306 变体同 API 风格）
+- [x] manifest.json platforms.stm32 notes 追加（SH1106 变体：页内序列完整/列偏移/与 SSD1306 差异说明——mspm0 未提炼（首次））
+- [x] 测试 `tests/test_module_oled_extra.py` 增：`oled_init_sh1106` 存在 + SH1106 序列守卫（`0xAD`/`0x8B`/`0x33`/列偏移 `0x02`）+ 128×64 分辨率注释
+- [x] UV4 矩阵增 SH1106 初始化调用（同工单 04 矩阵——两条变体路径都调，(void) 化）→ 0/0（与工单 04 同矩阵/复核）
+- [x] 中文提交 → resolved → 结论回填（与工单 04 同一提交或紧随——记录）
 
 **结论（2026-09 实施完成，与工单 04 同文件同一矩阵）**：oled_extra_stm32.c 增 oled_init_sh1106()——专属序列（0xAE 关/列偏移 0x02 0x10/0x40/0xB0/0x81 0xCF/0xA1/0xA6/0xA8 0x3F/0xAD 0x8B 0x33/0xC8/0xD3 0x00/0xD5 0x80/0xD9 0x1F/0xDA 0x12/0xDB 0x40/清屏/0xAF 开——页面 L116-142 A 类直提）+ s_sh1106 刷新列偏移 0x02 分支；**mspm0 未提炼过 SH1106——本件首次落码**（notes 记录）；manifest notes 追加（SH1106 变体说明）；测试守卫（0xAD/0x8B/0x33/列偏移 0x02）全绿；UV4 矩阵与工单 04 同一矩阵 0 error/0 warning。
 
 **验收标准：** 与工单 04 合并验收：pytest 绿；矩阵 exit 0；I2C 路径零回归。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

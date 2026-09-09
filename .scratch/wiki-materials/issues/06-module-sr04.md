@@ -8,10 +8,15 @@
 
 **结论：** 2026-09-05 完成并提交（8781d8d5 前置提交）。**实现变更：定时器中断测宽 → CPU 忙等测宽**——首版加 TIMG4 定时器实例被 SysConfig 拒绝（地猛星 SysConfig TIMER 仅暴露 TIMG0/6/7/8/12，全被既有模块占用），改忙等后 gmake 0 error/0 warning（PASS）。PB24/PB8 默认重叠入 test_pin_bindings 刻意重叠表；全量 3315 通过。
 
-- [ ] 代码提炼：从 `sources/materials/lckfb-地猛星移植手册/sensor--sr04-ultrasonic-ranging-sensor.md`「代码块」章节抽 `bsp_ultrasonic.c/h` 全文 → 模块规范改写（`code/sr04.c/h`；TRIG/ECHO 引脚宏参数化；定时器中断计数照 ntb_time `NTB_INST_IRQHandler` 先例；delay_us/delay_ms 走 delay 依赖；去掉 main.c 演示/printf；5 次测量均值等按手册算法保留为纯函数）
-- [ ] 母版 `mspm0.syscfg` 加：GPIO 输出实例（TRIG）+ GPIO 输入实例（ECHO）+ TIMER 实例（Basic_Periodic 1ms 中断，闲置 TIMGx——不占用 MOTOR_PID/NTB/SERVO_PWM 的 TIM 外设，计时基准 = 时钟 1MHz 换 1us 分辨率，按手册 800kHz 说明核对）；`syscfg_instances.py` 登记（TIMER 实例 → sr04 slug）
-- [ ] `manifest.json`：`dependencies: ["delay"]`；mspm0 平台条目（kit/source_url = 手册原页；notes 含手册路径 + 原页 + 网盘链接 + 改造要点 + 定时器实例说明）；简介能力方向（超声波测距 / 避障 / 液位高度辅助测量）+ 无题绑定；pins 1 × gpio_out(TRIG) + 1 × gpio_in(ECHO)
-- [ ] wordlist.json 补录：「感知传感器」类加「HC-SR04 超声波测距」方案挂 `lib_modules: ["sr04"]`
-- [ ] 测试：`test_pins.py::MSPM0_DEFAULT_MAP` 增映射；`test_syscfg_prune.py` 增实例保留/裁剪断言；新增 `tests/test_module_sr04.py`（单选生成 → syscfg 含实例 + 文件落盘 + main.c 调 init/测距过静态门禁）
-- [ ] 定时器实例冲突核查：sr04 所选 TIM 外设与骨架调度/滴答/PWM 绑定无冲突（照 TIM 门禁口径自查，默认组合不拦）
-- [ ] 编译验证：gmake 真编译 0 error、模块 warning 0；回写 manifest verified/notes
+- [x] 代码提炼：从 `sources/materials/lckfb-地猛星移植手册/sensor--sr04-ultrasonic-ranging-sensor.md`「代码块」章节抽 `bsp_ultrasonic.c/h` 全文 → 模块规范改写（`code/sr04.c/h`；TRIG/ECHO 引脚宏参数化；定时器中断计数照 ntb_time `NTB_INST_IRQHandler` 先例；delay_us/delay_ms 走 delay 依赖；去掉 main.c 演示/printf；5 次测量均值等按手册算法保留为纯函数）
+- [x] 母版 `mspm0.syscfg` 加：GPIO 输出实例（TRIG）+ GPIO 输入实例（ECHO）+ TIMER 实例（Basic_Periodic 1ms 中断，闲置 TIMGx——不占用 MOTOR_PID/NTB/SERVO_PWM 的 TIM 外设，计时基准 = 时钟 1MHz 换 1us 分辨率，按手册 800kHz 说明核对）；`syscfg_instances.py` 登记（TIMER 实例 → sr04 slug）
+- [x] `manifest.json`：`dependencies: ["delay"]`；mspm0 平台条目（kit/source_url = 手册原页；notes 含手册路径 + 原页 + 网盘链接 + 改造要点 + 定时器实例说明）；简介能力方向（超声波测距 / 避障 / 液位高度辅助测量）+ 无题绑定；pins 1 × gpio_out(TRIG) + 1 × gpio_in(ECHO)
+- [x] wordlist.json 补录：「感知传感器」类加「HC-SR04 超声波测距」方案挂 `lib_modules: ["sr04"]`
+- [x] 测试：`test_pins.py::MSPM0_DEFAULT_MAP` 增映射；`test_syscfg_prune.py` 增实例保留/裁剪断言；新增 `tests/test_module_sr04.py`（单选生成 → syscfg 含实例 + 文件落盘 + main.c 调 init/测距过静态门禁）
+- [x] 定时器实例冲突核查：sr04 所选 TIM 外设与骨架调度/滴答/PWM 绑定无冲突（照 TIM 门禁口径自查，默认组合不拦）
+- [x] 编译验证：gmake 真编译 0 error、模块 warning 0；回写 manifest verified/notes
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

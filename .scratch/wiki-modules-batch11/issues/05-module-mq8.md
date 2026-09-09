@@ -10,9 +10,14 @@
 
 **验收：**
 
-- [ ] 代码提炼：从 `sources/materials/lckfb-地猛星移植手册/sensor--mq-8-sensor.md` 「代码块」章节抽完整 `bsp_mq8.c/h` → 改造为 `code/mq8.c` + `code/mq8.h`：去 main/printf、函数名规范化（`mq8_init/read_percent`）、ADC 中断改经 adc 模块 API 轮询（无 IRQHandler 强符号）、`Get_MQ8_DO_value`/`MQ_DO` 不声明（mq2 同策略，notes）
-- [ ] `manifest.json`：`dependencies: ["adc"]`；mspm0 平台条目（files/verified 初始 false/hardware_bound false/kit+source_url 手册原页/notes 含手册路径+原页+网盘链接（资料 9966/案例 kpr3）+改造要点+**正向映射取证**+**MQ 系相对值非 ppm 精标+预热/湿度影响**+**多路气体同选共读 MEM0 现实约束**）；pins：`MQ8_AO_CH0` = adc 默认 PA24 照 mq2；简介判据：能力方向（氢气检测、氢能源安全监测、浓度报警）+ 无题绑定 + ADR 0009
-- [ ] `syscfg_instances.py` INSTANCE_CONSUMERS：`ADC12_0` 元组增 `"mq8"`（薄封装核对——无新实例）
-- [ ] wordlist.json 补录：「感知传感器」加「MQ-8 氢气传感器」方案挂 `lib_modules: ["mq8"]`，models 加 "MQ-8"
-- [ ] 测试：新增 `tests/test_module_mq8.py`（照 test_module_mq2.py：manifest 结构 + 单选生成 + 公式守卫（`MQ8_ADC_MAX`/`4095u`/`* 100.0f`/`ADC_Channel_0`）+ 无 IRQHandler 守卫 + notes 守卫）；`tests/test_pins.py` 豁免元组增 `"mq8"`；`tests/test_syscfg_prune.py` ADC12_0 新消费方断言；`tests/test_pin_bindings.py` PA24 注释补本批共读
-- [ ] 编译验证：`run_mq8_matrix.py` 单选生成 → SysConfig CLI → gmake 0 error / 0 warning；verified=true + notes 记录；code-review 后中文提交、工单 resolved
+- [x] 代码提炼：从 `sources/materials/lckfb-地猛星移植手册/sensor--mq-8-sensor.md` 「代码块」章节抽完整 `bsp_mq8.c/h` → 改造为 `code/mq8.c` + `code/mq8.h`：去 main/printf、函数名规范化（`mq8_init/read_percent`）、ADC 中断改经 adc 模块 API 轮询（无 IRQHandler 强符号）、`Get_MQ8_DO_value`/`MQ_DO` 不声明（mq2 同策略，notes）
+- [x] `manifest.json`：`dependencies: ["adc"]`；mspm0 平台条目（files/verified 初始 false/hardware_bound false/kit+source_url 手册原页/notes 含手册路径+原页+网盘链接（资料 9966/案例 kpr3）+改造要点+**正向映射取证**+**MQ 系相对值非 ppm 精标+预热/湿度影响**+**多路气体同选共读 MEM0 现实约束**）；pins：`MQ8_AO_CH0` = adc 默认 PA24 照 mq2；简介判据：能力方向（氢气检测、氢能源安全监测、浓度报警）+ 无题绑定 + ADR 0009
+- [x] `syscfg_instances.py` INSTANCE_CONSUMERS：`ADC12_0` 元组增 `"mq8"`（薄封装核对——无新实例）
+- [x] wordlist.json 补录：「感知传感器」加「MQ-8 氢气传感器」方案挂 `lib_modules: ["mq8"]`，models 加 "MQ-8"
+- [x] 测试：新增 `tests/test_module_mq8.py`（照 test_module_mq2.py：manifest 结构 + 单选生成 + 公式守卫（`MQ8_ADC_MAX`/`4095u`/`* 100.0f`/`ADC_Channel_0`）+ 无 IRQHandler 守卫 + notes 守卫）；`tests/test_pins.py` 豁免元组增 `"mq8"`；`tests/test_syscfg_prune.py` ADC12_0 新消费方断言；`tests/test_pin_bindings.py` PA24 注释补本批共读
+- [x] 编译验证：`run_mq8_matrix.py` 单选生成 → SysConfig CLI → gmake 0 error / 0 warning；verified=true + notes 记录；code-review 后中文提交、工单 resolved
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

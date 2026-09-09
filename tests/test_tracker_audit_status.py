@@ -113,13 +113,19 @@ def test_every_ticket_status_is_detected(status):
 
 
 def test_ascii_colon_tickets_are_detected(status):
-    """回归锚点：半角冒号形态的两张工单（旧正则漏报的实例）必须被提取到。"""
-    for rel, expected in (
-        (".scratch/code-editor-refine/issues/08-ai-apply-locate-insert.md", "claimed"),
-        (".scratch/code-page-vscode-overhaul/issues/07-code-visual-polish.md", "ready-for-agent"),
+    """回归锚点：半角冒号形态的工单必须被提取到（旧正则漏报的实例）。
+
+    锚点用「形态」而非固定值——工单翻牌后状态会变，但形态不该变。
+    """
+    for rel in (
+        ".scratch/code-editor-refine/issues/08-ai-apply-locate-insert.md",
+        ".scratch/code-page-vscode-overhaul/issues/07-code-visual-polish.md",
+        ".scratch/identity-fields/issues/06-pending-identity-sources-human.md",
     ):
         text = (ROOT / rel).read_text(encoding="utf-8")
-        assert status.extract_status(text) == expected
+        state = status.extract_status(text)
+        assert state is not None, f"{rel} 的状态行未被识别"
+        assert state in status.STANDARD_STATES, f"{rel} 状态值非标准：{state}"
 
 
 # ---------------------------------------------------------------------------
@@ -143,12 +149,31 @@ def _run(script: str) -> str:
 
 
 def test_census_buckets_are_not_all_unknown(status):
-    """census 不再把半角冒号形态误算成无状态行：无状态行只剩 pr-body 草稿。"""
+    """census 的分桶与提取器一致：resolved（含变体）/ 非标准值 / 无状态行 三桶计数
+    等于按 ticket_status 现算的结果——不再把半角冒号形态误算成无状态行。"""
+    import re
+
+    expected = {"resolved": 0, "非标准值": 0, "无状态行": 0}
+    for path in sorted((ROOT / ".scratch").glob("*/issues/*.md")):
+        state = status.extract_status(path.read_text(encoding="utf-8", errors="replace"))
+        if state is None:
+            expected["无状态行"] += 1
+        elif state == "resolved" or state.startswith("resolved"):
+            expected["resolved"] += 1
+        elif state in status.STANDARD_STATES:
+            continue  # claimed / ready-* / needs-* / wontfix 各成一桶
+        else:
+            expected["非标准值"] += 1
+
     out = _run("census.py")
     assert "(none)" not in out
-    assert "无状态行 3 张" in out  # 三份 pr-body 草稿
-    assert "非标准值 9 张" in out  # 已实施×6 + deferred + pending + 散文化 A/B/C
-    assert "resolved 变体形态 5 张" in out  # resolved：日期×4 + resolved。5
+    assert f"'resolved': {expected['resolved']}" in out
+    assert f"非标准值 {expected['非标准值']} 张" in out
+    assert f"无状态行 {expected['无状态行']} 张" in out
+    # 无状态行只剩 pr-body 草稿（非工单）
+    pr_bodies = len(list((ROOT / ".scratch").glob("*/issues/pr-body-*.md")))
+    assert expected["无状态行"] == pr_bodies
+    assert re.search(r"resolved 变体形态 \d+ 张", out)
 
 
 def test_list_open_tickets_covers_every_open_ticket(status):

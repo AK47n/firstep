@@ -2,7 +2,7 @@
 
 **要做什么：** generate tab 的「修订（revise）」簇迁入 `static/js/ui/generate-revise.js`（当前目录 / QA 计数 / 修订流水：load → context → analyze → apply → deepen → verify → rollback，SSE 分发 + diff 渲染 + 弃用/回滚）。**被谁阻塞：** 02（app.js）
 
-**状态：** 已实施（resolved）
+**状态：** resolved（resolved）
 
 ## 关键事实（1-based 行号，实施时以 grep 复核）
 
