@@ -1,7 +1,7 @@
 """统计 .scratch/*/issues/*.md 的状态分布（按 feature 分组）。
 
 只出计数、不出工单内容；要逐张看未完成工单的标题 / 要做什么 / 被谁阻塞，
-用 `.scratch/library-audit/list_open_tickets.py`（分工见其 docstring）。
+用 `.scratch/tracker-audit/list_open_tickets.py`（分工见其 docstring）。
 
 用法：$env:PYTHONIOENCODING='utf-8'; python .scratch/tracker-audit/census.py
 """
