@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=03a7509a53a87d3c77744bbb6e30683528cd6a32 -->
+<!-- changelog-auto: last-commit=274a8904d614fa6e2d53ffe2266b0c06242dfe53 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -18,6 +18,7 @@
 - 13:38 工单收尾：批量翻牌 167 张（口径 = 只勾选 + 改 Status，不动 checklist 文字）
 - 13:38 整理：删除误入库的临时提交信息文件
 - 13:43 工单修订：14 张过期验收文字按实现现状改写（口径修订段留痕）
+- 13:47 工单：真机验收项集中挂账 real-acceptance/01（62 张来源工单加指针）
 
 ## 2026-09-08
 - 12:10 工单：wiki-stm32-batch4/05 vl53l0x ToF 激光测距（B 类新 slug——仅 stm32 条目）
