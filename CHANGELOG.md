@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=ada7269a244d8cd7612ffa2192d2ba776a2f977a -->
+<!-- changelog-auto: last-commit=7f1d66014db9c369e3fac6a5bc3b8e23464c30e2 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -22,6 +22,7 @@
 - 19:43 修复：代码页 CDP 冒烟补口（折叠/保存/回车/Tab）+ 两处窗口化渲染缺陷
 - 21:04 ﻿第七轮：CDP 冒烟姿势修复 + 未折叠态折叠箭头
 - 21:04 第七轮：CDP 冒烟姿势修复 + 未折叠态折叠箭头
+- 21:32 第七轮续：CDP 守卫 + 输入路径视口高缓存（逐键/Tab 性能达标）
 
 ## 2026-09-08
 - 12:10 工单：wiki-stm32-batch4/05 vl53l0x ToF 激光测距（B 类新 slug——仅 stm32 条目）
