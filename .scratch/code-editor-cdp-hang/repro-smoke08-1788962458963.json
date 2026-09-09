@@ -1,0 +1,68 @@
+{
+  "mode": "smoke08",
+  "cycles": 10,
+  "hung": 0,
+  "ok": 10,
+  "results": [
+    {
+      "cycle": 1,
+      "ok": true,
+      "reloadMs": 4,
+      "readyMs": 7
+    },
+    {
+      "cycle": 2,
+      "ok": true,
+      "reloadMs": 4,
+      "readyMs": 295
+    },
+    {
+      "cycle": 3,
+      "ok": true,
+      "reloadMs": 5,
+      "readyMs": 295
+    },
+    {
+      "cycle": 4,
+      "ok": true,
+      "reloadMs": 4,
+      "readyMs": 293
+    },
+    {
+      "cycle": 5,
+      "ok": true,
+      "reloadMs": 4,
+      "readyMs": 5
+    },
+    {
+      "cycle": 6,
+      "ok": true,
+      "reloadMs": 5,
+      "readyMs": 14
+    },
+    {
+      "cycle": 7,
+      "ok": true,
+      "reloadMs": 6,
+      "readyMs": 296
+    },
+    {
+      "cycle": 8,
+      "ok": true,
+      "reloadMs": 5,
+      "readyMs": 6
+    },
+    {
+      "cycle": 9,
+      "ok": true,
+      "reloadMs": 4,
+      "readyMs": 296
+    },
+    {
+      "cycle": 10,
+      "ok": true,
+      "reloadMs": 5,
+      "readyMs": 7
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "mode": "plain",
+  "cycles": 5,
+  "hung": 0,
+  "ok": 5,
+  "results": [
+    {
+      "cycle": 1,
+      "ok": true,
+      "reloadMs": 5,
+      "readyMs": 300
+    },
+    {
+      "cycle": 2,
+      "ok": true,
+      "reloadMs": 5,
+      "readyMs": 293
+    },
+    {
+      "cycle": 3,
+      "ok": true,
+      "reloadMs": 5,
+      "readyMs": 9
+    },
+    {
+      "cycle": 4,
+      "ok": true,
+      "reloadMs": 5,
+      "readyMs": 296
+    },
+    {
+      "cycle": 5,
+      "ok": true,
+      "reloadMs": 4,
+      "readyMs": 297
+    }
+  ]
+}

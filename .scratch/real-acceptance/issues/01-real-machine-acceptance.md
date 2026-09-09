@@ -52,10 +52,20 @@ SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_ru
 
 **第七轮补充约定（CDP 挂死缓解 + 复跑姿势）**：
 - 偶发「`Page.reload` 后渲染进程无响应」已开诊断单 `.scratch/code-editor-cdp-hang/issues/01-reload-renderer-hang.md`；
-  在此之前，**每支脚本前重建标签页**（`json/close/<id>` + `json/new?<url>`）是复跑约定；
+  在此之前，**每支脚本前重建标签页**（`json/close/<id>` + `PUT json/new?<url>`）是复跑约定；
   `overhaul/*.smoke*.mjs` 的 `cdp()` 已加 20s 超时守卫（挂死会显式报错而非静默卡住）。
 - `overhaul/smoke-01/04/08/09` 已按「派发按键前重设选区 + 等渲染落定」修过姿势与过期断言，
   实跑全绿（09 唯一 FAIL 为回车性能项，另见 `.scratch/code-editor-perf-structural/issues/01`）。
+
+**第八轮更新（2026-09-09 · 根因已查清，约定升级为强制）**：
+- **根因**：上一支脚本留下**未保存修改**且页面拿过**用户手势**时，`Page.reload` 会弹
+  **原生 beforeunload 对话框**（CDP `Page.javascriptDialogOpening`，`type=beforeunload`）；
+  无人应答 → 渲染进程停住 → `Runtime.evaluate` 等命令永不返回（`Input.*` 仍应答）。
+  **不是产品缺陷**（应答后页面完全恢复，`verify-recovery-clean.mjs` 9/9）。
+- **强制前置**：**每支脚本启动前重建标签页**（`json/close/<id>` + **PUT** `json/new?<url>`）。
+  推荐直接用批跑器（默认即按此约定）：`node .scratch/cdp-smoke-run.mjs --batch=<名> --port=<CDP 端口>`；
+  脚本内自建连接用 `.scratch/cdp-harness.mjs` 的 `rebuildTab()` / `connect()`（后者**自动应答对话框**）。
+- 复现与取证脚本、完整证据矩阵见 `.scratch/code-editor-cdp-hang/README.md`。
 
 - [x] **B1 来源 `code-page-vscode-overhaul/01`**：补折叠与保存的 CDP 断言（现 `smoke-01.mjs` 8 项只覆盖行操作/只读/帮助；
   `grep "折叠|Ctrl+S|保存" .scratch/code-page-vscode-overhaul/*.mjs` 仅命中「截图已保存」）。
