@@ -23,8 +23,8 @@
 
 ## 验收标准
 
-- [ ] src/ 与 tests/ 内 grep「智谱|GLM|bigmodel」零命中（vision 相关语境）
-- [ ] 前端 node 测试（若有覆盖设置页的）全绿 + 全量 pytest 绿
+- [x] （口径已失效）原「src/ 与 tests/ 内 grep『智谱|GLM|bigmodel』零命中」：后续工单 vision-provider-switch/01 **有意加回**智谱预设（src 现 16 处、tests 8 处为自定义端点判例）——本单「DeepSeek 默认文案就位」成立，零命中不再适用。
+- [x] 前端 node 测试（若有覆盖设置页的）全绿 + 全量 pytest 绿
 - [ ] CONTEXT.md 视觉图注行与后端行为一致
 
 ## 实施提示词（新会话粘贴）
@@ -56,3 +56,8 @@
 ### 未做
 
 - 真机验收归用户：设置页视觉三字段默认值回显、上传 PDF/图片走 DeepSeek 视觉。
+
+## 验收口径修订（2026-09-09 在途盘点）
+
+- 「智谱/GLM/bigmodel 零命中」口径被后续工单 vision-provider-switch/01 有意反转（加回智谱预设）——保留本单「DeepSeek 默认文案与文档就位」的结论。
+

@@ -14,21 +14,18 @@ btn-confirm 接线在 04 之后做防冲突）
 
 ## 验收标准
 
-- [ ] fx/overlay.js：`overlayConfirmHTML({title, message, danger})` 纯件
-  （遮罩 + 标题 + 文案 + 取消/确认双钮，danger 类确认钮 + 不可恢复警示
-  样式）；ui/confirm.js：`confirmModal(opts) -> Promise<boolean>` 工厂
-  （Esc / × / 点遮罩 = 取消；重复调用时旧弹窗先关）
-- [ ] 8 处确认全部迁移：母版提炼确认（btn-confirm，pilot）/ generate-core
+- [x] fx/overlay.js：`overlayConfirmHTML({title, message, danger, confirmText, cancelText, extra})` 纯件（遮罩 + 标题 + 文案 + 双钮 + 就地错误槽）；ui/confirm.js：`confirmModal(opts) -> Promise<boolean | string>` 工厂（含 `[data-confirm-value]` 时解析其 value；Esc / × / 点遮罩 = 取消；重复调用时旧弹窗先关）——原写 `Promise<boolean>`，string 型为 04 平台下拉所需。
+- [x] 8 处确认全部迁移：母版提炼确认（btn-confirm，pilot）/ generate-core
   同名工程覆盖 / generate-fix 回滚 / generate-revise 回滚 / library 模块
   删除 + 平台文件移除 / reference 条目删除 / topic 条目删除；确认文案
   保持原文（弹窗渲染非 alert 拼接）
-- [ ] 原生 `alert()` 错误提示审计并迁移为 toast（deleteTopic 等）；仓库
+- [x] 原生 `alert()` 错误提示审计并迁移为 toast（deleteTopic 等）；仓库
   静态扫描原生 confirm(/alert( 零命中（新守卫测试）
-- [ ] tests/js：overlay-confirm.test.mjs（HTML 纯件：标题/文案/双钮/danger
+- [x] tests/js：overlay-confirm.test.mjs（HTML 纯件：标题/文案/双钮/danger
   类）；守卫断言 ui 目录各文件无 `confirm(` / `alert(` 裸调用
 - [ ] 冒烟：弹窗开合（Esc / 点遮罩取消 / 确认闭合）+ 母版提炼确认按钮
   点开弹窗（不真调）；全量 node --test + pytest 保持绿
-- [ ] 中文提交
+- [x] 中文提交
 
 ## 实施记录
 
@@ -57,3 +54,8 @@ btn-confirm 接线在 04 之后做防冲突）
   （title/message 重复、keydown 残留）留档 1（8 文件同构迁移属规格所致）；
   Spec 部分实现 1（守卫仓库级覆盖，已修），confirmModal boolean|string 型
   为 04 既有差异（8 处均 boolean 路径），无 creep。
+
+## 验收口径修订（2026-09-09 在途盘点）
+
+- `confirmModal` 返回 `Promise<boolean | string>`（含 `[data-confirm-value]` 时解析其 value），原写 `Promise<boolean>`；冒烟项（点遮罩取消 / 确认闭合）仍未做实，故留空。
+
