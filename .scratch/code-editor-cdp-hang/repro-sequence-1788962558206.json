@@ -1,0 +1,87 @@
+{
+  "rounds": 4,
+  "scripts": [
+    ".scratch/code-page-vscode-overhaul/smoke-04.mjs",
+    ".scratch/code-page-vscode-overhaul/smoke-05.mjs"
+  ],
+  "hangs": 1,
+  "report": [
+    {
+      "round": 1,
+      "script": "code-page-vscode-overhaul/smoke-04.mjs",
+      "ms": 3828,
+      "exit": 0,
+      "timedOut": false,
+      "hung": false,
+      "tail": "ALL PASS"
+    },
+    {
+      "round": 1,
+      "script": "code-page-vscode-overhaul/smoke-05.mjs",
+      "ms": 75014,
+      "exit": null,
+      "timedOut": true,
+      "hung": true,
+      "tail": "",
+      "forensics": {
+        "alive": false,
+        "why": "Runtime.evaluate 超时（6000ms）—— 渲染进程无响应"
+      },
+      "recovered": "重建失败"
+    },
+    {
+      "round": 2,
+      "script": "code-page-vscode-overhaul/smoke-04.mjs",
+      "ms": 380,
+      "exit": 1,
+      "timedOut": false,
+      "hung": false,
+      "tail": ""
+    },
+    {
+      "round": 2,
+      "script": "code-page-vscode-overhaul/smoke-05.mjs",
+      "ms": 381,
+      "exit": 1,
+      "timedOut": false,
+      "hung": false,
+      "tail": ""
+    },
+    {
+      "round": 3,
+      "script": "code-page-vscode-overhaul/smoke-04.mjs",
+      "ms": 367,
+      "exit": 1,
+      "timedOut": false,
+      "hung": false,
+      "tail": ""
+    },
+    {
+      "round": 3,
+      "script": "code-page-vscode-overhaul/smoke-05.mjs",
+      "ms": 369,
+      "exit": 1,
+      "timedOut": false,
+      "hung": false,
+      "tail": ""
+    },
+    {
+      "round": 4,
+      "script": "code-page-vscode-overhaul/smoke-04.mjs",
+      "ms": 377,
+      "exit": 1,
+      "timedOut": false,
+      "hung": false,
+      "tail": ""
+    },
+    {
+      "round": 4,
+      "script": "code-page-vscode-overhaul/smoke-05.mjs",
+      "ms": 363,
+      "exit": 1,
+      "timedOut": false,
+      "hung": false,
+      "tail": ""
+    }
+  ]
+}

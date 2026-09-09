@@ -1,0 +1,727 @@
+{
+  "rounds": 2,
+  "seq": [
+    ".scratch/code-page-vscode-overhaul/smoke-04.mjs",
+    ".scratch/code-page-vscode-overhaul/smoke-05.mjs"
+  ],
+  "rounds_detail": [
+    {
+      "round": 1,
+      "pre_probe": {
+        "alive": true,
+        "value": 2
+      },
+      "scripts": [
+        {
+          "script": "code-page-vscode-overhaul/smoke-04.mjs",
+          "ms": 3816,
+          "exit": 0,
+          "timedOut": false,
+          "stdout_tail": "PASS 18 / FAIL 0 | ALL PASS",
+          "stderr_tail": "",
+          "targets_after": [
+            "page:http://127.0.0.1:8000/",
+            "browser_ui:chrome://omnibox-popup.top-chrome/",
+            "browser_ui:chrome://omnibox-popup.top-chrome/omnibo"
+          ],
+          "post_probe": {
+            "alive": true,
+            "value": 2
+          }
+        },
+        {
+          "script": "code-page-vscode-overhaul/smoke-05.mjs",
+          "ms": 70010,
+          "exit": null,
+          "timedOut": true,
+          "stdout_tail": "",
+          "stderr_tail": "",
+          "targets_after": [
+            "page:http://127.0.0.1:8000/",
+            "browser_ui:chrome://omnibox-popup.top-chrome/",
+            "browser_ui:chrome://omnibox-popup.top-chrome/omnibo"
+          ],
+          "post_probe": {
+            "alive": false,
+            "why": "Runtime.evaluate 超时（5000ms）"
+          },
+          "hang": true,
+          "probe_after_20s": {
+            "alive": false,
+            "why": "Runtime.evaluate 超时（5000ms）"
+          },
+          "recovered": "已重建标签页"
+        }
+      ],
+      "events": [
+        {
+          "t": "14:02:55.115",
+          "method": "Target.targetInfoChanged",
+          "targetId": "D478963FF4B156BE38F130AA7910D14F",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:02:58.936",
+          "method": "Target.targetInfoChanged",
+          "targetId": "D478963FF4B156BE38F130AA7910D14F",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:02:58.937",
+          "method": "Target.targetInfoChanged",
+          "targetId": "D478963FF4B156BE38F130AA7910D14F",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:02:58.937",
+          "method": "Target.targetInfoChanged",
+          "targetId": "D478963FF4B156BE38F130AA7910D14F",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:02:58.937",
+          "method": "Target.targetInfoChanged",
+          "targetId": "D478963FF4B156BE38F130AA7910D14F",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:02:58.937",
+          "method": "Target.targetInfoChanged",
+          "targetId": "D478963FF4B156BE38F130AA7910D14F",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:04:08.952",
+          "method": "Target.targetInfoChanged",
+          "targetId": "D478963FF4B156BE38F130AA7910D14F",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:04:08.953",
+          "method": "Target.targetInfoChanged",
+          "targetId": "D478963FF4B156BE38F130AA7910D14F",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:04:08.953",
+          "method": "Target.targetInfoChanged",
+          "targetId": "D478963FF4B156BE38F130AA7910D14F",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:04:08.953",
+          "method": "Target.targetInfoChanged",
+          "targetId": "D478963FF4B156BE38F130AA7910D14F",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:04:13.962",
+          "method": "Target.targetInfoChanged",
+          "targetId": "D478963FF4B156BE38F130AA7910D14F",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:04:33.976",
+          "method": "Target.targetInfoChanged",
+          "targetId": "D478963FF4B156BE38F130AA7910D14F",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:04:38.989",
+          "method": "Target.targetInfoChanged",
+          "targetId": "D478963FF4B156BE38F130AA7910D14F",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:04:39.001",
+          "method": "Target.targetDestroyed",
+          "targetId": "D478963FF4B156BE38F130AA7910D14F"
+        },
+        {
+          "t": "14:04:39.007",
+          "method": "Target.targetDestroyed",
+          "targetId": "61C11934C85DC5C62AC17D78CBB8F662"
+        },
+        {
+          "t": "14:04:39.009",
+          "method": "Target.targetDestroyed",
+          "targetId": "77D7D8C4A1BF63BCCD49FF6B58051B16"
+        },
+        {
+          "t": "14:04:39.525",
+          "method": "Target.targetCreated",
+          "targetId": "053F1695FD52683E4777E6E34DEBFDAA",
+          "type": "browser_ui",
+          "url": "chrome://omnibox-popup.top-chrome/omnibox_popup_aim.html"
+        },
+        {
+          "t": "14:04:39.530",
+          "method": "Target.targetCreated",
+          "targetId": "678D73B819E9D4D8F50B9416EC85EA8B",
+          "type": "browser_ui",
+          "url": "chrome://omnibox-popup.top-chrome/"
+        },
+        {
+          "t": "14:04:39.547",
+          "method": "Target.targetCreated",
+          "targetId": "6646B2B58A621AE208691415D460E995",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:04:39.566",
+          "method": "Target.targetInfoChanged",
+          "targetId": "053F1695FD52683E4777E6E34DEBFDAA",
+          "type": "browser_ui",
+          "url": "chrome://omnibox-popup.top-chrome/omnibox_popup_aim.html"
+        },
+        {
+          "t": "14:04:39.567",
+          "method": "Target.targetInfoChanged",
+          "targetId": "678D73B819E9D4D8F50B9416EC85EA8B",
+          "type": "browser_ui",
+          "url": "chrome://omnibox-popup.top-chrome/"
+        },
+        {
+          "t": "14:04:39.580",
+          "method": "Target.targetInfoChanged",
+          "targetId": "6646B2B58A621AE208691415D460E995",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        }
+      ]
+    },
+    {
+      "round": 2,
+      "pre_probe": {
+        "alive": true,
+        "value": 2
+      },
+      "scripts": [
+        {
+          "script": "code-page-vscode-overhaul/smoke-04.mjs",
+          "ms": 3767,
+          "exit": 0,
+          "timedOut": false,
+          "stdout_tail": "PASS 18 / FAIL 0 | ALL PASS",
+          "stderr_tail": "",
+          "targets_after": [
+            "page:http://127.0.0.1:8000/",
+            "browser_ui:chrome://omnibox-popup.top-chrome/",
+            "browser_ui:chrome://omnibox-popup.top-chrome/omnibo"
+          ],
+          "post_probe": {
+            "alive": true,
+            "value": 2
+          }
+        },
+        {
+          "script": "code-page-vscode-overhaul/smoke-05.mjs",
+          "ms": 70017,
+          "exit": null,
+          "timedOut": true,
+          "stdout_tail": "",
+          "stderr_tail": "",
+          "targets_after": [
+            "page:http://127.0.0.1:8000/",
+            "browser_ui:chrome://omnibox-popup.top-chrome/",
+            "browser_ui:chrome://omnibox-popup.top-chrome/omnibo"
+          ],
+          "post_probe": {
+            "alive": false,
+            "why": "Runtime.evaluate 超时（5000ms）"
+          },
+          "hang": true,
+          "probe_after_20s": {
+            "alive": false,
+            "why": "Runtime.evaluate 超时（5000ms）"
+          },
+          "recovered": "已重建标签页"
+        }
+      ],
+      "events": [
+        {
+          "t": "14:04:41.568",
+          "method": "Target.targetInfoChanged",
+          "targetId": "6646B2B58A621AE208691415D460E995",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:04:45.339",
+          "method": "Target.targetInfoChanged",
+          "targetId": "6646B2B58A621AE208691415D460E995",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:04:45.339",
+          "method": "Target.targetInfoChanged",
+          "targetId": "6646B2B58A621AE208691415D460E995",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:04:45.339",
+          "method": "Target.targetInfoChanged",
+          "targetId": "6646B2B58A621AE208691415D460E995",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:04:45.339",
+          "method": "Target.targetInfoChanged",
+          "targetId": "6646B2B58A621AE208691415D460E995",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:04:45.340",
+          "method": "Target.targetInfoChanged",
+          "targetId": "6646B2B58A621AE208691415D460E995",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:05:55.362",
+          "method": "Target.targetInfoChanged",
+          "targetId": "6646B2B58A621AE208691415D460E995",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:05:55.362",
+          "method": "Target.targetInfoChanged",
+          "targetId": "6646B2B58A621AE208691415D460E995",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:05:55.363",
+          "method": "Target.targetInfoChanged",
+          "targetId": "6646B2B58A621AE208691415D460E995",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:05:55.363",
+          "method": "Target.targetInfoChanged",
+          "targetId": "6646B2B58A621AE208691415D460E995",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:06:00.368",
+          "method": "Target.targetInfoChanged",
+          "targetId": "6646B2B58A621AE208691415D460E995",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:06:20.375",
+          "method": "Target.targetInfoChanged",
+          "targetId": "6646B2B58A621AE208691415D460E995",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:06:25.377",
+          "method": "Target.targetInfoChanged",
+          "targetId": "6646B2B58A621AE208691415D460E995",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:06:25.388",
+          "method": "Target.targetDestroyed",
+          "targetId": "6646B2B58A621AE208691415D460E995"
+        },
+        {
+          "t": "14:06:25.394",
+          "method": "Target.targetDestroyed",
+          "targetId": "678D73B819E9D4D8F50B9416EC85EA8B"
+        },
+        {
+          "t": "14:06:25.396",
+          "method": "Target.targetDestroyed",
+          "targetId": "053F1695FD52683E4777E6E34DEBFDAA"
+        },
+        {
+          "t": "14:06:25.912",
+          "method": "Target.targetCreated",
+          "targetId": "B6D9A902B7DE87D1A8256B0DBB6DCACF",
+          "type": "browser_ui",
+          "url": "chrome://omnibox-popup.top-chrome/omnibox_popup_aim.html"
+        },
+        {
+          "t": "14:06:25.917",
+          "method": "Target.targetCreated",
+          "targetId": "A9A6DB6480D9CA6B9C790C0369A2C2CD",
+          "type": "browser_ui",
+          "url": "chrome://omnibox-popup.top-chrome/"
+        },
+        {
+          "t": "14:06:25.935",
+          "method": "Target.targetCreated",
+          "targetId": "7DE87D1F6B49E77D7F795B110C4A1CA5",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        },
+        {
+          "t": "14:06:25.955",
+          "method": "Target.targetInfoChanged",
+          "targetId": "B6D9A902B7DE87D1A8256B0DBB6DCACF",
+          "type": "browser_ui",
+          "url": "chrome://omnibox-popup.top-chrome/omnibox_popup_aim.html"
+        },
+        {
+          "t": "14:06:25.957",
+          "method": "Target.targetInfoChanged",
+          "targetId": "A9A6DB6480D9CA6B9C790C0369A2C2CD",
+          "type": "browser_ui",
+          "url": "chrome://omnibox-popup.top-chrome/"
+        },
+        {
+          "t": "14:06:25.970",
+          "method": "Target.targetInfoChanged",
+          "targetId": "7DE87D1F6B49E77D7F795B110C4A1CA5",
+          "type": "page",
+          "url": "http://127.0.0.1:8000/"
+        }
+      ]
+    }
+  ],
+  "hangs": 2,
+  "all_events": [
+    {
+      "t": "14:02:54.599",
+      "method": "Target.targetCreated",
+      "targetId": "61C11934C85DC5C62AC17D78CBB8F662",
+      "type": "browser_ui",
+      "url": "chrome://omnibox-popup.top-chrome/"
+    },
+    {
+      "t": "14:02:54.600",
+      "method": "Target.targetCreated",
+      "targetId": "77D7D8C4A1BF63BCCD49FF6B58051B16",
+      "type": "browser_ui",
+      "url": "chrome://omnibox-popup.top-chrome/omnibox_popup_aim.html"
+    },
+    {
+      "t": "14:02:54.600",
+      "method": "Target.targetCreated",
+      "targetId": "D478963FF4B156BE38F130AA7910D14F",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:02:55.115",
+      "method": "Target.targetInfoChanged",
+      "targetId": "D478963FF4B156BE38F130AA7910D14F",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:02:58.936",
+      "method": "Target.targetInfoChanged",
+      "targetId": "D478963FF4B156BE38F130AA7910D14F",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:02:58.937",
+      "method": "Target.targetInfoChanged",
+      "targetId": "D478963FF4B156BE38F130AA7910D14F",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:02:58.937",
+      "method": "Target.targetInfoChanged",
+      "targetId": "D478963FF4B156BE38F130AA7910D14F",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:02:58.937",
+      "method": "Target.targetInfoChanged",
+      "targetId": "D478963FF4B156BE38F130AA7910D14F",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:02:58.937",
+      "method": "Target.targetInfoChanged",
+      "targetId": "D478963FF4B156BE38F130AA7910D14F",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:04:08.952",
+      "method": "Target.targetInfoChanged",
+      "targetId": "D478963FF4B156BE38F130AA7910D14F",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:04:08.953",
+      "method": "Target.targetInfoChanged",
+      "targetId": "D478963FF4B156BE38F130AA7910D14F",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:04:08.953",
+      "method": "Target.targetInfoChanged",
+      "targetId": "D478963FF4B156BE38F130AA7910D14F",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:04:08.953",
+      "method": "Target.targetInfoChanged",
+      "targetId": "D478963FF4B156BE38F130AA7910D14F",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:04:13.962",
+      "method": "Target.targetInfoChanged",
+      "targetId": "D478963FF4B156BE38F130AA7910D14F",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:04:33.976",
+      "method": "Target.targetInfoChanged",
+      "targetId": "D478963FF4B156BE38F130AA7910D14F",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:04:38.989",
+      "method": "Target.targetInfoChanged",
+      "targetId": "D478963FF4B156BE38F130AA7910D14F",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:04:39.001",
+      "method": "Target.targetDestroyed",
+      "targetId": "D478963FF4B156BE38F130AA7910D14F"
+    },
+    {
+      "t": "14:04:39.007",
+      "method": "Target.targetDestroyed",
+      "targetId": "61C11934C85DC5C62AC17D78CBB8F662"
+    },
+    {
+      "t": "14:04:39.009",
+      "method": "Target.targetDestroyed",
+      "targetId": "77D7D8C4A1BF63BCCD49FF6B58051B16"
+    },
+    {
+      "t": "14:04:39.525",
+      "method": "Target.targetCreated",
+      "targetId": "053F1695FD52683E4777E6E34DEBFDAA",
+      "type": "browser_ui",
+      "url": "chrome://omnibox-popup.top-chrome/omnibox_popup_aim.html"
+    },
+    {
+      "t": "14:04:39.530",
+      "method": "Target.targetCreated",
+      "targetId": "678D73B819E9D4D8F50B9416EC85EA8B",
+      "type": "browser_ui",
+      "url": "chrome://omnibox-popup.top-chrome/"
+    },
+    {
+      "t": "14:04:39.547",
+      "method": "Target.targetCreated",
+      "targetId": "6646B2B58A621AE208691415D460E995",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:04:39.566",
+      "method": "Target.targetInfoChanged",
+      "targetId": "053F1695FD52683E4777E6E34DEBFDAA",
+      "type": "browser_ui",
+      "url": "chrome://omnibox-popup.top-chrome/omnibox_popup_aim.html"
+    },
+    {
+      "t": "14:04:39.567",
+      "method": "Target.targetInfoChanged",
+      "targetId": "678D73B819E9D4D8F50B9416EC85EA8B",
+      "type": "browser_ui",
+      "url": "chrome://omnibox-popup.top-chrome/"
+    },
+    {
+      "t": "14:04:39.580",
+      "method": "Target.targetInfoChanged",
+      "targetId": "6646B2B58A621AE208691415D460E995",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:04:41.568",
+      "method": "Target.targetInfoChanged",
+      "targetId": "6646B2B58A621AE208691415D460E995",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:04:45.339",
+      "method": "Target.targetInfoChanged",
+      "targetId": "6646B2B58A621AE208691415D460E995",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:04:45.339",
+      "method": "Target.targetInfoChanged",
+      "targetId": "6646B2B58A621AE208691415D460E995",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:04:45.339",
+      "method": "Target.targetInfoChanged",
+      "targetId": "6646B2B58A621AE208691415D460E995",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:04:45.339",
+      "method": "Target.targetInfoChanged",
+      "targetId": "6646B2B58A621AE208691415D460E995",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:04:45.340",
+      "method": "Target.targetInfoChanged",
+      "targetId": "6646B2B58A621AE208691415D460E995",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:05:55.362",
+      "method": "Target.targetInfoChanged",
+      "targetId": "6646B2B58A621AE208691415D460E995",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:05:55.362",
+      "method": "Target.targetInfoChanged",
+      "targetId": "6646B2B58A621AE208691415D460E995",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:05:55.363",
+      "method": "Target.targetInfoChanged",
+      "targetId": "6646B2B58A621AE208691415D460E995",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:05:55.363",
+      "method": "Target.targetInfoChanged",
+      "targetId": "6646B2B58A621AE208691415D460E995",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:06:00.368",
+      "method": "Target.targetInfoChanged",
+      "targetId": "6646B2B58A621AE208691415D460E995",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:06:20.375",
+      "method": "Target.targetInfoChanged",
+      "targetId": "6646B2B58A621AE208691415D460E995",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:06:25.377",
+      "method": "Target.targetInfoChanged",
+      "targetId": "6646B2B58A621AE208691415D460E995",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:06:25.388",
+      "method": "Target.targetDestroyed",
+      "targetId": "6646B2B58A621AE208691415D460E995"
+    },
+    {
+      "t": "14:06:25.394",
+      "method": "Target.targetDestroyed",
+      "targetId": "678D73B819E9D4D8F50B9416EC85EA8B"
+    },
+    {
+      "t": "14:06:25.396",
+      "method": "Target.targetDestroyed",
+      "targetId": "053F1695FD52683E4777E6E34DEBFDAA"
+    },
+    {
+      "t": "14:06:25.912",
+      "method": "Target.targetCreated",
+      "targetId": "B6D9A902B7DE87D1A8256B0DBB6DCACF",
+      "type": "browser_ui",
+      "url": "chrome://omnibox-popup.top-chrome/omnibox_popup_aim.html"
+    },
+    {
+      "t": "14:06:25.917",
+      "method": "Target.targetCreated",
+      "targetId": "A9A6DB6480D9CA6B9C790C0369A2C2CD",
+      "type": "browser_ui",
+      "url": "chrome://omnibox-popup.top-chrome/"
+    },
+    {
+      "t": "14:06:25.935",
+      "method": "Target.targetCreated",
+      "targetId": "7DE87D1F6B49E77D7F795B110C4A1CA5",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    },
+    {
+      "t": "14:06:25.955",
+      "method": "Target.targetInfoChanged",
+      "targetId": "B6D9A902B7DE87D1A8256B0DBB6DCACF",
+      "type": "browser_ui",
+      "url": "chrome://omnibox-popup.top-chrome/omnibox_popup_aim.html"
+    },
+    {
+      "t": "14:06:25.957",
+      "method": "Target.targetInfoChanged",
+      "targetId": "A9A6DB6480D9CA6B9C790C0369A2C2CD",
+      "type": "browser_ui",
+      "url": "chrome://omnibox-popup.top-chrome/"
+    },
+    {
+      "t": "14:06:25.970",
+      "method": "Target.targetInfoChanged",
+      "targetId": "7DE87D1F6B49E77D7F795B110C4A1CA5",
+      "type": "page",
+      "url": "http://127.0.0.1:8000/"
+    }
+  ]
+}
