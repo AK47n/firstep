@@ -17,6 +17,7 @@
         {
           "id": "EC01G_TX",
           "type": "uart_tx",
+          "label": "EC01G_TX",
           "default": "PB10",
           "required": true,
           "macros": [
@@ -29,6 +30,7 @@
         {
           "id": "EC01G_RX",
           "type": "uart_rx",
+          "label": "EC01G_RX",
           "default": "PB11",
           "required": true,
           "macros": [
