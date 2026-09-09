@@ -21,3 +21,9 @@
 - [ ] 既有 DOM 键（.code-hl-line / .code-gutter-line / data-code-line / .code-ta）不删不改，防止破坏既有 CDP 冒烟与跳行/当前行逻辑
 
 **补充：** 纯 CSS + 极少量 HTML 结构微调（如滚动条实现、空态容器）；改动集中在代码页内，不动生成页编辑器。
+
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

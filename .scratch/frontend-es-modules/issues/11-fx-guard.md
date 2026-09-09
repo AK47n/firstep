@@ -24,3 +24,9 @@
 - [ ] `node --test "tests/js/*.test.mjs"` 416 全绿；pytest 全绿
 - [ ] 浏览器冒烟：全部 8 个 tab 正常（生成流程走一次到骨架生成前）
 - [ ] 提交（中文信息）与 CHANGELOG 记录
+
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

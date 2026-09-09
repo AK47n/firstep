@@ -56,3 +56,9 @@
 
 - **改**：`src/contest_generator/compile_runner.py`（RunResult duration）、`src/contest_generator/fix_errors.py`（+summarize_compile_output）、`src/contest_generator/webapp.py`（/api/compile 载荷 + 新源码行接口）、`src/contest_generator/static/index.html`（横幅 + 列表交互 + 耗时）、`tests/`（编译/修复/接口相关测试文件 + 红证用例）、`.scratch/compile-experience-ui/issues/01-banner-error-list.md`（本工单）
 - **不动**：llm.py / sse.py / 编译命令与超时 / 工具链探测 / 循环状态机（FIX_MAX_ROUNDS）/ backup / rollback / 生成器 / 库数据 / 素材库
+
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

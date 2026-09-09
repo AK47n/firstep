@@ -52,3 +52,9 @@
   - c2 spec 52 三步措辞与本工单决策 3 冲突 → spec 52 已按 clarify 确认语义修正（并入三步，以工单为准），spec.md:66 同步修正。
   - c3 compact 一句话文案失实（指向不存在的「和 AI 商量」）→ **修复**：改为「贴赛题 → 生成 → 编译 → 上板；12 步向导会带你走每一步。」welcome.test.mjs 同步更新。
   - c4 首访无 key 双重复按钮（gen-banner 去设置 + 欢迎卡去配置 API key，均 focus #set-api-key）→ **接受**：spec 52/53 均要求存在、clarify 用户确认；横幅为持久兜底（欢迎卡「不再显示」关闭后仍有入口）。
+
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

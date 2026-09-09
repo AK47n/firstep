@@ -40,3 +40,9 @@
 - 2026-08-09 立项（架构评审 2026-08-09 候选 5，用户授权代决）：① 共享原语落 skeleton.py（generator 已 import skeleton，反向会环——build_module_corpus 的母版头读留在 generator，原语只做模块文件段）；② 编码策略 = errors="replace" 单源（骨架从崩变不崩 = 刻意行为变化，与门禁对齐——"同一语义两种容错"的分歧消失）；③ is_header_path 公开化（kind 的 .h 分支改走它，语义逐字）；④ verify_main_c 死代码删除（生产零调用，仅测试）；⑤ API 边界使"物理读盘一次"不可能（骨架/生成两个独立请求），单源的是读法而非读次；⑥ missing_platforms（平台条目存在性）留 generator——原语只做"有平台条目后的文件读盘"，职责边界不模糊
 - 2026-08-09 实施提示词已交付聊天（含文件边界 / 红绿步骤 / 验收 grep / worktree 命令），待新会话执行；设计已在立项 comment 敲定，执行会话按提示词即可，不再开会
 - 2026-08-10 已合 main PR #32（4cb7eeb，920 绿 + mypy 干净），Status 补勾 resolved
+
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

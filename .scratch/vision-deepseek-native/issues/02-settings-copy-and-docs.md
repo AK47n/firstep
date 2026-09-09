@@ -61,3 +61,8 @@
 
 - 「智谱/GLM/bigmodel 零命中」口径被后续工单 vision-provider-switch/01 有意反转（加回智谱预设）——保留本单「DeepSeek 默认文案与文档就位」的结论。
 
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

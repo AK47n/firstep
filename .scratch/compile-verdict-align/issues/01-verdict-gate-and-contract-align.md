@@ -57,3 +57,9 @@
 - `CHANGELOG.md` + `changelog.py`：示例 `- [HH:MM] 描述` → `- HH:MM 描述`（与真实数据 / _ITEM_RE 对齐）；CHANGELOG.md 追加本工单条目（19:32）
 - `tests/test_webapp.py` +1：`test_compile_without_ai_config_streams_done`（config=None 起 app + 假 UV4 → compile_start → done，passed=true + summary {0,0}；红证：改前该形态 400）
 - 不动：fix_errors / llm / compile_runner / sse / 生成器 / 门禁（diff 仅上述 7 文件）
+
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

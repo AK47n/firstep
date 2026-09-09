@@ -61,3 +61,9 @@ Debug -f makefile -B all` exit=0、`mspm0_project.out` 产出。
 - [ ] 真实生成 2024H → 桌面 `2024H_Auto_Car`
 - [ ] 目录内无中文路径残留（makefile 集 recipe 全 ASCII）
 - [ ] gmake 全量编译 exit=0、`.out` 存在
+
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

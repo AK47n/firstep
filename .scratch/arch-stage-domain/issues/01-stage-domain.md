@@ -44,3 +44,9 @@
 ## Comments
 
 - 2026-08-09 立项（架构评审 2026-08-09 候选 2，grilling 决策树，用户授权代决）：① 落点 = 新叶子模块 stage.py（非 master_store——暂存不是母版库 CRUD；删除测试：删 stage.py 语义弹回 HTTP 层，集中 = 值得）；② 穿越校验归 entry_store.is_unsafe_path（唯一行为变化：空段从放行变拒绝）；③ 噪音跳过 = 任意深度 .git（现状保留）+ skip_project_noise 剥首段复用（新扩展：构建产物顶层上传即跳过——5.7GB 工程不再撞 512MB 上限，与「残留不进母版」哲学一致）；④ 上限 / 文案 / 返回形状全保留；⑤ StageError 登记 errors.py 400（反射测试兜底）
+
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

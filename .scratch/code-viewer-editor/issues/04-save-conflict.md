@@ -27,3 +27,8 @@
 
 - `conflictHTML` 纯件只出双列对比，动作按钮由模态 shell（`ui/codeeditor.js`）提供——纯件保持无副作用。
 
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

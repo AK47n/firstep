@@ -27,3 +27,9 @@
 - 新守卫 tests/js/ui-cycle.test.mjs：静态解析 ui/ 目录全部 ui→ui import 边 + Kahn 拓扑判环——实现前红（seen 9/19，断言报告环成员），实现后绿；全量 node --test 445/445。
 - review-import-graph.mjs 复核：模块 import 环 =（无环）；app.js 无 ui 依赖 ✓；host import 39 行不变（只 initScoreChecklist 自 core）。
 - diag 零 EXC（pwsh-26）+ smoke 11/11（pwsh-27 在工单 23 后亦复跑 ✓）。
+
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。
