@@ -521,6 +521,10 @@ def _slugs_of_kind(kind: str) -> list[str]:
 # 依据见工单 04 Comments「05 续」表。口径仍是 `source_url` 必须指**同一件实物**的
 # 可采购 / 官方页：教程页、别的板族的同类页、不同驱动形态的页、元件级商品页、
 # B2B 批发页都不算；判据不放宽来凑数。
+#
+# 06（2026-09-09）：取源这一步需要人，本清单的人工队列落点 = 工单 06
+# （`.scratch/identity-fields/issues/06-pending-identity-sources-human.md`，
+# ready-for-human）——补齐一个 slug 就按该工单的关闭流程收尾。
 IDENTITY_BACKLOG: tuple[str, ...] = (
     "beep",
     "ir_beam",

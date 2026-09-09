@@ -20,7 +20,8 @@
 - [ ] `led`：LED 指示灯（板载 / 外接；wiki 只有教程页与 WS2812 / 数码管等不同硬件）
 - [ ] `led_beep`：LED + 蜂鸣器组合件（随 `led` / `beep` 一起解决）
 - [ ] `step_motor`：脉冲式步进电机 + 驱动板（库内实物 = DCC-100v3 闭环步进，
-      `sources/materials/2026_04_地猛星电控题配套资料/` 有说明书与发货清单但无公开采购链接；
+      `sources/materials/2026_04_地猛星电赛控制题配套资料/`（实测：`【云台】02_DCC-100v3说明书-2026-05-24.pdf`
+      与 `【云台】04_Q_2026_05_11_DCC-101v1闭环步进电机资料.zip`）有说明书与发货清单但无公开采购链接；
       wiki 命中的 `l298n` / `tb6612` 是直流驱动板，不同硬件）
 - [ ] 每补齐一个 slug：按下方「关闭流程」收尾（移出 `IDENTITY_BACKLOG`、删对应 xfail
       用例、复跑 audit 确认缺口数与清单一一对应）
@@ -30,7 +31,7 @@
 - **为什么单独开 06 而不是重开 04**：04 的交付物（待补清单 + 逐条依据 + 复跑探针）确实
   已完成，重开会混淆 `resolved` 的含义；同 feature 续号不触碰 01-05 的 resolved 语义，
   且本工单会进 `python .scratch/tracker-audit/list_open_tickets.py` 的人工队列
-  （当前该队列只有 `recommend-vision-qa/03`）。
+  （此前该队列只有 `recommend-vision-qa/03`，本工单入库后为 2 条）。
 - **缺口的三处可见性**（互为兜底，任一丢失都能被发现）：
   1. `tests/test_library_invariants.py::IDENTITY_BACKLOG`（6 slug）+ 对应 strict-xfail
      用例——数据补齐即 XPASS 判失败，**强制**你走关闭流程；
