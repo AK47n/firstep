@@ -61,3 +61,9 @@
 2. 搜索目录扫描只收 *.h **直接子文件**（glob 非递归），与 master_headers 的 rglob 递归语义不同——搜索目录实际平铺头文件；目录不存在 = 空集与旧 is_file False 同义（验收标准第 2 条即为此语义）。
 
 **结构钉**：`test_generator_module_file_segment_has_no_raw_read_text`（build_module_corpus 模块文件段无裸 read_text）未破——搜索目录扫描放在 master_headers 段之后；`test_generation_gate_table_complete_and_ordered` 六道表序未动；契约文字（ModuleFile/ModuleCorpus docstring、门禁 docstring「门禁只吃语料不碰盘」）逐字未动，修复让三处文字成真。
+
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

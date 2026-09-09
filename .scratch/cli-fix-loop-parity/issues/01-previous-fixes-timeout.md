@@ -56,3 +56,9 @@
 - 可选「注错单轮 probe 第 2 轮请求体带 previous_fixes」未做真机（分钟级 LLM 烧卡）：由契约单元测试 test_run_fix_loop_round2_payload_includes_previous_fixes 行为级覆盖（轮 2 payload previous_fixes == 轮 1 done.fixes 全等，与真机 probe 同断言面）
 
 **遗留**：首编（check_topic 初编译）超时仍沿用旧路径进修复循环（半截输出喂第 1 轮 LLM）——本工单超时停条件按设计只落在循环内重编译；如需处理可另立工单。
+
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

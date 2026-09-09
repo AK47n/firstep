@@ -39,3 +39,9 @@
 - 2026-08-09 立项（架构评审 2026-08-09 候选 7，用户授权代决）：① 模型迁 report.py（叶子模型层只 import 标准库，无环；判定素材模型归模型层 ADR 0001 先例延续）；② 环根因 = archive 反向依赖 master 的模型，迁走后切断——archive 只剩 report/master_store/参考库族/autocommit/entry_store 依赖；③ **延迟 import 保留**（关键澄清：C3 有两个动机——避环 + 防 import 链；环消后"防链"仍是硬约束：master 模块级 import archive 会经 archive → reference_library/topic_library 拉入参考库族，破坏 C3 "master 不 import 参考库族"收敛——注释从"避环"改"防链"）；④ webapp 不 import 模型（只 import 三个函数）已核实；categories.py:214/225 只是注释提及字段名（不 import）不改；⑤ 行为零变化，收益 = 模型层归位 + 依赖方向澄清 + 未来新消费者（如 archive 之外）可直接依赖 report 模型
 - 2026-08-09 实施提示词已交付聊天（文件边界 / 验收 grep / worktree 命令），待新会话执行；已核实 master.py:110-146 为 master 唯二 class（迁后 master 零 class 定义）、webapp.py:61-65 无模型 import、test_autocommit.py:32 + test_categories.py:25-32 为仅有的外部引用
 - 2026-08-10 已合 main PR #34（d6ea313），Status 补勾 resolved
+
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

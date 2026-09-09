@@ -34,3 +34,9 @@
 - 2026-08-09 立项（架构评审 2026-08-09 候选 6，用户授权代决）：评估后缩水——探索报告"映射 ×4 / 正则逐字 ×3"不实：正则逐字仅 slug ×2（reference 的 _ENTRY_ID_PATTERN 允许中文、topic 用题号文法，均非重复）；翻译差异为语义差异（master FileNotFoundError 特判 / manifest 分支合并 / topic 上下文文案），参数化 = 4 参数抽象劣于 ~10 行清晰重复，deletion test 不过（删共享助手复杂度弹回各库且更难读）→ 机制共享不做；第五库入场成本用文档解决（reference_library 模板 + 搭建清单入 CONTEXT 词条），非机制抽象；SLUG_PATTERN 单源是唯一真实小赢（键文法 = 条目库原语域，entry_store 收符合"原语不持业务形状"——文法本身是参数，共享的是"两库传同一文法"的事实）
 - 2026-08-09 实施提示词已交付聊天（文件边界 / 验收 grep / worktree 命令），待新会话执行；机制共享已裁决不做，执行会话只做 SLUG_PATTERN 单源 + CONTEXT 两句
 - 2026-08-10 已合 main PR #33（2b53181，922 绿 + mypy 干净），Status 补勾 resolved
+
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

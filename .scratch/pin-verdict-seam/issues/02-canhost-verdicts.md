@@ -12,3 +12,9 @@
 - [ ] 前端灰色渲染改读裁决数据；删除 pinIsTypeLevel / mspm0PwmAllowed / roleInstances / pinSupports / pinMissReason 的规则镜像
 - [ ] 对全库角色 × 母版路径穷举：裁决数据的 can_host 与 resolve_bindings 单绑定该 (角色, 引脚) 的成功/失败一致
 - [ ] 引脚候选高亮 / 灰显行为与迁移前一致（既有前端用例绿）
+
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

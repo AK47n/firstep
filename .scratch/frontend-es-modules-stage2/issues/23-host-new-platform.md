@@ -19,3 +19,9 @@
 - ui/master.js 新增 `export function renderNewPlatformOptions(platforms)`（loadMasters 之后，含注记）；index.html L2239 import 行追加该名；启动 IIFE L2593-2594 两行内联渲染改一行调用 `renderNewPlatformOptions(state.platforms);`。
 - 新守卫 tests/js/master-render.test.mjs（2 条：master.js 定义 + 导出；index.html 无 `$("new-platform").innerHTML`）——实现前红、实现后绿；全量 node --test 447/447。
 - smoke 11/11（8 tab 存在 + 切换 + main.c 高亮）；diag 复跑零 EXC（pwsh-26 于工单 21 后、pwsh-29 于本票后，见 25 记录）。
+
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

@@ -10,3 +10,9 @@ Status: resolved
 - [ ] 三处状态判定继续同源（stepDoneSet + genOverviewWarn），无新增状态源
 - [ ] node --test tests/js/*.test.mjs 全绿；headless 截图目检
 - [ ] 中文提交信息
+
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

@@ -17,3 +17,9 @@
 - [ ] 现有 tests/js 全绿、pytest 全量全绿、冒烟清单不回归
 
 **实现备注（评审修订后）：** 斑马纹方案撤销——生成页 / 参考库表均无斑马纹，为与全站一致并遵守 spec「不新造令牌」，行高亮沿用全局 `tbody tr:hover`；`td.slug` 限定 `.lib-table`（避免波及参考库中文标题列与母版表）；`.lib-table td:last-child` 与全局 `table td:last-child` 重复故删除。圆角 / 焦点态 / 错误态经查证由既有全局样式覆盖（`.card` 圆角、`button:focus-visible`、`.error`），不新增规则。
+
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

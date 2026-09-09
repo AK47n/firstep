@@ -15,3 +15,9 @@
 ## Comments
 
 - 2026-08-05: 工单 03 完成。默认注册表 mspm0 → CcsPatcher（NullPatcher 占位移除）。与 Keil 的结构差异已记录在 ccs.py 模块文档：.cproject 不逐文件枚举源文件，修改器只做两件事——把模块目录追加进每个 build configuration 的 buildIncludePath 选项（${PROJECT_LOC}/ 前缀），保证 modules/ 被 sourceEntry 覆盖（母版已有根条目时不新增）。母版缺 .cproject / 多个 .cproject / 非法 XML / 无 build configuration / 缺 buildIncludePath 选项时都报错拒绝生成。唯一未勾项为 CCS 真实编译验证，等待用户手工执行。
+
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

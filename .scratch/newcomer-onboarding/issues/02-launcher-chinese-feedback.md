@@ -43,3 +43,9 @@
 
 - **Standards 轴**：无硬违规。/api/health 无 docstring 属一致性观察（既有路由函数均无，不修）。判断项：bat 内探测/弹窗与 install.bat 重复——保持显式，同 01 裁定。
 - **Spec 轴**：/api/health 契约（200 + `{"app","version","ok"}`、不依赖配置）与决策 1/2 一致；弹窗实现偏离 spec 决策 3（mshta→powershell）已在实施记录与 spec 决策 49 修正；启动流程（.venv 优先→版本→依赖→三态探测→轮询→成功/失败）与决策 4 一致。
+
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

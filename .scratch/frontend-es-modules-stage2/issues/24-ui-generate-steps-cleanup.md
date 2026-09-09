@@ -18,3 +18,9 @@
 - L68-79 两监听器重构为 `bindClearDraftButton(btnId)` + 两行调用（行为逐字等价：clearDraft →「已清除」→1.5s→「清除草稿」）。
 - `genOverviewWarn(n)` → `genOverviewWarn(stepNo)`（参数 + 体内两处引用；调用点传参不变）。overviewPlanNow(doneArr) 经核语义尚可，未改。
 - 全量 node --test 447/447（含结构钉 step-done-refs 断言不涉）；smoke 11/11。
+
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

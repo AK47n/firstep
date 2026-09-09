@@ -44,3 +44,9 @@
 
 - **Standards 轴**：无硬违规（README 中文/编码、install.bat 流程与幂等、守护测试均合约定）。判断项 3 条，裁定不修：bat 内探针/弹窗逻辑与 install.bat 重复（批处理无模块系统，保持显式）；Popup 五行子例程化（带参子例程引号不可靠）；_cjk_count 与 test_repo_language.py 重复定义（孤立测试文件可接受）。
 - **Spec 轴**：R3（欢迎卡）缺失——本 spec 分三期，R3 由工单 03 补齐并已实施；README「开发者」节超出 spec（README 面向人）——已删；README 常见问题缺编译工具链（uv4_path/gmake_path）——已补；spec 决策 49 mshta 弹窗方案实施后漂移——已修正为 powershell WScript.Shell.Popup（详见工单 02 实施记录）。
+
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

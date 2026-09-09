@@ -13,3 +13,9 @@
 - [ ] 预览渲染：`parseMarkdownBlocks` + `markdownPreviewHTML`（fx/markdown.js 单源，与 code-viewer md 预览同管线；代码块语言分发/高亮沿用既有；opts.imageUrl 置空——wiki 正文无图）
 - [ ] index.html：nav 按钮「Markdown 资料」（data-tab，紧挨 pdf）+ `#tab-md` section（lib-toolbar：搜索框/排序下拉/方向钮/刷新/清空 + 批次 chips 行 + 统计条 + 表格 + 错误槽），CSS 对齐 tab-pdf 既有表格样式
 - [ ] 人工验收：`lckfb-地猛星移植手册/` 批次可见、70 篇 + 2 篇索引全在；过滤「mpu6050」命中 1 篇；预览弹窗渲染正文 + 代码块高亮；刷新/清空正常
+
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

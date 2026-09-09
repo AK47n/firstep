@@ -44,3 +44,9 @@
   3. 三条降级路径按工单逐条复验（视觉 key 置空或指向无效 key / no-topic 粘贴文本 /
      mock 回调返回 None）；
   4. 把「问题样例 / 视觉答案 / 剩余问题 / 结论」写回本工单 Comments 后翻 resolved。
+
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

@@ -64,3 +64,8 @@ masterContentHTML）
 
 - C 高亮命名 `highlightC` → 实际复用 `fx/code.js` 的 `cHighlight`（单源）；超限阈值 128KB → 1MB（code-page-vscode-overhaul/09 放宽）。冒烟项（key 文件高亮 + 剪贴板断言）仍未做实，故留空。
 
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

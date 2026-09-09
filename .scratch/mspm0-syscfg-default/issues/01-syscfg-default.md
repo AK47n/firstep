@@ -41,3 +41,9 @@
 6. 提交（数据改动，消息前缀 data:）+ 推送
 注意：勿动 src/（syscfg 是母版文件，生成流程复制即生效）；勿动 ~/.contest_generator/
 ```
+
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。

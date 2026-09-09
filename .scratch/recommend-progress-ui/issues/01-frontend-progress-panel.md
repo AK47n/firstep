@@ -60,3 +60,8 @@ CSS 类全部复用提炼面板现成的（`.distill-progress` / `.prog-bar` / `
 
 - 「jsdom 假流 39 断言」是工单原文标注的**可选**自查（当时已全绿），脚本未入库；仓库前端测试零依赖（`static/js/package.json` 仅 `{"type":"module"}`），不为此引入 jsdom。真机验收（真实 API 跑 2021F）仍待办。
 
+## 真机项集中挂账（2026-09-09 在途盘点）
+
+- 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
+  已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
+  验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。
