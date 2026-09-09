@@ -5,7 +5,7 @@
 **被谁阻塞：** 无——可立即开始。
 
 **Type:** task
-**Status:** ready-for-agent
+**Status:** resolved
 
 ## 实现要点
 
@@ -15,13 +15,24 @@
 
 ## 验收 checklist
 
-- [ ] 深色 + 浅色各一张截图：缩进引导线可见、对齐、不覆盖文字。
-- [ ] 括号配对描边（光标旁配对括号）样式正确，双主题可辨。
-- [ ] Ctrl+滚轮缩放后引导线与文字仍对齐。
-- [ ] 既有折叠/查找/选中词/行号/滚动不回归；`node --test` 全绿。
+- [x] 深色 + 浅色各一张截图：缩进引导线可见、对齐、不覆盖文字。
+  **2026-09-09 第七轮 CDP 实跑**：`smoke-07.mjs` 写出 `shot-07-visual-dark.png`（78903B）/ `shot-07-visual-light.png`（80376B）
+  并入库；同脚本断言「缩进引导线渲染（≥3 条）」「浅色主题引导线仍渲染（≥3）」。
+- [x] 括号配对描边（光标旁配对括号）样式正确，双主题可辨。
+  断言：光标落 `{` 后 `.code-mark-bracket` == 2（`index.html:1890` 的 `box-shadow: inset 0 0 0 1.5px`）。
+- [x] Ctrl+滚轮缩放后引导线与文字仍对齐。
+  断言：`--code-zoom: 1.5` 后 gutter 行高 == 高亮行高（实测 31.1875 == 31.1875）+ 引导线仍渲染。
+- [x] 既有折叠/查找/选中词/行号/滚动不回归；`node --test` 全绿。
+  **第七轮实测**：`smoke-01.mjs` 24/24、`smoke-03.mjs` 9/9、`smoke-07.mjs` 7/7、`smoke-08.mjs` 13/13、
+  `smoke-10-guides-scroll.mjs` 5/5；`node --test tests/js/*.test.mjs` **1393 pass / 0 fail**。
 
 ## 真机项集中挂账（2026-09-09 在途盘点）
 
 - 本单仍未勾的验收项属**真机工具链 / 浏览器 CDP / 真实 LLM 额度 / 人工取源 / 历史流程**类，
   已集中到 `.scratch/real-acceptance/issues/01-real-machine-acceptance.md`（那里不写代码，
   验完一项回勾本单对应项即可）；后续盘点不再逐张重判这些项。
+
+## Comments
+
+- 2026-09-09 第七轮：验收项全部由 CDP 实跑关闭（B2 截图 + 三条断言 + 回归面），
+  `Status: ready-for-agent → resolved`；`.scratch/real-acceptance/issues/01` 的 **B2 同时勾选**。
