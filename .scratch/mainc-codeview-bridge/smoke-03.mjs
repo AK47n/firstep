@@ -80,7 +80,12 @@ assert(await waitFor(`document.querySelector("#main-c").value.includes('#include
 await Eval(`(async () => { const c = await import("/js/ui/codeview.js"); c.openCodeViewer(${JSON.stringify(OTHER)}); })()`);
 assert(await waitFor(`document.querySelector("#code-dir-label").textContent.includes(${JSON.stringify(OTHER)})`), "打开其他目录");
 assert(await waitFor(`document.querySelector("#btn-code-goto-generate").classList.contains("hidden")`), "非生成上下文 → 入口隐藏");
-// 5. 只读契约：代码 tab 无编辑控件（无 textarea）
-assert(await Eval(`document.querySelectorAll("#tab-code textarea").length === 0`), "代码 tab 保持只读（无 textarea）");
+// 5. 生成页编辑框不受代码 tab 影响（原「代码 tab 只读（无 textarea）」断言已过期：
+//    工单 code-viewer-editor 起代码 tab 本身即可编辑（.code-ta）；本桥的契约是
+//    「生成页 #main-c 仍是生成侧编辑入口」，故改为断生成页编辑框仍在且未被清空。
+//    2026-09-09 第八轮按实现现状修订，见工单 code-editor-cdp-hang/01。
+assert(await Eval(`!!document.getElementById("main-c")
+  && document.getElementById("main-c").value.includes('#include "app.h"')`), "生成页编辑框独立于代码 tab（内容仍在）");
+assert(await Eval(`!!document.querySelector("#tab-code #code-viewer")`), "代码 tab 编辑器面板在位（可编辑入口）");
 ws.close();
 console.log(process.exitCode ? "\nSMOKE FAILED" : "\nSMOKE PASS");
