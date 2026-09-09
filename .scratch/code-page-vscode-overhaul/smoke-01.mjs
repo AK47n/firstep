@@ -1,7 +1,15 @@
 // 冒烟（code-page-vscode-overhaul/01 行操作与反缩进）：真实浏览器验证
 // Shift+Tab 反缩进 / Ctrl+Shift+K 删行 / Alt+↑↓ 移动行 / Shift+Alt+↑↓ 复制行 /
-// Ctrl+L 选整行；深色主题截图存档。零写库；CDP 9251 + webapp 8000。
-import { mkdirSync, writeFileSync } from "node:fs";
+// Ctrl+L 选整行；**折叠与保存回归面**（2026-09-09 在途盘点补口）：
+// Ctrl+Shift+[ 折叠 → 占位行 + gutter 箭头 + 视图文本；点箭头 / 点占位行 /
+// Ctrl+Shift+] 三种展开路径；Ctrl+S 保存 → 脏点清 + toast + 磁盘内容 = 模型。
+// 深色主题截图存档。零写库（只写脚本自建夹具 .scratch/.../sample-proj/main.c）。
+// CDP 9251 + webapp 8000。
+//
+// 注（2026-09-09 盘点补口）：注入姿势必须「派发按键前重设光标」——编辑器在
+// input 后按模型光标重渲染，直接在注入时设的选区会被覆盖成模型光标（旧脚本
+// 因此对错光标做断言，5 项假红）。
+import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,12 +18,14 @@ const CDP = 9251;
 const pageUrl = "http://127.0.0.1:8000/";
 const OUT = join(ROOT, ".scratch", "code-page-vscode-overhaul");
 const SAMPLE = join(OUT, "sample-proj");
+const MAIN_C = join(SAMPLE, "main.c");
 mkdirSync(SAMPLE, { recursive: true });
-writeFileSync(join(SAMPLE, "main.c"), [
+const ORIGINAL = [
   "void helper(void) {",
   "    int x = 0;",
   "}",
-].join("\n"));
+].join("\n");
+writeFileSync(MAIN_C, ORIGINAL);
 
 const fetchT = async (url, ms = 5000) => {
   const ctl = new AbortController();
@@ -53,6 +63,7 @@ const waitFor = async (expr, ms = 8000) => {
   }
   return false;
 };
+const settle = (ms = 250) => new Promise((r) => setTimeout(r, ms));
 
 await Eval(`window.__smokeMarker = 1; true`);
 await cdp("Page.reload", { ignoreCache: true });
@@ -76,8 +87,11 @@ await Eval(`import('/js/ui/codeview.js').then((m) => m.openCodeViewer(${JSON.str
 await waitFor(`!!document.querySelector('#code-tree [data-code-file="main.c"]')`);
 await Eval(`document.querySelector('#code-tree [data-code-file="main.c"]')?.click()`);
 await waitFor(`!!document.querySelector('#code-viewer .code-ta')`);
+// 「代码」tab 激活——折叠快捷键（Ctrl+Shift+[/]）与 Ctrl+S 都以此为门。
+await Eval(`document.querySelector('button[data-tab="code"]')?.click(); true`);
+await settle(400);
 
-// 工具：设定文本+选区（经 input 事件保持模型一致），按键，读结果
+// 工具：设定文本+选区（经 input 事件保持模型一致），按键（派发前重设光标），读结果
 const setText = (text, s, e) => Eval(`(() => {
   const ta = document.querySelector('#code-viewer .code-ta');
   ta.focus();
@@ -86,47 +100,54 @@ const setText = (text, s, e) => Eval(`(() => {
   ta.dispatchEvent(new InputEvent('input', { bubbles: true }));
   return true;
 })()`);
-const press = (opts) => Eval(`(() => {
+const press = (opts, sel) => Eval(`(() => {
   const ta = document.querySelector('#code-viewer .code-ta');
   ta.focus();
+  ${sel ? `ta.setSelectionRange(${sel[0]}, ${sel[1]});` : ""}
   ta.dispatchEvent(new KeyboardEvent('keydown', ${JSON.stringify(opts)}));
   return true;
 })()`);
 const readTa = () => Eval(`(() => {
   const ta = document.querySelector('#code-viewer .code-ta');
-  return { value: ta.value, selStart: ta.selectionStart, selEnd: ta.selectionEnd };
+  return { value: ta.value, sel: [ta.selectionStart, ta.selectionEnd] };
 })()`);
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
-// ---- Shift+Tab 多行反缩进 ----
+// ---- Shift+Tab 多行反缩进（选区覆盖整段，overhaul/01 回归修复）----
 await setText("    a\n      b\nc", 0, 14);
-await press({ key: "Tab", shiftKey: true, bubbles: true, cancelable: true });
+await press({ key: "Tab", shiftKey: true, bubbles: true, cancelable: true }, [0, 14]);
+await settle();
 let r = await readTa();
-check("Shift+Tab 多行反缩进", eq(r, { value: "a\n  b\nc", selStart: 0, selEnd: 5 }), JSON.stringify(r));
+check("Shift+Tab 多行反缩进（选区覆盖整段）",
+  eq(r, { value: "a\n  b\nc", sel: [0, 5] }), JSON.stringify(r));
 
 // ---- Ctrl+Shift+K 删行 ----
 await setText("a\nb\nc", 2, 2);
-await press({ key: "k", ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true });
+await press({ key: "k", ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }, [2, 2]);
+await settle();
 r = await readTa();
-check("Ctrl+Shift+K 删除中间行", eq(r, { value: "a\nc", selStart: 2, selEnd: 2 }), JSON.stringify(r));
+check("Ctrl+Shift+K 删除中间行", eq(r, { value: "a\nc", sel: [2, 2] }), JSON.stringify(r));
 
 // ---- Alt+↓ 移动行 ----
 await setText("a\nb\nc", 0, 0);
-await press({ key: "ArrowDown", altKey: true, bubbles: true, cancelable: true });
+await press({ key: "ArrowDown", altKey: true, bubbles: true, cancelable: true }, [0, 0]);
+await settle();
 r = await readTa();
-check("Alt+↓ 下移当前行（光标随行）", eq(r, { value: "b\na\nc", selStart: 2, selEnd: 2 }), JSON.stringify(r));
+check("Alt+↓ 下移当前行（光标随行）", eq(r, { value: "b\na\nc", sel: [2, 2] }), JSON.stringify(r));
 
 // ---- Shift+Alt+↓ 复制行 ----
 await setText("a\nb", 2, 2);
-await press({ key: "ArrowDown", altKey: true, shiftKey: true, bubbles: true, cancelable: true });
+await press({ key: "ArrowDown", altKey: true, shiftKey: true, bubbles: true, cancelable: true }, [2, 2]);
+await settle();
 r = await readTa();
-check("Shift+Alt+↓ 复制行（光标落副本）", eq(r, { value: "a\nb\nb", selStart: 4, selEnd: 4 }), JSON.stringify(r));
+check("Shift+Alt+↓ 复制行（光标落副本）", eq(r, { value: "a\nb\nb", sel: [4, 4] }), JSON.stringify(r));
 
 // ---- Ctrl+L 选整行 ----
 await setText("abc\ndef\nghi", 5, 5);
-await press({ key: "l", ctrlKey: true, bubbles: true, cancelable: true });
+await press({ key: "l", ctrlKey: true, bubbles: true, cancelable: true }, [5, 5]);
+await settle();
 r = await readTa();
-check("Ctrl+L 选整行（含行尾换行）", eq({ v: r.value, s: r.selStart, e: r.selEnd },
+check("Ctrl+L 选整行（含行尾换行）", eq({ v: r.value, s: r.sel[0], e: r.sel[1] },
   { v: "abc\ndef\nghi", s: 4, e: 8 }), JSON.stringify(r));
 
 // ---- 只读文件不响应 ----
@@ -135,9 +156,10 @@ await Eval(`(() => {
   ta.readOnly = true; return true;
 })()`);
 await setText("a\nb", 0, 0);
-await press({ key: "ArrowDown", altKey: true, bubbles: true, cancelable: true });
+await press({ key: "ArrowDown", altKey: true, bubbles: true, cancelable: true }, [0, 0]);
+await settle();
 r = await readTa();
-check("只读 textarea 行操作不生效", eq(r, { value: "a\nb", selStart: 0, selEnd: 0 }), JSON.stringify(r));
+check("只读 textarea 行操作不生效", eq(r, { value: "a\nb", sel: [0, 0] }), JSON.stringify(r));
 await Eval(`(() => { const ta = document.querySelector('#code-viewer .code-ta'); ta.readOnly = false; return true; })()`);
 
 // ---- 帮助弹窗渲染新条目 ----
@@ -149,10 +171,72 @@ check("帮助弹窗渲染行操作条目", helpOk);
 await Eval(`document.querySelector('.code-shortcuts-modal .modal-close, .code-shortcuts-modal [data-close]')?.click()
   ?? document.querySelector('.code-shortcuts-modal')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); true`);
 
+// ================= 折叠回归面（overhaul/01 验收项：既有折叠正常） =================
+const foldState = () => Eval(`(() => {
+  const box = document.getElementById('code-viewer');
+  const ta = box.querySelector('.code-ta');
+  return {
+    value: ta.value,
+    lines: box.querySelectorAll('.code-hl-line').length,
+    arrows: box.querySelectorAll('[data-fold]').length,
+    placeholders: box.querySelectorAll('[data-fold-expand]').length,
+    gutter: [...box.querySelectorAll('.code-gutter-line')].map((e) => e.textContent).join('|'),
+  };
+})()`);
+// 折叠 helper：光标落进函数体（模型偏移 20 = 第 2 行内）后按 Ctrl+Shift+[
+const foldByKey = async () => {
+  await Eval(`(() => {
+    const ta = document.querySelector('#code-viewer .code-ta');
+    ta.focus(); ta.setSelectionRange(20, 20); return true;
+  })()`);
+  await Eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: '[', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true })); true`);
+  return waitFor(`document.querySelectorAll('#code-viewer [data-fold-expand]').length > 0`, 4000);
+};
+
+await setText(ORIGINAL, 0, 0);
+await settle(400);
+let st = await foldState();
+check("未折叠基线：3 行 + 无占位行", st.lines === 3 && st.placeholders === 0, JSON.stringify(st));
+
+check("Ctrl+Shift+[ 折叠 → 占位行 + gutter 箭头 + 视图文本",
+  await foldByKey());
+st = await foldState();
+check("折叠态：可见行 2（模型 3 行 - 隐藏 2 行 + 占位 1 行）、占位文案在场",
+  st.lines === 2 && st.placeholders === 1 && st.arrows === 1
+  && st.value.includes("… 2 行") && st.gutter.startsWith("▸1|"),
+  JSON.stringify(st));
+
+await Eval(`document.querySelector('#code-viewer [data-fold]')?.click(); true`);
+check("点 gutter 箭头 → 展开（占位行消失、行号回齐）",
+  await waitFor(`document.querySelectorAll('#code-viewer [data-fold-expand]').length === 0`, 4000));
+st = await foldState();
+check("展开态：3 行 + gutter 1|2|3", st.lines === 3 && st.gutter === "1|2|3", JSON.stringify(st));
+
+await foldByKey();
+await Eval(`document.querySelector('#code-viewer [data-fold-expand]')?.click(); true`);
+check("点占位行 → 展开", await waitFor(`document.querySelectorAll('#code-viewer [data-fold-expand]').length === 0`, 4000));
+
+await foldByKey();
+await Eval(`(() => { const ta = document.querySelector('#code-viewer .code-ta'); ta.focus(); ta.setSelectionRange(0, 0); return true; })()`);
+await Eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: ']', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true })); true`);
+check("Ctrl+Shift+] → 展开", await waitFor(`document.querySelectorAll('#code-viewer [data-fold-expand]').length === 0`, 4000));
+
+// ================= 保存回归面（overhaul/01 验收项：既有保存正常） =================
+const SAVE_TEXT = "int main(void) {\n    return 0;\n}\n";
+await setText(SAVE_TEXT, 0, 0);
+await settle(400);
+check("编辑后脏点出现", await Eval(`document.querySelectorAll('.code-tab-dirty').length`) === 1);
+await Eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, cancelable: true })); true`);
+check("Ctrl+S → 脏点清除", await waitFor(`document.querySelectorAll('.code-tab-dirty').length === 0`, 8000));
+check("Ctrl+S → 成功 toast（已保存）",
+  await Eval(`(document.querySelector('.toast')?.textContent || '').includes('已保存')`));
+check("Ctrl+S → 磁盘内容 = 模型", readFileSync(MAIN_C, "utf8") === SAVE_TEXT,
+  JSON.stringify(readFileSync(MAIN_C, "utf8")));
+
 // ---- 深色主题截图 ----
 await setText("int main(void) {\n    int x = 1;\n    return x;\n}\n", 16, 16);
 await Eval(`document.documentElement.removeAttribute('data-theme')`);
-await new Promise((r) => setTimeout(r, 250));
+await settle(250);
 const box = await Eval(`(() => {
   const r = document.getElementById('code-viewer').getBoundingClientRect();
   return { x: Math.max(0, r.x), y: Math.max(0, r.y), w: r.width, h: r.height };

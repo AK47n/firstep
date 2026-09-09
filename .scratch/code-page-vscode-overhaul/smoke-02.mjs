@@ -79,13 +79,15 @@ const setText = (text, s, e) => Eval(`(() => {
   ta.dispatchEvent(new InputEvent('input', { bubbles: true }));
   return true;
 })()`);
-const pressCtrlSlash = () => Eval(`(() => {
+const pressCtrlSlash = (sel) => Eval(`(() => {
   const ta = document.querySelector('#code-viewer .code-ta');
   ta.focus();
+  ${sel ? `ta.setSelectionRange(${sel[0]}, ${sel[1]});` : ""}
   ta.dispatchEvent(new KeyboardEvent('keydown',
     { key: '/', ctrlKey: true, bubbles: true, cancelable: true }));
   return true;
 })()`);
+const settle = (ms = 250) => new Promise((r) => setTimeout(r, ms));
 const readTa = () => Eval(`(() => {
   const ta = document.querySelector('#code-viewer .code-ta');
   return { value: ta.value, selStart: ta.selectionStart, selEnd: ta.selectionEnd };
@@ -94,25 +96,30 @@ const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 // 逐行加（光标）→ 再按去（光标回原列）
 await setText("int x;", 3, 3);
-await pressCtrlSlash();
+await pressCtrlSlash([3, 3]);
+await settle();
 let r = await readTa();
 check("C 单行加注释", eq(r, { value: "// int x;", selStart: 6, selEnd: 6 }), JSON.stringify(r));
 await pressCtrlSlash();
+await settle();
 r = await readTa();
 check("C 单行去注释", eq(r, { value: "int x;", selStart: 3, selEnd: 3 }), JSON.stringify(r));
 
 // 多行逐行加（选区含行尾换行 → 扩展）
 await setText("int a;\nint b;", 0, 7);
-await pressCtrlSlash();
+await pressCtrlSlash([0, 7]);
+await settle();
 r = await readTa();
 check("C 多行逐行加注释（选区扩展为整段）", eq(r, { value: "// int a;\n// int b;", selStart: 0, selEnd: 19 }), JSON.stringify(r));
 await pressCtrlSlash();
+await settle();
 r = await readTa();
 check("C 多行去注释", eq(r, { value: "int a;\nint b;", selStart: 0, selEnd: 13 }), JSON.stringify(r));
 
 // 块注释去（精确块选区）
 await setText("/*int x;\nint y;*/", 0, 17);
-await pressCtrlSlash();
+await pressCtrlSlash([0, 17]);
+await settle();
 r = await readTa();
 check("C 块注释去（解除包围）", eq(r, { value: "int x;\nint y;", selStart: 0, selEnd: 13 }), JSON.stringify(r));
 
@@ -121,10 +128,12 @@ await Eval(`document.querySelector('#code-tree [data-code-file="app.xml"]')?.cli
 await waitFor(`!!document.querySelector('#code-viewer .code-ta')
   && (document.querySelector('#code-viewer .code-ta')?.value || '').length < 20`);
 await setText("<a>x</a>", 0, 8);
-await pressCtrlSlash();
+await pressCtrlSlash([0, 8]);
+await settle();
 r = await readTa();
 check("XML 逐行加注释", eq(r, { value: "<!-- <a>x</a> -->", selStart: 0, selEnd: 17 }), JSON.stringify(r));
 await pressCtrlSlash();
+await settle();
 r = await readTa();
 check("XML 逐行去注释", eq(r, { value: "<a>x</a>", selStart: 0, selEnd: 8 }), JSON.stringify(r));
 

@@ -1,6 +1,8 @@
 // 冒烟（code-page-vscode-overhaul/09 输入窗口化+阈值调整）：真实浏览器验证
 // 5000 行 .c 逐键输入同步耗时 < 50ms（优化前 150-220ms；含窗口缓存/零强制
 // 布局路径）、高亮阈值放宽后 5000 行仍真彩色（tok- span 存在）、窗口正确。
+// **回车 / Tab 输入路径实测**（2026-09-09 在途盘点补口：旧脚本只 dispatch 字符
+// 'x'）——两条路径各 12 次，量同步耗时 + 模型实际变更（行数 / 长度）为证。
 // CDP 9251 + webapp 8000。
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -94,6 +96,68 @@ const res = await Eval(`(() => {
 })()`);
 check("逐键输入同步 < 50ms（均值）", res.avg < 50, "avg=" + res.avg.toFixed(1) + "ms max=" + res.max.toFixed(1));
 check("逐键输入同步 < 150ms（峰值——容忍 GC/预热抖动）", res.max < 150, "max=" + res.max.toFixed(1));
+
+// ---- 回车输入路径（在途盘点补口：旧脚本只 dispatch 字符 'x'）----
+// 光标落窗口内第 1 行行尾（该行无前导空白 → 每次回车只增 1 个换行符）；量同步
+// 耗时 + 模型实际变更（行数 +12 / 长度 +12）——空转的假绿过不了。
+const enterRes = await Eval(`(async () => {
+  const m = await import('/js/ui/codeeditor.js');
+  const ta = document.querySelector('#code-viewer .code-ta');
+  ta.focus();
+  const before = m.editorViewText();
+  const nl = ta.value.indexOf('\\n');
+  const pos = nl >= 0 ? nl : ta.value.length;
+  ta.setSelectionRange(pos, pos);
+  const times = [];
+  for (let k = 0; k < 12; k++) {
+    const t0 = performance.now();
+    ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    if (k >= 2) times.push(performance.now() - t0);
+  }
+  const after = m.editorViewText();
+  return {
+    avg: times.reduce((a, b) => a + b, 0) / times.length, max: Math.max(...times),
+    dLines: after.split('\\n').length - before.split('\\n').length,
+    dLen: after.length - before.length,
+  };
+})()`);
+check("回车输入：模型行数 +12（真实落库）", enterRes.dLines === 12,
+  "dLines=" + enterRes.dLines + " dLen=" + enterRes.dLen);
+check("回车输入：模型长度 +12（无自动缩进行）", enterRes.dLen === 12, "dLen=" + enterRes.dLen);
+check("回车输入同步 < 50ms（均值）", enterRes.avg < 50,
+  "avg=" + enterRes.avg.toFixed(1) + "ms max=" + enterRes.max.toFixed(1));
+check("回车输入同步 < 150ms（峰值）", enterRes.max < 150, "max=" + enterRes.max.toFixed(1));
+
+// ---- Tab 输入路径 ----
+// 光标落窗口内第 1 行行首（Tab = 缩进当前行，每档 4 空格）；同样量耗时 + 模型变更。
+const tabRes = await Eval(`(async () => {
+  const m = await import('/js/ui/codeeditor.js');
+  const ta = document.querySelector('#code-viewer .code-ta');
+  ta.focus();
+  const before = m.editorViewText();
+  ta.setSelectionRange(0, 0);
+  const times = [];
+  for (let k = 0; k < 12; k++) {
+    const t0 = performance.now();
+    ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    if (k >= 2) times.push(performance.now() - t0);
+  }
+  const after = m.editorViewText();
+  return {
+    avg: times.reduce((a, b) => a + b, 0) / times.length, max: Math.max(...times),
+    dLines: after.split('\\n').length - before.split('\\n').length,
+    dLen: after.length - before.length,
+    firstLine: after.slice(0, 56),
+  };
+})()`);
+check("Tab 输入：模型长度 +48（12 × 4 空格缩进）", tabRes.dLen === 48, "dLen=" + tabRes.dLen);
+check("Tab 输入：行数不变（缩进不换行）", tabRes.dLines === 0, "dLines=" + tabRes.dLines);
+check("Tab 输入同步 < 50ms（均值）", tabRes.avg < 50,
+  "avg=" + tabRes.avg.toFixed(1) + "ms max=" + tabRes.max.toFixed(1));
+check("Tab 输入同步 < 150ms（峰值）", tabRes.max < 150, "max=" + tabRes.max.toFixed(1));
+
+// 输入路径后高亮/窗口仍正确
+check("回车/Tab 后仍真彩色", await Eval(`document.querySelectorAll('#code-viewer .code-hl span').length > 100`));
 
 // 窗口仍正确（行数有界）
 check("DOM 行数有界", await Eval(`document.querySelectorAll('#code-viewer .code-hl-line').length < 400`));
