@@ -71,4 +71,4 @@
 
 ### 5.5 已知遗留（CONTEXT 自记，本次复核仍在）
 
-mq4-9 描述措辞未统一；77 条目全部未上板真机验证；oled 词表方案级缺口；A 类 3 页 mspm0-only 例外。
+mq4-9 描述措辞未统一；77 条目全部未上板真机验证；oled 词表方案级缺口；A 类 3 页 mspm0-only 例外 —— ✅ **已收口（2026-09-09）**：例外成立（stm32 侧由 pid/us016 承接），不再算待办；单平台例外清单 + 逐条理由单源 = `tests/test_library_invariants.py::SINGLE_PLATFORM_REASONS`（新增单平台模块即红、承接者须真有 stm32 条目也机检）；README 原本指向的 `.scratch/materials-wiki/dkx-map.tsv` 未随仓库保存（映射轮次工作产物）→ 引用改指 `dkx-map-summary.md` + 重生成配方，三个读表脚本补缺失提示。

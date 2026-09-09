@@ -634,3 +634,78 @@ def test_js_module_kind_vocabulary_mirrors_python_enum():
         f"fx/module.js 缺单源里的模块类别字面量：{'、'.join(missing)}"
         "（身份字段展示语义按 kind 分支，词表漂移会让内部件被当成器件）"
     )
+
+
+# ---------------------------------------------------------------------------
+# 单平台模块的显式例外（backlog 5.5④ / 地阔星映射轮次）
+#
+# 模块默认应同时有 stm32 与 mspm0 条目；只登记一个平台的必须在
+# `SINGLE_PLATFORM_REASONS` 里逐条给理由——新增单平台模块即红，逼显式决定
+# （`IDENTITY_BACKLOG` 先例）。地阔星 77 页映射轮次的 3 条 A 类例外
+# （huidu / xunji / sr04）在列：同 slug 补 stm32 条目会造重复能力。
+# ---------------------------------------------------------------------------
+
+# slug: (唯一平台, 理由)
+SINGLE_PLATFORM_REASONS: dict[str, tuple[str, str]] = {
+    "huidu": ("mspm0", "A 类 wiki 页例外：stm32 侧灰度读取由 pid.gray_track 承接"),
+    "xunji": (
+        "mspm0",
+        "A 类 wiki 页例外：stm32 侧循迹核心由 pid 承接（加权质心 / line_error_calc）",
+    ),
+    "sr04": ("mspm0", "A 类 wiki 页例外：stm32 侧超声测距由 us016 承接"),
+    "imu_uart": ("mspm0", "地阔星无对应页；stm32 侧姿态由 ml_mpu6050 承接"),
+    "step_motor": ("mspm0", "地阔星无对应页；驱动绑 mspm0 母版引脚"),
+    "jy61p": ("mspm0", "地阔星无对应页（dmx 有页）"),
+    "open_mv4": ("mspm0", "地阔星无对应页（dmx 有页）"),
+    "ec01g": ("stm32", "B 类新 slug：库内无对应，拍板仅 stm32 条目"),
+    "esp01s": ("stm32", "B 类新 slug：库内无对应，拍板仅 stm32 条目"),
+    "ec11": ("stm32", "B 类新 slug：库内无对应，拍板仅 stm32 条目"),
+    "key_matrix": ("stm32", "B 类新 slug：库内无对应，拍板仅 stm32 条目"),
+    "neo_6m": ("stm32", "B 类新 slug：库内无对应，拍板仅 stm32 条目"),
+    "vl53l0x": ("stm32", "B 类新 slug：库内无对应，拍板仅 stm32 条目"),
+    "ili9341": ("stm32", "B 类新 slug：库内无对应，拍板仅 stm32 条目"),
+    "ili9488": ("stm32", "B 类新 slug：库内无对应，拍板仅 stm32 条目"),
+    "st7789_para": ("stm32", "B 类新 slug：库内无对应，拍板仅 stm32 条目"),
+}
+
+# A 类 mspm0-only 例外声明的「stm32 侧能力承接者」——README / CONTEXT 的例外说明可机检。
+MSPM0_ONLY_STM32_OWNERS: dict[str, str] = {"huidu": "pid", "xunji": "pid", "sr04": "us016"}
+
+
+def test_single_platform_modules_are_declared_exceptions():
+    """单平台模块必须在 `SINGLE_PLATFORM_REASONS` 里声明平台与理由（棘轮）。"""
+    actual = {
+        slug: sorted(m.platforms)[0]
+        for slug, m in MANIFESTS.items()
+        if len(m.platforms) == 1
+    }
+    undeclared = sorted(set(actual) - set(SINGLE_PLATFORM_REASONS))
+    assert not undeclared, f"单平台模块未声明例外（新增单平台模块需给理由）：{undeclared}"
+    stale = sorted(set(SINGLE_PLATFORM_REASONS) - set(actual))
+    assert not stale, f"例外清单里的 slug 已不是单平台，请移出：{stale}"
+    wrong = [
+        f"{slug}: 清单声明 {SINGLE_PLATFORM_REASONS[slug][0]}，manifest 实况 {platform}"
+        for slug, platform in actual.items()
+        if SINGLE_PLATFORM_REASONS[slug][0] != platform
+    ]
+    assert not wrong, "例外清单平台与 manifest 实况不一致：\n- " + "\n- ".join(wrong)
+    empty = [
+        slug for slug, (_platform, reason) in SINGLE_PLATFORM_REASONS.items() if not reason.strip()
+    ]
+    assert not empty, f"例外清单缺理由：{empty}"
+
+
+def test_mspm0_only_wiki_exceptions_name_existing_stm32_owner():
+    """3 条 A 类 mspm0-only 例外声明的 stm32 承接模块必须真实存在且有 stm32 条目。"""
+    problems: list[str] = []
+    for slug, owner in MSPM0_ONLY_STM32_OWNERS.items():
+        if slug not in SINGLE_PLATFORM_REASONS:
+            problems.append(f"{slug} 不在单平台例外清单里")
+        if owner not in MANIFESTS:
+            problems.append(f"{slug} 的 stm32 承接模块 {owner} 不在库内")
+        elif "stm32" not in MANIFESTS[owner].platforms:
+            problems.append(f"{slug} 的 stm32 承接模块 {owner} 没有 stm32 条目")
+    assert not problems, "mspm0-only 例外的 stm32 承接不成立：\n- " + "\n- ".join(problems)
+    assert len(MSPM0_ONLY_STM32_OWNERS) == 3, (
+        "README 的「3 个 A 类页面为 mspm0-only」需与本清单同步"
+    )

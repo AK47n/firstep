@@ -46,10 +46,18 @@ for node in ast.walk(tree):
 # dkx（stm32 线）slug 集 = dkx-map.tsv 的 lib_slug 列
 import csv as _csv
 
+_DKX_MAP = REPO / ".scratch" / "materials-wiki" / "dkx-map.tsv"
+if not _DKX_MAP.is_file():
+    raise SystemExit(
+        f"缺 {_DKX_MAP}（映射轮次工作产物，未随仓库保存）——先重生成：\n"
+        "  python .scratch/materials-wiki/dkx_extract.py\n"
+        "  python .scratch/materials-wiki/dkx_build_map.py\n"
+        "注意：重生成按当前 manifest 分类，A/C 与映射轮次快照不同。"
+    )
+
 DKX_MAP_ROWS = list(
     _csv.DictReader(
-        open(REPO / ".scratch" / "materials-wiki" / "dkx-map.tsv",
-             encoding="utf-8", newline=""),
+        open(_DKX_MAP, encoding="utf-8", newline=""),
         delimiter="\t",
     )
 )

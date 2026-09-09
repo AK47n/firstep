@@ -6,7 +6,16 @@ pages_dir = "sources/materials/lckfb-地阔星移植手册"
 paged_files = sorted(f for f in os.listdir(pages_dir)
                      if f.endswith(".md") and "索引" not in f)
 
-rows = list(csv.reader(open(".scratch/materials-wiki/dkx-map.tsv", encoding="utf-8"), delimiter="\t"))
+DKX_MAP = ".scratch/materials-wiki/dkx-map.tsv"
+if not os.path.isfile(DKX_MAP):
+    raise SystemExit(
+        f"缺 {DKX_MAP}（映射轮次工作产物，未随仓库保存）——先重生成：\n"
+        "  python .scratch/materials-wiki/dkx_extract.py\n"
+        "  python .scratch/materials-wiki/dkx_build_map.py\n"
+        "注意：重生成按当前 manifest 分类，A/C 与映射轮次快照不同。"
+    )
+
+rows = list(csv.reader(open(DKX_MAP, encoding="utf-8"), delimiter="\t"))
 hdr, data = rows[0], rows[1:]
 assert hdr == ["page_file","cat","wiki_slug","wiki_title","lib_slug","stm32_entry","stm32_files","action","f4_suspect","code_blocks","备注"], hdr
 assert len(data) == 77 == len(paged_files), (len(data), len(paged_files))

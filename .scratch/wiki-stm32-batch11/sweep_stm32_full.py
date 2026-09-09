@@ -59,8 +59,16 @@ def manifest(slug):
     return json.load(open(path, encoding="utf-8"))
 
 
-with open(REPO / ".scratch" / "materials-wiki" / "dkx-map.tsv",
-          encoding="utf-8", newline="") as f:
+_DKX_MAP = REPO / ".scratch" / "materials-wiki" / "dkx-map.tsv"
+if not _DKX_MAP.is_file():
+    raise SystemExit(
+        f"缺 {_DKX_MAP}（映射轮次工作产物，未随仓库保存）——先重生成：\n"
+        "  python .scratch/materials-wiki/dkx_extract.py\n"
+        "  python .scratch/materials-wiki/dkx_build_map.py\n"
+        "注意：重生成按当前 manifest 分类，A/C 与映射轮次快照不同。"
+    )
+
+with open(_DKX_MAP, encoding="utf-8", newline="") as f:
     rows = list(csv.DictReader(f, delimiter="\t"))
 assert len(rows) == 77, f"dkx-map.tsv 行数 {len(rows)} ≠ 77"
 
