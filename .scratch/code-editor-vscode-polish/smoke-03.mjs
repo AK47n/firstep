@@ -1,7 +1,7 @@
 // 冒烟（code-editor-vscode-polish/03）：标签条增强——
 // 中键关闭（活动标签不关 / 非活动关闭；脏标签仍弹确认）→ 拖拽排序
-// （dragstart/dragover/drop 合成事件 + DataTransfer）→ 激活自动
-// scrollIntoView（Element.prototype 打桩计数）。零写库；CDP 9251 + webapp 8000。
+// （mouse 事件链 mousedown/mousemove/mouseup——实现是指针拖拽的 mouse 版）
+// → 激活自动 scrollIntoView（Element.prototype 打桩计数）。零写库；CDP 9251 + webapp 8000。
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -106,22 +106,35 @@ check("中键点击活动标签 → 不关闭（剩 3 标签）", await Eval(`
   document.querySelectorAll('#code-tabs .code-tab').length === 3`));
 
 // ================= 拖拽排序：main.c 拖到 digit.c 后 =================
+// 实现是指针拖拽的 **mouse 事件**版本（mousedown 于标签 / mousemove+mouseup
+// 于 document，位移 > DRAG_THRESHOLD=5 才启动；见 ui/codeeditor.js:2856-2899）。
+// 2026-09-09 在途盘点修正：原脚本派发 DragEvent（dragstart/dragover/drop），
+// 全仓已无 dragstart 监听 → 该段断言恒真但什么都没测。
 await Eval(`(() => {
-  const dt = new DataTransfer();
-  const from = document.querySelector('#code-tabs .code-tab[data-tab-path="main.c"]');
-  const to = document.querySelector('#code-tabs .code-tab[data-tab-path="src/digit.c"]');
-  dt.setData('text/plain', 'main.c');
-  from.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
-  const rect = to.getBoundingClientRect();
-  to.dispatchEvent(new DragEvent('dragover', {
-    bubbles: true, cancelable: true, dataTransfer: dt,
-    clientX: rect.right - 1, clientY: rect.top + 4,
+  const strip = document.getElementById('code-tabs');
+  const from = strip.querySelector('.code-tab[data-tab-path="main.c"]');
+  const r = from.getBoundingClientRect();
+  from.dispatchEvent(new MouseEvent('mousedown', {
+    bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + 4,
   }));
-  to.dispatchEvent(new DragEvent('drop', {
-    bubbles: true, cancelable: true, dataTransfer: dt,
-    clientX: rect.right - 1, clientY: rect.top + 4,
+  return true;
+})()`);
+await Eval(`(() => {
+  const strip = document.getElementById('code-tabs');
+  const from = strip.querySelector('.code-tab[data-tab-path="main.c"]');
+  const digit = strip.querySelector('.code-tab[data-tab-path="src/digit.c"]');
+  const readme = strip.querySelector('.code-tab[data-tab-path="readme.md"]');
+  const r = from.getBoundingClientRect();
+  const dc = digit.getBoundingClientRect();
+  const rc = readme.getBoundingClientRect();
+  // 目标：被拖标签中心落在 digit 与 readme 中心之间 → 插到 readme 之前
+  const x = (dc.left + dc.width / 2 + rc.left + rc.width / 2) / 2;
+  document.dispatchEvent(new MouseEvent('mousemove', {
+    bubbles: true, clientX: x, clientY: r.top + 4,
   }));
-  from.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: dt }));
+  document.dispatchEvent(new MouseEvent('mouseup', {
+    bubbles: true, clientX: x, clientY: r.top + 4,
+  }));
   return true;
 })()`);
 check("拖拽排序：main.c 到 src/digit.c 之后 → 顺序 [digit, main, readme]", await waitFor(`
@@ -129,21 +142,26 @@ check("拖拽排序：main.c 到 src/digit.c 之后 → 顺序 [digit, main, rea
 
 // ================= 空白区拖放 = 追加末尾 =================
 await Eval(`(() => {
-  const dt = new DataTransfer();
   const strip = document.getElementById('code-tabs');
-  const from = document.querySelector('#code-tabs .code-tab[data-tab-path="src/digit.c"]');
-  dt.setData('text/plain', 'src/digit.c');
-  from.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
-  const rect = strip.getBoundingClientRect();
-  strip.dispatchEvent(new DragEvent('dragover', {
-    bubbles: true, cancelable: true, dataTransfer: dt,
-    clientX: rect.right - 2, clientY: rect.top + 4,
+  const from = strip.querySelector('.code-tab[data-tab-path="src/digit.c"]');
+  const r = from.getBoundingClientRect();
+  from.dispatchEvent(new MouseEvent('mousedown', {
+    bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + 4,
   }));
-  strip.dispatchEvent(new DragEvent('drop', {
-    bubbles: true, cancelable: true, dataTransfer: dt,
-    clientX: rect.right - 2, clientY: rect.top + 4,
+  return true;
+})()`);
+await Eval(`(() => {
+  const strip = document.getElementById('code-tabs');
+  const from = strip.querySelector('.code-tab[data-tab-path="src/digit.c"]');
+  const r = from.getBoundingClientRect();
+  const sr = strip.getBoundingClientRect();
+  const x = sr.right + 40;   // 越过全部兄弟中心 → atEnd
+  document.dispatchEvent(new MouseEvent('mousemove', {
+    bubbles: true, clientX: x, clientY: r.top + 4,
   }));
-  from.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: dt }));
+  document.dispatchEvent(new MouseEvent('mouseup', {
+    bubbles: true, clientX: x, clientY: r.top + 4,
+  }));
   return true;
 })()`);
 check("空白区拖放 → 追加末尾 [main, readme, digit]", await waitFor(`
@@ -151,15 +169,23 @@ check("空白区拖放 → 追加末尾 [main, readme, digit]", await waitFor(`
 
 // ================= 从关闭钮按下不启动拖动 =================
 await Eval(`(() => {
-  const dt = new DataTransfer();
   const close = document.querySelector('#code-tabs .code-tab[data-tab-path="readme.md"] .code-tab-close');
-  close.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: dt }));
+  const r = close.getBoundingClientRect();
+  close.dispatchEvent(new MouseEvent('mousedown', {
+    bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + 2,
+  }));
+  document.dispatchEvent(new MouseEvent('mousemove', {
+    bubbles: true, clientX: r.left + 120, clientY: r.top + 2,
+  }));
+  document.dispatchEvent(new MouseEvent('mouseup', {
+    bubbles: true, clientX: r.left + 120, clientY: r.top + 2,
+  }));
   return true;
 })()`);
 await new Promise((r) => setTimeout(r, 200));
-check("从关闭钮 dragstart → 无 .dragging（不启动拖动）", await Eval(`
+check("从关闭钮 mousedown → 无 .dragging（不启动拖动）", await Eval(`
   document.querySelectorAll('#code-tabs .code-tab.dragging').length === 0`));
-check("关闭钮 dragstart 后顺序不变", await Eval(`
+check("关闭钮 mousedown 后顺序不变", await Eval(`
   JSON.stringify(${tabPaths()}) === JSON.stringify(['main.c', 'readme.md', 'src/digit.c'])`));
 
 // ================= 激活自动 scrollIntoView（打桩计数） =================

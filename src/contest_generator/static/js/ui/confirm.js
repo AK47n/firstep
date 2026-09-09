@@ -6,6 +6,10 @@
 // true，但若 extra 内含 [data-confirm-value] 元素（如平台下拉），确认后
 // 解析为其 .value（调用方据此拿选择值，空值 = 取消语义）。纯件
 // overlayConfirmHTML 在 fx/overlay.js，本模块只做 DOM 接线与事件解绑。
+//
+// validate（可选，工单 code-tree-ops/02 在途盘点补口）：确认前就地校验钩子
+// validate(value) → 错误消息字符串 = **不关闭弹窗**并在错误槽显示（如文件
+// 名非法）；返回空 = 通过。避免「弹窗已关才 toast 报错、用户输入丢失」。
 import { overlayConfirmHTML } from "/js/fx/overlay.js";
 
 // 级联清理（评审 05 修正）：并发/重入时旧弹窗被直接 remove 会残留 keydown
@@ -20,6 +24,7 @@ export function confirmModal({
   confirmText,
   cancelText = "取消",
   extra = "",
+  validate = null,
 } = {}) {
   // 开发告警（工单 ux-walkthrough-02/15）：防漏传光秃秃的「确认」——动作
   // 语义（确认删除 / 执行修订…）应由调用点给出；默认值仅兜底不静默
@@ -74,9 +79,29 @@ export function confirmModal({
     overlay.querySelector(".ref-files-close").addEventListener("click", () => finish(false));
     overlay.addEventListener("click", (e) => { if (e.target === overlay) finish(false); });
     overlay.querySelector("[data-confirm-cancel]").addEventListener("click", () => finish(false));
+    // 就地校验错误槽（工单 code-tree-ops/02 补口）：校验失败只显示错误、
+    // 不关闭弹窗，用户留在原输入框改。
+    const errorBox = overlay.querySelector("[data-confirm-error]");
+    const valueEl = overlay.querySelector("[data-confirm-value]");
+    const showError = (msg) => {
+      if (!errorBox) return;
+      errorBox.textContent = msg;
+      errorBox.classList.remove("hidden");
+      if (valueEl) { valueEl.focus(); if (valueEl.select) valueEl.select(); }
+    };
+    if (valueEl && errorBox) {
+      valueEl.addEventListener("input", () => {
+        errorBox.textContent = "";
+        errorBox.classList.add("hidden");
+      });
+    }
     overlay.querySelector("[data-confirm-ok]").addEventListener("click", () => {
-      const valued = overlay.querySelector("[data-confirm-value]");
-      finish(valued ? valued.value : true);
+      const value = valueEl ? valueEl.value : true;
+      if (validate) {
+        const msg = validate(value);
+        if (msg) { showError(msg); return; }   // 不 finish：弹窗保持打开
+      }
+      finish(value);
     });
     document.addEventListener("keydown", onKey);
     document.body.appendChild(overlay);

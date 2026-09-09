@@ -660,6 +660,15 @@ def _parse_python_artifact(data: dict[str, Any]) -> PythonArtifactSpec | None:
         )
 
     if "templates" in raw:
+        # 旧形状（template/output）与新形状（templates/default）**不得并存**
+        # （工单 k230-multi-template/01 在途盘点补口）：并存时旧键会被静默忽略，
+        # 录入者以为的单模板会被多模板覆盖——大声失败优于静默丢弃。
+        legacy_keys = [key for key in ("template", "output") if key in raw]
+        if legacy_keys:
+            raise ManifestError(
+                "python_artifact 不能同时使用旧形状（template/output）与新形状"
+                f"（templates/default）——请删掉 {('、'.join(legacy_keys))}"
+            )
         templates_raw = raw["templates"]
         if not isinstance(templates_raw, list) or not templates_raw:
             raise ManifestError("python_artifact.templates 必须是非空数组")

@@ -3593,7 +3593,7 @@
         <div class="muted" style="margin-bottom: var(--space-2)">两种深化怎么选：「逐步深化」= 逐任务执行 + 步骤报告（推荐，出了问题好定位）；「直接深化」= 修订页「直接深化（快速兜底）」按钮，一次填完并编译验证（快，但无步骤报告）。</div>
         <details class="card-details">
           <summary>AI 按题面拆成有序任务清单，逐任务执行 + 自动编译验证；每步有步骤报告与上板指引。</summary>
-          <div class="card-details-body">每个任务 = 一段可独立实现的 main.c 增量。点「做这一步」执行 —— 写盘前整树备份、自动编译验证，执行后 AI 给出本步报告（做了什么 + 你要做什么，上板类任务会告诉你怎么接线/烧录）；每步有不懂的可在卡片上问 AI 澄清（可行性 / 接线 / 预期效果，采纳的结论会带进执行）、上板后可反馈修复；结果面板可直接「烧录到板子」（STM32=ST-Link / MSPM0=XDS110）；直接深化（「修订」页签的按钮）为快速兜底。</div>
+          <div class="card-details-body">每个任务 = 一段可独立实现的 main.c 增量。点「做这一步」执行 —— 改动前自动备份整个工程、自动编译验证，执行后 AI 给出本步报告（做了什么 + 你要做什么，上板类任务会告诉你怎么接线/烧录）；每步有不懂的可在卡片上问 AI 澄清（可行性 / 接线 / 预期效果，采纳的结论会带进执行）、上板后可反馈修复；结果面板可直接「烧录到板子」（STM32=ST-Link / MSPM0=XDS110）；直接深化（「修订」页签的按钮）为快速兜底。</div>
         </details>
         <div class="card-group" style="margin-top: var(--space-2)">
           <div class="card-group-title">新想法 / 发现的问题（不绑定任务卡）</div>
@@ -4265,6 +4265,7 @@
         <span id="vision-selfcheck-status" class="muted" style="flex:1"></span>
       </div>
       <div class="muted">云端识图：上传赛题 PDF 时识别嵌入的电路图 / 布局图，图片文件直接识别。视觉服务下拉一键切换 DeepSeek / 智谱预设；手动修改 base_url 或模型会自动转为「自定义」模式（自备 key）。DeepSeek 模式下 key 留空自动复用主 key（同 key 同价）；智谱模式自动沿用已保存的智谱 key。不配置 = 视觉功能关闭，其余功能不受影响。「自检」用当前填写参数真实调用一次视觉模型（含复用主 key 逻辑），通过 = 配置可用。</div>
+      <div id="vision-banner" class="banner hidden" style="margin-top: var(--space-2)">视觉通道当前未启用：识别 PDF 嵌入图 / 上传图片会跳过视觉描述（其余功能不受影响）。DeepSeek 模式可留空 key 复用主 key，配好主 key 后保存即生效。</div>
     </div>
 
     <div class="card" data-collapse-id="env-check">

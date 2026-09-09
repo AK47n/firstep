@@ -22,6 +22,10 @@ const paramsUi = src("ui/params.js");
 const paramsFx = src("fx/params.js");
 const taskFx = src("fx/task.js");
 const reviseUi = src("ui/generate-revise.js");
+const codeviewUi = src("ui/codeview.js");
+const codeeditorUi = src("ui/codeeditor.js");
+const codeeditorFx = src("fx/codeeditor.js");
+const exitGuardFx = src("fx/exit-guard.js");
 
 test("index.html：任务推进/全局商量/参数速调详情不再暴露 .contest_*.json 文件名", () => {
   assert.ok(!html.includes(".contest_ideas.json"), "草稿文件名仍出现在界面");
@@ -50,6 +54,38 @@ test("参数应用状态：「写盘」改「保存」", () => {
 test("参数失效徽章：「锚已失效」改「位置已变」", () => {
   assert.ok(!paramsFx.includes("锚已失效"));
   assert.ok(paramsFx.includes("位置已变"));
+});
+
+// 在途盘点补口（2026-09-09）：「写盘」在用户可见文案里仍残留 6 处——逐处钉住。
+// 只钉用户可见串（整文件断言会被注释里的「写盘」误伤，故按串定位）。
+test("index.html：任务卡说明不再出现「写盘」", () => {
+  assert.ok(!html.includes("写盘"));
+  assert.ok(html.includes("改动前自动备份整个工程"));
+});
+
+test("代码栏替换 toast：「保存写盘」改「保存」", () => {
+  assert.ok(!codeviewUi.includes("保存写盘"));
+  assert.ok(codeviewUi.includes("（Ctrl+S 保存）"));
+});
+
+test("保存冲突按钮：「覆盖写盘」改「覆盖保存」", () => {
+  assert.ok(!codeeditorUi.includes(">覆盖写盘<"));
+  assert.ok(codeeditorUi.includes(">覆盖保存<"));
+});
+
+test("保存冲突弹窗正文：不再出现「写盘」", () => {
+  assert.ok(!codeeditorFx.includes("写盘"));
+  assert.ok(codeeditorFx.includes("任务 / 深化保存过，或外部编辑器改过"));
+});
+
+test("任务回滚确认：不再出现「后续写盘中」", () => {
+  assert.ok(!tasksUi.includes("后续写盘中"));
+  assert.ok(tasksUi.includes("已在各自备份与后续保存中"));
+});
+
+test("目录切换确认：「先写盘保存」改「先保存文件」", () => {
+  assert.ok(!exitGuardFx.includes("写盘"));
+  assert.ok(exitGuardFx.includes("将先保存文件"));
 });
 
 test("fx/task.js：下一步提示用「第 N 步」，不再拼原始任务 id", () => {
