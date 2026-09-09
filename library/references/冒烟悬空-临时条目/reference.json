@@ -3,13 +3,13 @@
   "title": "冒烟悬空-临时条目",
   "type": "冒烟测试",
   "description": "悬空警示冒烟，脚本结束后删除",
-  "anchor_kind": "topic",
-  "anchor_value": "1999Z",
+  "anchor_kind": "none",
+  "anchor_value": "",
   "platform": "any",
   "topic_type": "",
   "files": [
     "demo.txt"
   ],
-  "file_count": 0,
-  "size_bytes": 0
+  "file_count": 2,
+  "size_bytes": 348
 }
