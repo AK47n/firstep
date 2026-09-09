@@ -75,10 +75,21 @@ const check = (name, ok, extra) => {
 await Eval(`import('/js/ui/codeview.js').then((m) => m.openCodeViewer(${JSON.stringify(SAMPLE)}))`);
 await waitFor(`!!document.querySelector('#code-tree [data-code-file="big.c"]')`);
 await Eval(`document.querySelector('#code-tree [data-code-file="big.c"]')?.click()`);
-await waitFor(`(document.querySelector('#code-viewer .code-ta')?.value.length || 0) > 100000`);
+// 就绪判据（窗口化形态）：全量模型 > 100000（tab.content）；textarea 只装窗口切片
+await waitFor(`import('/js/ui/codeeditor.js').then((m) => {
+  const t = m.getActiveTab();
+  return !!t && t.content.length > 100000;
+})`);
 
 // 阈值放宽（1MB）：5000 行 .c 仍有真彩色 token
 check("5000 行真彩色（阈值放宽生效）", await Eval(`document.querySelectorAll('#code-viewer .code-hl span').length > 100`));
+// 窗口化形态佐证：textarea 只装窗口切片（远小于全量模型）
+check("textarea 只装窗口切片（远小于模型）",
+  await Eval(`import('/js/ui/codeeditor.js').then((m) => {
+    const t = m.getActiveTab();
+    const ta = document.querySelector('#code-viewer .code-ta');
+    return !!t && ta.value.length > 0 && ta.value.length < t.content.length / 4;
+  })`));
 
 // 逐键输入同步耗时（光标文件尾；热身后取 10 次均值）
 const res = await Eval(`(() => {

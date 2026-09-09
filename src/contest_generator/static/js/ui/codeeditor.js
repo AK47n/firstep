@@ -65,6 +65,7 @@ import {
   codeFoldModelToView,
   codeFoldMapEdit,
   codeFoldGutterLines,
+  codeFoldModelGutterLines,
   codeFoldMerge,
 } from "/js/fx/code-fold.js";  // 代码折叠纯件（工单 code-editor-vscode-polish/07；08 行号窗口化）
 import { confirmModal } from "/js/ui/confirm.js";
@@ -320,7 +321,12 @@ let editorFind = { query: "", ranges: [], index: 0 };
 // 空白变化）时折叠清单与标记集不变，跳过全量重算（5000 行逐键 GC/扫描主
 // 热点）；任何结构变更/状态变化（查找/词/括号/错误/换 tab）置 false。
 let markClean = false;
-let marksCache = { content: null, marks: [] };   // 模型级标记缓存（窗口过滤每次切片）
+// marksCache：模型级标记缓存（窗口过滤每次切片）。**缓存键 = (content, 查找
+// 查询)**——查找命中/当前命中是「查询态相关」标记，随 query 变化而变；只按
+// 内容引用命中的旧实现会在「内容变更未经 marksPatch（如直接写 textarea 的
+// 输入路径/外部赋值）→ 清空查询」时把带旧命中段的缓存整体复用，命中高亮清
+// 不掉（2026-09-09 第七轮 CDP 实测：Esc 清空后 .code-mark-hit 仍在）。
+let marksCache = { content: null, findQuery: "", marks: [] };
 
 // currentMarks(errLines?)：当前应渲染的标记清单（缩进引导线 + 括号彩虹 + 查找
 // 命中 + 当前命中 + 选中词 + 括号配对 + 编译错误行；07 引导线按模型文本逐行
@@ -829,9 +835,15 @@ function winLineHeight() {
 function winBuild(viewText, lang) {
   const lines = viewText.split("\n");
   const hl = new Array(lines.length).fill(null);
+  // gutter 来源：折叠视图（占位行 + ▸/▾）→ 折叠 gutter；**未折叠态但存在折叠
+  // 区** → 平铺行号 + 开行 ▾（工单 code-fold-arrow/01：鼠标折叠入口——此前未
+  // 折叠态走纯平铺行号，可折叠行没有任何箭头）；无折叠区 → 纯平铺行号
+  // （零变化，避免每次 build 白建描述数组）。
   const gutter = viewModel
     ? codeFoldGutterLines(viewModel.lines)
-    : lines.map((_, i) => codeGutterLineHTML(i + 1));
+    : (folds.length
+      ? codeFoldGutterLines(codeFoldModelGutterLines(lines, folds))
+      : lines.map((_, i) => codeGutterLineHTML(i + 1)));
   if (gutter.length !== lines.length) {
     // 自愈：gutter 来源行数 ≠ 当前内容行数（旧折叠视图态残留/跨文件混合）——
     // 补齐成平铺行号（不替换已有折叠箭头行，只补缺），行号与高亮恢复 1:1。
@@ -1254,7 +1266,9 @@ function winRenderMarks() {
   // 工单 11：纯字符编辑（markClean）且非折叠态 → 模型级标记缓存直接复用
   //（currentMarks 全量重算 = 缩进引导线 + 括号深度扫描，逐键热点之一）。
   let marks;
-  if (!viewModel && marksCache.content === viewText) {
+  // 缓存复用前提：内容引用一致 **且** 查找查询一致（查找段是查询态相关标记，
+  // 见 marksCache 注释——否则清空查询后旧命中段会被复用回来）。
+  if (!viewModel && marksCache.content === viewText && marksCache.findQuery === editorFind.query) {
     // 工单 code-editor-opt/02：静态层缓存（引导线/彩虹）已按内容引用增量修补
     // → 无论 markClean 与否都复用（词/查找/错误等状态标记独立于缓存、随状态
     // 追加）；markClean 仅决定行级修补是否可用（其渲染含括号对两段）。
@@ -1290,7 +1304,7 @@ function winRenderMarks() {
     marks = marksForView(errLines);
   } else {
     marks = currentMarks(errLines);
-    marksCache = { content: viewText, marks };
+    marksCache = { content: viewText, findQuery: editorFind.query, marks };
   }
   const lines = (winCache && winCache.lines) || viewText.split("\n");
   const windowText = lines.slice(r.start, r.end).join("\n");
@@ -1344,10 +1358,19 @@ function winApplySize() {
   const box = paneBox();
   const edit = box && box.querySelector(".code-edit");
   if (!edit || !winCache) return;
-  if (!winSize || winSize.lineCount !== winCache.lineCount
-    || winSize.lineH !== winLineH) {
+  // 行高变化（缩放/字体）= 字体度量失效 → 宽度必须重测；行数变化（换行增删）
+  // 只改高度，**宽度缓存必须保留**——否则每次回车都重置 cols=-1 → 重新
+  // 走下方探针测量，而探针 span 的 getBoundingClientRect 在「刚写过
+  // .code-edit 全量高度」之后会强制整树深布局（5000 行实测 ≈50ms/次，
+  // 2026-09-09 第七轮 CDP 剖析定位）。
+  const lineHChanged = !!winSize && winSize.lineH !== winLineH;
+  if (!winSize || winSize.lineCount !== winCache.lineCount || lineHChanged) {
     edit.style.height = Math.ceil(16 + winCache.lineCount * winLineH) + "px";
-    winSize = { lineCount: winCache.lineCount, lineH: winLineH, cols: -1, chW: 8 };
+    winSize = {
+      lineCount: winCache.lineCount, lineH: winLineH,
+      cols: lineHChanged ? -1 : (winSize ? winSize.cols : -1),
+      chW: lineHChanged ? 8 : (winSize ? winSize.chW : 8),
+    };
   }
   if (winSize.cols < 0) {
     // 首次：探测最长行实测宽（工单 code-editor-opt/06：测量元素脱离文档流
@@ -1472,15 +1495,17 @@ function renderPane() {
       taValue: "",
     })
     + '<span class="code-window-probe" aria-hidden="true"></span>';
+  // 折叠区先算（工单 11 后补：无结构输入前 folds=[] 会导致 Ctrl+Shift+[/]
+  // 与折叠箭头不可用；渲染层不需要，快捷键/箭头语义需要）。**必须在 winBuild
+  // 之前**——code-fold-arrow/01 后未折叠态 gutter 也要按 folds 标开行 ▾，
+  // 否则打开文件时首屏无箭头（编辑一次才出现）。
+  if (!viewModel) folds = codeFoldRanges(tab.content, tab.lang);
   winBuild(src, tab.lang);
   winReadView();
   winApplySize();
   winRender();
   taWinInfo = null;      // 重建后旧窗口对象失效（winCache 引用已换）
   taWindowApply(0);      // 打开/切换：窗口 [0,*) + 光标文档头
-  // 打开/切换即算折叠区（工单 11 后补：无结构输入前 folds=[] 会导致
-  // Ctrl+Shift+[/] 与折叠箭头不可用；渲染层不需要，快捷键/箭头语义需要）
-  if (!viewModel) folds = codeFoldRanges(tab.content, tab.lang);
   if (tab.readonly) renderReadonlyNote(box);
   refreshMarkSetters();   // 选中词/括号标记统一兜底（activateTab/applySavedState/applyDiskState/closeTab/remap 全经本函数，评审整改 05/06）
 }
@@ -2274,7 +2299,7 @@ function applyCachePatches(oldText, newText, span) {
     && indentGuideCache.content === oldText) {
     const patched = marksPatch(marksCache.marks, oldText, newText, span);
     const parts = marksPartition(patched);
-    marksCache = { content: newText, marks: parts.all };
+    marksCache = { content: newText, findQuery: marksCache.findQuery, marks: parts.all };
     bracketRainbowCache = { content: newText, marks: parts.rainbow };
     indentGuideCache = { content: newText, marks: parts.guides };
   } else {
