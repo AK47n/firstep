@@ -98,6 +98,10 @@ await waitFor(`!!document.querySelector('#code-tree [data-code-file="a.c"]')`);
 await openFile("a.c");
 await openFile("b.c");
 await waitFor(`document.querySelectorAll('#code-tabs .code-tab').length === 2`);
+// 等 b.c 真的成为活动标签（openEditorFile 是 async，两次点击并发时旧请求晚到
+// 不再抢活动标签——但脚本仍须等到「用户视角已落在 b.c」再改内容，否则会改到 a.c。
+// 2026-09-09 第八轮实测：缺此等待时场景 2 偶发 FAIL，见工单 code-editor-cdp-hang/01）
+await waitFor(`document.querySelector('#code-tabs .code-tab.on')?.dataset.tabPath === "b.c"`);
 check("0 两标签就位", await tabCount() === 2);
 
 // ---- 场景 1：Ctrl+W 关脏标签 → 确认（取消保留）----
@@ -173,6 +177,3 @@ await Eval(`document.querySelector('.code-shortcuts-modal [data-close], .code-sh
 
 console.log(`\n${passed} PASS / ${failed} FAIL`);
 process.exit(failed ? 1 : 0);
-
-(End of file - total 175 lines)
-</content>

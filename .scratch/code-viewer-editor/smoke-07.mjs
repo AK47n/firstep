@@ -90,10 +90,22 @@ check("打开 main.c（未编辑）→ .code-file-path 折叠", await waitFor(`
   })()`));
 check("折叠后代码区紧贴标签条（无 30px 空隙）", await Eval(`
   (() => {
+    // 注（2026-09-09 第八轮）：标签条与代码区之间现在是**面包屑**
+    // （code-page-vscode-overhaul/05 新增，有活动标签时正常显示，约 28px）；
+    // 本项要测的是「空态信息条不占位」——量最后一个可见中间元素底边到代码区
+    // 顶边的剩余空隙（信息条已 display:none，故空隙应≈0）。
     const tabs = document.getElementById('code-tabs');
     const viewer = document.getElementById('code-viewer');
-    const gap = viewer.getBoundingClientRect().top - tabs.getBoundingClientRect().bottom;
-    return gap < 4;
+    let anchor = tabs.getBoundingClientRect().bottom;
+    let el = tabs && tabs.nextElementSibling;
+    while (el && el !== viewer) {
+      const r = el.getBoundingClientRect();
+      if (r.height > 0) anchor = Math.max(anchor, r.bottom);
+      el = el.nextElementSibling;
+    }
+    const p = document.querySelector('.code-file-path');
+    const hidden = !!p && getComputedStyle(p).display === 'none';
+    return hidden && (viewer.getBoundingClientRect().top - anchor) < 4;
   })()`));
 
 // ===== 编辑 → 脏 → 保存按钮出现 → 信息条出现 =====

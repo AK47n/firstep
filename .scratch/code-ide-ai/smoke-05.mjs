@@ -153,8 +153,22 @@ check("按钮位置非零（选区末行右侧）", await Eval(`
   (() => { const b = document.querySelector('.code-ai-selection-btn');
     return parseFloat(b.style.left) > 0 && parseFloat(b.style.top) > 0; })()`));
 
-// 点击按钮 → 引用插入输入框 + 面板聚焦
+// 点击按钮 → 动作菜单（工单 code-editor-refine/07：解释 / 加中文注释 / 重构 / 问 AI）
+// 注（2026-09-09 第八轮）：按钮行为由「直接插引用」升级为「开动作菜单」，原断言
+// 「点击后输入框出现引用」已过期——改为先断菜单四项，再点「问 AI」（= 原插引用行为）。
 await Eval(`document.querySelector('.code-ai-selection-btn').click()`);
+check("浮动按钮点击 → 动作菜单四项（解释/加中文注释/重构/问 AI）", await waitFor(`
+  (() => { const m = document.querySelector('.code-ctx-menu');
+    if (!m) return false;
+    const labels = Array.from(m.querySelectorAll('.code-ctx-item')).map((b) => b.textContent.trim());
+    return labels.length === 4 && labels[0] === '解释' && labels[1] === '加中文注释'
+      && labels[2] === '重构' && labels[3] === '问 AI'; })()`));
+await Eval(`(() => {
+  const items = Array.from(document.querySelectorAll('.code-ctx-menu .code-ctx-item'));
+  const ask = items.find((b) => b.textContent.trim() === '问 AI');
+  ask?.click();
+  return true;
+})()`);
 check("引用插入输入框（契约格式）", await waitFor(`
   (() => { const v = document.getElementById('code-ai-chat-input').value;
     const fence = String.fromCharCode(96).repeat(3);
