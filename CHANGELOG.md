@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=889d5fe5e8ad7962e5e39106003116dfe715c360 -->
+<!-- changelog-auto: last-commit=3bee40609528fc5a6b955fa4e3f11910862d9439 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -27,6 +27,7 @@
 - 22:59 修复：代码编辑器两处真缺陷（编译错误标记残留 + 打开文件竞态）
 - 22:59 工具：CDP 冒烟共用 harness + 批跑器（挂死根因收口，工单 code-editor-cdp-hang/01）
 - 22:59 修复：ec01g 模块 source_url 占位符（库数据，非本轮引入）+ 在途盘点第八轮段
+- 22:59 冒烟产物：母版详情/树截图入库（real-acceptance B12 产物缺口）
 
 ## 2026-09-08
 - 12:10 工单：wiki-stm32-batch4/05 vl53l0x ToF 激光测距（B 类新 slug——仅 stm32 条目）
