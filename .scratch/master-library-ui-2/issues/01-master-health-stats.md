@@ -13,26 +13,26 @@
 
 ## 验收标准
 
-- [ ] master_store 域函数：`master_health(masters_dir, platform)` 返回
+- [x] master_store 域函数：`master_health(masters_dir, platform)` 返回
   MasterHealth（ok / missing_key_files / config_file_ok / artifact_dirs）；
   `master_stats(masters_dir, platform)` 返回 MasterStats
   （total_size_bytes / file_count / big_files Top 10 >256KB）；平台
   不存在 → 与既有 get_master 同文案 MasterError；体积/文件数统计走
   统一噪音跳过（构建产物目录不计入，与浏览口径一致）
-- [ ] GET /api/masters 每条响应带 `health` / `stats`（既有 platform_label /
+- [x] GET /api/masters 每条响应带 `health` / `stats`（既有 platform_label /
   key_files 字段不动，既有断言不破）
-- [ ] fx 纯函数 `masterHealthBadgeHTML(h)`（✓/⚠ + title 明细文本）与
+- [x] fx 纯函数 `masterHealthBadgeHTML(h)`（✓/⚠ + title 明细文本）与
   `masterStatsHTML(s)`（总大小 / 文件数 / 大文件清单，字节 → 可读单位），
   表格行加健康徽章列、详情弹窗元数据段加统计行
-- [ ] pytest：test_master_store.py（health/stats 用例：正常 / 关键文件缺失
+- [x] pytest：test_master_store.py（health/stats 用例：正常 / 关键文件缺失
   / 构建产物残留 / 平台不存在；体积与 big_files 数值断言）+ test_webapp.py
   （列表 health/stats 字段形状，tmp 母版注入不碰真实库）
-- [ ] tests/js：master-ext-browser.test.mjs（健康徽章 / 统计行渲染、
+- [x] tests/js：master-ext-browser.test.mjs（健康徽章 / 统计行渲染、
   缺失与残留文案）
-- [ ] 既有全量回归：pytest 全量 + node --test 全量保持绿；真实库冒烟：
+- [x] 既有全量回归：pytest 全量 + node --test 全量保持绿；真实库冒烟：
   stm32 / mspm0 两条母版 health 实况正确（mspm0 无 artifact_dirs、
   stm32 关键文件 4 条全存在）
-- [ ] 中文提交
+- [x] 中文提交
 
 ## 实施记录
 
@@ -61,3 +61,8 @@
   3 项（已修）+ 观察 2 项（fx-guard 观察项经评估不修：新名从未进
   index.html，不触发双源回退）；Spec 无缺口（仅徽章文案「需关注」→
   「有缺失或残留」对齐 spec，已修）。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

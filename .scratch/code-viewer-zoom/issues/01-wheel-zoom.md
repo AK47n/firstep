@@ -14,26 +14,26 @@
 pytest 2989 passed（后端零改动）。双轴评审整改（--code-font-size 收口、
 spec 归一、文件名 wheel）均已落地，见下方「评审整改」节。
 
-- [ ] `.code-gutter-line` 与 `.code-pre` 字体改经 `--code-font-size`
+- [x] `.code-gutter-line` 与 `.code-pre` 字体改经 `--code-font-size`
        （= `calc(13px * var(--code-zoom, 1))`，挂 `.code-view`）；新增
        `.code-zoom-badge`（右上浮层、pointer-events:none、既有 token，
        挂 `.code-pane-main`——不随 `.code-view` 滚动）。
-- [ ] ui/codeview.js：`applyCodeZoom(pct)` 单一路径（clamp → 写
+- [x] ui/codeview.js：`applyCodeZoom(pct)` 单一路径（clamp → 写
        `--code-zoom` → 持久化 `firstep.codeViewZoom` → badge 显示 pct% +
        .show → 1.2s 后移除）；`currentCodeZoomPct()` 反算当前档；init 按
        `parseZoomStored` 恢复。
-- [ ] wheel 监听（`.code-view`，passive:false）：仅 `ctrlKey || metaKey`
+- [x] wheel 监听（`.code-view`，passive:false）：仅 `ctrlKey || metaKey`
        时 `preventDefault()` + 缩放（上滚 +10 / 下滚 -10）；累积器
        |Δ| ≥ 40 才触发一步（高 DPI/触控板多事件兼容）；无 Ctrl 滚动不受影响。
-- [ ] 纯件复用 fx/code.js `codeZoomClamp` / `parseZoomStored`（80–200 /
+- [x] 纯件复用 fx/code.js `codeZoomClamp` / `parseZoomStored`（80–200 /
        NaN→100），**不新增** fx 导出；code-zoom.test.mjs 既有单测覆盖；
        fx-guard 不登记新名。
-- [ ] 缩放跟会话不跟文件：`openCodeFile` 重渲染 innerHTML 后容器
+- [x] 缩放跟会话不跟文件：`openCodeFile` 重渲染 innerHTML 后容器
        `--code-zoom` inline 保持（不重置）。
-- [ ] CDP 冒烟扩展：初始 100%、Ctrl+滚轮放大 → 变量 1.1 + gutter/pre
+- [x] CDP 冒烟扩展：初始 100%、Ctrl+滚轮放大 → 变量 1.1 + gutter/pre
        font-size 同步（相等且 ≠13px）、连缩 15 档 clamp 到 80%（badge 80%）、
        localStorage 同值、reload 恢复；既有冒烟全绿。
-- [ ] tests/js 全量绿 + pytest 全量绿（后端零改动）。
+- [x] tests/js 全量绿 + pytest 全量绿（后端零改动）。
 
 ## 评审整改（双轴，已落地）
 
@@ -58,3 +58,8 @@ spec 归一、文件名 wheel）均已落地，见下方「评审整改」节。
   刻意保守防高 DPI 单档连跳）。其余实现（范围/步进/键名/1.2s 淡出/单源复用/
   零新导出）与 spec 全对齐；范围蔓延仅良性（aria-hidden、累积器常量化、
   dispatchEvent 返回 false 断言、冒烟收尾回 100%）。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

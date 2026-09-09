@@ -10,8 +10,13 @@
 
 **验收：** 全部 ✓（`build_topic_framework_info` 装配（references ∪ manual_references、平台过滤 platform_matches、保序首个、降级）+ `POST /api/skeleton` 返回体带 `topic_framework` + `GET /api/references/topic-types` 端点；前端参考库表格「题型」列 + 编辑弹窗/录入表单「题型」下拉 + 生成页步骤 8「题型框架已注入」提示行（`frameworkNoteHTML` 入 fx/generate.js）；JS 492 全绿 + 后台 webapp 集成测试 4 条 + E2E 实跑全绿）。
 
-- [ ] `/api/skeleton` 装配 framework（保序取首个平台匹配 + topic_type 非空；`build_topic_framework` None = 降级 injected false）+ 透传 + 返回体带 `topic_framework`（null 时 `{"injected": false}`）
-- [ ] GET /api/references 响应附 `topic_types`（词表；单源 dropdown+校验同源）
-- [ ] 参考库表格「题型」列（topic_type 空 = "—"）+ 编辑弹窗「题型」下拉（含 "（未标记）" 项）+ 新增表单同款下拉；PUT / POST payload 带 topic_type
-- [ ] 生成页步骤 8：骨架结果面板「题型框架已注入」提示行（纯函数 `frameworkNoteHTML(data)` 入 fx，DOM 胶水入 ui/generate-mainc.js）
-- [ ] 测试：/api/skeleton 假 LLM 命中框架条目（21F → injected true + source 断言）/ 无标记条目 → false；前后端纯函数（题型下拉 / 列渲染 / 提示行）；fx-guard 登记新纯函数
+- [x] `/api/skeleton` 装配 framework（保序取首个平台匹配 + topic_type 非空；`build_topic_framework` None = 降级 injected false）+ 透传 + 返回体带 `topic_framework`（null 时 `{"injected": false}`）
+- [x] GET /api/references 响应附 `topic_types`（词表；单源 dropdown+校验同源）
+- [x] 参考库表格「题型」列（topic_type 空 = "—"）+ 编辑弹窗「题型」下拉（含 "（未标记）" 项）+ 新增表单同款下拉；PUT / POST payload 带 topic_type
+- [x] 生成页步骤 8：骨架结果面板「题型框架已注入」提示行（纯函数 `frameworkNoteHTML(data)` 入 fx，DOM 胶水入 ui/generate-mainc.js）
+- [x] 测试：/api/skeleton 假 LLM 命中框架条目（21F → injected true + source 断言）/ 无标记条目 → false；前后端纯函数（题型下拉 / 列渲染 / 提示行）；fx-guard 登记新纯函数
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

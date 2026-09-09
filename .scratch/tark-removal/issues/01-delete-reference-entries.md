@@ -7,10 +7,10 @@
 
 **状态：** resolved
 
-- [ ] 删除 6 条目：塔克R3-DB20-PID-位置控制 / PID-速度控制 / 直流电机调速 / 编码器数据采集 /
+- [x] 删除 6 条目：塔克R3-DB20-PID-位置控制 / PID-速度控制 / 直流电机调速 / 编码器数据采集 /
       舵机角度控制 / 编码器电机小车控制源码
-- [ ] 删除后 `list_references` 无塔克（直接验证 + 真库测试翻转见 04）
-- [ ] 触发一次生成冒烟（stm32）：确认参考清单注入段无塔克条目
+- [x] 删除后 `list_references` 无塔克（直接验证 + 真库测试翻转见 04）
+- [x] 触发一次生成冒烟（stm32）：确认参考清单注入段无塔克条目
 
 ## Comments
 
@@ -31,3 +31,8 @@
   注入源 = `associated_references`（只从参考库取），库内无塔克 → 注入段不可能有塔克；
   另有搜索面零命中断言 `tests/test_reference_library.py:2242
   test_tarkbot_entries_absent_from_web_facing_search` ✓。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

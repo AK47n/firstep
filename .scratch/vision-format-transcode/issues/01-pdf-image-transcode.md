@@ -5,12 +5,12 @@
 **What to build:** `pdf_image_notes` 对 DeepSeek 不支持的嵌入图格式（BMP / JPEG2000 / 未知后缀）在发送前用 Pillow 转 PNG，替换 vision-deepseek-native/01 的「BMP 发送前跳过」行为；`pyproject.toml` 加 `pillow>=11`；PIL lazy import + 全异常兜底（未装 pillow 老环境退化为跳过，不崩启动）。spec：`.scratch/vision-format-transcode/spec.md`（用户已确认根治方案）。
 
 **Definition of done:**
-- [ ] 红证先行：改 BMP 测试（跳过→转码发送）+ 新增 JPEG2000 转码测试 + 新增转码失败降级测试 → 前两个跑红
-- [ ] pyproject.toml dependencies 加 pillow
-- [ ] extraction.py 新增 `_transcode_to_png(data) -> bytes | None`（lazy import PIL，异常 → None）
-- [ ] pdf_image_notes 接线：后缀 ∉ {.jpg,.jpeg,.png,.gif,.webp} → 转码成功用 PNG 字节 + image/png 发送，失败 skipped；mime 与相关注释同步更新
-- [ ] 全量 pytest（2123+ 绿）+ `mypy src` 干净
-- [ ] code-review 双轴评审通过；Comments 写证据；Status 改 resolved
+- [x] 红证先行：改 BMP 测试（跳过→转码发送）+ 新增 JPEG2000 转码测试 + 新增转码失败降级测试 → 前两个跑红
+- [x] pyproject.toml dependencies 加 pillow
+- [x] extraction.py 新增 `_transcode_to_png(data) -> bytes | None`（lazy import PIL，异常 → None）
+- [x] pdf_image_notes 接线：后缀 ∉ {.jpg,.jpeg,.png,.gif,.webp} → 转码成功用 PNG 字节 + image/png 发送，失败 skipped；mime 与相关注释同步更新
+- [x] 全量 pytest（2123+ 绿）+ `mypy src` 干净
+- [x] code-review 双轴评审通过；Comments 写证据；Status 改 resolved
 
 ## 背景
 
@@ -62,3 +62,8 @@
 ### 最终回归
 
 - 评审落实后：`tests/test_extraction.py` 31 passed（parametrize 2 用例 + 降级 + 全跳过边界）；`mypy src` 57 文件干净；全量 pytest（待收尾确认）
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

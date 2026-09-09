@@ -8,11 +8,16 @@
 
 ## 验收标准
 
-- [ ] spec.md:92 表项改为 `ui/generate-recommend.js`（可加一句「工单 12 重指向：cut 方案复核后非 generate-steps」注记）
-- [ ] 复核该表其余表项（90-95 行）与实现一致：group-cards / recommend-telemetry → generate-recommend ✓；score-points-format / btn-icons / price-reference-clear / generate-overwrite 等核对后不动的项无需改动
-- [ ] 纯文档零代码改动；git diff 仅 spec.md 一行
+- [x] spec.md:92 表项改为 `ui/generate-recommend.js`（可加一句「工单 12 重指向：cut 方案复核后非 generate-steps」注记）
+- [x] 复核该表其余表项（90-95 行）与实现一致：group-cards / recommend-telemetry → generate-recommend ✓；score-points-format / btn-icons / price-reference-clear / generate-overwrite 等核对后不动的项无需改动
+- [x] 纯文档零代码改动；git diff 仅 spec.md 一行
 
 ## 实施记录
 
 - spec.md:92 表项已改「ui/generate-recommend.js（工单 12 重指向：cut 方案复核后非 generate-steps）」；其余表项（group-cards / score-points-format / recommend-telemetry / btn-icons / price-reference-clear / test_generate_check_contract）核对与实现一致，未动。
 - git diff 仅 spec.md 一行（连同 21-25 工单文件一并提交）。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

@@ -17,10 +17,10 @@
 
 **状态：** resolved
 
-- [ ] 验收 1：打开过的非 main.c 文件 external 修改 → 面板展开行级 diff 区
+- [x] 验收 1：打开过的非 main.c 文件 external 修改 → 面板展开行级 diff 区
   （stats+hunks/TODO 标题照常）；未打开 → 无行级区。
-- [ ] 验收 2：main.c 行为与 03 期一致（行级区始终在）。
-- [ ] 验收 3：maincContent 特例删除后无引用残留（grep 校验）；node +
+- [x] 验收 2：main.c 行为与 03 期一致（行级区始终在）。
+- [x] 验收 3：maincContent 特例删除后无引用残留（grep 校验）；node +
   smoke-03/**smoke-05 新增用例**全绿。
 
 **结论：** 已实现（待双轴评审整改确认）：
@@ -91,3 +91,8 @@
   `src/contest_generator/static/js/**` 命中仅 `migrateBaselineStore` 兼容层
   （disk-baseline.js:86-108）与 `maincContentEmpty`（另一个函数，fx/code.js:109，
   非基线字段），无残留 ✓。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

@@ -239,6 +239,3 @@ CCS 的编辑器体验（多标签、脏点、Ctrl+S 直接落盘），把查看
 - 「保持现有 code-viewer 只读能力作为回退」：实现期如编辑器异常（如
   非 UTF-8）可回退只读渲染（现有 codeViewHTML 保留，不删除）。
 - 所有文案中文；spec / 工单 / 提交信息 / CHANGELOG 遵循仓库语言规范。
-
-(End of file - total 241 lines)
-</content>

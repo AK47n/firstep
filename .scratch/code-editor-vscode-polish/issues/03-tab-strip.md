@@ -13,13 +13,18 @@
 - 评审处置：Spec 轴 3 项（空白区落位断链、dragstart 未排除关闭钮/徽章、关闭钮与徽章样式统一）全部落实；Standards 轴同两点 + moveTab 注释矛盾已改；Fowler 判断项（closest ×4、拖拽三变量数据簇、if(strip) ×3）留待后续（属风格偏好，不阻断）。
 - 测试：moveTab 3 组单测；node --test 全量绿；smoke-03.mjs 8/8（含空白区追加末尾与关闭钮 dragstart 守卫）；既有 code-viewer-editor smoke-02 20/20 回归通过。
 
-- [ ] 鼠标中键（button 1）点击标签关闭该标签；作用中（活动）标签不因中键关闭（VSCode 行为）
-- [ ] 按住标签可拖拽排序：拖动中显示插入位指示（虚线或高亮缝），松手落位；拖动不触发普通激活；关闭钮 / 徽章区域按下不启动拖动
-- [ ] 标签顺序仅会话内有效（不持久化）；关闭 / 重命名 / 目录切换后顺序保持正确（tree rename 的 remap 与关闭右邻逻辑不受影响）
-- [ ] 激活标签横向溢出被截断时自动 scrollIntoView（inline nearest）；新打开 / Ctrl+Tab（若有）/ 点击激活均触发
-- [ ] 关闭钮 hover 区扩大（paddding + 圆角底色），脏点 / 磁盘变更徽章 / 只读标间距统一
-- [ ] 上限 10 个标签、脏确认关闭、磁盘徽章点击弹三选等既有行为全部保持（回归）
-- [ ] tests/js：标签排序纯件（拖拽落位顺序、活动标签不可拖走首尾边界、无副作用返回新数组）单测
-- [ ] CDP 冒烟：中键关标签、拖拽排序（可模拟 dragstart/drop 事件）、活动标签 scrollIntoView 被调用
+- [x] 鼠标中键（button 1）点击标签关闭该标签；作用中（活动）标签不因中键关闭（VSCode 行为）
+- [x] 按住标签可拖拽排序：拖动中显示插入位指示（虚线或高亮缝），松手落位；拖动不触发普通激活；关闭钮 / 徽章区域按下不启动拖动
+- [x] 标签顺序仅会话内有效（不持久化）；关闭 / 重命名 / 目录切换后顺序保持正确（tree rename 的 remap 与关闭右邻逻辑不受影响）
+- [x] 激活标签横向溢出被截断时自动 scrollIntoView（inline nearest）；新打开 / Ctrl+Tab（若有）/ 点击激活均触发
+- [x] 关闭钮 hover 区扩大（paddding + 圆角底色），脏点 / 磁盘变更徽章 / 只读标间距统一
+- [x] 上限 10 个标签、脏确认关闭、磁盘徽章点击弹三选等既有行为全部保持（回归）
+- [x] tests/js：标签排序纯件（拖拽落位顺序、活动标签不可拖走首尾边界、无副作用返回新数组）单测
+- [x] CDP 冒烟：中键关标签、拖拽排序（可模拟 dragstart/drop 事件）、活动标签 scrollIntoView 被调用
 
 **补充：** 排序纯件放 fx（moveTab / tabIndexOf 等），事件（auxclick / dragstart / dragover / drop / scrollIntoView）在 ui 胶水；HTML5 DnD 用 dataTransfer 传路径，不用拖影（拖影由浏览器默认）。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

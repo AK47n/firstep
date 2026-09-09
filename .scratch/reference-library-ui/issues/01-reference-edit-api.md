@@ -8,20 +8,20 @@
 
 **状态：** resolved
 
-- [ ] `PUT /api/references/{entry_id}` 存在，body 契约 = `{title, type,
+- [x] `PUT /api/references/{entry_id}` 存在，body 契约 = `{title, type,
       description, anchor_kind, anchor_value, platform, add_files?, remove_files?}`，
       成功返回 `to_dict()`（含 file_count / size_bytes 实况）
-- [ ] 元数据校验与 add_reference 同源：非空、锚定三态（topic 格式 / kit 词表
+- [x] 元数据校验与 add_reference 同源：非空、锚定三态（topic 格式 / kit 词表
       / none 空值）、平台词表；标题 / 锚定值等变化正确写回元数据
-- [ ] add_files 路径安全、不与 reference.json 冲突，内容按 UTF-8 写入；
+- [x] add_files 路径安全、不与 reference.json 冲突，内容按 UTF-8 写入；
       remove_files 必须实际存在于条目目录（清单外散文件也允许删除），
       删除实体并更新元数据 files 清单（保序去重）
-- [ ] 任何校验失败：ReferenceError 中文文案 → HTTP 400，磁盘零变化
+- [x] 任何校验失败：ReferenceError 中文文案 → HTTP 400，磁盘零变化
       （含「删除清单外路径」「删除 reference.json」「删不存在的文件」各例）
-- [ ] 标题编辑不影响条目 id / 目录名（位置不变，引用稳定）
-- [ ] 成功一次 commit_after_write 自动 git 提交（提交信息 `lib: update
+- [x] 标题编辑不影响条目 id / 目录名（位置不变，引用稳定）
+- [x] 成功一次 commit_after_write 自动 git 提交（提交信息 `lib: update
       reference {id}`）
-- [ ] pytest 新增用例全绿（成功 / 各校验失败 / 不存在条目 / 组合增删 /
+- [x] pytest 新增用例全绿（成功 / 各校验失败 / 不存在条目 / 组合增删 /
       files 清单更新 / autocommit 触发），全量 pytest 保持绿
 
 **实现备注（评审修订后）：**
@@ -38,3 +38,8 @@
   改为 `[]` 缺省（测试含「显式空容器合法」断言锁定）。
 - 删除实体失败仅留清单外散文件：与浏览 / 统计「磁盘目录即数据库」容忍
   语义一致（先例 remove_platform_files 同款）。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

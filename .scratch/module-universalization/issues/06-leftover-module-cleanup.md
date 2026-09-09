@@ -45,6 +45,11 @@
 
 - [x] pytest 全绿：EXCEPTION_REGISTRY 6 条已删、全库无题词命中（`find_topic_word_hits` 全库扫描 = 空）、其余测试无回归。
 - [x] mypy src 干净。
-- [ ] 五条简介判据四要素齐（能力方向在、无题号/年份/题名），update_module_description 全流程通过（机械 + AI）。
-- [ ] uwb_uart 仅注释改动，编译不受影响（stm32 线任意一产物编译验证可选——注释零风险，至少确认无代码行变更）。
-- [ ] 工单补实施记录 + 验收勾选，Status resolved。
+- [x] 五条简介判据四要素齐（能力方向在、无题号/年份/题名），update_module_description 全流程通过（机械 + AI）。
+- [x] uwb_uart 仅注释改动，编译不受影响（stm32 线任意一产物编译验证可选——注释零风险，至少确认无代码行变更）。
+- [x] 工单补实施记录 + 验收勾选，Status resolved。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

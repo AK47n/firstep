@@ -26,7 +26,12 @@ VERSIONS.md 定稿）；tests/test_repo_language.py 扩展 VERSIONS.md 中文守
 - 此前被 04 评审指出的「无操作顺序重排」已随单源化消解（顺序含义只在
   nav-tabs-shared 一处表达）。
 
-- [ ] guide.js：资料管理组列表去掉「更新记录」，指南组介绍 + 一句话导语同步
-- [ ] CONTEXT.md 补版本记录机制一行（或所在词条更新）
-- [ ] test_repo_language.py 增 VERSIONS.md 中文守门并全绿
-- [ ] 全量测试套件绿
+- [x] guide.js：资料管理组列表去掉「更新记录」，指南组介绍 + 一句话导语同步
+- [x] CONTEXT.md 补版本记录机制一行（或所在词条更新）
+- [x] test_repo_language.py 增 VERSIONS.md 中文守门并全绿
+- [x] 全量测试套件绿
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

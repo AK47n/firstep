@@ -10,10 +10,15 @@
 
 **验收：** 全部 ✓（清单见上方 checklist，测试 test_task_progress.py 17 条 + 全量 2515 通过；mypy 0 错；JS 484 通过）。
 
-- [ ] 任务域：`Task` / `TaskPlan` 模型 + 状态与验收词表（pending / doing / verified / unverified / failed / skipped；verify = compile / manual）+ `parse_task_plan`（LLM 原始 dict → 模型；畸形输出照 `parse_score_points` 先例：字段缺失 / 类型错 → 拒收或修正，空任务清单 → TaskError）
-- [ ] LLM 协议新增 `plan_tasks(...)`（DeepSeek 实现 + RoutingLLM 转发 + 测试假 LLM 扩展；`_retry_parse` 兜底复用）
-- [ ] `.contest_tasks.json` 读写 + 形状校验（缺文件 = 未拆解；坏 JSON = TaskError → 400 中文；版本字段向后兼容），落盘与生成产物零交叉
-- [ ] `POST /api/tasks/plan`（SSE）：`{output_dir}`（可带 problem_text 覆盖，照 /api/revise/deepen 先例）；事件 `task_planning`（events.py 词表新增）→ done（`{tasks, generated_at}`）；缺上下文（无题面 / 无需求清单）→ 400 中文提示（照 /api/revise/context 判断口径）；`force` 重拆：旧清单改名 `.bak` 备档再覆盖
-- [ ] 前端：卡 11「修订与深化」内新增「任务推进」子区 + 「拆解任务」按钮（含重新拆解入口）+ 任务卡只读网格渲染（状态徽章 / 分值点 / 前置依赖 / verify 标注），纯函数入 fx、UI 簇按迁移规则
-- [ ] `TaskError` 登记 errors.py 错误映射表（400 中文）
-- [ ] 测试：parse 合法/畸形；落盘 roundtrip + 坏 JSON；SSE 事件序列；假 LLM 全链路（照 test_deepen.py / test_selection.py 先例）
+- [x] 任务域：`Task` / `TaskPlan` 模型 + 状态与验收词表（pending / doing / verified / unverified / failed / skipped；verify = compile / manual）+ `parse_task_plan`（LLM 原始 dict → 模型；畸形输出照 `parse_score_points` 先例：字段缺失 / 类型错 → 拒收或修正，空任务清单 → TaskError）
+- [x] LLM 协议新增 `plan_tasks(...)`（DeepSeek 实现 + RoutingLLM 转发 + 测试假 LLM 扩展；`_retry_parse` 兜底复用）
+- [x] `.contest_tasks.json` 读写 + 形状校验（缺文件 = 未拆解；坏 JSON = TaskError → 400 中文；版本字段向后兼容），落盘与生成产物零交叉
+- [x] `POST /api/tasks/plan`（SSE）：`{output_dir}`（可带 problem_text 覆盖，照 /api/revise/deepen 先例）；事件 `task_planning`（events.py 词表新增）→ done（`{tasks, generated_at}`）；缺上下文（无题面 / 无需求清单）→ 400 中文提示（照 /api/revise/context 判断口径）；`force` 重拆：旧清单改名 `.bak` 备档再覆盖
+- [x] 前端：卡 11「修订与深化」内新增「任务推进」子区 + 「拆解任务」按钮（含重新拆解入口）+ 任务卡只读网格渲染（状态徽章 / 分值点 / 前置依赖 / verify 标注），纯函数入 fx、UI 簇按迁移规则
+- [x] `TaskError` 登记 errors.py 错误映射表（400 中文）
+- [x] 测试：parse 合法/畸形；落盘 roundtrip + 坏 JSON；SSE 事件序列；假 LLM 全链路（照 test_deepen.py / test_selection.py 先例）
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

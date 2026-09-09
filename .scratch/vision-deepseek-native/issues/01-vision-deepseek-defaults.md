@@ -36,10 +36,10 @@
 
 ## 验收标准
 
-- [ ] 红证先行：helper 三分支测试先写（不存在 → 红）；BMP 拦截测试先写（当前会发请求 → 红）；行为语义两测试先改（复用后 → 红）
-- [ ] 全量 pytest 绿 + `mypy src` 干净
-- [ ] 默认值字面量断言 = DeepSeek 官方端点与模型名；config 回写/掩码语义不变
-- [ ] 显式视觉 key 优先于复用（既有显式 key 用例全绿）；自定义 base 不把主 key 发出去
+- [x] 红证先行：helper 三分支测试先写（不存在 → 红）；BMP 拦截测试先写（当前会发请求 → 红）；行为语义两测试先改（复用后 → 红）
+- [x] 全量 pytest 绿 + `mypy src` 干净
+- [x] 默认值字面量断言 = DeepSeek 官方端点与模型名；config 回写/掩码语义不变
+- [x] 显式视觉 key 优先于复用（既有显式 key 用例全绿）；自定义 base 不把主 key 发出去
 
 ## 实施提示词（新会话粘贴）
 
@@ -84,3 +84,8 @@ key 复用后「未配视觉 key + 默认 DeepSeek base + 主 key 在」= 视觉
 
 - 设置页 / 上传区文案与 CONTEXT.md（工单 02，被本工单阻塞，01 resolved 后开工）。
 - 真机验证：DeepSeek 视觉 API 真实调用（需用户配置 key 后上传 PDF/图片验收）；赛题库 JPEG2000 12 张按既有降级语义静默跳过（实测长 PDF 472 张图无 BMP，见 .scratch/vision-deepseek-native/pdf_image_scan.py 结果）。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

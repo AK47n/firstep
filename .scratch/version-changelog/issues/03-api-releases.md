@@ -18,6 +18,11 @@ tests/test_webapp.py 的更新记录路由测试同步为新契约。
   首次发版后的守卫（docstring 已注明）；`/api/changelog` 命名是 spec 显式
   决策（前端唯一调用方，破坏性变更可接受），不改名；仓库根推导不新增多处。
 
-- [ ] 路由返回 `{"releases": [...]}`，字段与 02 契约一致
-- [ ] VERSIONS.md 缺失 → `{"releases": []}`
-- [ ] tests/test_webapp.py 更新记录测试改为断言新形状（实况 VERSIONS.md）
+- [x] 路由返回 `{"releases": [...]}`，字段与 02 契约一致
+- [x] VERSIONS.md 缺失 → `{"releases": []}`
+- [x] tests/test_webapp.py 更新记录测试改为断言新形状（实况 VERSIONS.md）
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

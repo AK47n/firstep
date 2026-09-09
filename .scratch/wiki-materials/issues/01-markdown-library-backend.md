@@ -8,9 +8,14 @@
 
 **结论：** 2026-09-05 完成并提交（33194e8e）。md_library.py 三函数 + webapp 两端点 + tests/test_md_library.py 16 例 + tests/test_webapp.py 6 例；全量 3303 通过；真机素材根冒烟：wiki 批次 72 篇全在清单、最大 84KB < 1MB 上限。
 
-- [ ] 新域模块 `md_library.py`：`list_markdowns(root, name)` → `[{rel_path, name, batch, size_bytes, mtime}]`（递归收集 .md 扩展名大小写不敏感；批次 = 第一级目录；按 (batch, rel_path) 排序；素材根缺失 = 空清单；过滤命中文件名/批次/完整路径任一）
-- [ ] `resolve_markdown(root, rel_path)`：`is_unsafe_path` 校验 + 存在性 + .md 后缀，失败抛 ReferenceError（webapp 映射 400，与 pdf_library 同通道）
-- [ ] 正文读取：`read_markdown(root, rel_path)` → `{rel_path, name, size_bytes, content}`；`MD_FILE_MAX_BYTES = 1MB` 超限 400（照 codeview 先例）；utf-8 errors="replace" 读全文
-- [ ] webapp 路由：`GET /api/materials-md`（清单 + name 过滤）、`GET /api/materials-md/{rel_path:path}`（全文 JSON）；路由注册位置与 pdf 路由区相邻
-- [ ] `tests/test_md_library.py`：清单字段/批次推导/过滤/排序、路径安全拒绝面全覆盖、非 .md 拒绝、超限拒绝、素材根缺失空清单、webapp 两端点两态（正常 + 400 中文）
-- [ ] 全文检索自查：`lckfb-地猛星移植手册/` 70 篇 + 2 篇索引在清单中，`sensor--mpu6050-six-axis-sensor.md` 可读全文
+- [x] 新域模块 `md_library.py`：`list_markdowns(root, name)` → `[{rel_path, name, batch, size_bytes, mtime}]`（递归收集 .md 扩展名大小写不敏感；批次 = 第一级目录；按 (batch, rel_path) 排序；素材根缺失 = 空清单；过滤命中文件名/批次/完整路径任一）
+- [x] `resolve_markdown(root, rel_path)`：`is_unsafe_path` 校验 + 存在性 + .md 后缀，失败抛 ReferenceError（webapp 映射 400，与 pdf_library 同通道）
+- [x] 正文读取：`read_markdown(root, rel_path)` → `{rel_path, name, size_bytes, content}`；`MD_FILE_MAX_BYTES = 1MB` 超限 400（照 codeview 先例）；utf-8 errors="replace" 读全文
+- [x] webapp 路由：`GET /api/materials-md`（清单 + name 过滤）、`GET /api/materials-md/{rel_path:path}`（全文 JSON）；路由注册位置与 pdf 路由区相邻
+- [x] `tests/test_md_library.py`：清单字段/批次推导/过滤/排序、路径安全拒绝面全覆盖、非 .md 拒绝、超限拒绝、素材根缺失空清单、webapp 两端点两态（正常 + 400 中文）
+- [x] 全文检索自查：`lckfb-地猛星移植手册/` 70 篇 + 2 篇索引在清单中，`sensor--mpu6050-six-axis-sensor.md` 可读全文
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

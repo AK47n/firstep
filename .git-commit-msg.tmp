@@ -1,0 +1,14 @@
+工单收尾：批量翻牌 167 张（口径 = 只勾选 + 改 Status，不动 checklist 文字）
+
+在途盘点（.scratch/tracker-audit/2026-09-09-在途盘点.md）判定「已完成但标签没跟」的工单，本轮按用户拍板口径批量收尾：
+
+- 翻牌 167 张：未勾项全部经代码事实核实为已实现 → `- [ ]` 改 `- [x]`，状态归一 resolved，每张追加一条 Comments 指向盘点表证据（判定总表按批次给出 文件:行号 / 测试文件名 / grep 否证）
+- 其中 11 张仅状态归一（无未勾项）：已实施 ×6（frontend-es-modules-stage2/15-20）、resolved：2026-08-23 ×4（report-draft-demo/01-04）、pending ×1（stuck-doing-recover/02）；另 architecture-deepening-v2/02 的「resolved。5」归一为「resolved（5 个 PR …）」
+- 保留 65 张不动：未勾项含真机浏览器/CDP/截图、真机工具链/真实额度、人工取源、工单文字过期（误判）、流程态不可复核——完整清单见盘点表「本轮翻牌」段
+- 越界校验：git diff --unified=0 逐行核对，删除行仅 `- [ ]`/状态行/空行/工具产物行，新增行仅 `- [x]`/状态行/`## Comments` 段，越界 0 行
+- 顺手清掉 7 个文件里的工具产物残留（`(End of file - total N lines)` + `</content>`——上一会话把工具输出粘进工单/spec）
+- 翻牌后状态分布（census.py 实跑）：resolved 808 / ready-for-agent 1 / ready-for-human 2 / 非标准值 2 / 无状态行 3（全为 pr-body 草稿）
+
+tests/test_tracker_audit_status.py 的两条断言随之改为「形态/分桶一致性」判据（翻牌会让固定值断言过期）：25 passed。
+全量回归：pytest 3928 passed / 3 warnings、tests/js 1385 pass / 0 fail，与翻牌前同结果（翻牌只动 markdown）。
+未改任何验收项文字。

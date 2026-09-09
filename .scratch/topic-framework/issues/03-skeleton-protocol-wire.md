@@ -10,7 +10,12 @@
 
 **验收：** 全部 ✓（协议签名加参 + DeepSeek/RoutingLLM/fakes 同步；`_skeleton_user_prompt` 框架段在参考段之前 + 强指令；`_generate_main_c` / `generate_skeleton` / `run_skeleton` 透传；测试 test_llm.py 新增 2 条 + 既有 302 全绿）。
 
-- [ ] LLM 抽象 `generate_main_skeleton(..., topic_framework=None)`；DeepSeek 实现 + RoutingLLM 转发（remote 方法加参）+ FakeLLM / RecordingLLM（测试 fakes）同步
-- [ ] `_skeleton_user_prompt(problem_text, module_interfaces, reference_fulltexts=None, topic_framework=None)`：framework 段在 reference 段之前；文案含 `### 题型框架：<topic_type>（来源 <entry.id>）`、强指令（保留结构 / 只填 TODO / 不存在的调用注释占位）
-- [ ] `_generate_main_c` / `generate_skeleton` / `run_skeleton` 加 `topic_framework` 透传（smoke 路径不受影响；reference_fulltexts 两参 / 三参调用分支保持零回归）
-- [ ] 测试：prompt 含 framework 段（顺序断言：framework 在 reference 之前）；None → 逐字节不变（既有断言先例）；fakes 捕获 topic_framework；RoutingLLM remote 转发参数断言
+- [x] LLM 抽象 `generate_main_skeleton(..., topic_framework=None)`；DeepSeek 实现 + RoutingLLM 转发（remote 方法加参）+ FakeLLM / RecordingLLM（测试 fakes）同步
+- [x] `_skeleton_user_prompt(problem_text, module_interfaces, reference_fulltexts=None, topic_framework=None)`：framework 段在 reference 段之前；文案含 `### 题型框架：<topic_type>（来源 <entry.id>）`、强指令（保留结构 / 只填 TODO / 不存在的调用注释占位）
+- [x] `_generate_main_c` / `generate_skeleton` / `run_skeleton` 加 `topic_framework` 透传（smoke 路径不受影响；reference_fulltexts 两参 / 三参调用分支保持零回归）
+- [x] 测试：prompt 含 framework 段（顺序断言：framework 在 reference 之前）；None → 逐字节不变（既有断言先例）；fakes 捕获 topic_framework；RoutingLLM remote 转发参数断言
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

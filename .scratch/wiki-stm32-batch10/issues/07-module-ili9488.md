@@ -11,14 +11,19 @@
 **状态：** resolved（2026-09 实施完成）。
 
 **实施清单（资料已到位——可直接开工，同工单 06 规范）：**
-- [ ] 读软 SPI 版 `HARDWARE/LCD/lcd.c/lcd.h`（**初始序列 + 18bit 面板 16bit 打包**——包内实现为准；**引脚宏表 lcd.h 取默认脚**；sys.h 位带宏换算 ml_gpio 不引入）→ 纯驱动切片（API 照 mspm0 lcd.h 风格；**不引入 lcdwiki 旧壳**）→ 软 SPI 换算 → 字库复用 lcdfont.h（FONT.H 不入库）；触摸复用 tp_xpt2046（同芯 XPT2046）
-- [ ] `library/modules/ili9488/`：code/ili9488_stm32.c/.h + manifest.json（仅 platforms.stm32：files、pins（**默认六脚 = lcd 组同款互替 + 触摸 tp 组**）、verified 初 false、kit/source_url（wiki 原页 + lcdwiki 官网链接——notes 双来源）、notes（B 类口径+下载来源+**18bit 打包/引脚表取自包内**+位带换算+性能风险（全屏 ≈0.55s——局部刷新建议）+未上板）、description（能力方向：大屏显示/ILI9488；无题绑定）
-- [ ] pin_config.h 宏段（包内 lcd.h 引脚表核对）
-- [ ] 测试 test_module_ili9488.py（B 类模板 + 守卫：序列关键字节/18bit 打包/无 POINT_COLOR/LCD_ShowString/sys.h）
-- [ ] UV4 矩阵 0/0 → verified=true
-- [ ] wordlist 补录
-- [ ] 中文提交 → resolved → 结论回填
+- [x] 读软 SPI 版 `HARDWARE/LCD/lcd.c/lcd.h`（**初始序列 + 18bit 面板 16bit 打包**——包内实现为准；**引脚宏表 lcd.h 取默认脚**；sys.h 位带宏换算 ml_gpio 不引入）→ 纯驱动切片（API 照 mspm0 lcd.h 风格；**不引入 lcdwiki 旧壳**）→ 软 SPI 换算 → 字库复用 lcdfont.h（FONT.H 不入库）；触摸复用 tp_xpt2046（同芯 XPT2046）
+- [x] `library/modules/ili9488/`：code/ili9488_stm32.c/.h + manifest.json（仅 platforms.stm32：files、pins（**默认六脚 = lcd 组同款互替 + 触摸 tp 组**）、verified 初 false、kit/source_url（wiki 原页 + lcdwiki 官网链接——notes 双来源）、notes（B 类口径+下载来源+**18bit 打包/引脚表取自包内**+位带换算+性能风险（全屏 ≈0.55s——局部刷新建议）+未上板）、description（能力方向：大屏显示/ILI9488；无题绑定）
+- [x] pin_config.h 宏段（包内 lcd.h 引脚表核对）
+- [x] 测试 test_module_ili9488.py（B 类模板 + 守卫：序列关键字节/18bit 打包/无 POINT_COLOR/LCD_ShowString/sys.h）
+- [x] UV4 矩阵 0/0 → verified=true
+- [x] wordlist 补录
+- [x] 中文提交 → resolved → 结论回填
 
 **结论（2026-09 实施完成）**：B 类新 slug 落地——library/modules/ili9488/（code/ili9488_stm32.c/.h + code/ili9488_font.h（同 ili9341 副本口径））；**18bit 面板 16bit 打包**（0x3A 0x66 + 每像素 3 字节流 RED 0xF8/GREEN 0xFC/BLUE <<3——包内原式直提）；初始化序列全取自 lcdwiki MSP3520 软 SPI 版包；API 照 mspm0 lcd.h 风格（ili9488_ 前缀全族——与 ili9341 同构）；默认脚 = lcd 六脚组同款（互替同脚）；触摸复用 tp_xpt2046；pin_config.h 12 宏 + 测试全绿（18bit 打包守卫/无旧壳/无位带宏/字库预算）；UV4 矩阵 0 error/0 warning → verified=true（run_ili9488_matrix.py——Code=4500/RO=3104）；性能 notes（全屏 ≈0.55s——18bit 3 字节/像素）；wordlist 补录同工单 06（ILI 大屏方案合一条 + models）。
 
 **验收标准：** 同工单 06（资料到位后实施；期间不阻塞批次收尾）。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

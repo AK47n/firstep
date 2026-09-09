@@ -2,7 +2,7 @@
 
 **要做什么：** generate tab 的「就绪检查面板」簇迁入 `static/js/ui/generate-readiness.js`（readinessState / renderReadinessPanel / refreshReadinessPanel / initReadinessCheck）。**被谁阻塞：** 02 + 18（stepDoneSet import 读）
 
-**状态：** 已实施（resolved）
+**状态：** resolved（resolved）
 
 ## 关键事实（1-based 行号，实施时以 grep 复核）
 

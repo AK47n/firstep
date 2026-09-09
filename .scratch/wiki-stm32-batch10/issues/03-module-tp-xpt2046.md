@@ -13,14 +13,19 @@
 **状态：** resolved（2026-09 实施完成）。
 
 **实施清单：**
-- [ ] `library/modules/tp_xpt2046/code/tp_xpt2046_stm32.c/.h`（独立 stm32 头——API 5 函数照 mspm0 tp_xpt2046.h；.c 软 SPI 5 脚 + 5 次中值滤波 + PEN 轮询；零引脚字面量）
-- [ ] manifest.json platforms 增 stm32：files `[code/tp_xpt2046_stm32.c, code/tp_xpt2046_stm32.h]`、dependencies ["delay"]（照 mspm0）、verified false、hardware_bound false、pins 5 行、kit/source_url（wiki 原页 `.../screen/1-8-touch-color-screen.html`）、notes（手册路径+原页+网盘+**软 SPI 5 脚（页面硬 SPI 改法换算）**+校准结构+与 lcd 零耦合/配套错开+默认脚推理+未上板）
-- [ ] pin_config.h 增 10 宏
-- [ ] 测试 `tests/test_module_tp_xpt2046.py`：形状（5 pins）+宏存在+单选生成+mspm0 零改动+守卫（`0xD0`/`0x90` 命令、5 次中值滤波、PEN 轮询（无 EXTI/NVIC/IRQHandler）、无 printf/GPIO_Init/RCC_）
-- [ ] test_pins.py 补 10 宏；test_default_layout.py 白名单 PB12-15 组 +4、PB0 +1
-- [ ] UV4 矩阵（init+set_calibration(1,1,0,0)+read_raw+read_xy+is_pressed 全调，(void) 化）→ 0/0 → verified=true
-- [ ] wordlist 零补录复核；中文提交 → resolved → 结论回填
+- [x] `library/modules/tp_xpt2046/code/tp_xpt2046_stm32.c/.h`（独立 stm32 头——API 5 函数照 mspm0 tp_xpt2046.h；.c 软 SPI 5 脚 + 5 次中值滤波 + PEN 轮询；零引脚字面量）
+- [x] manifest.json platforms 增 stm32：files `[code/tp_xpt2046_stm32.c, code/tp_xpt2046_stm32.h]`、dependencies ["delay"]（照 mspm0）、verified false、hardware_bound false、pins 5 行、kit/source_url（wiki 原页 `.../screen/1-8-touch-color-screen.html`）、notes（手册路径+原页+网盘+**软 SPI 5 脚（页面硬 SPI 改法换算）**+校准结构+与 lcd 零耦合/配套错开+默认脚推理+未上板）
+- [x] pin_config.h 增 10 宏
+- [x] 测试 `tests/test_module_tp_xpt2046.py`：形状（5 pins）+宏存在+单选生成+mspm0 零改动+守卫（`0xD0`/`0x90` 命令、5 次中值滤波、PEN 轮询（无 EXTI/NVIC/IRQHandler）、无 printf/GPIO_Init/RCC_）
+- [x] test_pins.py 补 10 宏；test_default_layout.py 白名单 PB12-15 组 +4、PB0 +1
+- [x] UV4 矩阵（init+set_calibration(1,1,0,0)+read_raw+read_xy+is_pressed 全调，(void) 化）→ 0/0 → verified=true
+- [x] wordlist 零补录复核；中文提交 → resolved → 结论回填
 
 **结论（2026-09 实施完成）**：stm32 条目落地——code/tp_xpt2046_stm32.c/.h（软 SPI 5 脚 gpio_set/gpio_get + 页原式 Out_PP/IPU 换算 + 五脚 init；API 5 函数与 mspm0 版同名同型完全对齐；0xD0/0x90 命令 + 5 次中值滤波 + PEN 轮询无中断）；默认脚 CS=PB12/CLK=PB13/DIN=PB14/DOUT=PB15/PEN=PB0（触摸按键×屏幕触摸互替同脚；与 lcd 六脚组刻意错开——配套同选）；pin_config.h 10 宏 + 测试全绿；UV4 矩阵 0 error/0 warning → verified=true（run_tp_xpt2046_matrix.py——Code=3100）；wordlist 零补录复核。
 
 **验收标准：** 全部 checkbox；pytest 绿；矩阵 exit 0。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

@@ -9,15 +9,15 @@ Ctrl+Shift+S 快捷键（复用 saveAllDirtyTabs 单源；无脏 → toast「没
 
 **状态：** resolved
 
-- [ ] 验收 1：状态栏「保存全部」按钮常显；点击 → saveAllDirtyTabs；无脏 →
+- [x] 验收 1：状态栏「保存全部」按钮常显；点击 → saveAllDirtyTabs；无脏 →
   toast 中文；保存冲突流程走既有 409 模态。
-- [ ] 验收 2：Ctrl+Shift+S 全局触发（与 Ctrl+S 不冲突）；多脏一次落盘
+- [x] 验收 2：Ctrl+Shift+S 全局触发（与 Ctrl+S 不冲突）；多脏一次落盘
   （mock 计数 = 脏标签数）。
-- [ ] 验收 3：smoke.mjs 全 PASS：新建文件（树+tab+写盘）、新建文件夹、
+- [x] 验收 3：smoke.mjs 全 PASS：新建文件（树+tab+写盘）、新建文件夹、
   重命名文件（tab 路径更新）、重命名目录（子树 tab 路径更新）、删除文件
   （tab 关闭）、删除空目录、非空目录删除 → toast 400、脏文件删除 →
   两键确认、保存全部按钮/快捷键计数。
-- [ ] 验收 4：回归——node 全量 + pytest 全量 + code-tab-compile /
+- [x] 验收 4：回归——node 全量 + pytest 全量 + code-tab-compile /
   code-write-guard 冒烟全绿；提交/工单/CHANGELOG 中文。
 
 **结论：** 已落地。状态栏 #btn-code-save-all + initCodeSaveAll（saveAllFromBar
@@ -33,3 +33,8 @@ Network.enable + Network.setCacheDisabled（Page.reload ignoreCache 对模块
 常驻 toast 占首槽）。回归：node 1016 全绿、pytest 3101 全绿、code-tab-compile
 17 + code-write-guard 11 全 PASS（code-tree-ops 本次改动后已重跑 24/24）。
 验收 1-4 全部满足。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

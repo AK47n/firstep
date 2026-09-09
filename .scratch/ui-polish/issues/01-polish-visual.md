@@ -8,11 +8,16 @@
 
 **完成记录：** 全局 transition（按钮/输入框/卡片/条目类）、.primary 渐变+微光+按压缩放、.card hover 上浮提亮、.step-no 渐变发光、品牌字呼吸光晕（brand-breathe，不动 .cursor）；6 处空状态升级（模块库新增兜底 colspan=5，参考库/PDF 库/赛题库/更新记录/最近工作流换 .empty-state 样式）。node --test tests/js/*.test.mjs 49/49 通过；pytest tests/test_generate_check_contract.py 50/50 通过；无头 Edge 截图目检无异常。
 
-- [ ] 全局按钮 / 卡片 / 输入框加 transition（约 0.15s），hover 不再瞬间跳变
-- [ ] `.primary` 按钮改青色渐变 + hover 微光（box-shadow glow）
-- [ ] `.card` hover 边框提亮 + 轻微上浮（translateY(-1px)）；现有 .item/.score-panel 同步
-- [ ] `.step-no` 徽章改渐变背景 + 发光描边
-- [ ] 顶栏品牌字加呼吸光晕动画（不动 .cursor 现有闪烁）
-- [ ] 新增空状态样式（.empty-state：图标 + 文案 + 引导按钮），并在模块库 / 参考库 / PDF 库 / 赛题库空列表处生效
-- [ ] 卡片间距 / 标题层级微调
-- [ ] `node tests/js/*.test.mjs` 与契约钉测试全绿
+- [x] 全局按钮 / 卡片 / 输入框加 transition（约 0.15s），hover 不再瞬间跳变
+- [x] `.primary` 按钮改青色渐变 + hover 微光（box-shadow glow）
+- [x] `.card` hover 边框提亮 + 轻微上浮（translateY(-1px)）；现有 .item/.score-panel 同步
+- [x] `.step-no` 徽章改渐变背景 + 发光描边
+- [x] 顶栏品牌字加呼吸光晕动画（不动 .cursor 现有闪烁）
+- [x] 新增空状态样式（.empty-state：图标 + 文案 + 引导按钮），并在模块库 / 参考库 / PDF 库 / 赛题库空列表处生效
+- [x] 卡片间距 / 标题层级微调
+- [x] `node tests/js/*.test.mjs` 与契约钉测试全绿
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

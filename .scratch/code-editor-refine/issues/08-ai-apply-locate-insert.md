@@ -5,7 +5,7 @@
 **被谁阻塞：** 无（与 07 独立；若 07 先行，按钮浮层复用其样式）。
 
 **Type:** task
-**Status:** claimed
+**Status:** resolved
 
 ## 实现要点
 
@@ -15,10 +15,11 @@
 
 ## 验收 checklist
 
-- [ ] AI diff 应用后正确跳转首 hunk 文件与行（CDP 断言 active file + 行号）。
-- [ ] 选中一段 → 插入替换选区；无选区 → 插入光标处；插入后脏标志、Ctrl+S 正常落盘；409 冲突路径不回归。
-- [ ] 多代码块仅插第一块并提示；无标点/中文内容插入正常。
-- [ ] node 单测 insertAtPosition；CDP 冒烟 smoke-08。
+- [x] AI diff 应用后正确跳转首 hunk 文件与行（CDP 断言 active file + 行号）。
+- [x] 选中一段 → 插入替换选区；无选区 → 插入光标处；插入后脏标志、Ctrl+S 正常落盘；409 冲突路径不回归。
+- [x] 多代码块仅插第一块并提示；无标点/中文内容插入正常。
+- [x] node 单测 insertAtPosition；CDP 冒烟 smoke-08。
 
-(End of file - total 21 lines)
-</content>
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

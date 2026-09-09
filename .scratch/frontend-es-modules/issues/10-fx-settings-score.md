@@ -21,8 +21,13 @@
 - [x] settings-collapse / score-checklist / score-points-format 三个测试文件改 import（跨模块依赖：syncCollapseBtn 由 settings 模块内部引用 fx/generate.js）
 - [x] `node --test "tests/js/*.test.mjs"` 416 全绿；diag 零 EXC；冒烟 11/11（设置页折叠默认态 + 评分清单纯函数经 import 生效经探针验证）
 
-- [ ] 新建 fx/settings.js：parseSettingsCollapse / settingsDefaultCollapsed / effectiveCollapsed / applySettingsCollapseState / syncCollapseBtn / settingsMasterLabel / sectionCollapseLabel 及域内常量；尾部 window 桥
-- [ ] 新建 fx/score.js：scoreChecklistPartLabel / scoreChecklistScoreText / scoreChecklistRefsText / scoreChecklistId / scoreChecklistChecked / scoreChecklistLineText / scoreChecklistKey / scoreChecklistItemsHTML / scoreChecklistProgressHTML / scoreChecklistExportText / scoreChecklistParse / scoreChecklistLoad / scoreChecklistSave / formatScorePoints / renderScorePointPanel 及域内常量；尾部 window 桥
-- [ ] index.html 删除上述定义；加载两个模块 script
-- [ ] 三个测试文件改 import（跨模块依赖：syncCollapseBtn 由 settings 模块提供）
-- [ ] `node --test` 全绿；冒烟设置页（折叠）+ 生成页评分清单
+- [x] 新建 fx/settings.js：parseSettingsCollapse / settingsDefaultCollapsed / effectiveCollapsed / applySettingsCollapseState / syncCollapseBtn / settingsMasterLabel / sectionCollapseLabel 及域内常量；尾部 window 桥
+- [x] 新建 fx/score.js：scoreChecklistPartLabel / scoreChecklistScoreText / scoreChecklistRefsText / scoreChecklistId / scoreChecklistChecked / scoreChecklistLineText / scoreChecklistKey / scoreChecklistItemsHTML / scoreChecklistProgressHTML / scoreChecklistExportText / scoreChecklistParse / scoreChecklistLoad / scoreChecklistSave / formatScorePoints / renderScorePointPanel 及域内常量；尾部 window 桥
+- [x] index.html 删除上述定义；加载两个模块 script
+- [x] 三个测试文件改 import（跨模块依赖：syncCollapseBtn 由 settings 模块提供）
+- [x] `node --test` 全绿；冒烟设置页（折叠）+ 生成页评分清单
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

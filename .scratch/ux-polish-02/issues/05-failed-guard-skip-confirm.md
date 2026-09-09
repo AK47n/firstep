@@ -13,9 +13,13 @@ unverified 保留 mark＝上板人工确认）；generate-tasks.js skip 走 conf
 handoff-note-guard.test.mjs 对 goto-tasks 守卫断言对齐 ux-polish-02/04（async +
 reviseLoad）。CDP 冒烟 probe-t05.mjs 全 PASS（每次运行前重置临时任务清单）。
 
-- [ ] failed 卡不再渲染「确认通过」按钮；unverified 卡保留「确认通过」（上板人工确认语义不变）；verified 卡行为不变
-- [ ] 「跳过」点击弹确认框：说明后续依赖该步的卡可能受影响、可随时恢复；确认文案「跳过」、取消「取消」
-- [ ] 跳过确认后行为与现状一致（置 skipped，不计入完成）
-- [ ] 按钮措辞统一：skipped 卡「恢复此步」、其余「重做」，均带 title 说明语义（恢复=回到待做；重做=回待做重跑）；「重做此步」（清建议标记）保留并补 title
-- [ ] 任务卡动作集（front-end 判定）改动同步纯函数单测（failed 无 mark）
+- [x] failed 卡不再渲染「确认通过」按钮；unverified 卡保留「确认通过」（上板人工确认语义不变）；verified 卡行为不变
+- [x] 「跳过」点击弹确认框：说明后续依赖该步的卡可能受影响、可随时恢复；确认文案「跳过」、取消「取消」
+- [x] 跳过确认后行为与现状一致（置 skipped，不计入完成）
+- [x] 按钮措辞统一：skipped 卡「恢复此步」、其余「重做」，均带 title 说明语义（恢复=回到待做；重做=回待做重跑）；「重做此步」（清建议标记）保留并补 title
+- [x] 任务卡动作集（front-end 判定）改动同步纯函数单测（failed 无 mark）
 
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

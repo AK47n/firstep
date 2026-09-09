@@ -16,10 +16,14 @@ to_dict 不含 mtime——域序列化与磁盘一致；webapp /api/references G
 mtime 断言 + webapp 响应带 mtime）、topic mtime 往返、module_mtime（含不存在
 =0）。pytest 三套 375 全绿。
 
-- [ ] 模块库列表每条目带 `mtime`（模块目录 manifest.json 的 mtime）
-- [ ] 参考库列表每条目带 `mtime`（条目目录 reference.json 的 mtime）
-- [ ] 赛题库列表每条目带 `mtime`（条目目录 manifest.json 的 mtime）
-- [ ] 元数据文件写盘形状不变（manifest/元数据序列化不新增键——「mtime 只在序列化响应层补，不落盘」逐字节兼容保持）
-- [ ] 单测：三库列表形状断言补 mtime（既有测试文件对应用例处），并确认写盘逐字节断言继续绿
-- [ ] 旧库（已有条目无新字段来源）全部兼容，mtime 缺失时按 0 处理不报错
+- [x] 模块库列表每条目带 `mtime`（模块目录 manifest.json 的 mtime）
+- [x] 参考库列表每条目带 `mtime`（条目目录 reference.json 的 mtime）
+- [x] 赛题库列表每条目带 `mtime`（条目目录 manifest.json 的 mtime）
+- [x] 元数据文件写盘形状不变（manifest/元数据序列化不新增键——「mtime 只在序列化响应层补，不落盘」逐字节兼容保持）
+- [x] 单测：三库列表形状断言补 mtime（既有测试文件对应用例处），并确认写盘逐字节断言继续绿
+- [x] 旧库（已有条目无新字段来源）全部兼容，mtime 缺失时按 0 处理不报错
 
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

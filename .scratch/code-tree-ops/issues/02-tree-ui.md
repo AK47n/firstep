@@ -11,19 +11,19 @@ fx-guard 登记 + node 单测。
 
 **状态：** resolved
 
-- [ ] 验收 1：树头部「新建文件 / 新建文件夹」按钮就位；输入模态复用
+- [x] 验收 1：树头部「新建文件 / 新建文件夹」按钮就位；输入模态复用
   confirmModal extra 输入，名称校验失败中文提示（非法名不关闭/不落盘）。
-- [ ] 验收 2：每行 hover ✎/🗑（文件与目录行）；✎ → 重命名模态（默认值 =
+- [x] 验收 2：每行 hover ✎/🗑（文件与目录行）；✎ → 重命名模态（默认值 =
   当前名称）；🗑 → 删除确认（文案含路径）。
-- [ ] 验收 3：新建文件成功后树刷新 + 自动打开该文件 tab（空内容，可编辑，
+- [x] 验收 3：新建文件成功后树刷新 + 自动打开该文件 tab（空内容，可编辑，
   可保存）；新建文件夹成功后树刷新（无 tab 打开）。
-- [ ] 验收 4：重命名成功 → 树新名；已打开 tab 路径映射（标签/活动路径同步，
+- [x] 验收 4：重命名成功 → 树新名；已打开 tab 路径映射（标签/活动路径同步，
   脏状态与 mtime 基准不变）；目录改名 → 子树 tab 一并映射。
-- [ ] 验收 5：删除成功 → 受影响 tab 关闭；受影响 tab 有脏 → 先两键提示
+- [x] 验收 5：删除成功 → 受影响 tab 关闭；受影响 tab 有脏 → 先两键提示
   （保存全部并继续 / 取消），取消则中止；非空目录删除 → toast 400 中文。
-- [ ] 验收 6：main.c（生成上下文）被改名/删除 → 完成后 refreshMainCDiskState
+- [x] 验收 6：main.c（生成上下文）被改名/删除 → 完成后 refreshMainCDiskState
   同步步骤 8 状态行。
-- [ ] 验收 7：node 单测（纯件边界）+ fx-guard 登记全绿。
+- [x] 验收 7：node 单测（纯件边界）+ fx-guard 登记全绿。
 
 **结论：** 已落地。fx/code-tree-ops.js（treeNameValidate / treeOpAffected /
 treeOpTitle / createPromptMessage / renamePromptMessage / treeOpConfirmMessage /
@@ -51,3 +51,8 @@ ui tab 结构，tab 集合由既有单源给出；测试与 fx-guard 走新名�
 rename 脏状态/mtime 不变、无数据风险——评审整改已删初版 guardTreeOpWrite
 调用）；⑦ treeOpIsDir 保留在 fx 导出 + fx-guard + 单测（评审仅要求删 ui 层
 死 import，已删）。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

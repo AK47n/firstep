@@ -11,14 +11,14 @@
 **状态：** resolved
 
 **实施清单：**
-- [ ] `library/modules/ec01g/` 新目录：`code/ec01g_stm32.c/.h`（API 5 函数；.c uart 收发 + rx_handler（收缓冲 256 上限+截断——空指针保护）+ send_cmd 应答匹配（strstr+超时）；零引脚字面量/零标准库）
-- [ ] `manifest.json`（仅 platforms.stm32：files、dependencies []、verified false、hardware_bound false、pins 2 行、kit（EC-01G NB-IoT+GPS 模块）、source_url `.../rf/ec01g-nbiot-gps-module.html`、notes（B 类口径+手册路径+原页+网盘+**页面无 GPS 代码（GPS 归范围外）**+天气/JSON demo 归范围外+缺陷修正（空指针/无界扫）+rx_handler+UART_3 互替共享+未上板）+ description（能力方向：NB-IoT 通信/AT 指令；无题绑定）
-- [ ] pin_config.h 增 6 宏；isr.c __weak + USART3_IRQ_CALLS；pinwriter 登记
-- [ ] 测试 `tests/test_module_ec01g.py`（B 类模板）：仅 platforms.stm32 + 宏存在（`EC01G_UART\s+UART_3` 五件套）+isr.c 聚合（USART3_IRQ_CALLS 含 ec01g）+单选生成+守卫（空指针保护（`NULL`/非空检查）、有界扫、`strstr` 匹配、缓冲上限、API 5 函数断言、无 printf/GPIO_Init/RCC_）
-- [ ] test_pins.py 补 6 宏；test_pin_bindings uart 共享组扩充（EC01G → UART3）；test_default_layout 白名单 UART3 外设级 +1
-- [ ] UV4 矩阵（init+send_cmd("AT")+send_string("x")+available+receive(buf,128)，(void) 化）→ 0/0 → verified=true
-- [ ] wordlist 补录（无线通信/NB-IoT + models + lib_modules）
-- [ ] 中文提交 → resolved → 结论回填
+- [x] `library/modules/ec01g/` 新目录：`code/ec01g_stm32.c/.h`（API 5 函数；.c uart 收发 + rx_handler（收缓冲 256 上限+截断——空指针保护）+ send_cmd 应答匹配（strstr+超时）；零引脚字面量/零标准库）
+- [x] `manifest.json`（仅 platforms.stm32：files、dependencies []、verified false、hardware_bound false、pins 2 行、kit（EC-01G NB-IoT+GPS 模块）、source_url `.../rf/ec01g-nbiot-gps-module.html`、notes（B 类口径+手册路径+原页+网盘+**页面无 GPS 代码（GPS 归范围外）**+天气/JSON demo 归范围外+缺陷修正（空指针/无界扫）+rx_handler+UART_3 互替共享+未上板）+ description（能力方向：NB-IoT 通信/AT 指令；无题绑定）
+- [x] pin_config.h 增 6 宏；isr.c __weak + USART3_IRQ_CALLS；pinwriter 登记
+- [x] 测试 `tests/test_module_ec01g.py`（B 类模板）：仅 platforms.stm32 + 宏存在（`EC01G_UART\s+UART_3` 五件套）+isr.c 聚合（USART3_IRQ_CALLS 含 ec01g）+单选生成+守卫（空指针保护（`NULL`/非空检查）、有界扫、`strstr` 匹配、缓冲上限、API 5 函数断言、无 printf/GPIO_Init/RCC_）
+- [x] test_pins.py 补 6 宏；test_pin_bindings uart 共享组扩充（EC01G → UART3）；test_default_layout 白名单 UART3 外设级 +1
+- [x] UV4 矩阵（init+send_cmd("AT")+send_string("x")+available+receive(buf,128)，(void) 化）→ 0/0 → verified=true
+- [x] wordlist 补录（无线通信/NB-IoT + models + lib_modules）
+- [x] 中文提交 → resolved → 结论回填
 
 **验收标准：** 全部 checkbox；pytest 绿；矩阵 exit 0。
 
@@ -43,3 +43,8 @@
   ③ 6 宏 + isr __weak + USART3 聚合 + pinwriter 登记 ✓
   ④ 测试形状/宏/isr/生成/守卫 ✓ ⑤ test_pins/test_pin_bindings（EC01G → UART3）/
   test_default_layout ✓ ⑥ 矩阵 verified=true ✓ ⑦ wordlist 补录 ✓。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

@@ -11,13 +11,13 @@
 **状态：** resolved
 
 **实施清单：**
-- [ ] `library/modules/syn6288/code/syn6288_stm32.c/.h`（独立 stm32 头——API 6 函数与 mspm0 syn6288.h 同名同型；.c 软 UART TX（104us/bit）+ send_cmd 帧（0xFD/Len/Cmd/Par/text/XOR）+ **text 长度 ≤200 上限**（Send_Buff 防溢出）；零引脚字面量/零标准库/无 UART 实例字面量）
-- [ ] manifest.json platforms 增 stm32：files、dependencies ["delay"]、verified false、hardware_bound false、pins 1 行、kit/source_url（wiki 原页 `.../control/syn6288-speech-synthesis-broadcast-module.html`）、notes（手册路径+原页+网盘+软 UART TX 定稿+200 上限（mspm0 同款）+RX 不实现+默认脚推理+未上板）
-- [ ] pin_config.h 增 2 宏
-- [ ] 测试 `tests/test_module_syn6288.py`：形状+宏存在（`SYN6288_GPIO\s+GPIO_C`/`SYN6288_PIN\s+Pin_14`）+单选生成+mspm0 零改动+守卫（`104`us、`0xFD` 帧头+异或校验+`200` 上限、API 6 函数名断言、无 `UART_`/`USART`/`rx_handler`、无 printf/GPIO_Init/RCC_）
-- [ ] test_pins.py 补 2 宏；test_default_layout.py 白名单 PC14 +1（LED 组）
-- [ ] UV4 矩阵（init+send_cmd(1,0,"test")+speak("hi")+stop+pause+resume 全调，(void) 化）→ 0/0 → verified=true
-- [ ] wordlist 零补录复核；中文提交 → resolved → 结论回填
+- [x] `library/modules/syn6288/code/syn6288_stm32.c/.h`（独立 stm32 头——API 6 函数与 mspm0 syn6288.h 同名同型；.c 软 UART TX（104us/bit）+ send_cmd 帧（0xFD/Len/Cmd/Par/text/XOR）+ **text 长度 ≤200 上限**（Send_Buff 防溢出）；零引脚字面量/零标准库/无 UART 实例字面量）
+- [x] manifest.json platforms 增 stm32：files、dependencies ["delay"]、verified false、hardware_bound false、pins 1 行、kit/source_url（wiki 原页 `.../control/syn6288-speech-synthesis-broadcast-module.html`）、notes（手册路径+原页+网盘+软 UART TX 定稿+200 上限（mspm0 同款）+RX 不实现+默认脚推理+未上板）
+- [x] pin_config.h 增 2 宏
+- [x] 测试 `tests/test_module_syn6288.py`：形状+宏存在（`SYN6288_GPIO\s+GPIO_C`/`SYN6288_PIN\s+Pin_14`）+单选生成+mspm0 零改动+守卫（`104`us、`0xFD` 帧头+异或校验+`200` 上限、API 6 函数名断言、无 `UART_`/`USART`/`rx_handler`、无 printf/GPIO_Init/RCC_）
+- [x] test_pins.py 补 2 宏；test_default_layout.py 白名单 PC14 +1（LED 组）
+- [x] UV4 矩阵（init+send_cmd(1,0,"test")+speak("hi")+stop+pause+resume 全调，(void) 化）→ 0/0 → verified=true
+- [x] wordlist 零补录复核；中文提交 → resolved → 结论回填
 
 **验收标准：** 全部 checkbox；pytest 绿；矩阵 exit 0。
 
@@ -39,3 +39,8 @@
   验收逐条对照：① stm32 源 + API 6 函数 ✓ ② manifest stm32 条目 ✓
   ③ pin_config 2 宏 ✓ ④ 测试形状+宏+生成+守卫（含 200 上限）✓
   ⑤ test_pins/test_default_layout ✓ ⑥ 矩阵 verified=true ✓ ⑦ wordlist ✓。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

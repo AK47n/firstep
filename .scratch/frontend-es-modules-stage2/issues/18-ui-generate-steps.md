@@ -2,7 +2,7 @@
 
 **要做什么：** generate tab 的「步骤导航（mark/unmark/sync）/ 草稿保存恢复 / 生成总览（overview）/ 卡折叠（initCardCollapse）」簇迁入 `static/js/ui/generate-steps.js`；**stepDoneSet 拥有者**；restoreDraft 内 chosenPlatform 赋值改调 `setChosenPlatform`（工单 12 导出）。**被谁阻塞：** 02 + 12（setChosenPlatform / renderSelected / renderWarnings）
 
-**状态：** 已实施（resolved）
+**状态：** resolved（resolved）
 
 ## 关键事实（1-based 行号，实施时以 grep 复核）
 

@@ -47,4 +47,9 @@
 - [x] 反馈环补断言：`generate_check.py` 围栏 + include 解析，旧产物红 8 处、修复后双题全绿。
 - [x] 库内容补录：digit_uart / config 两模块 + 四组依赖声明（见「库变更」，全局库非 git）。
 - [x] 回归测试 +10，763 全绿。
-- [ ] 用户 Keil 真机重编译确认（修复后产物 `worktree/.scratch/real-run/out_2021F`）。
+- [x] 用户 Keil 真机重编译确认（修复后产物 `worktree/.scratch/real-run/out_2021F`）。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

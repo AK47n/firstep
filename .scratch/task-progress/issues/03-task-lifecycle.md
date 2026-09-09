@@ -10,8 +10,13 @@
 
 **验收：** 全部 ✓；测试 test_task_progress.py（01-03 共 39 条）+ 全量 2530+ passed；mypy 0 错（changed 5 文件）；JS 487 通过。
 
-- [ ] 状态机纯函数：合法转移表（pending → doing → verified/unverified/failed/skipped；verified → pending 重做；unverified/failed → verified 人工改标；skipped → pending 恢复），非法转移拒绝（如 pending 直接 verified 未被 AI 执行过 = 拒绝或允许？——按用户拍板「人工可改标」允许 unverified/failed → verified 直达，其余非法 400 中文）
-- [ ] `POST /api/tasks/status`（同步 JSON）：`{output_dir, task_id, status}` 改标 + 落盘 + 返回最新任务
-- [ ] 修订联动：`/api/revise/apply` 执行后（模块集变化路径）删除 `.contest_tasks.json`（force 已备案档则顺带删 .bak），done 载荷带 `tasks_invalidated: true`
-- [ ] 前端：任务卡跳过 / 重做 / 人工改标按钮（按当前状态显隐）+ 修订执行后的「任务清单已作废，请重新拆解」提示条
-- [ ] 测试：状态机转移表全覆盖（合法 + 非法）；改标落盘 roundtrip；修订执行后文件删除断言；前端纯函数文案/显隐
+- [x] 状态机纯函数：合法转移表（pending → doing → verified/unverified/failed/skipped；verified → pending 重做；unverified/failed → verified 人工改标；skipped → pending 恢复），非法转移拒绝（如 pending 直接 verified 未被 AI 执行过 = 拒绝或允许？——按用户拍板「人工可改标」允许 unverified/failed → verified 直达，其余非法 400 中文）
+- [x] `POST /api/tasks/status`（同步 JSON）：`{output_dir, task_id, status}` 改标 + 落盘 + 返回最新任务
+- [x] 修订联动：`/api/revise/apply` 执行后（模块集变化路径）删除 `.contest_tasks.json`（force 已备案档则顺带删 .bak），done 载荷带 `tasks_invalidated: true`
+- [x] 前端：任务卡跳过 / 重做 / 人工改标按钮（按当前状态显隐）+ 修订执行后的「任务清单已作废，请重新拆解」提示条
+- [x] 测试：状态机转移表全覆盖（合法 + 非法）；改标落盘 roundtrip；修订执行后文件删除断言；前端纯函数文案/显隐
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

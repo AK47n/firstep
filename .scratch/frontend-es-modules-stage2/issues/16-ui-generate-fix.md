@@ -2,7 +2,7 @@
 
 **要做什么：** generate tab 的「编译修复（fix center）」簇迁入 `static/js/ui/generate-fix.js`（FIX_MAX_ROUNDS / toolchains / fixLoop + 单次编译 / 修复循环 / 批继续 / 横幅 / 结果表 / telemetry 展示 / 就绪度）。**被谁阻塞：** 02（app.js）
 
-**状态：** 已实施（resolved）
+**状态：** resolved（resolved）
 
 ## 关键事实（1-based 行号，实施时以 grep 复核）
 

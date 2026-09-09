@@ -20,7 +20,12 @@
 - CHANGELOG 中文条目由各提交信息自动补录（01-06 全部提交信息中文）。
 - tests/test_repo_language.py 3 passed（语言规范兜底绿）。
 
-- [ ] CONTEXT.md 词表含「修订」「深化」「上下文清单」三条，指向主要实现
-- [ ] 必要 ADR 已写（若 01-04 实现中浮现出值得留痕的决策）
-- [ ] CHANGELOG 中文条目就位
-- [ ] 语言规范检查通过（tests/test_repo_language.py 绿）
+- [x] CONTEXT.md 词表含「修订」「深化」「上下文清单」三条，指向主要实现
+- [x] 必要 ADR 已写（若 01-04 实现中浮现出值得留痕的决策）
+- [x] CHANGELOG 中文条目就位
+- [x] 语言规范检查通过（tests/test_repo_language.py 绿）
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

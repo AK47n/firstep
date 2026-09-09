@@ -11,14 +11,14 @@
 **状态：** resolved
 
 **实施清单：**
-- [ ] `library/modules/esp01s/` 新目录：`code/esp01s_stm32.c/.h`（API 6 函数；.c uart 收发 + rx_handler（收字符入缓冲 200 上限+截断）+ send_cmd 应答匹配（strstr+超时）+ parse_ipd（`+IPD,` 有界解析）；零引脚字面量/零标准库）
-- [ ] `manifest.json`（仅 platforms.stm32：files、dependencies []、verified false、hardware_bound false、pins 2 行、kit（ESP-01S WiFi 模块）、source_url `.../rf/esp01s-wifi-module.html`、notes（B 类口径+手册路径+原页+网盘（5 条）+AT 模板/应用范围外+缺陷修正 4 条+rx_handler+UART_1 互替共享+未上板）+ description（能力方向：WiFi 连接/AT 透传；无题绑定）
-- [ ] pin_config.h 增 6 宏；isr.c __weak + USART1_IRQ_CALLS；pinwriter 登记
-- [ ] 测试 `tests/test_module_esp01s.py`（B 类模板）：仅 platforms.stm32 + 宏存在（`ESP01S_UART\s+UART_1` 五件套）+isr.c 聚合+单选生成+守卫（无 `% 200` 回绕式、有界扫（`while` 含上限条件）、`strstr` 匹配、缓冲 200 上限、API 6 函数断言、无 printf/GPIO_Init/RCC_）
-- [ ] test_pins.py 补 6 宏；test_pin_bindings uart 共享组扩充（ESP01S → UART1）；test_default_layout 白名单 UART1 外设级 +1
-- [ ] UV4 矩阵（init+send_cmd("AT")+send_string("hi")+available+receive(buf,128)+parse_ipd，(void) 化）→ 0/0 → verified=true
-- [ ] wordlist 补录（无线通信/WiFi + models + lib_modules）
-- [ ] 中文提交 → resolved → 结论回填
+- [x] `library/modules/esp01s/` 新目录：`code/esp01s_stm32.c/.h`（API 6 函数；.c uart 收发 + rx_handler（收字符入缓冲 200 上限+截断）+ send_cmd 应答匹配（strstr+超时）+ parse_ipd（`+IPD,` 有界解析）；零引脚字面量/零标准库）
+- [x] `manifest.json`（仅 platforms.stm32：files、dependencies []、verified false、hardware_bound false、pins 2 行、kit（ESP-01S WiFi 模块）、source_url `.../rf/esp01s-wifi-module.html`、notes（B 类口径+手册路径+原页+网盘（5 条）+AT 模板/应用范围外+缺陷修正 4 条+rx_handler+UART_1 互替共享+未上板）+ description（能力方向：WiFi 连接/AT 透传；无题绑定）
+- [x] pin_config.h 增 6 宏；isr.c __weak + USART1_IRQ_CALLS；pinwriter 登记
+- [x] 测试 `tests/test_module_esp01s.py`（B 类模板）：仅 platforms.stm32 + 宏存在（`ESP01S_UART\s+UART_1` 五件套）+isr.c 聚合+单选生成+守卫（无 `% 200` 回绕式、有界扫（`while` 含上限条件）、`strstr` 匹配、缓冲 200 上限、API 6 函数断言、无 printf/GPIO_Init/RCC_）
+- [x] test_pins.py 补 6 宏；test_pin_bindings uart 共享组扩充（ESP01S → UART1）；test_default_layout 白名单 UART1 外设级 +1
+- [x] UV4 矩阵（init+send_cmd("AT")+send_string("hi")+available+receive(buf,128)+parse_ipd，(void) 化）→ 0/0 → verified=true
+- [x] wordlist 补录（无线通信/WiFi + models + lib_modules）
+- [x] 中文提交 → resolved → 结论回填
 
 **验收标准：** 全部 checkbox；pytest 绿；矩阵 exit 0。
 
@@ -41,3 +41,8 @@
   ② manifest 仅 stm32 + kit/source_url + description ✓ ③ 6 宏 + isr + pinwriter ✓
   ④ 测试形状/宏/isr/生成/守卫（无回绕式、有界扫、strstr）✓ ⑤ test_pins 等 ✓
   ⑥ 矩阵 verified=true ✓ ⑦ wordlist 补录 ✓。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

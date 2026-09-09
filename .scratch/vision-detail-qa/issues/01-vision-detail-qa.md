@@ -8,14 +8,19 @@ Status: resolved
 
 ## 验收标准
 
-- [ ] `refine_image_description`：二轮有细节 → `描述；细节补充：<细节>`；二轮异常 / 空 / 否定（无补充/无需补充/没有补充/无更多）→ 原描述原样返回
-- [ ] `detail_qa=False` 时四个 extraction 函数零二轮调用（行为与现状一致）
-- [ ] `pdf_page_render_notes` 精注记在图文过滤之后（无图页不付二轮调用）
-- [ ] `config.py` `vision_detail_qa` 默认 True；非 bool 解析抛 ConfigError
-- [ ] settings GET 回 `vision_detail_qa`、PUT 解析 `_optional_bool(default=True)`
-- [ ] tests/test_extraction.py 新增 ≥4 用例、tests/test_config.py ≥1、tests/test_webapp.py ≥2，全绿
-- [ ] pytest 全量无回归
+- [x] `refine_image_description`：二轮有细节 → `描述；细节补充：<细节>`；二轮异常 / 空 / 否定（无补充/无需补充/没有补充/无更多）→ 原描述原样返回
+- [x] `detail_qa=False` 时四个 extraction 函数零二轮调用（行为与现状一致）
+- [x] `pdf_page_render_notes` 精注记在图文过滤之后（无图页不付二轮调用）
+- [x] `config.py` `vision_detail_qa` 默认 True；非 bool 解析抛 ConfigError
+- [x] settings GET 回 `vision_detail_qa`、PUT 解析 `_optional_bool(default=True)`
+- [x] tests/test_extraction.py 新增 ≥4 用例、tests/test_config.py ≥1、tests/test_webapp.py ≥2，全绿
+- [x] pytest 全量无回归
 
 ## 提交
 
 中文提交信息；提交后 post-commit 自动补 CHANGELOG。
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。

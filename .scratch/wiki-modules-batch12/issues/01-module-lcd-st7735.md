@@ -12,11 +12,16 @@
 
 **验收：**
 
-- [ ] 提炼：从厂家 C8T6 例程取 lcd.c/lcd.h/lcdfont.h/lcd_init.c/lcd_init.h → `library/modules/lcd/code/`（UTF-8），去 STM32 平台依赖（GPIO_ResetBits/SetBits→DL_GPIO 位操作宏、delay_ms→库 delay、去 printf/main）
-- [ ] API 定稿按 spec：lcd_init(model,dir) + 绘制/文本函数 + LCD_MODEL_096 常量；方向态/分辨率静态化，lcd_get_width/height 出参
-- [ ] 字库裁剪：ascii 四套全留 + tfont16 汉字集；lcdfont.h ≤ 16KB；pic.h 不入库；LCDFONT 体积断言进测试
-- [ ] 母版 syscfg：新增 LCD GPIO 实例（6 脚命名 SCL/SDA/RES/DC/CS/BLK，全 OUTPUT，CS/BLK initialValue SET）+ INSTANCE_CONSUMERS `"LCD":("lcd",)`
-- [ ] manifest.json：dependencies ["delay"]；mspm0 条目（files 5 件、verified 初始 false、hardware_bound false、kit=中景园 0.96 寸 IPS 屏 ZJY096S0800TG01、source_url=screen--0-96-color-screen.md 原页 https://wiki.lckfb.com/zh-hans/dmx/module/screen/0-96-color-screen.html、notes 含 wiki 页路径+原页+网盘（19DxY8JJEzNt4XYF_CwVbDw/8888）+厂家目录路径+初始化序列来源（ST7735 0x11/0xB1-0xE1 序列，厂家 lcd_init.c）+改造要点（软 SPI/去平台依赖/字库裁剪/方向参数化）+六屏合一说明+未上板）；pins 6 角色 gpio_out（default 按上表）
-- [ ] wordlist 显示模块一条 solution（六屏合一 + 触摸选配件 lib ["lcd","tp_xpt2046"]）+ models 增 ST7735/ST7789/GC9A01/XPT2046；实测默认词表 wire 字节数（超 7300 fit 上限按先例上调并同步 budget/llm）
-- [ ] 测试：test_module_lcd.py（manifest 形状 + 单选生成 syscfg 落盘 + main.c 调 init/显示函数过静态门禁 + 字库体积断言 + 无平台依赖守卫 + 型号常量完整性）+ test_pins/test_pin_bindings（刻意重叠表）/test_syscfg_prune 增断言
-- [ ] 编译矩阵：单选生成 → SysConfig CLI → gmake 0 error/0 warning；verified=true + notes 编译记录；code-review 后中文提交、工单 resolved
+- [x] 提炼：从厂家 C8T6 例程取 lcd.c/lcd.h/lcdfont.h/lcd_init.c/lcd_init.h → `library/modules/lcd/code/`（UTF-8），去 STM32 平台依赖（GPIO_ResetBits/SetBits→DL_GPIO 位操作宏、delay_ms→库 delay、去 printf/main）
+- [x] API 定稿按 spec：lcd_init(model,dir) + 绘制/文本函数 + LCD_MODEL_096 常量；方向态/分辨率静态化，lcd_get_width/height 出参
+- [x] 字库裁剪：ascii 四套全留 + tfont16 汉字集；lcdfont.h ≤ 16KB；pic.h 不入库；LCDFONT 体积断言进测试
+- [x] 母版 syscfg：新增 LCD GPIO 实例（6 脚命名 SCL/SDA/RES/DC/CS/BLK，全 OUTPUT，CS/BLK initialValue SET）+ INSTANCE_CONSUMERS `"LCD":("lcd",)`
+- [x] manifest.json：dependencies ["delay"]；mspm0 条目（files 5 件、verified 初始 false、hardware_bound false、kit=中景园 0.96 寸 IPS 屏 ZJY096S0800TG01、source_url=screen--0-96-color-screen.md 原页 https://wiki.lckfb.com/zh-hans/dmx/module/screen/0-96-color-screen.html、notes 含 wiki 页路径+原页+网盘（19DxY8JJEzNt4XYF_CwVbDw/8888）+厂家目录路径+初始化序列来源（ST7735 0x11/0xB1-0xE1 序列，厂家 lcd_init.c）+改造要点（软 SPI/去平台依赖/字库裁剪/方向参数化）+六屏合一说明+未上板）；pins 6 角色 gpio_out（default 按上表）
+- [x] wordlist 显示模块一条 solution（六屏合一 + 触摸选配件 lib ["lcd","tp_xpt2046"]）+ models 增 ST7735/ST7789/GC9A01/XPT2046；实测默认词表 wire 字节数（超 7300 fit 上限按先例上调并同步 budget/llm）
+- [x] 测试：test_module_lcd.py（manifest 形状 + 单选生成 syscfg 落盘 + main.c 调 init/显示函数过静态门禁 + 字库体积断言 + 无平台依赖守卫 + 型号常量完整性）+ test_pins/test_pin_bindings（刻意重叠表）/test_syscfg_prune 增断言
+- [x] 编译矩阵：单选生成 → SysConfig CLI → gmake 0 error/0 warning；verified=true + notes 编译记录；code-review 后中文提交、工单 resolved
+
+
+## Comments
+
+- 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。
