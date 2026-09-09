@@ -14,6 +14,7 @@ from contest_generator.extraction import ExtractionError, extract_file, extract_
 from tests.fakes import (
     make_blank_pdf,
     make_encrypted_pdf,
+    make_pdf_with_image,
     make_sample_docx,
     make_sample_pdf,
 )
@@ -241,6 +242,67 @@ def testpdf_image_notes_caps_at_eight_and_marks_skips(monkeypatch, tmp_path):
     assert len(lines) == 9  # 8 张描述 + 1 行跳过标注
     assert lines[0] == "[示意图1：图]"
     assert "另有 1 张图跳过" in lines[-1]
+
+
+# ---------------------------------------------------------------------------
+# 真 PDF 集成（在途盘点补口，工单 vision-eyes/02）：真实 PdfReader +
+# page.images 提取路径（此前只用 _FakeReader 替身，提取链没被真实 PDF 走通）
+# ---------------------------------------------------------------------------
+
+
+def test_pdf_image_notes_reads_real_embedded_image(monkeypatch, tmp_path):
+    """真 PDF 内嵌图 → page.images 真实解码 → 图注段（图像字节与嵌入值一致）。"""
+    from contest_generator import extraction
+
+    path = make_pdf_with_image(tmp_path / "problem.pdf", "Contest 2026")
+    fake_describe = _fake_describe("真图描述")
+    monkeypatch.setattr(extraction, "describe_image_cached", fake_describe)
+
+    notes = extraction.pdf_image_notes(
+        path, vision_base_url="", vision_api_key="sk-test", vision_model="",
+        detail_qa=False,
+    )
+
+    assert notes == "[示意图1：真图描述]"
+    # pypdf 把原始图像流解码为 PNG（ImageFile.data）——按真实像素核对嵌入值
+    from PIL import Image
+
+    png = fake_describe.calls[0][0]
+    assert png.startswith(b"\x89PNG")
+    with Image.open(io.BytesIO(png)) as image:
+        assert image.size == (1, 1)
+        assert image.convert("RGB").getpixel((0, 0)) == (200, 30, 30)
+    assert fake_describe.calls[0][1] == "image/png"  # XObject 名无后缀 → 兜底 png
+
+
+def test_extract_pdf_with_image_notes_end_to_end(monkeypatch, tmp_path):
+    """端到端：文本抽取 + 图注段追加（真实 PDF，非替身）。"""
+    from contest_generator import extraction
+
+    path = make_pdf_with_image(tmp_path / "problem.pdf", "Contest 2026")
+    monkeypatch.setattr(extraction, "describe_image_cached", _fake_describe("布局 A"))
+
+    out = extraction.extract_pdf_with_image_notes(
+        path, vision_base_url="", vision_api_key="sk-test", vision_model="",
+        detail_qa=False,
+    )
+
+    assert "Contest 2026" in out
+    assert out.rstrip("\n").endswith("[示意图1：布局 A]")
+
+
+def test_extract_pdf_with_image_notes_degrades_without_key(tmp_path):
+    """未配视觉 key：含图 PDF 的产物与纯文本抽取逐字节一致（静默降级）。"""
+    from contest_generator import extraction
+
+    path = make_pdf_with_image(tmp_path / "problem.pdf", "Contest 2026")
+
+    out = extraction.extract_pdf_with_image_notes(
+        path, vision_base_url="", vision_api_key="", vision_model="",
+    )
+
+    assert out == extract_file(path)
+    assert "[示意图" not in out
 
 
 def _pil_image_bytes(fmt: str) -> bytes:

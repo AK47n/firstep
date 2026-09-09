@@ -76,6 +76,8 @@ def test_effective_vision_api_key_reuses_main_key_for_deepseek_base():
     assert effective_vision_api_key("", "sk-main", DEFAULT_VISION_BASE_URL) == "sk-main"
     assert effective_vision_api_key("", "sk-main", "https://api.deepseek.com/v1") == "sk-main"
     assert effective_vision_api_key("", "sk-main", "https://api.deepseek.com/") == "sk-main"
+    # 主 key 也为空 → 无可复用 key（vision_effective 判据的关闭分支）
+    assert effective_vision_api_key("", "", DEFAULT_VISION_BASE_URL) == ""
 
 
 def test_effective_vision_api_key_does_not_leak_main_key_to_custom_base():

@@ -4599,6 +4599,18 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "vision_detail_qa": (
                 config.vision_detail_qa if config is not None else True
             ),
+            # 视觉通道是否真的可用（工单 vision-eyes/04 在途盘点补口）：判据单源
+            # = vision.effective_vision_api_key + vision_configured（DeepSeek 端点
+            # 留空 key 复用主 key；自定义端点留空 = 关闭）。前端据此显示/隐藏
+            # 视觉专用横幅——不重复实现「复用主 key」规则。
+            "vision_effective": (
+                config is not None
+                and vision_configured(
+                    effective_vision_api_key(
+                        config.vision_api_key, config.api_key, config.vision_base_url
+                    )
+                )
+            ),
             # LLM 单价（工单 llm-cost-control/01）：返回当前生效表（默认 + 覆盖
             # 合并），前端可直接显示；未配置 / 无覆盖 = 内置默认
             "llm_prices": price_tables_to_config(

@@ -28,6 +28,7 @@ import {
   codeTabStripHTML,
   codeEditorHTML,
   codeWindowRange,
+  codeWindowSpacerHTML,
   conflictHTML,
   editorLineRange,
   isTabSavable,
@@ -719,6 +720,18 @@ export function editorFindStep(delta) {
   return { total, current: editorFind.index };
 }
 
+// editorFindSetCurrent(line)：把当前命中索引移到该行的首个命中——命中列表
+// 点击用（工单 code-editor-vscode-polish/04 在途盘点补口）：点击项要成为
+// current，否则「第 N / 共 M 处」与当前命中高亮不跟随。该行无命中 → 索引不动。
+export function editorFindSetCurrent(line) {
+  const idx = editorFind.ranges.findIndex((r) => r.line === line);
+  if (idx >= 0) {
+    editorFind.index = idx;
+    renderEditorMarks();
+  }
+  return { total: editorFind.ranges.length, current: editorFind.index };
+}
+
 // focusFindRange(range)：跳转到命中区段——先 editJumpToLine（滚动居中 +
 // flash + 当前行），再把选区缩为命中区间（VSCode 当前命中选址观感）。
 // 折叠态（工单 code-page-vscode-overhaul/03）：range 为模型行/列，选区按
@@ -1047,7 +1060,9 @@ function winPatchRow(span) {
 }
 
 function winSpacer(px) {
-  return px > 0 ? `<div class="code-window-spacer" style="height:${px}px"></div>` : "";
+  // 占位块 HTML 单源在 fx/codeeditor.js（工单 code-page-vscode-overhaul/08
+  // 在途盘点补口：纯件可单测，ui 层只做调用）
+  return codeWindowSpacerHTML(px);
 }
 
 function winWindow() {
@@ -1993,7 +2008,7 @@ function showConflictModal(tab, manual) {
           + conflictHTML(disk.content || "", tab.content)
           + "</div>"
           + '<div class="pdf-detail-actions">'
-          + '<button type="button" class="danger" data-conflict-action="overwrite">覆盖写盘</button>'
+          + '<button type="button" class="danger" data-conflict-action="overwrite">覆盖保存</button>'
           + '<button type="button" data-conflict-action="reload">放弃我的修改并重新加载</button>'
           + '<button type="button" data-confirm-cancel data-conflict-action="cancel">取消</button>'
           + "</div></div>";

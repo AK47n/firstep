@@ -67,7 +67,7 @@ from contest_generator.pin_bindings import PinBindingError, resolve_bindings
 from contest_generator.recent_jobs import load_recent, recent_file, record_recent
 from contest_generator.recommend_cache import cache_recommend, recommend_cache_path
 from contest_generator.wiring import build_wiring_snapshot, write_wiring_snapshot
-from contest_generator.library import ValidationResult
+from contest_generator.library import ValidationResult, module_mtime
 from contest_generator.manifest import ManifestSummary
 from contest_generator.selection import (
     REFERENCE_SOURCE_RELATED,
@@ -3716,7 +3716,7 @@ def test_recommend_llm_failure_ends_stream_with_error_event(client, context):
 # ---------------------------------------------------------------------------
 
 
-def test_modules_list_returns_all(client):
+def test_modules_list_returns_all(client, context):
     resp = client.get("/api/modules")
 
     assert resp.status_code == 200
@@ -3728,6 +3728,11 @@ def test_modules_list_returns_all(client):
     # 列表 API 返回新字段：存量无身份字段的条目以空值呈现（迁移不打断）
     assert dht11["platforms"][PLATFORM_STM32]["kit"] == ""
     assert dht11["platforms"][PLATFORM_STM32]["source_url"] == ""
+    # 最近更新排序数据源（工单 ux-polish-02/07）：每条带 mtime（manifest 文件
+    # 的 epoch 秒，与 library.module_mtime 同源；缺失/不可读 = 0 垫底）
+    assert all(isinstance(m["mtime"], int) for m in resp.json())
+    assert dht11["mtime"] == module_mtime(context[0].config.module_library_dir, "dht11")
+    assert dht11["mtime"] > 0
 
 
 def test_module_file_endpoint_returns_content(client):
@@ -5095,6 +5100,38 @@ def test_settings_vision_fields_roundtrip_and_mask(client, context):
     )
     assert resp.status_code == 200
     assert context[0].config.vision_api_key == ""
+
+
+def test_settings_vision_effective_flag(client, context):
+    """vision_effective（工单 vision-eyes/04 在途盘点补口）：判据单源 =
+    effective_vision_api_key + vision_configured——DeepSeek 端点留空 key 复用
+    主 key；自定义端点留空 = 关闭（不外发主 key）；显式视觉 key = 开。"""
+    current = client.get("/api/settings").json()
+
+    def put(**overrides):
+        payload = {
+            "base_url": current["base_url"],
+            "api_key": current["api_key"],
+            "model": current["model"],
+            "module_library_dir": current["module_library_dir"],
+            "masters_dir": current["masters_dir"],
+        }
+        payload.update(overrides)
+        assert client.put("/api/settings", json=payload).status_code == 200
+        return client.get("/api/settings").json()["vision_effective"]
+
+    # 主 key 非空 + DeepSeek 端点 + 视觉 key 留空 → 复用主 key = 可用
+    assert put(api_key="sk-main-123456", vision_base_url="https://api.deepseek.com",
+               vision_api_key="") is True
+    # 自定义端点 + 视觉 key 留空 → 不外发主 key = 关闭
+    assert put(api_key="sk-main-123456", vision_base_url="https://vision.example.com/v1",
+               vision_api_key="") is False
+    # 显式视觉 key → 任意端点都可用
+    assert put(api_key="sk-main-123456", vision_base_url="https://vision.example.com/v1",
+               vision_api_key="sk-vis-123456") is True
+    # 「主 key 也空 = 关闭」由域层单测覆盖（tests/test_vision.py::
+    # test_effective_vision_api_key_reuses_main_key_for_deepseek_base）——
+    # PUT api_key 空串 = 沿用旧值（掩码语义），端点层造不出该状态。
 
 
 def test_settings_local_llm_fields_roundtrip(client, context):

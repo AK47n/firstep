@@ -1226,7 +1226,7 @@ async function tasksRollback(backupId, taskId) {
   if (tasks.busy) return;
   if (!await confirmModal({
     title: "确认回滚？",
-    message: "将把输出目录整体恢复到该任务执行前的状态（含 main.c 与其余文件），本任务的改动全部撤销；已完成的其他任务不受影响（其改动已在各自备份与后续写盘中）。",
+    message: "将把输出目录整体恢复到该任务执行前的状态（含 main.c 与其余文件），本任务的改动全部撤销；已完成的其他任务不受影响（其改动已在各自备份与后续保存中）。",
     danger: true,
     confirmText: "确认回滚",
   })) return;

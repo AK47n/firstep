@@ -135,6 +135,10 @@ $("set-vision-detail-qa").checked = s.vision_detail_qa !== false;
     $("set-recommend-rounds").value = String(s.recommend_max_rounds ?? 4);
     $("set-config-path").textContent = s.config_path;
     $("settings-banner").classList.toggle("hidden", !!s.configured);
+    // 视觉专用横幅（工单 vision-eyes/04 在途盘点补口）：判据单源 = 后端
+    // /api/settings 的 vision_effective（含「DeepSeek 端点留空 key 复用主 key」）
+    const visionBanner = $("vision-banner");
+    if (visionBanner) visionBanner.classList.toggle("hidden", !!s.vision_effective);
     void refreshToolchainProbes();  // 已保存配置的探测回显（工单 ux-walkthrough-02/06）
   } catch (e) { $("settings-msg").textContent = e.message; }
 }

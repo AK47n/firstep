@@ -80,10 +80,13 @@ async function treeCreate(kind) {
     confirmText: "创建",
     cancelText: "取消",
     extra: treeNamePromptHTML(kind, ""),
+    // 就地校验（工单 code-tree-ops/02 在途盘点补口）：名称非法 → 弹窗不关闭 +
+    // 错误就地显示，用户留在输入框改（此前是弹窗已关才 toast，输入丢失）。
+    validate: (value) => treeNameValidate(String(value)).msg,
   });
   if (!res) return;
   const name = String(res);
-  const v = treeNameValidate(name);
+  const v = treeNameValidate(name);   // 兜底（validate 已挡，防御路径）
   if (!v.ok) { toastError({ message: v.msg }, "无法创建"); return; }
   const path = name;
   try {
@@ -115,10 +118,12 @@ async function treeRename(path, isDir) {
     confirmText: "重命名",
     cancelText: "取消",
     extra: treeNamePromptHTML("rename", currentName),
+    // 就地校验（工单 code-tree-ops/02 在途盘点补口）：同新建——非法名不关闭弹窗
+    validate: (value) => treeNameValidate(String(value)).msg,
   });
   if (!res) return;
   const name = String(res);
-  const v = treeNameValidate(name);
+  const v = treeNameValidate(name);   // 兜底（validate 已挡，防御路径）
   if (!v.ok) { toastError({ message: v.msg }, "无法重命名"); return; }
   if (name === currentName) { toast("info", "名称未变化"); return; }
   try {

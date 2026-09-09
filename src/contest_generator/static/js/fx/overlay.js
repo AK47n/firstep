@@ -8,6 +8,8 @@ import { esc } from "./core.js";
 // danger（默认 true = 主钮危险红）/ confirmText / cancelText / extra（可选
 // HTML 片段，追加在消息后，如平台选择下拉）}。data-confirm-ok /
 // data-confirm-cancel 交事件层（ui/confirm.js 工厂）。
+// data-confirm-error = 就地校验错误槽（默认隐藏，工单 code-tree-ops/02
+// 在途盘点补口）：确认前校验失败时弹窗**不关闭**，错误显示在这里。
 export function overlayConfirmHTML({
   title,
   message,
@@ -19,7 +21,8 @@ export function overlayConfirmHTML({
   return `<div class="ref-files-modal confirm-modal">
     <div class="ref-files-head"><strong>${esc(title)}</strong>
       <button class="ref-files-close" title="关闭">×</button></div>
-    <div class="ref-detail-scroll"><div class="confirm-message">${esc(message)}</div>${extra}</div>
+    <div class="ref-detail-scroll"><div class="confirm-message">${esc(message)}</div>${extra}
+      <div class="confirm-error error hidden" data-confirm-error role="alert"></div></div>
     <div class="pdf-detail-actions">
       <button type="button" class="${danger ? "danger" : "primary"}" data-confirm-ok>${esc(confirmText)}</button>
       <button type="button" data-confirm-cancel>${esc(cancelText)}</button>

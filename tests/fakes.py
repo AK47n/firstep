@@ -1498,6 +1498,67 @@ def _pdf_escape(text: str) -> str:
     return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
 
+def make_pdf_with_image(path: Path, text: str, image_bytes: bytes | None = None) -> Path:
+    """手工构造含 1 张内嵌栅格图的单页 PDF（真实 /XObject /Im1）。
+
+    工单 vision-eyes/02 在途盘点补口：视觉图注链路此前只用 _FakeReader 替身，
+    本构造器让 `pdf_image_notes` 走**真实** PdfReader + page.images 提取路径
+    （image_bytes 缺省 = 1×1 纯色 RGB，解码后即该 3 字节）。
+    """
+    raw = image_bytes if image_bytes is not None else bytes([200, 30, 30])
+    image_stream = zlib.compress(raw)
+    content = f"BT /F1 24 Tf 72 720 Td ({_pdf_escape(text)}) Tj ET\n"
+    content_stream = zlib.compress(content.encode("ascii"))
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        (
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+            b"/Resources << /Font << /F1 5 0 R >> /XObject << /Im1 4 0 R >> >> "
+            b"/Contents 6 0 R >>"
+        ),
+        (
+            b"<< /Type /XObject /Subtype /Image /Width 1 /Height 1 "
+            b"/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode "
+            b"/Length "
+            + str(len(image_stream)).encode("ascii")
+            + b" >>\nstream\n"
+            + image_stream
+            + b"\nendstream"
+        ),
+        (
+            b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica "
+            b"/Encoding /WinAnsiEncoding >>"
+        ),
+        (
+            b"<< /Filter /FlateDecode /Length "
+            + str(len(content_stream)).encode("ascii")
+            + b" >>\nstream\n"
+            + content_stream
+            + b"\nendstream"
+        ),
+    ]
+    out = bytearray(b"%PDF-1.4\n")
+    offsets: list[int] = []
+    for number, body in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out.extend(f"{number} 0 obj\n".encode("ascii"))
+        out.extend(body)
+        out.extend(b"\nendobj\n")
+    xref_pos = len(out)
+    out.extend(b"xref\n0 7\n")
+    out.extend(b"0000000000 65535 f \n")
+    for offset in offsets:
+        out.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    out.extend(
+        f"trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n{xref_pos}\n%%EOF\n".encode(
+            "ascii"
+        )
+    )
+    path.write_bytes(bytes(out))
+    return path
+
+
 def make_encrypted_pdf(path: Path) -> Path:
     """pypdf 生成带密码的 PDF，用于测试"已加密"报错路径。"""
     writer = PdfWriter()

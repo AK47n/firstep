@@ -31,7 +31,7 @@ export function conflictHTML(diskText, editText) {
       : "");
   };
   return '<div class="code-conflict">'
-    + '<p class="muted">磁盘上的文件已被外部修改（任务 / 深化写盘或外部编辑器）。请对比后选择动作：</p>'
+    + '<p class="muted">磁盘上的文件已被外部修改（任务 / 深化保存过，或外部编辑器改过）。请对比后选择动作：</p>'
     + '<div class="code-conflict-cols">'
     + '<div class="code-conflict-col"><div class="code-conflict-col-title">磁盘版（外部修改）</div>'
     + '<pre class="code-conflict-pre">' + clip(diskText) + "</pre></div>"
@@ -174,6 +174,25 @@ export function codeWindowRange(scrollTop, viewportH, lineH, lineCount, overscan
   const start = Math.max(0, Math.min(n - 1, Math.floor((top - 8) / lh) - ov));
   const end = Math.max(start + 1, Math.min(n, Math.ceil((top + vh - 8) / lh) + ov));
   return { start, end };
+}
+
+// codeWindowSpacerHTML(px)：窗口化上下留白块（纯件单源，工单
+// code-page-vscode-overhaul/08 在途盘点补口——此前只在 ui 层 winSpacer 里，
+// 纯件测试覆盖不到）。px ≤ 0 → 空串（不留占位块）。
+export function codeWindowSpacerHTML(px) {
+  const n = Math.max(0, Math.round(Number(px) || 0));
+  return n > 0 ? `<div class="code-window-spacer" style="height:${n}px"></div>` : "";
+}
+
+// codeWindowSpacers(start, end, lineCount, lineH)：窗口 [start, end) 的上下
+// 留白高度（px）——上 = start*lineH、下 = (lineCount-end)*lineH；越界钳制、
+// 行高下限 1（与 codeWindowRange 同口径）。折叠态调用方传视图行数/视图窗口。
+export function codeWindowSpacers(start, end, lineCount, lineH) {
+  const n = Math.max(0, lineCount | 0);
+  const s = Math.max(0, Math.min(n, start | 0));
+  const e = Math.max(s, Math.min(n, end | 0));
+  const lh = Math.max(1, lineH || 1);
+  return { top: s * lh, bottom: (n - e) * lh };
 }
 
 // codeEditorHTML(content, lang, opts)：可编辑三明治纯件——

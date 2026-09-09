@@ -539,6 +539,29 @@ def test_python_artifact_multi_template_rejects_default_not_in_list():
         )
 
 
+def test_python_artifact_rejects_legacy_and_new_shape_mixed():
+    """旧形状（template/output）与新形状（templates/default）并存 = 大声失败。
+
+    在途盘点补口（2026-09-09）：并存时旧键被静默忽略，录入者以为的单模板
+    会被多模板覆盖——宁可拒收，不静默丢字段。
+    """
+    for legacy_key in ("template", "output"):
+        block = {
+            "default": "a",
+            "templates": [{"id": "a", "template": "code/a.py", "output": "a.py"}],
+            legacy_key: "code/legacy.py" if legacy_key == "template" else "legacy.py",
+        }
+        with pytest.raises(ManifestError, match="不能同时使用旧形状"):
+            ModuleManifest.from_dict(
+                {
+                    "slug": "k230",
+                    "description": "K230 视觉副控",
+                    "python_artifact": block,
+                    "platforms": {"stm32": {"files": [], "verified": True}},
+                }
+            )
+
+
 def test_python_artifact_multi_template_rejects_empty_list():
     block = {"default": "a", "templates": []}
     with pytest.raises(ManifestError, match="非空数组"):

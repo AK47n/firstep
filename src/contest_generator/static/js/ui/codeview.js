@@ -67,6 +67,7 @@ import {
   replaceOneInActiveFile,
   setEditorFind,
   editorFindStep,
+  editorFindSetCurrent,
   codeWindowRefresh,
   editorCaretModelPos,
 } from "/js/ui/codeeditor.js";
@@ -563,9 +564,22 @@ function refreshFindPanel() {
 
 // updateFindCount(status, q)：计数文案——无查询隐藏；有查询无命中显示
 // 「无匹配」（评审整改 04：不隐藏，让用户知道查了但没中）；有命中
-// 「第 N / 共 M 处」。
+// 「第 N / 共 M 处」。同时同步替换按钮可用态（工单 code-page-vscode-overhaul/03
+// 在途盘点补口）：无查询或无命中 = 禁用，避免「点了才弹 toast」。
+const REPLACE_BUTTON_IDS = [
+  "btn-code-replace-one", "btn-code-replace-next", "btn-code-replace-all",
+];
+
+function setReplaceButtonsDisabled(disabled) {
+  for (const id of REPLACE_BUTTON_IDS) {
+    const btn = $(id);
+    if (btn) btn.disabled = disabled;
+  }
+}
+
 function updateFindCount(status, q) {
   const el = $("code-find-count");
+  setReplaceButtonsDisabled(!(q && status && status.total));
   if (!el) return;
   if (!q) {
     el.classList.add("hidden");
@@ -1070,7 +1084,7 @@ export function initCodeViewer() {
     if (tab.lang === "md" && isMdPreviewActive()) setMdMode(tab.path, "edit");   // 与 Ctrl+F/H 同口径：预览态先切源码
     const count = replaceAllInActiveFile(needle, replaceInput ? replaceInput.value : "");
     if (count > 0) {
-      toast("ok", "已替换 " + count + " 处（Ctrl+S 保存写盘）");
+      toast("ok", "已替换 " + count + " 处（Ctrl+S 保存）");
       refreshFindPanel();
       applyEditorFind(needle);   // 替换后标记层按新内容重算（计数可能变，工单 04）
     } else {
@@ -1146,7 +1160,7 @@ export function initCodeViewer() {
         toast("info", tab.readonly ? "只读文件不允许替换" : "当前文件没有匹配");
         return;
       }
-      toast("ok", "已替换 1 处（Ctrl+S 保存写盘）");
+      toast("ok", "已替换 1 处（Ctrl+S 保存）");
       // 计数联动：替换后命中数 / 当前索引重算（不重置选区）
       updateFindCount({ total: st.total, current: st.current }, needle);
       const rc = $("code-replace-count");
@@ -1163,10 +1177,18 @@ export function initCodeViewer() {
     if (replaceOneBtn) replaceOneBtn.addEventListener("click", () => doReplaceOne(false));
     if (replaceNextBtn) replaceNextBtn.addEventListener("click", () => doReplaceOne(true));
   }
+  // 初始态：无查询 = 无命中 → 替换按钮禁用（与计数同源）
+  updateFindCount({ total: 0, current: -1 }, "");
   const findBox = $("code-find-results");
   if (findBox) findBox.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-find-line]");
-    if (btn) editJumpToLine(parseInt(btn.dataset.findLine, 10));
+    if (!btn) return;
+    const line = parseInt(btn.dataset.findLine, 10);
+    editJumpToLine(line);
+    // 点击项成为当前命中（工单 code-editor-vscode-polish/04 补口）：计数与
+    // 当前高亮跟随点击，不再停在 Enter 循环留下的旧索引。
+    const st = editorFindSetCurrent(line);
+    updateFindCount(st, findInput ? findInput.value : "");
   });
   // 搜索结果点击跳文件 + 行（delegation）；.md 预览态在 codeeditor 内先切
   // 源码（editJumpToFile）。

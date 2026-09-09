@@ -20,7 +20,7 @@ export function unsavedSwitchMessage(dir, dirtyTabs) {
     + (more > 0 ? " 等 " + more + " 个" : "");
   return "切换到「" + esc(dir) + "」前，有 " + paths.length
     + " 个文件未保存" + (list ? "：" + list : "") + "。"
-    + "选择「保存全部并切换」将先写盘保存；"
+    + "选择「保存全部并切换」将先保存文件；"
     + "「放弃修改并切换」将丢弃这些修改；"
     + "「取消」保留当前编辑不动。";
 }
