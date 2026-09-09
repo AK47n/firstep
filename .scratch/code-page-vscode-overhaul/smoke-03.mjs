@@ -33,8 +33,17 @@ ws.onmessage = (ev) => {
   const msg = JSON.parse(ev.data);
   if (msg.id && pending.has(msg.id)) { pending.get(msg.id)(msg); pending.delete(msg.id); }
 };
+// CDP 超时守卫（第七轮）：渲染进程偶发无响应时命令永不返回 → 脚本静默挂死。
+// 20s 无响应即抛错，让失败可见（而不是卡死）。
 const cdp = (method, params = {}) =>
-  new Promise((resolve) => { const id = ++seq; pending.set(id, resolve); ws.send(JSON.stringify({ id, method, params })); });
+  new Promise((resolve, reject) => {
+    const id = ++seq;
+    const t = setTimeout(() => {
+      if (pending.has(id)) { pending.delete(id); reject(new Error("CDP 无响应（20s）: " + method + " —— 页面可能已挂死")); }
+    }, 20000);
+    pending.set(id, (msg) => { clearTimeout(t); resolve(msg); });
+    ws.send(JSON.stringify({ id, method, params }));
+  });
 const Eval = async (expr) => {
   const r = await cdp("Runtime.evaluate", { expression: expr, returnByValue: true, awaitPromise: true });
   if (r.result?.exceptionDetails) throw new Error("eval 失败: " + (r.result.exceptionDetails.exception?.description || JSON.stringify(r.result.exceptionDetails)));
