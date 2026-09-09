@@ -1112,8 +1112,14 @@ function taApplyWindowStyle(wi) {
   if (!ta) return;
   const topPx = Math.round(wi.start * winLineH * 100) / 100;
   const cover = Math.max(0, (winView.scrollTop | 0) - topPx);   // overscan 上缘
+  // 视口高取缓存（winView.viewportH，滚动/ResizeObserver 事件里刷新）——工单 09
+  // 纪律「输入同步路径绝不读 scrollTop/clientHeight」；此处旧实现每次输入都读
+  // box.clientHeight，而 `ta.value = 窗口文本` 刚使布局失效 → 强制整树深布局
+  // （5000 行实测 ≈30-50ms/键，2026-09-09 第七轮 CDP 时间线定位）。缓存为 0
+  // （首次/未测）时退回实时读一次（随后事件会补上缓存）。
+  const vh = winView.viewportH || (box ? box.clientHeight : 0);
   ta.style.top = topPx + "px";
-  ta.style.height = Math.ceil((box ? box.clientHeight : 0) + cover) + "px";
+  ta.style.height = Math.ceil(vh + cover) + "px";
 }
 
 // taFillWindow(wi, rel)：窗口对象 + 窗口内选区偏移 → 装进 textarea（值/
