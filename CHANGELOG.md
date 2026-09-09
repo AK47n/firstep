@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=0fd7e7e73a483a8c32a275e910a50adc867e254c -->
+<!-- changelog-auto: last-commit=4356452f1026f3a9965ea5cd757a03c511ce7445 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -16,6 +16,7 @@
 - 13:31 修复：在途盘点真待办 13 项 + 状态正则漏配 + 残留空目录
 - 13:32 整理：CHANGELOG 去掉提交信息带出的 BOM 残留字符
 - 13:38 工单收尾：批量翻牌 167 张（口径 = 只勾选 + 改 Status，不动 checklist 文字）
+- 13:38 整理：删除误入库的临时提交信息文件
 
 ## 2026-09-08
 - 12:10 工单：wiki-stm32-batch4/05 vl53l0x ToF 激光测距（B 类新 slug——仅 stm32 条目）
