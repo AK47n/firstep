@@ -87,8 +87,11 @@
 
 - **77 篇模块移植手册**（截至本版收录数）：抓取归档于 `sources/materials/lckfb-地阔星移植手册/`，每篇文首注明原页链接；
 - **74 个 stm32 平台条目**（截至本版收录数）：77 页中 74 页映射为模块库中的 stm32 平台条目
-  （A 类 58 件 + B 类新 slug 9 件 + C 类核对 7 件；映射表、匹配依据与例外见 `.scratch/materials-wiki/dkx-map.tsv`），
-  另 **3 个 A 类页面为 mspm0-only**（huidu/xunji/sr04——stm32 侧能力由 pid/us016 承接，系设计例外而非遗漏）。
+  （A 类 58 件 + B 类新 slug 9 件 + C 类核对 7 件；统计与关键判定见
+  `.scratch/materials-wiki/dkx-map-summary.md`——逐行映射表是映射轮次的工作产物、未随仓库保存，
+  可用 `dkx_extract.py` → `dkx_build_map.py` 就地重生成），
+  另 **3 个 A 类页面为 mspm0-only**（huidu/xunji/sr04——stm32 侧能力由 pid/us016 承接，系设计例外而非遗漏；
+  单平台例外清单与理由单源 = `tests/test_library_invariants.py::SINGLE_PLATFORM_REASONS`）。
   来源标注与合规措施与上同。
 
 按立创官网版权声明第三条要求，使用本工具生成的工程、或复制/传播/修改上述资料时，请清楚标明

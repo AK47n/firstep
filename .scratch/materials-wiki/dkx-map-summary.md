@@ -1,7 +1,7 @@
 # 地阔星（dkx-stm32f103c8t6）wiki 模块页 ↔ 库内模块 slug 映射表 · 总结
 
-- 主表：`dkx-map.tsv`（77 行，表头 `page_file | cat | wiki_slug | wiki_title | lib_slug | stm32_entry | stm32_files | action | f4_suspect | code_blocks | 备注`）
-- D 类附表：`dkx-d-appendix.tsv`（24 个库侧模块，无地阔星页面对应；含 stm32 条目/文件/库侧描述截取）
+- 主表 `dkx-map.tsv`（77 行，表头 `page_file | cat | wiki_slug | wiki_title | lib_slug | stm32_entry | stm32_files | action | f4_suspect | code_blocks | 备注`）与 D 类附表 `dkx-d-appendix.tsv`（24 个库侧模块，无地阔星页面对应；含 stm32 条目/文件/库侧描述截取）：**映射轮次的工作产物，未随仓库保存**（`dkx-pages.json` 同理）——本文件的统计与关键判定即该轮次快照的留档。
+- 重生成：`python .scratch/materials-wiki/dkx_extract.py` → `python .scratch/materials-wiki/dkx_build_map.py`。注意 `action` 按**当前** manifest 现算（该 slug 无 stm32 条目 = A、有 = C），故重生成不会复现映射轮次的 A61/B9/C7 快照——要历史分类以本文件为准。
 - 判定与备注全文在表内；本文件为统计与关键判定说明。
 
 ## 全景统计
