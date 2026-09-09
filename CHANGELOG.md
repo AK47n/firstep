@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=47671e81ae94f8d3bd122457ce37c0616573fc2c -->
+<!-- changelog-auto: last-commit=0fd7e7e73a483a8c32a275e910a50adc867e254c -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -15,6 +15,7 @@
 - 13:02 整理：backlog 5.5④ 收口——mspm0-only 例外落成单源+守卫，修 dkx-map.tsv 悬空引用
 - 13:31 修复：在途盘点真待办 13 项 + 状态正则漏配 + 残留空目录
 - 13:32 整理：CHANGELOG 去掉提交信息带出的 BOM 残留字符
+- 13:38 工单收尾：批量翻牌 167 张（口径 = 只勾选 + 改 Status，不动 checklist 文字）
 
 ## 2026-09-08
 - 12:10 工单：wiki-stm32-batch4/05 vl53l0x ToF 激光测距（B 类新 slug——仅 stm32 条目）
