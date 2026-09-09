@@ -57,3 +57,5 @@
 ## Comments
 
 - 2026-09-09 在途盘点（第二轮）：本单未勾项经代码事实逐条核对，判定全部为「已实现（勾选没跟）」——证据见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`（判定总表按批次给出 `文件:行号` / 测试文件名 / grep 否证）。本次只勾选 + 状态归一 resolved，未改任何验收项文字。
+- 2026-09-09 在途盘点（第六轮，CDP 实跑 `smoke-07.mjs`）：**修复前 8/9**——「占位整块替换 → 全部展开」实跑红（模型已正确替换、**gutter 未重建**：幽灵占位行 + 行号错位）。根因：占位行被整体替换 → 折叠全展开、可见行数恰好不变（7 行折叠视图 → 7 行平铺），`syncTail` 走增量 patch 分支（只 patch lines/hl、不动 gutter）。**已修**（产品缺陷）：`winBuild` 记录 `winCache.foldedView`，增量 patch 分支加 `!winCache.foldedView` 前提（`ui/codeeditor.js`）；守卫 `tests/js/code-editor-window-guard.test.mjs`。修复后 **9/9 PASS**。
+- 2026-09-09 第六轮另发现验收项②只兑现一半：**未折叠态没有 ▾ 箭头**（可折叠行的鼠标折叠入口缺失）——已另开 `.scratch/code-fold-arrow/issues/01-unfolded-gutter-arrow.md`（本单该项勾选据此**暂不撤回**，缺口以新工单承载）。

@@ -50,11 +50,17 @@ SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_ru
 零写库或按脚本说明。仓库前端单测（`node --test tests/js/*.test.mjs`）本轮实测 1385 pass / 0 fail，
 **下列项是它覆盖不到的真机面**。
 
-- [ ] **B1 来源 `code-page-vscode-overhaul/01`**：补折叠与保存的 CDP 断言（现 `smoke-01.mjs` 8 项只覆盖行操作/只读/帮助；
+- [x] **B1 来源 `code-page-vscode-overhaul/01`**：补折叠与保存的 CDP 断言（现 `smoke-01.mjs` 8 项只覆盖行操作/只读/帮助；
   `grep "折叠|Ctrl+S|保存" .scratch/code-page-vscode-overhaul/*.mjs` 仅命中「截图已保存」）。
+  **2026-09-09 第六轮完成**：`smoke-01.mjs` 补折叠 5 项（未折叠基线 / Ctrl+Shift+[ 折叠 + 占位行 + gutter 箭头 + 视图文本 /
+  点箭头展开 / 点占位行展开 / Ctrl+Shift+] 展开）+ 保存 3 项（脏点 → Ctrl+S → 脏点清 + toast「已保存」+ 磁盘内容 = 模型），
+  并修正脚本注入姿势（派发按键前重设选区）→ 实跑 **19/19 PASS**。顺带修出两处产品缺陷：块选区坍缩（applyEdit 补 taSetRange）、
+  幽灵占位行（增量 patch 加 `!winCache.foldedView` 前提）。截图 `shot-01-lineops-dark.png` 已入库。
 - [ ] **B2 来源 `code-page-vscode-overhaul/07`**：深/浅双主题各一张截图——缩进引导线可见对齐、括号配对描边框、Ctrl+滚轮缩放后仍对齐。
   已就位：`fx/code-marks.js:103 codeIndentGuideMarks`、`index.html:1890 .code-mark-bracket`。
-- [ ] **B3 来源 `code-page-vscode-overhaul/09`**：5000 行 .c 连续**回车 / Tab** 输入路径实测（现 `smoke-09.mjs:87-96` 只 dispatch 字符 `'x'`）。
+- [x] **B3 来源 `code-page-vscode-overhaul/09`**：5000 行 .c 连续**回车 / Tab** 输入路径实测（现 `smoke-09.mjs:87-96` 只 dispatch 字符 `'x'`）。
+  **2026-09-09 第六轮完成**：回车 12 次（模型行数 +12 / 长度 +12，均值 13.2ms）、Tab 12 次（模型长度 +48 = 12×4 空格、行数不变，均值 12.6ms），
+  输入后仍真彩色 + DOM 行数有界 → 实跑 **14/14 PASS**；截图 `shot-09-input-window-dark.png` 已入库。
 - [ ] **B4 来源 `code-editor-vscode-polish/02`**：深浅主题截图（`smoke-02.mjs:154/158` 会写 `shot-editor-light/dark.png`，产物不在库）。
   注：当前行左侧 accent 竖线已被后续提交有意移除（`index.html:1829-1833`）。
 - [ ] **B5 来源 `code-editor-vscode-polish/08`**：全页验收图 `shot-ide-dark/light.png`（`smoke-08.mjs:133/136`）。

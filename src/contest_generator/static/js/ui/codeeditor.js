@@ -854,6 +854,8 @@ function winBuild(viewText, lang) {
     lineStarts: buildLineStarts(lines),   // 行起点数组（caretLineFast 二分）
     lineStates: lineStatesOf(lines, lang),  // 逐行起始跨行态（fix：块注释/跨行字符串承接行）
     lang,                     // 惰性高亮语言（工单 code-editor-opt/06）
+    foldedView: !!viewModel,  // gutter 来源是否折叠视图（syncTail 增量 patch 判据——
+                              // 折叠 → 全展开且可见行数不变时，gutter 必须重建）
     probeText, probeCols, probeIndex, text: viewText,
   };
   winLast = null;
@@ -2336,10 +2338,14 @@ function syncTail(caretModel, follow = true) {
   const viewText = viewModel ? viewModel.text : tab.content;
   if (winCache.text === viewText) {
     // 内容未变（选区/状态类输入）：零重建，尺寸/窗口均不动
-  } else if (!viewModel
+  } else if (!viewModel && !winCache.foldedView
     && (curEditSpan && !curEditSpan.structural
       ? true   // 非结构编辑：无换行增删 → 行数必不变，免一次全量 split
       : viewText.split("\n").length === winCache.lineCount)) {
+    // 增量 patch 前提（2026-09-09 盘点补口）：**上一版 gutter 不是折叠视图**
+    // ——占位行被整体替换 → 折叠全展开且可见行数可能恰好不变（7 行折叠视图
+    // → 7 行平铺），此分支只 patch lines/hl、不动 gutter，会留下幽灵占位行
+    // 与错位行号（smoke-07「占位整块替换 → 全部展开」实测）。
     winPatchEdit(viewText, tab.lang, curEditSpan);
     if (!(curEditSpan && !curEditSpan.structural && winPatchRow(curEditSpan))) {
       winRender();   // 行级修补失败（窗口外/元素缺失）→ 全量窗口重画
@@ -2425,6 +2431,11 @@ function applyEdit(text, start, end) {
     tab.content = text;
     applyCachePatches(oldText, text, span);
     syncTail(Math.max(0, end | 0));
+    // 块选区还原（overhaul/01 回归）：syncTail 只接单个 caret（窗口重装按光标落位），
+    // 多行 Shift+Tab / Alt+↑↓ / Shift+Alt+↑↓ 的纯件契约（start/end 覆盖整段）
+    // 会在此坍缩为光标——非折叠窗口化态 view == model，taSetRange 直接按模型
+    // 区间还原（越出窗口时 taSetRange 内部重装窗口）。
+    if (start !== end) taSetRange(start, end);
     scheduleCursorWork();
     return;
   }

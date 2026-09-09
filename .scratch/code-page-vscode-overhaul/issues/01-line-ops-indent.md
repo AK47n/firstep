@@ -33,13 +33,26 @@
 
 ## 验收 checklist
 
-- [ ] `node --test tests/js/` 全部绿（新增 line-ops 纯件测试 + 既有测试无回归）。
-- [ ] 深色主题下：多行选中 Shift+Tab 同时反缩进、无选区时缩进当前行。
-- [ ] Ctrl+Shift+K 删除当前行/选中行组，光标位置合理。
-- [ ] Alt+↑↓ 移动行（单行/多行），光标随行移动；Shift+Alt+↑↓ 复制行。
-- [ ] Ctrl+L 选整行（再按扩展选中多行）。
-- [ ] 快捷键帮助弹窗出现以上条目，可正常唤起。
-- [ ] 既有 Tab/Enter/括号/查找/折叠/保存回归面正常（CDP 冒烟）。
+- [x] `node --test tests/js/` 全部绿（新增 line-ops 纯件测试 + 既有测试无回归）。
+- [x] 深色主题下：多行选中 Shift+Tab 同时反缩进、无选区时缩进当前行。
+- [x] Ctrl+Shift+K 删除当前行/选中行组，光标位置合理。
+- [x] Alt+↑↓ 移动行（单行/多行），光标随行移动；Shift+Alt+↑↓ 复制行。
+- [x] Ctrl+L 选整行（再按扩展选中多行）。
+- [x] 快捷键帮助弹窗出现以上条目，可正常唤起。
+- [x] 既有 Tab/Enter/括号/查找/折叠/保存回归面正常（CDP 冒烟）。
+
+## Comments
+
+- 2026-09-09 在途盘点（第六轮，CDP 实跑）：本单验收项**逐条真机复核并勾选**，期间查出并修复两处真缺陷。
+  - 冒烟脚本注入姿势过期（本单 5 项假红）：`setText` 直写 `ta.value` 后，编辑器按模型光标重渲染，
+    注入时设的选区被覆盖成模型光标——行操作落在错光标上。修法 = 派发按键前重设选区 + 等渲染落定
+    （`.scratch/code-page-vscode-overhaul/smoke-01.mjs` 的 `press(opts, sel)` / `settle()`）。
+  - **真缺陷①（产品）**：窗口化后 `applyEdit` 的非折叠分支只把 `end` 传给 `syncTail`（窗口按光标重装），
+    多行 Shift+Tab / Alt+↑↓ / Shift+Alt+↑↓ 的纯件契约 `{start, end}` 被坍缩成光标
+    → 补 `if (start !== end) taSetRange(start, end)`（`ui/codeeditor.js` applyEdit）。
+  - 实跑证据：`smoke-01.mjs` **19/19 PASS**（行操作 5 项含块选区 + 只读 + 帮助弹窗 + 折叠 5 项 + 保存 3 项 + 截图）；
+    `smoke-09.mjs` 14/14（Tab 无选区缩进当前行 = 12 次 Tab 模型 +48 空格）；`polish/smoke-06.mjs` 8/8（括号）；
+    `overhaul/smoke-03.mjs` 9/9（查找替换）。守卫 `tests/js/code-editor-window-guard.test.mjs` 钉住块选区还原。
 
 ## 真机项集中挂账（2026-09-09 在途盘点）
 
