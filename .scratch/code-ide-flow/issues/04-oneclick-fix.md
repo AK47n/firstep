@@ -7,7 +7,7 @@
 
 **被谁阻塞：** 无——可立即开始（与 01/02/03 并行）。
 
-**状态：** ready-for-agent
+**状态：** resolved
 
 - [ ] 验收 1：IDE 编译失败（目录 = 生成上下文）→ 点按钮 → 切到生成页修复
   中心 → 自动进入修复循环（AI 行动横幅出现、编译/修复事件照常流转）。
@@ -62,3 +62,20 @@ S4 感知回归：外部写盘 main.c → 切回代码 tab → 磁盘变更面�
   外部写盘面板复现（集成不回归）。
 - [x] 验收 5：CDP 冒烟 smoke-04 9 项全 PASS；全量回归（node 1038 +
   smoke-02/03）全绿。
+
+## Comments
+
+- 2026-09-09 补标 resolved（代码事实盘点，复核工单自述）：
+  `src/contest_generator/static/js/ui/code-compile.js:30` import
+  `startFixCenter`（来自 `/js/ui/generate-fix.js`），`:279-284`
+  `btn-code-compile-goto` 点击 → `scrollToStep(10)` → `startFixCenter()`；
+  前置校验与写盘守卫复用 startFixCenter 自身（零重复实现，`generate-fix.js`
+  不反向 import code-compile.js，无循环依赖）。
+  测试：本票为纯接线、无新增 node 用例（工单自述一致），由 CDP 冒烟覆盖——
+  `.scratch/code-ide-flow/smoke-04.mjs` 9 项：S1 跳转切页 + 前置校验提示
+  （87/89）、S2 守卫弹窗与取消不开始（115/120/124）、S3 自动开始状态行 +
+  AI 行动横幅 + 循环收敛（155/158/166）、S4 写盘后磁盘变更面板感知（176）。
+  验收逐条对照：① 点按钮 → 切修复中心 → 自动开始（S3）✓ ② 脏标签守卫弹窗 +
+  取消中止（S2）✓ ③ 无工具链/无输出目录 → 前置校验提示，与手动入口同判据
+  （S1，startFixCenter 未改）✓ ④ 修复写盘后 IDE 感知（S4 + smoke-02/03 回归）✓
+  ⑤ 冒烟覆盖 + 全量回归 ✓。

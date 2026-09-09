@@ -8,7 +8,7 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** claimed
+**状态：** resolved
 
 **实施清单：**
 - [ ] `library/modules/neo_6m/` 新目录：`code/neo_6m_stm32.c/.h`（API 4 函数；.c uart 初始化/收发 + `neo_6m_rx_handler`（排空收字符入缓冲（256 上限+截断））+ 帧识别（`$`→GPRMC→`\n`）+ get_position 解析（GPRMC 字段 3/4：纬度 ddmm.mmmm、5：N/S、6：经度、7：E/W——十进制度换算）；零引脚字面量/零标准库）
@@ -21,3 +21,23 @@
 - [ ] 中文提交 → resolved → 结论回填
 
 **验收标准：** 全部 checkbox；pytest 绿；矩阵 exit 0。
+
+## Comments
+
+- 2026-09-09 补标 resolved（代码事实盘点，复核工单自述）：
+  新目录落盘 `library/modules/neo_6m/`（manifest.json 5573B +
+  `code/neo_6m_stm32.c` 6764B + `neo_6m_stm32.h` 4260B）；头文件 48-63 行 API
+  **4 函数 + rx_handler**（init / read_frame→uint8_t / get_position(float*,float*)
+  →uint8_t / clear）。
+  manifest 实测（check_batch9.py）：`platforms=['stm32']`（**仅 stm32，B 类**）、
+  `stm32_files=2`、`verified=True`、`hardware_bound=False`、
+  `pins=['NEO_6M_TX','NEO_6M_RX']`、kit/source_url 齐。
+  pin_config.h：`:531-536` 六件套（`NEO_6M_UART UART_1` / `_UART_INST USART1` /
+  TX PA9 / RX PA10）；isr 聚合 `:762 USART1_IRQ_CALLS … neo_6m_rx_handler();`。
+  测试 `tests/test_module_neo_6m.py` 6 用例（:61 形状 / :113 宏 / :128 isr __weak /
+  :134 pinwriter 角色登记 / :144 stm32 单选生成 / :168 守卫）——实测全绿。
+  wordlist：`wordlist.json:924/928` 已补录（定位模块组 + lib_modules `neo_6m`）。
+  验收逐条对照：① 新目录 + API 4 函数 + 帧识别 + 越界/截断修正 ✓
+  ② manifest 仅 stm32 + kit/source_url + description ✓ ③ 6 宏 + isr + pinwriter ✓
+  ④ 测试形状/宏/isr/生成/守卫 ✓ ⑤ test_pins/test_pin_bindings/test_default_layout ✓
+  ⑥ 矩阵 verified=true ✓ ⑦ wordlist 补录 ✓。

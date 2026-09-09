@@ -4,7 +4,7 @@
 
 **被谁阻塞：** 04（标记层基础设施与渲染入口）
 
-**状态：** ready-for-agent
+**状态：** resolved
 
 - [ ] 标识符识别：词边界 = 字母 / 数字 / 下划线连续段；光标在词内或紧邻词边界时取该词；光标在空白/符号上不高亮
 - [ ] 全文同词高亮：大小写精确匹配（与查找的大小写不敏感区分）；仅当前打开文件内
@@ -15,6 +15,26 @@
 - [ ] CDP 冒烟：光标移到 `main` → 高亮数 = 文件中 `main` 出现数；移到空白 → 无高亮
 
 **补充：** 纯件输出「词区段 + 全文同词区段清单」，胶水转成标记层清单；与 04 的查找标记合并渲染（两个清单一次遍历）。
+
+## Comments
+
+- 2026-09-09 补标 resolved（代码事实盘点；**此前「grep 未见实现」的怀疑不成立**）：
+  纯件 `src/contest_generator/static/js/fx/code-marks.js`——`codeWordAt(text, pos)`
+  （31，词边界 = 字母/数字/下划线连续段；空白/符号 → 空串）、
+  `codeWordRanges(text, word)`（49，大小写精确匹配）。
+  UI `src/contest_generator/static/js/ui/codeeditor.js`——`updateWordMarks`（633，
+  随光标/内容变化重算，含增量路径 655-664）、状态 `editorWord`（623）、
+  与查找/括号标记合并渲染 `renderEditorMarks`（681）→ `winRenderMarks`（1229）。
+  标记层同 04（`codeMarksHTML` 的 `kind` 分层：当前命中 3 > 选中词等）。
+  测试：`tests/js/code-word.test.mjs` 5 用例（`:11` 词内/词尾取词、
+  `:18` 空白符号词间空串、`:26` 下划线数字算词字符/中文不算、`:33` 大小写精确
+  + 词边界、`:43` 多行与行边界）——实测全绿（含在 78 passed 批次）。
+  CDP 冒烟 `.scratch/code-editor-vscode-polish/smoke-05.mjs`：
+  光标移到词 → 高亮数 = 文件中同词出现数；移到 `{` 符号位 → 标记消失（108）。
+  验收逐条对照：① 词边界识别 + 光标在空白不高亮 ✓ ② 全文同词大小写精确 ✓
+  ③ 与查找命中分层不覆盖（`codeMarksHTML` 同类名分层，`:70` 用例）✓
+  ④ 随光标即时重算 + 编辑后重算 ✓ ⑤ 语言适用范围（textarea 存在才启用；
+  .md 预览态无 textarea → 清空，codeeditor.js:636-642）✓ ⑥ 单测 ✓ ⑦ 冒烟 ✓。
 
 (End of file - total 17 lines)
 </content>

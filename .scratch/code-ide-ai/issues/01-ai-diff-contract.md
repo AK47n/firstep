@@ -12,7 +12,7 @@ startLine, endLine, code)` → 用户消息选区引用拼装
 
 **被谁阻塞：** 无——契约 spec 已定稿，可立即开始（与 02 并行）。
 
-**状态：** ready-for-agent
+**状态：** resolved
 
 - [ ] 验收 1：parseAiDiff 对合法 DIFF 块（含 TODO 标题/多 hunk）解析出
   {path, stats, hunks} 全字段。
@@ -54,3 +54,16 @@ line 仅展示语义——AI 行号错位天然免疫，钉死是假约束）。
 - [x] 验收 2：无块/空块/非 JSON/结构非法/kind 越界 → null 不 throw。
 - [x] 验收 3：selectionContextText 拼装含路径/行区间/语言 fence；行号 1 起。
 - [x] 验收 4：node 单测 11 用例全绿 + 全量 1049 回归绿。
+
+## Comments
+
+- 2026-09-09 补标 resolved（代码事实盘点，复核工单自述）：
+  `src/contest_generator/static/js/fx/ai-diff.js` 存在——`parseAiDiff`（16 行，
+  首个 `<DIFF>` 块 → JSON.parse → 结构校验）、`selectionContextText`（65 行，
+  「【代码引用 · path · 第 a-b 行】+ ```lang fence」）、辅助 `isPosInt`（72）、
+  `isSafeRelPath`（77，复刻后端 `entry_store.is_unsafe_path` 四规则）。
+  测试 `tests/js/ai-diff.test.mjs` 11 用例，实测 `node --test tests/js/ai-diff.test.mjs`
+  全绿（本文件含在 39 passed / 0 fail 的一批里）。验收逐条对照：
+  ① 合法 DIFF 块全字段（:20）✓ ② 无块/空/非 JSON/结构非法/kind 越界 → null 不 throw
+  （:37/42/48/57/62）✓ ③ selectionContextText 路径+行区间+fence（:88/94）✓
+  ④ 单测 ≥8 用例（实 11）全绿 ✓。附：工单「验收 4」计数 11 与实况一致。

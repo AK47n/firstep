@@ -17,7 +17,7 @@
 
 **被谁阻塞：** 03（openEditorFile 接入点；三期在一期完成后）。
 
-**状态：** ready-for-agent（待一期完成后启动）
+**状态：** resolved
 
 - [ ] 验收 1：打开文件 → 快照入基线；同 mtime 重开 → 快照刷新不误报。
 - [ ] 验收 2：外部改已打开过的文件 → 变更集合该文件 content（旧值）
@@ -80,3 +80,26 @@
 - [x] 验收 5：node 单测全绿；smoke 回归。
 
 （双轴评审记录见 spec.md「评审确认」段，整改后更新。）
+
+## Comments
+
+- 2026-09-09 补标 resolved（代码事实盘点，复核工单自述）：
+  `src/contest_generator/static/js/fx/disk-baseline.js`——`SNAPSHOT_MAX = 256*1024`
+  （77）、`snapshotOf`（81）、`migrateBaselineStore`（92，旧 maincContent →
+  files["main.c"].content，幂等且不改入参）、`mtimeEq`（33）。
+  `static/js/ui/codeeditor.js:263 onFileLoaded(cb)` 读盘成功监听；
+  `static/js/ui/codeview.js`——`setSnapshotContent`（172，唯一写点）、
+  onFileLoaded 注册建快照（202-208：mtime == 基线才写，不等不动旧快照）、
+  `baselineUpdateFile` 第 5 参 content 通用推进（183）、
+  `baselineCommitDisk` 推进 re-fetch（149）、`baselineStoreLoad` 过
+  `migrateBaselineStore`（113）。
+  测试：`tests/js/disk-baseline.test.mjs`——`snapshotOf` 边界（:122）、
+  `migrateBaselineStore` 迁移与幂等（:133/150/158）、`mtimeEq`（:163/173）；
+  实测 `node --test tests/js/disk-baseline.test.mjs` 全绿（含在 39 passed 批次）。
+  CDP 冒烟 `.scratch/code-ide-ai/smoke-08.mjs` 落盘（S1 打开建快照 / S1b 同 mtime
+  重开 / S2 外部改 → 行级区 / S3 未打开无 content / S4 mtime 不等不建 / S5 清空
+  re-fetch / S6 保存=用户确认版 / S7 旧格式迁移 / S8 超限 null / S9 删除场景）。
+  验收逐条对照：① 打开建快照 + 同 mtime 重开不误报 ✓ ② 外部改 → 变更集合带旧
+  content ✓ ③ 从未打开/超限 → null ✓ ④ 推进后快照=新确认内容 + 旧数据兼容 ✓
+  ⑤ node 单测全绿 ✓。附：工单字面「快照文件清单域」经评审改为派生
+  （files.content 非空即持有），工单结论段已记录该偏离，代码与之一致。

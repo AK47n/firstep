@@ -8,7 +8,7 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** claimed
+**状态：** resolved
 
 **实施清单：**
 - [ ] `library/modules/l298n/code/l298n_stm32.c/.h`（独立 stm32 头——3 函数 + L298N_PWM_PERIOD 2000u 宏照 mspm0 l298n.h；.c pwm_init/update + 方向互切（IN1/IN2 占空比交换——照 mspm0 .c 逐行）；零引脚字面量）
@@ -20,3 +20,23 @@
 - [ ] wordlist 零补录复核；中文提交 → resolved → 结论回填
 
 **验收标准：** 全部 checkbox；pytest 绿；矩阵 exit 0。
+
+## Comments
+
+- 2026-09-09 补标 resolved（代码事实盘点，复核工单自述）：
+  文件落盘 `library/modules/l298n/code/l298n_stm32.c`（2895B）与
+  `l298n_stm32.h`（3574B）；头文件 45-54 行 API **3 函数**
+  （init / set_duty(uint32_t) / set_direction(uint8_t)）+ `L298N_PWM_PERIOD` 宏。
+  manifest 实测：`platforms=['mspm0','stm32']`、`stm32_files=2`、`verified=True`、
+  `hardware_bound=False`、`pins=['L298N_IN1','L298N_IN2']`、kit/source_url 齐。
+  pin_config.h：`pin_config.h:517-520` `L298N_IN1_TIM TIM_3` / `L298N_IN1_CH TIM3_CH1`
+  / `L298N_IN2_TIM TIM_3` / `L298N_IN2_CH TIM3_CH2`（默认 PA6/PA7，注释 509-516
+  记录「与软 I2C 同脚冲突 ⚠ / 与 TB6612 错开 / TIM 门禁默认×默认不拦」）。
+  测试 `tests/test_module_l298n.py` 8 用例（:43/:78 mspm0 / :109 AO_Control 形状
+  与调用守卫 / :179 stm32 形状 / :209 宏 / :218 stm32 单选生成 / :242 stm32 守卫）
+  ——实测全绿。
+  wordlist：`wordlist.json:664/690/696` 已收录（lib_modules `l298n`）。
+  验收逐条对照：① stm32 源 + 3 函数 + PWM_PERIOD 宏 ✓ ② manifest stm32 条目
+  ✓ ③ pin_config 4 宏 ✓ ④ 测试形状+宏+生成+守卫 ✓ ⑤ test_pins/test_default_layout
+  （PA6/PA7 组）✓ ⑥ 矩阵 verified=true（notes 记录「2026-09-08 stm32 单选生成 →
+  UV4 0 error / 0 module warning」）✓ ⑦ wordlist ✓。

@@ -15,7 +15,7 @@
 
 **被谁阻塞：** 07（content 快照）。
 
-**状态：** ready-for-agent（待 07 完成后启动）
+**状态：** resolved
 
 - [ ] 验收 1：打开过的非 main.c 文件 external 修改 → 面板展开行级 diff 区
   （stats+hunks/TODO 标题照常）；未打开 → 无行级区。
@@ -70,3 +70,24 @@
   migrateBaselineStore 兼容层与注释）；node + smoke-03 新增用例全绿。
 
 （双轴评审记录见 spec.md「评审确认」段，整改后更新。）
+
+## Comments
+
+- 2026-09-09 补标 resolved（代码事实盘点，复核工单自述）：
+  `src/contest_generator/static/js/fx/change-panel.js`——`changeEntryHTML`（52）
+  第 69 行 `if (st === "modified" && e.hasLineDiffSource)`，**无 `isMainCPath`
+  路径特判**（grep 该文件 isMainCPath 零命中）；`static/js/fx/line-diff.js`
+  存在（`lineDiffCompute` 90、`LINE_DIFF_MAX_CELLS` 18、TODO 标题 62），
+  `fx/mainc-diff.js` 已不存在。
+  `static/js/ui/codeview.js`——`getBaselineContent(dir, path, loaded)`（313）、
+  `renderChangePanel` 泛化（337-345：任意 modified 且基线有 content 快照 →
+  `hasLineDiffSource = true` → `lineDiffCompute(旧快照, 当前磁盘)`）。
+  测试：`tests/js/change-panel.test.mjs:49`（非 main.c 文件同样带行级区，
+  断言 `src/app.c` 的 details/summary）、`:40`（hasLineDiffSource 带区）、
+  `:56`（无快照 → 无区）；`tests/js/line-diff.test.mjs` 6 用例；
+  实测 `node --test` 四文件 39 passed / 0 fail。
+  验收逐条对照：① 非 main.c 打开过 → 行级区（:49）✓ ② main.c 行为一致
+  （:40 + smoke-03 原 14 项）✓ ③ maincContent 特例无引用残留——grep
+  `src/contest_generator/static/js/**` 命中仅 `migrateBaselineStore` 兼容层
+  （disk-baseline.js:86-108）与 `maincContentEmpty`（另一个函数，fx/code.js:109，
+  非基线字段），无残留 ✓。

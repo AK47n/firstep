@@ -8,7 +8,7 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** claimed
+**状态：** resolved
 
 **实施清单：**
 - [ ] `library/modules/ec01g/` 新目录：`code/ec01g_stm32.c/.h`（API 5 函数；.c uart 收发 + rx_handler（收缓冲 256 上限+截断——空指针保护）+ send_cmd 应答匹配（strstr+超时）；零引脚字面量/零标准库）
@@ -21,3 +21,25 @@
 - [ ] 中文提交 → resolved → 结论回填
 
 **验收标准：** 全部 checkbox；pytest 绿；矩阵 exit 0。
+
+## Comments
+
+- 2026-09-09 补标 resolved（代码事实盘点，复核工单自述）：
+  新目录落盘 `library/modules/ec01g/`（manifest.json 6455B +
+  `code/ec01g_stm32.c` 4208B + `ec01g_stm32.h` 4475B）；头文件 51-68 行 API
+  **5 函数 + rx_handler**（init / send_cmd→uint8_t / send_string / available /
+  receive(buf,max)→uint16_t）。
+  manifest 实测：`platforms=['stm32']`（B 类仅 stm32）、`stm32_files=2`、
+  `verified=True`、`hardware_bound=False`、`pins=['EC01G_TX','EC01G_RX']`、
+  kit/source_url 齐。
+  pin_config.h：`:561-566` 六件套（`EC01G_UART UART_3` / `_UART_INST USART3` /
+  TX PB10 / RX PB11）；isr 聚合 `:764 USART3_IRQ_CALLS zigbee_rx_handler();
+  ec01g_rx_handler();`。
+  测试 `tests/test_module_ec01g.py` 6 用例（:63 形状 / :115 宏 / :130 isr __weak /
+  :136 pinwriter 角色登记 / :146 stm32 单选生成 / :170 守卫）——实测全绿。
+  wordlist：`wordlist.json:815/818` 已补录（NB-IoT 组 + lib_modules `ec01g`）。
+  验收逐条对照：① 新目录 + API 5 函数 + 空指针/有界扫修正（HTTP/JSON demo 归
+  范围外）✓ ② manifest 仅 stm32 + kit/source_url + description ✓
+  ③ 6 宏 + isr __weak + USART3 聚合 + pinwriter 登记 ✓
+  ④ 测试形状/宏/isr/生成/守卫 ✓ ⑤ test_pins/test_pin_bindings（EC01G → UART3）/
+  test_default_layout ✓ ⑥ 矩阵 verified=true ✓ ⑦ wordlist 补录 ✓。

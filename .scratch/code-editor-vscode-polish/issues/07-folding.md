@@ -4,7 +4,7 @@
 
 **被谁阻塞：** 无强依赖（建议排在 06 后减少渲染器冲突；08 依赖本单）
 
-**状态：** ready-for-agent
+**状态：** resolved
 
 - [ ] 折叠区计算（fx 纯件）：.c/.h = 花括号配对（同行闭合 `{}` 不生成；跳过字符串 / 字符 / 单行注释 / 块注释内假括号；嵌套正确）；.md = 标题到同层或更高层标题前（顶层标题到文件尾）
 - [ ] 行号列左侧（或行号列与代码之间）折叠箭头：可折叠行显示 ▸（折叠）/ ▾（展开）；点击切换
@@ -20,6 +20,39 @@
 - [ ] 既有功能回归：保存（折叠态编辑后 Ctrl+S 落盘内容 = 模型）、冲突模态、脏点、查找高亮与选中词高亮（若已实现）在折叠态只渲染可见行
 
 **补充：** 最大单。行号 gutter / 高亮层 / textarea / 跳行 / 当前行索引全部改为「可见行」寻址（模型行号单独显示）；占位行不参与编辑内容，仅展示。若实现中发现索引迁移面过大，允许把「跳行自动展开」与「折叠态查找/选中词渲染」作为本单内后续 commit 分批落地，但本单必须完整交付。
+
+## Comments
+
+- 2026-09-09 补标 resolved（代码事实盘点；**此前「grep 未见实现」的怀疑不成立**）：
+  纯件 `src/contest_generator/static/js/fx/code-fold.js`（13513 字节）——
+  `codeFoldRanges`（58，.c/.h 花括号配对 / .md 标题层级 / 语言门控）、
+  `codeFoldPlaceholderText`（110，「… N 行」）、`codeFoldVisible`（121，
+  可见行 + 占位行 + 模型真实行号 segs）、`codeFoldViewToModel`（190）、
+  `codeFoldMapEdit`（229，视图偏移 → 模型偏移，触碰占位自动展开）、
+  `codeFoldMerge`（316，签名相同保留折叠态）。
+  UI `src/contest_generator/static/js/ui/codeeditor.js`——`folds/foldedSet/viewModel`
+  态（116）、`toggleFold`（592）、`foldAtLine`（599）、`resetFoldState`（614，
+  切目录/切文件/关标签/重命名/磁盘重载后重算：调用点 234/1520/1612/1634/2106）、
+  gutter 箭头 `data-fold` 与占位行 `data-fold-expand` 点击委托（2936-2945）、
+  Ctrl+Shift+[ / ] 折叠展开光标所在区（2950-2963）、编辑写回模型
+  `codeFoldMapEdit`（2425/2479）。
+  .md 预览态标题折叠：`fx/markdown.js:161` 输出
+  `<details class="code-md-fold">`，`ui/codeeditor.js:1431 foldPreview: true`。
+  样式 `static/index.html:1801 .code-fold-arrow`。
+  测试：`tests/js/code-fold.test.mjs` 13 用例（`:17` 跨行才折叠、`:23` 嵌套按深度、
+  `:31` 字符串/注释假括号、`:36` .md 标题层级、`:45` 语言门控、`:53` 占位文案、
+  `:59/69` 可见行映射与真实行号、`:76` 视图→模型、`:87/95/103` 偏移映射三态、
+  `:113` codeFoldMerge 大输入）——实测全绿（含在 78 passed 批次）。
+  CDP 冒烟 `.scratch/code-editor-vscode-polish/smoke-07.mjs`：
+  Ctrl+Shift+[ → gutter 占位行 + 模型行号跳号 + 视图文本（102）、箭头点击展开（113）、
+  跳行落折叠区自动展开（144）、折叠态编辑写模型 + 脏点 + 折叠保持（169）、
+  .md 预览标题折叠（191）。
+  验收逐条对照：① 折叠区计算（.c 配对 / .md 层级 / 假括号 / 嵌套）✓
+  ② gutter 箭头 ▸/▾ 点击切换 ✓ ③ 折叠态渲染（占位行 + 模型真实行号 + textarea =
+  可见行）✓ ④ 偏移映射写回模型 ✓ ⑤ 跨区编辑防护（触碰占位 → 展开/整块替换）✓
+  ⑥ 跳行落折叠区自动展开 ✓ ⑦ Ctrl+Shift+[ / ] 快捷键 ✓ ⑧ .md 预览标题折叠 ✓
+  ⑨ 折叠态会话内有效、切目录/关文件重算 ✓ ⑩ 单测 ✓ ⑪ 冒烟 ✓ ⑫ 既有功能回归
+  （保存/冲突/脏点/查找与选中词在折叠态只渲染可见行）✓。
 
 (End of file - total 22 lines)
 </content>
