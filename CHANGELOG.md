@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=76e67aa2e11e78d5983f21f5a7562a7912c59db1 -->
+<!-- changelog-auto: last-commit=d5fb1090941a9af5c56ea98e6564356701487f45 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -8,6 +8,7 @@
 - 12:09 整理：CONTEXT 来源标注计数复测更正 + .gitignore 收口 DSH 运行产物
 - 12:30 未翻牌工单按代码事实盘点——30 张全部判定，29 张翻 resolved（code-viewer/01-06、code-viewer-editor/01-02、code-ide-ai/01/02/07/08、code-ide-flow/03/04、code-editor-vscode-polish/04/05/07、auto-update/05、tark-removal/01-04、wiki-stm32-batch9/01-07），recommend-vision-qa/03 维持 ready-for-human（真视觉服务 + 额度）；每张工单 Comments 记实现位置/测试路径/行号或 grep 否证 + 验收逐条对照；盘点表 .scratch/tracker-audit/2026-09-09-盘点.md + census.py/check_batch9.py 辅助脚本；pytest 3892 passed 与基线同结果（零回归）、tests/js 1365 全绿
 - 12:36 整理：CONTEXT 来源标注计数去数字 + 探针脚本分工写进 docstring
+- 12:39 整理：wiki 来源覆盖面加地板守卫 + 探针脚本归位 tracker-audit
 
 ## 2026-09-08
 - 12:10 工单：wiki-stm32-batch4/05 vl53l0x ToF 激光测距（B 类新 slug——仅 stm32 条目）
