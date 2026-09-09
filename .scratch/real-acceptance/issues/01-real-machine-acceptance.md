@@ -61,11 +61,15 @@ SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_ru
 - [x] **B3 来源 `code-page-vscode-overhaul/09`**：5000 行 .c 连续**回车 / Tab** 输入路径实测（现 `smoke-09.mjs:87-96` 只 dispatch 字符 `'x'`）。
   **2026-09-09 第六轮完成**：回车 12 次（模型行数 +12 / 长度 +12，均值 13.2ms）、Tab 12 次（模型长度 +48 = 12×4 空格、行数不变，均值 12.6ms），
   输入后仍真彩色 + DOM 行数有界 → 实跑 **14/14 PASS**；截图 `shot-09-input-window-dark.png` 已入库。
-- [ ] **B4 来源 `code-editor-vscode-polish/02`**：深浅主题截图（`smoke-02.mjs:154/158` 会写 `shot-editor-light/dark.png`，产物不在库）。
+- [x] **B4 来源 `code-editor-vscode-polish/02`**：深浅主题截图（`smoke-02.mjs:154/158` 会写 `shot-editor-light/dark.png`，产物不在库）。
   注：当前行左侧 accent 竖线已被后续提交有意移除（`index.html:1829-1833`）。
-- [ ] **B5 来源 `code-editor-vscode-polish/08`**：全页验收图 `shot-ide-dark/light.png`（`smoke-08.mjs:133/136`）。
+  **2026-09-09 第七轮完成**：`smoke-02.mjs` 实跑 **8/8 PASS**，产物 `shot-editor-light.png` / `shot-editor-dark.png` 已入库。
+- [x] **B5 来源 `code-editor-vscode-polish/08`**：全页验收图 `shot-ide-dark/light.png`（`smoke-08.mjs:133/136`）。
+  **2026-09-09 第七轮完成**：`smoke-08.mjs` 实跑 **4/4 PASS**，产物 `shot-ide-dark.png` / `shot-ide-light.png` 已入库。
 - [ ] **B6 来源 `code-editor-refine/04`**：括号彩虹双主题截图（现以 computed 色值断言代替，无截图产物）。
 - [ ] **B7 来源 `module-library-ui/01`**：模块库表格目视截图 `01-table-shot.png`（从未提交；`git log --all --` 无该路径）。
+  注（2026-09-09 第七轮实测）：`.scratch/module-library-ui/smoke.mjs` 在本机复跑**未就绪退出**（`页面未就绪`）——
+  脚本就绪判据要求全局 `state.modules` 为数组，与当前页面形态不符（同批其它脚本用 DOM 判据）；截图仍未生成，留待脚本判据更新后重跑。
 - [ ] **B8 来源 `master-library-ui-2/02`**：母版树冒烟补「目录数 / 文件数」数值断言 + 二进制 / 缺失路径 400 中文断言。
 - [ ] **B9 来源 `master-library-ui-2/03`**：冒烟补 `pin_config.h` / `mspm0.syscfg` 高亮 span 断言 + 剪贴板内容子串断言。
 - [ ] **B10 来源 `master-library-ui-2/04`**：冒烟补「开导入弹窗 + 平台下拉选项数 + 空 project_dir / 非法平台 400」。

@@ -278,6 +278,26 @@ export function codeFoldMapEdit(model, segs, oldView, newView) {
   };
 }
 
+// codeFoldModelGutterLines(lines, folds)：**未折叠态**的行号 gutter 行描述
+// （工单 code-fold-arrow/01）——平铺文本行 + 折叠区开行标 {foldStart: true,
+// fold: idx, folded: false}，交给 codeFoldGutterLines 渲染（箭头 markup 单源，
+// 不复制）。未折叠态此前直接走 lines.map(codeGutterLineHTML)（无箭头）→ 可
+// 折叠行没有鼠标折叠入口（只有 Ctrl+Shift+[ 的键盘路径）。
+// lines = 模型行数组（split("\n")）；folds = codeFoldRanges 输出（1 基行号）。
+export function codeFoldModelGutterLines(lines, folds) {
+  const starts = new Map();
+  (folds || []).forEach((f, i) => {
+    if (f && f.startLine >= 1) starts.set(f.startLine, i);
+  });
+  return (lines || []).map((text, i) => {
+    const no = i + 1;
+    const fIdx = starts.get(no);
+    return fIdx === undefined
+      ? { no, text, placeholder: false, fold: -1, foldStart: false, folded: false }
+      : { no, text, placeholder: false, fold: fIdx, foldStart: true, folded: false };
+  });
+}
+
 // codeFoldGutterLines(lines)：行号 gutter 逐行字符串数组（工单
 // code-page-vscode-overhaul/08 窗口化——滑动窗口切片用；与
 // codeFoldGutterHTML 单源）。每行 span.code-gutter-line[data-code-line =
@@ -335,6 +355,7 @@ if (typeof window !== "undefined") {
     codeFoldModelToView,
     codeFoldMapEdit,
     codeFoldGutterLines,
+    codeFoldModelGutterLines,
     codeFoldGutterHTML,
     codeFoldMerge,
     codeFoldPlaceholderText,

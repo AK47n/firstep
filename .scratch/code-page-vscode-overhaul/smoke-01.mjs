@@ -197,6 +197,20 @@ await setText(ORIGINAL, 0, 0);
 await settle(400);
 let st = await foldState();
 check("未折叠基线：3 行 + 无占位行", st.lines === 3 && st.placeholders === 0, JSON.stringify(st));
+// 工单 code-fold-arrow/01：未折叠态可折叠行显示 ▾（鼠标折叠入口）
+check("未折叠态：可折叠行 gutter 显示 ▾ 箭头",
+  st.arrows === 1 && st.gutter === "▾1|2|3", JSON.stringify(st));
+await Eval(`document.querySelector('#code-viewer [data-fold]')?.click(); true`);
+check("点未折叠箭头 → 折叠（占位行出现 + 行号跳号）",
+  await waitFor(`document.querySelectorAll('#code-viewer [data-fold-expand]').length > 0`, 4000));
+st = await foldState();
+check("点未折叠箭头折叠后：占位行 1 + 箭头变 ▸",
+  st.placeholders === 1 && st.arrows === 1 && st.gutter.startsWith("▸1|"), JSON.stringify(st));
+await Eval(`document.querySelector('#code-viewer [data-fold]')?.click(); true`);
+check("再点箭头 → 展开回未折叠态（▾ 仍在）",
+  await waitFor(`document.querySelectorAll('#code-viewer [data-fold-expand]').length === 0`, 4000));
+st = await foldState();
+check("展开后 gutter 回到 ▾1|2|3", st.arrows === 1 && st.gutter === "▾1|2|3", JSON.stringify(st));
 
 check("Ctrl+Shift+[ 折叠 → 占位行 + gutter 箭头 + 视图文本",
   await foldByKey());
@@ -210,7 +224,8 @@ await Eval(`document.querySelector('#code-viewer [data-fold]')?.click(); true`);
 check("点 gutter 箭头 → 展开（占位行消失、行号回齐）",
   await waitFor(`document.querySelectorAll('#code-viewer [data-fold-expand]').length === 0`, 4000));
 st = await foldState();
-check("展开态：3 行 + gutter 1|2|3", st.lines === 3 && st.gutter === "1|2|3", JSON.stringify(st));
+check("展开态：3 行 + gutter ▾1|2|3（code-fold-arrow/01 后未折叠态也有箭头）",
+  st.lines === 3 && st.gutter === "▾1|2|3", JSON.stringify(st));
 
 await foldByKey();
 await Eval(`document.querySelector('#code-viewer [data-fold-expand]')?.click(); true`);

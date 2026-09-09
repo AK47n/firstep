@@ -10,6 +10,8 @@ import {
   codeFoldViewToModel,
   codeFoldMapEdit,
   codeFoldMerge,
+  codeFoldModelGutterLines,
+  codeFoldGutterLines,
   codeFoldPlaceholderText,
 } from "../../src/contest_generator/static/js/fx/code-fold.js";
 
@@ -120,4 +122,57 @@ test("codeFoldMerge：签名相同保留折叠态；漂移/未折叠不保留；
   // 大输入（3000 折叠无折叠态）——与旧实现的语义一致（空集）
   const many = Array.from({ length: 3000 }, (_, i) => ({ startLine: i * 2 + 1, endLine: i * 2 + 2 }));
   assert.equal(codeFoldMerge(many, new Set(), many).size, 0);
+});
+
+// ---- codeFoldModelGutterLines（工单 code-fold-arrow/01：未折叠态 gutter 箭头）----
+
+test("codeFoldModelGutterLines：单折叠区 → 开行标 foldStart/folded:false，其余平铺", () => {
+  const lines = ["void f() {", "    int x;", "}"];
+  const rows = codeFoldModelGutterLines(lines, [{ startLine: 1, endLine: 3 }]);
+  assert.equal(rows.length, 3);
+  assert.deepEqual(rows[0],
+    { no: 1, text: "void f() {", placeholder: false, fold: 0, foldStart: true, folded: false });
+  assert.deepEqual(rows[1],
+    { no: 2, text: "    int x;", placeholder: false, fold: -1, foldStart: false, folded: false });
+  assert.deepEqual(rows[2],
+    { no: 3, text: "}", placeholder: false, fold: -1, foldStart: false, folded: false });
+});
+
+test("codeFoldModelGutterLines：多折叠区 → 行号与 fold 索引逐一对应（乱序 folds 也对）", () => {
+  const lines = Array.from({ length: 9 }, (_, i) => "L" + (i + 1));
+  // folds 未按行号排序：索引仍须按 folds 数组下标（foldedSet 的键就是它）
+  const folds = [{ startLine: 6, endLine: 8 }, { startLine: 1, endLine: 3 }];
+  const rows = codeFoldModelGutterLines(lines, folds);
+  const starts = rows.filter((r) => r.foldStart).map((r) => [r.no, r.fold]);
+  assert.deepEqual(starts, [[1, 1], [6, 0]]);
+  assert.equal(rows.filter((r) => !r.foldStart).length, 7);
+  assert.deepEqual(rows.map((r) => r.no), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+});
+
+test("codeFoldModelGutterLines：嵌套折叠区 → 内外层开行各自标（索引不串）", () => {
+  const lines = Array.from({ length: 6 }, (_, i) => "L" + (i + 1));
+  const folds = [{ startLine: 1, endLine: 6 }, { startLine: 2, endLine: 4 }];
+  const rows = codeFoldModelGutterLines(lines, folds);
+  assert.deepEqual(rows.filter((r) => r.foldStart).map((r) => [r.no, r.fold]),
+    [[1, 0], [2, 1]]);
+});
+
+test("codeFoldModelGutterLines：无折叠区 → 全平铺（fold:-1、foldStart:false）", () => {
+  const rows = codeFoldModelGutterLines(["a", "b"], []);
+  assert.deepEqual(rows.map((r) => [r.no, r.fold, r.foldStart, r.folded]),
+    [[1, -1, false, false], [2, -1, false, false]]);
+  assert.deepEqual(codeFoldModelGutterLines([], [{ startLine: 1, endLine: 2 }]), []);
+  assert.deepEqual(codeFoldModelGutterLines(null, null), []);
+});
+
+test("codeFoldModelGutterLines → codeFoldGutterLines：未折叠态渲染 ▾ 箭头（data-fold 单源）", () => {
+  const lines = ["void f() {", "    int x;", "}"];
+  const html = codeFoldGutterLines(codeFoldModelGutterLines(lines, [{ startLine: 1, endLine: 3 }]));
+  assert.equal(html.length, 3);
+  assert.match(html[0], /class="code-fold-arrow open" data-fold="0" role="button" title="折叠">▾</);
+  assert.match(html[0], /data-code-line="1"/);
+  assert.doesNotMatch(html[1], /code-fold-arrow/);
+  assert.doesNotMatch(html[2], /code-fold-arrow/);
+  assert.match(html[1], />2<\/span>$/);
+  assert.match(html[2], />3<\/span>$/);
 });

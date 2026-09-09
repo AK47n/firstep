@@ -2,6 +2,11 @@
 // 5000 行 .c 文件——DOM 内行数有界（远小于 5000）、滚动到中部窗口行号正确、
 // 滚动流畅（同窗零 DOM 变更）、输入后窗口仍正确、行号/gutter/高亮对齐。
 // CDP 9251 + webapp 8000。
+//
+// 注（2026-09-09 第七轮补口）：textarea 已**窗口化**（editor-textarea-viewport
+// 02/04）——ta.value 只装当前窗口切片（约数千字符），全量模型在 tab.content。
+// 旧断言「ta.value.length > 100000」是窗口化之前的形态，故改为经
+// getActiveTab().content 断全量模型，并新增「ta 窗口切片远小于模型」断言。
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -73,7 +78,11 @@ const check = (name, ok, extra) => {
 await Eval(`import('/js/ui/codeview.js').then((m) => m.openCodeViewer(${JSON.stringify(SAMPLE)}))`);
 await waitFor(`!!document.querySelector('#code-tree [data-code-file="big.c"]')`);
 await Eval(`document.querySelector('#code-tree [data-code-file="big.c"]')?.click()`);
-await waitFor(`(document.querySelector('#code-viewer .code-ta')?.value || '').length > 100000`);
+// 就绪判据（窗口化形态）：模型全量 > 100000（tab.content），textarea 只装窗口切片
+await waitFor(`import('/js/ui/codeeditor.js').then((m) => {
+  const t = m.getActiveTab();
+  return !!t && t.content.length > 100000;
+})`);
 
 const domLines = () => Eval(`({
   hl: document.querySelectorAll('#code-viewer .code-hl-line').length,
@@ -82,13 +91,18 @@ const domLines = () => Eval(`({
   lastHl: [...document.querySelectorAll('#code-viewer .code-hl-line')].pop()?.dataset.codeLine || '0',
   firstGut: document.querySelector('#code-viewer .code-gutter-line')?.dataset.codeLine || '0',
   taLen: document.querySelector('#code-viewer .code-ta').value.length,
+  modelLen: (window.__modelLen || 0),
 })`);
+
+const modelLen = () => Eval(`import('/js/ui/codeeditor.js').then((m) => (m.getActiveTab()?.content || '').length)`);
 
 // 初始：窗口有界（远小于 5000 行，含 overscan）
 let d = await domLines();
 check("初始 DOM 行数有界（< 400）", d.hl < 400 && d.gut < 400, "hl=" + d.hl + " gut=" + d.gut);
 check("初始窗口从第 1 行开始", d.firstHl === "1" && d.firstGut === "1");
-check("textarea 全量", d.taLen > 100000);
+const mLen = await modelLen();
+check("模型全量（tab.content > 100000）", mLen > 100000, "modelLen=" + mLen);
+check("textarea 只装窗口切片（远小于模型）", d.taLen > 0 && d.taLen < mLen / 4, "ta=" + d.taLen + " model=" + mLen);
 
 // 滚动到中部：窗口行号正确 + DOM 仍有界
 await Eval(`(() => {
@@ -118,7 +132,18 @@ await new Promise((r) => setTimeout(r, 400));
 d = await domLines();
 check("回顶后窗口从第 1 行开始", d.firstHl === "1");
 
-// 输入仍正常（末尾追加字符 → 窗口重建且值正确）
+// 输入仍正常（滚到文件尾 → 窗口含尾行 → 末尾追加字符 → 模型 +1 字符）
+// 注：textarea 窗口化后「末尾」= **窗口**末尾；先滚到尾部使窗口覆盖模型尾行，
+// 再按模型断言（tab.content 末字符）。窗口切片长度作「已重装」佐证。
+await Eval(`(() => {
+  const b = document.getElementById('code-viewer');
+  b.scrollTop = b.scrollHeight;
+  b.dispatchEvent(new Event('scroll', { bubbles: true }));
+  return true;
+})()`);
+await new Promise((r) => setTimeout(r, 500));
+check("滚到尾部后窗口覆盖模型末行（ta 含最后一行）",
+  await Eval(`(document.querySelector('#code-viewer .code-ta')?.value || '').includes('line 5000')`));
 await Eval(`(() => {
   const ta = document.querySelector('#code-viewer .code-ta');
   ta.focus();
@@ -130,7 +155,9 @@ await Eval(`(() => {
   return true;
 })()`);
 await new Promise((r) => setTimeout(r, 500));
-check("输入后 textarea 值正确", await Eval(`document.querySelector('#code-viewer .code-ta').value.endsWith('x')`));
+check("输入后模型末尾落字符（tab.content 以 x 结尾）",
+  await Eval(`import('/js/ui/codeeditor.js').then((m) => (m.getActiveTab()?.content || '').endsWith('x'))`));
+check("输入后 textarea 窗口切片非空", (await Eval(`document.querySelector('#code-viewer .code-ta').value.length`)) > 0);
 d = await domLines();
 check("输入后窗口重新对齐（尾部行号）", parseInt(d.lastHl, 10) > 4900, "last=" + d.lastHl);
 
