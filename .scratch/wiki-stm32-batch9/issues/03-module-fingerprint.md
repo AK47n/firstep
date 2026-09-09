@@ -8,7 +8,7 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** claimed
+**状态：** resolved
 
 **实施清单：**
 - [ ] `library/modules/fingerprint/code/fingerprint_stm32.c/.h`（独立 stm32 头——API 全族照 mspm0 fingerprint.h；.c uart_init/uart_sendbyte + `fingerprint_rx_handler()`（聚合宏调用——`uart_getbyte` 轮询排空收精确 12/16 字节，照 mspm0 `_receive_response` 改进）；帧发送（0xEF 01 FF FF FF + PID + Len + 指令 + 校验和）；零引脚字面量）
@@ -20,3 +20,25 @@
 - [ ] wordlist 零补录复核；中文提交 → resolved → 结论回填
 
 **验收标准：** 全部 checkbox；pytest 绿；矩阵 exit 0。
+
+## Comments
+
+- 2026-09-09 补标 resolved（代码事实盘点，复核工单自述）：
+  文件落盘 `library/modules/fingerprint/code/fingerprint_stm32.c`（9733B）与
+  `fingerprint_stm32.h`（5588B）；头文件 52-89 行 API **10 函数**
+  （init / check_device / is_touched / get_image / img_to_buffer / reg_model /
+  search→uint16_t / save_finger / delete_all / enroll）+ `fingerprint_rx_handler`。
+  manifest 实测：`platforms=['mspm0','stm32']`、`stm32_files=2`、`verified=True`、
+  `hardware_bound=False`、`pins=['FINGERPRINT_TX','FINGERPRINT_RX','FINGERPRINT_TOUCH']`、
+  kit/source_url 齐。
+  pin_config.h：`pin_config.h:433-440` 五件套 + TOUCH
+  （`FINGERPRINT_UART UART_1` / `_UART_INST USART1` / TX PA9 / RX PA10 /
+  TOUCH PB5）；isr 聚合 `pin_config.h:762 USART1_IRQ_CALLS … fingerprint_rx_handler();`。
+  测试 `tests/test_module_fingerprint.py` 11 用例（:55 页面校验和镜像 / :68 轮询与
+  收帧守卫 / :87/:123 mspm0 / :205 stm32 形状 / :262 宏 / :279 isr __weak 兜底 /
+  :285 pinwriter 角色登记 / :295 stm32 单选生成 / :319 stm32 守卫）——实测全绿。
+  wordlist：`wordlist.json:159/162` 已收录（lib_modules `fingerprint`）。
+  验收逐条对照：① stm32 源 + API 全族 ✓ ② manifest stm32 条目（2 pins TX/RX
+  + TOUCH）✓ ③ pin_config 6 宏 + isr __weak + 聚合宏 + pinwriter 登记 ✓
+  ④ 测试形状/宏/isr/生成/守卫 ✓ ⑤ test_pins/test_pin_bindings/test_default_layout ✓
+  ⑥ 矩阵 verified=true ✓ ⑦ wordlist ✓。

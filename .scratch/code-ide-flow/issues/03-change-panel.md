@@ -9,7 +9,7 @@ main.c 条目展开显示既有确定性 diff（复用 main_diff 渲染，默认
 
 **被谁阻塞：** 01（基线对比纯件）；与 02 串行（同区域文件改动，避免冲突）。
 
-**状态：** ready-for-agent
+**状态：** resolved
 
 - [ ] 验收 1：打开目录后无变更 → 面板空态（或收起）；出现变更后（外部 /
   AI 写盘）切回 → 面板列出三类条目，状态徽章区分。
@@ -71,3 +71,29 @@ SMOKE-03 14/14 全 PASS（三类条目/摘要/置灰/diff 区/TODO 标题/点击
 - [x] 验收 5：面板与编译面板并排、可折叠、互不覆盖（同型 head + 独立
   collapsed；窄屏同编译面板行为）。
 - [x] 验收 6：条目渲染纯件 node 单测全绿；CDP 冒烟覆盖面板出现/跳转/清空主路径。
+
+## Comments
+
+- 2026-09-09 补标 resolved（代码事实盘点，复核工单自述）：
+  条目渲染纯件 `src/contest_generator/static/js/fx/change-panel.js`——
+  `changeEntryHTML`（52，三类徽章表 15：added/modified/removed）、
+  `changesPanelHTML`（82）、`changeSummaryText`（34）、行级 diff 区走
+  `hasLineDiffSource`（69）。行级 diff 计算件已由工单 08 改名
+  `fx/mainc-diff.js → fx/line-diff.js`（`lineDiffCompute` 90），工单正文里的
+  `mainc-diff.js` 系改名前的旧名，功能同一处。
+  UI 胶水 `src/contest_generator/static/js/ui/codeview.js`——
+  `codeDiskChanges` 单源（82）、`baselineCommitDisk`（149）、
+  `renderChangePanel`（325）、`clearCodeDiskChanges`（359，「清空并确认已看」）、
+  清空按钮绑定（1216）、AI 写盘后感知（30）。
+  面板 DOM/CSS `src/contest_generator/static/index.html:1533`（与编译面板同型
+  公共选择器）+ `.code-change-*` 样式 1609-1626。
+  测试：`tests/js/change-panel.test.mjs` 7 用例（:21 三类条目/徽章/跳转 data/
+  消失置灰、:34 转义、:40 行级区、:49 非 main.c 泛化、:56 占位文案、:68 摘要、
+  :74 空数组）；实测 `node --test tests/js/change-panel.test.mjs` 全绿。
+  CDP 冒烟 `.scratch/code-ide-flow/smoke-03.mjs` 16 项：无变更面板隐藏（82）、
+  三类条目（101）、摘要（108）、消失置灰（112）、main.c diff 区与 TODO 标题
+  （117/122）、点击新增跳 tab（127/134）、diff 可展开（140）、清空后面板/徽章/
+  toast（145/147/149）、清空后再感知（155）。
+  验收逐条对照：① 空态隐藏 + 三类条目 ✓ ② 点击跳转 + 消失置灰 ✓ ③ main.c diff
+  区 + 占位文案 ✓ ④ 清空推进基线 + 再感知 ✓ ⑤ 与编译面板并排可折叠 ✓
+  ⑥ 纯件单测 + 冒烟 ✓。

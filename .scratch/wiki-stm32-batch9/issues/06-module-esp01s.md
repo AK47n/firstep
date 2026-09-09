@@ -8,7 +8,7 @@
 
 **被谁阻塞：** 无——可立即开始（B 类 AT 首件，打样）。
 
-**状态：** claimed
+**状态：** resolved
 
 **实施清单：**
 - [ ] `library/modules/esp01s/` 新目录：`code/esp01s_stm32.c/.h`（API 6 函数；.c uart 收发 + rx_handler（收字符入缓冲 200 上限+截断）+ send_cmd 应答匹配（strstr+超时）+ parse_ipd（`+IPD,` 有界解析）；零引脚字面量/零标准库）
@@ -21,3 +21,23 @@
 - [ ] 中文提交 → resolved → 结论回填
 
 **验收标准：** 全部 checkbox；pytest 绿；矩阵 exit 0。
+
+## Comments
+
+- 2026-09-09 补标 resolved（代码事实盘点，复核工单自述）：
+  新目录落盘 `library/modules/esp01s/`（manifest.json 6074B +
+  `code/esp01s_stm32.c` 5481B + `esp01s_stm32.h` 4651B）；头文件 50-72 行 API
+  **6 函数 + rx_handler**（init / send_cmd→uint8_t / send_string / available /
+  receive(buf,max)→uint16_t / parse_ipd(id,len,out,max)）。
+  manifest 实测：`platforms=['stm32']`（B 类仅 stm32）、`stm32_files=2`、
+  `verified=True`、`hardware_bound=False`、`pins=['ESP01S_TX','ESP01S_RX']`、
+  kit/source_url 齐。
+  pin_config.h：`:545-550` 六件套（`ESP01S_UART UART_1` / `_UART_INST USART1` /
+  TX PA9 / RX PA10）；isr 聚合 `:762 USART1_IRQ_CALLS … esp01s_rx_handler();`。
+  测试 `tests/test_module_esp01s.py` 6 用例（:65 形状 / :117 宏 / :132 isr __weak /
+  :138 pinwriter 角色登记 / :148 stm32 单选生成 / :172 守卫）——实测全绿。
+  wordlist：`wordlist.json:785/788` 已补录（无线通信组 + lib_modules `esp01s`）。
+  验收逐条对照：① 新目录 + API 6 函数 + AT 透传 + 4 条缺陷修正 ✓
+  ② manifest 仅 stm32 + kit/source_url + description ✓ ③ 6 宏 + isr + pinwriter ✓
+  ④ 测试形状/宏/isr/生成/守卫（无回绕式、有界扫、strstr）✓ ⑤ test_pins 等 ✓
+  ⑥ 矩阵 verified=true ✓ ⑦ wordlist 补录 ✓。

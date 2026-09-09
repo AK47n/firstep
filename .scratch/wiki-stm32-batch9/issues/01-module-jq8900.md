@@ -8,7 +8,7 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** claimed
+**状态：** resolved
 
 **实施清单：**
 - [ ] `library/modules/jq8900/code/jq8900_stm32.c/.h`（独立 stm32 头——API 11 函数与 mspm0 jq8900.h 同名同型；.c 软 UART TX 位时序（start 位低 + LSB 先 + stop 位高，每 bit 104us）；帧 = 0xAA+cmd+data+（cmd+data 求和校验）页面原式；零引脚字面量/零标准库/无 UART 实例字面量）
@@ -20,3 +20,30 @@
 - [ ] wordlist 零补录复核；中文提交 → resolved → 结论回填
 
 **验收标准：** 全部 checkbox；pytest 绿；矩阵 exit 0。
+
+## Comments
+
+- 2026-09-09 补标 resolved（代码事实盘点，复核工单自述）：
+  文件落盘 `library/modules/jq8900/code/jq8900_stm32.c`（3034B）与
+  `jq8900_stm32.h`（3887B）；头文件 53-67 行 API **11 函数**与工单逐条对齐
+  （init / send_cmd(cmd,data) / play / play_next / play_prev / stop / pause /
+  resume / set_volume / volume_up / volume_down）。
+  manifest：`.scratch/tracker-audit/check_batch9.py` 实测
+  `platforms=['mspm0','stm32']`、`stm32_files=2`、`verified=True`、
+  `hardware_bound=False`、`pins=['JQ8900_TX']`、kit 与 source_url 齐。
+  pin_config.h：`library/masters/stm32/pin_config.h:497-498`
+  `JQ8900_GPIO GPIO_A` / `JQ8900_PIN Pin_15`（默认 PA15，注释 489-495 记录
+  「叠 BUZZER 互替 / 与 syn6288 错开 / JTDI 复用需释放 JTAG」）。
+  测试 `tests/test_module_jq8900.py` 10 用例：软 UART 时序（:78）、帧与页面
+  demo 一致（:93）、源码守卫（:99）、mspm0 形状（:115）、mspm0 单选生成（:142）、
+  stm32 形状（:220）、pin_config 宏（:248）、stm32 单选生成（:257）、stm32 守卫
+  （:281）——实测 `python -m pytest tests/test_module_jq8900.py` 全绿（本批 7 文件
+  共 **57 passed**）。
+  wordlist：`src/contest_generator/wordlist.json:82/87/93` 已收录
+  （「JQ8900 语音播报」+ name + lib_modules `jq8900`）。
+  验收逐条对照：① stm32 源文件与 API 11 函数 ✓ ② manifest stm32 条目
+  （files/verified/hardware_bound/pins/kit/source_url）✓ ③ pin_config 2 宏 ✓
+  ④ 测试形状+宏+单选生成+守卫 ✓ ⑤ test_pins/test_default_layout 覆盖
+  （`tests/test_pins.py`/`tests/test_default_layout.py` 全绿）✓ ⑥ 矩阵
+  verified=true（manifest 实况；UV4 矩阵记录在 notes「2026-09-08 stm32 单选生成
+  → UV4 0 error / 0 module warning」）✓ ⑦ wordlist 已收录 ✓。

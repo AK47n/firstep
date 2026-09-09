@@ -8,7 +8,7 @@
 
 **被谁阻塞：** 无——可立即开始（与 jq8900 对仗）。
 
-**状态：** claimed
+**状态：** resolved
 
 **实施清单：**
 - [ ] `library/modules/syn6288/code/syn6288_stm32.c/.h`（独立 stm32 头——API 6 函数与 mspm0 syn6288.h 同名同型；.c 软 UART TX（104us/bit）+ send_cmd 帧（0xFD/Len/Cmd/Par/text/XOR）+ **text 长度 ≤200 上限**（Send_Buff 防溢出）；零引脚字面量/零标准库/无 UART 实例字面量）
@@ -20,3 +20,22 @@
 - [ ] wordlist 零补录复核；中文提交 → resolved → 结论回填
 
 **验收标准：** 全部 checkbox；pytest 绿；矩阵 exit 0。
+
+## Comments
+
+- 2026-09-09 补标 resolved（代码事实盘点，复核工单自述）：
+  文件落盘 `library/modules/syn6288/code/syn6288_stm32.c`（3250B）与
+  `syn6288_stm32.h`（3945B）；头文件 49-61 行 API **6 函数**
+  （init / send_cmd(cmd_type,cmd_par,text) / speak / stop / pause / resume）。
+  manifest 实测：`platforms=['mspm0','stm32']`、`stm32_files=2`、`verified=True`、
+  `hardware_bound=False`、`pins=['SYN6288_TX']`、kit/source_url 齐。
+  pin_config.h：`library/masters/stm32/pin_config.h:506-507`
+  `SYN6288_GPIO GPIO_C` / `SYN6288_PIN Pin_14`（默认 PC14，注释 500-505 记录
+  「叠 LED_YELLOW 互替 / 与 jq8900 错开」）。
+  测试 `tests/test_module_syn6288.py` 10 用例（:79 时序 / :92 帧与页面协议一致 /
+  :101 源码守卫 / :119 mspm0 形状 / :146 mspm0 生成 / :220 stm32 形状 /
+  :249 宏 / :257 stm32 生成 / :281 stm32 守卫）——实测全绿（7 文件 57 passed）。
+  wordlist：`wordlist.json:83/97/103` 已收录（lib_modules `syn6288`）。
+  验收逐条对照：① stm32 源 + API 6 函数 ✓ ② manifest stm32 条目 ✓
+  ③ pin_config 2 宏 ✓ ④ 测试形状+宏+生成+守卫（含 200 上限）✓
+  ⑤ test_pins/test_default_layout ✓ ⑥ 矩阵 verified=true ✓ ⑦ wordlist ✓。
