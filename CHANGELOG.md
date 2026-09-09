@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=8cf9767b6da53b3f351397397c25032f66fa7842 -->
+<!-- changelog-auto: last-commit=daf3620784ed3dab5258e10610487a3f1669a4b0 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-09-09
+- 12:09 整理：CONTEXT 来源标注计数复测更正 + .gitignore 收口 DSH 运行产物
 
 ## 2026-09-08
 - 12:10 工单：wiki-stm32-batch4/05 vl53l0x ToF 激光测距（B 类新 slug——仅 stm32 条目）
