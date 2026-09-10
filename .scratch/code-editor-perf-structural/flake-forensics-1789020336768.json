@@ -1,0 +1,51 @@
+{
+  "rounds": 10,
+  "sigNoTab": 1,
+  "sigStaleDisk": 0,
+  "ok": 9,
+  "guardSaved": 0,
+  "rawLost": 1,
+  "details": [
+    {
+      "attempt": 4,
+      "sig": "sigNoTab",
+      "diskAfterSave": "int b = 777;\n",
+      "raw": {
+        "ok": false,
+        "scene": {
+          "nodePresent": false,
+          "nodeConnected": false,
+          "treeText": "main.c变11 B\n    ✎\n    🗑",
+          "treeFiles": [
+            "main.c"
+          ],
+          "label": "b"
+        }
+      },
+      "scenes": [
+        {
+          "try": 1,
+          "skipped": "节点不稳定"
+        },
+        {
+          "try": 2,
+          "skipped": "节点不稳定"
+        },
+        {
+          "try": 3,
+          "skipped": "节点不稳定"
+        }
+      ],
+      "tabs": [],
+      "tree": {
+        "nodePresent": false,
+        "nodeConnected": false,
+        "treeText": "main.c变11 B\n    ✎\n    🗑",
+        "treeFiles": [
+          "main.c"
+        ],
+        "label": "b"
+      }
+    }
+  ]
+}
