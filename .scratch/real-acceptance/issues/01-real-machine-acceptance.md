@@ -86,9 +86,16 @@ SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_ru
 - [x] **B5 来源 `code-editor-vscode-polish/08`**：全页验收图 `shot-ide-dark/light.png`（`smoke-08.mjs:133/136`）。
   **2026-09-09 第七轮完成**：`smoke-08.mjs` 实跑 **4/4 PASS**，产物 `shot-ide-dark.png` / `shot-ide-light.png` 已入库。
 - [ ] **B6 来源 `code-editor-refine/04`**：括号彩虹双主题截图（现以 computed 色值断言代替，无截图产物）。
-- [ ] **B7 来源 `module-library-ui/01`**：模块库表格目视截图 `01-table-shot.png`（从未提交；`git log --all --` 无该路径）。
+- [x] **B7 来源 `module-library-ui/01`**：模块库表格目视截图 `01-table-shot.png`（从未提交；`git log --all --` 无该路径）。
   注（2026-09-09 第七轮实测）：`.scratch/module-library-ui/smoke.mjs` 在本机复跑**未就绪退出**（`页面未就绪`）——
   脚本就绪判据要求全局 `state.modules` 为数组，与当前页面形态不符（同批其它脚本用 DOM 判据）；截图仍未生成，留待脚本判据更新后重跑。
+  **2026-09-09 第九轮完成**：脚本按 `master-library-ui-2/smoke.mjs` 模板重写后实跑 **71/71（后 75/75）PASS**，
+  截图 `01-table-shot.png` + 收尾截图 `01-table-shot-final.png` 均已入库（每轮冒烟复跑都会重截）。
+  **2026-09-10 第十四轮完成目视**：执行 agent 的模型不声明图像输入，经用户拍板改用**仓库自带视觉通道**
+  （`contest_generator.vision.describe_image`）看图 + **像素级定量核对**：标题未被吸顶栏遮挡、5 列、无斑马纹、
+  徽章与按钮配色统一（仅删除为红字）、slug 等宽、简介列省略号截断、无渲染异常，总评「正常渲染、样式统一」。
+  证据：`.scratch/module-library-ui/vision-eyeball.py`、`01-table-shot{,-final}.vision.txt`、`probe-shot-pixels.py`；
+  来源工单 `module-library-ui/01` 该项已勾（口径变更留痕见该单「第十四轮」段）。
 - [ ] **B8 来源 `master-library-ui-2/02`**：母版树冒烟补「目录数 / 文件数」数值断言 + 二进制 / 缺失路径 400 中文断言。
 - [ ] **B9 来源 `master-library-ui-2/03`**：冒烟补 `pin_config.h` / `mspm0.syscfg` 高亮 span 断言 + 剪贴板内容子串断言。
 - [ ] **B10 来源 `master-library-ui-2/04`**：冒烟补「开导入弹窗 + 平台下拉选项数 + 空 project_dir / 非法平台 400」。
