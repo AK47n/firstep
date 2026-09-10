@@ -110,3 +110,85 @@ test("CDP 冒烟 smoke-02：开标签后等 b.c 成为活动标签（防并发�
     'await waitFor(`document.querySelector(\'#code-tabs .code-tab.on\')?.dataset.tabPath === "b.c"`);'),
     "smoke-02 缺「等 b.c 成为活动标签」等待：两次点击并发时会改到 a.c（场景 2 偶发 FAIL）");
 });
+
+// ---------------------------------------------------------------------------
+// 工单 code-editor-perf-structural/01 补口（2026-09-09 第九轮）
+// ---------------------------------------------------------------------------
+
+test("syncTail 同步输入路径不读/写 scrollTop：强制深布局来源（结构性编辑 76ms → 10ms）", () => {
+  // 缺陷：syncTail 里「行数变化 → 读 box.scrollTop/Left → winApplySize →
+  // 写回同值」的滚动恢复。读写都发生在 winRender（写 innerHTML）+ winApplySize
+  // （写 .code-edit 高度）之后 —— 布局已失效，读 scrollTop 强制一次整树深布局、
+  // 写 scrollTop（需要 scroll extent）再强制一次；5000 行实测读 33.7ms + 写
+  // 30.6ms/次，是回车同步耗时（78.9ms）的绝对大头。写回的值与刚读到的值相同，
+  // 语义上是 no-op（浏览器自身保持 scrollTop，内容变矮时按需钳制）。
+  // 修法 = 删掉这一次读写；滚动位置改由浏览器保持，窗口切片用 winView 缓存。
+  const at = ui.indexOf("function syncTail(");
+  assert.ok(at > 0, "找不到 syncTail");
+  const nextFn = ui.indexOf("\nfunction ", at + 10);
+  const raw = ui.slice(at, nextFn > at ? nextFn : at + 4000);
+  assert.ok(raw.length > 1000, "syncTail 函数体提取异常（函数结构变化）");
+  // 去注释后判定（注释里会写到历史实现与 `box.scrollTop` 字样，不算代码）
+  const body = raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  for (const bad of ["box.scrollTop", "box.scrollLeft", "box.clientHeight"]) {
+    assert.ok(!body.includes(bad),
+      `syncTail 重新读了 ${bad}：同步输入路径的布局强制读（回车同步耗时回到 ~70ms）`);
+  }
+  assert.ok(!/box\.scroll(?:Top|Left)\s*=/.test(body),
+    "syncTail 重新写了 scrollTop/scrollLeft：赋值需要 scroll extent，同样强制布局");
+  // winView 缓存必须仍是窗口切片的来源（否则窗口按陈旧/缺失值切片）
+  assert.ok(ui.includes("winView = { scrollTop: box.scrollTop, viewportH: box.clientHeight };"),
+    "winReadView 不再刷新 winView 缓存：窗口切片失去滚动位置来源");
+  assert.ok(ui.includes("return codeWindowRange(winView.scrollTop, winView.viewportH, winLineH,"),
+    "winWindow 不再用 winView 缓存：删掉实时读之后窗口切片无从取值");
+});
+
+test("性能工单验收脚本在位（防验收证据被删/静默放宽）", () => {
+  const verify = readFileSync(
+    new URL("../../.scratch/code-editor-perf-structural/verify-structural-edit.mjs", import.meta.url), "utf8");
+  for (const needle of [
+    "同步路径零布局强制读",
+    "中部回车：滚动位置不跳（scrollTop 不变）",
+    "中部回车：可见窗口行号序列不变（视口不位移）",
+    "回车同步耗时 < 50ms（均值）",
+  ]) {
+    assert.ok(verify.includes(needle), `验收脚本缺断言：${needle}`);
+  }
+});
+
+test("winRenderMarks 复用分支：缓存只存基础清单（状态段写回 = 旧括号/词标记复用回来）", () => {
+  // 缺陷（2026-09-09 第九轮顺带修出）：复用分支把 `base.concat(extra)` 的结果
+  // 写回 marksCache.marks —— 下次复用即把**上一次的括号/词/查找段**当基础段
+  // 带回来。实测两处红：polish/smoke-06「光标移开 → 括号标记消失」（标记不消失）、
+  // polish/smoke-05「光标移到 '{' 符号位 → 选中词标记消失」。
+  const at = ui.indexOf("function winRenderMarks(");
+  assert.ok(at > 0, "找不到 winRenderMarks");
+  const nextFn = ui.indexOf("\nfunction ", at + 10);
+  const raw = ui.slice(at, nextFn > at ? nextFn : at + 4000);
+  const code = raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.ok(code.includes("const base = marksCache.marks;"),
+    "winRenderMarks 未区分基础清单（状态段会污染缓存）");
+  assert.ok(/marks = extra\.length \? base\.concat\(extra\) : base;/.test(code),
+    "合并式不是 base.concat(extra)（或又改回从 marksCache.marks 直接拼）");
+  assert.ok(/marks: base \};/.test(code),
+    "marksCache 未写回基础清单：状态段（括号/词/查找/错误）被当基础段缓存");
+  assert.ok(!/marks: marks\s*\}/.test(ui),
+    "marksCache 写回了合并结果 marks：下次复用会把旧状态段带回来");
+  // 冒烟断言不许被悄悄放宽（两处红都是它抓到的）
+  const smoke05 = readFileSync(
+    new URL("../../.scratch/code-editor-vscode-polish/smoke-05.mjs", import.meta.url), "utf8");
+  const smoke06 = readFileSync(
+    new URL("../../.scratch/code-editor-vscode-polish/smoke-06.mjs", import.meta.url), "utf8");
+  assert.ok(smoke06.includes("光标移开 → 括号标记消失"), "smoke-06 缺「括号标记消失」断言");
+  assert.ok(smoke05.includes("选中词标记消失"), "smoke-05 缺「词标记消失」断言");
+});
+
+test("smoke-08「窗口内滚动零 DOM」断言不写死位移（窗口边界由纯件现算）", () => {
+  // 旧断言写死 +5px：窗口 [start,end) 由 codeWindowRange 按滚动偏移精确重算，
+  // 5px 可能跨过底部边界 → DOM 行数变 1 是正确行为，断言却判红。修订 = 用同一
+  // 纯件现算「不跨边界」的位移。
+  const smoke08 = readFileSync(
+    new URL("../../.scratch/code-page-vscode-overhaul/smoke-08.mjs", import.meta.url), "utf8");
+  assert.ok(smoke08.includes("codeWindowRange"), "smoke-08 未用纯件现算窗口边界");
+  assert.ok(!smoke08.includes("b.scrollTop += 5"), "smoke-08 又写死了 +5px 位移");
+});

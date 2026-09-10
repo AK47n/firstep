@@ -1319,8 +1319,17 @@ function winRenderMarks() {
         ? winCache.lines[er.line - 1].length : 0);
       extra.push({ line: er.line, start: 0, end: ln, kind: "error", title: er.message });
     }
-    marks = extra.length ? marksCache.marks.concat(extra) : marksCache.marks;
-    marksCache = { content: viewText, findQuery: editorFind.query, compileSig, marks };
+    // 工单 code-editor-perf-structural/01 顺带修出：**缓存只存基础清单**
+    //（引导线/彩虹等静态段），状态段（括号/词/查找/错误）每次现拼、绝不写回。
+    // 旧实现把 `base.concat(extra)` 的结果写回 marksCache.marks → 下次复用
+    // 即把**上一次的状态段**当基础段带回来：光标移开后括号标记清不掉
+    //（polish/smoke-06「光标移开 → 括号标记消失」红）、选中词移出词外不消失
+    //（polish/smoke-05「光标移到 '{' → 词标记消失」红），且状态叠加时会重复
+    // 累积（winPatchRow 再拼一次 editorBracket）。同族既往两修（findQuery /
+    // compileSig）治的是「复用判据」，本条治的是「缓存内容本身被污染」。
+    const base = marksCache.marks;
+    marks = extra.length ? base.concat(extra) : base;
+    marksCache = { content: viewText, findQuery: editorFind.query, compileSig, marks: base };
   } else if (viewModel) {
     marks = marksForView(errLines);
   } else {
@@ -2399,9 +2408,16 @@ function syncTail(caretModel, follow = true) {
     }
   }
   // 工单 09：scrollTop/Left 只在「行数变化」（内容高度变化）时读写——大
-  // textarea 场景读/写滚动位置会强制布局（实测 60-150ms/次）；行数不变时
-  // .code-edit 显式高度不变，窗口 innerHTML 重建不改变滚动，容器自动保持。
-  const prevCount = winCache.lineCount;
+  // textarea 场景读/写滚动位置会强制布局（实测 60-150ms/次）。
+  // 工单 code-editor-perf-structural/01：**连那一次读写也删掉**——旧实现
+  // 「读 box.scrollTop/Left → winApplySize → 写回同值」实质是 no-op（读到
+  // 的已是 winRender 之后的实际值，写回的值与当前值相同），却因为读/写发生在
+  // 「winRender 写 innerHTML + winApplySize 写高度」之后，各自强制一次整树深
+  // 布局：5000 行实测读 33.7ms + 写 30.6ms/次，是回车同步耗时（78.9ms）的
+  // 绝对大头。滚动位置不需要人工保持——scrollTop 不因内容变高而改变，内容变
+  // 矮时浏览器按需钳制（本就正确）；窗口切片读 winView.scrollTop 缓存（滚动/
+  // 尺寸事件里刷新），与浏览器实际位置一致。写入同理：赋值 scrollTop 需要
+  // scroll extent，仍会强制布局——同步路径一律不碰。
   // 只重绘窗口行（滚动窗口化 08）：内容变化 → 重建逐行缓存 + 重测尺寸 +
   // 画当前滚动窗口（textarea 本体不重建——焦点/选区零抖动）。工单 11：内容
   // 未变零重建；非折叠态行数不变 → 增量 patch 只重算变更行；折叠态/行数变化
@@ -2425,20 +2441,7 @@ function syncTail(caretModel, follow = true) {
     winBuild(viewText, tab.lang);
     winRender();
   }
-  const needScrollRestore = winCache.lineCount !== prevCount;
-  let scrollTop = 0;
-  let scrollLeft = 0;
-  if (needScrollRestore) {
-    scrollTop = box.scrollTop;
-    scrollLeft = box.scrollLeft;
-  }
   winApplySize();
-  // 只写不读（需要时）：行数变化才恢复滚动（先恢复再窗口重装——taWindowApply
-  // 在光标出窗时以光标为准滚动，覆盖恢复值，语义正确）
-  if (needScrollRestore) {
-    box.scrollTop = scrollTop;
-    box.scrollLeft = scrollLeft;
-  }
   // 标记层渲染单点（工单 code-editor-opt/05）：窗口渲染（winRender →
   // winRenderMarks，或 winPatchRow 行级修补）已用「状态先行」的最新
   // editorWord/editorBracket/editorFind/错误 渲染一次即终——不再调用

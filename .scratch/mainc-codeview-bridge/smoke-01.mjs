@@ -74,8 +74,18 @@ const assert = (cond, label) => {
   else console.log("ok: " + label);
 };
 
+// 0. 状态卫生（2026-09-09 第九轮）：本脚本第 2 步断言「未生成时状态行隐藏」，
+//    前提是草稿里没有 outputDir；而 `firstep.draft.v1` 存在 localStorage（同一
+//    profile 跨脚本留存），其它冒烟（ideflow / treeops / ideai 等）会把 outputDir
+//    写进去 → 本脚本的绿红取决于**批跑顺序**（实测同一批跑器：
+//    ideai/treeops/ideflow 因 CDP 9231 未起而提前失败时本脚本绿；9231 起来后
+//    同批次它转红）。故开头清掉草稿键并整页重载 —— 把前提条件自己造出来，
+//    不依赖外部执行顺序。
+await Eval(`try { localStorage.removeItem("firstep.draft.v1"); } catch (e) {} window.__smokeMarker = 1; true`);
+await cdp("Page.reload", { ignoreCache: true });
+
 // 1. 模块图加载完成（fx/draft window 桥 = host 脚本 import 全链成功）
-assert(await waitFor(`typeof window.draftState === "function"`), "页面模块图加载（draftState 桥就绪）");
+assert(await waitFor(`typeof window.draftState === "function" && !window.__smokeMarker`), "页面模块图加载（draftState 桥就绪）");
 // 2. 状态行 DOM 存在且初始隐藏
 assert(await Eval(`!!document.querySelector("#mainc-disk-state")`), "状态行 DOM 存在");
 assert(await Eval(`document.querySelector("#mainc-disk-state").classList.contains("hidden")`), "未生成时状态行隐藏");

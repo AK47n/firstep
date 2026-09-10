@@ -129,11 +129,38 @@ check("中部窗口行号区间正确（~2500 附近）", first > 2300 && first 
 check("行号与高亮窗口一致", d.firstGut === d.firstHl);
 
 // 窗口内滚动（微小位移）→ DOM 不变（零重建）
+// 口径修订（2026-09-09 第九轮，工单 code-editor-perf-structural/01 实跑暴露）：
+// 旧断言写死「+5px」，但窗口 [start,end) 由 codeWindowRange 按滚动偏移**精确**
+// 重算——5px 完全可能跨过底部边界（end: ceil((top+vh-8)/lh)+ov），此时 DOM 行数
+// 62 vs 61 是**正确行为**而非回归；该断言因而对滚动位置敏感（实测中部滚动后
+// 必红）。改为用同一纯件现算「不跨边界的位移」再断言零 DOM 变更——判据仍是
+// 「同窗滚动零重建」，但不再依赖 +5px 恰好落在窗内。
+const within = await Eval(`(async () => {
+  const { codeWindowRange } = await import('/js/fx/codeeditor.js');
+  const b = document.getElementById('code-viewer');
+  const lh = parseFloat(getComputedStyle(document.querySelector('#code-viewer .code-hl')).lineHeight);
+  const n = 5001;
+  const sig = (t) => { const r = codeWindowRange(t, b.clientHeight, lh, n, 20); return r.start + ':' + r.end; };
+  const want = sig(b.scrollTop);
+  let delta = 0;
+  for (let px = 1; px <= Math.max(1, Math.floor(lh)); px++) {
+    if (sig(b.scrollTop + px) === want) { delta = px; break; }
+  }
+  return { delta, lh, want };
+})()`);
 const before = await domLines();
-await Eval(`(() => { const b = document.getElementById('code-viewer'); b.scrollTop += 5; return true; })()`);
+const scrolled = await Eval(`(() => {
+  const b = document.getElementById('code-viewer');
+  const before = b.scrollTop;
+  b.scrollTop = before + ${within.delta};
+  return { before, after: b.scrollTop };
+})()`);
 await new Promise((r) => setTimeout(r, 400));
 const after = await domLines();
-check("窗口内滚动零 DOM 变更", before.hl === after.hl && before.firstHl === after.firstHl);
+check("窗口内滚动零 DOM 变更（位移由纯件现算：不跨窗口边界）",
+  within.delta > 0 && scrolled.after > scrolled.before
+  && before.hl === after.hl && before.firstHl === after.firstHl && before.lastHl === after.lastHl,
+  `Δ=${within.delta}px 窗=[${within.want}] hl=${before.hl}→${after.hl} 行 ${before.firstHl}-${before.lastHl}→${after.firstHl}-${after.lastHl}`);
 
 // 大跨步滚动（跨窗口）→ 窗口重画
 await Eval(`(() => { const b = document.getElementById('code-viewer'); b.scrollTop = 0; return true; })()`);

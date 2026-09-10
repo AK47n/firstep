@@ -74,7 +74,27 @@ const check = (name, ok, extra) => {
   if (ok) passed++; else failed++;
 };
 const openDir = (dir) => Eval(`import('/js/ui/codeview.js').then((m) => m.openCodeViewer(${JSON.stringify(dir)}))`);
-const openFile = (name) => Eval(`document.querySelector('#code-tree [data-code-file=${JSON.stringify(name)}]')?.click()`);
+// openFile(name)：点树节点打开文件。
+// 口径修订（2026-09-09 第九轮实跑暴露的偶发红，**基线（stash 产品改动）同样 2/8 复现**
+// → 与本轮产品改动无关的既有脚本竞态）：切目录后 #code-tree 会被 loadCodeDir 清成
+// 「加载中…」再异步重渲染，`waitFor(节点存在)` 可能被**上一次目录留下的同名节点**
+// 满足，两次 Eval 之间的清树使 click 落在已移除节点上（`?.click()` 静默 no-op）→
+// 没有活动标签、编辑器空白（实测现场：ta=null / 标签=[]），场景 5b 因等不到 ta 值而假红。
+// 修法两层：① 点前等节点**稳定**（连续两次轮询都在场，避开"清树前一瞬"）；
+// ② 打开失败即重试（最多 3 次，每次等 1.5s 看是否成为活动标签）——与第八轮
+// smoke-02「等 b.c 成为活动标签」同一姿势。
+const openFile = async (name) => {
+  for (let i = 0; i < 3; i++) {
+    await waitFor(`document.querySelector('#code-tree [data-code-file=${JSON.stringify(name)}]')`, 8000);
+    await new Promise((r) => setTimeout(r, 250));
+    const stable = await Eval(`!!document.querySelector('#code-tree [data-code-file=${JSON.stringify(name)}]')`);
+    if (!stable) continue;
+    await Eval(`document.querySelector('#code-tree [data-code-file=${JSON.stringify(name)}]')?.click()`);
+    const ok = await waitFor(`import('/js/ui/codeeditor.js').then((m) => m.getActiveTab()?.path === ${JSON.stringify(name)})`, 1500);
+    if (ok) return true;
+  }
+  return false;
+};
 const setText = (text) => Eval(`(() => {
   const ta = document.querySelector('#code-viewer .code-ta');
   ta.focus();
@@ -145,7 +165,18 @@ await waitFor(`document.getElementById('code-dir-label').textContent === ${JSON.
   && !!document.querySelector('#code-tree [data-code-file="other.c"]')`);
 await openFile("other.c");
 await waitFor(`document.querySelector('#code-viewer .code-ta')?.value === "int b = 777;\\n"`);
-check("5b B 磁盘内容已含修改", await taValue() === "int b = 777;\n");
+check("5b B 磁盘内容已含修改", await (async () => {
+  const v = await taValue();
+  const disk = await Eval(`fetch('/api/code/file?dir=' + encodeURIComponent(${JSON.stringify(DIR_B)})
+    + '&path=' + encodeURIComponent('other.c')).then((r) => r.json()).then((j) => j.content).catch(() => '(读盘失败)')`);
+  // 失败时把「编辑器看到的」与「磁盘上的」一起打出来（第九轮排查用：
+  // 两者不一致 = 客户端缓存陈旧；一致但非 777 = 保存没落盘）
+  return v === "int b = 777;\n" && disk === "int b = 777;\n"
+    ? true
+    : (console.log("   现场：ta=" + JSON.stringify(v) + " 磁盘=" + JSON.stringify(disk)
+      + " 标签=" + JSON.stringify(await Eval(`(async () => (await import('/js/ui/codeeditor.js')).openTabPaths())()`))),
+      false);
+})());
 
 // ---- 场景 6：干净态 beforeunload 不拦截 ----
 await openDir(DIR_A);   // 无脏 → 直通（顺带验证无脏切换不弹窗）
