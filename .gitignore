@@ -44,3 +44,4 @@ sources/materials/
 # 代码页冒烟脚本自建夹具（每次运行重生成，不入库；2026-09-09 第六轮 CDP 实跑）
 .scratch/code-page-vscode-overhaul/sample-proj/
 .scratch/code-editor-vscode-polish/sample-proj/
+.scratch/code-editor-perf-structural/sample-proj/

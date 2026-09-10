@@ -1,534 +1,580 @@
-// 冒烟（pdf-library-ui 系列）：PDF 资料库页 UI。每张工单追加检查项。
-// 零依赖：node 内置 fetch + WebSocket 直连 Chrome CDP（9251）；webapp 8000 提供真实 /api/pdfs。
+// 冒烟（pdf-library-ui 系列，工单 02–06）：PDF 资料库页 UI——表格精修 + 客户端
+// 即时检索/排序/统计 / 轻量详情弹窗（页数懒取 + 复制相对路径）/ 数据健康
+// （疑似重复 + 0 字节损坏）/ 空态与清空恢复 / 疑似重复回收删除（单删 + 组级）。
+//
+// 重写说明（2026-09-09 第八轮「未完成」第 1 项）：本脚本写于前端阶段 2 ES 模块化
+// **之前**，就绪判据与断言直接求值 `pdfCache` / `pdfFilterContext()` / `loadPdfs()`
+// 等**模块作用域名**——模块化后不再挂全局（`app.js` 规则 3：不挂 window 桥），
+// 求值抛错 → 就绪判据恒假 → 脚本退出「页面未就绪」。本轮按已绿的
+// `.scratch/master-library-ui-2/smoke.mjs` 模板重写：cdp-harness（每支前重建标签页
+// + 自动应答 beforeunload + 命令超时）+ 数据取真实端点 + 期望值由**页面内
+// `import()` 取纯件**现算 + 就绪/断言全部用 DOM 可观察事实；需要触发重渲染时调
+// ui 模块的**导出**函数（`import('/js/ui/pdf.js')` → `loadPdfs`）。
+// 零真删真实素材：只真删本脚本自建的 zz-smoke-* 合成文件（同名同大小对 → 重复组），
+// finally 里连回收镜像一起清理；真实素材零触碰。
+import { mkdirSync, writeFileSync, unlinkSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { rebuildTab, connect } from "../cdp-harness.mjs";
+
+const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const CDP = 9251;
-const pageUrl = "http://127.0.0.1:8000/";
+const PAGE_URL = "http://127.0.0.1:8000/";
+const MATERIALS = join(ROOT, "sources", "materials");
+const TRASH = join(ROOT, "sources", ".trash-pdf");
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const dateStr = (() => {
+  const t = new Date(), p = (n) => String(n).padStart(2, "0");
+  return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}`;
+})();
 
-let targets = null;
-for (let i = 0; i < 50 && !targets; i++) {
-  try {
-    targets = await (await fetch(`http://127.0.0.1:${CDP}/json/list`)).json();
-  } catch {}
-  if (!targets || !targets.length) await new Promise((r) => setTimeout(r, 300));
-}
-if (!targets) { console.error("CDP 不可达"); process.exit(1); }
-const page = targets.find((t) => t.type === "page" && t.url.startsWith("http://127.0.0.1:8000"));
-const ws = new WebSocket(page.webSocketDebuggerUrl);
-await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error("ws error")); });
+await rebuildTab({ port: CDP, pageUrl: PAGE_URL, settleMs: 2000 });
+const c = await connect({ port: CDP, pageUrl: PAGE_URL, timeoutMs: 20000 });
+await c.cdp("Page.enable");
+const Eval = (expr) => c.Eval(expr);
 
-let seq = 0;
-const pending = new Map();
-ws.onmessage = (ev) => {
-  const msg = JSON.parse(ev.data);
-  if (msg.id && pending.has(msg.id)) { pending.get(msg.id)(msg); pending.delete(msg.id); }
-};
-const cdp = (method, params = {}) =>
-  new Promise((resolve) => { const id = ++seq; pending.set(id, resolve); ws.send(JSON.stringify({ id, method, params })); });
-const Eval = async (expr) => {
-  const r = await cdp("Runtime.evaluate", { expression: expr, returnByValue: true, awaitPromise: true });
-  if (r.result?.exceptionDetails) throw new Error("eval 失败: " + (r.result.exceptionDetails.exception?.description || JSON.stringify(r.result.exceptionDetails)));
-  return r.result?.result?.value;
-};
+// 页面内探针命名空间（仅本次运行时注入，不落产品代码）：纯件 + ui 导出 + 真实数据
+await Eval(`(async () => {
+  const [core, fx] = await Promise.all([import('/js/fx/core.js'), import('/js/fx/pdf.js')]);
+  const ui = { pdf: await import('/js/ui/pdf.js') };
+  window.__probe = { core, fx, ui,
+    pdfs: await (await fetch('/api/pdfs')).json(),
+    reload: async () => {
+      window.__probe.pdfs = await (await fetch('/api/pdfs')).json();
+      await window.__probe.ui.pdf.loadPdfs();
+      return window.__probe.pdfs.length;
+    } };
+  return window.__probe.pdfs.length;
+})()`);
 
-let ready = false;
-await Eval(`window.__smokeMarker = 1`);
-await cdp("Page.reload", { ignoreCache: true });
-for (let i = 0; i < 100 && !ready; i++) {
-  try {
-    ready = await Eval(`document.readyState === 'complete' && !window.__smokeMarker
-      && !!document.getElementById('tab-pdf')
-      && typeof state !== 'undefined' && state && Array.isArray(state.modules)`);
-  } catch {}
-  if (!ready) await new Promise((r) => setTimeout(r, 300));
-}
+const ready = await c.ready(`document.readyState === 'complete'
+  && !!document.getElementById('tab-pdf') && !!document.getElementById('pdf-rows')
+  && !!window.__probe && Array.isArray(window.__probe.pdfs)`, 20000);
 if (!ready) { console.error("页面未就绪"); process.exit(1); }
 
-let failed = 0;
+let failed = 0, passed = 0;
 const check = (name, ok, extra) => {
   console.log((ok ? "PASS" : "FAIL") + " " + name + (extra !== undefined ? " [" + extra + "]" : ""));
-  if (!ok) failed++;
+  if (ok) passed++; else failed++;
 };
+// 期望值单源 = 页面内纯件 + 真实端点数据
+const expect = (expr) => Eval(`(() => { const P = window.__probe; const pdfs = P.pdfs; const fx = P.fx;
+  const { pdfFilterEntries, pdfSortEntries, pdfStats, pdfStatsText, pdfHealth, pdfBroken, formatMtime } = fx;
+  const { formatSize } = P.core;
+  const h = pdfHealth(pdfs);
+  return (${expr}); })()`);
 
-// ---- 切「PDF 资料库」tab ----
+// ---- 切「PDF 资料库」tab（host 分发器跑 loadPdfs → 真实端点全量） ----
+const total = await Eval(`window.__probe.pdfs.length`);
 await Eval(`(() => {
-  const tab = [...document.querySelectorAll('nav button')]
-    .find((b) => b.textContent.trim() === 'PDF 资料库');
+  const tab = [...document.querySelectorAll('nav button')].find((b) => b.dataset.tab === 'pdf');
   if (tab) tab.click();
   return !!tab;
 })()`);
-for (let i = 0; i < 40; i++) {
-  const n = await Eval(`(pdfCache || []).length`);
-  if (n > 0) break;
-  await new Promise((r) => setTimeout(r, 250));
-}
+const rowsLoaded = await c.waitFor(`document.querySelectorAll('#pdf-rows tr').length === ${total}`, 20000);
+check("PDF 列表已加载（真实素材库全量行数）", rowsLoaded, "pdfs=" + total);
 
-const loaded = await Eval(`(pdfCache || []).length`);
-check("PDF 列表已加载（pdfCache 非空）", loaded > 0, "pdfs=" + loaded);
-
-// ================= 工单 02：表格精修 + 客户端即时检索 + 统计条 =================
-check("旧筛选区已移除（无搜索/清空按钮、无计数 span、无 pdf-count）", await Eval(`!document.getElementById('btn-pdf-search')
-  && !document.getElementById('btn-pdf-search-clear') && !document.getElementById('pdf-count')`));
-
-check("工具栏元素齐全（搜索 / 排序 / 方向 / 清空 / 批次 chips / 统计条）", await Eval(`!!(document.getElementById('pdf-filter')
-  && document.getElementById('pdf-sort') && document.getElementById('pdf-sort-dir')
-  && document.getElementById('pdf-filter-clear') && document.getElementById('pdf-batch-chips')
-  && document.getElementById('pdf-stats'))`));
-
-// 防 id 冲突回归（对偶 reference 评审 C1）：pdf- 前缀元素 id 全局唯一
-check("pdf- 前缀元素 id 唯一（无重复 id）", await Eval(`(() => {
+// ================= 工单 02：表格精修 + 检索 + 排序 + 统计 =================
+check("旧筛选区已移除（无搜索/清空按钮、无计数 span、无 pdf-count）", await Eval(`
+  !document.getElementById('btn-pdf-search') && !document.getElementById('btn-pdf-search-clear')
+  && !document.getElementById('pdf-count')`));
+check("工具栏元素齐全（搜索 / 排序 / 方向 / 清空 / 刷新 / 批次 chips / 统计条）", await Eval(`
+  !!(document.getElementById('pdf-filter') && document.getElementById('pdf-sort')
+    && document.getElementById('pdf-sort-dir') && document.getElementById('pdf-filter-clear')
+    && document.getElementById('pdf-refresh') && document.getElementById('pdf-batch-chips')
+    && document.getElementById('pdf-stats'))`));
+check("pdf- 前缀元素 id 全局唯一（≥10 个，无重复）", await Eval(`(() => {
   const ids = [...document.querySelectorAll('[id^="pdf-"]')].map((i) => i.id);
-  return ids.length === new Set(ids).size && ids.length >= 10;
-})()`));
+  return ids.length === new Set(ids).size && ids.length >= 10; })()`));
 
 const t02c = await Eval(`(() => {
   const table = document.querySelector('#tab-pdf table');
   const th = document.querySelector('#tab-pdf thead th');
-  const ths = [...document.querySelectorAll('#tab-pdf thead th')].map((t) => t.textContent.trim());
-  return { hasLibTable: !!(table && table.classList.contains('lib-table')),
+  return { hasLibTable: !!table && table.classList.contains('lib-table'),
     thBg: th ? getComputedStyle(th).backgroundColor : null,
-    ths, rows: document.querySelectorAll('#pdf-rows tr').length };
+    ths: [...document.querySelectorAll('#tab-pdf thead th')].map((t) => t.textContent.trim()) };
 })()`);
 check("表格带 lib-table 类", t02c.hasLibTable);
 check("表头有底纹背景", !!t02c.thBg && t02c.thBg !== "rgba(0, 0, 0, 0)", "bg=" + t02c.thBg);
 check("表头 6 列（文件名/批次/目录/大小/修改时间/操作）",
   JSON.stringify(t02c.ths) === JSON.stringify(["文件名", "批次", "目录", "大小", "修改时间", "操作"]),
   t02c.ths.join("/"));
-check("行数 = 全量份数", t02c.rows === loaded, `rows=${t02c.rows}, pdfs=${loaded}`);
 
-const t02e = await Eval(`(() => {
+// 默认排序 = 最近更新降序（pdfUI 初值 mtime/desc，与 select 的 selected 项一致）
+const t02d = await Eval(`(() => {
   const first = document.querySelector('#pdf-rows tr');
-  if (!first) return null;
   const nameTd = first.querySelector('.desc-cell');
-  const chip = first.querySelector('.lib-chip');
   const tds = [...first.querySelectorAll('td')];
-  const btnOpen = first.querySelector('[data-open-pdf]');
-  const btnDetail = first.querySelector('[data-pdf-detail]');
-  return { nameTitle: nameTd ? (nameTd.title || '') : '', chipText: chip ? chip.textContent.trim() : null,
-    tds: tds.map((td) => td.textContent.trim()),
-    btnOpenText: first.querySelector('button[data-open-pdf]')?.textContent.trim() ?? null,
-    btnDetailText: btnDetail ? btnDetail.textContent.trim() : null };
+  return {
+    name: nameTd.querySelector('a').textContent.trim(),
+    nameTitle: nameTd.getAttribute('title') || '',
+    chip: (first.querySelector('.lib-chip') || {}).textContent || '',
+    sizeText: tds[3].textContent.trim(),
+    mtimeText: tds[4].textContent.trim(),
+    btnOpen: (first.querySelector('button[data-open-pdf]') || {}).textContent || '',
+    btnDetail: (first.querySelector('[data-pdf-detail]') || {}).textContent || '',
+    sortVal: document.getElementById('pdf-sort').value,
+    dirText: document.getElementById('pdf-sort-dir').textContent,
+  };
 })()`);
-check("首行文件名列 = 截断类 + 完整路径 tooltip", !!(t02e && t02e.nameTitle && t02e.nameTitle.includes('/')), t02e && t02e.nameTitle);
-check("首行批次 chip（.lib-chip 文案）", !!(t02e && t02e.chipText), t02e && t02e.chipText);
-check("首行大小列 = formatSize 口径", await Eval(`(() => {
-  const first = document.querySelector('#pdf-rows tr');
-  if (!first) return false;
-  const sorted = pdfSortEntries(pdfCache, { by: 'name', dir: 'asc' });
-  const sizeTd = [...first.querySelectorAll('td')][3];
-  return sizeTd && sizeTd.textContent.trim() === formatSize(sorted[0].size_bytes);
-})()`));
-check("首行修改时间列含 YYYY-MM-DD", await Eval(`(() => {
-  const first = document.querySelector('#pdf-rows tr');
-  if (!first) return false;
-  const mtTd = [...first.querySelectorAll('td')][4];
-  return mtTd && /^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}$/.test(mtTd.textContent.trim());
-})()`));
-check("操作列：打开 + 详情按钮", !!(t02e && t02e.btnOpenText === "打开" && t02e.btnDetailText === "详情"));
+const expFirst = await expect(`(() => { const p = pdfSortEntries(pdfs, { by: 'mtime', dir: 'desc' })[0];
+  return { name: p.name, rel: p.rel_path, size: formatSize(p.size_bytes), mtime: formatMtime(p.mtime), batch: p.batch }; })()`);
+check("默认排序 = 最近更新降序（select 值 + 方向按钮文案）",
+  t02d.sortVal === "mtime" && t02d.dirText.includes("↓"), `${t02d.sortVal} / ${t02d.dirText}`);
+check("首行 = 纯件默认排序首条（名称 / 大小 / 时间 / tooltip 全路径）",
+  t02d.name === expFirst.name && t02d.sizeText === expFirst.size
+    && t02d.mtimeText === expFirst.mtime && t02d.nameTitle === expFirst.rel,
+  `${t02d.name} | ${t02d.sizeText} vs ${expFirst.size}`);
+check("首行批次 chip + 操作列「打开 / 详情」",
+  t02d.chip.includes(expFirst.batch) && t02d.btnOpen === "打开" && t02d.btnDetail === "详情",
+  `${t02d.chip} | ${t02d.btnOpen}/${t02d.btnDetail}`);
+check("修改时间列格式 YYYY-MM-DD HH:mm", /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(t02d.mtimeText), t02d.mtimeText);
 
-// ---- 统计条（无过滤时 = 全量口径）----
-check("统计条文案 = pdfStatsText(pdfStats(全量))", await Eval(`(() => {
-  const text = document.getElementById('pdf-stats').textContent;
-  const expected = pdfStatsText(pdfStats(pdfFilterEntries(pdfCache, pdfFilterContext())));
-  return text.includes(expected);
-})()`));
+const expStats = await expect(`pdfStatsText(pdfStats(pdfs))`);
+check("统计条 = 全量纯件口径（共 N 份 · 总体积 · 批次）", await Eval(`
+  document.getElementById('pdf-stats').textContent.includes(${JSON.stringify(expStats)})`), expStats);
 
-// ---- 关键字即时过滤（防抖 150ms）----
-const kwRows = await Eval(`(async () => {
+// ---- 关键字即时过滤（防抖 150ms）：派发当帧不重渲染 → 防抖后按纯件收缩 ----
+const kwProbe = "数据手册";
+const kw = await Eval(`(async () => {
   const inp = document.getElementById('pdf-filter');
-  inp.value = '数据手册';
+  inp.value = ${JSON.stringify(kwProbe)};
   inp.dispatchEvent(new Event('input', { bubbles: true }));
-  await new Promise((r) => setTimeout(r, 400));
-  return document.querySelectorAll('#pdf-rows tr').length;
+  const immediate = document.querySelectorAll('#pdf-rows tr').length;
+  await new Promise((r) => setTimeout(r, 450));
+  return { immediate, after: document.querySelectorAll('#pdf-rows tr').length };
 })()`);
-check("关键字即时过滤：命中数 > 0 且 < 全量", kwRows > 0 && kwRows < loaded, "rows=" + kwRows);
+const expKw = await expect(`pdfFilterEntries(pdfs, { q: ${JSON.stringify(kwProbe)}, batch: '', health: '' }).length`);
+check("关键字即时过滤：命中数 = 纯件期望且 < 全量",
+  kw.after === expKw && kw.after > 0 && kw.after < total, `${kw.after} vs ${expKw} / 全量 ${total}`);
+check("防抖 150ms 生效（派发 input 后当帧不重渲染）", kw.immediate === total, `immediate=${kw.immediate}`);
+await Eval(`document.getElementById('pdf-filter-clear').click()`);
+await c.waitFor(`document.querySelectorAll('#pdf-rows tr').length === ${total}`, 8000);
+check("清空过滤恢复全量", await Eval(`document.querySelectorAll('#pdf-rows tr').length === ${total}`));
 
-// ---- 批次 chips：点击过滤 / 再点取消 ----
+// ---- 批次 chips：点击过滤（行数 = 该批次份数）→ 再点取消 ----
 const chipTest = await Eval(`(async () => {
-  document.getElementById('pdf-filter-clear').click(); // 清掉前面遗留的关键字过滤
-  await new Promise((r) => setTimeout(r, 120));
   const btn = [...document.querySelectorAll('#pdf-batch-chips [data-pdf-chip]')]
     .find((b) => b.dataset.pdfChip !== '');
-  if (!btn) return null;
+  if (!btn) return { skipped: true };
   const batch = btn.dataset.pdfChip;
   btn.click();
-  await new Promise((r) => setTimeout(r, 120));
+  await new Promise((r) => setTimeout(r, 250));
   const filtered = document.querySelectorAll('#pdf-rows tr').length;
-  const expected = (pdfCache || []).filter((p) => p.batch === batch).length;
-  // chips 重渲染后旧引用已脱离文档：重新按 value 查找再点（取消）
+  const on = document.querySelector('#pdf-batch-chips .lib-chip.on');
+  const onVal = on ? on.dataset.pdfChip : null;
   const btn2 = [...document.querySelectorAll('#pdf-batch-chips [data-pdf-chip]')]
     .find((b) => b.dataset.pdfChip === batch);
   if (btn2) btn2.click();
-  await new Promise((r) => setTimeout(r, 120));
-  const restored = document.querySelectorAll('#pdf-rows tr').length;
-  return { batch, filtered, expected, restored, full: (pdfCache || []).length };
+  await new Promise((r) => setTimeout(r, 250));
+  return { skipped: false, batch, filtered, onVal,
+    restored: document.querySelectorAll('#pdf-rows tr').length };
 })()`);
-check("批次 chip 点击 = 只看该批次（行数 = 该批次份数）", !!(chipTest && chipTest.filtered === chipTest.expected && chipTest.filtered > 0),
-  chipTest && `${chipTest.batch}: ${chipTest.filtered}/${chipTest.expected}`);
-check("批次 chip 再点取消 = 恢复全量", !!(chipTest && chipTest.restored === chipTest.full), chipTest && "rows=" + chipTest.restored);
+if (!chipTest.skipped) {
+  const expBatch = await expect(`pdfFilterEntries(pdfs, { q: '', batch: ${JSON.stringify(chipTest.batch)}, health: '' }).length`);
+  check("批次 chip 点击 = 只看该批次（行数 = 纯件期望 + on 态）",
+    chipTest.filtered === expBatch && chipTest.filtered > 0 && chipTest.onVal === chipTest.batch,
+    `${chipTest.batch}: ${chipTest.filtered}/${expBatch}`);
+  check("批次 chip 再点取消 = 恢复全量", chipTest.restored === total, "rows=" + chipTest.restored);
+} else {
+  check("批次 chip 过滤（无批次数据，跳过）", true);
+}
 
-// ---- 排序切换：按大小降序 → 首行最大 ----
+// ---- 排序切换：按大小（默认方向 = 降序）→ 全列序列 = 纯件期望；再点方向 → 升序 ----
 const sortTest = await Eval(`(async () => {
+  const seq = () => [...document.querySelectorAll('#pdf-rows tr')]
+    .map((tr) => tr.querySelector('.desc-cell').getAttribute('title'));
   const sel = document.getElementById('pdf-sort');
   sel.value = 'size';
-  sel.dispatchEvent(new Event('change', { bubbles: true }));
-  document.getElementById('pdf-sort-dir').click(); // asc → desc
-  await new Promise((r) => setTimeout(r, 120));
-  const firstRow = document.querySelector('#pdf-rows tr');
-  if (!firstRow) return null;
-  const sizeTd = [...firstRow.querySelectorAll('td')][3];
-  return { top: sizeTd.textContent.trim(), max: formatSize(Math.max(...pdfCache.map((p) => p.size_bytes))) };
+  sel.dispatchEvent(new Event('change', { bubbles: true }));   // 方向保持当前（降序）
+  await new Promise((r) => setTimeout(r, 300));
+  const descSeq = seq();
+  document.getElementById('pdf-sort-dir').click();             // ↓ → ↑
+  await new Promise((r) => setTimeout(r, 300));
+  return { descSeq, ascSeq: seq(), dirText: document.getElementById('pdf-sort-dir').textContent };
 })()`);
-check("排序切换：按大小降序首行 = 最大文件", !!(sortTest && sortTest.top === sortTest.max), sortTest && `${sortTest.top} vs ${sortTest.max}`);
-
-// ---- 清空过滤：恢复全量 ----
-check("清空过滤恢复全量", await Eval(`(async () => {
-  document.getElementById('pdf-filter-clear').click();
-  await new Promise((r) => setTimeout(r, 120));
-  return document.querySelectorAll('#pdf-rows tr').length === (pdfCache || []).length;
-})()`));
+const expSortDesc = await expect(`pdfSortEntries(pdfs, { by: 'size', dir: 'desc' }).map((p) => p.rel_path)`);
+const expSortAsc = await expect(`pdfSortEntries(pdfs, { by: 'size', dir: 'asc' }).map((p) => p.rel_path)`);
+check("排序（大小降序）：全行序列与纯件完全一致",
+  JSON.stringify(sortTest.descSeq) === JSON.stringify(expSortDesc),
+  `first=${sortTest.descSeq[0]}`);
+check("排序方向切换（↑ 升序）：全行序列与纯件完全一致，方向按钮文案跟随",
+  JSON.stringify(sortTest.ascSeq) === JSON.stringify(expSortAsc) && sortTest.dirText.includes("↑"),
+  `first=${sortTest.ascSeq[0]} / ${sortTest.dirText}`);
+await Eval(`(() => { const s = document.getElementById('pdf-sort');
+  s.value = 'mtime'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`);   // 回默认（mtime/desc）
+await sleep(300);
 
 // ================= 工单 03：轻量详情弹窗（页数懒取 + 复制相对路径） =================
+const detailRel = await Eval(`window.__probe.pdfs[0].rel_path`);
+const detailSel = `#pdf-rows [data-pdf-detail="${detailRel}"]`;
 const d03 = await Eval(`(async () => {
-  const pdf = (pdfCache || []).find((p) => p.name === 'TB6612FNG电机驱动芯片数据手册.pdf')
-    || (pdfCache || [])[0];
-  if (!pdf) return null;
-  const btn = [...document.querySelectorAll('#pdf-rows tr [data-pdf-detail]')]
-    .find((b) => b.dataset.pdfDetail === pdf.rel_path);
-  if (!btn) return null;
+  const btn = document.querySelector(${JSON.stringify(detailSel)});
+  if (!btn) return { found: false };
   btn.click();
-  await new Promise((r) => setTimeout(r, 800)); // 页数懒取
-  const overlay = document.querySelector('.ref-files-overlay');
-  if (!overlay) return { open: false };
-  const text = overlay.textContent;
-  const pagesText = overlay.querySelector('[data-pdf-pages]')?.textContent || '';
-  const hasCopyMsg = !!overlay.querySelector('.pdf-detail-copy-msg');
-  overlay.querySelector('.ref-files-close').click(); // × 关闭
-  await new Promise((r) => setTimeout(r, 100));
-  const closedByX = !document.querySelector('.ref-files-overlay');
-  return { open: true, hasPath: text.includes(pdf.rel_path), pagesText, hasCopyMsg, closedByX, name: pdf.name };
+  for (let i = 0; i < 30; i++) {
+    await new Promise((r) => setTimeout(r, 200));
+    const t = document.querySelector('.ref-files-overlay [data-pdf-pages]')?.textContent || '';
+    if (t && !t.includes('读取中')) break;
+  }
+  const ov = document.querySelector('.ref-files-overlay');
+  const out = {
+    found: true, overlayCount: document.querySelectorAll('.ref-files-overlay').length,
+    text: ov.textContent,
+    pagesText: ov.querySelector('[data-pdf-pages]')?.textContent || '',
+    hasCopySlot: !!ov.querySelector('.pdf-detail-copy-msg'),
+    hasOpen: !!ov.querySelector('[data-pdf-open]'),
+  };
+  ov.querySelector('.ref-files-close').click();
+  await new Promise((r) => setTimeout(r, 250));
+  out.closedByX = document.querySelectorAll('.ref-files-overlay').length === 0;
+  return out;
 })()`);
-check("详情弹窗打开（行「详情」→ 遮罩弹窗）", !!(d03 && d03.open), d03 && d03.name);
-check("详情含完整相对路径", !!(d03 && d03.hasPath));
-check("页数懒取：真实文件成功显示 N 页",
-  !!(d03 && d03.pagesText.includes("页") && !d03.pagesText.includes("无法读取") && !d03.pagesText.includes("读取中")),
-  d03 && d03.pagesText);
-check("操作区含复制按钮消息槽", !!(d03 && d03.hasCopyMsg));
-check("× 关闭弹窗", !!(d03 && d03.closedByX));
+check("详情弹窗打开（行「详情」→ 遮罩弹窗，替换式唯一）",
+  d03.found && d03.overlayCount === 1, `overlay=${d03.overlayCount}`);
+check("详情含完整相对路径 + 打开按钮 + 复制消息槽",
+  d03.text.includes(detailRel) && d03.hasOpen && d03.hasCopySlot, detailRel);
+check("页数懒取：真实文件成功显示 N 页（非「读取中」/「无法读取」）",
+  /\d+ 页/.test(d03.pagesText) && !d03.pagesText.includes("无法读取"), d03.pagesText);
+check("× 关闭弹窗（无残留）", d03.closedByX);
 
-// 损坏三态验证：素材库现无 0 字节文件（历史 3 份均已修复为真 PDF），
-// 临时创建 0 字节文件走真实链路（写入/清理由本脚本负责，不留痕迹）。
-import { writeFileSync, unlinkSync } from "node:fs";
-import { resolve } from "node:path";
-const smokeBatch = await Eval(`(pdfCache[0] || {}).batch`);
+// 复制相对路径 → 消息槽反馈（已复制 / 降级失败两种均成立）+ 遮罩点击关闭
+const d03c = await Eval(`(async () => {
+  document.querySelector(${JSON.stringify(detailSel)}).click();
+  await new Promise((r) => setTimeout(r, 400));
+  const ov = document.querySelector('.ref-files-overlay');
+  const btn = ov.querySelector('[data-pdf-copy]');
+  if (!btn) return { noBtn: true };
+  btn.click();
+  await new Promise((r) => setTimeout(r, 400));
+  const msg = ov.querySelector('.pdf-detail-copy-msg').textContent;
+  ov.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 250));
+  return { msg, closedByMask: document.querySelectorAll('.ref-files-overlay').length === 0 };
+})()`);
+check("复制相对路径触发反馈（已复制 / 降级提示）",
+  !d03c.noBtn && (d03c.msg === "已复制相对路径" || d03c.msg === "复制失败，请手动复制"), d03c.msg);
+check("遮罩点击关闭弹窗", !!d03c.closedByMask);
+
+// 0 字节损坏文件三态（临时注入 zz-smoke-broken.pdf，自建自清）+ Esc 关闭
+const smokeBatch = await Eval(`window.__probe.pdfs[0].batch`);
 const brokenRel = smokeBatch + "/zz-smoke-broken.pdf";
-const brokenAbs = resolve("sources/materials", brokenRel);
+const brokenAbs = join(MATERIALS, smokeBatch, "zz-smoke-broken.pdf");
 let brokenCreated = false;
 try {
-  if (smokeBatch) { // 空防御：库为空（无批次）时跳过损坏专测，不写盘
-    writeFileSync(brokenAbs, "");
-    brokenCreated = true;
-    const d03b = await Eval(`(async () => {
-      await loadPdfs(); // 重拉全量（含临时损坏文件）
-      await new Promise((r) => setTimeout(r, 300));
-      const pdf = (pdfCache || []).find((p) => p.name === 'zz-smoke-broken.pdf');
-      if (!pdf) return { found: false };
-      const btn = [...document.querySelectorAll('#pdf-rows tr [data-pdf-detail]')]
-        .find((b) => b.dataset.pdfDetail === pdf.rel_path);
-      if (!btn) return { found: false };
-      btn.click();
-      await new Promise((r) => setTimeout(r, 800));
-      const overlay = document.querySelector('.ref-files-overlay');
-      const pagesText = overlay?.querySelector('[data-pdf-pages]')?.textContent || '';
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-      await new Promise((r) => setTimeout(r, 100));
-      const closedByEsc = !document.querySelector('.ref-files-overlay');
-      return { found: true, pagesText, closedByEsc };
-    })()`);
-    check("0 字节损坏文件详情 → 无法读取三态", !!(d03b && d03b.found && d03b.pagesText.includes("无法读取")), d03b && d03b.pagesText);
-    check("Esc 关闭弹窗", !!(d03b && d03b.closedByEsc));
-    const d03b2 = await Eval(`(async () => {
-      const pdf = (pdfCache || []).find((p) => p.name === 'zz-smoke-broken.pdf');
-      if (!pdf) return null;
-      const btn = [...document.querySelectorAll('#pdf-rows tr [data-pdf-detail]')]
-        .find((b) => b.dataset.pdfDetail === pdf.rel_path);
-      if (!btn) return null;
-      btn.click();
-      await new Promise((r) => setTimeout(r, 150));
-      const overlay = document.querySelector('.ref-files-overlay');
-      if (!overlay) return null;
-      overlay.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await new Promise((r) => setTimeout(r, 100));
-      return { closed: !document.querySelector('.ref-files-overlay') };
-    })()`);
-    check("遮罩点击关闭弹窗", !!(d03b2 && d03b2.closed));
-  }
+  writeFileSync(brokenAbs, "");
+  brokenCreated = true;
+  const d03b = await Eval(`(async () => {
+    await window.__probe.reload();
+    await new Promise((r) => setTimeout(r, 250));
+    const btn = document.querySelector('#pdf-rows [data-pdf-detail="${brokenRel}"]');
+    if (!btn) return { found: false, rows: document.querySelectorAll('#pdf-rows tr').length };
+    btn.click();
+    for (let i = 0; i < 30; i++) {
+      await new Promise((r) => setTimeout(r, 200));
+      const t = document.querySelector('.ref-files-overlay [data-pdf-pages]')?.textContent || '';
+      if (t && !t.includes('读取中')) break;
+    }
+    const ov = document.querySelector('.ref-files-overlay');
+    const out = { found: true,
+      pagesText: ov.querySelector('[data-pdf-pages]')?.textContent || '',
+      brokenBadge: !!ov.querySelector('.badge.pdf-broken'),
+      rows: document.querySelectorAll('#pdf-rows tr').length,
+      listHasIt: window.__probe.pdfs.some((p) => p.rel_path === "${brokenRel}") };
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await new Promise((r) => setTimeout(r, 250));
+    out.closedByEsc = document.querySelectorAll('.ref-files-overlay').length === 0;
+    return out;
+  })()`);
+  check("0 字节损坏文件进清单（列表实况 + 行数 = 全量 + 1）",
+    d03b.found && d03b.listHasIt && d03b.rows === total + 1, `rows=${d03b.rows}`);
+  check("损坏文件详情 = 「无法读取」三态 + ⚠ 损坏徽章",
+    d03b.pagesText.includes("无法读取") && d03b.brokenBadge, d03b.pagesText);
+  check("Esc 关闭详情弹窗", !!d03b.closedByEsc);
 } finally {
   if (brokenCreated) { try { unlinkSync(brokenAbs); } catch {} }
-  await Eval(`loadPdfs().catch(() => {})`); // 清理后列表即时回到真实全量
+  await Eval(`window.__probe.reload().catch(() => {})`);
+  await sleep(500);
 }
 
-const d03c = await Eval(`(async () => {
-  const pdf = (pdfCache || [])[0];
-  if (!pdf) return null;
-  const btn = [...document.querySelectorAll('#pdf-rows tr [data-pdf-detail]')]
-    .find((b) => b.dataset.pdfDetail === pdf.rel_path);
-  if (!btn) return null;
-  btn.click();
-  await new Promise((r) => setTimeout(r, 300));
-  const overlay = document.querySelector('.ref-files-overlay');
-  const copyBtn = overlay?.querySelector('[data-pdf-copy]');
-  if (!overlay || !copyBtn) return null;
-  copyBtn.click();
-  await new Promise((r) => setTimeout(r, 400));
-  const msg = overlay.querySelector('.pdf-detail-copy-msg')?.textContent || '';
-  overlay.querySelector('.ref-files-close').click();
-  return { msg };
+// ================= 工单 04：数据健康（疑似重复 / 损坏警示） =================
+const d04 = await Eval(`(() => {
+  const h = window.__probe.fx.pdfHealth(window.__probe.pdfs);
+  const dupSeg = document.querySelector('#pdf-stats [data-pdf-health="dup"]');
+  const brokenSeg = document.querySelector('#pdf-stats [data-pdf-health="broken"]');
+  return {
+    expDupGroups: h.dupGroups.length, expDupPaths: h.dupPaths.size, expBroken: h.broken.size,
+    dupN: dupSeg ? Number((dupSeg.textContent.match(/(\\d+)/) || [])[1]) : 0,
+    brokenSeg: !!brokenSeg,
+    dupMarks: document.querySelectorAll('#pdf-rows .badge.pdf-dup').length,
+    brokenMarks: document.querySelectorAll('#pdf-rows .badge.pdf-broken').length,
+    rows: document.querySelectorAll('#pdf-rows tr').length,
+  };
 })()`);
-check("复制相对路径触发反馈（已复制或降级失败提示）",
-  !!(d03c && (d03c.msg === "已复制相对路径" || d03c.msg === "复制失败，请手动复制")), d03c && d03c.msg);
+check("重复红段 = 全量纯件口径（组数）", d04.dupN === d04.expDupGroups,
+  `seg=${d04.dupN} exp=${d04.expDupGroups}`);
+check("行内重复徽章数 = 纯件重复路径数", d04.dupMarks === d04.expDupPaths,
+  `${d04.dupMarks} vs ${d04.expDupPaths}`);
+check("损坏红段与行内徽章同纯件口径（无损坏 = 都不渲染）",
+  d04.brokenSeg === (d04.expBroken > 0) && d04.brokenMarks === d04.expBroken,
+  `expBroken=${d04.expBroken} seg=${d04.brokenSeg} marks=${d04.brokenMarks}`);
 
-// ================= 工单 04：数据健康（重复 / 损坏警示） =================
-// 现状修订基线：4 组疑似重复（000_2017-2025 两批各一 + 塔克R3 三份芯片手册
-// 各两组）、0 字节损坏 0 份。断言按「≥ 下限 + 双态」设计——素材库增删数字
-// 变化只影响下限与双态注入，判据不变。
-const d04 = await Eval(`(async () => {
-  const stats = document.querySelector('#pdf-stats');
-  if (!stats) return null;
-  const text = stats.textContent || '';
-  const dupSeg = [...stats.querySelectorAll('[data-pdf-health="dup"]')][0];
-  const dupN = dupSeg ? Number((dupSeg.textContent.match(/(\\d+)/) || [])[1]) : 0;
-  const brokenSeg = stats.querySelector('[data-pdf-health="broken"]');
-  const dupMarks = document.querySelectorAll('#pdf-rows .badge.pdf-dup').length;
-  const brokenMarks = document.querySelectorAll('#pdf-rows .badge.pdf-broken').length;
-  return { text, dupN, brokenSeg: !!brokenSeg, brokenText: brokenSeg ? brokenSeg.textContent : "",
-           dupMarks, brokenMarks, rows: document.querySelectorAll('#pdf-rows tr').length };
-})()`);
-check("健康红段：疑似重复 ≥ 4 组（全量口径真值）", !!(d04 && d04.dupN >= 4), d04 && `dup=${d04.dupN}`);
-check("行内重复徽章 ≥ 8 个（4 组 × 2 成员下限）", !!(d04 && d04.dupMarks >= 8), d04 && `marks=${d04.dupMarks}`);
-check("现状无损坏：损坏红段不显示 / 无行内损坏徽章",
-  !!(d04 && !d04.brokenSeg && d04.brokenMarks === 0));
-
-const d04f = await Eval(`(async () => {
-  const seg = document.querySelector('[data-pdf-health="dup"]');
-  if (!seg) return null;
-  seg.click(); // 点击 = 只看重复类（innerHTML 重渲染后旧 span 已分离，
-               // 每次操作都重新 query——detached 元素 click 不冒泡到容器）
-  await new Promise((r) => setTimeout(r, 100));
-  const rows = document.querySelectorAll('#pdf-rows tr').length;
-  const marks = document.querySelectorAll('#pdf-rows .badge.pdf-dup').length;
-  const statsText = (document.querySelector('#pdf-stats') || {}).textContent || '';
-  const on = !!(document.querySelector('[data-pdf-health="dup"]') || {}).classList?.contains('on');
-  document.querySelector('[data-pdf-health="dup"]').click(); // 再点取消（新 span）
-  await new Promise((r) => setTimeout(r, 100));
-  const restored = document.querySelectorAll('#pdf-rows tr').length;
-  return { rows, marks, on, restored, statsText };
-})()`);
-check("红段点击过滤：只显示重复类（行数 = 徽章数，全是重复）",
-  !!(d04f && d04f.rows >= 8 && d04f.rows === d04f.marks && d04f.rows === 2 * (d04 && d04.dupN)),
-  d04f && `rows=${d04f.rows}`);
-check("统计条随 health 过滤收缩（共 N 份 = 行数）",
-  !!(d04f && d04f.statsText.includes(`共 ${d04f.rows} 份`)), d04f && d04f.statsText);
-check("红段再点取消恢复全量", !!(d04f && d04f.on && d04f.restored === d04.rows));
-
-// 损坏双态：临时注入 0 字节 → 红段「损坏 1 份」+ 行内徽章 + 点击只显示损坏 → 清理
-let brokenInjected = false;
-try {
-  if (smokeBatch) {
-    writeFileSync(brokenAbs, "");
-    brokenInjected = true;
-    const d04b = await Eval(`(async () => {
-      await loadPdfs();
-      await new Promise((r) => setTimeout(r, 300));
-      const seg = document.querySelector('[data-pdf-health="broken"]');
-      const segText = seg ? seg.textContent : '';
-      const marks = document.querySelectorAll('#pdf-rows .badge.pdf-broken').length;
-      const dupMarks = document.querySelectorAll('#pdf-rows .badge.pdf-dup').length;
-      if (!seg) return { segText, marks, dupMarks };
-      seg.click();
-      await new Promise((r) => setTimeout(r, 100));
-      const rows = document.querySelectorAll('#pdf-rows tr').length;
-      document.querySelector('[data-pdf-health="broken"]').click(); // 还原（新 span）
-      await new Promise((r) => setTimeout(r, 100));
-      return { segText, marks, dupMarks, rows };
-    })()`);
-    check("临时损坏注入 → 红段「损坏 1 份」", !!(d04b && d04b.segText.includes("损坏 1 份")), d04b && d04b.segText);
-    check("临时损坏注入 → 行内 ⚠ 损坏徽章恰好 1 个", !!(d04b && d04b.marks === 1), d04b && `marks=${d04b && d04b.marks}`);
-    check("损坏红段点击：只显示损坏 1 行；重复徽章仍为全量 ≥ 8",
-      !!(d04b && d04b.rows === 1 && d04b.dupMarks >= 8), d04b && `rows=${d04b && d04b.rows}`);
-  }
-} finally {
-  if (brokenInjected) { try { unlinkSync(brokenAbs); } catch {} }
-  await Eval(`loadPdfs().catch(() => {})`); // 清理后回到真实全量
-  const d04c = await Eval(`(async () => {
-    await new Promise((r) => setTimeout(r, 200));
-    const seg = document.querySelector('[data-pdf-health="broken"]');
-    return { hasBroken: !!seg, rows: document.querySelectorAll('#pdf-rows tr').length };
+// 红段点击过滤（只显示重复类，与 q / 批次正交）→ 再点取消
+if (d04.expDupGroups > 0) {
+  const d04f = await Eval(`(async () => {
+    document.querySelector('#pdf-stats [data-pdf-health="dup"]').click();
+    await new Promise((r) => setTimeout(r, 300));
+    const out = {
+      rows: document.querySelectorAll('#pdf-rows tr').length,
+      marks: document.querySelectorAll('#pdf-rows .badge.pdf-dup').length,
+      on: !!(document.querySelector('#pdf-stats [data-pdf-health="dup"]') || {}).classList?.contains('on'),
+      statsText: document.querySelector('#pdf-stats').textContent,
+    };
+    document.querySelector('#pdf-stats [data-pdf-health="dup"]').click();
+    await new Promise((r) => setTimeout(r, 300));
+    out.restored = document.querySelectorAll('#pdf-rows tr').length;
+    return out;
   })()`);
-  check("清理后损坏红段消失（回真实全量）", !!(d04c && !d04c.hasBroken));
+  check("红段点击过滤：只显示重复类（行数 = 徽章数 = 纯件重复路径数）",
+    d04f.rows === d04f.marks && d04f.rows === d04.expDupPaths && d04f.on,
+    `rows=${d04f.rows} marks=${d04f.marks} exp=${d04.expDupPaths}`);
+  check("统计条随 health 过滤收缩（共 N 份 = 行数）",
+    d04f.statsText.includes(`共 ${d04f.rows} 份`), d04f.statsText.trim().slice(0, 40));
+  check("红段再点取消恢复全量", d04f.restored === d04.rows, `${d04f.restored} vs ${d04.rows}`);
+} else {
+  check("红段过滤（库无重复，跳过）", true);
 }
 
-// ================= 工单 05：空态 / 加载态 / 错误态 =================
-// 过滤无结果空态（对偶参考库「没有匹配的参考条目」文案）
+// 损坏双态：临时注入 0 字节 → 红段「损坏 1 份」+ 行内 1 个徽章 + 点击只显示 1 行 → 清理
+let injected = false;
+try {
+  writeFileSync(brokenAbs, "");
+  injected = true;
+  const d04b = await Eval(`(async () => {
+    await window.__probe.reload();
+    await new Promise((r) => setTimeout(r, 250));
+    const seg = document.querySelector('#pdf-stats [data-pdf-health="broken"]');
+    const segText = seg ? seg.textContent : '';
+    const marks = document.querySelectorAll('#pdf-rows .badge.pdf-broken').length;
+    const dupMarks = document.querySelectorAll('#pdf-rows .badge.pdf-dup').length;
+    if (!seg) return { segText, marks, dupMarks };
+    seg.click();
+    await new Promise((r) => setTimeout(r, 300));
+    const out = { segText, marks, dupMarks, rows: document.querySelectorAll('#pdf-rows tr').length };
+    document.querySelector('#pdf-stats [data-pdf-health="broken"]').click();
+    await new Promise((r) => setTimeout(r, 300));
+    return out;
+  })()`);
+  check("临时损坏注入 → 红段「损坏 1 份」", String(d04b.segText).includes("损坏 1 份"), d04b.segText);
+  check("临时损坏注入 → 行内 ⚠ 损坏徽章恰好 1 个", d04b.marks === 1, "marks=" + d04b.marks);
+  check("损坏红段点击：只显示损坏 1 行；重复徽章仍为全量",
+    d04b.rows === 1 && d04b.dupMarks === d04.expDupPaths, `rows=${d04b.rows} dupMarks=${d04b.dupMarks}`);
+} finally {
+  if (injected) { try { unlinkSync(brokenAbs); } catch {} }
+  await Eval(`window.__probe.reload().catch(() => {})`);
+  await sleep(500);
+  check("清理后损坏红段消失（回真实全量）",
+    await Eval(`!document.querySelector('#pdf-stats [data-pdf-health="broken"]')
+      && document.querySelectorAll('#pdf-rows tr').length === ${total}`));
+}
+
+// ================= 工单 05：空态（过滤无结果）+ 清空恢复 =================
 const d05 = await Eval(`(async () => {
   const input = document.getElementById('pdf-filter');
-  if (!input) return null;
   input.value = 'zz-绝对不存在的关键字-zz';
   input.dispatchEvent(new Event('input', { bubbles: true }));
-  await new Promise((r) => setTimeout(r, 400)); // 150ms 防抖 + 渲染
+  await new Promise((r) => setTimeout(r, 450));
   const empty = document.querySelector('#pdf-rows .empty-state');
-  const text = empty ? empty.textContent : '';
+  const out = { hasEmpty: !!empty,
+    text: (empty?.querySelector('.es-title') || {}).textContent || '',
+    hint: (empty?.querySelector('.es-hint') || {}).textContent || '' };
   document.getElementById('pdf-filter-clear').click();
-  await new Promise((r) => setTimeout(r, 200));
-  const restored = document.querySelectorAll('#pdf-rows tr').length;
-  return { hasEmpty: !!empty, text, restored };
+  await new Promise((r) => setTimeout(r, 300));
+  out.restored = document.querySelectorAll('#pdf-rows tr').length;
+  return out;
 })()`);
-check("过滤无结果空态（es-title 文案 + 清空按钮恢复）",
-  !!(d05 && d05.hasEmpty && d05.text.includes("没有匹配的 PDF 文件") && d05.restored === d04.rows),
-  d05 && d05.text);
+check("过滤无结果空态（🔍 文案「没有匹配的 PDF 文件」+ 指向清空过滤）",
+  d05.hasEmpty && d05.text.includes("没有匹配的 PDF 文件") && d05.hint.includes("清空过滤"), d05.text);
+check("空态清空后恢复全量", d05.restored === total, `${d05.restored} vs ${total}`);
 
-// ================= 工单 06：疑似重复回收删除（仅重复组可删，不真删） =================
-// 自助一对同内容小 PDF（同名不同子目录 → 命中重复组）：真实素材零触碰；
-// 单删（行内按钮）+ 组级「保留一份删其余」（详情弹窗）→ trash 落盘核对 →
-// 脚本清理回收文件与恢复源目录。
-import { mkdirSync, rmSync, existsSync, readFileSync } from "node:fs";
-const dateStr = (() => { const t = new Date(); const p = (n) => String(n).padStart(2, "0");
-  return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}`; })();
+// ================= 工单 06：疑似重复回收删除（单删 + 组级，零真实素材触碰） =================
 const dupRel1 = smokeBatch + "/zz-smoke-dup/zz-smoke-pair.pdf";
 const dupRel2 = smokeBatch + "/zz-smoke-dup-2/zz-smoke-pair.pdf";
 const dupRel3 = smokeBatch + "/zz-smoke-dup-3/zz-smoke-pair.pdf";
-const dupAbs1 = resolve("sources/materials", dupRel1);
-const dupAbs2 = resolve("sources/materials", dupRel2);
-const dupAbs3 = resolve("sources/materials", dupRel3);
-const dupBytes = "%PDF-1.4\nzz smoke pair（工单 06 自助冒烟对）";
+const dupBytes = "%PDF-1.4\nzz smoke pair（pdf-library-ui/06 冒烟合成对）";
+const dupAbs = [dupRel1, dupRel2, dupRel3].map((r) => join(MATERIALS, r));
+const dupDirs = [
+  join(MATERIALS, smokeBatch, "zz-smoke-dup"), join(MATERIALS, smokeBatch, "zz-smoke-dup-2"),
+  join(MATERIALS, smokeBatch, "zz-smoke-dup-3"),
+  join(TRASH, dateStr, smokeBatch, "zz-smoke-dup"), join(TRASH, dateStr, smokeBatch, "zz-smoke-dup-2"),
+  join(TRASH, dateStr, smokeBatch, "zz-smoke-dup-3"),
+];
 let dupCreated = false;
 try {
-  if (smokeBatch) {
-    mkdirSync(resolve("sources/materials", smokeBatch + "/zz-smoke-dup"), { recursive: true });
-    mkdirSync(resolve("sources/materials", smokeBatch + "/zz-smoke-dup-2"), { recursive: true });
-    writeFileSync(dupAbs1, dupBytes);
-    writeFileSync(dupAbs2, dupBytes);
-    dupCreated = true;
+  mkdirSync(join(MATERIALS, smokeBatch, "zz-smoke-dup"), { recursive: true });
+  mkdirSync(join(MATERIALS, smokeBatch, "zz-smoke-dup-2"), { recursive: true });
+  writeFileSync(dupAbs[0], dupBytes);
+  writeFileSync(dupAbs[1], dupBytes);
+  dupCreated = true;
 
-    // 行内单删：确认弹窗内容（路径/大小/去向/取消确认）→ 先取消 → 再确认
-    const d06a = await Eval(`(async () => {
-      await loadPdfs();
-      await new Promise((r) => setTimeout(r, 400));
-      const btns = [...document.querySelectorAll('#pdf-rows tr [data-pdf-trash]')]
-        .filter((b) => b.dataset.pdfTrash === '${dupRel1}');
-      if (!btns.length) return { found: 0 };
-      btns[0].click();
+  const d06a = await Eval(`(async () => {
+    await window.__probe.reload();
+    await new Promise((r) => setTimeout(r, 250));
+    const pairDup = () => [...document.querySelectorAll('#pdf-rows tr')]
+      .filter((tr) => tr.querySelector('[data-pdf-trash="${dupRel1}"]')
+        || tr.querySelector('[data-pdf-trash="${dupRel2}"]'))
+      .filter((tr) => tr.querySelector('.badge.pdf-dup')).length;
+    const before = pairDup();
+    if (!document.querySelector('#pdf-rows [data-pdf-trash="${dupRel1}"]')) {
+      return { found: false, before };
+    }
+    document.querySelector('#pdf-rows [data-pdf-trash="${dupRel1}"]').click();
+    await new Promise((r) => setTimeout(r, 400));
+    const ov = document.querySelector('.ref-files-overlay');
+    const out = {
+      found: true, before, text: ov.textContent,
+      hasModal: !!ov.querySelector('.confirm-modal'),
+      hasCancel: !!ov.querySelector('[data-confirm-cancel]'),
+      hasOk: !!ov.querySelector('[data-confirm-ok]'),
+      okText: ov.querySelector('[data-confirm-ok]').textContent,
+    };
+    ov.querySelector('[data-confirm-cancel]').click();
+    await new Promise((r) => setTimeout(r, 300));
+    out.cancelled = document.querySelectorAll('.ref-files-overlay').length === 0;
+    out.stillHas1 = !!document.querySelector('#pdf-rows [data-pdf-trash="${dupRel1}"]');
+    document.querySelector('#pdf-rows [data-pdf-trash="${dupRel1}"]').click();
+    await new Promise((r) => setTimeout(r, 400));
+    document.querySelector('.ref-files-overlay [data-confirm-ok]').click();
+    for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 200));
-      const ov = document.querySelector('.ref-files-overlay');
-      if (!ov) return { found: 0 };
-      const text = ov.textContent;
-      const hasCancel = !!ov.querySelector('[data-pdf-trash-cancel]');
-      const hasConfirm = !!ov.querySelector('[data-pdf-trash-confirm]');
-      ov.querySelector('[data-pdf-trash-cancel]').click(); // 取消不删
-      await new Promise((r) => setTimeout(r, 200));
-      const cancelled = !document.querySelector('.ref-files-overlay');
-      const stillHas1 = [...document.querySelectorAll('#pdf-rows tr [data-pdf-trash]')]
-        .some((b) => b.dataset.pdfTrash === '${dupRel1}');
-      // 再次打开并确认（渲染后重新 query——detached 元素 click 不冒泡）
-      const again = [...document.querySelectorAll('#pdf-rows tr [data-pdf-trash]')]
-        .find((b) => b.dataset.pdfTrash === '${dupRel1}');
-      if (!again) return { found: 0, cancelled, stillHas1, text, hasCancel, hasConfirm };
-      again.click();
-      await new Promise((r) => setTimeout(r, 200));
-      const ov2 = document.querySelector('.ref-files-overlay');
-      ov2.querySelector('[data-pdf-trash-confirm]').click();
-      await new Promise((r) => setTimeout(r, 900)); // POST + toast + loadPdfs 重拉
-      const pairBtnsAfter = [...document.querySelectorAll('#pdf-rows tr [data-pdf-trash]')]
-        .filter((b) => b.dataset.pdfTrash === '${dupRel1}' || b.dataset.pdfTrash === '${dupRel2}').length;
-      return { found: 1, cancelled, stillHas1, text, hasCancel, hasConfirm, pairBtnsAfter,
-               toastText: [...document.querySelectorAll('.toast .toast-text')].map((t) => t.textContent).join("|") };
-    })()`);
-    check("自配套：行内删除按钮出现（重复组 2 行）", !!(d06a && d06a.found), d06a && `found=${d06a && d06a.found}`);
-    check("确认弹窗：路径/大小/去向 + 取消确认按钮 + 参考镜像提示",
-      !!(d06a && d06a.text && d06a.text.includes(dupRel1) && d06a.hasCancel && d06a.hasConfirm
-        && d06a.text.includes('大小') && d06a.text.includes('回收去向')
-        && d06a.text.includes('参考库条目引用') && d06a.text.includes('git 已忽略')),
-      d06a && "text-ok");
-    check("取消按钮：弹窗关闭且文件未删（目标行删除按钮仍在）",
-      !!(d06a && d06a.cancelled && d06a.stillHas1), d06a && `stillHas1=${d06a && d06a.stillHas1}`);
-    check("确认删除：toast「已移入回收目录」+ 重复对按钮全部消失（剩余单份不成组）",
-      !!(d06a && d06a.toastText.includes("已移入回收目录") && d06a.pairBtnsAfter === 0),
-      d06a && `toast=${d06a && d06a.toastText}, pairBtns=${d06a && d06a.pairBtnsAfter}`);
-    // 后端核对：trash 落盘（镜像内容一致）+ 源文件消失 + 不出现在清单
-    check("trash 落盘：镜像内容与源一致",
-      existsSync(resolve("sources/.trash-pdf", dateStr, dupRel1))
-      && readFileSync(resolve("sources/.trash-pdf", dateStr, dupRel1), "utf8") === dupBytes,
-      dateStr + "/" + dupRel1);
-    check("源文件消失（列表不再含 zz-smoke-pair 第一份）",
-      !(await Eval(`(pdfCache || []).some((p) => p.rel_path === '${dupRel1}')`)));
+      const t = [...document.querySelectorAll('.toast .toast-text')].map((x) => x.textContent).join('|');
+      if (t.includes('已移入回收目录')) out.toast = t;
+      if (!document.querySelector('#pdf-rows [data-pdf-trash="${dupRel1}"]')) break;
+    }
+    out.toast = out.toast || '';
+    out.after = pairDup();
+    // 清单实况：重新拉一次（确认弹窗内部走 ui 模块自己的 loadPdfs，探针缓存需自刷新）
+    await window.__probe.reload();
+    out.rows = document.querySelectorAll('#pdf-rows tr').length;
+    out.listHas1 = window.__probe.pdfs.some((p) => p.rel_path === "${dupRel1}");
+    out.listHas2 = window.__probe.pdfs.some((p) => p.rel_path === "${dupRel2}");
+    return out;
+  })()`);
+  check("自配套：合成对进重复组（2 行带重复徽章）", d06a.found && d06a.before === 2, `dupBaseline=${d06a.before}`);
+  check("确认弹窗：共享工厂 + 路径 / 大小 / 回收去向 / 参考镜像提示 + 双钮",
+    d06a.hasModal && d06a.text.includes(dupRel1) && d06a.text.includes("大小")
+      && d06a.text.includes("回收去向") && d06a.text.includes("参考库条目引用")
+      && d06a.text.includes("git 已忽略") && d06a.hasCancel && d06a.hasOk
+      && d06a.okText.trim() === "确认删除",
+    String(d06a.okText).trim());
+  check("取消：弹窗关闭且文件未删（目标行删除按钮仍在）",
+    d06a.cancelled && d06a.stillHas1, `stillHas1=${d06a.stillHas1}`);
+  check("确认单删：toast「已移入回收目录」+ 该行消失 + 清单不再含它 + 余单份不再成组",
+    d06a.toast.includes("已移入回收目录") && d06a.listHas1 === false && d06a.listHas2 === true
+      && d06a.after === 0 && d06a.rows === total + 1,
+    `toast=${d06a.toast} after=${d06a.after} rows=${d06a.rows}`);
+  check("trash 落盘：镜像内容与源一致",
+    existsSync(join(TRASH, dateStr, dupRel1))
+      && readFileSync(join(TRASH, dateStr, dupRel1), "utf8") === dupBytes, dateStr + "/" + dupRel1);
+  check("源文件已移走（磁盘实况）", !existsSync(dupAbs[0]));
 
-    // 组级「保留此文件，删除其余 N 份」：单删后只剩 1 份不成组——再注入
-    // 第三份合成新对（dupRel2 + dupRel3），详情弹窗 → 组级按钮 → 确认 →
-    // 保留 dupRel2、回收 dupRel3 → 列表无 zz 重复行
-    mkdirSync(resolve("sources/materials", smokeBatch + "/zz-smoke-dup-3"), { recursive: true });
-    writeFileSync(dupAbs3, dupBytes);
-    await Eval(`loadPdfs().catch(() => {})`);
-    const d06b = await Eval(`(async () => {
-      await new Promise((r) => setTimeout(r, 400));
-      const btn = [...document.querySelectorAll('#pdf-rows tr [data-pdf-detail]')]
-        .find((b) => b.dataset.pdfDetail === '${dupRel2}');
-      if (!btn) return { found: 0 };
-      btn.click();
-      await new Promise((r) => setTimeout(r, 300));
-      const ov = document.querySelector('.ref-files-overlay');
-      const groupBtn = ov && ov.querySelector('[data-pdf-delete-group]');
-      if (!groupBtn) return { found: 0 };
-      const groupText = groupBtn.textContent.trim();
-      groupBtn.click();
+  // 组级「保留此文件，删除其余 1 份」：再注入第三份合成新对（dupRel2 + dupRel3）
+  mkdirSync(join(MATERIALS, smokeBatch, "zz-smoke-dup-3"), { recursive: true });
+  writeFileSync(dupAbs[2], dupBytes);
+  const d06b = await Eval(`(async () => {
+    await window.__probe.reload();
+    await new Promise((r) => setTimeout(r, 250));
+    document.querySelector('#pdf-rows [data-pdf-detail="${dupRel2}"]').click();
+    await new Promise((r) => setTimeout(r, 600));
+    const det = document.querySelector('.ref-files-overlay');
+    const groupBtn = det.querySelector('[data-pdf-delete-group]');
+    if (!groupBtn) return { found: false };
+    const out = { found: true, groupText: groupBtn.textContent.trim() };
+    groupBtn.click();
+    await new Promise((r) => setTimeout(r, 400));
+    const ov = [...document.querySelectorAll('.ref-files-overlay')]
+      .find((o) => o.querySelector('[data-confirm-ok]'));
+    if (!ov) return { found: false };
+    out.overlayCount = document.querySelectorAll('.ref-files-overlay').length;
+    out.title = ov.querySelector('.ref-files-head strong').textContent;
+    out.members = ov.querySelectorAll('.pdf-trash-members li').length;
+    out.memberText = (ov.querySelector('.pdf-trash-members') || {}).textContent || '';
+    ov.querySelector('[data-confirm-ok]').click();
+    for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 200));
-      // 精确查找确认弹窗（含确认按钮的那个——不依赖叠层语义）
-      const ov2 = [...document.querySelectorAll('.ref-files-overlay')]
-        .find((o) => o.querySelector('[data-pdf-trash-confirm]'));
-      if (!ov2) return { found: 0, groupText };
-      const members = ov2.querySelectorAll('.pdf-trash-members li').length;
-      const memberText = (ov2.querySelector('.pdf-trash-members') || {}).textContent || '';
-      ov2.querySelector('[data-pdf-trash-confirm]').click();
-      await new Promise((r) => setTimeout(r, 900));
-      const pairBtnsAfter = [...document.querySelectorAll('#pdf-rows tr [data-pdf-trash]')]
-        .filter((b) => b.dataset.pdfTrash === '${dupRel2}' || b.dataset.pdfTrash === '${dupRel3}').length;
-      return { found: 1, groupText, members, memberText, pairBtnsAfter };
-    })()`);
-    check("组级按钮文案 = 保留此文件，删除其余 1 份",
-      !!(d06b && d06b.found && d06b.groupText.includes("删除其余 1 份")), d06b && d06b.groupText);
-    check("组级确认弹窗：成员清单 2 项（含保留与删除对象）",
-      !!(d06b && d06b.members === 2 && d06b.memberText.includes(dupRel2) && d06b.memberText.includes(dupRel3)),
-      d06b && `members=${d06b && d06b.members}`);
-    check("组级确认后：重复对按钮全部消失（列表无 zz-smoke-pair 重复行）",
-      !!(d06b && d06b.pairBtnsAfter === 0), d06b && `pairBtns=${d06b && d06b.pairBtnsAfter}`);
-    // 组级语义核对：保留 dupRel2（仍在素材库）、其余 dupRel3 已回收落盘
-    const kept2 = await Eval(`(pdfCache || []).some((p) => p.rel_path === '${dupRel2}')`);
-    check("组级确认后：保留对象仍在素材库（清单命中）", kept2 === true);
-    check("组级确认后：其余成员已回收落盘（镜像内容一致）",
-      existsSync(resolve("sources/.trash-pdf", dateStr, dupRel3))
-      && readFileSync(resolve("sources/.trash-pdf", dateStr, dupRel3), "utf8") === dupBytes,
-      dateStr + "/" + dupRel3);
-  }
+      if (!document.querySelector('#pdf-rows [data-pdf-detail="${dupRel3}"]')) break;
+    }
+    await window.__probe.reload();
+    out.rows = document.querySelectorAll('#pdf-rows tr').length;
+    out.listHas2 = window.__probe.pdfs.some((p) => p.rel_path === "${dupRel2}");
+    out.listHas3 = window.__probe.pdfs.some((p) => p.rel_path === "${dupRel3}");
+    return out;
+  })()`);
+  check("组级按钮文案 = 保留此文件，删除其余 1 份",
+    d06b.found && String(d06b.groupText).includes("删除其余 1 份"), d06b.groupText);
+  check("组级确认弹窗：成员清单 2 项（含保留与删除对象）+ 标题「保留一份删其余」",
+    d06b.members === 2 && String(d06b.memberText).includes(dupRel2)
+      && String(d06b.memberText).includes(dupRel3) && String(d06b.title).includes("保留一份删其余"),
+    `members=${d06b.members} title=${d06b.title}`);
+  check("组级确认后：保留对象仍在清单、其余成员已回收、余 N 份不再成组",
+    d06b.listHas2 === true && d06b.listHas3 === false && d06b.rows === total + 1,
+    `rows=${d06b.rows}（全量 ${total} + 保留的 dupRel2）`);
+  check("组级回收落盘（镜像内容一致）", existsSync(join(TRASH, dateStr, dupRel3))
+    && readFileSync(join(TRASH, dateStr, dupRel3), "utf8") === dupBytes, dateStr + "/" + dupRel3);
 } finally {
   if (dupCreated) {
-    // 清理：源目录（含空目录）+ trash 镜像 → 重拉列表回真实全量
-    for (const p of [dupAbs1, dupAbs2, dupAbs3]) { try { unlinkSync(p); } catch {} }
-    for (const d of [
-      resolve("sources/materials", smokeBatch + "/zz-smoke-dup"),
-      resolve("sources/materials", smokeBatch + "/zz-smoke-dup-2"),
-      resolve("sources/materials", smokeBatch + "/zz-smoke-dup-3"),
-      resolve("sources/.trash-pdf", dateStr, smokeBatch + "/zz-smoke-dup"),
-      resolve("sources/.trash-pdf", dateStr, smokeBatch + "/zz-smoke-dup-2"),
-      resolve("sources/.trash-pdf", dateStr, smokeBatch + "/zz-smoke-dup-3"),
-    ]) { try { rmSync(d, { recursive: true, force: true }); } catch {} }
-    await Eval(`loadPdfs().catch(() => {})`);
-    const d06c = await Eval(`(async () => {
-      await new Promise((r) => setTimeout(r, 300));
-      const pair = (pdfCache || []).filter((p) => p.name === 'zz-smoke-pair.pdf');
-      return { pair: pair.length, rows: document.querySelectorAll('#pdf-rows tr').length };
-    })()`);
-    check("清理后回到真实全量（无 zz-smoke 痕迹）",
-      !!(d06c && d06c.pair === 0 && d06c.rows === (d04 && d04.rows)),
-      d06c && `rows=${d06c && d06c.rows}`);
+    for (const p of dupAbs) { try { unlinkSync(p); } catch {} }
+    for (const d of dupDirs) { try { rmSync(d, { recursive: true, force: true }); } catch {} }
+    await Eval(`window.__probe.reload().catch(() => {})`);
+    await sleep(500);
+    const clean = await Eval(`(() => ({
+      pair: window.__probe.pdfs.filter((p) => p.name === 'zz-smoke-pair.pdf').length,
+      rows: document.querySelectorAll('#pdf-rows tr').length }))()`);
+    check("清理后回到真实全量（无 zz-smoke 痕迹，回收镜像亦清除）",
+      clean.pair === 0 && clean.rows === total, `pair=${clean.pair} rows=${clean.rows}`);
   }
 }
 
-console.log(failed ? `\n冒烟结果：${failed} 项失败` : "\n冒烟结果：全部通过");
-process.exit(failed ? 1 : 0);
+// ================= 截图存档（工单 05 目视验收产物） =================
+mkdirSync(join(ROOT, ".scratch", "pdf-library-ui"), { recursive: true });
+await Eval(`document.getElementById('tab-pdf').scrollIntoView({ block: 'start' })`);
+await sleep(400);
+const shotFull = await c.cdp("Page.captureScreenshot", { format: "png" });
+writeFileSync(join(ROOT, ".scratch", "pdf-library-ui", "shot-05-full.png"),
+  Buffer.from(shotFull.result.data, "base64"));
+const shotDup = await Eval(`(async () => {
+  const seg = document.querySelector('#pdf-stats [data-pdf-health="dup"]');
+  if (!seg) return false;
+  seg.click();
+  await new Promise((r) => setTimeout(r, 350));
+  return document.querySelectorAll('#pdf-rows tr').length;
+})()`);
+if (shotDup) {
+  const s2 = await c.cdp("Page.captureScreenshot", { format: "png" });
+  writeFileSync(join(ROOT, ".scratch", "pdf-library-ui", "shot-05-dup-filtered.png"),
+    Buffer.from(s2.result.data, "base64"));
+  await Eval(`document.querySelector('#pdf-stats [data-pdf-health="dup"]').click()`);
+  await sleep(300);
+}
+const shotDetail = await Eval(`(async () => {
+  document.querySelector('#pdf-rows [data-pdf-detail]').click();
+  for (let i = 0; i < 30; i++) {
+    await new Promise((r) => setTimeout(r, 200));
+    const t = document.querySelector('.ref-files-overlay [data-pdf-pages]')?.textContent || '';
+    if (t && !t.includes('读取中')) break;
+  }
+  return !!document.querySelector('.ref-files-overlay');
+})()`);
+if (shotDetail) {
+  const s3 = await c.cdp("Page.captureScreenshot", { format: "png" });
+  writeFileSync(join(ROOT, ".scratch", "pdf-library-ui", "shot-05-detail.png"),
+    Buffer.from(s3.result.data, "base64"));
+  await Eval(`document.querySelector('.ref-files-overlay .ref-files-close')?.click()`);
+}
+console.log("shot-05-full / shot-05-dup-filtered / shot-05-detail 已存档");
+
+console.log("---- 冒烟总览 ----");
+console.log("PASS " + passed + " / FAIL " + failed);
+console.log(failed === 0 ? "ALL PASS" : "FAILED");
+c.close();
+process.exit(failed === 0 ? 0 : 1);

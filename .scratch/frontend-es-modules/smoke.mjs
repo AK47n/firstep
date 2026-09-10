@@ -75,8 +75,24 @@ check("window 桥挂载（esc/formatSize/btnIcon/platform/env/code 均 function�
   Object.values(bridge).every((v) => v === "function"), JSON.stringify(bridge));
 
 // ---- 头像级交互：各 tab 切换无异常 ----
-const tabs = await Eval(`[...document.querySelectorAll('nav button')].map((b) => b.dataset.tab).filter(Boolean).join(',')`);
-check("8 个 tab 存在", tabs.split(",").length === 8, tabs);
+// 口径修订（2026-09-09 第九轮）：旧断言写死「8 个 tab」——tab 分组历经
+// tab-grouping/01-02（8 → 11，新增 code / md / guide）与后续批次（版本更新记录 /
+// 新手指引），现为 11 个页面 tab。判据改为**结构性不变量**：限定顶部导航
+// （nav .tab-group，排除 #revise-tabs 这类页内 nav）后，每个 tab 的 aria-controls
+// 必须指向存在的 section —— 新增 tab 不再打红，漏接 section 仍红。
+const tabInfo = await Eval(`(() => {
+  const btns = [...document.querySelectorAll('nav .tab-group button[data-tab]')];
+  const keys = btns.map((b) => b.dataset.tab);
+  const bad = btns.filter((b) => {
+    const id = b.getAttribute('aria-controls');
+    return !id || !document.getElementById(id);
+  }).map((b) => b.dataset.tab + '→' + (b.getAttribute('aria-controls') || '(无)'));
+  return { keys, bad };
+})()`);
+const tabs = tabInfo.keys.join(",");
+check("顶部导航每个 tab 的 aria-controls 指向存在的 section（且 ≥ 8 个）",
+  tabInfo.keys.length >= 8 && tabInfo.bad.length === 0,
+  `${tabs} 坏=[${tabInfo.bad.join("|")}]`);
 for (const t of ["generate", "library", "topic", "reference", "pdf", "master"]) {
   const ok = await Eval(`(() => {
     const btn = [...document.querySelectorAll('nav button')].find((b) => b.dataset.tab === ${JSON.stringify(t)});
