@@ -319,6 +319,10 @@
   .badge.no-master { background: rgba(139, 148, 158, .15); color: var(--muted); }
   .badge.dep { background: rgba(139, 148, 158, .12); color: var(--muted); }
   .badge.ok { background: var(--ok-dim); color: var(--ok-bright); }
+  /* 中性徽章（第十轮目视验收修）：无颜色变体的 .badge 只有形状没有底色，
+     夹在彩色平台胶囊之间像「没套样式的裸文字」——「内嵌母版」这类
+     纯说明性徽章给中性底（同 .badge.ref-none 写法，随主题切换）。 */
+  .badge.neutral { background: rgba(139, 148, 158, .15); color: var(--muted); }
   .item { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px 16px;
           margin-bottom: var(--space-3); background: var(--panel-2);
           box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03), var(--shadow-item); }

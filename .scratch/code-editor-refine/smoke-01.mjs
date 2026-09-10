@@ -90,19 +90,35 @@ const openFile = async (name) => {
     const stable = await Eval(`!!document.querySelector('#code-tree [data-code-file=${JSON.stringify(name)}]')`);
     if (!stable) continue;
     await Eval(`document.querySelector('#code-tree [data-code-file=${JSON.stringify(name)}]')?.click()`);
-    const ok = await waitFor(`import('/js/ui/codeeditor.js').then((m) => m.getActiveTab()?.path === ${JSON.stringify(name)})`, 1500);
+    // 就绪判据（第十轮加强）：点完可能有两种落空——
+    //   ① 点击落在被移除的节点上（清树瞬间）→ 什么都没发生；
+    //   ② 点击命中、但文件读盘未回（本机端点 ≈500ms 量级）→ 活动标签要等一会儿。
+    // 原判据只有 1.5s 窗口，①/② 都可能不够。改为「先等树脱离『加载中…』占位，
+    // 再等成为活动标签」，单次窗口放到 3s（总预算仍 3 次尝试）。
+    await waitFor(`!document.querySelector('#code-tree > .muted')`, 3000);
+    const ok = await waitFor(`import('/js/ui/codeeditor.js').then((m) => m.getActiveTab()?.path === ${JSON.stringify(name)})`, 3000);
     if (ok) return true;
   }
   return false;
 };
-const setText = (text) => Eval(`(() => {
-  const ta = document.querySelector('#code-viewer .code-ta');
-  ta.focus();
-  ta.value = ${JSON.stringify(text)};
-  ta.setSelectionRange(0, 0);
-  ta.dispatchEvent(new InputEvent('input', { bubbles: true }));
-  return true;
-})()`);
+// setText(text)：直写 textarea + 派发 input。
+// 第十轮加固：原来 `ta.focus()` 对 null 直接抛 TypeError —— 而**调用点是 fire-and-forget**
+// （`await setText(...)` 的结果在脚本主流程里被吞掉），异常只让「后续断言」连锁变红，
+// 真正的失败点被掩盖（实测现场：某轮 5a 报「label=b、ta 仍脏、磁盘未落盘」，其实是
+// 更早一步的文件没打开 → setText 抛错 → 整段后续流程在错的状态上继续跑）。
+// 现在：先等 textarea 到场（最多 5s），再写值，并**回报是否写成**；调用点断言它。
+const setText = async (text) => {
+  const appeared = await waitFor(`!!document.querySelector('#code-viewer .code-ta')`, 5000);
+  if (!appeared) return false;
+  return Eval(`(() => {
+    const ta = document.querySelector('#code-viewer .code-ta');
+    ta.focus();
+    ta.value = ${JSON.stringify(text)};
+    ta.setSelectionRange(0, 0);
+    ta.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    return ta.value === ${JSON.stringify(text)};
+  })()`);
+};
 const label = () => Eval(`document.getElementById('code-dir-label').textContent`);
 const modalOpen = () => Eval(`!!document.querySelector('.code-unsaved-modal')`);
 const taValue = () => Eval(`document.querySelector('#code-viewer .code-ta')?.value ?? null`);
@@ -118,8 +134,8 @@ const dbg = (tag) => Eval(`(() => ({
 // ---- 场景 1：打开 A，改脏，切 B → 三选模态 ----
 await openDir(DIR_A);
 await waitFor(`!!document.querySelector('#code-tree [data-code-file="main.c"]')`);
-await openFile("main.c");
-await waitFor(`!!document.querySelector('#code-viewer .code-ta')`);
+check("1-pre 打开 main.c（树点击命中且成为活动标签）", await openFile("main.c"));
+check("1-pre2 编辑器 textarea 到场", await waitFor(`!!document.querySelector('#code-viewer .code-ta')`, 5000));
 await setText("int a = 999;\n");
 check("1a 修改为脏（ta 值生效）", await taValue() === "int a = 999;\n");
 check("1b beforeunload：脏 → 拦截", await Eval(`(() => {
@@ -150,13 +166,15 @@ check("4b 标签已清（丢弃）", await taValue() === null);
 
 // ---- 场景 5：保存全部并切换 → 写盘 ----
 await waitFor(`!!document.querySelector('#code-tree [data-code-file="other.c"]')`);
-await openFile("other.c");
-await waitFor(`!!document.querySelector('#code-viewer .code-ta')`);
-await setText("int b = 777;\n");
+check("5-pre 打开 other.c（树点击命中且成为活动标签）", await openFile("other.c"));
+check("5-pre2 编辑器 textarea 到场", await waitFor(`!!document.querySelector('#code-viewer .code-ta')`, 5000));
+check("5-pre3 改脏已写入编辑器", await setText("int b = 777;\n"));
 await openDir(DIR_A);
-await waitFor(`!!document.querySelector('.code-unsaved-modal')`);
+check("5-pre4 切 A 弹三选模态", await waitFor(`!!document.querySelector('.code-unsaved-modal')`, 8000));
 await clickAction("save");
-await waitFor(`!document.querySelector('.code-unsaved-modal') && document.getElementById('code-dir-label').textContent === ${JSON.stringify(DIR_A)}`);
+check("5-pre5 点「保存全部」后目录切到 A（防「点了没反应」掩盖成 5a/5b 红）",
+  await waitFor(`!document.querySelector('.code-unsaved-modal')
+    && document.getElementById('code-dir-label').textContent === ${JSON.stringify(DIR_A)}`, 8000));
 await dbg("after-save-switch");
 check("5a 保存后为 A", await label() === DIR_A);
 // 重开 B 验证写盘（等 ta 内容 = 保存值，防读盘异步）

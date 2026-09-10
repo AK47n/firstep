@@ -45,3 +45,12 @@ sources/materials/
 .scratch/code-page-vscode-overhaul/sample-proj/
 .scratch/code-editor-vscode-polish/sample-proj/
 .scratch/code-editor-perf-structural/sample-proj/
+
+# 第十轮补：其余代码页冒烟脚本的同类夹具（同样每次运行重生成）
+.scratch/code-editor-refine/sample-proj*/
+.scratch/code-ide-ai/sample-proj/
+.scratch/code-ide-flow/sample-proj/
+.scratch/code-viewer-editor/sample-proj/
+
+# CDP 批跑器的逐次运行记录（run-<时间戳>.json，每次批跑都新增；不入库）
+.scratch/cdp-smoke-runs/

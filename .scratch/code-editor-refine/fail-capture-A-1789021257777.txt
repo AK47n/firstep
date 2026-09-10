@@ -1,0 +1,19 @@
+# A 单跑 第 2 次 FAIL 19373ms
+
+PASS 1a 修改为脏（ta 值生效）
+PASS 1b beforeunload：脏 → 拦截
+PASS 2a 弹三选模态
+PASS 2b 消息含计数与路径
+PASS 2c 三按钮齐
+PASS 3a 取消后仍为 A
+PASS 3b 编辑保留且脏
+PASS 4a 放弃后为 B
+PASS 4b 标签已清（丢弃）
+{"tag":"after-save-switch","label":"C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\b","modal":false,"conflict":false,"ta":"int b = 777;\n"}
+FAIL 5a 保存后为 A
+   现场：ta="int b = 777;\n" 磁盘="int b = 2;\n" 标签=["other.c"]
+FAIL 5b B 磁盘内容已含修改
+FAIL 6a 无脏切目录不弹窗
+FAIL 6b beforeunload：干净 → 不拦截
+
+9 PASS / 4 FAIL

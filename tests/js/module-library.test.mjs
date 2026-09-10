@@ -4,12 +4,16 @@
 // 子串断言防脆。直接 import fx/module.js（不再字符串提取）。
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
-  moduleBadges, pythonArtifactSummary, moduleRowHTML,
+  moduleBadges, pythonArtifactSummary, moduleRowHTML, moduleGridHTML,
   libFilterModules, libSortModules, danglingDependencies, libStats,
   libStatsText, libChipRowHTML, editDescStatus, libIsValidHttpUrl,
   libPlatformKits,
 } from "../../src/contest_generator/static/js/fx/module.js";
+
+const indexHtml = readFileSync(
+  new URL("../../src/contest_generator/static/index.html", import.meta.url), "utf8");
 
 const base = {
   slug: "ultrasonic",
@@ -74,6 +78,24 @@ test("moduleRowHTML 无平台：徽章区为空、行仍完整", () => {
   const out = moduleRowHTML({ slug: "empty", description: "无平台模块", platforms: {} });
   assert.ok(out.includes('<td class="slug">empty</td>'));
   assert.ok(!out.includes("badge"));
+});
+
+test("「内嵌母版」徽章必带颜色变体类（.badge.neutral 在 CSS 中有定义）", () => {
+  // 第十轮浏览器截图目视验收暴露：裸 `<span class="badge">` 只有形状（padding/圆角/字号）
+  // 没有底色 → 夹在彩色平台胶囊之间像「没套样式的裸文字」。判据双向：
+  // ① 渲染侧必须给变体类；② index.html 必须真有该变体规则（防死类名）。
+  const master = moduleRowHTML({ ...base, platforms: { stm32: { files: [], verified: true, hardware_bound: false } } });
+  assert.match(master, /<span class="badge neutral" title="实现内嵌母版/,
+    "「内嵌母版」徽章应带 neutral 变体类");
+  // 模块选择卡（moduleGridHTML）同一标注走另一分支，必须同源
+  assert.match(moduleGridHTML([{ ...base, platforms: { stm32: { files: [] } } }], [], "", ""),
+    /<span class="mc-plat embed"/, "模块卡用 .mc-plat.embed（自有底色，不属裸 badge 问题）");
+  assert.match(indexHtml, /\.badge\.neutral\s*\{[^}]*background:/,
+    "index.html 应定义 .badge.neutral 底色（否则变体类成死类名）");
+  // 防回退：模块库里不得再出现无变体的裸 badge（topic 详情等其它页不在此断言面）
+  const src = readFileSync(
+    new URL("../../src/contest_generator/static/js/fx/module.js", import.meta.url), "utf8");
+  assert.ok(!/class="badge"/.test(src), "fx/module.js 不应再有裸 class=\"badge\"");
 });
 
 // ================= 工单 02：工具栏与统计条纯函数 =================
