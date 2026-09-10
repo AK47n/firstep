@@ -75,9 +75,22 @@ import {
 // 模块态：当前目录 / 扁平清单（中栏状态在 codeeditor.js）
 let codeDir = "";
 let codeFiles = [];
-// codeDirSeq：目录加载的「最新请求」序号（照 codeeditor.js openSeq 先例）——
-// 详见 loadCodeDir 内的竞态注释。0 = 从未发起。
+// codeDirSeq：目录树操作的「最新请求」序号（照 codeeditor.js openSeq 先例）——
+// 覆盖**全部**会写模块级 codeFiles / 渲染树 / 写徽章的入口（loadCodeDir、
+// checkCodeDiskChanges、refreshCodeTreeOnly）。0 = 从未发起。
+// 详见 loadCodeDir 与 probeDiskBaseline 内的竞态注释。
 let codeDirSeq = 0;
+// claimCodeDirSeq()：(是否最新) 谓词工厂——调用方在**每条 await 之后**重新求值，
+// 晚到就早退（一处认领、多处复核，避免每加一个 await 就补一次手写比较）。
+// 只比序号：任何**更新**的认领都会让先前认领者的响应作废。
+// 目录归属那一半判据不在这里，而在 probeDiskBaseline 内部（它以进入时刻的
+// codeDir 为锚点）——因为认领发生在 setCodeDir **之前**（此刻 codeDir 还停在
+// 上一个目录），在这里比目录会让每次认领当场自我作废（第十一轮首次实现即栽在
+// 这里：目录永远加载不出来，冒烟 1-pre 全红）。
+function claimCodeDirSeq() {
+  const req = ++codeDirSeq;
+  return () => req === codeDirSeq;
+}
 // 树徽章（code-ide-flow/02）：磁盘基线对比结果 {path → "new"|"modified"}，
 // renderCodeTree 交 buildCodeTree/codeTreeHTML 渲染「新/变」徽章。
 let codeTreeChanges = {};
@@ -213,14 +226,14 @@ onFileLoaded((path, content, mtimeNs) => {
   baselineStoreSave(baselineEvict(store, CODE_BASELINE_MAX_DIRS));
 });
 
-// applyDiskChanges(diff)：基线对比命中 → 联动（spec 1）——干净标签自动
+// applyDiskChanges(isCurrent, diff)：基线对比命中 → 联动（spec 1）——干净标签自动
 // 重载（计数 → toast）；脏标签置「磁盘已变更」徽章（点徽章弹既有三选，绝不
 // 静默——脏标签永不推进，留待用户定夺）；未打开的变更文件留树徽章。树徽章
 // = 磁盘改动集合（新增「新」/ 修改「变」），**不因自动重载而消失**——重载
 // 只是标签跟上磁盘，用户尚未整体审视（spec 用户故事 2）；「清空并确认已
 // 看」（工单 03）/保存/树操作才推进基线让集合收敛。removed 文件标签保留旧
 // 内容可继续查看（保存时后端既有错误文案兜底；树重拉后条目自然消失）。
-async function applyDiskChanges(diff) {
+async function applyDiskChanges(isCurrent, diff) {
   const changed = diff.added.concat(diff.modified);
   const dirty = new Set(dirtyTabPaths());
   const open = new Set(openTabPaths());
@@ -237,6 +250,9 @@ async function applyDiskChanges(diff) {
       // 磁盘文件已不存在 / 读取失败：保留标签旧内容（验收 4），不打断
     }
   }
+  // 逐文件重载含 await：期间可能已有更新的目录树操作接手 → 旧目录的变更集
+  // （徽章 / 面板 / toast）一律不落界面（同 probeDiskBaseline 的守卫理由）
+  if (isCurrent && !isCurrent()) return;
   const next = {};
   for (const p of diff.modified) next[p] = TREE_CHANGE_MODIFIED;
   for (const p of diff.added) next[p] = TREE_CHANGE_NEW;
@@ -253,17 +269,40 @@ async function applyDiskChanges(diff) {
   }
 }
 
-// probeDiskBaseline(dir)：重拉清单 + 基线探测（纯计算不推进基线；无基线先
-// 建立）——loadCodeDir 与 checkCodeDiskChanges 共用同一探测序（评审整改：
-// 两处同序易漂移）。无基线 → 徽章集合清空（跨目录/首次不残留旧目录徽章——
-// spec：目录隔离不串台）。**不渲染**——渲染由调用方统一（无变更一次 /
+// probeDiskBaseline(isCurrent, dir)：重拉清单 + 基线探测（纯计算不推进基线；
+// 无基线先建立）——loadCodeDir 与 checkCodeDiskChanges 共用同一探测序（评审
+// 整改：两处同序易漂移）。无基线 → 徽章集合清空（跨目录/首次不残留旧目录徽章
+// ——spec：目录隔离不串台）。**不渲染**——渲染由调用方统一（无变更一次 /
 // 有变更 applyDiskChanges 内一次，评审整改：消灭双次渲染）。
-async function probeDiskBaseline(dir) {
+//
+// 晚到响应守卫（第十一轮 CDP 取证定位的第二个目录竞态，两次失败现场完全同形）：
+// 本函数**无条件**写模块级 `codeFiles`，而它的触发点不止 loadCodeDir 一个——
+// 切到「代码」tab 的导航点击也会调 checkCodeDiskChanges()。实测的失败序列：
+//   ① openCodeViewer(B) 里 `btn.click()` **同步**触发 checkCodeDiskChanges()
+//      （此刻 codeDir 还是 A）→ 对 A 发起探测；
+//   ② 随后才 setCodeDir(B) 把 codeDir 改成 B + 对 B 发起探测；
+//   ③ 后发起的 B 先返回（7ms）、先发起的 A 后返回（10ms）→ A 的响应把
+//      `codeFiles` 覆盖成 A 的清单，而 loadCodeDir 的 stale 判定早已在
+//      A 返回**之前**通过 → 树渲染出 `main.c`（A 的文件）而标签显示 b。
+//      用户在 B 里点 other.c 自然点不到（树里根本没有这个节点）→「没有活动
+//      标签 / 编辑器空白」，与第九轮登记的签名 ① 同一表象、不同成因。
+// 修法：写 `codeFiles` 之前先复核守卫——`isCurrent` 由调用方用
+// claimCodeDirSeq() 认领（loadCodeDir / checkCodeDiskChanges 各持一个），
+// 晚到响应连清单都不写（新请求的清单绝不能被旧响应覆盖）。
+async function probeDiskBaseline(isCurrent, dir) {
+  // 本探测只回答「目录 dir 的清单与基线」——认领者可能已经走到别的目录
+  // （loadCodeDir 等三选确认时 codeDir 还停在上一个目录）。故这里以**进入时刻**
+  // 的 codeDir 作为目录判据锚点：之后只要 codeDir 变了（用户已切走），本次结果
+  // 就作废，绝不写进模块态。
+  const target = codeDir;
+  const mine = () => (isCurrent ? isCurrent() : true) && codeDir === target;
   const data = await apiPost("/api/code/open", { dir });
+  if (!mine()) return null;   // 晚到：清单写入与基线都不做
   codeFiles = data.files || [];
   const diff = baselineDiffDisk(dir, codeFiles);
   if (diff === null) {
     await baselineCommitDisk(dir, codeFiles);
+    if (!mine()) return null;
     codeTreeChanges = {};
     codeDiskChanges = emptyChanges();
   }
@@ -273,12 +312,18 @@ async function probeDiskBaseline(dir) {
 // checkCodeDiskChanges()：切回「代码」tab / 显式刷新入口——重扫磁盘对比
 // 基线，命中 → applyDiskChanges（loadCodeDir 成功与 refreshCodeTreeOnly
 // 之外的第三触发点；与 index.html tab 切换钩子接线）。
+// 与 loadCodeDir **共用同一守卫**：本函数在 tab 点击时同步发起，极易与紧随
+// 其后的 loadCodeDir（同一动作里的 openCodeViewer）交叠——认领序号后，
+// 任何 await 落到晚到一侧就不再渲染/不写徽章（避免用旧目录的 diff 抹掉新
+// 目录的树与徽章）。
 export async function checkCodeDiskChanges() {
   if (!codeDir) return;
+  const isCurrent = claimCodeDirSeq();
   try {
-    const diff = await probeDiskBaseline(codeDir);
+    const diff = await probeDiskBaseline(isCurrent, codeDir);
+    if (!isCurrent()) return;   // 期间已有更新的目录树操作：本次结果作废
     if (diff && baselineHasChanges(diff)) {
-      await applyDiskChanges(diff);
+      await applyDiskChanges(isCurrent, diff);
     } else {
       codeTreeChanges = {};   // 变更已收敛（无 diff）：不残留旧徽章
       codeDiskChanges = emptyChanges();
@@ -286,6 +331,7 @@ export async function checkCodeDiskChanges() {
       renderChangePanel();
     }
   } catch (e) {
+    if (!isCurrent()) return;
     toastError(e, "刷新文件变化失败");
   }
 }
@@ -362,13 +408,19 @@ async function renderChangePanel() {
 // 此后同类外部变更不再报（无变化）；外部再改 → 重新感知。
 export async function clearCodeDiskChanges() {
   if (!codeDir) return;
+  // 与 loadCodeDir / checkCodeDiskChanges 共用同一守卫（第十一轮）：本函数在
+  // `await baselineCommitDisk` 之后渲染树，期间可能已切换目录（旧目录的徽章/
+  // 树不该落回新目录的界面）。
+  const isCurrent = claimCodeDirSeq();
   const stalePaths = Object.keys(codeTreeChanges);
   codeTreeChanges = {};
   codeDiskChanges = emptyChanges();
   for (const p of stalePaths) clearDiskChanged(p);
   await baselineCommitDisk(codeDir, codeFiles);
+  if (!isCurrent()) return;
   renderCodeTree();
   await renderChangePanel();
+  if (!isCurrent()) return;
   toast("ok", "已确认磁盘变更：待看清单已清空");
 }
 
@@ -397,23 +449,33 @@ export function openCodeViewer(dir, filePath) {
 
 async function loadCodeDir(dir, filePath) {
   if (!dir) { toast("error", "目录为空：无法打开（请从最近记录或「选择文件夹」进入）"); return; }
+  // 目录加载竞态（第十/十一轮 CDP 取证定位，两轮各一半）：
+  // ① 两次 loadCodeDir 交叠时（快速连点两个目录 / 外部桥连发），后发起的请求
+  //    通常先返回，而**先发起的晚到响应**会写回模块级 `codeFiles` → 树被旧
+  //    目录的清单覆盖（标签显示新目录、树里还是旧目录的文件，用户点不到目标
+  //    文件 =「点了没反应」）；
+  // ② 触发点不止本函数——openCodeViewer 先 `btn.click()` 切 tab，那会**同步**
+  //    调 checkCodeDiskChanges()，此刻 codeDir 还是上一个目录 → 对旧目录发起
+  //    探测，其晚到响应同样覆盖 `codeFiles`（第十一轮实测现场：label=b 而
+  //    treeFiles=["main.c"]，两次失败完全同形）。
+  // 修法照 openEditorFile 的 openSeq 先例：**统一序号**——本函数与
+  // checkCodeDiskChanges / refreshCodeTreeOnly 共用 claimCodeDirSeq()，只有最新
+  // 一次认领者的响应可以提交状态（清单 / 徽章 / 渲染 / 错误 / 打开指定文件）；
+  // 晚到者直接丢弃（用户意图已变，旧目录的任何状态都不该落回界面）。序号在本
+  // 函数**最前面**认领（早于 setCodeDir 的三选确认等待），这样「切目录等待用户
+  // 确认」期间旧目录的晚到响应也不会落回界面；目录归属那一半判据在
+  // probeDiskBaseline 内锚定（见该函数注释）。
+  const isCurrent = claimCodeDirSeq();
   // 未保存退出保护（工单 code-editor-refine/01）：setCodeDir 内有脏标签 →
   // 三选确认（保存全部并切换 / 放弃修改并切换 / 取消）；取消或保存未落盘 →
   // 返回 false，不切换目录（编辑保留）。网络请求放确认之后——避免白拉树。
+  // 注意：**不要**在 setCodeDir 之前抢先赋 codeDir —— 守卫的第 ② 条判据是
+  // 「认领时与现在的 codeDir 是否相同」，抢跑会让本次认领当场自我作废
+  // （第十一轮首次实现即栽在这里：目录永远加载不出来，冒烟 1-pre 全红）。
   const switched = await setCodeDir(dir);
+  // 取消 / 保存未落定：目录没换 → 界面一概不动（**先前**的实现已把树清成
+  // 「加载中…」，取消后停在占位上是可见缺陷；清树已移到探测成功之后，见下）
   if (!switched) return;
-  // 目录加载竞态（第十轮 CDP 取证定位）：两次 loadCodeDir 交叠时（快速连点两个
-  // 目录 / 外部桥连发），后发起的请求通常先返回，而**先发起的晚到响应**会经
-  // probeDiskBaseline 无条件写回 `codeFiles`（模块级单值）→ 树被旧目录的清单
-  // 覆盖：标签显示新目录、树里还是旧目录的文件（取证现场：label=b 而
-  // treeFiles=["main.c"]），且旧清单里没有新目录的文件 → 用户点不到目标文件
-  // （表现为「点了没反应」）。本机 webapp 单端点 ≈500ms（见
-  // .scratch/pdf-library-ui/diag-refs-timing.mjs），窗口足够宽；实测 1/10 复现。
-  // 修法照 openEditorFile 的 openSeq 先例：序号守卫——只有**最新**一次加载
-  // 的响应可以提交状态（清单 / 徽章 / 渲染 / 错误 / 打开指定文件）；
-  // 晚到响应直接丢弃（用户意图已变，旧目录的任何状态都不该落回界面）。
-  const req = ++codeDirSeq;
-  const stale = () => req !== codeDirSeq;
   codeDir = dir;
   $("code-dir-label").textContent = dir;
   setCodeAiDir(dir);  // AI 对话面板（code-ide-ai/03）：跟随目录显示 + 拉历史
@@ -424,14 +486,14 @@ async function loadCodeDir(dir, filePath) {
     // 对比旧基线感知（上次会话/外部编辑器改过）→ 联动（干净重载 / 脏标签
     // 徽章 / 树徽章）。基线**不**随打开推进——diff 是待审视变更集，用户
     // 点「清空并确认已看」（工单 03）才整体确认（spec 用户故事 2）。
-    const diff = await probeDiskBaseline(codeDir);
-    if (stale()) return;   // 期间已发起更新的目录加载：本次响应作废（含清单写入的渲染）
+    const diff = await probeDiskBaseline(isCurrent, codeDir);
+    if (!isCurrent()) return;   // 期间已发起更新的目录树操作：本次结果作废
     renderOutline();
     renderSearchResults([]);
     $("code-find-input").value = "";
     $("code-find-results").innerHTML = '<span class="muted">在当前文件内查找</span>';
     if (diff && baselineHasChanges(diff)) {
-      await applyDiskChanges(diff);   // 内部渲染树（带「新/变」徽章）+ 变更面板
+      await applyDiskChanges(isCurrent, diff);   // 内部渲染树（带「新/变」徽章）+ 变更面板
     } else {
       codeTreeChanges = {};           // 跨目录/无变更：不残留上一目录徽章
       codeDiskChanges = emptyChanges();
@@ -440,7 +502,7 @@ async function loadCodeDir(dir, filePath) {
     }
     if (filePath) await openEditorFile(filePath);   // 外部桥指定文件：目录就位后直接打开（工单 code-editor-utilize/01）
   } catch (e) {
-    if (stale()) return;   // 旧目录的失败不该把新目录的树写成错误态
+    if (!isCurrent()) return;   // 旧目录的失败不该把新目录的树写成错误态
     codeFiles = [];
     $("code-tree").innerHTML = '<div class="error">加载失败：' + esc(e.message) + "</div>";
     toastError(e, "打开目录失败");
@@ -478,15 +540,21 @@ function renderCodeTree() {
 // 快照（不视为外部变更，徽章清空），避免下次对比把自己改的报「修改」。
 export async function refreshCodeTreeOnly() {
   if (!codeDir) return;
+  // 与 loadCodeDir / checkCodeDiskChanges 共用同一守卫（第十一轮）：树操作触发的
+  // 重拉同样可能被并发目录加载的晚到响应覆盖（或反之），认领序号后逐 await 复核。
+  const isCurrent = claimCodeDirSeq();
   try {
     const data = await apiPost("/api/code/open", { dir: codeDir });
+    if (!isCurrent()) return;   // 期间已切换目录：旧目录的清单不落界面
     codeFiles = data.files || [];
     await baselineCommitDisk(codeDir, codeFiles);
+    if (!isCurrent()) return;
     codeTreeChanges = {};
     codeDiskChanges = emptyChanges();
     renderCodeTree();
     renderChangePanel();
   } catch (e) {
+    if (!isCurrent()) return;
     toastError(e, "刷新文件树失败");
   }
 }

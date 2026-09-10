@@ -1,0 +1,8 @@
+# 第 8 轮 smoke-01 FAIL 16868ms
+
+Warning: Detected unsettled top-level await at file:///C:/Users/luoji/Desktop/firstep/.scratch/code-editor-refine/smoke-01.mjs:196
+check("1-pre 打开 main.c（树点击命中且成为活动标签）", await openFile("main.c"));
+                                       ^
+
+
+

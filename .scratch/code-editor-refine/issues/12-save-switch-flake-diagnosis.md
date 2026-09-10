@@ -91,3 +91,22 @@
   `pdf-library-ui/smoke.mjs` 场景 06 用 `sleep(400)` 等删除确认弹窗，而该弹窗前面有一次
   ≈500ms 的 `/api/pdfs/{rel}/refs` 请求（实测弹窗首现 518ms）→ **确定性红**；改为轮询等到场
   （`.scratch/pdf-library-ui/diag-trash-modal-flake.mjs` 为取证脚本）。
+- **2026-09-10 第十一轮（按第九轮「下一轮建议」第 1 项续做）：残余偶发定性完毕，成因是本单之外的
+  「第二个」目录竞态 → 另开 `.scratch/code-editor-refine/issues/13-tabclick-old-dir-probe-race.md`。**
+  要点：
+  1. 第十轮「下一步取证方向」的两条都验证过了——① 改模块命名空间对象**确实无效**（`Object.defineProperty`
+     对 ES 模块命名空间同样无效），故第十一轮改走**只记不改**的 `window.fetch` 观测器：
+     对每次 `/api/code/open` 记录 `dir` + **`Error().stack` 调用链**，一次就钉死了真因，不需要动产品码；
+     ② 观察目标从「谁调了 `setCodeDir`」换成「谁又发起了一次目录探测」，因为实测**没有任何人调
+     `setCodeDir`**——真正覆盖清单的是 `checkCodeDiskChanges`（它不碰标签）。
+  2. 真因：`openCodeViewer` 先 `btn.click()` 切 tab → nav 处理器**同步**调 `checkCodeDiskChanges()`，
+     此刻 `codeDir` 还是**旧目录** ⇒ 对旧目录发起探测；随后 `loadCodeDir` 才切目录。两次响应乱序时
+     `probeDiskBaseline` 的**无条件写入**让旧清单覆盖新清单。第十轮加的 `codeDirSeq` 只守
+     `loadCodeDir` 的快路径，拦不住这条。
+  3. 修复后实测：`diag-batch-loop.mjs` **20 轮 20 绿**（修复前 8 轮 2 红、10 轮 2 红 ≈1/4）；
+     确定性复现 A/B 对照：基线 FAIL / 修复 PASS。
+  4. 签名 ②（保存未落盘）本轮 24 轮 + 20 轮均**不成立**，且取证脚本已补齐 toast + 写盘状态码：
+     每次都是 `POST /api/code/save → 200`（6–12ms）。基线出现过的那 1 次 `sigStaleDisk` 是
+     旧版 `setText` 未校验返回值的**假红**（直写被窗口重装盖回 → 模型未改脏 → 无脏可存）。
+     本单「未取得根因证据、不写结论」的留口到此**关闭**：真因 = 场景 5 的**客户端标签/树状态**
+     问题（第一/第二个目录竞态），与保存落盘无关。

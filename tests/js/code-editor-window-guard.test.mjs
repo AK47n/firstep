@@ -213,15 +213,77 @@ test("loadCodeDir：晚到的旧目录响应不覆盖新目录清单（codeDirSe
   const raw = view.slice(at, nextFn > at ? nextFn : at + 4000);
   assert.ok(raw.length > 800, "loadCodeDir 函数体提取异常（函数结构变化）");
   const code = raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-  assert.ok(code.includes("const req = ++codeDirSeq;"), "loadCodeDir 未登记目录加载序号");
-  assert.ok(code.includes("const stale = () => req !== codeDirSeq;"),
-    "loadCodeDir 未判定晚到响应");
-  // 三处出口都要守卫：渲染前、错误态、打开指定文件由 stale 早退统一覆盖
-  const staleChecks = code.match(/if \(stale\(\)\) return;/g) || [];
+  assert.ok(code.includes("const isCurrent = claimCodeDirSeq();"),
+    "loadCodeDir 未认领导致目录树操作序号");
+  // 晚到出口都要守卫：渲染前 + catch 各一处（+ 取消分支的提前 return）
+  const staleChecks = code.match(/if \(!isCurrent\(\)\) return;/g) || [];
   assert.ok(staleChecks.length >= 2,
     `loadCodeDir 的晚到早退点不足（渲染前 + catch 各一处）：实测 ${staleChecks.length}`);
-  assert.ok(/const diff = await probeDiskBaseline\(codeDir\);\s*\n\s*if \(stale\(\)\) return;/.test(code),
-    "probeDiskBaseline 之后没有 stale 早退：晚到响应仍会渲染旧目录清单");
+  assert.ok(/const diff = await probeDiskBaseline\(isCurrent, codeDir\);\s*\n\s*if \(!isCurrent\(\)\) return;/.test(code),
+    "probeDiskBaseline 之后没有晚到早退：晚到响应仍会渲染旧目录清单");
   // 模块级序号必须存在（声明在模块作用域，不在函数内）
   assert.ok(/^let codeDirSeq = 0;$/m.test(view), "codeview.js 未声明模块级 codeDirSeq");
+});
+
+test("probeDiskBaseline：清单写入受守卫（第二个目录竞态 —— 切 tab 的 checkCodeDiskChanges）", () => {
+  // 缺陷（第十一轮 CDP 取证，batch-loop 8 轮 2 次、10 轮 2 次，现场两次完全同形
+  // 且 `dir` 已由观测器钉死）：
+  //   ① openCodeViewer(B) 先 `btn.click()` 切「代码」tab → nav 处理器**同步**调
+  //      checkCodeDiskChanges()，此刻 codeDir 还是 A → 对 **A** 发起
+  //      /api/code/open；
+  //   ② 随后 setCodeDir(B) 把 codeDir 改成 B，并对 **B** 发起探测；
+  //   ③ B 先返回（7ms）、A 后返回（10ms）→ A 的响应把 `codeFiles` 覆盖成
+  //      A 的清单（main.c）→ 树渲染 main.c 而标签显示 b → 点 other.c 点不到。
+  // `codeDirSeq` 若只守 loadCodeDir 自己的快路径，挡不住这个**无条件写入**：
+  // 必须在 probeDiskBaseline 写 `codeFiles` 之前复核守卫，并让
+  // checkCodeDiskChanges 也成为「认领者」（否则它对旧目录的探测永不被判死）。
+  const view = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/codeview.js", import.meta.url), "utf8");
+  const at = view.indexOf("async function probeDiskBaseline(");
+  assert.ok(at > 0, "找不到 probeDiskBaseline");
+  const nextFn = view.indexOf("\nexport async function ", at + 10);
+  const raw = view.slice(at, nextFn > at ? nextFn : at + 3000);
+  const code = raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  // 签名带守卫 + await 之后、写 codeFiles **之前**必须有早退
+  assert.ok(code.includes("async function probeDiskBaseline(isCurrent, dir)"),
+    "probeDiskBaseline 未接收晚到守卫");
+  const writeAt = code.indexOf("codeFiles = data.files");
+  const gateAt = code.indexOf("if (!mine()) return null;");
+  assert.ok(gateAt > 0, "probeDiskBaseline 未在写入前复核守卫（晚到响应仍会覆盖清单）");
+  assert.ok(gateAt < writeAt, "守卫复核在 codeFiles 写入之后：等于没守");
+  // 目录归属锚点：进入时刻的 codeDir（认领早于 setCodeDir，codeDir 可能还是旧目录）
+  assert.ok(code.includes("const target = codeDir;") && code.includes("codeDir === target"),
+    "probeDiskBaseline 未锚定目录：旧目录的晚到探测结果会写进新目录的树");
+  // checkCodeDiskChanges 必须是认领者，且逐 await 复核
+  const cAt = view.indexOf("export async function checkCodeDiskChanges()");
+  assert.ok(cAt > 0, "找不到 checkCodeDiskChanges");
+  const cRaw = view.slice(cAt, view.indexOf("\n// ", cAt + 40));
+  const cCode = cRaw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.ok(cCode.includes("const isCurrent = claimCodeDirSeq();"),
+    "checkCodeDiskChanges 未认领序号：它对旧目录的晚到探测无人判死");
+  assert.ok(cCode.includes("await probeDiskBaseline(isCurrent, codeDir)"),
+    "checkCodeDiskChanges 未把守卫交给 probeDiskBaseline");
+  assert.ok(cCode.includes("await applyDiskChanges(isCurrent, diff)"),
+    "checkCodeDiskChanges 未把守卫交给 applyDiskChanges（旧目录徽章会落界面）");
+  // applyDiskChanges 的重载循环含 await：落界面之前也要复核
+  const aAt = view.indexOf("async function applyDiskChanges(");
+  const aRaw = view.slice(aAt, view.indexOf("\n// ", aAt + 40));
+  const aCode = aRaw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const aGate = aCode.indexOf("if (isCurrent && !isCurrent()) return;");
+  assert.ok(aGate > 0 && aGate < aCode.indexOf("codeTreeChanges = next;"),
+    "applyDiskChanges 未在写徽章/渲染之前复核守卫");
+  // 判据含「目录归属在探测内锚定」：认领早于 setCodeDir，故 claimCodeDirSeq
+  // 本身只比序号（在那里比目录会让每次认领自我作废）
+  const claimAt = view.indexOf("function claimCodeDirSeq()");
+  const claimRaw = view.slice(claimAt, claimAt + 900);
+  assert.ok(/return \(\) => req === codeDirSeq;/.test(claimRaw),
+    "claimCodeDirSeq 判据应为纯序号比较（目录归属锚在 probeDiskBaseline 内）");
+  // 验收脚本在位（防验收证据被删/静默放宽）：确定性复现 A/B 对照
+  // —— 基线 FAIL（树 = ["main.c"]）/ 修复 PASS（树 = ["other.c"]）
+  const repro = readFileSync(
+    new URL("../../.scratch/code-editor-perf-structural/diag-dir-race-tabclick.mjs", import.meta.url), "utf8");
+  assert.ok(repro.includes("checkCodeDiskChanges"),
+    "确定性复现脚本未覆盖「切 tab 的 checkCodeDiskChanges 探测旧目录」这条路径");
+  assert.ok(repro.includes('treeFiles[0] === "other.c"'),
+    "确定性复现脚本的 PASS 判据被放宽/删除");
 });

@@ -1,0 +1,17 @@
+# 第 1 轮 smoke-01 FAIL 54070ms
+
+FAIL 1-pre 打开 main.c（树点击命中且成为活动标签）
+FAIL 1-pre2 编辑器 textarea 到场
+FAIL 1a 修改为脏（ta 值生效）
+FAIL 1b beforeunload：脏 → 拦截
+FAIL 2a 弹三选模态
+file:///C:/Users/luoji/Desktop/firstep/.scratch/code-editor-refine/smoke-01.mjs:48
+  if (r.result?.exceptionDetails) throw new Error("eval 失败: " + (r.result.exceptionDetails.exception?.description || JSON.stringify(r.result.exceptionDetails)));
+                                        ^
+
+Error: eval 失败: TypeError: Cannot read properties of null (reading 'textContent')
+    at <anonymous>:1:63
+    at Eval (file:///C:/Users/luoji/Desktop/firstep/.scratch/code-editor-refine/smoke-01.mjs:48:41)
+    at async file:///C:/Users/luoji/Desktop/firstep/.scratch/code-editor-refine/smoke-01.mjs:208:22
+
+Node.js v24.15.0

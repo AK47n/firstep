@@ -1,0 +1,77 @@
+# 第 4 轮 smoke-01 FAIL 46882ms
+
+PASS 1-pre 打开 main.c（树点击命中且成为活动标签）
+PASS 1-pre2 编辑器 textarea 到场
+PASS 1a 修改为脏（ta 值生效）
+PASS 1b beforeunload：脏 → 拦截
+PASS 2a 弹三选模态
+PASS 2b 消息含计数与路径
+PASS 2c 三按钮齐
+PASS 3a 取消后仍为 A
+PASS 3b 编辑保留且脏
+PASS 4a 放弃后为 B
+PASS 4b 标签已清（丢弃）
+PASS 5-pre 打开 other.c（树点击命中且成为活动标签）
+PASS 5-pre2 编辑器 textarea 到场
+PASS 5-pre3 改脏已写入编辑器
+PASS 5-pre4 切 A 弹三选模态
+PASS 5-pre5 点「保存全部」后目录切到 A（防「点了没反应」掩盖成 5a/5b 红）
+{"tag":"after-save-switch","label":"C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\a","modal":false,"conflict":false,"ta":null}
+PASS 5a 保存后为 A
+   现场（重开 B 失败）：{
+ "label": "C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\b",
+ "treeText": "main.c11 B\n    ✎\n    🗑",
+ "treeFiles": [
+  "main.c"
+ ],
+ "activeTab": null,
+ "openTabs": [],
+ "modal": false,
+ "conflict": false,
+ "toasts": [],
+ "apiFiles": [
+  "other.c"
+ ],
+ "apiErr": null
+}
+   现场：ta=null 磁盘="int b = 777;\n"
+   现场：打开成功=false 标签采样=[{"t":1789024412576,"n":0,"label":"b","tree":["main.c"]}]
+   现场：/api/code/open 调用链=[
+ {
+  "url": "/api/code/open",
+  "method": "POST",
+  "status": 200,
+  "ms": 7,
+  "dir": "b",
+  "dirFull": "C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\b",
+  "stack": "at window.fetch (<anonymous>:11:20) < at apiPost (http://127.0.0.1:8000/js/app.js:90:23) < at probeDiskBaseline (http://127.0.0.1:8000/js/ui/codeview.js:262:22) < at loadCodeDir (http://127.0.0.1:8000/js/ui/codeview.js:427:24)"
+ },
+ {
+  "url": "/api/code/open",
+  "method": "POST",
+  "status": 200,
+  "ms": 10,
+  "dir": "a",
+  "dirFull": "C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\a",
+  "stack": "at window.fetch (<anonymous>:11:20) < at apiPost (http://127.0.0.1:8000/js/app.js:90:23) < at probeDiskBaseline (http://127.0.0.1:8000/js/ui/codeview.js:262:22) < at checkCodeDiskChanges (http://127.0.0.1:8000/js/ui/codeview.js:279:24) < at HTMLButtonElement.<anonymous> (http://127.0.0.1:8000/:4495:37)"
+ }
+]
+   现场：写盘请求=[]
+   现场：现状={
+ "label": "C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\b",
+ "treeFiles": [
+  "main.c"
+ ],
+ "activeTab": null,
+ "openTabs": [],
+ "dirty": [],
+ "modal": false,
+ "conflict": false,
+ "toasts": []
+}
+FAIL 5b B 磁盘内容已含修改
+FAIL 5b-supp 打开成功后标签未被第三方清空（第十轮残余签名的机器判据）
+PASS 6a 无脏切目录不弹窗
+PASS 6b beforeunload：干净 → 不拦截
+
+19 PASS / 2 FAIL

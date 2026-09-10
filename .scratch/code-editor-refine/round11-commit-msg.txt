@@ -1,0 +1,24 @@
+修复：目录树第二个竞态（切 tab 的 checkCodeDiskChanges 探测旧目录并覆盖新目录清单）
+
+refine/smoke-01 场景 5 的残余偶发（≈1/4，第十轮修掉第一个目录竞态后仍在）定性为
+「同一症状的第二个成因」：openCodeViewer 先 btn.click() 切「代码」tab，nav 处理器
+同步调 checkCodeDiskChanges()，此刻 codeDir 还是旧目录 → 对旧目录发起探测；随后
+loadCodeDir 才切目录。两次响应乱序时 probeDiskBaseline 的无条件写入让旧目录清单
+覆盖新目录清单 → 树渲染 main.c 而标签显示 b → 用户点 other.c 时树里没有该节点
+（?.click() 静默 no-op）→「没有活动标签 / 编辑器空白」。
+
+修法：把只属于 loadCodeDir 的 codeDirSeq 提升为目录树操作统一守卫
+claimCodeDirSeq()，四个写入点（loadCodeDir / checkCodeDiskChanges /
+refreshCodeTreeOnly / clearCodeDiskChanges）全部认领；probeDiskBaseline 在写
+codeFiles 之前复核守卫；目录归属锚点放进探测内部（认领早于 setCodeDir，把目录比较
+放进 claimCodeDirSeq 会让每次认领自我作废）；applyDiskChanges 落徽章/渲染之前复核。
+顺带修：loadCodeDir 清树改到探测成功之后，取消分支不再留空占位。
+
+证据：确定性复现 A/B 对照（.scratch/code-editor-perf-structural/
+diag-dir-race-tabclick.mjs：基线必 FAIL / 修复必 PASS）+ diag-batch-loop 20 轮 20 绿
+（修复前 8 轮 2 红、10 轮 2 红）；签名 ②（保存未落盘）24+20 轮均不成立，为旧版
+setText 未校验返回值的假红，已改为回读模型（dirtyTabPaths 判据）。
+
+守卫：tests/js/code-editor-window-guard.test.mjs 新增「probeDiskBaseline 清单写入
+受守卫」用例；回归 pytest 3928 passed、tests/js 1403 pass、十批 CDP 65 支次全绿。
+工单：.scratch/code-editor-refine/issues/13-tabclick-old-dir-probe-race.md（resolved）。
