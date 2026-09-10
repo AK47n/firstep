@@ -65,7 +65,7 @@ export async function loadSettings() {
   try {
     const s = await apiGet("/api/settings");
     $("set-base-url").value = s.base_url || "https://api.deepseek.com";
-    $("set-model").value = s.model || "deepseek-v4-flash";
+    $("set-model").value = s.model || "deepseek-flash";
     // key 只回掩码（前 4 位 + 与真实长度一致的圆点），直接填入文本框
     $("set-api-key").value = s.api_key;
     $("set-lib-dir").value = s.module_library_dir;
@@ -191,7 +191,7 @@ function bindEnvJumps(box) {
 let visionZhipuMask = "";
 let visionApplyingPreset = false;
 const VISION_PRESETS = {
-  deepseek: { base: "https://api.deepseek.com", model: "deepseek-v4-flash-vision-exp" },
+  deepseek: { base: "https://api.deepseek.com", model: "deepseek-flash" },
   zhipu: { base: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4.6v-flash" },
 };
 const VISION_HINTS = {

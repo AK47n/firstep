@@ -2,8 +2,9 @@
 
 主 LLM 是 DeepSeek 纯文本模型，看不见图；本模块给题面示意图 / 上传图片提供
 「图 → 中文描述」通道：OpenAI 兼容 chat/completions（content = text + image_url
-base64 data URL），默认模型 deepseek-v4-flash-vision-exp（DeepSeek 官方视觉
-模型，与 V4 Flash 同价，2026-08 上线；支持 JPEG/PNG/GIF/WebP，单图 384 token
+base64 data URL），默认模型 deepseek-flash（DeepSeek 官方视觉模型；2026-09-10
+起 flash 线统一为该 id，旧 id deepseek-v4-flash-vision-exp 已回落至此；支持
+JPEG/PNG/GIF/WebP，单图 384 token
 封顶，图片仅限 user 消息）。
 
 网络层照 llm.py 先例：标准库 urllib（零第三方依赖）+ 可注入传输接缝
@@ -30,7 +31,7 @@ from typing import Any, Protocol
 # DeepSeek 官方 OpenAI 兼容端点（缺省值；设置页可覆盖；含 /v1 形态）
 DEFAULT_VISION_BASE_URL = "https://api.deepseek.com"
 # 官方视觉模型（与 V4 Flash 同价；单图 token 计费封顶 384）
-DEFAULT_VISION_MODEL = "deepseek-v4-flash-vision-exp"
+DEFAULT_VISION_MODEL = "deepseek-flash"
 
 # 视觉 key 复用守卫：仅 DeepSeek 官方端点允许「视觉 key 留空 = 复用主 key」。
 # 用户改成其它 OpenAI 兼容视觉服务仍须自备 key——不把主 key 发给别的服务商。

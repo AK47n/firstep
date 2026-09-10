@@ -108,7 +108,7 @@ def test_saved_file_is_plain_json(tmp_path):
         # 视觉通道（工单 vision-deepseek-native/01）：api_key 空 = 复用主 key，base/model 有默认
         "vision_base_url": "https://api.deepseek.com",
         "vision_api_key": "",
-        "vision_model": "deepseek-v4-flash-vision-exp",
+        "vision_model": "deepseek-flash",
         # 问答式精注记开关（工单 vision-detail-qa/01）：缺省开
         "vision_detail_qa": True,
         # 推荐缓存开关（工单 llm-cost-control/02）：缺省开
@@ -192,7 +192,7 @@ def test_vision_fields_default_and_roundtrip(tmp_path):
     loaded = load_config(path)
     assert loaded.vision_base_url == "https://api.deepseek.com"
     assert loaded.vision_api_key == ""
-    assert loaded.vision_model == "deepseek-v4-flash-vision-exp"
+    assert loaded.vision_model == "deepseek-flash"
 
     save_config(
         AppConfig(
