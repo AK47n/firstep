@@ -74,6 +74,53 @@ const check = (name, ok, extra) => {
   if (ok) passed++; else failed++;
 };
 const openDir = (dir) => Eval(`import('/js/ui/codeview.js').then((m) => m.openCodeViewer(${JSON.stringify(dir)}))`);
+// 观测器（第十一轮）：只记不改——包装 window.fetch 记 `/api/code/*` 请求（含
+// **调用链**，可直接看出是哪一段代码发起的）；另给标签数采样器。用于把
+// 「打开成功后被第三方清标签」这类现场钉死（不改产品码、不影响被测时序）。
+await Eval(`(() => {
+  if (window.__smokeDiag) return true;
+  window.__smokeDiag = { fetch: [], tabs: [], clears: [] };
+  const orig = window.fetch;
+  window.fetch = async (input, init) => {
+    const url = typeof input === 'string' ? input : (input && input.url) || '';
+    const method = (init && init.method) || (input && input.method) || 'GET';
+    let dir = null;
+    try { dir = JSON.parse(init.body).dir; } catch {}
+    const t0 = Date.now();
+    const stack = (new Error('smoke')).stack.split('\\n').slice(1, 6).map((s) => s.trim()).join(' < ');
+    try {
+      const r = await orig(input, init);
+      if (url.includes('/api/code/')) {
+        window.__smokeDiag.fetch.push({ url: url.replace(location.origin, ''), method, status: r.status,
+          ms: Date.now() - t0, dir: dir && dir.split(/[\\\\/]/).pop(), dirFull: dir, stack });
+      }
+      return r;
+    } catch (e) {
+      window.__smokeDiag.fetch.push({ url: url.replace(location.origin, ''), method, status: 'ERR(' + e.message + ')',
+        ms: Date.now() - t0, dir: dir && dir.split(/[\\\\/]/).pop(), dirFull: dir, stack });
+      throw e;
+    }
+  };
+  window.__smokeSampleTabs = async (rounds) => {
+    const ed = await import('/js/ui/codeeditor.js');
+    let prev = -1;
+    const log = [];
+    for (let i = 0; i < rounds; i++) {
+      const n = ed.openTabPaths().length;
+      if (n !== prev) {
+        log.push({ t: Date.now(), n,
+          label: document.getElementById('code-dir-label').textContent.split(/[\\\\/]/).pop(),
+          tree: [...document.querySelectorAll('#code-tree [data-code-file]')].map((b) => b.dataset.codeFile) });
+        prev = n;
+      }
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    return log;
+  };
+  window.__smokeDiagReset = () => { window.__smokeDiag.fetch = []; window.__smokeDiag.clears = []; return true; };
+  return true;
+})()`);
+
 // openFile(name)：点树节点打开文件。
 // 口径修订（2026-09-09 第九轮实跑暴露的偶发红，**基线（stash 产品改动）同样 2/8 复现**
 // → 与本轮产品改动无关的既有脚本竞态）：切目录后 #code-tree 会被 loadCodeDir 清成
@@ -110,14 +157,26 @@ const openFile = async (name) => {
 const setText = async (text) => {
   const appeared = await waitFor(`!!document.querySelector('#code-viewer .code-ta')`, 5000);
   if (!appeared) return false;
-  return Eval(`(() => {
+  const wrote = await Eval(`(() => {
     const ta = document.querySelector('#code-viewer .code-ta');
+    if (!ta) return false;
     ta.focus();
     ta.value = ${JSON.stringify(text)};
     ta.setSelectionRange(0, 0);
     ta.dispatchEvent(new InputEvent('input', { bubbles: true }));
     return ta.value === ${JSON.stringify(text)};
   })()`);
+  if (!wrote) return false;
+  // 第十一轮加固：写值成功 ≠ 模型吃到了。窗口化渲染器可能在写入与读取之间
+  // 按模型重装窗口（`taWindowApply`）把直写的值盖回去——那时后续断言会以
+  // 「磁盘没落盘」的形态红，掩盖真正的原因（老版 diag-save-switch-flake 的
+  // `setText` 就是这个盲点：它在未校验返回值的情况下 20 轮里造出 1 次
+  // sigStaleDisk 假红，而写盘请求其实从未发出）。故写后**回读模型**：
+  // 模型脏（tab.content ≠ savedContent）才算真的改脏。
+  return waitFor(`(async () => {
+    const m = await import('/js/ui/codeeditor.js');
+    return m.dirtyTabPaths().length > 0;
+  })()`, 2000);
 };
 const label = () => Eval(`document.getElementById('code-dir-label').textContent`);
 const modalOpen = () => Eval(`!!document.querySelector('.code-unsaved-modal')`);
@@ -178,14 +237,48 @@ check("5-pre5 点「保存全部」后目录切到 A（防「点了没反应」�
 await dbg("after-save-switch");
 check("5a 保存后为 A", await label() === DIR_A);
 // 重开 B 验证写盘（等 ta 内容 = 保存值，防读盘异步）
+await Eval(`window.__smokeDiagReset()`);
+// 决定性取证（第十一轮）：把 codeeditor 模块的 `setCodeDir` **重新绑定**成包装版
+// ——ES 模块命名空间对象是冻结的（改不动），但 `import(...)` 每次返回同一对象，
+// 而 `codeview.js` 是 `import { setCodeDir }` 的**活绑定**，拿不到包装（第十轮
+// 踩过的坑）。本轮不信这一点：直接在**点击时刻**重绑，然后看**谁**真的调了它。
+// 判据只在「标签被清」时才需要——setCodeDir 是 tabs=[] 的唯一路径。
+await Eval(`(async () => {
+  const m = await import('/js/ui/codeeditor.js');
+  try {
+    Object.defineProperty(m, 'setCodeDir', { value: async (d) => {
+      window.__smokeDiag.clears = window.__smokeDiag.clears || [];
+      window.__smokeDiag.clears.push({ t: Date.now(), dir: String(d).split(/[\\\\/]/).pop(),
+        label: document.getElementById('code-dir-label').textContent.split(/[\\\\/]/).pop(),
+        tabs: m.openTabPaths().slice() });
+      return window.__smokeRealSetCodeDir(d);
+    }, configurable: true });
+    return 'rebound';
+  } catch (e) { return 'frozen:' + e.message; }
+})()`);
 await openDir(DIR_B);
 await waitFor(`document.getElementById('code-dir-label').textContent === ${JSON.stringify(DIR_B)}
   && !!document.querySelector('#code-tree [data-code-file="other.c"]')`);
 const reopened = await openFile("other.c");
-// 第十轮·决定性取证：这一支在批内偶发红（6 轮里 2 次，**总是卡在这里**），
-// 且落盘/切目录全好（5-pre5 绿、磁盘已 777）——即「点击丢失」而非保存问题。
-// 失败时把**树的实况 + 端点实况 + 活动标签**一起打出来（判定三种可能：
-// ① 树停在旧目录清单；② 树是 B 但点击丢失；③ 端点本身没回 other.c）。
+// 第十一轮·决定性取证：打开成功后按 20ms 采样标签数 1.2s——第十轮残余的形态是
+// 「openFile 返回 true（打开确实成功）而断言时 openTabPaths()=[]」，即**打开成功
+// 之后被第三方清标签**（清标签的唯一路径 = setCodeDir ← loadCodeDir）。采样 +
+// `/api/code/open` 的调用链一起，能把「谁在什么时候又跑了一次目录加载」钉死。
+const tabLog = await Eval(`window.__smokeSampleTabs(60)`);
+const openReqs = await Eval(`window.__smokeDiag.fetch.filter((f) => f.url.includes('/api/code/open'))`);
+const diagNow = async () => Eval(`(async () => {
+  const ed = await import('/js/ui/codeeditor.js');
+  return {
+    label: document.getElementById('code-dir-label').textContent,
+    treeFiles: [...document.querySelectorAll('#code-tree [data-code-file]')].map((b) => b.dataset.codeFile),
+    activeTab: (ed.getActiveTab() || {}).path || null,
+    openTabs: ed.openTabPaths(),
+    dirty: ed.dirtyTabPaths(),
+    modal: !!document.querySelector('.code-unsaved-modal'),
+    conflict: !!document.querySelector('.code-conflict-overlay'),
+    toasts: [...document.querySelectorAll('.toast')].map((x) => x.textContent),
+  };
+})()`);
 if (!reopened) {
   const s = await Eval(`(async () => {
     const box = document.getElementById('code-tree');
@@ -213,13 +306,22 @@ check("5b B 磁盘内容已含修改", await (async () => {
   const disk = await Eval(`fetch('/api/code/file?dir=' + encodeURIComponent(${JSON.stringify(DIR_B)})
     + '&path=' + encodeURIComponent('other.c')).then((r) => r.json()).then((j) => j.content).catch(() => '(读盘失败)')`);
   // 失败时把「编辑器看到的」与「磁盘上的」一起打出来（第九轮排查用：
-  // 两者不一致 = 客户端缓存陈旧；一致但非 777 = 保存没落盘）
+  // 两者不一致 = 客户端缓存陈旧；一致但非 777 = 保存没落盘）。
+  // 第十一轮补齐第九轮要求的取证面：**toast 文案 + 写盘请求状态码**（签名 ②
+  // 「保存未落盘」的直接判据 = 没发出 POST / 发出但非 2xx），外加标签采样与
+  // 目录重入调用链。
   return v === "int b = 777;\n" && disk === "int b = 777;\n"
     ? true
     : (console.log("   现场：ta=" + JSON.stringify(v) + " 磁盘=" + JSON.stringify(disk)
-      + " 标签=" + JSON.stringify(await Eval(`(async () => (await import('/js/ui/codeeditor.js')).openTabPaths())()`))),
+      + "\n   现场：打开成功=" + reopened + " 标签采样=" + JSON.stringify(tabLog)
+      + "\n   现场：/api/code/open 调用链=" + JSON.stringify(openReqs, null, 1)
+      + "\n   现场：写盘请求=" + JSON.stringify(await Eval(
+        `window.__smokeDiag.fetch.filter((f) => f.url.includes('/api/code/save'))`))
+      + "\n   现场：现状=" + JSON.stringify(await diagNow(), null, 1)),
       false);
 })());
+check("5b-supp 打开成功后标签未被第三方清空（第十轮残余签名的机器判据）",
+  reopened && tabLog.length > 0 && tabLog[tabLog.length - 1].n > 0);
 
 // ---- 场景 6：干净态 beforeunload 不拦截 ----
 await openDir(DIR_A);   // 无脏 → 直通（顺带验证无脏切换不弹窗）

@@ -1,0 +1,8 @@
+# 第 9 轮 smoke-01 FAIL 1829ms
+
+Warning: Detected unsettled top-level await at file:///C:/Users/luoji/Desktop/firstep/.scratch/code-editor-refine/smoke-01.mjs:195
+await waitFor(`!!document.querySelector('#code-tree [data-code-file="main.c"]')`);
+^
+
+
+

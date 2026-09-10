@@ -1,0 +1,39 @@
+{
+  "rounds": 20,
+  "sigNoTab": 0,
+  "sigStaleDisk": 1,
+  "ok": 19,
+  "guardSaved": 0,
+  "rawLost": 0,
+  "details": [
+    {
+      "attempt": 4,
+      "sig": "sigStaleDisk",
+      "diskAfterSave": "int b = 2;\n",
+      "raw": {
+        "ok": true,
+        "scene": {
+          "nodePresent": true,
+          "nodeConnected": true,
+          "treeText": "other.c变11 B\n    ✎\n    \ud83d",
+          "treeFiles": [
+            "other.c"
+          ],
+          "label": "b"
+        }
+      },
+      "tabs": [
+        "other.c"
+      ],
+      "tree": {
+        "nodePresent": true,
+        "nodeConnected": true,
+        "treeText": "other.c变11 B\n    ✎\n    \ud83d",
+        "treeFiles": [
+          "other.c"
+        ],
+        "label": "b"
+      }
+    }
+  ]
+}

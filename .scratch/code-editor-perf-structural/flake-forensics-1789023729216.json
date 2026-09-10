@@ -1,0 +1,10 @@
+{
+  "rounds": 24,
+  "ok": 24,
+  "sigNoTab": 0,
+  "sigDropped": 0,
+  "sigStaleDisk": 0,
+  "rawLost": 0,
+  "guardSaved": 0,
+  "details": []
+}
