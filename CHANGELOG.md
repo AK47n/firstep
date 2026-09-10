@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=169c6abd103e130723a4646b74af55da7fdc7b78 -->
+<!-- changelog-auto: last-commit=4a72b2502097af179d92d309aa6ffc86b1074b5b -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -15,6 +15,7 @@
 - 19:38 ﻿feat: 批跑器判定与取证补口——挑页唯一化 / 无判定行标注 / 首跑输出落盘 / 退出码按终局（第十四轮）
 - 19:38 ﻿docs: 第十四轮收口——两处批内偶发定性 + 模块库目视走仓库自带视觉通道
 - 20:26 ﻿test: 真机验收 B 组收口——18 项 CDP 验证 + 视觉通道目视（第十五轮）
+- 23:59 mspm0 编译判读缺口——SysConfig 冲突不再被报成「0 错 0 警」（工单 real-acceptance/02）
 
 ## 2026-09-09
 - 12:09 整理：CONTEXT 来源标注计数复测更正 + .gitignore 收口 DSH 运行产物
