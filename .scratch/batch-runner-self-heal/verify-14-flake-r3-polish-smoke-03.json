@@ -1,0 +1,57 @@
+{
+  "script": "code-editor-vscode-polish/smoke-03.mjs",
+  "round": 3,
+  "attempt": 1,
+  "ts": 1789038021261,
+  "verdict": "flake",
+  "exit": 1,
+  "timedOut": false,
+  "hung": false,
+  "reasons": [
+    "退出码 1"
+  ],
+  "tail": "PASS 4 / FAIL 4 | FAILED",
+  "forensics": {
+    "eval_1plus1": 2,
+    "target": "C1BB7907",
+    "unresponsive": null
+  },
+  "postMortem": null,
+  "digest": {
+    "total": 9,
+    "kept": [
+      {
+        "dtMs": 26346,
+        "method": "Page.frameStartedNavigating"
+      },
+      {
+        "dtMs": 26347,
+        "method": "Page.frameNavigated"
+      },
+      {
+        "dtMs": 26347,
+        "method": "Page.domContentEventFired"
+      },
+      {
+        "dtMs": 26347,
+        "method": "Page.loadEventFired"
+      },
+      {
+        "dtMs": 26348,
+        "method": "Page.frameStoppedLoading"
+      }
+    ],
+    "counts": {
+      "navigation": 5,
+      "other": 1,
+      "contextNoise": 3
+    },
+    "folded": [
+      "上下文噪声 ×3"
+    ],
+    "unknown": [
+      "Page.frameStartedLoading ×1"
+    ],
+    "summary": "+26346ms Page.frameStartedNavigating → +26347ms Page.frameNavigated → +26347ms Page.domContentEventFired → +26347ms Page.loadEventFired → +26348ms Page.frameStoppedLoading"
+  }
+}

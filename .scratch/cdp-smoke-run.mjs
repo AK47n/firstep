@@ -189,12 +189,20 @@ function spawnOnce(script) {
   const out = (r.stdout || "") + (r.stderr || "");
   return {
     ms, exit: r.status, out, t0,
+    stdout: r.stdout || "", stderr: r.stderr || "",
     tail: (r.stdout || "").trim().split("\n").slice(-2).join(" | "),
     stdioTail: { stderr: (r.stderr || "").trim().split("\n").slice(-12).join("\n       "),
                  stdout: (r.stdout || "").trim().split("\n").slice(-6).join("\n       ") },
     timedOut: !!(r.error && r.error.code === "ETIMEDOUT"),
   };
 }
+
+// tailText：取文本末尾 n 行（第十四轮补：非绿支次要能自己说清「哪几条断言红了」，
+// 此前落盘只有 tail 两行，而 tail 往往来自复跑那次，真现场反而丢了）。
+const tailText = (s, n) => {
+  const lines = String(s || "").replace(/\r/g, "").trimEnd().split("\n");
+  return lines.slice(-n).join("\n");
+};
 
 // 现场判定：命令还回不回来（决定「挂死」与「只是断言红」）
 async function forensic() {
@@ -228,6 +236,7 @@ async function attemptOnce(script, t0Outer) {
     pageUnresponsive: !!(forensics && forensics.unresponsive),
     tail: raw.tail, reasons: cls.reasons, pass: cls.pass, hung: cls.hung,
     events: seen, forensics, stdioTail: raw.stdioTail, t0: raw.t0 || t0Outer, postMortem: pm,
+    stdoutTail: tailText(raw.stdout, 80), stderrTail: tailText(raw.stderr, 40),
   };
   return rec;
 }
@@ -239,6 +248,7 @@ function persistDiag(rec) {
     script: rec.script, round: rec.round, attempt: rec.attempt, ts: stamp,
     verdict: rec.verdict, exit: rec.exit, timedOut: rec.timedOut, hung: rec.hung,
     reasons: rec.reasons, tail: rec.tail, forensics: rec.forensics, postMortem: rec.postMortem || null, digest,
+    stdoutTail: rec.stdoutTail || "", stderrTail: rec.stderrTail || "",
   };
   const base = diagFileName(rec.script, rec.round, { stamp });
   writeFileSync(join(OUT, base), JSON.stringify(payload, null, 2), "utf8");
@@ -308,10 +318,12 @@ for (let round = 1; round <= ROUNDS; round++) {
     console.log(`r${round} ${mark.padEnd(4)} ${name.padEnd(52)} exit=${String(first.exit).padStart(4)} ${String(first.attemptMs).padStart(6)}ms${retryNote} | ${last.tail}`);
     if (verdict.verdict !== "pass") {
       console.log(`      判定：${verdict.verdict}${verdict.flake ? "（首红复绿 = 偶发，不计失败）" : ""}；信号：${first.reasons.join("；") || "（无）"}${retryRec ? ` → 复跑信号：${retryRec.reasons.join("；") || "（无）"}` : ""}`);
-      if (last.stdioTail?.stderr) console.log(`      stderr: ${last.stdioTail.stderr}`);
-      if (last.stdioTail?.stdout) console.log(`      stdout: ${last.stdioTail.stdout}`);
+      // 现场取**首跑**（红的那次）：复跑多半是绿的，拿它的输出会把真现场盖掉（第十四轮修正）。
+      const showTail = first.pass ? last : first;
+      if (showTail.stdioTail?.stderr) console.log(`      stderr（首跑）: ${showTail.stdioTail.stderr}`);
+      if (showTail.stdioTail?.stdout) console.log(`      stdout（首跑）: ${showTail.stdioTail.stdout}`);
       if (diagNote) console.log(`      事件序列：[${diagNote.digest.kept.length} 关键事件 / ${diagNote.digest.total} 总事件] ${diagNote.digest.summary}`);
-      if (diagFiles.length) console.log(`      已落盘：${diagFiles.map((f) => `.scratch/cdp-smoke-runs/${f}`).join(" , ")}`);
+      if (diagFiles.length) console.log(`      已落盘（含该支次完整输出尾 80 行）：${diagFiles.map((f) => `.scratch/cdp-smoke-runs/${f}`).join(" , ")}`);
       if (first.forensics) console.log(`      现场：${JSON.stringify(first.forensics)}`);
     }
     if (verdict.verdict === "hang") {
@@ -339,12 +351,18 @@ if (watcher) watcher.close();
 
 console.log(`\n---- 汇总 ----`);
 console.log(`PASS ${passes} / FAIL ${fails} / 挂死 ${hangs}｜偶发 ${flakes}（共 ${results.length} 支次，${NO_REBUILD ? "未重建标签页（对照）" : "每支前重建标签页"}，--retry=${RETRY}${NO_DIAG ? "，--no-diag" : ""}）`);
+// 退出码按**终局判定**算（第十四轮修正）：上面的 FAIL/挂死 计的是「首跑」，
+// 而首跑红、复跑绿 = 偶发，按第十三轮口径「不计失败」——此前退出码仍取 fails，
+// 于是「只有偶发」也会 exit 1，与记录里的口径自相矛盾。真失败 = verdict=fail/hang。
+const realFails = results.filter((r) => r.verdict === "fail").length;
+const realHangs = results.filter((r) => r.verdict === "hang").length;
+console.log(`判定口径：FAIL/挂死 计首跑；真失败（复跑仍红）${realFails} / 真挂死 ${realHangs} ⇒ 退出码 ${realFails || realHangs ? 1 : 0}`);
 if (flakeList.length) {
   console.log(`偶发支清单（首红复绿，不计失败）：`);
   for (const f of flakeList) console.log(`  - ${f}`);
 }
 writeFileSync(join(OUT, `run-${Date.now()}.json`), JSON.stringify({
   port: PORT, batch: BATCH || "(scripts)", noRebuild: NO_REBUILD, retry: RETRY, noDiag: NO_DIAG,
-  summary: { passes, fails, hangs, flakes }, flakeList, results,
+  summary: { passes, fails, hangs, flakes, realFails, realHangs }, flakeList, results,
 }, null, 2), "utf8");
-process.exit(hangs || fails ? 1 : 0);
+process.exit(realFails || realHangs ? 1 : 0);
