@@ -181,7 +181,32 @@ check("5a 保存后为 A", await label() === DIR_A);
 await openDir(DIR_B);
 await waitFor(`document.getElementById('code-dir-label').textContent === ${JSON.stringify(DIR_B)}
   && !!document.querySelector('#code-tree [data-code-file="other.c"]')`);
-await openFile("other.c");
+const reopened = await openFile("other.c");
+// 第十轮·决定性取证：这一支在批内偶发红（6 轮里 2 次，**总是卡在这里**），
+// 且落盘/切目录全好（5-pre5 绿、磁盘已 777）——即「点击丢失」而非保存问题。
+// 失败时把**树的实况 + 端点实况 + 活动标签**一起打出来（判定三种可能：
+// ① 树停在旧目录清单；② 树是 B 但点击丢失；③ 端点本身没回 other.c）。
+if (!reopened) {
+  const s = await Eval(`(async () => {
+    const box = document.getElementById('code-tree');
+    const api = await fetch('/api/code/open', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dir: ${JSON.stringify(DIR_B)} }) }).then((r) => r.json()).catch((e) => ({ err: String(e) }));
+    const ed = await import('/js/ui/codeeditor.js');
+    return {
+      label: document.getElementById('code-dir-label').textContent,
+      treeText: box.textContent.trim().slice(0, 60),
+      treeFiles: [...box.querySelectorAll('[data-code-file]')].map((b) => b.dataset.codeFile),
+      activeTab: (ed.getActiveTab() || {}).path || null,
+      openTabs: ed.openTabPaths(),
+      modal: !!document.querySelector('.code-unsaved-modal'),
+      conflict: !!document.querySelector('.code-conflict-overlay'),
+      toasts: [...document.querySelectorAll('.toast')].map((x) => x.textContent),
+      apiFiles: (api.files || []).map((f) => f.path), apiErr: api.err || null,
+    };
+  })()`);
+  console.log("   现场（重开 B 失败）：" + JSON.stringify(s, null, 1));
+}
 await waitFor(`document.querySelector('#code-viewer .code-ta')?.value === "int b = 777;\\n"`);
 check("5b B 磁盘内容已含修改", await (async () => {
   const v = await taValue();
