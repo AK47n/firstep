@@ -420,6 +420,20 @@ try {
   const d06a = await Eval(`(async () => {
     await window.__probe.reload();
     await new Promise((r) => setTimeout(r, 250));
+    // 弹窗等待（第十轮修）：打开删除确认前先 \`await apiGet(pdfRefsUrl(rel_path))\`
+    // （ui/pdf.js openPdfTrashConfirm）——本机 webapp 实测该请求 ≈500ms
+    // （/api/pdfs 500ms 量级，见 .scratch/pdf-library-ui/diag-refs-timing.mjs），
+    // 弹窗首现 ≈518ms（diag-trash-modal-flake.mjs）。旧写法 \`sleep(400)\` 后直接读
+    // overlay → 确定性 null（本批复跑两轮都红）。改为**轮询等到场**（最长 5s），
+    // 与脚本其它处 waitFor 姿势一致。
+    const waitOverlay = async (ms = 5000) => {
+      for (let i = 0; i < ms / 50; i++) {
+        const o = document.querySelector('.ref-files-overlay');
+        if (o) return o;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      return null;
+    };
     const pairDup = () => [...document.querySelectorAll('#pdf-rows tr')]
       .filter((tr) => tr.querySelector('[data-pdf-trash="${dupRel1}"]')
         || tr.querySelector('[data-pdf-trash="${dupRel2}"]'))
@@ -429,8 +443,8 @@ try {
       return { found: false, before };
     }
     document.querySelector('#pdf-rows [data-pdf-trash="${dupRel1}"]').click();
-    await new Promise((r) => setTimeout(r, 400));
-    const ov = document.querySelector('.ref-files-overlay');
+    const ov = await waitOverlay();
+    if (!ov) return { found: true, before, overlayMissing: true };   // 显式失败（不再抛 null 崩脚本）
     const out = {
       found: true, before, text: ov.textContent,
       hasModal: !!ov.querySelector('.confirm-modal'),
@@ -443,7 +457,7 @@ try {
     out.cancelled = document.querySelectorAll('.ref-files-overlay').length === 0;
     out.stillHas1 = !!document.querySelector('#pdf-rows [data-pdf-trash="${dupRel1}"]');
     document.querySelector('#pdf-rows [data-pdf-trash="${dupRel1}"]').click();
-    await new Promise((r) => setTimeout(r, 400));
+    await waitOverlay();                                            // 同上：等弹窗到场再点确认
     document.querySelector('.ref-files-overlay [data-confirm-ok]').click();
     for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 200));
@@ -482,19 +496,43 @@ try {
   mkdirSync(join(MATERIALS, smokeBatch, "zz-smoke-dup-3"), { recursive: true });
   writeFileSync(dupAbs[2], dupBytes);
   const d06b = await Eval(`(async () => {
+    // 弹窗等待与 d06a 同口径：详情弹窗 / 确认弹窗都在一次慢请求之后才出现
+    // （本机 webapp 端点 ≈500ms 量级），固定 sleep 会抢跑 → 轮询等到场。
+    const waitOverlay = async (ms = 5000) => {
+      for (let i = 0; i < ms / 50; i++) {
+        const o = document.querySelector('.ref-files-overlay');
+        if (o) return o;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      return null;
+    };
+    const waitConfirm = async (ms = 5000) => {
+      for (let i = 0; i < ms / 50; i++) {
+        const o = [...document.querySelectorAll('.ref-files-overlay')]
+          .find((x) => x.querySelector('[data-confirm-ok]'));
+        if (o) return o;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      return null;
+    };
     await window.__probe.reload();
     await new Promise((r) => setTimeout(r, 250));
     document.querySelector('#pdf-rows [data-pdf-detail="${dupRel2}"]').click();
-    await new Promise((r) => setTimeout(r, 600));
-    const det = document.querySelector('.ref-files-overlay');
-    const groupBtn = det.querySelector('[data-pdf-delete-group]');
+    const det = await waitOverlay();
+    if (!det) return { found: false, overlayMissing: true };
+    const groupBtn = await (async () => {
+      for (let i = 0; i < 100; i++) {
+        const b = det.querySelector('[data-pdf-delete-group]');
+        if (b) return b;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      return null;
+    })();
     if (!groupBtn) return { found: false };
     const out = { found: true, groupText: groupBtn.textContent.trim() };
     groupBtn.click();
-    await new Promise((r) => setTimeout(r, 400));
-    const ov = [...document.querySelectorAll('.ref-files-overlay')]
-      .find((o) => o.querySelector('[data-confirm-ok]'));
-    if (!ov) return { found: false };
+    const ov = await waitConfirm();
+    if (!ov) return { found: false, overlayMissing: true };
     out.overlayCount = document.querySelectorAll('.ref-files-overlay').length;
     out.title = ov.querySelector('.ref-files-head strong').textContent;
     out.members = ov.querySelectorAll('.pdf-trash-members li').length;

@@ -192,3 +192,36 @@ test("smoke-08「窗口内滚动零 DOM」断言不写死位移（窗口边界�
   assert.ok(smoke08.includes("codeWindowRange"), "smoke-08 未用纯件现算窗口边界");
   assert.ok(!smoke08.includes("b.scrollTop += 5"), "smoke-08 又写死了 +5px 位移");
 });
+
+// ---------------------------------------------------------------------------
+// 工单 code-editor-refine/01 场景 5 偶发定性（2026-09-09 第十轮）
+// ---------------------------------------------------------------------------
+
+test("loadCodeDir：晚到的旧目录响应不覆盖新目录清单（codeDirSeq 守卫）", () => {
+  // 缺陷（第十轮 CDP 取证：diag-save-switch-flake.mjs 10 次实测 1 次，
+  // 现场 label=b 而 treeFiles=["main.c"]）：loadCodeDir 是 async，两次调用交叠时
+  // 后发起的通常先返回，而**先发起的晚到响应**经 probeDiskBaseline 无条件写回
+  // 模块级 `codeFiles` → 树被旧目录清单覆盖，且旧清单里没有新目录的文件 →
+  // 用户点不到目标文件（表现为「点了没反应」/「无活动标签」）。
+  // 本机 webapp 单端点 ≈500ms（.scratch/pdf-library-ui/diag-refs-timing.mjs），
+  // 窗口足够宽。修法 = 照 openEditorFile 的 openSeq 先例加目录加载序号。
+  const view = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/codeview.js", import.meta.url), "utf8");
+  const at = view.indexOf("async function loadCodeDir(");
+  assert.ok(at > 0, "找不到 loadCodeDir");
+  const nextFn = view.indexOf("\nasync function ", at + 10);
+  const raw = view.slice(at, nextFn > at ? nextFn : at + 4000);
+  assert.ok(raw.length > 800, "loadCodeDir 函数体提取异常（函数结构变化）");
+  const code = raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.ok(code.includes("const req = ++codeDirSeq;"), "loadCodeDir 未登记目录加载序号");
+  assert.ok(code.includes("const stale = () => req !== codeDirSeq;"),
+    "loadCodeDir 未判定晚到响应");
+  // 三处出口都要守卫：渲染前、错误态、打开指定文件由 stale 早退统一覆盖
+  const staleChecks = code.match(/if \(stale\(\)\) return;/g) || [];
+  assert.ok(staleChecks.length >= 2,
+    `loadCodeDir 的晚到早退点不足（渲染前 + catch 各一处）：实测 ${staleChecks.length}`);
+  assert.ok(/const diff = await probeDiskBaseline\(codeDir\);\s*\n\s*if \(stale\(\)\) return;/.test(code),
+    "probeDiskBaseline 之后没有 stale 早退：晚到响应仍会渲染旧目录清单");
+  // 模块级序号必须存在（声明在模块作用域，不在函数内）
+  assert.ok(/^let codeDirSeq = 0;$/m.test(view), "codeview.js 未声明模块级 codeDirSeq");
+});

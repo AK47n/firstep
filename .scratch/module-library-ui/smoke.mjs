@@ -83,6 +83,24 @@ const t01 = await Eval(`(() => {
     hasEditMod: !!document.querySelector('#lib-rows [data-edit-mod]'),
     hasInfo: !!document.querySelector('#lib-rows [data-info]'),
     hasBadge: !!badge,
+    // 徽章配色完整性（第十轮目视验收修）：裸 badge（无颜色变体）只有形状没有底色，
+    // 夹在彩色平台胶囊之间像「没套样式的裸文字」。两条：① 每枚 badge 都带变体类；
+    // ② 「内嵌母版」的变体必须真给出底色。
+    badgeCls: [...document.querySelectorAll('#lib-rows .badge')].map((b) => b.className),
+    embedBadgeBg: (() => {
+      const b = [...document.querySelectorAll('#lib-rows .badge')]
+        .find((x) => x.textContent.trim() === '内嵌母版');
+      return b ? getComputedStyle(b).backgroundColor : null;
+    })(),
+    embedBadgeCls: (() => {
+      const b = [...document.querySelectorAll('#lib-rows .badge')]
+        .find((x) => x.textContent.trim() === '内嵌母版');
+      return b ? b.className : null;
+    })(),
+    // 简介列截断判据（第十轮补）：DOM 文本 = 纯件同源截断（26 字符 + …），
+    // 且与 title 全文不同（截断发生了）——旧断言只查 title 非空，截断本身没被验。
+    descText: desc ? desc.textContent : null,
+    descTitleText: desc ? desc.title : null,
     rowBg1: trs.length ? getComputedStyle(trs[0]).backgroundColor : null,
     rowBg2: trs.length > 1 ? getComputedStyle(trs[1]).backgroundColor : null,
   };
@@ -91,10 +109,43 @@ check("表格带 lib-table 类", t01.hasLibTable);
 check("slug 列等宽字体", t01.slugIsMono);
 check("简介列全文 tooltip（截断可悬停）", t01.descTitle);
 check("简介列 ellipsis 截断", t01.descEllipsis);
+// 简介列截断判据（第十轮补）：旧断言只查 title 非空 —— 「截断」本身没被验。
+// 实现现状（读 fx/module.js moduleRowHTML 第 503 行 + index.html `.desc-cell` 规则）：
+// 单元格渲染**全文**（DOM 文本 = 端点 description，逐字节相等），截断由 CSS
+// `overflow:hidden + white-space:nowrap + text-overflow:ellipsis` 完成
+// —— 故机器判据 = 全文进 DOM/进 title + 三项计算样式齐 + 文本**确实溢出**
+// （scrollWidth 明显大于 clientWidth，否则「截断」不可见，只是这一列恰好短）。
+const descExpect = await Eval(`(async () => {
+  const mods = window.__probe.mods;
+  const first = [...document.querySelectorAll('#lib-rows tr')][0];
+  const slug = first.querySelector('td.slug').textContent;
+  const m = mods.find((x) => x.slug === slug);
+  const d = first.querySelector('td.desc-cell');
+  const cs = getComputedStyle(d);
+  return { slug, apiDesc: String(m.description || ''), domText: d.textContent, domTitle: d.title,
+    overflow: cs.overflow, whiteSpace: cs.whiteSpace, textOverflow: cs.textOverflow,
+    scrollW: d.scrollWidth, clientW: d.clientWidth };
+})()`);
+check("简介列 DOM 文本/title = 端点全文（截断由 CSS 完成，非文本裁剪）",
+  descExpect.domText === descExpect.apiDesc && descExpect.domTitle === descExpect.apiDesc
+    && descExpect.apiDesc.length > 0,
+  `slug=${descExpect.slug} 全文 ${descExpect.apiDesc.length} 字`);
+check("简介列截断三件套齐 + 文本确实溢出（ellipsis 可见）",
+  descExpect.overflow === "hidden" && descExpect.whiteSpace === "nowrap"
+    && descExpect.textOverflow === "ellipsis" && descExpect.scrollW > descExpect.clientW * 2,
+  `overflow=${descExpect.overflow} ws=${descExpect.whiteSpace} ellipsis=${descExpect.textOverflow} `
+  + `scroll=${descExpect.scrollW} client=${descExpect.clientW}`);
 check("表头有底纹背景", !!t01.thBg && t01.thBg !== "rgba(0, 0, 0, 0)", "bg=" + t01.thBg);
 check("操作列四入口齐备（详情 / 改简介 / 编辑 / danger 删除）",
   t01.hasInfo && t01.hasEditBtn && t01.hasEditMod && t01.hasDangerDelete);
 check("平台徽章在位（行内 badge）", t01.hasBadge);
+check("每枚徽章都带颜色变体类（无裸 .badge = 无底色裸文字）",
+  t01.badgeCls.length > 0 && t01.badgeCls.every((c) => /(^|\s)(plat|neutral)(\s|$)/.test(c)),
+  `共 ${t01.badgeCls.length} 枚，异常=${JSON.stringify(t01.badgeCls.filter((c) => !/(^|\s)(plat|neutral)(\s|$)/.test(c)))}`);
+check("「内嵌母版」徽章有中性底色（badge neutral 变体生效）",
+  /(^|\s)neutral(\s|$)/.test(t01.embedBadgeCls || "")
+    && !!t01.embedBadgeBg && t01.embedBadgeBg !== "rgba(0, 0, 0, 0)",
+  `cls=${t01.embedBadgeCls} bg=${t01.embedBadgeBg}`);
 check("无斑马纹（相邻行背景一致且透明）",
   t01.rowBg1 === t01.rowBg2 && t01.rowBg1 === "rgba(0, 0, 0, 0)", `${t01.rowBg1} vs ${t01.rowBg2}`);
 
@@ -678,18 +729,32 @@ check("跨表切换后模块库回到全量（状态无污染）", crossTable.ba
   `${crossTable.backRows} vs ${modTotal}`);
 
 // ================= 截图存档（工单 01 目视验收产物） =================
+// 取景（第十轮目视验收修）：此前直接 `#tab-library.scrollIntoView({block:'start'})`
+// 截图 —— 页面 scrollTop 落在 68，而 header 是 `position:sticky; top:0`（高 48px），
+// 于是标题 h2 被吸顶栏盖掉一半，第一眼像渲染故障。改为**滚回页顶**再截，
+// 不隐藏任何 chrome（保持截图 = 用户真实所见）。
+const shotPath = (name) => join(ROOT, ".scratch", "module-library-ui", name);
+const shoot = async (name) => {
+  await Eval(`window.scrollTo(0, 0)`);
+  await sleep(400);
+  const shot = await c.cdp("Page.captureScreenshot", { format: "png" });
+  mkdirSync(join(ROOT, ".scratch", "module-library-ui"), { recursive: true });
+  writeFileSync(shotPath(name), Buffer.from(shot.result.data, "base64"));
+  console.log(name + " 已存档");
+};
 await Eval(`document.getElementById('lib-filter-clear').click()`);
 await c.waitFor(`document.querySelectorAll('#lib-rows tr').length === ${modTotal}`, 8000);
-await Eval(`document.getElementById('tab-library').scrollIntoView({ block: 'start' })`);
-await sleep(400);
-const shot = await c.cdp("Page.captureScreenshot", { format: "png" });
-mkdirSync(join(ROOT, ".scratch", "module-library-ui"), { recursive: true });
-writeFileSync(join(ROOT, ".scratch", "module-library-ui", "01-table-shot.png"),
-  Buffer.from(shot.result.data, "base64"));
-console.log("01-table-shot.png 已存档");
+await shoot("01-table-shot.png");
 
 console.log("---- 冒烟总览 ----");
 console.log("PASS " + passed + " / FAIL " + failed);
 console.log(failed === 0 ? "ALL PASS" : "FAILED");
+
+// 脏标签退出保护（beforeunload）会拦 reload —— 先重载出干净页再收尾截图
+await c.cdp("Page.navigate", { url: PAGE_URL });
+await c.waitFor(`document.readyState === 'complete' && !!document.getElementById('tab-library')`, 20000);
+await Eval(`(() => { const b = [...document.querySelectorAll('nav button')].find((x) => x.dataset.tab === 'library'); if (b) b.click(); return true; })()`);
+await c.waitFor(`document.querySelectorAll('#lib-rows tr').length > 1`, 20000);
+await shoot("01-table-shot-final.png");
 c.close();
 process.exit(failed === 0 ? 0 : 1);

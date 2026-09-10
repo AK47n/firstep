@@ -75,6 +75,9 @@ import {
 // 模块态：当前目录 / 扁平清单（中栏状态在 codeeditor.js）
 let codeDir = "";
 let codeFiles = [];
+// codeDirSeq：目录加载的「最新请求」序号（照 codeeditor.js openSeq 先例）——
+// 详见 loadCodeDir 内的竞态注释。0 = 从未发起。
+let codeDirSeq = 0;
 // 树徽章（code-ide-flow/02）：磁盘基线对比结果 {path → "new"|"modified"}，
 // renderCodeTree 交 buildCodeTree/codeTreeHTML 渲染「新/变」徽章。
 let codeTreeChanges = {};
@@ -399,6 +402,18 @@ async function loadCodeDir(dir, filePath) {
   // 返回 false，不切换目录（编辑保留）。网络请求放确认之后——避免白拉树。
   const switched = await setCodeDir(dir);
   if (!switched) return;
+  // 目录加载竞态（第十轮 CDP 取证定位）：两次 loadCodeDir 交叠时（快速连点两个
+  // 目录 / 外部桥连发），后发起的请求通常先返回，而**先发起的晚到响应**会经
+  // probeDiskBaseline 无条件写回 `codeFiles`（模块级单值）→ 树被旧目录的清单
+  // 覆盖：标签显示新目录、树里还是旧目录的文件（取证现场：label=b 而
+  // treeFiles=["main.c"]），且旧清单里没有新目录的文件 → 用户点不到目标文件
+  // （表现为「点了没反应」）。本机 webapp 单端点 ≈500ms（见
+  // .scratch/pdf-library-ui/diag-refs-timing.mjs），窗口足够宽；实测 1/10 复现。
+  // 修法照 openEditorFile 的 openSeq 先例：序号守卫——只有**最新**一次加载
+  // 的响应可以提交状态（清单 / 徽章 / 渲染 / 错误 / 打开指定文件）；
+  // 晚到响应直接丢弃（用户意图已变，旧目录的任何状态都不该落回界面）。
+  const req = ++codeDirSeq;
+  const stale = () => req !== codeDirSeq;
   codeDir = dir;
   $("code-dir-label").textContent = dir;
   setCodeAiDir(dir);  // AI 对话面板（code-ide-ai/03）：跟随目录显示 + 拉历史
@@ -410,6 +425,7 @@ async function loadCodeDir(dir, filePath) {
     // 徽章 / 树徽章）。基线**不**随打开推进——diff 是待审视变更集，用户
     // 点「清空并确认已看」（工单 03）才整体确认（spec 用户故事 2）。
     const diff = await probeDiskBaseline(codeDir);
+    if (stale()) return;   // 期间已发起更新的目录加载：本次响应作废（含清单写入的渲染）
     renderOutline();
     renderSearchResults([]);
     $("code-find-input").value = "";
@@ -424,6 +440,7 @@ async function loadCodeDir(dir, filePath) {
     }
     if (filePath) await openEditorFile(filePath);   // 外部桥指定文件：目录就位后直接打开（工单 code-editor-utilize/01）
   } catch (e) {
+    if (stale()) return;   // 旧目录的失败不该把新目录的树写成错误态
     codeFiles = [];
     $("code-tree").innerHTML = '<div class="error">加载失败：' + esc(e.message) + "</div>";
     toastError(e, "打开目录失败");

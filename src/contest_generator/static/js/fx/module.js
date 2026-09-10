@@ -17,7 +17,7 @@ export function moduleBadges(m) {
     // 母版内嵌标注（2024H 复盘）：平台条目 files 空且无副产物 = 实现内嵌母版
     // （如 stm32 的 delay/led），不复制任何文件——消除"自动带入 = 文件重复"误解
     if (!(entry.files || []).length && !m.python_artifact) {
-      badges.push('<span class="badge" title="实现内嵌母版（随母版进工程），不复制文件、不重复">内嵌母版</span>');
+      badges.push('<span class="badge neutral" title="实现内嵌母版（随母版进工程），不复制文件、不重复">内嵌母版</span>');
     }
   }
   return badges.join("");
