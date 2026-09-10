@@ -3,6 +3,7 @@
 // 全部是纯函数，不需要 Chrome：运行 `node --test tests/js/*.test.mjs`。
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   classifyAttempt,
   runVerdict,
@@ -10,7 +11,9 @@ import {
   digestEvents,
   diagFileName,
   renderDiagText,
+  planRebuildTargets,
   TRANSPORT_SIGNAL_RE,
+  VERDICT_LINE_RE,
 } from "../../.scratch/cdp-harness.mjs";
 
 test("classifyAttempt：exit=0 且无信号 = 绿", () => {
@@ -176,4 +179,88 @@ test("renderDiagText：非绿现场文本含支次、判定、关键事件与折
   assert.ok(txt.includes("折叠计数：上下文噪声 ×2 / 网络噪声 ×1"));
   assert.ok(txt.includes("一行摘要："));
   assert.ok(txt.endsWith("\n"));
+});
+
+// ---------------------------------------------------------------------------
+// 第十四轮补：两处尾巴收口时新增/修正的三处工具口径
+//   ① 重建标签页 = 关**全部**匹配页（挑页不再依赖 /json/list 顺序、不留孤儿页）
+//   ② 「非零退出 + 无判定行」单独标注（第十一轮库 UI 偶发签名：exit=1 无 FAIL 行）
+//   ③ 非绿支次落盘自己的输出 + 批跑器退出码按终局判定（只有偶发 → 0）
+// ---------------------------------------------------------------------------
+
+test("planRebuildTargets：有匹配页 → **全部**返回（重建后候选唯一，不依赖列表顺序）", () => {
+  const list = [
+    { id: "new", type: "page", url: "http://127.0.0.1:8000/" },
+    { id: "orphan", type: "page", url: "http://127.0.0.1:8000/" },
+    { id: "other", type: "page", url: "http://127.0.0.1:9999/" },
+    { id: "worker", type: "worker", url: "http://127.0.0.1:8000/" },
+  ];
+  assert.deepEqual(planRebuildTargets(list).map((t) => t.id), ["new", "orphan"]);
+});
+
+test("planRebuildTargets：一个匹配页都没有 → 退回旧行为（只关一个任意 page，不卷进无关页）", () => {
+  const list = [
+    { id: "blank", type: "page", url: "about:blank" },
+    { id: "other", type: "page", url: "http://127.0.0.1:9999/" },
+    { id: "worker", type: "worker", url: "http://127.0.0.1:8000/" },
+  ];
+  assert.deepEqual(planRebuildTargets(list).map((t) => t.id), ["blank"]);
+  assert.deepEqual(planRebuildTargets([], ), []);
+  assert.deepEqual(planRebuildTargets(null), []);
+});
+
+test("classifyAttempt：非零退出 + 无判定行 → 标注「脚本在打印汇总前中断」（第十一轮库 UI 偶发签名）", () => {
+  const a = classifyAttempt({ exit: 1, out: "TypeError: Cannot read properties of null\n    at smoke.mjs:120:5" });
+  assert.equal(a.pass, false);
+  assert.equal(a.noVerdictLine, true);
+  assert.ok(a.reasons.some((r) => r.includes("无判定行") && r.includes("未捕获异常")));
+
+  const withLine = classifyAttempt({ exit: 1, out: "PASS 4 / FAIL 4\nFAILED" });
+  assert.equal(withLine.noVerdictLine, false);
+  assert.ok(!withLine.reasons.some((r) => r.includes("无判定行")), "有汇总行就不是中断");
+});
+
+test("VERDICT_LINE_RE：认得各脚本的汇总措辞（绿也认；用于把「中断」与「断言红」分开）", () => {
+  for (const s of [
+    "PASS 24 / FAIL 0 | ALL PASS",
+    "21 PASS / 0 FAIL",
+    "---- 冒烟总览 ----\nPASS 8 / FAIL 0\nALL PASS",
+    "SMOKE PASS",
+    "SMOKE-02 全 PASS",
+    "全部通过",
+    "11 passed, 0 failed",
+    "PASS 4 / FAIL 4\nFAILED",
+  ]) {
+    assert.ok(VERDICT_LINE_RE.test(s), s);
+  }
+  assert.ok(!VERDICT_LINE_RE.test("TypeError: x is not a function\n    at a.mjs:1:1"));
+});
+
+test("renderDiagText：落盘文本带「该支次自身输出」（首跑红的那次，而不是复跑那次）", () => {
+  const digest = digestEvents([], { t0Ms: 0 });
+  const txt = renderDiagText({
+    script: "code-editor-vscode-polish/smoke-03.mjs", round: 3, attempt: 1, ts: 1, digest,
+    attemptRecord: {
+      verdict: "flake", exit: 1, reasons: ["退出码 1"], tail: "PASS 0 / FAIL 8 | FAILED",
+      stdoutTail: "FAIL 打开 4 文件 → 4 标签（readme.md 活动）\nPASS 中键点击活动标签 → 不关闭（剩 3 标签）",
+      stderrTail: "Error: 页面未就绪",
+    },
+  });
+  assert.ok(txt.includes("## 该支次 stdout"));
+  assert.ok(txt.includes("FAIL 打开 4 文件"));
+  assert.ok(txt.includes("## 该支次 stderr"));
+  assert.ok(txt.includes("Error: 页面未就绪"));
+});
+
+test("守卫：rebuildTab 走 planRebuildTargets（关全部匹配页），批跑器退出码按终局判定", () => {
+  const harness = readFileSync(new URL("../../.scratch/cdp-harness.mjs", import.meta.url), "utf8");
+  const runner = readFileSync(new URL("../../.scratch/cdp-smoke-run.mjs", import.meta.url), "utf8");
+  const rebuild = harness.slice(harness.indexOf("export async function rebuildTab"));
+  assert.ok(rebuild.includes("planRebuildTargets(await listTargets(port), pageUrl)"), "重建走纯函数挑目标");
+  assert.ok(rebuild.includes("for (const t of targets)"), "关掉计划里的**每一个**目标");
+  assert.ok(!/const t = await pageTarget\(\{ port, pageUrl, anyPage: true \}\);\s*\n\s*if \(t\) \{/
+    .test(rebuild), "不得回退成「只关一个」");
+  assert.ok(runner.includes("realFails") && runner.includes("realHangs"), "退出码按 verdict 算");
+  assert.ok(runner.includes("process.exit(realFails || realHangs ? 1 : 0)"), "只有偶发 → exit 0");
+  assert.ok(runner.includes("stdoutTail: tailText(raw.stdout, 80)"), "非绿支次落盘自己的输出");
 });

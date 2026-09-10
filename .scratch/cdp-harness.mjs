@@ -45,17 +45,40 @@ export async function pageTarget({ port, pageUrl = DEFAULT_PAGE_URL, anyPage = f
   return anyPage ? list.find((t) => t.type === "page") || null : null;
 }
 
-// rebuildTab：关掉现有页面标签 → 新开一个（`json/new` 必须 PUT）。返回新 target 或 null。
+// planRebuildTargets：重建标签页时**要关掉哪些页**（纯函数，便于单测）。
+//
+// 口径（第十四轮修正）：**关掉全部匹配页**，不是只关一个。
+//   · 只关一个时，列表里原有的第二个匹配页**永不被关闭** —— 实测 9251 上 `1C933610`
+//     跨数十支次恒定存在（孤儿页，白占一个渲染进程）；
+//   · 更要紧的是 50+ 支脚本挑页用的是 `list.find(...)` = 列表**第一个**匹配页，而 rebuild
+//     只关第一个 —— 「脚本跑在哪个页上」于是变成**依赖 /json/list 顺序**这件事。
+//     顺序实测为「新页在前」（`.scratch/batch-runner-self-heal/probe-list-order.mjs`），
+//     所以当前恰好挑中刚重建的页；但这是**未文档化的顺序假设**，不是构造保证。
+//   全关之后，「刚重建的页」是唯一候选，挑页正确性与顺序无关。
+//   没有任何匹配页时退回旧行为（关一个任意 page）：避免把 about:blank 之类的无关页也卷进来。
+export function planRebuildTargets(list = [], pageUrl = DEFAULT_PAGE_URL) {
+  const pages = (Array.isArray(list) ? list : []).filter((t) => t && t.type === "page");
+  const matching = pages.filter((t) => String(t.url || "").startsWith(pageUrl));
+  return matching.length ? matching : pages.slice(0, 1);
+}
+
+// rebuildTab：关掉**全部匹配页** → 新开一个（`json/new` 必须 PUT）。返回新 target 或 null。
 // 这是「每支脚本前重建标签页」约定的实现；挂死现场也可用它恢复。
 export async function rebuildTab({ port, pageUrl = DEFAULT_PAGE_URL, settleMs = 1500 } = {}) {
-  const t = await pageTarget({ port, pageUrl, anyPage: true });
-  if (t) {
+  const targets = planRebuildTargets(await listTargets(port), pageUrl);
+  for (const t of targets) {
     await fetchT(`http://127.0.0.1:${port}/json/close/${t.id}`, 5000).catch(() => {});
-    await sleep(400);
   }
+  if (targets.length) await sleep(400);
   await fetchT(`http://127.0.0.1:${port}/json/new?${encodeURIComponent(pageUrl)}`, 8000, { method: "PUT" }).catch(() => {});
   await sleep(settleMs);
-  return pageTarget({ port, pageUrl, anyPage: true });
+  const fresh = pageTarget({ port, pageUrl, anyPage: true });
+  const left = (await listTargets(port)).filter((t) => t.type === "page" && String(t.url || "").startsWith(pageUrl));
+  if (left.length > 1) {
+    console.error(`[harness] 警告：重建后仍有 ${left.length} 个匹配页（挑页将不再唯一）：`
+      + left.map((t) => String(t.id).slice(0, 8)).join(", "));
+  }
+  return fresh;
 }
 
 // connect：连上 page target；每个命令带超时守卫；对话框自动应答。
@@ -263,10 +286,17 @@ export async function ensureReady({ port, pageUrl = DEFAULT_PAGE_URL, expr, time
 // （见 code-editor-refine/14）；其余几条是脚本与批跑器自己的挂死措辞。
 export const TRANSPORT_SIGNAL_RE = /TRANSPORT|CDP 无响应|页面可能已挂死|页面未就绪|CDP 不可达/;
 
+// 判定行：脚本自己打印的汇总（各脚本措辞不一，全部收录）。
+// 用途见 classifyAttempt —— 「非零退出 **且** 一条判定行都没有」= 脚本在打印汇总前就死了
+// （未捕获异常 / 传输层中断），这与「断言红」是两回事，但只看退出码区分不出来。
+// 第十一轮挂账的库 UI 偶发就是 `exit=1 无 FAIL 行` 这个签名。
+export const VERDICT_LINE_RE =
+  /ALL PASS|全部通过|全 PASS|SMOKE PASS|FAILED|PASS\s*\d+\s*\/\s*FAIL\s*\d+|\d+\s*PASS\s*\/\s*\d+\s*FAIL|\d+\s+passed/;
+
 // classifyAttempt：一次支次的判定。rec 形如
 //   { exit, timedOut, pageUnresponsive, out }        — 批跑器给的原始观测
 //   out = 子进程 stdout+stderr 合并文本（用于识别挂死/传输层信号）
-// 返回 { exitCode, timedOut, hung, pass, reasons }。
+// 返回 { exitCode, timedOut, hung, pass, reasons, noVerdictLine }。
 // 注意 exitCode 单独不足以判绿：冒烟脚本会刻意用「非 0 退出 + 无 FAIL 行」表示传输层问题，
 // 也可能出现「exit 0 但整片命令超时」的现场劣化 —— 故挂死/传输层信号优先于退出码判定。
 export function classifyAttempt(rec = {}) {
@@ -275,12 +305,14 @@ export function classifyAttempt(rec = {}) {
   const timedOut = !!rec.timedOut;
   const hangSignal = TRANSPORT_SIGNAL_RE.test(out);
   const hung = timedOut || (hangSignal && !!rec.pageUnresponsive);
+  const noVerdictLine = exitCode !== 0 && exitCode !== null && !VERDICT_LINE_RE.test(out);
   const reasons = [];
   if (timedOut) reasons.push("脚本超时被杀");
   if (hangSignal) reasons.push(`传输层/挂死信号${rec.pageUnresponsive ? "（页面确已无响应）" : "（页面仍可应答，未定性为挂死）"}`);
   if (exitCode !== 0 && exitCode !== null) reasons.push(`退出码 ${exitCode}`);
+  if (noVerdictLine) reasons.push("非零退出且无判定行（脚本在打印汇总前中断：未捕获异常/传输层）");
   if (hung) reasons.push("判定：挂死");
-  return { exitCode, timedOut, hung, pass: !hung && exitCode === 0, reasons };
+  return { exitCode, timedOut, hung, pass: !hung && exitCode === 0, reasons, noVerdictLine };
 }
 
 // runVerdict：由「首次 + 复跑」两次支次判定终局。
@@ -413,6 +445,16 @@ export function renderDiagText({ script, round, attempt, ts, digest, attemptReco
       `## 支次后反射（非实录；脚本自己换过标签页时用它兜底）`,
       pm.reattachedTo ? `追挂到 target：${pm.reattachedTo}` : (pm.reattachError ? `追挂失败：${pm.reattachError}` : "监听所在页仍存活，未追挂"),
       pm.snapshot ? `现场快照：${pm.snapshot}` : null);
+  }
+  // 第十四轮补：非绿支次的**自身输出**（此前只留 tail 两行，而 tail 常常是复跑那次的——
+  // 于是「哪几条断言红了」在落盘里看不到，得靠再复现一次）。
+  if (attemptRecord.stdoutTail) {
+    lines.push("", `## 该支次 stdout（尾 ${String(attemptRecord.stdoutTail).split("\n").length} 行）`, "```",
+      String(attemptRecord.stdoutTail), "```");
+  }
+  if (attemptRecord.stderrTail) {
+    lines.push("", `## 该支次 stderr（尾 ${String(attemptRecord.stderrTail).split("\n").length} 行）`, "```",
+      String(attemptRecord.stderrTail), "```");
   }
   return lines.filter((x) => x !== null).join("\n") + "\n";
 }
