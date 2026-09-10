@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=1d9586599122ad7fa70f3a823a93a5d8978e9acb -->
+<!-- changelog-auto: last-commit=cd7fa8fb6cff50bbaf9a9bac04c44e2dbec02e7a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -6,6 +6,7 @@
 
 ## 2026-09-10
 - 13:12 perf(code-editor): 结构性编辑回车同步耗时 78.9ms → 9.8ms（删掉 syncTail 的滚动读写）
+- 14:28 ﻿修复：目录加载竞态（切目录后树被旧目录清单覆盖）
 
 ## 2026-09-09
 - 12:09 整理：CONTEXT 来源标注计数复测更正 + .gitignore 收口 DSH 运行产物
