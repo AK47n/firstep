@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=8ba967dcbc551e0ec57bf9a8a42895d2a41c98a9 -->
+<!-- changelog-auto: last-commit=9eba546169bda0dd67fa48caa047d95e3cadefe6 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -12,6 +12,7 @@
 - 14:44 ﻿冒烟产物：第十轮最终全批复跑的截图与失败现场入库
 - 17:00 修复：目录树第二个竞态（切 tab 的 checkCodeDiskChanges 探测旧目录并覆盖新目录清单）
 - 18:14 ﻿feat: 批跑器自助复判——红即单支复跑一次 + 非绿自动落盘事件序列（第十三轮）
+- 19:38 ﻿feat: 批跑器判定与取证补口——挑页唯一化 / 无判定行标注 / 首跑输出落盘 / 退出码按终局（第十四轮）
 
 ## 2026-09-09
 - 12:09 整理：CONTEXT 来源标注计数复测更正 + .gitignore 收口 DSH 运行产物
