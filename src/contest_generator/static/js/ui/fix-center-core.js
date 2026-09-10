@@ -28,8 +28,23 @@
 import { parseSSE } from "../fx/llm.js";
 import { parseHttpError } from "../fx/errors.js";
 import { compileSummaryText, fmtSeconds } from "../fx/generate.js";
+import { isSyscfgConflict } from "../fx/code-compile.js";
 
 export const FIX_MAX_ROUNDS = 3;
+
+// 配置级冲突（工单 02，mspm0 / SysConfig 真机形态）：编译失败原因是工程外设
+// 配置冲突（引脚被两个模块同时占用），没有源码可改——不进 AI 修复轮（域层
+// 也短路不喂 LLM，前端这里提前收口：省一次请求 + 状态行给准话），直接列出
+// 冲突清单 + 指路。条目判据单源 = fx/code-compile.js isSyscfgConflict（与后端
+// fix_errors.SYSCFG_CONFLICT_KIND 逐字一致，缺省缺 kind = 源码级）。
+// 文案与后端 fix_errors.SYSCFG_CONFLICT_NOTICE 刻意同文（跨语言对偶，同
+// TRUNCATION_NOTICE 先例：前端不逐字 import 后端常量），尾句是本界面专属引导。
+export function syscfgConflictStateText(conflicts) {
+  return "SysConfig 资源冲突：本次编译的失败原因是工程外设配置冲突（引脚被两个"
+    + "模块同时占用），不是源码写错——属于配置级问题，没有源码可改，因此不进行"
+    + "AI 修复。请按上方冲突清单处理：改引脚绑定（模块实例卡里换脚 / 自动分配），"
+    + "或去掉冲突模块中的一个，然后重新「一键编译修复」。";
+}
 
 // ---- 流程状态（live 对象——壳层 re-export / check_contract 读 .resume 结构；
 // 只经本模块 mutate）----
@@ -129,6 +144,15 @@ function fixHandleEvent(type, raw, outputDir) {
   try { data = JSON.parse(raw || "null") || {}; } catch { data = {}; }
   if (type === "parse_done") {
     const degraded = !data.file_count;
+    // 配置级冲突（工单 02）：域层对纯冲突短路不调 LLM——本阶段就报冲突 + 指路，
+    // 不显示「AI 修复中」（否则是先误导再改口）。判据单源 = parse_done.conflicts
+    // 条目 kind（isSyscfgConflict）；并存源码错时既修源码错也需要用户改配置，
+    // 两条信息都给。
+    const conflicts = (data.conflicts || []).filter(isSyscfgConflict);
+    if (conflicts.length) {
+      emitAll("onState", syscfgConflictStateText(conflicts));
+      return;
+    }
     emitAll("onState", "已解析 " + (data.error_count || 0) + " 条报错"
       + (degraded ? "，未定位到可读取的源码文件（降级模式，只按报错全文修复）"
         : "，定位 " + data.file_count + " 个文件") + "，AI 修复中…");
@@ -290,6 +314,14 @@ export async function startFixCenterCore(input) {
       // 0 错 N 警 → 进告警轮（验收标准 = 0 错 0 警）
     }
     emitAll("onList", initial.parsed_errors || [], [], 0);
+    // 配置级冲突（工单 02）：没有源码可改 → 不进修复轮（不白烧一轮 LLM），
+    // 冲突行已在错误列表里，状态行给准话 + 指路即收工（判据 = 条目 kind，
+    // 单源 fx/code-compile.js isSyscfgConflict）
+    const conflicts = (initial.parsed_errors || []).filter(isSyscfgConflict);
+    if (conflicts.length) {
+      emitAll("onState", syscfgConflictStateText(conflicts));
+      return;
+    }
     await fixRounds(input, initial.error_text, initial.summary || null, null);
   } catch (e) {
     emitAll("onState", "");

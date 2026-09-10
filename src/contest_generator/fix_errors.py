@@ -1,4 +1,4 @@
-"""编译错误回填自愈域模块（工单 compile-error-fix/01，决策记录 1-10）。
+r"""编译错误回填自愈域模块（工单 compile-error-fix/01，决策记录 1-10）。
 
 闭环"生成 → 编译 → 报错 → 修复"：把 Keil / CCS 编译报错文本贴回 → 解析文件
 引用 → 从输出目录读真实文件内容（截断）→ LLM 逐条修复建议 → 直接写回工程
@@ -31,6 +31,14 @@ old_snippet 精确匹配（含缩进）优先；精确匹配失败时走行首�
 判决单源在 match_snippet（纯函数），理由文案单源在 _reason_for——写回循环
 只消费判决，改匹配规则 / 文案只动一处；改协议须同步 llm.FIX_SYSTEM_PROMPT
 约束 2（对偶测试双端断言）。
+
+**配置级判读（工单 02「mspm0 编译判读缺口」）**：SysConfig 的工程外设配置冲突
+（真机 2026H 形态 `error: DC_MOTOR(/ti/driverlib/GPIO) associatedPins[3].pin:
+Resource conflict`）没有文件没有行号、也不是 LLM 能修的（没有源码可改）——解析
+时归 kind="syscfg_conflict"（伪路径 + line=0 + 结构化明细），修复链对它**短路**
+（不调 llm.fix_compile_errors，直接给冲突清单 + 指路），并让汇总行大小写不敏感
+（gmake / SysConfig 真机汇总形态是全小写 `7 error(s), 0 warning(s)`）。判据契约
+见下文「编译报错条目类别」段；载荷条目形状单源 = parsed_error_entries。
 
 本模块依赖方向：只 import budget / entry_store / events（叶子契约）与标准库，
 是叶子模块——llm.py 反向依赖本模块（FixSuggestion 模型），禁止本模块 import
@@ -83,6 +91,69 @@ TRUNCATION_NOTICE = "按所见内容判断，不要脑补缺失部分"
 # ~/.contest_generator）下的 fix-backups/，在输出目录之外
 FIX_BACKUPS_DIRNAME = "fix-backups"
 
+# ---------------------------------------------------------------------------
+# 编译报错条目类别（工单 02「mspm0 编译判读缺口」）：源码级 vs 配置级
+# ---------------------------------------------------------------------------
+#
+# 源码级（kind="source"，缺省）：带「文件:行号」定位，可读文件内容、可由 LLM
+# 给出 snippet 修复——既有 UV4 / CCS / tiarmclang 形态全归此类。
+#
+# 配置级（kind="syscfg_conflict"）：SysConfig 的工程外设配置冲突（真机 2026H
+# 形态「error: DC_MOTOR(/ti/driverlib/GPIO) associatedPins[3].pin: Resource
+# conflict」）——没有文件没有行号（问题在 .syscfg 的外设绑定），**不是 LLM 能
+# 修的**（没有源码可改）。修复链识别为此类后不进 LLM 修复、不做「未定位到可
+# 修复文件」的盲轮，直接逐条列出冲突 + 给用户指路（改引脚绑定 / 去冲突模块）。
+SOURCE_ERROR_KIND = "source"
+SYSCFG_CONFLICT_KIND = "syscfg_conflict"
+
+# 配置级冲突条目的伪路径（工单 02）：前端错误列表据此显示「配置冲突（来自
+# mspm0.syscfg）」，且**不会被当成可打开 / 可跳转的源码文件**——line=0 让行内
+# 跳转天然跳过；修复链也不会把它当源码候选（后缀不在 WRITABLE_EXTENSIONS 白
+# 名单内，且工程内不存在该相对路径的文件，双重不入选）。
+SYSCFG_CONFLICT_PATH = "mspm0.syscfg"
+
+# 配置级冲突的人话指路（工单 02 修复方向③）：**载荷文案单源**——修复轮 done 的
+# notice 字段与本仓 CLI 验收脚本（generate_check.py）打印的指引都用它，改文案只
+# 改这里。前端不方便逐字同源（core 模块不 import 静态常量），
+# ui/fix-center-core.js 的 syscfgConflictStateText 与之**刻意同文**（同一句指路 +
+# 界面专属尾句「重新『一键编译修复』」），改动须两侧同步——与 TRUNCATION_NOTICE
+# 同款对偶（本仓既有先例：跨语言刻意同文 + 双端断言）。
+SYSCFG_CONFLICT_NOTICE = (
+    "SysConfig 资源冲突：本次编译的失败原因是工程外设配置冲突（引脚被两个模块"
+    "同时占用），不是源码写错——属于配置级问题，没有源码可改，因此不进行"
+    "AI 修复。请按下方冲突清单处理：改引脚绑定（模块实例卡里换脚 / 自动分配），"
+    "或去掉冲突模块中的一个。"
+)
+
+# SysConfig 冲突段识别（工单 02 修复方向②）。两条形态（真机逐字）：
+#   行级：`error: DC_MOTOR(/ti/driverlib/GPIO) associatedPins[3].pin: Resource conflict`
+#   续行：`\tPA7/49 is currently in use by SERVO_PWM(/ti/driverlib/PWM) peripheral.ccp0Pin`
+# 行级锚定行首（缩进容忍）——tiarmclang / clang 的 `path:line:col: error:` 形态
+# 行首是路径，不会误命中；`(/(?P<periph>...))` 要求外设名以 / 开头（SysConfig
+# 的 /ti/driverlib/... 形态），排除源码级 `foo.c(12): error #20:` 的括号数字。
+_SYSCFG_CONFLICT_RE = re.compile(
+    r"^\s*error:\s*(?P<name>[\w.-]+)\((?P<periph>/[^)]+)\)\s*"
+    r"(?P<field>[\w.\[\]]+):\s*(?P<reason>Resource conflict)\s*$",
+    re.IGNORECASE,
+)
+# 续行（被占用方）：`PA7/49 is currently in use by SERVO_PWM(/ti/driverlib/PWM) ...`
+# ——引脚名 / 占用方模块名 / 占用方字段（peripheral.ccp0Pin / associatedPins[0].pin）
+_SYSCFG_OCCUPY_RE = re.compile(
+    r"^\s*(?P<pin>P[A-Z]\d+)(?:/\d+)?\s+is currently in use by\s+"
+    r"(?P<by>[\w.-]+)\((?P<by_periph>/[^)]+)\)\s*(?P<by_field>[\w.\[\]]+)",
+    re.IGNORECASE,
+)
+
+# 冲突条目 message 用的引脚角色中文名（配置级冲突不是源码报错，人话优先；
+# 未登记形态原样带出字段名，不猜语义）
+_SYSCFG_FIELD_LABELS = {
+    "pin": "引脚",
+    "rxpin": "接收脚",
+    "txpin": "发送脚",
+    "ccp0pin": "PWM 通道 0 脚",
+    "ccp1pin": "PWM 通道 1 脚",
+}
+
 
 class FixError(Exception):
     """编译错误修复的业务失败（登记 errors.py → 400 中文）。"""
@@ -90,11 +161,28 @@ class FixError(Exception):
 
 @dataclass(frozen=True)
 class CompileError:
-    """解析出的一条编译报错：path 为空串 = 未解析到文件引用（降级模式）。"""
+    """解析出的一条编译报错。
+
+    path 为空串 = 未解析到文件引用（降级模式）；配置级冲突（SysConfig Resource
+    conflict）path = SYSCFG_CONFLICT_PATH 伪路径、line = 0（无行号，见
+    SYSCFG_CONFLICT_KIND 段注释）。
+
+    name / periph / field / pin / by / by_periph 是配置级冲突的结构化明细
+    （工单 02：验收标准要求「逐条带外设名」且前端 / CLI 能列出「DC_MOTOR ×
+    SERVO_PWM 抢 PA7」这类人话冲突，不必反向解析 message）；源码级条目全为
+    缺省值（名称 / 外设 / 引脚 / 占用方均为空串）。
+    """
 
     path: str  # 相对路径（POSIX，反斜杠已归一）；可能为 ""（未解析到文件引用）
     line: int  # 行号；0 = 未知
-    message: str  # 报错整行文本（原文）
+    message: str  # 报错整行文本（原文；配置级为「人话 + 原文」）
+    kind: str = SOURCE_ERROR_KIND  # 条目类别（source / syscfg_conflict）
+    name: str = ""  # 配置级：报错模块实例名（如 DC_MOTOR）
+    periph: str = ""  # 配置级：报错模块外设（如 /ti/driverlib/GPIO）
+    field: str = ""  # 配置级：冲突字段（关联引脚号 / 外设脚）
+    pin: str = ""  # 配置级：被抢的引脚（如 PA7）
+    by: str = ""  # 配置级：占用方模块实例名（如 SERVO_PWM）
+    by_periph: str = ""  # 配置级：占用方外设（如 /ti/driverlib/PWM）
 
 
 @dataclass(frozen=True)
@@ -171,35 +259,163 @@ _CCS_ERROR_RE = re.compile(
 
 # UV4 汇总行（工单 compile-experience-ui/01）：标准形态 "1 Error(s), 0
 # Warning(s)." 与真机形态 "0 Error(s) 0 Warning(s)."（无逗号）都命中；
-# Warning 段缺省（如 "5 Error(s)."）时按 0 处理
+# Warning 段缺省（如 "5 Error(s)."）时按 0 处理。**大小写放宽**（工单 02 修复
+# 方向①）：gmake / SysConfig 线的真机汇总形态是全小写 "7 error(s), 0
+# warning(s)"（第十六轮 A8 现场），只认 UV4 大写形态会把「编译失败」报成
+# 「0 错 0 警」——数字前缀要求（`\d+\s+`）天然不误命中行级 error: 行。
 _UV4_SUMMARY_RE = re.compile(
-    r"(?P<errors>\d+)\s+Error\(s\)(?:[,\s]+(?P<warnings>\d+)\s+Warning\(s\))?"
+    r"(?P<errors>\d+)\s+Error\(s\)(?:[,\s]+(?P<warnings>\d+)\s+Warning\(s\))?",
+    re.IGNORECASE,
 )
 
 
 def parse_compile_errors(error_text: str) -> tuple[CompileError, ...]:
     """逐行解析编译报错 → CompileError 列表（路径归一为 POSIX）。
 
-    两种形态都试（UV4 / CCS，混合多文件自然兼容）；解析不到文件引用的行不
-    产出条目——该行文本保留在报错全文里（随 LLM 上下文注入，降级不丢信息）。
-    垃圾文本（无匹配）→ 空元组，不崩。反斜杠开头（\proj\... 绝对形态）视为
-    未解析到引用（防把绝对路径当相对路径）。
+    三类形态都试（UV4 / CCS / SysConfig 配置级，混合多文件自然兼容）；解析不到
+    文件引用且不是配置级冲突的行不产出条目——该行文本保留在报错全文里（随 LLM
+    上下文注入，降级不丢信息）。垃圾文本（无匹配）→ 空元组，不崩。反斜杠开头
+    （绝对形态）视为未解析到引用（防把绝对路径当相对路径）。
+
+    SysConfig 配置级冲突（工单 02）：`error: NAME(外设) 字段: Resource conflict`
+    行 + 紧随的「引脚 is currently in use by 占用方(外设) 字段」续行合成一条
+    条目——path = SYSCFG_CONFLICT_PATH（伪路径，非源码）、line = 0、kind =
+    syscfg_conflict、message = 人话（谁抢谁 + 引脚 + 指路）+ 两行原文逐字。
+    解析优先级：先配置级（形态更具体），再行级两类。
     """
     parsed: list[CompileError] = []
-    for line in error_text.splitlines():
-        stripped = line.strip()
+    lines = error_text.splitlines()
+    index = 0
+    while index < len(lines):
+        stripped = lines[index].strip()
         if not stripped:
+            index += 1
+            continue
+        conflict = _SYSCFG_CONFLICT_RE.match(lines[index])
+        if conflict is not None:
+            # 续行（被占用方）只在紧邻下一行时消费；否则本条只有报错侧信息
+            occupied = None
+            if index + 1 < len(lines):
+                occupied = _SYSCFG_OCCUPY_RE.match(lines[index + 1])
+            parsed.append(_syscfg_conflict_entry(conflict, occupied, lines, index))
+            index += 2 if occupied is not None else 1
             continue
         match = _UV4_ERROR_RE.search(stripped) or _CCS_ERROR_RE.search(stripped)
         if match is None:
+            index += 1
             continue
         path = match.group("path").replace("\\", "/")
         if path.startswith("/"):
+            index += 1
             continue  # 绝对形态：解析不到相对文件引用（该行降级）
         parsed.append(
             CompileError(path=path, line=int(match.group("line")), message=stripped)
         )
+        index += 1
     return tuple(parsed)
+
+
+def _syscfg_conflict_entry(
+    conflict: re.Match[str],
+    occupied: re.Match[str] | None,
+    lines: Sequence[str],
+    index: int,
+) -> CompileError:
+    """SysConfig 冲突 → CompileError（人话 + 原文逐字，工单 02 修复方向②）。
+
+    message 三段：① 人话冲突句（`DC_MOTOR 与 SERVO_PWM 抢 PA7（引脚）：资源
+    冲突，引脚绑定需去重`——占用方缺失时只报报错侧）；② 指路一句（改引脚绑定 /
+    去冲突模块）；③ 原文行逐字（可追溯，用户可拿去搜 / 贴给 AI）。
+    """
+    name = conflict.group("name")
+    field = conflict.group("field")
+    detail = occupied.group(0).strip() if occupied is not None else ""
+    pin = occupied.group("pin") if occupied is not None else ""
+    by = occupied.group("by") if occupied is not None else ""
+    label = _SYSCFG_FIELD_LABELS.get(field.rsplit(".", 1)[-1].lower(), field)
+    if occupied is not None:
+        # 被占用方续行解析成功才有 of/occupied（pin=脚、by=占用方模块）
+        headline = f"{name} 与 {by} 抢 {pin}（{label}）：资源冲突，引脚绑定需去重"
+    else:
+        # 只有报错行（无续行 / 续行形态未识别）：字段名如实带出，不猜引脚
+        headline = f"{name} 的 {label} {field}：资源冲突（SysConfig 工程外设配置冲突）"
+        pin = by = ""
+    raw = [lines[index].strip()]
+    if detail:
+        raw.append(detail)
+    return CompileError(
+        path=SYSCFG_CONFLICT_PATH,
+        line=0,
+        message=headline
+        + "。请改引脚绑定（模块实例卡换脚 / 自动分配）或去掉冲突模块中的一个。"
+        "原文：" + " / ".join(raw),
+        kind=SYSCFG_CONFLICT_KIND,
+        name=name,
+        periph=conflict.group("periph"),
+        field=field,
+        pin=pin,
+        by=by,
+        by_periph=occupied.group("by_periph") if occupied is not None else "",
+    )
+
+
+def _is_syscfg_conflict(error: CompileError) -> bool:
+    """条目是否配置级冲突（判据单源）：syscfg_conflicts 两个分支共用，
+    禁在别处再写一遍 `kind == SYSCFG_CONFLICT_KIND`。"""
+    return error.kind == SYSCFG_CONFLICT_KIND
+
+
+def syscfg_conflicts(
+    error_text: str, parsed_errors: Sequence[CompileError] = ()
+) -> tuple[CompileError, ...]:
+    """配置级冲突清单（工单 02 修复方向③）：修复链 / 展示层的分流数据源单源。
+
+    优先取已解析条目里的配置级条目（parsed_errors 非空即权威——调用方已解析过
+    一遍，不重复解析）；parsed_errors 为空而 error_text 非空时按同一条正则现
+    扫描一次（只拿到编译输出原文的调用方也能取到冲突清单）。两条路共用
+    _SYSCFG_CONFLICT_RE，判据单源（禁另写正则）。
+    """
+    entries = parsed_errors or parse_compile_errors(error_text or "")
+    return tuple(e for e in entries if _is_syscfg_conflict(e))
+
+
+def should_skip_llm_fix(
+    source_candidates: Sequence[str], conflicts: Sequence[CompileError]
+) -> bool:
+    """配置级冲突短路判据（工单 02）：**同一输入必得同一结论**，域层（run_fix_round）
+    与本仓 CLI 验收脚本（generate_check.run_fix_loop）共用本函数，禁各写一份。
+
+    判据 = 有配置级冲突（SysConfig Resource conflict）且没有源码级候选文件。
+    并存「源码错 + 配置冲突」时**不短路**：LLM 修得动的是源码错（工单原文
+    「这类冲突不是 LLM 能修的（没有源码可改）」，并未要求把源码错一起放弃），
+    冲突条目仍随 parsed / syscfg_conflicts 如实带出给用户。两者皆空判 False
+    （无候选但也无冲突 = 纯降级形态，走既有的「只按报错全文修复」路径）。
+    """
+    return bool(conflicts) and not source_candidates
+
+
+def parsed_error_entries(
+    errors: Sequence[CompileError],
+) -> list[dict[str, Any]]:
+    """CompileError → 载荷条目（[{path, line, message}] + 配置级带 kind）。
+
+    载荷形状单源（工单 02）：/api/compile 的 parsed_errors、修复轮 done 的
+    parsed、深化摘要的 parsed_errors 三处共用本函数，禁各写一份。源码级条目
+    保持既有三字段（旧前端 / 旧契约零改动）；配置级条目追加 kind——前端据此
+    区分「可跳转的源码错误」与「不可跳转的配置冲突」（kind 缺省语义 = 源码级，
+    与 CompileError.kind 缺省一致）。
+    """
+    entries: list[dict[str, Any]] = []
+    for error in errors:
+        entry: dict[str, Any] = {
+            "path": error.path,
+            "line": error.line,
+            "message": error.message,
+        }
+        if error.kind != SOURCE_ERROR_KIND:
+            entry["kind"] = error.kind
+        entries.append(entry)
+    return entries
 
 
 def summarize_compile_output(
@@ -207,10 +423,13 @@ def summarize_compile_output(
 ) -> dict[str, int]:
     """编译输出数字汇总（工单 compile-experience-ui/01）：{errors, warnings}。
 
-    UV4 汇总行优先——命中即取汇总值（errors / warnings 都来自汇总行，与行级
-    计数可能不一致，以汇总为准）；未命中（CCS / gmake 无汇总行）退行级：
+    汇总行优先——命中即取汇总值（errors / warnings 都来自汇总行，与行级计数
+    可能不一致，以汇总为准）；未命中（CCS / gmake 无汇总行）退行级：
     len(parsed_errors) 为底，warning 条数 = 消息含 "warning"（大小写不敏感）
     计数，errors = 总数 − warnings。垃圾 / 空文本 → {0, 0}，不崩。
+    汇总行识别大小写放宽（工单 02 修复方向①）：UV4 的 "7 Error(s), 0
+    Warning(s)" 与 gmake / SysConfig 的真机全小写 "7 error(s), 0 warning(s)"
+    同判——这是「编译失败被报成 0 错 0 警」的第一处缺口。
     与 parse_compile_errors 同文件（解析域单源），展示层汇总与修复层解析
     共用同一份编译输出，禁止调用方另写正则。
     """
@@ -741,9 +960,16 @@ def run_fix_round(
 
     五步：parse_compile_errors → collect_candidate_paths → read_file_contexts
     （dropped 保留）→ llm.fix_compile_errors → apply_fixes。事件序列契约：
-    parse_done（error_count / file_count）→ fix_start（LLM 修复中，分钟级）
-    → apply_result…（逐处应用结果）——emit 走旁路（_emit，发射失败不影响
-    主流程），None = 不发射（单测直调形态）。
+    parse_done（error_count / file_count / conflicts：配置级冲突条目，工单 02）
+    → fix_start（LLM 修复中，分钟级）→ apply_result…（逐处应用结果）——emit 走
+    旁路（_emit，发射失败不影响主流程），None = 不发射（单测直调形态）。
+
+    **配置级冲突短路（工单 02 修复方向③）**：报错里全是 SysConfig Resource
+    conflict（没有源码候选）时，这条链没有可改的源码——不进 llm.fix_compile_
+    errors（不白烧一轮分钟级调用，也不产出「未定位到可修复文件」的误导文案），
+    直接把冲突清单 + 指路带出（syscfg_conflicts / notice）。事件序列仍是
+    parse_done → fix_start（前端靠 parse_done.conflicts 就能给准话，状态机不
+    引入新事件类型）。判据单源 = should_skip_llm_fix（CLI 验收脚本同用）。
 
     previous_fixes（工单 fix-loop-progress/01）：上一轮 done 载荷的 fixes
     数组（[{file, line, status, reason}]），形状校验（_validate_previous_fixes，
@@ -752,35 +978,47 @@ def run_fix_round(
 
     done 载荷作为返回值（形状的家在此，webapp docstring 只指向本函数）：
     output_dir（str，原样传入）/ backup_id（本次备份编号，无应用 = ""）/
-    degraded（未定位到可修复文件）/ parsed（[{path, line, message}]，解析
-    结果）/ fixes（[{file, line, status, reason}]，逐处应用结果）。终态发射
-    归路由（emit.done 收尾，run_sse 终态保证语义不变；对照
-    run_recommendation 的 emit.done 在域内，差异见工单决策记录 4）。
+    degraded（未定位到可修复文件）/ parsed（parsed_error_entries：源码级
+    {path, line, message}，配置级多一个 kind）/
+    fixes（[{file, line, status, reason}]，逐处应用结果）/ syscfg_conflicts
+    （[{name, pin, by, message}]，配置级冲突清单，无冲突 = []）/ notice
+    （配置级冲突人话指路，无冲突 = ""）。终态发射归路由（emit.done 收尾，
+    run_sse 终态保证语义不变；对照 run_recommendation 的 emit.done 在域内，
+    差异见工单决策记录 4）。
     """
     validated_previous = _validate_previous_fixes(previous_fixes)
     errors = parse_compile_errors(error_text)
     candidates = collect_candidate_paths(output_dir, errors)
     contexts, dropped = read_file_contexts(output_dir, candidates)
+    conflicts = syscfg_conflicts(error_text, errors)
+    # parse_done 带配置级冲突条目（工单 02）：前端在本阶段就能给准话（域层对纯
+    # 冲突短路不调 LLM，先显示「AI 修复中」再改口是误导）
     _emit(
         emit,
         ProgressEvent(
             type=EVENT_PARSE_DONE,
             error_count=len(errors),
             file_count=len(candidates),
+            conflicts=tuple(parsed_error_entries(conflicts)),
         ),
     )
     _emit(emit, ProgressEvent(type=EVENT_FIX_START))
-    fixes = llm.fix_compile_errors(
-        error_text,
-        dict(contexts),
-        problem_text=problem_text,
-        platform=platform,
-        module_slugs=module_slugs,
-        main_c=main_c,
-        dropped_files=dropped,
-        previous_fixes=validated_previous,
-    )
-    report = apply_fixes(fixes, output_dir, backup_root)
+    if should_skip_llm_fix(candidates, conflicts):
+        # 配置级冲突短路（工单 02）：没有源码候选可改 → 不喂 LLM（判据单源
+        # = should_skip_llm_fix，CLI 验收脚本同用；并存源码错时不短路）
+        report = ApplyReport(backup_id="", results=())
+    else:
+        fixes = llm.fix_compile_errors(
+            error_text,
+            dict(contexts),
+            problem_text=problem_text,
+            platform=platform,
+            module_slugs=module_slugs,
+            main_c=main_c,
+            dropped_files=dropped,
+            previous_fixes=validated_previous,
+        )
+        report = apply_fixes(fixes, output_dir, backup_root)
     for result in report.results:
         _emit(
             emit,
@@ -796,12 +1034,23 @@ def run_fix_round(
         "output_dir": str(output_dir),
         "backup_id": report.backup_id,
         "degraded": not candidates,
-        "parsed": [
-            {"path": e.path, "line": e.line, "message": e.message}
-            for e in errors
-        ],
+        "parsed": parsed_error_entries(errors),
         "fixes": [
             {"file": r.file, "line": r.line, "status": r.status, "reason": r.reason}
             for r in report.results
         ],
+        "syscfg_conflicts": [
+            {
+                # 载荷只带消费方真用的字段（工单 02）：name / pin / by 是前端与
+                # 清单筛选的三元组（谁抢谁抢哪个脚），message 是人话全句；
+                # periph / field / conflict_count 属 CompileError 的解析明细，
+                # 无消费方故不下发（YAGNI——需要时再加）
+                "name": e.name,
+                "pin": e.pin,
+                "by": e.by,
+                "message": e.message,
+            }
+            for e in conflicts
+        ],
+        "notice": SYSCFG_CONFLICT_NOTICE if conflicts else "",
     }

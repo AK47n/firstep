@@ -62,8 +62,11 @@ EVENT_LLM_TELEMETRY = "llm_telemetry"
 # 原样采集自编译器输出（与 fix-errors 解析契约对齐），passed 由域模块
 # compile_runner.compile_passed 判定（前端循环不自己判退出码）。展示层字段
 # （工单 compile-experience-ui/01，只增不改旧字段）：duration（秒，float，
-# 子进程实际耗时）/ parsed_errors（[{path, line, message}]，parse_compile_errors
-# 解析——与 fix-errors 的 parsed 同源同构）/ summary（{errors, warnings}，
+# 子进程实际耗时）/ parsed_errors（[{path, line, message, kind?}]，解析与条目
+# 形状单源 = fix_errors.parse_compile_errors / parsed_error_entries——与 fix-errors
+# 的 parsed 同源同构；配置级冲突（工单 02：SysConfig Resource conflict）条目带
+# kind="syscfg_conflict"、path 为伪路径、line=0，前端据此渲染不可跳转的说明行）/
+# summary（{errors, warnings}，
 # summarize_compile_output）。done 契约与 webapp.py /api/compile 路由 docstring
 # 同源（词表唯一出处，改动须两处同步）
 EVENT_COMPILE_START = "compile_start"
@@ -159,7 +162,10 @@ class ProgressEvent:
     （该轮要补问的缺失文件数）；phase_done 用 phase / file_count（本阶段文件数）；
     推荐收敛循环（工单 10）的 round 用 round / round_total、converged 用 round；
     编译错误修复（工单 compile-error-fix/01）的 parse_done 用 error_count /
-    file_count、apply_result 用 file / line / status / reason；LLM telemetry 用
+    file_count / conflicts（该轮解析出的配置级冲突条目，工单 02：SysConfig
+    Resource conflict——前端 parse_done 阶段就能给准话，不必先显示「AI 修复中」
+    再改口；域层对纯冲突短路不调 LLM）、apply_result 用 file / line / status /
+    reason；LLM telemetry 用
     llm_* 聚合字段与 llm_calls 明细（均为脱敏数值 / 枚举 / id，不含内容）。
     """
 
@@ -179,6 +185,7 @@ class ProgressEvent:
     round: int = 0  # 模块推荐收敛轮次（round / converged 事件用，1 起）
     round_total: int = 0  # 收敛轮次上限（round 事件携带，前端显示"N/上限"）
     error_count: int = 0  # 编译错误修复：parse_done 解析出的报错条数
+    conflicts: tuple[dict[str, Any], ...] = ()  # 编译错误修复 parse_done：配置级冲突条目
     file: str = ""  # 编译错误修复：apply_result 修复的文件相对路径
     line: int = 0  # 编译错误修复：apply_result 报错行号
     status: str = ""  # 编译错误修复：apply_result "applied" / "skipped"

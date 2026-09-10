@@ -68,7 +68,14 @@ from contest_generator.compile_runner import (
     find_make,
     find_uv4,
 )
-from contest_generator.fix_errors import parse_compile_errors, summarize_compile_output
+from contest_generator.fix_errors import (
+    SYSCFG_CONFLICT_NOTICE,
+    collect_candidate_paths,
+    parse_compile_errors,
+    should_skip_llm_fix,
+    summarize_compile_output,
+    syscfg_conflicts,
+)
 from contest_generator.generator import (
     GeneratorError,
     build_output_tree_corpus,
@@ -531,6 +538,21 @@ def run_fix_loop(
             if summary["errors"] else f"{summary['warnings']} 条 Warning"
         )
         print(f"  第 {round_no}/{FIX_MAX_ROUNDS} 轮：{verdict} → AI 修复…")
+        # 配置级冲突（工单 02，mspm0 / SysConfig 真机形态，**调 LLM 之前**判）：
+        # 冲突 = 工程外设配置问题，没有源码可改——不喂 /api/fix-errors 白烧一轮
+        # 分钟级调用，直接逐条列出冲突 + 指路收工。判据与域层同一函数
+        # （fix_errors.should_skip_llm_fix：有冲突且无源码候选才短路；并存
+        # 源码错时照常修源码错），解析单源 parse_compile_errors / syscfg_conflicts。
+        parsed_first = parse_compile_errors(error_text)
+        conflicts = syscfg_conflicts(error_text, parsed_first)
+        candidates = collect_candidate_paths(out_dir, parsed_first)
+        if should_skip_llm_fix(candidates, conflicts):
+            print(f"  配置级冲突 {len(conflicts)} 条（SysConfig 工程外设配置，非源码报错）：")
+            for e in conflicts:
+                print(f"    · {e.message}")
+            print("  " + SYSCFG_CONFLICT_NOTICE)
+            print("  未应用任何修复（配置级冲突无源码可改），停止循环")
+            return False
         fix = fix_stream(
             build_fix_payload(
                 out_dir,
@@ -561,6 +583,8 @@ def run_fix_loop(
                 f"    {mark} {f.get('file')}:{f.get('line')} "
                 f"[{f.get('status')}] {f.get('reason', '')}"
             )
+        # 配置级冲突（工单 02）已在调 LLM 前短路返回，这里的 degraded 分支
+        # 只剩「无文件引用但也无配置冲突」的降级形态（链接错误等）
         if done.get("degraded"):
             print("  [提示] 未定位到可修复文件（降级），修复未落盘")
         if done.get("backup_id"):

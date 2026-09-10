@@ -62,6 +62,7 @@ const DOMAINS = {
   },
   "code-compile.js": {
     compileStatusText: "fn", compileStatusClass: "fn", compileErrorRowsHTML: "fn",
+    isSyscfgConflict: "fn",
   },
   "code-tree-ops.js": {
     treeNameValidate: "fn", treeOpAffected: "fn", treeRenamedPath: "fn",

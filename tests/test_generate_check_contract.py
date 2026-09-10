@@ -235,6 +235,61 @@ def test_run_fix_loop_rebuild_timeout_stops_without_next_llm_call(
     assert len(calls) == 1
 
 
+def test_gmake_build_summary_reports_syscfg_conflict_count(monkeypatch) -> None:
+    """工单 02 判读同源钉（真机摘要文案）：gmake_build 的摘要行把 SysConfig 段的
+    7 条 Resource conflict 如实报成「7 错误 0 警」——实施前是全小写汇总行不识别
+    + 冲突行不解析 → 「0 错误 0 警」（真机验收现场无法判读的根因）。摘要计数与
+    冲突解析同源 summarize_compile_output / parse_compile_errors，此处红 =
+    判读层回退（禁止另写正则）。"""
+    text = (
+        REPO_ROOT / ".scratch" / "real-run" / "verify-16-A8-mspm0-2026H-buildlog.txt"
+    ).read_text(encoding="utf-8")
+
+    class _Run:
+        output = text
+        exit_code = 2
+        timed_out = False
+        duration = 1.0
+
+    class _Build:
+        platform = "mspm0"
+        run = _Run()
+
+    monkeypatch.setattr(gen, "collect_build_log", lambda *a, **k: _Build())
+    passed, summary, raw, timed_out = gen.gmake_build(Path("out_x"))
+    assert passed is False and timed_out is False
+    assert raw == text
+    assert "7 错误 0 警" in summary, f"摘要未如实报错数：{summary}"
+
+
+def test_run_fix_loop_config_conflict_reports_instead_of_blind_round(
+    monkeypatch, capsys
+) -> None:
+    """工单 02（mspm0 编译判读缺口）红证：SysConfig 配置级冲突（真机 2026H 形态，
+    7 条 Resource conflict）——CLI 修复循环必须①轮次文案说真话（"7 条 Error"，
+    实施前是 "0 条 Warning"）、②不做「未定位到可修复文件」的盲轮，直接逐条列出
+    冲突 + 指路收工（配置级冲突没有源码可改，喂修复中心等于白烧一轮）。"""
+    text = (
+        REPO_ROOT / ".scratch" / "real-run" / "verify-16-A8-mspm0-2026H-buildlog.txt"
+    ).read_text(encoding="utf-8")
+    calls: list[dict] = []
+
+    def fake_fix(payload: dict) -> dict:  # 不该被调用
+        calls.append(payload)
+        return {"event": "done", "data": {"fixes": []}}
+
+    monkeypatch.setattr(gen, "fix_stream", fake_fix)
+    assert gen.run_fix_loop(
+        Path("out_x"), text, "题面", "mspm0", ["huidu"], "int main(void) { return 0; }",
+    ) is False
+    out = capsys.readouterr().out
+    assert "7 条 Error" in out, f"轮次文案未说真话（应为 7 条 Error）：{out}"
+    assert "配置级冲突" in out
+    assert "DC_MOTOR" in out and "PA7" in out and "SERVO_PWM" in out
+    assert "引脚绑定" in out  # 指路：改引脚绑定 / 去冲突模块
+    assert calls == [], "配置级冲突不得喂 /api/fix-errors（白烧一轮 LLM）"
+
+
 # ---------- 首编超时即停（工单 cli-init-compile-timeout/01） ----------
 #
 # cli-fix-loop-parity/01 的停条件只在循环内：check_topic 首编译丢弃

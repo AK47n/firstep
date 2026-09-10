@@ -349,9 +349,10 @@ def _compile_summary(build) -> dict[str, Any]:
 
     parsed_errors = 结构化错误列表（工单 error-jump-task/01：任务结果面板
     错误行跳转 main.c 用；parse_compile_errors 同源——compile_runner
-    /api/compile done 载荷的 parsed_errors 字段同型）；build 为 None（无
-    工具链降级）= 空列表。compile dict 只追加不改既有键（passed / exit_code
-    / summary），旧前端忽略新字段即可。
+    /api/compile done 载荷的 parsed_errors 字段同型，条目形状单源 =
+    fix_errors.parsed_error_entries，工单 02：SysConfig 配置级冲突条目带
+    kind）；build 为 None（无工具链降级）= 空列表。compile dict 只追加不改
+    既有键（passed / exit_code / summary），旧前端忽略新字段即可。
     """
     if build is None:
         return {
@@ -363,11 +364,17 @@ def _compile_summary(build) -> dict[str, Any]:
         "passed": compile_passed(build.platform, build.run.exit_code),
         "exit_code": build.run.exit_code,
         "summary": _summarize(build.run.output, parsed),
-        "parsed_errors": [
-            {"path": e.path, "line": e.line, "message": e.message}
-            for e in parsed
-        ],
+        "parsed_errors": _error_entries(parsed),
     }
+
+
+def _error_entries(parsed):
+    """结构化错误条目（形状单源 = fix_errors.parsed_error_entries；域内延迟导入
+    与 _parse_errors / _summarize 同款——本模块对 fix_errors 一律延迟导入，避免
+    与 llm ← fix_errors 的依赖方向纠缠）。"""
+    from .fix_errors import parsed_error_entries
+
+    return parsed_error_entries(parsed)
 
 
 def _parse_errors(output: str):

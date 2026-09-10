@@ -3794,6 +3794,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         流结束。HTTP 200 起流，失败以流内 error 事件收尾
         （sse 运行器终态保证）；参数校验失败 / 输出目录不存在 400。
 
+        配置级冲突短路（工单 02）：报错全是 SysConfig Resource conflict 且无
+        源码候选时，本端点不发 LLM 调用，done 直接带 syscfg_conflicts（逐条
+        明细）+ notice（人话指路），事件序列仍是 parse_done → fix_start。
+
         请求体契约：error_text（必填，编译报错全文）；output_dir（必填，生成
         结果目录，必须已存在）；problem_text / platform / slugs / main_c
         （可选上下文，决策记录 6）；previous_fixes（可选，上一轮 done 载荷的
@@ -3896,9 +3900,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         timed_out / project_file（定位到的工程文件）/ command（实际命令，
         可复述）；展示层追加（工单 compile-experience-ui/01，只增不改旧字段）：
         duration（秒，float，子进程实际耗时）/ parsed_errors（[{path, line,
-        message}]，parse_compile_errors 解析——与 fix-errors 的 parsed 同源
-        同构）/ summary（{errors, warnings}，summarize_compile_output：UV4
-        汇总行优先、无汇总退行级）。不要求 AI 配置（工单
+        message, kind?}]，解析与条目形状单源 = fix_errors.parse_compile_errors /
+        parsed_error_entries——与 fix-errors 的 parsed 同源同构；配置级冲突
+        （工单 02：SysConfig Resource conflict）条目带 kind="syscfg_conflict"、
+        path 为伪路径 mspm0.syscfg、line=0）/ summary（{errors, warnings}，
+        summarize_compile_output：汇总行优先（大小写不敏感，UV4 与 gmake 真机
+        形态同判）、无汇总退行级）。不要求 AI 配置（工单
         compile-verdict-align/01：编译不调 LLM，只须工具链路径——无 api_key
         的用户也应能"编译看结果"；修复按钮仍走 AI 配置校验，400 如实报、
         循环自然停）。阻塞调用（编译分钟级以内）放独立线程跑，

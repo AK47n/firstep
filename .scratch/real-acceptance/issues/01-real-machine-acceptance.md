@@ -84,6 +84,13 @@ SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_ru
   而产品的报错解析把「7 error(s)」读成 **0 错 0 警**、修复链当「未定位到可修复文件」——见
   `.scratch/real-acceptance/issues/02-mspm0-compile-verdict-parse-gap.md`。
   **本项（0 错）暂判不满足**，待新单 02 修好后复跑再勾。
+  **2026-09-17 第十七轮：判读缺口已修（单 02 resolved），0 错前提不成立 → 保持未勾**——
+  真机复跑 `--platform mspm0 --reuse-recommend 2026H`：轮次文案与冲突清单都说真话
+  （「第 1/3 轮：7 条 Error 0 条 Warning」；7 条冲突逐条「谁抢谁 + 引脚 + 指路」）、
+  配置级冲突不再喂 `/api/fix-errors`（0 次 LLM 调用即停）；
+  但**编译仍 exit=2**——7 条冲突是工程真实的 SysConfig 引脚互斥（生成门禁现有检查面覆盖不到，
+  附在单 02 的「另立缺口」），本项「gmake 0 错」的验收前提在 2026H 模块组合下仍不满足。
+  证据 `.scratch/real-run/verify-17-A8-mspm0-2026H-verdict.txt`。
 - [x] **A9 来源 `gate-corpus-closure/01`**：真机回归 `generate_check` 2026C `--reuse-recommend`，门禁全过。
   怎么验：`python .scratch/real-run/generate_check.py --topic 2026C --reuse-recommend`。
   **2026-09-10 第十六轮完成**：真机全绿（`2026C: ✓ 通过`）——

@@ -9,6 +9,7 @@ import {
   compileErrorLinesForFile,
   compileErrorPathNorm,
   compileErrorPathBase,
+  isSyscfgConflict,
 } from "../../src/contest_generator/static/js/fx/code-compile.js";
 
 test("compileStatusText：成功/失败/超时状态行（单源 = fx/generate.js 同文案）", () => {
@@ -50,6 +51,47 @@ test("compileErrorRowsHTML：路径+行号+消息 + 转义 + 空态", () => {
   assert.ok(html.includes("use of undeclared"));
   const empty = compileErrorRowsHTML([]);
   assert.match(empty, /无结构化错误信息/);
+});
+
+// ---- 配置级冲突条目（工单 02：SysConfig Resource conflict，不可跳转）----
+
+const SYSCFG_ERR = {
+  path: "mspm0.syscfg", line: 0, kind: "syscfg_conflict",
+  message: "DC_MOTOR 与 SERVO_PWM 抢 PA7（引脚）：资源冲突，引脚绑定需去重。"
+    + "请改引脚绑定（模块实例卡换脚 / 自动分配）或去掉冲突模块中的一个。"
+    + "原文：error: DC_MOTOR(/ti/driverlib/GPIO) associatedPins[3].pin: Resource conflict",
+};
+
+test("isSyscfgConflict：kind=syscfg_conflict 命中；源码级 / 旧载荷缺省不命中", () => {
+  assert.equal(isSyscfgConflict(SYSCFG_ERR), true);
+  assert.equal(isSyscfgConflict({ path: "main.c", line: 3, message: "x" }), false);
+  assert.equal(isSyscfgConflict(null), false);
+  assert.equal(isSyscfgConflict({ kind: "source" }), false);
+});
+
+test("compileErrorRowsHTML：配置级冲突行不可跳转（无 data-compile-path）+ 标注", () => {
+  const html = compileErrorRowsHTML([SYSCFG_ERR]);
+  assert.ok(!html.includes("data-compile-path"), "配置级冲突不该可跳转");
+  assert.ok(html.includes("配置冲突"));
+  assert.ok(html.includes("mspm0.syscfg"));
+  assert.ok(html.includes("DC_MOTOR"));
+  assert.ok(html.includes("code-compile-error-conflict"));
+});
+
+test("compileErrorRowsHTML：源码级与配置级混排互不影响", () => {
+  const html = compileErrorRowsHTML([
+    { path: "main.c", line: 45, message: "use of undeclared identifier 'y'" },
+    SYSCFG_ERR,
+  ]);
+  // 源码级照旧可跳转，配置级仍不可
+  assert.match(html, /data-compile-path="main\.c" data-compile-line="45"/);
+  assert.equal((html.match(/data-compile-path=/g) || []).length, 1);
+  assert.ok(html.includes("配置冲突"));
+});
+
+test("compileErrorLinesForFile：配置级冲突不标源码行（line 0 + 伪路径不误配）", () => {
+  assert.deepEqual(compileErrorLinesForFile([SYSCFG_ERR], "mspm0.syscfg"), []);
+  assert.deepEqual(compileErrorLinesForFile([SYSCFG_ERR], "Core/Src/main.c"), []);
 });
 
 // ---- 错误行映射（工单 code-editor-refine/05：行号色点 + 错误行标记）----

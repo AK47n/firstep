@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Sequence
 
 from .events import EVENT_COMPILE_START, ProgressEvent
-from .fix_errors import parse_compile_errors, summarize_compile_output
+from .fix_errors import parse_compile_errors, parsed_error_entries, summarize_compile_output
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 
 if TYPE_CHECKING:
@@ -480,12 +480,11 @@ def run_compile(
             "project_file": build.project_file,
             "command": list(build.command),
             # 展示层（工单 compile-experience-ui/01）：耗时 / 结构化错误列表 /
-            # 数字汇总——只追加不改既有字段，旧前端忽略即可
+            # 数字汇总——只追加不改既有字段，旧前端忽略即可。条目形状单源 =
+            # parsed_error_entries（工单 02：SysConfig 配置级冲突条目带 kind，
+            # 前端据此区分可跳转源码行与不可跳转的配置冲突）
             "duration": build.run.duration,
-            "parsed_errors": [
-                {"path": e.path, "line": e.line, "message": e.message}
-                for e in parsed
-            ],
+            "parsed_errors": parsed_error_entries(parsed),
             "summary": summarize_compile_output(build.run.output, parsed),
         }
     )

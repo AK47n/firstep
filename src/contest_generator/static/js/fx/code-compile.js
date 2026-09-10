@@ -25,9 +25,25 @@ export function compileStatusClass(done) {
   return "";
 }
 
+// SYSCFG_CONFLICT_KIND：配置级冲突条目的 kind 值（工单 02，与后端
+// fix_errors.SYSCFG_CONFLICT_KIND 逐字一致）——SysConfig 的工程外设配置冲突
+// （引脚被两个模块同时占用）没有文件行号、也**不是 LLM 能修的**（没有源码可
+// 改）：前端据此把这类条目渲染成不可跳转的说明行，而不是「点开看源码」的错误行。
+// 旧载荷 / 源码级条目不带 kind（缺省语义 = 源码级，向后兼容）。
+export const SYSCFG_CONFLICT_KIND = "syscfg_conflict";
+
+// isSyscfgConflict(entry)：条目是否配置级冲突（parsed_errors / parsed 同型
+// [{path, line, message, kind?}]）。非对象 / 无 kind → false（源码级缺省）。
+export function isSyscfgConflict(entry) {
+  return !!entry && entry.kind === SYSCFG_CONFLICT_KIND;
+}
+
 // compileErrorRowsHTML(errors)：结构化错误列表（parsed_errors 同型
-// [{path, line, message}]）→ 可点击行；data-compile-path / data-compile-line
-// 交给胶水层委托跳转。空数组 → 空提示（无结构化错误信息——降级/解析失败）。
+// [{path, line, message, kind?}]）→ 可点击行；data-compile-path / data-compile-line
+// 交给胶水层委托跳转。配置级冲突（kind="syscfg_conflict"）例外：无源码可跳，
+// 渲染成带「配置冲突」标签的不可点击行（工单 02——真机 2026H 的 7 条 Resource
+// conflict 此前整段不可见，用户拿不到任何可读原因）。空数组 → 空提示
+// （无结构化错误信息——降级/解析失败）。
 export function compileErrorRowsHTML(errors) {
   const list = errors || [];
   if (!list.length) {
@@ -37,11 +53,19 @@ export function compileErrorRowsHTML(errors) {
     const path = String(er.path == null ? "" : er.path);
     const line = Number(er.line) || 0;
     const loc = path ? path + ":" + line : String(line || "");
+    const msg = esc(er.message || "");
+    if (isSyscfgConflict(er)) {
+      return '<div class="code-compile-error code-compile-error-conflict">'
+        + '<span class="code-compile-path">配置冲突'
+        + (path ? "（来自 " + esc(path) + "）" : "") + "</span>"
+        + '<span class="code-compile-msg">' + msg + "</span>"
+        + "</div>";
+    }
     return '<button type="button" class="code-compile-error"'
       + ' data-compile-path="' + esc(path) + '" data-compile-line="' + line + '"'
       + ' title="在代码栏打开并定位 ' + esc(loc) + '">'
       + '<span class="code-compile-path">' + esc(loc) + "</span>"
-      + '<span class="code-compile-msg">' + esc(er.message || "") + "</span>"
+      + '<span class="code-compile-msg">' + msg + "</span>"
       + "</button>";
   }).join("");
 }
@@ -96,6 +120,8 @@ if (typeof window !== "undefined") {
     compileErrorLinesForFile,
     compileErrorPathNorm,
     compileErrorPathBase,
+    isSyscfgConflict,
+    SYSCFG_CONFLICT_KIND,
     AUTO_COMPILE_KEY,
   });
 }

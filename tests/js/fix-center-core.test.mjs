@@ -9,6 +9,7 @@ import {
   subscribeFixCenter,
   isFixRunning,
   fixLoopSnapshot,
+  syscfgConflictStateText,
   FIX_MAX_ROUNDS,
 } from "../../src/contest_generator/static/js/ui/fix-center-core.js";
 
@@ -62,8 +63,9 @@ const COMPILE_TIMEOUT = [["compile_start", {}], ["done", {
 }]];
 
 // 修复 SSE（fix-errors）：parse_done → fix_start → apply_result → done
-function fixEvents(donePayload) {
-  return [["parse_done", { error_count: 1, file_count: 1 }],
+// （conflicts = parse_done 携带的配置级冲突条目，工单 02；无冲突 = 空数组）
+function fixEvents(donePayload, conflicts = []) {
+  return [["parse_done", { error_count: 1, file_count: 1, conflicts }],
     ["fix_start", {}],
     ["apply_result", { file: "a.c", line: 3, reason: "ok", status: "applied" }],
     ["done", donePayload]];
@@ -87,6 +89,13 @@ const BASE = {
   slugs: [],
 };
 
+// 纯配置级冲突的 /api/fix-errors 流（域层短路：无源码候选、无 apply_result）
+function fixEventsConfigConflict(donePayload, conflictEntry) {
+  return [["parse_done", {
+    error_count: 7, file_count: 0, conflicts: [conflictEntry],
+  }], ["fix_start", {}], ["done", donePayload]];
+}
+
 function collectCbs() {
   const events = [];
   return {
@@ -105,6 +114,77 @@ function collectCbs() {
     },
   };
 }
+
+// 配置级冲突（工单 02：SysConfig Resource conflict，真机 2026H 形态）
+const COMPILE_CFG_CONFLICT = [["compile_start", {}], ["done", {
+  passed: false, timed_out: false, duration: 0.9,
+  error_text: "error: DC_MOTOR(/ti/driverlib/GPIO) associatedPins[3].pin: "
+    + "Resource conflict\n\tPA7/49 is currently in use by "
+    + "SERVO_PWM(/ti/driverlib/PWM) peripheral.ccp0Pin\n7 error(s), 0 warning(s)\n",
+  summary: { errors: 7, warnings: 0 },
+  parsed_errors: [{
+    path: "mspm0.syscfg", line: 0, kind: "syscfg_conflict",
+    message: "DC_MOTOR 与 SERVO_PWM 抢 PA7（引脚）：资源冲突，引脚绑定需去重。",
+  }],
+}]];
+
+test("syscfgConflictStateText：指路文案与后端 notice 刻意同文 + 界面专属尾句", async () => {
+  const conflicts = COMPILE_CFG_CONFLICT[1][1].parsed_errors;
+  const text = syscfgConflictStateText(conflicts);
+  // 与 fix_errors.SYSCFG_CONFLICT_NOTICE 刻意同文的核心三句（跨语言对偶）
+  assert.ok(text.includes("SysConfig 资源冲突"));
+  assert.ok(text.includes("引脚被两个模块同时占用"));
+  assert.ok(text.includes("没有源码可改"));
+  assert.ok(text.includes("改引脚绑定"));
+  assert.ok(text.includes("一键编译修复"));  // 界面专属尾句
+});
+
+test("首编配置级冲突：列冲突 + 指路收工，不进修复轮（不喂 /api/fix-errors）", async () => {
+  const calls = [];
+  const orig = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    const u = String(url);
+    calls.push(u);
+    if (u.includes("/api/compile")) return sseResponse(COMPILE_CFG_CONFLICT);
+    throw new Error("配置级冲突不该请求：" + u);
+  };
+  const { cbs, events } = collectCbs();
+  await startFixCenterCore({ ...BASE, callbacks: cbs });
+  globalThis.fetch = orig;
+  assert.equal(calls.filter((u) => u.includes("/api/fix-errors")).length, 0);
+  // 错误列表已重建（冲突条目可见，不再空列表）
+  assert.ok(events.some((e) => e[0] === "list" && e[1] === 1));
+  // 状态行给准话（配置级冲突 + 指路），无轮次条
+  assert.ok(events.some((e) => e[0] === "state"
+    && typeof e[1] === "string" && e[1].includes("SysConfig 资源冲突")));
+  assert.equal(events.filter((e) => e[0] === "round").length, 0);
+  assert.equal(isFixRunning(), false);
+});
+
+test("手动贴文本路径遇配置级冲突：parse_done 就报冲突指路，不显示「AI 修复中」", async () => {
+  const entry = COMPILE_CFG_CONFLICT[1][1].parsed_errors[0];
+  const orig = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes("/api/fix-errors")) {
+      return sseResponse(fixEventsConfigConflict({
+        parsed: [entry], fixes: [], backup_id: null,
+        degraded: true, syscfg_conflicts: [entry],
+        notice: "SysConfig 资源冲突：…",
+      }, entry));
+    }
+    throw new Error("不该请求：" + u);
+  };
+  const { cbs, events } = collectCbs();
+  await runFixOnceCore({ ...BASE, callbacks: cbs }, "error: DC_MOTOR(...) Resource conflict");
+  globalThis.fetch = orig;
+  const states = events.filter((e) => e[0] === "state").map((e) => e[1]);
+  assert.ok(states.some((t) => t.includes("SysConfig 资源冲突")), states.join(" | "));
+  assert.ok(!states.some((t) => t.includes("AI 修复中")), "配置级冲突不得显示「AI 修复中」");
+  assert.ok(!states.some((t) => t.includes("只按报错全文修复")), "不得报「降级模式」误导文案");
+  // 冲突条目进列表（用户拿得到可读原因）
+  assert.ok(events.some((e) => e[0] === "list" && e[1] === 1));
+});
 
 // ---------------------------------------------------------------------------
 test("首编通过 0 警：banner success + 状态文案，不进修复轮", async () => {

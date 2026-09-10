@@ -26,6 +26,7 @@ from contest_generator.events import (
 )
 from contest_generator.fix_errors import (
     FIX_BACKUPS_DIRNAME,
+    SYSCFG_CONFLICT_PATH,
     CompileError,
     FixError,
     FixResult,
@@ -41,9 +42,30 @@ from contest_generator.fix_errors import (
     read_file_contexts,
     restore_backup,
     run_fix_round,
+    should_skip_llm_fix,
     summarize_compile_output,
+    syscfg_conflicts,
 )
 from tests.fakes import FakeLLM
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+# 真机编译日志（第十六轮 A8：2026H/mspm0 gmake 全量构建，exit=2）——SysConfig 段
+# 7 条 Resource conflict + 全小写汇总行 "7 error(s), 0 warning(s)" 的原始现场，
+# 工单 02 的判读红证基座（.scratch/real-run/ 被 force-tracked，与
+# test_generate_check_contract 引 generate_check.py 同先例）
+MSPM0_2026H_BUILDLOG = (
+    REPO_ROOT / ".scratch" / "real-run" / "verify-16-A8-mspm0-2026H-buildlog.txt"
+)
+
+# SysConfig 冲突最小合成形态（两条冲突 + 全小写汇总）：与真机逐字同形，用于
+# 解析判决与修复链分流的定点断言（真机日志另有一条端到端用例钉住）
+SYSCFG_CONFLICT_BLOCK = (
+    "error: DC_MOTOR(/ti/driverlib/GPIO) associatedPins[3].pin: Resource conflict\n"
+    "\tPA7/49 is currently in use by SERVO_PWM(/ti/driverlib/PWM) peripheral.ccp0Pin\n"
+    "error: HUIDU(/ti/driverlib/GPIO) associatedPins[5].pin: Resource conflict\n"
+    "\tPA27/31 is currently in use by L298N(/ti/driverlib/GPIO) "
+    "associatedPins[0].pin\n"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -968,7 +990,10 @@ def test_run_fix_round_event_sequence_and_done_payload(tmp_path):
     parse_done = emitted[0]
     assert parse_done.error_count == 2 and parse_done.file_count == 2
     # done 载荷形状：keys 全等（与 /api/fix-errors 逐字一致）+ 语义
-    assert set(done) == {"output_dir", "backup_id", "degraded", "parsed", "fixes"}
+    assert set(done) == {
+        "output_dir", "backup_id", "degraded", "parsed", "fixes",
+        "syscfg_conflicts", "notice",  # 工单 02：配置级冲突清单 + 指路
+    }
     assert done["output_dir"] == str(out)
     assert done["degraded"] is False
     assert done["parsed"] == [
@@ -1129,7 +1154,10 @@ def test_run_fix_round_previous_fixes_passthrough_to_llm(tmp_path):
         EVENT_FIX_START,
         EVENT_APPLY_RESULT,
     ]
-    assert set(done) == {"output_dir", "backup_id", "degraded", "parsed", "fixes"}
+    assert set(done) == {
+        "output_dir", "backup_id", "degraded", "parsed", "fixes",
+        "syscfg_conflicts", "notice",  # 工单 02：配置级冲突清单 + 指路
+    }
     assert llm.fix_errors_calls[0][6] == previous
 
 
@@ -1149,7 +1177,10 @@ def test_run_fix_round_no_previous_zero_regression(tmp_path):
         output_dir=out,
         backup_root=_backup_root(tmp_path),
     )
-    assert set(done) == {"output_dir", "backup_id", "degraded", "parsed", "fixes"}
+    assert set(done) == {
+        "output_dir", "backup_id", "degraded", "parsed", "fixes",
+        "syscfg_conflicts", "notice",  # 工单 02：配置级冲突清单 + 指路
+    }
     assert done["fixes"] == [
         {"file": "main.c", "line": 1, "status": "applied", "reason": ""}
     ]
@@ -1229,6 +1260,185 @@ def test_fix_errors_route_body_free_of_pipeline_calls():
         "/api/fix-errors 路由含五步管线调用，编排必须归 run_fix_round："
         + "；".join(ast.unparse(node) for node in forbidden)
     )
+
+
+# ---------------------------------------------------------------------------
+# SysConfig 段判读（工单 02：mspm0 编译判读缺口）——真机 7 条 Resource conflict
+# 被报成「0 错 0 警」的红证基座。缺口三处：① 冲突行无「文件:行号」形态，两条
+# 行级正则都不吃；② 汇总行全小写（"7 error(s), 0 warning(s)"）不匹配 UV4 形态；
+# ③ 冲突是工程外设配置级问题（没有源码可改），修复链不得当「未定位到可修复
+# 文件」白跑一轮，应给用户指路。
+# ---------------------------------------------------------------------------
+
+
+def test_parse_real_mspm0_buildlog_yields_seven_syscfg_conflicts():
+    """红证（真机日志端到端）：2026H/mspm0 真机构建日志 → 7 条冲突全部解析出来。
+
+    实施前 parse_compile_errors 返回 ()（SysConfig 的 `error: NAME(外设)` 形态
+    无文件无行号，两条行级正则都不吃）——本用例即该红证。
+    """
+    text = MSPM0_2026H_BUILDLOG.read_text(encoding="utf-8")
+    parsed = parse_compile_errors(text)
+    assert len(parsed) == 7, f"应解析出 7 条冲突，实际 {len(parsed)} 条"
+    assert all(error.kind == "syscfg_conflict" for error in parsed)
+    assert all(error.path == SYSCFG_CONFLICT_PATH for error in parsed)
+    assert all(error.line == 0 for error in parsed)  # 无行号（非源码级）
+
+
+def test_summarize_real_mspm0_buildlog_says_seven_errors():
+    """红证（真机日志端到端）：汇总行 "7 error(s), 0 warning(s)"（全小写）必须
+    被认出来——实施前返回 {0,0}，等于把「编译失败」报成「0 错 0 警」。"""
+    text = MSPM0_2026H_BUILDLOG.read_text(encoding="utf-8")
+    assert summarize_compile_output(text, parse_compile_errors(text)) == {
+        "errors": 7,
+        "warnings": 0,
+    }
+
+
+def test_parse_syscfg_conflict_message_is_human_readable():
+    """冲突条目 message = 人话（谁抢了谁）+ 逐字原文（原始形态可追溯）：真机
+    第 1 条 DC_MOTOR 抢 PA7（SERVO_PWM 占着）必须点名三个事实——模块、引脚、
+    占用方。"""
+    parsed = parse_compile_errors(
+        MSPM0_2026H_BUILDLOG.read_text(encoding="utf-8")
+    )
+    first = parsed[0].message
+    assert "DC_MOTOR" in first and "PA7" in first and "SERVO_PWM" in first
+    assert "资源冲突" in first and "引脚绑定" in first
+    assert "associatedPins[3].pin: Resource conflict" in first  # 原文逐字
+    assert "PA7/49 is currently in use by" in first
+    # 跨外设引脚项（IMU601 UART 抢 OLED_SPI 的脚）同样带出：peripheral.rxPin 形态
+    last = parsed[5].message
+    assert "IMU601" in last and "OLED_SPI" in last and "peripheral.rxPin" in last
+
+
+def test_parse_syscfg_conflict_block_without_summary_line():
+    """合成形态（与真机逐字同形）：冲突条目独立于汇总行成立——两行一条。"""
+    parsed = parse_compile_errors(SYSCFG_CONFLICT_BLOCK)
+    assert [e.path for e in parsed] == [SYSCFG_CONFLICT_PATH] * 2
+    assert all(e.kind == "syscfg_conflict" for e in parsed)
+    assert "DC_MOTOR" in parsed[0].message and "PA7" in parsed[0].message
+    assert "HUIDU" in parsed[1].message and "PA27" in parsed[1].message
+
+
+def test_parse_syscfg_conflict_without_occupy_line():
+    """只有报错行（无「is currently in use by」续行）时仍成条：字段名如实带出、
+    不猜引脚（真机上续行总在，但截断日志 / 手工粘贴可能只有一行）。"""
+    parsed = parse_compile_errors(
+        "error: FOO(/ti/driverlib/GPIO) associatedPins[0].pin: Resource conflict\n"
+    )
+    assert len(parsed) == 1
+    entry = parsed[0]
+    assert entry.kind == "syscfg_conflict" and entry.name == "FOO"
+    assert entry.pin == "" and entry.by == ""
+    assert "FOO" in entry.message and "associatedPins[0].pin" in entry.message
+    assert "资源冲突" in entry.message
+
+
+def test_summarize_lowercase_summary_line_takes_values():
+    """汇总行大小写放宽（修复方向①）：全小写 error(s)/warning(s) 与 UV4 的
+    Error(s)/Warning(s) 同判——真机 gmake 线形态。"""
+    assert summarize_compile_output("7 error(s), 0 warning(s)", ()) == {
+        "errors": 7,
+        "warnings": 0,
+    }
+    assert summarize_compile_output("2 error(s) 3 warning(s)", ()) == {
+        "errors": 2,
+        "warnings": 3,
+    }
+    # 单段形态（无 warning 段）照旧按 0 警
+    assert summarize_compile_output("5 error(s)", ()) == {"errors": 5, "warnings": 0}
+
+
+def test_syscfg_conflicts_extracts_from_text_and_entries():
+    """修复链分流的数据源（修复方向③）：文本扫描与已解析条目两条路都能拿到
+    冲突清单——编译结果（只有 error_text）与修复轮（有 parsed）共用同一判据。"""
+    parsed = parse_compile_errors(SYSCFG_CONFLICT_BLOCK)
+    from_entries = syscfg_conflicts("", parsed)
+    from_text = syscfg_conflicts(SYSCFG_CONFLICT_BLOCK, ())
+    assert from_entries == from_text
+    assert len(from_text) == 2
+    assert from_entries[0].name == "DC_MOTOR" and from_entries[0].pin == "PA7"
+    assert from_entries[1].name == "HUIDU" and from_entries[1].pin == "PA27"
+    # 无冲突文本 → 空（不误报）
+    assert syscfg_conflicts("0 Error(s), 0 Warning(s).\n", ()) == ()
+    assert syscfg_conflicts("", ()) == ()
+
+
+def test_should_skip_llm_fix_predicate_shared_by_domain_and_cli():
+    """短路判据单源（工单 02 修复方向③）：域层 run_fix_round 与 CLI 验收脚本共用
+    should_skip_llm_fix——同一输入必得同一结论（两处各写一份判据必致漂移：
+    纯冲突短路、并存源码错不短路）。"""
+    conflicts = syscfg_conflicts("", parse_compile_errors(SYSCFG_CONFLICT_BLOCK))
+    assert should_skip_llm_fix((), conflicts) is True  # 纯冲突 + 无源码候选 → 短路
+    assert should_skip_llm_fix(("main.c",), conflicts) is False  # 并存源码错 → 照修
+    assert should_skip_llm_fix((), ()) is False  # 无候选也无冲突 = 纯降级形态
+    assert should_skip_llm_fix(("main.c",), ()) is False  # 常规源码修复
+
+
+def test_run_fix_round_mixed_source_error_and_conflict_still_fixes_source(tmp_path):
+    """并存形态（源码错 + 配置冲突）：冲突不是 LLM 能修的，但源码错是——短路
+    判据不得把源码错一起放弃（LLM 照常收到含冲突原文的 error_text，源码错照修），
+    冲突条目同时如实带出（syscfg_conflicts 非空）。"""
+    out = _make_project(tmp_path)
+    llm = FakeLLM(
+        fixes=(
+            FixSuggestion(
+                file="main.c", line=1, old_snippet="int x = 1;",
+                new_snippet="int x = 2;", reason="修复初始化",
+            ),
+        )
+    )
+    done = run_fix_round(
+        llm,
+        error_text="main.c(1): error #20: boom\n" + SYSCFG_CONFLICT_BLOCK,
+        output_dir=out,
+        backup_root=_backup_root(tmp_path),
+    )
+    assert done["degraded"] is False  # 有源码候选
+    assert len(llm.fix_errors_calls) == 1  # 源码错照修（不因冲突放弃）
+    assert done["fixes"][0]["status"] == "applied"
+    assert len(done["syscfg_conflicts"]) == 2  # 冲突同时如实带出
+    assert done["notice"]  # 指路文案在场
+
+
+def test_run_fix_round_config_conflict_stops_with_guidance(tmp_path):
+    """修复方向③红证（域层）：配置级冲突 = 没有源码可改 → 不进 LLM 修复
+    （不白烧一轮），done 载荷如实带出冲突清单（syscfg_conflicts）。实施前：
+    degraded=True 但载荷里没有任何可读原因，用户只见「未定位到可修复文件」。"""
+    out = _make_project(tmp_path)
+    llm = FakeLLM()
+    emitted: list[ProgressEvent] = []
+    done = run_fix_round(
+        llm,
+        error_text=SYSCFG_CONFLICT_BLOCK + "2 error(s), 0 warning(s)\n",
+        output_dir=out,
+        backup_root=_backup_root(tmp_path),
+        emit=emitted.append,
+    )
+    assert done["degraded"] is True  # 无源码候选（既有语义不变）
+    assert done["fixes"] == [] and done["backup_id"] == ""
+    assert len(done["syscfg_conflicts"]) == 2
+    assert done["syscfg_conflicts"][0]["name"] == "DC_MOTOR"
+    assert done["syscfg_conflicts"][0]["pin"] == "PA7"
+    assert done["syscfg_conflicts"][0]["by"] == "SERVO_PWM"
+    assert [e.type for e in emitted] == [EVENT_PARSE_DONE, EVENT_FIX_START]
+    assert llm.fix_errors_calls == []  # 配置级冲突不喂 /api/fix-errors
+    # 逐条冲突进 parsed（前端错误列表据此渲染，不再空列表）
+    assert [p["kind"] for p in done["parsed"]] == ["syscfg_conflict"] * 2
+
+
+def test_run_fix_round_plain_degraded_has_empty_conflict_list(tmp_path):
+    """零回归：无冲突的降级形态（链接错误等）照旧——syscfg_conflicts 为空，
+    degraded 语义不变，仍走只按报错全文的降级修复。"""
+    out = _make_project(tmp_path)
+    done = run_fix_round(
+        FakeLLM(),
+        error_text="L6200E: Symbol foo multiply defined (by main.o and bar.o)",
+        output_dir=out,
+        backup_root=_backup_root(tmp_path),
+    )
+    assert done["degraded"] is True and done["syscfg_conflicts"] == []
 
 
 def test_apply_fixes_body_free_of_matching_primitives():

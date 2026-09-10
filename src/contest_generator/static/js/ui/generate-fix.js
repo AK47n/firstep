@@ -25,7 +25,7 @@ import { fixLogGroupHidden } from "/js/fx/generate.js";
 import { formatLLMTelemetry } from "/js/fx/llm.js";
 import { fixRowHTML } from "/js/fx/fix-rows.js";  // 修复结果行共享（工单 code-ide-ai/06）
 import { isMainCPath, maincJumpToLine } from "/js/fx/code.js";
-import { compileErrorPathNorm, compileErrorPathBase } from "/js/fx/code-compile.js";  // 编译错误 path 归一单源（工单 05 评审整改：fixKeyOf/fixKeyBasename 收敛到 fx 纯件）
+import { compileErrorPathNorm, compileErrorPathBase, isSyscfgConflict } from "/js/fx/code-compile.js";  // 编译错误 path 归一单源（工单 05 评审整改：fixKeyOf/fixKeyBasename 收敛到 fx 纯件）+ 配置级冲突判据（工单 02）
 import { makeWaitClock } from "/js/ui/progress.js";  // 长任务秒表（工单 ux-walkthrough-02/12）
 import { chosenPlatform, selectedSlugs } from "/js/ui/generate-recommend.js";
 import { reportRecentStatus } from "/js/ui/recent.js";
@@ -150,7 +150,10 @@ function fixRenderResults(parsed, fixes, round, listEl, onRowClick) {
   }
   const appendRow = (entry, label, cls, extra) => {
     const row = document.createElement("div");
-    row.className = "fix-row";
+    // 配置级冲突（工单 02）：不可跳转（没有源码可去）——标 conflict 类，
+    // 不绑行点击（fixToggleSource 对伪路径无意义）
+    const isConflict = isSyscfgConflict(entry);
+    row.className = "fix-row" + (isConflict ? " fix-row-conflict" : "");
     const tag = document.createElement("span");
     tag.className = "fix-tag " + cls;
     tag.textContent = label;
@@ -165,7 +168,9 @@ function fixRenderResults(parsed, fixes, round, listEl, onRowClick) {
     msg.textContent = extra || entry.message || "";
     row.appendChild(msg);
     row._source = { path: entry.path || entry.file, line: entry.line };
-    row.addEventListener("click", () => (onRowClick || fixToggleSource)(row));
+    if (!isConflict) {
+      row.addEventListener("click", () => (onRowClick || fixToggleSource)(row));
+    }
     list.appendChild(row);
   };
   for (const p of parsed) {
@@ -173,6 +178,9 @@ function fixRenderResults(parsed, fixes, round, listEl, onRowClick) {
     if (f) {
       appendRow(p, f.status === "applied" ? "已修复" : "跳过",
         f.status === "applied" ? "fixed" : "skipped", f.reason);
+    } else if (isSyscfgConflict(p)) {
+      // 配置级冲突没有「待修复」语义（不是源码问题，AI 也修不了）——如实标注
+      appendRow(p, "配置冲突", "conflict", "");
     } else {
       appendRow(p, round <= 1 ? "待修复" : "新增", round <= 1 ? "pending" : "new", "");
     }
