@@ -1,0 +1,530 @@
+﻿# 第十二轮：smoke-01（传输层 = cdp-harness.mjs：每支前 rebuildTab + 命令级 20s 超时 + 对话框自动应答）连跑 20 轮
+# 开始：2026-09-10 17:32:24  脚本：.scratch/code-editor-refine/smoke-01.mjs  CDP 9251 / webapp 8000
+===== r1  exit=0  PASS=21  FAIL=0  TRANSPORT=0  ::21 PASS / 0 FAIL
+PASS 1-pre 打开 main.c（树点击命中且成为活动标签）
+PASS 1-pre2 编辑器 textarea 到场
+PASS 1a 修改为脏（ta 值生效）
+PASS 1b beforeunload：脏 → 拦截
+PASS 2a 弹三选模态
+PASS 2b 消息含计数与路径
+PASS 2c 三按钮齐
+PASS 3a 取消后仍为 A
+PASS 3b 编辑保留且脏
+PASS 4a 放弃后为 B
+PASS 4b 标签已清（丢弃）
+PASS 5-pre 打开 other.c（树点击命中且成为活动标签）
+PASS 5-pre2 编辑器 textarea 到场
+PASS 5-pre3 改脏已写入编辑器
+PASS 5-pre4 切 A 弹三选模态
+PASS 5-pre5 点「保存全部」后目录切到 A（防「点了没反应」掩盖成 5a/5b 红）
+{"tag":"after-save-switch","label":"C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\a","modal":false,"conflict":false,"ta":null}
+PASS 5a 保存后为 A
+PASS 5b B 磁盘内容已含修改
+PASS 5b-supp 打开成功后标签未被第三方清空（第十轮残余签名的机器判据）
+PASS 6a 无脏切目录不弹窗
+PASS 6b beforeunload：干净 → 不拦截
+
+21 PASS / 0 FAIL
+   [事件] 事件序列=["Runtime.executionContextCreated","Page.frameStartedNavigating","Page.frameStartedLoading","Runtime.executionContextsCleared","Runtime.executionContextsCleared","Page.frameNavigated","Runtime.executionContextCreated","Page.domContentEventFired","Page.loadEventFired","Page.frameStoppedLoading"]
+===== r2  exit=0  PASS=21  FAIL=0  TRANSPORT=0  ::21 PASS / 0 FAIL
+PASS 1-pre 打开 main.c（树点击命中且成为活动标签）
+PASS 1-pre2 编辑器 textarea 到场
+PASS 1a 修改为脏（ta 值生效）
+PASS 1b beforeunload：脏 → 拦截
+PASS 2a 弹三选模态
+PASS 2b 消息含计数与路径
+PASS 2c 三按钮齐
+PASS 3a 取消后仍为 A
+PASS 3b 编辑保留且脏
+PASS 4a 放弃后为 B
+PASS 4b 标签已清（丢弃）
+PASS 5-pre 打开 other.c（树点击命中且成为活动标签）
+PASS 5-pre2 编辑器 textarea 到场
+PASS 5-pre3 改脏已写入编辑器
+PASS 5-pre4 切 A 弹三选模态
+PASS 5-pre5 点「保存全部」后目录切到 A（防「点了没反应」掩盖成 5a/5b 红）
+{"tag":"after-save-switch","label":"C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\a","modal":false,"conflict":false,"ta":null}
+PASS 5a 保存后为 A
+PASS 5b B 磁盘内容已含修改
+PASS 5b-supp 打开成功后标签未被第三方清空（第十轮残余签名的机器判据）
+PASS 6a 无脏切目录不弹窗
+PASS 6b beforeunload：干净 → 不拦截
+
+21 PASS / 0 FAIL
+   [事件] 事件序列=["Runtime.executionContextCreated","Page.frameStartedNavigating","Page.frameStartedLoading","Runtime.executionContextsCleared","Runtime.executionContextsCleared","Page.frameNavigated","Runtime.executionContextCreated","Page.domContentEventFired","Page.loadEventFired","Page.frameStoppedLoading"]
+===== r3  exit=0  PASS=21  FAIL=0  TRANSPORT=0  ::21 PASS / 0 FAIL
+PASS 1-pre 打开 main.c（树点击命中且成为活动标签）
+PASS 1-pre2 编辑器 textarea 到场
+PASS 1a 修改为脏（ta 值生效）
+PASS 1b beforeunload：脏 → 拦截
+PASS 2a 弹三选模态
+PASS 2b 消息含计数与路径
+PASS 2c 三按钮齐
+PASS 3a 取消后仍为 A
+PASS 3b 编辑保留且脏
+PASS 4a 放弃后为 B
+PASS 4b 标签已清（丢弃）
+PASS 5-pre 打开 other.c（树点击命中且成为活动标签）
+PASS 5-pre2 编辑器 textarea 到场
+PASS 5-pre3 改脏已写入编辑器
+PASS 5-pre4 切 A 弹三选模态
+PASS 5-pre5 点「保存全部」后目录切到 A（防「点了没反应」掩盖成 5a/5b 红）
+{"tag":"after-save-switch","label":"C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\a","modal":false,"conflict":false,"ta":null}
+PASS 5a 保存后为 A
+PASS 5b B 磁盘内容已含修改
+PASS 5b-supp 打开成功后标签未被第三方清空（第十轮残余签名的机器判据）
+PASS 6a 无脏切目录不弹窗
+PASS 6b beforeunload：干净 → 不拦截
+
+21 PASS / 0 FAIL
+   [事件] 事件序列=["Runtime.executionContextCreated","Page.frameStartedNavigating","Page.frameStartedLoading","Runtime.executionContextsCleared","Runtime.executionContextsCleared","Page.frameNavigated","Runtime.executionContextCreated","Page.domContentEventFired","Page.loadEventFired","Page.frameStoppedLoading"]
+===== r4  exit=0  PASS=21  FAIL=0  TRANSPORT=0  ::21 PASS / 0 FAIL
+PASS 1-pre 打开 main.c（树点击命中且成为活动标签）
+PASS 1-pre2 编辑器 textarea 到场
+PASS 1a 修改为脏（ta 值生效）
+PASS 1b beforeunload：脏 → 拦截
+PASS 2a 弹三选模态
+PASS 2b 消息含计数与路径
+PASS 2c 三按钮齐
+PASS 3a 取消后仍为 A
+PASS 3b 编辑保留且脏
+PASS 4a 放弃后为 B
+PASS 4b 标签已清（丢弃）
+PASS 5-pre 打开 other.c（树点击命中且成为活动标签）
+PASS 5-pre2 编辑器 textarea 到场
+PASS 5-pre3 改脏已写入编辑器
+PASS 5-pre4 切 A 弹三选模态
+PASS 5-pre5 点「保存全部」后目录切到 A（防「点了没反应」掩盖成 5a/5b 红）
+{"tag":"after-save-switch","label":"C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\a","modal":false,"conflict":false,"ta":null}
+PASS 5a 保存后为 A
+PASS 5b B 磁盘内容已含修改
+PASS 5b-supp 打开成功后标签未被第三方清空（第十轮残余签名的机器判据）
+PASS 6a 无脏切目录不弹窗
+PASS 6b beforeunload：干净 → 不拦截
+
+21 PASS / 0 FAIL
+   [事件] 事件序列=["Runtime.executionContextCreated","Page.frameStartedNavigating","Page.frameStartedLoading","Runtime.executionContextsCleared","Runtime.executionContextsCleared","Page.frameNavigated","Runtime.executionContextCreated","Page.domContentEventFired","Page.loadEventFired","Page.frameStoppedLoading"]
+===== r5  exit=0  PASS=21  FAIL=0  TRANSPORT=0  ::21 PASS / 0 FAIL
+PASS 1-pre 打开 main.c（树点击命中且成为活动标签）
+PASS 1-pre2 编辑器 textarea 到场
+PASS 1a 修改为脏（ta 值生效）
+PASS 1b beforeunload：脏 → 拦截
+PASS 2a 弹三选模态
+PASS 2b 消息含计数与路径
+PASS 2c 三按钮齐
+PASS 3a 取消后仍为 A
+PASS 3b 编辑保留且脏
+PASS 4a 放弃后为 B
+PASS 4b 标签已清（丢弃）
+PASS 5-pre 打开 other.c（树点击命中且成为活动标签）
+PASS 5-pre2 编辑器 textarea 到场
+PASS 5-pre3 改脏已写入编辑器
+PASS 5-pre4 切 A 弹三选模态
+PASS 5-pre5 点「保存全部」后目录切到 A（防「点了没反应」掩盖成 5a/5b 红）
+{"tag":"after-save-switch","label":"C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\a","modal":false,"conflict":false,"ta":null}
+PASS 5a 保存后为 A
+PASS 5b B 磁盘内容已含修改
+PASS 5b-supp 打开成功后标签未被第三方清空（第十轮残余签名的机器判据）
+PASS 6a 无脏切目录不弹窗
+PASS 6b beforeunload：干净 → 不拦截
+
+21 PASS / 0 FAIL
+   [事件] 事件序列=["Runtime.executionContextCreated","Page.frameStartedNavigating","Page.frameStartedLoading","Runtime.executionContextsCleared","Runtime.executionContextsCleared","Page.frameNavigated","Runtime.executionContextCreated","Page.domContentEventFired","Page.loadEventFired","Page.frameStoppedLoading"]
+===== r6  exit=0  PASS=21  FAIL=0  TRANSPORT=0  ::21 PASS / 0 FAIL
+PASS 1-pre 打开 main.c（树点击命中且成为活动标签）
+PASS 1-pre2 编辑器 textarea 到场
+PASS 1a 修改为脏（ta 值生效）
+PASS 1b beforeunload：脏 → 拦截
+PASS 2a 弹三选模态
+PASS 2b 消息含计数与路径
+PASS 2c 三按钮齐
+PASS 3a 取消后仍为 A
+PASS 3b 编辑保留且脏
+PASS 4a 放弃后为 B
+PASS 4b 标签已清（丢弃）
+PASS 5-pre 打开 other.c（树点击命中且成为活动标签）
+PASS 5-pre2 编辑器 textarea 到场
+PASS 5-pre3 改脏已写入编辑器
+PASS 5-pre4 切 A 弹三选模态
+PASS 5-pre5 点「保存全部」后目录切到 A（防「点了没反应」掩盖成 5a/5b 红）
+{"tag":"after-save-switch","label":"C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\a","modal":false,"conflict":false,"ta":null}
+PASS 5a 保存后为 A
+PASS 5b B 磁盘内容已含修改
+PASS 5b-supp 打开成功后标签未被第三方清空（第十轮残余签名的机器判据）
+PASS 6a 无脏切目录不弹窗
+PASS 6b beforeunload：干净 → 不拦截
+
+21 PASS / 0 FAIL
+   [事件] 事件序列=["Runtime.executionContextCreated","Page.frameStartedNavigating","Page.frameStartedLoading","Runtime.executionContextsCleared","Runtime.executionContextsCleared","Page.frameNavigated","Runtime.executionContextCreated","Page.domContentEventFired","Page.loadEventFired","Page.frameStoppedLoading"]
+===== r7  exit=0  PASS=21  FAIL=0  TRANSPORT=0  ::21 PASS / 0 FAIL
+PASS 1-pre 打开 main.c（树点击命中且成为活动标签）
+PASS 1-pre2 编辑器 textarea 到场
+PASS 1a 修改为脏（ta 值生效）
+PASS 1b beforeunload：脏 → 拦截
+PASS 2a 弹三选模态
+PASS 2b 消息含计数与路径
+PASS 2c 三按钮齐
+PASS 3a 取消后仍为 A
+PASS 3b 编辑保留且脏
+PASS 4a 放弃后为 B
+PASS 4b 标签已清（丢弃）
+PASS 5-pre 打开 other.c（树点击命中且成为活动标签）
+PASS 5-pre2 编辑器 textarea 到场
+PASS 5-pre3 改脏已写入编辑器
+PASS 5-pre4 切 A 弹三选模态
+PASS 5-pre5 点「保存全部」后目录切到 A（防「点了没反应」掩盖成 5a/5b 红）
+{"tag":"after-save-switch","label":"C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\a","modal":false,"conflict":false,"ta":null}
+PASS 5a 保存后为 A
+PASS 5b B 磁盘内容已含修改
+PASS 5b-supp 打开成功后标签未被第三方清空（第十轮残余签名的机器判据）
+PASS 6a 无脏切目录不弹窗
+PASS 6b beforeunload：干净 → 不拦截
+
+21 PASS / 0 FAIL
+   [事件] 事件序列=["Runtime.executionContextCreated","Page.frameStartedNavigating","Page.frameStartedLoading","Runtime.executionContextsCleared","Runtime.executionContextsCleared","Page.frameNavigated","Runtime.executionContextCreated","Page.domContentEventFired","Page.loadEventFired","Page.frameStoppedLoading"]
+===== r8  exit=0  PASS=21  FAIL=0  TRANSPORT=0  ::21 PASS / 0 FAIL
+PASS 1-pre 打开 main.c（树点击命中且成为活动标签）
+PASS 1-pre2 编辑器 textarea 到场
+PASS 1a 修改为脏（ta 值生效）
+PASS 1b beforeunload：脏 → 拦截
+PASS 2a 弹三选模态
+PASS 2b 消息含计数与路径
+PASS 2c 三按钮齐
+PASS 3a 取消后仍为 A
+PASS 3b 编辑保留且脏
+PASS 4a 放弃后为 B
+PASS 4b 标签已清（丢弃）
+PASS 5-pre 打开 other.c（树点击命中且成为活动标签）
+PASS 5-pre2 编辑器 textarea 到场
+PASS 5-pre3 改脏已写入编辑器
+PASS 5-pre4 切 A 弹三选模态
+PASS 5-pre5 点「保存全部」后目录切到 A（防「点了没反应」掩盖成 5a/5b 红）
+{"tag":"after-save-switch","label":"C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\a","modal":false,"conflict":false,"ta":null}
+PASS 5a 保存后为 A
+PASS 5b B 磁盘内容已含修改
+PASS 5b-supp 打开成功后标签未被第三方清空（第十轮残余签名的机器判据）
+PASS 6a 无脏切目录不弹窗
+PASS 6b beforeunload：干净 → 不拦截
+
+21 PASS / 0 FAIL
+   [事件] 事件序列=["Runtime.executionContextCreated","Page.frameStartedNavigating","Page.frameStartedLoading","Runtime.executionContextsCleared","Runtime.executionContextsCleared","Page.frameNavigated","Runtime.executionContextCreated","Page.domContentEventFired","Page.loadEventFired","Page.frameStoppedLoading"]
+===== r9  exit=0  PASS=21  FAIL=0  TRANSPORT=0  ::21 PASS / 0 FAIL
+PASS 1-pre 打开 main.c（树点击命中且成为活动标签）
+PASS 1-pre2 编辑器 textarea 到场
+PASS 1a 修改为脏（ta 值生效）
+PASS 1b beforeunload：脏 → 拦截
+PASS 2a 弹三选模态
+PASS 2b 消息含计数与路径
+PASS 2c 三按钮齐
+PASS 3a 取消后仍为 A
+PASS 3b 编辑保留且脏
+PASS 4a 放弃后为 B
+PASS 4b 标签已清（丢弃）
+PASS 5-pre 打开 other.c（树点击命中且成为活动标签）
+PASS 5-pre2 编辑器 textarea 到场
+PASS 5-pre3 改脏已写入编辑器
+PASS 5-pre4 切 A 弹三选模态
+PASS 5-pre5 点「保存全部」后目录切到 A（防「点了没反应」掩盖成 5a/5b 红）
+{"tag":"after-save-switch","label":"C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\a","modal":false,"conflict":false,"ta":null}
+PASS 5a 保存后为 A
+PASS 5b B 磁盘内容已含修改
+PASS 5b-supp 打开成功后标签未被第三方清空（第十轮残余签名的机器判据）
+PASS 6a 无脏切目录不弹窗
+PASS 6b beforeunload：干净 → 不拦截
+
+21 PASS / 0 FAIL
+   [事件] 事件序列=["Runtime.executionContextCreated","Page.frameStartedNavigating","Page.frameStartedLoading","Runtime.executionContextsCleared","Runtime.executionContextsCleared","Page.frameNavigated","Runtime.executionContextCreated","Page.domContentEventFired","Page.loadEventFired","Page.frameStoppedLoading"]
+===== r10  exit=0  PASS=21  FAIL=0  TRANSPORT=0  ::21 PASS / 0 FAIL
+PASS 1-pre 打开 main.c（树点击命中且成为活动标签）
+PASS 1-pre2 编辑器 textarea 到场
+PASS 1a 修改为脏（ta 值生效）
+PASS 1b beforeunload：脏 → 拦截
+PASS 2a 弹三选模态
+PASS 2b 消息含计数与路径
+PASS 2c 三按钮齐
+PASS 3a 取消后仍为 A
+PASS 3b 编辑保留且脏
+PASS 4a 放弃后为 B
+PASS 4b 标签已清（丢弃）
+PASS 5-pre 打开 other.c（树点击命中且成为活动标签）
+PASS 5-pre2 编辑器 textarea 到场
+PASS 5-pre3 改脏已写入编辑器
+PASS 5-pre4 切 A 弹三选模态
+PASS 5-pre5 点「保存全部」后目录切到 A（防「点了没反应」掩盖成 5a/5b 红）
+{"tag":"after-save-switch","label":"C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\a","modal":false,"conflict":false,"ta":null}
+PASS 5a 保存后为 A
+PASS 5b B 磁盘内容已含修改
+PASS 5b-supp 打开成功后标签未被第三方清空（第十轮残余签名的机器判据）
+PASS 6a 无脏切目录不弹窗
+PASS 6b beforeunload：干净 → 不拦截
+
+21 PASS / 0 FAIL
+   [事件] 事件序列=["Runtime.executionContextCreated","Page.frameStartedNavigating","Page.frameStartedLoading","Runtime.executionContextsCleared","Runtime.executionContextsCleared","Page.frameNavigated","Runtime.executionContextCreated","Page.domContentEventFired","Page.loadEventFired","Page.frameStoppedLoading"]
+===== r11  exit=0  PASS=21  FAIL=0  TRANSPORT=0  ::21 PASS / 0 FAIL
+PASS 1-pre 打开 main.c（树点击命中且成为活动标签）
+PASS 1-pre2 编辑器 textarea 到场
+PASS 1a 修改为脏（ta 值生效）
+PASS 1b beforeunload：脏 → 拦截
+PASS 2a 弹三选模态
+PASS 2b 消息含计数与路径
+PASS 2c 三按钮齐
+PASS 3a 取消后仍为 A
+PASS 3b 编辑保留且脏
+PASS 4a 放弃后为 B
+PASS 4b 标签已清（丢弃）
+PASS 5-pre 打开 other.c（树点击命中且成为活动标签）
+PASS 5-pre2 编辑器 textarea 到场
+PASS 5-pre3 改脏已写入编辑器
+PASS 5-pre4 切 A 弹三选模态
+PASS 5-pre5 点「保存全部」后目录切到 A（防「点了没反应」掩盖成 5a/5b 红）
+{"tag":"after-save-switch","label":"C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\a","modal":false,"conflict":false,"ta":null}
+PASS 5a 保存后为 A
+PASS 5b B 磁盘内容已含修改
+PASS 5b-supp 打开成功后标签未被第三方清空（第十轮残余签名的机器判据）
+PASS 6a 无脏切目录不弹窗
+PASS 6b beforeunload：干净 → 不拦截
+
+21 PASS / 0 FAIL
+   [事件] 事件序列=["Runtime.executionContextCreated","Page.frameStartedNavigating","Page.frameStartedLoading","Runtime.executionContextsCleared","Runtime.executionContextsCleared","Page.frameNavigated","Runtime.executionContextCreated","Page.domContentEventFired","Page.loadEventFired","Page.frameStoppedLoading"]
+===== r12  exit=0  PASS=21  FAIL=0  TRANSPORT=0  ::21 PASS / 0 FAIL
+PASS 1-pre 打开 main.c（树点击命中且成为活动标签）
+PASS 1-pre2 编辑器 textarea 到场
+PASS 1a 修改为脏（ta 值生效）
+PASS 1b beforeunload：脏 → 拦截
+PASS 2a 弹三选模态
+PASS 2b 消息含计数与路径
+PASS 2c 三按钮齐
+PASS 3a 取消后仍为 A
+PASS 3b 编辑保留且脏
+PASS 4a 放弃后为 B
+PASS 4b 标签已清（丢弃）
+PASS 5-pre 打开 other.c（树点击命中且成为活动标签）
+PASS 5-pre2 编辑器 textarea 到场
+PASS 5-pre3 改脏已写入编辑器
+PASS 5-pre4 切 A 弹三选模态
+PASS 5-pre5 点「保存全部」后目录切到 A（防「点了没反应」掩盖成 5a/5b 红）
+{"tag":"after-save-switch","label":"C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\a","modal":false,"conflict":false,"ta":null}
+PASS 5a 保存后为 A
+PASS 5b B 磁盘内容已含修改
+PASS 5b-supp 打开成功后标签未被第三方清空（第十轮残余签名的机器判据）
+PASS 6a 无脏切目录不弹窗
+PASS 6b beforeunload：干净 → 不拦截
+
+21 PASS / 0 FAIL
+   [事件] 事件序列=["Runtime.executionContextCreated","Page.frameStartedNavigating","Page.frameStartedLoading","Runtime.executionContextsCleared","Runtime.executionContextsCleared","Page.frameNavigated","Runtime.executionContextCreated","Page.domContentEventFired","Page.loadEventFired","Page.frameStoppedLoading"]
+===== r13  exit=0  PASS=21  FAIL=0  TRANSPORT=0  ::21 PASS / 0 FAIL
+PASS 1-pre 打开 main.c（树点击命中且成为活动标签）
+PASS 1-pre2 编辑器 textarea 到场
+PASS 1a 修改为脏（ta 值生效）
+PASS 1b beforeunload：脏 → 拦截
+PASS 2a 弹三选模态
+PASS 2b 消息含计数与路径
+PASS 2c 三按钮齐
+PASS 3a 取消后仍为 A
+PASS 3b 编辑保留且脏
+PASS 4a 放弃后为 B
+PASS 4b 标签已清（丢弃）
+PASS 5-pre 打开 other.c（树点击命中且成为活动标签）
+PASS 5-pre2 编辑器 textarea 到场
+PASS 5-pre3 改脏已写入编辑器
+PASS 5-pre4 切 A 弹三选模态
+PASS 5-pre5 点「保存全部」后目录切到 A（防「点了没反应」掩盖成 5a/5b 红）
+{"tag":"after-save-switch","label":"C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\a","modal":false,"conflict":false,"ta":null}
+PASS 5a 保存后为 A
+PASS 5b B 磁盘内容已含修改
+PASS 5b-supp 打开成功后标签未被第三方清空（第十轮残余签名的机器判据）
+PASS 6a 无脏切目录不弹窗
+PASS 6b beforeunload：干净 → 不拦截
+
+21 PASS / 0 FAIL
+   [事件] 事件序列=["Runtime.executionContextCreated","Page.frameStartedNavigating","Page.frameStartedLoading","Runtime.executionContextsCleared","Runtime.executionContextsCleared","Page.frameNavigated","Runtime.executionContextCreated","Page.domContentEventFired","Page.loadEventFired","Page.frameStoppedLoading"]
+===== r14  exit=0  PASS=21  FAIL=0  TRANSPORT=0  ::21 PASS / 0 FAIL
+PASS 1-pre 打开 main.c（树点击命中且成为活动标签）
+PASS 1-pre2 编辑器 textarea 到场
+PASS 1a 修改为脏（ta 值生效）
+PASS 1b beforeunload：脏 → 拦截
+PASS 2a 弹三选模态
+PASS 2b 消息含计数与路径
+PASS 2c 三按钮齐
+PASS 3a 取消后仍为 A
+PASS 3b 编辑保留且脏
+PASS 4a 放弃后为 B
+PASS 4b 标签已清（丢弃）
+PASS 5-pre 打开 other.c（树点击命中且成为活动标签）
+PASS 5-pre2 编辑器 textarea 到场
+PASS 5-pre3 改脏已写入编辑器
+PASS 5-pre4 切 A 弹三选模态
+PASS 5-pre5 点「保存全部」后目录切到 A（防「点了没反应」掩盖成 5a/5b 红）
+{"tag":"after-save-switch","label":"C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\a","modal":false,"conflict":false,"ta":null}
+PASS 5a 保存后为 A
+PASS 5b B 磁盘内容已含修改
+PASS 5b-supp 打开成功后标签未被第三方清空（第十轮残余签名的机器判据）
+PASS 6a 无脏切目录不弹窗
+PASS 6b beforeunload：干净 → 不拦截
+
+21 PASS / 0 FAIL
+   [事件] 事件序列=["Runtime.executionContextCreated","Page.frameStartedNavigating","Page.frameStartedLoading","Runtime.executionContextsCleared","Runtime.executionContextsCleared","Page.frameNavigated","Runtime.executionContextCreated","Page.domContentEventFired","Page.loadEventFired","Page.frameStoppedLoading"]
+===== r15  exit=0  PASS=21  FAIL=0  TRANSPORT=0  ::21 PASS / 0 FAIL
+PASS 1-pre 打开 main.c（树点击命中且成为活动标签）
+PASS 1-pre2 编辑器 textarea 到场
+PASS 1a 修改为脏（ta 值生效）
+PASS 1b beforeunload：脏 → 拦截
+PASS 2a 弹三选模态
+PASS 2b 消息含计数与路径
+PASS 2c 三按钮齐
+PASS 3a 取消后仍为 A
+PASS 3b 编辑保留且脏
+PASS 4a 放弃后为 B
+PASS 4b 标签已清（丢弃）
+PASS 5-pre 打开 other.c（树点击命中且成为活动标签）
+PASS 5-pre2 编辑器 textarea 到场
+PASS 5-pre3 改脏已写入编辑器
+PASS 5-pre4 切 A 弹三选模态
+PASS 5-pre5 点「保存全部」后目录切到 A（防「点了没反应」掩盖成 5a/5b 红）
+{"tag":"after-save-switch","label":"C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\a","modal":false,"conflict":false,"ta":null}
+PASS 5a 保存后为 A
+PASS 5b B 磁盘内容已含修改
+PASS 5b-supp 打开成功后标签未被第三方清空（第十轮残余签名的机器判据）
+PASS 6a 无脏切目录不弹窗
+PASS 6b beforeunload：干净 → 不拦截
+
+21 PASS / 0 FAIL
+   [事件] 事件序列=["Runtime.executionContextCreated","Page.frameStartedNavigating","Page.frameStartedLoading","Runtime.executionContextsCleared","Runtime.executionContextsCleared","Page.frameNavigated","Runtime.executionContextCreated","Page.domContentEventFired","Page.loadEventFired","Page.frameStoppedLoading"]
+===== r16  exit=0  PASS=21  FAIL=0  TRANSPORT=0  ::21 PASS / 0 FAIL
+PASS 1-pre 打开 main.c（树点击命中且成为活动标签）
+PASS 1-pre2 编辑器 textarea 到场
+PASS 1a 修改为脏（ta 值生效）
+PASS 1b beforeunload：脏 → 拦截
+PASS 2a 弹三选模态
+PASS 2b 消息含计数与路径
+PASS 2c 三按钮齐
+PASS 3a 取消后仍为 A
+PASS 3b 编辑保留且脏
+PASS 4a 放弃后为 B
+PASS 4b 标签已清（丢弃）
+PASS 5-pre 打开 other.c（树点击命中且成为活动标签）
+PASS 5-pre2 编辑器 textarea 到场
+PASS 5-pre3 改脏已写入编辑器
+PASS 5-pre4 切 A 弹三选模态
+PASS 5-pre5 点「保存全部」后目录切到 A（防「点了没反应」掩盖成 5a/5b 红）
+{"tag":"after-save-switch","label":"C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\a","modal":false,"conflict":false,"ta":null}
+PASS 5a 保存后为 A
+PASS 5b B 磁盘内容已含修改
+PASS 5b-supp 打开成功后标签未被第三方清空（第十轮残余签名的机器判据）
+PASS 6a 无脏切目录不弹窗
+PASS 6b beforeunload：干净 → 不拦截
+
+21 PASS / 0 FAIL
+   [事件] 事件序列=["Runtime.executionContextCreated","Page.frameStartedNavigating","Page.frameStartedLoading","Runtime.executionContextsCleared","Runtime.executionContextsCleared","Page.frameNavigated","Runtime.executionContextCreated","Page.domContentEventFired","Page.loadEventFired","Page.frameStoppedLoading"]
+===== r17  exit=0  PASS=21  FAIL=0  TRANSPORT=0  ::21 PASS / 0 FAIL
+PASS 1-pre 打开 main.c（树点击命中且成为活动标签）
+PASS 1-pre2 编辑器 textarea 到场
+PASS 1a 修改为脏（ta 值生效）
+PASS 1b beforeunload：脏 → 拦截
+PASS 2a 弹三选模态
+PASS 2b 消息含计数与路径
+PASS 2c 三按钮齐
+PASS 3a 取消后仍为 A
+PASS 3b 编辑保留且脏
+PASS 4a 放弃后为 B
+PASS 4b 标签已清（丢弃）
+PASS 5-pre 打开 other.c（树点击命中且成为活动标签）
+PASS 5-pre2 编辑器 textarea 到场
+PASS 5-pre3 改脏已写入编辑器
+PASS 5-pre4 切 A 弹三选模态
+PASS 5-pre5 点「保存全部」后目录切到 A（防「点了没反应」掩盖成 5a/5b 红）
+{"tag":"after-save-switch","label":"C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\a","modal":false,"conflict":false,"ta":null}
+PASS 5a 保存后为 A
+PASS 5b B 磁盘内容已含修改
+PASS 5b-supp 打开成功后标签未被第三方清空（第十轮残余签名的机器判据）
+PASS 6a 无脏切目录不弹窗
+PASS 6b beforeunload：干净 → 不拦截
+
+21 PASS / 0 FAIL
+   [事件] 事件序列=["Runtime.executionContextCreated","Page.frameStartedNavigating","Page.frameStartedLoading","Runtime.executionContextsCleared","Runtime.executionContextsCleared","Page.frameNavigated","Runtime.executionContextCreated","Page.domContentEventFired","Page.loadEventFired","Page.frameStoppedLoading"]
+===== r18  exit=0  PASS=21  FAIL=0  TRANSPORT=0  ::21 PASS / 0 FAIL
+PASS 1-pre 打开 main.c（树点击命中且成为活动标签）
+PASS 1-pre2 编辑器 textarea 到场
+PASS 1a 修改为脏（ta 值生效）
+PASS 1b beforeunload：脏 → 拦截
+PASS 2a 弹三选模态
+PASS 2b 消息含计数与路径
+PASS 2c 三按钮齐
+PASS 3a 取消后仍为 A
+PASS 3b 编辑保留且脏
+PASS 4a 放弃后为 B
+PASS 4b 标签已清（丢弃）
+PASS 5-pre 打开 other.c（树点击命中且成为活动标签）
+PASS 5-pre2 编辑器 textarea 到场
+PASS 5-pre3 改脏已写入编辑器
+PASS 5-pre4 切 A 弹三选模态
+PASS 5-pre5 点「保存全部」后目录切到 A（防「点了没反应」掩盖成 5a/5b 红）
+{"tag":"after-save-switch","label":"C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\a","modal":false,"conflict":false,"ta":null}
+PASS 5a 保存后为 A
+PASS 5b B 磁盘内容已含修改
+PASS 5b-supp 打开成功后标签未被第三方清空（第十轮残余签名的机器判据）
+PASS 6a 无脏切目录不弹窗
+PASS 6b beforeunload：干净 → 不拦截
+
+21 PASS / 0 FAIL
+   [事件] 事件序列=["Runtime.executionContextCreated","Page.frameStartedNavigating","Page.frameStartedLoading","Runtime.executionContextsCleared","Runtime.executionContextsCleared","Page.frameNavigated","Runtime.executionContextCreated","Page.domContentEventFired","Page.loadEventFired","Page.frameStoppedLoading"]
+===== r19  exit=0  PASS=21  FAIL=0  TRANSPORT=0  ::21 PASS / 0 FAIL
+PASS 1-pre 打开 main.c（树点击命中且成为活动标签）
+PASS 1-pre2 编辑器 textarea 到场
+PASS 1a 修改为脏（ta 值生效）
+PASS 1b beforeunload：脏 → 拦截
+PASS 2a 弹三选模态
+PASS 2b 消息含计数与路径
+PASS 2c 三按钮齐
+PASS 3a 取消后仍为 A
+PASS 3b 编辑保留且脏
+PASS 4a 放弃后为 B
+PASS 4b 标签已清（丢弃）
+PASS 5-pre 打开 other.c（树点击命中且成为活动标签）
+PASS 5-pre2 编辑器 textarea 到场
+PASS 5-pre3 改脏已写入编辑器
+PASS 5-pre4 切 A 弹三选模态
+PASS 5-pre5 点「保存全部」后目录切到 A（防「点了没反应」掩盖成 5a/5b 红）
+{"tag":"after-save-switch","label":"C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\a","modal":false,"conflict":false,"ta":null}
+PASS 5a 保存后为 A
+PASS 5b B 磁盘内容已含修改
+PASS 5b-supp 打开成功后标签未被第三方清空（第十轮残余签名的机器判据）
+PASS 6a 无脏切目录不弹窗
+PASS 6b beforeunload：干净 → 不拦截
+
+21 PASS / 0 FAIL
+   [事件] 事件序列=["Runtime.executionContextCreated","Page.frameStartedNavigating","Page.frameStartedLoading","Runtime.executionContextsCleared","Runtime.executionContextsCleared","Page.frameNavigated","Runtime.executionContextCreated","Page.domContentEventFired","Page.loadEventFired","Page.frameStoppedLoading"]
+===== r20  exit=0  PASS=21  FAIL=0  TRANSPORT=0  ::21 PASS / 0 FAIL
+PASS 1-pre 打开 main.c（树点击命中且成为活动标签）
+PASS 1-pre2 编辑器 textarea 到场
+PASS 1a 修改为脏（ta 值生效）
+PASS 1b beforeunload：脏 → 拦截
+PASS 2a 弹三选模态
+PASS 2b 消息含计数与路径
+PASS 2c 三按钮齐
+PASS 3a 取消后仍为 A
+PASS 3b 编辑保留且脏
+PASS 4a 放弃后为 B
+PASS 4b 标签已清（丢弃）
+PASS 5-pre 打开 other.c（树点击命中且成为活动标签）
+PASS 5-pre2 编辑器 textarea 到场
+PASS 5-pre3 改脏已写入编辑器
+PASS 5-pre4 切 A 弹三选模态
+PASS 5-pre5 点「保存全部」后目录切到 A（防「点了没反应」掩盖成 5a/5b 红）
+{"tag":"after-save-switch","label":"C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\code-editor-refine\\sample-proj\\a","modal":false,"conflict":false,"ta":null}
+PASS 5a 保存后为 A
+PASS 5b B 磁盘内容已含修改
+PASS 5b-supp 打开成功后标签未被第三方清空（第十轮残余签名的机器判据）
+PASS 6a 无脏切目录不弹窗
+PASS 6b beforeunload：干净 → 不拦截
+
+21 PASS / 0 FAIL
+   [事件] 事件序列=["Runtime.executionContextCreated","Page.frameStartedNavigating","Page.frameStartedLoading","Runtime.executionContextsCleared","Runtime.executionContextsCleared","Page.frameNavigated","Runtime.executionContextCreated","Page.domContentEventFired","Page.loadEventFired","Page.frameStoppedLoading"]
+
+---- 汇总（第十二轮，20 轮；harness 已含 connect() 自动开 Page/Runtime 域）----
+exit=0 × 20 轮
+exit 13（未落定 top-level await）：0 轮
+断言失败（有 FAIL 行）：0 轮
+传输层异常（TRANSPORT）：0 轮
+PASS 计数分布：21 项 × 20 轮
+# 结束：2026-09-10 17:34:37

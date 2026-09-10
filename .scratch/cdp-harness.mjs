@@ -107,6 +107,21 @@ export async function connect({
       ws.send(JSON.stringify({ id, method, params }));
     });
 
+  // 必须开域（第十二轮实测补上）：`Page.javascriptDialogOpening` 是 **Page 域事件**，
+  // 不 `Page.enable` 就收不到 —— 那样下面的「自动应答」是**静默失效**的：对话框照弹、
+  // 无人应答、渲染进程停在等应答态，下一次 `Runtime.evaluate` 直接撞 20s 超时（实测形态：
+  // 脚本前一步还好好的，某一步「脏页 → 导航」之后突然整片命令超时）。
+  // 域状态是**连接级**的：同一浏览器上另一条连接 enable 过，这条连接却收不到事件，
+  // 于是自动应答时灵时不灵 —— 故在 connect() 里无条件打开。
+  // `Runtime.enable` 顺带开，让 `Runtime.exceptionThrown` 诊断事件也稳定上报。
+  // 用带超时的 send 而不是 cdp()：受限 target 上这两个域可能不支持，不能让 connect 失败。
+  const enableDomain = (name) => Promise.race([
+    new Promise((res) => { const id = ++seq; pending.set(id, (msg) => res(msg)); ws.send(JSON.stringify({ id, method: name })); }),
+    sleep(3000).then(() => null),
+  ]).catch(() => null);
+  await enableDomain("Page.enable");
+  await enableDomain("Runtime.enable");
+
   const Eval = async (expr, timeout) => {
     const r = await cdp("Runtime.evaluate", { expression: expr, returnByValue: true, awaitPromise: true }, timeout);
     if (r.result?.exceptionDetails) {

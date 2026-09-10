@@ -4,9 +4,21 @@
 // ④保存全部并切换 → 写盘后切换（重开该文件内容一致）
 // ⑤beforeunload：脏 → preventDefault；干净 → 不拦截
 // 零写库（样例在 .scratch/code-editor-refine/sample-proj）；CDP 9251 + webapp 8000。
+//
+// 传输层（第十二轮，工单 `code-editor-refine/14-harness-transport-migration.md`）：
+// 由 `.scratch/cdp-harness.mjs` 提供，本地不再自带迷你 CDP 客户端——
+//   ① `rebuildTab()` 先重建标签页（clean 页 = 无脏缓冲 = 不弹 beforeunload 原生对话框）；
+//   ② `connect()` 给**每个命令**加 20s 超时守卫（挂死显式 reject，不静默卡住）并自动应答
+//      `Page.javascriptDialogOpening`。
+// 切之前的形态（第十一 ~ 第八轮反复出现的假红）：自建 `cdp()` 只有 resolve、没有 reject、
+// 没有超时 —— 某个渲染进程侧命令一旦不返回，脚本就停在未落定的 top-level await 上，
+// Node 事件循环一空即 **exit 13 且没有任何 FAIL 行**（长连跑劣化 + 对话框挂死两条路径）。
+// 切之后：断言失败 = exit 1（有 FAIL 行），传输层/挂死类 = exit 2（带 TRANSPORT 前缀与
+// CDP 事件序列），**两类不再混在同一个 exit code 里**。
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { connect, pageTarget, rebuildTab } from "../cdp-harness.mjs";
 
 const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const CDP = 9251;
@@ -19,54 +31,63 @@ mkdirSync(DIR_B, { recursive: true });
 writeFileSync(join(DIR_A, "main.c"), "int a = 1;\n");
 writeFileSync(join(DIR_B, "other.c"), "int b = 2;\n");
 
-const fetchT = async (url, ms = 5000) => {
-  const ctl = new AbortController();
-  const t = setTimeout(() => ctl.abort(), ms);
-  try { return await fetch(url, { signal: ctl.signal }); } finally { clearTimeout(t); }
+// 退出码口径：0 = 全绿；1 = 断言失败（有 FAIL 行）；2 = 传输层/挂死/脚本自身异常。
+const EXIT_ASSERT_FAIL = 1;
+const EXIT_TRANSPORT = 2;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// 未落定 top-level await 的兜底：以前这类异常就是「无 FAIL 行的 exit 13」，
+// 现在带原因显式退出（exit 2），现场一眼能看出是传输层而不是断言。
+const bail = (kind) => (e) => {
+  console.error(`TRANSPORT(${kind}) ${String((e && e.stack) || e).split("\n").slice(0, 4).join("\n  ")}`);
+  process.exit(EXIT_TRANSPORT);
+};
+process.on("unhandledRejection", bail("unhandledRejection"));
+process.on("uncaughtException", bail("uncaughtException"));
+
+const cdpEvents = [];
+const dumpEvents = (conn, tag) => {
+  const ev = (conn && conn.events) || cdpEvents;
+  if (!ev.length) return tag + " 事件序列=（空）";
+  return tag + " 事件序列=" + JSON.stringify(ev.map((e) => {
+    if (e.method === "Runtime.exceptionThrown") {
+      const d = (e.params && e.params.exceptionDetails) || {};
+      return [e.method, d.text || (d.exception && d.exception.description) || ""];
+    }
+    if (e.method === "Page.javascriptDialogOpening") return [e.method, e.params && e.params.type];
+    return e.method;
+  }).slice(-40));
 };
 
-let targets = null;
-for (let i = 0; i < 50 && !targets; i++) {
-  try { targets = await (await fetchT(`http://127.0.0.1:${CDP}/json/list`)).json(); } catch {}
-  if (!targets || !targets.length) await new Promise((r) => setTimeout(r, 300));
+async function main() {
+// 前置：CDP 可达（沿用原重试节奏）→ 重建标签页（harness 约定）→ 连接。
+let target = null;
+for (let i = 0; i < 50 && !target; i++) {
+  target = await pageTarget({ port: CDP, pageUrl, anyPage: true });
+  if (!target) await sleep(300);
 }
-if (!targets) { console.error("CDP 不可达"); process.exit(1); }
-const page = targets.find((t) => t.type === "page" && t.url.startsWith(pageUrl));
-const ws = new WebSocket(page.webSocketDebuggerUrl);
-await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error("ws error")); });
-
-let seq = 0;
-const pending = new Map();
-ws.onmessage = (ev) => {
-  const msg = JSON.parse(ev.data);
-  if (msg.id && pending.has(msg.id)) { pending.get(msg.id)(msg); pending.delete(msg.id); }
-};
-const cdp = (method, params = {}) =>
-  new Promise((resolve) => { const id = ++seq; pending.set(id, resolve); ws.send(JSON.stringify({ id, method, params })); });
-const Eval = async (expr) => {
-  const r = await cdp("Runtime.evaluate", { expression: expr, returnByValue: true, awaitPromise: true });
-  if (r.result?.exceptionDetails) throw new Error("eval 失败: " + (r.result.exceptionDetails.exception?.description || JSON.stringify(r.result.exceptionDetails)));
-  return r.result?.result?.value;
-};
+if (!target) { console.error("CDP 不可达"); process.exit(EXIT_TRANSPORT); }
+await rebuildTab({ port: CDP, pageUrl });
+const cdp = await connect({ port: CDP, pageUrl, timeoutMs: 20000, onEvent: (m) => cdpEvents.push(m) });
+const { cdp: send, Eval } = cdp;
 const waitFor = async (expr, ms = 8000) => {
   for (let i = 0; i < ms / 200; i++) {
     try { if (await Eval(expr)) return true; } catch {}
-    await new Promise((r) => setTimeout(r, 200));
+    await sleep(200);
   }
   return false;
 };
 
 await Eval(`window.__smokeMarker = 1; true`);
-await cdp("Page.reload", { ignoreCache: true });
+await send("Page.reload", { ignoreCache: true });
 let ready = false;
 for (let i = 0; i < 100 && !ready; i++) {
   try {
     ready = await Eval(`document.readyState === 'complete' && !window.__smokeMarker
       && !!document.getElementById('tab-code') && !!document.getElementById('code-viewer')`);
   } catch {}
-  if (!ready) await new Promise((r) => setTimeout(r, 300));
+  if (!ready) await sleep(300);
 }
-if (!ready) { console.error("页面未就绪"); process.exit(1); }
+if (!ready) { console.error("页面未就绪"); process.exit(EXIT_TRANSPORT); }
 
 let failed = 0, passed = 0;
 const check = (name, ok, extra) => {
@@ -133,7 +154,7 @@ await Eval(`(() => {
 const openFile = async (name) => {
   for (let i = 0; i < 3; i++) {
     await waitFor(`document.querySelector('#code-tree [data-code-file=${JSON.stringify(name)}]')`, 8000);
-    await new Promise((r) => setTimeout(r, 250));
+    await sleep(250);
     const stable = await Eval(`!!document.querySelector('#code-tree [data-code-file=${JSON.stringify(name)}]')`);
     if (!stable) continue;
     await Eval(`document.querySelector('#code-tree [data-code-file=${JSON.stringify(name)}]')?.click()`);
@@ -335,4 +356,18 @@ check("6b beforeunload：干净 → 不拦截", await Eval(`(() => {
 })()`));
 
 console.log(`\n${passed} PASS / ${failed} FAIL`);
-process.exit(failed ? 1 : 0);
+if (cdpEvents.length) console.log("   " + dumpEvents(cdp, "[事件]"));
+if (cdp.dialogsAccepted) console.log(`   [对话框自动应答] ${cdp.dialogsAccepted} 次`);
+cdp.close();
+process.exit(failed ? EXIT_ASSERT_FAIL : 0);
+}
+
+// 顶层只留一个 await：任何「未落定」都会走上面的 unhandledRejection 兜底（exit 2），
+// 不再是「无 FAIL 行的 exit 13」。
+try {
+  await main();
+} catch (e) {
+  console.error(`TRANSPORT(${String((e && e.message) || e).slice(0, 200)})`);
+  console.error("   " + dumpEvents(null, "[事件]"));
+  process.exit(EXIT_TRANSPORT);
+}
