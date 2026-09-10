@@ -72,3 +72,22 @@
 ### 5.5 已知遗留（CONTEXT 自记，本次复核仍在）
 
 mq4-9 描述措辞未统一；77 条目全部未上板真机验证；oled 词表方案级缺口；A 类 3 页 mspm0-only 例外 —— ✅ **已收口（2026-09-09）**：例外成立（stm32 侧由 pid/us016 承接），不再算待办；单平台例外清单 + 逐条理由单源 = `tests/test_library_invariants.py::SINGLE_PLATFORM_REASONS`（新增单平台模块即红、承接者须真有 stm32 条目也机检）；README 原本指向的 `.scratch/materials-wiki/dkx-map.tsv` 未随仓库保存（映射轮次工作产物）→ 引用改指 `dkx-map-summary.md` + 重生成配方，三个读表脚本补缺失提示。
+
+## 6. 真机验收第十六轮（2026-09-10）验出/记下的待修项 —— 🔶 6 张工单待做
+
+**入口（含每单的新会话提示词 + 优先级 + 依赖）**：`.scratch/real-acceptance/issues/00-待修清单-新会话入口.md`。
+本轮把挂账单 A–E 组里能跑的都跑了（45/50 勾完，详见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`「第十六轮」），
+过程里验出 4 条真问题 + 2 条口径/工具项，各自成单：
+
+| 工单 | 级别 | 一句话 |
+|---|---|---|
+| `real-acceptance/02` | 🔴 | gmake/tiarmclang/SysConfig 报错解析缺口：真机 exit=2、SysConfig 报 7 条引脚冲突，产品读成 **0 错 0 警**，修复链当「未定位到可修复文件」白跑一轮——**真机编译验收的判读底座** |
+| `real-acceptance/03` | 🟠 | 推荐域拒绝（`SelectionError`）被吞成「查 key / 查余额」通用话术且 `kind=client` 免重试：本轮 14 轮真实推荐 **9 轮**栽在此，真实理由都是「oled 不支持多实例」这类一轮能自愈的手滑 |
+| `real-acceptance/04` | 🟠 | 推荐层互斥组未收敛：同组两成员同时推荐（`zigbee_uart` + `zigbee_link`），到生成门禁才 400；提示词已写「只推荐一个」，解析层缺校验 |
+| `real-acceptance/05` | 🟡 | 请求预算账本失真：2021F 单次 select 实测 **122161 字节**（上限 131072，余量 6.8%），而 `budget.py` 注释写「最坏 ≈119.5KB」；模型点名读参考全文那条路已实测 149674 → 被拒发 |
+| `real-acceptance/06` | 🟡 | CCS 三件套跨安装目录混搭（编译器 ccs2050 + SDK/SysConfig ccs2051）实测可用，但环境体检不说明来源根 |
+| `real-acceptance/07` | 🟡 | 浏览器真机验收四坑固化：折叠+页签 / `waitForFunction` 超时位置 / `evaluate` await 长流程 / 模态确认不点 —— 每次重踩烧 20~40 分钟 |
+
+**不做（已裁决）**：SysConfig 外设引脚冲突的「生成期门禁」不单独立项——本轮把它作为 `real-acceptance/02`
+的附件事实记录（门禁现有检查面覆盖不到 SysConfig 语义级 `associatedPins` 冲突，且修复方向未定），
+等 02 落地后再看是否需要独立门禁单。
