@@ -1,0 +1,33 @@
+{
+  "analysis": {
+    "text": "",
+    "execVisible": true
+  },
+  "progress": [
+    " |  | result=false"
+  ],
+  "execState": {
+    "exec": "",
+    "resultText": ""
+  },
+  "rollback": {
+    "rollbackStatus": "",
+    "rollbackVisible": false,
+    "mainShaBefore": "f89a4136f9c8d32a4aa734b0704b1fcfc7cfd01322337eb7a4cadd770293b56c",
+    "mainShaAfter": "f89a4136f9c8d32a4aa734b0704b1fcfc7cfd01322337eb7a4cadd770293b56c"
+  },
+  "ctxSlugsBefore": [
+    "config",
+    "zigbee_uart_key",
+    "zigbee_uart",
+    "filter",
+    "uwb_uart",
+    "delay",
+    "oled",
+    "led",
+    "beep",
+    "led_beep",
+    "relay",
+    "key"
+  ]
+}

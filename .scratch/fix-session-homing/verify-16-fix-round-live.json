@@ -1,0 +1,32 @@
+{
+  "event_order": [
+    "parse_done",
+    "fix_start",
+    "llm_telemetry",
+    "apply_result",
+    "done"
+  ],
+  "terminal": "done",
+  "fixes": [
+    {
+      "file": "main.c",
+      "line": 23,
+      "status": "applied",
+      "reason": ""
+    }
+  ],
+  "backup_id": "20260910-212518",
+  "rollback": {
+    "restored": [
+      "main.c"
+    ]
+  },
+  "file_changed": true,
+  "sha_before": "10aedeb628f58f91b2adc49a0c8d4ce85ad687bf359f8528dc3ec81e03e1f509",
+  "sha_after": "10aedeb628f58f91b2adc49a0c8d4ce85ad687bf359f8528dc3ec81e03e1f509",
+  "ok": {
+    "order": true,
+    "fix": true,
+    "rollback": true
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "className": "success",
+  "text": "编译成功 · 0 Error 0 Warning · 耗时 5.4s",
+  "rect": {
+    "w": 0,
+    "h": 0,
+    "top": 0
+  },
+  "background": "rgba(63, 185, 80, 0.15)",
+  "borderColor": "rgb(63, 185, 80)",
+  "color": "rgb(126, 231, 135)",
+  "fontWeight": "600",
+  "padding": "10px 14px",
+  "hiddenAncestors": [
+    "generate-result"
+  ]
+}

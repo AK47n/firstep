@@ -1,0 +1,18 @@
+[请求] POST /api/revise/analyze  output_dir=C:\Users\luoji\Desktop\firstep\.scratch\real-run\out_2026C_stm32
+[请求] 新 Q&A 2 段 / 127 字符；补题面 2792 字符
+[事件流] impact_analyzing → llm_telemetry → diff_ready → done（7.5s）
+[终态] done
+[done] impacts=2 diff={added:0, removed:1, unchanged:11} warnings=0 suggested_slugs=11
+   - Q&A#1 答疑确认无线通信就用现有 Zigbee DL-20 串口透传（115200），不额外增加其他无线模块。故钥匙侧发送（zigbee_uart_key：按固定帧格式组帧上报本地 DIP-4 ID）与门锁侧
+   - Q&A#2 答疑明确开锁动作以 LED 指示为准，继电器只做演示联动、不作硬性要求。开锁/闭锁的执行动作由 led（多色通道 LED，另可配 led_beep 声光指示）即可满足并显示门锁状态，relay 不再被
+     +[] −['relay']
+
+  ✓ 事件流含 impact_analyzing（分析阶段事件）
+  ✓ 事件流含 diff_ready（diff 就绪事件）
+  ✓ 终态 done
+  ✓ done 带 impacts（逐条影响结论）
+  ✓ done 带 diff 三键（added/removed/unchanged）
+  ✓ done 带 suggested_slugs（可编辑确认集）
+  ✓ 每段 Q&A 都有影响结论（逐条不漏）
+
+B24 段一（真机 SSE + 载荷形状）：PASS

@@ -1,0 +1,175 @@
+{
+  "modules": [
+    {
+      "slug": "pid",
+      "reason": "PID灰度循迹闭环"
+    },
+    {
+      "slug": "motor",
+      "reason": "驱动两轮差速行驶"
+    },
+    {
+      "slug": "led_beep",
+      "reason": "LED蜂鸣器同时触发"
+    },
+    {
+      "slug": "ntb_time",
+      "reason": "时间戳辅助点位判定"
+    },
+    {
+      "slug": "ml_mpu6050",
+      "reason": "陀螺仪姿态航向保持"
+    }
+  ],
+  "requirements": [
+    {
+      "requirement": "沿无引导标记的黑弧线自主循迹行驶",
+      "sentence": 8,
+      "modules": [
+        "pid",
+        "motor"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "自动行驶到B点停车",
+      "sentence": 24,
+      "modules": [
+        "motor",
+        "pid"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "停车时声光提示",
+      "sentence": 24,
+      "modules": [
+        "led_beep"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "经过A/B/C/D点声光提示一次",
+      "sentence": 29,
+      "modules": [
+        "led_beep",
+        "ntb_time"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "A至C、B至D段自主行驶导航",
+      "sentence": 33,
+      "modules": [
+        "motor",
+        "pid"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "无摄像头下短距循迹越点",
+      "sentence": 52,
+      "modules": [
+        "pid"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "轮式差速前进不得后退",
+      "sentence": 46,
+      "modules": [
+        "motor"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "车载电池供电维持整程",
+      "sentence": 73,
+      "modules": [],
+      "suggestions": [
+        {
+          "name": "电源模块",
+          "examples": [
+            "稳压模块",
+            "锂电池+充电管理模块"
+          ],
+          "degraded": false,
+          "solutions": [],
+          "selected": ""
+        }
+      ]
+    },
+    {
+      "requirement": "行进中无遥控无外部导航",
+      "sentence": 62,
+      "modules": [
+        "pid"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "航向保持的稳定循迹",
+      "sentence": 58,
+      "modules": [
+        "ml_mpu6050"
+      ],
+      "suggestions": []
+    }
+  ],
+  "score_points": [
+    {
+      "id": "1",
+      "part": "development",
+      "description": "A到B停车声光提示，用时≤15s",
+      "score": 20.0,
+      "sentence_refs": [
+        24,
+        25,
+        26
+      ]
+    },
+    {
+      "id": "2",
+      "part": "development",
+      "description": "A-B-C-D-A一圈，每点声光提示，≤30s",
+      "score": 20.0,
+      "sentence_refs": [
+        28,
+        29,
+        30
+      ]
+    },
+    {
+      "id": "3",
+      "part": "development",
+      "description": "A-C-B-D-A一圈，每点声光提示，≤40s",
+      "score": 30.0,
+      "sentence_refs": [
+        33,
+        34,
+        36
+      ]
+    },
+    {
+      "id": "4",
+      "part": "development",
+      "description": "按路径3自动行驶4圈停车，用时越少越好",
+      "score": 30.0,
+      "sentence_refs": [
+        39
+      ]
+    },
+    {
+      "id": "5",
+      "part": "basic",
+      "description": "设计报告",
+      "score": 20.0,
+      "sentence_refs": [
+        40,
+        41
+      ]
+    }
+  ],
+  "topic_id": "2024H",
+  "references": []
+}

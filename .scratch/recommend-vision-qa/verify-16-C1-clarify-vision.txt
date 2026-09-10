@@ -1,0 +1,27 @@
+[题面] key='2021F' 题面 3037 字符；原 PDF=C:\Users\luoji\Desktop\firstep\library\topics\2021F\000_2017-2025_全国大学生电子设计竞赛真题汇总.pdf
+[构造问题] 图 1 中场地（走廊）的宽度尺寸是多少？题面图上标注的数值请照读。
+[可答性判据] vision_answerable = True（期望 True）
+  [注入] llm.clarify → 返回构造的图内问题（只替换模型这一轮输出）
+  [出车] 请求体 122161 字节 → {"model": 16, "max_tokens": 4, "response_format": 23, "thinking": 20, "msg0:system": 5707, "msg1:user": 116251}
+  [第 1 次] 编排抛错（非视觉链路）：模块选择连续 1 次调用失败：库外建议的硬件名不在硬件词表中：红外对管循迹数组（词表外型号请降级为词表内的类别名）
+  [注入] llm.clarify → 返回构造的图内问题（只替换模型这一轮输出）
+  [出车] 请求体 122161 字节 → {"model": 16, "max_tokens": 4, "response_format": 23, "thinking": 20, "msg0:system": 5707, "msg1:user": 116251}
+  [出车] 请求体 124475 字节 → {"model": 16, "max_tokens": 4, "response_format": 23, "thinking": 20, "msg0:system": 5707, "msg1:user": 118565}
+  [第 2 次] 终态 question；视觉消化 1 次
+  [注入] llm.clarify → 返回构造的图内问题（只替换模型这一轮输出）
+  [出车] 请求体 122161 字节 → {"model": 16, "max_tokens": 4, "response_format": 23, "thinking": 20, "msg0:system": 5707, "msg1:user": 116251}
+  [第 3 次] 编排抛错（非视觉链路）：模块选择连续 1 次调用失败：模块 hx711 不支持多实例，不能带 instances
+  [注入] llm.clarify → 返回构造的图内问题（只替换模型这一轮输出）
+  [出车] 请求体 122161 字节 → {"model": 16, "max_tokens": 4, "response_format": 23, "thinking": 20, "msg0:system": 5707, "msg1:user": 116251}
+  [出车] 请求体 124525 字节 → {"model": 16, "max_tokens": 4, "response_format": 23, "thinking": 20, "msg0:system": 5707, "msg1:user": 118615}
+  [第 4 次] 终态 done；视觉消化 1 次
+
+  ✓ 视觉回调被调用 ≥1 次
+  ✓ 视觉答案非空
+  ✓ **未发 question 事件**（用户不再被问）
+  ✓ 答案进了收敛用澄清历史
+  ✓ 推荐正常收敛到 done
+[终态] done；模块 8：digit_uart, k230, hx711, pid, ml_mpu6050, motor, led, zigbee_link
+[澄清历史里的视觉答案] 30cm
+
+C1 主链路（注入式）真机：PASS

@@ -3,6 +3,12 @@
 
 用法：python .scratch/b1-adc-servo/compile_matrix.py
 依赖：UV4（stm32）+ gmake/CCS 三件套（mspm0）可探测；真实库 + 真实母版。
+
+第十六轮（2026-09-10）口径修订：脚本里的 main.c 样例是工单期的形态，
+`servo_init` 在 b1-adc-servo/02 落地时定为**双参** `servo_init(servo_id,
+channel)`（`library/modules/servo/code/servo.h:37`，tests/test_module_servo.py:71-73
+守卫）——旧样例的单参调用真机报 `main.c(7): error: #165: too few arguments`，
+属**脚本过期**而非产品缺陷；本轮改成与模块头一致的 `servo_init(1, 0)`。
 """
 
 import sys
@@ -37,7 +43,7 @@ STM32_MAIN = (
     "int main(void) {\n"
     "    SystemInit();\n"
     "    adc_init(ADC_1, ADC_Channel_0);\n"
-    "    servo_init(1);\n"
+    "    servo_init(1, 0);\n"
     "    servo_set_angle(1, 90);\n"
     "    while (1) {}\n"
     "}\n"
@@ -51,7 +57,7 @@ MSPM0_MAIN = (
     "    /* TODO: 若使用 SysConfig 生成的外设初始化，请取消下面注释 */\n"
     "    // SYSCFG_DL_init();\n"
     "    adc_init(ADC_1, ADC_Channel_0);\n"
-    "    servo_init(1);\n"
+    "    servo_init(1, 0);\n"
     "    servo_set_angle(1, 90);\n"
     "    while (1) {}\n"
     "}\n"

@@ -12,6 +12,12 @@
       cache/，回归跑修复循环/编译链路时推荐段秒过；缓存缺失/失效报错退出，
       不静默回退真实调用；命中时 reference_ids/clarify 与生成缓存时不一致
       打警告不阻断）；
+      --topics-dir <目录> 题库根覆盖（缺省仍为 ~/.contest_generator/topics）。
+      库改建到仓库随包布局（ADR 0008：赛题库 = 模块库同级 topics/）后旧默认
+      路径在本机已不存在——不覆盖就报「题面读不到」错；显式传
+      --topics-dir library/topics 即可（第十六轮 A9/A10 实测口径，见挂账单）；
+      --modules-dir <目录> 模块库根覆盖（同上，只喂「未知模块 slug」自检）——
+      不覆盖会把全部 slug 误报成未知（第十六轮 A8 实测 9 条假红）；
       --bindings 板级引脚绑定载荷（工单 pin-board-config/02 真机驱动：
       {"模块.角色": "引脚"} JSON 对象字符串，如
       --bindings '{"motor.MOTOR_B_ENC":"PB4"}'）。
@@ -28,7 +34,15 @@ from pathlib import Path
 
 BASE = "http://127.0.0.1:8000"
 PLATFORM = "stm32"
+# 题库根（--topics-dir 可覆盖，见模块 docstring 的调用契约）：缺省沿用历史
+# 路径 ~/.contest_generator/topics；库随包布局（ADR 0008）下真实题库在
+# <仓库>/library/topics，调用方显式传 --topics-dir 覆盖。
 TOPICS = Path.home() / ".contest_generator" / "topics"
+# 模块库根（--modules-dir 可覆盖）：只用于 check_topic 的「未知模块 slug」
+# 自检。历史缺省 ~/.contest_generator/modules 在库随包布局（ADR 0008）后已
+# 不存在 —— 不覆盖会把**全部** slug 误报成未知（第十六轮 A8 实测：9 条假红
+# 与真编译结果混在一张汇总里），故本自检必须跟着库真实位置走。
+MODULES = Path.home() / ".contest_generator" / "modules"
 HERE = Path(__file__).parent
 # 推荐缓存目录（工单 check-recommend-cache/01 决策 3；环境变量
 # GENERATE_CHECK_CACHE_DIR 可在 recommend_cache_path 处覆盖）
@@ -739,7 +753,7 @@ def check_topic(
         print("  ✗ done 但模块为空")
         return False
     for s in slugs:
-        if not (Path.home() / ".contest_generator" / "modules" / s).is_dir():
+        if not (MODULES / s).is_dir():
             print(f"  ✗ 未知模块 slug: {s}")
             ok = False
 
@@ -758,6 +772,14 @@ def check_topic(
 
     # 3) 生成（bindings 板级引脚绑定载荷，工单 pin-board-config/02 真机驱动）
     out_dir = HERE / f"out_{key}_{platform}"
+    # 幂等清场（第十六轮 A9 实测）：/api/generate 对「已存在且非空」的输出目录
+    # 400 拒绝覆盖（generate-conflict-guard 的正常业务拒绝，保护用户工程）——
+    # 本脚本的输出目录是它自己专有的（docstring 明示 out_<topic>_<platform>），
+    # 上一轮的产物不清就会把第二次回归跑卡在 400。清场仅限本脚本自己的目录。
+    if out_dir.exists():
+        import shutil
+        shutil.rmtree(out_dir)
+        print(f"  [清场] 删除上一轮输出 {out_dir}")
     gen_payload: dict = {
         "platform": platform, "slugs": slugs, "main_c": main_c,
         "output_dir": str(out_dir),
@@ -842,7 +864,7 @@ def main() -> None:
     except (AttributeError, ValueError):
         pass
     args = sys.argv[1:]
-    global PLATFORM
+    global PLATFORM, TOPICS, MODULES
     platform = PLATFORM
     if "--platform" in args:
         idx = args.index("--platform")
@@ -854,6 +876,19 @@ def main() -> None:
         idx = args.index("--topic-file")
         topic_file = Path(args[idx + 1])
         del args[idx:idx + 2]
+    if "--topics-dir" in args:
+        # 题库根覆盖（第十六轮 A9/A10）：库随包布局（ADR 0008）下真实题库在
+        # <仓库>/library/topics，旧的 ~/.contest_generator/topics 已不存在。
+        idx = args.index("--topics-dir")
+        TOPICS = Path(args[idx + 1])
+        del args[idx:idx + 2]
+        print(f"[题库] 根目录覆盖为 {TOPICS}")
+    if "--modules-dir" in args:
+        # 模块库根覆盖（同上）：只影响「未知模块 slug」自检的落点判定
+        idx = args.index("--modules-dir")
+        MODULES = Path(args[idx + 1])
+        del args[idx:idx + 2]
+        print(f"[模块库] 根目录覆盖为 {MODULES}")
     clarify_map: dict[str, str] = {}
     if "--clarify" in args:
         idx = args.index("--clarify")

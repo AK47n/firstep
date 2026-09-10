@@ -1,0 +1,12 @@
+[构造] 各段 wire 字节：{"output_dir": 73, "error_text": 72558, "problem_text": 45308, "platform": 7, "slugs": 7, "main_c": 75389, "previous_fixes": 35671}
+[构造] 客户端请求体合计 ≈ 229013 字节（LLM 侧另有系统提示词 + JSON 壳）
+[事件流] parse_done → fix_start → llm_telemetry → done（2.9s）
+[终态] done
+[done] fixes=0 degraded=True file_count=None error_count=None
+[截断可见性] 报告文本前 400 字：{"output_dir": "C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\real-run\\out_2026C_stm32", "backup_id": "", "degraded": true, "parsed": [{"path": "../modules/mod01/code/impl01.c", "line": 1, "message": "..\\modules\\mod01\\code\\impl01.c(1): error:  #20: identifier \"变量名01\" is undefined （这是超长中文报错说明，用来把报错段顶到上限：中文填充中文填充中文填充中文填充中文填充中文填充中文填充中文填充中文填充中文填充中文填充中文填充中文填充中文填充中文填充中文填充中文填充中文填充中文填充中文填充中文填充中文填充中
+
+  ✓ 未出现「请求体过大」
+  ✓ 终态 done（非 error）
+  ✓ 事件流以 parse_done → fix_start 起头
+
+C3 超大上下文修复真机：PASS

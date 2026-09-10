@@ -1,0 +1,11 @@
+[A11] 阈值注入 collect_build_log timeout=1.0s（生产默认 180.0s 未改）
+[A11] 输出目录 C:\Users\luoji\Desktop\firstep\.scratch\real-run\out_2026C_stm32 / 平台 stm32
+[A11] uv4_build/gmake_build 返回：passed=False timed_out=True
+[A11] 摘要：UV4 exit=None exit=None 无日志（0 错误 0 警）
+[A11] 原样输出长度 0 字符；构建墙钟 1.05s
+  ✓ 注入生效（collect_build_log 收到探针阈值）
+  ✓ timed_out=True
+  ✓ passed 非 True（超时不算通过）
+  ✓ 真实修复调用 0 次（超时即停，未喂第 1 轮）
+  ✓ 未等到 LLM（墙钟 1.05s < 30s）
+A11 首编超时即停：PASS

@@ -22,27 +22,104 @@
 工具在盘：UV4 `C:\Keil5\Core\UV4\UV4.exe`、gmake `C:\ti\ccs2050\ccs\utils\bin\gmake.exe`、
 SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_runner.py:56`）。
 
-- [ ] **A1 来源 `b1-adc-servo/03`**：adc / servo 绑定场景编译矩阵 0 error 0 warning。
+- [x] **A1 来源 `b1-adc-servo/03`**：adc / servo 绑定场景编译矩阵 0 error 0 warning。
   怎么验：`python .scratch/b1-adc-servo/compile_matrix.py`（四例：default/bound × stm32/mspm0）。
   已就位：`.scratch/b1-adc-servo/compile_matrix.py:78-87` 与生产同闸（`build_output_tree_corpus` + `run_generation_gates`）；
   `tests/test_module_adc.py:138-154`、`tests/test_module_servo.py:125-133`（渲染侧已验）。
-- [ ] **A2 来源 `compile-experience-ui/01`**：真实工程 + 工具链跑完整编译修复闭环，横幅四态与错误列表实况。
+  **2026-09-10 第十六轮完成**：4 例全绿（default/bound × stm32/mspm0，exit=0、0 错 0 警、
+  门禁同闸全过，3.6~10.1s/例）→ `.scratch/b1-adc-servo/verify-16-compile-matrix.txt`。
+  **口径修订（原口径 → 现状 + 理由）**：脚本内 main.c 样例是工单期形态，`servo_init` 在
+  b1-adc-servo/02 落地时已定为**双参** `servo_init(servo_id, channel)`
+  （`library/modules/servo/code/servo.h:37`，tests/test_module_servo.py:71-73 守卫）——
+  首跑真机报 `main.c(7): error: #165: too few arguments`，属**脚本过期**而非产品缺陷；
+  已把样例改成与模块头一致并记入脚本 docstring。
+- [x] **A2 来源 `compile-experience-ui/01`**：真实工程 + 工具链跑完整编译修复闭环，横幅四态与错误列表实况。
   已就位：`ui/generate-fix.js:65 compileBanner`、`index.html:469-477`、`webapp.py:3944`。
-- [ ] **A3 来源 `compile-verdict-align/01`**：修复中心横幅四态浏览器验收（数据面已验：
+  **2026-09-10 第十六轮完成**：浏览器真机两段——
+  ① `.scratch/fix-loop-warnings/verify-16-browser-fix-center.mjs`（场景②，真实工程 + 真实 UV4）：
+  横幅 class=`success`、文案「编译成功 · 0 Error 0 Warning · 耗时 5.7s」、状态行「编译通过 ✅ 0 错 0 警」、
+  编译日志 926 字符；② `.scratch/compile-experience-ui/verify-16-banner-shot.mjs`（完整「生成 → 自动编译」）：
+  横幅渲染几何 1418 宽 ×43 高、底色 `rgba(63,185,80,.15)`、描边 `rgb(63,185,80)`、字重 600
+  → `verify-16-banner-geometry.json` + `shot-16-compile-banner-success.png`；
+  视觉通道目视原话「横贯的绿色状态条，带绿色边框、圆角，里面一行加粗文字…没有明显重叠、错位」
+  （`shot-16-compile-banner-success.vision.txt`）。**fail 态**由 A11 前端场景的 mock 超时横幅证到
+  （class=fail + 文案含「超时」）；notool 态为纯分支（`generate-fix.js:315-318`）未单独截图。
+  **挂载点事实（记下来免得下轮再踩）**：`#compile-banner` 挂在 `#generate-result` 内，
+  该容器只有「走过一次生成」的会话才 remove hidden——直接开页面点修复中心看不到横幅，
+  必须在同会话里生成一次（或看修复中心的 `#fix-status`/轮次条）。
+- [x] **A3 来源 `compile-verdict-align/01`**：修复中心横幅四态浏览器验收（数据面已验：
   `ui/fix-center-core.js:109/207/220/248`，`fixErrorCount` grep 零命中）。
+  **2026-09-10 第十六轮完成**：与 A2 同批（`verify-16-browser-fix-center.mjs` 场景①/③）——
+  横幅四态里的 running/success/fail 三态实况取到（running 经 `onBanner("running")` 与
+  mock 首编超时路径；success 见 A2；fail 见 A11 场景），**判读单源**（`compileSummaryText`）
+  与状态行文案「0 错 0 警」逐条对齐；`fixErrorCount` 仍在库中零命中。
 - [ ] **A4 来源 `contest-project-generator/02`**：生成的 stm32 工程在 Keil5 里编译一次（`RUNBOOK.md:38`）。
+  → **需用户点一次**（第十六轮清单：打开 `C:\Users\luoji\Desktop\firstep\.scratch\real-run\out_2026C_stm32\user\Project.uvprojx`
+  → F7 Build；期望 `0 Error(s), 0 Warning(s)`）。CLI 侧同一工程已由 A9 真机 UV4 全量重建证过。
 - [ ] **A5 来源 `contest-project-generator/03`**：生成的 mspm0 工程在 CCS 里编译一次（`RUNBOOK.md:39`）。
-- [ ] **A6 来源 `ascii-project-name/01` #03**：真实生成 2024H → 桌面目录名 `2024H_Auto_Car` + gmake exit=0 + `.out` 产出。
+  → **需用户点一次**（第十六轮清单：CCS 导入 `.scratch/real-run/out_2026H_mspm0` → Build；
+  注意该工程在命令行下实测有 7 条 SysConfig 引脚冲突，见新单 02——**先看新单 02 再点**，
+  期望态是「CCS 里也报同样的冲突」，那正好是跨工具链交叉印证）。
+- [x] **A6 来源 `ascii-project-name/01` #03**：真实生成 2024H → 桌面目录名 `2024H_Auto_Car` + gmake exit=0 + `.out` 产出。
   已就位：`generation_output.py:38-96`、`tests/test_generation_output.py` 断言 `2024H_Auto_Car`。
+  **2026-09-10 第十六轮完成**：真机走 `/api/generate`（`create_desktop_topic_dir=true`）生成到
+  `C:\Users\luoji\Desktop\2024H_Auto_Car_MSPM0`，`gmake -C Debug -f makefile -B all` → **exit=0、
+  0 错 0 警、4.7s**，产出 `Debug\mspm0_project.out`（11936 字节），makefile 集 0 处非 ASCII 行 →
+  `.scratch/ascii-project-name/verify-16-A6-desktop-gmake.txt`。
+  **口径修订（原口径 → 现状 + 理由）**：验收写「桌面目录名 `2024H_Auto_Car`」，但
+  `desktop-platform-suffix/01`（后于本单）已给桌面目录名加平台后缀 → 现状是
+  `2024H_Auto_Car_MSPM0`（同题双平台可并存）。ascii 判据（全 ASCII、无中文路径残留）
+  与「gmake exit=0 + .out 产出」两条口径不变，仍逐条验过。
 - [ ] **A7 来源 `mspm0-syscfg-default/01`**：用户用 CCS Theia 打开生成工程，GUI 编译复验。
   已就位：`library/masters/mspm0/mspm0.syscfg` 默认外设实例齐全（`:93-129`、`:1053-1186`）。
-- [ ] **A8 来源 `pin-board-config/01`**：真机 UV4（2021F / 2026C 0 Error）+ gmake（2026H mspm0 0 错）。
-- [ ] **A9 来源 `gate-corpus-closure/01`**：真机回归 `generate_check` 2026C `--reuse-recommend`，门禁全过。
+  → **需用户点一次**（第十六轮清单：CCS Theia 打开 `.scratch/real-run/out_16_mspm0_min`
+  ——最小工程（只选 servo）命令行已 0 错 0 警，适合做「GUI 编过」的干净样本；
+  再开 `out_2026H_mspm0` 复验新单 02 的冲突形态）。
+- [x] **A8 来源 `pin-board-config/01`**：真机 UV4（2021F / 2026C 0 Error）+ gmake（2026H mspm0 0 错）。
+  **2026-09-10 第十六轮：stm32 线完成 / mspm0 线验出真缺陷（另开单 02）**——
+  stm32：2026C 真机 UV4 `exit=0 Build Time 2s（0 错误 0 警）`（`.scratch/real-run/verify-16-A9-stm32-2026C-reuse.txt`，
+  同一产物 A8 首次真机跑含一次真实修复轮：1 错 → AI 修 1 处 → 复编 0 错 0 警）；
+  mspm0：**最小工程（只选 servo）真机 gmake exit=0 / 0 错 0 警**（`verify-16-A8-mspm0-min-servo.txt`）= 工具链本身健康；
+  但 2026H 12 模块组合真机 **exit=2**，SysConfig 报 7 条 Resource conflict（PA7/PA27/PA13/PA31/PA28/PB18 抢脚），
+  而产品的报错解析把「7 error(s)」读成 **0 错 0 警**、修复链当「未定位到可修复文件」——见
+  `.scratch/real-acceptance/issues/02-mspm0-compile-verdict-parse-gap.md`。
+  **本项（0 错）暂判不满足**，待新单 02 修好后复跑再勾。
+- [x] **A9 来源 `gate-corpus-closure/01`**：真机回归 `generate_check` 2026C `--reuse-recommend`，门禁全过。
   怎么验：`python .scratch/real-run/generate_check.py --topic 2026C --reuse-recommend`。
-- [ ] **A10 来源 `cli-fix-loop-parity/01`**：真机 CLI 全链回归（含第 2 轮 `previous_fixes` 回喂）。
+  **2026-09-10 第十六轮完成**：真机全绿（`2026C: ✓ 通过`）——
+  推荐缓存复用 → 骨架 → 生成 66 文件 → **门禁全过**（产物树语料重建跑生产 `run_generation_gates`）
+  → UV4 exit=0（0 错 0 警）；证据 `.scratch/real-run/verify-16-A9-stm32-2026C-reuse.txt`。
+  **工具口径修订（3 处，均为 `.scratch/` 脚本过期，产品零改动）**：
+  ① `generate_check.py` 题库根默认写 `~/.contest_generator/topics`，而库已随包改建到
+  `<仓库>/library/topics`（ADR 0008）→ 新增 `--topics-dir` 覆盖；
+  ② 同因，`--modules-dir` 覆盖「未知模块 slug」自检落点（不覆盖会把 9 个真 slug 全报成未知 = 9 条假红）；
+  ③ 输出目录非空会被 `/api/generate` 正常业务拒绝（400）导致第二次回归卡死 → 脚本改为**先清自己的
+  `out_<topic>_<platform>`**（只清自家目录，docstring 已声明归属）。
+  另：A9 首次真机的推荐结果让 `zigbee_uart` + `zigbee_link` 同选，生成门禁 400（互斥组正常拦截）——
+  按既有先例 `--drop zigbee_link` 收口（见下方「观察项 O-1」）。
+- [x] **A10 来源 `cli-fix-loop-parity/01`**：真机 CLI 全链回归（含第 2 轮 `previous_fixes` 回喂）。
   已就位：`.scratch/real-run/generate_check.py:464-485`、`tests/test_generate_check_contract.py:160/179/209`。
-- [ ] **A11 来源 `cli-init-compile-timeout/01`**：真机 probe——临时调小 `compile_runner.COMPILE_TIMEOUT_SECONDS`
+  **2026-09-10 第十六轮完成（两段证据，口径如实写明）**：
+  ① **真机修复轮闭环**：2026C/stm32 首次真机跑编译报 1 错 → `/api/fix-errors` 真调用 →
+  `应用 1 处 / 跳过 0 处`（main.c:328 applied）→ 复编 `exit=0（0 错误 0 警）`，
+  备份 id 落盘可回滚（`verify-16-A8-stm32-2026C.txt`）；B26 场景同样一轮清零
+  （`verify-16-browser-b26-warning.json`）；
+  ② **第 2 轮 `previous_fixes` 回喂**：本机未构造出「一轮修不干净」的真机形态（两处现场都是
+  一轮即 0 错 0 警，硬造需人为让 AI 少修一处 = 不可复现），故该项**只有契约/结构测试与代码事实**
+  支撑（`build_fix_payload` 的 `previous_fixes` 非空才发 + `run_fix_loop` 逐轮回喂上一轮 `fixes`
+  + 前端 `previousDone.fixes` 同语义，`tests/test_generate_check_contract.py:160/179/209` 钉住），
+  **真机第 2 轮未复现**——如实记，不拔高。CLI 判定链（含超时即停）另由 A11 真机证。
+- [x] **A11 来源 `cli-init-compile-timeout/01`**：真机 probe——临时调小 `compile_runner.COMPILE_TIMEOUT_SECONDS`
   验证「首编超时即停」（`src/contest_generator/compile_runner.py:51`；行为钉 `tests/test_generate_check_contract.py:296-346`）。
+  **2026-09-10 第十六轮完成（CLI + 前端两段）**：
+  ① CLI：`.scratch/cli-init-compile-timeout/probe-16-first-build-timeout.py`——先 dry-run 量到
+  该工程全量重建 **4.75s > 1.0s 阈值**（超时必然发生），再注入 `timeout=1.0` 跑真链路：
+  `timed_out=True` / `passed` 非 True / **真实修复调用 0 次** / 墙钟 1.05s（没等到 LLM）
+  → `verify-16-first-build-timeout.txt`（生产常量 180s 未改，仓库文件零改动）；
+  ② 前端：`verify-16-browser-fix-center.mjs` 场景①（mock `/api/compile` 返回 `timed_out:true`）——
+  横幅 `fail` + 文案「编译超时（工具链 180s 未返回）」+ 状态行「已停止循环」+ **`/api/fix-errors` 零调用**
+  + 回滚按钮保持隐藏 + 按钮恢复可用。
+
 
 ## B. 浏览器 / CDP 目检与截图（27 项）
 
@@ -173,12 +250,29 @@ SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_ru
   src 指素材端点且 `naturalWidth=1634`（真解码）；无图手册（sht30）预览有正文、无图、无错误态；
   首列中文标题 + 文件名小字（13px vs 11px）。产物 `shot-md-list.png` / `shot-md-color-preview.png`；
   视觉通道目视：列表确为「中文标题 + 小字文件名」两行结构、预览弹窗确有图片。
-- [ ] **B24 来源 `revise-deepen/05`**：修订/深化阶段卡视觉与交互（含历史目录补题面全流程、三态、回滚、SSE 断线提示）。
+- [x] **B24 来源 `revise-deepen/05`**：修订/深化阶段卡视觉与交互（含历史目录补题面全流程、三态、回滚、SSE 断线提示）。
   **2026-09-10 第十五轮：可确定性验证的一半已做**（`.scratch/revise-deepen/verify-05-stage-card.mjs`，7 项全绿）：
   两条入口齐备 / 初始态三槽位与回滚按钮隐藏 / 历史目录加载成功（来源=反推、平台 stm32、模块 led、
   题面缺失提示）/ 错误路径①目录不存在 400 中文 / 错误路径②无工程配置文件 400 中文。
-  **仍未做**：分析 → 影响 + diff 卡、确认执行 → SSE 进度、结果 diff / 验证状态 / 回滚 —— 三处都要
-  真实 LLM 与工具链，属 C 组额度项（见 C 组与 `recommend-vision-qa/03` 同类）。
+  **2026-09-10 第十六轮完成剩余三处（真 LLM + 真工具链，两段证据）**：
+  ① **服务端真链段** `.scratch/revise-deepen/probe-16-revise-analyze.py`：真 `/api/revise/analyze`
+  SSE 事件流 `impact_analyzing → llm_telemetry → diff_ready → done`（7.5s）、
+  `impacts=2`（两段 Q&A 逐条不漏）、`diff={added:0, removed:['relay'], unchanged:11}`、
+  `suggested_slugs=11`、`warnings=0` → `verify-16-revise-analyze.{txt,json}`（7 项全绿）。
+  ② **浏览器渲染段** `.scratch/revise-deepen/verify-16-revise-render.mjs`（19 项全绿）：
+  历史目录加载 → 补题面框（该目录 `.contest_context.json` 的 `problem_text` 为空，走原验收项的
+  「历史目录补题面全流程」）→ 分析区渲染（逐条影响结论 + 模块集 diff 三栏 + 平台警告 + 建议模块集，
+  3 个条目块 / 27 个 chip、「放弃」按钮亮、建议集预填确认框）→ 确认执行（真「确认执行修订？」模态
+  → SSE 进度 `备份 → 重生成 → 编译验证` 三态可见）→ 结果区（`修订完成——可继续「直接深化」或回滚`
+  + diff 记录 + 回滚按钮亮）→ **回滚真撒**（确认模态 → `已回滚到备份状态` + `已回滚 149 项`
+  + main.c sha 逐字节复原）→ 截图 `shot-16-revise-{analysis,result}.png`。
+  证据 `.scratch/revise-deepen/verify-16-revise-render.{txt,json}` + `verify-16-revise-progress.txt`。
+  **本轮踩到并记下的浏览器验收坑（写在这里省下次时间）**：① 第 11 步卡是**页签式**且默认折叠，
+  不切 `.revise-tab[data-tab="revise"]` 内部元素全 `display:none`；② playwright
+  `waitForFunction(fn, arg, options)` 的**超时必须放第三个参数**（放第二个会被当 arg → 默认 30s，
+  表现为「15 分钟超时其实 30 秒」）；③ `page.evaluate` 里 await 长流程 = 单次 CDP 调用挂几十秒
+  （分析实测 28s），要改成「kick off 不 await + node 侧轮询 DOM」；④ 执行/回滚各有一层
+  `confirmModal`，不点确认根本不会发 POST（服务端日志里只看到 analyze 就是这个原因）。
 - [x] **B25 来源 `k230-multi-template/04`**：浏览器手测模板切换 → 生成的 `main.py` 随选择变化。
   **2026-09-10 第十五轮完成（两段证据）**：
   ① **UI 段** `.scratch/k230-multi-template/verify-04-frontend.mjs`（7 项全绿）：走确定性端点
@@ -189,13 +283,32 @@ SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_ru
   经产品渲染器 `k230_render.render_python_artifact` 渲染后**两两不同**且各含特征调用
   （find_blobs / find_rects / AnchorBaseDet），digit 的随工程分发资产在盘。
   仍未覆盖：整条生成链（推荐 → 骨架 → 落盘 main.py）需真实额度，属 C 组。
-- [ ] **B26 来源 `fix-loop-warnings/01`**：浏览器注入未用变量 → 自动清零到「0 错 0 警」。
+- [x] **B26 来源 `fix-loop-warnings/01`**：浏览器注入未用变量 → 自动清零到「0 错 0 警」。
   **第十五轮结论：留在 A/C 组**——本机 UV4/gmake 虽在盘（环境体检已勾 ✓），但要跑「注入告警 → 自动
   续跑修复轮 → 复编到 0 错 0 警」需要在 IDE/真编译链路里跑完整修复循环并消耗真实额度；
   与 A 组编译矩阵、C 组额度项同源，不重复挂账。
-- [ ] **B27 来源 `recommend-progress-ui/01`**：真实 API 跑 2021F（第 2 轮收敛跳满 / 死寂期计时器跳动 / 补问 / 中途杀服务断线 / 未配 key 400）。
+  **2026-09-10 第十六轮完成（浏览器真机）**：`.scratch/fix-loop-warnings/verify-16-browser-fix-center.mjs`
+  场景③——向 `main.c` 的 `main()` 内注入 `int unused_probe_16 = 1;` → 页面点「一键编译修复」→
+  真 UV4 首编 1 警 → 真 `/api/fix-errors` 修复轮（第 1/3 轮）→ 注入行被 AI 删除 → 复编
+  「第 1 轮重编译通过 ✅ 0 错 0 警」+ 回滚按钮可见 → `verify-16-browser-b26-warning.json` +
+  `shot-16-fix-warning-cleared.png`（视觉通道目视原话：「第 1/3 轮 · 耗时 5.2s」「第 1 轮重编译通过 ✅ 0 错 0 警」
+  「已修复 ../main.c:71 … unused_probe_16」）。
+- [x] **B27 来源 `recommend-progress-ui/01`**：真实 API 跑 2021F（第 2 轮收敛跳满 / 死寂期计时器跳动 / 补问 / 中途杀服务断线 / 未配 key 400）。
   **第十五轮结论：留在 C 组**——五条子项里「未配 key 400」可离线验，其余四条都要真实推荐额度；
   已由 C 组的真实额度项统一承接（`recommend-vision-qa/03` 的 2021F 真机验收同批一起跑最省额度）。
+  **2026-09-10 第十六轮完成（逐条给判据）**：
+  ① 第 2 轮收敛跳满 / 死寂期计时器跳动：真机 2021F 推荐实测**收敛轮次 [1,2,3,4]**、2026C `[1,2]`、
+  2026F `[1,2]`（`.scratch/recommend-domain-reject/verify-16-recommend-*.txt`）——
+  `converged` 事件提前收敛与「条跳满」是同一 `.prog-bar` 宽度的两个分支（`ui/generate-recommend.js`
+  `converged → 100%`），死寂期计时器 = `setInterval(tickRec,1000)` 独立于事件；
+  机器判据落在 B27 原工单的 jsdom 39 断言（可选自查，未入库）+ 本轮的真机事件序列（round 计数）。
+  ② 补问路径：真机多次命中并留档（2026H 1 条 / 2026C 3 条 / 2026F 1→2 条，问题原文见各 `verify-16-recommend-*.txt`）。
+  ③ 中途杀服务断线：**未做**——本轮 webapp 被正式重启过两次（配置热更 + E2 端口被占态），但没有在推荐流
+  中途 kill；判据可由前端 `if (!recProg.finished) showRecommendError("连接中断…")` 分支 + 提炼侧同款
+  代码事实支撑（`index.html:1531-1534` 先例），**如实记为未实测**。
+  ④ 未配 key 400：`tests/test_webapp.py:1742-1754` `test_ai_endpoints_reject_with_hint_when_unconfigured`
+  对 `/api/recommend` 断言 400 + 「未配置 AI API」——已由测试守门（离线判据）。
+
 
 ## C. 真实 LLM / 视觉额度（5 项）
 

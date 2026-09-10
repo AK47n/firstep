@@ -1,0 +1,12 @@
+{
+  "bannerClass": "success",
+  "bannerText": "编译成功 · 0 Error 0 Warning · 耗时 5.7s",
+  "status": "编译通过 ✅ 0 错 0 警",
+  "round": "",
+  "errMsg": "",
+  "rows": [],
+  "rollbackHidden": true,
+  "continueHidden": true,
+  "logLen": 926,
+  "busy": false
+}

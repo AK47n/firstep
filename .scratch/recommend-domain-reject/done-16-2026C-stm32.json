@@ -1,0 +1,243 @@
+{
+  "modules": [
+    {
+      "slug": "zigbee_uart_key",
+      "reason": "Zigbee 发射端组帧上报本地DIP-4 ID"
+    },
+    {
+      "slug": "zigbee_uart",
+      "reason": "Zigbee 接收端解析ID身份帧"
+    },
+    {
+      "slug": "oled",
+      "reason": "OLED 显示ID信息"
+    },
+    {
+      "slug": "uwb_uart",
+      "reason": "UWB 串口输出距离与方位角"
+    },
+    {
+      "slug": "filter",
+      "reason": "滑动平均平滑定位数据"
+    },
+    {
+      "slug": "led_beep",
+      "reason": "LED+蜂鸣器声光提示"
+    },
+    {
+      "slug": "relay",
+      "reason": "继电器做真实开锁动作"
+    },
+    {
+      "slug": "led",
+      "reason": "LED 模拟开闭锁"
+    },
+    {
+      "slug": "config",
+      "reason": "拨码开关ID映射配置"
+    }
+  ],
+  "requirements": [
+    {
+      "requirement": "数字钥匙一键启动后持续无线发送身份ID",
+      "sentence": 33,
+      "modules": [
+        "zigbee_uart_key"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "智能门锁无线接收ID并检测进入感应区的钥匙",
+      "sentence": 33,
+      "modules": [
+        "zigbee_uart"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "无线通信距离不小于3m",
+      "sentence": 34,
+      "modules": [
+        "zigbee_uart",
+        "zigbee_uart_key"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "显示接收到的数字钥匙ID",
+      "sentence": 33,
+      "modules": [
+        "oled"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "计算数字钥匙径向距离与方位角",
+      "sentence": 38,
+      "modules": [
+        "uwb_uart",
+        "filter"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "径向距离误差≤0.3m、方位角误差≤10°",
+      "sentence": 39,
+      "modules": [
+        "uwb_uart"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "判定进出迎宾区并给出声光提示",
+      "sentence": 41,
+      "modules": [
+        "led_beep"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "迎宾区判定误差≤0.2m",
+      "sentence": 42,
+      "modules": [
+        "filter"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "判定进出开锁区并执行开锁/闭锁",
+      "sentence": 44,
+      "modules": [
+        "relay",
+        "led"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "开锁区判定误差≤0.2m",
+      "sentence": 45,
+      "modules": [
+        "filter"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "手动修改身份ID并识别、显示结果",
+      "sentence": 47,
+      "modules": [
+        "config",
+        "oled"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "不同颜色LED模拟开闭锁并实时显示门锁状态",
+      "sentence": 60,
+      "modules": [
+        "led",
+        "oled"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "显示ID、位置信息及各项判决结果",
+      "sentence": 61,
+      "modules": [
+        "oled"
+      ],
+      "suggestions": []
+    }
+  ],
+  "score_points": [
+    {
+      "id": "1",
+      "part": "basic",
+      "description": "数字钥匙一键启动持续发送ID，门锁检测接收并显示，通信距离≥3m",
+      "score": 20.0,
+      "sentence_refs": [
+        33,
+        34
+      ]
+    },
+    {
+      "id": "3",
+      "part": "development",
+      "description": "门锁定位钥匙径向距离与方位角，误差≤0.3m/≤10°",
+      "score": 30.0,
+      "sentence_refs": [
+        38,
+        39
+      ]
+    },
+    {
+      "id": "4",
+      "part": "development",
+      "description": "迎宾区判定与声光提示，误差≤0.2m",
+      "score": 18.0,
+      "sentence_refs": [
+        41,
+        42
+      ]
+    },
+    {
+      "id": "5",
+      "part": "development",
+      "description": "开锁区判定与开闭锁动作，误差≤0.2m",
+      "score": 18.0,
+      "sentence_refs": [
+        44,
+        45
+      ]
+    },
+    {
+      "id": "6",
+      "part": "development",
+      "description": "手动修改身份ID并识别显示",
+      "score": 10.0,
+      "sentence_refs": [
+        47
+      ]
+    }
+  ],
+  "instances": {
+    "led": [
+      {
+        "name": "红灯",
+        "variant": "red",
+        "pin": ""
+      },
+      {
+        "name": "黄灯",
+        "variant": "yellow",
+        "pin": ""
+      },
+      {
+        "name": "绿灯",
+        "variant": "green",
+        "pin": ""
+      }
+    ]
+  },
+  "topic_id": "2026C",
+  "references": [],
+  "exclusive_groups": [
+    {
+      "id": "zigbee-rx",
+      "label": "Zigbee 无线链路（接收侧）",
+      "hint": false,
+      "members": [
+        {
+          "slug": "zigbee_link",
+          "role": "任意字节帧收发（双机/双车无线数据通信）"
+        },
+        {
+          "slug": "zigbee_uart",
+          "role": "固定 DIP-4 ID 帧接收（身份识别/信标上报，与 zigbee_uart_key 配对）"
+        }
+      ],
+      "recommended": [
+        "zigbee_uart"
+      ]
+    }
+  ]
+}

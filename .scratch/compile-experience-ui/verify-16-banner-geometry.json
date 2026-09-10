@@ -1,0 +1,28 @@
+{
+  "banner": {
+    "className": "success",
+    "text": "编译成功 · 0 Error 0 Warning · 耗时 5.5s",
+    "rect": {
+      "w": 1076,
+      "h": 43,
+      "top": 380
+    },
+    "background": "rgba(63, 185, 80, 0.15)",
+    "borderColor": "rgb(63, 185, 80)",
+    "color": "rgb(126, 231, 135)",
+    "fontWeight": "600",
+    "padding": "10px 14px",
+    "hiddenAncestors": []
+  },
+  "rendered": {
+    "rect": {
+      "w": 1076,
+      "h": 43
+    },
+    "background": "rgba(63, 185, 80, 0.15)",
+    "border": "rgb(63, 185, 80)",
+    "color": "rgb(126, 231, 135)",
+    "padding": "10px 14px",
+    "text": "编译成功 · 0 Error 0 Warning · 耗时 5.5s"
+  }
+}

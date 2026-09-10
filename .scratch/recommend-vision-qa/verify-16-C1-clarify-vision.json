@@ -1,0 +1,105 @@
+{
+  "injected_question": "图 1 中场地（走廊）的宽度尺寸是多少？题面图上标注的数值请照读。",
+  "vision_calls": [
+    {
+      "question": "图 1 中场地（走廊）的宽度尺寸是多少？题面图上标注的数值请照读。",
+      "answer": "30cm"
+    }
+  ],
+  "terminal": "done",
+  "modules": [
+    "digit_uart",
+    "k230",
+    "hx711",
+    "pid",
+    "ml_mpu6050",
+    "motor",
+    "led",
+    "zigbee_link"
+  ],
+  "attempts": [
+    "第 1 次：LLMError: 模块选择连续 1 次调用失败：库外建议的硬件名不在硬件词表中：红外对管循迹数组（词表外型号请降级为词表内的类别名）",
+    "第 3 次：LLMError: 模块选择连续 1 次调用失败：模块 hx711 不支持多实例，不能带 instances"
+  ],
+  "request_sizes": [
+    {
+      "total": 122161,
+      "segments": {
+        "model": 16,
+        "max_tokens": 4,
+        "response_format": 23,
+        "thinking": 20,
+        "msg0:system": 5707,
+        "msg1:user": 116251
+      }
+    },
+    {
+      "total": 122161,
+      "segments": {
+        "model": 16,
+        "max_tokens": 4,
+        "response_format": 23,
+        "thinking": 20,
+        "msg0:system": 5707,
+        "msg1:user": 116251
+      }
+    },
+    {
+      "total": 124475,
+      "segments": {
+        "model": 16,
+        "max_tokens": 4,
+        "response_format": 23,
+        "thinking": 20,
+        "msg0:system": 5707,
+        "msg1:user": 118565
+      }
+    },
+    {
+      "total": 122161,
+      "segments": {
+        "model": 16,
+        "max_tokens": 4,
+        "response_format": 23,
+        "thinking": 20,
+        "msg0:system": 5707,
+        "msg1:user": 116251
+      }
+    },
+    {
+      "total": 122161,
+      "segments": {
+        "model": 16,
+        "max_tokens": 4,
+        "response_format": 23,
+        "thinking": 20,
+        "msg0:system": 5707,
+        "msg1:user": 116251
+      }
+    },
+    {
+      "total": 124525,
+      "segments": {
+        "model": 16,
+        "max_tokens": 4,
+        "response_format": 23,
+        "thinking": 20,
+        "msg0:system": 5707,
+        "msg1:user": 118615
+      }
+    }
+  ],
+  "clarif_with_answer": [
+    [
+      "图 1 中场地（走廊）的宽度尺寸是多少？题面图上标注的数值请照读。",
+      "30cm"
+    ]
+  ],
+  "checks": {
+    "视觉回调被调用 ≥1 次": true,
+    "视觉答案非空": true,
+    "**未发 question 事件**（用户不再被问）": true,
+    "答案进了收敛用澄清历史": true,
+    "推荐正常收敛到 done": true
+  }
+}

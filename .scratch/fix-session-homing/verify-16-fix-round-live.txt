@@ -1,0 +1,13 @@
+[修复前] main.c sha256=10aedeb628f58f91… 行数=355
+[请求] POST /api/fix-errors output_dir=C:\Users\luoji\Desktop\firstep\.scratch\real-run\out_2026C_stm32 error_text=273 字符
+[事件流] parse_done → fix_start → llm_telemetry → apply_result → done（14.8s）
+[终态] done
+  事件序判据（events.py 词表）：PASS 期望前缀 ['parse_done', 'fix_start']
+[done] fixes=1 backup_id='20260910-212518' degraded=False
+   - main.c:23 [applied] 
+[修复后] 文件内容变化=True；注入行是否仍在=False
+  修复调用判据：PASS（done + fixes 非空 + backup_id 非空）
+[回滚] 响应：{"restored": ["main.c"]}
+  回滚一致判据：PASS（restored=1 项；sha 复原=True）
+
+C4 贴文本修复真机：PASS

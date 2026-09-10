@@ -1,0 +1,5 @@
+分析阶段观测轨迹：
+t+0s st="AI 影响分析中…（分钟级调用，请等待）" msg="" analysisHidden=true analysisLen=0 busy=true
+t+5s st="AI 影响分析中…（分钟级调用，请等待）" msg="" analysisHidden=true analysisLen=0 busy=true
+t+10s st="AI 影响分析中…（分钟级调用，请等待）" msg="" analysisHidden=true analysisLen=0 busy=true
+t+15s st="AI 影响分析中…（分钟级调用，请等待）" msg="" analysisHidden=true analysisLen=0 busy=true

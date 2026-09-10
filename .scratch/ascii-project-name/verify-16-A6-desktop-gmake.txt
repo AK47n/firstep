@@ -1,0 +1,7 @@
+[A6] 桌面目录 C:\Users\luoji\Desktop\2024H_Auto_Car_MSPM0  存在=True
+[A6] 目录名全 ASCII = True  name='2024H_Auto_Car_MSPM0'
+[A6] gmake = C:\ti\ccs2050\ccs\utils\bin\gmake.exe
+[A6] command = C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\Desktop\2024H_Auto_Car_MSPM0\Debug -f makefile -B all
+[A6] exit=0 passed=True errors=0 warnings=0 dur=4.7s timed_out=False
+[A6] .out: Debug\mspm0_project.out  11936 字节
+[A6] makefile 集含非 ASCII 行 = 0 处

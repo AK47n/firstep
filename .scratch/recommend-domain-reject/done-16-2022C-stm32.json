@@ -1,0 +1,263 @@
+{
+  "modules": [
+    {
+      "slug": "pid",
+      "reason": "灰度循迹+PID闭环控制"
+    },
+    {
+      "slug": "motor",
+      "reason": "双路电机调速与编码器"
+    },
+    {
+      "slug": "beep",
+      "reason": "蜂鸣器发声提示"
+    },
+    {
+      "slug": "led",
+      "reason": "LED 灯光指示"
+    },
+    {
+      "slug": "ir_beam",
+      "reason": "红外对射检测黑色标志线"
+    },
+    {
+      "slug": "ntb_time",
+      "reason": "毫秒计时控制停车时长"
+    },
+    {
+      "slug": "uwb_uart",
+      "reason": "UWB 测距获两车间距"
+    },
+    {
+      "slug": "zigbee_link",
+      "reason": "串口透传帧协议收发指令"
+    },
+    {
+      "slug": "key",
+      "reason": "按键读取启动与设置"
+    }
+  ],
+  "requirements": [
+    {
+      "requirement": "小车沿黑色引导线循迹行驶",
+      "sentence": 4,
+      "modules": [
+        "pid",
+        "motor"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "车速 0.3~1m/s 可调",
+      "sentence": 4,
+      "modules": [
+        "motor"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "到达终点发出声音提示",
+      "sentence": 9,
+      "modules": [
+        "beep"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "内圈 BFD 段行驶时发出灯光指示",
+      "sentence": 12,
+      "modules": [
+        "led"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "识别 E 点所在边的等停指示标识（停车）",
+      "sentence": 14,
+      "modules": [
+        "ir_beam"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "等停处停车 5 秒后继续行驶",
+      "sentence": 15,
+      "modules": [
+        "ntb_time"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "两车间距保持约 20cm 跟随行驶",
+      "sentence": 17,
+      "modules": [
+        "uwb_uart"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "领头与跟随小车之间无线通信指挥",
+      "sentence": 98,
+      "modules": [
+        "zigbee_link"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "领头小车启动按键与设置按键",
+      "sentence": 98,
+      "modules": [
+        "key"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "跟随小车仅上电开关无其他按键",
+      "sentence": 99,
+      "modules": [],
+      "suggestions": []
+    },
+    {
+      "requirement": "小车间可切换内外圈路径实现超车反超",
+      "sentence": 36,
+      "modules": [
+        "pid"
+      ],
+      "suggestions": []
+    }
+  ],
+  "score_points": [
+    {
+      "id": "1",
+      "part": "basic",
+      "description": "A点发车0.3m/s沿外圈一圈：速度误差≤10%，跟随不碰撞，停车间距20cm误差≤6cm",
+      "score": 20.0,
+      "sentence_refs": [
+        17,
+        18,
+        19,
+        20,
+        21,
+        22
+      ]
+    },
+    {
+      "id": "2",
+      "part": "basic",
+      "description": "0.5m/s外圈两圈：速度误差≤10%，跟随追上按20cm跟随，停车间距与时间差达标",
+      "score": 20.0,
+      "sentence_refs": [
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31
+      ]
+    },
+    {
+      "id": "3",
+      "part": "development",
+      "description": "三圈行驶含两次内外圈超车与反超，平稳不碰撞，停车达标，时间越短越好",
+      "score": 30.0,
+      "sentence_refs": [
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45
+      ]
+    },
+    {
+      "id": "4",
+      "part": "development",
+      "description": "1m/s外圈一圈遇等停标识停车位置误差≤5cm，停车5s误差≤1s，两车不碰撞",
+      "score": 20.0,
+      "sentence_refs": [
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54
+      ]
+    },
+    {
+      "id": "5",
+      "part": "unknown",
+      "description": "其他",
+      "score": 10.0,
+      "sentence_refs": [
+        55,
+        56
+      ]
+    },
+    {
+      "id": "6",
+      "part": "unknown",
+      "description": "设计报告",
+      "score": 20.0,
+      "sentence_refs": [
+        57,
+        58
+      ]
+    }
+  ],
+  "instances": {
+    "led": [
+      {
+        "name": "指示灯",
+        "variant": "red",
+        "pin": ""
+      }
+    ],
+    "key": [
+      {
+        "name": "启动按键",
+        "variant": "start",
+        "pin": ""
+      },
+      {
+        "name": "设置按键",
+        "variant": "set",
+        "pin": ""
+      }
+    ]
+  },
+  "topic_id": "2022C",
+  "references": [],
+  "exclusive_groups": [
+    {
+      "id": "zigbee-rx",
+      "label": "Zigbee 无线链路（接收侧）",
+      "hint": false,
+      "members": [
+        {
+          "slug": "zigbee_link",
+          "role": "任意字节帧收发（双机/双车无线数据通信）"
+        },
+        {
+          "slug": "zigbee_uart",
+          "role": "固定 DIP-4 ID 帧接收（身份识别/信标上报，与 zigbee_uart_key 配对）"
+        }
+      ],
+      "recommended": [
+        "zigbee_link"
+      ]
+    }
+  ]
+}

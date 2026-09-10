@@ -1,0 +1,22 @@
+note 历史目录缺题面 → 补题面框填入 library/topics/2026C/topic.md（原验收场景）
+ok   分析无错误提示（msg=""）
+ok   分析区渲染出来（轮询终态 st="分析完成——请核对影响结论与 diff，确认后执行修订"）
+ok   渲染含「逐条影响结论」标题
+ok   渲染含「模块集 diff」卡
+ok   diff 卡三栏（新增 / 移除 / 不变）都在
+ok   渲染含「平台警告」段
+ok   渲染含「建议模块集」段
+ok   渲染出 3 个条目块（逐条影响 + diff 卡 + …）
+ok   渲染出 28 个 chip（模块名 / 标记）
+ok   「放弃」按钮出现
+ok   建议模块集已预填确认框（config, zigbee_uart_key, zigbee_uart, filter, uwb_…）
+note 确认弹窗出现=true
+ok   执行无错误提示（msg=""）
+ok   结果区渲染出来（轮询终态 st="修订完成——可继续「直接深化」或回滚"）
+ok   结果区含 diff 记录 / 验证状态文本
+ok   回滚按钮可见（有备份）
+ok   SSE 进度出现过备份/重生成/编译验证字样（2 个状态行）
+note 回滚确认弹窗出现=true
+ok   回滚后 main.c sha 复原（before=f89a4136f9c8 after=f89a4136f9c8）
+ok   回滚状态可见（st="已回滚到备份状态" / rollbackStatus="已回滚 149 项：.contest_context.json、.contest_wiring.json、.gitignore、code/readme.txt、isr.c、key/startup_stm32f10x_md.s、key_instances.h、led_instances.h、main.c、ml_libs/headfile.h、ml_libs/ml_adc.c、ml_libs/ml_adc.h、ml_libs/ml_delay.c、ml_libs/ml_delay.h、ml_libs/ml_exti.c、ml_libs/ml_exti.h、ml_libs/ml_gpio.c、ml_libs/ml_gpio.h、ml_libs/ml_i2c.c、ml_libs/ml_i2c.h、ml_libs/ml_led.c、ml_libs/ml_led.h、ml_libs/ml_nvic.c、ml_libs/ml_nvic.h、ml_libs/ml_oled.c、ml_libs/ml_oled.h、ml_libs/ml_oled_font.h、ml_libs/ml_pwm.c、ml_libs/ml_pwm.h、ml_libs/ml_systick.c、ml_libs/ml_systick.h、ml_libs/ml_tim.c、ml_libs/ml_tim.h、ml_libs/ml_uart.c、ml_libs/ml_uart.h、modules/beep/code/beep_stm32.c、modules/beep/code/beep_stm32.h、modules/config/code/config.h、modules/filter/code/filter.c、modules/filter/code/filter.h、modules/key/code/key_stm32.c、modules/key/code/key_stm32.h、modules/led_beep/code/led_beep_stm32.c、modules/led_beep/code/led_beep_stm32.h、modules/oled/code/oled_extra_stm32.c、modules/oled/code/oled_extra_stm32.h、modules/relay/code/relay_stm32.c、modules/relay/code/relay_stm32.h、modules/uwb_uart/code/uwb_uart.c、modules/uwb_uart/code/uwb_uart.h、modules/zigbee_uart/code/zigbee_uart.c、modules/zigbee_uart/code/zigbee_uart.h、modules/zigbee_uart_key/code/zigbee_uart_key.c、modules/zigbee_uart_key/code/zigbee_uart_key.h、pin_config.h、README.md、sys/core_cm3.h、sys/core_cmFunc.h、sys/core_cmInstr.h、sys/stm32f10x.h、sys/system_stm32f10x.c、sys/system_stm32f10x.h、user/DebugConfig/Target_1_STM32F103C8_1.0.0.dbgconf、user/Listings/Project.map、user/Listings/startup_stm32f10x_md.lst、user/Objects/beep_stm32.crf、user/Objects/beep_stm32.d、user/Objects/beep_stm32.o、user/Objects/filter.crf、user/Objects/filter.d、user/Objects/filter.o、user/Objects/isr.crf、user/Objects/isr.d、user/Objects/isr.o、user/Objects/key_stm32.crf、user/Objects/key_stm32.d、user/Objects/key_stm32.o、user/Objects/led_beep_stm32.crf、user/Objects/led_beep_stm32.d、user/Objects/led_beep_stm32.o、user/Objects/main.crf、user/Objects/main.d、user/Objects/main.o、user/Objects/ml_adc.crf、user/Objects/ml_adc.d、user/Objects/ml_adc.o、user/Objects/ml_delay.crf、user/Objects/ml_delay.d、user/Objects/ml_delay.o、user/Objects/ml_exti.crf、user/Objects/ml_exti.d、user/Objects/ml_exti.o、user/Objects/ml_gpio.crf、user/Objects/ml_gpio.d、user/Objects/ml_gpio.o、user/Objects/ml_i2c.crf、user/Objects/ml_i2c.d、user/Objects/ml_i2c.o、user/Objects/ml_led.crf、user/Objects/ml_led.d、user/Objects/ml_led.o、user/Objects/ml_nvic.crf、user/Objects/ml_nvic.d、user/Objects/ml_nvic.o、user/Objects/ml_oled.crf、user/Objects/ml_oled.d、user/Objects/ml_oled.o、user/Objects/ml_pwm.crf、user/Objects/ml_pwm.d、user/Objects/ml_pwm.o、user/Objects/ml_systick.crf、user/Objects/ml_systick.d、user/Objects/ml_systick.o、user/Objects/ml_tim.crf、user/Objects/ml_tim.d、user/Objects/ml_tim.o、user/Objects/ml_uart.crf、user/Objects/ml_uart.d、user/Objects/ml_uart.o、user/Objects/oled_extra_stm32.crf、user/Objects/oled_extra_stm32.d、user/Objects/oled_extra_stm32.o、user/Objects/Project.axf、user/Objects/Project.build_log.htm、user/Objects/Project.hex、user/Objects/Project.htm、user/Objects/Project.lnp、user/Objects/Project.sct、user/Objects/Project_Target 1.dep、user/Objects/relay_stm32.crf、user/Objects/relay_stm32.d、user/Objects/relay_stm32.o、user/Objects/startup_stm32f10x_md.d、user/Objects/startup_stm32f10x_md.o、user/Objects/system_stm32f10x.crf、user/Objects/system_stm32f10x.d、user/Objects/system_stm32f10x.o、user/Objects/uwb_uart.crf、user/Objects/uwb_uart.d、user/Objects/uwb_uart.o、user/Objects/zigbee_uart.crf、user/Objects/zigbee_uart.d、user/Objects/zigbee_uart.o、user/Objects/zigbee_uart_key.crf、user/Objects/zigbee_uart_key.d、user/Objects/zigbee_uart_key.o、user/Project.uvguix.luoji、user/Project.uvprojx、演示脚本.md——目录已恢复，状态已刷新"）
+ok   页面零 JS 异常（0 条）

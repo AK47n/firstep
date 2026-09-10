@@ -1,0 +1,15 @@
+补题面区可见=true
+t+4s {"s":"请求中…","m":"","hidden":true,"len":0}
+t+8s {"s":"请求中…","m":"","hidden":true,"len":0}
+t+12s {"s":"请求中…","m":"","hidden":true,"len":0}
+t+16s {"s":"请求中…","m":"","hidden":true,"len":0}
+t+20s {"s":"请求中…","m":"","hidden":true,"len":0}
+t+24s {"s":"请求中…","m":"","hidden":true,"len":0}
+t+28s {"s":"分析完成——请核对影响结论与 diff，确认后执行修订","m":"","hidden":false,"len":623}
+served(route.fetch 抓到的服务端 SSE): {"status":200,"len":4193,"head":"event: impact_analyzing\ndata: {\"type\": \"impact_analyzing\", \"stage\": \"\", \"judgment_count\": 0, \"summary_batch_count\": 0, \"decide_batch_count\": 0, \"phase\": \"\", \"ba"}
+页面 console/pageerror（前 10 条）: [
+ "info: Clear-Site-Data header on 'http://127.0.0.1:8000/': Cleared data types: \"cache\".",
+ "verbose: [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
+ "verbose: [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o",
+ "error: Failed to load resource: the server responded with a status of 400 (Bad Request)"
+]

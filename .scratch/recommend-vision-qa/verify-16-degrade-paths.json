@@ -1,0 +1,11 @@
+{
+  "key_custom": "",
+  "key_official_reused": true,
+  "vision_stub_calls": 0,
+  "hard_question_answer": null,
+  "ok": {
+    "path1": true,
+    "path2": true,
+    "path3": true
+  }
+}

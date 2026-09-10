@@ -1,0 +1,21 @@
+=== C1 降级路径一：无视觉配置（留空 + 自定义端点 → 不注入） ===
+留空 + 自定义端点 → key='' configured=False（期望 '' / False = 不注入，行为与改动前一致）
+留空 + DeepSeek 官方端点 → key=<复用主 key> configured=True（期望 True = 这是主链路口径）
+显式 vision key → 原样 configured=True
+降级一路径判据：PASS
+
+=== C1 降级路径二：粘贴无图题面（no-topic）→ 视觉回调零调用 ===
+vision_answerable('这个尺寸是多少？', 无图题面) = False（期望 False：题面无「图N」引用）
+vision_answerable('图1 里的尺寸是多少？', 无图题面) = False（期望 False）
+_answer_vision_questions：剩余待问 2 条（期望 2 = 全保留）、视觉回调调用 0 次（期望 0）
+
+=== C1 降级路径三：视觉答不上（真调 2021F 原 PDF）===
+2021F 题面引用图号：['1', '2']
+问题：图1 中标注的那个部件的采购价格是多少元？
+vision_answerable(问题, 题面) = True（期望 True：问到图1）
+视觉通道：base_url=https://api.deepseek.com model=deepseek-flash key=复用主 key
+answer_figure_question → None
+判据：返回 None（否定词 / 空答案）→ 问题照旧问用户、流程不阻塞 = PASS
+编排层复验：剩余待问 1 条（期望 1 = 问题保留给用户）、澄清历史新增 0 条（期望 0）
+
+三条降级路径判据：一=PASS / 二=PASS / 三=PASS

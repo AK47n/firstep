@@ -1,0 +1,26 @@
+[
+  {
+    "file": "lckfb-地猛星移植手册\\control--16-ch-servo-drive-module.md",
+    "size_bytes": 21597,
+    "head_chars": "# 16路舵机驱动模块\n\n- 分类：控制类\n- 来源：https://wiki.lckfb.com/zh-hans/dmx/module/control/16-ch-servo-drive-module.html\n- 标题：16路舵机驱动模块\n- 代码块：4 个 · 图片：0 张\n\n当你在一个项目中碰到了微控制器芯片的PWM输出引脚不够用的情况，那么这款PCA968516路舵机就能很快帮助您解决这个问题了。只要你的主控芯片具备了I2C通信，就能够让主控芯片和PCA9685通信，实现多个舵机的同时控制了。PCA9685 16路舵机是一个采用I2C通信，内置了PWM驱动器和一个时钟，这个意味着，这",
+    "verdict_text": "① 不像正常的硬件文档。\n\n② 主要问题：\n\n- **OCR/识别错误与乱码式错字**：如「PCA968516路舵机」「l2C总线」「0×40」（应为 0x40）、「TLCG940」（疑为 TLC5940）等，明显不是正常技术写作。\n- **标点/符号混用严重**：「20 ms．」用了中文句号式点；「0×40」「0×41」中乘号与 x 混淆。\n- **长段落粘连、可读性差**：如「Board 0: Address = 0×40 Offset = binary 00000 (默认)Board 1: Address = 0×41...」多项内容挤在一行，缺少换行/列表结构。\n- **语句不通顺且有拼接感**：「这个意味着，这将和TLCG940系列有很大不同」「为步进电机准备输出12位分辨率」等，像机器翻译或 OCR 后未整理。\n- **信息层级混乱**：标题、列表、引用、正文混在一起，规格参数和原理说明格式不统一。\n\n总体看，像是从网页/PDF 抓取后 OCR 或自动转换得到的半成品，不是正常人工编写的硬件模块移植手册。"
+  },
+  {
+    "file": "lckfb-地猛星移植手册\\rf--as32-lora-wireless-communication-module.md",
+    "size_bytes": 9597,
+    "head_chars": "# AS32-LoRa无线通信模块\n\n- 分类：无线通信类\n- 来源：https://wiki.lckfb.com/zh-hans/dmx/module/rf/as32-lora-wireless-communication-module.html\n- 标题：AS32-LoRa无线通信模块\n- 代码块：3 个 · 图片：0 张\n\n## 一、模块来源\n\n采购链接：\n\n[LORA模块433无线通信串口模块中继组网SX1278/76应用成熟杜绝死机](https://item.taobao.com/item.htm?spm=a1z09.2.0.0.a2882e8dnsJF7e&id=62378185",
+    "verdict_text": "① 不像一份正常的硬件文档。\n\n② 主要问题：\n\n- 元数据混入正文：开头列了「分类／来源／标题／代码块：3 个 · 图片：0 张」，像是抓取工具的摘要字段，不是手册内容。\n- 代码块被截断：结尾 ```c 代码块只有注释开头 `/* 立创开发板软硬件资料与相关扩展板`，没有闭合，也没有实际代码。\n- 图片引用失效：正文多处写「根据下方图片进行添加」「见下方图片」，但元数据标明「图片：0 张」，图文对不上。\n- 口语句式夹杂：如「可能会报错，我们不用管！」这类口语化备注，出现在步骤中显得不正式。"
+  },
+  {
+    "file": "lckfb-地猛星移植手册\\screen--0-91-color-screen.md",
+    "size_bytes": 6415,
+    "head_chars": "# 0.91寸彩屏\n\n- 分类：显示类\n- 来源：https://wiki.lckfb.com/zh-hans/dmx/module/screen/0-91-color-screen.html\n- 标题：0.91寸彩屏\n- 代码块：5 个 · 图片：1 张\n\n## 一、模块来源\n\n**采购链接**： [0.91寸OLED显示屏12832液晶屏显串口屏iic接口屏i2cssd1306](https://item.taobao.com/item.htm?spm=a1z09.2.0.0.38ec2e8dwBMLLQ&id=39454653104&_u=d2t4uge5e573)\n\n**资料下载链接*",
+    "verdict_text": "① 不像正常的硬件文档。\n\n② 主要问题：\n- 元信息以列表堆叠呈现，像抓取摘要而非正文：“- 分类：显示类 / - 来源：… / - 代码块：5 个 · 图片：1 张”\n- 规格参数被拆成一行一条的加粗键值，缺乏段落/表格结构，读起来碎片化。\n- 步骤中夹带大量无意义强调与括号说明，语句生硬，例如：“> **TIP**：(在左边将 **oled.h** 的工程目录展开，就发现有 **oled.h** )”\n- 标题与内容不匹配：“#### 软件SPI移植”下方却在讲 IIC/SCL/SDA 和 SYSCONFIG。\n- 存在明显笔误/重复：“> **WARNING**：出现只要出现下面的框就一定要选择”"
+  },
+  {
+    "file": "lckfb-地猛星移植手册\\sensor--ads1115-multichannel-a-to-d-sensor.md",
+    "size_bytes": 18079,
+    "head_chars": "# ADS1115多路模数转换器\n\n- 分类：传感器类\n- 来源：https://wiki.lckfb.com/zh-hans/dmx/module/sensor/ads1115-multichannel-a-to-d-sensor.html\n- 标题：ADS1115多路模数转换器\n- 代码块：5 个 · 图片：0 张\n\nADS1115 器件是兼容 IIC 的 16 位高精度低功耗模数转换器 (ADC)，采用超小型无引线 X2QFN-10 封装和 VSSOP-10 封装。ADS111x 器件采用了低漂移电压基准和振荡器。ADS1114 和 ADS1115 还采用可编程增益放大器(PGA)和数字",
+    "verdict_text": "① 基本像一份正常的硬件文档：有标题、列表、代码/链接、段落结构，语句总体通顺。\n\n② 有几处小问题：\n- 结尾被截断，最后一句不完整：「**发送IIC停止信号*」缺少收尾的 `*` 和后续内容。\n- 个别标点/空格不规范，例如「±6.144V」前缺空格、「ADS1115 具有 一个输入多路复用器」中间多空格。\n- 链接标题里 `a1z10.3-c-s` 等是正常 URL，不算乱码。\n- 未发现「一个词一行」的碎片化或行号残留。"
+  }
+]

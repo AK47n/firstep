@@ -1,0 +1,260 @@
+{
+  "modules": [
+    {
+      "slug": "adc",
+      "reason": "采集输入信号幅度"
+    },
+    {
+      "slug": "uart",
+      "reason": "调试输出状态"
+    },
+    {
+      "slug": "config",
+      "reason": "统一外设配置"
+    },
+    {
+      "slug": "filter",
+      "reason": "平滑幅度检测"
+    },
+    {
+      "slug": "key",
+      "reason": "设置输出档位"
+    },
+    {
+      "slug": "k230",
+      "reason": "视觉副控识别图形"
+    },
+    {
+      "slug": "coord_detect",
+      "reason": "解析视觉坐标帧"
+    },
+    {
+      "slug": "delay",
+      "reason": "控制节拍延时"
+    },
+    {
+      "slug": "led_beep",
+      "reason": "声光组合提示"
+    },
+    {
+      "slug": "led",
+      "reason": "指示灯"
+    },
+    {
+      "slug": "beep",
+      "reason": "蜂鸣提示"
+    },
+    {
+      "slug": "ntb_time",
+      "reason": "毫秒时间戳计时"
+    }
+  ],
+  "requirements": [
+    {
+      "requirement": "输入信号与输出信号直通输出到Y轴",
+      "sentence": 24,
+      "modules": [
+        "adc",
+        "uart",
+        "config"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "输出与输入相位正交且幅度相等",
+      "sentence": 28,
+      "modules": [
+        "adc",
+        "filter",
+        "config"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "输出为输入频率2倍且幅度相等",
+      "sentence": 32,
+      "modules": [
+        "adc",
+        "filter",
+        "config"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "可设置输出峰峰值为2/4/6/8div",
+      "sentence": 36,
+      "modules": [
+        "key",
+        "config"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "3个独立启动按钮进入3种自动模式",
+      "sentence": 40,
+      "modules": [
+        "key",
+        "config"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "摄像头拍摄示波器图形并识别",
+      "sentence": 41,
+      "modules": [
+        "k230",
+        "coord_detect"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "自动闭环控制输出使图形达到目标形状",
+      "sentence": 41,
+      "modules": [
+        "adc",
+        "delay",
+        "config"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "完成后声光提示",
+      "sentence": 42,
+      "modules": [
+        "led_beep",
+        "led",
+        "beep"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "控制与稳定时间计时",
+      "sentence": 42,
+      "modules": [
+        "ntb_time"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "输出接示波器Y轴，50Ω阻抗排针BNC连接",
+      "sentence": 28,
+      "modules": [],
+      "suggestions": [
+        {
+          "name": "稳压模块",
+          "examples": [
+            "DC-DC 稳压模块"
+          ],
+          "degraded": false,
+          "solutions": [],
+          "selected": ""
+        }
+      ]
+    }
+  ],
+  "score_points": [
+    {
+      "id": "1",
+      "part": "basic",
+      "description": "直通模式显示对角线",
+      "score": 5.0,
+      "sentence_refs": [
+        24,
+        25,
+        26,
+        27
+      ]
+    },
+    {
+      "id": "2",
+      "part": "basic",
+      "description": "正交等幅输出显示圆",
+      "score": 15.0,
+      "sentence_refs": [
+        28,
+        29,
+        30,
+        31
+      ]
+    },
+    {
+      "id": "3",
+      "part": "basic",
+      "description": "二倍频输出显示∞形",
+      "score": 25.0,
+      "sentence_refs": [
+        32,
+        33,
+        34,
+        35
+      ]
+    },
+    {
+      "id": "4",
+      "part": "basic",
+      "description": "输出峰峰值2/4/6/8div可调",
+      "score": 15.0,
+      "sentence_refs": [
+        36,
+        37,
+        38
+      ]
+    },
+    {
+      "id": "5",
+      "part": "development",
+      "description": "摄像头闭环自动完成三图形并声光提示",
+      "score": 40.0,
+      "sentence_refs": [
+        39,
+        40,
+        41,
+        42,
+        43
+      ]
+    },
+    {
+      "id": "6",
+      "part": "unknown",
+      "description": "设计报告",
+      "score": 20.0,
+      "sentence_refs": [
+        44,
+        45
+      ]
+    }
+  ],
+  "instances": {
+    "key": [
+      {
+        "name": "设置键",
+        "variant": "set",
+        "pin": ""
+      },
+      {
+        "name": "启动键1",
+        "variant": "start",
+        "pin": ""
+      },
+      {
+        "name": "启动键2",
+        "variant": "start",
+        "pin": ""
+      },
+      {
+        "name": "启动键3",
+        "variant": "start",
+        "pin": ""
+      }
+    ],
+    "led": [
+      {
+        "name": "状态灯",
+        "variant": "green",
+        "pin": ""
+      }
+    ]
+  },
+  "topic_id": "2026F",
+  "references": []
+}

@@ -1,0 +1,4 @@
+﻿install.bat 含「没有找到 Python」：1 处
+install.bat 含「版本太旧」：1 处
+install.bat 含「3.13」：3 处
+install.bat 含「Add python.exe to PATH」：1 处

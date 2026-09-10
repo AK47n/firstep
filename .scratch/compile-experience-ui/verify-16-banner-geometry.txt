@@ -1,0 +1,6 @@
+ok   横幅 class = success（实际 success）
+ok   横幅文案（编译成功 · 0 Error 0 Warning · 耗时 5.5s）
+ok   横幅样式渲染出真横幅几何（克隆 1076×43）
+ok   成功态底色 = ok-dim（rgba(63, 185, 80, 0.15)）
+ok   成功态描边 = ok（rgb(63, 185, 80)）
+ok   挂载点事实：祖先 hidden = []（#compile-banner 挂在 #generate-result 内——只有生成过的会话里结果区才可见）

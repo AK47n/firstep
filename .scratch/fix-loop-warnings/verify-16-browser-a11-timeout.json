@@ -1,0 +1,15 @@
+{
+  "fixErrorCalls": 0,
+  "st": {
+    "bannerClass": "fail",
+    "bannerText": "编译超时（工具链 180s 未返回）",
+    "status": "编译超时（工具链 180s 未返回），已停止循环——可在设置页检查工具链路径后重试",
+    "round": "",
+    "errMsg": "",
+    "rows": [],
+    "rollbackHidden": true,
+    "continueHidden": true,
+    "logLen": 10,
+    "busy": false
+  }
+}
