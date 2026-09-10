@@ -85,7 +85,11 @@ SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_ru
   **2026-09-09 第七轮完成**：`smoke-02.mjs` 实跑 **8/8 PASS**，产物 `shot-editor-light.png` / `shot-editor-dark.png` 已入库。
 - [x] **B5 来源 `code-editor-vscode-polish/08`**：全页验收图 `shot-ide-dark/light.png`（`smoke-08.mjs:133/136`）。
   **2026-09-09 第七轮完成**：`smoke-08.mjs` 实跑 **4/4 PASS**，产物 `shot-ide-dark.png` / `shot-ide-light.png` 已入库。
-- [ ] **B6 来源 `code-editor-refine/04`**：括号彩虹双主题截图（现以 computed 色值断言代替，无截图产物）。
+- [x] **B6 来源 `code-editor-refine/04`**：括号彩虹双主题截图（现以 computed 色值断言代替，无截图产物）。
+  **2026-09-10 第十五轮完成**：新写 `.scratch/code-editor-refine/shot-rainbow.mjs`——打开
+  `sample-proj-04/nest.c`，断言「深度标记 ≥3 个、逐层颜色互不相同（≥3 色）、深浅两套色不同」，
+  产物 `shot-04-rainbow-dark.png` / `shot-04-rainbow-light.png` 入库（视觉通道目视：深色看到 3 种颜色，
+  浅色 3 种且「清晰可辨」；注释/字符串里的假括号不被标记）。
 - [x] **B7 来源 `module-library-ui/01`**：模块库表格目视截图 `01-table-shot.png`（从未提交；`git log --all --` 无该路径）。
   注（2026-09-09 第七轮实测）：`.scratch/module-library-ui/smoke.mjs` 在本机复跑**未就绪退出**（`页面未就绪`）——
   脚本就绪判据要求全局 `state.modules` 为数组，与当前页面形态不符（同批其它脚本用 DOM 判据）；截图仍未生成，留待脚本判据更新后重跑。
@@ -96,26 +100,102 @@ SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_ru
   徽章与按钮配色统一（仅删除为红字）、slug 等宽、简介列省略号截断、无渲染异常，总评「正常渲染、样式统一」。
   证据：`.scratch/module-library-ui/vision-eyeball.py`、`01-table-shot{,-final}.vision.txt`、`probe-shot-pixels.py`；
   来源工单 `module-library-ui/01` 该项已勾（口径变更留痕见该单「第十四轮」段）。
-- [ ] **B8 来源 `master-library-ui-2/02`**：母版树冒烟补「目录数 / 文件数」数值断言 + 二进制 / 缺失路径 400 中文断言。
-- [ ] **B9 来源 `master-library-ui-2/03`**：冒烟补 `pin_config.h` / `mspm0.syscfg` 高亮 span 断言 + 剪贴板内容子串断言。
-- [ ] **B10 来源 `master-library-ui-2/04`**：冒烟补「开导入弹窗 + 平台下拉选项数 + 空 project_dir / 非法平台 400」。
-- [ ] **B11 来源 `master-library-ui-2/05`**：冒烟补「点遮罩取消 + 确认闭合」。
-- [ ] **B12 来源 `master-library-ui-2/06`**：母版 tab 五项冒烟清单全绿 + 截图 `shot-06-detail-tree.png`。
-- [ ] **B13 来源 `gen-result-panel/01`**：宽 / 窄屏截图目检生成结果两列布局。
-- [ ] **B14 来源 `ui-detail/01`、`/02`、`/03`**：headless 截图目检（步进导航 warn 态 / 动效令牌 / 卡分组）。
-- [ ] **B15 来源 `ux-polish-02/09`**：CDP 跑 `.scratch/ux-polish-02/probe-t09.mjs`（八项行为 + 四页零 JS 异常 + 无横向溢出 + 未触发真实 LLM 请求）。
-- [ ] **B16 来源 `frontend-es-modules/11`**：8 个 tab 浏览器冒烟（`.scratch/frontend-es-modules/smoke.mjs`）。
-- [ ] **B17 来源 `frontend-es-modules-stage2/23`**：新增平台下拉 options 实况（`ui/master.js:655 renderNewPlatformOptions` 已导出）。
-- [ ] **B18 来源 `frontend-es-modules-stage2/24`**：草稿清除按钮实况点按（共享 handler `generate-steps.js:77 bindClearDraftButton`）。
-- [ ] **B19 来源 `frontend-es-modules-stage2/25`**：main.c 滚动三同步实况（`generate-mainc.js:26-30 syncPanels`）。
-- [ ] **B20 来源 `frontend-es-modules-stage2/21`**：diag 零 EXC + `smoke.mjs` 11/11。
-- [ ] **B21 来源 `newcomer-onboarding/03`**：欢迎卡「不再显示」跨刷新持久 + 配 key 后转 compact（localStorage 跨刷新）。
-- [ ] **B22 来源 `wiki-materials/02`**：Markdown 资料库人工验收（批次可见 / 70+2 篇 / 过滤 mpu6050 / 预览渲染 / 刷新清空）。
-- [ ] **B23 来源 `wiki-md-repair/04`、`/06`**：彩屏篇预览显示 gif；列表首列显示中文标题 + 文件名小字。
+- [x] **B8 来源 `master-library-ui-2/02`**：母版树冒烟补「目录数 / 文件数」数值断言 + 二进制 / 缺失路径 400 中文断言。
+  **2026-09-10 第十五轮完成**：`master-library-ui-2/smoke.mjs` 断言「DOM 树文件条目 = `/tree` 端点条数且逐条同名」
+  「DOM `details` 数 = 清单推导的目录数」「缺失路径 400 中文」「`../` 穿越 400 中文」；二进制 400 用
+  **同约束的代码端点 + 临时目录**验证（母版树里实测 0 个含 NUL 文件，无真样本——口径写在收口记录里）。
+- [x] **B9 来源 `master-library-ui-2/03`**：冒烟补 `pin_config.h` / `mspm0.syscfg` 高亮 span 断言 + 剪贴板内容子串断言。
+  **2026-09-10 第十五轮完成**：`pin_config.h`（C 高亮）与 `.cproject`（真 XML）断言 `tok-*` span > 0；
+  剪贴板经 `Browser.grantPermissions` 授权后读回内容含 `#define`（复制钮 → 剪贴板闭环）。
+  **口径修订**：`.syscfg` 的内容实为 **SysConfig JavaScript**，而 `languageOf` 把 `.syscfg` 归到 XML 分词器
+  （`tests/js/highlight.test.mjs` 有守卫）⇒ 该文件 0 个 tok-*、预览为纯文本。冒烟里以 `NOTE` 记录该
+  **已知缺口**（要真高亮需加 JS 词法或改映射，属新特性），并把「高亮 span」判据落到真 XML 的工程配置上。
+- [x] **B10 来源 `master-library-ui-2/04`**：冒烟补「开导入弹窗 + 平台下拉选项数 + 空 project_dir / 非法平台 400」。
+  **2026-09-10 第十五轮完成**：入口接线（`#btn-direct-import` → 隐藏目录输入，spy 计数）、
+  平台下拉 = `state.platforms`、空 `project_dir` / 非法平台各 400 中文、导入同形确认弹窗（下拉选项数 + 双钮）。
+  **口径修订**：真实「选文件夹 → 暂存 → 弹窗」链路走**原生目录选择器**，CDP `DOM.setFileInputFiles`
+  不产生 `webkitRelativePath` 而产品按 `parts.length > 1` 过滤 ⇒ 无法用它跑通，故拆成上述四段机器判据。
+- [x] **B11 来源 `master-library-ui-2/05`**：冒烟补「点遮罩取消 + 确认闭合」。
+  **2026-09-10 第十五轮完成**：在导入同形弹窗上实测三条闭合路径——**确认**（OK → 返回所选平台值 + 关闭，
+  只调组件不调后端、零写库）/ **点遮罩** / **Esc**；取消路径返回值按实现断言「falsy」（带
+  `[data-confirm-value]` 时返回 `false`，非 `null`）。
+- [x] **B12 来源 `master-library-ui-2/06`**：母版 tab 五项冒烟清单全绿 + 截图 `shot-06-detail-tree.png`。
+  **2026-09-10 第十五轮完成**：`smoke.mjs` 扩到 **35 项全绿**（原 17），截图每轮重存档；
+  视觉通道目视确认弹窗内是**可展开文件树**（截图看到的是折叠态顶层 6 条，43 个文件条目在 DOM 里，
+  机器判据已逐条对齐）。
+- [x] **B13 来源 `gen-result-panel/01`**：宽 / 窄屏截图目检生成结果两列布局。
+  **2026-09-10 第十五轮完成**：新写 `.scratch/gen-result-panel/verify-01-layout.mjs`——宽屏（1418）
+  `.res-grid` 两列且 `.res-side` 在右列（宽 ≈380px、top 齐），窄屏（900）单列且 `.res-side` 落到下方；
+  9 个既有 id 全在、`.res-label` ≥5、结构树在右列。产物 `shot-01-wide.png` / `shot-01-narrow.png`；
+  视觉通道目视：宽屏「上半部分左右两列」、窄屏「从上到下单列、无横向溢出」。
+- [x] **B14 来源 `ui-detail/01`、`/02`、`/03`**：headless 截图目检（步进导航 warn 态 / 动效令牌 / 卡分组）。
+  **2026-09-10 第十五轮完成**：新写 `.scratch/ui-detail/verify-01-03.mjs`——① `.step-dot.warn`/`.done`
+  规则存在且**挂类后计算样式确实变成 warn-dim / ok-dim**（注意：`transition` 150ms，读数必须等落定，
+  否则读到动画起始值）；② 四个动效令牌存在且 40 个采样元素的计算 transition 全部取自它们；
+  ③ `.card-group` 规则 + 生成页 12 个分组（卡 10 `#card-fix-center` 两段、卡 11 四段）。
+  产物 3 张截图 + 视觉通道目视。
+- [x] **B15 来源 `ux-polish-02/09`**：CDP 跑 `.scratch/ux-polish-02/probe-t09.mjs`（八项行为 + 四页零 JS 异常 + 无横向溢出 + 未触发真实 LLM 请求）。
+  **2026-09-10 第十五轮完成**：探针修掉两处过期前提后实跑 **13 项全绿**（含 9 个页签零横向溢出、
+  零未捕获 JS 异常、零真实 LLM 请求）；证据 `.scratch/ux-polish-02/verify-09-t09.txt`。
+  **口径修订**：① 检查项 04 的假工程需补最小 `.uvprojx`（`/api/revise/context` 现在要求工程配置文件）；
+  ② 检查项 03 改为点击后轮询（首跑三条子断言全 false、随后单跑/人工复现均通过）；
+  ③ 任务卡缺失时按 FAIL 报告而不是抛异常中断整支脚本。
+- [x] **B16 来源 `frontend-es-modules/11`**：8 个 tab 浏览器冒烟（`.scratch/frontend-es-modules/smoke.mjs`）。
+  **2026-09-10 第十五轮完成**：实跑 **11 passed / 0 failed**（含「每个 tab 的 aria-controls 指向存在的
+  section」结构不变量，导航现为 11 个 tab——第九轮口径修订），证据 `verify-11-smoke.txt`。
+- [x] **B17 来源 `frontend-es-modules-stage2/23`**：新增平台下拉 options 实况（`ui/master.js:655 renderNewPlatformOptions` 已导出）。
+  **2026-09-10 第十五轮完成**：`master-library-ui-2/smoke.mjs` 断言下拉选项值集合 = `state.platforms`
+  （`["stm32","mspm0"]`，逐项对齐）；`tests/js/master-render.test.mjs` 静态守卫在位。
+- [x] **B18 来源 `frontend-es-modules-stage2/24`**：草稿清除按钮实况点按（共享 handler `generate-steps.js:77 bindClearDraftButton`）。
+  **2026-09-10 第十五轮完成**：新写 `.scratch/frontend-es-modules-stage2/verify-24-25.mjs`——点 `#btn-clear-draft`
+  → 草稿键确实被清 + 文案「已清除」→ 1.5s 回「清除草稿」；第二入口 `#btn-draft-clear` 同 handler 同样生效。
+- [x] **B19 来源 `frontend-es-modules-stage2/25`**：main.c 滚动三同步实况（`generate-mainc.js:26-30 syncPanels`）。
+  **2026-09-10 第十五轮完成**：同上脚本——200 行内容后行号列行数跟新、高亮层有 tok-* span；
+  滚到 300px 与 80% 处时 `#main-c-nums` / `#main-c-hl` 的 `scrollTop` 与 textarea 相等（三方同步）。
+- [x] **B20 来源 `frontend-es-modules-stage2/21`**：diag 零 EXC + `smoke.mjs` 11/11。
+  **2026-09-10 第十五轮完成**：`frontend-es-modules/diag.mjs` 实跑 **事件区零 EXC**（另有 1 条
+  `/api/generate/preview-dir` 400 与 1 条 favicon 404，均为预期/无关，非异常）；`smoke.mjs` 11/11。
+  证据 `verify-21-diag.txt` / `verify-11-smoke.txt`。
+- [x] **B21 来源 `newcomer-onboarding/03`**：欢迎卡「不再显示」跨刷新持久 + 配 key 后转 compact（localStorage 跨刷新）。
+  **2026-09-10 第十五轮完成**：新写 `.scratch/newcomer-onboarding/verify-03-welcome.mjs`——**12 项全绿**：
+  纯件真值表（full/compact/hidden×2）/ 未配 key 首访完整卡 + 三步 + 四按钮 / 「去配置 API key」切页并聚焦
+  （AI API 卡自动展开）/ 「检查环境」切页且体检结果区非空 / 「不再显示」写键并清空卡片 + **跨刷新持久** /
+  已配 key → compact 卡（含「开始做题」）/ 已配 key + 有草稿 → 不显示 / gen-banner「去设置」跳转。
+  口径澄清：草稿优先于 compact，但**未配 key 时仍走 full**（`welcomeMode` 的判定顺序）。
+- [x] **B22 来源 `wiki-materials/02`**：Markdown 资料库人工验收（批次可见 / 70+2 篇 / 过滤 mpu6050 / 预览渲染 / 刷新清空）。
+  **2026-09-10 第十五轮完成**：新写 `.scratch/wiki-materials/verify-md-library.mjs`——列表行数 = 端点全量
+  （**156 篇**，库已扩容）、批次 chips 含 `lckfb-地猛星移植手册`（该批 **72 篇**）、两篇索引在列、
+  过滤「mpu6050」命中数与端点同源（**2 篇**，地阔星 + 地猛星各一）、预览渲染正文（6 个标题 / 5 个代码块 /
+  169 个 tok-* 高亮 span）、刷新与清空正常、点「打开」经**可信点击**开新标签且列表不受影响。
+  口径修订：篇数按库现状（156 / 该批 72 / mpu6050 两篇）而非旧记录的 70+2 / 1 篇。
+- [x] **B23 来源 `wiki-md-repair/04`、`/06`**：彩屏篇预览显示 gif；列表首列显示中文标题 + 文件名小字。
+  **2026-09-10 第十五轮完成**：同脚本——图片端点直取 gif 200 + `image/gif`；彩屏篇预览 `img`
+  src 指素材端点且 `naturalWidth=1634`（真解码）；无图手册（sht30）预览有正文、无图、无错误态；
+  首列中文标题 + 文件名小字（13px vs 11px）。产物 `shot-md-list.png` / `shot-md-color-preview.png`；
+  视觉通道目视：列表确为「中文标题 + 小字文件名」两行结构、预览弹窗确有图片。
 - [ ] **B24 来源 `revise-deepen/05`**：修订/深化阶段卡视觉与交互（含历史目录补题面全流程、三态、回滚、SSE 断线提示）。
-- [ ] **B25 来源 `k230-multi-template/04`**：浏览器手测模板切换 → 生成的 `main.py` 随选择变化。
+  **2026-09-10 第十五轮：可确定性验证的一半已做**（`.scratch/revise-deepen/verify-05-stage-card.mjs`，7 项全绿）：
+  两条入口齐备 / 初始态三槽位与回滚按钮隐藏 / 历史目录加载成功（来源=反推、平台 stm32、模块 led、
+  题面缺失提示）/ 错误路径①目录不存在 400 中文 / 错误路径②无工程配置文件 400 中文。
+  **仍未做**：分析 → 影响 + diff 卡、确认执行 → SSE 进度、结果 diff / 验证状态 / 回滚 —— 三处都要
+  真实 LLM 与工具链，属 C 组额度项（见 C 组与 `recommend-vision-qa/03` 同类）。
+- [x] **B25 来源 `k230-multi-template/04`**：浏览器手测模板切换 → 生成的 `main.py` 随选择变化。
+  **2026-09-10 第十五轮完成（两段证据）**：
+  ① **UI 段** `.scratch/k230-multi-template/verify-04-frontend.mjs`（7 项全绿）：走确定性端点
+  `/api/selection/expand` + 导出的 `renderSelected()` → k230 卡出现「副产物模板」下拉（3 选项 = manifest
+  templates、默认 = `default`(blob)、title 带 description）；选 `rect` 记进 `pythonTemplates`、
+  改回默认则删除（默认不发字段）；选 `digit` → 展开结果含模板级依赖 `digit_uart`。
+  ② **渲染段** `.scratch/k230-multi-template/verify-04-templates.py`（14 项全绿）：三份模板文件在盘，
+  经产品渲染器 `k230_render.render_python_artifact` 渲染后**两两不同**且各含特征调用
+  （find_blobs / find_rects / AnchorBaseDet），digit 的随工程分发资产在盘。
+  仍未覆盖：整条生成链（推荐 → 骨架 → 落盘 main.py）需真实额度，属 C 组。
 - [ ] **B26 来源 `fix-loop-warnings/01`**：浏览器注入未用变量 → 自动清零到「0 错 0 警」。
+  **第十五轮结论：留在 A/C 组**——本机 UV4/gmake 虽在盘（环境体检已勾 ✓），但要跑「注入告警 → 自动
+  续跑修复轮 → 复编到 0 错 0 警」需要在 IDE/真编译链路里跑完整修复循环并消耗真实额度；
+  与 A 组编译矩阵、C 组额度项同源，不重复挂账。
 - [ ] **B27 来源 `recommend-progress-ui/01`**：真实 API 跑 2021F（第 2 轮收敛跳满 / 死寂期计时器跳动 / 补问 / 中途杀服务断线 / 未配 key 400）。
+  **第十五轮结论：留在 C 组**——五条子项里「未配 key 400」可离线验，其余四条都要真实推荐额度；
+  已由 C 组的真实额度项统一承接（`recommend-vision-qa/03` 的 2021F 真机验收同批一起跑最省额度）。
 
 ## C. 真实 LLM / 视觉额度（5 项）
 
