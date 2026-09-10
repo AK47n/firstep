@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=3bee40609528fc5a6b955fa4e3f11910862d9439 -->
+<!-- changelog-auto: last-commit=1d9586599122ad7fa70f3a823a93a5d8978e9acb -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-09-10
+- 13:12 perf(code-editor): 结构性编辑回车同步耗时 78.9ms → 9.8ms（删掉 syncTail 的滚动读写）
 
 ## 2026-09-09
 - 12:09 整理：CONTEXT 来源标注计数复测更正 + .gitignore 收口 DSH 运行产物
