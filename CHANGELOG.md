@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=cd96bedd3d723d1eaf701229cfa10e46d19ff40d -->
+<!-- changelog-auto: last-commit=6a2e358dd3b538ab1cc52f3bbb119b12527a93fd -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-09-12
+- 00:58 门禁引脚容量诊断（落点/可用 IO/解不开几组/至少去掉几个）
 
 ## 2026-09-11
 - 09:29 ﻿fix: 推荐域拒绝不再被吞成通用话术——kind=domain 分流 + 带理由重试一次（工单 real-acceptance/03）
