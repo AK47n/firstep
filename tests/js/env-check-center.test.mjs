@@ -4,9 +4,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { esc } from "../../src/contest_generator/static/js/fx/core.js";
-import { ENV_BADGE_GLYPH, envRowHTML, envChannelHTML, envCheckStatusHTML, toolchainProbeText } from "../../src/contest_generator/static/js/fx/env.js";
+import { ENV_BADGE_GLYPH, envRowHTML, envChannelHTML, envCheckStatusHTML, toolchainProbeText, ccsSourceText, CCS_PROBE_NOTE } from "../../src/contest_generator/static/js/fx/env.js";
 
-// fixture：全字段形状（字段名与 /api/env/status 契约一致）
+// fixture：全字段形状（字段名与 /api/env/status 契约一致）；CCS 三件带 root
+// （工单 real-acceptance/06：安装根反推，命中件才有）
 const status = {
   api_configured: true,
   llm: { base_url: "https://api.deepseek.com", model: "deepseek-chat", local_llm_base_url: "" },
@@ -15,9 +16,9 @@ const status = {
     mspm0: { found: false, path: null, override: false },
   },
   ccs_tools: {
-    sdk: { found: true, path: "C:\\ti\\ccs2051\\mspm0_sdk_2_10_00_04", override: false },
-    compiler: { found: false, path: null, override: false },
-    sysconfig: { found: true, path: "C:\\ti\\ccs2051\\sysconfig_1.26.2\\sysconfig_cli.bat", override: true },
+    sdk: { found: true, path: "C:\\ti\\ccs2051\\mspm0_sdk_2_10_00_04", root: "C:\\ti\\ccs2051", override: false },
+    compiler: { found: false, path: null, root: null, override: false },
+    sysconfig: { found: true, path: "C:\\ti\\ccs2051\\sysconfig_1.26.2\\sysconfig_cli.bat", root: "C:\\ti\\ccs2051", override: true },
   },
   library_dirs: {
     topic: { dir: "C:\\libs\\topics", exists: true, writable: true },
@@ -109,6 +110,9 @@ test("CCS 三件套逐行：命中 env-ok + 路径 / 未设置 env-err + 跳转�
   assert.ok(out.includes('data-env-row="ccs-sdk"'));
   assert.ok(out.includes("CCS SDK（mspm0）"));
   assert.ok(out.includes("C:\\ti\\ccs2051\\mspm0_sdk_2_10_00_04"));
+  // 安装根随行带出（工单 real-acceptance/06）：根不是 path 的可见前缀时（编译器
+  // 在 ccs/tools/compiler 下三层）用户才看得出跨目录
+  assert.ok(out.includes("（安装根 C:\\ti\\ccs2051）"));
   assert.ok(out.includes('data-env-row="ccs-compiler"'));
   assert.ok(out.includes("未设置（可在设置页填 ccs_compiler_dir）"));
   assert.ok(out.includes('data-env-jump="set-ccs-compiler-dir"'));
@@ -120,6 +124,67 @@ test("CCS 三件套逐行：命中 env-ok + 路径 / 未设置 env-err + 跳转�
   assert.ok(!sparse.includes('data-env-row="ccs-'));
 });
 
+test("CCS 探测说明行：独立探测 / 可能跨安装目录文案 + 三件来源一句话（工单 06）", () => {
+  // 本机实况形状（real-acceptance/06 表格）：编译器 ccs2050、SDK + SysConfig ccs2051
+  const mixed = {
+    ...status,
+    ccs_tools: {
+      sdk: { found: true, path: "C:\\ti\\ccs2051\\mspm0_sdk_2_10_00_04", root: "C:\\ti\\ccs2051", override: false },
+      compiler: { found: true, path: "C:\\ti\\ccs2050\\ccs\\tools\\compiler\\ti-cgt-armllvm_4.0.4.LTS", root: "C:\\ti\\ccs2050", override: false },
+      sysconfig: { found: true, path: "C:\\ti\\ccs2051\\sysconfig_1.26.2\\sysconfig_cli.bat", root: "C:\\ti\\ccs2051", override: false },
+    },
+  };
+  const out = envCheckStatusHTML(mixed, null, null);
+  const row = out.slice(out.indexOf('data-env-row="ccs-note"'), out.indexOf('data-env-row="ccs-note"') + 700);
+  assert.ok(row.includes("三件逐件独立探测"), "说明行含探测规则");
+  assert.ok(row.includes("可能来自不同 CCS 安装目录"), "说明行含跨目录提示");
+  assert.ok(row.includes("一个 CCS 版本 = 一套工具链"), "说明行点名要打破的直觉");
+  assert.ok(row.includes("编译器 ccs2050"), "本机来源逐件列出（编译器）");
+  assert.ok(row.includes("SDK ccs2051") && row.includes("SysConfig ccs2051"), "本机来源逐件列出（SDK / SysConfig）");
+  assert.ok(row.includes("（跨安装目录）"), "判定为跨安装目录");
+  assert.ok(row.includes("env-warn"), "说明行是「注意」而非报错");
+  assert.ok(!row.includes("去设置填"), "说明行不带跳转按钮（不是错误）");
+  // 说明行排在三条件行之后
+  assert.ok(out.indexOf('data-env-row="ccs-sysconfig"') < out.indexOf('data-env-row="ccs-note"'));
+
+  // 三件同源 → 判语换「三件同源」
+  const same = {
+    ...status,
+    ccs_tools: Object.fromEntries(Object.entries(mixed.ccs_tools).map(([k, v]) => [k, { ...v, root: "C:\\ti\\ccs2051" }])),
+  };
+  assert.ok(envCheckStatusHTML(same, null, null).includes("（三件同源）"));
+
+  // 缺键（旧后端载荷）→ 无说明行，也不炸
+  assert.ok(!envCheckStatusHTML({ ...status, ccs_tools: {} }, null, null).includes('data-env-row="ccs-note"'));
+});
+
+test("ccsSourceText：跨安装目录 / 三件同源 / 无 root 不猜（工单 06）", () => {
+  assert.equal(
+    ccsSourceText({
+      compiler: { found: true, root: "C:\\ti\\ccs2050" },
+      sdk: { found: true, root: "C:\\ti\\ccs2051" },
+      sysconfig: { found: true, root: "C:\\ti\\ccs2051\\" },
+    }),
+    "三件来源：编译器 ccs2050；SDK ccs2051；SysConfig ccs2051（跨安装目录）");
+  assert.equal(
+    ccsSourceText({
+      compiler: { found: true, root: "C:\\ti\\ccs2051" },
+      sdk: { found: true, root: "C:\\ti\\ccs2051" },
+      sysconfig: { found: true, root: "C:\\ti\\ccs2051" },
+    }),
+    "三件来源：编译器 ccs2051；SDK ccs2051；SysConfig ccs2051（三件同源）");
+  // 自定义路径（root=null）与缺件都不进来源句；全无 root → 空串
+  assert.equal(ccsSourceText({
+    compiler: { found: true, root: null },
+    sdk: { found: false, root: null },
+    sysconfig: { found: true, root: "C:\\ti\\ccs2051" },
+  }), "三件来源：SysConfig ccs2051");
+  assert.equal(ccsSourceText({}), "");
+  assert.equal(ccsSourceText(null), "");
+  // 文案单源：说明行用的就是这条常量
+  assert.ok(CCS_PROBE_NOTE.includes("各取最新"));
+});
+
 test("全就绪：工具链 + CCS 三件套 + 派生库目录全部 env-ok（工单 ux-walkthrough-02/06）", () => {
   const all = {
     ...status,
@@ -128,9 +193,9 @@ test("全就绪：工具链 + CCS 三件套 + 派生库目录全部 env-ok（工
       mspm0: { found: true, path: "C:\\ti\\gmake.exe", override: false },
     },
     ccs_tools: {
-      sdk: { found: true, path: "C:\\ti\\sdk", override: false },
-      compiler: { found: true, path: "C:\\ti\\compiler", override: false },
-      sysconfig: { found: true, path: "C:\\ti\\sysconfig_cli.bat", override: false },
+      sdk: { found: true, path: "C:\\ti\\sdk", root: "C:\\ti\\ccs2050", override: false },
+      compiler: { found: true, path: "C:\\ti\\compiler", root: "C:\\ti\\ccs2050", override: false },
+      sysconfig: { found: true, path: "C:\\ti\\sysconfig_cli.bat", root: "C:\\ti\\ccs2050", override: false },
     },
     library_dirs: {
       topic: { dir: "C:\\libs\\topics", exists: true, writable: true },
@@ -170,6 +235,18 @@ test("toolchainProbeText：四态文案（覆盖命中/覆盖未找到/自动命
   assert.match(toolchainProbeText({ found: true, path: "C:\\ti\\gmake.exe", override: false }), /自动探测到/);
   assert.match(toolchainProbeText({ found: false, path: null, override: false }), /未探测到/);
   assert.equal(toolchainProbeText(undefined), "");
+  // 无 root（uv4 / gmake）不出现「各取最新」——那是 CCS 三件套的探测语义
+  assert.ok(!toolchainProbeText({ found: true, path: "C:\\ti\\gmake.exe", override: false }).includes("各取最新"));
+});
+
+test("toolchainProbeText：CCS 三件（载荷带 root）点明「留空 = 自动探测：各取最新」（工单 06）", () => {
+  const piece = { found: true, path: "C:\\ti\\ccs2051\\mspm0_sdk_2_10_00_04", root: "C:\\ti\\ccs2051", override: false };
+  assert.match(toolchainProbeText(piece), /自动探测到：C:\\ti\\ccs2051\\mspm0_sdk_2_10_00_04/);
+  assert.match(toolchainProbeText(piece), /留空 = 自动探测：三件各取目录名最新/);
+  assert.match(toolchainProbeText({ ...piece, override: true }), /已配置：探测命中.*各取目录名最新/);
+  const missing = toolchainProbeText({ found: false, path: null, root: null, override: false });
+  assert.match(missing, /未探测到/);
+  assert.match(missing, /C:\/ti\/ccs\*.*各取目录名最新/);
 });
 
 test("平台母版：ready env-ok / no-master env-warn", () => {

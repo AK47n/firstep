@@ -4,6 +4,47 @@ import { esc } from "./core.js";
 
 export const ENV_BADGE_GLYPH = { "env-ok": "✓", "env-warn": "!", "env-err": "✕" };
 
+// CCS 三件套探测说明（工单 real-acceptance/06）：探测规则 = 三件**逐件独立**（各取
+// 目录名排序最大），因此可能来自不同 CCS 安装目录 —— 真机实测「编译器在 ccs2050 +
+// SDK/SysConfig 在 ccs2051」这一组合能正常编译，用户按「一个 CCS 版本 = 一套工具链」
+// 排查会走偏。文案单源在此（体检说明行与设置页提示共用下面的判据）。
+export const CCS_PROBE_NOTE =
+  "三件逐件独立探测（各取目录名排序最大），可能来自不同 CCS 安装目录"
+  + "——排查时别按「一个 CCS 版本 = 一套工具链」；任一覆盖项留空 = 该件自动探测（各取最新）";
+
+// 三件的中文名（探测说明行 / 来源一句话共用）
+export const CCS_PIECE_NAMES = { sdk: "SDK", compiler: "编译器", sysconfig: "SysConfig" };
+
+// 路径最后一段（Windows / POSIX 分隔符都认，尾分隔符容错）：来源根只显示目录名
+// （ccs2051 比整条 C:\ti\ccs2051 更适合一眼对照），完整路径仍在各件行里。
+function _pathTail(p) {
+  const parts = String(p || "").split(/[\\/]+/).filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : "";
+}
+
+// ccsSourceText(ccs)：三件来源根 → 一句话（工单 real-acceptance/06）。
+//   「三件来源：编译器 ccs2050；SDK ccs2051；SysConfig ccs2051（跨安装目录）」
+// 判据：来源根取载荷的 root（后端反推，推不出为 null = 不列）；≥2 个不同根 = 跨
+// 安装目录；三件都探测到且同根 = 三件同源；一件都没有 root（全自定义路径）→ 空串
+// （不显示这半句，不猜）。
+export function ccsSourceText(ccs) {
+  const listed = [];
+  let unknown = 0;
+  for (const key of ["compiler", "sdk", "sysconfig"]) {
+    const entry = (ccs || {})[key];
+    if (!entry || !entry.found) continue;
+    const tail = _pathTail(entry.root);
+    if (tail) listed.push(CCS_PIECE_NAMES[key] + " " + tail);
+    else unknown++;
+  }
+  if (!listed.length) return "";
+  const roots = new Set(listed.map((s) => s.slice(s.indexOf(" ") + 1)));
+  const verdict = roots.size > 1
+    ? "（跨安装目录）"
+    : (listed.length === 3 && unknown === 0 ? "（三件同源）" : "");
+  return "三件来源：" + listed.join("；") + verdict;
+}
+
 export function envRowHTML(key, badgeCls, name, detail, jump) {
   const btn = jump
     ? ' <button type="button" class="env-jump" data-env-jump="' + esc(jump.focus) + '"'
@@ -75,10 +116,20 @@ export function envCheckStatusHTML(status, textCh, visionCh) {  if (!status) ret
     if (!entry) continue;
     if (entry.found) {
       rows.push(envRowHTML("ccs-" + piece, "env-ok", meta.name,
-        esc(entry.path || "") + (entry.override ? "（设置页路径覆盖）" : "")));
+        esc(entry.path || "")
+        + (entry.root ? "（安装根 " + esc(entry.root) + "）" : "")
+        + (entry.override ? "（设置页路径覆盖）" : "")));
     } else {
       rows.push(envRowHTML("ccs-" + piece, "env-err", meta.name, meta.miss + "。", meta.jump));
     }
+  }
+  // 探测说明行（工单 real-acceptance/06）：三件逐件独立探测 ⇒ 可能来自不同 CCS
+  // 安装目录。有任一件在案就显示（含缺件态——缺件时更要知道探测规则），
+  // 「去设置填」按钮不需要（这不是错误，是一条排查提示）。
+  if (Object.keys(ccs).length) {
+    const source = ccsSourceText(ccs);
+    rows.push(envRowHTML("ccs-note", "env-warn", "CCS 探测说明",
+      esc(CCS_PROBE_NOTE + "。") + (source ? esc(source) : "")));
   }
   // 派生库目录（工单 ux-walkthrough-02/05-06）：赛题 / 参考 / PDF
   const libDirs = status.library_dirs || {};
@@ -138,14 +189,24 @@ export function envCheckStatusHTML(status, textCh, visionCh) {  if (!status) ret
 
 // 工具链内联探测文案（工单 ux-walkthrough-02/06）：设置页「已配置值旁显示
 // 探测结果」——entry = /api/env/status 的单件 {found, path, override}。
+// CCS 三件套专属（工单 real-acceptance/06）：载荷额外带 root（安装根）⇒ 自动
+// 探测的语义是「逐件各取目录名最新」，三个 ccs_* 覆盖项下的提示据此点明；
+// uv4 / gmake 无 root（按候选顺序 / PATH 探测），不说「各取最新」。
 export function toolchainProbeText(entry) {
   if (!entry) return "";
-  if (entry.override && entry.found) return "已配置：探测命中 " + (entry.path || "");
+  const isCcs = entry.root !== undefined;
+  const hint = isCcs ? "（留空 = 自动探测：三件各取目录名最新）" : "（留空 = 自动）";
+  if (entry.override && entry.found) return "已配置：探测命中 " + (entry.path || "") + hint;
   if (entry.override && !entry.found) return "✕ 已填路径未找到（请确认路径正确，或留空自动探测）";
-  if (!entry.override && entry.found) return "✓ 自动探测到：" + (entry.path || "") + "（留空 = 自动）";
-  return "未探测到（留空 = 自动扫描；也可填路径覆盖）";
+  if (!entry.override && entry.found) return "✓ 自动探测到：" + (entry.path || "") + hint;
+  return isCcs
+    ? "未探测到（留空 = 自动扫描 C:/ti/ccs*，各取目录名最新；也可填路径覆盖）"
+    : "未探测到（留空 = 自动扫描；也可填路径覆盖）";
 }
 
 if (typeof window !== "undefined") {
-  Object.assign(window, { envRowHTML, envChannelHTML, envCheckStatusHTML, toolchainProbeText, ENV_BADGE_GLYPH });
+  Object.assign(window, {
+    envRowHTML, envChannelHTML, envCheckStatusHTML, toolchainProbeText,
+    ccsSourceText, ENV_BADGE_GLYPH, CCS_PROBE_NOTE, CCS_PIECE_NAMES,
+  });
 }

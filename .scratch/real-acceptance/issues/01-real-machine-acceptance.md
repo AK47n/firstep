@@ -151,6 +151,35 @@ SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_ru
   脚本内自建连接用 `.scratch/cdp-harness.mjs` 的 `rebuildTab()` / `connect()`（后者**自动应答对话框**）。
 - 复现与取证脚本、完整证据矩阵见 `.scratch/code-editor-cdp-hang/README.md`。
 
+**姿势清单（第十六轮 B24 浏览器段四坑 → 工单 `real-acceptance/07` 固化；新写真机脚本前先读这一段）**：
+助手已入库 `.scratch/browser-harness.mjs`（`expandCard(page, cardId, tabSelector)` /
+`pollUntil(page, fn, {timeoutMs, every, label})`——零依赖、**不 import playwright**，page 由调用方
+传进来，故纯件可测：`tests/js/browser-harness.test.mjs`；回归样本 =
+`.scratch/revise-deepen/verify-16-revise-render.mjs`）。四个坑**都表现为「脚本红/挂住，产品其实
+没问题」**，每次重踩平均烧 20~40 分钟，逐条一句 + 正确姿势：
+
+1. **折叠 + 页签 = 元素 `display:none`**：卡默认折叠（`.card.collapsed > *:not(h2) { display:none }`）
+   且卡内可能是页签式时，不展开 + 不切页签，内部元素全不可见，`fill/click` 一路等到 30s 超时，
+   报错只说 `element is not visible`（看不出是页签没切）。
+   **姿势**：`waitForSelector(sel,{state:"attached"})` → `classList.remove("collapsed")` + 点
+   `.revise-tab[data-tab=…]` → 再 `waitForSelector(sel,{state:"visible"})`；直接用
+   `expandCard(page, cardId, tabSelector)`（见证 = 页签条可见，折叠态整块 display:none）。
+   顺带记下 id 事实：修复中心卡 = `#card-fix-center`；`#compile-banner` 挂在 `#generate-result`
+   内，**只有走过一次生成的会话**里结果区才可见。
+2. **`waitForFunction(fn, arg, options)` 的超时位置**：超时必须放**第三个参数**，写第二个会被当
+   `arg` → 拿到默认 30s（现场表现「我明明写了 15 分钟，却 30 秒就红」，本轮因此误判两次「页面挂死」）。
+   **姿势**：`waitForFunction(fn, null, {timeout})`；或干脆用 `pollUntil`（它没有这一格）。
+3. **`page.evaluate` 里 await 长流程 = 单次 CDP 调用挂几十秒**（分析实测 28s，视觉/深化分钟级），
+   期间 node 侧任何 `page.evaluate` 都可能拿不到响应，看起来像「渲染进程无响应」。
+   **姿势**：kick off 不 await（`page.evaluate(() => { import(…).then(m => m.analyze()); })`）+
+   `pollUntil(page, fn, {timeoutMs, every})` 在 node 侧轮询 DOM（诊断实测：这么写页面一切正常、
+   t+28s 分析完成、无 pageerror）。
+4. **模态确认不点 = 请求根本不发**：`reviseApply` / `reviseRollback` 各有一层 `confirmModal`
+   （覆盖式重生成明示 / 回滚危险确认），不点确认 `POST /api/revise/apply` 不会发出——现场表现
+   「执行阶段状态行一直空、服务端日志里只有 analyze」。
+   **姿势**：等模态出现后**按按钮文字**点最稳：
+   `page.locator(".confirm-modal button, .modal button").filter({ hasText: /执行修订|确认回滚/ }).first().click()`。
+
 - [x] **B1 来源 `code-page-vscode-overhaul/01`**：补折叠与保存的 CDP 断言（现 `smoke-01.mjs` 8 项只覆盖行操作/只读/帮助；
   `grep "折叠|Ctrl+S|保存" .scratch/code-page-vscode-overhaul/*.mjs` 仅命中「截图已保存」）。
   **2026-09-09 第六轮完成**：`smoke-01.mjs` 补折叠 5 项（未折叠基线 / Ctrl+Shift+[ 折叠 + 占位行 + gutter 箭头 + 视图文本 /

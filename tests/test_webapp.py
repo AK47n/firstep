@@ -7778,11 +7778,13 @@ def test_env_status_aggregates_static_facts(client, context):
     assert data["output_dir"]["exists"] is True
     assert data["output_dir"]["writable"] is True
     # 工单 ux-walkthrough-02/05：CCS 三件套逐件 + 派生库目录存在性/可写性
+    # 工单 real-acceptance/06：三件额外带 root（安装根反推，推不出为 null）
     assert set(data["ccs_tools"]) == {"sdk", "compiler", "sysconfig"}
     for entry in data["ccs_tools"].values():
-        assert set(entry) == {"found", "path", "override"}
+        assert set(entry) == {"found", "path", "root", "override"}
         assert (entry["path"] is not None) == entry["found"]
         assert isinstance(entry["override"], bool)
+        assert entry["root"] is None or isinstance(entry["root"], str)
     assert set(data["library_dirs"]) == {"topic", "reference", "pdf"}
     for entry in data["library_dirs"].values():
         assert set(entry) == {"dir", "exists", "writable"}
@@ -7847,10 +7849,10 @@ def test_env_status_unconfigured_shape(client, context):
     assert data["toolchains"]["stm32"]["found"] in (True, False)
     assert "count" in data["module_library"]
     # 工单 ux-walkthrough-02/05：未配置时 CCS 三件套默认扫描（override=False），
-    # 字段形状仍完整不报错（未配置 ≠ 500）
+    # 字段形状仍完整不报错（未配置 ≠ 500）；root 字段同 shape（工单 06）
     assert set(data["ccs_tools"]) == {"sdk", "compiler", "sysconfig"}
     for entry in data["ccs_tools"].values():
-        assert set(entry) == {"found", "path", "override"}
+        assert set(entry) == {"found", "path", "root", "override"}
         assert entry["override"] is False
     assert set(data["library_dirs"]) == {"topic", "reference", "pdf"}
 

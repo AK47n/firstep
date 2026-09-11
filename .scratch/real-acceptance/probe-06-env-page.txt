@@ -1,0 +1,10 @@
+# 工单 06 体检页面探针（真浏览器 + 真端点，2026-09-11T09:54:42.226Z）
+
+[toolchain-mspm0] ✓CCS + MSPM0 SDK（mspm0）· gmakeC:\ti\ccs2050\ccs\utils\bin\gmake.exe
+[ccs-sdk] ✓CCS SDK（mspm0）C:\ti\ccs2051\mspm0_sdk_2_10_00_04（安装根 C:\ti\ccs2051）
+[ccs-compiler] ✓CCS 编译器（mspm0）C:\ti\ccs2050\ccs\tools\compiler\ti-cgt-armllvm_4.0.4.LTS（安装根 C:\ti\ccs2050）
+[ccs-sysconfig] ✓SysConfig CLI（mspm0）C:\ti\ccs2051\sysconfig_1.26.2\sysconfig_cli.bat（安装根 C:\ti\ccs2051）
+[ccs-note] !CCS 探测说明三件逐件独立探测（各取目录名排序最大），可能来自不同 CCS 安装目录——排查时别按「一个 CCS 版本 = 一套工具链」；任一覆盖项留空 = 该件自动探测（各取最新）。三件来源：编译器 ccs2050；SDK ccs2051；SysConfig ccs2051（跨安装目录）
+
+页面 JS 异常：0 条
+ALL PASS

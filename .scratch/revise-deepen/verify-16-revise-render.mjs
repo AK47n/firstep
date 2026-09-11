@@ -4,18 +4,19 @@
 // 段一（`.scratch/revise-deepen/probe-16-revise-analyze.py`）已用服务端真链证过
 // `/api/revise/analyze` 的事件流与载荷形状；本段测页面把真实载荷渲染出来 + 执行 + 回滚。
 //
-// 本轮踩过的四个坑（都写在这里免得下次再踩）：
-// 1. `card-revise` 默认折叠 + 第 11 步卡内是**页签式**（`.revise-tab[data-tab="revise"]`）——
-//    不展开 + 不切页签，内部元素 `display:none`，`fill/click` 会等 30s 超时；
-// 2. playwright `waitForFunction(fn, arg, options)`：**超时必须放第三个参数**，
-//    写第二个会被当 arg → 拿到默认 30s 超时（前两次「15 分钟超时」其实是 30s）；
-// 3. 历史目录 `.contest_context.json` 的 `problem_text` 为空（A9 那次生成走 topic_id 路径）
-//    → 必须先在「补题面」框贴题面，分析才不会 400；
-// 4. **`page.evaluate` 里 await 长流程 = 单次 CDP 调用挂几十秒**（分析实测 28s 出结果）。
-//    改成「kick off 不 await + 页面内轮询 DOM」才稳（本轮前几次「挂死」多半是这个）。
+// 脚本姿势（工单 real-acceptance/07）：本轮的折叠+页签 / 长流程轮询两个坑**已固化成
+// `.scratch/browser-harness.mjs` 的 `expandCard()` / `pollUntil()`**（本脚本就是它们的
+// 回归样本）；四个坑的全文与正确姿势见
+// `.scratch/real-acceptance/issues/07-browser-acceptance-pitfalls.md` 与挂账单 01 的
+// 「B 组统一前置 · 姿势清单」。本脚本另有两条自己的坑：
+//   1. 历史目录 `.contest_context.json` 的 `problem_text` 为空（A9 那次生成走 topic_id 路径）
+//      → 必须先在「补题面」框贴题面，分析才不会 400；
+//   2. `reviseApply` / `reviseRollback` 各有一层 confirmModal，**不点确认请求根本不发**
+//      （服务端日志里只有 analyze 就是这个原因）→ 按按钮文字点。
 import { createRequire } from "node:module";
 import { readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { expandCard, pollUntil } from "../browser-harness.mjs";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require("C:/Users/luoji/AppData/Local/npm-cache/_npx/e41f203b7505f1fb/node_modules/playwright");
@@ -52,30 +53,21 @@ page.on("console", (m) => {
   if (m.type() === "error") pageErrors.push("console: " + t.slice(0, 240));
 });
 
-/** 轮询 DOM 直到 cond 成立（在 node 侧循环，单次 evaluate 恒短）。 */
-async function pollUntil(fn, { timeoutMs = 600000, every = 3000, label = "" } = {}) {
-  const t0 = Date.now();
-  for (;;) {
-    const v = await page.evaluate(fn).catch(() => null);
-    if (v && v.done) return v;
-    if (Date.now() - t0 > timeoutMs) {
-      note(`轮询超时（${label}）：最后一次观测 ${JSON.stringify(v)}`);
-      return v || { done: false, timeout: true };
-    }
-    await page.waitForTimeout(every);
-  }
-}
+/** 轮询 DOM 直到终态（助手在 .scratch/browser-harness.mjs；超时如实记 note 不静默）。 */
+const poll = async (fn, opts) => {
+  const out = await pollUntil(page, fn, opts);
+  if (out.timeout) note(`轮询超时（${opts.label}）：最后一次观测 ${JSON.stringify(out)}`);
+  return out;
+};
 
 await page.goto(BASE, { waitUntil: "networkidle" });
-await page.waitForSelector("#btn-revise-load-dir", { state: "attached", timeout: 20000 });
-await page.evaluate(() => {
-  document.getElementById("card-revise")?.classList.remove("collapsed");
-  document.querySelector('#revise-tabs .revise-tab[data-tab="revise"]')?.click();
-});
+// 第 11 步卡默认折叠 + 卡内页签式（坑 1 的姿势）：展开 #card-revise 并切到「修订」页签
+const expanded = await expandCard(page, "card-revise", '#revise-tabs .revise-tab[data-tab="revise"]');
+note(`展开 card-revise（原折叠=${expanded.wasCollapsed}，页签命中=${expanded.tabFound}）`);
 await page.waitForSelector("#btn-revise-load-dir", { state: "visible", timeout: 15000 });
 await page.fill("#revise-dir-input", DIR);
 await page.click("#btn-revise-load-dir");
-await pollUntil(() => ({
+await poll(() => ({
   done: !document.getElementById("revise-context").classList.contains("hidden"),
 }), { timeoutMs: 40000, every: 800, label: "上下文加载" });
 
@@ -94,12 +86,12 @@ if (needProblem) {
 const mainShaBefore = sha(`${DIR}/main.c`);
 const ctxBefore = JSON.parse(readFileSync(`${DIR}/.contest_context.json`, "utf-8"));
 
-// ---------- ① 分析：kick off 不 await + 轮询 DOM ----------
+// ---------- ① 分析：kick off 不 await + 轮询 DOM（坑 3 的姿势） ----------
 await page.fill("#revise-qa-new", QA);
 await page.evaluate(() => {
   import("/js/ui/generate-revise.js").then((m) => m.reviseAnalyze());
 });
-const analysisPoll = await pollUntil(() => ({
+const analysisPoll = await poll(() => ({
   done: !document.getElementById("revise-analysis").classList.contains("hidden")
     || document.getElementById("revise-analyze-msg").textContent.trim() !== "",
   st: document.getElementById("revise-analyze-status").textContent,
@@ -163,7 +155,7 @@ if (confirmSeen) {
         .catch(() => {});
     });
 }
-const applyPoll = await pollUntil(() => ({
+const applyPoll = await poll(() => ({
   done: !document.getElementById("revise-result").classList.contains("hidden")
     || document.getElementById("revise-exec-msg").textContent.trim() !== ""
     || !document.getElementById("btn-revise-rollback").classList.contains("hidden"),
@@ -204,7 +196,7 @@ if (applyResult.rollbackVisible) {
   await page.locator(".confirm-modal button, .modal button")
     .filter({ hasText: /确认回滚|确认|确定/ }).first().click({ timeout: 10000 })
     .catch(() => {});
-  await pollUntil(() => ({
+  await poll(() => ({
     done: /已回滚到备份状态/.test(document.getElementById("revise-exec-status").textContent)
       || /已回滚/.test(document.getElementById("revise-rollback-status").textContent),
     st: document.getElementById("revise-exec-status").textContent,

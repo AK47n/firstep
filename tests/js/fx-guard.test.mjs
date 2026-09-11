@@ -36,6 +36,7 @@ const DOMAINS = {
     ENV_BADGE_GLYPH: "object",
     envRowHTML: "fn", envChannelHTML: "fn", envCheckStatusHTML: "fn",
     toolchainProbeText: "fn",
+    CCS_PROBE_NOTE: "string", CCS_PIECE_NAMES: "object", ccsSourceText: "fn",
   },
   "btn-icon.js": { btnIcon: "fn" },
   "platform.js": { platformClickAction: "fn" },

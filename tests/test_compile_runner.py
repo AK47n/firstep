@@ -288,6 +288,40 @@ def test_ccs_tools_status_reports_each_piece(monkeypatch, tmp_path):
     assert find_ccs_tools() is None  # 同源：缺件 → 整体 None
 
 
+def test_ccs_tools_status_reports_install_root_per_piece(monkeypatch, tmp_path):
+    """安装根反推（工单 real-acceptance/06，真机跨目录形态）：SDK + SysConfig 在
+    ccs2051、编译器在 ccs2050 —— 逐件 root 各自指向自己的安装根（编译器在
+    ccs/tools/compiler 下三层，root ≠ path 的可见前缀，正是体检要说清的那件事）。"""
+    ccs2050 = _ccs_tree(tmp_path, "ccs2050", sdk="", sysconfig="")
+    ccs2051 = _ccs_tree(tmp_path, "ccs2051", compiler="")
+    _scan_root(monkeypatch, tmp_path)
+
+    st = ccs_tools_status()
+
+    assert st["compiler"]["root"] == str(ccs2050)
+    assert st["sdk"]["root"] == str(ccs2051)
+    assert st["sysconfig"]["root"] == str(ccs2051)
+
+
+def test_ccs_tools_status_install_root_none_when_layout_not_ccs(monkeypatch, tmp_path):
+    """自定义布局（覆盖指向不在 ccs* 目录下的路径）→ root 为 None（不猜）：
+    体检只报安装根推不出的实况，不编一个根出来。"""
+    _ccs_tree(tmp_path, "ccs2050")
+    _scan_root(monkeypatch, tmp_path)
+    custom_sdk = tmp_path / "vendor" / "sdk_here"
+    custom_sdk.mkdir(parents=True)
+    custom_cli = tmp_path / "vendor" / "cli" / "sysconfig_cli.bat"
+    custom_cli.parent.mkdir(parents=True)
+    custom_cli.write_text("", encoding="utf-8")
+
+    st = ccs_tools_status(str(custom_sdk), "", str(custom_cli))
+
+    assert st["sdk"]["found"] is True and st["sdk"]["root"] is None
+    assert st["sysconfig"]["found"] is True and st["sysconfig"]["root"] is None
+    # 未覆盖的编译器照常自动扫描（根仍在案）
+    assert st["compiler"]["root"] == str(tmp_path / "ccs2050")
+
+
 def test_ccs_tools_status_override_priority(monkeypatch, tmp_path):
     """逐件状态（工单 ux-walkthrough-02/05）：覆盖优先、非空但不存在 = 未找到。"""
     _ccs_tree(tmp_path, "ccs2050")

@@ -6,7 +6,8 @@
 
 **被谁阻塞：** 无。
 
-**状态：** ready-for-agent（低风险收尾单；可与任一真机单合并做）
+**状态：** resolved（2026-09-11 落地：`.scratch/browser-harness.mjs` 两助手 +
+挂账单 01 B 组姿势清单 + B24 脚本改用它复跑）
 
 ## 四坑（本轮逐条实测）
 
@@ -51,9 +52,52 @@ node 侧轮询 DOM** 时，页面一切正常（
 
 ## 验收标准
 
-- [ ] 助手函数入库且被至少一个新脚本实际使用（B24 的 `verify-16-revise-render.mjs` 可改为调用它，作为回归样本）
-- [ ] 挂账单 B 组前置段落含四坑清单（逐条一句 + 正确姿势）
-- [ ] `node --test tests/js/*.test.mjs` 绿（若新增纯件测试）
+- [x] 助手函数入库且被至少一个新脚本实际使用（B24 的 `verify-16-revise-render.mjs` 可改为调用它，作为回归样本）
+      —— 新文件 `.scratch/browser-harness.mjs` 导出 `expandCard(page, cardId, tabSelector, {attachMs, visibleMs})`
+      与 `pollUntil(page, fn, {timeoutMs, every, label})`（零依赖、不 import playwright，page 由调用方传）；
+      `verify-16-revise-render.mjs` 三处 `pollUntil` + 展开/切页签段全部改用它（19 项真机复跑全绿，见下）
+- [x] 挂账单 B 组前置段落含四坑清单（逐条一句 + 正确姿势）
+      —— `01-real-machine-acceptance.md`「B. 浏览器 / CDP 目检与截图」的**姿势清单**段（助手入口 + 四坑 + id 事实）
+- [x] `node --test tests/js/*.test.mjs` 绿（若新增纯件测试）
+      —— 新增 `tests/js/browser-harness.test.mjs`（9 条：选择器归一 / done 判据 / 轮询终态与超时 /
+      `evaluate` 抛错不炸 / 展开+页签顺序与可见性见证 / 见证超时抛错带上下文）
+
+## 实施记录（2026-09-11）
+
+| 改动 | 位置 |
+|---|---|
+| 新助手文件（零依赖、page 由调用方传——可假 page 单测）：`expandCard` = `attached` → 页面内 `classList.remove("collapsed")` + DOM 点页签 → 等**页签条/卡** `visible`（折叠态 `.card.collapsed > *:not(h2)` 整块 `display:none`，故这是「卡真展开了」的可靠见证；超时抛错带上下文：步骤没显示 / 选择器不对）；`pollUntil` = node 侧轮询，返回**最后一次观测** + `{done, elapsedMs, observations, timeout?}`，`evaluate` 抛错按未就绪处理，超时打 stderr 一行 | `.scratch/browser-harness.mjs`（新） |
+| 头部把四坑写成姿势说明（含「间隔用本地 sleep、不绑 playwright 生命周期」与 id 事实） | 同上 |
+| 纯件测试（假 page，不起浏览器） | `tests/js/browser-harness.test.mjs`（新，9 条） |
+| B24 脚本改为助手回归样本：删掉脚本内自写的 `pollUntil`（局部 `poll` 只做超时 note）、展开+切页签段改 `expandCard`；头部四坑改为指向助手与本文 | `.scratch/revise-deepen/verify-16-revise-render.mjs` |
+| 挂账单 01「B 组统一前置」补姿势清单（四坑逐条 + 正确姿势 + 助手入口 + id 事实） | `.scratch/real-acceptance/issues/01-real-machine-acceptance.md` |
+| 可选第 3 条落地：批跑器顶部注释补「`waitForFunction` 超时在第三个参数」+「长流程别在 evaluate 里 await」两条 | `.scratch/cdp-smoke-run.mjs`（注释） |
+
+**真机复跑（B24，2026-09-11）**：`node .scratch/revise-deepen/verify-16-revise-render.mjs`
+——**19 项全绿**（分析段 11 + 执行段 5 + 回滚段 3），证据
+`.scratch/revise-deepen/verify-16-revise-render.{txt,json}` + `verify-16-revise-progress.txt`
+（脚本用新助手跑通同一场景：`expandCard` 展开 `#card-revise` + 切修订页签 → 历史目录补题面 →
+分析渲染 3 条目块 / 28 chip → 确认执行（真 SSE 三态「备份 → 重生成 → 编译验证」）→
+回滚后 `main.c` sha 逐字节复原 `47c9c6d3d850`，`已回滚 149 项`，页面零 JS 异常）。
+
+**回归**：全量 `pytest` **3971 passed, 1 warning**；`node --test tests/js/*.test.mjs`
+**1444 pass / 0 fail**（本单新增 `tests/js/browser-harness.test.mjs` 9 条）。
+
+**没做/边界**：
+
+1. **模态确认（坑 4）没做成助手**：本轮只按工单加两个助手，脚本里两处 `confirmModal` 仍是
+   自带代码（已是正确姿势：等模态 + `filter({hasText:/执行修订|确认回滚/})` 按文字点）。
+   要收成第三个助手 `confirmModal(page, {text})` 时注意：**别用「等状态行」代替等模态**
+   （不点确认请求根本不发，状态行永远空）。
+2. **坑 2（`waitForFunction` 超时位置）无法用助手消灭**：`pollUntil` 绕开了它，但脚本里
+   直接写 `waitForFunction` 的地方仍会踩——故只做成「两处注释 + 清单一条」。
+3. 助手的 `every` 间隔用本地 `sleep`（不是 `page.waitForTimeout`）：页面被关掉后仍能走到
+   超时并如实返回，代价是与 playwright 的 fake timer 无关（本仓库没有用 fake timer 的脚本）。
+4. **本轮真机那次 `wasCollapsed=false`**（页签命中 `true`）：卡折叠状态是持久化的，上一次
+   跑完就留在展开态，所以真机这次实际走的是「已展开 + 切页签 + 等可见」这条分支；
+   **「折叠 → 展开」那条分支由纯件测试覆盖**（`tests/js/browser-harness.test.mjs` 的
+   「顺序 = attached → 页面内展开+点页签 → visible 见证」用 `collapsed: true` 的假 DOM）。
+   要真机复现折叠态：换一个干净 profile 或用 `expandCard` 前先 `classList.add("collapsed")`。
 
 ## 实施提示词（新会话粘贴）
 

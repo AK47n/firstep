@@ -22,6 +22,13 @@
 //
 // 输出：逐支 PASS/FAIL/偶发/挂死 + 汇总（偶发支清单）；非绿时打印现场摘要并落盘事件序列；
 //       挂死时打印现场并自动重建标签页恢复。
+//
+// 写脚本前先读两条（工单 real-acceptance/07，坑的全文见 `.scratch/browser-harness.mjs`
+// 头部与挂账单 01 的「B 组统一前置 · 姿势清单」）：
+//   · playwright `waitForFunction(fn, arg, options)` —— **超时是第三个参数**，写第二个会被
+//     当 arg ⇒ 拿到默认 30s（表现为「我写了 15 分钟却 30 秒就红」）；
+//   · 长流程别在 `page.evaluate` 里 await（单次 CDP 调用挂几十秒，看着像渲染进程挂死）——
+//     kick off 不 await + 用 `.scratch/browser-harness.mjs` 的 `pollUntil()` 轮询 DOM。
 import { spawnSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";

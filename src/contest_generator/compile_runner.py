@@ -172,8 +172,14 @@ def ccs_tools_status(
 ) -> dict:
     """CCS 三件套逐件探测（工单 ux-walkthrough-02/05）：与 find_ccs_tools
     同规则（覆盖优先、非空但不存在 = 未找到、自动扫描取目录名排序最大），
-    返回逐件 {found, path}——环境体检要求「逐行返回每件状态」，整体
-    find_ccs_tools 的 None 不够细。纯只读探测，无副作用。"""
+    返回逐件 {found, path, root}——环境体检要求「逐行返回每件状态」，整体
+    find_ccs_tools 的 None 不够细。纯只读探测，无副作用。
+
+    root（工单 real-acceptance/06）= 该件所属的 ccs* 安装根：三件逐件独立
+    探测 ⇒ 可能来自不同安装目录（真机实测 编译器 ccs2050 + SDK/SysConfig
+    ccs2051，编译实测通过），体检据此一句话说清来源；反推不出（自定义布局）
+    为 None，不猜。
+    """
     pieces = {
         "sdk": _piece(sdk_override, _sdk_candidates, kind="dir"),
         "compiler": _piece(compiler_override, _compiler_candidates, kind="dir"),
@@ -185,6 +191,7 @@ def ccs_tools_status(
         key: {
             "found": p is not None,
             "path": str(p) if p is not None else None,
+            "root": _piece_install_root(p, key),
         }
         for key, p in pieces.items()
     }
@@ -238,6 +245,37 @@ def _newest(candidates: Sequence[Path], *, by_parent: bool = False) -> Path | No
         return None
     name = (lambda p: p.parent.name) if by_parent else (lambda p: p.name)
     return max(candidates, key=lambda p: (name(p), str(p)))
+
+
+# CCS 安装目录名判据（工单 real-acceptance/06）：TI 装在 <根>/ccs<版本>（真机
+# ccs2050 / ccs2051）；反推得到的根不满足该前缀 = 不是 CCS 安装根（自定义路径），
+# 如实报 None，不猜。
+_CCS_ROOT_PREFIX = "ccs"
+
+
+def _piece_install_root(piece: Path | None, kind: str) -> str | None:
+    """件路径 → 所属 CCS 安装根（<ccs*>/…）；反推不出（自定义布局）= None。
+
+    布局知识本就在本模块（_sdk_candidates / _compiler_candidates /
+    _sysconfig_candidates 的 glob 形态即布局单源），故反推也归这里——前端
+    不重写一份目录布局：
+
+    - SDK：`<ccs>/mspm0_sdk_*` → 上一级
+    - 编译器：`<ccs>/ccs/tools/compiler/ti-cgt-armllvm_*` → 上四级
+    - SysConfig CLI：`<ccs>/sysconfig_*/sysconfig_cli.bat` → 上两级（版本在父目录名）
+    """
+    if piece is None:
+        return None
+    if kind == "sdk":
+        root: Path | None = piece.parent
+    elif kind == "compiler":
+        parents = piece.parents
+        root = parents[3] if len(parents) > 3 else None
+    else:  # sysconfig：piece = <ccs>/sysconfig_*/sysconfig_cli.bat
+        root = piece.parent.parent
+    if root is None or not root.name.lower().startswith(_CCS_ROOT_PREFIX):
+        return None
+    return str(root)
 
 
 def _ccs_install_dirs(root: str) -> list[Path]:
