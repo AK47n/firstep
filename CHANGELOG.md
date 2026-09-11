@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=773d039a9390ddf84c8eeaf43ae72797fd0fe84e -->
+<!-- changelog-auto: last-commit=1d2120310becdabe454d6a7115fdcb8c558cd283 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -12,6 +12,7 @@
 - 17:41 fix(recommend): 同组互斥在解析层收敛——推荐结果点一次就能生成（工单 real-acceptance/04）
 - 17:55 体检补 CCS 三件套跨目录说明 + 浏览器验收四坑固化成姿势助手（工单 real-acceptance/06、07）
 - 18:10 fix(词表): 顺延批 27 条方案裸名入 models——跨 7 行纯数据（工单 real-acceptance/10）
+- 18:12 fix(docs 工具): 修 measure-20 两处量法 bug——错落点被截断吃边际字节 + 基线不同源；复现真值 51B/条
 
 ## 2026-09-10
 - 13:12 perf(code-editor): 结构性编辑回车同步耗时 78.9ms → 9.8ms（删掉 syncTail 的滚动读写）
