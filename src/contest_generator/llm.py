@@ -1114,6 +1114,24 @@ ERROR_KIND_CLIENT = "client"
 ERROR_KIND_DOMAIN = "domain"
 ERROR_KIND_RATE_LIMIT = "rate_limit"
 ERROR_KIND_BUDGET = "budget"
+# output（工单 real-acceptance/09）= **输出侧本地判决**：服务连得上、HTTP 200 也
+# 回来了，但拿到的输出不能用（被 max_tokens 截断 / 异常超长 / 形状不对到解析函数
+# 只能拒收）。与 client（上游 HTTP 4xx）是两回事，判据同样是 kind 而不是字符串猜：
+# errors.llm_error_message 只有 client 才能说「API key / 余额」。
+#
+# 为什么必须单开一类（现场判例）：webapp 最近两次 recommend 工作流都是 select 失败、
+# 观测面 `http_status=200` / `parse_status=parse_error` / `error_kind=client` /
+# `attempts=1`——上游回 200、key 与余额都正常（余额接口实测 21.57 CNY），用户却看到
+# 「AI 服务拒绝了本次请求（可能是 API key 无效、账户余额不足…）」。这与域拒绝
+# （real-acceptance/03）是同一类病：把本地判决错报成上游拒绝，排查方向被指向凭据。
+ERROR_KIND_OUTPUT = "output"
+
+# 「参数性确定失败」的输出形态判据（工单 real-acceptance/09）：输出**超长**
+# （>SELECT_MAX_OUTPUT_CHARS，疑似退化/循环）与**被 max_tokens 截断**
+# （finish_reason=length）两类，同参数重试只会得到同样的结果——_retry_parse 据此
+# 把它们排除在重试之外（其余 output 失败照 parse 同款快重试）。单源常量：两处
+# 抛错点（超长守卫 / 截断转化）与重试判据引用同一个串，改文案不会静默失配。
+OUTPUT_TRUNCATION_HINT = "放弃重试"
 
 # 域拒绝的带理由重试上限（工单 real-acceptance/03）：域拒绝是模型输出的
 # **概率性手滑**（同一题连跑三次可能三个不同错处），带上被拒理由重出的第二次
@@ -1964,15 +1982,17 @@ class DeepSeekLLM:
             # 输出失控守卫（工单 llm-select-runaway/01）：deepseek-v4-flash 曾
             # 无上限输出 ~20K tokens/次（逐句分析/自检过程写进 JSON），超长必然
             # 解析失败且单次等待 ~160s。超过合理输出量级 = 模型退化/循环——
-            # 报 client 错误免重试（_retry_parse 对 client break），不再重复烧钱
-            # 烧时间。配合请求侧 max_tokens 截断双保险。
+            # 报 output 错误（工单 real-acceptance/09：原报 client，文案层因此说
+            # 「可能是 API key 无效」——HTTP 是 200，那条文案按定义不成立），
+            # 重试同参数只会重复超长，故 _retry_parse 对超长/截断形态不重试
+            # （见 OUTPUT_TRUNCATION_HINT）。配合请求侧 max_tokens 截断双保险。
             if len(content) > SELECT_MAX_OUTPUT_CHARS:
                 raise LLMError(
                     "模块选择输出异常超长（"
                     f"{len(content)} 字符 > {SELECT_MAX_OUTPUT_CHARS}）："
                     "疑似模型输出退化或循环（逐句分析写进 JSON），放弃重试——"
                     "请重试或检查模型配置",
-                    kind=ERROR_KIND_CLIENT,
+                    kind=ERROR_KIND_OUTPUT,
                 )
             data = extract_module_selection_data(content)
             # 核验轮短标记（工单 01）：{"converged": true} = 模型自报与上一轮
@@ -2271,10 +2291,10 @@ class DeepSeekLLM:
                 last_error = exc
                 # 截断 = 参数性确定性失败（工单 select-truncation/01）：输出被
                 # max_tokens 上限截断（finish_reason=length，推理模型下 content
-                # 常为空串）——同参数重试必然同样截断，报 client 错误免重试，
+                # 常为空串）——同参数重试必然同样截断，报 output 错误免重试，
                 # 不再重复烧钱烧时间（曾 5 次重试全截断 = 「模型返回的不是 JSON」
                 # 连续失败）。仅当本轮真实拿到截断响应且错误是解析类时转化
-                # （字符超长守卫已是 client 错误，不重复包装）。
+                # （字符超长守卫已是 output 错误，不重复包装）。
                 if (
                     result is not None
                     and result.finish_reason == "length"
@@ -2285,7 +2305,7 @@ class DeepSeekLLM:
                         "推理模型下 reasoning 与 content 共享上限、content 常为"
                         "空）——重试必然同样截断，已放弃重试；请重试或检查模型"
                         "配置",
-                        kind=ERROR_KIND_CLIENT,
+                        kind=ERROR_KIND_OUTPUT,
                     )
                     break
                 # 域拒绝的带理由重试（工单 real-acceptance/03）：只对
@@ -2300,10 +2320,20 @@ class DeepSeekLLM:
                         if extra_instruction:
                             continue
                     break
-                if exc.kind in (ERROR_KIND_CLIENT, ERROR_KIND_BUDGET):
-                    if exc.kind == ERROR_KIND_BUDGET:
-                        raise
-                    break
+                if exc.kind == ERROR_KIND_CLIENT:
+                    break  # 上游 HTTP 4xx：重试同参数必然同拒
+                if exc.kind == ERROR_KIND_OUTPUT:
+                    # 本地输出失败（工单 real-acceptance/09）：**可重试的一类**
+                    # ——畸形 / 形状不对是模型输出的概率性手滑，整次重问与解析类
+                    # 同款（SUMMARY_RETRY_LIMIT 次快重试）；只有「参数性确定失败」
+                    # 形态（超长 / 截断）不重试——它们已在上面 break，或带着
+                    # OUTPUT_TRUNCATION_HINT 落到这里被跳过。
+                    if OUTPUT_TRUNCATION_HINT in str(exc):
+                        break
+                    if attempts >= SUMMARY_RETRY_LIMIT:
+                        break
+                elif exc.kind == ERROR_KIND_BUDGET:
+                    raise
                 if exc.kind == ERROR_KIND_RATE_LIMIT:
                     if attempts >= NETWORK_RETRY_LIMIT:
                         break
@@ -3399,6 +3429,12 @@ class DeepSeekLLM:
                 if exc.kind == ERROR_KIND_BUDGET:
                     raise
                 if exc.kind == ERROR_KIND_CLIENT:
+                    raise
+                # output（工单 real-acceptance/09）在这里不进重试：_chat 是「拿文本」
+                # 的直调用法，它只可能从 _chat_once 收到输出侧异常（超长 / 截断——
+                # 都是参数性确定失败），同参数重试只重复烧钱。那是 _retry_parse 的
+                # 活儿（那里对畸形输出才重试）。
+                if exc.kind == ERROR_KIND_OUTPUT:
                     raise
                 if exc.kind == ERROR_KIND_RATE_LIMIT:
                     if attempts >= NETWORK_RETRY_LIMIT:

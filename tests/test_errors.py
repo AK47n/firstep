@@ -27,6 +27,7 @@ from contest_generator.llm import (
     ERROR_KIND_CLIENT,
     ERROR_KIND_DOMAIN,
     ERROR_KIND_NETWORK,
+    ERROR_KIND_OUTPUT,
     ERROR_KIND_RATE_LIMIT,
     LOCAL_LLM_UNAVAILABLE_MESSAGE,
     LLMError,
@@ -354,3 +355,41 @@ def test_llm_error_413_keeps_oversize_hint() -> None:
     assert status == 502
     assert "请求体过大" in message
     assert "赛题文本" in message
+
+
+def test_llm_error_output_never_blames_key_or_balance() -> None:
+    """本地输出失败（kind=output，工单 real-acceptance/05 尾巴）不说 key / 余额。
+
+    现场判例（webapp 最近两次 recommend 工作流）：select 失败，观测面
+    `http_status=200` / `parse_status=parse_error` / `error_kind=client` /
+    `attempts=1`，用户看到「AI 服务拒绝了本次请求（可能是 API key 无效、账户
+    余额不足…）」——**上游回的是 200**，key 与余额都正常（余额接口实测可用），
+    真因是本地拿到的输出不能用（被 max_tokens 截断 / 畸形）。这条文案把用户
+    指向凭据，与域拒绝那条是同一种病。
+
+    判据同 domain：靠 **kind** 分派（下面用例与上游 4xx 用例吃同一种
+    LLMError，只换 kind），不靠字符串猜。
+    """
+    status, message = error_entry(
+        LLMError("模型输出被 max_tokens 上限截断", kind=ERROR_KIND_OUTPUT)
+    )
+    assert status == 502  # 状态码契约不变（AI 服务调用失败仍是 502）
+    assert "AI 服务调用失败" in message
+    assert "API key" not in message
+    assert "余额" not in message
+    assert "重试" in message  # 人话引导：重来一次有意义（输出是概率性的）
+
+
+def test_llm_error_output_survives_exhausted_retry_text() -> None:
+    """输出失败经 _raise_retry_exhausted 包装后（「模块选择连续 N 次调用失败：
+    模型输出被 max_tokens 上限截断…」）到用户眼前仍是同一分支——kind 在包装处
+    保留，不会被重新归类成 client。"""
+    exhausted = LLMError(
+        "模块选择连续 2 次调用失败：模型输出被 max_tokens 上限截断"
+        "（finish_reason=length）",
+        kind=ERROR_KIND_OUTPUT,
+    )
+    status, message = error_entry(exhausted)
+    assert status == 502
+    assert "API key" not in message and "余额" not in message
+    assert "AI 服务调用失败" in message

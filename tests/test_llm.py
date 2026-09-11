@@ -14,6 +14,7 @@ import pytest
 
 import contest_generator.llm as llm_module
 from contest_generator.config import AppConfig
+from contest_generator.errors import error_entry
 from contest_generator.events import (
     EVENT_BATCH_DONE,
     EVENT_BATCH_START,
@@ -65,6 +66,7 @@ from contest_generator.llm import (
     JUDGMENT_SUMMARY_SYSTEM_PROMPT,
     LLMError,
     ERROR_KIND_CLIENT,
+    ERROR_KIND_OUTPUT,
     LOCAL_LLM_METHODS,
     LOCAL_LLM_LOAD_FAILED_MESSAGE,
     LOCAL_LLM_UNAVAILABLE_MESSAGE,
@@ -3639,7 +3641,12 @@ def test_select_prompt_embeds_requested_fulltexts():
     全文原样直传（逐文件截断已由 read_fulltext 完成）。"""
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport)
-    long_text = "长全文" * 1400  # 4200 字符 ≈ 25200 wire 字节：超旧 4000 上限、在新 wire 预算（27000）内
+    # 夹具按预算联动推导（工单 real-acceptance/05 把常量 25600 → 23400：写死
+    # 「长全文」×1400 = 25200B 会超预算触发截断，把「全文原样直传」打成红）。
+    # 「长全文」= 3 字符 = 18 wire 字节，故份数 = (预算 − 2KB 余量) / 18。
+    reps = (REFERENCE_FULLTEXT_BYTES - 2048) // 18
+    long_text = "长全文" * reps
+    assert wire_size(long_text) < REFERENCE_FULLTEXT_BYTES - 1024
 
     llm.select_modules(
         "赛题",
@@ -3662,8 +3669,13 @@ def test_select_prompt_embeds_fulltext_with_every_file_head():
     test_select_prompt_truncates_fulltext_at_relaxed_total_cap 钉死。"""
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport)
+    # 夹具按预算联动推导（工单 real-acceptance/05 把常量 25600 → 23400：写死的
+    # 3×8000 会超预算触发截断，把「每个文件头都在」的断言打成红）。`c` 是 ASCII，
+    # wire 1B/字符，故每篇预算 = 总预算 / 3 篇再留 2KB 余量。
+    per_file = REFERENCE_FULLTEXT_BYTES // 3 - 2048
+    assert per_file > 4000  # 仍远超旧的每篇 4000 字符口径，用例不退化为平凡
     fulltext = "\n".join(
-        f"// ---- f{i}.c ----\n/* f{i}_head */\n" + "c" * 8000 for i in range(3)
+        f"// ---- f{i}.c ----\n/* f{i}_head */\n" + "c" * per_file for i in range(3)
     )
 
     llm.select_modules(
@@ -5368,13 +5380,25 @@ def test_select_prompt_without_multi_instance_module_keeps_old_shape():
 def test_select_prompt_embeds_manual_fulltexts_with_label():
     """手动选参考资料（工单 01）：全文直读段（read_fulltext 的 file_label 文件名
     标注 + 逐文件截断标注原样保留；注入处总预算放宽为 REFERENCE_FULLTEXT_BYTES
-    wire 字节——预算内原样直传）；清单段手动条目带来源标注（无需点名）。"""
+    wire 字节——预算内原样直传）；清单段手动条目带来源标注（无需点名）。
+
+    夹具体量随 REFERENCE_FULLTEXT_BYTES **联动推导**（工单 real-acceptance/05
+    段级重分配把该常量 25600 → 23400）：填到「预算 − 2000B」并断言实际余量
+    > 1500B，留出截断标注预扣（工单 05 更正 `_fit_segment_wire`：标注现在真的
+    从预算里扣）的余量，使「预算内不截断 + file_label 原样」两条核心断言在
+    任何预算取值下都成立。
+
+    **不要求夹具超 4000 字符**（旧断言已删）：4000 是**字符**口径的旧截断上限，
+    而本段预算是 wire 字节 —— 在 23400B 级预算下「超 4000 字符」需要 ≈24000B
+    内容，加上标注预扣必然触发截断，两条要求不可兼得。核心行为（不被旧上限
+    截断、file_label 保留）由 `TRUNCATION_NOTICE not in user_message` + file_label
+    断言直接守，与文字长度无关。
+    """
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport)
-    # 700 份 ≈ 4200 字符：超旧 4000 上限（注入处不再截断）、又低于
-    # REFERENCE_FULLTEXT_BYTES 预算（module-preselect/02 定 27000，中文
-    # json.dumps 6 字节/字符 ≈ 25.2KB）
-    manual_text = "// ---- visual.txt ----\n" + "视觉资料正文" * 700
+    manual_text = "// ---- visual.txt ----\n" + "视觉资料正文" * 600
+    # 夹具前提：确实压在预算内并留足余量（否则本用例红在别处，看不出真实原因）
+    assert wire_size(manual_text) < REFERENCE_FULLTEXT_BYTES - 1500
 
     llm.select_modules(
         "赛题",
@@ -5387,7 +5411,7 @@ def test_select_prompt_embeds_manual_fulltexts_with_label():
 
     user_message = transport.calls[0][2]["messages"][1]["content"]
     assert "以下为你手动指定的参考文件全文" in user_message
-    assert manual_text in user_message  # 超 4000 字符仍全文在（旧实现必截断）
+    assert manual_text in user_message  # 预算内全文原样在（旧字符上限实现必截断）
     assert "// ---- visual.txt ----" in user_message  # read_fulltext 的 file_label 标注保留
     assert TRUNCATION_NOTICE not in user_message  # 总上限内不截断（截断标注归 read_fulltext）
     assert "（用户手动指定，全文已直接给出，无需点名）" in user_message  # 清单行来源标注
@@ -6293,8 +6317,14 @@ def test_non_select_calls_omit_max_tokens_and_thinking():
 
 
 def test_select_modules_oversized_output_fails_fast_without_retry():
-    """输出异常超长（>60000 字符，疑似模型输出退化/循环）→ client 错误，
-    只尝试 1 次（client 不重试——重试只会重复烧钱烧时间）。"""
+    """输出异常超长（>60000 字符，疑似模型输出退化/循环）→ **output** 错误，
+    只尝试 1 次（同参数重试只会重复烧钱烧时间）。
+
+    kind 从 client 改 output（工单 real-acceptance/09）：`client` 在文案层 =
+    「上游 HTTP 4xx」，而这里是**本地**对模型输出的判决（HTTP 是 200）——混用
+    会让用户看到「可能是 API key 无效、账户余额不足」，把诊断指向凭据。
+    免重试的**策略**不变（断言 transport.calls == 1）。
+    """
     oversized = (
         '{"modules": [{"slug": "dht11", "reason": "' + "长" * 60000 + '"}]}'
     )
@@ -6306,7 +6336,7 @@ def test_select_modules_oversized_output_fails_fast_without_retry():
             "设计一个环境监测仪", [ManifestSummary("dht11", "温湿度传感器驱动")]
         )
 
-    assert excinfo.value.kind == "client"
+    assert excinfo.value.kind == ERROR_KIND_OUTPUT
     assert len(transport.calls) == 1
     assert "异常超长" in str(excinfo.value)
 
@@ -6314,7 +6344,8 @@ def test_select_modules_oversized_output_fails_fast_without_retry():
 def test_select_modules_truncated_output_fails_fast_without_retry():
     """finish_reason=length（输出被 max_tokens 截断）= 参数性确定性失败：
     同参数重试必然再截断（推理模型 reasoning 与 content 共享 max_tokens），
-    只尝试 1 次报 client 错误，不再 5 次重试烧钱烧时间。"""
+    只尝试 1 次报 **output** 错误（kind 语义见上条用例），不再 5 次重试烧钱
+    烧时间。"""
     transport = FakeTransport(body=_api_response("", finish_reason="length"))
     llm = _llm(transport)
 
@@ -6323,9 +6354,34 @@ def test_select_modules_truncated_output_fails_fast_without_retry():
             "设计一个环境监测仪", [ManifestSummary("dht11", "温湿度传感器驱动")]
         )
 
-    assert excinfo.value.kind == "client"
+    assert excinfo.value.kind == ERROR_KIND_OUTPUT
     assert len(transport.calls) == 1
     assert "截断" in str(excinfo.value)
+
+
+def test_truncated_select_failure_reaches_user_without_key_blame():
+    """端到端（工单 real-acceptance/09）：输出被截断的 select 失败，经 errors
+    映射表到用户眼前的文案**不含** key / 余额误导。
+
+    现场判例（webapp 最近两次 recommend 工作流，观测面 `http_status=200` /
+    `parse_status=parse_error` / `error_kind=client` / `attempts=1`）：上游回
+    200、key 与余额都正常（余额实测 21.57 CNY），用户却被告知「可能是 API key
+    无效、账户余额不足——请在设置页核对」。本用例把「截断响应 → 异常 → 文案」
+    整条链钉住：改回 client 就红。
+    """
+    transport = FakeTransport(body=_api_response("", finish_reason="length"))
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError) as excinfo:
+        llm.select_modules(
+            "设计一个环境监测仪", [ManifestSummary("dht11", "温湿度传感器驱动")]
+        )
+
+    status, message = error_entry(excinfo.value)
+    assert status == 502  # 状态码契约不变
+    assert "API key" not in message
+    assert "余额" not in message
+    assert "重试" in message  # 可操作引导仍在
 
 
 # 域拒绝现场载荷（工单 real-acceptance/03 三条用例共用）：非多实例模块 dht11

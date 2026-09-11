@@ -84,9 +84,10 @@ mq4-9 描述措辞未统一；77 条目全部未上板真机验证；oled 词表
 | `real-acceptance/02` | 🔴 | gmake/tiarmclang/SysConfig 报错解析缺口：真机 exit=2、SysConfig 报 7 条引脚冲突，产品读成 **0 错 0 警**，修复链当「未定位到可修复文件」白跑一轮——**真机编译验收的判读底座** |
 | `real-acceptance/03` | 🟠 | 推荐域拒绝（`SelectionError`）被吞成「查 key / 查余额」通用话术且 `kind=client` 免重试：本轮 14 轮真实推荐 **9 轮**栽在此，真实理由都是「oled 不支持多实例」这类一轮能自愈的手滑 |
 | `real-acceptance/04` | 🟠 | 推荐层互斥组未收敛：同组两成员同时推荐（`zigbee_uart` + `zigbee_link`），到生成门禁才 400；提示词已写「只推荐一个」，解析层缺校验 |
-| `real-acceptance/05` | 🟡 | 请求预算账本失真：2021F 单次 select 实测 **122161 字节**（上限 131072，余量 6.8%），而 `budget.py` 注释写「最坏 ≈119.5KB」；模型点名读参考全文那条路已实测 149674 → 被拒发 |
+| `real-acceptance/05` | ✅ | ~~请求预算账本失真~~ **已落地（resolved）**：账本与实测对齐 + 尺寸断言口径。根因是三种记账病（账本的数来自修复侧被误引用 / select 2KB 与 fix-clarify-skeleton 10KB 两套余量魔数 / 最坏形态漏算预筛注记且合成结构测试比真实库小 34KB）；做法：段级账本可执行（Σ段 + JSON 壳 = 实发，逐字节对账）+ 统一余量单源 `budget.REQUEST_RESERVE_BYTES=2048` + 全文段重分配 25600→23400 + 修掉 `_fit_segment_wire` 标注超预算（段级预算此前不是实发上界）+ 贴边/拒发留段级 breakdown。实测 mspm0 128405B/619B → **125638B/5434B**；真机 2021F/stm32 4 轮收敛终态 done 无「请求体过大」 |
 | `real-acceptance/06` | 🟡 | CCS 三件套跨安装目录混搭（编译器 ccs2050 + SDK/SysConfig ccs2051）实测可用，但环境体检不说明来源根 |
 | `real-acceptance/07` | 🟡 | 浏览器真机验收四坑固化：折叠+页签 / `waitForFunction` 超时位置 / `evaluate` await 长流程 / 模态确认不点 —— 每次重踩烧 20~40 分钟 |
+| `real-acceptance/09` | ✅ | ~~推荐失败被报成「AI 服务拒绝了本次请求（API key / 余额）」~~ **已落地（resolved）**：真因是**输出侧本地判决被塞进 `kind=client`**（观测面 `http_status=200` / `parse_status=parse_error` / `attempts=1`；余额实测 21.57 CNY、最小调用 200）。做法：新增 `ERROR_KIND_OUTPUT` 分流 + 三处「借 client」抛出点改归 output + 新增 `OUTPUT_TRUNCATION_HINT` 单源判据（截断/超长确定失败免重试，畸形照 parse 快重试）+ 文案改「这次返回的内容无法使用…不是登录凭据或账户问题」。与 `03`（域拒绝）同源病：本地判决错报成上游拒绝 |
 
 **不做（已裁决）**：SysConfig 外设引脚冲突的「生成期门禁」不单独立项——本轮把它作为 `real-acceptance/02`
 的附件事实记录（门禁现有检查面覆盖不到 SysConfig 语义级 `associatedPins` 冲突，且修复方向未定），

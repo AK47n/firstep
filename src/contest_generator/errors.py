@@ -49,6 +49,7 @@ from .llm import (
     ERROR_KIND_CLIENT,
     ERROR_KIND_DOMAIN,
     ERROR_KIND_NETWORK,
+    ERROR_KIND_OUTPUT,
     ERROR_KIND_PARSE,
     ERROR_KIND_RATE_LIMIT,
     LLMError,
@@ -145,6 +146,21 @@ LLM_CLIENT_MESSAGE = (
     "AI 服务拒绝了本次请求（可能是 API key 无效、账户余额不足或请求内容不被接受）。"
     "请在设置页核对 API key 与账户余额后重试。"
 )
+# 本地输出失败（kind=output，工单 real-acceptance/05 尾巴）：服务连得上、HTTP 200
+# 也回来了，是模型这次吐出来的东西不能用（被 max_tokens 截断 / 异常超长 / 畸形）。
+# 与域拒绝（kind=domain）同一种病：本地判决被 client 分支换成「API key / 余额」
+# 话术，用户被指去查凭据。现场判例 = webapp 最近两次 recommend 工作流
+# （`http_status=200` / `parse_status=parse_error` / `error_kind=client`），
+# 而账户余额实测正常。
+#
+# 引导语只给可操作方向、不承载可变量（与 domain 后缀同政策）：不说「已自动重试
+# N 次」——重试次数取决于失败形态（截断/超长形态按确定性失败不重试），文案里写死
+# 次数就会撒谎；也不断言「一定不是你的问题」——排查建议保留。
+LLM_OUTPUT_MESSAGE = (
+    "AI 服务这次返回的内容无法使用（响应被截断、超长或不是合法结构）——"
+    "这通常是一次性的，不是登录凭据或账户问题。请再点一次重试；"
+    "若反复出现，可在设置页换一个模型后再试。"
+)
 # 本地域判决（kind=domain，工单 real-acceptance/03）：不是上游拒绝，而是产品
 # 自己判的（selection.build_module_selection 的域拒绝——模型输出与库内事实
 # 冲突：给非多实例模块带 instances、推荐库中不存在的模块、库外建议的硬件名
@@ -196,6 +212,9 @@ def llm_error_message(exc: Exception) -> str:
     通用话术只适用于后者；
     client（上游 HTTP 4xx）→ 核对 key 与余额建议；413（请求体过大）保留专属
     提示（检查赛题文本 / 文件数量——通用 key 建议对它是误导）；
+    output（**输出侧本地判决**，工单 real-acceptance/05 尾巴）→ 说「这次返回的
+    内容无法使用」+ 重试引导，**不给 key / 余额话术**（服务回的是 200，那条建议
+    按定义不成立）；
     parse 及其它（含缺省 kind，AI 输出非法 / 业务失败）→ message 原样带出
     （保留「AI 服务调用失败：」前缀——存量文案契约不变，测试
     test_error_entry_contract_unchanged 钉住）。
@@ -231,6 +250,10 @@ def llm_error_message(exc: Exception) -> str:
                 "或减少导入工程的文件数量与单文件大小。"
             )
         return LLM_CLIENT_MESSAGE
+    if kind == ERROR_KIND_OUTPUT:
+        # 输出侧本地判决（工单 real-acceptance/05 尾巴）：**不给 key / 余额
+        # 话术**——HTTP 是 200，那条建议按定义不成立（判据是 kind，不是字符串）。
+        return "AI 服务调用失败：" + LLM_OUTPUT_MESSAGE
     return "AI 服务调用失败：" + _scrub_urls(message)
 
 
