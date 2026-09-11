@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=6db0a36fd704fb5df57fb8c8e1dc43437db2cbe4 -->
+<!-- changelog-auto: last-commit=cd96bedd3d723d1eaf701229cfa10e46d19ff40d -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -14,6 +14,7 @@
 - 18:10 fix(词表): 顺延批 27 条方案裸名入 models——跨 7 行纯数据（工单 real-acceptance/10）
 - 18:12 fix(docs 工具): 修 measure-20 两处量法 bug——错落点被截断吃边际字节 + 基线不同源；复现真值 51B/条
 - 18:41 fix(推荐): instances 幻觉改确定性降级——现场主形态是空数组（工单 real-acceptance/11）
+- 21:44 fix(生成): mspm0 引脚冲突生成前拦下 + 一键配置真能解默认撞脚（工单 pin-conflict-gate/01-02）
 
 ## 2026-09-10
 - 13:12 perf(code-editor): 结构性编辑回车同步耗时 78.9ms → 9.8ms（删掉 syncTail 的滚动读写）
