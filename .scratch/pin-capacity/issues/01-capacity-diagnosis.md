@@ -8,7 +8,7 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** ready-for-agent
+**状态：** claimed
 
 - [ ] 新增域模块 `pin_capacity.py`（命名严守「引脚容量」，**不得**出现裸「预算」二字）：
       `PinCapacityReport`（冻结）+ `diagnose_pin_capacity(manifests, platform, board,
