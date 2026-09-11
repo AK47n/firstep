@@ -25,6 +25,7 @@ from contest_generator.errors import _ERROR_TABLE, error_entry
 from contest_generator.generator import DuplicateFilePathError
 from contest_generator.llm import (
     ERROR_KIND_CLIENT,
+    ERROR_KIND_DOMAIN,
     ERROR_KIND_NETWORK,
     ERROR_KIND_RATE_LIMIT,
     LOCAL_LLM_UNAVAILABLE_MESSAGE,
@@ -268,6 +269,62 @@ def test_llm_error_parse_keeps_chinese_message() -> None:
         502,
         "AI 服务调用失败：骨架 main.c 生成返回空内容",
     )
+
+
+def test_llm_error_domain_rejection_keeps_real_reason() -> None:
+    """域拒绝（产品自己判的，kind=domain，工单 real-acceptance/03）：保留
+    LLMError.message 原文 + 一句人话引导——不再被 client 分支的通用话术吞掉。
+
+    现场判例（第十六轮真机 14 轮里 9 轮栽在这）：SelectionError「模块 oled
+    不支持多实例，不能带 instances」被译成 client 后被换成「AI 服务拒绝了
+    本次请求（可能是 API key 无效、账户余额不足…）」——用户被指去查 key 与
+    余额，而真因是模型手滑。
+
+    分支判据（工单验收项）：「上游 4xx vs 本地域判决」靠 **kind** 分派，
+    不靠字符串猜——下面两个用例吃的是同一种 LLMError、只换 kind。
+    """
+    status, message = error_entry(
+        LLMError("模块 oled 不支持多实例，不能带 instances", kind=ERROR_KIND_DOMAIN)
+    )
+    assert status == 502  # 状态码契约不变（AI 服务调用失败仍是 502）
+    assert "模块 oled 不支持多实例，不能带 instances" in message  # 真实理由原样
+    assert "核对 API key" not in message  # 不再指错方向（误导致用户去查 key / 余额）
+    assert "账户余额不足" not in message
+    assert "重试" in message  # 人话引导：这是可恢复的手滑，可直接重试
+
+
+def test_llm_error_upstream_4xx_still_generic_key_hint() -> None:
+    """上游 HTTP 4xx（kind=client，真·key / 余额问题）仍走通用话术——
+    域拒绝分支不改上游错误的既有语义（表驱动两分支互不串味）。"""
+    status, message = error_entry(
+        LLMError("DeepSeek API 返回 401：unauthorized", kind=ERROR_KIND_CLIENT)
+    )
+    assert status == 502
+    assert "API key" in message
+    assert "余额" in message
+    assert "unauthorized" not in message
+
+
+def test_llm_error_domain_exhausted_real_machine_reason_survives() -> None:
+    """端到端（真机现场原文，工单 real-acceptance/03）：域拒绝耗尽（首轮 +
+    带理由重试 1 次）后抛出的异常，经错误映射表到用户眼前的文案仍带真实理由。
+
+    异常文本逐字取自第十七轮探针现场
+    （`.scratch/recommend-domain-reject/verify-17-recommend-2026H-mspm0.txt`
+    的 `[PROBE16][重试耗尽] kind= domain` 行）。
+    """
+    exhausted = LLMError(
+        "模块选择连续 2 次调用失败：模块 xunji 不支持多实例，不能带 instances",
+        kind=ERROR_KIND_DOMAIN,
+    )
+    status, message = error_entry(exhausted)
+    assert status == 502
+    assert "xunji 不支持多实例" in message  # 真实理由逐字到用户眼前
+    assert "核对 API key" not in message  # 不再是「查 key / 查余额」误导话术
+    assert "自动重试" in message  # 说明已自动重试过（用户不会以为系统没试）
+    # 评审整改：文案不报次数（曾说「重试 2 次」而用户感知的重试只有 1 次）
+    assert "重试 2 次" not in message
+    assert "重试 1 次" not in message
 
 
 def test_llm_error_local_hint_preserved() -> None:

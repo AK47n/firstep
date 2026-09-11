@@ -46,6 +46,11 @@ from .impact import ImpactError
 from .keil import KeilProjectError
 from .library import LibraryError
 from .llm import (
+    ERROR_KIND_CLIENT,
+    ERROR_KIND_DOMAIN,
+    ERROR_KIND_NETWORK,
+    ERROR_KIND_PARSE,
+    ERROR_KIND_RATE_LIMIT,
     LLMError,
     LOCAL_LLM_LOAD_FAILED_MESSAGE,
     LOCAL_LLM_UNAVAILABLE_MESSAGE,
@@ -118,7 +123,8 @@ def os_error_message(exc: OSError) -> str:
 # 原始异常串（urlopen / URL / 响应体原文）透给用户——按错误类别重写为中文人话
 # + 建议动作；原始消息保留在异常链（服务端日志 / 回滚排查可溯源），用户界面
 # 只见人话。类别来源 = llm.LLMError.kind（network / rate_limit / client /
-# parse，缺省 parse=业务解析失败）。
+# domain / parse，缺省 parse=业务解析失败）；**分支按 kind 常量分派**
+# （ERROR_KIND_DOMAIN 等），与 llm 侧单源——不靠字符串猜语义。
 LLM_NETWORK_MESSAGE = (
     "AI 服务连接失败（网络不通 / 连接超时 / 服务暂时不可用）。"
     "请检查网络连接后重试；若多次失败，请稍后再试。"
@@ -138,6 +144,23 @@ LLM_RATE_LIMIT_MESSAGE = "AI 服务请求过于频繁——请等待片刻后重
 LLM_CLIENT_MESSAGE = (
     "AI 服务拒绝了本次请求（可能是 API key 无效、账户余额不足或请求内容不被接受）。"
     "请在设置页核对 API key 与账户余额后重试。"
+)
+# 本地域判决（kind=domain，工单 real-acceptance/03）：不是上游拒绝，而是产品
+# 自己判的（selection.build_module_selection 的域拒绝——模型输出与库内事实
+# 冲突：给非多实例模块带 instances、推荐库中不存在的模块、库外建议的硬件名
+# 不在硬件词表…）。这类失败**必须保留真实理由**：用「API key / 余额」话术
+# 描述它是指错方向的误导（第十六轮真机 14 轮推荐里 9 轮栽在这，用户被指去
+# 查 key，而真因是模型手滑）。前半句说明真实冲突，括号里明说"不是凭据 /
+# 账户问题" + 可操作引导。
+#
+# 只说「已自动重试」不说次数（评审整改）：次数与 DOMAIN_RETRY_LIMIT 保持
+# 一致靠格式化容易写错（原实现用 DOMAIN_RETRY_LIMIT + 1 说成"重试 2 次"，
+# 而用户感知的"重试"是额外那一次 = 1 次），且将来若有调用方不开 domain_retry
+# 就会被谎报。硬编码只会更糟——文案不承载可变量。
+LLM_DOMAIN_MESSAGE_SUFFIX = (
+    "（这是 AI 输出与库内容对不上，不是登录凭据或账户问题——"
+    "系统已自动重试仍不通过。请再点一次推荐；若反复失败，"
+    "可调整题面措辞或在赛题答疑里补充说明。）"
 )
 
 
@@ -167,15 +190,19 @@ def llm_error_message(exc: Exception) -> str:
     失联（RoutingLLM 包装附 LOCAL_LLM_* 提示），本地专属建议一并给出（别被
     通用网络建议覆盖——用户需知道「启动 Ollama / 清空本地模型配置」）。
     rate_limit（429）→ 等待建议（附 retry_after 秒数）；
-    client（4xx）→ 核对 key 与余额建议；413（请求体过大）保留专属提示
-    （检查赛题文本 / 文件数量——通用 key 建议对它是误导）；
+    domain（本地域判决，工单 real-acceptance/03）→ **message 原文保留**
+    （真实理由，如「模块 oled 不支持多实例，不能带 instances」）+ 一句
+    「不是 key / 余额问题」的引导——本产品自己判的失败与上游拒绝是两回事，
+    通用话术只适用于后者；
+    client（上游 HTTP 4xx）→ 核对 key 与余额建议；413（请求体过大）保留专属
+    提示（检查赛题文本 / 文件数量——通用 key 建议对它是误导）；
     parse 及其它（含缺省 kind，AI 输出非法 / 业务失败）→ message 原样带出
     （保留「AI 服务调用失败：」前缀——存量文案契约不变，测试
     test_error_entry_contract_unchanged 钉住）。
     """
     message = str(exc)
-    kind = exc.kind if isinstance(exc, LLMError) else "parse"
-    if kind == "network":
+    kind = exc.kind if isinstance(exc, LLMError) else ERROR_KIND_PARSE
+    if kind == ERROR_KIND_NETWORK:
         hint = next(
             (
                 h for h in
@@ -185,11 +212,19 @@ def llm_error_message(exc: Exception) -> str:
             None,
         )
         return _llm_network_message(exc) + ("另：" + hint if hint else "")
-    if kind == "rate_limit":
+    if kind == ERROR_KIND_RATE_LIMIT:
         retry = exc.retry_after if isinstance(exc, LLMError) else None
         suffix = f"（约 {math.ceil(retry)} 秒后）" if retry else ""
         return LLM_RATE_LIMIT_MESSAGE + suffix
-    if kind == "client":
+    if kind == ERROR_KIND_DOMAIN:
+        # 域拒绝保留理由原文（判据：errors.py 能区分「上游 HTTP 4xx」与
+        # 「本地域判决」，不靠字符串猜——两条分支吃的是不同 kind 常量）
+        return (
+            "AI 生成的推荐内容与库内事实冲突："
+            + _scrub_urls(message)
+            + LLM_DOMAIN_MESSAGE_SUFFIX
+        )
+    if kind == ERROR_KIND_CLIENT:
         if "413" in message:
             return (
                 "AI 服务拒绝了本次请求：请求体过大——请检查赛题文本是否异常巨大，"

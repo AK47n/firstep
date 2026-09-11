@@ -43,7 +43,9 @@ from contest_generator.llm import (
     DISTILL_SYSTEM_PROMPT,
     DeepSeekLLM,
     LLMObservationCollector,
+    DOMAIN_RETRY_LIMIT,
     EMBEDDED_CONTENT_CAP,
+    ERROR_KIND_DOMAIN,
     ERROR_KIND_NETWORK,
     FIX_PREVIOUS_FIXES_CAP,
     FIX_SYSTEM_PROMPT,
@@ -5201,8 +5203,11 @@ def test_select_modules_accepts_module_outside_shown_list_but_in_library():
 
 def test_select_modules_rejects_hallucinated_module_even_with_library():
     """真幻觉仍被拒（防线不缩）：库内确实没有的 slug，带 known_summaries 也抛
-    客户端类错误（免重试契约不变）。"""
-    transport = FakeTransport(body=_api_response(SELECTION_MOTOR_JSON))
+    域拒绝类错误（工单 real-acceptance/03：kind=domain——可在 errors.py 与
+    上游 4xx 区分，且带理由重试 1 次后仍失败）。"""
+    transport = SequenceTransport(
+        [_api_response(SELECTION_MOTOR_JSON), _api_response(SELECTION_MOTOR_JSON)]
+    )
     llm = _llm(transport)
 
     with pytest.raises(LLMError) as excinfo:
@@ -5213,7 +5218,7 @@ def test_select_modules_rejects_hallucinated_module_even_with_library():
         )
 
     assert "库中不存在的模块：motor" in str(excinfo.value)
-    assert excinfo.value.kind == ERROR_KIND_CLIENT
+    assert excinfo.value.kind == ERROR_KIND_DOMAIN
 
 
 def test_select_modules_parses_converged_short_marker():
@@ -5286,8 +5291,10 @@ def test_select_modules_parses_instances_for_multi_instance_manifest():
 
 def test_select_modules_rejects_instances_without_multi_instance_capability():
     """能力校验宁严勿假绿：清单模块未声明 multi_instance 时模型带 instances
-    → LLMError（重试后大声失败），不带病进选择结果。"""
-    transport = FakeTransport(body=_api_response(REQUIREMENTS_INSTANCES_JSON))
+    → 域拒绝（带理由重试 1 次仍失败），不带病进选择结果。"""
+    transport = SequenceTransport(
+        [_api_response(REQUIREMENTS_INSTANCES_JSON)] * 2
+    )
     llm = _llm(transport)
 
     with pytest.raises(LLMError, match="不支持多实例"):
@@ -6321,16 +6328,57 @@ def test_select_modules_truncated_output_fails_fast_without_retry():
     assert "截断" in str(excinfo.value)
 
 
-def test_select_domain_rejection_fails_fast_without_retry():
-    """域拒绝（SelectionError，如给非多实例模块带 instances）= 模型输出与
-    库内事实的客观矛盾——同参数重试模型稳定输出同样幻觉（2021F 实测
-    digit_uart 连续 5 轮同样带 instances），报 client 错误只尝试 1 次，
-    不再 5 次重试烧钱烧时间。"""
-    bad = (
-        '{"modules": [{"slug": "dht11", "reason": "r", '
-        '"instances": [{"name": "a", "variant": "x"}]}]}'
+# 域拒绝现场载荷（工单 real-acceptance/03 三条用例共用）：非多实例模块 dht11
+# 被手滑带上 instances——真机现场「模块 oled / huidu / pid / k230 不支持多实例，
+# 不能带 instances」的最小复现。
+DOMAIN_REJECTED_JSON = json.dumps(
+    {
+        "modules": [
+            {
+                "slug": "dht11",
+                "reason": "r",
+                "instances": [{"name": "a", "variant": "x"}],
+            }
+        ]
+    }
+)
+
+
+def test_select_domain_rejection_retries_once_with_reason_then_succeeds():
+    """红证（工单 real-acceptance/03）：首轮域拒绝 → 次轮修正通过。
+
+    真机现场（第十六轮 14 轮推荐里 9 轮栽在这）：模型给非多实例模块（oled /
+    huidu / pid / k230…）手滑带上 instances → SelectionError。改前形态是
+    kind=client 立即 break（同一输出现场 2022C 连续 3 次终态失败），用户只能
+    自己再点一次；改后形态 = 带被拒理由重出 JSON 一次，本轮即自愈。
+
+    同时钉住重试请求形状（判据：不是"空转重试"）——第二次请求的 user 消息
+    必须带上一轮被拒理由（"不支持多实例"）与修正指令。
+    """
+    transport = SequenceTransport(
+        [_api_response(DOMAIN_REJECTED_JSON), _api_response(SELECTION_JSON)]
     )
-    transport = FakeTransport(body=_api_response(bad))
+    llm = _llm(transport)
+
+    result = llm.select_modules(
+        "设计一个环境监测仪", [ManifestSummary("dht11", "温湿度传感器驱动")]
+    )
+
+    assert result.modules == ("dht11",)
+    assert len(transport.calls) == 2
+    retry_user_message = transport.calls[1][2]["messages"][1]["content"]
+    assert "被拒绝" in retry_user_message
+    assert "不支持多实例" in retry_user_message  # 理由原文带上
+    assert "不要重复" in retry_user_message  # 明确要求换一种输出
+    assert len(retry_user_message) > len(transport.calls[0][2]["messages"][1]["content"])
+
+
+def test_select_domain_rejection_retry_is_capped_at_one():
+    """上限 1 次（防烧钱循环）：模型连续两轮同样手滑 → 第 2 次即停，
+    kind=domain 保留真实理由（文案层据此不再说"API key 无效"）。"""
+    transport = SequenceTransport(
+        [_api_response(DOMAIN_REJECTED_JSON)] * (DOMAIN_RETRY_LIMIT + 1)
+    )
     llm = _llm(transport)
 
     with pytest.raises(LLMError) as excinfo:
@@ -6338,9 +6386,29 @@ def test_select_domain_rejection_fails_fast_without_retry():
             "设计一个环境监测仪", [ManifestSummary("dht11", "温湿度传感器驱动")]
         )
 
-    assert excinfo.value.kind == "client"
-    assert len(transport.calls) == 1
+    assert excinfo.value.kind == ERROR_KIND_DOMAIN
     assert "不支持多实例" in str(excinfo.value)
+    assert len(transport.calls) == DOMAIN_RETRY_LIMIT + 1  # 首轮 + 1 次带理由重试
+
+
+def test_select_domain_retry_observation_records_domain_kind_and_attempt_pair():
+    """遥测口径（第十六轮真机现场是 http_status=200 / parse_error /
+    error_kind=client / attempts=1）：域拒绝的两次调用各自一条观测，
+    error_kind=domain，attempts=1/2——排查时能看出"重试过一次"而不是"一枪毙命"。"""
+    collector = LLMObservationCollector("workflow-domain-retry")
+    transport = SequenceTransport(
+        [_api_response(DOMAIN_REJECTED_JSON), _api_response(SELECTION_JSON)]
+    )
+    llm = _llm(transport, observation_collector=collector)
+
+    llm.select_modules(
+        "设计一个环境监测仪", [ManifestSummary("dht11", "温湿度传感器驱动")]
+    )
+
+    observations = list(collector.observations)
+    assert [o["error_kind"] for o in observations] == ["domain", None]
+    assert [o["attempts"] for o in observations] == [1, 2]
+    assert [o["parse_status"] for o in observations] == ["parse_error", "success"]
 
 
 def test_select_prompt_multi_instance_rule_is_hard_constraint():

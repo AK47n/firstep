@@ -15,7 +15,9 @@ export function formatLLMTelemetry(data) {
     vision_describe: "视觉识别",
   };
   const parseLabels = { success: "成功", parse_error: "解析失败", not_sent: "未发送" };
-  const errLabels = { network: "网络", rate_limit: "限流", client: "客户端", server: "服务端" };
+  // 错误类别标签（与 llm.ERROR_KIND_* 常量同词表，工单 real-acceptance/03 补
+  // domain=域拒绝——本地域判决与上游 4xx 是两回事，未知类别回退原文）
+  const errLabels = { network: "网络", rate_limit: "限流", client: "客户端", domain: "域拒绝", server: "服务端" };
   const usageLabels = { prompt_tokens: "prompt", completion_tokens: "completion", total_tokens: "total" };
   const op = data.llm_latest_operation || "";
   const parts = [

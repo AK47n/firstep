@@ -54,3 +54,20 @@ test("无 usage / 无错误时省略对应段；未知 operation 回退原文", 
     "LLM：1 次调用 · 本地 1 / DeepSeek 0 · 最新 future_op_unknown · 请求 0B · 耗时 0ms"
   );
 });
+
+test("域拒绝（domain）有中文标签——不再在设置页显示原始英文 kind", () => {
+  // 工单 real-acceptance/03：错误类别词表新增 domain（本地域判决，与上游 4xx
+  // 的 client 区分）；词表缺项时前端会回退显示原文「错误 domain」。
+  assert.match(
+    formatLLMTelemetry({
+      llm_total_calls: 2,
+      llm_local_calls: 0,
+      llm_deepseek_calls: 2,
+      llm_latest_operation: "select_modules",
+      llm_error_kind: "domain",
+      llm_parse_status: "parse_error",
+      llm_attempts: 2,
+    }),
+    /错误 域拒绝 \/ 解析 解析失败/
+  );
+});

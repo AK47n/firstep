@@ -1087,11 +1087,37 @@ def _extract_good_decisions(
 # （_retry_parse 走指数退避，见 NETWORK_RETRY_LIMIT），parse = 输出解析 /
 # 业务失败（快重试）。字符串常量单源：转换点（UrllibTransport / _chat 5xx）
 # 与 _retry_parse 分策略都引用，测试同样引用（词表同款单源原则）。
+#
+# domain（工单 real-acceptance/03）= **本地域判决**：产品自己判的拒绝
+# （selection 域层：模型输出与库内事实冲突），与 client（上游 HTTP 4xx）是
+# 两回事——errors.llm_error_message 靠这个 kind 分派：client 才能说
+# 「API key / 余额」，domain 必须说真实理由（改前一律按 client 换成通用话术，
+# 第十六轮 14 轮真机推荐里 9 轮因此把「模型给 oled 写了 instances」报成
+# 「可能是 API key 无效」）。分流能力不靠字符串猜。
 ERROR_KIND_NETWORK = "network"
 ERROR_KIND_PARSE = "parse"
 ERROR_KIND_CLIENT = "client"
+ERROR_KIND_DOMAIN = "domain"
 ERROR_KIND_RATE_LIMIT = "rate_limit"
 ERROR_KIND_BUDGET = "budget"
+
+# 域拒绝的带理由重试上限（工单 real-acceptance/03）：域拒绝是模型输出的
+# **概率性手滑**（同一题连跑三次可能三个不同错处），带上被拒理由重出的第二次
+# 经常就过了；但同参空转重试会烧钱烧时间（模型可能稳定输出同一幻觉），
+# 故只给 1 次——「一次可恢复」而不是「重试循环」。
+DOMAIN_RETRY_LIMIT = 1
+
+# 域拒绝重试的追加指令（工单 real-acceptance/03）：把被拒理由原样回给模型
+# （**不重发它上一轮的输出**——_retry_parse 只带 system + user，重发的只有
+# 指令；模型靠理由自己定位该改哪一处），比空转重试有效。拼在 user 消息
+# **末尾**（离生成点最近，权重最高）；理由来自 selection 域的
+# SelectionError 文案（中文，本身即可读）。
+DOMAIN_FEEDBACK_SEGMENT = (
+    "【上一轮输出被拒绝，请修正后重新输出 JSON】\n"
+    "拒绝理由：{reason}\n"
+    "请按上面的理由改掉这一处（例如去掉不该出现的字段、只推荐清单里存在的"
+    "模块），其余部分照旧；不要重复同样的输出。"
+)
 
 
 @dataclass
@@ -1798,6 +1824,17 @@ def _raise_retry_exhausted(label: str, attempts: int, last_error: Exception | No
     ) from last_error
 
 
+def _domain_feedback(reason: str) -> str:
+    """域拒绝理由 → 重试追加指令（工单 real-acceptance/03）。
+
+    独立函数 = 文案单源 + 测试锚点：理由为空（不该发生）时不拼段，返回空串
+    让调用方退回空转重试的旧形态，绝不让"上一轮被拒绝：（空）"这种半句话进提示词。
+    """
+    if not reason.strip():
+        return ""
+    return DOMAIN_FEEDBACK_SEGMENT.format(reason=reason.strip())
+
+
 def _unwrap_json_fence(content: str) -> str:
     """剥掉 Markdown 代码围栏外层（工单 local-llm-json-group/01，唯一出处）。
 
@@ -1901,6 +1938,12 @@ class DeepSeekLLM:
 
         瞬时失败整次重问（_retry_parse，与归档判定同款兜底）：DeepSeek 偶发
         空内容 / 输出畸形会重问，最多 SUMMARY_RETRY_LIMIT 轮，仍失败大声抛错。
+
+        域拒绝（模型输出与库内事实冲突，SelectionError）单独一路（工单
+        real-acceptance/03）：翻译为 LLMError(kind=domain) + 带被拒理由重出
+        一次（_retry_parse 的 domain_retry，上限 DOMAIN_RETRY_LIMIT）——一次
+        手滑不再等于整次推荐终态失败；仍失败时 kind=domain 让文案层保留真实
+        理由（errors.llm_error_message 的 domain 分支），不指错方向。
         """
 
         def parse(content: str) -> ModuleSelection:
@@ -1945,12 +1988,16 @@ class DeepSeekLLM:
                 # 域判决错误由传输侧翻译回 LLMError（错误契约 502 / 文案逐字不变；
                 # selection 不 import LLMError——否则与 llm → selection 既有边成环；
                 # 翻译在闭包内，重试循环吃的是翻译后的 LLMError）。
-                # kind=client 免重试（工单 select-domain-reject/01）：域拒绝 =
-                # 模型输出与库内事实的客观矛盾（如给非多实例模块带 instances、
-                # 幻觉模块名）——同参数重试模型稳定输出同样的幻觉（2021F 实测
-                # digit_uart 连续 5 轮同样带 instances），重试只烧钱烧时间；
-                # 报 client 错误立即结束，用户可重试或调整题面。
-                raise LLMError(str(exc), kind=ERROR_KIND_CLIENT) from exc
+                # kind=domain（工单 real-acceptance/03）：域拒绝 = **产品自己判的**
+                # （模型输出与库内事实的矛盾——给非多实例模块带 instances、幻觉
+                # 模块名、库外建议名不在词表），与上游 HTTP 4xx 分道：errors.py
+                # 的 domain 分支保留本 message 原文（真实理由），不再换成
+                # 「API key 无效 / 余额不足」通用话术（改前第十六轮 14 轮真机里
+                # 9 轮被这句误导文案收尾）。可恢复性由 _retry_parse 承担：
+                # domain_retry=True 时带被拒理由重出一次（上限 DOMAIN_RETRY_LIMIT）。
+                # 旧判据「同参重试稳定同错」（select-domain-reject/01）已被现场
+                # 推翻——2022C 同一题三次三个不同的错处，重试不是空转。
+                raise LLMError(str(exc), kind=ERROR_KIND_DOMAIN) from exc
 
         return self._retry_parse(
             system_prompt=SELECT_SYSTEM_PROMPT,
@@ -1977,6 +2024,10 @@ class DeepSeekLLM:
             # 「模型返回的不是 JSON」连续 5 次失败。select 是确定性 JSON 任务，
             # 不需要思维链：关闭后 content 直接输出，等待 / 成本 / 截断齐解。
             thinking_disabled=True,
+            # 域拒绝带理由重出一次（工单 real-acceptance/03）：本调用是唯一
+            # 会把域拒绝当"终态失败"摊给用户的地方（一次模型手滑 = 整次推荐
+            # 白跑），也是唯一开这个开关的调用方。
+            domain_retry=True,
         )
 
     def clarify(
@@ -2153,6 +2204,7 @@ class DeepSeekLLM:
         json_mode: bool = False,
         max_tokens: int | None = None,
         thinking_disabled: bool = False,
+        domain_retry: bool = False,
     ) -> RT:
         """整次调用级重试（单调用契约共用原语，与批处理 _retry_batch 同哲学）。
 
@@ -2161,10 +2213,16 @@ class DeepSeekLLM:
         max_tokens = 输出上限（None = 不带字段，服务端默认）。
         thinking_disabled = 关闭思考模式（推理模型默认开且 effort=high，确定性
         JSON 任务会深度推理吃掉 max_tokens、content 为空——select 用）。
+        domain_retry = 域拒绝（ERROR_KIND_DOMAIN）允许带被拒理由重出一次
+        （工单 real-acceptance/03，上限 DOMAIN_RETRY_LIMIT）：重试请求 = 原
+        user 消息 + 理由追加段（_domain_feedback）——与 client（上游 4xx，
+        重试没有意义）分道；未开启的调用方对域拒绝照旧立即结束（零变化）。
         """
         last_error: Exception | None = None
         attempts = 0
         network_failures = 0
+        domain_retries = 0
+        extra_instruction = ""
         result: _ChatResult | None = None
         while attempts < NETWORK_RETRY_LIMIT:
             attempts += 1
@@ -2172,7 +2230,7 @@ class DeepSeekLLM:
                 result = self._chat_once(
                     [
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
+                        {"role": "user", "content": user_prompt + extra_instruction},
                     ],
                     json_mode=json_mode,
                     operation=operation or label,
@@ -2215,6 +2273,18 @@ class DeepSeekLLM:
                         "配置",
                         kind=ERROR_KIND_CLIENT,
                     )
+                    break
+                # 域拒绝的带理由重试（工单 real-acceptance/03）：只对
+                # domain_retry=True 的调用方（select_modules）生效，上限
+                # DOMAIN_RETRY_LIMIT 次——重试请求把被拒理由作为追加指令带上
+                # （比空转重试有效）；用满后照旧走耗尽路径（kind=domain 保留，
+                # 文案层据实说真实理由）。真正的上游 4xx（client）不在此列。
+                if exc.kind == ERROR_KIND_DOMAIN:
+                    if domain_retry and domain_retries < DOMAIN_RETRY_LIMIT:
+                        domain_retries += 1
+                        extra_instruction = _domain_feedback(str(exc))
+                        if extra_instruction:
+                            continue
                     break
                 if exc.kind in (ERROR_KIND_CLIENT, ERROR_KIND_BUDGET):
                     if exc.kind == ERROR_KIND_BUDGET:

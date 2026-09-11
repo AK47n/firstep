@@ -8,6 +8,12 @@
 用内存注入的诊断行把真实异常打出来（磁盘 llm.py 零改动，做法同
 `.scratch/recommend-domain-reject/probe-16-select-reject.py`）。
 
+第十七轮更新（工单 real-acceptance/03 落地后复跑用）：域拒绝的翻译点已从
+`kind=ERROR_KIND_CLIENT` 改为 `kind=ERROR_KIND_DOMAIN`，锚点随源码同步；
+此时的现场应出现两种形态之一——① 首轮域拒绝 + 次轮通过（自愈，`[PROBE16]
+[域拒绝]` 只出现一次且终态 done）；② 两次都被拒（`[重试耗尽] kind= domain`
+且**终态 error 文案带真实理由**，不再说「API key / 余额」）。
+
 顺带产出：成功时把 done 载荷按 `generate_check.cache_recommend` 的同款形状
 写进 `.scratch/real-run/cache/recommend_<topic>.json`（`--write-cache`），
 让后续 `generate_check --reuse-recommend` 复用这次真实推荐（省额度）。
@@ -44,10 +50,10 @@ from contest_generator.sse import SseEmitter  # noqa: E402
 
 ANCHORS = (
     (
-        '                raise LLMError(str(exc), kind=ERROR_KIND_CLIENT) from exc\n',
+        '                raise LLMError(str(exc), kind=ERROR_KIND_DOMAIN) from exc\n',
         '                print("[PROBE16][域拒绝] SelectionError →", str(exc)[:900],\n'
         '                      flush=True)\n'
-        '                raise LLMError(str(exc), kind=ERROR_KIND_CLIENT) from exc\n',
+        '                raise LLMError(str(exc), kind=ERROR_KIND_DOMAIN) from exc\n',
     ),
     (
         '        _raise_retry_exhausted(label, attempts, last_error)\n',
@@ -232,6 +238,11 @@ def main() -> int:
     parser.add_argument("--fake-clarify", default="",
                         help="JSON 数组：把 llm.clarify 换成恒返回这些问题（注入式探针）")
     parser.add_argument("--fake-clarify-file", default="", help="同上，从文件读")
+    parser.add_argument(
+        "--out-prefix", default="done-16",
+        help="done 载荷落盘前缀（缺省 done-16 覆写第十六轮现场件；"
+             "复跑请用 --out-prefix done-17 另存，别污染历史证据）",
+    )
     args = parser.parse_args()
 
     inject(REPO / "src" / "contest_generator" / "llm.py")
@@ -295,7 +306,7 @@ def main() -> int:
               f"互斥组 {len(data.get('exclusive_groups') or [])} 个；"
               f"参考资料 {len(data.get('references') or [])} 条", flush=True)
         out = REPO / ".scratch" / "recommend-domain-reject" / (
-            f"done-16-{args.topic}-{args.platform}.json"
+            f"{args.out_prefix}-{args.topic}-{args.platform}.json"
         )
         out.write_text(json.dumps(data, ensure_ascii=False, indent=2),
                        encoding="utf-8")

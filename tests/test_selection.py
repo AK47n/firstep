@@ -1636,6 +1636,39 @@ def test_build_selection_suggestion_off_wordlist_rejected(suggestion):
         build_module_selection(raw, known_slugs=(), hardware_words=WORDS)
 
 
+def test_build_selection_solution_name_is_not_a_legal_suggestion_name():
+    """词表闸现状契约（工单 real-acceptance/03 修复方向 ③ 的评估锚，**行为未改**）。
+
+    合法 name 取值域 = 类别名 ∪ 型号名（`_solution_group` 单源）；**选购方案名
+    不是合法 name**——即使它逐字出现在词表里，也照样拒收。
+
+    第十六轮真机现场（探针 probe-17-wordlist-gate-verdicts.py 实证）：模型给的
+    「红外对管循迹数组」「红外测距传感器」「直流减速电机 + TB6612 双路驱动板」
+    三条**恰好是默认词表里已登记的选购方案名（或其去括号裸名）**——模型知道该
+    买什么，只是用了方案名而不是型号 / 类别名，于是被闸拒了三次（2022C 三轮全
+    挂在同一类名字上）。这是本用例钉住的现状，不是模型幻觉。
+
+    是否把「方案名」纳入合法名（或让闸确定性降级到方案所属类别）会改动
+    SelectionError 的语义边界，需先与 wordlist / 买件指引链路口径确认——
+    决策点与建议见工单 real-acceptance/03「评估」节；落地前本用例是回归锚。
+    """
+    from contest_generator.llm import DEFAULT_WORDLIST
+
+    raw = {
+        "requirements": [
+            {
+                "requirement": "循迹",
+                "sentence": 1,
+                "modules": [],
+                "suggestions": [{"name": "红外对管循迹数组"}],
+            }
+        ]
+    }
+
+    with pytest.raises(SelectionError, match="库外建议的硬件名不在硬件词表中"):
+        build_module_selection(raw, known_slugs=(), hardware_words=DEFAULT_WORDLIST)
+
+
 def test_build_selection_suggestions_without_wordlist_rejected():
     """没给硬件词表时模型报库外建议 = 无法校验的编造：大声失败。"""
     raw = {
