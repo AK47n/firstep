@@ -193,6 +193,11 @@
 3. `ml_mpu6050` mspm0 是补高层包装，还是维持“mspm0 姿态走 imu_uart”？
 4. 编译矩阵验收口径：先做「编译 0 错」即可，还是连「0 warning」也纳入？（历史基线有 syscfg ovsRate 建议级 warning）
 
+**2026-09-18 留档（用户本轮拍板范围之外）**：第 3、4 问**仍未拍**（本报告 §6 已记 `delay_us` 随
+module-polish/03 落库；第 3 问 `ml_mpu6050` 方向仍是「暂缓、维持 mspm0 姿态走 imu_uart」性质，
+未获正式拍板）——本报告 §7 两问保持敞开，不计入 2026-09-18 那次拍板（该次拍的是 CCS 探测策略 /
+引脚容量 A·B / launcher 可机读失败原因 / D1 器件链接，见 `tracker-audit/2026-09-09-在途盘点.md` 末段）。
+
 ## 8. 盘点边界
 
 - 本报告为只读盘点；未改任何 `library/modules/*`、`library/masters/*`、`src/*`、`tests/*`。

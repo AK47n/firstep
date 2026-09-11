@@ -25,3 +25,11 @@
   需要一台没有全局 Python、或服务劣化的机器——本机是开发机（全局 Python 3.14.6 + 依赖齐全），
   跑 `install.bat` 会在仓库根新建 `.venv` 并 `pip install -e .`（改本机环境 + 联网数分钟），
   按「不动用户环境」原则**不做**，留人工在干净机器/虚拟机上验。
+
+## 2026-09-18 拍板（用户）
+
+- 第 3 态（超时弹窗）**继续留人工**；其机器化前置——**给 launcher 加可机读失败原因**——
+  **已放行、另立单**（不塞进验收挂账单）。立单素材即
+  `newcomer-onboarding/verify-16-E2-timeout-state.txt` 的六版尝试与三个可复用探针件
+  （`fakebin/python.cmd` 门控垫片 / `diag-trace-start-app.bat` 分支 trace 副本 / `e2-launch-job.ps1`）。
+- 全文见 `tracker-audit/2026-09-09-在途盘点.md` 末「待拍板项的拍板结果与留档」第 ⑤ 条。
