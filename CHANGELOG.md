@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=1704317c4d4cd3304879a09453f6b4f3d10ef9ea -->
+<!-- changelog-auto: last-commit=57dd5f01778bb80a5ebf8fe12cf52ea0b26adf27 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -6,6 +6,7 @@
 
 ## 2026-09-11
 - 09:29 ﻿fix: 推荐域拒绝不再被吞成通用话术——kind=domain 分流 + 带理由重试一次（工单 real-acceptance/03）
+- 12:37 fix(wordlist): 方案裸名入 models——词表合法 name 域对齐（real-acceptance/08）
 
 ## 2026-09-10
 - 13:12 perf(code-editor): 结构性编辑回车同步耗时 78.9ms → 9.8ms（删掉 syncTail 的滚动读写）
