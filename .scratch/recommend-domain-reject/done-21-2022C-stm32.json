@@ -1,0 +1,807 @@
+{
+  "modules": [
+    {
+      "slug": "pid",
+      "reason": "灰度循迹+PID闭环"
+    },
+    {
+      "slug": "motor",
+      "reason": "PWM调速+编码器测速"
+    },
+    {
+      "slug": "l298n",
+      "reason": "电机驱动"
+    },
+    {
+      "slug": "beep",
+      "reason": "蜂鸣器发声"
+    },
+    {
+      "slug": "led_beep",
+      "reason": "声光提示组合"
+    },
+    {
+      "slug": "led",
+      "reason": "LED灯光指示"
+    },
+    {
+      "slug": "ws2812",
+      "reason": "灯带灯光指示"
+    },
+    {
+      "slug": "uwb_uart",
+      "reason": "车距测量"
+    },
+    {
+      "slug": "filter",
+      "reason": "距离平滑滤波"
+    },
+    {
+      "slug": "nrf24l01",
+      "reason": "车车无线透传"
+    },
+    {
+      "slug": "key",
+      "reason": "按键读取"
+    }
+  ],
+  "requirements": [
+    {
+      "requirement": "循迹沿黑色引导线自主行驶",
+      "sentence": 4,
+      "modules": [
+        "pid"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "行驶速度0.3~1m/s可调",
+      "sentence": 4,
+      "modules": [
+        "motor",
+        "l298n"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "到达终点发出声音提示",
+      "sentence": 9,
+      "modules": [
+        "beep",
+        "led_beep"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "内圈BFD段发出灯光指示",
+      "sentence": 12,
+      "modules": [
+        "led",
+        "ws2812"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "识别等停指示标识并停车5秒",
+      "sentence": 14,
+      "modules": [],
+      "suggestions": [
+        {
+          "name": "红外对管循迹数组",
+          "examples": [
+            "额外灰度/红外传感器组识别平行标志线"
+          ],
+          "degraded": false,
+          "solutions": [
+            {
+              "name": "指纹识别模块（AS608）",
+              "interface": "串口（UART 帧协议，双向）+ 触摸检测 GPIO",
+              "price": "￥15-30/个",
+              "note": "库内 fingerprint 已打通（mspm0：fingerprint_init + check_device 口令验证 + get_image/img_to_buffer/reg_model/save_finger + search 返回指纹 ID（255=未找到）+ enroll 录入固定序列 + delete_all 删库——真实 UART 轮询接收（独立 FINGERPRINT_UART，默认 57600（页面注释；9600 出厂版改 targetBaudRate 一行）），默认 PA28/PA31/PA12——同选时经引脚绑定消解）；指库 300 枚（ID 0-299）；采集/比对流程控制归生成骨架（先触摸→采集→比对）；模块 8 脚（串口方式 USB 悬空），3.3V 供电勿超压",
+              "suitable": "指纹采集/身份验证/指纹门禁考勤",
+              "recommended": false,
+              "lib_modules": [
+                "fingerprint"
+              ]
+            },
+            {
+              "name": "超声波测距（HC-SR04）",
+              "interface": "GPIO trigger/echo（CPU 忙等测宽，免定时器）",
+              "price": "￥5-15/个",
+              "note": "库内 sr04 已打通（mspm0：sr04_get_distance_cm 直接出厘米，5 次平均 + 超时防护，默认 PB24/PB8——同选时经引脚绑定消解）；忙等测宽不占 TIM 外设（地猛星 TIMG 全被占用）；5V 供电 echo 回 5V 需分压或串电阻；探头发声有方向性、死角 2cm",
+              "suitable": "避障/定高/车位感知（>10cm 距离）",
+              "recommended": true,
+              "lib_modules": [
+                "sr04"
+              ]
+            },
+            {
+              "name": "串口超声波（JSN-SR04T 等）",
+              "interface": "UART（帧协议，免捕获）",
+              "price": "￥15-30/个",
+              "note": "收发一体防水探头，免分压免定时器；帧格式查手册；低速但够用",
+              "suitable": "室内远距/空旷场地；省引脚场景",
+              "recommended": true,
+              "lib_modules": []
+            },
+            {
+              "name": "激光测距（VL53L0X）",
+              "interface": "I2C",
+              "price": "￥10-25/个",
+              "note": "测 3cm-2m、精度 1mm 级；I2C 地址/寄存器要初始化序列；光线强时需遮蔽",
+              "suitable": "近距离高精度测距/落点检测",
+              "recommended": false,
+              "lib_modules": [
+                "vl53l0x"
+              ]
+            },
+            {
+              "name": "红外对管循迹数组（低价替代）",
+              "interface": "GPIO 数字量（5-8 路红外对管）",
+              "price": "￥5-15/组",
+              "note": "低价替代对象=库内灰度循迹两套：xunji（mspm0 加权质心巡线）与 pid/gray_track（双平台 8 路灰度+PD 巡线+速度环）；红外对管与灰度同为 GPIO 数字量读取（不存在省 ADC，省的是模组单价与易得性）；红外对管数组库内无驱动需自写接线/读值/偏差算法；车底贴地测黑白线，室外强光下易误判",
+              "suitable": "预算极低/临时循迹（室外慎用）",
+              "recommended": true,
+              "lib_modules": [
+                "xunji",
+                "pid"
+              ]
+            },
+            {
+              "name": "模拟量超声波测距（US-016）",
+              "interface": "模拟量输出（ADC 电压成正比）",
+              "price": "￥10-20/个",
+              "note": "库内 us016 已打通（mspm0：us016_read_distance_cm 出 cm，5 次快平均；与 adc 模块共享 ADC12_0 MEM0 槽位、默认 PA24——同选时经引脚绑定消解）；量程 2cm-3m（Range 悬空/高 = 3m、接地 = 1m），输 0~Vcc 模拟电压线性对应距离；避障/定高比数字超声稳（无脉冲回声波形依赖），但需一个 ADC 通道",
+              "suitable": "避障/定高/车位感知（模拟量场景，ADC 空余时）",
+              "recommended": false,
+              "lib_modules": [
+                "us016"
+              ]
+            },
+            {
+              "name": "红外避障探头（GPIO）",
+              "interface": "GPIO 数字量（带电位器调距）",
+              "price": "￥2-6/个",
+              "note": "输出高低电平，免调试；探测 2-30cm 对应挡位；只能做有无判定",
+              "suitable": "撞墙检测/近距避障/边界判定",
+              "recommended": false,
+              "lib_modules": []
+            },
+            {
+              "name": "红外测距传感器（GP2Y0A02YK0F）",
+              "interface": "模拟量输出（ADC 电压→距离）",
+              "price": "￥20-40/个",
+              "note": "库内 ir_distance 已打通（mspm0：ir_distance_read_distance_cm 出 cm，10 次平均；独立 ADC12_0 MEM3 通道、默认 PA27——同选时经引脚绑定消解；与 us016 同属模拟量测距，同选可无冲突共读）；20-150cm 段、材质/温度不影响精度（三角测量法）；<15cm 电压跌落非线性（安装勿入盲区）；输出曲线非线性，精密场景按官方公式标定",
+              "suitable": "避障/非接触测距/近距开关量替代",
+              "recommended": false,
+              "lib_modules": [
+                "ir_distance"
+              ]
+            },
+            {
+              "name": "红外对射传感器（遮挡检测）",
+              "interface": "GPIO 数字量（三线制 VCC/GND/OUT）",
+              "price": "￥3-10/套",
+              "note": "库内 ir_beam 已打通遮挡检测（ir_beam_read 返回 1=遮挡/0=无遮挡，双平台默认 PA8，无需再自写驱动）；对射式发射/接收两端对装、三线制只占 1 个 GPIO；遮挡=高电平（个别模块极性相反，改 IR_BEAM_BLOCKED_LEVEL 一处即可）；强光下接收易误判，室内用",
+              "suitable": "门洞/出入口遮挡检测、物体经过计数、防夹、载物在位",
+              "recommended": false,
+              "lib_modules": [
+                "ir_beam"
+              ]
+            },
+            {
+              "name": "WS2812 幻彩灯带",
+              "interface": "GPIO 单线位操作（800kHz 时序）",
+              "price": "￥5-20/米",
+              "note": "库内 ws2812 已打通（mspm0：ws2812_set_color/set_rgb/refresh，0xRRGGBB 直接写色，单 GPIO 默认 PA14）；灯带每颗 40mA 级功耗，长段需外部供电；数据手册时序 1.25us/位，本实现延时经 CPUCLK_FREQ 精确换算，实测异常时微调 ws2812.c 两处延时",
+              "suitable": "RGB 幻彩指示/氛围灯效/状态光带",
+              "recommended": false,
+              "lib_modules": [
+                "ws2812"
+              ]
+            },
+            {
+              "name": "HX711 称重传感器（压阻半桥）",
+              "interface": "GPIO 双线时序（SCK 串行时钟 + DT 数据）",
+              "price": "￥5-15/套（含称重平台）",
+              "note": "库内 hx711 已打通（mspm0：hx711_tare 去皮 + hx711_get_gram 出克数，默认 PA28/PA31——同选时经引脚绑定消解）；每克计数 HX711_GAP_VALUE 需按实际秤校准（默认 207.00，偏大则增大、偏小则减小）；砝码垫平、避开振动台面",
+              "suitable": "电子称重/拉力压力检测/重量阈值判断",
+              "recommended": false,
+              "lib_modules": [
+                "hx711"
+              ]
+            },
+            {
+              "name": "AHT10 温湿度传感器",
+              "interface": "I2C（软 I2C 占 2 GPIO，不必硬件外设）",
+              "price": "￥5-10/个",
+              "note": "库内 aht10 已打通（mspm0：aht10_read 读温度℃/湿度%RH，默认 PB6/PB7——同选时经引脚绑定消解）；上电等 50ms 稳定后校准；模块板自带或总线上拉电阻；长时间连续测量建议 2s 以上间隔（器件自发热）",
+              "suitable": "环境温湿度采集/恒温恒湿监测/仓储农业环境机",
+              "recommended": false,
+              "lib_modules": [
+                "aht10"
+              ]
+            },
+            {
+              "name": "DHT11 温湿度传感器（单总线）",
+              "interface": "GPIO 单线数字量（1 根数据线位时序）",
+              "price": "￥3-8/个",
+              "note": "库内 dht11 已打通（mspm0：dht11_read 读温度℃/湿度%RH + 校验和/超时防护，默认 PB7——同选时经引脚绑定消解；与 AHT10 功能互替，精度 ±2℃/±5%RH 低于 AHT10，胜在便宜单线）；单总线忙等位时序不占 TIMER；采样间隔建议 ≥1s",
+              "suitable": "环境温湿度采集/低成本恒温恒湿监测",
+              "recommended": false,
+              "lib_modules": [
+                "dht11"
+              ]
+            },
+            {
+              "name": "DS18B20 单总线温度传感器",
+              "interface": "GPIO 单线数字量（1 根数据线位时序，1-Wire）",
+              "price": "￥3-10/个",
+              "note": "库内 ds18b20 已打通（mspm0：ds18b20_init 器件检测 + ds18b20_read_temp 出℃（±0.5℃ 精度、0.0625 系数 12bit、-55~+125℃、负温补码），默认 PA7——同选时经引脚绑定消解）；单总线忙等位时序不占 TIMER，转换等待 750ms（12bit 最大）；与 DHT11/AHT10 比：精度 ±0.5℃ 远高于 DHT11、可测负温、单线省脚，但只有温度无湿度；与 MLX90614 比：接触式、便宜、免标定；采样间隔建议 ≥1s",
+              "suitable": "高精度温度测量/恒温控制/温控报警/粮仓冷链温度监测",
+              "recommended": false,
+              "lib_modules": [
+                "ds18b20"
+              ]
+            },
+            {
+              "name": "SHT30 温湿度传感器",
+              "interface": "I2C（软 I2C 占 2 GPIO，不必硬件外设）",
+              "price": "￥5-15/个",
+              "note": "库内 sht30 已打通（mspm0：sht30_init 设周期模式 + sht30_read/read_temperature/read_humidity 出温度℃/湿度%RH（0.01 系数、CRC8 校验），默认 PA28/PA31——同选时经引脚绑定消解）；典型精度 ±0.2℃/±2%RH（页面标注 ±0.3℃/±2%RH）、宽温 -40~125℃；与 aht10 同为软 I2C 温湿度一体件（精度/分辨率同档、价位相近，aht10 默认温湿度件），与 dht11（单总线 ±2℃/±5%RH 低成本互替）、mlx90614（非接触红外测温）分工按场景选；周期模式 1 次/秒，采样节拍勿超（器件自热）",
+              "suitable": "环境温湿度采集/恒温恒湿监测/仓储农业环境机/宽温域监控",
+              "recommended": false,
+              "lib_modules": [
+                "sht30"
+              ]
+            },
+            {
+              "name": "SHT20 温湿度传感器（SHT2x 旧系列）",
+              "interface": "I2C（软 I2C 占 2 GPIO，不必硬件外设）",
+              "price": "￥3-10/个",
+              "note": "库内 sht20 已打通（mspm0：sht20_init + sht20_read 出温度℃/湿度%RH（0.01 系数按页面、低功耗单次测量 no-hold——每次读发测量命令测完即停，与 sht30 周期模式分工），默认 PA16/PA17——同选时经引脚绑定消解）；地址 0x40（SHT2x 固定——注意与 pca9685 同址，共总线同选须错开）；精度 ±0.3℃/±3%RH、-40~125℃；SHT2x 旧系列最便宜温湿度一体件，环境站按需与 aht10/sht30/dht11 任选",
+              "suitable": "环境温湿度采集/恒温恒湿监测/低功耗电池供电环境机",
+              "recommended": false,
+              "lib_modules": [
+                "sht20"
+              ]
+            },
+            {
+              "name": "JY61P 六轴姿态传感器（角度输出）",
+              "interface": "I2C（软 I2C 占 2 GPIO，不必硬件外设；页面 IIC 例程）",
+              "price": "￥30-60/个",
+              "note": "库内 jy61p 已打通（mspm0：jy61p_init 器件初始化序列（Z 轴/角度归零，各步 200ms）+ jy61p_read_angles 出 roll/pitch/yaw（°，±180°，raw/32768×180 页面换算）+ jy61p_read_raw 原始数据可选，默认 PA28/PA31——同选时经引脚绑定消解）；**器件内卡尔曼融合直接出角度**（200Hz 回传、5V 供电、I2C 地址 0x50）；与库内 ml_mpu6050（硬 I2C 原始数据，需主控融合）/imu_uart（UART 601 帧原始数据）分工：取用姿态角场景首选本件，原始数据/融合算法学习用后两者",
+              "suitable": "平衡车俯仰/云台角度/姿态预警/倾斜报警",
+              "recommended": false,
+              "lib_modules": [
+                "jy61p"
+              ]
+            },
+            {
+              "name": "MPU6050 六轴姿态模块（GY-521）",
+              "interface": "I2C（库内走硬件 I2C 总线）",
+              "price": "￥8-20/个",
+              "note": "库内 ml_mpu6050 已打通（双平台：MPU6050 的 I2C 通用驱动，读加速度/角速度原始数据）；器件内部只有原始数据，姿态角需主控自己做互补滤波/卡尔曼融合；与 jy61p（器件内融合直接出角度）/imu_uart（UART 601 帧）分工：练融合算法用本件，要现成角度用 jy61p",
+              "suitable": "姿态解算学习/平衡车/倾角检测/运动状态判定",
+              "recommended": false,
+              "lib_modules": [
+                "ml_mpu6050"
+              ]
+            },
+            {
+              "name": "独立轻触按键模块（带上拉）",
+              "interface": "GPIO 输入（上拉低电平按下，可多路独立）",
+              "price": "￥0.5-3/个",
+              "note": "库内 key 已打通（双平台：get_key_state(channel) 按通道读取；多实例模块——多路独立按键，内置变体 start/stop/mode 等；板载启动键同模块）",
+              "suitable": "启动/停止/模式切换/参数调整",
+              "recommended": false,
+              "lib_modules": [
+                "key"
+              ]
+            },
+            {
+              "name": "MQ-2 烟雾/可燃气体传感器",
+              "interface": "ADC 模拟量（AO 输出，DO 数字量阈值可选）",
+              "price": "￥5-15/个",
+              "note": "库内 mq2 已打通（mspm0：mq2_init + mq2_read_percent 出 0-100% 相对浓度，与 adc 模块共享 ADC12_0 MEM0、默认 PA24——同选时经引脚绑定消解）；**读数是相对值非 ppm 精标**（MQ 系随加热/环境/老化漂移，真实 ppm 需标准气体标定）；模块上电必须预热（几分钟级）否则输出不准；DO 阈值由模块可调电阻控制（库内未声明 DO 角色，需要时经 GPIO 输入自读）；对液化气/天然气/城市煤气/烟雾灵敏；5V 供电",
+              "suitable": "烟雾/可燃气体检测/气体浓度报警/厨房仓库环境监测",
+              "recommended": false,
+              "lib_modules": [
+                "mq2"
+              ]
+            },
+            {
+              "name": "MQ-135 空气质量传感器",
+              "interface": "ADC 模拟量（AO 输出，DO 数字量阈值可选）",
+              "price": "￥5-15/个",
+              "note": "库内 mq135 已打通（mspm0：mq135_init + mq135_read_percent 出 0-100% 相对浓度，**独立 ADC12_0 MEM4 通道、默认 PB20**（与 mq2 的 MEM0 薄封装不同——多路气体同选时物理通道独立、无共读冲突，mq2+mq135 同选默认即不撞），同选时经引脚绑定消解）；**读数是相对值非 ppm 精标**（MQ 系随加热/环境/老化漂移，真实 ppm 需标准气体标定）；模块上电必须预热（几分钟级）否则输出不准；DO 阈值由模块可调电阻控制（库内未声明 DO 角色，需要时经 GPIO 输入自读）；对氨气/硫化物/苯系/烟雾灵敏；与 MQ-2 分工：MQ-2 偏油烟/燃气、MQ-135 偏空气质量（苯系/氨/烟雾）",
+              "suitable": "空气质量检测/有害气体报警/通风联动/环境监测",
+              "recommended": false,
+              "lib_modules": [
+                "mq135"
+              ]
+            },
+            {
+              "name": "MQ-5 液化气/天然气传感器",
+              "interface": "ADC 模拟量（AO 输出，DO 数字量阈值可选）",
+              "price": "￥5-15/个",
+              "note": "库内 mq5 已打通（mspm0：mq5_init + mq5_read_percent 出 0-100% 相对浓度，**独立 ADC12_0 MEM5 通道、默认 PB24**（与 mq2 的 MEM0 薄封装不同——多路气体同选时物理通道独立、无共读冲突，与 MQ-2/MQ-135 同选默认即不撞），同选时经引脚绑定消解）；**读数是相对值非 ppm 精标**（MQ 系随加热/环境/老化漂移，真实 ppm 需标准气体标定）；模块上电必须预热（几分钟级）否则输出不准；DO 阈值由模块可调电阻控制（库内未声明 DO 角色，需要时经 GPIO 输入自读）；对丁烷/丙烷/甲烷/天然气（液化气）灵敏；与 MQ-2 分工：MQ-5 偏烷烃类可燃气体、MQ-2 偏油烟/烟雾+烷烃并存",
+              "suitable": "液化气/天然气泄漏检测/可燃气体浓度报警/燃气安全监测",
+              "recommended": false,
+              "lib_modules": [
+                "mq5"
+              ]
+            },
+            {
+              "name": "MQ-3 酒精/汽油蒸汽传感器",
+              "interface": "ADC 模拟量（AO 输出，DO 数字量阈值可选）",
+              "price": "￥5-15/个",
+              "note": "库内 mq3 已打通（mspm0：mq3_init + mq3_read_percent 出 0-100% 相对浓度——**正向映射**（浓度越高 ADC 值越高），与 adc 模块共享 ADC12_0 MEM0、默认 PA24——同选时经引脚绑定消解；**多路气体同选共读 MEM0 物理通道限制**：每路只能接一个器件到 PA24）；**读数是相对值非 ppm 精标**（MQ 系随加热/环境（湿度）/老化漂移，真实 ppm 需标准气体标定）；模块上电必须预热 3-5 分钟否则输出不准；DO 阈值由模块可调电阻控制（库内未声明 DO 角色，需要时经 GPIO 输入自读）；对酒精/汽油蒸汽灵敏（抗汽油/烟雾/水蒸气干扰）；3.3-5V 供电",
+              "suitable": "酒精/汽油蒸汽检测/酒驾呼气检测/酒精浓度报警/化工环境监测",
+              "recommended": false,
+              "lib_modules": [
+                "mq3"
+              ]
+            },
+            {
+              "name": "MQ-4 甲烷/天然气传感器",
+              "interface": "ADC 模拟量（AO 输出，DO 数字量阈值可选）",
+              "price": "￥5-15/个",
+              "note": "库内 mq4 已打通（mspm0：mq4_init + mq4_read_percent 出 0-100% 相对浓度——**正向映射**（浓度越高 ADC 值越高），与 adc 模块共享 ADC12_0 MEM0、默认 PA24——同选时经引脚绑定消解；**多路气体同选共读 MEM0 物理通道限制**：每路只能接一个器件到 PA24）；**读数是相对值非 ppm 精标**（MQ 系随加热/环境（湿度）/老化漂移，真实 ppm 需标准气体标定）；模块上电必须预热 3-5 分钟否则输出不准；DO 阈值由模块可调电阻控制（库内未声明 DO 角色，需要时经 GPIO 输入自读）；对甲烷/天然气灵敏（对丙烷/丁烷较好）；3.3-5V 供电",
+              "suitable": "甲烷/天然气泄漏检测/燃气安全监测/可燃气体浓度报警",
+              "recommended": false,
+              "lib_modules": [
+                "mq4"
+              ]
+            },
+            {
+              "name": "MQ-6 液化气/丙烷传感器",
+              "interface": "ADC 模拟量（AO 输出，DO 数字量阈值可选）",
+              "price": "￥5-15/个",
+              "note": "库内 mq6 已打通（mspm0：mq6_init + mq6_read_percent 出 0-100% 相对浓度——**正向映射**（浓度越高 ADC 值越高），与 adc 模块共享 ADC12_0 MEM0、默认 PA24——同选时经引脚绑定消解；**多路气体同选共读 MEM0 物理通道限制**：每路只能接一个器件到 PA24）；**读数是相对值非 ppm 精标**（MQ 系随加热/环境（湿度）/老化漂移，真实 ppm 需标准气体标定）；模块上电必须预热 3-5 分钟否则输出不准；DO 阈值由模块可调电阻控制（库内未声明 DO 角色，需要时经 GPIO 输入自读）；对液化气（丙烷）/丁烷/甲烷灵敏；3.3-5V 供电",
+              "suitable": "液化气/丙烷泄漏检测/燃气安全监测/可燃气体浓度报警",
+              "recommended": false,
+              "lib_modules": [
+                "mq6"
+              ]
+            },
+            {
+              "name": "MQ-7 一氧化碳传感器",
+              "interface": "ADC 模拟量（AO 输出，DO 数字量阈值可选）",
+              "price": "￥5-15/个",
+              "note": "库内 mq7 已打通（mspm0：mq7_init + mq7_read_percent 出 0-100% 相对浓度——**正向映射**（浓度越高 ADC 值越高），与 adc 模块共享 ADC12_0 MEM0、默认 PA24——同选时经引脚绑定消解；**多路气体同选共读 MEM0 物理通道限制**：每路只能接一个器件到 PA24）；**读数是相对值非 ppm 精标**（MQ 系随加热/环境（湿度）/老化漂移，真实 ppm 需标准气体标定）；模块上电必须预热 3-5 分钟否则输出不准；DO 阈值由模块可调电阻控制（库内未声明 DO 角色，需要时经 GPIO 输入自读）；器件高低温循环检测（页面驱动仅单 AO——双通道区分需模块级温控/标定）；对一氧化碳灵敏；3.3-5V 供电",
+              "suitable": "一氧化碳检测/CO 报警/燃气不完全燃烧监测/地下车库通风联动",
+              "recommended": false,
+              "lib_modules": [
+                "mq7"
+              ]
+            },
+            {
+              "name": "MQ-8 氢气传感器",
+              "interface": "ADC 模拟量（AO 输出，DO 数字量阈值可选）",
+              "price": "￥5-15/个",
+              "note": "库内 mq8 已打通（mspm0：mq8_init + mq8_read_percent 出 0-100% 相对浓度——**正向映射**（浓度越高 ADC 值越高），与 adc 模块共享 ADC12_0 MEM0、默认 PA24——同选时经引脚绑定消解；**多路气体同选共读 MEM0 物理通道限制**：每路只能接一个器件到 PA24）；**读数是相对值非 ppm 精标**（MQ 系随加热/环境（湿度）/老化漂移，真实 ppm 需标准气体标定）；模块上电必须预热 3-5 分钟否则输出不准；DO 阈值由模块可调电阻控制（库内未声明 DO 角色，需要时经 GPIO 输入自读）；对氢气灵敏；3.3-5V 供电",
+              "suitable": "氢气检测/氢能源安全监测/氢气泄漏报警",
+              "recommended": false,
+              "lib_modules": [
+                "mq8"
+              ]
+            },
+            {
+              "name": "MQ-9 一氧化碳/可燃气体传感器",
+              "interface": "ADC 模拟量（AO 输出，DO 数字量阈值可选）",
+              "price": "￥5-15/个",
+              "note": "库内 mq9 已打通（mspm0：mq9_init + mq9_read_percent 出 0-100% 相对浓度——**正向映射**（浓度越高 ADC 值越高），与 adc 模块共享 ADC12_0 MEM0、默认 PA24——同选时经引脚绑定消解；**多路气体同选共读 MEM0 物理通道限制**：每路只能接一个器件到 PA24）；**读数是相对值非 ppm 精标**（MQ 系随加热/环境（湿度）/老化漂移，真实 ppm 需标准气体标定）；模块上电必须预热 3-5 分钟否则输出不准；DO 阈值由模块可调电阻控制（库内未声明 DO 角色，需要时经 GPIO 输入自读）；器件双温循环（低温 CO/高温可燃气）——页面驱动仅单 AO、4Pin 模块无加热控制脚，双通道区分需模块级温控/标定；与 mq7（CO 专一）/mq6（可燃气专一）分工；3.3-5V 供电",
+              "suitable": "一氧化碳/可燃气体检测/燃气与 CO 报警/地下车库与厨房安全监测",
+              "recommended": false,
+              "lib_modules": [
+                "mq9"
+              ]
+            },
+            {
+              "name": "MS1100 VOC 气体传感器（甲醛/苯系）",
+              "interface": "ADC 模拟量（AOUT 输出，DOUT 数字量阈值可选）",
+              "price": "￥5-15/个",
+              "note": "库内 ms1100 已打通（mspm0：ms1100_init + ms1100_read_percent 出 0-100% 相对浓度——read_percent 由页面 demo 电压式推导（value/4095×3.3 → percent=value/4095×100，Vref 3.3V 归一；**正向映射**：浓度越高 AOUT 电压越高），与 adc 模块共享 ADC12_0 MEM0、默认 PA24——同选时经引脚绑定消解；**多路气体同选共读 MEM0 物理通道限制**：每路只能接一个器件到 PA24）；**读数是相对值非 ppm 精标**（页面未给电压-浓度换算表，真实浓度需标定）；**上电预热 3-5 分钟**（页面原文）再测量；DOUT 阈值由模块可调电阻控制（库内未声明 DO 角色，需要时经 GPIO 输入自读）；对甲醛/甲苯/苯等 VOC 灵敏（半导体型）；5V 供电；与 sgp30/ags10（ppb/ppm 数字量）分工：要数字绝对量用后两者、只要相对报警/低成本用本件",
+              "suitable": "VOC/甲醛/苯系检测/室内空气质量监测/通风净化联动",
+              "recommended": false,
+              "lib_modules": [
+                "ms1100"
+              ]
+            },
+            {
+              "name": "SGP30 空气质量传感器（TVOC/CO2e）",
+              "interface": "I2C（软 I2C 占 2 GPIO，不必硬件外设；数字量输出）",
+              "price": "￥15-30/个",
+              "note": "库内 sgp30 已打通（mspm0：sgp30_init 发 0x2003 初始化空气特征基准 + sgp30_read 出 TVOC（ppb）与 CO2 当量（ppm），软 I2C 默认 PA18/PB9——同选时经引脚绑定消解）；数字量免标定（相对 MQ 系模拟量，读数是 ppb/ppm 级绝对量）；**上电需 15s 左右预热**（预热期 CO2=400ppm、TVOC=0ppb 恒定，读到 TVOC≠0 且 CO2≠400 才算就绪）；采样周期 ≥1s；带 CRC8 校验（数据手册要求）；主要面向甲醛/室内空气质量；与 AGS10（单 TVOC ppb、预热 ≥120s、采样周期 ≥2s）分工：本件多 CO2e 一路、预热快；与 MQ 系（相对值、需标定）分工：要 ppb/ppm 读数用本件、只要相对报警用 MQ",
+              "suitable": "室内空气质量检测/甲醛 TVOC 监测/CO2 浓度联动通风/环境监测",
+              "recommended": false,
+              "lib_modules": [
+                "sgp30"
+              ]
+            },
+            {
+              "name": "AGS10 有害气体传感器（TVOC）",
+              "interface": "I2C（软 I2C 占 2 GPIO，不必硬件外设；数字量输出）",
+              "price": "￥15-30/个",
+              "note": "库内 ags10 已打通（mspm0：ags10_init 空实现占位 + ags10_read 出 TVOC（ppb），软 I2C 默认 PB18/PA14——同选时经引脚绑定消解）；数字量免标定；0-99999ppb 量程、25℃/50%RH 典型精度 25% 读数；**预热 ≥120s、采样周期 ≥2s**；带 CRC8 校验（页面原式 0xFF/0x31）；页面规格注 I2C ≤15kHz（页面代码时序 ~100kHz，真机异常时调慢时序宏）；与 SGP30（TVOC+CO2e、预热 15s）分工：只要 TVOC 且想更省用本件、要 CO2e / 快速预热用 SGP30；与 MQ 系（相对值、需标定）分工：要 ppb 读数用本件、只要相对报警用 MQ",
+              "suitable": "有害气体 TVOC 检测/空气污染监测/空气质量报警/净化通风联动",
+              "recommended": false,
+              "lib_modules": [
+                "ags10"
+              ]
+            },
+            {
+              "name": "TTP224 4 路电容触摸按键",
+              "interface": "GPIO 数字量（4 路 OUT，上拉输入）",
+              "price": "￥5-15/个",
+              "note": "库内 ttp224 已打通（mspm0：ttp224_init + ttp224_read(ch)（1-4）单键 1=触摸 + ttp224_read_all 返回 4 位掩码（支持多点），默认 OUT1-4=PA22/PA25/PA26/PA27——同选时经引脚绑定消解）；电容式可隔塑料/玻璃触摸、免机械按键寿命长、2.4-5.5V 宽压、微安级功耗；页面按「高电平=触摸」（TTP224N 实物常为低有效——遇反相改 TTP224_TOUCH_LEVEL 宏为 0 即可）；最短响应 ~100ms，按键场合按电平直读无去抖（骨架侧按需加滤波）",
+              "suitable": "触摸按键面板/菜单选择/触摸开关控制/隐身桌面按键",
+              "recommended": false,
+              "lib_modules": [
+                "ttp224"
+              ]
+            },
+            {
+              "name": "EC11 旋转编码器（带按键旋钮）",
+              "interface": "GPIO A/B 相 + SW 按键（轮询判向，不占 EXTI/TIMER）",
+              "price": "￥3-10/个",
+              "note": "库内 ec11 已打通（**stm32 纯驱动——B 类仅 stm32 条目，mspm0 缺（选 mspm0 平台报 missing 警告），同选时经引脚绑定消解**：ec11_init + ec11_get_delta 出旋转净增量（正=顺时针/负=逆时针，清零式——题目常用「旋转 N 格」）+ ec11_read_sw（1=按下/0=松开）；**轮询 A 相跳变采样 B 相判向**——不注册 EXTI（避开异口同线门禁）、不占 TIMER（TIM2/3/4 被 PWM/骨架调度占用）——与电机光电编码器（EXTI 计数）分工：本件人机旋钮输入、后者电机闭环；防抖归调用方节拍（驱动零阻塞）；默认 PA4/PB5/PB0——与微波雷达/称重/编码器闭环不同框、同选概率最低）",
+              "suitable": "旋钮参数调节/菜单选择/增量计数/人机交互输入",
+              "recommended": false,
+              "lib_modules": [
+                "ec11"
+              ]
+            },
+            {
+              "name": "4×4 矩阵键盘",
+              "interface": "GPIO 4 行输出 + 4 列输入（逐行拉低扫列）",
+              "price": "￥3-10/套",
+              "note": "库内 key_matrix 已打通（**stm32 纯驱动——B 类仅 stm32 条目，mspm0 缺（选 mspm0 平台报 missing 警告），同选时经引脚绑定消解**：key_matrix_init + key_matrix_scan 出键值 0-16（0=无键、1-16 行主序——页面原式 i×4+j+1）；行列扫描逐行拉低扫列（低有效 + 列上拉）；**防抖/连按/释放语义归调用方节拍**（驱动零阻塞——纯 GPIO 快扫）；默认 ROW1-4=PB12/13/14/15 + COL1-4=PA9/PA10/PB10/PB11——8 脚宏族逐脚宏；与 TTP224 触摸 4 键互替（机械×触摸不同框）、与 KEY 独立按键分工（矩阵键盘按键多/独立按键简单）；骨架侧按需加 10-20ms 采样防抖",
+              "suitable": "多键矩阵输入/键盘面板/菜单选择/密码输入",
+              "recommended": false,
+              "lib_modules": [
+                "key_matrix"
+              ]
+            },
+            {
+              "name": "BH1750 光照度传感器",
+              "interface": "I2C（软 I2C 占 2 GPIO，不必硬件外设）",
+              "price": "￥3-8/个",
+              "note": "库内 bh1750 已打通（mspm0：bh1750_init 上电 + start_measure 启动连续高分辨率 + read_lux 出 lx，默认 PA12/PA13——同选时经引脚绑定消解）；0-65535 lx、1 lx 分辨率、测量 ~120ms（调用方按 BH1750_MEASURE_DELAY_MS 等待）；模块板自带上拉；台灯调光/农业补光监测/环境光照采集",
+              "suitable": "环境光照度采集/光照控制与显示/自动调光",
+              "recommended": false,
+              "lib_modules": [
+                "bh1750"
+              ]
+            },
+            {
+              "name": "火焰传感器（红外）",
+              "interface": "ADC 模拟量（AO 输出，DO 数字量阈值可选）",
+              "price": "￥3-10/个",
+              "note": "库内 flame 已打通（mspm0：flame_init + flame_read_percent 出 0-100% 火焰强度（**反向映射**——红外光越强 ADC 值越小、百分比越高），**独立 ADC12_0 MEM6 通道、默认 PA22**——同选时经引脚绑定消解）；探测 700-1000nm 红外（灵敏度峰值 880nm、角度 60°、距离 ~1m）；读数是相对强度非绝对值（受环境红外/器件差异影响）；DO 阈值由模块可调电阻控制（库内未声明 DO 角色，需要时经 GPIO 输入自读）；红外火焰亦受日光/热源干扰，室内/遮光使用更稳",
+              "suitable": "火源探测/火警报警联动/灭火机器人/燃烧检测",
+              "recommended": false,
+              "lib_modules": [
+                "flame"
+              ]
+            },
+            {
+              "name": "土壤湿度传感器",
+              "interface": "ADC 模拟量（AO 输出，DO 数字量阈值可选）",
+              "price": "￥3-10/个",
+              "note": "库内 soil 已打通（mspm0：soil_init + soil_read_percent 出 0-100% 土壤湿度（**正向映射**——水分越足 ADC 值越大、百分比越高），**独立 ADC12_0 MEM7 通道、默认 PA14**——同选时经引脚绑定消解；**MEM 槽位已满（8/8）**，后续 ADC 类件一律薄封装共读 MEM0）；读数是相对湿度非绝对值（与土壤类型/压实度有关）；DO 阈值由板载蓝色电位器控制（库内未声明 DO 角色，需要时经 GPIO 输入自读）；叉子插土测电导、表面镀镍不易锈、3.3-5V 供电",
+              "suitable": "自动浇花/土壤湿度监测/智慧农业大棚/灌溉联动",
+              "recommended": false,
+              "lib_modules": [
+                "soil"
+              ]
+            },
+            {
+              "name": "人体红外传感器（HC-SR501）",
+              "interface": "GPIO 数字量（1 路上拉输入，热释电被动式）",
+              "price": "￥3-10/个",
+              "note": "库内 human_ir 已打通（mspm0：human_ir_init + human_ir_read 返回 1=感应到人体/0=未感应到——按模块介绍「感应到=输出高」（页面函数注释 0=感应到 与模块介绍矛盾已修正），极性不匹配改 HUMAN_IR_TRIGGER_LEVEL 宏一处即可），默认 PB8——同选时经引脚绑定消解；热释电被动式只感应**移动**人体（正对接近不灵敏、双元方向与人体活动方向平行），上电 ~1 分钟初始化（期间勿判定）；感应灯/防盗报警惯配温湿度/光照/显示/蜂鸣——组合时留意默认脚重叠；与微波雷达组合双判据更稳（微波不受温度影响、只对移动敏感）",
+              "suitable": "人来灯亮感应/防盗报警联动/感应门迎宾/人流量检测",
+              "recommended": false,
+              "lib_modules": [
+                "human_ir"
+              ]
+            },
+            {
+              "name": "微波雷达传感器（HB100）",
+              "interface": "GPIO 数字量（1 路上拉输入，多普勒主动式）",
+              "price": "￥10-25/个",
+              "note": "库内 microwave_radar 已打通（mspm0：microwave_radar_init + microwave_radar_read 返回 1=检测到移动/0=无移动——按页面「检测到=输出低」（页面注释+演示自一致），极性不匹配改 MICROWAVE_TRIGGER_LEVEL 宏一处即可），默认 PA31——同选时经引脚绑定消解（注意 PA0/PA1 不能作 GPIO 输入——SysConfig CLI 实测）；多普勒主动式检测**任何运动物体**（不限人体、不受温度影响、探测 2-16m 连续可调、5V 供电）；对静止人体不敏感；页面推荐与人体红外组合双判据（微波+热释电判断是否有人经过，默认脚 PB8/PA31 不撞）；自动门/车流场景常配电机/显示——组合时留意默认脚重叠",
+              "suitable": "自动门感应/车流检测/倒车雷达/移动感应报警",
+              "recommended": false,
+              "lib_modules": [
+                "microwave_radar"
+              ]
+            },
+            {
+              "name": "光敏电阻传感器（光控调光）",
+              "interface": "ADC 模拟量（AO 输出，DO 数字量阈值可选）",
+              "price": "￥1-5/个",
+              "note": "库内 photoresistance 已打通（mspm0：photoresistance_init + photoresistance_read_percent 出 0-100% 亮度百分比——**反向映射**（100=最亮 0=最暗，页面原式），与 adc 模块共享 ADC12_0 MEM0、默认 PA24——同选时经引脚绑定消解）；廉价模拟件（5516 光敏电阻 + LM393 板、3.3-5V/1mA）；读数**非线性**（阻值-照度对数关系 + 分压输出），lx 级精度需标准照度源标定——只要相对光强判断就用、要 lx 绝对量用 BH1750；DO 阈值由板载电位器控制（库内未声明 DO 角色）",
+              "suitable": "光控灯/自动调光/光强阈值报警/光暗感应",
+              "recommended": false,
+              "lib_modules": [
+                "photoresistance"
+              ]
+            },
+            {
+              "name": "雨滴传感器（雨量检测）",
+              "interface": "ADC 模拟量（AO 输出，DO 数字量阈值可选）",
+              "price": "￥3-10/个",
+              "note": "库内 rain 已打通（mspm0：rain_init + rain_read_percent 出 0-100% 雨量百分比——**正向映射**（雨越大百分比越高；页面原式与页面正文「雨水越大→ADC 值越大」矛盾——照原式雨越大百分比反而越低，已按正文取证修正为正向），与 adc 模块共享 ADC12_0 MEM0、默认 PA24——同选时经引脚绑定消解）；读数**非线性/受干净度影响**（雨滴板脏污/氧化/放置方式改变基线电阻——相对值非精标，页面原话「降雨量多少毫米需实体测量」）；DO 阈值由板载电位器控制（库内未声明 DO 角色）",
+              "suitable": "雨感雨刷/晾衣架/车窗雨感/降雨报警",
+              "recommended": false,
+              "lib_modules": [
+                "rain"
+              ]
+            },
+            {
+              "name": "GP2Y1014AU 粉尘传感器（PM2.5）",
+              "interface": "ADC 模拟量（AOUT）+ GPIO 输出驱动内置红外 LED（需时序脉冲）",
+              "price": "￥15-30/个",
+              "note": "库内 gp2y1014au 已打通（mspm0：gp2y1014_init + gp2y1014_read_dust 出浓度估算值——页面原式 0.17×value−0.1 + 10 点滑动平均内嵌 + LED 280us/40us/9680us 脉冲时序；ADC 共享 MEM0（默认 PA24）+ LED 驱动 GPIO 输出（默认 PA1）——同选时经引脚绑定消解）；工作 5-7V/最大 20mA、最小粒子检出 0.8um、灵敏度 0.5V/(0.1mg/m³)、清洁空气 ~0.9V；**读数为相对估算非精标**（页面公式对演示值/ADC 量程标定不明确；红外漫反射对烟尘/水汽同样响应——烟/尘区分不能；需标准粉尘标定）；采样周期 10ms（读一次 ~ms 级、连续读勿快于周期）",
+              "suitable": "PM2.5/粉尘浓度监测/空气净化联动/扬尘报警",
+              "recommended": false,
+              "lib_modules": [
+                "gp2y1014au"
+              ]
+            },
+            {
+              "name": "S12SD 紫外线传感器（UV 指数）",
+              "interface": "ADC 模拟量（SIG 放大电压输出，3 Pin）",
+              "price": "￥10-30/个",
+              "note": "库内 s12sd 已打通（mspm0：s12sd_init + s12sd_read_uv_index 出 0-11 级 UV 指数（页面阈值表原式），与 adc 模块共享 ADC12_0 MEM0、默认 PA24——同选时经引脚绑定消解）；检测波长 240-370nm（**UV-A 波段**——UV-B/UV-C 不响应）、测量角度 130°、温漂 0.08%/℃、工作 2.7-5V/1mA、板载 LM358 放大 1% 精度元件；档位表按页面标定（页面实测室内 0 级）——户外强日光/遮挡/器件个体差异会偏移，按相对档位用",
+              "suitable": "紫外线强度/UV 指数检测/防晒提醒/户外环境监测",
+              "recommended": false,
+              "lib_modules": [
+                "s12sd"
+              ]
+            },
+            {
+              "name": "ADS1115 四通道 ADC（I2C 外扩 16bit）",
+              "interface": "I2C（软 I2C 占 2 GPIO，不必硬件外设；4 路 16bit）",
+              "price": "￥5-15/个",
+              "note": "库内 ads1115 已打通（mspm0：ads1115_init + read(ch) 出 16bit 原始值 + read_voltage(ch) 出电压 + set_gain/set_data_rate/set_address，默认 PA16/PA17——同选时经引脚绑定消解）；MUX 任选 AIN0-3 单端（或差分）、PGA ±256mV~±6.144V 六档、8~860SPS；与板载 adc 分工：板载 adc 单通道（默认 PA24，us016 共享），多路模拟量/分离供电用本件；比较器/ALERT 未用；模块板自带上拉",
+              "suitable": "多路模拟量采集/称重与电压监测/多传感器分离供电",
+              "recommended": false,
+              "lib_modules": [
+                "ads1115"
+              ]
+            },
+            {
+              "name": "TCS34725 颜色识别传感器（RGB）",
+              "interface": "I2C（软 I2C 占 2 GPIO，不必硬件外设）",
+              "price": "￥8-20/个",
+              "note": "库内 tcs34725 已打通（mspm0：tcs34725_init 判 ID（0x44/0x4D）+ read_rgb 出 RGBC 16bit（C/R/G/B）+ rgb_to_hsl 出 HSL + set_gain/set_integration_time（2.4ms-700ms/1X-60X），默认 PA23/PA24——同选时经引脚绑定消解）；红外阻挡滤光片（环境光直射干扰小）；识别前需避光/固定照度标定；颜色识别与 K230 视觉互替——按识别精度/并发需求选",
+              "suitable": "颜色识别/物料色块分拣/RGB 环境光检测/色温调节",
+              "recommended": false,
+              "lib_modules": [
+                "tcs34725"
+              ]
+            },
+            {
+              "name": "MLX90614 非接触红外测温（GY-906）",
+              "interface": "I2C/SMBus（软 I2C 占 2 GPIO，不必硬件外设）",
+              "price": "￥15-35/个",
+              "note": "库内 mlx90614 已打通（mspm0：mlx90614_read_object_temp 出目标温度℃ + read_ambient_temp 出环境温度℃（RAW×0.02−273.15，0.01℃ 级，页面 0.02 系数），默认 PA9/PA8——同选时经引脚绑定消解）；测温分辨率 0.02K 级、±0.5℃ 典型误差；视场角/被测面距离影响读数（被测面罩住视野中心）；人脸测温需辐射率校准/环境温度补偿；与 MLX90640 阵列区分（本件单点）",
+              "suitable": "非接触体温/物温测量/恒温监测/热源定位",
+              "recommended": false,
+              "lib_modules": [
+                "mlx90614"
+              ]
+            },
+            {
+              "name": "BMP180 气压/海拔传感器（GY-68，BOSCH 老款——BMP280/BME280 换代）",
+              "interface": "I2C（软 I2C 占 2 GPIO，不必硬件外设）",
+              "price": "￥8-20/个",
+              "note": "库内 bmp180 已打通（mspm0：bmp180_init 读 11 项出厂校准系数 + bmp180_read 出温度℃/气压 Pa + bmp180_read_altitude 出海拔 m（44330 公式），软 I2C 默认 PA23/PA24——同选时经引脚绑定消解）；BOSCH BMP085 换代老件（**已停产**——换代替代 BMP280/BME280），温压精度 ±1hPa/±1℃（BMP280 ±0.25hPa 级）；气压/海拔检测可用（海拔差检测/爬楼计层/气压监测/气象采集），**控制题定高闭环精度要求高选 ms5611**（±1.5mbar/0.1m 级、二次补偿、长期稳定——无人机定高首选）；与 ms5611 互替、默认脚错开（bmp180 PA23/PA24 × ms5611 PA28/PA31），同选无冲突",
+              "suitable": "海拔差检测/爬楼计层/气压监测/气象采集",
+              "recommended": false,
+              "lib_modules": [
+                "bmp180"
+              ]
+            },
+            {
+              "name": "MS5611 高精度气压传感器（GY-63，无人机定高/气象）",
+              "interface": "I2C（软 I2C 占 2 GPIO，不必硬件外设）",
+              "price": "￥15-40/个",
+              "note": "库内 ms5611 已打通（mspm0：ms5611_init 复位+校准 PROM 读取 + ms5611_read 出温度℃（0.01℃ 分辨率）/气压 Pa + ms5611_read_altitude 出海拔 m（与 bmp180 共用 44330 公式），软 I2C 默认 PA28/PA31——同选时经引脚绑定消解）；MS5611-01BA03 高精度件（±1.5mbar/0.1m 级、二次补偿、长期稳定、10-1200mbar、工作 1.8-3.6V/0.25-23uA）；**无人机定高/飞行器定高/计层高精度场景首选**；与 bmp180（低价 ±1hPa ≈ ±8.4m 理论、BMP280/BME280 换代老件）互替——海拔差检测/气压监测/低成本件选 bmp180；两件默认脚错开（PA28/PA31 × PA23/PA24）、同选无冲突",
+              "suitable": "无人机定高/飞行器定高/海拔差检测/气象气压采集",
+              "recommended": false,
+              "lib_modules": [
+                "ms5611"
+              ]
+            },
+            {
+              "name": "磁力计指南针（QMC5883L）",
+              "interface": "I2C（QMC/IST 系列同寄存器族）",
+              "price": "￥5-15/个",
+              "note": "出 2D 航向角；需椭球标定与磁偏角校正；库内 imu_uart/MPU6050 可作信息融合",
+              "suitable": "航向保持/无 GPS 场的朝向判定",
+              "recommended": true,
+              "lib_modules": []
+            },
+            {
+              "name": "磁力计指南针（HMC5883L）",
+              "interface": "I2C",
+              "price": "￥8-20/个",
+              "note": "经典型号、例程最多；已停产抖货多，注意区分翻新",
+              "suitable": "航向保持/依赖旧例程的项目",
+              "recommended": false,
+              "lib_modules": []
+            },
+            {
+              "name": "磁力计指南针（IST8310）",
+              "interface": "I2C 或 SPI",
+              "price": "￥15-40/个",
+              "note": "常与 BMI160/MPU9250 底座搭配；低噪声，需配套驱动库",
+              "suitable": "高精度姿态/飞控系扩展",
+              "recommended": false,
+              "lib_modules": []
+            }
+          ],
+          "selected": "红外对管循迹数组（低价替代）"
+        }
+      ]
+    },
+    {
+      "requirement": "两车跟随保持20cm间距",
+      "sentence": 20,
+      "modules": [
+        "uwb_uart",
+        "filter"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "两车之间通信指挥",
+      "sentence": 98,
+      "modules": [
+        "nrf24l01"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "领头车启动按键",
+      "sentence": 98,
+      "modules": [
+        "key"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "领头车设置按键",
+      "sentence": 98,
+      "modules": [
+        "key"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "跟随车仅上电开关",
+      "sentence": 99,
+      "modules": [],
+      "suggestions": []
+    },
+    {
+      "requirement": "无车外遥控与其他通信辅助",
+      "sentence": 105,
+      "modules": [],
+      "suggestions": []
+    }
+  ],
+  "score_points": [
+    {
+      "id": "1",
+      "part": "basic",
+      "description": "速度0.3m/s沿外圈一圈，平均速度误差≤10%，跟随不碰撞，停车时间差≤1s、间距20cm误差≤6cm",
+      "score": 20.0,
+      "sentence_refs": [
+        17,
+        18,
+        19,
+        20,
+        21,
+        22
+      ]
+    },
+    {
+      "id": "2",
+      "part": "development",
+      "description": "速度0.5m/s沿外圈两圈，快速追上并按20cm跟随，停车时间差≤1s、间距误差≤6cm",
+      "score": 20.0,
+      "sentence_refs": [
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31
+      ]
+    },
+    {
+      "id": "3",
+      "part": "development",
+      "description": "三圈行驶含两次内外圈超车，不碰撞，停车时间差≤1s、间距误差≤6cm，速度≥0.3m/s且越快越好",
+      "score": 30.0,
+      "sentence_refs": [
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        41,
+        42,
+        43,
+        44,
+        45
+      ]
+    },
+    {
+      "id": "4",
+      "part": "development",
+      "description": "速度1m/s外圈一圈，遇等停指示停车位置误差≤5cm、停5s误差≤1s，不碰撞",
+      "score": 20.0,
+      "sentence_refs": [
+        46,
+        48,
+        49,
+        50,
+        52,
+        53,
+        54
+      ]
+    },
+    {
+      "id": "5",
+      "part": "unknown",
+      "description": "其他",
+      "score": 10.0,
+      "sentence_refs": [
+        55
+      ]
+    },
+    {
+      "id": "6",
+      "part": "unknown",
+      "description": "设计报告",
+      "score": 20.0,
+      "sentence_refs": [
+        57
+      ]
+    }
+  ],
+  "instances": {
+    "led": [
+      {
+        "name": "内圈指示",
+        "variant": "green",
+        "pin": ""
+      }
+    ],
+    "key": [
+      {
+        "name": "启动",
+        "variant": "start",
+        "pin": ""
+      },
+      {
+        "name": "设置",
+        "variant": "set",
+        "pin": ""
+      }
+    ]
+  },
+  "topic_id": "2022C",
+  "references": []
+}

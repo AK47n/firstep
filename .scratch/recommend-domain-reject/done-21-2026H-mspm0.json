@@ -1,0 +1,455 @@
+{
+  "modules": [
+    {
+      "slug": "key",
+      "reason": "按键启动计时"
+    },
+    {
+      "slug": "ntb_time",
+      "reason": "毫秒计时"
+    },
+    {
+      "slug": "oled",
+      "reason": "显示时间"
+    },
+    {
+      "slug": "huidu",
+      "reason": "红外光电循迹"
+    },
+    {
+      "slug": "motor",
+      "reason": "轮式驱动"
+    },
+    {
+      "slug": "servo",
+      "reason": "摆杆角度控制"
+    },
+    {
+      "slug": "coord_detect",
+      "reason": "摄像头钢球位置解析"
+    }
+  ],
+  "requirements": [
+    {
+      "requirement": "摆球位置图传实时显示与视频记录回放",
+      "sentence": 23,
+      "modules": [],
+      "suggestions": [
+        {
+          "name": "摄像头",
+          "examples": [
+            "K230 摄像头",
+            "OpenMV 摄像头",
+            "串口摄像头"
+          ],
+          "degraded": false,
+          "solutions": [
+            {
+              "name": "K230（CanMV）",
+              "interface": "UART（CSV 帧给主控）+ 副控板",
+              "price": "￥100-200/板",
+              "note": "官方 CanMV 训练；库内 k230 已打通（副产物 main.py 直接生成；主控侧串口解析随依赖 coord_detect 自动带入）；图像识别/色块/形状",
+              "suitable": "视觉识别/色块追踪/大模型推理",
+              "recommended": true,
+              "lib_modules": [
+                "k230"
+              ]
+            },
+            {
+              "name": "OpenMV Cam H7",
+              "interface": "UART（Python 脚本 → 主控帧解析 `[cx,cy]`/`[pos]`，9600）",
+              "price": "￥200-300/板",
+              "note": "自带 IDE、例程多；识别色块/数字/形状/人脸；Python 脚本直接出结果——库内 open_mv4 已打通（mspm0：open_mv4_init + open_mv4_read_frame 出中心坐标/置信度（真实 UART 轮询、UART1 默认 PA8/PA9——与 K230 视觉互替、同选时经引脚绑定消解），默认 9600）",
+              "suitable": "快速开发视觉功能/数字识别",
+              "recommended": false,
+              "lib_modules": [
+                "open_mv4"
+              ]
+            },
+            {
+              "name": "串口摄像头（JPEG 输出 UART 转接）",
+              "interface": "UART（帧协议，MCU 侧解码 JPEG）",
+              "price": "￥30-60/个",
+              "note": "免副控板直接出图；帧率低（≤10fps）+ MCU 内存吃紧，半角处理够用",
+              "suitable": "极简视觉/无副控板预算",
+              "recommended": false,
+              "lib_modules": []
+            }
+          ],
+          "selected": ""
+        }
+      ]
+    },
+    {
+      "requirement": "按键启动并计时显示行驶总时间",
+      "sentence": 26,
+      "modules": [
+        "key",
+        "ntb_time",
+        "oled"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "沿黑线顺时针循迹一圈并按指定点停车",
+      "sentence": 26,
+      "modules": [
+        "huidu",
+        "pid",
+        "motor",
+        "ntb_time"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "静止时摆杆控制钢球由O到+5cm折返到-5cm稳定",
+      "sentence": 28,
+      "modules": [
+        "servo",
+        "coord_detect"
+      ],
+      "suggestions": [
+        {
+          "name": "摄像头",
+          "examples": [
+            "K230 摄像头"
+          ],
+          "degraded": false,
+          "solutions": [
+            {
+              "name": "K230（CanMV）",
+              "interface": "UART（CSV 帧给主控）+ 副控板",
+              "price": "￥100-200/板",
+              "note": "官方 CanMV 训练；库内 k230 已打通（副产物 main.py 直接生成；主控侧串口解析随依赖 coord_detect 自动带入）；图像识别/色块/形状",
+              "suitable": "视觉识别/色块追踪/大模型推理",
+              "recommended": true,
+              "lib_modules": [
+                "k230"
+              ]
+            },
+            {
+              "name": "OpenMV Cam H7",
+              "interface": "UART（Python 脚本 → 主控帧解析 `[cx,cy]`/`[pos]`，9600）",
+              "price": "￥200-300/板",
+              "note": "自带 IDE、例程多；识别色块/数字/形状/人脸；Python 脚本直接出结果——库内 open_mv4 已打通（mspm0：open_mv4_init + open_mv4_read_frame 出中心坐标/置信度（真实 UART 轮询、UART1 默认 PA8/PA9——与 K230 视觉互替、同选时经引脚绑定消解），默认 9600）",
+              "suitable": "快速开发视觉功能/数字识别",
+              "recommended": false,
+              "lib_modules": [
+                "open_mv4"
+              ]
+            },
+            {
+              "name": "串口摄像头（JPEG 输出 UART 转接）",
+              "interface": "UART（帧协议，MCU 侧解码 JPEG）",
+              "price": "￥30-60/个",
+              "note": "免副控板直接出图；帧率低（≤10fps）+ MCU 内存吃紧，半角处理够用",
+              "suitable": "极简视觉/无副控板预算",
+              "recommended": false,
+              "lib_modules": []
+            }
+          ],
+          "selected": ""
+        }
+      ]
+    },
+    {
+      "requirement": "行驶中钢球稳定在摆杆中心点附近",
+      "sentence": 30,
+      "modules": [
+        "servo",
+        "coord_detect"
+      ],
+      "suggestions": [
+        {
+          "name": "摄像头",
+          "examples": [
+            "K230 摄像头"
+          ],
+          "degraded": false,
+          "solutions": [
+            {
+              "name": "K230（CanMV）",
+              "interface": "UART（CSV 帧给主控）+ 副控板",
+              "price": "￥100-200/板",
+              "note": "官方 CanMV 训练；库内 k230 已打通（副产物 main.py 直接生成；主控侧串口解析随依赖 coord_detect 自动带入）；图像识别/色块/形状",
+              "suitable": "视觉识别/色块追踪/大模型推理",
+              "recommended": true,
+              "lib_modules": [
+                "k230"
+              ]
+            },
+            {
+              "name": "OpenMV Cam H7",
+              "interface": "UART（Python 脚本 → 主控帧解析 `[cx,cy]`/`[pos]`，9600）",
+              "price": "￥200-300/板",
+              "note": "自带 IDE、例程多；识别色块/数字/形状/人脸；Python 脚本直接出结果——库内 open_mv4 已打通（mspm0：open_mv4_init + open_mv4_read_frame 出中心坐标/置信度（真实 UART 轮询、UART1 默认 PA8/PA9——与 K230 视觉互替、同选时经引脚绑定消解），默认 9600）",
+              "suitable": "快速开发视觉功能/数字识别",
+              "recommended": false,
+              "lib_modules": [
+                "open_mv4"
+              ]
+            },
+            {
+              "name": "串口摄像头（JPEG 输出 UART 转接）",
+              "interface": "UART（帧协议，MCU 侧解码 JPEG）",
+              "price": "￥30-60/个",
+              "note": "免副控板直接出图；帧率低（≤10fps）+ MCU 内存吃紧，半角处理够用",
+              "suitable": "极简视觉/无副控板预算",
+              "recommended": false,
+              "lib_modules": []
+            }
+          ],
+          "selected": ""
+        }
+      ]
+    },
+    {
+      "requirement": "整圈行驶并将钢球稳定在任意指定位置",
+      "sentence": 32,
+      "modules": [
+        "pid",
+        "servo",
+        "coord_detect",
+        "huidu",
+        "motor"
+      ],
+      "suggestions": [
+        {
+          "name": "摄像头",
+          "examples": [
+            "K230 摄像头"
+          ],
+          "degraded": false,
+          "solutions": [
+            {
+              "name": "K230（CanMV）",
+              "interface": "UART（CSV 帧给主控）+ 副控板",
+              "price": "￥100-200/板",
+              "note": "官方 CanMV 训练；库内 k230 已打通（副产物 main.py 直接生成；主控侧串口解析随依赖 coord_detect 自动带入）；图像识别/色块/形状",
+              "suitable": "视觉识别/色块追踪/大模型推理",
+              "recommended": true,
+              "lib_modules": [
+                "k230"
+              ]
+            },
+            {
+              "name": "OpenMV Cam H7",
+              "interface": "UART（Python 脚本 → 主控帧解析 `[cx,cy]`/`[pos]`，9600）",
+              "price": "￥200-300/板",
+              "note": "自带 IDE、例程多；识别色块/数字/形状/人脸；Python 脚本直接出结果——库内 open_mv4 已打通（mspm0：open_mv4_init + open_mv4_read_frame 出中心坐标/置信度（真实 UART 轮询、UART1 默认 PA8/PA9——与 K230 视觉互替、同选时经引脚绑定消解），默认 9600）",
+              "suitable": "快速开发视觉功能/数字识别",
+              "recommended": false,
+              "lib_modules": [
+                "open_mv4"
+              ]
+            },
+            {
+              "name": "串口摄像头（JPEG 输出 UART 转接）",
+              "interface": "UART（帧协议，MCU 侧解码 JPEG）",
+              "price": "￥30-60/个",
+              "note": "免副控板直接出图；帧率低（≤10fps）+ MCU 内存吃紧，半角处理够用",
+              "suitable": "极简视觉/无副控板预算",
+              "recommended": false,
+              "lib_modules": []
+            }
+          ],
+          "selected": ""
+        }
+      ]
+    },
+    {
+      "requirement": "仅红外光电循迹模块",
+      "sentence": 50,
+      "modules": [
+        "huidu"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "启动按键与≤2英寸显示装置",
+      "sentence": 51,
+      "modules": [
+        "key",
+        "oled"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "凹槽内钢球位置检测采用摄像头",
+      "sentence": 61,
+      "modules": [
+        "coord_detect"
+      ],
+      "suggestions": [
+        {
+          "name": "摄像头",
+          "examples": [
+            "K230 摄像头"
+          ],
+          "degraded": false,
+          "solutions": [
+            {
+              "name": "K230（CanMV）",
+              "interface": "UART（CSV 帧给主控）+ 副控板",
+              "price": "￥100-200/板",
+              "note": "官方 CanMV 训练；库内 k230 已打通（副产物 main.py 直接生成；主控侧串口解析随依赖 coord_detect 自动带入）；图像识别/色块/形状",
+              "suitable": "视觉识别/色块追踪/大模型推理",
+              "recommended": true,
+              "lib_modules": [
+                "k230"
+              ]
+            },
+            {
+              "name": "OpenMV Cam H7",
+              "interface": "UART（Python 脚本 → 主控帧解析 `[cx,cy]`/`[pos]`，9600）",
+              "price": "￥200-300/板",
+              "note": "自带 IDE、例程多；识别色块/数字/形状/人脸；Python 脚本直接出结果——库内 open_mv4 已打通（mspm0：open_mv4_init + open_mv4_read_frame 出中心坐标/置信度（真实 UART 轮询、UART1 默认 PA8/PA9——与 K230 视觉互替、同选时经引脚绑定消解），默认 9600）",
+              "suitable": "快速开发视觉功能/数字识别",
+              "recommended": false,
+              "lib_modules": [
+                "open_mv4"
+              ]
+            },
+            {
+              "name": "串口摄像头（JPEG 输出 UART 转接）",
+              "interface": "UART（帧协议，MCU 侧解码 JPEG）",
+              "price": "￥30-60/个",
+              "note": "免副控板直接出图；帧率低（≤10fps）+ MCU 内存吃紧，半角处理够用",
+              "suitable": "极简视觉/无副控板预算",
+              "recommended": false,
+              "lib_modules": []
+            }
+          ],
+          "selected": ""
+        }
+      ]
+    }
+  ],
+  "score_points": [
+    {
+      "id": "1",
+      "part": "basic",
+      "description": "安装摆球位置监测图传装置，实时显示并记录回放钢球滚动画面",
+      "score": 6.0,
+      "sentence_refs": [
+        23
+      ]
+    },
+    {
+      "id": "2",
+      "part": "development",
+      "description": "按键启动沿黑线顺时针行驶一圈停回A点，总时间≤20s，停车偏差≤2cm",
+      "score": 16.0,
+      "sentence_refs": [
+        26
+      ]
+    },
+    {
+      "id": "3",
+      "part": "development",
+      "description": "静止时控制钢球从O到+5cm折返至-5cm稳定，≤5s，误差≤1cm",
+      "score": 13.0,
+      "sentence_refs": [
+        28
+      ]
+    },
+    {
+      "id": "4",
+      "part": "development",
+      "description": "A到B行驶时间≤8s，钢球稳定在中心附近误差≤1cm",
+      "score": 20.0,
+      "sentence_refs": [
+        30
+      ]
+    },
+    {
+      "id": "5",
+      "part": "development",
+      "description": "整圈总时间≤30s，钢球稳定在中心附近误差≤1cm",
+      "score": 20.0,
+      "sentence_refs": [
+        32
+      ]
+    },
+    {
+      "id": "6",
+      "part": "development",
+      "description": "整圈总时间≤30s，钢球稳定在任意指定位置误差≤1cm",
+      "score": 20.0,
+      "sentence_refs": [
+        34
+      ]
+    },
+    {
+      "id": "7",
+      "part": "unknown",
+      "description": "其他",
+      "score": 5.0,
+      "sentence_refs": []
+    },
+    {
+      "id": "8",
+      "part": "development",
+      "description": "设计报告",
+      "score": 20.0,
+      "sentence_refs": [
+        37
+      ]
+    }
+  ],
+  "instances": {
+    "key": [
+      {
+        "name": "按键",
+        "variant": "start",
+        "pin": ""
+      }
+    ]
+  },
+  "topic_id": "2026H",
+  "references": [
+    {
+      "id": "2026_04_地猛星电赛控制题配套资料",
+      "title": "2026_04_地猛星电赛控制题配套资料",
+      "source": "auto",
+      "platform": "mspm0"
+    },
+    {
+      "id": "26H-滚球巡线决策例程",
+      "title": "26H-滚球巡线决策例程",
+      "source": "auto",
+      "platform": "mspm0"
+    }
+  ],
+  "exclusive_groups": [
+    {
+      "id": "gray-track",
+      "label": "8 路灰度传感器驱动",
+      "hint": false,
+      "members": [
+        {
+          "slug": "huidu",
+          "role": "仅 8 路灰度读取（黑线检测位图），不含巡线/电机控制；适合自写巡线逻辑"
+        },
+        {
+          "slug": "pid",
+          "role": "灰度读取 + 边缘中点巡线偏差 + PID/PD 巡线 + 电机目标速度（含速度环，双平台）"
+        },
+        {
+          "slug": "xunji",
+          "role": "灰度读取（位图）+ 加权质心巡线 + 编码器采样（开环速度输出；真机控制代码移植）"
+        }
+      ],
+      "recommended": [
+        "huidu"
+      ],
+      "candidates": [
+        "pid",
+        "xunji"
+      ],
+      "dropped": [
+        "pid"
+      ]
+    }
+  ]
+}

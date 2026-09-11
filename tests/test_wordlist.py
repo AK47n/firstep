@@ -330,6 +330,49 @@ ONSITE_REJECTED_NAMES = (
 )
 MUST_STAY_REJECTED_NAMES = ("TI MSPM0 主控板",)
 
+# 顺延批 27 条（工单 real-acceptance/10）：单 08 因预算不足顺延的「规则可入的
+# 方案裸名」，单 05 把全文段 25600→23400 后余量已够（权威口径实测 +1375B、
+# 收下后 mspm0 余量 2173B ≥ REQUEST_RESERVE_BYTES），本批全收。
+# 落点由机械反查得出（.scratch/recommend-domain-reject/
+# probe-21-deferred-placement.py，判据 = name 命中某行 solutions[].name 或其
+# 去括号裸名）——跨 7 行，不是单 08 那批的「感知传感器 + 执行机构」两行。
+DEFERRED_BATCH_NAMES = (
+    # 感知传感器（16）
+    "SHT30 温湿度传感器",
+    "红外对射传感器",
+    "磁力计指南针",
+    "BMP180 气压/海拔传感器",
+    "MS5611 高精度气压传感器",
+    "GP2Y1014AU 粉尘传感器",
+    "S12SD 紫外线传感器",
+    "BH1750 光照度传感器",
+    "TTP224 4 路电容触摸按键",
+    "TCS34725 颜色识别传感器",
+    "MLX90614 非接触红外测温",
+    "MQ-2 烟雾/可燃气体传感器",
+    "MQ-135 空气质量传感器",
+    "DS18B20 单总线温度传感器",
+    "SHT20 温湿度传感器",
+    "JY61P 六轴姿态传感器",
+    # 执行机构（3）
+    "L298N 大电流驱动板",
+    "1 路 5V 继电器模块",
+    "PCA9685 16 路舵机板",
+    # 语音模块（2）
+    "JQ8900 语音播报模块",
+    "SYN6288 语音合成模块",
+    # 显示模块（2）
+    "0.96 寸 OLED 单色屏",
+    "MAX7219 数码管/点阵",
+    # 遥控接收（2）
+    "双轴摇杆按键",
+    "红外遥控接收头 VS1838B",
+    # 声光提示器件（1）
+    "有源蜂鸣器模块",
+    # 无线通信模块（1）
+    "RC522 射频 IC 卡读卡器",
+)
+
 
 def _suggestion_verdict(name: str) -> str:
     """现算一条库外建议名的判决（真跑 build_module_selection，不模拟判据）。
@@ -370,6 +413,67 @@ def test_default_wordlist_onsite_rejected_names_are_legal_now():
     verdicts = {name: _suggestion_verdict(name) for name in ONSITE_REJECTED_NAMES}
     rejected = [name for name, verdict in verdicts.items() if verdict != "合法"]
     assert not rejected, f"现场被拒名又被拒收了（B1 数据回滚？）：{'、'.join(rejected)}"
+
+
+def test_default_wordlist_deferred_batch_names_are_legal_now():
+    """顺延批 27 条不得再被拒收（工单 real-acceptance/10 结构守卫，防空转）。
+
+    单 08 把这 27 条**规则可入**的方案裸名按预算顺延（当时全文段 25600、边界余量
+    只剩 731B）；单 05 把全文段降到 23400 后余量已够（权威口径实测补数据 +1375B，
+    mspm0 最坏形态 126851B、余量 2173B ≥ `REQUEST_RESERVE_BYTES`），本批全收。
+
+    本条与 `test_default_wordlist_onsite_rejected_names_are_legal_now` 同型同口径
+    （`DEFAULT_WORDLIST` + `build_module_selection` 直测，真跑闸不模拟判据）：
+    **数据一旦被回滚/被改坏立即红**，不用等真机复跑。名字按落点行分组（跨 7 行，
+    机械反查得出——见 DEFERRED_BATCH_NAMES 上方注释），名单本身即「提示词给模型
+    看过的方案裸名」的回归锚。
+    """
+    verdicts = {name: _suggestion_verdict(name) for name in DEFERRED_BATCH_NAMES}
+    rejected = [name for name, verdict in verdicts.items() if verdict != "合法"]
+    assert not rejected, (
+        f"顺延批裸名又被拒收了（工单 10 数据回滚 / 落点行写错？）：{'、'.join(rejected)}"
+    )
+
+
+def test_default_wordlist_deferred_batch_landed_in_home_rows():
+    """顺延批落点守卫：裸名必须落在**反查得出的那一行**，不能落在别的行。
+
+    判据（工单 10「27 条的落点」）：name 命中某行 `solutions[].name` 或它的
+    **去括号裸名** → 落该行 category。落错行不会让上面那条用例红（闸只要任何
+    一行认它就放行），所以单独守一层：`_solution_group` 命中的行必须就是
+    「该名字作为方案名/裸名出现的那一行」。
+    """
+    import re
+
+    from contest_generator.llm import DEFAULT_WORDLIST
+    from contest_generator.selection import _solution_group
+
+    def bare(name: str) -> str:
+        return re.sub(r"（[^）]*）", "", name).strip()
+
+    # 反查：顺延名 → 它作为方案全名/裸名出现的类别行（必须恰好一行）
+    homes: dict[str, set[str]] = {name: set() for name in DEFERRED_BATCH_NAMES}
+    for group in DEFAULT_WORDLIST:
+        for option in group.solutions:
+            for candidate in (option.name, bare(option.name)):
+                if candidate in homes:
+                    homes[candidate].add(group.category)
+    unmatched = [name for name, cats in homes.items() if not cats]
+    assert not unmatched, f"顺延名在词表里找不到落点行：{'、'.join(unmatched)}"
+    ambiguous = [name for name, cats in homes.items() if len(cats) > 1]
+    assert not ambiguous, (
+        "顺延名落点歧义（命中多行）："
+        + "；".join(f"{n} → {'/'.join(sorted(homes[n]))}" for n in ambiguous)
+    )
+
+    wrong = []
+    for name in DEFERRED_BATCH_NAMES:
+        matched = _solution_group(name, DEFAULT_WORDLIST)
+        assert matched is not None, f"{name} 未命中任何词表行"
+        home = next(iter(homes[name]))
+        if matched.category != home:
+            wrong.append(f"{name}：落 {matched.category}（应为 {home}）")
+    assert not wrong, "顺延名落错行：" + "；".join(wrong)
 
 
 def test_default_wordlist_platform_name_stays_rejected():

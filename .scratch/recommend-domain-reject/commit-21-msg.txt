@@ -1,0 +1,42 @@
+fix(词表): 顺延批 27 条方案裸名入 models——跨 7 行纯数据（工单 real-acceptance/10）
+
+单 08 因预算不足顺延的 27 条「规则可入的方案裸名」全收，让「模型照抄提示词里的
+方案名 → 被闸拒收」的可达面再压一层。**纯数据改动，零产品代码**：判据
+（selection._solution_group）、OutOfLibrarySuggestion/degraded 语义、
+format_wordlist_prompt 渲染形态、budget.py/llm.py 段预算常量全部未动。
+
+落点机械反查（判据 = name 命中某行 solutions[].name 或其去括号裸名，照单 08
+先例写一次性脚本，不手抄表）：27 条全部恰好命中一行、零歧义，跨 7 行——
+感知传感器 16 / 执行机构 3 / 语音模块 2 / 显示模块 2 / 遥控接收 2 /
+声光提示器件 1 / 无线通信模块 1（单 08「都归感知传感器 + 执行机构两行」的
+经验对本批不成立，反查必须机械跑）。
+
+红证先行：补数据前 27 条逐条真跑 build_module_selection → 全部拒收，理由逐字
+「库外建议的硬件名不在硬件词表中」；对照 TI MSPM0 主控板 同样拒收。补数据后
+27 条全部命中（非降级）、name 原样保留。
+
+预算与截断双守卫（权威口径实测）：词表段 9619 → 10994B（预算 12150，
+**未截断**、余 1156B ⇒ 全量送达）；mspm0 最坏形态 125476 → 126851B
+（余 2173B ≥ REQUEST_RESERVE_BYTES 2048）、stm32 124856 → 126231B（余 2793B）；
+test_recommend_real_library_budget 绿。**段预算常量一个没动**。
+
+同时更正工单的一处预估账（量法坑，如实记）：本批真实成本 +1375B / 均摊 51B，
+不是工单预估的 ≈2529B / 94B——后者是 measure-20-deferred-headroom.py 的
+「27 条重复加到两行 → 词表段被 fit 截断」产生的假数（真实 7 行形态不截断）。
+另该脚本 import 时固化 DEFAULT_WORDLIST，补数据后其「现状」读数不可直接信
+（它报 125476/128007，真实落盘词表是 126851）；判余量只认同跑一份落盘词表的
+那套（probe-21-authoritative-after.py / 真实库预算测试）。
+
+结构守卫（tests/test_wordlist.py，照单 08 先例同型）：新增「顺延批 27 条不得再被
+拒收」（DEFAULT_WORDLIST + build_module_selection 直测）与「落点行守卫」（落错行
+不会让前者红，闸只要任何一行认它就放行，单独守一层），保留 TI MSPM0 主控板
+仍拒收的对照。
+
+真机复跑（probe-16-recommend-live.py --out-prefix done-21）：2022C/stm32 终态
+done（2 轮）、2026H/mspm0 终态 done（4 轮），两跑「硬件名不在硬件词表中」拒收
+**0 条**，done 载荷里库外建议名过 _solution_group 未命中 0 条。附带如实记：
+两跑都要先答澄清门才到 done；两跑都出现过**多实例域拒绝**（k230/pid 不支持
+多实例）由 DOMAIN_RETRY_LIMIT=1 自愈——与词表闸无关，属另一条线，另议。
+
+回归：pytest 3973 passed（基线 3971，+2 条新守卫）；node --test tests/js
+1444 pass / 0 fail（无 JS 改动）。

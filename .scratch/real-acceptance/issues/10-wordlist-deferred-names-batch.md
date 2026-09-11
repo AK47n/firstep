@@ -6,7 +6,7 @@
 
 **被谁阻塞：** 无（前置 = 单 08 已 resolved；预算前提已被单 05 改掉，本轮已复核）。
 
-**状态：** ready-for-agent
+**状态：** resolved（2026-09-17 落地：27 条全收 + 结构守卫 + 真机复跑；见文末「实施记录」）
 
 ## 为什么现在能做（单 08 收口那句结论已过时）
 
@@ -77,14 +77,14 @@
 
 ## 验收标准
 
-- [ ] 红证：27 条现状在 `build_module_selection` 下**全部拒收**（现算留档）
-- [ ] 补数据后 27 条**全部不再抛 `SelectionError`**，`name` 原样保留（不擅自改名）
-- [ ] 对照：`TI MSPM0 主控板` 仍拒收（闸没被放宽成万金油）
-- [ ] 权威口径复核：`test_recommend_real_library_budget` 绿（余量 ≥
+- [x] 红证：27 条现状在 `build_module_selection` 下**全部拒收**（现算留档）
+- [x] 补数据后 27 条**全部不再抛 `SelectionError`**，`name` 原样保留（不擅自改名）
+- [x] 对照：`TI MSPM0 主控板` 仍拒收（闸没被放宽成万金油）
+- [x] 权威口径复核：`test_recommend_real_library_budget` 绿（余量 ≥
       `REQUEST_RESERVE_BYTES`），`measure-20-deferred-headroom.py` 显示 mspm0 仍有余量
-- [ ] 词表段未截断（`WORDLIST_PROMPT_BYTES` 内，全量送达）
-- [ ] 全量 `pytest` + `node --test tests/js/*.test.mjs` 绿
-- [ ] 真机复跑：`python .scratch/recommend-domain-reject/probe-16-recommend-live.py
+- [x] 词表段未截断（`WORDLIST_PROMPT_BYTES` 内，全量送达）
+- [x] 全量 `pytest` + `node --test tests/js/*.test.mjs` 绿
+- [x] 真机复跑：`python .scratch/recommend-domain-reject/probe-16-recommend-live.py
       --topic 2022C --platform stm32 --attempts 2 --out-prefix done-21` 与
       `--topic 2026H --platform mspm0`（跑前带 `$env:PYTHONIOENCODING='utf-8'`，
       探针在 GBK 控制台会因 `⚠` 崩溃）——期望域拒绝 0 条「硬件名不在硬件词表中」
@@ -97,3 +97,72 @@
 - **排序/入选依据是可达性，不是字节成本**（单 08 第一版按成本收，真机当场打到让位名）。
 - **提交信息别用 PowerShell 的 `Out-File -Encoding utf8` 生成 `-F` 消息文件**——带 BOM
   会打穿 CHANGELOG 跳过清单（盘点「新发现」第 6 条）；用 `git commit -m` 或 write 工具。
+
+## 实施记录（2026-09-17 落地）
+
+**改动面**：`src/contest_generator/wordlist.json`（+27 条 models，跨 7 行）+
+`tests/test_wordlist.py`（+2 条结构守卫）。**零产品代码改动**——`_solution_group` 判据、
+`OutOfLibrarySuggestion`/`degraded` 语义、`format_wordlist_prompt` 渲染形态、`budget.py` /
+`llm.py` 段预算常量**全部未动**（工单三条硬边界与「不顺手改常量」都守住了）。
+
+**落点机械反查**（`.scratch/recommend-domain-reject/probe-21-deferred-placement.py`，
+判据 = name 命中某行 `solutions[].name` **或它的去括号裸名**）：27 条**全部**反查得到
+**恰好一行**（0 歧义、0 需人工裁），跨 7 行——与本工单「27 条的落点」表**逐行一致**
+（16 / 3 / 2 / 2 / 2 / 1 / 1）。落盘脚本 `patch-21-deferred-wordlist.py` 用同一反查
+（不手抄表），幂等（从 `wordlist-before-21.json` = git HEAD 副本重生）。
+
+**红证**：补数据前 27 条逐条真跑 `build_module_selection` → **全部拒收**、理由逐字为
+「库外建议的硬件名不在硬件词表中：…」；`TI MSPM0 主控板` 同样拒收（留档
+`verify-21-deferred-placement-before.txt`）。补数据后 27 条全部**命中**（非降级），
+`name` 原样保留。
+
+**预算与截断（实测，权威口径）**：
+
+| 项 | 补数据前 | 补数据后 |
+|---|---|---|
+| 词表段全量 / 实发 wire | 9619B / 9619B（未截断） | **10994B / 10994B**（未截断） |
+| mspm0 最坏形态 | 125476B（余 3548B） | **126851B（余 2173B）** |
+| stm32 最坏形态 | 124856B（余 4168B） | **126231B（余 2793B）** |
+| `test_recommend_real_library_budget` | 绿 | **绿**（余量 2173 ≥ `REQUEST_RESERVE_BYTES` 2048） |
+
+词表段实发 10994 < `WORDLIST_PROMPT_BYTES` 12150 ⇒ **全量送达、未被截断**
+（余 1156B）。**段预算常量一个没动**。
+
+⚠️ **两处口径更正（都是量法问题，不是产品问题）**：
+
+1. **本批真实成本是 +1375B，不是工单预估的 ≈2529B**（每条均摊 51B，不是 94B）。
+   工单那个数是 `measure-20-deferred-headroom.py` 的**截断记账假数**：该脚本的
+   `with_names` 把 27 条**重复加到「感知传感器 + 执行机构」两行**（本批真实落点跨
+   7 行），该形态下词表段超过 12150 **被 fit 截断到 12150**，于是「再加一条」的边际
+   字节被截断吃掉——摊出来 94B/条是截断的产物。真实 7 行形态不截断，实测 +1375B。
+   **结论不变且更宽松**：余量 2173B 充足。复算留档
+   `probe-21-reconcile-deltas.py` + `probe-21-authoritative-after.py`。
+2. **`measure-20-deferred-headroom.py` 的「现状最坏形态」读数在补数据后不可直接信**：
+   它 import 时读盘固化 `DEFAULT_WORDLIST`，脚本内又用「现状 + 逐条试加」的算术，
+   两截口径不同（实测它报「现状 125476 / 收下后 128007」，而真实的「已落盘词表 +
+   这 27 条」是 126851）。**判余量只看 `probe-21-authoritative-after.py` 或
+   `test_recommend_real_library_budget` 这一套**（同一份落盘词表、同一条载荷构造）。
+
+**结构守卫**（`tests/test_wordlist.py`，照单 08 先例同型）：新增
+`test_default_wordlist_deferred_batch_names_are_legal_now`（27 条现算必须「合法」）
+与 `test_default_wordlist_deferred_batch_landed_in_home_rows`（**落点行守卫**——
+落错行不会让前者红，闸只要任何一行认它就放行，所以单独守一层：`_solution_group`
+命中的行必须就是「该名字作为方案名/裸名出现的那一行」）；`TI MSPM0 主控板 仍拒收`
+对照照旧保留。
+
+**真机复跑**（`--out-prefix done-21`，带 `PYTHONIOENCODING=utf-8`）：
+**2022C / stm32 终态 done（2 轮）**、**2026H / mspm0 终态 done（4 轮）**，
+两跑**「硬件名不在硬件词表中」拒收 0 条**——验收线达成。证据
+`verify-21-recommend-{2022C-stm32,2026H-mspm0}.txt` + `done-21-*.json` +
+`verify-21-live-verdicts.py`（机械核：日志域拒绝分类 + done 载荷里每条库外建议名
+过 `_solution_group`，两跑未命中 = 0）。
+
+- ⚠️ 两跑的**澄清门**要答才到 done（与单 08 同）：2022C 首跑停在补问
+  「车-车间通信是否限定无线模块」，加 `clarify-answers-21-2022C.json` 后 done。
+- ⚠️ **多实例域拒绝是另一条线的病**（**非本单范围**，如实记）：2026H 出现 3 条
+  「模块 k230 不支持多实例，不能带 instances」、2022C 首跑出现 1 条
+  「模块 pid 不支持多实例」——都是模型给非多实例模块塞 `instances`，由
+  `DOMAIN_RETRY_LIMIT=1` 自愈（两跑最终都 done）。**与词表闸无关**，要不要治另议。
+
+**回归面**：`python -m pytest -q` → **3973 passed, 1 warning**（基线 3971 → 净增 2 =
+两条新守卫）；`node --test tests/js/*.test.mjs` → **1444 pass / 0 fail**（无 JS 改动）。

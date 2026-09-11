@@ -1,0 +1,19 @@
+== 2022C-stm32 ==
+python : Traceback (most recent call last):
+At line:1 char:160
++ ... NG='utf-8'; python .scratch/recommend-domain-reject/verify-21-live-ve ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Traceback (most recent call last)::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  File "C:\Users\luoji\Desktop\firstep\.scratch\recommend-domain-reject\verify-21-live-verdicts.py", line 101, in <modu
+le>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "C:\Users\luoji\Desktop\firstep\.scratch\recommend-domain-reject\verify-21-live-verdicts.py", line 56, in main
+    text = log_path.read_text(encoding="utf-8")
+  File "C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\Lib\pathlib\__init__.py", line 788, in read_text
+    return f.read()
+           ~~~~~~^^
+  File "<frozen codecs>", line 325, in decode
+UnicodeDecodeError: 'utf-8' codec can't decode byte 0xff in position 0: invalid start byte
