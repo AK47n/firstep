@@ -5,10 +5,11 @@
 
 1. 「方案名 → 合法 name 域」（合法域 = 类别名 ∪ 该行 models，判据单源
    selection._solution_group）——多少方案名其实是模型抄不出合法名的（缺口规模）；
-2. B1（把方案名去括号裸名补进同类别 models）后的**词表提示词字节增量**——
-   这是 B1 唯一的非零风险（词表段喂模型，撑预算）；
-3. 现场被拒名逐条现算 `build_module_selection`——红证（实施前应全部拒收，
-   实施后四条应合法、`TI MSPM0 主控板` 仍拒收）。
+2. B1 的**词表提示词字节增量**——B1 唯一的非零风险（词表段喂模型，撑预算）；
+   现状词表已是补数据后时，增量按 git HEAD 版 → 现状**实测两次渲染**，不模拟；
+3. 现场被拒名逐条现算 `build_module_selection`——现状判决（补数据后应四条全合法、
+   `TI MSPM0 主控板` 仍拒收）+ ④b 节同批名字在 git HEAD 词表下的判决（红证，
+   可复现，不依赖手工备份文件）。
 
 跑法（仓库根）：
 
@@ -22,7 +23,9 @@ from __future__ import annotations
 import dataclasses
 import json
 import re
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
@@ -49,6 +52,38 @@ def bare(name: str) -> str:
     return re.sub(r"（[^）]*）", "", name).strip()
 
 
+def bytes_added_to_prompt(before_groups, after_groups) -> int:
+    """B1 唯一风险量：词表提示词字节增量（实测两次渲染，不估算）。"""
+    b_before = len(W.format_wordlist_prompt(before_groups).encode("utf-8"))
+    b_after = len(W.format_wordlist_prompt(after_groups).encode("utf-8"))
+    return b_after - b_before
+
+
+def git_head_groups():
+    """补数据前的词表（git HEAD 版）——红证的**可复现**来源。
+
+    HEAD 里若已是补数据后的版本（重复跑时），本函数返回 None，红证节退化标注。
+    """
+    proc = subprocess.run(
+        ["git", "show", "HEAD:src/contest_generator/wordlist.json"],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+    )
+    if proc.returncode != 0 or not proc.stdout:
+        return None
+    handle = tempfile.NamedTemporaryFile(
+        "wb", suffix="-wordlist-head.json", delete=False
+    )
+    try:
+        handle.write(proc.stdout)
+        handle.close()
+        return W.load_wordlist(Path(handle.name), lib_slugs=None)
+    except (W.WordlistError, json.JSONDecodeError):
+        return None
+    finally:
+        Path(handle.name).unlink(missing_ok=True)
+
+
 def legal_names(groups) -> set[str]:
     legal: set[str] = set()
     for group in groups:
@@ -57,8 +92,11 @@ def legal_names(groups) -> set[str]:
     return legal
 
 
-def probe_selection(name: str) -> str:
-    """现算一条库外建议名的判决（真跑 build_module_selection，不模拟判据）。"""
+def probe_selection(name: str, groups=None) -> str:
+    """现算一条库外建议名的判决（真跑 build_module_selection，不模拟判据）。
+
+    groups = 用哪份词表（缺省 = 现状词表；传 git HEAD 版 = 红证）。
+    """
     raw = {
         "requirements": [
             {
@@ -70,7 +108,9 @@ def probe_selection(name: str) -> str:
         ]
     }
     try:
-        build_module_selection(raw, known_slugs=(), hardware_words=DEFAULT_WORDLIST)
+        build_module_selection(
+            raw, known_slugs=(), hardware_words=groups or DEFAULT_WORDLIST
+        )
     except SelectionError as exc:
         return f"拒收：{exc}"
     return "合法"
@@ -94,23 +134,28 @@ def main() -> int:
     print(f"其中裸名 ≠ 全名（模型可能抄前半句）：{len(bare_only)} 条")
 
     print("\n== ② B1 词表提示词字节增量 ==")
-    before = W.format_wordlist_prompt(groups)
-    added = 0
-    simulated = []
-    for group in groups:
-        models = list(group.models)
-        have = set(models)
-        for option in group.solutions:
-            name = bare(option.name)
-            if name and name not in have:
-                models.append(name)
-                have.add(name)
-                added += 1
-        simulated.append(dataclasses.replace(group, models=tuple(models)))
-    after = W.format_wordlist_prompt(simulated)
-    b_before, b_after = len(before.encode("utf-8")), len(after.encode("utf-8"))
-    print(f"补裸名 {added} 条（去重后）")
-    print(f"提示词 {b_before} → {b_after} 字节（增量 {b_after - b_before}）")
+    # 现状词表若已是补数据后：真实增量 = HEAD 版提示词 → 现状词表提示词（实测两次渲染）。
+    head = git_head_groups()
+    if head is not None:
+        delta = bytes_added_to_prompt(head, groups)
+        print(f"提示词 {len(W.format_wordlist_prompt(head).encode('utf-8'))} → "
+              f"{len(W.format_wordlist_prompt(groups).encode('utf-8'))} 字节"
+              f"（实际增量 {delta}，预算 ≤2500）")
+    else:
+        added = 0
+        simulated = []
+        for group in groups:
+            models = list(group.models)
+            have = set(models)
+            for option in group.solutions:
+                name = bare(option.name)
+                if name and name not in have:
+                    models.append(name)
+                    have.add(name)
+                    added += 1
+            simulated.append(dataclasses.replace(group, models=tuple(models)))
+        print(f"（HEAD 版词表不可得）模拟补裸名 {added} 条，"
+              f"预估增量 {bytes_added_to_prompt(groups, simulated)} 字节")
 
     print("\n== ③ 现场被拒名现算（红证 / 回归锚）==")
     for name in ONSITE_REJECTED:
@@ -119,6 +164,11 @@ def main() -> int:
     print("\n== ④ 对照：新增项应合法、平台名应仍拒收 ==")
     for name in ("红外传感器", "步进电机", "指纹模块"):
         print(f"  {name!r:42} → {probe_selection(name)}")
+
+    if head is not None:
+        print("\n== ④b 同一批名字在补数据前（git HEAD 词表）的判决 ==")
+        for name in ONSITE_REJECTED:
+            print(f"  {name!r:42} → {probe_selection(name, head)}")
 
     print("\n== ⑤ 词表别名检查（models 内重复）==")
     dup = {

@@ -314,3 +314,72 @@ def test_default_wordlist_internal_modules_are_not_hooked():
     hooked = _hooked_slugs()
     offenders = [slug for slug in _internal_slugs() if slug in hooked]
     assert not offenders, f"内部件/协议切片被误挂接：{'、'.join(offenders)}"
+
+
+# 「方案名 → 合法 name」口径守卫（工单 real-acceptance/08）：
+# 提示词 format_wordlist_prompt 把方案名摆在模型眼前，闸的合法 name 域却是
+# 类别名 ∪ models（selection._solution_group 单源）——模型照抄方案名即被拒。
+# 用户拍板 B1：solutions 保持导览语义、models 是唯一合法 name 域、**补数据零代码**。
+# 判据（工单「修复方向 2 裁定规则」）：裸名是电赛真会买的硬件（能写进采购单的名词
+# 短语）→ 入 models；平台/主控本身、上位概念、句子或组合描述、与既有条目重复 → 不入。
+ONSITE_REJECTED_NAMES = (
+    "红外对管循迹数组",
+    "红外测距传感器",
+    "直流减速电机 + TB6612 双路驱动板",
+    "串口摄像头（JPEG 输出 UART 转接）",
+)
+MUST_STAY_REJECTED_NAMES = ("TI MSPM0 主控板",)
+
+
+def _suggestion_verdict(name: str) -> str:
+    """现算一条库外建议名的判决（真跑 build_module_selection，不模拟判据）。
+
+    返回 "合法" 或 "拒收"——与工单红证脚本 measure-18-wordlist-coverage.py
+    同一调用形态（同一闸、同一默认词表）。
+    """
+    from contest_generator.llm import DEFAULT_WORDLIST
+    from contest_generator.selection import SelectionError, build_module_selection
+
+    raw = {
+        "requirements": [
+            {
+                "requirement": "循迹",
+                "sentence": 1,
+                "modules": [],
+                "suggestions": [{"name": name}],
+            }
+        ]
+    }
+    try:
+        build_module_selection(raw, known_slugs=(), hardware_words=DEFAULT_WORDLIST)
+    except SelectionError:
+        return "拒收"
+    return "合法"
+
+
+def test_default_wordlist_onsite_rejected_names_are_legal_now():
+    """现场被拒名不得再被拒（工单 real-acceptance/08 结构守卫，防空转）。
+
+    2022C 历史上**连续三轮**挂在这一类名字上（模型逐字照抄提示词「选购方案」段里的
+    方案名，于是被词表闸拒收）——本条把这些名字钉成回归锚：**B1 数据一旦被回滚/
+    被改坏，本用例立即红**（不用等真机复跑）。
+
+    口径：合法域 = 类别名 ∪ 该行 models；四条现场名（`串口摄像头` 那条是**全名**，
+    见工单 08「裁定结果」的偏差说明）现算必须走「命中」而不是「降级」。
+    """
+    verdicts = {name: _suggestion_verdict(name) for name in ONSITE_REJECTED_NAMES}
+    rejected = [name for name, verdict in verdicts.items() if verdict != "合法"]
+    assert not rejected, f"现场被拒名又被拒收了（B1 数据回滚？）：{'、'.join(rejected)}"
+
+
+def test_default_wordlist_platform_name_stays_rejected():
+    """对照：平台名仍拒收（工单 real-acceptance/08——闸不得被放宽成万金油）。
+
+    `TI MSPM0 主控板` 是平台本身（裁定规则①），词表无对应类别行 → **拒收正确**。
+    本条与上一条成对：只有「该放的放、该拦的还拦」才算口径对齐，而不是把闸拆了。
+    """
+    for name in MUST_STAY_REJECTED_NAMES:
+        assert _suggestion_verdict(name) == "拒收", (
+            f"{name} 应当仍被拒收（平台/主控本身，不是可采购的在库外建议）"
+        )
+

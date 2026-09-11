@@ -1636,37 +1636,49 @@ def test_build_selection_suggestion_off_wordlist_rejected(suggestion):
         build_module_selection(raw, known_slugs=(), hardware_words=WORDS)
 
 
-def test_build_selection_solution_name_is_not_a_legal_suggestion_name():
-    """词表闸现状契约（工单 real-acceptance/03 修复方向 ③ 的评估锚，**行为未改**）。
+def test_build_selection_solution_bare_name_is_a_legal_suggestion_name():
+    """方案名（或其去括号裸名）已在 models 里 → 合法 name、原样保留（工单 real-acceptance/08）。
 
-    合法 name 取值域 = 类别名 ∪ 型号名（`_solution_group` 单源）；**选购方案名
-    不是合法 name**——即使它逐字出现在词表里，也照样拒收。
+    **旧契约已改红为绿**：本用例原名
+    `test_build_selection_solution_name_is_not_a_legal_suggestion_name`，钉的是
+    「方案名不是合法 name」的旧现状（那时 2022C 连续三轮被这个闸拒收）。
 
-    第十六轮真机现场（探针 probe-17-wordlist-gate-verdicts.py 实证）：模型给的
-    「红外对管循迹数组」「红外测距传感器」「直流减速电机 + TB6612 双路驱动板」
-    三条**恰好是默认词表里已登记的选购方案名（或其去括号裸名）**——模型知道该
-    买什么，只是用了方案名而不是型号 / 类别名，于是被闸拒了三次（2022C 三轮全
-    挂在同一类名字上）。这是本用例钉住的现状，不是模型幻觉。
+    根因（工单 08）：`format_wordlist_prompt` 把**方案名**列进「选购方案：…」段摆在
+    模型眼前，而闸的合法 name 域 = 类别名 ∪ models（`selection._solution_group`
+    单源）——**提示词给什么看、闸就不认什么**，模型照抄方案名即被拒。用户拍板走 B1：
+    `solutions` 保持「界面导览文本」语义、**models 是唯一合法 name 域**，做法是
+    把方案名的裸名登记进同类别行的 models（**数据对齐，SelectionError 语义零改动**）。
 
-    是否把「方案名」纳入合法名（或让闸确定性降级到方案所属类别）会改动
-    SelectionError 的语义边界，需先与 wordlist / 买件指引链路口径确认——
-    决策点与建议见工单 real-acceptance/03「评估」节；落地前本用例是回归锚。
+    本用例钉 B1 的结果：现场四条被拒名现算合法、且 `name` **原样保留**（不擅自改名、
+    不降级）。对照「平台名仍拒收」在 `test_wordlist.py`（防闸被放宽成万金油）。
     """
     from contest_generator.llm import DEFAULT_WORDLIST
 
-    raw = {
-        "requirements": [
-            {
-                "requirement": "循迹",
-                "sentence": 1,
-                "modules": [],
-                "suggestions": [{"name": "红外对管循迹数组"}],
-            }
-        ]
-    }
+    onsite = (
+        "红外对管循迹数组",
+        "红外测距传感器",
+        "直流减速电机 + TB6612 双路驱动板",
+        "串口摄像头（JPEG 输出 UART 转接）",
+    )
+    for name in onsite:
+        raw = {
+            "requirements": [
+                {
+                    "requirement": "循迹",
+                    "sentence": 1,
+                    "modules": [],
+                    "suggestions": [{"name": name}],
+                }
+            ]
+        }
 
-    with pytest.raises(SelectionError, match="库外建议的硬件名不在硬件词表中"):
-        build_module_selection(raw, known_slugs=(), hardware_words=DEFAULT_WORDLIST)
+        selection = build_module_selection(
+            raw, known_slugs=(), hardware_words=DEFAULT_WORDLIST
+        )
+
+        suggestion = selection.requirements[0].suggestions[0]
+        assert suggestion.name == name, "命中词表后 name 必须原样保留"
+        assert suggestion.degraded is False, "裸名已入 models，走的是命中而非降级"
 
 
 def test_build_selection_suggestions_without_wordlist_rejected():

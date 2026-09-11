@@ -1,0 +1,329 @@
+{
+  "modules": [
+    {
+      "slug": "k230",
+      "reason": "视觉副控组帧回传钢球坐标"
+    },
+    {
+      "slug": "key",
+      "reason": "启动按键输入"
+    },
+    {
+      "slug": "oled",
+      "reason": "显示屏显示计时"
+    },
+    {
+      "slug": "xunji",
+      "reason": "灰度循迹加权质心巡线"
+    },
+    {
+      "slug": "pid",
+      "reason": "启停线检测停车状态机"
+    },
+    {
+      "slug": "step_motor",
+      "reason": "步进电机控制摆杆角度"
+    },
+    {
+      "slug": "imu_uart",
+      "reason": "航向保持/姿态传感器"
+    },
+    {
+      "slug": "motor",
+      "reason": "双路直流电机驱动"
+    }
+  ],
+  "requirements": [
+    {
+      "requirement": "摄像头实时图传钢球滚动画面并存储回放",
+      "sentence": 23,
+      "modules": [
+        "k230"
+      ],
+      "suggestions": [
+        {
+          "name": "串口摄像头（JPEG 输出 UART 转接）",
+          "examples": [
+            "OV2640 串口图传模块",
+            "ESP32-CAM 串口回传"
+          ],
+          "degraded": false,
+          "solutions": [
+            {
+              "name": "K230（CanMV）",
+              "interface": "UART（CSV 帧给主控）+ 副控板",
+              "price": "￥100-200/板",
+              "note": "官方 CanMV 训练；库内 k230 已打通（副产物 main.py 直接生成；主控侧串口解析随依赖 coord_detect 自动带入）；图像识别/色块/形状",
+              "suitable": "视觉识别/色块追踪/大模型推理",
+              "recommended": true,
+              "lib_modules": [
+                "k230"
+              ]
+            },
+            {
+              "name": "OpenMV Cam H7",
+              "interface": "UART（Python 脚本 → 主控帧解析 `[cx,cy]`/`[pos]`，9600）",
+              "price": "￥200-300/板",
+              "note": "自带 IDE、例程多；识别色块/数字/形状/人脸；Python 脚本直接出结果——库内 open_mv4 已打通（mspm0：open_mv4_init + open_mv4_read_frame 出中心坐标/置信度（真实 UART 轮询、UART1 默认 PA8/PA9——与 K230 视觉互替、同选时经引脚绑定消解），默认 9600）",
+              "suitable": "快速开发视觉功能/数字识别",
+              "recommended": false,
+              "lib_modules": [
+                "open_mv4"
+              ]
+            },
+            {
+              "name": "串口摄像头（JPEG 输出 UART 转接）",
+              "interface": "UART（帧协议，MCU 侧解码 JPEG）",
+              "price": "￥30-60/个",
+              "note": "免副控板直接出图；帧率低（≤10fps）+ MCU 内存吃紧，半角处理够用",
+              "suitable": "极简视觉/无副控板预算",
+              "recommended": false,
+              "lib_modules": []
+            }
+          ],
+          "selected": "串口摄像头（JPEG 输出 UART 转接）"
+        }
+      ]
+    },
+    {
+      "requirement": "按键启动小车行驶",
+      "sentence": 26,
+      "modules": [
+        "key"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "显示行驶总时间",
+      "sentence": 26,
+      "modules": [
+        "oled"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "沿黑线顺时针行驶一圈回到A点",
+      "sentence": 26,
+      "modules": [
+        "xunji"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "停车偏差≤2cm并在A点停准",
+      "sentence": 26,
+      "modules": [
+        "pid"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "小车静止时控制钢球至+5cm折返-5cm并稳定",
+      "sentence": 28,
+      "modules": [
+        "step_motor"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "识别凹槽中钢球位置±5cm",
+      "sentence": 28,
+      "modules": [
+        "k230"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "行驶中保持钢球在中心点误差≤1cm",
+      "sentence": 30,
+      "modules": [
+        "step_motor",
+        "k230"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "一圈通过A点整圈≤30s",
+      "sentence": 32,
+      "modules": [],
+      "suggestions": []
+    },
+    {
+      "requirement": "行驶中保持钢球在任意指定位置误差≤1cm",
+      "sentence": 34,
+      "modules": [
+        "step_motor",
+        "k230"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "沿无引导标记直线段保持航向",
+      "sentence": 40,
+      "modules": [
+        "imu_uart"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "电机驱动小车运动",
+      "sentence": 45,
+      "modules": [
+        "motor"
+      ],
+      "suggestions": []
+    }
+  ],
+  "score_points": [
+    {
+      "id": "1",
+      "part": "basic",
+      "description": "安装摆球位置监测图传装置，实时显示钢球滚动画面并完整记录回放",
+      "score": 6.0,
+      "sentence_refs": [
+        23,
+        24
+      ]
+    },
+    {
+      "id": "2",
+      "part": "basic",
+      "description": "小车从A点按键启动沿黑线顺时针一圈回A停车，计时显示，时间≤20s，停车偏差≤2cm",
+      "score": 16.0,
+      "sentence_refs": [
+        26
+      ]
+    },
+    {
+      "id": "3",
+      "part": "basic",
+      "description": "静止时钢球从中心O到+5cm折返再到-5cm稳定，时间≤5s，误差≤1cm",
+      "score": 13.0,
+      "sentence_refs": [
+        28
+      ]
+    },
+    {
+      "id": "4",
+      "part": "development",
+      "description": "A点启动经B，AB时间≤8s，钢球稳定中心误差≤1cm",
+      "score": 20.0,
+      "sentence_refs": [
+        30
+      ]
+    },
+    {
+      "id": "5",
+      "part": "development",
+      "description": "A点启动一圈经A，总时间≤30s，钢球稳定中心误差≤1cm",
+      "score": 20.0,
+      "sentence_refs": [
+        32
+      ]
+    },
+    {
+      "id": "6",
+      "part": "development",
+      "description": "A点启动一圈经A，总时间≤30s，钢球稳定任意指定位置误差≤1cm",
+      "score": 20.0,
+      "sentence_refs": [
+        34
+      ]
+    },
+    {
+      "id": "7",
+      "part": "unknown",
+      "description": "其他",
+      "score": 5.0,
+      "sentence_refs": [
+        36
+      ]
+    },
+    {
+      "id": "report",
+      "part": "unknown",
+      "description": "设计报告",
+      "score": 20.0,
+      "sentence_refs": [
+        69,
+        70
+      ]
+    },
+    {
+      "id": "total",
+      "part": "unknown",
+      "description": "总分",
+      "score": 120.0,
+      "sentence_refs": [
+        90
+      ]
+    }
+  ],
+  "instances": {
+    "key": [
+      {
+        "name": "启动键",
+        "variant": "start",
+        "pin": ""
+      }
+    ]
+  },
+  "topic_id": "2026H",
+  "references": [
+    {
+      "id": "2026_04_地猛星电赛控制题配套资料",
+      "title": "2026_04_地猛星电赛控制题配套资料",
+      "source": "auto",
+      "platform": "mspm0"
+    },
+    {
+      "id": "26H-滚球巡线决策例程",
+      "title": "26H-滚球巡线决策例程",
+      "source": "auto",
+      "platform": "mspm0"
+    }
+  ],
+  "exclusive_groups": [
+    {
+      "id": "gray-track",
+      "label": "8 路灰度传感器驱动",
+      "hint": false,
+      "members": [
+        {
+          "slug": "huidu",
+          "role": "仅 8 路灰度读取（黑线检测位图），不含巡线/电机控制；适合自写巡线逻辑"
+        },
+        {
+          "slug": "pid",
+          "role": "灰度读取 + 边缘中点巡线偏差 + PID/PD 巡线 + 电机目标速度（含速度环，双平台）"
+        },
+        {
+          "slug": "xunji",
+          "role": "灰度读取（位图）+ 加权质心巡线 + 编码器采样（开环速度输出；真机控制代码移植）"
+        }
+      ],
+      "recommended": [
+        "pid",
+        "xunji"
+      ]
+    },
+    {
+      "id": "attitude-hold",
+      "label": "航向保持 / 姿态传感器",
+      "hint": false,
+      "members": [
+        {
+          "slug": "imu_uart",
+          "role": "UART 串口陀螺仪（9 字节帧 + CRC16，yaw/角速度直出，接 PA28/PA31）"
+        },
+        {
+          "slug": "ml_mpu6050",
+          "role": "I2C + 官方 DMP 姿态解算（pitch/roll/yaw 100Hz，接 PA0/PA1，MPU6050 套件）"
+        }
+      ],
+      "recommended": [
+        "imu_uart"
+      ]
+    }
+  ]
+}
