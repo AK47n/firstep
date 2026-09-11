@@ -413,6 +413,16 @@ SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_ru
   **2026-09-10 第十六轮完成两态**：端口被占态 exit=1 / 7.1s；本应用在跑态 exit=0 / 2.1s。
   证据 `newcomer-onboarding/verify-16-E2-three-states.md`。
   **未验的一态**：**超时弹窗带日志路径**需要劣化环境（如人为拖慢启动），留人工——已在 `00` 第三节登记。
+  **2026-09-18 试把它机器化：六版尝试，仍未复现（如实留口）**——判据是「退出码 1 + 计时」：
+  `:port_busy` ≈7s、`:timeout` ≈25s（两分支弹窗标题同为「firstep 启动失败」，进程侧读不到正文）。
+  六版做成什么样、各自卡在哪，逐条记在 `newcomer-onboarding/verify-16-E2-timeout-state.txt`
+  （v1 慢健康占位服务 7.1s→走 :port_busy；v2 sitecustomize 延迟注入 7.3s；v3 慢响应占位服务 7.7s；
+  v4/v5 `Start-Process` 跑批处理静默不执行；v6 Start-Job 里 launcher 0.2s 退出、现象未定性）。
+  **副产品**（已落盘可复用）：两条分支的计时判据被钉死；`:port_busy` 的触发条件精确化为
+  「**身份判定失败**」而非「端口被占」；留了三个可复用件（`fakebin/python.cmd` 垫片、
+  `diag-trace-start-app.bat` 分支 trace 副本、`e2-launch-job.ps1` 取回退出码）。
+  **结论**：这一态要么在真·慢机器/冷启动环境验，要么先修「E2 判读不可机检」的根因
+  （给 launcher 写可机读的失败原因）——那是产品改动，需另立单。
 
 ## F. 历史流程项（不可回溯复核，仅登记）
 

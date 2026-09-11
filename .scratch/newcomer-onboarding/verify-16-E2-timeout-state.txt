@@ -1,0 +1,81 @@
+# E2 第三态（`start-app.bat` 启动超时弹窗）实测：**未复现**（2026-09-18 第 1~6 版尝试留档）
+
+挂账单项：`.scratch/real-acceptance/issues/01-real-machine-acceptance.md` E2（第三态）。
+来源工单：`.scratch/newcomer-onboarding/issues/02-launcher-chinese-feedback.md`。
+第十六轮已实测两态（见同目录 `verify-16-E2-three-states.md`：端口被占 exit=1 / 7.1s、本应用在跑 exit=0 / 2.1s），
+第三态当时如实留口「需要劣化环境」。本轮试着把它机器化，**结论：本机未能复现**，原因与证据如下。
+
+## 一、判据（先说清，否则复现不了也没法判读）
+
+`start-app.bat` 的失败分支只有两条，弹窗标题**同为**「firstep 启动失败」，正文才区分
+（`:port_busy` = 「端口 8000 已被其他程序占用…」；`:timeout` = 「启动超时（20 秒）…查看日志：…webapp.log」）；
+进程侧读不到弹窗正文，所以只能靠**退出码 + 计时 + 前置条件**判读：
+
+| 分支 | 前置 | 计时（本机实测） |
+|---|---|---|
+| `:port_busy` | 有东西占着 8000 且**身份判定当场失败**（`urlopen(timeout=3)` 超时 / 返回非 JSON） | **≈7s 退出**（exit 1） |
+| `:timeout` | 端口身份判定不成立 → 进 `:wait` 20 次轮询（每次 `timeout=1`）**全失败** | **≈25s 退出**（exit 1） |
+
+要拿到 `:timeout` 的**唯一**形态：`netstat` 那一刻 8000 **无监听**（走 `:start_service`）→
+服务起来了但 **20 秒内给不出可用健康响应**。
+
+## 二、六版尝试（全部为探针件；产品文件零改动）
+
+| 版 | 做法 | 实测结果 | 为什么不行 |
+|---|---|---|---|
+| v1 | 慢健康占位服务占住 8000（`/api/health` 迟响应 3.5s） | `:port_busy`，exit 1 / **7.1s** | 占位服务与 launcher 抢「谁先占端口」，身份判定被拖超时 → 与「返回非 JSON」殊途同归 |
+| v2 | `sitecustomize` 延迟注入、不占端口 | `:port_busy` / **7.3s** | 延迟落在 launcher 自己的 4 次自检上，端口在 `netstat` 之后才被占住 |
+| v3 | 慢响应占位服务（2s 起来、`/api/health` 挂 5s） | `:port_busy` / **7.7s** | 探针自身计时先被自注入延迟污染（自证读数 28.4s = 3s 超时 + 25s 自延迟），修正后仍在身份判定处失败 |
+| v4 | PATH 垫片 `fakebin/python.cmd`（只对 `-m contest_generator.webapp` 那条命令行注入延迟） | **静默不执行**：3.1~3.2s 退出、退出码空、stdout 空 | `Start-Process cmd.exe -ArgumentList @('/c','start-app.bat')` 传数组时 cmd 不执行批处理 |
+| v5 | 同上，把 `cmd /c` 也塞进同一个 ArgumentList 字符串 | **静默** | `cmd.exe cmd /c ...`：PATH 前置垫片目录后，cmd 里找不到 `cmd` |
+| v6 | launcher 交给 `Start-Job` 子进程 `& cmd /c`（同流程 ASCII trace 副本，逐分支写 trace） | trace 停在第二行（`PYEXE=python`）后 **0.2s 内退出 exit 0**，服务从未启动 | 未定位：作业子进程里跑批处理时，`python -c "import sys"` 之后的行为异常；**该现象本身尚未定性**（可能是作业宿主 + PATH 垫片交互，也可能是 trace 副本 `cd /d "%~dp0..\.."` 在作业里落到别处） |
+
+## 三、结论与如实边界
+
+- **第三态在本机仍未复现**（`start-app.bat` 的 `:timeout` 分支未被观察到）。第十六轮那份判断依然成立：
+  它要的「服务起得来但 20s 内不响应」在本机（依赖齐全、真服务 ~2s 就绪）没有自然形态；
+  本轮试的六种人造形态要么落进 `:port_busy`（那是另一个态），要么被宿主/工具链交互打断（v4/v5/v6）。
+  **不把这六版里任何一版的结果冒充成第三态。**
+- **本轮真正验到的**（可复用的副产品）：
+  1. 两条失败分支的**计时判据**被实测钉死：`:port_busy` ≈7s、`:timeout` ≈25s（本机）；
+  2. `:port_busy` 的触发条件比原记录更精确：**不只是「端口被占」，而是「身份判定失败」**——
+     慢响应（v1/v3）与返回非 JSON 都走这条；
+  3. 探针工具链踩到的两个坑已固化：`Start-Process` 跑 `.bat` 不可靠（必须经作业/包装层拿退出码）；
+     `.cmd` 里用 UTF-8 中文注释在 `chcp 936` 下会被 cmd 误解析成命令（症状：
+     `'xxx' is not recognized as an internal or external command`）→ 垫片改为纯 ASCII。
+- **留下的可复用件**（都在 `.scratch/newcomer-onboarding/`）：
+  `fakebin/python.cmd`（PATH 垫片，可对指定命令行注入启动延迟，门控已自证有效）、
+  `diag-trace-start-app.bat`（`start-app.bat` 的同流程 ASCII trace 副本，逐分支写 trace——
+  下次谁要判 launcher 走了哪条分支，直接用它，不用猜弹窗）、
+  `e2-launch-job.ps1`（在作业里跑 launcher 并取回退出码 + trace）。
+- **下一步建议**：这一态要么在真·慢机器/冷启动环境里验（原判据没错），要么先修掉
+  E2「判读不可机检」的根因——给 launcher 加一个**可机读的失败原因**（如把分支名写进
+  `%USERPROFILE%\.contest_generator\launcher.log`）。那属于产品改动，需另立单，不塞进验收。
+
+---
+
+## 附：v6 那一版的原始输出（原样保留，供追溯）
+
+```
+# E2 第三态（启动超时弹窗）实测 v6 2026-09-11 23:48:06
+[0] 前置：释放 8000 + 清更新标记
+    停掉 8000 监听者 PID 55288
+    8000 空闲 = True
+[1] 垫片环境：PATH 前置 fakebin；服务启动延迟 10s（大于 20 次轮询预算）
+    A) 自检命令行：exit 0，用时 0.1s（应约 0.x s = 未注入）
+    B) 服务命令行：4s 后仍在运行 = True（应 True = 已注入延迟）
+    垫片输出：INFO:     Started server process [27876]
+[2] 真跑 launcher：Start-Job → & cmd /c start-app.bat
+    作业 Id = 7
+[3] 轮询弹窗（1s 间隔，最多 70s；抓到记录标题并关掉）
+    未捕获到弹窗进程（以退出码 + 计时判读）
+[4] 结果
+    作业结果文件：exit_code=0 | elapsed_seconds=0.2 | stdout= | trace: | [23:48:24.11] START cwd=C:\Users\luoji\Desktop\firstep  | [23:48:24.13] PYEXE=python
+    判读：exit 0 ⇒ 不是失败分支 FAIL
+    墙钟总耗时 3.4s
+[5] 弹窗点名的日志路径
+    存在：C:\Users\luoji\.contest_generator\webapp.log（1538795 字节，最后写入 09/11/2026 23:43:43）
+[6] 收尾：清延迟子进程 + 复原真 webapp
+    真 webapp 已复原：监听 PID 61688
+    /api/health → HTTP 200：{"app":"contest-generator","version":"1.0.0","ok":true}
+```

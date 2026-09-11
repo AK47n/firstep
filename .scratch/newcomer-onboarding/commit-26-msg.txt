@@ -1,0 +1,35 @@
+test: E2 第三态（启动超时弹窗）机器化尝试——六版未复现，如实留口 + 判据钉死
+
+背景：挂账单 E2 第三态（start-app.bat 的 :timeout 弹窗）自第十六轮起就是「留人工 / 需劣化环境」。
+本轮试机器化，结论不合格：**六版都没复现**，不拿别的分支冒充。
+
+一、判据（本轮最有价值的产出）
+两分支弹窗标题同为「firstep 启动失败」，正文才区分，而进程侧读不到正文 → 只能靠
+「退出码 + 计时 + 前置条件」：
+- :port_busy = 身份判定 urlopen(timeout=3) 当场失败 → 约 7s 退出；
+- :timeout   = 进 20 次轮询（每次 timeout=1）全失败 → 约 25s 退出。
+
+二、六版与被卡在哪（逐条落盘 newcomer-onboarding/verify-16-E2-timeout-state.txt）
+- v1 慢健康占位服务占 8000（迟响应 3.5s）→ :port_busy / 7.1s（占位服务与 launcher 抢端口）；
+- v2 sitecustomize 延迟注入、不占端口 → :port_busy / 7.3s（延迟落在 launcher 自检上）；
+- v3 慢响应占位服务（2s 起、健康接口挂 5s）→ :port_busy / 7.7s（探针自证计时被自注入污染）；
+- v4 PATH 垫片只延迟服务启动命令行 → Start-Process 传数组时 cmd 不执行批处理（静默 3.1s）；
+- v5 同上把 cmd /c 并入同一字符串 → PATH 前置垫片后 cmd 不可见（同样静默）；
+- v6 Start-Job 里 & cmd /c + 同流程 trace 副本 → launcher 0.2s 退出 exit 0、服务未启动，
+  现象未定性（作业宿主 × 垫片 PATH × trace 副本 cwd 的交互，待查）。
+
+三、副产品（已入库可复用）
+- 两分支计时判据钉死；
+- :port_busy 触发条件精确化为「身份判定失败」而非「端口被占」（慢响应也走这条）；
+- 三个探针件：fakebin/python.cmd（门控 PATH 垫片，只对含 contest_generator.webapp 的
+  命令行注入延迟；ASCII-only，因为 .cmd 里 UTF-8 中文注释在 chcp 936 下会被 cmd 误解析成命令）、
+  diag-trace-start-app.bat（start-app.bat 的同流程 ASCII trace 副本，逐分支写 trace，
+  下次判 launcher 走哪条分支直接用它）、e2-launch-job.ps1（作业里跑 launcher 并取回退出码 + trace）；
+- 工具坑两条：Start-Process 跑 .bat 不可靠；.cmd 别用 UTF-8 中文注释。
+
+四、下一步建议（需用户拍板是否立单）
+要真收口这一态，先给 launcher 加可机读的失败原因（如把分支名写进
+%USERPROFILE%\.contest_generator\launcher.log）——那是产品改动，属另立单，不塞进验收挂账单。
+
+产品代码零改动（src/ 与 static/ 未触碰）；测试套件不受影响（上一笔实测 pytest 3994 passed /
+node 1444 pass 0 fail）。
