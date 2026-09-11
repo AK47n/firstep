@@ -357,27 +357,62 @@ SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_ru
 
 ## C. 真实 LLM / 视觉额度（5 项）
 
-- [ ] **C1 来源 `recommend-vision-qa/03`（ready-for-human）**：2021F 真视觉主链路（图内尺寸类澄清被自动消化，不再问用户）+ 三条降级路径。
+**2026-09-18 补勾说明**：C1–C5 **在第十六轮就已全部真机跑完并 PASS**（证据见
+`.scratch/tracker-audit/2026-09-09-在途盘点.md` 第十六轮「① 结果总表 / ② 逐项证据」两表），
+但那一轮的收口只把「C 未勾 0 / 已勾 5」写进了盘点，**挂账单这里一直没回勾**——于是后续
+每一轮盘点都把它当「未验」，`real-acceptance/00` 甚至写成「A–E 组 45/50」。本轮按在盘证据
+逐条核对产物后补勾（**零新增额度**：本轮不重跑已经 PASS 且判据未被后续改动触及的项）。
+逐项产物存在性已核（见下面各条）；C1 / C3 / C5 三条与第十七轮后续改动的关系见各条注记。
+
+- [x] **C1 来源 `recommend-vision-qa/03`（ready-for-human）**：2021F 真视觉主链路（图内尺寸类澄清被自动消化，不再问用户）+ 三条降级路径。
   已就位：`webapp.py:1752-1769` 注入链、`tests/test_vision_qa.py` 9 例；本机 `vision_api_key` 为空（按仓库口径复用主 key，会消耗主 key 额度）。
-- [ ] **C2 来源 `clarify-no-restriction/02`**：重启服务后 2024H 不再问「起始方向 / 声光形式 / 几路」。
+  **2026-09-10 第十六轮完成**：注入式真机探针把「图 1 走廊宽度」喂给真视觉链路 → 真视觉答
+  **30cm** → 并入澄清历史 → **未发 question 事件** → 收敛 done，五项判据全 PASS；三条降级
+  路径全 PASS。证据 `recommend-vision-qa/verify-16-C1-clarify-vision{,.json,-run.txt}` +
+  `verify-16-degrade-paths{,.json,-run.txt}`。
+  **与后续改动的关系**：该轮第 1/3 次编排曾栽在域拒绝（`real-acceptance/03` 的病），第 2/4 次
+  收敛——`03` 在第十七轮已修（kind=domain 分流 + 带理由重试 1 次），只会让这条链路更稳，
+  不影响本项判据（视觉消化 + 不发 question）。
+- [x] **C2 来源 `clarify-no-restriction/02`**：重启服务后 2024H 不再问「起始方向 / 声光形式 / 几路」。
   已就位：提示词条款 `llm.py:153/182`、契约测试 `tests/test_llm.py:5743`。
-- [ ] **C3 来源 `fix-request-budget/01`**：真实超大中文上下文打 `/api/fix-errors`，不再「请求体过大」。
+  **2026-09-10 第十六轮完成**：提示词三条条款契约逐条命中 + 真机走 `llm.clarify`（2024H）
+  返回 **0 条补问**、三类历史症状问题均未出现。证据 `clarify-no-restriction/verify-16-C2-{clarify,2024H}.txt`。
+- [x] **C3 来源 `fix-request-budget/01`**：真实超大中文上下文打 `/api/fix-errors`，不再「请求体过大」。
   已就位：`fix_errors.py:359`、`tests/test_llm.py:1117`（最坏总量 < 128KB 已钉死）。
-- [ ] **C4 来源 `fix-session-homing/01`**：真机贴文本修复一次真实调用，事件流与回滚一致。
+  **2026-09-10 第十六轮完成**：最坏形态（各段顶满、全中文）**客户端请求体 229120 字节**打真端点
+  → 未报「请求体过大」、终态 done、事件流正常；**诚实边界**（原轮已记）：探针伪造模块路径使其
+  走 degraded 分支（真实文件不匹配）。证据 `fix-request-budget/verify-16-huge-context{,.json,-run.txt}`。
+  **判据有效性复核（2026-09-18）**：本项依赖的常量 `budget.FIX_CONTEXT_TOTAL_BYTES` 仍是 **23000**
+  （与本项落地时一致；第十七轮改的是推荐侧 `REFERENCE_FULLTEXT_BYTES`，不碰 fix 上下文段），
+  探针无硬编码过期值 → 该 PASS 仍成立，本轮不重跑。
+- [x] **C4 来源 `fix-session-homing/01`**：真机贴文本修复一次真实调用，事件流与回滚一致。
   已就位：`fix_errors.py:726 run_fix_round`、`tests/test_fix_errors.py:932/998/1013/1177/1200`。
-- [ ] **C5 来源 `key-multi-instance/07`**：AI 推荐抽验 2026F / 2022C / 2026C（多实例猜测是否合理）。
+  **2026-09-10 第十六轮完成**：事件流 `parse_done → fix_start → llm_telemetry → apply_result → done`、
+  1 处 applied、回滚后 `main.c` sha **复原**；脚本口径修正（基线取「注入后」）已在原轮记。
+  证据 `fix-session-homing/verify-16-fix-round-live{,.json,-run.txt}`。
+- [x] **C5 来源 `key-multi-instance/07`**：AI 推荐抽验 2026F / 2022C / 2026C（多实例猜测是否合理）。
+  **2026-09-10 第十六轮完成**：三题 done 载荷落盘 `recommend-domain-reject/done-16-{2026F,2022C,2026C}-stm32.json`
+  （本轮复核：模块 12/9/9、实例 2/2/1、需求 10/11/13）；**2022C 三次尝试曾被词表闸拒绝** → 正是
+  `real-acceptance/03` / `08` 两条的取证来源，两条均已 resolved。**与后续改动的关系**：第十八轮
+  复跑 2022C / 2026H 双题 done、词表闸拒收 0 条（`verify-18-recommend-*.txt`），比本项原判据更强。
 
 ## D. 人工取源 / 外部账号（2 项）
 
 - [ ] **D1 来源 `identity-fields/06`（ready-for-human）**：6 个器件补 `kit` + `source_url`（beep / ir_beam / key / led / led_beep / step_motor）——
   或明确判「永久不补」并改 `library.MODULE_KIND`（内部件 / 协议切片）。**机器不许编链接**，必须人工核实。
-- [ ] **D2 来源 `wiki-md-repair/02`**：跨分类抽查 ≥5 篇（现记 4 篇：sensor / rf / screen / control 各一）。
+- [x] **D2 来源 `wiki-md-repair/02`**：跨分类抽查 ≥5 篇（原记 4 篇：sensor / rf / screen / control 各一）。
+  **2026-09-10 第十六轮完成（口径变更）**：库内 Markdown 资料**实际只有这 4 个分类**，故「≥5 篇」
+  不可达 → 按「每分类各抽 1 篇」跑满并留原话。证据 `wiki-md-repair/verify-16-spotcheck.txt` +
+  四份 `<篇名>.review.txt`（control / rf / screen / sensor 各一）。
 
 ## E. 干净机器 / 启动脚本三态（2 项）
 
 - [ ] **E1 来源 `newcomer-onboarding/01`**：全新机器 `install.bat` → `.venv` → 双击 `start-app.vbs` 起服务走通
   （含「无 python」「有旧版 python」两态中文提示；`tests/test_onboarding_docs.py:27` 已守门文案）。
-- [ ] **E2 来源 `newcomer-onboarding/02`**：`start-app.bat` 双态实测——正常态无黑窗 + 端口被占中文弹窗 + 超时弹窗带日志路径。
+- [x] **E2 来源 `newcomer-onboarding/02`**：`start-app.bat` 双态实测——正常态无黑窗 + 端口被占中文弹窗 + 超时弹窗带日志路径。
+  **2026-09-10 第十六轮完成两态**：端口被占态 exit=1 / 7.1s；本应用在跑态 exit=0 / 2.1s。
+  证据 `newcomer-onboarding/verify-16-E2-three-states.md`。
+  **未验的一态**：**超时弹窗带日志路径**需要劣化环境（如人为拖慢启动），留人工——已在 `00` 第三节登记。
 
 ## F. 历史流程项（不可回溯复核，仅登记）
 
