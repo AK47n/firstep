@@ -623,6 +623,20 @@ def _group_roles(group: Mapping[str, object]) -> list[str]:
     return [str(key) for key in roles] if isinstance(roles, list) else []
 
 
+def _group_modules(group: Mapping[str, object]) -> list[str]:
+    """冲突组涉及的角色所属模块（保序去重；消费方如引脚容量诊断要报「哪些模块在冲突」）。
+
+    角色键文法 `<slug>.<role_id>` 由本模块的 `resolve_bindings` 唯一校验、也由本模块的
+    `_group_roles` 唯一读出，故解析归本模块，不向消费方泄漏（引脚容量诊断只报模块名）。
+    """
+    modules: list[str] = []
+    for role in _group_roles(group):
+        slug = role.split(".", 1)[0]
+        if slug not in modules:
+            modules.append(slug)
+    return modules
+
+
 def _role_entries(
     manifests: Sequence[ModuleManifest],
     platform: str,

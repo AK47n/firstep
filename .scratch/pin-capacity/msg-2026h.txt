@@ -1,0 +1,15 @@
+mspm0 引脚冲突：落盘后的 mspm0.syscfg 有 7 个引脚被两只实例同时占用，SysConfig 会直接编译失败（Resource conflict）：
+  · PA13：motor（PWMAB.peripheral.ccp1Pin，角色 motor.PWMAB_C1） × oled（OLED_SPI.associatedPins[2].pin，角色 oled.OLED_SPI_DC）
+  · PA22：huidu（HUIDU.associatedPins[0].pin，角色 huidu.L1） × oled（OLED_SPI.associatedPins[4].pin，角色 oled.OLED_SPI_RES）
+  · PA27：l298n（L298N.associatedPins[0].pin，角色 l298n.L298N_EN） × huidu（HUIDU.associatedPins[5].pin，角色 huidu.R2）
+  · PA28：oled（OLED_SPI.associatedPins[0].pin，角色 oled.OLED_SPI_SCL） × imu_uart（IMU601.peripheral.txPin，角色 imu_uart.IMU601_TX）
+  · PA31：oled（OLED_SPI.associatedPins[1].pin，角色 oled.OLED_SPI_SDA） × imu_uart（IMU601.peripheral.rxPin，角色 imu_uart.IMU601_RX）
+  · PA7：servo（SERVO_PWM.peripheral.ccp0Pin，角色 servo.SERVO_PWM_C0） × motor（DC_MOTOR.associatedPins[3].pin，角色 motor.BIN2）
+  · PB18：motor（DC_MOTOR.associatedPins[2].pin，角色 motor.BIN1） × oled（OLED_SPI.associatedPins[3].pin，角色 oled.OLED_SPI_CS）
+【引脚容量】13 个模块 / 42 个引脚落点（上界：合法共享会少占脚）；地猛星 MSPM0G3507 板载可用 IO 31 脚，本次已占 27 脚、剩余 4 脚。
+实测到的 7 组同脚冲突「自动配置」可解开 4 组，剩余 3 组无法靠改绑解开（任一方模块让位即可）：
+    · oled.OLED_SPI_SDA × imu_uart.IMU601_RX
+    · motor.BIN2 × servo.SERVO_PWM_C0
+    · motor.BIN1 × oled.OLED_SPI_CS
+解冲突后板上的可用 IO 脚已全被占用（31 脚，一个空闲脚都不剩），而剩余冲突组无法靠改绑解开——该选中集在地猛星 MSPM0G3507上物理不可实现：至少要去掉 3 个模块（冲突模块：oled、imu_uart、motor、servo）。（佐证：引脚落点 42 个 > 板上可用 IO 31 脚；落点含合法共享与没有可落脚默认脚的角色，只是上界。）
+出路：在引脚配置里改绑上述角色（或点「自动配置」一键解开），或去掉冲突模块中的一个后重新生成。

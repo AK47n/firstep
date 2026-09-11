@@ -1195,6 +1195,118 @@ def test_syscfg_pin_conflicts_output_tree_corpus_judges_current_text(tmp_path):
     assert "DC_MOTOR_1.associatedPins[0].pin" in str(excinfo.value)
 
 
+def test_syscfg_pin_conflicts_message_carries_capacity_numbers(tmp_path):
+    """引脚容量诊断（工单 pin-capacity/01）：真机 2026H/mspm0 选中集（12 选中 +
+    依赖展开 = 13 manifest）在门禁 400 文案里必须带可操作数字——选中集规模、板上可用
+    IO、占用脚、门禁发现几组、一键配置解开几组、剩余几组、最低代价几个模块。
+
+    数字为**独立来源**（真库 + 真板 + 真母版现算，spec「本轮实测基线」表）：
+    13 模块 / 42 落点 / 占用 27 脚 / 可用 31 脚 / 撞脚 7 组 / 一键搬动 4 组 /
+    剩 3 组无解（PA31 oled.OLED_SPI_SDA × imu_uart.IMU601_RX、
+    PA7 motor.BIN2 × servo.SERVO_PWM_C0、PB18 motor.BIN1 × oled.OLED_SPI_CS——与
+    `.scratch/pin-capacity/probe-03-2026h-baseline.py` 的剩余组**逐条一致**）/
+    解后空闲 0 脚 → 物理不可实现，下界 3 个模块（= 剩余组数）。
+
+    断言全部落在**用户读得到的那条文案**上（门禁是唯一外部缝），不测内部结构。
+
+    与探针的一处已知差异（如实记账）：探针让 `l298n.L298N_EN` 挪到 PB8、门禁让
+    `motor.BIN2` 让位，**剩余 3 组的角色对两处相同**，只有「涉及哪些模块」的并集不同
+    ——两处共用同一求解器，差异只在让位顺序，故本用例钉死的是角色对与剩余组数，
+    模块清单只断言「在剩余组里出现过的模块被判为冲突方」。
+    """
+    corpus = _real_mspm0_syscfg_corpus(tmp_path)
+    manifests = _real_mspm0_manifests(*REAL_2026H_MSPM0_SLUGS)
+
+    with pytest.raises(SyscfgPinConflictError) as excinfo:
+        _check_syscfg_pin_conflicts(
+            corpus, manifests, PLATFORM_MSPM0, GateContext(board=_mspm0_board())
+        )
+
+    message = str(excinfo.value)
+    assert "13 个模块 / 42 个引脚落点" in message  # 选中集规模与落点
+    assert "板载可用 IO 31 脚" in message  # 板上容量（整板可用脚）
+    assert "已占 27 脚、剩余 4 脚" in message  # 占用与剩余空闲
+    assert "7 组同脚冲突" in message  # 门禁发现
+    assert "可解开 4 组，剩余 3 组无法靠改绑解开" in message  # 一键配置的真实能力
+    for unresolved_pair in (
+        "oled.OLED_SPI_SDA × imu_uart.IMU601_RX",
+        "motor.BIN2 × servo.SERVO_PWM_C0",
+        "motor.BIN1 × oled.OLED_SPI_CS",
+    ):
+        assert unresolved_pair in message, f"缺无解角色对 {unresolved_pair}：{message}"
+    # 剩余组涉及模块的并集（保序去重）——只断言确在剩余组里出现过的模块
+    assert "冲突模块：oled、imu_uart、motor、servo）" in message
+    # 硬事实在前：解冲突后占用 = 板上全部可用 IO、一行空脚都不剩；落点数只作上界佐证
+    assert "可用 IO 脚已全被占用（31 脚，一个空闲脚都不剩）" in message
+    assert "物理不可实现" in message
+    assert "至少要去掉 3 个模块" in message  # 下界（= 无解组数）
+    assert "落点 42 个 > 板上可用 IO 31 脚" in message and "只是上界" in message
+    assert "去掉冲突模块中的一个后重新生成" in message  # 出路文案照旧在末尾
+
+
+def test_syscfg_pin_conflicts_message_reports_solvable_case_numbers(tmp_path):
+    """反向守卫（防「到处加数字」）：只选 motor + servo = 可解形态（一键即可解开），
+    文案要给容量数字与「可解开」，**不得**出现最低代价陈述。"""
+    corpus = _real_mspm0_syscfg_corpus(tmp_path)
+    manifests = _real_mspm0_manifests("motor", "servo")
+
+    with pytest.raises(SyscfgPinConflictError) as excinfo:
+        _check_syscfg_pin_conflicts(
+            corpus, manifests, PLATFORM_MSPM0, GateContext(board=_mspm0_board())
+        )
+
+    message = str(excinfo.value)
+    assert "板载可用 IO 31 脚" in message
+    assert "1 组同脚冲突" in message
+    assert "都可以解开" in message
+    assert "不必去掉模块" in message
+    assert "至少要去掉" not in message
+    assert "物理不可实现" not in message
+
+
+def test_syscfg_pin_conflicts_no_capacity_numbers_without_board(tmp_path):
+    """降级逐字不变（工单 pin-capacity/01）：缺板定义（`GateContext()`，绑定缺省形态）
+    时门禁照旧拦，但**不**补容量数字——既有 400 文案与测试契约不被污染。"""
+    corpus = _real_mspm0_syscfg_corpus(tmp_path)
+    manifests = _real_mspm0_manifests("motor", "servo")
+
+    with pytest.raises(SyscfgPinConflictError, match="PA7") as excinfo:
+        _check_syscfg_pin_conflicts(corpus, manifests, PLATFORM_MSPM0, GateContext())
+
+    message = str(excinfo.value)
+    assert "容量" not in message
+    assert "可用 IO" not in message
+    assert "落点" not in message
+    assert "去掉冲突模块中的一" in message  # 出路文案仍是改动前那一句
+
+
+def test_syscfg_pin_conflicts_no_capacity_numbers_on_output_tree_corpus(tmp_path):
+    """降级逐字不变（工单 pin-capacity/01）：产物复核形态（`manifests == []`，语料即
+    生成时落盘结果、没有选中集知识）→ 门禁照旧拦，但**不**补容量数字。"""
+    conflicting = (
+        "const DC_MOTOR = scripting.addModule('/ti/driverlib/GPIO');\n"
+        "const DC_MOTOR_1 = DC_MOTOR.addInstance();\n"
+        "DC_MOTOR_1.associatedPins.create(1);\n"
+        'DC_MOTOR_1.associatedPins[0].pin.$assign = "PA7";\n'
+        "const SERVO_PWM = scripting.addModule('/ti/driverlib/PWM');\n"
+        "const SERVO_PWM_1 = SERVO_PWM.addInstance();\n"
+        'SERVO_PWM_1.peripheral.ccp0Pin.$assign = "PA7";\n'
+    )
+    corpus = _memory_corpus(
+        tmp_path, platform=PLATFORM_MSPM0, master_syscfg=conflicting
+    )
+
+    with pytest.raises(SyscfgPinConflictError, match="PA7") as excinfo:
+        _check_syscfg_pin_conflicts(
+            corpus, [], PLATFORM_MSPM0, GateContext(board=_mspm0_board())
+        )
+
+    message = str(excinfo.value)
+    assert "可用 IO" not in message
+    assert "引脚容量" not in message
+    assert "落点" not in message
+
+
 def test_run_generation_gates_invokes_all_in_order_and_stops_on_failure(
     monkeypatch,
 ):

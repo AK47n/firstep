@@ -1,0 +1,5 @@
+mspm0 引脚冲突：落盘后的 mspm0.syscfg 有 1 个引脚被两只实例同时占用，SysConfig 会直接编译失败（Resource conflict）：
+  · PA7：servo（SERVO_PWM.peripheral.ccp0Pin，角色 servo.SERVO_PWM_C0） × motor（DC_MOTOR.associatedPins[3].pin，角色 motor.BIN2）
+【引脚容量】2 个模块 / 11 个引脚落点（上界：合法共享会少占脚）；地猛星 MSPM0G3507 板载可用 IO 31 脚，本次已占 10 脚、剩余 21 脚。
+实测到的 1 组同脚冲突「自动配置」都可以解开（会解开 1 组），改绑后剩余空闲 20 脚——不必去掉模块。
+出路：在引脚配置里改绑上述角色（或点「自动配置」一键解开），或去掉冲突模块中的一个后重新生成。

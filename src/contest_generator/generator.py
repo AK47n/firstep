@@ -49,6 +49,7 @@ from .patchers import (
     include_search_dirs,
 )
 from .pin_bindings import PinBindingError, ResolvedBinding, resolve_bindings
+from .pin_capacity import diagnose_pin_capacity, render_pin_capacity_diagnosis
 from .pinwriter import apply_pin_bindings
 from .syscfg_model import (
     MSPM0_SYSCFG_FILENAME,
@@ -1712,10 +1713,25 @@ def _check_syscfg_pin_conflicts(
     for pin in sorted(conflicts):
         sites = " × ".join(roles.get(path, f"{path}（角色未登记）") for path in conflicts[pin])
         lines.append(f"  · {pin}：{sites}")
+    # 引脚容量诊断（工单 pin-capacity/01）：只升文案、不增拦截——判据与触发条件
+    # 一行未改，只在逐脚清单之后、出路之前补可操作数字（选中集规模 / 板上可用 IO /
+    # 占用与空闲 / 一键配置解开几组剩几组 / 最低代价几个模块）。两种形态没有诊断
+    # 可言，走缺省文案：① 无选中集知识（产物复核 `run_generation_gates(corpus, [],
+    # platform)`，manifests 为空）；② 板数据缺失（bindings 缺省且板加载降级为
+    # None）——都给不出「可用 IO / 落点」这些数，编不得。
+    capacity = ""
+    if manifests and context.board is not None:
+        capacity = "\n" + render_pin_capacity_diagnosis(
+            diagnose_pin_capacity(
+                manifests, platform, context.board, context.bindings
+            ),
+            context.board.name,
+        )
     raise SyscfgPinConflictError(
         f"mspm0 引脚冲突：落盘后的 {MSPM0_SYSCFG_FILENAME} 有 {len(conflicts)} 个引脚"
         "被两只实例同时占用，SysConfig 会直接编译失败（Resource conflict）：\n"
         + "\n".join(lines)
+        + capacity
         + "\n出路：在引脚配置里改绑上述角色（或点「自动配置」一键解开），"
         "或去掉冲突模块中的一个后重新生成。"
     )
