@@ -1,0 +1,25 @@
+[02] 真机选中集：12 模块（展开 13）
+
+[02] 现状（开关缺省关）= 旧行为：
+  增量 （空）；fixed （空）；conflict 标注 7 组
+
+[02] 一键配置（resolve_default_conflicts=True，端点走这条）：
+  ✓ oled.OLED_SPI_DC → PA0（原 PA13 与 motor.PWMAB_C1 冲突，已自动移开）
+  ✓ oled.OLED_SPI_RES → PA1（原 PA22 与 huidu.L1、pid.GRAY_D1 冲突，已自动移开）
+  ✓ l298n.L298N_EN → PB8（原 PA27 与 huidu.R2、pid.GRAY_D6 冲突，已自动移开）
+  ✓ oled.OLED_SPI_SCL → PA15（原 PA28 与 imu_uart.IMU601_TX 冲突，已自动移开）
+  增量 4 条；剩余 conflict 标注 3 组
+  鸽子笼口径：角色落点 42 个（含合法共享的重复落点）vs 板上可用 IO 31 脚——空闲脚池已被这次配置全部用掉，故剩下的组不是算法没解、是这块板上**物理没解**（母版默认布局「同选概率最低者重叠」的上限）
+    · 未解 PA31：oled.OLED_SPI_SDA / imu_uart.IMU601_RX
+    · 未解 PA7：motor.BIN2 / servo.SERVO_PWM_C0
+    · 未解 PB18：motor.BIN1 / oled.OLED_SPI_CS
+
+[02] 可解形态（motor + servo，真库真母版）：
+  ✓ servo.SERVO_PWM_C0 → PA0（原 PA7 与 motor.BIN2 冲突，已自动移开）
+  剩余 conflict 标注 0 组
+
+[02] 带增量再生成：
+  ✓ 生成通过；产物 syscfg 同脚多实例复算 = 无
+
+[02] --bindings 载荷（可粘给 generate_check.py，配 --drop 收窄到同一选中集）：
+{"servo.SERVO_PWM_C0": "PA0"}

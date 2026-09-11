@@ -2031,6 +2031,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         不动。校验与 validate / generate 同源（resolve_bindings + 同一份
         manifests / board）。
 
+        默认脚撞脚消解（工单 pin-conflict-gate/02）：本端点拿到的 slugs 就是
+        本次选中集，正是唯一有「选中集语义」的调用方 → 开 resolve_default_conflicts
+        （生成门禁 syscfg_pin_conflicts 拦下的那批默认撞脚，一键即可解开；库级 /
+        纯校验调用方缺省不开，旧行为零变化）。
+
         契约：{platform, slugs, bindings} → {ok:true, bindings(增量),
         fixed(调整说明), shared(保留共享标注)} 或 {ok:false, error}。
         """
@@ -2041,7 +2046,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         board = board_for_platform(platform)
         try:
             result = auto_assign_bindings(
-                resolved.manifests, platform, board, bindings
+                resolved.manifests,
+                platform,
+                board,
+                bindings,
+                resolve_default_conflicts=True,
             )
         except PinBindingError as exc:
             return {"ok": False, "error": str(exc)}

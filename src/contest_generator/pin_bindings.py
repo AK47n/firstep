@@ -498,6 +498,8 @@ def auto_assign_bindings(
     platform: str,
     board: Board,
     raw: Mapping[str, str] | None,
+    *,
+    resolve_default_conflicts: bool = False,
 ) -> AutoAssignResult:
     """一键解冲突（工单 pin-auto-assign/01）：确定性贪心求解，零 LLM。
 
@@ -512,17 +514,54 @@ def auto_assign_bindings(
     整体 resolve_bindings 验证，合法 = 保留不动）；非法 → 换候选引脚（板
     排针，跳过已占用——自动配置倾向不制造新共享），逐个试绑整体验证，
     首个成功者。唯一校验 = resolve_bindings，不复制判定。
+
+    resolve_default_conflicts（工单 pin-conflict-gate/02）= 「默认×默认撞脚」
+    消解相，**缺省关**：只对知道「本次选中了什么」的调用方（生成页引脚卡的
+    `/api/bindings/auto`）开。为什么必须是显式开关——全库默认布局本身就是
+    「全量实例 + 同选概率最低者重叠」（mspm0 27 组 / stm32 26 组刻意重叠），
+    库级 / 纯校验调用方把它们当成「要解的冲突」是无意义的；而选中集里剩下的
+    同脚冲突就是真会炸 SysConfig 的那些（生成门禁 syscfg_pin_conflicts 拦下的
+    是同一批）。本相：逐组让**一个**角色让位（让位方 = 选中清单里靠后的模块，
+    同模块内角色键序最后；已被用户显式绑定的角色不动 = 用户明确选择），移到
+    能力匹配、且搬完不再出现在任何冲突组里的首个空闲脚；合法共享
+    （`kind="share"`）一律不动；搬不动（无候选脚）= 该组留在 shared 标注里
+    如实可见，不谎报成功也不抛错。
     """
     bindings = dict(raw or {})
-    # 1. 现状合法 = 无冲突（含合法共享），直接返回
+    # 1. 现状合法 = 无绑定级冲突（含合法共享）：跳过逐角色修复相
+    fixed: list[str] = []
+    repaired: dict[str, str] = dict(bindings)
     try:
         resolve_bindings(manifests, platform, board, bindings or None)
-        return AutoAssignResult(
-            bindings={}, fixed=(), shared=_shared_groups(manifests, platform, board, bindings)
-        )
     except PinBindingError:
-        pass
-    # 2. 逐角色修复：先试原值（合法保留），非法换脚（跳过已占用）
+        repaired, fixed = _repair_binding_conflicts(
+            manifests, platform, board, bindings
+        )
+    # 2. 默认脚撞脚消解相（只对选中集语义的调用方开，缺省零变化）
+    if resolve_default_conflicts:
+        repaired, default_fixed = _resolve_default_pin_conflicts(
+            manifests, platform, board, repaired, raw or {}
+        )
+        fixed = fixed + default_fixed
+    delta = {
+        key: pin for key, pin in repaired.items()
+        if (raw or {}).get(key) != pin
+    }
+    return AutoAssignResult(
+        bindings=delta,
+        fixed=tuple(fixed),
+        shared=_shared_groups(manifests, platform, board, repaired),
+    )
+
+
+def _repair_binding_conflicts(
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+    board: Board,
+    bindings: Mapping[str, str],
+) -> tuple[dict[str, str], list[str]]:
+    """逐角色修复相（工单 pin-auto-assign/01 原算法，逐字抽出）：先试原值
+    （整体 resolve_bindings 合法 = 保留），非法 → 换能力匹配的候选脚。"""
     repaired: dict[str, str] = {}
     used: set[str] = set()
     fixed: list[str] = []
@@ -556,15 +595,144 @@ def auto_assign_bindings(
                 f"自动配置无法为 {key} 找到可用引脚（能力匹配且未被占用的引脚"
                 "不存在或与其余绑定冲突），请手动调整"
             )
-    delta = {
-        key: pin for key, pin in repaired.items()
-        if (raw or {}).get(key) != pin
+    return repaired, fixed
+
+
+# 默认脚撞脚消解的最大搬动次数（防御性上限：选中集内真冲突组数量级 ~10，
+# 全库调用不开本相；上限保证任何输入下都是有限、确定的迭代）
+_MAX_DEFAULT_CONFLICT_MOVES = 32
+
+
+def _default_conflict_groups(
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+    board: Board,
+    bindings: Mapping[str, str],
+) -> list[dict[str, object]]:
+    """当前绑定/默认布局下的物理冲突组（`kind="conflict"`，共享组不算）。"""
+    return [
+        group
+        for group in _shared_groups(manifests, platform, board, bindings)
+        if group["kind"] == "conflict"
+    ]
+
+
+def _group_roles(group: Mapping[str, object]) -> list[str]:
+    """冲突组的角色键清单（`_shared_groups` 的 roles 字段，形状由它保证）。"""
+    roles = group.get("roles")
+    return [str(key) for key in roles] if isinstance(roles, list) else []
+
+
+def _role_entries(
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+    bindings: Mapping[str, str],
+) -> list[tuple[str, str, PinDeclaration, str]]:
+    """选中角色的生效落点：(角色键, slug, 声明, 生效引脚)。绑定优先、缺省用声明
+    默认脚；无默认脚 = 不含（角色键与生效脚的唯一推导出处，`_shared_groups` 与
+    默认脚消解相共用——两处各写一遍就会漂移）。"""
+    entries: list[tuple[str, str, PinDeclaration, str]] = []
+    for manifest in manifests:
+        entry = manifest.platforms.get(platform)
+        if entry is None:
+            continue
+        for decl in entry.pins:
+            key = f"{manifest.slug}.{decl.id}"
+            pin = bindings.get(key) or decl.default
+            if pin:
+                entries.append((key, manifest.slug, decl, pin))
+    return entries
+
+
+def _resolve_default_pin_conflicts(
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+    board: Board,
+    bindings: Mapping[str, str],
+    explicit: Mapping[str, str],
+) -> tuple[dict[str, str], list[str]]:
+    """默认脚撞脚消解相（工单 pin-conflict-gate/02）：逐组搬一个让位角色。
+
+    让位方 = 该组成员所属模块在选中清单里**靠后**者（同模块内角色键序最后），
+    且**未被用户显式绑定**（显式 = 用户明确选择，只标注不搬）；组内全是显式
+    绑定 → 整组不动。候选脚 = 板定义引脚序里「**空闲**（本次选中集内没有任何
+    其它角色用它，含合法共享的同伴——同一实例的三条落点挤一个脚是接线错，
+    真机上连 SysConfig 都过不去）+ resolve_bindings 试绑合法 + 搬完该角色不再
+    出现在任何冲突组 + 不把冲突搬到别处」的首个脚。
+
+    让位方按偏好序**逐个试**（先靠后模块，搬不动换下一个）：UART TX/RX 这类
+    成对角色单搬一个过不了成对校验，得让组里另一侧让位——只钉「第一个候选」
+    会在真机上留下解不掉的两组（2026H 的 PA28/PA31 实测）。搬不动 → 该组留给
+    shared 标注（不抛错：一键配置是尽力而为，拦生成是门禁的活）。
+    """
+    repaired = dict(bindings)
+    fixed: list[str] = []
+    order = {manifest.slug: index for index, manifest in enumerate(manifests)}
+    given_up: set[str] = set()
+
+    def rank(key: str) -> tuple[int, str]:
+        slug = key.split(".", 1)[0]
+        return (order.get(slug, -1), key)
+
+    for _ in range(_MAX_DEFAULT_CONFLICT_MOVES):
+        conflicts = _default_conflict_groups(manifests, platform, board, repaired)
+        target = next((g for g in conflicts if g["pin"] not in given_up), None)
+        if target is None:
+            break
+        movable = [key for key in _group_roles(target) if key not in explicit]
+        pin: str | None = None
+        victim: str | None = None
+        for candidate in sorted(movable, key=rank, reverse=True):
+            pin = _first_pin_without_conflict(
+                candidate, manifests, platform, board, repaired, conflicts
+            )
+            if pin is not None:
+                victim = candidate
+                break
+        if victim is None or pin is None:
+            given_up.add(str(target["pin"]))
+            continue
+        repaired[victim] = pin
+        others = "、".join(key for key in _group_roles(target) if key != victim)
+        fixed.append(f"{victim} → {pin}（原 {target['pin']} 与 {others} 冲突，已自动移开）")
+    return repaired, fixed
+
+
+def _first_pin_without_conflict(
+    victim: str,
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+    board: Board,
+    bindings: Mapping[str, str],
+    conflicts: Sequence[Mapping[str, object]],
+) -> str | None:
+    """让位角色的候选脚：板定义引脚序里「空闲 + 能力匹配 + 搬完不再冲突」的首个脚。
+
+    空闲 = 本次选中集内没有别的角色落脚（其它角色的默认脚也算占用——母版默认
+    布局按「同选概率最低者重叠」铺满，但**选中集内**没被别的选中角色用掉的脚
+    就是生成时 prune 之后真正空出来的脚，正是可搬家当）。
+    """
+    before = len(conflicts)
+    occupied = {
+        pin for key, _slug, _decl, pin in _role_entries(manifests, platform, bindings)
+        if key != victim
     }
-    return AutoAssignResult(
-        bindings=delta,
-        fixed=tuple(fixed),
-        shared=_shared_groups(manifests, platform, board, repaired),
-    )
+    for pin in board.pins:
+        if pin.name in occupied:
+            continue
+        trial = dict(bindings)
+        trial[victim] = pin.name
+        try:
+            resolve_bindings(manifests, platform, board, trial)
+        except PinBindingError:
+            continue
+        after = _default_conflict_groups(manifests, platform, board, trial)
+        if any(victim in _group_roles(group) for group in after):
+            continue
+        if len(after) > before:
+            continue  # 别把冲突搬到别处
+        return pin.name
+    return None
 
 
 def _role_resource_keys(slug: str, decl: PinDeclaration, bound: BoardPin | None) -> set[str]:
@@ -603,15 +771,8 @@ def _shared_groups(
     DIP 拨码与灰度同脚等实际不可共用）。
     """
     groups: dict[str, list[tuple[str, str, PinDeclaration]]] = {}
-    for manifest in manifests:
-        entry = manifest.platforms.get(platform)
-        if entry is None:
-            continue
-        for decl in entry.pins:
-            key = f"{manifest.slug}.{decl.id}"
-            pin = bindings.get(key) or decl.default
-            if pin:
-                groups.setdefault(pin, []).append((key, manifest.slug, decl))
+    for key, slug, decl, pin in _role_entries(manifests, platform, bindings):
+        groups.setdefault(pin, []).append((key, slug, decl))
     shared: list[dict[str, object]] = []
     for pin, roles in sorted(groups.items()):
         if len(roles) < 2 or board.pin_index.get(pin) is None:

@@ -23,6 +23,7 @@ from contest_generator.generator import (
     ModuleFile,
     ModuleSelfIncludeError,
     OutputDirNotEmptyError,
+    SyscfgPinConflictError,
     UndefinedCallsError,
     UnresolvedIncludeError,
     _LIBC_HEADERS,
@@ -30,6 +31,7 @@ from contest_generator.generator import (
     _check_macro_conflicts,
     _check_module_files,
     _check_module_self_include,
+    _check_syscfg_pin_conflicts,
     _check_unresolved_includes,
     _search_dir_header_names,
     build_module_corpus,
@@ -397,9 +399,12 @@ def _memory_corpus(
     missing_platforms: list[str] | None = None,
     master_headers: list[tuple[str, str]] | None = None,
     search_dir_headers: tuple[tuple[Path, frozenset[str]], ...] = (),
+    platform: str = PLATFORM_STM32,
+    master_syscfg: str | None = None,
 ) -> ModuleCorpus:
     """内存语料：module_texts = (slug, rel, text)，master_headers / 搜索目录
-    头名单可传（默认空）。"""
+    头名单可传（默认空）。master_syscfg = 母版（或产物树）syscfg 文本——
+    生成期引脚冲突门禁吃它（工单 pin-conflict-gate/01）。"""
     files: list[tuple[str, tuple[ModuleFile, ...]]] = []
     seen_slugs: set[str] = set()
     for slug, rel, text in module_texts or []:
@@ -412,7 +417,7 @@ def _memory_corpus(
             if s == slug:
                 files[i] = (s, (*_files, file))
     return ModuleCorpus(
-        platform=PLATFORM_STM32,
+        platform=platform,
         modules=tuple(files),
         missing_platforms=tuple(missing_platforms or ()),
         missing_files=tuple(missing_files or ()),
@@ -421,6 +426,7 @@ def _memory_corpus(
         search_dir_headers=search_dir_headers,
         master_project_dir=tmp_path,
         main_c=main_c,
+        master_syscfg=master_syscfg,
     )
 
 
@@ -978,9 +984,10 @@ def test_unresolved_include_rejects_cross_platform_toolchain_header_on_mspm0(tmp
 
 
 def test_generation_gate_table_complete_and_ordered():
-    """门禁装配表钉死：13 键有序完整（顺序有语义——file_path_conflicts 依赖
+    """门禁装配表钉死：14 键有序完整（顺序有语义——file_path_conflicts 依赖
     module_files 先报缺平台条目；timer_instance_conflicts / exti_line_conflicts
-    / uart_instance_conflicts 依赖 pin_bindings 先校验载荷），增删 / 换序即红。"""
+    / uart_instance_conflicts / syscfg_pin_conflicts 依赖 pin_bindings 先校验
+    载荷），增删 / 换序即红。"""
     assert [g.key for g in GENERATION_GATES] == [
         "module_files",
         "file_path_conflicts",
@@ -990,12 +997,202 @@ def test_generation_gate_table_complete_and_ordered():
         "unresolved_includes",
         "macro_conflicts",
         "pin_bindings",
+        "syscfg_pin_conflicts",
         "timer_instance_conflicts",
         "exti_line_conflicts",
         "uart_instance_conflicts",
         "no_pin_literals_in_main",
         "no_usart_handlers_in_main",
     ]
+
+
+# ---------------------------------------------------------------------------
+# 生成期 syscfg 引脚冲突门禁（工单 pin-conflict-gate/01）：判据 = 写侧将要落盘的
+# mspm0.syscfg（母版 → prune(选中集) → rewrite(绑定)）里同脚多实例 —— 与
+# SysConfig 自身的 Resource conflict 同构。真机现场见
+# .scratch/real-run/verify-16-A8-mspm0-2026H-buildlog.txt（7 条）。
+# ---------------------------------------------------------------------------
+
+REAL_MSPM0_MASTER_SYSCFG = (
+    Path(__file__).resolve().parents[1] / "library" / "masters" / "mspm0" / "mspm0.syscfg"
+)
+# 真机炸过的组合（.scratch/real-run/out_2026H_mspm0/.contest_context.json 的 slugs）
+REAL_2026H_MSPM0_SLUGS = (
+    "coord_detect",
+    "k230",
+    "uart",
+    "key",
+    "huidu",
+    "motor",
+    "pid",
+    "l298n",
+    "delay",
+    "oled",
+    "ntb_time",
+    "servo",
+    "imu_uart",
+)
+# 真机日志里那 7 条冲突的引脚（逐脚对上）
+REAL_2026H_MSPM0_CONFLICT_PINS = (
+    "PA7",
+    "PA13",
+    "PA22",
+    "PA27",
+    "PA28",
+    "PA31",
+    "PB18",
+)
+
+
+def _real_mspm0_manifests(*slugs: str):
+    """真库 manifest（按传入 slug 取，保序）——pins 声明在 platforms.mspm0.pins。"""
+    by_slug = {
+        m.slug: m
+        for m in list_modules(Path(__file__).resolve().parents[1] / "library" / "modules")
+    }
+    return [by_slug[slug] for slug in slugs]
+
+
+def _real_mspm0_syscfg_corpus(tmp_path: Path) -> ModuleCorpus:
+    """真母版 syscfg 的内存语料（门禁吃它，零读盘）。"""
+    return _memory_corpus(
+        tmp_path,
+        platform=PLATFORM_MSPM0,
+        master_syscfg=REAL_MSPM0_MASTER_SYSCFG.read_text(encoding="utf-8"),
+    )
+
+
+def _mspm0_board():
+    from contest_generator.boards import load_board
+
+    return load_board(
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "contest_generator"
+        / "boards"
+        / "mspm0-dimx.json"
+    )
+
+
+def test_syscfg_pin_conflicts_red_real_machine_combo(tmp_path):
+    """红证（工单 pin-conflict-gate/01）：真机炸过的 13 模块组合 → 门禁抛错，
+    错误里出现的引脚**恰为**真机日志那 7 条（现状生成照旧成功、编译才炸）。"""
+    corpus = _real_mspm0_syscfg_corpus(tmp_path)
+    manifests = _real_mspm0_manifests(*REAL_2026H_MSPM0_SLUGS)
+
+    with pytest.raises(SyscfgPinConflictError) as excinfo:
+        _check_syscfg_pin_conflicts(corpus, manifests, PLATFORM_MSPM0, GateContext())
+
+    message = str(excinfo.value)
+    for pin in REAL_2026H_MSPM0_CONFLICT_PINS:
+        assert pin in message, f"错误信息缺 {pin}：{message}"
+    # 逐脚对上计数（多报/少报都红）：真机日志 7 条
+    assert sum(message.count(f"{pin}：") for pin in REAL_2026H_MSPM0_CONFLICT_PINS) == 7
+    assert "motor.BIN2" in message and "servo.SERVO_PWM_C0" in message  # 角色可操作
+    assert "自动配置" in message  # 指路可操作
+
+
+def test_syscfg_pin_conflicts_single_pair_reports_only_that_pin(tmp_path):
+    """对照不假阳性：只选 motor + servo → 只剩 PA7 一条（母版里其余重叠实例
+    已被 prune 掉）。"""
+    corpus = _real_mspm0_syscfg_corpus(tmp_path)
+    manifests = _real_mspm0_manifests("motor", "servo")
+
+    with pytest.raises(SyscfgPinConflictError) as excinfo:
+        _check_syscfg_pin_conflicts(corpus, manifests, PLATFORM_MSPM0, GateContext())
+
+    message = str(excinfo.value)
+    assert "PA7：" in message
+    assert all(
+        f"{pin}：" not in message
+        for pin in REAL_2026H_MSPM0_CONFLICT_PINS
+        if pin != "PA7"
+    )
+
+
+def test_syscfg_pin_conflicts_shares_and_single_module_pass(tmp_path):
+    """合法共享与单选不误伤：huidu + pid 共用同一 syscfg 器件实例（HUIDU 八路
+    灰度，同脚 = 同一实例的同一脚，不是两只实例抢一脚）→ 不报；单模块 → 不报。"""
+    corpus = _real_mspm0_syscfg_corpus(tmp_path)
+
+    _check_syscfg_pin_conflicts(
+        corpus, _real_mspm0_manifests("huidu", "pid"), PLATFORM_MSPM0, GateContext()
+    )
+    _check_syscfg_pin_conflicts(
+        corpus, _real_mspm0_manifests("motor"), PLATFORM_MSPM0, GateContext()
+    )
+
+
+def test_syscfg_pin_conflicts_skips_other_platform_and_missing_syscfg(tmp_path):
+    """判据面收窄：非 mspm0（stm32 默认脚冲突按 ADR 0010 是提示语义，不拦生成）
+    与语料无 syscfg（假母版 / 测试树）→ 直接返回。"""
+    stm32_corpus = _memory_corpus(
+        tmp_path,
+        master_syscfg=REAL_MSPM0_MASTER_SYSCFG.read_text(encoding="utf-8"),
+    )
+    _check_syscfg_pin_conflicts(
+        stm32_corpus,
+        _real_mspm0_manifests("motor", "servo"),
+        PLATFORM_STM32,
+        GateContext(),
+    )
+    no_syscfg = _memory_corpus(tmp_path, platform=PLATFORM_MSPM0)
+    _check_syscfg_pin_conflicts(
+        no_syscfg,
+        _real_mspm0_manifests("motor", "servo"),
+        PLATFORM_MSPM0,
+        GateContext(),
+    )
+
+
+def test_syscfg_pin_conflicts_binding_moves_the_conflict(tmp_path):
+    """绑定参与判据（判据 = 写侧最终落盘的那份 syscfg）：把 motor.BIN2 显式绑到
+    别的空闲脚 → PA7 不再是两实例抢一脚 → 门禁放行；绑回冲突脚 → 又报（同一判据
+    两个方向都成立）。载荷同生产形态（带板定义，先过 pin_bindings 校验）。"""
+    corpus = _real_mspm0_syscfg_corpus(tmp_path)
+    manifests = _real_mspm0_manifests("motor", "servo")
+    board = _mspm0_board()
+
+    _check_syscfg_pin_conflicts(
+        corpus,
+        manifests,
+        PLATFORM_MSPM0,
+        GateContext(bindings={"motor.BIN2": "PA28"}, board=board),
+    )
+
+    with pytest.raises(SyscfgPinConflictError, match="PA7") as excinfo:
+        _check_syscfg_pin_conflicts(
+            corpus,
+            manifests,
+            PLATFORM_MSPM0,
+            GateContext(bindings={"motor.BIN2": "PA7"}, board=board),  # 绑回冲突脚
+        )
+    # 角色标签取「裁剪后、改写前」的那份模型：改写过的脚仍认得出角色
+    assert "motor.BIN2" in str(excinfo.value)
+
+
+def test_syscfg_pin_conflicts_output_tree_corpus_judges_current_text(tmp_path):
+    """产物复核形态（generate_check 现状 `run_generation_gates(corpus, [], platform)`）：
+    manifests 为空 = 无选中集知识 → **不 prune、不 rewrite**，直接判语料现值——
+    手写一份「两实例抢一脚」的产物 syscfg 必须被这条判据抓住（空 manifests 下
+    若仍 prune，实例会被全裁掉、判据静默失明）。"""
+    conflicting = (
+        "const DC_MOTOR = scripting.addModule('/ti/driverlib/GPIO');\n"
+        "const DC_MOTOR_1 = DC_MOTOR.addInstance();\n"
+        "DC_MOTOR_1.associatedPins.create(1);\n"
+        'DC_MOTOR_1.associatedPins[0].pin.$assign = "PA7";\n'
+        "const SERVO_PWM = scripting.addModule('/ti/driverlib/PWM');\n"
+        "const SERVO_PWM_1 = SERVO_PWM.addInstance();\n"
+        'SERVO_PWM_1.peripheral.ccp0Pin.$assign = "PA7";\n'
+    )
+    corpus = _memory_corpus(
+        tmp_path, platform=PLATFORM_MSPM0, master_syscfg=conflicting
+    )
+
+    with pytest.raises(SyscfgPinConflictError, match="PA7") as excinfo:
+        _check_syscfg_pin_conflicts(corpus, [], PLATFORM_MSPM0, GateContext())
+    # 无选中集时角色反查不出（不猜角色）——路径原样报出
+    assert "DC_MOTOR_1.associatedPins[0].pin" in str(excinfo.value)
 
 
 def test_run_generation_gates_invokes_all_in_order_and_stops_on_failure(

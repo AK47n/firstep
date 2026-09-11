@@ -50,6 +50,12 @@ from .patchers import (
 )
 from .pin_bindings import PinBindingError, ResolvedBinding, resolve_bindings
 from .pinwriter import apply_pin_bindings
+from .syscfg_model import (
+    MSPM0_SYSCFG_FILENAME,
+    SyscfgModel,
+    parse_syscfg,
+    syscfg_path_matches,
+)
 from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from .readme import README_FILENAME, render_readme
 from .reference_library import (
@@ -171,6 +177,15 @@ class ExclusivePairConflictError(GeneratorError):
     zigbee_uart 与 zigbee_link——两者都定义 zigbee_rx_handler /
     ZIGBEE_UART_INST_IRQHandler，同选 = UV4 L6200E multiply defined；
     工单 zigbee-link/02）。manifest 互斥组管推荐/UI 单选，本门禁兜底 API 直选。"""
+
+
+class SyscfgPinConflictError(GeneratorError):
+    """mspm0 落盘 syscfg 里同一引脚被两只实例同时占用（工单 pin-conflict-gate/01）。
+
+    母版默认布局是「全量实例 + 同选概率最低者重叠」，按选中模块 prune 后若两个
+    选中模块的默认脚相同（motor.BIN2 与 servo C0 都默认 PA7），落盘的 syscfg
+    必然被 SysConfig 拒绝（真机 2026H：7 条 Resource conflict、exit=2）——生成前
+    拦截，别产出编不过的工程。"""
 
 
 class UsartHandlerInMainError(GeneratorError):
@@ -910,6 +925,10 @@ class ModuleCorpus:
     search_dir_headers: tuple[tuple[Path, frozenset[str]], ...]  # 搜索目录 *.h 基名集合（小写化）
     master_project_dir: Path  # main.c 的 own_dir（最终工程根 = 母版根）
     main_c: str
+    # mspm0.syscfg 全文（生成路径 = 母版原文；产物复核路径 = 产物树现值，已
+    # prune/rewrite 过）。该平台无此文件 = None——引脚冲突门禁吃它，保持
+    # 「门禁吃语料、不各自读盘」（工单 pin-conflict-gate/01）。
+    master_syscfg: str | None = None
 
 
 def _search_dir_header_names(
@@ -991,7 +1010,22 @@ def build_module_corpus(
         search_dir_headers=_search_dir_header_names(search_dirs),
         master_project_dir=master_project_dir,
         main_c=main_c_content,
+        master_syscfg=_read_syscfg_text(master_project_dir, platform),
     )
+
+
+def _read_syscfg_text(project_dir: Path, platform: str) -> str | None:
+    """母版 / 产物树的 mspm0.syscfg 全文（该平台无此文件 = None）。
+
+    引脚冲突门禁的输入（工单 pin-conflict-gate/01）：语料构建时读一次，门禁
+    本身不碰盘。
+    """
+    if platform != PLATFORM_MSPM0:
+        return None
+    path = project_dir / MSPM0_SYSCFG_FILENAME
+    if not path.is_file():
+        return None
+    return path.read_text(encoding="utf-8", errors="replace")
 
 
 def build_output_tree_corpus(
@@ -1069,6 +1103,9 @@ def build_output_tree_corpus(
         search_dir_headers=_search_dir_header_names(search_dir_list),
         master_project_dir=output_dir,
         main_c=main_c,
+        # 产物树里的 syscfg 已是生成时落盘的结果（prune + rewrite 过）——
+        # 引脚冲突门禁判它现值、不再裁剪改写（见 _check_syscfg_pin_conflicts）
+        master_syscfg=_read_syscfg_text(output_dir, platform),
     )
 
 
@@ -1615,6 +1652,103 @@ def _check_pin_bindings(
     resolve_bindings(manifests, platform, context.board, context.bindings)
 
 
+def _check_syscfg_pin_conflicts(
+    corpus: ModuleCorpus,
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+    context: "GateContext",
+) -> None:
+    """mspm0 生成期引脚冲突门禁（工单 pin-conflict-gate/01）。
+
+    判据 = **写侧将要落盘的那份 syscfg**：`parse_syscfg` → `prune(选中集)` →
+    `rewrite(绑定)`（与 pinwriter.apply_pin_bindings 同一条 pipeline），按
+    `$assign` 引脚分组，同一引脚被**两只实例**同时占用 = SysConfig 的
+    Resource conflict（真机 2026H 的 7 条逐脚对上）。
+
+    为什么在这里拦：母版默认布局按「同选概率最低者重叠」铺满（syscfg-prune
+    只在生成时裁剪未选实例），选中两个默认脚相同的模块 → 落盘即冲突、编译
+    才炸；生成前拦下才守住「打开的工程就能编译」。
+
+    产物复核形态（`build_output_tree_corpus` + `run_generation_gates(corpus, [],
+    platform)`）没有选中集知识：语料里的 syscfg 已是生成时落盘的结果，**不再
+    prune / 不再 rewrite**，直接判现值——空 manifests 下若仍 prune 会把实例
+    全裁掉、判据静默失明。
+
+    非 mspm0（stm32 的默认脚重叠按 ADR 0010 是提示语义、不拦生成）与语料无
+    syscfg（假母版 / 测试树）直接返回。
+    """
+    if platform != PLATFORM_MSPM0 or not corpus.master_syscfg:
+        return
+    origin = parse_syscfg(corpus.master_syscfg)
+    if manifests:
+        resolved = (
+            resolve_bindings(manifests, platform, context.board, context.bindings)
+            if context.bindings and context.board is not None
+            else ()
+        )
+        model = origin.prune(manifest.slug for manifest in manifests).rewrite(resolved)
+        # 角色标签取「裁剪后、改写前」的那份：GPIO 组角色的 `$assign` 路径
+        # （<实例>.associatedPins[n].pin）只带实例名，一个实例下多条落点要按
+        # 「现脚 == 声明默认脚」消歧——改写后现脚已变，消歧就失效了；而改写
+        # 只改引号里的值、路径不变，故按路径回查仍成立。
+        roles = _syscfg_role_labels(
+            origin.prune(manifest.slug for manifest in manifests), manifests, platform
+        )
+    else:
+        # 产物复核形态：语料即生成时落盘结果，不裁剪不改写
+        model = origin
+        roles = {}
+    by_pin: dict[str, list[str]] = {}
+    for assign in model.assigns:
+        by_pin.setdefault(assign.pin, []).append(assign.path)
+    conflicts = {
+        pin: paths
+        for pin, paths in by_pin.items()
+        if len({path.split(".", 1)[0] for path in paths}) > 1
+    }
+    if not conflicts:
+        return
+    lines = []
+    for pin in sorted(conflicts):
+        sites = " × ".join(roles.get(path, f"{path}（角色未登记）") for path in conflicts[pin])
+        lines.append(f"  · {pin}：{sites}")
+    raise SyscfgPinConflictError(
+        f"mspm0 引脚冲突：落盘后的 {MSPM0_SYSCFG_FILENAME} 有 {len(conflicts)} 个引脚"
+        "被两只实例同时占用，SysConfig 会直接编译失败（Resource conflict）：\n"
+        + "\n".join(lines)
+        + "\n出路：在引脚配置里改绑上述角色（或点「自动配置」一键解开），"
+        "或去掉冲突模块中的一个后重新生成。"
+    )
+
+
+def _syscfg_role_labels(
+    model: SyscfgModel, manifests: Sequence[ModuleManifest], platform: str
+) -> dict[str, str]:
+    """`$assign` 路径 → 「模块（路径，角色 <slug>.<id>）」人话标签。
+
+    角色反查 = `syscfg_path_matches`（槽位身份原语，校验侧 / 写侧共用）；GPIO 组
+    一个实例下有多条落点（DC_MOTOR 十个脚）时，用「现脚 = 该角色声明默认脚」消歧
+    ——母版默认布局下这个等式恒成立（传入的必须是**未改写**的模型）。消歧不出唯一
+    角色（改写过 / 母版漂移）= 只报路径，不猜角色。
+    """
+    labels: dict[str, str] = {}
+    for assign in model.assigns:
+        candidates = [
+            (manifest.slug, decl)
+            for manifest in manifests
+            if manifest.platforms.get(platform) is not None
+            for decl in manifest.platforms[platform].pins
+            if syscfg_path_matches(decl.type, decl.id, manifest.slug, assign.path)
+        ]
+        for slug, decl in candidates:
+            if decl.default == assign.pin:
+                labels[assign.path] = f"{slug}（{assign.path}，角色 {slug}.{decl.id}）"
+                break
+        else:
+            labels.setdefault(assign.path, f"{assign.path}（角色未登记）")
+    return labels
+
+
 def _check_no_pin_literals_in_main(
     corpus: ModuleCorpus,
     manifests: Sequence[ModuleManifest],
@@ -1930,6 +2064,12 @@ GENERATION_GATES: tuple[GenerationGate, ...] = (
     GenerationGate(
         "pin_bindings",
         lambda corpus, manifests, platform, context: _check_pin_bindings(
+            corpus, manifests, platform, context
+        ),
+    ),
+    GenerationGate(
+        "syscfg_pin_conflicts",
+        lambda corpus, manifests, platform, context: _check_syscfg_pin_conflicts(
             corpus, manifests, platform, context
         ),
     ),

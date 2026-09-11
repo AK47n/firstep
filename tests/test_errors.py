@@ -22,7 +22,7 @@ from contest_generator.entry_store import (
     StoreShapeError,
 )
 from contest_generator.errors import _ERROR_TABLE, error_entry
-from contest_generator.generator import DuplicateFilePathError
+from contest_generator.generator import DuplicateFilePathError, SyscfgPinConflictError
 from contest_generator.llm import (
     ERROR_KIND_CLIENT,
     ERROR_KIND_DOMAIN,
@@ -144,6 +144,25 @@ def test_manual_reference_error_registered_as_400() -> None:
     )
     assert status == 400
     assert "不存在" in message
+
+
+def test_syscfg_pin_conflict_error_registered_as_400() -> None:
+    """落盘 syscfg 同脚多实例（工单 pin-conflict-gate/01）：显式登记
+    error_to_http 表 → 400 中文，且逐脚冲突清单与指路原文到用户眼前。"""
+    status, message = error_entry(
+        SyscfgPinConflictError(
+            "mspm0 引脚冲突：落盘后的 mspm0.syscfg 有 1 个引脚被两只实例同时"
+            "占用，SysConfig 会直接编译失败（Resource conflict）：\n"
+            "  · PA7：motor（DC_MOTOR.associatedPins[3].pin，角色 motor.BIN2）"
+            " × servo（SERVO_PWM.peripheral.ccp0Pin，角色 servo.SERVO_PWM_C0）\n"
+            "出路：在引脚配置里改绑上述角色（或点「自动配置」一键解开），"
+            "或去掉冲突模块中的一个后重新生成。"
+        )
+    )
+    assert status == 400
+    assert "PA7" in message
+    assert "motor.BIN2" in message  # 角色可操作（用户知道改哪一条）
+    assert "自动配置" in message  # 指路
 
 
 def test_duplicate_file_path_error_registered_as_400() -> None:

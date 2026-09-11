@@ -244,7 +244,16 @@ def update_changelog(path: Path, repo: Path) -> bool:
 
 
 def _is_displayable(subject: str) -> bool:
-    """提交主题是否进更新记录：跳过 merge / 工单噪声 / 写库 CRUD 机器提交。"""
+    """提交主题是否进更新记录：跳过 merge / 工单噪声 / 写库 CRUD 机器提交。
+
+    先清洗前导空白与 UTF-8 BOM（工单 commit-subject-bom/01）：PS 5.1 的
+    `Out-File -Encoding utf8` 写的提交信息文件带 BOM，`git commit -F` 会把它
+    带进主题，而 `git log --format=%s` 取出的主题以 `\\ufeff` 开头——不洗的话
+    `startswith` 判不出 `docs:` / `chore:` / `test:` / `merge`，机器提交就被当成
+    用户可见条目补录进 CHANGELOG（定稿区 `VERSIONS.md` 的上游被污染）。
+    只吃前导噪声，不做别的规范化。
+    """
+    subject = subject.lstrip("\ufeff \t")
     if subject.lower().startswith(("merge", *_SKIP_PREFIXES)):
         return False
     if _ROUTINE_LIB_RE.match(subject):

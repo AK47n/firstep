@@ -1297,8 +1297,99 @@ def test_auto_assign_keeps_user_valid_bindings_untouched():
     assert result.fixed == ()
 
 
+# ---------------------------------------------------------------------------
+# 默认脚冲突消解（工单 pin-conflict-gate/02）：mspm0 生成前拦下的「默认×默认撞脚」
+# 要能被「自动配置」按钮解开——现状按钮只修显式绑定，这类冲突双方都没绑过脚，
+# 增量恒空。本相**只对有选中集语义的调用方开**（resolve_default_conflicts=True，
+# 生成页引脚卡走它）：库级 / 纯校验调用零变化（全库默认布局本身就是刻意重叠的
+# 27 组，不该被当成「要解的冲突」）。让位方 = 选中清单里靠后的模块；合法共享不动。
+# ---------------------------------------------------------------------------
+
+
+def _auto_selected(
+    slugs: tuple[str, ...],
+    platform: str,
+    bindings: dict[str, str],
+    *,
+    resolve_default_conflicts: bool = True,
+):
+    """选中集形态的自动配置调用：manifests 顺序 = 传入 slugs 顺序（选中清单序，
+    让位规则看的就是它）。"""
+    from contest_generator.pin_bindings import auto_assign_bindings
+
+    by_slug = {m.slug: m for m in ALL_MANIFESTS}
+    manifests = [by_slug[slug] for slug in slugs]
+    return auto_assign_bindings(
+        manifests,
+        platform,
+        BOARDS[platform],
+        bindings,
+        resolve_default_conflicts=resolve_default_conflicts,
+    )
+
+
+def test_auto_assign_resolves_default_pin_conflicts_on_selection():
+    """红证（工单 pin-conflict-gate/02）：motor + servo 默认都吃 PA7 → 一键把让位方
+    移开（现状增量空、fixed 空，两个默认脚谁都不动）。"""
+    result = _auto_selected(("motor", "servo"), "mspm0", {})
+
+    assert result.bindings, "默认×默认撞脚必须被解开（现状：增量空）"
+    moved_key = next(iter(result.bindings))
+    assert moved_key.split(".", 1)[0] == "servo"  # 让位方 = 选中清单里靠后的模块
+    assert "原 PA7" in result.fixed[0]
+    assert "→" in result.fixed[0]  # 说明行可读（旧脚 → 新脚）
+    # 解完该选中集内不再有物理冲突组（共享标注里 conflict 清零）
+    assert all(g["kind"] != "conflict" for g in result.shared)
+
+
+def test_auto_assign_default_conflicts_off_by_default():
+    """缺省关闭（旧行为逐字节）：库级 / 纯校验调用方不因本单改变——全库默认布局
+    刻意重叠的 27 组一个都不动，只标注。"""
+    result = _auto("mspm0", {})
+
+    assert result.bindings == {}
+    assert result.fixed == ()
+    assert sum(1 for g in result.shared if g["kind"] == "conflict") > 0  # 仍如实标注
+
+
+def test_auto_assign_default_conflict_keeps_legal_shares():
+    """合法共享不动：huidu / pid 共用同一 syscfg 器件实例（HUIDU 八路灰度）→
+    这些脚不是冲突，一键配置不该把它们拆开。"""
+    result = _auto_selected(("huidu", "pid"), "mspm0", {})
+
+    assert result.bindings == {}
+    share_pins = {g["pin"] for g in result.shared if g["kind"] == "share"}
+    assert {"PA23", "PA24", "PA25", "PA26", "PB6", "PB7"} <= share_pins
+
+
+def test_auto_assign_default_conflict_victim_follows_selection_order():
+    """让位方确定：同一组冲突，选中清单顺序换一下 → 让位方随之改变（不看 reason
+    文本、不做打分）。"""
+    first = _auto_selected(("motor", "servo"), "mspm0", {})
+    second = _auto_selected(("servo", "motor"), "mspm0", {})
+
+    assert next(iter(first.bindings)).startswith("servo.")
+    assert next(iter(second.bindings)).startswith("motor.")
+
+
+def test_auto_assign_default_conflict_leaves_explicit_bindings_alone():
+    """用户显式绑定不动（既有契约）：两个角色都被显式绑到同一脚 = 用户明确选择，
+    只标注不搬（kind=conflict 照旧）；只搬「还在默认脚上」的那一个。"""
+    # 双方都显式绑到 PA0（motor+servo 的默认里没有别的角色吃 PA0）→ 整组不动
+    explicit = _auto_selected(
+        ("motor", "servo"), "mspm0", {"motor.BIN2": "PA0", "servo.SERVO_PWM_C0": "PA0"}
+    )
+    assert explicit.bindings == {}
+    group = next(g for g in explicit.shared if g["pin"] == "PA0")
+    assert group["kind"] == "conflict"  # 如实标注，不静默
+
+    # 混合：motor.BIN2 显式绑在 PA7（与 servo 默认同脚）→ 只搬没绑过的 servo
+    mixed = _auto_selected(("motor", "servo"), "mspm0", {"motor.BIN2": "PA7"})
+    assert "motor.BIN2" not in mixed.bindings
+    assert "servo.SERVO_PWM_C0" in mixed.bindings
+
+
 def test_auto_assign_no_solution_reports_explicitly():
-    """所有 pwm 脚被占用 → 无解，中文报错（不静默失败）。"""
     occupants = {
         "config.LED_RED": "PA0", "config.LED_YELLOW": "PA1",
         "config.LED_GREEN": "PA2", "config.BUZZER": "PA3",

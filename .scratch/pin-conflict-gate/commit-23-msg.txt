@@ -1,0 +1,34 @@
+fix(生成): mspm0 引脚冲突生成前拦下 + 一键配置真能解默认撞脚（工单 pin-conflict-gate/01-02）
+
+为什么：产品承诺「打开的工程就能编译」，但真机 2026H/mspm0 生成成功、CCS 编译 exit=2
+（SysConfig 7 条 Resource conflict）——母版默认布局是「全量实例 + 同选概率最低者重叠」，
+按选中模块 prune 后两个默认脚相同的模块（motor.BIN2 与 servo C0 都吃 PA7）落盘即冲突；
+生成侧此前没有任何 syscfg 引脚判据，引脚卡 ⚠ 只是提示语义、不拦生成。
+
+单 01（门禁）：判据 = 写侧将要落盘的那份 syscfg（parse_syscfg → prune(选中集) →
+rewrite(绑定)，与 pinwriter.apply_pin_bindings 同一条 pipeline）里同脚多实例；语料新增
+ModuleCorpus.master_syscfg（生成路径读母版 / 产物复核读产物树现值 / 非 mspm0 = None，门禁
+仍不读盘）；门禁表加 syscfg_pin_conflicts（排 pin_bindings 之后）；新错误类
+SyscfgPinConflictError → 400 中文，逐脚列「引脚 + 双方实例/模块/角色」+ 两条出路。角色反查
+用「裁剪后、改写前」的模型消歧（GPIO 组路径只带实例名，靠「现脚 == 声明默认脚」区分）。
+
+单 02（一键配置真能解）：auto_assign_bindings 新增 resolve_default_conflicts（缺省关，只有
+拿到选中集的 /api/bindings/auto 开——全库默认布局本身刻意重叠 mspm0 27 组 / stm32 26 组，
+库级与纯校验调用方把它当冲突毫无意义）；让位方 = 选中清单里靠后的模块且未被显式绑定；
+候选脚 = 空闲（选中集内无别的角色落脚）+ resolve_bindings 试绑合法 + 搬完不再出现在任何
+冲突组；搬不动如实留在 shared 标注。真机探针证伪并修掉初稿两处：只查「不制造冲突组」会把
+同一实例三条落点全搬到一脚（合法共享放过叠脚）；让位方必须逐个试（UART TX/RX 成对，单搬
+一侧过不了成对校验）。
+
+真机证据：① 只读探针复算真机组合 = 7 条同脚多实例、逐脚对上真机日志，且
+auto_assign_bindings(空 bindings) 增量/fixed 皆空（按钮按下去什么也不做 = 红）；② 生成前
+抛错、输出目录未产生，HTTP 路径 /api/generate 400 带同一份清单；③ 开开关后解开 4 组
+（恰好用尽该选中集的 4 个空闲脚），剩 3 组**物理不可解**（角色落点 42 vs 可用 IO 31，母版
+默认布局的上限——真机 7 条冲突的根），可解形态 motor+servo 解完 zero conflict；
+④ generate_check 带增量真机跑通：生成 + 产物门禁全过 + gmake exit=0（0 错 0 警，9.1s）。
+
+顺带：changelog._is_displayable 判定前 lstrip("\ufeff \t")（PS 5.1 Out-File -Encoding utf8
+的 BOM 经 git commit -F 进主题会让跳过清单失效，机器提交污染 CHANGELOG；工单
+commit-subject-bom/01）。
+
+回归：pytest 3994 passed、node --test tests/js 1444 pass、mypy 零问题；前端零改动。

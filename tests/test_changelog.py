@@ -176,6 +176,27 @@ def test_is_displayable_skips_merge_docs_chore_test_and_routine_lib():
     assert _is_displayable("lib: 素材录入脚本 GBK 兜底转码（工单 register-gbk-guard/01）") is True
 
 
+def test_is_displayable_skips_bom_prefixed_machine_commits():
+    """BOM 前缀不打穿跳过清单（工单 commit-subject-bom/01）。
+
+    触发路径：提交信息文件由 `Out-File -Encoding utf8`（PS 5.1）写成 → 文件头
+    带 BOM → `git commit -F` 把 BOM 带进主题 → `git log --format=%s` 取出的主题
+    以 `\\ufeff` 开头 → startswith 判不出 `docs:` / `chore:` / `test:` / `merge`
+    → 机器提交被当成用户可见条目补录进 CHANGELOG（定稿区的上游被污染）。
+    修法 = 判定前先 `lstrip("\\ufeff \\t")`；只吃 BOM 与前导空白，不做别的规范化。
+    """
+    assert _is_displayable("\ufefftest: 补结构钉") is False
+    assert _is_displayable("\ufeffdocs: 工单 01 开工认领") is False
+    assert _is_displayable("\ufeffchore: 自动更新 CHANGELOG") is False
+    assert _is_displayable("\ufeffmerge branch 'main'") is False
+    assert _is_displayable("\ufefflib: update topic 2023E") is False
+    # 只有 BOM 的真条目照常显示（别把清洗做成「见 BOM 就丢」）
+    assert _is_displayable("\ufefffeat: 板图加旋转按钮 (#92)") is True
+    assert _is_displayable("\ufefffix: 推荐模块移除不再回加") is True
+    # 前导空白（同一类「主题前缀被噪声打穿」）一并吃掉
+    assert _is_displayable("  docs: 工单 01 开工认领") is False
+
+
 def test_clean_subject_strips_type_prefix_and_pr_ref():
     """条目文本 = 提交主题去类型前缀与尾部 (#NN)。"""
     assert _clean_subject("feat: 板图加「旋转 90°」按钮 (#92)") == "板图加「旋转 90°」按钮"

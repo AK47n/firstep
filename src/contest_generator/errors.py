@@ -38,6 +38,7 @@ from .generator import (
     ExtiLineConflictError,
     GeneratorError,
     PythonArtifactError,
+    SyscfgPinConflictError,
     TimerConflictError,
     UartInstanceConflictError,
     UsartHandlerInMainError,
@@ -293,6 +294,7 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
             TimerConflictError,  # 绑定 pwm TIM 实例撞骨架调度定时器（工单 pin-unlock-stm32/01）
             ExtiLineConflictError,  # 绑定 enc/exti 角色异口同线互斥（工单 pin-full-unlock/01）
             UartInstanceConflictError,  # 绑定 UART 实例撞未绑角色默认实例（工单 pin-full-unlock/02）
+            SyscfgPinConflictError,  # 落盘 syscfg 同脚多实例 = SysConfig Resource conflict（工单 pin-conflict-gate/01）
             UsartHandlerInMainError,  # main.c 定义 USARTx_IRQHandler 撞 isr.c 聚合（工单 pin-full-unlock/02）
             PythonArtifactError,  # Python 副产物写盘失败：模板缺失 / 跨模块 output 同名（工单 k230-vision-copilot/02）
             ConfigError,

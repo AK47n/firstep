@@ -1,0 +1,60 @@
+[题库] 根目录覆盖为 library\topics
+[模块库] 根目录覆盖为 library\modules
+
+===== 2026H (mspm0) =====
+[题面] library\topics\2026H\topic.md 5560 字符
+[缓存] 复用 C:\Users\luoji\Desktop\firstep\.scratch\real-run\cache\recommend_2026H.json（推荐段跳过）
+  → 同组互斥收敛：组 gray-track 剔掉 ['pid']（同组只留一个；被剔成员在选择卡「同组候选（未选中）」可见，无需 --drop）
+  → 按 --drop 去掉 ['k230', 'coord_detect', 'uart', 'key', 'huidu', 'l298n', 'oled', 'ntb_time', 'imu_uart']（无 mspm0 平台条目，前端同款手动增删语义）
+  模块(2): motor, servo
+    - k230: 自带视觉与UART回传，可作图传发送
+    - coord_detect: UART接收解析视觉帧
+    - uart: 接收透传画面数据
+    - key: 读取启动按键
+    - huidu: 8路红外灰度检测黑线
+    - motor: 双路电机驱动循迹
+    - l298n: 电机大电流驱动
+    - oled: 0.96寸屏显示时间
+    - ntb_time: 毫秒计时
+    - servo: 舵机角度控制摆杆倾斜
+    - imu_uart: 航向保持与姿态稳定
+  识别 topic_id=2026H related=None
+  功能需求层 11 条
+  参考资料 2 条（done 透明闭环）
+    - 2026_04_地猛星电赛控制题配套资料: 2026_04_地猛星电赛控制题配套资料 [auto/mspm0]
+    - 26H-滚球巡线决策例程: 26H-滚球巡线决策例程 [auto/mspm0]
+[骨架] main.c 5675 字符, 拦截幻觉调用 0 处
+  [绑定] {'servo.SERVO_PWM_C0': 'PA0'}
+[生成] 输出 C:\Users\luoji\Desktop\firstep\.scratch\real-run\out_2026H_mspm0
+  文件数 26
+    - .ccsproject
+    - .contest_context.json
+    - .contest_wiring.json
+    - .cproject
+    - .project
+    - main.c
+    - mspm0.syscfg
+    - README.md
+    - 演示脚本.md
+    - .settings/org.eclipse.cdt.codan.core.prefs
+    - .settings/org.eclipse.core.resources.prefs
+    - Debug/makefile
+    - Debug/objects.mk
+    - Debug/sources.mk
+    - Debug/subdir_rules.mk
+    - Debug/subdir_vars.mk
+    - targetConfigs/MSPM0G3507.ccxml
+    - targetConfigs/readme.txt
+    - modules/servo/code/servo.h
+    - modules/servo/code/servo_mspm0.c
+    - modules/motor/code/motor.c
+    - modules/motor/code/motor.h
+    - Debug/modules/servo/code/subdir_rules.mk
+    - Debug/modules/servo/code/subdir_vars.mk
+    - Debug/modules/motor/code/subdir_rules.mk
+    - Debug/modules/motor/code/subdir_vars.mk
+  [产物] 门禁全过（产物树语料重建，与生成同源）
+  [真机] ✓ gmake exit=0 gmake: Leaving directory 'C:/Users/luoji/Desktop/firstep/.scratch/real-run/out_2026H_mspm0/Debug'（0 错误 0 警，9.1s）
+
+===== 汇总 =====
+2026H: ✓ 通过
