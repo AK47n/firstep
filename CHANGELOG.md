@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=aa215a7551d1269d72a2436e9a6904804b53d092 -->
+<!-- changelog-auto: last-commit=a69dcf60ba3165e33b45e6748938dfa29ee30da5 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -8,6 +8,7 @@
 - 09:29 ﻿fix: 推荐域拒绝不再被吞成通用话术——kind=domain 分流 + 带理由重试一次（工单 real-acceptance/03）
 - 12:37 fix(wordlist): 方案裸名入 models——词表合法 name 域对齐（real-acceptance/08）
 - 17:02 fix(recommend): 输出侧本地判决不再被报成「查 key / 查余额」（工单 real-acceptance/09）
+- 17:02 fix(预算): 推荐请求段级账本可执行 + 统一余量单源 + 全文段重分配 25600→23400（工单 real-acceptance/05）
 
 ## 2026-09-10
 - 13:12 perf(code-editor): 结构性编辑回车同步耗时 78.9ms → 9.8ms（删掉 syncTail 的滚动读写）
