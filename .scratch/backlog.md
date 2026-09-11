@@ -83,7 +83,7 @@ mq4-9 描述措辞未统一；77 条目全部未上板真机验证；oled 词表
 |---|---|---|
 | `real-acceptance/02` | 🔴 | gmake/tiarmclang/SysConfig 报错解析缺口：真机 exit=2、SysConfig 报 7 条引脚冲突，产品读成 **0 错 0 警**，修复链当「未定位到可修复文件」白跑一轮——**真机编译验收的判读底座** |
 | `real-acceptance/03` | 🟠 | 推荐域拒绝（`SelectionError`）被吞成「查 key / 查余额」通用话术且 `kind=client` 免重试：本轮 14 轮真实推荐 **9 轮**栽在此，真实理由都是「oled 不支持多实例」这类一轮能自愈的手滑 |
-| `real-acceptance/04` | 🟠 | 推荐层互斥组未收敛：同组两成员同时推荐（`zigbee_uart` + `zigbee_link`），到生成门禁才 400；提示词已写「只推荐一个」，解析层缺校验 |
+| `real-acceptance/04` | ✅ | ~~推荐层互斥组未收敛：同组两成员同时推荐（`zigbee_uart` + `zigbee_link`），到生成门禁才 400；提示词已写「只推荐一个」，解析层缺校验~~ **已落地（resolved）**：解析层确定性收敛（零额度）——`build_module_selection` 按 `ManifestSummary.exclusive_group` 投影「组 → 候选成员」，同组多成员只留模型清单首个，其余剔出顶层 `modules` 并记进 `dropped_exclusive_members`（需求层不改写 = 模型证据保留）；载荷契约 `exclusive_groups[].recommended` 收紧为**组内 ≤1** + 新增 `candidates` / `dropped` 可见字段（前端标「同组互斥·未选中」，点组卡即换选）；`run_recommendation` 出卡前兜底 + `--reuse-recommend` 旧载荷补刀（`converge_recommendation_payload` 幂等，缓存不改写）；生成侧 `HARD_EXCLUSIVE_PAIRS` 门禁**不动**。真机 2026C/stm32 **不带 `--drop` 跑绿**（UV4 0 错 0 警） |
 | `real-acceptance/05` | ✅ | ~~请求预算账本失真~~ **已落地（resolved）**：账本与实测对齐 + 尺寸断言口径。根因是三种记账病（账本的数来自修复侧被误引用 / select 2KB 与 fix-clarify-skeleton 10KB 两套余量魔数 / 最坏形态漏算预筛注记且合成结构测试比真实库小 34KB）；做法：段级账本可执行（Σ段 + JSON 壳 = 实发，逐字节对账）+ 统一余量单源 `budget.REQUEST_RESERVE_BYTES=2048` + 全文段重分配 25600→23400 + 修掉 `_fit_segment_wire` 标注超预算（段级预算此前不是实发上界）+ 贴边/拒发留段级 breakdown。实测 mspm0 128405B/619B → **125638B/5434B**；真机 2021F/stm32 4 轮收敛终态 done 无「请求体过大」 |
 | `real-acceptance/06` | 🟡 | CCS 三件套跨安装目录混搭（编译器 ccs2050 + SDK/SysConfig ccs2051）实测可用，但环境体检不说明来源根 |
 | `real-acceptance/07` | 🟡 | 浏览器真机验收四坑固化：折叠+页签 / `waitForFunction` 超时位置 / `evaluate` await 长流程 / 模态确认不点 —— 每次重踩烧 20~40 分钟 |

@@ -95,6 +95,45 @@ test("组卡渲染：转义模型文本，避免注入可交互控件", () => {
   assert.doesNotMatch(rendered, /<script\b/);
 });
 
+// 同组互斥收敛（工单 real-acceptance/04）：载荷 recommended ≤1 + dropped =
+// 被收敛剔掉的成员（AI 也推荐过它，只是组内只能留一个）——本卡标注可见，
+// 用户点它即换选（换选语义由 applyGroupRadio 保证，无需新交互）。
+const convergedGroups = [
+  {
+    id: "zigbee-rx", label: "Zigbee 无线链路（接收侧）", hint: false,
+    members: [
+      { slug: "zigbee_link", role: "任意字节帧收发" },
+      { slug: "zigbee_uart", role: "固定 DIP-4 ID 帧接收" },
+    ],
+    recommended: ["zigbee_link"],
+    candidates: ["zigbee_uart"],
+    dropped: ["zigbee_uart"],
+  },
+];
+
+test("组卡渲染：收敛后的组卡 = 一个推荐态 + 被剔成员标「同组互斥·未选中」", () => {
+  const rendered = renderGroupCards(
+    convergedGroups,
+    [{ slug: "zigbee_link", reason: "透传链路满足3m以上通信" }],
+    ["zigbee_link"]
+  );
+
+  assert.equal((rendered.match(/AI 推荐/g) || []).length, 1);
+  assert.match(rendered, /data-group-slug="zigbee_link" checked/);
+  assert.match(rendered, /同组互斥·未选中/);
+  assert.match(rendered, /透传链路满足3m以上通信/);
+  // 被剔成员仍可点选（radio 在场），不是灰字死行
+  assert.match(rendered, /data-group-slug="zigbee_uart"/);
+  assert.equal((rendered.match(/同组互斥·未选中/g) || []).length, 1);
+});
+
+test("组卡渲染：无 dropped 字段（旧载荷）→ 零标注、零报错", () => {
+  const legacy = [{ ...convergedGroups[0], dropped: undefined, candidates: undefined }];
+  const rendered = renderGroupCards(legacy, [], ["zigbee_link"]);
+  assert.doesNotMatch(rendered, /同组互斥·未选中/);
+  assert.match(rendered, /data-group-slug="zigbee_link"/);
+});
+
 test("旧载荷（无 exclusive_groups / 空数组）→ 不渲染组卡、不抛错", () => {
   assert.equal(renderGroupCards(undefined, undefined, undefined), "");
   assert.equal(renderGroupCards([], [], []), "");

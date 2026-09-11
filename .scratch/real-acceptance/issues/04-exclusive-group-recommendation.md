@@ -6,7 +6,7 @@
 
 **被谁阻塞：** 无（`recommend-exclusive-groups/01-03` 已交付组声明 / 选择卡 / 提示词段）。
 
-**状态：** ready-for-agent
+**状态：** resolved（2026-09-11 收口；验收证据见文末「收口」段）
 
 ## 真机现场（2026-09-10 第十六轮 A8/A9 实跑）
 
@@ -57,11 +57,50 @@ HTTP 400 /api/generate:
 
 ## 验收标准
 
-- [ ] 红证：把 2026C 那份真实缓存载荷（或等价 fixture）喂解析层 → 现状同组两成员都进
+- [x] 红证：把 2026C 那份真实缓存载荷（或等价 fixture）喂解析层 → 现状同组两成员都进
       `selected`；实施后只留一个 + 另一个出现在「未选中候选」
-- [ ] 真机：2026C / stm32 推荐后**不再需要 `--drop`** 即可生成通过（`generate_check.py --reuse-recommend 2026C` 不带 `--drop` 跑绿）
-- [ ] 选择卡 UI：组卡仍显示两个成员、只有一个是推荐态（`verify-16`/新增脚本断言）
-- [ ] 全量 pytest + node 绿
+      （`tests/test_selection.py::test_build_selection_real_2026c_payload_converges_zigbee_rx`，
+      fixture = `.scratch/real-run/cache/recommend_2026C.json` 原文，不抄副本）
+- [x] 真机：2026C / stm32 推荐后**不再需要 `--drop`** 即可生成通过（`generate_check.py --reuse-recommend 2026C` 不带 `--drop` 跑绿）
+- [x] 选择卡 UI：组卡仍显示两个成员、只有一个是推荐态
+      （`tests/js/group-cards.test.mjs` 两条新用例：收敛卡 = 1 个「AI 推荐」+ 被剔成员标
+      「同组互斥·未选中」；旧载荷无 `dropped` 零标注）
+- [x] 全量 pytest + node 绿（3969 passed / 1432 pass 0 fail）
+
+## 收口（2026-09-11）
+
+**做法**：解析层确定性收敛（零额外额度）——`build_module_selection` 收
+`manifest_summaries` 后按 `ManifestSummary.exclusive_group` 投影「组 → 候选成员」，
+同组多成员只留**模型清单首个**，其余剔出顶层 `modules` 并记进
+`ModuleSelection.dropped_exclusive_members`；需求层不改写（模型原始证据保留）。
+`run_recommendation` 出卡前再收敛一次（直造 `ModuleSelection` 的调用方兜底），
+载荷契约收紧为 `recommended` **组内 ≤1** + 新增 `candidates` / `dropped` 可见字段。
+`generator.py` 的 `HARD_EXCLUSIVE_PAIRS` 门禁**不动**（最后一道）。
+
+**真机验收输出**（不带 `--drop`）：
+
+```
+[缓存] 复用 ...\cache\recommend_2026C.json（推荐段跳过）
+  → 同组互斥收敛：组 zigbee-rx 剔掉 ['zigbee_uart']（同组只留一个；被剔成员在选择卡「同组候选（未选中）」可见，无需 --drop）
+  模块(8): zigbee_uart_key, zigbee_link, uwb_uart, oled, led_beep, led, relay, key
+  [产物] 门禁全过（产物树语料重建，与生成同源）
+  [真机] ✓ UV4 exit=0 Build Time Elapsed:  00:00:02（0 错误 0 警）
+2026C: ✓ 通过
+```
+
+**对照取证**（同一台机器，一次性探针跑完即删）：原样 9 slug 喂 `/api/generate` →
+`HTTP 400 {"detail":"模块 zigbee_uart 与 zigbee_link 互斥…请二选一。"}`；收敛后 8 slug →
+`HTTP 200`。
+
+**改动文件**：`src/contest_generator/selection.py`（收敛 + 出卡 + 载荷补刀）、
+`src/contest_generator/llm.py`（把功能组摘要透传给解析层）、
+`src/contest_generator/static/js/fx/module.js`（被剔成员标「同组互斥·未选中」）、
+`.scratch/real-run/generate_check.py`（`--reuse-recommend` 路径补刀，缓存文件不改写）、
+`tests/test_selection.py` + `tests/js/group-cards.test.mjs`。
+
+**边界**：收敛保证「能生成」，不保证「选得最准」——保的是模型自己的排序，用户可在组卡
+一键换选；`selection.modules`（进工程集）与 `requirements[].modules`（模型证据）收敛后
+会有意不一致。详见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`「2026-09-11 收口」段。
 
 ## 实施提示词（新会话粘贴）
 

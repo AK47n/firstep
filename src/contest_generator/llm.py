@@ -2042,6 +2042,11 @@ class DeepSeekLLM:
                     multi_instance_slugs=[
                         s.slug for s in known if s.multi_instance
                     ],
+                    # 同组互斥收敛判据（工单 real-acceptance/04）：功能组声明
+                    # 单源 = ManifestSummary.exclusive_group（与清单行「同组
+                    # 互斥」标注同源）——同组被推荐多个成员时解析层收敛到
+                    # 一个，其余落 done 载荷的「同组候选（未选中）」。
+                    manifest_summaries=known,
                 )
             except SelectionError as exc:
                 # 域判决错误由传输侧翻译回 LLMError（错误契约 502 / 文案逐字不变；

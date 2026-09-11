@@ -19,7 +19,7 @@ TYPE_CHECKING（library.py 先例，避免 llm ↔ selection 运行时环）。
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from math import isfinite
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
@@ -38,6 +38,7 @@ from .library import list_modules
 from .manifest import (
     ExclusiveGroup,
     ExclusiveGroupMember,
+    ExclusiveGroupSpec,
     ManifestSummary,
     ModuleManifest,
     collect_kits,
@@ -803,6 +804,13 @@ class ModuleSelection:
     instances: dict[str, tuple[ModuleInstance, ...]] = field(default_factory=dict)
     converged: bool = False  # 核验轮短标记（工单 01）：模型自报与上一轮一致
     # （无需求层可判——短标记形态跳过域判决；仅核验轮允许，第 1 轮出现当空结果）
+    # 同组互斥收敛（工单 real-acceptance/04）：功能组 id → 被剔出 selected 的
+    # 成员（模型推荐顺序）。载荷落 exclusive_groups[].candidates / dropped——
+    # 剔掉的成员必须可见（不静默丢弃），用户可在组卡一键换选。缺省空 = 无收敛
+    # （无多成员组命中 / 未给摘要判据）。
+    dropped_exclusive_members: dict[str, tuple[str, ...]] = field(
+        default_factory=dict
+    )
 
 
 @dataclass(frozen=True)
@@ -838,6 +846,7 @@ def build_module_selection(
     known_reference_ids: Sequence[str] = (),
     hardware_words: Sequence[HardwareWordGroup] = (),
     multi_instance_slugs: Sequence[str] = (),
+    manifest_summaries: Sequence[ManifestSummary] = (),
 ) -> ModuleSelection:
     """把模型输出的原始 JSON 数据（llm 已解析为 dict）解析校验为 ModuleSelection。
 
@@ -862,6 +871,12 @@ def build_module_selection(
     层从 ManifestSummary 同源取），带 instances 的 slug 不在清单内 = 没有能力
     证据，大声失败（宁严勿假绿，与 references 幻觉同款口径）；未提供清单
     （空）同样拒绝。数量不设硬上限（上限守卫是 expand_instances 的活）。
+
+    同组互斥收敛（工单 real-acceptance/04）：manifest_summaries 提供功能组
+    声明时，同一组被推荐多个成员 → 只保留模型清单里最先出现的一个，其余剔出
+    顶层 modules 并记进 dropped_exclusive_members（载荷 candidates 可见）。
+    收敛在解析层做（确定性、零额度），生成侧 HARD_EXCLUSIVE_PAIRS 门禁保留
+    作兜底；未给摘要（旧调用方 / CLI 直造）逐字节旧行为。
     """
     known = set(known_slugs)
     multi_instance = set(multi_instance_slugs)
@@ -884,6 +899,11 @@ def build_module_selection(
     else:
         raise SelectionError("模型输出缺少 modules 数组")
 
+    modules, dropped = converge_exclusive_group_selection(
+        modules,
+        _exclusive_group_members(manifest_summaries, known_slugs),
+        instances,
+    )
     reference_ids = _parse_reference_ids(raw.get("references", []), known_reference_ids)
     return ModuleSelection(
         modules=tuple(modules),
@@ -893,7 +913,75 @@ def build_module_selection(
         score_points=parse_score_points(raw.get("score_points")),
         questions=questions,
         instances=instances,
+        dropped_exclusive_members=dropped,
     )
+
+
+def _exclusive_group_members(
+    summaries: Sequence[ManifestSummary], known_slugs: Sequence[str]
+) -> dict[str, tuple[str, ...]]:
+    """功能组 → 候选成员清单（组内互斥收敛的判据来源，纯函数）。
+
+    判据单源 = ManifestSummary.exclusive_group（库内声明，与清单行「同组互斥」
+    标注、库级 collect_exclusive_groups 同源）；members 序 = 摘要传入序
+    （库登记序，保证收敛判据跨调用稳定）。只保留平台在册（known_slugs）的
+    成员——与 LLM 看见的清单行同口径，剔除只留一个的平台外成员毫无意义。
+    只出现一次的成员不算组（无可选，与 collect_exclusive_groups 的单成员剔除
+    同款口径）；无摘要 / 无组声明 → 空 dict = 不收敛。
+    """
+    known = set(known_slugs)
+    by_id: dict[str, list[str]] = {}
+    for summary in summaries:
+        spec = summary.exclusive_group
+        if spec is None or summary.slug not in known:
+            continue
+        members = by_id.setdefault(spec.id, [])
+        if summary.slug not in members:
+            members.append(summary.slug)
+    return {
+        group_id: tuple(members)
+        for group_id, members in by_id.items()
+        if len(members) >= 2
+    }
+
+
+def converge_exclusive_group_selection(
+    modules: Sequence[str],
+    group_members: Mapping[str, Sequence[str]],
+    instances: dict[str, tuple[ModuleInstance, ...]] | None = None,
+) -> tuple[list[str], dict[str, tuple[str, ...]]]:
+    """同组互斥收敛（工单 real-acceptance/04）：同组多成员只保留一个，保序。
+
+    保留规则 = **模型清单顺序**（modules 即模型推荐顺序，第一个出现者是它的
+    首选——2026C 真机现场：zigbee_link 先于 zigbee_uart 入清单，保 zigbee_link，
+    与「无线通信距离不小于 3m，透传身份 ID」那条需求对齐）。规则是确定的，
+    不做二次打分（reason 文本打分 = 自造第二判据，判错的代价比省一次点击大）。
+
+    需求层不改写：被剔的 slug 仍留在 requirements[].modules（那是模型的原始
+    证据，剔掉的是「进工程」的成员不是证据）——组卡候选人清单 + 需求灰注是
+    它的可见出口。instances 传入时顺带清掉被剔 slug 的实例清单（模块没进
+    selected，实例不该留在载荷里）。
+
+    返回 (收敛后 slug 清单, {组 id: 被剔成员})——调用方落载荷的可见字段。
+    """
+    if not group_members:
+        return list(modules), {}
+    owners: dict[str, str] = {}  # 组 id → 已保留的 slug
+    kept: list[str] = []
+    excluded: dict[str, list[str]] = {}
+    for slug in modules:
+        group_id = next(
+            (gid for gid, members in group_members.items() if slug in members), None
+        )
+        if group_id is not None and group_id in owners:
+            excluded.setdefault(group_id, []).append(slug)
+            if instances is not None:
+                instances.pop(slug, None)
+            continue
+        if group_id is not None:
+            owners[group_id] = slug
+        kept.append(slug)
+    return kept, {gid: tuple(slugs) for gid, slugs in excluded.items()}
 
 
 def _parse_model_instances(
@@ -1577,14 +1665,27 @@ def _group_card(
     *,
     hint: bool,
     recommended: Sequence[str],
+    dropped: Sequence[str],
 ) -> dict[str, Any]:
-    """选择卡 dict 构造（命中卡与 hint 卡共用）。"""
+    """选择卡 dict 构造（命中卡与 hint 卡共用）。
+
+    recommended = 推荐态成员（**≤1**：同组互斥收敛后组内只会有一个成员被推荐
+    ——工单 real-acceptance/04 载荷契约收紧；数组形态保留兼容旧前端）；
+    candidates = 组内未选中成员（其余全部，成员登记序）——被收敛剔掉的成员
+    落在这里可见，用户点组卡即换选；dropped = 其中因同组互斥被剔的（模型原本
+    也推荐了、解析层收敛掉的），UI 据此标注「同组互斥·未选中」。
+    """
+    recommended_set = set(recommended)
+    dropped_set = set(dropped)
+    remaining = [member.slug for member in members if member.slug not in recommended_set]
     return {
         "id": group.id,
         "label": group.label,
         "hint": hint,
         "members": [{"slug": m.slug, "role": m.role} for m in members],
         "recommended": list(recommended),
+        "candidates": remaining,
+        "dropped": [slug for slug in remaining if slug in dropped_set],
     }
 
 
@@ -1594,20 +1695,27 @@ def build_exclusive_groups(
     platform: str,
     *,
     hint_module_groups: Sequence[str] = (),
+    dropped: Mapping[str, Sequence[str]] | None = None,
 ) -> list[dict[str, Any]]:
     """功能组选择卡派生（工单 recommend-exclusive-groups/02）：纯函数。
 
     输入 = AI 推荐 slug 集 + 库级组定义（collect_exclusive_groups 全平台
-    视图）+ 目标平台。输出 = 出卡列表（命中卡在前按库登记顺序，hint-only
-    卡按 hint 声明顺序在后）：
+    视图）+ 目标平台 + 同组收敛的被剔成员（dropped，工单 real-acceptance/04）。
+    输出 = 出卡列表（命中卡在前按库登记顺序，hint-only 卡按 hint 声明顺序在后）：
     - 命中卡：组内成员（scope_group_members 平台投影后）∩ 推荐集非空 →
       {id, label, hint: False, members: [{slug, role}], recommended:
-      [命中 slug 按成员顺序]}
+      [命中 slug 按成员顺序]（**≤1**——收敛保证），candidates: 其余成员，
+      dropped: 其中被同组互斥剔掉的}
     - hint 卡：AI 未命中但赛题声明 hint_module_groups 的组 → hint: True、
-      recommended 空（卡内无默认选中）；AI 已命中 = 只出命中卡不重复
+      recommended 空（卡内无默认选中）、candidates 全成员、dropped 空
     - 单成员组不出卡（无可选）；hint id 库内无对应组 → 静默忽略（不炸推荐）。
+
+    调用方传的推荐集应先经 converge_exclusive_group_selection 收敛（组内 ≤1）；
+    万一没收敛（直造 ModuleSelection 的调用方），本函数**按成员登记序只留首个
+    推荐成员**兜底——载荷契约「组内 ≤1」在出卡这一层也守得住。
     """
     selected = set(selection_modules)
+    dropped_by_group = dropped or {}
     hit_ids: set[str] = set()
     cards: list[dict[str, Any]] = []
     for group in group_defs:
@@ -1618,7 +1726,15 @@ def build_exclusive_groups(
         if not recommended:
             continue  # 未命中：留给 hint 兜底（若有声明）
         hit_ids.add(group.id)
-        cards.append(_group_card(group, members, hint=False, recommended=recommended))
+        cards.append(
+            _group_card(
+                group,
+                members,
+                hint=False,
+                recommended=recommended[:1],  # 组内 ≤1（收敛兜底）
+                dropped=dropped_by_group.get(group.id, ()),
+            )
+        )
     seen_hint: set[str] = set()
     for hint_id in hint_module_groups:
         if hint_id in hit_ids or hint_id in seen_hint:
@@ -1630,8 +1746,110 @@ def build_exclusive_groups(
         members = scope_group_members(hint_group.members, platform)
         if len(members) < 2:
             continue
-        cards.append(_group_card(hint_group, members, hint=True, recommended=()))
+        cards.append(
+            _group_card(hint_group, members, hint=True, recommended=(), dropped=())
+        )
     return cards
+
+
+def converge_recommendation_payload(
+    payload: Mapping[str, Any], group_defs: Sequence[ExclusiveGroup]
+) -> dict[str, Any]:
+    """载荷层同组收敛（工单 real-acceptance/04）：done 载荷 → 收敛后的副本。
+
+    预筛修好的第一道防线是解析层（build_module_selection）；本函数是**复用
+    旧载荷**的补刀（CLI --reuse-recommend 吃的是旧缓存里的 done 载荷——那份
+    载荷生在新代码之前，不补刀就仍会把同组两个成员喂给生成门禁，用户看到的
+    「真机跑绿」就成了假绿）。判据仍是库级组定义 + 模型推荐顺序（payload
+    modules 即模型推荐序），**不重跑模型、零额度**。
+
+    输出契约与出卡侧一致：每张组卡 recommended ≤1 + candidates（组内未选中
+    成员）+ dropped（因互斥被剔的）；无推荐成员的卡（hint 卡形态 / 用户取消
+    整组）原样保留——收敛只做「组内 ≤1」，不做「无推荐就删卡」。
+
+    幂等且不写入参：已收敛的载荷逐字段相等（可反复调用）；无需收敛的形态
+    （无 exclusive_groups 键 / 无组定义）原样返回副本（调用方 `==` 判定零误伤）。
+    """
+    if not group_defs or not payload.get("exclusive_groups"):
+        return dict(payload)
+    modules = [
+        m.get("slug", "")
+        for m in payload.get("modules", [])
+        if isinstance(m, dict)
+    ]
+    summaries = [
+        ManifestSummary(
+            slug=member.slug,
+            description="",
+            exclusive_group=ExclusiveGroupSpec(
+                id=group.id, label=group.label, role=member.role
+            ),
+        )
+        for group in group_defs
+        for member in group.members
+    ]
+    kept, dropped = converge_exclusive_group_selection(
+        modules, _exclusive_group_members(summaries, modules)
+    )
+    cards: list[dict[str, Any]] = []
+    changed = False
+    for card in payload["exclusive_groups"]:
+        if not isinstance(card, dict):
+            continue
+        rebuilt = _converge_payload_card(card, dropped)
+        if rebuilt is None:
+            changed = True  # 整组被换掉：卡剔掉
+            continue
+        if rebuilt != card:
+            changed = True
+        cards.append(rebuilt)
+    if not changed:
+        return dict(payload)
+    kept_set = set(kept)
+    return {
+        **payload,
+        "modules": [
+            m
+            for m in payload.get("modules", [])
+            if isinstance(m, dict) and m.get("slug") in kept_set
+        ],
+        "exclusive_groups": cards,
+    }
+
+
+def _converge_payload_card(
+    card: Mapping[str, Any], dropped: Mapping[str, Sequence[str]]
+) -> dict[str, Any] | None:
+    """单张组卡按收敛结果重写（recommended 只留首个 / candidates / dropped）。
+
+    卡片已是合规形状（recommended ≤1 且 candidates / dropped 与之一致）→
+    原样返回（幂等的判据）；无推荐成员的卡（hint 卡形态 / 用户把整组取消）
+    原样保留——收敛只做「组内 ≤1」，不做「无推荐就删卡」（出卡侧的
+    hint: True 卡正是无推荐形态）。
+
+    dropped 取**本轮新剔的 ∪ 卡上已有的**：第二轮调用时被剔成员已不在
+    modules（本轮无处可剔），若只按本轮算会把「因互斥未选中」标注抹掉——
+    卡片语义是「这个成员因同组互斥没进工程」，不是「这一轮剔了它」。
+    """
+    members = [
+        m.get("slug", "") for m in card.get("members", []) if isinstance(m, dict)
+    ]
+    recommended = [slug for slug in card.get("recommended", []) if slug in members]
+    if not recommended:
+        return dict(card)
+    kept = recommended[0]
+    remaining = [slug for slug in members if slug != kept]
+    dropped_set = set(dropped.get(str(card.get("id", "")), ())) | set(
+        card.get("dropped", ())
+    )
+    expected = {
+        "recommended": [kept],
+        "candidates": remaining,
+        "dropped": [slug for slug in remaining if slug in dropped_set],
+    }
+    if all(card.get(key) == value for key, value in expected.items()):
+        return dict(card)
+    return {**card, **expected}
 
 
 def run_recommendation(
@@ -1708,6 +1926,9 @@ def run_recommendation(
             qa_material=qa_material,  # 赛题答疑 Q&A（工单 qa-material/01）
             preselect_note=preselect_note,  # 预筛注记（工单 module-preselect/03）
             known_summaries=known,  # 合法性全集（同上；清单行另算）
+            # 说明：manifest_summaries 位置参数传的就是 topic.manifest_summaries
+            # ——同组互斥收敛的判据在解析层由 llm.select_modules 透传的
+            # known_summaries 提供（工单 real-acceptance/04），本层不重复传。
         )
 
     if not clarifications:
@@ -1732,6 +1953,31 @@ def run_recommendation(
         if selection.questions:
             emit.question({"questions": list(selection.questions)})
             return
+    # 同组互斥收敛兜底（工单 real-acceptance/04）：解析层已收敛（build_module_
+    # selection 收 manifest_summaries），这里是**直造 ModuleSelection 的调用方**
+    # （测试 / 未来旁路）的第二道——出卡前再收敛一次，组内 ≤1 是载荷契约，
+    # 不能只靠「上游都记得收敛」。判据取 topic.exclusive_groups 经平台投影
+    # （与出卡同一份组定义），不依赖摘要清单是否随 topic 带出。收敛幂等
+    # （已收敛的清单原样通过），被剔成员取两轮并集，正常路径零变化。
+    _converged_modules, _dropped = converge_exclusive_group_selection(
+        selection.modules,
+        {
+            group.id: tuple(
+                member.slug
+                for member in scope_group_members(group.members, platform)
+            )
+            for group in topic.exclusive_groups
+        },
+        selection.instances,
+    )
+    selection = replace(
+        selection,
+        modules=tuple(_converged_modules),
+        dropped_exclusive_members={
+            **selection.dropped_exclusive_members,
+            **_dropped,
+        },
+    )
     result: dict[str, Any] = {
         "modules": [
             {"slug": slug, "reason": selection.reasons.get(slug, "")}
@@ -1792,6 +2038,7 @@ def run_recommendation(
         topic.exclusive_groups,
         platform,
         hint_module_groups=topic.hint_module_groups,
+        dropped=selection.dropped_exclusive_members,  # 同组收敛剔掉的成员（可见）
     )
     if group_cards:
         result["exclusive_groups"] = group_cards

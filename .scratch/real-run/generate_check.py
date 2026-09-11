@@ -81,6 +81,9 @@ from contest_generator.generator import (
     build_output_tree_corpus,
     run_generation_gates,
 )
+from contest_generator.library import list_modules
+from contest_generator.manifest import collect_exclusive_groups
+from contest_generator.selection import converge_recommendation_payload
 
 
 def check_artifacts(out_dir: Path, platform: str = PLATFORM) -> list[str]:
@@ -386,6 +389,36 @@ def load_recommend(path: Path) -> dict:
     if not isinstance(done, dict) or not isinstance(done.get("modules"), list):
         raise ValueError(f"缓存形状错误: {path}（done 非对象或缺 modules 列表）")
     return raw
+
+
+def _converge_cached_groups(data: dict) -> dict:
+    """复用缓存的同组互斥收敛（工单 real-acceptance/04）：done 载荷 → 收敛后副本。
+
+    收敛实现单源 = selection.converge_recommendation_payload（生产解析层收敛
+    的对偶）；组定义取库级 collect_exclusive_groups（全平台视图，成员平台投影
+    归 selection 的出卡侧）。打印剔掉的成员——真机日志里「哪个被收敛掉了」必须
+    可见（不静默丢），剔掉的在 exclusive_groups[].candidates 留档。
+    模块库读不到 / 无组库 → 原样返回（不因收敛失败打断验收）。
+    """
+    try:
+        groups = collect_exclusive_groups(list_modules(MODULES))
+    except Exception as exc:  # 库不可读：收敛是加固不是前置，照旧往下走
+        print(f"  [收敛] 跳过错组收敛（模块库不可读: {exc}）")
+        return data
+    converged = converge_recommendation_payload(data, groups)
+    dropped = {
+        card["id"]: card.get("dropped", [])
+        for card in converged.get("exclusive_groups", [])
+        if card.get("dropped")
+    }
+    if dropped:
+        for group_id, slugs in dropped.items():
+            print(
+                f"  → 同组互斥收敛：组 {group_id} 剔掉 {slugs}"
+                "（同组只留一个；被剔成员在选择卡「同组候选（未选中）」可见，"
+                "无需 --drop）"
+            )
+    return converged
 
 
 # /api/recommend 请求契约（服务端校验唯一出处 = webapp.py:575-582，本函数是其
@@ -706,6 +739,13 @@ def check_topic(
             print("    （结果沿用旧推荐；如需应用新输入，去掉 --reuse-recommend 重跑）")
         data = cached["done"]
         print(f"[缓存] 复用 {cpath}（推荐段跳过）")
+        # 同组互斥收敛补刀（工单 real-acceptance/04）：缓存里的 done 载荷生在
+        # 「解析层收敛」之前——同组多成员（2026C 现场 zigbee_link + zigbee_uart）
+        # 直接喂生成必被 HARD_EXCLUSIVE_PAIRS 门禁 400。判据取库级组定义 +
+        # 载荷里的模型推荐顺序（**不重跑模型、零额度**，与前端同款「同组只留
+        # 一个」语义）；缓存文件本身**不改写**（那是真机现场记录，红了要能翻
+        # 旧账），只在本次运行内收敛。
+        data = _converge_cached_groups(data)
     else:
         rec: dict = {}
         for _round in range(5):

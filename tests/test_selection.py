@@ -26,6 +26,7 @@ from contest_generator.generator import TopicContext
 from contest_generator.manifest import (
     ExclusiveGroup,
     ExclusiveGroupMember,
+    ExclusiveGroupSpec,
     ManifestSummary,
     ModuleManifest,
     MultiInstanceSpec,
@@ -58,6 +59,8 @@ from contest_generator.selection import (
     associated_references,
     build_exclusive_groups,
     build_module_selection,
+    converge_exclusive_group_selection,
+    converge_recommendation_payload,
     parse_decision,
     check_platform_warnings,
     filter_manifests_by_platform,
@@ -2766,6 +2769,32 @@ def test_run_recommendation_passes_qa_material_through():
 # ---------------------------------------------------------------------------
 
 
+def _group_summary(slug: str, group_id: str | None) -> ManifestSummary:
+    """模块摘要构造器：带/不带功能组声明（解析层收敛判据的构造源）。"""
+    return ManifestSummary(
+        slug=slug,
+        description=f"{slug} 功能说明",
+        exclusive_group=(
+            None
+            if group_id is None
+            else ExclusiveGroupSpec(
+                id=group_id, label=f"{group_id} 组", role=f"{slug} 组内定位"
+            )
+        ),
+    )
+
+
+# 真机载荷 fixture（工单 real-acceptance/04 红证）：第十六轮 A8 2026C / stm32
+# 的真实推荐缓存（done 载荷逐字），其中 zigbee-rx 组两个成员都被模型推荐
+# （exclusive_groups[0].recommended = [zigbee_link, zigbee_uart]），一路穿到
+# /api/generate 才 400。真源就这一份缓存，不另抄副本（抄本会与真机现场漂移）。
+REAL_2026C_CACHE = (
+    Path(__file__).resolve().parents[1]
+    / ".scratch" / "real-run" / "cache" / "recommend_2026C.json"
+)
+REAL_LIBRARY_DIR = Path(__file__).resolve().parents[1] / "library" / "modules"
+
+
 def _group(
     group_id: str,
     label: str,
@@ -2784,7 +2813,8 @@ def _group(
 
 def test_build_exclusive_groups_derives_hit_cards():
     """命中派生：成员 ∩ 推荐集非空 → 出卡（hint False），recommended = 命中
-    slug（按成员登记顺序，与 AI 推荐顺序无关）；未命中成员仍出卡供选择。"""
+    slug（**组内 ≤1**，工单 real-acceptance/04：同组多命中只留成员登记序首个，
+    其余进 candidates 可见）；未命中成员仍出卡供选择。"""
     gray = _group(
         "gray-track",
         "8 路灰度传感器驱动",
@@ -2807,9 +2837,34 @@ def test_build_exclusive_groups_derives_hit_cards():
                 {"slug": "pid", "role": "PID 巡线"},
                 {"slug": "xunji", "role": "质心巡线"},
             ],
-            "recommended": ["pid", "xunji"],
+            "recommended": ["pid"],
+            "candidates": ["huidu", "xunji"],
+            "dropped": [],
         }
     ]
+
+
+def test_build_exclusive_groups_marks_converged_candidates_as_dropped():
+    """收敛可见（工单 real-acceptance/04）：被同组互斥剔掉的成员进 candidates
+    且在 dropped 里标出来（前端据此标「同组互斥·未选中」），保留的成员入
+    recommended。"""
+    gray = _group(
+        "gray-track",
+        "8 路灰度传感器驱动",
+        [
+            ("huidu", ("mspm0",), "仅 8 路灰度读取"),
+            ("pid", ("mspm0",), "PID 巡线"),
+            ("xunji", ("mspm0",), "质心巡线"),
+        ],
+    )
+
+    cards = build_exclusive_groups(
+        ("pid",), (gray,), "mspm0", dropped={"gray-track": ("xunji",)}
+    )
+
+    assert cards[0]["recommended"] == ["pid"]
+    assert cards[0]["candidates"] == ["huidu", "xunji"]
+    assert cards[0]["dropped"] == ["xunji"]
 
 
 def test_build_exclusive_groups_real_library_zigbee_rx_card():
@@ -2888,6 +2943,8 @@ def test_build_exclusive_groups_hint_unhit_emits_card():
                 {"slug": "ml_mpu6050", "role": "I2C DMP"},
             ],
             "recommended": [],
+            "candidates": ["imu_uart", "ml_mpu6050"],
+            "dropped": [],
         }
     ]
 
@@ -2940,9 +2997,236 @@ def test_build_exclusive_groups_hint_single_member_platform_no_card():
     ) == []
 
 
+def test_build_selection_converges_same_group_members():
+    """解析层同组收敛（工单 real-acceptance/04）：模型同组推两个 → 保清单
+    首个（模型推荐序即它的首选），其余剔出 selected 并记进
+    dropped_exclusive_members（不静默丢弃——载荷 candidates 可见）。"""
+    summaries = (
+        _group_summary("zigbee_link", "zigbee-rx"),
+        _group_summary("zigbee_uart", "zigbee-rx"),
+        _group_summary("oled", None),
+    )
+
+    result = build_module_selection(
+        {
+            "modules": [
+                {"slug": "zigbee_uart", "reason": "解析固定 ID 帧"},
+                {"slug": "oled", "reason": "显示"},
+                {"slug": "zigbee_link", "reason": "透传链路"},
+            ]
+        },
+        known_slugs=("zigbee_link", "zigbee_uart", "oled"),
+        manifest_summaries=summaries,
+    )
+
+    assert result.modules == ("zigbee_uart", "oled")
+    assert result.dropped_exclusive_members == {"zigbee-rx": ("zigbee_link",)}
+    # 组内只有一个成员的选择零变化（本测试同时是「收敛不误伤其余模块」的守卫）
+
+
+def test_build_selection_group_convergence_noop_without_multimember_group():
+    """无多成员组 / 未给摘要 → 逐字节旧行为（旧调用方零改动）。"""
+    raw = {
+        "modules": [
+            {"slug": "dht11", "reason": "测温湿度"},
+            {"slug": "oled", "reason": "显示"},
+        ]
+    }
+    baseline = build_module_selection(raw, known_slugs=("dht11", "oled"))
+    assert baseline.modules == ("dht11", "oled")
+    assert baseline.dropped_exclusive_members == {}
+
+    grouped = build_module_selection(
+        raw,
+        known_slugs=("dht11", "oled"),
+        manifest_summaries=(
+            _group_summary("dht11", "sensor"),
+            _group_summary("oled", "display"),
+        ),
+    )
+    assert grouped.modules == ("dht11", "oled")  # 两组各 1 成员 = 无可选
+    assert grouped.dropped_exclusive_members == {}
+
+
+def test_build_selection_real_2026c_payload_converges_zigbee_rx():
+    """红证（工单 real-acceptance/04）：真机缓存载荷喂解析层。
+
+    现场：2026C / stm32 推荐同时给出 zigbee_link 与 zigbee_uart（zigbee-rx 组
+    两成员），一路走到 /api/generate 才 400（HARD_EXCLUSIVE_PAIRS 兜底）。
+    解析层收敛后：顶层只剩 zigbee_link（模型推荐序在前者），zigbee_uart 进
+    「同组候选（未选中）」可见字段——用户点一次推荐就能直接生成。
+    """
+    from contest_generator.library import list_modules
+
+    baseline = list_modules(REAL_LIBRARY_DIR)
+    summaries = tuple(ManifestSummary.from_manifest(m) for m in baseline)
+    asserted = _cache_done_payload()
+
+    result = build_module_selection(
+        asserted,
+        known_slugs=[m.slug for m in baseline],
+        manifest_summaries=summaries,
+        hardware_words=load_wordlist(),  # 真机载荷含词表内库外建议（电源模块）
+    )
+
+    assert "zigbee_uart" not in result.modules
+    assert "zigbee_link" in result.modules
+    assert result.dropped_exclusive_members == {"zigbee-rx": ("zigbee_uart",)}
+    # 其余 8 个模块（含 zigbee_uart_key / uwb_uart / oled）一个不少
+    assert set(result.modules) == {
+        m["slug"] for m in _raw_cache()["done"]["modules"]
+    } - {"zigbee_uart"}
+    # 需求层保留模型原文（剔掉的是「进工程」的成员，不是证据）
+    assert any(
+        "zigbee_uart" in requirement.modules for requirement in result.requirements
+    )
+
+
+def test_build_selection_real_2026c_payload_extracts_all_nine_modules():
+    """红证前置（工单 real-acceptance/04）：缓存载荷喂解析层，九个模块一个不少。
+
+    没有这条断言，上面那条「zigbee_uart 被剔掉」可能被别的原因满足（少解析
+    了几个模块也"绿"）——本测试钉死收敛前的完整命中集。
+    """
+    from contest_generator.library import list_modules
+
+    baseline = list_modules(REAL_LIBRARY_DIR)
+    result = build_module_selection(
+        _cache_done_payload(),
+        known_slugs=[m.slug for m in baseline],
+        hardware_words=load_wordlist(),
+    )
+
+    assert result.modules == tuple(
+        m["slug"] for m in _raw_cache()["done"]["modules"]
+    )
+    assert "zigbee_uart" in result.modules and "zigbee_link" in result.modules
+    assert result.dropped_exclusive_members == {}  # 未给摘要 = 无收敛判据
+
+
+def _raw_cache() -> dict:
+    """真机推荐缓存原文（fixture 真源：第十六轮 A8 2026C / stm32 实跑产物）。
+
+    落盘的是 /api/recommend done 载荷（模型输出经解析后的形状）；解析层吃的
+    是模型原始输出（requirement.modules 是 {slug} 对象而非字符串），故本测试
+    经 _cache_done_payload 把它还原成模型侧形状——只做形状还原，**任何 slug /
+    句子 / 理由都不增删**（收敛判据是清单顺序，还原保序即等价）。
+    """
+    import json
+
+    return json.loads(REAL_2026C_CACHE.read_text(encoding="utf-8"))
+
+
+def _cache_done_payload() -> dict:
+    """缓存 done 载荷 → 模型原始输出形状（工单 real-acceptance/04 红证 fixture）。
+
+    还原规则：requirement.modules 的字符串 slug 包回 {"slug": …}（理由取顶层
+    推荐理由，与前端 :528「找 reason 同源」一致）；两个字段**形状不同**故不还原
+    ——done 的 references 是解析后的条目对象（模型输出的是 id 字符串）、done 的
+    instances 是解析后的 slug → 实例清单（模型输出挂在模块条目内），两者都不是
+    本工单的收敛判据。其余字段逐字透传（含 exclusive_groups——要治的现场证据），
+    slug / 句子 / 理由不增删，防 fixture 变成「我手写的、我想让它失败的东西」。
+    """
+    done = _raw_cache()["done"]
+    reasons = {m["slug"]: m.get("reason", "") for m in done["modules"]}
+    payload = {
+        key: value
+        for key, value in done.items()
+        if key not in ("references", "instances")
+    }
+    payload["requirements"] = [
+        {
+            **requirement,
+            "modules": [
+                {"slug": slug, "reason": reasons.get(slug, "")}
+                for slug in requirement.get("modules", [])
+            ],
+        }
+        for requirement in done["requirements"]
+    ]
+    return payload
+
+
+def test_build_selection_real_2026c_payload_fixture_is_intact():
+    """fixture 前置断言：真机载荷原本就是「zigbee-rx 组两成员都被推荐」。
+
+    缓存是可被覆盖的现场产物——先钉死前提，红证才成立（现场变了 = 这条先红，
+    而不是被收敛逻辑悄悄满足成假绿）。
+    """
+    done = _raw_cache()["done"]
+    assert [m["slug"] for m in done["modules"]] == [
+        "zigbee_uart_key", "zigbee_link", "zigbee_uart", "uwb_uart",
+        "oled", "led_beep", "led", "relay", "key",
+    ]
+    card = next(g for g in done["exclusive_groups"] if g["id"] == "zigbee-rx")
+    assert card["recommended"] == ["zigbee_link", "zigbee_uart"]
+    assert [m["slug"] for m in card["members"]] == ["zigbee_link", "zigbee_uart"]
+
+
+def test_converge_recommendation_payload_real_2026c_cache():
+    """载荷层收敛（工单 real-acceptance/04）：CLI --reuse-recommend 吃的是旧
+    缓存里的 done 载荷（生在新代码之前），补刀后同组只留一个；**不改写入参**
+    （缓存文件是真机现场记录，红了要能翻旧账）。"""
+    from contest_generator.library import list_modules
+    from contest_generator.manifest import collect_exclusive_groups
+
+    done = _raw_cache()["done"]
+    groups = collect_exclusive_groups(list_modules(REAL_LIBRARY_DIR))
+
+    converged = converge_recommendation_payload(done, groups)
+
+    assert [m["slug"] for m in converged["modules"]] == [
+        "zigbee_uart_key", "zigbee_link", "uwb_uart",
+        "oled", "led_beep", "led", "relay", "key",
+    ]
+    card = next(g for g in converged["exclusive_groups"] if g["id"] == "zigbee-rx")
+    assert card["recommended"] == ["zigbee_link"]
+    assert card["candidates"] == ["zigbee_uart"]
+    assert card["dropped"] == ["zigbee_uart"]
+    # 入参未被改写（原载荷仍带两个推荐成员 = 现场记录可回查）
+    assert done["exclusive_groups"][0]["recommended"] == [
+        "zigbee_link", "zigbee_uart"
+    ]
+    assert len(done["modules"]) == 9
+    # 幂等：再收敛一次结果逐字段一致
+    assert converge_recommendation_payload(converged, groups) == converged
+
+
+def test_converge_recommendation_payload_noop_without_groups():
+    """无组库 / 无 exclusive_groups 键 / 组内单成员 → 逐字节不变（旧载荷兼容）。
+
+    组内单成员那条用**收敛后的真机载荷**（recommended 已 ≤1 + candidates /
+    dropped 齐备）——出卡侧产出的合规形状，再收敛一次逐字段相等。
+    """
+    from contest_generator.library import list_modules
+    from contest_generator.manifest import collect_exclusive_groups
+
+    done = _raw_cache()["done"]
+    groups = collect_exclusive_groups(list_modules(REAL_LIBRARY_DIR))
+    converged = converge_recommendation_payload(done, groups)
+
+    assert converge_recommendation_payload(done, ()) == done
+    no_key = {k: v for k, v in done.items() if k != "exclusive_groups"}
+    assert converge_recommendation_payload(no_key, groups) == no_key
+    assert converge_recommendation_payload(converged, groups) == converged
+    # 无推荐成员的 hint 卡（组内一个都没推荐）：无收敛可做 → 原样保留
+    hint_card = {
+        **converged["exclusive_groups"][0],
+        "recommended": [],
+        "dropped": [],
+    }
+    hint_payload = {**converged, "exclusive_groups": [hint_card]}
+    assert converge_recommendation_payload(hint_payload, groups) == hint_payload
+
+
 def test_run_recommendation_done_includes_exclusive_groups_when_hit():
     """done 载荷带 exclusive_groups（工单 02）：命中组出卡（hint False，
-    recommended = 命中 slug）——前端据此渲染组卡 + autoAdd 去重。"""
+    recommended = 命中 slug）——前端据此渲染组卡 + autoAdd 去重。
+
+    同组两命中（工单 real-acceptance/04）：出卡前收敛兜底（直造 ModuleSelection
+    的调用方没有解析层判据，本层按成员登记序只留首个推荐成员），组内 ≤1 是
+    载荷契约；被剔的成员仍在 candidates 且进 dropped（前端标「同组互斥·
+    未选中」，用户可换选）。"""
     gray = _group(
         "gray-track",
         "8 路灰度传感器驱动",
@@ -2964,6 +3248,7 @@ def test_run_recommendation_done_includes_exclusive_groups_when_hit():
     )
 
     data = _drain_events(events)[-1][1]
+    assert [m["slug"] for m in data["modules"]] == ["pid"]  # xunji 被收敛剔出
     assert data["exclusive_groups"] == [
         {
             "id": "gray-track",
@@ -2974,7 +3259,9 @@ def test_run_recommendation_done_includes_exclusive_groups_when_hit():
                 {"slug": "pid", "role": "PID 巡线"},
                 {"slug": "xunji", "role": "质心巡线"},
             ],
-            "recommended": ["pid", "xunji"],
+            "recommended": ["pid"],
+            "candidates": ["huidu", "xunji"],
+            "dropped": ["xunji"],
         }
     ]
 
@@ -3011,6 +3298,8 @@ def test_run_recommendation_done_includes_hint_cards():
                 {"slug": "ml_mpu6050", "role": "I2C DMP"},
             ],
             "recommended": [],
+            "candidates": ["imu_uart", "ml_mpu6050"],
+            "dropped": [],
         }
     ]
 

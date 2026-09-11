@@ -36,8 +36,11 @@ export function pythonArtifactSummary(m) {
 // 功能组选择卡（工单 recommend-exclusive-groups/04）：纯函数层——组卡渲染、
 // 单选交换/取消、autoAdd 同组去重、同组多选冲突判定。交互逻辑全部下沉为
 // 纯函数（不碰 DOM），照 score-points-format 先例喂 node:test 单测。
-// 载荷形状（工单 02）：exclusive_groups = [{id, label, hint, members:[{slug,
-// role}], recommended:[slug]}]；旧载荷无该键 → 一律 || [] 容错（无卡）。
+// 载荷形状（工单 02 / 04）：exclusive_groups = [{id, label, hint, members:[{slug,
+// role}], recommended:[slug], candidates:[slug], dropped:[slug]}]——recommended
+// 语义收紧为「组内 ≤1」（同组互斥收敛，工单 real-acceptance/04），candidates =
+// 组内未选中成员、dropped = 其中因互斥被收敛掉的（本卡标「同组互斥·未选中」）；
+// 旧载荷无该键 → 一律 || [] 容错（无卡 / 无标注）。
 // ---------------------------------------------------------------------------
 
 export function groupOfSlug(groups, slug) {
@@ -91,6 +94,8 @@ export function renderGroupCards(groups, modules, selectedSlugs) {
   // 在 selectedSlugs 的成员，多个按 data.modules 序（AI 推荐序）取第一个；
   // 不在 data.modules 的成员（用户手动加的）按组成员登记序兜底（spec:107 注：
   // AI 首选由 data.modules 顺序决定，不依赖 recommended 字段）。
+  // 同组互斥收敛（工单 real-acceptance/04）：被收敛剔掉的成员（dropped）标
+  // 「同组互斥·未选中」——AI 也推荐过它，只是组内只能留一个；点它即换选。
   const reasons = {};
   for (const m of (modules || [])) reasons[m.slug] = m.reason || "";
   return (groups || []).map((g) => {
@@ -104,9 +109,11 @@ export function renderGroupCards(groups, modules, selectedSlugs) {
         ? checkedMembers.find((x) => x.slug === firstInModules.slug).slug
         : checkedMembers[0].slug;
     }
+    const dropped = g.dropped || [];
     const rows = members.map((m) => {
       const isRec = (g.recommended || []).includes(m.slug);
       const reason = reasons[m.slug];
+      const isDropped = !isRec && dropped.includes(m.slug);
       return '<label class="group-member' + (m.slug === checked ? " checked" : "") + '">'
         + '<input type="radio" name="group-' + esc(g.id) + '"'
         + ' data-group-id="' + esc(g.id) + '" data-group-slug="' + esc(m.slug) + '"'
@@ -115,6 +122,9 @@ export function renderGroupCards(groups, modules, selectedSlugs) {
         + '<span class="role">' + esc(m.role || "") + '</span>'
         + (isRec ? '<span class="badge ok">AI 推荐</span>'
             + (reason ? '<span class="reason">' + esc(reason) + '</span>' : "") : "")
+        + (isDropped
+            ? '<span class="badge un" title="AI 也推荐了它，但同组只能留一个">'
+              + '同组互斥·未选中</span>' : "")
         + '</label>';
     }).join("");
     return '<div class="group-card">'
