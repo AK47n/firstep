@@ -5,6 +5,7 @@
 
 import json
 import logging
+import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -30,7 +31,13 @@ from contest_generator.events import (
 from contest_generator.budget import (
     MODULE_SUMMARY_BYTES,
     REFERENCE_SUGGESTIONS_MAX_WIRE_BYTES,
+    REQUEST_RESERVE_BYTES,
     SKELETON_RELATED_LIMIT,
+    format_segment_breakdown,
+    payload_budget_state,
+    payload_shell_wire_size,
+    payload_wire_size,
+    request_segments,
     wire_size,
 )
 from contest_generator.library import list_modules
@@ -48,6 +55,7 @@ from contest_generator.llm import (
     EMBEDDED_CONTENT_CAP,
     ERROR_KIND_DOMAIN,
     ERROR_KIND_NETWORK,
+    EXCLUSIVE_GROUP_TAG,
     FIX_PREVIOUS_FIXES_CAP,
     FIX_SYSTEM_PROMPT,
     SELECT_SYSTEM_PROMPT,
@@ -62,6 +70,8 @@ from contest_generator.llm import (
     _decision_note,
     _requirement_lines,
     _wordlist_prompt_segment,
+    _clarification_history_segment,
+    _fit_segment_wire,
     JUDGMENT_SCOPE,
     JUDGMENT_SUMMARY_SYSTEM_PROMPT,
     LLMError,
@@ -141,7 +151,7 @@ from contest_generator.topic_preread import (
     PrereadResult,
 )
 from contest_generator.manifest import ModuleManifest, PlatformEntry
-from contest_generator.wordlist import SolutionOption
+from contest_generator.wordlist import SolutionOption, format_wordlist_prompt
 from tests.fakes import FakeLLM, FakeTransport, RecordingLLM
 
 SELECTION_JSON = json.dumps(
@@ -1163,7 +1173,8 @@ def test_fix_prompt_worst_case_fits_request_budget(tmp_path):
         "response_format": {"type": "json_object"},
     }
     total = len(json.dumps(payload).encode("utf-8"))
-    assert total <= MAX_REQUEST_BYTES - 10 * 1024
+    # 统一余量单源（工单 real-acceptance/05）：本线实测余量 10.7KB，断言取下界
+    assert total <= MAX_REQUEST_BYTES - REQUEST_RESERVE_BYTES
     assert "上下文预算限制" in prompt  # 文件上下文真实走了总量预算截断
     assert f"仅展示前 {FIX_PREVIOUS_FIXES_CAP} 字符" in prompt  # 回喂段合计截断带标注
 
@@ -2141,6 +2152,100 @@ def test_chat_rejects_oversized_payload_before_send():
         llm._chat([{"role": "user", "content": "x" * (MAX_REQUEST_BYTES + 1024)}])
 
     assert transport.calls == []  # 断言在传输之前，网络调用未发生
+
+
+def test_rejected_oversized_payload_logs_segment_breakdown(caplog):
+    """被拒时留「哪一段占了多少」的可判读信号（工单 real-acceptance/05）。
+
+    改前只有一个总字节数：超限了也看不出是哪一段顶上去的，账本与实测对不上
+    只能人肉复算。本测试钉住拒发路径的段级留痕（`llm_request_budget`）——
+    含 request_bytes / limit / over_by / segments，且**只含元数据**
+    （脱敏契约：不含 prompt / response 内容）。
+
+    并钉住**渲染后的消息文本**也带分解串：src 全仓没有配置任何 logging
+    handler，未配置时 Python 的 lastResort 只打 `record.getMessage()`——只放
+    `extra` 的字段在真机上落不到任何 sink（评审实测），等于没有信号。
+    """
+    llm = _llm(FakeTransport())
+    marker = "秘密题面内容"
+    payload_text = marker + "x" * (MAX_REQUEST_BYTES + 1024)
+
+    with caplog.at_level(logging.ERROR):
+        with pytest.raises(LLMError, match="请求体过大"):
+            llm._chat([{"role": "user", "content": payload_text}])
+
+    records = [
+        record
+        for record in caplog.records
+        if "llm_request_budget" in record.__dict__
+    ]
+    assert len(records) == 1
+    budget = records[0].__dict__["llm_request_budget"]
+    assert budget["request_bytes"] > budget["limit"]
+    assert budget["over_by"] == budget["request_bytes"] - budget["limit"]
+    assert "msg0:user=" in budget["segments"]  # 段级分解可判读
+    assert f"{budget['request_bytes']}B" in budget["segments"]
+    assert marker not in str(budget)  # 脱敏：只有段名与字节数
+
+    # 渲染后的消息（= 无 handler 时 lastResort 打到 stderr 的东西）必须自带分解
+    rendered = records[0].getMessage()
+    assert "msg0:user=" in rendered
+    assert str(budget["request_bytes"]) in rendered
+    assert marker not in rendered  # 渲染后同样脱敏
+
+
+def test_near_limit_payload_logs_segment_breakdown(caplog):
+    """贴边（≥90% 上限）在**发出之前**留痕（工单 real-acceptance/05）。
+
+    留痕时机是「接近上限」而不是「已超限」——这样真正被拒的那一次，日志里
+    早就有近因可查（谁在吃预算），不用等失败再反推。
+
+    两种贴边形态都测（它们**不是**同一件事，工单 05 统一余量把二者分开）：
+      * 贴边但**仍在余量内**（90% ≤ 用量 < 上限 − 2KB）→ 留痕 + `within_reserve`
+        True（推荐侧常态：最坏形态 125638B 就落在这里）；
+      * 贴边且**已跌破统一余量**（上限 − 2KB ≤ 用量 ≤ 上限）→ 留痕 +
+        `within_reserve` False——这是「下一次会被拒」的前兆，最该留痕的形态。
+    """
+    transport = FakeTransport(body=_api_response("ok"))
+    llm = _llm(transport)
+
+    def send(size: int) -> dict:
+        caplog.clear()
+        with caplog.at_level(logging.WARNING):
+            llm._chat([{"role": "user", "content": "y" * size}])
+        records = [
+            record
+            for record in caplog.records
+            if "llm_request_budget" in record.__dict__
+        ]
+        assert len(records) == 1, f"用量 {size} 未留痕"
+        # 渲染后的消息自带分解串（无 handler 时 lastResort 只打 message）
+        assert "msg0:user=" in records[0].getMessage()
+        return records[0].__dict__["llm_request_budget"]
+
+    # 形态 ①：95% 上限——贴边但仍在余量内
+    within = send(int(MAX_REQUEST_BYTES * 0.95) - 128)
+    assert within["within_reserve"] is True
+    assert within["headroom"] > REQUEST_RESERVE_BYTES
+    assert "msg0:user=" in within["segments"]
+    assert len(transport.calls) == 1  # 贴边只留痕，请求照发（不是拒绝）
+
+    # 形态 ②：上限 − 1KB——贴边且已跌破统一余量（拒发前兆）
+    below = send(MAX_REQUEST_BYTES - 1024 - 128)
+    assert below["within_reserve"] is False
+    assert 0 < below["headroom"] < REQUEST_RESERVE_BYTES
+
+
+def test_normal_payload_logs_no_budget_warning(caplog):
+    """远低于上限的常规请求不产生贴边留痕（防日志噪声淹没真信号）。"""
+    llm = _llm(FakeTransport(body=_api_response("ok")))
+
+    with caplog.at_level(logging.WARNING):
+        llm._chat([{"role": "user", "content": "短请求"}])
+
+    assert not [
+        record for record in caplog.records if "llm_request_budget" in record.__dict__
+    ]
 
 
 def test_distill_master_batches_summary_phase():
@@ -5391,8 +5496,8 @@ def test_select_prompt_embeds_manual_fulltexts_with_label():
     **不要求夹具超 4000 字符**（旧断言已删）：4000 是**字符**口径的旧截断上限，
     而本段预算是 wire 字节 —— 在 23400B 级预算下「超 4000 字符」需要 ≈24000B
     内容，加上标注预扣必然触发截断，两条要求不可兼得。核心行为（不被旧上限
-    截断、file_label 保留）由 `TRUNCATION_NOTICE not in user_message` + file_label
-    断言直接守，与文字长度无关。
+    截断、file_label 保留）由 `TRUNCATION_NOTICE not in user_message` +
+    file_label 断言直接守，与文字长度无关。
     """
     transport = FakeTransport(body=_api_response(SELECTION_JSON))
     llm = _llm(transport)
@@ -5411,7 +5516,7 @@ def test_select_prompt_embeds_manual_fulltexts_with_label():
 
     user_message = transport.calls[0][2]["messages"][1]["content"]
     assert "以下为你手动指定的参考文件全文" in user_message
-    assert manual_text in user_message  # 预算内全文原样在（旧字符上限实现必截断）
+    assert manual_text in user_message  # 超 4000 字符仍全文在（旧实现必截断）
     assert "// ---- visual.txt ----" in user_message  # read_fulltext 的 file_label 标注保留
     assert TRUNCATION_NOTICE not in user_message  # 总上限内不截断（截断标注归 read_fulltext）
     assert "（用户手动指定，全文已直接给出，无需点名）" in user_message  # 清单行来源标注
@@ -5514,7 +5619,8 @@ def test_select_prompt_includes_qa_material():
 
 
 def test_selection_prompt_worst_case_fits_request_budget():
-    """结构测试（工单 budget-wire-unification/01 唯一硬保证，红证先行）：最坏
+    """结构测试（工单 budget-wire-unification/01 立；工单 real-acceptance/05
+    更正其「唯一硬保证」的自称——详见文末）：最坏
     情况 select 请求——REFERENCE_FULLTEXT_BYTES 上限全文（全中文，wire 口径
     6 字节/字符）+ 20 条长问答历史（截断后形态）+ 词表 + 摘要 + 题面 4000
     （推导最坏形态）——完整 payload 按 json.dumps 序列化（对齐 llm._chat 预检
@@ -5542,7 +5648,16 @@ def test_selection_prompt_worst_case_fits_request_budget():
      MAX_REQUEST_BYTES（128KB 网关）。10KB 备量已是历史（多次修订累计被
      真实段消耗），现按「距 MAX_REQUEST_BYTES 保持 ≥2KB 充分距离 + 新增段
      再加即红」校准——2KB 是网关 / 响应开销的紧凑但充分的距离，预算再涨
-     必须先红证实测再动常数。"""
+     必须先红证实测再动常数。
+
+     **本测试不是预算的硬保证（工单 real-acceptance/05 更正）**：它用固定 14 条
+     假摘要 + 写死的短简介（"温湿度传感器采集与显示" × 8），实测 94196B——比
+     真实库形态（86 条摘要行吃满 MODULE_SUMMARY_BYTES=40000）**小 34KB**。
+     历史上本文档称它是「唯一硬保证」，而真正绑定的那条是
+     test_recommend_real_library_budget（真实库 + 预筛注记）。本测试现在的职责
+     是**合成条件段组合回归**（多实例 / 同组互斥 / 题面核查三条件段同出），预算
+     上界由真实库那条 + 段级账本测试承担。余量不再写死：各线共用
+     budget.REQUEST_RESERVE_BYTES（单源，改一处即全改）。"""
     problem = "设" * EMBEDDED_CONTENT_CAP  # 题面截断上限（推导最坏形态 4000 中文）
     summaries = [
         ManifestSummary(
@@ -5595,7 +5710,9 @@ def test_selection_prompt_worst_case_fits_request_budget():
         "response_format": {"type": "json_object"},
     }
     total = len(json.dumps(payload).encode("utf-8"))
-    assert total <= MAX_REQUEST_BYTES - 2 * 1024
+    # 统一余量单源（工单 real-acceptance/05）：本线实测余量 33.6KB，远超
+    # REQUEST_RESERVE_BYTES；断言取下界而不是写死一个比下界更松的数。
+    assert total <= MAX_REQUEST_BYTES - REQUEST_RESERVE_BYTES
     assert "内容过长，已截断" in prompt  # 历史段合计截断带标注
     assert f"仅展示前 {CLARIFICATION_HISTORY_CAP} 字符" in prompt
     assert f"仅展示前 {REFERENCE_FULLTEXT_BYTES} wire 字节" in prompt  # 全文 wire 预算截断带标注
@@ -5623,19 +5740,328 @@ def test_selection_prompt_preselect_note_two_states():
     assert "初筛" not in plain and "wire 字节" not in plain
 
 
+def test_select_request_segment_ledger_closes_and_reserves():
+    """段级记账自检（工单 real-acceptance/05）：`request_segments` 的分解必须
+    **逐字节对上**实发请求体——Σ段 + JSON 壳 = json.dumps(payload) 字节数。
+
+    这条是本单「账本与实测对齐」的机器化形式：账本不再是 budget.py 注释里的
+    手算（那份手算写「最坏 ≈119.5KB」，而真实库最坏形态实测 128405B），而是
+    一个能对不上就红的等式。段名按稳定键名断言（msg0:system / msg1:user /
+    顶层字段），防「分解函数悄悄换键名，测试还绿」。
+
+    口径说明（尺寸断言硬约定）：wire 字节 = json.dumps ensure_ascii 序列化
+    字节，与 llm._chat_once 发送前预检同一行同一对象。任何用快照函数 /
+    JSON 估算代替本口径的记账都算**假账**（工单 08 立单时按词表快照估
+    +1942B，实发只 +770B）。
+    """
+    prompt = _selection_user_prompt(
+        "赛题", [ManifestSummary("dht11", "温湿度")]
+    )
+    payload = {
+        "model": "deepseek-chat",
+        "messages": [
+            {"role": "system", "content": SELECT_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        "response_format": {"type": "json_object"},
+    }
+    segments = request_segments(payload)
+    total = payload_wire_size(payload)
+
+    # 段名稳定（含角色与顶层字段）——换键名即红
+    assert set(segments) == {
+        "msg0:system",
+        "msg1:user",
+        "model",
+        "response_format",
+    }
+    assert segments["msg0:system"] == wire_size(SELECT_SYSTEM_PROMPT)
+    assert segments["msg1:user"] == wire_size(prompt)
+
+    # 对账等式：Σ段 + 壳 = 实发（壳是残差，不许被并进任何内容段）
+    shell = payload_shell_wire_size(payload)
+    assert shell >= 0
+    assert sum(segments.values()) + shell == total
+    # 壳是纯 JSON 结构（花括号 / 引号 / 逗号 / "messages" 键名），量级固定
+    # （实测 86B：`{"messages": [` + 两个 message 对象的花括号/引号/逗号 + `]}`）
+    assert 0 < shell < 128
+    # 与既有 wire 口径同源：单条 message 的段字节 = budget.wire_size(内容)
+    assert total == len(json.dumps(payload).encode("utf-8"))
+
+
+def test_format_segment_breakdown_is_content_free_and_keyword_pinned():
+    """近限 / 拒发信号（工单 real-acceptance/05）：段级分解单行**不含任何请求
+    内容**（只段名 + 字节数），且 keywords 命中的段无视 top 恒列出——「被拒时
+    至少要知道全文段和历史段占了多少」是可断言的行为，不是「加了个日志」。
+
+    同时钉住脱敏契约：prompt 原文里的中文串一律不出现在分解串里（观测面
+    「不含 prompt / response」的同一契约）。
+    """
+    prompt = _selection_user_prompt(
+        "送药小车识别数字", [ManifestSummary("dht11", "温湿度传感器")]
+    )
+    payload = {
+        "model": "deepseek-chat",
+        "messages": [
+            {"role": "system", "content": SELECT_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        "response_format": {"type": "json_object"},
+    }
+    line = format_segment_breakdown(payload, top=2, keywords=("user",))
+    assert "msg1:user=" in line  # keywords 命中（top=2 时未必在前二）
+    assert "msg0:system=" in line  # 最大的段
+    assert str(payload_wire_size(payload)) in line  # 总字节数在
+    assert "JSON壳=" in line
+    # 脱敏：只元数据，无内容
+    assert "送药小车" not in line
+    assert "温湿度传感器" not in line
+    assert "你是电子设计竞赛" not in line
+
+
+def test_select_budget_reserve_is_single_source():
+    """统一余量单源（工单 real-acceptance/05）：各请求线的结构测试必须共用
+    `budget.REQUEST_RESERVE_BYTES` / `budget.payload_budget_state`，不得再各写
+    各的魔数。
+
+    改前实况：推荐侧两处写 2KB、fix / skeleton / clarify 写 10KB，而没有任何
+    一处说明为什么两条线不同——实际是「推荐侧被词表段十五次逐批增长一路啃到
+    2KB，另三条线没跟着动」。本测试钉住单一来源，并**现测**四条线（select 真实
+    库 / 澄清 / 骨架 / 修复）都满足同一条下界——判据走生产同一函数
+    `payload_budget_state`，不是测试另写一遍减法。
+    """
+    assert REQUEST_RESERVE_BYTES == 2048  # 单源取值（改它必须改本节与工单记录）
+
+    def assert_within_reserve(payload: dict, label: str) -> None:
+        state = payload_budget_state(payload, limit=MAX_REQUEST_BYTES)
+        assert state["reserve"] == REQUEST_RESERVE_BYTES
+        assert state["within_reserve"], (
+            f"{label} 最坏形态 {state['total']}B 距上限仅 {state['headroom']}B"
+            f"（统一余量下界 {REQUEST_RESERVE_BYTES}B）"
+        )
+        assert not state["over_limit"]
+
+    # 线 1：select 真实库（绑定形态）——与 test_recommend_real_library_budget
+    # 同源构造（真实库 + 预筛注记 + 满额全文 + 满额历史）
+    lib = Path(__file__).resolve().parents[1] / "library" / "modules"
+    problem = "设" * EMBEDDED_CONTENT_CAP
+    presel = preselect_module_summaries(
+        build_manifest_summaries(filter_manifests_by_platform(list_modules(lib), PLATFORM_MSPM0)),
+        problem,
+        DEFAULT_WORDLIST,
+        MODULE_SUMMARY_BYTES,
+    )
+    assert_within_reserve(
+        {
+            "model": "deepseek-chat",
+            "messages": [
+                {"role": "system", "content": SELECT_SYSTEM_PROMPT},
+                {"role": "user", "content": _selection_user_prompt(
+                    problem,
+                    presel.summaries,
+                    references=[
+                        _suggestion(
+                            f"关联例程{i:02d}", f"TI 外设例程 {i:02d}",
+                            "TI MSPM0 SDK 官方例程" * 8,
+                            source=REFERENCE_SOURCE_RELATED,
+                        )
+                        for i in range(15)
+                    ] + [_suggestion("big-ref", "大参考文件", "巨型参考")],
+                    reference_fulltexts={"big-ref": "中" * REFERENCE_FULLTEXT_BYTES},
+                    clarifications=tuple(
+                        (f"第{i}问：" + "疑" * 200, "答" * 5000) for i in range(20)
+                    ),
+                    hardware_words=DEFAULT_WORDLIST,
+                    preselect_note=(
+                        f"（按题面初筛 {len(presel.summaries)}/{presel.total} 条，"
+                        f"仅展示前 {MODULE_SUMMARY_BYTES} wire 字节）"
+                    ),
+                )},
+            ],
+            "response_format": {"type": "json_object"},
+        },
+        "select 真实库 mspm0",
+    )
+
+    # 线 2：澄清（题面上限 + 20 条长历史，与 test_clarify_prompt_worst_case 同源）
+    clarifications = tuple(
+        (f"问题{i}：" + "疑" * 200, "答" * 5000) for i in range(20)
+    )
+    assert_within_reserve(
+        {
+            "model": "deepseek-chat",
+            "messages": [
+                {"role": "system", "content": CLARIFY_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": _clarify_user_prompt(
+                        "设" * CLARIFY_TOPIC_CAP, clarifications
+                    ),
+                },
+            ],
+            "response_format": {"type": "json_object"},
+        },
+        "clarify",
+    )
+
+    # 线 3：骨架（4 篇 related 全文按 SKELETON_REFERENCE_TOTAL_BYTES 均分）
+    refs = {
+        f"ref-{i}": "中" * REFERENCE_FULLTEXT_BYTES
+        for i in range(SKELETON_RELATED_LIMIT)
+    }
+    assert_within_reserve(
+        {
+            "model": "deepseek-chat",
+            "messages": [
+                {"role": "system", "content": SKELETON_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": _skeleton_user_prompt(
+                        "设" * EMBEDDED_CONTENT_CAP,
+                        ["### 模块 m（h）\nvoid init(void);"] * 3,
+                        refs,
+                        None,
+                        {key: REFERENCE_SOURCE_RELATED for key in refs},
+                    ),
+                },
+            ],
+        },
+        "skeleton",
+    )
+
+    # 线 4：修复（结构测试同源夹具）
+    tmp = Path(tempfile.mkdtemp(prefix="t05-fix-"))
+    (tmp / "big.c").write_text(
+        "\n".join("中" * 50 for _ in range(3000)), encoding="utf-8"
+    )
+    contexts, dropped = read_file_contexts(tmp, ("big.c",))
+    assert_within_reserve(
+        {
+            "model": "deepseek-chat",
+            "messages": [
+                {"role": "system", "content": FIX_SYSTEM_PROMPT},
+                {"role": "user", "content": _fix_errors_user_prompt(
+                    error_text="错" * 5000,
+                    file_contexts=dict(contexts),
+                    dropped_files=tuple(f"code/mod_{i}_driver.c" for i in range(200)),
+                    problem_text="设" * 4000,
+                    platform="stm32",
+                    module_slugs=tuple(f"mod_{i}_driver" for i in range(40)),
+                    main_c="主" * 5000,
+                    previous_fixes=tuple(
+                        {"file": f"code/mod_{i}.c", "line": 10 + i,
+                         "status": "skipped", "reason": "未" * 200}
+                        for i in range(60)
+                    ),
+                )},
+            ],
+            "response_format": {"type": "json_object"},
+        },
+        "fix",
+    )
+
+
+def test_fulltext_segment_budget_is_aggregate_not_per_reference():
+    """参考全文段的预算必须是**合计**而不是逐篇（工单 real-acceptance/05，
+    规格评审抓出的缺口）。
+
+    改前：`_selection_user_prompt` 对**每篇**各自 `_fit_segment_wire(fulltext)`
+    （预算 REFERENCE_FULLTEXT_BYTES），篇数不受任何段级约束——模型可点名多篇、
+    调用方也可给多篇（`generator.build_reference_fulltexts` = 手动 ∪ 全部锚定
+    id），于是 N 篇 = N × 预算：段级账本不再是上界，「请求体过大」会从预检漏到
+    用户眼前。实测改前 4 篇满额 = 125634B（余量 5438B），再加篇数即越界；而单篇
+    夹具下账本看起来完全正常——这正是「账本与实测不同源」的最隐蔽形态。
+
+    改后按篇数均分合计预算（与骨架侧 SKELETON_REFERENCE_TOTAL_BYTES 同款），
+    两个注入路径各测：篇数涨而总量**不涨**。
+    """
+    refs = [
+        _suggestion(f"r{i}", f"参考 {i}", "简介", source=REFERENCE_SOURCE_RELATED)
+        for i in range(10)
+    ]
+    summaries = [ManifestSummary("dht11", "温湿度传感器驱动")]
+
+    def payload_of(kw: str, count: int) -> tuple[dict, str]:
+        prompt = _selection_user_prompt(
+            "赛题",
+            summaries,
+            references=refs,
+            clarifications=(),
+            hardware_words=DEFAULT_WORDLIST,
+            **{kw: {f"r{i}": "中" * REFERENCE_FULLTEXT_BYTES for i in range(count)}},
+        )
+        return {
+            "model": "deepseek-chat",
+            "messages": [
+                {"role": "system", "content": SELECT_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            "response_format": {"type": "json_object"},
+        }, prompt
+
+    for kw in ("manual_fulltexts", "reference_fulltexts"):
+        one, _ = payload_of(kw, 1)
+        ten, ten_prompt = payload_of(kw, 10)
+        one_total = payload_wire_size(one)
+        ten_total = payload_wire_size(ten)
+        # 篇数涨 10×，总量**不能**跟着涨（改前逐篇 fit 时 10 篇 ≈ 10 × 预算）
+        assert ten_total < one_total + REFERENCE_FULLTEXT_BYTES, (
+            f"{kw}: 1 篇 {one_total}B → 10 篇 {ten_total}B——"
+            f"增量 {ten_total - one_total}B 超过一个段级预算，说明全文段不是合计预算"
+        )
+        # 合计预算生效：两个路径都仍满足统一余量下界
+        assert payload_budget_state(
+            ten, limit=MAX_REQUEST_BYTES
+        )["within_reserve"]
+        # 超预算的部分带截断标注（截了要明说，不静默）
+        assert "内容过长，已截断" in ten_prompt
+
+
+def test_fit_segment_wire_never_exceeds_budget():
+    """段级预算就是实发上界（工单 real-acceptance/05）：任何预算取值下，
+    `_fit_segment_wire` 的返回值都不得**长于**预算。
+
+    改前实现先 fit 到预算再补标注 → 返回值超预算约 281B；改为预扣标注后，
+    极小预算（< 标注自身长度）仍会因「fit 到负数 → 空串 + 标注」而超预算——
+    已加护栏（标注装不下时原样返回，交给调用方的段级合计兜底）。
+    """
+    for budget in (50, 200, 1000, 4096):
+        for text in ("长" * 200, "中" * 5000, "x" * 100):
+            fitted = _fit_segment_wire(text, budget)
+            # 预算够 = 原样返回；预算不够 = 截断（可能只剩标注）；无论如何
+            # 不得凭空变长（护栏把「fit 到负数 → 空串 + 标注」这条堵住了）
+            assert wire_size(fitted) <= max(budget, wire_size(text)), (
+                f"budget={budget} 原文 {wire_size(text)}B → 返回 {wire_size(fitted)}B"
+            )
+
+
 def test_recommend_real_library_budget():
-    """真实库预算回归（工单 module-preselect/02）：扫仓库真实模块库
-    （library/modules）构造 mspm0 / stm32 两平台最坏形态 select 载荷——
-    题面 4000 中文（零命中形态 = 预筛退化 slug 序截断，覆盖最坏截断面）+
-    预筛后真实摘要 + 真实词表 + 20 条长澄清历史 + 15 条相关候选 + 满额参考
-    全文——完整 payload json.dumps 序列化 ≤ MAX_REQUEST_BYTES 且余量 ≥ 2KB。
+    """真实库段级账本（工单 module-preselect/02 立，real-acceptance/05 改段级记账）：
+    扫仓库真实模块库（library/modules）构造 mspm0 / stm32 两平台最坏形态 select
+    载荷——题面 4000 中文（零命中形态 = 预筛退化 slug 序截断，覆盖最坏截断面）+
+    预筛后真实摘要 + 预筛注记 + 真实词表 + 20 条长澄清历史 + 15 条相关候选 +
+    满额参考全文——完整 payload json.dumps 序列化 ≤ MAX_REQUEST_BYTES 且余量
+    ≥ `REQUEST_RESERVE_BYTES`（统一单源；改前这里是硬编码的 2*1024）。
+
+    **本测试是预算的绑定保证**（工单 05 更正；此前它自称「唯一硬保证」，而那条
+    合成测试的 docstring 同样自称「唯一硬保证」——两句互斥，现各自写明真实职责）：
+    另一条结构测试 `test_selection_prompt_worst_case_fits_request_budget` 用固定
+    14 条假摘要 + 写死的短简介，实测 94196B，比本测试的真实库形态**小 34KB**——
+    它**不是上界**，只是合成条件段组合回归，不能拿来当预算保证。真实库形态
+    （86 条摘要行吃满 40000B 预算）才是绑定的那一条：工单 05 现场实测 HEAD
+    128405B、余量 619B（距自设 2KB 边界）。
 
     模块库每增一个模块（摘要行变长 / 条数变多）此测试即红——照词表段
     test_wordlist_segment 的红证先例，防「固定 14 条假摘要样例」假绿掩盖
     真实库增长（预算推导按 14 条 ≈ 7.6KB 记账，批次 13 后 mspm0 84 条
     ≈ 73KB wire，未修复形态实测 195000B > 131072）。改 MODULE_SUMMARY_BYTES /
     REFERENCE_FULLTEXT_BYTES 必须先红证校准再改断言（照 budget.py 词表段
-    先例：每涨必红、保 2KB 边界余量）。
+    先例：每涨必红、保统一余量下限）。
+
+    预筛注记（工单 05 补）：**生产路径带注记**（webapp 预筛发生时必须告知模型
+    清单不是全量，见 _selection_user_prompt 的 preselect_note），而改前本测试
+    与合成测试都**不带**——「最坏形态」比生产实际少算 ~109B，属同一类
+    「账本与实发不同源」。本测试按生产形态带上注记。
     """
     lib = Path(__file__).resolve().parents[1] / "library" / "modules"
     modules = list_modules(lib)
@@ -5654,6 +6080,12 @@ def test_recommend_real_library_budget():
         presel = preselect_module_summaries(
             summaries, problem, DEFAULT_WORDLIST, MODULE_SUMMARY_BYTES
         )
+        note = (
+            f"（按题面初筛 {len(presel.summaries)}/{presel.total} 条，"
+            f"仅展示前 {MODULE_SUMMARY_BYTES} wire 字节）"
+            if presel.truncated
+            else ""
+        )
         prompt = _selection_user_prompt(
             problem,
             presel.summaries,
@@ -5661,6 +6093,7 @@ def test_recommend_real_library_budget():
             reference_fulltexts={"big-ref": "中" * REFERENCE_FULLTEXT_BYTES},
             clarifications=clarifications,
             hardware_words=DEFAULT_WORDLIST,
+            preselect_note=note,
         )
         payload = {
             "model": "deepseek-chat",
@@ -5670,12 +6103,269 @@ def test_recommend_real_library_budget():
             ],
             "response_format": {"type": "json_object"},
         }
-        total = len(json.dumps(payload).encode("utf-8"))
-        assert total <= MAX_REQUEST_BYTES - 2 * 1024, (
+        total = payload_wire_size(payload)
+        assert total <= MAX_REQUEST_BYTES - REQUEST_RESERVE_BYTES, (
             f"{platform} 真实库最坏形态 {total}B > "
-            f"{MAX_REQUEST_BYTES - 2 * 1024}（预算 {MODULE_SUMMARY_BYTES}，"
+            f"{MAX_REQUEST_BYTES - REQUEST_RESERVE_BYTES}（预算 {MODULE_SUMMARY_BYTES}，"
             f"摘要 {presel.total} 条预筛后 {len(presel.summaries)} 条）"
         )
+        # 段级分解可读（余量吃紧时失败信息/日志直接给出是哪一段在占）
+        line = format_segment_breakdown(payload, top=3)
+        assert f"msg1:user={wire_size(prompt)}B" in line, line
+
+
+def test_select_segment_ledger_matches_measured_segments():
+    """段级账本与**实测段字节**逐条对齐（工单 real-acceptance/05 的核心）。
+
+    这是本单要的口径本身：把「哪一段占了多少」写成可执行的期望值，让任何
+    一段悄悄长大（词表补数据、摘要行变长、规则段加字、题面上限改动）都当场红，
+    而不是等注释里的手算与真机差出 6KB 才被发现。
+
+    两个场景各钉一份实测：
+      * 合成最坏形态（固定 14 条假摘要 + 两组互斥）——覆盖「条件段都出」的形态；
+      * 真实库 mspm0（86 条库 → 预筛 43 条吃满摘要预算）——覆盖**绑定形态**。
+
+    期望值同时断言在**当前配置**与**账本用满**两种口径下（后者 = 可裁段按
+    段级预算全额计），把「段级预算之和 + 基础段 + 系统提示词 + 壳 ≤ 上限 −
+    统一余量」写成可执行的不等式——这就是「基础段先扣、余量才给可裁段」的
+    机器形式。改任一预算常量都会在这里红（红证先行校准，照词表段先例）。
+    """
+    lib = Path(__file__).resolve().parents[1] / "library" / "modules"
+    modules = list_modules(lib)
+    problem = "设" * EMBEDDED_CONTENT_CAP
+    clarifications = tuple((f"第{i}问：" + "疑" * 200, "答" * 5000) for i in range(20))
+
+    def build(summaries, references, note):
+        prompt = _selection_user_prompt(
+            problem,
+            summaries,
+            references=references,
+            reference_fulltexts={"big-ref": "中" * REFERENCE_FULLTEXT_BYTES},
+            clarifications=clarifications,
+            hardware_words=DEFAULT_WORDLIST,
+            preselect_note=note,
+        )
+        payload = {
+            "model": "deepseek-chat",
+            "messages": [
+                {"role": "system", "content": SELECT_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            "response_format": {"type": "json_object"},
+        }
+        return prompt, payload
+
+    # ---- 场景 1：合成最坏形态（条件段全出：多实例 / 互斥 / 题面核查） ----
+    # 多实例模块（led 在策略表里登记了变体 token）→ 多实例规则段出段；
+    # 两组成员（gray-track / attitude-hold）→ 互斥规则段 + 题面核查条同出。
+    # 三条件段同出 = 合成形态的**段组合上界**（各段都占字节）。
+    synthetic_summaries = [
+        ManifestSummary(
+            f"mod{i}",
+            "温湿度传感器采集与显示" * 8,
+            exclusive_group=(
+                ExclusiveGroupSpec(id="gray-track", label="8 路灰度传感器驱动", role=f"role-{i}")
+                if i < 2
+                else ExclusiveGroupSpec(id="attitude-hold", label="航向保持 / 姿态传感器", role=f"role-{i}")
+                if i < 4
+                else None
+            ),
+            multi_instance=MultiInstanceSpec(max=4, variant="color") if i == 0 else None,
+        )
+        for i in range(14)
+    ]
+    synth_refs = [
+        _suggestion(
+            f"关联例程{i:02d}", f"TI 外设例程 {i:02d}",
+            "TI MSPM0 SDK 官方例程，演示外设初始化与中断配置流程" * 8,
+            source=REFERENCE_SOURCE_RELATED,
+        )
+        for i in range(15)
+    ] + [_suggestion("big-ref", "大参考文件", "巨型参考")]
+    prompt, payload = build(synthetic_summaries, synth_refs, "")
+    segs = request_segments(payload)
+    total = payload_wire_size(payload)
+    assert sum(segs.values()) + payload_shell_wire_size(payload) == total
+    # 实发 ≤ 上限 − 统一余量（合成形态；绑定的那条是下面的真实库）
+    assert total <= MAX_REQUEST_BYTES - REQUEST_RESERVE_BYTES
+
+    # ---- 场景 2：真实库 mspm0（绑定形态） ----
+    filtered = filter_manifests_by_platform(modules, PLATFORM_MSPM0)
+    presel = preselect_module_summaries(
+        build_manifest_summaries(filtered), problem, DEFAULT_WORDLIST, MODULE_SUMMARY_BYTES
+    )
+    assert presel.truncated  # 预筛确实发生（否则注记不出、账本形态不成立）
+    real_refs = [
+        _suggestion(
+            f"关联例程{i:02d}", f"TI 外设例程 {i:02d}", "TI MSPM0 SDK 官方例程" * 8,
+            source=REFERENCE_SOURCE_RELATED,
+        )
+        for i in range(15)
+    ] + [_suggestion("big-ref", "大参考文件", "巨型参考")]
+    real_note = (
+        f"（按题面初筛 {len(presel.summaries)}/{presel.total} 条，"
+        f"仅展示前 {MODULE_SUMMARY_BYTES} wire 字节）"
+    )
+    real_prompt, real_payload = build(presel.summaries, real_refs, real_note)
+    real_segs = request_segments(real_payload)
+    real_total = payload_wire_size(real_payload)
+    real_shell = payload_shell_wire_size(real_payload)
+    assert sum(real_segs.values()) + real_shell == real_total
+    assert real_total <= MAX_REQUEST_BYTES - REQUEST_RESERVE_BYTES, (
+        f"真实库 mspm0 最坏形态 {real_total}B > "
+        f"{MAX_REQUEST_BYTES - REQUEST_RESERVE_BYTES}"
+    )
+
+    # 每一段都必须真的「在预算内送得出去」——段级预算不是名义值
+    assert wire_size(_wordlist_prompt_segment(DEFAULT_WORDLIST)) <= WORDLIST_PROMPT_BYTES
+
+    # ---- 段级账本用满口径：基础段先扣，余量才给可裁段 ----
+    # 基础段与各段都由**实发 prompt 现切现量**（`_measure_prompt_segments` 自带
+    # 「Σ段 = 实发」对账）——不用估算，因为清单行字节是库驱动的。这正是旧账本
+    # 手算「摘要 14 条 ≈7.6KB」与真实库 40KB 差 32KB 的病根。
+    #
+    # 注意 base 的口径：`_measure_prompt_segments` 的 base = 参考清单段锚点**之前**
+    # 的全部（题面 + 清单行 + 预筛注记 + 输出契约）；**条件规则段不算在 base 里**
+    # （它们排在词表段之后），由下面的 `fixed_segs` 单列计入——两笔相加才是全部
+    # 不可裁段。
+    base, measured_segs = _measure_prompt_segments(real_prompt)
+    assert {"参考清单段", "参考全文段", "澄清历史段", "词表段"} <= set(measured_segs)
+    assert base > 0
+
+    # 段级预算 vs 实发段字节：三种段壳口径各不同，逐条按实现断言（不统一猜测）
+    # ① 词表段：段内自扣（fit 到「预算 − 标注」再补标注）→ 实发段 ≤ 预算
+    assert measured_segs["词表段"] <= WORDLIST_PROMPT_BYTES, (
+        f"词表段实发 {measured_segs['词表段']}B > 段级预算 {WORDLIST_PROMPT_BYTES}B"
+    )
+    # ② 候选清单段：段级预算截的是**段体**（_fit_segment_wire 已改标注预扣，
+    #    返回值严格 ≤ 预算）——段首换行 + 下一段拼装的 join 换行各占 1B 落在
+    #    本段，故实发段 = 段体 ≤预算 + 2B 拼接壳。这 2B 是拼装外壳不是内容，
+    #    显式记账而不为它改生产路径。
+    assert measured_segs["参考清单段"] <= REFERENCE_SUGGESTIONS_MAX_WIRE_BYTES + 2, (
+        f"候选清单段实发 {measured_segs['参考清单段']}B > "
+        f"段级预算 {REFERENCE_SUGGESTIONS_MAX_WIRE_BYTES}B + 2B 拼接壳"
+    )
+    assert measured_segs["参考全文段"] <= _reference_fulltext_segment_wire()
+    assert measured_segs["澄清历史段"] == _clarification_history_segment_wire()
+
+    # 用满口径账本 = 基础段 + 系统提示词 + JSON 壳 + 各段级预算上界。
+    # 这是**上界**（每段取预算/最坏形态，实发形态未必用满：词表段实测 9619 <
+    # 预算 12150），故账本 ≥ 实发——账本偏小即记账口径低估，正是本单要治的病。
+    # 可变段取段级预算上界（实发未必用满），**不可裁段取实发值**（题面 / 清单行 /
+    # 条件规则段 / 输出契约都由库与题面驱动，没有「预算」可谈，只能实量）。
+    fulltext_ub = _reference_fulltext_segment_wire()
+    history_seg = _clarification_history_segment_wire()
+    variable = {"词表段", "参考清单段", "参考全文段", "澄清历史段"}
+    fixed_segs = sum(
+        value for name, value in measured_segs.items() if name not in variable
+    )
+    ledger = (
+        base
+        + fixed_segs
+        + wire_size(SELECT_SYSTEM_PROMPT)
+        + real_shell
+        + WORDLIST_PROMPT_BYTES
+        + REFERENCE_SUGGESTIONS_MAX_WIRE_BYTES
+        + fulltext_ub
+        + history_seg
+    )
+    limit = MAX_REQUEST_BYTES - REQUEST_RESERVE_BYTES
+    assert ledger <= limit, (
+        f"段级账本用满 {ledger}B > {limit}B（基础段 {base}B + "
+        f"系统提示词 {wire_size(SELECT_SYSTEM_PROMPT)}B）——"
+        "基础段先扣之后，可裁段的段级预算之和超了：改小 REFERENCE_FULLTEXT_BYTES "
+        "或瘦身基础段（照 budget.py 的取值来源注释）"
+    )
+    assert ledger >= real_total, (
+        f"账本 {ledger}B 比实发 {real_total}B 还小——记账口径低估了（账本必须是上界）\n"
+        f"  base={base} fixed_segs={fixed_segs} sys={wire_size(SELECT_SYSTEM_PROMPT)} "
+        f"shell={real_shell} wl={WORDLIST_PROMPT_BYTES} sg={REFERENCE_SUGGESTIONS_MAX_WIRE_BYTES} "
+        f"ft={fulltext_ub} hs={history_seg}\n  measured={measured_segs}"
+    )
+
+
+def _measure_prompt_segments(prompt: str) -> tuple[int, dict[str, int]]:
+    """把组装好的 user 段切成 (基础段 wire, 各固定/可裁段 wire)。
+
+    **单点实现 + 逐字节对账**：Σ(基础段 + 各段) 必须等于 prompt 的 wire 字节，
+    否则直接抛断言（口径对不上就红，不给一个看起来合理的错数——这正是本单
+    要治的病）。
+
+    切法照 `_selection_user_prompt` 的拼装序：基础段 = 题面 + 清单行 + 预筛
+    注记 + 输出契约（prompt 头 → 参考清单段之前的全部，含段间空行）；其余按
+    各段标题行锚点切。锚点取「标题连同前导换行 + 冒号」，不用会出现在内容里的
+    通用短语（假摘要的简介正文可能含同种子串，通用短语会产生假锚点）。
+    """
+    wordlist_heading = format_wordlist_prompt(DEFAULT_WORDLIST).split("\n", 1)[0]
+    anchors = (
+        ("参考清单段", "\n关联参考文件（标题 + 一句话简介；如需阅读全文"),
+        ("参考全文段", "\n以下是你要求阅读全文的参考文件："),
+        ("澄清历史段", "\n用户已澄清的问题（题面证据不足处用户已补充的回答"),
+        ("词表段", "\n\n" + wordlist_heading),
+        # 词表段之后的**条件规则段**（库内有对应标注才出段）：它们是固定段
+        # （不可裁、由库内容决定体量），必须单独量——并进词表段会让「词表段
+        # ≤ WORDLIST_PROMPT_BYTES」这条段级预算断言假红（实测词表段自身 9619B，
+        # 而其后还有多实例规则 618B + 互斥规则 1463B）。
+        ("多实例规则段", "\n\n多实例规则（硬约束）："),
+        (f"{EXCLUSIVE_GROUP_TAG}段", f"\n\n{EXCLUSIVE_GROUP_TAG}（硬约束）"),
+        ("题面核查条", "\n\n题面核查（硬约束）："),
+    )
+    found: list[tuple[str, int]] = []
+    for name, anchor in anchors:
+        start = prompt.find(anchor)
+        if start < 0:
+            continue  # 条件段（库内无对应标注时不出段）——缺段是正常形态
+        found.append((name, start))
+    starts = [start for _, start in found]
+    assert starts == sorted(starts), f"段序与拼装序不一致：{found!r}"
+    # 参考/词表四条是**无条件**段（拼装序里一定有），缺任何一条即锚点/拼装漂移
+    unconditional = {"参考清单段", "参考全文段", "澄清历史段", "词表段"}
+    assert unconditional <= {name for name, _ in found}, f"无条件段缺失：{found!r}"
+
+    base = wire_size(prompt[: starts[0]])
+    segments: dict[str, int] = {}
+    for index, (name, start) in enumerate(found):
+        end = starts[index + 1] if index + 1 < len(found) else None
+        segments[name] = wire_size(prompt[start:end])
+    total = base + sum(segments.values())
+    assert total == wire_size(prompt), (
+        f"段级记账对不上实发：Σ={total} vs prompt={wire_size(prompt)}"
+    )
+    return base, segments
+
+
+def _reference_fulltext_segment_wire() -> int:
+    """参考全文段的**段级上界**（供段级账本用满口径）。
+
+    段 = 拼接壳（段首 lead 换行 + 标题行 + 条目行前缀 + 两处代码栅栏）+ 内容 +
+    截断标注。`_fit_segment_wire` 截断时把内容 fit 到「预算 − 标注」（本单更正），
+    故 内容 + 标注 ≤ 预算，**段总 ≤ 壳 + 预算**——这是精确上界（不是估算）：
+    预算内不截断时内容 ≤ 预算且无标注，同样落在界内。
+
+    壳由同形状样例渲染求得（不写字面量）；条目 id/标题越长，壳越大，故调用方
+    实测段（真实 id/标题长度）与上界一并比较时应允许壳的长度差——实际用
+    `_measure_prompt_segments` 的实发值做「≤」比较即可（实发 id 短于样例 id
+    时实发段会略小，反之略大，故本界按样例 id 与真实 id 等长构造）。
+    """
+    shell = wire_size("\n以下是你要求阅读全文的参考文件：\n- big-ref: 大参考文件：\n```\n\n```")
+    return shell + REFERENCE_FULLTEXT_BYTES
+
+
+def _clarification_history_segment_wire() -> int:
+    """澄清历史段的实测形态 wire 字节（截断到 cap 的真实形态）。
+
+    与 `llm._clarification_history_segment` 同一函数产出（不是「6 字节/字符」
+    估算——工单 05 实测同长度中文串的 ensure_ascii 实发明显低于 6×，按 6× 记
+    会虚高约 3KB，那正是「账本与实测不同源」的另一面）。
+    """
+    clarifications = tuple(
+        (f"第{i}问：" + "疑" * 200, "答" * 5000) for i in range(20)
+    )
+    return wire_size(
+        "\n用户已澄清的问题（题面证据不足处用户已补充的回答，不要重复问）：\n"
+        + _clarification_history_segment(clarifications)
+    )
+
 
 
 def test_skeleton_prompt_worst_case_with_references_fits_request_budget():
@@ -5705,7 +6395,8 @@ def test_skeleton_prompt_worst_case_with_references_fits_request_budget():
         ],
     }
     total = len(json.dumps(payload).encode("utf-8"))
-    assert total <= MAX_REQUEST_BYTES - 10 * 1024
+    # 统一余量单源（工单 real-acceptance/05）：本线实测余量 10.7KB，断言取下界
+    assert total <= MAX_REQUEST_BYTES - REQUEST_RESERVE_BYTES
     per_ref = SKELETON_REFERENCE_TOTAL_BYTES // SKELETON_RELATED_LIMIT
     assert f"仅展示前 {per_ref} wire 字节" in prompt
     assert "内容过长，已截断" in prompt
@@ -5731,7 +6422,8 @@ def test_clarify_prompt_worst_case_fits_request_budget():
         "response_format": {"type": "json_object"},
     }
     total = len(json.dumps(payload).encode("utf-8"))
-    assert total <= MAX_REQUEST_BYTES - 10 * 1024
+    # 统一余量单源（工单 real-acceptance/05）：本线实测余量 10.7KB，断言取下界
+    assert total <= MAX_REQUEST_BYTES - REQUEST_RESERVE_BYTES
     assert "内容过长，已截断" in prompt  # 历史段合计截断带标注
     assert f"仅展示前 {CLARIFICATION_HISTORY_CAP} 字符" in prompt
 
@@ -6320,9 +7012,9 @@ def test_select_modules_oversized_output_fails_fast_without_retry():
     """输出异常超长（>60000 字符，疑似模型输出退化/循环）→ **output** 错误，
     只尝试 1 次（同参数重试只会重复烧钱烧时间）。
 
-    kind 从 client 改 output（工单 real-acceptance/09）：`client` 在文案层 =
-    「上游 HTTP 4xx」，而这里是**本地**对模型输出的判决（HTTP 是 200）——混用
-    会让用户看到「可能是 API key 无效、账户余额不足」，把诊断指向凭据。
+    kind 从 client 改 output（工单 real-acceptance/05 尾巴）：`client` 在文案层
+    = 「上游 HTTP 4xx」，而这里是**本地**对模型输出的判决（HTTP 是 200）——
+    混用会让用户看到「可能是 API key 无效、账户余额不足」，把诊断指向凭据。
     免重试的**策略**不变（断言 transport.calls == 1）。
     """
     oversized = (
@@ -6360,12 +7052,12 @@ def test_select_modules_truncated_output_fails_fast_without_retry():
 
 
 def test_truncated_select_failure_reaches_user_without_key_blame():
-    """端到端（工单 real-acceptance/09）：输出被截断的 select 失败，经 errors
-    映射表到用户眼前的文案**不含** key / 余额误导。
+    """端到端（工单 real-acceptance/05 尾巴）：输出被截断的 select 失败，
+    经 errors 映射表到用户眼前的文案**不含** key / 余额误导。
 
-    现场判例（webapp 最近两次 recommend 工作流，观测面 `http_status=200` /
-    `parse_status=parse_error` / `error_kind=client` / `attempts=1`）：上游回
-    200、key 与余额都正常（余额实测 21.57 CNY），用户却被告知「可能是 API key
+    现场判例（webapp 最近两次 recommend 工作流，观测面
+    `http_status=200` / `parse_status=parse_error` / `error_kind=client` /
+    `attempts=1`）：上游回 200、key 与余额都正常，用户却被告知「可能是 API key
     无效、账户余额不足——请在设置页核对」。本用例把「截断响应 → 异常 → 文案」
     整条链钉住：改回 client 就红。
     """

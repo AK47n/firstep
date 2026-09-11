@@ -5,7 +5,7 @@
 （FIX_CONTEXT_TOTAL_BYTES / FIX_PREVIOUS_FIXES_CAP / REFERENCE_FULLTEXT_BYTES）。
 叶子约束：本模块不 import 任何域模块（防环——llm→fix_errors 依赖链上任何
 非叶子位置都无法被三方同时 import），llm.py / fix_errors.py 从本模块 import
-并 re-export，既有测试 import 面不动。
+并 re-export，既有测试 import 面不变。
 
 wire 字节口径（工单 fix-request-budget/01 定案，budget-wire-unification/01
 推广到推荐侧）：json.dumps ensure_ascii 序列化字节与 llm._chat 发送前预检
@@ -13,11 +13,20 @@ wire 字节口径（工单 fix-request-budget/01 定案，budget-wire-unificatio
 中文 6×；真实线格式是 json.dumps(payload).encode("utf-8") 且 ensure_ascii
 默认开——「×3 字节」的 UTF-8 估算同样是假口径（旧推荐侧 cap 即此口径，
 全中文最坏形态实发 ≈250KB 必炸 128KB 网关）。
+
+段级记账原语（工单 real-acceptance/05）：request_segments /
+payload_wire_size / format_segment_breakdown——把「哪一段占了多少」从注释里的
+手算变成可执行代码。**尺寸断言口径（本单定的硬约定）**：任何尺寸类断言/记账
+一律走发送前 wire 字节（wire_size / 本模块原语），不得用快照函数返回值或
+JSON 估算代账——词表 models 与「选购方案」段文本重复、models 条数与实发段
+字节不同源，估算必偏（工单 08 立单时按 format_wordlist_prompt 估 +1942B，
+实发只 +770B；按 JSON 增量估则偏高）。
 """
 
 from __future__ import annotations
 
 import json
+from typing import Any, Mapping, Sequence
 
 # ===========================================================================
 # wire 字节口径原语
@@ -55,6 +64,165 @@ def fit_wire_budget(content: str, budget: int) -> str:
 
 
 # ===========================================================================
+# 段级记账原语（工单 real-acceptance/05）
+# ===========================================================================
+#
+# 与 llm._chat_once 发送前预检**同一对象同一口径**：body_bytes =
+# json.dumps(payload).encode("utf-8")。request_segments 只分解这一个对象，
+# 不做任何估算——Σ段 = 实发 total 是**逐字节可断言**的（tests 用等式钉死），
+# 这正是本单要的口径：账本与实测同源，不是「注释里手算得挺像」。
+
+# message 段的键名形态（含角色，同 role 多条按序编号）：'msg0:system' /
+# 'msg1:user' …——预检错误与近限告警都按此读，测试按名断言防漂移。
+# 键名格式在此一处成形（`request_segments` 产出、消费方按 `msg{index}:{role}`
+# 读取），不另设构造函数——多一层包装只会多一处要同步的地方。
+
+
+def payload_wire_size(payload: Mapping[str, Any]) -> int:
+    """整个请求体的实发字节数（= 发送前预检那一行，唯一真值口径）。
+
+    口径与 llm 侧预检同源但**依赖方向不反**（叶子模块不 import 域模块）：
+    两边都是 `len(json.dumps(payload).encode("utf-8"))`，llm 调本函数做预检。
+    """
+    return len(json.dumps(payload).encode("utf-8"))
+
+
+def request_segments(payload: Mapping[str, Any]) -> dict[str, int]:
+    """请求体的段级 wire 分解：每条 message（含角色）+ 顶层其余字段。
+
+    每条 message 记该 message `content` 自身的 wire 字节（与
+    BudgetTracker.request_sizes 的探针口径一致），顶层其余字段记
+    「json.dumps({key: value}) − 2」（剥掉外层 {}，键名自身计入该段——
+    字段是请求的一部分，不该漏账）。messages 键本身贡献的引号/冒号/逗号
+    不含在任何一段里（几字节的 JSON 壳），所以 Σ段 ≤ total，差额就是壳——
+    **不假装它为零**：对账断言写成「Σ段 + 壳 = total」，壳单独量。
+    """
+    segments: dict[str, int] = {}
+    for index, message in enumerate(payload.get("messages") or ()):
+        if not isinstance(message, Mapping):
+            continue
+        segments[f"msg{index}:{message.get('role') or '?'}"] = wire_size(
+            str(message.get("content") or "")
+        )
+    for key, value in payload.items():
+        if key == "messages":
+            continue
+        segments[str(key)] = len(json.dumps({key: value}).encode("utf-8")) - 2
+    return segments
+
+
+def format_segment_breakdown(
+    payload: Mapping[str, Any],
+    *,
+    top: int = 4,
+    keywords: Sequence[str] = (),
+    total: int | None = None,
+) -> str:
+    """段级分解的可读单行（近限告警 / 预检拒发日志用）。
+
+    只输出**元数据**（段名 + 字节数），不含任何请求内容——与观测面
+    「不含 prompt / response」的脱敏契约一致。按字节降序取前 `top` 段；
+    `keywords` 命中的段无视 top 恒列出（例如「被拒时至少要知道全文段和
+    历史段占了多少」）。`total` 供调用方传入已算好的实发字节（热路径上
+    避免重复序列化整个请求体）；缺省自算。空请求体等退化形态返回空串。
+    """
+    segments = request_segments(payload)
+    if not segments or total == 0:
+        return ""
+    if total is None:
+        total = payload_wire_size(payload)
+    shell = payload_shell_wire_size(payload, segments=segments, total=total)
+    ranked = sorted(segments.items(), key=lambda item: (-item[1], item[0]))
+    picked = [item for item in ranked[: max(top, 0)]]
+    if keywords:
+        picked_keys = {key for key, _ in picked}
+        picked.extend(
+            item
+            for item in ranked
+            if item[0] not in picked_keys
+            and any(keyword in item[0] for keyword in keywords)
+        )
+    shown = "/".join(f"{key}={value}B" for key, value in picked)
+    rest = len(segments) - len(picked)
+    if rest > 0:
+        shown += f"/其余{rest}段"
+    return f"{total}B（{shown}/JSON壳={shell}B）"
+
+
+def payload_shell_wire_size(
+    payload: Mapping[str, Any],
+    *,
+    segments: Mapping[str, int] | None = None,
+    total: int | None = None,
+) -> int:
+    """JSON 壳（花括号 / 引号 / 逗号 / messages 键名）的 wire 字节。
+
+    = payload_wire_size − Σ request_segments；恒 ≥ 0。对账等式
+    「Σ段 + 壳 = total」即由此可断言（壳是残差，不许被并进任何内容段）。
+    `segments` / `total` 供已有结果的调用方传入（避免重复分解 / 序列化）。
+    """
+    resolved = request_segments(payload) if segments is None else segments
+    if total is None:
+        total = payload_wire_size(payload)
+    return total - sum(resolved.values())
+
+
+# ===========================================================================
+# 段级预算派生（工单 real-acceptance/05：基础段先扣，余量才给可裁段）
+# ===========================================================================
+
+# 统一请求余量下限（wire 字节）：每条请求线的最坏形态都必须 ≤
+# llm.MAX_REQUEST_BYTES − 本值。单源的理由：此前各结构测试各写各的
+# （select 两处写 2KB、fix / skeleton / clarify 写 10KB），没有任何一处
+# 说明「为什么这条线是 2KB 那条是 10KB」——实际读法是**它们互不知情**：
+# 推荐侧被词表段 15 次逐批增长一路啃到 2KB，另三条线没跟着动。统一到
+# 单源后改一处即全改，且 docstring 必须写明为何取下界而不是更大。
+#
+# **不是测试专用常量**：生产侧由 llm._chat_once 经 `payload_budget_state`
+# 消费（贴边留痕 / 超限拒发都按它判），结构测试用同一函数断言同一条下界
+# ——「口径」与「执行」同源，不是两处各写一个数。
+#
+# 取 2048（2KB）的理由（工单 real-acceptance/05 实测）：推荐侧最坏形态
+# （真实库 86 条摘要行 + 满额全文段 + 满额历史段 + 预筛注记）在**用满所有
+# 段级预算**时已是本值左右，取 10KB 会让推荐侧直接越界（实测 HEAD 余量
+# 仅 728B）——那是「把断言改到红」而不是「把请求改小」。10KB 是历史遗留：
+# budget.py 的 FIX_CONTEXT_TOTAL_BYTES 推导里确实按 10KB 目标余量反推，
+# 但推荐侧从没满足过同款余量。所以本单的选择是**如实统一到下界**，并在
+# 下文把每段的实测值记账清楚——而不是继续在两个数之间各说各话。
+REQUEST_RESERVE_BYTES = 2048
+
+
+def payload_budget_state(
+    payload: Mapping[str, Any],
+    *,
+    limit: int,
+    total: int | None = None,
+) -> dict[str, int | bool]:
+    """一次请求体相对「硬限 + 统一余量」的位置（工单 real-acceptance/05）。
+
+    发送前预检与结构测试**共用本函数**，所以「余量下界」只有一个判据来源：
+    `within_reserve`（headroom ≥ reserve）= 合格；`near_limit`（≥90% 硬限）
+    是要留痕的贴边形态；`over_limit` 是要拒发的超限形态。`total` 供调用方
+    传入已算好的实发字节（热路径避免重复序列化整个请求体）。
+
+    叶子约束下的依赖方向：本模块**不知道** MAX_REQUEST_BYTES 在哪（那是 llm
+    的常量），`limit` 由调用方传入——本函数只负责「按统一口径算位置」。
+    """
+    if total is None:
+        total = payload_wire_size(payload)
+    headroom = limit - total
+    return {
+        "total": total,
+        "limit": limit,
+        "reserve": REQUEST_RESERVE_BYTES,
+        "headroom": headroom,
+        "within_reserve": headroom >= REQUEST_RESERVE_BYTES,
+        "near_limit": total * 10 >= limit * 9,
+        "over_limit": total > limit,
+    }
+
+
+# ===========================================================================
 # 预算常量（推导单源，原分居 llm.py / fix_errors.py 的镜像注释合此）
 # ===========================================================================
 
@@ -73,8 +241,16 @@ def fit_wire_budget(content: str, budget: int) -> str:
 # dropped 清单 / 模块清单 / 平台 / 标题分隔 ≈5.3KB ≈ 96.9KB（实测）→ 文件
 # 上下文余量 = 128KB − 10KB 目标余量 − 96.9KB ≈ 21.1KB →
 # FIX_CONTEXT_TOTAL_BYTES = 23000（wire 字节，每文件截断标注 ≈0.12KB 含在
-# 余量内）→ 最坏形态总量 ≈119.5KB，余量 ≈10.7KB ≥ 10KB。最坏情况结构测试
-# 钉死（tests/test_llm.py::test_fix_prompt_worst_case_fits_request_budget），
+# 余量内）→ 本侧最坏形态**实测 120128B**（工单 real-acceptance/05 现算，
+# .scratch/real-acceptance/probe-05-headroom-lines.txt），距硬限 10944B。
+# 
+# **口径更正（工单 real-acceptance/05）**：此前的记账注释写「≈119.5KB，余量
+# ≈10.7KB ≥ 10KB」——那个数**是修复侧自己的**，被当成推荐侧预算的依据引用了
+# 很久（推荐侧真实库最坏形态当时实测 128405B，差 6KB+）。同一份注释里的
+# 「10KB 目标余量」也不是全局口径：推荐侧从没满足过它。本单起，**统一余量
+# 单源 = REQUEST_RESERVE_BYTES**（下文），各侧结构测试都断言同一条下界；
+# 每侧的最坏形态实测值由本模块的段级记账原语现算，不再手算。
+# 最坏情况结构测试钉死（tests/test_llm.py::test_fix_prompt_worst_case_fits_request_budget），
 # 改大任一上限即红。超预算的文件不发送、在提示词里点名（防静默丢失）。
 FIX_CONTEXT_TOTAL_BYTES = 23000
 
@@ -174,15 +350,61 @@ SKELETON_REFERENCE_TOTAL_BYTES = 40000
 # .scratch/recommend-domain-reject/patch-18-wordlist-models.py）。
 # **基线已在边界内 97B**（HEAD 实测 mspm0 128927B，距 129024 自设边界仅 97B）→
 # 任何有意义的词表补数据都必然越界，只能压缩余量 + 用满全文可降空间：
-# 全文降 1400B 至 **25600**（该值是三条全文用例钉死的下限——手动全文 25356B
-# 必须原样送达，fit 上限 25600−166=25434 ≥ 25356，再低即
-# test_select_prompt_embeds_manual_fulltexts_with_label 红）。
+# 全文降 1400B 至 **25600**（该值当时读作「三条全文用例钉死的下限」——手动全文
+# 25356B 必须原样送达，fit 上限 25600−166=25434 ≥ 25356，再低即
+# test_select_prompt_embeds_manual_fulltexts_with_label 红。**工单 05 更正**：
+# 该「下限」其实只是**一条**用例的**写死**夹具体量（那条夹具已改为按常量联动
+# 推导），不是契约——真正的契约是「预算内原样送达、file_label 保留」，与夹具
+# 字数无关）。
 # 校准后实测 mspm0 **128293B**（距自设 2KB 边界 129024 余 731B、距硬限 131072
 # 余 2779B——比基线余量 97B **更宽**，因为全文这一降比词表这一涨多）。下一个往
 # 词表加内容的人：先看 measure-18-wordlist-budget.py 量两条传导路径（词表段 +
 # 摘要段），别按 JSON 增量估；且入选顺序按**真机可达性**排（本批第一版按成本排，
 # 真机当场打到顺延里的长句名，返工重排）。
-REFERENCE_FULLTEXT_BYTES = 25600
+#
+# 25600 → **23400**（2026-09-17，工单 real-acceptance/05 段级重分配）。
+# 上一段的 128293B/731B 是**不带预筛注记**的形态；生产路径带注记（webapp 预筛
+# 发生时必须告知模型清单不是全量），实测 **128405B / 余量 619B**——比记账值又
+# 紧 109B。本单把这笔账做成可执行段级账本（tests/test_llm.py::
+# test_select_segment_ledger_matches_measured_segments），用它反推本常量：
+#
+#   上限 131072 − 统一余量 REQUEST_RESERVE_BYTES(2048) = 129024
+#   先扣**基础段** 63341（题面 4000 中文 + 86 条预筛摘要行 + 预筛注记 +
+#     输出契约；实发现量，库驱动，**不可裁**）
+#   再扣条件规则段 3725（多实例 1222 + 同组互斥 618 + 题面核查 1885；
+#     库内有对应标注才出段，同属不可裁）
+#   再扣 system 提示词 5705 + JSON 壳 86 + 词表段预算 12150 + 候选清单段预算 4096
+#   + 澄清历史段实测形态 15438
+#   余量 = 129024 − 63341 − 3725 − 5705 − 86 − 12150 − 4096 − 15438 = 24483
+#   全文段占「内容预算 + 段壳 ≈158」→ 取内容 23400（账本用满 **128099** ≤
+#   129024，余 925B 呼吸位）；全文取 24400 则用满 129099 **超 75B** 即红，
+#   23400 是当前基础段下的可行上界。
+#
+# 实施后实测（证据 .scratch/real-acceptance/verify-05-segment-budget.txt）：
+#   mspm0 真实库最坏形态 **125476B（余 5596B）**、stm32 **124856B（余 6216B）**
+#   ——同形态在工单 08 结束时为 128405B / 619B。比记账值宽松，因为本单同时
+#   修掉了 `_fit_segment_wire` 的标注超预算（−281B）并降了全文段（−2200B）。
+#   四条线现状：select mspm0 125476 / select stm32 124856 / clarify 91338 /
+#   skeleton 67834 / fix 120128，全部满足统一余量下界 129024。
+#
+# **为什么不再抬一点**：词表段（预算 12150 / 实发 9623）虽有 2527B 未用满，
+# 但那是工单 08 明确留的「不瘦身反而涨预算」位（闸的合法 name 数据，截断 =
+# 模型看不到合法名），故本轮不再动它——腾空间的方向仍是**全文段**（本常量），
+# 与 issue-08 同向。
+#
+# **本常量现在是「合计」预算（工单 05 规格评审补）**：`_selection_user_prompt`
+# 此前对**每篇**全文各自 fit 到本值，篇数不受约束（模型可点名多篇、调用方也可
+# 给多篇）→ N 篇 = N × 本值，段级账本不再是上界（实测 4 篇满额即 125634B 且
+# 加篇即越界）。现按篇数均分（`_reference_fulltext_total_budget`，与骨架侧
+# SKELETON_REFERENCE_TOTAL_BYTES 同款），单篇形态逐字节等价。
+#
+# 代价如实记账：本单同时把手动全文用例的夹具改为**按本常量联动推导**
+# （tests/test_llm.py::test_select_prompt_embeds_manual_fulltexts_with_label：
+# 旧夹具写死 700 份 = 25225B wire，超新预算必截断），并删掉该用例里
+# 「必须超 4000 **字符**」的旧断言——4000 是字符口径的旧截断上限，在 23400B
+# 级预算下与「预算内不截断」不可兼得；核心行为（不被旧上限截断、file_label
+# 原样）改由 `TRUNCATION_NOTICE not in message` 直接守。
+REFERENCE_FULLTEXT_BYTES = 23400
 
 # 相关候选清单段合计 wire 字节预算（工单 02 相关候选自动扩容）：recommend
 # 启 15 条相关候选后，清单段现实形态 ≈4.7KB（真实库简介 194-348 字/条，

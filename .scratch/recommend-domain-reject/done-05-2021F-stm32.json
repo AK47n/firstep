@@ -1,0 +1,351 @@
+{
+  "modules": [
+    {
+      "slug": "motor",
+      "reason": "TB6612双路电机驱动+编码器"
+    },
+    {
+      "slug": "pid",
+      "reason": "速度闭环与循迹控制"
+    },
+    {
+      "slug": "l298n",
+      "reason": "大电流电机驱动备选"
+    },
+    {
+      "slug": "ml_mpu6050",
+      "reason": "陀螺仪航向保持"
+    },
+    {
+      "slug": "k230",
+      "reason": "视觉副控AI数字识别"
+    },
+    {
+      "slug": "digit_uart",
+      "reason": "解析K230数字识别结果"
+    },
+    {
+      "slug": "hx711",
+      "reason": "称重检测200g药品装载"
+    },
+    {
+      "slug": "key",
+      "reason": "装载确认按键"
+    },
+    {
+      "slug": "led",
+      "reason": "红色指示灯"
+    },
+    {
+      "slug": "zigbee_link",
+      "reason": "串口透传无线链路"
+    },
+    {
+      "slug": "nrf24l01",
+      "reason": "2.4G无线收发"
+    },
+    {
+      "slug": "hc05",
+      "reason": "蓝牙串口透传"
+    }
+  ],
+  "requirements": [
+    {
+      "requirement": "小车由电池供电，无外界附加电路",
+      "sentence": 83,
+      "modules": [],
+      "suggestions": [
+        {
+          "name": "稳压模块",
+          "examples": [
+            "LM2596 降压模块"
+          ],
+          "degraded": false,
+          "solutions": [],
+          "selected": ""
+        },
+        {
+          "name": "充电管理模块",
+          "examples": [
+            "TP4056"
+          ],
+          "degraded": false,
+          "solutions": [],
+          "selected": ""
+        }
+      ]
+    },
+    {
+      "requirement": "小车长宽高≤25cm×20cm×25cm，普通车轮",
+      "sentence": 81,
+      "modules": [],
+      "suggestions": []
+    },
+    {
+      "requirement": "双直流电机驱动底盘，可调速与转向",
+      "sentence": 15,
+      "modules": [
+        "motor",
+        "pid",
+        "l298n"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "走廊红线循迹，无引导线时保持航向",
+      "sentence": 7,
+      "modules": [
+        "ml_mpu6050",
+        "pid"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "识别病房号黑色数字",
+      "sentence": 13,
+      "modules": [
+        "k230",
+        "digit_uart"
+      ],
+      "suggestions": [
+        {
+          "name": "视觉模块",
+          "examples": [
+            "OpenMV Cam H7",
+            "串口摄像头"
+          ],
+          "degraded": false,
+          "solutions": [
+            {
+              "name": "K230（CanMV）",
+              "interface": "UART（CSV 帧给主控）+ 副控板",
+              "price": "￥100-200/板",
+              "note": "官方 CanMV 训练；库内 k230 已打通（副产物 main.py 直接生成；主控侧串口解析随依赖 coord_detect 自动带入）；图像识别/色块/形状",
+              "suitable": "视觉识别/色块追踪/大模型推理",
+              "recommended": true,
+              "lib_modules": [
+                "k230"
+              ]
+            },
+            {
+              "name": "OpenMV Cam H7",
+              "interface": "UART（Python 脚本 → 主控帧解析 `[cx,cy]`/`[pos]`，9600）",
+              "price": "￥200-300/板",
+              "note": "自带 IDE、例程多；识别色块/数字/形状/人脸；Python 脚本直接出结果——库内 open_mv4 已打通（mspm0：open_mv4_init + open_mv4_read_frame 出中心坐标/置信度（真实 UART 轮询、UART1 默认 PA8/PA9——与 K230 视觉互替、同选时经引脚绑定消解），默认 9600）",
+              "suitable": "快速开发视觉功能/数字识别",
+              "recommended": false,
+              "lib_modules": [
+                "open_mv4"
+              ]
+            },
+            {
+              "name": "串口摄像头（JPEG 输出 UART 转接）",
+              "interface": "UART（帧协议，MCU 侧解码 JPEG）",
+              "price": "￥30-60/个",
+              "note": "免副控板直接出图；帧率低（≤10fps）+ MCU 内存吃紧，半角处理够用",
+              "suitable": "极简视觉/无副控板预算",
+              "recommended": false,
+              "lib_modules": []
+            }
+          ],
+          "selected": ""
+        }
+      ]
+    },
+    {
+      "requirement": "检测药品装载完成自动启动",
+      "sentence": 15,
+      "modules": [
+        "hx711",
+        "key"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "药品卸载完成后自动熄灭红灯",
+      "sentence": 19,
+      "modules": [
+        "hx711"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "到达病房点亮红色指示灯",
+      "sentence": 17,
+      "modules": [
+        "led"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "返回药房后点亮绿色指示灯",
+      "sentence": 21,
+      "modules": [
+        "led"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "两小车之间无线通信",
+      "sentence": 83,
+      "modules": [
+        "zigbee_link",
+        "nrf24l01",
+        "hc05"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "两车协同：小车2自选暂停点亮黄灯等待",
+      "sentence": 41,
+      "modules": [
+        "led"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "小车2收到指令后熄灭黄灯继续运送",
+      "sentence": 43,
+      "modules": [
+        "led"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "小车2取药到达病房亮红色指示灯",
+      "sentence": 62,
+      "modules": [
+        "led"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "小车2等待小车1取药指令后启动",
+      "sentence": 61,
+      "modules": [
+        "zigbee_link"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "指示灯点亮时小车必须停止",
+      "sentence": 95,
+      "modules": [
+        "led"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "小车投影不得落在黑实线外，防越界",
+      "sentence": 98,
+      "modules": [
+        "pid"
+      ],
+      "suggestions": []
+    }
+  ],
+  "score_points": [
+    {
+      "id": "basic-1",
+      "part": "basic",
+      "description": "单个小车运送药品到指定的近端病房并返回到药房",
+      "score": 12.0,
+      "sentence_refs": [
+        25
+      ]
+    },
+    {
+      "id": "basic-2",
+      "part": "basic",
+      "description": "单个小车运送药品到指定的中部病房并返回到药房",
+      "score": 18.0,
+      "sentence_refs": [
+        29
+      ]
+    },
+    {
+      "id": "basic-3",
+      "part": "basic",
+      "description": "单个小车运送药品到指定的远端病房并返回到药房",
+      "score": 20.0,
+      "sentence_refs": [
+        33
+      ]
+    },
+    {
+      "id": "dev-1",
+      "part": "development",
+      "description": "两个小车协同运送药品到同一指定的中部病房",
+      "score": 23.0,
+      "sentence_refs": [
+        37
+      ]
+    },
+    {
+      "id": "dev-2",
+      "part": "development",
+      "description": "两个小车协同到不同的远端病房送、取药品",
+      "score": 21.0,
+      "sentence_refs": [
+        47
+      ]
+    },
+    {
+      "id": "dev-3",
+      "part": "development",
+      "description": "其他",
+      "score": 6.0,
+      "sentence_refs": [
+        66
+      ]
+    }
+  ],
+  "instances": {
+    "led": [
+      {
+        "name": "红灯",
+        "variant": "red",
+        "pin": ""
+      },
+      {
+        "name": "绿灯",
+        "variant": "green",
+        "pin": ""
+      },
+      {
+        "name": "黄灯",
+        "variant": "yellow",
+        "pin": ""
+      }
+    ]
+  },
+  "topic_id": "2021F",
+  "references": [
+    {
+      "id": "21F-巡线送药决策例程",
+      "title": "21F-巡线送药决策例程",
+      "source": "auto",
+      "platform": "stm32"
+    }
+  ],
+  "exclusive_groups": [
+    {
+      "id": "zigbee-rx",
+      "label": "Zigbee 无线链路（接收侧）",
+      "hint": false,
+      "members": [
+        {
+          "slug": "zigbee_link",
+          "role": "任意字节帧收发（双机/双车无线数据通信）"
+        },
+        {
+          "slug": "zigbee_uart",
+          "role": "固定 DIP-4 ID 帧接收（身份识别/信标上报，与 zigbee_uart_key 配对）"
+        }
+      ],
+      "recommended": [
+        "zigbee_link"
+      ]
+    }
+  ]
+}

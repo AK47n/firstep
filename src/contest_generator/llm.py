@@ -35,8 +35,12 @@ from .budget import (
     FIX_PREVIOUS_FIXES_CAP,
     REFERENCE_FULLTEXT_BYTES,
     REFERENCE_SUGGESTIONS_MAX_WIRE_BYTES,
+    REQUEST_RESERVE_BYTES,
     SKELETON_REFERENCE_TOTAL_BYTES,
     fit_wire_budget,
+    format_segment_breakdown,
+    payload_budget_state,
+    payload_wire_size,
     wire_size,
 )
 from .config import AppConfig
@@ -803,14 +807,27 @@ def _fit_segment_wire(
     此处零增删）。budget 参数供骨架参考段等多篇注入按篇数均分
     （skeleton-smoke-refs/02）；候选清单段等其它段用段级预算常量
     （REFERENCE_SUGGESTIONS_MAX_WIRE_BYTES）。
+
+    标注预扣（工单 real-acceptance/05 更正）：本函数此前**先 fit 到预算、再补
+    标注**——文档写着「标注进预算」，而返回值的 wire 字节实际会超出预算约 281B
+    （标注自身的量级）。后果不是「差几百字节无所谓」：段级预算因此**不是实发
+    上界**，段级账本永远对不上实发（本单实测候选清单段声明 4096、实发 4379），
+    只能靠「约等于」打圆场——正是本单要治的账实不同源。现改为与
+    `_wordlist_prompt_segment` 同款做法：先预扣标注 wire 再 fit，返回值严格
+    ≤ 预算（预算扣完标注后过小 → 内容全截、只剩标注，调用方仍看到「被截了」）。
     """
-    fitted = fit_wire_budget(fulltext, budget)
-    if fitted != fulltext:
-        fitted += (
-            f"\n……（内容过长，已截断：仅展示前 {budget} "
-            f"wire 字节，原文共 {len(fulltext)} 字符；{TRUNCATION_NOTICE}）……\n"
-        )
-    return fitted
+    if wire_size(fulltext) <= budget:
+        return fulltext
+    notice = (
+        f"\n……（内容过长，已截断：仅展示前 {budget} "
+        f"wire 字节，原文共 {len(fulltext)} 字符；{TRUNCATION_NOTICE}）……\n"
+    )
+    if wire_size(notice) >= budget:
+        # 预算连标注都装不下（极小预算 / 篇数极多的均分）：原样返回让调用方的
+        # 段级合计兜底去截——绝不返回**比预算还长**的内容（那会让「段级预算 =
+        # 实发上界」再次失真，正是本单要治的病）。
+        return fulltext
+    return fit_wire_budget(fulltext, budget - wire_size(notice)) + notice
 
 
 # 硬件词表科普段 wire 字节预算（工单 buy-guide/01）：词表行含选购方案名后
@@ -923,11 +940,18 @@ def _fit_segment_wire(
 # 取 12150（fit 上限 11984）是给**本批 + 少量后续**留位：本次实发 9619 远在预算内，
 # 但预算本身不再顶格——这是 15 次同款配套里唯一一次「不瘦身反而涨预算」：涨的是闸
 # 的合法 name 数据（不是可裁素材），截断 = 模型看不到合法名 = 退化成本工单要治的病。
-# 段级代价（如实记账）：词表段 +770B → 全文预算配套降 1400B（27000 → 25600，已触
-# 三条全文用例钉死的下限）→ 真实库最坏形态 mspm0 实测 **128293B**（距自设 2KB 边界
-# 129024 余 731B、距硬限 MAX_REQUEST_BYTES=131072 余 2779B；基线余量仅 97B——比
-# 基线**更宽**，因为全文那一降比词表这一涨多）。下一个往词表加内容的人：先看
-# .scratch/recommend-domain-reject/measure-18-wordlist-budget.py 的两条传导路径。
+# 段级代价（如实记账）：词表段 +770B → 全文预算配套降 1400B（27000 → 25600）→
+# 真实库最坏形态 mspm0 实测 **128293B**（距自设 2KB 边界 129024 余 731B；基线
+# 余量仅 97B——比基线**更宽**，因为全文那一降比词表这一涨多）。下一个往词表加
+# 内容的人：先看 .scratch/recommend-domain-reject/measure-18-wordlist-budget.py
+# 的两条传导路径。
+# 2026-09-17（工单 real-acceptance/05）：上段的 128293B 是**不带预筛注记**的形态；
+# 生产带注记（webapp 预筛发生时必须告知模型清单不是全量），实测 **128405B**。
+# 本单把账做成可执行段级账本（request_segments / payload_wire_size + 各段实测），
+# 用它把全文预算再降 25600 → **23400**（推导与实测见
+# budget.REFERENCE_FULLTEXT_BYTES 注释；改后真实库最坏形态 125476B / 余 5596B）。
+# 本常量（12150）**不动**：实发段 9623 < 预算 2527B 是工单 08 明确留的
+# 「不瘦身反而涨预算」位——涨的是闸的合法 name 数据（截断 = 模型看不到合法名）。
 WORDLIST_PROMPT_BYTES = 12150
 
 # 词表段截断标注（单源；不用全局 TRUNCATION_NOTICE——词表截断是科普段压缩
@@ -1114,19 +1138,20 @@ ERROR_KIND_CLIENT = "client"
 ERROR_KIND_DOMAIN = "domain"
 ERROR_KIND_RATE_LIMIT = "rate_limit"
 ERROR_KIND_BUDGET = "budget"
-# output（工单 real-acceptance/09）= **输出侧本地判决**：服务连得上、HTTP 200 也
-# 回来了，但拿到的输出不能用（被 max_tokens 截断 / 异常超长 / 形状不对到解析函数
-# 只能拒收）。与 client（上游 HTTP 4xx）是两回事，判据同样是 kind 而不是字符串猜：
-# errors.llm_error_message 只有 client 才能说「API key / 余额」。
+# output（工单 real-acceptance/05 尾巴）= **输出侧本地判决**：服务连得上、HTTP
+# 200 也回来了，但拿到的输出不能用（被 max_tokens 截断 / 异常超长 / 形状不对
+# 到解析函数只能拒收）。与 client（上游 HTTP 4xx）是两回事，判据同样是 kind
+# 而不是字符串猜：errors.llm_error_message 只有 client 才能说「API key / 余额」。
 #
-# 为什么必须单开一类（现场判例）：webapp 最近两次 recommend 工作流都是 select 失败、
-# 观测面 `http_status=200` / `parse_status=parse_error` / `error_kind=client` /
-# `attempts=1`——上游回 200、key 与余额都正常（余额接口实测 21.57 CNY），用户却看到
-# 「AI 服务拒绝了本次请求（可能是 API key 无效、账户余额不足…）」。这与域拒绝
-# （real-acceptance/03）是同一类病：把本地判决错报成上游拒绝，排查方向被指向凭据。
+# 为什么必须单开一类（现场判例）：webapp 最近两次 recommend 工作流都是 select
+# 失败、观测面 `http_status=200` / `parse_status=parse_error` /
+# `error_kind=client` / `attempts=1`——上游回 200、key 与余额都正常（余额接口
+# 实测可用），用户却看到「AI 服务拒绝了本次请求（可能是 API key 无效、账户
+# 余额不足…）——请在设置页核对 API key 与账户余额」。这与域拒绝（real-acceptance/03）
+# 是同一类病：把本地判决错报成上游拒绝，把用户的排查方向指向凭据。
 ERROR_KIND_OUTPUT = "output"
 
-# 「参数性确定失败」的输出形态判据（工单 real-acceptance/09）：输出**超长**
+# 「参数性确定失败」的输出形态判据（工单 real-acceptance/05 尾巴）：输出**超长**
 # （>SELECT_MAX_OUTPUT_CHARS，疑似退化/循环）与**被 max_tokens 截断**
 # （finish_reason=length）两类，同参数重试只会得到同样的结果——_retry_parse 据此
 # 把它们排除在重试之外（其余 output 失败照 parse 同款快重试）。单源常量：两处
@@ -1982,8 +2007,8 @@ class DeepSeekLLM:
             # 输出失控守卫（工单 llm-select-runaway/01）：deepseek-v4-flash 曾
             # 无上限输出 ~20K tokens/次（逐句分析/自检过程写进 JSON），超长必然
             # 解析失败且单次等待 ~160s。超过合理输出量级 = 模型退化/循环——
-            # 报 output 错误（工单 real-acceptance/09：原报 client，文案层因此说
-            # 「可能是 API key 无效」——HTTP 是 200，那条文案按定义不成立），
+            # 报 output 错误（工单 real-acceptance/05 尾巴：原报 client，文案层
+            # 因此说「可能是 API key 无效」——HTTP 是 200，那条文案按定义不成立），
             # 重试同参数只会重复超长，故 _retry_parse 对超长/截断形态不重试
             # （见 OUTPUT_TRUNCATION_HINT）。配合请求侧 max_tokens 截断双保险。
             if len(content) > SELECT_MAX_OUTPUT_CHARS:
@@ -2323,11 +2348,11 @@ class DeepSeekLLM:
                 if exc.kind == ERROR_KIND_CLIENT:
                     break  # 上游 HTTP 4xx：重试同参数必然同拒
                 if exc.kind == ERROR_KIND_OUTPUT:
-                    # 本地输出失败（工单 real-acceptance/09）：**可重试的一类**
-                    # ——畸形 / 形状不对是模型输出的概率性手滑，整次重问与解析类
-                    # 同款（SUMMARY_RETRY_LIMIT 次快重试）；只有「参数性确定失败」
-                    # 形态（超长 / 截断）不重试——它们已在上面 break，或带着
-                    # OUTPUT_TRUNCATION_HINT 落到这里被跳过。
+                    # 本地输出失败（工单 real-acceptance/05 尾巴）：**可重试的
+                    # 一类**——畸形 / 形状不对是模型输出的概率性手滑，整次重问
+                    # 与解析类同款（SUMMARY_RETRY_LIMIT 次快重试）；只有
+                    # 「参数性确定失败」形态（超长 / 截断）不重试——它们已在上面
+                    # break，或带着 OUTPUT_TRUNCATION_HINT 落到这里被跳过。
                     if OUTPUT_TRUNCATION_HINT in str(exc):
                         break
                     if attempts >= SUMMARY_RETRY_LIMIT:
@@ -3430,10 +3455,10 @@ class DeepSeekLLM:
                     raise
                 if exc.kind == ERROR_KIND_CLIENT:
                     raise
-                # output（工单 real-acceptance/09）在这里不进重试：_chat 是「拿文本」
-                # 的直调用法，它只可能从 _chat_once 收到输出侧异常（超长 / 截断——
-                # 都是参数性确定失败），同参数重试只重复烧钱。那是 _retry_parse 的
-                # 活儿（那里对畸形输出才重试）。
+                # output（工单 real-acceptance/05 尾巴）在这里不进重试：_chat 是
+                # 「拿文本」的直调用法，它只可能从 _chat_once 收到输出侧异常
+                # （超长 / 截断——都是参数性确定失败），同参数重试只重复烧钱。
+                # 那是 _retry_parse 的活儿（那里对畸形输出才重试）。
                 if exc.kind == ERROR_KIND_OUTPUT:
                     raise
                 if exc.kind == ERROR_KIND_RATE_LIMIT:
@@ -3482,7 +3507,53 @@ class DeepSeekLLM:
             payload["thinking"] = {"type": "disabled"}
         body_bytes = json.dumps(payload).encode("utf-8")
         started_at = time.monotonic()
-        request_bytes = len(body_bytes)
+        # 段级记账（工单 real-acceptance/05）：request_bytes 与段级分解都由 budget
+        # 的口径原语算，且**复用同一个序列化结果**（body_bytes）——预检与账本
+        # 同一函数同一行，不允许两处各写一遍 json.dumps（那正是「账本与实测
+        # 不同源」的最小形态）；也不重复序列化（本函数在热路径上）。
+        request_bytes = payload_wire_size(payload)
+        if request_bytes != len(body_bytes):  # pragma: no cover - 口径自锁
+            raise AssertionError(
+                f"budget 口径与预检不同源：{request_bytes} != {len(body_bytes)}"
+            )
+        state = payload_budget_state(
+            payload, limit=MAX_REQUEST_BYTES, total=request_bytes
+        )
+        # 贴边 / 拒发的可判读信号（工单 real-acceptance/05）：此前只有一个总字节数，
+        # 超限了也看不出**是哪一段**把请求顶上去的。分解串只含元数据（段名 +
+        # 字节数），与观测面「不含 prompt / response」的脱敏契约一致（见
+        # budget.format_segment_breakdown）。≥90% 即留痕——留痕在**发出之前**，
+        # 这样「下一次被拒」时日志里已经有近因可查，不用反推。
+        #
+        # 分解串**进消息文本**而不是只进 extra：src 全仓没有配置任何 logging
+        # handler，未配置时 Python 的 lastResort 只把 record.getMessage() 打到
+        # stderr——只放 extra 的字段在真机上**根本落不到任何 sink**（评审实测），
+        # 那就等于没有信号。extra 里同样保留一份给结构化消费方（caplog / 采集器）。
+        if state["near_limit"]:
+            breakdown = format_segment_breakdown(
+                payload, keywords=("user",), total=request_bytes
+            )
+            logger.warning(
+                "LLM 请求体接近上限：%s（上限 %d，余量 %d，统一余量下界 %d，%s）"
+                % (
+                    breakdown,
+                    MAX_REQUEST_BYTES,
+                    state["headroom"],
+                    REQUEST_RESERVE_BYTES,
+                    "仍在余量内" if state["within_reserve"] else "已跌破统一余量",
+                ),
+                extra={
+                    "llm_request_budget": {
+                        "operation": operation,
+                        "call_id": call_id,
+                        "request_bytes": request_bytes,
+                        "limit": MAX_REQUEST_BYTES,
+                        "headroom": state["headroom"],
+                        "within_reserve": state["within_reserve"],
+                        "segments": breakdown,
+                    }
+                },
+            )
         if self._retry_budget is not None:
             try:
                 budget_attempt = self._retry_budget.consume_attempt()
@@ -3514,7 +3585,28 @@ class DeepSeekLLM:
                 budget_attempt=budget_attempt,
             )
             # 体积断言兜底：所有嵌内容调用都应已截断 / 分批，仍超限说明有未兜底
-            # 的长输入——请求发出前大声失败（可操作信息），而不是等网关 413
+            # 的长输入——请求发出前大声失败（可操作信息），而不是等网关 413。
+            # 段级分解进日志（工单 real-acceptance/05）：拒发时先能看出「哪一段
+            # 占了多少」——只记总字节数时，账本与实测对不上的病只能靠人肉复算。
+            # 同贴边分支：分解串进消息文本（无 handler 时 lastResort 才打得出来），
+            # 也在 extra 里留一份。
+            breakdown = format_segment_breakdown(
+                payload, keywords=("user",), total=request_bytes
+            )
+            logger.error(
+                "LLM 请求体超限，拒绝发送：%s（超限 %d 字节，上限 %d）"
+                % (breakdown, -state["headroom"], MAX_REQUEST_BYTES),
+                extra={
+                    "llm_request_budget": {
+                        "operation": operation,
+                        "call_id": call_id,
+                        "request_bytes": request_bytes,
+                        "limit": MAX_REQUEST_BYTES,
+                        "over_by": -state["headroom"],
+                        "segments": breakdown,
+                    }
+                },
+            )
             raise LLMError(
                 f"请求体过大（{len(body_bytes)} 字节 > {MAX_REQUEST_BYTES} 字节）："
                 "嵌内容的调用应已按预算截断 / 分批，仍超限说明有未兜底的长输入"
@@ -5106,6 +5198,23 @@ def _impact_user_prompt(
     return prompt
 
 
+def _reference_fulltext_total_budget(count: int) -> int:
+    """参考全文段的**合计** wire 预算（工单 real-acceptance/05）。
+
+    段级预算是「合计」而不是「逐篇」：`_fit_segment_wire` 逐篇调用只保证单篇
+    ≤ 预算，篇数不受约束（模型可点名多篇、调用方也可给多篇，见
+    `generator.build_reference_fulltexts`）——N 篇 = N × 预算，段级账本就不再
+    是上界，超限会从预检漏到用户眼前（真机曾实测 149674 字节被拒发）。
+
+    与骨架侧 `SKELETON_REFERENCE_TOTAL_BYTES / 篇数` 同款做法（多篇均分、短篇
+    剩余不回收——实现简单优先，截断标注仍兜底）。`count ≤ 1` 时就是段级预算
+    本身（单篇形态逐字节等价，既有用例零变化）。
+    """
+    if count <= 1:
+        return REFERENCE_FULLTEXT_BYTES
+    return max(REFERENCE_FULLTEXT_BYTES // count, 1)
+
+
 def _selection_user_prompt(
     problem_text: str,
     manifest_summaries: Sequence[ManifestSummary],
@@ -5150,6 +5259,14 @@ def _selection_user_prompt(
             "\n".join(lines), REFERENCE_SUGGESTIONS_MAX_WIRE_BYTES
         )
     if reference_fulltexts:
+        # 整段注入的合计预算（工单 real-acceptance/05）：**逐篇** fit 只保证单篇
+        # ≤ REFERENCE_FULLTEXT_BYTES，篇数不受本段约束（模型可点名多篇、调用方
+        # 也可给多篇），N 篇 = N × 预算 → 段级账本不是上界、请求体过大会从预检
+        # 漏到用户眼前。改为两段式：先各篇按段级预算单独兜底（防单篇天量，
+        # 与旧行为一致），再把拼好的段体按**合计预算**兜底（防篇数叠爆）。
+        budget = _reference_fulltext_total_budget(
+            sum(1 for ref in references if reference_fulltexts.get(ref.id) is not None)
+        )
         lines = ["", "以下是你要求阅读全文的参考文件："]
         for ref in references:
             fulltext = reference_fulltexts.get(ref.id)
@@ -5162,23 +5279,27 @@ def _selection_user_prompt(
                 # 尾部文件；旧字符 cap 3B 估算假口径已弃）
                 lines.append(
                     f"- {ref.id}: {ref.title}：\n```\n"
-                    f"{_fit_segment_wire(fulltext)}\n```"
+                    f"{_fit_segment_wire(fulltext, budget)}\n```"
                 )
-        prompt += "\n".join(lines)
+        prompt += _fit_segment_wire("\n".join(lines), budget)
     if manual_fulltexts:
         # 手动选参考资料（工单 01）：全文直读强制（read_fulltext 已带 file_label
         # 文件名标注 + 逐文件截断标注，此处只做 wire 字节预算兜底
         # （_fit_segment_wire——工单 03 放宽旧 4000 总截断吞掉尾部文件；
-        # budget-wire-unification/01 弃字符 cap 改 wire 记账）
+        # budget-wire-unification/01 弃字符 cap 改 wire 记账）；合计预算
+        # 同 reference_fulltexts（工单 real-acceptance/05：逐篇 fit 不约束篇数）。
+        budget = _reference_fulltext_total_budget(
+            sum(1 for ref in references if manual_fulltexts.get(ref.id) is not None)
+        )
         lines = ["", "以下为你手动指定的参考文件全文（用户显式选择，直接作学习素材）："]
         for ref in references:
             fulltext = manual_fulltexts.get(ref.id)
             if fulltext is not None:
                 lines.append(
                     f"- {ref.id}: {ref.title}：\n```\n"
-                    f"{_fit_segment_wire(fulltext)}\n```"
+                    f"{_fit_segment_wire(fulltext, budget)}\n```"
                 )
-        prompt += "\n".join(lines)
+        prompt += _fit_segment_wire("\n".join(lines), budget)
     if qa_material:
         # 赛题答疑 Q&A（工单 qa-material/01）：赛事组对题面的澄清问答，权威
         # 材料——题面/参考段之后、用户澄清之前的独立段（原文直引，不并入题面

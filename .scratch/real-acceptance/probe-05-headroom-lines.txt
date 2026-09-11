@@ -1,0 +1,12 @@
+单 05 探针 A：四条请求线余量现状（只读，HEAD 19f4590e）
+MAX_REQUEST_BYTES = 131072
+
+① select 合成最坏（14 条假摘要）      91268B  余量   39804B (38.9KB)
+② clarify 最坏（12000 字题面+历史）    91338B  余量   39734B (38.8KB)
+③ skeleton 最坏（4 篇全文均分）       67834B  余量   63238B (61.8KB)  段预算 40000
+④ fix 最坏（结构测试原样）           120128B  余量   10944B (10.7KB)
+
+现状口径（tests 断言）：select 合成 / select 真实库 / clarify / skeleton / fix = 距上限 2KB / 2KB / 10KB / 10KB / 10KB
+→ 统一 reserve 单源后，四条线都必须满足同一 reserve；
+  取 2KB 会让 clarify/skeleton 变严（现状 36-37KB 余量，仍远超）；
+  取 10KB 会让 select 真实库变严（现状 0.7KB，本轮必须靠重分配腾出来）。
