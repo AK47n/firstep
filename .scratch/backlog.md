@@ -73,11 +73,11 @@
 
 mq4-9 描述措辞未统一；77 条目全部未上板真机验证；oled 词表方案级缺口；A 类 3 页 mspm0-only 例外 —— ✅ **已收口（2026-09-09）**：例外成立（stm32 侧由 pid/us016 承接），不再算待办；单平台例外清单 + 逐条理由单源 = `tests/test_library_invariants.py::SINGLE_PLATFORM_REASONS`（新增单平台模块即红、承接者须真有 stm32 条目也机检）；README 原本指向的 `.scratch/materials-wiki/dkx-map.tsv` 未随仓库保存（映射轮次工作产物）→ 引用改指 `dkx-map-summary.md` + 重生成配方，三个读表脚本补缺失提示。
 
-## 6. 真机验收第十六轮（2026-09-10）验出/记下的待修项 —— 🔶 6 张工单待做
+## 6. 真机验收第十六轮（2026-09-10）验出/记下的待修项 —— ✅ 全部落地（02–11 十一张工单均 resolved，2026-09-18 复核）
 
 **入口（含每单的新会话提示词 + 优先级 + 依赖）**：`.scratch/real-acceptance/issues/00-待修清单-新会话入口.md`。
 本轮把挂账单 A–E 组里能跑的都跑了（45/50 勾完，详见 `.scratch/tracker-audit/2026-09-09-在途盘点.md`「第十六轮」），
-过程里验出 4 条真问题 + 2 条口径/工具项，各自成单：
+过程里验出 4 条真问题 + 2 条口径/工具项，各自成单；后续又开出 08 / 09 / 10 / 11 四单（均落地）：
 
 | 工单 | 级别 | 一句话 |
 |---|---|---|
@@ -85,8 +85,8 @@ mq4-9 描述措辞未统一；77 条目全部未上板真机验证；oled 词表
 | `real-acceptance/03` | 🟠 | 推荐域拒绝（`SelectionError`）被吞成「查 key / 查余额」通用话术且 `kind=client` 免重试：本轮 14 轮真实推荐 **9 轮**栽在此，真实理由都是「oled 不支持多实例」这类一轮能自愈的手滑 |
 | `real-acceptance/04` | ✅ | ~~推荐层互斥组未收敛：同组两成员同时推荐（`zigbee_uart` + `zigbee_link`），到生成门禁才 400；提示词已写「只推荐一个」，解析层缺校验~~ **已落地（resolved）**：解析层确定性收敛（零额度）——`build_module_selection` 按 `ManifestSummary.exclusive_group` 投影「组 → 候选成员」，同组多成员只留模型清单首个，其余剔出顶层 `modules` 并记进 `dropped_exclusive_members`（需求层不改写 = 模型证据保留）；载荷契约 `exclusive_groups[].recommended` 收紧为**组内 ≤1** + 新增 `candidates` / `dropped` 可见字段（前端标「同组互斥·未选中」，点组卡即换选）；`run_recommendation` 出卡前兜底 + `--reuse-recommend` 旧载荷补刀（`converge_recommendation_payload` 幂等，缓存不改写）；生成侧 `HARD_EXCLUSIVE_PAIRS` 门禁**不动**。真机 2026C/stm32 **不带 `--drop` 跑绿**（UV4 0 错 0 警） |
 | `real-acceptance/05` | ✅ | ~~请求预算账本失真~~ **已落地（resolved）**：账本与实测对齐 + 尺寸断言口径。根因是三种记账病（账本的数来自修复侧被误引用 / select 2KB 与 fix-clarify-skeleton 10KB 两套余量魔数 / 最坏形态漏算预筛注记且合成结构测试比真实库小 34KB）；做法：段级账本可执行（Σ段 + JSON 壳 = 实发，逐字节对账）+ 统一余量单源 `budget.REQUEST_RESERVE_BYTES=2048` + 全文段重分配 25600→23400 + 修掉 `_fit_segment_wire` 标注超预算（段级预算此前不是实发上界）+ 贴边/拒发留段级 breakdown。实测 mspm0 128405B/619B → **125638B/5434B**；真机 2021F/stm32 4 轮收敛终态 done 无「请求体过大」 |
-| `real-acceptance/06` | 🟡 | CCS 三件套跨安装目录混搭（编译器 ccs2050 + SDK/SysConfig ccs2051）实测可用，但环境体检不说明来源根 |
-| `real-acceptance/07` | 🟡 | 浏览器真机验收四坑固化：折叠+页签 / `waitForFunction` 超时位置 / `evaluate` await 长流程 / 模态确认不点 —— 每次重踩烧 20~40 分钟 |
+| `real-acceptance/06` | ✅ | ~~CCS 三件套跨安装目录混搭（编译器 ccs2050 + SDK/SysConfig ccs2051）实测可用，但环境体检不说明来源根~~ **已落地（resolved）**：体检补「三件逐件独立探测 / 可能跨目录」说明行 + 逐件安装根（`ccs_tools_status` 新增 `root`）+ 设置页三行提示；**探测行为未改**（「同根优先」属行为变更，留工单「未采纳的方案」等用户拍板） |
+| `real-acceptance/07` | ✅ | ~~浏览器真机验收四坑固化~~ **已落地（resolved）**：`.scratch/browser-harness.mjs` 两助手（`expandCard` / `pollUntil`，零依赖、假 page 可测）+ 挂账单 01「B 组统一前置 · 姿势清单」；B24 脚本改用它真机复跑 **19/19 全绿** |
 | `real-acceptance/09` | ✅ | ~~推荐失败被报成「AI 服务拒绝了本次请求（API key / 余额）」~~ **已落地（resolved）**：真因是**输出侧本地判决被塞进 `kind=client`**（观测面 `http_status=200` / `parse_status=parse_error` / `attempts=1`；余额实测 21.57 CNY、最小调用 200）。做法：新增 `ERROR_KIND_OUTPUT` 分流 + 三处「借 client」抛出点改归 output + 新增 `OUTPUT_TRUNCATION_HINT` 单源判据（截断/超长确定失败免重试，畸形照 parse 快重试）+ 文案改「这次返回的内容无法使用…不是登录凭据或账户问题」。与 `03`（域拒绝）同源病：本地判决错报成上游拒绝 |
 
 **不做（已裁决）**：SysConfig 外设引脚冲突的「生成期门禁」不单独立项——本轮把它作为 `real-acceptance/02`
@@ -94,6 +94,12 @@ mq4-9 描述措辞未统一；77 条目全部未上板真机验证；oled 词表
 等 02 落地后再看是否需要独立门禁单。
 **已更新（2026-09-17）**：上一条的「等 02 落地后再看」已到期并做掉——生成期引脚冲突门禁 +
 「一键配置真能解默认撞脚」两单落地（`.scratch/pin-conflict-gate/`，均 resolved）。
+
+**小尾巴收口（2026-09-18）**：本节标题长期停在「6 张工单待做」而 02–11 早已全部 resolved
+（台账不实，本轮修）；同时把 `real-acceptance/09` 的复现探针从两份「runpy 套一层」的副本
+（锚点版 + 抓包版，后者第三个锚点随 05 尾巴改缩进**永久失效**、每次跑静默丢一路取证）合并进
+`.scratch/recommend-domain-reject/probe-16-recommend-live.py --capture-raw`，并给探针补
+UTF-8 stdout（原锚点版是崩在 GBK 编码上的）。第 7 节的两道候选仍在等拍板，不受影响。
 
 ## 7. 选中集引脚容量预警 —— 🔶 候选（2026-09-17 取证，**未立项**）
 

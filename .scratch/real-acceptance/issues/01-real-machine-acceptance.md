@@ -57,9 +57,12 @@ SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_ru
   → **需用户点一次**（第十六轮清单：打开 `C:\Users\luoji\Desktop\firstep\.scratch\real-run\out_2026C_stm32\user\Project.uvprojx`
   → F7 Build；期望 `0 Error(s), 0 Warning(s)`）。CLI 侧同一工程已由 A9 真机 UV4 全量重建证过。
 - [ ] **A5 来源 `contest-project-generator/03`**：生成的 mspm0 工程在 CCS 里编译一次（`RUNBOOK.md:39`）。
-  → **需用户点一次**（第十六轮清单：CCS 导入 `.scratch/real-run/out_2026H_mspm0` → Build；
-  注意该工程在命令行下实测有 7 条 SysConfig 引脚冲突，见新单 02——**先看新单 02 再点**，
-  期望态是「CCS 里也报同样的冲突」，那正好是跨工具链交叉印证）。
+  → **需用户点一次**（第十六轮清单：CCS 导入 `.scratch/real-run/out_2026H_mspm0` → Build）。
+  **2026-09-18 口径更新**：该工程（7 条 SysConfig 引脚冲突）现在**根本生成不出来**——生成期
+  门禁按「写侧将要落盘的 syscfg」拦下并逐脚列出双方（`pin-conflict-gate/01`，HTTP 路径 400 见
+  `verify-01-real-machine-generate-check.txt`）。所以 CCS 复验改用**可解形态**：
+  生成时带 `--bindings {"servo.SERVO_PWM_C0":"PA0"}`（= 网页「一键配置」同一动作），
+  命令行已验 gmake exit=0；期望 CCS 里也编过，作为跨工具链交叉印证。
 - [x] **A6 来源 `ascii-project-name/01` #03**：真实生成 2024H → 桌面目录名 `2024H_Auto_Car` + gmake exit=0 + `.out` 产出。
   已就位：`generation_output.py:38-96`、`tests/test_generation_output.py` 断言 `2024H_Auto_Car`。
   **2026-09-10 第十六轮完成**：真机走 `/api/generate`（`create_desktop_topic_dir=true`）生成到
@@ -91,6 +94,12 @@ SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_ru
   但**编译仍 exit=2**——7 条冲突是工程真实的 SysConfig 引脚互斥（生成门禁现有检查面覆盖不到，
   附在单 02 的「另立缺口」），本项「gmake 0 错」的验收前提在 2026H 模块组合下仍不满足。
   证据 `.scratch/real-run/verify-17-A8-mspm0-2026H-verdict.txt`。
+  **2026-09-18 闭环**：撞脚本体由 `pin-conflict-gate/01-02` 修掉（生成期门禁拦下 + 一键配置真能
+  解默认撞脚）——真机 `generate_check.py --platform mspm0 --reuse-recommend --drop … --bindings
+  {"servo.SERVO_PWM_C0":"PA0"} 2026H` 生成通过、产物门禁全过、**gmake exit=0（0 错 0 警，9.1s）**，
+  证据 `.scratch/pin-conflict-gate/verify-03-auto-config-closes-the-loop.txt`；
+  「全模块同选」形态仍物理不可解（落点 42 > 板上可用 IO 31），那是引脚容量问题不是判读问题，
+  已记 `backlog.md` 第 7 节等拍板——**本项（stm32 + mspm0 两线 0 错）至此勾满**。
 - [x] **A9 来源 `gate-corpus-closure/01`**：真机回归 `generate_check` 2026C `--reuse-recommend`，门禁全过。
   怎么验：`python .scratch/real-run/generate_check.py --topic 2026C --reuse-recommend`。
   **2026-09-10 第十六轮完成**：真机全绿（`2026C: ✓ 通过`）——

@@ -18,9 +18,22 @@
 写进 `.scratch/real-run/cache/recommend_<topic>.json`（`--write-cache`），
 让后续 `generate_check --reuse-recommend` 复用这次真实推荐（省额度）。
 
+第十八轮合并（工单 real-acceptance/05 尾巴）：原先另有两个独立探针
+（`.scratch/real-acceptance/probe-05-select-client-error.py` 源码锚点注入版、`probe-05-transport-capture.py`
+运行期猴子补丁版），都只是 **runpy 包住本探针** 再加一层抓取——锚点版因锚点太泛+GBK 控制台
+自炸而不可用，两个都已删除，能力并进本探针：`--capture-raw` 在 Transport 边界逐次打印
+原始 HTTP 往返（status / body 字节 / finish_reason / content 字符数 / usage + 四支判读），
+用于判定「select 失败」的真实近因：①超长守卫 ②max_tokens 截断 ③空 content/畸形 ④上游 4xx。
+另：本探针启动即把 stdout/stderr 切 UTF-8（Windows GBK 控制台打 `⚠` 会 UnicodeEncodeError
+炸在诊断行上，见 probe-05-select-client-error-2023I.txt）。
+
 用法：
     $env:PYTHONPATH='src'; python .scratch/recommend-domain-reject/probe-16-recommend-live.py \
         --topic 2026H --platform mspm0 --attempts 3 --write-cache
+
+    # 抓原始 HTTP 往返（判读失败近因；不带 = 不抓，零额外行为）
+    $env:PYTHONPATH='src'; python .scratch/recommend-domain-reject/probe-16-recommend-live.py \
+        --topic 2026H --platform mspm0 --attempts 3 --capture-raw
 """
 from __future__ import annotations
 
@@ -34,8 +47,18 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "src"))
 sys.path.insert(0, str(REPO / ".scratch" / "real-run"))
 
+# Windows GBK 控制台打不出 ⚠ / 中文标点就自炸在诊断行上（probe-05-select-client-error 的现场），
+# 统一切 UTF-8 + errors=replace：探针宁可花字，也不能因编码炸掉取证。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+    except (AttributeError, ValueError):  # 非 TextIOWrapper（重定向到管道）时跳过
+        pass
+
 # --vision-qa 开关（run_once 内读；CLI 解析后写入）
 args_vision_qa_flag = False
+# --capture-raw 开关（启动时决定是否包 Transport.post；运行期不再变）
+args_capture_raw_flag = False
 # --extra-words 词表追加（{类别: [型号…]}；run_once 内读）
 args_extra_words: dict[str, list[str]] = {}
 # --fake-clarify 注入的补问清单（None = 不注入）
@@ -63,11 +86,11 @@ ANCHORS = (
         '        _raise_retry_exhausted(label, attempts, last_error)\n',
     ),
     (
-        '                    raise LLMError(\n'
-        '                        "模块选择输出异常超长（"\n',
-        '                    print("[PROBE16][超长守卫]", len(content), flush=True)\n'
-        '                    raise LLMError(\n'
-        '                        "模块选择输出异常超长（"\n',
+        '                raise LLMError(\n'
+        '                    "模块选择输出异常超长（"\n',
+        '                print("[PROBE16][超长守卫]", len(content), flush=True)\n'
+        '                raise LLMError(\n'
+        '                    "模块选择输出异常超长（"\n',
     ),
 )
 
@@ -75,13 +98,94 @@ ANCHORS = (
 def inject(src_path: Path) -> None:
     """内存注入诊断行（锚点必须唯一，否则大声失败）。"""
     src = src_path.read_text(encoding="utf-8")
+    done: list[str] = []
+    missed: list[str] = []
     for old, new in ANCHORS:
         n = src.count(old)
         if n != 1:
-            print(f"⚠ 锚点命中 {n} 处（跳过该注入点）：{old.strip()[:50]!r}")
+            missed.append(f"命中 {n} 处：{old.strip()[:50]!r}")
             continue
         src = src.replace(old, new)
+        done.append(old.strip()[:50])
     exec(compile(src, str(src_path), "exec"), llm_mod.__dict__)
+    print(f"[探针] 源码锚点注入 {len(done)}/{len(ANCHORS)} 处；"
+          f"锚点失败 {len(missed)} 处：{'；'.join(missed) or '无'}", flush=True)
+
+
+# 已观测到的 HTTP 往返条数（--capture-raw 的判读序号）
+_RAW_SEEN = 0
+# 诊断副本，仅打印用：真值域单源在 llm.SELECT_MAX_OUTPUT_CHARS
+_RAW_MAX_CHARS = 60000
+
+
+def _describe_raw(index: int, status: int, body: str) -> None:
+    """逐次打印原始 HTTP 往返 + 四支判读（不解析模型内容，只看形状）。"""
+    print(f"\n[RAW#{index}] status={status} body={len(body)}B", flush=True)
+    if status != 200:
+        print(f"[RAW#{index}][非200] {body[:800]}", flush=True)
+        print(f"[RAW#{index}] 判读：④上游拒绝（HTTP {status}）——此时「API key / 余额」类话术才成立",
+              flush=True)
+        return
+    try:
+        data = json.loads(body)
+        choice = data["choices"][0]
+        message = choice.get("message") or {}
+        content = message.get("content") or ""
+        reasoning = message.get("reasoning_content") or ""
+        verdict = []
+        if len(content) > _RAW_MAX_CHARS:
+            verdict.append(f"①超长守卫命中（content {len(content)} > {_RAW_MAX_CHARS}）")
+        if choice.get("finish_reason") == "length":
+            verdict.append("②max_tokens 截断（finish_reason=length）")
+        if not content.strip():
+            verdict.append("③空 content（解析必失败）")
+        print(
+            f"[RAW#{index}] finish_reason={choice.get('finish_reason')!r} "
+            f"content={len(content)}字符 reasoning={len(reasoning)}字符 "
+            f"usage={json.dumps(data.get('usage'), ensure_ascii=False)}",
+            flush=True,
+        )
+        print(f"[RAW#{index}] 判读：{'；'.join(verdict) or '形状正常（失败在下游解析 / 域判决）'}",
+              flush=True)
+        print(f"[RAW#{index}] head={content[:160]!r}", flush=True)
+        print(f"[RAW#{index}] tail={content[-160:]!r}", flush=True)
+    except Exception as exc:  # noqa: BLE001 - 探针
+        print(f"[RAW#{index}] 响应解析失败：{type(exc).__name__}: {exc}；原文头 {body[:300]!r}",
+              flush=True)
+
+
+def patch_transports() -> None:
+    """包一层 Transport.post（运行期猴子补丁，不碰源码、不依赖锚点唯一性）。
+
+    只认 HTTP 边界：所有失败近因（超长 / 截断 / 空 content / 上游 4xx）都在
+    这一层能看见形状，无需猜 `_chat_once` 内部长什么样。
+    """
+
+    def make(orig):  # noqa: ANN001, ANN202
+        def post(self, url, headers, payload, timeout):  # noqa: ANN001, ANN202
+            global _RAW_SEEN
+            response = orig(self, url, headers, payload, timeout)
+            _RAW_SEEN += 1
+            _describe_raw(_RAW_SEEN, response[0], response[1])
+            return response
+
+        post.__dsh_probe__ = True  # type: ignore[attr-defined]
+        return post
+
+    wrapped: list[str] = []
+    for name in dir(llm_mod):
+        cls = getattr(llm_mod, name)
+        if not isinstance(cls, type) or not hasattr(cls, "post"):
+            continue
+        if name == "Transport":
+            continue  # Protocol，不是实现
+        original = cls.post
+        if getattr(original, "__dsh_probe__", False):
+            continue
+        cls.post = make(original)  # type: ignore[method-assign]
+        wrapped.append(name)
+    print(f"[探针] --capture-raw 已包 Transport：{wrapped or '（未找到实现，探针无效）'}",
+          flush=True)
 
 
 def run_once(topic_key: str, platform: str, clarify_answers: dict[str, str]):
@@ -230,6 +334,11 @@ def main() -> int:
     parser.add_argument("--clarify-answers", default="", help="JSON 文件：{问题: 答案}")
     parser.add_argument("--vision-qa", action="store_true",
                         help="注入真视觉问答回调（C1 主链路用）")
+    parser.add_argument(
+        "--capture-raw", action="store_true",
+        help="在 Transport 边界逐次打印原始 HTTP 往返 + 四支判读"
+             "（select 失败近因：超长 / 截断 / 空 content / 上游 4xx）",
+    )
     parser.add_argument("--evidence", default="")
     parser.add_argument("--extra-words", default="",
                         help='JSON：{"类别": ["型号", …]} 追加进默认词表')
@@ -246,10 +355,15 @@ def main() -> int:
     args = parser.parse_args()
 
     inject(REPO / "src" / "contest_generator" / "llm.py")
-    print(f"[探针] 注入诊断行完成（磁盘 llm.py 零改动）；"
-          f"topic={args.topic} platform={args.platform} attempts={args.attempts}")
-    global args_vision_qa_flag, args_extra_words, args_fake_clarify
+    global args_vision_qa_flag, args_extra_words, args_fake_clarify, args_capture_raw_flag
     args_vision_qa_flag = args.vision_qa
+    args_capture_raw_flag = args.capture_raw
+    print(f"[探针] 注入诊断行完成（磁盘 llm.py 零改动）；"
+          f"topic={args.topic} platform={args.platform} attempts={args.attempts}"
+          f"{' capture-raw=开' if args.capture_raw else ''}")
+    if args_capture_raw:
+        # 注入之后再包 Transport：patch 的是实现类，与上面的源码注入互不干扰
+        patch_transports()
     if args.fake_clarify or args.fake_clarify_file:
         raw_q = (
             Path(args.fake_clarify_file).read_text(encoding="utf-8")
@@ -322,9 +436,17 @@ def main() -> int:
                 reference_ids=(), clarify_hist=(),
             )
             print(f"[缓存] 已写 {cpath}", flush=True)
-            return 0
+            return _finish(0)
     print("[未收敛] 见上面 [PROBE16] 行与终态 data", flush=True)
-    return 1
+    return _finish(1)
+
+
+def _finish(code: int) -> int:
+    """收尾：--capture-raw 时给出「抓了几条」的可判读汇总。"""
+    if args_capture_raw_flag:
+        print(f"[探针] --capture-raw 共抓到 {_RAW_SEEN} 条原始 HTTP 往返"
+              f"（逐条见上面 [RAW#N] 行）", flush=True)
+    return code
 
 
 if __name__ == "__main__":

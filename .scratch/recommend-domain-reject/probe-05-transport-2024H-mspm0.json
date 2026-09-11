@@ -1,0 +1,218 @@
+{
+  "modules": [
+    {
+      "slug": "motor",
+      "reason": "轮式小车驱动行进"
+    },
+    {
+      "slug": "pid",
+      "reason": "速度闭环控制直线行驶"
+    },
+    {
+      "slug": "led_beep",
+      "reason": "LED与蜂鸣器同步提示"
+    },
+    {
+      "slug": "imu_uart",
+      "reason": "陀螺仪保持航向直行"
+    },
+    {
+      "slug": "xunji",
+      "reason": "灰度循迹沿黑弧线行驶"
+    }
+  ],
+  "requirements": [
+    {
+      "requirement": "A点自动行驶至B点停车",
+      "sentence": 24,
+      "modules": [
+        "motor",
+        "pid"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "停车时声光提示",
+      "sentence": 24,
+      "modules": [
+        "led_beep"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "A到B无引导线自主直行",
+      "sentence": 24,
+      "modules": [
+        "imu_uart"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "A至B后沿半弧线行驶到C点",
+      "sentence": 28,
+      "modules": [
+        "xunji"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "由C点自动行驶到D点",
+      "sentence": 28,
+      "modules": [
+        "imu_uart"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "由D点沿半弧线行驶到A点停车",
+      "sentence": 28,
+      "modules": [
+        "xunji"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "每经过A/B/C/D点声光提示一次",
+      "sentence": 29,
+      "modules": [
+        "led_beep"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "A到C后沿半弧线行驶到B点",
+      "sentence": 33,
+      "modules": [
+        "xunji"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "由B点自动行驶到D点",
+      "sentence": 33,
+      "modules": [
+        "imu_uart"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "按要求3路径行驶4圈停车",
+      "sentence": 39,
+      "modules": [
+        "motor",
+        "xunji",
+        "imu_uart",
+        "led_beep"
+      ],
+      "suggestions": []
+    }
+  ],
+  "score_points": [
+    {
+      "id": "(1)",
+      "part": "basic",
+      "description": "A点自动行驶到B点停车并声光提示",
+      "score": 20.0,
+      "sentence_refs": [
+        24,
+        26,
+        27
+      ]
+    },
+    {
+      "id": "(2)",
+      "part": "basic",
+      "description": "A到B沿弧到C再直行到D沿弧回A停车，每点声光提示",
+      "score": 20.0,
+      "sentence_refs": [
+        28,
+        29,
+        31,
+        32
+      ]
+    },
+    {
+      "id": "(3)",
+      "part": "basic",
+      "description": "A到C沿弧到B再直行到D沿弧回A停车，每点声光提示",
+      "score": 30.0,
+      "sentence_refs": [
+        33,
+        36,
+        37,
+        38
+      ]
+    },
+    {
+      "id": "(4)",
+      "part": "development",
+      "description": "按要求3路径自动行驶4圈停车",
+      "score": 30.0,
+      "sentence_refs": [
+        39
+      ]
+    },
+    {
+      "id": "设计报告",
+      "part": "unknown",
+      "description": "设计报告",
+      "score": 20.0,
+      "sentence_refs": [
+        40,
+        41
+      ]
+    }
+  ],
+  "topic_id": "2024H",
+  "references": [
+    {
+      "id": "car-1-1-巡线模板-mspm0",
+      "title": "car 1.1 巡线模板（mspm0）",
+      "source": "auto",
+      "platform": "mspm0"
+    }
+  ],
+  "exclusive_groups": [
+    {
+      "id": "gray-track",
+      "label": "8 路灰度传感器驱动",
+      "hint": false,
+      "members": [
+        {
+          "slug": "huidu",
+          "role": "仅 8 路灰度读取（黑线检测位图），不含巡线/电机控制；适合自写巡线逻辑"
+        },
+        {
+          "slug": "pid",
+          "role": "灰度读取 + 边缘中点巡线偏差 + PID/PD 巡线 + 电机目标速度（含速度环，双平台）"
+        },
+        {
+          "slug": "xunji",
+          "role": "灰度读取（位图）+ 加权质心巡线 + 编码器采样（开环速度输出；真机控制代码移植）"
+        }
+      ],
+      "recommended": [
+        "pid",
+        "xunji"
+      ]
+    },
+    {
+      "id": "attitude-hold",
+      "label": "航向保持 / 姿态传感器",
+      "hint": false,
+      "members": [
+        {
+          "slug": "imu_uart",
+          "role": "UART 串口陀螺仪（9 字节帧 + CRC16，yaw/角速度直出，接 PA28/PA31）"
+        },
+        {
+          "slug": "ml_mpu6050",
+          "role": "I2C + 官方 DMP 姿态解算（pitch/roll/yaw 100Hz，接 PA0/PA1，MPU6050 套件）"
+        }
+      ],
+      "recommended": [
+        "imu_uart"
+      ]
+    }
+  ]
+}

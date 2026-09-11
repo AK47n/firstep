@@ -1,0 +1,293 @@
+{
+  "modules": [
+    {
+      "slug": "led",
+      "reason": "一键启动与状态指示"
+    },
+    {
+      "slug": "key",
+      "reason": "按键触发启动"
+    },
+    {
+      "slug": "pid",
+      "reason": "灰度循迹与闭环控制"
+    },
+    {
+      "slug": "ml_mpu6050",
+      "reason": "陀螺仪姿态用于航向保持"
+    },
+    {
+      "slug": "motor",
+      "reason": "风机转速与方向驱动"
+    },
+    {
+      "slug": "ir_distance",
+      "reason": "探测前方障碍物距离"
+    },
+    {
+      "slug": "led_beep",
+      "reason": "LED与蜂鸣器声光提示"
+    },
+    {
+      "slug": "relay",
+      "reason": "切断总电源实现关机"
+    },
+    {
+      "slug": "syn6288",
+      "reason": "中文TTS播报运行信息"
+    }
+  ],
+  "requirements": [
+    {
+      "requirement": "一键启动，车缓慢升起，悬浮高度>2mm，悬停>2s",
+      "sentence": 34,
+      "modules": [
+        "led"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "一键启动控制（单一按键触发全流程）",
+      "sentence": 34,
+      "modules": [
+        "key"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "沿赛道逆时针寻迹运行一周并停在启/停点",
+      "sentence": 36,
+      "modules": [
+        "pid"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "沿无引导标记路径自主行驶的航向保持",
+      "sentence": 36,
+      "modules": [
+        "ml_mpu6050"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "悬浮与前进/倒退由高速轴流风机产生动力",
+      "sentence": 60,
+      "modules": [
+        "motor"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "在A、B标识线之间往返运行并最终停启/停点",
+      "sentence": 39,
+      "modules": [
+        "pid"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "遇障碍物绕行并从左右侧通过后返回寻迹线",
+      "sentence": 47,
+      "modules": [
+        "ir_distance"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "避障后返回寻迹线并继续运行一周泊车",
+      "sentence": 48,
+      "modules": [
+        "pid"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "悬停结束后发出声光提示",
+      "sentence": 47,
+      "modules": [
+        "led_beep"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "绕障时发出声光提示",
+      "sentence": 48,
+      "modules": [
+        "led_beep"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "泊车后自动关机",
+      "sentence": 50,
+      "modules": [
+        "relay"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "泊车后定位检测（车体十字中心与启/停点偏差≤10cm）",
+      "sentence": 74,
+      "modules": [],
+      "suggestions": [
+        {
+          "name": "视觉模块",
+          "examples": [
+            "K230",
+            "OpenMV"
+          ],
+          "degraded": false,
+          "solutions": [
+            {
+              "name": "K230（CanMV）",
+              "interface": "UART（CSV 帧给主控）+ 副控板",
+              "price": "￥100-200/板",
+              "note": "官方 CanMV 训练；库内 k230 已打通（副产物 main.py 直接生成；主控侧串口解析随依赖 coord_detect 自动带入）；图像识别/色块/形状",
+              "suitable": "视觉识别/色块追踪/大模型推理",
+              "recommended": true,
+              "lib_modules": [
+                "k230"
+              ]
+            },
+            {
+              "name": "OpenMV Cam H7",
+              "interface": "UART（Python 脚本 → 主控帧解析 `[cx,cy]`/`[pos]`，9600）",
+              "price": "￥200-300/板",
+              "note": "自带 IDE、例程多；识别色块/数字/形状/人脸；Python 脚本直接出结果——库内 open_mv4 已打通（mspm0：open_mv4_init + open_mv4_read_frame 出中心坐标/置信度（真实 UART 轮询、UART1 默认 PA8/PA9——与 K230 视觉互替、同选时经引脚绑定消解），默认 9600）",
+              "suitable": "快速开发视觉功能/数字识别",
+              "recommended": false,
+              "lib_modules": [
+                "open_mv4"
+              ]
+            },
+            {
+              "name": "串口摄像头（JPEG 输出 UART 转接）",
+              "interface": "UART（帧协议，MCU 侧解码 JPEG）",
+              "price": "￥30-60/个",
+              "note": "免副控板直接出图；帧率低（≤10fps）+ MCU 内存吃紧，半角处理够用",
+              "suitable": "极简视觉/无副控板预算",
+              "recommended": false,
+              "lib_modules": []
+            }
+          ],
+          "selected": ""
+        }
+      ]
+    },
+    {
+      "requirement": "以语音方式实时播报运行信息",
+      "sentence": 57,
+      "modules": [
+        "syn6288"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "语音播报悬停时间、循环、避障数量、稳定停车",
+      "sentence": 76,
+      "modules": [
+        "syn6288"
+      ],
+      "suggestions": []
+    }
+  ],
+  "score_points": [
+    {
+      "id": "基本(1)",
+      "part": "basic",
+      "description": "一键启动升起、悬浮高度>2mm、悬停>2s",
+      "score": 10.0,
+      "sentence_refs": [
+        34,
+        35
+      ]
+    },
+    {
+      "id": "基本(2)",
+      "part": "basic",
+      "description": "逆时针寻迹一周并停在启/停点",
+      "score": 15.0,
+      "sentence_refs": [
+        36,
+        37,
+        38
+      ]
+    },
+    {
+      "id": "基本(3)",
+      "part": "basic",
+      "description": "A、B标识线间往返并最终停车",
+      "score": 25.0,
+      "sentence_refs": [
+        39,
+        40,
+        41,
+        42
+      ]
+    },
+    {
+      "id": "发挥(1)",
+      "part": "development",
+      "description": "避障运行一周并行泊车定位，含悬停10s与声光提示",
+      "score": 20.0,
+      "sentence_refs": [
+        44,
+        46,
+        47,
+        48,
+        50,
+        51
+      ]
+    },
+    {
+      "id": "发挥(2)",
+      "part": "development",
+      "description": "A-B往返并泊车定位",
+      "score": 20.0,
+      "sentence_refs": [
+        53,
+        54,
+        55,
+        56
+      ]
+    },
+    {
+      "id": "发挥(3)",
+      "part": "development",
+      "description": "语音实时播报运行信息",
+      "score": 6.0,
+      "sentence_refs": [
+        57,
+        76
+      ]
+    },
+    {
+      "id": "发挥(4)",
+      "part": "development",
+      "description": "其他",
+      "score": 4.0,
+      "sentence_refs": [
+        58
+      ]
+    }
+  ],
+  "instances": {
+    "led": [
+      {
+        "name": "启动指示灯",
+        "variant": "green",
+        "pin": ""
+      }
+    ],
+    "key": [
+      {
+        "name": "启动键",
+        "variant": "start",
+        "pin": ""
+      }
+    ]
+  },
+  "topic_id": "2023I",
+  "references": []
+}

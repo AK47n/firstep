@@ -60,9 +60,10 @@ key 与余额都正常，用户被指去设置页查凭据。
 最相符（确定性失败不重试）；超长守卫（60000 字符 ≈ 数万 token）与 token 数不符，但**不能
 从观测面区分**——观测里没有 `finish_reason`。这也是本条如实记下的取证边界：
 
-- 复现尝试（`.scratch/real-acceptance/probe-05-transport-capture.py`，逐次打印原始
-  `status` / `finish_reason` / `content` 长度）：**2026H/mspm0 3 轮、2024H/mspm0 3 轮
-  全部终态 done**——该失败是**偶发**的，六轮没撞上；
+- 复现尝试（当时是 `.scratch/real-acceptance/probe-05-transport-capture.py`——**该脚本已删**，
+  能力并入 `.scratch/recommend-domain-reject/probe-16-recommend-live.py --capture-raw`，
+  见本文「现场证据」；逐次打印原始 `status` / `finish_reason` / `content` 长度）：
+  **2026H/mspm0 3 轮、2024H/mspm0 3 轮全部终态 done**——该失败是**偶发**的，六轮没撞上；
 - 失败请求的 `request_bytes=56980` 与库里全部题面 × 平台的 select 装配（按 webapp 同款
   装配逐题量，`.scratch/real-acceptance/probe-05-find-topic.py`）**都不相等**（用户当时
   的题面不在库内 / 与库内题面不同），所以「照原题重跑」这条路也走不通；
@@ -114,9 +115,15 @@ N 次」（重试次数取决于失败形态，写死就会撒谎），也不删
    （确定失败 / 概率失败）本应正交。现在 `output` 用 `OUTPUT_TRUNCATION_HINT` 字符串
    成员判据来分「确定失败」，是**可用的近似而不是结构**——下一个想再借 client 的人，
    先想清楚要借的是哪一维。
-3. 复现该偶发失败的探针留在 `.scratch/real-acceptance/probe-05-transport-capture.py`
-   （逐次打印原始 `status` / `finish_reason` / `content` 长度），下一个撞上现场的人
-   直接跑它就能拿到那一支的原始证据。
+3. 复现该偶发失败的探针 = `.scratch/recommend-domain-reject/probe-16-recommend-live.py
+   --capture-raw`（逐次打印原始 `status` / `finish_reason` / `content` 长度 + 四支判读），
+   下一个撞上现场的人直接跑它就能拿到那一支的原始证据。
+   **2026-09-18 更正**：原先另立的 `.scratch/real-acceptance/probe-05-transport-capture.py`
+   只是 runpy 包住上面这个探针再抓一层，且它继承的第三个源码锚点（超长守卫）在工单 05 尾巴
+   改动源码缩进后**永久失效**（每次跑都打 `⚠ 锚点命中 0 处`，静默丢一路取证）；该文件与其
+   更早的锚点版 `.scratch/real-acceptance/probe-05-select-client-error.py`（锚点太泛 + GBK
+   控制台自炸，见 `probe-05-select-client-error-2023I.txt`）**均已删除**，能力并入探针本体
+   的 `--capture-raw`；探针现在同时把 stdout/stderr 切 UTF-8 并打印「锚点注入 N/M 处」。
 
 ## 现场证据
 
@@ -125,6 +132,10 @@ N 次」（重试次数取决于失败形态，写死就会撒谎），也不删
   （两条 `recommend:*`，`select_modules` / `http_status=200` / `parse_status=parse_error`
   / `error_kind=client` / `attempts=1`）——**进程内存 ring buffer，重启即失**，重启后要
   重现只能靠日志；本单已把关键字段抄进本文
-- 复现尝试与原始响应探针：`.scratch/real-acceptance/probe-05-transport-capture.py`
+- 复现尝试与原始响应探针：`.scratch/recommend-domain-reject/probe-16-recommend-live.py
+  --capture-raw`（原 `probe-05-transport-capture.py` 已删，见「未了」3）
+- 原始抓取留档：`.scratch/real-acceptance/probe-05-transport-capture.txt`（2026H/mspm0
+  3 轮脚本实跑原样输出）、`.scratch/real-acceptance/probe-05-select-client-error-2023I.txt`
+  （锚点版崩在 GBK 编码上的原样 traceback）
 - 题面对照量：`.scratch/real-acceptance/probe-05-find-topic.py`（56980 与库内任一题面
   装配都不相等 → 现场题面不在库内）
