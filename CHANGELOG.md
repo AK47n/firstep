@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=72e9f510750ee91e992b8f18db0d3c08856fdf4d -->
+<!-- changelog-auto: last-commit=60cbdd6c4749b5795f0e2fee2fbccea66d38aaf3 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -10,6 +10,7 @@
 - 17:02 fix(recommend): 输出侧本地判决不再被报成「查 key / 查余额」（工单 real-acceptance/09）
 - 17:02 fix(预算): 推荐请求段级账本可执行 + 统一余量单源 + 全文段重分配 25600→23400（工单 real-acceptance/05）
 - 17:41 fix(recommend): 同组互斥在解析层收敛——推荐结果点一次就能生成（工单 real-acceptance/04）
+- 17:55 体检补 CCS 三件套跨目录说明 + 浏览器验收四坑固化成姿势助手（工单 real-acceptance/06、07）
 
 ## 2026-09-10
 - 13:12 perf(code-editor): 结构性编辑回车同步耗时 78.9ms → 9.8ms（删掉 syncTail 的滚动读写）
