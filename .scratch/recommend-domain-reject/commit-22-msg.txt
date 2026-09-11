@@ -1,0 +1,26 @@
+fix(推荐): instances 幻觉改确定性降级——现场主形态是空数组（工单 real-acceptance/11）
+
+诊断先行（方向 ①）：新探针把域拒绝时的模型原始输出整份落盘，2026H/mspm0 三次
+真实推荐抓到 4 条违规现场 / 15 个 instances 形态——4/4 条违规都是 `"instances":
+[]`（元素 0 个），模型把空数组当「无实例」的默认写法；工单原文「真违规的是非空
+数组」是未取证初判，只降级单元素的话现场违规一条不减。
+
+判决层（方向 ②）：非多实例模块的 instances 长度 ≤ 1 → 确定性降级为「无实例
+（默认单实例）」+ 可见标注（INSTANCES_DEGRADED_NOTE，出口 = 模块 reason 追加
+（推荐卡 chip 副标题，零前端改动）+ done 载荷 instances_degraded 键）；长度 ≥ 2
+仍拒收走带理由重试；null / 缺省不变。恒等变换论证：该模块只能出单默认实例，
+生成侧 expand_instances 对非多实例模块的非空清单本来就抛错 → 丢弃这 0/1 个实例
+走的是它唯一可能成功的路径，产物逐字节不变；≥2 是「不可能的诉求」，静默忽略会
+改变用户要的硬件。为零降级载荷逐字节兼容，instances_degraded 非空才落键。
+
+重试反馈（方向 ③）：DOMAIN_FEEDBACK_SEGMENT 增一句可操作改法（先删后换：删掉
+系统不认的字段按默认单实例 / 要多个同类器件改选带「多实例」标注的模块 / 库外
+硬件名降级为词表类别名），三类域拒绝共用一句、不按理由串分支（无字符串判据）。
+提示词（多实例规则段）逐字节未动——加字收益已被现场否定。
+
+证据：红绿对照 probe-22-red-first.py 把现场 61 个形态重放进 build_module_selection
+（能力清单取真实库）→ 修前拒收 57 / 通过 4，修后拒收 0 / 通过 61。真机：工单原
+命令 probe-16 --topic 2026H --platform mspm0 --attempts 2 --out-prefix done-22
+四跑全部零「不支持多实例」域拒绝；降级路径监听探针正证现场确实又犯了同一形态并
+被接住（一次 7 个模块：k230/ntb_time/oled/huidu/motor/step_motor/coord_detect），
+两跑终态都 done。回归：pytest 3981 passed、node --test tests/js 1444 pass。

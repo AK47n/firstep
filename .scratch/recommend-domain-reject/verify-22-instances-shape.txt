@@ -1,0 +1,119 @@
+⚠ 锚点命中 0 处（跳过该注入点）：'raise LLMError(\n                        "模块选择输出异常超'
+[探针] 注入诊断行 + 形态落盘完成（磁盘 llm.py 零改动）；topic=2026H platform=mspm0 attempts=2
+
+===== 第 1/2 次真实推荐 =====
+[装配] 清单行 84 条（截断=False）note=''
+[结果] 终态 question；收敛轮次 [1, 2, 3]；补问 2 条
+
+===== 第 2/2 次真实推荐 =====
+[装配] 清单行 84 条（截断=False）note=''
+[结果] 终态 question；收敛轮次 [1]；补问 3 条
+[形态] 本轮未出现「不支持多实例」违规（无现场可取证）
+⚠ 锚点命中 0 处（跳过该注入点）：'raise LLMError(\n                        "模块选择输出异常超'
+[探针] 注入诊断行 + 形态落盘完成（磁盘 llm.py 零改动）；topic=2026H platform=mspm0 attempts=3
+
+===== 第 1/3 次真实推荐 =====
+[装配] 清单行 84 条（截断=False）note=''
+[PROBE16][编排抛错] TypeError: _parse_model_instances() missing 1 required positional argument: 'degraded'
+[结果] 终态 exception；收敛轮次 [1]；补问 0 条
+
+===== 第 2/3 次真实推荐 =====
+[装配] 清单行 84 条（截断=False）note=''
+[PROBE16][编排抛错] TypeError: _parse_model_instances() missing 1 required positional argument: 'degraded'
+[结果] 终态 exception；收敛轮次 [1]；补问 0 条
+
+===== 第 3/3 次真实推荐 =====
+[装配] 清单行 84 条（截断=False）note=''
+[PROBE16][编排抛错] TypeError: _parse_model_instances() missing 1 required positional argument: 'degraded'
+[结果] 终态 exception；收敛轮次 [1]；补问 0 条
+[形态] 本轮未出现「不支持多实例」违规（无现场可取证）
+⚠ 锚点命中 0 处（跳过该注入点）：'raise LLMError(\n                        "模块选择输出异常超'
+[探针] 注入诊断行 + 形态落盘完成（磁盘 llm.py 零改动）；topic=2026H platform=mspm0 attempts=3
+
+===== 第 1/3 次真实推荐 =====
+[装配] 清单行 84 条（截断=False）note=''
+[PROBE16][域拒绝] SelectionError → 模型推荐了库中不存在的模块：husu
+[PROBE22][形态落盘] 模块 oled 不支持多实例，不能带 instances
+[PROBE16][域拒绝] SelectionError → 模块 oled 不支持多实例，不能带 instances
+[结果] 终态 question；收敛轮次 [1, 2, 3, 4]；补问 2 条
+
+===== 第 2/3 次真实推荐 =====
+[装配] 清单行 84 条（截断=False）note=''
+[PROBE22][形态落盘] 模块 k230 不支持多实例，不能带 instances
+[PROBE16][域拒绝] SelectionError → 模块 k230 不支持多实例，不能带 instances
+[结果] 终态 question；收敛轮次 [1]；补问 2 条
+
+===== 第 3/3 次真实推荐 =====
+[装配] 清单行 84 条（截断=False）note=''
+[PROBE22][形态落盘] 模块 k230 不支持多实例，不能带 instances
+[PROBE16][域拒绝] SelectionError → 模块 k230 不支持多实例，不能带 instances
+[PROBE22][形态落盘] 模块 k230 不支持多实例，不能带 instances
+[PROBE16][域拒绝] SelectionError → 模块 k230 不支持多实例，不能带 instances
+[结果] 终态 done；收敛轮次 [1, 2, 3, 4]；补问 0 条
+
+[形态] 共 4 条违规现场 → C:\Users\luoji\Desktop\firstep\.scratch\recommend-domain-reject\instances-shape-22.txt
+  · 模块 oled 不支持多实例，不能带 instances
+      requirements[2].modules[0] slug=key type=list len=1 value=[{"name": "启动按键", "variant": "start"}]
+      requirements[3].modules[0] slug=oled type=list len=0 value=[]
+      requirements[4].modules[0] slug=xunji type=list len=0 value=[]
+      requirements[4].modules[1] slug=pid type=list len=0 value=[]
+      requirements[4].modules[2] slug=huidu type=list len=0 value=[]
+      requirements[5].modules[0] slug=ir_beam type=list len=0 value=[]
+      requirements[6].modules[0] slug=motor type=list len=0 value=[]
+      requirements[7].modules[0] slug=step_motor type=list len=0 value=[]
+      requirements[8].modules[0] slug=k230 type=list len=0 value=[]
+      requirements[8].modules[1] slug=coord_detect type=list len=0 value=[]
+      requirements[9].modules[0] slug=pid type=list len=0 value=[]
+      requirements[10].modules[0] slug=pid type=list len=0 value=[]
+      requirements[11].modules[0] slug=pid type=list len=0 value=[]
+  · 模块 k230 不支持多实例，不能带 instances
+      requirements[0].modules[0] slug=k230 type=list len=0 value=[]
+      requirements[2].modules[0] slug=key type=list len=0 value=[]
+      requirements[3].modules[0] slug=xunji type=list len=0 value=[]
+      requirements[3].modules[1] slug=motor type=list len=0 value=[]
+      requirements[3].modules[2] slug=pid type=list len=0 value=[]
+      requirements[4].modules[0] slug=ml_mpu6050 type=list len=0 value=[]
+      requirements[5].modules[0] slug=ntb_time type=list len=0 value=[]
+      requirements[5].modules[1] slug=oled type=list len=0 value=[]
+      requirements[6].modules[0] slug=step_motor type=list len=0 value=[]
+      requirements[6].modules[1] slug=k230 type=list len=0 value=[]
+      requirements[7].modules[0] slug=k230 type=list len=0 value=[]
+      requirements[7].modules[1] slug=step_motor type=list len=0 value=[]
+      requirements[8].modules[0] slug=k230 type=list len=0 value=[]
+      requirements[8].modules[1] slug=step_motor type=list len=0 value=[]
+  · 模块 k230 不支持多实例，不能带 instances
+      requirements[0].modules[0] slug=k230 type=list len=0 value=[]
+      requirements[1].modules[0] slug=xunji type=list len=0 value=[]
+      requirements[1].modules[1] slug=motor type=list len=0 value=[]
+      requirements[1].modules[2] slug=key type=list len=1 value=[{"name": "启动按键", "variant": "start"}]
+      requirements[1].modules[3] slug=pid type=list len=0 value=[]
+      requirements[1].modules[4] slug=ntb_time type=list len=0 value=[]
+      requirements[2].modules[0] slug=oled type=list len=0 value=[]
+      requirements[3].modules[0] slug=step_motor type=list len=0 value=[]
+      requirements[3].modules[1] slug=k230 type=list len=0 value=[]
+      requirements[4].modules[0] slug=xunji type=list len=0 value=[]
+      requirements[4].modules[1] slug=step_motor type=list len=0 value=[]
+      requirements[5].modules[0] slug=xunji type=list len=0 value=[]
+      requirements[5].modules[1] slug=step_motor type=list len=0 value=[]
+      requirements[6].modules[0] slug=step_motor type=list len=0 value=[]
+      requirements[6].modules[1] slug=k230 type=list len=0 value=[]
+      requirements[7].modules[0] slug=imu_uart type=list len=0 value=[]
+  · 模块 k230 不支持多实例，不能带 instances
+      requirements[0].modules[0] slug=k230 type=list len=0 value=[]
+      requirements[2].modules[0] slug=key type=list len=0 value=[]
+      requirements[2].modules[1] slug=huidu type=list len=0 value=[]
+      requirements[2].modules[2] slug=motor type=list len=0 value=[]
+      requirements[2].modules[3] slug=pid type=list len=0 value=[]
+      requirements[3].modules[0] slug=ntb_time type=list len=0 value=[]
+      requirements[3].modules[1] slug=lcd type=list len=0 value=[]
+      requirements[5].modules[0] slug=step_motor type=list len=0 value=[]
+      requirements[5].modules[1] slug=k230 type=list len=0 value=[]
+      requirements[5].modules[2] slug=coord_detect type=list len=0 value=[]
+      requirements[5].modules[3] slug=pid type=list len=0 value=[]
+      requirements[6].modules[0] slug=k230 type=list len=0 value=[]
+      requirements[6].modules[1] slug=step_motor type=list len=0 value=[]
+      requirements[7].modules[0] slug=k230 type=list len=0 value=[]
+      requirements[7].modules[1] slug=step_motor type=list len=0 value=[]
+      requirements[8].modules[0] slug=k230 type=list len=0 value=[]
+      requirements[8].modules[1] slug=step_motor type=list len=0 value=[]
+      requirements[9].modules[0] slug=imu_uart type=list len=0 value=[]

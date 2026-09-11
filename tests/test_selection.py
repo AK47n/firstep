@@ -34,6 +34,7 @@ from contest_generator.manifest import (
 )
 from contest_generator.reference_library import PLATFORM_ANY, ReferenceEntry, add_reference
 from contest_generator.selection import (
+    INSTANCES_DEGRADED_NOTE,
     WARNING_HARDWARE_BOUND,
     WARNING_MISSING,
     WARNING_UNVERIFIED,
@@ -1421,10 +1422,152 @@ def test_build_selection_instances_identical_across_requirements_ok():
     }
 
 
+# ---------------------------------------------------------------------------
+# 实例确定性降级（工单 real-acceptance/11 方向 ②，现场取证后收窄到 len ≤ 1）：
+# 非多实例模块被模型带上**长度 0 或 1** 的 instances → 不拒收，降级为「无实例
+# （默认单实例）」+ 一条可见标注（instances_degraded）；长度 ≥ 2 仍拒收
+# （真幻觉，走带理由重试）。恒等变换论证见 selection._parse_model_instances
+# docstring；现场取证（4/4 违规都是 `[]`）见
+# .scratch/recommend-domain-reject/instances-shape-22.txt。
+# ---------------------------------------------------------------------------
+
+
+def test_build_selection_single_instance_on_single_instance_module_degrades():
+    """k230 / xunji / oled 这类单实例模块被手滑带上 1 个实例 → 不抛错：
+    instances 为空（默认单实例 = 生成侧唯一可能成功的路径）+ 可见降级标注；
+    reason 不被本层改写（追加发生在载荷装配层，域对象只记标注）。"""
+    raw = {
+        "requirements": [
+            {
+                "requirement": "视觉识别",
+                "sentence": 1,
+                "modules": [
+                    {
+                        "slug": "k230",
+                        "reason": "识别数字",
+                        "instances": [{"name": "主视觉", "variant": ""}],
+                    }
+                ],
+            }
+        ]
+    }
+
+    result = build_module_selection(
+        raw, known_slugs=("k230",), multi_instance_slugs=("led",)
+    )
+
+    assert result.modules == ("k230",)
+    assert result.instances == {}  # 降级为无实例 = 单默认实例
+    assert result.instances_degraded == {"k230": INSTANCES_DEGRADED_NOTE}
+    assert result.reasons["k230"] == "识别数字"  # 模型原话不被改写
+
+
+def test_build_selection_empty_instance_array_on_single_instance_module_degrades():
+    """**现场主形态**（工单 11 方向 ① 取证）：模型给非多实例模块补
+    `"instances": []`——2026H/mspm0 三次真实推荐的 4 条违规现场 4/4 都是这个
+    形态（模型把空数组当「无实例」的默认写法）。0 元素语义等于无声明，降级为
+    「无实例 + 标注」，不再白花一次分钟级调用。"""
+    raw = {
+        "requirements": [
+            {
+                "requirement": "视觉识别",
+                "sentence": 1,
+                "modules": [{"slug": "k230", "reason": "识别", "instances": []}],
+            },
+            {
+                "requirement": "循迹",
+                "sentence": 2,
+                "modules": [{"slug": "huidu", "reason": "循迹", "instances": []}],
+            },
+        ]
+    }
+
+    result = build_module_selection(
+        raw,
+        known_slugs=("k230", "huidu"),
+        multi_instance_slugs=("led", "key"),
+    )
+
+    assert result.modules == ("k230", "huidu")
+    assert result.instances == {}
+    assert result.instances_degraded == {
+        "k230": INSTANCES_DEGRADED_NOTE,
+        "huidu": INSTANCES_DEGRADED_NOTE,
+    }
+
+
+def test_build_selection_degradation_covers_plain_modules_and_empty_ability():
+    """两种边界同判据：旧契约顶层 modules 形态、以及能力清单为空（未给清单
+    = 同样「不在多实例清单内」）——空数组与单元素都降级，不改两条路径的口径。"""
+    legacy = build_module_selection(
+        {"modules": [{"slug": "oled", "reason": "显示", "instances": [{"name": "屏"}]}]},
+        known_slugs=("oled",),
+        multi_instance_slugs=("led",),
+    )
+    empty_ability = build_module_selection(
+        {"modules": [{"slug": "oled", "reason": "显示", "instances": []}]},
+        known_slugs=("oled",),
+        multi_instance_slugs=(),
+    )
+
+    assert legacy.instances_degraded == {"oled": INSTANCES_DEGRADED_NOTE}
+    assert empty_ability.instances_degraded == {"oled": INSTANCES_DEGRADED_NOTE}
+
+
+def test_build_selection_instances_null_and_absent_are_untouched():
+    """`{"instances": null}`（DeepSeek 常对非多实例模块补的显式 null）与字段
+    缺省 = 无实例、**无降级标注**——null 是「无声明」语义、不是幻觉，连降级
+    标注都不该有（现状逐字节不变，既有用例不红）。"""
+    raw = {
+        "modules": [
+            {"slug": "oled", "reason": "显示", "instances": None},
+            {"slug": "huidu", "reason": "循迹"},
+        ]
+    }
+
+    result = build_module_selection(
+        raw, known_slugs=("oled", "huidu"), multi_instance_slugs=("led",)
+    )
+
+    assert result.modules == ("oled", "huidu")
+    assert result.instances == {}
+    assert result.instances_degraded == {}
+
+
+def test_build_selection_two_instances_on_single_instance_module_still_rejected():
+    """对照用例（工单 real-acceptance/11 验收）：`k230` 带 **2 个**实例必须仍
+    拒收——用户真要两套视觉而该模块没有能力 = 真幻觉，静默忽略会改变用户要的
+    硬件；降级线只有「长度 ≤ 1」这一条确定性判据。"""
+    raw = {
+        "requirements": [
+            {
+                "requirement": "视觉识别",
+                "sentence": 1,
+                "modules": [
+                    {
+                        "slug": "k230",
+                        "reason": "识别数字",
+                        "instances": [
+                            {"name": "主视觉"},
+                            {"name": "备视觉"},
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+    with pytest.raises(SelectionError, match="模块 k230 不支持多实例"):
+        build_module_selection(
+            raw, known_slugs=("k230",), multi_instance_slugs=("led",)
+        )
+
+
 @pytest.mark.parametrize(
     "bad_raw, multi_slugs, match",
     [
-        # 非多实例模块带 instances = 能力校验拒绝（宁严勿假绿）
+        # 非多实例模块带 ≥2 个实例 = 能力校验拒绝（宁严勿假绿；单元素形态已在
+        # 工单 real-acceptance/11 方向 ② 改为确定性降级，见降级用例）
         (
             {
                 "requirements": [
@@ -1435,7 +1578,7 @@ def test_build_selection_instances_identical_across_requirements_ok():
                             {
                                 "slug": "dht11",
                                 "reason": "x",
-                                "instances": [{"name": "红"}],
+                                "instances": [{"name": "红"}, {"name": "黄"}],
                             }
                         ],
                     }
@@ -1455,7 +1598,7 @@ def test_build_selection_instances_identical_across_requirements_ok():
                             {
                                 "slug": "led",
                                 "reason": "x",
-                                "instances": [{"name": "红"}],
+                                "instances": [{"name": "红"}, {"name": "黄"}],
                             }
                         ],
                     }
@@ -1466,7 +1609,15 @@ def test_build_selection_instances_identical_across_requirements_ok():
         ),
         # 旧契约顶层模块同样受能力校验
         (
-            {"modules": [{"slug": "dht11", "reason": "x", "instances": [{"name": "红"}]}]},
+            {
+                "modules": [
+                    {
+                        "slug": "dht11",
+                        "reason": "x",
+                        "instances": [{"name": "红"}, {"name": "黄"}],
+                    }
+                ]
+            },
             ("led",),
             "不支持多实例",
         ),
@@ -2489,6 +2640,56 @@ def test_run_recommendation_done_payload_includes_instances():
             {"name": "状态灯", "variant": "", "pin": ""},
         ]
     }
+
+
+def test_run_recommendation_done_payload_surfaces_instances_degradation():
+    """单元素降级标注的两个可见出口（工单 real-acceptance/11 方向 ②）：
+    ① 模块 reason 追加标注——推荐卡 chip 副标题就是 reason，用户看得见（既有
+    文案通道，零前端改动）；② 载荷 `instances_degraded` 键（机器可见）。
+    整条链一起测：模型原始 JSON → build_module_selection → done 载荷。"""
+    selection = build_module_selection(
+        {
+            "requirements": [
+                {
+                    "requirement": "视觉识别",
+                    "sentence": 1,
+                    "modules": [
+                        {
+                            "slug": "k230",
+                            "reason": "识别数字",
+                            "instances": [{"name": "主视觉"}],
+                        }
+                    ],
+                }
+            ]
+        },
+        known_slugs=("k230",),
+        multi_instance_slugs=("led",),
+    )
+    llm = FakeLLM(selection=selection)
+
+    _, events = _run_recommendation(_topic(), llm)
+
+    data = _drain_events(events)[-1][1]
+    assert data["modules"] == [
+        {"slug": "k230", "reason": "识别数字 " + INSTANCES_DEGRADED_NOTE}
+    ]
+    assert data["instances_degraded"] == {"k230": INSTANCES_DEGRADED_NOTE}
+    assert "instances" not in data  # 降级 = 无实例（默认单实例）
+
+
+def test_run_recommendation_done_payload_omits_degradation_key_when_clean():
+    """零降级 = 载荷不带 instances_degraded 键、reason 逐字不变（旧载荷逐字节
+    兼容）——同一条 verbatim 用例的补充钉子（键不得常驻）。"""
+    llm = FakeLLM(
+        selection=ModuleSelection(modules=("oled",), reasons={"oled": "显示"})
+    )
+
+    _, events = _run_recommendation(_topic(), llm)
+
+    data = _drain_events(events)[-1][1]
+    assert "instances_degraded" not in data
+    assert data["modules"] == [{"slug": "oled", "reason": "显示"}]
 
 
 # ---------------------------------------------------------------------------

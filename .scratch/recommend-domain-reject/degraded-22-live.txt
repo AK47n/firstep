@@ -1,0 +1,2 @@
+{"notes": {"k230": "（不支持多实例，已按默认单实例处理）"}, "modules": ["k230", "key", "xunji", "motor", "ntb_time", "oled", "step_motor"]}
+{"notes": {"k230": "（不支持多实例，已按默认单实例处理）", "ntb_time": "（不支持多实例，已按默认单实例处理）", "oled": "（不支持多实例，已按默认单实例处理）", "huidu": "（不支持多实例，已按默认单实例处理）", "motor": "（不支持多实例，已按默认单实例处理）", "step_motor": "（不支持多实例，已按默认单实例处理）", "coord_detect": "（不支持多实例，已按默认单实例处理）"}, "modules": ["k230", "key", "ntb_time", "oled", "huidu", "motor", "step_motor", "coord_detect"]}

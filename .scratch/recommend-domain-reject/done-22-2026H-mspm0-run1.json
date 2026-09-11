@@ -1,0 +1,446 @@
+{
+  "modules": [
+    {
+      "slug": "k230",
+      "reason": "视觉副控采集图像并通过UART回传"
+    },
+    {
+      "slug": "key",
+      "reason": "启动按键输入"
+    },
+    {
+      "slug": "oled",
+      "reason": "显示行驶时间"
+    },
+    {
+      "slug": "ntb_time",
+      "reason": "系统毫秒计时"
+    },
+    {
+      "slug": "xunji",
+      "reason": "红外光电循迹黑线"
+    },
+    {
+      "slug": "servo",
+      "reason": "摆杆角度控制机构"
+    },
+    {
+      "slug": "motor",
+      "reason": "轮式驱动"
+    },
+    {
+      "slug": "ml_mpu6050",
+      "reason": "六轴陀螺仪航向保持"
+    }
+  ],
+  "requirements": [
+    {
+      "requirement": "摆球位置监测图传：摄像头回传钢球滚动实时画面并录制回放",
+      "sentence": 23,
+      "modules": [
+        "k230"
+      ],
+      "suggestions": [
+        {
+          "name": "视觉模块",
+          "examples": [
+            "K230 CanMV",
+            "OpenMV Cam H7",
+            "串口摄像头JPEG输出"
+          ],
+          "degraded": false,
+          "solutions": [
+            {
+              "name": "K230（CanMV）",
+              "interface": "UART（CSV 帧给主控）+ 副控板",
+              "price": "￥100-200/板",
+              "note": "官方 CanMV 训练；库内 k230 已打通（副产物 main.py 直接生成；主控侧串口解析随依赖 coord_detect 自动带入）；图像识别/色块/形状",
+              "suitable": "视觉识别/色块追踪/大模型推理",
+              "recommended": true,
+              "lib_modules": [
+                "k230"
+              ]
+            },
+            {
+              "name": "OpenMV Cam H7",
+              "interface": "UART（Python 脚本 → 主控帧解析 `[cx,cy]`/`[pos]`，9600）",
+              "price": "￥200-300/板",
+              "note": "自带 IDE、例程多；识别色块/数字/形状/人脸；Python 脚本直接出结果——库内 open_mv4 已打通（mspm0：open_mv4_init + open_mv4_read_frame 出中心坐标/置信度（真实 UART 轮询、UART1 默认 PA8/PA9——与 K230 视觉互替、同选时经引脚绑定消解），默认 9600）",
+              "suitable": "快速开发视觉功能/数字识别",
+              "recommended": false,
+              "lib_modules": [
+                "open_mv4"
+              ]
+            },
+            {
+              "name": "串口摄像头（JPEG 输出 UART 转接）",
+              "interface": "UART（帧协议，MCU 侧解码 JPEG）",
+              "price": "￥30-60/个",
+              "note": "免副控板直接出图；帧率低（≤10fps）+ MCU 内存吃紧，半角处理够用",
+              "suitable": "极简视觉/无副控板预算",
+              "recommended": false,
+              "lib_modules": []
+            }
+          ],
+          "selected": ""
+        }
+      ]
+    },
+    {
+      "requirement": "图传发送模块稳固安装于小车，接收端接显示存储装置",
+      "sentence": 24,
+      "modules": [],
+      "suggestions": [
+        {
+          "name": "无线通信模块",
+          "examples": [
+            "ESP8266 WiFi图传",
+            "NRF24L01 2.4G",
+            "蓝牙串口透传"
+          ],
+          "degraded": false,
+          "solutions": [
+            {
+              "name": "RC522 射频 IC 卡读卡器（MFRC522）",
+              "interface": "软 SPI 位操作（CS/RST/SCK/MOSI/MISO 5 脚，免硬件 SPI 外设）",
+              "price": "￥5-15/套（含 S50 卡）",
+              "note": "库内 rc522 已打通（mspm0：rc522_init + read_card 出 4 字节卡号 + auth_block/read_block/write_block 认证读写 16 字节数据块，默认 PA7/PA18/PA14/PA16/PA17——同选时经引脚绑定消解）；支持 M1 S50/S70/UltraLight 等；读卡请求重试节奏由调用方控制（页面演示循环归生成骨架）；卡片写入须按扇区默认密码 FF FF FF FF FF FF（KEYA/KEYB 页面默认）",
+              "suitable": "RFID 卡号读取/身份识别/门禁刷卡/考勤打卡",
+              "recommended": false,
+              "lib_modules": [
+                "rc522"
+              ]
+            },
+            {
+              "name": "NRF24L01 2.4G 点对点",
+              "interface": "软 SPI（CLK/MOSI/MISO/CSN/CE/IRQ 六脚位操作）",
+              "price": "￥10-20/对",
+              "note": "双向低功耗；信道/地址自配；短帧传输数据包；库内 nrf24l01 已打通（mspm0：nrf24l01_init/set_channel/address/speed/power + tx_packet/rx_packet，默认 PA26/PA25/PA9/PA24/PA23/PA22——同选时经引脚绑定消解；接收为轮询，不占 TIMER/SPI 外设）",
+              "suitable": "双车通信/遥控/无线触发（距离 20-50m）",
+              "recommended": true,
+              "lib_modules": [
+                "nrf24l01"
+              ]
+            },
+            {
+              "name": "蓝牙 4.0/5.0（HM-10 等 BLE 模块）",
+              "interface": "UART 串口透传",
+              "price": "￥10-20/个",
+              "note": "手机连 App 控；最大 1Mbps 级；需配对",
+              "suitable": "手机端/调试/低速率遥测",
+              "recommended": true,
+              "lib_modules": []
+            },
+            {
+              "name": "HC05 蓝牙串口（主从一体透传）",
+              "interface": "UART 串口透传（9600 8N1）",
+              "price": "￥10-20/个",
+              "note": "库内 hc05 已打通（mspm0：hc05_init 开 RX 中断 + 环形缓冲、send_string/receive 双向、is_connected 读 STATE、at_mode_enter/exit 切 AT——KEY 高 + 重上电进 AT 默认 38400）；蓝牙与 UWB/ZIGBEE/NRF 同为无线链路互替，默认脚同选时经引脚绑定消解",
+              "suitable": "手机遥控/上位机无线通信/数据透传",
+              "recommended": false,
+              "lib_modules": [
+                "hc05"
+              ]
+            },
+            {
+              "name": "ESP8266 WiFi 模块",
+              "interface": "UART AT 指令",
+              "price": "￥8-15/个",
+              "note": "接入路由器发数据；能上云（MQTT）；配网复杂；库内 esp01s 已打通（**stm32 纯驱动——B 类仅 stm32 条目，mspm0 缺（选 mspm0 平台报 missing 警告），同选时经引脚绑定消解**：esp01s_init + send_cmd 发 AT 行 + 应答匹配（OK 命中/超时）+ send_string 透传负载 + available/receive 读走应答 + parse_ipd 解析 +IPD 帧——AT 模板（CWMODE/CWSAP/CIPSERVER/MQTT）归骨架，模块只出透传原语；默认 UART_1（PA9/PA10，与 HC05 手机遥控互替同脚）、115200；MQTT 固件需单独烧写（页面提示）",
+              "suitable": "地面站/手机网页监控（200m 内）",
+              "recommended": false,
+              "lib_modules": [
+                "esp01s"
+              ]
+            },
+            {
+              "name": "LoRa 数传（AS32-TTL 串口版 / SX1278 等）",
+              "interface": "UART 串口透传（AS32-TTL-100，9600——双向收发免帧解析）",
+              "price": "￥30-60/对",
+              "note": "超远距离 1-3km、433MHz 20dBm（2.0-5.5V 供电）；库内 as32 已打通（mspm0：as32_init + as32_send_string/send_hex 发送 + as32_receive 轮询收数（返回字节数、读后清缓冲）——真实 UART 双向透传、轮询接收（无中断），默认 UART3 PA26/PA25（与 Zigbee 数传互替、同选时经引脚绑定换实例消解）、9600；页面无 AT 指令代码——参数经上位机（soft_asds.zip）预设或配置模式直发）；SX1278 裸芯片 SPI 开发版需自写驱动（页面「占 SPI」措辞按 AS32=串口版修正——本件为串口版免 SPI 免帧解析）；丢包重传自写（透传无帧结构——行分帧归调用方）",
+              "suitable": "远距双机通信/大场地/山野组网",
+              "recommended": false,
+              "lib_modules": [
+                "as32"
+              ]
+            },
+            {
+              "name": "Zigbee 模块（DL-20 串口透传）",
+              "interface": "UART 串口透传（115200 点对点）",
+              "price": "￥10-20/个",
+              "note": "库内 zigbee_link 已打通任意字节收发（长度前缀帧协议，无需重复采购）；模块需预先配置 115200 + 点对点模式，程序不需发 AT 指令；双端须同为 zigbee_link",
+              "suitable": "双机/双车无线数据通信、遥控指令、遥测上报",
+              "recommended": false,
+              "lib_modules": [
+                "zigbee_link"
+              ]
+            },
+            {
+              "name": "EC-01G NB-IoT+GPS 模块（AT 指令）",
+              "interface": "UART AT 指令（9600）",
+              "price": "￥30-60/个",
+              "note": "蜂窝窄带物联网（NB-IoT）远距上云 + 板载 GPS（页面仅 NB-IoT 天气 demo、**无 GPS 代码**）；库内 ec01g 已打通（**stm32 纯驱动——B 类仅 stm32 条目，mspm0 缺（选 mspm0 平台报 missing 警告），同选时经引脚绑定消解**：ec01g_init + send_cmd 发 AT 行 + 应答匹配（OK 命中/超时）+ send_string 透传负载 + available/receive 读走——AT 底座原语化（页面 HTTP 天气/JSON/hex 解码 demo 归范围外，骨架做 HTTP 需自行拼 AT 序列）；默认 UART_3（PB10/PB11，与 Zigbee/LoRa 无线链路互替同脚）、9600；GPS 功能按官方 AT 资料（docs.ai-thinker.com）另议或复用 neo_6m 模块——页面无 GPS 代码",
+              "suitable": "蜂窝远距数据上报/无人值守遥测/无公网 WiFi 场景",
+              "recommended": false,
+              "lib_modules": [
+                "ec01g"
+              ]
+            }
+          ],
+          "selected": ""
+        }
+      ]
+    },
+    {
+      "requirement": "小车凹槽内钢球位置检测采用摄像头",
+      "sentence": 61,
+      "modules": [
+        "k230"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "按键启动小车，显示屏显示行驶总时间",
+      "sentence": 26,
+      "modules": [
+        "key",
+        "oled",
+        "ntb_time"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "沿黑色环形路线顺时针行驶一圈并停到A点",
+      "sentence": 26,
+      "modules": [
+        "xunji"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "循迹模块使用红外光电模块",
+      "sentence": 50,
+      "modules": [
+        "xunji"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "静止状态摆杆控制钢球从中心O到+5cm折返到-5cm并稳定",
+      "sentence": 28,
+      "modules": [
+        "servo",
+        "pid"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "摄像头检测凹槽内钢球位置用于闭环",
+      "sentence": 61,
+      "modules": [
+        "k230"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "小车从A点沿黑线顺时针行驶并通过B位置",
+      "sentence": 30,
+      "modules": [
+        "xunji",
+        "motor",
+        "pid"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "行驶中钢球稳定在摆杆中心点附近",
+      "sentence": 30,
+      "modules": [
+        "k230",
+        "servo",
+        "pid"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "小车从A点沿黑线顺时针行驶一圈并通过A位置",
+      "sentence": 32,
+      "modules": [
+        "xunji",
+        "motor",
+        "pid"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "行驶中钢球稳定在任意指定位置附近",
+      "sentence": 34,
+      "modules": [
+        "k230",
+        "servo",
+        "pid"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "小车沿无引导标记直线自主行驶需航向保持",
+      "sentence": 26,
+      "modules": [
+        "ml_mpu6050"
+      ],
+      "suggestions": []
+    }
+  ],
+  "score_points": [
+    {
+      "id": "1",
+      "part": "unknown",
+      "description": "安装摆球位置监测图传装置，实时显示并记录回放钢球滚动画面",
+      "score": 6.0,
+      "sentence_refs": [
+        23,
+        24
+      ]
+    },
+    {
+      "id": "2",
+      "part": "unknown",
+      "description": "A点按键启动顺时针一圈停回A点，计时≤20s，停车偏差≤2cm",
+      "score": 16.0,
+      "sentence_refs": [
+        26
+      ]
+    },
+    {
+      "id": "3",
+      "part": "unknown",
+      "description": "静止时钢球由O到+5cm折返到-5cm并稳定，时间≤5s，误差≤1cm",
+      "score": 13.0,
+      "sentence_refs": [
+        28
+      ]
+    },
+    {
+      "id": "4",
+      "part": "unknown",
+      "description": "A点启动通过B，AB时间≤8s，钢球稳定于中心O误差≤1cm",
+      "score": 20.0,
+      "sentence_refs": [
+        30
+      ]
+    },
+    {
+      "id": "5",
+      "part": "unknown",
+      "description": "A点启动一圈通过A，时间≤30s，钢球稳定于中心O误差≤1cm",
+      "score": 20.0,
+      "sentence_refs": [
+        32
+      ]
+    },
+    {
+      "id": "6",
+      "part": "unknown",
+      "description": "钢球任意指定位置，A点启动一圈通过A，时间≤30s，误差≤1cm",
+      "score": 20.0,
+      "sentence_refs": [
+        34
+      ]
+    },
+    {
+      "id": "7",
+      "part": "unknown",
+      "description": "其他",
+      "score": 5.0,
+      "sentence_refs": [
+        36
+      ]
+    },
+    {
+      "id": "8",
+      "part": "unknown",
+      "description": "设计报告",
+      "score": 20.0,
+      "sentence_refs": [
+        37
+      ]
+    }
+  ],
+  "instances": {
+    "key": [
+      {
+        "name": "启动按键",
+        "variant": "start",
+        "pin": ""
+      }
+    ]
+  },
+  "topic_id": "2026H",
+  "references": [
+    {
+      "id": "2026_04_地猛星电赛控制题配套资料",
+      "title": "2026_04_地猛星电赛控制题配套资料",
+      "source": "auto",
+      "platform": "mspm0"
+    },
+    {
+      "id": "26H-滚球巡线决策例程",
+      "title": "26H-滚球巡线决策例程",
+      "source": "auto",
+      "platform": "mspm0"
+    }
+  ],
+  "exclusive_groups": [
+    {
+      "id": "gray-track",
+      "label": "8 路灰度传感器驱动",
+      "hint": false,
+      "members": [
+        {
+          "slug": "huidu",
+          "role": "仅 8 路灰度读取（黑线检测位图），不含巡线/电机控制；适合自写巡线逻辑"
+        },
+        {
+          "slug": "pid",
+          "role": "灰度读取 + 边缘中点巡线偏差 + PID/PD 巡线 + 电机目标速度（含速度环，双平台）"
+        },
+        {
+          "slug": "xunji",
+          "role": "灰度读取（位图）+ 加权质心巡线 + 编码器采样（开环速度输出；真机控制代码移植）"
+        }
+      ],
+      "recommended": [
+        "xunji"
+      ],
+      "candidates": [
+        "huidu",
+        "pid"
+      ],
+      "dropped": [
+        "pid"
+      ]
+    },
+    {
+      "id": "attitude-hold",
+      "label": "航向保持 / 姿态传感器",
+      "hint": false,
+      "members": [
+        {
+          "slug": "imu_uart",
+          "role": "UART 串口陀螺仪（9 字节帧 + CRC16，yaw/角速度直出，接 PA28/PA31）"
+        },
+        {
+          "slug": "ml_mpu6050",
+          "role": "I2C + 官方 DMP 姿态解算（pitch/roll/yaw 100Hz，接 PA0/PA1，MPU6050 套件）"
+        }
+      ],
+      "recommended": [
+        "ml_mpu6050"
+      ],
+      "candidates": [
+        "imu_uart"
+      ],
+      "dropped": []
+    }
+  ]
+}

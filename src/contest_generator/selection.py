@@ -804,6 +804,11 @@ class ModuleSelection:
     instances: dict[str, tuple[ModuleInstance, ...]] = field(default_factory=dict)
     converged: bool = False  # 核验轮短标记（工单 01）：模型自报与上一轮一致
     # （无需求层可判——短标记形态跳过域判决；仅核验轮允许，第 1 轮出现当空结果）
+    # 实例降级标注（工单 real-acceptance/11 方向 ②）：非多实例模块被模型带上
+    # 长度 ≤ 1 的 instances（现场主形态是空数组 `[]`）→ 确定性降级为「无实例
+    # （默认单实例）」，此处记一条可见标注（slug → INSTANCES_DEGRADED_NOTE）。
+    # 缺省空 = 零降级（旧行为）。
+    instances_degraded: dict[str, str] = field(default_factory=dict)
     # 同组互斥收敛（工单 real-acceptance/04）：功能组 id → 被剔出 selected 的
     # 成员（模型推荐顺序）。载荷落 exclusive_groups[].candidates / dropped——
     # 剔掉的成员必须可见（不静默丢弃），用户可在组卡一键换选。缺省空 = 无收敛
@@ -880,15 +885,16 @@ def build_module_selection(
     """
     known = set(known_slugs)
     multi_instance = set(multi_instance_slugs)
+    degraded: dict[str, str] = {}
     questions = _parse_questions(raw.get("questions"))
     raw_requirements = raw.get("requirements")
     if raw_requirements is not None:
         requirements, modules, reasons, instances = _parse_requirements(
-            raw_requirements, known, hardware_words, multi_instance
+            raw_requirements, known, hardware_words, multi_instance, degraded
         )
     elif isinstance(raw.get("modules"), list):
         modules, reasons, instances = _parse_plain_modules(
-            raw["modules"], known, multi_instance
+            raw["modules"], known, multi_instance, degraded
         )
         requirements = ()
     elif questions:
@@ -913,6 +919,7 @@ def build_module_selection(
         score_points=parse_score_points(raw.get("score_points")),
         questions=questions,
         instances=instances,
+        instances_degraded=_degraded_notes_for_modules(degraded, modules),
         dropped_exclusive_members=dropped,
     )
 
@@ -984,22 +991,53 @@ def converge_exclusive_group_selection(
     return kept, {gid: tuple(slugs) for gid, slugs in excluded.items()}
 
 
+# 非多实例模块带长度 ≤ 1 的 instances 时的确定性降级标注（工单 real-acceptance/11
+# 方向 ②）：文案单源——载荷 instances_degraded[slug]（机器可见）与模块 reason
+# 追加（推荐卡 chip 副标题，用户可见）同用它。
+INSTANCES_DEGRADED_NOTE = "（不支持多实例，已按默认单实例处理）"
+
+
 def _parse_model_instances(
-    raw: Any, slug: str, multi_instance: set[str], path: str
+    raw: Any,
+    slug: str,
+    multi_instance: set[str],
+    path: str,
+    degraded: dict[str, str],
 ) -> tuple[ModuleInstance, ...]:
     """模型输出的 instances 数组解析（工单 module-multi-instance/06，AI 推荐侧）。
 
     形状：[{"name": 显示名, "variant": 变体}]——name 非空字符串、variant 字符串
     （null 归一空串 = 非内置色）；pin 不解析（AI 不猜，恒自动分配）。只对
-    多实例模块收 instances：slug 不在能力清单内 = 没有能力证据，大声失败
-    （宁严勿假绿，与 references 幻觉同款口径）。字段缺省 / null = 无实例
-    （单默认实例，旧行为；null = 无声明语义，DeepSeek 常对非多实例模块
-    补显式 null，不能当幻觉打——空数组则照打：显式声明了数组形状）。任何
+    多实例模块收 instances：slug 不在能力清单内 = 没有能力证据，见下面两条
+    降级 / 拒收判据。字段缺省 / null = 无实例（单默认实例，旧行为；null =
+    无声明语义，DeepSeek 常对非多实例模块补显式 null，不能当幻觉打）。任何
     形状问题抛 SelectionError。
+
+    单元素确定性降级（工单 real-acceptance/11 方向 ②）：非多实例模块带
+    **长度 ≤ 1** 的 instances 数组不再拒收——降级为「无实例（默认单实例）」，
+    并往 degraded 记一条可见标注（slug → INSTANCES_DEGRADED_NOTE）。**恒等
+    变换**论证（为什么不违反「宁严勿假绿」）：该模块只能出单默认实例，生成侧
+    expand_instances 对非多实例模块的非空清单本来就大声抛错，丢弃这 1 个实例
+    后走的正是它唯一可能成功的路径——产物逐字节不变，丢的不是信息，是一次
+    无谓的拒绝（每次手滑 = 一次分钟级调用白花）。元素形状不参与判决（数组
+    整体丢弃、内容无从生效，判据只有「长度」这一条确定性线）。
+
+    为什么长度 0 也降级（工单 11 方向 ① 现场取证推翻了「真违规 = 非空数组」
+    的初判）：2026H/mspm0 三次真实推荐抓到的 4 条违规现场**全部是 `[]`**
+    （`.scratch/recommend-domain-reject/instances-shape-22.txt`）——模型把
+    `"instances": []` 当「无实例」的默认写法，给几乎每个模块条目都补上，
+    同批里唯一的非空形态出现在真多实例模块 key 上（合法）。0 元素语义上
+    就**等于**无声明（null / 缺省），降级比单元素更彻底地是恒等变换；
+    不降级则现场违规一条不减、本次修复的目标落空。**长度 ≥ 2 仍拒收**
+    （要 2 个以上而模块没有能力 = 真幻觉；静默降级会改变用户要的硬件），
+    照旧走带理由重试；null / 缺省现状不变（本来就是无实例）。
     """
     if raw is None:
         return ()
     if slug not in multi_instance:
+        if isinstance(raw, list) and len(raw) <= 1:
+            degraded[slug] = INSTANCES_DEGRADED_NOTE
+            return ()
         raise SelectionError(f"模块 {slug} 不支持多实例，不能带 instances")
     if not isinstance(raw, list):
         raise SelectionError(f"{path} 的 instances 必须是数组")
@@ -1048,8 +1086,36 @@ def _record_instances(
     instances[slug] = tuple(merged)
 
 
+def _degraded_notes_for_modules(
+    degraded: Mapping[str, str], modules: Sequence[str]
+) -> dict[str, str]:
+    """降级标注按最终模块清单裁剪（同组互斥收敛剔掉的模块不留标注）。
+
+    标注是「给用户看的模块级注记」，模块没进 selected 就无从展示；载荷与
+    reason 追加共用本判据，保证两处口径一致（单源）。
+    """
+    if not degraded:
+        return {}
+    kept = set(modules)
+    return {slug: note for slug, note in degraded.items() if slug in kept}
+
+
+def _reason_with_note(reason: str, note: str) -> str:
+    """模块推荐理由 + 降级标注（用户可见通道：推荐卡 chip 副标题就是 reason）。
+
+    无标注 = reason 逐字不变（旧载荷逐字节兼容）；空理由 = 只留标注（不留
+    前导空格）。
+    """
+    if not note:
+        return reason
+    return f"{reason} {note}" if reason else note
+
+
 def _parse_plain_modules(
-    raw_modules: Sequence[Any], known: set[str], multi_instance: set[str]
+    raw_modules: Sequence[Any],
+    known: set[str],
+    multi_instance: set[str],
+    degraded: dict[str, str],
 ) -> tuple[list[str], dict[str, str], dict[str, tuple[ModuleInstance, ...]]]:
     """旧契约的 modules 数组解析（无功能需求层时的顶层模块）。"""
     modules: list[str] = []
@@ -1071,7 +1137,13 @@ def _parse_plain_modules(
         _record_instances(
             instances,
             slug,
-            _parse_model_instances(item.get("instances"), slug, multi_instance, f"modules[{index}]"),
+            _parse_model_instances(
+                item.get("instances"),
+                slug,
+                multi_instance,
+                f"modules[{index}]",
+                degraded,
+            ),
         )
         modules.append(slug)
         reasons[slug] = reason
@@ -1083,6 +1155,7 @@ def _parse_requirements(
     known: set[str],
     hardware_words: Sequence[HardwareWordGroup],
     multi_instance: set[str],
+    degraded: dict[str, str],
 ) -> tuple[
     tuple[FunctionRequirement, ...],
     list[str],
@@ -1095,6 +1168,8 @@ def _parse_requirements(
     句子编号，找不出对应句的需求即脑补）、modules（库内命中，slug 必须
     在库内且需求内不重复，条目可带 instances 数组——多实例推荐，工单
     module-multi-instance/06）、suggestions（库外建议，name 词表校验）。
+    degraded = 单元素实例降级标注收集器（工单 real-acceptance/11，见
+    _parse_model_instances）。
     """
     if not isinstance(raw, list):
         raise SelectionError("requirements 必须是数组")
@@ -1150,6 +1225,7 @@ def _parse_requirements(
                     slug,
                     multi_instance,
                     f"requirements[{index}] modules[{m_index}]",
+                    degraded,
                 ),
             )
             slugs.append(slug)
@@ -1978,9 +2054,21 @@ def run_recommendation(
             **_dropped,
         },
     )
+    # 实例降级标注（工单 real-acceptance/11 方向 ②）：按最终模块清单裁剪
+    # （上面的第二道收敛可能又剔掉成员），两处消费同一份——① 模块 reason 追加
+    # （推荐卡 chip 副标题 = 既有可见通道，用户看得见，零前端改动）；② 载荷
+    # instances_degraded 键（机器可见，非空才落键，零降级 = 旧载荷逐字节不变）。
+    degraded_notes = _degraded_notes_for_modules(
+        selection.instances_degraded, selection.modules
+    )
     result: dict[str, Any] = {
         "modules": [
-            {"slug": slug, "reason": selection.reasons.get(slug, "")}
+            {
+                "slug": slug,
+                "reason": _reason_with_note(
+                    selection.reasons.get(slug, ""), degraded_notes.get(slug, "")
+                ),
+            }
             for slug in selection.modules
         ],
         "requirements": [
@@ -1988,6 +2076,8 @@ def run_recommendation(
             for requirement in selection.requirements
         ],
     }
+    if degraded_notes:
+        result["instances_degraded"] = dict(degraded_notes)
     if selection.score_points:
         result["score_points"] = [
             point.to_dict() for point in selection.score_points

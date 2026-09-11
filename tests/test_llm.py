@@ -7077,15 +7077,20 @@ def test_truncated_select_failure_reaches_user_without_key_blame():
 
 
 # 域拒绝现场载荷（工单 real-acceptance/03 三条用例共用）：非多实例模块 dht11
-# 被手滑带上 instances——真机现场「模块 oled / huidu / pid / k230 不支持多实例，
-# 不能带 instances」的最小复现。
+# 被手滑带上 **2 个** instances——真机现场「模块 oled / huidu / pid / k230
+# 不支持多实例，不能带 instances」的最小复现。长度取 2 而非 1（工单
+# real-acceptance/11 方向 ② 之后，单元素形态已在解析层确定性降级、不再拒收），
+# 这样这三条用例钉住的仍是「真幻觉 → 域拒绝 → 带理由重试」这条链。
 DOMAIN_REJECTED_JSON = json.dumps(
     {
         "modules": [
             {
                 "slug": "dht11",
                 "reason": "r",
-                "instances": [{"name": "a", "variant": "x"}],
+                "instances": [
+                    {"name": "a", "variant": "x"},
+                    {"name": "b", "variant": "y"},
+                ],
             }
         ]
     }
@@ -7119,6 +7124,28 @@ def test_select_domain_rejection_retries_once_with_reason_then_succeeds():
     assert "不支持多实例" in retry_user_message  # 理由原文带上
     assert "不要重复" in retry_user_message  # 明确要求换一种输出
     assert len(retry_user_message) > len(transport.calls[0][2]["messages"][1]["content"])
+
+
+def test_select_domain_retry_feedback_says_how_to_fix():
+    """反馈段从「一句内部事实」变「怎么改」（工单 real-acceptance/11 方向 ③）：
+    光说「模块 X 不支持多实例」模型不知道下一步做什么，补一段可操作改法——
+    先删（删掉 instances 用默认单实例）后换（改选带「多实例」标注的模块 /
+    库外硬件名降级为词表类别名）。同一段覆盖三类域拒绝，不做理由串分支。"""
+    transport = SequenceTransport(
+        [_api_response(DOMAIN_REJECTED_JSON), _api_response(SELECTION_JSON)]
+    )
+    llm = _llm(transport)
+
+    llm.select_modules(
+        "设计一个环境监测仪", [ManifestSummary("dht11", "温湿度传感器驱动")]
+    )
+
+    retry_user_message = transport.calls[1][2]["messages"][1]["content"]
+    assert "怎么改" in retry_user_message
+    assert "删掉系统不认的字段" in retry_user_message
+    assert "默认单实例" in retry_user_message
+    assert "多实例" in retry_user_message  # 改选带「多实例」标注的模块
+    assert "类别名" in retry_user_message  # 库外硬件名的改法
 
 
 def test_select_domain_rejection_retry_is_capped_at_one():

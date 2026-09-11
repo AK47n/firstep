@@ -1,0 +1,246 @@
+[红证] 库内多实例能力清单（2 条）：key, led
+[红证] 现场 4 条违规 / 61 个 instances 形态：
+
+  · 现场异常：模块 oled 不支持多实例，不能带 instances
+    形态：requirements[2].modules[0] slug=key type=list len=1 value=[{"name": "启动按键", "variant": "start"}]
+    判决：通过 → instances={'key': (ModuleInstance(name='启动按键', variant='start', pin=''),)} instances_degraded={}
+
+  · 现场异常：模块 oled 不支持多实例，不能带 instances
+    形态：requirements[3].modules[0] slug=oled type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'oled': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 oled 不支持多实例，不能带 instances
+    形态：requirements[4].modules[0] slug=xunji type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'xunji': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 oled 不支持多实例，不能带 instances
+    形态：requirements[4].modules[1] slug=pid type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'pid': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 oled 不支持多实例，不能带 instances
+    形态：requirements[4].modules[2] slug=huidu type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'huidu': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 oled 不支持多实例，不能带 instances
+    形态：requirements[5].modules[0] slug=ir_beam type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'ir_beam': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 oled 不支持多实例，不能带 instances
+    形态：requirements[6].modules[0] slug=motor type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'motor': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 oled 不支持多实例，不能带 instances
+    形态：requirements[7].modules[0] slug=step_motor type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'step_motor': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 oled 不支持多实例，不能带 instances
+    形态：requirements[8].modules[0] slug=k230 type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'k230': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 oled 不支持多实例，不能带 instances
+    形态：requirements[8].modules[1] slug=coord_detect type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'coord_detect': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 oled 不支持多实例，不能带 instances
+    形态：requirements[9].modules[0] slug=pid type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'pid': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 oled 不支持多实例，不能带 instances
+    形态：requirements[10].modules[0] slug=pid type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'pid': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 oled 不支持多实例，不能带 instances
+    形态：requirements[11].modules[0] slug=pid type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'pid': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[0].modules[0] slug=k230 type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'k230': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[2].modules[0] slug=key type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[3].modules[0] slug=xunji type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'xunji': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[3].modules[1] slug=motor type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'motor': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[3].modules[2] slug=pid type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'pid': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[4].modules[0] slug=ml_mpu6050 type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'ml_mpu6050': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[5].modules[0] slug=ntb_time type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'ntb_time': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[5].modules[1] slug=oled type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'oled': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[6].modules[0] slug=step_motor type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'step_motor': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[6].modules[1] slug=k230 type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'k230': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[7].modules[0] slug=k230 type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'k230': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[7].modules[1] slug=step_motor type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'step_motor': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[8].modules[0] slug=k230 type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'k230': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[8].modules[1] slug=step_motor type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'step_motor': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[0].modules[0] slug=k230 type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'k230': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[1].modules[0] slug=xunji type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'xunji': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[1].modules[1] slug=motor type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'motor': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[1].modules[2] slug=key type=list len=1 value=[{"name": "启动按键", "variant": "start"}]
+    判决：通过 → instances={'key': (ModuleInstance(name='启动按键', variant='start', pin=''),)} instances_degraded={}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[1].modules[3] slug=pid type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'pid': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[1].modules[4] slug=ntb_time type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'ntb_time': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[2].modules[0] slug=oled type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'oled': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[3].modules[0] slug=step_motor type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'step_motor': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[3].modules[1] slug=k230 type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'k230': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[4].modules[0] slug=xunji type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'xunji': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[4].modules[1] slug=step_motor type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'step_motor': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[5].modules[0] slug=xunji type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'xunji': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[5].modules[1] slug=step_motor type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'step_motor': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[6].modules[0] slug=step_motor type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'step_motor': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[6].modules[1] slug=k230 type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'k230': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[7].modules[0] slug=imu_uart type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'imu_uart': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[0].modules[0] slug=k230 type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'k230': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[2].modules[0] slug=key type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[2].modules[1] slug=huidu type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'huidu': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[2].modules[2] slug=motor type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'motor': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[2].modules[3] slug=pid type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'pid': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[3].modules[0] slug=ntb_time type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'ntb_time': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[3].modules[1] slug=lcd type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'lcd': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[5].modules[0] slug=step_motor type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'step_motor': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[5].modules[1] slug=k230 type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'k230': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[5].modules[2] slug=coord_detect type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'coord_detect': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[5].modules[3] slug=pid type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'pid': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[6].modules[0] slug=k230 type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'k230': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[6].modules[1] slug=step_motor type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'step_motor': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[7].modules[0] slug=k230 type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'k230': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[7].modules[1] slug=step_motor type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'step_motor': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[8].modules[0] slug=k230 type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'k230': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[8].modules[1] slug=step_motor type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'step_motor': '（不支持多实例，已按默认单实例处理）'}
+
+  · 现场异常：模块 k230 不支持多实例，不能带 instances
+    形态：requirements[9].modules[0] slug=imu_uart type=list len=0 value=[]
+    判决：通过 → instances={} instances_degraded={'imu_uart': '（不支持多实例，已按默认单实例处理）'}

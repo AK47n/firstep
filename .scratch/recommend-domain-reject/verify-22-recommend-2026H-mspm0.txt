@@ -1,0 +1,11 @@
+⚠ 锚点命中 0 处（跳过该注入点）：'raise LLMError(\n                        "模块选择输出异常超'
+[探针] 注入诊断行完成（磁盘 llm.py 零改动）；topic=2026H platform=mspm0 attempts=2
+
+===== 第 1/2 次真实推荐 =====
+[装配] 清单行 84 条（截断=False）note=''
+[结果] 终态 done；收敛轮次 [1, 2, 3, 4]；补问 0 条；视觉消化 0 次
+[done] 模块 8：k230, key, oled, ntb_time, xunji, servo, motor, ml_mpu6050
+[done] 多实例猜测：{"key": [{"name": "启动按键", "variant": "start", "pin": ""}]}
+[done] 功能需求层 13 条；互斥组 2 个；参考资料 2 条
+[落盘] done 载荷 → C:\Users\luoji\Desktop\firstep\.scratch\recommend-domain-reject\done-22-2026H-mspm0.json
+[未收敛] 见上面 [PROBE16] 行与终态 data
