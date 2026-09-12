@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=91c1b3a81080eea298b2ff9583fa8d2431baa6e3 -->
+<!-- changelog-auto: last-commit=4012b85b3cb9a2fea6f37c948ea4468615f276f8 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -38,6 +38,7 @@
 - 19:40 fix(引脚): 谓词改「并列全成立」——多条门禁并存时下发 `constraints` 数组（此前单条 `constraint` 字段把槽位谓词吞掉，默认脚种子下 37 条同型假绿）；前端 `pinModelConstraints` / `pinConstraintHolds` 全部成立才可绑，原因给第一条不成立的（工单 mspm0-slot-conflict/04）
 - 19:40 test(引脚): 全库（93 模块 / mspm0 176 角色 + stm32 201 角色）累积态对拍两相（空种子 + 默认脚种子）钉零分歧；反向验证两处停用分别回到 188/52 与 37（`reverse-verify-pair-predicate.txt`）
 - 19:40 docs(工单): 工单 03「不做」里那条全库线索结清 + 新工单 05「成对联动搬」（成对角色在界面上搬不动 = 后端口径 vs 单角色绑一脚交互的缺口，本单记账不修）
+- 19:51 fix(引脚判据): 槽位互斥进判据模型 + 全库累积态相收口 + uart/i2c 成对联动搬（工单 02-05）
 
 ## 2026-09-11
 - 09:29 ﻿fix: 推荐域拒绝不再被吞成通用话术——kind=domain 分流 + 带理由重试一次（工单 real-acceptance/03）
