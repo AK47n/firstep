@@ -739,6 +739,132 @@ def test_entry_stats_counts_framework_dir(tmp_path):
     assert total > len("/* 框架段 */\n")
 
 
+def _mirror_entry(tmp_path, files=None):
+    """建一个条目并按「条目标题 = 镜像目录名」在其下造 sources/materials 镜像。"""
+    root = _reference_root(tmp_path)
+    entry = add_reference(
+        root,
+        title="ALX 套件资料",
+        type="开发板资料",
+        description="x",
+        anchor_kind=ANCHOR_KIND_NONE,
+        anchor_value="",
+        files=files or _sample_files(),
+        kit_vocabulary=(),
+    )
+    mirror = tmp_path / "materials" / entry.title
+    mirror.mkdir(parents=True, exist_ok=True)
+    return root, entry, mirror
+
+
+def test_entry_index_stats_counts_mirror_only_files(tmp_path):
+    """索引素材口径（工单 reference-volume-dual-metric/01）：清单留痕、本体在
+    sources/materials 镜像的二进制件由 entry_index_stats 单独算出——entry_stats
+    的磁盘口径看不见它们，浏览层「体量」列靠这一路补全。"""
+    root, entry, mirror = _mirror_entry(tmp_path)
+    (mirror / "子目录").mkdir()
+    (mirror / "手册.pdf").write_bytes(b"x" * 100)
+    (mirror / "子目录" / "视频.mp4").write_bytes(b"y" * 250)
+    (root / entry.id / "素材清单.txt").write_text(
+        "素材目录（sources/materials）文件清单：\n\n"
+        "手册.pdf  100 bytes\n子目录/视频.mp4  250 bytes\n",
+        encoding="utf-8",
+    )
+
+    assert reference_library.entry_index_stats(root, entry.id) == (2, 350)
+    # 磁盘口径不变（example.c + reference.json + 素材清单.txt），两侧互不重复
+    count, _ = reference_library.entry_stats(root / entry.id)
+    assert count == 3
+
+
+def test_entry_index_stats_excludes_disk_backed_manifest_paths(tmp_path):
+    """清单路径若已是条目目录里的实体文件，不计入索引口径——两侧相加 =
+    可服务文件全集，不重复计数（文本副本与镜像摘要并存时的边界）。"""
+    root, entry, mirror = _mirror_entry(tmp_path)
+    (mirror / "手册.pdf").write_bytes(b"x" * 100)
+    (mirror / "example.c").write_text(EXAMPLE_C, encoding="utf-8")
+    (root / entry.id / "素材清单.txt").write_text(
+        "素材目录（sources/materials）文件清单：\n\n"
+        f"example.c  {len(EXAMPLE_C)} bytes\n手册.pdf  100 bytes\n",
+        encoding="utf-8",
+    )
+
+    assert reference_library.entry_index_stats(root, entry.id) == (1, 100)
+
+
+def test_entry_index_stats_no_double_count_when_mirror_and_disk_share_path(tmp_path):
+    """同路径两侧都有（条目目录实体 + 镜像件）= 只算一次。
+
+    「文本副本入库 + 完整副本走镜像」是本库的既定形态（C7 / ALX 套件条目）：
+    解析优先命中条目目录，故该路径已是实体，索引口径必须排除，否则体量列
+    会把同一个文件算两遍（file_count + index_count > 可服务文件数）。
+    """
+    root, entry, mirror = _mirror_entry(tmp_path)
+    # 条目目录里新增一个文本副本，镜像里同名同路径也有（内容可不同——如实况）
+    (root / entry.id / "使用说明.txt").write_text("要点", encoding="utf-8")
+    (mirror / "使用说明.txt").write_text("要点与图示", encoding="utf-8")
+    (mirror / "另外的手册.pdf").write_bytes(b"z" * 64)
+    (root / entry.id / "素材清单.txt").write_text(
+        "".join([
+            "素材目录（sources/materials）文件清单：\n\n",
+            "使用说明.txt  6 bytes\n",
+            "另外的手册.pdf  64 bytes\n",
+        ]),
+        encoding="utf-8",
+    )
+
+    assert reference_library.entry_index_stats(root, entry.id) == (1, 64)
+    # 不变式：素材实体（条目目录里属可服务集的那些，不含 reference.json /
+    # 素材清单.txt 这类索引控制文件）+ 索引素材 = 可服务文件全集，不重不漏
+    served = set(reference_library._entry_file_records(root, entry.id))
+    disk_served = {rel for rel in served if (root / entry.id / rel).is_file()}
+    index_count = reference_library.entry_index_stats(root, entry.id)[0]
+    assert len(disk_served) + index_count == len(served) == 4
+    assert "使用说明.txt" in disk_served        # 同路径以实体为准
+    assert "另外的手册.pdf" not in disk_served  # 只有镜像件的那条走索引口径
+
+
+def test_entry_index_stats_zero_for_pure_code_entry(tmp_path):
+    """纯代码条目（无镜像件 / 无清单）= 索引口径 0，存量行为不变。"""
+    root = _reference_root(tmp_path)
+    entry = add_reference(
+        root,
+        title="纯代码条目",
+        type="例程代码",
+        description="x",
+        anchor_kind=ANCHOR_KIND_TOPIC,
+        anchor_value="2021F",
+        files=_sample_files(),
+        kit_vocabulary=(),
+    )
+    assert reference_library.entry_index_stats(root, entry.id) == (0, 0)
+
+
+def test_entry_index_stats_unknown_entry_raises(tmp_path):
+    root = _reference_root(tmp_path)
+    with pytest.raises(reference_library.ReferenceError):
+        reference_library.entry_index_stats(root, "不存在的条目")
+
+
+def test_references_api_reports_index_volume(tmp_path):
+    """浏览端点带出索引口径：条目目录实况与索引素材分开给，前端相加即总量。"""
+    root, entry, mirror = _mirror_entry(tmp_path)
+    (mirror / "手册.pdf").write_bytes(b"x" * 100)
+    (root / entry.id / "素材清单.txt").write_text(
+        "素材目录（sources/materials）文件清单：\n\n手册.pdf  100 bytes\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / ".contest_generator" / "config.json"
+    _write_config(config_path, _kit_library(tmp_path))
+    # 端点读 reference_library_dir(module_library_dir) —— 让模块库的兄弟目录即本条目库
+    client = TestClient(create_app(AppContext(config_path=config_path)))
+    listed = {item["id"]: item for item in client.get("/api/references").json()}
+
+    data = listed[entry.id]
+    assert data["index_count"] == 1
+    assert data["index_bytes"] == 100
+
+
 def test_entry_stats_counts_whole_dir_including_unlisted_strays(tmp_path):
     """体量 = 磁盘实况（磁盘目录即数据库）：清单外的散文件也如实计入。
 

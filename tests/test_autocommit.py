@@ -458,6 +458,9 @@ _WRITE_FUNCTION_REGISTRY: dict[str, dict[str, tuple[str, str]]] = {
         # 两支先后合入 main 都不红
         "entry_stats": ("read", ""),
         "entry_mtime": ("read", ""),   # ux-polish-02/07：浏览层「最近更新」mtime（只读不落盘）
+        # 体量双口径（工单 reference-volume-dual-metric/01）：索引素材口径
+        # （清单留痕、本体在 sources/materials 镜像的二进制件），纯读盘
+        "entry_index_stats": ("read", ""),
         "get_reference": ("read", ""),
         "search_references": ("read", ""),
         "delete_reference": ("commit", "lib: delete reference"),

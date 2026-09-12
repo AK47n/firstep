@@ -77,7 +77,7 @@ export function refSortEntries(entries, s) {
   const by = (s && s.by) || "title";
   const dir = (s && s.dir) === "desc" ? -1 : 1;
   const key = (e) => {
-    if (by === "size") return Number(e.size_bytes || 0);
+    if (by === "size") return refServedTotal(e);   // 与体量列同口径（实体 + 索引素材）
     if (by === "files") return Number(e.file_count != null ? e.file_count : (e.files || []).length);
     if (by === "mtime") return Number(e.mtime || 0);   // 最近更新（ux-polish-02/08）
     if (by === "type") return String(e.type || "");
@@ -107,7 +107,7 @@ export function refStats(entries, ctx) {
   for (const e of list) {
     if (platforms[e.platform] != null) platforms[e.platform] += 1;
     if (anchorKinds[e.anchor_kind] != null) anchorKinds[e.anchor_kind] += 1;
-    totalBytes += Number(e.size_bytes || 0);
+    totalBytes += refServedTotal(e);   // 与体量列同口径（实体 + 索引素材）
   }
   const dangling = ctx
     ? refDanglingAnchors(list, ctx.topicKeys, ctx.kitVocab).length : 0;
@@ -170,7 +170,7 @@ export function refRowHTML(entry, f) {
     <td>${entry.topic_type ? esc(entry.topic_type) : '<span class="muted">—</span>'}</td>
     <td class="muted">${refAnchorBadge(entry)}${referencePlatformChip(entry)}${dangling ? '<span class="ref-dangling-tag" title="锚定值不命中任何库内赛题 / 套件，生成时不会自动关联（点「编辑」改正锚定）">⚠</span>' : ""}</td>
     <td class="desc-cell" title="${esc(desc)}">${esc(desc)}</td>
-    <td class="muted" title="${esc(`${(entry.files || []).length} 个素材文件，路径清单见磁盘目录`)}">${esc(entry.file_count)} 个文件 · ${formatSize(entry.size_bytes)}</td>
+    <td class="muted" title="${esc(refVolumeTitle(entry))}">${esc(refVolumeText(entry))}</td>
     <td><button data-ref-view="${esc(entry.id)}" title="查看条目详情">详情</button> <button data-ref-edit="${esc(entry.id)}" title="编辑条目元数据与文件">编辑</button> <button class="danger" data-ref-del="${esc(entry.id)}">删除</button></td>
   </tr>`;
 }
@@ -184,7 +184,8 @@ export function refDetailHTML(entry, files) {
     <div class="ref-detail-row"><span class="ref-detail-k">类型</span><span>${esc(entry.type)}</span></div>
     <div class="ref-detail-row"><span class="ref-detail-k">锚定</span><span>${refAnchorBadge(entry)}${referencePlatformChip(entry)}${referenceTopicTypeChip(entry)}</span></div>
     <div class="ref-detail-row"><span class="ref-detail-k">简介</span><span class="ref-detail-desc">${esc(entry.description)}</span></div>
-    <div class="ref-detail-row"><span class="ref-detail-k">体量</span><span>${esc(entry.file_count)} 个文件 · ${formatSize(entry.size_bytes)}</span></div>
+    <div class="ref-detail-row"><span class="ref-detail-k">体量</span><span>${esc(refVolumeText(entry))}</span></div>
+    ${Number(entry.index_count || 0) ? `<div class="ref-detail-row"><span class="ref-detail-k">索引素材</span><span class="muted">${esc(`${entry.index_count} 个 · ${formatSize(Number(entry.index_bytes || 0))}——清单留痕、本体在 sources/materials 镜像，下列清单可逐个打开`)}</span></div>` : ""}
   </div>
   <input class="ref-files-filter" placeholder="过滤文件名…">
   <ul class="ref-files-list">
@@ -262,6 +263,52 @@ export function refEditPayload(fields, plan) {
   };
 }
 
+// refFileOpenKind(path) → "inline" | "download"：按扩展名决定条目文件的打开
+// 方式。inline = 新窗口内联（浏览器原生预览：PDF 阅读器 / 视频播放器 / 图片
+// 查看器——服务端 FileResponse 带 Accept-Ranges，mp4 可拖动进度条流式播放）；
+// download = 新窗口触发下载（zip / rar / bin 固件等逐字节落盘）。资料库混装
+// 固件与视频（如 ESP32-CAM 批次的烧录工具 rar + 使用教程 mp4），原先 UI 只对
+// .pdf 新窗口预览、其余一律当下载——本条把视频/音频/图片并入内联组。
+const REF_INLINE_EXTENSIONS = [
+  "pdf",
+  "mp4", "webm", "ogv", "mov", "m4v", "avi",
+  "mp3", "wav", "ogg", "m4a", "flac",
+  "png", "jpg", "jpeg", "gif", "webp", "bmp", "svg",
+];
+export function refFileOpenKind(path) {
+  const lower = String(path || "").toLowerCase();
+  const ext = lower.includes(".") ? lower.split(".").pop() : "";
+  return REF_INLINE_EXTENSIONS.includes(ext) ? "inline" : "download";
+}
+
+// refServedTotal(entry)：条目可服务体量合计字节 = 实体文件（条目目录磁盘实况）
+// + 索引素材（素材清单留痕、本体在 sources/materials 镜像的二进制件）。两个
+// 口径由服务端分别给出（size_bytes / index_bytes），相加即用户在库里能拿到的
+// 全部素材；索引口径缺字段（旧响应 / 无镜像件）= 0，不影响存量语义。
+export function refServedTotal(entry) {
+  return Number(entry.size_bytes || 0) + Number(entry.index_bytes || 0);
+}
+
+// refVolumeText(entry)：体量列文案。有索引素材时按「N 个文件 · 总量」呈现，
+// 并在括号里标明索引件数与索引体积（磁盘口径看不见镜像件，分开标才不撒谎；
+// 例：2 个文件 · 83.4 MB（另含 13 个索引素材 · 83.4 MB））。
+export function refVolumeText(entry) {
+  const indexed = Number(entry.index_count || 0);
+  const base = `${entry.file_count} 个文件 · ${formatSize(entry.size_bytes)}`;
+  if (!indexed) return base;
+  return `${entry.file_count} 个文件 · ${formatSize(refServedTotal(entry))}`
+    + `（另含 ${indexed} 个索引素材 · ${formatSize(Number(entry.index_bytes || 0))}）`;
+}
+
+// refVolumeTitle(entry)：体量列的悬停说明（两个口径各自的定义，人查得到依据）。
+export function refVolumeTitle(entry) {
+  const indexed = Number(entry.index_count || 0);
+  if (!indexed) return `${(entry.files || []).length} 条清单记录 · ${entry.file_count} 个实体文件`;
+  return `实体文件 ${entry.file_count} 个（条目目录内，含 reference.json）`
+    + ` ＋ 索引素材 ${indexed} 个（素材清单.txt 留痕、本体在 sources/materials 镜像，点「详情」逐个打开）`
+    + ` ＝ 可服务 ${entry.file_count + indexed} 个 · ${formatSize(refServedTotal(entry))}`;
+}
+
 if (typeof window !== "undefined") {
-  Object.assign(window, { referencePlatformChip, referenceTopicTypeChip, refFilterEntries, refDanglingAnchors, refSortEntries, refStats, refStatsText, refMatchFiles, refAnchorBadge, refChipRowHTML, refRowHTML, refDetailHTML, refEditState, refEditValidate, refEditFilePlan, refEditPayload });
+  Object.assign(window, { referencePlatformChip, referenceTopicTypeChip, refFilterEntries, refDanglingAnchors, refSortEntries, refStats, refStatsText, refMatchFiles, refAnchorBadge, refChipRowHTML, refRowHTML, refDetailHTML, refEditState, refEditValidate, refEditFilePlan, refEditPayload, refFileOpenKind });
 }

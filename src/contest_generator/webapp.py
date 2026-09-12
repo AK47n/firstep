@@ -244,6 +244,7 @@ from .reference_library import (
     add_reference,
     delete_reference,
     draft_description as reference_draft_description,
+    entry_index_stats,
     list_entry_files,
     match_entry_files,
     module_kit_vocabulary,
@@ -4935,6 +4936,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
         文件名过滤时每条目附 matched_files（命中文件路径列表）——搜索直出
         文件，免"查看 → 清单 → 翻找"两跳；未过滤时不含该字段（向后兼容）。
+        每条目另附 index_count / index_bytes（索引素材：素材清单.txt 留痕、
+        本体在 sources/materials 镜像的二进制件——file_count / size_bytes 是
+        条目目录磁盘实况，看不见它们，两口径分别呈现，前端相加即总量）。
         """
         config = _require_config(context)
         reference_root = reference_library_dir(config.module_library_dir)
@@ -4948,6 +4952,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         ):
             data = entry.to_dict()
             data["mtime"] = entry.mtime   # ux-polish-02/07：浏览层「最近更新」排序（只进响应）
+            index_count, index_bytes = entry_index_stats(reference_root, entry.id)
+            data["index_count"] = index_count
+            data["index_bytes"] = index_bytes
             if filename.strip():
                 data["matched_files"] = match_entry_files(
                     reference_root, entry.id, filename

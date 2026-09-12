@@ -261,6 +261,30 @@ def entry_stats(entry_dir: Path) -> tuple[int, int]:
     return count, total
 
 
+def entry_index_stats(reference_root: Path, entry_id: str) -> tuple[int, int]:
+    """条目「索引素材」体量：(条数, 字节数)——只算**不在条目目录里**的可服务文件。
+
+    条目可服务文件全集 = 素材清单.txt 记录 + 条目目录实际文件（_entry_file_records）。
+    镜像件（PDF / mp4 / exe 等二进制素材，本体在 sources/materials/<条目标题>/ 下）
+    只有清单留痕、不落条目目录，故 entry_stats 的磁盘口径看不见它们——浏览层
+    「体量」列只报磁盘那几件（如某套件条目显示「2 个文件 · 3.2 KB」而清单实为
+    15 条）。本函数把该差额单独算出来，供响应层同时呈现两个口径，语义边界清楚：
+    清单里的路径若在条目目录里已是实体文件（文本副本），不计入索引口径，两侧
+    相加 = 可服务文件全集，不重复计数。
+
+    size 缺失（清单记录 -1，stat 失败留痕行）按 0 计；条目不存在抛 ReferenceError。
+    """
+    entry_dir = reference_root / entry_id
+    count = 0
+    total = 0
+    for rel, size in _entry_file_records(reference_root, entry_id).items():
+        if (entry_dir / Path(*rel.split("/"))).is_file():
+            continue
+        count += 1
+        total += max(size, 0)
+    return count, total
+
+
 def entry_mtime(entry_dir: Path) -> int:
     """条目元数据 mtime（reference.json 修改时间，epoch 秒）——浏览层
     「最近更新」排序数据源（ux-polish-02/07）；不写入元数据文件本身
