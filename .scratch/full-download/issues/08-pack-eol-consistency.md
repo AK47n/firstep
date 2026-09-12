@@ -13,9 +13,19 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** claimed（2026-09-18 开工；口径已定 = 推荐 A，但做法比 A 更省——见下）
+**状态：** resolved
 
-- [x] **定口径：A（统一成 git 口径）**。落地方式与工单原文的设想不同，理由与实测如下：
+### 验证结果（2026-09-18 真机）
+
+| 项 | 结果 | 证据 |
+|---|---|---|
+| 真实仓库跨包逐字节 | **共有文件 3480 个，字节差异 = 0**（完整包 8780 个文件 / 小发版 5042 个；完整包 25.9s、小发版 11.6s） | `.scratch/full-download/verify-08-cross-pack-bytes.txt`（脚本 `verify-08-cross-pack-bytes.py`：完整包 + **真 `pack-update.ps1`** 两条路径） |
+| `.gitattributes` 物化口径未被碰坏 | `install.bat` → CRLF=83/LF=0；`.githooks/commit-msg` → CRLF=0/LF=34 | 同上 |
+| 小发版四件套自洽 | zip 条目 = `.files.txt`；`.sha256.txt` 与实测一致；空删除清单写注释行（非 0 字节） | 同上（6 项判据全 ✓） |
+| **新判据在历史包上有效性** | 对 v1.1.0 旧包报出 **926 个**差异（与工单记载一致）、v1.1.1 报 **929 个**，逐条归一化后**全部仅换行符、真实内容差异 0** | `.scratch/full-download/verify-08-historical-cross-pack.txt`（脚本 `probe-08-historical-cross-pack.py`，对拍本机保留的真实发版四件套） |
+| 回归 | pytest **4339 passed / 1 skipped**；node **1550 pass / 0 fail** | 全量实跑 |
+
+- [x] 先定口径（二选一，推荐 A）：
 
       **先把事实量清（本机真机实测，命令与结果都在）**：
 
@@ -37,8 +47,8 @@
       钉住后 archive 不做文本转换、`.gitattributes` 里显式写了 `eol` 的仍按属性物化
       （`*.bat` → CRLF、`.githooks/*` → LF），于是**更新包字节 = 工作树字节 = 完整包字节**，
       与 v1.1.0 已发布字节也一致（零额外churn）。
-- [x] 落**跨包不变量测试**：`tests/test_pack_update.py` 13 例——同一 commit 跑两个打包器断言共有文件字节逐一相等（本工单缺的守卫）；另含「钉与不钉必须不同」的红证、`core.autocrlf` true/false 两态一致、`.bat` CRLF 与 `.githooks/*` LF 不被碰坏、完整包清单 SHA256 = zip 实际字节
-- [x] 发行侧自检脚本（`verify_release_assets.py`）补「两个 zip 的共有文件字节一致」（`cross_pack_byte_diff` + `main()` 落地）
+- [x] 落**跨包不变量测试**：`tests/test_pack_update.py` 14 例——同一 commit 跑两个打包器断言共有文件字节逐一相等（本工单缺的守卫）；另含「钉与不钉必须不同」的红证、`core.autocrlf` true/false 两态一致、`.bat` CRLF 与 `.githooks/*` LF 不被碰坏、完整包清单 SHA256 = zip 实际字节
+- [x] 发行侧自检脚本（`verify_release_assets.py`）补「两个 zip 的共有文件字节一致」（`cross_pack_byte_diff` + `main()` 落地；顺带把它改成可导入——原先模块级执行，一 import 就崩）
 - [x] 重新出一次两包并实测：共有文件差异数 = 0（记录到工单）
 - [x] 确认 `full_pack` 在**非 git 目录**（测试夹具 / 用户手动打包）下行为不变，且既有单测不破（`tests/test_full_pack.py` 全绿；小发版侧另有一条「非 git 目录回退读盘」用例）
 - [x] 文档补一句：包内字节口径以哪个为准（`docs/agents/releasing.md` 小发版段落）
@@ -57,13 +67,18 @@
 | 文件 | 改动 |
 |---|---|
 | `src/contest_generator/pack_update.py` | **新增**：小发版打包核心（`git archive -c core.autocrlf=false` + `--ignore-missing`，清单过长自动分块；非 git 目录回退按清单读盘） |
-| `tools/pack-update.ps1` | 去掉裸 `git archive`，改调核心（`-B` + 绝对路径调用）；空 `removed.txt` 写注释行；SHA256 从核心输出取并与实测复核 |
+| `tools/pack-update.ps1` | 去掉裸 `git archive`，改调核心（`PYTHONPATH=src` + `-m contest_generator.pack_update`，与 `pack-full.ps1` 同款姿势）；空 `removed.txt` 写注释行；SHA256 从核心输出取并与实测复核 |
 | `src/contest_generator/full_pack.py` | 只补口径注释（**逻辑零改动**：继续读工作树） |
-| `tests/test_pack_update.py` | **新增**：13 例跨包守卫 |
-| `.scratch/full-download/verify_release_assets.py` | 补 `cross_pack_byte_diff` + `main()` 里两包对拍；改为可导入（原先模块级执行，一 import 就崩） |
+| `tests/test_pack_update.py` | **新增**：14 例跨包守卫 |
+| `.scratch/full-download/verify_release_assets.py` | 补 `cross_pack_byte_diff` + `main()` 里两包对拍；改为可导入 |
 | `.scratch/full-download/verify-08-cross-pack-bytes.py` | **新增**：真实仓库端到端验证（完整包 + 真 `pack-update.ps1` → 逐字节对拍） |
+| `.scratch/full-download/probe-08-historical-cross-pack.py` | **新增**：拿新判据照本机保留的真实发版包（判据有效性红证） |
 | `docs/agents/releasing.md` | 小发版段落补「包内字节口径」一句 |
 | `.gitignore` | 验证产物目录 `_verify08/`（真实仓库 1 GB 级分卷，脚本可重建） |
+
+**真机演练踩到的第二个坑（已修，`2d3acb8c`）**：`python -B <脚本路径>` 直接跑核心会让
+`from .full_pack import _validate_version` 报 `ImportError: attempted relative import with
+no known parent package`——必须 `PYTHONPATH=src` + `-m`。第一次端到端验证就是这么失败的。
 
 **注意（改这个特性前必读）**：`git archive` 的 EOL 行为**不受 `.gitattributes` 的 `-text` 控制**
 （实测仓库级与 `--worktree-attributes` 两种都压不住），只受 `core.autocrlf` 控制；
