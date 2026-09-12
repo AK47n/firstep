@@ -653,8 +653,8 @@ export function renderRecommendResult(data, autoAdd = true) {
         return;
       }
       // 未选态：加回工程（addModule 内部会重绘已选/警告/模块池）。expand=false +
-      // 自己走 reRenderAfterSelectionChange：推荐 chip 的选中态由**同一次重绘**刷新
-      // ——否则 chip 会停在上一次的类名上（点掉后 chip 一直显示未选，即使已在工程里）。
+      // 自己走 reRenderAfterSelectionChange：推荐 chip 的选中态与「按新集合重跑展开」
+      // 都由那一次收口负责（两处都跑会打两次请求）。
       if (!b.classList.contains("unsel")) return;   // 兜底：非 chip（旧结构）不误加
       addModule(slug, false);
       reRenderAfterSelectionChange();
@@ -675,9 +675,13 @@ export function renderRecommendResult(data, autoAdd = true) {
 
 function reRenderAfterSelectionChange() {
   // chip 移除 / 组卡单选共用：选择集变化后清空展开与警告、重绘已选/警告/推荐区
-  // （照原 data-remove 回调尾段行为——重渲染推荐卡不 autoAdd，避免重复加入）
+  // （照原 data-remove 回调尾段行为——重渲染推荐卡不 autoAdd，避免重复加入）。
+  // 顺带**按新集合重跑一次展开**（工单 module-intro-detail/07）：清掉 expanded 却
+  // 不重跑，界面会停在「已选（未展开依赖）」——把「这次变化要不要重新展开」这件事
+  // 留给调用方记，必然会漏（runExpand 内部已排队，在途时只是记一笔，不会重复打请求）。
   expanded = []; warnings = [];
   renderSelected(); renderWarnings(); renderRecommendResult(lastRecommend, false);
+  runExpand();
 }
 
 function showRecommendError(message) {
@@ -1013,31 +1017,76 @@ function addModule(slug, expand = true) {
   if (expand) runExpand();  // 添加后直接展开，步骤 7 立即可配置引脚
 }
 
-let expandBusy = false;   // 展开检查进行中（工单 ux-walkthrough-02/17：禁防连点）
+// —— 展开（/api/selection/expand）的并发收口（工单 module-intro-detail/07）——
+// 原实现 `if (expandBusy) return;` 是**静默丢弃**：展开途中再点一下（加模块 / 点 chip
+// 的 ✕ / 组卡换选）会直接返回，那次预期的展开永远不发生（引脚卡不更新、已选清单
+// 停在「未展开依赖」），而先发的那次请求带着**旧选择集**返回后又把 `expanded` 覆盖成
+// 旧集合——真机探针实测过：点回 chip 后 120ms，已选清单被刷成只剩 motor（ir_beam/pid
+// 消失）。这与「用户手速」无关，只要 expand 比点击慢就会中。
+//
+// 收口口径（两条，缺一不可）：
+//   ① **令牌**：每次请求带自增 token，返回时不是最新令牌 → 结果作废（不写 expanded /
+//      不重绘）——旧响应永远盖不掉新状态；
+//   ② **排队**：进行中再触发不丢弃，记 pending，当前请求收尾后**用最新选择集再跑一次**
+//      ——最终态必然对应「现在选的东西」，不会停在中间态。
+let expandBusy = false;     // 展开请求在途
+let expandSeq = 0;          // 请求令牌（自增）
+let expandApplied = 0;      // 已落地结果对应的令牌（过期结果判据）
+let expandPending = false;  // 在途期间又被触发（收尾后重跑一次）
+let expandBtnLabel = null;  // 按钮原始文案（首次进入时存，收尾统一还原——重跑不覆盖）
 
-export async function runExpand() {
-  if (expandBusy) return;   // 进行中禁防连点（工单 ux-walkthrough-02/17）
+function expandBegin() {
   $("expand-msg").textContent = "";
-  if (!chosenPlatform) { $("expand-msg").textContent = "请先在步骤 3 选择目标平台"; return; }
-  if (!selectedSlugs.length) { $("expand-msg").textContent = "请先选择至少一个模块"; return; }
+  if (!chosenPlatform) { $("expand-msg").textContent = "请先在步骤 3 选择目标平台"; return false; }
+  if (!selectedSlugs.length) { $("expand-msg").textContent = "请先选择至少一个模块"; return false; }
   const btn = $("btn-expand");
-  const oldLabel = btn.innerHTML;
+  if (expandBtnLabel === null) expandBtnLabel = btn.innerHTML;   // 只存一次
   expandBusy = true;
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>展开检查中…';
+  return true;
+}
+
+function expandEnd() {
+  expandBusy = false;
+  const btn = $("btn-expand");
+  btn.disabled = false;
+  if (expandBtnLabel !== null) btn.innerHTML = expandBtnLabel;
+}
+
+export async function runExpand() {
+  if (expandBusy) { expandPending = true; return; }   // 排队（不是丢弃）
+  if (!expandBegin()) return;
+  const token = ++expandSeq;
+  // 请求体快照：判「结果是否已过期」用（与令牌双保险——令牌拦旧响应，快照比对拦
+  // 「响应对得上但选择集在等待期间又变了」）
+  const snapshot = JSON.stringify([chosenPlatform, selectedSlugs]);
+  let ok = false;
   try {
     const data = await apiPost("/api/selection/expand", { slugs: selectedSlugs, platform: chosenPlatform });
-    expanded = data.modules;
-    warnings = data.warnings;
-    renderSelected(); renderWarnings();
-    clusterDeps.renderPinCard();  // 引脚配置卡（工单 03）：角色清单随展开结果重算
-    clusterDeps.renderInstanceConfig();  // 多实例配置卡（工单 04）：随展开结果重算
+    if (token > expandApplied && snapshot === JSON.stringify([chosenPlatform, selectedSlugs])) {
+      expandApplied = token;
+      expanded = data.modules;
+      warnings = data.warnings;
+      renderSelected(); renderWarnings();
+      clusterPinsRefresh();
+      ok = true;
+    }
   } catch (e) { $("expand-msg").textContent = e.message; }
   finally {
-    expandBusy = false;
-    btn.disabled = false;
-    btn.innerHTML = oldLabel;
+    expandEnd();
+    // 在途期间又被触发（或落地被跳过）→ 用**当前**选择集再跑一次，收敛到最新态
+    if ((expandPending || !ok) && chosenPlatform && selectedSlugs.length) {
+      expandPending = false;
+      void runExpand();
+    }
   }
+}
+
+// 引脚相关重绘（展开结果落地时才需要；集中一处便于上面复用）
+function clusterPinsRefresh() {
+  clusterDeps.renderPinCard();          // 引脚配置卡（工单 03）：角色清单随展开结果重算
+  clusterDeps.renderInstanceConfig();   // 多实例配置卡（工单 04）：随展开结果重算
 }
 
 $("btn-expand").addEventListener("click", runExpand);

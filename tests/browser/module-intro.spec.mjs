@@ -188,14 +188,73 @@ test("需求清单灰注（进了功能组的模块）+ 已选清单行：同样
   await page.close();
 });
 
+// 并发收口（工单 module-intro-detail/07）：展开比点击慢时，**过期响应不得被写进状态**
+// ——修前真机实测：点回 chip 后约 120ms，已选清单被带旧选择集的 expand 响应刷成只剩
+// motor（ir_beam/pid 一起消失），要等下一次展开才恢复。
+//
+// 口径：终态断言抓不到这种 bug（收口后的重跑总会把终态修对），所以这里用
+// MutationObserver **盯住中间帧**：整个连点过程里，已选清单任何一帧都不得丢掉
+// 当前已选的模块；并且给 expand 响应注入延迟，让「旧响应迟到」必然发生。
+test("展开并发：过期响应不写状态——连点过程任何一帧都不丢已选模块", async () => {
+  const page = await browser.newPage();
+  const problems = [];
+  page.on("pageerror", (e) => problems.push("pageerror: " + e.message));
+  // 关键：给 expand 响应注入延迟并记录请求序号 → 旧响应必然晚于新点击落地
+  let expandCalls = 0;
+  await page.route("**/api/selection/expand", async (route) => {
+    const nth = ++expandCalls;
+    await new Promise((r) => setTimeout(r, 500));   // 第一个请求故意更慢
+    return route.continue();
+  });
+  await page.route("**/api/recommend", (route) => route.fulfill({
+    status: 200, headers: { "Content-Type": "text/event-stream" }, body: sseStream(),
+  }));
+
+  await page.goto(server.url + "/", { waitUntil: "domcontentloaded" });
+  await page.locator("#platforms .platform-card", { hasText: "STM32" }).first().click();
+  await page.waitForFunction(() => document.querySelectorAll("#module-grid .module-card").length > 0);
+  await page.fill("#problem", "1. 检测物体是否经过。2. 沿黑线行驶。");
+  await page.click("#btn-recommend");
+  await page.locator('#rec-list .chip.rec[data-remove="ir_beam"]').waitFor({ state: "visible", timeout: 15000 });
+  await page.waitForFunction(() => !document.getElementById("btn-expand").disabled, undefined, { timeout: 15000 });
+
+  // 开始盯帧：记录「已选清单文本」的每一次变化
+  await page.evaluate(() => {
+    window.__frames = [];
+    const box = document.getElementById("selected-list");
+    const rec = () => window.__frames.push(box.innerText.replace(/\s+/g, " "));
+    rec();
+    new MutationObserver(rec).observe(box, { childList: true, subtree: true, characterData: true });
+  });
+
+  // 连点（展开在途时继续点）——旧响应会在这些点击之后才回来
+  const chip = () => page.locator('#rec-list .chip.rec[data-remove="ir_beam"]');
+  await chip().locator(".chip-x").click();
+  await chip().click();
+  await page.waitForFunction(() => !document.getElementById("btn-expand").disabled, undefined, { timeout: 15000 });
+  await page.waitForTimeout(800);
+
+  const frames = await page.evaluate(() => window.__frames);
+  // 中间帧不得出现「pid 在、ir_beam 不在」的塌陷态——pid 一直在选，ir_beam 点回来后也一直在选
+  const collapsed = frames.filter((f) => f.includes("pid") && !f.includes("ir_beam")
+    && !f.includes("未展开依赖"));
+  assert.deepEqual(collapsed, [],
+    "过期 expand 响应把已选清单写成了旧集合（中间帧丢失 ir_beam）：\n" + collapsed.join("\n---\n"));
+  // 终态：两个模块都在，且已展开
+  const selected = await page.locator("#selected-list").innerText();
+  assert.ok(selected.includes("ir_beam") && selected.includes("pid"), selected);
+  await page.waitForFunction(() => !document.getElementById("selected-list").innerText.includes("未展开依赖"),
+    undefined, { timeout: 10000 });
+  assert.deepEqual(problems, []);
+  await page.close();
+});
 // 回归：chip 本体是**双向选择开关**，且界面与实际必须一致（工单 module-intro-detail/06
 // 修的既有 bug：点 ✕ 后模块已从工程移除，chip 却仍显示成已选绿标——界面说在、
 // 实际不在，而且没有任何路径能加回来）。
 //
-// 断言口径说明：本用例只验「chip 选择态 ↔ 选择集」这层（本工单修的东西）。
-// 点击后后台还有一次 /api/selection/expand（依赖展开）在跑，它落地时重绘的是**已选
-// 清单**、不重绘推荐 chip；那一步的时序问题（展开期间连点会让已选清单被中间态覆盖）
-// 属另一处既有竞态，不在本单范围——见工单记录。故这里在点击的即时状态下断言。
+// 断言口径：本用例验「chip 选择态 ↔ 选择集」这层（点掉 → 未选态 + 选择集去掉；
+// 点回 → 已选态 + 选择集回填）。后台那次 /api/selection/expand 的时序收敛由上面的
+// 并发用例负责（工单 07）——两者一起才保证「界面、选择集、展开结果」三者一致。
 test("推荐 chip 选择开关：点掉变未选态、点回加回来（界面与选择集一致）", async () => {
   const { page, problems } = await openAppWithRecommend();
   const chip = page.locator('#rec-list .chip.rec[data-remove="ir_beam"]');

@@ -148,13 +148,27 @@ test("recommendChipHTML：chip 带说明按钮，选择态按 selected 渲染（
   assert.ok(recommendChipHTML("led", "").includes('data-mod-info="led"'));
 });
 
+test("generate-recommend.js：展开并发收口——排队 + 令牌作废旧响应（工单 07）", () => {
+  // 原实现是 `if (expandBusy) return;` 静默丢弃：展开途中再改选择集 → 那次展开永不发生，
+  // 旧响应落地还会覆盖成旧集合（真机实测：点回 chip 后 120ms 已选清单只剩 motor）。
+  assert.match(src, /let expandSeq = 0/);
+  assert.match(src, /let expandPending = false/);
+  assert.match(src, /if \(expandBusy\) \{ expandPending = true; return; \}/);
+  // 结果落地前判令牌 + 请求体快照（双保险）
+  assert.match(src, /token > expandApplied && snapshot === JSON\.stringify/);
+  // 收尾：有待办或本次未落地 → 用当前选择集再跑一次（收敛到最新态）
+  assert.match(src, /if \(\(expandPending \|\| !ok\) && chosenPlatform && selectedSlugs\.length\)/);
+  // 选择集变化后必须重跑展开（否则停在「已选（未展开依赖）」）
+  assert.match(src, /renderRecommendResult\(lastRecommend, false\);\n  runExpand\(\);/);
+});
+
 test("generate-recommend.js：chip 渲染带选择态 + 点击是双向开关（工单 06）", () => {
   // 渲染必须按 selectedSlugs 判选择态——照 done 载荷的 modules 渲染 = 点掉后仍显示已选
   assert.match(src, /recommendChipHTML\(slug, reason, on\)/);
   assert.match(src, /const on = selectedSlugs\.includes\(slug\)/);
   // 点击双向：已选 → 移除；未选 → 加回（否则点掉了再也加不回来）
   assert.match(src, /if \(selectedSlugs\.includes\(slug\)\)/);
-  assert.match(src, /addModule\(slug\)/);
+  assert.match(src, /addModule\(slug, false\)/);
   assert.match(src, /classList\.contains\("unsel"\)/);
 });
 
