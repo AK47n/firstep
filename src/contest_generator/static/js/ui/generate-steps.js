@@ -23,7 +23,7 @@ import { genOverviewChipsHTML, genOverviewSummaryHTML, overviewFillPlan, overvie
 import { generateReadinessChecks } from "/js/fx/readiness.js";
 import { readinessState, desktopTopicOutputEnabled, ensureOutputDirWarn, getOutputDirWarnRow, outputDirWarnCached } from "/js/ui/generate-readiness.js";  // 工单 19 迁出→静态 import（取代工单 18 接缝）；desktopTopicOutputEnabled 工单 21 归位；工单 07 总览输出目录预警共享请求
 import { stepDoneSet, stepCard, STEP_NAV_CARD_SELECTOR, markStepDone, step7WireGet, scrollToStep } from "/js/ui/step-state.js";
-import { runExpand, renderModulePool, setSelectedSlugs, setChosenPlatform, setCurrentTopicId, renderPlatforms, renderSelected, renderWarnings, renderRecommendResult, lastRecommend, selectedSlugs, chosenPlatform } from "/js/ui/generate-recommend.js";
+import { runExpand, renderModulePool, setSelectedSlugs, setChosenPlatform, setCurrentTopicId, renderPlatforms, renderSelected, renderWarnings, renderRecommendResult, lastRecommend, selectedSlugs, chosenPlatform, groupChoices, setGroupChoices } from "/js/ui/generate-recommend.js";
 import { loadPinBoard } from "/js/ui/generate-pins.js";  // 草稿恢复下游（工单 20）：平台恢复后重取板定义
 import { syncMainCHighlight } from "/js/ui/generate-mainc.js";
 import { getMainCDiskDir, setMainCDiskContext, refreshMainCDiskState } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/01）：恢复草稿时回填上下文目录并校验磁盘现状
@@ -41,7 +41,8 @@ function collectDraftState() {
     $("problem").value, $("topic-id").value,
     chosenPlatform || "", selectedSlugs,
     $("main-c").value, $("qa-text").value,
-    getMainCDiskDir()
+    getMainCDiskDir(),
+    groupChoices   // 功能组用户选择（工单 group-choice-required/01）：刷新后仍是「我点的」
   );
 }
 let draftTimer = null;
@@ -63,6 +64,9 @@ function restoreDraft() {
     markStepDone(3);
   }
   if (d.slugs.length) { setSelectedSlugs(d.slugs); markStepDone(6); }
+  // 功能组用户选择随草稿恢复（工单 group-choice-required/01）：刷新/重开页面后仍是用户点过的那一组，
+  // 不会退回「未选」而被生成门禁拦一次（旧草稿无该字段 → {} = 未选，仍要求用户点一次）
+  setGroupChoices(d.groupChoices || {});
   if (d.mainC) { $("main-c").value = d.mainC; markStepDone(8); syncMainCHighlight(); renderSkeletonRefs(); }
   if (d.qa) { $("qa-text").value = d.qa; }
   if (d.outputDir) { setMainCDiskContext(d.outputDir); void refreshMainCDiskState(); }

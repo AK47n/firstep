@@ -88,27 +88,104 @@ export function groupConflicts(groups, selectedSlugs) {
   return out;
 }
 
-export function renderGroupCards(groups, modules, selectedSlugs) {
-  // 组卡渲染：label + (hint 卡)「AI 未推荐，题面疑似需要——请确认」标注 +
-  // 成员行（radio + slug + role + 「AI 推荐」徽标与理由）。默认选中 = 组内当前
-  // 在 selectedSlugs 的成员，多个按 data.modules 序（AI 推荐序）取第一个；
-  // 不在 data.modules 的成员（用户手动加的）按组成员登记序兜底（spec:107 注：
-  // AI 首选由 data.modules 顺序决定，不依赖 recommended 字段）。
+// ---------------------------------------------------------------------------
+// 功能组「必须由用户显式选择」（工单 group-choice-required/01）
+//
+// 背景：组卡原先默认替用户勾上 AI 推荐的那一件（radio 已选），用户不点也能生成
+// ——默认值隐身。用户拍板改成：**卡上不预选**、挂「请选择」、未选即拦生成；
+// 服务端 /api/generate 与 /api/skeleton 用同一条规矩（selection.missing_group_choices）。
+//
+// 状态单源 = groupChoices（{组 id: 用户点过的成员 slug}），只有它能让 radio 变选中；
+// selectedSlugs 仍带着 AI 推荐的那一件（生成集不因「还没点」而缺件），但把选择权
+// 摆到台面上：没点就不许生成。
+// ---------------------------------------------------------------------------
+
+export function renderableGroupCards(groups) {
+  // 出卡判据与后端一致：≥2 成员才出卡（单成员组无可选）；hint 卡（AI 未推荐）
+  // 保留展示但不纳入「必须选」。
+  return (groups || []).filter((g) => (g.members || []).length >= 2);
+}
+
+export function groupChoiceRequired(group) {
+  // 待选判据：choice_required 为真（命中卡）且 ≥2 成员。旧载荷无该键 → false
+  // （历史缓存不该把用户卡死在生成前，与 spec「旧载荷一律按 false」一致）。
+  if (!group) return false;
+  if (!group.choice_required) return false;
+  return (group.members || []).length >= 2;
+}
+
+export function pendingGroupChoices(groups, choices) {
+  // 还没由用户点过的功能组（组 id → slug）；空数组 = 可以生成。
+  const picked = choices || {};
+  return renderableGroupCards(groups).filter((g) => {
+    if (!groupChoiceRequired(g)) return false;
+    const slug = picked[g.id];
+    return !(slug && (g.members || []).some((m) => m.slug === slug));
+  });
+}
+
+export function applyGroupChoices(selectedSlugs, groups, choices) {
+  // 用用户的组选择重算集合（幂等、可复算）：先移除这些**出卡组**的全部成员，
+  // 再按 choices 加回用户点过的那一个。非组模块与不在卡上的组不受影响；
+  // hint 卡与旧载荷（无 choice_required）视为「无选择」→ 保持原集合不动。
+  const cards = renderableGroupCards(groups).filter((g) => groupChoiceRequired(g));
+  const groupMembers = new Set();
+  for (const g of cards) for (const m of (g.members || [])) groupMembers.add(m.slug);
+  const out = (selectedSlugs || []).filter((s) => !groupMembers.has(s));
+  const picked = choices || {};
+  for (const g of cards) {
+    const slug = picked[g.id];
+    if (slug && (g.members || []).some((m) => m.slug === slug) && !out.includes(slug)) {
+      out.push(slug);
+    }
+  }
+  return out;
+}
+
+export function recordGroupChoice(choices, groups, groupId, slug) {
+  // 点选即记录（幂等）：返回新的 choices 副本；未知组 / 组外成员 = 原样返回
+  // （前端不替用户造一个不存在的选择）。
+  const group = (groups || []).find((g) => g.id === groupId);
+  if (!group || !(group.members || []).some((m) => m.slug === slug)) return { ...(choices || {}) };
+  return { ...(choices || {}), [groupId]: slug };
+}
+
+export function pruneGroupChoices(groups, choices) {
+  // 新一次推荐 / 换题 / 库变更后，旧选择只在**仍然成立**时保留：组还在、
+  // 被点的成员还在该组里。返回新的 choices 副本（幂等，不改入参）。
+  const picked = choices || {};
+  const out = {};
+  for (const g of (groups || [])) {
+    const slug = picked[g.id];
+    if (slug && (g.members || []).some((m) => m.slug === slug)) out[g.id] = slug;
+  }
+  return out;
+}
+
+export function groupChoiceGapText(groups, choices) {
+  // 未选功能组的拦截图中文案（空串 = 通过）：前端两处生成入口与就绪检查单共用，
+  // 措辞与后端 400 同义（工单 group-choice-required/01）。
+  const gap = pendingGroupChoices(groups, choices);
+  if (!gap.length) return "";
+  return "功能组「" + gap.map((g) => g.label).join("」「")
+    + "」还需要你选择一项——请到第 5 步推荐结果的「功能组选择」卡里点选后再生成";
+}
+
+export function renderGroupCards(groups, modules, selectedSlugs, choices) {
+  // 组卡渲染：label + 「请选择」提示（待选组）+ 成员行（radio + slug + role +
+  // 「AI 推荐」徽标与理由）。**选中态只看 choices**（工单 group-choice-required/01）：
+  // 用户没点过的组一律不画选中——即便 AI 推荐的那一件已经在生成集合里；
+  // 这样「谁做的选择」在界面上是清楚的。
   // 同组互斥收敛（工单 real-acceptance/04）：被收敛剔掉的成员（dropped）标
   // 「同组互斥·未选中」——AI 也推荐过它，只是组内只能留一个；点它即换选。
   const reasons = {};
   for (const m of (modules || [])) reasons[m.slug] = m.reason || "";
+  const picked = choices || {};
   return (groups || []).map((g) => {
     const members = g.members || [];
-    const checkedMembers = members.filter((m) => selectedSlugs.includes(m.slug));
-    let checked = "";
-    if (checkedMembers.length) {
-      const firstInModules = (modules || []).find((m) =>
-        checkedMembers.some((x) => x.slug === m.slug));
-      checked = firstInModules
-        ? checkedMembers.find((x) => x.slug === firstInModules.slug).slug
-        : checkedMembers[0].slug;
-    }
+    const pickedSlug = picked[g.id];
+    const checked = members.some((m) => m.slug === pickedSlug) ? pickedSlug : "";
+    const needsChoice = groupChoiceRequired(g) && !checked;
     const dropped = g.dropped || [];
     const rows = members.map((m) => {
       const isRec = (g.recommended || []).includes(m.slug);
@@ -127,17 +204,28 @@ export function renderGroupCards(groups, modules, selectedSlugs) {
               + '同组互斥·未选中</span>' : "")
         + '</label>';
     }).join("");
-    return '<div class="group-card">'
-      + '<div class="title">功能组选择 · ' + esc(g.label) + '</div>'
+    return '<div class="group-card' + (needsChoice ? " needs-choice" : "") + '">'
+      + '<div class="title">功能组选择 · ' + esc(g.label)
+      + (needsChoice ? '<span class="badge needs-choice-badge">请选择</span>' : "")
+      + '</div>'
       + (g.hint ? '<div class="hint-note">AI 未推荐，题面疑似需要——请确认</div>' : "")
       + rows + '</div>';
   }).join("");
 }
 
-export function groupRequirementNote(groups, slug, reason) {
-  // 需求清单灰注：组内成员的 slug 不再渲染成可移除 chip，改为灰注（需求句 / 
+export function groupRequirementNote(groups, slug, reason, choices) {
+  // 需求清单灰注：组内成员的 slug 不再渲染成可移除 chip，改为灰注（需求句 /
   // 理由可见性保留）；非组模块返回 null（调用方走 recommendChip 原逻辑）。
-  if (!groupOfSlug(groups, slug)) return null;
+  // 该组还没被用户点过时，灰注说「请选择」而不是复述 AI 理由（工单
+  // group-choice-required/01）——理由等用户点完再看，免得把推荐当成已定。
+  const group = groupOfSlug(groups, slug);
+  if (!group) return null;
+  const picked = (choices || {})[group.id];
+  const needsChoice = groupChoiceRequired(group)
+    && !((group.members || []).some((m) => m.slug === picked));
+  if (needsChoice) {
+    return '<span class="muted">' + esc(slug) + '（已在『功能组选择』中，请选择）</span>';
+  }
   return '<span class="muted">' + esc(slug)
     + '（已在『功能组选择』中' + (reason ? "，" + esc(reason) : "") + '）</span>';
 }
@@ -558,5 +646,5 @@ export function libPlatformKits(modules) {
 }
 
 if (typeof window !== "undefined") {
-  Object.assign(window, { moduleBadges, pythonArtifactSummary, groupOfSlug, applyGroupRadio, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, moduleGridPlatformLabel, moduleGridStatusText, moduleGridBadgeClass, moduleGridFilter, moduleGridCountText, moduleGridHTML, moduleInfoHTML, moduleRequiresIdentity, identityExemptLabel, INTERNAL_KINDS, multiInstanceModules, instancePayload, ensureDefaultInstances, instanceGapCount, libFilterModules, libSortModules, danglingDependencies, libStats, libStatsText, libChipRowHTML, moduleRowHTML, editDescStatus, libIsValidHttpUrl, libPlatformKits });
+  Object.assign(window, { moduleBadges, pythonArtifactSummary, groupOfSlug, applyGroupRadio, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, renderableGroupCards, groupChoiceRequired, pendingGroupChoices, applyGroupChoices, recordGroupChoice, pruneGroupChoices, moduleGridPlatformLabel, moduleGridStatusText, moduleGridBadgeClass, moduleGridFilter, moduleGridCountText, moduleGridHTML, moduleInfoHTML, moduleRequiresIdentity, identityExemptLabel, INTERNAL_KINDS, multiInstanceModules, instancePayload, ensureDefaultInstances, instanceGapCount, libFilterModules, libSortModules, danglingDependencies, libStats, libStatsText, libChipRowHTML, moduleRowHTML, editDescStatus, libIsValidHttpUrl, libPlatformKits });
 }

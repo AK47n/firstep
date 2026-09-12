@@ -1750,6 +1750,11 @@ def _group_card(
     candidates = 组内未选中成员（其余全部，成员登记序）——被收敛剔掉的成员
     落在这里可见，用户点组卡即换选；dropped = 其中因同组互斥被剔的（模型原本
     也推荐了、解析层收敛掉的），UI 据此标注「同组互斥·未选中」。
+
+    choice_required（工单 group-choice-required/01）：命中卡为 True——这一组
+    该由**用户自己点**，前端不预选、未选即拦生成，服务端 missing_group_choices
+    同源守门；hint 卡（AI 未推荐、题面疑似需要）为 False（没有「默认值」可替，
+    是软提示不是硬选择）。旧载荷无该键时前端一律按 False 处理。
     """
     recommended_set = set(recommended)
     dropped_set = set(dropped)
@@ -1758,6 +1763,7 @@ def _group_card(
         "id": group.id,
         "label": group.label,
         "hint": hint,
+        "choice_required": not hint,
         "members": [{"slug": m.slug, "role": m.role} for m in members],
         "recommended": list(recommended),
         "candidates": remaining,
@@ -1826,6 +1832,47 @@ def build_exclusive_groups(
             _group_card(hint_group, members, hint=True, recommended=(), dropped=())
         )
     return cards
+
+
+def missing_group_choices(
+    group_defs: Sequence[ExclusiveGroup],
+    platform: str,
+    group_choices: Mapping[str, str] | None,
+    selected_slugs: Sequence[str],
+) -> list[ExclusiveGroup]:
+    """尚未由用户显式选择的功能组（工单 group-choice-required/01）：判据单源。
+
+    背景：功能组卡**不再替用户预选** AI 推荐的那一件（用户拍板「必须先选才能生成」）。
+    服务端因此要能回答「这次请求里，还有哪几组是用户没点过的」——**前后端同一条规矩**
+    （前端拦 + 端点 400），判据都落在这里，免得两边各写一套。
+
+    判据（全部满足才算出问题）：
+    ① 该组在目标平台投影后 **≥2 成员**（单成员组无可选，不出卡也不拦——与
+       `build_exclusive_groups` 的「单成员组不出卡」同源）；
+    ② 该组**确实进入了本次选中集**（组内至少一个成员在 `selected_slugs` 里）——
+       没进选中集的组是 hint 卡（AI 未推荐 / 用户没选），不拦；
+    ③ `group_choices` 里没有该组的合法选择（值必须是**该组当前平台的成员**；
+       越界 slug、非字符串、空串都算没选——宁严勿松，不静默替用户决定）。
+
+    返回待选组列表（库登记序）；空列表 = 可以生成。
+    """
+    if not group_defs:
+        return []
+    choices = group_choices or {}
+    selected = set(selected_slugs or ())
+    missing: list[ExclusiveGroup] = []
+    for group in group_defs:
+        members = scope_group_members(group.members, platform)
+        if len(members) < 2:
+            continue
+        member_slugs = {m.slug for m in members}
+        if not (member_slugs & selected):
+            continue
+        picked = choices.get(group.id)
+        if isinstance(picked, str) and picked in member_slugs:
+            continue
+        missing.append(group)
+    return missing
 
 
 def converge_recommendation_payload(

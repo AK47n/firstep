@@ -49,7 +49,18 @@ export function stepNavCurrent(entries, threshold) {
 // 生成页草稿自动记忆（工单 ui-polish-3/01）：localStorage 防误刷新丢失；
 // 只存表单态，恢复不触发任何后端请求
 // ---------------------------------------------------------------------------
-export function draftState(problem, topicId, platform, slugs, mainC, qa, outputDir) {
+export function draftGroupChoices(raw) {
+  // 功能组用户选择（工单 group-choice-required/01）：{组 id: 成员 slug} 形状闸——
+  // 只留「非空字符串键 → 非空字符串值」，损坏 / 旧草稿（无该字段）→ {}。
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof k === "string" && k && typeof v === "string" && v) out[k] = v;
+  }
+  return out;
+}
+
+export function draftState(problem, topicId, platform, slugs, mainC, qa, outputDir, groupChoices) {
   return {
     problem: String(problem || ""),
     topicId: String(topicId || ""),
@@ -58,6 +69,7 @@ export function draftState(problem, topicId, platform, slugs, mainC, qa, outputD
     mainC: String(mainC || ""),
     qa: String(qa || ""),
     outputDir: String(outputDir || ""),
+    groupChoices: draftGroupChoices(groupChoices),
   };
 }
 
@@ -85,6 +97,9 @@ export function draftRestoreMeta(json) {
     if (f === "slugs") out[f] = Array.isArray(v) ? v.filter((s) => typeof s === "string") : [];
     else out[f] = typeof v === "string" ? v : "";
   }
+  // 功能组用户选择（工单 group-choice-required/01）：旧草稿无该字段 → {}（= 未选，
+  // 恢复后仍要求用户点一次，与「必须由用户显式选择」一致，不把 AI 默认当选择）。
+  out.groupChoices = draftGroupChoices(json.groupChoices);
   return out;
 }
 

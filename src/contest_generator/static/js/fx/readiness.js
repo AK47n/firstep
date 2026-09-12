@@ -4,12 +4,16 @@
 // 局部 esc：仅替换 &<>"（无 ' 且无 null 兜底），与 core esc 语义不同，
 // 照搬不合并）。模块约定见 fx/core.js 头部。
 export function generateReadinessChecks(state) {
-  // 顺序 = btn-generate 原提示顺序（平台 → 模块 → 题面 → 目录）；reason 逐字复用
+  // 顺序 = btn-generate 原提示顺序（平台 → 模块 → 题面 → 目录）；reason 逐字复用。
+  // 功能组显式选择（工单 group-choice-required/01）插在「模块清单」之后：它同样是
+  // 模块相关的硬判据——组卡不预选，用户没点过的功能组不许生成（服务端同源 400）。
   return [
     { step: 3, title: "目标平台", reason: "请先选择目标平台",
       ok: !!state.chosenPlatform, autoFixable: false },
     { step: 6, title: "模块清单与平台警告", reason: "请先选择模块",
       ok: (state.selectedSlugs || []).length > 0, autoFixable: true },
+    { step: 5, title: "功能组选择", reason: state.groupChoiceReason || "请先选择功能组",
+      ok: !state.groupChoiceReason, autoFixable: false },
     { step: 1, title: "赛题原文", reason: "请先填写赛题原文",
       ok: !state.desktopOutput || !!state.problem, autoFixable: false },
     { step: 9, title: "输出目录并生成", reason: "请填写输出目录",

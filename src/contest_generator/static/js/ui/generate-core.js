@@ -32,7 +32,7 @@ import { expandSettingsCollapse } from "/js/ui/settings.js";  // 指引卡「去
 import { instancePayload } from "/js/fx/module.js";
 import { scoreChecklistId, scoreChecklistKey, scoreChecklistLoad, scoreChecklistItemsHTML, scoreChecklistProgressHTML, scoreChecklistSave, scoreChecklistExportText, formatScorePoints } from "/js/fx/score.js";
 import { syncStep7 } from "/js/ui/step-state.js";
-import { chosenPlatform, selectedSlugs, expanded, warnings, scorePoints, selectedReferenceIds, autoReferenceIds, currentTopicId, pythonTemplates, lastRecommend, prereadOverviewText } from "/js/ui/generate-recommend.js";
+import { chosenPlatform, selectedSlugs, expanded, warnings, scorePoints, selectedReferenceIds, autoReferenceIds, currentTopicId, pythonTemplates, lastRecommend, prereadOverviewText, groupChoices, groupChoiceGap } from "/js/ui/generate-recommend.js";
 import { instances, pinBindings, pinUnbound, pinRoles } from "/js/ui/generate-pins.js";
 import { markStepDone, markStepUndone } from "/js/ui/step-state.js";
 import { syncMainCHighlight } from "/js/ui/generate-mainc.js";
@@ -56,6 +56,17 @@ const SKELETON_MODES = {
   smoke: { btn: "btn-smoke", doneLabel: "重新生成自检骨架", interceptHint: "自检骨架" },
 };
 
+// 功能组「必须由用户显式选择」（工单 group-choice-required/01）：未选就拦在本地，
+// 不让请求发出去——服务端 /api/generate 与 /api/skeleton 也守同一条规矩（400 中文）。
+// 判据单源 = fx/module.js 的 groupChoiceGapText（与组卡渲染、就绪检查单同一口径）；
+// 主生成走就绪检查单（generateReadinessChecks 里那一条硬判据），骨架走这里。
+function groupChoiceGapText() {
+  const gap = groupChoiceGap();
+  if (!gap.length) return "";
+  return "功能组「" + gap.map((g) => g.label).join("」「")
+    + "」还需要你选择一项——请到第 5 步推荐结果的「功能组选择」卡里点选后再生成。";
+}
+
 async function generateMain(mode) {
   const cfg = SKELETON_MODES[mode];
   const btn = $(cfg.btn);
@@ -64,6 +75,8 @@ async function generateMain(mode) {
   if (!problem) { $("skeleton-msg").textContent = "请先填写赛题原文"; return; }
   if (!chosenPlatform) { $("skeleton-msg").textContent = "请先在步骤 3 选择目标平台"; return; }
   if (!selectedSlugs.length) { $("skeleton-msg").textContent = "请先选择模块"; return; }
+  const groupGap = groupChoiceGapText();
+  if (groupGap) { $("skeleton-msg").textContent = groupGap; return; }
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>生成中…';
   aiActionStart("生成骨架");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
@@ -71,6 +84,7 @@ async function generateMain(mode) {
     const payload = {
       problem_text: problem, slugs: selectedSlugs, platform: chosenPlatform,
       topic_id: currentTopicId || undefined,
+      group_choices: groupChoices,  // 用户点过的功能组选择（未选时上面已拦）
     };
     if (mode === "smoke") payload.main_mode = "smoke";
     else payload.reference_ids = selectedReferenceIds;  // 参考实现进骨架（工单 02）
@@ -618,6 +632,9 @@ $("btn-generate").addEventListener("click", async () => {
     payload = payloadData;
     if (Object.keys(bindings).length) payload.bindings = bindings;
     if (Object.keys(inst).length) payload.instances = inst;
+    // 功能组用户选择（工单 group-choice-required/01）：随生成请求回传（未选时
+    // 就绪检查单那条硬判据已经拦下，这里只在通过后带上——服务端同源复核）。
+    payload.group_choices = groupChoices;
     // 副产物模板选择（工单 k230-multi-template/04）：只带用户改过的（≠默认）；
     // 空 = 不发字段 = 旧行为（默认模板）逐字节不变
     if (Object.keys(pythonTemplates).length) payload.python_templates = pythonTemplates;

@@ -20,7 +20,8 @@ import {
   readinessRowsHTML, readinessSummaryHTML, outputDirWarnRow,
 } from "/js/fx/readiness.js";
 import { stepDoneSet, scrollToStep } from "/js/ui/step-state.js";
-import { chosenPlatform, selectedSlugs, setRecommendClarifications, startRecommend } from "/js/ui/generate-recommend.js";
+import { chosenPlatform, selectedSlugs, setRecommendClarifications, startRecommend, lastRecommend, groupChoices } from "/js/ui/generate-recommend.js";
+import { groupChoiceGapText } from "/js/fx/module.js";
 
 // ---------------------------------------------------------------------------
 // 检查能否生成（工单 a3-readiness-check/01-02）：判据与 btn-generate 前置校验
@@ -47,6 +48,9 @@ function readinessState() {
     outputDir: $("output-dir").value.trim(),
     recommended: stepDoneSet.has(5),
     hasMainC: !!$("main-c").value.trim(),
+    // 功能组显式选择（工单 group-choice-required/01）：非空 = 还有组没点过（硬判据）。
+    // 判据单源 = fx/module.js 的 groupChoiceGapText（与组卡渲染、服务端 400 同一口径）。
+    groupChoiceReason: groupChoiceGapText((lastRecommend || {}).exclusive_groups || [], groupChoices),
   };
 }
 function renderReadinessPanel() {

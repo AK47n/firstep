@@ -9,15 +9,16 @@ import {
   readinessRowsHTML, readinessSummaryHTML, outputDirWarnRow,
 } from "../../src/contest_generator/static/js/fx/readiness.js";
 
-test("generateReadinessChecks 全空（桌面模式默认）：3/6/1 ❌，输出目录 ✅", () => {
+test("generateReadinessChecks 全空（桌面模式默认）：3/6/5/1 ❌，输出目录 ✅", () => {
   const checks = generateReadinessChecks({
     chosenPlatform: "", selectedSlugs: [], problem: "",
     desktopOutput: true, outputDir: "",
   });
-  assert.equal(checks.length, 4);
+  // 工单 group-choice-required/01 插了一条硬判据「功能组选择」（step 5，紧随模块清单）
+  assert.equal(checks.length, 5);
   assert.deepEqual(
     checks.map((c) => c.step),
-    [3, 6, 1, 9]
+    [3, 6, 5, 1, 9]
   );
   assert.equal(checks[0].ok, false);
   assert.equal(checks[0].reason, "请先选择目标平台");
@@ -25,9 +26,10 @@ test("generateReadinessChecks 全空（桌面模式默认）：3/6/1 ❌，输�
   assert.equal(checks[1].ok, false);
   assert.equal(checks[1].reason, "请先选择模块");
   assert.equal(checks[1].autoFixable, true);
-  assert.equal(checks[2].ok, false);
-  assert.equal(checks[2].reason, "请先填写赛题原文");
-  assert.equal(checks[3].ok, true);   // 桌面模式：输出目录不强制
+  assert.equal(checks[2].ok, true);   // 没有未选功能组（旧载荷 / 无组）→ 该条已就绪
+  assert.equal(checks[3].ok, false);
+  assert.equal(checks[3].reason, "请先填写赛题原文");
+  assert.equal(checks[4].ok, true);   // 桌面模式：输出目录不强制
 });
 
 test("generateReadinessChecks 手动模式：题面不强制，输出目录必填", () => {
@@ -35,9 +37,9 @@ test("generateReadinessChecks 手动模式：题面不强制，输出目录必�
     chosenPlatform: "stm32", selectedSlugs: ["led"], problem: "",
     desktopOutput: false, outputDir: "",
   });
-  assert.equal(checks[2].ok, true);   // 手动模式题面可空
-  assert.equal(checks[3].ok, false);
-  assert.equal(checks[3].reason, "请填写输出目录");
+  assert.equal(checks[3].ok, true);   // 手动模式题面可空
+  assert.equal(checks[4].ok, false);
+  assert.equal(checks[4].reason, "请填写输出目录");
 });
 
 test("generateReadinessChecks 全齐：4 项全 ok；桌面模式忽略输出目录", () => {
@@ -51,7 +53,7 @@ test("generateReadinessChecks 全齐：4 项全 ok；桌面模式忽略输出目
     chosenPlatform: "mspm0", selectedSlugs: ["led"], problem: "题面",
     desktopOutput: true, outputDir: "",
   });
-  assert.equal(d[3].ok, true);
+  assert.equal(d[4].ok, true);
 });
 
 test("readinessSoftChecks：推荐未跑 / 骨架未生成 → ⚠（中性可选项措辞）；空模块不重复提示推荐", () => {
@@ -141,7 +143,8 @@ test("readinessRowsHTML：多项 join，每项一个 rc-row", () => {
     chosenPlatform: "", selectedSlugs: [], problem: "", desktopOutput: true, outputDir: "",
   });
   const out = readinessRowsHTML(items, { recommendEnabled: false });
-  assert.equal((out.match(/class="rc-row /g) || []).length, 4);
+  assert.equal((out.match(/class="rc-row /g) || []).length, items.length);
+  assert.equal(items.length, 5);   // 3 / 6 / 5（功能组选择）/ 1 / 9
   assert.ok(out.indexOf('data-step="3"') < out.indexOf('data-step="1"'));
 });
 

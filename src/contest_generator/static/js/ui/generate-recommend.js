@@ -27,7 +27,7 @@ import { esc } from "/js/fx/core.js";
 import { platformClickAction } from "/js/fx/platform.js";
 import { platformSwitchConfirmMessage } from "/js/fx/danger.js";  // 切平台清空下游确认文案（工单 ux-walkthrough-02/01）
 import { confirmModal } from "/js/ui/confirm.js";
-import { moduleBadges, applyGroupRadio, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, moduleGridCountText, moduleGridHTML, moduleInfoHTML } from "/js/fx/module.js";
+import { moduleBadges, applyGroupRadio, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, applyGroupChoices, recordGroupChoice, pruneGroupChoices, pendingGroupChoices, moduleGridCountText, moduleGridHTML, moduleInfoHTML } from "/js/fx/module.js";
 import { bindModuleSource } from "/js/ui/module-source.js";  // 模块源码区（mainc-codeview-bridge/05）：弹窗文件行懒加载
 import { referencePlatformChip } from "/js/fx/reference.js";
 import {
@@ -53,6 +53,14 @@ export function setChosenPlatform(v) { chosenPlatform = v; }
 export let selectedSlugs = [];     // 当前选择的模块 slug（含用户增删，未展开）
 export function setSelectedSlugs(v) { selectedSlugs = v; }
 export let expanded = [];                // 展开后的模块 manifest（含依赖）
+export let groupChoices = {};            // 功能组用户选择（工单 group-choice-required/01）：
+                                          // {组 id: 用户点过的成员 slug}——组卡选中态与
+                                          // 「未选不许生成」都只看它；AI 的推荐只作徽标展示
+export function setGroupChoices(v) { groupChoices = v && typeof v === "object" ? v : {}; }
+export function groupChoiceGap() {
+  // 还没由用户点过的功能组（数组）；空 = 可以生成。判据与后端 missing_group_choices 同口径。
+  return pendingGroupChoices((lastRecommend || {}).exclusive_groups || [], groupChoices);
+}
 export let pythonTemplates = {};         // 副产物模板选择（工单 k230-multi-template/04）：{slug: template_id}（只含用户改过的，=默认不记录）
 export let warnings = [];                // 平台警告
 export let scorePoints = [];              // 推荐解析出的题面评分点（只读增强信息）
@@ -568,11 +576,15 @@ export function renderRecommendResult(data, autoAdd = true) {
   renderReferenceResult(data);  // 本次注入的参考资料（含来源标注）展示在第 3 步
   hydrateDecisions(data);  // 已定结论恢复（localStorage → suggestion.decision，工单 buy-discuss/05）
   const groups = data.exclusive_groups || [];  // 旧载荷无该键 = 无组卡（工单 04）
+  // 功能组用户选择（工单 group-choice-required/01）：新一次推荐的成员集合可能与上次不同，
+  // 只保留**仍然成立**的选择（组还在、成员还在组内）——换题 / 库变更后不拿旧选择硬套。
+  groupChoices = pruneGroupChoices(groups, groupChoices);
   if (autoAdd) {
     // autoAdd 同组去重（工单 recommend-exclusive-groups/04）：data.modules 逐个
     // 加入时，若该 slug 属某组且已选里已有同组任一成员 → 跳过（仅首个入集；
     // AI 的其它同组推荐仅以组卡徽标展示，不重复进已选）
     selectedSlugs = autoAddDedup(groups, selectedSlugs, data.modules);
+    selectedSlugs = applyGroupChoices(selectedSlugs, groups, groupChoices);  // 已点过的组按用户选择重算
     // 多实例回填（工单 module-multi-instance/06）：AI 猜的实例清单进 6.5 实例卡
     // （显示名/颜色，引脚恒空 = 自动分配）；用户确认后仍可增删改。载荷里带
     // 实例的模块 = 新猜测覆盖旧清单；AI 未猜（题面无明确数量）的模块保留用户
@@ -588,7 +600,7 @@ export function renderRecommendResult(data, autoAdd = true) {
   const box = $("rec-list");
   const requirements = data.requirements || [];
   const scorePanel = renderScorePointPanel(scorePoints);
-  const groupPanel = renderGroupCards(groups, data.modules, selectedSlugs);
+  const groupPanel = renderGroupCards(groups, data.modules, selectedSlugs, groupChoices);
   // 空结果分支（工单 recommend-covered-note/01）：本分支先于
   // recommendCoverageNote 执行——真实载荷下 data.modules 必覆盖所有
   // requirements[].modules 引用（:528 找 reason 同源），故「模块空 + 某需求
@@ -605,7 +617,7 @@ export function renderRecommendResult(data, autoAdd = true) {
       <div class="rec-chips">
         ${r.modules.map((slug) => {
           const reason = (data.modules.find((m) => m.slug === slug) || {}).reason;
-          return groupRequirementNote(groups, slug, reason) || recommendChip(slug, reason);
+          return groupRequirementNote(groups, slug, reason, groupChoices) || recommendChip(slug, reason);
         }).join("") || '<span class="muted">库内无命中</span>'}
         ${(r.suggestions || []).map((s) => {
           const key = suggestionKey(s);
@@ -623,13 +635,14 @@ export function renderRecommendResult(data, autoAdd = true) {
       selectedSlugs = selectedSlugs.filter((s) => s !== b.dataset.remove);
       reRenderAfterSelectionChange();
     }));
-  // 组卡单选交互（工单 04）：点击 radio → 换选（同组互斥）/ 再点已选 = 取消
-  // 整组。用 click 而非 change——再点已选 radio 不触发 change（原生行为），
-  // 取消整组会丢。
+  // 组卡单选交互（工单 04 / group-choice-required/01）：点击 radio = **由用户做出这一组的选择**
+  // ——记账进 groupChoices（草稿持久化）+ 用选择重算集合（同组其他成员被顶替）。
+  // 用 click 而非 change：再点已选 radio 不触发 change。
   box.querySelectorAll("[data-group-slug]").forEach((input) =>
     input.addEventListener("click", () => {
-      selectedSlugs = applyGroupRadio((lastRecommend || {}).exclusive_groups || [],
-        selectedSlugs, input.dataset.groupId, input.dataset.groupSlug);
+      groupChoices = recordGroupChoice(groupChoices, groups, input.dataset.groupId, input.dataset.groupSlug);
+      selectedSlugs = applyGroupChoices(selectedSlugs, groups, groupChoices);
+      scheduleDraftSave();  // 选择即刻入草稿（刷新后仍是用户的选择，不是 AI 的默认）
       reRenderAfterSelectionChange();
     }));
   if (autoAdd && data.modules.length) runExpand();

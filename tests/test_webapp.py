@@ -2599,6 +2599,143 @@ def test_skeleton_forwards_instances_to_llm(client, context):
     assert any("#define LED_RED_2" in block for block in interfaces)
 
 
+def _add_fake_group_modules(library_dir: Path) -> None:
+    """给假模块库补一个两成员功能组（工单 group-choice-required/01 素材）：
+    `gyro_uart` / `gyro_i2c` 同属 attitude-hold——同一种功能的两种硬件。"""
+    for slug, role in (("gyro_uart", "UART 串口陀螺仪"), ("gyro_i2c", "I2C 陀螺仪")):
+        (library_dir / slug).mkdir(parents=True, exist_ok=True)
+        (library_dir / slug / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "slug": slug,
+                    "description": f"{role}（假模块，验收素材）",
+                    "dependencies": [],
+                    "exclusive_group": {
+                        "id": "attitude-hold",
+                        "label": "航向保持 / 姿态传感器",
+                        "role": role,
+                    },
+                    "platforms": {
+                        "stm32": {
+                            "files": [],
+                            "verified": True,
+                            "hardware_bound": False,
+                            "notes": "",
+                            "kit": "",
+                            "source_url": "",
+                        }
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+
+def test_generate_rejects_missing_group_choice(client, context, tmp_path):
+    """功能组必须由用户显式选择（工单 group-choice-required/01）：选中集里有组内成员、
+    但请求没带该组的 group_choices → 400 中文（带组名），且**不产生输出目录**。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    _add_fake_group_modules(context[0].config.module_library_dir)
+    output_dir = tmp_path / "out" / "group-gate"
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["gyro_uart"],
+            "main_c": "int main(void) { while (1); }\n",
+            "output_dir": str(output_dir),
+        },
+    )
+
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert "功能组" in detail and "还需要你选择一项" in detail
+    assert "航向保持 / 姿态传感器" in detail
+    assert not output_dir.exists(), "门禁必须在落盘之前拦下"
+
+
+def test_generate_rejects_group_choice_outside_members(client, context, tmp_path):
+    """group_choices 的值必须是该组成员：越界 slug 不算选择（宁严勿松）→ 仍然 400。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    _add_fake_group_modules(context[0].config.module_library_dir)
+    output_dir = tmp_path / "out" / "group-gate-bad"
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["gyro_uart"],
+            "main_c": "int main(void) { while (1); }\n",
+            "output_dir": str(output_dir),
+            "group_choices": {"attitude-hold": "not_a_member"},
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "航向保持 / 姿态传感器" in resp.json()["detail"]
+    assert not output_dir.exists()
+
+
+def test_generate_accepts_valid_group_choice(client, context, tmp_path):
+    """带齐合法 group_choices → 门禁放行（生成照常走完，输出目录产生）。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    _add_fake_group_modules(context[0].config.module_library_dir)
+    context[1]["llm"] = FakeLLM(preread=PrereadResult(overview="姿态", reminders=()))
+    output_dir = tmp_path / "out" / "group-ok"
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["gyro_uart"],
+            "main_c": "int main(void) { while (1); }\n",
+            "output_dir": str(output_dir),
+            "group_choices": {"attitude-hold": "gyro_uart"},
+        },
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert output_dir.is_dir()
+
+
+def test_skeleton_rejects_missing_group_choice(client, context, tmp_path):
+    """骨架端点同一条规矩（工单 group-choice-required/01）：未选功能组 → 400，
+    不烧 LLM 调用（假 LLM 一旦被调即抛错）。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    _add_fake_group_modules(context[0].config.module_library_dir)
+    context[1]["llm"] = RaisingLLM()   # 门禁在调用 LLM 之前拦下 → 这个假 LLM 不该被碰到
+    resp = client.post(
+        "/api/skeleton",
+        json={
+            "problem_text": "设计一个航向保持小车",
+            "platform": PLATFORM_STM32,
+            "slugs": ["gyro_uart"],
+            "references": [],
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "还需要你选择一项" in resp.json()["detail"]
+
+
+def test_generate_rejects_non_object_group_choices(client, context, tmp_path):
+    """group_choices 形状闸：非对象 → 400 中文（与 instances / references 同款口径）。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    _add_fake_group_modules(context[0].config.module_library_dir)
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["gyro_uart"],
+            "main_c": "int main(void) { while (1); }\n",
+            "output_dir": str(tmp_path / "out" / "x"),
+            "group_choices": ["attitude-hold"],
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "group_choices" in resp.json()["detail"]
+
+
 def test_generate_rejects_instances_with_unknown_slug(client, context, tmp_path):
     """generate 请求层同样校验 instances（slug 没进工程 → 400 中文）。"""
     _import_stm32_master(context[0].config.masters_dir, tmp_path)

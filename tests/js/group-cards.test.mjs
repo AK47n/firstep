@@ -19,7 +19,7 @@ const src = readFileSync(
 
 const groups = [
   {
-    id: "gray-track", label: "8 路灰度传感器驱动", hint: false,
+    id: "gray-track", label: "8 路灰度传感器驱动", hint: false, choice_required: true,
     members: [
       { slug: "huidu", role: "仅 8 路灰度读取，不含巡线核心" },
       { slug: "pid", role: "灰度读取 + PID 巡线 + 编码器速度环" },
@@ -28,7 +28,7 @@ const groups = [
     recommended: ["pid", "xunji"],
   },
   {
-    id: "attitude-hold", label: "航向保持 / 姿态传感器", hint: true,
+    id: "attitude-hold", label: "航向保持 / 姿态传感器", hint: true, choice_required: false,
     members: [
       { slug: "imu_uart", role: "UART 串口陀螺仪" },
       { slug: "ml_mpu6050", role: "I2C + DMP 姿态解算" },
@@ -64,26 +64,24 @@ test("组卡渲染：label + hint 标注 + 成员行（radio/slug/role）+ AI �
   assert.doesNotMatch(rendered, /checked/);
 });
 
-test("组卡渲染：已选成员为默认选中（同组多个按 data.modules 序 = AI 推荐序取第一个）", () => {
-  const rendered = renderGroupCards(groups, modules, ["xunji"]);
+test("组卡渲染：只有用户点过的组才画选中态（工单 group-choice-required/01 改口径）", () => {
+  // 旧口径：从 selectedSlugs 反推默认选中（AI 推荐件自动勾上）——已由用户拍板换成
+  // 「不预选、用户点过才算」。这里逐条改写为 choices 驱动。
+  const rendered = renderGroupCards(groups, modules, ["xunji"], { "gray-track": "xunji" });
   assert.match(rendered, /data-group-slug="xunji" checked/);
-  // 同组两个成员都在 selectedSlugs（手动添加所致）→ 按 data.modules 序取第一个
-  // 命中成员（spec:107：AI 首选由 data.modules 顺序决定）
-  const both = renderGroupCards(groups, modules, ["xunji", "pid"]);
-  assert.match(both, /data-group-slug="pid" checked/);
-  assert.doesNotMatch(both, /data-group-slug="xunji" checked/);
-  // data.modules 序与成员登记序不同（xunji 先于 pid）→ data.modules 序优先
-  const swapOrder = renderGroupCards(groups, [{ slug: "xunji" }, { slug: "pid" }], ["pid", "xunji"]);
-  assert.match(swapOrder, /data-group-slug="xunji" checked/);
-  // 成员都不在 data.modules（全为手动添加）→ 按组成员登记序兜底
-  const manualOnly = renderGroupCards(groups, [], ["huidu", "xunji"]);
-  assert.match(manualOnly, /data-group-slug="huidu" checked/);
+  // 同一份集合、但没有 choices（用户没点过）→ 一律不画选中
+  const untouched = renderGroupCards(groups, modules, ["xunji"], {});
+  assert.doesNotMatch(untouched, /checked/);
+  // 点的是非推荐成员也照样选中（用户说了算）
+  const picked = renderGroupCards(groups, modules, ["pid"], { "gray-track": "huidu" });
+  assert.match(picked, /data-group-slug="huidu" checked/);
+  assert.doesNotMatch(picked, /data-group-slug="pid" checked/);
 });
 
 test("组卡渲染：转义模型文本，避免注入可交互控件", () => {
   const rendered = renderGroupCards(
     [{
-      id: "g", label: "<b>L</b>", hint: false,
+      id: "g", label: "<b>L</b>", hint: false, choice_required: false,
       members: [{ slug: "<script>", role: "<input>alert(1)</input>" }],
       recommended: ["<script>"],
     }],
@@ -100,7 +98,7 @@ test("组卡渲染：转义模型文本，避免注入可交互控件", () => {
 // 用户点它即换选（换选语义由 applyGroupRadio 保证，无需新交互）。
 const convergedGroups = [
   {
-    id: "zigbee-rx", label: "Zigbee 无线链路（接收侧）", hint: false,
+    id: "zigbee-rx", label: "Zigbee 无线链路（接收侧）", hint: false, choice_required: true,
     members: [
       { slug: "zigbee_link", role: "任意字节帧收发" },
       { slug: "zigbee_uart", role: "固定 DIP-4 ID 帧接收" },
@@ -115,7 +113,8 @@ test("组卡渲染：收敛后的组卡 = 一个推荐态 + 被剔成员标「�
   const rendered = renderGroupCards(
     convergedGroups,
     [{ slug: "zigbee_link", reason: "透传链路满足3m以上通信" }],
-    ["zigbee_link"]
+    ["zigbee_link"],
+    { "zigbee-rx": "zigbee_link" }   // 用户点过这一组（工单 group-choice-required/01）
   );
 
   assert.equal((rendered.match(/AI 推荐/g) || []).length, 1);
@@ -129,7 +128,7 @@ test("组卡渲染：收敛后的组卡 = 一个推荐态 + 被剔成员标「�
 
 test("组卡渲染：无 dropped 字段（旧载荷）→ 零标注、零报错", () => {
   const legacy = [{ ...convergedGroups[0], dropped: undefined, candidates: undefined }];
-  const rendered = renderGroupCards(legacy, [], ["zigbee_link"]);
+  const rendered = renderGroupCards(legacy, [], ["zigbee_link"], { "zigbee-rx": "zigbee_link" });
   assert.doesNotMatch(rendered, /同组互斥·未选中/);
   assert.match(rendered, /data-group-slug="zigbee_link"/);
 });
@@ -199,7 +198,7 @@ test("同组多选警告：跨组各一成员 / 单成员 / 旧载荷 → 无冲
 });
 
 test("需求清单灰注：组内成员 → 灰注（含理由、不产出可移除 chip）", () => {
-  const note = groupRequirementNote(groups, "pid", "PID 循迹，双平台");
+  const note = groupRequirementNote(groups, "pid", "PID 循迹，双平台", { "gray-track": "pid" });
   assert.match(note, /已在『功能组选择』中/);
   assert.match(note, /PID 循迹，双平台/);
   assert.doesNotMatch(note, /data-remove/);
@@ -213,8 +212,8 @@ test("需求清单灰注：非组模块 → null（chips 交互不变）", () =>
 });
 
 test("generate-recommend.js 推荐结果区接线：组卡渲染 / autoAdd 去重 / 单选交互 / 冲突警告", () => {
-  assert.match(src, /renderGroupCards\(groups, data\.modules, selectedSlugs\)/);
+  assert.match(src, /renderGroupCards\(groups, data\.modules, selectedSlugs, groupChoices\)/);
   assert.match(src, /selectedSlugs = autoAddDedup\(groups, selectedSlugs, data\.modules\)/);
-  assert.match(src, /applyGroupRadio\(\(lastRecommend \|\| \{\}\)\.exclusive_groups \|\| \[\],/);
+  assert.match(src, /recordGroupChoice\(groupChoices, groups, input\.dataset\.groupId, input\.dataset\.groupSlug\)/);
   assert.match(src, /groupConflicts\(\(lastRecommend \|\| \{\}\)\.exclusive_groups \|\| \[\], selectedSlugs\)/);
 });

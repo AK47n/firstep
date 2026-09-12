@@ -177,7 +177,7 @@ from .library import (
     update_module_description,
     update_platform_identity,
 )
-from .manifest import ManifestSummary, ModuleManifest
+from .manifest import ExclusiveGroup, ManifestSummary, ModuleManifest
 from .llm import (
     LLM,
     LLMError,
@@ -252,7 +252,9 @@ from .reference_library import (
 )
 from .revision import restore_revision, revise_backup_root, run_revision
 from .selection import (
+    SelectionError,
     default_instances_for_multi,
+    missing_group_choices,
     multi_instance_pin_capability,
     multi_instance_variants,
     parse_instances,
@@ -532,6 +534,45 @@ def _module_library_summaries(module_library_dir: Path) -> tuple[ManifestSummary
     if not module_library_dir.is_dir():
         return ()
     return tuple(build_manifest_summaries(list_modules(module_library_dir)))
+
+
+def _library_exclusive_groups(module_library_dir: Path) -> tuple[ExclusiveGroup, ...]:
+    """库级功能组定义（工单 group-choice-required/01）：从库一次扫描构建。
+
+    与生成侧（`generator` 的 `collect_exclusive_groups(candidates)`）同源同一函数。
+    服务端要在这里回答「这次请求里还有哪几组是用户没点过的」——判据本身在
+    `selection.missing_group_choices`（与前端同一个口径），本函数只负责取数。
+    """
+    from .manifest import collect_exclusive_groups
+
+    if not module_library_dir.is_dir():
+        return ()
+    return tuple(collect_exclusive_groups(list_modules(module_library_dir)))
+
+
+def _require_group_choices(
+    ctx: Any, payload: dict, platform: str, slugs: Sequence[str]
+) -> None:
+    """功能组「必须由用户显式选择」门禁（工单 group-choice-required/01）。
+
+    前端不预选功能组卡、未选即拦生成；这里守**同一条规矩**——CLI / 脚本 / 旧页面
+    直接打端点时也不会把「AI 推荐的那个默认」当成用户的选择。缺选 → SelectionError
+    → 既有 errors.py 映射成 400 中文（与 instances / references 等形状判决同一条路）。
+    """
+    choices = payload.get("group_choices")
+    if choices is not None and not isinstance(choices, dict):
+        raise SelectionError("group_choices 必须是对象（组 id → 成员 slug）")
+    if not choices or not isinstance(choices, dict):
+        choices = {}
+    groups = _library_exclusive_groups(_library_dir(ctx))
+    missing = missing_group_choices(groups, platform, choices, slugs)
+    if not missing:
+        return
+    names = "、".join(f"『{g.label}』" for g in missing)
+    raise SelectionError(
+        f"功能组 {names} 还需要你选择一项（同一功能只能选一个模块，"
+        "请到推荐结果的「功能组选择」卡里点选后再生成）"
+    )
 
 
 def _pin_summary_text(platform: str, manifests: Sequence[ModuleManifest]) -> str:
@@ -1920,6 +1961,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         slugs = _require_str_list(payload, "slugs")
         topic_id = _optional_str(payload, "topic_id")
         reference_ids = _require_str_list(payload, "reference_ids")
+        # 功能组「必须由用户显式选择」门禁（工单 group-choice-required/01）：与
+        # /api/generate 同一条规矩——骨架会按选中集写模块清单，未选就不该烧这一次调用。
+        _require_group_choices(context, payload, platform, slugs)
         # 多实例清单（工单 module-multi-instance/04）：形状判决归 selection.parse_instances
         # （SelectionError → 400 中文），缺省 / 空 = 现行为（单默认实例）。
         # known_slugs = 选中 ∪ 依赖展开（工单 instance-config-deps/01）：依赖带入的
@@ -2077,6 +2121,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         platform = _require_str(payload, "platform")
         slugs = _require_str_list(payload, "slugs")
         main_c = _require_str(payload, "main_c")
+        # 功能组「必须由用户显式选择」门禁（工单 group-choice-required/01）：缺选 400 中文，
+        # 拦在任何落盘动作（含输出目录 mkdir）之前。
+        _require_group_choices(context, payload, platform, slugs)
         output_dir, output_verdict = _resolve_generation_output_dir(context, payload)
         topic_id = _optional_str(payload, "topic_id")
         # 覆盖确认（工单 generate-overwrite/01）：严格 `is True`——非布尔（如

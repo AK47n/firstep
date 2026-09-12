@@ -18,14 +18,20 @@ function fakeStorage(seed, { throwOnGet = false } = {}) {
   };
 }
 
-test("draftState 组装七字段；slugs 非数组 / 含非字符串被裁剪；outputDir 兜底空串", () => {
-  const s = draftState("题面", "2026C", "mspm0", ["led", 42, "beep", null], "int main(){}", "问：x 答：y", "D:\\proj");
+test("draftState 组装八字段（含 groupChoices）；slugs 非数组 / 含非字符串被裁剪；outputDir 兜底空串", () => {
+  // groupChoices（工单 group-choice-required/01）：{组 id: 成员 slug}——刷新后仍是「我点的」；
+  // 形状闸只留非空字符串键值，损坏形态 → {}
+  const s = draftState("题面", "2026C", "mspm0", ["led", 42, "beep", null], "int main(){}", "问：x 答：y", "D:\\proj", { "attitude-hold": "imu_uart", bad: 3, "": "x" });
   assert.deepEqual(s, {
     problem: "题面", topicId: "2026C", platform: "mspm0",
     slugs: ["led", "beep"], mainC: "int main(){}", qa: "问：x 答：y", outputDir: "D:\\proj",
+    groupChoices: { "attitude-hold": "imu_uart" },
   });
   const empty = draftState(undefined, null, "", null, undefined, "", undefined);
-  assert.deepEqual(empty, { problem: "", topicId: "", platform: "", slugs: [], mainC: "", qa: "", outputDir: "" });
+  assert.deepEqual(empty, {
+    problem: "", topicId: "", platform: "", slugs: [], mainC: "", qa: "", outputDir: "",
+    groupChoices: {},
+  });
 });
 
 test("draftSave + draftLoad 往返一致", () => {
@@ -57,10 +63,12 @@ test("draftRestoreMeta 非法字段裁剪：数字→空串、slugs 过滤非字
   assert.deepEqual(out, {
     problem: "", topicId: "2026C", platform: "mspm0",
     slugs: ["led", "beep"], mainC: "", qa: "x", outputDir: "",
+    groupChoices: {},   // 旧草稿无该字段 → {}（= 未选，仍要求用户点一次）
   });
   const ok = draftRestoreMeta({ mainC: "int main(){}", outputDir: "D:\\proj" });
   assert.deepEqual(ok, {
     problem: "", topicId: "", platform: "", slugs: [], mainC: "int main(){}", qa: "", outputDir: "D:\\proj",
+    groupChoices: {},
   });
 });
 

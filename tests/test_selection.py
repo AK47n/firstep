@@ -42,6 +42,7 @@ from contest_generator.selection import (
     FunctionRequirement,
     MAX_QUESTIONS,
     ManualReferenceError,
+    missing_group_choices,
     ModuleInstance,
     ModuleSelection,
     OutOfLibrarySuggestion,
@@ -3033,6 +3034,8 @@ def test_build_exclusive_groups_derives_hit_cards():
             "id": "gray-track",
             "label": "8 路灰度传感器驱动",
             "hint": False,
+            # choice_required（工单 group-choice-required/01）：命中卡该由用户自己点
+            "choice_required": True,
             "members": [
                 {"slug": "huidu", "role": "仅 8 路灰度读取"},
                 {"slug": "pid", "role": "PID 巡线"},
@@ -3043,6 +3046,54 @@ def test_build_exclusive_groups_derives_hit_cards():
             "dropped": [],
         }
     ]
+
+
+def test_missing_group_choices_predicate():
+    """功能组「必须由用户显式选择」判据（工单 group-choice-required/01）。
+
+    待选 = ① 平台投影后 ≥2 成员 且 ② 该组确实进了选中集 且 ③ group_choices 里
+    没有该组的**合法成员**值。单成员组、未进选中集的组（hint 卡）、无组载荷都不拦。
+    """
+    att = _group(
+        "attitude-hold",
+        "航向保持 / 姿态传感器",
+        [
+            ("imu_uart", ("mspm0",), "UART 串口陀螺仪"),
+            ("jy61p", ("mspm0",), "软 I2C + 器件内卡尔曼融合"),
+            ("ml_mpu6050", ("mspm0", "stm32"), "I2C + DMP"),
+        ],
+    )
+    gray = _group(
+        "gray-track", "8 路灰度传感器驱动",
+        [("huidu", ("mspm0",), "只用 8 路读取"), ("pid", ("mspm0",), "PID 巡线")],
+    )
+
+    # ① 未选：组在选中集里 → 待选
+    assert [g.id for g in missing_group_choices((att,), "mspm0", {}, ("imu_uart",))] == [
+        "attitude-hold"
+    ]
+    assert [g.id for g in missing_group_choices((att,), "mspm0", None, ("jy61p",))] == [
+        "attitude-hold"
+    ]
+    # ② 选了组内合法成员 → 放行（点谁都可以，包括非 recommended 的那个）
+    assert missing_group_choices((att,), "mspm0", {"attitude-hold": "jy61p"}, ("imu_uart",)) == []
+    # ③ 越界 / 非字符串 / 空串 = 没选（宁严勿松）
+    for bad in ("motor", "", 3, None):
+        assert [
+            g.id for g in missing_group_choices(
+                (att,), "mspm0", {"attitude-hold": bad}, ("imu_uart",)
+            )
+        ] == ["attitude-hold"], bad
+    # ④ 组内没进选中集（hint 卡形态）→ 不拦
+    assert missing_group_choices((att,), "mspm0", {}, ("pid",)) == []
+    # ⑤ 平台投影后单成员（stm32 侧 attitude-hold 只剩 ml_mpu6050）→ 不拦
+    assert missing_group_choices((att,), "stm32", {}, ("ml_mpu6050",)) == []
+    # ⑥ 多组同时待选：库登记序返回
+    assert [
+        g.id for g in missing_group_choices((gray, att), "mspm0", {}, ("pid", "imu_uart"))
+    ] == ["gray-track", "attitude-hold"]
+    # ⑦ 无组定义（旧库 / 无组载荷）→ 不拦
+    assert missing_group_choices((), "mspm0", {}, ("imu_uart",)) == []
 
 
 def test_build_exclusive_groups_marks_converged_candidates_as_dropped():
@@ -3139,6 +3190,7 @@ def test_build_exclusive_groups_hint_unhit_emits_card():
             "id": "attitude-hold",
             "label": "航向保持 / 姿态传感器",
             "hint": True,
+            "choice_required": False,
             "members": [
                 {"slug": "imu_uart", "role": "UART 串口陀螺仪"},
                 {"slug": "ml_mpu6050", "role": "I2C DMP"},
@@ -3455,6 +3507,7 @@ def test_run_recommendation_done_includes_exclusive_groups_when_hit():
             "id": "gray-track",
             "label": "8 路灰度传感器驱动",
             "hint": False,
+            "choice_required": True,
             "members": [
                 {"slug": "huidu", "role": "仅 8 路灰度读取"},
                 {"slug": "pid", "role": "PID 巡线"},
@@ -3494,6 +3547,7 @@ def test_run_recommendation_done_includes_hint_cards():
             "id": "attitude-hold",
             "label": "航向保持 / 姿态传感器",
             "hint": True,
+            "choice_required": False,
             "members": [
                 {"slug": "imu_uart", "role": "UART 串口陀螺仪"},
                 {"slug": "ml_mpu6050", "role": "I2C DMP"},
