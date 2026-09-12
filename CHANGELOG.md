@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=38675b81bff845674482f11d49b4f08f858bffc2 -->
+<!-- changelog-auto: last-commit=4cea38e6514d732a03c75e2d2f331f7771de2d00 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -14,6 +14,7 @@
 - 00:56 ﻿fix(发版): 两个打包器字节口径统一——git archive 钉 core.autocrlf=false，跨包共有文件差异 926 → 0（工单 full-download/08）
 - 00:57 ﻿fix(发版): pack-update 改以模块方式调核心——真机演练发现相对导入失败（工单 full-download/08）
 - 00:59 ﻿docs(发版): 工单 full-download/08 翻牌 resolved + 补登台账与环境事实
+- 01:10 ﻿chore(库治理): 各库重复项盘点 + 回收 7 个「改名重复」文件（208 MB）
 
 ## 2026-09-12
 - 00:58 门禁引脚容量诊断（落点/可用 IO/解不开几组/至少去掉几个）
