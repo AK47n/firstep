@@ -110,27 +110,33 @@ export function groupMemberPick(group, choices) {
   return (group.members || []).some((m) => m.slug === slug) ? slug : "";
 }
 
-export function pendingGroupChoices(groups, choices, selectedSlugs) {
-  // 还没由用户点过的**硬选择**组（组 id → slug）；空数组 = 可以生成。
-  // 判据与后端 `missing_group_choices` 逐条对齐（跨语言镜像由
-  // tests/js/group-choice-mirror.test.mjs + tests/test_group_choice_mirror.py 钉住）：
-  //   ① ≥2 成员 ② 该组确实进了选中集（组内一个成员都没有 = hint 卡形态，不拦）
+export function needsGroupChoice(group, choices, selectedSlugs) {
+  // 「还差用户点一下」的**单组**判据（与后端 missing_group_choices 逐条对齐）：
+  //   ① 硬选择卡（choice_required + ≥2 成员）；
+  //   ② 该组在选中集里有**≥2 个成员**（同功能被推了多个 → 必须收成一个；
+  //      只剩一个成员 = AI 收敛后的形态，没有「另一个」可选，不该拦——评审整改）；
   //   ③ choices 里没有该组的合法成员值。
-  const picked = choices || {};
+  if (!groupChoiceRequired(group)) return false;
   const selected = new Set(selectedSlugs || []);
-  return renderableGroupCards(groups).filter((g) => {
-    if (!groupChoiceRequired(g)) return false;
-    if (selectedSlugs && !(g.members || []).some((m) => selected.has(m.slug))) return false;
-    return !groupMemberPick(g, picked);
-  });
+  const inSet = (group.members || []).filter((m) => selected.has(m.slug));
+  if (inSet.length < 2) return false;
+  return !groupMemberPick(group, choices);
+}
+
+export function pendingGroupChoices(groups, choices, selectedSlugs) {
+  // 还没由用户点过的**硬选择**组（空数组 = 可以生成）。判据见 needsGroupChoice；
+  // 跨语言镜像由 tests/js/group-choice-mirror.test.mjs + tests/test_group_choice_mirror.py 钉住。
+  return renderableGroupCards(groups).filter((g) => needsGroupChoice(g, choices, selectedSlugs));
 }
 
 export function applyGroupChoices(selectedSlugs, groups, choices) {
-  // 用户点一下成员 → 重算集合（幂等、可复算）。判据：
+  // 用户点一下成员 → 重算集合（幂等、可复算）。只对**用户真的点过的组**动手：
   //   * 点在**快照里已有的成员**上 = 换选：把它换成新点的那一个；
   //   * 点在**快照里没有的成员**上 = 新增：新点的那一个进集合，其余同组成员不动
-  //     （用户从模块库手动加过的东西不该被一次点选带走——评审整改：只有「换选」才顶替）。
-  // 快照 = 调用方传进来的 selectedSlugs；本函数是纯函数，多次调用同一入参结果相同。
+  //     （用户从模块库手动加过的东西不该被一次点选带走）。
+  // **没点过的组一律不动**（评审整改）：否则 AI 收敛后只留的那一件会被静默删掉
+  // （界面没勾选 → 用户以为没选 → 工程里也没有 = 漏件）。
+  // 快照 = 调用方传进来的 selectedSlugs；纯函数，多次调用同一入参结果相同。
   const snapshot = new Set(selectedSlugs || []);
   const out = (selectedSlugs || []).slice();
   const picked = choices || {};

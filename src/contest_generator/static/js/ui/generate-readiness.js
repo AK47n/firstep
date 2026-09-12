@@ -20,8 +20,7 @@ import {
   readinessRowsHTML, readinessSummaryHTML, outputDirWarnRow,
 } from "/js/fx/readiness.js";
 import { stepDoneSet, scrollToStep } from "/js/ui/step-state.js";
-import { chosenPlatform, selectedSlugs, setRecommendClarifications, startRecommend, lastRecommend, groupChoices } from "/js/ui/generate-recommend.js";
-import { groupChoiceGapText } from "/js/fx/module.js";
+import { chosenPlatform, selectedSlugs, setRecommendClarifications, startRecommend, groupChoiceGapMessage } from "/js/ui/generate-recommend.js";
 
 // ---------------------------------------------------------------------------
 // 检查能否生成（工单 a3-readiness-check/01-02）：判据与 btn-generate 前置校验

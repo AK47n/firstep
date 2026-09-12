@@ -1846,11 +1846,12 @@ def missing_group_choices(
     服务端因此要能回答「这次请求里，还有哪几组是用户没点过的」——**前后端同一条规矩**
     （前端拦 + 端点 400），判据都落在这里，免得两边各写一套。
 
-    判据（全部满足才算出问题）：
+    判据（前两条为「这一组到底要不要用户选」，全部满足才算出问题）：
     ① 该组在目标平台投影后 **≥2 成员**（单成员组无可选，不出卡也不拦——与
        `build_exclusive_groups` 的「单成员组不出卡」同源）；
-    ② 该组**确实进入了本次选中集**（组内至少一个成员在 `selected_slugs` 里）——
-       没进选中集的组是 hint 卡（AI 未推荐 / 用户没选），不拦；
+    ② 该组在本次选中集里**有 ≥2 个成员**——同一功能被推了多个，必须收敛成一个，
+       这才需要用户拍板；只剩一个成员 = 同组互斥收敛后的形态（已经没有「另一个」可选），
+       不该拦（评审整改：否则 AI 收敛出的那一个会被判成「用户没选」）；
     ③ `group_choices` 里没有该组的合法选择（值必须是**该组当前平台的成员**；
        越界 slug、非字符串、空串都算没选——宁严勿松，不静默替用户决定）。
 
@@ -1866,7 +1867,7 @@ def missing_group_choices(
         if len(members) < 2:
             continue
         member_slugs = {m.slug for m in members}
-        if not (member_slugs & selected):
+        if len(member_slugs & selected) < 2:
             continue
         picked = choices.get(group.id)
         if isinstance(picked, str) and picked in member_slugs:

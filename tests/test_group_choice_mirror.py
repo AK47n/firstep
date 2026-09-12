@@ -66,18 +66,18 @@ def _single() -> ExclusiveGroup:
 def cases() -> list[dict]:
     """跨语言共用的场景表（**单一出处**；JS 侧读由它导出的 fixture）。"""
     return [
-        {"name": "未选：组在选中集里", "groups": [_att()], "platform": "mspm0",
-         "choices": {}, "selected": ["imu_uart"]},
-        {"name": "未选：组内非推荐成员在选中集里", "groups": [_att()], "platform": "mspm0",
-         "choices": {}, "selected": ["pid", "jy61p"]},
+        {"name": "未选：同组两件都在选中集里", "groups": [_att()], "platform": "mspm0",
+         "choices": {}, "selected": ["imu_uart", "jy61p"]},
         {"name": "已选合法成员", "groups": [_att()], "platform": "mspm0",
-         "choices": {"attitude-hold": "imu_uart"}, "selected": ["imu_uart"]},
+         "choices": {"attitude-hold": "imu_uart"}, "selected": ["imu_uart", "jy61p"]},
         {"name": "已选非推荐成员（换选）", "groups": [_att()], "platform": "mspm0",
-         "choices": {"attitude-hold": "jy61p"}, "selected": ["imu_uart"]},
+         "choices": {"attitude-hold": "jy61p"}, "selected": ["imu_uart", "jy61p"]},
         {"name": "越界成员 = 没选", "groups": [_att()], "platform": "mspm0",
-         "choices": {"attitude-hold": "motor"}, "selected": ["imu_uart"]},
+         "choices": {"attitude-hold": "motor"}, "selected": ["imu_uart", "jy61p"]},
         {"name": "空串值 = 没选", "groups": [_att()], "platform": "mspm0",
-         "choices": {"attitude-hold": ""}, "selected": ["imu_uart"]},
+         "choices": {"attitude-hold": ""}, "selected": ["imu_uart", "jy61p"]},
+        {"name": "组内只有一件（AI 收敛后形态）= 不拦", "groups": [_att()], "platform": "mspm0",
+         "choices": {}, "selected": ["imu_uart"]},
         {"name": "组没进选中集（hint 卡形态）= 不拦", "groups": [_att()], "platform": "mspm0",
          "choices": {}, "selected": ["pid", "motor"]},
         {"name": "stm32 投影后单成员 = 不拦", "groups": [_att()], "platform": "stm32",
@@ -85,9 +85,9 @@ def cases() -> list[dict]:
         {"name": "单成员组 = 不拦", "groups": [_single()], "platform": "mspm0",
          "choices": {}, "selected": ["only"]},
         {"name": "多组同时待选（库登记序）", "groups": [_gray(), _att()], "platform": "mspm0",
-         "choices": {}, "selected": ["pid", "imu_uart"]},
+         "choices": {}, "selected": ["pid", "xunji", "imu_uart", "jy61p"]},
         {"name": "多组：只选了其中一组", "groups": [_gray(), _att()], "platform": "mspm0",
-         "choices": {"attitude-hold": "imu_uart"}, "selected": ["pid", "imu_uart"]},
+         "choices": {"attitude-hold": "imu_uart"}, "selected": ["pid", "xunji", "imu_uart", "jy61p"]},
         {"name": "无组定义（旧库 / 无组载荷）", "groups": [], "platform": "mspm0",
          "choices": {}, "selected": ["imu_uart"]},
         {"name": "用户把组内模块删掉后 = 不拦（前后端同口径）", "groups": [_att()],
@@ -141,8 +141,7 @@ def mirror_payload() -> dict:
 def test_backend_predicate_on_mirror_scenarios():
     """后端判据在场景表上的结论（逐条钉住，兼作 fixture 的语义说明）。"""
     results = {case["name"]: expected_pending(case) for case in cases()}
-    assert results["未选：组在选中集里"] == ["attitude-hold"]
-    assert results["未选：组内非推荐成员在选中集里"] == ["attitude-hold"]
+    assert results["未选：同组两件都在选中集里"] == ["attitude-hold"]
     assert results["已选合法成员"] == []
     assert results["已选非推荐成员（换选）"] == []
     assert results["越界成员 = 没选"] == ["attitude-hold"]

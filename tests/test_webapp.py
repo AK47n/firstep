@@ -2642,7 +2642,7 @@ def test_generate_rejects_missing_group_choice(client, context, tmp_path):
         "/api/generate",
         json={
             "platform": PLATFORM_STM32,
-            "slugs": ["gyro_uart"],
+            "slugs": ["gyro_uart", "gyro_i2c"],
             "main_c": "int main(void) { while (1); }\n",
             "output_dir": str(output_dir),
         },
@@ -2666,7 +2666,7 @@ def test_generate_rejects_group_choice_outside_members(client, context, tmp_path
         "/api/generate",
         json={
             "platform": PLATFORM_STM32,
-            "slugs": ["gyro_uart"],
+            "slugs": ["gyro_uart", "gyro_i2c"],
             "main_c": "int main(void) { while (1); }\n",
             "output_dir": str(output_dir),
             "group_choices": {"attitude-hold": "not_a_member"},
@@ -2688,10 +2688,31 @@ def test_generate_accepts_valid_group_choice(client, context, tmp_path):
         "/api/generate",
         json={
             "platform": PLATFORM_STM32,
-            "slugs": ["gyro_uart"],
+            "slugs": ["gyro_uart", "gyro_i2c"],
             "main_c": "int main(void) { while (1); }\n",
             "output_dir": str(output_dir),
             "group_choices": {"attitude-hold": "gyro_uart"},
+        },
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert output_dir.is_dir()
+
+
+def test_generate_allows_single_member_group(client, context, tmp_path):
+    """收敛态不拦（工单 group-choice-required/01 口径）：同组只剩**一件**在选中集里 =
+    引擎已把「同功能重复」解决掉，没有歧义可拍板 → 不带 group_choices 也放行。"""
+    _import_stm32_master(context[0].config.masters_dir, tmp_path)
+    _add_fake_group_modules(context[0].config.module_library_dir)
+    context[1]["llm"] = FakeLLM(preread=PrereadResult(overview="姿态", reminders=()))
+    output_dir = tmp_path / "out" / "group-single"
+    resp = client.post(
+        "/api/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "slugs": ["gyro_uart"],
+            "main_c": "int main(void) { while (1); }\n",
+            "output_dir": str(output_dir),
         },
     )
 
@@ -2710,7 +2731,7 @@ def test_skeleton_rejects_missing_group_choice(client, context, tmp_path):
         json={
             "problem_text": "设计一个航向保持小车",
             "platform": PLATFORM_STM32,
-            "slugs": ["gyro_uart"],
+            "slugs": ["gyro_uart", "gyro_i2c"],
             "references": [],
         },
     )
@@ -2727,7 +2748,7 @@ def test_generate_rejects_non_object_group_choices(client, context, tmp_path):
         "/api/generate",
         json={
             "platform": PLATFORM_STM32,
-            "slugs": ["gyro_uart"],
+            "slugs": ["gyro_uart", "gyro_i2c"],
             "main_c": "int main(void) { while (1); }\n",
             "output_dir": str(tmp_path / "out" / "x"),
             "group_choices": ["attitude-hold"],

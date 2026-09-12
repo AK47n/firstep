@@ -1,0 +1,97 @@
+{
+  "modules": [
+    {
+      "slug": "pid",
+      "reason": "灰度循迹 + PID"
+    },
+    {
+      "slug": "jy61p",
+      "reason": "陀螺仪输出角度，直线段保持航向"
+    }
+  ],
+  "requirements": [
+    {
+      "sentence": 4,
+      "requirement": "沿直线与半圆弧路径自动行驶",
+      "modules": [
+        "pid"
+      ]
+    },
+    {
+      "sentence": 12,
+      "requirement": "无引导标记直线段航向保持",
+      "modules": [
+        "jy61p"
+      ]
+    },
+    {
+      "sentence": 1,
+      "requirement": "航向保持 / 姿态传感器",
+      "modules": [
+        "imu_uart"
+      ]
+    }
+  ],
+  "exclusive_groups": [
+    {
+      "id": "gray-track",
+      "label": "8 路灰度传感器驱动",
+      "hint": false,
+      "choice_required": true,
+      "members": [
+        {
+          "slug": "huidu",
+          "role": "仅 8 路灰度读取（黑线检测位图），不含巡线/电机控制；适合自写巡线逻辑"
+        },
+        {
+          "slug": "pid",
+          "role": "灰度读取 + 边缘中点巡线偏差 + PID/PD 巡线 + 电机目标速度（含速度环，双平台）"
+        },
+        {
+          "slug": "xunji",
+          "role": "灰度读取（位图）+ 加权质心巡线 + 编码器采样（开环速度输出；真机控制代码移植）"
+        }
+      ],
+      "recommended": [
+        "pid"
+      ],
+      "candidates": [
+        "huidu",
+        "xunji"
+      ],
+      "dropped": []
+    },
+    {
+      "id": "attitude-hold",
+      "label": "航向保持 / 姿态传感器",
+      "hint": false,
+      "choice_required": true,
+      "members": [
+        {
+          "slug": "imu_uart",
+          "role": "UART 串口陀螺仪（9 字节帧 + CRC16，yaw/角速度直出，接 PA28/PA31）"
+        },
+        {
+          "slug": "jy61p",
+          "role": "软 I2C + 器件内卡尔曼融合（roll/pitch/yaw 直出，接 PA28/PA31，JY61P 模块）"
+        },
+        {
+          "slug": "ml_mpu6050",
+          "role": "I2C + 官方 DMP 姿态解算（pitch/roll/yaw 100Hz，接 PA0/PA1，MPU6050 套件）"
+        }
+      ],
+      "recommended": [
+        "jy61p"
+      ],
+      "candidates": [
+        "imu_uart",
+        "ml_mpu6050"
+      ],
+      "dropped": [
+        "imu_uart"
+      ]
+    }
+  ],
+  "score_points": [],
+  "references": []
+}

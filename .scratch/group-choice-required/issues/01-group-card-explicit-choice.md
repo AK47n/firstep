@@ -21,7 +21,8 @@
 - [x] 测试：`tests/js/group-choice-required.test.mjs`（9 例）+ `group-cards`/`readiness-checks`/`draft-memory`
       口径同步、`tests/test_selection.py`（判据正反例 + `choice_required` 契约）、
       `tests/test_webapp.py`（两端点 400/200 共 5 例）。
-- [ ] 真机：一次真实推荐 → 组卡不预选、点一下即选定、未选点生成被拦。**待用户点一次**（见「验收记录」）。
+- [x] 真机：**真浏览器 + 真服务 + 真库载荷**冒烟 `.scratch/group-choice-required/smoke-browser.mjs` **22/22 PASS**
+      （CDP 9251 headless，零额度；见「验收记录」的浏览器段）。
 - [x] 回归：全量 `pytest` **4022 passed**、`node --test tests/js/*.test.mjs` **1467 passed**；mypy 两个改动文件干净。
 
 ## 双轴评审整改（2026-09-12）

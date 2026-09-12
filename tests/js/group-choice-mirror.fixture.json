@@ -3,44 +3,11 @@
   "note": "期望值由 Python 判据 missing_group_choices 现算；JS 侧 pendingGroupChoices 必须一致",
   "cases": [
     {
-      "name": "未选：组在选中集里",
+      "name": "未选：同组两件都在选中集里",
       "platform": "mspm0",
       "choices": {},
       "selected": [
-        "imu_uart"
-      ],
-      "groups": [
-        {
-          "id": "attitude-hold",
-          "label": "航向保持 / 姿态传感器",
-          "hint": false,
-          "choice_required": true,
-          "members": [
-            {
-              "slug": "imu_uart",
-              "role": "imu_uart 的差异定位"
-            },
-            {
-              "slug": "jy61p",
-              "role": "jy61p 的差异定位"
-            },
-            {
-              "slug": "ml_mpu6050",
-              "role": "ml_mpu6050 的差异定位"
-            }
-          ]
-        }
-      ],
-      "expected_pending": [
-        "attitude-hold"
-      ]
-    },
-    {
-      "name": "未选：组内非推荐成员在选中集里",
-      "platform": "mspm0",
-      "choices": {},
-      "selected": [
-        "pid",
+        "imu_uart",
         "jy61p"
       ],
       "groups": [
@@ -76,7 +43,8 @@
         "attitude-hold": "imu_uart"
       },
       "selected": [
-        "imu_uart"
+        "imu_uart",
+        "jy61p"
       ],
       "groups": [
         {
@@ -109,7 +77,8 @@
         "attitude-hold": "jy61p"
       },
       "selected": [
-        "imu_uart"
+        "imu_uart",
+        "jy61p"
       ],
       "groups": [
         {
@@ -142,7 +111,8 @@
         "attitude-hold": "motor"
       },
       "selected": [
-        "imu_uart"
+        "imu_uart",
+        "jy61p"
       ],
       "groups": [
         {
@@ -177,7 +147,8 @@
         "attitude-hold": ""
       },
       "selected": [
-        "imu_uart"
+        "imu_uart",
+        "jy61p"
       ],
       "groups": [
         {
@@ -204,6 +175,37 @@
       "expected_pending": [
         "attitude-hold"
       ]
+    },
+    {
+      "name": "组内只有一件（AI 收敛后形态）= 不拦",
+      "platform": "mspm0",
+      "choices": {},
+      "selected": [
+        "imu_uart"
+      ],
+      "groups": [
+        {
+          "id": "attitude-hold",
+          "label": "航向保持 / 姿态传感器",
+          "hint": false,
+          "choice_required": true,
+          "members": [
+            {
+              "slug": "imu_uart",
+              "role": "imu_uart 的差异定位"
+            },
+            {
+              "slug": "jy61p",
+              "role": "jy61p 的差异定位"
+            },
+            {
+              "slug": "ml_mpu6050",
+              "role": "ml_mpu6050 的差异定位"
+            }
+          ]
+        }
+      ],
+      "expected_pending": []
     },
     {
       "name": "组没进选中集（hint 卡形态）= 不拦",
@@ -289,7 +291,9 @@
       "choices": {},
       "selected": [
         "pid",
-        "imu_uart"
+        "xunji",
+        "imu_uart",
+        "jy61p"
       ],
       "groups": [
         {
@@ -346,7 +350,9 @@
       },
       "selected": [
         "pid",
-        "imu_uart"
+        "xunji",
+        "imu_uart",
+        "jy61p"
       ],
       "groups": [
         {

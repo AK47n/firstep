@@ -3051,8 +3051,9 @@ def test_build_exclusive_groups_derives_hit_cards():
 def test_missing_group_choices_predicate():
     """功能组「必须由用户显式选择」判据（工单 group-choice-required/01）。
 
-    待选 = ① 平台投影后 ≥2 成员 且 ② 该组确实进了选中集 且 ③ group_choices 里
-    没有该组的**合法成员**值。单成员组、未进选中集的组（hint 卡）、无组载荷都不拦。
+    待选 = ① 平台投影后 ≥2 成员 且 ② 该组在选中集里**有 ≥2 个成员**（= 歧义态：
+    同功能被推了多个，必须收成一个）且 ③ group_choices 里没有该组的**合法成员**值。
+    单成员组、组内只剩一件（收敛后常态）、一件都没进选中集（hint 卡）、无组载荷都不拦。
     """
     att = _group(
         "attitude-hold",
@@ -3065,32 +3066,49 @@ def test_missing_group_choices_predicate():
     )
     gray = _group(
         "gray-track", "8 路灰度传感器驱动",
-        [("huidu", ("mspm0",), "只用 8 路读取"), ("pid", ("mspm0",), "PID 巡线")],
+        [
+            ("huidu", ("mspm0",), "只用 8 路读取"),
+            ("pid", ("mspm0",), "PID 巡线"),
+            ("xunji", ("mspm0",), "质心巡线"),
+        ],
     )
 
-    # ① 未选：组在选中集里 → 待选
-    assert [g.id for g in missing_group_choices((att,), "mspm0", {}, ("imu_uart",))] == [
-        "attitude-hold"
-    ]
-    assert [g.id for g in missing_group_choices((att,), "mspm0", None, ("jy61p",))] == [
-        "attitude-hold"
-    ]
+    # ① 未选 + 组内**两件都在**选中集里（= 歧义态）→ 待选
+    assert [
+        g.id for g in missing_group_choices((att,), "mspm0", {}, ("imu_uart", "jy61p"))
+    ] == ["attitude-hold"]
+    assert [
+        g.id
+        for g in missing_group_choices((att,), "mspm0", None, ("imu_uart", "jy61p"))
+    ] == ["attitude-hold"]
     # ② 选了组内合法成员 → 放行（点谁都可以，包括非 recommended 的那个）
-    assert missing_group_choices((att,), "mspm0", {"attitude-hold": "jy61p"}, ("imu_uart",)) == []
+    assert (
+        missing_group_choices(
+            (att,), "mspm0", {"attitude-hold": "jy61p"}, ("imu_uart", "jy61p")
+        )
+        == []
+    )
     # ③ 越界 / 非字符串 / 空串 = 没选（宁严勿松）
     for bad in ("motor", "", 3, None):
         assert [
-            g.id for g in missing_group_choices(
-                (att,), "mspm0", {"attitude-hold": bad}, ("imu_uart",)
+            g.id
+            for g in missing_group_choices(
+                (att,), "mspm0", {"attitude-hold": bad}, ("imu_uart", "jy61p")
             )
         ] == ["attitude-hold"], bad
-    # ④ 组内没进选中集（hint 卡形态）→ 不拦
+    # ④ 组内一件都没进选中集（hint 卡形态）→ 不拦
     assert missing_group_choices((att,), "mspm0", {}, ("pid",)) == []
+    # ④' 组内**只剩一件**（收敛后常态）→ 不拦：已经没有「另一个」可选，
+    #     拦它只是让用户确认一个已定的默认值（工单口径，见 spec「方案 3」）
+    assert missing_group_choices((att,), "mspm0", {}, ("imu_uart",)) == []
     # ⑤ 平台投影后单成员（stm32 侧 attitude-hold 只剩 ml_mpu6050）→ 不拦
     assert missing_group_choices((att,), "stm32", {}, ("ml_mpu6050",)) == []
     # ⑥ 多组同时待选：库登记序返回
     assert [
-        g.id for g in missing_group_choices((gray, att), "mspm0", {}, ("pid", "imu_uart"))
+        g.id
+        for g in missing_group_choices(
+            (gray, att), "mspm0", {}, ("pid", "xunji", "imu_uart", "jy61p")
+        )
     ] == ["gray-track", "attitude-hold"]
     # ⑦ 无组定义（旧库 / 无组载荷）→ 不拦
     assert missing_group_choices((), "mspm0", {}, ("imu_uart",)) == []
