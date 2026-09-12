@@ -44,15 +44,28 @@
 
    - 产出四件套：`firstep-update-v1.1.0.zip`（仓库 tracked 快照，含 `VERSIONS.md`，**不含** `.scratch` / `.venv` / `sources/materials` / `.git`）、`.files.txt`（文件清单）、`.removed.txt`（自基线起删除的文件；首次发布无基线 = 空）、`.sha256.txt`。
    - 首次小发版没有基线：省略 `-Baseline`（removed 为空，更新器跳过删除）。
-3. 创建 Release 并上传更新包四件套（附件用 ASCII 文件名，避免 gh 把中文名替换成 `default.txt`）：
+3. **先在本地打 tag 并推送，再建 Release**（`gh release create` 是在**服务端**建 tag，
+   本地不会自动有这个 tag —— 2026-09-13 发 v1.1.0/v1.1.1 时踩到：本地 `git tag` 只有
+   v1.0.0，下次要按 tag 引基线就找不到）：
+
+   ```powershell
+   git tag -a v1.1.0 -m "firstep v1.1.0"
+   git push origin main v1.1.0
+   ```
+
+   已经用 `gh release create` 建过 tag 的，补一条同步即可：`git fetch origin --tags`。
+4. 创建 Release 并上传更新包四件套（附件用 ASCII 文件名，避免 gh 把中文名替换成 `default.txt`）：
 
    ```powershell
    gh release create v1.1.0 --title 'firstep 电赛工程生成器 · 更新包 v1.1.0' --notes-file release-notes.md --repo AK47n/firstep
    gh release upload v1.1.0 firstep-update-v1.1.0.zip firstep-update-v1.1.0.files.txt firstep-update-v1.1.0.removed.txt firstep-update-v1.1.0.sha256.txt --repo AK47n/firstep
    ```
 
-4. 校验：`gh release view v1.1.0 --repo AK47n/firstep` 或 GitHub API 确认 4 个附件齐全。
-5. 把本次 `firstep-update-v1.1.0.files.txt` 存好——下次小发版的 `-Baseline`。
+   - **空 `removed.txt` 会被拒收**：首次发布（无基线）时该文件是 0 字节，`gh release
+     upload` 报 `HTTP 400: Bad Content-Length`。上传前写成一行注释
+     （`# 本次无被删除的文件`）——更新器本就跳过 `#` 行，语义不变。
+5. 校验：`gh release view v1.1.0 --repo AK47n/firstep` 或 GitHub API 确认 4 个附件齐全。
+6. 把本次 `firstep-update-v1.1.0.files.txt` 存好——下次小发版的 `-Baseline`。
 
 ## 完整包（zip 分卷）流程（一键全量下载）
 

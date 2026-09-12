@@ -448,17 +448,28 @@ SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_ru
 ## G. 完整包（一键全量下载）真机发布演练（1 项）
 
 - [x] **G1 前两步：真实 Release 已发布并上传资产**（2026-09-13 完成）
-  - 发布：https://github.com/AK47n/firstep/releases/tag/v1.1.0 （tag `v1.1.0` → `d9d14e8b`；main 已同步远端）
-  - 资产 8 件：`firstep-full-v1.1.0.zip` 783.29 MB + 清单 3.55 MB + 删除清单 + 校验和；
-    `firstep-update-v1.1.0.zip` 295.98 MB + files / removed / sha256
-  - 验证：发布前四件套自检 **26 项全过**（`verify_release_assets.py`）；发布后**从线上重新下载两个 zip 重算 SHA256 与校验和一致**（`verify_published_assets.py`）；真机端点 **15 项全过**（`verify_live_endpoints.py`：`/api/health` 报 1.1.0、完整包检查认出 v1.1.0 / 1 卷 / 清单地址、小发版检查判「已是最新」、资料库检查回 `baseline-missing`）
-  - 现场踩坑：空 `removed.txt`（0 字节）被 `gh release upload` 以 `HTTP 400: Bad Content-Length` 拒收 → 改写为 `# 注释行`（更新器跳过 `#` 行，语义不变）；已开工单 `full-download/08` 要求发布侧生成时就写注释行
-- [ ] **G1 后五步：客户端真机演练**（需要在一台**无基线的用户环境**走一遍；不宜在开发机上对自己的源码树做替换）
-  1. 无基线环境「设置 → 完整包下载」→ 下载 → 自动替换 → 自动重启；
-  2. 更新后核对：工具可启动、DeepSeek key / 任务状态 / 对话记录 / 已生成工程原样、资料库内容齐全、**那批第三方安装包未被误删**；
-  3. 再次检查更新只提示「变化的部分」（基线已随包写回）；
-  4. 弱网：中途取消 / 断网重试 → 已校验的卷不重下；
-  5. 失败演练：改一个卷制造校验失败 → 中文错误 + 备份位置提示、旧版本仍可用。
+  - **v1.1.0**：https://github.com/AK47n/firstep/releases/tag/v1.1.0 （tag → `d9d14e8b`）
+  - **v1.1.1（修复版）**：https://github.com/AK47n/firstep/releases/tag/v1.1.1 （tag → `f4f9822d`）——
+    v1.1.0 发布后经**沙箱真机演练**发现三处用户必踩缺陷（更新器路径 / 资料库基线路径 / 停服端口），
+    修复后重发本版；两版的资产都是 8 件（完整包 zip + 清单 + 删除清单 + 校验和；小发版 4 件）
+  - 验证：发布前四件套自检 **26 / 20 项全过**（`verify_release_assets.py` / `verify_release_assets_111.py`，
+    后者额外断言「三处修复确实在包内」）；发布后**从线上重新下载两个 zip 重算 SHA256 与校验和一致**
+    （`verify_published_assets.py`）；真机端点核对（`verify_live_endpoints.py` / `verify_live_v111.py`）
+  - 现场踩坑：空 `removed.txt`（0 字节）被 `gh release upload` 以 `HTTP 400: Bad Content-Length` 拒收
+    → 改写为 `# 注释行`（更新器跳过 `#` 行，语义不变）；已开单 `full-download/08`，并在 `releasing.md` 写了这一步
+  - 另一处流程坑：`gh release create` 在**服务端**建 tag，本地 `git tag` 不会自动有 v1.1.0/v1.1.1
+    → 已 `git fetch origin --tags` 补齐，并把「先本地打 tag 再建 Release」写进 `releasing.md`
+- [x] **G1 中两步：沙箱「模拟用户机」完成客户端真机演练**（2026-09-13 完成，同一台机器）
+  - 做法：`Desktop\firstep-sim`（瘦身但同构的安装副本）+ 独立数据目录 `~\.contest_generator_sim`
+    + 独立端口 8020，用**线上真实的包**跑全链路（构建脚本 `make_sim_sandbox.py`）
+  - **完整包**：真下载 783 MB（62 s / 11 MB·s⁻¹）→ SHA256 校验 → 停服 → 备份 8536 文件 → 落位 8774
+    → 写回资料库基线（12 批次 / 5087 文件）→ 重启 → 版本 1.1.1；**断点续传**复跑 0 秒进替换（已校验卷跳过）
+  - **小发版**：真下载 296 MB → 替换 5039 文件 → 结果记录 `mode=single / version=1.1.1` → 重启后 1.1.1
+  - 保命项：第三方安装包未被误删、包外文件保留、备份生成、`pending-update.json` 被清除
+  - 演练脚本：`trigger_and_watch.py` / `verify_sim_after_update.py` / `sim_small_update.py`
+- [ ] **G1 后三步：极端场景**（弱网中途取消 / 断网重试 / 故意改坏一个卷制造校验失败）
+  - 代码侧已由自动化覆盖：卷级断点续传、校验失败清理半成品与中文报错、失败保留备份
+    （`tests/test_full_task.py` / `test_full_updater.py`）；真机只额外验过「取消后重试跳过已完成卷」的等价路径
 
 **来源 `full-download/07`**；本机可验部分已全跑过：
 `.scratch/full-download/e2e_full_download.py`（7 步全通过）+ `smoke-full-update.mjs`（9/9 PASS，截图 `shot-full-update-window-dark.png`）；
