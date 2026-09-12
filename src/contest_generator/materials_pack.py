@@ -27,7 +27,7 @@ import urllib.request
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
 
 MANIFEST_FILENAME = ".materials-manifest.json"
 PART_LIMIT_BYTES = int(1.9 * 1024**3)  # GitHub 单资产 2 GB 上限留余量
@@ -51,6 +51,12 @@ DIR_SLUGS: dict[str, str] = {
 
 # 扫描时跳过的条目名（任意层级）
 SKIP_NAMES = {".git", "__pycache__", MANIFEST_FILENAME}
+
+# 运行期补充的 slug（工单 full-download/01）：完整包打包要把当前资料库状态
+# 直接写成新版基线，若碰到尚未登记的中文目录，不该让整条发版链路断掉——
+# `register_dir_slugs` 在扫描前补登记，落盘的清单就是最终 slug（一致性由
+# 调用方保证：登记一次即沿用，不做「先派生后改名」的漂移）。
+_EXTRA_DIR_SLUGS: dict[str, str] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -135,12 +141,44 @@ def slug_for_dir(dirname: str) -> str:
     """目录名 → ASCII slug：登记表命中直接用；全 ASCII 则规范化；否则报错。
 
     规范化：小写；非 `[A-Za-z0-9._-]` 字符替换为 `_`（空格等）。
+    运行期补登记（`register_dir_slugs`，完整包打包用）优先于内置登记表。
     """
+    if dirname in _EXTRA_DIR_SLUGS:
+        return _EXTRA_DIR_SLUGS[dirname]
     if dirname in DIR_SLUGS:
         return DIR_SLUGS[dirname]
     if all(ord(ch) < 128 for ch in dirname) and dirname not in (".", ".."):
         return "".join(ch.lower() if ch.isalnum() or ch in "._-" else "_" for ch in dirname)
     raise ValueError(f"目录「{dirname}」未登记 slug，请在 DIR_SLUGS 中登记后再打包")
+
+
+def derive_slug(dirname: str) -> str:
+    """未登记目录名的确定性 ASCII slug 派生（`dir-<sha1 前 12 位>`）。
+
+    内容寻址：同一个目录名恒得同一个 slug，跨版本稳定；`register_dir_slugs`
+    在没有显式映射时用它补登记。已登记目录绝不走这条路径（slug 一旦发出去
+    就不能变，改名 = 用户侧整批重下）。
+    """
+    digest = hashlib.sha1(dirname.encode("utf-8")).hexdigest()[:12]
+    return f"dir-{digest}"
+
+
+def register_dir_slugs(extra: dict[str, str]) -> dict[str, str]:
+    """补登记目录 → slug（合并进内置表，返回合并后的映射）。
+
+    完整包打包前调用：未在 `DIR_SLUGS` 里登记的中文目录，用显式映射或
+    `derive_slug` 补上，让打包不因新目录中断；已登记项不会被覆盖（发出去的
+    slug 是用户侧基线的一部分，必须稳定）。
+    """
+    added: dict[str, str] = {}
+    for dirname, slug in extra.items():
+        if dirname in DIR_SLUGS:
+            continue
+        if not slug or not all(ch.isalnum() or ch in "._-" for ch in slug):
+            raise ValueError(f"目录「{dirname}」的 slug 含非法字符：{slug!r}")
+        _EXTRA_DIR_SLUGS.setdefault(dirname, slug)
+        added[dirname] = _EXTRA_DIR_SLUGS[dirname]
+    return added
 
 
 # ---------------------------------------------------------------------------
@@ -152,17 +190,24 @@ def _relative_posix(root: Path, path: Path) -> str:
     return path.relative_to(root).as_posix()
 
 
-def scan_materials(root: Path) -> list[PartFile]:
+def scan_materials(root: Path, exclude: Callable[[str], bool] | None = None) -> list[PartFile]:
     """扫描资料库根：全部文件 → PartFile（相对 POSIX 路径 / size / sha256）。
 
     跳过 SKIP_NAMES（任意层级）与零字节以下的目录噪音；结果按 path 排序
     （确定性，diff 稳定）。
+
+    `exclude`（相对资料库根的 POSIX 路径 → 是否排除）：完整包打包时用它与
+    包本体的排除规则保持同一口径——**清单里出现的文件必须真的在包里**，
+    否则用户侧基线会虚报文件、下载器按清单找不到文件（工单 full-download/01）。
     """
     entries: list[PartFile] = []
     for path in sorted(root.rglob("*")):
         if not path.is_file():
             continue
+        relative = _relative_posix(root, path)
         if any(part in SKIP_NAMES for part in path.relative_to(root).parts):
+            continue
+        if exclude is not None and exclude(relative):
             continue
         digest = hashlib.sha256()
         with open(path, "rb") as handle:
@@ -170,7 +215,7 @@ def scan_materials(root: Path) -> list[PartFile]:
                 digest.update(chunk)
         entries.append(
             PartFile(
-                path=_relative_posix(root, path),
+                path=relative,
                 size=path.stat().st_size,
                 sha256=digest.hexdigest(),
             )
@@ -179,9 +224,16 @@ def scan_materials(root: Path) -> list[PartFile]:
     return entries
 
 
-def scan_as_manifest(root: Path, version: str) -> dict[str, Any]:
-    """扫描结果直接构造成「当前全量清单」（批次 = 顶级目录，slug 映射登记）。"""
-    entries = scan_materials(root)
+def scan_as_manifest(
+    root: Path,
+    version: str,
+    exclude: Callable[[str], bool] | None = None,
+) -> dict[str, Any]:
+    """扫描结果直接构造成「当前全量清单」（批次 = 顶级目录，slug 映射登记）。
+
+    `exclude` 透传给 `scan_materials`（完整包打包用：与包本体排除规则同口径）。
+    """
+    entries = scan_materials(root, exclude=exclude)
     groups: dict[str, list[PartFile]] = {}
     for entry in entries:
         top = entry.path.split("/", 1)[0]
