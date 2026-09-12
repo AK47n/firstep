@@ -67,8 +67,8 @@ CASES: list[tuple[str, str, tuple[str, str], list[dict]]] = [
         ],
     ),
     (
-        "待拍板·LoRa × Zigbee",
-        "?无线",
+        "候5·无线链路组（LoRa × Zigbee）",
+        "zigbee-rx",
         ("as32", "zigbee_link"),
         [
             {"sentence": 6, "requirement": "双车之间远距离无线数据通信（LoRa 数传）"},
@@ -76,8 +76,17 @@ CASES: list[tuple[str, str, tuple[str, str], list[dict]]] = [
         ],
     ),
     (
-        "待拍板·定位组",
-        "?定位",
+        "候5b·无线链路组（2.4G × Zigbee）",
+        "zigbee-rx",
+        ("nrf24l01", "zigbee_link"),
+        [
+            {"sentence": 17, "requirement": "点对点低延迟遥控链路（2.4G 无线收发）"},
+            {"sentence": 10, "requirement": "双机无线透传收发数据（Zigbee 链路）"},
+        ],
+    ),
+    (
+        "候6·定位组（UWB × GPS）",
+        "positioning",
         ("uwb_uart", "neo_6m"),
         [
             {"sentence": 13, "requirement": "室内定位测量坐标（UWB 基站）"},
@@ -85,8 +94,8 @@ CASES: list[tuple[str, str, tuple[str, str], list[dict]]] = [
         ],
     ),
     (
-        "待拍板·手机遥控链路",
-        "?遥控",
+        "候5c·无线链路组（蓝牙 × WiFi）",
+        "zigbee-rx",
         ("hc05", "esp01s"),
         [
             {"sentence": 15, "requirement": "手机蓝牙遥控小车（蓝牙串口）"},

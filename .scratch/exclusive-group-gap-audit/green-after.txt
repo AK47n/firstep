@@ -1,11 +1,12 @@
 ﻿真库组声明：
+  zigbee-rx: ['as32', 'ec01g', 'esp01s', 'hc05', 'nrf24l01', 'zigbee_link', 'zigbee_uart']
   sound-prompt: ['beep', 'jq8900']
   barometer: ['bmp180', 'ms5611']
   gray-track: ['huidu', 'pid', 'xunji']
   display: ['ili9341', 'ili9488', 'lcd', 'max7219', 'oled', 'st7789_para']
   attitude-hold: ['imu_uart', 'jy61p', 'ml_mpu6050']
   distance: ['ir_distance', 'sr04', 'us016', 'vl53l0x']
-  zigbee-rx: ['zigbee_link', 'zigbee_uart']
+  positioning: ['neo_6m', 'uwb_uart']
 
 [对照·姿态组（已并入，应绿）] imu_uart × jy61p
   同组：imu_uart=attitude-hold jy61p=attitude-hold
@@ -37,22 +38,28 @@
   dropped = {'sound-prompt': ('jq8900',)}
   → 绿（只剩一件）
 
-[待拍板·LoRa × Zigbee] as32 × zigbee_link
-  同组：as32=None zigbee_link=zigbee-rx
-  顶层 modules = ['as32', 'zigbee_link']
-  dropped = {}
-  → 红（两件同时在顶层 modules）
+[候5·无线链路组（LoRa × Zigbee）] as32 × zigbee_link
+  同组：as32=zigbee-rx zigbee_link=zigbee-rx
+  顶层 modules = ['as32']
+  dropped = {'zigbee-rx': ('zigbee_link',)}
+  → 绿（只剩一件）
 
-[待拍板·定位组] uwb_uart × neo_6m
-  同组：uwb_uart=None neo_6m=None
-  顶层 modules = ['uwb_uart', 'neo_6m']
-  dropped = {}
-  → 红（两件同时在顶层 modules）
+[候5b·无线链路组（2.4G × Zigbee）] nrf24l01 × zigbee_link
+  同组：nrf24l01=zigbee-rx zigbee_link=zigbee-rx
+  顶层 modules = ['nrf24l01']
+  dropped = {'zigbee-rx': ('zigbee_link',)}
+  → 绿（只剩一件）
 
-[待拍板·手机遥控链路] hc05 × esp01s
-  同组：hc05=None esp01s=None
-  顶层 modules = ['hc05', 'esp01s']
-  dropped = {}
-  → 红（两件同时在顶层 modules）
+[候6·定位组（UWB × GPS）] uwb_uart × neo_6m
+  同组：uwb_uart=positioning neo_6m=positioning
+  顶层 modules = ['uwb_uart']
+  dropped = {'positioning': ('neo_6m',)}
+  → 绿（只剩一件）
 
-红计数 = 3 / 8
+[候5c·无线链路组（蓝牙 × WiFi）] hc05 × esp01s
+  同组：hc05=zigbee-rx esp01s=zigbee-rx
+  顶层 modules = ['hc05']
+  dropped = {'zigbee-rx': ('esp01s',)}
+  → 绿（只剩一件）
+
+红计数 = 0 / 9

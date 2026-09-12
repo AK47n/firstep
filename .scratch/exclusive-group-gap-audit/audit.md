@@ -42,11 +42,12 @@ $env:PYTHONPATH='src'; $env:PYTHONIOENCODING='utf-8'; python .scratch/exclusive-
 
 ## 二、逐条裁定（阶段二）
 
-### 2.1 并组（4 组 / 13 个模块）——已实施
+### 2.1 并组：4 组（首轮判定实施）+ 2 组（用户拍板第二批）——已实施
 
 红证口径：同一份「同一题同时推这两件」的需求层载荷，跑真实
 `selection.build_module_selection`（真库 manifest + 真摘要），看是否两件都进顶层 `modules`。
-改前 `red-before.txt`（红计数 7/8；对照样例 = 已修好的姿态组必须绿），改后 `green-after.txt`。
+改前 `red-before.txt`（红计数 7/8；对照样例 = 已修好的姿态组必须绿），改后 `green-after.txt`
+（9 条载荷：8 绿 + 1 条「已拍板不并」的对照，应保持红）。
 
 #### 组 1 `display`「显示 / 屏幕」（6 件）
 
@@ -105,16 +106,31 @@ $env:PYTHONPATH='src'; $env:PYTHONIOENCODING='utf-8'; python .scratch/exclusive-
 | 绿证 | 改后：顶层 `['beep']`、`dropped = {'sound-prompt': ('jq8900',)}` |
 | 已知留白 | `beep` 的 mspm0 条目是占位实现（`pins` 空）但**有条目**，故 mspm0 侧仍 2 成员、出卡与硬拦不变 |
 
-### 2.2 待用户拍板（3 条 + 3 条备选，**未动手**）
+### 2.2 无线族：用户拍板记录 + 第二批实施（**复核两次，两处改了主意**）
 
-| # | 候选 | 证据 | 现状（改后仍红） | 我的建议 |
+拍板口径（2026-09-13）：用户「全部按你建议」→ 以**复核后的建议**为准。复核推翻了我首轮两处口径，
+两处都朝更严的方向（都改了：`ec01g`、`hc05`/`esp01s`），理由写在「改主意原因」列。
+
+| 候选 | 库内证据 | 首轮建议 | **最终（已实施）** | 改主意原因 |
 |---|---|---|---|---|
-| 1 | `as32`（LoRa）× `zigbee_link`/`zigbee_uart` | `as32` mspm0 notes：「默认挂 UART3（ZIGBEE_UART 宿主——**LoRa 与 Zigbee 无线数传互替件**、同选概率最低）」「as32×zigbee_uart/zigbee_link 同选 = UART3 双实例 CLI 拒绝」；stm32 notes 同款；默认脚完全相同（`pin_config.h:394-399` `AS32_UART = UART_3` TX=PB10/RX=PB11 = `pin_config.h:380-386` ZIGBEE_UART 原脚；mspm0 `AS32_UART` PA26/PA25 = `ZIGBEE_UART` 实例原脚） | 顶层 `['as32', 'zigbee_link']` | **并入并把组名改成中性名**（如「无线串口链路（透传）」）：三件都走同一路 UART 透传、同一物理链路只能一个消费者；**若你要求保留现组名 `zigbee-rx`，则本条不并**——把 LoRa 挂在「Zigbee 无线链路（接收侧）」名下语义是错的 |
-| 2 | `uwb_uart` × `neo_6m` | `neo_6m` description「默认 UART_1（与 UWB 定位互替同脚）」+ notes「与 UWB 定位链路**互替件同脚先例**（GPS 室外定位 × UWB 室内定位……）」；默认脚完全相同（stm32 PA9/PA10 `pin_config.h:372-378` UWB × `:531-536` NEO_6M；mspm0 `UWB_UART` PA23/PA24，`neo_6m` 无 mspm0 条目） | 顶层 `['uwb_uart', 'neo_6m']` | **新开组**「定位 / 位置测量」：mspm0 侧投影后只剩 UWB 单成员 → 该平台不出卡（合理：该平台只有一件）；组名只能按「功能」而非「协议」（跨厂商跨原理） |
-| 3 | `hc05` × `esp01s` | `esp01s` stm32 notes：「默认 UART_1 = UWB_UART 宿主（ESP-01S 手机/上位机遥控 × HC05 蓝牙 = 同手机遥控链路**互替件同脚先例**、同选概率最低）」；`hc05` notes 反向自证；默认脚相同（`pin_config.h:411-416` × `:545-550`） | 顶层 `['hc05', 'esp01s']` | **不并**：蓝牙近场配置链路 vs WiFi 联网上报能力不同框（可共存）；只在「手机遥控」单一口径下才是互替——**口径由你定** |
-| 4（备选） | `ec01g`（NB-IoT）× zigbee/LoRa | `ec01g` stm32 notes：「NB-IoT 蜂窝无线 × Zigbee/LoRa 无线链路**互替件同脚先例**（无线链路二选一接入）」；默认 UART_3 = PB10/PB11 同脚（`pin_config.h:561-566`） | 顶层 `['as32'/'zigbee_*', 'ec01g']`（未单测，同上形状） | **不并**：蜂窝联网（远程遥测/云端上报）与短距透传不同框；且 `ec01g` 自带 GPS（与候选 2 的语义重叠） |
-| 5（备选） | `jq8900` × `syn6288`（语音两件） | 两件都是软 UART TX 语音件；但 `jq8900`/`syn6288` notes 都写「**语音两件常同选，默认即不撞**」（刻意错开 PB19 × PB20 / PA15 × PC14） | 顶层 `['jq8900', 'syn6288']` | **不并**：曲目播报（预存语音）vs 文本合成（任意文本）能力有真实差异，与 `led`/`beep` 并列可共存同口径 |
-| 6（备选） | 温湿度互替件（`aht10`/`sht20`/`sht30`/`dht11`） | 各件 notes 互称「温湿度互替」；但 `sht30` notes 明写「环境站按需任选，**同选互不冲突**（各自默认脚错开）」，`sht20` notes 写「**刻意不叠温湿度互替件** aht10 PB6/PB7、dht11 PB7、sht30 PA28/PA31、ds18b20 PA7」；stm32 侧六件软 I2C 默认共挂 PA6/PA7 是**合法共享**（地址 0x38/0x23/0x40/0x44/0x50/0x1A 全异，白名单登记） | 顶层 `['sht30', 'aht10']`（未单测） | **不并**：库内文字自证可共存 + 默认脚刻意错开 = 不同框信号；若你认为「一块板只需一个温湿度件」，推翻此判定即可（改法 = 四件各加一组 `env-temp-humidity`） |
+| `as32`（LoRa）× `zigbee_link`/`zigbee_uart` | `as32` notes：「LoRa 与 Zigbee 无线数传**互替件**」+「as32×zigbee_uart/zigbee_link 同选 = UART3 双实例 CLI 拒绝」；默认脚完全相同（`pin_config.h:394-399` = `:380-386`；mspm0 同 UART3 PA26/PA25） | 并入 + 改中性组名（连 `nrf24l01`） | **并入 `zigbee-rx`，组名改「无线链路 / 数传」**（组 id 不变——id 不是用户可见词，改名会牵动赛题 `hint_module_groups` 与多处夹具） | — |
+| `nrf24l01`（2.4G） | stm32 notes：「CLK=PB10/MOSI=PB11（ZIGBEE_UART+as32——**无线数传互替件同脚先例**：2.4G 与 Zigbee/LoRa **二选一接入**）」 | 并入 | **并入**（`pin_config.h:442-456` CLK/MOSI 与 `:380-386` ZIGBEE 同脚） | — |
+| `ec01g`（NB-IoT 蜂窝） | stm32 notes：「NB-IoT 蜂窝无线与 Zigbee/LoRa 无线链路**互替件同脚先例（无线链路二选一接入）**」；默认 UART_3 = `PB10/PB11` 同脚（`pin_config.h:561-566`） | 不并（「蜂窝 vs 短距不同框」） | **改了：并入** | **自相矛盾**：同一个「不同框、但可共存」的理由我也用在 LoRa/NB-IoT 上，却把其中之一判了不并——而两者都是「同一路 UART3、同一物理链路只能挂一个驱动、波特率还不同（9600 vs 115200）」；库内又明写「二选一接入」。共存需求由组卡候选 + 用户点选承担（不会静默丢件） |
+| `hc05`（蓝牙）× `esp01s`（WiFi） | `esp01s` stm32 notes：「与 HC05 手机遥控**互替件同脚先例**（ESP-01S 手机/上位机遥控与 HC05 蓝牙 = 同手机遥控链路）」；默认脚相同（`pin_config.h:411-416` × `:545-550`） | 不并 | **改了：并入** | 同一条矛盾：`hc05`×`uwb_uart` 也是「互替件、同一路 UART_1」，若只并一半，A 题的「蓝牙+定位」会被收敛、B 题的「蓝牙+WiFi」不会——**判据必须一致** |
+| `uwb_uart` × `neo_6m` | `neo_6m` notes：「与 UWB 定位链路**互替件同脚先例**（GPS 室外定位 × UWB 室内定位）」；默认脚完全相同 | 新开「定位 / 位置测量」 | **新开 `positioning`** | — |
+| `jq8900` × `syn6288`（语音两件） | 两件 notes 都写「**语音两件常同选，默认即不撞**」（刻意错开 PB19 × PB20 / PA15 × PC14） | 不并 | **不并**（与 `led`/`beep` 并列同口径） | — |
+| 温湿度族（`aht10`/`sht20`/`sht30`/`dht11`） | 互称「温湿度互替」，但 `sht30` notes 明写「按需任选，**同选互不冲突**」、`sht20` notes 写「**刻意不叠**温湿度互替件……」 | 不并 | **不并** | — |
+
+**并入 `zigbee-rx` 后的组形态**：`{as32, ec01g, esp01s, hc05, nrf24l01, zigbee_link, zigbee_uart}`
+（stm32 侧 7 件全在；mspm0 侧 5 件——`ec01g`/`esp01s` 无 mspm0 条目）。
+自证片段（每条都能在对应 manifest 里原文查到）：`as32`「互替件」× `zigbee_uart`；
+`nrf24l01`「二选一接入」× `as32`；`ec01g`「互替件同脚先例」× Zigbee；`hc05`「互替件」× UWB；
+`esp01s`「互替件同脚先例」× HC05。
+
+**已知交叉（不是遗漏）**：`uwb_uart` 与 `hc05` 在 mspm0 侧同吃 `UART2`（PA23/PA24），而 `uwb_uart`
+已属 `positioning` 组——**一个模块只能属一个组**（`converge_exclusive_group_selection` 按组收一个），
+故这一对靠**引脚绑定/换实例**消解，不并组（组语义 = 用途：定位 ≠ 链路）。同理 `hc05`/`esp01s`
+与 `digit_uart`（K230 视觉链路）也共用 UART_1——`digit_uart` 是视觉链路件，不属无线族。
 
 ### 2.3 判定为「不并」并留证（37 条，防下一轮重复产出同一批候选）
 
@@ -129,7 +145,7 @@ $env:PYTHONPATH='src'; $env:PYTHONIOENCODING='utf-8'; python .scratch/exclusive-
 | 4 | `ds18b20` × `mlx90614` | 接触式单总线测温 × 非接触红外测温，测量方式与场景不同（`sht20` notes 把 `mlx90614` 归为「不接触场景」） |
 | 5 | `mq2`/`mq3`/`mq4`/`mq5`/`mq6`/`mq7`/`mq8`/`mq9`/`mq135`/`ms1100`/`ags10`/`sgp30` | 12 件测**不同气体/不同物理量**（烟雾、可燃、酒精、CO、甲烷、液化气、氢气、空气质量、CO₂/VOC 等效值），不是互替件；stm32 侧 16 个 ADC 角色共读 PA5 是**合法共读**（`pin_config.h:156-192` 注释 + ml_adc 顺序调用互不干扰）；`gp2y1014au` notes 明写「smoke 类与本件量纲不同**不可互替**」 |
 | 6 | `bh1750` × `tcs34725` × `s12sd` × `photoresistance` | 光照强度（lux）× 颜色识别（RGB）× 紫外 × 光敏电阻——不同物理量；`tcs34725` notes 自证「颜色识别属视觉类，与 K230 视觉互替」（那是另一条语义，见 #7） |
-| 7 | `tcs34725` × `k230`/`open_mv4`（视觉） | `tcs34725` notes 说「与 K230 视觉互替」——但 `k230`/`open_mv4` 是**协议切片/视觉链路件**（`k230` 是 python artifact + 帧解析、`coord_detect` 是帧协议切片，`open_mv4` 是串口帧件），不是「另一种颜色传感器」；且 `open_mv4` 仅 mspm0、`tcs34725` 双平台。**待你确认是否要开「视觉/颜色识别」组**——我建议不并（协议切片不属器件组） |
+| 7 | `tcs34725` × `k230`/`open_mv4`（视觉） | `tcs34725` notes 说「与 K230 视觉互替」——但 `k230`/`open_mv4` 是**协议切片/视觉链路件**（`k230` 是 python artifact + 帧解析、`coord_detect` 是帧协议切片，`open_mv4` 是串口帧件），不是「另一种颜色传感器」；且 `open_mv4` 仅 mspm0、`tcs34725` 双平台。**不并**（协议切片不属器件组；若要做「视觉/颜色识别」组应另立口碑，本单不碰） |
 | 8 | `tcs34725` × `vl53l0x` | stm32 侧**同址 0x29 不可同挂**（`pin_config.h:568-587` 注释 + `vl53l0x` description），但两件是不同物理量（颜色 vs 距离）= 同址冲突 ≠ 同类；冲突由引脚绑定/换件消解，**不并组**（并组会把「颜色传感器」误标成测距件） |
 | 9 | `vl53l0x` × `tcs34725` 的「同址」这一半 | 同上（硬冲突已在 notes 记录；`distance` 组只按「测距」语义收 `vl53l0x`） |
 | 10 | `key` × `key_matrix` × `ttp224` × `ec11` | 独立按键 × 4×4 机械矩阵 × 4 路电容触摸 × 旋转编码器——人机输入的不同形态，可共存（键盘+旋钮+触摸同面板是常见组合）；`key_matrix`/`ttp224` 都写「**刻意不叠人机面板组合**（KEY/OLED/数码管——键盘+屏幕/按键同框）」= 不同框信号 |
@@ -154,9 +170,9 @@ $env:PYTHONPATH='src'; $env:PYTHONIOENCODING='utf-8'; python .scratch/exclusive-
 | 29 | `hx711` × `motor`（PB5/PB0 同脚） | 「光电编码器闭环小车与静态称重不同框」——不同框 |
 | 30 | `relay` × `motor`/`hx711` | 「继电器与带编码器闭环的电机控制不同框、同选概率最低」——不同框 |
 | 31 | `relay` × `jq8900`/`syn6288`/`ws2812`（执行/输出件泛化） | 「输出」是过宽的口径（继电器控制负载、语音提示、灯带效果都是输出），并组会吃掉各自的独立价值；本表只收**同一功能槽位**（如「一声/一句提示」）——与 #37 同口径 |
-| 32 | `esp01s` × `ec01g` | 一个是 WiFi 局域联网、一个是蜂窝广域；两者都是「联网上报」但介面/资费/范围不同，可共存（也都能与 `hc05` 并列）——若按 2.2 #3 口径拍板，本条同口径 |
-| 33 | `nrf24l01` × `zigbee_link`/`as32` | `nrf24l01` stm32 notes「CLK=PB10/MOSI=PB11（ZIGBEE_UART+as32+key_matrix COL3/4——**无线数传互替件同脚先例**：2.4G 与 Zigbee/LoRa 二选一接入）」——**2.4G 点对点低速 vs 透传链路**存在真实差异（低延迟遥控 vs 数据透传），但库内自证「二选一接入」→ 若你按 2.2 #1 合并无线族，本条应一并纳入；**我建议一并纳入**（同一物理链路只能挂一件） |
-| 34 | `hc05` × `nrf24l01` | 同上族内（蓝牙 vs 2.4G），差异真实；建议随 #33 同口径 |
+| 32 | `esp01s` × `ec01g` | **改主意的一条**（复核前判「不并」，复核后并入同一组）：两者都在 `zigbee-rx`「无线链路 / 数传」组内——串口层面「同一路 UART 只能挂一个驱动」是硬约束，故不能同时选；WiFi 与蜂窝的业务差异由**组卡 role 与用户点选**表达（组内可换选，不是二选一丢弃） |
+| 33 | `nrf24l01` × `zigbee_link`/`as32` | **已并入同一组**（复核建议 + 用户拍板）：`nrf24l01` stm32 notes「CLK=PB10/MOSI=PB11（ZIGBEE_UART+as32+key_matrix COL3/4——**无线数传互替件同脚先例**：2.4G 与 Zigbee/LoRa **二选一接入**）」——2.4G 点对点低速与透传链路的业务差异由组卡 role 表达 |
+| 34 | `hc05` × `nrf24l01` | **已并入同一组**（复核建议 + 用户拍板）：蓝牙手机链路与 2.4G 点对点在「车内一路无线数据链」上是同一槽位（UART_1 与 SPI 两组脚各自与 Zigbee/LoRa 家族同脚） |
 | 35 | `uwb_uart` × `huidu`/`pid`/`xunji`（mspm0 默认脚同族 PA22-27） | `uwb_uart` mspm0 notes「UWB 全局定位 × 灰度巡线为方案互替/不同框」——「方案互替」指整车方案层面（定位车 vs 巡线车），不是同一功能的两种硬件；**不并** |
 | 36 | `tp_xpt2046` × `lcd` | 触摸屏配套件（屏+触同选），`lcd`/`ili9341` notes 都写「与 tp_xpt2046 配套件**刻意错开**」——配套不是互替 |
 | 37 | `relay`/`jq8900`/`syn6288` 的「输出执行件」泛化 | 「输出」是过宽的口径（继电器控制负载、语音提示、显示都是输出），并组会吃掉独立价值；本表只收**同一功能槽位**（如「一声/一句提示」）——判定与 #31 同口径 |
@@ -165,39 +181,48 @@ $env:PYTHONPATH='src'; $env:PYTHONIOENCODING='utf-8'; python .scratch/exclusive-
 
 ## 三、结论
 
-1. **已并 4 组 / 13 个模块**：`display`（6）、`distance`（4）、`barometer`（2）、`sound-prompt`（2）。
-   库内功能组从 3 个 / 8 个模块 → **7 个组 / 21 个模块**（`gray-track` 3、`attitude-hold` 3、
-   `zigbee-rx` 2 为本轮之前已有）。
+1. **已并 6 组 / 24 个模块位**（4 个模块为双平台双条目，故文件数 = 20 个 manifest）：
+   `display`（6）、`distance`（4）、`barometer`（2）、`sound-prompt`（2）、
+   `zigbee-rx` **扩容 + 改中性组名**（2 → 7）、`positioning`（新开，2）。
+   库内功能组从 3 组 / 8 个模块 → **8 组 / 29 个成员位**（`check-groups.py` 实跑：
+   全平台 8 组 / 29 位；stm32 侧 6 组 / 22 位；mspm0 侧 7 组 / 20 位——单成员组按平台剔除）。
 2. **判定「不并」37 条**（2.3 全表）——每条给了为什么，下一轮盘点不必重复产出同一批候选。
-3. **待用户拍板 3 条**（无线族：LoRa×Zigbee、UWB×GPS、蓝牙×WiFi 手机遥控链路）+
-   **备选 3 条**（NB-IoT、语音两件、温湿度族）——**未动手**，各带建议选项（2.2）。
-4. **红证/绿证**：改前 7/8 红（4 组候选全红 + 3 条待拍板红，对照样例姿态组绿）；
-   改后 4 组全绿（每组只剩一件 + 另一件进 `dropped_exclusive_members`），3 条待拍板仍红
-   （`red-before.txt` / `green-after.txt`）。
+3. **待用户拍板项已清零**：无线族 3 条 + 备选 3 条经用户拍板（2026-09-13「全部按你建议」）
+   全部落地或明确不并，记录见 2.2（含我复核后**改主意的两条**：`ec01g`、`hc05`/`esp01s`）。
+4. **红证/绿证**：改前 7/8 红（4 组候选全红 + 3 条无线族红，对照样例姿态组绿）；
+   改后 **9 条载荷全绿（红计数 0/9）**——含新并入的无线链路三条（LoRa / 2.4G / 蓝牙 × WiFi）
+   与定位组（UWB × GPS），每条都是「同组只剩一件 + 另一件进 `dropped_exclusive_members`」。
 5. **回归数值**：见文末「回归」段（`pytest` / `node --test` / `mypy` / `make-payload.py`）。
 
 ## 四、回归（2026-09-13 实测）
 
 | 项 | 命令 | 结果 |
 |---|---|---|
-| 全量 Python | `$env:PYTHONPATH='src'; python -m pytest -q` | **4032 passed, 1 warning in 136.19s**（warning = fastapi/starlette 弃用提示，非失败）。基线对照：改前测试树 `--collect-only` = **4023**，本树 = **4032**（+9 = 本单新增的结构守卫 `tests/test_exclusive_group_gap_audit.py`，其余为基准值更新，零回归） |
+| 全量 Python | `$env:PYTHONPATH='src'; python -m pytest -q` | **4036 passed, 1 warning in 132.26s**（warning = fastapi/starlette 弃用提示，非失败）。基线对照：改前测试树 `--collect-only` = **4023**，本树 = **4036**（+13 = 本单新增的结构守卫用例，其余为基准值更新，零回归） |
 | 全量前端 | `node --test tests/js/*.test.mjs` | **1467 pass / 0 fail**（前端本轮零改动） |
 | 类型检查 | `$env:PYTHONPATH='src'; python -m mypy src/contest_generator/selection.py` | **Success: no issues found in 1 source file** |
 | 组卡 fixture | `$env:PYTHONPATH='src'; python .scratch/group-choice-required/make-payload.py` | 组卡 `[('gray-track', ['pid'], []), ('attitude-hold', ['jy61p'], ['imu_uart'])]`——**每组 recommended ≤1**；两份 fixture（`payload.json` / `payload-ambiguous.json`）重跑后与既有内容**逐字节一致**（`git status` 无 diff） |
-| 红/绿探针 | `python .scratch/exclusive-group-gap-audit/probe-group-convergence.py` | 改前 **7/8 红** → 改后 **3/8 红**（剩余 3 条 = 待拍板的无线族三条，探针里已标注） |
-| 结构守卫 | `python -m pytest tests/test_exclusive_group_gap_audit.py -q` | **9 passed** |
+| 红/绿探针 | `python .scratch/exclusive-group-gap-audit/probe-group-convergence.py` | 改前 **7/8 红** → 改后 **9 条全绿（红计数 0/9）** |
+| 结构守卫 | `python -m pytest tests/test_exclusive_group_gap_audit.py -q` | **13 passed**（6 组 × 形状/自证 + 收敛） |
 | 真库基准 | `python -m pytest tests/test_module_universality.py -q` | **8 passed** |
+| 组形态自查 | `python .scratch/exclusive-group-gap-audit/check-groups.py` | 全平台 8 组 / 29 成员位（逐组逐成员 role 打印） |
+| 首轮踩到并修掉的红 | `tests/test_selection.py::test_build_exclusive_groups_real_library_zigbee_rx_card` | 该用例断言真库 `zigbee-rx` 成员清单（原 = zigbee_link/zigbee_uart）→ 扩容后按**平台投影**更新期望值（stm32 七件 / mspm0 五件），**判据未改**（仍是「命中任一成员出卡且 recommended 只含命中 slug」） |
 
 ## 五、留口
 
-1. **待用户拍板 3 条**（2.2 表）：无线族并组要动 `zigbee-rx` 的组名语义 —— 拍板前不动手。
-2. **`beep` 的 mspm0 条目是占位实现**（`pins` 空、`hardware_bound: true`）：`sound-prompt`
+1. **`beep` 的 mspm0 条目是占位实现**（`pins` 空、`hardware_bound: true`）：`sound-prompt`
    在 mspm0 侧仍出卡（成员 ≥2），但要真正在 mspm0 上用蜂鸣器需先接线并按 `beep_stm32.c` 实现
    （模块自身留口，非本单范围）。
-3. **`vl53l0x` × `tcs34725` 的 stm32 同址 0x29**：属**同址物理冲突**而非同类功能，本轮按
+2. **`vl53l0x` × `tcs34725` 的 stm32 同址 0x29**：属**同址物理冲突**而非同类功能，本轮按
    不改引脚/不改 notes 的口径留原样（notes 已有记录，冲突走引脚绑定/换件消解）。
-4. **`distance` 组收进了 `sr04`**（仅 mspm0、与 `us016` 同为超声波但接口不同）：库内文字
+3. **`distance` 组收进了 `sr04`**（仅 mspm0、与 `us016` 同为超声波但接口不同）：库内文字
    没有直接写「sr04 × us016 互替」，依据是 `vl53l0x` notes 把四件归为「测距」一族 + 同物理量
-   口径；如果你认为「超声波模拟量件」与「超声波 TRIG/ECHO 件」应当可共存，把 `sr04` 移出该
-   组即可（一处 manifest + 两处测试基准）。
+   口径；若认为「超声波模拟量件」与「超声波 TRIG/ECHO 件」应当可共存，把 `sr04` 移出该组即可
+   （一处 manifest + 两处测试基准）。
+4. **跨组同脚（有意留白）**：`uwb_uart`（`positioning`）× `hc05`（`zigbee-rx`）在 mspm0 侧同吃
+   `UART2` PA23/PA24；`hc05`/`esp01s` × `digit_uart`（视觉链路，无组）同吃 stm32 `UART_1`——
+   一个模块只能属一个组，这类交叉由**引脚绑定/换实例**消解，不并组（组语义 = 用途）。
+5. **`zigbee-rx` 的组 id 保持原名**（只是 label 改成「无线链路 / 数传」）：id 不是用户可见词
+   （界面显示 label），而改名会牵动赛题 `hint_module_groups` 存量值与多处测试夹具——下一轮若
+   要做 id 归一（如 `wireless-link`），应连同赛题库存量一起迁移。
 
