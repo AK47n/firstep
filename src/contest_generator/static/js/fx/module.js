@@ -216,15 +216,20 @@ export function renderGroupCards(groups, modules, selectedSlugs, choices) {
 export function groupRequirementNote(groups, slug, reason, choices) {
   // 需求清单灰注：组内成员的 slug 不再渲染成可移除 chip，改为灰注（需求句 /
   // 理由可见性保留）；非组模块返回 null（调用方走 recommendChip 原逻辑）。
-  // 该组还没被用户点过时，灰注说「请选择」而不是复述 AI 理由（工单
-  // group-choice-required/01）——理由等用户点完再看，免得把推荐当成已定。
+  // 两处口径（工单 group-choice-required/01）：
+  //   ① 该组还没被用户点过 → 灰注说「请选择」，不复述 AI 理由（免得把推荐当成已定）；
+  //   ② 用户已经点了同组**另一个**成员（换选）→ 灰注改说「已由 <组名> 的 <选中件> 替代」，
+  //      因为这时它已经不是工程里那一个了（照实说，别让需求句挂着一个已作废的模块名）。
   const group = groupOfSlug(groups, slug);
   if (!group) return null;
   const picked = (choices || {})[group.id];
-  const needsChoice = groupChoiceRequired(group)
-    && !((group.members || []).some((m) => m.slug === picked));
-  if (needsChoice) {
+  const validPicked = (group.members || []).some((m) => m.slug === picked) ? picked : "";
+  if (groupChoiceRequired(group) && !validPicked) {
     return '<span class="muted">' + esc(slug) + '（已在『功能组选择』中，请选择）</span>';
+  }
+  if (validPicked && validPicked !== slug) {
+    return '<span class="muted">' + esc(slug) + '（已由『' + esc(group.label) + '』的 '
+      + esc(validPicked) + ' 替代）</span>';
   }
   return '<span class="muted">' + esc(slug)
     + '（已在『功能组选择』中' + (reason ? "，" + esc(reason) : "") + '）</span>';

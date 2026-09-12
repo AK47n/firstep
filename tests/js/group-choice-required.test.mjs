@@ -95,13 +95,18 @@ test("pruneGroupChoices：换题 / 库变更后旧选择只在仍成立时保留
   assert.deepEqual(pruneGroupChoices([hintCard], { "attitude-hold": "jy61p" }), {}, "组已不在载荷 = 丢弃");
 });
 
-test("需求句灰注：未选的组写「请选择」而不是复述 AI 理由", () => {
+test("需求句灰注：未选写「请选择」；换选后写「已由 <组> 的 <选中件> 替代」", () => {
   const pending = groupRequirementNote([hit], "imu_uart", "串口陀螺仪直出 yaw", {});
   assert.match(pending, /请选择/);
   assert.doesNotMatch(pending, /串口陀螺仪直出 yaw/);
+  // 用户点了推荐件本身 → 照旧显示理由
   const chosen = groupRequirementNote([hit], "imu_uart", "串口陀螺仪直出 yaw", { "attitude-hold": "imu_uart" });
   assert.match(chosen, /串口陀螺仪直出 yaw/);
   assert.doesNotMatch(chosen, /请选择/);
+  // 用户换选了同组另一个成员 → 别让需求句挂着一个已作废的模块名（照实说被谁替代）
+  const swapped = groupRequirementNote([hit], "imu_uart", "串口陀螺仪直出 yaw", { "attitude-hold": "jy61p" });
+  assert.match(swapped, /已由『航向保持 \/ 姿态传感器』的 jy61p 替代/);
+  assert.doesNotMatch(swapped, /请选择/);
   assert.equal(groupRequirementNote([hit], "motor", "x", {}), null, "非组模块仍走 chip");
 });
 
