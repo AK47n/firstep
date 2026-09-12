@@ -619,7 +619,12 @@ export function renderRecommendResult(data, autoAdd = true) {
       <div class="rec-chips">
         ${r.modules.map((slug) => {
           const reason = (data.modules.find((m) => m.slug === slug) || {}).reason;
-          return groupRequirementNote(groups, slug, reason, groupChoices) || recommendChipHTML(slug, reason);
+          // 选择态按 selectedSlugs 渲染（工单 module-intro-detail/06）：点掉之后
+          // chip 必须变成未选态而不是继续显示成已选——否则界面与工程不一致，
+          // 用户以为模块还在（原本也没有任何路径能加回来）。
+          const on = selectedSlugs.includes(slug);
+          return groupRequirementNote(groups, slug, reason, groupChoices)
+            || recommendChipHTML(slug, reason, on);
         }).join("") || '<span class="muted">库内无命中</span>'}
         ${(r.suggestions || []).map((s) => {
           const key = suggestionKey(s);
@@ -634,11 +639,24 @@ export function renderRecommendResult(data, autoAdd = true) {
     </div>`).join("") + recommendCoverageNote(data);
   box.querySelectorAll("[data-remove]").forEach((b) =>
     b.addEventListener("click", () => {
-      selectedSlugs = selectedSlugs.filter((s) => s !== b.dataset.remove);
-      // 被移除的这个模块若正是某功能组的用户选择，那条记账一起清掉（评审整改）：
-      // 否则界面显示「已选它」而工程里没有 = 静默漏件。
-      groupChoices = clearGroupChoiceForSlug(groupChoices, groups, b.dataset.remove);
-      clusterDeps.scheduleDraftSave();
+      // chip 本体 = 选择开关（工单 module-intro-detail/06）：已选 → 移除；未选 → 加回。
+      // 加回走 addModule（与模块库点卡片同一条路径：加入 + 依赖展开 + 重绘），
+      // 否则「点掉了就再也加不回来」——那正是本次要修的 bug 的另一半。
+      const slug = b.dataset.remove;
+      if (selectedSlugs.includes(slug)) {
+        selectedSlugs = selectedSlugs.filter((s) => s !== slug);
+        // 被移除的这个模块若正是某功能组的用户选择，那条记账一起清掉（评审整改）：
+        // 否则界面显示「已选它」而工程里没有 = 静默漏件。
+        groupChoices = clearGroupChoiceForSlug(groupChoices, groups, slug);
+        clusterDeps.scheduleDraftSave();
+        reRenderAfterSelectionChange();
+        return;
+      }
+      // 未选态：加回工程（addModule 内部会重绘已选/警告/模块池）。expand=false +
+      // 自己走 reRenderAfterSelectionChange：推荐 chip 的选中态由**同一次重绘**刷新
+      // ——否则 chip 会停在上一次的类名上（点掉后 chip 一直显示未选，即使已在工程里）。
+      if (!b.classList.contains("unsel")) return;   // 兜底：非 chip（旧结构）不误加
+      addModule(slug, false);
       reRenderAfterSelectionChange();
     }));
   // 组卡单选交互（工单 04 / group-choice-required/01）：点击 radio = **由用户做出这一组的选择**
@@ -985,12 +1003,14 @@ function initModuleGrid() {
   });
 }
 
-function addModule(slug) {
+function addModule(slug, expand = true) {
   if (!slug || selectedSlugs.includes(slug)) return;
   selectedSlugs.push(slug);
   expanded = []; warnings = [];
   renderSelected(); renderWarnings(); renderModulePool();
-  runExpand();  // 添加后直接展开，步骤 7 立即可配置引脚
+  // expand=false：调用方会自己走 reRenderAfterSelectionChange（推荐 chip 双向开关
+  // 加回时用，工单 module-intro-detail/06）——两处都跑会打两次 /api/selection/expand
+  if (expand) runExpand();  // 添加后直接展开，步骤 7 立即可配置引脚
 }
 
 let expandBusy = false;   // 展开检查进行中（工单 ux-walkthrough-02/17：禁防连点）

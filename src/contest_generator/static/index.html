@@ -527,6 +527,14 @@
   .chip.rec .chip-x { font-size: 11px; opacity: .6; }
   .chip.rec:hover { border-color: var(--danger); }
   .chip.rec:hover .chip-x { color: var(--danger); opacity: 1; }
+  /* 未选态的推荐 chip（工单 module-intro-detail/06）：用户点掉了它 —— 灰显 + 虚线框，
+     点一下加回工程。与「绿底 = 在工程里」形成可读对比，且不再是「界面说在、实际不在」。 */
+  .chip.rec.unsel { background: transparent; border-style: dashed;
+                    color: var(--muted); cursor: pointer; }
+  .chip.rec.unsel .reason { color: var(--muted); opacity: .8; }
+  .chip.rec.unsel .chip-x { color: var(--ok-bright); opacity: 1; }
+  .chip.rec.unsel:hover { border-color: var(--ok-bright); color: var(--text); }
+  .chip.rec.unsel .mod-info-btn { color: var(--accent); }
   /* 模块说明入口（工单 module-intro-detail/03）：推荐 chip / 功能组卡成员行 /
      已选清单行三处共用。**不是 chip 本体**——点它开说明，点 chip 仍是移除模块。
      chip 内的样式按 chip 前景色走（chip.rec 是绿字，独立配色会突兀）。 */

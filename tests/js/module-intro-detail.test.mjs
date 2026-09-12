@@ -127,14 +127,35 @@ test("moduleInfoBtnHTML：说明按钮独立于 chip 本体（data-mod-info + �
   assert.ok(moduleInfoBtnHTML("<x>").includes("&lt;x&gt;"));
 });
 
-test("recommendChipHTML：chip 带说明按钮，点 chip 本体的移除契约不变", () => {
-  const out = recommendChipHTML("ir_beam", "可选点/起始做辅助");
-  assert.ok(out.includes('data-remove="ir_beam"'), "chip 本体仍是移除入口");
-  assert.ok(out.includes('data-mod-info="ir_beam"'), "chip 内有说明入口");
-  assert.ok(out.includes("可选点/起始做辅助"));
-  assert.ok(out.includes("chip-x"));
-  // 无理由（旧载荷）也照样有说明入口
+test("recommendChipHTML：chip 带说明按钮，选择态按 selected 渲染（工单 06）", () => {
+  // 已选（默认）：绿底 + ✕ 移除语义
+  const on = recommendChipHTML("ir_beam", "可选点/起始做辅助");
+  assert.ok(on.includes('class="chip rec"'), "缺省 = 已选，类名不带 unsel");
+  assert.ok(on.includes('data-remove="ir_beam"'), "chip 本体仍是选择开关");
+  assert.ok(on.includes('data-mod-info="ir_beam"'), "chip 内有说明入口");
+  assert.ok(on.includes("可选点/起始做辅助"));
+  assert.ok(on.includes("✕"));
+  assert.match(on, /点击从工程里移除/);
+  // 未选（用户点掉了它）：灰显虚线 + ＋ 加回语义
+  const off = recommendChipHTML("ir_beam", "可选点/起始做辅助", false);
+  assert.ok(off.includes("chip rec unsel"), "未选态要带 unsel 类（灰显虚线）");
+  assert.ok(off.includes("＋"), "未选态显示加回符号");
+  assert.ok(!off.includes("✕"), "未选态不该再显示移除符号");
+  assert.match(off, /已从工程移除，点击加回/);
+  // 两侧都保留说明入口与理由
+  assert.ok(off.includes('data-mod-info="ir_beam"'));
+  assert.ok(off.includes("可选点/起始做辅助"));
   assert.ok(recommendChipHTML("led", "").includes('data-mod-info="led"'));
+});
+
+test("generate-recommend.js：chip 渲染带选择态 + 点击是双向开关（工单 06）", () => {
+  // 渲染必须按 selectedSlugs 判选择态——照 done 载荷的 modules 渲染 = 点掉后仍显示已选
+  assert.match(src, /recommendChipHTML\(slug, reason, on\)/);
+  assert.match(src, /const on = selectedSlugs\.includes\(slug\)/);
+  // 点击双向：已选 → 移除；未选 → 加回（否则点掉了再也加不回来）
+  assert.match(src, /if \(selectedSlugs\.includes\(slug\)\)/);
+  assert.match(src, /addModule\(slug\)/);
+  assert.match(src, /classList\.contains\("unsel"\)/);
 });
 
 test("三处入口都出说明按钮：推荐 chip / 功能组卡成员行 / 需求清单灰注", () => {

@@ -373,21 +373,30 @@ export function moduleInfoBtnHTML(slug) {
     + '" title="' + escHtml(MODULE_INFO_BTN_TITLE) + '">' + MODULE_INFO_BTN_TEXT + "</button>";
 }
 
-// recommendChipHTML(slug, reason)：AI 推荐命中的模块 chip（自
-// ui/generate-recommend.js 迁入，工单 module-intro-detail/03——三处说明入口
-// 要共用同一份 chip 结构，渲染散在两个文件必然漂移）。
-// 结构语义：点 chip 本体 = 从工程移除该模块（data-remove，data-remove 钩子的
-// 契约）；chip 内的「说明」按钮 = 开模块说明弹窗——按钮是 chip 的子元素，
-// **JS 侧必须 stopPropagation**，否则点说明会顺手把模块移除（`data-remove`
-// 处理在事件委托里，见 ui/generate-recommend.js）。
-export function recommendChipHTML(slug, reason) {
+// recommendChipHTML(slug, reason, selected)：AI 推荐命中的模块 chip（自
+// ui/generate-recommend.js 迁入，工单 module-intro-detail/03/06）。
+// 结构语义：chip 本体 = **选择开关**（`data-remove` 钩子名保留，契约是「切一下」）：
+//   * selected（默认 true）= 已在工程里 → 点击移除（✕），绿底；
+//   * selected=false = 用户点掉了它 → 灰显未选（＋），点一下加回工程。
+// **必须看 selected 渲染**（工单 module-intro-detail/06 修的既有 bug）：原实现一律
+// 按 done 载荷的 modules 渲染，于是「点 ✕」之后模块已从工程移除、chip 却仍然显示
+// 成已选绿标——界面与实际不一致，用户以为它还在，且没有任何路径能加回来。
+// chip 内的「说明」按钮 = 开模块说明弹窗：说明按钮在 chip 内部，**JS 侧必须以
+// 捕获阶段拦住**（chip 本体的监听属 target 阶段，先于容器冒泡监听；见
+// ui/generate-recommend.js bindModuleInfoEntry 的注释）。
+export function recommendChipHTML(slug, reason, selected) {
   const escHtml = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   })[c]);
-  return '<span class="chip rec" data-remove="' + escHtml(slug) + '">' + escHtml(slug)
+  const on = selected === undefined ? true : !!selected;   // 缺省 = 已选（旧调用点零变化）
+  const state = on ? "" : " unsel";
+  const title = on ? "点击从工程里移除" : "已从工程移除，点击加回";
+  const mark = on ? "✕" : "＋";
+  return '<span class="chip rec' + state + '" data-remove="' + escHtml(slug) + '"'
+    + ' title="' + escHtml(title) + '">' + escHtml(slug)
     + (reason ? '<span class="reason">' + escHtml(reason) + "</span>" : "")
     + moduleInfoBtnHTML(slug)
-    + '<span class="chip-x">✕</span></span>';
+    + '<span class="chip-x">' + mark + "</span></span>";
 }
 
 // moduleIntroHTML(intro)：简介四问分段（工单 module-intro-detail/01/03）。// 载荷 `intro` = `[{label, text}]`（后端 module_intro 拆段，前端不判规则）——

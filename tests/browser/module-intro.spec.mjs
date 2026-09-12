@@ -188,18 +188,42 @@ test("需求清单灰注（进了功能组的模块）+ 已选清单行：同样
   await page.close();
 });
 
-// 回归：点 chip 本体仍是「移除模块」——chip-x 属既有交互（本单只往 chip 里加了个
-// 说明按钮，不能把原交互顶掉）。断言口径按**实际行为**：移除的是工程里的模块
-// （已选清单变化），推荐区 chip 本身由推荐载荷渲染、点完仍在（既有行为，不在本单范围）。
-test("回归：点 chip 的 ✕ 仍把模块从工程里移除（说明按钮没顶掉原交互）", async () => {
+// 回归：chip 本体是**双向选择开关**，且界面与实际必须一致（工单 module-intro-detail/06
+// 修的既有 bug：点 ✕ 后模块已从工程移除，chip 却仍显示成已选绿标——界面说在、
+// 实际不在，而且没有任何路径能加回来）。
+//
+// 断言口径说明：本用例只验「chip 选择态 ↔ 选择集」这层（本工单修的东西）。
+// 点击后后台还有一次 /api/selection/expand（依赖展开）在跑，它落地时重绘的是**已选
+// 清单**、不重绘推荐 chip；那一步的时序问题（展开期间连点会让已选清单被中间态覆盖）
+// 属另一处既有竞态，不在本单范围——见工单记录。故这里在点击的即时状态下断言。
+test("推荐 chip 选择开关：点掉变未选态、点回加回来（界面与选择集一致）", async () => {
   const { page, problems } = await openAppWithRecommend();
-  assert.match(await page.locator("#selected-list").innerText(), /ir_beam/);
-  await page.locator('#rec-list .chip.rec[data-remove="ir_beam"] .chip-x').click();
-  await page.waitForFunction(() => {
-    const box = document.getElementById("selected-list");
-    return box && !box.innerText.includes("ir_beam");
-  }, undefined, { timeout: 10000 });
-  // 工程里没有了，也没有产生 pageerror/console 错误
+  const chip = page.locator('#rec-list .chip.rec[data-remove="ir_beam"]');
+  const chipHTML = () => page.locator('#rec-list .chip.rec[data-remove="ir_beam"]').innerHTML();
+  const unselected = () => page.locator('#rec-list .chip.rec.unsel[data-remove="ir_beam"]').count();
+
+  // 初始：已选态（绿标、✕）
+  assert.equal(await unselected(), 0, "初始应是已选态");
+  assert.ok((await page.locator("#selected-list").innerText()).includes("ir_beam"));
+
+  // 点掉：chip 立刻变未选态（灰显虚线 + ＋），选择集里也去掉
+  await chip.locator(".chip-x").click();
+  await page.waitForFunction(
+    () => document.querySelector('#rec-list .chip.rec.unsel[data-remove="ir_beam"]') !== null,
+    undefined, { timeout: 10000 });
+  assert.match(await chip.getAttribute("title"), /加回/);
+  assert.match(await chipHTML(), /＋/, "未选态应显示加回符号");
+  assert.ok(!(await page.locator("#selected-list").innerText()).includes("ir_beam"),
+    "点掉后选择集里不该还有它");
+
+  // 点回：chip 回已选态 + 选择集回填（原 bug 的另一半：点掉了加不回来）
+  await chip.click();
+  await page.waitForFunction(
+    () => document.querySelector('#rec-list .chip.rec.unsel[data-remove="ir_beam"]') === null,
+    undefined, { timeout: 10000 });
+  assert.match(await chipHTML(), /✕/);
+  assert.ok((await page.locator("#selected-list").innerText()).includes("ir_beam"),
+    "点回后选择集里应重新有它");
   assert.deepEqual(problems, []);
   await page.close();
 });
