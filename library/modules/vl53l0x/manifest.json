@@ -2,6 +2,11 @@
   "slug": "vl53l0x",
   "description": "VL53L0X ToF 激光测距传感器驱动（stm32 纯驱动，B 类——仅 stm32 条目、无 mspm0 对照，ADR 0009）：软 I2C 位操作 2 脚（SCL/SDA，不占硬件 I2C/TIMER）+ XSHUT 复位序列（6Pin 模块：VCC/GND/SDA/SCL/XSHUT/GPIO1——GPIO1 中断脚未用，轮询单次测量），驱动 = ST 官方 VL53L0X API 最小切片（vl53l0x_core——DataInit/StaticInit/PerformRef* 校准/单次测量传递闭包，函数体原样）；API = vl53l0x_init/set_mode（DEFAULT/HIGH_ACCURACY/LONG_RANGE/HIGH_SPEED 四档模式）+ read_mm（单次测距、mm 输出、量程 2m）；默认 SCL=PA6/SDA=PA7（⚠ 0x29 与 tcs34725 同址——互替不可同挂）+ XSHUT=PB0；适用于 ToF 毫米级激光测距、障碍物检测/避障、小车/无人机高度与距离测量等赛题功能。",
   "dependencies": [],
+  "exclusive_group": {
+    "id": "distance",
+    "label": "距离测量 / 测距传感器",
+    "role": "VL53L0X ToF 激光（软 I2C 3 脚含 XSHUT、毫米级 2m 量程；仅 stm32 条目）"
+  },
   "platforms": {
     "stm32": {
       "files": [

@@ -4,6 +4,11 @@
   "dependencies": [
     "delay"
   ],
+  "exclusive_group": {
+    "id": "distance",
+    "label": "距离测量 / 测距传感器",
+    "role": "HC-SR04 超声波（TRIG 触发 + ECHO 忙等测宽，2 根 GPIO，不占 ADC；仅 mspm0 条目）"
+  },
   "platforms": {
     "mspm0": {
       "files": [

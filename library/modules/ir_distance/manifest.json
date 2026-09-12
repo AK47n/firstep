@@ -4,6 +4,11 @@
   "dependencies": [
     "adc"
   ],
+  "exclusive_group": {
+    "id": "distance",
+    "label": "距离测量 / 测距传感器",
+    "role": "GP2Y0A02YK0F 红外（模拟量 AO 走 ADC，20-150cm 近距段；stm32 与 us016 默认同脚 PA5）"
+  },
   "platforms": {
     "mspm0": {
       "files": [

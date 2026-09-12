@@ -4,6 +4,11 @@
   "dependencies": [
     "adc"
   ],
+  "exclusive_group": {
+    "id": "distance",
+    "label": "距离测量 / 测距传感器",
+    "role": "US-016 超声波（模拟量 AO 走 ADC 读，3m/1m 双量程；stm32 与 ir_distance 默认同脚 PA5）"
+  },
   "platforms": {
     "mspm0": {
       "files": [
