@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=b13b221d9ba17bc5933f1d62e4712bc3570f8283 -->
+<!-- changelog-auto: last-commit=189d105c2e6cf38cc07c957a423415a3409a1248 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -50,6 +50,7 @@
 - 21:42 chore(模块库): 磁力计批次四份编译日志留档（verified 翻牌证据，显式入索引）
 - 22:36 feat(完整包): 一键全量下载的发布侧落地——完整包打包核心 + pack-full 脚本（工单 full-download/01）
 - 22:38 feat(完整包): 检查更新端点 /api/update/full/check——双轨判定与中文降级（工单 full-download/02）
+- 22:42 feat(完整包): 下载任务与 apply/status/cancel 端点——卷级断点续传 + 磁盘预检（工单 full-download/03）
 
 ## 2026-09-11
 - 09:29 ﻿fix: 推荐域拒绝不再被吞成通用话术——kind=domain 分流 + 带理由重试一次（工单 real-acceptance/03）
