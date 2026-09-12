@@ -291,6 +291,10 @@ from .materials_update import (
     load_local_manifest,
     materials_library_dir,
 )
+from .full_update import (
+    check_for_full_update,
+    load_installed_marker,
+)
 from .materials_task import (
     ApplyTask,
     task_status,
@@ -1185,6 +1189,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
     def _materials_tasks_dir() -> Path:
         return context.config_path.parent / "updates"
+
+    # 完整包检查更新（工单 full-download/02）：软件 Release 上的完整包清单；
+    # 无基线 / 未知已装版本也返回 200 级 + 中文提示（可一键下载完整包）。
+    @app.get("/api/update/full/check")
+    @_map_errors
+    def full_update_check() -> dict:
+        updates_dir = context.config_path.parent / "updates"
+        return check_for_full_update(load_installed_marker(updates_dir))
 
     @app.post("/api/update/materials/apply")
     @_map_errors
