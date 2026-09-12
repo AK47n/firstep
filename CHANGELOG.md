@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=1b1892d87a952c6ae1063fd8a45b59c55855f7c4 -->
+<!-- changelog-auto: last-commit=6231ecd290525d1960d084ba49e30002b087f3f9 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -27,6 +27,7 @@
 - 12:36 docs(排查): firstep 卡死根因工单（resolved）+ 在途盘点收口 + 诊断/验证脚本
 - 13:06 feat(模块说明): 推荐区模块名旁「说明」入口 + 简介四拍改写（工单 module-intro-detail/01-04）
 - 14:05 test(模块说明): 真机验收补上——playwright 真浏览器点「说明」，当场抓到阶段顺序 bug（工单 module-intro-detail/05）
+- 14:16 fix(推荐): 推荐 chip 改成双向选择开关——点掉必须变未选态、且能加回（工单 module-intro-detail/06）
 
 ## 2026-09-11
 - 09:29 ﻿fix: 推荐域拒绝不再被吞成通用话术——kind=domain 分流 + 带理由重试一次（工单 real-acceptance/03）
