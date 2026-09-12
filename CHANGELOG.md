@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=56723596ed63232bd846f9f5acfa53278c219329 -->
+<!-- changelog-auto: last-commit=8fc6cd40f6be5cf8eb5d9c51656f712670722ab7 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -25,6 +25,7 @@
 - 12:25 docs(排查): 无线族与定位组落地后的排查表/工单/在途盘点同步（含两处改主意的记录）
 - 12:34 fix(前端): 修「firstep 一打开就卡死、强刷也不行」——index.html 的死导入打崩整页 + 补导入对账守卫
 - 12:36 docs(排查): firstep 卡死根因工单（resolved）+ 在途盘点收口 + 诊断/验证脚本
+- 13:06 feat(模块说明): 推荐区模块名旁「说明」入口 + 简介四拍改写（工单 module-intro-detail/01-04）
 
 ## 2026-09-11
 - 09:29 ﻿fix: 推荐域拒绝不再被吞成通用话术——kind=domain 分流 + 带理由重试一次（工单 real-acceptance/03）
