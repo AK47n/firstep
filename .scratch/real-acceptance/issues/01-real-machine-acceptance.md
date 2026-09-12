@@ -426,6 +426,14 @@ SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_ru
   **2026-09-18 用户拍板：放行另立单**（不塞进本挂账单，故本项维持 `[x]` 两态、超时态仍留人工）——
   立单后 E2 超时态才可能转「机器可判读」；六版探针件留作立单素材。见
   `tracker-audit/2026-09-09-在途盘点.md` 末「待拍板项的拍板结果与留档」第 ⑤ 条。
+  **2026-09-12 收口：第三态机器可判读已达成**（工单 `launcher-failure-reason/01-02`，均 resolved）——
+  launcher 现在每条退出路径都往 `%USERPROFILE%\.contest_generator\launcher.log` 写一行
+  `[ISO8601] reason=<分支码> …`，判读不再靠计时猜。真机分支矩阵 **7/7 PASS**（真跑 `start-app.bat`）：
+  `updating` / `no_python` / `started` / `already_running` / `port_busy` / `timeout` / `already_running@8000`，
+  其中 **`:timeout` 真机复现成功**（退出码 1、`reason=timeout port=8899`、服务侧 `webapp.log` 只有替身那行
+  「holding service start」）。证据 `.scratch/launcher-failure-reason/verify-01-branch-matrix.txt`。
+  第三态由「留人工」改为「机器可判读」；**仍如实保留的边界**：未在真·慢机器/冷启动上验过，
+  验的是劣化环境下的可复现性（探针配方与四条踩坑见 `launcher-failure-reason/02`）。
 
 ## F. 历史流程项（不可回溯复核，仅登记）
 

@@ -21,10 +21,14 @@
 
 ## 验收标准
 
-- [ ] pytest：/api/health 2 例绿（含未配 key 200），既有测试零回归
-- [ ] start-app.bat：正常态无黑窗（vbs 包装下）启动并开浏览器；端口被他程序占用 → 中文弹窗；.venv 缺失回退系统 python
-- [ ] 超时场景：日志路径出现在弹窗文案中
-- [ ] 真机：本机双态实测（正常 + 端口占用）
+- [x] pytest：/api/health 2 例绿（含未配 key 200），既有测试零回归
+- [x] start-app.bat：正常态无黑窗（vbs 包装下）启动并开浏览器；端口被他程序占用 → 中文弹窗；.venv 缺失回退系统 python
+- [x] 超时场景：日志路径出现在弹窗文案中
+- [x] 真机：本机双态实测（正常 + 端口占用）
+      **2026-09-12 补第三态**：超时态真机复现成功并机器可判读（工单 `launcher-failure-reason/01-02`）——
+      launcher 现在每条退出路径写 `launcher.log` 一行 `reason=<分支码>`；探针 7/7 PASS
+      （含 `:timeout`，证据 `.scratch/launcher-failure-reason/verify-01-branch-matrix.txt`）。
+      本单四条验收项至此全部勾满。
 
 ## 文件边界
 

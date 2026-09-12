@@ -5389,12 +5389,35 @@ def _generation_result(summary: GenerationSummary) -> dict:
 
 app = create_app()
 
+# 启动端口（工单 launcher-failure-reason/01）：默认 8000，可用 `FIRSTEP_LAUNCHER_PORT` 覆盖。
+# 存在的理由 = **验收/测试要一个不打断用户会话的端口**：`start-app.bat` 的「本应用已在跑 /
+# 端口被占 / 启动超时」三态都必须真占住一个端口才造得出来，而 8000 上通常正跑着用户在用的会话。
+# 正常双击 `start-app.vbs` 不设这个变量 ⇒ 行为与改动前逐字一致（含 CONFIG 覆盖项与默认值）。
+LAUNCHER_PORT_ENV = "FIRSTEP_LAUNCHER_PORT"
+DEFAULT_PORT = 8000
+
+
+def resolve_port() -> int:
+    """启动端口：`FIRSTEP_LAUNCHER_PORT` 合法（1..65535 的纯数字）则用它，否则用 8000。
+
+    非法值**不抛错**：启动器宁可回到默认端口把服务起起来，也不要因为一个环境变量写错而
+    「弹一个框、说不清原因」。`start-app.bat` 侧有**同口径的取值校验**（`findstr` 数字形态 +
+    `if gtr 65535` 回落 8000）：两侧必须一致，否则会出现「launcher 轮询坏端口、服务绑 8000」
+    的假超时——`tests/test_launcher_log.py` 的两条用例钉住这个同源约定。
+    """
+    raw = os.environ.get(LAUNCHER_PORT_ENV, "").strip()
+    if raw.isdigit():
+        port = int(raw)
+        if 1 <= port <= 65535:
+            return port
+    return DEFAULT_PORT
+
 
 def main() -> None:
     """本地服务入口：python -m contest_generator.webapp 或 contest-generator。"""
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=resolve_port())
 
 
 if __name__ == "__main__":
