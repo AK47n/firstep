@@ -295,6 +295,19 @@ from .full_update import (
     check_for_full_update,
     load_installed_marker,
 )
+from .full_task import (
+    DISK_HEADROOM_BYTES,
+    DISK_HEADROOM_FACTOR,
+    FullDownloadTask,
+    free_bytes,
+    full_task_status,
+    get_full_task,
+    last_check,
+    set_full_task,
+    set_last_check,
+    start_full_update,
+    write_full_snapshot,
+)
 from .materials_task import (
     ApplyTask,
     task_status,
@@ -1196,7 +1209,77 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @_map_errors
     def full_update_check() -> dict:
         updates_dir = context.config_path.parent / "updates"
-        return check_for_full_update(load_installed_marker(updates_dir))
+        result = check_for_full_update(load_installed_marker(updates_dir))
+        set_last_check(result)
+        return result
+
+    # 完整包下载（工单 full-download/03）：分卷白名单 + 磁盘预检 → 后台线程；
+    # 卷级断点续传（校验通过的卷持久化，重试只补未完成卷）。
+
+    def _full_apply_complete(parts: list[dict]) -> None:
+        """全部分卷就绪后的替换编排（工单 full-download/04 接更新器）。
+
+        替换动作绝不在运行中的 webapp 进程内执行：这里只写待更新标记并以
+        独立进程拉起更新器；停服 / 备份 / 覆盖 / 重启都由更新器自己做。
+        """
+        raise RuntimeError("完整包替换尚未接通（工单 full-download/04）")
+
+    @app.post("/api/update/full/apply")
+    @_map_errors
+    def full_update_apply(payload: dict) -> dict:
+        names = payload.get("parts")
+        if not isinstance(names, list) or not names:
+            raise HTTPException(400, "缺少所选分卷（parts）")
+        if not all(isinstance(n, str) for n in names):
+            raise HTTPException(400, "分卷列表格式非法")
+        check = last_check()
+        available = {p["name"]: p for p in check.get("parts", [])}
+        if not available:
+            raise HTTPException(400, "请先检查更新（尚无可用完整包信息）")
+        unknown = [n for n in names if n not in available]
+        if unknown:
+            raise HTTPException(400, f"未知分卷：{'、'.join(unknown)}")
+        selected = [available[n] for n in names]
+        total_bytes = sum(int(p["size"]) for p in selected)
+        updates_dir = context.config_path.parent / "updates"
+        updates_dir.mkdir(parents=True, exist_ok=True)
+        needed = int(total_bytes * DISK_HEADROOM_FACTOR) + DISK_HEADROOM_BYTES
+        free = free_bytes(updates_dir)
+        if free < needed:
+            raise HTTPException(
+                400,
+                f"磁盘空间不足：需要约 {needed // (1024 * 1024)} MB，"
+                f"剩余 {free // (1024 * 1024)} MB，请清理后重试",
+            )
+        running = get_full_task()
+        if running is not None and running.state.value in ("downloading", "applying"):
+            raise HTTPException(400, "已有完整包下载任务在进行中，请稍候")
+        task = FullDownloadTask(
+            task_dir=updates_dir,
+            parts=selected,
+            on_complete=_full_apply_complete,
+        )
+        set_full_task(task)
+        start_full_update(task)
+        total_mb = total_bytes // (1024 * 1024)
+        return {
+            "started": True,
+            "message": f"已开始下载完整包（{len(selected)} 卷 / 约 {total_mb} MB）",
+        }
+
+    @app.get("/api/update/full/status")
+    def full_update_status() -> dict:
+        return full_task_status(get_full_task())
+
+    @app.post("/api/update/full/cancel")
+    @_map_errors
+    def full_update_cancel() -> dict:
+        task = get_full_task()
+        if task is None or task.state.value not in ("downloading", "applying"):
+            return {"cancelled": False, "message": "当前没有进行中的下载"}
+        task.cancel()
+        write_full_snapshot(task)
+        return {"cancelled": True, "message": "已请求取消，将在当前卷下载完成后停止"}
 
     @app.post("/api/update/materials/apply")
     @_map_errors
