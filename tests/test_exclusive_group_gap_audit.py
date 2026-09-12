@@ -66,7 +66,36 @@ GROUPS: dict[str, tuple[str, list[str], list[tuple[str, str, str]]]] = {
         ["beep", "jq8900"],
         [("jq8900", "提示输出互替", "蜂鸣器")],
     ),
+    # 本轮扩容（用户拍板）：原「Zigbee 无线链路（接收侧）」两条目 → 中性组名 + 五条新成员
+    "zigbee-rx": (
+        "无线链路 / 数传",
+        [
+            "as32",
+            "ec01g",
+            "esp01s",
+            "hc05",
+            "nrf24l01",
+            "zigbee_link",
+            "zigbee_uart",
+        ],
+        [
+            ("as32", "互替件", "zigbee_uart"),
+            ("nrf24l01", "二选一接入", "as32"),
+            ("ec01g", "互替件同脚先例", "Zigbee"),
+            ("hc05", "互替件", "UWB"),
+            ("esp01s", "互替件同脚先例", "HC05"),
+        ],
+    ),
+    "positioning": (
+        "定位 / 位置测量",
+        ["neo_6m", "uwb_uart"],
+        [("neo_6m", "互替件同脚先例", "UWB")],
+    ),
 }
+
+# 平台投影后只有 1 个成员的组（该平台无可选 → 不出卡，属**预期**而非漏保护）：
+# positioning 只有 stm32 有 neo_6m（GPS 件无 mspm0 条目），mspm0 侧只剩 uwb_uart。
+SINGLE_MEMBER_PLATFORMS: dict[str, set[str]] = {"positioning": {"mspm0"}}
 
 
 def _manifests() -> list[ModuleManifest]:
@@ -89,13 +118,20 @@ def test_group_declaration_shape_on_the_real_library(group_id: str) -> None:
     for slug in members:
         assert roles[slug], f"{slug} 缺 role（选择卡上要说清「选它差在哪」）"
     # 平台投影后 ≥2 成员：<2 该平台不出卡 = 该平台漏保护（beep 的 mspm0 条目是占位
-    # 实现、pins 为空，但**条目在**，故 mspm0 侧 sound-prompt 仍是 2 成员）
+    # 实现、pins 为空，但**条目在**，故 mspm0 侧 sound-prompt 仍是 2 成员）。
+    # 例外 = SINGLE_MEMBER_PLATFORMS：该平台确实只有一件（如 mspm0 无 GPS 件）→
+    # 不出卡是**预期**，不是漏保护；这类例外必须逐条登记，防止把「漏保护」混进来。
     for platform in ("stm32", "mspm0"):
         projected = [
             g
             for g in collect_exclusive_groups(manifests, platform=platform)
             if g.id == group_id
         ]
+        if platform in SINGLE_MEMBER_PLATFORMS.get(group_id, set()):
+            assert not projected, (
+                f"{group_id} 在 {platform} 侧登记为单成员组，却仍然出了卡"
+            )
+            continue
         assert projected, f"{group_id} 在 {platform} 侧投影后 <2 成员（不出卡）"
         assert len(projected[0].members) >= 2
 

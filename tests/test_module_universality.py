@@ -144,15 +144,22 @@ def test_exclusive_groups_aggregate_on_the_real_library():
     attitude-hold = imu_uart/jy61p/ml_mpu6050（航向保持 / 姿态传感器——三者是同一功能的
     三种硬件，用户报告「已选姿态传感器，需求句里又出现另一个姿态件」后补入 jy61p）；
     同 id label 不一致会在 collect 时抛 ManifestError（本测试能通过 = 声明一致）；
-    本轮全库排查再补四组（每组都有库内文字 + 默认脚证据，见
+    本轮全库排查再补五组（每组都有库内文字 + 默认脚证据，见
     .scratch/exclusive-group-gap-audit/audit.md）：
     display = lcd/oled/max7219/ili9341/ili9488/st7789_para（显示 / 屏幕——「显示族互替
     同脚，一次选一块屏」）、distance = us016/ir_distance/vl53l0x/sr04（距离测量 / 测距
     传感器——「与 ir_distance 互替件同脚」）、barometer = bmp180/ms5611（气压 / 海拔
     传感器——stm32 侧同址 0xEE 不可同挂）、sound-prompt = beep/jq8900（提示输出 / 声
-    ——「语音播报与蜂鸣器为提示输出互替」）。
-    平台投影：mspm0 侧七组完整（neo_6m 之类单平台件不进组）；stm32 侧
-    gray-track（仅 pid）与 attitude-hold（仅 ml_mpu6050）单成员 → 剔除。
+    ——「语音播报与蜂鸣器为提示输出互替」）、positioning = uwb_uart/neo_6m（定位 /
+    位置测量——「与 UWB 定位链路互替件同脚」）。
+    zigbee-rx 本轮扩容并改中性组名（用户拍板）：原「Zigbee 无线链路（接收侧）」
+    = zigbee_link/zigbee_uart → 「无线链路 / 数传」= as32/ec01g/esp01s/hc05/
+    nrf24l01/zigbee_link/zigbee_uart（七件都吃同一路无线链路：LoRa × Zigbee 同一路
+    UART3 同脚、2.4G 与 Zigbee/LoRa「二选一接入」、NB-IoT 蜂窝「与 Zigbee/LoRa
+    互替件同脚先例」、蓝牙 × UWB「互替件」、WiFi「与 HC05 手机遥控互替件同脚先例」）；
+    组 id 保持不变（id 不是用户可见词，改名会牵动赛题 hint_module_groups 与多处测试夹具）。
+    平台投影：mspm0 侧 positioning 只有 uwb_uart 单成员 → 剔除（该平台无 GPS 件）；
+    stm32 侧 gray-track（仅 pid）与 attitude-hold（仅 ml_mpu6050）单成员 → 剔除。
     """
     manifests = _real_manifests()
     groups = collect_exclusive_groups(manifests)
@@ -164,6 +171,7 @@ def test_exclusive_groups_aggregate_on_the_real_library():
         "distance",
         "barometer",
         "sound-prompt",
+        "positioning",
     }
     by_id = {g.id: g for g in groups}
     assert by_id["gray-track"].label == "8 路灰度传感器驱动"
@@ -174,15 +182,26 @@ def test_exclusive_groups_aggregate_on_the_real_library():
         "jy61p",
         "ml_mpu6050",
     ]
-    assert by_id["zigbee-rx"].label == "Zigbee 无线链路（接收侧）"
-    assert [m.slug for m in by_id["zigbee-rx"].members] == ["zigbee_link", "zigbee_uart"]
-    assert {
-        m.slug: m.role for m in by_id["zigbee-rx"].members
-    } == {
-        "zigbee_link": "任意字节帧收发（双机/双车无线数据通信）",
-        "zigbee_uart": "固定 DIP-4 ID 帧接收（身份识别/信标上报，与 zigbee_uart_key 配对）",
+    assert by_id["zigbee-rx"].label == "无线链路 / 数传"
+    assert [m.slug for m in by_id["zigbee-rx"].members] == [
+        "as32",
+        "ec01g",
+        "esp01s",
+        "hc05",
+        "nrf24l01",
+        "zigbee_link",
+        "zigbee_uart",
+    ]
+    assert {m.slug: m.role for m in by_id["zigbee-rx"].members} == {
+        "as32": "AS32 433MHz LoRa 透传（3km 级远距双端，9600，stm32 挂 UART_3 = ZIGBEE 原脚）",
+        "ec01g": "EC-01G NB-IoT 蜂窝 + AT 透传底座（9600，广域上云/无人值守遥测，stm32 挂 UART_3；仅 stm32 条目）",
+        "esp01s": "ESP-01S WiFi + AT 透传（115200，联网/上位机通信，stm32 挂 UART_1 = HC05 同脚；仅 stm32 条目）",
+        "hc05": "HC-05 蓝牙串口（9600，手机/上位机遥控；mspm0 与 UWB_UART 同脚、stm32 挂 UART_1 = UWB 宿主）",
+        "nrf24l01": "NRF24L01 2.4G 软 SPI 点对点收发（20-50m 低延迟，六脚单口、不占硬件 SPI；stm32 CLK/MOSI 与 Zigbee/LoRa 同脚）",
+        "zigbee_link": "任意字节帧收发（长度前缀帧协议，双机/双车无线透传数据通信；Zigbee DL-20）",
+        "zigbee_uart": "固定 DIP-4 ID 帧接收（身份识别/信标上报，与 zigbee_uart_key 配对；同一路 RX 单消费者）",
     }
-    # 本轮新增四组：成员清单按库登记序（模块目录字典序）
+    # 本轮新增五组：成员清单按库登记序（模块目录字典序）
     assert by_id["display"].label == "显示 / 屏幕"
     assert [m.slug for m in by_id["display"].members] == [
         "ili9341",
@@ -203,7 +222,9 @@ def test_exclusive_groups_aggregate_on_the_real_library():
     assert [m.slug for m in by_id["barometer"].members] == ["bmp180", "ms5611"]
     assert by_id["sound-prompt"].label == "提示输出 / 声"
     assert [m.slug for m in by_id["sound-prompt"].members] == ["beep", "jq8900"]
-    # mspm0 侧七组完整；stm32 侧 gray/attitude 两组单成员 → 剔除
+    assert by_id["positioning"].label == "定位 / 位置测量"
+    assert [m.slug for m in by_id["positioning"].members] == ["neo_6m", "uwb_uart"]
+    # mspm0 侧七组（positioning 单成员剔除）；stm32 侧 gray/attitude 两组单成员 → 剔除
     msp_groups = collect_exclusive_groups(manifests, platform="mspm0")
     assert {g.id for g in msp_groups} == {
         "gray-track",
@@ -215,11 +236,12 @@ def test_exclusive_groups_aggregate_on_the_real_library():
         "sound-prompt",
     }
     assert [g.id for g in collect_exclusive_groups(manifests, platform="stm32")] == [
+        "zigbee-rx",
         "sound-prompt",
         "barometer",
         "display",
         "distance",
-        "zigbee-rx",
+        "positioning",
     ]
 
 

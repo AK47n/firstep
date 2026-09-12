@@ -3138,8 +3138,11 @@ def test_build_exclusive_groups_marks_converged_candidates_as_dropped():
 
 
 def test_build_exclusive_groups_real_library_zigbee_rx_card():
-    """真库 zigbee-rx 组（工单 zigbee-link/02）：双平台完整，命中任一成员出
-    卡且 recommended 只含命中 slug；stm32 视图同为双成员（两模块双平台）。"""
+    """真库 zigbee-rx 组（工单 zigbee-link/02；exclusive-group-gap-audit/01 扩容）：
+    命中任一成员出卡且 recommended 只含命中 slug；成员按平台投影——
+    stm32 = as32/ec01g/esp01s/hc05/nrf24l01/zigbee_link/zigbee_uart 七件（本轮
+    把 LoRa/2.4G/蓝牙/WiFi/NB-IoT 并入「无线链路 / 数传」），mspm0 = 去掉
+    仅 stm32 有条目的 ec01g/esp01s 后五件。"""
     from pathlib import Path
 
     from contest_generator.library import list_modules
@@ -3149,11 +3152,23 @@ def test_build_exclusive_groups_real_library_zigbee_rx_card():
     groups = collect_exclusive_groups(list_modules(modules))
     zigbee_rx = next(g for g in groups if g.id == "zigbee-rx")
 
-    for platform in ("mspm0", "stm32"):
+    expected = {
+        "stm32": [
+            "as32",
+            "ec01g",
+            "esp01s",
+            "hc05",
+            "nrf24l01",
+            "zigbee_link",
+            "zigbee_uart",
+        ],
+        "mspm0": ["as32", "hc05", "nrf24l01", "zigbee_link", "zigbee_uart"],
+    }
+    for platform, members in expected.items():
         card = build_exclusive_groups(("zigbee_link",), (zigbee_rx,), platform)[0]
         assert card["id"] == "zigbee-rx"
         assert card["hint"] is False
-        assert [m["slug"] for m in card["members"]] == ["zigbee_link", "zigbee_uart"]
+        assert [m["slug"] for m in card["members"]] == members
         assert card["recommended"] == ["zigbee_link"]
 
 
