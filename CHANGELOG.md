@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=82d9b810aba8af080bcf404624c7a40f6dd95da1 -->
+<!-- changelog-auto: last-commit=7749a1deeb61fb4f5d46a4f38e404eaef6115631 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -8,6 +8,7 @@
 - 00:58 门禁引脚容量诊断（落点/可用 IO/解不开几组/至少去掉几个）
 - 10:21 feat(启动器): 失败原因可机读（launcher.log）+ E2 超时态真机收口（工单 launcher-failure-reason/01-02）
 - 10:22 chore(验收): 探针收尾按端口再清一次 + 工单记账（脱离进程树的服务 taskkill /T 打不到）
+- 10:35 fix(库): jy61p 并入「航向保持 / 姿态传感器」功能组——推荐里不再同时冒出两个姿态件（工单 attitude-group-jy61p/01）
 
 ## 2026-09-11
 - 09:29 ﻿fix: 推荐域拒绝不再被吞成通用话术——kind=domain 分流 + 带理由重试一次（工单 real-acceptance/03）
