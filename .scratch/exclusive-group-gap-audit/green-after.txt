@@ -1,0 +1,58 @@
+﻿真库组声明：
+  sound-prompt: ['beep', 'jq8900']
+  barometer: ['bmp180', 'ms5611']
+  gray-track: ['huidu', 'pid', 'xunji']
+  display: ['ili9341', 'ili9488', 'lcd', 'max7219', 'oled', 'st7789_para']
+  attitude-hold: ['imu_uart', 'jy61p', 'ml_mpu6050']
+  distance: ['ir_distance', 'sr04', 'us016', 'vl53l0x']
+  zigbee-rx: ['zigbee_link', 'zigbee_uart']
+
+[对照·姿态组（已并入，应绿）] imu_uart × jy61p
+  同组：imu_uart=attitude-hold jy61p=attitude-hold
+  顶层 modules = ['imu_uart']
+  dropped = {'attitude-hold': ('jy61p',)}
+  → 绿（只剩一件）
+
+[候1·测距组] us016 × ir_distance
+  同组：us016=distance ir_distance=distance
+  顶层 modules = ['us016']
+  dropped = {'distance': ('ir_distance',)}
+  → 绿（只剩一件）
+
+[候2·显示组] lcd × max7219
+  同组：lcd=display max7219=display
+  顶层 modules = ['lcd']
+  dropped = {'display': ('max7219',)}
+  → 绿（只剩一件）
+
+[候3·气压/海拔组] bmp180 × ms5611
+  同组：bmp180=barometer ms5611=barometer
+  顶层 modules = ['bmp180']
+  dropped = {'barometer': ('ms5611',)}
+  → 绿（只剩一件）
+
+[候4·声提示组] beep × jq8900
+  同组：beep=sound-prompt jq8900=sound-prompt
+  顶层 modules = ['beep']
+  dropped = {'sound-prompt': ('jq8900',)}
+  → 绿（只剩一件）
+
+[待拍板·LoRa × Zigbee] as32 × zigbee_link
+  同组：as32=None zigbee_link=zigbee-rx
+  顶层 modules = ['as32', 'zigbee_link']
+  dropped = {}
+  → 红（两件同时在顶层 modules）
+
+[待拍板·定位组] uwb_uart × neo_6m
+  同组：uwb_uart=None neo_6m=None
+  顶层 modules = ['uwb_uart', 'neo_6m']
+  dropped = {}
+  → 红（两件同时在顶层 modules）
+
+[待拍板·手机遥控链路] hc05 × esp01s
+  同组：hc05=None esp01s=None
+  顶层 modules = ['hc05', 'esp01s']
+  dropped = {}
+  → 红（两件同时在顶层 modules）
+
+红计数 = 3 / 8
