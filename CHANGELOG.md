@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=81a5bc82516f4701ddf3dd34cd5c032becf0b6ba -->
+<!-- changelog-auto: last-commit=165665e565871f0431de4b90fbea2c9059c5baba -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -11,6 +11,7 @@
 - 10:35 fix(库): jy61p 并入「航向保持 / 姿态传感器」功能组——推荐里不再同时冒出两个姿态件（工单 attitude-group-jy61p/01）
 - 10:53 fix(推荐): 功能组卡改为「必须由用户显式选择」——不预选、提示「请选择」、未选卡住生成（工单 group-choice-required/01）
 - 10:53 fix(推荐): 换选后需求句灰注照实说「已由 <组> 的 <选中件> 替代」（工单 group-choice-required/01 补）
+- 11:03 fix(推荐): 功能组显式选择的评审整改——点选 ReferenceError、hint 卡漏件、判据漂移、跨语言镜像守卫（工单 group-choice-required/01）
 
 ## 2026-09-11
 - 09:29 ﻿fix: 推荐域拒绝不再被吞成通用话术——kind=domain 分流 + 带理由重试一次（工单 real-acceptance/03）
