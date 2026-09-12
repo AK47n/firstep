@@ -1,0 +1,162 @@
+{
+  "version": 1,
+  "platform": "mspm0",
+  "slugs": [
+    "motor",
+    "l298n",
+    "pid",
+    "ntb_time",
+    "led",
+    "beep",
+    "delay",
+    "led_beep",
+    "ml_mpu6050"
+  ],
+  "main_c": "/*\n * main.c —— 2024 电赛 H 题（自动行驶小车）主骨架\n * 平台：TI MSPM0G3507（地猛星） + TB6612 双电机 + 8 路灰度 + 编码器\n *\n * 题型框架：line_follow（car 1.1 巡线模板 mspm0）\n *   状态机枚举 / 调度循环 / 框架函数名保持原样，只在 TODO 位填入本工程\n *   所选模块（motor / pid_mspm0 / gray_track_mspm0 / led / beep / led_beep /\n *   delay / ntb_time）中真实存在的接口。\n *\n * 驱动选型说明：\n *   motor(TB6612) 与 l298n 为互替驱动，本骨架采用 motor —— 题面要求走 40cm\n *   半圆弧、投影不得脱离圆弧，必须闭环（motor 带编码器读数 API）；\n *   l298n 无编码器闭环，仅作备用（如需改用：l298n_init / l298n_set_duty /\n *   l298n_set_direction，并删除编码器测速段）。\n */\n\n#include \"motor.h\"\n#include \"pid_mspm0.h\"\n#include \"gray_track_mspm0.h\"\n#include \"ntb_time.h\"\n#include \"led.h\"          /* 已含 led_instances.h：LED_CHANNEL_COUNT / LED_1 */\n#include \"beep.h\"\n#include \"led_beep.h\"\n#include \"delay.h\"\n\n/* ============================================================\n * TODO 参数区（全部为待标定的实测值，勿凭猜写死）\n * ============================================================ */\n#define TICK_MS             10u      /* 调度周期 ms（框架约定 10ms 节拍） */\n#define ENCODER_TO_SPEED    1.0f     /* 编码器脉冲 → 速度换算系数\n                                      * （线数 MOTOR_BIANMAQI=260、轮径\n                                      *   MOTOR_WHEEL_D=48mm，按 10ms 采样周期换算） */\n#define SPEED_KP            0.9f     /* 速度环 P（增量式 / 位置式见 pid_mode） */\n#define SPEED_KI            0.0f     /* 速度环 I */\n#define SPEED_KD            0.0f     /* 速度环 D */\n#define LINE_KP             3.4f     /* 巡线环 P（line_pid_track 内部使用） */\n#define LINE_KI             0.0f     /* 巡线环 I */\n#define LINE_KD             0.0f     /* 巡线环 D */\n#define STOP_WHITE_FRAMES   5        /* 停车区判定：连续 N 帧「全白 / 丢线」特征\n                                      * 5 帧 × 10ms = 50ms 消抖 */\n#define RUN_TIMEOUT_MS      30000    /* 状态转换安全超时 ms（第 2 问一圈上限 30s，\n                                      * 兜底禁止死等） */\n#define STOP_BEEP_MS        200u     /* 经过 A/B/C/D 点声光提示时长 ms */\n\n/* 电机编号约定（motor.h 未提供 ID 宏，此处为 main.c 本地约定）：\n * TODO: 与实车接线核对 0/1 分别对应左轮 / 右轮 */\n#define MOTOR_ID_LEFT       0u\n#define MOTOR_ID_RIGHT      1u\n\n/* ===== 巡线状态机（框架原样保留）===== */\ntypedef enum {\n    XUNJI_STOP,        /* 等待启动（按键 / 上电复位） */\n    XUNJI_FOLLOW,      /* 正常巡线中 */\n    XUNJI_WAIT_LINE    /* 等待特定线型（如停车区） */\n} xunji_state_t;\n\nstatic xunji_state_t xunji_state = XUNJI_STOP;\n\n/* 框架约定的调度状态（无按键模块，启用计时与消抖，均被后续代码读取） */\nstatic int64_t run_start_ms = 0;   /* 本段起跑时间戳（超时兜底用） */\nstatic int     white_cnt    = 0;   /* 连续全白 / 丢线帧计数（停车区消抖） */\n\n/*\n * 10ms 调度周期入口（主循环节拍或定时器中断调用）。\n * 读线 → 算偏差 → 差速控制；状态机只做最小化转移。\n */\nstatic void xunji_dispatch(void)\n{\n    int32_t enc_left  = 0;\n    int32_t enc_right = 0;\n\n    switch (xunji_state) {\n        case XUNJI_STOP:\n            /* 等待启动：所选模块中没有按键接口。\n             * TODO: 若补充按键模块，在此读取并消抖后再启动 */\n            /* 上电后直接起步；起跑时间戳从这里开始（题面计时用） */\n            run_start_ms = get_time_stamp_ms();\n            xunji_state = XUNJI_FOLLOW;\n            break;\n\n        case XUNJI_FOLLOW:\n            /* 1) 读线 → 偏差 → 差速目标：\n             *    line_pid_track() 内部调用 line_error_calc()（灰度偏差）、\n             *    all_white_detect()（丢线保持），并写 motorA/motorB.target */\n            line_pid_track();\n\n            /* 2) 编码器测速 → 速度环：\n             *    motor_encoder_read() 读并清零计数（GROUP1_IRQHandler 累加），\n             *    速度换算按 10ms 采样周期由调用方完成 */\n            motor_encoder_read(&enc_left, &enc_right);\n            motorA.now = (float)enc_left  * ENCODER_TO_SPEED;\n            motorB.now = (float)enc_right * ENCODER_TO_SPEED;\n            pid_cal(&motorA);\n            pid_cal(&motorB);\n            pidout_limit(&motorA);\n            pidout_limit(&motorB);\n\n            /* 3) 输出到电机：方向 + 占空比（题面只许前进，负输出仅用于收敛） */\n            if (motorA.out >= 0.0f) {\n                motor_set_direction(MOTOR_ID_LEFT, 0u);   /* TODO: 0/1 与正/反转的\n                                                           * 对应关系按实车确认 */\n            } else {\n                motor_set_direction(MOTOR_ID_LEFT, 1u);\n            }\n            motor_set_duty(MOTOR_ID_LEFT, (uint32_t)limit_duty((int)motorA.out));\n\n            if (motorB.out >= 0.0f) {\n                motor_set_direction(MOTOR_ID_RIGHT, 0u);  /* TODO: 同上 */\n            } else {\n                motor_set_direction(MOTOR_ID_RIGHT, 1u);\n            }\n            motor_set_duty(MOTOR_ID_RIGHT, (uint32_t)limit_duty((int)motorB.out));\n\n            /* 4) 停车区判定（连续 N 帧全白 / 丢线）+ 安全超时兜底 */\n            if (all_white_detect()) {\n                white_cnt++;\n            } else {\n                white_cnt = 0;\n            }\n            if ((white_cnt >= STOP_WHITE_FRAMES) ||\n                ((get_time_stamp_ms() - run_start_ms) > (int64_t)RUN_TIMEOUT_MS)) {\n                white_cnt = 0;\n                xunji_state = XUNJI_WAIT_LINE;\n            }\n            break;\n\n        case XUNJI_WAIT_LINE:\n            /* 停车：占空比置零（题面要求停车点地面投影覆盖圆弧顶点） */\n            motor_set_duty(MOTOR_ID_LEFT, 0u);\n            motor_set_duty(MOTOR_ID_RIGHT, 0u);\n\n            /* 声光提示：每经过 A/B/C/D 点一次。\n             * 用非阻塞开关 + 一次短延时，勿在 FOLLOW 高频路径里调阻塞式提示 */\n            led_beep_on();\n            delay_ms(STOP_BEEP_MS);\n            led_beep_off();\n\n            /* TODO: 多段 / 多圈（第 2 / 3 / 4 问）在此编排下一段路径：\n             *       xunji_state = XUNJI_FOLLOW;\n             *       run_start_ms = get_time_stamp_ms();   // 重新计时\n             *       white_cnt = 0;\n             *       单段测试（第 1 问）停在本状态即可 */\n            break;\n    }\n}\n\n/*\n * main() 骨架：初始化 → 调度循环（while(1) 内只调 xunji_dispatch）。\n */\nint main(void)\n{\n    /* ---- 初始化序列：先指示 → 再传感 → 再执行器 → 后算法参数 ---- */\n\n    /* 1) 声光提示（上电指示 / 经过顶点提示共用） */\n    led_init(LED_1);        /* 唯一 LED 通道（led_instances.h：LED_1 = 0） */\n    beep_init();            /* 蜂鸣器 */\n    led_beep_init();        /* LED + 蜂鸣器组合层（依赖上两步） */\n\n    /* 2) 灰度巡线传感器（8 路，通道宏 D1..D8 / digtal() 见 gray_track_mspm0.h） */\n    gray_init();\n\n    /* 3) 双电机（TB6612 + 编码器）：每路单独初始化 */\n    motor_init(MOTOR_ID_LEFT);\n    motor_init(MOTOR_ID_RIGHT);\n\n    /* 4) PID 参数：速度环（左右各一）+ 巡线环 */\n    pid_init(&motorA,   POSITION_PID, SPEED_KP, SPEED_KI, SPEED_KD);\n    pid_init(&motorB,   POSITION_PID, SPEED_KP, SPEED_KI, SPEED_KD);\n    pid_init(&line_pid, POSITION_PID, LINE_KP,  LINE_KI,  LINE_KD);\n    // TODO: 角度环 angle（pid_mspm0.h 已 extern）——若加陀螺仪闭环，在此\n    //       pid_init(&angle, POSITION_PID, <P>, <I>, <D>) 并在 FOLLOW 里喂 now\n\n    /* 5) 上电声光提示（一次） */\n    led_beep_alarm(1u, 100u, 100u);\n\n    // TODO: 10ms 定时器启动 —— 本骨架用主循环 delay_ms(TICK_MS) 轮询节拍；\n    //       若改中断调度，请在定时器中断里调 xunji_dispatch() 并删除循环内 delay_ms\n\n    for (;;) {\n        xunji_dispatch();\n        delay_ms(TICK_MS);   /* 10ms 节拍等待 */\n    }\n}\n\n/* ============================================================\n * 赛题路径段编排 —— 预留编写区（TODO，纯注释，无变量声明）\n *\n * 场地图：A(左上)—B(右上) 顶边 100cm；D(左下)—C(右下) 底边 220cm；\n *         左右端为 R=40cm 半圆弧；弧线宽约 1.8cm，线外无任何标记。\n *\n * 第（1）问：A → 直线 → B 停车，声光提示，≤15s\n *   段序列：{ 直行跟线, 直到 B 点特征 } → 停车 + 声光\n *\n * 第（2）问：A → B(直) → C(右半弧) → D(直) → A(左半弧) 停车，≤30s\n *   段序列：直/弧/直/弧 四段，每段到点停车 + 声光一次\n *\n * 第（3）问：A → C(直) → B(左半弧) → D(直) → A(右半弧) 停车，≤40s\n *   段序列：直/弧/直/弧，弧段方向与第（2）问相反（小车需掉头布线或反向跑弧）\n *\n * 第（4）问：第（3）问路径连跑 4 圈后停车，用时越少越好\n *   在 WAIT_LINE 里把圈计数 +1，未满 4 圈则重新起步（重置 run_start_ms）\n *\n * 待编排的接口调用（均为已存在接口，实现时直接填进 WAIT_LINE 的 TODO 位）：\n *   - 顶点识别：gray_track_mspm0.h 的 digtal(channel) / all_white_detect()\n *   - 圆弧段：line_pid_track() 连续输出（弧线为黑线，灰度仍可循迹）\n *   - 计时：ntb_time.h 的 get_time_stamp_ms()\n *   - 提示：led_beep.h 的 led_beep_on() / led_beep_off() / led_beep_alarm()\n *   - 停车：motor.h 的 motor_set_duty(id, 0)\n * ============================================================ */\n",
+  "problem_text": "自动行驶小车（H 题） \n【本科组/高职高专组】 \n一、 任务 \n设计一个采用 TI MSPM0 系列 MCU 控制的自动行驶小车，能在指定路径\n上自动行驶， 行驶场地示意如图1 所示。 场地面积不小于220cm×120cm。 图中\n两个对称半圆弧线的半径为 40cm，弧线为黑色，线宽 1.8cm 左右，弧线的四个\n顶点分别定义为 A、B、C 和 D 点。建议场地采用白色哑光喷绘布制作。场地除\n两个半圆弧外，不得添加任何标记。 \n40cm 40cm\n100cm\n220cm\n120cm\nA B\nCD\n60cm\n60cm\n \n图 1 小车行驶场地示意图 \n\nH - 2 / 3 \n \n二、 要求 \n（1）将小车放在位置 A 点，小车能自动行驶到 B 点停车，停车时有声光提\n示。用时不大于 15 秒。 （20 分）。 \n（2）将小车放在位置 A 点，小车能自动行驶到 B 点后，沿半弧线行驶到 C\n点， 再由C 点自动行驶到 D 点，最后沿半弧线行驶到 A 点停车， 每经过一个点，\n声光提示一次。完成一圈用时不大于 30 秒。 （20 分） \n（3）将小车放在位置 A 点，小车能自动行驶到 C 点后，沿半弧线行驶到 B\n点， 再由B 点自动行驶到 D 点，最后沿半弧线行驶到 A 点停车。 每经过一个点，\n声光提示一次。完成一圈用时不大于 40 秒。 （30 分） \n（4）按要求 3 的路径自动行驶 4 圈停车，用时越少越好（30 分） \n（5）设计报告。（20 分） \n \n三、 说明 \n（1）作品中的小车尺寸不大于 25cm（长）×15cm（宽）× 15cm（高） 。\n小车尺寸包括小车以及小车所安装的传感器等总体的轮廓尺寸大小。 小车采用轮\n式小车，不得采用履带和麦氏轮。小车行驶时只能前进，不得后退。必须采用\nTI MSPM0 系列 MCU 控制小车的状态，不得采用其他型号的 MCU。小车控制\n板安装时需暴露其 TI MSPM0 芯片，便于测试时查验。小车上不得安装摄像头。\n不符合规定的小车不进行测试。 \n（2）行驶场地水平铺设于平整的地面，除题目要求的圆弧之外，行驶场地\n上不得有其他任何指示标记（包括 ABCD 四个字符） 。不得对测试场地外环境有\n任何要求。为了适应测试场地，允许测试前小车试跑。 \n（3）小车不得借助周围环境物品导航。场地内外不得架设任何其他装置设\n备。正式测试时，小车行驶过程中不得人为干涉、遥控小车运动。测试时，应允\n许相关人员在场地外围走动。 \n（4）本题目所有小车在起始点的摆放方向自定。要求的小车停车动作及行\n驶经过 A、B、C、D 点时， 必须有声光提示。 启动、 停车及行驶经过A、B、C、\nD 点时， 小车的地面投影必须覆盖圆弧顶点； 小车所有在圆弧上的行驶过程， 其\n投影必须在弧线上，投影脱离圆弧即认为此次测试失败，此项目不得分。 \n（5） 所有测试项目如果完成时间超过规定时间一倍以上时， 此项目不得分。 \n（6）小车采用车载电池供电。进入测试环节，中途不得更换电池。 \n \n  \nH - 3 / 3 \n \n四、 评分标准 \n 项 目 主要内容 满分 \n设计报告 \n系统方案 小车自动行驶的设计方案 3 \n理论分析 小车自动行驶误差分析 \n小车轨迹控制 5 \n电路与程序设计 控制电路及程序流程 5 \n测试方案与测试结果 测试数据完成性 \n测试结果分析 4 \n设计报告结构及规范性 \n摘要 \n设计报告正文的结构 \n图标的规范性 \n3 \n合计 20 \n要求 \n完成第（1）项 20 \n完成第（2）项 20 \n完成第（3）项 30 \n完成第（4）项 30 \n合计 100 \n总 分 120 \n\n[图1 标注：图1 小车行驶场地示意图：\n\n- **布局**：一个由两段水平直线和两端半圆弧组成的封闭跑道形场地。四个顶点分别为 A（左上）、B（右上）、C（右下）、D（左下）。\n- **尺寸标注**：\n  - 顶部水平边（A-B）长度：1000mm。\n  - 底部水平边（D-C）长度：2200mm。\n  - 左右两侧垂直距离（A-D 和 B-C）：1200mm。\n  - 两个对称半圆弧的半径：40cm（约400mm）。\n  - 内部垂直标注线长度：600mm（位于两半圆弧圆心之间）。\n- **线型**：黑色实线。]",
+  "topic_id": "2024H",
+  "qa_text": "",
+  "requirements": [
+    {
+      "requirement": "MSPM0 系列 MCU 主控，控制小车行驶状态",
+      "sentence": 49,
+      "modules": [],
+      "suggestions": []
+    },
+    {
+      "requirement": "小车按指定路径在场地内自动行驶",
+      "sentence": 4,
+      "modules": [
+        "motor",
+        "l298n"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "从 A 点自动行驶到 B 点停车",
+      "sentence": 24,
+      "modules": [
+        "pid",
+        "ntb_time"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "停车时声光提示",
+      "sentence": 24,
+      "modules": [
+        "led_beep",
+        "beep",
+        "led"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "A→B→沿半弧到 C→D→沿半弧回 A 停车，途经每点声光提示",
+      "sentence": 28,
+      "modules": [
+        "xunji",
+        "huidu",
+        "led_beep",
+        "ntb_time"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "沿无标记直线段自主行驶，保持航向",
+      "sentence": 12,
+      "modules": [
+        "jy61p",
+        "ml_mpu6050"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "A→C→沿半弧到 B→D→沿半弧回 A 停车，途经每点声光提示",
+      "sentence": 33,
+      "modules": [
+        "xunji",
+        "led_beep"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "按第 3 项路径连续自动行驶 4 圈后停车",
+      "sentence": 39,
+      "modules": [
+        "xunji",
+        "pid"
+      ],
+      "suggestions": []
+    },
+    {
+      "requirement": "小车采用轮式，只能前进不后退",
+      "sentence": 45,
+      "modules": [],
+      "suggestions": []
+    },
+    {
+      "requirement": "小车不得安装摄像头",
+      "sentence": 52,
+      "modules": [],
+      "suggestions": []
+    },
+    {
+      "requirement": "小车尺寸不大于 25cm×15cm×15cm（含传感器）",
+      "sentence": 43,
+      "modules": [],
+      "suggestions": []
+    },
+    {
+      "requirement": "不得借助环境物品导航，场地内不得架设装置",
+      "sentence": 59,
+      "modules": [],
+      "suggestions": []
+    },
+    {
+      "requirement": "车载电池供电，测试中途不得更换电池",
+      "sentence": 73,
+      "modules": [],
+      "suggestions": [
+        {
+          "name": "稳压模块",
+          "examples": [
+            "DC-DC 稳压模块给主控与电机供电"
+          ],
+          "degraded": false,
+          "solutions": [],
+          "selected": ""
+        },
+        {
+          "name": "充电管理模块",
+          "examples": [
+            "锂电池充电管理"
+          ],
+          "degraded": false,
+          "solutions": [],
+          "selected": ""
+        }
+      ]
+    },
+    {
+      "requirement": "启动、停车及各点地面投影覆盖圆弧顶点",
+      "sentence": 68,
+      "modules": [],
+      "suggestions": []
+    }
+  ],
+  "references": [],
+  "bindings": {},
+  "instances": {
+    "led": [
+      {
+        "name": "LED",
+        "variant": "",
+        "pin": ""
+      }
+    ]
+  },
+  "python_templates": {},
+  "generated_at": "2026-09-11T16:43:59+0800",
+  "tool_version": "1.0.0"
+}

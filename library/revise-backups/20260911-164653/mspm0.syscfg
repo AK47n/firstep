@@ -1,0 +1,658 @@
+/**
+ * firstep mspm0 母版默认外设布局（地猛星 LCKFB-DMX 开发板，模块库默认引脚方案，
+ * 编译闭环用；2026-08-14 地猛星化，工单 mspm0-master-dimx/01）。
+ * 实例名/宏名与模块库代码一一对应（PWMAB/DC_MOTOR/IMU601/OLED/NTB/MOTOR_PID/
+ * HUIDU/KEY/LED_BEEP/STEP_MOTOR/DCC_100_PWM2/I2C_0）；实际接线不同时改引脚名
+ * 即可，实例名与宏名勿动。
+ * 引脚方案（除 PB4/PB5 外全部在地猛星 2×20 排针上）：
+ *   motor：PWMAB C0/C1→PA12/PA13、DC_MOTOR AIN1=PB9 AIN2=PA18 BIN1=PB18
+ *   BIN2=PA7、编码器 AA=PA16 AB=PA17 BA=PB19 BB=PB20
+ *   HUIDU：PA22-27/PB4/PB5（R3/R4 的 PB4/PB5 为 LaunchPad 遗留，地猛星未引出）
+ *   KEY：PA2（板载 ROSC 偏置 100k 到地，按键与上拉共用此脚）
+ *   LED_BEEP：PA15；IR_BEAM：PA8（红外对射 OUT，ir_beam 模块；与
+ *   DIGIT_UART 默认重叠，同选时经引脚绑定消解）；IMU601：UART0 =
+ *   PA28(TX)/PA31(RX)（板载 CH340E 占
+ *   UART0 的 PA10/PA11，勿用）；DIGIT_UART：UART1 = PA8(TX)/PA9(RX)（K230 串口）
+ *   OLED：I2C1 = PB3(SDA)/PB2(SCL)；I2C_0：I2C0 = PA0(SDA)/PA1(SCL)（MPU6050，
+ *   复用板载 LED 脚——总线空闲高电平 LED 不亮，通信期间微闪；PA1 板载 4.7k 上拉，
+ *   PA0 上拉未焊 R12，靠 MPU 板自带）
+ *   STEP_MOTOR：RST2/SLP2/DIR2/DCY2 = PB24/PB6/PB7/PB8（全 GPIOB，
+ *   STEP_MOTOR_PORT 整组 GPIOB）；DCC_100_PWM2：TIMG12 C0 = PA14（板上经
+ *   LED2+15k 到地，PWM 输出时 LED 微亮，可忽略）
+ *   JOYSTICK：SW = PA9（摇杆按键，上拉输入低有效；与 DIGIT_UART RX 默认
+ *   重叠——手动摇杆与 K230 视觉同选概率最低，同选时经引脚绑定消解）；
+ *   ADC12_0 八通道：MEM0 = PA24(A0_3) 归 adc 模块（us016/mq2 薄封装共读同槽），
+ *   MEM1 = PA26(A0_1) / MEM2 = PA25(A0_2) 归 joystick 摇杆 X/Y（与
+ *   ZIGBEE_UART 默认重叠——手动摇杆与无线身份/信标同选概率最低，同选时
+ *   经引脚绑定消解；多 MEM 必须 sequence 模式，2026-09-05 SysConfig CLI
+ *   实证），MEM3 = PA27(A0_0) 归 ir_distance（与 HUIDU R2 重叠——红外
+ *   测距与灰度巡线同选概率最低），MEM4 = PB20(A0_6) 归 mq135、MEM5 =
+ *   PB24(A0_5) 归 mq5（两件均独立通道，
+ *   与 DC_MOTOR BB/SYN6288 TX、STEP_MOTOR RST2/SR04 TRIG/HC05 KEY/AT24C02 SCL
+ *   重叠——MQ 系与运动控制/语音/记录常见同框概率最低；多路气体同选时物理
+ *   通道独立、无共读冲突——mq2 为 MEM0 薄封装
+ *   共读同槽，2026-09-08 实证 MEM4-7 通道/脚全合法），MEM6 = PA22(A0_7) 归
+ *   flame 火焰传感（独立通道——AO 高阻源取剩余通道中唯一无负载脚，与
+ *   HUIDU L1/DEBUG_UART RX/NRF24L01 IRQ/TTP224 OUT1 重叠——巡线巡检/无线
+ *   链路/触摸面板与火警/灭火不同框、同选概率最低），MEM7 = PA14(A0_12) 归
+ *   soil 土壤湿度（独立通道——**MEM 槽位已满（8/8）**：后续 ADC 类件一律
+ *   薄封装共读 MEM0（mq2/us016 先例，多件同选同读一物理通道）；PA14 板载
+ *   LED2+15k 为固定比率衰减（读数系统偏小、单调性保留），与步进/灯带/读卡/
+ *   气体重叠——浇花/农业与运动/读卡不同框、同选概率最低）
+ *   HC05：HC05_UART = UART2 共享（9600——HC05 出厂默认波特率，与 DEBUG+UWB
+ *   同外设；默认 PA23/PA24 与 UWB 同脚——蓝牙与 UWB 链路互替、同选概率
+ *   最低，同选时经引脚绑定换实例消解）；STATE = PA8 输入（连接状态，
+ *   高有效；与 DIGIT_UART TX/IR_BEAM OUT 重叠——蓝牙与 K230 视觉/红外对射
+ *   链路互替）、KEY = PB24 输出（AT 模式切换，与 STEP_MOTOR RST2/SR04 TRIG
+ *   重叠——AT 切换不常用，同选经引脚绑定消解）
+ *   NRF24L01：软 SPI 6 脚全 GPIOA（CLK=PA26/MOSI=PA25/MISO=PA9/
+ *   CSN=PA24/CE=PA23/IRQ=PA22，单 NRF24L01_PORT 宏）——与 ZIGBEE_UART/
+ *   UWB/DEBUG_UART/HUIDU 巡线/joystick/adc/DIGIT 默认重叠：NRF 与其它无线
+ *   链路互替、同选概率最低，同选时经引脚绑定消解；IRQ 输入不配中断（GPIO
+ *   中断只有 GROUP1 一路且被 motor 编码器独占，第二个 GROUP1_IRQHandler 会
+ *   链接期冲突——按手册轮询方式接收，见 nrf24l01 模块注释）
+ *   IR_REMOTE：OUT = PA26 输入（红外接收头，NEC 忙等解码不占 TIMER；
+ *   与 ZIGBEE_TX/joystick X/NRF24L01 CLK 重叠——红外与其它无线/手动输入
+ *   互替、同选概率最低，同选时经引脚绑定消解；主循环轮询解码，不注册
+ *   GPIO 中断，原因同 NRF24L01）
+ *   MAX7219：DIN=PB9/CLK=PA18/CS=PB18 输出（数码管/点阵显示，软 SPI 位
+ *   操作不占硬件 SPI——与 DC_MOTOR AIN1/AIN2/BIN1 重叠：大数字显示（计分/
+ *   计时/数据牌）与双电机小车同选概率最低，同选时经引脚绑定消解；PA18 兼
+ *   BSL 排针脚，作输出无碍）
+ *   PCA9685：SCL=PB6/SDA=PB7（16 路舵机驱动板，软 I2C 位操作不占硬件 I2C
+ *   外设，SDA 方向运行时切换——与 STEP_MOTOR SLP2/DIR2、HUIDU R3/R4、
+ *   AHT10/DHT11 温湿度重叠：多路舵机多自由度执行与温湿度采集/步进（互替）/
+ *   巡线车同选概率最低，同选时经引脚绑定消解；软 I2C 需板上/模块自带上拉）
+ *   IR_TX：OUT = PA0 输出（红外编码发射，38kHz 载波忙等不占 TIMER——与
+ *   I2C_0 SDA（ml_mpu6050 姿态）/板载 LED 重叠：红外发射链与姿态采集同选
+ *   概率最低，板载 LED 随载波闪烁可作发射指示；与 IR_REMOTE 默认 PA26 刻意
+ *   错开——发射/接收常配对，双选默认即不撞，同选时经引脚绑定消解）
+ *   LCD：软 SPI 6 脚全输出（SCL=PA16/SDA=PA17/RES=PA27/DC=PA22/CS=PB19/
+ *   BLK=PB20——与 DC_MOTOR 编码器 AA/AB、RC522、ADS1115/SHT20 SCL/SDA、HUIDU
+ *   L1/R2、NRF IRQ、ZIGBEE/DEBUG RX、TTP224、flame、JQ8900/SYN6288、mq135
+ *   默认重叠：彩屏与巡线车/无线链路/语音播报/触摸/读卡/气体互替不同框、同选
+ *   概率最低（刻意不叠显示族与环境站/PA0-PA1——i2c_bus_share 测试互扰，
+ *   批次 5 实测先例），同选时经引脚绑定消解；六屏合一模块（ST7735/ST7789/
+ *   GC9A01），软 SPI 位操作不占硬件 SPI 外设——max7219 先例）
+ * 板上固定占用：CH340E PA10/PA11、Flash PB14-17、晶振 PA3-6、板载 LED PA0/PA1、
+ * VREF- PA21 直连地、BSL PA18（47k 到 BSL 排针）、SWD PA19/PA20（独立 DEBUG 排针，
+ * 用户实物未在 2×20P 上找到 A19/A20）、NRST。2026-08-20 用户实物核验：芯片丝印
+ * 可见 42WG4 / ABDL，外周为 48 脚，2×20P 排针分布正确，PA13/PA14 在排针上可用。
+ * TI 封装命名中 LQFP(PT)=48 脚、LQFP(PM)=64 脚；当前 SysConfig 仍沿用可工作的
+ * LQFP-64(PM) / LP-MSPM0G3507 模型，不以此反推实物脚数。实际地猛星 2×20P
+ * 引出范围由 mspm0-dimx 板定义约束，PB4/PB5 为 LaunchPad 遗留模型脚、不在 2×20P 上。
+ */
+//@cliArgs --device "MSPM0G350X" --package "LQFP-64(PM)" --part "Default"
+//@v2CliArgs --device "MSPM0G3507" --package "LQFP-64(PM)"
+// @cliArgs --board /ti/boards/LP_MSPM0G3507 --rtos nortos
+
+/**
+ * Import the modules used in this configuration.
+ */
+const PWM     = scripting.addModule("/ti/driverlib/PWM", {}, false);
+const PWMAB   = PWM.addInstance();
+// 舵机（servo 模块：50Hz/20ms 周期，0.5-2.5ms 脉宽映射 0-180°；周期由
+// servo_init 按 SERVO_PWM_INST_CLK_FREQ 运行时配置，此处初值仅保证可编译）
+const TIMER   = scripting.addModule("/ti/driverlib/TIMER", {}, false);
+const MOTOR_PID = TIMER.addInstance();
+const NTB     = TIMER.addInstance();
+const GPIO    = scripting.addModule("/ti/driverlib/GPIO", {}, false);
+const DC_MOTOR = GPIO.addInstance();
+const HUIDU   = GPIO.addInstance();
+const LED_BEEP = GPIO.addInstance();
+const I2C     = scripting.addModule("/ti/driverlib/I2C", {}, false);
+const I2C_0   = I2C.addInstance();
+const SYSCTL  = scripting.addModule("/ti/driverlib/SYSCTL");
+
+/**
+ * Write custom configuration values to the imported modules.
+ */
+
+// 电机 PWM：双通道 C0/C1（TB6612 左/右 PWM 输入）
+PWMAB.$name                      = "PWMAB";
+PWMAB.clockPrescale              = 256;
+PWMAB.timerCount                 = 2000;
+PWMAB.peripheral.$assign         = "TIMG0";
+PWMAB.peripheral.ccp0Pin.$assign = "PA12";
+PWMAB.peripheral.ccp1Pin.$assign = "PA13";
+PWMAB.PWM_CHANNEL_0.$name        = "ti_driverlib_pwm_PWMTimerCC0";
+PWMAB.PWM_CHANNEL_0.dutyCycle    = 0;
+PWMAB.PWM_CHANNEL_1.$name        = "ti_driverlib_pwm_PWMTimerCC1";
+PWMAB.PWM_CHANNEL_1.dutyCycle    = 0;
+
+// 步进电机脉冲输出（step_motor 模块：DCC_100_PWM2_INST，TIMG12 32 位定时器，
+// clockPrescale 必须为 1——step_set_speed 按 INST_CLK_FREQ/频率 直算周期；C0 = PA14）
+
+// L298N 大电流电机驱动（l298n 模块：IN1/IN2 双通道 PWM 方向+调速（页面
+// AO_Control 原样：dir=1 → C0=0/C1=duty、dir=0 → C0=duty/C1=0）+ EN 使能
+// GPIO（三脚一组）。L298N_PWM = TIMG12（32MHz BUSCLK/1 预分频/2000 计数 ≈
+// 16kHz——与 DCC_100_PWM2 同外设：L298N 与步进驱动互替、同选概率最低，
+// 同选时经引脚绑定换实例消解）；默认 C0=PA14 / C1=PB24——与 DCC_100_PWM2
+// （步进脉冲）、WS2812 IN（灯带）、SR04 TRIG（测距）、RC522 SCK（读卡）、
+// AGS10 SDA/soil（气体/土壤）、HC05 KEY、AT24C02 SCL、mq5、STEP_MOTOR RST2
+// 重叠：大电流驱动与步进/测距/读卡/存储/气体不同框、同选概率最低（刻意
+// 与 motor 默认 10 脚错开——两驱动同选概率低但可能并排使用，默认即不撞）
+const L298N_PWM = PWM.addInstance();
+L298N_PWM.$name              = "L298N_PWM";
+L298N_PWM.clockPrescale      = 1;
+L298N_PWM.timerCount         = 2000;
+L298N_PWM.peripheral.$assign = "TIMG12";
+L298N_PWM.peripheral.ccp0Pin.$assign = "PA14";
+L298N_PWM.peripheral.ccp1Pin.$assign = "PB24";
+L298N_PWM.PWM_CHANNEL_0.$name        = "ti_driverlib_pwm_L298N_CC0";
+L298N_PWM.PWM_CHANNEL_0.dutyCycle    = 0;
+L298N_PWM.PWM_CHANNEL_1.$name        = "ti_driverlib_pwm_L298N_CC1";
+L298N_PWM.PWM_CHANNEL_1.dutyCycle    = 0;
+
+// L298N 使能脚（l298n 模块：EN 输出高有效——页面「5V 使能高电平有效，常态
+// 下跳线帽接 VCC」；本件 l298n_init 置高（配合取跳线帽 + GPIO 使能），初始
+// SET = 使能。默认 PA27——与 HUIDU R2（8 路灰度巡线）、ADC12_0 adcPin0
+// （ir_distance MEM3）、TTP224 OUT4（触摸按键）重叠：使能脚与巡线（巡线车
+// 惯用轻量 TB6612，与大电流驱动不同框）/模拟测距/触摸面板不同框、同选概率
+// 最低，同选时经引脚绑定消解）
+const L298N = GPIO.addInstance();
+L298N.$name = "L298N";
+L298N.associatedPins.create(1);
+L298N.associatedPins[0].$name            = "EN";
+L298N.associatedPins[0].direction        = "OUTPUT";
+L298N.associatedPins[0].initialValue     = "SET";
+L298N.associatedPins[0].pin.$assign      = "PA27";
+
+// 电机 PID 调度定时器（10ms 周期中断，pid 模块用；编译闭环只需宏存在）
+MOTOR_PID.$name              = "MOTOR_PID";
+MOTOR_PID.profile            = "Basic_Periodic";
+MOTOR_PID.peripheral.$assign = "TIMG6";
+
+// 计程定时器（ntb_time 模块读计数）
+NTB.$name              = "NTB";
+NTB.profile            = "Basic_Periodic";
+NTB.peripheral.$assign = "TIMG7";
+
+// 超声波 TRIG/ECHO（sr04 模块：TRIG 输出触发 / ECHO 输入回波；测宽用
+// CPU 忙等计数，不占 TIMER 外设——地猛星 SysConfig TIMER 实例仅暴露
+// TIMG0/6/7/8/12（已被 motor/pid/ntb_time/servo/step_motor 全占，没有
+// 新定时器可加）。默认 TRIG=PB24（与 STEP_MOTOR RST2 重叠）、ECHO=PB8
+// （与 STEP_MOTOR DCY2 重叠）——测距与步进同选概率最低，同选时经引脚
+// 绑定消解）
+
+// 电机方向/使能 + 编码器中断（key 模块 GROUP1_IRQHandler 消费 IIDX）
+DC_MOTOR.$name = "DC_MOTOR";
+DC_MOTOR.associatedPins.create(8);
+DC_MOTOR.associatedPins[0].$name        = "AIN1";
+DC_MOTOR.associatedPins[0].direction    = "OUTPUT";
+DC_MOTOR.associatedPins[0].initialValue = "CLEARED";
+DC_MOTOR.associatedPins[0].pin.$assign  = "PB9";
+DC_MOTOR.associatedPins[1].$name        = "AIN2";
+DC_MOTOR.associatedPins[1].direction    = "OUTPUT";
+DC_MOTOR.associatedPins[1].initialValue = "CLEARED";
+DC_MOTOR.associatedPins[1].pin.$assign  = "PA18";
+DC_MOTOR.associatedPins[2].$name        = "BIN1";
+DC_MOTOR.associatedPins[2].direction    = "OUTPUT";
+DC_MOTOR.associatedPins[2].initialValue = "CLEARED";
+DC_MOTOR.associatedPins[2].pin.$assign  = "PB18";
+DC_MOTOR.associatedPins[3].$name        = "BIN2";
+DC_MOTOR.associatedPins[3].direction    = "OUTPUT";
+DC_MOTOR.associatedPins[3].initialValue = "CLEARED";
+DC_MOTOR.associatedPins[3].pin.$assign  = "PA7";
+DC_MOTOR.associatedPins[4].$name        = "AA";
+DC_MOTOR.associatedPins[4].direction    = "INPUT";
+DC_MOTOR.associatedPins[4].interruptEn  = true;
+DC_MOTOR.associatedPins[4].polarity     = "RISE_FALL";
+DC_MOTOR.associatedPins[4].pin.$assign  = "PA16";
+DC_MOTOR.associatedPins[5].$name        = "AB";
+DC_MOTOR.associatedPins[5].direction    = "INPUT";
+DC_MOTOR.associatedPins[5].interruptEn  = true;
+DC_MOTOR.associatedPins[5].polarity     = "RISE_FALL";
+DC_MOTOR.associatedPins[5].pin.$assign  = "PA17";
+DC_MOTOR.associatedPins[6].$name        = "BA";
+DC_MOTOR.associatedPins[6].direction    = "INPUT";
+DC_MOTOR.associatedPins[6].interruptEn  = true;
+DC_MOTOR.associatedPins[6].polarity     = "RISE_FALL";
+DC_MOTOR.associatedPins[6].pin.$assign  = "PB19";
+DC_MOTOR.associatedPins[7].$name        = "BB";
+DC_MOTOR.associatedPins[7].direction    = "INPUT";
+DC_MOTOR.associatedPins[7].interruptEn  = true;
+DC_MOTOR.associatedPins[7].polarity     = "RISE_FALL";
+DC_MOTOR.associatedPins[7].pin.$assign  = "PB20";
+
+// 8 路灰度循线输入（引脚空闲位，按实际接线改）
+HUIDU.$name = "HUIDU";
+HUIDU.associatedPins.create(8);
+HUIDU.associatedPins[0].$name       = "L1";
+HUIDU.associatedPins[0].direction   = "INPUT";
+HUIDU.associatedPins[0].pin.$assign = "PA22";
+HUIDU.associatedPins[1].$name       = "L2";
+HUIDU.associatedPins[1].direction   = "INPUT";
+HUIDU.associatedPins[1].pin.$assign = "PA23";
+HUIDU.associatedPins[2].$name       = "L3";
+HUIDU.associatedPins[2].direction   = "INPUT";
+HUIDU.associatedPins[2].pin.$assign = "PA24";
+HUIDU.associatedPins[3].$name       = "L4";
+HUIDU.associatedPins[3].direction   = "INPUT";
+HUIDU.associatedPins[3].pin.$assign = "PA25";
+HUIDU.associatedPins[4].$name       = "R1";
+HUIDU.associatedPins[4].direction   = "INPUT";
+HUIDU.associatedPins[4].pin.$assign = "PA26";
+HUIDU.associatedPins[5].$name       = "R2";
+HUIDU.associatedPins[5].direction   = "INPUT";
+HUIDU.associatedPins[5].pin.$assign = "PA27";
+HUIDU.associatedPins[6].$name       = "R3";
+HUIDU.associatedPins[6].direction   = "INPUT";
+HUIDU.associatedPins[6].pin.$assign = "PB6";
+HUIDU.associatedPins[7].$name       = "R4";
+HUIDU.associatedPins[7].direction   = "INPUT";
+HUIDU.associatedPins[7].pin.$assign = "PB7";
+
+// 启动按键输入（实例名 KEY → KEY_PORT 宏；引脚名 START → KEY_START_PIN）
+
+// 红外对射传感器输入（ir_beam 模块：实例名 IR_BEAM → IR_BEAM_PORT 宏；
+// 引脚名 OUT → IR_BEAM_OUT_PIN；默认 PA8——仅与 DIGIT_UART 默认重叠，
+// 同选时经引脚绑定消解；内部上拉 = 遮挡（开集输出截止）时由电阻钳到高，
+// 无遮挡 = 接收管导通拉低）
+
+// WS2812 幻彩灯带数据脚（ws2812 模块：单 GPIO 强推挽输出，位操作时序；
+// 默认 PA14——与 DCC_100_PWM2（step_motor 脉冲）默认重叠，同选时经引脚
+// 绑定消解。地猛星 2×20 排针 31 个 IO 已被母版默认布局全占，新模块默认
+// 脚按「与同选概率最低者重叠」分配，IR_BEAM/PA8 先例）
+
+// HX711 称重（hx711 模块：SCK 输出 / DT 输入（片上拉，空闲高 = 未就绪，
+// 数据就绪拉低）。默认 SCK=PA28（与 IMU601 TX 重叠）、DT=PA31（与 IMU601
+// RX 重叠）——称重与串口陀螺仪同为「姿态/力」低频组合，同选概率最低；
+// 同选时经引脚绑定消解）
+
+// AHT10 温湿度软 I2C（aht10 模块：SCL 输出 / SDA 双向运行时切换；
+// 位操作不占硬件 I2C 外设。默认 SCL=PB6（与 STEP_MOTOR SLP2 / HUIDU R3
+// 重叠）、SDA=PB7（与 STEP_MOTOR DIR2 / HUIDU R4 重叠）——温湿度与步进/
+// 巡线同选概率最低，同选时经引脚绑定消解；软 I2C 需板上/模块自带上拉）
+
+// DHT11 单总线温湿度（dht11 模块：DATA 双向——输出起始信号/释放总线、
+// 输入采样响应与 40bit 数据位，方向运行时切换（照 AHT10_SDA 先例）；
+// 位时序 CPU 忙等 + delay 模块换算，不占 TIMER。默认 DATA=PB7——与
+// AHT10 SDA（温湿度互替、同选概率最低）/STEP_MOTOR DIR2/HUIDU R4
+// 重叠（温湿度与步进/巡线同选概率最低，AHT10 先例），同选时经引脚绑定消解）
+
+// DS18B20 单总线温度（ds18b20 模块：DATA 双向——输出起始/释放总线、输入采样
+// 应答与数据位，方向运行时切换（照 DHT11_DATA 先例）；位时序 CPU 忙等 +
+// delay 模块换算（复位 750us、位槽 62-64us），不占 TIMER；模块板自带上拉。
+// 默认 DATA=PA7——与 DC_MOTOR BIN2（双电机）、SERVO_PWM ccp0（舵机）、
+// RC522 CS（读卡门禁）重叠：接触测温与运动控制/读卡不同框、同选概率最低
+// （刻意不叠温湿度/光照/显示/语音件——测温+显示/语音/传感站为常见搭配，
+// 同 mlx90614 选型口诀；也不叠 I2C_0 的 PA0/PA1——硬件 I2C 脚与 i2c_bus_share
+// 测试互扰，批次 5 实测调整先例），同选时经引脚绑定消解）
+
+// BH1750 光照度软 I2C（bh1750 模块：SCL 输出 / SDA 双向运行时切换；
+// 位操作不占硬件 I2C 外设，照 AHT10 先例。默认 SCL=PA12 / SDA=PA13——
+// 与 PWMAB C0/C1（motor 双路 PWM）重叠：光照度监测/台灯类与双电机驱动
+// 同选概率最低（故意不叠 AHT10 的 PB6/PB7——温湿度+光照=环境监测站常见
+// 组合），同选时经引脚绑定消解；软 I2C 需板上/模块自带上拉）
+
+// ADS1115 四通道 16bit 外扩 ADC（ads1115 模块：软 I2C 位操作 2 脚 SCL/SDA——
+// 照 AHT10 先例不占硬件 I2C 外设；SDA 方向运行时切换（写 = 输出、读 ACK = 输入）。
+// 默认 SCL=PA16 / SDA=PA17——与 DC_MOTOR 编码器 AA/AB、RC522 MOSI/MISO 重叠：
+// 外扩多通道 ADC 与双电机闭环车/读卡门禁同选概率最低（与库内 adc 板载 12bit
+// 单通道分工不同：adc = 板载 ADC12_0 MEM0（默认 PA24，us016 共读同槽），多路
+// 模拟量/分离供电用本件——两件同选互不冲突），同选时经引脚绑定消解；
+// 软 I2C 需板上/模块自带上拉）
+
+// TCS34725 颜色识别（tcs34725 模块：软 I2C 位操作 2 脚 SCL/SDA——照 AHT10 先例
+// 不占硬件 I2C 外设；SDA 方向运行时切换（写 = 输出、读 ACK = 输入）。默认
+// SCL=PA23 / SDA=PA24——与 HUIDU L2/L3、UWB/DEBUG/HC05 UART（PA23/PA24）、
+// NRF24L01 CSN/CE、ADC12_0 MEM0（adc+us016 共享槽）重叠：颜色识别与无线
+// 链路/巡线/板载 ADC 同选概率最低（颜色识别属视觉类，与 K230 视觉互替；
+// 刻意不叠 OLED PB2/PB3/MAX7219 显示件——显示颜色值是常见搭配），同选时
+// 经引脚绑定消解；软 I2C 需板上/模块自带上拉）
+
+// MLX90614 非接触红外测温（mlx90614 模块：软 I2C/SMBus 兼容位操作 2 脚
+// SCL/SDA——照 AHT10 先例不占硬件 I2C 外设；SDA 方向运行时切换（写 = 输出、
+// 读 ACK = 输入）。默认 SCL=PA9 / SDA=PA8——与 DIGIT_UART RX/TX（K230 视觉）、
+// IR_BEAM OUT、HC05 STATE、JOYSTICK SW、NRF24L01 MISO 重叠：非接触测温与
+// 视觉（K230 互替类）/手动输入/蓝牙/2.4G 链路同选概率最低（刻意不叠
+// 温湿度/光照/显示——测温与传感站/显示为常见搭配），同选时经引脚绑定
+// 消解；软 I2C 需板上/模块自带上拉（SMBus 上拉 4.7k~10k，模块板自带））
+
+// AT24C02 EEPROM 存储（at24c02 模块：软 I2C 位操作 2 脚 SCL/SDA——照 AHT10
+// 先例不占硬件 I2C 外设；SDA 方向运行时切换（写 = 输出、读 ACK = 输入）。
+// 默认 SCL=PB24 / SDA=PB8——与 STEP_MOTOR RST2/DCY2、SR04 TRIG/ECHO、
+// HC05 KEY 重叠：EEPROM 存储记录与步进/测距同选概率最低（记录类与运动类
+// 不同框；记录+传感站类同选时与同批 ads1115/tcs34725/mlx90614 默认不撞），
+// 同选时经引脚绑定消解；软 I2C 需板上/模块自带上拉）
+
+// SHT30 温湿度软 I2C（sht30 模块：SCL 输出 / SDA 双向运行时切换；
+// 位操作不占硬件 I2C 外设，照 AHT10 先例——半周期 5us ≈ 100kHz 级。
+// 默认 SCL=PA28 / SDA=PA31——与 IMU601 UART0（+FINGERPRINT_UART）、
+// HX711 SCK/DT 重叠：温湿度与姿态/称重/身份采集不同框、同选概率最低
+// （刻意不叠 PB6/PB7——aht10 温湿度互替；不叠批次 5 八脚），同选时经引脚
+// 绑定消解；软 I2C 需板上/模块自带上拉）
+
+// SHT20 温湿度软 I2C（sht20 模块：SCL 输出 / SDA 双向运行时切换；
+// 位操作不占硬件 I2C 外设，照 AHT10 先例——半周期 5us ≈ 100kHz 级；
+// 单次测量模式（0xF3 温度/0xF5 湿度 no-hold、低功耗），与 sht30 周期模式
+// 分工。默认 SCL=PA16 / SDA=PA17——与 DC_MOTOR 编码器 AA/AB（双电机闭环车）、
+// RC522 MOSI/MISO（读卡门禁）、ADS1115 SCL/SDA（外扩多路 ADC）重叠：温湿度
+// 与闭环车/读卡/多路模拟采集不同框、同选概率最低（刻意不叠温湿度互替件
+// aht10 PB6/PB7、dht11 PB7、sht30 PA28/PA31、ds18b20 PA7、mlx90614 PA9/PA8
+// 与光照 bh1750 PA12/PA13——温湿度+显示/其他传感为环境站常见搭配），同选时
+// 经引脚绑定消解；软 I2C 需板上/模块自带上拉）
+
+// JY61P 六轴姿态传感器软 I2C（jy61p 模块：SCL 输出 / SDA 双向运行时切换；
+// 位操作不占硬件 I2C 外设，照 AHT10 先例。默认 SCL=PA28 / SDA=PA31——与
+// IMU601 UART0（imu_uart 姿态互替）、FINGERPRINT_UART（身份）、HX711（称重）、
+// SHT30 SDA（温湿度）、MICROWAVE（微波雷达）重叠：姿态测量与身份/称重/温湿度/
+// 微波采集不同框、同选概率最低（姿态惯配双电机/舵机/显示/无线——刻意不叠
+// motor/step_motor/servo/显示/无线/触摸/语音/气体/报警/红外件与 I2C_0 硬 I2C
+// 的 PA0/PA1——软 I2C×硬 I2C 同脚 = 物理冲突分组，批次 5 先例），同选时经
+// 引脚绑定消解；软 I2C 需板上/模块自带上拉）
+
+// SGP30 空气 TVOC/CO2e 气体传感（sgp30 模块：软 I2C 位操作 2 脚 SCL/SDA——
+// 照 AHT10 先例不占硬件 I2C 外设；SDA 方向运行时切换（写 = 输出、读 ACK =
+// 输入）。默认 SCL=PA18 / SDA=PB9——与 DC_MOTOR AIN2/AIN1（双电机）、
+// MAX7219 CLK/DIN（大数字显示）、RC522 RST（读卡门禁）重叠：气体传感与
+// 运动控制/读卡门禁不同框、同选概率最低（刻意不叠温湿度（AHT10 PB6/PB7、
+// DHT11 PB7、DS18B20 PA7、SHT30 PA28/PA31）、光照（PA12/PA13）、OLED 显示
+// （PB2/PB3）、语音（PB19/PB20）、按键（PA2、PA22-27）、报警（PA15）、无线
+// （PA8/PA9/PA23/PA24）与批次 5 八脚——气体检测器标配温湿度+显示+蜂鸣/灯+
+// 键盘，同选概率最高故避开），同选时经引脚绑定消解；软 I2C 需板上/模块
+// 自带上拉）
+
+// AGS10 有害气体（TVOC）传感（ags10 模块：软 I2C 位操作 2 脚 SCL/SDA——
+// 照 AHT10 先例不占硬件 I2C 外设；SDA 方向运行时切换（写 = 输出、读 ACK =
+// 输入）。默认 SCL=PB18 / SDA=PA14——与 DC_MOTOR BIN1（双电机）、MAX7219 CS
+// （大数字显示）、DCC_100_PWM2（step_motor 步进脉冲——风机排烟联动）、
+// WS2812 IN（灯带指示）、RC522 SCK（读卡门禁）重叠：气体传感与运动控制/读卡/
+// 灯带低频同框、同选概率最低（避让原则同 SGP30：不叠温湿度/光照/OLED/语音/
+// 按键/报警/无线/批次 5 八脚），同选时经引脚绑定消解；软 I2C 需板上/模块
+// 自带上拉）
+
+// BMP180 气压/温度/海拔软 I2C（bmp180 模块：SCL 输出 / SDA 双向运行时切换；
+// 位操作不占硬件 I2C 外设/TIMER，照 SHT30/SGP30 先例。默认 SCL=PA23 /
+// SDA=PA24——与 HUIDU L2/L3（巡线）、UWB/HC05 链路、NRF24L01 CSN/MOSI、
+// TCS34725 SCL/SDA、ADC12_0 板载共读槽（adc 默认脚 PA24/A0_3）重叠：气压/
+// 海拔与巡线车控/无线链路/色觉不同框、同选概率最低（刻意不叠温湿度/光照/
+// 气体等环境件与显示/语音——气压+环境站/显示为常见搭配；与互替件 ms5611
+// 刻意错开），同选时经引脚绑定消解；PA0/PA1 不可作软 I2C SDA（预设事实
+// ④——2026-09-06 SysConfig CLI 实证仅禁输入；软 I2C 需板上/模块自带上拉）
+
+// MS5611 高精度气压/温度软 I2C（ms5611 模块：SCL 输出 / SDA 双向运行时切换；
+// 位操作不占硬件 I2C 外设/TIMER，照 SHT30/SGP30/BMP180 先例。默认 SCL=PA28 /
+// SDA=PA31——低频采集池（IMU601/FINGERPRINT_UART/HX711/SHT30/JY61P/
+// MICROWAVE/TP_XPT2046/OLED_SPI——姿态/称重/身份/温湿度/微波/显示，jy61p
+// 同池先例；MS5611 高精度件与姿态/飞行器定高同框概率最高——池内重叠、同选
+// 时经引脚绑定消解；刻意与互替件 bmp180 错开），同选时经引脚绑定消解；
+// PA0/PA1 不可作软 I2C SDA（既定事实④——2026-09-06 SysConfig CLI 实证仅禁
+// 输入；软 I2C 需板上/模块自带上拉）
+
+// TTP224 4 路电容触摸按键（ttp224 模块：OUT1-4 输入 + 内部上拉——页面
+// 「上拉输入」；电平直读无去抖/无 GPIO 中断（GROUP1 仍被 motor 编码器独占，
+// 页面同为电平直读）。默认 OUT1=PA22 / OUT2=PA25 / OUT3=PA26 / OUT4=PA27——
+// 与 HUIDU L1/L4/R1/R2（巡线）、DEBUG_UART RX/NRF24L01 IRQ、ZIGBEE_UART/
+// joystick X-Y/IR_REMOTE/ADC12_0 MEM3（ir_distance）重叠：触摸按键与无线
+// 链路/手动输入互替、与巡线/测距不同框，同选概率最低；四脚与同批默认
+// （PA7/PA28/PA31/PA24）不撞，同选时经引脚绑定消解）
+
+// 人体红外感应输入（human_ir 模块：OUT 输入 + 内部上拉——HC-SR501 模块被
+// 感应到人体时输出高电平（模块介绍「人进入其感应范围则输出高电平」+ 规格
+// 「电平输出：高3.3V/低0V」；页面函数注释「0=感应到」与介绍矛盾——按
+// HC-SR501 器件标准高=检测到修正，模块 notes 记录）；电平直读无去抖/无
+// GPIO 中断（GROUP1 仍被 motor 编码器独占，页面同为电平直读）。默认 PB8——
+// 与 STEP_MOTOR DCY2 / SR04 ECHO / AT24C02 SDA 重叠：人体红外与步进/测距/
+// 存储不同框、同选概率最低（感应灯/防盗报警惯配温湿度/光照/显示/语音/无线/
+// 按键/蜂鸣——刻意不叠），同选时经引脚绑定消解）
+
+// 微波多普勒雷达输入（microwave_radar 模块：OUT 输入 + 内部上拉——HB100
+// 模块检测到物体移动时 OUT 低电平（页面函数注释「1=未检测到 0=检测到」+
+// main 演示（OUT 输入为 0 判移动）同口径，页面自一致）；电平直读无去抖/无
+// GPIO 中断（GROUP1 仍被 motor 编码器独占，页面同为电平直读）；页面演示的
+// 开/关门时序逻辑归生成骨架（ADR 0009）。默认 PA31——2026-09-06 SysConfig
+// CLI 实证 PA0/PA1 不在 GPIO 输入实例 pin 选项内（"No option named PA0
+// defined"；GPIO 输出可配 PA0——ir_remote_tx 先例，输入不可）→ 改选
+// PA31：与 IMU601 RX（姿态）/HX711 DT（称重）/FINGERPRINT_UART RX（身份）/
+// SHT30 SDA（温湿度）重叠——微波雷达（自动门/车流/倒车）与姿态/称重/身份/
+// 温湿度采集不同框、同选概率最低（自动门/车流惯配电机/显示/蜂鸣/无线/超声/
+// 人体红外——刻意不叠：PWMAB/MAX7219/LED_BEEP/无线族/SR04 脚/human_ir PB8），
+// 同选时经引脚绑定消解；与同批 human_ir（PB8）刻意错开（人体红外+微波组合
+// 常同选，默认即不撞）
+
+// GP2Y1014AU 粉尘传感器 LED 驱动输出（gp2y1014au 模块：LED 脉冲驱动——页面
+// Read_dust_concentration 时序：clear（LED 亮）→ 280us → 采样 → 40us → set
+// （LED 关）→ 9680us，10ms 周期；**器件必需**——GP2Y1014AU 内置红外 LED
+// 必须由主控脉冲驱动才能测量，无此脚传感器不工作（薄封装件唯一例外：ADC 仍
+// 薄封装共读 MEM0（见 ADC 段），LED 为 GPIO 输出实例）。页面极性原样：
+// clear = LED 亮、set = LED 关（空闲高 = 关闭）。默认 PA1——与 I2C_0 sclPin
+// （ml_mpu6050 硬 I2C SCL）重叠：粉尘浓度监测与姿态采集不同框、同选概率
+// 最低故叠此脚（PA0/PA1 不可作 GPIO 输入——2026-09-06 SysConfig CLI 实证；
+// GPIO 输出可配 PA0——ir_remote_tx 先例，PA1 同型经编译矩阵 CLI 实证），
+// 同选时经引脚绑定消解；刻意不叠传感站标配（温湿度/光照/气体/显示）、
+// 报警（PA15 蜂鸣）、无线/触摸/运动/语音件——粉尘监测站 = 显示 + 报警 +
+// 温湿度 + 无线遥测常见组合，默认即不撞）
+
+// 1 路 5V 继电器（relay 模块：OUT 输出——光耦隔离/低电平吸合（IN1 低电平 =
+// 光耦导通 = 三极管导通 = 线圈得电 = 触点吸合），5V 驱动 250V/10A 高压负载；
+// initialValue SET = 引脚高 = 初始断开（模块低电平吸合，吸合=引脚低；
+// relay_init 亦置断开，双保险）。默认 PA1——与 I2C_0 scl（ml_mpu6050 姿态）、
+// GP2Y1014 LED（gp2y1014au 粉尘）重叠：继电器与姿态/粉尘不同框、同选概率
+// 最低（刻意不叠声光/执行件 LED_BEEP PA15/电机类/风机控制类——继电器+蜂鸣
+// 报警/电灯控制为常见组合，默认即不撞），同选时经引脚绑定消解；PA1 可作
+// GPIO 输出（2026-09-06 SysConfig CLI 实证仅禁输入——ir_remote_tx 先例；
+// 板载 4.7k 上拉对推挽输出无碍）
+
+
+// 双轴摇杆按键（joystick 模块：SW 输入上拉低有效；实例名 JOYSTICK →
+// JOYSTICK_PORT 宏；引脚名 SW → JOYSTICK_SW_PIN；默认 PA9——仅与
+// DIGIT_UART RX 默认重叠（K230 视觉串口），同选时经引脚绑定消解。
+// X/Y 两轴走 ADC12_0 MEM1/MEM2（见 ADC 段），SW 独立 GPIO）
+
+// HC05 蓝牙（hc05 模块：STATE 输入 = 连接状态指示（模块 STATE 脚高 = 手机
+// 已连接；默认 PA8——与 DIGIT_UART TX / IR_BEAM OUT 默认重叠：K230 视觉/
+// 红外对射与蓝牙链路互替，同选时经引脚绑定消解）；KEY 输出 = AT 模式切换
+// 按键（KEY 高 + 重上电 = AT 命令模式；默认 PB24——与 STEP_MOTOR RST2 /
+// SR04 TRIG 重叠，AT 切换不常用，同选时经引脚绑定消解））
+
+// NRF24L01 2.4G 无线（nrf24l01 模块：软 SPI 位操作 6 脚——CLK/MOSI/CSN/CE
+// 输出 + MISO/IRQ 输入；IRQ 输入不配中断（GPIO 中断只有 GROUP1 一路且被
+// motor 编码器独占——NRF+电机是双车标配组合，定义第二个 GROUP1_IRQHandler
+// 会链接期冲突，按手册轮询方式接收）。默认全 GPIOA 单口：CLK=PA26/MOSI=PA25/
+// MISO=PA9/CSN=PA24/CE=PA23/IRQ=PA22——与 ZIGBEE_UART（PA26/PA25）、
+// UWB/DEBUG_UART（PA23/PA24/PA22）、HUIDU 巡线（PA22-26）、joystick X/Y、
+// adc、DIGIT_UART（PA9）默认重叠：NRF 与其它无线/巡线/手动输入互替、同选
+// 概率最低，同选时经引脚绑定消解）
+
+// IPS 彩屏（lcd 模块，批次 12 决策 A：六屏合一单模块——ST7735/ST7735S/
+// ST7789V2/ST7789V3/GC9A01 差异 = 初始化序列+分辨率+偏移表，lcd_init(型号,
+// 方向) 运行时选择；软 SPI 位操作不占硬件 SPI 外设/TIMER——nrf24l01/max7219
+// 先例）。六脚全输出：SCL=PA16（与 DC_MOTOR 编码器 AA/RC522 MOSI/ADS1115 SCL/
+// SHT20 SCL 重叠）、SDA=PA17（编码器 AB/RC522 MISO/ADS1115 SDA/SHT20 SDA）、
+// RES=PA27（与 HUIDU R2/ADC ir_distance/TTP224 OUT4 重叠）、DC=PA22（与 HUIDU
+// L1/NRF24L01 IRQ/ZIGBEE DEBUG RX/TTP224 OUT1/flame 重叠）、CS=PB19（与
+// JQ8900 语音重叠）、BLK=PB20（与 SYN6288 语音/mq135 重叠）——各对按「同选
+// 概率最低者与既有默认重叠」：彩屏与巡线车/无线链路/语音播报/触摸/读卡/
+// 气体互替不同框（刻意不叠显示族 oled/max7219/ws2812/led 与环境站温湿度/
+// 光照/红外测温/粉尘——彩屏显示环境数据是常见组合；不叠 PA0/PA1——
+// i2c_bus_share 测试互扰，批次 5 实测先例），同选时经引脚绑定消解；CS/BLK
+// 初始 SET（片选空闲/开背光），其余输出初始 CLEARED。
+
+// XPT2046 电阻触摸（tp_xpt2046 模块，批次 12/06——1.8 寸屏配套独立件，与
+// lcd 零耦合：共用 SCLK/MOSI 接线由引脚绑定自选，默认脚独立互不相撞）。
+// 五脚：CLK/DIN/CS 输出（CS 初始 SET=片选空闲）+ DOUT/PEN 输入。默认
+// CS=PA8（与 DIGIT_UART TX/IR_BEAM/HC05 STATE/MLX90614 SDA/OPENMV4 TX 重叠
+// ——触摸与视觉/红外对射/蓝牙链路互替、同选概率最低）、CLK=PA13（与
+// PWMAB C1/BH1750 SDA 重叠）、DIN=PA9（与 DIGIT_UART RX/JOYSTICK SW/NRF
+// MISO/MLX90614 SCL/OPENMV4 RX 重叠）、DOUT=PA28（与 IMU601/HX711/
+// FINGERPRINT_UART/SHT30/JY61P 重叠——姿态/称重/温湿度采集不同框）、
+// PEN=PB24（与 STEP_MOTOR RST2/SR04 TRIG/HC05 KEY/AT24C02 SCL/mq5 ADC/
+// L298N PWM2 重叠——步进/测距/存储/气体不同框）——各对按「同选概率最低者
+// 与既有默认重叠」：触摸与视觉链路/手动输入/姿态/步进不同框，且刻意不叠
+// LCD 六脚（PA16/PA17/PA27/PA22/PB19/PB20——触摸与彩屏常同选，默认即不
+// 撞），同选时经引脚绑定消解。
+
+// SPI 总线 OLED 0.96 单色屏（oled 模块 SPI 变体，批次 12/07 决策 B——同芯片
+// SSD1306 同 API，仅总线层不同：5 脚软 SPI 位操作 SCL/SDA/DC/CS/RES，不占
+// 硬件 SPI 外设/TIMER——nrf24l01/max7219 先例；I2C1「OLED」实例与此并存
+// （选任一总线时两实例都保留：已知取舍 = SPI 模式下 I2C1 的 PB2/PB3 仍被
+// 占用，需要时经引脚绑定换脚消解，见 oled manifest notes）。默认
+// SCL=PA28/SDA=PA31（与 IMU601/HX711/FINGERPRINT_UART/SHT30/JY61P/TP DOUT
+// 重叠——单色 SPI 屏与姿态/称重/身份/温湿度采集不同框、同选概率最低）、
+// DC=PA13（与 PWMAB C1/BH1750 SDA/TP CLK 重叠）、CS=PB18（与 MAX7219 CS/
+// AGS10 SCL 重叠——显示互替件同框罕见）、RES=PA22（与 HUIDU L1/NRF IRQ/
+// TTP224/flame/TP… 重叠——巡线/无线不同框）——刻意不叠 oled I2C 的 PB2/PB3
+// 与彩屏 LCD 六脚，同选时经引脚绑定消解；CS/RES 初始 SET（片选空闲/复位
+// 空闲高），其余输出初始 CLEARED。
+
+// 红外遥控接收（ir_remote 模块：OUT 输入（接收头输出直接接 GPIO，上拉 = 无
+// 信号高电平、有信号拉低）；NEC 解码用 CPU 忙等采样（delay 模块 20us 步进），
+// 不占 TIMER（TIMG 全占，sr04 先例）；主循环轮询解码、不注册 GPIO 中断
+// （GROUP1 只有一路且被 motor 编码器独占——红外+电机是经典组合）。默认
+// PA26——与 ZIGBEE_TX/joystick X/NRF24L01 CLK 默认重叠（红外与其它无线/
+// 手动输入互替、同选概率最低），同选时经引脚绑定消解）
+
+// MAX7219 数码管/点阵（max7219 模块：软 SPI 位操作 3 脚 DIN/CLK/CS，全强推挽
+// 输出；位操作不占硬件 SPI 外设；CS 初始高 = 片选空闲。默认 DIN=PB9（与
+// DC_MOTOR AIN1 重叠）/CLK=PA18（与 DC_MOTOR AIN2 重叠——PA18 兼 BSL 排针
+// 脚，作输出无碍）/CS=PB18（与 DC_MOTOR BIN1 重叠）——大数字显示（计分/
+// 计时/数据牌类固定装置）与双电机小车同选概率最低（小车状态显示惯走
+// OLED），同选时经引脚绑定消解）
+
+// PCA9685 16 路舵机驱动板（pca9685 模块：软 I2C 位操作 2 脚 SCL/SDA——照
+// AHT10 先例不占硬件 I2C 外设；SDA 方向运行时切换（写 = 输出、读 ACK = 输入）。
+// 默认 SCL=PB6 / SDA=PB7——与 STEP_MOTOR SLP2/DIR2、HUIDU R3/R4、
+// AHT10 SCL/SDA（软 I2C 同型）、DHT11 DATA 重叠：16 路舵机多自由度执行与
+// 温湿度采集（环境站类）/步进电机（单轴执行，互替）/8 路灰度巡线（车类）
+// 同选概率最低，同选时经引脚绑定消解；软 I2C 需板上/模块自带上拉）
+
+// 红外编码发射（ir_remote_tx 模块：OUT 输出强推挽，38kHz NEC 载波位时序
+// CPU 忙等 + delay 模块换算，不占 TIMER（照 ir_remote/ws2812 先例）；初始
+// 低 = 载波空闲。默认 PA0——与 I2C_0 SDA（ml_mpu6050 姿态）/板载 LED 重叠
+// （红外发射链与姿态采集同选概率最低；板载 LED 随载波闪烁可作发射指示），
+// 且与 IR_REMOTE 默认 PA26 刻意错开（发射/接收本就常配对——双选默认即不撞，
+// 同选时经引脚绑定消解）
+
+// JQ8900 语音播报（jq8900 模块：软 UART 单发 TX——GPIO 位操作 9600 8N1，
+// 不占 UART 外设/TIMER（批次 4 UART 可行性调研：SysConfig CLI 拒绝同一
+// UART 外设多实例，语音单向发指令帧走软 UART）；TX 输出初始 SET = 空闲高。
+// 默认 PB19——DC_MOTOR 编码器 BA 脚：语音播报与双电机小车同选概率最低，
+// 同选时经引脚绑定消解；与同批 syn6288 默认 PB20 刻意错开（语音两件常同选））
+
+// SYN6288 语音合成（syn6288 模块：软 UART 单发 TX——同 jq8900 先例，不占
+// UART 外设/TIMER；TX 输出初始 SET = 空闲高。默认 PB20——DC_MOTOR 编码器
+// BB 脚：语音合成与双电机小车同选概率最低；与同批 jq8900 默认 PB19 刻意
+// 错开（语音两件常同选，默认即不撞），同选时经引脚绑定消解）
+
+// RC522 射频 IC 卡识别（rc522 模块：软 SPI 位操作 5 脚——CS/RST/SCK/MOSI
+// 输出 + MISO 输入，单 RC522_PORT 宏；不占硬件 SPI 外设（nrf24l01 先例）。
+// 默认 CS=PA7（DC_MOTOR BIN2 + SERVO_PWM 重叠）/RST=PA18（DC_MOTOR AIN2 +
+// MAX7219 CLK）/SCK=PA14（DCC_100_PWM2 + WS2812 IN）/MOSI=PA16（编码器
+// AA）/MISO=PA17（编码器 AB）——读卡与车类（双电机/舵机/步进）同选概率
+// 最低，同选时经引脚绑定消解；五脚全 GPIOA 单口，与同批语音/指纹默认不撞）
+
+// 指纹模块触摸感应输入（fingerprint 模块：模块 5 脚触摸信号输出高 = 检测到
+// 触摸，VTI 接 3.3V——直连 GPIO 输入即可。默认 PA12——PWMAB C0（motor 双路
+// PWM）+ BH1750 SCL 重叠：指纹与双电机/光照同选概率最低，同选时经引脚绑定
+// 消解；与同批 jq8900/syn6288/rc522 默认不撞）
+
+// LED/蜂鸣器输出（PA15；原 LaunchPad 值 PA3 = 32.768k 晶振脚，地猛星排针未引出）
+LED_BEEP.$name = "LED_BEEP";
+LED_BEEP.associatedPins.create(1);
+LED_BEEP.associatedPins[0].$name        = "LED";
+LED_BEEP.associatedPins[0].direction    = "OUTPUT";
+LED_BEEP.associatedPins[0].initialValue = "CLEARED";
+LED_BEEP.associatedPins[0].pin.$assign  = "PA15";
+
+// 步进电机方向/使能（step_motor 模块：宏 STEP_MOTOR_RST2/SLP2/DIR2/DCY2_PIN，
+// 四脚同 GPIOB → STEP_MOTOR_PORT = GPIOB；RST2/SLP2 空闲高有效，init 置高）
+
+// IMU 串口（RX 中断；UART0 = PA28(TX)/PA31(RX)——板载 CH340E 占用 UART0 默认脚
+// PA10/PA11，勿用；imu_uart 模块接线注释同步此值）
+
+// K230 视觉串口（digit_uart/coord_detect 模块用，RX 中断；PA8/PA9 = UART1）
+
+// 调试串口（debug_uart 模块用，RX 中断；UART2 = PA23(TX)/PA22(RX)。
+// 与 UWB_UART 默认同 UART2——两模块同选时经引脚绑定换实例消解；
+// PA23/PA22 与 HUIDU L2/L1 默认重叠，同选时改绑消解）
+
+// UWB 定位串口（uwb_uart 模块用，RX 中断；UART2 = PA23(TX)/PA24(RX)。
+// PA23/PA24 与 HUIDU L2/L3 默认重叠——两模块同选时经引脚绑定消解）
+
+// Zigbee DL-20 串口（zigbee_uart 接收 / zigbee_uart_key 发送共享，
+// RX 中断；UART3 = PA26(TX)/PA25(RX)。PA26/PA25 与 HUIDU R2/R3 默认
+// 重叠——同选时经引脚绑定消解）
+
+// HC05 蓝牙串口（hc05 模块：9600 8N1 透传——HC05 模块出厂默认波特率，与
+// 其余 UART 实例 115200 独立无冲突；RX 中断 + FIFO 关闭；与 DEBUG_UART/
+// UWB_UART 默认同 UART2 外设——两模块同选时经引脚绑定换实例消解；默认
+// TX=PA23/RX=PA24 与 UWB_UART 同脚：蓝牙手机遥控与 UWB 定位链路互替、
+// 同选概率最低，同选时经引脚绑定消解）
+
+// 指纹识别（fingerprint 模块：AS608 串口双向——独立 UART 实例，批次 4 UART
+// 可行性调研实证 SysConfig CLI 拒绝同一 UART 外设多实例，故不共享；默认
+// UART0（IMU601 原脚 PA28/PA31——身份与姿态同选概率最低，单选裁剪后独占
+// UART0，同选时经引脚绑定换实例消解）；57600 = 页面注释 AS608 默认波特率
+// （市售 9600 出厂版改 targetBaudRate 一行即可，协议与波特率无关）；
+// enabledInterrupts 空 = **轮询接收**（不注册 UART 中断、无 ISR 强符号）
+
+// OpenMV4 视觉串口（open_mv4 模块：主控侧 UART 帧解析 `[cx,cy]`——真实 UART
+// 独立实例照 fingerprint「裁剪后独占」先例（批次 4 UART 可行性调研：SysConfig
+// CLI 拒绝同一 UART 外设多实例、UART 实例上限 4 = UART0-3 外设数——母版 7 个
+// UART 实例定义每工程先裁剪、裁剪后至多 4 实例，open_mv4 与另 ≤3 件 UART
+// 模块同选在限内、4 件以上同选 = CLI 拒绝（既有约束类，notes 写明）；
+// 同外设多实例同选时经引脚绑定换实例/换脚消解）；默认挂 UART1（页面原接线
+// 「PA8/PA9 附加串口 1」，与 DIGIT_UART（K230 视觉）同外设同脚——OpenMV4 与
+// K230 视觉互替、同选概率最低，单选裁剪后独占 UART1）；9600 = 页面案例波特率
+// （独立于其余 115200 实例）；enabledInterrupts 空 = **轮询接收**（无 ISR
+// 强符号——照 fingerprint 先例）
+
+// AS32-TTL-100 LoRa 无线数传（as32 模块：真实 UART 双向透传——照
+// fingerprint/open_mv4「裁剪后独占」先例（批次 4 UART 可行性调研：SysConfig
+// CLI 拒绝同一 UART 外设多实例、UART 实例上限 4 = UART0-3 外设数——母版
+// 9 个 UART 实例定义每工程先裁剪、裁剪后至多 4 实例；as32 与另 ≤3 件 UART
+// 模块同选在限内、4 件以上同选 = CLI 拒绝（既有约束类，notes 写明））。
+// 默认挂 UART3（ZIGBEE_UART 宿主——LoRa 与 Zigbee 无线数传互替、同选概率
+// 最低，单选裁剪后独占 UART3；默认 TX=PA26/RX=PA25 = ZIGBEE_UART 原脚，
+// 互替件同脚先例：OPENMV4_UART/PA8/PA9 与 DIGIT_UART 同构，同选时经引脚
+// 绑定换实例/换脚消解）；9600 = 页面/AS32 出厂默认波特率（独立于其余
+// 115200 实例；HC05 9600 先例）；enabledInterrupts 空 = **轮询接收**（无
+// UART_3_INST_IRQHandler 强符号——zigbee_uart 为 RX 中断件，轮询避免同实例
+// 名 ISR 重复；fingerprint/open_mv4 轮询先例，页面 LOAR_Init 的 NVIC 段随
+// 轮询裁剪）；页面无 AT 指令代码（参数经上位机设置——AT 配置范围外）
+
+// OLED（I2C 控制器）
+
+// MPU6050 姿态传感器（ml_mpu6050 模块：I2C_0_INST，轮询控制器模式；
+// I2C0 = PA0(SDA)/PA1(SCL) 复用板载 LED 脚，通信期间 LED 微闪——地猛星 I2C0 的
+// 另一组 PA28/PA31 已给 IMU601 UART0；PA1 板载 4.7k 上拉，PA0 上拉未焊 R12、
+// 依赖 MPU6050 模块板自带）
+I2C_0.$name                     = "I2C_0";
+I2C_0.basicEnableController     = true;
+I2C_0.basicControllerBusSpeed   = 400000;
+I2C_0.peripheral.$assign        = "I2C0";
+I2C_0.peripheral.sdaPin.$assign = "PA0";
+I2C_0.peripheral.sclPin.$assign = "PA1";
+
+// adc 模块 + 摇杆 + 模拟量测距 + 气体传感 + 火焰/土壤传感共享 ADC12_0（b1-adc-servo/01 +
+// wiki-modules-batch1/01 + wiki-modules-batch2/02/04 +
+// wiki-modules-batch7/01/02 + wiki-modules-batch8/01/02：
+// MEM0=PA24/A0_3 归 adc（us016/mq2 薄封装共读同槽——wiki-modules-batch2/02
+// 与 batch6/03），MEM1=PA26/A0_1、
+// MEM2=PA25/A0_2 归 joystick X/Y，MEM3=PA27/A0_0 归 ir_distance 红外测距
+// （手册原脚），MEM4=PB20/A0_6 归 mq135、MEM5=PB24/A0_5 归 mq5（独立通道
+// ——与 mq2 的 MEM0 薄封装不同：多路气体同选时各器件物理通道独立、无共读
+// 冲突；2026-09-08 SysConfig CLI 实证 MEM4-7 通道/脚全合法），MEM6=PA22/A0_7
+// 归 flame 火焰传感（独立通道——火焰 AO 为高阻电流源，取剩余通道中唯一
+// 无负载脚 PA22；与 HUIDU L1/DEBUG_UART RX/NRF24L01 IRQ/TTP224 OUT1 重叠，
+// 与巡线/无线/触摸不同框、同选概率最低），MEM7=PA14/A0_12 归 soil 土壤湿度
+// （独立通道——**MEM 槽位已满（8/8）**：后续 ADC 类件（photoresistance/rain/
+// gp2y1014au/s12sd/ms1100——wiki-modules-batch9/01-04，mq3/mq4/mq6/mq7/mq8/mq9/
+// ms1100——wiki-modules-batch11/01-07 同构快补）一律薄封装共读 MEM0（mq2/us016
+// 先例——多件同选
+// 同读一物理通道、一次转换一次读、采样节奏按用途自协调）；PA14 板载
+// LED2+15k 为固定比率衰减（读数系统偏小、单调性保留），与 DCC_100_PWM2/
+// WS2812 IN/RC522 SCK/AGS10 SDA 重叠——浇花/智慧农业与运动/读卡/气体不同框、
+// 同选概率最低）；
+// 轮询读取不配
+// 中断。多 MEM 必须 sequence 模式（startAdd..endAdd = 启用 MEM 集合）——
+// 单发模式只启用 startAdd 槽位，adcPin1/2 由此不可用（原注释「槽位不存在」
+// 系误判，2026-09-05 SysConfig CLI 实证）
+const Board = scripting.addModule("/ti/driverlib/Board", {}, false);
+Board.configureUnused = true;
+
+SYSCTL.forceDefaultClkConfig = true;
+SYSCTL.clockTreeEn  = true;
+// LED 多实例通道（module-multi-instance/03 渲染产物：实例名 LED_<实例号>，改引脚只改 $assign）
