@@ -31,6 +31,13 @@
 - 14:28 fix(推荐): 展开与选择集的并发收口——过期响应不写状态、在途触发改为排队（工单 module-intro-detail/07）
 - 15:11 fix(推荐): expand 失败不再自激重试 + 说明弹窗补键盘无障碍（工单 module-intro-detail/09-10）
 - 15:53 test(真机): 深挖审计脚本转正进 tests/browser + 写入「判据先自我质疑」的防重犯说明（工单 module-intro-detail/08 教训）
+- 17:20 fix(生成): 桌面同名工程的覆盖确认链路修通——判据从「前缀打头」改「包含」（handle 统一加 HTTP 前缀后整个覆盖分支是死代码，工单 gen-chain-audit/01）
+- 17:20 fix(代码栏): 文件树点文件名打不开——行内 ✎/🗑 改 flex 兄弟布局，不再浮在文件名按钮上吃指针（工单 gen-chain-audit/02）
+- 17:20 test(真机): 生成链路审计脚本（引脚/编译跳行/生成覆盖/模块库 CRUD/代码栏失败路径 5 节 48 断言）+ 两个 bug 的守卫与反向验证（工单 gen-chain-audit/01-03）
+- 19:40 fix(引脚): 全库累积态枚举的 188+52 条「板图显示可绑、生成必 400」收口——uart TX/RX 与 i2c SCL/SDA 成对实例补跨角色谓词（`_role_pair_mate` 配对表与 `_check_paired_role_instances` 同源，修前它只配同类型对脚、uart 恒找不到对脚）（工单 mspm0-slot-conflict/04）
+- 19:40 fix(引脚): 谓词改「并列全成立」——多条门禁并存时下发 `constraints` 数组（此前单条 `constraint` 字段把槽位谓词吞掉，默认脚种子下 37 条同型假绿）；前端 `pinModelConstraints` / `pinConstraintHolds` 全部成立才可绑，原因给第一条不成立的（工单 mspm0-slot-conflict/04）
+- 19:40 test(引脚): 全库（93 模块 / mspm0 176 角色 + stm32 201 角色）累积态对拍两相（空种子 + 默认脚种子）钉零分歧；反向验证两处停用分别回到 188/52 与 37（`reverse-verify-pair-predicate.txt`）
+- 19:40 docs(工单): 工单 03「不做」里那条全库线索结清 + 新工单 05「成对联动搬」（成对角色在界面上搬不动 = 后端口径 vs 单角色绑一脚交互的缺口，本单记账不修）
 
 ## 2026-09-11
 - 09:29 ﻿fix: 推荐域拒绝不再被吞成通用话术——kind=domain 分流 + 带理由重试一次（工单 real-acceptance/03）

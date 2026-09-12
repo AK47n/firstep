@@ -234,6 +234,7 @@ from .pdf_library import list_pdfs, pdf_page_count, resolve_pdf, trash_pdf
 from .pin_bindings import (
     PinBindingError,
     auto_assign_bindings,
+    build_bindings_matrix,
     resolve_bindings,
 )
 from .reference_library import (
@@ -2072,6 +2073,39 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         except PinBindingError as exc:
             return {"ok": False, "error": str(exc)}
         return {"ok": True}
+
+    @app.post("/api/bindings/matrix")
+    @_map_errors
+    def bindings_matrix(payload: dict) -> dict:
+        """绑定判据模型（工单 gen-chain-audit/04）：板图「某角色此刻能绑哪些脚」的
+        单源下发。
+
+        契约：{platform, slugs, bindings?} → {roles: [{role, type, default,
+        selectable, constraint[, constraints]}...]}（`constraints` 只在多条谓词
+        **并存**时下发：数组，前端全部成立才可绑——谓词是并列门禁而非「选一条」，
+        单条 `constraint` 字段装不下两条，见 `pin_bindings.build_bindings_matrix`
+        文档串）。前端（ui/generate-pins.js）只渲染本模型、
+        不求值任何后端规则——判据（mspm0 gpio 同端口组 / 成对与 PWM 通道同实例 /
+        uart TX-RX 与 i2c SCL-SDA 成对同实例 / 槽位互斥）与校验、生成**同一出口**
+        （pin_bindings.build_bindings_matrix 里
+        抽的组 / 对脚 / 同槽位同伴，与 _check_* 门禁同判据），以后后端加门禁板图
+        自动跟上，不再有两处镜像漂移（工单 03 实测：板图 115 条「显示可绑但生成
+        必 400」；工单 mspm0-slot-conflict/02 同型第二例：槽位互斥看的是**整份**
+        bindings，per-binding 判据结构上算不出来；工单 /04 同型第三例：uart/i2c
+        成对同实例——全库 188+52 条）。
+
+        判据**随观测绑定变化**（组 / pair 级约束看其余角色的有效脚）：`bindings`
+        = 界面当前已配（与 /api/bindings/validate、/api/generate 同一份
+        collectBindings）；缺省 = 全默认（旧口径）。形状判决归域层（400 中文），
+        module 集与板定义解析与 validate 同源（resolve_selection +
+        board_for_platform）。
+        """
+        platform = _require_str(payload, "platform")
+        slugs = _require_str_list(payload, "slugs")
+        bindings = payload.get("bindings") or None
+        resolved = resolve_selection(_library_dir(context), platform, slugs)
+        board = board_for_platform(platform)
+        return build_bindings_matrix(resolved.manifests, platform, board, bindings)
 
     @app.post("/api/bindings/auto")
     @_map_errors

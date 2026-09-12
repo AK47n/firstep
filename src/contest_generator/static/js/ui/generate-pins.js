@@ -27,12 +27,24 @@ import { confirmModal } from "/js/ui/confirm.js";
 import { pinResetConfirmMessage } from "/js/fx/danger.js";  // 还原默认确认文案（工单 ux-walkthrough-02/01）
 import { multiInstanceModules, ensureDefaultInstances, instanceGapCount } from "/js/fx/module.js";
 import { collectBindings, pinShareClass } from "/js/fx/generate.js";  // pinShareClass = 同脚多角色 共享/冲突 判据（工单 pin-share-rule/01，与后端 _shared_groups 同口径）
+import {
+  pinModelVerdict, pinModelMissReason, pinSelectableByType, pinPairFollow,
+} from "/js/fx/pin-model.js";  // 绑定判据模型的前端求值（工单 gen-chain-audit/05：判据由后端下发，前端不复制规则）+ 成对跟随落点（工单 mspm0-slot-conflict/05）
 import { syncStep7, markSubStep, refreshStepNav } from "/js/ui/step-state.js";
 import { chosenPlatform, expanded, selectedSlugs } from "/js/ui/generate-recommend.js";
 
 // ---- 全局状态：多实例 + 引脚板图（随簇；host 经 import 活绑定读） ----
 export let instances = {};               // 多实例配置（工单 04）：{ slug: [{name, variant, pin}] }
-export let instancePinTarget = null;     // 正在从板图选引脚的实例 { slug, index }（null = 非选脚模式）
+export let instancePinTarget = null;     // 正在从板图选脚模式 { slug, index }（null = 非选脚模式）
+
+// ---- 绑定判据模型（工单 gen-chain-audit/05）----
+// 后端 `/api/bindings/matrix` 下发的「角色 × 可绑脚」判据（含跨角色谓词）。判据
+// **随观测绑定变化**（端口组 / pwm 两通道看其余角色的有效脚），所以每次绑定变化
+// 都要重取；按 (平台, 角色集, 观测绑定) 三元组缓存，同键不重复请求。
+let pinModel = null;                     // {roles:[{role, type, default, selectable, constraint}]}
+let pinModelKey = "";                    // 当前模型对应的载荷键（"" = 未取）
+let pinModelError = "";                  // 拉取失败原因（非空 = 降级为类型级口径并提示）
+const pinModelCache = new Map();         // 载荷键 → 模型（LRU 上限，防无限增长）
 
 // ---------------------------------------------------------------------------
 // 生成页：6.5 多实例配置（工单 module-multi-instance/04）
@@ -320,7 +332,10 @@ function pinRoles() {
   for (const m of expanded) {
     const entry = (m.platforms || {})[chosenPlatform];
     for (const decl of (entry && entry.pins) || []) {
-      roles.push({ key: m.slug + "." + decl.id, slug: m.slug, decl });
+      // roleKey 挂在 decl 上：能力判定（pinCanHost / pinMissReason）要按角色键查后端
+      // 判据模型（工单 gen-chain-audit/05），而这两个函数的签名只收 decl
+      decl.roleKey = m.slug + "." + decl.id;
+      roles.push({ key: decl.roleKey, slug: m.slug, decl });
     }
   }
   return roles;
@@ -371,83 +386,124 @@ function overviewPie(cx, cy, r, colors, opacity) {
   ).join("");
 }
 
-// ---- 能力判定（镜像后端 pin_bindings.resolve_bindings 口径：stm32 pwm /
-// enc / uart 类型级 + mspm0 uart / i2c / pwm 类型级（pwm 另按角色通道过滤）+
-// 其余 strict-all） ----
+// ---- 能力判定（判据单源 = 后端 `/api/bindings/matrix`，工单 gen-chain-audit/05）----
+// 本模块**不再镜像** `pin_bindings` 的类型级 / 通道 / 成对规则：模型里的
+// `selectable`（能力层，后端算好）与 `constraint`（跨角色谓词）就是全部判据。
+// 降级：模型未到 / 拉取失败 → 退回「类型级」旧口径（不假拦），并在引脚卡提示。
 function pinSupports(pin, type, instance) {
   const token = instance ? type + ":" + instance : type;
   return (pin.capabilities || []).includes(token);
 }
 
 function roleInstances(decl) {
-  // 角色实例 = 默认引脚能力 token 的实例（与门禁一致：板外默认无实例）
+  // 角色实例 = 默认引脚能力 token 的实例（**只用于降级文案**：模型未到时的灰显
+  // 原因说明。判定本身归后端模型，工单 gen-chain-audit/05）
   const def = pinIndex()[decl.default];
   if (!def) return [];
   const prefix = decl.type + ":";
   return (def.capabilities || []).filter((t) => t.startsWith(prefix)).map((t) => t.slice(prefix.length));
 }
 
-function pinIsTypeLevel(decl) {
-  if (chosenPlatform === "stm32") {
-    return decl.type === "pwm" || decl.type === "enc" ||
-      decl.type === "uart_tx" || decl.type === "uart_rx";
-  }
-  if (chosenPlatform === "mspm0") {
-    return decl.type === "uart_tx" || decl.type === "uart_rx" ||
-      decl.type === "i2c_scl" || decl.type === "i2c_sda";
-  }
-  return false;
-}
-
-function pwmRoleChannel(decl) {
-  const m = decl.id.match(/_C(\d+)$/);
-  return m ? "C" + m[1] : null;
-}
-
-function mspm0PwmAllowed(pin, decl) {
-  // 全类型级（04）：有任意 pwm token 且通道匹配角色尾 _C0/_C1 的脚可选
-  // （_C0N 等互补通道不算 _C0，后端同款 endswith 判据）
-  const channel = pwmRoleChannel(decl);
-  return (pin.capabilities || [])
-    .filter((t) => t.startsWith("pwm:"))
-    .map((t) => t.slice(4))
-    .filter((i) => !channel || i.endsWith("_" + channel));
+function pinListsType(pin, type) {
+  // 菜单第一层过滤：引脚能力集里连该类型 token 都没有的角色直接不列
+  // （UART 脚不出现 PWM 角色）；类型有但不可绑 → 列但灰显（判据由后端模型给）
+  return pinSelectableByType(pin, type);
 }
 
 function pinCanHost(pin, decl) {
+  // 判据 = 后端模型（能力层 selectable + 跨角色 constraint）。模型缺该角色条目
+  // （未到 / 拉取失败 / 角色集刚变）→ 降级为「类型级」旧口径：不假拦，只是板图
+  // 可能多列几个脚；生成前仍有 /api/bindings/validate 兜底。
+  //
+  // 成对角色（uart TX/RX、i2c SCL/SDA、pwm C0/C1）额外看「对脚能不能一起搬」
+  // （工单 mspm0-slot-conflict/05）：候选脚与对脚当前脚同实例、或对脚有合法落点
+  // → 放行（点下去时 `bindRole` 会把两脚写进同一次提交）。观测绑定要一起传：
+  // 跟随落点取决于对脚此刻绑在哪、哪些脚已被占。
   if (!pin || pin.kind !== "io") return false;
-  // 类型级（镜像后端）：任意对应类型 token 即 canHost，实例随绑定引脚；
-  // mspm0 pwm 全类型级（跨族已放开，通道仍按角色尾过滤）
-  if (pinIsTypeLevel(decl)) return pinListsType(pin, decl.type);
-  if (chosenPlatform === "mspm0" && decl.type === "pwm") {
-    return mspm0PwmAllowed(pin, decl).length > 0;
+  const roleKey = decl.roleKey || "";
+  if (pinModelEntryOf(roleKey)) {
+    return pinModelVerdict(pinModel, pinBoard, roleKey, pin, pinBindings);
   }
-  const insts = roleInstances(decl);
-  if (insts.length) return insts.every((i) => pinSupports(pin, decl.type, i));
-  return pinSupports(pin, decl.type, "");
-}
-
-function pinListsType(pin, type) {
-  // 菜单第一层过滤：引脚能力集里连该类型 token 都没有的角色直接不列
-  // （UART 脚不出现 PWM 角色）；类型有但实例不齐 → 列但灰显
-  return (pin.capabilities || []).some((t) => t === type || t.startsWith(type + ":"));
+  return pinListsType(pin, decl.type);
 }
 
 function pinMissReason(pin, decl) {
-  // 类型级：灰显原因 = 无对应 token（与后端类型级报错文案同语义）
-  if (pinIsTypeLevel(decl)) return "该脚不支持角色类型 " + decl.type;
-  if (chosenPlatform === "mspm0" && decl.type === "pwm") {
-    const channel = pwmRoleChannel(decl);
-    return channel
-      ? "该脚没有 pwm 通道 " + channel + "（互补通道不算同通道）"
-      : "该脚不支持角色类型 pwm";
-  }
-  const insts = roleInstances(decl);
-  if (insts.length) {
-    const miss = insts.filter((i) => !pinSupports(pin, decl.type, i));
-    return "需要 " + decl.type + " 实例 " + insts.join("、") + "，此脚缺 " + miss.join("、");
+  const fromModel = decl.roleKey
+    ? pinModelMissReason(pinModel, pinBoard, decl.roleKey, pin, pinBindings)
+    : "";
+  if (fromModel) return fromModel;   // 跨角色谓词挡住：后端逐字原因
+  if (pinListsType(pin, decl.type)) {
+    const insts = roleInstances(decl);
+    if (insts.length) {
+      const miss = insts.filter((i) => !pinSupports(pin, decl.type, i));
+      if (miss.length) {
+        return "需要 " + decl.type + " 实例 " + insts.join("、") + "，此脚缺 " + miss.join("、");
+      }
+    }
+    return "该脚此刻不可绑（同组/成对角色约束）";
   }
   return "该脚不支持角色类型 " + decl.type;
+}
+
+// ---- 判据模型的取用 / 缓存 / 降级（工单 gen-chain-audit/05）----
+function pinModelEntryOf(roleKey) {
+  return ((pinModel && pinModel.roles) || []).find((r) => r.role === roleKey) || null;
+}
+
+// 观测绑定的 slugs：用**展开集**（= 板图上渲染的全部角色），与 /api/generate 的
+// `collectBindings(selectedSlugs…)` 差在依赖模块的角色也在内（板图上它们同样可绑）。
+function pinModelSlugs(roles) {
+  return roles.map((r) => r.slug).filter((v, i, a) => a.indexOf(v) === i);
+}
+
+// 载荷键：平台 + 角色集 + **观测绑定**（判据随绑定状态变，见后端契约）
+function pinModelPayloadKey(roles) {
+  const slugs = pinModelSlugs(roles);
+  const observed = collectBindings(slugs, pinBindings, instances);
+  const keys = Object.keys(observed).sort();
+  return JSON.stringify([
+    chosenPlatform, slugs.slice().sort(),
+    keys.map((k) => [k, observed[k]]),
+  ]);
+}
+
+async function fetchPinModel(key, roles) {
+  try {
+    const slugs = pinModelSlugs(roles);
+    const observed = collectBindings(slugs, pinBindings, instances);
+    const data = await apiPost("/api/bindings/matrix", {
+      platform: chosenPlatform, slugs,
+      bindings: Object.keys(observed).length ? observed : null,
+    });
+    if (pinModelCache.size > 32) pinModelCache.clear();   // 简易上限（键含绑定状态）
+    pinModelCache.set(key, data);
+    pinModel = data;
+    pinModelError = "";
+  } catch (e) {
+    pinModelError = e && e.message ? e.message : String(e);
+  } finally {
+    // 键可能已经变了（用户又绑了一脚）：变了就交给下一次 render 再取
+    if (key === pinModelKey) renderPinCard();
+  }
+}
+
+// 模型同步：角色集 / 平台 / 观测绑定任一变化 → 取一次（缓存命中直接用）
+function syncPinModel(roles) {
+  if (!chosenPlatform || !pinBoard || !roles.length) {
+    if (pinModelKey) { pinModel = null; pinModelKey = ""; pinModelError = ""; }
+    return;
+  }
+  const key = pinModelPayloadKey(roles);
+  if (key === pinModelKey) return;
+  pinModelKey = key;                    // 先认键，避免同一轮 render 内重复取
+  if (pinModelCache.has(key)) {
+    pinModel = pinModelCache.get(key);
+    pinModelError = "";
+    return;
+  }
+  pinModel = null;                      // 新键：等模型（期间按类型级降级显示）
+  pinModelError = "";
+  fetchPinModel(key, roles);
 }
 
 function pinMacroFamilies(roles) {
@@ -525,6 +581,14 @@ function renderPinCard() {
     .join("");
   $("pin-warn-list").innerHTML = warnHtml;
   $("pin-warn-sub").classList.toggle("hidden", !warnHtml);
+  // 绑定判据模型（工单 gen-chain-audit/05）：角色集 / 平台 / 观测绑定变了就重取，
+  // 取到后本函数会被再调一次（fetchPinModel 尾声）→ 板图上灰显随之更新。
+  // 载入状态 = 板题注后缀（不覆盖 pinHint 的用户提示条）
+  syncPinModel(roles);
+  const modelNote = pinModelError
+    ? "（判据加载失败：暂按类型级显示，生成前仍会校验）"
+    : (roles.length && !pinModel ? "（正在核对可绑引脚…）" : "");
+  $("pin-board-caption").textContent = pinBoard.name + modelNote;
   // 步骤 7 完成判定随角色/绑定/展开变化重算（工单 step7-done/01）
   syncStep7({ platform: chosenPlatform, expanded, roles: pinRoles(), bindings: pinBindings, instances })
 }
@@ -631,8 +695,8 @@ function renderPinBoard() {
       parts.push(`<text x="230" y="${topPad - 18}" text-anchor="middle" font-size="8" fill="var(--muted)">${esc(lm.label || "Type-C")}</text>`);
     }
   }
-  // 板名标题在 SVG 之外（HTML div）：旋转视角时永远正对用户、永远在最下面
-  $("pin-board-caption").textContent = pinBoard.name;
+  // 板名标题在 SVG 之外（HTML div）：旋转视角时永远正对用户、永远在最下面。
+  // 判据模型的载入/失败注记由 renderPinCard 追加（工单 gen-chain-audit/05）
   for (const pin of pinBoard.pins) parts.push(svgPin(pin, roles, idx, rotated180));
   parts.push(`</svg>`);
   box.innerHTML = parts.join("");
@@ -917,19 +981,45 @@ function unbindRole(key) {
   syncStep7({ platform: chosenPlatform, expanded, roles: pinRoles(), bindings: pinBindings, instances })
 }
 
+// 解除某角色的绑定（写 pinBindings / pinUnbound，不渲染——由调用方在整笔改绑
+// 之后统一 renderPinCard，成对搬要一次提交两个 key，半途渲染会闪出中间态）
+function unbindPin(key) {
+  delete pinBindings[key];
+  pinUnbound.add(key);  // 显式解除 = 红显未绑（生成仍按默认走）
+}
+
+// 同脚让位：本脚被别的角色占用时，占用者回「未绑定」红显（排针满员两步换位交互）
+function freePin(key, pinName) {
+  for (const [k, v] of Object.entries(pinBindings)) {
+    if (v === pinName && k !== key) unbindPin(k);
+  }
+}
+
 function bindRole(key, pinName) {
   const roles = pinRoles();
   const r = roles.find((x) => x.key === key);
-  if (!r || pinBindings[key] === pinName) return;
-  // 替换本脚占用者：被替换角色回"未绑定"红显（排针满员两步换位交互）
-  for (const [k, v] of Object.entries(pinBindings)) {
-    if (v === pinName && k !== key) {
-      delete pinBindings[k];
-      pinUnbound.add(k);
-    }
-  }
+  if (!r) return;
+  // 成对角色（uart TX/RX、i2c SCL/SDA、pwm C0/C1）要**一起搬**（工单
+  // mspm0-slot-conflict/05）：后端门禁看的是整份 bindings 的两脚实例集交集，
+  // 单搬一脚必 400——所以落点由模型口径算出（`pinPairFollow`），两脚在**同一次
+  // 提交**里写，中间不存在「一脚在新实例、另一脚还在旧实例」的非法态。
+  const follow = pinPairFollow(pinModel, pinBoard, key, pinIndex()[pinName], pinBindings);
+  const mateMoves = !!(follow && !follow.same && follow.to && follow.to !== pinName);
+  const mateRole = mateMoves ? roles.find((x) => x.key === follow.mate) : null;
+  const mateSettled = mateMoves && pinBindings[follow.mate] === follow.to;   // 对脚已在落点
+  // 真 no-op（本脚已绑 + 无对脚要动 / 对脚已在落点）—— 不渲染、不提示
+  if (pinBindings[key] === pinName && (!mateMoves || mateSettled)) return;
+  if (mateMoves && !mateRole) return;                       // 对脚不在本次角色集里：不动
+  // ① 让出落脚点：本脚 + 对脚落点上的占用者（同既有「替换占用者」语义）
+  freePin(key, pinName);
+  if (mateMoves) freePin(follow.mate, follow.to);
+  // ② 两脚一起写（**一次提交**，见上：中间不存在半搬的非法态）
   pinBindings[key] = pinName;
   pinUnbound.delete(key);
+  if (mateMoves) {
+    pinBindings[follow.mate] = follow.to;
+    pinUnbound.delete(follow.mate);
+  }
   pinHighlight = null;
   renderPinCard();
   syncStep7({ platform: chosenPlatform, expanded, roles: pinRoles(), bindings: pinBindings, instances })
@@ -937,7 +1027,7 @@ function bindRole(key, pinName) {
   const famInfo = pinMacroFamilies(roles).get(key);
   pinHint(famInfo
     ? `已绑 ${r.decl.label || r.decl.id} → ${pinName}：与同族角色 ${famInfo.siblings.join("、")} 共享宏 ${famInfo.macro}——改线会同步影响同族其它角色的共享宏，请确认接线。`
-    : "");
+    : (mateMoves ? `${r.decl.label || r.decl.id} 与 ${mateRole.decl.label || mateRole.decl.id} 是成对外设脚，已**成对搬**：${key} → ${pinName}、${follow.mate} → ${follow.to}（同一实例，缺一必被后端拒）。要换位置请再点一次——成对脚会一起跟。` : ""));
 }
 
 // ---- 引脚锚定浮层菜单（复用 .ref-files-overlay 模式） ----

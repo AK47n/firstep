@@ -1,0 +1,126 @@
+后端就绪：http://127.0.0.1:8791
+临时工程根：C:\Users\luoji\AppData\Local\Temp\firstep-gen-audit-kHm9Cb
+
+=== P. 引脚分配 / 冲突消解 / 多实例 ===
+  stm32：候选 (角色×脚) 600 条；实测 600 条（预算外跳过 0）；UI 说行 600 / UI 说不行 0
+[PASS] P1 stm32 UI 放行的绑定后端全收 :: 600 条 UI 可配绑定实测后端 ok
+  stm32 自动配置：界面绑定 {"pid.GRAY_D5":"PC13"}；msg=「✓ pid.GRAY_D5 → PC13（原 PA8 与 ir_beam.IR_BEAM_OUT 冲突，已自动移开）」
+[PASS] P2 stm32 自动配置产物过校验 :: 1 条界面绑定逐条回验 ok
+[PASS] P2 stm32 说明条与绑定一致 :: 1 条「已移开」在界面都真变成了已绑
+  stm32 多实例：起始 3 个 → 加到 8 个（上限 8）；添加按钮 disabled=true
+[PASS] P3 stm32 实例上限生效 :: 8/8，按钮禁用=true（提示「已达上限 8」）
+  选脚：点 PC13 → 行文本「#1 PC13 选引脚 改回自动 删除」
+[PASS] P3 stm32 板图选脚落到实例 :: 实例行显示 PC13
+  生成：blocked=false msg=「生成完成！工程结构 / include path / main.c 已就位。已自动触发编译修复（见第 10 栏）…」
+  generate 载荷 instances.led = [{"name":"探照灯","variant":"red","pin":"PC13"},{"name":"黄灯","variant":"yellow","pin":""},{"name":"绿灯","variant":"green","pin":""},{"name":"灯 4","variant":"red","pin":""},{"name":"灯 5","variant":"red","pin":""},{"name":"灯 6","variant":"red","pin":""},{"name":"灯 7","variant":"red","pin":""},{"name":"灯 8","variant":"red","pin":""}]
+[PASS] P3 stm32 instances 载荷逐字一致 :: 8 个实例（首个 探照灯/red/PC13）
+  led_instances.h（P-stm32\led_instances.h）：46 行；通道/引脚相关行：
+      /* led_instances.h —— 生成器多实例渲染产物（module-multi-instance/03）：LED 通道宏 + 每通道 (port, pin) 表。改接线改这里（stm32：直接改 GPIO_x/Pin_y 对；mspm0：改 sys
+      #define LED_CHANNEL_COUNT 8
+      #define LED_RED      0
+      #define LED_YELLOW   1
+      #define LED_GREEN    2
+      #define LED_RED_2    3
+[PASS] P3 stm32 通道表覆盖全部实例且带界面的脚 :: 9 个通道宏，PC13 落盘（GPIO_C Pin_13）
+  mspm0：候选 (角色×脚) 744 条；实测 744 条（预算外跳过 0）；UI 说行 701 / UI 说不行 43
+[FAIL] P1 mspm0 UI 放行但后端拒收 :: 115 条：例 step_motor.STEP_MOTOR_RST2(gpio_out) → PA0，后端：「绑定冲突：step_motor 的 4 个 gpio_out 角色（STEP_MOTOR_RST2、STEP_MOTOR_SLP2、STEP_MOTOR_DIR2、STEP_MOTOR_DCY2）必须绑到同一端口（当前 A、B）——该组角色走单端口宏（如 STEP_MOTOR_PORT），混端口编译」 —— 板图上配得出的绑定，生成时必 400
+[PASS] P1b mspm0 UI 灰显的后端也拒 :: 实测 UI 说不行 43 条，后端全部一致拒收
+  mspm0 自动配置：界面绑定 {"huidu.R3":"PA0","huidu.R4":"PA1"}；msg=「✓ huidu.R3 → PA0（原 PB6 与 step_motor.STEP_MOTOR_SLP2 冲突，已自动移开） ✓ huidu.R4 → PA1（原 PB7 与 step_motor.STEP_MOTOR_DIR2 冲突，已自动移开）」
+[PASS] P2 mspm0 自动配置产物过校验 :: 2 条界面绑定逐条回验 ok
+[PASS] P2 mspm0 说明条与绑定一致 :: 1 条「已移开」在界面都真变成了已绑
+  mspm0 多实例：起始 1 个 → 加到 8 个（上限 8）；添加按钮 disabled=true
+[PASS] P3 mspm0 实例上限生效 :: 8/8，按钮禁用=true（提示「已达上限 8」）
+  选脚：点 PA0 → 行文本「#1 PA0 选引脚 改回自动 删除」
+[PASS] P3 mspm0 板图选脚落到实例 :: 实例行显示 PA0
+  生成：blocked=false msg=「生成完成！工程结构 / include path / main.c 已就位。已自动触发编译修复（见第 10 栏）…」
+  generate 载荷 instances.led = [{"name":"探照灯","variant":"red","pin":"PA0"},{"name":"灯 2","variant":"red","pin":""},{"name":"灯 3","variant":"red","pin":""},{"name":"灯 4","variant":"red","pin":""},{"name":"灯 5","variant":"red","pin":""},{"name":"灯 6","variant":"red","pin":""},{"name":"灯 7","variant":"red","pin":""},{"name":"灯 8","variant":"red","pin":""}]
+[PASS] P3 mspm0 instances 载荷逐字一致 :: 8 个实例（首个 探照灯/red/PA0）
+  led_instances.h（P-mspm0\modules\led\code\led_instances.h）：46 行；通道/引脚相关行：
+      /* led_instances.h —— 生成器多实例渲染产物（module-multi-instance/03）：LED 通道宏 + 每通道 (port, pin) 表。改接线改这里（stm32：直接改 GPIO_x/Pin_y 对；mspm0：改 sys
+      #define LED_CHANNEL_COUNT 8
+      #define LED_RED      0
+      #define LED_RED_2    1
+      #define LED_RED_3    2
+      #define LED_RED_4    3
+[PASS] P3 mspm0 通道表覆盖全部实例且带界面的脚 :: 9 个通道宏，PA0 落盘（syscfg $assign）
+
+=== R. 编译 → 错误跳行 → 修复轮 ===
+  生成：blocked=false msg=「生成完成！工程结构 / include path / main.c 已就位。已自动触发编译修复（见第 10 栏）…」
+  代码栏：目录=「C:\Users\luoji\AppData\Local\Temp\firstep-gen-audit-kHm9Cb\R-stm32」编译按钮 disabled=false
+  编译状态行 = 「编译失败 · 1 个错误 · 耗时 9.5s」；结构化错误 2 条
+    · ../main.c:4 ../main.c:4 ..\main.c(4): warning: #223-D: function "ir_beam_init" declared implicitly
+    · ../main.c:5 ../main.c:5 ..\main.c(5): error: #29: expected an expression
+[PASS] R1 编译失败被如实呈现 :: 状态行=「编译失败 · 1 个错误 · 耗时 9.5s」
+[PASS] R1b 结构化错误行就位 :: 2 条可点行
+[PASS] R2 错误行号准确 :: ../main.c:5 ..\main.c(5): error: #29: expected an expression
+  跳行后：编辑器=true tabs=["main.c"] 光标=59 gutter 错误行=2
+[PASS] R3 跳行落到出错行 :: 光标第 5 行 = 注入位置；gutter 错误行 2
+[PASS] R3b gutter 错误行色点 :: 2 个色点
+  修复轮：fix-errors 请求 1 → (3s) 1 → (再 3s) 2
+[PASS] R4 修复轮失败不自激 :: 6s 共 1 次请求
+
+=== W. 生成 → 输出目录 → 覆盖确认 ===
+  就绪检查单 7 行：
+    [✓] 3 ✓ 目标平台 已就绪
+    [✓] 6 ✓ 模块清单与平台警告 已就绪
+    [✓] 5 ✓ 功能组选择 已就绪
+    [✓] 1 ✓ 赛题原文 已就绪
+    [✗] 9 ✗ 输出目录并生成 请填写输出目录 去第 9 步
+    [⚠] 5 ⚠ AI 推荐模块 未跑 AI 推荐（可选项） 去第 5 步
+    [⚠] 8 ⚠ main.c 骨架 骨架未生成（可选项，生成时可留空） 去第 8 步
+  首次生成：blocked=false res-dir=「C:\Users\luoji\AppData\Local\Temp\firstep-gen-audit-kHm9Cb\W-manual」msg=「生成完成！工程结构 / include path / main.c 已就位。已自动触发编译修复（见第 10 栏）…」产物 16 项
+[PASS] W1 结果区目录一致 :: C:\Users\luoji\AppData\Local\Temp\firstep-gen-audit-kHm9Cb\W-manual
+[PASS] W1 产物落地 :: 16 项，含 main.c
+  手动目录二次生成：msg=「请求失败（HTTP 400）：输出目录已存在且非空，拒绝覆盖：C:\Users\luoji\AppData\Local\Temp\firstep-gen-audit-kHm9Cb\W-manual」；目录=["W-manual"]
+[PASS] W2 未静默改名 :: 仍只有 W-manual
+[PASS] W2 拒绝原因如实呈现 :: 「请求失败（HTTP 400）：输出目录已存在且非空，拒绝覆盖：C:\Users\luoji\AppData\Local\Temp\firstep-gen-audit-kHm9Cb\W-manual」
+[PASS] W2 被拒后原工程完好 :: main.c 仍在
+  注入闸门：命中=true（injected=1）；#generate-msg=「」
+    确认弹窗文案：「覆盖生成？ × 桌面上已有同名工程「W-inject」：旧工程将先备份为「W-inject.bak」，然后覆盖生成全新工程。如需找回旧工程，把桌面上「W-inject.bak」改名回「W-inject」（生成后也可在结果区一键恢复）。确定覆盖并重新生成？ 确定覆盖 取消」
+[PASS] W2b 弹窗说明了 .bak 去向 :: 
+[PASS] W2b 取消覆盖不重发 :: 取消后没有第二次生成请求
+[PASS] W2b 取消后有说明 :: 「请求失败（HTTP 400）：桌面上已有同名工程「W-inject」：为避免覆盖你的已有工程，请先删除该目录或修改题名后再生成（不会自动改名或覆盖）。」
+  第 2 次尝试：请求数 +1；确认弹窗=0；msg=「生成完成！工程结构 / include path / main.c 已就位。已自动触发编译修复（见第 10 栏）…」
+[INFO] W2c 第 2 次未再弹确认（真后端拒绝的原因不必覆盖） :: msg=「生成完成！工程结构 / include path / main.c 已就位。已自动触发编译修复（见第 10 栏）…」—— 手动目录的拒绝理由是「目录已存在且非空」，不是「桌面同名工程」，故 isConflictError 不命中，属实（覆盖通道只服务桌面模式）
+  确认覆盖支路终态：最后一次请求 overwrite=undefined；写盘=true
+[PASS] W3 预览端点无副作用 :: verdict=absent，目录未创建
+
+=== X. 模块库 CRUD ===
+  提交后 #add-msg=「请求失败（HTTP 400）：模块简介与实际代码不一致，请修正后再入库：简介与代码及模块形态新规均不符：① 简介仅说明该模块是“仅用于真机审计、用后即删”的临时探针，用于验证模块库 CRUD 链路，未描述任何实际功能行为；代码只有 int probe(void){return 1;} 这一空壳桩函数，既不体现“审计”能力，也无法验证任何 CRUD 链路（无读」toast=「」
+  POST /api/modules 载荷 = {"slug":"zz_audit_probe_mod","platform":"stm32","description":"审计探针模块：仅用于真机审计，用后即删。适用于验证模块库 CRUD 链路。","dependencies":[],"hardware_bound":false,"verified":false,"notes":"","files":{"probe.c":"int probe(void){return 1;}\n"}}
+[PASS] X1 入库失败有中文提示 :: 「请求失败（HTTP 400）：模块简介与实际代码不一致，请修正后再入库：简介与代码及模块形态新规均不符：① 简介仅说明该模块是“仅用于真机审计、用后即删”的临时探针，用于验证模块库 CRUD 链路，未描述任何实际功能行为；代码只有 int probe(void){return 1;} 这一空壳桩函数」
+[PASS] X1b 入库失败后按钮可点 :: 
+  搜索「zz_audit_probe_mod」→「zz_audit_probe_mod 审计探针模块（真机审计用，结束即删）：验证模块库列表 / 编辑 / 删除链路。适用于审计用例。 — STM32 已验证 详情 编辑 改简介 删除」
+[PASS] X2 新模块进了列表 :: 搜到「zz_audit_probe_mod」
+  编辑简介失败：弹窗仍在=1 保存 disabled=false；msg=「请求失败（HTTP 400）：模块简介与实际代码不一致，请修正后再保存：简介与实际代码不一致：① 简介内容为元描述（"审计改写后的简介……适用于审计用例"），未描述模块的任何功能、接口或行为，而代码 code/probe.c 仅提供一个 int probe(void) 接口并恒返回 1，简介中没有任何与之对应的说明；②」；磁盘 description 开头=「审计探针模块（真机审计用，结束即删）：验证模块库列表」
+[PASS] X3 AI 校验失败有就地提示 :: 「请求失败（HTTP 400）：模块简介与实际代码不一致，请修正后再保存：简介与实际代码不一致：① 简介内容为元描述（"审计改写后的简介……适用于审计用例"），未描述模块的任何功能、接口或行为，而代码 code/probe.c 仅提供一个 int probe(v」
+[PASS] X3 失败时弹窗保留 :: 输入还在，可改后重试
+[PASS] X3 失败后保存按钮可点 :: 
+[PASS] X3 AI 校验失败未写回 :: 磁盘 description 未被改动
+  删除确认弹窗：「删除模块？ × 删除模块 zz_audit_probe_mod 的整个目录？ 确认删除 取消」
+[PASS] X4 确认删除真删了目录 :: C:\Users\luoji\Desktop\firstep\library\modules\zz_audit_probe_mod
+
+=== Y. 代码编辑器 / AI 面板失败路径 ===
+  Y 前置生成：blocked=false msg=「生成完成！工程结构 / include path / main.c 已就位。已自动触发编译修复（见第 10 栏）…」
+  代码栏：目录标签 loaded=true；编译按钮 disabled=false
+  树：「code readme.txt 45 B key startup_stm32f10x_md.s 12.5 KB ml_libs headfile.h 322 B ml_adc.c 3.7 KB ml_adc.h 665 B ml_delay.c 797 B ml_delay.h 」
+[PASS] Y1 鼠标点文件名打得开 :: hover → 点文件名文字区 → 编辑器就位
+  保存失败：toast=「✕ 保存失败：请求失败（HTTP 500）：磁盘写入失败（审计注入） 复制 ×」；磁盘含注入行=false
+[PASS] Y1 保存失败有提示 :: 「✕ 保存失败：请求失败（HTTP 500）：磁盘写入失败（审计注入） 复制 ×」
+[PASS] Y2 保存失败不丢内容 :: 编辑器里仍保留未保存的一行
+[PASS] Y2b 保存失败盘上确实没写 :: 
+  编译 500：请求 1 → (2.5s) 2 → (再 2.5s) 2；状态行=「请求失败（HTTP 500）：编译启动失败（审计注入）」；按钮 disabled=false
+[PASS] Y3 编译失败有状态行 :: 「请求失败（HTTP 500）：编译启动失败（审计注入）」
+[PASS] Y3b 编译失败后按钮可点 :: 
+[PASS] Y3c 编译失败不自激 :: 5s 共 1 次请求
+  推荐 502：请求 0 → (3s) 1 → (再 3s) 1；按钮 disabled=false；横幅在=0
+    界面文本=「请求失败（HTTP 502）：LLM 调用失败（审计注入 502）：本机未配置可用凭据」
+[PASS] Y4 推荐失败有反馈 :: 「请求失败（HTTP 502）：LLM 调用失败（审计注入 502）：本机未配置可用凭据」
+[PASS] Y4b 推荐失败后按钮可点 :: 
+[PASS] Y4c 推荐失败不自激 :: 6s 共 1 次请求
+[PASS] Y4d 失败后横幅已收起 :: 
+
+================ 结论 ================
+FAIL 1 条 / WARN 0 条 / INFO 1 条 / PASS 48 条
+- [FAIL] P1 mspm0 UI 放行但后端拒收：115 条：例 step_motor.STEP_MOTOR_RST2(gpio_out) → PA0，后端：「绑定冲突：step_motor 的 4 个 gpio_out 角色（STEP_MOTOR_RST2、STEP_MOTOR_SLP2、STEP_MOTOR_DIR2、STEP_MOTOR_DCY2）必须绑到同一端口（当前 A、B）——该组角色走单端口宏（如 STEP_MOTOR_PORT），混端口编译」 —— 板图上配得出的绑定，生成时必 400
+- [INFO] W2c 第 2 次未再弹确认（真后端拒绝的原因不必覆盖）：msg=「生成完成！工程结构 / include path / main.c 已就位。已自动触发编译修复（见第 10 栏）…」—— 手动目录的拒绝理由是「目录已存在且非空」，不是「桌面同名工程」，故 isConflictError 不命中，属实（覆盖通道只服务桌面模式）

@@ -1,0 +1,84 @@
+# 反向验证证据：临时停用 slot 谓词（build_bindings_matrix 传空 slot_peers）
+# 命令：python -m pytest tests/test_bindings_matrix.py .scratch/mspm0-slot-conflict/repro_slot_conflict.py -q
+# 用法：node/python 写 UTF-8（PowerShell 重定向是 UTF-16，会被 windows-text-encoding 守卫判红）
+
+ 47k 到 BSL，输出无碍）')), landmarks=(), pcb_color=''))
+
+tests\test_bindings_matrix.py:708: AssertionError
+________________________________ test_slot_gap ________________________________
+
+    def test_slot_gap():
+        board = t.MSPM0_BOARD
+        manifests = resolve_selection(t.LIBRARY_MODULES, "mspm0", SLUGS).manifests
+        model = build_bindings_matrix(manifests, "mspm0", board, None)
+        rows = {r["role"]: r for r in model["roles"]}
+        print("\nhuidu/pid 同默认脚：R3/GRAY_D7 → PB6；R4/GRAY_D8 → PB7\n")
+    
+        print("① 单绑定口径（parity 用例现在用的）：")
+        _verdict(manifests, board, {"huidu.R3": "PA0"}, "huidu.R3=PA0")
+    
+        print("② 累积态口径（界面点下去之后真实发出去的那份）：")
+        _verdict(
+            manifests, board,
+            {"huidu.R3": "PA0", "pid.GRAY_D7": "PB6"},
+            "huidu.R3=PA0 + pid.GRAY_D7=PB6（未动的那脚走默认）",
+        )
+    
+        print("③ 模型怎么看 huidu.R3 能不能绑 PA0：")
+        row = rows["huidu.R3"]
+        print("   selectable 含 PA0 =", "PA0" in row["selectable"],
+              "| constraint =", row["constraint"],
+              "| 判定 =", t._selectable(row, "PA0", board))
+    
+        print("④ 点下去之后的模型（其余角色有效脚不变）：")
+        m2 = build_bindings_matrix(
+            manifests, "mspm0", board, {"huidu.R3": "PA0", "pid.GRAY_D7": "PB6"}
+        )
+        r2 = {r["role"]: r for r in m2["roles"]}
+        print("   pid.GRAY_D7 约束 =", r2["pid.GRAY_D7"]["constraint"])
+        print("   huidu.R3 约束 =", r2["huidu.R3"]["constraint"])
+    
+        print("\n⑤ 判据口径修正后（工单 mspm0-slot-conflict/02-03）：")
+        # 板图此刻观测到的那一份 = 界面当前已配（collectBindings 同源）
+        submitted = {"pid.GRAY_D7": "PB6"}
+        row3 = {r["role"]: r for r in build_bindings_matrix(
+            manifests, "mspm0", board, submitted
+        )["roles"]}["huidu.R3"]
+        print("   观测 =", submitted)
+        print("   huidu.R3 绑 PA0 的判定 =", t._selectable(row3, "PA0", board),
+              "| constraint =", row3["constraint"])
+>       assert not t._selectable(row3, "PA0", board), "槽位谓词没挡住（假绿仍在）"
+E       AssertionError: 槽位谓词没挡住（假绿仍在）
+E       assert not True
+E        +  where True = <function _selectable at 0x000001E3D35E9A60>({'role': 'huidu.R3', 'type': 'gpio_in', 'default': 'PB6', 'selectable': ['PA0', 'PA1', 'PA28', 'PA31', 'PA2', 'PB24', ...], ...}, 'PA0', Board(board_id='mspm0-dimx', name='地猛星 MSPM0G3507', platform='mspm0', pins=(BoardPin(name='PA0', kind='io', x=0, y=0, ...ixedResource(name='BSL 排针', occupies=('BSL',), note='独立 BSL 烧录排针（PA18 经 47k 到 BSL，输出无碍）')), landmarks=(), pcb_color=''))
+E        +    where <function _selectable at 0x000001E3D35E9A60> = t._selectable
+
+.scratch\mspm0-slot-conflict\repro_slot_conflict.py:77: AssertionError
+---------------------------- Captured stdout call -----------------------------
+
+huidu/pid 同默认脚：R3/GRAY_D7 → PB6；R4/GRAY_D8 → PB7
+
+① 单绑定口径（parity 用例现在用的）：
+  huidu.R3=PA0 → 后端收
+② 累积态口径（界面点下去之后真实发出去的那份）：
+  huidu.R3=PA0 + pid.GRAY_D7=PB6（未动的那脚走默认） → 后端拒：绑定冲突：huidu.R3 与 pid.GRAY_D7 共用同一槽位（默认引脚 PB6）却绑到不同引脚 PA0、PB6 —— 请绑到同一引脚
+③ 模型怎么看 huidu.R3 能不能绑 PA0：
+   selectable 含 PA0 = True | constraint = None | 判定 = True
+④ 点下去之后的模型（其余角色有效脚不变）：
+   pid.GRAY_D7 约束 = None
+   huidu.R3 约束 = None
+
+⑤ 判据口径修正后（工单 mspm0-slot-conflict/02-03）：
+   观测 = {'pid.GRAY_D7': 'PB6'}
+   huidu.R3 绑 PA0 的判定 = True | constraint = None
+=========================== short test summary info ===========================
+FAILED tests/test_bindings_matrix.py::test_slot_constraint_only_when_peer_is_observed
+FAILED tests/test_bindings_matrix.py::test_slot_constraint_follows_observed_peer_pin
+FAILED tests/test_bindings_matrix.py::test_slot_constraint_none_when_observed_peers_disagree
+FAILED tests/test_bindings_matrix.py::test_slot_group_survives_when_port_group_has_no_answer
+FAILED tests/test_bindings_matrix.py::test_accumulated_state_blocks_slot_conflict_with_peer_bound
+FAILED tests/test_bindings_matrix.py::test_accumulated_state_blocks_slot_conflict_without_seed
+FAILED .scratch/mspm0-slot-conflict/repro_slot_conflict.py::test_slot_gap - A...
+7 failed, 19 passed in 1.35s
+
+--- stderr tail ---

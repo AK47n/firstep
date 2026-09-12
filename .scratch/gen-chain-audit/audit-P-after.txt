@@ -1,0 +1,48 @@
+后端就绪：http://127.0.0.1:8791
+临时工程根：C:\Users\luoji\AppData\Local\Temp\firstep-gen-audit-dOM3PZ
+
+=== P. 引脚分配 / 冲突消解 / 多实例 ===
+  stm32：候选 (角色×脚) 600 条；实测 600 条（预算外跳过 0）；UI 说行 600 / UI 说不行 0
+[PASS] P1 stm32 UI 放行的绑定后端全收 :: 600 条 UI 可配绑定实测后端 ok
+  stm32 自动配置：界面绑定 {"pid.GRAY_D5":"PC13"}；msg=「✓ pid.GRAY_D5 → PC13（原 PA8 与 ir_beam.IR_BEAM_OUT 冲突，已自动移开）」
+[PASS] P2 stm32 自动配置产物过校验 :: 1 条界面绑定逐条回验 ok
+[PASS] P2 stm32 说明条与绑定一致 :: 1 条「已移开」在界面都真变成了已绑
+  stm32 多实例：起始 3 个 → 加到 8 个（上限 8）；添加按钮 disabled=true
+[PASS] P3 stm32 实例上限生效 :: 8/8，按钮禁用=true（提示「已达上限 8」）
+  选脚：点 PC13 → 行文本「#1 PC13 选引脚 改回自动 删除」
+[PASS] P3 stm32 板图选脚落到实例 :: 实例行显示 PC13
+  生成：blocked=false msg=「生成完成！工程结构 / include path / main.c 已就位。已自动触发编译修复（见第 10 栏）…」
+  generate 载荷 instances.led = [{"name":"探照灯","variant":"red","pin":"PC13"},{"name":"黄灯","variant":"yellow","pin":""},{"name":"绿灯","variant":"green","pin":""},{"name":"灯 4","variant":"red","pin":""},{"name":"灯 5","variant":"red","pin":""},{"name":"灯 6","variant":"red","pin":""},{"name":"灯 7","variant":"red","pin":""},{"name":"灯 8","variant":"red","pin":""}]
+[PASS] P3 stm32 instances 载荷逐字一致 :: 8 个实例（首个 探照灯/red/PC13）
+  led_instances.h（P-stm32\led_instances.h）：46 行；通道/引脚相关行：
+      /* led_instances.h —— 生成器多实例渲染产物（module-multi-instance/03）：LED 通道宏 + 每通道 (port, pin) 表。改接线改这里（stm32：直接改 GPIO_x/Pin_y 对；mspm0：改 sys
+      #define LED_CHANNEL_COUNT 8
+      #define LED_RED      0
+      #define LED_YELLOW   1
+      #define LED_GREEN    2
+      #define LED_RED_2    3
+[PASS] P3 stm32 通道表覆盖全部实例且带界面的脚 :: 9 个通道宏，PC13 落盘（GPIO_C Pin_13）
+  mspm0：候选 (角色×脚) 744 条；实测 744 条（预算外跳过 0）；UI 说行 586 / UI 说不行 158
+[PASS] P1 mspm0 UI 放行的绑定后端全收 :: 586 条 UI 可配绑定实测后端 ok
+[PASS] P1b mspm0 UI 灰显的后端也拒 :: 实测 UI 说不行 158 条，后端全部一致拒收
+  mspm0 自动配置：界面绑定 {"huidu.R3":"PA0","huidu.R4":"PA1"}；msg=「✓ huidu.R3 → PA0（原 PB6 与 step_motor.STEP_MOTOR_SLP2 冲突，已自动移开） ✓ huidu.R4 → PA1（原 PB7 与 step_motor.STEP_MOTOR_DIR2 冲突，已自动移开）」
+[PASS] P2 mspm0 自动配置产物过校验 :: 2 条界面绑定逐条回验 ok
+[PASS] P2 mspm0 说明条与绑定一致 :: 1 条「已移开」在界面都真变成了已绑
+  mspm0 多实例：起始 1 个 → 加到 8 个（上限 8）；添加按钮 disabled=true
+[PASS] P3 mspm0 实例上限生效 :: 8/8，按钮禁用=true（提示「已达上限 8」）
+  选脚：点 PA0 → 行文本「#1 PA0 选引脚 改回自动 删除」
+[PASS] P3 mspm0 板图选脚落到实例 :: 实例行显示 PA0
+  生成：blocked=false msg=「生成完成！工程结构 / include path / main.c 已就位。已自动触发编译修复（见第 10 栏）…」
+  generate 载荷 instances.led = [{"name":"探照灯","variant":"red","pin":"PA0"},{"name":"灯 2","variant":"red","pin":""},{"name":"灯 3","variant":"red","pin":""},{"name":"灯 4","variant":"red","pin":""},{"name":"灯 5","variant":"red","pin":""},{"name":"灯 6","variant":"red","pin":""},{"name":"灯 7","variant":"red","pin":""},{"name":"灯 8","variant":"red","pin":""}]
+[PASS] P3 mspm0 instances 载荷逐字一致 :: 8 个实例（首个 探照灯/red/PA0）
+  led_instances.h（P-mspm0\modules\led\code\led_instances.h）：46 行；通道/引脚相关行：
+      /* led_instances.h —— 生成器多实例渲染产物（module-multi-instance/03）：LED 通道宏 + 每通道 (port, pin) 表。改接线改这里（stm32：直接改 GPIO_x/Pin_y 对；mspm0：改 sys
+      #define LED_CHANNEL_COUNT 8
+      #define LED_RED      0
+      #define LED_RED_2    1
+      #define LED_RED_3    2
+      #define LED_RED_4    3
+[PASS] P3 mspm0 通道表覆盖全部实例且带界面的脚 :: 9 个通道宏，PA0 落盘（syscfg $assign）
+
+================ 结论 ================
+FAIL 0 条 / WARN 0 条 / INFO 0 条 / PASS 15 条

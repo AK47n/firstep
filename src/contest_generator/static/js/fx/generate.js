@@ -11,8 +11,18 @@ export const CONFLICT_MSG_PREFIX = "桌面上已有同名工程「";
 // CONFLICT_MSG_PREFIX 与后端 GenerationConflictError 消息前缀单源锚定，
 // 跨文件一致性由
 // tests/test_webapp.py::test_conflict_message_prefix_anchored_both_sides 兜底。
+//
+// **判据是「包含」而不是「开头」**（工单 gen-chain-audit/01 修的真 bug）：
+// 本函数吃的是 `catch (e)` 里 `e.message`——而 app.js 的 handle() 经 fx/errors
+// 的 parseError 统一加了 `请求失败（HTTP 400）：` 前缀（ux-walkthrough-02/11
+// 起如此）。于是真机上的 message 是
+//   `请求失败（HTTP 400）：桌面上已有同名工程「X」：…`
+// `indexOf(prefix) === 0` 恒 false → generate-core 的覆盖确认分支**永不进入**，
+// 用户只看到一条报错，没有任何覆盖入口（详见工单与 deep 审计 W2b）。
+// 单测当初直接把**没前缀**的文案喂进来，所以一直是绿的。
+// 用「包含」不放松守卫：前缀本身（含「」书名号）够独特，不与其他 400 文案相撞。
 export function isConflictError(message) {
-  return typeof message === "string" && message.indexOf(CONFLICT_MSG_PREFIX) === 0;
+  return typeof message === "string" && message.includes(CONFLICT_MSG_PREFIX);
 }
 
 export function conflictDirName(message) {

@@ -1,0 +1,7 @@
+﻿=== 反向验证：停用前端「对脚跟随」（`_frontend_pair_follow` 恒 None）===
+test_paired_move_frontend_matches_backend: 红 [OK] 成对搬枚举样本太少（0），守卫形同虚设
+test_paired_move_is_the_only_way_out_of_default_instance: 红 [OK] 
+test_paired_move_round_trip_from_default_seed: 红 [OK] StopIteration 
+test_full_library_paired_move_has_no_divergence: 红 [OK] mspm0 全库成对搬样本太少（0）
+
+结论：4/4 条在停用对脚跟随后当场红（守卫有效）

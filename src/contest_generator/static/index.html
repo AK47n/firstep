@@ -2029,14 +2029,25 @@
     border-radius: var(--radius-xs); font-weight: 700; letter-spacing: .02em; }
   .code-tree-badge.b-new { background: var(--accent-dim); color: var(--accent); }
   .code-tree-badge.b-mod { background: var(--warn-dim); color: var(--warn); }
-  /* 行操作按钮（工单 code-tree-ops/02）：每行右侧 ✎/🗑，hover 行显示；
-     目录行 / 文件行 li 均为相对定位容器，右侧按钮绝对定位不参与布局。 */
+  /* 行操作按钮（工单 code-tree-ops/02）：每行右侧 ✎/🗑，hover 行显示。
+     **文件行改 flex 兄弟布局**（工单 gen-chain-audit/02 修的真 bug）：原先操作
+     容器是绝对定位浮在名字按钮上方（right:0 + z-index:2），hover 显形后把
+     「点文件名打开文件」的指针吃掉——实测文件名按钮可点区只剩左侧 108/225px，
+     名字按钮正中央（playwright hover 的落点）命中的是 `✎ 重命名`：真机表现为
+     「点文件名没有任何反应」，键盘/辅助技术也够不到。绝对定位 + 只给 right 时
+     块级盒宽度由包含块决定（实测容器 131px，比自身两个按钮还宽、横向覆盖整行
+     58%），所以「收窄容器」治不了根——改成 flex 兄弟：按钮占满剩余宽度、操作区
+     只占自身宽度，两者永不重叠，行右的 46px 预留由布局天然承担。 */
   .code-tree-dir, .code-tree-file { position: relative; }
-  /* 行右预留给操作按钮 44px（按钮内容不压在 ✎/🗑 下） */
+  /* 目录行仍是 summary + 绝对定位操作区（summary 是 details 的固定子元素，不便于插兄弟） */
   .code-tree-dir summary { padding-right: 46px; }
-  .code-tree-file button { padding-right: 46px; }
-  .code-tree-actions { position: absolute; top: 2px; right: 0; display: none;
-    gap: 2px; z-index: 2; background: var(--panel-2); border-radius: var(--radius-xs); }
+  .code-tree-file { display: flex; align-items: center; }
+  .code-tree-file button { flex: 1 1 auto; min-width: 0; }
+  .code-tree-actions { display: none; align-items: center;
+    gap: 2px; background: var(--panel-2); border-radius: var(--radius-xs); }
+  .code-tree-file .code-tree-actions { flex: none; }
+  .code-tree-dir .code-tree-actions { position: absolute; top: 2px; right: 0;
+    z-index: 2; }
   .code-tree-dir:hover .code-tree-actions,
   .code-tree-file:hover .code-tree-actions { display: inline-flex; }
   .code-tree-act { border: 0; background: none; color: var(--muted);

@@ -27,6 +27,23 @@ async function healthy(url) {
   }
 }
 
+// 端点哨兵（工单 gen-chain-audit/06 的现场教训）：`startServer` 之前只等健康检查，
+// 端口上**已有一个旧后端**时 `spawn` 静默失败、健康检查却立刻通过 → 整轮验收跑在
+// 旧代码上（本轮就踩过：判据端点 404，审计报的还是修前那 115 条）。
+// 判据：起服务后必须真答一个**较新**端点（`/api/bindings/matrix`），否则大声失败。
+async function endpointSentinel(url) {
+  try {
+    const resp = await fetch(`${url}/api/bindings/matrix`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ platform: "mspm0", slugs: [] }),
+    });
+    return resp.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
 // startServer()：起服务并等健康检查通过；返回 { proc, url, stop() }。
 // 启动失败（30s 内没活）抛错——验收环境问题要当场红，不要静默跳过。
 export async function startServer({ timeoutMs = 30000 } = {}) {
@@ -47,14 +64,31 @@ export async function startServer({ timeoutMs = 30000 } = {}) {
   proc.stderr.on("data", (d) => { log += d.toString(); });
 
   const deadline = Date.now() + timeoutMs;
+  let sawStale = false;
   while (Date.now() < deadline) {
     if (await healthy(BASE_URL)) {
-      return {
-        proc,
-        url: BASE_URL,
-        log: () => log,
-        stop: () => stopServer(proc),
-      };
+      if (await endpointSentinel(BASE_URL)) {
+        return {
+          proc,
+          url: BASE_URL,
+          log: () => log,
+          stop: () => stopServer(proc),
+        };
+      }
+      // 健康检查过了但端点哨兵不过 = 端口上是别的东西（多半是上一轮没收干净的
+      // 旧后端）；等它一会儿，仍不过就大声失败而不是静默跑在旧代码上。
+      if (!sawStale) {
+        sawStale = true;
+        await sleep(2000);
+        continue;
+      }
+      await stopServer(proc);
+      throw new Error(
+        `端口 ${TEST_PORT} 上已有一个不进贡新版端点的服务（旧后端？）——验收会跑在旧代码上。\n`
+        + `请先收掉它：Get-NetTCPConnection -LocalPort ${TEST_PORT} -State Listen | `
+        + `ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }\n`
+        + `（本进程日志：${log || "（空：说明真正在答的是别的进程）"}）`
+      );
     }
     if (proc.exitCode !== null) {
       throw new Error(`后端启动即退出（exit ${proc.exitCode}）：\n${log}`);

@@ -150,6 +150,12 @@ const DOMAINS = {
     frameworkNoteHTML: "fn", fixLogGroupHidden: "fn",
     compileSummaryText: "fn",
   },
+  "pin-model.js": {
+    pinModelEntry: "fn", pinModelVerdict: "fn", pinModelMissReason: "fn",
+    pinInstanceTokens: "fn", pinSelectableByType: "fn",
+    pinModelConstraints: "fn", pinConstraintHolds: "fn", pinRoleChannel: "fn",
+    pinPairFollow: "fn",
+  },
   "recommend.js": {
     suggestionSolutionBadges: "fn", suggestionOptionRowHTML: "fn",
     suggestionOptionsHTML: "fn", suggestionChipHTML: "fn",
