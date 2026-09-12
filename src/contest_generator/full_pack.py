@@ -174,6 +174,10 @@ def scan_tree(root: Path, *, skip_dir_names: frozenset[str] | None = None) -> li
 
     只收白名单顶层下的文件，按 `SKIP_DIR_NAMES` / `SKIP_FILE_NAMES` /
     `INSTALLER_GLOBS` / `SKIP_FILE_SUFFIXES` 排除；排序保证清单与分卷确定性。
+
+    **取源口径（工单 full-download/08）**：读**工作树字节**，与小发版包同口径——
+    小发版侧 `git archive` 被钉成 `core.autocrlf=false`，两边拿到的就是同一份
+    盘上字节（改这里前先看 `tests/test_pack_update.py` 的跨包一致性守卫）。
     """
     root = Path(root)
     dir_skips = SKIP_DIR_NAMES if skip_dir_names is None else skip_dir_names
@@ -353,7 +357,8 @@ def build_zip_volumes(
     """把文件按分卷打成 zip（条目路径 = 仓库根相对 POSIX 路径）。
 
     返回 `([{zip_name, size, sha256}], [zip 路径])`；单卷 = `<base>.zip`，
-    多卷 = `<base>.part<N>.zip`（N 从 1 起）。
+    多卷 = `<base>.part<N>.zip`（N 从 1 起）。写入的是工作树字节——与
+    清单里算 size / sha256 的那份同源，也与小发版包同口径。
     """
     tree = Path(tree)
     out_dir = Path(out_dir)

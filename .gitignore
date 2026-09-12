@@ -69,3 +69,6 @@ tests/browser/**/*.png
 # .scratch 下 C 探针的本机编译产物（.c 入库当证据，exe 每次可重建；2026-09-13 收尾）
 # 构建命令写在各自 .c 的文件头（如 probe/heading_check.c 的 gcc -O2 ... -lm）
 .scratch/**/*.exe
+
+# 跨包字节一致性验证的打包产物（真实仓库 1 GB 级 zip 分卷，脚本可重建；2026-09-18）
+.scratch/full-download/_verify08/

@@ -44,6 +44,7 @@
 
    - 产出四件套：`firstep-update-v1.1.0.zip`（仓库 tracked 快照，含 `VERSIONS.md`，**不含** `.scratch` / `.venv` / `sources/materials` / `.git`）、`.files.txt`（文件清单）、`.removed.txt`（自基线起删除的文件；首次发布无基线 = 空）、`.sha256.txt`。
    - 首次小发版没有基线：省略 `-Baseline`（removed 为空，更新器跳过删除）。
+   - **包内字节口径**（工单 `full-download/08` 定案；两条打包路线必须一致）：以**工作树检出字节**为准——核心里的 `git archive` 已钉 `-c core.autocrlf=false`，故不受本机 `core.autocrlf` 影响；`.gitattributes` 里显式写了 `eol` 的仍按其物化（`*.bat` → CRLF、`.githooks/*` → LF）。改任一侧前先跑 `tests/test_pack_update.py`（跨包逐字节守卫）——两边不一致会让增量发布把大批文件误判为「已修改」，把「只下变化部分」变成「几乎全量重下」（v1.1.0 现场：3474 个共有文件里 926 个字节不同、内容差异 0）。
 3. **先在本地打 tag 并推送，再建 Release**（`gh release create` 是在**服务端**建 tag，
    本地不会自动有这个 tag —— 2026-09-13 发 v1.1.0/v1.1.1 时踩到：本地 `git tag` 只有
    v1.0.0，下次要按 tag 引基线就找不到）：
