@@ -1,0 +1,16 @@
+素材目录（sources/materials）文件清单：
+
+修改ID教程/PDOA定位20251011.rar  1257355 bytes
+修改ID教程/方向定位通讯协议格式1.2发布日期2025-09-12.docx  45502 bytes
+修改ID教程/方向定位通讯协议格式1.2发布日期2025-09-12.md  9693 bytes
+修改ID教程/跟随基站修改ID.docx  19747 bytes
+修改ID教程/跟随基站修改ID.md  784 bytes
+修改ID教程/通信协议1.2测试.txt  649 bytes
+全向360度基站安装与测试指导.mp4  10579994 bytes
+全向天线360°基站/Windows软件-PDOA定位20251204/MapLocation.exe  368640 bytes
+全向天线360°基站/全向360°基站&信标 规格书V1.2.pdf  648645 bytes
+单基站&双基站&四基站/Windows软件-PDOA定位20251204/MapLocation.exe  368640 bytes
+单基站&双基站&四基站/单基站&双基站&四基站 规格书V2.1.pdf  8339861 bytes
+单基站&双基站&四基站/基站转接板安装孔位.pdf  3278 bytes
+双基站安装与测试指导.mp4  10778002 bytes
+定向天线360°基站/360°基站 规格书V1.1.pdf  2595431 bytes

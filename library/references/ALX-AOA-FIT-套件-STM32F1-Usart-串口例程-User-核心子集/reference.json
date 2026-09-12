@@ -23,5 +23,6 @@
     "Interrupt/stm32f10x_it.c",
     "Interrupt/stm32f10x_it.h"
   ],
-  "platform": "stm32"
+  "platform": "stm32",
+  "notes": "本条目 = 套件内「示例代码/STM32F1-Usart/STM32F1-Usart/User」子集（16 个 .c/.h，files 列表所载）。套件全量（PDOA 定位上位机 MapLocation.exe、全向/定向/单双四基站规格书、方向定位通讯协议 1.2、信标与基站硬件图、跟随车核心资料与卡尔曼滤波库、安装指导视频）已于 2026-09-12 归档为资料库批次 sources/materials/ALX-AOA-FIT跟随套件开发资料（批次 slug = alx-aoa-fit-kit）。"
 }

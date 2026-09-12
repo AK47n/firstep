@@ -2,7 +2,7 @@
   "id": "C7-3-4L-ESP32-CAM开发板资料",
   "title": "C7-3-4L ESP32-CAM开发板资料",
   "type": "开发板资料",
-  "description": "ESP32-CAM 开发板资料：Arduino IDE 环境、官方 WiFi 摄像头网页推流例程（app_httpd.cpp 等 5 文件）、ESP32 数据手册与参考手册、OV2640 传感器手册、出厂固件与烧录工具、MicroPython 固件、烧录接线 / 注意事项 / 使用教程等。文本例程已入库；视频 / 固件 / 手册 / 安装包（约 245M）不入库，完整保真见 Desktop/C7-3-4L；素材清单留痕。",
+  "description": "ESP32-CAM 开发板资料：Arduino IDE 环境、官方 WiFi 摄像头网页推流例程（app_httpd.cpp 等 5 文件）、ESP32 数据手册与参考手册、OV2640 传感器手册、出厂固件与烧录工具、MicroPython 固件、烧录接线 / 注意事项 / 使用教程等。文本例程已入库；视频 / 固件 / 手册 / 安装包（约 245M）原留 Desktop/C7-3-4L 不入库，2026-09-12 已整份归档为资料库批次 sources/materials/C7-3-4L ESP32-CAM开发板资料（素材清单留痕）。",
   "anchor_kind": "none",
   "anchor_value": "",
   "platform": "any",
@@ -18,5 +18,6 @@
     "注意事项.txt"
   ],
   "file_count": 0,
-  "size_bytes": 0
+  "size_bytes": 0,
+  "notes": "完整保真副本（含 Arduino IDE 安装包 / 固件 bin / 烧录工具 / 教程视频 / 手册 PDF）已于 2026-09-12 归档进资料库批次 sources/materials/C7-3-4L ESP32-CAM开发板资料，桌面 Desktop/C7-3-4L 不再是唯一副本；批次 slug = c7-3-4l-esp32cam。"
 }

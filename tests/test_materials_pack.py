@@ -97,6 +97,9 @@ def test_slug_known_chinese_dirs() -> None:
     assert slug_for_dir("无线串口模块资料") == "wireless-uart"
     assert slug_for_dir("塔克R3两驱小车底盘资料") == "tark-r3-chassis"
     assert slug_for_dir("C7-3-4L ESP32-CAM开发板资料") == "c7-3-4l-esp32cam"
+    assert slug_for_dir("ALX-AOA-FIT跟随套件开发资料") == "alx-aoa-fit-kit"
+    assert slug_for_dir("lckfb-地猛星移植手册") == "lckfb-dimx-wiki"
+    assert slug_for_dir("lckfb-地阔星移植手册") == "lckfb-dikuoxing-wiki"
 
 
 def test_slug_ascii_passthrough() -> None:
@@ -107,6 +110,27 @@ def test_slug_ascii_passthrough() -> None:
 def test_slug_unknown_chinese_dir_raises() -> None:
     with pytest.raises(ValueError, match="未登记"):
         slug_for_dir("全新中文目录")
+
+
+def test_real_materials_tree_all_dirs_registered() -> None:
+    """钉住真资料库：sources/materials 每个顶级目录都必须登记 slug。
+
+    其余用例全在 tmp_path 造迷你库，登记表与真库脱节时测不出来——真库新增
+    顶级目录忘登记，pack-materials.ps1 会以「未登记 = 大声失败」崩在发布前
+    一刻（例：lckfb-地猛星/地阔星移植手册先例）。本用例把真库钉进测试。
+    """
+    materials_root = Path(__file__).resolve().parents[1] / "sources" / "materials"
+    if not materials_root.is_dir():
+        pytest.skip(f"真资料库目录不存在：{materials_root}")
+    unregistered: list[str] = []
+    for child in sorted(materials_root.iterdir()):
+        if not child.is_dir():
+            continue
+        try:
+            slug_for_dir(child.name)
+        except ValueError:
+            unregistered.append(child.name)
+    assert unregistered == []
 
 
 # ---------------------------------------------------------------------------
