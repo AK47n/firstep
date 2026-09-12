@@ -4,6 +4,11 @@
   "dependencies": [
     "delay"
   ],
+  "exclusive_group": {
+    "id": "attitude-hold",
+    "label": "航向保持 / 姿态传感器",
+    "role": "软 I2C + 器件内卡尔曼融合（roll/pitch/yaw 直出，接 PA28/PA31，JY61P 模块）"
+  },
   "platforms": {
     "mspm0": {
       "files": [

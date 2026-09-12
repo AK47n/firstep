@@ -62,6 +62,36 @@ def test_jy61p_manifest_shape_mspm0():
         ("JY61P_SCL", "gpio_out", "PA28", True, ()),
         ("JY61P_SDA", "gpio_out", "PA31", True, ()),
     ]
+
+
+def test_jy61p_declares_attitude_hold_group_with_imu_uart():
+    """jy61p 与 imu_uart / ml_mpu6050 同属「航向保持 / 姿态传感器」互斥组。
+
+    用户报告（2026-09-12）：AI 推荐把 `imu_uart` 放进功能组单选框，同一份推荐的句子 12
+    又出现 `jy61p` 这个可移除 chip——**已经选了一个姿态传感器，需求句里还挂着另一个姿态件**。
+    根因是 jy61p 的 manifest 没声明 `exclusive_group`（既不入组卡、也不吃同组互斥收敛），
+    而它自己的 notes 早写着与 imu_uart 「姿态互替」——同一种功能的三种硬件必须同组。
+    """
+    from contest_generator.manifest import collect_exclusive_groups
+
+    manifests = [
+        ModuleManifest.load(p) for p in sorted(MODULES.iterdir()) if p.is_dir()
+    ]
+    groups = {g.id: g for g in collect_exclusive_groups(manifests)}
+    assert "attitude-hold" in groups, "真库里没有 attitude-hold 组"
+    group = groups["attitude-hold"]
+    assert group.label == "航向保持 / 姿态传感器"
+    assert [m.slug for m in group.members] == ["imu_uart", "jy61p", "ml_mpu6050"]
+    roles = {m.slug: m.role for m in group.members}
+    assert all(roles[s] for s in ("imu_uart", "jy61p", "ml_mpu6050")), (
+        "组内每个成员都要有 role（选择卡上给用户看「选它差在哪」）")
+    assert "软 I2C" in roles["jy61p"], "jy61p 的 role 应说清它与另外两件的硬件差别"
+
+
+def test_jy61p_identity_and_notes():
+    """jy61p 的身份字段与「与库内姿态件分工」说明在位。"""
+    manifest = ModuleManifest.load(MODULES / "jy61p")
+    mspm0 = manifest.platforms["mspm0"]
     assert mspm0.kit and mspm0.source_url
     # 与库内 ml_mpu6050 / imu_uart 的分工说明必须写入 notes
     assert "ml_mpu6050" in mspm0.notes

@@ -139,10 +139,11 @@ def _real_manifests() -> list[ModuleManifest]:
 def test_exclusive_groups_aggregate_on_the_real_library():
     """真库功能组声明聚合正确（防回退，工单 recommend-exclusive-groups/01）。
 
-    冒烟基准（实施时）：gray-track = huidu/pid/xunji（8 路灰度传感器驱动），
-    attitude-hold = imu_uart/ml_mpu6050（航向保持 / 姿态传感器）；同 id label
-    不一致会在 collect 时抛 ManifestError（本测试能通过 = 声明一致）；stm32
-    平台两组均只剩 1 成员（pid / ml_mpu6050 双平台）→ 单成员组剔除 → 输出空。
+    冒烟基准（2026-09-12 更新）：gray-track = huidu/pid/xunji（8 路灰度传感器驱动），
+    attitude-hold = imu_uart/jy61p/ml_mpu6050（航向保持 / 姿态传感器——三者是同一功能的
+    三种硬件，用户报告「已选姿态传感器，需求句里又出现另一个姿态件」后补入 jy61p）；
+    同 id label 不一致会在 collect 时抛 ManifestError（本测试能通过 = 声明一致）；
+    stm32 平台两组均只剩 1 成员（pid / ml_mpu6050 双平台）→ 单成员组剔除 → 输出空。
     """
     manifests = _real_manifests()
     groups = collect_exclusive_groups(manifests)
@@ -151,7 +152,11 @@ def test_exclusive_groups_aggregate_on_the_real_library():
     assert by_id["gray-track"].label == "8 路灰度传感器驱动"
     assert [m.slug for m in by_id["gray-track"].members] == ["huidu", "pid", "xunji"]
     assert by_id["attitude-hold"].label == "航向保持 / 姿态传感器"
-    assert [m.slug for m in by_id["attitude-hold"].members] == ["imu_uart", "ml_mpu6050"]
+    assert [m.slug for m in by_id["attitude-hold"].members] == [
+        "imu_uart",
+        "jy61p",
+        "ml_mpu6050",
+    ]
     assert by_id["zigbee-rx"].label == "Zigbee 无线链路（接收侧）"
     assert [m.slug for m in by_id["zigbee-rx"].members] == ["zigbee_link", "zigbee_uart"]
     assert {
