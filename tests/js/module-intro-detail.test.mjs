@@ -148,7 +148,7 @@ test("recommendChipHTML：chip 带说明按钮，选择态按 selected 渲染（
   assert.ok(recommendChipHTML("led", "").includes('data-mod-info="led"'));
 });
 
-test("generate-recommend.js：展开并发收口——排队 + 令牌作废旧响应（工单 07）", () => {
+test("generate-recommend.js：展开并发收口——排队 + 令牌作废旧响应（工单 07 / 09）", () => {
   // 原实现是 `if (expandBusy) return;` 静默丢弃：展开途中再改选择集 → 那次展开永不发生，
   // 旧响应落地还会覆盖成旧集合（真机实测：点回 chip 后 120ms 已选清单只剩 motor）。
   assert.match(src, /let expandSeq = 0/);
@@ -156,8 +156,12 @@ test("generate-recommend.js：展开并发收口——排队 + 令牌作废旧�
   assert.match(src, /if \(expandBusy\) \{ expandPending = true; return; \}/);
   // 结果落地前判令牌 + 请求体快照（双保险）
   assert.match(src, /token > expandApplied && snapshot === JSON\.stringify/);
-  // 收尾：有待办或本次未落地 → 用当前选择集再跑一次（收敛到最新态）
-  assert.match(src, /if \(\(expandPending \|\| !ok\) && chosenPlatform && selectedSlugs\.length\)/);
+  // 收尾判据（工单 09 起）单一来源在 fx 层：三结局（applied / discarded / failed）
+  // 的后续动作由 expandOutcomeDecision 决定——**不许**在 ui 层再合并成一个 `!ok`
+  assert.match(src, /expandOutcomeDecision\(outcome, \{/);
+  assert.match(src, /if \(decision\.retry\) void runExpand\(\)/);
+  assert.ok(!/\(\s*expandPending\s*\|\|\s*!ok\s*\)/.test(src),
+    "ui 层又出现「pending || !ok」合并重跑 = 失败也被重跑（自激根因，工单 09）");
   // 选择集变化后必须重跑展开（否则停在「已选（未展开依赖）」）
   assert.match(src, /renderRecommendResult\(lastRecommend, false\);\n  runExpand\(\);/);
 });
@@ -170,6 +174,37 @@ test("generate-recommend.js：chip 渲染带选择态 + 点击是双向开关（
   assert.match(src, /if \(selectedSlugs\.includes\(slug\)\)/);
   assert.match(src, /addModule\(slug, false\)/);
   assert.match(src, /classList\.contains\("unsel"\)/);
+});
+
+// ===== 已选清单的「点掉之后」时序（工单 module-intro-detail/08 调查结论）=====
+// 曾疑为 bug：点掉 chip 后、新 expand 回来之前，已选清单会显示**过期**的展开结果
+// （真机时间线里 t+139ms 那帧看起来像「已移除的 ir_beam 还在清单里」）。
+// **结论：不成立——那是我自己的判据误报**。复现实验：
+//   ① 把 renderSelected 临时改回原实现的两行分支形状（`if (!expanded.length) …`），
+//      真机时间线仍然**只在占位里列出当前选择**（`已选（未展开依赖）：pid、motor`），
+//      从未渲染出 ir_beam 的行；
+//   ② 把「点掉后无条件按 expanded 渲染」作为反例注入 → 清单变成**空**（不是过期行），
+//      因为 `reRenderAfterSelectionChange` 已经先清了 expanded；
+//   ③ 读码确认：点击路径（chip 移除 / 组卡换选）清 `expanded` **早于**任何 renderSelected，
+//      renderSelected 拿到的 expanded 只可能是「空」或「本次/上次请求落地的新结果」。
+// 故此处**只留判据**：清单里的占位文案必须逐字等于当前选择，且不得出现被点掉的模块——
+// 用一个纯函数把它钉住（它描述的是既有行为，不是新增代码）。
+const pendingText = (selected) => (selected.length
+  ? "已选（未展开依赖）：" + selected.join("、")
+  : "尚未选择模块。");
+
+test("已选清单占位文案：逐字等于当前选择，且不含被点掉的模块（工单 08 判据）", () => {
+  assert.equal(pendingText(["pid", "motor"]), "已选（未展开依赖）：pid、motor");
+  assert.ok(!pendingText(["pid", "motor"]).includes("ir_beam"),
+    "占位文案带上了已移除的模块 = 界面与工程不一致（本判据就是当初误报的那条）");
+  assert.equal(pendingText([]), "尚未选择模块。");
+});
+
+test("generate-recommend.js：点击路径清 expanded 必须**早于**渲染（工单 08 的根因判据）", () => {
+  // 这是「点掉后清单不会显示过期结果」的**真正保障**：先把 expanded 清掉再重绘。
+  // 一旦有人把顺序调换（先渲染再清），上面那条占位判据就会被打破。
+  assert.match(src, /expanded = \[\]; warnings = \[\];\s*\n\s*renderSelected\(\); renderWarnings\(\); renderRecommendResult\(lastRecommend, false\);/,
+    "reRenderAfterSelectionChange 的「先清后渲染」顺序被改了 —— 点掉模块后清单可能显示过期展开结果");
 });
 
 test("三处入口都出说明按钮：推荐 chip / 功能组卡成员行 / 需求清单灰注", () => {

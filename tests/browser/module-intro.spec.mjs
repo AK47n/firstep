@@ -248,8 +248,7 @@ test("展开并发：过期响应不写状态——连点过程任何一帧都�
   assert.deepEqual(problems, []);
   await page.close();
 });
-// 回归：chip 本体是**双向选择开关**，且界面与实际必须一致（工单 module-intro-detail/06
-// 修的既有 bug：点 ✕ 后模块已从工程移除，chip 却仍显示成已选绿标——界面说在、
+// 回归：chip 本体是**双向选择开关**，且界面与实际必须一致（工单 module-intro-detail/06// 修的既有 bug：点 ✕ 后模块已从工程移除，chip 却仍显示成已选绿标——界面说在、
 // 实际不在，而且没有任何路径能加回来）。
 //
 // 断言口径：本用例验「chip 选择态 ↔ 选择集」这层（点掉 → 未选态 + 选择集去掉；
@@ -283,6 +282,103 @@ test("推荐 chip 选择开关：点掉变未选态、点回加回来（界面�
   assert.match(await chipHTML(), /✕/);
   assert.ok((await page.locator("#selected-list").innerText()).includes("ir_beam"),
     "点回后选择集里应重新有它");
+  assert.deepEqual(problems, []);
+  await page.close();
+});
+
+test("说明弹窗键盘无障碍：打开即聚焦、Tab 不外逃、关闭后焦点归位（工单 10）", async () => {
+  const { page, problems } = await openAppWithRecommend();
+  const trigger = page.locator('#rec-list .chip.rec[data-remove="ir_beam"] [data-mod-info="ir_beam"]');
+  await trigger.click();
+  await modal(page).waitFor({ state: "visible" });
+
+  // ① 打开即聚焦：焦点进弹窗（否则读屏不播报，键盘用户不知道弹窗开了）
+  const focusIn = await page.evaluate(() => {
+    const m = document.querySelector(".module-info-overlay .module-info-modal");
+    return { inModal: !!(m && m.contains(document.activeElement)),
+      el: document.activeElement ? document.activeElement.className : "" };
+  });
+  assert.equal(focusIn.inModal, true, `打开说明后焦点仍在弹窗外（${focusIn.el}）—— 未聚焦弹窗`);
+  assert.match(focusIn.el, /ref-files-close/, "打开即聚焦应落在关闭按钮（Tab 循环第一站，口径同 codeview 快捷键帮助）");
+
+  // ② Tab 焦点陷阱：连按多次 Tab 焦点都必须留在弹窗内（含 Shift+Tab 回绕）
+  for (let i = 0; i < 8; i++) {
+    await page.keyboard.press("Tab");
+    const inside = await page.evaluate(() => {
+      const m = document.querySelector(".module-info-overlay .module-info-modal");
+      return !!(m && m.contains(document.activeElement));
+    });
+    assert.equal(inside, true, `第 ${i + 1} 次 Tab 后焦点跑出了弹窗 —— 无焦点陷阱`);
+  }
+  await page.keyboard.press("Shift+Tab");
+  const backInside = await page.evaluate(() => {
+    const m = document.querySelector(".module-info-overlay .module-info-modal");
+    return !!(m && m.contains(document.activeElement));
+  });
+  assert.equal(backInside, true, "Shift+Tab 回绕后焦点跑出了弹窗");
+
+  // ③ 关闭后焦点归位：回到触发它的那个「说明」按钮
+  await page.keyboard.press("Escape");
+  await page.locator(".module-info-overlay").waitFor({ state: "detached" });
+  const focusAfter = await page.evaluate(() => {
+    const ae = document.activeElement;
+    return { cls: ae ? String(ae.className || "") : "", slug: ae && ae.dataset ? ae.dataset.modInfo : null };
+  });
+  assert.match(focusAfter.cls, /mod-info-btn/, `关闭后焦点 = ${focusAfter.cls}（期望回到「说明」按钮）`);
+  assert.equal(focusAfter.slug, "ir_beam", "关闭后焦点回到的应是同一个模块的说明按钮");
+  // Esc 只解绑一次（✕ / 遮罩 / Esc 三条路径幂等）：再按一次不该报错
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(80);
+  assert.equal(await page.locator(".module-info-overlay").count(), 0);
+  assert.deepEqual(problems, []);
+  await page.close();
+});
+
+// 失败路径（工单 module-intro-detail/09）：`/api/selection/expand` **失败**时不许自动
+// 重跑。原实现把「结果被作废」与「请求失败」合并成同一个 `!ok` 一起重跑：失败 →
+// 同参数立刻再打 → 再失败，真机实测恒 500 时打出 ~10 次/秒，且
+//   * `expandBusy` 恒 true → 「展开检查」按钮永久禁用（用户连手动重试都做不到）；
+//   * `expandBegin` 每次都把 `#expand-msg` 清空 → 报错在被看到前就被自己擦掉。
+// 口径：失败要**停下来**——请求数有上界、按钮可点、原因留在界面上。
+test("展开失败：不自动重跑（无自激）、按钮可点、失败原因留在界面上", async () => {
+  const page = await browser.newPage();
+  const problems = [];
+  page.on("pageerror", (e) => problems.push("pageerror: " + e.message));
+  let expandCalls = 0;
+  await page.route("**/api/selection/expand", (route) => {
+    expandCalls++;
+    return route.fulfill({
+      status: 500, headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ detail: "内部错误（用例注入）" }),
+    });
+  });
+  await page.route("**/api/recommend", (route) => route.fulfill({
+    status: 200, headers: { "Content-Type": "text/event-stream" }, body: sseStream(),
+  }));
+
+  await page.goto(server.url + "/", { waitUntil: "domcontentloaded" });
+  await page.locator("#platforms .platform-card", { hasText: "STM32" }).first().click();
+  await page.waitForFunction(() => document.querySelectorAll("#module-grid .module-card").length > 0);
+  await page.fill("#problem", "1. 检测物体是否经过。2. 沿黑线行驶。");
+  await page.click("#btn-recommend");
+  await page.locator('#rec-list .chip.rec[data-remove="ir_beam"]').waitFor({ state: "visible", timeout: 15000 });
+
+  await page.waitForTimeout(2500);   // 给自激足够的时间显形（修前这里已经是两位数请求）
+  assert.ok(expandCalls <= 4,
+    `expand 恒失败却打了 ${expandCalls} 次请求 —— 收尾重跑把「失败」也当成「结果被作废」在自激`);
+  assert.equal(await page.locator("#btn-expand").isDisabled(), false,
+    "expand 失败后「展开检查」仍是禁用态 —— 用户无法手动重试");
+  assert.ok((await page.locator("#expand-msg").innerText()).trim().length > 0,
+    "expand 失败后 #expand-msg 为空 —— 报错被重跑自己清掉了，用户看不到原因");
+
+  // 手动再点一次：失败后不粘滞，仍能再试（请求数增长 = 用户手点的）
+  const before = expandCalls;
+  await page.click("#btn-expand");
+  await page.waitForTimeout(800);
+  assert.equal(expandCalls, before + 1,
+    `手动重试打了 ${expandCalls - before} 次请求（期望正好 1 次：用户点一次 = 一次请求）`);
+
+  // 500 必然在控制台留 resource 错误（浏览器行为，不是产品 bug）——只收集页面级异常
   assert.deepEqual(problems, []);
   await page.close();
 });

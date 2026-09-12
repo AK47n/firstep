@@ -208,12 +208,39 @@ export function discussionAreaHTML(s, st) {
   </div>`;
 }
 
+// expandOutcomeDecision(outcome, ctx)：`/api/selection/expand` 一次请求的**收尾决策**
+// （工单 09，纯函数——单源在 fx 层，ui 层只执行）。把三种结局的后续动作分开：
+//
+//   * `applied`   结果已写进状态 → 只有「在途期间又被触发」才补跑一次（排队语义）。
+//   * `discarded` 结果被令牌 / 快照拦下（配不上现在的选择集）→ **必须**用当前选择集
+//                 重跑，否则界面停在「未展开依赖」（工单 07 的收敛口径）。
+//   * `failed`    请求失败（500 / 超时 / 断网）→ **绝不重跑**。原实现把 failed 与
+//                 discarded 合并成 `!ok` 一起重跑，等于同参数立刻再打一次：失败 →
+//                 重跑 → 再失败，实测恒 500 时打出 ~10 次/秒，而且 `expandBusy` 恒 true
+//                 让「展开检查」永久禁用、`expandBegin` 每次都把报错清空——用户既看不到
+//                 原因也没法手动重试。失败就该停下、把原因摊在界面上（keepError）。
+//
+// ctx = { pending（在途期间被触发过）, platform, count（当前已选数）}：
+// 缺平台 / 空选择集时**不重跑**（重跑也只会立刻又撞上 expandBegin 的前置检查）。
+export function expandOutcomeDecision(outcome, ctx) {
+  const status = (outcome && outcome.status) || "applied";
+  const c = ctx || {};
+  const canRun = !!c.platform && Number(c.count || 0) > 0;
+  if (status === "failed") {
+    return { retry: false, keepError: true, clearPending: true };
+  }
+  if (status === "discarded") {
+    return { retry: canRun, keepError: false, clearPending: canRun };
+  }
+  return { retry: !!(c.pending && canRun), keepError: false, clearPending: !!c.pending && canRun };
+}
+
 if (typeof window !== "undefined") {
   Object.assign(window, {
     suggestionSolutionBadges, suggestionOptionRowHTML,
     suggestionOptionsHTML, suggestionChipHTML,
     BUY_DECISIONS_KEY, decisionBadgeHTML, reviewBadgeHTML, decisionPayload,
     suggestionKey, loadBuyDecisions, saveBuyDecisions, matchBuyDecision,
-    discussionAreaHTML, recommendCoverageNote,
+    discussionAreaHTML, recommendCoverageNote, expandOutcomeDecision,
   });
 }

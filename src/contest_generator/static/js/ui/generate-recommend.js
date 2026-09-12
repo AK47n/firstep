@@ -33,7 +33,7 @@ import { referencePlatformChip } from "/js/fx/reference.js";
 import {
   suggestionChipHTML, decisionPayload, suggestionKey,
   loadBuyDecisions, saveBuyDecisions, matchBuyDecision,
-  recommendCoverageNote,
+  recommendCoverageNote, expandOutcomeDecision,
 } from "/js/fx/recommend.js";
 import { renderScorePointPanel } from "/js/fx/score.js";
 import { formatLLMTelemetry, parseSSE } from "/js/fx/llm.js";
@@ -934,6 +934,9 @@ export function openModuleInfo(slug, platform = chosenPlatform, reason = "") {
   if (!module) { toast("info", "未找到模块 " + slug); return; }
   // 重复打开 = 替换（同 showPinMenu 先例）
   document.querySelectorAll(".module-info-overlay").forEach((o) => o.remove());
+  // 键盘无障碍（工单 module-intro-detail/10）：打开时记下触发元素，关闭时把焦点还给它
+  // ——口径与 ui/confirm.js（:74-75「评审 19」）、ui/codeview.js 的快捷键帮助弹窗一致。
+  const opener = document.activeElement;
   const overlay = document.createElement("div");
   overlay.className = "module-info-overlay";
   const modal = document.createElement("div");
@@ -944,12 +947,36 @@ export function openModuleInfo(slug, platform = chosenPlatform, reason = "") {
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
   bindModuleSource(modal, slug);  // 源码区（工单 mainc-codeview-bridge/05）：文件行点击懒加载
-  const close = () => overlay.remove();
+  let closed = false;
+  const close = () => {
+    if (closed) return;           // 多路径（✕ / 遮罩 / Esc）幂等——doc 监听只解绑一次
+    closed = true;
+    document.removeEventListener("keydown", onKey);
+    overlay.remove();
+    // 焦点还给触发它的那个「说明」按钮（disabled / 已卸载则跳过，照 confirm.js 口径）
+    if (opener && !opener.disabled && typeof opener.focus === "function" && opener.isConnected) opener.focus();
+  };
+  // Esc 关闭 + Tab 焦点陷阱（工单 10，照 ui/confirm.js:51-64 的写法）：弹窗打开时
+  // Tab 只在弹窗内循环——否则键盘用户 Tab 两下就跑到背景控件上，误触时还看不见弹窗。
+  const onKey = (e) => {
+    if (e.key === "Escape") { close(); return; }
+    if (e.key !== "Tab") return;
+    const focusables = Array.from(
+      overlay.querySelectorAll("button, input, select, textarea, [href], [tabindex]:not([tabindex='-1'])")
+    ).filter((el) => !el.disabled && el.offsetParent !== null);
+    if (!focusables.length) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  };
   modal.querySelector(".ref-files-close").addEventListener("click", close);
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
-  const onKey = (e) => { if (e.key === "Escape") close(); };
   document.addEventListener("keydown", onKey);
-  overlay.addEventListener("remove", () => document.removeEventListener("keydown", onKey));
+  // 打开即聚焦（工单 10）：焦点进弹窗，读屏才会播报、键盘用户才知道「现在在弹窗里」。
+  // 与 codeview.js 的快捷键帮助同口径——聚焦关闭按钮（它同时是 Tab 循环的第一站）。
+  const closeBtn = modal.querySelector(".ref-files-close");
+  if (closeBtn) closeBtn.focus();
 }
 
 // —— 模块说明入口（工单 module-intro-detail/03）——
@@ -1061,7 +1088,7 @@ export async function runExpand() {
   // 请求体快照：判「结果是否已过期」用（与令牌双保险——令牌拦旧响应，快照比对拦
   // 「响应对得上但选择集在等待期间又变了」）
   const snapshot = JSON.stringify([chosenPlatform, selectedSlugs]);
-  let ok = false;
+  let outcome = { status: "applied" };
   try {
     const data = await apiPost("/api/selection/expand", { slugs: selectedSlugs, platform: chosenPlatform });
     if (token > expandApplied && snapshot === JSON.stringify([chosenPlatform, selectedSlugs])) {
@@ -1070,17 +1097,20 @@ export async function runExpand() {
       warnings = data.warnings;
       renderSelected(); renderWarnings();
       clusterPinsRefresh();
-      ok = true;
+    } else {
+      // 结果配不上现在的选择集：不写状态，交给收尾用当前选择集重跑（工单 07）
+      outcome = { status: "discarded" };
     }
-  } catch (e) { $("expand-msg").textContent = e.message; }
-  finally {
-    expandEnd();
-    // 在途期间又被触发（或落地被跳过）→ 用**当前**选择集再跑一次，收敛到最新态
-    if ((expandPending || !ok) && chosenPlatform && selectedSlugs.length) {
-      expandPending = false;
-      void runExpand();
-    }
+  } catch (e) {
+    outcome = { status: "failed", message: (e && e.message) || "展开失败" };
   }
+  const decision = expandOutcomeDecision(outcome, {
+    pending: expandPending, platform: chosenPlatform, count: selectedSlugs.length,
+  });
+  expandPending = decision.clearPending ? false : expandPending;
+  if (decision.keepError) $("expand-msg").textContent = outcome.message;   // 失败原因留在界面上
+  expandEnd();
+  if (decision.retry) void runExpand();   // 重跑**只**为「结果被作废」而发（工单 09）
 }
 
 // 引脚相关重绘（展开结果落地时才需要；集中一处便于上面复用）
