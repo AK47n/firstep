@@ -2,6 +2,11 @@
   "slug": "ec01g",
   "description": "EC-01G NB-IoT+GPS 模块驱动（stm32 纯驱动，B 类——仅 stm32 条目、无 mspm0 对照，ADR 0009）：真实串口 9600 + AT 指令透传底座——ec01g_send_cmd 发 AT 行 + 应答匹配（OK 命中/超时）、send_string 透传负载、available/receive 读走应答；RX 线性缓冲截断保护（页面回绕/断串/空指针缺陷修正）；HTTP 天气/JSON/hex 解码 demo 与 GPS 归范围外（页面无 GPS 代码）——模块只出 AT 底座；默认 UART_3（与 Zigbee/LoRa 无线链路互替同脚）；适用于 NB-IoT 蜂窝远距通信、无人值守遥测上报、AT 指令透传等赛题功能。",
   "dependencies": [],
+  "exclusive_group": {
+    "id": "zigbee-rx",
+    "label": "无线链路 / 数传",
+    "role": "EC-01G NB-IoT 蜂窝 + AT 透传底座（9600，广域上云/无人值守遥测，stm32 挂 UART_3；仅 stm32 条目）"
+  },
   "platforms": {
     "stm32": {
       "files": [

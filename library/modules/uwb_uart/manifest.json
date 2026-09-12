@@ -5,6 +5,11 @@
     "config",
     "filter"
   ],
+  "exclusive_group": {
+    "id": "positioning",
+    "label": "定位 / 位置测量",
+    "role": "UWB 基站串口定位（室内 10cm 级，帧同步 + XOR 校验 + 滑动平均；双平台）"
+  },
   "platforms": {
     "stm32": {
       "files": [

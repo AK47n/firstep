@@ -4,6 +4,11 @@
   "dependencies": [
     "delay"
   ],
+  "exclusive_group": {
+    "id": "zigbee-rx",
+    "label": "无线链路 / 数传",
+    "role": "NRF24L01 2.4G 软 SPI 点对点收发（20-50m 低延迟，六脚单口、不占硬件 SPI；stm32 CLK/MOSI 与 Zigbee/LoRa 同脚）"
+  },
   "platforms": {
     "mspm0": {
       "files": [

@@ -2,6 +2,11 @@
   "slug": "as32",
   "description": "AS32-TTL-100 433MHz LoRa 无线数传模块驱动（双平台纯驱动，ADR 0009）：真实 UART 双向透传——mspm0 独立实例 AS32_UART（UART3 默认、9600、轮询接收）；stm32 默认 UART_3（ZIGBEE_UART 宿主，9600、轮询接收），as32_send_string/send_hex 发送 + as32_receive 轮询收数（返回字节数、读后清缓冲）+ as32_flush；适用于远距离双端遥控/遥测/组网（3km 级参考距离）、双车协同、无线数据链等赛题功能（AT 配置范围外——页面无 AT 代码）。",
   "dependencies": [],
+  "exclusive_group": {
+    "id": "zigbee-rx",
+    "label": "无线链路 / 数传",
+    "role": "AS32 433MHz LoRa 透传（3km 级远距双端，9600，stm32 挂 UART_3 = ZIGBEE 原脚）"
+  },
   "platforms": {
     "mspm0": {
       "files": [

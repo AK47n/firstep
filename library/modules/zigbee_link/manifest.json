@@ -6,8 +6,8 @@
   ],
   "exclusive_group": {
     "id": "zigbee-rx",
-    "label": "Zigbee 无线链路（接收侧）",
-    "role": "任意字节帧收发（双机/双车无线数据通信）"
+    "label": "无线链路 / 数传",
+    "role": "任意字节帧收发（长度前缀帧协议，双机/双车无线透传数据通信；Zigbee DL-20）"
   },
   "platforms": {
     "stm32": {

@@ -2,6 +2,11 @@
   "slug": "hc05",
   "description": "HC-05 蓝牙串口透传驱动（双平台纯驱动，ADR 0009）：hc05_init 开 RX 中断 + 环形缓冲，send_char/string/buffer 发送、receive/available 读走蓝牙数据、is_connected 读 STATE 引脚连接状态、at_mode_enter/exit 驱动 KEY 引脚切 AT 模式（重上电生效）；9600 8N1 透传——mspm0 默认 UART2（DEBUG+UWB 共享）、stm32 默认 UART_1（UWB 互替）；适用于手机遥控、上位机无线通信、数据透传等赛题功能。",
   "dependencies": [],
+  "exclusive_group": {
+    "id": "zigbee-rx",
+    "label": "无线链路 / 数传",
+    "role": "HC-05 蓝牙串口（9600，手机/上位机遥控；mspm0 与 UWB_UART 同脚、stm32 挂 UART_1 = UWB 宿主）"
+  },
   "platforms": {
     "mspm0": {
       "files": [

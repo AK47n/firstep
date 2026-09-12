@@ -2,6 +2,11 @@
   "slug": "neo_6m",
   "description": "NEO-6M GPS 定位模块驱动（stm32 纯驱动，B 类——仅 stm32 条目、无 mspm0 对照，ADR 0009）：真实串口 9600 + NMEA 帧识别（$→GPRMC→行尾状态机收帧 + 主循环字段解析）——neo_6m_init 后 read_frame 帧就绪检测、get_position 出十进制度（ddmm.mmmm 换算、N/S E/W 符号）、clear 清帧；默认 UART_1（与 UWB 定位互替同脚）；适用于 GPS 定位、室外位置采集、卫星导航定位、定位报警等赛题功能。",
   "dependencies": [],
+  "exclusive_group": {
+    "id": "positioning",
+    "label": "定位 / 位置测量",
+    "role": "NEO-6M GPS 卫星定位（室外经纬度，9600 + NMEA GPRMC 解析；仅 stm32 条目）"
+  },
   "platforms": {
     "stm32": {
       "files": [
