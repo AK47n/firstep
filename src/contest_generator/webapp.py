@@ -309,7 +309,7 @@ from .full_task import (
     start_full_update,
     write_full_snapshot,
 )
-from .full_apply import apply_full_package
+from .full_apply import apply_full_package, resolve_launcher_port
 from .materials_task import (
     ApplyTask,
     task_status,
@@ -363,6 +363,11 @@ def spawn_updater(
 
     解释器 = `.venv\\Scripts\\python.exe` 优先、系统 Python 兜底；stdout
     丢弃（更新器自身写 updates\\updater.log）。
+
+    **停服端口显式传**（工单 full-download/09）：更新器默认 8000，同机上若有
+    另一个实例（验收 / 沙箱用别的端口）会被误停——真机演练实测两次：沙箱的
+    更新器把用户在 8000 上正在用的实例停掉了。端口取 `FIRSTEP_LAUNCHER_PORT`
+    （与启动器 / 服务端同源），非法值回落 8000。
     """
     root = tool_root()
     updater = root / "tools" / "update-app.py"
@@ -376,6 +381,7 @@ def spawn_updater(
         "--zip", str(zip_path),
         "--root", str(root),
         "--data-dir", str(data_dir),
+        "--port", str(resolve_launcher_port()),
     ]
     if removed_path is not None:
         command += ["--removed", str(removed_path)]

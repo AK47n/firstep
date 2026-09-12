@@ -35,12 +35,23 @@
 `UpdateOptions.full_manifest_location: str` 与 `build_updater_command` 同步改；
 新增三条回归（URL 原样送达 / 走网络分支 / 反斜杠形态大声报错）。
 
-## 附：停服端口必须显式传（已修）
+## 附：停服端口必须显式传（已修，两条路径都修了）
 
 更新器默认端口 8000，**同机上可能有另一个实例**：沙箱的更新器把用户在 8000 上
-正在用的实例停掉了（本次演练真实发生，随后已恢复）。修法：
-`full_apply.resolve_launcher_port()` 读 `FIRSTEP_LAUNCHER_PORT`（与启动器/服务端同源），
-非法值回落 8000；命令行显式 `--port`。
+正在用的实例停掉了——真机演练里**发生了两次**：
+
+1. 第一次在完整包路径（`full_apply.build_updater_command`）：当时未传端口 →
+   沙箱更新器停掉用户实例；
+2. 第二次在小发版路径（`webapp.spawn_updater`）：同一个缺陷的第二处，我第一轮
+   只修了完整包那条，重跑演练时又把用户实例停了一次。
+
+修法统一为 `full_apply.resolve_launcher_port()` 读 `FIRSTEP_LAUNCHER_PORT`
+（与启动器 / 服务端同源口径，非法值回落 8000），两条路径都显式 `--port`；
+各有一条回归测试钉住（`test_updater_stop_port_comes_from_launcher_env` /
+`test_small_update_spawn_passes_launcher_port`）。
+
+**对真实用户的影响**：单实例机器上无影响（机器上只有它一个监听 8000）；
+受影响的是「同机跑第二个实例（改端口验收 / 沙箱）」的场景。
 
 ## Comments
 

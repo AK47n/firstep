@@ -98,6 +98,34 @@ def test_updater_stop_port_defaults_to_8000_without_env(monkeypatch, tmp_path: P
     assert resolve_launcher_port() == 8020
 
 
+def test_small_update_spawn_passes_launcher_port(monkeypatch, tmp_path: Path) -> None:
+    """小发版一键更新也要显式传停服端口（同一个「误停 8000 上另一个实例」缺陷）。
+
+    真机演练实测：沙箱的小发版更新器按默认端口 8000 停了用户正在用的实例。
+    """
+    import subprocess
+
+    from contest_generator import webapp as webapp_mod
+
+    captured: dict[str, list[str]] = {}
+
+    class FakePopen:
+        def __init__(self, command, **kwargs):
+            captured["command"] = list(command)
+
+    monkeypatch.setattr(subprocess, "Popen", FakePopen)
+    monkeypatch.setenv("FIRSTEP_LAUNCHER_PORT", "8020")
+    webapp_mod.spawn_updater(
+        data_dir=tmp_path / "data",
+        zip_path=tmp_path / "firstep-update-1.1.1.zip",
+        removed_path=None,
+    )
+    command = captured["command"]
+    assert "--port" in command, f"没传 --port：{command}"
+    assert command[command.index("--port") + 1] == "8020"
+    assert str(tmp_path / "data") in command
+
+
 def test_apply_uses_correct_updater_path_for_real_root(tmp_path: Path) -> None:
     """真工具根（仓库根）下命令里的脚本路径必须是 <根>/tools/update-app.py。"""
     parts_dir = tmp_path / "updates" / "full"

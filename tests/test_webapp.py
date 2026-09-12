@@ -7703,7 +7703,7 @@ def test_pdf_trash_route_not_shadowed_by_file_route(client, context, tmp_path):
 
 def test_changelog_route_lists_releases(client):
     """版本更新记录：200 + {releases: [{version, date, summary, items}]}——
-    repo 根 VERSIONS.md 实况（已发布 v1.0.0，GitHub Release 2026-08-30）。"""
+    repo 根 VERSIONS.md 实况（版本块倒序，最新在前）。"""
     resp = client.get("/api/changelog")
     assert resp.status_code == 200
     data = resp.json()
@@ -7715,11 +7715,14 @@ def test_changelog_route_lists_releases(client):
         assert isinstance(rel["items"], list)
         for item in rel["items"]:
             assert isinstance(item["kind"], str) and isinstance(item["text"], str)
-    # 实况断言：首个已发布版本 v1.0.0（下个版本发布时随 VERSIONS.md 更新）
+    # 实况断言：版本块倒序且最新一块是当前工具版本（发版时随 VERSIONS.md 走，
+    # 不写死字符串——写死过 v1.0.0，发版后就让守卫无故变红）
+    from contest_generator import __version__ as tool_version
+
     assert data["releases"], "VERSIONS.md 应有已发布版本"
-    first = data["releases"][0]
-    assert first["version"] == "v1.0.0"
-    assert first["date"] == re.fullmatch(r"2026-08-30", first["date"]).group(0)
+    versions = [rel["version"] for rel in data["releases"]]
+    assert versions == sorted(versions, reverse=True), f"版本块应倒序：{versions}"
+    assert versions[0] == f"v{tool_version}", f"最新块应等于工具版本：{versions[0]} vs v{tool_version}"
 
 
 def test_changelog_route_missing_versions_returns_empty(client, monkeypatch):

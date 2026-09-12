@@ -431,21 +431,24 @@ def test_load_versions_unreadable_path_returns_empty(tmp_path):
 
 
 def test_load_versions_real_file_reflects_released_versions():
-    """真实 VERSIONS.md：已发布 v1.0.0（GitHub Release 2026-08-30 定稿）。
+    """真实 VERSIONS.md：已发布 v1.1.1 / v1.1.0 / v1.0.0（三块都进前台）。
 
     契约守卫：官方格式示例注释（`<!-- … -->` 内含 `## v` / `- ` 行）不得
-    击穿注释态解析出幽灵版本——真实块恰好 1 个、字段与首版定稿一致；
-    下个版本发布时更新此断言（追加而非替换）。
+    击穿注释态解析出幽灵版本——真实块数与已发布版本数一致、新版本在最前、
+    字段齐全；下个版本发布时更新此断言（追加而非替换）。
     """
     real = Path(__file__).resolve().parents[1] / "VERSIONS.md"
     releases = load_versions(real)
-    assert len(releases) == 1, "VERSIONS.md 应恰有 1 个已发布版本（示例注释不算）"
-    first = releases[0]
+    versions = [r["version"] for r in releases]
+    assert versions == ["v1.1.1", "v1.1.0", "v1.0.0"], f"VERSIONS.md 版本块与顺序：{versions}"
+    assert releases[0]["date"] == "2026-09-13", "最新版日期"
+    for release in releases:
+        assert release["summary"], f"{release['version']} 应有主题一句话"
+        assert release["items"], f"{release['version']} 应有要点条目"
+        assert all(
+            isinstance(i["kind"], str) and isinstance(i["text"], str) and i["text"]
+            for i in release["items"]
+        )
+    first = releases[-1]
     assert first["version"] == "v1.0.0"
     assert first["date"] == "2026-08-30"
-    assert first["summary"], "首版应有主题一句话"
-    assert first["items"], "首版应有要点条目"
-    assert all(
-        isinstance(i["kind"], str) and isinstance(i["text"], str) and i["text"]
-        for i in first["items"]
-    )

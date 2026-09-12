@@ -209,7 +209,18 @@ def test_check_bad_versions_compare_as_string() -> None:
 
 
 def test_check_endpoint_returns_contract(tmp_path, monkeypatch) -> None:
-    release = _release("v1.1.0")
+    """端点契约：current_version 吃 __version__；线上版高于它 → 提示可更新。
+
+    线上版本号**从当前版本推一个更大的**（不是写死字符串）：写死过一次
+    v1.1.0，发版到 1.1.1 后「当前比线上新」就让 `update_available`
+    断言失效——契约测试不该随版本号发版而红。
+    """
+    from contest_generator import __version__ as tool_version
+
+    parts = [int(x) for x in tool_version.split(".")]
+    parts[-1] += 1
+    newer = "v" + ".".join(str(x) for x in parts)  # 例如 1.1.1 → v1.1.2
+    release = _release(newer)
     sha = "b" * 64
     monkeypatch.setattr(
         update_mod, "http_json", lambda url, timeout=15.0: release
@@ -217,15 +228,15 @@ def test_check_endpoint_returns_contract(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
         update_mod,
         "http_text",
-        lambda url, timeout=15.0: sha + "  firstep-update-v1.1.0.zip\n",
+        lambda url, timeout=15.0: f"{sha}  firstep-update-{newer.lstrip('v')}.zip\n",
     )
     ctx = AppContext(config_path=tmp_path / "config.json")
     client = TestClient(create_app(ctx))
     resp = client.get("/api/update/check")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["current_version"] == "1.0.0"
-    assert body["latest_version"] == "1.1.0"
+    assert body["current_version"] == tool_version
+    assert body["latest_version"] == newer.lstrip("v")
     assert body["update_available"] is True
     assert body["sha256"] == sha
     assert body["error"] == ""
