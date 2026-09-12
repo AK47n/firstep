@@ -2,6 +2,11 @@
   "slug": "beep",
   "description": "蜂鸣器驱动（双平台）：beep_init/beep_on/beep_off/beep_toggle + beep_beep 响 N 声（阻塞式）。",
   "dependencies": [],
+  "exclusive_group": {
+    "id": "sound-prompt",
+    "label": "提示输出 / 声",
+    "role": "有源蜂鸣器一声/几声（阻塞式响 N 声，1 根 GPIO，默认 PA15）"
+  },
   "platforms": {
     "stm32": {
       "files": [

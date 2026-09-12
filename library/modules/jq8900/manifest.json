@@ -4,6 +4,11 @@
   "dependencies": [
     "delay"
   ],
+  "exclusive_group": {
+    "id": "sound-prompt",
+    "label": "提示输出 / 声",
+    "role": "语音播报预存曲目（软 UART 发指令帧选曲/音量，1 根 GPIO，stm32 默认 PA15 与蜂鸣器同脚）"
+  },
   "platforms": {
     "mspm0": {
       "files": [
