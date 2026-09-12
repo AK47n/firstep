@@ -178,6 +178,7 @@ from .library import (
     update_platform_identity,
 )
 from .manifest import ExclusiveGroup, ManifestSummary, ModuleManifest
+from .module_intro import intro_sections
 from .llm import (
     LLM,
     LLMError,
@@ -4131,6 +4132,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         protocol）与 `requires_identity`（是否需要 kit + source_url）——判据单源
         仍是 `library.MODULE_KIND`，此处只做投影，前端不另写 slug 名单。详情弹窗
         据此区分「可补填的身份字段」与「内部件 / 协议切片无需购买链接」。
+
+        另附简介拆段投影（工单 module-intro-detail/01）：`intro` = 简介按四问拆出的
+        `[{label, text}]`（判据单源 `module_intro.intro_sections`）——详情弹窗据此
+        把一句话读不下去的简介渲染成「这是干什么的 / 怎么接线 / 怎么用 / 什么时候用」。
+        拆段只切不改写，前端不持有任何规则。
         """
         module_root = _library_dir(context)
         return [
@@ -4139,6 +4145,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 "mtime": module_mtime(module_root, m.slug),
                 "kind": module_kind(m.slug).value,
                 "requires_identity": requires_identity(m.slug),
+                "intro": [
+                    section.to_dict() for section in intro_sections(m.description)
+                ],
             }
             for m in list_modules(module_root)
         ]

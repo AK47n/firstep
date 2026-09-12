@@ -1,6 +1,6 @@
 {
   "slug": "sr04",
-  "description": "HC-SR04 超声波测距驱动（mspm0 纯驱动，ADR 0009）：TRIG 触发 + ECHO 脉宽 CPU 忙等计时（不占定时器外设），sr04_get_distance_cm 直接出厘米（5 次平均，30ms 超时防护）；适用于避障、定高、车位/液位感知、距离阈值触发等赛题功能。",
+  "description": "HC-SR04 超声波测距模块：板上一对“喇叭”探头，一只发 40kHz 超声波、一只收回声，按“发出到收到”的时间差算距离（声速换算已在模块内做好），非接触测出 2cm-4m 的障碍距离。接线 4 脚（VCC 电源 / GND 地 / TRIG 触发 / ECHO 回响），占用 2 个 GPIO——TRIG 默认 PB24、ECHO 默认 PB8。驱动接口：sr04_init() 初始化、sr04_get_distance_cm() 直接返回厘米数（内部连测 5 次取平均、每次 ECHO 等待带 30ms 超时，任一次超时整次返回 0）。测距靠 ECHO 脉宽 CPU 忙等计时，不占定时器外设。适用于避障、定高、车位/液位感知、距离阈值触发等赛题功能。",
   "dependencies": [
     "delay"
   ],

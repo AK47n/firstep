@@ -1,6 +1,6 @@
 {
   "slug": "beep",
-  "description": "蜂鸣器驱动（双平台）：beep_init/beep_on/beep_off/beep_toggle + beep_beep 响 N 声（阻塞式）。",
+  "description": "蜂鸣器驱动：接有源蜂鸣器（自带振荡，给高电平就响，不需要 PWM 载波），用来做提示音、报警、到位提示等“听得见的输出”。接线二线制（VCC 电源 / GND 地 + 信号脚），只占 1 个 GPIO——stm32 默认 PA15、mspm0 走板载 LED_BEEP 实例。驱动接口：beep_init() 初始化、beep_on/beep_off/beep_toggle() 控制响停、beep_beep(次数, 响毫秒, 停毫秒) 连响若干声（阻塞式，响完才返回，别放在需要同时巡线的循环里）。适用于声光提示、报警、按键/到位反馈等赛题功能。",
   "dependencies": [],
   "exclusive_group": {
     "id": "sound-prompt",

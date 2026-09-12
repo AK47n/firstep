@@ -1,6 +1,6 @@
 {
   "slug": "ws2812",
-  "description": "WS2812 幻彩 RGB 灯带驱动（mspm0 纯驱动，ADR 0009）：单 GPIO 位操作时序下发 24bit 颜色，内置 8 灯颜色缓冲（ws2812_set_color/set_rgb 设色、ws2812_refresh 整体刷新），颜色值 0xRRGGBB 直接写码；适用于 RGB 幻彩指示、氛围灯效、状态光带等赛题功能。",
+  "description": "WS2812 幻彩 RGB 灯带驱动：灯带上每颗灯是一颗自带驱动芯片的 RGB 三色 LED，用一根信号线串成链、按固定时序把 24bit 颜色逐颗往下传，一根 GPIO 就能控制整条灯带每颗灯的任意颜色（不是普通灯带的“整条一个颜色”）。接线三线制（5V 电源 / GND 地 / DIN 信号），只占 1 个 GPIO——默认 PA14。驱动接口：ws2812_init() 初始化、ws2812_set_color()/ws2812_set_rgb() 按灯序号设色（颜色值直接写 0xRRGGBB）、ws2812_refresh() 整体刷新一次才真正点亮；点亮靠 GPIO 位操作跑灯带时序，不占定时器外设。适用于 RGB 幻彩指示、氛围灯效、状态光带等赛题功能。",
   "dependencies": [
     "delay"
   ],

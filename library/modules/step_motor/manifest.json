@@ -1,6 +1,6 @@
 {
   "slug": "step_motor",
-  "description": "脉冲式步进电机驱动：GPIO 方向/使能控制 + PWM 脉冲频率控速（1 脉冲 = 0.05625°）+ LOAD 中断计数到位自动停车。",
+  "description": "脉冲式步进电机驱动：步进电机按“收到一个脉冲转一个固定小角度”工作，本模块用一路 PWM 发脉冲（脉冲频率 = 转速，1 个脉冲 = 0.05625°），另外用 GPIO 控制方向与使能，靠 PWM 中断计数脉冲数、数到位就自动停——能精确走固定角度/固定距离，这是普通直流电机做不到的。接线：方向 + 使能 + 脉冲三路输出（外加电机驱动的电源），默认 RST2/SLP2/DIR2/DCY2 四个 GPIO 加一路 PWM（PA14）。驱动接口：step_motor_init() 初始化、step_motor_dir_set() 设正反转、step_set_speed() 设转速、step_motor_start() 起转、step_motor_set_angle() 走指定角度后自动停；多路步进按 stepper_id 区分。适用于转盘定位、丝杆/升降、精确角度控制等赛题功能。",
   "dependencies": [],
   "platforms": {
     "mspm0": {

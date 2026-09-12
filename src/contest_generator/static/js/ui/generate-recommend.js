@@ -27,7 +27,7 @@ import { esc } from "/js/fx/core.js";
 import { platformClickAction } from "/js/fx/platform.js";
 import { platformSwitchConfirmMessage } from "/js/fx/danger.js";  // 切平台清空下游确认文案（工单 ux-walkthrough-02/01）
 import { confirmModal } from "/js/ui/confirm.js";
-import { moduleBadges, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, applyGroupChoices, recordGroupChoice, clearGroupChoiceForSlug, pruneGroupChoices, pendingGroupChoices, groupChoiceGapText, moduleGridCountText, moduleGridHTML, moduleInfoHTML } from "/js/fx/module.js";
+import { moduleBadges, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, applyGroupChoices, recordGroupChoice, clearGroupChoiceForSlug, pruneGroupChoices, pendingGroupChoices, groupChoiceGapText, moduleGridCountText, moduleGridHTML, moduleInfoHTML, recommendChipHTML, moduleInfoBtnHTML } from "/js/fx/module.js";
 import { bindModuleSource } from "/js/ui/module-source.js";  // 模块源码区（mainc-codeview-bridge/05）：弹窗文件行懒加载
 import { referencePlatformChip } from "/js/fx/reference.js";
 import {
@@ -416,11 +416,8 @@ $("problem").addEventListener("keydown", (e) => {
 // ---------------------------------------------------------------------------
 // 生成页：3. AI 推荐
 // ---------------------------------------------------------------------------
-function recommendChip(slug, reason) {
-  return '<span class="chip rec" data-remove="' + esc(slug) + '">' + esc(slug)
-    + (reason ? '<span class="reason">' + esc(reason) + '</span>' : "")
-    + '<span class="chip-x">✕</span></span>';
-}
+// 推荐 chip 渲染已迁 fx/module.js（recommendChipHTML，工单 module-intro-detail/03）：
+// chip 结构 = 三处说明入口共用一份，散在两个文件必然漂移。
 
 // 库外建议 chip（工单 buy-guide/02 + 工单 buy-discuss/05）：chip 展开 /
 // 讨论区开关 / 发送 / 确定全部走 state + 重渲染（discussions Map 按建议名
@@ -622,7 +619,7 @@ export function renderRecommendResult(data, autoAdd = true) {
       <div class="rec-chips">
         ${r.modules.map((slug) => {
           const reason = (data.modules.find((m) => m.slug === slug) || {}).reason;
-          return groupRequirementNote(groups, slug, reason, groupChoices) || recommendChip(slug, reason);
+          return groupRequirementNote(groups, slug, reason, groupChoices) || recommendChipHTML(slug, reason);
         }).join("") || '<span class="muted">库内无命中</span>'}
         ${(r.suggestions || []).map((s) => {
           const key = suggestionKey(s);
@@ -654,6 +651,7 @@ export function renderRecommendResult(data, autoAdd = true) {
       clusterDeps.scheduleDraftSave();  // 选择即刻入草稿（刷新后仍是用户的选择，不是 AI 的默认）
       reRenderAfterSelectionChange();
     }));
+  bindModuleInfoEntry(box);  // 推荐 chip / 灰注 / 组卡成员行的说明入口（委托，重绘后仍有效）
   if (autoAdd && data.modules.length) runExpand();
 }
 
@@ -909,7 +907,7 @@ export function renderModulePool() {
   if (count) count.textContent = moduleGridCountText(state.modules || [], selectedSlugs, q);
 }
 
-export function openModuleInfo(slug, platform = chosenPlatform) {
+export function openModuleInfo(slug, platform = chosenPlatform, reason = "") {
   const module = (state.modules || []).find((mo) => mo.slug === slug);
   if (!module) { toast("info", "未找到模块 " + slug); return; }
   // 重复打开 = 替换（同 showPinMenu 先例）
@@ -918,9 +916,9 @@ export function openModuleInfo(slug, platform = chosenPlatform) {
   overlay.className = "module-info-overlay";
   const modal = document.createElement("div");
   modal.className = "module-info-modal";
-  modal.innerHTML = '<div class="module-info-head"><strong>模块详情</strong>'
+  modal.innerHTML = '<div class="module-info-head"><strong>模块说明 · ' + esc(slug) + '</strong>'
     + '<button class="ref-files-close" title="关闭">×</button></div>'
-    + '<div class="module-info-scroll">' + moduleInfoHTML(module, platform) + "</div>";
+    + '<div class="module-info-scroll">' + moduleInfoHTML(module, platform, reason) + "</div>";
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
   bindModuleSource(modal, slug);  // 源码区（工单 mainc-codeview-bridge/05）：文件行点击懒加载
@@ -930,6 +928,34 @@ export function openModuleInfo(slug, platform = chosenPlatform) {
   const onKey = (e) => { if (e.key === "Escape") close(); };
   document.addEventListener("keydown", onKey);
   overlay.addEventListener("remove", () => document.removeEventListener("keydown", onKey));
+}
+
+// —— 模块说明入口（工单 module-intro-detail/03）——
+// 三处入口统一走**容器级事件委托** + `data-mod-info`：推荐 chip / 需求清单灰注
+// （容器 #rec-list）、功能组选择卡（同容器）、已选清单（#selected-list）都是
+// innerHTML 全量重绘的，逐按钮绑监听会在每次重绘后失效（既有实现正是逐按钮绑，
+// 故 chip 移除监听也随重绘重挂）。委托 + closest 让入口与渲染解耦。
+// **必须 stopPropagation**：说明按钮嵌在 `.chip.rec`（data-remove）里，不拦住
+// 冒泡就会「点说明顺手把模块从工程移除」。
+
+// moduleInfoReason(slug)：推荐区那句短线推荐理由（模块说明弹窗里「为什么推荐它」）。
+// 找不到（模块库页 / 非推荐来源）= "" → 弹窗不渲染该段（不编造）。
+export function moduleInfoReason(slug) {
+  const mod = ((lastRecommend || {}).modules || []).find((m) => m.slug === slug);
+  return (mod && mod.reason) || "";
+}
+
+// bindModuleInfoEntry(root)：容器级委托绑定（幂等——同一容器只挂一次）。
+export function bindModuleInfoEntry(root) {
+  if (!root || root.dataset.modInfoBound === "1") return;
+  root.dataset.modInfoBound = "1";
+  root.addEventListener("click", (ev) => {
+    const btn = ev.target.closest ? ev.target.closest("[data-mod-info]") : null;
+    if (!btn) return;
+    ev.stopPropagation();   // 别让 chip 的 data-remove 顺手移除模块
+    ev.preventDefault();
+    openModuleInfo(btn.dataset.modInfo, chosenPlatform, moduleInfoReason(btn.dataset.modInfo));
+  });
 }
 
 function initModuleGrid() {
@@ -1035,6 +1061,7 @@ export function renderSelected() {
     <div class="item">
       <div class="head" title="${esc((m.description || "") + " " + notes(m))}">
         <span class="slug">${esc(m.slug)}</span>
+        ${moduleInfoBtnHTML(m.slug)}
         ${isDep ? `<span class="badge dep" title="由 ${esc(bringer || "其它模块")} 依赖带入">自动带入${bringer ? "·" + esc(bringer) : ""}</span>` : ""}
         ${moduleBadges(m)}
         ${isDep ? "" : `<button class="danger" data-remove="${esc(m.slug)}">移除</button>`}
@@ -1043,6 +1070,7 @@ export function renderSelected() {
       ${isDep ? "" : templateSelect(m)}
     </div>`;
   }).join("");
+  bindModuleInfoEntry(box);  // 已选清单行的说明入口（委托，重绘后仍有效）
   box.querySelectorAll("[data-remove]").forEach((b) =>
     b.addEventListener("click", () => {
       selectedSlugs = selectedSlugs.filter((s) => s !== b.dataset.remove);

@@ -1,6 +1,6 @@
 {
   "slug": "led",
-  "description": "LED 指示灯驱动（双平台）：led_init/led_on/led_off/led_toggle + 通道宏 LED_RED/LED_YELLOW/LED_GREEN；拉电流 1=亮 细节已封装在模块内。",
+  "description": "LED 指示灯驱动：接普通发光二极管（或板载 LED 排针），用电平点亮/熄灭，做状态指示、声光提示、计数显示等最基础的“看得见的输出”。接线二线制（串限流电阻后接 GPIO 与 GND），每个 LED 占 1 个 GPIO——stm32 默认板载 PC13/PC14/PC15 三色、mspm0 默认 PA15；多路 LED 按通道宏区分，最多 8 个实例。驱动接口：led_init() 初始化、led_on/led_off/led_toggle(通道宏) 控制亮灭翻转，通道宏用 LED_RED / LED_YELLOW / LED_GREEN（多实例时按颜色命名）；默认拉电流接法 1=亮，接法相反时容器内一处宏可反。适用于状态指示、声光提示、得分/次数显示等赛题功能。",
   "dependencies": [],
   "multi_instance": {
     "max": 8,

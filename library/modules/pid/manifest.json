@@ -1,6 +1,6 @@
 {
   "slug": "pid",
-  "description": "PID 闭环控制 + 灰度循迹驱动（双平台）：通用 PID 控制器（位置式/增量式，pid_init/pid_cal/pidout_limit）+ 左右轮目标速度输出（含轮速校准，motor_target_set）+ 灰度 8 路读取与边缘中点巡线偏差计算（line_error_calc）+ PD 巡线速度输出（line_pid_track）；适用于巡线/循迹/速度闭环类赛题功能，路口/停车等决策逻辑归生成骨架。",
+  "description": "灰度循迹 + PID 闭环控制：8 路灰度传感器一字排开朝下看地面，黑线在哪个探头下就知道车偏了多少，算出偏差后交给 PID 调节左右轮转速把车拉回线上——巡线小车最核心的一块。接线：8 路灰度输入 + 电机驱动输出，灰度默认 8 个 GPIO（stm32 PB12-PB15/PA8/PB3/PB6/PB7，mspm0 PA22-PA27/PB6/PB7）。驱动接口：gray_init() 初始化 8 路灰度、line_error_calc() 出巡线偏差、line_pid_track() 由偏差直接输出左右轮速度、pid_cal() 是通用 PID 计算（位置式/增量式）、motor_target_set() 设左右轮目标速度（含轮速校准）；巡线用 PD 即可，参数在参数卡上调。适用于巡线/循迹/速度闭环类赛题功能；路口判断、停车、模式切换等决策逻辑归生成骨架，不写进模块。",
   "dependencies": [
     "motor"
   ],

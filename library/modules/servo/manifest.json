@@ -1,6 +1,6 @@
 {
   "slug": "servo",
-  "description": "舵机角度控制（双平台）：servo_init/servo_set_angle 输出 50Hz/20ms 周期、0.5-2.5ms 脉宽映射 0-180°；stm32 走母版 ml_pwm（pwm 类型级开放），mspm0 走母版 syscfg SERVO_PWM 实例（周期按实例时钟运行时计算）；适用于云台转向 / 打靶角度 / 机械臂等舵机类赛题功能。",
+  "description": "舵机角度控制：舵机专吃 PWM 信号，按高电平脉宽决定转到哪个角度（20ms 周期、0.5-2.5ms 脉宽对应 0-180°），常见于云台、机械臂关节、打靶转向。接线三线制（VCC 电源 / GND 地 / 信号），只占 1 个 PWM 脚——stm32 默认 PB6、mspm0 默认 PA7（走母版 PWM 实例，周期按实例时钟运行时计算）。驱动接口：servo_init() 初始化、servo_set_angle(angle) 直接给 0-180 的角度值，脉宽换算已在模块内做好。适用于云台转向、打靶角度、机械臂等舵机类赛题功能。",
   "dependencies": [],
   "platforms": {
     "stm32": {

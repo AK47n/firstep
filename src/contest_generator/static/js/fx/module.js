@@ -219,6 +219,9 @@ export function renderGroupCards(groups, modules, selectedSlugs, choices) {
         + ' data-group-id="' + esc(g.id) + '" data-group-slug="' + esc(m.slug) + '"'
         + (m.slug === checked ? " checked" : "") + '>'
         + '<span class="slug">' + esc(m.slug) + '</span>'
+        // 说明入口（工单 module-intro-detail/03）：选哪个之前先看清「它是什么」
+        // ——组内成员常是互斥的同类件（灰度/姿态/无线），选错就是整块硬件换掉。
+        + moduleInfoBtnHTML(m.slug)
         + '<span class="role">' + esc(m.role || "") + '</span>'
         + (isRec ? '<span class="badge ok">AI 推荐</span>'
             + (reason ? '<span class="reason">' + esc(reason) + '</span>' : "") : "")
@@ -247,14 +250,17 @@ export function groupRequirementNote(groups, slug, reason, choices) {
   if (!group) return null;
   const picked = (choices || {})[group.id];
   const validPicked = (group.members || []).some((m) => m.slug === picked) ? picked : "";
+  // 说明入口（工单 module-intro-detail/03）：灰注里的模块名同样能点开说明——
+  // 「请选择」这一刻用户最需要知道这几个候选各自是什么。
+  const info = moduleInfoBtnHTML(slug);
   if (groupChoiceRequired(group) && !validPicked) {
-    return '<span class="muted">' + esc(slug) + '（已在『功能组选择』中，请选择）</span>';
+    return '<span class="muted">' + esc(slug) + info + '（已在『功能组选择』中，请选择）</span>';
   }
   if (validPicked && validPicked !== slug) {
-    return '<span class="muted">' + esc(slug) + '（已由『' + esc(group.label) + '』的 '
+    return '<span class="muted">' + esc(slug) + info + '（已由『' + esc(group.label) + '』的 '
       + esc(validPicked) + ' 替代）</span>';
   }
-  return '<span class="muted">' + esc(slug)
+  return '<span class="muted">' + esc(slug) + info
     + '（已在『功能组选择』中' + (reason ? "，" + esc(reason) : "") + '）</span>';
 }
 
@@ -328,8 +334,7 @@ export function moduleGridHTML(modules, selectedSet, query, platform) {
       + ' title="' + escHtml(desc) + '">'
       + '<div class="mc-head"><span class="slug">' + escHtml(m.slug) + "</span>"
       + '<button class="mc-info" data-info="' + escHtml(m.slug) + '" title="查看模块详情">详情</button>'
-      + (off ? '<span class="mc-offtag">需切换平台</span>' : "") + "</div>"
-      + '<div class="mc-desc">' + escHtml(short) + "</div>"
+      + (off ? '<span class="mc-offtag">需切换平台</span>' : "") + "</div>"      + '<div class="mc-desc">' + escHtml(short) + "</div>"
       + '<div class="mc-meta">' + badges + deps + pa + "</div></div>";
   }).join("");
 }
@@ -353,7 +358,70 @@ export function identityExemptLabel(kind) {
   return kind === "protocol" ? "无需购买链接（协议切片）" : "无需购买链接（内部件）";
 }
 
-export function moduleInfoHTML(module, platform) {
+// 模块说明入口按钮（工单 module-intro-detail/03）：推荐 chip / 功能组卡成员行 /
+// 已选清单行三处共用。文案与 title 单源在此——三处各写一份必然漂移。
+export const MODULE_INFO_BTN_TEXT = "说明";
+export const MODULE_INFO_BTN_TITLE = "这是什么？点开看详细说明（怎么接、怎么用、什么时候用）";
+
+// moduleInfoBtnHTML(slug)：说明入口按钮。**不是 chip 本体**——点 chip 仍是移除模块，
+// 点这个按钮才开说明（chip 里嵌按钮，用 stopPropagation 与 chip 交互隔离）。
+export function moduleInfoBtnHTML(slug) {
+  const escHtml = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]);
+  return '<button type="button" class="mod-info-btn" data-mod-info="' + escHtml(slug)
+    + '" title="' + escHtml(MODULE_INFO_BTN_TITLE) + '">' + MODULE_INFO_BTN_TEXT + "</button>";
+}
+
+// recommendChipHTML(slug, reason)：AI 推荐命中的模块 chip（自
+// ui/generate-recommend.js 迁入，工单 module-intro-detail/03——三处说明入口
+// 要共用同一份 chip 结构，渲染散在两个文件必然漂移）。
+// 结构语义：点 chip 本体 = 从工程移除该模块（data-remove，data-remove 钩子的
+// 契约）；chip 内的「说明」按钮 = 开模块说明弹窗——按钮是 chip 的子元素，
+// **JS 侧必须 stopPropagation**，否则点说明会顺手把模块移除（`data-remove`
+// 处理在事件委托里，见 ui/generate-recommend.js）。
+export function recommendChipHTML(slug, reason) {
+  const escHtml = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]);
+  return '<span class="chip rec" data-remove="' + escHtml(slug) + '">' + escHtml(slug)
+    + (reason ? '<span class="reason">' + escHtml(reason) + "</span>" : "")
+    + moduleInfoBtnHTML(slug)
+    + '<span class="chip-x">✕</span></span>';
+}
+
+// moduleIntroHTML(intro)：简介四问分段（工单 module-intro-detail/01/03）。// 载荷 `intro` = `[{label, text}]`（后端 module_intro 拆段，前端不判规则）——
+// 用户第一次遇到这个模块名时，「它是个什么东西」必须直接可读，而不是一坨
+// 函数名。缺 `intro`（旧载荷 / 无简介）→ ""，调用方回落原样简介。
+export function moduleIntroHTML(intro) {
+  const escHtml = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]);
+  const sections = (Array.isArray(intro) ? intro : []).filter(
+    (s) => s && s.label && s.text
+  );
+  if (!sections.length) return "";
+  return '<div class="mi-intro">' + sections.map((s) =>
+    '<div class="mi-intro-sec"><div class="mi-intro-label">' + escHtml(s.label)
+    + '</div><div class="mi-intro-text">' + escHtml(s.text) + "</div></div>"
+  ).join("") + "</div>";
+}
+
+// moduleReasonHTML(reason)：推荐区带来的推荐理由（工单 module-intro-detail/03）。
+// 推荐 chip 上只有一句短线代号（如「可选点/起始做辅助」），用户点开说明时那句
+// 理由要有上下文——它就是「AI 为什么挑它」。模块库页没有推荐理由（reason 空）
+// → 不渲染该段，不编造。
+export function moduleReasonHTML(reason) {
+  const text = String(reason || "").trim();
+  if (!text) return "";
+  const escHtml = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]);
+  return '<div class="mi-reason"><span class="mi-reason-k">为什么推荐它</span>'
+    + escHtml(text) + "</div>";
+}
+
+export function moduleInfoHTML(module, platform, reason) {
   // 自包含内联 esc（同 moduleGridHTML 范式）
   const escHtml = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
@@ -438,9 +506,17 @@ export function moduleInfoHTML(module, platform) {
       + ' <span class="mc-plat ' + cls + '">' + status + "</span></h4>"
       + '<ul class="mi-files">' + files + "</ul>" + notes + kit + source + identityNote + pins + "</section>";
   }).join("");
+  // 讲人话的四问分段（工单 module-intro-detail/03）：推荐区/组卡/已选清单点
+  // 「说明」进来的人，第一眼要看到「这是个什么东西」——分段在前，内部字段在后。
+  // **有分段就不再重复整段简介**（分段本来就是同一份简介拆出来的，两处都印 =
+  // 同一段话连读两遍）；无 intro（旧载荷 / 无简介）→ 回落整段简介当正文，
+  // 详情弹窗永不出现「只有 slug 没有说明」的空壳。
+  const intro = moduleIntroHTML(m.intro);
   return '<div class="module-info-body">'
     + '<div class="module-info-title"><span class="slug">' + escHtml(m.slug || "") + "</span>"
-    + '<div class="desc">' + escHtml(m.description || "") + "</div></div>"
+    + (intro ? "" : '<div class="desc">' + escHtml(m.description || "") + "</div>") + "</div>"
+    + intro
+    + moduleReasonHTML(reason)
     + (off ? '<div class="module-info-off">当前平台 ' + escHtml(moduleGridPlatformLabel(platform))
       + " 无此模块版本</div>" : "")
     + (rows.length ? '<ul class="module-info-rows">' + rows.join("") + "</ul>" : "")
@@ -674,5 +750,5 @@ export function libPlatformKits(modules) {
 }
 
 if (typeof window !== "undefined") {
-  Object.assign(window, { moduleBadges, pythonArtifactSummary, groupOfSlug, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, renderableGroupCards, groupChoiceRequired, groupMemberPick, pendingGroupChoices, applyGroupChoices, recordGroupChoice, clearGroupChoiceForSlug, pruneGroupChoices, groupChoiceGapText, moduleGridPlatformLabel, moduleGridStatusText, moduleGridBadgeClass, moduleGridFilter, moduleGridCountText, moduleGridHTML, moduleInfoHTML, moduleRequiresIdentity, identityExemptLabel, INTERNAL_KINDS, multiInstanceModules, instancePayload, ensureDefaultInstances, instanceGapCount, libFilterModules, libSortModules, danglingDependencies, libStats, libStatsText, libChipRowHTML, moduleRowHTML, editDescStatus, libIsValidHttpUrl, libPlatformKits });
+  Object.assign(window, { moduleBadges, pythonArtifactSummary, groupOfSlug, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, renderableGroupCards, groupChoiceRequired, groupMemberPick, pendingGroupChoices, applyGroupChoices, recordGroupChoice, clearGroupChoiceForSlug, pruneGroupChoices, groupChoiceGapText, moduleGridPlatformLabel, moduleGridStatusText, moduleGridBadgeClass, moduleGridFilter, moduleGridCountText, moduleGridHTML, moduleInfoHTML, moduleRequiresIdentity, identityExemptLabel, INTERNAL_KINDS, MODULE_INFO_BTN_TEXT, MODULE_INFO_BTN_TITLE, moduleInfoBtnHTML, moduleIntroHTML, moduleReasonHTML, recommendChipHTML, multiInstanceModules, instancePayload, ensureDefaultInstances, instanceGapCount, libFilterModules, libSortModules, danglingDependencies, libStats, libStatsText, libChipRowHTML, moduleRowHTML, editDescStatus, libIsValidHttpUrl, libPlatformKits });
 }
