@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=8acde6863188bc3ab33560a60786a97660efb67e -->
+<!-- changelog-auto: last-commit=d80f03d594ce3ec5ba1d4c60d20f15dedc1df53f -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -17,6 +17,7 @@
 - 11:34 库：beep 与 jq8900 并入功能组「提示输出 / 声」（同类功能件同组排查 1/4）
 - 11:34 库：bmp180 与 ms5611 并入功能组「气压 / 海拔传感器」（同类功能件同组排查 2/4）
 - 11:34 库：us016/ir_distance/vl53l0x/sr04 并入功能组「距离测量 / 测距传感器」（同类功能件同组排查 3/4）
+- 11:35 库：lcd/oled/max7219/ili9341/ili9488/st7789_para 并入功能组「显示 / 屏幕」（同类功能件同组排查 4/4）
 
 ## 2026-09-11
 - 09:29 ﻿fix: 推荐域拒绝不再被吞成通用话术——kind=domain 分流 + 带理由重试一次（工单 real-acceptance/03）
