@@ -22,7 +22,7 @@
 import { $, apiGet, apiPost, apiPut, apiDelete, toast, toastError } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc, formatSize } from "/js/fx/core.js";
-import { refStats, refStatsText, refChipRowHTML, refFilterEntries, refSortEntries, refRowHTML, refDetailHTML, refEditValidate, refEditFilePlan, refEditPayload, refEditState } from "/js/fx/reference.js";
+import { refStats, refStatsText, refChipRowHTML, refFilterEntries, refSortEntries, refRowHTML, refDetailHTML, refEditValidate, refEditFilePlan, refEditPayload, refEditState, refFileOpenKind } from "/js/fx/reference.js";
 import { addFileRow, collectFiles, pickFilesInto, bindFilePicker } from "/js/ui/files.js";
 
 // —— 参考库工具栏状态与渲染（工单 02）：过滤条件集中于此，事件层只转发 ——
@@ -384,12 +384,14 @@ export function referenceFileUrl(entryId, path) {
   return `/api/references/${encodeURIComponent(entryId)}/files/${segments}`;
 }
 
-// 打开参考文件（行内直开 / 弹层共用）：PDF 新窗口预览 / 文本 fetch 内联 /
-// 其余新窗口下载。viewer 缺省 = 行内直开（文本也新窗口，服务端给 Content-Type）。
+// 打开参考文件（行内直开 / 弹层共用）：PDF / 视频 / 音频 / 图片新窗口内联
+// 预览（浏览器原生预览器；服务端 FileResponse 带 Accept-Ranges，mp4 可拖
+// 进度条）；文本 fetch 内联；其余（zip / rar / bin 固件等）新窗口触发下载。
+// 判据单源 = fx/reference.js 的 refFileOpenKind（纯函数，tests/js 覆盖）。
 export async function openReferenceFile(entryId, path, viewer, viewerPre) {
   const url = referenceFileUrl(entryId, path);
   const lower = path.toLowerCase();
-  if (lower.endsWith(".pdf")) { window.open(url, "_blank"); return; } // PDF 浏览器预览
+  if (refFileOpenKind(path) === "inline") { window.open(url, "_blank"); return; }
   if (viewer && REF_TEXT_EXTENSIONS.some((ext) => lower.endsWith("." + ext))) {
     try {
       const resp = await fetch(url);

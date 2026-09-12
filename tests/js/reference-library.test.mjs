@@ -9,7 +9,7 @@ import {
   referencePlatformChip, referenceTopicTypeChip, refFilterEntries, refDanglingAnchors, refSortEntries,
   refStats, refStatsText, refMatchFiles, refAnchorBadge, refChipRowHTML,
   refRowHTML, refDetailHTML, refEditState, refEditValidate, refEditFilePlan,
-  refEditPayload,
+  refEditPayload, refFileOpenKind, refServedTotal, refVolumeText, refVolumeTitle,
 } from "../../src/contest_generator/static/js/fx/reference.js";
 
 const refs = [
@@ -407,3 +407,92 @@ test("refDetailHTML 锚定行带题型 chip（类型标注可见）", () => {
   const detail = refDetailHTML({ ...refs[1], topic_type: "line_follow" }, []);
   assert.ok(detail.includes("line_follow 框架"));
 });
+
+// ================= 条目文件打开方式：refFileOpenKind =================
+test("refFileOpenKind 内联组：PDF / 视频 / 音频 / 图片新窗口原生预览", () => {
+  // 视频（ESP32-CAM 使用教程 mp4、ALX 基站安装指导 mp4——资料库里混装的大件）
+  assert.equal(refFileOpenKind("ESP32 CAM使用教程.mp4"), "inline");
+  assert.equal(refFileOpenKind("双基站安装与测试指导.MP4"), "inline");
+  assert.equal(refFileOpenKind("演示/子目录/片段.webm"), "inline");
+  // 音频 / 图片 / PDF
+  assert.equal(refFileOpenKind("录音.wav"), "inline");
+  assert.equal(refFileOpenKind("接线图.png"), "inline");
+  assert.equal(refFileOpenKind("使用说明.pdf"), "inline");
+  assert.equal(refFileOpenKind("使用说明.PDF"), "inline");
+});
+
+test("refFileOpenKind 下载组：固件 / 压缩包 / 无扩展名触发下载", () => {
+  assert.equal(refFileOpenKind("ESP32-CAM固件烧录问题/ESP32_GENERIC-20230426-v1.20.0.bin"), "download");
+  assert.equal(refFileOpenKind("flash_download_tool_3.9.5_0官方烧录固件软件.rar"), "download");
+  assert.equal(refFileOpenKind("arduino-ide_2.2.1_Windows_64bit.rar"), "download");
+  assert.equal(refFileOpenKind("esp32cam固件烧录教程.zip"), "download");
+  assert.equal(refFileOpenKind("使用教程.txt"), "download"); // 文本走 fetch 内联分支，不归 inline 组
+  assert.equal(refFileOpenKind("没有扩展名"), "download");
+  assert.equal(refFileOpenKind(""), "download");
+});
+
+test("refFileOpenKind 边界：取末段扩展名、忽略大小写、目录名含点不误判", () => {
+  assert.equal(refFileOpenKind("v1.2/规格书.pdf"), "inline");       // 目录点号不影响
+  assert.equal(refFileOpenKind("esp32_datasheet_cn.pdf"), "inline");
+  assert.equal(refFileOpenKind("archive.tar.gz"), "download");      // 末段 = gz
+  assert.equal(refFileOpenKind("片段.mp4.txt"), "download");         // 末段 = txt
+});
+
+// ================= 体量双口径：refServedTotal / refVolumeText =================
+test("refServedTotal：实体 + 索引素材相加（缺字段按 0，存量语义不变）", () => {
+  assert.equal(refServedTotal({ size_bytes: 3317, index_bytes: 83856360 }), 83859677);
+  assert.equal(refServedTotal({ size_bytes: 4096 }), 4096);          // 旧响应无索引字段
+  assert.equal(refServedTotal({ index_bytes: 100 }), 100);
+  assert.equal(refServedTotal({}), 0);
+});
+
+test("refVolumeText：有索引素材 = 总量 + 括号标注索引件数体积", () => {
+  const withIndex = refVolumeText({ file_count: 2, size_bytes: 3317, index_count: 13, index_bytes: 83856360 });
+  assert.match(withIndex, /^2 个文件 · 80\.0 MB/);
+  assert.match(withIndex, /另含 13 个索引素材/);
+});
+
+test("refVolumeText：无索引素材 = 原样磁盘口径（存量条目显示不变）", () => {
+  assert.equal(refVolumeText({ file_count: 3, size_bytes: 4096 }), "3 个文件 · 4.0 KB");
+  assert.equal(refVolumeText({ file_count: 0, size_bytes: 0, index_count: 0, index_bytes: 0 }), "0 个文件 · 0 B");
+});
+
+test("refVolumeTitle：悬停说明写清两个口径与相加关系（索引 0 时时给清单记录数）", () => {
+  const t = refVolumeTitle({ file_count: 2, size_bytes: 3317, index_count: 13, index_bytes: 83856360 });
+  assert.match(t, /实体文件 2 个/);
+  assert.match(t, /索引素材 13 个/);
+  assert.match(t, /可服务 15 个/);
+  const plain = refVolumeTitle({ files: ["a.c", "b.c"], file_count: 3, size_bytes: 4096 });
+  assert.match(plain, /2 条清单记录/);
+});
+
+test("refSortEntries 按体积：走实体 + 索引合计口径（不只看磁盘实况）", () => {
+  const entries = [
+    { id: "small", title: "a", type: "t", platform: "any", anchor_kind: "none", size_bytes: 10, index_bytes: 0, file_count: 1 },
+    { id: "big", title: "b", type: "t", platform: "any", anchor_kind: "none", size_bytes: 10, index_bytes: 999, file_count: 1 },
+  ];
+  const asc = refSortEntries(entries, { by: "size", dir: "asc" }).map((e) => e.id);
+  assert.deepEqual(asc, ["small", "big"]);
+  const desc = refSortEntries(entries, { by: "size", dir: "desc" }).map((e) => e.id);
+  assert.deepEqual(desc, ["big", "small"]);
+});
+
+test("refStats 总体积：与体量列同口径（实体 + 索引合计）", () => {
+  const st = refStats([
+    { platform: "any", anchor_kind: "none", size_bytes: 100, index_bytes: 900 },
+    { platform: "any", anchor_kind: "none", size_bytes: 50, index_bytes: 0 },
+  ]);
+  assert.equal(st.totalBytes, 1050);
+});
+
+test("refRowHTML 体量列：索引条目渲染合计体积与索引标注", () => {
+  const row = refRowHTML(
+    { id: "e1", title: "t", type: "开发板资料", description: "d", anchor_kind: "none",
+      anchor_value: "", platform: "any", files: ["素材清单.txt"], file_count: 2,
+      size_bytes: 3317, index_count: 13, index_bytes: 83856360 },
+    {}
+  );
+  assert.match(row, /另含 13 个索引素材/);
+});
+
+
