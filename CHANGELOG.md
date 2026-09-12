@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=3a57e2f0b7fc7a0230e6f890dede866961f03123 -->
+<!-- changelog-auto: last-commit=78e13fa1941f448f30523f293053d59cc4cc7c7d -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -47,6 +47,7 @@
 - 20:49 fix(参考库): 无线串口模块资料条目补齐镜像件——21 条清单可逐个打开，删桌面副本不再断链
 - 21:38 feat(模块库): 磁力计双件入库（hmc5883l + qmc5883l，双平台，编译矩阵四组全通过）
 - 21:42 chore(模块库): 磁力计批次编译产物移出版本库 + 补 .gitignore
+- 21:42 chore(模块库): 磁力计批次四份编译日志留档（verified 翻牌证据，显式入索引）
 
 ## 2026-09-11
 - 09:29 ﻿fix: 推荐域拒绝不再被吞成通用话术——kind=domain 分流 + 带理由重试一次（工单 real-acceptance/03）
