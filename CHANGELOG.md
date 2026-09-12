@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=bc794b8ba2cd412ed449fd0407ab267ba9996d14 -->
+<!-- changelog-auto: last-commit=f4d161c6e4385a8f9ddda66a18017792cfe5a66a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -54,6 +54,7 @@
 - 22:45 feat(完整包): 更新器全量模式与应用编排——分卷整体预检 + 覆盖 + 资料库基线写回（工单 full-download/04）
 - 22:53 feat(完整包): 设置页完整包下载窗口与双轨入口——无基线直接一键全量（工单 full-download/05）
 - 23:01 feat(完整包): 端到端演练与文档收口——修掉删除清单未进清单 JSON 的真缺陷（工单 full-download/06）
+- 23:05 chore(完整包): 工单记录数字与最终回归基线对齐（pytest 4309 passed）
 
 ## 2026-09-11
 - 09:29 ﻿fix: 推荐域拒绝不再被吞成通用话术——kind=domain 分流 + 带理由重试一次（工单 real-acceptance/03）
