@@ -48,7 +48,6 @@
 - 21:38 feat(模块库): 磁力计双件入库（hmc5883l + qmc5883l，双平台，编译矩阵四组全通过）
 - 21:42 chore(模块库): 磁力计批次编译产物移出版本库 + 补 .gitignore
 - 21:42 chore(模块库): 磁力计批次四份编译日志留档（verified 翻牌证据，显式入索引）
-- 22:36 ﻿feat(完整包): 一键全量下载的发布侧落地——完整包打包核心 + pack-full 脚本（工单 full-download/01）
 - 22:36 feat(完整包): 一键全量下载的发布侧落地——完整包打包核心 + pack-full 脚本（工单 full-download/01）
 - 22:38 feat(完整包): 检查更新端点 /api/update/full/check——双轨判定与中文降级（工单 full-download/02）
 
