@@ -34,6 +34,8 @@ import re
 import subprocess
 from pathlib import Path
 
+from .tool_root import find_tool_root
+
 # 严格日期：行首行尾锚定，防说明文字里的 `## ` 小节（或残缺日期）误判
 _GROUP_RE = re.compile(r"^## (\d{4}-\d{2}-\d{2})$")
 # 条目：可选 `HH:MM ` 时间前缀（`- ` 后必须是时间 + 空格，否则整段当文本）
@@ -448,6 +450,8 @@ def _run_git(
 
 
 if __name__ == "__main__":
-    _root = Path(__file__).resolve().parents[2]
+    # 工具根判定单源（工单 full-download/09）：此前按 parents[2] 推，源码直跑
+    # 时会算成 <根>/src，CHANGELOG 被写到错位置。
+    _root = find_tool_root(__file__)
     _changed = update_changelog(_root / "CHANGELOG.md", _root)
     print("CHANGELOG updated" if _changed else "CHANGELOG up-to-date")

@@ -62,12 +62,14 @@ class UpdateOptions:
     # 完整包模式（工单 full-download/04）：多分卷 + 完整包清单（清单里带
     # 资料库基线清单，落位时写回 sources/materials/.materials-manifest.json）。
     # `full_parts` 空 = 按清单 `parts` 顺序在下载目录里找（分卷乱序也无妨）。
+    # `full_manifest_location` 是**字符串**（本地路径或 http(s) URL）——URL 绝
+    # 不能进 Path（Windows 上 `//` 会被折叠成 `\`，见 load_full_manifest 注释）。
     full_parts: list[str] = field(default_factory=list)
-    full_manifest_path: Path | None = None
+    full_manifest_location: str = ""
 
     @property
     def is_full_mode(self) -> bool:
-        return self.full_manifest_path is not None or bool(self.full_parts)
+        return bool(self.full_manifest_location) or bool(self.full_parts)
 
     @property
     def updates_dir(self) -> Path:
@@ -323,28 +325,33 @@ def version_of(zip_path: Path) -> str:
 # ---------------------------------------------------------------------------
 
 
-def load_full_manifest(path: Path) -> dict[str, Any]:
+def load_full_manifest(location: str) -> dict[str, Any]:
     """读完整包清单：本地路径或 http(s) URL（容忍 UTF-8 BOM；结构不对抛错）。
 
     走 URL 的理由：完整包清单带全部文件清单（几 MB 级），让浏览器先下再回传
     纯属浪费——更新器自己拉一次即可。
+
+    **入参必须是 str，绝不能是 Path**：Windows 上 `Path("https://a/b")` 会把
+    `//` 折叠成 `\\`（实测 Python 3.14：得到 `https:\\a\\b`），于是
+    `startswith("https://")` 判 false、走本地路径分支失败（真机演练实测
+    `[Errno 22] Invalid argument: 'https:\\\\github.com\\...'`）。
     """
-    location = str(path)
+    text_holder: dict[str, Any] = {}
     try:
         if location.startswith(("http://", "https://")):
             request = urllib.request.Request(
                 location, headers={"User-Agent": "firstep-updater"}
             )
             with urllib.request.urlopen(request, timeout=120) as response:
-                text = response.read().decode("utf-8-sig")
+                text_holder["text"] = response.read().decode("utf-8-sig")
         else:
-            text = Path(location).read_text(encoding="utf-8-sig")
+            text_holder["text"] = Path(location).read_text(encoding="utf-8-sig")
     except FileNotFoundError as exc:
         raise UpdateError(f"完整包清单不存在：{location}") from exc
     except Exception as exc:
         raise UpdateError(f"完整包清单获取失败：{exc}") from exc
     try:
-        data = json.loads(text)
+        data = json.loads(text_holder["text"])
     except Exception as exc:
         raise UpdateError(f"完整包清单解析失败：{exc}") from exc
     if not isinstance(data, dict):
@@ -453,8 +460,8 @@ def run_update(opts: UpdateOptions) -> int:
         parts: list[Path] = []
         members_per_part: list[list[zipfile.ZipInfo]] = []
         if opts.is_full_mode:
-            if opts.full_manifest_path is not None:
-                full_manifest = load_full_manifest(opts.full_manifest_path)
+            if opts.full_manifest_location:
+                full_manifest = load_full_manifest(opts.full_manifest_location)
             parts = full_zip_paths(opts, full_manifest)
             # 全部卷整体预检（zip slip / 绝对路径 / 盘符 → 整体拒绝，写盘之前）
             members_per_part = validate_all_parts(parts, root)
@@ -593,8 +600,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_option(
         "--full-manifest",
         dest="full_manifest",
-        metavar="PATH",
-        help="完整包清单路径（给了即走完整包模式：多分卷 + 资料库基线写回）",
+        metavar="PATH_OR_URL",
+        help="完整包清单（本地路径或 http(s) URL；给了即走完整包模式：多分卷 + 资料库基线写回）",
     )
     parser.add_option(
         "--part",
@@ -619,9 +626,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         restart=not options.no_restart,
         check_deps=not options.skip_pip,
         full_parts=list(options.parts or []),
-        full_manifest_path=(
-            Path(options.full_manifest) if options.full_manifest else None
-        ),
+        full_manifest_location=str(options.full_manifest or ""),
     )
     return run_update(opts)
 

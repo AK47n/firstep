@@ -20,4 +20,7 @@ contest-generator = "contest_generator.webapp:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# 测试与生产同一种导入方式（源码直跑，import 自 src/）——真机演练实测：源码
+# 直跑时 `webapp.tool_root()` 曾把工具根算成 src/，更新器被拼成
+# src/tools/update-app.py 而秒退（被 tool_root 的「哪一层像工具根」判定修掉）。
 pythonpath = ["src"]

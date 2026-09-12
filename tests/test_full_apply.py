@@ -44,6 +44,14 @@ def _ready_parts(tmp_path: Path, names: list[str]) -> list[dict]:
     return parts
 
 
+def _fake_tool_root(tmp_path: Path) -> Path:
+    """假工具根：必须带 tools/update-app.py（拉起前预检要求它存在）。"""
+    root = tmp_path / "tool"
+    (root / "tools").mkdir(parents=True, exist_ok=True)
+    (root / "tools" / "update-app.py").write_text("# 假更新器\n", encoding="utf-8")
+    return root
+
+
 def _spy_spawn(calls: list[tuple[list[str], Path, Path]]):
     def spawn(command, cwd, log_path):
         calls.append((list(command), Path(cwd), Path(log_path)))
@@ -80,7 +88,7 @@ def test_apply_writes_pending_marker_and_spawns(tmp_path: Path) -> None:
     result = apply_full_package(
         parts=parts,
         updates_dir=tmp_path / "updates",
-        tool_root=tmp_path / "tool",
+        tool_root=_fake_tool_root(tmp_path),
         version="v1.1.0",
         manifest_url="https://example.com/manifest.json",
         spawn=_spy_spawn(calls),
@@ -106,7 +114,7 @@ def test_apply_rejects_missing_manifest_url(tmp_path: Path) -> None:
     result = apply_full_package(
         parts=parts,
         updates_dir=tmp_path / "updates",
-        tool_root=tmp_path / "tool",
+        tool_root=_fake_tool_root(tmp_path),
         manifest_url="",
         spawn=_spy_spawn(calls),
     )
@@ -121,7 +129,7 @@ def test_apply_rejects_missing_part_file(tmp_path: Path) -> None:
     result = apply_full_package(
         parts=[{"name": "gone.zip", "path": str(tmp_path / "gone.zip")}],
         updates_dir=tmp_path / "updates",
-        tool_root=tmp_path / "tool",
+        tool_root=_fake_tool_root(tmp_path),
         manifest_url="https://example.com/m.json",
         spawn=_spy_spawn(calls),
     )
@@ -139,7 +147,7 @@ def test_apply_reports_spawn_failure(tmp_path: Path) -> None:
     result = apply_full_package(
         parts=parts,
         updates_dir=tmp_path / "updates",
-        tool_root=tmp_path / "tool",
+        tool_root=_fake_tool_root(tmp_path),
         version="v1.1.0",
         manifest_url="https://example.com/m.json",
         spawn=boom,

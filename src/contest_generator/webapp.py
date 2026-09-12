@@ -285,6 +285,7 @@ from .topic_library import (
     update_topic,
 )
 from .update import check_for_update
+from .tool_root import find_tool_root
 from .wordlist import DEFAULT_WORDLIST
 from .materials_update import (
     check_for_materials_update,
@@ -325,8 +326,15 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 
 def tool_root() -> Path:
-    """工具根目录（webapp.py 位于 src/contest_generator/ 下）。"""
-    return Path(__file__).resolve().parent.parent
+    """工具根目录（含 `tools/update-app.py` 与启动脚本的那一层）。
+
+    判定单源在 `tool_root.find_tool_root`（工单 full-download/09）：**不能只按
+    `parent.parent` 推**——源码直跑（`start-app.bat` 就是这么起的，`PYTHONPATH=src`）
+    时 webapp.py 位于 `<根>/src/contest_generator/`，`parent.parent` = `<根>/src`，
+    更新器会被拼成 `<根>/src/tools/update-app.py` 而秒退（真机演练实测：下载
+    783 MB 后什么都没替换，编排还误报成功）。
+    """
+    return find_tool_root(__file__)
 
 
 def download_to(url: str, dest: Path, timeout: float = 300.0) -> str:
@@ -5321,7 +5329,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         展示数据损坏阻塞工具——不走"大声失败"。
         """
         return {
-            "releases": load_versions(Path(__file__).resolve().parents[2] / "VERSIONS.md")
+            "releases": load_versions(find_tool_root(__file__) / "VERSIONS.md")
         }
 
     # ------------------------------------------------------------------

@@ -24,11 +24,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
+from .tool_root import find_tool_root
+
 WORDLIST_PATH = Path(__file__).parent / "wordlist.json"
 
 # 源码树模块库（与词表同仓同 commit 分发）：词表引用校验的锚点。仓库开发
 # 环境存在 → 加载即校验；pip/无源码树部署不存在 → 跳过（None = 不校验）。
-_SOURCE_MODULES_DIR = Path(__file__).resolve().parents[2] / "library" / "modules"
+# 工具根判定单源（工单 full-download/09）：此前按 parents[2] 推，源码直跑
+# （PYTHONPATH=src）时会算成 <根>/src/library/modules 而校验静默失效。
+_SOURCE_MODULES_DIR = find_tool_root(__file__) / "library" / "modules"
 
 
 class WordlistError(ValueError):

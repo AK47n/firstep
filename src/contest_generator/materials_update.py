@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .materials_pack import MANIFEST_FILENAME
+from .tool_root import find_tool_root
 from .update import compare_versions
 
 GITHUB_API_BASE = "https://api.github.com"
@@ -77,10 +78,12 @@ def _fetch_text(url: str) -> str:
 def materials_library_dir() -> Path:
     """资料库根目录（工具根下 sources/materials；随工具走）。
 
-    工具根 = 本文件上级的上级（src/contest_generator/ → 仓库根），不依赖
-    webapp（避免循环导入）；webapp 同口径的函数是 webapp.tool_root()。
+    工具根判定单源 = `tool_root.find_tool_root`（工单 full-download/09）：此前
+    按「本文件上级的上级」推，源码直跑时算成 `<根>/src/sources/materials`，
+    于是**本地已有基线也会被判 `baseline-missing`**（真机演练实测）。不依赖
+    webapp（同一个单源模块，避免循环导入）。
     """
-    return Path(__file__).resolve().parent.parent / "sources" / "materials"
+    return find_tool_root(__file__) / "sources" / "materials"
 
 
 # ---------------------------------------------------------------------------

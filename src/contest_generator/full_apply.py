@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -35,6 +36,23 @@ class FullApplyResult:
     message: str = ""
 
 
+def resolve_launcher_port(default: int = 8000) -> int:
+    """要停的服务端口：读 `FIRSTEP_LAUNCHER_PORT`（与启动器/服务端同源口径）。
+
+    为什么必须显式传：更新器默认端口是 8000，而**同机上可能有另一个实例**
+    （验收实例 / 沙箱 / 用户另起的端口）。不传就会去停 8000 上的那个——真机
+    演练实测：沙箱的更新器把用户在 8000 上正在用的实例停掉了。
+
+    取值校验与 `webapp.resolve_port` 同口径：只认 1..65535 的纯数字，非法回落默认。
+    """
+    raw = os.environ.get("FIRSTEP_LAUNCHER_PORT", "").strip()
+    if raw.isdigit():
+        port = int(raw)
+        if 1 <= port <= 65535:
+            return port
+    return default
+
+
 def _python_for(root: Path) -> str:
     """解释器：`.venv\\Scripts\\python.exe` 优先、当前解释器兜底。"""
     venv = root / ".venv" / "Scripts" / "python.exe"
@@ -49,7 +67,11 @@ def build_updater_command(
     parts: Sequence[Path],
     port: int,
 ) -> list[str]:
-    """更新器命令行：完整包模式（--full-manifest + 逐个 --part）。"""
+    r"""更新器命令行：完整包模式（--full-manifest + 逐个 --part）。
+
+    `manifest_location` 原样透传（URL 或本地路径）——**不要包成 Path**：Windows
+    上 `Path("https://a/b")` 会把 `//` 折叠成 `\`，更新器就再也认不出 URL。
+    """
     updater = root / "tools" / "update-app.py"
     command = [
         python,
@@ -95,7 +117,7 @@ def apply_full_package(
     tool_root: Path,
     version: str = "",
     manifest_url: str = "",
-    port: int = 8000,
+    port: int | None = None,
     python: str | None = None,
     spawn: Callable[[Sequence[str], Path, Path], int] = default_spawn,
 ) -> FullApplyResult:
@@ -138,12 +160,23 @@ def apply_full_package(
     )
 
     log_path = updates_dir / LOG_FILENAME
+    updater_script = tool_root / "tools" / "update-app.py"
+    if not updater_script.is_file():
+        # 拉起前预检：路径拼错时「起得来做不了事」最坑——子进程会秒退，而编排
+        # 只看到「进程起来了」就报成功（真机演练实测：下载 783 MB 后什么都没替换）。
+        return FullApplyResult(
+            ok=False,
+            version=version,
+            log_path=str(log_path),
+            message=f"更新器脚本不存在：{updater_script}（工具根判定可能有误）",
+        )
+    resolved_port = resolve_launcher_port() if port is None else port
     command = build_updater_command(
         root=tool_root,
         python=python or _python_for(tool_root),
         manifest_location=manifest_url,
         parts=part_paths,
-        port=port,
+        port=resolved_port,
     )
     try:
         spawn(command, tool_root, log_path)
@@ -161,8 +194,8 @@ def apply_full_package(
         command=command,
         log_path=str(log_path),
         message=(
-            f"已开始应用完整包 {version or ''}（{len(part_paths)} 卷）："
-            "工具将自动停止并重启"
+            f"已开始应用完整包 {version or ''}（{len(part_paths)} 卷，"
+            f"停服端口 {resolved_port}）：工具将自动停止并重启"
         ).replace("  ", " "),
     )
 

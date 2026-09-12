@@ -96,7 +96,7 @@ def _options(root: Path, data: Path, parts: list[Path], manifest: Path):
         restart=False,
         check_deps=False,
         full_parts=[str(p) for p in parts],
-        full_manifest_path=manifest,
+        full_manifest_location=str(manifest),
         log=updater.logging.getLogger("test-full"),
     )
 
@@ -296,7 +296,7 @@ def test_parts_from_manifest_used_when_not_given(tmp_path: Path) -> None:
         stop=False,
         restart=False,
         check_deps=False,
-        full_manifest_path=manifest,
+        full_manifest_location=str(manifest),
         log=updater.logging.getLogger("test-order"),
     )
     assert updater.run_update(opts) == 0
@@ -332,5 +332,64 @@ def test_cli_accepts_full_options(tmp_path: Path, monkeypatch) -> None:
     )
     assert code == 0
     opts = captured["opts"]
-    assert opts.full_manifest_path == manifest
+    assert opts.full_manifest_location == str(manifest)
     assert opts.full_parts == []
+
+
+def test_full_manifest_url_is_not_mangled(tmp_path: Path, monkeypatch) -> None:
+    """URL 形式的清单地址必须原样送达更新器（回归：[Errno 22] 正斜杠变反斜杠）。
+
+    Python 3.14 + Windows 上 `Path("https://a/b")` 会把 `//` 折叠成 `\\`，
+    更新器于是认不出 URL、按本地路径打开而报 `[Errno 22] Invalid argument`。
+    """
+    url = (
+        "https://github.com/AK47n/firstep/releases/download/v1.1.0/"
+        "firstep-full-v1.1.0.manifest.json"
+    )
+    captured: dict[str, object] = {}
+
+    def fake_run(opts):
+        captured["opts"] = opts
+        return 0
+
+    monkeypatch.setattr(updater, "run_update", fake_run)
+    code = updater.main(
+        ["--zip", "x.zip", "--full-manifest", url, "--no-stop", "--no-restart", "--skip-pip"]
+    )
+    assert code == 0
+    opts = captured["opts"]
+    assert opts.full_manifest_location == url
+    assert "https://" in opts.full_manifest_location
+    assert "\\" not in opts.full_manifest_location
+
+
+def test_load_full_manifest_detects_url_before_path(tmp_path: Path, monkeypatch) -> None:
+    """load_full_manifest 收到 URL 时走网络分支（不落本地路径分支）。"""
+    url = "https://example.com/firstep-full-v1.1.0.manifest.json"
+    seen: list[str] = []
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return b'{"version": "v1.1.0", "parts": [], "files": []}'
+
+    def fake_urlopen(request, timeout=0):
+        seen.append(request.full_url if hasattr(request, "full_url") else str(request))
+        return FakeResponse()
+
+    monkeypatch.setattr(updater.urllib.request, "urlopen", fake_urlopen)
+    data = updater.load_full_manifest(url)
+    assert data["version"] == "v1.1.0"
+    assert seen == [url], f"传给 urlopen 的地址被改坏：{seen}"
+
+
+def test_load_full_manifest_rejects_broken_url(tmp_path: Path) -> None:
+    """反斜杠形态的 URL（被 Path 折叠过的样子）→ 大声报错，不静默读本地。"""
+    broken = "https:\\\\github.com\\AK47n\\x.json"
+    with pytest.raises(updater.UpdateError):
+        updater.load_full_manifest(broken)
