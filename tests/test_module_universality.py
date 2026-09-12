@@ -139,15 +139,32 @@ def _real_manifests() -> list[ModuleManifest]:
 def test_exclusive_groups_aggregate_on_the_real_library():
     """真库功能组声明聚合正确（防回退，工单 recommend-exclusive-groups/01）。
 
-    冒烟基准（2026-09-12 更新）：gray-track = huidu/pid/xunji（8 路灰度传感器驱动），
+    冒烟基准（2026-09-13 更新，工单 exclusive-group-gap-audit/01 全库排查同功能件）：
+    gray-track = huidu/pid/xunji（8 路灰度传感器驱动），
     attitude-hold = imu_uart/jy61p/ml_mpu6050（航向保持 / 姿态传感器——三者是同一功能的
     三种硬件，用户报告「已选姿态传感器，需求句里又出现另一个姿态件」后补入 jy61p）；
     同 id label 不一致会在 collect 时抛 ManifestError（本测试能通过 = 声明一致）；
-    stm32 平台两组均只剩 1 成员（pid / ml_mpu6050 双平台）→ 单成员组剔除 → 输出空。
+    本轮全库排查再补四组（每组都有库内文字 + 默认脚证据，见
+    .scratch/exclusive-group-gap-audit/audit.md）：
+    display = lcd/oled/max7219/ili9341/ili9488/st7789_para（显示 / 屏幕——「显示族互替
+    同脚，一次选一块屏」）、distance = us016/ir_distance/vl53l0x/sr04（距离测量 / 测距
+    传感器——「与 ir_distance 互替件同脚」）、barometer = bmp180/ms5611（气压 / 海拔
+    传感器——stm32 侧同址 0xEE 不可同挂）、sound-prompt = beep/jq8900（提示输出 / 声
+    ——「语音播报与蜂鸣器为提示输出互替」）。
+    平台投影：mspm0 侧七组完整（neo_6m 之类单平台件不进组）；stm32 侧
+    gray-track（仅 pid）与 attitude-hold（仅 ml_mpu6050）单成员 → 剔除。
     """
     manifests = _real_manifests()
     groups = collect_exclusive_groups(manifests)
-    assert {g.id for g in groups} == {"gray-track", "attitude-hold", "zigbee-rx"}
+    assert {g.id for g in groups} == {
+        "gray-track",
+        "attitude-hold",
+        "zigbee-rx",
+        "display",
+        "distance",
+        "barometer",
+        "sound-prompt",
+    }
     by_id = {g.id: g for g in groups}
     assert by_id["gray-track"].label == "8 路灰度传感器驱动"
     assert [m.slug for m in by_id["gray-track"].members] == ["huidu", "pid", "xunji"]
@@ -165,11 +182,44 @@ def test_exclusive_groups_aggregate_on_the_real_library():
         "zigbee_link": "任意字节帧收发（双机/双车无线数据通信）",
         "zigbee_uart": "固定 DIP-4 ID 帧接收（身份识别/信标上报，与 zigbee_uart_key 配对）",
     }
-    # mspm0 侧三组完整；stm32 侧 gray/attitude 两组单成员 → 剔除，zigbee-rx 保留
+    # 本轮新增四组：成员清单按库登记序（模块目录字典序）
+    assert by_id["display"].label == "显示 / 屏幕"
+    assert [m.slug for m in by_id["display"].members] == [
+        "ili9341",
+        "ili9488",
+        "lcd",
+        "max7219",
+        "oled",
+        "st7789_para",
+    ]
+    assert by_id["distance"].label == "距离测量 / 测距传感器"
+    assert [m.slug for m in by_id["distance"].members] == [
+        "ir_distance",
+        "sr04",
+        "us016",
+        "vl53l0x",
+    ]
+    assert by_id["barometer"].label == "气压 / 海拔传感器"
+    assert [m.slug for m in by_id["barometer"].members] == ["bmp180", "ms5611"]
+    assert by_id["sound-prompt"].label == "提示输出 / 声"
+    assert [m.slug for m in by_id["sound-prompt"].members] == ["beep", "jq8900"]
+    # mspm0 侧七组完整；stm32 侧 gray/attitude 两组单成员 → 剔除
     msp_groups = collect_exclusive_groups(manifests, platform="mspm0")
-    assert {g.id for g in msp_groups} == {"gray-track", "attitude-hold", "zigbee-rx"}
+    assert {g.id for g in msp_groups} == {
+        "gray-track",
+        "attitude-hold",
+        "zigbee-rx",
+        "display",
+        "distance",
+        "barometer",
+        "sound-prompt",
+    }
     assert [g.id for g in collect_exclusive_groups(manifests, platform="stm32")] == [
-        "zigbee-rx"
+        "sound-prompt",
+        "barometer",
+        "display",
+        "distance",
+        "zigbee-rx",
     ]
 
 
