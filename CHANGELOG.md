@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=165665e565871f0431de4b90fbea2c9059c5baba -->
+<!-- changelog-auto: last-commit=3e190db3353b1686f687fa08668399164f7e9569 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -12,6 +12,7 @@
 - 10:53 fix(推荐): 功能组卡改为「必须由用户显式选择」——不预选、提示「请选择」、未选卡住生成（工单 group-choice-required/01）
 - 10:53 fix(推荐): 换选后需求句灰注照实说「已由 <组> 的 <选中件> 替代」（工单 group-choice-required/01 补）
 - 11:03 fix(推荐): 功能组显式选择的评审整改——点选 ReferenceError、hint 卡漏件、判据漂移、跨语言镜像守卫（工单 group-choice-required/01）
+- 11:22 fix(推荐): 功能组「必须选择」口径落定 + 真浏览器冒烟 23/23（工单 group-choice-required/01）
 
 ## 2026-09-11
 - 09:29 ﻿fix: 推荐域拒绝不再被吞成通用话术——kind=domain 分流 + 带理由重试一次（工单 real-acceptance/03）
