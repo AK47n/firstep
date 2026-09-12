@@ -289,11 +289,13 @@ def build_full_manifest(
     files: Sequence[PartFile],
     tree: Path,
     parts: Sequence[dict[str, Any]] = (),
+    removed: Sequence[str] = (),
 ) -> dict[str, Any]:
     """构建完整包清单（纯函数，除资料库扫描外无 I/O）。
 
     `total_bytes` = 包内文件原始大小合计（下载前估算用）；`parts` 由
-    `build_zip_volumes` 回填（调用方传入）。
+    `build_zip_volumes` 回填；`removed` = 相对上一版完整包被删除的文件
+    （更新器按它清理废弃文件，故必须进清单——`removed.txt` 只是人工副本）。
     """
     materials_root = Path(tree) / "sources" / "materials"
     register_materials_dirs(materials_root)
@@ -303,6 +305,7 @@ def build_full_manifest(
         "published_at": published_at,
         "total_bytes": sum(f.size for f in files),
         "parts": [dict(p) for p in parts],
+        "removed": [str(p) for p in removed],
         MATERIALS_MANIFEST_KEY: materials,
         "files": [f.to_dict() for f in files],
     }
@@ -417,6 +420,15 @@ def prepare_full_package(
     if not files:
         raise ValueError("扫描结果为空——顶层白名单或排除规则可能写错了")
 
+    current_paths = [f.path for f in files]
+    current_set = set(current_paths)
+    if baseline_path is not None:
+        removed = [
+            p for p in _load_baseline_files(Path(baseline_path)) if p not in current_set
+        ]
+    else:
+        removed = []
+
     meta, written = build_zip_volumes(tree, version, files, out_dir, limit)
     manifest = build_full_manifest(
         version=version,
@@ -424,17 +436,14 @@ def prepare_full_package(
         files=files,
         tree=tree,
         parts=meta,
+        removed=removed,
     )
-
+    # 删除清单必须**同时进清单 JSON**：更新器只读清单（它按 URL 拉清单，
+    # 不下载 .removed.txt），漏写会让「废弃文件清理」静默不执行。
     (out_dir / full_manifest_filename(version)).write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-
-    current_paths = [f.path for f in files]
-    if baseline_path is not None:
-        removed = [p for p in _load_baseline_files(Path(baseline_path)) if p not in set(current_paths)]
-    else:
-        removed = []
+    # 同时落一份纯文本（人工核对 / 与既有小发版 removed.txt 形态一致）
     (out_dir / f"{full_zip_base(version)}.removed.txt").write_text(
         "\n".join(removed) + ("\n" if removed else ""), encoding="utf-8"
     )

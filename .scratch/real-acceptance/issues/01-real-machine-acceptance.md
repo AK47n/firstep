@@ -445,6 +445,24 @@ SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_ru
 - [ ] **F3 `pin-verdict-seam/02`（deferred）**：已裁决不做（前端镜像与后端 `resolve_bindings` 当前同口径），
   仅在未来真有矩阵改动时作 prefactoring 前置——**非待办**。
 
+## G. 完整包（一键全量下载）真机发布演练（1 项）
+
+- [ ] **G1 来源 `full-download/07`**：在**真实 Release** 上发一次完整包并走通全链路。
+  怎么验（发布者）：
+  1. `powershell -File tools\pack-full.ps1 -Tag vX.Y.Z -Baseline <上版 firstep-full-*.manifest.json>`
+     → 核对体积与卷数（本机实测包内 8764 文件 / 原始 1.07 GB、zip 后约 1.0 GB / 1~2 卷）；
+  2. `gh release upload vX.Y.Z firstep-full-vX.Y.Z*.* --repo AK47n/firstep` → `gh release view` 确认清单资产在场；
+  3. 无基线环境（删掉 `sources/materials/.materials-manifest.json`）→「设置 → 完整包下载」→ 检查 → 下载
+     → 自动替换重启；
+  4. 核对：工具可启动、DeepSeek key / 任务状态 / 对话记录 / 已生成工程原样、资料库内容齐全、
+     **那批第三方安装包未被误删**；再次检查资料库更新已能算增量（基线已随包写回）；
+  5. 弱网：中途取消 / 断网重试 → 已校验的卷不重下；失败演练：改一个卷制造校验失败 → 中文错误 + 备份位置提示、旧版本仍可用。
+  已就位（代码侧）：`tools/pack-full.ps1`、四端点、更新器全量模式、前端窗口；本机 e2e
+  `.scratch/full-download/e2e_full_download.py`（7 步全通过）+ 浏览器冒烟
+  `.scratch/full-download/smoke-full-update.mjs`（9/9 PASS，截图 `shot-full-update-window-dark.png`）；
+  全量 pytest 4269 passed / JS 1550 pass。
+  缺的只是「真的发一次 Release」这一步（需要上传约 1 GB 资产）。
+
 ## 收尾约定
 
 - 本单每验完一项：勾选 + 在来源工单对应验收项补勾（来源工单不删本单指针）。

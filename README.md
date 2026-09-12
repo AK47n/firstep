@@ -9,9 +9,11 @@
 | 方式 | 内容包括 | 备注 |
 | --- | --- | --- |
 | **GitHub 克隆**（轻量，约 270 MB） | 生成器代码 + 模块库/母版库（`library/`）、文档 | `git clone https://github.com/AK47n/firstep.git` |
-| **完整包**（开箱即用，约 6 GB） | 上述全部 + `sources/materials` 电赛参考资料库（CCS 安装包、开发板手册、K230/视觉资料、真题、参考例程） | 从 [GitHub Releases](https://github.com/AK47n/firstep/releases) 下载 `firstep-full.7z.001~004` 四个分卷，全部下载后解压 `.001` 即可；需 [7-Zip](https://www.7-zip.org/) 或 Bandizip |
+| **完整包**（开箱即用，约 6 GB） | 上述全部 + `sources/materials` 电赛参考资料库（CCS 安装包、开发板手册、K230/视觉资料、真题、参考例程） | 从 [GitHub Releases](https://github.com/AK47n/firstep/releases) 下载 `firstep-full.7z.001~004` 四个分卷，全部下载后解压 `.001` 即可；需 [7-Zip](https://www.7-zip.org/) 或 Bandizip。**已装用户不必再走这条**：工具内「设置 → 完整包下载」可一键下完并自动替换 |
 
 > `sources/materials` 资料库内有大量超过 100 MB 的第三方安装包/固件镜像（GitHub 单文件上限 100 MB），**不入 git 仓库**，随完整包（Releases 附件）分发。只想跑工具本身（不用资料库）的话，克隆 GitHub 仓库即可。
+>
+> 这些第三方安装包（CCS / VSCode / 视觉 SDK 等）**不进「一键全量下载」的包**——它们几乎不变、只在装机时用一次，放进去等于让每次全量都多下 4.9 GB。已装用户本机那批文件原地保留。
 
 ## 版本与发布
 
@@ -20,6 +22,7 @@
 - **两级发布**：
   - **小发版**（代码 / 模块库 / 文档变更，不用重下 6 GB）：GitHub Releases 发布轻量更新包（几百 MB 以内），工具内「设置 → 软件更新」→「检查更新」→「一键更新」，自动完成下载 / 校验 / 替换 / 重启；DeepSeek key、任务状态与 6 GB 电赛资料库原样保留
   - **大发版**（`sources/materials` 资料库增删改）：GitHub Releases 发布**资料库增量包**（按批次分卷、只含新增/修改文件，tag `materials-vX.Y.Z`），工具内「设置 → 资料库更新」→「检查资料库更新」→ 弹窗勾选批次（可只下需要的）→ 下载（进度 / 断点续传）→ 自动解压落位备份，**不再需要下完整包**；首次无基线时提示走完整包
+  - **一键全量下载**（整份 firstep，约 1 GB，tag 与软件版本同号）：GitHub Releases 发布 `firstep-full-<tag>.zip`（超 1.9 GB 自动拆 `.part<N>.zip`）+ `.manifest.json`；工具内「设置 → 完整包下载」→「检查完整包」→「下载完整 firstep」→ 自动下载 / 校验 / 替换 / 重启。**适用**：修损坏、换机器、本地还没有资料库基线（无基线无法算增量）；完成后资料库基线一并写回，后续只收增量
 - `git clone` 用户不受影响：`git pull` 始终拿到最新代码，与更新包路线平级
 - 详细发版流程见 `docs/agents/releasing.md`（含打包命令与 gh 发布步骤）
 
@@ -67,9 +70,10 @@
 - **体检提示「模块库 / 母版未就绪」**：「设置」→「库目录」，把两项分别填到工具包根目录（含 `install.bat` 的文件夹，如 `C:\...\firstep`）下的 `library\modules` 与 `library\masters`；赛题库 / 参考文件库自动跟随（`library\topics`、`library\references`，与模块库同级）。
 - **怎么更新到新版**：打开工具 →「设置」→「软件更新」→「检查更新」→「一键更新」。完成后自动重启，配置与资料库不受影响；不用重下 6 GB 完整包。
 - **资料库（电赛资料）更新**：打开工具 →「设置」→「资料库更新」→「检查资料库更新」→ 弹窗勾选批次（默认全选，可只挑需要的）→「开始下载」，进度/速度/剩余时间实时显示，下载完成自动解压落位；失败或取消后重试，已完成部分不重复下载。
-- **更新失败怎么办**：更新会先把被覆盖的文件备份到 `%USERPROFILE%\.contest_generator\updates\backup\`（资料库更新备份在 `updates\materials-backup\`），失败后旧版本仍可用；到「设置 → 软件更新」重新点「一键更新」，或查看日志 `%USERPROFILE%\.contest_generator\updates\updater.log`。
+- **一键下载完整 firstep（约 1 GB）**：打开工具 →「设置」→「完整包下载」→「检查完整包」→「下载完整 firstep」。适合修损坏 / 换机器 / 本地还没资料库基线（检查资料库更新时若提示「版本未知」，那里的按钮也会直接带你走这条路）。下载完自动替换并重启，中途取消或关页面后重试只补没下完的卷。
+- **更新失败怎么办**：更新会先把被覆盖的文件备份到 `%USERPROFILE%\.contest_generator\updates\backup\`（资料库更新备份在 `updates\materials-backup\`），失败后旧版本仍可用；到「设置 → 软件更新」重新点「一键更新」，或查看日志 `%USERPROFILE%\.contest_generator\updates\updater.log`（完整包应用的进程日志在同目录 `full-apply.log`）。
 - **更新期间双击启动器提示「更新中」**：更新正在后台进行，完成后会自动打开浏览器，不要手动干预；若提示「上次更新未完成」，按提示重新检查更新即可。
-- **更新后配置 / 任务还在吗**：在。DeepSeek key、任务状态、对话记录都在工具目录外的 `%USERPROFILE%\.contest_generator\`，更新不碰；6 GB 电赛资料库也不在更新包内，原样保留。
+- **更新后配置 / 任务还在吗**：在。DeepSeek key、任务状态、对话记录都在工具目录外的 `%USERPROFILE%\.contest_generator\`，更新不碰；电赛资料库与那批第三方安装包也不在更新包内，原样保留。
 - **想停掉服务**：双击 `stop-firstep.bat`。
 
 ## 第三方素材来源与知识产权说明

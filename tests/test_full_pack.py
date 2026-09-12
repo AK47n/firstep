@@ -408,15 +408,23 @@ def test_prepare_full_package_removed_list_from_baseline(tmp_path: Path) -> None
     baseline_path.write_text(json.dumps(baseline, ensure_ascii=False), encoding="utf-8")
 
     out = tmp_path / "pack"
-    prepare_full_package(
+    manifest, _ = prepare_full_package(
         tree,
         version="v9.9.9",
         out_dir=out,
         published_at="",
         baseline_path=baseline_path,
     )
+    expected = ["docs/old-page.md", "sources/materials/gone/old.md"]
     removed = (out / "firstep-full-v9.9.9.removed.txt").read_text(encoding="utf-8").split()
-    assert removed == ["docs/old-page.md", "sources/materials/gone/old.md"]
+    assert removed == expected
+    # 删除清单必须同时进清单 JSON：更新器只读清单（按 URL 拉），不下载
+    # .removed.txt —— 漏写会让「废弃文件清理」静默不执行（真实缺陷回归）。
+    assert manifest["removed"] == expected
+    on_disk = json.loads(
+        (out / full_manifest_filename("v9.9.9")).read_text(encoding="utf-8")
+    )
+    assert on_disk["removed"] == expected
 
 
 def test_prepare_full_package_without_baseline_writes_empty_removed(tmp_path: Path) -> None:

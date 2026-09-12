@@ -3,6 +3,7 @@
 本文件定义 firstep 的版本号命名规则与发布流程。生成器**代码更新频繁**，而完整包（含电赛资料库 `sources/materials`）体积约 6.5 GB、重传成本高——因此发布拆成两级：
 
 > **小发版**（代码 / 库 / 文档变更）：发轻量更新包（单 zip，约 0.3 GB，4 件套），工具内置「检查更新 + 一键更新」自动完成替换，用户**不重下完整包**。
+> **完整包（一键全量，约 1.0 GB）**：`firstep-full-<tag>.zip`（超 1.9 GB 自动拆 `.part<N>`）+ 清单，工具内「设置 → 完整包下载」一键下载 + 自动替换重启；用于无基线 / 修损坏 / 换机器。**不含**装机用的第三方安装包与视觉 SDK（约省 4.9 GB）。
 > **大发版**（`sources/materials` 资料库增删改）：发**资料库增量包**（按批次 zip，只含新增 / 修改文件，工具内「资料库更新」一键下载应用）；完整包（6.2 GB、4 个 7z 分卷）仅作无基线 / 全新安装渠道，低频。
 
 `git clone` 用户不受影响：`git pull` 路线与小发版平级，始终拿到最新代码。
@@ -20,8 +21,9 @@
 ## 何时发 Release
 
 1. **小发版**：代码 / 模块库 / 母版库 / 赛题库 / 参考文件库（`sources` 下除 `materials` 的部分）/ 文档有变更 → 发更新包 4 件套（更新包机制见 `.scratch/auto-update/spec.md`）。
-2. **大发版**：`sources/materials` 资料库有增删改 → 打资料库增量包（见下文「大发版流程（资料库增量包）」），发 `materials-vX.Y.Z` tag + Release。
-3. 重大里程碑（首次公开、大版本切换）→ 即使资料无变化也可发完整包。
+2. **完整包（一键全量）**：想让用户能「一键下载整份 firstep」（换机器、修损坏、给尚无资料库基线的用户一条自动出路）→ 小发版四件套之外**再加发**完整包资产（见下文「完整包（zip 分卷）流程」）。资产小（约 1 GB / 1~2 卷），与小发版同 tag，可一起传。
+3. **大发版**：`sources/materials` 资料库有增删改 → 打资料库增量包（见下文「大发版流程（资料库增量包）」），发 `materials-vX.Y.Z` tag + Release。
+4. 重大里程碑（首次公开、大版本切换）→ 即使资料无变化也可发完整包。
 
 ## 发版前：三处版本号同步（必做）
 
@@ -51,6 +53,32 @@
 
 4. 校验：`gh release view v1.1.0 --repo AK47n/firstep` 或 GitHub API 确认 4 个附件齐全。
 5. 把本次 `firstep-update-v1.1.0.files.txt` 存好——下次小发版的 `-Baseline`。
+
+## 完整包（zip 分卷）流程（一键全量下载）
+
+> 机制见 `.scratch/full-download/spec.md`。**包内只有会变的内容**：工具本体 + 五个库 + `sources/contest`、`sources/car` + 资料库内容文件；第三方安装包与视觉 SDK 打包件（`*.exe` / `*.rar` / `*.img*` / `*CCS_20.5*` / `*tsp-xbhdcc*` 等，本机约 5.4 GB）、缓存、虚拟环境、本地备份目录都不进包。实测包内约 **8764 个文件 / 原始 1.07 GB**，zip 后约 1.0 GB、1~2 卷。
+
+1. 确认工作区干净（`git status`；脚本默认拒绝脏工作树，`-AllowDirty` 豁免）。
+2. 跑打包脚本（仓库根）：
+
+   ```powershell
+   powershell -File tools\pack-full.ps1 -Tag v1.1.0 -Baseline <上一版 firstep-full-*.manifest.json>
+   ```
+
+   - 产出四件套：`firstep-full-<tag>.zip`（或 `.part<N>.zip` 多卷）、`firstep-full-<tag>.manifest.json`（**含包内全部文件清单 + 资料库基线清单 + 删除清单**）、`firstep-full-<tag>.removed.txt`（人工核对副本）、`firstep-full-<tag>.sha256.txt`。
+   - 首次发布没有基线：省略 `-Baseline`（删除清单为空，更新器跳过删除）。
+   - 单卷上限默认 1900 MB（GitHub 单资产 2 GB 留余量），`-LimitMB` 可调。
+3. 上传到**当次软件版本 tag 的 Release**（与小发版四件套同一个 Release；附件一律 ASCII 文件名）：
+
+   ```powershell
+   gh release upload v1.1.0 firstep-full-v1.1.0.zip firstep-full-v1.1.0.manifest.json firstep-full-v1.1.0.removed.txt firstep-full-v1.1.0.sha256.txt --repo AK47n/firstep
+   ```
+
+4. 校验：`gh release view v1.1.0 --repo AK47n/firstep` 确认**完整包清单资产在场**——工具内「设置 → 完整包下载 → 检查完整包」靠它发现新版本；资产缺失时前端会明确提示「该版本的 Release 上没有完整包资产」。
+5. 把本版 `firstep-full-v1.1.0.manifest.json` 存好——下次完整包的 `-Baseline`。
+6. 用户侧效果：下载完成 → 自动替换重启 → 资料库基线随包写回（**无基线状态只出现一次**，之后检查资料库更新只收增量）。
+
+> 与 7z 完整包的关系：7z 路线**保留**（无基线 / 全新安装 / 需要那批第三方安装包时用），zip 完整包是「已装用户的一键全量」路线。两条并存，互不影响。
 
 ## 大发版流程（资料库增量包，`sources/materials` 变动时）
 
@@ -115,5 +143,6 @@ gh CLI 上传**中文文件名**会把附件名替换为 `default.txt`——解�
 ## 快速发版（给 Agent）
 
 - 小发版：`powershell -File tools\pack-update.ps1 -Tag vX.Y.Z -Baseline <上次 files.txt>`（几分钟），产物在输出目录（缺省 `%USERPROFILE%\Desktop\firstep-pack`）。
+- 完整包：`powershell -File tools\pack-full.ps1 -Tag vX.Y.Z -Baseline <上版 firstep-full-*.manifest.json>`（本机实测打包 ≤ 数分钟），产物同上；与小发版同 tag 一起上传。
 - 大发版：用上面 7zr 命令（store 模式几分钟）。
-- 上传 6.2 GB 附件视上行带宽需 20 分钟以上，用后台任务跑，别阻塞等待。
+- 上传 6.2 GB 附件视上行带宽需 20 分钟以上，用后台任务跑，别阻塞等待；完整包约 1 GB，可一并后台传。

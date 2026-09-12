@@ -177,6 +177,33 @@ def test_full_mode_skips_parts_not_present_in_package_content(tmp_path: Path) ->
     assert (root / "pyproject.toml").is_file()
 
 
+def test_full_mode_applies_removed_list_from_manifest(tmp_path: Path) -> None:
+    """删除清单来自**清单 JSON 的 removed**（发布侧真实产物形态）。
+
+    回归：发布侧曾只写 removed.txt、不写清单 removed，导致线上清理静默不执行。
+    """
+    root, data, downloads = _make_workspace(tmp_path)
+    part = _write_zip(downloads / "firstep-full-v1.1.0.zip", {"README.md": "# 新\n"})
+    manifest = _manifest([part], removed=["sources/materials/手册/a.md"])
+    assert json.loads(manifest.read_text(encoding="utf-8"))["removed"] == [
+        "sources/materials/手册/a.md"
+    ]
+    assert updater.run_update(_options(root, data, [part], manifest)) == 0
+    assert not (root / "sources" / "materials" / "手册" / "a.md").exists()
+
+
+def test_full_mode_without_removed_key_is_noop(tmp_path: Path) -> None:
+    """清单没有 removed 键（老资产）→ 跳过删除，不报错。"""
+    root, data, downloads = _make_workspace(tmp_path)
+    part = _write_zip(downloads / "firstep-full-v1.1.0.zip", {"README.md": "# 新\n"})
+    manifest = _manifest([part])
+    data_json = json.loads(manifest.read_text(encoding="utf-8"))
+    data_json.pop("removed", None)
+    manifest.write_text(json.dumps(data_json, ensure_ascii=False), encoding="utf-8")
+    assert updater.run_update(_options(root, data, [part], manifest)) == 0
+    assert (root / "sources" / "materials" / "手册" / "a.md").is_file()
+
+
 def test_full_mode_cleans_upstate_and_lock(tmp_path: Path) -> None:
     root, data, downloads = _make_workspace(tmp_path)
     part = _write_zip(downloads / "firstep-full-v1.1.0.zip", {"README.md": "# 新\n"})

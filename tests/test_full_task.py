@@ -300,7 +300,24 @@ def _seed_check(parts: list[dict[str, Any]]) -> None:
 
 
 def test_apply_rejects_unknown_part_name(tmp_path: Path, monkeypatch) -> None:
-    _seed_check(_parts(["firstep-full-v1.1.0.zip"]))
+    """未知分卷：先兜底自查一次（白名单可能过期）；自查后仍不匹配 → 400。
+
+    这里桩掉自查用的 check（否则会真打 GitHub），断言走的是「未知分卷」这条。
+    """
+    parts = _parts(["firstep-full-v1.1.0.zip"])
+    _seed_check(parts)
+    monkeypatch.setattr(
+        "contest_generator.webapp.check_for_full_update",
+        lambda installed: {
+            "latest_version": "v1.1.0",
+            "total_bytes": parts[0]["size"],
+            "parts": parts,
+            "error": "",
+            "message": "",
+            "manifest_url": "https://example.com/firstep-full-v1.1.0.manifest.json",
+        },
+    )
+    monkeypatch.setattr("contest_generator.webapp.free_bytes", lambda path: 10 * 1024**3)
     client = _client(tmp_path)
     resp = client.post("/api/update/full/apply", json={"parts": ["../evil.zip"]})
     assert resp.status_code == 400
@@ -381,6 +398,28 @@ def test_apply_starts_and_status_reports_progress(tmp_path: Path, monkeypatch) -
     assert status["parts"][0]["ok"] is True
     # 分卷文件落盘名 = 清单 zip_name（应用器按它找文件）
     assert (tmp_path / "updates" / "full" / parts[0]["name"]).is_file()
+
+
+def test_apply_dry_run_does_not_start_task_or_spawn(tmp_path: Path, monkeypatch) -> None:
+    """演练模式：真机冒烟用——不下载、不起进程、只回成功文案。"""
+    parts = _parts(["firstep-full-v1.1.0.zip"])
+    _seed_check(parts)
+    monkeypatch.setattr("contest_generator.webapp.free_bytes", lambda path: 10 * 1024**3)
+    spawned: list[str] = []
+    monkeypatch.setattr(
+        "contest_generator.full_task.download_part",
+        lambda url, dest, cb: spawned.append(url) or "",
+    )
+    client = _client(tmp_path)
+    resp = client.post(
+        "/api/update/full/apply", json={"parts": [parts[0]["name"]], "dry_run": True}
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["started"] is True and body["dry_run"] is True
+    assert "演练" in body["message"]
+    assert spawned == [], "演练不该真下载"
+    assert ft.get_full_task() is None, "演练不该登记任务"
 
 
 def test_status_idle_before_any_task(tmp_path: Path) -> None:
