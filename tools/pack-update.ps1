@@ -91,7 +91,7 @@ try {
     if (-not (Test-Path -LiteralPath $CorePath)) { throw "打包核心不存在：$CorePath" }
     # 以模块方式跑（PYTHONPATH=src + -m，与 pack-full.ps1 同款姿势）：直接
     # `python <脚本路径>` 会让核心里的相对导入 `from .full_pack import ...` 失败
-    # （2026-09-18 真机演练踩到）。
+    # （2026-09-13 真机演练踩到）。
     $env:PYTHONPATH = Join-Path $RepoRoot 'src'
     # 核心按 UTF-8 输出：否则中文摘要在已设为 UTF-8 的 PS 控制台上显示为乱码
     $env:PYTHONIOENCODING = 'utf-8'

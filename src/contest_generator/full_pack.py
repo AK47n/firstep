@@ -83,6 +83,7 @@ SKIP_DIR_NAMES: frozenset[str] = frozenset(
         "fix-backups",
         "revise-backups",
         ".trash-pdf",
+        ".trash-dedup",
     }
 )
 
