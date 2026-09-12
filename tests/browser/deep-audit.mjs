@@ -1,13 +1,27 @@
-﻿// 深挖审计（module-intro-detail 后续）：用真机 playwright 把先前只被"静态断言"和
-// "6 条验收用例"覆盖过的链路，往**边界/失败/收敛/无障碍/几何**方向再压一遍。
+// 深挖审计（真机 playwright）：把只被「静态断言 + 功能验收」覆盖过的链路，往
+// **边界 / 失败路径 / 中间帧时序 / 无障碍 / 几何**方向再压一遍。
 //
-// 与 tests/browser/module-intro.spec.mjs 的区别：那份是「功能对不对」的验收（6 条），
-// 这份是「还有哪里会塌」的审计——结论可以带红，红的地方就是待修的问题。
+// 与 tests/browser/module-intro.spec.mjs 的分工：那份是「功能对不对」的**验收**
+// （断言式，进 CI 口径）；这份是「还有哪里会塌」的**审计**（报告式，可以带红，
+// 红的地方就是待修的问题）。两者用同一套真机夹具（本目录 server.mjs）。
 //
-// 运行：node .scratch/module-intro-detail/playwright-deep-audit.mjs
-// 依赖：python 后端可起（tests/browser/server.mjs 夹具）、playwright chromium。
+// 运行：node tests/browser/deep-audit.mjs            ← 全部 7 节
+//       node tests/browser/deep-audit.mjs A C2 D     ← 只跑指定节（调试用）
+// 依赖：python 后端可起（server.mjs 夹具）、playwright chromium。
+// **不进** `node --test "tests/js/*.test.mjs"`：要起服务 + 开浏览器，改动推荐区 /
+// 说明弹窗 / 展开链路时手动跑。
+//
+// 分节：A 入口全扫 · B 弹窗自身（叠层/焦点/懒加载）· C 收敛压测（盯中间帧）·
+//       C2 单点时间线（请求体 / 响应时刻 / 帧三线对齐）· D 失败路径 · E 视口几何 ·
+//       F 键盘可达 · G 弹窗内容质量。
+//
+// ⚠ **写判据前先读这段**：本脚本第一版有两条「铁证」最后被证伪——判据本身把**正确行为**
+// 当成了 bug（把「已选（未展开依赖）：<当前选择>」这个合法占位读成「过期视图写回」）。
+// 宣称发现 bug 之前，**必须**：① 把嫌疑逻辑改回原实现形状，确认现象仍在；
+// ② 读一遍真正执行路径的源码，确认时序；③ 判据只描述「绝不该出现的事实」，
+// 不要描述「我以为应该出现却没出现」。
 import { chromium } from "playwright";
-import { startServer } from "../../tests/browser/server.mjs";
+import { startServer } from "./server.mjs";
 
 const RECOMMEND = {
   topic_id: "",

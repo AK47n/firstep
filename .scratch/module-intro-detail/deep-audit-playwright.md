@@ -1,9 +1,9 @@
-# 深挖审计：推荐/说明链路的真机复查（playwright）
+﻿# 深挖审计：推荐/说明链路的真机复查（playwright）
 
 **做法：** 用 playwright 驱动**真后端 + 真 /api/modules + 真渲染**，把先前只被
 「6 条验收用例」和「纯函数静态断言」覆盖过的链路，往**全入口扫描 / 失败路径 /
 收敛时序 / 无障碍 / 几何**方向再压一遍。脚本 =
-`.scratch/module-intro-detail/playwright-deep-audit.mjs`（可 `node ... A C2 D` 只跑某几节）。
+`tests/browser/deep-audit.mjs`（可 `node ... A C2 D` 只跑某几节）。
 
 **原始输出：** `audit-round3.txt`（全量）、`audit-round1.txt`（第一版，含两处脚本自身的误报）、
 `audit-round4-after-fix.txt`（修完工单 09 之后的重跑）、**`audit-round5-final.txt`

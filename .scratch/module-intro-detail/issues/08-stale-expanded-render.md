@@ -9,7 +9,7 @@
 
 ## 为什么当初以为它是 bug
 
-`playwright-deep-audit.mjs` 的 C2 节（单点一次 + expand 注入 700ms 延迟）打出这样一条
+`tests/browser/deep-audit.mjs` 的 C2 节（单点一次 + expand 注入 700ms 延迟）打出这样一条
 时间线，`FAIL` 判据当场报警「过期视图写回」：
 
 ```
