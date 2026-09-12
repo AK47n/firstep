@@ -54,12 +54,12 @@ test("已选：选中态跟着用户的选择走（含换到非推荐成员）",
   assert.doesNotMatch(html, /请选择/);
 });
 
-test("待选判据：命中卡算、hint 卡与旧载荷不算、单成员组不算", () => {
+test("待选判据：同组多件才算、hint 卡/旧载荷/单成员组/只剩一件都不算", () => {
   assert.equal(groupChoiceRequired(hit), true);
   assert.equal(groupChoiceRequired(hintCard), false);
   assert.equal(groupChoiceRequired(legacy), false);
   assert.equal(groupChoiceRequired(single), false);
-  const sel = ["imu_uart"];
+  const sel = ["imu_uart", "jy61p"];   // 同组两件都在（= 该由用户收敛成一个）
   assert.deepEqual(pendingGroupChoices([hit, hintCard, legacy, single], {}, sel).map((g) => g.id),
     ["attitude-hold"]);
   assert.deepEqual(pendingGroupChoices([hit, hintCard, legacy], { "attitude-hold": "imu_uart" }, sel), []);
@@ -68,9 +68,10 @@ test("待选判据：命中卡算、hint 卡与旧载荷不算、单成员组不
     ["attitude-hold"]);
   assert.deepEqual(pendingGroupChoices([hit], { "unknown-group": "imu_uart" }, sel).map((g) => g.id),
     ["attitude-hold"]);
-  // 组内一个成员都没进选中集（用户把模块删了 / hint 卡形态）→ 不拦（与后端条件②同口径）
-  assert.deepEqual(pendingGroupChoices([hit], {}, ["pid"]), []);
-  assert.deepEqual(pendingGroupChoices([hintCard], {}, ["pid"]).map((g) => g.id), []);
+  // 组内只留一件（AI 收敛后形态 / 用户已删掉另一个）→ 不拦：已经没有「另一个」可选
+  assert.deepEqual(pendingGroupChoices([hit], {}, ["imu_uart"]), []);
+  // 组一件都没进选中集（hint 卡形态）→ 不拦
+  assert.deepEqual(pendingGroupChoices([hit, hintCard], {}, ["pid"]), []);
 });
 
 test("点选即记账：recordGroupChoice 幂等、组外成员不认", () => {
@@ -122,13 +123,14 @@ test("需求句灰注：未选写「请选择」；换选后写「已由 <组> �
 });
 
 test("拦截图文案：带上组名，全选齐 = 空串（可以生成）", () => {
-  const sel = ["imu_uart"];
+  const sel = ["imu_uart", "jy61p"];
   const text = groupChoiceGapText([hit, hintCard], {}, sel);
   assert.match(text, /航向保持 \/ 姿态传感器/);
   assert.match(text, /还需要你选择一项/);
   assert.equal(groupChoiceGapText([hit, hintCard], { "attitude-hold": "imu_uart" }, sel), "");
   assert.equal(groupChoiceGapText([], {}, []), "");
   assert.equal(groupChoiceGapText([hit], {}, ["pid"]), "", "组没进选中集 = 不拦（与后端同口径）");
+  assert.equal(groupChoiceGapText([hit], {}, ["imu_uart"]), "", "组内只剩一件 = 不拦（AI 收敛后形态）");
 });
 
 test("renderableGroupCards：单成员组不出卡（与后端同判据）", () => {
