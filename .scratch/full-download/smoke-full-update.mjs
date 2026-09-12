@@ -1,5 +1,8 @@
 // smoke-full-update.mjs — 完整包下载窗口真机冒烟（工单 full-download/05）
 //
+// 沙箱端口 / 状态 / 使用注意见 `docs/agents/local-environment.md`。
+// 页面地址用 SMOKE_URL 覆盖（缺省 8000；冒烟常另起 8011/8020 实例避免打扰在用实例）。
+//
 // 真浏览器（CDP 9251 + webapp 8000）验证：
 //  1) 设置页出现「完整包下载」卡（检查按钮 + 说明）；
 //  2) 点「检查完整包」→ 真实打 /api/update/full/check（fetch 被桩成假的完整包

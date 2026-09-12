@@ -1,5 +1,8 @@
 """搭一个「模拟用户机」沙箱：瘦身但同构的 firstep 安装副本。
 
+**当前沙箱的状态与使用注意见 `docs/agents/local-environment.md`**（沙箱在哪、哪些是
+故意造假的、本机在跑哪些端口、main 与线上发布包的落差都记在那里——改完沙箱记得回去改那份）。
+
 复制内容（对应真实用户的工具根）：
   src / library / docs / assets / tools / tests / .githooks / 根级脚本与配置（tracked 部分）
   sources/materials 的两个目录（每个只取一个真实文件）+ **一个第三方安装包**（干扰件，

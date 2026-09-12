@@ -35,6 +35,12 @@ Five canonical triage roles (`needs-triage`, `needs-info`, `ready-for-agent`, `r
 
 Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+### 本机环境与当前状态（必读）
+
+开工前先看 `docs/agents/local-environment.md` —— 那里记着**只属于这台机器 + 此刻**的事实：沙箱
+「模拟用户机」在哪、什么状态（哪些是故意造假的部分）、本机在跑哪些端口、**main 与线上发布包的落差**
+（例如哪处修复还没进发布包）。凡改动它描述的东西（删沙箱、发新版、换端口），**当场回去改那份文件**。
+
 ### Session handoff preference
 
 当会话已经很长、继续重活容易丢细节时，主动告诉用户：建议开新会话；新会话用 `max` 还是 `high`；并直接给出新会话的第一段提示词（让它读 CLAUDE.md / CONTEXT.md / 相关 spec，然后继续哪个工单）。用户原话："你觉得该开新会话时直接告诉我新会话该用max还是high然后给我新会话的提示词，这样能省很多力"。
