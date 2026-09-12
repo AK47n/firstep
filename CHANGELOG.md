@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=189d105c2e6cf38cc07c957a423415a3409a1248 -->
+<!-- changelog-auto: last-commit=0931d419567eba35b51dbea8042e58caaf2acbda -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -51,6 +51,7 @@
 - 22:36 feat(完整包): 一键全量下载的发布侧落地——完整包打包核心 + pack-full 脚本（工单 full-download/01）
 - 22:38 feat(完整包): 检查更新端点 /api/update/full/check——双轨判定与中文降级（工单 full-download/02）
 - 22:42 feat(完整包): 下载任务与 apply/status/cancel 端点——卷级断点续传 + 磁盘预检（工单 full-download/03）
+- 22:45 feat(完整包): 更新器全量模式与应用编排——分卷整体预检 + 覆盖 + 资料库基线写回（工单 full-download/04）
 
 ## 2026-09-11
 - 09:29 ﻿fix: 推荐域拒绝不再被吞成通用话术——kind=domain 分流 + 带理由重试一次（工单 real-acceptance/03）
