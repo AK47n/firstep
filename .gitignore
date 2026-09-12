@@ -1,4 +1,4 @@
-__pycache__/
+﻿__pycache__/
 *.pyc
 .pytest_cache/
 .venv/
@@ -61,3 +61,7 @@ sources/materials/
 node_modules/
 tests/browser/**/test-results/
 tests/browser/**/*.png
+
+# 磁力计双件批次的编译矩阵产物（生成工程，可重建；2026-09-12）
+.scratch/magnetometer-modules/matrix/
+.scratch/magnetometer-modules/matrix-logs/
