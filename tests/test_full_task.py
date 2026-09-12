@@ -29,6 +29,20 @@ def _payload(name: str) -> bytes:
     return f"内容-{name}".encode("utf-8")
 
 
+@pytest.fixture(autouse=True)
+def _reset_full_state():
+    """每个测试前后重置模块级单例（任务 + 上次检查）。
+
+    这两个是全进程共享的（webapp 端点与测试同源），不复位会让相邻测试互相
+    污染：上一个测试留下的白名单/任务态会让下一个测试的 400 分支不触发。
+    """
+    ft.set_last_check({})
+    ft.set_full_task(None)
+    yield
+    ft.set_last_check({})
+    ft.set_full_task(None)
+
+
 def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -300,12 +314,27 @@ def test_apply_rejects_empty_list(tmp_path: Path) -> None:
     assert client.post("/api/update/full/apply", json={}).status_code == 400
 
 
-def test_apply_without_check_first_is_400(tmp_path: Path) -> None:
+def test_apply_without_check_first_is_400(tmp_path: Path, monkeypatch) -> None:
+    """白名单空 → 兜底自查一次；仍无可下（真实 GitHub 上还没有完整包资产）→ 400 中文。"""
     ft._LAST_CHECK.clear()
+    monkeypatch.setattr(
+        "contest_generator.webapp.check_for_full_update",
+        lambda installed: {
+            "current_version": "",
+            "latest_version": "",
+            "update_available": False,
+            "total_bytes": 0,
+            "parts": [],
+            "reason": "",
+            "error": "no-asset",
+            "message": "该版本的 Release 上没有完整包资产，请联系发布者",
+            "manifest_url": "",
+        },
+    )
     client = _client(tmp_path)
     resp = client.post("/api/update/full/apply", json={"parts": ["a.zip"]})
     assert resp.status_code == 400
-    assert "检查更新" in resp.json()["detail"]
+    assert "完整包" in resp.json()["detail"]
 
 
 def test_apply_insufficient_disk_is_400(tmp_path: Path, monkeypatch) -> None:

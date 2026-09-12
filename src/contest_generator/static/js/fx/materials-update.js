@@ -9,7 +9,13 @@ import { esc } from "./core.js";
 /** 检查结果 → 设置页结果区 HTML（弹窗由 ui 层在「查看更新」时打开）。 */
 export function materialsCheckCardHTML(check) {
   if (check.error === "baseline-missing") {
-    return `<div class="error">${esc(check.message || "本地资料库版本未知，无法增量更新")}</div>`;
+    // 无基线 = 无从算增量 → 直接把主按钮切成「一键下载完整 firstep」
+    // （工单 full-download/05 的双轨选路：按钮 id 由 ui 层接线到全量流程）
+    return `<div class="error">${esc(check.message || "本地资料库版本未知，无法增量更新")}</div>
+      <div class="row" style="margin-top:var(--space-2)">
+        <button id="btn-materials-full-download" type="button" class="primary breathe" data-ico="download">一键下载完整 firstep</button>
+        <span class="muted">本地还没有资料库基线清单（资料库版本未知），无法只下变化的部分；下载完整包后会自动记下基线，以后就只下增量了。</span>
+      </div>`;
   }
   if (check.error === "network") {
     return `<div class="error">${esc(check.message || "检查资料库更新失败（网络原因）")}</div>`;

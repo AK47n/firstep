@@ -269,6 +269,10 @@ const DOMAINS = {
     materialsPickHTML: "fn", materialsPickFooterHTML: "fn",
     materialsProgressHTML: "fn", materialsStateText: "fn",
   },
+  "full-update.js": {
+    fullCheckCardHTML: "fn", fullConfirmHTML: "fn", fullProgressHTML: "fn",
+    fullStateText: "fn", fullResultText: "fn", fullPlanText: "fn",
+  },
 };
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

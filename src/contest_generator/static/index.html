@@ -4375,6 +4375,15 @@
       <div id="materials-update-results" class="muted"></div>
     </div>
 
+    <div class="card" data-collapse-id="full-download">
+      <h2>完整包下载</h2>
+      <div class="row" style="align-items:center;margin-bottom:var(--space-2)">
+        <button id="btn-full-check" type="button" data-ico="download">检查完整包</button>
+        <span class="muted" style="flex:1">一键下载<strong>整份 firstep</strong>（工具本体 + 五个库 + 电赛资料库内容，约 1 GB，不含装机用的第三方安装包）：下载完自动替换并重启，不用手动下分卷、不用装 7-Zip。修损坏、换机器、或本地没有资料库基线时都用它。</span>
+      </div>
+      <div id="full-update-results" class="muted"></div>
+    </div>
+
     <div class="card" data-collapse-id="reset-records">
       <h2>重置本地记录</h2>
       <div class="row" style="align-items:center">
@@ -4482,6 +4491,7 @@ import { loadTopics, loadTopicGroupVocabulary, initTopicToolbar, viewTopicDetail
 import { loadSettings, loadRecentWorkflows, initSettingsCollapse, renderPriceReference, setSettingsDeps } from "/js/ui/settings.js";
 import { initUpdatePanel } from "/js/ui/update.js";  // 设置页「软件更新」区（工单 auto-update/06）
 import { initMaterialsUpdate } from "/js/ui/materials-update.js";  // 设置页「资料库更新」区（工单 materials-update/06）
+import { initFullUpdate } from "/js/ui/full-update.js";  // 设置页「完整包下载」区（工单 full-download/05）
 import { renderRecentList, refreshRecent, reportRecentStatus, initRecent } from "/js/ui/recent.js";
 import { initCodeViewer, checkCodeDiskChanges } from "/js/ui/codeview.js";  // 代码查看器（code-viewer/04-06）：init 加载模块，openCodeViewer 由 recent.js 直接 import；checkCodeDiskChanges = 磁盘基线感知（code-ide-flow/02）
 import { initCodeAiChat } from "/js/ui/code-ai-chat.js";  // AI 对话面板（code-ide-ai/03）：选中代码问 AI + 对话历史
@@ -4912,6 +4922,7 @@ initWiringToggle();  // 接线图「显示全部接线」开关（task-wiring-di
 initSettingsCollapse();  // 设置页折叠：DOM 已就绪，读盘应用默认/记忆状态（首帧前同步执行）
 initUpdatePanel();  // 设置页「软件更新」区（工单 auto-update/06）：当前版本 + 检查更新按钮接线
 initMaterialsUpdate();  // 设置页「资料库更新」区（工单 materials-update/06）：检查 + 选择弹窗 + 进度
+initFullUpdate();  // 设置页「完整包下载」区（工单 full-download/05）：检查 + 确认弹窗 + 进度（无基线时的双轨入口）
 initLibraryToolbar();  // 模块库工具栏（工单 02）：搜索 / 排序 / 过滤 chips 事件绑定（DOM 已就绪）
 initAddSections();  // 添加模块分区折叠（工单 07）：分区头点击切换（DOM 已就绪）
 initReferenceToolbar();  // 参考库工具栏（工单 02）：防抖搜索 / 排序 / chips 事件绑定（DOM 已就绪）

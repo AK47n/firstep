@@ -24,6 +24,16 @@ from contest_generator.full_apply import (
 from contest_generator.webapp import AppContext, create_app
 
 
+@pytest.fixture(autouse=True)
+def _reset_full_state():
+    """重置模块级单例（任务 + 上次检查），防相邻测试互相污染。"""
+    ft.set_last_check({})
+    ft.set_full_task(None)
+    yield
+    ft.set_last_check({})
+    ft.set_full_task(None)
+
+
 def _ready_parts(tmp_path: Path, names: list[str]) -> list[dict]:
     parts = []
     for name in names:

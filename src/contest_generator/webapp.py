@@ -1247,8 +1247,25 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             raise HTTPException(400, "分卷列表格式非法")
         check = last_check()
         available = {p["name"]: p for p in check.get("parts", [])}
+
+        def _refresh_check() -> dict[str, Any]:
+            result = check_for_full_update(
+                load_installed_marker(context.config_path.parent / "updates")
+            )
+            set_last_check(result)
+            return result
+
+        # 兜底自查一次：白名单为空或请求的分卷不在其中，都说明本次进程看到的
+        # 检查结果已过期（后端刚重启 / 前端缓存了旧结果）——此时直接 400 会让
+        # 用户「点下载就报错」。自查后仍不匹配才拒绝。
+        if not available or any(n not in available for n in names):
+            check = _refresh_check()
+            available = {p["name"]: p for p in check.get("parts", [])}
         if not available:
-            raise HTTPException(400, "请先检查更新（尚无可用完整包信息）")
+            raise HTTPException(
+                400,
+                str(check.get("message") or "暂无可用的完整包信息，请稍后重试"),
+            )
         unknown = [n for n in names if n not in available]
         if unknown:
             raise HTTPException(400, f"未知分卷：{'、'.join(unknown)}")
@@ -1267,6 +1284,15 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         running = get_full_task()
         if running is not None and running.state.value in ("downloading", "applying"):
             raise HTTPException(400, "已有完整包下载任务在进行中，请稍候")
+        # 演练开关（真机冒烟用）：不下载、不起进程，只回成功文案——让浏览器里
+        # 能把「检查 → 确认 → 已开始下载」整条链路走完而不产生副作用。
+        if payload.get("dry_run"):
+            total_mb = total_bytes // (1024 * 1024)
+            return {
+                "started": True,
+                "dry_run": True,
+                "message": f"演练模式：已接受 {len(selected)} 卷 / 约 {total_mb} MB（未真下载）",
+            }
         task = FullDownloadTask(
             task_dir=updates_dir,
             parts=selected,
