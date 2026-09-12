@@ -39,7 +39,7 @@
 - 用户可见变更已进 `CHANGELOG.md` 草稿区（提交信息自动补录）；下次发版时由发布者归纳成 v1.1.0 要点。
 
 **回归**
-- Python 全量：**4269 passed / 1 skipped**（提交 04 时点；本工单新增用例后复跑见提交前结果）。
+- Python 全量：**4309 passed / 1 skipped**（提交 04 时点；本工单新增用例后复跑见提交前结果）。
 - 前端 JS：**1550 pass / 0 fail**。
 - 类型检查：本次新增/改动的模块（`full_pack` / `full_update` / `full_task` / `full_apply` / `materials_pack`）**mypy 干净**；全库 `mypy src/contest_generator` 仍有 6 处**存量**错误，全部在 `pin_bindings.py`（本特性未触碰该文件）。
 - 规范门禁：`test_ps1_encoding`（pack-full.ps1 带 BOM）/ `test_repo_language`（工单与 spec 中文）/ `test_onboarding_docs` 全绿。

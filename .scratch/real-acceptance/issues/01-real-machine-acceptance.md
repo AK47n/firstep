@@ -460,7 +460,7 @@ SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_ru
   已就位（代码侧）：`tools/pack-full.ps1`、四端点、更新器全量模式、前端窗口；本机 e2e
   `.scratch/full-download/e2e_full_download.py`（7 步全通过）+ 浏览器冒烟
   `.scratch/full-download/smoke-full-update.mjs`（9/9 PASS，截图 `shot-full-update-window-dark.png`）；
-  全量 pytest 4269 passed / JS 1550 pass。
+  全量 pytest 4309 passed / JS 1550 pass。
   缺的只是「真的发一次 Release」这一步（需要上传约 1 GB 资产）。
 
 ## 收尾约定
