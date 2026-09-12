@@ -308,6 +308,7 @@ from .full_task import (
     start_full_update,
     write_full_snapshot,
 )
+from .full_apply import apply_full_package
 from .materials_task import (
     ApplyTask,
     task_status,
@@ -1217,12 +1218,24 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     # 卷级断点续传（校验通过的卷持久化，重试只补未完成卷）。
 
     def _full_apply_complete(parts: list[dict]) -> None:
-        """全部分卷就绪后的替换编排（工单 full-download/04 接更新器）。
+        """全部分卷就绪后的替换编排（工单 full-download/04）。
 
         替换动作绝不在运行中的 webapp 进程内执行：这里只写待更新标记并以
-        独立进程拉起更新器；停服 / 备份 / 覆盖 / 重启都由更新器自己做。
+        独立进程拉起更新器；停服 / 备份 / 覆盖 / 写资料库基线 / 删除 / 重启
+        都由更新器自己做（Windows 上运行中的 python 进程占着自己的文件，
+        就地覆盖必失败）。
         """
-        raise RuntimeError("完整包替换尚未接通（工单 full-download/04）")
+        check = last_check()
+        # 工具根必须绝对：更新器以独立进程跑，cwd 与相对路径都可能对不上
+        result = apply_full_package(
+            parts=parts,
+            updates_dir=context.config_path.parent / "updates",
+            tool_root=tool_root().resolve(),
+            version=str(check.get("latest_version") or ""),
+            manifest_url=str(check.get("manifest_url") or ""),
+        )
+        if not result.ok:
+            raise RuntimeError(result.message)
 
     @app.post("/api/update/full/apply")
     @_map_errors

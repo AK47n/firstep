@@ -134,6 +134,7 @@ def _response(
     reason: str = "",
     error: str = "",
     message: str = "",
+    manifest_url: str = "",
 ) -> dict[str, Any]:
     return {
         "current_version": current_version,
@@ -144,6 +145,9 @@ def _response(
         "reason": reason,
         "error": error,
         "message": message,
+        # 清单地址给应用编排用（更新器自己读它拿删除清单与资料库基线；
+        # 清单含全量文件清单，几 MB 级，不在前端与后端之间搬运）
+        "manifest_url": manifest_url,
     }
 
 
@@ -282,4 +286,5 @@ def check_for_full_update(
         update_available=update_available,
         reason=reason,
         message=message,
+        manifest_url=manifest_url,
     )

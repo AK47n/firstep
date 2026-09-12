@@ -331,6 +331,13 @@ def test_apply_starts_and_status_reports_progress(tmp_path: Path, monkeypatch) -
     monkeypatch.setattr("contest_generator.webapp.start_full_update", fake_start)
     # 下载函数也要注入：测试不碰网络（默认实现是 urllib 真下载）
     monkeypatch.setattr("contest_generator.full_task.download_part", _fake_download([]))
+    # 应用编排要注入：真实现会起独立进程跑更新器（测试不真起进程）
+    monkeypatch.setattr(
+        "contest_generator.webapp.apply_full_package",
+        lambda **kwargs: __import__(
+            "contest_generator.full_apply", fromlist=["FullApplyResult"]
+        ).FullApplyResult(ok=True, version="v1.1.0", message="已开始应用"),
+    )
     client = _client(tmp_path)
     resp = client.post("/api/update/full/apply", json={"parts": [parts[0]["name"]]})
     assert resp.status_code == 200
@@ -339,8 +346,8 @@ def test_apply_starts_and_status_reports_progress(tmp_path: Path, monkeypatch) -
     assert ran["count"] == 1
 
     status = client.get("/api/update/full/status").json()
-    assert status["state"] == "failed"  # 替换编排尚未接通（工单 04 落地后转 done）
-    assert "替换" in status["error"]
+    assert status["state"] == "done"  # 下载 + 应用编排（已注入）全部走通
+    assert status["error"] == ""
     assert status["total_bytes"] == parts[0]["size"]
     assert status["parts"][0]["ok"] is True
     # 分卷文件落盘名 = 清单 zip_name（应用器按它找文件）

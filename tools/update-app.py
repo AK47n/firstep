@@ -59,6 +59,15 @@ class UpdateOptions:
     restart: bool = True
     check_deps: bool = True
     log: logging.Logger | None = None
+    # 完整包模式（工单 full-download/04）：多分卷 + 完整包清单（清单里带
+    # 资料库基线清单，落位时写回 sources/materials/.materials-manifest.json）。
+    # `full_parts` 空 = 按清单 `parts` 顺序在下载目录里找（分卷乱序也无妨）。
+    full_parts: list[str] = field(default_factory=list)
+    full_manifest_path: Path | None = None
+
+    @property
+    def is_full_mode(self) -> bool:
+        return self.full_manifest_path is not None or bool(self.full_parts)
 
     @property
     def updates_dir(self) -> Path:
@@ -79,6 +88,11 @@ class UpdateOptions:
     @property
     def result_path(self) -> Path:
         return self.updates_dir / "last-update.json"
+
+    @property
+    def installed_marker_path(self) -> Path:
+        """完整包「已装版本」标记（检查更新端点读它报当前版本）。"""
+        return self.updates_dir / "full-installed.json"
 
 
 # ---------------------------------------------------------------------------
@@ -211,9 +225,22 @@ def remove_removed_list(
     if removed_path is None or not removed_path.exists():
         log("无删除清单，跳过删除")
         return 0
+    return remove_named_files(
+        removed_path.read_text(encoding="utf-8-sig").splitlines(), root, log
+    )
+
+
+def remove_named_files(
+    names: Sequence[str], root: Path, log: Callable[[str], None]
+) -> int:
+    """按相对路径清单删除（路径校验落工具根内；不存在 / 非普通文件跳过）。
+
+    完整包模式的删除清单直接来自清单 JSON 的 `removed` 数组，故与
+    `remove_removed_list` 共用这一段（路径校验单源）。
+    """
     count = 0
-    for raw_line in removed_path.read_text(encoding="utf-8-sig").splitlines():
-        name = raw_line.strip()
+    for raw_line in names:
+        name = str(raw_line).strip()
         if not name or name.startswith("#"):
             continue
         target = safe_join(root, name)
@@ -292,6 +319,96 @@ def version_of(zip_path: Path) -> str:
 
 
 # ---------------------------------------------------------------------------
+# 完整包模式（工单 full-download/04）：多分卷 + 清单 → 覆盖 + 基线写回
+# ---------------------------------------------------------------------------
+
+
+def load_full_manifest(path: Path) -> dict[str, Any]:
+    """读完整包清单：本地路径或 http(s) URL（容忍 UTF-8 BOM；结构不对抛错）。
+
+    走 URL 的理由：完整包清单带全部文件清单（几 MB 级），让浏览器先下再回传
+    纯属浪费——更新器自己拉一次即可。
+    """
+    location = str(path)
+    try:
+        if location.startswith(("http://", "https://")):
+            request = urllib.request.Request(
+                location, headers={"User-Agent": "firstep-updater"}
+            )
+            with urllib.request.urlopen(request, timeout=120) as response:
+                text = response.read().decode("utf-8-sig")
+        else:
+            text = Path(location).read_text(encoding="utf-8-sig")
+    except FileNotFoundError as exc:
+        raise UpdateError(f"完整包清单不存在：{location}") from exc
+    except Exception as exc:
+        raise UpdateError(f"完整包清单获取失败：{exc}") from exc
+    try:
+        data = json.loads(text)
+    except Exception as exc:
+        raise UpdateError(f"完整包清单解析失败：{exc}") from exc
+    if not isinstance(data, dict):
+        raise UpdateError("完整包清单格式非法（顶层不是对象）")
+    return data
+
+
+def full_zip_paths(opts: UpdateOptions, manifest: dict[str, Any]) -> list[Path]:
+    """待应用的分卷路径：显式列表优先，否则按清单 `parts` 顺序在下载目录里找。"""
+    if opts.full_parts:
+        paths = [Path(p) for p in opts.full_parts]
+    else:
+        names = [
+            str(item.get("zip_name") or "")
+            for item in manifest.get("parts") or []
+            if isinstance(item, dict)
+        ]
+        if not names:
+            raise UpdateError("完整包清单没有分卷（parts 为空）")
+        paths = [opts.zip_path.parent / name for name in names]
+    missing = [str(p) for p in paths if not p.is_file()]
+    if missing:
+        raise UpdateError("完整包分卷缺失：" + "、".join(missing))
+    return paths
+
+
+def validate_all_parts(paths: Sequence[Path], root: Path) -> list[list[zipfile.ZipInfo]]:
+    """**先整体预检全部卷**：任一条目越界 → 整体拒绝，且此时尚未写任何文件。"""
+    return [validate_zip_members(path, root) for path in paths]
+
+
+def extract_all_parts(
+    paths: Sequence[Path], members_per_part: Sequence[Sequence[zipfile.ZipInfo]], root: Path
+) -> int:
+    """按清单顺序逐卷解压（每卷内部仍逐条目原子替换）。"""
+    total = 0
+    for path, members in zip(paths, members_per_part):
+        total += extract_zip(path, root, members)
+    return total
+
+
+def write_materials_baseline(
+    manifest: dict[str, Any], root: Path, log: Callable[[str], None]
+) -> bool:
+    """把清单里的资料库基线写进 `sources/materials/.materials-manifest.json`。
+
+    这一步是「无基线 → 有基线」的转折点：写完这次全量，用户之后检查更新就
+    只收增量。清单没带基线（老资产）→ 跳过并记日志。
+    """
+    baseline = manifest.get("materials_manifest")
+    if not isinstance(baseline, dict) or not baseline:
+        log("清单未带资料库基线，跳过写回（下次检查更新仍会提示完整包）")
+        return False
+    target = safe_join(root, "sources/materials/.materials-manifest.json")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        json.dumps(baseline, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    batches = len(baseline.get("batches") or [])
+    log(f"已写回资料库基线清单：{batches} 个批次 → {target}")
+    return True
+
+
+# ---------------------------------------------------------------------------
 # 主流程
 # ---------------------------------------------------------------------------
 
@@ -332,9 +449,21 @@ def run_update(opts: UpdateOptions) -> int:
         log(f"更新包：{opts.zip_path}")
         log(f"工具根：{root}")
 
-        # 1. zip slip 全量预检（未写盘前拒绝）
-        members = validate_zip_members(opts.zip_path, root)
-        log(f"更新包条目 {len(members)} 个，安全校验通过")
+        full_manifest: dict[str, Any] = {}
+        parts: list[Path] = []
+        members_per_part: list[list[zipfile.ZipInfo]] = []
+        if opts.is_full_mode:
+            if opts.full_manifest_path is not None:
+                full_manifest = load_full_manifest(opts.full_manifest_path)
+            parts = full_zip_paths(opts, full_manifest)
+            # 全部卷整体预检（zip slip / 绝对路径 / 盘符 → 整体拒绝，写盘之前）
+            members_per_part = validate_all_parts(parts, root)
+            total_members = sum(len(m) for m in members_per_part)
+            log(f"完整包模式：{len(parts)} 卷 / {total_members} 个条目，安全校验通过")
+        else:
+            members_per_part = [validate_zip_members(opts.zip_path, root)]
+            parts = [opts.zip_path]
+            log(f"更新包条目 {len(members_per_part[0])} 个，安全校验通过")
 
         # 2. 停服（确认是本应用才 kill）
         if opts.stop:
@@ -342,8 +471,9 @@ def run_update(opts: UpdateOptions) -> int:
         else:
             log("跳过停服（--no-stop）")
 
-        # 3. 备份将被覆盖的条目
-        backup_count = backup_overwritten(root, members, backup_dir)
+        # 3. 备份将被覆盖的条目（全部卷合并备份一次）
+        flat_members = [m for members in members_per_part for m in members]
+        backup_count = backup_overwritten(root, flat_members, backup_dir)
         log(f"已备份 {backup_count} 个将被覆盖的文件到 {backup_dir}")
 
         # 4. 覆盖前记录依赖指纹（缺失 = 无旧记录，走「变了」语义 ——
@@ -351,11 +481,22 @@ def run_update(opts: UpdateOptions) -> int:
         old_pyproject_hash = file_sha256(root / "pyproject.toml")
 
         # 5. 解压覆盖
-        written = extract_zip(opts.zip_path, root, members)
+        if opts.is_full_mode:
+            written = extract_all_parts(parts, members_per_part, root)
+        else:
+            written = extract_zip(opts.zip_path, root, members_per_part[0])
         log(f"已落位 {written} 个文件")
 
-        # 6. 按删除清单清理
-        removed_count = remove_removed_list(opts.removed_path, root, log)
+        # 5b. 完整包：写回资料库基线（无基线 → 有基线的转折点）
+        if opts.is_full_mode:
+            write_materials_baseline(full_manifest, root, log)
+
+        # 6. 按删除清单清理（完整包用清单里的 removed，小发版用 removed.txt）
+        if opts.is_full_mode:
+            removed_names = [str(p) for p in full_manifest.get("removed") or []]
+            removed_count = remove_named_files(removed_names, root, log)
+        else:
+            removed_count = remove_removed_list(opts.removed_path, root, log)
         log(f"已删除 {removed_count} 个废弃文件")
 
         # 7. 依赖变更检测：覆盖前后 pyproject.toml 哈希对比
@@ -378,7 +519,12 @@ def run_update(opts: UpdateOptions) -> int:
         # 8b. 记录结果（status 端点据此报 done）
         result = {
             "status": "ok",
-            "version": version_of(opts.zip_path),
+            "mode": "full" if opts.is_full_mode else "single",
+            "version": (
+                str(full_manifest.get("version") or "") or version_of(opts.zip_path)
+                if opts.is_full_mode
+                else version_of(opts.zip_path)
+            ),
             "finished_at": timestamp,
             "backup_dir": str(backup_dir),
         }
@@ -386,6 +532,19 @@ def run_update(opts: UpdateOptions) -> int:
             json.dumps(result, ensure_ascii=False), encoding="utf-8"
         )
         log(f"已记录更新结果：{opts.result_path}")
+
+        # 8c. 完整包：写「已装版本」标记（检查更新端点读它报当前版本；
+        #     丢失 = 未知版本，会让用户被建议再下一次完整包，故必须落盘）
+        if opts.is_full_mode and result["version"]:
+            marker = {
+                "version": result["version"],
+                "installed_at": timestamp,
+                "backup_dir": str(backup_dir),
+            }
+            opts.installed_marker_path.write_text(
+                json.dumps(marker, ensure_ascii=False), encoding="utf-8"
+            )
+            log(f"已记录已装完整包版本：{result['version']} → {opts.installed_marker_path}")
 
         # 9. 重启
         if opts.restart:
@@ -404,6 +563,7 @@ def run_update(opts: UpdateOptions) -> int:
             json.dumps(
                 {
                     "status": "failed",
+                    "mode": "full" if opts.is_full_mode else "single",
                     "error": str(exc),
                     "finished_at": timestamp,
                     "backup_dir": str(backup_dir),
@@ -430,6 +590,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_option("--no-stop", action="store_true", dest="no_stop", default=False, help="跳过停服（测试用）")
     parser.add_option("--no-restart", action="store_true", dest="no_restart", default=False, help="跳过重启（测试用）")
     parser.add_option("--skip-pip", action="store_true", dest="skip_pip", default=False, help="跳过依赖检测与安装（测试用）")
+    parser.add_option(
+        "--full-manifest",
+        dest="full_manifest",
+        metavar="PATH",
+        help="完整包清单路径（给了即走完整包模式：多分卷 + 资料库基线写回）",
+    )
+    parser.add_option(
+        "--part",
+        action="append",
+        dest="parts",
+        default=[],
+        metavar="PATH",
+        help="完整包分卷路径（可重复；不给则按清单 parts 顺序在 --zip 同目录里找）",
+    )
     options, _args = parser.parse_args(list(argv) if argv is not None else None)
 
     if not options.zip_path:
@@ -444,6 +618,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         stop=not options.no_stop,
         restart=not options.no_restart,
         check_deps=not options.skip_pip,
+        full_parts=list(options.parts or []),
+        full_manifest_path=(
+            Path(options.full_manifest) if options.full_manifest else None
+        ),
     )
     return run_update(opts)
 

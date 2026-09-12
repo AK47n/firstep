@@ -63,6 +63,8 @@ def _release(
     manifest: bool = True,
     prefix: str = "firstep-full-",
 ) -> dict[str, Any]:
+    """Release 夹具：清单资产名按检查端点的口径（`firstep-full-<version>.manifest.json`，
+    version = tag 去掉 `v` 前的软件版本串——端点用 tag 原样构造，故两者一致）。"""
     assets: list[dict[str, Any]] = []
     if manifest:
         assets.append(
@@ -291,7 +293,9 @@ def test_check_result_shape_is_stable() -> None:
         "reason",
         "error",
         "message",
+        "manifest_url",
     }
+    assert result["manifest_url"] == "https://example.com/files/v1.1.0.manifest.json"
 
 
 # ---------------------------------------------------------------------------
