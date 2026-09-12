@@ -447,21 +447,22 @@ SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_ru
 
 ## G. 完整包（一键全量下载）真机发布演练（1 项）
 
-- [ ] **G1 来源 `full-download/07`**：在**真实 Release** 上发一次完整包并走通全链路。
-  怎么验（发布者）：
-  1. `powershell -File tools\pack-full.ps1 -Tag vX.Y.Z -Baseline <上版 firstep-full-*.manifest.json>`
-     → 核对体积与卷数（本机实测包内 8764 文件 / 原始 1.07 GB、zip 后约 1.0 GB / 1~2 卷）；
-  2. `gh release upload vX.Y.Z firstep-full-vX.Y.Z*.* --repo AK47n/firstep` → `gh release view` 确认清单资产在场；
-  3. 无基线环境（删掉 `sources/materials/.materials-manifest.json`）→「设置 → 完整包下载」→ 检查 → 下载
-     → 自动替换重启；
-  4. 核对：工具可启动、DeepSeek key / 任务状态 / 对话记录 / 已生成工程原样、资料库内容齐全、
-     **那批第三方安装包未被误删**；再次检查资料库更新已能算增量（基线已随包写回）；
-  5. 弱网：中途取消 / 断网重试 → 已校验的卷不重下；失败演练：改一个卷制造校验失败 → 中文错误 + 备份位置提示、旧版本仍可用。
-  已就位（代码侧）：`tools/pack-full.ps1`、四端点、更新器全量模式、前端窗口；本机 e2e
-  `.scratch/full-download/e2e_full_download.py`（7 步全通过）+ 浏览器冒烟
-  `.scratch/full-download/smoke-full-update.mjs`（9/9 PASS，截图 `shot-full-update-window-dark.png`）；
-  全量 pytest 4309 passed / JS 1550 pass。
-  缺的只是「真的发一次 Release」这一步（需要上传约 1 GB 资产）。
+- [x] **G1 前两步：真实 Release 已发布并上传资产**（2026-09-13 完成）
+  - 发布：https://github.com/AK47n/firstep/releases/tag/v1.1.0 （tag `v1.1.0` → `d9d14e8b`；main 已同步远端）
+  - 资产 8 件：`firstep-full-v1.1.0.zip` 783.29 MB + 清单 3.55 MB + 删除清单 + 校验和；
+    `firstep-update-v1.1.0.zip` 295.98 MB + files / removed / sha256
+  - 验证：发布前四件套自检 **26 项全过**（`verify_release_assets.py`）；发布后**从线上重新下载两个 zip 重算 SHA256 与校验和一致**（`verify_published_assets.py`）；真机端点 **15 项全过**（`verify_live_endpoints.py`：`/api/health` 报 1.1.0、完整包检查认出 v1.1.0 / 1 卷 / 清单地址、小发版检查判「已是最新」、资料库检查回 `baseline-missing`）
+  - 现场踩坑：空 `removed.txt`（0 字节）被 `gh release upload` 以 `HTTP 400: Bad Content-Length` 拒收 → 改写为 `# 注释行`（更新器跳过 `#` 行，语义不变）；已开工单 `full-download/08` 要求发布侧生成时就写注释行
+- [ ] **G1 后五步：客户端真机演练**（需要在一台**无基线的用户环境**走一遍；不宜在开发机上对自己的源码树做替换）
+  1. 无基线环境「设置 → 完整包下载」→ 下载 → 自动替换 → 自动重启；
+  2. 更新后核对：工具可启动、DeepSeek key / 任务状态 / 对话记录 / 已生成工程原样、资料库内容齐全、**那批第三方安装包未被误删**；
+  3. 再次检查更新只提示「变化的部分」（基线已随包写回）；
+  4. 弱网：中途取消 / 断网重试 → 已校验的卷不重下；
+  5. 失败演练：改一个卷制造校验失败 → 中文错误 + 备份位置提示、旧版本仍可用。
+
+**来源 `full-download/07`**；本机可验部分已全跑过：
+`.scratch/full-download/e2e_full_download.py`（7 步全通过）+ `smoke-full-update.mjs`（9/9 PASS，截图 `shot-full-update-window-dark.png`）；
+全量 pytest 4309 passed / JS 1550 pass。
 
 ## 收尾约定
 
