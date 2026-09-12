@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=56ce0e7409877ad51202ac5ce3d79fa8f25b20dc -->
+<!-- changelog-auto: last-commit=2d3acb8c68c2a39b51c2ca20dfe612c475543c87 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -12,6 +12,7 @@
 - 00:37 docs(环境): 新建「本机环境与当前状态」常驻记录（沙箱/端口/发布落差）并挂进 CLAUDE.md 必读——环境事实不再只活在会话里
 - 00:40 chore(磁力计): 收尾漏项——航向角离线复核器入库（两件互替一致性 0.0007° 证据）+ exe 入忽略 + 工单补登记
 - 00:56 ﻿fix(发版): 两个打包器字节口径统一——git archive 钉 core.autocrlf=false，跨包共有文件差异 926 → 0（工单 full-download/08）
+- 00:57 ﻿fix(发版): pack-update 改以模块方式调核心——真机演练发现相对导入失败（工单 full-download/08）
 
 ## 2026-09-12
 - 00:58 门禁引脚容量诊断（落点/可用 IO/解不开几组/至少去掉几个）
