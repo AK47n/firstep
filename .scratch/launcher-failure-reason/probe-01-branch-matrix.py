@@ -479,6 +479,11 @@ def main() -> int:
             if pid:
                 subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, text=True)
                 say(f"[收尾] 停掉探针起的服务 pid={pid}")
+        # launcher 是用 `start "" /b python -m …` 把服务**脱离**进程树起的：`taskkill /T` 打不到它，
+        # 所以最后必须按端口再收一次（实测漏掉一次就会留一个 8899 监听者，让下一次测量读到
+        # `:already_running`/`:port_busy` 而不是它该有的形态）。
+        cleared = clear_port(PORT, "收尾")
+        say(f"[收尾] 探针端口 {PORT} 已清空={cleared}")
         _stop_reaper.set()
         say("")
         say(f"[收尾] 弹窗清扫共杀掉 {len(_reaped)} 个宿主进程 {_reaped[:8]}")

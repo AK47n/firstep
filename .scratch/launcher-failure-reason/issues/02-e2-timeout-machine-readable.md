@@ -45,6 +45,7 @@
 | 判读 | 读 `launcher.log` 的 `reason=` 行 | 被强杀/等待的进程退不出码 ⇒ 不要把退出码当唯一判据 |
 | 不弹框 | 探针自带「firstep 标题窗口一出现就按 pid 杀」的清扫线程 | 清扫别用 `taskkill /IM powershell.exe`（会误伤别的东西）；判据别用「命令行含 Popup」（会命中测试执行器自己） |
 | 不开浏览器 | 临时改写 `HKCU\…\Classes\<ProgId>\shell\open\command` → `cmd.exe /c exit`，跑完复原 | `start` 是 cmd 内建命令，PATH 垫片与「替换内建分派」都拦不住 |
+| 收尾清端口 | 每个状态开始前 + 收尾都按**端口**清一次监听者（`clear_port`） | launcher 用 `start "" /b` 把服务**脱离进程树**起了，`taskkill /T` 打不到它；漏收一次就会留一个探针端口监听者，让下一次测量读到 `:already_running`/`:port_busy` 而不是它该有的形态（实测踩到过：`:started` 被判成 `port_busy`） |
 
 ## Comments
 
