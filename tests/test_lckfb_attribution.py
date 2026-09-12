@@ -61,16 +61,34 @@ _URL_RE = re.compile(r"https?://\S+")
 # 库增长不触发红；确需下调（模块下架 / 换来源）时改这里 = 显式决定而非静默漂移。
 WIKI_COVERAGE_FLOOR = (71, 268)  # 2026-09-09 实测：71 模块 / 268 文件
 
+# 非 wiki 来源标注块的**显式豁免登记**（slug → 理由）。判据 = 该模块源码头部
+# **确实带来源标注块、但来源不是 lckfb wiki 页**（器件官方数据手册 / 厂商资料），
+# 故「有块 → source_url 必须是 wiki 页」这条对本模块不成立。
+# 为什么用登记表而不是放宽守卫：立创版权要求第三条只约束 wiki 派生代码；数据手册
+# 派生代码没有对等条款，「有块」并不构成「必须出自 wiki」。登记项由
+# test_non_wiki_source_note_exemptions_are_real 反向守住（条目 source_url 必须
+# 非 wiki、且来源块里确实没有 lckfb URL）——防拿豁免掩盖真实漏标。
+# 未登记模块照旧受守卫约束（新增 wiki 派生模块漏标原页 URL 仍红）。
+NON_WIKI_SOURCE_NOTE_EXEMPT = {
+    "hmc5883l": "依据器件官方数据手册（Honeywell HMC5883L）重写，库内无该器件 lckfb wiki 页",
+    "qmc5883l": "依据器件官方数据手册（QST QMC5883L）重写，库内无该器件 lckfb wiki 页",
+}
+
 
 def _head(text: str) -> str:
     return text[:HEAD_WINDOW]
 
 
-def _source_note_files():
+def _source_note_files(skip_exempt: bool = False):
     """(slug, 平台, 相对文件路径, 文件对象, 头部窗口文本) —— 头部带来源标注块的
-    .c/.h（判据 = 代码事实，不按 source_url 反推）。"""
+    .c/.h（判据 = 代码事实，不按 source_url 反推）。
+
+    skip_exempt=True 时跳过 NON_WIKI_SOURCE_NOTE_EXEMPT 登记的模块（数据手册
+    派生，不受「来源块 = wiki 页」约束）。"""
     for manifest_path in sorted(LIBRARY_MODULES.glob("*/manifest.json")):
         manifest = ModuleManifest.load(manifest_path.parent)
+        if skip_exempt and manifest.slug in NON_WIKI_SOURCE_NOTE_EXEMPT:
+            continue
         for platform, entry in manifest.platforms.items():
             for rel in entry.files:
                 if not rel.endswith((".c", ".h")):
@@ -95,7 +113,7 @@ def test_wiki_derived_module_sources_carry_page_url():
     """
     problems: list[str] = []
     checked = 0
-    for slug, platform, rel, _path, head in _source_note_files():
+    for slug, platform, rel, _path, head in _source_note_files(skip_exempt=True):
         manifest = ModuleManifest.load(LIBRARY_MODULES / slug)
         entry = manifest.platforms[platform]
         checked += 1
@@ -110,6 +128,31 @@ def test_wiki_derived_module_sources_carry_page_url():
     assert not problems, (
         "wiki 派生模块源码来源标注与条目 source_url 不一致：\n- " + "\n- ".join(problems)
     )
+
+
+def test_non_wiki_source_note_exemptions_are_real():
+    """豁免登记反向自守（工单 magnetometer-modules/03）：每条登记必须真有带来源
+    标注块的文件、条目 source_url 确实非 wiki、且来源块里确实没有 lckfb URL——
+    防「拿豁免掩盖真实漏标」；登记了但词条已不存在也红（防陈留）。"""
+    problems: list[str] = []
+    for slug, reason in sorted(NON_WIKI_SOURCE_NOTE_EXEMPT.items()):
+        manifest_dir = LIBRARY_MODULES / slug
+        if not (manifest_dir / "manifest.json").is_file():
+            problems.append(f"{slug} 登记了豁免但模块不存在")
+            continue
+        if not reason.strip():
+            problems.append(f"{slug} 豁免理由为空")
+        rows = [r for r in _source_note_files() if r[0] == slug]
+        if not rows:
+            problems.append(f"{slug} 登记了豁免但源码头部没有来源标注块（豁免无从谈起）")
+        manifest = ModuleManifest.load(manifest_dir)
+        for platform, entry in manifest.platforms.items():
+            if is_wiki_source_url(entry.source_url):
+                problems.append(f"{slug}/{platform} 豁免登记但 source_url 已是 wiki 页")
+        for _slug, _plat, rel, _path, head in rows:
+            if any(is_wiki_source_url(url) for url in _URL_RE.findall(head)):
+                problems.append(f"{slug}/{rel} 豁免登记但来源块里含 lckfb wiki URL")
+    assert not problems, "非 wiki 来源豁免登记不自洽：\n- " + "\n- ".join(problems)
 
 
 def test_wiki_source_url_entries_carry_source_note():

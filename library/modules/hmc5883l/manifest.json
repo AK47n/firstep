@@ -1,0 +1,67 @@
+{
+  "slug": "hmc5883l",
+  "description": "HMC5883L 三轴磁力计 / 电子罗盘驱动（双平台纯驱动，ADR 0009）：软 I2C 位操作（不占硬件 I2C 外设）——hmc5883l_init 先读器件 ID（0x0A..0x0C = 'H','4','3'）验明型号再配置，hmc5883l_read 出三轴 16 位有符号磁场（已符号扩展），hmc5883l_read_heading 出 0–360° 航向角（硬铁偏移入参可不改代码现场重定标，换算走四象限 arctan 有理逼近、不引 math.h）；适用于电子罗盘找北、航向保持、定向跟随、与 UWB/AOA 配合的绝对朝向等赛题功能。库内旧实现 ml_hmc5883l（三处逐字节相同）有六处确定性缺陷，本模块为重写——缺陷清单见 notes 与两个平台条目。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/hmc5883l.c",
+        "code/hmc5883l.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "母版 syscfg GPIO 实例 HMC5883L（SCL 宏 HMC5883L_SCL_PIN / SDA 宏 HMC5883L_SDA_PIN / IOMUX 宏 HMC5883L_SCL_IOMUX / HMC5883L_SDA_IOMUX——SysConfig 命名 <实例>_<引脚名>_IOMUX，aht10 编译矩阵实测确认）。软 I2C：SDA 方向运行时切换（HMC5883L_SDA_OUT/IN 宏，不用硬件 I2C 外设；节点需板上/模块自带上拉）。**默认 SCL=PB6 / SDA=PB7** ——与 aht10（温湿度）与 pca9685（舵机驱动）默认同脚：「罗盘 + 温湿度」与「罗盘 + 舵机阵列」同框概率低；且器件两地址 0x3C/0x3D 与 aht10 0x70 全异，两件共挂一条软总线合法（库内同款先例：sht30×ms5611 刻意同脚、六件软 I2C 件共挂 PA6/PA7）。同选时经引脚绑定换脚消解。默认脚不得用 PA0/PA1（既定事实：不可作 GPIO 输入，SDA 需输入）。\n**手册来源的诚实交代**：库内**没有** HMC5883L 移植手册（lckfb 地猛星 41 篇 / 地阔星 43 篇 sensor 页均无磁力计页，已全库检索确认）——本模块寄存器表依据**器件官方数据手册（Honeywell HMC5883L Datasheet 900405 Rev E）**，非移植页；source_url 指向器件资料页。\n**旧实现缺陷清单（六条，全部修正 + 守卫防回潮）**：① 读地址当寄存器用（旧 HMC5883L_Read 写 addr 后发 HMC5883L_ADDR|0x01=0x3D）→ 本实现读写地址两宏分列；② 寄存器宏名按 X-Y-Z 命名而器件数据区顺序为 X-Z-Y（0x03/04 为 X、0x05/06 为 Z、0x07/08 为 Y）→ 宏名与手册一致并注释；③ 无符号扩展（data_l|(data_h<<8) 把负磁场读成 32768+）→ (int16_t)(((uint16_t)hi<<8)|lo)；④ 死全局 yaw_hmc 声明后从未赋值 → read_heading 真出航向角；⑤ CRA 写值落在手册保留区间（合法组合 0x70/0x78/0x68 等）→ 按手册取 0x70；⑥ 从不验 ID、ACK 全忽略（器件拔了也「初始化成功」）→ init 先读 ID，返回 1=总线无应答 / 2=型号不符。\n**航向换算不引 math.h**：四象限 arctan 有理逼近内联（免链 libm，纯函数可数值单测；精度 ±0.01° 级——库内不依赖更高精度，校准/椭球拟合属生成骨架范围，ADR 0009）。\n**未上板**：软 I2C 时序、ID 读回值、航向角真机方向语义（实测轴向与安装方向）留后续；编译矩阵由工单 04 翻牌。\\nmagnetometer-modules/04 编译矩阵（2026-09-12）：双平台单选生成 → mspm0：SysConfig CLI 1.26.2 + gmake **0 error / 0 module warning**；stm32：UV4（C:/Keil5/Core/UV4）**0 error / 0 module warning**（四组全 PASS，原始输出留档 .scratch/magnetometer-modules/matrix/）。",
+      "kit": "HMC5883L 三轴磁力计 / 电子罗盘模块（3.3V I2C；±1.3Ga 量程可选、I2C 100/400kHz）",
+      "source_url": "https://www.analog.com/en/products/hmc5883l.html",
+      "pins": [
+        {
+          "id": "HMC5883L_SCL",
+          "type": "gpio_out",
+          "default": "PB6",
+          "required": true
+        },
+        {
+          "id": "HMC5883L_SDA",
+          "type": "gpio_out",
+          "default": "PB7",
+          "required": true
+        }
+      ]
+    },
+    "stm32": {
+      "files": [
+        "code/hmc5883l_stm32.c",
+        "code/hmc5883l_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "软 I2C 总线件（SDA 方向运行时切换，不占硬件 I2C 外设/TIMER——不用母版 ml_i2c）。电平 = 开漏输出 OUT_OD + 上拉输入 IU（页面同款语义）；**SCL 在 init 里 gpio_init + 置高**（库内曾有「SCL 从未初始化 → F1 复位后浮空输入、ODR 写入无效、总线必死」的真 bug，wiki-stm32-batch2 回修；测试有专项守卫）。**默认脚 = PA6（SCL）/PA7（SDA）** ——库内软 I2C 总线共享组（与 aht10/bh1750/sht20/sht30/at24c02/ags10/ads1115/vl53l0x/mlx90614 共挂；本件地址 0x3C/0x3D 与其余件已知地址 0x1A/0x40/0x44/0x46/0x50/0x52/0x58/0x5A/0x70/0x90/0xD0/0xEE/0xEF 全异，多挂合法）；同选时经引脚绑定消解。\n**与 mspm0 条目分工**：mspm0 侧 syscfg 实例 + DL_GPIO（默认 PB6/PB7），本条目 ml_gpio + pin_config.h 宏段（默认 PA6/PA7），API 同名同语义、零交叉改动。\n**旧实现缺陷清单与修正同 mspm0 条目**（六条；本侧 read 出参判空用 0——F1 头无 NULL）。**航向换算不引 math.h**（同上，内联有理逼近）。\n**未上板**：同 mspm0 条目（软 I2C 时序、ID 读回、航向方向语义留真机复核）；编译矩阵由工单 04 翻牌。\\nmagnetometer-modules/04 编译矩阵（2026-09-12）：双平台单选生成 → mspm0：SysConfig CLI 1.26.2 + gmake **0 error / 0 module warning**；stm32：UV4（C:/Keil5/Core/UV4）**0 error / 0 module warning**（四组全 PASS，原始输出留档 .scratch/magnetometer-modules/matrix/）。",
+      "kit": "HMC5883L 三轴磁力计 / 电子罗盘模块（3.3V I2C；±1.3Ga 量程可选、I2C 100/400kHz）",
+      "source_url": "https://www.analog.com/en/products/hmc5883l.html",
+      "pins": [
+        {
+          "id": "HMC5883L_SCL",
+          "type": "i2c_scl",
+          "default": "PA6",
+          "required": true,
+          "macros": [
+            "HMC5883L_SCL_GPIO",
+            "HMC5883L_SCL_PIN"
+          ]
+        },
+        {
+          "id": "HMC5883L_SDA",
+          "type": "i2c_sda",
+          "default": "PA7",
+          "required": true,
+          "macros": [
+            "HMC5883L_SDA_GPIO",
+            "HMC5883L_SDA_PIN"
+          ]
+        }
+      ]
+    }
+  }
+}

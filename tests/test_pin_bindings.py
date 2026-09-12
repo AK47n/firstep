@@ -291,23 +291,29 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
     for value in values:
         counts[value] = counts.get(value, 0) + 1
     assert {v: c for v, c in counts.items() if c != 1} == {
-        "PB6": 4,  # STEP_MOTOR SLP2 + HUIDU R3 + AHT10 SCL + PCA9685 SCL
+        "PB6": 5,  # STEP_MOTOR SLP2 + HUIDU R3 + AHT10 SCL + PCA9685 SCL
+        # + HMC5883L SCL（hmc5883l 默认脚——三轴磁力计/电子罗盘与温湿度/
+        # 舵机阵列同选概率最低故叠此脚，同选时经引脚绑定消解）
         # （pca9685 默认脚——16 路舵机多自由度执行与温湿度/步进/巡线同选概率
         # 最低故叠此脚，同选时经引脚绑定消解）
-        "PB7": 5,  # AHT10 SDA（aht10 默认脚）+ STEP_MOTOR DIR2 + HUIDU R4
+        "PB7": 6,  # AHT10 SDA（aht10 默认脚）+ STEP_MOTOR DIR2 + HUIDU R4
+        # + HMC5883L SDA（同上——hmc5883l 默认脚）
         # + DHT11 DATA（dht11 默认脚；DHT11 与 AHT10 温湿度互替、同选概率最低，
         # 温湿度与步进/巡线同选概率最低故叠此脚，同选时经引脚绑定消解）+
         # PCA9685 SDA（同上——软 I2C 同型）
         "PA22": 4,  # HUIDU L1 + DEBUG_UART RX + NRF24L01 IRQ + TTP224 OUT1
         # （ttp224 默认脚——触摸按键与无线链路/手动输入互替、与巡线不同框、
         # 同选概率最低故叠此脚，同选时经引脚绑定消解）
-        "PA23": 6,  # HUIDU L2 + UWB_UART TX + DEBUG_UART TX + HC05_UART TX
+        "PA23": 8,  # HUIDU L2 + UWB_UART TX + DEBUG_UART TX + HC05_UART TX
+        # + QMC5883L SCL（qmc5883l 默认脚——QMC 磁力计与气压/无线链路同选
+        # 概率最低故叠此脚，同选时经引脚绑定消解）
         # （hc05 默认脚）+ NRF24L01 CE（nrf24l01 默认脚；蓝牙/2.4G 与 UWB/
         # DEBUG 链路互替，同选概率最低故叠此脚，同选时经引脚绑定消解）+
         # TCS34725 SCL（tcs34725 默认脚——颜色识别与无线链路/巡线/板载 ADC
         # 同选概率最低故叠此脚（视觉类与 K230 互替，刻意不叠显示件），同选
         # 时经引脚绑定消解）
-        "PA24": 6,  # HUIDU L3 + UWB_UART RX + ADC12_0 adcPin3（adc 默认脚，
+        "PA24": 8,  # HUIDU L3 + UWB_UART RX + ADC12_0 adcPin3（adc 默认脚，
+        # + QMC5883L SDA（同上——qmc5883l 默认脚）
         # us016/mq2/批次9 薄封装四件（photoresistance/rain/gp2y1014au/s12sd）
         # 共享同槽——wiki-modules-batch2/02、batch6/03、batch9/01-04；批次 11
         # MQ 系同构快补 mq3/mq4/mq6/mq7/mq8/mq9/ms1100 共读同槽——batch11/01-07，
@@ -555,16 +561,19 @@ def test_syscfg_pin_assign_values_unique_except_intentional_default_overlaps():
         # 无线数传互替、同选概率最低故叠——同选时经引脚绑定换实例/换脚消解，
         # 单选裁剪后独占；UART 实例上限 4——UART 类 4 件以上同选 = CLI 拒绝；
         # wiki-modules-batch13/02）
-        "PA23": 7,  # HUIDU L2 + UWB_UART TX + DEBUG_UART TX + HC05_UART TX
+        "PA23": 8,  # HUIDU L2 + UWB_UART TX + DEBUG_UART TX + HC05_UART TX
         # + NRF24L01 CE + TCS34725 SCL + BMP180 SCL（bmp180 默认脚——气压/
         # 海拔与巡线车控/无线链路/色觉不同框、同选概率最低故叠此脚（刻意
         # 不叠温湿度/光照/气体等环境件与显示/语音——气压+环境站/显示为常见
         # 搭配；与互替件 ms5611 刻意错开），同选时经引脚绑定消解；
         # wiki-modules-batch13/03）
-        "PA24": 7,  # HUIDU L3 + UWB_UART RX + ADC12_0 adcPin3（adc 默认脚，
+        # + QMC5883L SCL（qmc5883l 默认脚——QMC 磁力计与气压/无线链路同选
+        # 概率最低故叠此脚；magnetometer-modules/02）
+        "PA24": 8,  # HUIDU L3 + UWB_UART RX + ADC12_0 adcPin3（adc 默认脚，
         # us016/mq2/批次9 薄封装四件/批次 11 MQ 系同构快补共读同槽）+
         # HC05_UART RX + NRF24L01 CSN + TCS34725 SDA + BMP180 SDA（bmp180
         # 默认脚——同上，同选时经引脚绑定消解；wiki-modules-batch13/03）
+        # + QMC5883L SDA（同上——qmc5883l 默认脚；magnetometer-modules/02）
         "PA28": 8,  # IMU601 TX + HX711 SCK + FINGERPRINT_UART TX + SHT30 SCL
         # + JY61P SCL + TP_XPT2046_DOUT + OLED_SPI_SCL + MS5611 SCL（ms5611
         # 默认脚——高精度气压与姿态/定高同框概率最高故叠此脚（低频采集池

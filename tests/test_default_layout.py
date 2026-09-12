@@ -476,6 +476,12 @@ WHITELIST = {
         # 与 tcs34725 同址 = 互替不可同挂**（同址双选必冲突——选其一，同选经
         # 引脚绑定换独立总线或换件）；电平口径 OUT_OD/IU（页面 Out_PP 换算）
         "vl53l0x.VL53L0X_SCL",
+        # magnetometer-modules/01：hmc5883l SCL——三轴磁力计/电子罗盘并入软
+        # I2C 总线共享组（地址 0x3C/0x3D 与其余件全异 = 合法共挂）
+        "hmc5883l.HMC5883L_SCL",
+        # magnetometer-modules/02：qmc5883l SCL——同为磁力计件（互替件，默认脚
+        # 在 mspm0 侧刻意错开，stm32 侧并入同一软 I2C 总线；地址 0x0D/0x0E 全异）
+        "qmc5883l.QMC5883L_SCL",
     },
     "PA7": {
         "motor.MOTOR_A_DIR2",
@@ -496,6 +502,10 @@ WHITELIST = {
         "l298n.L298N_IN2",
         # wiki-stm32-batch4/05：vl53l0x SDA——同 PA6 登记（软 I2C 总线共享组）
         "vl53l0x.VL53L0X_SDA",
+        # magnetometer-modules/01：hmc5883l SDA——同 PA6 登记
+        "hmc5883l.HMC5883L_SDA",
+        # magnetometer-modules/02：qmc5883l SDA——同 PA6 登记
+        "qmc5883l.QMC5883L_SDA",
     },
 }
 

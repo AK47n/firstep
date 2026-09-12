@@ -110,6 +110,7 @@ const KEY     = GPIO.addInstance();
 const WS2812 = GPIO.addInstance();
 const HX711 = GPIO.addInstance();
 const AHT10 = GPIO.addInstance();
+const HMC5883L = GPIO.addInstance();
 const SR04 = GPIO.addInstance();
 const JOYSTICK = GPIO.addInstance();
 const HC05 = GPIO.addInstance();
@@ -341,6 +342,20 @@ AHT10.associatedPins[1].$name        = "SDA";
 AHT10.associatedPins[1].direction    = "OUTPUT";
 AHT10.associatedPins[1].initialValue = "CLEARED";
 AHT10.associatedPins[1].pin.$assign  = "PB7";
+
+// HMC5883L 三轴磁力计（电子罗盘，软 I2C 位操作）：SCL=PB6 / SDA=PB7
+// 与 AHT10 同脚——罗盘与温湿度同框概率低，且器件地址全异（0x3C/0x3D vs
+// 0x70）共挂一条软总线合法；同选时经引脚绑定消解。
+HMC5883L.$name = "HMC5883L";
+HMC5883L.associatedPins.create(2);
+HMC5883L.associatedPins[0].$name        = "SCL";
+HMC5883L.associatedPins[0].direction    = "OUTPUT";
+HMC5883L.associatedPins[0].initialValue = "CLEARED";
+HMC5883L.associatedPins[0].pin.$assign  = "PB6";
+HMC5883L.associatedPins[1].$name        = "SDA";
+HMC5883L.associatedPins[1].direction    = "OUTPUT";
+HMC5883L.associatedPins[1].initialValue = "CLEARED";
+HMC5883L.associatedPins[1].pin.$assign  = "PB7";
 
 // DHT11 单总线温湿度（dht11 模块：DATA 双向——输出起始信号/释放总线、
 // 输入采样响应与 40bit 数据位，方向运行时切换（照 AHT10_SDA 先例）；
@@ -583,6 +598,25 @@ BMP180.associatedPins[1].$name        = "SDA";
 BMP180.associatedPins[1].direction    = "OUTPUT";
 BMP180.associatedPins[1].initialValue = "CLEARED";
 BMP180.associatedPins[1].pin.$assign  = "PA24";
+
+// QMC5883L 三轴磁力计 / 电子罗盘软 I2C（qmc5883l 模块：SCL 输出 / SDA 双向
+// 运行时切换；位操作不占硬件 I2C 外设/TIMER，照 SHT30/SGP30/BMP180 先例）。
+// 默认 SCL=PA23 / SDA=PA24——与 BMP180（气压）默认同脚：罗盘与气压同框概率
+// 最低（刻意不叠互替件 ms5611 的 PA28/PA31），且器件地址全异（QMC 0x0D/0x0E
+// vs BMP180 0xEE/0xEF）共挂一条软总线协议合法；排针 31 个 IO 已被默认布局
+// 占满（IR_BEAM/PA8 先例），同选时经引脚绑定消解；PA0/PA1 不可作软 I2C SDA
+//（既定事实④；软 I2C 需板上/模块自带上拉）
+const QMC5883L = GPIO.addInstance();
+QMC5883L.$name = "QMC5883L";
+QMC5883L.associatedPins.create(2);
+QMC5883L.associatedPins[0].$name        = "SCL";
+QMC5883L.associatedPins[0].direction    = "OUTPUT";
+QMC5883L.associatedPins[0].initialValue = "CLEARED";
+QMC5883L.associatedPins[0].pin.$assign  = "PA23";
+QMC5883L.associatedPins[1].$name        = "SDA";
+QMC5883L.associatedPins[1].direction    = "OUTPUT";
+QMC5883L.associatedPins[1].initialValue = "CLEARED";
+QMC5883L.associatedPins[1].pin.$assign  = "PA24";
 
 // MS5611 高精度气压/温度软 I2C（ms5611 模块：SCL 输出 / SDA 双向运行时切换；
 // 位操作不占硬件 I2C 外设/TIMER，照 SHT30/SGP30/BMP180 先例。默认 SCL=PA28 /

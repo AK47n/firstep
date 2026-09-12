@@ -1,0 +1,67 @@
+{
+  "slug": "qmc5883l",
+  "description": "QMC5883L 三轴磁力计 / 电子罗盘驱动（纯驱动切片，ADR 0009），API 与 hmc5883l 同名同语义（换芯片只改头文件名）：软 I2C 位操作读取（不占硬件 I2C 外设），qmc5883l_init 启动验 Chip ID（0x0D 读回 0xFF，不符返回 2）+ qmc5883l_read 出三轴原始值（16 位小端有符号，已符号扩展）+ qmc5883l_read_heading 出航向角（0–360°，顺时针，硬铁偏移入参）；适用于电子罗盘/航向角类赛题功能（定向跟随、航向保持、找北、与 UWB/AOA 配合的绝对朝向）。",
+  "dependencies": [
+    "delay"
+  ],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/qmc5883l.c",
+        "code/qmc5883l.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**手册来源交代（不掩饰）**：库内**无** lckfb 磁力计移植手册页——地猛星 41 篇 / 地阔星 43 篇 sensor 页均无磁力计条目（已全库检索确认），故本件寄存器表依据 = **QST 官方数据手册**《QMC5883L 3-Axis Magnetic Sensor》QST-PD-B002-22 **Rev. B**（原厂器件页 https://www.qstcorp.com，PDF 路径 /upload/pdf/…QMC5883L Datasheet Rev. B.pdf；**2026-09-13 逐条核对**：§9.1 表 12 寄存器表、§9.2.1 表 13 输出数据寄存器、§9.2.2 表 14 状态寄存器、§9.2.4 表 16 控制1 / 表 17 控制2、§9.2.5 表 18 SET/RESET 周期、§9.2.6 表 19 Chip ID、§8.2.3 表 10 写序列 / §8.2.4 表 11 读序列）+ 仓库内既有 HMC5883L 实现（sources/contest/2021F/21F/ml_libs/ml_hmc5883l.c，三处副本 sha256 前 12 位 52537c752973）交叉核对。手册逐条印证本件取值：从机地址 7 位 0x0D（写 0x0D / 读 0x0E，表 10「Slave Address 0001101 + W」/ 表 11 同位 + R）；数据 0x00..0x05 = X/Y/Z 各 16 位**小端**补码有符号（表 13，§9.2.1 明示各轴 16 位 2's complement、MSB 为符号位）；状态 0x06 = bit0 DRDY / bit1 OVL / bit2 DOR（表 14 + §9.2.2 逐位说明）；控制1 0x09 = 0x1D（bit7:6 OSR=00=512、bit5:4 RNG=01=±8G、bit3:2 ODR=11=10Hz、bit1:0 MODE=01=连续，表 16）；控制2 0x0A = 0x40（bit7 SOFT_RST=0、bit6 ROL_PNT=1 指针翻转开、bit0 INT_ENB=0 不开中断脚，表 17）；SET/RESET 周期 0x0B = 0x01（表 18 + §9.2.5 原话「recommended that the register 0BH is written by 0x01」）；Chip ID 寄存器 0x0D 读回 **0xFF**（表 19 全 1 + §9.2.6 原话「This register is chip identification register. It returns 0xFF.」）。**与 hmc5883l 的互替关系**：HMC5883L 已停产多年，市售「HMC5883L 电子罗盘模块」绝大多数实为 QMC5883L（同封装、同 I2C 引脚，寄存器与地址完全不同）——故两件独立入库、独立验收、API 同名同语义（qmc5883l_init/read/read_heading + qmc5883l_heading_from_xy 换算纯函数，用户换模块只改头文件名），生成页互写互替说明。**「把 HMC 初始化序列发给 QMC 会写坏控制字」的具体证据**：0x09 在 HMC 是**状态寄存器 SR**（只读）、在 QMC 是**控制1**（读写——OSR/RNG/ODR/MODE）；0x0B 在 HMC 是 **ID 尾字节 IRC**（读回 'C'=0x43）、在 QMC 是 **SET/RESET 周期 FBR**（写）。于是 HMC 的初始化序列 CRA(0x00)←0x70、CRB(0x01)←0x20、MR(0x02)←0x00 里 MR=0x00 恰好落在 QMC 的 **Y 数据 LSB（只读）**无副作用，但同一套代码若写 0x09/0x0B（HMC 语义 = 读状态的地址 / 读 ID 的地址）就会把 **0x09 写成 0x00**（MODE=Standby、ODR=最低、OSR 最小）与 **0x0B 写成 0x00/0x43**（SET/RESET 周期错值）⇒ QMC 不再连续测量、磁阻置位/复位脉冲周期错，读出的不是磁场数据且**静默**——这正是「两件分开 + 每件启动验 Chip ID」的硬理由（本件 init 读 0x0D ≠0xFF 即返回 2）。母版 syscfg GPIO 实例 QMC5883L（SCL 宏 QMC5883L_SCL_PIN / SDA 宏 QMC5883L_SDA_PIN / IOMUX 宏 QMC5883L_SCL_IOMUX / QMC5883L_SDA_IOMUX——SysConfig 命名 <实例>_<引脚名>_IOMUX，aht10/bh1750 编译矩阵实测）。软 I2C：SDA 方向运行时切换（QMC5883L_SDA_OUT/IN 宏，不用硬件 I2C 外设；节点需板上/模块自带上拉电阻）。**默认脚重叠理由**：默认 SCL=PA23 / SDA=PA24——与 **bmp180（气压）** 默认同脚：罗盘+气压同框概率低（互替件 ms5611 默认 PA28/PA31 刻意错开），且两者器件地址全异（QMC 0x0D/0x0E vs BMP180 0xEE/0xEF）共挂一条软总线协议合法；排针 31 个 IO 已被默认布局占满（IR_BEAM/PA8 先例），同选时经引脚绑定消解。延时走 delay 模块（软 I2C 半周期 2us ≈ 100kHz 级；软复位后等 QMC5883L_RESET_WAIT_MS=10ms 再验 ID、读前等 DRDY 状态位 QMC5883L_DRDY_TIMEOUT_MS=20×1ms，均为待真机确认的取值）。改造要点：去演示与调试输出；函数名规范化（qmc5883l_init/read/read_heading；换算收敛成头文件暴露的纯函数 qmc5883l_heading_from_xy 供单测）；I2C 原语静态化（iic_start/stop/send_ack/wait_ack/send_byte/read_byte）；显式写入阶段地址 QMC5883L_ADDR_WRITE(0x0D) 与读阶段地址 QMC5883L_ADDR_READ(0x0E) 两个宏（旧 HMC 实现把读地址当寄存器地址的缺陷不回潮）；wait_ack 失败逐处返回码（旧实现忽略 ACK）。**未上板**（软 I2C 时序、复位等待 10ms、DRDY 轮询窗口 20ms、Chip ID 0xFF、航向角 xy 对齐均待真机复核；编译矩阵由后续工单翻牌，verified 暂 false）。\\nmagnetometer-modules/04 编译矩阵（2026-09-12）：双平台单选生成 → mspm0：SysConfig CLI 1.26.2 + gmake **0 error / 0 module warning**（首轮红 = 母版 syscfg 的 QMC5883L 实例被重复声明（SyntaxError: Identifier 'QMC5883L' has already been declared），去重后通过——已记入本节）；stm32：UV4 **0 error / 0 module warning**。",
+      "kit": "QMC5883L 三轴磁力计 / 电子罗盘模块（QST，I2C，3.3V/5V 兼容，7 位地址 0x0D；市售 GY-271 类模块多为本件——HMC5883L 已停产）",
+      "source_url": "https://www.qstcorp.com/",
+      "pins": [
+        {
+          "id": "QMC5883L_SCL",
+          "type": "gpio_out",
+          "default": "PA23",
+          "required": true
+        },
+        {
+          "id": "QMC5883L_SDA",
+          "type": "gpio_out",
+          "default": "PA24",
+          "required": true
+        }
+      ]
+    },
+    "stm32": {
+      "files": [
+        "code/qmc5883l_stm32.c",
+        "code/qmc5883l_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "软 I2C 总线件（SDA 方向运行时切换，不占硬件 I2C 外设/TIMER——不用母版 ml_i2c，spec 决策①），API 与 mspm0 条目、与 hmc5883l 模块**同名同语义**（qmc5883l_init/read/read_heading + qmc5883l_heading_from_xy 换算纯函数）。**手册来源交代（不掩饰）**：库内**无**磁力计移植手册页（地阔星 43 篇 sensor 页无磁力计条目，已全库检索确认），故本件寄存器表依据 = **QST 官方数据手册**《QMC5883L 3-Axis Magnetic Sensor》QST-PD-B002-22 **Rev. B**（原厂器件页 https://www.qstcorp.com；2026-09-13 逐条核对 §9.1 表 12 寄存器表 / §9.2.1 表 13 数据寄存器 / §9.2.2 表 14 状态寄存器 / §9.2.4 表 16 控制1 + 表 17 控制2 / §9.2.5 表 18 SET/RESET 周期 / §9.2.6 表 19 Chip ID / §8.2.3 表 10 写序列 / §8.2.4 表 11 读序列）+ 库内既有 HMC5883L 实现（sources/contest/2021F/21F/ml_libs/ml_hmc5883l.c 缺陷清单）交叉核对。取值逐条印证：7 位从机地址 0x0D（写 0x0D / 读 0x0E——表 10 地址位 0001101 + W、表 11 同位 + R）；数据 0x00..0x05 = X/Y/Z 各 16 位小端补码有符号（表 13）；状态 0x06 = DRDY bit0 / OVL bit1 / DOR bit2（表 14）；控制1 0x09 = 0x1D（OSR=512/RNG=±8G/ODR=10Hz/MODE=连续，表 16）；控制2 0x0A = 0x40（ROL_PNT 指针翻转开、不软复位、不开中断脚，表 17）；SET/RESET 周期 0x0B = 0x01（表 18 + §9.2.5 推荐原话）；Chip ID 0x0D 读回 0xFF（表 19 + §9.2.6 原话），不符 init 返回 2。**页面/素材缺陷修正面**：本件素材非 立创页面（库内无磁力计页），修正面 = 既有无手册实现 ml_hmc5883l 的五处确定性缺陷在 QMC 语境下的同型回修——① 读地址当寄存器地址（旧 HMC5883L_Read 用 ADDR|0x01 当寄存器地址）→ 本件显式 QMC5883L_ADDR_WRITE(0x0D)/QMC5883L_ADDR_READ(0x0E) 两宏，读阶段用读地址（表 11 两阶段序列，含重启 START）；② 寄存器序/语义混淆（旧件注释 X-Y-Z 而器件序 X-Z-Y）→ 本件按手册表 13 逐条注释；③ **缺符号扩展**（旧件 data_l | (data_h<<8) 负磁场读成大正数）→ 本件三轴统一 (int16_t) 小端拼装；④ 名义航向角（旧件 float yaw_hmc 声明后从未赋值）→ 本件 qmc5883l_read_heading 真出角（atan2f，0–360° 顺时针、硬铁偏移入参、z 不入公式）；⑤ 无视 ACK / init 不验 ID（旧件全部 I2C 原语忽略 ACK、init 从不读 ID → 器件拔了也「成功」）→ 本件 wait_ack 逐处返回码（写寄存器三处 + 读序列两处）、init 软复位后读 Chip ID 校验（≠0xFF → 返回 2；总线无应答 → 返回 1）。换算实现：引脚 = gpio_init(OUT_OD)（页面原式）+ init 内两脚置高 = 总线空闲电平；**SCL 显式初始化**（F1 复位后浮空输入、ODR 写入无效，不初始化 = 总线死——批次 2 六件 SCL 从未初始化的真 bug 回修先例，本模块守卫钉住）；SDA 方向切换 gpio_init(SDA, OUT_OD/IU)（页面原式 OD+IPU——均需总线外上拉）；原语族 qmc5883l_iic_*（时序 = bh1750_stm32 原值 5us 半周期 ≈100kHz 级，QMC5883L Fast Mode ≤400kHz 裕量足）；qmc5883l_write_reg / qmc5883l_read_regs 静态（start→0x0D→wait_ack→寄存器地址→wait_ack→(数据→wait_ack)→stop / 读：…→重启→0x0E→wait_ack→逐字节读+ack→stop；0=成功/1=无应答）；DRDY 等待静态（qmc5883l_wait_drdy：轮询 0x06 bit0，QMC5883L_DRDY_TIMEOUT_MS=20×1ms 超时后仍读一次——宁给旧值不返回失败，实现理由）与复位等待（QMC5883L_RESET_WAIT_MS=10ms）走 delay 模块。**默认脚 = PA6（SCL）/PA7（SDA）**——即库内既有软 I2C 总线：与 aht10/bh1750/sht20/sht30/at24c02/ags10/ads1115/tcs34725/mlx90614/sgp30/pca9685/bmp180/ms5611 等软 I2C 件共挂（白名单登记），**器件地址 0x0D/0x0E 与既有 0x38/0x23/0x40/0x44/0x50/0x1A/0x48/0x29/0x5A/0x58/0xEE 全异 = 多挂协议允许的合法共享**（与 motor MOTOR_A_DIR/DIR2 默认重叠：罗盘与「带电机方向的小车运动控制」不同框、同选概率最低；刻意不叠显示/声光/输入/串口/无线/USB(PA11/12)/SWD(PA13/14) 组）；同选时经引脚绑定消解（逐脚端口宏 QMC5883L_SCL_GPIO/_PIN/_SDA_GPIO/_PIN，换脚零组约束）。与 mspm0 条目分工：mspm0 侧 syscfg 实例 + DL_GPIO 位操作（默认 PA23/PA24），本条目 ml_gpio + pin_config.h 宏段（默认 PA6/PA7），API 同名同语义、零交叉改动。**未上板**：软 I2C 5us 半周期时序、复位等待 10ms、DRDY 轮询 20ms 窗口、Chip ID 0xFF 判定、航向角 xy 平面对齐均待真机复核；编译矩阵由后续工单（04）翻牌，verified 暂 false。\\nmagnetometer-modules/04 编译矩阵（2026-09-12）：双平台单选生成 → mspm0：SysConfig CLI 1.26.2 + gmake **0 error / 0 module warning**（首轮红 = 母版 syscfg 的 QMC5883L 实例被重复声明（SyntaxError: Identifier 'QMC5883L' has already been declared），去重后通过——已记入本节）；stm32：UV4 **0 error / 0 module warning**。",
+      "kit": "QMC5883L 三轴磁力计 / 电子罗盘模块（QST，I2C，3.3V/5V 兼容，7 位地址 0x0D，4 Pin：VCC/GND/SCL/SDA；市售 GY-271 类模块多为本件——HMC5883L 已停产）",
+      "source_url": "https://www.qstcorp.com/",
+      "pins": [
+        {
+          "id": "QMC5883L_SCL",
+          "type": "i2c_scl",
+          "default": "PA6",
+          "required": true,
+          "macros": [
+            "QMC5883L_SCL_GPIO",
+            "QMC5883L_SCL_PIN"
+          ]
+        },
+        {
+          "id": "QMC5883L_SDA",
+          "type": "i2c_sda",
+          "default": "PA7",
+          "required": true,
+          "macros": [
+            "QMC5883L_SDA_GPIO",
+            "QMC5883L_SDA_PIN"
+          ]
+        }
+      ]
+    }
+  }
+}

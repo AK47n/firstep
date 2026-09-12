@@ -55,6 +55,9 @@ INSTANCE_CONSUMERS: dict[str, tuple[str, ...]] = {
     "AGS10": ("ags10",),
     "BMP180": ("bmp180",),
     "MS5611": ("ms5611",),
+    # magnetometer-modules/03：三轴磁力计双件（电子罗盘）——各两脚软 I2C
+    "HMC5883L": ("hmc5883l",),
+    "QMC5883L": ("qmc5883l",),
     "TTP224": ("ttp224",),
     "HUMAN_IR": ("human_ir",),
     "MICROWAVE": ("microwave_radar",),

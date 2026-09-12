@@ -1,0 +1,17 @@
+{
+  "id": "磁力计驱动移植笔记-HMC5883L-与-QMC5883L",
+  "title": "磁力计驱动移植笔记-HMC5883L-与-QMC5883L",
+  "type": "开发板资料",
+  "description": "磁力计（电子罗盘）驱动移植笔记：设备侧两件 HMC5883L 与 QMC5883L 的寄存器表依据（器件官方数据手册，库内无对应移植页）、两件不可混用的具体证据（0x09/0x0B 语义对撞）、库内模块 slug 与 API、软 I2C 默认脚与总线共享关系、硬铁偏移校准口径、与 jy61p/ml_mpu6050/imu_uart 的分工，以及库内旧实现六处确定性缺陷的逐条清单（读地址当寄存器、寄存器序 X-Z-Y、无符号扩展、航向死变量、CRA 保留值、不验 ID）。",
+  "anchor_kind": "kit",
+  "anchor_value": "QMC5883L 三轴磁力计 / 电子罗盘模块（QST，I2C，3.3V/5V 兼容，7 位地址 0x0D；市售 GY-271 类模块多为本件——HMC5883L 已停产）",
+  "platform": "any",
+  "files": [
+    "驱动移植笔记.md",
+    "hmc5883l_stm32.c",
+    "hmc5883l_stm32.h",
+    "qmc5883l_stm32.c",
+    "qmc5883l_stm32.h"
+  ],
+  "notes": "锚定值取模块库 kit 词表里的 QMC5883L 模块条目（词表由 library/modules/*/manifest.json 的 kit 字段单源派生）。本条目由工单 magnetometer-modules/05 手工落盘（未走 add_reference：该函数带自动 git 提交，本工单要求与本批改动一起提交）；磁盘形状与库内范式一致（reference.json + 文本素材）。"
+}

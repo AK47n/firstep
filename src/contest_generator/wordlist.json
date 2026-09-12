@@ -666,16 +666,22 @@
         "name": "磁力计指南针（QMC5883L）",
         "interface": "I2C（QMC/IST 系列同寄存器族）",
         "price": "￥5-15/个",
-        "note": "出 2D 航向角；需椭球标定与磁偏角校正；库内 imu_uart/MPU6050 可作信息融合",
+        "note": "库内 qmc5883l 已打通（双平台：qmc5883l_init 先验 Chip ID（0x0D 读 0xFF）再配置 + qmc5883l_read 出三轴 16 位有符号磁场（小端）+ qmc5883l_read_heading 出 0–360° 航向角（硬铁偏移入参））；软 I2C 占 2 GPIO（mspm0 默认 PA23/PA24、stm32 默认 PA6/PA7 共总线）；出 2D 航向角；需椭球标定与磁偏角校正；库内 ml_mpu6050/jy61p 可作信息融合；与 HMC5883L 版互替——两者寄存器语义不同，库内两件各一套驱动、接错型号 init 会返回 2（型号不符）",
         "suitable": "航向保持/无 GPS 场的朝向判定",
-        "recommended": true
+        "recommended": true,
+        "lib_modules": [
+          "qmc5883l"
+        ]
       },
       {
         "name": "磁力计指南针（HMC5883L）",
         "interface": "I2C",
         "price": "￥8-20/个",
-        "note": "经典型号、例程最多；已停产抖货多，注意区分翻新",
-        "suitable": "航向保持/依赖旧例程的项目"
+        "note": "库内 hmc5883l 已打通（双平台：hmc5883l_init 先读器件 ID（0x0A..0x0C = 'H','4','3'）验明型号再配置 + hmc5883l_read 出三轴 16 位有符号磁场（数据区顺序 X-Z-Y、大端）+ hmc5883l_read_heading 出 0–360° 航向角（硬铁偏移入参））；软 I2C 占 2 GPIO（mspm0 默认 PB6/PB7、stm32 默认 PA6/PA7 共总线）；经典型号、例程最多；已停产（原厂 Honeywell 停产，市售多为 QMC5883L 翻新/替换，注意区分——库内 qmc5883l 条目即为其寄存器兼容位替换件）",
+        "suitable": "航向保持/依赖旧例程的项目",
+        "lib_modules": [
+          "hmc5883l"
+        ]
       },
       {
         "name": "磁力计指南针（IST8310）",

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "platform": "mspm0",
+  "slugs": [
+    "delay",
+    "hmc5883l"
+  ],
+  "main_c": "#include \"ti_msp_dl_config.h\"\n#include \"hmc5883l.h\"\nint main(void) { int16_t x = 0, y = 0, z = 0; float deg = 0.0f;\n  uint8_t st = hmc5883l_init(); (void)st;\n  (void)hmc5883l_read(&x, &y, &z);\n  (void)hmc5883l_read_heading(&deg, 0, 0);\n  deg = hmc5883l_heading_from_xy((float)x, (float)y); (void)deg;\n  while (1) {} }\n",
+  "problem_text": "",
+  "topic_id": "",
+  "qa_text": "",
+  "requirements": [],
+  "references": [],
+  "bindings": {},
+  "instances": {},
+  "python_templates": {},
+  "generated_at": "2026-09-12T21:27:44+0800",
+  "tool_version": ""
+}

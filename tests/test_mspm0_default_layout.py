@@ -128,6 +128,7 @@ WHITELIST = {
     },
     "PA23": {  # HUIDU L2 × GRAY_D2 × xunji P2 + UART TX 族/软 I2C/无线 CE
         "bmp180.BMP180_SCL",
+        "qmc5883l.QMC5883L_SCL",
         "debug_uart.DEBUG_UART_TX",
         "hc05.HC05_TX",
         "huidu.L2",
@@ -140,6 +141,7 @@ WHITELIST = {
     "PA24": {  # ADC12_0 MEM0 共读同槽族（adc 薄封装 × ADC 模拟量）× 灰度 × UART RX
         "adc.ADC_CH0",
         "bmp180.BMP180_SDA",
+        "qmc5883l.QMC5883L_SDA",
         "gp2y1014au.GP2Y1014_AO_CH0",
         "hc05.HC05_RX",
         "huidu.L3",
@@ -215,17 +217,19 @@ WHITELIST = {
         "oled.OLED_SPI_SDA",
         "sht30.SHT30_SDA",
     },
-    "PB6": {  # 灰度 R3/GRAY_D7/xunji P7 + AHT10/PCA9685 软 I2C + 步进 SLP2
+    "PB6": {  # 灰度 R3/GRAY_D7/xunji P7 + AHT10/HMC5883L/PCA9685 软 I2C + 步进 SLP2
         "aht10.AHT10_SCL",
+        "hmc5883l.HMC5883L_SCL",
         "huidu.R3",
         "pca9685.PCA9685_SCL",
         "pid.GRAY_D7",
         "step_motor.STEP_MOTOR_SLP2",
         "xunji.P7",
     },
-    "PB7": {  # 灰度 R4/GRAY_D8/xunji P8 + AHT10/PCA9685 软 I2C + DHT11 + 步进 DIR2
+    "PB7": {  # 灰度 R4/GRAY_D8/xunji P8 + AHT10/HMC5883L/PCA9685 软 I2C + DHT11 + 步进 DIR2
         "aht10.AHT10_SDA",
         "dht11.DHT11_DATA",
+        "hmc5883l.HMC5883L_SDA",
         "huidu.R4",
         "pca9685.PCA9685_SDA",
         "pid.GRAY_D8",
