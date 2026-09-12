@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=b1b183d09d106fce77aac66743e14e0faa76a266 -->
+<!-- changelog-auto: last-commit=0f515b656edd01eec062df38c18f25c81e2ffee0 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -42,6 +42,7 @@
 - 20:02 test(真机): 代码栏文件树点击验收脚本入库（工单 gen-chain-audit/02）
 - 20:04 chore(工单): recommend-vision-qa/03 按在盘产物翻牌 resolved（六条真机验收早已跑完）
 - 20:45 feat(资料库): ALX 套件批次归档 + 套件资料条目新建 + 三个批次 slug 登记
+- 20:45 feat(参考库): 条目不量补「索引素材」第二口径 + 体量列/详情/统计/排序统一口径
 
 ## 2026-09-11
 - 09:29 ﻿fix: 推荐域拒绝不再被吞成通用话术——kind=domain 分流 + 带理由重试一次（工单 real-acceptance/03）
