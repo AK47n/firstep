@@ -2652,6 +2652,8 @@ def test_generate_rejects_missing_group_choice(client, context, tmp_path):
     detail = resp.json()["detail"]
     assert "功能组" in detail and "还需要你选择一项" in detail
     assert "航向保持 / 姿态传感器" in detail
+    # 一个组选择都没带 = 可能是改版前的旧推荐载荷在页面上：文案要给出出路（重跑推荐）
+    assert "重新跑一次" in detail
     assert not output_dir.exists(), "门禁必须在落盘之前拦下"
 
 

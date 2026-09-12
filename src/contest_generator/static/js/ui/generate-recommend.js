@@ -27,7 +27,7 @@ import { esc } from "/js/fx/core.js";
 import { platformClickAction } from "/js/fx/platform.js";
 import { platformSwitchConfirmMessage } from "/js/fx/danger.js";  // 切平台清空下游确认文案（工单 ux-walkthrough-02/01）
 import { confirmModal } from "/js/ui/confirm.js";
-import { moduleBadges, applyGroupRadio, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, applyGroupChoices, recordGroupChoice, pruneGroupChoices, pendingGroupChoices, moduleGridCountText, moduleGridHTML, moduleInfoHTML } from "/js/fx/module.js";
+import { moduleBadges, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, applyGroupChoices, recordGroupChoice, clearGroupChoiceForSlug, pruneGroupChoices, pendingGroupChoices, groupChoiceGapText, moduleGridCountText, moduleGridHTML, moduleInfoHTML } from "/js/fx/module.js";
 import { bindModuleSource } from "/js/ui/module-source.js";  // 模块源码区（mainc-codeview-bridge/05）：弹窗文件行懒加载
 import { referencePlatformChip } from "/js/fx/reference.js";
 import {
@@ -58,8 +58,13 @@ export let groupChoices = {};            // 功能组用户选择（工单 group
                                           // 「未选不许生成」都只看它；AI 的推荐只作徽标展示
 export function setGroupChoices(v) { groupChoices = v && typeof v === "object" ? v : {}; }
 export function groupChoiceGap() {
-  // 还没由用户点过的功能组（数组）；空 = 可以生成。判据与后端 missing_group_choices 同口径。
-  return pendingGroupChoices((lastRecommend || {}).exclusive_groups || [], groupChoices);
+  // 还没由用户点过的功能组（数组）；空 = 可以生成。判据与后端 missing_group_choices 同口径
+  // （含「组没进选中集不算」——用户把组内模块删掉后不该被永久拦住）。
+  return pendingGroupChoices((lastRecommend || {}).exclusive_groups || [], groupChoices, selectedSlugs);
+}
+export function groupChoiceGapMessage() {
+  // 拦截文案单源在 fx/module.js（前端两处生成入口/就绪单共用一份措辞）
+  return groupChoiceGapText((lastRecommend || {}).exclusive_groups || [], groupChoices, selectedSlugs);
 }
 export let pythonTemplates = {};         // 副产物模板选择（工单 k230-multi-template/04）：{slug: template_id}（只含用户改过的，=默认不记录）
 export let warnings = [];                // 平台警告
@@ -633,6 +638,10 @@ export function renderRecommendResult(data, autoAdd = true) {
   box.querySelectorAll("[data-remove]").forEach((b) =>
     b.addEventListener("click", () => {
       selectedSlugs = selectedSlugs.filter((s) => s !== b.dataset.remove);
+      // 被移除的这个模块若正是某功能组的用户选择，那条记账一起清掉（评审整改）：
+      // 否则界面显示「已选它」而工程里没有 = 静默漏件。
+      groupChoices = clearGroupChoiceForSlug(groupChoices, groups, b.dataset.remove);
+      clusterDeps.scheduleDraftSave();
       reRenderAfterSelectionChange();
     }));
   // 组卡单选交互（工单 04 / group-choice-required/01）：点击 radio = **由用户做出这一组的选择**
@@ -642,7 +651,7 @@ export function renderRecommendResult(data, autoAdd = true) {
     input.addEventListener("click", () => {
       groupChoices = recordGroupChoice(groupChoices, groups, input.dataset.groupId, input.dataset.groupSlug);
       selectedSlugs = applyGroupChoices(selectedSlugs, groups, groupChoices);
-      scheduleDraftSave();  // 选择即刻入草稿（刷新后仍是用户的选择，不是 AI 的默认）
+      clusterDeps.scheduleDraftSave();  // 选择即刻入草稿（刷新后仍是用户的选择，不是 AI 的默认）
       reRenderAfterSelectionChange();
     }));
   if (autoAdd && data.modules.length) runExpand();
@@ -1037,12 +1046,15 @@ export function renderSelected() {
   box.querySelectorAll("[data-remove]").forEach((b) =>
     b.addEventListener("click", () => {
       selectedSlugs = selectedSlugs.filter((s) => s !== b.dataset.remove);
+      // 同上：移除的模块若正被记作某功能组的选择，那条记账一起清掉（评审整改）
+      groupChoices = clearGroupChoiceForSlug(groupChoices, (lastRecommend || {}).exclusive_groups || [], b.dataset.remove);
       expanded = []; warnings = [];
       delete pythonTemplates[b.dataset.remove];  // 模板选择随模块移除清理（工单 04）
       clusterDeps.clearInstanceTarget();  // 选脚目标随清单变化失效（工单 04）
       renderSelected(); renderWarnings(); renderModulePool();
       clusterDeps.renderPinCard();  // 引脚配置卡（工单 03）：清单变化后回到占位态
       clusterDeps.renderInstanceConfig();  // 多实例配置卡（工单 04）：被移除模块的实例清单随之清掉
+      clusterDeps.scheduleDraftSave();      // 移除 + 组选择清理一起入草稿
     }));
   box.querySelectorAll("[data-template]").forEach((sel) =>
     sel.addEventListener("change", () => {

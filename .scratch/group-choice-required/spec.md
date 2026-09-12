@@ -41,8 +41,18 @@ AI 推荐出卡时，同一个功能的几个互斥件（`imu_uart` / `jy61p` / 
 
 - **载荷契约（`exclusive_groups[]` 新增 `choice_required`）**：命中卡（组内已有推荐成员）为
   `true`，hint 卡（AI 未推荐、题面疑似需要）为 `false`——hint 卡本来就是「你看着办」的软提示，
-  没有默认值可替，不纳入硬拦。旧载荷无该键 → 一律按 `false`（旧行为不再出现硬拦，避免历史缓存
-  把用户卡死）。
+  没有默认值可替，不纳入硬拦。旧载荷无该键 → **前端**一律按 `false`（不做前端硬拦，避免历史缓存
+  在页面上把用户卡死）。**如实记**：服务端的判据看的是**库内组定义**（不依赖前端载荷字段），
+  所以「页面上是改版前的旧推荐载荷、用户直接点生成」时服务端仍会 400——这是有意的（服务端不能
+  依赖一个可能被伪造/过期的字段），并在文案里给出了出路：「若推荐卡上现在没法点选，请重新跑一次
+  『让 AI 推荐』拿到新版结果」。
+- **跨语言镜像（评审整改）**：同一条判据有两份实现（后端 `missing_group_choices` 守端点，前端
+  `pendingGroupChoices` 守即时反馈）。仓库先例不允许「各写一份、谁也不管谁」
+  （`tests/test_library_invariants.py:619` 的跨语言常量镜像 + 守卫），故：
+  场景表单一出处 = `tests/test_group_choice_mirror.py::cases()`，期望值由 Python 判据现算并导出
+  `tests/js/group-choice-mirror.fixture.json`，JS 侧 `tests/js/group-choice-mirror.test.mjs` 逐场景
+  比对前端判据 → **改一侧忘了另一侧就红**。文案同样单源：前端拦截文案只在 `fx/module.js`
+  的 `groupChoiceGapText` 里写一份（`ui/generate-core.js` 与就绪检查单都读它）。
 - **用户选择的存在哪里**：前端新增 `groupChoices = {组 id: slug}`（草稿持久化，随现有草稿机制
   落盘/恢复）；后端请求新增可选字段 `group_choices`（同形状字符串映射）。
 - **选中态的唯一判据 = `groupChoices`**：`renderGroupCards` 不再从 `selectedSlugs` 反推选中，

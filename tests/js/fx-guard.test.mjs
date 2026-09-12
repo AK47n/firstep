@@ -115,8 +115,12 @@ const DOMAINS = {
   },
   "module.js": {
     moduleBadges: "fn", pythonArtifactSummary: "fn", groupOfSlug: "fn",
-    applyGroupRadio: "fn", autoAddDedup: "fn", groupConflicts: "fn",
+    autoAddDedup: "fn", groupConflicts: "fn",
     renderGroupCards: "fn", groupRequirementNote: "fn",
+    // 功能组显式选择（工单 group-choice-required/01）：applyGroupRadio 已被取代（删除）
+    renderableGroupCards: "fn", groupChoiceRequired: "fn", groupMemberPick: "fn",
+    pendingGroupChoices: "fn", applyGroupChoices: "fn", recordGroupChoice: "fn",
+    clearGroupChoiceForSlug: "fn", pruneGroupChoices: "fn", groupChoiceGapText: "fn",
     moduleGridPlatformLabel: "fn", moduleGridStatusText: "fn",
     moduleGridBadgeClass: "fn", moduleGridFilter: "fn", moduleGridCountText: "fn",
     moduleGridHTML: "fn", moduleInfoHTML: "fn", multiInstanceModules: "fn",

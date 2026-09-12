@@ -50,17 +50,6 @@ export function groupOfSlug(groups, slug) {
   return null;
 }
 
-export function applyGroupRadio(groups, selectedSlugs, groupId, slug) {
-  // 单选交互：点击成员 → 从 selectedSlugs 移除同组其他成员后加入该成员；
-  // 点击已选成员 = 取消整组（该组全部成员移出）。未知组 id / 旧载荷按无组
-  // 处理（只加入，无移除）。
-  const group = (groups || []).find((g) => g.id === groupId) || null;
-  const members = group ? (group.members || []).map((m) => m.slug) : [slug];
-  const without = selectedSlugs.filter((s) => !members.includes(s));
-  if (selectedSlugs.includes(slug)) return without;
-  return without.concat(slug);
-}
-
 export function autoAddDedup(groups, selectedSlugs, modules) {
   // autoAdd 同组去重：data.modules 逐个加入时，若该 slug 属某组且已选里已有
   // 同组任一成员 → 跳过（仅首个推荐成员入集；AI 的其它同组推荐仅以组卡徽标
@@ -101,43 +90,59 @@ export function groupConflicts(groups, selectedSlugs) {
 // ---------------------------------------------------------------------------
 
 export function renderableGroupCards(groups) {
-  // 出卡判据与后端一致：≥2 成员才出卡（单成员组无可选）；hint 卡（AI 未推荐）
-  // 保留展示但不纳入「必须选」。
+  // 出卡判据与后端一致：≥2 成员才出卡（单成员组无可选）。
   return (groups || []).filter((g) => (g.members || []).length >= 2);
 }
 
 export function groupChoiceRequired(group) {
-  // 待选判据：choice_required 为真（命中卡）且 ≥2 成员。旧载荷无该键 → false
-  // （历史缓存不该把用户卡死在生成前，与 spec「旧载荷一律按 false」一致）。
+  // **硬选择**判据（未选即拦生成）：choice_required 为真（命中卡）且 ≥2 成员。
+  // 旧载荷无该键 → false（历史缓存的卡不做硬拦）。
   if (!group) return false;
   if (!group.choice_required) return false;
   return (group.members || []).length >= 2;
 }
 
-export function pendingGroupChoices(groups, choices) {
-  // 还没由用户点过的功能组（组 id → slug）；空数组 = 可以生成。
+export function groupMemberPick(group, choices) {
+  // 用户在该组点过的成员 slug（组外 / 空 / 不存在 → 空串）。合法选择判据单源，
+  // 供 pendingGroupChoices / applyGroupChoices / groupRequirementNote 共用。
+  const slug = (choices || {})[group && group.id];
+  if (!slug) return "";
+  return (group.members || []).some((m) => m.slug === slug) ? slug : "";
+}
+
+export function pendingGroupChoices(groups, choices, selectedSlugs) {
+  // 还没由用户点过的**硬选择**组（组 id → slug）；空数组 = 可以生成。
+  // 判据与后端 `missing_group_choices` 逐条对齐（跨语言镜像由
+  // tests/js/group-choice-mirror.test.mjs + tests/test_group_choice_mirror.py 钉住）：
+  //   ① ≥2 成员 ② 该组确实进了选中集（组内一个成员都没有 = hint 卡形态，不拦）
+  //   ③ choices 里没有该组的合法成员值。
   const picked = choices || {};
+  const selected = new Set(selectedSlugs || []);
   return renderableGroupCards(groups).filter((g) => {
     if (!groupChoiceRequired(g)) return false;
-    const slug = picked[g.id];
-    return !(slug && (g.members || []).some((m) => m.slug === slug));
+    if (selectedSlugs && !(g.members || []).some((m) => selected.has(m.slug))) return false;
+    return !groupMemberPick(g, picked);
   });
 }
 
 export function applyGroupChoices(selectedSlugs, groups, choices) {
-  // 用用户的组选择重算集合（幂等、可复算）：先移除这些**出卡组**的全部成员，
-  // 再按 choices 加回用户点过的那一个。非组模块与不在卡上的组不受影响；
-  // hint 卡与旧载荷（无 choice_required）视为「无选择」→ 保持原集合不动。
-  const cards = renderableGroupCards(groups).filter((g) => groupChoiceRequired(g));
-  const groupMembers = new Set();
-  for (const g of cards) for (const m of (g.members || [])) groupMembers.add(m.slug);
-  const out = (selectedSlugs || []).filter((s) => !groupMembers.has(s));
+  // 用户点一下成员 → 重算集合（幂等、可复算）。判据：
+  //   * 点在**快照里已有的成员**上 = 换选：把它换成新点的那一个；
+  //   * 点在**快照里没有的成员**上 = 新增：新点的那一个进集合，其余同组成员不动
+  //     （用户从模块库手动加过的东西不该被一次点选带走——评审整改：只有「换选」才顶替）。
+  // 快照 = 调用方传进来的 selectedSlugs；本函数是纯函数，多次调用同一入参结果相同。
+  const snapshot = new Set(selectedSlugs || []);
+  const out = (selectedSlugs || []).slice();
   const picked = choices || {};
-  for (const g of cards) {
-    const slug = picked[g.id];
-    if (slug && (g.members || []).some((m) => m.slug === slug) && !out.includes(slug)) {
-      out.push(slug);
+  for (const g of renderableGroupCards(groups)) {
+    const slug = groupMemberPick(g, picked);
+    if (!slug) continue;
+    for (const m of (g.members || [])) {
+      if (m.slug === slug || !snapshot.has(m.slug)) continue;
+      const at = out.indexOf(m.slug);
+      if (at >= 0) out.splice(at, 1);
     }
+    if (!out.includes(slug)) out.push(slug);
   }
   return out;
 }
@@ -150,22 +155,34 @@ export function recordGroupChoice(choices, groups, groupId, slug) {
   return { ...(choices || {}), [groupId]: slug };
 }
 
+export function clearGroupChoiceForSlug(choices, groups, slug) {
+  // 某个模块被移出集合时，把「它就是该组的用户选择」那条记账一起清掉
+  // （工单 group-choice-required/01 评审整改）：否则界面会显示「已选 jy61p」
+  // 而工程里根本没有它 = 静默漏件。
+  const picked = { ...(choices || {}) };
+  for (const g of (groups || [])) {
+    if (picked[g.id] === slug) delete picked[g.id];
+  }
+  return picked;
+}
+
 export function pruneGroupChoices(groups, choices) {
   // 新一次推荐 / 换题 / 库变更后，旧选择只在**仍然成立**时保留：组还在、
   // 被点的成员还在该组里。返回新的 choices 副本（幂等，不改入参）。
   const picked = choices || {};
   const out = {};
   for (const g of (groups || [])) {
-    const slug = picked[g.id];
-    if (slug && (g.members || []).some((m) => m.slug === slug)) out[g.id] = slug;
+    const slug = groupMemberPick(g, picked);
+    if (slug) out[g.id] = slug;
   }
   return out;
 }
 
-export function groupChoiceGapText(groups, choices) {
+export function groupChoiceGapText(groups, choices, selectedSlugs) {
   // 未选功能组的拦截图中文案（空串 = 通过）：前端两处生成入口与就绪检查单共用，
-  // 措辞与后端 400 同义（工单 group-choice-required/01）。
-  const gap = pendingGroupChoices(groups, choices);
+  // 措辞与后端 400 同义（工单 group-choice-required/01）。selectedSlugs 参与判据
+  // （组没进选中集不算），与后端 `missing_group_choices` 同口径。
+  const gap = pendingGroupChoices(groups, choices, selectedSlugs);
   if (!gap.length) return "";
   return "功能组「" + gap.map((g) => g.label).join("」「")
     + "」还需要你选择一项——请到第 5 步推荐结果的「功能组选择」卡里点选后再生成";
@@ -651,5 +668,5 @@ export function libPlatformKits(modules) {
 }
 
 if (typeof window !== "undefined") {
-  Object.assign(window, { moduleBadges, pythonArtifactSummary, groupOfSlug, applyGroupRadio, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, renderableGroupCards, groupChoiceRequired, pendingGroupChoices, applyGroupChoices, recordGroupChoice, pruneGroupChoices, moduleGridPlatformLabel, moduleGridStatusText, moduleGridBadgeClass, moduleGridFilter, moduleGridCountText, moduleGridHTML, moduleInfoHTML, moduleRequiresIdentity, identityExemptLabel, INTERNAL_KINDS, multiInstanceModules, instancePayload, ensureDefaultInstances, instanceGapCount, libFilterModules, libSortModules, danglingDependencies, libStats, libStatsText, libChipRowHTML, moduleRowHTML, editDescStatus, libIsValidHttpUrl, libPlatformKits });
+  Object.assign(window, { moduleBadges, pythonArtifactSummary, groupOfSlug, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, renderableGroupCards, groupChoiceRequired, groupMemberPick, pendingGroupChoices, applyGroupChoices, recordGroupChoice, clearGroupChoiceForSlug, pruneGroupChoices, groupChoiceGapText, moduleGridPlatformLabel, moduleGridStatusText, moduleGridBadgeClass, moduleGridFilter, moduleGridCountText, moduleGridHTML, moduleInfoHTML, moduleRequiresIdentity, identityExemptLabel, INTERNAL_KINDS, multiInstanceModules, instancePayload, ensureDefaultInstances, instanceGapCount, libFilterModules, libSortModules, danglingDependencies, libStats, libStatsText, libChipRowHTML, moduleRowHTML, editDescStatus, libIsValidHttpUrl, libPlatformKits });
 }

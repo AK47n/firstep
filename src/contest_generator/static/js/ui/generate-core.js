@@ -32,7 +32,7 @@ import { expandSettingsCollapse } from "/js/ui/settings.js";  // 指引卡「去
 import { instancePayload } from "/js/fx/module.js";
 import { scoreChecklistId, scoreChecklistKey, scoreChecklistLoad, scoreChecklistItemsHTML, scoreChecklistProgressHTML, scoreChecklistSave, scoreChecklistExportText, formatScorePoints } from "/js/fx/score.js";
 import { syncStep7 } from "/js/ui/step-state.js";
-import { chosenPlatform, selectedSlugs, expanded, warnings, scorePoints, selectedReferenceIds, autoReferenceIds, currentTopicId, pythonTemplates, lastRecommend, prereadOverviewText, groupChoices, groupChoiceGap } from "/js/ui/generate-recommend.js";
+import { chosenPlatform, selectedSlugs, expanded, warnings, scorePoints, selectedReferenceIds, autoReferenceIds, currentTopicId, pythonTemplates, lastRecommend, prereadOverviewText, groupChoices, groupChoiceGapMessage } from "/js/ui/generate-recommend.js";
 import { instances, pinBindings, pinUnbound, pinRoles } from "/js/ui/generate-pins.js";
 import { markStepDone, markStepUndone } from "/js/ui/step-state.js";
 import { syncMainCHighlight } from "/js/ui/generate-mainc.js";
@@ -58,14 +58,9 @@ const SKELETON_MODES = {
 
 // 功能组「必须由用户显式选择」（工单 group-choice-required/01）：未选就拦在本地，
 // 不让请求发出去——服务端 /api/generate 与 /api/skeleton 也守同一条规矩（400 中文）。
-// 判据单源 = fx/module.js 的 groupChoiceGapText（与组卡渲染、就绪检查单同一口径）；
+// 判据与文案单源都在 fx/module.js（经推荐簇的 groupChoiceGapMessage 读），
 // 主生成走就绪检查单（generateReadinessChecks 里那一条硬判据），骨架走这里。
-function groupChoiceGapText() {
-  const gap = groupChoiceGap();
-  if (!gap.length) return "";
-  return "功能组「" + gap.map((g) => g.label).join("」「")
-    + "」还需要你选择一项——请到第 5 步推荐结果的「功能组选择」卡里点选后再生成。";
-}
+const groupChoiceGapText = () => groupChoiceGapMessage();
 
 async function generateMain(mode) {
   const cfg = SKELETON_MODES[mode];

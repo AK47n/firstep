@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  groupOfSlug, applyGroupRadio, autoAddDedup, groupConflicts,
+  groupOfSlug, applyGroupChoices, recordGroupChoice, autoAddDedup, groupConflicts,
   renderGroupCards, groupRequirementNote,
 } from "../../src/contest_generator/static/js/fx/module.js";
 
@@ -95,7 +95,7 @@ test("组卡渲染：转义模型文本，避免注入可交互控件", () => {
 
 // 同组互斥收敛（工单 real-acceptance/04）：载荷 recommended ≤1 + dropped =
 // 被收敛剔掉的成员（AI 也推荐过它，只是组内只能留一个）——本卡标注可见，
-// 用户点它即换选（换选语义由 applyGroupRadio 保证，无需新交互）。
+// 用户点它即换选（换选语义由 applyGroupChoices / recordGroupChoice 保证——工单 group-choice-required/01 取代了 applyGroupRadio）。
 const convergedGroups = [
   {
     id: "zigbee-rx", label: "Zigbee 无线链路（接收侧）", hint: false, choice_required: true,
@@ -166,19 +166,25 @@ test("autoAdd 去重：旧载荷 / 无组库 = 逐个照加（行为与现状一
   assert.deepEqual(autoAddDedup(undefined, undefined, undefined), []);
 });
 
-test("换选 swap：点击成员 → 移除同组其他成员后加入该成员", () => {
-  assert.deepEqual(applyGroupRadio(groups, ["huidu"], "gray-track", "pid"), ["pid"]);
-  assert.deepEqual(applyGroupRadio(groups, ["xunji", "motor"], "gray-track", "huidu"), ["motor", "huidu"]);
+test("换选 swap：用户点成员 → 记录选择 + 同组旧成员被顶替（取代 applyGroupRadio）", () => {
+  const g = groups.map((x) => ({ ...x, choice_required: true }));
+  let choices = recordGroupChoice({}, g, "gray-track", "pid");
+  assert.deepEqual(applyGroupChoices(["huidu"], g, choices), ["pid"]);
+  choices = recordGroupChoice(choices, g, "gray-track", "huidu");
+  assert.deepEqual(applyGroupChoices(["xunji", "motor"], g, choices), ["motor", "huidu"]);
 });
 
-test("取消整组：再点已选成员 → 移除该组全部成员（不强制选）", () => {
-  assert.deepEqual(applyGroupRadio(groups, ["pid"], "gray-track", "pid"), []);
-  assert.deepEqual(applyGroupRadio(groups, ["xunji", "imu_uart"], "gray-track", "xunji"), ["imu_uart"]);
+test("取消 = 从已选清单移除模块（不再有「再点已选 = 取消整组」的隐式行为）", () => {
+  const g = groups.map((x) => ({ ...x, choice_required: true }));
+  // 点过的选择仍在，但集合里原本没有该组成员 → 只把所选那一个加回来
+  assert.deepEqual(applyGroupChoices([], g, { "gray-track": "pid" }), ["pid"]);
+  // 未点过 + 集合里没有 → 原样
+  assert.deepEqual(applyGroupChoices([], g, {}), []);
 });
 
-test("换选/取消：未知组 id 与旧载荷不炸（按无组处理 = 只加入）", () => {
-  assert.deepEqual(applyGroupRadio(groups, ["motor"], "no-such-group", "pid"), ["motor", "pid"]);
-  assert.deepEqual(applyGroupRadio([], ["motor"], "gray-track", "pid"), ["motor", "pid"]);
+test("换选：未知组 id 不进 choices / 不影响集合", () => {
+  assert.deepEqual(recordGroupChoice({}, groups, "no-such-group", "pid"), {});
+  assert.deepEqual(applyGroupChoices(["motor"], groups, { "no-such-group": "pid" }), ["motor"]);
 });
 
 test("同组多选警告：同组 ≥2 成员在 selectedSlugs → 出冲突条目（不硬拦）", () => {

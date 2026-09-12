@@ -6,8 +6,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  renderableGroupCards, groupChoiceRequired, pendingGroupChoices,
-  applyGroupChoices, recordGroupChoice, pruneGroupChoices,
+  renderableGroupCards, groupChoiceRequired, groupMemberPick, pendingGroupChoices,
+  applyGroupChoices, recordGroupChoice, clearGroupChoiceForSlug, pruneGroupChoices,
   renderGroupCards, groupRequirementNote, groupChoiceGapText,
 } from "../../src/contest_generator/static/js/fx/module.js";
 
@@ -59,14 +59,18 @@ test("待选判据：命中卡算、hint 卡与旧载荷不算、单成员组不
   assert.equal(groupChoiceRequired(hintCard), false);
   assert.equal(groupChoiceRequired(legacy), false);
   assert.equal(groupChoiceRequired(single), false);
-  assert.deepEqual(pendingGroupChoices([hit, hintCard, legacy, single], {}).map((g) => g.id),
+  const sel = ["imu_uart"];
+  assert.deepEqual(pendingGroupChoices([hit, hintCard, legacy, single], {}, sel).map((g) => g.id),
     ["attitude-hold"]);
-  assert.deepEqual(pendingGroupChoices([hit, hintCard, legacy], { "attitude-hold": "imu_uart" }), []);
+  assert.deepEqual(pendingGroupChoices([hit, hintCard, legacy], { "attitude-hold": "imu_uart" }, sel), []);
   // 越界 / 不存在的成员 = 没选（宁严勿松）
-  assert.deepEqual(pendingGroupChoices([hit], { "attitude-hold": "motor" }).map((g) => g.id),
+  assert.deepEqual(pendingGroupChoices([hit], { "attitude-hold": "motor" }, sel).map((g) => g.id),
     ["attitude-hold"]);
-  assert.deepEqual(pendingGroupChoices([hit], { "unknown-group": "imu_uart" }).map((g) => g.id),
+  assert.deepEqual(pendingGroupChoices([hit], { "unknown-group": "imu_uart" }, sel).map((g) => g.id),
     ["attitude-hold"]);
+  // 组内一个成员都没进选中集（用户把模块删了 / hint 卡形态）→ 不拦（与后端条件②同口径）
+  assert.deepEqual(pendingGroupChoices([hit], {}, ["pid"]), []);
+  assert.deepEqual(pendingGroupChoices([hintCard], {}, ["pid"]).map((g) => g.id), []);
 });
 
 test("点选即记账：recordGroupChoice 幂等、组外成员不认", () => {
@@ -77,16 +81,23 @@ test("点选即记账：recordGroupChoice 幂等、组外成员不认", () => {
   assert.deepEqual(recordGroupChoice(first, [hit], "no-such-group", "imu_uart"), first, "未知组不记");
 });
 
-test("用户选择重算集合：幂等 / 换选顶替 / 非组模块与 hint 卡不动", () => {
+test("用户选择重算集合：幂等 / 换选顶替 / 未点过不动作 / hint 卡点了也生效", () => {
   const groups = [hit, hintCard];
   const before = ["pid", "imu_uart"];
   assert.deepEqual(applyGroupChoices(before, groups, { "attitude-hold": "imu_uart" }), before,
     "已点过推荐件 = 集合不变");
   assert.deepEqual(applyGroupChoices(before, groups, { "attitude-hold": "jy61p" }),
     ["pid", "jy61p"], "换选 = 同组旧成员被顶替");
-  assert.deepEqual(applyGroupChoices(["pid", "imu_uart"], groups, {}), ["pid"],
-    "hint 卡与未点过的命中卡都不参与重算（组内成员移出、无选择可加回）");
+  assert.deepEqual(applyGroupChoices(before, groups, {}), before,
+    "未点过的命中卡保持调用方集合（AI 收敛结果仍在，界面不显示为已选）");
   assert.deepEqual(applyGroupChoices(["pid"], groups, { "attitude-hold": "jy61p" }), ["pid", "jy61p"]);
+  // hint 卡（AI 未推荐、题面疑似需要）：点组内**快照里已有**的成员 = 换选（顶替同组另一个）
+  assert.deepEqual(applyGroupChoices(["pid"], [hintCard], { "gray-track": "huidu" }), ["huidu"],
+    "点了 huidu：快照里同组的 pid 被顶替");
+  // 点组内**快照里没有**的成员 = 只新增，不动别的
+  assert.deepEqual(applyGroupChoices(["motor"], [hintCard], { "gray-track": "huidu" }), ["motor", "huidu"]);
+  assert.deepEqual(applyGroupChoices(["motor"], [hit], { "attitude-hold": "jy61p" }), ["motor", "jy61p"],
+    "组内原本一件都没选（AI 那件被用户删了）→ 只加不减");
 });
 
 test("pruneGroupChoices：换题 / 库变更后旧选择只在仍成立时保留", () => {
@@ -111,11 +122,13 @@ test("需求句灰注：未选写「请选择」；换选后写「已由 <组> �
 });
 
 test("拦截图文案：带上组名，全选齐 = 空串（可以生成）", () => {
-  const text = groupChoiceGapText([hit, hintCard], {});
+  const sel = ["imu_uart"];
+  const text = groupChoiceGapText([hit, hintCard], {}, sel);
   assert.match(text, /航向保持 \/ 姿态传感器/);
   assert.match(text, /还需要你选择一项/);
-  assert.equal(groupChoiceGapText([hit, hintCard], { "attitude-hold": "imu_uart" }), "");
-  assert.equal(groupChoiceGapText([], {}), "");
+  assert.equal(groupChoiceGapText([hit, hintCard], { "attitude-hold": "imu_uart" }, sel), "");
+  assert.equal(groupChoiceGapText([], {}, []), "");
+  assert.equal(groupChoiceGapText([hit], {}, ["pid"]), "", "组没进选中集 = 不拦（与后端同口径）");
 });
 
 test("renderableGroupCards：单成员组不出卡（与后端同判据）", () => {

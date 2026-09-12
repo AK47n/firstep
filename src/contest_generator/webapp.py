@@ -569,10 +569,16 @@ def _require_group_choices(
     if not missing:
         return
     names = "、".join(f"『{g.label}』" for g in missing)
-    raise SelectionError(
+    message = (
         f"功能组 {names} 还需要你选择一项（同一功能只能选一个模块，"
         "请到推荐结果的「功能组选择」卡里点选后再生成）"
     )
+    if not choices:
+        # 请求里一个组选择都没有 = 十有八九是**改版前生成的旧推荐载荷**在页面上：
+        # 那张卡还不带选择交互（`choice_required` 是本次新增的载荷字段），用户点了也没用。
+        # 这条后注就是给他的出路（不静默、不猜）。
+        message += "；若推荐卡上现在没法点选，请重新跑一次「让 AI 推荐」拿到新版结果"
+    raise SelectionError(message)
 
 
 def _pin_summary_text(platform: str, manifests: Sequence[ModuleManifest]) -> str:

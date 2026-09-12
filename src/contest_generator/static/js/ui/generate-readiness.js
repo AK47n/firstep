@@ -50,7 +50,7 @@ function readinessState() {
     hasMainC: !!$("main-c").value.trim(),
     // 功能组显式选择（工单 group-choice-required/01）：非空 = 还有组没点过（硬判据）。
     // 判据单源 = fx/module.js 的 groupChoiceGapText（与组卡渲染、服务端 400 同一口径）。
-    groupChoiceReason: groupChoiceGapText((lastRecommend || {}).exclusive_groups || [], groupChoices),
+    groupChoiceReason: groupChoiceGapMessage(),
   };
 }
 function renderReadinessPanel() {
