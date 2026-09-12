@@ -156,8 +156,12 @@ test("generate-recommend.js 接线：委托绑定 + stopPropagation + 已选清�
   // 三处入口统一走 data-mod-info 委托（innerHTML 全量重绘后仍有效）
   assert.match(src, /bindModuleInfoEntry\(box\)/);
   assert.match(src, /closest\("\[data-mod-info\]"\)/);
-  // 说明按钮嵌在 .chip.rec（data-remove）里：不 stopPropagation 会顺手移除模块
+  // 说明按钮嵌在 .chip.rec（data-remove）里，且 chip 的移除监听挂在 chip 本体上
+  // ——同一元素的监听属 target 阶段，先于容器冒泡监听 → **必须捕获阶段**才拦得住
+  // （真机验收抓到过：冒泡阶段 stopPropagation 时模块已被移除）
   assert.match(src, /ev\.stopPropagation\(\)/);
+  assert.match(src, /\}, true\);/);
+  assert.match(src, /ev\.preventDefault\(\)/);
   // 已选清单行带说明按钮
   assert.match(src, /moduleInfoBtnHTML\(m\.slug\)/);
   // 弹窗标题与推荐理由（chip 上那句短线代号在弹窗里有上下文）

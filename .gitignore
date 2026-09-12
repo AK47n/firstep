@@ -54,3 +54,10 @@ sources/materials/
 
 # CDP 批跑器的逐次运行记录（run-<时间戳>.json，每次批跑都新增；不入库）
 .scratch/cdp-smoke-runs/
+
+# 真机验收（playwright，工单 module-intro-detail/05）：依赖与浏览器二进制不入库
+# ——`npm install && npx playwright install chromium` 一行即可重建；
+# 浏览器本体默认装在 %LOCALAPPDATA%\ms-playwright（本来就在仓库外）。
+node_modules/
+tests/browser/**/test-results/
+tests/browser/**/*.png

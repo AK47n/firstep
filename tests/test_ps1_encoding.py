@@ -21,8 +21,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 _UTF8_BOM = b"\xef\xbb\xbf"
 
-# sources/ 为赛题素材与第三方源码（vendored），不适用本仓库脚本约定
-_EXCLUDE_PREFIXES = (ROOT / "sources",)
+# sources/ 为赛题素材与第三方源码（vendored），不适用本仓库脚本约定；
+# node_modules/ 同理（npm 装的第三方包，工单 module-intro-detail/05 引入 playwright
+# 真机验收后才出现——包内的 .ps1 是别人写的，我们不改，也管不着）
+_EXCLUDE_PREFIXES = (ROOT / "sources", ROOT / "node_modules")
 
 
 def _is_repo_script(path: Path) -> bool:

@@ -1,0 +1,28 @@
+test(模块说明): 真机验收补上——playwright 真浏览器点「说明」，当场抓到阶段顺序 bug（工单 module-intro-detail/05）
+
+上一条提交结尾如实记了「没做真浏览器点击」，这次补上，而且第一条就抓到真 bug。
+
+新增（tests/browser/，不进默认测试跑，改动推荐区交互时手动跑）：
+- server.mjs：起真后端的夹具（FIRSTEP_LAUNCHER_PORT 覆盖端口，不动用户默认端口；
+  按进程树收服务）。唯一假件 = 拦 /api/recommend 回合成 SSE（真推荐要花 LLM 额度），
+  其余全真：真 /api/modules（真库 93 模块 + 真 intro 拆段）、真 SSE 解析、真渲染、
+  真事件委托。从「让 AI 推荐」按钮走而不是直接调渲染函数——ui/* 按 app.js 规则 3
+  不挂 window 桥，从按钮走才是唯一不打洞的入口，也顺带验了「按钮 → 载荷 → 渲染」。
+- module-intro.spec.mjs：6 条用例（chip 点说明且不移除模块 / 弹窗四问分段 + 推荐理由
+  + 引脚表源码 / Esc 与遮罩关闭 / 组卡点说明不误选 radio / 灰注与已选清单行同样能开 /
+  回归点 chip ✕ 仍移除模块）。
+
+**真机抓到的 bug（静态断言永远抓不到）**：第一版在容器上挂**冒泡阶段**委托 +
+stopPropagation，真机点了「说明」之后**模块真的被移除了**（已选清单里 ir_beam 没了）。
+根因：chip 的移除监听挂在 chip **本体**上，与目标同元素的监听属 **target 阶段**，
+先于容器冒泡监听执行——冒泡阶段再拦已经晚了。改**捕获阶段**
+（addEventListener(..., true) + stopImmediatePropagation）后 6/6 绿。
+静态断言检的是「HTML 里有 data-mod-info」「代码写了 stopPropagation」，三条全过而
+行为是错的：**两个监听器的执行先后是运行时事实，不是文本事实**。
+
+顺带：node_modules 让 tests/test_ps1_encoding.py 的门禁扫到第三方 .ps1——把
+node_modules 加进该测试的 vendored 排除名单（与 sources/ 同类）；.gitignore 补
+node_modules/ 与 playwright 产物。
+
+验证：node --test tests/browser/module-intro.spec.mjs 6/6 绿；
+node --test "tests/js/*.test.mjs" 1481 绿；pytest 全量绿。
