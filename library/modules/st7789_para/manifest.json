@@ -2,6 +2,11 @@
   "slug": "st7789_para",
   "description": "ST7789V 1.14 寸 135×240 8 位并口（8080 接口）彩屏驱动（stm32 纯驱动，B 类——仅 stm32 条目、无 mspm0 对照，ADR 0009）：**库内首个 8 位并口显示件**——GPIO 位操作 14 脚（DB0-7 八位数据线 + RD/WR/CS/DC/RES/BLK 六控制线，**不用 FSMC/硬件外设/TIMER**——8080 时序 RD/WR 选通忙等），API 照 lcd 六合一模块风格（init(dir)/get_width/height/fill/clear/draw_point/line/rectangle/circle/show_char/string/num/float/chinese16x16/picture——不含 lcdwiki 旧壳 POINT_COLOR/LCD_ShowString）；字库复用库内 lcdfont.h 同源副本（1206/1608 + tfont16 汉字——包内无 ascii_1206 且 API 口径 12/16 字号需要）；默认脚 = 工单重拍 14 脚（包默认 14 脚全弃用——全撞既有占用；数据线叠采集/运动/输入类不同框、控制线叠板载灯+蜂鸣输出指示互替、与显示族互替——一次选一块屏）；性能：并口位操作整屏填充估算 ≈0.2-0.4s（未上板实测——建议局部刷新）；适用于小屏数据显示/仪表盘/菜单界面/波形曲线等赛题功能。",
   "dependencies": [],
+  "exclusive_group": {
+    "id": "display",
+    "label": "显示 / 屏幕",
+    "role": "ST7789V 1.14 寸 8 位并口 8080 彩屏（14 脚 GPIO 位操作，用量最大；仅 stm32 条目）"
+  },
   "platforms": {
     "stm32": {
       "files": [

@@ -2,6 +2,11 @@
   "slug": "ili9341",
   "description": "ILI9341 2.8 寸 320×240 16bit 彩屏驱动（stm32 纯驱动，B 类——仅 stm32 条目、无 mspm0 对照，ADR 0009）：软 SPI 位操作 6 脚（SCL/SDA/RES/DC/CS/BLK，不占硬件 SPI/TIMER），API 照 lcd 六合一模块风格（init(dir)/get_width/height/fill/clear/draw_point/line/rectangle/circle/show_char/string/num/float/chinese16x16/picture——不含 lcdwiki 旧壳 POINT_COLOR/LCD_ShowString）；字库复用库内 lcdfont.h（1206/1608 + tfont16 汉字；lcdwiki FONT.H 不入库）；触摸复用 tp_xpt2046 模块（同芯 XPT2046——配套选择、零耦合）；默认脚 = lcd 六脚组同款（ILI 屏×中景园屏互替同脚）；性能：软 SPI 全屏填充 ≈0.27s（建议局部刷新）；适用于大屏数据显示、仪表盘/菜单/界面/触摸座标屏（触摸配 tp_xpt2046）等赛题功能。",
   "dependencies": [],
+  "exclusive_group": {
+    "id": "display",
+    "label": "显示 / 屏幕",
+    "role": "ILI9341 2.8 寸 320×240 彩屏（软 SPI 6 脚，lcdwiki 包；仅 stm32 条目）"
+  },
   "platforms": {
     "stm32": {
       "files": [

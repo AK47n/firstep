@@ -4,6 +4,11 @@
   "dependencies": [
     "delay"
   ],
+  "exclusive_group": {
+    "id": "display",
+    "label": "显示 / 屏幕",
+    "role": "中景园 ZJY 六屏合一彩色 IPS（0.96-1.8 寸五种变体，软 SPI 6 脚，库内屏主力件）"
+  },
   "platforms": {
     "mspm0": {
       "files": [

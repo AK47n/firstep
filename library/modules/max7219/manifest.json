@@ -2,6 +2,11 @@
   "slug": "max7219",
   "description": "MAX7219 数码管/点阵显示驱动（mspm0 纯驱动，ADR 0009）：软 SPI 位操作 3 脚（DIN/CLK/CS，不必占硬件 SPI 外设），同一芯片双显示形态——8 位数码管（BCD 译码：max7219_write_digit 按位写 0-9/符号/0x0F 熄灭，级联可扩 16/24/32 位）与 4合1 点阵（无译码：max7219_write_matrix 逐行写 8×8 字模 × 1-4 片级联）；max7219_init 按形态配译码方式/亮度/扫描界限；适用于计分/计时/大数字显示、点阵文字与图形等赛题功能。",
   "dependencies": [],
+  "exclusive_group": {
+    "id": "display",
+    "label": "显示 / 屏幕",
+    "role": "MAX7219 数码管/点阵（软 SPI 3 脚；只出数字与点阵图形，无字符界面）"
+  },
   "platforms": {
     "mspm0": {
       "files": [
