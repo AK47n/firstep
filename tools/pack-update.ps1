@@ -89,8 +89,13 @@ $ManifestTmp = Join-Path ([System.IO.Path]::GetTempPath()) "firstep-files-$Tag-$
 try {
     $CorePath = Join-Path $RepoRoot 'src\contest_generator\pack_update.py'
     if (-not (Test-Path -LiteralPath $CorePath)) { throw "打包核心不存在：$CorePath" }
-    # -B：不写 .pyc、也不把脚本目录塞进 sys.path（避免与 site-packages 里的同名包打架）
-    $CoreOut = & $Python -B $CorePath --tree $RepoRoot --version $Tag --out $OutDir --files $ManifestTmp
+    # 以模块方式跑（PYTHONPATH=src + -m，与 pack-full.ps1 同款姿势）：直接
+    # `python <脚本路径>` 会让核心里的相对导入 `from .full_pack import ...` 失败
+    # （2026-09-18 真机演练踩到）。
+    $env:PYTHONPATH = Join-Path $RepoRoot 'src'
+    # 核心按 UTF-8 输出：否则中文摘要在已设为 UTF-8 的 PS 控制台上显示为乱码
+    $env:PYTHONIOENCODING = 'utf-8'
+    $CoreOut = & $Python -B -m contest_generator.pack_update --tree $RepoRoot --version $Tag --out $OutDir --files $ManifestTmp
     $code = $LASTEXITCODE
     if ($code -ne 0) {
         throw "更新包打包失败（退出码 $code）：见上方错误输出"
