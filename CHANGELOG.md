@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=6a2e358dd3b538ab1cc52f3bbb119b12527a93fd -->
+<!-- changelog-auto: last-commit=81d4b97c0b929aad73fbe1c4b03ff9c05d48760d -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -6,6 +6,7 @@
 
 ## 2026-09-12
 - 00:58 门禁引脚容量诊断（落点/可用 IO/解不开几组/至少去掉几个）
+- 10:21 feat(启动器): 失败原因可机读（launcher.log）+ E2 超时态真机收口（工单 launcher-failure-reason/01-02）
 
 ## 2026-09-11
 - 09:29 ﻿fix: 推荐域拒绝不再被吞成通用话术——kind=domain 分流 + 带理由重试一次（工单 real-acceptance/03）
