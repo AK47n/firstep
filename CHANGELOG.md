@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=bdc1b1ed92edd03111259f49295d2b4a8f0a67ef -->
+<!-- changelog-auto: last-commit=50722fcc63bfb2d371a348923fe879f08d5b6ece -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -29,6 +29,7 @@
 - 14:05 test(模块说明): 真机验收补上——playwright 真浏览器点「说明」，当场抓到阶段顺序 bug（工单 module-intro-detail/05）
 - 14:16 fix(推荐): 推荐 chip 改成双向选择开关——点掉必须变未选态、且能加回（工单 module-intro-detail/06）
 - 14:28 fix(推荐): 展开与选择集的并发收口——过期响应不写状态、在途触发改为排队（工单 module-intro-detail/07）
+- 15:11 fix(推荐): expand 失败不再自激重试 + 说明弹窗补键盘无障碍（工单 module-intro-detail/09-10）
 
 ## 2026-09-11
 - 09:29 ﻿fix: 推荐域拒绝不再被吞成通用话术——kind=domain 分流 + 带理由重试一次（工单 real-acceptance/03）
