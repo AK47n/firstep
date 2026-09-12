@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=6e193f6548a8ab232e7e689415d5de40c9e6fa0e -->
+<!-- changelog-auto: last-commit=703de25ea50356ef0de76341c99404ef9882dd47 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -14,6 +14,7 @@
 - 11:03 fix(推荐): 功能组显式选择的评审整改——点选 ReferenceError、hint 卡漏件、判据漂移、跨语言镜像守卫（工单 group-choice-required/01）
 - 11:22 fix(推荐): 功能组「必须选择」口径落定 + 真浏览器冒烟 23/23（工单 group-choice-required/01）
 - 11:22 test(推荐): 组选择纯件用例按新口径改写（组内多件才算歧义、未点过的组不动集合）
+- 11:34 库：beep 与 jq8900 并入功能组「提示输出 / 声」（同类功能件同组排查 1/4）
 
 ## 2026-09-11
 - 09:29 ﻿fix: 推荐域拒绝不再被吞成通用话术——kind=domain 分流 + 带理由重试一次（工单 real-acceptance/03）
