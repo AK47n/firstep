@@ -4,6 +4,11 @@
   "dependencies": [
     "delay"
   ],
+  "exclusive_group": {
+    "id": "barometer",
+    "label": "气压 / 海拔传感器",
+    "role": "BMP180 低压件（±1hPa/±1℃，已停产/换代老件；stm32 侧与 ms5611 同址 0xEE 不可同挂）"
+  },
   "platforms": {
     "mspm0": {
       "files": [

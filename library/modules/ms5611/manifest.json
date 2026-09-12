@@ -4,6 +4,11 @@
   "dependencies": [
     "delay"
   ],
+  "exclusive_group": {
+    "id": "barometer",
+    "label": "气压 / 海拔传感器",
+    "role": "MS5611 高精度件（±1.5mbar/0.1m 级、PROM 二次补偿、定高闭环；stm32 侧与 bmp180 同址 0xEE）"
+  },
   "platforms": {
     "mspm0": {
       "files": [
