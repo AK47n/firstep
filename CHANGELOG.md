@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=41eb4f9d6748c28ecc5297d11d5a2294dcf213e5 -->
+<!-- changelog-auto: last-commit=81a5bc82516f4701ddf3dd34cd5c032becf0b6ba -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -10,6 +10,7 @@
 - 10:22 chore(验收): 探针收尾按端口再清一次 + 工单记账（脱离进程树的服务 taskkill /T 打不到）
 - 10:35 fix(库): jy61p 并入「航向保持 / 姿态传感器」功能组——推荐里不再同时冒出两个姿态件（工单 attitude-group-jy61p/01）
 - 10:53 fix(推荐): 功能组卡改为「必须由用户显式选择」——不预选、提示「请选择」、未选卡住生成（工单 group-choice-required/01）
+- 10:53 fix(推荐): 换选后需求句灰注照实说「已由 <组> 的 <选中件> 替代」（工单 group-choice-required/01 补）
 
 ## 2026-09-11
 - 09:29 ﻿fix: 推荐域拒绝不再被吞成通用话术——kind=domain 分流 + 带理由重试一次（工单 real-acceptance/03）
