@@ -104,6 +104,36 @@
 | **v1.1.1** | ✅ 已发布（8 件资产，完整包 783 MB / 小发版 296 MB） | 修复「一键全量白下载 783 MB」与「全量后资料库仍报版本未知」 |
 | **v1.1.0** | ⚠️ 有缺陷，已被 v1.1.1 取代 | 点「一键全量」不会真正替换；资料库检查永远报「无基线」。老用户点一次「检查更新 → 一键更新」即可升到 1.1.1 |
 
+**发布仓库**：`AK47n/firstep`（= `git remote origin`）。
+档② 的线上复核脚本 `verify-06-online.py` 按这个 slug 取 release 元数据（`gh` CLI 已认证）。
+
+## 3.5 「下载抗断」特性的产物与**用户可见的新事实**（2026-09-13，`resumable-download`）
+
+| 项 | 位置 / 值 |
+|---|---|
+| 可续下载域模块 | `src/contest_generator/download_resume.py` |
+| 本地可控服务器 | `.scratch/resumable-download/sim-server.py`（六种行为；`--port 0` 由内核分配；默认 8031，**当前没有常驻实例**） |
+| 探针（真 socket） | `probe-01-resume.py`（下载函数层，五用例）、`probe-03-corridor.py`（任务层走廊 + 忽略 Range + 跨进程续传）、`probe-01-negative.py`（反证） |
+| 单测用桩服务器 | `tests/_byte_server.py`（进程内线程，只切流；**与探针那支强度不同**，别混） |
+| 证据 | `verify-01-baseline.*`、`verify-01-negative.txt`（反证）、`verify-02-probe.*`、`verify-03-corridor.*`、`verify-03-negative.*`、`verify-05-*`、`verify-06-local.json`、`verify-06-online.txt`（全在 `.scratch/resumable-download/`） |
+| **半成品落点（用户可见）** | 下载未完成的卷留在 `updates/full/`（完整包）与 `updates/materials/`（资料库），旁边带 `<卷名>.partial.json` 边车。**用户点取消或下载失败，这些文件不会被删**（它们就是断点）；成功或校验失败才清 |
+| 断点粒度 | **卷内**（字节级 `Range` 续传）。卷级断点（快照记 `ok`）是上一轮就有的，两者叠加 |
+
+**下次要验证/复现「抗断」时**：跑 `python .scratch/resumable-download/probe-03-corridor.py`
+（秒级、自带反证）；它起的是子进程端口，用完即停。想手工看弱网效果就用
+`sim-server.py --port 8031` 再配合 `?mode=cut|stall|slow`。
+
+**发布要点草稿**（本轮是用户可见的行为变化，发版时写进 VERSIONS.md / Release 说明；**本轮不发版**）：
+
+- 修复：下载断线后**从断点接着下**（以前一次网络抖动就从头再来；完整包 783 MB 尤其明显）；
+- 修复：**被截断的下载不再当成「下完了」**（以前进度 100% → 报校验失败 → 从 0 重来）；
+- 修复：断线**自动重试**（退避 2→4→8→…→60 秒封顶，**无次数上限**，随时可取消）；
+- 新增：中途取消或失败**不再丢掉已下载的部分**（`updates/` 下会留着半成品与
+  `.partial.json` 边车，**下一次点重试时从那里接着下**；成功或校验失败才清）；
+- 界面：剩余时间改说人话（「约 12 分钟」），弱网明写「网络较慢」，重试明写
+  「正在自动重试（第 N 次），从 X% 接着下」，失败分两类话术（网络 / 校验，后者明说
+  「重新下载也不会有变化」）。
+
 **main 上有一处修复尚未进任何发布包**（下次发版带走即可，无用户影响）：
 
 - 小发版一键更新的停服端口改为显式传 `FIRSTEP_LAUNCHER_PORT`（提交 `ba32e95a`）。

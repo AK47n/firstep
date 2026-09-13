@@ -1,0 +1,171 @@
+{
+  "impl": "resumable_download",
+  "negative": false,
+  "payload_bytes": 2097152,
+  "cases": [
+    {
+      "case": "stable",
+      "question": "不断的情况下能不能下完",
+      "probe_attempts": 1,
+      "network_requests": 1,
+      "attempts": 1,
+      "attempts_log": [
+        {
+          "attempt": 1,
+          "offset_before": 0,
+          "bytes_this_try": 2097152,
+          "seconds": 0.01,
+          "outcome": "ok"
+        }
+      ],
+      "claimed_ok": true,
+      "bytes_on_disk": 2097152,
+      "expected_bytes": 2097152,
+      "sha_local": "d69d5984c03381086eca4a86f92fe45c3ff57c3f1aa242a285dd29008ce53bb5",
+      "sha_expected": "d69d5984c03381086eca4a86f92fe45c3ff57c3f1aa242a285dd29008ce53bb5",
+      "sha_returned_matches": true,
+      "hashes_match": true,
+      "seconds": 0.05,
+      "request_starts": [
+        0
+      ],
+      "ranges_seen": [
+        ""
+      ],
+      "resumed_observed": false
+    },
+    {
+      "case": "cut",
+      "question": "连断 3 次，能不能从断点接上",
+      "probe_attempts": 1,
+      "network_requests": 4,
+      "attempts": 1,
+      "attempts_log": [
+        {
+          "attempt": 1,
+          "offset_before": 0,
+          "bytes_this_try": 2097152,
+          "seconds": 14.08,
+          "outcome": "ok"
+        }
+      ],
+      "claimed_ok": true,
+      "bytes_on_disk": 2097152,
+      "expected_bytes": 2097152,
+      "sha_local": "d69d5984c03381086eca4a86f92fe45c3ff57c3f1aa242a285dd29008ce53bb5",
+      "sha_expected": "d69d5984c03381086eca4a86f92fe45c3ff57c3f1aa242a285dd29008ce53bb5",
+      "sha_returned_matches": true,
+      "hashes_match": true,
+      "seconds": 14.1,
+      "request_starts": [
+        0,
+        838860,
+        1342176,
+        1644166
+      ],
+      "ranges_seen": [
+        "",
+        "bytes=838860-",
+        "bytes=1342176-",
+        "bytes=1644166-"
+      ],
+      "resumed_observed": true
+    },
+    {
+      "case": "stall",
+      "question": "对端卡死不动，能不能判出来并接上",
+      "probe_attempts": 1,
+      "network_requests": 2,
+      "attempts": 1,
+      "attempts_log": [
+        {
+          "attempt": 1,
+          "offset_before": 0,
+          "bytes_this_try": 2097152,
+          "seconds": 32.03,
+          "outcome": "ok"
+        }
+      ],
+      "claimed_ok": true,
+      "bytes_on_disk": 2097152,
+      "expected_bytes": 2097152,
+      "sha_local": "d69d5984c03381086eca4a86f92fe45c3ff57c3f1aa242a285dd29008ce53bb5",
+      "sha_expected": "d69d5984c03381086eca4a86f92fe45c3ff57c3f1aa242a285dd29008ce53bb5",
+      "sha_returned_matches": true,
+      "hashes_match": true,
+      "seconds": 32.06,
+      "request_starts": [
+        0,
+        786432
+      ],
+      "ranges_seen": [
+        "",
+        "bytes=786432-"
+      ],
+      "resumed_observed": true
+    },
+    {
+      "case": "ignore-range",
+      "question": "服务器不支持断点（恒 200），会不会拼出坏文件",
+      "probe_attempts": 1,
+      "network_requests": 1,
+      "attempts": 1,
+      "attempts_log": [
+        {
+          "attempt": 1,
+          "offset_before": 0,
+          "bytes_this_try": 2097152,
+          "seconds": 0.01,
+          "outcome": "ok"
+        }
+      ],
+      "claimed_ok": true,
+      "bytes_on_disk": 2097152,
+      "expected_bytes": 2097152,
+      "sha_local": "d69d5984c03381086eca4a86f92fe45c3ff57c3f1aa242a285dd29008ce53bb5",
+      "sha_expected": "d69d5984c03381086eca4a86f92fe45c3ff57c3f1aa242a285dd29008ce53bb5",
+      "sha_returned_matches": true,
+      "hashes_match": true,
+      "seconds": 0.04,
+      "request_starts": [
+        0
+      ],
+      "ranges_seen": [
+        ""
+      ],
+      "resumed_observed": false
+    },
+    {
+      "case": "slow",
+      "question": "弱网但连接正常，能不能下完",
+      "probe_attempts": 1,
+      "network_requests": 1,
+      "attempts": 1,
+      "attempts_log": [
+        {
+          "attempt": 1,
+          "offset_before": 0,
+          "bytes_this_try": 2097152,
+          "seconds": 5.3,
+          "outcome": "ok"
+        }
+      ],
+      "claimed_ok": true,
+      "bytes_on_disk": 2097152,
+      "expected_bytes": 2097152,
+      "sha_local": "d69d5984c03381086eca4a86f92fe45c3ff57c3f1aa242a285dd29008ce53bb5",
+      "sha_expected": "d69d5984c03381086eca4a86f92fe45c3ff57c3f1aa242a285dd29008ce53bb5",
+      "sha_returned_matches": true,
+      "hashes_match": true,
+      "seconds": 5.32,
+      "request_starts": [
+        0
+      ],
+      "ranges_seen": [
+        ""
+      ],
+      "resumed_observed": false
+    }
+  ],
+  "verdict": "PASS"
+}
