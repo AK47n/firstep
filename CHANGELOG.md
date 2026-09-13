@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=414f7af5d6fdef352875d6464bb55040ad94ed9a -->
+<!-- changelog-auto: last-commit=cad061ad38a67a80eefc9593e19dddf477495799 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -44,6 +44,7 @@
 - 21:32 docs(本机环境): 补记卡死的具体触发点（那支 status spy 打转的用例）与工单 12 的结构守卫/证据位置
 - 22:05 docs(下载): download_part 的活口量清了——生产侧零调用点，按 wontfix 保留（工单 resumable-download/14）
 - 22:46 test(下载): 12 键状态契约收成一份——内联副本改走共用常量，并立单一家结构守卫（工单 resumable-download/15）
+- 22:47 docs(本机环境): 补记工单 15 的契约单源、单一家守卫与六份证据（工单 resumable-download/15 收口）
 
 ## 2026-09-12
 - 00:58 门禁引脚容量诊断（落点/可用 IO/解不开几组/至少去掉几个）
