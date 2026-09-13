@@ -206,6 +206,50 @@ def test_install_bat_exists_and_chinese():
         assert needle in text, f"install.bat 缺少安装主流程：{needle}"
 
 
+def test_install_bat_port_message_follows_launcher_port():
+    """完成提示里的端口必须跟着 `FIRSTEP_LAUNCHER_PORT` 走（工单 newuser-download/07）。
+
+    真机演练卡点 K6：原文写死 `http://127.0.0.1:8000`，而端口被环境变量覆盖时
+    （同机第二实例 / 验收用别的端口）提示会指错地址——正好是「不要让用户照着一句假话操作」
+    这条主线要根除的毛病。改法：只说 `%PORT%`，口径与 `start-app.bat` 同一个变量、同一个默认值。
+    """
+    text = _install_bat_text()
+    assert "http://127.0.0.1:8000" not in text, (
+        "install.bat 里仍有写死的 8000——应改用 %PORT%（否则多实例/换端口时提示指错）"
+    )
+    assert "http://127.0.0.1:%PORT%" in text, "完成提示未使用 %PORT% 报端口"
+    assert "set PORT=8000" in text, "缺少端口默认值（口径应与 start-app.bat 的 8000 一致）"
+    assert "if defined FIRSTEP_LAUNCHER_PORT set PORT=%FIRSTEP_LAUNCHER_PORT%" in text, (
+        "端口未从 FIRSTEP_LAUNCHER_PORT 取值"
+    )
+
+
+def test_install_bat_failure_branches_offer_resume():
+    """没装 / 版本太旧的提示必须给「装完回来按回车继续」的路径（工单 newuser-download/07）。
+
+    这条来自真机演练暴露的局限：「机器上没有 Python」这种环境没法在本机复现，
+    于是把「用户装好之后怎么继续」做成脚本自身可验证的结构——
+    两个失败分支都 `call :recheck_python`，子过程重查版本、通过就 `goto :step_python_ok`
+    回到主线（用户不用重跑一遍已经做完的步骤）。
+    """
+    text = _install_bat_text()
+    assert ":recheck_python" in text, "缺少重查子过程（用户装完 Python 后无法继续）"
+    assert text.count("call :recheck_python") == 2, (
+        f"两个失败分支（need_python / old_python）都该能续跑，实际 call 次数 = {text.count('call :recheck_python')}"
+    )
+    assert ":step_python_ok" in text, "缺少重查成功后的回落标号"
+    assert "goto :step_python_ok" in text, "重查成功后未回到安装主线"
+    # 重查必须真的再查一次版本（不能只查 where）
+    recheck = text[text.find(":recheck_python"):]
+    assert "sys.version_info" in recheck, "重查子过程没有重新检查版本（只查了 where python？）"
+    for needle, why in (
+        ("按回车继续", "版本太旧分支没告诉用户可以按回车继续"),
+        ("按一次回车", "没找到 Python 分支没告诉用户可以按回车继续"),
+        ("之后再双击一次本脚本", "没给「关掉窗口稍后再来」的退路"),
+    ):
+        assert needle in text, why
+
+
 def test_start_app_bat_has_health_and_chinese_popups():
     """start-app.bat（工单 newcomer-onboarding/02）：用 /api/health 判定端口归属、
     失败分支弹中文提示（不再静默 exit /b 1）。"""
@@ -243,20 +287,27 @@ def test_install_bat_tells_user_not_to_rerun_it():
     assert "桌面" in done, "完成提示未点明是桌面上的快捷方式"
 
 
-def test_install_bat_python_branches_say_rerun():
-    """没装 / 版本太旧的提示要给「装完重新运行本脚本」（工单 newuser-download/04）：
-    否则新人装完 Python 不知道下一步做什么。"""
+def test_install_bat_python_branches_say_how_to_continue():
+    """没装 / 版本太旧的提示要给出**继续下去的办法**（工单 newuser-download/04、07）：
+    否则新人装完 Python 不知道下一步做什么。
+
+    工单 07 把话术升级了：从「装完重新运行本脚本即可」改成
+    「按回车就地重查（`call :recheck_python`）+ 之后也可以再双击一次本脚本」——
+    两种续跑方式都给，且按回车那条**不用重跑已经做完的步骤**。
+    """
+    text = _install_bat_text()
     for name, anchor in (
         ("need_python", ":need_python"),
         ("old_python", ":old_python"),
     ):
-        start = _install_bat_text().find(anchor)
+        start = text.find(anchor)
         assert start >= 0, f"install.bat 缺少 {anchor} 分支"
-        tail = _install_bat_text()[start:]
+        tail = text[start:]
         end = tail.find("exit /b 1")
         branch = tail if end < 0 else tail[:end]
         assert "python.org" in branch, f"{name} 分支未给官方下载地址"
-        assert "重新运行本脚本" in branch, f"{name} 分支未说『装完重新运行本脚本』"
+        assert "call :recheck_python" in branch, f"{name} 分支未给「按回车就地重查」的续跑路径"
+        assert "双击一次本脚本" in branch, f"{name} 分支未给「稍后再来」的退路"
 
 
 def test_install_bat_shortcut_payload_is_valid_powershell():

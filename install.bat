@@ -5,12 +5,23 @@ cd /d "%~dp0"
 rem 工具根（快捷方式负载要用）：cmd 的 set 不自动导出给子进程，必须显式设
 set "FIRSTEP_ROOT=%~dp0"
 
+rem ---------- 本次启动端口（与 start-app.bat 同一口径：只认 1..65535 的纯数字，缺省 8000）----------
+rem 只在完成提示里报给用户看；不做第二套校验逻辑（那边的校验在 start-app.bat 里，单一事实源）
+set PORT=8000
+if defined FIRSTEP_LAUNCHER_PORT set PORT=%FIRSTEP_LAUNCHER_PORT%
+echo %PORT%| findstr /r "^[1-9][0-9]*$" >nul 2>&1
+if errorlevel 1 set PORT=8000
+set /a PORT_OK=PORT
+if %PORT_OK% gtr 65535 set PORT=8000
+
 echo ============================================
 echo  firstep（电赛工程生成器）一键安装
 echo ============================================
 echo.
 
 rem ---------- 第 1 步：检测 Python ----------
+:step_python_ok
+rem 注：:recheck_python 会 goto 到这里——用户装完 Python 按回车就接着往下走
 where python >nul 2>&1
 if errorlevel 1 goto :need_python
 
@@ -63,7 +74,7 @@ if errorlevel 1 goto :check_fail
 echo.
 echo ============================================
 echo  安装完成！双击桌面的 firstep 快捷方式启动
-echo  （也可以双击本目录的 start-app.vbs；浏览器会自动打开 http://127.0.0.1:8000）
+echo  （也可以双击本目录的 start-app.vbs；浏览器会自动打开 http://127.0.0.1:%PORT%）
 echo.
 echo  以后每次启动：双击桌面的 firstep 即可，不用再运行本脚本。
 echo ============================================
@@ -72,17 +83,23 @@ pause
 exit /b 0
 
 :need_python
-echo [错误] 没有找到 Python。
-echo 请先安装 Python 3.13 或更新版本，下载地址：
-echo   https://www.python.org/downloads/
-echo 安装时勾选 "Add python.exe to PATH"，装完重新运行本脚本即可。
+echo [错误] 没有找到 Python。本工具需要 Python 3.13 或更新版本。
+echo.
+echo   1) 打开这个地址下载安装：https://www.python.org/downloads/
+echo   2) 安装时务必勾选 "Add python.exe to PATH"
+echo   3) 装完回到这个窗口按一次回车，本脚本会重新检查并接着装；
+echo      也可以现在关掉窗口，之后再双击一次本脚本（已装好的步骤会自动跳过）。
+echo.
 pause
+call :recheck_python
 exit /b 1
 
 :old_python
 echo [错误] 找到的 Python 版本太旧（需要 3.13 或更新）。
-echo 请到 https://www.python.org/downloads/ 下载新版安装，装完重新运行本脚本即可。
+echo 请到 https://www.python.org/downloads/ 下载新版安装；装好后回到本窗口按回车继续，
+echo 或之后再双击一次本脚本（已装好的步骤会自动跳过）。
 pause
+call :recheck_python
 exit /b 1
 
 :venv_fail
@@ -100,3 +117,27 @@ exit /b 1
 echo [错误] 依赖自检未通过，请重新运行本脚本。
 pause
 exit /b 1
+
+rem ---------- 子过程：用户装完 Python 后重查（被 :need_python / :old_python 调用）----------
+rem 只做「再查一次」这一件事：不重复安装逻辑、不改任何状态；查不过就如实说清下一步。
+:recheck_python
+where python >nul 2>&1
+if errorlevel 1 (
+    echo.
+    echo 还是没有找到 Python。两种可能：
+    echo   - 还没装完，或安装时没勾 "Add python.exe to PATH"；
+    echo   - PATH 变更对已经打开的窗口不生效——关掉本窗口、重新双击一次本脚本即可。
+    pause
+    exit /b 1
+)
+python -c "import sys; sys.exit(0 if sys.version_info >= (3, 13) else 1)"
+if errorlevel 1 (
+    echo.
+    echo 找到了 Python，但版本仍然低于 3.13——请装 3.13 或更新版本。
+    echo 若系统里有多个 Python，可到 https://www.python.org/downloads/ 装新版后重开本窗口再跑一次。
+    pause
+    exit /b 1
+)
+echo.
+echo Python 就绪，继续安装……
+goto :step_python_ok

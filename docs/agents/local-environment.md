@@ -59,18 +59,28 @@
 |---|---|
 | 系统 Python | **3.14.6**（`py -0p` 只有这一个；满足工具的 ≥3.13） |
 | 依赖 | fastapi / uvicorn / pypdf / pillow / pymupdf **已装在全局 site-packages** |
-| 真身 `.venv` | **不存在** —— `start-app.bat` 走「回退系统 python」分支；这解释了为什么真身没跑过 `install.bat` 也能起 |
-| 沙箱 `.venv` | 不存在（`local-environment.md` 第 1 节已记，属于故意不真实项） |
+| 真身 `.venv` | **现在有了**（2026-09-13 11:09 由 `install.bat` 建，跑依赖自检通过）——`start-app.bat` 会优先用它；在那之前真身一直是走「回退系统 python」分支 |
+| 沙箱 `.venv` | 不存在（第 1 节已记，属于故意不真实项） |
 
-**已知隐患（本机专属，与代码无关）**：全局 site-packages 里有**两个** editable 安装并存——
+**已清理的隐患（2026-09-13）**：全局 site-packages 里曾有**两个**同名 editable 安装并存，
+版本元数据指向**同一套源码的两个路径**——`0.1.0 → Desktop\firstep-sim\src`、
+`1.1.1 → Desktop\firstep\src`（注意方向：版本号小的指向沙箱、大的指向工作区，我先前记反过）。
+已用 `python -m pip uninstall -y contest-generator` 把 `0.1.0` 那份元数据清掉（pip 卸装输出留痕：
+`Uninstalling contest-generator-0.1.0`）。**残留的那份 `1.1.1` 指向 `firstep-sim\src`**，
+两份源码同源所以无害——但**再跑全局 `pip install -e .` 会重新制造重复元数据**，要装就用 `.venv`。
 
-```
-__editable__.contest_generator-0.1.0.pth  →  C:\Users\luoji\Desktop\firstep-sim\src
-__editable__.contest_generator-1.1.1.pth  →  C:\Users\luoji\Desktop\firstep\src
-```
+**本机不该丢的环境变量**：`LOCALAPPDATA` / `USERPROFILE` 这类被清空或改错时，pip 找不到缓存目录
+就会在当前目录建 `pip\cache\`（实测在仓库根落了 111 个文件）。演练脚本改环境变量请**逐项增删**，
+别整段替换 `PATH`/`USERPROFILE`。
 
-两个 src 都进了 `sys.path`，真身恰好排在前面所以现在能跑；**装依赖的路径不要再用全局 `pip install -e .`**
-（会再加一层）。要清就删掉沙箱那个 `0.1.0` 的 dist-info + pth（沙箱用 `sim-run.py` 起，不依赖它）。
+## 2.5b 演练脚本的两条铁律（2026-09-13 用血换的）
+
+1. **真身文件只读**：任何"改写一份再跑"的演练，改写目标必须是 `%TEMP%` 下的副本。
+   当天我给验证脚本算错了仓库根层数（`.scratch/<slug>/` 下 `parents[2]` 才对），
+   于是测试每跑一次就把「测试版 `install.bat`」覆盖到真身文件上一次——排查花了很久，
+   而且它伪装成"产品坏了"。**写这类脚本时先断言 `真身文件字节未变`。**
+2. **模拟外部命令别用 `.cmd`/`.bat` 垫片**：批处理里调用 `.cmd` 会**转移控制权**（缺 `call`），
+   父脚本直接终止——看起来就像"脚本自己提前退了"。要模拟版本不符，只改脚本里那一行判断。
 
 ## 2.6 新用户下载体验的演练口径（2026-09-13 起，`newuser-download` 特性）
 
@@ -81,7 +91,11 @@ __editable__.contest_generator-1.1.1.pth  →  C:\Users\luoji\Desktop\firstep\sr
    配置 / 日志 / updates 全被关进演练目录，真身 `~\.contest_generator` **零触碰**；
 3. `FIRSTEP_LAUNCHER_PORT=8020` 起服务；
 4. 依赖靠 `venv --system-site-packages` 就地满足（`PYTHONNOUSERSITE=1`），**别让 pip 写全局 user-site**；
-5. 跑完查三件事：8000/8020 是否已释放、有无残留 python 进程、真身数据目录 mtime 是否未变。
+   也别把 `LOCALAPPDATA` 清掉（pip 缓存会落到当前目录，见 2.5）；
+5. 跑完查三件事：8000/8020 是否已释放、有无残留 python 进程、真身数据目录 mtime 是否未变；
+6. **本次会话的 PowerShell 教训**：`PATH`/`USERPROFILE` 一旦在本会话改坏，后续每次调用都受影响，
+   会造出"产品坏了"的假象。改坏了就从注册表重建：
+   `HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment` + `HKCU:\Environment`。
 
 ## 3. 发布状态：main 与线上包的落差
 

@@ -23,8 +23,16 @@ _UTF8_BOM = b"\xef\xbb\xbf"
 
 # sources/ 为赛题素材与第三方源码（vendored），不适用本仓库脚本约定；
 # node_modules/ 同理（npm 装的第三方包，工单 module-intro-detail/05 引入 playwright
-# 真机验收后才出现——包内的 .ps1 是别人写的，我们不改，也管不着）
-_EXCLUDE_PREFIXES = (ROOT / "sources", ROOT / "node_modules")
+# 真机验收后才出现——包内的 .ps1 是别人写的，我们不改，也管不着）；
+# .venv/ 与 venv/ 是**本机虚拟环境**（`install.bat` / `python -m venv` 生成）：
+# venv 自带的 `Scripts\Activate.ps1` 由标准库生成、无 BOM，不是我们的脚本，也随时会被重建
+# ——2026-09-13 工单 newuser-download/07 在真身跑过 install.bat 后，这个门禁第一次撞上它。
+_EXCLUDE_PREFIXES = (
+    ROOT / "sources",
+    ROOT / "node_modules",
+    ROOT / ".venv",
+    ROOT / "venv",
+)
 
 
 def _is_repo_script(path: Path) -> bool:
