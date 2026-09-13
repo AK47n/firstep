@@ -130,6 +130,12 @@ class Sim:
                                     timeout=10) as resp:
             return json.loads(resp.read().decode("utf-8"))
 
+    def reset(self) -> None:
+        """清台账：让 `cut_runs` 的「第几次请求」从 1 重新算（每例开始前调）。"""
+        with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/reset",
+                                    timeout=10) as resp:
+            resp.read()
+
 
 # ---------------------------------------------------------------------------
 # 单个用例
@@ -172,13 +178,23 @@ def main() -> int:
         tmp = Path(tmpdir)
         urls = {
             "stable": sim.url("stable"),
-            "cut": sim.url("cut", fraction=SLICE_FRACTION),
-            "stall": sim.url("stall", fraction=SLICE_FRACTION),
+            # 断流 3 次后恢复：验「连断之后能不能接上」
+            "cut": sim.url("cut", fraction=SLICE_FRACTION, cut_runs=3),
+            # 卡死只卡 1 次：这一次要静默超过客户端的读超时（服务器侧 STALL_HOLD_SECONDS），
+            # 才验得到「零字节卡死被超时判出来」
+            "stall": sim.url("stall", fraction=SLICE_FRACTION, cut_runs=1),
             "ignore-range": sim.url("ignore-range"),
             "slow": sim.url("slow", kbps=384),
         }
         for case in cases:
-            # 台账只用来对「本用例第几次请求从哪开始」，故先取基线长度
+            # 判据卫生：每次跑之前把这一例的落盘点清干净。
+            # 不清会怎样：上一次留下的**完整文件**会被实现直接复用（它还带 sha 校验），
+            # 于是「断了能不能接上」根本不会发生——实测 stall 用例 0.05 秒就"通过"了。
+            for leftover in [tmp / f"{case.name}.bin",
+                             Path(str(tmp / f"{case.name}.bin") + ".partial.json")]:
+                leftover.unlink(missing_ok=True)
+            # 台账只用来对「本用例第几次请求从哪开始」：先清台账再取基线
+            sim.reset()
             before = len(sim.requests())
             t0 = time.time()
             outcome = _run_one(case, sim, urls[case.name], download, tmp,
@@ -203,9 +219,17 @@ def main() -> int:
 
 def _run_one(case: Case, sim: Sim, url: str, download, tmp: Path,
              negative: bool) -> dict:
+    """跑一个用例。
+
+    两个计数要分开看，别混：
+    - `probe_attempts`：**探针**的兜底重试次数（本探针自带的循环）；
+    - `network_requests`：服务器真的被请求了几次 —— 下载器**内部**的重试也会计入这里。
+      「自动重试」是产品行为，所以判据看的是 network_requests，而不是探针那层。
+    """
     dest = tmp / f"{case.name}.bin"
     for leftover in [dest, Path(str(dest) + ".partial.json")]:
         leftover.unlink(missing_ok=True)
+    before_requests = len(sim.requests())
     attempts_log: list[dict] = []
     digest = ""
     got_total = 0
@@ -244,7 +268,9 @@ def _run_one(case: Case, sim: Sim, url: str, download, tmp: Path,
     return {
         "case": case.name,
         "question": case.question,
-        "attempts": len(attempts_log),
+        "probe_attempts": len(attempts_log),
+        "network_requests": len(sim.requests()) - before_requests,
+        "attempts": len(attempts_log),          # 兼容旧字段名
         "attempts_log": attempts_log,
         "claimed_ok": claimed_ok,
         "bytes_on_disk": on_disk,
@@ -259,8 +285,8 @@ def _run_one(case: Case, sim: Sim, url: str, download, tmp: Path,
 def _print_case(o: dict) -> None:
     mark = "OK " if o["hashes_match"] else "!! "
     claim = "自称成功" if o["claimed_ok"] else "如实报错"
-    print(f"{mark}{o['case']:<13} 尝试 {o['attempts']} 次 / {o['seconds']}s  "
-          f"落盘 {o['bytes_on_disk']}/{o['expected_bytes']}  "
+    print(f"{mark}{o['case']:<13} 探针重试 {o['probe_attempts']} 次 / 网络请求 {o['network_requests']} 次"
+          f" / {o['seconds']}s  落盘 {o['bytes_on_disk']}/{o['expected_bytes']}  "
           f"请求起始偏移 {o['request_starts']}  {claim}  "
           f"哈希{'一致' if o['hashes_match'] else '不一致'}")
     for a in o["attempts_log"]:

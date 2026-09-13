@@ -12,7 +12,7 @@
 
     /p?mode=stable         正常发完（支持 Range）
     /p?mode=ignore-range   忽略 Range，恒 200 发整份（模拟代理/镜像剥掉断点能力）
-    /p?mode=cut&fraction=0.4   发到 40% 直接关连接（模拟断流）
+    /p?mode=cut&fraction=0.4&cut_runs=3   发到 40% 直接关连接（只切前 3 次，之后正常发完）
     /p?mode=stall&fraction=0.4 发到 40% 后不再发、也不关连接（模拟卡死）
     /p?mode=deadline&seconds=6 先睡 6 秒再发整份（模拟「长时间零字节」）
     /p?mode=slow&kbps=64       限速（模拟弱网，但连接是好的）
@@ -35,7 +35,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 CHUNK = 32 * 1024
-STALL_HOLD_SECONDS = 8.0  # 卡死模式的兜底等待：够判「对端零字节」，又不拖慢探针
+# 卡死模式发完首块后还要安静多久。
+# 必须**长于客户端的读超时**（download_resume.SOCKET_TIMEOUT_SECONDS = 30），
+# 否则先关连接的是服务器，客户端走的是「读干净了但没读满」那条路，
+# 验不到「零字节卡死被超时判出来」——这正是本模式存在的理由。
+STALL_HOLD_SECONDS = 35.0
 
 ARGS = argparse.Namespace(port=8031, size=4 * 1024 * 1024, seed=20260913)
 PAYLOAD = b""
@@ -49,6 +53,16 @@ _LOCK = threading.Lock()
 def _build_payload(size: int, seed: int) -> bytes:
     rng = random.Random(seed)
     return bytes(rng.getrandbits(8) for _ in range(size))
+
+
+def _request_index() -> int:
+    """**当前这次**请求是第几次（1 起）。`_record` 已把本次记进台账，故取长度即可。
+
+    台账被 `/reset` 清过之后重新从 1 起——`cut_runs` / `stall.cut_runs` 的语义
+    就是「每个用例内的前几次请求」，所以探针每例开始前会调一次 `/reset`。
+    """
+    with _LOCK:
+        return max(1, len(REQUESTS))
 
 
 def _record(path: str, range_header: str, start: int, status: int) -> None:
@@ -99,6 +113,14 @@ class Handler(BaseHTTPRequestHandler):
             import json
             body = json.dumps(REQUESTS).encode("utf-8")
             self._send_bytes(200, body, "application/json")
+            return
+        if parsed.path == "/reset":
+            # 清台账：`cut_runs` / `stall.cut_runs` 按「第几次请求」生效，
+            # 跨用例累加会让它们永远不满足（探针实测踩过：stall 用例 0.02 秒就"通过"了）。
+            # 探针每例开始前调一次，用例之间才互不干扰。
+            with _LOCK:
+                REQUESTS.clear()
+            self._send_bytes(200, b"reset", "text/plain")
             return
         if parsed.path != "/p":
             self._send_bytes(404, b"not found", "text/plain")
@@ -152,22 +174,32 @@ class Handler(BaseHTTPRequestHandler):
             headers["Content-Range"] = f"bytes {start}-{end}/{total}"
 
         if mode == "cut":
+            # 只切前 cut_runs 次请求，之后正常发完。
+            # 为什么要这样：每次都切掉「剩余部分的 40%」在数学上会收敛（0.6^n → 0），
+            # 但工程上要几十轮才凑满，探针会跑到天荒地老。真实的坏网络也是「坏一阵就好」，
+            # 所以默认切 3 次——既够验「断了能接上」，又能在秒级跑完。
             frac = float((q.get("fraction") or ["0.4"])[0])
-            keep = max(1, int(len(blob) * frac))
-            self._stream(status, blob[:keep], headers, declared=len(blob))
-            try:  # 模拟断流：不发完就关，客户端会拿到 IncompleteRead / 连接重置
-                self.connection.shutdown(socket.SHUT_RDWR)
-            except OSError:
-                pass
-            self.close_connection = True
-            return
+            cut_runs = int((q.get("cut_runs") or ["3"])[0])
+            if _request_index() <= cut_runs:
+                keep = max(1, int(len(blob) * frac))
+                self._stream(status, blob[:keep], headers, declared=len(blob))
+                try:  # 模拟断流：不发完就关，客户端会拿到 IncompleteRead / 连接重置
+                    self.connection.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+                self.close_connection = True
+                return
 
         if mode == "stall":
-            frac = float((q.get("fraction") or ["0.4"])[0])
-            keep = max(1, int(len(blob) * frac))
-            self._stream(status, blob[:keep], headers, declared=len(blob))
-            self._stall_until_client_gives_up()
-            return
+            # 与 cut 同理：卡死只卡前几次，之后正常发完（否则探针要一轮轮等 35 秒兜底）。
+            # 默认只卡 1 次——这一次就够验「零字节卡死被读超时判出来，然后重连接着下」。
+            cut_runs = int((q.get("cut_runs") or ["1"])[0])
+            if _request_index() <= cut_runs:
+                frac = float((q.get("fraction") or ["0.4"])[0])
+                keep = max(1, int(len(blob) * frac))
+                self._stream(status, blob[:keep], headers, declared=len(blob))
+                self._stall_until_client_gives_up()
+                return
 
         if mode == "slow":
             kbps = float((q.get("kbps") or ["64"])[0])
