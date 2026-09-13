@@ -108,7 +108,13 @@ def download_part(
 
 @dataclass
 class _PartState:
-    """单卷下载态（内存 + 快照共用形状）。"""
+    """单卷下载态（内存 + 快照共用形状）。
+
+    **没有 `from_dict`**（工单 12，与 `full_task._PartState` 完全同形）：快照读侧
+    从来不重建这个对象——`_snapshot_pairs` 把 JSON 存档项当 dict 交给
+    `task_download.restore_snapshot_parts`。原来那个 `from_dict` **全仓零调用点**
+    （工单 12 用静态 grep 与「换成抛异常的炸弹」两手证明），故删。
+    """
 
     name: str
     url: str = ""
@@ -129,21 +135,14 @@ class _PartState:
             "dest": self.dest,
         }
 
-    @staticmethod
-    def from_dict(data: dict[str, Any]) -> "_PartState":
-        return _PartState(
-            name=str(data.get("name") or ""),
-            url=str(data.get("url") or ""),
-            size=int(data.get("size") or 0),
-            sha256=str(data.get("sha256") or ""),
-            downloaded_bytes=int(data.get("downloaded_bytes") or 0),
-            ok=bool(data.get("ok")),
-            dest=str(data.get("dest") or ""),
-        )
-
 
 @dataclass
 class _BatchState:
+    """一个批次的下载态（资料库这条链路独有：卷是**两层**组织的）。
+
+    与 `_PartState` 同理没有 `from_dict`（工单 12：零调用点，快照读侧走 dict）。
+    """
+
     slug: str
     name: str
     parts: list[_PartState] = field(default_factory=list)
@@ -151,14 +150,6 @@ class _BatchState:
     def to_dict(self) -> dict[str, Any]:
         return {"slug": self.slug, "name": self.name,
                 "parts": [p.to_dict() for p in self.parts]}
-
-    @staticmethod
-    def from_dict(data: dict[str, Any]) -> "_BatchState":
-        return _BatchState(
-            slug=str(data.get("slug") or ""),
-            name=str(data.get("name") or ""),
-            parts=[_PartState.from_dict(p) for p in data.get("parts") or []],
-        )
 
 
 class ApplyTask(TaskRetryMixin):

@@ -1,0 +1,200 @@
+  [OK ]tests/test_apply_diff.py                                1.2s  13 passed in 0.18s
+  [OK ]tests/test_autocommit.py                                9.6s  15 passed in 8.43s
+  [OK ]tests/test_bindings_matrix.py                           6.8s  34 passed in 5.80s
+  [OK ]tests/test_boards.py                                    2.3s  19 passed, 1 warning in 0.94s
+  [OK ]tests/test_categories.py                                2.4s  32 passed in 1.24s
+  [OK ]tests/test_ccs_patcher.py                               1.5s  27 passed in 0.42s
+  [OK ]tests/test_changelog.py                                 1.4s  28 passed in 0.22s
+  [OK ]tests/test_clex.py                                      1.3s  31 passed in 0.19s
+  [OK ]tests/test_codeview.py                                  2.4s  101 passed in 1.30s
+  [OK ]tests/test_compile_runner.py                            5.5s  40 passed in 4.31s
+  [OK ]tests/test_config.py                                    1.4s  22 passed in 0.34s
+  [OK ]tests/test_context_manifest.py                          3.6s  20 passed, 1 warning in 2.18s
+  [OK ]tests/test_deepen.py                                    2.8s  14 passed, 1 warning in 1.45s
+  [OK ]tests/test_default_layout.py                            1.2s  3 passed in 0.15s
+  [OK ]tests/test_delivery.py                                  2.2s  16 passed, 1 warning in 0.96s
+  [OK ]tests/test_demo_script.py                               1.4s  10 passed in 0.39s
+  [OK ]tests/test_desktop_cleanup.py                           1.3s  4 passed in 0.20s
+  [OK ]tests/test_distill_adapters.py                          1.2s  8 passed in 0.12s
+  [OK ]tests/test_download_resume.py                           1.7s  37 passed in 0.62s
+  [OK ]tests/test_download_sequence_home.py                    1.3s  4 passed in 0.20s
+  [OK ]tests/test_download_status_surface.py                   7.2s  30 passed, 1 warning in 5.91s
+  [OK ]tests/test_drafts.py                                    2.0s  9 passed, 1 warning in 0.73s
+  [OK ]tests/test_entry_store.py                               1.2s  21 passed in 0.18s
+  [OK ]tests/test_errors.py                                    1.7s  18 passed in 0.52s
+  [OK ]tests/test_exclusive_group_gap_audit.py                 1.4s  13 passed in 0.41s
+  [OK ]tests/test_extraction.py                                1.6s  63 passed in 0.62s
+  [OK ]tests/test_fix_errors.py                                1.9s  102 passed in 0.84s
+  [OK ]tests/test_flash.py                                     3.7s  38 passed, 1 warning in 2.32s
+  [OK ]tests/test_full_apply.py                                2.1s  7 passed, 1 warning in 0.82s
+  [OK ]tests/test_full_apply_paths.py                          1.9s  7 passed in 0.62s
+  [OK ]tests/test_full_pack.py                                78.3s  28 passed in 77.23s (0:01:17)
+  [OK ]tests/test_full_task.py                                11.0s  33 passed, 1 warning in 9.56s
+  [OK ]tests/test_full_update.py                               2.2s  19 passed, 1 warning in 0.87s
+  [OK ]tests/test_full_updater.py                              2.0s  16 passed in 0.87s
+  [OK ]tests/test_generate_check_contract.py                   1.5s  52 passed in 0.44s
+  [OK ]tests/test_generate_collision_gate.py                   1.3s  10 passed in 0.16s
+  [OK ]tests/test_generation_output.py                         1.3s  41 passed in 0.28s
+  [OK ]tests/test_generator.py                                 8.8s  106 passed in 7.77s
+  [OK ]tests/test_group_choice_mirror.py                       1.1s  2 passed in 0.07s
+  [OK ]tests/test_idea_chat.py                                 1.2s  10 passed in 0.19s
+  [OK ]tests/test_impact.py                                    2.5s  22 passed, 1 warning in 1.22s
+  [OK ]tests/test_include_contract.py                          2.0s  12 passed in 0.93s
+  [OK ]tests/test_k230_artifact.py                             4.0s  79 passed in 2.95s
+  [OK ]tests/test_keil_patcher.py                              1.4s  29 passed in 0.42s
+  [OK ]tests/test_launcher_log.py                              5.3s  12 passed in 4.08s
+  [OK ]tests/test_lckfb_attribution.py                         2.2s  15 passed in 1.10s
+  [OK ]tests/test_library.py                                   4.3s  93 passed in 3.28s
+  [OK ]tests/test_library_invariants.py                        1.2s  22 passed in 0.20s
+  [OK ]tests/test_llm.py                                       1.7s  316 passed in 0.68s
+  [OK ]tests/test_llm_pricing.py                               1.1s  12 passed in 0.08s
+  [OK ]tests/test_llm_recent_workflows.py                      1.0s  5 passed in 0.07s
+  [OK ]tests/test_makefiles.py                                 1.2s  12 passed in 0.21s
+  [OK ]tests/test_manifest.py                                  1.7s  69 passed in 0.65s
+  [OK ]tests/test_master.py                                    4.6s  69 passed, 1 skipped in 3.44s
+  [OK ]tests/test_master_embedded.py                           1.2s  10 passed in 0.15s
+  [OK ]tests/test_master_store.py                              2.5s  56 passed in 1.55s
+  [OK ]tests/test_materials_apply.py                           1.3s  12 passed in 0.24s
+  [OK ]tests/test_materials_pack.py                            1.7s  22 passed in 0.71s
+  [OK ]tests/test_materials_task.py                            5.2s  20 passed, 1 warning in 3.95s
+  [OK ]tests/test_materials_update.py                          2.0s  12 passed, 1 warning in 0.73s
+  [OK ]tests/test_md_library.py                                1.2s  28 passed in 0.28s
+  [OK ]tests/test_module_adc.py                                1.1s  11 passed in 0.11s
+  [OK ]tests/test_module_ads1115.py                            1.4s  6 passed in 0.47s
+  [OK ]tests/test_module_ags10.py                              1.4s  7 passed in 0.45s
+  [OK ]tests/test_module_aht10.py                              1.4s  7 passed in 0.47s
+  [OK ]tests/test_module_as32.py                               1.5s  8 passed in 0.50s
+  [OK ]tests/test_module_at24c02.py                            1.5s  7 passed in 0.53s
+  [OK ]tests/test_module_bh1750.py                             1.4s  7 passed in 0.44s
+  [OK ]tests/test_module_bmp180.py                             1.5s  10 passed in 0.51s
+  [OK ]tests/test_module_collision.py                          2.4s  7 passed in 1.35s
+  [OK ]tests/test_module_dep_cleanup.py                        1.2s  8 passed in 0.15s
+  [OK ]tests/test_module_dht11.py                              1.6s  8 passed in 0.48s
+  [OK ]tests/test_module_ds18b20.py                            1.5s  9 passed in 0.46s
+  [OK ]tests/test_module_ec01g.py                              1.5s  6 passed in 0.43s
+  [OK ]tests/test_module_ec11.py                               1.4s  5 passed in 0.39s
+  [OK ]tests/test_module_esp01s.py                             1.4s  6 passed in 0.40s
+  [OK ]tests/test_module_fingerprint.py                        1.6s  11 passed in 0.54s
+  [OK ]tests/test_module_flame.py                              1.6s  7 passed in 0.47s
+  [OK ]tests/test_module_gp2y1014au.py                         1.6s  7 passed in 0.47s
+  [OK ]tests/test_module_hc05.py                               1.5s  9 passed in 0.53s
+  [OK ]tests/test_module_hmc5883l.py                           2.1s  10 passed in 1.12s
+  [OK ]tests/test_module_human_ir.py                           1.5s  7 passed in 0.50s
+  [OK ]tests/test_module_hx711.py                              1.5s  6 passed in 0.47s
+  [OK ]tests/test_module_ili9341.py                            1.4s  4 passed in 0.39s
+  [OK ]tests/test_module_ili9488.py                            1.5s  4 passed in 0.44s
+  [OK ]tests/test_module_independence.py                       1.6s  4 passed in 0.58s
+  [OK ]tests/test_module_intro.py                              2.3s  127 passed, 1 warning in 0.96s
+  [OK ]tests/test_module_ir_beam.py                            1.5s  5 passed in 0.46s
+  [OK ]tests/test_module_ir_distance.py                        1.5s  8 passed in 0.47s
+  [OK ]tests/test_module_ir_remote.py                          1.4s  7 passed in 0.45s
+  [OK ]tests/test_module_ir_remote_tx.py                       1.5s  8 passed in 0.47s
+  [OK ]tests/test_module_joystick.py                           1.6s  8 passed in 0.49s
+  [OK ]tests/test_module_jq8900.py                             1.5s  10 passed in 0.46s
+  [OK ]tests/test_module_jy61p.py                              1.2s  6 passed in 0.22s
+  [OK ]tests/test_module_key_matrix.py                         1.4s  5 passed in 0.41s
+  [OK ]tests/test_module_key_uart_stm32.py                     1.1s  6 passed in 0.07s
+  [OK ]tests/test_module_l298n.py                              1.6s  8 passed in 0.49s
+  [OK ]tests/test_module_lcd.py                                1.5s  9 passed in 0.53s
+  [OK ]tests/test_module_led_beep.py                           1.2s  6 passed in 0.13s
+  [OK ]tests/test_module_max7219.py                            1.5s  7 passed in 0.45s
+  [OK ]tests/test_module_microwave_radar.py                    1.5s  7 passed in 0.47s
+  [OK ]tests/test_module_mlx90614.py                           1.4s  6 passed in 0.45s
+  [OK ]tests/test_module_motor_parity.py                       1.1s  3 passed in 0.07s
+  [OK ]tests/test_module_mq135.py                              1.5s  8 passed in 0.47s
+  [OK ]tests/test_module_mq2.py                                1.4s  7 passed in 0.44s
+  [OK ]tests/test_module_mq3.py                                1.7s  7 passed in 0.58s
+  [OK ]tests/test_module_mq4.py                                1.5s  7 passed in 0.46s
+  [OK ]tests/test_module_mq5.py                                1.5s  8 passed in 0.46s
+  [OK ]tests/test_module_mq6.py                                1.5s  7 passed in 0.48s
+  [OK ]tests/test_module_mq7.py                                1.4s  7 passed in 0.45s
+  [OK ]tests/test_module_mq8.py                                1.5s  7 passed in 0.47s
+  [OK ]tests/test_module_mq9.py                                1.5s  7 passed in 0.49s
+  [OK ]tests/test_module_ms1100.py                             1.5s  7 passed in 0.51s
+  [OK ]tests/test_module_ms5611.py                             1.5s  12 passed in 0.49s
+  [OK ]tests/test_module_multi_instance.py                     1.8s  86 passed in 0.67s
+  [OK ]tests/test_module_neo_6m.py                             1.4s  6 passed in 0.38s
+  [OK ]tests/test_module_nrf24l01.py                           1.7s  7 passed in 0.60s
+  [OK ]tests/test_module_ntb_time_stm32.py                     1.0s  2 passed in 0.06s
+  [OK ]tests/test_module_oled_extra.py                         1.4s  5 passed in 0.42s
+  [OK ]tests/test_module_oled_spi.py                           1.3s  4 passed in 0.24s
+  [OK ]tests/test_module_open_mv4.py                           1.2s  5 passed in 0.19s
+  [OK ]tests/test_module_pca9685.py                            1.4s  6 passed in 0.46s
+  [OK ]tests/test_module_photoresistance.py                    1.5s  7 passed in 0.48s
+  [OK ]tests/test_module_polish_batch.py                       1.2s  6 passed in 0.08s
+  [OK ]tests/test_module_protocol_mspm0.py                     1.2s  10 passed in 0.24s
+  [OK ]tests/test_module_qmc5883l.py                           1.5s  12 passed in 0.49s
+  [OK ]tests/test_module_rain.py                               1.5s  7 passed in 0.50s
+  [OK ]tests/test_module_rc522.py                              1.5s  8 passed in 0.46s
+  [OK ]tests/test_module_relay.py                              1.5s  7 passed in 0.49s
+  [OK ]tests/test_module_s12sd.py                              1.5s  7 passed in 0.52s
+  [OK ]tests/test_module_servo.py                              1.2s  13 passed in 0.11s
+  [OK ]tests/test_module_sgp30.py                              1.5s  6 passed in 0.50s
+  [OK ]tests/test_module_sht20.py                              1.5s  7 passed in 0.50s
+  [OK ]tests/test_module_sht30.py                              1.6s  7 passed in 0.52s
+  [OK ]tests/test_module_soil.py                               1.6s  8 passed in 0.48s
+  [OK ]tests/test_module_sr04.py                               1.3s  3 passed in 0.20s
+  [OK ]tests/test_module_st7789_para.py                        1.5s  4 passed in 0.44s
+  [OK ]tests/test_module_syn6288.py                            1.7s  10 passed in 0.55s
+  [OK ]tests/test_module_tcs34725.py                           1.6s  6 passed in 0.46s
+  [OK ]tests/test_module_tp_xpt2046.py                         1.5s  8 passed in 0.47s
+  [OK ]tests/test_module_ttp224.py                             1.4s  7 passed in 0.45s
+  [OK ]tests/test_module_universality.py                       1.4s  8 passed in 0.23s
+  [OK ]tests/test_module_us016.py                              1.5s  7 passed in 0.47s
+  [OK ]tests/test_module_vl53l0x.py                            1.6s  5 passed in 0.48s
+  [OK ]tests/test_module_ws2812.py                             1.5s  6 passed in 0.49s
+  [OK ]tests/test_mspm0_default_layout.py                      1.1s  2 passed in 0.10s
+  [OK ]tests/test_onboarding_docs.py                           1.2s  11 passed in 0.29s
+  [OK ]tests/test_pack_update.py                               6.7s  12 passed in 5.64s
+  [OK ]tests/test_params.py                                    2.8s  27 passed, 1 warning in 1.36s
+  [OK ]tests/test_patchers.py                                  1.1s  7 passed in 0.12s
+  [OK ]tests/test_pdf_library.py                               1.9s  20 passed in 0.77s
+  [OK ]tests/test_pin_bindings.py                              2.1s  64 passed in 1.00s
+  [OK ]tests/test_pin_capacity.py                              1.1s  2 passed in 0.11s
+  [OK ]tests/test_pin_unlock_enc.py                            1.7s  13 passed in 0.68s
+  [OK ]tests/test_pin_unlock_i2c.py                            1.2s  10 passed in 0.10s
+  [OK ]tests/test_pin_unlock_led.py                            1.0s  4 passed in 0.06s
+  [OK ]tests/test_pin_unlock_mspm0_cross.py                    1.2s  7 passed in 0.14s
+  [OK ]tests/test_pin_unlock_mspm0_same.py                     1.1s  14 passed in 0.13s
+  [OK ]tests/test_pin_unlock_startup.py                        1.5s  4 passed in 0.43s
+  [OK ]tests/test_pin_unlock_uart.py                           1.8s  20 passed in 0.72s
+  [OK ]tests/test_pins.py                                      1.6s  17 passed in 0.54s
+  [OK ]tests/test_preselect_coverage.py                        1.4s  8 passed in 0.41s
+  [OK ]tests/test_ps1_encoding.py                              2.4s  2 passed in 1.40s
+  [OK ]tests/test_readme.py                                    1.8s  42 passed in 0.87s
+  [OK ]tests/test_recent_jobs.py                               1.5s  15 passed in 0.56s
+  [OK ]tests/test_recommend_cache.py                           1.3s  13 passed in 0.18s
+  [OK ]tests/test_reference_library.py                        14.7s  168 passed, 1 warning in 13.12s
+  [OK ]tests/test_register_gbk.py                              1.2s  3 passed in 0.14s
+  [OK ]tests/test_repo_language.py                             8.1s  5 passed in 7.11s
+  [OK ]tests/test_report.py                                    1.1s  6 passed in 0.12s
+  [OK ]tests/test_report_draft.py                              1.4s  14 passed in 0.31s
+  [OK ]tests/test_revision.py                                  3.3s  12 passed, 1 warning in 2.03s
+  [OK ]tests/test_selection.py                                 3.1s  182 passed in 2.00s
+  [OK ]tests/test_selection_vision_qa.py                       1.1s  17 passed in 0.08s
+  [OK ]tests/test_skeleton.py                                  1.6s  46 passed in 0.57s
+  [OK ]tests/test_skeleton_mapping_coverage.py                 1.3s  8 passed in 0.32s
+  [OK ]tests/test_sse.py                                       1.1s  10 passed in 0.20s
+  [OK ]tests/test_stage.py                                     1.3s  15 passed in 0.30s
+  [OK ]tests/test_syscfg_model.py                              1.3s  7 passed in 0.27s
+  [OK ]tests/test_syscfg_prune.py                              2.1s  6 passed in 0.98s
+  [OK ]tests/test_task_download.py                             1.8s  19 passed in 0.79s
+  [OK ]tests/test_task_progress.py                            11.3s  96 passed, 1 warning in 9.65s
+  [OK ]tests/test_tool_root.py                                 1.8s  8 passed in 0.52s
+  [OK ]tests/test_topic_library.py                            13.1s  158 passed, 1 warning in 11.21s
+  [OK ]tests/test_topic_preread.py                             1.1s  7 passed in 0.07s
+  [OK ]tests/test_tracker_audit_status.py                      2.1s  25 passed in 0.89s
+  [OK ]tests/test_treewalk.py                                  2.0s  3 passed in 1.01s
+  [OK ]tests/test_update_app.py                                1.4s  7 passed in 0.34s
+  [OK ]tests/test_update_apply.py                              3.3s  10 passed, 1 warning in 1.78s
+  [OK ]tests/test_update_check.py                              2.1s  15 passed, 1 warning in 0.83s
+  [OK ]tests/test_vision.py                                    4.1s  25 passed in 3.10s
+  [OK ]tests/test_vision_qa.py                                 1.1s  16 passed in 0.07s
+  [OK ]tests/test_webapp.py                                   66.8s  366 passed, 1 warning in 64.76s (0:01:04)
+  [OK ]tests/test_wiki_md.py                                   1.3s  27 passed in 0.10s
+  [OK ]tests/test_wiring.py                                    1.8s  23 passed in 0.75s
+  [OK ]tests/test_wordlist.py                                  1.3s  21 passed in 0.27s
+
+== 小结（逐文件，超时 120s）==
+  文件数 196：绿 196 / 红 0 / 卡住 0
+  总耗时 556.7s

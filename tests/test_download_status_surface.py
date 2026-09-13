@@ -38,6 +38,8 @@ EXISTING_KEYS = {
 }
 # 本单新增的三个（工单 04）+ 重试百分比（工单 05）
 NEW_KEYS = {"retry_count", "retrying", "error_kind", "resume_percent"}
+# 12 个键的**全集**：两侧状态视图的载荷必须与它**严格相等**（工单 12）
+STATUS_KEYS = EXISTING_KEYS | NEW_KEYS
 
 PAYLOAD = bytes((i * 7 + 11) % 251 for i in range(300 * 1024))
 
@@ -81,16 +83,31 @@ STATUS_FOR = {
 
 
 @pytest.mark.parametrize("flavor", ["full", "materials"])
-def test_status_keys_are_the_contracted_eleven(flavor: str, tmp_path: Path) -> None:
-    """结构守卫：**包含** 8 个既有键（防改名）+ **包含** 3 个新增键。
+def test_status_keys_are_the_contracted_set(flavor: str, tmp_path: Path) -> None:
+    """结构守卫：状态载荷的键集合**就是**契约那 12 个（**严格相等**）。
 
-    用「包含」而不是「集合相等」：工单要守的是「既有名字不许动、新字段必须在场」，
-    不是「永远不许再加字段」——相等断言会让将来合法的第四个字段无缘无故转红。
+    （名字原先叫 `..._contracted_eleven`，而契约是 **12** 个键——工单 12 评审指出名不符实，已改。）
+
+    工单 12 把这条从「包含 8 个既有键 + 包含 4 个新增键」改成**严格相等**：
+    多一个键与少一个键**同等致命**——前端是零分支契约（少一个键 → `undefined`），
+    而多一个键意味着前端拿不到它、契约测试却全绿（那正是「判据比实际弱」的形状）。
+    另一侧（`test_full_task.py::test_status_idle_shape`）本来就是严格相等；
+    本单把**两侧拉齐**，并把两侧共用的这份键集合收成 `STATUS_KEYS`。
+
+    两侧**分别**断言（不是一条循环）：漏改一侧必须指名道姓地红在哪一侧。
+
+    **将来要加字段怎么办**（这条判据是有意收紧的，不是说「永远不许加」）：先在这条
+    用例里改 `STATUS_KEYS`——`.scratch/resumable-download/spec.md` 起字段就是跨语言契约，
+    改契约就该改这一处、并当场过一遍两侧；若哪天两侧**依法**要长得不一样，
+    那也在这里显式分成两套键集合（让「不对称」成为一条写下来的决定，而不是漂出来的）。
     """
     status_fn, make_task = STATUS_FOR[flavor]
     for status in (status_fn(None), status_fn(make_task(tmp_path))):
-        assert EXISTING_KEYS <= set(status), sorted(EXISTING_KEYS - set(status))
-        assert NEW_KEYS <= set(status), sorted(NEW_KEYS - set(status))
+        assert set(status) == STATUS_KEYS, (
+            f"{flavor} 侧状态载荷的键与契约不一致："
+            f"多 {sorted(set(status) - STATUS_KEYS)} / "
+            f"少 {sorted(STATUS_KEYS - set(status))}"
+        )
 
 
 @pytest.mark.parametrize("flavor", ["full", "materials"])
@@ -478,7 +495,7 @@ def test_endpoints_expose_new_fields(tmp_path: Path) -> None:
     client = TestClient(create_app(AppContext(config_path=tmp_path / "config.json")))
     for path in ("/api/update/full/status", "/api/update/materials/status"):
         body = client.get(path).json()
-        assert set(body) == EXISTING_KEYS | NEW_KEYS, path
+        assert set(body) == STATUS_KEYS, path
         assert body["retry_count"] == 0 and body["retrying"] is False
         assert body["error_kind"] == ""
 
@@ -667,3 +684,178 @@ def test_download_resume_module_has_no_status_knowledge() -> None:
                         and target.slice.value in fields:
                     offenders.append(f"下标 {target.slice.value}")
     assert not offenders, offenders
+
+
+# ---------------------------------------------------------------------------
+# 工单 12：分卷状态形状（两模块各一份）只许有一份契约
+# ---------------------------------------------------------------------------
+
+
+# 快照里那条契约的字段序列（顺序 = `to_dict` 的键序 = 快照 JSON 键序）。
+# 顺序也算契约：`_write_snapshot` 一落盘，`restore_snapshot_parts` 就按这些键**按名**读，
+# 所以这里钉的是「两侧同形且都在」，不是「恰好这几个字」。
+PART_FIELDS = ("name", "url", "size", "sha256",
+               "downloaded_bytes", "ok", "dest")
+
+
+def _class_node(source: str, name: str) -> Any:
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.ClassDef) and node.name == name:
+            return node
+    pytest.fail(f"源码里找不到类 {name}（守卫的扫描面变了？）")
+
+
+def _without_docstrings(node: ast.AST) -> ast.AST:
+    """→ 抹掉 docstring 的等价节点（`ast.unparse` 会把类/方法 docstring 一起带出来）。
+
+    为什么要规范化再比：docstring 是说明文字，两侧措辞本来就不同
+    （materials 那份写着「与 full_task 同形」），**比形状不该把文字算进去**。
+    """
+    clone = ast.parse(ast.unparse(node)).body[0]
+    for child in ast.walk(clone):
+        body = getattr(child, "body", None)
+        if isinstance(body, list) and body and isinstance(body[0], ast.Expr) \
+                and isinstance(body[0].value, ast.Constant) \
+                and isinstance(body[0].value.value, str):
+            child.body = body[1:]
+    return clone
+
+
+def _dataclass_shape(source: str, name: str) -> dict[str, Any]:
+    """→ 一个 dataclass 的**形状**：字段 / 默认值 / 方法**正文** / `to_dict` 键序。
+
+    为什么不直接 `import _PartState` 比：守的是**源码形状**（含方法的有无），
+    而私有类没有实例可比；按 AST 取还能把「一侧多长出来一个方法」这种
+    **漂移**抓住（那正是工单 12 删掉的那类东西）。
+
+    方法那一轴比的是 **名字 → 规范化后的正文**（不是只比名字）：只比名字的话，
+    「一侧把 `to_dict` 的取值改了」这种漂移不会红（工单 12 评审指出第一版就是这个毛病——
+    判据比工单承诺的「五轴逐项相同」弱）。
+    """
+    node = _class_node(source, name)
+    fields: list[str] = []
+    defaults: list[str] = []
+    for stmt in node.body:
+        if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
+            fields.append(stmt.target.id)
+            defaults.append(
+                ast.unparse(stmt.value) if stmt.value is not None else "<必填>"
+            )
+    methods: dict[str, str] = {}
+    for stmt in node.body:
+        if isinstance(stmt, ast.FunctionDef):
+            methods[stmt.name] = ast.unparse(_without_docstrings(stmt))
+    keys: list[str] = []
+    to_dict = next((s for s in node.body
+                    if isinstance(s, ast.FunctionDef) and s.name == "to_dict"), None)
+    if to_dict is not None:
+        for child in ast.walk(to_dict):
+            if isinstance(child, ast.Constant) and isinstance(child.value, str) \
+                    and child.value in PART_FIELDS and child.value not in keys:
+                keys.append(child.value)
+    return {"fields": fields, "defaults": defaults,
+            "methods": methods, "to_dict_keys": keys}
+
+
+def _shape_problems(full_source: str, mats_source: str) -> list[str]:
+    """→ 形状漂移清单（空表 = 两侧同形）。**纯函数**：吃两段源码文本，好做反向验证。
+
+    契约断言**两侧都查**（工单 12 评审指出第一版只查 full 侧：两侧同时改错就全绿——
+    而「两侧一起漂」正是这套副本最可能的坏法）。
+    """
+    problems: list[str] = []
+    full_shape = _dataclass_shape(full_source, "_PartState")
+    mats_shape = _dataclass_shape(mats_source, "_PartState")
+    for axis in ("fields", "defaults", "methods", "to_dict_keys"):
+        if full_shape[axis] != mats_shape[axis]:
+            problems.append(
+                f"_PartState.{axis} 两侧不同形：full={full_shape[axis]!r} "
+                f"materials={mats_shape[axis]!r}"
+            )
+    for flavor, shape in (("full", full_shape), ("materials", mats_shape)):
+        if list(shape["fields"]) != list(PART_FIELDS):
+            problems.append(
+                f"{flavor} 侧 _PartState 字段与快照契约不一致：{shape['fields']}"
+            )
+        if list(shape["to_dict_keys"]) != list(PART_FIELDS):
+            problems.append(
+                f"{flavor} 侧 to_dict 键序与快照契约不一致：{shape['to_dict_keys']}"
+            )
+    return problems
+
+
+def test_part_state_shape_has_a_single_contract() -> None:
+    """结构守卫（工单 12）：两条链路的 `_PartState` 形状**逐项相同**，且它就是快照契约。
+
+    为什么值得钉：这份形状是 `_write_snapshot` 的落盘内容 + `restore_snapshot_parts`
+    的读入内容，两条链路各持一份**源码副本**。工单 12 量出来的漂移是
+    **一侧多出一个从来没人调用的方法**（两处 `from_dict`），而不是字段不同——
+    所以判据要覆盖「字段 / 默认值 / 方法集合 / `to_dict` 正文 / `to_dict` 键序」五个轴。
+
+    判据本体是**纯函数**（`_shape_problems` 吃两段源码文本），
+    反向验证直接喂「被人动过的源码副本」——真身源码一个字节都不碰
+    （工单 11 立的铁律）。
+    """
+    from contest_generator import full_task as ft
+    from contest_generator import materials_task as mt
+
+    problems = _shape_problems(
+        Path(ft.__file__).read_text(encoding="utf-8"),
+        Path(mt.__file__).read_text(encoding="utf-8"),
+    )
+    assert not problems, "两条链路的分卷状态形状漂了：" + "；".join(problems)
+    # 两侧都**没有** from_dict（工单 12 删掉的就是它：零调用点）
+    assert not hasattr(ft._PartState, "from_dict")
+    assert not hasattr(mt._PartState, "from_dict")
+    assert not hasattr(mt._BatchState, "from_dict")
+    # `_BatchState` 是资料库独有（两层组织），但它的**方法集合**也该与 `_PartState` 同风格：
+    # 只留 `to_dict`（读写不对称的另一半在工单 12 被证明没人用）
+    batch = _dataclass_shape(Path(mt.__file__).read_text(encoding="utf-8"), "_BatchState")
+    assert list(batch["methods"]) == ["to_dict"], list(batch["methods"])
+
+
+def test_shape_guard_turns_red_on_drift() -> None:
+    """**反向验证**：三种真实漂移，守卫必须指名道姓转红（否则它只是装饰）。
+
+    三种漂移都是**改过源码文本**的产物，不是想象出来的：
+    ① 只有一侧把 `from_dict` 加回来（工单 12 删掉的形状，正是本单要防的漂移）；
+    ② 只有一侧漏掉 `dest` 字段（快照恢复读它，漏了 `part_paths()` 就交不出输入）；
+    ③ 只有一侧把 `to_dict` 的键改名（快照读侧按名取，改名 = 静默丢字段）。
+    """
+    from contest_generator import full_task as ft
+    from contest_generator import materials_task as mt
+
+    full_text = Path(ft.__file__).read_text(encoding="utf-8")
+    mats_text = Path(mt.__file__).read_text(encoding="utf-8")
+    assert _shape_problems(full_text, mats_text) == [], "干净的两份不该报问题"
+
+    # ① 一侧把 from_dict 加回来
+    re_added = mats_text.replace(
+        "    def to_dict(self) -> dict[str, Any]:\n"
+        "        return {\n"
+        '            "name": self.name,',
+        "    @staticmethod\n"
+        "    def from_dict(data):\n"
+        '        return _PartState(name="x")\n'
+        "\n"
+        "    def to_dict(self) -> dict[str, Any]:\n"
+        "        return {\n"
+        '            "name": self.name,',
+        1,
+    )
+    assert re_added != mats_text, "阳性对照没造出来（①）：替换锚点没命中"
+    problems = _shape_problems(full_text, re_added)
+    assert any("methods" in p for p in problems), problems
+
+    # ② 一侧漏掉 dest 字段（连默认值一起）
+    dropped = mats_text.replace('    dest: str = ""  # 本地保存路径（快照恢复时校验存在与 sha）\n', "", 1)
+    assert dropped != mats_text, "阳性对照没造出来（②）：替换锚点没命中"
+    problems = _shape_problems(full_text, dropped)
+    assert any("fields" in p for p in problems), problems
+
+    # ③ 一侧把 to_dict 的键改名
+    renamed = mats_text.replace('            "downloaded_bytes": self.downloaded_bytes,',
+                               '            "已下载字节": self.downloaded_bytes,', 1)
+    assert renamed != mats_text, "阳性对照没造出来（③）：替换锚点没命中"
+    problems = _shape_problems(full_text, renamed)
+    assert any("to_dict" in p for p in problems), problems

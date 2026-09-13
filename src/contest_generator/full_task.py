@@ -35,7 +35,7 @@ from __future__ import annotations
 import json
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
@@ -86,7 +86,14 @@ def set_last_check(result: dict[str, Any]) -> None:
 
 @dataclass
 class _PartState:
-    """单卷下载态（内存 + 快照共用形状）。"""
+    """单卷下载态（内存 + 快照共用形状）。
+
+    **没有 `from_dict`**（工单 12）：快照的读侧从来不重建这个对象——`_snapshot_pairs`
+    直接把 JSON 里的存档项当 dict 交给 `task_download.restore_snapshot_parts`
+    （它按 `saved.get("ok")` / `("dest")` 取值）。原来那个 `from_dict` 是随本类一起
+    抄过来的，**全仓零调用点**（工单 12 用静态 grep 与「换成抛异常的炸弹」两手证明），
+    故删；将来真要重建对象，读侧的形状判定仍以 `task_download` 那一处为准。
+    """
 
     name: str
     url: str = ""
@@ -106,18 +113,6 @@ class _PartState:
             "ok": self.ok,
             "dest": self.dest,
         }
-
-    @staticmethod
-    def from_dict(data: dict[str, Any]) -> "_PartState":
-        return _PartState(
-            name=str(data.get("name") or ""),
-            url=str(data.get("url") or ""),
-            size=int(data.get("size") or 0),
-            sha256=str(data.get("sha256") or ""),
-            downloaded_bytes=int(data.get("downloaded_bytes") or 0),
-            ok=bool(data.get("ok")),
-            dest=str(data.get("dest") or ""),
-        )
 
 
 def _safe_part_name(name: str) -> bool:

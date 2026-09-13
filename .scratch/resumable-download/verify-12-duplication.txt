@@ -1,0 +1,200 @@
+
+===== 改动前（git 5461f39d） =====
+候选                          full 行   mat 行       代码行    相同行     抄写代价    不同行   AST同形     语句同形
+--------------------------------------------------------------------------------------------
+① 状态视图                          49      52   45/45       43       90      4       否        否
+      只 full : deffull_task_status(task:"FullDownloadTask|None")->dict[str,Any]:
+      只 full : forpintask.parts
+      只 mats : deftask_status(task:ApplyTask|None)->dict[str,Any]:
+      只 mats : forbintask.batchesforpinb.parts
+      签名差异: deffull_task_status(task:"FullDownloadTask|None")->dict[str,Any]
+                deftask_status(task:ApplyTask|None)->dict[str,Any]
+② 主流程 run()                     57      55   45/43       38       88     14       否        否
+      只 full : forpartinself.parts:
+      只 full : self._on_complete(
+      只 full : [{"name":p.name,"path":p.dest,"sha256":p.sha256,"size":p.size}
+      只 full : forpinself.parts]
+      只 full : self._error=(
+      只 full : f"应用失败：{exc}"ifwas_applying
+      只 full : elsef"下载失败（卷{self._current_part_name}）：{exc}"
+      只 mats : forbatchinself.batches:
+      只 mats : forpartinbatch.parts:
+      只 mats : self._on_complete()
+      只 mats : ifwas_applying:
+      只 mats : self._error=f"应用失败：{exc}"
+      只 mats : else:
+      只 mats : self._error=f"下载失败（卷{self._current_part_name}）：{exc}"
+② 快照封套                          14      14   14/14       13       28      2       否        否
+      只 full : "parts":[p.to_dict()forpinself.parts],
+      只 mats : "batches":[b.to_dict()forbinself.batches],
+② 构造 __init__                   38      44   32/41       23       73     26       否        否
+      只 full : parts:list[dict[str,Any]],
+      只 full : on_complete:Callable[[list[dict[str,Any]]],None]|None=None,
+      只 full : self.task_dir=Path(task_dir)
+      只 full : self.parts=[
+      只 full : name=str(p.get("name")or""),
+      只 full : url=str(p.get("url")or""),
+      只 full : size=int(p.get("size")or0),
+      只 full : forpinparts
+      只 full : self._download=downloadorresumable_download
+      只 mats : batches:list[dict[str,Any]],
+      只 mats : on_complete:Callable[[],None]|None=None,
+      只 mats : self.task_dir=task_dir
+      只 mats : self.batches=[
+      只 mats : _BatchState(
+      只 mats : slug=str(b["slug"]),
+      只 mats : name=str(b.get("name")orb["slug"]),
+      只 mats : parts=[
+      只 mats : name=_part_name(p,slug=str(b["slug"])),
+      只 mats : url=str(p.get("zip_url")or""),
+      只 mats : size=int(p.get("size_bytes")or0),
+      只 mats : forpinb.get("parts")or[]
+      只 mats : ],
+      只 mats : forbinbatches
+      只 mats : ifdownloadisNone:
+      只 mats : download=resumable_download
+      只 mats : self._download=download
+      签名差异: def__init__(self,task_dir:Path,parts:list[dict[str,Any]],download:Callable[[str,Path,Callable[[int],None]],str]|None=None,snapshot_interval:float=SNAPSHOT_INTERVAL_SECONDS,on_complete:Callable[[list[dict[str,Any]]],None]|None=None,)->None
+                def__init__(self,task_dir:Path,batches:list[dict[str,Any]],download:Callable[[str,Path,Callable[[int],None]],str]|None=None,snapshot_interval:float=SNAPSHOT_INTERVAL_SECONDS,on_complete:Callable[[],None]|None=None,)->None
+③ 数据形状 to_dict                  10      10   10/10       10       20      0       是        是
+③ 数据形状 from_dict                10      10   10/10       10       20      0       是        是
+④ 取值器 state                      2       2    2/2         2        4      0       是        是
+④ 取值器 error                      2       2    2/2         2        4      0       是        是
+④ 取值器 cancel                     2       2    2/2         2        4      0       是        是
+④ 取值器 _retry_state               3       3    2/2         2        4      0       是        是
+已收 _resolve_download            10      10    2/2         2        4      0       否        是
+已收 _restore_snapshot             9       9    4/4         4        8      0       否        是
+
+===== 现状（工作区） =====
+候选                          full 行   mat 行       代码行    相同行     抄写代价    不同行   AST同形     语句同形
+--------------------------------------------------------------------------------------------
+① 状态视图                          49      52   45/45       43       90      4       否        否
+      只 full : deffull_task_status(task:"FullDownloadTask|None")->dict[str,Any]:
+      只 full : forpintask.parts
+      只 mats : deftask_status(task:ApplyTask|None)->dict[str,Any]:
+      只 mats : forbintask.batchesforpinb.parts
+      签名差异: deffull_task_status(task:"FullDownloadTask|None")->dict[str,Any]
+                deftask_status(task:ApplyTask|None)->dict[str,Any]
+② 主流程 run()                     57      55   45/43       38       88     14       否        否
+      只 full : forpartinself.parts:
+      只 full : self._on_complete(
+      只 full : [{"name":p.name,"path":p.dest,"sha256":p.sha256,"size":p.size}
+      只 full : forpinself.parts]
+      只 full : self._error=(
+      只 full : f"应用失败：{exc}"ifwas_applying
+      只 full : elsef"下载失败（卷{self._current_part_name}）：{exc}"
+      只 mats : forbatchinself.batches:
+      只 mats : forpartinbatch.parts:
+      只 mats : self._on_complete()
+      只 mats : ifwas_applying:
+      只 mats : self._error=f"应用失败：{exc}"
+      只 mats : else:
+      只 mats : self._error=f"下载失败（卷{self._current_part_name}）：{exc}"
+② 快照封套                          14      14   14/14       13       28      2       否        否
+      只 full : "parts":[p.to_dict()forpinself.parts],
+      只 mats : "batches":[b.to_dict()forbinself.batches],
+② 构造 __init__                   38      44   32/41       23       73     26       否        否
+      只 full : parts:list[dict[str,Any]],
+      只 full : on_complete:Callable[[list[dict[str,Any]]],None]|None=None,
+      只 full : self.task_dir=Path(task_dir)
+      只 full : self.parts=[
+      只 full : name=str(p.get("name")or""),
+      只 full : url=str(p.get("url")or""),
+      只 full : size=int(p.get("size")or0),
+      只 full : forpinparts
+      只 full : self._download=downloadorresumable_download
+      只 mats : batches:list[dict[str,Any]],
+      只 mats : on_complete:Callable[[],None]|None=None,
+      只 mats : self.task_dir=task_dir
+      只 mats : self.batches=[
+      只 mats : _BatchState(
+      只 mats : slug=str(b["slug"]),
+      只 mats : name=str(b.get("name")orb["slug"]),
+      只 mats : parts=[
+      只 mats : name=_part_name(p,slug=str(b["slug"])),
+      只 mats : url=str(p.get("zip_url")or""),
+      只 mats : size=int(p.get("size_bytes")or0),
+      只 mats : forpinb.get("parts")or[]
+      只 mats : ],
+      只 mats : forbinbatches
+      只 mats : ifdownloadisNone:
+      只 mats : download=resumable_download
+      只 mats : self._download=download
+      签名差异: def__init__(self,task_dir:Path,parts:list[dict[str,Any]],download:Callable[[str,Path,Callable[[int],None]],str]|None=None,snapshot_interval:float=SNAPSHOT_INTERVAL_SECONDS,on_complete:Callable[[list[dict[str,Any]]],None]|None=None,)->None
+                def__init__(self,task_dir:Path,batches:list[dict[str,Any]],download:Callable[[str,Path,Callable[[int],None]],str]|None=None,snapshot_interval:float=SNAPSHOT_INTERVAL_SECONDS,on_complete:Callable[[],None]|None=None,)->None
+③ 数据形状 to_dict                  10      10   10/10       10       20      0       是        是
+③ 数据形状 from_dict           （缺：full=False materials=False）
+④ 取值器 state                      2       2    2/2         2        4      0       是        是
+④ 取值器 error                      2       2    2/2         2        4      0       是        是
+④ 取值器 cancel                     2       2    2/2         2        4      0       是        是
+④ 取值器 _retry_state               3       3    2/2         2        4      0       是        是
+已收 _resolve_download            10      10    2/2         2        4      0       否        是
+已收 _restore_snapshot             9       9    4/4         4        8      0       否        是
+
+===== ③ `_PartState` 数据形状逐字段对 =====
+[full] 字段 ['name', 'url', 'size', 'sha256', 'downloaded_bytes', 'ok', 'dest']
+        默认 ['<必填>', "''", '0', "''", '0', 'False', "''"]
+[materials] 字段 ['name', 'url', 'size', 'sha256', 'downloaded_bytes', 'ok', 'dest']
+        默认 ['<必填>', "''", '0', "''", '0', 'False', "''"]
+  字段名序列相同: 是
+  默认值序列相同: 是
+  方法 from_dict: 同形 是（full 1 句 / mats 1 句）
+  方法 to_dict: 同形 是（full 1 句 / mats 1 句）
+  [full] to_dict 字面键序 ['name', 'url', 'size', 'sha256', 'downloaded_bytes', 'ok', 'dest']
+  [full] to_dict 在类外的同名函数数 = 1
+  [full] from_dict 字面键序 ['ok', 'name', 'url', 'size', 'sha256', 'downloaded_bytes', 'dest']
+  [full] from_dict 在类外的同名函数数 = 1
+  [materials] to_dict 字面键序 ['name', 'url', 'size', 'sha256', 'downloaded_bytes', 'ok', 'dest']
+  [materials] to_dict 在类外的同名函数数 = 2
+  [materials] from_dict 字面键序 ['ok', 'name', 'url', 'size', 'sha256', 'downloaded_bytes', 'dest']
+  [materials] from_dict 在类外的同名函数数 = 2
+
+----- 现状的 `_PartState`（改动后如有） -----
+
+===== ③ `_PartState` 数据形状逐字段对 =====
+[full] 字段 ['name', 'url', 'size', 'sha256', 'downloaded_bytes', 'ok', 'dest']
+        默认 ['<必填>', "''", '0', "''", '0', 'False', "''"]
+[materials] 字段 ['name', 'url', 'size', 'sha256', 'downloaded_bytes', 'ok', 'dest']
+        默认 ['<必填>', "''", '0', "''", '0', 'False', "''"]
+  字段名序列相同: 是
+  默认值序列相同: 是
+  方法 to_dict: 同形 是（full 1 句 / mats 1 句）
+  [full] to_dict 字面键序 ['name', 'url', 'size', 'sha256', 'downloaded_bytes', 'ok', 'dest']
+  [full] to_dict 在类外的同名函数数 = 1
+  [full] from_dict 字面键序 []
+  [full] from_dict 在类外的同名函数数 = 0
+  [materials] to_dict 字面键序 ['name', 'url', 'size', 'sha256', 'downloaded_bytes', 'ok', 'dest']
+  [materials] to_dict 在类外的同名函数数 = 2
+  [materials] from_dict 字面键序 []
+  [materials] from_dict 在类外的同名函数数 = 0
+
+===== E. git 历史：这套东西被改过几次、几次是「两边各改一次」 =====
+  两文件被**同一提交**一起改过 8 次（总提交 12 次）：
+    5461f39d|fix(下载): 双轴评审的 12 条落地——删死代码与假先例、守卫加「半抄」判据、补 materials 哈希判据（工单 resumable
+    2737eef6|refactor(下载): 注入缝解析与卷级恢复各收一处——两条链路的 7 行真抄与 16 行同形变成一行壳（工单 resumable-dow
+    3fc218b4|refactor(下载): 「一次分卷下载」收成一处——两条链路各 55/47 行的动作序列变成 16/18 行（工单 resumable-d
+    918f25b4|refactor(下载): 两条链路重复的重试观测收成一处——225 行重复消失、判据一字未改（工单 resumable-download/0
+    2cad192c|test(下载): 补完档③ 真实完整包端到端（替换→重启→版本号 1.1.0→1.1.1）+ 修 resumed_from 语义（工单 re
+    54fff91b|feat(下载): 进度说人话——剩余时间人话化 + 弱网/重试可见 + 两种失败话术（工单 resumable-download/05）
+    a7c3d2b5|feat(下载): 状态面三字段定契约——retrying / retry_count / error_kind（工单 resumable-d
+    22d0f643|feat(下载): 两条链路接上可续下载——半成品保留 + 边车 + 重试计数（工单 resumable-download/03）
+
+  逐个关键字：这套东西本体被哪几次提交改过（-S 逐字改）
+    [状态视图] `def full_task_status` 命中 1 次
+        189d105c feat(完整包): 下载任务与 apply/status/cancel 端点——卷级断点续传 + 磁盘预检（工单 full-download/03）
+    [状态视图(mats)] `def task_status` 命中 1 次
+        786dc450 资料库下载任务与apply/status/cancel端点（工单 materials-update/04）：后台线程+卷级断点
+    [run] `def run(self)` 命中 2 次
+        189d105c feat(完整包): 下载任务与 apply/status/cancel 端点——卷级断点续传 + 磁盘预检（工单 full-download/03）
+        786dc450 资料库下载任务与apply/status/cancel端点（工单 materials-update/04）：后台线程+卷级断点
+    [快照封套] `def _write_snapshot` 命中 2 次
+        189d105c feat(完整包): 下载任务与 apply/status/cancel 端点——卷级断点续传 + 磁盘预检（工单 full-download/03）
+        786dc450 资料库下载任务与apply/status/cancel端点（工单 materials-update/04）：后台线程+卷级断点
+    [数据形状] `class _PartState` 命中 2 次
+        189d105c feat(完整包): 下载任务与 apply/status/cancel 端点——卷级断点续传 + 磁盘预检（工单 full-download/03）
+        786dc450 资料库下载任务与apply/status/cancel端点（工单 materials-update/04）：后台线程+卷级断点
+    [取值器] `def cancel(self)` 命中 2 次
+        189d105c feat(完整包): 下载任务与 apply/status/cancel 端点——卷级断点续传 + 磁盘预检（工单 full-download/03）
+        786dc450 资料库下载任务与apply/status/cancel端点（工单 materials-update/04）：后台线程+卷级断点
+    [目标共享件] `def restore_snapshot_parts` 命中 1 次
+        2737eef6 refactor(下载): 注入缝解析与卷级恢复各收一处——两条链路的 7 行真抄与 16 行同形变成一行壳（工单 resumable-download/11）

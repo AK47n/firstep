@@ -1,0 +1,92 @@
+工单 12 错版注入探针：内存里换成错版 → 跑既有用例 → 看红不红
+
+（逐文件跑、每文件 120s 上限；「卡住」如实记录、不作判据）
+
+== full:no_retry_fields ==
+  [红（判据有效）]
+      [红（判据有效）] tests/test_full_task.py：5 failed, 28 passed, 1 warning in 9.40s；首个红：tests/test_full_task.py::test_status_shows_retrying_message_during_backoff
+      [红（判据有效）] tests/test_download_status_surface.py（-k 'not test_message_cleared_when_backoff_window_closes'）：13 failed, 15 passed, 2 deselected, 1 warning in 5.19s；首个红：tests/test_download_status_surface.py::test_status_keys_are_the_contracted_set[full]
+
+== materials:no_retry_fields ==
+  [红（判据有效）]
+      [红（判据有效）] tests/test_materials_task.py：1 failed, 19 passed, 1 warning in 4.03s；首个红：tests/test_materials_task.py::test_apply_task_retrying_flag_only_during_backoff
+      [红（判据有效）] tests/test_download_status_surface.py（-k 'not test_message_cleared_when_backoff_window_closes'）：10 failed, 18 passed, 2 deselected, 1 warning in 4.85s；首个红：tests/test_download_status_surface.py::test_status_keys_are_the_contracted_set[materials]
+
+== full:part_key ==
+  [红（判据有效）]
+      [红（判据有效）] tests/test_full_task.py：4 failed, 29 passed, 1 warning in 9.51s；首个红：tests/test_full_task.py::test_task_downloads_all_parts_and_marks_ok
+      [红（判据有效）] tests/test_download_status_surface.py：3 failed, 27 passed, 1 warning in 5.99s；首个红：tests/test_download_status_surface.py::test_status_keys_are_the_contracted_set[full]
+
+== materials:part_key ==
+  [红（判据有效）]
+      [红（判据有效）] tests/test_materials_task.py：1 failed, 19 passed, 1 warning in 3.95s；首个红：tests/test_materials_task.py::test_task_status_shapes
+      [红（判据有效）] tests/test_download_status_surface.py：3 failed, 27 passed, 1 warning in 6.01s；首个红：tests/test_download_status_surface.py::test_status_keys_are_the_contracted_set[materials]
+
+== full:speed_zero ==
+  [绿（判据无效）]
+      [绿（判据无效）] tests/test_full_task.py：33 passed, 1 warning in 9.53s
+
+== materials:speed_zero ==
+  [绿（判据无效）]
+      [绿（判据无效）] tests/test_materials_task.py：20 passed, 1 warning in 4.10s
+
+== full:keep_current_name ==
+  [红（判据有效）]
+      [红（判据有效）] tests/test_full_task.py：1 failed, 32 passed, 1 warning in 9.55s；首个红：tests/test_full_task.py::test_status_reports_speed_and_current_part
+
+== full:no_error_kind ==
+  [红（判据有效）]
+      [绿（判据无效）] tests/test_full_task.py：33 passed, 1 warning in 9.57s
+      [红（判据有效）] tests/test_download_status_surface.py：2 failed, 28 passed, 1 warning in 6.04s；首个红：tests/test_download_status_surface.py::test_failed_network_kind[full]
+
+== full:drop_field ==
+  [绿（判据无效）]
+      [绿（判据无效）] tests/test_full_task.py：33 passed, 1 warning in 9.47s
+      [绿（判据无效）] tests/test_download_status_surface.py：30 passed, 1 warning in 5.99s
+      [绿（判据无效）] tests/test_task_download.py：19 passed in 0.78s
+
+== from_dict_boom ==
+  [红（判据有效）]
+      [绿（判据无效）] tests/test_full_task.py：33 passed, 1 warning in 9.61s
+      [绿（判据无效）] tests/test_materials_task.py：20 passed, 1 warning in 3.85s
+      [红（判据有效）] tests/test_download_status_surface.py：1 failed, 29 passed, 1 warning in 6.09s；首个红：tests/test_download_status_surface.py::test_part_state_shape_has_a_single_contract
+
+== full:init_drops_name ==
+  [红（判据有效）]
+      [红（判据有效）] tests/test_full_task.py：15 failed, 18 passed, 1 warning in 9.71s；首个红：tests/test_full_task.py::test_task_writes_file_under_manifest_name
+      [绿（判据无效）] tests/test_download_status_surface.py：30 passed, 1 warning in 5.94s
+
+== full:getter_state_const ==
+  [红（判据有效）]
+      [红（判据有效）] tests/test_full_task.py：22 failed, 11 passed, 1 warning in 9.94s；首个红：tests/test_full_task.py::test_task_downloads_all_parts_and_marks_ok
+      [红（判据有效）] tests/test_download_status_surface.py：9 failed, 21 passed, 1 warning in 6.24s；首个红：tests/test_download_status_surface.py::test_downloading_state_is_not_retrying[full]
+
+== full:getter_error_const ==
+  [红（判据有效）]
+      [红（判据有效）] tests/test_full_task.py：3 failed, 30 passed, 1 warning in 9.73s；首个红：tests/test_full_task.py::test_task_failure_keeps_partial_file
+      [红（判据有效）] tests/test_download_status_surface.py：3 failed, 27 passed, 1 warning in 6.14s；首个红：tests/test_download_status_surface.py::test_failed_network_kind[full]
+
+
+== 补充：单格复跑的原始输出（诊断用，脚本 rerun-12-case.py 逐文件跑）==
+$ python .scratch/resumable-download/rerun-12-case.py full:no_retry_fields 180
+  [红（判据有效）] tests/test_full_task.py：5 failed, 28 passed
+      FAILED ...::test_status_shows_retrying_message_during_backoff
+      FAILED ...::test_status_retrying_false_while_resuming_message_present
+      FAILED ...::test_ignored_range_retry_message_says_from_zero
+      FAILED ...::test_cancel_leaves_error_kind_empty - KeyError
+      FAILED ...::test_status_idle_shape - KeyError: 'total_bytes'
+  [卡住（不作判据）] tests/test_download_status_surface.py 超过 180s 没跑完
+      -> faulthandler 转储（`-o faulthandler_timeout=25 -v -s`）把打转点钉在
+         tests/test_download_status_surface.py:355 → test_message_cleared_when_backoff_window_closes
+         → 它的 spy（第 347 行）→ download_resume.task_download → task_download.download_and_verify
+      -> 重跑三次都是「稳定卡死」（>600s 也没完），不是随机抖动；
+         处置 = 这一支用例在该格用 `-k 'not test_message_cleared_when_backoff_window_closes'`
+         排除掉，**其余 27 支照跑**（该格结果见上方正文）。
+$ python .scratch/resumable-download/rerun-12-case.py from_dict_boom 120
+  （本单改动**之前**）rc=0 81 passed —— 炸弹没被碰到 = 三处 from_dict 零执行路径。
+  stderr: Error in sitecustomize; AttributeError: 'function' object has no attribute '__func__'
+      -> 探针自证写法错（从类上取 staticmethod 已解包成普通函数），**不是注入没生效**；
+         改成查类属性表里那份原始 staticmethod 后复跑：注入生效。
+  （新守卫落地**之后**）同一格转 **红**：`test_part_state_shape_has_a_single_contract`
+  的 `assert not hasattr(..., "from_dict")` 抓到了炸弹 —— 「零调用点」只对**改动前的用例集**
+  成立；本单落地后，这条运行时证据由**新守卫**接手（见工单「判据强度」那一节）。
