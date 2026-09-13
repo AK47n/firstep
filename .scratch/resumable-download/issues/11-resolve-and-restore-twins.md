@@ -10,7 +10,7 @@
 
 **状态：** resolved
 
-- [x] **先量再动**：三把量具 + 三支探针，全部落盘可复跑（见「验收记录」第一、二节）。
+- [x] **先量再动**：两把量具 + 两支探针 + 一套逐文件跑法，全部落盘可复跑（见「验收记录」第一、二节）。
       量出来的账：`_resolve_download` 两处**代码 7 行逐字相同、AST 去名后同形**；
       `_restore_snapshot` 代码 21/26 行、相同 16 行、**AST 去名后不同形**（多一层批次）。
       git 历史：`_resolve_download` **一次创建、两处各抄一遍**（`22d0f643` 同一提交）；
@@ -21,13 +21,14 @@
 - [x] 收 `_restore_snapshot` 的**逐卷恢复**那 16 行（快照封套 + ok 判 + 文件在否 +
       内容哈希 == 清单 sha → 三个字段一起恢复），进 `task_download.restore_snapshot_parts`；
       **两层的遍历留在各链路**（`iter_parts` 由调用点给）。
-- [x] **零行为变化**：既有判据全程绿，`git diff --stat` 里 `tests/` 既有文件 **0 deletions**；
-      错版注入探针证明改动的两处**都在判据的射程内**（第四节）。
+- [x] **零行为变化**：既有判据全程绿，`git diff --stat` 里 `tests/` 既有文件 **0 deletions**
+      （逐条核对见第五节第 13 行；**唯一一处真实行为差异**是「存档项不是字典」时
+      由异常兜底改成形状判定，结果相同、已补判据——第五节第 10 行）。
 - [x] 新增**一条结构守卫**（两处同形不许再回来）：任务模块里 `_resolve_download` /
       `_restore_snapshot` 必须是**薄壳**（只许「调用共享件」这一句），并做**反向注入验证它会红**。
 - [x] 顺手补上**材料库那一侧缺掉的判据**：`_restore_snapshot` 的哈希校验在 materials 侧
       **原先没有任何判据**（探针实测：错版全绿），补一条与 full 侧对偶的用例。
-- [x] 双轴评审；判定记进「验收记录」（第六节，含**评审当场修掉的 7 条**）。
+- [x] 双轴评审；判定记进「验收记录」（第五节，含**评审提出的 14 条**与逐条处置）。
 
 ## 先说清代价（为什么这一单成立、边界在哪）
 
@@ -101,9 +102,10 @@
 
 | 量具 | 命令 | 结论 |
 |---|---|---|
-| `measure-11-duplication.py` | `python .scratch/resumable-download/measure-11-duplication.py` | `_resolve_download` 7/7 逐字相同、AST 同形；`_restore_snapshot` 21/26、相同 16、AST 不同形 |
-| `measure-11-surface.py` | `python .scratch/resumable-download/measure-11-surface.py` | 两文件 14 个同名函数、145 行相同；**AST 同形 7 个**（本单只动其中 1 个 + 1 段） |
-| `probe-11-resolve-seam.py` | `python .scratch/resumable-download/probe-11-resolve-seam.py` | 注入缝四格 + 卷级恢复五格，总判 PASS |
+| `measure-11-duplication.py` | `python .scratch/resumable-download/measure-11-duplication.py` | 改动前：`_resolve_download` 7/7 逐字相同、AST 同形；`_restore_snapshot` 21/26、相同 16、AST 不同形。改动后：两处各 3 / 5 行代码、AST 同形（都是壳） |
+| `measure-11-surface.py` | `python .scratch/resumable-download/measure-11-surface.py` | 改动前：14 个同名函数 / 145 行相同 / **AST 同形 7 个**；改动后：15 个 / 132 行 / **8 个**（含收后的两处壳）。本单只动其中 1 个 + 1 段 |
+| `probe-11-resolve-seam.py` | `python .scratch/resumable-download/probe-11-resolve-seam.py` | 注入缝四格 + 卷级恢复五格，总判 PASS（落盘 `verify-11-resolve-seam.txt`） |
+| `run-11-suite.py` | `python .scratch/resumable-download/run-11-suite.py 120` | 逐文件全套：196 文件 / 绿 196 / 红 0 / 卡住 0（落盘 `verify-11-suite.txt`） |
 
 `_restore_snapshot` 的五格（两条链路各一遍，落盘在探针输出里）：
 

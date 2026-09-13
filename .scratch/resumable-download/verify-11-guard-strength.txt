@@ -3,17 +3,17 @@
   ... 跑 _restore_snapshot / full
   [红（判据有效）] _restore_snapshot / full
       用例：test_full_task.py test_full_apply.py test_download_status_surface.py
-      结果：1 failed, 67 passed, 1 warning in 14.73s；首个红：tests/test_full_task.py::test_resume_rejects_tampered_local_file
+      结果：1 failed, 67 passed, 1 warning in 16.83s；首个红：tests/test_full_task.py::test_resume_rejects_tampered_local_file
 
   ... 跑 _restore_snapshot / materials
   [红（判据有效）] _restore_snapshot / materials
       用例：test_materials_task.py test_download_status_surface.py
-      结果：1 failed, 47 passed, 1 warning in 8.83s；首个红：tests/test_materials_task.py::test_apply_task_rejects_tampered_local_file
+      结果：1 failed, 47 passed, 1 warning in 8.87s；首个红：tests/test_materials_task.py::test_apply_task_rejects_tampered_local_file
 
   ... 跑 _resolve_download / only_instance
   [红（判据有效）] _resolve_download / only_instance
       用例：test_full_task.py test_full_apply.py test_materials_task.py test_download_status_surface.py
-      结果：3 failed, 85 passed, 1 warning in 18.15s；首个红：tests/test_full_task.py::test_apply_starts_and_status_reports_progress
+      结果：3 failed, 85 passed, 1 warning in 18.05s；首个红：tests/test_full_task.py::test_apply_starts_and_status_reports_progress
 
   ... 跑 _resolve_download / always_default
   [探针失效] _resolve_download / always_default
