@@ -48,6 +48,13 @@ export function pdfBadgeTags(broken, dup) {
 // 大小 > 0，组内 ≥ 2 成员（0 字节归损坏不参与重复；同名不同大小 = 版本
 // 差异不判；判据纯客户端，不读内容 hash）。返回
 // [{name, size, count, paths: string[]}]，按组内首成员输入序稳定。
+//
+// 「不读内容 hash」是**量过之后的决定**（2026-09-13 库去重盘点）：对真实库
+// （97 个 PDF / 208 MB）全量 SHA256 只要 1.4s，但算出的重复组 100% 已被本判据
+// 覆盖（组内大小全部一致，多抓 0 组）——升级成内容哈希只有维护成本、没有收益。
+// 已知边界：内容相同但**换了名字**的重复本判据标不出（那类靠离线盘点清理，
+// 见 .scratch/library-dedup-audit/report.md）。改判据前先读
+// tests/js/pdf-dup-guard.test.mjs：那条守卫会把形态变化与健全性回归都挡下来。
 export function pdfDupGroups(pdfs) {
   const groups = new Map(); // nameLower|size → {name, size, paths}
   for (const p of pdfs || []) {
