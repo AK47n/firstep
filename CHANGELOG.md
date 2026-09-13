@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=5461f39d82d6890abe42f7daf308424731cffcfe -->
+<!-- changelog-auto: last-commit=ea0ae09dbb7b598ebc97697284f60a04ed6489d8 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -39,6 +39,7 @@
 - 18:11 docs(本机环境): 补记任务层共享件与两条结构守卫的位置（工单 10 收口）
 - 18:50 refactor(下载): 注入缝解析与卷级恢复各收一处——两条链路的 7 行真抄与 16 行同形变成一行壳（工单 resumable-download/11）
 - 19:13 fix(下载): 双轴评审的 12 条落地——删死代码与假先例、守卫加「半抄」判据、补 materials 哈希判据（工单 resumable-download/11 评审）
+- 19:27 docs(下载): 工单 11 验收记录定稿——两轴 14 条处置、量具口径改成两个时刻、证据文件 UTF-8（工单 resumable-download/11）
 
 ## 2026-09-12
 - 00:58 门禁引脚容量诊断（落点/可用 IO/解不开几组/至少去掉几个）
