@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=4cea38e6514d732a03c75e2d2f331f7771de2d00 -->
+<!-- changelog-auto: last-commit=2c22f06130c007ee1d3819685a2b2f5c87f7db5c -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -15,6 +15,7 @@
 - 00:57 ﻿fix(发版): pack-update 改以模块方式调核心——真机演练发现相对导入失败（工单 full-download/08）
 - 00:59 ﻿docs(发版): 工单 full-download/08 翻牌 resolved + 补登台账与环境事实
 - 01:10 ﻿chore(库治理): 各库重复项盘点 + 回收 7 个「改名重复」文件（208 MB）
+- 09:31 ﻿test(pdf): 固化「疑似重复」判据——实测否决「升级成内容哈希」动议，不另开工单
 
 ## 2026-09-12
 - 00:58 门禁引脚容量诊断（落点/可用 IO/解不开几组/至少去掉几个）
