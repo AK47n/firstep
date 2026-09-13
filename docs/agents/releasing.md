@@ -1,4 +1,4 @@
-﻿# Release & Versioning（发布与版本命名）
+# Release & Versioning（发布与版本命名）
 
 本文件定义 firstep 的版本号命名规则与发布流程。
 
@@ -39,6 +39,21 @@
 1. `src/contest_generator/__init__.py` 的 `__version__`（**唯一可信来源**，`/api/health` 与「检查更新」都吃它）；
 2. `pyproject.toml` 的 `project.version`（打包元数据，必须与 `__version__` 一致）；
 3. `README.md`「版本与发布」当前版本行 + `VERSIONS.md` 顶部新增版本区块（用户可见）。
+
+## 发版前：跑一次下载链路自检（必做）
+
+```powershell
+python tools\check-download-docs.py
+```
+
+它把**新用户能看到的三个入口**对一遍：README「获取方式」（有没有已下线形态、指向的是不是
+`/releases/latest`、点名的包内文件是否真在包里、写的体积与线上字节是否同一量级）、
+**线上最新版的 Release 说明前几行**（有没有「新用户只下哪个 / 已装用户走工具内更新」）、
+以及 git clone 的体积口径。任一处分叉 → 非 0 退出并逐条给原因。
+
+为什么必须跑：2026-09 出过一次真实事故——README 教用户下 `firstep-full.7z.001~004`（约 6 GB），
+而那个形态只在 v1.0.0 那个 release 上，最新版根本没有。**文档与线上分叉，新用户就会白找一圈。**
+（不放进 pytest 是因为本仓库测试刻意不联网；它是**发版前手动跑**的自检。）
 
 ## 小发版流程
 
@@ -170,7 +185,14 @@ VSCode 等约 5.4 GB，几乎不变、只在装机时用一次）；去各自官
 
 ## 快速发版（给 Agent）
 
+- **发版前先跑自检**：`python tools\check-download-docs.py`（README / Release 说明 / 包内文件三处一致性；红了先修再发）。
+- **Release 说明照模板写**（本文件末「Release 说明模板」）——前两行是固定的新用户 / 已装用户指引，
+  新用户就看这两行。
 - 小发版：`powershell -File tools\pack-update.ps1 -Tag vX.Y.Z -Baseline <上次 files.txt>`（几分钟），产物在输出目录（缺省 `%USERPROFILE%\Desktop\firstep-pack`）。
 - 完整包：`powershell -File tools\pack-full.ps1 -Tag vX.Y.Z -Baseline <上版 firstep-full-*.manifest.json>`（本机实测打包 ≤ 数分钟），产物同上；与小发版同 tag 一起上传。
+  - 打完包手查一眼新用户要看的那个文件在不在：`tar.exe -tf <zip> | findstr START-HERE`
+    （应输出 `00-START-HERE.txt`）。
 - 大发版：`powershell -File tools\pack-materials.ps1 -Tag vX.Y.Z -Mode diff -Baseline <上版清单.json>`，发 `materials-` tag 的 Release。
 - 上传完整包约 821 MB，视上行带宽需几分钟到十几分钟，**用后台任务跑，别阻塞等待**；小发版约 0.3 GB，可一并后台传。
+- **发完再跑一次自检**（此时线上已有新 tag）：`python tools\check-download-docs.py` ——
+  它会拿**最新 release** 校验，正好确认这一版的 README 体积口径与 Release 说明都对得上。
