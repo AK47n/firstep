@@ -1,0 +1,153 @@
+{
+  "impl": "download_part",
+  "negative": false,
+  "payload_bytes": 2097152,
+  "cases": [
+    {
+      "case": "stable",
+      "question": "不断的情况下能不能下完",
+      "attempts": 1,
+      "attempts_log": [
+        {
+          "attempt": 1,
+          "offset_before": 0,
+          "bytes_this_try": 2097152,
+          "seconds": 0.02,
+          "outcome": "ok"
+        }
+      ],
+      "claimed_ok": true,
+      "bytes_on_disk": 2097152,
+      "expected_bytes": 2097152,
+      "sha_local": "d69d5984c03381086eca4a86f92fe45c3ff57c3f1aa242a285dd29008ce53bb5",
+      "sha_expected": "d69d5984c03381086eca4a86f92fe45c3ff57c3f1aa242a285dd29008ce53bb5",
+      "sha_returned_matches": true,
+      "hashes_match": true,
+      "seconds": 0.02,
+      "request_starts": [
+        0
+      ],
+      "ranges_seen": [
+        ""
+      ],
+      "resumed_observed": false
+    },
+    {
+      "case": "cut",
+      "question": "连断 3 次，能不能从断点接上",
+      "attempts": 1,
+      "attempts_log": [
+        {
+          "attempt": 1,
+          "offset_before": 0,
+          "bytes_this_try": 838860,
+          "seconds": 0.02,
+          "outcome": "ok"
+        }
+      ],
+      "claimed_ok": true,
+      "bytes_on_disk": 838860,
+      "expected_bytes": 2097152,
+      "sha_local": "3708964d748a80d1f525f168d2ce02409887f3b29ab1fdd0e9b686cc2900242b",
+      "sha_expected": "d69d5984c03381086eca4a86f92fe45c3ff57c3f1aa242a285dd29008ce53bb5",
+      "sha_returned_matches": false,
+      "hashes_match": false,
+      "seconds": 0.03,
+      "request_starts": [
+        0
+      ],
+      "ranges_seen": [
+        ""
+      ],
+      "resumed_observed": false
+    },
+    {
+      "case": "stall",
+      "question": "对端卡死不动，能不能判出来并接上",
+      "attempts": 1,
+      "attempts_log": [
+        {
+          "attempt": 1,
+          "offset_before": 0,
+          "bytes_this_try": 838860,
+          "seconds": 8.07,
+          "outcome": "ok"
+        }
+      ],
+      "claimed_ok": true,
+      "bytes_on_disk": 838860,
+      "expected_bytes": 2097152,
+      "sha_local": "3708964d748a80d1f525f168d2ce02409887f3b29ab1fdd0e9b686cc2900242b",
+      "sha_expected": "d69d5984c03381086eca4a86f92fe45c3ff57c3f1aa242a285dd29008ce53bb5",
+      "sha_returned_matches": false,
+      "hashes_match": false,
+      "seconds": 8.08,
+      "request_starts": [
+        0
+      ],
+      "ranges_seen": [
+        ""
+      ],
+      "resumed_observed": false
+    },
+    {
+      "case": "ignore-range",
+      "question": "服务器不支持断点（恒 200），会不会拼出坏文件",
+      "attempts": 1,
+      "attempts_log": [
+        {
+          "attempt": 1,
+          "offset_before": 0,
+          "bytes_this_try": 2097152,
+          "seconds": 0.01,
+          "outcome": "ok"
+        }
+      ],
+      "claimed_ok": true,
+      "bytes_on_disk": 2097152,
+      "expected_bytes": 2097152,
+      "sha_local": "d69d5984c03381086eca4a86f92fe45c3ff57c3f1aa242a285dd29008ce53bb5",
+      "sha_expected": "d69d5984c03381086eca4a86f92fe45c3ff57c3f1aa242a285dd29008ce53bb5",
+      "sha_returned_matches": true,
+      "hashes_match": true,
+      "seconds": 0.01,
+      "request_starts": [
+        0
+      ],
+      "ranges_seen": [
+        ""
+      ],
+      "resumed_observed": false
+    },
+    {
+      "case": "slow",
+      "question": "弱网但连接正常，能不能下完",
+      "attempts": 1,
+      "attempts_log": [
+        {
+          "attempt": 1,
+          "offset_before": 0,
+          "bytes_this_try": 2097152,
+          "seconds": 5.28,
+          "outcome": "ok"
+        }
+      ],
+      "claimed_ok": true,
+      "bytes_on_disk": 2097152,
+      "expected_bytes": 2097152,
+      "sha_local": "d69d5984c03381086eca4a86f92fe45c3ff57c3f1aa242a285dd29008ce53bb5",
+      "sha_expected": "d69d5984c03381086eca4a86f92fe45c3ff57c3f1aa242a285dd29008ce53bb5",
+      "sha_returned_matches": true,
+      "hashes_match": true,
+      "seconds": 5.29,
+      "request_starts": [
+        0
+      ],
+      "ranges_seen": [
+        ""
+      ],
+      "resumed_observed": false
+    }
+  ],
+  "verdict": "FAIL：cut **被截断却自称成功**（落盘 838860/2097152）——截断必须是失败，否则用户看到的是「100% → 校验失败」；stall **被截断却自称成功**（落盘 838860/2097152）——截断必须是失败，否则用户看到的是「100% → 校验失败」"
+}
