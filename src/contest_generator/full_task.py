@@ -50,6 +50,7 @@ from .materials_task import (
     TaskState,
     _file_sha256,
 )
+from .task_retry import TaskRetryMixin, TaskRetryState, part_progress_callbacks
 
 SNAPSHOT_FILENAME = "full-task.json"
 SNAPSHOT_INTERVAL_SECONDS = 2.0
@@ -142,7 +143,7 @@ def _free_bytes(path: Path) -> int:
 free_bytes = _free_bytes
 
 
-class FullDownloadTask:
+class FullDownloadTask(TaskRetryMixin):
     """完整包下载任务（一任务一实例；webapp 模块级单例）。
 
     构造时不启动线程；`run()` 在调用方线程执行（端点用 daemon 线程包一层）。
@@ -186,13 +187,10 @@ class FullDownloadTask:
         # 速度估算窗口（status 轮询时更新）
         self._last_ts = time.time()
         self._last_bytes = 0
-        # 重试观测（内存态，不落快照：重启后从 0 重新计更诚实）
-        self.retry_count = 0
-        self.last_retry_at = 0.0
-        self.last_error_kind = ""
-        self._retrying = False
-        self._resume_percent = -1
-        self._message = ""
+        # 重试观测（内存态，不落快照：重启后从 0 重新计更诚实）。
+        # 字段与规则的单源在 `task_retry`（工单 09）；这里只持有一个值对象，
+        # 六个字段名由 `TaskRetryMixin` 原样暴露，状态面契约零改动。
+        self._retry = TaskRetryState()
         self._restore_snapshot()
 
     # -- 状态 --------------------------------------------------------------
@@ -287,15 +285,9 @@ class FullDownloadTask:
                 if part.ok:
                     continue
                 self._current_part_name = part.name
-                self.retry_count = 0
-                self.last_retry_at = 0.0
-                self.last_error_kind = ""
-                self._retrying = False
-                self._resume_percent = -1
-                self._message = ""
+                self.reset_retry_state()
                 self._download_one(part)
-            self._message = ""
-            self._retrying = False
+            self._retry.clear_message_and_window()
             if self._on_complete is not None:
                 self._state = TaskState.APPLYING
                 self._write_snapshot(force=True)
@@ -314,15 +306,11 @@ class FullDownloadTask:
             # 上一次失败填过了，不清就会在取消态里报出「重试 1 次 / 网络错误」，
             # 前端据此说「网络失败」= 把用户自己点的取消讲成网络故障（spec 的词表里
             # 取消态的分类是空串）。
-            self._message = ""
-            self._retrying = False
-            self.retry_count = 0
-            self.last_error_kind = ""
+            self._retry.reset_for_cancelled()
         except Exception as exc:
             was_applying = self._state is TaskState.APPLYING
             self._state = TaskState.FAILED
-            self._message = ""
-            self._retrying = False
+            self._retry.clear_message_and_window()
             self._error = (
                 f"应用失败：{exc}" if was_applying
                 else f"下载失败（卷 {self._current_part_name}）：{exc}"
@@ -356,18 +344,18 @@ class FullDownloadTask:
             part.downloaded_bytes = have
         else:
             if download_resume.is_resumable_partial(dest, part.url, part.size):
-                self._message = download_resume.resume_message(have, part.size)
+                self._retry.message = download_resume.resume_message(have, part.size)
                 part.downloaded_bytes = have
             else:
                 download_resume.clear_partial(dest)   # 来路不明的不完整文件：不留
             download, is_default = self._resolve_download()
+            on_progress, on_start = part_progress_callbacks(part, lock=self._lock)
             download = download_resume.as_task_downloader(
-                download, cancel=self._cancel, before_retry=self._on_retry(part),
-                on_start=self._on_attempt_start(part),
-                before_attempt=self._on_retry_window_closed, default=is_default,
+                download, cancel=self._cancel, on_start=on_start,
+                default=is_default, **self.retry_callbacks(part),
             )
             try:
-                actual = download(part.url, dest, self._on_progress(part),
+                actual = download(part.url, dest, on_progress,
                                   expected_size=part.size,
                                   expected_sha256=part.sha256)
             except Exception as exc:
@@ -388,73 +376,12 @@ class FullDownloadTask:
             raise DownloadVerifyError(f"卷 {part.name} 校验失败（SHA256 不匹配）")
         part.ok = True
         part.downloaded_bytes = part.size
-        self._message = ""
+        self._retry.clear_message()
         self._write_snapshot(force=False)
 
-    def _on_progress(self, part: _PartState) -> Callable[[int], None]:
-        """进度回调：累计量 = **本轮尝试的落盘起点** + 本次连接读到的字节。
-
-        起点由下载器每轮开始时报一次（`on_start`）——不能拿「调用前盘上有多少」当基准：
-        服务器忽略 Range 时会**丢弃半成品从 0 重下**，那时起点是 0 而不是盘上原有字节，
-        拿旧基准会把已经扔掉的字节继续算进进度（实测会算出超过卷大小的进度）。
-        """
-
-        def cb(nbytes: int) -> None:
-            with self._lock:
-                part.downloaded_bytes += nbytes
-
-        return cb
-
-    def _on_attempt_start(self, part: _PartState) -> Callable[[int], None]:
-        """每轮尝试开始：进度基准对齐到**这一轮真实的落盘起点**。
-
-        **不在这里关「重试窗口」**：`on_start` 是紧跟着 `before_retry` 发生的
-        （同一轮循环里先报重试、再开始下一轮），在这关会把窗口压成 0 宽——
-        状态面永远看不到「正在重试」。窗口的关闭由 `resumable_download` 在
-        **退避等待结束之后**回调 `before_attempt`（见该函数）。
-        """
-
-        def cb(offset: int) -> None:
-            with self._lock:
-                part.downloaded_bytes = max(0, int(offset))
-
-        return cb
-
-    def _on_retry_window_closed(self) -> None:
-        """退避等待结束、马上要真的重连：关掉「正在重试」窗口。
-
-        窗口 = `before_retry`（开）→ 退避等待结束（关）。只清 `retrying` 不清
-        `message` 会留下「正在重试第 2 次」挂满剩下整段下载（自相矛盾的状态组合，
-        前端只剩解析文案一条路——而 spec 明禁解析文案）。
-        """
-        self._retrying = False
-        self._message = ""
-
-    def _on_retry(self, part: _PartState) -> Callable[..., None]:
-        """`before_retry` 回调：如实计数 + 把「正在重试」的三件事分别落成三个字段。
-
-        `message`（原因）/ `retry_count`（第几次）/ `resume_percent`（从多少接着下）
-        ——**分开就是给前端拼的**：前端不再需要从任何文案里抠信息。
-        """
-
-        def cb(attempt: int, exc: BaseException, on_disk: int, restarted: bool) -> None:
-            self.retry_count = int(attempt)
-            self.last_retry_at = time.time()
-            # 取消不算失败态分类（第三个字段值只能来自异常分类，spec 的词表是
-            # "" | network | verify）：`DownloadCancelledError` 那条路不会走到这里。
-            self.last_error_kind = download_resume.error_kind(exc)
-            # 「服务器没让我们接上」→ 半成品已被丢弃，本轮的起点**就是 0%**（说 0 才是如实；
-            # 说 -1「不知道」会让界面拿不到「从 0 重新下」这个事实）
-            self._resume_percent = (
-                0 if restarted
-                else download_resume.retry_resume_percent(on_disk, part.size)
-            )
-            self._retrying = True     # 退避等待中（退避结束时清）
-            self._message = download_resume.retry_message(
-                download_resume.retry_reason(exc)
-            )
-
-        return cb
+    def _retry_state(self) -> TaskRetryState:
+        """`TaskRetryMixin` 要的取值入口（字段与规则都住在 `task_retry`）。"""
+        return self._retry
 
     def _write_snapshot(self, force: bool = False) -> None:
         now = time.time()
@@ -518,12 +445,13 @@ def full_task_status(task: "FullDownloadTask | None") -> dict[str, Any]:
         "speed_bps": speed,
         "current_part_name": task._current_part_name,
         "error": task.error,
-        "message": task._message,
-        # 重试观测（工单 04 的契约面；工单 05 起前端直接消费这三个字段，不再解析文案）
+        "message": task.message,
+        # 重试观测（工单 04 的契约面；工单 05 起前端直接消费这三个字段，不再解析文案。
+        # 工单 09：取值走「重试观测」值对象的同名属性，不再是任务对象上的散字段）
         "retry_count": int(task.retry_count),
-        "retrying": bool(task._retrying),
+        "retrying": bool(task.retrying),
         "error_kind": str(task.last_error_kind),
-        "resume_percent": int(task._resume_percent),
+        "resume_percent": int(task.resume_percent),
     }
 
 

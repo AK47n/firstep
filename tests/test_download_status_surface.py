@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import threading
 import time
@@ -495,6 +496,147 @@ def test_snapshot_does_not_carry_retry_state(tmp_path: Path) -> None:
     )
     assert "retry_count" not in snapshot
     assert snapshot["parts"][0]["downloaded_bytes"] == 0
+
+
+_RETRY_FIELDS = {"retry_count", "last_retry_at", "last_error_kind",
+                 "retrying", "resume_percent", "message"}
+
+
+def _ast_assign_targets(stmt: Any) -> list[str]:
+    """一条语句的赋值目标名（属性名与裸名都算；非赋值 = 空表）。"""
+    if isinstance(stmt, ast.Assign):
+        targets = stmt.targets
+    elif isinstance(stmt, ast.AnnAssign):
+        targets = [stmt.target]
+    else:
+        return []
+    names: list[str] = []
+    for target in targets:
+        if isinstance(target, ast.Attribute):
+            names.append(target.attr)
+        elif isinstance(target, ast.Name):
+            names.append(target.id)
+    return names
+
+
+def _assigned_retry_fields(path: str) -> set[str]:
+    """该文件里被赋过值的重试观测字段名。"""
+    tree = ast.parse(Path(path).read_text(encoding="utf-8"))
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        found.update(n for n in _ast_assign_targets(node) if n in _RETRY_FIELDS)
+    return found
+
+
+def _reset_blocks(path: str) -> list[list[str]]:
+    """找出「连续 ≥3 条赋值都写重试观测字段」的块 = **复位块**。
+
+    判「重复有没有回来」要认的是这个形状：复位是把六个字段一起写回去，所以它必然
+    表现为一个连续的赋值块。单条写某个字段（失败路径写 `last_error_kind`、
+    下载完成时清 `message`）是正常的分散写入，不算重复。
+    """
+    tree = ast.parse(Path(path).read_text(encoding="utf-8"))
+    blocks: list[list[str]] = []
+
+    def scan(body: list[Any]) -> None:
+        run: list[str] = []
+        for stmt in body:
+            hit = [n for n in _ast_assign_targets(stmt) if n in _RETRY_FIELDS]
+            if hit:
+                run.extend(hit)
+                continue
+            if len(run) >= 3:
+                blocks.append(list(run))
+            run = []
+        if len(run) >= 3:
+            blocks.append(list(run))
+
+    for node in ast.walk(tree):
+        body = getattr(node, "body", None)
+        if isinstance(body, list) and body and all(
+            isinstance(stmt, ast.stmt) for stmt in body
+        ):
+            scan(body)
+    return blocks
+
+
+def test_retry_observation_has_a_single_home() -> None:
+    """结构守卫（工单 09）：重试观测的**规则**只许有一处实现。
+
+    为什么值得钉：这套规则原本在两条链路上各写一遍，代价已经付过——
+    「退避中取消要归零」工单 04 评审时**两边都漏了**，各补一次；
+    「退避关窗要同时清摘要」也是两边各改一次。判定「重复有没有回来」不能靠人眼，
+    故这里机械判三件事：
+
+    1. 任务模块里不再有**成块的**重试观测赋值（复位块）；
+    2. 那四个回调的**实现**不再长在任务模块上（`TaskRetryMixin` 只留调用转发）；
+    3. 共享件仍是这六个字段的家（防「把规则挪走、守卫却留在原地」）。
+
+    判据只看「赋值目标」——注释、docstring、以及状态面投影里的**读取**都不算
+    （投影本来就要读；`task_retry` 自己的注释里也正大光明地讨论这些名字）。
+    """
+    from contest_generator import full_task as ft
+    from contest_generator import materials_task as mt
+    from contest_generator import task_retry as tr
+
+    # 1) 任务模块不许再有复位块
+    for module in (ft, mt):
+        blocks = _reset_blocks(module.__file__)
+        assert not blocks, (
+            f"{Path(module.__file__).name} 又出现成块的重试观测赋值：{blocks}"
+            "（复位应走 TaskRetryState.reset / reset_for_cancelled）"
+        )
+
+    # 2) 那四个回调的实现只许有一处：任务模块上不该再有它们的 def
+    callback_names = {"_on_progress", "_on_attempt_start",
+                      "_on_retry_window_closed", "_on_retry"}
+    for module in (ft, mt):
+        tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
+        defined = {
+            node.name for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and node.name in callback_names
+        }
+        assert not defined, (
+            f"{Path(module.__file__).name} 又重新定义了回调：{sorted(defined)}"
+            "（共享实现在 task_retry）"
+        )
+
+    # 3) 共享件确实是字段的家
+    assert _assigned_retry_fields(tr.__file__) >= _RETRY_FIELDS
+
+    # 4) 两条链路**确实**继承了 mixin、并实现了取值入口
+    #    （少了这条：有人把继承删掉，上面两条照样绿——它们只看「文件里没有重复」）
+    from contest_generator.task_retry import TaskRetryMixin
+
+    for cls, name in ((ft.FullDownloadTask, "FullDownloadTask"),
+                      (mt.ApplyTask, "ApplyTask")):
+        assert issubclass(cls, TaskRetryMixin), f"{name} 不再继承 TaskRetryMixin"
+        # 取值入口真的接上了（不是继承来的那条抛 NotImplementedError 的桩）
+        assert cls._retry_state is not TaskRetryMixin._retry_state, (
+            f"{name} 没有实现 _retry_state（还在用 mixin 里的桩）"
+        )
+
+    # 5) 三条**规则**必须在共享件里、且各自写到该写的字段
+    #    （第 3 条只看「有没有赋值」，被 mixin 的属性 setter 也能满足——那是个空断言；
+    #     这一条改成按方法逐个查，才真的钉住「规则住在 TaskRetryState」）
+    import inspect
+
+    from contest_generator.task_retry import TaskRetryState
+
+    def cleared_fields(method_name: str) -> set[str]:
+        body = inspect.getsource(getattr(TaskRetryState, method_name))
+        return {
+            field for field in _RETRY_FIELDS
+            if f"self.{field} =" in body
+        }
+
+    assert cleared_fields("reset") >= _RETRY_FIELDS, "reset 没把六个字段都复位"
+    assert cleared_fields("reset_for_cancelled") >= {
+        "retry_count", "last_error_kind", "retrying", "message",
+    }, "取消复位漏了字段"
+    assert cleared_fields("close_window") >= {"retrying", "message"}, (
+        "关窗必须同时清 retrying 与 message（只清一个会留下自相矛盾的状态组合）"
+    )
 
 
 def test_download_resume_module_has_no_status_knowledge() -> None:
