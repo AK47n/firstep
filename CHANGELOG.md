@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=7a288e163708c16e44f1b72095efe20f7c82873d -->
+<!-- changelog-auto: last-commit=e5d6abb0a9701175ae51dbb49d5b837717cd5ff8 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -46,6 +46,7 @@
 - 22:46 test(下载): 12 键状态契约收成一份——内联副本改走共用常量，并立单一家结构守卫（工单 resumable-download/15）
 - 22:47 docs(本机环境): 补记工单 15 的契约单源、单一家守卫与六份证据（工单 resumable-download/15 收口）
 - 22:53 chore(证据): 收工全套落盘——196 文件全绿、0 卡住（工单 resumable-download/14+15）
+- 23:00 chore(仓库): 清掉被误提交的 Windows 缓存目录（%SystemDrive% 没展开就落进仓库）+ 挡这类路径的忽略规则
 
 ## 2026-09-12
 - 00:58 门禁引脚容量诊断（落点/可用 IO/解不开几组/至少去掉几个）
