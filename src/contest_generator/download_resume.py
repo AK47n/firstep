@@ -104,7 +104,7 @@ class DownloadResult:
     sha256: str
     transferred_bytes: int          # 本次调用从网络真正读到的字节（续传只算新增部分）
     attempts: int                   # 实际尝试次数（1 = 一次成功）
-    resumed_from: int               # 首次尝试时本地已有的字节（0 = 从头下）
+    resumed_from: int               # 本次**真正用 Range 接上**的起始偏移（0 = 从头下）
     retried: bool                   # 是否发生过重试（前端据此在完成行留痕）
 
 
@@ -114,6 +114,7 @@ class _AttemptOutcome:
 
     got: int                        # 本次从网络读到的字节
     restarted: bool                 # 服务器忽略了 Range / 起点不符 → 本地半成品已丢弃
+    resumed_at: int = 0             # 本次**真正接上**的起始偏移（没接上 = 0）
 
 
 class _RestartFlag:
@@ -332,7 +333,11 @@ def resumable_download(
     elif want_sha and dest.is_file():
         pass                     # 长度不足：照常续传，内容由本轮下载完后再验
 
-    resumed_from = dest.stat().st_size if dest.is_file() else 0
+    # `resumed_from` 的口径 = 「本次**真正用 Range 接上**的起始偏移」，**不是**
+    # 「进函数时盘上有多少」：盘上有 N 字节、但服务器忽略 Range 回 200 时，半成品
+    # 会被丢弃、实际是从 0 下的，那时必须报 0。真正的取值在下面循环里由
+    # `_AttemptOutcome.resumed_at`（`_attempt` 判完「有没有真接上」）回填。
+    resumed_from = 0
     transferred = 0
     attempts = 0
     need_clean_slate = False
@@ -358,6 +363,9 @@ def resumable_download(
                 restart_flag=forced_restart,
             )
             transferred += outcome.got
+            if attempts == 1:
+                # 首轮尝试才决定「这次到底接没接上」（resume 只由首轮盘上的字节决定）
+                resumed_from = outcome.resumed_at
             size = dest.stat().st_size if dest.is_file() else 0
             if expected > 0 and size != expected:
                 # 这一轮「读完了」但长度不对（对端先声明后少发）：当失败处理，
@@ -462,7 +470,8 @@ def _attempt(
             raise DownloadSizeMismatchError(
                 f"发布信息不一致：清单说 {expected_size} 字节，服务器说 {declared_total} 字节"
             )
-        return _AttemptOutcome(got=got, restarted=restarted)
+        return _AttemptOutcome(got=got, restarted=restarted,
+                               resumed_at=0 if restarted else offset)
 
 
 def _decode_response(response: Any) -> tuple[int, int, int]:
@@ -582,7 +591,14 @@ def marker_for(dest: Path) -> Path:
 
 
 def write_partial_marker(dest: Path, url: str, expected_size: int) -> Path:
-    """写边车（取消 / 失败时）。只记 URL 与期望总长——够判「这份还能不能接着用」。"""
+    """写边车（**开跑就写**，另在取消 / 失败时兜底重写）。只记 URL 与期望总长——
+    够判「这份还能不能接着用」。
+
+    为什么不是「只在取消 / 失败时写」：**硬杀进程**（任务管理器结束 / 崩溃 / 断电）
+    两条路都不走，盘上于是只剩半成品、没有边车，下一个进程认不出它、当来路不明的
+    文件清掉重下。工单 06 档③ 真机实测：白下 210 MB。成功路径会 `clear_marker`，
+    提前写不留垃圾。
+    """
     marker = marker_for(dest)
     try:
         marker.parent.mkdir(parents=True, exist_ok=True)

@@ -1,0 +1,27 @@
+[
+  {
+    "label": "工单 06 口径",
+    "ok": false,
+    "message": "更新器脚本不存在：C:\\Users\\luoji\\AppData\\Local\\Temp\\firstep-preflight-44yfjych\\tier3-way\\tools\\update-app.py（工具根判定可能有误）",
+    "command": []
+  },
+  {
+    "label": "补 tools/ 后",
+    "ok": true,
+    "message": "已开始应用完整包 v1.1.1（1 卷，停服端口 8020）：工具将自动停止并重启",
+    "command": [
+      "C:\\Users\\luoji\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe",
+      "C:\\Users\\luoji\\AppData\\Local\\Temp\\firstep-preflight-44yfjych\\with-tools\\tools\\update-app.py",
+      "--zip",
+      "C:\\Users\\luoji\\AppData\\Local\\Temp\\firstep-preflight-44yfjych\\with-tools\\_fake\\firstep-full-v1.1.1.zip",
+      "--root",
+      "C:\\Users\\luoji\\AppData\\Local\\Temp\\firstep-preflight-44yfjych\\with-tools",
+      "--full-manifest",
+      "https://example.invalid/firstep-full-v1.1.1.manifest.json",
+      "--port",
+      "8020",
+      "--part",
+      "C:\\Users\\luoji\\AppData\\Local\\Temp\\firstep-preflight-44yfjych\\with-tools\\_fake\\firstep-full-v1.1.1.zip"
+    ]
+  }
+]

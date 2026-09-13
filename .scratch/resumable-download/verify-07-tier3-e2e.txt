@@ -1,0 +1,71 @@
+# 工单 07 证据：真实完整包端到端（替换 → 重启 → 版本号正确）
+
+## 零、隔离边界（真身只读）
+  真身工作树（只读）：C:\Users\luoji\Desktop\firstep
+    基线：12616 个文件（已排除 .git / __pycache__ / 缓存 / .venv / node_modules）
+  真身数据目录（只读）：C:\Users\luoji\.contest_generator（mtime=1789228119.8854978）
+    updates/ 现有条目：（空）
+
+一次性演练目录：C:\Users\luoji\AppData\Local\Temp\fe07-sd_yvjud
+
+## 一、铺一个像 v1.1.0 用户机的工具根（**含 tools/**）
+  线上清单：v1.1.1 / firstep-full-v1.1.1.zip / 783 MB
+  起点版本已改写为 1.1.0（src\contest_generator\__init__.py）
+  数据目录（隔离）：C:\Users\luoji\AppData\Local\Temp\fe07-sd_yvjud\profile\.contest_generator
+  配置文件：库目录指向 C:\Users\luoji\Desktop\firstep\library\modules（autocommit 已关）
+  完整包已就位：C:\Users\luoji\AppData\Local\Temp\fe07-sd_yvjud\profile\.contest_generator\updates\full\firstep-full-v1.1.1.zip（783 MB，复用本机缓存，未重新下载）
+
+## 二、完整包自证（复用的缓存也复核 sha256）
+  清单 sha256：8c6541e312e2db331c766f877e21165ef66f5a3e91c0e26c3d0d3deae86afd88
+  本地 sha256：8c6541e312e2db331c766f877e21165ef66f5a3e91c0e26c3d0d3deae86afd88
+  一致：True
+
+## 三、按用户机方式起服务（start-app.vbs → 8020）
+  服务已就绪：http://127.0.0.1:8020
+  **替换前 `/api/health`.version = 1.1.0**（期望 1.1.0）
+  检查更新：latest=v1.1.1 / current='' / reason=no-installed / 分卷 1 个
+
+## 四、点「一键全量」（下载 783 MB → 校验 → 拉起更新器 → 替换 → 重启）
+  apply 已接受：{'started': True, 'message': '已开始下载完整包（1 卷 / 约 783 MB）'}
+  进度 783.3/783.3 MB (100%) state=downloading retry=0 摘要=''
+  任务终态：state=done / 783 MB / error=''
+
+## 五、等更新器替换工具根（独立进程：停服 → 备份 → 覆盖 → 重启）
+  已装版本标记：{'version': 'v1.1.1', 'installed_at': '20260913-155621', 'backup_dir': 'C:\\Users\\luoji\\AppData\\Local\\Temp\\fe07-sd_yvjud\\profile\\.contest_generator\\updates\\backup\\20260913-155621'}
+
+## 六、重启后的判据（版本号从跑起来的服务读，不只看盘上文件）
+  等新区间服务就绪（旧服务已被更新器停掉）…
+  盘上 src\contest_generator\__init__.py：__version__ = "1.1.1"  # 与 GitHub Release v1.1.1 对齐；发版时三处同步（本文件 / pyproject.toml / README 当前版本）
+  **替换后 `/api/health`.version = 1.1.1**
+  → 「重启后版本号正确」：成立
+  替换后检查更新：current='v1.1.1' / reason=up-to-date / update_available=False
+
+## 七、更新器日志（替换链逐步骤留痕）与启动器留痕
+  | === firstep 更新开始（20260913-155621）===
+  | 更新包：C:\Users\luoji\AppData\Local\Temp\fe07-sd_yvjud\profile\.contest_generator\updates\full\firstep-full-v1.1.1.zip
+  | 工具根：C:\Users\luoji\AppData\Local\Temp\fe07-sd_yvjud\tool
+  | 完整包模式：1 卷 / 8777 个条目，安全校验通过
+  | 停服：结束本应用进程 PID 7788
+  | 已备份 234 个将被覆盖的文件到 C:\Users\luoji\AppData\Local\Temp\fe07-sd_yvjud\profile\.contest_generator\updates\backup\20260913-155621
+  | 已落位 8777 个文件
+  | 已写回资料库基线清单：12 个批次 → C:\Users\luoji\AppData\Local\Temp\fe07-sd_yvjud\tool\sources\materials\.materials-manifest.json
+  | 已删除 0 个废弃文件
+  | pyproject.toml 未变化，跳过依赖安装
+  | 已清除待更新标记（pending-update.json）
+  | 已记录更新结果：C:\Users\luoji\AppData\Local\Temp\fe07-sd_yvjud\profile\.contest_generator\updates\last-update.json
+  | 已记录已装完整包版本：v1.1.1 → C:\Users\luoji\AppData\Local\Temp\fe07-sd_yvjud\profile\.contest_generator\updates\full-installed.json
+  | 重启应用（start-app.vbs）
+  | === 更新完成 ===
+  启动器留痕（C:\Users\luoji\AppData\Local\Temp\fe07-sd_yvjud\profile\.contest_generator\launcher.log）：
+  | [2026-09-13T15:56:16+08:00] reason=started tries=1 port=8020
+  | [2026-09-13T15:56:56+08:00] reason=started tries=1 port=8020
+
+## 八、隔离边界收尾校验
+  真身数据目录 mtime 未变：成立（1789228119.8854978 → 1789228119.8854978）
+  真身 updates/ 条目未变：成立（（空））
+  真身工作树未变（排除 VCS / 缓存）：成立（12616 → 12616 个文件）
+  演练数据目录里有 webapp.log（隔离生效的旁证）：True
+
+收尾：已收掉 8020 上的监听进程 ['47048']
+收尾：8020 端口已释放
+演练目录已清理

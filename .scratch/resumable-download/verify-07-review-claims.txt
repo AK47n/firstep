@@ -1,0 +1,39 @@
+# 工单 07 探针：双轴评审五条断言的独立复现（真 HTTP，本地线程服务器）
+
+仓库：C:\Users\luoji\Desktop\firstep
+载荷：307200 字节，sha256=f18c9323791b1089…
+
+## 假设 1：`resumed_from` 语义（spec = 「本次**真正用 Range 接上**的起始偏移」）
+  铺 102400 字节 + 服务器忽略 Range（回 200 整份）
+  实测 range_headers=['bytes=102400-']（客户端确实带了 Range）
+  实测 resumed_from=0 / 最终 sha_ok=True
+  评审说：应报 0（真正接上的偏移），代码报「进函数时盘上的字节」。
+  → 复现**不成立**（实测 resumed_from=0）
+
+## 假设 2：服务器 416（spec 断点契约表：「删掉从 0 重下」）
+  铺 102400 字节 + 服务器对带 Range 的请求恒回 416
+  实测 error='HTTPError: HTTP Error 416: Range Not Satisfiable'
+  实测 半成品在盘=True / 边车在=True
+  → 「删掉并重下」**不成立**（最终 sha_ok=False，请求数=1）
+
+## 假设 3：本地比远端大（spec：「本地坏，删掉从 0 重下」）
+  铺 311296 字节（比清单大 4096）
+  实测 error=''
+  实测 半成品在盘=307200 / 请求数=0
+  → 「删掉并重下」成立（最终 sha_ok=True）
+
+## 假设 4：完整卷跑完后是否留孤儿边车（spec：「成功…一并删除…不留孤儿」）
+  铺一整卷（307200 字节）+ 服务器正常
+  实测 请求数=0（期望 0 = 不发请求直接进校验）
+  实测 最终 sha_ok=True / 边车还在=False
+  → 「不留孤儿」成立
+
+## 假设 5（对照组）：正常整份下载，边车该被清掉
+  实测 边车还在=False / sha_ok=True
+
+## 总判
+  1_resumed_from_semantics_inverted：不成立
+  2_416_not_cleared_and_restarted：**复现成立**
+  3_local_bigger_not_restarted：不成立
+  4_orphan_sidecar_after_complete_volume：不成立
+  5_control_clean_full_download：**复现成立**

@@ -1,0 +1,22 @@
+# 工单 07 前置诊断：替换环节的拉起前预检（零下载、零网络）
+
+仓库：C:\Users\luoji\Desktop\firstep
+
+## 一、照工单 06 那次的口径铺工具根（只有 src/ + 四个顶层文件）
+  工具根：C:\Users\luoji\AppData\Local\Temp\firstep-preflight-44yfjych\tier3-way
+  tools/ 存在：False
+  [工单 06 口径] ok=False
+           message=更新器脚本不存在：C:\Users\luoji\AppData\Local\Temp\firstep-preflight-44yfjych\tier3-way\tools\update-app.py（工具根判定可能有误）
+           command=（没拉起）
+
+## 二、补上 tools/ 之后再跑一次
+  工具根：C:\Users\luoji\AppData\Local\Temp\firstep-preflight-44yfjych\with-tools
+  tools/update-app.py 存在：True
+  [补 tools/ 后] ok=True
+           message=已开始应用完整包 v1.1.1（1 卷，停服端口 8020）：工具将自动停止并重启
+           command=['C:\\Users\\luoji\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe', 'C:\\Users\\luoji\\AppData\\Local\\Temp\\firstep-preflight-44yfjych\\with-tools\\tools\\update-app.py', '--zip', 'C:\\Users\\luoji\\AppData\\Local\\Temp\\firstep-preflight-44yfjych\\with-tools\\_fake\\firstep-full-v1.1.1.zip', '--root', 'C:\\Users\\luoji\\AppData\\Local\\Temp\\firstep-preflight-44yfjych\\with-tools', '--full-manifest', 'https://example.invalid/firstep-full-v1.1.1.manifest.json', '--port', '8020', '--part', 'C:\\Users\\luoji\\AppData\\Local\\Temp\\firstep-preflight-44yfjych\\with-tools\\_fake\\firstep-full-v1.1.1.zip']
+
+## 三、结论
+  预检通过：1/2
+  → 假设成立：**工单 06 档③ 卡在「工具根没铺 tools/」，不是产品缺陷**。
+     产品侧的拉起前预检工作正常（正因它拦下，才没出现「以为更新了其实没更新」）。

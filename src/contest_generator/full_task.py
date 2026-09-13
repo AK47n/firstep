@@ -24,7 +24,7 @@
 - 缺省下载器 = `download_resume.resumable_download`（卷内断点 + 自动重试 + 退避可取消），
   经 `download_resume.as_task_downloader` 适配成既有的 `(url, dest, on_progress)` 注入缝；
 - **下载异常保留半成品**（它就是断点），**校验失败才删**（重下也是坏的）；
-- 半成品旁落 `.partial.json` 边车（只在取消 / 失败时写，成功时清），
+- 半成品旁落 `.partial.json` 边车（**开跑就写**，取消 / 失败时兜底重写，成功时清），
   `run()` 启动时对得上就接着下，对不上就清掉从头下；
 - 重试计数与「正在重试」摘要进内存态（`retry_count` / `last_retry_at` /
   `last_error_kind` 不落快照；`message` 走进行中的摘要）。

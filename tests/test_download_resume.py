@@ -319,6 +319,41 @@ def test_server_ignoring_range_restarts_from_zero(dest: Path) -> None:
     assert server.n_requests == 1                    # 一次就成，不必重试
 
 
+def test_resumed_from_reports_whether_range_actually_connected(dest: Path) -> None:
+    """`resumed_from` 的口径 = 「本次**真正用 Range 接上**的起始偏移」（spec 明写）。
+
+    盘上有 N 字节**不等于**接上了：服务器忽略 Range 回 200 时，半成品被丢弃、
+    实际是从 0 下的——此时必须报 0，否则这个字段会把「被重启的下载」说成「续传」。
+
+    （工单 07 探针实测：改之前这里返回 102400，与 spec 语义相反。两条分支都钉。）
+    """
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(PAYLOAD[:100 * 1024])
+
+    # 分支一：服务器**忽略** Range → 回 200 整份 → 没接上，报 0
+    ignoring = _FakeServer()
+    ignoring.ignore_range = True
+    result = resumable_download(
+        "https://x/p.zip", dest, lambda n: None, opener=ignoring,
+        expected_size=len(PAYLOAD), expected_sha256=PAYLOAD_SHA,
+        min_resume_bytes=64 * 1024,
+    )
+    assert result.sha256 == PAYLOAD_SHA
+    assert ignoring.starts() == [100 * 1024]     # 客户端确实带了 Range（被忽略）
+    assert result.resumed_from == 0              # 但**没接上**
+
+    # 分支二：服务器认 Range → 真的从 100 KB 接上
+    dest.write_bytes(PAYLOAD[:100 * 1024])       # 复原半成品
+    honoring = _FakeServer()
+    result2 = resumable_download(
+        "https://x/p.zip", dest, lambda n: None, opener=honoring,
+        expected_size=len(PAYLOAD), expected_sha256=PAYLOAD_SHA,
+        min_resume_bytes=64 * 1024,
+    )
+    assert honoring.starts() == [100 * 1024]
+    assert result2.resumed_from == 100 * 1024
+
+
 def test_manifest_size_mismatch_is_not_retried(dest: Path) -> None:
     """清单说 A、服务器说 B = 发布物与清单不一致：直报，不进重试循环。
 

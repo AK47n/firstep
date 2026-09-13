@@ -1,0 +1,70 @@
+{
+  "asset": {
+    "zip_name": "firstep-full-v1.1.1.zip",
+    "size": 821352026,
+    "sha256_matches": true
+  },
+  "before": {
+    "health": {
+      "app": "contest-generator",
+      "version": "1.1.0",
+      "ok": true
+    },
+    "check": {
+      "latest_version": "v1.1.1",
+      "current_version": "",
+      "update_available": true,
+      "reason": "no-installed",
+      "error": ""
+    }
+  },
+  "task": {
+    "state": "done",
+    "total_downloaded_bytes": 821352026,
+    "total_bytes": 821352026,
+    "error": ""
+  },
+  "installed_marker": {
+    "version": "v1.1.1",
+    "installed_at": "20260913-155621",
+    "backup_dir": "C:\\Users\\luoji\\AppData\\Local\\Temp\\fe07-sd_yvjud\\profile\\.contest_generator\\updates\\backup\\20260913-155621"
+  },
+  "after": {
+    "on_disk": "__version__ = \"1.1.1\"  # 与 GitHub Release v1.1.1 对齐；发版时三处同步（本文件 / pyproject.toml / README 当前版本）",
+    "served": "1.1.1",
+    "version_ok": true,
+    "check": {
+      "latest_version": "v1.1.1",
+      "current_version": "v1.1.1",
+      "update_available": false,
+      "reason": "up-to-date"
+    }
+  },
+  "verdict": {
+    "version_before": "1.1.0",
+    "version_after_served": "1.1.1",
+    "version_after_on_disk": "__version__ = \"1.1.1\"  # 与 GitHub Release v1.1.1 对齐；发版时三处同步（本文件 / pyproject.toml / README 当前版本）",
+    "version_ok": true,
+    "task_state": "done",
+    "installed_marker": {
+      "version": "v1.1.1",
+      "installed_at": "20260913-155621",
+      "backup_dir": "C:\\Users\\luoji\\AppData\\Local\\Temp\\fe07-sd_yvjud\\profile\\.contest_generator\\updates\\backup\\20260913-155621"
+    },
+    "real_data_untouched": true,
+    "real_updates_untouched": true,
+    "real_tree_untouched": true,
+    "real_tree_diff": {
+      "added": [],
+      "removed": [],
+      "changed": []
+    },
+    "isolation_proof": true
+  },
+  "cleanup": {
+    "killed": [
+      "47048"
+    ],
+    "leftover": []
+  }
+}
