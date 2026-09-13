@@ -96,6 +96,10 @@
 `retry_count` / `last_retry_at` / `last_error_kind` / `_retrying` / `_message` 五个散字段宜收成一个
 `RetryState` 值对象。两条都是**结构重排**，与 04（状态面定契约）在同一片代码上，放到那时一起做更省。
 
+> **后来的去向**：第一条散字段那条由工单 **09** 收掉；第二条（`_download_one` /
+> `_resolve_download` 的重复）最终**另立工单 10**，未与 09 合并——理由写在 10 的开头
+> （两个业务流程长得像 ≠ 同一件观测被抄两遍）。
+
 **回归**：全套 `4399 passed / 1 skipped`；工单 01/02 的探针（`probe-01-resume.py`）复跑仍 PASS
 （本单改了模拟服务器台账的一处语义，见证据文件第二节的说明）；`probe-03-corridor.py` 总判 PASS、
 反证如期转红。

@@ -139,4 +139,10 @@ AssertionError: full_task.py 又出现成块的重试观测赋值：
 - **没改任何状态面字段名、默认值或词表**（工单 04 的契约面）。
 - **没改 `full_task` → `materials_task` 的同层 import**（`TaskState` / `_file_sha256`）：
   评审确认这是**本单之前就有**的，与本次重排无关；顺手拆它会扩大爆炸半径。
-- **没清兼容别名**（第五节）。
+- **没清兼容别名**（第五节）——那是「一个名字有两个住处」，与本单「同一件观测被抄两遍」
+  不同轴，清理仍是独立一步。
+
+> **归位（本单结案后补记）**：第六节那笔账已从「备注」搬到工单 **10**
+> （`.scratch/resumable-download/issues/10-download-attempt-primitive.md`，`ready-for-agent`）——
+> 里面写清了「两个业务流程长得像」与「同一件观测被抄两遍」为什么必须分开判，
+> 以及 `_resolve_download` 那 18 行为什么**不**跟它一起收。
