@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=b1094d5da21a53c3056cce5fd4fb9ecf54b7171a -->
+<!-- changelog-auto: last-commit=f14e9b7d6ba32ea29afc660a349d23a7a6dba168 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -17,6 +17,7 @@
 - 01:10 ﻿chore(库治理): 各库重复项盘点 + 回收 7 个「改名重复」文件（208 MB）
 - 09:31 ﻿test(pdf): 固化「疑似重复」判据——实测否决「升级成内容哈希」动议，不另开工单
 - 09:46 feat(安装): install.bat 收尾自动创建桌面 firstep 快捷方式——新人不再需要认出该双击哪个文件（工单 beginner-shortcut/01）
+- 10:25 ﻿docs(下载): README 获取方式只说事实——新用户只下一个 zip，7z 分卷渠道口径下线（工单 newuser-download/01）
 
 ## 2026-09-12
 - 00:58 门禁引脚容量诊断（落点/可用 IO/解不开几组/至少去掉几个）
