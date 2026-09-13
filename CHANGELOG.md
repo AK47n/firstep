@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=54fff91b554828e26ce4854bceb685b2fd0b9bdc -->
+<!-- changelog-auto: last-commit=0fa696d34bae016a3b207ce9968a54804c30e0b1 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -28,6 +28,7 @@
 - 13:59 feat(下载): 两条链路接上可续下载——半成品保留 + 边车 + 重试计数（工单 resumable-download/03）
 - 14:14 feat(下载): 状态面三字段定契约——retrying / retry_count / error_kind（工单 resumable-download/04）
 - 14:32 feat(下载): 进度说人话——剩余时间人话化 + 弱网/重试可见 + 两种失败话术（工单 resumable-download/05）
+- 14:41 docs(下载): 真机复检档①② + 文档收口；档③ 未跑并如实记账（工单 resumable-download/06）
 
 ## 2026-09-12
 - 00:58 门禁引脚容量诊断（落点/可用 IO/解不开几组/至少去掉几个）
