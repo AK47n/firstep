@@ -76,3 +76,12 @@ tests/browser/**/*.png
 # 素材库回收目录（不真删、可手动恢复；与 -xr!.trash-pdf 的既有口径一致）
 sources/.trash-dedup/
 sources/.trash-pdf/
+
+# 「没展开的环境变量」被当成相对路径落进仓库的产物（2026-09-13 清理）：某脚本把
+# `%SystemDrive%\ProgramData\...\Windows\Caches` 原样写进了仓库根，又被 `git add`
+# 带进提交（`2c22f061`），三个 Windows 字体缓存 db 因此一直在库里。已 `git rm` 清掉。
+# 根因（写这份文件的脚本）没找到，先在这里挡住这个形状：目录名就是没展开的变量，一律不入库。
+%SystemDrive%/
+%USERPROFILE%/
+%LOCALAPPDATA%/
+%TEMP%/
