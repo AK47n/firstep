@@ -120,6 +120,8 @@
 | 项 | 位置 / 值 |
 |---|---|
 | 可续下载域模块 | `src/contest_generator/download_resume.py` |
+| 任务层共享件（工单 10 起） | `src/contest_generator/task_download.py`（「一次分卷下载」原语）、`src/contest_generator/task_retry.py`（重试观测）——两条链路（完整包 / 资料库）的 `_download_one` 自工单 10 起只剩「路径 + 卷级记账」，动作序列在这两处 |
+| 结构守卫（钉「重复有没有回来」） | `tests/test_download_status_surface.py::test_retry_observation_has_a_single_home`（工单 09）、`tests/test_download_sequence_home.py::test_download_sequence_has_a_single_home`（工单 10，含反向注入验证） |
 | 本地可控服务器 | `.scratch/resumable-download/sim-server.py`（六种行为；`--port 0` 由内核分配；默认 8031，**当前没有常驻实例**） |
 | 探针（真 socket） | `probe-01-resume.py`（下载函数层，五用例）、`probe-03-corridor.py`（任务层走廊 + 忽略 Range + 跨进程续传）、`probe-01-negative.py`（反证）、`probe-07-stage-preflight.py`（工具根预检，零下载）、`probe-07-review-claims.py`（评审断言的独立复现） |
 | 单测用桩服务器 | `tests/_byte_server.py`（进程内线程，只切流；**与探针那支强度不同**，别混） |
