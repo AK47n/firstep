@@ -532,8 +532,8 @@ def test_ignored_range_retry_message_says_from_zero(tmp_path: Path, monkeypatch)
     剧本 = 真实顺序：先带 Range 请求（被忽略 → 200 整份）→ 又断一次 → 重试。
     重试那一刻的摘要必须写「从 0 重新下」，而不是「从 X% 接着下」。
 
-    读的时刻 = **每一轮收到第一个数据块之前**（包 `on_progress`）：`before_retry` 在
-    **上一轮**失败里触发，那时摘要还是上一轮的事（本用例第一版就读错了，把两条文案混了）。
+    读的时刻 = **开窗那一刻**（`before_retry` 里、任务自己写完状态之后）：
+    窗口一关（退避结束）摘要是要被清掉的，所以不能在下一轮开始后读。
     """
     monkeypatch.setattr("contest_generator.download_resume.retry_delay", lambda n: 0.0)
     parts = _parts(["firstep-full-v1.1.0.zip"])
@@ -549,16 +549,15 @@ def test_ignored_range_retry_message_says_from_zero(tmp_path: Path, monkeypatch)
         task = _task(tmp_path, parts)
 
         def spy(url, dest, on_progress, **kwargs):  # noqa: ANN001, ANN003
-            original = on_progress
-            calls = {"n": 0}
+            original = kwargs["before_retry"]
 
-            def watcher(nbytes: int) -> None:
-                calls["n"] += 1
-                if calls["n"] == 2:      # 第 2 次进度回调 = 重试那一轮的第一个块
-                    observed.append((task._message, task._retrying))
-                return original(nbytes)
+            def watcher(*args):        # noqa: ANN002 —— 开窗：先让任务写完状态再读
+                result = original(*args)
+                observed.append((task._message, task._retrying))
+                return result
 
-            return resumable_download(url, dest, watcher, **kwargs)
+            kwargs["before_retry"] = watcher
+            return resumable_download(url, dest, on_progress, **kwargs)
 
         task._download = spy  # type: ignore[attr-defined]
         task.run()
@@ -567,7 +566,7 @@ def test_ignored_range_retry_message_says_from_zero(tmp_path: Path, monkeypatch)
     assert observed, "没有重试发生（前提是「先被忽略 Range，再断一次」）"
     message, retrying = observed[0]
     assert "从 0 重新下" in message, message
-    assert retrying is False, "退避已结束、新一轮已经开始，不该还挂在「重试中」"
+    assert retrying is True, "开窗那一刻就该是「正在重试」"
 
 
 def test_cancel_leaves_error_kind_empty(tmp_path: Path, monkeypatch) -> None:

@@ -7,7 +7,7 @@
       "case": "corridor",
       "state": "done",
       "error": "",
-      "seconds": 0.72,
+      "seconds": 0.7,
       "bytes_at_start": 0,
       "request_starts": [
         0,
@@ -37,7 +37,7 @@
       "case": "ignore-range",
       "state": "done",
       "error": "",
-      "seconds": 0.01,
+      "seconds": 0.02,
       "bytes_at_start": 1048576,
       "request_starts": [
         1048576
@@ -61,7 +61,7 @@
       "case": "failed-case",
       "state": "failed",
       "error": "下载失败（卷 firstep-full-v1.1.0.zip）：重试 1 次仍未下完（838860 / 2097152 字节）：连接中断：本次声明 2097152 字节，只收到 838860 字节，会自动重连接着下",
-      "seconds": 0.06,
+      "seconds": 0.04,
       "request_starts": [
         0
       ],

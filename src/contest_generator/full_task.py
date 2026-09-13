@@ -40,7 +40,12 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import download_resume
-from .download_resume import DownloadCancelledError, DownloadResult, resumable_download
+from .download_resume import (
+    DownloadCancelledError,
+    DownloadResult,
+    DownloadVerifyError,
+    resumable_download,
+)
 from .materials_task import (
     TaskState,
     _file_sha256,
@@ -302,8 +307,15 @@ class FullDownloadTask:
             self._current_part_name = ""
         except DownloadCancelledError:
             self._state = TaskState.CANCELLED
+            # 取消是终态：把「进行中的摘要」与「重试观测」一并归零。
+            # 特别是**退避等待中被取消**那条路——那时 retry_count / error_kind 已经被
+            # 上一次失败填过了，不清就会在取消态里报出「重试 1 次 / 网络错误」，
+            # 前端据此说「网络失败」= 把用户自己点的取消讲成网络故障（spec 的词表里
+            # 取消态的分类是空串）。
             self._message = ""
             self._retrying = False
+            self.retry_count = 0
+            self.last_error_kind = ""
         except Exception as exc:
             was_applying = self._state is TaskState.APPLYING
             self._state = TaskState.FAILED
@@ -313,7 +325,12 @@ class FullDownloadTask:
                 f"应用失败：{exc}" if was_applying
                 else f"下载失败（卷 {self._current_part_name}）：{exc}"
             )
-            self.last_error_kind = download_resume.error_kind(exc)
+            # 应用阶段（解压 / 替换 / 磁盘写入）的失败不是网络问题，也不是「重下就变好」的
+            # 校验问题——它是第四类，spec 的词表里没有格子，故留空：前端于是走通用话术，
+            # 而不是照着 network 说「点重试会从这里接着下」。
+            self.last_error_kind = (
+                "" if was_applying else download_resume.error_kind(exc)
+            )
         self._write_snapshot(force=True)
 
     def _download_one(self, part: _PartState) -> None:
@@ -344,7 +361,8 @@ class FullDownloadTask:
             download, is_default = self._resolve_download()
             download = download_resume.as_task_downloader(
                 download, cancel=self._cancel, before_retry=self._on_retry(part),
-                on_start=self._on_attempt_start(part), default=is_default,
+                on_start=self._on_attempt_start(part),
+                before_attempt=self._on_retry_window_closed, default=is_default,
             )
             try:
                 actual = download(part.url, dest, self._on_progress(part),
@@ -364,7 +382,8 @@ class FullDownloadTask:
             digest = download_resume.file_sha256(dest)
         if digest.lower() != part.sha256.lower():
             download_resume.clear_partial(dest)
-            raise OSError(f"卷 {part.name} 校验失败（SHA256 不匹配）")
+            # 校验失败用下载域那一支（`DownloadVerifyError`）→ `error_kind` 仍是单源
+            raise DownloadVerifyError(f"卷 {part.name} 校验失败（SHA256 不匹配）")
         part.ok = True
         part.downloaded_bytes = part.size
         self._message = ""
@@ -385,14 +404,29 @@ class FullDownloadTask:
         return cb
 
     def _on_attempt_start(self, part: _PartState) -> Callable[[int], None]:
-        """每轮尝试开始：把进度基准对齐到**这一轮真实的落盘起点**，并退出「重试中」。"""
+        """每轮尝试开始：进度基准对齐到**这一轮真实的落盘起点**。
+
+        **不在这里关「重试窗口」**：`on_start` 是紧跟着 `before_retry` 发生的
+        （同一轮循环里先报重试、再开始下一轮），在这关会把窗口压成 0 宽——
+        状态面永远看不到「正在重试」。窗口的关闭由 `resumable_download` 在
+        **退避等待结束之后**回调 `before_attempt`（见该函数）。
+        """
 
         def cb(offset: int) -> None:
             with self._lock:
                 part.downloaded_bytes = max(0, int(offset))
-            self._retrying = False
 
         return cb
+
+    def _on_retry_window_closed(self) -> None:
+        """退避等待结束、马上要真的重连：关掉「正在重试」窗口。
+
+        窗口 = `before_retry`（开）→ 退避等待结束（关）。只清 `retrying` 不清
+        `message` 会留下「正在重试第 2 次」挂满剩下整段下载（自相矛盾的状态组合，
+        前端只剩解析文案一条路——而 spec 明禁解析文案）。
+        """
+        self._retrying = False
+        self._message = ""
 
     def _on_retry(self, part: _PartState) -> Callable[..., None]:
         """`before_retry` 回调：如实计数 + 把「正在重试」摘要写进 `message`。"""
@@ -403,7 +437,7 @@ class FullDownloadTask:
             # 取消不算失败态分类（第三个字段值只能来自异常分类，spec 的词表是
             # "" | network | verify）：`DownloadCancelledError` 那条路不会走到这里。
             self.last_error_kind = download_resume.error_kind(exc)
-            self._retrying = True     # 退避等待中（下一轮尝试开始时清）
+            self._retrying = True     # 退避等待中（退避结束时清）
             self._message = download_resume.retry_message(
                 download_resume.retry_reason(exc), int(attempt), on_disk, part.size,
                 restarted=bool(restarted),

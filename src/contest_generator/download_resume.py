@@ -79,6 +79,16 @@ class DownloadCancelledError(DownloadError):
     """用户取消（不是失败：任务层应转 cancelled，且半成品保留）。"""
 
 
+class DownloadVerifyError(DownloadError):
+    """内容与清单不符（**任务层判出来的**校验失败：重下也不会有变化）。
+
+    为什么要在谱系里单列一支、而不是让任务层自己给异常打标记：`error_kind` 是
+    「状态面 `error_kind` 字段的单源」，分类必须只有一处。校验失败发生在任务层
+    （下载器已经把整卷算过哈希了），但它**语义上属于同一张表**——所以由任务层
+    抛这个类型，分类仍归这里（工单 04 的双轴评审整改）。
+    """
+
+
 # 本类错误重试必然同样结果，故不进重试循环（HTTPError 单独判，因为它要分状态码）
 _NOT_RETRYABLE = (
     DownloadSizeMismatchError,
@@ -150,6 +160,8 @@ def describe_network_error(exc: BaseException) -> str:
     """底层异常 → 中文可行动句子（状态面的错误文案单源）。"""
     if isinstance(exc, DownloadCancelledError):
         return "已取消下载"
+    if isinstance(exc, DownloadVerifyError):
+        return str(exc)
     if isinstance(exc, DownloadSizeMismatchError):
         return str(exc)
     if isinstance(exc, DownloadLocalCorruptError):
@@ -186,10 +198,14 @@ def describe_network_error(exc: BaseException) -> str:
 
 
 def error_kind(exc: BaseException) -> str:
-    """错误分类（状态面 `error_kind` 字段的单源）："" | "network" | "verify" | "cancelled"。"""
+    """错误分类（状态面 `error_kind` 字段的**单源**）："" | "network" | "verify" | "cancelled"。
+
+    任务层只消费、不自己判——校验失败也走这张表（抛 `DownloadVerifyError`）。
+    """
     if isinstance(exc, DownloadCancelledError):
         return "cancelled"
-    if isinstance(exc, (DownloadSizeMismatchError, DownloadLocalCorruptError)):
+    if isinstance(exc, (DownloadSizeMismatchError, DownloadLocalCorruptError,
+                        DownloadVerifyError)):
         return "verify"
     return "network"
 
@@ -253,6 +269,7 @@ def resumable_download(
     max_attempts: int | None = None,
     opener: Callable[[Any, float], Any] | None = None,
     on_start: Callable[[int], None] | None = None,
+    before_attempt: Callable[[], None] | None = None,
 ) -> DownloadResult:
     """把一卷下到 `dest`：断点续传 + 截断判定 + 无上限退避重试。
 
@@ -267,6 +284,10 @@ def resumable_download(
     - `on_start(resume_offset)`：**每次尝试开始时**报一次「本轮实际从盘上第几字节起写」。
       调用方据此把进度基准对齐到**这一次尝试的真实起点**——服务器忽略 Range 时会
       把它从「以为接着下」纠正回落盘真相（不报这一下，进度会把已丢弃的半成品算进去）。异常不外抛。
+    - `before_attempt()`：**退避等待结束、马上要真的重连**时报一次。观测面用它关掉
+      「正在重试」这个窗口——窗口 = `before_retry`（开）→ 这一次回调（关）。
+      为什么不复用 `on_start`：两者在同一轮循环里紧挨着发生（先报重试、再开始下一轮），
+      在 `on_start` 里关会把窗口压成 0 宽。异常不外抛。
     - `max_attempts`：**缺省 None = 无上限**（产品口径：网络故障要自己扛到成功）。
       只有给测试用的假服务器写「永远截断」的剧本时才需要它，真机上不必设。
     - `opener`：注入用（测试）；缺省走 `urllib.request.urlopen`。
@@ -352,6 +373,7 @@ def resumable_download(
                 # 退避期间被取消：立刻收手，不再发起下一次尝试（半成品保留）
                 write_partial_marker(dest, url, expected)
                 raise DownloadCancelledError("已取消下载")
+            _notify_attempt(before_attempt)      # 窗口关闭：马上要真的重连了
             continue
         break
 
@@ -511,6 +533,16 @@ def _notify_start(callback: Callable[[int], None] | None, offset: int) -> None:
         pass
 
 
+def _notify_attempt(callback: Callable[[], None] | None) -> None:
+    """告知调用方「退避结束、马上要重连了」（观测面，异常不外抛）。"""
+    if callback is None:
+        return
+    try:
+        callback()
+    except Exception:  # noqa: BLE001 —— 同上
+        pass
+
+
 def _wait_or_cancel(cancel: threading.Event | None, delay: float) -> None:
     if cancel is None:
         time.sleep(delay)
@@ -627,6 +659,7 @@ def as_task_downloader(
     cancel: threading.Event | None = None,
     before_retry: Callable[..., None] | None = None,
     on_start: Callable[[int], None] | None = None,
+    before_attempt: Callable[[], None] | None = None,
     default: bool = False,
 ) -> Callable[..., Any]:
     """任务层的下载适配层：`(url, dest, on_progress, *, expected_size, expected_sha256)`。
@@ -660,6 +693,7 @@ def as_task_downloader(
         return download(
             url, dest, on_progress,
             cancel=cancel, before_retry=before_retry, on_start=on_start,
+            before_attempt=before_attempt,
             expected_size=expected_size, expected_sha256=expected_sha256,
         )
 
