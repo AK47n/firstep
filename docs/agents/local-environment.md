@@ -53,15 +53,32 @@
 
 **根因**：`sources/materials/.materials-manifest.json`（本地基线清单，`materials_pack.MANIFEST_FILENAME`）
 **不在完整包里**，只在走完整包替换那一步由 `tools/update-app.py:396 write_materials_baseline()`
-从完整包清单的 `materials_manifest` 写回工具根。**直跑源码 / 普通重启永远不会写它**（本机现状即如此：
-文件不在，`/api/update/materials/check` → `error=baseline-missing`）。
+从完整包清单的 `materials_manifest` 写回工具根。**直跑源码 / 普通重启永远不会写它**
+（本次真身就是这种情况：文件不在，`/api/update/materials/check` → `error=baseline-missing`）。
 
-**现在要不要管**：不用。线上**还没有任何 `materials-` release**（只有 v1.0.0 / v1.1.0 / v1.1.1 / v1.2.0
-四个软件 release），资料库本来就没有增量可下。等第一次发资料库增量包之前，记得让真身与沙箱各跑一次
-「完整包下载 → 检查完整包 → 下载完整 firstep」把基线补上（这也正是工单 07 跑通的第③档链路）。
+**真身已就地补上（2026-09-13，不必下 770 MB）**：
+
+| 项 | 值 |
+|---|---|
+| 脚本 | `.scratch/materials-baseline-writeback/init-baseline.py`（`--write` 才落盘；默认 dry-run 只对比） |
+| 写了什么 | `sources/materials/.materials-manifest.json`（12 批次 / **5081 文件** / 1,473,311 字节，version=v1.2.0） |
+| 判据 | 与 `firstep-pack\firstep-full-v1.2.0.manifest.json` 的 `materials_manifest` 做**逐文件 sha256 对比全等**才写 |
+| 关键坑 | 扫描必须传 `full_pack.materials_excluded` 当排除规则——否则把 **36 个「故意不进包」的第三方安装包**（CCS_20.5 / VSCode / `*.img*` / `*.rar` / `tsp-xbhdcc`…）当成「本地多出」，5117 vs 5081 直接对不上 |
+| 现状 | 检查已从 `error=baseline-missing` 变成 `error=no-release`（「还没有发布资料库更新包」）——基线读到了，当前版本识别为 v1.2.0 |
+| 会不会污染仓库 | 不会：`sources/materials/` 整目录在 `.gitignore` 第 33 行，基线进不了 git / 发布包 |
+| 沙箱 | **还没补**（`Desktop\firstep-sim` 仍是 v1.1.1、无基线）；等发资料库增量包前一起补 |
+
+**顺手修掉的一处用例环境耦合**（这次补基线时暴露的）：`tests/test_materials_update.py::test_check_endpoint_baseline_missing`
+原先**没有注入资料库目录**，读的是真身 `sources/materials/`，于是「真机上有没有基线」这个真机状态直接决定它的红绿
+（我一写基线它就红了；同文件姊妹用例 `test_check_endpoint_has_new_version` 本来是注入的）。已改成注入空目录，
+判据一个字没改。**这条不是产品缺陷，是用例把环境当夹具了。**
 
 **版本号怎么看才准**：改完 `src/contest_generator/__init__.py` 后，**已经在跑的进程不会变**——
 浏览器刷新、重新打开页面都没用（`/api/health` 与「检查更新」都吃进程内的模块）。必须重启进程。
+
+**将来要发资料库增量包时**（`materials-v*` release，线上目前一个都没有）：发布侧基线用
+`firstep-pack\firstep-full-v1.2.0.manifest.json` 里的 `materials_manifest` 即可，**不必**再单独留一份
+`firstep-materials-*.manifest.json`——两者本来就是同一份东西（本次已实测逐文件相等）。
 
 ## 2.5 本机 Python 与依赖现状（2026-09-13 实测，动过就回来改）
 

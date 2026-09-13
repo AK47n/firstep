@@ -228,6 +228,15 @@ def test_check_endpoint_baseline_missing(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
         mu, "_fetch_text", lambda url: "{}"
     )
+    # 注入空资料库目录（与 test_check_endpoint_has_new_version 同法）：本用例要的是
+    # 「本地没有基线」这个前置条件，不能让真机状态决定结果——真机上写过一次
+    # `.materials-manifest.json`（完整包落位 / 就地补基线），这条就会从红变绿再变红。
+    materials_dir = tmp_path / "materials"
+    materials_dir.mkdir()
+    monkeypatch.setattr(
+        "contest_generator.webapp.materials_library_dir",
+        lambda: materials_dir,
+    )
     client = _client(tmp_path)
     resp = client.get("/api/update/materials/check")
     assert resp.status_code == 200
