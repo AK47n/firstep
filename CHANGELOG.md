@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=bb92ad5ab34f7c75491cb684418b36a39ba7c990 -->
+<!-- changelog-auto: last-commit=a7db1429fe61d67b2463a8bf5e86ee26e11dff82 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -24,6 +24,7 @@
 - 11:02 ﻿docs(下载体验): 收尾记账——工单 06 建档 + spec 更新为定案（含两处与初稿不同的决策）
 - 11:31 ﻿fix(安装): install.bat 端口提示随环境变量 + 失败可续跑；清掉重复安装元数据（工单 newuser-download/07）
 - 12:36 test(下载): 断点续传真 socket 判据先落地并证明会红——抓到「截断被当成下完了」（工单 resumable-download/01）
+- 13:12 feat(下载): 可续下载器——卷内断点续传 + 截断判定 + 无上限退避重试（工单 resumable-download/02）
 
 ## 2026-09-12
 - 00:58 门禁引脚容量诊断（落点/可用 IO/解不开几组/至少去掉几个）
