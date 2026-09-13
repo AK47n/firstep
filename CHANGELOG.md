@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=a0b114953c2d02f9399393ecbd1eff666fec9721 -->
+<!-- changelog-auto: last-commit=c58e12aa9002e80373cccca3b00e459b80e04e9f -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -22,6 +22,7 @@
 - 10:57 ﻿docs(下载): Releases 页说明改写 + 资产名保持 ASCII 的决策入库（工单 newuser-download/03、06）
 - 11:01 ﻿feat(发版): 下载链路一致性自检脚本，挂进发版清单（工单 newuser-download/06）
 - 11:02 ﻿docs(下载体验): 收尾记账——工单 06 建档 + spec 更新为定案（含两处与初稿不同的决策）
+- 11:31 ﻿fix(安装): install.bat 端口提示随环境变量 + 失败可续跑；清掉重复安装元数据（工单 newuser-download/07）
 
 ## 2026-09-12
 - 00:58 门禁引脚容量诊断（落点/可用 IO/解不开几组/至少去掉几个）
