@@ -142,7 +142,7 @@ class TaskRetryState:
             download_resume.retry_reason(exc)
         )
 
-    # -- 回调工厂 -----------------------------------------------------------
+    # -- 回调工厂（装配在状态对象上：拿得到本卷 `part` 的才是它）--------------
 
     def on_retry(self, part: T) -> Callable[..., None]:
         """`before_retry` 的绑定回调（`part` 提供总长，用于算百分比）。"""
@@ -152,6 +152,21 @@ class TaskRetryState:
                             part.size)  # type: ignore[attr-defined]
 
         return cb
+
+    def callbacks(self, part: T) -> dict[str, Any]:
+        """→ 交给 `as_task_downloader` 的两个重试观测回调（一次装配好）。
+
+        `{"before_retry": …, "before_attempt": …}`
+        （`on_start` 是**进度基准**回调，归 `part_progress_callbacks`，不在这里。）
+
+        住在状态对象上而不是混入类上：装配它需要的东西只有状态与**本卷**（`part`），
+        所以 `task_download` 那条共享路径拿到 `retry` 就能自己装，不必再回任务对象上取
+        （工单 10 收「一次分卷下载」时划的缝）。
+        """
+        return {
+            "before_retry": self.on_retry(part),
+            "before_attempt": self.close_window,
+        }
 
 
 def part_progress_callbacks(
@@ -254,16 +269,11 @@ class TaskRetryMixin:
         """`before_attempt` 回调：退避结束、马上要重连时关窗。"""
         self._retry_state().close_window()
 
-    def retry_callbacks(self, part: T) -> dict[str, Any]:
-        """交给 `as_task_downloader` 的两个重试观测回调（一次装配好）。
-
-        → `{"before_retry": …, "before_attempt": …}`
-        （`on_start` 是进度基准回调，归 `part_progress_callbacks`，不在这里。）
-        """
-        return {
-            "before_retry": self._retry_state().on_retry(part),
-            "before_attempt": self.close_retry_window,
-        }
+    # 回调的**装配**（`before_retry` / `before_attempt` 那一对）不在这里：
+    # 从工单 10 起归 `TaskRetryState.callbacks(part)` —— 共享的下载路径
+    # （`task_download.download_and_verify`）拿到观测对象就能自己装，
+    # 不必再回任务对象上取。混入类上原来那个 `retry_callbacks` 转发已删
+    # （零调用点；兼容别名只留「既有判据真的在用」的那些，见下）。
 
     # -- 兼容别名（**只给既有测试的私有注入点**，新代码用上面的公开名）--------
     #

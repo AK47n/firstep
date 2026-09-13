@@ -41,11 +41,10 @@ from typing import Any, Callable
 from . import download_resume
 from .download_resume import (
     DownloadCancelledError,
-    DownloadResult,
-    DownloadVerifyError,
     resumable_download,
 )
-from .task_retry import TaskRetryMixin, TaskRetryState, part_progress_callbacks
+from .task_download import download_and_verify
+from .task_retry import TaskRetryMixin, TaskRetryState
 
 SNAPSHOT_FILENAME = "materials-task.json"
 SNAPSHOT_INTERVAL_SECONDS = 2.0
@@ -277,7 +276,7 @@ class ApplyTask(TaskRetryMixin):
                 if not dest.is_file():
                     continue
                 # 恢复校验：本地已下载文件的内容哈希 == 清单期望 SHA256
-                if _file_sha256(dest) == str(part.sha256 or "").lower():
+                if download_resume.file_sha256(dest) == str(part.sha256 or "").lower():
                     part.ok = True
                     part.dest = str(dest)
                     part.downloaded_bytes = part.size
@@ -306,7 +305,7 @@ class ApplyTask(TaskRetryMixin):
                         continue
                     self._current_part_name = part.name
                     self.reset_retry_state()
-                    self._download_one(part, batch)
+                    self._download_one(part)
             self._retry.clear_message_and_window()
             # 下载全部完成 → 应用（挂钩抛错 = 失败态）
             if self._on_complete is not None:
@@ -338,52 +337,23 @@ class ApplyTask(TaskRetryMixin):
             )
         self._write_snapshot(force=True)
 
-    def _download_one(self, part: _PartState, batch: _BatchState) -> None:
-        # 文件名 = part.name（即 zip_name / URL 尾段），与应用器按
-        # manifest parts[].zip_name 找文件的口径一致（勿加 slug 前缀，
-        # 否则双缀导致应用器找不到）。
+    def _download_one(self, part: _PartState) -> None:
+        """下一卷并校验。
+
+        「一次分卷下载」的**动作序列**住在 `task_download.download_and_verify`——
+        两条链路同一份（工单 10）。本方法只剩**本链路自己的两件事**：
+        这卷落在哪（`materials/` 目录，文件名口径见下），以及成功之后的卷级记账与快照。
+
+        文件名 = part.name（即 zip_name / URL 尾段），与应用器按
+        manifest parts[].zip_name 找文件的口径一致（勿加 slug 前缀，
+        否则双缀导致应用器找不到）。
+        """
         dest = self.task_dir / "materials" / part.name
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        part.dest = str(dest)
-        part.downloaded_bytes = 0
-        have = dest.stat().st_size if dest.is_file() else 0
-        digest = ""
-        if part.size > 0 and have == part.size:
-            # 长度已到点：不再发请求，直接进校验（spec 的断点契约）
-            part.downloaded_bytes = have
-        else:
-            if download_resume.is_resumable_partial(dest, part.url, part.size):
-                self._retry.message = download_resume.resume_message(have, part.size)
-                part.downloaded_bytes = have
-            else:
-                download_resume.clear_partial(dest)   # 来路不明的不完整文件：不留
-            download, is_default = self._resolve_download()
-            on_progress, on_start = part_progress_callbacks(part, lock=self._lock)
-            download = download_resume.as_task_downloader(
-                download, cancel=self._cancel, on_start=on_start,
-                default=is_default, **self.retry_callbacks(part),
-            )
-            try:
-                actual = download(part.url, dest, on_progress,
-                                  expected_size=part.size,
-                                  expected_sha256=part.sha256)
-            except Exception as exc:
-                if not isinstance(exc, DownloadCancelledError):
-                    download_resume.write_partial_marker(dest, part.url, part.size)
-                raise
-            # 缺省下载器已算过整卷哈希；注入的假下载器返回裸 sha 字符串则读盘算
-            digest = (actual.sha256 if isinstance(actual, DownloadResult)
-                      else str(actual))
-        if not digest:
-            digest = _file_sha256(dest)
-        if digest.lower() != part.sha256.lower():
-            # 校验失败 = 重下也是坏的：整份清掉（半成品 + 边车），不留孤儿。
-            # 异常用下载域那一支（`DownloadVerifyError`），好让 `error_kind` 仍是单源。
-            download_resume.clear_partial(dest)
-            raise DownloadVerifyError(f"卷 {part.name} 校验失败（SHA256 不匹配）")
-        part.ok = True
-        part.downloaded_bytes = part.size
-        self._retry.clear_message()
+        download_and_verify(
+            part, dest,
+            retry=self._retry, lock=self._lock, cancel=self._cancel,
+            resolve=self._resolve_download,
+        )
         self._write_snapshot(force=False)
 
     def _retry_state(self) -> TaskRetryState:
@@ -408,14 +378,6 @@ class ApplyTask(TaskRetryMixin):
     @staticmethod
     def _snapshot_path() -> str:
         return SNAPSHOT_FILENAME
-
-
-def _file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for chunk in iter(lambda: handle.read(256 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 # ---------------------------------------------------------------------------

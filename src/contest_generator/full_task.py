@@ -42,15 +42,11 @@ from typing import Any, Callable
 from . import download_resume
 from .download_resume import (
     DownloadCancelledError,
-    DownloadResult,
-    DownloadVerifyError,
     resumable_download,
 )
-from .materials_task import (
-    TaskState,
-    _file_sha256,
-)
-from .task_retry import TaskRetryMixin, TaskRetryState, part_progress_callbacks
+from .materials_task import TaskState
+from .task_download import download_and_verify
+from .task_retry import TaskRetryMixin, TaskRetryState
 
 SNAPSHOT_FILENAME = "full-task.json"
 SNAPSHOT_INTERVAL_SECONDS = 2.0
@@ -260,7 +256,7 @@ class FullDownloadTask(TaskRetryMixin):
             dest = Path(str(saved.get("dest") or ""))
             if not dest.is_file():
                 continue
-            if _file_sha256(dest) == str(part.sha256 or "").lower():
+            if download_resume.file_sha256(dest) == str(part.sha256 or "").lower():
                 part.ok = True
                 part.dest = str(dest)
                 part.downloaded_bytes = part.size
@@ -326,57 +322,18 @@ class FullDownloadTask(TaskRetryMixin):
     def _download_one(self, part: _PartState) -> None:
         """下一卷并校验。
 
-        - 已下字节 == 卷大小 → **不发请求**，直接进校验（spec 的断点契约）；
-        - 有可续的半成品（边车对得上）→ 不重下，接着下（用户视角：上次断在这儿）；
-        - 下载异常 → **半成品留着**（断点），如实往上抛；
-        - 校验失败 → **清掉半成品与边车**（重下也不会有变化），如实往上抛。
+        「一次分卷下载」的**动作序列**（判长度到点 / 判半成品可续 / 清来路不明的半成品 /
+        装配进注入缝 / 调下载器 / 失败写边车 / 复用返回的哈希 / 校验失败清掉重下）住在
+        `task_download.download_and_verify`——两条链路同一份（工单 10）。
+        本方法只剩**本链路自己的两件事**：这卷落在哪（`full/` 目录），
+        以及成功之后的**卷级记账与快照**。
         """
         dest = self.task_dir / PARTS_DIRNAME / part.name
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        part.dest = str(dest)
-        part.downloaded_bytes = 0
-        have = dest.stat().st_size if dest.is_file() else 0
-        digest = ""
-        if part.size > 0 and have == part.size:
-            # 长度已到点：不再发请求，直接进下面那条校验。
-            # 少了这条，「盘上已经是一整卷」会被当「来路不明的文件」删掉重下——
-            # 白下几百 MB（快照没记 ok 的那些卷就是这个下场）。
-            part.downloaded_bytes = have
-        else:
-            if download_resume.is_resumable_partial(dest, part.url, part.size):
-                self._retry.message = download_resume.resume_message(have, part.size)
-                part.downloaded_bytes = have
-            else:
-                download_resume.clear_partial(dest)   # 来路不明的不完整文件：不留
-            download, is_default = self._resolve_download()
-            on_progress, on_start = part_progress_callbacks(part, lock=self._lock)
-            download = download_resume.as_task_downloader(
-                download, cancel=self._cancel, on_start=on_start,
-                default=is_default, **self.retry_callbacks(part),
-            )
-            try:
-                actual = download(part.url, dest, on_progress,
-                                  expected_size=part.size,
-                                  expected_sha256=part.sha256)
-            except Exception as exc:
-                if not isinstance(exc, DownloadCancelledError):
-                    # 失败：半成品是断点，留着；边车（谁留下的、期望多大）一并写出，
-                    # 好让**换一次进程**也知道这份还能不能接着用。
-                    download_resume.write_partial_marker(dest, part.url, part.size)
-                raise
-            # 缺省下载器已经把整卷算过哈希了（`DownloadResult.sha256`），不必再读一遍盘；
-            # 注入的假下载器返回裸 sha 字符串，走既有行为读盘算哈希。
-            digest = (actual.sha256 if isinstance(actual, DownloadResult)
-                      else str(actual))
-        if not digest:
-            digest = download_resume.file_sha256(dest)
-        if digest.lower() != part.sha256.lower():
-            download_resume.clear_partial(dest)
-            # 校验失败用下载域那一支（`DownloadVerifyError`）→ `error_kind` 仍是单源
-            raise DownloadVerifyError(f"卷 {part.name} 校验失败（SHA256 不匹配）")
-        part.ok = True
-        part.downloaded_bytes = part.size
-        self._retry.clear_message()
+        download_and_verify(
+            part, dest,
+            retry=self._retry, lock=self._lock, cancel=self._cancel,
+            resolve=self._resolve_download,
+        )
         self._write_snapshot(force=False)
 
     def _retry_state(self) -> TaskRetryState:

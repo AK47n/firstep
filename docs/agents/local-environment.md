@@ -73,6 +73,14 @@
 就会在当前目录建 `pip\cache\`（实测在仓库根落了 111 个文件）。演练脚本改环境变量请**逐项增删**，
 别整段替换 `PATH`/`USERPROFILE`。
 
+**跑测试的命令有讲究（2026-09-13 实测，工单 10 撞上）**：用 **`python -m pytest`**。
+`pyproject.toml` 里 `pythonpath = ["src"]` 只保证 pytest 把本仓库 `src/` 排在最前；
+而**裸 `pytest` 命令**会先走全局 site-packages 那份 editable 安装——它指向的是
+**沙箱 `Desktop\firstep-sim\src`**，于是被测对象变成沙箱源码而不是你正在改的源码
+（工单 10 实测：同一批用例在沙箱源码上 41 failed，在自己源码上全绿，白排查一轮）。
+`.venv` 里**没有 pytest**（只有运行依赖），所以要跑测试就用系统 python +
+`python -m pytest`（`-p no:cacheprovider` 可选）。
+
 ## 2.5b 演练脚本的两条铁律（2026-09-13 用血换的）
 
 1. **真身文件只读**：任何"改写一份再跑"的演练，改写目标必须是 `%TEMP%` 下的副本。
