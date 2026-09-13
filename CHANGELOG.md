@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=f56a994187bbd97eb07d08082eabf86db96ca9e3 -->
+<!-- changelog-auto: last-commit=d0a63a3491471a8f618f037d7e25d1b51c5ba6e9 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -20,6 +20,7 @@
 - 10:25 ﻿docs(下载): README 获取方式只说事实——新用户只下一个 zip，7z 分卷渠道口径下线（工单 newuser-download/01）
 - 10:50 ﻿feat(下载体验): 包内加「请先读我」说明书 + install.bat 收尾说明 + 守卫（工单 newuser-download/02、04）
 - 10:57 ﻿docs(下载): Releases 页说明改写 + 资产名保持 ASCII 的决策入库（工单 newuser-download/03、06）
+- 11:01 ﻿feat(发版): 下载链路一致性自检脚本，挂进发版清单（工单 newuser-download/06）
 
 ## 2026-09-12
 - 00:58 门禁引脚容量诊断（落点/可用 IO/解不开几组/至少去掉几个）
