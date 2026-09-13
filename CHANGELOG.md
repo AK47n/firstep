@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=187c94481c4694a4cf167041374a2988519c9383 -->
+<!-- changelog-auto: last-commit=daf0319dc728970b3e88f0ff85c68dd25b53b197 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -32,6 +32,7 @@
 - 15:30 fix(下载): 开跑就写边车——硬杀进程留下的半成品不再被清掉重下（工单 resumable-download/06 验证发现）
 - 16:07 test(下载): 补完档③ 真实完整包端到端（替换→重启→版本号 1.1.0→1.1.1）+ 修 resumed_from 语义（工单 resumable-download/07）
 - 16:07 chore(工单): 清掉误提交的提交信息助手文件（工单 resumable-download/07）
+- 16:33 fix(下载): 本地那份与远端对不上——清了却没人重下的三处死胡同改成真重下（工单 resumable-download/08）
 
 ## 2026-09-12
 - 00:58 门禁引脚容量诊断（落点/可用 IO/解不开几组/至少去掉几个）
