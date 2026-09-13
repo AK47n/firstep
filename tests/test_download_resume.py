@@ -23,15 +23,18 @@ from contest_generator.download_resume import (
     DownloadResult,
     DownloadSizeMismatchError,
     DownloadTruncatedError,
+    as_task_downloader,
     describe_network_error,
     error_kind,
     file_sha256,
+    is_resumable_partial,
     is_retryable,
     marker_for,
     parse_content_range,
     read_partial_marker,
     resumable_download,
     retry_delay,
+    write_partial_marker,
 )
 
 PAYLOAD = bytes((i * 7 + 11) % 251 for i in range(300 * 1024))
@@ -409,6 +412,26 @@ def test_cancel_before_start_does_not_touch_network(dest: Path) -> None:
     assert server.n_requests == 0
 
 
+def test_failure_writes_sidecar_for_the_next_process(dest: Path, monkeypatch) -> None:
+    """失败（不是取消）也要写边车——否则下一个进程当它是来路不明的文件，白下一次。
+
+    这条是工单 03 的探针实测出来的洞：边车原来只在「取消」与「重试用尽」两处写，
+    而产品的重试**无上限**，「重试用尽」真机上永远走不到 → 断流失败后盘上只有
+    半成品、没有边车 → 下一个进程认不出它。
+    """
+    monkeypatch.setattr("contest_generator.download_resume.retry_delay", lambda n: 0.0)
+    server = _FakeServer()
+    server.cut_keep = [0.02] * 8                   # 每次都只发 2% 就断（收敛不了）
+    with pytest.raises(DownloadTruncatedError):
+        resumable_download("https://x/p.zip", dest, lambda n: None, opener=server,
+                           expected_size=len(PAYLOAD), max_attempts=2)
+    assert dest.is_file() and dest.stat().st_size > 0
+    marker = read_partial_marker(dest)
+    assert marker, "失败后必须有边车，否则这份半成品没人认领"
+    assert marker["url"] == "https://x/p.zip"
+    assert marker["expected_size"] == len(PAYLOAD)
+
+
 def test_broken_callback_does_not_break_download(dest: Path, monkeypatch) -> None:
     """before_retry 是观测面：它抛异常不许把下载带崩。"""
     monkeypatch.setattr("contest_generator.download_resume.retry_delay", lambda n: 0.0)
@@ -429,3 +452,81 @@ def test_file_sha256_matches_payload(dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(PAYLOAD)
     assert file_sha256(dest) == PAYLOAD_SHA
+
+
+# ---------------------------------------------------------------------------
+# 与任务层的共同口径（工单 03：两条链路同源接线）
+# ---------------------------------------------------------------------------
+
+
+def _part_dest(tmp_path: Path) -> Path:
+    dest = tmp_path / "k230.zip"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    return dest
+
+
+def test_partial_is_resumable_only_with_a_sidecar(tmp_path: Path) -> None:
+    """半成品能不能接着用：边车（URL + 期望总长）都对上才算数。
+
+    没有边车 = 来路不明（可能是别的版本、也可能是垃圾字节）→ **不续**，从头下。
+    这条判据就是工单 03 备注里那句「别让用户看到一堆来路不明的文件」。
+    """
+    dest = _part_dest(tmp_path)
+    dest.write_bytes(b"x" * 600)
+    assert not is_resumable_partial(dest, "https://x/k230.zip", 1200)
+
+    write_partial_marker(dest, "https://x/k230.zip", 1200)
+    assert is_resumable_partial(dest, "https://x/k230.zip", 1200)
+    # 换了 URL（另一个版本的同名卷）或清单大小变了 → 这份半成品不再能用
+    assert not is_resumable_partial(dest, "https://x/k230-v2.zip", 1200)
+    assert not is_resumable_partial(dest, "https://x/k230.zip", 900)
+    # 已经完整（长度到点）→ 不走「续」，直接进校验
+    dest.write_bytes(b"x" * 1200)
+    assert not is_resumable_partial(dest, "https://x/k230.zip", 1200)
+
+
+def test_partial_is_never_resumable_without_a_file(tmp_path: Path) -> None:
+    dest = _part_dest(tmp_path)
+    write_partial_marker(dest, "https://x/k230.zip", 1200)
+    assert not is_resumable_partial(dest, "https://x/k230.zip", 1200)
+
+
+def test_task_downloader_adds_expected_size_and_sha256(tmp_path: Path) -> None:
+    """接线契约：任务层用 `(url, dest, on_progress)` 调默认下载器，
+    适配层负责把**清单的 size 与 sha256 一并**传下去。
+
+    两条都传是硬要求（工单 02 踩坑 2）：只给 size 时「尺寸到点但内容坏」是死局，
+    重试每轮收 0 字节，白转到上限。
+    """
+    calls: list[dict] = []
+
+    def fake(url: str, dest: Path, on_progress, **kwargs) -> DownloadResult:  # noqa: ANN003
+        calls.append({"url": url, "dest": dest, "kwargs": kwargs})
+        return DownloadResult("a" * 64, 10, 1, 0, False)
+
+    cancel = threading.Event()
+    seen: list[tuple] = []
+    download = as_task_downloader(
+        fake, cancel=cancel,
+        before_retry=lambda *a: seen.append(a),
+    )
+    result = download("https://x/k230.zip", tmp_path / "k230.zip", lambda n: None,
+                      expected_size=1200, expected_sha256="b" * 64)
+
+    assert result.sha256 == "a" * 64
+    assert calls[0]["kwargs"]["expected_size"] == 1200
+    assert calls[0]["kwargs"]["expected_sha256"] == "b" * 64
+    assert calls[0]["kwargs"]["cancel"] is cancel, "取消要在下载器内部生效（退避中也能停）"
+    assert calls[0]["kwargs"]["before_retry"] is not None
+
+
+def test_task_downloader_falls_back_for_legacy_injected_downloader(tmp_path: Path) -> None:
+    """兼容契约：既有的三参假下载器（不吃关键字参数）照旧可用，零改动。"""
+    def legacy(url: str, dest: Path, on_progress) -> str:
+        dest.write_bytes(url.encode("utf-8"))
+        on_progress(len(url))
+        return "c" * 64
+
+    download = as_task_downloader(legacy, cancel=threading.Event(), before_retry=None)
+    assert download("https://x/k230.zip", tmp_path / "k230.zip", lambda n: None,
+                    expected_size=1, expected_sha256="c" * 64) == "c" * 64

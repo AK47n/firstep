@@ -10,23 +10,35 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
+from contest_generator import download_resume
 from contest_generator import full_task as ft
+from contest_generator.download_resume import resumable_download
 from contest_generator.full_task import (
     FullDownloadTask,
     full_task_status,
     write_full_snapshot,
 )
 from contest_generator.webapp import AppContext, create_app
+from tests._byte_server import ByteServer
 
 
 def _payload(name: str) -> bytes:
-    return f"内容-{name}".encode("utf-8")
+    """这一卷的「内容」= 名字 + 一段确定性伪随机字节。
+
+    为什么不是三个字的小串：真实分卷是几百 MB，而**断点续传只在卷 > 64 KB 时启用**
+    （小卷整卷重下更省事）。用几字节的载荷测「续传」，测的其实是另一条分支
+    （工单 02 的阈值判据就是这么被发现的）。
+    """
+    filler = bytes((i * 7 + 11) % 251 for i in range(300 * 1024))
+    return f"内容-{name}".encode("utf-8") + filler
 
 
 @pytest.fixture(autouse=True)
@@ -45,6 +57,53 @@ def _reset_full_state():
 
 def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# 本机桩服务器：真 socket，让**缺省的可续下载器**真的跑一遍
+# ---------------------------------------------------------------------------
+#
+# 为什么单测里也要真 socket：工单 03 判的是「任务层 + 缺省下载器」联手的端到端行为
+# （半成品留不留、边车写不写、下次从哪个偏移接着下）。注入假下载器之后这些行为
+# 根本不发生——假下载器不会自己写边车，也不会真发 Range。实现见 `tests/_byte_server.py`。
+
+
+def _byte_server(*, cut_after: int = 0, cut_runs: int = 0,
+                 ignore_range: bool = False) -> ByteServer:
+    """桩服务器：载荷固定 = v1.1.0 那一卷的字节（与清单 sha256 对得上，> 64 KB）。"""
+    return ByteServer(_payload("firstep-full-v1.1.0.zip"), cut_after=cut_after,
+                      cut_runs=cut_runs, ignore_range=ignore_range)
+
+
+def _capped_resumable(max_attempts: int):
+    """缺省下载器 + 重试上限（单测里造「这一次没下完」的确定性手段）。
+
+    产品的重试是**无上限**的（网络故障要自己扛到成功），所以单测里要造「失败态」
+    必须显式封顶——否则用例会一直重试下去（探针那边靠探针自己的次数上限兜底）。
+    """
+
+    def download(url, dest, on_progress, **kwargs):  # noqa: ANN001, ANN003
+        return resumable_download(url, dest, on_progress, max_attempts=max_attempts,
+                                  **kwargs)
+
+    return download
+
+
+def _cancellable_resumable(on_bytes):
+    """缺省下载器 + 「读到第 N 个字节时点取消」：模拟用户中途取消。"""
+
+    def download(url, dest, on_progress, **kwargs):  # noqa: ANN001, ANN003
+        fired = {"done": False}
+
+        def progress(n: int) -> None:
+            on_progress(n)
+            if not fired["done"]:
+                fired["done"] = True
+                on_bytes(n)          # 写盘之后才置取消位 → 半成品真的落下了
+
+        return resumable_download(url, dest, progress, **kwargs)
+
+    return download
 
 
 def _parts(names: list[str], size: int | None = None) -> list[dict[str, Any]]:
@@ -129,13 +188,122 @@ def test_task_writes_file_under_manifest_name(tmp_path: Path) -> None:
     assert names == ["firstep-full-v1.1.0.part1.zip"]
 
 
-def test_task_failure_cleans_partial_file(tmp_path: Path) -> None:
+def test_task_download_defaults_to_resumable(tmp_path: Path) -> None:
+    """缺省下载器必须换上可续下载（工单 03 的产品口径）。
+
+    「换了没换」不能靠注入假下载器的用例来证明——那些用例注入之后走的根本不是
+    缺省实现。所以这条直接看缺省值本身。
+    """
+    task = _task(tmp_path, _parts(["firstep-full-v1.1.0.zip"]))
+    assert task._download is resumable_download
+    assert task._resolve_download()[0] is resumable_download
+
+
+def test_task_download_passes_manifest_size_and_sha(tmp_path: Path, monkeypatch) -> None:
+    """缺省路径把清单的 size 与 sha256 **一起**交给下载器（工单 02 踩坑 2）。
+
+    只给 size 会掉进实测过的死局：「尺寸到点但内容坏」时服务器见「起点=整卷大小」
+    就不发字节，重试每轮收 0 字节。这里夹在调用点上把两个参数截下来看，
+    同时**真的下完一次**（参数传错这条用例就红）。
+    """
+    monkeypatch.setattr("contest_generator.download_resume.retry_delay", lambda n: 0.0)
     parts = _parts(["firstep-full-v1.1.0.zip"])
-    task = _task(tmp_path, parts, download=_fake_download([], fail_on={"firstep-full-v1.1.0.zip"}))
-    task.run()
+    seen: list[dict[str, Any]] = []
+    with _byte_server() as server:
+        parts[0]["url"] = server.url
+
+        def spy(url, dest, on_progress, **kwargs):  # noqa: ANN001, ANN003
+            seen.append(kwargs)
+            return resumable_download(url, dest, on_progress, **kwargs)
+
+        task = _task(tmp_path, parts)
+        task._download = spy  # type: ignore[attr-defined]
+        task.run()
+    assert task.state.value == "done", task.error
+    assert seen[0]["expected_size"] == parts[0]["size"]
+    assert seen[0]["expected_sha256"] == parts[0]["sha256"]
+    assert seen[0]["cancel"] is task._cancel, "取消要传到下载器里（退避中也能停）"
+    assert callable(seen[0]["before_retry"]), "重试要经 before_retry 如实上报"
+
+
+def test_task_failure_keeps_partial_file(tmp_path: Path, monkeypatch) -> None:
+    """下载异常 → **保留半成品**（它就是断点）；删了就等于每次断流都从 0 重来。
+
+    走**缺省下载器**（真 socket 打在本机桩服务器上，它发到 40% 就断流），
+    因为「半成品留不留」是任务层与下载器联手的行为，注入假下载器证明不了。
+    """
+    monkeypatch.setattr("contest_generator.download_resume.retry_delay", lambda n: 0.0)
+    monkeypatch.setattr("contest_generator.download_resume.MIN_RESUME_BYTES", 1)
+    parts = _parts(["firstep-full-v1.1.0.zip"])
+    target = tmp_path / "updates" / "full" / parts[0]["name"]
+    # 每次都断（cut_runs 给足）：这条要的是「失败态下盘上还剩什么」，
+    # 所以必须一路断到无上限重试也下不完——探针的 stall/cut 用例就是这种形态。
+    with _byte_server(cut_after=64 * 1024, cut_runs=999) as server:
+        parts[0]["url"] = server.url
+        task = _task(tmp_path, parts)
+        task._download = _capped_resumable(max_attempts=2)  # 别真跑到天荒地老
+        task.run()
+        assert server.starts, "真发过请求"
     assert task.state.value == "failed"
-    assert "模拟断网" in task.error or "下载失败" in task.error
-    assert not (tmp_path / "updates" / "full" / "firstep-full-v1.1.0.zip").exists()
+    assert "下载失败" in task.error
+    assert target.is_file(), "下载异常分支不许再删半成品（工单 resumable-download/03）"
+    assert 0 < target.stat().st_size < parts[0]["size"]
+    assert download_resume.is_resumable_partial(
+        target, parts[0]["url"], parts[0]["size"]
+    ), "半成品必须带对得上的边车，否则下次照样重下"
+
+
+def test_task_retry_state_reported(tmp_path: Path, monkeypatch) -> None:
+    """重试要如实计数、写进进行中的摘要（`message`）、终态清空。
+
+    桩服务器**只断一次**（`cut_runs=1`）：这就是「坏一阵就好」的真实形态，
+    于是这条同时判「断了能自己接上并下完」。
+    """
+    monkeypatch.setattr("contest_generator.download_resume.retry_delay", lambda n: 0.0)
+    parts = _parts(["firstep-full-v1.1.0.zip"])
+    target = tmp_path / "updates" / "full" / parts[0]["name"]
+    with _byte_server(cut_after=64 * 1024, cut_runs=1) as server:
+        parts[0]["url"] = server.url
+        task = _task(tmp_path, parts)
+        task.run()
+    assert task.state.value == "done", task.error
+    # 第一次 0 起（发到 64 KB 就断），第二次从断点起 ← 两次请求的起始偏移就是判据
+    assert server.starts[0] == 0, server.starts
+    assert server.starts[1] == 64 * 1024, server.starts
+    assert task.retry_count >= 1, "重试次数要如实计数"
+    assert task.last_retry_at > 0
+    assert task.last_error_kind == "network"
+    assert task._message == "", "终态清空进行中的摘要（终态原因只走 error）"
+    assert _sha(target.read_bytes()) == parts[0]["sha256"]
+
+
+def test_status_shows_retrying_message_during_backoff(tmp_path: Path, monkeypatch) -> None:
+    """退避等待期间，`full_task_status` 真的透出「正在重试」的摘要。
+
+    这是工单 04 的预览，但判据必须走**真路径**（缺省下载器 + 真 socket）：
+    前端的「慢 / 卡 / 失败」三态就靠 `message` / `retrying` 区分，注入假下载器的
+    用例证明不了这条链路通。退避拉长到 0.2 秒，好在等待窗口里轮询。
+    """
+    monkeypatch.setattr("contest_generator.download_resume.retry_delay", lambda n: 0.2)
+    parts = _parts(["firstep-full-v1.1.0.zip"])
+    seen: list[dict[str, Any]] = []
+    with _byte_server(cut_after=64 * 1024, cut_runs=1) as server:
+        parts[0]["url"] = server.url
+        task = _task(tmp_path, parts)
+        worker = threading.Thread(target=task.run, daemon=True)
+        worker.start()
+        deadline = time.time() + 10
+        while worker.is_alive() and time.time() < deadline:
+            status = full_task_status(task)
+            if status["retrying"]:
+                seen.append(status)
+            time.sleep(0.01)
+        worker.join(timeout=10)
+    assert task.state.value == "done", task.error
+    assert seen, "退避等待期间状态面必须能看到「正在重试」"
+    assert "自动重试" in seen[0]["message"], seen[0]["message"]
+    assert seen[0]["retry_count"] >= 1
+    assert seen[0]["error"] == "", "重试中不算失败（终态原因才进 error）"
 
 
 def test_task_checksum_mismatch_fails(tmp_path: Path) -> None:
@@ -154,6 +322,268 @@ def test_task_checksum_mismatch_fails(tmp_path: Path) -> None:
     assert task.state.value == "failed"
     assert "校验失败" in task.error
     assert not (tmp_path / "updates" / "full" / "firstep-full-v1.1.0.zip").exists()
+    assert not (tmp_path / "updates" / "full" / "firstep-full-v1.1.0.zip.partial.json").exists()
+
+
+def test_verify_failure_discards_stale_partial(tmp_path: Path) -> None:
+    """校验失败过的半成品不该被接着用：**要么删掉、要么从头下**，不许续着坏字节写。
+
+    盘上是一份「长度不足 + 有边车」的陈旧半成品；它上次其实是校验失败。
+    一个从 0 重下的下载器会**覆盖**它（`wb`），续写的实现则会在尾部追加。
+    """
+    parts = _parts(["firstep-full-v1.1.0.zip"])
+    name = "firstep-full-v1.1.0.zip"
+    target = tmp_path / "updates" / "full" / name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(b"stale-bytes")
+    download_resume.write_partial_marker(target, parts[0]["url"], parts[0]["size"])
+
+    def download(url: str, dest: Path, on_progress) -> str:
+        payload = _payload(name)
+        dest.write_bytes(payload)          # 覆盖写：续写的实现写不出正确结果
+        on_progress(len(payload))
+        return _sha(payload)
+
+    task = _task(tmp_path, parts, download=download)
+    task.run()
+    assert task.state.value == "done"
+    assert _sha(target.read_bytes()) == parts[0]["sha256"]
+
+
+def test_task_resumes_partial_file_instead_of_restarting(tmp_path: Path, monkeypatch) -> None:
+    """跑到一半断了 → 下次 `run()` **接着下**（服务器台账里的 Range 起点就是判据）。
+
+    两段都跑在**同一个**桩服务器上（同一个 URL）：第二次 `run()` 拿到的半成品
+    必须被认下来——判它「边车对得上就接着用」这条真的生效。
+    """
+    monkeypatch.setattr("contest_generator.download_resume.retry_delay", lambda n: 0.0)
+    parts = _parts(["firstep-full-v1.1.0.zip"])
+    payload = _payload(parts[0]["name"])
+    half = len(payload) // 2
+    target = tmp_path / "updates" / "full" / parts[0]["name"]
+
+    with _byte_server(cut_after=half, cut_runs=1) as server:
+        parts[0]["url"] = server.url
+        first = _task(tmp_path, parts)
+        first._download = _capped_resumable(1)     # 这一次就断在这儿，别自动接完
+        first.run()
+        assert first.state.value == "failed"
+        assert target.stat().st_size == half
+        assert download_resume.is_resumable_partial(
+            target, parts[0]["url"], parts[0]["size"]
+        ), "断掉的半成品必须带对得上的边车，否则下次照样重下"
+
+        mark = len(server.starts)                 # 只看第二次 run 的请求
+        second = _task(tmp_path, parts)
+        second.run()
+        second_starts = server.starts[mark:]
+
+    assert second.state.value == "done", second.error
+    assert second_starts == [half], "已落盘的半成品没被接着用（又从头下了）"
+    assert _sha(target.read_bytes()) == parts[0]["sha256"]
+    assert not (target.parent / (target.name + ".partial.json")).exists()
+
+
+def test_cancel_progress_counts_resumed_bytes(tmp_path: Path, monkeypatch) -> None:
+    """进度语义：续传时进度 = 盘上已有字节 + 本次连接读到的字节（别把已有部分丢掉）。"""
+    monkeypatch.setattr("contest_generator.download_resume.retry_delay", lambda n: 0.0)
+    parts = _parts(["firstep-full-v1.1.0.zip"])
+    payload = _payload(parts[0]["name"])
+    half = len(payload) // 2
+    target = tmp_path / "updates" / "full" / parts[0]["name"]
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(payload[:half])
+    download_resume.write_partial_marker(target, parts[0]["url"], parts[0]["size"])
+
+    with _byte_server() as server:
+        parts[0]["url"] = server.url
+        # 边车里的 URL 与任务现在用的 URL 一致（否则正是「来路不明」那种情形）
+        download_resume.write_partial_marker(target, parts[0]["url"], parts[0]["size"])
+        task = _task(tmp_path, parts)
+        task.run()
+    assert task.state.value == "done", task.error
+    assert task.parts[0].downloaded_bytes == parts[0]["size"], (
+        "进度没把已落盘的那一半算进去"
+    )
+
+
+def test_cancel_writes_sidecar_and_keeps_partial(tmp_path: Path, monkeypatch) -> None:
+    """取消 → 半成品与边车都留下（下次接着下），任务态 = cancelled。
+
+    取消由下载器内部的 `cancel` 事件判出（退避中也能立刻停），任务层据此转
+    `cancelled`——这条同时证明「任务层真的把 cancel 传进了下载器」。
+    """
+    monkeypatch.setattr("contest_generator.download_resume.retry_delay", lambda n: 0.0)
+    parts = _parts(["firstep-full-v1.1.0.zip"])
+    target = tmp_path / "updates" / "full" / parts[0]["name"]
+
+    with _byte_server(cut_after=64 * 1024) as server:
+        parts[0]["url"] = server.url
+        task = _task(tmp_path, parts)
+        # 取消发生在第一轮写盘**之后**（取消是「读到一半点了取消」，不是「还没开始」）：
+        # 半成品与边车因此都该在盘上留着。
+        task._download = _cancellable_resumable(  # type: ignore[attr-defined]
+            on_bytes=lambda n: task.cancel()
+        )
+        task.run()
+
+    assert task.state.value == "cancelled"
+    marker = target.parent / (target.name + ".partial.json")
+    assert marker.is_file(), "取消必须写边车（跨进程也要知道这份半成品是谁的）"
+    data = json.loads(marker.read_text(encoding="utf-8"))
+    assert data["url"] == parts[0]["url"]
+    assert data["expected_size"] == parts[0]["size"]
+    assert target.is_file() and 0 < target.stat().st_size < parts[0]["size"]
+
+
+def test_status_retrying_false_while_resuming_message_present(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """`retrying` 只表示「正处在退避等待中」：续传启动那一下的摘要不算重试。
+
+    少了这条区分，「本次是接着下」会被界面说成「正在重试」（两者混在一个字段里）。
+    """
+    monkeypatch.setattr("contest_generator.download_resume.retry_delay", lambda n: 0.0)
+    parts = _parts(["firstep-full-v1.1.0.zip"])
+    payload = _payload(parts[0]["name"])
+    half = len(payload) // 2
+    target = tmp_path / "updates" / "full" / parts[0]["name"]
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(payload[:half])
+
+    observed: list[dict[str, Any]] = []
+    with _byte_server() as server:
+        parts[0]["url"] = server.url
+        download_resume.write_partial_marker(target, parts[0]["url"], parts[0]["size"])
+        task = _task(tmp_path, parts)
+
+        def spy(url, dest, on_progress, **kwargs):  # noqa: ANN001, ANN003
+            observed.append(full_task_status(task))     # 下载器被调用的那一刻
+            return resumable_download(url, dest, on_progress, **kwargs)
+
+        task._download = spy  # type: ignore[attr-defined]
+        task.run()
+
+    assert task.state.value == "done", task.error
+    assert observed, "假下载器没被调到"
+    assert "接着" in observed[0]["message"], observed[0]["message"]
+    assert observed[0]["retrying"] is False, "「接着下」不是「正在重试」"
+    assert observed[0]["retry_count"] == 0
+
+
+def test_complete_file_is_verified_without_refetching(tmp_path: Path) -> None:
+    """盘上已是一整卷（长度到点）→ **不发请求**直接进校验，不许删了重下。
+
+    旧行为（`unlink` 后重下）会让任何「快照没记 ok 但文件已下完」的卷白下几百 MB；
+    探针/桩服务器一次请求都不该收到。
+    """
+    parts = _parts(["firstep-full-v1.1.0.zip"])
+    target = tmp_path / "updates" / "full" / parts[0]["name"]
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(_payload(parts[0]["name"]))
+
+    with _byte_server() as server:
+        parts[0]["url"] = server.url
+        task = _task(tmp_path, parts)
+        task.run()
+
+    assert task.state.value == "done", task.error
+    assert server.starts == [], "长度已到点就不该再发请求"
+    assert task.parts[0].downloaded_bytes == parts[0]["size"]
+    assert target.is_file()
+
+
+def test_server_ignoring_range_restarts_progress_without_overcounting(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """服务器忽略 Range（恒 200 整份）→ 丢弃半成品从 0 重下，**进度不许超算**。
+
+    进度基准原来取「调用前盘上有多少」：忽略 Range 时那部分已被丢弃，却还留在进度里
+    → 会出现「进度 > 卷大小」。现在基准由下载器每轮开始时报（`on_start`）。
+    """
+    monkeypatch.setattr("contest_generator.download_resume.retry_delay", lambda n: 0.0)
+    parts = _parts(["firstep-full-v1.1.0.zip"])
+    payload = _payload(parts[0]["name"])
+    half = len(payload) // 2
+    target = tmp_path / "updates" / "full" / parts[0]["name"]
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(payload[:half])
+
+    seen: list[int] = []
+    with _byte_server(ignore_range=True) as server:
+        parts[0]["url"] = server.url
+        download_resume.write_partial_marker(target, parts[0]["url"], parts[0]["size"])
+        task = _task(tmp_path, parts)
+        task._download = lambda url, dest, on_progress, **kw: (  # type: ignore[attr-defined]
+            resumable_download(url, dest, on_progress, **kw),
+            seen.append(task.parts[0].downloaded_bytes),
+        )[0]
+        task.run()
+
+    assert task.state.value == "done", task.error
+    assert server.starts == [half], "确实带了 Range（然后被服务器忽略）"
+    assert seen and seen[0] <= parts[0]["size"], f"进度超算：{seen}"
+    assert _sha(target.read_bytes()) == parts[0]["sha256"]
+
+
+def test_ignored_range_retry_message_says_from_zero(tmp_path: Path, monkeypatch) -> None:
+    """「服务器不支持续传」要在重试消息里说出来（spec 的断点契约表）。
+
+    剧本 = 真实顺序：先带 Range 请求（被忽略 → 200 整份）→ 又断一次 → 重试。
+    重试那一刻的摘要必须写「从 0 重新下」，而不是「从 X% 接着下」。
+
+    读的时刻 = **每一轮收到第一个数据块之前**（包 `on_progress`）：`before_retry` 在
+    **上一轮**失败里触发，那时摘要还是上一轮的事（本用例第一版就读错了，把两条文案混了）。
+    """
+    monkeypatch.setattr("contest_generator.download_resume.retry_delay", lambda n: 0.0)
+    parts = _parts(["firstep-full-v1.1.0.zip"])
+    payload = _payload(parts[0]["name"])
+    target = tmp_path / "updates" / "full" / parts[0]["name"]
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(payload[: len(payload) // 2])
+
+    observed: list[tuple[str, bool]] = []
+    with _byte_server(ignore_range=True, cut_runs=1, cut_after=64 * 1024) as server:
+        parts[0]["url"] = server.url
+        download_resume.write_partial_marker(target, parts[0]["url"], parts[0]["size"])
+        task = _task(tmp_path, parts)
+
+        def spy(url, dest, on_progress, **kwargs):  # noqa: ANN001, ANN003
+            original = on_progress
+            calls = {"n": 0}
+
+            def watcher(nbytes: int) -> None:
+                calls["n"] += 1
+                if calls["n"] == 2:      # 第 2 次进度回调 = 重试那一轮的第一个块
+                    observed.append((task._message, task._retrying))
+                return original(nbytes)
+
+            return resumable_download(url, dest, watcher, **kwargs)
+
+        task._download = spy  # type: ignore[attr-defined]
+        task.run()
+
+    assert task.state.value == "done", task.error
+    assert observed, "没有重试发生（前提是「先被忽略 Range，再断一次」）"
+    message, retrying = observed[0]
+    assert "从 0 重新下" in message, message
+    assert retrying is False, "退避已结束、新一轮已经开始，不该还挂在「重试中」"
+
+
+def test_cancel_leaves_error_kind_empty(tmp_path: Path, monkeypatch) -> None:
+    """取消不是失败态分类：`error_kind` 该保持空（spec 的词表只有 ""|network|verify）。"""
+    monkeypatch.setattr("contest_generator.download_resume.retry_delay", lambda n: 0.0)
+    parts = _parts(["firstep-full-v1.1.0.zip"])
+    with _byte_server() as server:
+        parts[0]["url"] = server.url
+        task = _task(tmp_path, parts)
+        task._download = _cancellable_resumable(  # type: ignore[attr-defined]
+            on_bytes=lambda n: task.cancel()
+        )
+        task.run()
+    assert task.state.value == "cancelled"
+    assert task.last_error_kind == ""
+    assert full_task_status(task)["error_kind"] == ""
 
 
 def test_resume_skips_verified_parts(tmp_path: Path) -> None:
@@ -237,6 +667,7 @@ def test_status_idle_shape() -> None:
     assert status["state"] == "idle"
     assert status["parts"] == []
     assert status["total_bytes"] == 0
+    # 8 个既有字段（前端契约，不许改名）+ 工单 04 的三个新增字段
     assert set(status) == {
         "state",
         "parts",
@@ -246,6 +677,9 @@ def test_status_idle_shape() -> None:
         "current_part_name",
         "error",
         "message",
+        "retry_count",
+        "retrying",
+        "error_kind",
     }
 
 
@@ -375,8 +809,10 @@ def test_apply_starts_and_status_reports_progress(tmp_path: Path, monkeypatch) -
         task.run()  # 同步执行：测试里不等待后台线程
 
     monkeypatch.setattr("contest_generator.webapp.start_full_update", fake_start)
-    # 下载函数也要注入：测试不碰网络（默认实现是 urllib 真下载）
-    monkeypatch.setattr("contest_generator.full_task.download_part", _fake_download([]))
+    # 下载函数也要注入：测试不碰网络（缺省实现是可续下载，最终仍是 urllib 真下载）。
+    # 注入点是 **任务类的 `_download`**——`download_part` 已经不再是缺省实现，
+    # patch 它改不到任务真正调用的那个函数（工单 03）。
+    monkeypatch.setattr(FullDownloadTask, "_download", _fake_download([]))
     # 应用编排要注入：真实现会起独立进程跑更新器（测试不真起进程）
     monkeypatch.setattr(
         "contest_generator.webapp.apply_full_package",
@@ -406,10 +842,12 @@ def test_apply_dry_run_does_not_start_task_or_spawn(tmp_path: Path, monkeypatch)
     _seed_check(parts)
     monkeypatch.setattr("contest_generator.webapp.free_bytes", lambda path: 10 * 1024**3)
     spawned: list[str] = []
-    monkeypatch.setattr(
-        "contest_generator.full_task.download_part",
-        lambda url, dest, cb: spawned.append(url) or "",
-    )
+
+    def spy(url, dest, on_progress):  # noqa: ANN001
+        spawned.append(url)
+        return ""
+
+    monkeypatch.setattr(FullDownloadTask, "_download", spy)
     client = _client(tmp_path)
     resp = client.post(
         "/api/update/full/apply", json={"parts": [parts[0]["name"]], "dry_run": True}

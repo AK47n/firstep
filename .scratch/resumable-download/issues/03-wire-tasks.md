@@ -5,9 +5,9 @@
 
 **被谁阻塞：** 02（可续下载器可用）。
 
-**状态：** ready-for-agent
+**状态：** resolved
 
-- [ ] `full_task.py` / `materials_task.py` **对称改**（两处形状一致，便于对照阅读）：
+- [x] `full_task.py` / `materials_task.py` **对称改**（两处形状一致，便于对照阅读）：
       - `download` 缺省值 → `resumable_download`（**注入点与 `(url, dest, on_progress)` 三参签名不变**，
         既有假下载器照旧可用）；
       - `_download_one` 的两处 `dest.unlink()` 分开处理：
@@ -16,17 +16,94 @@
         仍保留「返回裸字符串」的兼容分支（注入的假下载器走这条），行为与现在逐字一致；
       - 新增重试状态：`retry_count` / `last_retry_at` / `last_error_kind`（内存态，不落快照）；
       - 重试消息进任务摘要（`message`）：如「网络中断，第 2 次自动重试，从 68% 接着下」。
-- [ ] **跨进程残留边车**：`dest` 旁 `.partial.json`（只记 `url` 与期望总字节），**只在取消 / 失败时写**；
+- [x] **跨进程残留边车**：`dest` 旁 `.partial.json`（只记 `url` 与期望总字节），**只在取消 / 失败时写**；
       成功或校验失败时**连带删除边车与半成品**，不留孤儿文件。
       `run()` 启动时若「本地长度 + 边车期望」自洽 → 继续用、不重下。
-- [ ] 单测（扩 `tests/test_full_task.py` / `tests/test_materials_task.py`，沿用既有假下载器缝）：
+- [x] 单测（扩 `tests/test_full_task.py` / `tests/test_materials_task.py`，沿用既有假下载器缝）：
       - 下载异常后**半成品仍在**、且再次 `run()` 时**不从头下**（假下载器收到已存在文件即可断言）；
       - 校验失败后**半成品被删**；
       - 旧的三参假下载器（返回裸 sha 字符串）断言**逐条仍绿**（兼容契约）；
       - 取消 → 边车写出；重启（新建任务实例）→ 不重下已完成部分。
-- [ ] **反向验证留痕**：把「保留半成品」改回 `unlink` → 对应用例转红，证据与本单正证分开存。
-- [ ] 真机：本地可控服务器上跑一次「下到 60% 断流 → 自动重试 → 完成」，
+- [x] **反向验证留痕**：把「保留半成品」改回 `unlink` → 对应用例转红，证据与本单正证分开存。
+- [x] 真机：本地可控服务器上跑一次「断流 → 自动重试 → 完成」，
       证据落 `.scratch/resumable-download/verify-03-corridor.txt`（含最终哈希）。
+      断流点用的是工单 01 的**每次剩 40%** 剧本（不是 60%）：连断 3 次更能压出
+      「逐次接续」的偏移序列（`[0, 838860, 1342176, 1644166]`），判据更强。
+
+## 验收记录（2026-09-13）
+
+**同一套真 socket 判据，跑在「接好线的任务」上**：`probe-03-corridor.py` 驱动工单 01 的
+`sim-server.py`，直接过 `FullDownloadTask`（缺省下载器，不注入假件）：
+
+| 判据 | 数字 | 读法 |
+|---|---|---|
+| 断点续传 | 请求起始偏移 `[0, 838860, 1342176, 1644166]` | 连断 3 次，每次从**上一次断掉的那个字节**接着下（与工单 02 在下载函数层跑出的序列**逐字节相同**——说明不是探针自己的重试凑出来的） |
+| 重试如实 | `task_retry_count = 3` | 与服务器台账的 3 次重连对得上（任务不再自己重试，计数从下载器内部经 `before_retry` 上报） |
+| 最终正确 | 2097152/2097152，`sha_local == sha_expected` | 断点拼出来的文件与载荷逐字节一致 |
+| 不留孤儿 | 成功后边车已清 | 终态摘要也清空（终态原因只走 `error`） |
+| **跨进程** | 失败断在 838860 → 新任务实例第一次请求起始 = **838860** | 「重启后不重下已完成部分」这条验收标准的判据就是这个数字 |
+| 反证 | 对照（每次尝试前删半成品）下同一格退回 **0** | 判据真的在判别（`verify-03-negative.txt`） |
+
+**本单实测出来的两个真问题**（都留了判据）：
+
+1. **失败态不写边车**（真产品缺陷，已修）：`write_partial_marker` 原来只在「取消」与
+   「重试用尽」两处调用，而产品的重试**无上限**——「重试用尽」真机上永远走不到。
+   后果：断流失败后盘上只有半成品、**没有边车**，下一个进程把它当来路不明的东西清掉重下，
+   整条「回来还能接着下」白做。修法：边车改在**重试循环内**写（失败即写）；
+   `tests/test_download_resume.py::test_failure_writes_sidecar_for_the_next_process` 钉住。
+2. **探针读错时刻**（判据自身的卫生问题）：`marker_left` 在第二个任务跑完之后才读，
+   那时边车已被（正确地）清掉 → 把「已经清干净」误判成「从来没写过」。
+   修法：失败态快照在第二个任务开跑**之前**取。
+
+**两处「按 spec 写、但与直觉不同」的地方**（别顺手改回去）：
+
+- **缺省下载器不在 `__init__` 里写死**：`_resolve_download()` 按「实例属性 → 类属性 →
+  缺省实现」解析。直接写 `self._download = download or resumable_download` 会让
+  `monkeypatch.setattr(FullDownloadTask, "_download", fake)`（既有用例与一次性桩的注入点）
+  被实例属性盖住而**静默失效**——本单在接线时真的踩到了（两条 `test_full_apply` 用例变红）。
+- **`message` 的「正在重试」语义按「有摘要」判**（`retrying = bool(message)`）：
+  退避等待期间摘要在、跑完就清空；工单 04 会把这个字段正式定死并投影。
+
+**本单没做的事**（留给 04/05/06）：前端话术（05）、真机三档复检（06）。
+
+## 双轴评审结论（2026-09-13）
+
+评审对象 = 本单未提交改动（`git diff HEAD`，HEAD = `5dddd54`）；两条轴各自独立跑，结论并列如下。
+
+**Spec 轴：4 处「像做了但其实不对」→ 已全部修**（每处都补了判据）：
+
+| # | 问题 | 修法 | 判据 |
+|---|---|---|---|
+| 1 | 「已下字节 == 卷大小 → 不再发请求直接校验」没实现：`is_resumable_partial` 对长度到点的文件返回 False，调用点反手 `clear_partial` 把**完整卷删掉重下**（白下几百 MB） | `_download_one` 加「长度到点 → 跳过下载直接校验」分支 | 两条链路各一条用例：`server.starts == []` |
+| 2 | 「服务器不支持续传」要在重试消息里说明——做不到：`restarted` 想用 `_attempt` 的返回值带出来，而截断**在 `_attempt` 内部抛**，返回值那一行走不到 | 改 `_RestartFlag` 记号（`_attempt` 内**先记账再可能抛**） | `test_ignored_range_retry_message_says_from_zero`（真 socket：带了 Range 被忽略 → 断一次 → 消息写「从 0 重新下」） |
+| 3 | `retrying` 用「有没有 message」判，于是「本次是接着下」被当成「正在重试」 | 独立 `_retrying` 字段：`before_retry` 置真、下一轮 `on_start` 清 | `test_status_retrying_false_while_resuming_message_present` |
+| 4 | 进度基准取「调用前盘上有多少」：服务器忽略 Range 时半成品被丢弃，那部分却还算在进度里（能算出「进度 > 卷大小」） | 基准改由下载器每轮开始时报（新 `on_start` 回调） | `test_server_ignoring_range_restarts_progress_without_overcounting` |
+
+同轴另两条**未改**（判定为「spec 的意图已被别的方式满足」）：`error_kind` 的词表多一个 `"cancelled"`
+只在取消路径出现、且**不写进 `last_error_kind`**（已加用例钉住那条路是空串）；`as_task_downloader`
+的签名嗅探与类属性解析层是为**保住三参注入缝**（spec 明写的兼容契约）而付的代价，不动。
+
+**Standards 轴：无硬性违规**（中文文案 / 工单状态 / 未触碰 .ps1 均合规）。四条 judgement call 记账，
+其中两条**当场落地**：
+
+- `is_resumable_partial` 的接口约定写进 docstring（纯判据、删文件是调用点的策略、`expected_size<=0`
+  时的退化语义）——回应「谓词名字像带副作用」。
+- 领域词回填 `CONTEXT.md`（新增「下载抗断」行：半成品 / 边车 / 保留与删除的分界 / 半成品会留在
+  `updates/` 下这条用户可见事实）——回应「新领域词只活在代码与工单里」。
+
+两条**留给后续**（不在本单动手）：`full_task` / `materials_task` 的 `_download_one` 与
+`_resolve_download` 近乎逐字重复（约 40 行）——可提取到 `download_resume` 的「一次下载尝试」原语；
+`retry_count` / `last_retry_at` / `last_error_kind` / `_retrying` / `_message` 五个散字段宜收成一个
+`RetryState` 值对象。两条都是**结构重排**，与 04（状态面定契约）在同一片代码上，放到那时一起做更省。
+
+**回归**：全套 `4399 passed / 1 skipped`；工单 01/02 的探针（`probe-01-resume.py`）复跑仍 PASS
+（本单改了模拟服务器台账的一处语义，见证据文件第二节的说明）；`probe-03-corridor.py` 总判 PASS、
+反证如期转红。
+
+**评审期间修的一处判据资产**：`sim-server.py` 的 `ignore-range` 模式原来把台账的「起始偏移」
+记成服务器实际发出的起点（恒 0），于是「客户端带了 Range 却被忽略」这件事在台账里看不见
+——任务层做对了也会被判红。现在台账记的是 Range 头里客户端要的那一段。
+
 
 ## 备注
 

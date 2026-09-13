@@ -142,9 +142,15 @@ class Handler(BaseHTTPRequestHandler):
                 time.sleep(6.0)
 
         if mode == "ignore-range":
-            start, end, status = 0, total - 1, 200
-            _record(parsed.path, range_header, 0, status)
-            self._send_bytes(status, payload, "application/octet-stream",
+            # 忽略 Range：恒 200 发整份（模拟代理 / 镜像剥掉断点能力）。
+            # **台账记的是「客户端要的是哪一段」**（`_parse_range` 从 Range 头解析出的起点），
+            # 不是「服务器实际从哪发」——本模式的判据正是「客户端带了 Range，服务器没理会」，
+            # 记成 0 会让这条判据永远看不到「带了却没被理会」这件事（工单 03 实测踩到：
+            # 任务层已经正确地从断点重下，台账却显示起始偏移一直是 0）。
+            requested = _parse_range(range_header, total)
+            start = requested[0] if requested else 0
+            _record(parsed.path, range_header, start, 200)
+            self._send_bytes(200, payload, "application/octet-stream",
                              accept_ranges="none")
             return
 

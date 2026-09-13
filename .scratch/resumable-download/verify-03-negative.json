@@ -1,0 +1,83 @@
+{
+  "negative": true,
+  "payload_bytes": 2097152,
+  "cut_runs": 3,
+  "runs": [
+    {
+      "case": "corridor",
+      "state": "done",
+      "error": "",
+      "seconds": 0.69,
+      "bytes_at_start": 0,
+      "request_starts": [
+        0,
+        838860,
+        1342176,
+        1644166
+      ],
+      "request_ranges": [
+        "",
+        "bytes=838860-",
+        "bytes=1342176-",
+        "bytes=1644166-"
+      ],
+      "network_requests": 4,
+      "task_retry_count": 3,
+      "last_error_kind": "network",
+      "message_at_end": "",
+      "bytes_on_disk": 2097152,
+      "expected_bytes": 2097152,
+      "sha_local": "d69d5984c03381086eca4a86f92fe45c3ff57c3f1aa242a285dd29008ce53bb5",
+      "sha_expected": "d69d5984c03381086eca4a86f92fe45c3ff57c3f1aa242a285dd29008ce53bb5",
+      "part_downloaded_bytes": 2097152,
+      "part_ok": true,
+      "marker_left": false
+    },
+    {
+      "case": "ignore-range",
+      "state": "done",
+      "error": "",
+      "seconds": 0.02,
+      "bytes_at_start": 1048576,
+      "request_starts": [
+        0
+      ],
+      "request_ranges": [
+        ""
+      ],
+      "network_requests": 1,
+      "task_retry_count": 0,
+      "last_error_kind": "",
+      "message_at_end": "",
+      "bytes_on_disk": 2097152,
+      "expected_bytes": 2097152,
+      "sha_local": "d69d5984c03381086eca4a86f92fe45c3ff57c3f1aa242a285dd29008ce53bb5",
+      "sha_expected": "d69d5984c03381086eca4a86f92fe45c3ff57c3f1aa242a285dd29008ce53bb5",
+      "part_downloaded_bytes": 2097152,
+      "part_ok": true,
+      "marker_left": false
+    },
+    {
+      "case": "failed-case-negative",
+      "state": "failed",
+      "error": "下载失败（卷 firstep-full-v1.1.0.zip）：重试 1 次仍未下完（838860 / 2097152 字节）：连接中断：本次声明 2097152 字节，只收到 838860 字节，会自动重连接着下",
+      "seconds": 0.02,
+      "request_starts": [
+        0
+      ],
+      "bytes_before_restart": 838860,
+      "resume_start_after_restart": 0,
+      "second_state": "done",
+      "second_error": "",
+      "expected_bytes": 2097152,
+      "sha_local": "d69d5984c03381086eca4a86f92fe45c3ff57c3f1aa242a285dd29008ce53bb5",
+      "sha_expected": "d69d5984c03381086eca4a86f92fe45c3ff57c3f1aa242a285dd29008ce53bb5",
+      "bytes_on_disk": 2097152,
+      "marker_left": true,
+      "resumable_next_time": true,
+      "task_retry_count": 0,
+      "message_at_end": ""
+    }
+  ],
+  "verdict": "PASS（反证如期转红）"
+}

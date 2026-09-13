@@ -196,7 +196,7 @@ def test_endpoint_full_flow_starts_updater(tmp_path: Path, monkeypatch) -> None:
         on_progress(len(payload))
         return sha
 
-    monkeypatch.setattr("contest_generator.full_task.download_part", fake_download)
+    monkeypatch.setattr(ft.FullDownloadTask, "_download", fake_download)
     monkeypatch.setattr("contest_generator.webapp.free_bytes", lambda path: 10 * 1024**3)
     monkeypatch.setattr("contest_generator.webapp.start_full_update", lambda task: task.run())
     spawns: list[list[str]] = []
@@ -260,7 +260,7 @@ def test_endpoint_apply_without_manifest_url_marks_failed(
         on_progress(len(payload))
         return sha
 
-    monkeypatch.setattr("contest_generator.full_task.download_part", fake_download)
+    monkeypatch.setattr(ft.FullDownloadTask, "_download", fake_download)
     monkeypatch.setattr("contest_generator.webapp.free_bytes", lambda path: 10 * 1024**3)
     monkeypatch.setattr("contest_generator.webapp.start_full_update", lambda task: task.run())
     client = TestClient(create_app(AppContext(config_path=tmp_path / "config.json")))

@@ -97,6 +97,30 @@ class DownloadResult:
     retried: bool                   # 是否发生过重试（前端据此在完成行留痕）
 
 
+@dataclass
+class _AttemptOutcome:
+    """单次尝试的产出（**本次**连接的帐，不是整卷的）。"""
+
+    got: int                        # 本次从网络读到的字节
+    restarted: bool                 # 服务器忽略了 Range / 起点不符 → 本地半成品已丢弃
+
+
+class _RestartFlag:
+    """「这一轮服务器没让我们接上」的跨层记号（`_attempt` 写、重试循环读）。
+
+    为什么不走返回值：截断是**在 `_attempt` 内部**抛的，返回值那一行根本走不到——
+    实测过一次：起始偏移明明是 0（服务器忽略了 Range），重试消息却写「从 21% 接着下」。
+    """
+
+    __slots__ = ("seen",)
+
+    def __init__(self) -> None:
+        self.seen = False
+
+    def note(self, restarted: bool) -> None:
+        self.seen = bool(restarted)
+
+
 # ---------------------------------------------------------------------------
 # 单源策略与文案
 # ---------------------------------------------------------------------------
@@ -170,6 +194,38 @@ def error_kind(exc: BaseException) -> str:
     return "network"
 
 
+def retry_reason(exc: BaseException) -> str:
+    """重试原因（人话，用在「第 N 次自动重试」那句话里）。
+
+    取 `describe_network_error` 的第一句并去掉「会自动重连接着下」这个尾巴——
+    重试次数由调用方拼（消息里不必重复说两遍会重试）。
+    """
+    text = describe_network_error(exc)
+    text = text.split("，会自动重连接着下")[0].rstrip("，。")
+    return text or "网络中断"
+
+
+def retry_message(reason: str, attempt: int, done_bytes: int, total_bytes: int,
+                  restarted: bool = False) -> str:
+    """进行中的摘要（任务 `message` 字段的单源文案）。
+
+    形态：「网络中断，第 2 次自动重试，从 68% 接着下」。不知道总量时就不写百分比
+    （编一个出来比不写更糟）。
+    """
+    tail = "从 0 重新下" if restarted else (
+        f"从 {int(done_bytes * 100 / total_bytes)}% 接着下" if total_bytes > 0
+        else "接着下"
+    )
+    return f"{reason}，第 {int(attempt)} 次自动重试，{tail}"
+
+
+def resume_message(done_bytes: int, total_bytes: int) -> str:
+    """「这次是从上次断开处接着下」的摘要（任务 `run()` 启动时用）。"""
+    if total_bytes > 0:
+        return f"接着上次的进度从 {int(done_bytes * 100 / total_bytes)}% 继续下载"
+    return f"接着已下载的 {done_bytes} 字节继续下载"
+
+
 def parse_content_range(value: str) -> tuple[int, int] | None:
     """`Content-Range: bytes 100-199/2000` → (起始, 总长)；解析不出返回 None。"""
     match = _CONTENT_RANGE_RE.search(value or "")
@@ -196,6 +252,7 @@ def resumable_download(
     timeout: float = SOCKET_TIMEOUT_SECONDS,
     max_attempts: int | None = None,
     opener: Callable[[Any, float], Any] | None = None,
+    on_start: Callable[[int], None] | None = None,
 ) -> DownloadResult:
     """把一卷下到 `dest`：断点续传 + 截断判定 + 无上限退避重试。
 
@@ -206,6 +263,10 @@ def resumable_download(
       所以任务层应当两个都给。
     - `cancel`：置位后**不再发起下一次尝试**，退避等待中也能立刻返回（抛 `DownloadCancelledError`）。
     - `before_retry(attempt, error, bytes_on_disk, restarted)`：每次重试前回调，其异常不外抛。
+      `restarted=True` = 这一轮服务器没让我们接上（忽略 Range / 起点不符），落盘从 0 重新计。
+    - `on_start(resume_offset)`：**每次尝试开始时**报一次「本轮实际从盘上第几字节起写」。
+      调用方据此把进度基准对齐到**这一次尝试的真实起点**——服务器忽略 Range 时会
+      把它从「以为接着下」纠正回落盘真相（不报这一下，进度会把已丢弃的半成品算进去）。异常不外抛。
     - `max_attempts`：**缺省 None = 无上限**（产品口径：网络故障要自己扛到成功）。
       只有给测试用的假服务器写「永远截断」的剧本时才需要它，真机上不必设。
     - `opener`：注入用（测试）；缺省走 `urllib.request.urlopen`。
@@ -232,6 +293,9 @@ def resumable_download(
     transferred = 0
     attempts = 0
     need_clean_slate = False
+    # 「这一轮服务器没让我们接上」的记号。**不能用返回值带出来**：截断是在 `_attempt`
+    # 内部抛的，返回值那一行根本走不到（实测：起始偏移明明是 0，消息却写「从 21% 接着下」）。
+    forced_restart = _RestartFlag()
     while True:
         if cancel is not None and cancel.is_set():
             write_partial_marker(dest, url, expected)
@@ -244,11 +308,13 @@ def resumable_download(
             need_clean_slate = False
         attempts += 1
         try:
-            transferred += _attempt(
+            outcome = _attempt(
                 url=url, dest=dest, on_progress=on_progress, cancel=cancel,
                 expected_size=expected, min_resume_bytes=min_resume_bytes,
-                timeout=timeout, opener=opener,
+                timeout=timeout, opener=opener, on_start=on_start,
+                restart_flag=forced_restart,
             )
+            transferred += outcome.got
             size = dest.stat().st_size if dest.is_file() else 0
             if expected > 0 and size != expected:
                 # 这一轮「读完了」但长度不对（对端先声明后少发）：当失败处理，
@@ -269,14 +335,18 @@ def resumable_download(
                 # 不可重试：不调 before_retry（它语义是「即将重试」），
                 # 但它自称的处置要落地——见 _attempt 里 clear_partial 的调用点。
                 raise
+            # **失败即写边车**（spec：边车只在取消 / 失败时写）。写在重试循环里而不是
+            # 只在「重试用尽」分支：产品的重试是**无上限**的，那条分支真机上永远走不到
+            # ——于是「断了之后半成品没人认领」这个洞会一直藏着（工单 03 的探针实测：
+            # 只有半成品没有边车，下一个进程会把它当来路不明的东西丢掉，白下一次）。
+            write_partial_marker(dest, url, expected)
             if max_attempts is not None and attempts >= int(max_attempts):
-                write_partial_marker(dest, url, expected)
                 size_now = dest.stat().st_size if dest.is_file() else 0
                 raise DownloadTruncatedError(
                     f"重试 {attempts} 次仍未下完（{size_now} / {expected or '?'} 字节）："
                     f"{describe_network_error(exc)}"
                 ) from exc
-            _notify_retry(before_retry, attempts, exc, dest, False)
+            _notify_retry(before_retry, attempts, exc, dest, bool(forced_restart.seen))
             _wait_or_cancel(cancel, retry_delay(attempts))
             if cancel is not None and cancel.is_set():
                 # 退避期间被取消：立刻收手，不再发起下一次尝试（半成品保留）
@@ -299,8 +369,10 @@ def _attempt(
     min_resume_bytes: int,
     timeout: float,
     opener: Callable[[Any, float], Any],
-) -> int:
-    """一次尝试。返回本次从网络读到的字节数；失败抛异常，半成品状态留给外层处置。"""
+    on_start: Callable[[int], None] | None = None,
+    restart_flag: "_RestartFlag | None" = None,
+) -> _AttemptOutcome:
+    """一次尝试。返回本次的产出；失败抛异常，半成品状态留给外层处置。"""
     offset = dest.stat().st_size if dest.is_file() else 0
     if expected_size > 0 and offset > expected_size:
         # 本地坏：先按「不可重试」如实处置（清掉半成品），再报错
@@ -319,11 +391,17 @@ def _attempt(
 
     with opener(request, timeout) as response:
         status, start, declared_total = _decode_response(response)
-        if resume and start != offset:
+        restarted = bool(resume) and start != offset
+        if restart_flag is not None:
+            restart_flag.note(restarted)     # 先记账：下面可能抛异常（返回值走不到）
+        if restarted:
             # 服务器要么忽略了 Range（整份重发，start=0），要么给的区间起点与请求不符。
             # 两种都不能续写——续写会把「旧字节 + 新字节」拼成一份坏文件。
             clear_partial(dest)
             offset = 0
+        # 把**本轮真实起点**报给调用方：它据此校准进度基准。必须赶在第一个
+        # chunk 之前报（此时「服务器忽略 Range」这件事已经判完了）。
+        _notify_start(on_start, offset)
         mode = "ab" if offset > 0 else "wb"
         got = _stream_to_file(response, dest, mode, on_progress, cancel)
         # 完整性判据：**已落盘 + 本次收到** 与响应声明的总长比。
@@ -340,7 +418,7 @@ def _attempt(
             raise DownloadSizeMismatchError(
                 f"发布信息不一致：清单说 {expected_size} 字节，服务器说 {declared_total} 字节"
             )
-        return got
+        return _AttemptOutcome(got=got, restarted=restarted)
 
 
 def _decode_response(response: Any) -> tuple[int, int, int]:
@@ -423,6 +501,16 @@ def _notify_retry(
         pass
 
 
+def _notify_start(callback: Callable[[int], None] | None, offset: int) -> None:
+    """告知调用方「本轮从盘上第几字节起写」（观测面，异常不外抛）。"""
+    if callback is None:
+        return
+    try:
+        callback(int(offset))
+    except Exception:  # noqa: BLE001 —— 同上
+        pass
+
+
 def _wait_or_cancel(cancel: threading.Event | None, delay: float) -> None:
     if cancel is None:
         time.sleep(delay)
@@ -475,3 +563,105 @@ def clear_partial(dest: Path) -> None:
     """删半成品 + 边车（校验失败、服务器忽略 Range、本地坏 时用）。"""
     Path(dest).unlink(missing_ok=True)
     clear_marker(dest)
+
+
+def is_resumable_partial(dest: Path, url: str, expected_size: int) -> bool:
+    """盘上这份半成品能不能接着下（任务 `run()` 启动时的判据）。
+
+    三个条件缺一不可，因为「来路不明的不完整文件」比重新下更糟：
+
+    1. 文件在，且长度 **> 0 且 < 期望总长**（0 字节 = 没有可续的东西；长度到点 = 该进校验而不是发 Range）；
+    2. 边车在（没有边车 = 不是本项目留下的半成品）；
+    3. 边车里的 `url` 与 `expected_size` 都对得上（换版本后同名卷不能拿来续）。
+
+    对不上就当它不存在：清掉半成品与边车，从头下。
+
+    两条接口约定（评审提过，写下来免得被当成 bug）：
+
+    - 本函数是**纯判据**，自己不删任何东西；「对不上就清掉」是**调用点**的动作
+      （任务层在判据为假时显式调 `clear_partial`），因为删不删是任务层的策略。
+    - `expected_size <= 0`（清单没给大小）时「长度到点」这条无从判起，于是只按
+      「有文件 + 边车对得上」算可续。当前唯一调用方（两个任务）永远给得出大小。
+    """
+    dest = Path(dest)
+    if not dest.is_file():
+        return False
+    size = dest.stat().st_size
+    total = int(expected_size or 0)
+    if size <= 0 or (total > 0 and size >= total):
+        return False
+    marker = read_partial_marker(dest)
+    if not marker:
+        return False
+    if str(marker.get("url") or "") != str(url or ""):
+        return False
+    try:
+        if int(marker.get("expected_size") or 0) != total:
+            return False
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+def _accepts_modern_kwargs(download: Callable[..., Any]) -> bool:
+    """这个下载函数吃不吃「新式」关键字（`expected_size` / `cancel` / `before_retry` …
+
+    判据两条：显式声明了 `expected_size`，或声明了 `**kwargs`（测试里的 spy 常这样写）。
+    没有签名（内建 / C 实现）按「不吃」处理——宁可退回三参老形态。
+    """
+    from inspect import Parameter, signature
+
+    try:
+        params = signature(download).parameters
+    except (TypeError, ValueError):
+        return False
+    return (
+        "expected_size" in params
+        or any(p.kind is Parameter.VAR_KEYWORD for p in params.values())
+    )
+
+
+def as_task_downloader(
+    download: Callable[..., Any],
+    *,
+    cancel: threading.Event | None = None,
+    before_retry: Callable[..., None] | None = None,
+    on_start: Callable[[int], None] | None = None,
+    default: bool = False,
+) -> Callable[..., Any]:
+    """任务层的下载适配层：`(url, dest, on_progress, *, expected_size, expected_sha256)`。
+
+    三件事，缺一不可（工单 03）：
+
+    1. **把清单的 `size` 与 `sha256` 一并传给缺省的 `resumable_download`**。
+       只给 size 会掉进工单 02 实测的死局——「尺寸到点但内容坏」时服务器见
+       「你要的起点=整卷大小」就不发字节，重试每轮收 0 字节，白转到上限；
+    2. **把 `cancel` / `before_retry` / `on_start` 接到缺省实现上**（退避中可取消、
+       重试如实计数、进度基准随本轮真实起点校准）；
+    3. **保住三参注入缝**：`default=False`（注入的下载器）时按位置传三个参数就完事——
+       除非这个下载器自己声明要吃那几个关键字参数（显式写了 `expected_size`
+       或 `**kwargs`），那就照传，好让它走完整的注入契约。
+
+    `default=True` 由调用方在「解析出来的是缺省实现」时给出：此时关键字参数是无条件
+    传的（不靠签名嗅探——`default` 的判断更结实）。
+    """
+    accepts_kwargs = True if default else _accepts_modern_kwargs(download)
+
+    def task_download(
+        url: str,
+        dest: Path,
+        on_progress: Callable[[int], None],
+        *,
+        expected_size: int = 0,
+        expected_sha256: str = "",
+    ) -> Any:
+        if not accepts_kwargs:
+            return download(url, dest, on_progress)
+        return download(
+            url, dest, on_progress,
+            cancel=cancel, before_retry=before_retry, on_start=on_start,
+            expected_size=expected_size, expected_sha256=expected_sha256,
+        )
+
+    return task_download
+

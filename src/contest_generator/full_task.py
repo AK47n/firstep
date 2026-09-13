@@ -19,6 +19,15 @@
 也没有 partial 态），落盘目录是 `updates/full/`，卷名 = 清单 `zip_name` 逐字节
 一致（应用器按它找文件）。流式下载与状态机形态与资料库任务同构，故意保持结构
 一致以便对照阅读。
+
+下载抗断（工单 resumable-download/03）：
+- 缺省下载器 = `download_resume.resumable_download`（卷内断点 + 自动重试 + 退避可取消），
+  经 `download_resume.as_task_downloader` 适配成既有的 `(url, dest, on_progress)` 注入缝；
+- **下载异常保留半成品**（它就是断点），**校验失败才删**（重下也是坏的）；
+- 半成品旁落 `.partial.json` 边车（只在取消 / 失败时写，成功时清），
+  `run()` 启动时对得上就接着下，对不上就清掉从头下；
+- 重试计数与「正在重试」摘要进内存态（`retry_count` / `last_retry_at` /
+  `last_error_kind` 不落快照；`message` 走进行中的摘要）。
 """
 
 from __future__ import annotations
@@ -30,10 +39,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+from . import download_resume
+from .download_resume import DownloadCancelledError, DownloadResult, resumable_download
 from .materials_task import (
     TaskState,
     _file_sha256,
-    download_part,
 )
 
 SNAPSHOT_FILENAME = "full-task.json"
@@ -134,6 +144,10 @@ class FullDownloadTask:
     `download` 可注入（测试不碰网络）；快照持久化在 task_dir/full-task.json。
     """
 
+    # 类属性是「注入点」的一部分：`monkeypatch.setattr(FullDownloadTask, "_download", fake)`
+    # 靠它能落到类上（`_resolve_download` 按「实例属性 ≠ 这个缺省值」判有没有注入）。
+    _download: Callable[..., Any] = staticmethod(resumable_download)
+
     def __init__(
         self,
         task_dir: Path,
@@ -152,7 +166,9 @@ class FullDownloadTask:
             )
             for p in parts
         ]
-        self._download = download or download_part
+        # 下载器：缺省 = 可续下载；注入的（构造参数或测试直接给 `_download` 赋值）
+        # 原样用——适配层只在缺省实现那条路上补 `expected_size` / `expected_sha256`。
+        self._download = download or resumable_download
         self._on_complete = on_complete
         self._snapshot_interval = snapshot_interval
         self._lock = threading.Lock()
@@ -165,6 +181,12 @@ class FullDownloadTask:
         # 速度估算窗口（status 轮询时更新）
         self._last_ts = time.time()
         self._last_bytes = 0
+        # 重试观测（内存态，不落快照：重启后从 0 重新计更诚实）
+        self.retry_count = 0
+        self.last_retry_at = 0.0
+        self.last_error_kind = ""
+        self._retrying = False
+        self._message = ""
         self._restore_snapshot()
 
     # -- 状态 --------------------------------------------------------------
@@ -198,6 +220,25 @@ class FullDownloadTask:
 
     # -- 主流程 -------------------------------------------------------------
 
+    def _resolve_download(self) -> tuple[Callable[..., Any], bool]:
+        """→（这次要用的下载函数, 是不是**缺省的可续下载**）。
+
+        解析顺序：实例属性（构造注入 / 测试直接赋值）→ 类属性（既有
+        `monkeypatch.setattr(FullDownloadTask, "_download", …)` 注入点）→ 缺省的可续下载。
+        实例属性仍等于缺省实现 = 没人注入过 → 让类属性优先（这就是既有 monkeypatch
+        用例继续有效的原因）。
+
+        第二个返回值交给 `as_task_downloader`：缺省实现无条件吃
+        `expected_size` / `expected_sha256` / `cancel` / `before_retry`；注入的下载器
+        仍按既有的三参形态调用（除非它自己声明要吃那几个关键字参数）——
+        「`(url, dest, on_progress)` 签名不变」这条契约因此零改动。
+        """
+        instance = self.__dict__.get("_download")
+        if instance is None or instance is resumable_download:
+            chosen = getattr(type(self), "_download", None) or resumable_download
+            return chosen, chosen is resumable_download
+        return instance, False
+
     def _restore_snapshot(self) -> None:
         """读上次快照：ok 卷且本地文件内容哈希与清单一致 → 标记跳过（断点续传）。"""
         snapshot = self.task_dir / SNAPSHOT_FILENAME
@@ -221,7 +262,10 @@ class FullDownloadTask:
                 part.downloaded_bytes = part.size
 
     def run(self) -> None:
-        """执行下载：逐卷 → 下载 + 校验 + 完成标记；分卷边界响应取消。"""
+        """执行下载：逐卷 → 下载 + 校验 + 完成标记；分卷边界响应取消。
+
+        取消（含下载器在退避中的取消）→ `cancelled`（半成品与边车留着，下次接着下）。
+        """
         if self._cancel.is_set():
             self._state = TaskState.CANCELLED
             self._write_snapshot(force=True)
@@ -237,7 +281,14 @@ class FullDownloadTask:
                 if part.ok:
                     continue
                 self._current_part_name = part.name
+                self.retry_count = 0
+                self.last_retry_at = 0.0
+                self.last_error_kind = ""
+                self._retrying = False
+                self._message = ""
                 self._download_one(part)
+            self._message = ""
+            self._retrying = False
             if self._on_complete is not None:
                 self._state = TaskState.APPLYING
                 self._write_snapshot(force=True)
@@ -249,36 +300,114 @@ class FullDownloadTask:
             self._state = TaskState.DONE
             self._error = ""
             self._current_part_name = ""
+        except DownloadCancelledError:
+            self._state = TaskState.CANCELLED
+            self._message = ""
+            self._retrying = False
         except Exception as exc:
             was_applying = self._state is TaskState.APPLYING
             self._state = TaskState.FAILED
+            self._message = ""
+            self._retrying = False
             self._error = (
                 f"应用失败：{exc}" if was_applying
                 else f"下载失败（卷 {self._current_part_name}）：{exc}"
             )
+            self.last_error_kind = download_resume.error_kind(exc)
         self._write_snapshot(force=True)
 
     def _download_one(self, part: _PartState) -> None:
+        """下一卷并校验。
+
+        - 已下字节 == 卷大小 → **不发请求**，直接进校验（spec 的断点契约）；
+        - 有可续的半成品（边车对得上）→ 不重下，接着下（用户视角：上次断在这儿）；
+        - 下载异常 → **半成品留着**（断点），如实往上抛；
+        - 校验失败 → **清掉半成品与边车**（重下也不会有变化），如实往上抛。
+        """
         dest = self.task_dir / PARTS_DIRNAME / part.name
         dest.parent.mkdir(parents=True, exist_ok=True)
         part.dest = str(dest)
         part.downloaded_bytes = 0
-        try:
-            actual = self._download(part.url, dest, self._on_progress(part))
-        except Exception:
-            dest.unlink(missing_ok=True)
-            raise
-        if actual.lower() != part.sha256.lower():
-            dest.unlink(missing_ok=True)
+        have = dest.stat().st_size if dest.is_file() else 0
+        digest = ""
+        if part.size > 0 and have == part.size:
+            # 长度已到点：不再发请求，直接进下面那条校验。
+            # 少了这条，「盘上已经是一整卷」会被当「来路不明的文件」删掉重下——
+            # 白下几百 MB（快照没记 ok 的那些卷就是这个下场）。
+            part.downloaded_bytes = have
+        else:
+            if download_resume.is_resumable_partial(dest, part.url, part.size):
+                self._message = download_resume.resume_message(have, part.size)
+                part.downloaded_bytes = have
+            else:
+                download_resume.clear_partial(dest)   # 来路不明的不完整文件：不留
+            download, is_default = self._resolve_download()
+            download = download_resume.as_task_downloader(
+                download, cancel=self._cancel, before_retry=self._on_retry(part),
+                on_start=self._on_attempt_start(part), default=is_default,
+            )
+            try:
+                actual = download(part.url, dest, self._on_progress(part),
+                                  expected_size=part.size,
+                                  expected_sha256=part.sha256)
+            except Exception as exc:
+                if not isinstance(exc, DownloadCancelledError):
+                    # 失败：半成品是断点，留着；边车（谁留下的、期望多大）一并写出，
+                    # 好让**换一次进程**也知道这份还能不能接着用。
+                    download_resume.write_partial_marker(dest, part.url, part.size)
+                raise
+            # 缺省下载器已经把整卷算过哈希了（`DownloadResult.sha256`），不必再读一遍盘；
+            # 注入的假下载器返回裸 sha 字符串，走既有行为读盘算哈希。
+            digest = (actual.sha256 if isinstance(actual, DownloadResult)
+                      else str(actual))
+        if not digest:
+            digest = download_resume.file_sha256(dest)
+        if digest.lower() != part.sha256.lower():
+            download_resume.clear_partial(dest)
             raise OSError(f"卷 {part.name} 校验失败（SHA256 不匹配）")
         part.ok = True
         part.downloaded_bytes = part.size
+        self._message = ""
         self._write_snapshot(force=False)
 
     def _on_progress(self, part: _PartState) -> Callable[[int], None]:
+        """进度回调：累计量 = **本轮尝试的落盘起点** + 本次连接读到的字节。
+
+        起点由下载器每轮开始时报一次（`on_start`）——不能拿「调用前盘上有多少」当基准：
+        服务器忽略 Range 时会**丢弃半成品从 0 重下**，那时起点是 0 而不是盘上原有字节，
+        拿旧基准会把已经扔掉的字节继续算进进度（实测会算出超过卷大小的进度）。
+        """
+
         def cb(nbytes: int) -> None:
             with self._lock:
                 part.downloaded_bytes += nbytes
+
+        return cb
+
+    def _on_attempt_start(self, part: _PartState) -> Callable[[int], None]:
+        """每轮尝试开始：把进度基准对齐到**这一轮真实的落盘起点**，并退出「重试中」。"""
+
+        def cb(offset: int) -> None:
+            with self._lock:
+                part.downloaded_bytes = max(0, int(offset))
+            self._retrying = False
+
+        return cb
+
+    def _on_retry(self, part: _PartState) -> Callable[..., None]:
+        """`before_retry` 回调：如实计数 + 把「正在重试」摘要写进 `message`。"""
+
+        def cb(attempt: int, exc: BaseException, on_disk: int, restarted: bool) -> None:
+            self.retry_count = int(attempt)
+            self.last_retry_at = time.time()
+            # 取消不算失败态分类（第三个字段值只能来自异常分类，spec 的词表是
+            # "" | network | verify）：`DownloadCancelledError` 那条路不会走到这里。
+            self.last_error_kind = download_resume.error_kind(exc)
+            self._retrying = True     # 退避等待中（下一轮尝试开始时清）
+            self._message = download_resume.retry_message(
+                download_resume.retry_reason(exc), int(attempt), on_disk, part.size,
+                restarted=bool(restarted),
+            )
 
         return cb
 
@@ -315,6 +444,10 @@ def full_task_status(task: "FullDownloadTask | None") -> dict[str, Any]:
             "current_part_name": "",
             "error": "",
             "message": "",
+            # 空态也要在场（前端零分支）
+            "retry_count": 0,
+            "retrying": False,
+            "error_kind": "",
         }
     parts = [
         {
@@ -339,7 +472,11 @@ def full_task_status(task: "FullDownloadTask | None") -> dict[str, Any]:
         "speed_bps": speed,
         "current_part_name": task._current_part_name,
         "error": task.error,
-        "message": "",
+        "message": task._message,
+        # 重试观测（工单 04 的契约面；此刻仅供任务层自证）
+        "retry_count": int(task.retry_count),
+        "retrying": bool(task._retrying),
+        "error_kind": str(task.last_error_kind),
     }
 
 
