@@ -12,9 +12,9 @@
 
 ## 假设 2：服务器 416（spec 断点契约表：「删掉从 0 重下」）
   铺 102400 字节 + 服务器对带 Range 的请求恒回 416
-  实测 error='HTTPError: HTTP Error 416: Range Not Satisfiable'
-  实测 半成品在盘=True / 边车在=True
-  → 「删掉并重下」**不成立**（最终 sha_ok=False，请求数=1）
+  实测 error=''
+  实测 半成品在盘=True / 边车在=False
+  → 「删掉并重下」成立（最终 sha_ok=True，请求数=2）
 
 ## 假设 3：本地比远端大（spec：「本地坏，删掉从 0 重下」）
   铺 311296 字节（比清单大 4096）
@@ -33,7 +33,7 @@
 
 ## 总判
   1_resumed_from_semantics_inverted：不成立
-  2_416_not_cleared_and_restarted：**复现成立**
+  2_416_not_cleared_and_restarted：不成立
   3_local_bigger_not_restarted：不成立
   4_orphan_sidecar_after_complete_volume：不成立
   5_control_clean_full_download：**复现成立**

@@ -102,12 +102,29 @@
 | 本地无文件 / 0 字节 | — | 从 0 开始，不发 Range |
 | 本地已有 N 字节，卷 > 1 MB | 发 `Range: bytes=N-` | 期望 `206`；`Content-Range` 与 N 对齐则续写 |
 | 服务器忽略 Range | 收到 `200` | **丢弃本地半成品，从 0 重下**，并在重试消息里说明「服务器不支持续传」 |
-| 服务器返回 `416` | — | 本地比远端大 = 本地坏，删掉从 0 重下 |
+| 服务器返回 `416` | — | 本地比远端大 = 本地坏：**清掉本地那份、去掉 Range 从 0 重下**；若清干净后仍 `416` → 不可重试，中文报「本地记录与远端对不上，请重新点一次下载」 |
 | 已下字节 == 卷大小 | 本地长度自证 | 不再发请求，直接进校验 |
-| 续传后 SHA256 不符 | `DownloadResult.sha256` 与清单比对 | **不重试**，删半成品，中文报「校验失败（重新下载也不会有变化）」 |
+| **下完但内容与清单 SHA256 不符** | `DownloadResult.sha256` 与清单比对 | **删半成品 + 走退避重试**（从 0 整卷重来，直到对上或用户取消）；单列 `DownloadContentMismatchError`，归 `error_kind="verify"` |
+| 本地已下字节 > 卷大小（清单说的大小） | — | 本地那份是坏的：**清掉、从 0 重下**（不再抛不可重试异常） |
 | **被截断**（实收 < 对端声明） | `Content-Length` / `Content-Range` 给出的总长 vs 实收 | **算失败**（当前实现把它当成功，是工单 01 实测到的缺陷）；半成品保留，走重试 |
 | **清单 size 与对端总长矛盾** | 清单 `size` vs 响应给出的总长 | **不可重试**：这是发布物与清单不一致，重试同样结果；中文直报「发布信息不一致，请稍后重试或反馈」 |
 | 单次尝试到点（size 已知且已达） | — | 当作成功，进校验 |
+
+> **工单 08 补记（2026-09-13）：上表有五行被实现改写，「重下」那一半此前根本没做。**
+> `416`、`本地已下字节 > 卷大小`、`下完但内容不符` 三条，实现里都是**清掉本地那份
+> 之后就抛 `DownloadLocalCorruptError`**——而它在 `_NOT_RETRYABLE` 里，于是重下从来没
+> 发生，坏半成品把那一卷**永久卡住**（用户点重试仍带同样的 `Range`、仍 `416` 或仍失败）。
+> 其中「内容不符」那条的异常文案还写着「已丢弃整份重新下载」，说了一套做了一套。
+> 工单 08 的处置：前两条**就地清掉重来**（同一次尝试内完成），内容不符**清掉 + 走退避重试**。
+> 另按「本地的补救只做一次、再做还是 416」把持久 `416` 定成**不可重试**
+> （否则就是每 60 秒撞一次墙的安静死循环），归 `error_kind="verify"`。
+> 判据见 `tests/test_download_resume.py`：
+> `test_http_416_clears_stale_partial_and_redownloads` /
+> `test_http_416_without_range_is_not_retried_forever` /
+> `test_local_bigger_than_manifest_recovers_from_zero` /
+> `test_content_mismatch_is_retried_from_zero`；
+> 真 HTTP 探针 `.scratch/resumable-download/probe-08-416.py`（含实现前的红基线）。
+> 表内其余各条不变。
 
 **跨进程残留**：`dest` 旁落 `.partial.json` 边车（只记 `url` 与期望总字节），**只在取消 / 失败时写**；
 进程重启后 `run()` 里若发现「本地长度 + 边车期望」自洽，就继续用、不重下。
@@ -123,7 +140,6 @@
 > `tests/test_download_resume.py::test_download_start_writes_sidecar_so_a_killed_process_can_resume`
 > 与 `tests/test_download_resume.py::test_success_clears_the_early_sidecar`。
 > 原文保留在此，是为了让后来的人看得见「契约怎么被现实修正的」，不是现行口径。
-
 ### 状态面契约（前端消费）
 
 `task_status` / `full_task_status` 的既有字段**一个不改**（前端零破坏），**新增**三个：

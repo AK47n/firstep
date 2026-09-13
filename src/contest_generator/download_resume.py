@@ -11,8 +11,11 @@
   并返回自称成功的 SHA256，用户侧看到的是「100% → 校验失败 → 从头再来」；
 - **瞬时失败自动重试**：次数无上限，退避 2→4→8→16→32→60 秒封顶；每次重试经 `before_retry`
   如实上报；`cancel` 置位后**不再发起下一次尝试**，退避等待期间也能立刻中断；
-- **不可重试的只有三种**：清单与服务器总长互相矛盾（发布物不一致）、本地文件比远端大（本地坏）、
-  服务器明确说没有/不给（HTTP 4xx）。这三种直报中文错误，不进重试循环——否则就是死循环。
+- **不可重试的只有两种**：清单与服务器总长互相矛盾（发布物不一致）、
+  服务器明确说没有/不给（HTTP 404/403 这类 4xx）。这两种直报中文错误，不进重试循环
+  ——否则就是死循环。
+  > 工单 08 更正**第三条**：原文写「本地文件比远端大（本地坏）」也不可重试，实测是错的——
+  > 它清了却没人重下，等于把那一卷判死。现在它与 `416`、内容不符一起归「删掉从 0 重下」。
 
 `resumable_download` 的前三个参数与 `materials_task.download_part` **位置与语义完全一致**，
 新参数一律关键字可选：既有注入点（`(url, dest, on_progress)` 三参假下载器）零改动。
@@ -20,10 +23,18 @@
 异常谱系（任务层据此分类，不用解析文案）：
 
     层级        下载错误
-    ├─ DownloadTruncatedError    传输被截断 / 本地长度不足 —— 可重试，半成品保留
-    ├─ DownloadSizeMismatchError 发布物与清单不一致 —— 不可重试
-    ├─ DownloadLocalCorruptError 本地文件比远端还大 —— 不可重试（删掉重来即可，但重试同一份没意义）
-    └─ DownloadCancelledError    用户取消 —— 不算失败，任务转 cancelled
+    ├─ DownloadTruncatedError       传输被截断 —— 可重试，半成品保留
+    ├─ DownloadContentMismatchError 下完但内容与清单不符 —— 可重试，清掉从 0 重下
+    ├─ DownloadSizeMismatchError    发布物与清单不一致 —— 不可重试
+    ├─ DownloadLocalCorruptError    本地文件来路不对 —— 不可重试（⚠️ 工单 08 起无人抛，见其 docstring）
+    └─ DownloadCancelledError       用户取消 —— 不算失败，任务转 cancelled
+
+**工单 08 起，「本地那份与远端对不上」一律不再靠抛异常了事**：`416`、本地比清单还大、
+下载完内容不符，三种的处置都是 spec 断点契约表那一句「删掉从 0 重下」——
+前两种**就地清掉重来**，第三种清掉后走退避重试。此前它们（或清掉之后）抛
+`DownloadLocalCorruptError`，而它在 `_NOT_RETRYABLE` 里 → **直接判死**，
+文案却写着「已丢弃整份重新下载」：能力只有「清掉」，「重下」从来没发生，
+坏半成品于是把那一卷永久卡住（工单 07 翻出、工单 08 修掉）。
 """
 
 from __future__ import annotations
@@ -68,12 +79,39 @@ class DownloadTruncatedError(DownloadError):
     """传输被截断或本地长度不足（**可重试**，半成品保留）。"""
 
 
+class DownloadContentMismatchError(DownloadError):
+    """下完了整卷、但内容与清单 sha256 不符（**可重试**：清掉从 0 重下）。
+
+    为什么单列一支而不是复用 `DownloadTruncatedError`：两者**重试动作相同**
+    （清掉、退避、从 0 重来）但**归因不同**——截断是网络，这条是内容/服务器上那份
+    换过。混用会让状态面把内容问题报成网络问题，文案还会承诺「会自动重连接着下」
+    （实际动作是整卷重下）。归因单源在 `error_kind`，见工单 04 立的分工。
+    """
+
+
+class DownloadRangeNotSatisfiableError(DownloadError):
+    """服务器 `416`，且**本地补救已用尽**（清掉本地那份、去掉 Range 再试，仍然 416）。
+
+    **不可重试**：416 的语义是「你请求的那个字节范围不合法」，根因在本地那份与远端
+    对不上；本地能做的（清掉、从 0 重来）在 `_attempt` 里已经做过一次了，再重试还是
+    同一个结果——交给外层无上限重试就成了「每 60 秒撞一次墙」的安静死循环。
+    归 `error_kind="verify"`：界面该说「本地记录与远端对不上」，而不是承诺「会自动重连」。
+    """
+
+
 class DownloadSizeMismatchError(DownloadError):
     """清单与服务器的总长互相矛盾（**不可重试**：重试必然同样结果）。"""
 
 
 class DownloadLocalCorruptError(DownloadError):
-    """本地落盘文件比远端还大（**不可重试**：删掉重新下即可，原地重试没意义）。"""
+    """本地落盘文件来路不对（**不可重试**）。
+
+    ⚠️ 工单 08 起**下载器不再抛它**：「本地比清单还大」「416」两种情形都改成
+    「就地清掉、从 0 重下」——抛不可重试异常等于把那一卷判死（清了却没人重下）。
+    类型与它在 `error_kind` / `describe_network_error` 里的映射**暂时留着**，
+    以便下游（任务层 / 未来的调用方）仍有一支可用的词表；但按当前实现，
+    这几条分支不可达。
+    """
 
 
 class DownloadCancelledError(DownloadError):
@@ -94,6 +132,7 @@ class DownloadVerifyError(DownloadError):
 _NOT_RETRYABLE = (
     DownloadSizeMismatchError,
     DownloadLocalCorruptError,
+    DownloadRangeNotSatisfiableError,
 )
 
 
@@ -147,13 +186,20 @@ def retry_delay(attempt: int) -> float:
 def is_retryable(exc: BaseException) -> bool:
     """这个错误值不值得再试一次。
 
-    不可重试 = 重试必然同样结果：清单与服务器总长矛盾、本地比远端大、服务器明确拒绝。
-    **HTTP 5xx 可重试**（服务端临时故障），404/403 不可重试（文件不在 / 不给）。
+    不可重试 = 重试必然同样结果：清单与服务器总长矛盾、服务器明确拒绝。
+    **HTTP 5xx 可重试**（服务端临时故障），404/403 不可重试（文件不在 / 不给），
+    **416 也不可重试**：它的语义是「本地那份与远端对不上」，本地补救（清掉、去掉
+    Range 从 0 重来）在 `_attempt` 里已经做过一次——再做还是 416。416 走的是
+    `DownloadRangeNotSatisfiableError`，所以它连 `HTTPError` 分支都到不了。
     """
     if isinstance(exc, _NOT_RETRYABLE):
         return False
     if isinstance(exc, urllib.error.HTTPError):
         code = int(getattr(exc, "code", 0) or 0)
+        # 416 不该出现在这里（`_attempt` 会把它翻成 DownloadRangeNotSatisfiableError），
+        # 但裸 HTTPError 也能从注入的 opener 冒出来，故显式判成不可重试。
+        if code == 416:
+            return False
         return 500 <= code < 600 or code in (408, 429)
     return True
 
@@ -168,6 +214,12 @@ def describe_network_error(exc: BaseException) -> str:
         return str(exc)
     if isinstance(exc, DownloadLocalCorruptError):
         return str(exc)
+    if isinstance(exc, DownloadRangeNotSatisfiableError):
+        return ("本地记录与远端对不上（服务器回了 416，本地那份已清）；"
+                "请重新点一次下载")
+    if isinstance(exc, DownloadContentMismatchError):
+        # 归因是**内容**不是网络：别说「重连接着下」（实际动作是整卷重下）
+        return f"{exc}，会重新下载整卷"
     if isinstance(exc, DownloadTruncatedError):
         return f"{exc}，会自动重连接着下"
     if isinstance(exc, urllib.error.HTTPError):
@@ -203,11 +255,17 @@ def error_kind(exc: BaseException) -> str:
     """错误分类（状态面 `error_kind` 字段的**单源**）："" | "network" | "verify" | "cancelled"。
 
     任务层只消费、不自己判——校验失败也走这张表（抛 `DownloadVerifyError`）。
+    **内容与清单不符归 `verify`**（不是 `network`）：归因是「内容不对」，
+    前端据此说的话术才不是「网络问题、会自动重连」。
+
+    注：词表仍是三值（`"" | network | verify`）+ 取消态那一支，工单 04 定的契约不变；
+    取消态只在异常路径出现，从不写进状态面的 `last_error_kind`（任务层负责）。
     """
     if isinstance(exc, DownloadCancelledError):
         return "cancelled"
     if isinstance(exc, (DownloadSizeMismatchError, DownloadLocalCorruptError,
-                        DownloadVerifyError)):
+                        DownloadRangeNotSatisfiableError,
+                        DownloadContentMismatchError, DownloadVerifyError)):
         return "verify"
     return "network"
 
@@ -340,20 +398,17 @@ def resumable_download(
     resumed_from = 0
     transferred = 0
     attempts = 0
-    need_clean_slate = False
     # 「这一轮服务器没让我们接上」的记号。**不能用返回值带出来**：截断是在 `_attempt`
     # 内部抛的，返回值那一行根本走不到（实测：起始偏移明明是 0，消息却写「从 21% 接着下」）。
+    #
+    # 注：工单 08 之前这里还有一个 `need_clean_slate` 旗标（「内容不符 → 下一轮先清掉」）。
+    # 现在**清掉这一步就地做了**（见下面内容不符那条：clear 之后才抛），旗标再没人置真，
+    # 成了死代码——已删。留着它比删掉更危险：它看着像「有机制在管这件事」，实际不会执行。
     forced_restart = _RestartFlag()
     while True:
         if cancel is not None and cancel.is_set():
             write_partial_marker(dest, url, expected)
             raise DownloadCancelledError("已取消下载")
-        if need_clean_slate:
-            # 上一轮「内容不对」（外层拿清单 sha256 验出来的）：清掉重下。
-            # 不清就会死循环——服务器见「你要的起点=整卷大小」于是不发字节，
-            # 每次尝试收到 0 字节，重试白转（实测过，报「重试 N 次仍未下完（307200/307200）」）。
-            clear_partial(dest)
-            need_clean_slate = False
         attempts += 1
         try:
             outcome = _attempt(
@@ -372,11 +427,19 @@ def resumable_download(
                 # 走下面的重试——**判定必须在循环内**，否则第一次就跳出、重试形同虚设。
                 raise DownloadTruncatedError(f"下载未完成（{size} / {expected} 字节）")
             if want_sha and file_sha256(dest) != want_sha:
-                # 长度对了但内容不是清单上那一份：**不重试**，删掉整份重下再验。
+                # 长度对了但内容不是清单上那一份（多发生在「服务器上那份换过」）。
+                # **真的重下**：先清掉整份，再走外层退避，下一轮从 0 整卷重来。
+                #
+                # 为什么不能像工单 08 之前那样「清掉 + 抛 `DownloadLocalCorruptError`」：
+                # 那个异常在 `_NOT_RETRYABLE` 里，抛出去就是**直接判死**——能力只有
+                # 「清掉」，「重下」从来没发生（工单 08 实测），坏半成品于是把这一卷
+                # 永久卡住。它的文案却写着「已丢弃整份重新下载」，说了一套做了一套。
+                #
+                # **清掉必须就地做**（不能只置个旗标留给下一轮）：旗标若被置真，
+                # 下一轮开头会再清一次，把刚下好的字节删掉，永远收敛不了。
                 clear_partial(dest)
-                need_clean_slate = True
-                raise DownloadLocalCorruptError(
-                    f"下载内容与清单不符（{size} 字节），已丢弃整份重新下载"
+                raise DownloadContentMismatchError(
+                    f"下载内容与清单不符（{size} 字节），已删除重下"
                 )
         except DownloadCancelledError:
             write_partial_marker(dest, url, expected)
@@ -427,11 +490,12 @@ def _attempt(
     """一次尝试。返回本次的产出；失败抛异常，半成品状态留给外层处置。"""
     offset = dest.stat().st_size if dest.is_file() else 0
     if expected_size > 0 and offset > expected_size:
-        # 本地坏：先按「不可重试」如实处置（清掉半成品），再报错
+        # 本地比**清单**还大 = 本地那份是坏的（正常下载不可能超过总长）。
+        # 处置 = spec 断点契约表那一行：「删掉从 0 重下」——**就地清掉接着下**，
+        # 不抛异常（抛了就没人替它重下：`DownloadLocalCorruptError` 在
+        # `_NOT_RETRYABLE` 里，实测会把这一卷直接判死）。
         clear_partial(dest)
-        raise DownloadLocalCorruptError(
-            f"本地文件比远端还大（本地 {offset} / 清单 {expected_size} 字节）"
-        )
+        offset = 0
     resume = offset >= max(1, int(min_resume_bytes))
     if offset > 0 and not resume:
         clear_partial(dest)          # 小卷：重下比发 Range 更省事，也少一堆边界
@@ -441,12 +505,57 @@ def _attempt(
     if resume:
         request.add_header("Range", f"bytes={offset}-")
 
-    with opener(request, timeout) as response:
+    try:
+        handle = opener(request, timeout)
+    except urllib.error.HTTPError as exc:
+        if int(getattr(exc, "code", 0) or 0) != 416:
+            raise
+        # **服务器回 416 = 我们要的起点超出了资源总长**（本地那份与远端对不上：
+        # 远端变小过 / 本地半成品来路不对）。spec 断点契约表：删掉本地那份、从 0 重下。
+        #
+        # 为什么在这里就地重来、而不是抛出去让外层重试：外层对「这次到底接没接上」
+        # 的记账（`restart_flag`）与进度基准（`on_start`）都在本函数里，
+        # 就地重来才能把「半成品已丢弃、本轮起点是 0」如实报给调用方——
+        # 否则状态面会拿已丢弃的字节算进度（工单 03 双轴评审修过同一个坑）。
+        if offset <= 0:
+            # 没带 Range 也 416：本地那份已经不在了（刚在别处清过）或压根没发 Range——
+            # **本地的补救手段已经用尽**，再重试还是 416（不是瞬时故障）。
+            # 如实抛，不交给外层无上限重试：那会变成「每 60 秒撞一次墙」的安静死循环，
+            # 而 416 的语义是「你本地那份不对」——真修法在本地，重试修不了它。
+            # 归 `error_kind="verify"`（不是 network）：界面据此说「本地记录与远端对不上」，
+            # 而不是承诺「会自动重连」。用户重新点一次下载即从头来过（本地已清）。
+            # **不把底层 HTTPError 的原文塞进 message**：那样用户会看到
+            # 「HTTP Error 416: Range Not Satisfiable」这种英文原文，而
+            # `describe_network_error` 已经给了可行动的中文那句（工单 05 立的规矩：
+            # 底层异常一律翻成人话，不甩原文）。
+            raise DownloadRangeNotSatisfiableError(
+                "服务器回了 416（本地记录与远端对不上）") from exc
+        clear_partial(dest)          # 坏的那份连同边车一起清
+        offset = 0
+        if restart_flag is not None:
+            restart_flag.note(True)
+        _notify_start(on_start, 0)
+        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        try:
+            handle = opener(request, timeout)     # 这一次不带 Range
+        except urllib.error.HTTPError as exc2:
+            if int(getattr(exc2, "code", 0) or 0) != 416:
+                raise
+            # 清干净了、也不带 Range 了，服务器**仍然** 416：本地的补救手段用尽，
+            # 再重试还是同样结果 → 如实抛（同上，不进退避循环）。
+            raise DownloadRangeNotSatisfiableError(
+                "服务器回了 416（本地记录与远端对不上）") from exc2
+        restarted = True
+    else:
+        restarted = False
+
+    with handle as response:
         status, start, declared_total = _decode_response(response)
-        restarted = bool(resume) and start != offset
+        if not restarted:
+            restarted = bool(resume) and start != offset
         if restart_flag is not None:
             restart_flag.note(restarted)     # 先记账：下面可能抛异常（返回值走不到）
-        if restarted:
+        if restarted and offset != 0:
             # 服务器要么忽略了 Range（整份重发，start=0），要么给的区间起点与请求不符。
             # 两种都不能续写——续写会把「旧字节 + 新字节」拼成一份坏文件。
             clear_partial(dest)

@@ -1,0 +1,48 @@
+{
+  "cases": [
+    {
+      "case": "relentless-416",
+      "mode": "416-always",
+      "seed_bytes": 102400,
+      "range_headers": [
+        "bytes=102400-",
+        ""
+      ],
+      "error": "",
+      "sha_ok": true,
+      "on_disk": 307200,
+      "sidecar_left": false
+    },
+    {
+      "case": "transient-416",
+      "mode": "416-once",
+      "seed_bytes": 102400,
+      "range_headers": [
+        "bytes=102400-",
+        ""
+      ],
+      "error": "",
+      "sha_ok": true,
+      "on_disk": 307200,
+      "sidecar_left": false
+    },
+    {
+      "case": "local-bigger",
+      "mode": "416-once",
+      "seed_bytes": 311296,
+      "range_headers": [
+        ""
+      ],
+      "error": "",
+      "sha_ok": true,
+      "on_disk": 307200,
+      "sidecar_left": false
+    }
+  ],
+  "verdict": {
+    "relentless_416_recovers": true,
+    "transient_416_recovers": true,
+    "local_bigger_recovers": true,
+    "416_is_not_a_retryable_network_error": true
+  }
+}

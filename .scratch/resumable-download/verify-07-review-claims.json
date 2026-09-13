@@ -20,15 +20,16 @@
       "mode": "range-416",
       "seed_bytes": 102400,
       "range_headers": [
-        "bytes=102400-"
+        "bytes=102400-",
+        ""
       ],
-      "error": "HTTPError: HTTP Error 416: Range Not Satisfiable",
-      "sha_ok": false,
-      "on_disk": 102400,
-      "sidecar_left": true,
-      "resumed_from": null,
-      "attempts": null,
-      "transferred": null
+      "error": "",
+      "sha_ok": true,
+      "on_disk": 307200,
+      "sidecar_left": false,
+      "resumed_from": 0,
+      "attempts": 1,
+      "transferred": 307200
     },
     {
       "case": "local-bigger",
@@ -74,7 +75,7 @@
   ],
   "claims": {
     "1_resumed_from_semantics_inverted": false,
-    "2_416_not_cleared_and_restarted": true,
+    "2_416_not_cleared_and_restarted": false,
     "3_local_bigger_not_restarted": false,
     "4_orphan_sidecar_after_complete_volume": false,
     "5_control_clean_full_download": true

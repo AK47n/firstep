@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import threading
 import urllib.error
 from http.client import IncompleteRead
@@ -17,9 +18,11 @@ from pathlib import Path
 
 import pytest
 
+from contest_generator import download_resume as _dr
 from contest_generator.download_resume import (
     DownloadCancelledError,
     DownloadLocalCorruptError,
+    DownloadRangeNotSatisfiableError,
     DownloadResult,
     DownloadSizeMismatchError,
     DownloadTruncatedError,
@@ -35,6 +38,17 @@ from contest_generator.download_resume import (
     resumable_download,
     retry_delay,
     write_partial_marker,
+)
+
+# 工单 08 新增的类型：**按名字取，缺失时让相关用例 skip 而不是整文件 ImportError**。
+# 为什么要这样：导入期报错会让「把实现回退一版」的**反向验证**（以及任何在旧版实现上
+# 跑测试套件的场景）直接炸在收集阶段——那是 ERROR 不是 FAILED，看起来像测试坏了而不是
+# 判据发现了回归，反而掩盖问题。缺类型 = 这些判据在这份实现上「无从谈起」，skip 才如实。
+DownloadContentMismatchError = getattr(
+    _dr, "DownloadContentMismatchError", None)
+_NEEDS_08 = pytest.mark.skipif(
+    DownloadContentMismatchError is None,
+    reason="本份实现没有 DownloadContentMismatchError（工单 08 之前）：该判据无从谈起",
 )
 
 PAYLOAD = bytes((i * 7 + 11) % 251 for i in range(300 * 1024))
@@ -139,6 +153,40 @@ def dest(tmp_path: Path) -> Path:
     return tmp_path / "parts" / "v1.1.1.zip"
 
 
+class _Server416:
+    """对**带 Range 的请求**回 416 的假服务器（工单 08）。
+
+    为什么单起一个类而不给 `_FakeServer` 加开关：416 是**在 opener 里抛**的
+    （`urlopen` 对 4xx/5xx 抛 HTTPError，把响应体封在异常对象上），
+    与「返回一个响应对象」是两条不同的路——混在一个类里会让两边的剧本互相干扰。
+
+    剧本 = 「带 Range 一律 416，不带 Range 正常发」。它同时覆盖两种真实现象：
+    本地那份坏死在盘上（每次都 416）、服务器上那份变小过一次（第一次 416）。
+    """
+
+    def __init__(self, payload: bytes = PAYLOAD) -> None:
+        self.payload = payload
+        self.ranges: list[str] = []
+
+    @property
+    def n_requests(self) -> int:
+        return len(self.ranges)
+
+    def starts(self) -> list[int]:
+        return [int(h[len("bytes="):-1]) if h else 0 for h in self.ranges]
+
+    def __call__(self, request, timeout: float):  # noqa: ANN001
+        header = request.get_header("Range") or ""
+        self.ranges.append(header)
+        full = len(self.payload)
+        if header:
+            raise _http_error_with_body(
+                416, f"range not satisfiable: bytes */{full}".encode())
+        body = self.payload
+        return _FakeResponse(200, {"Content-Length": str(len(body)),
+                                   "Accept-Ranges": "bytes"}, body)
+
+
 # ---------------------------------------------------------------------------
 # 策略与文案（纯函数）
 # ---------------------------------------------------------------------------
@@ -163,12 +211,23 @@ def _http_error(code: int) -> urllib.error.HTTPError:
     return urllib.error.HTTPError("https://x/p.zip", code, "boom", {}, None)  # type: ignore[arg-type]
 
 
+def _http_error_with_body(code: int, body: bytes) -> urllib.error.HTTPError:
+    """带响应体的 HTTPError：`urlopen` 实际上**总是**这样抛（真实服务器 416 会带
+    `Content-Range: bytes */N` 与一段说明体）。用 None 当 body 测不出这条路上
+    任何读体的代码（工单 08 的 416 分支要在异常对象上接着重发请求）。"""
+    return urllib.error.HTTPError(  # type: ignore[arg-type]
+        "https://x/p.zip", code, "boom", {}, io.BytesIO(body))
+
+
 def test_retryable_classification() -> None:
     assert is_retryable(OSError("socket"))
     assert is_retryable(TimeoutError("slow"))
     assert is_retryable(IncompleteRead(b"partial", 100))
     assert is_retryable(_http_error(500))
     assert is_retryable(_http_error(429))
+    # 416 = 「本地那份与远端对不上」：本地补救在 _attempt 里做过一次，重试还是 416
+    assert not is_retryable(_http_error(416))
+    assert not is_retryable(DownloadRangeNotSatisfiableError("416"))
     assert not is_retryable(_http_error(404))
     assert not is_retryable(_http_error(403))
     assert not is_retryable(DownloadSizeMismatchError("x"))
@@ -354,6 +413,143 @@ def test_resumed_from_reports_whether_range_actually_connected(dest: Path) -> No
     assert result2.resumed_from == 100 * 1024
 
 
+def test_http_416_clears_stale_partial_and_redownloads(dest: Path) -> None:
+    """服务器对带 Range 的请求回 416 → **清掉本地那份、从 0 重下**（工单 08）。
+
+    spec 断点契约表：「服务器返回 `416` | — | 本地比远端大 = 本地坏，删掉从 0 重下」。
+    改之前的现状：416 直接冒泡 → 任务 failed、坏半成品留在盘上 → 用户点重试仍带
+    同样的 Range、仍 416——**同一个坏半成品把这一卷永久卡住**。
+    """
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(PAYLOAD[:100 * 1024])          # 与远端对不上的半成品
+    server = _Server416()
+
+    result = resumable_download(
+        "https://x/p.zip", dest, lambda n: None, opener=server,
+        expected_size=len(PAYLOAD), expected_sha256=PAYLOAD_SHA,
+        min_resume_bytes=64 * 1024,                 # 载荷 300 KB < 产品阈值 1 MB
+    )
+
+    assert result.sha256 == PAYLOAD_SHA
+    assert dest.read_bytes() == PAYLOAD
+    # 两次请求：第一次带 Range（被 416 拒），第二次**不带 Range** 从 0 重下
+    assert server.starts() == [100 * 1024, 0]
+    assert result.attempts == 1                     # 就地重来，没走外层的退避重试
+    assert not marker_for(dest).is_file()           # 成功不留边车
+
+
+def test_http_416_without_range_is_not_retried_forever(dest: Path) -> None:
+    """**本地补救用尽后仍然 416** → 如实抛，**不进无上限重试**（工单 08）。
+
+    `_attempt` 里只允许「带 Range 被拒 → 清掉本地那份、**去掉 Range 再试一次**」
+    这一次让步；若连不带 Range 的请求都被 416 拒，本地的补救手段就用尽了——
+    再重试还是同一个结果。**关键判据**：不传 `max_attempts`（产品默认无上限），
+    异常仍然立刻抛出、且总共只发两次请求。若把 416 当成可重试的网络错误，
+    这里就会变成「每 60 秒撞一次墙」的安静死循环（退避 2→60 秒封顶，只有用户取消
+    才停）——那正是本单要消灭的东西，不是要引入的。
+    """
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(PAYLOAD[:100 * 1024])
+
+    class _HostileServer:
+        """恒 416，**连不带 Range 的请求也 416**。"""
+
+        def __init__(self) -> None:
+            self.ranges: list[str] = []
+
+        def __call__(self, request, timeout):  # noqa: ANN001
+            header = request.get_header("Range") or ""
+            self.ranges.append(header)
+            raise _http_error_with_body(416, b"range not satisfiable")
+
+    server = _HostileServer()
+    with pytest.raises(DownloadRangeNotSatisfiableError) as err:
+        resumable_download(
+            "https://x/p.zip", dest, lambda n: None, opener=server,
+            expected_size=len(PAYLOAD), expected_sha256=PAYLOAD_SHA,
+            min_resume_bytes=64 * 1024,
+        )
+    # 异常 message 与映射文案都不许出现底层英文原文，也不许承诺自动重连
+    assert "HTTP Error" not in str(err.value)
+    spoken = describe_network_error(err.value)
+    assert "重新点一次下载" in spoken
+    assert "自动重连" not in spoken
+    assert "对不上" in spoken
+    assert error_kind(err.value) == "verify"
+    assert server.ranges == ["bytes=102400-", ""]   # 让步一次就收手，没有第三次
+    assert not dest.is_file()                       # 坏的那份已清掉，不留半成品
+
+
+def test_local_bigger_than_manifest_recovers_from_zero(dest: Path) -> None:
+    """本地比**清单**还大 = 本地坏：清掉、从 0 重下，最终成功（工单 08）。
+
+    改之前：抛 `DownloadLocalCorruptError`（在 `_NOT_RETRYABLE` 里）直接判死——
+    而 spec 同一行的处置是「删掉从 0 重下」。本用例判「结果对」：
+    坏的那份被清、请求数 0（不必先问一次服务器）、最终哈希正确。
+    """
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(PAYLOAD + b"\x00" * 4096)      # 比清单大 4096 字节
+    server = _FakeServer()
+
+    result = resumable_download(
+        "https://x/p.zip", dest, lambda n: None, opener=server,
+        expected_size=len(PAYLOAD), expected_sha256=PAYLOAD_SHA,
+    )
+
+    assert result.sha256 == PAYLOAD_SHA
+    assert dest.read_bytes() == PAYLOAD
+    assert server.n_requests == 1                   # 坏的那份被就地清掉，直接重下
+    assert not marker_for(dest).is_file()
+
+
+@_NEEDS_08
+def test_content_mismatch_is_retried_from_zero(dest: Path, monkeypatch) -> None:
+    """「长度对了但内容不是清单那一份」→ **真的删掉重下**，不是判死（工单 08）。
+
+    改之前：抛 `DownloadLocalCorruptError`（在 `_NOT_RETRYABLE` 里）→ 直接失败，
+    而它的文案还写着「已丢弃整份重新下载」——能力只有「清掉」，重下从来没发生。
+    这里判三件事：最终内容对得上、确实重试过、重试用的是**整卷重下**（起点 0）。
+    """
+    monkeypatch.setattr("contest_generator.download_resume.retry_delay", lambda n: 0.0)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+
+    class _ServerSwappedContent:
+        """第 1 次发**另一份内容**（同长度），之后发正确的那份。"""
+
+        def __init__(self) -> None:
+            self.starts: list[int] = []
+
+        def __call__(self, request, timeout):  # noqa: ANN001
+            header = request.get_header("Range") or ""
+            start = int(header[len("bytes="):-1]) if header else 0
+            self.starts.append(start)
+            body = (b"\xaa" * len(PAYLOAD)) if len(self.starts) == 1 else PAYLOAD[start:]
+            status = 206 if header else 200
+            headers = {"Content-Length": str(len(body)), "Accept-Ranges": "bytes"}
+            if status == 206:
+                headers["Content-Range"] = f"bytes {start}-{len(PAYLOAD) - 1}/{len(PAYLOAD)}"
+            return _FakeResponse(status, headers, body)
+
+    server = _ServerSwappedContent()
+    retries: list[tuple] = []
+    result = resumable_download(
+        "https://x/p.zip", dest, lambda n: None, opener=server,
+        expected_size=len(PAYLOAD), expected_sha256=PAYLOAD_SHA,
+        max_attempts=3, min_resume_bytes=64 * 1024,
+        before_retry=lambda attempt, exc, on_disk, restarted: retries.append(
+            (attempt, type(exc).__name__)),
+    )
+
+    assert result.sha256 == PAYLOAD_SHA
+    assert dest.read_bytes() == PAYLOAD
+    assert server.starts == [0, 0]          # 第二轮从 0 整卷重下（不是接着那份坏字节）
+    assert result.attempts == 2
+    # 归因是**内容**不是网络：单列一支异常，状态面据此说「会重新下载整卷」
+    assert retries == [(1, "DownloadContentMismatchError")]
+    assert error_kind(DownloadContentMismatchError("x")) == "verify"
+    assert "重新下载整卷" in describe_network_error(DownloadContentMismatchError("内容不对"))
+    assert not marker_for(dest).is_file()
+
 def test_manifest_size_mismatch_is_not_retried(dest: Path) -> None:
     """清单说 A、服务器说 B = 发布物与清单不一致：直报，不进重试循环。
 
@@ -384,15 +580,24 @@ def test_http_500_is_retried(dest: Path, monkeypatch) -> None:
     assert result.sha256 == PAYLOAD_SHA
     assert server.n_requests == 2
 
-def test_local_larger_than_remote_clears_and_reports(dest: Path) -> None:
+def test_local_larger_than_remote_recovers_instead_of_dying(dest: Path) -> None:
+    """本地比远端大：**清掉接着下**，不再抛 `DownloadLocalCorruptError`（工单 08）。
+
+    这条此前断言的是「抛错 + 请求数 0」（旧行为 = 直接判死）。工单 08 按 spec
+    断点契约表把处置改成「删掉从 0 重下」，所以旧断言与 spec 相反、必须改：
+    现在判「坏的那份被清掉、从 0 重下、最终哈希正确」。
+    """
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(b"\x00" * (len(PAYLOAD) + 10))
     server = _FakeServer()
-    with pytest.raises(DownloadLocalCorruptError):
-        resumable_download("https://x/p.zip", dest, lambda n: None, opener=server,
-                           expected_size=len(PAYLOAD))
-    assert not dest.is_file()            # 本地坏的那份要清掉
-    assert server.n_requests == 0        # 不可重试，且不必发请求
+
+    result = resumable_download("https://x/p.zip", dest, lambda n: None, opener=server,
+                                expected_size=len(PAYLOAD),
+                                expected_sha256=PAYLOAD_SHA)
+
+    assert result.sha256 == PAYLOAD_SHA
+    assert dest.read_bytes() == PAYLOAD
+    assert server.starts() == [0]        # 坏半成品已清，第一次请求就是从头下
 
 
 def test_complete_local_file_needs_no_request(dest: Path) -> None:
