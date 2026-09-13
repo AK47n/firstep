@@ -1,10 +1,16 @@
 # Release & Versioning（发布与版本命名）
 
-本文件定义 firstep 的版本号命名规则与发布流程。生成器**代码更新频繁**，而完整包（含电赛资料库 `sources/materials`）体积约 6.5 GB、重传成本高——因此发布拆成两级：
+本文件定义 firstep 的版本号命名规则与发布流程。
+
+> **完整包口径（2026-09-13 复核后改写）**：完整包 = 工具本体 + 五个库 + 资料库**内容文件**、
+> **标准 zip 单卷约 821 MB**（超 1.9 GB 才拆 `.part<N>`）。它同时是**新用户唯一的安装包**
+> （README 只指这一个文件，Windows 自带解压，包内带 `START-HERE.txt`）。
+> 历史上那个 6.2 GB / 4 个 7z 分卷的形态**已下线**：只剩 v1.0.0 那个 release 有，
+> 不再打包、不再上传、不再在文档里出现（`tests/test_onboarding_docs.py` 有负向门禁）。
 
 > **小发版**（代码 / 库 / 文档变更）：发轻量更新包（单 zip，约 0.3 GB，4 件套），工具内置「检查更新 + 一键更新」自动完成替换，用户**不重下完整包**。
-> **完整包（一键全量，约 1.0 GB）**：`firstep-full-<tag>.zip`（超 1.9 GB 自动拆 `.part<N>`）+ 清单，工具内「设置 → 完整包下载」一键下载 + 自动替换重启；用于无基线 / 修损坏 / 换机器。**不含**装机用的第三方安装包与视觉 SDK（约省 4.9 GB）。
-> **大发版**（`sources/materials` 资料库增删改）：发**资料库增量包**（按批次 zip，只含新增 / 修改文件，工具内「资料库更新」一键下载应用）；完整包（6.2 GB、4 个 7z 分卷）仅作无基线 / 全新安装渠道，低频。
+> **完整包（一键全量，约 821 MB）**：`firstep-full-<tag>.zip`（超 1.9 GB 自动拆 `.part<N>`）+ 清单，工具内「设置 → 完整包下载」一键下载 + 自动替换重启；用于无基线 / 修损坏 / 换机器 / 新用户首次安装。**不含**装机用的第三方安装包与视觉 SDK（约省 4.9 GB）。
+> **大发版**（`sources/materials` 资料库增删改）：发**资料库增量包**（按批次 zip，只含新增 / 修改文件，工具内「资料库更新」一键下载应用）。新用户不再需要一条单独的 6.2 GB 渠道——完整包里已带资料库内容文件与基线清单。
 
 `git clone` 用户不受影响：`git pull` 路线与小发版平级，始终拿到最新代码。
 
@@ -21,7 +27,8 @@
 ## 何时发 Release
 
 1. **小发版**：代码 / 模块库 / 母版库 / 赛题库 / 参考文件库（`sources` 下除 `materials` 的部分）/ 文档有变更 → 发更新包 4 件套（更新包机制见 `.scratch/auto-update/spec.md`）。
-2. **完整包（一键全量）**：想让用户能「一键下载整份 firstep」（换机器、修损坏、给尚无资料库基线的用户一条自动出路）→ 小发版四件套之外**再加发**完整包资产（见下文「完整包（zip 分卷）流程」）。资产小（约 1 GB / 1~2 卷），与小发版同 tag，可一起传。
+2. **完整包（一键全量）**：想让用户能「一键下载整份 firstep」（换机器、修损坏、给尚无资料库基线的用户一条自动出路）→ 小发版四件套之外**再加发**完整包资产（见下文「完整包（zip 分卷）流程」）。资产约 821 MB / 1~2 卷，与小发版同 tag，可一起传。
+   **它同时是新用户的安装包**：README 的「获取方式」只指这一个文件，所以**每次发版都要确认该资产在场且可被 Windows 自带解压**（`firstep-full-<tag>.zip` 在 release 上、字节数与 README 写的「约 821 MB」同一量级）。
 3. **大发版**：`sources/materials` 资料库有增删改 → 打资料库增量包（见下文「大发版流程（资料库增量包）」），发 `materials-vX.Y.Z` tag + Release。
 4. 重大里程碑（首次公开、大版本切换）→ 即使资料无变化也可发完整包。
 
@@ -70,7 +77,9 @@
 
 ## 完整包（zip 分卷）流程（一键全量下载）
 
-> 机制见 `.scratch/full-download/spec.md`。**包内只有会变的内容**：工具本体 + 五个库 + `sources/contest`、`sources/car` + 资料库内容文件；第三方安装包与视觉 SDK 打包件（`*.exe` / `*.rar` / `*.img*` / `*CCS_20.5*` / `*tsp-xbhdcc*` 等，本机约 5.4 GB）、缓存、虚拟环境、本地备份目录都不进包。实测包内约 **8764 个文件 / 原始 1.07 GB**，zip 后约 1.0 GB、1~2 卷。
+> 机制见 `.scratch/full-download/spec.md`。**包内只有会变的内容**：工具本体 + 五个库 + `sources/contest`、`sources/car` + 资料库内容文件；第三方安装包与视觉 SDK 打包件（`*.exe` / `*.rar` / `*.img*` / `*CCS_20.5*` / `*tsp-xbhdcc*` 等，本机约 5.4 GB）、缓存、虚拟环境、本地备份目录都不进包。实测包内约 **8777 个文件 / 原始 1.07 GB**，zip 后 **约 821 MB**（v1.1.1 实测 `821,352,026` 字节）、1~2 卷。
+>
+> **包内还有面向新用户的 `START-HERE.txt`**（工单 `newuser-download/02`）：解压后第一个该看到的东西。它必须在 `full_pack` 顶层白名单里，改完跑 `tests/test_full_pack.py` 确认它真的进了包与清单。
 
 1. 确认工作区干净（`git status`；脚本默认拒绝脏工作树，`-AllowDirty` 豁免）。
 2. 跑打包脚本（仓库根）：
@@ -89,10 +98,13 @@
    ```
 
 4. 校验：`gh release view v1.1.0 --repo AK47n/firstep` 确认**完整包清单资产在场**——工具内「设置 → 完整包下载 → 检查完整包」靠它发现新版本；资产缺失时前端会明确提示「该版本的 Release 上没有完整包资产」。
+   **同时确认 `firstep-full-<tag>.zip` 在场且体积与「约 821 MB」同量级**——它是新用户的安装包，README 只指这一个文件；它不在，新用户就没有入口（`gh api repos/AK47n/firstep/releases/tags/<tag>` 看 `size`）。
 5. 把本版 `firstep-full-v1.1.0.manifest.json` 存好——下次完整包的 `-Baseline`。
 6. 用户侧效果：下载完成 → 自动替换重启 → 资料库基线随包写回（**无基线状态只出现一次**，之后检查资料库更新只收增量）。
+7. **写 Release 说明**（模板见本文件末「Release 说明模板」；新用户的落点全在这里）。
 
-> 与 7z 完整包的关系：7z 路线**保留**（无基线 / 全新安装 / 需要那批第三方安装包时用），zip 完整包是「已装用户的一键全量」路线。两条并存，互不影响。
+> **7z 完整包渠道已下线（2026-09-13）**：不再打 7z、不再传分卷、文档不再提。存量资产只剩 v1.0.0 那个 release，
+> 保留不动（不删已发布的东西）。要那批第三方安装包的用户走各自官网，完整包**故意不含**它们。
 
 ## 大发版流程（资料库增量包，`sources/materials` 变动时）
 
@@ -120,43 +132,45 @@
 4. 校验：`gh release view materials-v1.1.0 --repo AK47n/firstep` 确认清单 + 各批次 zip 齐全（用户在工具「设置 → 资料库更新」检查即见）。
 5. 把本版 `firstep-materials-v1.1.0.manifest.json` 存为下一版基线。
 
-### 完整包路线（保留，无基线 / 全新安装 / 资料库全量重下时）
+### 旧 7z 完整包路线：已下线（不要再跑）
 
-1. 重新打包完整包（store 模式，1900 MB 分卷；**分卷必须 < 2 GB**，GitHub 附件单文件上限）：
+2026-09-13 起不再打 7z 完整包：新用户走 zip 完整包（README 唯一入口），资料库变动走增量包，
+没有任何用户需要那条 6.2 GB 的路线了。历史命令与踩坑记录不再保留在本文件
+（需要时看 git 历史里本节的旧版本）。
 
-   ```powershell
-   & C:\Users\luoji\Desktop\firstep-tools\7zr.exe a -t7z -mx=0 -v1900m `
-     C:\Users\luoji\Desktop\firstep-pack\firstep-full.7z `
-     C:\Users\luoji\Desktop\firstep `
-     '-xr!.git' '-xr!.scratch' '-xr!__pycache__' '-xr!.pytest_cache' '-xr!.mypy_cache' '-xr!*.log' `
-     -bso0 -bsp0
-   ```
-
-   注意：排除开关必须带引号（`'-xr!.git'`），否则 7zr 报 `Too short switch r!`。`7zr.exe` 从 https://www.7-zip.org/a/7zr.exe 下载（单文件版，无需安装）。
-
-2. 写 Release Notes（本版变化来自 `git log v上一版..HEAD`；解压方法见 `HOW_TO_EXTRACT.txt` 模板）。
-3. 创建 Release 并上传附件：
-
-   ```powershell
-   gh release create vX.Y.Z `
-     --title 'firstep 电赛工程生成器 · 完整包 vX.Y.Z（含电赛资料库）' `
-     --notes-file release-notes.md --repo AK47n/firstep
-
-   gh release upload vX.Y.Z `
-     firstep-full.7z.001 firstep-full.7z.002 firstep-full.7z.003 firstep-full.7z.004 `
-     HOW_TO_EXTRACT.txt --repo AK47n/firstep
-   ```
-
-4. 更新 README「获取方式」与「版本与发布」中的当前版本号（Release 链接形式固定，无需改）。
-5. 校验：`gh release view vX.Y.Z --repo AK47n/firstep` 或 GitHub API 确认附件齐全。
+**遇到「用户要那批第三方安装包」时的答复**：完整包**故意不含**它们（CCS 安装包 / 视觉 SDK /
+VSCode 等约 5.4 GB，几乎不变、只在装机时用一次）；去各自官网下载即可，已装用户本机那份不会被删。
 
 ## 附件命名注意
 
-gh CLI 上传**中文文件名**会把附件名替换为 `default.txt`——解压说明一律用 ASCII 文件名 **`HOW_TO_EXTRACT.txt`**（文件内容可中文）。Release 页面可放说明，正文用 `HOW_TO_EXTRACT.txt` 指路。
+**附件一律用 ASCII 文件名**：`gh release upload` 对中文文件名不可靠（历史上出现过被替换成 `default.txt`，
+本地也没留下当时的实测记录）。因此：
+
+- 现状（**继续这么做**）：`firstep-full-<tag>.zip` / `firstep-update-<tag>.zip` / `firstep-materials-<tag>-<slug>.zip`。
+- 想在文件名里带中文（工单 `newuser-download/03` 的目标）**必须先实测** `gh release upload` 的中文名行为，
+  并确认工具内「检查完整包」仍能发现该资产（它按**清单里的 `zip_name`** 去 release 上找同名资产，
+  改名必须同步改写清单，否则整条链路判「不可下」）。测不出来就退回 ASCII 名，用 Release 说明补人话。
+
+## Release 说明模板（新用户就看这一段）
+
+每条 release 的说明**前两行固定**，其余随意（本版修了什么、加了什么）：
+
+```markdown
+> **新用户**：只下 `firstep-full-<tag>.zip`（约 821 MB），Windows 自带解压即可，解压后照包里的 `START-HERE.txt` 走。
+> **已装用户**：不用看这里——打开工具「设置 → 软件更新 → 检查更新 → 一键更新」。
+
+## 这一版有什么变化
+
+- …（`git log v上一版..HEAD` 归纳成 3~6 条人话，别抄 commit 标题）
+```
+
+为什么固定这两行：Release 页上 8 个资产并列，新用户无从判断该下哪个；把答案写在**正文第一行**，
+比指望他读完 README 更可靠（实测下载计数里 `firstep-update-*.zip` 与 `firstep-full-*.zip` 都在被下，
+说明确实有人在两个 zip 之间犹豫）。
 
 ## 快速发版（给 Agent）
 
 - 小发版：`powershell -File tools\pack-update.ps1 -Tag vX.Y.Z -Baseline <上次 files.txt>`（几分钟），产物在输出目录（缺省 `%USERPROFILE%\Desktop\firstep-pack`）。
 - 完整包：`powershell -File tools\pack-full.ps1 -Tag vX.Y.Z -Baseline <上版 firstep-full-*.manifest.json>`（本机实测打包 ≤ 数分钟），产物同上；与小发版同 tag 一起上传。
-- 大发版：用上面 7zr 命令（store 模式几分钟）。
-- 上传 6.2 GB 附件视上行带宽需 20 分钟以上，用后台任务跑，别阻塞等待；完整包约 1 GB，可一并后台传。
+- 大发版：`powershell -File tools\pack-materials.ps1 -Tag vX.Y.Z -Mode diff -Baseline <上版清单.json>`，发 `materials-` tag 的 Release。
+- 上传完整包约 821 MB，视上行带宽需几分钟到十几分钟，**用后台任务跑，别阻塞等待**；小发版约 0.3 GB，可一并后台传。
