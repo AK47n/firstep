@@ -15,7 +15,8 @@ const html = readFileSync(
 // 全部已搬名称 + 期望形态：fn = 函数（含 async）；否则为期望 typeof 字符串
 const DOMAINS = {
   "core.js": {
-    esc: "fn", formatSize: "fn", fmtClock: "fn", fmtDuration: "fn", truncate: "fn",
+    esc: "fn", formatSize: "fn", fmtClock: "fn", fmtDuration: "fn", fmtEta: "fn",
+    truncate: "fn",
   },
   "danger.js": {
     reviseApplyConfirmMessage: "fn", platformSwitchConfirmMessage: "fn",

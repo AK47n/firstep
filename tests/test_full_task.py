@@ -301,8 +301,10 @@ def test_status_shows_retrying_message_during_backoff(tmp_path: Path, monkeypatc
         worker.join(timeout=10)
     assert task.state.value == "done", task.error
     assert seen, "退避等待期间状态面必须能看到「正在重试」"
-    assert "自动重试" in seen[0]["message"], seen[0]["message"]
+    # 三件事各在自己的字段里（工单 05 起前端直接拼，不再解析任何文案）
     assert seen[0]["retry_count"] >= 1
+    assert "连接中断" in seen[0]["message"], seen[0]["message"]
+    assert seen[0]["resume_percent"] >= 0, seen[0]["resume_percent"]
     assert seen[0]["error"] == "", "重试中不算失败（终态原因才进 error）"
 
 
@@ -549,11 +551,13 @@ def test_ignored_range_retry_message_says_from_zero(tmp_path: Path, monkeypatch)
         task = _task(tmp_path, parts)
 
         def spy(url, dest, on_progress, **kwargs):  # noqa: ANN001, ANN003
+            # 包装（不能另传 before_retry：适配层已经传了一个）
             original = kwargs["before_retry"]
 
             def watcher(*args):        # noqa: ANN002 —— 开窗：先让任务写完状态再读
                 result = original(*args)
-                observed.append((task._message, task._retrying))
+                observed.append((task._message, task._retrying,
+                                 full_task_status(task)["resume_percent"]))
                 return result
 
             kwargs["before_retry"] = watcher
@@ -564,8 +568,11 @@ def test_ignored_range_retry_message_says_from_zero(tmp_path: Path, monkeypatch)
 
     assert task.state.value == "done", task.error
     assert observed, "没有重试发生（前提是「先被忽略 Range，再断一次」）"
-    message, retrying = observed[0]
-    assert "从 0 重新下" in message, message
+    message, retrying, resume_percent = observed[0]
+    # 「从 0 重新下」现在是**字段**（工单 05 的整改：前端不再解析文案）：
+    # 服务器没让我们接上 → 本轮的起始百分比如实是 0，而不是拿旧进度骗人。
+    assert resume_percent == 0, resume_percent
+    assert "连接中断" in message, message
     assert retrying is True, "开窗那一刻就该是「正在重试」"
 
 
@@ -666,7 +673,7 @@ def test_status_idle_shape() -> None:
     assert status["state"] == "idle"
     assert status["parts"] == []
     assert status["total_bytes"] == 0
-    # 8 个既有字段（前端契约，不许改名）+ 工单 04 的三个新增字段
+    # 八个既有字段（前端契约，不许改名）+ 工单 04 的三个新增字段 + 工单 05 的 resume_percent
     assert set(status) == {
         "state",
         "parts",
@@ -679,6 +686,7 @@ def test_status_idle_shape() -> None:
         "retry_count",
         "retrying",
         "error_kind",
+        "resume_percent",
     }
 
 

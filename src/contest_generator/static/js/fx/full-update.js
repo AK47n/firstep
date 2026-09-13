@@ -4,7 +4,14 @@
 // 各类降级）、确认弹窗、下载进度（总进度条 + 当前卷 + 速度 + 剩余时间 + 分卷
 // 列表）、终态文案（完成提示重启 / 取消说明已完成卷保留 / 失败可重试）。
 // 后端契约见 src/contest_generator/full_update.py 与 full_task.py。
-import { esc, formatSize } from "./core.js";
+//
+// 下载抗断的状态面（工单 resumable-download/05）：三种「进度条不动」必须长得不一样——
+// **慢**（速度低 → 明写「网络较慢」）／**在重试**（`retrying` → 明写第几次、从多少接着下）
+// ／**真失败**（`error_kind` 选话术）。分类只认 `error_kind` 字段，**不许解析 error 文案**。
+import {
+  esc, formatSize, fmtEta, downloadedPercent,
+  downloadFailureText, retryProgressText, retryNoteText, SLOW_SPEED_BPS,
+} from "./core.js";
 
 /** 体积 + 卷数的中文描述（下载前估算用；0 = 未知）。 */
 export function fullPlanText(totalBytes, partCount) {
@@ -76,7 +83,9 @@ export function fullResultText(status) {
   const state = (status && status.state) || "";
   if (state === "done") {
     const version = (status && status.version) || "";
-    return `完整包更新完成${version ? `（${version}）` : ""}，工具即将重启；若没有自动打开，请双击 start-app.vbs。`;
+    // 「它自己扛过去了」这件事要留痕：用户中途看到的失败/重试不是白发生的
+    const retryNote = retryNoteText(status && status.retry_count);
+    return `完整包更新完成${version ? `（${version}）` : ""}${retryNote}，工具即将重启；若没有自动打开，请双击 start-app.vbs。`;
   }
   if (state === "cancelled") {
     return "已取消下载；已经下载并校验通过的卷会保留，下次重试不用重下。";
@@ -92,8 +101,11 @@ export function fullProgressHTML(status) {
   const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
   const speed = s.speed_bps || 0;
   const speedText = speed > 0 ? (speed / 1024 / 1024).toFixed(1) + " MB/s" : "—";
+  // 剩余时间说人话（「约 12 分钟」），弱网时另加一句「网络较慢」——
+  // 让「慢」与「卡死」在界面上长得不一样（两者都是进度条不动）
   const remainText = speed > 0 && total > done
-    ? `剩余 ${Math.max(1, Math.ceil((total - done) / speed))} 秒` : "…";
+    ? fmtEta((total - done) / speed) : "…";
+  const slowNote = speed > 0 && speed < SLOW_SPEED_BPS ? " · 网络较慢" : "";
   const parts = (s.parts || []).map((p) => {
     const pTotal = p.total_bytes || 0;
     const pPct = pTotal > 0 ? Math.min(100, Math.round(((p.downloaded_bytes || 0) / pTotal) * 100)) : 0;
@@ -105,24 +117,37 @@ export function fullProgressHTML(status) {
   }).join("");
   const current = s.current_part_name
     ? `<div class="muted">当前卷：${esc(s.current_part_name)}</div>` : "";
-  const actions = ["downloading", "applying"].includes(s.state)
+  // 退避等待中：明写「正在自动重试（第 N 次）」，把「等」与「下」分开
+  const retryLine = s.retrying
+    ? `<div class="warning">${esc(retryProgressText(s.retry_count, s.message, s.resume_percent))}</div>`
+    : "";
+  const retrying = ["downloading", "applying"].includes(s.state);
+  // 校验失败**不给「重试」按钮**：文案刚说完「重下也不会有变化」，再摆一个重试按钮
+  // 就是自相矛盾（用户会一直点）。仍可点「检查更新」重新走一遍。
+  const canRetry = s.state === "failed" && (s.error_kind || "") !== "verify";
+  const actions = retrying
     ? `<div class="row" style="margin-top:var(--space-2)">
         <button id="btn-full-cancel" type="button" data-ico="stop">取消</button>
         <span class="muted">可在后台继续，页面关闭不影响下载</span>
       </div>`
-    : s.state === "failed"
+    : canRetry
       ? `<div class="row" style="margin-top:var(--space-2)">
           <button id="btn-full-retry" type="button" data-ico="download">重试（已完成卷跳过）</button>
         </div>`
       : "";
-  const errorLine = s.error ? `<div class="error">${esc(s.error)}</div>` : "";
+  // 失败：话术按 `error_kind` 分（verify 与网络两类），原始 error 只作补充明细
+  const failureLine = s.state === "failed"
+    ? `<div class="error">${esc(downloadFailureText(s))}</div>
+       ${s.error ? `<div class="muted">${esc(s.error)}</div>` : ""}`
+    : "";
   const resultLine = fullResultText(s) ? `<div class="ok">${esc(fullResultText(s))}</div>` : "";
   return `<div class="materials-progress">
     <div class="ok">${esc(fullStateText(s.state))}</div>
     <div class="progress"><div class="progress-fill" style="width:${pct}%"></div></div>
-    <div class="muted" style="margin:var(--space-1) 0">${formatSize(done)} / ${formatSize(total)}（${pct}%）· 速度 ${speedText} · ${remainText}</div>
+    <div class="muted" style="margin:var(--space-1) 0">${formatSize(done)} / ${formatSize(total)}（${pct}%）· 速度 ${speedText}${slowNote} · ${remainText}</div>
     ${current}
-    ${errorLine}
+    ${retryLine}
+    ${failureLine}
     ${resultLine}
     ${parts}
     ${actions}

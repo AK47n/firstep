@@ -126,6 +126,9 @@ test("materialsProgressHTML：进度 / 速度 / 剩余时间 / 卷状态", () =>
   assert.match(html, /50%/);
   assert.match(html, /✓/); // ok 卷标记
   assert.match(html, /速度/);
+  // 与完整包同一套口径：体积用 formatSize（不再甩原始字节数）
+  assert.match(html, /50 B \/ 100 B/);
+  assert.doesNotMatch(html, /50 \/ 100 字节/);
 });
 
 test("materialsStateText：六态映射 + 未知空串", () => {

@@ -216,6 +216,7 @@ class ApplyTask:
         self.last_retry_at = 0.0
         self.last_error_kind = ""
         self._retrying = False
+        self._resume_percent = -1
         self._message = ""
         self._restore_snapshot()
 
@@ -312,6 +313,7 @@ class ApplyTask:
                     self.last_retry_at = 0.0
                     self.last_error_kind = ""
                     self._retrying = False
+                    self._resume_percent = -1
                     self._message = ""
                     self._download_one(part, batch)
             self._message = ""
@@ -430,16 +432,25 @@ class ApplyTask:
         self._message = ""
 
     def _on_retry(self, part: _PartState) -> Callable[..., None]:
-        """`before_retry` 回调：如实计数 + 把「正在重试」摘要写进 `message`。"""
+        """`before_retry` 回调：如实计数 + 「正在重试」的三件事分别落成三个字段。
+
+        `message`（原因）/ `retry_count`（第几次）/ `resume_percent`（从多少接着下）分开放，
+        前端直接拼——**不用从任何文案里抠信息**（与 full_task 同形）。
+        """
 
         def cb(attempt: int, exc: BaseException, on_disk: int, restarted: bool) -> None:
             self.retry_count = int(attempt)
             self.last_retry_at = time.time()
             self.last_error_kind = download_resume.error_kind(exc)
+            # 「服务器没让我们接上」→ 半成品已被丢弃，本轮起点就是 0%（说 -1「不知道」
+            # 会让界面拿不到「从 0 重新下」这个事实）
+            self._resume_percent = (
+                0 if restarted
+                else download_resume.retry_resume_percent(on_disk, part.size)
+            )
             self._retrying = True     # 退避等待中（退避结束时清）
             self._message = download_resume.retry_message(
-                download_resume.retry_reason(exc), int(attempt), on_disk, part.size,
-                restarted=bool(restarted),
+                download_resume.retry_reason(exc)
             )
 
         return cb
@@ -497,6 +508,7 @@ def task_status(task: ApplyTask | None) -> dict[str, Any]:
             "retry_count": 0,
             "retrying": False,
             "error_kind": "",
+            "resume_percent": -1,
         }
     parts = [
         {
@@ -522,10 +534,11 @@ def task_status(task: ApplyTask | None) -> dict[str, Any]:
         "current_part_name": task._current_part_name,
         "error": task.error,
         "message": task._message,
-        # 重试观测（工单 04 的契约面；此刻仅供任务层自证）
+        # 重试观测（工单 04 的契约面；工单 05 起前端直接消费，不再解析文案）
         "retry_count": int(task.retry_count),
         "retrying": bool(task._retrying),
         "error_kind": str(task.last_error_kind),
+        "resume_percent": int(task._resume_percent),
     }
 
 

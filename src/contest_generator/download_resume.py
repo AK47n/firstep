@@ -221,18 +221,30 @@ def retry_reason(exc: BaseException) -> str:
     return text or "网络中断"
 
 
-def retry_message(reason: str, attempt: int, done_bytes: int, total_bytes: int,
-                  restarted: bool = False) -> str:
-    """进行中的摘要（任务 `message` 字段的单源文案）。
+def retry_message(reason: str) -> str:
+    """进行中的摘要（任务 `message` 字段的单源文案）：**只说原因**。
 
-    形态：「网络中断，第 2 次自动重试，从 68% 接着下」。不知道总量时就不写百分比
-    （编一个出来比不写更糟）。
+    形态：「连接中断：本次声明 2097152 字节，只收到 838860 字节」。
+
+    **不带「第 N 次」也不带「从 X% 接着下」**：那两件事分别是 `retry_count` 与
+    `resume_percent` 两个**字段**的事。文案里再写一遍会与界面自己拼的那句撞车
+    （实测读出「正在自动重试（第 1 次）：…，第 1 次自动重试，从 39% 接着下」）；
+    而让前端反过来解析这句话取百分比更是把文案当接口
+    （工单 05 的双轴评审整改：第一版正是这么写的，两个轴都判了它）。
     """
-    tail = "从 0 重新下" if restarted else (
-        f"从 {int(done_bytes * 100 / total_bytes)}% 接着下" if total_bytes > 0
-        else "接着下"
-    )
-    return f"{reason}，第 {int(attempt)} 次自动重试，{tail}"
+    return str(reason)
+
+
+def retry_resume_percent(done_bytes: int, total_bytes: int) -> int:
+    """重试时已下载的百分比（状态面 `resume_percent` 字段的单源）。
+
+    `-1` = 不知道（总量未知）：前端据此决定要不要写百分比。
+    `0` = 从 0 开始（真相，不是「不知道」）——例如服务器忽略了 Range，半成品已被丢弃。
+    """
+    total = int(total_bytes or 0)
+    if total <= 0:
+        return -1
+    return int(int(done_bytes or 0) * 100 / total)
 
 
 def resume_message(done_bytes: int, total_bytes: int) -> str:

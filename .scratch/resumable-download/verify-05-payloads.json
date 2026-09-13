@@ -1,0 +1,179 @@
+{
+  "cases": [
+    {
+      "id": "slow",
+      "note": "弱网但连接正常（32 KB/s，速度字段人工指定，其余来自真任务）：应出现「网络较慢」且不出现失败/重试话术",
+      "status": {
+        "state": "downloading",
+        "parts": [
+          {
+            "name": "firstep-full-v1.1.0.zip",
+            "downloaded_bytes": 524288,
+            "total_bytes": 2097152,
+            "ok": false
+          }
+        ],
+        "total_downloaded_bytes": 524288,
+        "total_bytes": 2097152,
+        "speed_bps": 32768,
+        "current_part_name": "",
+        "error": "",
+        "message": "",
+        "retry_count": 0,
+        "retrying": false,
+        "error_kind": "",
+        "resume_percent": -1
+      }
+    },
+    {
+      "id": "retrying",
+      "note": "断流后自动重试（退避等待中）：应出现「正在自动重试（第 N 次）…从 X% 接着下」",
+      "status": {
+        "state": "downloading",
+        "parts": [
+          {
+            "name": "firstep-full-v1.1.0.zip",
+            "downloaded_bytes": 838860,
+            "total_bytes": 2097152,
+            "ok": false
+          }
+        ],
+        "total_downloaded_bytes": 838860,
+        "total_bytes": 2097152,
+        "speed_bps": 83266686,
+        "current_part_name": "firstep-full-v1.1.0.zip",
+        "error": "",
+        "message": "连接中断：本次声明 2097152 字节，只收到 838860 字节",
+        "retry_count": 1,
+        "retrying": true,
+        "error_kind": "network",
+        "resume_percent": 39
+      }
+    },
+    {
+      "id": "failed-network",
+      "note": "断流且重试用尽：error_kind=network → 「网络中断（已下载 N%）…接着下」",
+      "status": {
+        "state": "failed",
+        "parts": [
+          {
+            "name": "firstep-full-v1.1.0.zip",
+            "downloaded_bytes": 838860,
+            "total_bytes": 2097152,
+            "ok": false
+          }
+        ],
+        "total_downloaded_bytes": 838860,
+        "total_bytes": 2097152,
+        "speed_bps": 174933319,
+        "current_part_name": "firstep-full-v1.1.0.zip",
+        "error": "下载失败（卷 firstep-full-v1.1.0.zip）：重试 1 次仍未下完（838860 / 2097152 字节）：连接中断：本次声明 2097152 字节，只收到 838860 字节，会自动重连接着下",
+        "message": "",
+        "retry_count": 0,
+        "retrying": false,
+        "error_kind": "network",
+        "resume_percent": -1
+      }
+    },
+    {
+      "id": "failed-verify",
+      "note": "内容与清单不符：error_kind=verify → 「重新下载也不会有变化」",
+      "status": {
+        "state": "failed",
+        "parts": [
+          {
+            "name": "firstep-full-v1.1.0.zip",
+            "downloaded_bytes": 307200,
+            "total_bytes": 307200,
+            "ok": false
+          }
+        ],
+        "total_downloaded_bytes": 307200,
+        "total_bytes": 307200,
+        "speed_bps": 136898660,
+        "current_part_name": "firstep-full-v1.1.0.zip",
+        "error": "下载失败（卷 firstep-full-v1.1.0.zip）：卷 firstep-full-v1.1.0.zip 校验失败（SHA256 不匹配）",
+        "message": "",
+        "retry_count": 0,
+        "retrying": false,
+        "error_kind": "verify",
+        "resume_percent": -1
+      }
+    },
+    {
+      "id": "materials-retrying",
+      "note": "资料库链路断流重试（真 ApplyTask）：话术应与完整包同源",
+      "status": {
+        "state": "downloading",
+        "parts": [
+          {
+            "name": "k230.zip",
+            "downloaded_bytes": 838860,
+            "total_bytes": 2097152,
+            "ok": false
+          }
+        ],
+        "total_downloaded_bytes": 838860,
+        "total_bytes": 2097152,
+        "speed_bps": 82491649,
+        "current_part_name": "k230.zip",
+        "error": "",
+        "message": "连接中断：本次声明 2097152 字节，只收到 838860 字节",
+        "retry_count": 1,
+        "retrying": true,
+        "error_kind": "network",
+        "resume_percent": 39
+      }
+    },
+    {
+      "id": "materials-failed-network",
+      "note": "资料库链路网络失败终态（真 ApplyTask）",
+      "status": {
+        "state": "failed",
+        "parts": [
+          {
+            "name": "k230.zip",
+            "downloaded_bytes": 838860,
+            "total_bytes": 2097152,
+            "ok": false
+          }
+        ],
+        "total_downloaded_bytes": 838860,
+        "total_bytes": 2097152,
+        "speed_bps": 28550373,
+        "current_part_name": "k230.zip",
+        "error": "下载失败（卷 k230.zip）：重试 1 次仍未下完（838860 / 2097152 字节）：连接中断：本次声明 2097152 字节，只收到 838860 字节，会自动重连接着下",
+        "message": "",
+        "retry_count": 0,
+        "retrying": false,
+        "error_kind": "network",
+        "resume_percent": -1
+      }
+    },
+    {
+      "id": "materials-failed-verify",
+      "note": "资料库链路校验失败终态（真 ApplyTask）",
+      "status": {
+        "state": "failed",
+        "parts": [
+          {
+            "name": "k230.zip",
+            "downloaded_bytes": 307200,
+            "total_bytes": 307200,
+            "ok": false
+          }
+        ],
+        "total_downloaded_bytes": 307200,
+        "total_bytes": 307200,
+        "speed_bps": 170367603,
+        "current_part_name": "k230.zip",
+        "error": "下载失败（卷 k230.zip）：卷 k230.zip 校验失败（SHA256 不匹配）",
+        "message": "",
+        "retry_count": 0,
+        "retrying": false,
+        "error_kind": "verify",
+        "resume_percent": -1
+      }
+    }
+  ]
+}

@@ -123,7 +123,9 @@ test("fullProgressHTML：进度条宽度 / 当前卷 / 速度 / 剩余时间", (
   assert.match(html, /width:60%/);
   assert.match(html, /p2\.zip/);
   assert.match(html, /50\.0 MB\/s/);
-  assert.match(html, /剩余 \d+ 秒/);
+  // 剩余时间说人话（工单 resumable-download/05）：不再是「剩余 N 秒」
+  assert.match(html, /不到 1 分钟/);
+  assert.doesNotMatch(html, /剩余 \d+ 秒/);
   assert.match(html, /btn-full-cancel/);
 });
 

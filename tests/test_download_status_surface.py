@@ -35,8 +35,8 @@ EXISTING_KEYS = {
     "error",
     "message",
 }
-# 本单新增的三个
-NEW_KEYS = {"retry_count", "retrying", "error_kind"}
+# 本单新增的三个（工单 04）+ 重试百分比（工单 05）
+NEW_KEYS = {"retry_count", "retrying", "error_kind", "resume_percent"}
 
 PAYLOAD = bytes((i * 7 + 11) % 251 for i in range(300 * 1024))
 
@@ -162,7 +162,8 @@ def test_retrying_state_during_backoff(flavor: str, tmp_path: Path, monkeypatch)
     mid = during_backoff[0]
     assert mid["retrying"] is True, mid
     assert mid["retry_count"] >= 1, mid
-    assert "自动重试" in mid["message"], mid["message"]
+    assert "连接中断" in mid["message"], mid["message"]
+    assert mid["resume_percent"] >= 0, mid["resume_percent"]
     assert mid["error"] == "", "重试中不算失败（终态原因才进 error）"
     assert mid["error_kind"] == "network"
     # 终态：摘要在场 = 谎报「还在重试」
@@ -181,15 +182,34 @@ def test_retry_window_closes_when_backoff_ends(tmp_path: Path, monkeypatch) -> N
     task = _full_task(tmp_path)
     task._state = TaskState.DOWNLOADING
     part = task.parts[0]
-    task._on_retry(part)(2, OSError("连接重置"), 1234, False)     # 开窗
+    half = part.size // 2
+    task._on_retry(part)(2, OSError("连接重置"), half, False)     # 开窗（正常续传）
     opened = full_task_status(task)
     assert opened["retrying"] is True and opened["retry_count"] == 2
-    assert "自动重试" in opened["message"]
+    assert "连接重置" in opened["message"]
+    assert opened["resume_percent"] == 50, opened["resume_percent"]
     task._on_retry_window_closed()                               # 关窗（退避结束）
     closed = full_task_status(task)
     assert closed["retrying"] is False
     assert closed["message"] == "", "关窗必须连摘要一起清（不许自相矛盾）"
     assert closed["retry_count"] == 2, "计数是「本卷累计」，关窗不清零"
+
+
+def test_retry_resume_percent_is_zero_when_server_forced_restart(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """服务器没让我们接上（`restarted=True`）→ 本轮起点就是 **0%**（如实，不是「不知道」）。
+
+    说 -1（不知道）会让界面拿不到「从 0 重新下」这个事实；说上一份的进度则是撒谎
+    ——那份半成品已经被丢弃了。
+    """
+    monkeypatch.setattr("contest_generator.download_resume.retry_delay", lambda n: 0.0)
+    task = _full_task(tmp_path)
+    task._state = TaskState.DOWNLOADING
+    part = task.parts[0]
+    task._on_retry(part)(1, OSError("连接重置"), part.size - 1, True)   # 几乎下完但被丢弃
+    status = full_task_status(task)
+    assert status["resume_percent"] == 0, status["resume_percent"]
 
 
 @pytest.mark.parametrize("flavor", ["full", "materials"])
@@ -478,11 +498,30 @@ def test_snapshot_does_not_carry_retry_state(tmp_path: Path) -> None:
 
 
 def test_download_resume_module_has_no_status_knowledge() -> None:
-    """分层守卫：下载域模块不认识「任务状态面」这三个字段（词表归任务层投影）。
+    """分层守卫：下载域的**代码**不碰状态面字段（词表归任务层投影）。
 
     为什么值得钉：`error_kind` 这个名字在同一份代码里有两层含义——下载域的**分类函数**
     与状态面的**字段**。哪天有人把状态字段的取值逻辑塞回下载域，这两层就会开始互相污染。
+
+    判据只看**代码里真的用到这几个名字的地方**（赋值目标 / 属性访问 / 下标键），
+    不看注释、docstring 与函数名：本模块的注释里正大光明地讨论这几个字段
+    （说明为什么不在这里定义它们），而 `retry_resume_percent` 这个**函数名**也含
+    `resume_percent` 三个字——拿子串判会把这两件正常事一起判违规。
     """
-    source = Path(download_resume.__file__).read_text(encoding="utf-8")
-    assert "retrying" not in source
-    assert "retry_count" not in source
+    import ast
+
+    tree = ast.parse(Path(download_resume.__file__).read_text(encoding="utf-8"))
+    fields = {"retrying", "retry_count", "resume_percent", "last_error_kind"}
+    offenders: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and node.attr in fields:
+            offenders.append(f"属性 {node.attr}")
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                if isinstance(target, ast.Name) and target.id in fields:
+                    offenders.append(f"赋值 {target.id}")
+                if isinstance(target, ast.Subscript) and isinstance(target.slice, ast.Constant) \
+                        and target.slice.value in fields:
+                    offenders.append(f"下标 {target.slice.value}")
+    assert not offenders, offenders

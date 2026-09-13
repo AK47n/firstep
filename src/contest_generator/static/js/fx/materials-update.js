@@ -4,7 +4,13 @@
 // 批次选择弹窗（勾选列表 + 全选 + 已选大小）、下载进度（总进度条 + 当前卷 +
 // 速度 + 剩余时间）、完成 / 失败结果。后端契约见
 // src/contest_generator/materials_update.py 与 materials_task.py。
-import { esc } from "./core.js";
+//
+// 与完整包**同一套进度口径**（工单 resumable-download/05）：剩余时间说人话、
+// 弱网明写「网络较慢」、重试明写第几次、失败话术按 `error_kind` 分两类。
+import {
+  esc, formatSize, fmtEta,
+  downloadFailureText, retryProgressText, retryNoteText, SLOW_SPEED_BPS,
+} from "./core.js";
 
 /** 检查结果 → 设置页结果区 HTML（弹窗由 ui 层在「查看更新」时打开）。 */
 export function materialsCheckCardHTML(check) {
@@ -86,14 +92,17 @@ export function materialsPickFooterHTML(check, selected) {
 
 /** 进度视图（status = /api/update/materials/status 轮询）。 */
 export function materialsProgressHTML(status) {
-  const total = status.total_bytes || 0;
-  const done = status.total_downloaded_bytes || 0;
+  const s = status || {};
+  const total = s.total_bytes || 0;
+  const done = s.total_downloaded_bytes || 0;
   const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
-  const speed = status.speed_bps || 0;
+  const speed = s.speed_bps || 0;
   const speedText = speed > 0 ? (speed / 1024 / 1024).toFixed(1) + " MB/s" : "—";
+  // 与完整包同一套：剩余时间说人话 + 弱网明写「网络较慢」（「慢」与「卡死」要分得开）
   const remainText = speed > 0 && total > done
-    ? `剩余 ${Math.max(1, Math.ceil((total - done) / speed))} 秒` : "…";
-  const parts = (status.parts || []).map((p) => {
+    ? fmtEta((total - done) / speed) : "…";
+  const slowNote = speed > 0 && speed < SLOW_SPEED_BPS ? " · 网络较慢" : "";
+  const parts = (s.parts || []).map((p) => {
     const pPct = p.total_bytes > 0 ? Math.round((p.downloaded_bytes / p.total_bytes) * 100) : 0;
     const mark = p.ok ? "✓" : "";
     return `<div class="materials-part-row">
@@ -101,11 +110,25 @@ export function materialsProgressHTML(status) {
       <span class="materials-part-meta">${pPct}%</span>
     </div>`;
   }).join("");
-  const stateText = materialsStateText(status.state);
+  const retryLine = s.retrying
+    ? `<div class="warning">${esc(retryProgressText(s.retry_count, s.message, s.resume_percent))}</div>`
+    : "";
+  const failureLine = s.state === "failed"
+    ? `<div class="error">${esc(downloadFailureText(s))}</div>
+       ${s.error ? `<div class="muted">${esc(s.error)}</div>` : ""}`
+    : "";
+  // 完成行与完整包同一口径：重试过就留痕
+  const resultLine = s.state === "done"
+    ? `<div class="ok">${esc(`资料库更新完成${retryNoteText(s.retry_count)}`)}</div>`
+    : "";
+  const stateText = materialsStateText(s.state);
   return `<div class="materials-progress">
     <div class="ok">${esc(stateText)}</div>
     <div class="progress"><div class="progress-fill" style="width:${pct}%"></div></div>
-    <div class="muted" style="margin:var(--space-1) 0">${done} / ${total} 字节（${pct}%）· 速度 ${speedText} · ${remainText}</div>
+    <div class="muted" style="margin:var(--space-1) 0">${formatSize(done)} / ${formatSize(total)}（${pct}%）· 速度 ${speedText}${slowNote} · ${remainText}</div>
+    ${retryLine}
+    ${failureLine}
+    ${resultLine}
     ${parts}
   </div>`;
 }
