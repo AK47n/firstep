@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=98204d3687f3011e49cc166733e5d0a8ce59dec4 -->
+<!-- changelog-auto: last-commit=3fc218b4eaab6ba8dc016b31f0b3a874abedd861 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -35,6 +35,7 @@
 - 16:33 fix(下载): 本地那份与远端对不上——清了却没人重下的三处死胡同改成真重下（工单 resumable-download/08）
 - 16:49 refactor(下载): 两条链路重复的重试观测收成一处——225 行重复消失、判据一字未改（工单 resumable-download/09）
 - 16:56 docs(下载): 两个业务流程长得像那 40 行另立工单 10——不与 09 合并，理由写在单里
+- 18:11 refactor(下载): 「一次分卷下载」收成一处——两条链路各 55/47 行的动作序列变成 16/18 行（工单 resumable-download/10）
 
 ## 2026-09-12
 - 00:58 门禁引脚容量诊断（落点/可用 IO/解不开几组/至少去掉几个）
