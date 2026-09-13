@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=d0a63a3491471a8f618f037d7e25d1b51c5ba6e9 -->
+<!-- changelog-auto: last-commit=a0b114953c2d02f9399393ecbd1eff666fec9721 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -21,6 +21,7 @@
 - 10:50 ﻿feat(下载体验): 包内加「请先读我」说明书 + install.bat 收尾说明 + 守卫（工单 newuser-download/02、04）
 - 10:57 ﻿docs(下载): Releases 页说明改写 + 资产名保持 ASCII 的决策入库（工单 newuser-download/03、06）
 - 11:01 ﻿feat(发版): 下载链路一致性自检脚本，挂进发版清单（工单 newuser-download/06）
+- 11:02 ﻿docs(下载体验): 收尾记账——工单 06 建档 + spec 更新为定案（含两处与初稿不同的决策）
 
 ## 2026-09-12
 - 00:58 门禁引脚容量诊断（落点/可用 IO/解不开几组/至少去掉几个）
