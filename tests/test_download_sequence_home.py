@@ -196,6 +196,34 @@ def _fat_shells(source: str) -> list[str]:
     return found
 
 
+def _fat_shell_bodies(source: str) -> list[str]:
+    """→ **留了壳、但壳里不止一句转发**的函数（空表 = 壳真的只是壳）。
+
+    判据 = 函数体（去掉 docstring）**只许剩一句**，且那一句必须调用共享件。
+    为什么这条不能省（工单 11 评审指出）：上面那条只查「形状在不在」，
+    于是**先调共享件、再顺手改一遍 `part.ok`** 这种「半抄」不会红——
+    它把规则的一半又搬回了两条链路。壳的契约就一句转发，故这里数语句。
+    """
+    offenders: list[str] = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        helper = SHELL_ALLOWED.get(node.name)
+        if helper is None:
+            continue
+        body = [stmt for stmt in node.body if not (
+            isinstance(stmt, ast.Expr)
+            and isinstance(stmt.value, ast.Constant)
+            and isinstance(stmt.value.value, str)
+        )]
+        if len(body) != 1 or not _reaches(ast.Module(body=body, type_ignores=[]), helper):
+            offenders.append(
+                f"{node.name}（第 {node.lineno} 行：壳里有 {len(body)} 句，"
+                f"应为 1 句 `{helper}(…)`）"
+            )
+    return offenders
+
+
 # 判据的**阳性对照**：这段就是工单 11 改之前的旧正文形状，`_fat_shells` 必须抓到它。
 # （没有这一段的「空表 = 干净」是假绿：判据写松了也一样是空表。）
 FAT_SHELL_CONTROL = '''
@@ -221,6 +249,19 @@ class _Control:
                 part.ok = True
 '''
 
+# 判据的**第二段阳性对照**（工单 11 评审补的那条路）：壳在、共享件也调了，
+# 但**顺手把规则的一半又写了一遍**。只查「形状在不在」的判据抓不到这种「半抄」。
+HALF_SHELL_CONTROL = '''
+class _Half:
+    def _restore_snapshot(self):
+        restore_snapshot_parts(self.task_dir / SNAPSHOT_FILENAME, self._snapshot_pairs)
+        for part in self.parts:
+            saved = self._saved.get(part.name)
+            if saved and saved.get("ok"):
+                part.ok = True
+                part.downloaded_bytes = part.size
+'''
+
 
 def _checked_task_paths() -> list[Path]:
     """守卫的扫描面（反向验证会换掉它）。"""
@@ -240,23 +281,30 @@ def test_shared_task_helpers_have_a_single_home() -> None:
 
     工单 11 量出来的账：`_resolve_download` 两处**7 行逐字相同**（`22d0f643` 同一提交
     各抄一遍）、`_restore_snapshot` 两处 16 行相同。收完之后两条链路各留一行壳；
-    本守卫查三件事（照上面那条的形状判据写，不认名字）：
+    本守卫查四件事（照上面那条的形状判据写，不认名字）：
 
-    1. 任务模块里不再出现「解析 / 逐卷恢复」的形状；
-    2. `task_download` 确实是它们的家；
-    3. 两条链路**确实**还在调共享件（防绕过）。
+    1. 任务模块里不再出现「解析 / 逐卷恢复」的形状（**整段抄回去**）；
+    2. 壳**真的只是壳**——`_resolve_download` / `_restore_snapshot` 的函数体只许一句
+       对共享件的转发（**防「先调共享件、再顺手把规则的一半抄一遍」**这种半抄；
+       工单 11 评审指出第一版判据漏了这条路）；
+    3. `task_download` 确实是它们的家（函数在、且家里的关键形状在）；
+    4. 两条链路**确实**还在调共享件（防绕过）。
     """
     from contest_generator import task_download as td
 
-    # 判据先自证（治「守卫只是装饰」）：阳性对照必须被认出来
+    # 判据先自证（治「守卫只是装饰」）：两段阳性对照都必须被认出来
     control = _fat_shells(FAT_SHELL_CONTROL)
     assert len(control) == 2, f"判据连阳性对照都认不出来（假绿）：{control}"
+    half = _fat_shell_bodies(HALF_SHELL_CONTROL)
+    assert len(half) == 1, f"壳的语句数判据抓不到「半抄」：{half}"
 
     for path in _checked_task_paths():
-        offenders = _fat_shells(path.read_text(encoding="utf-8"))
+        text = path.read_text(encoding="utf-8")
+        offenders = _fat_shells(text) + _fat_shell_bodies(text)
         assert not offenders, (
             f"{path.name} 又把共享件的规则抄回来了：{offenders}"
-            "（应走 task_download.resolve_task_download / restore_snapshot_parts）"
+            "（应走 task_download.resolve_task_download / restore_snapshot_parts；"
+            "壳里只许留一句转发）"
         )
 
     home_source = Path(td.__file__).read_text(encoding="utf-8")
@@ -320,6 +368,8 @@ def test_shell_guard_turns_red_on_reinlined_body(tmp_path: Path) -> None:
     # 干净的那份也必须判绿（守卫不是「见谁都红」）
     assert _fat_shells(Path(ft.__file__).read_text(encoding="utf-8")) == []
     assert _fat_shells(Path(mt.__file__).read_text(encoding="utf-8")) == []
+    assert _fat_shell_bodies(Path(ft.__file__).read_text(encoding="utf-8")) == []
+    assert _fat_shell_bodies(Path(mt.__file__).read_text(encoding="utf-8")) == []
 
 
 def test_guard_turns_red_on_reinlined_sequence(tmp_path: Path) -> None:

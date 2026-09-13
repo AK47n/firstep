@@ -33,11 +33,10 @@ import json
 import threading
 import time
 import urllib.request
-from collections.abc import Iterator
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 from . import download_resume
 from .download_resume import (
@@ -250,15 +249,18 @@ class ApplyTask(TaskRetryMixin):
         解析顺序住在 `task_download.resolve_task_download`——与
         `full_task.FullDownloadTask._resolve_download` **同一份**（工单 11：
         两处原本是 7 行逐字相同的代码，账在 `measure-11-duplication.py`）。
-        留一行壳的理由与 `_retry_state` 同：调用点与既有判据按方法取用。
+        **壳为什么要留**：调用点（`download_and_verify(resolve=…)`）与判据
+        `task._resolve_download()` 都按方法取用；壳只剩一句转发，规则不在这里。
         """
         return resolve_task_download(self)
 
     def _snapshot_pairs(self, data: dict[str, Any]) -> Iterator[tuple[_PartState, Any]]:
-        """按 **slug + 卷名**把本次批次与上次快照对齐（两层的组织方式是本链路的知识）。
+        """按 **slug + 卷名**把本次批次与上次快照对齐——本链路是**「批次 → 卷」两层**。
 
-        快照形状 = `{"batches": [{slug, parts: [{name, ok, dest, …}]}]}`：
-        先按 slug 找批次（找不到就整批跳过），再在该批次内按卷名找存档项。
+        这一层形状差异就是工单 11 划的缝：共享件（`restore_snapshot_parts`）只收
+        「逐卷怎么恢复」，「卷怎么遍历」留在各链路。快照形状 =
+        `{"batches": [{slug, parts: [{name, ok, dest, …}]}]}`：先按 slug 找批次
+        （找不到就整批跳过），再在该批次内按卷名找存档项。
         """
         saved = {b["slug"]: b for b in data.get("batches") or []}
         for batch in self.batches:

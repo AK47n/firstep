@@ -50,9 +50,9 @@ from __future__ import annotations
 
 import json
 import threading
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Callable, Iterator, Protocol
 
 from . import download_resume
 from .download_resume import (
@@ -177,12 +177,6 @@ def download_and_verify(
 # ---------------------------------------------------------------------------
 
 
-class SavedItemLike(Protocol):
-    """快照里一条存档项的**最小契约**（只声明本模块真的碰的两个字段）。"""
-
-    def get(self, key: str, default: Any = ...) -> Any: ...
-
-
 def resolve_task_download(task: Any) -> tuple[Callable[..., Any], bool]:
     """→（这次要用的下载函数, 是不是**缺省的可续下载**）——注入缝的解析**单源**。
 
@@ -197,10 +191,13 @@ def resolve_task_download(task: Any) -> tuple[Callable[..., Any], bool]:
     仍按既有的三参形态调用（除非它自己声明要吃那几个关键字参数）——
     「`(url, dest, on_progress)` 签名不变」这条契约因此零改动。
 
-    **为什么收在这里而不是收成基类方法**：调用点（`download_and_verify(resolve=…)`）
-    与既有判据（`task._resolve_download()`）都按**类上的方法**取用，两条链路的类上
-    各留一个一行壳即可，类层次零改动。壳与 `_retry_state`（`TaskRetryMixin` 的取值入口）
-    同形——本函数不是新模式，是把解析回到既有模式上。
+    **为什么收在这里而不是收成基类方法**：两条链路的类上各留一个一行壳即可，
+    类层次零改动——壳之所以要留，是因为调用点（`download_and_verify(resolve=…)`）
+    与**既有判据**都按方法取用：`tests/test_full_task.py` 与
+    `tests/test_materials_task.py::test_task_download_defaults_to_resumable`
+    各有一条 `task._resolve_download()[0] is resumable_download`。
+    **壳不是「同形重复」**（它只剩一句转发，没有规则），规则（解析顺序与
+    `is_default` 的语义）从今天起只有本函数这一份。
     """
     instance = task.__dict__.get("_download")
     if instance is None or instance is resumable_download:

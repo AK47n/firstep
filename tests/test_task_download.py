@@ -409,3 +409,21 @@ def test_restore_snapshot_parts_compares_sha_case_insensitively(tmp_path: Path) 
         lambda _saved: [(part, {"name": "a.zip", "ok": True, "dest": str(target)})],
     )
     assert part.ok is True
+
+
+def test_restore_snapshot_parts_skips_non_mapping_entries(tmp_path: Path) -> None:
+    """存档项不是「键值对」时按**跳过**处理，而不是抛异常（工单 11 评审点名的行为差异）。
+
+    旧正文写的是 `if not saved or not saved.get("ok")`——存档项若是字符串 / 数字，
+    这一句会 `AttributeError`，靠外层 `except Exception` 兜住（**恰好**也是「跳过」，
+    但代价是把「这一卷形状不对」和「整个快照读不出来」混成一件事）。
+    新实现先 `isinstance(saved, Mapping)` 判形状，结果同样是跳过，
+    但**不再借异常控制流**。这条判据就是钉这个语义的（否则「顺手改成静默跳过」
+    与「顺手改成崩溃」都没人看得见）。
+    """
+    snapshot = tmp_path / "full-task.json"
+    snapshot.write_text(json.dumps({"parts": []}), encoding="utf-8")
+    for weird in ("a.zip", 1, None, ["a.zip"]):
+        part = _Part("a.zip", "http://x/a.zip", 8, _sha(b"abcdefgh"))
+        restore_snapshot_parts(snapshot, lambda _saved, w=weird: [(part, w)])
+        assert part.ok is False, f"形状不对的存档项被认了：{weird!r}"

@@ -35,10 +35,9 @@ from __future__ import annotations
 import json
 import threading
 import time
-from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 from . import download_resume
 from .download_resume import (
@@ -231,19 +230,19 @@ class FullDownloadTask(TaskRetryMixin):
 
         解析顺序（实例属性 → 类属性 → 缺省的可续下载）住在
         `task_download.resolve_task_download`——两条链路同一份（工单 11：
-        两处原本是 7 行逐字相同的代码）。本方法留一行壳是**故意的**：
-        调用点（`download_and_verify(resolve=…)`）与既有判据都按方法取用，
-        类层次因而零改动（与 `_retry_state` 壳同形）。
+        两处原本是 7 行逐字相同的代码）。**壳为什么要留**：调用点
+        （`download_and_verify(resolve=…)`）与判据 `task._resolve_download()`
+        都按方法取用；壳只剩一句转发，规则不在这里（所以它不算「同形重复」）。
         """
         return resolve_task_download(self)
 
-    def _saved_parts_of_flat_table(self, data: dict[str, Any]) -> dict[str, Any]:
-        """快照的扁平分卷表 → `{卷名: 存档项}`（只有本链路知道自己是扁平的）。"""
-        return {p["name"]: p for p in data.get("parts") or []}
-
     def _snapshot_pairs(self, data: dict[str, Any]) -> Iterator[tuple[_PartState, Any]]:
-        """按**卷名**把本次清单与上次快照对齐（卷的组织方式是本链路的知识）。"""
-        saved = self._saved_parts_of_flat_table(data)
+        """按**卷名**把本次清单与上次快照对齐——本链路是**扁平分卷表**（没有批次层）。
+
+        这一层形状差异就是工单 11 划的缝：共享件（`restore_snapshot_parts`）只收
+        「逐卷怎么恢复」，「卷怎么遍历」留在各链路（这里一行，资料库那边是两层）。
+        """
+        saved = {p["name"]: p for p in data.get("parts") or []}
         return ((part, saved.get(part.name)) for part in self.parts)
 
     def _restore_snapshot(self) -> None:

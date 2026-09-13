@@ -241,10 +241,17 @@ def probe_restore_coverage() -> None:
 
 
 def probe_reference_surface() -> None:
+    """引用点盘点（谁依赖这两个私有方法的『住处』）。
+
+    **扫描面只算代码**：`src` / `tests` / `tools`。第一版把 `.scratch` 也算进来，
+    于是**本探针自己的输出文件**（`verify-11-resolve-seam.txt`，里面逐条列了引用点）
+    被下一次运行当成新的引用点读进去——输出一次比一次长（18KB → 43KB），
+    且结论被自己的回声污染。判据探针的输出不许进判据的输入。
+    """
     print("\n== 4. 引用点盘点（谁依赖这两个私有方法的『住处』）==")
     for token in ("_resolve_download", "_restore_snapshot"):
         out = subprocess.run(
-            ["git", "grep", "-n", token, "--", "src", "tests", "tools", ".scratch"],
+            ["git", "grep", "-n", token, "--", "src", "tests", "tools"],
             cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
         ).stdout.strip().splitlines()
         print(f"\n  [{token}] {len(out)} 处引用：")

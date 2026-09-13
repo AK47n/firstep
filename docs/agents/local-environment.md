@@ -81,6 +81,12 @@
 `.venv` 里**没有 pytest**（只有运行依赖），所以要跑测试就用系统 python +
 `python -m pytest`（`-p no:cacheprovider` 可选）。
 
+**全套会间歇性卡死（2026-09-13 工单 11 实测两次）**：一条 `python -m pytest` 跑全套有时会
+**十分钟以上不返回、CPU 只烧 120s**（一次整支探针无输出被我按中断杀掉，一次后台跑 40 分钟
+没完）。逐文件跑就正常：**196 个文件 / 335 秒 / 4457 passed + 1 skipped**（同一批用例）。
+定位脚本 = `.scratch/resumable-download/run-11-suite.py`（逐文件 + 每文件 120s 超时，
+卡住与转红分开记，原始输出落 `verify-11-suite.txt`）。**卡住不算判据**，要单独复跑。
+
 ## 2.5b 演练脚本的两条铁律（2026-09-13 用血换的）
 
 1. **真身文件只读**：任何"改写一份再跑"的演练，改写目标必须是 `%TEMP%` 下的副本。
@@ -120,8 +126,8 @@
 | 项 | 位置 / 值 |
 |---|---|
 | 可续下载域模块 | `src/contest_generator/download_resume.py` |
-| 任务层共享件（工单 10 起） | `src/contest_generator/task_download.py`（「一次分卷下载」原语）、`src/contest_generator/task_retry.py`（重试观测）——两条链路（完整包 / 资料库）的 `_download_one` 自工单 10 起只剩「路径 + 卷级记账」，动作序列在这两处 |
-| 结构守卫（钉「重复有没有回来」） | `tests/test_download_status_surface.py::test_retry_observation_has_a_single_home`（工单 09）、`tests/test_download_sequence_home.py::test_download_sequence_has_a_single_home`（工单 10，含反向注入验证） |
+| 任务层共享件（工单 10/11） | `src/contest_generator/task_download.py`——**四件**：「一次分卷下载」原语（`download_and_verify`）、注入缝解析（`resolve_task_download`，工单 11）、卷级断点恢复（`restore_snapshot_parts`，工单 11）；`src/contest_generator/task_retry.py`（重试观测）——两条链路（完整包 / 资料库）的任务模块里只剩「路径 + 卷级记账」与一行壳 |
+| 结构守卫（钉「重复有没有回来」） | `tests/test_download_status_surface.py::test_retry_observation_has_a_single_home`（工单 09）、`tests/test_download_sequence_home.py::test_download_sequence_has_a_single_home`（工单 10）与 `::test_shared_task_helpers_have_a_single_home`（工单 11），三条都带反向注入验证 |
 | 本地可控服务器 | `.scratch/resumable-download/sim-server.py`（六种行为；`--port 0` 由内核分配；默认 8031，**当前没有常驻实例**） |
 | 探针（真 socket） | `probe-01-resume.py`（下载函数层，五用例）、`probe-03-corridor.py`（任务层走廊 + 忽略 Range + 跨进程续传）、`probe-01-negative.py`（反证）、`probe-07-stage-preflight.py`（工具根预检，零下载）、`probe-07-review-claims.py`（评审断言的独立复现） |
 | 单测用桩服务器 | `tests/_byte_server.py`（进程内线程，只切流；**与探针那支强度不同**，别混） |
