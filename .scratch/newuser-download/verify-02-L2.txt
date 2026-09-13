@@ -1,0 +1,105 @@
+
+=== 0. 清场 + 从真实包解压（Windows 自带解压） ===
+  [PASS] 真实包解压成功：8,776 文件 / 6.5 秒
+
+=== 1. 解压后第一眼（资源管理器排序近似：先主名不区分大小写、再全名） ===
+    1. 00-START-HERE.txt
+    2. assets
+    3. CHANGELOG.md
+    4. CLAUDE.md
+    5. CONTEXT.md
+  [PASS] 第一个可见文件：00-START-HERE.txt
+
+=== 2. 照 00-START-HERE.txt 的第 1 步：双击 install.bat ===
+  已预置 .venv（--system-site-packages，供 install.bat 第 2 步跳过创建）
+  ---- install.bat 原始输出 ----
+    ============================================
+     firstep（电赛工程生成器）一键安装
+    ============================================
+    [1/5] Python 检查通过（需要 3.13 或更新版本）
+    [2/5] 虚拟环境已存在，跳过创建
+    [3/5] 正在安装依赖（需要联网，约几分钟；可重复运行）...
+    Obtaining file:///C:/Users/luoji/AppData/Local/Temp/firstep-l2/tool
+      Installing build dependencies: started
+      Installing build dependencies: finished with status 'done'
+      Checking if build backend supports build_editable: started
+      Checking if build backend supports build_editable: finished with status 'done'
+      Getting requirements to build editable: started
+      Getting requirements to build editable: finished with status 'done'
+      Preparing editable metadata (pyproject.toml): started
+      Preparing editable metadata (pyproject.toml): finished with status 'done'
+    Requirement already satisfied: pypdf>=6 in C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages (from contest-generator==1.1.1) (6.14.2)
+    Requirement already satisfied: fastapi>=0.141 in C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages (from contest-generator==1.1.1) (0.141.1)
+    Requirement already satisfied: uvicorn>=0.52 in C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages (from contest-generator==1.1.1) (0.52.1)
+    Requirement already satisfied: python-multipart>=0.0.20 in C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages (from contest-generator==1.1.1) (0.0.32)
+    Requirement already satisfied: pillow>=11 in C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages (from contest-generator==1.1.1) (12.3.0)
+    Requirement already satisfied: pymupdf>=1.24 in C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages (from contest-generator==1.1.1) (1.28.0)
+    Requirement already satisfied: starlette>=0.46.0 in C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages (from fastapi>=0.141->contest-generator==1.1.1) (1.3.1)
+    Requirement already satisfied: pydantic>=2.9.0 in C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages (from fastapi>=0.141->contest-generator==1.1.1) (2.13.4)
+    Requirement already satisfied: typing-extensions>=4.8.0 in C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages (from fastapi>=0.141->contest-generator==1.1.1) (4.16.0)
+    Requirement already satisfied: typing-inspection>=0.4.2 in C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages (from fastapi>=0.141->contest-generator==1.1.1) (0.4.2)
+    Requirement already satisfied: annotated-doc>=0.0.2 in C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages (from fastapi>=0.141->contest-generator==1.1.1) (0.0.5)
+    Requirement already satisfied: annotated-types>=0.6.0 in C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages (from pydantic>=2.9.0->fastapi>=0.141->contest-generator==1.1.1) (0.8.0)
+    Requirement already satisfied: pydantic-core==2.46.4 in C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages (from pydantic>=2.9.0->fastapi>=0.141->contest-generator==1.1.1) (2.46.4)
+    Requirement already satisfied: anyio<5,>=3.6.2 in C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages (from starlette>=0.46.0->fastapi>=0.141->contest-generator==1.1.1) (4.14.2)
+    Requirement already satisfied: idna>=2.8 in C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages (from anyio<5,>=3.6.2->starlette>=0.46.0->fastapi>=0.141->contest-generator==1.1.1) (3.18)
+    Requirement already satisfied: click>=7.0 in C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages (from uvicorn>=0.52->contest-generator==1.1.1) (8.4.2)
+    Requirement already satisfied: h11>=0.8 in C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages (from uvicorn>=0.52->contest-generator==1.1.1) (0.16.0)
+    Requirement already satisfied: colorama in C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages (from click>=7.0->uvicorn>=0.52->contest-generator==1.1.1) (0.4.6)
+    Building wheels for collected packages: contest-generator
+      Building editable for contest-generator (pyproject.toml): started
+      Building editable for contest-generator (pyproject.toml): finished with status 'done'
+      Created wheel for contest-generator: filename=contest_generator-1.1.1-0.editable-py3-none-any.whl size=1808 sha256=a51701a40bd979e8ee880fcbb3efaa7d96d4859d2f10810b12006196734d4685
+      Stored in directory: C:\Users\luoji\AppData\Local\Temp\pip-ephem-wheel-cache-6yzze50x\wheels\4e\9a\fc\824c2f4cf2e979f9cc363511d4b338724230967df237d0fb50
+    Successfully built contest-generator
+    Installing collected packages: contest-generator
+      Attempting uninstall: contest-generator
+        Found existing installation: contest-generator 0.1.0
+        Not uninstalling contest-generator at c:\users\luoji\appdata\local\python\pythoncore-3.14-64\lib\site-packages, outside environment C:\Users\luoji\AppData\Local\Temp\firstep-l2\tool\.venv
+        Can't uninstall 'contest-generator'. No files were found to uninstall.
+    Successfully installed contest-generator-1.1.1
+    [4/5] 库目录已就绪：首次安装自动指向随包 library（已有配置则未改动）
+    [5/5] 正在创建桌面快捷方式...
+    [5/5] 桌面快捷方式已就绪（已存在则不重复创建）
+    ============================================
+     安装完成！双击桌面的 firstep 快捷方式启动
+     （也可以双击本目录的 start-app.vbs；浏览器会自动打开 http://127.0.0.1:8000）
+    ============================================
+    请按任意键继续. . . 
+  [PASS] install.bat 退出码：0
+  [PASS] 输出含 [1/5]：在场
+  [PASS] 输出含 [2/5]：在场
+  [PASS] 输出含 [3/5]：在场
+  [PASS] 输出含 [4/5]：在场
+  [PASS] 输出含 [5/5]：在场
+  [PASS] 输出含 安装完成：在场
+
+=== 3. 桌面 firstep 快捷方式（落在重定向后的用户目录） ===
+  [PASS] 快捷方式存在：C:\Users\luoji\AppData\Local\Temp\firstep-l2\profile\Desktop\firstep.lnk
+    TARGET=C:\Windows\System32\wscript.exe
+    ARGS="C:\Users\luoji\AppData\Local\Temp\firstep-l2\tool\start-app.vbs"
+    WORKDIR=C:\Users\luoji\AppData\Local\Temp\firstep-l2\tool
+  [PASS] Target 是 wscript.exe：在场
+  [PASS] 指向 start-app.vbs：在场
+  [PASS] 工作目录是演练工具根：C:\Users\luoji\AppData\Local\Temp\firstep-l2\tool
+
+=== 4. 照第 2 步：双击快捷方式（模拟）→ 服务是否起来 + 浏览器地址可访问 ===
+  [PASS] 8020 有响应且是本应用：{'app': 'contest-generator', 'version': '1.1.1', 'ok': True}
+
+=== 5. 配置与日志落点（数据必须落在演练用户目录，真身不被触碰） ===
+  [PASS] 配置写在演练用户目录：C:\Users\luoji\AppData\Local\Temp\firstep-l2\profile\.contest_generator\config.json
+    module 库目录 = C:\Users\luoji\AppData\Local\Temp\firstep-l2\tool\library\modules
+  [PASS] 库目录指向工具包内 library：C:\Users\luoji\AppData\Local\Temp\firstep-l2\tool\library\modules
+  [PASS] 日志写在演练用户目录：C:\Users\luoji\AppData\Local\Temp\firstep-l2\profile\.contest_generator\webapp.log
+  [PASS] 真身数据目录未被本次演练改动：C:\Users\luoji\.contest_generator 仍存在（演练用的是 C:\Users\luoji\AppData\Local\Temp\firstep-l2\profile）
+
+=== 6. 幂等：再跑一次 install.bat ===
+  [PASS] 第二次退出码 0：0
+  [PASS] 第二次提示已存在/跳过：在场
+
+=== 7. 收尾：停掉演练服务（只关演练那个进程） ===
+    killed=4916
+killed=12076
+
+=== 结论 ===
+  PASS：真实包 → 解压 → 照说明书安装 → 快捷方式 → 服务起来，全链路走通

@@ -1,10 +1,10 @@
-# Release & Versioning（发布与版本命名）
+﻿# Release & Versioning（发布与版本命名）
 
 本文件定义 firstep 的版本号命名规则与发布流程。
 
 > **完整包口径（2026-09-13 复核后改写）**：完整包 = 工具本体 + 五个库 + 资料库**内容文件**、
 > **标准 zip 单卷约 821 MB**（超 1.9 GB 才拆 `.part<N>`）。它同时是**新用户唯一的安装包**
-> （README 只指这一个文件，Windows 自带解压，包内带 `START-HERE.txt`）。
+> （README 只指这一个文件，Windows 自带解压，包内带 `00-START-HERE.txt`）。
 > 历史上那个 6.2 GB / 4 个 7z 分卷的形态**已下线**：只剩 v1.0.0 那个 release 有，
 > 不再打包、不再上传、不再在文档里出现（`tests/test_onboarding_docs.py` 有负向门禁）。
 
@@ -79,7 +79,7 @@
 
 > 机制见 `.scratch/full-download/spec.md`。**包内只有会变的内容**：工具本体 + 五个库 + `sources/contest`、`sources/car` + 资料库内容文件；第三方安装包与视觉 SDK 打包件（`*.exe` / `*.rar` / `*.img*` / `*CCS_20.5*` / `*tsp-xbhdcc*` 等，本机约 5.4 GB）、缓存、虚拟环境、本地备份目录都不进包。实测包内约 **8777 个文件 / 原始 1.07 GB**，zip 后 **约 821 MB**（v1.1.1 实测 `821,352,026` 字节）、1~2 卷。
 >
-> **包内还有面向新用户的 `START-HERE.txt`**（工单 `newuser-download/02`）：解压后第一个该看到的东西。它必须在 `full_pack` 顶层白名单里，改完跑 `tests/test_full_pack.py` 确认它真的进了包与清单。
+> **包内还有面向新用户的 `00-START-HERE.txt`**（工单 `newuser-download/02`）：名字前的 `00-` 让它排在解压目录第一位，新人第一眼就看得到。它必须在 `full_pack` 顶层白名单里，改完跑 `tests/test_full_pack.py` 确认它真的进了包与清单。
 
 1. 确认工作区干净（`git status`；脚本默认拒绝脏工作树，`-AllowDirty` 豁免）。
 2. 跑打包脚本（仓库根）：
@@ -156,7 +156,7 @@ VSCode 等约 5.4 GB，几乎不变、只在装机时用一次）；去各自官
 每条 release 的说明**前两行固定**，其余随意（本版修了什么、加了什么）：
 
 ```markdown
-> **新用户**：只下 `firstep-full-<tag>.zip`（约 821 MB），Windows 自带解压即可，解压后照包里的 `START-HERE.txt` 走。
+> **新用户**：只下 `firstep-full-<tag>.zip`（约 821 MB），Windows 自带解压即可，解压后照包里的 `00-START-HERE.txt` 走。
 > **已装用户**：不用看这里——打开工具「设置 → 软件更新 → 检查更新 → 一键更新」。
 
 ## 这一版有什么变化

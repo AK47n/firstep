@@ -4,6 +4,9 @@
 另含下载渠道门禁（工单 newuser-download/01）：README 的「获取方式」必须只描述**线上真实存在**
 的资产形态——曾经出现的 `firstep-full.7z.001~004` / 约 6 GB / 需第三方解压软件，在最新 release
 上根本不存在（那只是 v1.0.0 那个 release 的形态），会把新用户直接带进死路。
+
+还有一条跨文件门禁（工单 newuser-download/02）：README 让用户「看包里的某个文件」时，
+那个文件必须真的在完整包里（`full_pack.scan_tree` 认得它）——否则又是「指向不存在的东西」。
 """
 
 from __future__ import annotations
@@ -156,7 +159,8 @@ def test_readme_download_channel_is_live_shape():
 
     当前完整包 = `firstep-full-<版本>.zip`（单卷、标准 zip、系统自带解压），
     新用户不需要第三方解压软件、也不需要去找 7z 分卷。
-    `START-HERE.txt` 的断言留到工单 02（包内文件落地后再钉）。
+    包内 `00-START-HERE.txt` 的断言在 `tests/test_full_pack.py`（工单 02）——那里才有
+    「文件真的进包」的判据。
     """
     text = _readme_text()
     hits = dead_channel_hits(text)
@@ -225,6 +229,34 @@ def test_install_bat_creates_desktop_shortcut():
     assert "快捷方式" in text, "install.bat 提示文案未提桌面快捷方式"
     done = text[text.rfind("安装完成"):]
     assert "firstep" in done and "start-app.vbs" in done, "安装完成提示未同时给出两个入口"
+
+
+def test_install_bat_tells_user_not_to_rerun_it():
+    """完成提示必须说清「以后只双击桌面快捷方式，不用再跑本脚本」（工单 newuser-download/04）。
+
+    真机演练卡点 K5：原文只说「双击桌面的 firstep 快捷方式启动」，新人最常见的错是
+    每次开机都重跑一遍安装（白等几分钟，还可能覆盖自己在快捷方式上的改动）。
+    """
+    done = _install_bat_text()
+    done = done[done.rfind("安装完成"):]
+    assert "不用再" in done, "完成提示未说明『以后不用再运行本脚本』"
+    assert "桌面" in done, "完成提示未点明是桌面上的快捷方式"
+
+
+def test_install_bat_python_branches_say_rerun():
+    """没装 / 版本太旧的提示要给「装完重新运行本脚本」（工单 newuser-download/04）：
+    否则新人装完 Python 不知道下一步做什么。"""
+    for name, anchor in (
+        ("need_python", ":need_python"),
+        ("old_python", ":old_python"),
+    ):
+        start = _install_bat_text().find(anchor)
+        assert start >= 0, f"install.bat 缺少 {anchor} 分支"
+        tail = _install_bat_text()[start:]
+        end = tail.find("exit /b 1")
+        branch = tail if end < 0 else tail[:end]
+        assert "python.org" in branch, f"{name} 分支未给官方下载地址"
+        assert "重新运行本脚本" in branch, f"{name} 分支未说『装完重新运行本脚本』"
 
 
 def test_install_bat_shortcut_payload_is_valid_powershell():

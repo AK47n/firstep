@@ -163,6 +163,104 @@ def test_top_level_entries_cover_tool_root() -> None:
     assert "sources" in TOP_LEVEL_ENTRIES
     assert "tools" in TOP_LEVEL_ENTRIES
     assert "README.md" in TOP_LEVEL_ENTRIES
+    # 面向新用户的包内说明书（工单 newuser-download/02）：漏登记 = 它根本不进包，
+    # 而「解压后没有任何说明」正是要根治的病。
+    assert "00-START-HERE.txt" in TOP_LEVEL_ENTRIES
+
+
+def test_repo_start_here_ships_in_package() -> None:
+    """真仓库的 `00-START-HERE.txt` 必须真的进包（工单 newuser-download/02）。
+
+    反向也验：`excluded_paths` 里不得出现它——两边都断言，防「清单有、包里没有」
+    与「包里没有、没人发现」两种漏法。
+    """
+    repo = Path(__file__).resolve().parent.parent
+    source = repo / "00-START-HERE.txt"
+    assert source.is_file(), "仓库根缺少 00-START-HERE.txt（新用户解压后第一眼要看到的东西）"
+
+    paths = {f.path for f in scan_tree(repo)}
+    assert "00-START-HERE.txt" in paths, "00-START-HERE.txt 未进包（白名单漏登记？）"
+    assert "00-START-HERE.txt" not in excluded_paths(repo), "00-START-HERE.txt 被判为排除项，进不了包"
+
+
+def test_start_here_sorts_first_in_explorer() -> None:
+    """`00-START-HERE.txt` 必须在解压目录里排**第一位**（工单 newuser-download/02）。
+
+    为什么是硬要求：它排在中间就等于没有——实测裸叫 `START-HERE.txt` 时按名称排在
+    README 之下（#11/14），隐藏扩展名时更靠后（#17/22）。新人只会点第一眼看到的东西。
+
+    只拿**进包的那些根级条目**比（`TOP_LEVEL_ENTRIES` ∩ 仓库根实际内容），
+    因为用户解压后看到的就是这些；排序口径近似资源管理器：先按「主名（去扩展名）不区分大小写」，
+    同名再按全名。
+    """
+    repo = Path(__file__).resolve().parent.parent
+    shipped = sorted(
+        [p.name for p in repo.iterdir() if p.name in TOP_LEVEL_ENTRIES],
+        key=lambda n: ((n.rsplit(".", 1)[0] if "." in n else n).lower(), n),
+    )
+    assert shipped, "仓库根没有任何进包条目——白名单与磁盘脱节了？"
+    # 点开头的文件（`.gitattributes` / `.gitignore`）由资源管理器排在更前，且用户通常没开显示
+    # 隐藏文件——拿「用户实际看得到的那批」比第一眼落点。
+    visible = [n for n in shipped if not n.startswith(".")]
+    assert visible[0] == "00-START-HERE.txt", (
+        f"解压后第一个可见文件应是 00-START-HERE.txt，实际是 {visible[0]}；前 3 项：{visible[:3]}"
+    )
+
+
+def test_start_here_is_newcomer_facing_and_readable() -> None:
+    """`00-START-HERE.txt` 面向新用户：UTF-8 无 BOM、一屏内读完、三步链路齐全。"""
+    repo = Path(__file__).resolve().parent.parent
+    raw = (repo / "00-START-HERE.txt").read_bytes()
+    assert not raw.startswith(b"\xef\xbb\xbf"), "00-START-HERE.txt 不应带 UTF-8 BOM"
+    text = raw.decode("utf-8")  # 解不开就是编码错了，直接红
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    assert len(lines) <= 40, f"00-START-HERE.txt 太长（{len(lines)} 行），新人不会读完"
+    for needle, why in (
+        ("install.bat", "第一步该点哪个文件"),
+        ("firstep", "桌面快捷方式的名字"),
+        ("http://127.0.0.1:8000", "启动后浏览器会打开的地址"),
+        ("DeepSeek API key", "要配的东西叫什么"),
+        ("设置", "配 key 的入口在哪"),
+        ("webapp.log", "出问题去哪看日志"),
+    ):
+        assert needle in text, f"00-START-HERE.txt 缺少关键信息：{why}（{needle}）"
+    # 三条「预期行为」——消除「是不是坏了」的误解
+    assert ".venv" in text, "00-START-HERE.txt 未说明『包里没有 .venv 是正常的』"
+    assert "重复" in text, "00-START-HERE.txt 未说明 install.bat 可重复运行"
+
+
+def test_readme_promised_package_files_exist_in_package() -> None:
+    """README「获取方式」里点名「去包里看」的文件，必须真的在包里（工单 newuser-download/02）。
+
+    这是把「文档不得指向不存在的东西」钉成跨文件不变量的最小一条：工单 01 曾短暂写过
+    「解压后照包里的 `START-HERE.txt` 走」，而那时它还没进包——正是要根治的病。
+    只检查「看起来像文件名」（含 `.`、无空格、长度合理）的 token，自然语言与下载资产名不算。
+    """
+    import re
+
+    repo = Path(__file__).resolve().parent.parent
+    readme = (repo / "README.md").read_text(encoding="utf-8")
+    start = readme.find("## 获取方式")
+    assert start >= 0, "README 缺少「获取方式」章节"
+    rest = readme[start:]
+    end = rest.find("\n## ", 3)
+    section = rest if end < 0 else rest[:end]
+
+    in_pack = {f.path for f in scan_tree(repo)}
+    # 排除三类「不是包内文件名」的 token：发布资产名、版本号、资产名后缀（`.removed.txt` 这种
+    # 只写了后缀的，不是用户要去包里找的文件）。
+    not_package_file = re.compile(r"^(?:firstep-|v\d|\.)")
+    promised = {
+        token
+        for token in re.findall(r"`([^`\n]+)`", section)
+        if "." in token and " " not in token and 3 <= len(token) <= 40
+        and not not_package_file.match(token)
+    }
+    assert "00-START-HERE.txt" in promised, (
+        "「获取方式」应点名包内的 00-START-HERE.txt（新用户解压后的第一落点）"
+    )
+    missing = sorted(t for t in promised if t not in in_pack)
+    assert not missing, f"「获取方式」点名了不在包内的文件：{missing}"
 
 
 def test_excluded_file_count_stays_small_on_real_tree() -> None:

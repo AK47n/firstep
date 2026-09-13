@@ -34,6 +34,36 @@
 > 会把 8000 上你正在用的那个停掉。两个更新路径（完整包 / 小发版）现在都从 `FIRSTEP_LAUNCHER_PORT`
 > 取端口，正常不会再发生；停掉后重跑 `start-app.vbs` 即可恢复。
 
+## 2.5 本机 Python 与依赖现状（2026-09-13 实测，动过就回来改）
+
+| 项 | 值 |
+|---|---|
+| 系统 Python | **3.14.6**（`py -0p` 只有这一个；满足工具的 ≥3.13） |
+| 依赖 | fastapi / uvicorn / pypdf / pillow / pymupdf **已装在全局 site-packages** |
+| 真身 `.venv` | **不存在** —— `start-app.bat` 走「回退系统 python」分支；这解释了为什么真身没跑过 `install.bat` 也能起 |
+| 沙箱 `.venv` | 不存在（`local-environment.md` 第 1 节已记，属于故意不真实项） |
+
+**已知隐患（本机专属，与代码无关）**：全局 site-packages 里有**两个** editable 安装并存——
+
+```
+__editable__.contest_generator-0.1.0.pth  →  C:\Users\luoji\Desktop\firstep-sim\src
+__editable__.contest_generator-1.1.1.pth  →  C:\Users\luoji\Desktop\firstep\src
+```
+
+两个 src 都进了 `sys.path`，真身恰好排在前面所以现在能跑；**装依赖的路径不要再用全局 `pip install -e .`**
+（会再加一层）。要清就删掉沙箱那个 `0.1.0` 的 dist-info + pth（沙箱用 `sim-run.py` 起，不依赖它）。
+
+## 2.6 新用户下载体验的演练口径（2026-09-13 起，`newuser-download` 特性）
+
+要当一次「新用户」把完整包走通，**不必动沙箱**——用这套更干净的口径（`.scratch/newuser-download/E2E-8020.md` 有细节）：
+
+1. 从**真实包**解压到一个一次性工具根（`%TEMP%\firstep-l2\tool`），而不是拼装沙箱；
+2. **重定向 `USERPROFILE`** 到同一目录下的 `profile`（实测 `Path.home()` 跟随它）→
+   配置 / 日志 / updates 全被关进演练目录，真身 `~\.contest_generator` **零触碰**；
+3. `FIRSTEP_LAUNCHER_PORT=8020` 起服务；
+4. 依赖靠 `venv --system-site-packages` 就地满足（`PYTHONNOUSERSITE=1`），**别让 pip 写全局 user-site**；
+5. 跑完查三件事：8000/8020 是否已释放、有无残留 python 进程、真身数据目录 mtime 是否未变。
+
 ## 3. 发布状态：main 与线上包的落差
 
 | 版本 | 线上状态 | 说明 |

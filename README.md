@@ -8,11 +8,12 @@
 
 **只想用工具本身：克隆 GitHub 仓库就够了**（约 270 MB，含生成器代码 + 模块库 / 母版库 + 文档）。
 **想开箱即用（含电赛资料库）：去 [Releases 最新版](https://github.com/AK47n/firstep/releases/latest) 下 zip**——
-**只下这一个文件**，Windows 右键「全部解压缩」或双击进去拖出来都行。
+**只下这一个文件**；解压用 Windows 右键「全部解压缩」即可。解压完**第一个文件就是 `00-START-HERE.txt`**
+（名字前面的 `00-` 就是为了让它排在最前面），照着走三步就装好，不用去猜那些 `.bat` 是干什么的。
 
 | 从哪拿 | 文件名（`<版本>` 形如 `v1.1.1`） | 体积 | 给谁用 |
 | --- | --- | --- | --- |
-| [Releases 最新版](https://github.com/AK47n/firstep/releases/latest) | `firstep-full-<版本>.zip` | 约 821 MB | **新用户（推荐）**：工具 + 五个库 + 电赛资料库（真题 / 手册 / 例程）；解压后照下面「三步装好」做 |
+| [Releases 最新版](https://github.com/AK47n/firstep/releases/latest) | `firstep-full-<版本>.zip` | 约 821 MB | **新用户（推荐）**：工具 + 五个库 + 电赛资料库（真题 / 手册 / 例程）；解压后**先看第一个文件 `00-START-HERE.txt`**（三步装好，别去猜那些 .bat） |
 | 同上 | `firstep-update-<版本>.zip` | 约 296 MB | **已装用户**：不要手动下——工具里「设置 → 软件更新 → 检查更新 → 一键更新」 |
 | 同上 | `firstep-full-<版本>.manifest.json`、`.removed.txt`、`.sha256.txt` | 几 KB ~ 4 MB | 谁都不用下：前两个给工具和发布者核对，`.sha256.txt` 是想自己校验文件完整性的人用 |
 | 终端 | `git clone https://github.com/AK47n/firstep.git` | 约 270 MB | 不要电赛资料库、且本机已有 git 与 Python 3.13+ 的人（`git pull` 即可保持最新） |

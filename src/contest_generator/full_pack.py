@@ -52,6 +52,12 @@ TOP_LEVEL_ENTRIES: tuple[str, ...] = (
     ".githooks",
     ".gitattributes",
     ".gitignore",
+    # 面向新用户：解压后第一个该看到的东西（工单 newuser-download/02）。
+    # 文件名前的 `00-` 是刻意的：资源管理器按名称排序时它排**第一位**，新人打开文件夹
+    # 第一眼就撞上它（裸叫 `START-HERE.txt` 会掉到 README 之下，实测名称序 #11/14、
+    # 隐藏扩展名时 #17/22——等于没有）。
+    # 它必须在白名单里，否则按下面的规则根本不进包——新用户解压完就又是「没有任何说明」。
+    "00-START-HERE.txt",
     "CLAUDE.md",
     "README.md",
     "CONTEXT.md",

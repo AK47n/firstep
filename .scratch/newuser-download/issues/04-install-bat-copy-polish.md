@@ -6,16 +6,31 @@ Python 没装 / 版本太低时除了给下载页，再补一句「装完重新�
 
 **被谁阻塞：** 无——可立即开始（与 02/03 并行的独立小切片）。
 
-**状态：** ready-for-agent
+**状态：** resolved
 
-- [ ] 完成提示明确「以后启动：双击桌面 `firstep`（不用再运行本脚本）」，并保留 `http://127.0.0.1:8000` 与 `start-app.vbs` 兜底路径
-- [ ] `need_python` / `old_python` 分支补「装完重新运行本脚本」一句，保留官方下载地址与「勾选 Add python.exe to PATH」
-- [ ] 桌面快捷方式创建失败分支的提示仍给出可用的手动入口（`start-app.vbs`），不因新增文案而丢失
-- [ ] `install.bat` 仍是 **GBK 无 BOM + CRLF**（`git diff` 字节口径与打包器一致；禁止引入 UTF-8 BOM）
-- [ ] 守卫扩 `tests/test_onboarding_docs.py`：完成提示含「桌面」「不用再」口径 + 两个入口；失败分支含「重新运行本脚本」
-- [ ] 真机：在本机 `Desktop\firstep` 跑一次 `install.bat`，确认文案与桌面快捷方式仍正确、幂等（连跑两次不重复创建）
+- [x] 完成提示明确「以后启动：双击桌面 `firstep`（不用再运行本脚本）」，并保留 `http://127.0.0.1:8000` 与 `start-app.vbs` 兜底路径
+- [x] `need_python` / `old_python` 分支补「装完重新运行本脚本即可」一句，保留官方下载地址与「勾选 Add python.exe to PATH」
+- [x] 桌面快捷方式创建失败分支的提示仍给出可用的手动入口（`start-app.vbs`），不因新增文案而丢失（本次未改该分支）
+- [x] `install.bat` 仍是 **GBK 无 BOM + CRLF**（补丁脚本内置复验：无 BOM、裸 LF 计数为 0）
+- [x] 守卫扩 `tests/test_onboarding_docs.py`：完成提示含「桌面」「不用再」口径；两个失败分支含「python.org」与「重新运行本脚本」
+- [x] 真机：在演练环境连跑两次 `install.bat`，文案与桌面快捷方式仍正确、幂等（见证据）
+
+## 验收记录（2026-09-13）
+
+- **补丁方式**：没有手工编辑（GBK + CRLF 的字节口径太容易改坏），改用带幂等断言的脚本
+  `.scratch/newuser-download/patch-04-install-bat-copy.py`：每条锚点断言**命中恰好 1 次**，
+  写完复验「无 BOM + 全 CRLF」。字节 4526 → 4606。
+  - 补丁 1：完成提示后补一行「以后每次启动：双击桌面的 firstep 即可，不用再运行本脚本。」
+  - 补丁 2：`need_python` 分支 → 「装完重新运行本脚本**即可**」
+  - 补丁 3：`old_python` 分支 → 同上
+- **真机复验** `verify-04-rehearsal.txt`：在 L2 演练根（重定向 `USERPROFILE`、端口 8020）跑打补丁后的
+  `install.bat` → 退出码 0，输出含「以后每次启动」与「不用再运行本脚本」；
+  运行后 8000/8020 均未监听、无残留进程、真身数据目录 mtime 未变。
+- **`git diff` 复核**：`install.bat` 只有 3 处文案改动（4 增 2 删），无流程/步骤编号/快捷方式负载改动。
+- **回归**：`tests/test_onboarding_docs.py` 10 条 + `tests/test_full_pack.py` 27 条全绿。
 
 ## 备注
 
 - 本工单只改文案与提示分支，**不动**安装步骤顺序、不动依赖安装逻辑。
 - 到用户手上需要一次小发版（工具内「一键更新」即可，与完整包无关）。
+- 与 L2 演练卡点 K5 对应：这条改动就是 K5 的处置。

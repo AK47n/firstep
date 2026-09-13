@@ -106,10 +106,10 @@ if LOCAL_ZIP.is_file():
     print(f"  根级文件（用户解压后第一眼看到的）：{len(loose)} 个")
     for name in loose:
         print(f"    - {name}")
-    has_start_here = any(s.lower().startswith("start-here") for s in roots)
+    has_start_here = any("start-here" in s.lower() for s in roots)
     print(
         f"  [{'PASS' if has_start_here else '待办'}] 包内「从这里开始」文件："
-        f"{'在场' if has_start_here else '不在场（工单 02 的目标；这正是 L1 的卡点 K1）'}"
+        f"{'在场：' + next(s for s in roots if 'start-here' in s.lower()) if has_start_here else '不在场（工单 02 的目标；这正是 L1 的卡点 K1）'}"
     )
 
 section("结论")

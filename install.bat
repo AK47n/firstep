@@ -64,6 +64,8 @@ echo.
 echo ============================================
 echo  安装完成！双击桌面的 firstep 快捷方式启动
 echo  （也可以双击本目录的 start-app.vbs；浏览器会自动打开 http://127.0.0.1:8000）
+echo.
+echo  以后每次启动：双击桌面的 firstep 即可，不用再运行本脚本。
 echo ============================================
 echo.
 pause
@@ -73,13 +75,13 @@ exit /b 0
 echo [错误] 没有找到 Python。
 echo 请先安装 Python 3.13 或更新版本，下载地址：
 echo   https://www.python.org/downloads/
-echo 安装时勾选 "Add python.exe to PATH"，装完重新运行本脚本。
+echo 安装时勾选 "Add python.exe to PATH"，装完重新运行本脚本即可。
 pause
 exit /b 1
 
 :old_python
 echo [错误] 找到的 Python 版本太旧（需要 3.13 或更新）。
-echo 请到 https://www.python.org/downloads/ 下载新版安装，装完重新运行本脚本。
+echo 请到 https://www.python.org/downloads/ 下载新版安装，装完重新运行本脚本即可。
 pause
 exit /b 1
 

@@ -35,11 +35,11 @@
    只有一行直链「下载 `firstep-完整包-<tag>.zip`（约 790 MB，Windows 自带解压）」
    + 一张「哪个文件给谁下」的三行表；Release 说明模板第一行就是「新用户只下一个文件」。
    **7z 完整包渠道正式标注下线**（用户已确认不要它），`docs/agents/releasing.md` 同步。
-2. **包内交付（A+B）**：完整包根目录新增 **`START-HERE.txt`**（UTF-8、中文、≤30 行、
+2. **包内交付（A+B）**：完整包根目录新增 **`00-START-HERE.txt`**（UTF-8、中文、≤30 行、
    记事本双击可读），解压后第一个就是它。它只回答前 20 分钟：
    双击 `install.bat` → 装完双击桌面 `firstep` → 网页里配 key。
    另附预期行为与常见误解（没有 `.venv` 是正常的；可重复运行；失败看哪里）。
-   为此 `START-HERE.txt` 必须进 `full_pack` 的顶层白名单（否则按现有规则根本不进包）。
+   为此 `00-START-HERE.txt` 必须进 `full_pack` 的顶层白名单（否则按现有规则根本不进包）。
 3. **资产可读性（A）**：之后的 release 里，新用户要下的那个文件叫
    `firstep-完整包-<tag>.zip`；`firstep-update-*` 资产名**不动**（工具内更新协议按前缀发现资产，
    改名即断链路）。同时装一条守卫：新名在、旧名不在同名 release 里同时出现两份 zip。
@@ -69,7 +69,7 @@
 | 层 | 改动 | 要发版才到用户手上？ |
 |---|---|---|
 | 文档层 | `README.md` 获取方式章、`docs/agents/releasing.md` 7z 下线、Release 说明模板 | **不需要**（README 是仓库主页，改完即时生效） |
-| 包内容层 | 根目录 `START-HERE.txt` + `full_pack` 顶层白名单 | **需要**（只在下次完整包里出现） |
+| 包内容层 | 根目录 `00-START-HERE.txt` + `full_pack` 顶层白名单 | **需要**（只在下次完整包里出现） |
 | 资产命名层 | 新用户包的资产名 | **需要**（下次发版时生效） |
 | 脚本层 | `install.bat` 文案人话化 | **需要**（小发版一键更新即可，与完整包无关） |
 
@@ -77,11 +77,11 @@
 
 ### 具体的接口与契约
 
-- **`START-HERE.txt` 是包内文件，不是仓库专属文件**：`full_pack` 只有一份顶层白名单
+- **`00-START-HERE.txt` 是包内文件，不是仓库专属文件**：`full_pack` 只有一份顶层白名单
   `TOP_LEVEL_ENTRIES`（目录与根级文件同表，如 `README.md` / `install.bat` 就在里面），
   新增后必须登记进它；否则 `scan_tree` 直接跳过、`_exclude_reason` 给出「顶层不在白名单」——
   这正是「清单与包一致」不变量的保护。
-- **编码**：`START-HERE.txt` 用 **UTF-8 无 BOM**（Win10 1903+ 记事本默认支持，且不引入 BOM 争议）；
+- **编码**：`00-START-HERE.txt` 用 **UTF-8 无 BOM**（Win10 1903+ 记事本默认支持，且不引入 BOM 争议）；
   `install.bat` 维持 **GBK 无 BOM**（`tests/test_onboarding_docs.py` 已钉住）。
 - **资产命名契约（可选条）**：新名 = `firstep-完整包-<tag>.zip`；
   `firstep-update-<tag>.zip` 与所有 `manifest/removed/sha256` 附件**原名不动**；
@@ -105,10 +105,10 @@
 - **文档守卫（最高既有缝）**：扩 `tests/test_onboarding_docs.py`：
   - `README.md` 不再出现已下线渠道串（`firstep-full.7z` / `7-Zip` 作为**要求**出现即失败）；
   - README 的「获取方式」章必须含当前资产名形态与「Windows 自带解压」口径；
-  - `START-HERE.txt` 存在、UTF-8 无 BOM、含三步链路 needle（`install.bat` / 桌面 `firstep` / API key）；
+  - `00-START-HERE.txt` 存在、UTF-8 无 BOM、含三步链路 needle（`install.bat` / 桌面 `firstep` / API key）；
   - Release 说明模板存在且含「新用户只下」「已装用户」两行。
 - **打包守卫**：`tests/test_full_pack.py`（既有）扩一条——
-  `scan_tree(仓库根)` 的结果**必须包含 `START-HERE.txt`**，
+  `scan_tree(仓库根)` 的结果**必须包含 `00-START-HERE.txt`**，
   且 `excluded_paths` 里**不得**出现它（防白名单漏登记导致「清单有、包里没有」或反之）。
 - **真机演练（本次的完成判据，不是单测）**：`.scratch/newuser-download/E2E-8020.md` 定义
   一次「把自己当新用户」的全链路：拿**线上真实 v1.1.1 资产**（本机 `firstep-pack\` 已有一份，
