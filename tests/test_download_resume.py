@@ -412,6 +412,51 @@ def test_cancel_before_start_does_not_touch_network(dest: Path) -> None:
     assert server.n_requests == 0
 
 
+def test_download_start_writes_sidecar_so_a_killed_process_can_resume(
+    dest: Path, monkeypatch
+) -> None:
+    """**开跑就写边车**：硬杀进程（任务管理器结束 / 崩溃 / 断电）留下的半成品也要有人认领。
+
+    这条是工单 06 档③ 真机实测出来的（不是推演）：原来只在「取消 / 失败」两处写边车，
+    于是把进程硬杀掉之后，盘上是「210 MB 半成品 + **没有边车**」→ 重启后点重试，
+    那份半成品被当来路不明的东西清掉，**白下 210 MB**。
+
+    判据：下载**还没结束**的任意时刻，边车都必须在场（且 URL / 期望大小对得上）。
+    """
+    server = _FakeServer()
+    server.cut_keep = [0.1] * 8              # 每轮只发 10%：保证「下载进行中」有窗口可看
+    monkeypatch.setattr("contest_generator.download_resume.retry_delay", lambda n: 1.0)
+    seen: list[bool] = []
+    cancel = threading.Event()
+
+    def on_progress(nbytes: int) -> None:
+        seen.append(marker_for(dest).is_file())      # 下载进行中：边车在不在？
+        if len(seen) >= 1:
+            cancel.set()                             # 看第一眼就取消（模拟进程被杀）
+
+    with pytest.raises(DownloadCancelledError):
+        resumable_download("https://x/p.zip", dest, on_progress, opener=server,
+                           cancel=cancel, expected_size=len(PAYLOAD))
+
+    assert seen and all(seen), f"下载进行中边车就不在场：{seen}"
+    marker = read_partial_marker(dest)
+    assert marker.get("url") == "https://x/p.zip"
+    assert marker.get("expected_size") == len(PAYLOAD)
+    assert is_resumable_partial(dest, "https://x/p.zip", len(PAYLOAD)), (
+        "硬杀后留下的半成品必须能被下一个进程认出来（否则就是白下）"
+    )
+
+
+def test_success_clears_the_early_sidecar(dest: Path) -> None:
+    """开跑就写，那成功时必须清干净（不留孤儿）——两条一起才成立。"""
+    server = _FakeServer()
+    result = resumable_download("https://x/p.zip", dest, lambda n: None, opener=server,
+                                expected_size=len(PAYLOAD),
+                                expected_sha256=PAYLOAD_SHA)
+    assert result.sha256 == PAYLOAD_SHA
+    assert not marker_for(dest).is_file(), "成功后边车必须被清掉"
+
+
 def test_failure_writes_sidecar_for_the_next_process(dest: Path, monkeypatch) -> None:
     """失败（不是取消）也要写边车——否则下一个进程当它是来路不明的文件，白下一次。
 

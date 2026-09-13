@@ -1,0 +1,18 @@
+# 工单 06 档③ 证据：真实完整包端到端（resumable-download/06）
+
+真身工作树（**只读，绝不改**）：C:\Users\luoji\Desktop\firstep
+真身数据目录（**只读，绝不改**）：C:\Users\luoji\.contest_generator（mtime=1789228119.8854978）
+
+一次性演练目录：C:\Users\luoji\AppData\Local\Temp\firstep-tier3-307w_u2o
+
+取到分卷：firstep-full-v1.1.1.zip / 783 MB
+
+## 七、确定性复检：铺一份「半成品 + 边车」，让真任务接着下
+  真资产：https://github.com/AK47n/firstep/releases/download/v1.1.1/firstep-full-v1.1.1.zip
+  先取前 32 MB（真 Range 请求）
+  铺好：32.0 MB + 边车 firstep-full-v1.1.1.zip.partial.json
+  state=done / 用时 78.0s / 下载器每次尝试的起始偏移 [33554432]
+  卷状态：ok=True / downloaded_bytes=821352026
+  → **从断点接着下**：成立（第一次尝试起始偏移 33554432）
+
+演练目录已清理

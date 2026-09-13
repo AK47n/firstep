@@ -1,0 +1,23 @@
+{
+  "parts": [
+    {
+      "name": "firstep-full-v1.1.1.zip",
+      "size": 821352026
+    }
+  ],
+  "resume_check": {
+    "seed_bytes": 33554432,
+    "state": "done",
+    "attempt_starts": [
+      33554432
+    ],
+    "resumed_from_offset": true,
+    "ok": true,
+    "error": "",
+    "seconds": 78.0
+  },
+  "verdict": {
+    "resumed_from_offset": true,
+    "verified": true
+  }
+}

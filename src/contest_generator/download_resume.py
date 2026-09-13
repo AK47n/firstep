@@ -53,7 +53,8 @@ MIN_RESUME_BYTES = 64 * 1024
 MAX_RETRY_DELAY_SECONDS = 60.0
 # 用户代理（与既有实现同一个，服务端侧看到的是同一个客户端）
 USER_AGENT = "firstep-materials"
-# 边车后缀：只在取消 / 失败时写，用来让「换一次进程」也知道本地这半份是谁的
+# 边车后缀：**开跑就写、成功才清**（工单 06 真机实测：只在取消 / 失败时写的话，
+# 硬杀进程留下的半成品没人认领）。它让「换一次进程」也知道本地这半份是谁的。
 PARTIAL_SUFFIX = ".partial.json"
 
 _CONTENT_RANGE_RE = re.compile(r"bytes\s+(\d+)-(\d+)/(\d+|\*)", re.IGNORECASE)
@@ -310,6 +311,15 @@ def resumable_download(
     want_sha = str(expected_sha256 or "").strip().lower()
     opener = opener or _urlopen
 
+    # **开跑就落边车**（这条是工单 06 档③ 真机实测出来的，别再改回去）：
+    # 原来只在「取消 / 失败」两处写，于是**硬杀进程**（任务管理器结束 / 崩溃 / 断电）
+    # 留下的半成品**没有边车**——下一个进程（重启工具后点重试）认不出它，
+    # 当「来路不明的不完整文件」清掉重下，白下几百 MB。真机演练实测：210 MB 白下。
+    # 成功路径本来就会 `clear_marker` 清掉，所以提前写不留垃圾。
+    # 注意：这份边车**不代表已经下完**（`ok` 由任务层按清单哈希判定），
+    # 「下次能不能接着用」仍要过 `is_resumable_partial` 的三条判据。
+    write_partial_marker(dest, url, expected)
+
     # 本地已是完整卷：先按内容判「能不能直接用」，而不是直接相信尺寸。
     if expected > 0 and dest.is_file() and dest.stat().st_size == expected:
         if not want_sha:
@@ -368,10 +378,10 @@ def resumable_download(
                 # 不可重试：不调 before_retry（它语义是「即将重试」），
                 # 但它自称的处置要落地——见 _attempt 里 clear_partial 的调用点。
                 raise
-            # **失败即写边车**（spec：边车只在取消 / 失败时写）。写在重试循环里而不是
-            # 只在「重试用尽」分支：产品的重试是**无上限**的，那条分支真机上永远走不到
-            # ——于是「断了之后半成品没人认领」这个洞会一直藏着（工单 03 的探针实测：
-            # 只有半成品没有边车，下一个进程会把它当来路不明的东西丢掉，白下一次）。
+            # 失败也补写一次边车（开跑时已经写过；这里是**兜底**：中途被别处删掉、
+            # 或这段代码将来被挪动时，失败路径仍然留得下「这份是谁的」）。
+            # 写在重试循环里而不是只在「重试用尽」分支：产品的重试是**无上限**的，
+            # 那条分支真机上永远走不到。
             write_partial_marker(dest, url, expected)
             if max_attempts is not None and attempts >= int(max_attempts):
                 size_now = dest.stat().st_size if dest.is_file() else 0
