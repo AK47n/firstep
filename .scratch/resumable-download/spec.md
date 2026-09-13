@@ -83,6 +83,21 @@
 既有 monkeypatch 点（`tests/test_full_task.py` / `tests/test_full_apply.py` 打 `full_task.download_part`）
 **继续有效、零改动**。
 
+> **⚠️ 本条已在工单 14（2026-09-13）被重新量过，逐句更正**：
+> 「**保留**」这个处置**维持**（不删），但当时给的两条理由**今天一条都不成立**——
+> ① `download_resume` **从来没有**调用过它：下载域不许知道任务层（工单 04 的守卫
+> `test_download_resume_module_has_no_status_knowledge`），它的单次尝试是
+> `download_resume._attempt` 自己实现的一支（同样 256 KB 分块、同一个 UA）；
+> ② `full_task.download_part` 这个 monkeypatch 点**自工单 03 起就不存在了**
+> （`full_task` 不再 import 它——工单 03 把缺省下载器换成可续版时一并去掉）。
+> 保留的**真实理由**（量出来的，不是推的）：它今天在生产侧**零调用点**，全仓活口只剩证据工具——
+> 本特性探针的红基线复现（`probe-01-resume.py`，两处取值引用）与反证对照
+> （`probe-01-negative.py`，写进字符串模板、落盘执行的 import），
+> 外加完整包那次端到端演练脚本里的一处**真调用**（`.scratch/full-download/e2e_full_download.py`）。
+> 那批工具要的恰好是一份**冻结的「改之前」实现**；生产侧调用点为零这一点由炸弹注入实测背书
+> （三文件全绿 + 阳性对照转红）。逐处清单与判据强度见
+> `.scratch/resumable-download/issues/14-download-part-live-callers.md`。
+
 **任务层**（`full_task.py` / `materials_task.py`，两条链路对称改）：
 
 - `download` 缺省值 → `resumable_download`（注入点与 `(url, dest, on_progress)` 三参签名不变，

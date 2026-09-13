@@ -1,0 +1,212 @@
+仓库根：C:\Users\luoji\Desktop\firstep
+基线：4fc27282（改动前那一份从 git 对象取，不读工作区现状）
+
+===== A. 扫描面 =====
+  扫描对象 = `git ls-files` 的 tracked 文件 7486 个（含 .scratch/ 与 docs/）
+  读不了 / 二进制（跳过）：0 个
+  未跟踪文件不在扫描面内（`git ls-files` 的口径）；`__pycache__` 之类的产物不在 tracked 里。
+
+===== B. 逐处清单（现状（工作区）） =====
+  .scratch/full-download/e2e_full_download.py（.scratch）: import=1  调用=1  提及=1
+      import：行 [372]
+      调用：行 [374]
+      提及：行 [371]
+  .scratch/full-download/issues/03-download-task.md（.scratch）: 提及=2
+      提及：行 [25, 36]
+  .scratch/materials-update/e2e/e2e_materials_update.py（.scratch）: 提及=1
+      提及：行 [250]
+  .scratch/materials-update/issues/04-download-task.md（.scratch）: 提及=1
+      提及：行 [18]
+  .scratch/resumable-download/issues/01-local-simulator-and-probe.md（.scratch）: 提及=1
+      提及：行 [37]
+  .scratch/resumable-download/issues/02-resumable-downloader.md（.scratch）: 提及=1
+      提及：行 [65]
+  .scratch/resumable-download/issues/10-download-attempt-primitive.md（.scratch）: 提及=1
+      提及：行 [183]
+  .scratch/resumable-download/issues/12-part-state-shape-and-contract-parity.md（.scratch）: 提及=3
+      提及：行 [174, 178, 193]
+  .scratch/resumable-download/probe-01-negative.py（.scratch）: 模板代码=1  提及=2
+      模板代码：行 [35]
+      提及：行 [10, 13]
+  .scratch/resumable-download/probe-01-resume.py（.scratch）: 取值引用=2  提及=2
+      取值引用：行 [55, 76]
+      提及：行 [16, 51]
+  .scratch/resumable-download/probe-03-corridor.py（.scratch）: 提及=1
+      提及：行 [8]
+  .scratch/resumable-download/spec.md（.scratch）: 提及=5
+      提及：行 [19, 76, 82, 83, 91]
+  .scratch/resumable-download/verify-01-baseline.json（.scratch）: 提及=1
+      提及：行 [2]
+  .scratch/resumable-download/verify-01-baseline.txt（.scratch）: 提及=3
+      提及：行 [2, 5, 25]
+  .scratch/resumable-download/verify-02-probe.txt（.scratch）: 提及=1
+      提及：行 [65]
+  docs/agents/local-environment.md（docs）: 提及=2
+      提及：行 [143, 147]
+  src/contest_generator/download_resume.py（src）: 提及=2
+      提及：行 [20, 57]
+  src/contest_generator/materials_task.py（src）: 定义=1
+      定义：行 [88]
+  tests/test_full_task.py（tests）: 提及=1
+      提及：行 [820]
+  tests/test_materials_task.py（tests）: import=2
+      import：行 [23, 26]
+
+  合计：定义 1 / import 3 / 调用 1 / 取值引用 2 / 模板代码 1 / 提及 31
+  按分区：
+    .scratch  定义 0 / import 1 / 调用 1 / 取值引用 2 / 模板代码 1 / 提及 26
+    docs      定义 0 / import 0 / 调用 0 / 取值引用 0 / 模板代码 0 / 提及 2
+    src       定义 1 / import 0 / 调用 0 / 取值引用 0 / 模板代码 0 / 提及 2
+    tests     定义 0 / import 2 / 调用 0 / 取值引用 0 / 模板代码 0 / 提及 1
+
+===== B′. 改动前那一份（`git grep 4fc27282`——读的是 git 对象，不是工作区） =====
+  命中 35 行 / 19 个文件
+  按分区：.scratch 30 行，src 3 行，tests 2 行
+    4fc27282:.scratch/full-download/e2e_full_download.py:371:    """真实 HTTP 流式下载（续传断言用；与生产 download_part 同口径）。"""
+    4fc27282:.scratch/full-download/e2e_full_download.py:372:    from contest_generator.materials_task import download_part
+    4fc27282:.scratch/full-download/e2e_full_download.py:374:    return download_part(url, dest, on_progress)
+    4fc27282:.scratch/full-download/issues/03-download-task.md:25:- 复用 `materials_task` 的三样东西而不是重写：`TaskState` 枚举、`_file_sha256`（恢复期内容校验）、`download_part`（256 KB 流式下载）。状态机与快照节流形态与资料库任务同构，便于对照阅读。
+    4fc27282:.scratch/full-download/issues/03-download-task.md:36:- **端点测试必须注入下载函数**：`FullDownloadTask` 的默认下载实现是真 urllib，端点测试只注入 `start_full_update` 不够——会真的去请求 `https://example.com`（404）。修法：同时 patch `full_task.download_part`。
+    4fc27282:.scratch/materials-update/e2e/e2e_materials_update.py:250:            download=None,  # 真 download_part（走 HTTP 到 mock）
+    4fc27282:.scratch/materials-update/issues/04-download-task.md:18:`src/contest_generator/materials_task.py`：TaskState（idle/downloading/applying/done/failed/cancelled/partial）、ApplyTask（构造吃 check 批次形状，part 名 = zip_name → URL 尾段 → `<slug>.zip` 兜底；run() 逐卷下载 + SHA256 校验 + 快照落盘（2s 节流）；恢复时按「本地文件实际哈希 == 清单期望」跳过已完成卷——断点续传；cancel 在分卷边界生效）、download_part（256 KB 分块流式）、task_status（含 speed_bps 窗口估算）、write_task_snapshot。webapp 端点：check 结果缓存模块级 `_MATERIALS_LAST_CHECK` → apply 白名单 / 磁盘空间 1.5× 下载量 + 16MB 余量校验 / 启动 daemon 线程；status / cancel 薄调。测试 `tests/test_materials_task.py` 11 项全绿（断点 / 取消 / 状态机 / 端点）；mypy 的 8 个报错为 HEAD 既有（stash 对照确认），非本次引入。
+    4fc27282:.scratch/resumable-download/issues/01-local-simulator-and-probe.md:37:| 断流后 `download_part` **返回成功**，没有任何异常 | `verify-01-baseline.txt`：`cut 尝试 1 次 → ok，落盘 838860/2097152` |
+    4fc27282:.scratch/resumable-download/issues/02-resumable-downloader.md:65:`download_part`，所以**用户侧行为此刻没有变化**；半成品保留、重试计数与状态面投影是工单 03/04。
+    4fc27282:.scratch/resumable-download/issues/10-download-attempt-primitive.md:183:- 顺手发现、**未处理**：`materials_task.download_part`（256 KB 分块那支）自工单 03 起
+    4fc27282:.scratch/resumable-download/issues/12-part-state-shape-and-contract-parity.md:174:| 13 | Spec | `download_part` 顺手量出「零调用点」，本单没收 | 写进备注（工单 10 已把它记为「另一单」）；**不塞进本单**——它是「一个公开导出没人用」，与「两侧同形契约」不同性质 |
+    4fc27282:.scratch/resumable-download/issues/12-part-state-shape-and-contract-parity.md:178:| 17 | Standards | 12 键契约在仓内有**第三份**副本（`tests/test_full_task.py` 的 `test_status_idle_shape` 字面集合） | **本单不收**（收它要改第二个既有文件、扩本单改动面）；记为**独立线索**，与 `download_part` 同处备注 |
+    4fc27282:.scratch/resumable-download/issues/12-part-state-shape-and-contract-parity.md:193:  - **不动 `materials_task.download_part`**（顺手量到、但属另一类）：本单复核它的调用点是
+    4fc27282:.scratch/resumable-download/probe-01-negative.py:10:  对照：`download_part`（当前唯一实现）在断流下既不报错、也不校验长度。
+    4fc27282:.scratch/resumable-download/probe-01-negative.py:13:对照用**包装函数**实现（包在 `download_part` 外面），使它与被测对象只差一件事：
+    4fc27282:.scratch/resumable-download/probe-01-negative.py:35:from contest_generator.materials_task import download_part as _plain
+    4fc27282:.scratch/resumable-download/probe-01-resume.py:16:    python probe-01-resume.py --impl plain         # 强制用 download_part（红基线复现）
+    4fc27282:.scratch/resumable-download/probe-01-resume.py:51:    """返回 (下载函数, 实现名)。`resumable_download` 未实现时 auto 退到 download_part。"""
+    4fc27282:.scratch/resumable-download/probe-01-resume.py:55:        return materials_task.download_part, "download_part"
+    4fc27282:.scratch/resumable-download/probe-01-resume.py:76:    return materials_task.download_part, "download_part"
+    4fc27282:.scratch/resumable-download/probe-03-corridor.py:8:| 被测对象 | 下载函数本身（`resumable_download` / `download_part`） | **任务层**：`FullDownloadTask` 走缺省下载器 |
+    4fc27282:.scratch/resumable-download/spec.md:19:   实测判据：`download_part` 一次 `urlopen`、256 KB 分块、只在**全部读完**后才由调用方
+    4fc27282:.scratch/resumable-download/spec.md:76:  **保签名兼容** `download_part(url, dest, on_progress)` 的三参调用形态（前三个参数位置与语义不变），
+    4fc27282:.scratch/resumable-download/spec.md:82:**`download_part` 保留**为「单次尝试」语义的实现（`download_resume` 内部调用它），
+    4fc27282:.scratch/resumable-download/spec.md:83:既有 monkeypatch 点（`tests/test_full_task.py` / `tests/test_full_apply.py` 打 `full_task.download_part`）
+    4fc27282:.scratch/resumable-download/verify-01-baseline.json:2:  "impl": "download_part",
+    4fc27282:.scratch/resumable-download/verify-01-baseline.txt:2:# 被测实现 = download_part（当前唯一存在的实现）；载荷 2 MiB；断流/卡死点 = 40%
+    4fc27282:.scratch/resumable-download/verify-01-baseline.txt:5:实现 = download_part
+    4fc27282:.scratch/resumable-download/verify-01-baseline.txt:25:断流/截断时，download_part **既不报错、也不校验 Content-Length**：
+    4fc27282:.scratch/resumable-download/verify-02-probe.txt:65:- **产品默认值还没换**：`full_task` / `materials_task` 的 `download` 缺省仍是 `download_part`，
+    4fc27282:src/contest_generator/download_resume.py:20:`resumable_download` 的前三个参数与 `materials_task.download_part` **位置与语义完全一致**，
+    4fc27282:src/contest_generator/download_resume.py:57:# 每次读取的块大小（与 download_part 一致，别改出两套口径）
+    4fc27282:src/contest_generator/materials_task.py:88:def download_part(
+    4fc27282:tests/test_full_task.py:820:    # 注入点是 **任务类的 `_download`**——`download_part` 已经不再是缺省实现，
+    4fc27282:tests/test_materials_task.py:26:    download_part,
+
+===== C. 定义本体（改动前 / 现状） =====
+  [改动前（git 4fc27282）] def 在第 88-106 行（共 19 行）
+  def download_part(
+      url: str, dest: Path, on_progress: Callable[[int], None]
+  ) -> str:
+      """流式下载单卷到 dest（256 KB 分块），返回 SHA256 hex。
+  
+      失败抛 urllib.error / OSError（调用方转失败态并清理半成品）。
+      """
+      digest = hashlib.sha256()
+      request = urllib.request.Request(url, headers={"User-Agent": "firstep-materials"})
+      with urllib.request.urlopen(request, timeout=300) as response:
+          with open(dest, "wb") as handle:
+              while True:
+                  chunk = response.read(256 * 1024)
+                  if not chunk:
+                      break
+                  handle.write(chunk)
+                  digest.update(chunk)
+                  on_progress(len(chunk))
+      return digest.hexdigest()
+
+  [现状（工作区）] def 在第 88-115 行（共 28 行）
+  def download_part(
+      url: str, dest: Path, on_progress: Callable[[int], None]
+  ) -> str:
+      """流式下载单卷到 dest（256 KB 分块），返回 SHA256 hex。
+  
+      失败抛 urllib.error / OSError（调用方转失败态并清理半成品）。
+  
+      **它已经不在生产链路上**（工单 14 量清后按 `wontfix` 留下，别照着用它）：
+      两条任务链路的缺省下载器自工单 03 起是 `download_resume.resumable_download`
+      （卷内断点 + 截断判定 + 退避重试），而全仓对它的活口只剩**证据工具**——
+      本特性探针的红基线复现与反证对照、以及完整包那次端到端演练脚本里的一处真调用。
+      留它的理由正是那批工具要一份**冻结的「改之前」实现**当对照，按定义不该随产品演进。
+  
+      **别拿它当下载器**：它不校验 `Content-Length`，被截断也会自称成功
+      （工单 01 探针实测到的原缺陷，正是它被换掉的原因）。
+      """
+      digest = hashlib.sha256()
+      request = urllib.request.Request(url, headers={"User-Agent": "firstep-materials"})
+      with urllib.request.urlopen(request, timeout=300) as response:
+          with open(dest, "wb") as handle:
+              while True:
+                  chunk = response.read(256 * 1024)
+                  if not chunk:
+                      break
+                  handle.write(chunk)
+                  digest.update(chunk)
+                  on_progress(len(chunk))
+      return digest.hexdigest()
+
+
+===== D. 对外承诺面（删之前必须逐条查——它是模块级公开函数） =====
+  *口径*：D2/D4/D5 读的是 `git grep <基线 ref>`（git 对象，不是工作区）；D6 读的是**工作区现状**（那两处事实只能在现状上问），已在该条里写明。
+  D1 `__all__` / 模块级导出：
+    [改动前] 模块里没有 __all__（不是显式导出面）
+    [现状] 模块里没有 __all__（不是显式导出面）
+  D2 文档点名（docs/、CONTEXT.md、README、CHANGELOG、VERSIONS；口径 = `git grep 4fc27282`）：
+    （无）
+  D3 发布包白名单（三支打包器都要查——「活口算不算用户可见」的判据就在这儿）：
+    pack-update.ps1（小发版）：顶层白名单 21 项；含 `src`=True；含 `.scratch`=False
+       注释：# ---------- 5. 文件清单（仅 tracked；.venv / sources\materials / .scratch 不进清单） ----------
+    pack-full.ps1 → full_pack.py（完整包）：TOP_LEVEL_ENTRIES 22 项；含 `src`=True；SKIP_DIR_NAMES 含 `.scratch`=True
+    pack-materials.ps1（资料库增量）：只打 `sources/materials`，与 `src/` 无关
+  D4 其它模块的 import（src/ 分区里的 import 类命中）：
+    （无——除定义处外没有任何 src/ 模块 import 它）
+  D5 spec 里的声明（.scratch/resumable-download/spec.md）：
+    spec.md:19: 实测判据：`download_part` 一次 `urlopen`、256 KB 分块、只在**全部读完**后才由调用方
+    spec.md:76: **保签名兼容** `download_part(url, dest, on_progress)` 的三参调用形态（前三个参数位置与语义不变），
+    spec.md:82: **`download_part` 保留**为「单次尝试」语义的实现（`download_resume` 内部调用它），
+    spec.md:83: 既有 monkeypatch 点（`tests/test_full_task.py` / `tests/test_full_apply.py` 打 `full_task.download_part`）
+    spec.md:91: > ② `full_task.download_part` 这个 monkeypatch 点**自工单 03 起就不存在了**
+  D6 spec 那两条理由今天还成立吗（要独立验证，不许照抄 spec）：
+    *这一条读的是**工作区现状**（`download_resume` / `full_task` 当前正文）——它问的是「今天还成立吗」，基线那一份回答不了。
+    - 「`download_resume` 内部调用它」：download_resume.py 里的**调用**行 = []（只有注释提到它——spec 这条理由已不成立）
+    - 「既有 monkeypatch 点 `full_task.download_part` 继续有效」：full_task.py 里有 `download_part` 吗 = False
+
+===== E. 历史：这东西被哪些提交增删过 =====
+  [全仓] `download_part` 命中 10 次
+      4fc27282 refactor(下载): 分卷状态形状只留用得上的那半——删三处零调用点的 from_dict、契约判据两侧拉齐（工单 resumable-download/12）
+      3fc218b4 refactor(下载): 「一次分卷下载」收成一处——两条链路各 55/47 行的动作序列变成 16/18 行（工单 resumable-download/10）
+      22d0f643 feat(下载): 两条链路接上可续下载——半成品保留 + 边车 + 重试计数（工单 resumable-download/03）
+      a7db1429 feat(下载): 可续下载器——卷内断点续传 + 截断判定 + 无上限退避重试（工单 resumable-download/02）
+      bb92ad5a test(下载): 断点续传真 socket 判据先落地并证明会红——抓到「截断被当成下完了」（工单 resumable-download/01）
+      bc794b8b feat(完整包): 端到端演练与文档收口——修掉删除清单未进清单 JSON 的真缺陷（工单 full-download/06）
+      0931d419 feat(完整包): 更新器全量模式与应用编排——分卷整体预检 + 覆盖 + 资料库基线写回（工单 full-download/04）
+      189d105c feat(完整包): 下载任务与 apply/status/cancel 端点——卷级断点续传 + 磁盘预检（工单 full-download/03）
+      8e306da3 资料库更新端到端冒烟与文档（工单 materials-update/07）+ 修复下载文件名双缀与 MaterialApplyError 异常登记
+      786dc450 资料库下载任务与apply/status/cancel端点（工单 materials-update/04）：后台线程+卷级断点
+  [tests/] `download_part` 命中 5 次
+      22d0f643 feat(下载): 两条链路接上可续下载——半成品保留 + 边车 + 重试计数（工单 resumable-download/03）
+      bc794b8b feat(完整包): 端到端演练与文档收口——修掉删除清单未进清单 JSON 的真缺陷（工单 full-download/06）
+      0931d419 feat(完整包): 更新器全量模式与应用编排——分卷整体预检 + 覆盖 + 资料库基线写回（工单 full-download/04）
+      189d105c feat(完整包): 下载任务与 apply/status/cancel 端点——卷级断点续传 + 磁盘预检（工单 full-download/03）
+      786dc450 资料库下载任务与apply/status/cancel端点（工单 materials-update/04）：后台线程+卷级断点
+  [src/] `download_part` 命中 4 次
+      22d0f643 feat(下载): 两条链路接上可续下载——半成品保留 + 边车 + 重试计数（工单 resumable-download/03）
+      a7db1429 feat(下载): 可续下载器——卷内断点续传 + 截断判定 + 无上限退避重试（工单 resumable-download/02）
+      189d105c feat(完整包): 下载任务与 apply/status/cancel 端点——卷级断点续传 + 磁盘预检（工单 full-download/03）
+      786dc450 资料库下载任务与apply/status/cancel端点（工单 materials-update/04）：后台线程+卷级断点
+  [曾把名字 import 进 full_task] `from .materials_task import` 命中 2 次
+      189d105c feat(完整包): 下载任务与 apply/status/cancel 端点——卷级断点续传 + 磁盘预检（工单 full-download/03）
+      786dc450 资料库下载任务与apply/status/cancel端点（工单 materials-update/04）：后台线程+卷级断点
+  [曾 patch full_task.download_part] `full_task.download_part` 命中 5 次
+      22d0f643 feat(下载): 两条链路接上可续下载——半成品保留 + 边车 + 重试计数（工单 resumable-download/03）
+      bb92ad5a test(下载): 断点续传真 socket 判据先落地并证明会红——抓到「截断被当成下完了」（工单 resumable-download/01）
+      bc794b8b feat(完整包): 端到端演练与文档收口——修掉删除清单未进清单 JSON 的真缺陷（工单 full-download/06）
+      0931d419 feat(完整包): 更新器全量模式与应用编排——分卷整体预检 + 覆盖 + 资料库基线写回（工单 full-download/04）
+      189d105c feat(完整包): 下载任务与 apply/status/cancel 端点——卷级断点续传 + 磁盘预检（工单 full-download/03）
+  [定义本体] `def download_part` 命中 1 次
+      786dc450 资料库下载任务与apply/status/cancel端点（工单 materials-update/04）：后台线程+卷级断点

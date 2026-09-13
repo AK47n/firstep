@@ -91,6 +91,15 @@ def download_part(
     """流式下载单卷到 dest（256 KB 分块），返回 SHA256 hex。
 
     失败抛 urllib.error / OSError（调用方转失败态并清理半成品）。
+
+    **它已经不在生产链路上**（工单 14 量清后按 `wontfix` 留下，别照着用它）：
+    两条任务链路的缺省下载器自工单 03 起是 `download_resume.resumable_download`
+    （卷内断点 + 截断判定 + 退避重试），而全仓对它的活口只剩**证据工具**——
+    本特性探针的红基线复现与反证对照、以及完整包那次端到端演练脚本里的一处真调用。
+    留它的理由正是那批工具要一份**冻结的「改之前」实现**当对照，按定义不该随产品演进。
+
+    **别拿它当下载器**：它不校验 `Content-Length`，被截断也会自称成功
+    （工单 01 探针实测到的原缺陷，正是它被换掉的原因）。
     """
     digest = hashlib.sha256()
     request = urllib.request.Request(url, headers={"User-Agent": "firstep-materials"})

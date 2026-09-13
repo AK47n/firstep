@@ -1,0 +1,42 @@
+工单 14 错版注入探针：内存里换成错版 → 跑既有用例 → 看红不红
+
+（逐文件跑、每文件 120s 上限；「卡住」如实记录、不作判据）
+
+== download_part_boom ==
+  [绿（判据无效）]
+      [绿（判据无效）] tests/test_materials_task.py：20 passed, 1 warning in 5.50s；炸弹被执行 0 次
+      [绿（判据无效）] tests/test_full_task.py：33 passed, 1 warning in 8.18s；炸弹被执行 0 次
+      [绿（判据无效）] tests/test_download_status_surface.py：30 passed, 1 warning in 5.43s；炸弹被执行 0 次
+
+== resolve_boom ==
+  [红（判据有效）]
+      [红（判据有效）] tests/test_materials_task.py：2 failed, 18 passed, 1 warning in 3.38s；炸弹被执行 1 次；首个红：tests/test_materials_task.py::test_task_download_defaults_to_resumable
+      [红（判据有效）] tests/test_full_task.py：5 failed, 28 passed, 1 warning in 8.00s；炸弹被执行 4 次；首个红：tests/test_full_task.py::test_task_download_defaults_to_resumable
+
+== .scratch 活口（运行时取证：把每支工具真正用它的那一行跑一遍） ==
+      [probe-01-resume.py: load_impl('plain')] download_part -> contest_generator.materials_task.download_part；是产品那份 download_part = True
+      [probe-01-negative.py: 模板里的 import] from contest_generator.materials_task import download_part as _plain -> 解析到产品函数的同一个对象 = True
+      [full-download/e2e_full_download.py: 函数体里的 import] from contest_generator.materials_task import download_part -> 同一个对象 = True
+
+== 补充：探针设计与三处已修的失真（脚本里写死，不走 shell 追加）==
+1. **配对证据，且阳性对照的靶子必须找对**：只跑「炸弹没人碰」得到绿，绿也可能来自
+   「注入没生效」。阳性对照要排掉这种解释，它的注入点必须覆盖**缺省下载器这条路上的
+   三个绑定**——① 构造期 `__init__` 读的是**任务模块自己的**模块名；② 两个任务类的
+   **类属性** `_download`（类创建时就绑死了）；③ 解析期算 `is_default` 用的是
+   **`task_download`** 那份绑定。自证 = 拿真任务实例跑一遍 `resolve_task_download`，
+   断言「解析结果就是炸弹」**且**「被认成缺省实现」。
+   *探针第一版打的是 `download_resume.resumable_download`：它确实转红了（5 + 12 failed），
+   但红的全是**身份断言**（用例里 `assert task._download is resumable_download` 两侧取到
+   不同对象），没有一条是「下载路径被执行」——那格红不为绿背书。第二版只换
+   `task_download` 的绑定，自证立刻如实报「探针失效」（实例属性仍是真实现 → 解析走
+   `return instance, False` 那一支）。现在的判据里多了一项**「炸弹被执行 N 次」**：
+   死目标那格三文件全绿且 N = 0，活目标那格 N > 0 —— 两类红分开报。*
+2. **每格自证注入生效**：断言目标对象的 `__code__.co_filename` 已是 `<naive-boom>`；
+   炸弹经 `exec(compile(..., "<naive-boom>", "exec"))` 装上（就地 `def` 会拿到
+   sitecustomize 的临时路径 → 自证永远失败）。
+3. **活口不止静态**：`.scratch` 那几处活口另做**运行时取证**——把每支工具真正用它的
+   那一行执行一遍（`load_impl("plain")` / 模板里的 import / 函数体里的 import），
+   全都要解析到**同一个产品函数对象**才算活口，避免「grep 命中但不是调用」的假账。
+4. **落盘这一层也要设 UTF-8**：本机控制台是 GBK，不设 `PYTHONIOENCODING` 时探针会在
+   「活口」那一节因回程替换字符 `UnicodeEncodeError` 崩掉（退出码 1、整节判据丢失），
+   而半截输出看起来像「跑完了」。子进程 env 与探针自身 stdout 两处都钉住。
