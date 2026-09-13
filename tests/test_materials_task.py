@@ -105,13 +105,20 @@ def _content_for(url: str) -> tuple[bytes, str]:
 
 
 def _fake_download(log: list[str] | None = None, failures: dict[str, int] | None = None):
-    """构造假下载函数：按 URL 写内容并返回其 SHA256；failures 控制失败次数。"""
+    """构造假下载函数：按 URL 写内容并返回其 SHA256；failures 控制失败次数。
 
+    `dest.parent.mkdir(...)` 这一句不是摆设（工单 11 撞上的）：**真下载器**（
+    `resumable_download`）自己会建目录，而假件若不建，`write_bytes` 就抛
+    `FileNotFoundError`——于是任务转 failed、盘上什么都不留，**而按调用次数 / 状态的断言
+    照样绿**（写没写盘根本没被看）。工单 11 新补的那条「改坏 → 重下」用例正是靠
+    「盘上那份在不在、内容对不对」判的，于是把这个潜伏的假件缺陷照了出来。
+    """
     def fake(url: str, dest: Path, on_progress) -> str:
         if failures and failures.get(url, 0) > 0:
             failures[url] -= 1
             raise OSError("connection reset")
         content, sha = _content_for(url)
+        dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(content)
         if log is not None:
             log.append(url)
@@ -286,6 +293,65 @@ def test_apply_task_keeps_partial_on_network_failure(tmp_path: Path, monkeypatch
     assert "校验失败" in task2.error
     assert not target.exists()
     assert not (target.parent / (target.name + ".partial.json")).exists()
+
+
+def test_apply_task_rejects_tampered_local_file(tmp_path: Path) -> None:
+    """快照记 ok、盘上文件也在，但**内容哈希与清单不符** → 恢复不认它，且**大声失败**。
+
+    **为什么这条是补的**：工单 11 的错版注入探针（
+    `.scratch/resumable-download/probe-11-guard-strength.py`）实测——把
+    `_restore_snapshot` 的哈希校验整段去掉，full 侧有
+    `tests/test_full_task.py::test_resume_rejects_tampered_local_file` 转红，
+    **而资料库这一侧 47 passed**：同一段逻辑，一处有人看、一处没人看。
+    两侧的实现现已收到 `task_download.restore_snapshot_parts` 一处，
+    判据也必须两侧都在场。
+
+    判据选的是**终态**（`failed` + 中文校验失败）而不是「重下了」：同尺寸改坏的文件
+    会被 `download_and_verify` 的「长度到点 → 不发请求、直接校验」接住（工单 03 立的规则），
+    于是**不会重下**，而是如实报校验失败——这一格在工单 11 的探针里栽过一次
+    （当时写成「必须重下」，红了才看清真口径，见 `probe-11-resolve-seam.py`）。
+    为什么这一格能抓到「恢复没做哈希校验」：去掉校验的实现会把改坏的卷标成 ok、
+    于是直接 `done`（静默收下一份坏文件），终态断言立刻红。
+
+    载荷要求：真字节 > MIN_RESUME_BYTES（64 KB），且**清单的 size / sha256 与它一致**
+    （`_fake_download` 只写 24 字节的小内容，拿它配 300 KB 的清单会被如实判成校验失败）。
+    """
+    content = _big_payload()
+    url = "https://x/k230.zip"
+    batches = [_batch("k230", "k230资料",
+                      [_part(url, len(content), _sha_of(content), "k230.zip")])]
+    calls: list[str] = []
+
+    def fake(touched_url: str, dest: Path, on_progress) -> str:  # noqa: ANN001
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(content)
+        on_progress(len(content))
+        calls.append(touched_url)
+        return _sha_of(content)
+
+    first = ApplyTask(task_dir=tmp_path / "updates", batches=batches, download=fake)
+    first.run()
+    assert first.state == TaskState.DONE, first.error
+    assert calls == [url]
+
+    target = tmp_path / "updates" / "materials" / "k230.zip"
+    tampered = bytearray(content)
+    tampered[len(tampered) // 2] ^= 0xFF          # 同尺寸、不同内容
+    target.write_bytes(bytes(tampered))
+    calls.clear()
+    again = ApplyTask(task_dir=tmp_path / "updates", batches=batches, download=fake)
+    again.run()
+    assert again.state == TaskState.FAILED, "改坏的卷被静默当成已下好"
+    assert "校验失败" in (again.error or ""), again.error
+
+    # 修好之后必须还能正常收尾（坏件已被清掉，走真实重下）
+    target.parent.mkdir(parents=True, exist_ok=True)
+    calls.clear()
+    third = ApplyTask(task_dir=tmp_path / "updates", batches=batches, download=fake)
+    third.run()
+    assert calls == [url], "坏件没被清掉 → 下一轮又被当成「长度到点」直接校验"
+    assert third.state == TaskState.DONE, third.error
+    assert target.read_bytes() == content
 
 
 def test_apply_task_resumes_partial_instead_of_restarting(tmp_path: Path, monkeypatch) -> None:

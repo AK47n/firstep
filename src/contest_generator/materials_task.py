@@ -33,6 +33,7 @@ import json
 import threading
 import time
 import urllib.request
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -43,7 +44,11 @@ from .download_resume import (
     DownloadCancelledError,
     resumable_download,
 )
-from .task_download import download_and_verify
+from .task_download import (
+    download_and_verify,
+    resolve_task_download,
+    restore_snapshot_parts,
+)
 from .task_retry import TaskRetryMixin, TaskRetryState
 
 SNAPSHOT_FILENAME = "materials-task.json"
@@ -167,7 +172,8 @@ class ApplyTask(TaskRetryMixin):
     这个既有注入点）→ 缺省的可续下载，见 `_resolve_download`。
     """
 
-    # 类属性 = 注入点的一部分（见 `_resolve_download`）：缺省值本身就是可续下载。
+    # 类属性 = 注入点的一部分（解析规则见 `task_download.resolve_task_download`）：
+    # 缺省值本身就是可续下载。
     _download: Callable[..., Any] = staticmethod(resumable_download)
 
     def __init__(
@@ -241,27 +247,19 @@ class ApplyTask(TaskRetryMixin):
     def _resolve_download(self) -> tuple[Callable[..., Any], bool]:
         """→（这次要用的下载函数, 是不是缺省的可续下载）。
 
-        与 `full_task.FullDownloadTask._resolve_download` 同形（两文件故意对称，
-        对照阅读）。第二个返回值交给 `as_task_downloader`：缺省实现无条件吃
-        `expected_size` / `expected_sha256` / `cancel` / `before_retry`，注入的下载器
-        仍按既有的三参形态调用。
+        解析顺序住在 `task_download.resolve_task_download`——与
+        `full_task.FullDownloadTask._resolve_download` **同一份**（工单 11：
+        两处原本是 7 行逐字相同的代码，账在 `measure-11-duplication.py`）。
+        留一行壳的理由与 `_retry_state` 同：调用点与既有判据按方法取用。
         """
-        instance = self.__dict__.get("_download")
-        if instance is None or instance is resumable_download:
-            chosen = getattr(type(self), "_download", None) or resumable_download
-            return chosen, chosen is resumable_download
-        return instance, False
+        return resolve_task_download(self)
 
-    def _restore_snapshot(self) -> None:
-        """读上次快照：ok 卷校验本地文件 sha 一致 → 标记跳过（断点续传）。"""
-        snapshot = self.task_dir / SNAPSHOT_FILENAME
-        if not snapshot.is_file():
-            return
-        try:
-            data = json.loads(snapshot.read_text(encoding="utf-8"))
-        except Exception:
-            return
-        # 仅按 slug + part name 对齐恢复（快照与本次任务形状一致）
+    def _snapshot_pairs(self, data: dict[str, Any]) -> Iterator[tuple[_PartState, Any]]:
+        """按 **slug + 卷名**把本次批次与上次快照对齐（两层的组织方式是本链路的知识）。
+
+        快照形状 = `{"batches": [{slug, parts: [{name, ok, dest, …}]}]}`：
+        先按 slug 找批次（找不到就整批跳过），再在该批次内按卷名找存档项。
+        """
         saved = {b["slug"]: b for b in data.get("batches") or []}
         for batch in self.batches:
             saved_batch = saved.get(batch.slug)
@@ -269,17 +267,17 @@ class ApplyTask(TaskRetryMixin):
                 continue
             saved_parts = {p["name"]: p for p in saved_batch.get("parts") or []}
             for part in batch.parts:
-                saved_part = saved_parts.get(part.name)
-                if not saved_part or not saved_part.get("ok"):
-                    continue
-                dest = Path(str(saved_part.get("dest") or ""))
-                if not dest.is_file():
-                    continue
-                # 恢复校验：本地已下载文件的内容哈希 == 清单期望 SHA256
-                if download_resume.file_sha256(dest) == str(part.sha256 or "").lower():
-                    part.ok = True
-                    part.dest = str(dest)
-                    part.downloaded_bytes = part.size
+                yield part, saved_parts.get(part.name)
+
+    def _restore_snapshot(self) -> None:
+        """读上次快照：ok 卷校验本地文件 sha 一致 → 标记跳过（断点续传）。
+
+        「逐卷恢复」那三条规则住在 `task_download.restore_snapshot_parts`（工单 11）；
+        本方法只交代**本链路的卷怎么遍历**：资料库是「批次 → 卷」两层。
+        """
+        restore_snapshot_parts(
+            self.task_dir / SNAPSHOT_FILENAME, self._snapshot_pairs
+        )
 
     def run(self) -> None:
         """执行下载：逐批次逐卷 → 下载 + 校验 + 完成标记；分卷边界响应取消。

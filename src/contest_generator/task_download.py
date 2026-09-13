@@ -36,16 +36,31 @@ test_download_resume_module_has_no_status_knowledge` 钉着这个方向（工单
 
 **半成品「保留还是删除」的分界仍是任务层策略**（工单 03 立的）：下载域只给
 `is_resumable_partial` 这条判据，删不删由这里（代表任务层）决定。
+
+**本模块还持另外两件「两条链路各写一遍就得同步」的事**（工单 11）：
+
+- `resolve_task_download`——**注入缝的解析**（实例属性 → 类属性 → 缺省实现）。
+  两处原本是 7 行**逐字相同**的代码（`22d0f643` 同一提交各抄一遍）；
+- `restore_snapshot_parts`——**卷级断点的逐卷恢复**（认下「标了 ok + 文件在 + 内容哈希
+  与清单一致」的卷）。两处原本有 16 行相同，差异只在「怎么遍历自己的卷」，
+  故这里吃一个 `iter_parts` 而不是把两种遍历都塞进来。
 """
 
 from __future__ import annotations
 
+import json
 import threading
+from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
 
 from . import download_resume
-from .download_resume import DownloadCancelledError, DownloadResult, DownloadVerifyError
+from .download_resume import (
+    DownloadCancelledError,
+    DownloadResult,
+    DownloadVerifyError,
+    resumable_download,
+)
 from .task_retry import TaskRetryState, part_progress_callbacks
 
 # 「本次不下载、直接进校验」的记号。
@@ -87,7 +102,8 @@ def download_and_verify(
     **dest 怎么算**、**成功之后的卷级记账与快照**（`_current_part_name`、`_write_snapshot`）。
 
     `resolve` 是**注入缝的解析器**（→ `(下载函数, 是不是缺省的可续下载)`），由调用方给
-    （就是 `_resolve_download`）：解析顺序（实例属性 → 类属性 → 缺省）是任务对象自己的事，
+    （就是各链路的 `_resolve_download` 壳，规则在 `resolve_task_download`）：
+    解析顺序（实例属性 → 类属性 → 缺省）是任务对象自己的事，
     **而且只在真的要下载时才调用**——「长度到点」那条短路上不解析（与重排前一致：
     那条路走的是 `if/else` 的另一支）。
 
@@ -150,3 +166,84 @@ def download_and_verify(
     part.ok = True
     part.downloaded_bytes = part.size
     retry.clear_message()
+
+
+# ---------------------------------------------------------------------------
+# 任务层的另外两件共享事（工单 resumable-download/11）
+#
+# 它们与上面的「一次分卷下载」是**两件事**，但同属「两条链路各写一遍就一定要同步」的那类，
+# 所以家也在这里（工单 11 的「先量再动」量出来的账：解析逻辑两处 7 行逐字相同、
+# 恢复逻辑两处 16 行相同）。
+# ---------------------------------------------------------------------------
+
+
+class SavedItemLike(Protocol):
+    """快照里一条存档项的**最小契约**（只声明本模块真的碰的两个字段）。"""
+
+    def get(self, key: str, default: Any = ...) -> Any: ...
+
+
+def resolve_task_download(task: Any) -> tuple[Callable[..., Any], bool]:
+    """→（这次要用的下载函数, 是不是**缺省的可续下载**）——注入缝的解析**单源**。
+
+    解析顺序：**实例属性**（构造注入 / 判据直接赋值）→ **类属性**
+    （`monkeypatch.setattr(<Task>, "_download", …)` 这个既有注入点）→ 缺省的可续下载。
+    实例属性仍等于缺省实现 = 没人注入过 → 让类属性优先
+    （这就是既有 monkeypatch 判据继续有效的原因：`__init__` 总会把实例属性写成
+    `download or resumable_download`，若不这样判，类属性注入会被那份缺省实现挡掉）。
+
+    第二个返回值交给 `as_task_downloader`：缺省实现无条件吃
+    `expected_size` / `expected_sha256` / `cancel` / `before_retry`；注入的下载器
+    仍按既有的三参形态调用（除非它自己声明要吃那几个关键字参数）——
+    「`(url, dest, on_progress)` 签名不变」这条契约因此零改动。
+
+    **为什么收在这里而不是收成基类方法**：调用点（`download_and_verify(resolve=…)`）
+    与既有判据（`task._resolve_download()`）都按**类上的方法**取用，两条链路的类上
+    各留一个一行壳即可，类层次零改动。壳与 `_retry_state`（`TaskRetryMixin` 的取值入口）
+    同形——本函数不是新模式，是把解析回到既有模式上。
+    """
+    instance = task.__dict__.get("_download")
+    if instance is None or instance is resumable_download:
+        chosen = getattr(type(task), "_download", None) or resumable_download
+        return chosen, chosen is resumable_download
+    return instance, False
+
+
+def restore_snapshot_parts(
+    snapshot_path: Path,
+    iter_parts: Callable[[Mapping[str, Any]], Iterator[tuple[PartLike, Any]]],
+) -> None:
+    """读上次快照，把**已经在盘上且内容对得上**的卷标记为跳过（卷级断点）——逐卷原语**单源**。
+
+    调用方只负责**怎么遍历自己的卷**（`iter_parts(快照 JSON) → (part, 存档项) 迭代器`）：
+    完整包是扁平分卷表、资料库是「批次 → 卷」两层，这一层形状差异留在各自的调用点，
+    本原语**不碰**（工单 11 的缝就划在这里：抽掉的只有两处逐字相同的那 16 行）。
+
+    三条规则（与两处旧正文逐字等价）：
+
+    - 快照缺失 / 读不出来（坏 JSON）/ 存档项形状不对 → 当作**没有断点**，静默返回。
+      快照是节流写盘的，断电、硬杀进程留下的半截文件很常见，任务对象在 `__init__`
+      里就要能带着它起来（大不了重下一卷）；把启动流程炸掉才是真 bug。
+    - 只有**标了 ok、且盘上文件在、且内容哈希 == 清单 sha** 的卷才认。
+      哈希那一格是安全线：没有它，一个被改坏 / 被别的程序覆盖的同名文件会被当
+      「已下好」交给应用器。清单 sha 大小写不统一也要认（比对前 `.lower()`）。
+    - 认下来就**三个字段一起**恢复：`ok` / `dest` / `downloaded_bytes`。
+      少恢复 `downloaded_bytes` 会让进度从 0 起（用户以为白下了）；
+      少恢复 `dest` 会让 `part_paths()` 交不出应用器的输入。
+    """
+    if not snapshot_path.is_file():
+        return
+    try:
+        data = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    except Exception:
+        return
+    for part, saved in iter_parts(data):
+        if not isinstance(saved, Mapping) or not saved.get("ok"):
+            continue
+        dest = Path(str(saved.get("dest") or ""))
+        if not dest.is_file():
+            continue
+        if download_resume.file_sha256(dest) == str(part.sha256 or "").lower():
+            part.ok = True
+            part.dest = str(dest)
+            part.downloaded_bytes = part.size

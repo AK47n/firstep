@@ -12,14 +12,23 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import threading
 from pathlib import Path
 
 import pytest
 
 from contest_generator import download_resume
-from contest_generator.download_resume import DownloadCancelledError, DownloadVerifyError
-from contest_generator.task_download import download_and_verify
+from contest_generator.download_resume import (
+    DownloadCancelledError,
+    DownloadVerifyError,
+    resumable_download,
+)
+from contest_generator.task_download import (
+    download_and_verify,
+    resolve_task_download,
+    restore_snapshot_parts,
+)
 from contest_generator.task_retry import TaskRetryState
 from tests._byte_server import ByteServer
 
@@ -224,3 +233,179 @@ def test_real_downloader_through_the_primitive(tmp_path: Path) -> None:
 
     assert part.ok is True
     assert dest.read_bytes() == PAYLOAD
+
+
+# ---------------------------------------------------------------------------
+# 任务层的另外两件共享事（工单 resumable-download/11）：
+# 注入缝的解析、卷级断点的恢复
+# ---------------------------------------------------------------------------
+
+
+class _FakeTask:
+    """最小任务对象：只持 `_download` 一个类属性 + 一个可设的实例属性。
+
+    为什么要自造一个：`resolve_task_download` 只碰这两处（
+    `task.__dict__["_download"]` 与 `type(task)._download`），拿真任务类测会让
+    「解析顺序」这件事被任务类的其它构造逻辑盖住。
+    """
+
+    _download = staticmethod(resumable_download)
+
+    def __init__(self, instance_value=None, set_instance: bool = True) -> None:
+        if set_instance:
+            self._download = instance_value if instance_value is not None else resumable_download
+
+
+def test_resolve_download_prefers_instance_attribute(tmp_path: Path) -> None:
+    """实例属性（构造注入 / 判据直接赋值）优先，且 `is_default=False`。
+
+    `is_default=False` 是有代价的语义：适配层据此**不**给注入的下载器补
+    `expected_size` / `expected_sha256`（保住既有的三参注入缝）。
+    """
+    def injected(url, dest, on_progress):  # noqa: ANN001
+        return ""
+
+    task = _FakeTask(instance_value=injected)
+    assert resolve_task_download(task) == (injected, False)
+
+
+def test_resolve_download_falls_back_to_class_attribute(tmp_path: Path) -> None:
+    """**类属性注入缝**：`monkeypatch.setattr(<Task>, "_download", fake)` 必须仍然生效。
+
+    这是工单 10 第七节点名要先回答的那个判据问题。构造后实例属性若等于缺省实现
+    （`__init__` 的 `download or resumable_download` 就会这样），解析必须让**类属性**赢——
+    否则 monkeypatch 出来的假下载器会被实例上那份缺省实现挡掉。
+    """
+    def patched(url, dest, on_progress):  # noqa: ANN001
+        return ""
+
+    task = _FakeTask()                       # 实例属性 = 缺省实现（没人真注入过）
+    original = _FakeTask._download
+    _FakeTask._download = staticmethod(patched)
+    try:
+        assert resolve_task_download(task) == (patched, False)
+    finally:
+        _FakeTask._download = original
+
+
+def test_resolve_download_defaults_to_resumable() -> None:
+    """两处都没有 → 缺省的可续下载，且 `is_default=True`（适配层据此补清单参数）。"""
+    task = _FakeTask(instance_value=None, set_instance=False)
+    assert resolve_task_download(task) == (resumable_download, True)
+
+    # 实例属性**显式**等于缺省实现（构造参数默认路径）→ 也算「没人注入过」
+    assert resolve_task_download(_FakeTask()) == (resumable_download, True)
+
+
+def test_resolve_download_without_class_attribute_falls_back() -> None:
+    """类属性被整体删掉（注释掉 / 换实现）→ 仍要退回缺省，不能返回 None。"""
+    class Bare:
+        pass
+
+    task = Bare()
+    assert resolve_task_download(task) == (resumable_download, True)
+
+
+def test_restore_snapshot_parts_skips_when_no_snapshot(tmp_path: Path) -> None:
+    """没有快照文件 → 什么都不做（也不是异常）。"""
+    part = _Part("a.zip", "http://x/a.zip", 3, _sha(b"abc"))
+    restore_snapshot_parts(tmp_path / "nope.json", lambda data: [(part, None)])
+    assert part.ok is False
+
+
+def test_restore_snapshot_parts_tolerates_broken_json(tmp_path: Path) -> None:
+    """坏快照（不是合法 JSON）→ 当作没有断点，静默返回（不许把启动流程炸掉）。
+
+    这条**不是**洁癖：快照是节流写盘的，断电 / 硬杀进程留下的半截文件很常见，
+    任务对象在 `__init__` 里就要能带着它起来（大不了重下一卷）。
+    """
+    snapshot = tmp_path / "full-task.json"
+    snapshot.write_text("{不是 JSON", encoding="utf-8")
+    part = _Part("a.zip", "http://x/a.zip", 3, _sha(b"abc"))
+    restore_snapshot_parts(snapshot, lambda data: [(part, None)])
+    assert part.ok is False
+
+
+def test_restore_snapshot_parts_restores_all_three_fields(tmp_path: Path) -> None:
+    """认下来的卷：`ok` / `dest` / `downloaded_bytes` **三个字段一起**恢复。
+
+    少恢复 `downloaded_bytes` 会让进度条从 0 开始（用户以为白下了）；
+    少恢复 `dest` 会让 `part_paths()` 交不出应用器的输入。
+    """
+    data = b"abcdefgh"
+    target = tmp_path / "full" / "a.zip"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(data)
+    snapshot = tmp_path / "full-task.json"
+    snapshot.write_text(
+        json.dumps({"parts": [{"name": "a.zip", "ok": True, "dest": str(target)}]}),
+        encoding="utf-8",
+    )
+    part = _Part("a.zip", "http://x/a.zip", len(data), _sha(data))
+    restore_snapshot_parts(
+        snapshot, lambda saved: [(part, next(iter(saved.get("parts") or []), None))]
+    )
+    assert (part.ok, part.dest, part.downloaded_bytes) == (True, str(target), len(data))
+
+
+def test_restore_snapshot_parts_rejects_tampered_content(tmp_path: Path) -> None:
+    """快照记 ok、文件也在，但**内容哈希与清单 sha 不符** → 不认（这就是卷级断点的安全线）。
+
+    没有这一条，一个被改坏 / 被别的程序覆盖的同名文件会被当「已下好」，
+    应用器拿它去解压 —— 终态是「校验失败」甚至更糟。
+    """
+    target = tmp_path / "full" / "a.zip"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"tampered")
+    snapshot = tmp_path / "full-task.json"
+    snapshot.write_text(
+        json.dumps({"parts": [{"name": "a.zip", "ok": True, "dest": str(target)}]}),
+        encoding="utf-8",
+    )
+    part = _Part("a.zip", "http://x/a.zip", 8, _sha(b"abcdefgh"))
+    restore_snapshot_parts(
+        snapshot, lambda saved: [(part, next(iter(saved.get("parts") or []), None))]
+    )
+    assert part.ok is False, "内容哈希不符的卷不许被当成已下好"
+
+
+def test_restore_snapshot_parts_ignores_entries_that_are_not_ok_or_gone(
+    tmp_path: Path,
+) -> None:
+    """四种「不该认」的存档形状：未标 ok / 文件不在 / dest 空 / 存档项根本不是字典。
+
+    最后一格（存档项是字符串而不是对象）是**形状防御**：快照文件是外部输入
+    （磁盘上可能被别人改过），旧实现靠 `TypeError` 撞进 `except Exception` 兜住，
+    现在按形状判掉，行为同样是「跳过这一卷」。
+    """
+    target = tmp_path / "full" / "a.zip"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"abcdefgh")
+    snapshot = tmp_path / "full-task.json"
+    snapshot.write_text(json.dumps({"parts": []}), encoding="utf-8")
+    saved_entries = [
+        {"name": "a.zip", "ok": False, "dest": str(target)},          # 没标 ok
+        {"name": "a.zip", "ok": True, "dest": str(tmp_path / "x.zip")},  # 文件不在
+        {"name": "a.zip", "ok": True, "dest": ""},                     # dest 空
+        "a.zip",                                                       # 形状就不对
+    ]
+    for saved in saved_entries:
+        part = _Part("a.zip", "http://x/a.zip", 8, _sha(b"abcdefgh"))
+        restore_snapshot_parts(snapshot, lambda _saved, s=saved: [(part, s)])
+        assert part.ok is False, f"不该认的存档形状被认了：{saved!r}"
+
+
+def test_restore_snapshot_parts_compares_sha_case_insensitively(tmp_path: Path) -> None:
+    """清单里的 sha 大小写不统一（大写）也要认——旧实现就是这么比的（`str(...).lower()`）。"""
+    data = b"abcdefgh"
+    target = tmp_path / "full" / "a.zip"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(data)
+    snapshot = tmp_path / "full-task.json"
+    snapshot.write_text(json.dumps({"parts": []}), encoding="utf-8")
+    part = _Part("a.zip", "http://x/a.zip", len(data), _sha(data).upper())
+    restore_snapshot_parts(
+        snapshot,
+        lambda _saved: [(part, {"name": "a.zip", "ok": True, "dest": str(target)})],
+    )
+    assert part.ok is True

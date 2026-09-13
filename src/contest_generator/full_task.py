@@ -35,6 +35,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -45,7 +46,11 @@ from .download_resume import (
     resumable_download,
 )
 from .materials_task import TaskState
-from .task_download import download_and_verify
+from .task_download import (
+    download_and_verify,
+    resolve_task_download,
+    restore_snapshot_parts,
+)
 from .task_retry import TaskRetryMixin, TaskRetryState
 
 SNAPSHOT_FILENAME = "full-task.json"
@@ -147,7 +152,8 @@ class FullDownloadTask(TaskRetryMixin):
     """
 
     # 类属性是「注入点」的一部分：`monkeypatch.setattr(FullDownloadTask, "_download", fake)`
-    # 靠它能落到类上（`_resolve_download` 按「实例属性 ≠ 这个缺省值」判有没有注入）。
+    # 靠它能落到类上（解析规则见 `task_download.resolve_task_download`：
+    # 实例属性 ≠ 这个缺省值 才算「有人注入过」）。
     _download: Callable[..., Any] = staticmethod(resumable_download)
 
     def __init__(
@@ -223,43 +229,32 @@ class FullDownloadTask(TaskRetryMixin):
     def _resolve_download(self) -> tuple[Callable[..., Any], bool]:
         """→（这次要用的下载函数, 是不是**缺省的可续下载**）。
 
-        解析顺序：实例属性（构造注入 / 测试直接赋值）→ 类属性（既有
-        `monkeypatch.setattr(FullDownloadTask, "_download", …)` 注入点）→ 缺省的可续下载。
-        实例属性仍等于缺省实现 = 没人注入过 → 让类属性优先（这就是既有 monkeypatch
-        用例继续有效的原因）。
-
-        第二个返回值交给 `as_task_downloader`：缺省实现无条件吃
-        `expected_size` / `expected_sha256` / `cancel` / `before_retry`；注入的下载器
-        仍按既有的三参形态调用（除非它自己声明要吃那几个关键字参数）——
-        「`(url, dest, on_progress)` 签名不变」这条契约因此零改动。
+        解析顺序（实例属性 → 类属性 → 缺省的可续下载）住在
+        `task_download.resolve_task_download`——两条链路同一份（工单 11：
+        两处原本是 7 行逐字相同的代码）。本方法留一行壳是**故意的**：
+        调用点（`download_and_verify(resolve=…)`）与既有判据都按方法取用，
+        类层次因而零改动（与 `_retry_state` 壳同形）。
         """
-        instance = self.__dict__.get("_download")
-        if instance is None or instance is resumable_download:
-            chosen = getattr(type(self), "_download", None) or resumable_download
-            return chosen, chosen is resumable_download
-        return instance, False
+        return resolve_task_download(self)
+
+    def _saved_parts_of_flat_table(self, data: dict[str, Any]) -> dict[str, Any]:
+        """快照的扁平分卷表 → `{卷名: 存档项}`（只有本链路知道自己是扁平的）。"""
+        return {p["name"]: p for p in data.get("parts") or []}
+
+    def _snapshot_pairs(self, data: dict[str, Any]) -> Iterator[tuple[_PartState, Any]]:
+        """按**卷名**把本次清单与上次快照对齐（卷的组织方式是本链路的知识）。"""
+        saved = self._saved_parts_of_flat_table(data)
+        return ((part, saved.get(part.name)) for part in self.parts)
 
     def _restore_snapshot(self) -> None:
-        """读上次快照：ok 卷且本地文件内容哈希与清单一致 → 标记跳过（断点续传）。"""
-        snapshot = self.task_dir / SNAPSHOT_FILENAME
-        if not snapshot.is_file():
-            return
-        try:
-            data = json.loads(snapshot.read_text(encoding="utf-8"))
-        except Exception:
-            return
-        saved_parts = {p["name"]: p for p in data.get("parts") or []}
-        for part in self.parts:
-            saved = saved_parts.get(part.name)
-            if not saved or not saved.get("ok"):
-                continue
-            dest = Path(str(saved.get("dest") or ""))
-            if not dest.is_file():
-                continue
-            if download_resume.file_sha256(dest) == str(part.sha256 or "").lower():
-                part.ok = True
-                part.dest = str(dest)
-                part.downloaded_bytes = part.size
+        """读上次快照：ok 卷且本地文件内容哈希与清单一致 → 标记跳过（断点续传）。
+
+        「逐卷恢复」那三条规则住在 `task_download.restore_snapshot_parts`（工单 11）；
+        本方法只交代**本链路的卷怎么遍历**：完整包是一张扁平分卷表。
+        """
+        restore_snapshot_parts(
+            self.task_dir / SNAPSHOT_FILENAME, self._snapshot_pairs
+        )
 
     def run(self) -> None:
         """执行下载：逐卷 → 下载 + 校验 + 完成标记；分卷边界响应取消。

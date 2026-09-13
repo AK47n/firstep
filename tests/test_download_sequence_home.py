@@ -21,6 +21,9 @@ from typing import Any
 
 import pytest
 
+from contest_generator import full_task as ft
+from contest_generator import materials_task as mt
+
 # 一次下载的**动作集合**。前两个是纯动作（装配注入缝、写断点边车），
 # 后两个是决定里的另外半边（判断半成品能不能续、校验失败时清掉它）。
 # 之所以四个一起列：**「保留还是删除」这个决定就是这套动作**——把它抄回任务模块的人
@@ -36,9 +39,6 @@ SEQUENCE_CALLS = {
 
 def _task_module_paths() -> list[Path]:
     """两条任务链路的源文件（守卫的扫描面；反向验证会把它换掉）。"""
-    from contest_generator import full_task as ft
-    from contest_generator import materials_task as mt
-
     return [Path(ft.__file__), Path(mt.__file__)]
 
 
@@ -51,6 +51,17 @@ def _reaches(node: ast.AST, name: str) -> bool:
         if isinstance(func, ast.Attribute) and func.attr == name:
             return True
         if isinstance(func, ast.Name) and func.id == name:
+            return True
+    return False
+
+
+def _defines(node: ast.AST, name: str) -> bool:
+    """这棵树里有没有**定义** `name`（查「家在不在这儿」用，与 `_reaches` 的分工：
+    前者问「有没有这个东西」，后者问「有没有调用它」）。"""
+    for child in ast.walk(node):
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child.name == name:
+            return True
+        if isinstance(child, ast.ClassDef) and child.name == name:
             return True
     return False
 
@@ -103,6 +114,212 @@ def test_download_sequence_has_a_single_home() -> None:
         assert calls_home, (
             f"{Path(module.__file__).name} 不再调用共享原语 download_and_verify"
         )
+
+
+# ---------------------------------------------------------------------------
+# 工单 11：另外两件任务层共享事也各只有一个家
+# ---------------------------------------------------------------------------
+
+# 函数名 → 它该调用的那个共享件（**壳**只许剩这一句调用）。
+# 口径：`_resolve_download`（注入缝的解析，原两处 7 行逐字相同）与
+# `_restore_snapshot`（卷级断点的逐卷恢复，原两处 16 行相同）。
+SHELL_ALLOWED = {
+    "_resolve_download": "resolve_task_download",
+    "_restore_snapshot": "restore_snapshot_parts",
+}
+
+# 共享件里必须出现的**形状**（防「壳还在、家搬空了」）。
+# 每一项 = (判据说明, 谓词)：谓词吃该共享函数的 AST 节点，返回「家确实在这儿」。
+HOME_MUST_HAVE = {
+    "resolve_task_download": (
+        ("读了实例属性表（`instance.__dict__`）",
+         lambda node: any(isinstance(child, ast.Attribute) and child.attr == "__dict__"
+                          for child in ast.walk(node))),
+        ("按 `_download` 这个名字找注入的下载器",
+         lambda node: any(isinstance(child, ast.Constant) and child.value == "_download"
+                          for child in ast.walk(node))),
+    ),
+    "restore_snapshot_parts": (
+        ("拿盘上内容哈希与清单比（`file_sha256`）",
+         lambda node: any(isinstance(child, ast.Attribute) and child.attr == "file_sha256"
+                          for child in ast.walk(node))),
+        ("先判文件在不在（`is_file`）",
+         lambda node: any(isinstance(child, ast.Attribute) and child.attr == "is_file"
+                          for child in ast.walk(node))),
+        ("按形状取存档项字段（`Mapping.get`）",
+         lambda node: any(isinstance(child, ast.Attribute) and child.attr == "get"
+                          for child in ast.walk(node))),
+    ),
+}
+
+
+def _fat_shells(source: str) -> list[str]:
+    """→「把共享件的规则抄回任务模块」的函数（空表 = 干净）。
+
+    判据**认形状不认名字**（三样都要在同一个函数体里，避开误伤）：
+
+    - 注入缝解析：`self.__dict__` 读 + `self.__dict__.get("_download")` 这个**字面名字**；
+    - 逐卷恢复：`file_sha256` 调用 + `is_file` 判 + 读存档项的 `.get(...)`。
+
+    为什么要把三样凑齐才算：单看任何一个都会误伤——`__init__` 里有
+    `self._download = …`、`_resolve_download` 的壳里也有 `_download` 这个名字，
+    而 `test_resume_rejects_tampered_local_file` 那种用例里到处都有 `is_file`。
+    """
+    found: list[str] = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+
+        def _has(predicate) -> bool:  # noqa: ANN001
+            return any(predicate(child) for child in ast.walk(node))
+
+        has_dict = _has(lambda c: isinstance(c, ast.Attribute) and c.attr == "__dict__")
+        has_download_name = _has(
+            lambda c: isinstance(c, ast.Constant) and c.value == "_download"
+        )
+        has_file_sha = _has(
+            lambda c: isinstance(c, ast.Attribute) and c.attr == "file_sha256"
+        )
+        has_is_file = _has(lambda c: isinstance(c, ast.Attribute) and c.attr == "is_file")
+        has_saved_get = _has(
+            lambda c: isinstance(c, ast.Call)
+            and isinstance(c.func, ast.Attribute) and c.func.attr == "get"
+        )
+
+        shapes = []
+        if has_dict and has_download_name:
+            shapes.append("实例属性 × 类属性的解析")
+        if has_file_sha and has_is_file and has_saved_get:
+            shapes.append("逐卷恢复的哈希比对")
+        if shapes:
+            found.append(f"{node.name}（第 {node.lineno} 行：{'、'.join(shapes)}）")
+    return found
+
+
+# 判据的**阳性对照**：这段就是工单 11 改之前的旧正文形状，`_fat_shells` 必须抓到它。
+# （没有这一段的「空表 = 干净」是假绿：判据写松了也一样是空表。）
+FAT_SHELL_CONTROL = '''
+class _Control:
+    def _resolve_download(self):
+        instance = self.__dict__.get("_download")
+        if instance is None or instance is resumable_download:
+            chosen = getattr(type(self), "_download", None) or resumable_download
+            return chosen, chosen is resumable_download
+        return instance, False
+
+    def _restore_snapshot(self):
+        snapshot = self.task_dir / SNAPSHOT_FILENAME
+        if not snapshot.is_file():
+            return
+        saved_parts = {p["name"]: p for p in data.get("parts") or []}
+        for part in self.parts:
+            saved = saved_parts.get(part.name)
+            dest = Path(str(saved.get("dest") or ""))
+            if not dest.is_file():
+                continue
+            if download_resume.file_sha256(dest) == str(part.sha256 or "").lower():
+                part.ok = True
+'''
+
+
+def _checked_task_paths() -> list[Path]:
+    """守卫的扫描面（反向验证会换掉它）。"""
+    return _task_module_paths()
+
+
+def _helper_node(source: str, name: str) -> ast.AST | None:
+    """共享件里那个函数的 AST 节点（查「家里到底有没有这套形状」）。"""
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
+            return node
+    return None
+
+
+def test_shared_task_helpers_have_a_single_home() -> None:
+    """结构守卫：注入缝解析 / 逐卷恢复只能在 `task_download` 里有实现。
+
+    工单 11 量出来的账：`_resolve_download` 两处**7 行逐字相同**（`22d0f643` 同一提交
+    各抄一遍）、`_restore_snapshot` 两处 16 行相同。收完之后两条链路各留一行壳；
+    本守卫查三件事（照上面那条的形状判据写，不认名字）：
+
+    1. 任务模块里不再出现「解析 / 逐卷恢复」的形状；
+    2. `task_download` 确实是它们的家；
+    3. 两条链路**确实**还在调共享件（防绕过）。
+    """
+    from contest_generator import task_download as td
+
+    # 判据先自证（治「守卫只是装饰」）：阳性对照必须被认出来
+    control = _fat_shells(FAT_SHELL_CONTROL)
+    assert len(control) == 2, f"判据连阳性对照都认不出来（假绿）：{control}"
+
+    for path in _checked_task_paths():
+        offenders = _fat_shells(path.read_text(encoding="utf-8"))
+        assert not offenders, (
+            f"{path.name} 又把共享件的规则抄回来了：{offenders}"
+            "（应走 task_download.resolve_task_download / restore_snapshot_parts）"
+        )
+
+    home_source = Path(td.__file__).read_text(encoding="utf-8")
+    home = ast.parse(home_source)
+    for helper in SHELL_ALLOWED.values():
+        assert _defines(home, helper), f"共享件里找不到 {helper}（家搬走了？）"
+    for helper, marks in HOME_MUST_HAVE.items():
+        node = _helper_node(home_source, helper)
+        assert node is not None, f"共享件里找不到 {helper}"
+        for label, predicate in marks:
+            assert predicate(node), f"{helper} 里少了「{label}」——家搬空了？"
+
+    from contest_generator import full_task as ft
+    from contest_generator import materials_task as mt
+
+    for module in (ft, mt):
+        tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
+        for helper in SHELL_ALLOWED.values():
+            assert _reaches(tree, helper), (
+                f"{Path(module.__file__).name} 不再调用共享件 {helper}"
+            )
+
+
+def test_shell_guard_turns_red_on_reinlined_body(tmp_path: Path) -> None:
+    """**反向验证**：把规则抄回任务模块，守卫必须指名道姓转红。
+
+    做法照上面那条反向验证的先例：取**磁盘上那个真守卫函数**的源码，拼上「抄回来的正文」
+    （就是工单 11 改之前的旧写法），写进 `%TEMP%` 副本再执行——判据本体是真身那份，
+    被扫的文件是副本，真身源码一个字节都不碰。
+    """
+    real_source = inspect.getsource(test_shared_task_helpers_have_a_single_home)
+    injected = real_source + (
+        "\n\nclass _Reinlined:\n"
+        "    def _resolve_download(self):\n"
+        "        instance = self.__dict__.get('_download')\n"
+        "        if instance is None or instance is resumable_download:\n"
+        "            chosen = getattr(type(self), '_download', None) or resumable_download\n"
+        "            return chosen, chosen is resumable_download\n"
+        "        return instance, False\n"
+        "\n"
+        "    def _restore_snapshot(self):\n"
+        "        if download_resume.file_sha256(self.dest) == self.sha256:\n"
+        "            self.ok = True\n"
+    )
+    copy_path = tmp_path / "reinlined_task.py"
+    copy_path.write_text(injected, encoding="utf-8")
+
+    namespace: dict[str, Any] = dict(globals())
+    exec(compile(injected, "<reinlined-shell-guard>", "exec"), namespace)
+    guard = namespace["test_shared_task_helpers_have_a_single_home"]
+    original = namespace["_checked_task_paths"]
+    namespace["_checked_task_paths"] = lambda: [copy_path]
+    try:
+        with pytest.raises(AssertionError) as caught:
+            guard()
+    finally:
+        namespace["_checked_task_paths"] = original
+
+    message = str(caught.value)
+    assert "_Reinlined" in message or "抄回来" in message, message
+    # 干净的那份也必须判绿（守卫不是「见谁都红」）
+    assert _fat_shells(Path(ft.__file__).read_text(encoding="utf-8")) == []
+    assert _fat_shells(Path(mt.__file__).read_text(encoding="utf-8")) == []
 
 
 def test_guard_turns_red_on_reinlined_sequence(tmp_path: Path) -> None:
