@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=30e2f2ef8a4454a934f929622032bbe4aca046e3 -->
+<!-- changelog-auto: last-commit=c5f2baf25218a802ca337d976657df9dae1ceb3c -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -42,6 +42,7 @@
 - 19:27 docs(下载): 工单 11 验收记录定稿——两轴 14 条处置、量具口径改成两个时刻、证据文件 UTF-8（工单 resumable-download/11）
 - 21:32 refactor(下载): 分卷状态形状只留用得上的那半——删三处零调用点的 from_dict、契约判据两侧拉齐（工单 resumable-download/12）
 - 21:32 docs(本机环境): 补记卡死的具体触发点（那支 status spy 打转的用例）与工单 12 的结构守卫/证据位置
+- 22:05 docs(下载): download_part 的活口量清了——生产侧零调用点，按 wontfix 保留（工单 resumable-download/14）
 
 ## 2026-09-12
 - 00:58 门禁引脚容量诊断（落点/可用 IO/解不开几组/至少去掉几个）
