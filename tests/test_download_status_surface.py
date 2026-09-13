@@ -14,6 +14,7 @@ import ast
 import json
 import threading
 import time
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -859,3 +860,190 @@ def test_shape_guard_turns_red_on_drift() -> None:
     assert renamed != mats_text, "阳性对照没造出来（③）：替换锚点没命中"
     problems = _shape_problems(full_text, renamed)
     assert any("to_dict" in p for p in problems), problems
+
+
+# ---------------------------------------------------------------------------
+# 12 键契约只许有一个家（工单 15）
+# ---------------------------------------------------------------------------
+
+# 「这一份是契约副本」的判据 = 字面集合（或其联合）枚举了契约的 ≥8 个键。
+# 阈值不是随手取的（工单 15 实测）：`_RETRY_FIELDS` 那条结构守卫的字段集与契约只重叠
+# **4** 个（它是「重试观测」那件事的内部属性名，不是载荷键），而仓内真正的契约副本是
+# **8 键**（`EXISTING_KEYS`，契约的前半）与 **12 键**（`STATUS_KEYS` = 前后半的联合）。
+# 阈值卡在 8 是为了连「只抄了前半」也认出来，同时不误伤 4 键那类部分重叠。
+CONTRACT_COPY_MIN_OVERLAP = 8
+
+
+def _resolve_unions(tree: ast.AST, known: dict[str, set[str]]) -> dict[str, set[str]]:
+    """模块级赋值两轮解析：先收字面量，再把 `A | B` 联合解出来（与书写顺序无关）。
+
+    **为什么需要它**：契约常量自己就是 `STATUS_KEYS = EXISTING_KEYS | NEW_KEYS`
+    （两个字面量拼的），只认 `ast.Set` 的守卫**连契约本体都认不出来**——
+    评审实测：第一版在现状下只命中 `EXISTING_KEYS`（8 键），自证那句「本文件那份契约常量
+    被认出来」名不副实。补上联合解析后，`STATUS_KEYS`（12 键）自己也在命中列表里，
+    而「别处用 `A | B` 拼一份副本」这条绕过路径同时被堵上（反向验证里有这一格）。
+    """
+    consts = dict(known)
+    assigns = [stmt for stmt in ast.walk(tree)
+               if isinstance(stmt, ast.Assign) and isinstance(stmt.targets[0], ast.Name)]
+    for _ in range(2):
+        for stmt in assigns:
+            keys = _literal_keys(stmt.value, consts)
+            if keys:
+                consts[stmt.targets[0].id] = keys
+    return consts
+
+
+def _literal_keys(node: ast.AST, consts: dict[str, set[str]]) -> set[str] | None:
+    """一个表达式能解出多少「字面键」：`{…}` / `A | B` / `名字`；解不出 → None。"""
+    if isinstance(node, ast.Set):
+        keys = {e.value for e in node.elts
+                if isinstance(e, ast.Constant) and isinstance(e.value, str)}
+        return keys or None
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        left, right = _literal_keys(node.left, consts), _literal_keys(node.right, consts)
+        if left is not None and right is not None:
+            return left | right
+        return None
+    if isinstance(node, ast.Name):
+        return consts.get(node.id)
+    return None
+
+
+def _contract_literal_copies(root: Path) -> list[tuple[Path, int, int]]:
+    """`root` 下**枚举了契约 ≥8 个键**的字面集合 / 联合 → [(文件, 行, 契约键数)]。
+
+    为什么值得钉（工单 15 的账）：这条 12 键契约在仓里曾有三份副本——
+    `STATUS_KEYS` 常量、`tests/test_full_task.py::test_status_idle_shape` 的内联字面、
+    以及两侧产品投影各自的空态 / 有态键表（后者是**实现**，不归这条守卫管）。
+    两份测试侧副本里那份内联的已收回：**量出来的取舍是「只少一格」**——
+    键与态的那几格它本来就包含在 `STATUS_KEYS` 那条里（探针逐格证过），
+    它真正多出来的唯一作用是「产品与共同常量一起改」时再红一次，
+    而那正是本文件 docstring 写明的**加字段手续**。这条守卫钉「别又抄回来」。
+
+    **判据面（已知边界，写在这儿免得被当成万能）**：只认 `{…}` 字面量与
+    `A | B` 联合（含模块级名字解析）；`set([...])` / 集合推导 / 从别处 import 再改名
+    这类写法**认不出来**。要收的口子是「又把 12 个键抄一遍」，那两种写法都不是它的形状。
+
+    **读不了的 `.py` 一律大声失败，不许静默跳过**：第一版 `except (OSError, SyntaxError):
+    continue`，于是真身实测时那个带 BOM 的文件（`utf-8` 读出 `\\ufeff` → `ast.parse` 抛错）
+    被**悄悄跳过**，守卫照样绿——「守卫只是装饰」正是工单 10/12 反复记过的坑。
+    现在 BOM 用 `utf-8-sig` 吃掉，真读不了 / 真解析不了就让用例红。
+    """
+    findings: list[tuple[Path, int, int]] = []
+    for path in sorted(root.rglob("*.py")):
+        try:
+            text = path.read_text(encoding="utf-8-sig")   # BOM 吃掉，别让它变成解析失败
+        except (OSError, UnicodeDecodeError) as exc:
+            raise AssertionError(
+                f"守卫扫到读不了的 .py：{path}（{exc}）——扫描面被藏起来了，"
+                "先修文件或修守卫，别让这一格静默通过") from exc
+        try:
+            # 解析别人的源码会把他们字符串里的无效转义（`"\m"` 之类）翻成 SyntaxWarning
+            # 打到本用例头上——与本守卫无关的噪声，就地静音（`ast.parse` 没有静音开关）。
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", SyntaxWarning)
+                tree = ast.parse(text)
+        except SyntaxError as exc:
+            raise AssertionError(
+                f"守卫扫到解析不了的 .py：{path}:{exc.lineno}（{exc.msg}）——"
+                "静默跳过等于放它藏一份契约副本") from exc
+        consts = _resolve_unions(tree, {})
+        seen: set[int] = set()
+        for node in ast.walk(tree):
+            keys = _literal_keys(node, consts)
+            if not keys:
+                continue
+            hits = len(keys & STATUS_KEYS)
+            if hits >= CONTRACT_COPY_MIN_OVERLAP and id(node) not in seen:
+                seen.add(id(node))
+                findings.append((path, node.lineno, hits))
+    return findings
+
+
+def test_status_contract_has_a_single_home() -> None:
+    """结构守卫：12 键契约的字面副本只许住在**本文件**。
+
+    守卫面 = `tests/**/*.py`（不含产品侧：两侧投影的「空态 + 有态」两张键表是**实现**，
+    它们的一致性由 `test_status_keys_are_the_contracted_set` 在**两个态上都查**兜着）。
+    判定只看字面集合与它们的联合——JS 侧那些对象字面量是**渲染用例的输入**（只读不判），
+    本来就不该被逼着写全 12 个键，故不在守卫面内。
+    """
+    here = Path(__file__).resolve()
+    findings = _contract_literal_copies(here.parent)
+    assert findings, "本文件里一份契约字面量都没被认出来（守卫的扫描面变了？）"
+    # 自证锚在**契约本体**上，不是随便哪个集合：`STATUS_KEYS` 是 12 键，必须被认出来。
+    # （第一版只认 `ast.Set`，于是只命中 `EXISTING_KEYS`（8 键）——那句自证名不副实。）
+    assert any(hits == len(STATUS_KEYS) for path, _, hits in findings
+               if path.resolve() == here), (
+        "本文件里的 12 键契约本体没被认出来——守卫的判据面（字面量 / 联合）漏了它")
+    others = [f"{path.name}:{line}（{hits} 个契约键）"
+              for path, line, hits in findings if path.resolve() != here]
+    assert not others, (
+        "12 键契约在别处又出现了字面副本：" + "、".join(others)
+        + "——契约的家是 tests/test_download_status_surface.py 的 STATUS_KEYS，"
+          "要加字段就改那一处（本文件 docstring 写明的手续）")
+
+
+def test_contract_home_guard_turns_red_on_a_second_copy(tmp_path: Path) -> None:
+    """反向验证：喂一份**又抄了一遍 12 键**的假测试文件，守卫必须指名道姓转红。
+
+    喂的是 `%TEMP%` 下的副本，真身一个字节不碰（工单 10/12 立的纪律）。
+    另配**两条阴性对照**：只写 4 个键的文件不该被认出来（阈值是真的），
+    `EXISTING_KEYS` 那种 8 键的半份**在同一文件里**也不该被当成「别处副本」。
+    """
+    import inspect
+
+    guard_src = (
+        f"CONTRACT_COPY_MIN_OVERLAP = {CONTRACT_COPY_MIN_OVERLAP}\n"
+        f"CONTRACT_KEYS = {sorted(STATUS_KEYS)!r}\n"
+        + inspect.getsource(_literal_keys)
+        + inspect.getsource(_resolve_unions)
+        + inspect.getsource(_contract_literal_copies).replace(
+            "STATUS_KEYS", "set(CONTRACT_KEYS)")
+    )
+    assert "set(CONTRACT_KEYS)" in guard_src, "自造源码的替换锚点没命中（守卫换了写法？）"
+    ns: dict[str, object] = {"ast": ast, "Path": Path, "warnings": warnings}
+    exec(compile(guard_src, "<guard-copy>", "exec"), ns)   # noqa: S102 - 自造源码，仅测试
+    guard = ns["_contract_literal_copies"]
+
+    # 假副本的键**从契约现derive**，不写死 12 个：写死的话，将来按手续加字段时
+    # 这条反向验证自己就会红（`findings[0][2] == len(STATUS_KEYS)` 不再成立）——
+    # 那正是本单在收掉的那份内联字面身上批评过的毛病（测试跟着数字走）。
+    keys = sorted(STATUS_KEYS)
+    half = len(keys) // 2
+    copy = tmp_path / "test_second_copy.py"
+    copy.write_text(
+        "def test_copy():\n"
+        f"    assert set({set(keys)!r}) == set()\n",
+        encoding="utf-8",
+    )
+    findings = guard(tmp_path)                       # type: ignore[operator]
+    assert findings, "阳性对照没被认出来：守卫的判据失效"
+    assert findings[0][0].name == "test_second_copy.py", findings
+    assert findings[0][2] == len(STATUS_KEYS), findings
+
+    # 阴性对照 ①：一个**联合**写的副本（`A | B`）也要被认出——这正是契约本体的形状。
+    union = tmp_path / "test_union_copy.py"
+    union.write_text(
+        f"A = {set(keys[:half])!r}\n"
+        f"B = {set(keys[half:])!r}\n"
+        "def test_union():\n"
+        "    assert A | B == set()\n",
+        encoding="utf-8",
+    )
+    copy.unlink()
+    findings = guard(tmp_path)                       # type: ignore[operator]
+    assert any(f[0].name == "test_union_copy.py" and f[2] == len(STATUS_KEYS)
+               for f in findings), findings
+
+    # 阴性对照 ②：只重叠 4 个键的集合不该被误伤（阈值太低就会把 `_RETRY_FIELDS` 那类
+    # 「另一件事的字段集」也判成副本）。
+    partial = tmp_path / "test_partial_overlap.py"
+    partial.write_text(
+        "def test_partial():\n"
+        "    assert set({'retry_count', 'retrying', 'error_kind', 'resume_percent'}) == set()\n",
+        encoding="utf-8",
+    )
+    union.unlink()
+    assert guard(tmp_path) == [], "阴性对照被误伤：阈值太低（4 个键的部分重叠不该算副本）"

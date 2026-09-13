@@ -28,6 +28,7 @@ from contest_generator.full_task import (
 )
 from contest_generator.webapp import AppContext, create_app
 from tests._byte_server import ByteServer
+from tests.test_download_status_surface import STATUS_KEYS
 
 
 def _payload(name: str) -> bytes:
@@ -673,21 +674,15 @@ def test_status_idle_shape() -> None:
     assert status["state"] == "idle"
     assert status["parts"] == []
     assert status["total_bytes"] == 0
-    # 八个既有字段（前端契约，不许改名）+ 工单 04 的三个新增字段 + 工单 05 的 resume_percent
-    assert set(status) == {
-        "state",
-        "parts",
-        "total_downloaded_bytes",
-        "total_bytes",
-        "speed_bps",
-        "current_part_name",
-        "error",
-        "message",
-        "retry_count",
-        "retrying",
-        "error_kind",
-        "resume_percent",
-    }
+    # 键集合**不在这里再抄一遍**（工单 15）：它的家是
+    # `tests/test_download_status_surface.py` 的 `STATUS_KEYS`——那条断言查**两侧 ×
+    # 空态 + 有态**，还查两个端点，本处那份内联字面在「键 × 侧 × 态」上没有一格是它独有的。
+    # **取值断言（上面三行）留在这里**：它们是本处独有的（探针实测：只改空态 `total_bytes`
+    # 时，`STATUS_KEYS` 那条绿、只有本用例红）。收口前后的逐格对照（同一支探针在基线提交
+    # 与现状各跑一遍）只差一格：内联字面会在「产品与共同常量一起改」时再红一次——
+    # 而那正是加字段的**规定手续**（见 `test_status_keys_are_the_contracted_set` 的 docstring），
+    # 不是多覆盖了哪一格载荷。
+    assert set(status) == STATUS_KEYS
 
 
 def test_status_reports_speed_and_current_part(tmp_path: Path) -> None:

@@ -1,0 +1,50 @@
+工单 15 错版注入探针：内存里换成错版 → 跑既有用例 → 看红不红
+
+（逐文件跑、每文件 120s 上限；「卡住」如实记录、不作判据）
+
+== full:add_key ==
+  [红（判据有效）]
+      [红（判据有效）] tests/test_download_status_surface.py：2 failed, 30 passed, 1 warning in 6.65s；红在：tests/test_download_status_surface.py::test_status_keys_are_the_contracted_set[full]、tests/test_download_status_surface.py::test_endpoints_expose_new_fields
+      [红（判据有效）] tests/test_full_task.py：1 failed, 32 passed, 1 warning in 8.53s；红在：tests/test_full_task.py::test_status_idle_shape
+
+== full:idle_add_key ==
+  [红（判据有效）]
+      [红（判据有效）] tests/test_download_status_surface.py：2 failed, 30 passed, 1 warning in 6.58s；红在：tests/test_download_status_surface.py::test_status_keys_are_the_contracted_set[full]、tests/test_download_status_surface.py::test_endpoints_expose_new_fields
+      [红（判据有效）] tests/test_full_task.py：1 failed, 32 passed, 1 warning in 8.46s；红在：tests/test_full_task.py::test_status_idle_shape
+
+== full:drop_key ==
+  [红（判据有效）]
+      [红（判据有效）] tests/test_download_status_surface.py：5 failed, 27 passed, 1 warning in 6.55s；红在：tests/test_download_status_surface.py::test_status_keys_are_the_contracted_set[full]、tests/test_download_status_surface.py::test_retrying_state_during_backoff[full]、tests/test_download_status_surface.py::test_retry_window_closes_when_backoff_ends
+      [红（判据有效）] tests/test_full_task.py：3 failed, 30 passed, 1 warning in 8.44s；红在：tests/test_full_task.py::test_status_shows_retrying_message_during_backoff、tests/test_full_task.py::test_ignored_range_retry_message_says_from_zero、tests/test_full_task.py::test_status_idle_shape
+
+== materials:drop_key ==
+  [红（判据有效）]
+      [红（判据有效）] tests/test_download_status_surface.py：3 failed, 29 passed, 1 warning in 6.59s；红在：tests/test_download_status_surface.py::test_status_keys_are_the_contracted_set[materials]、tests/test_download_status_surface.py::test_retrying_state_during_backoff[materials]、tests/test_download_status_surface.py::test_endpoints_expose_new_fields
+      [绿（判据无效）] tests/test_materials_task.py：20 passed, 1 warning in 3.35s
+
+== full:rename_key ==
+  [红（判据有效）]
+      [红（判据有效）] tests/test_download_status_surface.py：3 failed, 29 passed, 1 warning in 6.61s；红在：tests/test_download_status_surface.py::test_status_keys_are_the_contracted_set[full]、tests/test_download_status_surface.py::test_downloading_state_is_not_retrying[full]、tests/test_download_status_surface.py::test_endpoints_expose_new_fields
+      [红（判据有效）] tests/test_full_task.py：2 failed, 31 passed, 1 warning in 8.51s；红在：tests/test_full_task.py::test_status_idle_shape、tests/test_full_task.py::test_status_reports_speed_and_current_part
+
+== full:idle_total_bytes ==
+  [红（判据有效）]
+      [绿（判据无效）] tests/test_download_status_surface.py：32 passed, 1 warning in 6.47s
+      [红（判据有效）] tests/test_full_task.py：1 failed, 32 passed, 1 warning in 8.62s；红在：tests/test_full_task.py::test_status_idle_shape
+
+
+== 补充：探针与守卫的设计、以及三处已修的失真（脚本里写死，不走 shell 追加）==
+1. **错版一律是「包装真实现、只扰动要测的那一处」**：`_orig(task)` 走真实现，再对返回的
+   dict 做一件事（加一个键 / 少一个键 / 改名 / 改一个空态取值）。第一版把整支投影抄成
+   错版，非目标分支只能填桩——那会让大量用例因为桩而红，「红在谁身上」直接失效。
+2. **「协调改动」那一格**（`full:add_key_together`）= 产品两侧各多一个键 + 把共同常量
+   `STATUS_KEYS` 也补上同一个键（这正是本文件 docstring 写明的加字段流程）。
+   它答的是本单的核心问题：**字面副本是不是一份「独立见证」**。
+   为此另配一支 pytest 插件（collection 之后改模块属性——`assert set(status) == STATUS_KEYS`
+   取的是模块全局、调用时现取，故改得动）。
+3. **结构守卫不许静默跳过**：守卫要扫 `tests/**/*.py` 找「又抄一遍 12 键」的集合；
+   第一版 `except SyntaxError: continue`，真身实测时一个带 BOM 的副本被悄悄跳过、
+   守卫报绿（**假绿**）。现在 BOM 用 `utf-8-sig` 吃掉，读不了 / 解析不了都让用例红。
+   真身实测取证：造一份副本 → 守卫转红并指名 `_tmp_second_copy.py:2` → 删掉 → 复跑 32 passed。
+4. **两版对照**：`verify-15-{guard-strength-before,guard-strength}.txt` 是**收之前 / 收之后**
+   同一套错版注入的结果——取舍（少了哪一道拦、哪些格没变）就拿这两份对比着读。

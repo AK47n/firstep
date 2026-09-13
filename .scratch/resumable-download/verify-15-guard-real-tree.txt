@@ -1,0 +1,53 @@
+# 工单 15：结构守卫的**真身实测**（临时往 tests/ 放一份第二副本 → 看守卫红不红）
+# 脚本化可复跑：python .scratch/resumable-download/run-15-evidence.py real-tree
+
+## 放了第二副本之后（期望：**红**，并指名 _tmp_second_copy.py）
+F                                                                        [100%]
+================================== FAILURES ===================================
+___________________ test_status_contract_has_a_single_home ____________________
+
+    def test_status_contract_has_a_single_home() -> None:
+        """结构守卫：12 键契约的字面副本只许住在**本文件**。
+    
+        守卫面 = `tests/**/*.py`（不含产品侧：两侧投影的「空态 + 有态」两张键表是**实现**，
+        它们的一致性由 `test_status_keys_are_the_contracted_set` 在**两个态上都查**兜着）。
+        判定只看字面集合与它们的联合——JS 侧那些对象字面量是**渲染用例的输入**（只读不判），
+        本来就不该被逼着写全 12 个键，故不在守卫面内。
+        """
+        here = Path(__file__).resolve()
+        findings = _contract_literal_copies(here.parent)
+        assert findings, "本文件里一份契约字面量都没被认出来（守卫的扫描面变了？）"
+        # 自证锚在**契约本体**上，不是随便哪个集合：`STATUS_KEYS` 是 12 键，必须被认出来。
+        # （第一版只认 `ast.Set`，于是只命中 `EXISTING_KEYS`（8 键）——那句自证名不副实。）
+        assert any(hits == len(STATUS_KEYS) for path, _, hits in findings
+                   if path.resolve() == here), (
+            "本文件里的 12 键契约本体没被认出来——守卫的判据面（字面量 / 联合）漏了它")
+        others = [f"{path.name}:{line}（{hits} 个契约键）"
+                  for path, line, hits in findings if path.resolve() != here]
+>       assert not others, (
+            "12 键契约在别处又出现了字面副本：" + "、".join(others)
+            + "——契约的家是 tests/test_download_status_surface.py 的 STATUS_KEYS，"
+              "要加字段就改那一处（本文件 docstring 写明的手续）")
+E       AssertionError: 12 键契约在别处又出现了字面副本：_tmp_second_copy.py:2（12 个契约键）——契约的家是 tests/test_download_status_surface.py 的 STATUS_KEYS，要加字段就改那一处（本文件 docstring 写明的手续）
+E       assert not ['_tmp_second_copy.py:2（12 个契约键）']
+
+tests\test_download_status_surface.py:981: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_download_status_surface.py::test_status_contract_has_a_single_home
+1 failed in 1.01s
+
+
+## 删掉副本之后（期望：全绿；并核对 tests/ 干净）
+................................                                         [100%]
+============================== warnings summary ===============================
+tests/test_download_status_surface.py::test_endpoints_expose_new_fields
+  C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+32 passed, 1 warning in 6.83s
+
+
+## git status --short tests/（应只有本单改的那两个文件）
+M tests/test_download_status_surface.py
+ M tests/test_full_task.py

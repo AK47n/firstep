@@ -1,0 +1,43 @@
+# 本文件 = 工单 15 的错版注入探针在**基线提交 0344eb61** 上的输出（`git worktree` 临时检出，可复跑：
+#   python .scratch/resumable-download/run-15-evidence.py before
+# 用途：与 `verify-15-guard-strength.txt`（现状）对照，看「收成一份」改变了哪几格。
+
+工单 15 错版注入探针：内存里换成错版 → 跑既有用例 → 看红不红
+
+（逐文件跑、每文件 120s 上限；「卡住」如实记录、不作判据）
+
+== full:add_key ==
+  [红（判据有效）]
+      [红（判据有效）] tests/test_download_status_surface.py：2 failed, 28 passed, 5 warnings in 6.16s；红在：tests/test_download_status_surface.py::test_status_keys_are_the_contracted_set[full]、tests/test_download_status_surface.py::test_endpoints_expose_new_fields
+      [红（判据有效）] tests/test_full_task.py：1 failed, 32 passed, 1 warning in 8.86s；红在：tests/test_full_task.py::test_status_idle_shape
+
+== full:idle_add_key ==
+  [红（判据有效）]
+      [红（判据有效）] tests/test_download_status_surface.py：2 failed, 28 passed, 1 warning in 5.72s；红在：tests/test_download_status_surface.py::test_status_keys_are_the_contracted_set[full]、tests/test_download_status_surface.py::test_endpoints_expose_new_fields
+      [红（判据有效）] tests/test_full_task.py：1 failed, 32 passed, 1 warning in 8.86s；红在：tests/test_full_task.py::test_status_idle_shape
+
+== full:drop_key ==
+  [红（判据有效）]
+      [红（判据有效）] tests/test_download_status_surface.py：5 failed, 25 passed, 1 warning in 5.78s；红在：tests/test_download_status_surface.py::test_status_keys_are_the_contracted_set[full]、tests/test_download_status_surface.py::test_retrying_state_during_backoff[full]、tests/test_download_status_surface.py::test_retry_window_closes_when_backoff_ends
+      [红（判据有效）] tests/test_full_task.py：3 failed, 30 passed, 1 warning in 8.93s；红在：tests/test_full_task.py::test_status_shows_retrying_message_during_backoff、tests/test_full_task.py::test_ignored_range_retry_message_says_from_zero、tests/test_full_task.py::test_status_idle_shape
+
+== materials:drop_key ==
+  [红（判据有效）]
+      [红（判据有效）] tests/test_download_status_surface.py：3 failed, 27 passed, 1 warning in 5.71s；红在：tests/test_download_status_surface.py::test_status_keys_are_the_contracted_set[materials]、tests/test_download_status_surface.py::test_retrying_state_during_backoff[materials]、tests/test_download_status_surface.py::test_endpoints_expose_new_fields
+      [绿（判据无效）] tests/test_materials_task.py：20 passed, 1 warning in 3.45s
+
+== full:rename_key ==
+  [红（判据有效）]
+      [红（判据有效）] tests/test_download_status_surface.py：3 failed, 27 passed, 1 warning in 5.91s；红在：tests/test_download_status_surface.py::test_status_keys_are_the_contracted_set[full]、tests/test_download_status_surface.py::test_downloading_state_is_not_retrying[full]、tests/test_download_status_surface.py::test_endpoints_expose_new_fields
+      [红（判据有效）] tests/test_full_task.py：2 failed, 31 passed, 1 warning in 8.86s；红在：tests/test_full_task.py::test_status_idle_shape、tests/test_full_task.py::test_status_reports_speed_and_current_part
+
+== full:idle_total_bytes ==
+  [红（判据有效）]
+      [绿（判据无效）] tests/test_download_status_surface.py：30 passed, 1 warning in 5.64s
+      [红（判据有效）] tests/test_full_task.py：1 failed, 32 passed, 1 warning in 8.92s；红在：tests/test_full_task.py::test_status_idle_shape
+
+== full:add_key_together ==
+  [红（判据有效）]
+      [绿（判据无效）] tests/test_download_status_surface.py：30 passed, 1 warning in 5.70s
+      [红（判据有效）] tests/test_full_task.py：1 failed, 32 passed, 1 warning in 8.96s；红在：tests/test_full_task.py::test_status_idle_shape
+

@@ -1,0 +1,180 @@
+仓库根：C:\Users\luoji\Desktop\firstep
+基线：0344eb61（改动前那一份走 `git show <ref>:<文件>`，不读工作区现状）
+
+===== A. 扫描面 =====
+  产品侧投影：['src/contest_generator/full_task.py', 'src/contest_generator/materials_task.py']
+  测试文件：['tests/test_download_status_surface.py', 'tests/test_full_task.py', 'tests/test_materials_task.py']
+  前端 fixture：['tests/js/download-progress.test.mjs', 'tests/js/full-update.test.mjs', 'tests/js/materials-update.test.mjs']
+  **扫描面就是这些**：本量具不搜全仓找「第 N 份副本」，而是按「状态载荷键会出现在哪些地方」逐个点名（产品投影 / 测试断言 / 前端输入）。
+
+########## 改动前（git 0344eb61） ##########
+
+===== B. 契约本体（从产品侧投影现算，量具不自带副本） =====
+  [full] `full_task_status` 写下的键 12 个：['current_part_name', 'error', 'error_kind', 'message', 'parts', 'resume_percent', 'retry_count', 'retrying', 'speed_bps', 'state', 'total_bytes', 'total_downloaded_bytes']
+  [materials] `task_status` 写下的键 12 个：['current_part_name', 'error', 'error_kind', 'message', 'parts', 'resume_percent', 'retry_count', 'retrying', 'speed_bps', 'state', 'total_bytes', 'total_downloaded_bytes']
+  两侧并集（= 本量具口径的「12 键契约」）：12 个
+
+===== B′. 每一份副本 =====
+  产品侧  src/contest_generator/full_task.py:356  full_task_status 里的 dict 字面量
+          形状=产品投影（每个分支一份字面键表） 键 12 个：['state', 'parts', 'total_downloaded_bytes', 'total_bytes', 'speed_bps', 'current_part_name', 'error', 'message', 'retry_count', 'retrying', 'error_kind', 'resume_percent']
+  产品侧  src/contest_generator/full_task.py:386  full_task_status 里的 dict 字面量
+          形状=产品投影（每个分支一份字面键表） 键 12 个：['state', 'parts', 'total_downloaded_bytes', 'total_bytes', 'speed_bps', 'current_part_name', 'error', 'message', 'retry_count', 'retrying', 'error_kind', 'resume_percent']
+  产品侧  src/contest_generator/materials_task.py:386  task_status 里的 dict 字面量
+          形状=产品投影（每个分支一份字面键表） 键 12 个：['state', 'parts', 'total_downloaded_bytes', 'total_bytes', 'speed_bps', 'current_part_name', 'error', 'message', 'retry_count', 'retrying', 'error_kind', 'resume_percent']
+  产品侧  src/contest_generator/materials_task.py:416  task_status 里的 dict 字面量
+          形状=产品投影（每个分支一份字面键表） 键 12 个：['state', 'parts', 'total_downloaded_bytes', 'total_bytes', 'speed_bps', 'current_part_name', 'error', 'message', 'retry_count', 'retrying', 'error_kind', 'resume_percent']
+  测试常量 tests/test_download_status_surface.py:29  EXISTING_KEYS = 8 个键 ★契约副本
+          键：['current_part_name', 'error', 'message', 'parts', 'speed_bps', 'state', 'total_bytes', 'total_downloaded_bytes']
+  测试常量 tests/test_download_status_surface.py:40  NEW_KEYS = 4 个键 （与契约重叠 4 个——不足副本阈值 8，不是契约副本）
+          键：['error_kind', 'resume_percent', 'retry_count', 'retrying']
+  测试常量 tests/test_download_status_surface.py:42  STATUS_KEYS = 12 个键 ★契约副本
+          键：['current_part_name', 'error', 'error_kind', 'message', 'parts', 'resume_percent', 'retry_count', 'retrying', 'speed_bps', 'state', 'total_bytes', 'total_downloaded_bytes']
+  测试常量 tests/test_download_status_surface.py:518  _RETRY_FIELDS = 6 个键 （与契约重叠 4 个——不足副本阈值 8，不是契约副本）
+          键：['last_error_kind', 'last_retry_at', 'message', 'resume_percent', 'retry_count', 'retrying']
+  前端对象字面量 tests/js/download-progress.test.mjs:19 起  11 个键（**只读不判**：渲染用例的输入）与契约重叠 11：['current_part_name', 'error', 'error_kind', 'message', 'parts', 'retry_count', 'retrying', 'speed_bps', 'state', 'total_bytes', 'total_downloaded_bytes']
+  前端对象字面量 tests/js/download-progress.test.mjs:67 起  4 个键（**只读不判**：渲染用例的输入）与契约重叠 4：['message', 'resume_percent', 'retry_count', 'retrying']
+  前端对象字面量 tests/js/download-progress.test.mjs:86 起  4 个键（**只读不判**：渲染用例的输入）与契约重叠 4：['message', 'resume_percent', 'retry_count', 'retrying']
+  前端对象字面量 tests/js/download-progress.test.mjs:170 起  12 个键（**只读不判**：渲染用例的输入）与契约重叠 12：['current_part_name', 'error', 'error_kind', 'message', 'parts', 'resume_percent', 'retry_count', 'retrying', 'speed_bps', 'state', 'total_bytes', 'total_downloaded_bytes']
+  前端对象字面量 tests/js/download-progress.test.mjs:204 起  3 个键（**只读不判**：渲染用例的输入）与契约重叠 3：['retry_count', 'speed_bps', 'state']
+  前端对象字面量 tests/js/full-update.test.mjs:20 起  8 个键（**只读不判**：渲染用例的输入）与契约重叠 4：['error', 'message', 'parts', 'total_bytes']
+  前端对象字面量 tests/js/full-update.test.mjs:36 起  5 个键（**只读不判**：渲染用例的输入）与契约重叠 2：['parts', 'total_bytes']
+  前端对象字面量 tests/js/full-update.test.mjs:44 起  3 个键（**只读不判**：渲染用例的输入）与契约重叠 2：['error', 'message']
+  前端对象字面量 tests/js/full-update.test.mjs:56 起  8 个键（**只读不判**：渲染用例的输入）与契约重叠 4：['error', 'message', 'parts', 'total_bytes']
+  前端对象字面量 tests/js/full-update.test.mjs:73 起  6 个键（**只读不判**：渲染用例的输入）与契约重叠 2：['parts', 'total_bytes']
+  前端对象字面量 tests/js/full-update.test.mjs:94 起  3 个键（**只读不判**：渲染用例的输入）与契约重叠 2：['parts', 'total_bytes']
+  前端对象字面量 tests/js/full-update.test.mjs:116 起  6 个键（**只读不判**：渲染用例的输入）与契约重叠 6：['current_part_name', 'error', 'message', 'speed_bps', 'total_bytes', 'total_downloaded_bytes']
+  前端对象字面量 tests/js/full-update.test.mjs:134 起  8 个键（**只读不判**：渲染用例的输入）与契约重叠 8：['current_part_name', 'error', 'message', 'parts', 'speed_bps', 'state', 'total_bytes', 'total_downloaded_bytes']
+  前端对象字面量 tests/js/full-update.test.mjs:149 起  8 个键（**只读不判**：渲染用例的输入）与契约重叠 8：['current_part_name', 'error', 'message', 'parts', 'speed_bps', 'state', 'total_bytes', 'total_downloaded_bytes']
+  前端对象字面量 tests/js/full-update.test.mjs:187 起  8 个键（**只读不判**：渲染用例的输入）与契约重叠 8：['current_part_name', 'error', 'message', 'parts', 'speed_bps', 'state', 'total_bytes', 'total_downloaded_bytes']
+  前端对象字面量 tests/js/materials-update.test.mjs:18 起  7 个键（**只读不判**：渲染用例的输入）与契约重叠 2：['error', 'message']
+  前端对象字面量 tests/js/materials-update.test.mjs:26 起  5 个键（**只读不判**：渲染用例的输入）与契约重叠 1：['parts']
+  前端对象字面量 tests/js/materials-update.test.mjs:33 起  5 个键（**只读不判**：渲染用例的输入）与契约重叠 1：['parts']
+  前端对象字面量 tests/js/materials-update.test.mjs:45 起  3 个键（**只读不判**：渲染用例的输入）与契约重叠 2：['error', 'message']
+  前端对象字面量 tests/js/materials-update.test.mjs:112 起  6 个键（**只读不判**：渲染用例的输入）与契约重叠 6：['current_part_name', 'parts', 'speed_bps', 'state', 'total_bytes', 'total_downloaded_bytes']
+
+===== C. 断言强度（集合比较逐条列出） =====
+  *分类判据*：`★契约` = 两侧里有一侧名字含 `STATUS_KEYS`，或**枚举了契约 ≥8 个键**（真正的契约副本）；其余列为 `其它集合断言`（例如 `_RETRY_FIELDS` 那条结构守卫——另一件事，列出来只为看重叠面）。
+  tests/test_download_status_surface.py:
+    [其它集合断言] 行 622（test_retry_observation_has_a_single_home）`_assigned_retry_fields(tr.__file__)` >= `_RETRY_FIELDS`  → 强度 >=（字面侧 vs 字面侧）
+    [其它集合断言] 行 650（test_retry_observation_has_a_single_home）`cleared_fields('reset')` >= `_RETRY_FIELDS`  → 强度 >=（字面侧 vs 字面侧）
+    [其它集合断言] 行 651（test_retry_observation_has_a_single_home）`cleared_fields('reset_for_cancelled')` >= `{'retry_count', 'last_error_kind', 'retrying', 'message'}`  → 强度 >=（字面侧 vs 字面侧）
+    [其它集合断言] 行 654（test_retry_observation_has_a_single_home）`cleared_fields('close_window')` >= `{'retrying', 'message'}`  → 强度 >=（字面侧 vs 字面侧）
+    [★契约] 行 106（test_status_keys_are_the_contracted_set）`set(status)` == `STATUS_KEYS`  → 强度 ==（载荷侧 vs 字面侧）
+    [★契约] 行 498（test_endpoints_expose_new_fields）`set(body)` == `STATUS_KEYS`  → 强度 ==（载荷侧 vs 字面侧）
+    [其它集合断言] 行 544（_assigned_retry_fields）`n` In `_RETRY_FIELDS`  → 强度 In（字面侧 vs 字面侧）
+    [其它集合断言] 行 561（_reset_blocks）`n` In `_RETRY_FIELDS`  → 强度 In（字面侧 vs 字面侧）
+  tests/test_full_task.py:
+    [★契约] 行 677（test_status_idle_shape）`set(status)` == `{'state', 'parts', 'total_downloaded_bytes', 'total_bytes', 'speed_bps', 'current_part_name', 'error', 'message', 'retry_count', 'retrying', 'error_kind', 'resume_percent'}`  → 强度 ==（载荷侧 vs 字面侧）
+  tests/test_materials_task.py: （没有集合比较断言）
+
+===== D. 端点测试覆盖（哪几份副本会被端点用例真的跑到） =====
+  *口径*：端点用例 = 正文里出现 `/api/update/full/status / /api/update/materials/status` 之一的用例；「跑到哪一份副本」= 它内部**有没有**与契约相交的集合比较断言（有 → 断言作用在载荷上，至少要有一份副本提供期望值）。
+  tests/test_download_status_surface.py::test_endpoints_expose_new_fields → ['/api/update/full/status', '/api/update/materials/status']；`set(body)` == `STATUS_KEYS` → 用到的副本：**STATUS_KEYS**
+  tests/test_full_task.py::test_apply_starts_and_status_reports_progress → ['/api/update/full/status']；**不断言键集合**（只读几个字段值）→ 不依赖任何一份契约副本
+  tests/test_full_task.py::test_status_idle_before_any_task → ['/api/update/full/status']；**不断言键集合**（只读几个字段值）→ 不依赖任何一份契约副本
+  tests/test_materials_task.py::test_status_endpoint_idle → ['/api/update/materials/status']；**不断言键集合**（只读几个字段值）→ 不依赖任何一份契约副本
+
+===== F. 结构守卫的爆炸半径（全 tests 树扫一遍） =====
+  问题：若立一条「12 键契约只许有一处副本」的守卫（判据 = 字面集合**或其联合**枚举了契约 ≥8 个键），它今天会**命中谁**？
+  *口径*：与守卫**同口径**（字面量 + 模块级 `A | B` 联合）——第一版只认字面量，于是连契约本体 `STATUS_KEYS = EXISTING_KEYS | NEW_KEYS` 都认不出来。**按文件归并**：同一个文件里 `名字 / 字面量 / 联合` 三种节点会把同一份契约数三次，逐节点印会印出十几行假账（第一版就是这样），故只报「哪些文件里有 ≥8 键的副本」。
+  命中 2 个文件：
+    tests/test_download_status_surface.py（12 键、8 键）
+    tests/test_full_task.py（12 键）
+  （阈值 8：`_RETRY_FIELDS` 那类「部分重叠」的集合因此不会被误伤——实测它与契约只重叠 4 个。）
+
+===== E. `_RETRY_FIELDS` 与 12 键的重叠面 =====
+  `_RETRY_FIELDS` = ['last_error_kind', 'last_retry_at', 'message', 'resume_percent', 'retry_count', 'retrying']（6 个）
+  与 12 键的**名字**交集 = ['message', 'resume_percent', 'retry_count', 'retrying']
+  只在 `_RETRY_FIELDS` 里（**不是载荷键**）= ['last_error_kind', 'last_retry_at']
+  只在契约里（不是重试观测字段）= ['current_part_name', 'error', 'error_kind', 'parts', 'speed_bps', 'state', 'total_bytes', 'total_downloaded_bytes']
+  语义差异（量出来的一对一关系）：`_RETRY_FIELDS` 那一侧是**内部属性名**（`task_retry.TaskRetryState` 的字段），契约那一侧是**载荷键名**——`last_error_kind`（属性）对应 `error_kind`（载荷键），`last_retry_at` 根本不进载荷。
+
+########## 现状（工作区） ##########
+
+===== B. 契约本体（从产品侧投影现算，量具不自带副本） =====
+  [full] `full_task_status` 写下的键 12 个：['current_part_name', 'error', 'error_kind', 'message', 'parts', 'resume_percent', 'retry_count', 'retrying', 'speed_bps', 'state', 'total_bytes', 'total_downloaded_bytes']
+  [materials] `task_status` 写下的键 12 个：['current_part_name', 'error', 'error_kind', 'message', 'parts', 'resume_percent', 'retry_count', 'retrying', 'speed_bps', 'state', 'total_bytes', 'total_downloaded_bytes']
+  两侧并集（= 本量具口径的「12 键契约」）：12 个
+
+===== B′. 每一份副本 =====
+  产品侧  src/contest_generator/full_task.py:356  full_task_status 里的 dict 字面量
+          形状=产品投影（每个分支一份字面键表） 键 12 个：['state', 'parts', 'total_downloaded_bytes', 'total_bytes', 'speed_bps', 'current_part_name', 'error', 'message', 'retry_count', 'retrying', 'error_kind', 'resume_percent']
+  产品侧  src/contest_generator/full_task.py:386  full_task_status 里的 dict 字面量
+          形状=产品投影（每个分支一份字面键表） 键 12 个：['state', 'parts', 'total_downloaded_bytes', 'total_bytes', 'speed_bps', 'current_part_name', 'error', 'message', 'retry_count', 'retrying', 'error_kind', 'resume_percent']
+  产品侧  src/contest_generator/materials_task.py:395  task_status 里的 dict 字面量
+          形状=产品投影（每个分支一份字面键表） 键 12 个：['state', 'parts', 'total_downloaded_bytes', 'total_bytes', 'speed_bps', 'current_part_name', 'error', 'message', 'retry_count', 'retrying', 'error_kind', 'resume_percent']
+  产品侧  src/contest_generator/materials_task.py:425  task_status 里的 dict 字面量
+          形状=产品投影（每个分支一份字面键表） 键 12 个：['state', 'parts', 'total_downloaded_bytes', 'total_bytes', 'speed_bps', 'current_part_name', 'error', 'message', 'retry_count', 'retrying', 'error_kind', 'resume_percent']
+  测试常量 tests/test_download_status_surface.py:30  EXISTING_KEYS = 8 个键 ★契约副本
+          键：['current_part_name', 'error', 'message', 'parts', 'speed_bps', 'state', 'total_bytes', 'total_downloaded_bytes']
+  测试常量 tests/test_download_status_surface.py:41  NEW_KEYS = 4 个键 （与契约重叠 4 个——不足副本阈值 8，不是契约副本）
+          键：['error_kind', 'resume_percent', 'retry_count', 'retrying']
+  测试常量 tests/test_download_status_surface.py:43  STATUS_KEYS = 12 个键 ★契约副本
+          键：['current_part_name', 'error', 'error_kind', 'message', 'parts', 'resume_percent', 'retry_count', 'retrying', 'speed_bps', 'state', 'total_bytes', 'total_downloaded_bytes']
+  测试常量 tests/test_download_status_surface.py:519  _RETRY_FIELDS = 6 个键 （与契约重叠 4 个——不足副本阈值 8，不是契约副本）
+          键：['last_error_kind', 'last_retry_at', 'message', 'resume_percent', 'retry_count', 'retrying']
+  前端对象字面量 tests/js/download-progress.test.mjs:19 起  11 个键（**只读不判**：渲染用例的输入）与契约重叠 11：['current_part_name', 'error', 'error_kind', 'message', 'parts', 'retry_count', 'retrying', 'speed_bps', 'state', 'total_bytes', 'total_downloaded_bytes']
+  前端对象字面量 tests/js/download-progress.test.mjs:67 起  4 个键（**只读不判**：渲染用例的输入）与契约重叠 4：['message', 'resume_percent', 'retry_count', 'retrying']
+  前端对象字面量 tests/js/download-progress.test.mjs:86 起  4 个键（**只读不判**：渲染用例的输入）与契约重叠 4：['message', 'resume_percent', 'retry_count', 'retrying']
+  前端对象字面量 tests/js/download-progress.test.mjs:170 起  12 个键（**只读不判**：渲染用例的输入）与契约重叠 12：['current_part_name', 'error', 'error_kind', 'message', 'parts', 'resume_percent', 'retry_count', 'retrying', 'speed_bps', 'state', 'total_bytes', 'total_downloaded_bytes']
+  前端对象字面量 tests/js/download-progress.test.mjs:204 起  3 个键（**只读不判**：渲染用例的输入）与契约重叠 3：['retry_count', 'speed_bps', 'state']
+  前端对象字面量 tests/js/full-update.test.mjs:20 起  8 个键（**只读不判**：渲染用例的输入）与契约重叠 4：['error', 'message', 'parts', 'total_bytes']
+  前端对象字面量 tests/js/full-update.test.mjs:36 起  5 个键（**只读不判**：渲染用例的输入）与契约重叠 2：['parts', 'total_bytes']
+  前端对象字面量 tests/js/full-update.test.mjs:44 起  3 个键（**只读不判**：渲染用例的输入）与契约重叠 2：['error', 'message']
+  前端对象字面量 tests/js/full-update.test.mjs:56 起  8 个键（**只读不判**：渲染用例的输入）与契约重叠 4：['error', 'message', 'parts', 'total_bytes']
+  前端对象字面量 tests/js/full-update.test.mjs:73 起  6 个键（**只读不判**：渲染用例的输入）与契约重叠 2：['parts', 'total_bytes']
+  前端对象字面量 tests/js/full-update.test.mjs:94 起  3 个键（**只读不判**：渲染用例的输入）与契约重叠 2：['parts', 'total_bytes']
+  前端对象字面量 tests/js/full-update.test.mjs:116 起  6 个键（**只读不判**：渲染用例的输入）与契约重叠 6：['current_part_name', 'error', 'message', 'speed_bps', 'total_bytes', 'total_downloaded_bytes']
+  前端对象字面量 tests/js/full-update.test.mjs:134 起  8 个键（**只读不判**：渲染用例的输入）与契约重叠 8：['current_part_name', 'error', 'message', 'parts', 'speed_bps', 'state', 'total_bytes', 'total_downloaded_bytes']
+  前端对象字面量 tests/js/full-update.test.mjs:149 起  8 个键（**只读不判**：渲染用例的输入）与契约重叠 8：['current_part_name', 'error', 'message', 'parts', 'speed_bps', 'state', 'total_bytes', 'total_downloaded_bytes']
+  前端对象字面量 tests/js/full-update.test.mjs:187 起  8 个键（**只读不判**：渲染用例的输入）与契约重叠 8：['current_part_name', 'error', 'message', 'parts', 'speed_bps', 'state', 'total_bytes', 'total_downloaded_bytes']
+  前端对象字面量 tests/js/materials-update.test.mjs:18 起  7 个键（**只读不判**：渲染用例的输入）与契约重叠 2：['error', 'message']
+  前端对象字面量 tests/js/materials-update.test.mjs:26 起  5 个键（**只读不判**：渲染用例的输入）与契约重叠 1：['parts']
+  前端对象字面量 tests/js/materials-update.test.mjs:33 起  5 个键（**只读不判**：渲染用例的输入）与契约重叠 1：['parts']
+  前端对象字面量 tests/js/materials-update.test.mjs:45 起  3 个键（**只读不判**：渲染用例的输入）与契约重叠 2：['error', 'message']
+  前端对象字面量 tests/js/materials-update.test.mjs:112 起  6 个键（**只读不判**：渲染用例的输入）与契约重叠 6：['current_part_name', 'parts', 'speed_bps', 'state', 'total_bytes', 'total_downloaded_bytes']
+
+===== C. 断言强度（集合比较逐条列出） =====
+  *分类判据*：`★契约` = 两侧里有一侧名字含 `STATUS_KEYS`，或**枚举了契约 ≥8 个键**（真正的契约副本）；其余列为 `其它集合断言`（例如 `_RETRY_FIELDS` 那条结构守卫——另一件事，列出来只为看重叠面）。
+  tests/test_download_status_surface.py:
+    [其它集合断言] 行 623（test_retry_observation_has_a_single_home）`_assigned_retry_fields(tr.__file__)` >= `_RETRY_FIELDS`  → 强度 >=（字面侧 vs 字面侧）
+    [其它集合断言] 行 651（test_retry_observation_has_a_single_home）`cleared_fields('reset')` >= `_RETRY_FIELDS`  → 强度 >=（字面侧 vs 字面侧）
+    [其它集合断言] 行 652（test_retry_observation_has_a_single_home）`cleared_fields('reset_for_cancelled')` >= `{'retry_count', 'last_error_kind', 'retrying', 'message'}`  → 强度 >=（字面侧 vs 字面侧）
+    [其它集合断言] 行 655（test_retry_observation_has_a_single_home）`cleared_fields('close_window')` >= `{'retrying', 'message'}`  → 强度 >=（字面侧 vs 字面侧）
+    [★契约] 行 107（test_status_keys_are_the_contracted_set）`set(status)` == `STATUS_KEYS`  → 强度 ==（载荷侧 vs 字面侧）
+    [★契约] 行 499（test_endpoints_expose_new_fields）`set(body)` == `STATUS_KEYS`  → 强度 ==（载荷侧 vs 字面侧）
+    [其它集合断言] 行 545（_assigned_retry_fields）`n` In `_RETRY_FIELDS`  → 强度 In（字面侧 vs 字面侧）
+    [其它集合断言] 行 562（_reset_blocks）`n` In `_RETRY_FIELDS`  → 强度 In（字面侧 vs 字面侧）
+  tests/test_full_task.py: （没有集合比较断言）
+  tests/test_materials_task.py: （没有集合比较断言）
+
+===== D. 端点测试覆盖（哪几份副本会被端点用例真的跑到） =====
+  *口径*：端点用例 = 正文里出现 `/api/update/full/status / /api/update/materials/status` 之一的用例；「跑到哪一份副本」= 它内部**有没有**与契约相交的集合比较断言（有 → 断言作用在载荷上，至少要有一份副本提供期望值）。
+  tests/test_download_status_surface.py::test_endpoints_expose_new_fields → ['/api/update/full/status', '/api/update/materials/status']；`set(body)` == `STATUS_KEYS` → 用到的副本：**STATUS_KEYS**
+  tests/test_full_task.py::test_apply_starts_and_status_reports_progress → ['/api/update/full/status']；**不断言键集合**（只读几个字段值）→ 不依赖任何一份契约副本
+  tests/test_full_task.py::test_status_idle_before_any_task → ['/api/update/full/status']；**不断言键集合**（只读几个字段值）→ 不依赖任何一份契约副本
+  tests/test_materials_task.py::test_status_endpoint_idle → ['/api/update/materials/status']；**不断言键集合**（只读几个字段值）→ 不依赖任何一份契约副本
+
+===== F. 结构守卫的爆炸半径（全 tests 树扫一遍） =====
+  问题：若立一条「12 键契约只许有一处副本」的守卫（判据 = 字面集合**或其联合**枚举了契约 ≥8 个键），它今天会**命中谁**？
+  *口径*：与守卫**同口径**（字面量 + 模块级 `A | B` 联合）——第一版只认字面量，于是连契约本体 `STATUS_KEYS = EXISTING_KEYS | NEW_KEYS` 都认不出来。**按文件归并**：同一个文件里 `名字 / 字面量 / 联合` 三种节点会把同一份契约数三次，逐节点印会印出十几行假账（第一版就是这样），故只报「哪些文件里有 ≥8 键的副本」。
+  命中 1 个文件：
+    tests/test_download_status_surface.py（12 键、8 键）
+  （阈值 8：`_RETRY_FIELDS` 那类「部分重叠」的集合因此不会被误伤——实测它与契约只重叠 4 个。）
+
+===== E. `_RETRY_FIELDS` 与 12 键的重叠面 =====
+  `_RETRY_FIELDS` = ['last_error_kind', 'last_retry_at', 'message', 'resume_percent', 'retry_count', 'retrying']（6 个）
+  与 12 键的**名字**交集 = ['message', 'resume_percent', 'retry_count', 'retrying']
+  只在 `_RETRY_FIELDS` 里（**不是载荷键**）= ['last_error_kind', 'last_retry_at']
+  只在契约里（不是重试观测字段）= ['current_part_name', 'error', 'error_kind', 'parts', 'speed_bps', 'state', 'total_bytes', 'total_downloaded_bytes']
+  语义差异（量出来的一对一关系）：`_RETRY_FIELDS` 那一侧是**内部属性名**（`task_retry.TaskRetryState` 的字段），契约那一侧是**载荷键名**——`last_error_kind`（属性）对应 `error_kind`（载荷键），`last_retry_at` 根本不进载荷。
+<unknown>:2795: SyntaxWarning: "\m" is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\m"? A raw string is also an option.
+<unknown>:2825: SyntaxWarning: "\p" is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\p"? A raw string is also an option.
+<unknown>:313: SyntaxWarning: "\m" is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\m"? A raw string is also an option.
+<unknown>:465: SyntaxWarning: "\i" is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\i"? A raw string is also an option.
+<unknown>:346: SyntaxWarning: "\m" is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\m"? A raw string is also an option.
+<unknown>:2795: SyntaxWarning: "\m" is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\m"? A raw string is also an option.
+<unknown>:2825: SyntaxWarning: "\p" is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\p"? A raw string is also an option.
+<unknown>:313: SyntaxWarning: "\m" is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\m"? A raw string is also an option.
+<unknown>:465: SyntaxWarning: "\i" is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\i"? A raw string is also an option.
+<unknown>:346: SyntaxWarning: "\m" is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\m"? A raw string is also an option.
