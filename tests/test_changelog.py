@@ -452,3 +452,28 @@ def test_load_versions_real_file_reflects_released_versions():
     first = releases[-1]
     assert first["version"] == "v1.0.0"
     assert first["date"] == "2026-08-30"
+
+
+def test_real_versions_file_header_matches_tool_version():
+    """真实 VERSIONS.md 的第一个版本块必须就是当前工具版本号。
+
+    为什么单独立一条（2026-09-14 实撞）：发 v1.2.0 时我在版本头里补了一句
+    「重发」备注，写成 `## v1.2.0 (2026-09-13，2026-09-14 重发)`——日期段
+    混进中文后**整行不匹配** `_VERSION_HEADER_RE`，解析器把它当普通 `##` 分区
+    边界**静默跳过**，于是「版本更新记录」页面最新只显示到 v1.1.1，而设置页
+    版本号是对的。上面那条「精确列表」判据本可以抓到，但它是在改完数据**之后**
+    才跑的；这条把判据绑到 `__version__`（唯一可信来源）上，让「发版时版本块没
+    写进去 / 写坏了」当场红，不必指望有人记得手改精确列表。
+    """
+    from contest_generator import __version__ as tool_version
+
+    real = Path(__file__).resolve().parents[1] / "VERSIONS.md"
+    releases = load_versions(real)
+    assert releases, "VERSIONS.md 一个版本块都没解析出来（格式契约：`## vX.Y.Z (YYYY-MM-DD)`）"
+    assert releases[0]["version"] == f"v{tool_version}", (
+        f"版本更新记录页面的最新版本是 {releases[0]['version']}，"
+        f"而工具版本号是 v{tool_version}——"
+        "要么漏写本版要点区块，要么版本头格式不合格"
+        "（契约：`## vX.Y.Z (YYYY-MM-DD)`：ASCII 括号、纯日期、版本号严格三段，"
+        "多一个字都会被整行跳过）"
+    )
