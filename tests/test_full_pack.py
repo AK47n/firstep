@@ -13,8 +13,11 @@ import json
 import zipfile
 from pathlib import Path
 
+import pytest
+
 from contest_generator.full_pack import (
     MATERIALS_MANIFEST_KEY,
+    MAX_ENTRY_PATH_CHARS,
     TOP_LEVEL_ENTRIES,
     build_full_manifest,
     build_zip_volumes,
@@ -23,6 +26,7 @@ from contest_generator.full_pack import (
     full_manifest_filename,
     main,
     materials_excluded,
+    overlong_entries,
     prepare_full_package,
     register_materials_dirs,
     scan_tree,
@@ -291,6 +295,89 @@ def test_excluded_file_count_stays_small_on_real_tree() -> None:
         "pyproject.toml",
     ):
         assert must_keep not in excluded, must_keep
+
+
+# ---------------------------------------------------------------------------
+# 包内路径长度上限（工单 path-budget/01）
+#
+# 病灶与判据：Windows 资源管理器「全部解压缩」走老 API、硬卡 259 字符（含解压
+# 根目录），超了报 `0x80010135: 路径太长`，点「跳过」**静默丢文件**——用户拿到
+# 一个看似解压成功的残缺包。工具自身的解压（Python zipfile）与 `tar.exe` 走长
+# 路径 API 不受影响，所以只有一条真判据：包内相对路径本身不能太长。
+# ---------------------------------------------------------------------------
+
+
+def _long_material_file(tree: Path, path_len: int) -> Path:
+    """在资料库里造一个「包内相对路径恰好 path_len 字符」的文件。"""
+    fixed = len("sources/materials/k230/") + len(".md")
+    pad = "x" * (path_len - fixed)
+    return _write(tree / "sources" / "materials" / "k230" / f"{pad}.md", "# 长路径\n")
+
+
+def test_overlong_entry_is_rejected_by_packer(tmp_path: Path) -> None:
+    """超上限的包内路径必须**拒绝发版**，并且错误信息要点名长度与修法。"""
+    tree = make_mini_repo(tmp_path)
+    bad = _long_material_file(tree, MAX_ENTRY_PATH_CHARS + 1)
+    rel = bad.relative_to(tree).as_posix()
+    assert len(rel) == MAX_ENTRY_PATH_CHARS + 1
+
+    files = scan_tree(tree)
+    assert [f.path for f in overlong_entries(files)] == [rel]
+
+    with pytest.raises(ValueError) as excinfo:
+        prepare_full_package(tree, version="v9.9.9", out_dir=tmp_path / "pack")
+    message = str(excinfo.value)
+    assert str(MAX_ENTRY_PATH_CHARS) in message
+    assert rel in message
+    assert "slim_materials_paths.py" in message
+
+
+def test_path_at_ceiling_still_packs(tmp_path: Path) -> None:
+    """恰好等于上限的路径必须放行（判据是「超过」才拒，不是「达到」就拒）。"""
+    tree = make_mini_repo(tmp_path)
+    edge = _long_material_file(tree, MAX_ENTRY_PATH_CHARS)
+    rel = edge.relative_to(tree).as_posix()
+    assert len(rel) == MAX_ENTRY_PATH_CHARS
+    assert overlong_entries(scan_tree(tree)) == []
+
+    manifest, written = prepare_full_package(tree, version="v9.9.9", out_dir=tmp_path / "pack")
+    assert written, "边界路径不该阻断打包"
+    with zipfile.ZipFile(written[0]) as archive:
+        assert rel in archive.namelist()
+
+
+def test_real_tree_paths_fit_windows_extractor_budget() -> None:
+    """真仓库全量扫描：包内每条路径都不超上限（发版前的最后一道闸）。"""
+    repo = Path(__file__).resolve().parent.parent
+    files = scan_tree(repo)
+    bad = overlong_entries(files)
+    assert not bad, (
+        "包内路径超上限（资源管理器解压会静默丢文件）：\n"
+        + "\n".join(f"  {len(f.path):4d}  {f.path}" for f in bad[:10])
+        + "\n修法见 .scratch/path-budget/slim_materials_paths.py"
+    )
+    longest = max(files, key=lambda f: len(f.path))
+    # 余量守卫：最长路径必须比上限**明显**短，否则下一次资料增补就会顶破。
+    assert len(longest.path) < MAX_ENTRY_PATH_CHARS, longest.path
+
+
+def test_materials_paths_stay_under_ceiling() -> None:
+    """资料库单独把一遍：新批次入库时最先撞上限的就是这里。"""
+    repo = Path(__file__).resolve().parent.parent
+    materials = repo / "sources" / "materials"
+    if not materials.is_dir():
+        pytest.skip("本地无资料库目录（git clone 用户）")
+    longest_rel, longest_len, over = "", 0, []
+    for path in materials.rglob("*"):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(repo).as_posix()
+        if len(rel) > longest_len:
+            longest_rel, longest_len = rel, len(rel)
+        if len(rel) > MAX_ENTRY_PATH_CHARS:
+            over.append((len(rel), rel))
+    assert not over, f"资料库路径超上限 {len(over)} 个：{sorted(over, reverse=True)[:5]}"
+    assert longest_len <= MAX_ENTRY_PATH_CHARS, longest_rel
 
 
 # ---------------------------------------------------------------------------

@@ -99,6 +99,16 @@ SKIP_FILE_NAMES: frozenset[str] = frozenset({".DS_Store", "Thumbs.db", MANIFEST_
 # 任意层级跳过的后缀（机器可再生的缓存 / 构建产物 / 日志）
 SKIP_FILE_SUFFIXES: tuple[str, ...] = (".pyc", ".pyo", ".log")
 
+# 包内相对路径长度上限（工单 path-budget/01）。
+# 为什么必须有这条护栏：Windows 资源管理器「全部解压缩」走老 API、硬卡 259 字符
+# （含解压根目录），超了报 `0x80010135: 路径太长`，点「跳过」还会**静默丢文件**；
+# 解压根目录取决于用户名与放哪（实测 `C:\Users\Administrator\Desktop\firstep` 这种
+# 常见姿势就吃掉 38 字符）。工具自身的解压（Python zipfile）与 `tar.exe` 走长路径
+# API 不受影响——所以病灶只有一个：**包内路径太长**，必须在打包这一关挡住。
+# 上限取 200（≈59 字符余量）：库里最长路径实测 194（减肥前 223，已按
+# `.scratch/path-budget/` 的操作脚本压下来），再长就该动资料库而不是放宽这里。
+MAX_ENTRY_PATH_CHARS = 200
+
 # 「装机一次、之后几乎不变」的第三方安装包与 SDK 打包件（ASCII 特征模式）。
 # 这部分在本机实测约 5.4 GB（CCS 安装包 / 视觉 SDK / VSCode 等），
 # 放进每次全量重下等于让「修损坏 / 换机器」多付 4.9 GB，故不进包。
@@ -122,16 +132,19 @@ INSTALLER_GLOBS: tuple[str, ...] = (
 __all__ = [
     "INSTALLER_GLOBS",
     "MATERIALS_MANIFEST_KEY",
+    "MAX_ENTRY_PATH_CHARS",
     "SKIP_DIR_NAMES",
     "SKIP_FILE_NAMES",
     "SKIP_FILE_SUFFIXES",
     "TOP_LEVEL_ENTRIES",
     "build_full_manifest",
     "build_zip_volumes",
+    "ensure_paths_fit",
     "excluded_paths",
     "full_manifest_filename",
     "main",
     "materials_excluded",
+    "overlong_entries",
     "prepare_full_package",
     "register_materials_dirs",
     "scan_tree",
@@ -408,6 +421,37 @@ def _load_baseline_files(baseline_path: Path) -> list[str]:
     return [str(item["path"]) for item in data.get("files", [])]
 
 
+def overlong_entries(
+    files: Sequence[PartFile], limit: int = MAX_ENTRY_PATH_CHARS
+) -> list[PartFile]:
+    """包内相对路径超过上限的文件（空 = 可发版），按长度降序。"""
+    return sorted(
+        (f for f in files if len(f.path) > limit), key=lambda f: len(f.path), reverse=True
+    )
+
+
+def ensure_paths_fit(
+    files: Sequence[PartFile], limit: int = MAX_ENTRY_PATH_CHARS
+) -> None:
+    """过长的包内路径直接拒绝发版（否则用户解压时静默丢文件）。
+
+    判据只有一条：`len(相对路径) <= limit`。失败信息必须给出「长度 + 路径 +
+    怎么办」，因为这条错误只会在发版时撞到，而发版的人就是唯一能修的人。
+    """
+    bad = overlong_entries(files, limit)
+    if not bad:
+        return
+    head = "\n".join(f"  {len(f.path):4d}  {f.path}" for f in bad[:5])
+    more = f"\n  ……另有 {len(bad) - 5} 个" if len(bad) > 5 else ""
+    raise ValueError(
+        f"包内路径超过 {limit} 字符上限，共 {len(bad)} 个文件——"
+        "Windows 资源管理器解压会报「路径太长」并**跳过文件**（用户拿到残缺包）。\n"
+        f"{head}{more}\n"
+        "修法：给资料库对应目录做「路径减肥」（改目录名，不删内容）——"
+        "见 `.scratch/path-budget/slim_materials_paths.py`（dry-run 默认，--write 才落盘）。"
+    )
+
+
 def prepare_full_package(
     tree: Path,
     *,
@@ -431,6 +475,7 @@ def prepare_full_package(
     files = scan_tree(tree)
     if not files:
         raise ValueError("扫描结果为空——顶层白名单或排除规则可能写错了")
+    ensure_paths_fit(files)
 
     current_paths = [f.path for f in files]
     current_set = set(current_paths)
