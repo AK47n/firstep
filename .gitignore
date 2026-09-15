@@ -87,6 +87,37 @@ sources/.trash-pdf/
 %TEMP%/
 
 
+# ── 编译产物：工具生成的，可重建；**夹带本机信息**，不入库（2026-09-15 清理）──
+# 起因：一个 Keil 编译日志（Objects/Project.build_log.htm）把邮箱和 Keil 许可证
+# （LIC=XXXX-…）一起写进了仓库，而仓库是公开的。顺着查下去，这类产物里还夹带着
+# 本机绝对路径（C:/Users/<用户名>，实测 200+ 处）——它们不是源码，删掉只是
+# "别人 clone 下来要自己编译一次"，而留着会把你的机器信息一直公开在那儿。
+#
+# ⚠ 规则只写**确认过**的：每一条都先 `git ls-files` 数过命中哪些文件，
+#   确认全是产物才写进来。忽略规则误伤真源码 = 真删东西，比不清理更糟。
+#
+# Keil MDK：Objects/ 放编译结果、Listings/ 放清单、
+#          *.uvguix.* 是**文件名里就带用户名**的 GUI 布局状态
+Objects/
+Listings/
+*.uvguix.*
+*.build_log.htm
+*.scvd
+*.lnp
+*.iex
+*.sct
+
+# CCS / TI：Debug/ 是编译输出目录、.settings/ 是 IDE 工程设置
+Debug/
+DebugConfig/
+.settings/
+*.projectspec.user
+*.opt
+*.linkInfo.xml
+
+# 通用 IDE / 编辑器（.vscode/ 里会有本机路径和解释器路径）
+.vscode/
+
 # 说明（2026-09-13）：上面有 4 行注释（b1-adc-servo / PDF 回收 / 资料库素材 / key-multi-instance）
 # 的原文在一次写盘事故里被替换字符（U+FFFD）毁掉，git 历史里也从未有过完好版本，
 # 故是**按上下文重写**；另 3 行（worktree / 真机验收 / fix-errors）逐字还原自历史。
