@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=5adfb7990c2cda753538df8b918a55315d0d0065 -->
+<!-- changelog-auto: last-commit=2bdead56fa3d0c9ac715624ecf333228739f27e4 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-09-15
+- 19:58 清理：编译产物不入库（夹带本机路径与 Keil 许可证）
 
 ## 2026-09-14
 - 09:20 fix(资料库): 两族 LCD 厂商例程路径减肥——包内最长路径 223 → 194 字符，Windows 资源管理器解压不再报「路径太长」（工单 path-budget/01）
