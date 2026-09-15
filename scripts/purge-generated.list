@@ -1,0 +1,732 @@
+# 要从历史里删掉的文件（每行一个）。
+# 由 scripts/make-purge-list.mjs 生成 —— 规则改了要重新生成。
+# 用法见 scripts/purge-generated.sh。
+library/masters/mspm0/.settings/org.eclipse.cdt.codan.core.prefs
+library/masters/mspm0/.settings/org.eclipse.core.resources.prefs
+library/references/2026_04_地猛星电赛控制题配套资料/01_.vscode/.vscode/c_cpp_properties.json
+library/revise-backups/20260828-125533/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260828-125533/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260828-130130/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260828-130130/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260828-130905/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260828-130905/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260828-182312/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260828-182312/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260828-182439/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260828-182439/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260828-183016/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260828-183016/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260828-183423/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260828-183423/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260828-183635/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260828-183635/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260828-211750/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260828-211750/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260828-212239/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260828-212239/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260828-212354/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260828-212354/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260828-212542/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260828-212542/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260828-213458/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260828-213458/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260828-213704/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260828-213704/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260828-213849/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260828-213849/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260828-215656/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260828-215656/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260828-220252/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260828-220252/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260828-221641/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260828-221641/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260828-222107/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260828-222107/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260828-222542/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260828-222542/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260828-223255/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260828-223255/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260829-005350/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260829-005350/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260829-005521/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260829-005521/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260829-010053/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260829-010053/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260829-010546/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260829-010546/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260829-104728/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260829-104728/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260829-211102/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260829-211102/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260829-215523/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260829-215523/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260829-221330/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260829-221330/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260829-222909/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260829-222909/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260829-223418/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260829-223418/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260829-223821/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260829-223821/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260829-230016/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260829-230016/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260911-164653/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260911-164653/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260911-164938/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260911-164938/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260912-133001/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260912-133001/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260912-133218/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260912-133218/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260912-133515/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260912-133515/.settings/org.eclipse.core.resources.prefs
+library/revise-backups/20260912-133956/.settings/org.eclipse.cdt.codan.core.prefs
+library/revise-backups/20260912-133956/.settings/org.eclipse.core.resources.prefs
+sources/car/car 1.1/.settings/org.eclipse.cdt.codan.core.prefs
+sources/car/car 1.1/.settings/org.eclipse.cdt.debug.core.prefs
+sources/car/car 1.1/.settings/org.eclipse.core.resources.prefs
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/Delay.c.61A9E31BE6D59F05.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/Delay.c.95E27F1C322013FB.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/Delay.c.A3E1CDE659DE390C.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/Delay.c.E55ADB3ECF4FA59A.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/Delay.h.95F21872203BD10A.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/Delay.h.A510B608B9C5612F.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/Delay.h.C024BB13C8F469FE.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/Delay.h.DCB433C30647919F.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/DeviceFamily.h.B86197E44C39AF16.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/JY61P.c.0202743A3CEB6E29.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/JY61P.c.B749AF496AF8E3D4.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/JY61P.c.F9CA710032F56FDF.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/JY61P.c.FD60BEB66EFC6324.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/JY61P.h.07EA97C1152E4D9A.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/JY61P.h.8A6049B435E0494C.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/JY61P.h.BBCDB48DAE8F2C0A.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/JY61P.h.BD8DF109DA0EC055.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__config.FDF3F56F607A0944.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__config_site.544C22F370813B22.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__stdarg___gnuc_va_list.h.C4DAD2E66A6C1120.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__stdarg___va_copy.h.373C9DFA0B52F987.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__stdarg_va_arg.h.938C14164E5210E0.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__stdarg_va_copy.h.69598290CE7995B8.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__stdarg_va_list.h.7F0BEEA71B06DC9E.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__stddef_max_align_t.h.54DD14193E18AC07.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__stddef_null.h.50AA68BD56DBFBFD.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__stddef_offsetof.h.80C720B2B624660A.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__stddef_ptrdiff_t.h.53F13D91E4A2B7B5.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__stddef_size_t.h.3FB43AF609841380.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__stddef_wchar_t.h.DE91DBFD60BDE6DA.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/_defs.h.3FF4973A4A510F01.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/_limits.h.0A1C895E2A18B288.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/_stdint.h.4152668A76BCDAFD.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/_stdint.h.F4839344AF2E2B3C.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/_stdint40.h.16A66CAA9B168D6F.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/_string.h.5C0B3EA0680B7433.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/_ti_config.h.15D362E5EE7844F2.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/_types.h.56B8A1C44F7BB982.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/_types.h.C21F0F0D2FD66209.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/cdefs.h.FE8058170032214D.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/cmsis_compiler.h.0CEF690CAA3726B2.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/cmsis_version.h.3268E241B4F0B6F5.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/control.c.0E7992A8413CC8A1.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/control.c.11D174988397B639.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/control.c.2AA05DDD721B0E5F.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/control.c.B1D00E3D7BFA0B33.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/control.h.240F233270266B12.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/control.h.32E9571A0E478D9D.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/control.h.65F4135B62B8C5FC.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/control.h.7E925FA290C3163B.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/core_cm0plus.h.F86F97F397F97122.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_adc12.h.8B371C28B9CA98B8.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_aes.h.714BF43F89076D0E.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_aesadv.h.1B58380AABB58CC5.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_common.h.F7F9EAC19BB9DF7E.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_comp.h.36364F925D7E4362.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_core.h.40383795BA8421DB.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_crc.h.DF880BA265476D5F.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_crcp.h.92C0AE69BCACE630.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_dac12.h.4EFEEFFD9F181290.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_dma.h.4D0C4ABB12C0B5A8.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_factoryregion.h.7D1303A06CA3C13E.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_flashctl.h.8EE7115481394B19.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_gpamp.h.7712EDC582317F84.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_gpio.h.2A06ACC8F41A6B4A.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_i2c.h.EA19C17CEA11AEF8.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_i2s.h.02DB65F8BE7D558E.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_interrupt.h.1E2262DD9303629F.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_iwdt.h.6D5C0F2A8A2ED0CA.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_keystorectl.h.72C4E5778F712345.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_lcd.h.3B70F265DC0023C8.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_lfss.h.7BA3EB123DCA412E.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_mathacl.h.481DF9CE000A3ED9.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_mcan.h.796DC61FE8B23DEA.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_npu.h.5B0040F20BDB2AD1.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_opa.h.3E6A24ECC5741765.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_rtc.h.0401B9A56B4F755C.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_rtc_a.h.0B4B5F0631158186.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_rtc_b.h.2F4EAB2FD06C1429.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_rtc_common.h.82C0D882957CE915.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_scratchpad.h.C393C0044F296077.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_spgss.h.49BF92100A08DDD4.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_spi.h.F3BE8194E2DF6F86.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_sysctl.h.7498F92D9905C16B.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_sysctl_mspm0g1x0x_g3x0x.h.FAF5EE765C168A34.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_systick.h.69384C8DAA976D23.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_tamperio.h.ED93FC04173FA9FC.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_timer.h.291FD84AC91ABF95.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_timera.h.05D1748BD8C55F3E.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_timerb.h.C57A73D35E801799.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_timerg.h.15E945C9A30588A9.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_trng.h.C25655378683C7DE.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_uart.h.6176C2B3AE5C6049.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_uart_extend.h.2043613DFC81D6B5.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_uart_main.h.FADF360DCF6EC1AA.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_unicomm.h.D5F9D982C4292985.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_unicommi2cc.h.F7134BCFD5448FB7.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_unicommi2ct.h.CA68F94817640F64.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_unicommspi.h.DA5810D95E8B239D.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_unicommuart.h.913CAB0AEE7366F2.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_vref.h.CD56F0AFC5C82859.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_wwdt.h.183EA3E0A0EB0BD9.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/driverlib.h.58A5CF854BC3D328.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/empty.c.49DFB2136FC21A9B.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/empty.c.6AF969B64BE7F82A.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/empty.c.A5B5F3EC839E43CD.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/empty.c.E55B15BC2AB6A941.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_adc12.h.590A44DD86E39E63.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_aes.h.7313BD390062B087.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_comp.h.430DAE57C0A9F7BC.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_cpuss.h.EA8ED3A4A3144352.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_crc.h.D0B34E8AB8808006.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_dac12.h.963FD31B30370777.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_debugss.h.C6730C935AE513DF.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_dma.h.16062C3ABC9F498A.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_factoryregion.h.5D58315AE98F9C30.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_flashctl.h.AE143C633674573A.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_gpio.h.FFF15D95D813B4C0.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_gptimer.h.D18BE3E3A1B82364.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_i2c.h.C5516755BFFF8E34.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_iomux.h.744C0B536428067B.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_mathacl.h.EC6F4DE335C25EB7.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_mcan.h.DB73C75D6AC9CA9C.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_oa.h.8AC07E09DBEE291A.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_rtc.h.45E8F63BBC66E28F.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_spi.h.CBFD2E5B3ED24D58.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_sysctl.h.B0EA0ED95236C0E5.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_sysctl_mspm0g1x0x_g3x0x.h.6DB74E9A6FCD5669.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_trng.h.8AFDD77FB397BBFF.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_uart.h.1858E63E678C36F5.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_vref.h.F2E13DEEFB87DC3F.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_wuc.h.8CB3393032229725.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_wwdt.h.FDE883C703B3355A.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/linkage.h.11516441E7E2D1F8.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/math.h.79874CE1A9F11772.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/math.h.C6653C06BFCD57F9.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/mpu_armv7.h.1EA703775E1955B4.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/msp.h.A6767A4CB6D22847.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/mspm0g350x.h.CBA12581BD168DDB.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdarg.h.00CE2FB531A71298.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdbool.h.272D9B723E75E78F.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdbool.h.FB0F1122B9F7E37F.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stddef.h.43F2384DD6D92B7C.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stddef.h.4C0A8993436CDC98.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdint.h.082F62A436690CD5.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdint.h.13B9E9BCB893B601.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdint.h.186A510D485999AD.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdint.h.908E94AF3F841B7E.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdio.h.392130EAC82A2928.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdio.h.C5625403AD742310.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/string.h.2BA20B455CA9CE02.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/string.h.2C4F102A6CCF6271.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.c.00D16DC78BBD9DE2.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.c.314F4E2F3E3C4ADC.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.c.40644CC7FFCA3C7F.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.c.531688F8F84C7765.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.h.220209A424CA270C.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.h.9518A34EAC91A517.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.h.95D1E5DFA78A8A52.idx
+sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.h.B5013561EC804897.idx
+sources/car/car 1.1/Debug/.clangd/compile_commands.json
+sources/car/car 1.1/Debug/Delay.d
+sources/car/car 1.1/Debug/Delay.o
+sources/car/car 1.1/Debug/Event.dot
+sources/car/car 1.1/Debug/PWM.map
+sources/car/car 1.1/Debug/PWM.out
+sources/car/car 1.1/Debug/PWM_linkInfo.xml
+sources/car/car 1.1/Debug/USART_JY61P/JY61P.d
+sources/car/car 1.1/Debug/USART_JY61P/JY61P.o
+sources/car/car 1.1/Debug/USART_JY61P/empty.d
+sources/car/car 1.1/Debug/USART_JY61P/empty.o
+sources/car/car 1.1/Debug/USART_JY61P/subdir_rules.mk
+sources/car/car 1.1/Debug/USART_JY61P/subdir_vars.mk
+sources/car/car 1.1/Debug/ccsObjs.opt
+sources/car/car 1.1/Debug/control.d
+sources/car/car 1.1/Debug/control.o
+sources/car/car 1.1/Debug/device.cmd.genlibs
+sources/car/car 1.1/Debug/device.opt
+sources/car/car 1.1/Debug/device_linker.cmd
+sources/car/car 1.1/Debug/empty.d
+sources/car/car 1.1/Debug/empty.o
+sources/car/car 1.1/Debug/makefile
+sources/car/car 1.1/Debug/objects.mk
+sources/car/car 1.1/Debug/sources.mk
+sources/car/car 1.1/Debug/startup_mspm0g350x_ticlang.d
+sources/car/car 1.1/Debug/startup_mspm0g350x_ticlang.o
+sources/car/car 1.1/Debug/subdir_rules.mk
+sources/car/car 1.1/Debug/subdir_vars.mk
+sources/car/car 1.1/Debug/ti_msp_dl_config.c
+sources/car/car 1.1/Debug/ti_msp_dl_config.d
+sources/car/car 1.1/Debug/ti_msp_dl_config.h
+sources/car/car 1.1/Debug/ti_msp_dl_config.o
+sources/car/car ref/.settings/org.eclipse.cdt.codan.core.prefs
+sources/car/car ref/.settings/org.eclipse.cdt.debug.core.prefs
+sources/car/car ref/.settings/org.eclipse.core.resources.prefs
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/Delay.c.95E27F1C322013FB.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/Delay.h.95F21872203BD10A.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/DeviceFamily.h.B86197E44C39AF16.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/JY61P.c.F9CA710032F56FDF.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/JY61P.h.BD8DF109DA0EC055.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/__config.FDF3F56F607A0944.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/__config_site.544C22F370813B22.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stdarg___gnuc_va_list.h.C4DAD2E66A6C1120.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stdarg___va_copy.h.373C9DFA0B52F987.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stdarg_va_arg.h.938C14164E5210E0.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stdarg_va_copy.h.69598290CE7995B8.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stdarg_va_list.h.7F0BEEA71B06DC9E.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stddef_max_align_t.h.54DD14193E18AC07.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stddef_null.h.50AA68BD56DBFBFD.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stddef_offsetof.h.80C720B2B624660A.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stddef_ptrdiff_t.h.53F13D91E4A2B7B5.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stddef_size_t.h.3FB43AF609841380.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stddef_wchar_t.h.DE91DBFD60BDE6DA.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/_defs.h.3FF4973A4A510F01.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/_limits.h.0A1C895E2A18B288.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/_stdint.h.4152668A76BCDAFD.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/_stdint.h.F4839344AF2E2B3C.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/_stdint40.h.16A66CAA9B168D6F.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/_string.h.5C0B3EA0680B7433.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/_ti_config.h.15D362E5EE7844F2.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/_types.h.56B8A1C44F7BB982.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/_types.h.C21F0F0D2FD66209.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/cdefs.h.FE8058170032214D.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/cmsis_compiler.h.0CEF690CAA3726B2.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/cmsis_version.h.3268E241B4F0B6F5.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/control.c.B1D00E3D7BFA0B33.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/control.h.65F4135B62B8C5FC.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/core_cm0plus.h.F86F97F397F97122.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_adc12.h.8B371C28B9CA98B8.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_aes.h.714BF43F89076D0E.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_aesadv.h.1B58380AABB58CC5.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_common.h.F7F9EAC19BB9DF7E.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_comp.h.36364F925D7E4362.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_core.h.40383795BA8421DB.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_crc.h.DF880BA265476D5F.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_crcp.h.92C0AE69BCACE630.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_dac12.h.4EFEEFFD9F181290.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_dma.h.4D0C4ABB12C0B5A8.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_factoryregion.h.7D1303A06CA3C13E.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_flashctl.h.8EE7115481394B19.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_gpamp.h.7712EDC582317F84.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_gpio.h.2A06ACC8F41A6B4A.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_i2c.h.EA19C17CEA11AEF8.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_i2s.h.02DB65F8BE7D558E.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_interrupt.h.1E2262DD9303629F.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_iwdt.h.6D5C0F2A8A2ED0CA.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_keystorectl.h.72C4E5778F712345.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_lcd.h.3B70F265DC0023C8.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_lfss.h.7BA3EB123DCA412E.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_mathacl.h.481DF9CE000A3ED9.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_mcan.h.796DC61FE8B23DEA.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_npu.h.5B0040F20BDB2AD1.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_opa.h.3E6A24ECC5741765.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_rtc.h.0401B9A56B4F755C.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_rtc_a.h.0B4B5F0631158186.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_rtc_b.h.2F4EAB2FD06C1429.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_rtc_common.h.82C0D882957CE915.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_scratchpad.h.C393C0044F296077.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_spgss.h.49BF92100A08DDD4.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_spi.h.F3BE8194E2DF6F86.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_sysctl.h.7498F92D9905C16B.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_sysctl_mspm0g1x0x_g3x0x.h.FAF5EE765C168A34.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_systick.h.69384C8DAA976D23.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_tamperio.h.ED93FC04173FA9FC.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_timer.h.291FD84AC91ABF95.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_timera.h.05D1748BD8C55F3E.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_timerb.h.C57A73D35E801799.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_timerg.h.15E945C9A30588A9.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_trng.h.C25655378683C7DE.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_uart.h.6176C2B3AE5C6049.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_uart_extend.h.2043613DFC81D6B5.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_uart_main.h.FADF360DCF6EC1AA.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_unicomm.h.D5F9D982C4292985.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_unicommi2cc.h.F7134BCFD5448FB7.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_unicommi2ct.h.CA68F94817640F64.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_unicommspi.h.DA5810D95E8B239D.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_unicommuart.h.913CAB0AEE7366F2.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_vref.h.CD56F0AFC5C82859.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_wwdt.h.183EA3E0A0EB0BD9.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/driverlib.h.58A5CF854BC3D328.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/empty.c.6AF969B64BE7F82A.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_adc12.h.590A44DD86E39E63.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_aes.h.7313BD390062B087.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_comp.h.430DAE57C0A9F7BC.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_cpuss.h.EA8ED3A4A3144352.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_crc.h.D0B34E8AB8808006.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_dac12.h.963FD31B30370777.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_debugss.h.C6730C935AE513DF.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_dma.h.16062C3ABC9F498A.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_factoryregion.h.5D58315AE98F9C30.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_flashctl.h.AE143C633674573A.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_gpio.h.FFF15D95D813B4C0.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_gptimer.h.D18BE3E3A1B82364.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_i2c.h.C5516755BFFF8E34.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_iomux.h.744C0B536428067B.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_mathacl.h.EC6F4DE335C25EB7.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_mcan.h.DB73C75D6AC9CA9C.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_oa.h.8AC07E09DBEE291A.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_rtc.h.45E8F63BBC66E28F.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_spi.h.CBFD2E5B3ED24D58.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_sysctl.h.B0EA0ED95236C0E5.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_sysctl_mspm0g1x0x_g3x0x.h.6DB74E9A6FCD5669.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_trng.h.8AFDD77FB397BBFF.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_uart.h.1858E63E678C36F5.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_vref.h.F2E13DEEFB87DC3F.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_wuc.h.8CB3393032229725.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_wwdt.h.FDE883C703B3355A.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/linkage.h.11516441E7E2D1F8.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/math.h.79874CE1A9F11772.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/math.h.C6653C06BFCD57F9.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/mpu_armv7.h.1EA703775E1955B4.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/msp.h.A6767A4CB6D22847.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/mspm0g350x.h.CBA12581BD168DDB.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/stdarg.h.00CE2FB531A71298.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/stdbool.h.272D9B723E75E78F.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/stdbool.h.FB0F1122B9F7E37F.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/stddef.h.43F2384DD6D92B7C.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/stddef.h.4C0A8993436CDC98.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/stdint.h.082F62A436690CD5.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/stdint.h.13B9E9BCB893B601.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/stdint.h.186A510D485999AD.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/stdint.h.908E94AF3F841B7E.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/stdio.h.392130EAC82A2928.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/stdio.h.C5625403AD742310.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/string.h.2BA20B455CA9CE02.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/string.h.2C4F102A6CCF6271.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.c.40644CC7FFCA3C7F.idx
+sources/car/car ref/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.h.220209A424CA270C.idx
+sources/car/car ref/Debug/.clangd/compile_commands.json
+sources/car/car ref/Debug/Delay.d
+sources/car/car ref/Debug/Delay.o
+sources/car/car ref/Debug/Event.dot
+sources/car/car ref/Debug/PWM.map
+sources/car/car ref/Debug/PWM.out
+sources/car/car ref/Debug/PWM_linkInfo.xml
+sources/car/car ref/Debug/USART_JY61P/JY61P.d
+sources/car/car ref/Debug/USART_JY61P/JY61P.o
+sources/car/car ref/Debug/USART_JY61P/empty.d
+sources/car/car ref/Debug/USART_JY61P/empty.o
+sources/car/car ref/Debug/USART_JY61P/subdir_rules.mk
+sources/car/car ref/Debug/USART_JY61P/subdir_vars.mk
+sources/car/car ref/Debug/ccsObjs.opt
+sources/car/car ref/Debug/control.d
+sources/car/car ref/Debug/control.o
+sources/car/car ref/Debug/device.cmd.genlibs
+sources/car/car ref/Debug/device.opt
+sources/car/car ref/Debug/device_linker.cmd
+sources/car/car ref/Debug/empty.d
+sources/car/car ref/Debug/empty.o
+sources/car/car ref/Debug/makefile
+sources/car/car ref/Debug/objects.mk
+sources/car/car ref/Debug/sources.mk
+sources/car/car ref/Debug/startup_mspm0g350x_ticlang.d
+sources/car/car ref/Debug/startup_mspm0g350x_ticlang.o
+sources/car/car ref/Debug/subdir_rules.mk
+sources/car/car ref/Debug/subdir_vars.mk
+sources/car/car ref/Debug/ti_msp_dl_config.c
+sources/car/car ref/Debug/ti_msp_dl_config.d
+sources/car/car ref/Debug/ti_msp_dl_config.h
+sources/car/car ref/Debug/ti_msp_dl_config.o
+sources/car/car xunji/.settings/org.eclipse.cdt.codan.core.prefs
+sources/car/car xunji/.settings/org.eclipse.cdt.debug.core.prefs
+sources/car/car xunji/.settings/org.eclipse.core.resources.prefs
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/Delay.c.95E27F1C322013FB.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/Delay.c.E55ADB3ECF4FA59A.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/Delay.h.95F21872203BD10A.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/Delay.h.C024BB13C8F469FE.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/DeviceFamily.h.B86197E44C39AF16.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/JY61P.c.F9CA710032F56FDF.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/JY61P.c.FD60BEB66EFC6324.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/JY61P.h.8A6049B435E0494C.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/JY61P.h.BD8DF109DA0EC055.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__config.FDF3F56F607A0944.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__config_site.544C22F370813B22.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__stdarg___gnuc_va_list.h.C4DAD2E66A6C1120.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__stdarg___va_copy.h.373C9DFA0B52F987.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__stdarg_va_arg.h.938C14164E5210E0.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__stdarg_va_copy.h.69598290CE7995B8.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__stdarg_va_list.h.7F0BEEA71B06DC9E.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__stddef_max_align_t.h.54DD14193E18AC07.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__stddef_null.h.50AA68BD56DBFBFD.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__stddef_offsetof.h.80C720B2B624660A.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__stddef_ptrdiff_t.h.53F13D91E4A2B7B5.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__stddef_size_t.h.3FB43AF609841380.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__stddef_wchar_t.h.DE91DBFD60BDE6DA.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/_defs.h.3FF4973A4A510F01.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/_limits.h.0A1C895E2A18B288.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/_stdint.h.4152668A76BCDAFD.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/_stdint.h.F4839344AF2E2B3C.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/_stdint40.h.16A66CAA9B168D6F.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/_string.h.5C0B3EA0680B7433.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/_ti_config.h.15D362E5EE7844F2.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/_types.h.56B8A1C44F7BB982.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/_types.h.C21F0F0D2FD66209.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/cdefs.h.FE8058170032214D.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/cmsis_compiler.h.0CEF690CAA3726B2.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/cmsis_version.h.3268E241B4F0B6F5.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/control.c.2AA05DDD721B0E5F.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/control.c.B1D00E3D7BFA0B33.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/control.h.32E9571A0E478D9D.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/control.h.65F4135B62B8C5FC.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/core_cm0plus.h.F86F97F397F97122.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_adc12.h.8B371C28B9CA98B8.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_aes.h.714BF43F89076D0E.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_aesadv.h.1B58380AABB58CC5.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_common.h.F7F9EAC19BB9DF7E.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_comp.h.36364F925D7E4362.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_core.h.40383795BA8421DB.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_crc.h.DF880BA265476D5F.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_crcp.h.92C0AE69BCACE630.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_dac12.h.4EFEEFFD9F181290.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_dma.h.4D0C4ABB12C0B5A8.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_factoryregion.h.7D1303A06CA3C13E.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_flashctl.h.8EE7115481394B19.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_gpamp.h.7712EDC582317F84.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_gpio.h.2A06ACC8F41A6B4A.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_i2c.h.EA19C17CEA11AEF8.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_i2s.h.02DB65F8BE7D558E.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_interrupt.h.1E2262DD9303629F.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_iwdt.h.6D5C0F2A8A2ED0CA.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_keystorectl.h.72C4E5778F712345.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_lcd.h.3B70F265DC0023C8.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_lfss.h.7BA3EB123DCA412E.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_mathacl.h.481DF9CE000A3ED9.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_mcan.h.796DC61FE8B23DEA.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_npu.h.5B0040F20BDB2AD1.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_opa.h.3E6A24ECC5741765.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_rtc.h.0401B9A56B4F755C.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_rtc_a.h.0B4B5F0631158186.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_rtc_b.h.2F4EAB2FD06C1429.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_rtc_common.h.82C0D882957CE915.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_scratchpad.h.C393C0044F296077.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_spgss.h.49BF92100A08DDD4.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_spi.h.F3BE8194E2DF6F86.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_sysctl.h.7498F92D9905C16B.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_sysctl_mspm0g1x0x_g3x0x.h.FAF5EE765C168A34.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_systick.h.69384C8DAA976D23.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_tamperio.h.ED93FC04173FA9FC.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_timer.h.291FD84AC91ABF95.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_timera.h.05D1748BD8C55F3E.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_timerb.h.C57A73D35E801799.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_timerg.h.15E945C9A30588A9.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_trng.h.C25655378683C7DE.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_uart.h.6176C2B3AE5C6049.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_uart_extend.h.2043613DFC81D6B5.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_uart_main.h.FADF360DCF6EC1AA.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_unicomm.h.D5F9D982C4292985.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_unicommi2cc.h.F7134BCFD5448FB7.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_unicommi2ct.h.CA68F94817640F64.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_unicommspi.h.DA5810D95E8B239D.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_unicommuart.h.913CAB0AEE7366F2.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_vref.h.CD56F0AFC5C82859.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_wwdt.h.183EA3E0A0EB0BD9.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/driverlib.h.58A5CF854BC3D328.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/empty.c.6AF969B64BE7F82A.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/empty.c.A5B5F3EC839E43CD.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_adc12.h.590A44DD86E39E63.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_aes.h.7313BD390062B087.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_comp.h.430DAE57C0A9F7BC.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_cpuss.h.EA8ED3A4A3144352.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_crc.h.D0B34E8AB8808006.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_dac12.h.963FD31B30370777.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_debugss.h.C6730C935AE513DF.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_dma.h.16062C3ABC9F498A.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_factoryregion.h.5D58315AE98F9C30.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_flashctl.h.AE143C633674573A.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_gpio.h.FFF15D95D813B4C0.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_gptimer.h.D18BE3E3A1B82364.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_i2c.h.C5516755BFFF8E34.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_iomux.h.744C0B536428067B.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_mathacl.h.EC6F4DE335C25EB7.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_mcan.h.DB73C75D6AC9CA9C.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_oa.h.8AC07E09DBEE291A.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_rtc.h.45E8F63BBC66E28F.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_spi.h.CBFD2E5B3ED24D58.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_sysctl.h.B0EA0ED95236C0E5.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_sysctl_mspm0g1x0x_g3x0x.h.6DB74E9A6FCD5669.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_trng.h.8AFDD77FB397BBFF.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_uart.h.1858E63E678C36F5.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_vref.h.F2E13DEEFB87DC3F.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_wuc.h.8CB3393032229725.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_wwdt.h.FDE883C703B3355A.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/linkage.h.11516441E7E2D1F8.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/math.h.79874CE1A9F11772.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/math.h.C6653C06BFCD57F9.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/mpu_armv7.h.1EA703775E1955B4.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/msp.h.A6767A4CB6D22847.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/mspm0g350x.h.CBA12581BD168DDB.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/stdarg.h.00CE2FB531A71298.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/stdbool.h.272D9B723E75E78F.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/stdbool.h.FB0F1122B9F7E37F.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/stddef.h.43F2384DD6D92B7C.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/stddef.h.4C0A8993436CDC98.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/stdint.h.082F62A436690CD5.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/stdint.h.13B9E9BCB893B601.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/stdint.h.186A510D485999AD.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/stdint.h.908E94AF3F841B7E.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/stdio.h.392130EAC82A2928.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/stdio.h.C5625403AD742310.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/string.h.2BA20B455CA9CE02.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/string.h.2C4F102A6CCF6271.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.c.40644CC7FFCA3C7F.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.c.531688F8F84C7765.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.h.220209A424CA270C.idx
+sources/car/car xunji/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.h.95D1E5DFA78A8A52.idx
+sources/car/car xunji/Debug/.clangd/compile_commands.json
+sources/car/car xunji/Debug/Delay.d
+sources/car/car xunji/Debug/Delay.o
+sources/car/car xunji/Debug/Event.dot
+sources/car/car xunji/Debug/PWM.map
+sources/car/car xunji/Debug/PWM.out
+sources/car/car xunji/Debug/PWM_linkInfo.xml
+sources/car/car xunji/Debug/USART_JY61P/JY61P.d
+sources/car/car xunji/Debug/USART_JY61P/JY61P.o
+sources/car/car xunji/Debug/USART_JY61P/empty.d
+sources/car/car xunji/Debug/USART_JY61P/empty.o
+sources/car/car xunji/Debug/USART_JY61P/subdir_rules.mk
+sources/car/car xunji/Debug/USART_JY61P/subdir_vars.mk
+sources/car/car xunji/Debug/ccsObjs.opt
+sources/car/car xunji/Debug/control.d
+sources/car/car xunji/Debug/control.o
+sources/car/car xunji/Debug/device.cmd.genlibs
+sources/car/car xunji/Debug/device.opt
+sources/car/car xunji/Debug/device_linker.cmd
+sources/car/car xunji/Debug/empty.d
+sources/car/car xunji/Debug/empty.o
+sources/car/car xunji/Debug/makefile
+sources/car/car xunji/Debug/objects.mk
+sources/car/car xunji/Debug/sources.mk
+sources/car/car xunji/Debug/startup_mspm0g350x_ticlang.d
+sources/car/car xunji/Debug/startup_mspm0g350x_ticlang.o
+sources/car/car xunji/Debug/subdir_rules.mk
+sources/car/car xunji/Debug/subdir_vars.mk
+sources/car/car xunji/Debug/ti_msp_dl_config.c
+sources/car/car xunji/Debug/ti_msp_dl_config.d
+sources/car/car xunji/Debug/ti_msp_dl_config.h
+sources/car/car xunji/Debug/ti_msp_dl_config.o
+sources/contest/2026C/user/.vscode/c_cpp_properties.json
+sources/contest/2026C/user/.vscode/keil-assistant.log
+sources/contest/2026C/user/.vscode/uv4.log
+sources/contest/2026C/user/.vscode/uv4.log.lock
+sources/contest/2026C/user/DebugConfig/Target_1_STM32F103C6.dbgconf
+sources/contest/2026C/user/DebugConfig/Target_1_STM32F103C8.dbgconf
+sources/contest/2026C/user/DebugConfig/Target_1_STM32F103C8_1.0.0.dbgconf
+sources/contest/2026C/user/Listings/Project.map
+sources/contest/2026C/user/Listings/startup_stm32f10x_md.lst
+sources/contest/2026C/user/Objects/Project.axf
+sources/contest/2026C/user/Objects/Project.build_log.htm
+sources/contest/2026C/user/Objects/Project.hex
+sources/contest/2026C/user/Objects/Project.hex.asm
+sources/contest/2026C/user/Objects/Project.htm
+sources/contest/2026C/user/Objects/Project.lnp
+sources/contest/2026C/user/Objects/Project.sct
+sources/contest/2026C/user/Objects/Project_Target 1.dep
+sources/contest/2026C/user/Objects/Project_sct.Bak
+sources/contest/2026C/user/Objects/debug_uart.crf
+sources/contest/2026C/user/Objects/debug_uart.d
+sources/contest/2026C/user/Objects/debug_uart.o
+sources/contest/2026C/user/Objects/filter.crf
+sources/contest/2026C/user/Objects/filter.d
+sources/contest/2026C/user/Objects/filter.o
+sources/contest/2026C/user/Objects/isr.crf
+sources/contest/2026C/user/Objects/isr.d
+sources/contest/2026C/user/Objects/isr.o
+sources/contest/2026C/user/Objects/lock_control.crf
+sources/contest/2026C/user/Objects/lock_control.d
+sources/contest/2026C/user/Objects/lock_control.o
+sources/contest/2026C/user/Objects/main.crf
+sources/contest/2026C/user/Objects/main.d
+sources/contest/2026C/user/Objects/main.o
+sources/contest/2026C/user/Objects/ml_adc.crf
+sources/contest/2026C/user/Objects/ml_adc.d
+sources/contest/2026C/user/Objects/ml_delay.crf
+sources/contest/2026C/user/Objects/ml_delay.d
+sources/contest/2026C/user/Objects/ml_delay.o
+sources/contest/2026C/user/Objects/ml_exti.crf
+sources/contest/2026C/user/Objects/ml_exti.d
+sources/contest/2026C/user/Objects/ml_exti.o
+sources/contest/2026C/user/Objects/ml_gpio.crf
+sources/contest/2026C/user/Objects/ml_gpio.d
+sources/contest/2026C/user/Objects/ml_gpio.o
+sources/contest/2026C/user/Objects/ml_nvic.crf
+sources/contest/2026C/user/Objects/ml_nvic.d
+sources/contest/2026C/user/Objects/ml_nvic.o
+sources/contest/2026C/user/Objects/ml_oled.crf
+sources/contest/2026C/user/Objects/ml_oled.d
+sources/contest/2026C/user/Objects/ml_oled.o
+sources/contest/2026C/user/Objects/ml_pwm.crf
+sources/contest/2026C/user/Objects/ml_pwm.d
+sources/contest/2026C/user/Objects/ml_pwm.o
+sources/contest/2026C/user/Objects/ml_tim.crf
+sources/contest/2026C/user/Objects/ml_tim.d
+sources/contest/2026C/user/Objects/ml_tim.o
+sources/contest/2026C/user/Objects/ml_uart.crf
+sources/contest/2026C/user/Objects/ml_uart.d
+sources/contest/2026C/user/Objects/ml_uart.o
+sources/contest/2026C/user/Objects/startup_stm32f10x_md.d
+sources/contest/2026C/user/Objects/startup_stm32f10x_md.o
+sources/contest/2026C/user/Objects/system_stm32f10x.crf
+sources/contest/2026C/user/Objects/system_stm32f10x.d
+sources/contest/2026C/user/Objects/system_stm32f10x.o
+sources/contest/2026C/user/Objects/uwb_uart.crf
+sources/contest/2026C/user/Objects/uwb_uart.d
+sources/contest/2026C/user/Objects/uwb_uart.o
+sources/contest/2026C/user/Objects/zigbee_uart.crf
+sources/contest/2026C/user/Objects/zigbee_uart.d
+sources/contest/2026C/user/Objects/zigbee_uart.o
+sources/contest/2026C/user/Objects/zone.crf
+sources/contest/2026C/user/Objects/zone.d
+sources/contest/2026C/user/Objects/zone.o
+sources/contest/2026C/user/Project.uvguix.17331
+sources/contest/2026C/user/Project.uvguix.luoji
+sources/contest/key/.settings/org.eclipse.cdt.codan.core.prefs
+sources/contest/key/.settings/org.eclipse.core.resources.prefs
+sources/contest/key/Debug/.clangd/.cache/clangd/index/empty.c.0713CB84C2D091C4.idx
+sources/contest/key/Debug/.clangd/compile_commands.json
+sources/contest/key_dmx/.settings/org.eclipse.cdt.codan.core.prefs
+sources/contest/key_dmx/.settings/org.eclipse.core.resources.prefs
+sources/contest/key_dmx/.vscode/c_cpp_properties.json
+sources/contest/key_dmx/.vscode/tasks.json
+sources/contest/key_dmx/Debug/.clangd/.cache/clangd/index/main.c.14AD5CFD3B7E13AF.idx
+sources/contest/key_dmx/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.c.AAA57A0BBD37190C.idx
+sources/contest/key_dmx/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.h.8EA319FA90905201.idx
+sources/contest/key_dmx/Debug/.clangd/compile_commands.json
+sources/contest/key_dmx/Debug/Event.dot
+sources/contest/key_dmx/Debug/ccsObjs.opt
+sources/contest/key_dmx/Debug/device.cmd.genlibs
+sources/contest/key_dmx/Debug/device.opt
+sources/contest/key_dmx/Debug/device_linker.cmd
+sources/contest/key_dmx/Debug/key.map
+sources/contest/key_dmx/Debug/key.out
+sources/contest/key_dmx/Debug/key_linkInfo.xml
+sources/contest/key_dmx/Debug/main.d
+sources/contest/key_dmx/Debug/main.o
+sources/contest/key_dmx/Debug/makefile
+sources/contest/key_dmx/Debug/objects.mk
+sources/contest/key_dmx/Debug/sources.mk
+sources/contest/key_dmx/Debug/startup_mspm0g350x_ticlang.d
+sources/contest/key_dmx/Debug/startup_mspm0g350x_ticlang.o
+sources/contest/key_dmx/Debug/subdir_rules.mk
+sources/contest/key_dmx/Debug/subdir_vars.mk
+sources/contest/key_dmx/Debug/ti_msp_dl_config.c
+sources/contest/key_dmx/Debug/ti_msp_dl_config.d
+sources/contest/key_dmx/Debug/ti_msp_dl_config.h
+sources/contest/key_dmx/Debug/ti_msp_dl_config.o
