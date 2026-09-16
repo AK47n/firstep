@@ -13,7 +13,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "httpx>=0.28"]  # httpx：FastAPI TestClient 依赖
+# httpx：FastAPI TestClient 依赖
+# pytest-timeout：全套默认超时（卡住 = 红，见 [tool.pytest.ini_options]）
+# pytest-xdist：并行跑（opt-in，命令里 -n auto；**不进 addopts**，理由见 docs/agents/local-environment.md 2.5）
+dev = ["pytest>=8", "httpx>=0.28", "pytest-timeout>=2", "pytest-xdist>=3"]
 
 [project.scripts]
 contest-generator = "contest_generator.webapp:main"
@@ -24,3 +27,17 @@ testpaths = ["tests"]
 # 直跑时 `webapp.tool_root()` 曾把工具根算成 src/，更新器被拼成
 # src/tools/update-app.py 而秒退（被 tool_root 的「哪一层像工具根」判定修掉）。
 pythonpath = ["src"]
+
+# 全套默认超时（工单 test-speedup/01-02）：本机实测「整支 pytest 间歇性卡住十分钟以上」
+# （docs/agents/local-environment.md 2.5 节），卡住时既无报错也无栈，只能干等。
+# 口径：**卡住 = 红**（不再沿用「卡住不算判据」）。
+#
+# 阈值 180s 的依据（2026-09-16 实测）：最慢的正当用例是
+# tests/test_full_pack.py::test_repo_start_here_ships_in_package，并行（-n auto）争用下
+# 47.3s（串行时整个文件才 16.8s）——180s 给了约 3.8 倍余量，避免把「机器忙」误判成卡死。
+#
+# timeout_method = "thread"：Windows 上只有 thread 可用（signal 直接 INTERNALERROR，已实测）。
+# **thread 的语义要知道**：超时触发时它会打印所有线程的栈并**中止整场**（不是只废掉那一格），
+# 所以阈值宁可给宽——假红的代价是一整轮白跑。
+timeout = 180
+timeout_method = "thread"
