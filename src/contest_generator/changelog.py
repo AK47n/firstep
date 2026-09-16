@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 from .tool_root import find_tool_root
@@ -221,9 +222,21 @@ def update_changelog(path: Path, repo: Path) -> bool:
     marker_sha = _marker_sha(text)
     head_sha = _git_head_sha(repo)
 
-    if marker_sha:
+    if marker_sha and _commit_exists(repo, marker_sha):
         commits = _git_log_commits(repo, since_sha=marker_sha)
     else:
+        # 锚点不在本仓库 = **历史被重写过**（旧 hash 全部作废，2026-09-15 实撞：
+        # 标记还指着改前的 `2bdead56…`，`git log <sha>..HEAD` 直接报错 → 补录
+        # 静默返回「无新提交」→ 自动补录**从此永久失效**，连重写那笔提交自己都没进记录）。
+        # 旧实现的静默兜底是为「git 暂时不可用」设计的；这里必须区分
+        # 「没有新提交」与「我根本查不了」——后者按日期兜底并把话说出来。
+        # 按日期兜底不会写重复：`_merge_commits` 按 (时间, 文本) 去重。
+        if marker_sha:
+            print(
+                f"CHANGELOG 锚点 {marker_sha[:8]} 不在本仓库（历史被重写过？）——"
+                "按文件里最新日期兜底补录，并把锚点换成当前 HEAD",
+                file=sys.stderr,
+            )
         since_dt = _newest_datetime(groups)
         commits = _git_log_commits(repo, since_dt=since_dt) if since_dt else []
 
@@ -428,6 +441,17 @@ def _git_head_sha(repo: Path) -> str | None:
     if result is None or result.returncode != 0:
         return None
     return result.stdout.strip() or None
+
+
+def _commit_exists(repo: Path, sha: str) -> bool:
+    """这个 sha 在本仓库里还有没有对应的提交对象。
+
+    用途是认「锚点还作不作数」——`git log <sha>..HEAD` 在 sha 不存在时是**报错**
+    而不是返回空，若把它当「无新提交」处理，自动补录就会永远静止（2026-09-16 实撞）。
+    git 不可用 → False（退回按日期兜底，宁可多补一次，`_merge_commits` 会去重）。
+    """
+    result = _run_git(["git", "cat-file", "-e", f"{sha}^{{commit}}"], repo)
+    return result is not None and result.returncode == 0
 
 
 def _run_git(

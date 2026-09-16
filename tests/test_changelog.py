@@ -8,12 +8,14 @@ changelog.py docstring）：`## YYYY-MM-DD` 严格日期开新组（`^...$` 锚�
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
 
 from contest_generator.changelog import (
     _clean_subject,
+    _commit_exists,
     _is_displayable,
     _marker_sha,
     _merge_commits,
@@ -305,6 +307,82 @@ def test_update_changelog_no_display_commits_returns_false(tmp_path, monkeypatch
     assert "last-commit" not in changelog.read_text(encoding="utf-8")
 
 
+def test_stale_marker_falls_back_to_date_and_reanchors(tmp_path, monkeypatch, capsys):
+    """锚点在仓库里不存在（历史被重写）→ 按日期兜底补录 + 换锚 + 出声。
+
+    2026-09-15 的历史重写把**所有提交 hash 都换了**，而 CHANGELOG 的
+    `last-commit=2bdead56…` 还指着改前那个提交：`git log <sha>..HEAD` 是**报错**，
+    旧实现把它当「无新提交」→ 直接 `return False` → **自动补录从此永久静止**，
+    连重写那笔提交自己都没进记录，而且没有任何症状（`tests/test_changelog.py` 全绿、
+    hook 只打印一句 `CHANGELOG up-to-date`）。
+
+    这条钉住三件事：① 认得出锚点失效；② 退回按文件内最新日期扫；
+    ③ **把话说出来**（stderr），别让「我查不了」看起来像「没有新提交」。
+    """
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text(
+        "<!-- changelog-auto: last-commit=deadbeef -->\n"
+        "# 更新记录\n\n## 2026-09-15\n- 19:58 旧条目\n",
+        encoding="utf-8",
+    )
+    calls: list[dict] = []
+    monkeypatch.setattr(
+        "contest_generator.changelog._commit_exists", lambda repo, sha: False
+    )
+    monkeypatch.setattr(
+        "contest_generator.changelog._git_head_sha", lambda repo: "newsha1"
+    )
+    monkeypatch.setattr(
+        "contest_generator.changelog._git_log_commits",
+        lambda repo, since_sha=None, since_dt=None: calls.append(
+            {"since_sha": since_sha, "since_dt": since_dt}
+        )
+        or [
+            {"sha": "newsha1", "date": "2026-09-16", "time": "10:00",
+             "subject": "fix(母版): 还原工程编码钉"},
+        ],
+    )
+
+    assert update_changelog(changelog, tmp_path) is True
+    # 必须走**日期**兜底，而不是拿失效锚点去算区间
+    assert calls == [{"since_sha": None, "since_dt": "2026-09-15 19:58"}], calls
+    text = changelog.read_text(encoding="utf-8")
+    assert "last-commit=newsha1" in text, "锚点没换成当前 HEAD"
+    assert "还原工程编码钉" in text, "到期的新提交没补进来"
+    assert [g["date"] for g in parse_changelog(text)] == ["2026-09-16", "2026-09-15"]
+    assert "锚点 deadbeef 不在本仓库" in capsys.readouterr().err, "失效锚点必须出声"
+
+
+def test_valid_marker_still_uses_the_sha_range(tmp_path, monkeypatch):
+    """反向：锚点**有效**时仍按 `sha..HEAD` 走（别把兜底路径变成常态）。"""
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text(
+        "<!-- changelog-auto: last-commit=cafe01 -->\n"
+        "# 更新记录\n\n## 2026-09-15\n- 19:58 旧条目\n",
+        encoding="utf-8",
+    )
+    calls: list[dict] = []
+    monkeypatch.setattr(
+        "contest_generator.changelog._commit_exists", lambda repo, sha: True
+    )
+    monkeypatch.setattr(
+        "contest_generator.changelog._git_head_sha", lambda repo: "newsha2"
+    )
+    monkeypatch.setattr(
+        "contest_generator.changelog._git_log_commits",
+        lambda repo, since_sha=None, since_dt=None: calls.append(
+            {"since_sha": since_sha, "since_dt": since_dt}
+        )
+        or [
+            {"sha": "newsha2", "date": "2026-09-16", "time": "11:00",
+             "subject": "feat(推荐): 新能力"},
+        ],
+    )
+
+    assert update_changelog(changelog, tmp_path) is True
+    assert calls == [{"since_sha": "cafe01", "since_dt": None}], calls
+
+
 # ---------------------------------------------------------------------------
 # 版本更新记录（VERSIONS.md 定稿区，工单 version-changelog/02）：
 # parse_versions + load_versions——用户视角版本要点，纯展示数据不抛
@@ -476,4 +554,31 @@ def test_real_versions_file_header_matches_tool_version():
         "要么漏写本版要点区块，要么版本头格式不合格"
         "（契约：`## vX.Y.Z (YYYY-MM-DD)`：ASCII 括号、纯日期、版本号严格三段，"
         "多一个字都会被整行跳过）"
+    )
+
+
+def test_real_changelog_marker_points_at_a_commit_in_this_repo():
+    """真文件判据：自动补录的锚点必须在本仓库里真实存在（历史重写后不欠账）。
+
+    锚点一旦指向不存在的提交，`git log <sha>..HEAD` 是**报错**，而旧实现把它当
+    「无新提交」静默返回 → **自动补录永久静止且零症状**。2026-09-15 的历史重写
+    把全部 commit hash 换掉之后就是这个状态（锚点停在改前的 `2bdead56…`，
+    连重写那笔提交自己都没进记录，hook 每次只打印一句 `CHANGELOG up-to-date`）。
+    修法见 `changelog.update_changelog` 的失效锚点兜底；这条守卫负责「重写完
+    忘了重新落锚」当场红——那时跑一次 `python -m contest_generator.changelog` 即可。
+
+    从发布包解出的副本没有 `.git`（包由 `git archive` 生成）→ 跳过：那里本来
+    就没有提交记录可查，不是缺陷。
+    """
+    root = Path(__file__).resolve().parents[1]
+    if not (root / ".git").exists() or shutil.which("git") is None:
+        pytest.skip("无 .git / 无 git：发布包副本里没有提交记录可查")
+    marker = _marker_sha((root / "CHANGELOG.md").read_text(encoding="utf-8"))
+    assert marker, (
+        "CHANGELOG.md 缺 `<!-- changelog-auto: last-commit=… -->` 锚点——"
+        "补录会退化成按文件内日期扫，重复风险由 `_merge_commits` 兜着但不该常态如此"
+    )
+    assert _commit_exists(root, marker), (
+        f"CHANGELOG 锚点 {marker[:8]} 在本仓库里不存在——多半是历史刚被重写过"
+        "（旧 hash 全作废）。跑一次 `python -m contest_generator.changelog` 重新落锚即可"
     )
