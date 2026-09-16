@@ -42,12 +42,35 @@ const RULES = [
   { name: '调试器配置', re: /\.(scvd|lnp|iex|sct|opt)$/ },
 ]
 
-/* 绝不能删的：真源码。如果规则命中了这些，**停下来报警**而不是照删。 */
-const SOURCE_EXT = /\.(c|h|s|py|md|js|mjs|json|syscfg|uvprojx|uvoptx|ioc|ld|icf|toml|ya?ml|txt|html?)$/i
+/* 例外：**看着像 IDE 状态、其实是工程配置**的东西，不进清单（照删会坏生成物）。
+ *
+ * 为什么需要这一条（2026-09-16 补，踩过才知道）：
+ *   `IDE .settings/` 那条规则把 `library/masters/mspm0/.settings/` 一起扫掉了，其中
+ *   `org.eclipse.core.resources.prefs` 钉着 CCS 工程编码（`encoding/<project>=UTF-8`）——
+ *   它不是可再生状态，是工程配置。当时**闸门没叫停**：闸门只认「像源码」的扩展名，
+ *   而 `.prefs` 不在其中。半天后由 `tests/test_readme.py` 的母版同步守卫抓出来，
+ *   而那条红在 main 上挂了一整天（详见 `tests/test_master_template_config.py` 顶部）。
+ *
+ * 判据：母版下的 `.settings/` 是「随母版分发给生成工程的配置」；其余位置的 `.settings/`
+ * （用户工程、revise 备份）仍按 IDE 状态处理。
+ */
+const KEEP = [
+  { name: '母版 .settings/ 工程配置（含 CCS 编码钉）', re: /^library\/masters\/[^/]+\/\.settings\// },
+]
+
+/* 绝不能**静默**删的扩展名：真源码 + 工程配置。命中这些就停下来报警，由人确认。
+ * `.prefs` 是 2026-09-16 补的——它是 `.settings/` 的常见载体，当初漏在名单外，
+ * 于是「规则过宽」没有任何东西兜住。 */
+const SOURCE_EXT = /\.(c|h|s|py|md|js|mjs|json|syscfg|uvprojx|uvoptx|ioc|ld|icf|toml|ya?ml|txt|html?|prefs|ccsproject|cproject|project)$/i
 
 const byRule = new Map()
 const purged = new Set()
+const kept = []
 for (const f of files) {
+  if (KEEP.some((k) => k.re.test(f))) {
+    kept.push(f)
+    continue
+  }
   for (const { name, re } of RULES) {
     if (!re.test(f)) continue
     purged.add(f)
@@ -58,15 +81,22 @@ for (const f of files) {
 }
 
 console.log(`\n  仓库：${repoDir}`)
-console.log(`  跟踪文件 ${files.length} 个 → 命中 ${purged.size} 个\n`)
+console.log(`  跟踪文件 ${files.length} 个 → 命中 ${purged.size} 个 / 例外保留 ${kept.length} 个\n`)
 for (const { name } of RULES) {
   const list = byRule.get(name) || []
   console.log(`      ${String(list.length).padStart(5)}  ${name}`)
 }
+if (kept.length) {
+  console.log('\n  例外保留（工程配置，不删）：')
+  for (const { name } of KEEP) {
+    const list = files.filter((f) => KEEP.find((k) => k.name === name).re.test(f))
+    console.log(`      ${String(list.length).padStart(5)}  ${name}`)
+  }
+}
 
-// 安全闸：命中里有"像源码"的，列出来让人确认
+// 安全闸：命中里有"像源码 / 像工程配置"的，列出来让人确认
 const srcish = [...purged].filter((f) => SOURCE_EXT.test(f))
-console.log(`\n  命中里"像源码"的：${srcish.length} 个`)
+console.log(`\n  命中里"像源码或工程配置"的：${srcish.length} 个`)
 for (const f of srcish.slice(0, 20)) console.log('      ' + f)
 
 /* 自动判断：能不能放手删。

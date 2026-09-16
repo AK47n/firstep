@@ -115,6 +115,15 @@ DebugConfig/
 *.opt
 *.linkInfo.xml
 
+# 例外：**母版**的 .settings/ 不是 IDE 状态，是随母版分发给生成工程的**工程配置**
+# ——org.eclipse.core.resources.prefs 里钉着 CCS 工程编码 `encoding/<project>=UTF-8`，
+# 丢了以后生成工程在默认 GBK 的工作区里打开、中文注释有乱码风险。
+# 2026-09-15 那条 `.settings/` 忽略规则把它一起扫掉了（规则本意是清编译产物，
+# 而这两个文件既不含本机路径也不含许可证），半天后由 tests/test_readme.py 的
+# 母版同步守卫抓出来；守卫与判例见 tests/test_master_template_config.py。
+!library/masters/*/.settings/
+!library/masters/*/.settings/*.prefs
+
 # 通用 IDE / 编辑器（.vscode/ 里会有本机路径和解释器路径）
 .vscode/
 
