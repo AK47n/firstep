@@ -190,10 +190,14 @@ def check_download_docs(report: Report) -> None:
         report.add("下载文档一致性（offline）", False, f"跑不起来：{exc}")
         return
     ok = result.returncode == 0
-    tail = [line for line in (result.stdout or "").splitlines() if line.strip()][-4:]
-    detail = "\n".join(tail) if ok else "\n".join(
-        tail + [f"→ 修 README「获取方式」/ 包内文件，或看脚本输出的逐条原因"]
-    )
+    # 失败时把子进程的**完整输出**带出来：截断的尾巴在 CI 上等于没有诊断信息
+    # （2026-09-16 实测：Windows CI 报「下载文档一致性红」而看不到原因，只能重跑排查）
+    body = (result.stdout or "") + (("\n[stderr]\n" + result.stderr) if result.stderr else "")
+    if ok:
+        detail = "\n".join([line for line in body.splitlines() if line.strip()][-4:])
+    else:
+        detail = body.strip() or "（脚本无输出）"
+        detail += "\n→ 修 README「获取方式」/ 包内文件，或看上面脚本输出的逐条原因"
     report.add("下载文档一致性（offline）", ok, detail)
 
 

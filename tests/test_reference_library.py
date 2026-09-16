@@ -1332,6 +1332,11 @@ def test_build_material_manifest_stat_failure_marks_minus_one(tmp_path, monkeypa
 
     is_file 走 os.path.isfile（不经过 Path.stat），stat 只用于取大小——fake 对
     目标路径一律抛 OSError 即可，不影响 is_file 判定。
+
+    判据用**文件名**而不是 `Path` 相等（2026-09-16 Windows CI 实测：相等比较在那台
+    机器上不可靠，于是 fake 对别的路径也抛 OSError，用例红成 `OSError: 模拟 stat 失败`），
+    并显式关掉 `list_entry_files` 顺带诊断用的 `suppress(OSError)`——
+    **判据必须能让 OSError 逃出去**，否则这条用例只是"看着绿"。
     """
     src = tmp_path / "src"
     src.mkdir()
@@ -1340,12 +1345,17 @@ def test_build_material_manifest_stat_failure_marks_minus_one(tmp_path, monkeypa
     real_stat = Path.stat
 
     def fake_stat(self, *args, **kwargs):
-        if self == broken:
+        # 只对目标文件抛；比 Path 相等稳（Windows CI 实测相等比较会误伤别的路径）
+        if self.name == broken.name and self.parent == broken.parent:
             raise OSError("模拟 stat 失败")
         return real_stat(self, *args, **kwargs)
 
     monkeypatch.setattr(Path, "stat", fake_stat)
-    assert "broken.bin  -1 bytes" in build_material_manifest(src).splitlines()
+    manifest = build_material_manifest(src)
+    assert "broken.bin  -1 bytes" in manifest.splitlines()
+    # 反向判据：别的文件不受影响（fake 误伤正常路径会在这里露出来）
+    (src / "ok.txt").write_text("12345", encoding="utf-8")
+    assert "ok.txt  5 bytes" in build_material_manifest(src).splitlines(), "fake 误伤了正常文件"
 
 
 def test_build_material_manifest_roundtrips_with_read_side(tmp_path):
