@@ -346,21 +346,6 @@ def test_remote_branch_update_reports_pushed_commits(prepush):
     assert changed == ["src/contest_generator/changelog.py"], changed
 
 
-def test_remote_branch_update_reports_pushed_commits(prepush):
-    """远端已有分支：`remote_sha..local_sha` 就是本次推的改动（这条一直是好的）。"""
-    import subprocess as sp
-
-    head = sp.run(["git", "rev-parse", "HEAD"], cwd=str(REPO),
-                  capture_output=True, text=True).stdout.strip()
-    parent = sp.run(["git", "rev-parse", "HEAD~1"], cwd=str(REPO),
-                    capture_output=True, text=True).stdout.strip()
-    changed, tag_push = prepush.changed_from_refs(
-        f"refs/heads/main {head} refs/heads/main {parent}\n"
-    )
-    assert tag_push is False
-    assert changed, "上一笔提交的改动没被算出来"
-
-
 def test_base_ref_returns_readable_reference(prepush):
     """基点引用必须真实可解析（不能返回一个 git 不认识的字符串）。"""
     base = prepush.base_ref()
@@ -370,6 +355,22 @@ def test_base_ref_returns_readable_reference(prepush):
     result = sp.run(["git", "rev-parse", "--verify", f"{base}^{{commit}}"],
                     cwd=str(REPO), capture_output=True, text=True)
     assert result.returncode == 0, f"基点 {base!r} 解析不了：{result.stderr}"
+
+
+def test_no_duplicate_test_function_names():
+    """本文件里不许出现重名用例。
+
+    **为什么值得一条守卫**（2026-09-16 踩到）：我重写「远端已有分支」那条用例时，
+    新版本加在前面、旧的留在后面——Python 取**后一个**定义，于是 CI 上跑的一直是
+    旧的非确定性版本，改了三次都没生效。pytest 对重名**不报错**（静默覆盖），
+    这类错误只能靠机械判据挡。
+    """
+    import re
+
+    source = (REPO / "tests" / "test_prepush.py").read_text(encoding="utf-8")
+    names = re.findall(r"^def (test_[A-Za-z0-9_]+)\(", source, re.MULTILINE)
+    duplicates = sorted({n for n in names if names.count(n) > 1})
+    assert not duplicates, f"重名用例（pytest 只会跑最后一个）：{duplicates}"
 
 
 def make_git_repo(prepush, *, files: tuple[str, ...], tmp_root=None):

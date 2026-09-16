@@ -1333,24 +1333,35 @@ def test_build_material_manifest_stat_failure_marks_minus_one(tmp_path, monkeypa
     is_file 走 os.path.isfile（不经过 Path.stat），stat 只用于取大小——fake 对
     目标路径一律抛 OSError 即可，不影响 is_file 判定。
 
-    **为什么写成这样**（2026-09-16 Windows CI 上这条红过一次，`OSError: 模拟 stat 失败`
-    直接从用例体里冒出来）：`monkeypatch.setattr(Path, "stat", ...)` 是**全局**补丁，
-    任何别的 `Path.stat` 调用都会经过它。所以：
-      · 只对**目标文件**抛（按 `resolve()` 后的路径比，且目标文件必须真的存在）；
-      · 其余一律**转发给补丁前的真函数**（捕获在闭包里，避免拿到补丁后的自己）；
-      · 记一次命中计数并在断言里检查——**没命中就说明这条用例根本没验到东西**
-        （那才是真正的假绿）。
+    **为什么写成这样**（2026-09-16 在 Windows CI 上连踩两次，都记在这）：
+      · 第一版用 `if self == broken` ——路径相等比较在 runner 上误伤了**别的**路径，
+        异常从用例体里冒出来（`OSError: 模拟 stat 失败`）；
+      · 第二版加了 `target.exists()` ——`exists()` 内部就是调 `Path.stat`，
+        被补丁拦到 → **无限递归** → pytest INTERNALERROR 把整场测试打断（`ci` 上实测）。
+    所以现在：**只用 `resolve()` 做纯字符串比较**（`resolve` 不经过 `stat`），
+    转发用补丁前捕获的真函数，另加一层递归护栏与命中计数——
+    没命中 = 这条用例根本没验到东西（假绿），要红。
     """
     src = tmp_path / "src"
     src.mkdir()
     broken = src / "broken.bin"
     broken.write_bytes(b"data")
-    target = broken.resolve()
+    target = str(broken.resolve())
     real_stat = Path.stat  # 补丁前捕获，保证转发的是真实现
     hits: list[str] = []
+    calls = 0
 
     def fake_stat(self, *args, **kwargs):
-        if target.exists() and self.resolve() == target:
+        nonlocal calls
+        calls += 1
+        # 递归护栏：补丁是全局的，任何路径兜底都直接转发，绝不无限递归
+        if calls > 2000:
+            return real_stat(self, *args, **kwargs)
+        try:
+            same = str(self.resolve()) == target
+        except OSError:
+            same = False
+        if same:
             hits.append(str(self))
             raise OSError("模拟 stat 失败")
         return real_stat(self, *args, **kwargs)
@@ -1358,6 +1369,7 @@ def test_build_material_manifest_stat_failure_marks_minus_one(tmp_path, monkeypa
     monkeypatch.setattr(Path, "stat", fake_stat)
     manifest = build_material_manifest(src)
     assert hits, "补丁一次都没命中目标文件——这条用例等于没验（假绿）"
+    assert calls < 2000, f"疑似无限递归（fake_stat 被调 {calls} 次）"
     assert "broken.bin  -1 bytes" in manifest.splitlines(), manifest
     # 反向判据：别的文件不受影响（fake 误伤正常路径会在这里露出来）
     (src / "ok.txt").write_text("12345", encoding="utf-8")
