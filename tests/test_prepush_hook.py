@@ -98,11 +98,41 @@ def test_hook_exists_and_is_executable():
     assert mode[0].startswith("1007"), f"钩子索引模式不是可执行：{mode[0]}"
 
 
-def test_hooks_path_points_at_dot_githooks():
-    """本仓库的钩子目录配置正确（否则钩子文件在也不生效）。"""
-    out = subprocess.run(["git", "config", "core.hooksPath"], cwd=str(REPO),
-                         capture_output=True, text=True).stdout.strip()
-    assert out == ".githooks", f"core.hooksPath = {out!r}（应为 .githooks）"
+def test_gate_is_wired_up_on_this_machine():
+    """闸门在这台机器上**真的接上了**，且钩子可被 git 调用。
+
+    这里刻意分两种处境，而不是断言某一种配置：
+
+    * **本机**：`core.hooksPath=.githooks`（clone 后手动配，git 不会自己带这条配置）；
+    * **CI / 别人的 checkout**：通常**没配**——此时闸门的职责由 `.github/workflows/ci.yml`
+      兜（工单 04），所以「没配」不算红；但只要**配了**，就必须配得对，而且
+      `.githooks/pre-push` 必须在（新 clone 拿得到）。
+
+    2026-09-16 CI 实测：原版直接断言 `== ".githooks"`，在没配的 checkout 上假红。
+    """
+    assert HOOK.is_file(), ".githooks/pre-push 不在——新 clone 拿不到闸门"
+    mode = subprocess.run(
+        ["git", "ls-files", "-s", ".githooks/pre-push"], cwd=str(REPO),
+        capture_output=True, text=True,
+    ).stdout.split()
+    assert mode, "钩子没被 git 跟踪（新 clone 拿不到它）"
+    assert mode[0].startswith("1007"), f"钩子索引模式不是可执行：{mode[0]}"
+
+    configured = subprocess.run(
+        ["git", "config", "core.hooksPath"], cwd=str(REPO),
+        capture_output=True, text=True,
+    ).stdout.strip()
+    if configured:
+        assert configured == ".githooks", f"core.hooksPath 配错了：{configured!r}"
+    else:
+        # 没配 = 本地闸门不生效（CI 兜底），提示但不判红
+        import warnings
+
+        warnings.warn(
+            "本仓库没配 core.hooksPath=.githooks——本地 pre-push 闸门不会触发；"
+            "要启用：git config core.hooksPath .githooks",
+            stacklevel=1,
+        )
 
 
 def test_hook_delegates_to_prepush_and_pins_pythonpath():

@@ -2379,6 +2379,15 @@ def test_tarkbot_entries_absent_from_web_facing_search():
 MOTOR_OLD_ID = "MSPM0_MOTOR参考例程"
 MOTOR_MATERIALS_ROOT = Path(__file__).resolve().parents[1] / "sources" / "materials" / MOTOR_OLD_ID
 
+# 资料库目录（sources/materials，688 MB）**不进 git**（Release 分发，见 README），
+# 所以 clone / CI 上没有它。凡是要拿它当夹具的用例先过这道门（与
+# tests/test_full_pack.py::test_repo_materials_paths_fit_budget 同一写法）——
+# 2026-09-16 CI 抓出来的：这条之前只在有资料库的本机上绿过。
+needs_materials_fixture = pytest.mark.skipif(
+    not MOTOR_MATERIALS_ROOT.is_dir(),
+    reason="本地无资料库目录（git clone / CI）——该夹具随 Release 分发，不在仓库里",
+)
+
 # 新标题 → (type, 期望文件数)。旧条目 1630 文件修复为 13 + 6 + 1 = 20 文件
 # （修复脚本 .scratch/fix_mspm0_motor.py 的前置自检同源对照，本表为防回退 pin）
 MOTOR_SPLITS = {
@@ -2485,6 +2494,7 @@ def test_motor_transcoded_files_readable_utf8():
             assert marker in content, f"{entry.id}/{rel} 全文回读不见 {marker!r}"
 
 
+@needs_materials_fixture
 def test_motor_manifests_match_mirror_subdirs():
     """素材清单.txt 用 build_material_manifest 对镜像子目录重新生成（写读契约 pin）。
 

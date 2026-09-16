@@ -48,6 +48,8 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
+      - name: 装测试依赖（`dev` 组；快速面只跑 pytest，不装运行依赖）
+        run: python -m pip install -e ".[dev]"
       - name: 发版前自检（三处版本号 / 母版编码钉 / 下载文档 / README 版本行）
         run: python tools/preflight.py
       - name: 配置钩子路径（新 clone 没有 core.hooksPath，本机是手动配的）

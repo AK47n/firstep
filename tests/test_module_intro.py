@@ -244,8 +244,28 @@ def test_every_real_module_loses_no_content(slug):
 
 
 @pytest.fixture(scope="module")
-def client() -> TestClient:
-    return TestClient(create_app())
+def client(tmp_path_factory) -> TestClient:
+    """带**注入配置**的 app（不能裸 `create_app()`）。
+
+    2026-09-16 CI 抓到的环境耦合：裸 `create_app()` 会去读 `~/.contest_generator/config.json`，
+    本机有配置（所以全绿），CI / 新 clone 上没有 → `/api/modules` 直接 **400「未配置 AI API」**，
+    看起来像产品坏了，其实是用例把「本机装过工具」当成了夹具。
+    这里改成注入最小配置（真库目录 + 临时配置路径 + 假 key），与 `test_webapp.py` 同一姿势。
+    """
+    from contest_generator.config import AppConfig
+    from contest_generator.webapp import AppContext
+
+    work = tmp_path_factory.mktemp("module_intro_ctx")
+    ctx = AppContext(
+        config_path=work / "config.json",
+        config=AppConfig(
+            api_key="sk-test",
+            module_library_dir=MODULES,
+            masters_dir=REPO_ROOT / "library" / "masters",
+            autocommit_enabled=False,  # 只读浏览，不写库不提交
+        ),
+    )
+    return TestClient(create_app(ctx))
 
 
 def test_api_modules_projects_intro(client):

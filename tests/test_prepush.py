@@ -43,6 +43,14 @@ def selection(prepush):
     return _select
 
 
+@pytest.fixture(autouse=True)
+def _restore_repo_root(prepush):
+    """`make_git_repo` 会把 prepush.REPO_ROOT 改指临时仓库——用完必须还原。"""
+    original = prepush.REPO_ROOT
+    yield
+    prepush.REPO_ROOT = original
+
+
 # ---------------------------------------------------------------------------
 # 正例：每类规则各一条
 # ---------------------------------------------------------------------------
@@ -261,45 +269,35 @@ def test_dry_run_does_not_execute_pytest(prepush, monkeypatch, capsys):
 def test_real_refs_to_selection_end_to_end(prepush):
     """从**真实 git diff** 算改动 → 选出对应的测试（把钩子那条链的判据也钉住）。
 
-    刻意不断言「选出来的是哪几个文件」——那取决于这次提交改了什么，判据会随提交漂移。
-    这里钉的是**链路成立**：refs → changed → Selection 三步都不丢信息。
+    用**自建的小仓库**而不是本仓库的 `HEAD~1..HEAD`：CI 的 checkout 上那条区间
+    可能是空的（合并提交 / CHANGELOG 自动提交），用例会变成假红——2026-09-16 CI
+    实测就是 `assert []`。小仓库里改动是自己造的，任何 checkout 都成立。
     """
-    import subprocess as sp
-
-    head = sp.run(["git", "rev-parse", "HEAD"], cwd=str(REPO),
-                  capture_output=True, text=True).stdout.strip()
-    # 真实改动：HEAD 与上一个提交之间的文件
-    out = sp.run(["git", "diff", "--name-only", "HEAD~1..HEAD"], cwd=str(REPO),
-                 capture_output=True, text=True, encoding="utf-8").stdout
-    paths = [p for p in out.splitlines() if p.strip()]
-    assert paths, "HEAD~1..HEAD 没有改动——用例前提不成立"
-
+    repo, first, second = make_git_repo(prepush, files=("src/contest_generator/changelog.py",))
     changed, has_tag = prepush.changed_from_refs(
-        f"refs/heads/main {head} refs/heads/main HEAD~1\n"
+        f"refs/heads/main {second} refs/heads/main {first}\n"
     )
     assert has_tag is False
-    assert set(paths) <= set(changed), f"按 refs 算出的改动漏了文件：{set(paths) - set(changed)}"
+    assert changed == ["src/contest_generator/changelog.py"], changed
 
     selection = prepush.select_tests(changed)
-    assert selection.reasons, "选择结果没带理由——闸门拦人时说不清为什么"
-    assert selection.describe()
+    assert selection.paths == ("tests/test_changelog.py",)
+    assert selection.reasons
 
 
 def test_core_file_in_real_diff_forces_full_suite(prepush):
     """真正的端到端杀器用例：diff 里只要有一个公共面文件，就必须整套。"""
-    import subprocess as sp
-
-    head = sp.run(["git", "rev-parse", "HEAD"], cwd=str(REPO),
-                  capture_output=True, text=True).stdout.strip()
-    # 拿一个真实存在的公共面模块当「远端版」，与 HEAD 比——diff 里必然出现它
-    core = "src/contest_generator/manifest.py"
-    assert (REPO / core).is_file()
+    repo, _, second = make_git_repo(prepush, files=("notes.md",))
     changed, _ = prepush.changed_from_refs(
-        f"refs/heads/main {head} refs/heads/main {head}\n"
+        f"refs/heads/main {second} refs/heads/main {second}\n"
     )
+    core = "src/contest_generator/manifest.py"
     selection = prepush.select_tests([*changed, core])
     assert selection.full is True
     assert "公共面" in selection.reasons[core]
+
+    # 真仓库里这个模块也确实存在（判据不是凭空写的）
+    assert (REPO / core).is_file()
 
 
 # ---------------------------------------------------------------------------
@@ -313,16 +311,12 @@ def test_new_branch_push_does_not_degenerate_to_empty(prepush):
     当时的写法拿 `origin/main` 当基点，而本机克隆里 `origin/main` 正好 = 本地 HEAD，
     于是 diff 恒空 → 闸门报「没有守卫要跑」→ 一笔删掉母版守卫的提交被真 push 放过去了。
     现在的契约是二选一，**绝不许是「零改动 + 不要整套」**：
-      · 基点可解析（默认分支是 HEAD 的祖先）→ 给出那批提交的真实改动；
+      · 基点可解析 → 给出那批提交的真实改动；
       · 否则 → 倒向整套（第二个返回值在钩子侧就是「整套」的意思）。
     """
-    import subprocess as sp
-
-    head = sp.run(["git", "rev-parse", "HEAD"], cwd=str(REPO),
-                  capture_output=True, text=True).stdout.strip()
-    zeros = "0" * 40
+    repo, _, second = make_git_repo(prepush, files=("src/contest_generator/changelog.py",))
     changed, force_full = prepush.changed_from_refs(
-        f"HEAD {head} refs/heads/main {zeros}\n"
+        f"HEAD {second} refs/heads/main {'0' * 40}\n"
     )
     assert changed or force_full, (
         "推新分支既没算出改动、也没要求整套——这正是当时被真 push 放过去的那条路"
@@ -334,15 +328,22 @@ def test_new_branch_push_does_not_degenerate_to_empty(prepush):
 def test_new_branch_without_usable_base_falls_back_to_head_parent(prepush, monkeypatch):
     """基点拿不到时退到 HEAD~1（新分支通常只有一个新提交），仍要给出真实改动。"""
     monkeypatch.setattr(prepush, "base_ref", lambda: "")
-    import subprocess as sp
-
-    head = sp.run(["git", "rev-parse", "HEAD"], cwd=str(REPO),
-                  capture_output=True, text=True).stdout.strip()
+    repo, _, second = make_git_repo(prepush, files=("src/contest_generator/changelog.py",))
     changed, force_full = prepush.changed_from_refs(
-        f"HEAD {head} refs/heads/main {'0' * 40}\n"
+        f"HEAD {second} refs/heads/main {'0' * 40}\n"
     )
     assert force_full is False
-    assert changed, "退到 HEAD~1 之后仍算出零改动"
+    assert changed == ["src/contest_generator/changelog.py"], changed
+
+
+def test_remote_branch_update_reports_pushed_commits(prepush):
+    """远端已有分支：`remote_sha..local_sha` 就是本次推的改动（这条一直是好的）。"""
+    repo, first, second = make_git_repo(prepush, files=("src/contest_generator/changelog.py",))
+    changed, force_full = prepush.changed_from_refs(
+        f"refs/heads/main {second} refs/heads/main {first}\n"
+    )
+    assert force_full is False
+    assert changed == ["src/contest_generator/changelog.py"], changed
 
 
 def test_remote_branch_update_reports_pushed_commits(prepush):
@@ -369,6 +370,42 @@ def test_base_ref_returns_readable_reference(prepush):
     result = sp.run(["git", "rev-parse", "--verify", f"{base}^{{commit}}"],
                     cwd=str(REPO), capture_output=True, text=True)
     assert result.returncode == 0, f"基点 {base!r} 解析不了：{result.stderr}"
+
+
+def make_git_repo(prepush, *, files: tuple[str, ...], tmp_root=None):
+    """造一个**两提交的小仓库**并让 prepush 在它里面跑 → (repo, first, second)。
+
+    为什么要自建：`changed_from_refs` 读的是**当前仓库**的 git 状态，而 CI 的 checkout
+    上「上一笔提交改了什么」完全不受控（合并提交 / 只有 CHANGELOG 的自动提交），
+    拿它当夹具的用例会变成假红或假绿。小仓库里改动是自己造的，任何 checkout 都成立。
+    """
+    import subprocess as sp
+    import tempfile
+
+    root = Path(tempfile.mkdtemp(prefix="prepush-fixture-", dir=tmp_root))
+    (root / "src" / "contest_generator").mkdir(parents=True)
+    (root / "src" / "contest_generator" / "changelog.py").write_text("x = 1\n", encoding="utf-8")
+    (root / "notes.md").write_text("n\n", encoding="utf-8")
+    sp.run(["git", "init", "-q", "-b", "main"], cwd=str(root), capture_output=True)
+    sp.run(["git", "config", "user.email", "t@t"], cwd=str(root), capture_output=True)
+    sp.run(["git", "config", "user.name", "t"], cwd=str(root), capture_output=True)
+    sp.run(["git", "add", "-A"], cwd=str(root), capture_output=True)
+    sp.run(["git", "commit", "-qm", "first"], cwd=str(root), capture_output=True)
+    first = sp.run(["git", "rev-parse", "HEAD"], cwd=str(root),
+                   capture_output=True, text=True).stdout.strip()
+
+    for rel in files:
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("changed\n", encoding="utf-8")
+    sp.run(["git", "add", "-A"], cwd=str(root), capture_output=True)
+    sp.run(["git", "commit", "-qm", "second"], cwd=str(root), capture_output=True)
+    second = sp.run(["git", "rev-parse", "HEAD"], cwd=str(root),
+                    capture_output=True, text=True).stdout.strip()
+
+    original = prepush.REPO_ROOT
+    prepush.REPO_ROOT = root
+    return root, first, second
 
 
 

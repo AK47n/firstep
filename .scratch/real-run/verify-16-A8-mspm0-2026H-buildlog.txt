@@ -1,0 +1,24 @@
+gmake: Entering directory 'C:/Users/luoji/Desktop/firstep/.scratch/real-run/out_2026H_mspm0/Debug'
+'SysConfig - building file: "../mspm0.syscfg"'
+"C:\ti\ccs2051\sysconfig_1.26.2\sysconfig_cli.bat" -s "C:\ti\ccs2051\mspm0_sdk_2_10_00_04/.metadata/product.json" --script "../mspm0.syscfg" -o "." --compiler ticlang
+Running script...
+Validating...
+info: MOTOR_PID(/ti/driverlib/TIMER): Peripheral does not retain register contents in STOP or STANDBY modes. User should take care to save and restore register configuration in application. See Retention Configuration section for more details.
+info: NTB(/ti/driverlib/TIMER): Peripheral does not retain register contents in STOP or STANDBY modes. User should take care to save and restore register configuration in application. See Retention Configuration section for more details.
+gmake: Leaving directory 'C:/Users/luoji/Desktop/firstep/.scratch/real-run/out_2026H_mspm0/Debug'
+error: DC_MOTOR(/ti/driverlib/GPIO) associatedPins[3].pin: Resource conflict
+	PA7/49 is currently in use by SERVO_PWM(/ti/driverlib/PWM) peripheral.ccp0Pin
+error: HUIDU(/ti/driverlib/GPIO) associatedPins[5].pin: Resource conflict
+	PA27/31 is currently in use by L298N(/ti/driverlib/GPIO) associatedPins[0].pin
+error: OLED_SPI(/ti/driverlib/GPIO) associatedPins[2].pin: Resource conflict
+	PA13/6 is currently in use by PWMAB(/ti/driverlib/PWM) peripheral.ccp1Pin
+error: OLED_SPI(/ti/driverlib/GPIO) associatedPins[3].pin: Resource conflict
+	PB18/15 is currently in use by DC_MOTOR(/ti/driverlib/GPIO) associatedPins[2].pin
+error: OLED_SPI(/ti/driverlib/GPIO) associatedPins[4].pin: Resource conflict
+	PA22/18 is currently in use by HUIDU(/ti/driverlib/GPIO) associatedPins[0].pin
+error: IMU601(/ti/driverlib/UART) peripheral.rxPin: Resource conflict
+	PA31/39 is currently in use by OLED_SPI(/ti/driverlib/GPIO) associatedPins[1].pin
+error: IMU601(/ti/driverlib/UART) peripheral.txPin: Resource conflict
+	PA28/35 is currently in use by OLED_SPI(/ti/driverlib/GPIO) associatedPins[0].pin
+7 error(s), 0 warning(s)
+gmake: *** [subdir_rules.mk:9: build-1290584808] Error 1
