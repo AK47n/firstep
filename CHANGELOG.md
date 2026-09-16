@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=7334e6a2a82fb40133de2a1e281f089d3b5c6d00 -->
+<!-- changelog-auto: last-commit=8ddb32ab13d984dfe15c439a7ce6fd120d861772 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -16,6 +16,7 @@
 - 20:06 test(发版): 发版前一条命令自检——三处版本号 / 母版编码钉 / 下载文档 / README 版本行（工单 commit-gate/03）
 - 20:09 ci(闸门): GitHub Actions——windows 全套 + ubuntu 快速面（发版自检 / 语言 / 编码 / 闸门用例），不联网不吃 secret（工单 commit-gate/04）
 - 20:21 test(CI 首轮暴露的环境耦合): 真机夹具入库 + 用例自带配置/自建仓库——本机绿、CI 红的那 18 条
+- 20:27 fix(自检): 下载文档一致性失败时带出子进程完整输出（CI 上截断的尾巴等于没有诊断）+ stat 用例判据改用文件名
 
 ## 2026-09-15
 - 19:58 清理：编译产物不入库（夹带本机路径与 Keil 许可证）
