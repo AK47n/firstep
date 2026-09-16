@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=c5516b8b0186e8cd49ac1532fc6d36598c1cec77 -->
+<!-- changelog-auto: last-commit=25bfab44932711739df24596ead60756549e286a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -14,6 +14,7 @@
 - 19:47 test(闸门): 推之前按改动跑关联子集——pre-push 钩子 + 选择器 + 钩子契约守卫（工单 commit-gate/01-02）
 - 20:02 fix(闸门): 推新分支时基点取值退化（diff 恒空静默放行）+ 新增只选择模式（真 push 演练验出）
 - 20:06 test(发版): 发版前一条命令自检——三处版本号 / 母版编码钉 / 下载文档 / README 版本行（工单 commit-gate/03）
+- 20:09 ci(闸门): GitHub Actions——windows 全套 + ubuntu 快速面（发版自检 / 语言 / 编码 / 闸门用例），不联网不吃 secret（工单 commit-gate/04）
 
 ## 2026-09-15
 - 19:58 清理：编译产物不入库（夹带本机路径与 Keil 许可证）
