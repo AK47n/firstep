@@ -302,3 +302,73 @@ def test_core_file_in_real_diff_forces_full_suite(prepush):
     assert "公共面" in selection.reasons[core]
 
 
+# ---------------------------------------------------------------------------
+# 两个真缺陷的回归（2026-09-16 端到端演练里被真 push 放过去的）
+# ---------------------------------------------------------------------------
+
+
+def test_new_branch_push_does_not_degenerate_to_empty(prepush):
+    """**回归（真缺陷①）**：推新分支（远端 sha 全零）不许算出「零改动放行」。
+
+    当时的写法拿 `origin/main` 当基点，而本机克隆里 `origin/main` 正好 = 本地 HEAD，
+    于是 diff 恒空 → 闸门报「没有守卫要跑」→ 一笔删掉母版守卫的提交被真 push 放过去了。
+    现在的契约是二选一，**绝不许是「零改动 + 不要整套」**：
+      · 基点可解析（默认分支是 HEAD 的祖先）→ 给出那批提交的真实改动；
+      · 否则 → 倒向整套（第二个返回值在钩子侧就是「整套」的意思）。
+    """
+    import subprocess as sp
+
+    head = sp.run(["git", "rev-parse", "HEAD"], cwd=str(REPO),
+                  capture_output=True, text=True).stdout.strip()
+    zeros = "0" * 40
+    changed, force_full = prepush.changed_from_refs(
+        f"HEAD {head} refs/heads/main {zeros}\n"
+    )
+    assert changed or force_full, (
+        "推新分支既没算出改动、也没要求整套——这正是当时被真 push 放过去的那条路"
+    )
+    if force_full:
+        assert changed == [], "倒向整套时不该再带一份可能不全的改动清单"
+
+
+def test_new_branch_without_usable_base_falls_back_to_head_parent(prepush, monkeypatch):
+    """基点拿不到时退到 HEAD~1（新分支通常只有一个新提交），仍要给出真实改动。"""
+    monkeypatch.setattr(prepush, "base_ref", lambda: "")
+    import subprocess as sp
+
+    head = sp.run(["git", "rev-parse", "HEAD"], cwd=str(REPO),
+                  capture_output=True, text=True).stdout.strip()
+    changed, force_full = prepush.changed_from_refs(
+        f"HEAD {head} refs/heads/main {'0' * 40}\n"
+    )
+    assert force_full is False
+    assert changed, "退到 HEAD~1 之后仍算出零改动"
+
+
+def test_remote_branch_update_reports_pushed_commits(prepush):
+    """远端已有分支：`remote_sha..local_sha` 就是本次推的改动（这条一直是好的）。"""
+    import subprocess as sp
+
+    head = sp.run(["git", "rev-parse", "HEAD"], cwd=str(REPO),
+                  capture_output=True, text=True).stdout.strip()
+    parent = sp.run(["git", "rev-parse", "HEAD~1"], cwd=str(REPO),
+                    capture_output=True, text=True).stdout.strip()
+    changed, tag_push = prepush.changed_from_refs(
+        f"refs/heads/main {head} refs/heads/main {parent}\n"
+    )
+    assert tag_push is False
+    assert changed, "上一笔提交的改动没被算出来"
+
+
+def test_base_ref_returns_readable_reference(prepush):
+    """基点引用必须真实可解析（不能返回一个 git 不认识的字符串）。"""
+    base = prepush.base_ref()
+    assert base, "拿不到基点引用"
+    import subprocess as sp
+
+    result = sp.run(["git", "rev-parse", "--verify", f"{base}^{{commit}}"],
+                    cwd=str(REPO), capture_output=True, text=True)
+    assert result.returncode == 0, f"基点 {base!r} 解析不了：{result.stderr}"
+
+
+

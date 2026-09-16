@@ -28,6 +28,7 @@
     python tools/prepush.py --dry-run          # 只说要跑什么，不执行
     python tools/prepush.py --explain          # 打印每条改动的命中理由
     FIRSTEP_PREPUSH=full python tools/prepush.py    # 环境变量强制全套
+    FIRSTEP_PREPUSH=select-only python tools/prepush.py   # 只选择、绝不执行（看会跑什么）
     FIRSTEP_PREPUSH=off  python tools/prepush.py    # 跳过（明写警告）
 
 退出码：0 = 通过或按规则放行；1 = 测试红（应当拒推）；2 = 用法错误。
@@ -253,14 +254,48 @@ def _git(args: list[str]) -> str:
     return result.stdout
 
 
+def base_ref() -> str:
+    """认「本地这个分支是从哪儿分出来的」用的引用（只读，不猜）。
+
+    顺序：远端的默认分支（`origin/HEAD`）→ `origin/main` → `main` → `master`。
+    一个都没有 → 空串（调用方据此倒向整套）。
+    """
+    try:
+        name = _git(["rev-parse", "--abbrev-ref", "origin/HEAD"]).strip()
+        if name:
+            return name
+    except RuntimeError:
+        pass
+    for candidate in ("origin/main", "main", "master"):
+        try:
+            _git(["rev-parse", "--verify", "--quiet", f"{candidate}^{{commit}}"])
+            return candidate
+        except RuntimeError:
+            continue
+    return ""
+
+
 def changed_from_refs(stdin_text: str) -> tuple[list[str], bool]:
     """按 pre-push 协议的 stdin 算改动 → (路径, 是否含 tag 推送)。
 
     git 给钩子的每行 = `<local ref> <local sha> <remote ref> <remote sha>`。
-    推 tag = 发版动作 → 调用方应当整套跑（这里只如实报出来）。
+
+    三种情形分开处理（2026-09-16 两个真缺陷都在这里）：
+
+    * **远端已有这条分支**（remote_sha 非零）：`remote_sha..local_sha` 就是本次要推的改动；
+    * **推新分支 / 远端没有**（remote_sha 全零）：与「本分支分出来的那个点」比。
+      这里**不能用 `origin/main`**——若本地 main 已经跟到远端默认分支的最新，那个基点
+      就是 HEAD 自己，diff 恒空，闸门会静默判「没有守卫要跑」（实测踩到：一笔删掉
+      母版守卫的提交就这么被放过去了）。改用 `HEAD~1`（新分支通常只有一个新提交）
+      作基点；
+    * **认不出远端状态**（远端 sha 本地没有）：倒向整套。
+
+    另加一条**退化判据**：认得出 refs、却算出「零改动」时也倒向整套——宁可贵一次，
+    不可静默放行。
     """
     changed: set[str] = set()
     has_tag = False
+    saw_ref = False
     for line in stdin_text.splitlines():
         parts = line.split()
         if len(parts) != 4:
@@ -273,22 +308,32 @@ def changed_from_refs(stdin_text: str) -> tuple[list[str], bool]:
         remote_sha = remote_sha.strip()
         if not local_sha or set(local_sha) == {"0"}:
             continue
+        saw_ref = True
         if set(remote_sha) == {"0"}:
-            # 远端还没这条分支：与默认分支的合并基点比
-            try:
-                base = _git(["merge-base", local_sha, "origin/main"]).strip()
-            except RuntimeError:
-                base = ""
-            spec = f"{base}..{local_sha}" if base else local_sha
+            # 推新分支：优先用「分出来的那个点」（远端默认分支），它才是这批提交的完整范围；
+            # 拿不到基点（没有默认分支引用 / 本地 HEAD 已跟到远端默认分支）时退到 HEAD~1。
+            # 见 docstring 里的踩坑记录：**不能直接用 origin/main**——HEAD 跟到远端默认分支时
+            # 那个基点就是 HEAD 自己，diff 恒空，闸门会静默放行。
+            base = base_ref()
+            spec = ""
+            if base:
+                try:
+                    _git(["merge-base", "--is-ancestor", base, local_sha])
+                    spec = f"{base}..{local_sha}"
+                except RuntimeError:
+                    spec = ""
+            if not spec:
+                spec = f"{local_sha}~1..{local_sha}"
         else:
             spec = f"{remote_sha}..{local_sha}"
         try:
             out = _git(["diff", "--name-only", "--diff-filter=ACMR", spec])
         except RuntimeError:
-            # 远端那个 sha 本地没有（别人 force push 过之类）：认不出 → 整套
+            # 基点不存在（远端那个 sha 本地没有 / 新分支只有一个提交）→ 整套
             return [], True
         changed.update(normalize(line) for line in out.splitlines() if line.strip())
-    return sorted(changed), has_tag
+    # 退化：认得出 refs、却算出「零改动」——不轻信，交给整套（由 main 转成 full）
+    return sorted(changed), (has_tag or (saw_ref and not changed))
 
 
 def changed_from_worktree() -> list[str]:
@@ -327,6 +372,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--changed", nargs="*", default=None,
                         help="显式给改动路径（不给则从 git 读）")
     parser.add_argument("--dry-run", action="store_true", help="只说要跑什么，不执行")
+    parser.add_argument("--select-only", action="store_true",
+                        help="只做选择、绝不执行 pytest（钩子契约测试用；同 --dry-run）")
     parser.add_argument("--explain", action="store_true", help="打印每条改动的理由")
     parser.add_argument("--stdin-refs", action="store_true",
                         help="从 stdin 读 pre-push 协议的 refs（钩子用）")
@@ -350,7 +397,11 @@ def main(argv: list[str] | None = None) -> int:
             changed, tag_push = changed_from_refs(stdin_text)
             if tag_push:
                 full = True
-                print("[prepush] 本次要推 tag（发版动作）→ 整套跑", flush=True)
+                if changed:
+                    print("[prepush] 本次要推 tag（发版动作）→ 整套跑", flush=True)
+                else:
+                    print("[prepush] 认得出 refs 却算不出改动（新分支 / 基点认不出）→ 整套跑",
+                          flush=True)
         else:
             try:
                 changed = changed_from_worktree()
@@ -369,7 +420,9 @@ def main(argv: list[str] | None = None) -> int:
         for rel, why in sorted(selection.reasons.items()):
             print(f"    - {rel}：{why}", flush=True)
 
-    if args.dry_run:
+    if args.dry_run or args.select_only or mode == "select-only":
+        if selection.full:
+            print("    · （整套）", flush=True)
         for path in selection.paths:
             print(f"    · {path}", flush=True)
         return 0

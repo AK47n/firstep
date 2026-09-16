@@ -49,12 +49,20 @@ needs_shell = pytest.mark.skipif(
 
 
 def _run_hook(stdin_text: str, extra_env: dict | None = None,
-              timeout: int = 300) -> subprocess.CompletedProcess:
+              timeout: int = 300, select_only: bool = True) -> subprocess.CompletedProcess:
+    """跑真钩子。
+
+    `select_only=True`（默认）给钩子一个 `FIRSTEP_PREPUSH=select-only`：钩子照旧读 refs、
+    照旧判断、照旧按判据设退出码，但**不真跑 pytest**——钩子契约（读到什么、判成什么、
+    退出码怎么传）全都能验，而不会把用例拖进一整套 58 秒里（实测第一版就是这么超时的）。
+    """
     assert SHELL is not None
     executable, path_extra = SHELL
     env = dict(os.environ)
     env["PYTHONIOENCODING"] = "utf-8"
     env.pop("PYTHON", None)  # 免得外面设的 PYTHON 指向别的解释器
+    if select_only:
+        env["FIRSTEP_PREPUSH"] = "select-only"
     if path_extra:
         env["PATH"] = path_extra + os.pathsep + env.get("PATH", "")
     if extra_env:
