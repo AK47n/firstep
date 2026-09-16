@@ -164,6 +164,29 @@
 
 **逐文件跑法保留**（不取代）：它的分工是「卡住与红分开记」，与整支超时互补。
 
+### 2.5d 三道闸门（2026-09-16 起，工单 `commit-gate/01-04`）
+
+推之前、合并之前、发版之前各有一道自动闸门——**细节见 `docs/agents/workflow.md`
+「闸门」一节**，这里只记「这台机器上要做的动作」：
+
+| 事项 | 这台机器上的做法 |
+|---|---|
+| 本地 pre-push 闸门 | **要手动配一次**：`git config core.hooksPath .githooks`（新 clone 默认没有；本机已配） |
+| 远端 CI | `.github/workflows/ci.yml` 已在跑：push 与 PR 上，windows 全套 + ubuntu 快速面。**不联网、不吃 secret** |
+| 发版前自检 | `powershell -File tools\preflight.ps1`（四项：三处版本号 / 母版编码钉 / 下载文档 / README 版本行） |
+| 想知道「这次 push 会跑什么」 | `python tools/prepush.py --dry-run`（或 `FIRSTEP_PREPUSH=select-only`） |
+
+**两条硬约束**（都是 2026-09-16 实测踩出来的）：
+1. **钩子文件必须 LF + 无 BOM** —— 带 BOM 时 git 报 `cannot spawn ...: No such file or
+   directory` 且**成功 push 时 stderr 静默**，表现为"钩子存在却从不生效"；
+2. **CI 的 checkout 必须 `fetch-depth: 0`** —— 浅克隆里 CHANGELOG 锚点守卫查不到提交
+   （连 `HEAD~1` 都没有），会在最需要它的地方假红。
+
+**本机测试夹具的一条新纪律**（CI 首轮抓出来的）：**测试读的文件必须在 git 索引里**。
+2026-09-16 之前 `.scratch/real-run/` 下的真机 buildlog 与推荐缓存没入库，
+于是「本机全绿、CI 12 条红」。判断标准就一句：**测试读它 → 就要入库**（`.gitignore`
+加例外，注意 git 的规矩：父目录被排除时里面的 `!` 不生效，要逐层放行）。
+
 **顺带发现（同一轮）：main 上本来就有一条红**——`tests/test_readme.py` 的母版同步守卫，
 根因是 2026-09-15 的清理误删 mspm0 母版 `.settings/`（含 CCS 编码钉）。已修，见第 7 节。
 
