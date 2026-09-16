@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=3d914a14e90a31eabce9327664966b20a86ad15b -->
+<!-- changelog-auto: last-commit=82e1d9103604d0fd6f9d57fc7dc576f77e53e41c -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -19,6 +19,7 @@
 - 20:27 fix(自检): 下载文档一致性失败时带出子进程完整输出（CI 上截断的尾巴等于没有诊断）+ stat 用例判据改用文件名
 - 20:35 fix(自检/用例): 子进程按 cp1252 输出中文会 UnicodeEncodeError（Windows CI 实证，用户机同理）；stat 用例只命中目标文件并断言真的命中
 - 20:42 fix(闸门用例): 重名用例让 pytest 静默只跑旧版（改三次没生效）——删旧版 + 加重名守卫；stat 用例修掉自引入的无限递归（target.exists 又走 stat）
+- 20:48 fix(CI): checkout 取全历史（浅克隆下 CHANGELOG 锚点守卫假红）+ 锚点守卫对浅克隆显式跳过；stat 用例改成受控替身（3.14 的 is_file 也走 stat）
 
 ## 2026-09-15
 - 19:58 清理：编译产物不入库（夹带本机路径与 Keil 许可证）
