@@ -32,6 +32,23 @@
 3. **大发版**：`sources/materials` 资料库有增删改 → 打资料库增量包（见下文「大发版流程（资料库增量包）」），发 `materials-vX.Y.Z` tag + Release。
 4. 重大里程碑（首次公开、大版本切换）→ 即使资料无变化也可发完整包。
 
+## 发版前：一条命令自检（必做）
+
+```powershell
+powershell -File tools\preflight.ps1
+```
+
+四件事一次查完，**红了就别打包/别打 tag**（逐条给中文原因与修法）：
+
+1. **三处版本号一致**：`src/contest_generator/__init__.py` / `pyproject.toml` / `VERSIONS.md` 首个版本块；
+2. **母版 `.settings/` 编码钉**在盘**且在 git**（mspm0 的 CCS 编码设置，2026-09-15 被清理误删过一次）；
+3. **下载文档一致性**（`tools/check-download-docs.py --offline`）；
+4. **README 当前版本行**与 `__version__` 一致。
+
+> 2026-09-14 那次事故正是「改完版本号没跑守卫」：`VERSIONS.md` 版本头写坏（日期段混进中文），
+> 解析器**静默跳过整块** → 记录页缺本版，而两个包都已经传上线，只能重打重传。
+> 判据不新造——全部复用产品自己的解析器与既有守卫脚本，`tools/preflight.ps1` 只是入口。
+
 ## 发版前：三处版本号同步（必做）
 
 打 tag 前把版本号改到目标值并提交：
@@ -40,11 +57,15 @@
 2. `pyproject.toml` 的 `project.version`（打包元数据，必须与 `__version__` 一致）；
 3. `README.md`「版本与发布」当前版本行 + `VERSIONS.md` 顶部新增版本区块（用户可见）。
 
-## 发版前：跑一次下载链路自检（必做）
+## 发版前：跑一次下载链路自检（联网那一次，必做）
 
 ```powershell
 python tools\check-download-docs.py
 ```
+
+`tools/preflight.ps1` 里的第 3 项跑的是它的 `--offline` 版本（不联网，能进 CI）。**打包上传之后**
+再跑一次这个不带参数的完整版：它会拿**线上最新的 Release** 去校验 README 的体积口径与 Release
+说明前两行，正好确认这一版发对了。
 
 它把**新用户能看到的三个入口**对一遍：README「获取方式」（有没有已下线形态、指向的是不是
 `/releases/latest`、点名的包内文件是否真在包里、写的体积与线上字节是否同一量级）、
