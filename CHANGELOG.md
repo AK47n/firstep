@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=8ddb32ab13d984dfe15c439a7ce6fd120d861772 -->
+<!-- changelog-auto: last-commit=8c533371428dc89a762d74df7dbb2f5b1efc3688 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -17,6 +17,7 @@
 - 20:09 ci(闸门): GitHub Actions——windows 全套 + ubuntu 快速面（发版自检 / 语言 / 编码 / 闸门用例），不联网不吃 secret（工单 commit-gate/04）
 - 20:21 test(CI 首轮暴露的环境耦合): 真机夹具入库 + 用例自带配置/自建仓库——本机绿、CI 红的那 18 条
 - 20:27 fix(自检): 下载文档一致性失败时带出子进程完整输出（CI 上截断的尾巴等于没有诊断）+ stat 用例判据改用文件名
+- 20:35 fix(自检/用例): 子进程按 cp1252 输出中文会 UnicodeEncodeError（Windows CI 实证，用户机同理）；stat 用例只命中目标文件并断言真的命中
 
 ## 2026-09-15
 - 19:58 清理：编译产物不入库（夹带本机路径与 Keil 许可证）
