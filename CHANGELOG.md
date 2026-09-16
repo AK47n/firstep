@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=82e1d9103604d0fd6f9d57fc7dc576f77e53e41c -->
+<!-- changelog-auto: last-commit=75ab9481a15f3962d43f1fb5ef19a227dd9ab94b -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -20,6 +20,7 @@
 - 20:35 fix(自检/用例): 子进程按 cp1252 输出中文会 UnicodeEncodeError（Windows CI 实证，用户机同理）；stat 用例只命中目标文件并断言真的命中
 - 20:42 fix(闸门用例): 重名用例让 pytest 静默只跑旧版（改三次没生效）——删旧版 + 加重名守卫；stat 用例修掉自引入的无限递归（target.exists 又走 stat）
 - 20:48 fix(CI): checkout 取全历史（浅克隆下 CHANGELOG 锚点守卫假红）+ 锚点守卫对浅克隆显式跳过；stat 用例改成受控替身（3.14 的 is_file 也走 stat）
+- 20:52 docs(账本/工单): 三道闸门落到本机口径 + A4 四轮 CI 诊断结论（浅克隆/编码/重名/夹具入库）
 
 ## 2026-09-15
 - 19:58 清理：编译产物不入库（夹带本机路径与 Keil 许可证）
