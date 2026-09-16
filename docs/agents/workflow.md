@@ -114,6 +114,30 @@ Write one file per ticket under `.scratch/<feature-slug>/issues/<NN>-<slug>.md`,
 - [ ] 验收标准 2
 ```
 
+## 闸门：推之前与合并之前（工单 commit-gate/01-04）
+
+三道自动闸门，判据都是**既有测试**（不另造一套）：
+
+| 时机 | 谁 | 跑什么 |
+|---|---|---|
+| **push 之前**（本地） | `.githooks/pre-push` → `tools/prepush.py` | 按本次要推的改动选**关联子集**（改公共面模块 / 认不出的落点 / 推 tag → 整套）。测试红 → 拒推并点名失败用例 |
+| **push / PR 之后**（远端） | `.github/workflows/ci.yml` | windows-latest 跑全套 `pytest -n auto`；ubuntu-latest 跑发版自检（`tools/preflight.py`）+ 语言 / 编码 / 闸门自身用例。**不联网、不吃 secret** |
+| **打 tag 之前**（发版） | `tools/preflight.ps1` | 三处版本号一致 / 母版 `.settings` 编码钉在库 / 下载文档一致性 / README 版本行 |
+
+用法与绕过：
+
+```powershell
+python tools/prepush.py --changed <文件>        # 手动看会跑什么（--dry-run 只打印）
+python tools/prepush.py --full                  # 强制整套
+FIRSTEP_PREPUSH=full git push                   # 临时整套；=off 跳过（不鼓励）；=select-only 只选择
+powershell -File tools\preflight.ps1            # 发版前一条命令
+```
+
+改了 `.githooks/` 下的钩子请注意：**LF + 无 BOM**。钩子带 UTF-8 BOM 时 git 会
+`cannot spawn ...: No such file or directory`，而且**成功 push 时 stderr 是静默的**——
+表现为「钩子存在但从不生效」（2026-09-16 实测，排查花掉半小时）。别用 PowerShell 5.1 的
+`-Encoding utf8` 生成钩子文件。
+
 ## Step 4 — Implement ticket by ticket
 
 Work the **frontier**: any ticket whose blockers are all resolved. For a purely linear chain, that means top to bottom.

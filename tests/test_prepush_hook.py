@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -60,7 +61,9 @@ def _run_hook(stdin_text: str, extra_env: dict | None = None,
     executable, path_extra = SHELL
     env = dict(os.environ)
     env["PYTHONIOENCODING"] = "utf-8"
-    env.pop("PYTHON", None)  # 免得外面设的 PYTHON 指向别的解释器
+    # 钉住解释器：钩子优先用 $PYTHON（见钩子脚本），这样 CI 上不会去 PATH 里猜一个
+    # 没装依赖的 python（本地也不受全局 editable 安装影响）。
+    env["PYTHON"] = sys.executable
     if select_only:
         env["FIRSTEP_PREPUSH"] = "select-only"
     if path_extra:
@@ -210,7 +213,7 @@ def test_hook_blocks_push_when_tests_fail(tmp_path):
 
     executable, path_extra = SHELL  # type: ignore[misc]
     env = dict(os.environ)
-    env.pop("PYTHON", None)
+    env["PYTHON"] = sys.executable
     if path_extra:
         env["PATH"] = path_extra + os.pathsep + env.get("PATH", "")
     result = subprocess.run(

@@ -1,0 +1,58 @@
+name: CI
+
+# 为什么要有它（工单 commit-gate/04）：
+# 2026-09-15 那次误删让母版同步守卫在 main 上**红了整整一天**没人发现，根因写着
+# 「因为没人跑全套」。本地已有 pre-push 钩子，但那只保护**配过 `core.hooksPath` 的机器**
+# （别人 clone 不配就没有），也没法在 PR 上给出来。CI 就是那道不依赖本机状态的网。
+#
+# 两条不变量（本仓库既有约定，别破）：
+#   1. **不联网**：测试刻意不打网络（tests/fakes.py 的桩），所以 CI 不吃任何 secret；
+#   2. **判据与本地同一套**：跑的就是 `python -m pytest` 与 `tools/preflight.py`，不另写一套。
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # 同分支连推时取消上一轮，省 runner 也不看陈旧结果
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full-suite:
+    # 与用户机同平台：路径长度 / CRLF 字节口径 / .ps1 编码这些真风险只在 Windows 上暴露
+    name: 全套 pytest（windows-latest）
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"  # pyproject.toml 的 requires-python = ">=3.13"
+          cache: pip
+      - name: 装依赖（声明的那份：运行依赖 + dev 组）
+        run: python -m pip install -e ".[dev]"
+      - name: 全套测试（并行，与本地同一条命令）
+        run: python -m pytest -n auto -q
+
+  fast-checks:
+    # 快速面：不装运行依赖也能跑的机械守卫 + 发版自检
+    name: 快速守卫（ubuntu-latest）
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: 发版前自检（三处版本号 / 母版编码钉 / 下载文档 / README 版本行）
+        run: python tools/preflight.py
+      - name: 配置钩子路径（新 clone 没有 core.hooksPath，本机是手动配的）
+        run: git config core.hooksPath .githooks
+      - name: 中文语言约定与 .ps1 编码约定
+        run: python -m pytest -q tests/test_repo_language.py tests/test_ps1_encoding.py
+      - name: 闸门自身的用例（选择器 + 钩子契约 + 发版自检 + CI 契约）
+        run: python -m pytest -q tests/test_prepush.py tests/test_prepush_hook.py tests/test_preflight.py tests/test_ci_workflow.py
