@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -182,9 +183,16 @@ def check_download_docs(report: Report) -> None:
                    f"{script.relative_to(REPO_ROOT)} 不存在 → 发版自检脚本被删了？")
         return
     try:
+        env = dict(os.environ)
+        # Windows 上 Python 默认按控制台代码页输出（CI 上实测 cp1252）——子脚本打印中文
+        # 会直接 `UnicodeEncodeError: 'charmap' codec ...`，看起来像"文档不一致"，
+        # 实际是编码没钉（2026-09-16 Windows CI 抓到的真缺陷，用户机同理）。
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONUTF8"] = "1"
         result = subprocess.run(
             [sys.executable, str(script), "--offline"], cwd=str(REPO_ROOT),
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180, env=env,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         report.add("下载文档一致性（offline）", False, f"跑不起来：{exc}")

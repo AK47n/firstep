@@ -1333,26 +1333,32 @@ def test_build_material_manifest_stat_failure_marks_minus_one(tmp_path, monkeypa
     is_file 走 os.path.isfile（不经过 Path.stat），stat 只用于取大小——fake 对
     目标路径一律抛 OSError 即可，不影响 is_file 判定。
 
-    判据用**文件名**而不是 `Path` 相等（2026-09-16 Windows CI 实测：相等比较在那台
-    机器上不可靠，于是 fake 对别的路径也抛 OSError，用例红成 `OSError: 模拟 stat 失败`），
-    并显式关掉 `list_entry_files` 顺带诊断用的 `suppress(OSError)`——
-    **判据必须能让 OSError 逃出去**，否则这条用例只是"看着绿"。
+    **为什么写成这样**（2026-09-16 Windows CI 上这条红过一次，`OSError: 模拟 stat 失败`
+    直接从用例体里冒出来）：`monkeypatch.setattr(Path, "stat", ...)` 是**全局**补丁，
+    任何别的 `Path.stat` 调用都会经过它。所以：
+      · 只对**目标文件**抛（按 `resolve()` 后的路径比，且目标文件必须真的存在）；
+      · 其余一律**转发给补丁前的真函数**（捕获在闭包里，避免拿到补丁后的自己）；
+      · 记一次命中计数并在断言里检查——**没命中就说明这条用例根本没验到东西**
+        （那才是真正的假绿）。
     """
     src = tmp_path / "src"
     src.mkdir()
     broken = src / "broken.bin"
     broken.write_bytes(b"data")
-    real_stat = Path.stat
+    target = broken.resolve()
+    real_stat = Path.stat  # 补丁前捕获，保证转发的是真实现
+    hits: list[str] = []
 
     def fake_stat(self, *args, **kwargs):
-        # 只对目标文件抛；比 Path 相等稳（Windows CI 实测相等比较会误伤别的路径）
-        if self.name == broken.name and self.parent == broken.parent:
+        if target.exists() and self.resolve() == target:
+            hits.append(str(self))
             raise OSError("模拟 stat 失败")
         return real_stat(self, *args, **kwargs)
 
     monkeypatch.setattr(Path, "stat", fake_stat)
     manifest = build_material_manifest(src)
-    assert "broken.bin  -1 bytes" in manifest.splitlines()
+    assert hits, "补丁一次都没命中目标文件——这条用例等于没验（假绿）"
+    assert "broken.bin  -1 bytes" in manifest.splitlines(), manifest
     # 反向判据：别的文件不受影响（fake 误伤正常路径会在这里露出来）
     (src / "ok.txt").write_text("12345", encoding="utf-8")
     assert "ok.txt  5 bytes" in build_material_manifest(src).splitlines(), "fake 误伤了正常文件"

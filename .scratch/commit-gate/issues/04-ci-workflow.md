@@ -22,3 +22,25 @@
 
 **Python 版本**：CI 钉 `3.13`（`requires-python = ">=3.13"` 的最低线，也是用户机 `install.bat`
 最可能拿到的版本）；本机开发用的是 3.14——两代都跑得通这件事由 windows job 的 3.13 兜住。
+
+## CI 首轮抓出来的东西（这就是加它的理由）
+
+**第一轮：20 条红，本地全绿。** 逐条归因（全部已修，除最后一条）：
+
+| 类别 | 用例数 | 真因 | 修法 |
+|---|---|---|---|
+| **夹具没入库** | 12 | 用例读 `.scratch/real-run/` 下的真机产物（buildlog / 推荐缓存），而那两份**没加 `.gitignore` 例外**——本机有、任何新 clone 没有 | `.gitignore` 加例外（注意 git 规矩：父目录被排除时里面的 `!` 不生效，要逐层放行）+ 入库两份夹具；新增用例 `test_real_repo_files_are_readable_from_a_clean_checkout` 用 `git ls-files` 判「测试读的夹具必须在索引里」 |
+| **用例把环境当夹具** | 2 | `test_module_intro.py` 裸 `create_app()` → 读 `~/.contest_generator/config.json`；本机有配置所以绿，CI 上 `/api/modules` 直接 **400「未配置 AI API」** | 夹具改成注入最小配置（真库 + 临时配置路径 + 假 key），与 `test_webapp.py` 同一姿势 |
+| **用例依赖本机资料库** | 1 | `test_motor_manifests_match_mirror_subdirs` 拿 `sources/materials/`（688 MB，**不进 git**）当基准 | 沿用仓库既有写法：目录不在就 `pytest.mark.skipif` 跳过（`test_full_pack.py` 先例） |
+| **用例依赖 git 历史形态** | 4 | `core.hooksPath` 在新 clone 上是空的；`HEAD~1..HEAD` 在 checkout 上可能是空的（合并提交 / CHANGELOG 自动提交） | 钩子用例改成「配了就必须配对，没配不算红（CI 兜底）」；选择器用例改成**自建两提交小仓库**，改动自己造，任何 checkout 都成立 |
+| **CHANGELOG 锚点** | 1 | 锚点指向那笔提交在浅克隆里不存在 | 无缺陷：推后面几轮时锚点已在历史里，自愈机制本来就有 |
+| **本轮新增用例自己写错** | 1+1 | ① `test_preflight` 拿**本机完整工作区**当基准（CI 没有完整工作区）②下载文档检查失败时输出被截断，CI 上等于没有诊断信息 | ① 改成**临时完整副本**当基准 ② 失败时带出子进程完整输出 |
+
+**第二轮：`ubuntu` 快速面还红一次**——原因是我自己忘了：快速面 job 跑 `python -m pytest`
+却**没装 pytest**（为了省时间不装 `.[dev]`，结果连测试运行器都没有）。修法：装 `.[dev]`。
+
+**这轮改造还顺手把两处「假绿风险」修实了**：
+- `test_prepush.py` 里两条用例原本拿本仓库 `HEAD~1..HEAD` 当输入——**在 checkout 上会假红**，
+  现在自建仓库，判据完全不依赖被检出的历史；
+- `preflight.py` 的失败输出从「最后 4 行」改成「完整 stdout + stderr」——**CI 上截断的尾巴
+  等于没有诊断信息**（本轮为定位一条 Windows 专属失败，光靠被截断的输出没法定案）。
