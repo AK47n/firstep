@@ -1,0 +1,29 @@
+#!/bin/sh
+# 推之前跑关联测试子集（工单 commit-gate/02）。
+#
+# 判据与选择逻辑在 tools/prepush.py（纯函数，可单测）；这里只是薄壳。
+# 契约：
+#   · 测试红 → 非 0 退出（git 拒推），并打印失败的用例名与复跑/绕过方式；
+#   · 闸门自身故障（python 不在 / 选择器抛错 / git 读不到改动）→ 放行（prepush.py 的 safe_main 兜底）；
+#   · 推 tag（发版）→ prepush.py 自动整套；
+#   · FIRSTEP_PREPUSH=full 强制整套 / =off 跳过（明写警告）。
+#
+# 为什么把 PYTHONPATH 钉成仓库 src：本机全局 site-packages 里有一份 editable 安装
+# 指向**另一个**源码路径（见 docs/agents/local-environment.md 2.5），裸 pytest 会被它
+# 带偏——那正是这条闸门最不该出现的失败方式（跑的不是你改的代码）。
+root=$(git rev-parse --show-toplevel) || exit 0
+cd "$root" || exit 0
+
+if [ -n "$PYTHON" ]; then
+  py="$PYTHON"
+elif command -v python >/dev/null 2>&1; then
+  py=python
+elif command -v py >/dev/null 2>&1; then
+  py=py
+else
+  echo "[prepush] 找不到 python 解释器 → 放行本次推送（闸门未运行）" >&2
+  exit 0
+fi
+
+PYTHONPATH="$root/src${PYTHONPATH:+:$PYTHONPATH}" "$py" tools/prepush.py --stdin-refs
+exit $?
