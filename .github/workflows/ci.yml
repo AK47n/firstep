@@ -28,6 +28,11 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 取全历史：CHANGELOG 锚点守卫要查「锚点那个提交在不在本仓库」，
+          # 浅克隆（默认 fetch-depth: 1）下连 HEAD~1 都没有，那道守卫会假红
+          # 或者被迫跳过——两种都不该发生在最需要它的地方（2026-09-16 CI 实测）。
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"  # pyproject.toml 的 requires-python = ">=3.13"
@@ -44,6 +49,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 与 windows job 同口径：全历史（发版自检要查 git 索引/锚点）
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"

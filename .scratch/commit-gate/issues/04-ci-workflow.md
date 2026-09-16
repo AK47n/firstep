@@ -44,3 +44,16 @@
   现在自建仓库，判据完全不依赖被检出的历史；
 - `preflight.py` 的失败输出从「最后 4 行」改成「完整 stdout + stderr」——**CI 上截断的尾巴
   等于没有诊断信息**（本轮为定位一条 Windows 专属失败，光靠被截断的输出没法定案）。
+
+## 后面几轮又抓到的（都不是产品缺陷，但全是「只有 CI 才暴露」的）
+
+| 轮次 | 现象 | 真因 | 修法 |
+|---|---|---|---|
+| 第三轮 | Windows 全套：`preflight` 的下载文档检查红，输出被截断看不到原因 | 子进程按 **cp1252**（CI runner 的控制台代码页）输出中文 → `UnicodeEncodeError` | 拉子进程时钉 `PYTHONIOENCODING=utf-8` + `PYTHONUTF8=1`（**这是用户机同样会中的真缺陷**：任何非 UTF-8 代码页的 Windows 上，发版自检会把编码问题误报成「文档不一致」） |
+| 第四轮 | Windows 全套：pytest 自己 **INTERNALERROR** 打断整场（跑到 63% 崩） | `test_build_material_manifest_stat_failure_marks_minus_one` 里我上一版加固时写了 `target.exists()` —— `exists()` 内部就调 `Path.stat`，被全局补丁拦到 → **无限递归** | 改成纯 `resolve()` 字符串比较 + 递归护栏（调用数上限）+ 命中计数断言 |
+| 第四轮 | 一条用例连改三次都还是老样子 | **函数重名**：新版加在前面、旧的留在后面，pytest 静默只用最后一个 | 删旧版 + 新增守卫 `test_no_duplicate_test_function_names`（反向验证：加一个重名函数即红） |
+| 第二轮 | ubuntu 快速面红 | 快速面 job 为了省时间不装 `.[dev]`，结果**连 pytest 都没装** | 装 `.[dev]` |
+
+**教训一句话**：本地绿 + CI 红，八成是「用例把本机状态当夹具」；而**修这类问题时最容易再制造
+新问题**（这轮我自己就在 CI 上连踩两回）。所以判据要写成「不依赖任何本机状态」，并且
+**跑一次 CI 才算数**。

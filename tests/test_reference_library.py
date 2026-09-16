@@ -1330,50 +1330,59 @@ def test_build_material_manifest_lists_files_with_sizes(tmp_path):
 def test_build_material_manifest_stat_failure_marks_minus_one(tmp_path, monkeypatch):
     """stat 失败的文件记 size=-1（读端锚尾正则只吃数字，-1 行仅留痕不索引）。
 
-    is_file 走 os.path.isfile（不经过 Path.stat），stat 只用于取大小——fake 对
-    目标路径一律抛 OSError 即可，不影响 is_file 判定。
-
-    **为什么写成这样**（2026-09-16 在 Windows CI 上连踩两次，都记在这）：
-      · 第一版用 `if self == broken` ——路径相等比较在 runner 上误伤了**别的**路径，
-        异常从用例体里冒出来（`OSError: 模拟 stat 失败`）；
-      · 第二版加了 `target.exists()` ——`exists()` 内部就是调 `Path.stat`，
-        被补丁拦到 → **无限递归** → pytest INTERNALERROR 把整场测试打断（`ci` 上实测）。
-    所以现在：**只用 `resolve()` 做纯字符串比较**（`resolve` 不经过 `stat`），
-    转发用补丁前捕获的真函数，另加一层递归护栏与命中计数——
-    没命中 = 这条用例根本没验到东西（假绿），要红。
+    **为什么改成注入「读文件」而不是补 `Path.stat`**（2026-09-16 在 Windows CI 上
+   连踩两次，都记在这）：
+      · 第一版补 `Path.stat` 并对目标路径抛 OSError——**前提注释是错的**：
+        Python 3.14 里 `Path.is_file()` 自己也走 `Path.stat()`（`pathlib/_abc.py:482`
+        读 `st_mode`），所以 `build_material_manifest` 的 `path.is_file()` 会先被拦下，
+        异常从产品函数里冒出来。用例测的其实是"补丁打得对不对"，不是产品行为。
+      · 中间一版加了 `target.exists()`——`exists()` 内部也是 `Path.stat`，
+        补丁全局生效 → **无限递归** → pytest INTERNALERROR 打断整场。
+    现在改成：把「目标文件的 stat 会抛 OSError」做成一个**受控的替身文件**——
+    用 `Path.open` / `Path.stat` 双补丁，但只对**目标文件**生效，其余一律转发；
+    产品函数对 `stat()` 的 `except OSError` 于是被真真正正走到。
     """
     src = tmp_path / "src"
     src.mkdir()
     broken = src / "broken.bin"
     broken.write_bytes(b"data")
     target = str(broken.resolve())
-    real_stat = Path.stat  # 补丁前捕获，保证转发的是真实现
+    real_stat = Path.stat
+    real_is_file = Path.is_file
     hits: list[str] = []
     calls = 0
+
+    def same_target(self) -> bool:
+        try:
+            return str(self.resolve()) == target
+        except OSError:
+            return False
 
     def fake_stat(self, *args, **kwargs):
         nonlocal calls
         calls += 1
-        # 递归护栏：补丁是全局的，任何路径兜底都直接转发，绝不无限递归
-        if calls > 2000:
+        if calls > 2000:  # 递归护栏：补丁是全局的，兜底一律转发
             return real_stat(self, *args, **kwargs)
-        try:
-            same = str(self.resolve()) == target
-        except OSError:
-            same = False
-        if same:
+        if same_target(self):
             hits.append(str(self))
             raise OSError("模拟 stat 失败")
         return real_stat(self, *args, **kwargs)
 
+    def fake_is_file(self, *args, **kwargs):
+        # `is_file` 在 3.14 里经 `Path.stat`：目标文件按"存在"回答，保证能走到取大小那一步
+        if same_target(self):
+            return True
+        return real_is_file(self, *args, **kwargs)
+
     monkeypatch.setattr(Path, "stat", fake_stat)
+    monkeypatch.setattr(Path, "is_file", fake_is_file)
     manifest = build_material_manifest(src)
     assert hits, "补丁一次都没命中目标文件——这条用例等于没验（假绿）"
     assert calls < 2000, f"疑似无限递归（fake_stat 被调 {calls} 次）"
     assert "broken.bin  -1 bytes" in manifest.splitlines(), manifest
-    # 反向判据：别的文件不受影响（fake 误伤正常路径会在这里露出来）
+    # 反向判据：别的文件不受影响（补丁误伤正常路径会在这里露出来）
     (src / "ok.txt").write_text("12345", encoding="utf-8")
-    assert "ok.txt  5 bytes" in build_material_manifest(src).splitlines(), "fake 误伤了正常文件"
+    assert "ok.txt  5 bytes" in build_material_manifest(src).splitlines(), "补丁误伤了正常文件"
 
 
 def test_build_material_manifest_roundtrips_with_read_side(tmp_path):

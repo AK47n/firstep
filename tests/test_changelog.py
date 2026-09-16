@@ -569,10 +569,17 @@ def test_real_changelog_marker_points_at_a_commit_in_this_repo():
 
     从发布包解出的副本没有 `.git`（包由 `git archive` 生成）→ 跳过：那里本来
     就没有提交记录可查，不是缺陷。
+
+    **浅克隆（`git clone --depth 1`）同样跳过**（2026-09-16 CI 实测）：那条路径下
+    连 HEAD 的父提交都不存在，锚点「不存在」是**必然**而不是缺陷——但**必须在 CI 里
+    取全历史**，否则这道守卫在最需要它的地方（远端）永远看不见。工作流里已钉
+    `fetch-depth: 0`；这里显式跳过并说明原因，别让「取不到」看起来像「检查通过」。
     """
     root = Path(__file__).resolve().parents[1]
     if not (root / ".git").exists() or shutil.which("git") is None:
         pytest.skip("无 .git / 无 git：发布包副本里没有提交记录可查")
+    if (root / ".git" / "shallow").exists():
+        pytest.skip("浅克隆（无完整历史）：锚点查不了；CI 应配 fetch-depth: 0")
     marker = _marker_sha((root / "CHANGELOG.md").read_text(encoding="utf-8"))
     assert marker, (
         "CHANGELOG.md 缺 `<!-- changelog-auto: last-commit=… -->` 锚点——"

@@ -85,3 +85,22 @@ def test_windows_job_present_for_platform_specific_risks(workflow):
     runners = [str(job.get("runs-on", "")) for job in jobs.values()]
     assert any("windows" in runner for runner in runners), f"没有 Windows job：{runners}"
     assert any("ubuntu" in runner for runner in runners), f"没有 Linux 快速 job：{runners}"
+
+
+def test_checkout_fetches_full_history(workflow):
+    """checkout 必须取全历史（`fetch-depth: 0`）。
+
+    2026-09-16 CI 实测：默认 `fetch-depth: 1` 的浅克隆里，`CHANGELOG` 锚点守卫
+    查不到那个提交（连 HEAD~1 都没有）→ 在最需要它的地方假红。取全历史才有得查。
+    """
+    jobs = workflow.get("jobs") or {}
+    checkouts = [
+        step
+        for job in jobs.values()
+        for step in (job.get("steps") or [])
+        if str(step.get("uses", "")).startswith("actions/checkout")
+    ]
+    assert checkouts, "没有 checkout 步骤"
+    for step in checkouts:
+        depth = (step.get("with") or {}).get("fetch-depth")
+        assert depth == 0, f"checkout 没取全历史（fetch-depth={depth!r}）——锚点守卫会假红"
