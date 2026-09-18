@@ -467,9 +467,24 @@ SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_ru
   - **小发版**：真下载 296 MB → 替换 5039 文件 → 结果记录 `mode=single / version=1.1.1` → 重启后 1.1.1
   - 保命项：第三方安装包未被误删、包外文件保留、备份生成、`pending-update.json` 被清除
   - 演练脚本：`trigger_and_watch.py` / `verify_sim_after_update.py` / `sim_small_update.py`
-- [ ] **G1 后三步：极端场景**（弱网中途取消 / 断网重试 / 故意改坏一个卷制造校验失败）
-  - 代码侧已由自动化覆盖：卷级断点续传、校验失败清理半成品与中文报错、失败保留备份
-    （`tests/test_full_task.py` / `test_full_updater.py`）；真机只额外验过「取消后重试跳过已完成卷」的等价路径
+- [x] **G1 后三步：极端场景**（弱网中途取消 / 断网重试 / 故意改坏一个卷制造校验失败）
+  - 代码侧自动化覆盖之外，**2026-09-18 在沙箱上真机跑完**（工单 `sandbox-drill/02`；脚本
+    `.scratch/verify-gate-drills/drill-02-degraded.py` + 本地可控服务器 `drill-02-simserver.py` +
+    假 GitHub harness；证据 `verify-02-degraded.txt/.json` + 更正 `amend-02-corrections.py`）
+  - **弱网中途取消**：64 KB/s 下载到 256 KB 时点取消 → 状态 `cancelled`、半成品 524,288 B 与
+    `.partial.json` 边车都在、工具仍可用；再点重试**从 524,288 B 接着下**（摘要「接着上次的进度从 13%」、
+    服务器台账首次请求起始偏移 = 524,288）→ 终态 sha256 与载荷一致、替换链跑到「更新完成」。**10/10 成立**
+  - **断线重试**：连切 2 次断流 → `retry_count` 1→2、`retrying=True`、摘要带原因与 `resume_percent`（39%/63%）、
+    台账首次 0 其后单调递增、终态 sha256 一致、边车清、更新器完成。**12/12 成立**
+  - **校验失败**（拆两支）：① 不可重试（清单 size 与对端矛盾）→ `failed` + 中文「发布信息不一致…」+
+    `error_kind=verify` + 不重试 + lock/pending 未留 + 旧版本可用且未换掉 + 工具根未变（11/12）；
+    **不成立那条 = 失败后残留整卷半成品 + 边车** → 缺陷单 `update-verify-failure-leftovers/01`；
+    ② 可重试（持久内容不符）→ 观察格：与 spec 第 122 行设计一致（永远 downloading + 每轮整卷重下，
+    150 s / 7 次重试 / 台账起始偏移全 0）→ 决策单 `update-content-mismatch-retry-cap/01`
+  - 隔离：真身数据目录 mtime / 真身 `updates/` 条目 / 8000 监听三条成立；工作树那条原始输出报红 =
+    **同会话在写 B5 账本**造成的假红，已在证据文末更正节撤回
+  - **真机才看得见的两条口径**（写下来）：下载态落在「配置文件所在目录」的 `updates/`（夹具放过一次错）；
+    重试话术是**前端拼的**（`fx/core.js:96-97`），别在 `message` 里找词
 
 **来源 `full-download/07`**；本机可验部分已全跑过：
 `.scratch/full-download/e2e_full_download.py`（7 步全通过）+ `smoke-full-update.mjs`（9/9 PASS，截图 `shot-full-update-window-dark.png`）；

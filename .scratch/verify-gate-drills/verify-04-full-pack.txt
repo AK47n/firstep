@@ -1,0 +1,729 @@
+# B4 证据：完整包换装（**从线上真下 802 MB** → 校验 → 替换 → 重启）
+  时间：2026-09-18 22:50:14
+  一次性工具根：C:\Users\luoji\AppData\Local\Temp\fe04-20260918-225014\tool
+  一次性数据目录（USERPROFILE 重定向）：C:\Users\luoji\AppData\Local\Temp\fe04-20260918-225014\profile
+  端口：8021（真身 8000 只读、沙箱 8020 不动）
+
+## 零、隔离边界与真身基线
+  真身数据目录 mtime = 1789386306.649077；updates/ = （空）
+  真身工作树基线 = 11906 个文件
+  8000 监听：（空）；8021 监听：（空）
+  官方清单：8142 个文件（其中资料库 5081）；分卷 1 个；合计 1088540146 字节
+
+## 一、铺一次性工具根（起点版本改写为 v1.1.0 + 第三方安装包副本）
+  起点版本：盘上 = 1.1.0（脚本改写，判据才有落差）
+  包外哨兵：57 个（真身那批第三方安装包 56 个 + 1 个纯文本哨兵），合计 95720601 字节
+  配置：拷真身那份，库目录改指仓库真库（只读）+ autocommit 关；键 = ['api_key', 'autocommit_enabled', 'base_url', 'ccs_compiler_dir', 'ccs_sdk_dir', 'ccs_sysconfig_cli', 'dslite_path', 'gmake_path', 'llm_price_period', 'llm_prices', 'local_llm_base_url', 'local_llm_model', 'masters_dir', 'model', 'module_library_dir', 'openocd_path', 'recommend_cache_enabled', 'recommend_max_rounds', 'stflash_path', 'uv4_path', 'vision_api_key', 'vision_base_url', 'vision_detail_qa', 'vision_model']
+
+## 二、按用户机方式起服务（start-app.vbs → 8021）
+  服务已就绪：`/api/health` = {'app': 'contest-generator', 'version': '1.1.0', 'ok': True}
+
+## 三、走产品端点：检查完整包更新
+  latest=v1.2.1 current='' reason=no-installed update_available=True
+  message='本地完整包版本未知（未安装或标记缺失）；最新完整包 v1.2.1，约 1038 MB，可一键下载'
+  分卷：firstep-full-v1.2.1.zip 801873335 字节 sha256=49faced3203d75fb0bdc22bb1124815d16be1b28539abe45c57fc71e0b6a1596
+  manifest_url=https://github.com/AK47n/firstep/releases/download/v1.2.1/firstep-full-v1.2.1.manifest.json
+
+## 四、点「一键全量」：**真下载** → 校验 → 拉起更新器 → 替换 → 重启
+  apply 已接受：{'started': True, 'message': '已开始下载完整包（1 卷 / 约 764 MB）'}
+  进度 0.0/764.7 MB (0%) state=downloading retry=0 均速≈0.00 MB/s
+  进度 206.8/764.7 MB (27%) state=downloading retry=0 均速≈12.80 MB/s
+  进度 349.5/764.7 MB (45%) state=downloading retry=0 均速≈10.84 MB/s
+  进度 405.8/764.7 MB (53%) state=downloading retry=0 均速≈8.39 MB/s
+  进度 554.0/764.7 MB (72%) state=downloading retry=0 均速≈8.59 MB/s
+  进度 689.5/764.7 MB (90%) state=downloading retry=0 均速≈8.54 MB/s
+  任务终态：state=done / 801873335 字节 / error=''
+  耗时 94.8s，平均 8.06 MB/s
+  盘上分卷 firstep-full-v1.2.1.zip = 801873335 字节 / sha256 49faced3203d75fb0bdc22bb1124815d16be1b28539abe45c57fc71e0b6a1596
+  清单 sha256 = 49faced3203d75fb0bdc22bb1124815d16be1b28539abe45c57fc71e0b6a1596
+
+## 五、等更新器替换（停服 → 备份 → 覆盖 → 写基线 → 重启）
+  已装版本标记 full-installed.json：{'version': 'v1.2.1', 'installed_at': '20260918-225157', 'backup_dir': 'C:\\Users\\luoji\\AppData\\Local\\Temp\\fe04-20260918-225014\\profile\\.contest_generator\\updates\\backup\\20260918-225157'}
+  更新器日志：
+  | === firstep 更新开始（20260918-225157）===
+  | 更新包：C:\Users\luoji\AppData\Local\Temp\fe04-20260918-225014\profile\.contest_generator\updates\full\firstep-full-v1.2.1.zip
+  | 工具根：C:\Users\luoji\AppData\Local\Temp\fe04-20260918-225014\tool
+  | 完整包模式：1 卷 / 8142 个条目，安全校验通过
+  | 停服：结束本应用进程 PID 25376
+  | 已备份 298 个将被覆盖的文件到 C:\Users\luoji\AppData\Local\Temp\fe04-20260918-225014\profile\.contest_generator\updates\backup\20260918-225157
+  | 已落位 8142 个文件
+  | 已写回资料库基线清单：12 个批次 → C:\Users\luoji\AppData\Local\Temp\fe04-20260918-225014\tool\sources\materials\.materials-manifest.json
+  | 跳过（已不存在）：library/references/2026_04_地猛星电赛控制题配套资料/01_.vscode/.vscode/c_cpp_properties.json
+  | 跳过（已不存在）：sources/car/car 1.1/.settings/org.eclipse.cdt.codan.core.prefs
+  | 跳过（已不存在）：sources/car/car 1.1/.settings/org.eclipse.cdt.debug.core.prefs
+  | 跳过（已不存在）：sources/car/car 1.1/.settings/org.eclipse.core.resources.prefs
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/Delay.c.61A9E31BE6D59F05.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/Delay.c.95E27F1C322013FB.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/Delay.c.A3E1CDE659DE390C.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/Delay.c.E55ADB3ECF4FA59A.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/Delay.h.95F21872203BD10A.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/Delay.h.A510B608B9C5612F.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/Delay.h.C024BB13C8F469FE.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/Delay.h.DCB433C30647919F.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/DeviceFamily.h.B86197E44C39AF16.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/JY61P.c.0202743A3CEB6E29.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/JY61P.c.B749AF496AF8E3D4.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/JY61P.c.F9CA710032F56FDF.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/JY61P.c.FD60BEB66EFC6324.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/JY61P.h.07EA97C1152E4D9A.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/JY61P.h.8A6049B435E0494C.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/JY61P.h.BBCDB48DAE8F2C0A.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/JY61P.h.BD8DF109DA0EC055.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__config.FDF3F56F607A0944.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__config_site.544C22F370813B22.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__stdarg___gnuc_va_list.h.C4DAD2E66A6C1120.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__stdarg___va_copy.h.373C9DFA0B52F987.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__stdarg_va_arg.h.938C14164E5210E0.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__stdarg_va_copy.h.69598290CE7995B8.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__stdarg_va_list.h.7F0BEEA71B06DC9E.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__stddef_max_align_t.h.54DD14193E18AC07.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__stddef_null.h.50AA68BD56DBFBFD.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__stddef_offsetof.h.80C720B2B624660A.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__stddef_ptrdiff_t.h.53F13D91E4A2B7B5.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__stddef_size_t.h.3FB43AF609841380.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/__stddef_wchar_t.h.DE91DBFD60BDE6DA.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/_defs.h.3FF4973A4A510F01.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/_limits.h.0A1C895E2A18B288.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/_stdint.h.4152668A76BCDAFD.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/_stdint.h.F4839344AF2E2B3C.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/_stdint40.h.16A66CAA9B168D6F.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/_string.h.5C0B3EA0680B7433.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/_ti_config.h.15D362E5EE7844F2.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/_types.h.56B8A1C44F7BB982.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/_types.h.C21F0F0D2FD66209.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/cdefs.h.FE8058170032214D.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/cmsis_compiler.h.0CEF690CAA3726B2.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/cmsis_version.h.3268E241B4F0B6F5.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/control.c.0E7992A8413CC8A1.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/control.c.11D174988397B639.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/control.c.2AA05DDD721B0E5F.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/control.c.B1D00E3D7BFA0B33.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/control.h.240F233270266B12.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/control.h.32E9571A0E478D9D.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/control.h.65F4135B62B8C5FC.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/control.h.7E925FA290C3163B.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/core_cm0plus.h.F86F97F397F97122.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_adc12.h.8B371C28B9CA98B8.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_aes.h.714BF43F89076D0E.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_aesadv.h.1B58380AABB58CC5.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_common.h.F7F9EAC19BB9DF7E.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_comp.h.36364F925D7E4362.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_core.h.40383795BA8421DB.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_crc.h.DF880BA265476D5F.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_crcp.h.92C0AE69BCACE630.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_dac12.h.4EFEEFFD9F181290.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_dma.h.4D0C4ABB12C0B5A8.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_factoryregion.h.7D1303A06CA3C13E.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_flashctl.h.8EE7115481394B19.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_gpamp.h.7712EDC582317F84.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_gpio.h.2A06ACC8F41A6B4A.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_i2c.h.EA19C17CEA11AEF8.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_i2s.h.02DB65F8BE7D558E.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_interrupt.h.1E2262DD9303629F.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_iwdt.h.6D5C0F2A8A2ED0CA.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_keystorectl.h.72C4E5778F712345.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_lcd.h.3B70F265DC0023C8.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_lfss.h.7BA3EB123DCA412E.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_mathacl.h.481DF9CE000A3ED9.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_mcan.h.796DC61FE8B23DEA.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_npu.h.5B0040F20BDB2AD1.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_opa.h.3E6A24ECC5741765.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_rtc.h.0401B9A56B4F755C.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_rtc_a.h.0B4B5F0631158186.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_rtc_b.h.2F4EAB2FD06C1429.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_rtc_common.h.82C0D882957CE915.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_scratchpad.h.C393C0044F296077.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_spgss.h.49BF92100A08DDD4.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_spi.h.F3BE8194E2DF6F86.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_sysctl.h.7498F92D9905C16B.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_sysctl_mspm0g1x0x_g3x0x.h.FAF5EE765C168A34.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_systick.h.69384C8DAA976D23.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_tamperio.h.ED93FC04173FA9FC.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_timer.h.291FD84AC91ABF95.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_timera.h.05D1748BD8C55F3E.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_timerb.h.C57A73D35E801799.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_timerg.h.15E945C9A30588A9.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_trng.h.C25655378683C7DE.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_uart.h.6176C2B3AE5C6049.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_uart_extend.h.2043613DFC81D6B5.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_uart_main.h.FADF360DCF6EC1AA.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_unicomm.h.D5F9D982C4292985.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_unicommi2cc.h.F7134BCFD5448FB7.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_unicommi2ct.h.CA68F94817640F64.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_unicommspi.h.DA5810D95E8B239D.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_unicommuart.h.913CAB0AEE7366F2.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_vref.h.CD56F0AFC5C82859.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_wwdt.h.183EA3E0A0EB0BD9.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/driverlib.h.58A5CF854BC3D328.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/empty.c.49DFB2136FC21A9B.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/empty.c.6AF969B64BE7F82A.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/empty.c.A5B5F3EC839E43CD.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/empty.c.E55B15BC2AB6A941.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_adc12.h.590A44DD86E39E63.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_aes.h.7313BD390062B087.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_comp.h.430DAE57C0A9F7BC.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_cpuss.h.EA8ED3A4A3144352.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_crc.h.D0B34E8AB8808006.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_dac12.h.963FD31B30370777.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_debugss.h.C6730C935AE513DF.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_dma.h.16062C3ABC9F498A.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_factoryregion.h.5D58315AE98F9C30.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_flashctl.h.AE143C633674573A.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_gpio.h.FFF15D95D813B4C0.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_gptimer.h.D18BE3E3A1B82364.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_i2c.h.C5516755BFFF8E34.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_iomux.h.744C0B536428067B.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_mathacl.h.EC6F4DE335C25EB7.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_mcan.h.DB73C75D6AC9CA9C.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_oa.h.8AC07E09DBEE291A.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_rtc.h.45E8F63BBC66E28F.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_spi.h.CBFD2E5B3ED24D58.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_sysctl.h.B0EA0ED95236C0E5.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_sysctl_mspm0g1x0x_g3x0x.h.6DB74E9A6FCD5669.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_trng.h.8AFDD77FB397BBFF.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_uart.h.1858E63E678C36F5.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_vref.h.F2E13DEEFB87DC3F.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_wuc.h.8CB3393032229725.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_wwdt.h.FDE883C703B3355A.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/linkage.h.11516441E7E2D1F8.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/math.h.79874CE1A9F11772.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/math.h.C6653C06BFCD57F9.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/mpu_armv7.h.1EA703775E1955B4.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/msp.h.A6767A4CB6D22847.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/mspm0g350x.h.CBA12581BD168DDB.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdarg.h.00CE2FB531A71298.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdbool.h.272D9B723E75E78F.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdbool.h.FB0F1122B9F7E37F.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stddef.h.43F2384DD6D92B7C.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stddef.h.4C0A8993436CDC98.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdint.h.082F62A436690CD5.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdint.h.13B9E9BCB893B601.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdint.h.186A510D485999AD.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdint.h.908E94AF3F841B7E.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdio.h.392130EAC82A2928.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdio.h.C5625403AD742310.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/string.h.2BA20B455CA9CE02.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/string.h.2C4F102A6CCF6271.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.c.00D16DC78BBD9DE2.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.c.314F4E2F3E3C4ADC.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.c.40644CC7FFCA3C7F.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.c.531688F8F84C7765.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.h.220209A424CA270C.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.h.9518A34EAC91A517.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.h.95D1E5DFA78A8A52.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.h.B5013561EC804897.idx
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/.clangd/compile_commands.json
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/Delay.d
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/Delay.o
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/Event.dot
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/PWM.map
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/PWM.out
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/PWM_linkInfo.xml
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/USART_JY61P/JY61P.d
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/USART_JY61P/JY61P.o
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/USART_JY61P/empty.d
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/USART_JY61P/empty.o
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/USART_JY61P/subdir_rules.mk
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/USART_JY61P/subdir_vars.mk
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/ccsObjs.opt
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/control.d
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/control.o
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/device.cmd.genlibs
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/device.opt
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/device_linker.cmd
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/empty.d
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/empty.o
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/makefile
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/objects.mk
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/sources.mk
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/startup_mspm0g350x_ticlang.d
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/startup_mspm0g350x_ticlang.o
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/subdir_rules.mk
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/subdir_vars.mk
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/ti_msp_dl_config.c
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/ti_msp_dl_config.d
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/ti_msp_dl_config.h
+  | 跳过（已不存在）：sources/car/car 1.1/Debug/ti_msp_dl_config.o
+  | 跳过（已不存在）：sources/car/car ref/.settings/org.eclipse.cdt.codan.core.prefs
+  | 跳过（已不存在）：sources/car/car ref/.settings/org.eclipse.cdt.debug.core.prefs
+  | 跳过（已不存在）：sources/car/car ref/.settings/org.eclipse.core.resources.prefs
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/Delay.c.95E27F1C322013FB.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/Delay.h.95F21872203BD10A.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/DeviceFamily.h.B86197E44C39AF16.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/JY61P.c.F9CA710032F56FDF.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/JY61P.h.BD8DF109DA0EC055.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/__config.FDF3F56F607A0944.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/__config_site.544C22F370813B22.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stdarg___gnuc_va_list.h.C4DAD2E66A6C1120.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stdarg___va_copy.h.373C9DFA0B52F987.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stdarg_va_arg.h.938C14164E5210E0.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stdarg_va_copy.h.69598290CE7995B8.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stdarg_va_list.h.7F0BEEA71B06DC9E.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stddef_max_align_t.h.54DD14193E18AC07.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stddef_null.h.50AA68BD56DBFBFD.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stddef_offsetof.h.80C720B2B624660A.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stddef_ptrdiff_t.h.53F13D91E4A2B7B5.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stddef_size_t.h.3FB43AF609841380.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stddef_wchar_t.h.DE91DBFD60BDE6DA.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/_defs.h.3FF4973A4A510F01.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/_limits.h.0A1C895E2A18B288.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/_stdint.h.4152668A76BCDAFD.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/_stdint.h.F4839344AF2E2B3C.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/_stdint40.h.16A66CAA9B168D6F.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/_string.h.5C0B3EA0680B7433.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/_ti_config.h.15D362E5EE7844F2.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/_types.h.56B8A1C44F7BB982.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/_types.h.C21F0F0D2FD66209.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/cdefs.h.FE8058170032214D.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/cmsis_compiler.h.0CEF690CAA3726B2.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/cmsis_version.h.3268E241B4F0B6F5.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/control.c.B1D00E3D7BFA0B33.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/control.h.65F4135B62B8C5FC.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/core_cm0plus.h.F86F97F397F97122.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_adc12.h.8B371C28B9CA98B8.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_aes.h.714BF43F89076D0E.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_aesadv.h.1B58380AABB58CC5.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_common.h.F7F9EAC19BB9DF7E.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_comp.h.36364F925D7E4362.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_core.h.40383795BA8421DB.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_crc.h.DF880BA265476D5F.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_crcp.h.92C0AE69BCACE630.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_dac12.h.4EFEEFFD9F181290.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_dma.h.4D0C4ABB12C0B5A8.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_factoryregion.h.7D1303A06CA3C13E.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_flashctl.h.8EE7115481394B19.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_gpamp.h.7712EDC582317F84.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_gpio.h.2A06ACC8F41A6B4A.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_i2c.h.EA19C17CEA11AEF8.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_i2s.h.02DB65F8BE7D558E.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_interrupt.h.1E2262DD9303629F.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_iwdt.h.6D5C0F2A8A2ED0CA.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_keystorectl.h.72C4E5778F712345.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_lcd.h.3B70F265DC0023C8.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_lfss.h.7BA3EB123DCA412E.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_mathacl.h.481DF9CE000A3ED9.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_mcan.h.796DC61FE8B23DEA.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_npu.h.5B0040F20BDB2AD1.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_opa.h.3E6A24ECC5741765.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_rtc.h.0401B9A56B4F755C.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_rtc_a.h.0B4B5F0631158186.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_rtc_b.h.2F4EAB2FD06C1429.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_rtc_common.h.82C0D882957CE915.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_scratchpad.h.C393C0044F296077.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_spgss.h.49BF92100A08DDD4.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_spi.h.F3BE8194E2DF6F86.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_sysctl.h.7498F92D9905C16B.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_sysctl_mspm0g1x0x_g3x0x.h.FAF5EE765C168A34.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_systick.h.69384C8DAA976D23.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_tamperio.h.ED93FC04173FA9FC.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_timer.h.291FD84AC91ABF95.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_timera.h.05D1748BD8C55F3E.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_timerb.h.C57A73D35E801799.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_timerg.h.15E945C9A30588A9.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_trng.h.C25655378683C7DE.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_uart.h.6176C2B3AE5C6049.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_uart_extend.h.2043613DFC81D6B5.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_uart_main.h.FADF360DCF6EC1AA.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_unicomm.h.D5F9D982C4292985.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_unicommi2cc.h.F7134BCFD5448FB7.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_unicommi2ct.h.CA68F94817640F64.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_unicommspi.h.DA5810D95E8B239D.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_unicommuart.h.913CAB0AEE7366F2.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_vref.h.CD56F0AFC5C82859.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/dl_wwdt.h.183EA3E0A0EB0BD9.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/driverlib.h.58A5CF854BC3D328.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/empty.c.6AF969B64BE7F82A.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_adc12.h.590A44DD86E39E63.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_aes.h.7313BD390062B087.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_comp.h.430DAE57C0A9F7BC.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_cpuss.h.EA8ED3A4A3144352.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_crc.h.D0B34E8AB8808006.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_dac12.h.963FD31B30370777.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_debugss.h.C6730C935AE513DF.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_dma.h.16062C3ABC9F498A.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_factoryregion.h.5D58315AE98F9C30.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_flashctl.h.AE143C633674573A.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_gpio.h.FFF15D95D813B4C0.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_gptimer.h.D18BE3E3A1B82364.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_i2c.h.C5516755BFFF8E34.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_iomux.h.744C0B536428067B.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_mathacl.h.EC6F4DE335C25EB7.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_mcan.h.DB73C75D6AC9CA9C.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_oa.h.8AC07E09DBEE291A.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_rtc.h.45E8F63BBC66E28F.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_spi.h.CBFD2E5B3ED24D58.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_sysctl.h.B0EA0ED95236C0E5.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_sysctl_mspm0g1x0x_g3x0x.h.6DB74E9A6FCD5669.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_trng.h.8AFDD77FB397BBFF.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_uart.h.1858E63E678C36F5.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_vref.h.F2E13DEEFB87DC3F.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_wuc.h.8CB3393032229725.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/hw_wwdt.h.FDE883C703B3355A.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/linkage.h.11516441E7E2D1F8.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/math.h.79874CE1A9F11772.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/math.h.C6653C06BFCD57F9.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/mpu_armv7.h.1EA703775E1955B4.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/msp.h.A6767A4CB6D22847.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/mspm0g350x.h.CBA12581BD168DDB.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/stdarg.h.00CE2FB531A71298.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/stdbool.h.272D9B723E75E78F.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/stdbool.h.FB0F1122B9F7E37F.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/stddef.h.43F2384DD6D92B7C.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/stddef.h.4C0A8993436CDC98.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/stdint.h.082F62A436690CD5.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/stdint.h.13B9E9BCB893B601.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/stdint.h.186A510D485999AD.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/stdint.h.908E94AF3F841B7E.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/stdio.h.392130EAC82A2928.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/stdio.h.C5625403AD742310.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/string.h.2BA20B455CA9CE02.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/string.h.2C4F102A6CCF6271.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.c.40644CC7FFCA3C7F.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.h.220209A424CA270C.idx
+  | 跳过（已不存在）：sources/car/car ref/Debug/.clangd/compile_commands.json
+  | 跳过（已不存在）：sources/car/car ref/Debug/Delay.d
+  | 跳过（已不存在）：sources/car/car ref/Debug/Delay.o
+  | 跳过（已不存在）：sources/car/car ref/Debug/Event.dot
+  | 跳过（已不存在）：sources/car/car ref/Debug/PWM.map
+  | 跳过（已不存在）：sources/car/car ref/Debug/PWM.out
+  | 跳过（已不存在）：sources/car/car ref/Debug/PWM_linkInfo.xml
+  | 跳过（已不存在）：sources/car/car ref/Debug/USART_JY61P/JY61P.d
+  | 跳过（已不存在）：sources/car/car ref/Debug/USART_JY61P/JY61P.o
+  | 跳过（已不存在）：sources/car/car ref/Debug/USART_JY61P/empty.d
+  | 跳过（已不存在）：sources/car/car ref/Debug/USART_JY61P/empty.o
+  | 跳过（已不存在）：sources/car/car ref/Debug/USART_JY61P/subdir_rules.mk
+  | 跳过（已不存在）：sources/car/car ref/Debug/USART_JY61P/subdir_vars.mk
+  | 跳过（已不存在）：sources/car/car ref/Debug/ccsObjs.opt
+  | 跳过（已不存在）：sources/car/car ref/Debug/control.d
+  | 跳过（已不存在）：sources/car/car ref/Debug/control.o
+  | 跳过（已不存在）：sources/car/car ref/Debug/device.cmd.genlibs
+  | 跳过（已不存在）：sources/car/car ref/Debug/device.opt
+  | 跳过（已不存在）：sources/car/car ref/Debug/device_linker.cmd
+  | 跳过（已不存在）：sources/car/car ref/Debug/empty.d
+  | 跳过（已不存在）：sources/car/car ref/Debug/empty.o
+  | 跳过（已不存在）：sources/car/car ref/Debug/makefile
+  | 跳过（已不存在）：sources/car/car ref/Debug/objects.mk
+  | 跳过（已不存在）：sources/car/car ref/Debug/sources.mk
+  | 跳过（已不存在）：sources/car/car ref/Debug/startup_mspm0g350x_ticlang.d
+  | 跳过（已不存在）：sources/car/car ref/Debug/startup_mspm0g350x_ticlang.o
+  | 跳过（已不存在）：sources/car/car ref/Debug/subdir_rules.mk
+  | 跳过（已不存在）：sources/car/car ref/Debug/subdir_vars.mk
+  | 跳过（已不存在）：sources/car/car ref/Debug/ti_msp_dl_config.c
+  | 跳过（已不存在）：sources/car/car ref/Debug/ti_msp_dl_config.d
+  | 跳过（已不存在）：sources/car/car ref/Debug/ti_msp_dl_config.h
+  | 跳过（已不存在）：sources/car/car ref/Debug/ti_msp_dl_config.o
+  | 跳过（已不存在）：sources/car/car xunji/.settings/org.eclipse.cdt.codan.core.prefs
+  | 跳过（已不存在）：sources/car/car xunji/.settings/org.eclipse.cdt.debug.core.prefs
+  | 跳过（已不存在）：sources/car/car xunji/.settings/org.eclipse.core.resources.prefs
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/Delay.c.95E27F1C322013FB.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/Delay.c.E55ADB3ECF4FA59A.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/Delay.h.95F21872203BD10A.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/Delay.h.C024BB13C8F469FE.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/DeviceFamily.h.B86197E44C39AF16.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/JY61P.c.F9CA710032F56FDF.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/JY61P.c.FD60BEB66EFC6324.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/JY61P.h.8A6049B435E0494C.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/JY61P.h.BD8DF109DA0EC055.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__config.FDF3F56F607A0944.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__config_site.544C22F370813B22.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__stdarg___gnuc_va_list.h.C4DAD2E66A6C1120.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__stdarg___va_copy.h.373C9DFA0B52F987.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__stdarg_va_arg.h.938C14164E5210E0.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__stdarg_va_copy.h.69598290CE7995B8.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__stdarg_va_list.h.7F0BEEA71B06DC9E.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__stddef_max_align_t.h.54DD14193E18AC07.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__stddef_null.h.50AA68BD56DBFBFD.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__stddef_offsetof.h.80C720B2B624660A.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__stddef_ptrdiff_t.h.53F13D91E4A2B7B5.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__stddef_size_t.h.3FB43AF609841380.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/__stddef_wchar_t.h.DE91DBFD60BDE6DA.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/_defs.h.3FF4973A4A510F01.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/_limits.h.0A1C895E2A18B288.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/_stdint.h.4152668A76BCDAFD.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/_stdint.h.F4839344AF2E2B3C.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/_stdint40.h.16A66CAA9B168D6F.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/_string.h.5C0B3EA0680B7433.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/_ti_config.h.15D362E5EE7844F2.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/_types.h.56B8A1C44F7BB982.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/_types.h.C21F0F0D2FD66209.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/cdefs.h.FE8058170032214D.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/cmsis_compiler.h.0CEF690CAA3726B2.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/cmsis_version.h.3268E241B4F0B6F5.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/control.c.2AA05DDD721B0E5F.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/control.c.B1D00E3D7BFA0B33.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/control.h.32E9571A0E478D9D.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/control.h.65F4135B62B8C5FC.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/core_cm0plus.h.F86F97F397F97122.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_adc12.h.8B371C28B9CA98B8.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_aes.h.714BF43F89076D0E.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_aesadv.h.1B58380AABB58CC5.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_common.h.F7F9EAC19BB9DF7E.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_comp.h.36364F925D7E4362.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_core.h.40383795BA8421DB.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_crc.h.DF880BA265476D5F.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_crcp.h.92C0AE69BCACE630.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_dac12.h.4EFEEFFD9F181290.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_dma.h.4D0C4ABB12C0B5A8.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_factoryregion.h.7D1303A06CA3C13E.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_flashctl.h.8EE7115481394B19.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_gpamp.h.7712EDC582317F84.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_gpio.h.2A06ACC8F41A6B4A.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_i2c.h.EA19C17CEA11AEF8.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_i2s.h.02DB65F8BE7D558E.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_interrupt.h.1E2262DD9303629F.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_iwdt.h.6D5C0F2A8A2ED0CA.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_keystorectl.h.72C4E5778F712345.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_lcd.h.3B70F265DC0023C8.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_lfss.h.7BA3EB123DCA412E.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_mathacl.h.481DF9CE000A3ED9.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_mcan.h.796DC61FE8B23DEA.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_npu.h.5B0040F20BDB2AD1.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_opa.h.3E6A24ECC5741765.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_rtc.h.0401B9A56B4F755C.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_rtc_a.h.0B4B5F0631158186.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_rtc_b.h.2F4EAB2FD06C1429.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_rtc_common.h.82C0D882957CE915.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_scratchpad.h.C393C0044F296077.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_spgss.h.49BF92100A08DDD4.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_spi.h.F3BE8194E2DF6F86.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_sysctl.h.7498F92D9905C16B.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_sysctl_mspm0g1x0x_g3x0x.h.FAF5EE765C168A34.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_systick.h.69384C8DAA976D23.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_tamperio.h.ED93FC04173FA9FC.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_timer.h.291FD84AC91ABF95.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_timera.h.05D1748BD8C55F3E.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_timerb.h.C57A73D35E801799.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_timerg.h.15E945C9A30588A9.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_trng.h.C25655378683C7DE.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_uart.h.6176C2B3AE5C6049.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_uart_extend.h.2043613DFC81D6B5.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_uart_main.h.FADF360DCF6EC1AA.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_unicomm.h.D5F9D982C4292985.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_unicommi2cc.h.F7134BCFD5448FB7.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_unicommi2ct.h.CA68F94817640F64.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_unicommspi.h.DA5810D95E8B239D.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_unicommuart.h.913CAB0AEE7366F2.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_vref.h.CD56F0AFC5C82859.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/dl_wwdt.h.183EA3E0A0EB0BD9.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/driverlib.h.58A5CF854BC3D328.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/empty.c.6AF969B64BE7F82A.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/empty.c.A5B5F3EC839E43CD.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_adc12.h.590A44DD86E39E63.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_aes.h.7313BD390062B087.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_comp.h.430DAE57C0A9F7BC.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_cpuss.h.EA8ED3A4A3144352.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_crc.h.D0B34E8AB8808006.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_dac12.h.963FD31B30370777.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_debugss.h.C6730C935AE513DF.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_dma.h.16062C3ABC9F498A.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_factoryregion.h.5D58315AE98F9C30.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_flashctl.h.AE143C633674573A.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_gpio.h.FFF15D95D813B4C0.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_gptimer.h.D18BE3E3A1B82364.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_i2c.h.C5516755BFFF8E34.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_iomux.h.744C0B536428067B.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_mathacl.h.EC6F4DE335C25EB7.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_mcan.h.DB73C75D6AC9CA9C.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_oa.h.8AC07E09DBEE291A.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_rtc.h.45E8F63BBC66E28F.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_spi.h.CBFD2E5B3ED24D58.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_sysctl.h.B0EA0ED95236C0E5.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_sysctl_mspm0g1x0x_g3x0x.h.6DB74E9A6FCD5669.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_trng.h.8AFDD77FB397BBFF.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_uart.h.1858E63E678C36F5.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_vref.h.F2E13DEEFB87DC3F.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_wuc.h.8CB3393032229725.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/hw_wwdt.h.FDE883C703B3355A.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/linkage.h.11516441E7E2D1F8.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/math.h.79874CE1A9F11772.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/math.h.C6653C06BFCD57F9.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/mpu_armv7.h.1EA703775E1955B4.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/msp.h.A6767A4CB6D22847.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/mspm0g350x.h.CBA12581BD168DDB.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/stdarg.h.00CE2FB531A71298.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/stdbool.h.272D9B723E75E78F.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/stdbool.h.FB0F1122B9F7E37F.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/stddef.h.43F2384DD6D92B7C.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/stddef.h.4C0A8993436CDC98.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/stdint.h.082F62A436690CD5.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/stdint.h.13B9E9BCB893B601.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/stdint.h.186A510D485999AD.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/stdint.h.908E94AF3F841B7E.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/stdio.h.392130EAC82A2928.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/stdio.h.C5625403AD742310.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/string.h.2BA20B455CA9CE02.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/string.h.2C4F102A6CCF6271.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.c.40644CC7FFCA3C7F.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.c.531688F8F84C7765.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.h.220209A424CA270C.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.h.95D1E5DFA78A8A52.idx
+  | 跳过（已不存在）：sources/car/car xunji/Debug/.clangd/compile_commands.json
+  | 跳过（已不存在）：sources/car/car xunji/Debug/Delay.d
+  | 跳过（已不存在）：sources/car/car xunji/Debug/Delay.o
+  | 跳过（已不存在）：sources/car/car xunji/Debug/Event.dot
+  | 跳过（已不存在）：sources/car/car xunji/Debug/PWM.map
+  | 跳过（已不存在）：sources/car/car xunji/Debug/PWM.out
+  | 跳过（已不存在）：sources/car/car xunji/Debug/PWM_linkInfo.xml
+  | 跳过（已不存在）：sources/car/car xunji/Debug/USART_JY61P/JY61P.d
+  | 跳过（已不存在）：sources/car/car xunji/Debug/USART_JY61P/JY61P.o
+  | 跳过（已不存在）：sources/car/car xunji/Debug/USART_JY61P/empty.d
+  | 跳过（已不存在）：sources/car/car xunji/Debug/USART_JY61P/empty.o
+  | 跳过（已不存在）：sources/car/car xunji/Debug/USART_JY61P/subdir_rules.mk
+  | 跳过（已不存在）：sources/car/car xunji/Debug/USART_JY61P/subdir_vars.mk
+  | 跳过（已不存在）：sources/car/car xunji/Debug/ccsObjs.opt
+  | 跳过（已不存在）：sources/car/car xunji/Debug/control.d
+  | 跳过（已不存在）：sources/car/car xunji/Debug/control.o
+  | 跳过（已不存在）：sources/car/car xunji/Debug/device.cmd.genlibs
+  | 跳过（已不存在）：sources/car/car xunji/Debug/device.opt
+  | 跳过（已不存在）：sources/car/car xunji/Debug/device_linker.cmd
+  | 跳过（已不存在）：sources/car/car xunji/Debug/empty.d
+  | 跳过（已不存在）：sources/car/car xunji/Debug/empty.o
+  | 跳过（已不存在）：sources/car/car xunji/Debug/makefile
+  | 跳过（已不存在）：sources/car/car xunji/Debug/objects.mk
+  | 跳过（已不存在）：sources/car/car xunji/Debug/sources.mk
+  | 跳过（已不存在）：sources/car/car xunji/Debug/startup_mspm0g350x_ticlang.d
+  | 跳过（已不存在）：sources/car/car xunji/Debug/startup_mspm0g350x_ticlang.o
+  | 跳过（已不存在）：sources/car/car xunji/Debug/subdir_rules.mk
+  | 跳过（已不存在）：sources/car/car xunji/Debug/subdir_vars.mk
+  | 跳过（已不存在）：sources/car/car xunji/Debug/ti_msp_dl_config.c
+  | 跳过（已不存在）：sources/car/car xunji/Debug/ti_msp_dl_config.d
+  | 跳过（已不存在）：sources/car/car xunji/Debug/ti_msp_dl_config.h
+  | 跳过（已不存在）：sources/car/car xunji/Debug/ti_msp_dl_config.o
+  | 跳过（已不存在）：sources/contest/2026C/user/.vscode/c_cpp_properties.json
+  | 跳过（已不存在）：sources/contest/2026C/user/.vscode/uv4.log.lock
+  | 跳过（已不存在）：sources/contest/2026C/user/DebugConfig/Target_1_STM32F103C6.dbgconf
+  | 跳过（已不存在）：sources/contest/2026C/user/DebugConfig/Target_1_STM32F103C8.dbgconf
+  | 跳过（已不存在）：sources/contest/2026C/user/DebugConfig/Target_1_STM32F103C8_1.0.0.dbgconf
+  | 跳过（已不存在）：sources/contest/2026C/user/Listings/Project.map
+  | 跳过（已不存在）：sources/contest/2026C/user/Listings/startup_stm32f10x_md.lst
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/Project.axf
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/Project.build_log.htm
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/Project.hex
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/Project.hex.asm
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/Project.htm
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/Project.lnp
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/Project.sct
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/Project_Target 1.dep
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/Project_sct.Bak
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/debug_uart.crf
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/debug_uart.d
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/debug_uart.o
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/filter.crf
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/filter.d
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/filter.o
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/isr.crf
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/isr.d
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/isr.o
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/lock_control.crf
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/lock_control.d
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/lock_control.o
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/main.crf
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/main.d
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/main.o
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_adc.crf
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_adc.d
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_delay.crf
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_delay.d
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_delay.o
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_exti.crf
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_exti.d
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_exti.o
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_gpio.crf
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_gpio.d
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_gpio.o
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_nvic.crf
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_nvic.d
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_nvic.o
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_oled.crf
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_oled.d
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_oled.o
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_pwm.crf
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_pwm.d
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_pwm.o
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_tim.crf
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_tim.d
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_tim.o
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_uart.crf
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_uart.d
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/ml_uart.o
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/startup_stm32f10x_md.d
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/startup_stm32f10x_md.o
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/system_stm32f10x.crf
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/system_stm32f10x.d
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/system_stm32f10x.o
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/uwb_uart.crf
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/uwb_uart.d
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/uwb_uart.o
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/zigbee_uart.crf
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/zigbee_uart.d
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/zigbee_uart.o
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/zone.crf
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/zone.d
+  | 跳过（已不存在）：sources/contest/2026C/user/Objects/zone.o
+  | 跳过（已不存在）：sources/contest/2026C/user/Project.uvguix.17331
+  | 跳过（已不存在）：sources/contest/2026C/user/Project.uvguix.luoji
+  | 跳过（已不存在）：sources/contest/key/.settings/org.eclipse.cdt.codan.core.prefs
+  | 跳过（已不存在）：sources/contest/key/.settings/org.eclipse.core.resources.prefs
+  | 跳过（已不存在）：sources/contest/key/Debug/.clangd/.cache/clangd/index/empty.c.0713CB84C2D091C4.idx
+  | 跳过（已不存在）：sources/contest/key/Debug/.clangd/compile_commands.json
+  | 跳过（已不存在）：sources/contest/key_dmx/.settings/org.eclipse.cdt.codan.core.prefs
+  | 跳过（已不存在）：sources/contest/key_dmx/.settings/org.eclipse.core.resources.prefs
+  | 跳过（已不存在）：sources/contest/key_dmx/.vscode/c_cpp_properties.json
+  | 跳过（已不存在）：sources/contest/key_dmx/.vscode/tasks.json
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/.clangd/.cache/clangd/index/main.c.14AD5CFD3B7E13AF.idx
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.c.AAA57A0BBD37190C.idx
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.h.8EA319FA90905201.idx
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/.clangd/compile_commands.json
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/Event.dot
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/ccsObjs.opt
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/device.cmd.genlibs
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/device.opt
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/device_linker.cmd
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/key.map
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/key.out
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/key_linkInfo.xml
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/main.d
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/main.o
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/makefile
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/objects.mk
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/sources.mk
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/startup_mspm0g350x_ticlang.d
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/startup_mspm0g350x_ticlang.o
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/subdir_rules.mk
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/subdir_vars.mk
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/ti_msp_dl_config.c
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/ti_msp_dl_config.d
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/ti_msp_dl_config.h
+  | 跳过（已不存在）：sources/contest/key_dmx/Debug/ti_msp_dl_config.o
+  | 已删除 0 个废弃文件
+  | pyproject.toml 未变化，跳过依赖安装
+  | 已清除待更新标记（pending-update.json）
+  | 已记录更新结果：C:\Users\luoji\AppData\Local\Temp\fe04-20260918-225014\profile\.contest_generator\updates\last-update.json
+  | 已记录已装完整包版本：v1.2.1 → C:\Users\luoji\AppData\Local\Temp\fe04-20260918-225014\profile\.contest_generator\updates\full-installed.json
+  | 重启应用（start-app.vbs）
+  | === 更新完成 ===
+
+## 六、终点判据（版本号从跑起来的服务读）
+  盘上 __init__.py = 1.2.1
+  **替换后 `/api/health`.version = 1.2.1**（期望 v1.2.1）
+
+## 七、资料库基线写回 + 资料库内容
+  资料库文件数（含哨兵与基线）：5084（官方清单 5081 + 哨兵 57 + 基线本身）
+  基线：version='v1.2.1' / batches=12 / sha256=95be9ca353ae3b3d…
+
+## 八、包外文件与第三方安装包（逐个 sha256 比）
+  哨兵总数 57：缺失 0 / 内容变了 0
+
+## 九、隔离边界收尾校验（真身只读）
+  真身数据目录 mtime 未变：True（1789386306.649077 → 1789386306.649077）
+  真身 updates/ 条目未变：True
+  真身工作树未变：True（11906 → 11906 个文件）
+  8000 监听：（空）
+
+## 收尾
+  收掉 8021 上的监听进程：['24572']；残余：（无）
+  （--keep：一次性目录保留在 C:\Users\luoji\AppData\Local\Temp\fe04-20260918-225014）
+
+## 总判
+  判红 0 条 / 卡住 0 条
+  B4「完整包真下 → 换装 → 重启」：PASS

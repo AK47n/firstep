@@ -152,3 +152,15 @@ UTF-8 stdout（原锚点版是崩在 GBK 编码上的）。第 7 节的两道候
 - **其余：D1 六个器件的 `kit` + `source_url` 仍等用户给链接**（未拍「永久不补」→
   `MODULE_KIND` 不动）。
 
+## 8. 沙箱真机演练第二梯队 B1–B5 开出来的三张单（2026-09-18）
+
+演练本体（spec + 五张工单 + 脚本 + 原始证据）在 `.scratch/sandbox-drill/` 与
+`.scratch/verify-gate-drills/`；下面是**演练暴露的真缺陷/待决策项**，都已开单，别漏看：
+
+| 工单 | 级别 | 一句话 | 证据 |
+|---|---|---|---|
+| `update-restart-stale-service/01` | 🔴 用户可见 | **从 v1.1.1 点「一键更新」：文件全换成 1.2.1，但跑着的服务还是 1.1.1**（发起更新的那一代没传停服端口 → 旧进程没被停 → 启动器判 `already_running` 只开浏览器）。根因链完整、修复在 v1.2.0 起已有，**但那一批老用户会得到「说更新成功、其实是旧版」**；手动重开一次即可到新版（已实测） | `verify-gate-drills/verify-01-upgrade.{txt,json}` + `-aftercare.*` |
+| `update-orphan-files/01` | 🟠 卫生 | 小发版删除清单只覆盖「上一版 → 本版」，**落后两版以上的用户升级后留下 1483 个孤儿文件**（全在 `library/` 备份目录与 `sources/` 下几个）；官方包比对 3057 一致 / 3 不同 / 0 缺。附带发现：`src/contest_generator.egg-info/*` 随包分发，且更新器的 `pip install -e .` 每次都会重写它 | `verify-01-upgrade-aftercare.txt` 的构成一节 |
+| `update-content-mismatch-retry-cap/01` | 🟡 决策单 | 持久「内容与清单不符」→ **永远 downloading + 每轮整卷重下**（spec 第 122 行明文如此，**不是实现 bug**）；真机量出 150 秒 6 次重试、台账起始偏移全 0。建议加「连续 N 次转终态」或至少把重试量写进摘要 | `verify-02-degraded.{txt,json}` 的 `content-mismatch` 一节 |
+| `update-verify-failure-leftovers/01` | 🟡 卫生（可自愈） | **不可重试**的校验失败（清单 size 与对端总长矛盾）终态 `failed` + 中文话术都对，但 `updates/full/` 里留下**整卷半成品**（实测 3,961,701 B）+ 边车，与 spec 第 147 行「校验失败一并删除」不符；线上完整包场景 = 失败后白占 ~765 MB（下次重试会因 416 自愈） | `verify-02-degraded.{txt,json}` 的 `verify-size` 一节 + 文末更正节 |
+

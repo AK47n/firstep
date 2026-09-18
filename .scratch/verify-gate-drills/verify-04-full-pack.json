@@ -1,0 +1,99 @@
+{
+  "problems": [],
+  "stuck": [],
+  "notes": [],
+  "manifest": {
+    "files": 8142,
+    "materials_files": 5081,
+    "parts": [
+      {
+        "zip_name": "firstep-full-v1.2.1.zip",
+        "size": 801873335,
+        "sha256": "49faced3203d75fb0bdc22bb1124815d16be1b28539abe45c57fc71e0b6a1596"
+      }
+    ],
+    "total_bytes": 1088540146
+  },
+  "staged": {
+    "sentinels": 57,
+    "sentinel_bytes": 95720601,
+    "start_version": "1.1.0"
+  },
+  "before": {
+    "health": {
+      "app": "contest-generator",
+      "version": "1.1.0",
+      "ok": true
+    },
+    "on_disk": "1.1.0"
+  },
+  "check": {
+    "latest_version": "v1.2.1",
+    "current_version": "",
+    "update_available": true,
+    "reason": "no-installed",
+    "error": "",
+    "message": "本地完整包版本未知（未安装或标记缺失）；最新完整包 v1.2.1，约 1038 MB，可一键下载",
+    "manifest_url": "https://github.com/AK47n/firstep/releases/download/v1.2.1/firstep-full-v1.2.1.manifest.json"
+  },
+  "task": {
+    "state": "done",
+    "downloaded_bytes": 801873335,
+    "total_bytes": 801873335,
+    "seconds": 94.8,
+    "error": ""
+  },
+  "part": {
+    "path": "C:\\Users\\luoji\\AppData\\Local\\Temp\\fe04-20260918-225014\\profile\\.contest_generator\\updates\\full\\firstep-full-v1.2.1.zip",
+    "size": 801873335,
+    "sha256": "49faced3203d75fb0bdc22bb1124815d16be1b28539abe45c57fc71e0b6a1596",
+    "expected_sha256": "49faced3203d75fb0bdc22bb1124815d16be1b28539abe45c57fc71e0b6a1596"
+  },
+  "installed_marker": {
+    "version": "v1.2.1",
+    "installed_at": "20260918-225157",
+    "backup_dir": "C:\\Users\\luoji\\AppData\\Local\\Temp\\fe04-20260918-225014\\profile\\.contest_generator\\updates\\backup\\20260918-225157"
+  },
+  "after": {
+    "on_disk": "1.2.1",
+    "served": "1.2.1",
+    "restarted_by_updater": true
+  },
+  "materials": {
+    "files_now": 5084,
+    "official_files": 5081,
+    "sentinels": 57
+  },
+  "baseline": {
+    "version": "v1.2.1",
+    "batches": 12
+  },
+  "sentinels": {
+    "total": 57,
+    "missing": [],
+    "changed": []
+  },
+  "isolation": {
+    "real_data_mtime_untouched": true,
+    "real_updates_untouched": true,
+    "real_tree_untouched": true,
+    "port_8000_listeners": []
+  },
+  "real_tree_diff": {
+    "added": [],
+    "removed": [],
+    "changed": []
+  },
+  "cleanup": {
+    "killed": [
+      "24572"
+    ],
+    "leftover": [],
+    "work_dir": "C:\\Users\\luoji\\AppData\\Local\\Temp\\fe04-20260918-225014"
+  },
+  "verdict": {
+    "problems": [],
+    "stuck": [],
+    "pass": true
+  }
+}

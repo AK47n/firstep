@@ -1,0 +1,223 @@
+# B2 证据：三个极端场景（沙箱真机 + 本地可控服务器）
+  时间：2026-09-18 23:12:12
+  一次性目录（harness 与证据都在这里）：C:\Users\luoji\AppData\Local\Temp\fe02-20260918-231212
+
+## 零、前置事实与隔离基线
+  sim_root = 'C:\\Users\\luoji\\Desktop\\firstep-sim'
+  sim_version_on_disk = '1.2.1'
+  sandbox_updates_entries = ['backup', 'firstep-update-1.1.1.removed.txt', 'firstep-update-1.1.1.zip', 'firstep-update-1.2.1.removed.txt', 'firstep-update-1.2.1.zip', 'full', 'full-apply.log', 'last-update.json', 'updater.log']
+  port_8000_listeners = []
+  port_8020_listeners = []
+  载荷 zip：C:\Users\luoji\AppData\Local\Temp\fe02-20260918-231212\payload-firstep-full-v1.2.1.zip（3961701 字节 / sha256 9d7c18197bc60d66…；含 4 MiB 存储条目，够限速与切断用）
+  本地假 GitHub：http://127.0.0.1:10467（release 列表 http://127.0.0.1:10467/repos/AK47n/firstep/releases?per_page=30）
+  本地可控服务器：port=10469 size=3961701 sha256=9d7c18197bc60d66…
+  harness 应用：{'app': 'contest-generator', 'version': '1.2.1', 'ok': True}
+
+## 场景一：弱网中途取消（mode=slow&kbps=64）
+  起始清理（挪走旧任务态）：（无）
+  分卷地址（本地可控服务器）：http://127.0.0.1:10469/p?mode=slow&kbps=64
+  载荷：3961701 字节 / sha256 9d7c18197bc60d66…
+  check：latest=v1.2.1 reason=no-installed 分卷=[('firstep-full-v1.2.1.zip', 3961701, '9d7c18197bc6', 'http://127.0.0.1:10469/p?mode=slow&kbps=64')]
+  apply：{'started': True, 'message': '已开始下载完整包（1 卷 / 约 3 MB）'}
+  取消前已下 262144 字节（256 KB）
+  cancel：{'cancelled': True, 'message': '已请求取消，将在当前卷下载完成后停止'}
+  成立：状态 = cancelled（半成品 524288 字节 / 边车 True）
+  成立：半成品还在（updates/full/ 下）（半成品 524288 字节 / 边车 True）
+  成立：边车 .partial.json 已写（半成品 524288 字节 / 边车 True）
+  成立：工具仍可用（/api/health 正常）（半成品 524288 字节 / 边车 True）
+  取消态：state=cancelled message='' error=''
+  重试 apply：{'started': True, 'message': '已开始下载完整包（1 卷 / 约 3 MB）'}
+  [重试起手] 首次进度 524288 字节 / 摘要='接着上次的进度从 13% 继续下载'
+    [   0.0s] state=downloading bytes=524288 retry=0
+    [  20.7s] state=downloading bytes=1835008 retry=0
+    [  41.3s] state=downloading bytes=3145728 retry=0
+  （状态回到 idle 且 harness 进程已退出 = 更新器已完成替换并重启，任务终态改用盘上产物 + 更新器日志判）
+  重试终局：state=None 盘上 3961701 字节 / sha256 9d7c18197bc60d66…；更新器跑到「更新完成」= True
+  成立：重试后首次进度 >= 取消时的字节（不是从 0 重下）
+  成立：摘要说明「接着下」
+  成立：服务器台账：续传请求起始偏移 = 取消时的字节
+  成立：卷已下完（盘上长度 = 载荷大小）
+  成立：终态校验通过（盘上 sha256 = 载荷 sha256）
+  成立：下载完成后替换链真的跑到了（更新器「更新完成」）
+
+## 场景二：断线重试（mode=cut&fraction=0.4&cut_runs=2&kbps=512）
+  起始清理（挪走旧任务态）：{'updates/full': 'C:\\Users\\luoji\\AppData\\Local\\Temp\\fe02-20260918-231212\\drill-updates-archive\\full-231318', 'updates/full-task.json': 'C:\\Users\\luoji\\AppData\\Local\\Temp\\fe02-20260918-231212\\drill-updates-archive\\full-task.json-231318'}
+  分卷地址：http://127.0.0.1:10469/p?mode=cut&fraction=0.4&cut_runs=2&kbps=512
+  夹具自检：起点分卷存在=False / 边车存在=False / 快照存在=False → 起点干净
+  check：latest=v1.2.1 reason=up-to-date / 分卷=[('firstep-full-v1.2.1.zip', 3961701, 'http://127.0.0.1:10469/p?mode=cut&fraction=0.4&cut_runs=2&kbps=512')]
+  apply：{'started': True, 'message': '已开始下载完整包（1 卷 / 约 3 MB）'}
+    state=downloading bytes=0 retry=0 retrying=False resume%=-1 kind='' msg=''
+    state=downloading bytes=262144 retry=0 retrying=False resume%=-1 kind='' msg=''
+    state=downloading bytes=786432 retry=0 retrying=False resume%=-1 kind='' msg=''
+    state=downloading bytes=1048576 retry=0 retrying=False resume%=-1 kind='' msg=''
+    state=downloading bytes=1310720 retry=0 retrying=False resume%=-1 kind='' msg=''
+    state=downloading bytes=1584680 retry=1 retrying=True resume%=39 kind='network' msg='连接中断：本次声明 3961701 字节，只收到 1584680 字节'
+    state=downloading bytes=1846824 retry=1 retrying=False resume%=39 kind='network' msg=''
+    state=downloading bytes=2108968 retry=1 retrying=False resume%=39 kind='network' msg=''
+    state=downloading bytes=2535488 retry=2 retrying=True resume%=63 kind='network' msg='连接中断：本次声明 3961701 字节，只收到 2535488 字节'
+    state=downloading bytes=2535488 retry=2 retrying=False resume%=63 kind='network' msg=''
+    state=downloading bytes=3059776 retry=2 retrying=False resume%=63 kind='network' msg=''
+    state=downloading bytes=3321920 retry=2 retrying=False resume%=63 kind='network' msg=''
+    state=downloading bytes=3846208 retry=2 retrying=False resume%=63 kind='network' msg=''
+    state=idle bytes=0 retry=0 retrying=False resume%=-1 kind='' msg=''
+  （状态回到 idle 且 harness 进程已退出 = 更新器已完成替换并重启，改用更新器留痕判定「续传完成」）
+  成立：夹具起点干净（上一次的成品/边车都不在）
+  成立：观察到 retry_count 增长（>=1）
+  成立：观察到重试窗口 retrying=True
+  成立：重试窗口内有原因摘要（message 非空）
+  成立：重试窗口内给出「从 X% 接着下」的数据源（resume_percent >= 0）
+  成立：用户可见的那句话由前端拼（模板在 fx/core.js:96-97，静态出处）
+  成立：服务器台账：第一次从 0，其后从断点（单调不减）
+  成立：至少一次带 Range 的续传请求（起始偏移 > 0）
+  成立：卷已下完（盘上长度 = 载荷大小）
+  成立：终态 sha256 = 载荷 sha256
+  成立：下载完成后替换链真的跑到了（更新器「更新完成」）
+  成立：成功后边车已清
+
+## 场景三：校验失败（**不可重试**那一支：清单 size 与对端总长矛盾）
+  做法：清单里把这个卷声明成 1 MiB，但服务器照真载荷（3.96 MB）发——客户端一读响应头就发现「清单说 1 MiB、对端说 3.96 MB」，按 spec 第 125 行这属于**发布物与清单不一致，不可重试**。
+  起始清理（挪走旧任务态）：{'updates/full': 'C:\\Users\\luoji\\AppData\\Local\\Temp\\fe02-20260918-231212\\drill-updates-archive\\full-231337', 'updates/full-task.json': 'C:\\Users\\luoji\\AppData\\Local\\Temp\\fe02-20260918-231212\\drill-updates-archive\\full-task.json-231337'}
+  分卷地址：http://127.0.0.1:10469/p?mode=stable
+  旧版本自证：跑着的服务版本 = 1.2.1
+  夹具自检：起点分卷存在=False → 干净
+  check：latest=v1.2.1 / 分卷=[('firstep-full-v1.2.1.zip', 1048576, 'http://127.0.0.1:10469/p?mode=stable')]
+  apply：{'started': True, 'message': '已开始下载完整包（1 卷 / 约 1 MB）'}
+    [  0.0s] state=failed bytes=3961701 retry=0 kind='verify'
+  终态：state=failed error_kind='verify' error='下载失败（卷 firstep-full-v1.2.1.zip）：发布信息不一致：清单说 1048576 字节，服务器说 3961701 字节'
+  成立：夹具起点干净
+  成立：终态 = failed
+  成立：报错是中文（无英文异常名/Traceback）
+  成立：报错指明清单与对端不一致
+  成立：error_kind = verify
+  成立：不再重试（retry_count 未增长出多轮）
+  **不成立**：半成品被清（updates/full/ 下不再有分卷）
+  **不成立**：边车被清
+  成立：updating.lock 未留下
+  成立：pending-update.json 未留下
+  成立：旧版本仍可用（/api/health 正常）
+  成立：旧版本没被换掉（服务版本仍是演练前那个）
+  成立：工具根没被动过（VERSIONS.md 逐字节未变）
+  [判红] [校验失败·不可重试] 判据不成立：半成品被清（updates/full/ 下不再有分卷）
+  [判红] [校验失败·不可重试] 判据不成立：边车被清
+
+## 场景四分枝：**持久内容不符**（mode=corrupt；长度不变、字节被改坏）
+  口径说明：spec `.scratch/resumable-download/spec.md` 第 122 行明文写着「下完但内容与清单 SHA256 不符 → 删半成品 + 走退避重试（从 0 整卷重来，**直到对上或用户取消**）」——所以这一格**不是**「该失败而没失败」的实现缺陷，而是**设计如此**；本格的用途是把这条设计的真机后果量出来（原先只有代码侧覆盖）。
+  起始清理（挪走旧任务态）：{'updates/full': 'C:\\Users\\luoji\\AppData\\Local\\Temp\\fe02-20260918-231212\\drill-updates-archive\\full-231339', 'updates/full-task.json': 'C:\\Users\\luoji\\AppData\\Local\\Temp\\fe02-20260918-231212\\drill-updates-archive\\full-task.json-231339'}
+  分卷地址：http://127.0.0.1:10469/p?mode=corrupt&at=1024&count=16
+  夹具自检：起点分卷存在=False → 干净
+  check：latest=v1.2.1 分卷大小=[3961701]
+  apply：{'started': True, 'message': '已开始下载完整包（1 卷 / 约 3 MB）'}
+    [   0.0s] state=downloading bytes=0 retry=0 kind='' msg='' err=''
+    [   0.7s] state=downloading bytes=3961701 retry=1 kind='verify' msg='下载内容与清单不符（3961701 字节），已删除重下，会重新下载整卷' err=''
+    [   1.4s] （仍在 downloading：retry=1）
+    [   2.1s] state=downloading bytes=3961701 retry=2 kind='verify' msg='下载内容与清单不符（3961701 字节），已删除重下，会重新下载整卷' err=''
+    [   6.4s] state=downloading bytes=3961701 retry=3 kind='verify' msg='下载内容与清单不符（3961701 字节），已删除重下，会重新下载整卷' err=''
+    [  14.2s] state=downloading bytes=3961701 retry=4 kind='verify' msg='下载内容与清单不符（3961701 字节），已删除重下，会重新下载整卷' err=''
+    [  22.0s] （仍在 downloading：retry=4）
+    [  30.5s] state=downloading bytes=3961701 retry=5 kind='verify' msg='下载内容与清单不符（3961701 字节），已删除重下，会重新下载整卷' err=''
+    [  42.6s] （仍在 downloading：retry=5）
+    [  62.6s] state=downloading bytes=3961701 retry=6 kind='verify' msg='下载内容与清单不符（3961701 字节），已删除重下，会重新下载整卷' err=''
+    [  63.3s] （仍在 downloading：retry=6）
+    [  83.9s] （仍在 downloading：retry=6）
+    [ 104.6s] （仍在 downloading：retry=6）
+    [ 122.4s] state=downloading bytes=3961701 retry=7 kind='verify' msg='下载内容与清单不符（3961701 字节），已删除重下，会重新下载整卷' err=''
+    [ 125.2s] （仍在 downloading：retry=7）
+    [ 145.8s] （仍在 downloading：retry=7）
+  观察窗口 150.1s：8 个状态变化 / 重试 7 次
+  服务器台账：7 次请求，起始偏移 [0, 0, 0, 0, 0, 0, 0]（全 0 = 每轮整卷重下）
+  半成品此刻在不在：False（每轮内容不符都会就地 clear_partial）
+  [记录] 持久内容不符 = **永远 downloading + 每轮整卷重下**（spec 设计如此）：本机 150.1s 内重试 7 次、台账 7 次请求起始偏移全 0；退避封顶 60 秒，线上完整包 765 MB/轮 → 约 45 GB/小时的流量黑洞，且用户看不到任何终态或「重下不会有变化」的中文话术（那句只属于**不可重试**的 verify 分支，见下一格）。已按决策单记账。
+  → 与 spec 设计一致：**无终态**（观察窗口内未收敛）
+
+## 场景之后的痕迹（如实记账）
+  沙箱工具根 sources/materials/.b2-drill-marker.txt: 在（84 字节）
+  沙箱工具根 sources/materials/.b2-drill-payload.bin: 在（3961289 字节）
+  演练数据目录的备份目录：['20260918-231316', '20260918-231334']
+  沙箱**自己**的数据目录（本格应零触碰）：['backup', 'firstep-update-1.1.1.removed.txt', 'firstep-update-1.1.1.zip', 'firstep-update-1.2.1.removed.txt', 'firstep-update-1.2.1.zip', 'full', 'full-apply.log', 'last-update.json', 'updater.log']
+
+## 收尾
+  收掉 8020 监听进程：['16680']；残余：（无）
+
+## 隔离边界收尾校验（真身只读）
+  真身数据目录 mtime 未变：True
+  真身 updates/ 条目未变：True
+  真身工作树未变：False（11906 → 11906 个文件）
+    changed（前 12）：['docs/agents/local-environment.md']
+  8000 监听：（空）
+  [判红] 隔离判据不成立：real_tree_untouched
+  （证据目录保留在 C:\Users\luoji\AppData\Local\Temp\fe02-20260918-231212；脚本不自动删——里面有每个场景的原始台账）
+
+## 总判
+  判红 3 条 / 卡住 0 条
+    · 判红：[校验失败·不可重试] 判据不成立：半成品被清（updates/full/ 下不再有分卷）
+    · 判红：[校验失败·不可重试] 判据不成立：边车被清
+    · 判红：隔离判据不成立：real_tree_untouched
+  B2「三极端场景」：FAIL
+
+## 修订与更正（2026-09-18 23:16，B5 收口时追加；上面的原始输出一个字未改）
+
+### 1. 隔离判据「真身工作树未变 = False」的成因 = **本会话自己在改账本**
+
+那三条红里有一条是这一格：`changed=['docs/agents/local-environment.md']`。
+成因：演练跑着的时候，同一个会话正在写 B5 的账本（就是那份文件），tree_stamp 于是把它记成「变了」。
+**这不是产品往真身写了东西**，证据三条：
+
+- `git status --short` 此刻（原样贴出）只有本轮的 `.scratch/` 新文件与该文档；
+- B2 另外三条隔离判据（真身数据目录 mtime / 真身 `updates/` 条目 / 8000 监听）**全部成立**；
+- B1 / B3 / B4 各自的 tree_stamp 判据**都成立**（那几轮跑的时候没人在改仓库）。
+
+→ **判定：撤回这条判红**（假红，量具与并发编辑的相互作用，与产品行为无关）。
+
+```
+M .scratch/backlog.md
+ M .scratch/commit-gate/issues/04-ci-workflow.md
+ M .scratch/sandbox-drill/issues/01-sandbox-upgrade.md
+ M .scratch/sandbox-drill/issues/03-encoding-pin.md
+ M .scratch/sandbox-drill/issues/04-full-pack-e2e.md
+ M docs/agents/local-environment.md
+?? .scratch/update-content-mismatch-retry-cap/
+?? .scratch/update-orphan-files/
+?? .scratch/update-restart-stale-service/
+?? .scratch/verify-gate-drills/
+```
+
+### 2. 场景三（校验失败·不可重试）那两条红的更正 —— 量准之后是**一条真缺陷**
+
+原始输出说「半成品被清」「边车被清」都不成立。收口时把归档目录量准：
+
+```
+full-231318\firstep-full-v1.2.1.zip  3961701 字节
+full-231337\firstep-full-v1.2.1.zip  3961701 字节
+full-231339\firstep-full-v1.2.1.zip  3961701 字节
+full-231339\firstep-full-v1.2.1.zip.partial.json  73 字节
+full-task.json-231318  427 字节
+full-task.json-231337  452 字节
+full-task.json-231339  426 字节
+```
+
+- 留下的**不是 0 字节**：是**整卷 3,961,701 字节**（就是服务器发的那份完整载荷）
+  外加边车 73 B（`{"url": ".../p?mode=stable", "expected_size": 1048576}`）；
+- 按 spec `.scratch/resumable-download/spec.md` 第 147 行「成功 / 校验失败时**一并删除边车与
+  半成品**，不留孤儿」，这两件都该被清掉 —— **真缺陷（低severity、可自愈）**：
+  线上完整包场景里，用户看到 `failed` 之后磁盘上白占 ~765 MB（下次重试会因 416 就地清掉）。
+  已开单 `.scratch/update-verify-failure-leftovers/01`；
+- 其余 10 条判据成立（终态 `failed`、中文且指明「发布信息不一致」、`error_kind=verify`、
+  不再重试、`updating.lock` 与 `pending` 未留下、旧版本可用且未被换掉、工具根逐字节未变）。
+
+### 3. 结构澄清：下载态落在**演练目录**，不是沙箱数据目录
+
+harness 用的是一次性配置（`<work>/profile/.contest_generator/config.json`）——
+产品的 `updates/` 是 `context.config_path.parent / "updates"`，所以下载态全落在演练目录里。
+沙箱自己的 `~\.contest_generator_sim\updates` 本格**零触碰**（开头结尾各列了一次条目，逐字相同）。
+唯一写进沙箱的是**更新器落位的那两个演练标记文件**（工具根 `sources/materials/.b2-drill-*`）——
+那是产品自己的替换链干的，也正是这一格想要的证据。
+
+### 4. 更正后的总判
+
+| 场景 | 判据 | 更正后 |
+|---|---|---|
+| 一 · 弱网中途取消 | 10 条（取消态 4 + 续传 6） | **全成立** |
+| 二 · 断线重试 | 12 条（重试观测 6 + 台账 2 + 终态 4） | **全成立** |
+| 三 · 校验失败（不可重试） | 12 条 | **11 成立 / 1 不成立**（失败后残留整卷 + 边车，真缺陷，已开单） |
+| 四 · 持久内容不符 | 观察格（不判产品红：与 spec 第 122 行一致） | 记录：150.1s / 7 次重试 / 台账起始偏移全 0 / 无终态 → 决策单 |
+| 隔离 | 4 条 | **全成立**（第 1 节那条撤回） |

@@ -1,0 +1,52 @@
+# B3 证据：编码钉落点实证（沙箱里真生成一个 mspm0 工程）
+  时间：2026-09-18 22:52:29
+  一次性目录：C:\Users\luoji\AppData\Local\Temp\fe03-20260918-225229
+
+## 零、前置事实
+  sim_version_on_disk = '1.2.1'
+  master_settings_dir = 'C:\\Users\\luoji\\Desktop\\firstep-sim\\library\\masters\\mspm0\\.settings'
+  master_settings_files = ['org.eclipse.cdt.codan.core.prefs', 'org.eclipse.core.resources.prefs']
+  sample_context = 'C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\real-run\\out_16_mspm0_min\\.contest_context.json'
+  sample_context_exists = True
+  port_8020_listeners = []
+  母版 `.settings` 逐个 sha256：
+    org.eclipse.cdt.codan.core.prefs: 6c355f2f86adcd3582bd685e521a179f63b362a8a8fec0da0b2f9111746eab9d
+    org.eclipse.core.resources.prefs: 1a5b17d8a429f89e30d0d5fc6e12e81d37ea8f6f3f4a206383f4af8564292ac0
+  官方 v1.2.1 完整包清单里的同名文件 sha256：
+    org.eclipse.cdt.codan.core.prefs: 6c355f2f86adcd3582bd685e521a179f63b362a8a8fec0da0b2f9111746eab9d
+    org.eclipse.core.resources.prefs: 1a5b17d8a429f89e30d0d5fc6e12e81d37ea8f6f3f4a206383f4af8564292ac0
+  → 沙箱母版 = 官方 v1.2.1 包内那份（逐字节）
+  一次性配置：C:\Users\luoji\AppData\Local\Temp\fe03-20260918-225229\config.json（库目录指沙箱 library，autocommit 关；**配置正文不进证据**）
+
+## 一、起服务（一次性入口 → 8020，代码仍是沙箱 v1.2.1 那套）
+  服务已就绪：{'app': 'contest-generator', 'version': '1.2.1', 'ok': True}（生成器版本 = 1.2.1）
+
+## 二、真调生成链路（POST /api/generate，平台 mspm0 + servo）
+  payload：platform=mspm0 slugs=['servo'] output_dir=C:\Users\luoji\AppData\Local\Temp\fe03-20260918-225229\out_mspm0
+  main_c（213 字符）照抄真实历史产物样例
+  响应：{"output_dir": "C:\\Users\\luoji\\AppData\\Local\\Temp\\fe03-20260918-225229\\out_mspm0", "structure": [".ccsproject", ".contest_context.json", ".contest_wiring.json", ".cproject", ".project", ".settings/org.eclipse.cdt.codan.core.prefs", ".settings/org.eclipse.core.resources.prefs", "main.c", "modules/servo/code/servo.h", "modules/servo/code/servo_mspm0.c", "mspm0.syscfg", "README.md", "targetConfigs/MSPM0G3507.ccxml", "targetConfigs/readme.txt", "演示脚本.md"], "include_dirs": ["modules/servo/code"], "modules": [{"slug": "servo", "files": ["code/servo.h", "code/servo_mspm0.c"]}], "python_artifac
+
+## 三、产物断言（落点 + 内容 + 与母版逐字节）
+  产物文件数：22
+  产物清单（前 40）：['.ccsproject', '.contest_context.json', '.contest_wiring.json', '.cproject', '.project', '.settings/org.eclipse.cdt.codan.core.prefs', '.settings/org.eclipse.core.resources.prefs', 'Debug/makefile', 'Debug/modules/servo/code/subdir_rules.mk', 'Debug/modules/servo/code/subdir_vars.mk', 'Debug/objects.mk', 'Debug/sources.mk', 'Debug/subdir_rules.mk', 'Debug/subdir_vars.mk', 'README.md', 'main.c', 'modules/servo/code/servo.h', 'modules/servo/code/servo_mspm0.c', 'mspm0.syscfg', 'targetConfigs/MSPM0G3507.ccxml', 'targetConfigs/readme.txt', '演示脚本.md']
+  `org.eclipse.core.resources.prefs` 正文：'eclipse.preferences.version=1\nencoding/<project>=UTF-8\n'
+  成立：org.eclipse.cdt.codan.core.prefs 在产物里
+  成立：org.eclipse.cdt.codan.core.prefs = 母版（逐字节）
+  成立：org.eclipse.cdt.codan.core.prefs = 官方包清单
+  成立：org.eclipse.core.resources.prefs 在产物里
+  成立：org.eclipse.core.resources.prefs = 母版（逐字节）
+  成立：org.eclipse.core.resources.prefs = 官方包清单
+  成立：正文含 encoding/<project>=UTF-8
+
+## 四、证据落盘与诚实边界
+  产物副本（编码钉 + 上下文 + 工程文件）落：C:\Users\luoji\Desktop\firstep\.scratch\verify-gate-drills\artifacts-b3
+  [记录] **诚实边界**：以上证明的是「编码钉随生成工程落盘、内容与母版逐字节相同」；**不证明** CCS 打开工程后中文注释不乱码——本机没有可交互的 CCS 工作区实测条件，不外推。
+  [记录] 诚实边界：本格只证「落点与内容」，不证「CCS 实际读取行为」（已在 notes 与本节写明）
+
+## 收尾
+  收掉 8020 监听进程：（无）；残余：（无）
+  一次性目录已清理（产物副本已留在 artifacts-b3/）
+
+## 总判
+  判红 0 条 / 卡住 0 条
+  B3「编码钉落点实证」：PASS

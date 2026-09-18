@@ -1,0 +1,43 @@
+{
+  "problems": [],
+  "stuck": [],
+  "notes": [],
+  "recheck": {
+    "official_files": 8142,
+    "official_materials": 5081,
+    "materials_excluded": 0,
+    "really_excluded": {
+      "count": 1,
+      "missing": [],
+      "changed": [],
+      "sample": [
+        "2026_04_地猛星电赛控制题配套资料/01_CCS_20.5.0.00028_win.zip"
+      ]
+    },
+    "sentinels": 57,
+    "in_pack": 55,
+    "out_pack": 2,
+    "out_pack_paths": [
+      "2026_04_地猛星电赛控制题配套资料/01_CCS_20.5.0.00028_win.zip",
+      "_drill_keep_me.txt"
+    ],
+    "missing": [],
+    "changed": [],
+    "materials_on_disk": 5084,
+    "materials_not_in_pack": [
+      ".materials-manifest.json",
+      "2026_04_地猛星电赛控制题配套资料/01_CCS_20.5.0.00028_win.zip",
+      "_drill_keep_me.txt"
+    ],
+    "baseline": {
+      "version": "v1.2.1",
+      "batches": 12,
+      "sha256": "95be9ca353ae3b3dabac72dcae48c6130e0f38238afeb2afc36ca23ed7ba05d9"
+    }
+  },
+  "verdict": {
+    "problems": [],
+    "stuck": [],
+    "pass": true
+  }
+}

@@ -4,12 +4,20 @@
 
 **被谁阻塞：** 无（用一次性工具根，不依赖 B1；刻意如此，避免升级失败就整轮停摆）。
 
-**状态：** pending
+**状态：** resolved（2026-09-18，**判据全部成立：PASS**；复算格另跑一次把「包外」口径算准）
 
-- [ ] 一次性工具根（`%TEMP%`）+ `USERPROFILE` 重定向隔离（照 `verify-07-tier3-e2e.py` 的隔离手法）
-- [ ] 走产品端点：`/api/update/full/check` → `/api/update/full/apply` → **真下载 802 MB** → sha256 校验 → 更新器替换 → 重启
-- [ ] 判据：替换后 `/api/health`.version == 1.2.1；资料库基线写回（`sources/materials/.materials-manifest.json`，版本与批次对得上）；包外文件与第三方安装包未被动过；`full-installed.json` 落盘
-- [ ] 隔离三判据：真身数据目录 mtime 未变、真身 `updates/` 条目未变、真身工作树未变（`tree_stamp` 排除 VCS/缓存/`.scratch`）
-- [ ] 证据里**明写这一格是真下载**（记录耗时、速度、字节数、sha256 与线上清单一致），不许混用"复用缓存"的措辞
-- [ ] 脚本 `.scratch/verify-gate-drills/drill-04-full-pack.py` + 原始输出 `verify-04-full-pack.txt/.json`
-- [ ] 收尾：端口释放、无残留 python 进程
+- [x] 一次性工具根（`%TEMP%`）+ `USERPROFILE` 重定向隔离（照 `verify-07-tier3-e2e.py` 的手法）；起点版本用 harness 改写为 `1.1.0`（判据才有落差），**这一处改写如实记账**
+- [x] 走产品端点：`/api/update/full/check` → `/api/update/full/apply` → **真下载 801,873,335 B**（sha256 `49faced3…`，与线上清单一致；落盘分卷逐个 sha256 复核）→ 更新器替换（落位 8142 文件 / 删 0 / `pyproject.toml` 未变化故**未跑 pip**）→ 重启
+- [x] 判据：替换后 `/api/health`.version == **1.2.1**（**更新器自己把服务带起来了**，与 B1 形成对照）；资料库基线写回（`sources/materials/.materials-manifest.json`，`version=v1.2.1` / **batches=12**）；`full-installed.json` = `v1.2.1`；包外文件与第三方安装包未被动过
+- [x] 隔离三判据：真身数据目录 mtime 未变、真身 `updates/` 条目未变、真身工作树未变（11906 → 11906 文件）；`8000` 全程空
+- [x] 证据里明写这一格是**真下载**（耗时、速度、字节数、sha256 与线上清单一致都在 `verify-04-full-pack.txt`），没有混用「复用缓存」的措辞
+- [x] 脚本 `.scratch/verify-gate-drills/drill-04-full-pack.py` + 原始输出 `verify-04-full-pack.txt/.json`；另跑复算格 `verify-04-full-pack-recheck.txt/.json`
+- [x] 收尾：8021 释放、无残留 python 进程
+
+## 复算格为什么存在（一条判据口径的自我修正）
+
+主跑把「真身那批 56 个第三方安装包副本」**全当包外文件**算，但 `.exe/.zip/.rar` 只是扩展名筛法：
+按**打包器自己的排除规则**（`full_pack.materials_excluded`）算，那 57 个哨兵里 **55 个其实在包内**、
+只有 **2 个真包外**（`2026_04_…/01_CCS_20.5.0.00028_win.zip` + 一个纯文本哨兵）。复算格把两者分开报：
+**包外 2 个：缺失 0 / 内容变了 0**；包内那批被包覆盖过但内容逐字节相同。覆盖边界也写进证据
+（真身资料库另有被排除项没参与本格，由第九节隔离判据覆盖）——**不把「没测」说成「测过了」**。

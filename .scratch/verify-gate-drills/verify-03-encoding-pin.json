@@ -1,0 +1,113 @@
+{
+  "problems": [],
+  "stuck": [],
+  "notes": [
+    "**诚实边界**：以上证明的是「编码钉随生成工程落盘、内容与母版逐字节相同」；**不证明** CCS 打开工程后中文注释不乱码——本机没有可交互的 CCS 工作区实测条件，不外推。"
+  ],
+  "facts": {
+    "sim_version_on_disk": "1.2.1",
+    "master_settings_dir": "C:\\Users\\luoji\\Desktop\\firstep-sim\\library\\masters\\mspm0\\.settings",
+    "master_settings_files": [
+      "org.eclipse.cdt.codan.core.prefs",
+      "org.eclipse.core.resources.prefs"
+    ],
+    "sample_context": "C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\real-run\\out_16_mspm0_min\\.contest_context.json",
+    "sample_context_exists": true,
+    "port_8020_listeners": []
+  },
+  "master": {
+    "sha256": {
+      "org.eclipse.cdt.codan.core.prefs": "6c355f2f86adcd3582bd685e521a179f63b362a8a8fec0da0b2f9111746eab9d",
+      "org.eclipse.core.resources.prefs": "1a5b17d8a429f89e30d0d5fc6e12e81d37ea8f6f3f4a206383f4af8564292ac0"
+    },
+    "official_sha256": {
+      "org.eclipse.cdt.codan.core.prefs": "6c355f2f86adcd3582bd685e521a179f63b362a8a8fec0da0b2f9111746eab9d",
+      "org.eclipse.core.resources.prefs": "1a5b17d8a429f89e30d0d5fc6e12e81d37ea8f6f3f4a206383f4af8564292ac0"
+    }
+  },
+  "health": {
+    "app": "contest-generator",
+    "version": "1.2.1",
+    "ok": true
+  },
+  "generate": {
+    "output_dir": "C:\\Users\\luoji\\AppData\\Local\\Temp\\fe03-20260918-225229\\out_mspm0",
+    "structure": [
+      ".ccsproject",
+      ".contest_context.json",
+      ".contest_wiring.json",
+      ".cproject",
+      ".project",
+      ".settings/org.eclipse.cdt.codan.core.prefs",
+      ".settings/org.eclipse.core.resources.prefs",
+      "main.c",
+      "modules/servo/code/servo.h",
+      "modules/servo/code/servo_mspm0.c",
+      "mspm0.syscfg",
+      "README.md",
+      "targetConfigs/MSPM0G3507.ccxml",
+      "targetConfigs/readme.txt",
+      "演示脚本.md"
+    ],
+    "include_dirs": [
+      "modules/servo/code"
+    ],
+    "modules": [
+      {
+        "slug": "servo",
+        "files": [
+          "code/servo.h",
+          "code/servo_mspm0.c"
+        ]
+      }
+    ],
+    "python_artifacts": [],
+    "build_hint": ""
+  },
+  "produced": [
+    ".ccsproject",
+    ".contest_context.json",
+    ".contest_wiring.json",
+    ".cproject",
+    ".project",
+    ".settings/org.eclipse.cdt.codan.core.prefs",
+    ".settings/org.eclipse.core.resources.prefs",
+    "Debug/makefile",
+    "Debug/modules/servo/code/subdir_rules.mk",
+    "Debug/modules/servo/code/subdir_vars.mk",
+    "Debug/objects.mk",
+    "Debug/sources.mk",
+    "Debug/subdir_rules.mk",
+    "Debug/subdir_vars.mk",
+    "README.md",
+    "main.c",
+    "modules/servo/code/servo.h",
+    "modules/servo/code/servo_mspm0.c",
+    "mspm0.syscfg",
+    "targetConfigs/MSPM0G3507.ccxml",
+    "targetConfigs/readme.txt",
+    "演示脚本.md"
+  ],
+  "checks": {
+    "org.eclipse.cdt.codan.core.prefs 在产物里": true,
+    "org.eclipse.cdt.codan.core.prefs = 母版（逐字节）": true,
+    "org.eclipse.cdt.codan.core.prefs = 官方包清单": true,
+    "org.eclipse.core.resources.prefs 在产物里": true,
+    "org.eclipse.core.resources.prefs = 母版（逐字节）": true,
+    "org.eclipse.core.resources.prefs = 官方包清单": true,
+    "正文含 encoding/<project>=UTF-8": true
+  },
+  "produced_settings_sha256": {
+    "org.eclipse.cdt.codan.core.prefs": "6c355f2f86adcd3582bd685e521a179f63b362a8a8fec0da0b2f9111746eab9d",
+    "org.eclipse.core.resources.prefs": "1a5b17d8a429f89e30d0d5fc6e12e81d37ea8f6f3f4a206383f4af8564292ac0"
+  },
+  "cleanup": {
+    "killed": [],
+    "leftover": []
+  },
+  "verdict": {
+    "problems": [],
+    "stuck": [],
+    "pass": true
+  }
+}

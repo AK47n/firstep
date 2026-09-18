@@ -1,0 +1,431 @@
+{
+  "problems": [
+    "[校验失败·不可重试] 判据不成立：半成品被清（updates/full/ 下不再有分卷）",
+    "[校验失败·不可重试] 判据不成立：边车被清",
+    "隔离判据不成立：real_tree_untouched"
+  ],
+  "stuck": [],
+  "notes": [
+    "持久内容不符 = **永远 downloading + 每轮整卷重下**（spec 设计如此）：本机 150.1s 内重试 7 次、台账 7 次请求起始偏移全 0；退避封顶 60 秒，线上完整包 765 MB/轮 → 约 45 GB/小时的流量黑洞，且用户看不到任何终态或「重下不会有变化」的中文话术（那句只属于**不可重试**的 verify 分支，见下一格）。已按决策单记账。"
+  ],
+  "scenarios": {
+    "slow-cancel": {
+      "sim_url": "http://127.0.0.1:10469/p?mode=slow&kbps=64",
+      "payload_size": 3961701,
+      "payload_sha": "9d7c18197bc60d661ea6a93a21292ce052ce75318e55844411cc9bb4f91f11c9",
+      "cancel_checks": {
+        "状态 = cancelled": true,
+        "半成品还在（updates/full/ 下）": true,
+        "边车 .partial.json 已写": true,
+        "工具仍可用（/api/health 正常）": true
+      },
+      "bytes_after_cancel": 524288,
+      "status_after_cancel": {
+        "state": "cancelled",
+        "message": "",
+        "error": "",
+        "error_kind": "",
+        "retry_count": 0
+      },
+      "retry_checks": {
+        "重试后首次进度 >= 取消时的字节（不是从 0 重下）": true,
+        "摘要说明「接着下」": true,
+        "服务器台账：续传请求起始偏移 = 取消时的字节": true,
+        "卷已下完（盘上长度 = 载荷大小）": true,
+        "终态校验通过（盘上 sha256 = 载荷 sha256）": true,
+        "下载完成后替换链真的跑到了（更新器「更新完成」）": true
+      },
+      "retry_first_progress": 524288,
+      "retry_first_message": "接着上次的进度从 13% 继续下载",
+      "retry_request_starts": [
+        524288
+      ],
+      "restarted_midway": true,
+      "retry_final": {
+        "state": null,
+        "total_downloaded_bytes": null,
+        "total_bytes": null,
+        "message": null,
+        "error": null,
+        "retry_count": null,
+        "error_kind": null
+      },
+      "updater_completed": true
+    },
+    "cut-retry": {
+      "sim_url": "http://127.0.0.1:10469/p?mode=cut&fraction=0.4&cut_runs=2&kbps=512",
+      "request_starts": [
+        0,
+        1584680,
+        2535488
+      ],
+      "request_count": 3,
+      "max_retry_count": 2,
+      "saw_retry_message": true,
+      "observations": [
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 0,
+          "retry_count": 0,
+          "retrying": false,
+          "error_kind": "",
+          "message": "",
+          "resume_percent": -1
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 262144,
+          "retry_count": 0,
+          "retrying": false,
+          "error_kind": "",
+          "message": "",
+          "resume_percent": -1
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 786432,
+          "retry_count": 0,
+          "retrying": false,
+          "error_kind": "",
+          "message": "",
+          "resume_percent": -1
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 1048576,
+          "retry_count": 0,
+          "retrying": false,
+          "error_kind": "",
+          "message": "",
+          "resume_percent": -1
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 1310720,
+          "retry_count": 0,
+          "retrying": false,
+          "error_kind": "",
+          "message": "",
+          "resume_percent": -1
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 1584680,
+          "retry_count": 1,
+          "retrying": true,
+          "error_kind": "network",
+          "message": "连接中断：本次声明 3961701 字节，只收到 1584680 字节",
+          "resume_percent": 39
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 1846824,
+          "retry_count": 1,
+          "retrying": false,
+          "error_kind": "network",
+          "message": "",
+          "resume_percent": 39
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 2108968,
+          "retry_count": 1,
+          "retrying": false,
+          "error_kind": "network",
+          "message": "",
+          "resume_percent": 39
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 2535488,
+          "retry_count": 2,
+          "retrying": true,
+          "error_kind": "network",
+          "message": "连接中断：本次声明 3961701 字节，只收到 2535488 字节",
+          "resume_percent": 63
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 2535488,
+          "retry_count": 2,
+          "retrying": false,
+          "error_kind": "network",
+          "message": "",
+          "resume_percent": 63
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 3059776,
+          "retry_count": 2,
+          "retrying": false,
+          "error_kind": "network",
+          "message": "",
+          "resume_percent": 63
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 3321920,
+          "retry_count": 2,
+          "retrying": false,
+          "error_kind": "network",
+          "message": "",
+          "resume_percent": 63
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 3846208,
+          "retry_count": 2,
+          "retrying": false,
+          "error_kind": "network",
+          "message": "",
+          "resume_percent": 63
+        },
+        {
+          "state": "idle",
+          "total_downloaded_bytes": 0,
+          "retry_count": 0,
+          "retrying": false,
+          "error_kind": "",
+          "message": "",
+          "resume_percent": -1
+        }
+      ],
+      "checks": {
+        "夹具起点干净（上一次的成品/边车都不在）": true,
+        "观察到 retry_count 增长（>=1）": true,
+        "观察到重试窗口 retrying=True": true,
+        "重试窗口内有原因摘要（message 非空）": true,
+        "重试窗口内给出「从 X% 接着下」的数据源（resume_percent >= 0）": true,
+        "用户可见的那句话由前端拼（模板在 fx/core.js:96-97，静态出处）": true,
+        "服务器台账：第一次从 0，其后从断点（单调不减）": true,
+        "至少一次带 Range 的续传请求（起始偏移 > 0）": true,
+        "卷已下完（盘上长度 = 载荷大小）": true,
+        "终态 sha256 = 载荷 sha256": true,
+        "下载完成后替换链真的跑到了（更新器「更新完成」）": true,
+        "成功后边车已清": true
+      },
+      "updater_completed": true,
+      "final": {
+        "state": null,
+        "total_downloaded_bytes": null,
+        "total_bytes": null,
+        "error": null,
+        "error_kind": null,
+        "retry_count": null
+      }
+    },
+    "verify-size": {
+      "sim_url": "http://127.0.0.1:10469/p?mode=stable",
+      "declared_size": 1048576,
+      "actual_payload_size": 3961701,
+      "checks": {
+        "夹具起点干净": true,
+        "终态 = failed": true,
+        "报错是中文（无英文异常名/Traceback）": true,
+        "报错指明清单与对端不一致": true,
+        "error_kind = verify": true,
+        "不再重试（retry_count 未增长出多轮）": true,
+        "半成品被清（updates/full/ 下不再有分卷）": false,
+        "边车被清": false,
+        "updating.lock 未留下": true,
+        "pending-update.json 未留下": true,
+        "旧版本仍可用（/api/health 正常）": true,
+        "旧版本没被换掉（服务版本仍是演练前那个）": true,
+        "工具根没被动过（VERSIONS.md 逐字节未变）": true
+      },
+      "final": {
+        "state": "failed",
+        "error": "下载失败（卷 firstep-full-v1.2.1.zip）：发布信息不一致：清单说 1048576 字节，服务器说 3961701 字节",
+        "error_kind": "verify",
+        "retry_count": 0,
+        "message": ""
+      },
+      "health_before": {
+        "app": "contest-generator",
+        "version": "1.2.1",
+        "ok": true
+      },
+      "health_after": {
+        "app": "contest-generator",
+        "version": "1.2.1",
+        "ok": true
+      }
+    },
+    "content-mismatch": {
+      "spec_reference": "spec 第 122 行：内容不符 → 删半成品 + 退避重试，直到对上或用户取消",
+      "terminal_reached": false,
+      "final_state": null,
+      "max_retry_count": 7,
+      "observations": [
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 0,
+          "retry_count": 0,
+          "retrying": false,
+          "error_kind": "",
+          "message": "",
+          "error": ""
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 3961701,
+          "retry_count": 1,
+          "retrying": true,
+          "error_kind": "verify",
+          "message": "下载内容与清单不符（3961701 字节），已删除重下，会重新下载整卷",
+          "error": ""
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 3961701,
+          "retry_count": 2,
+          "retrying": true,
+          "error_kind": "verify",
+          "message": "下载内容与清单不符（3961701 字节），已删除重下，会重新下载整卷",
+          "error": ""
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 3961701,
+          "retry_count": 3,
+          "retrying": true,
+          "error_kind": "verify",
+          "message": "下载内容与清单不符（3961701 字节），已删除重下，会重新下载整卷",
+          "error": ""
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 3961701,
+          "retry_count": 4,
+          "retrying": true,
+          "error_kind": "verify",
+          "message": "下载内容与清单不符（3961701 字节），已删除重下，会重新下载整卷",
+          "error": ""
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 3961701,
+          "retry_count": 5,
+          "retrying": true,
+          "error_kind": "verify",
+          "message": "下载内容与清单不符（3961701 字节），已删除重下，会重新下载整卷",
+          "error": ""
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 3961701,
+          "retry_count": 6,
+          "retrying": true,
+          "error_kind": "verify",
+          "message": "下载内容与清单不符（3961701 字节），已删除重下，会重新下载整卷",
+          "error": ""
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 3961701,
+          "retry_count": 7,
+          "retrying": true,
+          "error_kind": "verify",
+          "message": "下载内容与清单不符（3961701 字节），已删除重下，会重新下载整卷",
+          "error": ""
+        }
+      ],
+      "server_requests": 7,
+      "server_starts": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "partial_present_after": false,
+      "health_after": {
+        "app": "contest-generator",
+        "version": "1.2.1",
+        "ok": true
+      },
+      "observed_seconds": 150.1
+    }
+  },
+  "facts": {
+    "sim_root": "C:\\Users\\luoji\\Desktop\\firstep-sim",
+    "sim_version_on_disk": "1.2.1",
+    "sandbox_updates_entries": [
+      "backup",
+      "firstep-update-1.1.1.removed.txt",
+      "firstep-update-1.1.1.zip",
+      "firstep-update-1.2.1.removed.txt",
+      "firstep-update-1.2.1.zip",
+      "full",
+      "full-apply.log",
+      "last-update.json",
+      "updater.log"
+    ],
+    "port_8000_listeners": [],
+    "port_8020_listeners": []
+  },
+  "sandbox_traces": {
+    "marker": true,
+    "drill_backups": [
+      "20260918-231316",
+      "20260918-231334"
+    ],
+    "sandbox_updates_untouched_entries": [
+      "backup",
+      "firstep-update-1.1.1.removed.txt",
+      "firstep-update-1.1.1.zip",
+      "firstep-update-1.2.1.removed.txt",
+      "firstep-update-1.2.1.zip",
+      "full",
+      "full-apply.log",
+      "last-update.json",
+      "updater.log"
+    ]
+  },
+  "cleanup": {
+    "killed": [
+      "16680"
+    ],
+    "leftover": []
+  },
+  "isolation": {
+    "real_data_mtime_untouched": true,
+    "real_updates_untouched": true,
+    "real_tree_untouched": false,
+    "port_8000_listeners": []
+  },
+  "real_tree_diff": {
+    "added": [],
+    "removed": [],
+    "changed": [
+      "docs/agents/local-environment.md"
+    ]
+  },
+  "verdict": {
+    "problems": [
+      "[校验失败·不可重试] 判据不成立：半成品被清（updates/full/ 下不再有分卷）",
+      "[校验失败·不可重试] 判据不成立：边车被清",
+      "隔离判据不成立：real_tree_untouched"
+    ],
+    "stuck": [],
+    "pass": false
+  },
+  "corrections": {
+    "amended_at": "2026-09-18 23:16",
+    "false_reds_withdrawn": [
+      "隔离判据 real_tree_untouched（并发人工编辑账本造成）"
+    ],
+    "corrected_findings": [
+      "场景三：不可重试的 verify 失败残留整卷 3961701 字节 + 边车 73 字节（spec 第 147 行要求一并删除）→ 开单 update-verify-failure-leftovers/01"
+    ],
+    "verdict_after_correction": {
+      "slow-cancel": "全部成立",
+      "cut-retry": "全部成立",
+      "verify-size": "11 成立 / 1 不成立（残留件，真缺陷）",
+      "content-mismatch": "与 spec 一致（无终态），决策单",
+      "isolation": "全部成立"
+    }
+  }
+}

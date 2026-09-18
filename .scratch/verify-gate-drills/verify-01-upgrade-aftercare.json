@@ -1,0 +1,77 @@
+{
+  "problems": [],
+  "stuck": [],
+  "notes": [],
+  "aftercare": {
+    "on_disk": "1.2.1",
+    "served": "1.2.1",
+    "killed": []
+  },
+  "composition": {
+    "available": true,
+    "official_tracked": 3060,
+    "on_disk_tracked": 4543,
+    "same": 3057,
+    "stale": 3,
+    "stale_examples": [
+      {
+        "path": "src/contest_generator.egg-info/PKG-INFO",
+        "why": "size 539 != 441"
+      },
+      {
+        "path": "src/contest_generator.egg-info/SOURCES.txt",
+        "why": "size 9012 != 8698"
+      },
+      {
+        "path": "src/contest_generator.egg-info/requires.txt",
+        "why": "size 151 != 117"
+      }
+    ],
+    "stale_by_top": {
+      "src": 3
+    },
+    "not_in_official": 1483,
+    "not_in_official_examples": [
+      "library/fix-backups/20260101-000000/main.c",
+      "library/revise-backups/20260827-192944/.contest_context.json",
+      "library/revise-backups/20260827-192944/.contest_tasks.json",
+      "library/revise-backups/20260827-192944/.gitignore",
+      "library/revise-backups/20260827-192944/README.md",
+      "library/revise-backups/20260827-192944/code/readme.txt",
+      "library/revise-backups/20260827-192944/isr.c",
+      "library/revise-backups/20260827-192944/key/startup_stm32f10x_md.s",
+      "library/revise-backups/20260827-192944/led_instances.h",
+      "library/revise-backups/20260827-192944/main.c",
+      "library/revise-backups/20260827-192944/ml_libs/headfile.h",
+      "library/revise-backups/20260827-192944/ml_libs/ml_adc.c",
+      "library/revise-backups/20260827-192944/ml_libs/ml_adc.h",
+      "library/revise-backups/20260827-192944/ml_libs/ml_delay.c",
+      "library/revise-backups/20260827-192944/ml_libs/ml_delay.h",
+      "library/revise-backups/20260827-192944/ml_libs/ml_exti.c",
+      "library/revise-backups/20260827-192944/ml_libs/ml_exti.h",
+      "library/revise-backups/20260827-192944/ml_libs/ml_gpio.c",
+      "library/revise-backups/20260827-192944/ml_libs/ml_gpio.h",
+      "library/revise-backups/20260827-192944/ml_libs/ml_i2c.c"
+    ],
+    "not_in_official_by_top": {
+      "library": 1482,
+      "sources": 1
+    },
+    "official_missing_on_disk": 0,
+    "official_missing_on_disk_examples": [],
+    "official_missing_on_disk_by_top": {},
+    "blobs": {}
+  },
+  "cleanup": {
+    "killed": [
+      "6576"
+    ],
+    "leftover": [],
+    "python_left": []
+  },
+  "verdict": {
+    "problems": [],
+    "stuck": [],
+    "pass": true
+  }
+}

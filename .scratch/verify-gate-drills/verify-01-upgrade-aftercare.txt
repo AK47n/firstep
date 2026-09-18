@@ -1,0 +1,26 @@
+# B1 善后复测：手动重启后的服务版本 + 升级后构成复算
+  时间：2026-09-18 22:45:55
+  盘上 __init__.py = 1.2.1
+  收掉端口 8020 上的旧进程：（无）
+  重起后 `/api/health` = {'app': 'contest-generator', 'version': '1.2.1', 'ok': True}
+  → 手动重开一次即到 1.2.1（用户自救口径成立）
+
+## 升级后构成复算（沙箱 tracked 树 vs 官方 v1.2.1 完整包清单）
+  官方 tracked 文件：3060；沙箱 tracked 文件：4543
+  内容与官方逐字节一致：3057
+  内容与官方不同：3（按顶层 {'src': 3}）
+  官方没了但沙箱还在（孤儿）：1483（按顶层 {'library': 1482, 'sources': 1}）
+  官方有但沙箱没有（缺）：0（按顶层 {}）
+    - 不同：src/contest_generator.egg-info/PKG-INFO（size 539 != 441）
+    - 不同：src/contest_generator.egg-info/SOURCES.txt（size 9012 != 8698）
+    - 不同：src/contest_generator.egg-info/requires.txt（size 151 != 117）
+  孤儿样例（前 20）：['library/fix-backups/20260101-000000/main.c', 'library/revise-backups/20260827-192944/.contest_context.json', 'library/revise-backups/20260827-192944/.contest_tasks.json', 'library/revise-backups/20260827-192944/.gitignore', 'library/revise-backups/20260827-192944/README.md', 'library/revise-backups/20260827-192944/code/readme.txt', 'library/revise-backups/20260827-192944/isr.c', 'library/revise-backups/20260827-192944/key/startup_stm32f10x_md.s', 'library/revise-backups/20260827-192944/led_instances.h', 'library/revise-backups/20260827-192944/main.c', 'library/revise-backups/20260827-192944/ml_libs/headfile.h', 'library/revise-backups/20260827-192944/ml_libs/ml_adc.c', 'library/revise-backups/20260827-192944/ml_libs/ml_adc.h', 'library/revise-backups/20260827-192944/ml_libs/ml_delay.c', 'library/revise-backups/20260827-192944/ml_libs/ml_delay.h', 'library/revise-backups/20260827-192944/ml_libs/ml_exti.c', 'library/revise-backups/20260827-192944/ml_libs/ml_exti.h', 'library/revise-backups/20260827-192944/ml_libs/ml_gpio.c', 'library/revise-backups/20260827-192944/ml_libs/ml_gpio.h', 'library/revise-backups/20260827-192944/ml_libs/ml_i2c.c']
+
+## 收尾
+  收掉 8020 监听进程：['6576']
+  8020 端口已释放
+  残留 python 进程：（无）
+
+## 总判
+  判红 0 条 / 卡住 0 条
+  B1「沙箱升级到 1.2.1」：PASS

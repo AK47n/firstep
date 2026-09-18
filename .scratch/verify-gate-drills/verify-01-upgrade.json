@@ -1,0 +1,220 @@
+{
+  "problems": [
+    "终点判据不成立：服务报 1.1.1，期望 1.2.1"
+  ],
+  "stuck": [],
+  "notes": [
+    "升级后沙箱 tracked 树与官方 v1.2.1 包**不完全一致**：内容不同 6 个、缺 0 个（小发版更新包是全量 tracked 快照，但删除清单只覆盖「上一版 → 本版」的删除）"
+  ],
+  "facts": {
+    "sim_root_exists": true,
+    "sim_data_exists": true,
+    "sim_run_exists": true,
+    "sim_venv_absent": true,
+    "sim_version_on_disk": "1.1.1",
+    "sim_config": "C:\\Users\\luoji\\.contest_generator_sim\\config.json",
+    "real_data": "C:\\Users\\luoji\\.contest_generator",
+    "port_8000_listeners": [],
+    "port_8020_listeners": []
+  },
+  "before": {
+    "real_data_mtime": 1789386306.649077,
+    "real_updates": [],
+    "real_tree_files": 11906,
+    "materials": {
+      "count": 5089,
+      "total_bytes": 723226562,
+      "baseline": {
+        "exists": true,
+        "bytes": 1474678,
+        "sha256": "9bd3a6fad545d1ff25aab3f28b424a87bb5020b1d09eb20f38d1a97b38a2b1cf",
+        "version": "v1.1.0",
+        "batches": 12
+      },
+      "sample_sha256": {
+        "2026_04_地猛星电赛控制题配套资料/00_天猛星MSPM0G3507开发板原理图.pdf": "7ee56a15db1177f04a1b54e1aabed44899aba7506809dbc0f4f0648c9b936b4c",
+        "2026_04_地猛星电赛控制题配套资料/00_天猛星MSPM0G3507开发板引脚图.pdf": "3d6811afd5be0988980a75b3b8b990bae628660b730c93f8a441f06c34939bc1",
+        "2026_04_地猛星电赛控制题配套资料/00_立创·地猛星MSPM0G3507开发板原理图.pdf": "adc1c4b1320661884974a895f026033fa887045dd08b403feac2ae0ffa3cd1b2",
+        "2026_04_地猛星电赛控制题配套资料/00_立创·地猛星MSPM0G3507开发板引脚图.pdf": "74fe433149d40a19e598661e988f589c50eaf3788d6207783fbbbf48f07e88f1",
+        "2026_04_地猛星电赛控制题配套资料/01_.vscode.zip": "1228f67cabfd6c3b2d92eaea0b601dd1e95355e12e803214c14eae72d7c5a153"
+      }
+    },
+    "third_party": {
+      "count": 56,
+      "total_bytes": 95720533
+    },
+    "sim_data_files": [
+      "config.json",
+      "recent.json",
+      "tasks-simulated.json",
+      "updates/firstep-update-1.1.1.removed.txt",
+      "updates/firstep-update-1.1.1.zip",
+      "updates/full-apply.log",
+      "updates/full-task.json",
+      "updates/last-update.json",
+      "updates/updater.log"
+    ],
+    "sim_config_sha256": "214e15b0dc071a270f24cf8b678fceb797eef82c54adb43b729f57e8b85a9fca"
+  },
+  "startpoint": {
+    "served": "1.1.1",
+    "on_disk": "1.1.1"
+  },
+  "check": {
+    "latest_version": "1.2.1",
+    "current_version": "1.1.1",
+    "update_available": true,
+    "zip_url": "https://github.com/AK47n/firstep/releases/download/v1.2.1/firstep-update-v1.2.1.zip",
+    "size_bytes": 304729724,
+    "sha256": "ec9921fc6e649478fb162e3d3207a7f681608f476f5030541a7222cb039bbecb",
+    "removed_url": "https://github.com/AK47n/firstep/releases/download/v1.2.1/firstep-update-v1.2.1.removed.txt",
+    "error": "",
+    "message": ""
+  },
+  "apply": {
+    "elapsed_seconds": 19.8,
+    "response": {
+      "started": true,
+      "message": "已开始更新，工具将自动重启（配置与资料库不受影响）"
+    },
+    "downloaded_bytes": 304729724,
+    "expected_bytes": 304729724,
+    "avg_mbps": 14.65
+  },
+  "status": {
+    "saw_lock": true,
+    "pending_left": false,
+    "final": {
+      "state": "done",
+      "message": "",
+      "result": {
+        "status": "ok",
+        "mode": "single",
+        "version": "1.2.1",
+        "finished_at": "20260918-224039",
+        "backup_dir": "C:\\Users\\luoji\\.contest_generator_sim\\updates\\backup\\20260918-224039"
+      }
+    }
+  },
+  "endpoint": {
+    "on_disk": "1.2.1",
+    "served": "1.1.1",
+    "restarted_by_updater": false
+  },
+  "composition": {
+    "available": true,
+    "official_tracked": 3060,
+    "on_disk_tracked": 4543,
+    "same": 3054,
+    "stale": 6,
+    "stale_examples": [
+      {
+        "path": "library/references/2026_06_电赛视觉资料/代码资料与视频同步更新(1).txt",
+        "why": "size 0 != 0"
+      },
+      {
+        "path": "library/references/2026_06_电赛视觉资料/代码资料与视频同步更新.txt",
+        "why": "size 0 != 0"
+      },
+      {
+        "path": "src/contest_generator.egg-info/PKG-INFO",
+        "why": "size 539 != 441"
+      },
+      {
+        "path": "src/contest_generator.egg-info/SOURCES.txt",
+        "why": "size 9012 != 8698"
+      },
+      {
+        "path": "src/contest_generator.egg-info/requires.txt",
+        "why": "size 151 != 117"
+      },
+      {
+        "path": "tests/__init__.py",
+        "why": "size 0 != 0"
+      }
+    ],
+    "stale_by_top": {
+      "library": 2,
+      "src": 3,
+      "tests": 1
+    },
+    "not_in_official": 1483,
+    "not_in_official_examples": [
+      "library/fix-backups/20260101-000000/main.c",
+      "library/revise-backups/20260827-192944/.contest_context.json",
+      "library/revise-backups/20260827-192944/.contest_tasks.json",
+      "library/revise-backups/20260827-192944/.gitignore",
+      "library/revise-backups/20260827-192944/README.md",
+      "library/revise-backups/20260827-192944/code/readme.txt",
+      "library/revise-backups/20260827-192944/isr.c",
+      "library/revise-backups/20260827-192944/key/startup_stm32f10x_md.s",
+      "library/revise-backups/20260827-192944/led_instances.h",
+      "library/revise-backups/20260827-192944/main.c",
+      "library/revise-backups/20260827-192944/ml_libs/headfile.h",
+      "library/revise-backups/20260827-192944/ml_libs/ml_adc.c",
+      "library/revise-backups/20260827-192944/ml_libs/ml_adc.h",
+      "library/revise-backups/20260827-192944/ml_libs/ml_delay.c",
+      "library/revise-backups/20260827-192944/ml_libs/ml_delay.h",
+      "library/revise-backups/20260827-192944/ml_libs/ml_exti.c",
+      "library/revise-backups/20260827-192944/ml_libs/ml_exti.h",
+      "library/revise-backups/20260827-192944/ml_libs/ml_gpio.c",
+      "library/revise-backups/20260827-192944/ml_libs/ml_gpio.h",
+      "library/revise-backups/20260827-192944/ml_libs/ml_i2c.c"
+    ],
+    "official_missing_on_disk": 0,
+    "official_missing_on_disk_examples": [],
+    "blobs": {}
+  },
+  "safeguards": {
+    "config.json 未变": true,
+    "资料库文件数未变": true,
+    "资料库字节数未变": true,
+    "资料库基线清单未变": true,
+    "资料库抽样 sha256 未变": true,
+    "第三方安装包计数未变": true,
+    "第三方安装包字节未变": true,
+    "任务记录 recent.json 未变": true,
+    "任务记录 tasks-simulated.json 未变": true,
+    "pending-update.json 已清": true,
+    "updating.lock 已释放": true,
+    "备份目录已生成": true
+  },
+  "backup": {
+    "stamps": [
+      "20260913-002004",
+      "20260913-002734",
+      "20260918-224039"
+    ],
+    "latest_files": 4312
+  },
+  "isolation": {
+    "real_data_mtime_untouched": true,
+    "real_updates_untouched": true,
+    "real_tree_untouched": true,
+    "real_launcher_log_untouched": true,
+    "port_8000_listeners": []
+  },
+  "real_tree_diff": {
+    "added": [],
+    "removed": [],
+    "changed": []
+  },
+  "redirect_profile": {
+    "launcher_log": true,
+    "webapp_log": false
+  },
+  "cleanup": {
+    "killed": [
+      "16904"
+    ],
+    "leftover": [],
+    "python_left": []
+  },
+  "verdict": {
+    "problems": [
+      "终点判据不成立：服务报 1.1.1，期望 1.2.1"
+    ],
+    "stuck": [],
+    "pass": false
+  }
+}

@@ -36,21 +36,54 @@
 | 端口 | **8020**（真身用 8000；`FIRSTEP_LAUNCHER_PORT=8020`） |
 | 入口 | `sim-run.py`（沙箱专用，因为生产入口的配置路径写死在真身数据目录） |
 | 构建脚本 | `.scratch/full-download/make_sim_sandbox.py`（删了可重建） |
-| 当前状态 | 已用**线上真实包**更新到 v1.1.1（**尚未更新到 v1.2.0**）；资料库基线在场（12 批次 / 5087 文件） |
+| 当前状态 | **已被 2026-09-18 的 B1 演练用线上真实小发版包升到 v1.2.1**（包 304,729,724 B，sha256 `ec9921fc…`；备份在 `~\.contest_generator_sim\updates\backup\20260918-224039`，4312 文件）。资料库基线仍是 `v1.1.0`（12 批次 / 5089 文件）——小发版更新**不写**基线，只有完整包换装才写（B4 在一次性根上验过）。基线与内容仍在场。 |
 
-**已知故意为之的两处「不真实」**（复用时别被误导）：
+**已知故意为之的两处「不真实」**（复用时别被误导）——**第一处 2026-09-18 已失效，见下**：
 
-1. **沙箱的 `src/contest_generator/__init__.py` 被钉在 `1.1.0`** —— 为的是下次还能重演「1.1.0 → 更新」。
-   要恢复成真实版本，直接把它同步成与 `src/` 一致即可（其余文件是 v1.1.1）。
-2. **沙箱没有 `.venv`** —— 所以包内自带的 `start-app.bat` 会在依赖检查分支弹窗退出；
-   演练时改用 `sim-run.py` 直接起（这不代表用户机有问题，用户机都跑过 `install.bat`）。
+1. **（已失效）** 原先记的是「沙箱的 `src/contest_generator/__init__.py` 被钉在 `1.1.0`，为的是下次还能重演『1.1.0 → 更新』」。
+   2026-09-18 实测：**盘上其实是 `1.1.1`**（不是 1.1.0），而且 B1 演练已把它升到 **1.2.1**——
+   也就是说**「从旧版升上来」这件事现在不能再靠这台沙箱重演了**。要重演得二选一：
+   ① 把 `__init__.py` 改回一个更低的版本号（只改这一行，其余保持新版，等价于「旧版本号 + 新文件」的混合体，
+   只够验「版本比较 / 检查更新」那一跳，不代表真旧版）；② 用
+   `.scratch/full-download/make_sim_sandbox.py` 重建沙箱（干净，但会覆盖现有沙箱）。
+2. **沙箱没有 `.venv`** —— 所以包内自带的 `start-app.bat` 会走「回退系统 python」那条路
+   （系统 python 装齐了运行依赖，所以能起来；B1/B4 都实测过）。
+   演练时仍建议改用 `sim-run.py` 直接起（这不代表用户机有问题，用户机都跑过 `install.bat`）。
+   **附带后果（2026-09-18 实测）**：没有 `.venv` 时，更新器第 7 步的 `pip install -e .`
+   会装进**全局 site-packages**（见第 2.5 节，演练收尾已清理）。
+
+**2026-09-18 演练在沙箱上留下的痕迹**（都是刻意留的，不是坏了）：
+
+| 痕迹 | 位置 / 说明 |
+|---|---|
+| B2 的两个演练标记 | `firstep-sim\sources\materials\.b2-drill-marker.txt`（84 B）与 `.b2-drill-payload.bin`（3,961,289 B）——B2 的「真 zip 载荷」被产品自己的替换链落位进来的，证明那条链真跑到底了 |
+| B1 的小发版包 | `~\.contest_generator_sim\updates\firstep-update-1.2.1.zip`（304,729,724 B）+ `.removed.txt` |
+| 旧的完整包残留 | 原先在沙箱 `updates\full\firstep-full-v1.1.0.zip`（821 MB，2026-09-13 演练的假载荷）+ `full-task.json`，**已被 B2 挪出**到 `%TEMP%\fe02-*` 两个演练目录（可删；沙箱 `updates\full\` 现在是空的） |
+
+## 1.5 沙箱真机演练结论（2026-09-18，第二梯队 B1–B5）
+
+一次把「只差真机」的四件事跑完（spec `.scratch/sandbox-drill/spec.md`，脚本与原始证据
+`.scratch/verify-gate-drills/`）。**结论一句话：判据 33/34 成立，暴露 4 条真问题（全部开单）。**
+
+| 格 | 做什么 | 结果 | 证据 |
+|---|---|---|---|
+| **B1** 沙箱升级 | v1.1.1 → 走产品端点真下线上小发版包 304,729,724 B → 替换 → 重启 | **判据不成立**：盘上 1.2.1，**跑着的服务仍 1.1.1**（旧进程没被停；启动器判 `already_running`）。善后：收旧进程重起 → 1.2.1 ✓。根因 = v1.1.1 的 `spawn_updater` 没传 `--port`（v1.2.0 起已修）→ 缺陷单 `update-restart-stale-service/01` | `verify-01-upgrade.{txt,json}`、`-aftercare.*` |
+| **B2** 三极端场景 | 本地可控服务器造弱网/断线/坏字节，走产品端点 | 弱网取消 **10/10**、断线重试 **12/12**、校验失败（不可重试）**11/12**（残留件 → `update-verify-failure-leftovers/01`）、持久内容不符 = 观察格（与 spec 一致 → 决策单 `update-content-mismatch-retry-cap/01`） | `verify-02-degraded.{txt,json}` + `amend-02-corrections.py` |
+| **B3** 编码钉落点 | 沙箱真调 `POST /api/generate`（mspm0 + servo） | **PASS**：产物 `.settings/` 两件都在、正文含 `encoding/<project>=UTF-8`、sha256 与**母版**与**官方包清单**三方相等。**只证落点，不证 CCS 读取行为**（写进证据） | `verify-03-encoding-pin.{txt,json}`、`artifacts-b3/` |
+| **B4** 完整包换装 | 一次性根上**真下 801,873,335 B** → 校验 → 替换 → 重启 | **PASS**：服务 1.2.1（更新器自己带起来了）、基线写回（v1.2.1 / 12 批次）、包外与第三方安装包未动、隔离三判据成立 | `verify-04-full-pack.{txt,json}` + `-recheck.*` |
+| **B5** 账本收口 | 本节 + 第 0/2/2.5 节 + `real-acceptance/01` G1 + `E2E-8020.md` + `backlog.md` | 已完成（B1–B5 五张工单全 resolved） | `.scratch/sandbox-drill/issues/05-ledger-closeout.md` |
+
+**下次要复跑**：`python .scratch/verify-gate-drills/drill-0{1,2,3,4}-*.py`（B2 支持 `--only <场景>`；
+B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已跑完的一次性目录复算））。
+**注意**：B1 那一格现在**不能在原沙箱上重演**了（沙箱已升到 1.2.1，见第 1 节第 1 条）。
 
 ## 2. 本机跑着的实例
 
 | 端口 | 是什么 | 谁在用 |
 |---|---|---|
-| **8000** | 真身（`Desktop\firstep`，工作树即最新代码） | 你自己日常用；双击 `start-app.vbs` 启停。**2026-09-16 发 v1.2.1 时它没在跑**（重启后即是 v1.2.1） |
-| **8020** | 沙箱 | 演练用，随时可停（发版时未在跑；沙箱仍是 v1.1.1） |
+| **8000** | 真身（`Desktop\firstep`，工作树即最新代码） | 你自己日常用；双击 `start-app.vbs` 启停。**2026-09-18 演练全程未在跑**（B1–B4 前后各查一次，一直空） |
+| **8020** | 沙箱 | 演练用，随时可停。**2026-09-18 演练收尾已释放**（B1/B2/B3 都在这个端口上跑，收尾都验过「无残余监听 + 无残留 python 进程」） |
+| **8021** | 一次性实例（B4 完整包换装） | 只在这一格存在，跑完即释放。**为什么另开一个端口**：8020 要留给沙箱的 B2/B3，两格并行；`FIRSTEP_LAUNCHER_PORT=8021` 一路传到更新器的 `--port`，收尾验过 8021 已释放 |
 
 > **同机两个实例的坑**（已修，但知道一下）：更新器默认按 8000 停服。若在 8020 上点更新而没传端口，
 > 会把 8000 上你正在用的那个停掉。两个更新路径（完整包 / 小发版）现在都从 `FIRSTEP_LAUNCHER_PORT`
@@ -106,6 +139,18 @@
 已用 `python -m pip uninstall -y contest-generator` 把 `0.1.0` 那份元数据清掉（pip 卸装输出留痕：
 `Uninstalling contest-generator-0.1.0`）。**残留的那份 `1.1.1` 指向 `firstep-sim\src`**，
 两份源码同源所以无害——但**再跑全局 `pip install -e .` 会重新制造重复元数据**，要装就用 `.venv`。
+
+**2026-09-18 更新（B1 演练把它又搅了一次，现已归零）**：
+
+| 时刻 | 全局 editable 安装 | 怎么来的 |
+|---|---|---|
+| B1 之前 | `1.1.1 → firstep-sim`（上面记的那份残留） | 历史遗留 |
+| B1 更新器跑完 | `1.1.1` + **`1.2.1`** 两份并存（都 → `firstep-sim`） | 沙箱无 `.venv` → 更新器第 7 步 `pip install -e .` 装进**全局**（`pyproject.toml` 变了就装，这是产品设计） |
+| 演练收尾（本次） | **零**（`python -m pip list` 里已无 `contest-generator`，site-packages 无 `contest_generator-*.dist-info`） | `python -m pip uninstall -y contest-generator` 两次 |
+
+**副作用是好的**：裸 `pytest` 那个坑（被测对象变成沙箱源码，见下面那段）**因此消失**；
+但**跑测试仍然用 `python -m pytest`**（`pyproject.toml` 的 `pythonpath=["src"]` 才是口径来源，
+别依赖任何全局安装）。下次谁再在无 `.venv` 的根上跑更新，会重新装进全局——**那之后记得再卸一次**。
 
 **本机不该丢的环境变量**：`LOCALAPPDATA` / `USERPROFILE` 这类被清空或改错时，pip 找不到缓存目录
 就会在当前目录建 `pip\cache\`（实测在仓库根落了 111 个文件）。演练脚本改环境变量请**逐项增删**，

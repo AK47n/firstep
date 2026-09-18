@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "platform": "mspm0",
+  "slugs": [
+    "servo"
+  ],
+  "main_c": "#include \"ti_msp_dl_config.h\"\n#include \"servo.h\"\n\nint main(void)\n{\n    /* TODO: 若使用 SysConfig 生成的外设初始化，请取消下面注释 */\n    // SYSCFG_DL_init();\n    servo_init(1, 0);\n    servo_set_angle(1, 90);\n    while (1) {\n    }\n}\n",
+  "problem_text": "",
+  "topic_id": "",
+  "qa_text": "",
+  "requirements": [],
+  "references": [],
+  "bindings": {},
+  "instances": {},
+  "python_templates": {},
+  "generated_at": "2026-09-18T22:52:30+0800",
+  "tool_version": "1.2.1"
+}
