@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=ac85bd9660b8a12cac3bec748dcddb6eefefec7b -->
+<!-- changelog-auto: last-commit=11aebd34e5b71c24c87bb0326795d97523a9781e -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -6,6 +6,7 @@
 
 ## 2026-09-18
 - 23:19 docs(闸门): commit-gate/04 CI 线上全绿收口（run 35098093620）
+- 23:19 docs(沙箱演练): 第二梯队 B1–B5 真机演练收口——判据 33/34 成立，开出 4 张缺陷/决策单
 
 ## 2026-09-16
 - 19:16 docs(本机环境): 记账——清理线两笔账、测试跑法新口径、一处待发项
