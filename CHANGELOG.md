@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=75ab9481a15f3962d43f1fb5ef19a227dd9ab94b -->
+<!-- changelog-auto: last-commit=ac85bd9660b8a12cac3bec748dcddb6eefefec7b -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-09-18
+- 23:19 docs(闸门): commit-gate/04 CI 线上全绿收口（run 35098093620）
 
 ## 2026-09-16
 - 19:16 docs(本机环境): 记账——清理线两笔账、测试跑法新口径、一处待发项
