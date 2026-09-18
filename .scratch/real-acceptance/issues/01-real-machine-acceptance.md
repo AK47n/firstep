@@ -477,7 +477,7 @@ SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_ru
   - **断线重试**：连切 2 次断流 → `retry_count` 1→2、`retrying=True`、摘要带原因与 `resume_percent`（39%/63%）、
     台账首次 0 其后单调递增、终态 sha256 一致、边车清、更新器完成。**12/12 成立**
   - **校验失败**（拆两支）：① 不可重试（清单 size 与对端矛盾）→ `failed` + 中文「发布信息不一致…」+
-    `error_kind=verify` + 不重试 + lock/pending 未留 + 旧版本可用且未换掉 + 工具根未变（11/12）；
+    `error_kind=verify` + 不重试 + lock/pending 未留 + 旧版本可用且未换掉 + 工具根未变（**11/13**）；
     **不成立那条 = 失败后残留整卷半成品 + 边车** → 缺陷单 `update-verify-failure-leftovers/01`；
     ② 可重试（持久内容不符）→ 观察格：与 spec 第 122 行设计一致（永远 downloading + 每轮整卷重下，
     150 s / 7 次重试 / 台账起始偏移全 0）→ 决策单 `update-content-mismatch-retry-cap/01`

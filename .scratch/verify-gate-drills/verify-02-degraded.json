@@ -413,7 +413,7 @@
     "pass": false
   },
   "corrections": {
-    "amended_at": "2026-09-18 23:16",
+    "amended_at": "2026-09-18 23:20",
     "false_reds_withdrawn": [
       "隔离判据 real_tree_untouched（并发人工编辑账本造成）"
     ],
@@ -421,11 +421,17 @@
       "场景三：不可重试的 verify 失败残留整卷 3961701 字节 + 边车 73 字节（spec 第 147 行要求一并删除）→ 开单 update-verify-failure-leftovers/01"
     ],
     "verdict_after_correction": {
-      "slow-cancel": "全部成立",
-      "cut-retry": "全部成立",
-      "verify-size": "11 成立 / 1 不成立（残留件，真缺陷）",
-      "content-mismatch": "与 spec 一致（无终态），决策单",
-      "isolation": "全部成立"
+      "slow-cancel": "全部成立（10 条）",
+      "cut-retry": "全部成立（12 条）",
+      "verify-size": "11 成立 / 2 不成立（残留整卷 + 边车，真缺陷）——13 条判据",
+      "content-mismatch": "与 spec 一致（无终态），决策单；不计入判据数",
+      "isolation": "全部成立（4 条）",
+      "judgment_counts": {
+        "total": 35,
+        "pass": 33,
+        "fail": 2,
+        "note": "slow-cancel 的 10 条存在 cancel_checks + retry_checks 两个键里（按 checks 单键数会漏掉它）"
+      }
     }
   }
 }

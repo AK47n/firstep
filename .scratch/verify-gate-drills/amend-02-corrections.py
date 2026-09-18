@@ -72,9 +72,13 @@ harness 用的是一次性配置（`<work>/profile/.contest_generator/config.jso
 |---|---|---|
 | 一 · 弱网中途取消 | 10 条（取消态 4 + 续传 6） | **全成立** |
 | 二 · 断线重试 | 12 条（重试观测 6 + 台账 2 + 终态 4） | **全成立** |
-| 三 · 校验失败（不可重试） | 12 条 | **11 成立 / 1 不成立**（失败后残留整卷 + 边车，真缺陷，已开单） |
+| 三 · 校验失败（不可重试） | 13 条 | **11 成立 / 2 不成立**（失败后残留整卷 + 边车，真缺陷，已开单） |
 | 四 · 持久内容不符 | 观察格（不判产品红：与 spec 第 122 行一致） | 记录：150.1s / 7 次重试 / 台账起始偏移全 0 / 无终态 → 决策单 |
 | 隔离 | 4 条 | **全成立**（第 1 节那条撤回） |
+| **合计** | **35 条** | **33 成立 / 2 不成立** |
+
+（条数口径：`slow-cancel` 的 10 条存在 `.json` 的 `cancel_checks` + `retry_checks` 两个键里——
+按 `checks` 单键数会漏掉它，第一版就是那么把总数写成 33/34 的。）
 """
 
 
@@ -93,8 +97,13 @@ def main() -> int:
         leftovers = "\n".join(rows)
 
     text = AMENDMENT.format(stamp=stamp, git_status=git_status, leftovers=leftovers)
-    with open(TXT, "a", encoding="utf-8") as handle:
-        handle.write(text)
+    existing = TXT.read_text(encoding="utf-8") if TXT.is_file() else ""
+    if "## 修订与更正" in existing:
+        # 幂等：这一节只该有一份（第二次跑只刷 JSON，不再往证据里堆重复段落）
+        print("更正节已存在——跳过文本追加（只刷 JSON 的 corrections）")
+    else:
+        with open(TXT, "a", encoding="utf-8") as handle:
+            handle.write(text)
 
     data = json.loads(JSON.read_text(encoding="utf-8"))
     data["corrections"] = {
@@ -105,11 +114,16 @@ def main() -> int:
             "（spec 第 147 行要求一并删除）→ 开单 update-verify-failure-leftovers/01",
         ],
         "verdict_after_correction": {
-            "slow-cancel": "全部成立",
-            "cut-retry": "全部成立",
-            "verify-size": "11 成立 / 1 不成立（残留件，真缺陷）",
-            "content-mismatch": "与 spec 一致（无终态），决策单",
-            "isolation": "全部成立",
+            "slow-cancel": "全部成立（10 条）",
+            "cut-retry": "全部成立（12 条）",
+            "verify-size": "11 成立 / 2 不成立（残留整卷 + 边车，真缺陷）——13 条判据",
+            "content-mismatch": "与 spec 一致（无终态），决策单；不计入判据数",
+            "isolation": "全部成立（4 条）",
+            "judgment_counts": {
+                "total": 35, "pass": 33, "fail": 2,
+                "note": "slow-cancel 的 10 条存在 cancel_checks + retry_checks 两个键里"
+                        "（按 checks 单键数会漏掉它）",
+            },
         },
     }
     JSON.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")

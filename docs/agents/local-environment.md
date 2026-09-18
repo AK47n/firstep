@@ -63,12 +63,12 @@
 ## 1.5 沙箱真机演练结论（2026-09-18，第二梯队 B1–B5）
 
 一次把「只差真机」的四件事跑完（spec `.scratch/sandbox-drill/spec.md`，脚本与原始证据
-`.scratch/verify-gate-drills/`）。**结论一句话：判据 33/34 成立，暴露 4 条真问题（全部开单）。**
+`.scratch/verify-gate-drills/`）。**结论一句话：判据 35 条里 33 条成立，暴露 4 条真问题（全部开单）。**
 
 | 格 | 做什么 | 结果 | 证据 |
 |---|---|---|---|
 | **B1** 沙箱升级 | v1.1.1 → 走产品端点真下线上小发版包 304,729,724 B → 替换 → 重启 | **判据不成立**：盘上 1.2.1，**跑着的服务仍 1.1.1**（旧进程没被停；启动器判 `already_running`）。善后：收旧进程重起 → 1.2.1 ✓。根因 = v1.1.1 的 `spawn_updater` 没传 `--port`（v1.2.0 起已修）→ 缺陷单 `update-restart-stale-service/01` | `verify-01-upgrade.{txt,json}`、`-aftercare.*` |
-| **B2** 三极端场景 | 本地可控服务器造弱网/断线/坏字节，走产品端点 | 弱网取消 **10/10**、断线重试 **12/12**、校验失败（不可重试）**11/12**（残留件 → `update-verify-failure-leftovers/01`）、持久内容不符 = 观察格（与 spec 一致 → 决策单 `update-content-mismatch-retry-cap/01`） | `verify-02-degraded.{txt,json}` + `amend-02-corrections.py` |
+| **B2** 三极端场景 | 本地可控服务器造弱网/断线/坏字节，走产品端点 | 弱网取消 **10/10**、断线重试 **12/12**、校验失败（不可重试）**11/13**（两条不成立 = 失败后残留整卷半成品 + 边车 → `update-verify-failure-leftovers/01`）、持久内容不符 = 观察格（与 spec 一致 → 决策单 `update-content-mismatch-retry-cap/01`） | `verify-02-degraded.{txt,json}` + `amend-02-corrections.py` |
 | **B3** 编码钉落点 | 沙箱真调 `POST /api/generate`（mspm0 + servo） | **PASS**：产物 `.settings/` 两件都在、正文含 `encoding/<project>=UTF-8`、sha256 与**母版**与**官方包清单**三方相等。**只证落点，不证 CCS 读取行为**（写进证据） | `verify-03-encoding-pin.{txt,json}`、`artifacts-b3/` |
 | **B4** 完整包换装 | 一次性根上**真下 801,873,335 B** → 校验 → 替换 → 重启 | **PASS**：服务 1.2.1（更新器自己带起来了）、基线写回（v1.2.1 / 12 批次）、包外与第三方安装包未动、隔离三判据成立 | `verify-04-full-pack.{txt,json}` + `-recheck.*` |
 | **B5** 账本收口 | 本节 + 第 0/2/2.5 节 + `real-acceptance/01` G1 + `E2E-8020.md` + `backlog.md` | 已完成（B1–B5 五张工单全 resolved） | `.scratch/sandbox-drill/issues/05-ledger-closeout.md` |
