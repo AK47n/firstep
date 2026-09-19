@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=87aa691e57f6d2f87183d132499fb01f4af14362 -->
+<!-- changelog-auto: last-commit=f74ff04aab90bdda19f23e1f91976da7443bf4f0 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -18,6 +18,7 @@
 - 12:18 修复：产品文件判据单源——小发版包不再多发，也不再漏发新文件（工单 update-orphan-files/01）
 - 12:19 卫生：library/revise-backups 移出 git 索引（工单 update-orphan-files/03）
 - 12:24 修复：删除清单改累计口径——跨版升级也能清掉被跳过版本的删除项（工单 update-orphan-files/02）
+- 12:35 验收：离线演练 + 账本收口——盘面与全新安装一致（工单 update-orphan-files/04）
 
 ## 2026-09-18
 - 23:19 docs(闸门): commit-gate/04 CI 线上全绿收口（run 35098093620）
