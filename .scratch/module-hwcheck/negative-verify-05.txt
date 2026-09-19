@@ -1,0 +1,50 @@
+# 工单 module-hwcheck/05 判据强度探针（停用守卫 → 用例必须变红）
+
+每条：注入故障 → 跑目标用例 → 期望**非零退出**（红）→ 逐字节复原。
+
+## A：红 ✓ exit=1 tests/test_hwcheck_recipe.py::test_real_library_mpu6050_stm32_judges_comm_and_shows_raw_axes_only
+  注入：library/hwcheck_recipes.json —— **探头期望值被改错**（0x68 → 0x69）：板上判定跟着翻 FAIL，而断言「期望值进比较式」的用例必须红——票面点名的那条红证
+  用例：pytest tests/test_hwcheck_recipe.py -q -k stm32_judges_comm or stm32_renders_a_self_proving
+
+## B：红 ✓ exit=1 tests/test_hwcheck.py::test_device_sections_bring_their_own_headers_into_main_c
+  注入：library/hwcheck_recipes.json —— **器件头不再 include**（配方 include 段清空）：产物里 MPU6050 的调用变隐式声明（真机 7 error）→ 头文件用例与 include 解析用例必须红
+  用例：pytest tests/test_hwcheck.py -q -k bring_their_own_headers or mpu_section_includes_resolve
+
+## C：红 ✓ exit=1 tests/test_hwcheck_recipe.py::test_real_library_mpu6050_recipes_pass_the_reference_guard
+  注入：library/hwcheck_recipes.json —— **局部变量名拼错**（pitch → pitchX）：读数表达式引用了没声明的变量 → 真库配方校验必须红
+  用例：pytest tests/test_hwcheck_recipe.py -q -k mpu6050_recipes_pass
+
+## D：红 ✓ exit=1 tests/test_hwcheck_recipe.py::test_real_library_mpu6050_recipes_pass_the_reference_guard
+  注入：library/hwcheck_recipes.json —— **大写函数名拼错**（DMP_Init → DMP_Initt）：判据必须拦住它（工单 05 修的漏洞：原先只查小写开头的标识符，官方库那些大写函数压根没过判据）
+  用例：pytest tests/test_hwcheck_recipe.py -q -k mpu6050_recipes_pass
+
+## E：红 ✓ exit=1 tests/test_hwcheck_recipe.py::test_validate_covers_the_prereq_segment_across_modules
+  注入：src/contest_generator/hwcheck_recipe.py —— **把大小写过滤加回 `_calls_in`**（历史写法）：上层那条 D 类拼错就再也拦不住→ 前置调用的拼错用例必须红
+  用例：pytest tests/test_hwcheck_recipe.py -q -k prereq_segment_across_modules or does_not_declare
+
+## F：红 ✓ exit=1 tests/test_hwcheck_recipe.py::test_escape_c_string_is_byte_exact_and_never_greedy
+  注入：src/contest_generator/hwcheck_recipe.py —— **转义退回贪婪的 `\xNN`**：`±2g` 会被读成 `\xb12`（越界转义）→ 逐字节还原用例必须红
+  用例：pytest tests/test_hwcheck_recipe.py -q -k byte_exact_and_never_greedy
+
+## G：红 ✓ exit=1 tests/test_hwcheck.py::test_a_full_probe_run_does_not_declare_the_probe_none_helper
+  注入：src/contest_generator/hwcheck.py —— **死代码按需渲染失效**（`_needs_probe_none` 恒真）：整趟都是带判定探头时多留一个没人调的函数（真机 -Wunused-function）→ 0 warning 用例必须红
+  用例：pytest tests/test_hwcheck.py -q -k full_probe_run_does_not_declare
+
+## H：红 ✓ exit=1 tests/test_hwcheck.py::test_mspm0_main_gets_a_systick_service_and_stm32_gets_none
+  注入：src/contest_generator/hwcheck.py —— **mspm0 的 SysTick 垫片没被渲染**（渲染点停用）：自己开 SysTick 中断的驱动会掉进启动文件的 Default_Handler 死循环 → 垫片用例必须红
+  用例：pytest tests/test_hwcheck.py -q -k systick_service
+
+## I：红 ✓ exit=1 tests/test_hwcheck.py::test_preview_payload_carries_platform_scoped_exclusive_groups
+  注入：src/contest_generator/webapp.py —— **互斥组不再按平台过滤**（platform 传空 = 全平台视图）：stm32 上只剩一件的姿态组也会出卡（页面报一个不存在的互斥）→ 互斥载荷用例必须红
+  用例：pytest tests/test_hwcheck.py -q -k platform_scoped_exclusive_groups
+
+## J：红 ✓ exit=1 tests/test_hwcheck.py::test_mpu6050_mspm0_renders_dmp_init_probe_and_split_angles
+  注入：src/contest_generator/hwcheck_recipe.py —— **局部变量不再声明**（渲染器漏掉 locals 那一行）：探头拿不到变量、读数表达式引用未声明名 → 声明在最前 + 双平台渲染用例必须红
+  用例：pytest tests/test_hwcheck.py -q -k local_declarations_before_every_action or mspm0_renders_dmp_init_probe
+
+## K：红 ✓ exit=1 tests/test_hwcheck_recipe.py::test_validate_rejects_an_include_that_is_not_in_the_library
+  注入：src/contest_generator/hwcheck_recipe.py —— **include 的头名不再校验**：拼错的头名一路漏到生成期（配方层判据失效）→ 头名拼错用例必须红
+  用例：pytest tests/test_hwcheck_recipe.py -q -k include_that_is_not_in_the_library
+
+## 结论
+11 条注入，11 条判红、0 条没红。每条守卫都真有牙。

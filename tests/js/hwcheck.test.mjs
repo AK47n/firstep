@@ -22,6 +22,7 @@ import {
   HWCHECK_PARENT_KEY, HWCHECK_LAST_DIR_KEY,
   hwcheckDevicePick, hwcheckDeviceSlugs, hwcheckDevicePool, hwcheckDeviceKit,
   hwcheckDeviceChipsHTML, hwcheckDeviceEmptyHTML, hwcheckMissingDevicesHTML,
+  hwcheckDeviceGroupNoticeHTML,
   hwcheckWiringErrorHTML, hwcheckWiringTableHTML, hwcheckPinGroupsHTML,
   hwcheckBoardSharesHTML, hwcheckOrderHTML, hwcheckOrderDesc, hwcheckBoardState,
   hwcheckSectionsState, hwcheckSectionsHTML, hwcheckUnspecializedHTML,
@@ -820,5 +821,98 @@ test("ui 换平台 / 换通道时清掉旧检测计划（配方按平台分，�
   const clears = ui.match(/hwcheckUI\.sections = \[\]/g) || [];
   assert.equal(clears.length, 3,
     "三处该清：换平台 / 换通道 / 取视图失败（清 failed 视图时一并清计划）");
+});
+
+// ---------------------------------------------------------------------------
+// 工单 module-hwcheck/05：同组互斥 = 单选交换 + 提示（判据来自服务端载荷）
+// ---------------------------------------------------------------------------
+
+// 载荷形状与后端 `_hwcheck_view` 的 exclusive_groups 一致：按**平台**过滤后的
+// 库级功能组（成员取自整库，单成员组不出）。
+const GROUPS = [
+  { id: "attitude-hold", label: "航向保持 / 姿态传感器",
+    members: ["imu_uart", "jy61p", "ml_mpu6050"] },
+  { id: "display", label: "显示 / 屏幕", members: ["lcd", "max7219", "oled"] },
+];
+
+test("hwcheckDevicePick：点同组第二件 = 单选交换（旧的自动去掉）", () => {
+  const before = { devices: ["ml_mpu6050"] };
+  const after = hwcheckDevicePick(before, "jy61p", true, GROUPS);
+  assert.deepEqual(after.devices, ["jy61p"], "同组只能留一件，且留的是刚点的那件");
+  assert.deepEqual(before.devices, ["ml_mpu6050"], "不许改原对象");
+});
+
+test("hwcheckDevicePick：不同组 / 没给组清单时不误伤别的件", () => {
+  const state = { devices: ["ml_mpu6050", "sr04", "lcd"] };
+  // 点 display 组的另一件：只清掉同组的 lcd，姿态件与另一件都不动
+  assert.deepEqual(
+    hwcheckDevicePick(state, "max7219", true, GROUPS).devices,
+    ["ml_mpu6050", "sr04", "max7219"]);
+  // 没给组清单（旧载荷 / 还没拿到预览）→ 老行为：只加不换
+  assert.deepEqual(
+    hwcheckDevicePick(state, "max7219", true).devices,
+    ["ml_mpu6050", "sr04", "lcd", "max7219"]);
+  // 不在任何组里的件照常加
+  assert.deepEqual(
+    hwcheckDevicePick({ devices: ["ml_mpu6050"] }, "sr04", true, GROUPS).devices,
+    ["ml_mpu6050", "sr04"]);
+});
+
+test("hwcheckDevicePick：取消不做交换、重复点幂等（返回原对象）", () => {
+  assert.deepEqual(
+    hwcheckDevicePick({ devices: ["ml_mpu6050", "jy61p"] }, "jy61p", false, GROUPS)
+      .devices, ["ml_mpu6050"]);
+  const once = hwcheckDevicePick({ devices: [] }, "led", true, GROUPS);
+  assert.equal(hwcheckDevicePick(once, "led", true, GROUPS), once,
+    "已经选中再点一次 = 原样返回（不把它挪到列表末尾，那会改变建议顺序里的位置）");
+});
+
+test("hwcheckDeviceGroupNoticeHTML：一件时预告交换、两件时点名冲突", () => {
+  const one = hwcheckDeviceGroupNoticeHTML(GROUPS, ["ml_mpu6050"]);
+  assert.ok(one.includes("同组互斥") && one.includes("航向保持"),
+    "要说清是哪一组：" + one);
+  assert.ok(one.includes("jy61p") && one.includes("imu_uart"),
+    "要让用户知道还有哪些同组成员：" + one);
+  assert.ok(one.includes("会自动换掉 ml_mpu6050"), "预告交换规则：" + one);
+
+  const two = hwcheckDeviceGroupNoticeHTML(GROUPS, ["ml_mpu6050", "jy61p"]);
+  assert.ok(two.includes("只能选一件") && two.includes("请去掉一件"),
+    "回读 / 历史态可能出现同组两件，如实报冲突：" + two);
+
+  assert.equal(hwcheckDeviceGroupNoticeHTML(GROUPS, []), "", "一件都没选 = 不占版面");
+  assert.equal(hwcheckDeviceGroupNoticeHTML(GROUPS, ["sr04"]), "",
+    "不在任何互斥组里的件不出提示");
+  assert.equal(hwcheckDeviceGroupNoticeHTML([], ["ml_mpu6050"]), "",
+    "没有组定义（stm32 上这一组只剩一件）→ 一个字都不说");
+});
+
+test("hwcheckDeviceGroupNoticeHTML：文案过转义（组名来自库内数据）", () => {
+  const html = hwcheckDeviceGroupNoticeHTML(
+    [{ id: "g", label: "<img src=x>", members: ["a", "b"] }], ["a"]);
+  assert.ok(!html.includes("<img"), "库内文案也要转义：" + html);
+});
+
+test("hwcheckBoardState：接纳 exclusive_groups，缺键时保留旧值", () => {
+  const adopted = hwcheckBoardState({}, { devices: [], exclusive_groups: GROUPS });
+  assert.deepEqual(adopted.exclusiveGroups, GROUPS);
+  assert.deepEqual(
+    hwcheckBoardState({ exclusiveGroups: GROUPS }, {}).exclusiveGroups, GROUPS,
+    "旧后端 / 出错响应不许把已拿到的组清单抹掉");
+  assert.deepEqual(
+    hwcheckBoardState({ exclusiveGroups: GROUPS }, { exclusive_groups: [] })
+      .exclusiveGroups, [],
+    "载荷明确给空数组 = 这个平台没有可互斥的组（stm32 的 attitude-hold）");
+});
+
+test("ui：器件挑选把组清单喂给单选交换，并渲染互斥提示", () => {
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url),
+    "utf8");
+  assert.ok(ui.includes("hwcheckDeviceGroupNoticeHTML("),
+    "同组互斥提示的渲染要走 fx 单源");
+  assert.ok(/hwcheckDevicePick\([^)]*exclusiveGroups/.test(ui),
+    "pick 时必须带上组清单，否则单选交换不会发生");
+  assert.ok(html.includes('id="hwcheck-device-groups"'),
+    "index.html 要有提示的落点");
 });
 

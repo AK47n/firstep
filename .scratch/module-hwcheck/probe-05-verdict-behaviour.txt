@@ -1,0 +1,62 @@
+# 工单 module-hwcheck/05 行为红证（把产物那一节真编真跑）
+
+主机编译器：C:\mingw64\bin\gcc.EXE（测的是**渲染器真产出**的那一节，不是替身）
+
+## stm32 探头命中（读回 0x68）：PASS
+```
+
+== [专精] ml_mpu6050 ==
+  初始化：已调用（本件不判返回值）
+  通信探头：OK  verdict: OK
+  ax = 100 加速度 X（LSB，±2g 量程：16384 LSB/g）
+  ay = -200 加速度 Y（LSB）
+  az = 16000 加速度 Z（LSB，放平时 ≈ +16384）
+  gx = 1 角速度 X（LSB，±2000dps 量程：16.4 LSB/(°/s)）
+  gy = 2 角速度 Y（LSB）
+  gz = 3 角速度 Z（LSB，静止时三轴都 ≈ 0）
+
+--END--
+```
+
+## stm32 探头不命中（读回 0x69）：PASS
+```
+
+== [专精] ml_mpu6050 ==
+  初始化：已调用（本件不判返回值）
+  通信探头：FAIL  detail: 通信失败：先查供电 / 上拉 / 地址 / 线序，再查驱动
+  verdict: FAIL
+  trouble: ml_mpu6050：通信失败（先查供电 / 上拉 / 地址 / 线序）
+
+--END--
+```
+
+## mspm0 两级自证都过：PASS
+```
+
+== [专精] ml_mpu6050 ==
+  初始化：OK  verdict: OK
+  通信探头：OK  verdict: OK
+  (int)pitch = 12 度（pitch 整数部分）
+  (int)((pitch - (int)pitch) * 10) = 3 （pitch 小数第一位）
+  (int)roll = -5 度（roll 整数部分）
+  (int)((roll - (int)roll) * 10) = -6 （roll 小数第一位）
+  (int)yaw = 0 度（yaw 整数部分）
+  (int)((yaw - (int)yaw) * 10) = 5 （yaw 小数第一位）
+
+--END--
+```
+
+## mspm0 探头不命中：PASS
+```
+
+== [专精] ml_mpu6050 ==
+  初始化：OK  verdict: OK
+  通信探头：FAIL  detail: 通信失败：先查供电 / 上拉 / 地址 / 线序，再查驱动
+  verdict: FAIL
+  trouble: ml_mpu6050：通信失败（先查供电 / 上拉 / 地址 / 线序）
+
+--END--
+```
+
+## 结论
+4 次真跑，4 次符合预期、0 次不符。票面那条红证成立：探头值从 0x68 改成 0x69，判定翻 FAIL 且不再打读数。

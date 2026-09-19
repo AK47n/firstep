@@ -3874,6 +3874,7 @@
       <h3>3. 要测的器件 <span class="muted">（选上就看得见接线表与默认脚冲突）</span></h3>
       <div id="hwcheck-device-chips" class="row"></div>
       <div id="hwcheck-device-missing"></div>
+      <div id="hwcheck-device-groups"></div>
       <div class="row">
         <input type="search" id="hwcheck-device-search" class="hwcheck-device-search"
                placeholder="搜索器件（模块名 / 简介 / 套件型号）…">
@@ -3881,9 +3882,10 @@
       </div>
       <div id="hwcheck-device-grid"></div>
       <div class="hwcheck-hint">器件列表 = 模块库全量（与「模块库」页同一份，可按名字搜）。
-        选中的器件会一起编进检测工程，并出现在下面的接线表与检测顺序里；
-        <strong>逐件的检测小节与板上通断判定还在做</strong>——这一版烧上去跑的仍是
-        「板子活着」那一趟（灯闪 + 串口那行字）。</div>
+        选中的器件会一起编进检测工程，并出现在下面的接线表、检测顺序与检测计划里；
+        哪几件有库内配方由服务端说（下面的检测计划会逐件列出来），页面不猜。有配方的
+        那几件会出<strong>逐件检测小节</strong>，带板上通断判定的会在串口 / 屏上直接
+        报 OK / FAIL。</div>
       <h3>4. 保存位置</h3>
       <div class="row">
         <input type="text" id="hwcheck-parent" class="hwcheck-parent" placeholder="留空 = 桌面">

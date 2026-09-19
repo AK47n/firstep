@@ -178,6 +178,7 @@ from .hwcheck_recipe import (
     SECTION_TAG,
     interface_names,
     load_recipes,
+    platform_header_names,
     resolve_sections,
     unspecialized_message,
 )
@@ -202,7 +203,12 @@ from .library import (
     update_module_description,
     update_platform_identity,
 )
-from .manifest import ExclusiveGroup, ManifestSummary, ModuleManifest
+from .manifest import (
+    ExclusiveGroup,
+    ManifestSummary,
+    ModuleManifest,
+    collect_exclusive_groups,
+)
 from .module_intro import intro_sections
 from .llm import (
     LLM,
@@ -750,7 +756,6 @@ def _hwcheck_recipes(
     ctx: AppContext,
     app_config: AppConfig,
     manifests: Sequence[ModuleManifest],
-    platform: str,
 ):
     """读库内配方（工单 04）→ `{slug: RecipeCatalog}`。
 
@@ -766,30 +771,51 @@ def _hwcheck_recipes(
 
     `recipe_path` 走 AppContext 的可选覆盖（`hwcheck_recipe_path`）：测试要注入
     坏配方时不必动真库文件（并行用例会互相读到半截）。
+
+    **接口清单按平台分开装配**（工单 05 修的一处真缺陷）：配方文件是**全平台
+    一份**，校验时每段要按**它自己的平台**取接口清单——只给当前平台那一份的话，
+    平台不对称一出现就误报（实测：拿 mspm0 的清单去查 stm32 的 `ax`，mspm0 预览
+    直接 400）。所以这里把**所有已注册平台**的清单都装出来，与用户当前选哪个
+    平台无关：配方里任何一段写错，任何一次预览都会当场红。
+
+    **母版工程树不可用的平台跳过校验**（"判不了就不判"，工单 04 定、05 校准）：
+    清单 = 模块头 ∪ 母版头，而 stm32 侧有一批函数**只住在母版里**（`OLED_Init` /
+    `oled_show_text` 在 ml_oled，模块目录里一个声明都没有）。用户还没导入母版
+    （或母版目录是空的）时清单天然不全——照判会把好配方判成拼错（本单实测：
+    修好"大写函数名没过判据"这个漏洞后，空母版下 `OLED_Init` 立刻误报）。所以
+    只有**母版工程树真的在**（目录非空）才判那个平台；真实库的完整判据另有
+    地位断言（`test_real_library_recipes_reference_only_real_interfaces`）兜底。
     """
-    master_dir = master_project_dir(app_config.masters_dir, platform)
-    master_headers: list[tuple[str, str]] = []
-    if master_dir.is_dir():
+    library = app_config.module_library_dir
+    interfaces: dict[str, dict[str, frozenset[str]]] = {}
+    headers: dict[str, frozenset[str]] = {}
+    for name in sorted(KNOWN_PLATFORMS):
+        master_dir = master_project_dir(app_config.masters_dir, name)
+        if not master_dir.is_dir() or next(iter(master_dir.iterdir()), None) is None:
+            continue
         master_headers = [
             (path.relative_to(master_dir).as_posix(),
              path.read_text(encoding="utf-8", errors="replace"))
             for path in iter_project_files(master_dir, pattern="*.h")
         ]
-    interfaces = interface_names(
-        manifests, app_config.module_library_dir, platform, master_headers
-    )
+        interfaces[name] = interface_names(manifests, library, name, master_headers)
+        # include 段的判据面（工单 05）：库内每个模块该平台条目声明的 .h 基名
+        # ∪ 母版树的 .h 基名——与生成门禁的 include 解析门同口径。
+        headers[name] = platform_header_names(manifests, name, master_headers)
     return load_recipes(
-        app_config.module_library_dir, manifests, interfaces,
+        library, manifests, interfaces,
         recipe_path=ctx.hwcheck_recipe_path,
+        headers=headers,
     )
 
 
 def _hwcheck_view(ctx: AppContext, config: HwCheckConfig) -> dict:
-    """检测页的**一次投影**（板块载荷）：板侧视图 + 逐件专精小节 + 未专精点名。
+    """检测页的**一次投影**（板块载荷）：板侧视图 + 逐件专精小节 + 未专精点名 +
+    同组互斥组。
 
-    返回的字典里 `board` = 载荷三键（`wiring` / `sections` / `unspecialized`，
-    端点用 `**board` 展开），`sections` = 域层的 `RecipeSection` 对象（生成端点
-    还要拿它去渲染 main.c，不必再解析一遍）。
+    返回的字典里 `board` = 载荷的四个键（`wiring` / `sections` / `unspecialized` /
+    `exclusive_groups`，端点用 `**board` 展开），`sections` = 域层的 `RecipeSection`
+    对象（生成端点还要拿它去渲染 main.c，不必再解析一遍）。
 
     三个端点（preview / generate / project）共用这一处装配：读库一次 → 展开
     依赖（`resolve_dependencies` 的顺序即进工程顺序）→ 配方校验 → 板侧投影
@@ -803,9 +829,7 @@ def _hwcheck_view(ctx: AppContext, config: HwCheckConfig) -> dict:
     app_config = _hwcheck_library_config(ctx)
     by_slug = {m.slug: m for m in list_modules(app_config.module_library_dir)}
     manifests = resolve_dependencies(list(hwcheck_modules(config)), by_slug)
-    recipes = _hwcheck_recipes(
-        ctx, app_config, list(by_slug.values()), config.platform
-    )
+    recipes = _hwcheck_recipes(ctx, app_config, list(by_slug.values()))
     devices = hwcheck_devices(config)
     view = hwcheck_board_view(
         config.platform,
@@ -825,6 +849,17 @@ def _hwcheck_view(ctx: AppContext, config: HwCheckConfig) -> dict:
                 for slug in devices
                 if slug not in specialized and slug not in missing
             ],
+            # 同组互斥（工单 05）：按**平台**投影的库级功能组——判据单源是库内
+            # manifest 的 exclusive_group（`collect_exclusive_groups`，与赛题侧
+            # 生成链路同一个函数）；成员取自**整库**而不是本次选中的模块集，
+            # 否则"点了同组第二件"时它还不在这份清单里，单选交换就无从下手。
+            "exclusive_groups": [
+                {"id": group.id, "label": group.label,
+                 "members": [member.slug for member in group.members]}
+                for group in collect_exclusive_groups(
+                    list(by_slug.values()), platform=config.platform
+                )
+            ],
         },
         "sections": sections,
     }
@@ -833,16 +868,19 @@ def _hwcheck_view(ctx: AppContext, config: HwCheckConfig) -> dict:
 def _hwcheck_sections_payload(sections: Sequence[Any]) -> list[dict]:
     """逐件专精小节的载荷（页面只渲染，不重推判据）。
 
-    字段 = 配方六段的可见面 + `tag`（专精件与未专精件外观可区分的判据，前端只
-    上样式）——`prereq` / `platform` 这一版页面用不上，但它们是配方契约的一部分
-    （工单 05/06 的探头与命令表都要读同一份载荷），留着不算投机抽象：前端不读
-    不等于载荷可以缺，缺了下一个工单就得改端点。
+    字段 = 配方各段的可见面 + `tag`（专精件与未专精件外观可区分的判据，前端只
+    上样式）——`include` / `locals` / `prereq` / `platform` 这一版页面用不上，但
+    它们是配方契约的一部分（工单 05 的头文件 / 局部变量与探头、06 的命令表都要
+    读同一份载荷），留着不算投机抽象：前端不读不等于载荷可以缺，缺了下一个工单
+    就得改端点。
     """
     return [
         {
             "slug": section.slug,
             "platform": section.platform,
             "tag": SECTION_TAG,
+            "include": list(section.include),
+            "locals": list(section.locals),
             "prereq": list(section.prereq),
             "init": list(section.init),
             "init_expect": section.init_expect,

@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -31,6 +32,7 @@ from contest_generator.hwcheck_recipe import (
     RecipeRead,
     RecipeSection,
     c_string,
+    escape_c_string,
     load_recipes,
     parse_recipes,
     recipe_library_path,
@@ -40,36 +42,29 @@ from contest_generator.hwcheck_recipe import (
 )
 from contest_generator.manifest import ModuleManifest
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
+from tests._c_escape import decode_c_string
 
 REAL_LIBRARY = Path(__file__).resolve().parents[1] / "library" / "modules"
 REAL_MASTERS = Path(__file__).resolve().parents[1] / "library" / "masters"
 
-# 真实库的 pilot 清单（spec「v1 专精范围」的本单两件）——地板断言的判据。
+# 真实库的 pilot 清单（spec「v1 专精范围」已落地的那几件）——地板断言的判据。
+# 工单 05 起加上 ml_mpu6050 × 两个平台（**平台不对称**：stm32 只有原始六轴、
+# mspm0 走官方 DMP 出角度），这一格缩水会让学生以为新到的器件"没得测"。
 PILOT = (("led", PLATFORM_STM32), ("led", PLATFORM_MSPM0),
-         ("oled", PLATFORM_STM32), ("oled", PLATFORM_MSPM0))
+         ("oled", PLATFORM_STM32), ("oled", PLATFORM_MSPM0),
+         ("ml_mpu6050", PLATFORM_STM32), ("ml_mpu6050", PLATFORM_MSPM0))
 
 
 def _unescape_c(code: str) -> str:
-    """渲染产物 → 人能读的文本：把 `\\xNN` 字节转义还原成字符。
+    """渲染产物 → 人能读的文本（把 ASCII 转义还原成字符）。
 
     渲染器把非 ASCII 转义成 UTF-8 字节（ARMCC 的本地代码页会把原样中文串的
     收尾引号吞掉），所以断言"程序里说了什么"时先把转义还原——**判据是"学生
     看到的那句话在不在"**，不是"转义写法对不对"（转义写法本身另有专门断言）。
+
+    解码器本体单源在 `tests/_c_escape.py`（工单 05 起两个测试文件共用）。
     """
-    out = bytearray()
-    index = 0
-    while index < len(code):
-        chunk = code[index:index + 4]
-        if chunk.startswith("\\x") and len(chunk) == 4:
-            try:
-                out.append(int(chunk[2:], 16))
-                index += 4
-                continue
-            except ValueError:
-                pass
-        out.extend(code[index].encode("utf-8"))
-        index += 1
-    return out.decode("utf-8", errors="replace")
+    return decode_c_string(code)
 
 
 def _section(**overrides) -> dict:
@@ -79,6 +74,7 @@ def _section(**overrides) -> dict:
     `{lines: [...]}`）——显式键让"这一段的这一项叫什么"在文件里看得见。
     """
     data = {
+        "locals": None,
         "prereq": {"calls": []},
         "init": {"calls": ["led_init(LED_RED)"]},
         "init_expect": "0",
@@ -253,14 +249,22 @@ def _manifest(slug: str, platforms: tuple[str, ...] = (PLATFORM_STM32,)) -> Modu
     })
 
 
-def _interfaces(slug: str, names: set[str]) -> dict[str, frozenset[str]]:
+def _interfaces(
+    slug: str, names: set[str], platform: str = PLATFORM_STM32
+) -> dict[str, dict[str, frozenset[str]]]:
     """接口清单夹具（含默认配方读数列用的 LED_CHANNEL_COUNT——read 段的裸常量
-    也过判据，所以夹具必须把它算进去，否则测的就不是本意的那条守卫）。"""
-    return {slug: frozenset({"LED_CHANNEL_COUNT"} | set(names))}
+    也过判据，所以夹具必须把它算进去，否则测的就不是本意的那条守卫）。
+
+    **形状 = `{平台: {slug: 名字集}}`**（工单 05 修正）：配方文件是全平台一份，
+    校验时每段按**自己的平台**取清单——早先只传一份清单，拿 mspm0 的清单去查
+    stm32 的段，平台不对称一出现就误报（实测：mspm0 预览 400 说 stm32 的 `ax`
+    找不到）。夹具跟着契约走，否则测的不是生产侧那条路。
+    """
+    return {platform: {slug: frozenset({"LED_CHANNEL_COUNT"} | set(names))}}
 
 
 def _library_interfaces(modules: Path, manifests, platform: str) -> dict[str, frozenset[str]]:
-    """真实库的接口清单 = `hwcheck_recipe.interface_names`（含母版头）。
+    """真实库**单平台**的接口清单 = `hwcheck_recipe.interface_names`（含母版头）。
 
     测试直接调**生产侧那一个函数**（不另写一份）：口径若漂了，本文件的地板断言
     就失去意义——"测试侧独立复现"在这里是反模式（复现的那份一定会与生产侧漂）。
@@ -275,6 +279,16 @@ def _library_interfaces(modules: Path, manifests, platform: str) -> dict[str, fr
         for path in sorted(master_dir.rglob("*.h"))
     ] if master_dir.is_dir() else []
     return interface_names(manifests, modules, platform, headers)
+
+
+def _library_interfaces_all(
+    modules: Path, manifests
+) -> dict[str, dict[str, frozenset[str]]]:
+    """真实库**两个平台**的接口清单（`load_recipes` 吃的形状）。"""
+    return {
+        platform: _library_interfaces(modules, manifests, platform)
+        for platform in (PLATFORM_STM32, PLATFORM_MSPM0)
+    }
 
 
 def test_validate_accepts_calls_that_exist_in_the_module_interface():
@@ -472,9 +486,10 @@ def test_resolve_sections_is_empty_without_recipes():
 def test_render_recipe_section_marks_it_specialized_and_counts_a_verdict():
     """专精小节：标题带 [专精] 标记（与未专精件外观可区分）+ 判定记账。
 
-    ⚠ 中文字面量按 `c_string` **转义成 `\\xNN`**（ARMCC 5.06 按本地代码页解析
-    源文件，原样中文串会把收尾引号吞掉、整份 main.c 编不过）——所以断言查的是
-    转义后的写法，不是原文。这条本身就是"别改回转义"的守卫。
+    ⚠ 中文字面量按 `c_string` **转义成 ASCII 转义序列**（工单 05 起三位八进制；
+    ARMCC 5.06 按本地代码页解析源文件，原样中文串会把收尾引号吞掉、整份 main.c
+    编不过）——所以断言查的是转义后的写法，不是原文。这条本身就是"别改回转义"的
+    守卫。
     """
     section = RecipeSection(
         slug="led", platform=PLATFORM_STM32,
@@ -612,7 +627,7 @@ def test_real_library_has_a_recipe_for_every_pilot_slot(slug, platform):
     from contest_generator.library import list_modules
 
     manifests = list_modules(REAL_LIBRARY)
-    interfaces = _library_interfaces(REAL_LIBRARY, manifests, platform)
+    interfaces = _library_interfaces_all(REAL_LIBRARY, manifests)
     recipes = load_recipes(REAL_LIBRARY, manifests, interfaces)
     catalog = recipes.get(slug)
     assert catalog is not None, f"真实库缺配方：{slug}"
@@ -625,18 +640,165 @@ def test_real_library_recipes_reference_only_real_interfaces():
     """真实库整份配方都过引用校验（本单的核心守卫在真数据上跑一遍）。
 
     `load_recipes` 带 interfaces 就会校验——能读出来即证明每一条引用的函数名
-    都在对应模块对应平台的头文件里。这条同时是"配方随库演进"的守卫：模块
+    都在**对应模块对应平台**的头文件里。这条同时是"配方随库演进"的守卫：模块
     改名 / 删接口而配方没跟上，这里当场红。
+
+    两个平台的清单**一起**传（工单 05 起 `interfaces` 是按平台分开的）：这样
+    一段都不会因为"这次没给那个平台的清单"而被跳过——平台不对称（stm32 有
+    `ax` 而没有 `DMP_Init`）正是这条要挡的东西。
     """
     from contest_generator.library import list_modules
 
     manifests = list_modules(REAL_LIBRARY)
-    for platform in (PLATFORM_STM32, PLATFORM_MSPM0):
-        interfaces = _library_interfaces(REAL_LIBRARY, manifests, platform)
-        recipes = load_recipes(REAL_LIBRARY, manifests, interfaces)
-        assert recipes, "真实库应当至少有 pilot 清单那两件的配方"
-        for catalog in recipes.values():
-            assert catalog.usable
+    recipes = load_recipes(
+        REAL_LIBRARY, manifests, _library_interfaces_all(REAL_LIBRARY, manifests))
+    assert recipes, "真实库应当至少有 pilot 清单那几件的配方"
+    for catalog in recipes.values():
+        assert catalog.usable
+
+
+def _decode_like_c(escaped: str) -> bytes:
+    """按 **C 的转义规则**解码一段字面量内容 → 字节（判"编译器会读出什么"）。
+
+    这正是判据该用的量具：`\\x` 贪婪吃**所有**后续十六进制数字，八进制最多吃
+    **三位**。于是"转义写法能不能被后面的字符吃掉"这件事，由"C 读出来的字节等不
+    等于原字节"直接作证，不必去猜正则怎么写（本用例第一版就写歪过：拿
+    `\\\\[0-7]{4,}` 去judge，把合法的 `\\2612g` 判成了违规）。
+    """
+    out = bytearray()
+    index = 0
+    while index < len(escaped):
+        char = escaped[index]
+        if char != "\\":
+            out.extend(char.encode("utf-8"))
+            index += 1
+            continue
+        nxt = escaped[index + 1] if index + 1 < len(escaped) else ""
+        if nxt == "x":                       # 十六进制：贪婪吃光所有十六进制数字
+            end = index + 2
+            while end < len(escaped) and escaped[end] in "0123456789abcdefABCDEF":
+                end += 1
+            out.append(int(escaped[index + 2:end], 16) & 0xFF)
+            index = end
+            continue
+        if nxt in "01234567":                # 八进制：最多三位
+            end = index + 1
+            while (end < len(escaped) and end < index + 4
+                   and escaped[end] in "01234567"):
+                end += 1
+            out.append(int(escaped[index + 1:end], 8) & 0xFF)
+            index = end
+            continue
+        if nxt == "n":
+            out.append(0x0A)
+        elif nxt == "r":
+            out.append(0x0D)
+        elif nxt == "t":
+            out.append(0x09)
+        elif nxt in ('"', "'", "\\"):
+            out.append(ord(nxt))
+        elif nxt:
+            out.append(ord(nxt))
+        index += 2
+    return bytes(out)
+
+
+def test_escape_c_string_is_byte_exact_and_never_greedy():
+    """转义必须**逐字节还原**，而且不能被后面的字符吃掉（工单 05 的真机判例）。
+
+    `\\x` 转义贪婪地吃十六进制数字：`±2g` 的字节是 `C2 B1 32 67`，写成
+    `\\xc2\\xb12g` 就被编译器读成 `\\xb12`（一个越界转义）——ARMCC 报
+    `#27-D: character value is out of range`，学生看到的字节也不对了。所以转义
+    改用**三位八进制**（最多三位数字，天然自终止）。
+
+    判据 = 按 **C 的规则**解码转义串，结果必须与原字符串的 UTF-8 字节**逐字节
+    相等**（`_decode_like_c` 就是"编译器会读出什么"的量具）。
+    """
+    for text in ("±2g", "角度：3 轴", "通过：", "°1", "a±b", "", "量程 ±2000dps"):
+        escaped = escape_c_string(text)
+        assert all(ord(ch) < 128 for ch in escaped), escaped
+        assert _decode_like_c(escaped) == text.encode("utf-8"), (text, escaped)
+        # 贪婪判据：`\x` 后面出现第三个十六进制数字 = 会被连读（旧写法中招的形态）
+        assert not re.search(r"\\x[0-9a-fA-F]*[0-9a-fA-F]{2}[0-9a-fA-F]",
+                             escaped), escaped
+
+
+def test_parse_and_reject_the_include_segment():
+    """`include` 段：`{headers: [...]}`——只收**头文件名**（不带目录、.h 结尾）。
+
+    为什么要这个段（本单真机判例）：检测程序直接调模块函数，而框架那套固定
+    include 只覆盖通道与心跳——不声明器件模块的头，`main.c` 会报一串
+    `#223-D function declared implicitly` 与 `#20 identifier undefined`（实测
+    7 个 error）。
+    """
+    section = parse_recipes(_document((
+        "ml_mpu6050", PLATFORM_STM32,
+        _section(include={"headers": ["ml_mpu6050.h", "ml_i2c.h"]}))))[
+        "ml_mpu6050"][PLATFORM_STM32]
+    assert section.include == ("ml_mpu6050.h", "ml_i2c.h")
+    for bad in ("ml_libs/ml_mpu6050.h", "ml_mpu6050.hpp", "ml_mpu6050"):
+        with pytest.raises(HwCheckError) as exc:
+            parse_recipes(_document((
+                "ml_mpu6050", PLATFORM_STM32,
+                _section(include={"headers": [bad]}))))
+        assert "include.headers" in str(exc.value)
+
+
+def test_validate_rejects_an_include_that_is_not_in_the_library():
+    """头名写错 → 配方校验当场红；写对 → 过（判据面 = 库内 / 母版的头名清单）。
+
+    判据面刻意**不读盘**（`platform_header_names` 只吃 manifest 声明的文件名与
+    母版头路径）：真实可解析性由生成门禁的 include 解析门兜底，两处都在。
+    """
+    from contest_generator.hwcheck_recipe import (
+        platform_header_names,
+        validate_recipes,
+    )
+
+    with_header = ModuleManifest.from_dict({
+        "slug": "ml_mpu6050", "description": "测试件", "dependencies": [],
+        "platforms": {PLATFORM_STM32: {
+            "files": ["ml_libs/ml_mpu6050.h"], "verified": True,
+            "hardware_bound": False, "notes": "", "pins": []}},
+    })
+    interfaces = _interfaces("ml_mpu6050", {"MPU6050_Init"})
+    headers = {
+        PLATFORM_STM32: platform_header_names(
+            [with_header], PLATFORM_STM32, [("ml_libs/ml_i2c.h", "")])
+    }
+    assert {"ml_mpu6050.h", "ml_i2c.h"} <= headers[PLATFORM_STM32]
+
+    def _recipe(header: str):
+        return parse_recipes(_document((
+            "ml_mpu6050", PLATFORM_STM32,
+            _section(include={"headers": [header]},
+                     init={"calls": ["MPU6050_Init()"]}, init_expect=""))))
+
+    validate_recipes(
+        _recipe("ml_mpu6050.h"), [with_header], interfaces, headers)
+    validate_recipes(
+        _recipe("ml_i2c.h"), [with_header], interfaces, headers)
+    with pytest.raises(HwCheckError) as exc:
+        validate_recipes(
+            _recipe("ml_mpu0650.h"), [with_header], interfaces, headers)
+    assert "ml_mpu0650.h" in str(exc.value)
+    # 母版不可用（这次没给头名清单）= 判不了就不判，不冤枉好配方
+    validate_recipes(_recipe("ml_mpu0650.h"), [with_header], interfaces, {})
+
+
+def test_real_library_mpu6050_declares_the_headers_its_calls_need():
+    """真库那一份必须声明器件头与跨模块前置头（否则产物编不过）。
+
+    判据落在数据上：stm32 侧要 `ml_mpu6050.h`（驱动 API + extern 全局量）与
+    `ml_i2c.h`（前置 `I2C_Init` 的声明——`ml_mpu6050.h` 自己 include 了它，
+    但检测程序直接调，写出来才不依赖传递包含）；mspm0 侧要 `mpu_port.h`
+    （`DMP_Init` / `DMP_Read_Data` 的声明）。
+    """
+    catalog = _real_mpu()
+    stm32 = catalog.for_platform(PLATFORM_STM32)
+    mspm0 = catalog.for_platform(PLATFORM_MSPM0)
+    assert set(stm32.include) == {"ml_mpu6050.h", "ml_i2c.h"}, stm32.include
+    assert set(mspm0.include) == {"mpu_port.h"}, mspm0.include
 
 
 def test_real_library_led_recipe_clamps_to_channel_zero_on_mspm0():
@@ -651,8 +813,7 @@ def test_real_library_led_recipe_clamps_to_channel_zero_on_mspm0():
 
     manifests = list_modules(REAL_LIBRARY)
     recipes = load_recipes(
-        REAL_LIBRARY, manifests,
-        _library_interfaces(REAL_LIBRARY, manifests, PLATFORM_MSPM0))
+        REAL_LIBRARY, manifests, _library_interfaces_all(REAL_LIBRARY, manifests))
     mspm0 = recipes["led"].for_platform(PLATFORM_MSPM0)
     assert mspm0 is not None
     calls = " ".join(
@@ -666,3 +827,304 @@ def test_real_library_led_recipe_clamps_to_channel_zero_on_mspm0():
     # LED_YELLOW / LED_GREEN"，对整份配方做子串否定会把正确的说明判成违规。
     notes = " ".join(mspm0.note)
     assert "钳" in notes or "通道 0" in notes, notes
+
+
+# ---------------------------------------------------------------------------
+# 工单 module-hwcheck/05：局部变量声明 + extern 全局量（平台不对称的地基）
+# ---------------------------------------------------------------------------
+
+
+def test_parse_and_render_local_declarations_before_every_action():
+    """`locals` 段：声明的变量排在**所有动作之前**（探头要用它们装角度）。
+
+    为什么必须是小节级而不是塞进 `read`：mspm0 的探头本身就是
+    `DMP_Read_Data(&pitch, &roll, &yaw)`——**探头那一步就要把角度搬进变量**，
+    声明晚于它就编不过（`pitch` 未声明）。
+    """
+    section = parse_recipes(_document((
+        "ml_mpu6050", PLATFORM_MSPM0,
+        _section(
+            locals={"declarations": ["float pitch = 0", "float roll = 0"]},
+            prereq={"calls": ["some_prereq()"]},
+            init={"calls": ["DMP_Init()"]}, init_expect="0",
+            probe={"calls": ["DMP_Read_Data(&pitch, &roll)"], "expect": "0"},
+            read={"items": [{"expression": "(int)pitch", "unit": "度"}]},
+        ))))[
+        "ml_mpu6050"][PLATFORM_MSPM0]
+    assert section.locals == ("float pitch = 0", "float roll = 0")
+    code = "\n".join(render_recipe_section(section))
+    assert "    float pitch = 0;" in code
+    assert code.index("float pitch = 0;") < code.index("some_prereq();")
+    assert code.index("float pitch = 0;") < code.index("DMP_Init();")
+    assert code.index("float pitch = 0;") < code.index("DMP_Read_Data(&pitch, &roll);")
+
+
+@pytest.mark.parametrize(
+    "declaration",
+    [
+        "float a = 0, b = 0",        # 一次声明两个：名字看不全
+        "float a = some_macro()",    # 初值不是数字字面量
+        "char buf[16]",              # 数组
+        "void (*cb)(void)",          # 函数指针
+        "int",                       # 只有类型
+    ],
+)
+def test_parse_rejects_a_local_declaration_it_cannot_read_statically(declaration):
+    """`locals` 只收 `类型 名字 [= 数字]`：**名字必须能静态看出来**。
+
+    这一条不是洁癖：声明的名字要进引用校验的白名单（读数表达式里写 `pitch` 是
+    在读自己声明的变量），名字藏进 `float a = f()` 这类写法里，白名单就失灵了
+    ——要么漏判、要么把整串都放行。
+    """
+    with pytest.raises(HwCheckError) as exc:
+        parse_recipes(_document((
+            "led", PLATFORM_MSPM0,
+            _section(locals={"declarations": [declaration]}))))
+    assert "locals.declarations" in str(exc.value)
+
+
+def test_parse_rejects_a_duplicate_or_keyword_local_name():
+    """同名声明两次 / 拿 C 关键字当变量名 → 当场红（编译期才发现就太晚了）。"""
+    for declarations in (["float pitch = 0", "float pitch = 0"], ["int int = 0"]):
+        with pytest.raises(HwCheckError) as exc:
+            parse_recipes(_document((
+                "led", PLATFORM_MSPM0,
+                _section(locals={"declarations": declarations}))))
+        assert "locals.declarations" in str(exc.value)
+
+
+def test_validate_accepts_a_read_that_uses_a_declared_local():
+    """自己声明的变量可以在读数表达式里用；**拼错的类型名仍要红**。"""
+    from contest_generator.hwcheck_recipe import validate_recipes
+
+    good = parse_recipes(_document((
+        "ml_mpu6050", PLATFORM_MSPM0,
+        _section(
+            locals={"declarations": ["float pitch = 0"]},
+            init={"calls": ["DMP_Init()"]}, init_expect="0",
+            probe={"calls": ["DMP_Read_Data(&pitch)"], "expect": "0"},
+            read={"items": [{"expression": "(int)pitch", "unit": "度"}]},
+        ))))
+    validate_recipes(
+        good, [_manifest("ml_mpu6050", (PLATFORM_MSPM0,))],
+        _interfaces("ml_mpu6050", {"DMP_Init", "DMP_Read_Data"}, PLATFORM_MSPM0))
+
+    bad_type = parse_recipes(_document((
+        "ml_mpu6050", PLATFORM_MSPM0,
+        _section(locals={"declarations": ["folat pitch = 0"]}))))
+    with pytest.raises(HwCheckError) as exc:
+        validate_recipes(
+            bad_type, [_manifest("ml_mpu6050", (PLATFORM_MSPM0,))],
+            _interfaces("ml_mpu6050", {"DMP_Init"}, PLATFORM_MSPM0))
+    assert "folat" in str(exc.value)
+
+
+def test_validate_judges_each_platform_with_its_own_interface_list():
+    """**按平台分开判**（工单 05 修的一处真缺陷）：stm32 的段只按 stm32 的清单查。
+
+    复现的现场：配方一份覆盖两个平台，而两个平台的接口互不相认（stm32 有
+    `MPU6050_Read` / `ax`，mspm0 有 `DMP_Init` / `DMP_Read_Data`）。早先只传一份
+    清单 → 拿 mspm0 的清单去查 stm32 的段 → 误报"找不到 ax"，mspm0 预览直接 400。
+    """
+    from contest_generator.hwcheck_recipe import validate_recipes
+
+    recipes = parse_recipes(_document(
+        ("ml_mpu6050", PLATFORM_STM32,
+         _section(init={"calls": ["MPU6050_Init()"]}, init_expect="",
+                  probe={"calls": ["MPU6050_Read(WHO_AM_I)"], "expect": "0x68"},
+                  read={"items": [{"expression": "ax", "unit": "LSB"}]})),
+        ("ml_mpu6050", PLATFORM_MSPM0,
+         _section(locals={"declarations": ["float pitch = 0"]},
+                  init={"calls": ["DMP_Init()"]}, init_expect="0",
+                  probe={"calls": ["DMP_Read_Data(&pitch)"], "expect": "0"},
+                  read={"items": [{"expression": "(int)pitch", "unit": "度"}]})),
+    ))
+    manifests = [_manifest("ml_mpu6050", (PLATFORM_STM32, PLATFORM_MSPM0))]
+    validate_recipes(recipes, manifests, {
+        PLATFORM_STM32: {"ml_mpu6050": frozenset(
+            {"MPU6050_Init", "MPU6050_Read", "WHO_AM_I", "ax", "LED_CHANNEL_COUNT"})},
+        PLATFORM_MSPM0: {"ml_mpu6050": frozenset(
+            {"DMP_Init", "DMP_Read_Data", "LED_CHANNEL_COUNT"})},
+    })
+    # 反向：把 stm32 的段错写成 mspm0 的接口 → 仍然当场红
+    wrong = parse_recipes(_document((
+        "ml_mpu6050", PLATFORM_STM32,
+        _section(init={"calls": ["DMP_Init()"]}, init_expect="0"))))
+    with pytest.raises(HwCheckError) as exc:
+        validate_recipes(wrong, manifests, {
+            PLATFORM_STM32: {"ml_mpu6050": frozenset({"MPU6050_Init"})},
+            PLATFORM_MSPM0: {"ml_mpu6050": frozenset({"DMP_Init"})},
+        })
+    assert "DMP_Init" in str(exc.value)
+
+
+def test_interface_names_includes_extern_globals_from_module_headers(tmp_path):
+    """**模块的公开数据接口也是接口**：`extern int16_t ax, az;` 里的名字要认。
+
+    真机判例（本单）：stm32 的 `ml_mpu6050.h` 用 `extern` 暴露六轴原始值，而
+    生成门禁那套提取只收函数与宏——不补这一条，"配方读了模块头里真实存在的
+    全局量"会被判成拼错（`ax` 找不到），读数就写不出来。
+    """
+    from contest_generator.hwcheck_recipe import interface_names
+
+    modules = tmp_path / "library" / "modules"
+    slug_dir = modules / "ml_mpu6050"
+    (slug_dir / "ml_libs").mkdir(parents=True)
+    (slug_dir / "ml_libs" / "ml_mpu6050.h").write_text(
+        "#ifndef _mpu6050_h\n#define _mpu6050_h\n"
+        "struct int_param_s { int pin; };\n"
+        "extern int16_t ax, ay, az, gx, gy, gz;\n"
+        "extern const char *label;\n"
+        "extern struct int_param_s param;\n"
+        "void MPU6050_Init(void);\n"
+        "#endif\n",
+        encoding="utf-8",
+    )
+    manifest = ModuleManifest.from_dict({
+        "slug": "ml_mpu6050",
+        "description": "测试件",
+        "dependencies": [],
+        "platforms": {
+            PLATFORM_STM32: {
+                "files": ["ml_libs/ml_mpu6050.h"], "verified": True,
+                "hardware_bound": False, "notes": "", "pins": [],
+            },
+        },
+    })
+    names = interface_names([manifest], modules, PLATFORM_STM32)
+    assert {"ax", "ay", "az", "gx", "gy", "gz"} <= names["ml_mpu6050"]
+    assert "label" in names["ml_mpu6050"]
+    # 结构体标签名不是变量名（`extern struct int_param_s param;` 里 `param` 才是）
+    assert "int_param_s" not in names["ml_mpu6050"]
+    assert "param" in names["ml_mpu6050"]
+    assert "MPU6050_Init" in names["ml_mpu6050"]
+
+
+def test_validate_covers_the_prereq_segment_across_modules():
+    """前置调用（工单 05 起纳入判据）：**可以来自别的模块 / 母版**，但必须真存在。
+
+    stm32 侧的现场：`ml_mpu6050` 要先调母版的 `I2C_Init()` 初始化软 I2C 总线
+    （它自己不初始化），而 `I2C_Init` 是 ml_i2c 的接口、不在本模块的头里——
+    所以判据面取"该平台库内任何模块 ∪ 母版"的并集。
+    """
+    from contest_generator.hwcheck_recipe import validate_recipes
+
+    recipes = parse_recipes(_document((
+        "ml_mpu6050", PLATFORM_STM32,
+        _section(prereq={"calls": ["I2C_Init()"]},
+                 init={"calls": ["MPU6050_Init()"]}, init_expect=""))))
+    manifests = [_manifest("ml_mpu6050"), _manifest("other")]
+    validate_recipes(recipes, manifests, {
+        PLATFORM_STM32: {
+            "ml_mpu6050": frozenset({"MPU6050_Init", "LED_CHANNEL_COUNT"}),
+            "other": frozenset({"I2C_Init"}),      # 别的模块提供的
+        },
+    })
+    typos = parse_recipes(_document((
+        "ml_mpu6050", PLATFORM_STM32,
+        _section(prereq={"calls": ["I2C_Initt()"]},
+                 init={"calls": ["MPU6050_Init()"]}, init_expect=""))))
+    with pytest.raises(HwCheckError) as exc:
+        validate_recipes(typos, manifests, {
+            PLATFORM_STM32: {
+                "ml_mpu6050": frozenset({"MPU6050_Init", "LED_CHANNEL_COUNT"}),
+                "other": frozenset({"I2C_Init"}),
+            },
+        })
+    assert "I2C_Initt" in str(exc.value)
+
+
+# ---------------------------------------------------------------------------
+# 工单 05：真实库的 MPU6050 配方把平台不对称如实讲清楚
+# ---------------------------------------------------------------------------
+
+
+def _real_mpu():
+    from contest_generator.library import list_modules
+
+    manifests = list_modules(REAL_LIBRARY)
+    recipes = load_recipes(
+        REAL_LIBRARY, manifests, _library_interfaces_all(REAL_LIBRARY, manifests))
+    return recipes["ml_mpu6050"]
+
+
+def test_real_library_mpu6050_recipes_pass_the_reference_guard():
+    """真库那一份能读出来 = 每条引用的名字都在**对应平台**的头文件里。
+
+    这条是本单的核心守卫在真数据上的落点：stm32 侧写 `ax` / `WHO_AM_I`，mspm0
+    侧写 `DMP_Init` / `DMP_Read_Data`——任何一处拼错，`load_recipes` 当场红。
+    """
+    catalog = _real_mpu()
+    assert catalog.for_platform(PLATFORM_STM32) is not None
+    assert catalog.for_platform(PLATFORM_MSPM0) is not None
+
+
+def test_real_library_mpu6050_stm32_judges_comm_and_shows_raw_axes_only():
+    """stm32：**自己带探头**判通信 + 只显示原始六轴（**不给角度**）。
+
+    票面两条硬要求：① 探头自证（不信驱动的初始化返回值——库里这份 stm32 驱动
+    不做身份校验、通信失败也照样往下写寄存器）：读 WHO_AM_I 比对 0x68；
+    ② 前端与产出的注释都要写明"本平台没有姿态解算"，避免学生把"显示不了角度"
+    误判成"我接错了"。
+    """
+    stm32 = _real_mpu().for_platform(PLATFORM_STM32)
+    assert stm32 is not None
+    # ① 前置调用：既有驱动不初始化总线，检测程序必须先起软 I2C
+    assert any("I2C_Init" in call for call in stm32.prereq), stm32.prereq
+    # ② 探头：寄存器读身份，比对期望值（期望值落在渲染出的比较式里）
+    assert stm32.probe is not None
+    assert stm32.probe.expect == "0x68"
+    assert any("WHO_AM_I" in call for call in stm32.probe.calls), stm32.probe.calls
+    # ③ 读数 = 原始六轴（驱动的 extern 全局量），**没有**角度
+    read = [item.expression for item in stm32.read]
+    assert read == ["ax", "ay", "az", "gx", "gy", "gz"], read
+    assert stm32.init_expect == "", "MPU6050_Init() 是 void，不许编一个期望值"
+    notes = " ".join(stm32.note)
+    assert "没有姿态解算" in notes
+    assert "jy61p" in notes or "imu_uart" in notes, "要给出改姿态模块的出路"
+
+
+def test_real_library_mpu6050_mspm0_shows_dmp_angles_split_into_integers():
+    """mspm0：官方 DMP 出 pitch / roll / yaw，且**没浮点显示接口**→ 拆整数 / 小数。
+
+    判据落在数据上：`locals` 声明三个 float（探头要把角度搬进去）、探头就是
+    `DMP_Read_Data(&pitch, &roll, &yaw)`（既证通信通、又取到数据）、每条读数
+    都是**整数表达式**（渲染走 `hwcheck_report_int`）。
+    """
+    mspm0 = _real_mpu().for_platform(PLATFORM_MSPM0)
+    assert mspm0 is not None
+    assert mspm0.locals == ("float pitch = 0", "float roll = 0", "float yaw = 0")
+    assert mspm0.init_expect == "0"          # DMP_Init 的返回值是板上判定入口之一
+    assert mspm0.probe is not None
+    assert mspm0.probe.expect == "0"         # 探头：真的从 FIFO 读回一帧
+    assert any("DMP_Read_Data" in call for call in mspm0.probe.calls)
+    read = [item.expression for item in mspm0.read]
+    # 三个角度 × （整数部分 + 小数第一位）
+    assert len(read) == 6, read
+    for angle in ("pitch", "roll", "yaw"):
+        assert f"(int){angle}" in read, (angle, read)
+        assert f"(int)(({angle} - (int){angle}) * 10)" in read, (angle, read)
+    notes = " ".join(mspm0.note)
+    assert "没有浮点显示接口" in notes
+    assert "拼起来" in notes or "拼起来看" in notes, "拆开显示必须说清怎么读"
+    assert "SysTick" in notes, "DMP 端口自开 SysTick 中断这件事要如实写在页面上"
+    # 第③层「只回显 + 给正常范围参考」（spec 判据三层）也要落在这一侧：
+    # 没给参考的话，"角度显示得对不对"学生无从判断（stm32 侧给了 LSB 换算）。
+    assert "静止" in notes and "≈ 0" in notes, "要给「静止时角度应≈0」的参考"
+    assert "漂移" in notes, "yaw 漂移是这套 DMP 的物理事实，要说清不是坏了"
+
+
+def test_real_library_platform_asymmetry_is_visible_on_both_sides():
+    """**平台不对称如实呈现**（spec）：两边都要说清"这一侧有什么、没有什么"。
+
+    mspm0 侧要说"与 stm32 不同（那边只有原始六轴）"；stm32 侧要说"没有姿态
+    解算、要角度去 mspm0 或用串口姿态模块"。只在一侧写，另一侧的用户就会把
+    "能力缺失"读成"自己接错了"。
+    """
+    catalog = _real_mpu()
+    stm32_notes = " ".join(catalog.for_platform(PLATFORM_STM32).note)
+    mspm0_notes = " ".join(catalog.for_platform(PLATFORM_MSPM0).note)
+    assert "没有姿态解算" in stm32_notes
+    assert "原始六轴" in stm32_notes
+    assert "DMP" in mspm0_notes
+    assert "原始六轴" in mspm0_notes, "mspm0 侧也要点明与 stm32 的差别"

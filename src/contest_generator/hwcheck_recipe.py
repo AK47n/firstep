@@ -69,7 +69,11 @@ __all__ = [
     "escape_c_string",
     "interface_names",
     "load_recipes",
+    "local_names",
+    "parse_includes",
+    "parse_locals",
     "parse_recipes",
+    "platform_header_names",
     "recipe_library_path",
     "render_recipe_section",
     "render_recipe_summary",
@@ -85,11 +89,15 @@ RECIPE_FILENAME = "hwcheck_recipes.json"
 # 由工单 07 的通用降级渲染，标题不带这个标记——改标记只改这一处。
 SECTION_TAG = "[专精]"
 
-# 六段（spec 定义）。缺段 = 该件不支持该项，一律合法；全缺 = 空壳（不合法）。
-_SEGMENTS = ("prereq", "init", "probe", "read", "console", "note")
+# 六段（spec 定义）+ 工单 05 补的两项：`locals`（局部变量声明，见
+# RecipeSection.locals）与 `include`（这一节的调用要 include 哪些头文件，见
+# RecipeSection.include）。缺段 = 该件不支持该项，一律合法；全缺 = 空壳。
+_SEGMENTS = ("include", "locals", "prereq", "init", "probe", "read", "console", "note")
 
 # 段 → 中文名（报错文案里点名"哪一段"，用学生看得懂的说法）
 _SEGMENT_NAMES = {
+    "include": "头文件",
+    "locals": "局部变量声明",
     "prereq": "前置调用",
     "init": "初始化",
     "probe": "通信探头",
@@ -147,10 +155,36 @@ class RecipeSection:
     """一件器件在一个平台上的检测小节（配方解析后的形态）。
 
     渲染只读这些字段（`render_recipe_section`）；`source` 只作报错时指路。
+
+    字段顺序按 `_SEGMENTS`（`include` 在最前，渲染时也是先 include 再声明再动作）。
+    工单 05 补的两个字段：
+
+    `include` ＝ **这一节的调用要 include 哪些头文件**（`ml_mpu6050.h` /
+    `mpu_port.h` / `ml_i2c.h`）。为什么放在配方而不是让框架自己推：① 检测程序
+    （它就是"应用"）直接调模块函数，而框架那套固定 include 只覆盖通道与心跳
+    （led / delay / oled / debug_uart）——器件模块一个都不在里面，真机口径下
+    `main.c` 会报一串 `#223-D function declared implicitly` 与
+    `#20 identifier undefined`（本单实测 7 error）；② 前置调用天生跨模块
+    （stm32 侧要先调母版 `I2C_Init()`，头在 `ml_i2c.h`），从"本件的清单"推不出
+    另一个模块的头；③ 哪些头是这一节真正的依赖，写配方的人知道，从 `files`
+    里"全收 .h"是猜（会把 DMP 固件表之类无关头一起拉进 main.c）。
+
+    `locals` ＝ **这一节自己要声明的局部变量**，每条是一句 C 声明
+    （`float pitch = 0`）。为什么它必须是**小节级**而不是放进 `read` 段：
+    声明的作用域要盖住 `probe`——mspm0 的官方 DMP 探头本身就是
+    `DMP_Read_Data(&pitch, &roll, &yaw)`（既证通信通、又把角度搬进变量），
+    变量得先声明出来才读得回来。渲染时它们排在最前面（紧跟 `int r;`）。
+
+    这一项也是"配方写 C"这条既定决策的延续（同 spec「调用什么写成 C 表达式
+    字符串」的理由）：结构化描述只会重新发明一遍 C 的声明语义。判据刻意窄——
+    只认 `类型 名字 [= 数字]` 形的声明（`parse_locals`），名字因此能被静态看出来
+    并进引用校验的白名单。
     """
 
     slug: str
     platform: str
+    include: tuple[str, ...] = ()
+    locals: tuple[str, ...] = ()
     prereq: tuple[str, ...] = ()
     init: tuple[str, ...] = ()
     init_expect: str = ""
@@ -233,6 +267,127 @@ def _segment_strings(
     return tuple(out)
 
 
+# 局部变量声明的**形状**（工单 05）：`类型 名字` 或 `类型 名字 = 数字字面量`。
+# 判据刻意窄——多词类型（`unsigned int` / `const float`）收，一次声明多个变量
+# （`float a = 0, b = 0`）、数组、函数指针、带副作用的初始化式**一律不收**：
+# 名字必须能静态看出来（它要进引用校验的白名单），这一点比"什么 C 都写得下"重要。
+# **类型与名字之间必须是空白**（`\s+`，不是 `\s*`）：放宽成 `\s*` 的话裸类型串
+# `"int"` 会被拆成类型 `i` + 名字 `nt`——"只有类型、忘了写名字"这种手滑就漏过去了。
+_LOCAL_DECL_RE = re.compile(
+    r"^(?P<type>[A-Za-z_][\w\s]*?)\s+\*?\s*(?P<name>[A-Za-z_]\w*)"
+    r"(?:\s*=\s*(?P<init>[^;]+?))?\s*$"
+)
+
+
+def parse_locals(
+    segment: Any, where: str, *, field: str = "locals.declarations"
+) -> tuple[str, ...]:
+    """`locals` 段 → 声明字符串元组（纯函数；形状判据，类型是不是真类型归校验）。
+
+    `{declarations: ["float pitch = 0", …]}`；缺段 = 这一件不需要自己声明变量。
+    """
+    declarations = _segment_strings(segment, "declarations", where, field=field)
+    seen: set[str] = set()
+    for declaration in declarations:
+        match = _LOCAL_DECL_RE.match(declaration)
+        if match is None:
+            raise HwCheckError(
+                f"{where}的 {field} 只收 `类型 名字` 或 `类型 名字 = 数字` 形的声明"
+                f"（一次声明一个变量、初值只能是数字字面量），收到 {declaration!r}"
+                f"——判据要能静态看出变量名，它进引用校验的白名单"
+            )
+        name = match.group("name")
+        if name in _C_KEYWORDS:
+            raise HwCheckError(
+                f"{where}的 {field} 里 {declaration!r} 的变量名 {name!r} 是 C 关键字"
+            )
+        if name in seen:
+            raise HwCheckError(
+                f"{where}的 {field} 里 {name!r} 声明了两次"
+                "（同一节里重复声明同名变量，编译期才会发现）"
+            )
+        init = (match.group("init") or "").strip()
+        if init and not _is_literal(init):
+            raise HwCheckError(
+                f"{where}的 {field} 里 {declaration!r} 的初值必须是数字字面量，"
+                f"收到 {init!r}（初值写别的会把名字藏进表达式里，白名单就失灵了）"
+            )
+        seen.add(name)
+    return declarations
+
+
+def local_names(declarations: Sequence[str]) -> frozenset[str]:
+    """声明字符串 → 变量名集合（引用校验用；形状已由 `parse_locals` 判过）。"""
+    out: set[str] = set()
+    for declaration in declarations:
+        match = _LOCAL_DECL_RE.match(declaration)
+        if match is not None:
+            out.add(match.group("name"))
+    return frozenset(out)
+
+
+def local_type_names(declarations: Sequence[str]) -> tuple[str, ...]:
+    """声明字符串里出现的**类型词**（`unsigned int v` → `unsigned`/`int`）——校验用。"""
+    out: list[str] = []
+    for declaration in declarations:
+        match = _LOCAL_DECL_RE.match(declaration)
+        if match is None:
+            continue
+        for word in _IDENT_RE.findall(match.group("type")):
+            if word not in out:
+                out.append(word)
+    return tuple(out)
+
+
+def parse_includes(
+    segment: Any, where: str, *, field: str = "include.headers"
+) -> tuple[str, ...]:
+    """`include` 段 → 头文件名元组（纯函数；形状判据，能否解析归引用校验）。
+
+    `{headers: ["ml_mpu6050.h", …]}`；缺段 = 这一节只靠框架那套固定 include
+    （如 led / oled：它们由 led_instances.h / headfile.h 覆盖）。
+    """
+    headers = _segment_strings(segment, "headers", where, field=field)
+    for header in headers:
+        if not header.endswith(".h") or "/" in header or "\\" in header:
+            raise HwCheckError(
+                f"{where}的 {field} 只收**头文件名**（形如 `ml_mpu6050.h`，不带"
+                f"目录、必须以 .h 结尾），收到 {header!r}"
+                "——include 路径由工程的 IncludePath 决定，配方不指定目录"
+            )
+    return headers
+
+
+def platform_header_names(
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+    master_headers: Sequence[tuple[str, str]] = (),
+) -> frozenset[str]:
+    """该平台工程里**可能出现的头文件名**（小写基名）——`include` 段的判据面。
+
+    两份来源，与生成门禁的 include 解析门（`generator._check_unresolved_includes`）
+    **方向一致、口径不同**：门禁问的是"这个 include 在**建出来的那个工程**里解析
+    得到吗"（own_dir 兄弟头 ∪ 模块目录 ∪ 搜索目录 ∪ 豁免），这里问的是"库 / 母版
+    声明过这个名字吗"（不读盘，只看 manifest 的 files 与母版头的路径）——
+    ① 库内每个模块该平台条目声明的 `.h` 基名；② 母版树的 `.h` 基名。
+
+    这条宽松（只看声明）是刻意的：真实可解析性由生成门禁兜底
+    （`UnresolvedIncludeError`，中文点名那个头），两处都在，判错的方向才安全。
+    """
+    names: set[str] = set()
+    for manifest in manifests:
+        entry = manifest.platforms.get(platform)
+        if entry is None:
+            continue
+        for rel in entry.files:
+            if rel.lower().endswith(".h"):
+                names.add(Path(rel).name.lower())
+    for rel, _text in master_headers:
+        if rel.lower().endswith(".h"):
+            names.add(Path(rel).name.lower())
+    return frozenset(names)
+
+
 def _parse_read(where: str, raw: Any) -> tuple[RecipeRead, ...]:
     """读数展示段：`{expressions: [...]}` 或 `{items: [{expression, unit}…]}`。
 
@@ -291,6 +446,12 @@ def _parse_section(slug: str, platform: str, data: Any, source: str) -> RecipeSe
             + f"（合法段：{'、'.join(_SEGMENTS)}）"
         )
     where = _where(slug, platform, "", source)
+    include = parse_includes(
+        data.get("include"), f"{where}的头文件段", field="include.headers")
+    locals_ = parse_locals(
+        data.get("locals"), f"{where}的局部变量声明段",
+        field="locals.declarations",
+    )
     prereq = _segment_strings(
         data.get("prereq"), "calls", f"{where}的前置调用段", field="prereq.calls")
     init = _segment_strings(
@@ -365,14 +526,16 @@ def _parse_section(slug: str, platform: str, data: Any, source: str) -> RecipeSe
         console = RecipeConsole(command=command, description=description)
 
     section = RecipeSection(
-        slug=slug, platform=platform, prereq=prereq, init=init,
+        slug=slug, platform=platform, include=include, locals=locals_,
+        prereq=prereq, init=init,
         init_expect=init_expect, probe=probe, read=read, console=console,
         note=note, source=source,
     )
     if not section.usable:
         raise HwCheckError(
-            f"{where}的六段全空：空壳配方不是「专精」——它会让学生以为这件被测过。"
-            "要么补齐六段里至少一段，要么把这一条删掉（那件走通用降级）"
+            f"{where}各段全空：空壳配方不是「专精」——它会让学生以为这件被测过。"
+            "要么补齐至少一段（局部变量声明不算动作），要么把这一条删掉"
+            "（那件走通用降级）"
         )
     return section
 
@@ -413,15 +576,22 @@ def parse_recipes(data: Any, *, source: str = "") -> dict[str, dict[str, RecipeS
 
 
 def _calls_in(expression: str) -> tuple[str, ...]:
-    """C 表达式里出现的调用名（**小写或下划线开头**的标识符紧跟 `(`）。
+    """C 表达式里出现的调用名：**紧跟 `(` 的标识符**（大小写都算，关键字除外）。
 
-    判据刻意窄一点：类型转换（`(uint8_t)x`）与全大写宏名不算"调用"——它们在
-    接口清单里通常是 `#define`，由 `_bare_names` 那条更宽的路径覆盖。
+    ⚠ **大小写都收是工单 05 修的漏洞**（原先只收小写/下划线开头）。当时的理由是
+    "全大写多半是 `#define`（类型转换 / 通道宏）"——但那个假设漏掉了最要命的
+    一类：**官方库的函数就是大写开头的**（`DMP_Init` / `DMP_Read_Data` /
+    `MPU6050_Read` / `OLED_Init`）。于是本单的核心配方里，探头的那个调用名
+    **压根没过判据**——拼错一个字母也不会红，正是本单要防的"看着测了其实没测"。
+    判据改成"形式"而不是"大小写"：**标识符紧跟 `(`** 才算调用，
+    `(uint8_t)x` 这种强制转换（后面是 `)`）与裸宏名照旧不算。
+
+    另跳过 C 关键字：`sizeof(x)` / `(int)(x)` 这类是语言构造，不在任何头文件里。
     """
     out: list[str] = []
     for match in _IDENT_RE.finditer(expression):
         name = match.group(0)
-        if not (name[0].islower() or name[0] == "_"):
+        if name in _C_KEYWORDS:
             continue
         if expression[match.end():match.end() + 1] == "(" and name not in out:
             out.append(name)
@@ -463,6 +633,50 @@ def _define_names(headers: Sequence[tuple[str, str]]) -> frozenset[str]:
     return frozenset(out)
 
 
+# `extern` 声明（到分号为止）——模块的**公开数据接口**也是接口。
+_EXTERN_DECL_RE = re.compile(r"\bextern\b([^;{}]*);", re.MULTILINE)
+
+# 声明里不是变量名的词：类型 / 限定词 / 存储类。判据刻意窄（只列这几类 + 下方
+# `struct`/`union`/`enum` 后的标签名）：多收的仍是头文件里真实写过的标识符，
+# 风险方向与 `_define_names` 一致——**宁可多认，不可冤枉真实存在的名字**。
+_C_TYPE_WORDS = frozenset({
+    "const", "volatile", "static", "extern", "register", "auto", "unsigned",
+    "signed", "char", "short", "int", "long", "float", "double", "void",
+    "struct", "union", "enum", "inline",
+})
+_TAG_INTRO_WORDS = frozenset({"struct", "union", "enum"})
+
+
+def _extern_names(headers: Sequence[tuple[str, str]]) -> frozenset[str]:
+    """头文件里 `extern` 声明的**全局量名**——配方读数会写它们。
+
+    为什么必须有这条：`ml_mpu6050.h` 用 `extern int16_t ax, ay, az, gx, gy, gz;`
+    把六轴原始值暴露给调用方（驱动 `MPU6050_GetData()` 的产出就在这几个全局量
+    里），而生成门禁那套提取（`skeleton.extract_header_functions`）只收函数与
+    宏——不补这一条，"配方引用了一个头文件里真实存在的全局量"会被判成拼错
+    （本单实测：诊断报 `ax` 找不到，而它就在模块头里）。
+
+    与 `_define_names` 同款：这是**配方侧的补充清单**，不动生成门禁共用的那个
+    提取函数（改它会牵动门禁判据）。
+    """
+    out: set[str] = set()
+    for _rel, text in headers:
+        for body in _EXTERN_DECL_RE.findall(text):
+            names = _IDENT_RE.findall(body)
+            skip_next = False
+            for name in names:
+                if skip_next:
+                    skip_next = False          # `struct int_param_s` 的标签名
+                    continue
+                if name in _TAG_INTRO_WORDS:
+                    skip_next = True
+                    continue
+                if name in _C_TYPE_WORDS or name.endswith("_t"):
+                    continue
+                out.add(name)
+    return frozenset(out)
+
+
 def _is_literal(expect: str) -> bool:
     return bool(_NUMBER_RE.match(expect))
 
@@ -472,7 +686,7 @@ _C_ESCAPES = {"\\": "\\\\", '"': '\\"'}
 
 
 def escape_c_string(text: str) -> str:
-    """C 字符串字面量内容 → **纯 ASCII** 源码写法（非 ASCII 一律 `\\xNN` 转义）。
+    """C 字符串字面量内容 → **纯 ASCII** 源码写法（非 ASCII 一律转义）。
 
     ## 为什么必须转义（工单 module-hwcheck/04 的真机判例，别改成原样输出）
 
@@ -487,11 +701,23 @@ def escape_c_string(text: str) -> str:
 
     * 给工程加 `--locale=english` 编译开关 → 0 error（但要改**母版工程**的
       编译选项，那是跨平台共享面）；
-    * **把非 ASCII 转义成 UTF-8 字节** → 0 error，源码纯 ASCII、产出的字节与
-      原文逐字节相等（本函数）。
+    * **把非 ASCII 转义成 ASCII 转义序列** → 0 error，编译出的字节与原文逐字节
+      相等（本函数）。
 
     取后者：不动母版、不依赖任何编译器的本地化设置，上网后学生看到的还是同一个
     字（串口按 UTF-8 解就是中文）。转义只换写法，不改字。
+
+    ## ⚠ 为什么是**三位八进制**而不是 `\\xNN`（工单 module-hwcheck/05 的真机判例）
+
+    `\\x` 转义会**贪婪地吃十六进制数字**：`±2g` 的字节序列是 `C2 B1 32 67`，
+    写成 `\\xc2\\xb12g` 后编译器把 `\\xb12` 读成**一个**转义（0xB12 越界）——
+    ARMCC 报 `#27-D: character value is out of range`，学生看到的字节也就不对了。
+    凡是"非 ASCII 字节后面紧跟 `0-9a-f`"的文案都会中招（`±2g` / `°1` / 「3 轴」
+    这类读数单位最容易）。
+
+    八进制转义**最多三位数字**，天然自终止：`\\302\\261` 后面跟 `2g` 谁也不会
+    连读。仍然只换写法（编译出的字节与原文逐字节相等），只是不再看后续字符的
+    脸色。
     """
     out: list[str] = []
     for char in text:
@@ -500,7 +726,8 @@ def escape_c_string(text: str) -> str:
         elif ord(char) < 128:
             out.append(char)
         else:
-            out.extend(f"\\x{byte:02x}" for byte in char.encode("utf-8"))
+            # 三位八进制（字节 ≥ 0x80 时 `:03o` 恰好是三位，自终止）
+            out.extend(f"\\{byte:03o}" for byte in char.encode("utf-8"))
     return "".join(out)
 
 
@@ -512,20 +739,32 @@ def c_string(text: str) -> str:
 def validate_recipes(
     recipes: Mapping[str, Mapping[str, RecipeSection]],
     manifests: Sequence[ModuleManifest],
-    interfaces: Mapping[str, frozenset[str] | set[str]],
+    interfaces: Mapping[str, Mapping[str, frozenset[str] | set[str]]],
+    headers: Mapping[str, frozenset[str] | set[str]] | None = None,
 ) -> None:
     """引用校验（**本单的核心守卫**）：键必须是库内 slug、必须有该平台条目、
     引用的函数名必须在该模块该平台的头文件接口清单内。任一不满足 → 中文大声失败。
 
-    `interfaces` = `{slug: 该模块该平台头文件里的名字集合}`（函数 + 函数式宏，
-    与生成门禁同一份提取：`skeleton.extract_header_functions`；由
-    `interface_names` 装配）。两条刻意的宽免：
+    `interfaces` = **按平台分开**的接口清单：`{平台: {slug: 该模块该平台头文件里的
+    名字集合}}`（函数 + 函数式宏 + 对象宏 + extern 全局量，与生成门禁同一份提取：
+    `skeleton.extract_header_functions`；由 `interface_names` 逐平台装配）。
 
-    * **接口集为空的 slug 不判**——`files: []` 的平台条目（实现内嵌母版）
-      在拿不到母版头时清单为空（如只用模块库、没配母版库的场景）。此时判不了，
-      就不假装判过、也不冤枉好配方（真实库装配点会并进母版头，判据完整）；
-    * **`prereq` 段不过这道判据**——见 `RecipeSection.prereq` 的说明（跨模块
-      占位调用归工单 05）。
+    ⚠ **为什么必须按平台分开**（工单 05 修的一处真缺陷）：同一件在两个平台上的
+    接口本来就不一样——`ml_mpu6050` 的 stm32 侧有 `MPU6050_Read` / `ax`，mspm0 侧
+    有 `DMP_Init` / `DMP_Read_Data`，两边互不相认。早先只传一份清单，于是"用
+    mspm0 的清单去查 stm32 的配方段"——平台不对称一出现就误报（实测：mspm0 预览
+    400 说 stm32 的 `ax` 找不到）。现在**每段按自己的平台取清单**。
+
+    两条刻意的宽免：
+
+    * **该段拿不到接口集就不判**——`files: []` 的平台条目（实现内嵌母版）在拿不到
+      母版头时清单为空（如只用模块库、没配母版库的场景），或调用方这次没给那个
+      平台的清单。判不了就不假装判过、也不冤枉好配方（真实库装配点两个平台都给）；
+    * **`prereq` 段按"该平台库内任何模块的接口"判，不是只按本件**（工单 05 定：
+      前置调用天生是跨模块的——stm32 侧 `ml_mpu6050` 要先调母版的 `I2C_Init()`
+      初始化软 I2C 总线，那是 ml_i2c 的接口，本件自己一个字都不声明）。
+      判据取"本件 ∪ 该平台库内全部模块 ∪ 母版"的并集：既拦得住拼错的名字，
+      又不会把"另一个模块提供的初始化"当成非法。
     """
     by_slug = {manifest.slug: manifest for manifest in manifests}
     for slug, platforms in recipes.items():
@@ -542,12 +781,41 @@ def validate_recipes(
                     f"{RECIPE_FILENAME} 里 {slug!r} 写了 {platform} 的配方，"
                     f"但该模块没有 {platform} 平台条目"
                 )
-            known = set(interfaces.get(slug, frozenset()))
+            platform_names = interfaces.get(platform) or {}
+            known = set(platform_names.get(slug, frozenset()))
             if not known:
-                # 这个 slug 拿不到任何接口（模块实现内嵌母版 + 调用方没给母版头）
-                # ——判不了就不判，不冤枉好配方、也不放过有清单的（真实库装配点
-                # 会并进母版头，那条路上判据是完整的）。
+                # 这个 slug 在该平台拿不到任何接口（模块实现内嵌母版 + 调用方没给
+                # 母版头 / 这次没给这个平台的清单）——判不了就不判，不冤枉好配方、
+                # 也不放过有清单的（真实库装配点两个平台都给，那条路上判据完整）。
                 continue
+            # 前置调用的判据面：该平台库内**任何**模块 ∪ 母版（跨模块前置调用天生如此）
+            library_wide: set[str] = set()
+            for names in platform_names.values():
+                library_wide |= set(names)
+            # include 段的判据面（工单 05）：该平台工程里可能出现的头文件名
+            platform_headers = headers.get(platform) if headers is not None else None
+            if platform_headers:
+                for header in section.include:
+                    if header.lower() in platform_headers:
+                        continue
+                    raise HwCheckError(
+                        f"{_where(slug, platform, 'include', section.source)}"
+                        f"引用了库内 / 母版里都没有的头文件 {header!r}"
+                        "——头名写错会在生成时被 include 解析门拦下（那里也点名），"
+                        "但配方是人写的库内数据，写错就该在配方校验这一层当场红"
+                    )
+            # 这一节自己声明的局部变量（工单 05）：名字进白名单（读数表达式里写
+            # `pitch` 是在读自己声明的变量），**类型词仍要过判据**——`folat pitch`
+            # 这种手滑不该漏到编译期。
+            known |= local_names(section.locals)
+            for word in local_type_names(section.locals):
+                if word in _C_KEYWORDS or word in known:
+                    continue
+                raise HwCheckError(
+                    f"{_where(slug, platform, 'locals', section.source)}里"
+                    f"局部变量声明的类型 {word!r} 既不是 C 关键字、也不在该模块 "
+                    f"{platform} 侧的接口清单里（拼错的类型名会在这里被拦下）"
+                )
             for segment, expressions in (
                 ("init", section.init),
                 # 读数表达式整条过判据（不只是"像调用"的部分）：裸常量同样要
@@ -592,14 +860,28 @@ def validate_recipes(
                             f" expect 期望值 {expect!r} 既不是数字字面量、也不是"
                             f"该模块接口清单里的常量（未找到 {name!r}）"
                         )
+            # 前置调用（工单 05 起纳入判据）：只按调用名查，判据面 = 库内任何模块
+            # ∪ 母版（跨模块前置调用天生如此，见 docstring）。写在最后：前面几段
+            # 的报错更具体，先报它们。
+            for expression in section.prereq:
+                for name in _calls_in(expression):
+                    if name in library_wide:
+                        continue
+                    raise HwCheckError(
+                        f"{_where(slug, platform, 'prereq', section.source)}"
+                        f"引用了库内找不到的前置调用 {name!r}（表达式：{expression}）"
+                        "——前置调用可以是别的模块 / 母版提供的（如 stm32 侧先调"
+                        " I2C_Init() 初始化软 I2C 总线），但它必须真在库内存在"
+                    )
 
 
 def load_recipes(
     module_library_dir: Path | str,
     manifests: Sequence[ModuleManifest],
-    interfaces: Mapping[str, frozenset[str] | set[str]] | None = None,
+    interfaces: Mapping[str, Mapping[str, frozenset[str] | set[str]]] | None = None,
     *,
     recipe_path: Path | str | None = None,
+    headers: Mapping[str, frozenset[str] | set[str]] | None = None,
 ) -> dict[str, RecipeCatalog]:
     """读库内配方文件 → 校验 → `{slug: RecipeCatalog}`。
 
@@ -610,7 +892,9 @@ def load_recipes(
     * 正常 → 逐条 RecipeSection，按 slug 归成目录。
 
     `interfaces` 缺省 = 只判形状不查函数名（文档 / 探针脚本够用）；检测页与
-    生成侧**必须**传（那是本单的守卫）。
+    生成侧**必须**传（那是本单的守卫）。形状 = `{平台: {slug: 名字集合}}`
+    （`interface_names` 逐平台装配后自己套上平台键）——**按平台分开**是硬要求，
+    见 `validate_recipes` 的说明：两个平台的接口互不相认，混在一起会误报。
 
     `recipe_path` 缺省 = 按库根推（`recipe_library_path`）；显式给 = 读另一个
     文件（测试注入坏配方时用——**不改真库的那一份**，并行跑用例才不会被别的
@@ -634,7 +918,7 @@ def load_recipes(
         ) from exc
     parsed = parse_recipes(data, source=source)
     if interfaces is not None:
-        validate_recipes(parsed, manifests, interfaces)
+        validate_recipes(parsed, manifests, interfaces, headers)
     return {
         slug: RecipeCatalog(slug=slug, sections=sections)
         for slug, sections in parsed.items()
@@ -668,6 +952,10 @@ def interface_names(
     另并入**对象宏名**（`#define LED_CHANNEL_COUNT 3` 这种，`_define_names`）：
     生成门禁的提取只收「类函数宏 + 带类型的声明」，而配方读数里最自然的写法的
     恰恰是对象宏——不并进来，"写了一个真实存在的常量"会被误判成拼错。
+
+    再并入 **`extern` 全局量名**（`extern int16_t ax, ay, az;`，`_extern_names`，
+    工单 05）：模块的公开**数据**接口同样是接口——stm32 的 `ml_mpu6050` 把六轴
+    原始值放在 extern 全局量里，配额不认它们，读数就写不出来。
     """
     from .skeleton import extract_header_functions, format_interface_blocks
 
@@ -677,7 +965,7 @@ def interface_names(
                 [("母版", rel, text) for rel, text in master_headers]
             )
         )
-    ) | _define_names(list(master_headers))
+    ) | _define_names(list(master_headers)) | _extern_names(list(master_headers))
     library = Path(module_library_dir)
     out: dict[str, frozenset[str]] = {}
     for manifest in manifests:
@@ -698,6 +986,7 @@ def interface_names(
             frozenset(extract_header_functions(format_interface_blocks(headers)))
             | master_names
             | _define_names([(rel, text) for _slug, rel, text in headers])
+            | _extern_names([(rel, text) for _slug, rel, text in headers])
         )
     return out
 
@@ -760,8 +1049,8 @@ def render_recipe_section(
     """一件器件的检测小节 → 缩进好的 C 语句（纯函数，可逐字断言）。
 
     形态（确定性）：注释块（哪一件 / 平台说明 / 专精声明）→ 小节头
-    `hwcheck_section` → 前置调用 → 初始化 → 通信探头 → 读数回显 → 判定记账
-    （`hwcheck_verdict*`，结尾汇总数得出来"真测了几件"）。
+    `hwcheck_section` → 局部变量声明 → 前置调用 → 初始化 → 通信探头 → 读数回显
+    → 判定记账（`hwcheck_verdict*`，结尾汇总数得出来"真测了几件"）。
 
     **两级判定**（spec 判据三层里的第②层；判定都在板上算）：
 
@@ -773,13 +1062,15 @@ def render_recipe_section(
       **不算通过**。`probe.calls` 允许只做动作、不带期望值（如让 OLED
       显示一行"我活着"作为肉眼现象），此时仍不打判定。
 
-    ⚠ **字面量一律经 `c_string` 转义**（非 ASCII → `\\xNN`）：ARMCC 5.06 按本地
-    代码页解析源文件，原样中文字面量会让整份 main.c 编不过（真机判例见
+    ⚠ **字面量一律经 `c_string` 转义**（非 ASCII → 三位八进制转义）：ARMCC 5.06 按
+    本地代码页解析源文件，原样中文字面量会让整份 main.c 编不过（真机判例见
     `escape_c_string` 的 docstring）。注释里保留中文——那是给人读的，不影响解析。
 
-    `report` 非空时被填进这一节的观测：`slug` / `verdict`（带判定时的 ok）、
-    `probe`（有没有带期望值的探头）/ `trouble`（排查指引）。渲染本身不打印、
-    不读盘。
+    `report` 非空时被填进这一节的观测：`slug` / `probe`（有没有带期望值的探头）/
+    `trouble`（排查指引）。渲染本身不打印、不读盘。
+
+    ⚠ **不写 `verdict`**（评审整改，04 的坑）：判定结果要到板上才算得出来，渲染期
+    写了只会是恒定值，汇总侧照它分支就是一条永不触发的死路。
     """
     probe = section.probe
     judged_probe = probe is not None and bool(probe.expect)
@@ -794,6 +1085,10 @@ def render_recipe_section(
 
     if judged_init or judged_probe:
         out.append("    int r;")
+    # 这一节自己声明的局部变量（工单 05）：排在所有动作之前——`probe` 里那句
+    # `DMP_Read_Data(&pitch, &roll, &yaw)` 就是靠它们把角度搬出来的。
+    for declaration in section.locals:
+        out.append(f"    {declaration};")
     for call in section.prereq:
         out.append(f"    {call};")
     for call in section.init:

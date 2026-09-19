@@ -174,9 +174,23 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > 多字节代码页（本机 GBK）解析源文件**——C 字符串字面量里直接写中文，会在某些字节收尾处把
 > 收尾引号当尾字节吞掉，报 `#8: missing closing quote`，整份 main.c 编不过（本轮实测 22 error）。
 > 两条出路都量过：工程加 `--locale=english`（要改母版编译开关，跨平台共享面）或
-> **把非 ASCII 转义成 `\xNN`**（不改母版、产出字节与原文逐字节相等）。检测程序取后者
+> **把非 ASCII 转义成 ASCII 转义序列**（不改母版、产出字节与原文逐字节相等）。检测程序取后者
 > （`hwcheck_recipe.c_string`），量具在 `.scratch/module-hwcheck/probe-04-armcc-*.py`。
 > **别在生成的 .c 里直接写中文串**；注释里可以（本机所有 `/* 中文 */` 都没问题）。
+>
+> ⚠ **2026-09-20（module-hwcheck/05）更正转义写法：`\xNN` → 三位八进制 `\NNN`**。
+> `\x` 转义**贪婪吃十六进制数字**：`±2g` 的字节是 `C2 B1 32 67`，写成 `\xc2\xb12g`
+> 会被编译器读成 `\xb12`（一个越界转义）——ARMCC 报 `#27-D: character value is out of range`
+> 且字节不对（工单 05 的编译矩阵第一次跑就撞上，读数单位里的 `±2g` / `°1` 这类最容易中招）。
+> 八进制转义最多三位数字、天然自终止，编译出的字节与原文仍逐字节相等。守卫用例
+> `tests/test_hwcheck_recipe.py::test_escape_c_string_is_byte_exact_and_never_greedy`
+> （判据 = 按 C 规则解码转义串后与原字符串逐字节相等）。
+>
+> ⚠ **同轮的另一条（对"生成 main.c 调模块函数"的功能适用）**：检测程序的框架 include
+> 只覆盖通道与心跳（led / delay / oled / debug_uart），**器件模块的头必须由配方声明**
+> （`hwcheck_recipes.json` 的 `include.headers`）——不然 ARMCC 报一串
+> `#223-D function declared implicitly` + `#20 identifier undefined`（工单 05 实测 7 error）。
+> 跨模块前置调用的头（如 `I2C_Init` 的 `ml_i2c.h`）也走这同一个段。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 

@@ -1,0 +1,29 @@
+# 工单 module-hwcheck/05 编译矩阵（stm32 UV4 + mspm0 gmake 真编译）
+
+UV4：C:\Keil5\Core\UV4\UV4.exe
+gmake：C:\ti\ccs2050\ccs\utils\bin\gmake.exe
+CCS 三件套：CcsTools(sdk_dir=WindowsPath('C:/ti/ccs2051/mspm0_sdk_2_10_00_04'), compiler_dir=WindowsPath('C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-armllvm_4.0.4.LTS'), sysconfig_cli=WindowsPath('C:/ti/ccs2051/sysconfig_1.26.2/sysconfig_cli.bat'))
+
+形态：框架 → ml_mpu6050 专精 → ml_mpu6050 + oled（两个平台各三形态）。
+
+## [stm32] 框架（不选器件）（hwcheck-stm32-20260919-234130）→ passed=True exit=0 error=0 warning=0
+  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe05-u7yj4z0d\hwcheck-stm32-20260919-234130\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmp8havnvng.log
+
+## [stm32] ml_mpu6050 专精（hwcheck-stm32-20260919-234133）→ passed=True exit=0 error=0 warning=0
+  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe05-u7yj4z0d\hwcheck-stm32-20260919-234133\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmpc0q1vnea.log
+
+## [stm32] ml_mpu6050 + oled（hwcheck-stm32-20260919-234137）→ passed=True exit=0 error=0 warning=0
+  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe05-u7yj4z0d\hwcheck-stm32-20260919-234137\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmpwke8v1zx.log
+
+## [mspm0] 框架（不选器件）（hwcheck-mspm0-20260919-234140）→ passed=True exit=0 error=0 warning=0
+  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe05-u7yj4z0d\hwcheck-mspm0-20260919-234140\Debug -f makefile -B all
+
+## [mspm0] ml_mpu6050 专精（hwcheck-mspm0-20260919-234143）→ passed=True exit=0 error=0 warning=0
+  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe05-u7yj4z0d\hwcheck-mspm0-20260919-234143\Debug -f makefile -B all
+
+## [mspm0] ml_mpu6050 + oled（只开屏：双通道撞 PA22 是既有事实）（hwcheck-mspm0-20260919-234149）→ passed=True exit=0 error=0 warning=0
+  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe05-u7yj4z0d\hwcheck-mspm0-20260919-234149\Debug -f makefile -B all
+
+## 结论
+6 种形态真编译，判红 0 种。全部 0 error / 0 warning。
+原始日志：C:\Users\luoji\Desktop\firstep\.scratch\module-hwcheck\probe-05-buildlogs

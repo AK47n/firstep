@@ -223,14 +223,16 @@ test("专精小节：选上 led 就在检测计划里出 [专精] 小节（未�
     "平台差异说明直接印在检测页上：\n" + plan);
 
   // 未专精件：有平台条目但这一版还没配方 → 单独点名（**不进专精小节清单**）
-  await page.fill("#hwcheck-device-search", "mpu6050");
-  await page.waitForSelector('#hwcheck-device-grid [data-add="ml_mpu6050"]');
-  await page.click('#hwcheck-device-grid [data-add="ml_mpu6050"]');
+  // ⚠ 样本是 `beep`，不能再用 ml_mpu6050：工单 05 起它已经专精了（本文件下面
+  // 有它自己的用例），拿它当"未专精"的样本会变成一条假红。
+  await page.fill("#hwcheck-device-search", "beep");
+  await page.waitForSelector('#hwcheck-device-grid [data-add="beep"]');
+  await page.click('#hwcheck-device-grid [data-add="beep"]');
   await page.waitForFunction(
     () => document.querySelector("#hwcheck-sections").textContent
       .includes("不会给它出检测小节"));
   const withUnspecialized = await page.textContent("#hwcheck-sections");
-  assert.ok(withUnspecialized.includes("ml_mpu6050"),
+  assert.ok(withUnspecialized.includes("beep"),
     "没配方的件要点名：\n" + withUnspecialized);
   const sectionCount = await page.locator("#hwcheck-sections .hwcheck-section").count();
   assert.equal(sectionCount, 1, "未专精件不产生专精小节（只点名）");
@@ -243,7 +245,74 @@ test("专精小节：选上 led 就在检测计划里出 [专精] 小节（未�
   await page.dispatchEvent('#hwcheck-device-chips [data-remove="led"]', "click");
   await page.waitForFunction(
     () => !document.querySelector("#hwcheck-sections").textContent.includes("[专精] led"));
+  await page.dispatchEvent('#hwcheck-device-chips [data-remove="beep"]', "click");
+  await page.fill("#hwcheck-device-search", "");
+});
+
+test("MPU6050 专精小节：板上判定 + 平台差异如实印在页面上（stm32 只有原始六轴）", async () => {
+  await openTab();
+  await page.click('[data-hwcheck-platform="stm32"]');
+  await page.fill("#hwcheck-device-search", "mpu6050");
+  await page.waitForSelector('#hwcheck-device-grid [data-add="ml_mpu6050"]');
+  await page.click('#hwcheck-device-grid [data-add="ml_mpu6050"]');
+  await page.waitForSelector("#hwcheck-sections .hwcheck-section");
+
+  const plan = await page.textContent("#hwcheck-sections");
+  assert.ok(plan.includes("[专精]") && plan.includes("ml_mpu6050"),
+    "这一件要出专精小节：\n" + plan);
+  assert.ok(plan.includes("通信探头带判定") && plan.includes("0x68"),
+    "板上判定那一档要说清探头与期望值：\n" + plan);
+  assert.ok(plan.includes("6 项读数回显"),
+    "stm32 侧是原始六轴（6 项）——不是角度：\n" + plan);
+  assert.ok(plan.includes("没有姿态解算") && plan.includes("原始六轴"),
+    "平台差异（本平台不给角度）必须直接印在页面上，\n"
+    + "否则学生会把「显示不了角度」误判成「我接错了」：\n" + plan);
+  assert.ok(plan.includes("I2C_Init"),
+    "前置调用（先起软 I2C 总线）也要看得见：\n" + plan);
+
+  // 产出的 main.c 里同样有这一节（页面与产物同一个判据来源）
+  await page.click("#btn-hwcheck-preview");
+  await page.waitForFunction(
+    () => document.querySelector("#hwcheck-output").textContent
+      .includes("hwcheck_check_ml_mpu6050();"));
+  const mainC = await page.textContent("#hwcheck-output");
+  assert.ok(mainC.includes("r = MPU6050_Read(WHO_AM_I);"),
+    "探头（读身份寄存器比对期望值）要落进产物：\n" + mainC.slice(0, 2000));
+  assert.ok(mainC.includes('hwcheck_report_int(ax);'), "原始六轴走整数回显");
   await page.dispatchEvent('#hwcheck-device-chips [data-remove="ml_mpu6050"]', "click");
+  await page.fill("#hwcheck-device-search", "");
+});
+
+test("同组互斥 = 单选交换：mspm0 上点第二件姿态件会自动换掉第一件并说明", async () => {
+  await openTab();
+  await page.click('[data-hwcheck-platform="mspm0"]');
+  await page.fill("#hwcheck-device-search", "mpu6050");
+  await page.waitForSelector('#hwcheck-device-grid [data-add="ml_mpu6050"]');
+  await page.click('#hwcheck-device-grid [data-add="ml_mpu6050"]');
+  await page.waitForSelector('#hwcheck-device-chips [data-remove="ml_mpu6050"]');
+
+  // 提示：这一组只能选一件 + 再点谁会自动换掉谁
+  await page.waitForFunction(
+    () => document.querySelector("#hwcheck-device-groups").textContent
+      .includes("同组互斥"));
+  const notice = await page.textContent("#hwcheck-device-groups");
+  assert.ok(notice.includes("航向保持"), "要说清是哪一组：\n" + notice);
+  assert.ok(notice.includes("会自动换掉 ml_mpu6050"),
+    "点之前就告诉用户会发生什么：\n" + notice);
+
+  // 点同组的第二件：第一件被换掉（不是两件都在）
+  await page.fill("#hwcheck-device-search", "jy61p");
+  await page.waitForSelector('#hwcheck-device-grid [data-add="jy61p"]');
+  await page.click('#hwcheck-device-grid [data-add="jy61p"]');
+  await page.waitForSelector('#hwcheck-device-chips [data-remove="jy61p"]');
+  const chips = await page.textContent("#hwcheck-device-chips");
+  assert.ok(chips.includes("jy61p"), "刚点的那件要在：\n" + chips);
+  assert.ok(!chips.includes("ml_mpu6050"),
+    "同组旧成员要被单选交换掉（这一组只能选一件）：\n" + chips);
+  const after = await page.textContent("#hwcheck-device-groups");
+  assert.ok(!after.includes("请去掉一件"),
+    "交换之后不该还是冲突态：\n" + after);
+  await page.dispatchEvent('#hwcheck-device-chips [data-remove="jy61p"]', "click");
   await page.fill("#hwcheck-device-search", "");
 });
 

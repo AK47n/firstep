@@ -226,8 +226,8 @@ export function hwcheckChecklistProgressHTML(items, checkedIds) {
 }
 
 // hwcheckBoardState(state, payload)：一次响应里的「板侧」部分——器件回显 +
-// 接线视图（preview 与 generate / 回读三个端点都带这两项）。载荷缺键 = 保留
-// 当前状态（旧后端 / 出错响应不许把用户刚选的器件抹掉）。
+// 接线视图 + 同组互斥组（preview 与 generate / 回读三个端点都带这几项）。载荷
+// 缺键 = 保留当前状态（旧后端 / 出错响应不许把用户刚选的器件抹掉）。
 export function hwcheckBoardState(state, payload) {
   const data = payload || {};
   return {
@@ -238,6 +238,9 @@ export function hwcheckBoardState(state, payload) {
     wiring: (data.wiring && typeof data.wiring === "object")
       ? data.wiring
       : ((state && state.wiring) || null),
+    exclusiveGroups: Array.isArray(data.exclusive_groups)
+      ? data.exclusive_groups
+      : ((state && Array.isArray(state.exclusiveGroups)) ? state.exclusiveGroups : []),
   };
 }
 
@@ -386,18 +389,70 @@ export const HWCHECK_LAST_DIR_KEY = "firstep.hwcheck.lastDir";
 // 维护选择态。**不在这里判冲突、不在这里推顺序**——两处各推一遍必然漂移。
 // ===========================================================================
 
-// hwcheckDevicePick(state, slug, on)：选中 / 取消一件器件 → 新状态（保序去重）。
+// hwcheckSameExclusiveGroup(groups, a, b)：a 与 b 是不是**同一个互斥组**的成员。
+// 判据只吃服务端给的组（库内 manifest 的 exclusive_group 投影，判据单源在
+// `collect_exclusive_groups`）——前端不自己推组、也不写 slug 名单。
+function hwcheckSameExclusiveGroup(groups, a, b) {
+  const x = String(a == null ? "" : a);
+  const y = String(b == null ? "" : b);
+  if (!x || !y || x === y) return false;
+  return (Array.isArray(groups) ? groups : []).some((group) => {
+    const members = (group && group.members) || [];
+    return members.includes(x) && members.includes(y);
+  });
+}
+
+// hwcheckDevicePick(state, slug, on, groups)：选中 / 取消一件器件 → 新状态。
+//
+// **同组互斥 = 单选交换**（工单 05 用户拍板，与 fx/module.js 的组卡「单选交换」
+// 同规则）：点开一件属于某互斥组的器件时，把**同组已选的其它成员**一并去掉——
+// 这一组只能选一件（如姿态类 imu_uart / jy61p / ml_mpu6050）。组清单由服务端
+// 按平台过滤后下发（单成员组不出，与赛题侧生成链路同一函数）。
+//
+// 取消（on=false）不做交换：去掉一件不会让另一件变得可选。
 // 返回新对象（不改原对象）；空 slug / 状态本来就是这样 = 原样返回（幂等——
 // 重复点同一件不该把它挪到列表末尾，那会顺带改变"器件在建议顺序里的位置"）。
-export function hwcheckDevicePick(state, slug, on) {
+export function hwcheckDevicePick(state, slug, on, groups = []) {
   const current = Array.isArray(state && state.devices) ? state.devices : [];
   const key = String(slug == null ? "" : slug);
   if (!key) return state;
   const has = current.includes(key);
   if (has === !!on) return state;
-  const next = current.filter((item) => item !== key);
-  if (on) next.push(key);
+  let next = current.filter((item) => item !== key);
+  if (on) {
+    next = next.filter((item) => !hwcheckSameExclusiveGroup(groups, key, item));
+    next.push(key);
+  }
   return { ...state, devices: next };
+}
+
+// hwcheckDeviceGroupNoticeHTML(groups, devices)：同组互斥的页面提示。
+//
+// 两种情形分开说（都不静默）：
+//   * 选中的组内成员 **≥2** —— 点选那条路已经收了，这里只可能是回读 / 历史态
+//     留下的（后端换过组定义等），如实报"只能选一件，请去掉一件再生成"；
+//   * 组内**已选一件**且还有别的成员 —— 明说"再点 X 会自动换掉 Y"，把单选
+//     交换这条规则摆到台面上（用户点之前就知道会发生什么，不被静默换掉）。
+export function hwcheckDeviceGroupNoticeHTML(groups, devices) {
+  const list = Array.isArray(groups) ? groups : [];
+  const sel = (Array.isArray(devices) ? devices : []).map((slug) => String(slug));
+  const rows = [];
+  (list || []).forEach((group) => {
+    const members = ((group && group.members) || []).map((slug) => String(slug));
+    const chosen = members.filter((slug) => sel.includes(slug));
+    if (!chosen.length) return;
+    const label = esc(String((group && group.label) || (group && group.id) || ""));
+    if (chosen.length >= 2) {
+      rows.push('<div class="hwcheck-warn">⚠ 同组互斥（' + label + '）：'
+        + esc(chosen.join(" × ")) + " 只能选一件——请去掉一件再生成。</div>");
+      return;
+    }
+    const others = members.filter((slug) => !sel.includes(slug));
+    if (!others.length) return;
+    rows.push('<div class="hwcheck-hint">▸ 同组互斥（' + label + '）：这一组只能选一件'
+      + "——再点 " + esc(others.join(" / ")) + " 会自动换掉 " + esc(chosen[0]) + "。</div>");
+  });
+  return rows.join("");
 }
 
 // hwcheckDevicePool(modules)：可挑选的器件池 = **模块库全量**（/api/modules 既有
@@ -677,8 +732,8 @@ export function hwcheckUnspecializedHTML(items) {
 // "为什么这条是空的"，不留一块沉默的空白。
 export function hwcheckSectionsEmptyHTML() {
   return '<div class="muted">这一趟没有专精件：检测程序只有 LED 心跳 + 通道自报，'
-    + "用来确认板子和烧录链路是好的。选上有配方的器件（当前是 led / oled）"
-    + "就会出现它们的检测小节。</div>";
+    + "用来确认板子和烧录链路是好的。选上有配方的器件就会出现它们的检测小节"
+    + "（服务端按库内配方给，页面不猜哪几件有）。</div>";
 }
 
 if (typeof window !== "undefined") {
@@ -698,6 +753,7 @@ if (typeof window !== "undefined") {
     HWCHECK_PARENT_KEY, HWCHECK_LAST_DIR_KEY,
     hwcheckDevicePick, hwcheckDevicePool, hwcheckDeviceKit,
     hwcheckDeviceChipsHTML, hwcheckDeviceEmptyHTML, hwcheckMissingDevicesHTML,
+    hwcheckDeviceGroupNoticeHTML,
     hwcheckWiringErrorHTML, hwcheckWiringTableHTML, hwcheckPinGroupsHTML,
     hwcheckBoardSharesHTML, hwcheckOrderHTML, hwcheckOrderDesc,
     hwcheckDeviceSlugs, hwcheckBoardState,

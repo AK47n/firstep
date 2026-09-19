@@ -32,6 +32,7 @@ import {
   hwcheckRecentHTML, hwcheckRecentEmptyHTML, hwcheckChannelNoteHTML,
   hwcheckDevicePick, hwcheckDevicePool, hwcheckDeviceChipsHTML,
   hwcheckDeviceEmptyHTML, hwcheckMissingDevicesHTML, hwcheckWiringTableHTML,
+  hwcheckDeviceGroupNoticeHTML,
   hwcheckPinGroupsHTML, hwcheckBoardSharesHTML, hwcheckOrderHTML,
   hwcheckBoardState, hwcheckWiringErrorHTML,
   hwcheckSectionsState, hwcheckSectionsHTML, hwcheckUnspecializedHTML,
@@ -53,6 +54,7 @@ const hwcheckUI = {
   preview: "",
   outputHint: "",
   wiring: null,       // 板侧视图（服务端投影：接线行 / 同脚组 / 顺序 / 缺条目）
+  exclusiveGroups: [], // 库级互斥组（服务端按平台投影，工单 05：单选交换的判据）
   sections: [],       // 逐件专精小节（服务端按库内配方解析，工单 04）
   unspecialized: [],  // 选了但没有配方的器件（点名，不假装测过）
   project: null,      // 当前正在看的检测工程（生成或回读来的）
@@ -189,6 +191,13 @@ function renderHwcheckDevices() {
   if (missing) {
     missing.innerHTML = hwcheckMissingDevicesHTML(
       hwcheckUI.wiring ? hwcheckUI.wiring.missing : []);
+  }
+  // 同组互斥提示（工单 05）：组清单来自服务端载荷（库内 exclusive_group 单源），
+  // 本层只渲染——"这一组只能选一件"与"再点谁会自动换掉谁"都由 fx 纯件说清。
+  const groups = $("hwcheck-device-groups");
+  if (groups) {
+    groups.innerHTML = hwcheckDeviceGroupNoticeHTML(
+      hwcheckUI.exclusiveGroups, hwcheckUI.devices);
   }
   const grid = $("hwcheck-device-grid");
   if (grid) {
@@ -332,8 +341,11 @@ async function previewHwcheck() {
 
 // addHwcheckDevice(slug, on)：加 / 去一件器件 → 重绘挑选面 + 重取板侧视图。
 // 选器件本身就是"我想看它怎么接"——所以这里顺手刷新一次（本地请求，零 LLM）。
+// 组清单一起带上：同组互斥 = 单选交换（工单 05），判据来自服务端载荷的
+// exclusive_groups（还没拿到时为空数组 = 老行为"只加不换"，提示会兜底说明）。
 function addHwcheckDevice(slug, on = true) {
-  Object.assign(hwcheckUI, hwcheckDevicePick(hwcheckUI, slug, on));
+  Object.assign(hwcheckUI, hwcheckDevicePick(
+    hwcheckUI, slug, on, hwcheckUI.exclusiveGroups));
   renderHwcheckDevices();
   refreshHwcheckView();
 }

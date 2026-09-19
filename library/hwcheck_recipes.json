@@ -1,5 +1,5 @@
 {
-  "_comment": "硬件检测的库内配方（工单 module-hwcheck/04）：键 = slug → 平台 → 配方。六段见 spec：prereq（前置调用）/ init（初始化；init_expect 缺省 = 这一件没有返回值可判，如 void led_init）/ probe（探头 + expect 期望；expect 缺省或空 = 只做动作不判通断）/ read（读数展示：expressions 简单写法，items[{expression,unit}] 带单位）/ console（控制台命令，消费方是工单 06）/ note（平台差异说明，直接印到检测页）。校验：init / read / probe 里出现的名字必须都能在该模块该平台的头文件里找到（read 的裸常量也查），找不到 = 构建期大声失败（hwcheck_recipe.validate_recipes）；判据与生成门禁同源（skeleton 的接口块提取）。⚠ 读数表达式必须是**整数**（常量或返回 int 的调用）——渲染走 hwcheck_report_int。",
+  "_comment": "硬件检测的库内配方（工单 module-hwcheck/04-05）：键 = slug → 平台 → 配方。段见 spec 六段 + include + locals：include（这一节的调用要 include 哪些头文件，`{headers:[...]}`，头名不带目录）/ locals（局部变量声明，`类型 名字 [= 数字]`，排在动作之前）/ prereq（跨模块前置调用）/ init（初始化；init_expect 缺省 = 这一件没有返回值可判，如 void led_init）/ probe（探头 + expect 期望；expect 缺省或空 = 只做动作不判通断）/ read（读数展示：expressions 简单写法，items[{expression,unit}] 带单位）/ console（控制台命令，消费方是工单 06）/ note（平台差异说明，直接印到检测页）。校验：include / locals / init / read / probe / prereq 里出现的名字必须都能在库内找到（read 的裸常量与 extern 全局量也查），找不到 = 构建期大声失败（hwcheck_recipe.validate_recipes）；判据与生成门禁同源（skeleton 的接口块提取 + 对象宏 + extern 全局量 + 头名清单）。⚠ 读数表达式必须是**整数**（常量、返回 int 的调用，或本节自己声明的变量）——渲染走 hwcheck_report_int；小数按 note 里写的拆整数 / 小数两次显示。",
   "led": {
     "stm32": {
       "init": {
@@ -74,6 +74,133 @@
           "地猛星 OLED 走硬件 I2C1「OLED」实例（SysConfig 配置，7 位地址 0x3C）：**没配 I2C1 就没有屏**——上板前先确认 mspm0.syscfg 里有这个实例。",
           "**本平台没有浮点显示接口**（库内只有 OLED_ShowNum / oled_show_number 这类整数接口）。检测页的读数只回显整数；带小数的量（角度、电压）由配方自己拆成整数 / 小数两次显示——工单 05 的 MPU6050 配方就是这么做的。",
           "屏是只写的：驱动里没有可读的状态寄存器，板端判不出通断。探头动作为「让屏上出现一行 OLED OK」，判据交给你眼睛。"
+        ]
+      }
+    }
+  },
+  "ml_mpu6050": {
+    "stm32": {
+      "include": {
+        "headers": [
+          "ml_mpu6050.h",
+          "ml_i2c.h"
+        ]
+      },
+      "prereq": {
+        "calls": [
+          "I2C_Init()"
+        ]
+      },
+      "init": {
+        "calls": [
+          "MPU6050_Init()",
+          "MPU6050_GetData()"
+        ]
+      },
+      "probe": {
+        "calls": [
+          "MPU6050_Read(WHO_AM_I)"
+        ],
+        "expect": "0x68"
+      },
+      "read": {
+        "items": [
+          {
+            "expression": "ax",
+            "unit": "加速度 X（LSB，±2g 量程：16384 LSB/g）"
+          },
+          {
+            "expression": "ay",
+            "unit": "加速度 Y（LSB）"
+          },
+          {
+            "expression": "az",
+            "unit": "加速度 Z（LSB，放平时 ≈ +16384）"
+          },
+          {
+            "expression": "gx",
+            "unit": "角速度 X（LSB，±2000dps 量程：16.4 LSB/(°/s)）"
+          },
+          {
+            "expression": "gy",
+            "unit": "角速度 Y（LSB）"
+          },
+          {
+            "expression": "gz",
+            "unit": "角速度 Z（LSB，静止时三轴都 ≈ 0）"
+          }
+        ]
+      },
+      "note": {
+        "lines": [
+          "**本平台（stm32）没有姿态解算**：这里的驱动只有原始六轴（ax / ay / az / gx / gy / gz），没有 pitch / roll / yaw——要角度请换到 mspm0 侧（官方 DMP 姿态解算），或改用串口姿态模块（jy61p / imu_uart）。**所以这一版在本平台不给你角度，别把「没有角度」读成「我接错了线」。**",
+          "前置调用：MPU6050_Init() **不初始化 I2C 总线**（它只写寄存器），检测程序已先调母版 I2C_Init() 初始化软 I2C（默认 SCL = PA11 / SDA = PA12，见工程 README 的引脚接线表）。总线没起来时读回来的是固定值（0x00 / 0xFF），不是「器件坏了」。",
+          "本件自己带探头（不看驱动的初始化返回值）：读 WHO_AM_I（寄存器 0x75）比对 0x68。库里这份 stm32 驱动**不做身份校验**（通信失败也照样往下写寄存器），所以板上判 FAIL 就是通信真的没通——先查供电 / 上拉（SDA/SCL 要有 4.7k 上拉）/ 地址（AD0 接 GND = 0x68）/ 线序（SCL、SDA 有没有接反）。",
+          "读数怎么算合理：加速度计 ±2g 量程 = 16384 LSB/g，板子放平静止时 Z 轴 ≈ ±16384、X/Y ≈ 0；陀螺仪 ±2000dps 量程 = 16.4 LSB/(°/s)，静止时三轴都 ≈ 0。数值一直在跳或差得很远，先确认线长 / 供电，再怀疑器件。"
+        ]
+      }
+    },
+    "mspm0": {
+      "include": {
+        "headers": [
+          "mpu_port.h"
+        ]
+      },
+      "locals": {
+        "declarations": [
+          "float pitch = 0",
+          "float roll = 0",
+          "float yaw = 0"
+        ]
+      },
+      "init": {
+        "calls": [
+          "DMP_Init()"
+        ]
+      },
+      "init_expect": "0",
+      "probe": {
+        "calls": [
+          "DMP_Read_Data(&pitch, &roll, &yaw)"
+        ],
+        "expect": "0"
+      },
+      "read": {
+        "items": [
+          {
+            "expression": "(int)pitch",
+            "unit": "度（pitch 整数部分）"
+          },
+          {
+            "expression": "(int)((pitch - (int)pitch) * 10)",
+            "unit": "（pitch 小数第一位）"
+          },
+          {
+            "expression": "(int)roll",
+            "unit": "度（roll 整数部分）"
+          },
+          {
+            "expression": "(int)((roll - (int)roll) * 10)",
+            "unit": "（roll 小数第一位）"
+          },
+          {
+            "expression": "(int)yaw",
+            "unit": "度（yaw 整数部分）"
+          },
+          {
+            "expression": "(int)((yaw - (int)yaw) * 10)",
+            "unit": "（yaw 小数第一位）"
+          }
+        ]
+      },
+      "note": {
+        "lines": [
+          "**本平台（mspm0）走官方 DMP 姿态解算**：直接出 pitch / roll / yaw 三维角度（100Hz）——这是与 stm32 侧最大的不同（那边只有原始六轴）。",
+          "**本平台没有浮点显示接口**，所以每个角度拆成两次回显：「整数部分」和「小数第一位」，读数时要**把相邻两行拼起来看**（例如 pitch 整数 = 12、pitch 小数 = 3 → 12.3°）。负数按截断显示（-12 与 -3 就是 -12.3°）。",
+          "两级自证（都不信「初始化没报错就是好的」）：① DMP_Init() 返回 0——官方库内部会读设备 ID 做校验；② 探头 DMP_Read_Data() 返回 0——真的从 FIFO 读回一帧，顺带把角度搬进变量。探头判 FAIL 就不再打读数（读数只会是没意义的 0）。",
+          "地猛星 MPU6050 默认 I2C0 = SDA PA0 / SCL PA1，**与板载 LED 同脚**（通信期间 LED 微闪是正常现象）；SysConfig 里必须有 I2C_0 实例（母版已含），否则 mpu_port.c 编不过（报 I2C_0_INST 缺失）。",
+          "读数怎么算合理：板子**静止放平**时 pitch / roll ≈ 0°（真实值可能差个一两度，属正常）；**yaw 会缓慢漂移**——这套 DMP 只用陀螺仪与加速度计、没有磁力计做绝对朝向，漂是物理决定的，不是坏了。数值一直在跳或差得离谱，先确认线长 / 供电，再怀疑器件。",
+          "DMP 端口（mpu_port.c 的 DMP_Init）自己会打开 SysTick 中断，而 mspm0 母版**没有** SysTick 服务函数（stm32 侧由母版 ml_systick.c 提供）——检测程序已在 main.c 里补了一个空的 SysTick_Handler：**别删**，删了会掉进启动文件的 Default_Handler 死循环，表现是灯都不闪。"
         ]
       }
     }

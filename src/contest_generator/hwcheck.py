@@ -23,16 +23,28 @@
 工单 04 补的一件事：**逐件专精小节**（`render_main_c(config, sections)`）——
 "每一件怎么测"由 `hwcheck_recipe.py` 从库内配方数据解析（形状 / 校验 / 渲成 C
 都在那边），本模块只负责把它插进框架、并渲染骨架期那套运行时（分节头 / 判定
-记账 / 结尾汇总）。两条**真机判例**留在这里免得后人踩：
+记账 / 结尾汇总）。
 
-1. **所有 C 字面量都走 `hwcheck_recipe.c_string` 转义**（非 ASCII → `\\xNN`）：
-   ARMCC 5.06 按本地代码页解析源文件，中文字面量会把收尾引号吞掉 →
-   `#8: missing closing quote`，整份 main.c 编不过（22 error 实测；量具在
-   `.scratch/module-hwcheck/probe-04-armcc-utf8.py`）。
-2. **按需渲染**：一件带判定的都没有的形态（如只选 led）不渲染 `hwcheck_verdict`
-   与"失败"档、一件读数都没有时不渲染 `hwcheck_report_int`——否则 ARMCC 报
-   `#177-D: declared but never referenced`。生成的程序是给学生读的，死代码会让
-   人以为漏调了什么。
+工单 05 补的一件事：**平台不对称如实呈现**（`ml_mpu6050` 是第一件真·器件专精
+件）。三条真机判例留在这里免得后人踩：
+
+1. **所有 C 字面量都走 `hwcheck_recipe.c_string` 转义**（非 ASCII → **三位八进制**
+   `\\302\\261`，工单 05 从 `\\xNN` 改过来）：ARMCC 5.06 按本地代码页解析源文件，
+   中文字面量会把收尾引号吞掉 → `#8: missing closing quote`，整份 main.c 编不过
+   （04 实测 22 error；量具 `.scratch/module-hwcheck/probe-04-armcc-utf8.py`）。
+   改用八进制是因为 `\\x` 会**贪婪吃**后面的十六进制数字（`±2g` → `\\xb12` 越界，
+   ARMCC 报 `#27-D`，05 实测）。
+2. **器件模块的头由配方的 `include` 段带进来**：框架那几行只覆盖通道与心跳，
+   检测程序直接调模块函数——不 include 就是隐式声明（05 实测 stm32 侧 7 error）。
+3. **按需渲染**（每种形态都要 0 error / 0 warning）：一件带判定的都没有时不留
+   `hwcheck_verdict` / "失败"档（ARMCC `#177-D`）；一件读数都没有时不渲染
+   `hwcheck_report_int`；整趟都是带判定的探头时不留 `hwcheck_verdict_probe_none`
+   （tiarmclang `-Wunused-function`，05 实测）。生成的程序是给学生读的，死代码
+   会让人以为漏调了什么。
+
+还有一处**平台垫片**（`_PLATFORM_FILE_SCOPE`，05 的读源码判例）：mspm0 母版没有
+SysTick 服务函数，而库内 DMP 端口会自己打开 SysTick 中断——不补一个空的
+`SysTick_Handler` 就会掉进启动文件的 `Default_Handler` 死循环（灯都不闪）。
 
 为什么要按通道分形态渲染，而不是"全渲染 + 运行时判断"：没有输出通道的构建
 必须**一个打印调用都不产生**——渲染出来却跑不到，学生会以为"程序报了结果、
@@ -135,6 +147,35 @@ _PLATFORM_BOOT_LINES: dict[str, str] = {
 }
 
 _LED_CHANNEL = "LED_RED"  # 两平台通用的通道宏（mspm0 单实例默认 1 通道、stm32 三通道）
+
+# 文件作用域的平台垫片（工单 module-hwcheck/05 的真机判例）。
+#
+# **mspm0 没有 SysTick 服务函数**：stm32 侧由母版 `ml_libs/ml_systick.c` 提供
+# `SysTick_Handler`，mspm0 母版里一个都没有；而 TI 启动文件把 `SysTick_Handler`
+# 弱别名到 `Default_Handler`，后者是 `while (1) { }`（实测源码：
+# `C:\ti\ccs2051\mspm0_sdk_2_10_00_04\source\ti\devices\msp\m0p\
+# startup_system_files\ticlang\startup_mspm0g350x_ticlang.c`）。于是**任何自己
+# 打开 SysTick 中断的驱动**（库内 ml_mpu6050 的 DMP 端口：`mpu_port.c` 的
+# `DMP_Init` 里 `SysTick_CTRL_TICKINT_Msk | __enable_irq()`）都会让检测程序在
+# 那一句里掉进死循环——现象是"灯都不闪、串口一个字没有"，看着像板子坏了，
+# 其实是缺一个中断服务函数。
+#
+# 所以检测程序（它就是那个"应用"）如实补上：空实现就够——本程序不用 SysTick
+# 做记账（DMP 端口自己的 `sys_tick_ms` 时间戳没被声明在头里，应用侧引不到，
+# 而它按模块自述"不递增仅影响 mget_ms 时间戳、不影响功能"）。与上面
+# `_PLATFORM_BOOT_LINES` 同级：**平台事实**，不随选了哪几件而变。
+_PLATFORM_FILE_SCOPE: dict[str, tuple[str, ...]] = {
+    PLATFORM_STM32: (),
+    PLATFORM_MSPM0: (
+        "/* mspm0：SysTick 中断服务函数（母版没有提供，见文件头的平台说明——",
+        " * 缺了它，自己打开 SysTick 中断的驱动会掉进启动文件的死循环）。 */",
+        "void SysTick_Handler(void)",
+        "{",
+        "    /* 空实现就够：检测程序不用 SysTick 记账，只是别落进 Default_Handler。 */",
+        "}",
+        "",
+    ),
+}
 
 # 输出通道形态的「应看到什么」（检测页明示；后端给文案，前端只渲染）
 OUTPUT_HINT_SERIAL_OLED = (
@@ -392,6 +433,35 @@ def render_checklist(config: HwCheckConfig) -> tuple[ChecklistItem, ...]:
     return tuple(items)
 
 
+def _section_includes(
+    sections: Sequence["RecipeSection"], skip: Sequence[str] = ()
+) -> tuple[str, ...]:
+    """逐件小节声明的头文件（配方 `include` 段）→ **保序去重**的头名元组。
+
+    `skip` = 框架已经印过的头名（进门头 / 通道 / 心跳那几行，见
+    `_PLATFORM_HEADERS`）：配方与框架撞名时不再印第二遍——重复 include 有包含
+    卫士兜着不出错，但生成的程序是给学生读的，同一行印两遍像是有意为之。
+    """
+    out: list[str] = []
+    for section in sections:
+        for header in section.include:
+            if header not in out and header not in skip:
+                out.append(header)
+    return tuple(out)
+
+
+def _needs_probe_none(sections: Sequence["RecipeSection"]) -> bool:
+    """这一趟有没有"判不了通断"的小节 → 决定 `hwcheck_verdict_probe_none` 渲不渲。
+
+    与 `_needs_verdict` 同一个理由（真机编译矩阵实测）：整趟都是带判定的探头
+    （如只选 ml_mpu6050）时，那个函数声明了没人调——tiarmclang 报
+    `-Wunused-function`（本单实测 1 warning），ARMCC 报 `#177-D`。
+    """
+    return any(
+        not (section.probe and section.probe.expect) for section in sections
+    )
+
+
 def _needs_verdict(sections: Sequence["RecipeSection"]) -> bool:
     """这一趟有没有"能判出通过 / 失败"的小节（工单 04 编译矩阵实测的判据）。
 
@@ -406,7 +476,7 @@ def _needs_verdict(sections: Sequence["RecipeSection"]) -> bool:
     )
 
 
-def _recipe_runtime(*, needs_verdict: bool) -> list[str]:
+def _recipe_runtime(*, needs_verdict: bool, needs_probe_none: bool) -> list[str]:
     """逐件小节的运行时（工单 04）：分节头 / 细节行 / 判定记账 / 结尾汇总。
 
     为什么记账要放板上：规格判据三层里第②层是"板端通信判定"，而"这一趟到底
@@ -422,8 +492,14 @@ def _recipe_runtime(*, needs_verdict: bool) -> list[str]:
     "hwcheck_verdict" was declared but never referenced`，学生读代码会以为漏调了
     什么（生成的程序是给人读的，死代码不是风格问题）。
 
-    ⚠ **每个字面量都过 `c_string`**（非 ASCII → `\\xNN` 转义）：ARMCC 5.06 按本地
-    代码页解析源文件，原样中文字面量会把收尾引号吞掉、整份 main.c 编不过
+    `needs_probe_none` 同理（工单 05 实测）：整趟都是带判定的探头时（如只选
+    ml_mpu6050），`hwcheck_verdict_probe_none` 与"未判定"那一档声明了没人调，
+    tiarmclang 报 `-Wunused-function`。两个开关互相独立（只选 oled 时反过来：
+    有"未判定"档、没有"失败"档），所以都**由调用方显式算好传进来**——给默认值
+    只会让"哪一档该在"这件事有一处看不见的分支。
+
+    ⚠ **字面量一律经 `c_string` 转义**（非 ASCII → 三位八进制转义）：ARMCC 5.06 按
+    本地代码页解析源文件，原样中文字面量会把收尾引号吞掉、整份 main.c 编不过
     （真机判例见 `hwcheck_recipe.escape_c_string`）。
     """
     out: list[str] = [
@@ -432,8 +508,9 @@ def _recipe_runtime(*, needs_verdict: bool) -> list[str]:
     ]
     if needs_verdict:
         out.append("static int hwcheck_summary_fail;")
+    if needs_probe_none:
+        out.append("static int hwcheck_summary_probe_none;")
     out.extend([
-        "static int hwcheck_summary_probe_none;",
         "",
         "/** 小节头：空一行 + 标题（一串检测结果之间的分节）。 */",
         "static void hwcheck_section(const char *title)",
@@ -469,14 +546,17 @@ def _recipe_runtime(*, needs_verdict: bool) -> list[str]:
             "}",
             "",
         ])
+    if needs_probe_none:
+        out.extend([
+            "/** 记一次「判不了」（没有读取型探头）：**不算通过**，只提示看现象。 */",
+            "static void hwcheck_verdict_probe_none(const char *hint)",
+            "{",
+            "    hwcheck_summary_probe_none++;",
+            "    hwcheck_detail(hint);",
+            "}",
+            "",
+        ])
     out.extend([
-        "/** 记一次「判不了」（没有读取型探头）：**不算通过**，只提示看现象。 */",
-        "static void hwcheck_verdict_probe_none(const char *hint)",
-        "{",
-        "    hwcheck_summary_probe_none++;",
-        "    hwcheck_detail(hint);",
-        "}",
-        "",
         "/** 结尾汇总：三档分开数（没探头的绝不混进「通过」）。 */",
         "static void hwcheck_summary(void)",
         "{",
@@ -501,18 +581,22 @@ def _recipe_runtime(*, needs_verdict: bool) -> list[str]:
             "        hwcheck_newline();",
             "    }",
         ])
+    if needs_probe_none:
+        out.extend([
+            "    if (hwcheck_summary_probe_none > 0)",
+            "    {",
+            f"        hwcheck_report({c_string('  未判定：')});",
+            "        hwcheck_report_int(hwcheck_summary_probe_none);",
+            f"        hwcheck_report({c_string(' 项——这些件没有读取型探头，板上判不了通断，')});",
+            "        hwcheck_newline();",
+            f"        hwcheck_report({c_string('    请对照检测页清单看现象（灯闪 / 屏亮）')});",
+            "        hwcheck_newline();",
+            "    }",
+        ])
     out.extend([
-        "    if (hwcheck_summary_probe_none > 0)",
-        "    {",
-        f"        hwcheck_report({c_string('  未判定：')});",
-        "        hwcheck_report_int(hwcheck_summary_probe_none);",
-        f"        hwcheck_report({c_string(' 项——这些件没有读取型探头，板上判不了通断，')});",
-        "        hwcheck_newline();",
-        f"        hwcheck_report({c_string('    请对照检测页清单看现象（灯闪 / 屏亮）')});",
-        "        hwcheck_newline();",
-        "    }",
         "    if (hwcheck_summary_ok == 0"
         + (" && hwcheck_summary_fail == 0" if needs_verdict else "")
+        + (" && hwcheck_summary_probe_none == 0" if needs_probe_none else "")
         + ")",
         "    {",
         f"        hwcheck_report({c_string('  这一趟没有板上判定项：只确认了板子与烧录链路是活的')});",
@@ -563,6 +647,16 @@ def render_main_c(
     所以下面的分支是穷尽的。
     """
     headers = _PLATFORM_HEADERS[config.platform]
+    # 框架这一趟印了哪些头（器件小节的 include 段据此去重，见 _section_includes）
+    framework_headers: list[str] = [str(headers["entry"])]
+    if config.debug_uart:
+        framework_headers.append(str(headers["serial"]))
+    if config.oled and headers["oled"]:
+        framework_headers.append(str(headers["oled"]))
+    if headers["delay"]:
+        framework_headers.append(str(headers["delay"]))
+    if headers["led"]:
+        framework_headers.append(str(headers["led"]))
     lines: list[str] = [
         "/**",
         " * @file main.c",
@@ -582,6 +676,12 @@ def render_main_c(
         lines.append(f'#include "{headers["delay"]}"  /* 心跳节拍 */')
     if headers["led"]:
         lines.append(f'#include "{headers["led"]}"  /* 通道宏 {_LED_CHANNEL} */')
+    # 器件模块自己的头（配方 `include` 段，工单 05）：检测程序直接调模块函数，
+    # 而上面那几行只覆盖通道与心跳——不 include 就会被当成隐式声明（真机判例：
+    # stm32 侧 7 个 error：`#223-D function declared implicitly` +
+    # `#20 identifier undefined`）。跨模块前置调用的头（如 ml_i2c.h）也走这里。
+    for header in _section_includes(sections, skip=framework_headers):
+        lines.append(f'#include "{header}"')
 
     lines.append("")
     lines.append("/* 心跳周期（毫秒）：改这里改闪灯快慢 */")
@@ -595,7 +695,10 @@ def render_main_c(
             config, needs_int=bool(sections) or bool(config.devices)))
         lines.append("")
         if sections:
-            lines.extend(_recipe_runtime(needs_verdict=_needs_verdict(sections)))
+            lines.extend(_recipe_runtime(
+                needs_verdict=_needs_verdict(sections),
+                needs_probe_none=_needs_probe_none(sections),
+            ))
             lines.append("")
 
     if sections and config.has_output_channel:
@@ -607,6 +710,8 @@ def render_main_c(
             lines.append("}")
             lines.append("")
 
+    # 平台垫片（文件作用域）：mspm0 的 SysTick 服务函数，见 _PLATFORM_FILE_SCOPE
+    lines.extend(_PLATFORM_FILE_SCOPE[config.platform])
     lines.append("int main(void)")
     lines.append("{")
     lines.append(_PLATFORM_BOOT_LINES[config.platform])
@@ -677,6 +782,11 @@ def _header_brief(
         lines.append(" *   生成链注入出来，所以下面那行初始化是**注释状态**。")
         lines.append(" *   上板前请先取消注释再重新编译，否则串口 / LED 都不会初始化")
         lines.append(" *   （灯不闪 ≠ 板子坏）。")
+        lines.append(" *")
+        lines.append(" * 另外本平台母版**没有 SysTick 服务函数**（stm32 侧由 ml_systick.c 提供）")
+        lines.append(" *   ——文件末尾那个空的 SysTick_Handler 就是补这一格的：自己打开 SysTick")
+        lines.append(" *   中断的驱动（如 ml_mpu6050 的 DMP 端口）没有它会掉进启动文件的")
+        lines.append(" *   Default_Handler 死循环（现象是灯都不闪）。别删。")
     return lines
 
 

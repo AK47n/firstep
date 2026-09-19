@@ -81,6 +81,7 @@ const DOMAINS = {
     hwcheckDevicePick: "fn", hwcheckDeviceSlugs: "fn", hwcheckDevicePool: "fn",
     hwcheckDeviceKit: "fn", hwcheckDeviceChipsHTML: "fn",
     hwcheckDeviceEmptyHTML: "fn", hwcheckMissingDevicesHTML: "fn",
+    hwcheckDeviceGroupNoticeHTML: "fn",
     hwcheckWiringErrorHTML: "fn", hwcheckWiringTableHTML: "fn",
     hwcheckPinGroupsHTML: "fn", hwcheckBoardSharesHTML: "fn",
     hwcheckOrderHTML: "fn", hwcheckOrderDesc: "fn",
