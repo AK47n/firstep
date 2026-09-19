@@ -5,7 +5,7 @@
 >
 > 更新纪律：改动了这里描述的东西（删沙箱、发新版、换端口），**当场回来改这份文件**。
 
-## 0. 交接区：main 上有什么还没到用户手上（2026-09-19 晚 · v1.2.2 发版后更新）
+## 0. 交接区：main 上有什么还没到用户手上（2026-09-19 下午 · v1.2.2 发版后更新）
 
 **当前状态：main 与线上资产同步——v1.2.2 已发布，B1–B5 三张单的修复全部到了用户手上。**
 
@@ -62,7 +62,7 @@ cmd 整行不执行（真机上由 `install.bat` 的 bootstrap 配置保证存�
 | 端口 | **8020**（真身用 8000；`FIRSTEP_LAUNCHER_PORT=8020`） |
 | 入口 | `sim-run.py`（沙箱专用，因为生产入口的配置路径写死在真身数据目录）。**恢复副本在库里**：`.scratch/update-restart-stale-service/sandbox-entry-sim-run.py`（一次失败的重建把原件连目录删了，重建脚本会用它兜底） |
 | 构建脚本 | `.scratch/full-download/make_sim_sandbox.py`（**从当前工作树拷**，只给「干净沙箱」用）；**要还原旧版用** `.scratch/update-restart-stale-service/rebuild-sandbox-v111.py --write`（从 `firstep-pack\firstep-full-v1.1.1.zip` 解真 v1.1.1） |
-| 当前状态 | **2026-09-19 晚（v1.2.2 发版后）**：盘上 = **v1.2.2**，资料库基线 = `v1.2.2` / 12 批次 / 5081 文件（走完整包替换那一步由更新器写回，见 2.1）；8020 **已释放**。上一轮那次「本机修复包升到 1.2.1」的状态已被本轮的「重建 → 真升级」覆盖 |
+| 当前状态 | **2026-09-19 下午（v1.2.2 发版后）**：盘上 = **v1.2.2**，资料库基线 = `v1.2.2` / 12 批次 / 5081 文件（走完整包替换那一步由更新器写回，见 2.1）；8020 **已释放**。上一轮那次「本机修复包升到 1.2.1」的状态已被本轮的「重建 → 真升级」覆盖 |
 
 **⚠ 重建沙箱前先收 8020**（2026-09-19 实测踩到）：`rebuild-sandbox-v111.py` 会整树删除工具根，
 而 drill 结尾会把沙箱重新拉起来 → `PermissionError [WinError 32] 另一个程序正在使用此文件`。
@@ -117,7 +117,7 @@ python .scratch\update-restart-stale-service\rebuild-sandbox-v111.py --write
 | 格 | 做什么 | 结果 | 证据 |
 |---|---|---|---|
 | **B1** 沙箱升级 | v1.1.1 → 走产品端点真下线上小发版包 → 替换 → 重启 | **2026-09-18 判据不成立**：盘上 1.2.1，**跑着的服务仍 1.1.1**（旧进程没被停；启动器判 `already_running`）→ 开缺陷单 `update-restart-stale-service/01`。**2026-09-19 修复 + 重发资产后复跑：PASS**（`restarted_by_updater=true` / `served=1.2.1`） | `verify-01-upgrade.{txt,json}`（最新一轮）、`-aftercare.*`、`-b1-failed.{txt,json}`（2026-09-18 那次失败证据另存） |
-| **B2** 三极端场景 | 本地可控服务器造弱网/断线/坏字节，走产品端点 | 弱网取消 **10/10**、断线重试 **12/12**、校验失败（不可重试）**11/13**（两条不成立 = 失败后残留整卷半成品 + 边车 → `update-verify-failure-leftovers/01`）、持久内容不符 = 观察格（与 spec 一致 → 决策单 `update-content-mismatch-retry-cap/01`）。**2026-09-19 晚复核：两格都已转绿**——`verify-size` 的「半成品被清 / 边车被清」两条都成立（drill 判红 0），`content-mismatch` 出现终态 `failed` / `error_kind=verify` / 「重下不会有变化」文案、30.6 秒收敛、`retry_count=4`。复跑用**工作树的源码**当「用户机上那一代」（harness 偏离记账在 `.scratch/verify-gate-drills/run-drill-02-with-workspace-src.py`），drill 本身零改动 | `verify-02-degraded.{txt,json}` + `amend-02-corrections.py` + `.scratch/update-verify-failure-leftovers/verify-real-machine*` + `.scratch/update-content-mismatch-retry-cap/verify-real-machine*` |
+| **B2** 三极端场景 | 本地可控服务器造弱网/断线/坏字节，走产品端点 | 弱网取消 **10/10**、断线重试 **12/12**、校验失败（不可重试）**11/13**（两条不成立 = 失败后残留整卷半成品 + 边车 → `update-verify-failure-leftovers/01`）、持久内容不符 = 观察格（与 spec 一致 → 决策单 `update-content-mismatch-retry-cap/01`）。**2026-09-19 下午复核：两格都已转绿**——`verify-size` 的「半成品被清 / 边车被清」两条都成立（drill 判红 0），`content-mismatch` 出现终态 `failed` / `error_kind=verify` / 「重下不会有变化」文案、30.6 秒收敛、`retry_count=4`。复跑用**工作树的源码**当「用户机上那一代」（harness 偏离记账在 `.scratch/verify-gate-drills/run-drill-02-with-workspace-src.py`），drill 本身零改动 | `verify-02-degraded.{txt,json}` + `amend-02-corrections.py` + `.scratch/update-verify-failure-leftovers/verify-real-machine*` + `.scratch/update-content-mismatch-retry-cap/verify-real-machine*` |
 | **B3** 编码钉落点 | 沙箱真调 `POST /api/generate`（mspm0 + servo） | **PASS**：产物 `.settings/` 两件都在、正文含 `encoding/<project>=UTF-8`、sha256 与**母版**与**官方包清单**三方相等。**只证落点，不证 CCS 读取行为**（写进证据） | `verify-03-encoding-pin.{txt,json}`、`artifacts-b3/` |
 | **B4** 完整包换装 | 一次性根上**真下 801,873,335 B** → 校验 → 替换 → 重启 | **PASS**：服务 1.2.1（更新器自己带起来了）、基线写回（v1.2.1 / 12 批次）、包外与第三方安装包未动、隔离三判据成立 | `verify-04-full-pack.{txt,json}` + `-recheck.*` |
 | **B5** 账本收口 | 本节 + 第 0/2/2.5 节 + `real-acceptance/01` G1 + `E2E-8020.md` + `backlog.md` | 已完成（B1–B5 五张工单全 resolved） | `.scratch/sandbox-drill/issues/05-ledger-closeout.md` |
@@ -133,8 +133,8 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 
 | 端口 | 是什么 | 谁在用 |
 |---|---|---|
-| **8000** | 真身（`Desktop\firstep`，工作树即最新代码） | 你自己日常用；双击 `start-app.vbs` 启停。**2026-09-19 晚 v1.2.2 发版收尾后已在跑**（版本 1.2.2）——期间为躲开 drill-01 曾临时挪到 8021（见第 0 节第 1 条），收尾已挪回 |
-| **8020** | 沙箱 | 演练用，随时可停。**2026-09-19 晚已释放**（drill 收尾自己收掉并验过） |
+| **8000** | 真身（`Desktop\firstep`，工作树即最新代码） | 你自己日常用；双击 `start-app.vbs` 启停。**2026-09-19 下午 v1.2.2 发版收尾后已在跑**（版本 1.2.2）——期间为躲开 drill-01 曾临时挪到 8021（见第 0 节第 1 条），收尾已挪回 |
+| **8020** | 沙箱 | 演练用，随时可停。**2026-09-19 下午已释放**（drill 收尾自己收掉并验过） |
 | **8021** | 一次性实例（B4 完整包换装用过；**2026-09-19 本轮又用它安置过真身**） | 只在该格 / 躲避 drill 时存在，用完即释放。`FIRSTEP_LAUNCHER_PORT=8021` 一路传到更新器的 `--port` |
 
 > **同机两个实例的坑**（已修，但知道一下）：更新器默认按 8000 停服。若在 8020 上点更新而没传端口，
@@ -327,7 +327,9 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 
 ## 3. 发布状态：main 与线上包的落差
 
-**2026-09-19 晚：`main` 与线上资产同步（v1.2.2 已发）。** 下面这张表是「线上现在有什么」。
+**2026-09-19 下午（发版提交 `ccab2d7a`，13:54）：`main` 与线上资产同步（v1.2.2 已发）。**
+下面这张表是「线上现在有什么」。（本节与第 0/1/1.5 节原记「晚」，2026-09-19 按提交时间与
+drill 证据时间戳更正为**下午**——发版链 12:58 起、drill 13:07–13:49、发版提交 13:54。）
 
 | 版本 | 线上状态 | 说明 |
 |---|---|---|
