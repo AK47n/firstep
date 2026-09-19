@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=2e39b019f66fb72be059ec314dabaff9024e1864 -->
+<!-- changelog-auto: last-commit=c966c13e340dd4608b7c54f68de91070ae74f75a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -26,6 +26,7 @@
 - 14:14 记账：identity-fields/06 第四轮——用户暂不提供实物链接，缺口维持 6 slug / 11 条
 - 14:20 账本更正：v1.2.2 发版时间由「09-19 晚」改为「下午」（按发版提交 13:54 与 drill 证据时间戳）
 - 15:36 立项：硬件检测（常用模块 bring-up 自检）——两轮 grilling 定稿 spec + 九张工单
+- 15:58 工单 module-hwcheck/01：硬件检测栏目贯通 + 前端测试门禁接通
 
 ## 2026-09-18
 - 23:19 docs(闸门): commit-gate/04 CI 线上全绿收口（run 35098093620）
