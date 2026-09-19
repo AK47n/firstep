@@ -33,6 +33,11 @@ updates/
 
 # fix-errors 运行产物：真机修复的备份目录（输出目录外，可回滚；不入库）
 library/fix-backups/
+# 修订运行产物：库里每次修订前的快照（同族，可回滚；不入库——工单 update-orphan-files/03）。
+# 原先没被忽略，2026-09-12 一次库自动提交把 1481 个备份文件带进了索引，随后随小发版包
+# 发到了每个用户盘上（完整包反而刻意不收它们，两条更新路径因此给出两套盘面。
+# 判据单源见 src/contest_generator/full_pack.py 的 product_file_reason）。
+library/revise-backups/
 
 # b1-adc-servo 双平台编译矩阵产物（生成工程 + 真机编译日志，可重建；不入库）
 .scratch/b1-adc-servo/out_matrix/

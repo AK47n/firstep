@@ -1,0 +1,10 @@
+卫生：library/revise-backups 移出 git 索引（工单 update-orphan-files/03）
+
+library/fix-backups/ 早在 .gitignore 里，同族的 revise-backups 却漏了——2026-09-12 一次库
+自动提交（e2e2b04e）把 1481 个本机修订备份带进索引，随后随小发版包发到每个用户盘上
+（完整包反而刻意不收）。本单只解决「以后不再入库」：加忽略规则 + git rm -r --cached。
+
+判据：盘上 3668 个文件逐字节未动（聚合金标 sha256 da89ea4ee66c9845… 前后相同）、
+索引 1481 → 0、提交后 git status 干净、运行时不变量不受影响（revision/deepen/task_progress
+只在运行时读写这些目录）；聚焦测试 test_revision/test_library_invariants/test_wordlist/
+test_lckfb_attribution 70 passed。老用户盘上已有的那 1481 个由工单 02 的累计删除清单清掉。

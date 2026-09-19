@@ -6,7 +6,23 @@
 
 **被谁阻塞：** 无（可与 01 并行；但同批提交时放在 01 之后更清楚）。
 
-**状态：** ready-for-agent
+**状态：** resolved（2026-09-19）
+
+**完成记录。** `.gitignore` 增加 `library/revise-backups/`（注释与既有
+`library/fix-backups/` 那行同族，并写明「判据单源见 full_pack.product_file_reason」）+
+`git rm -r --cached library/revise-backups`（1481 条移出索引）。
+
+| 判据 | 实测 |
+|---|---|
+| 盘上文件 | **3668 个，逐字节未动**（聚合金标 sha256 `da89ea4ee66c9845…` 前后相同） |
+| 索引里 | 1481 → **0** |
+| 提交后 `git status --porcelain` | 干净（被忽略的文件不以 untracked 形态冒出） |
+| 运行时不变量 | `revision.py` / `deepen.py` / `task_progress.py` 只在**运行时**读写这些目录（备份与回滚入口），与 git 索引无关 |
+| 聚焦测试 | `test_revision` / `test_library_invariants` / `test_wordlist` / `test_lckfb_attribution` **70 passed** |
+
+**与工单 02 的闭环**：这次 `git rm --cached` 只解决「以后不再入库」；**老用户盘上已经收到**的
+那 1481 个备份文件由工单 02 的累计删除清单清掉（线上 v1.1.1 的小发版清单里就有它们——
+`firstep-update-v1.1.1.files.txt` 命中 1559 条），两件事合起来才算闭环。
 
 ## 背景
 
