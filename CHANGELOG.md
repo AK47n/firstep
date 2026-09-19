@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=af9a6917abb36b8f2bb53a6435529f9737a30b22 -->
+<!-- changelog-auto: last-commit=715ca1c883525d9608739c52a2a25f612b8c8fa3 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -30,6 +30,7 @@
 - 17:09 工单 module-hwcheck/02：最小自检走到板（生成 / 编译 / 烧录 / 上板清单）
 - 17:59 工单 module-hwcheck/03：器件选择 + 接线表 + 默认脚冲突预警
 - 21:53 工单 module-hwcheck/04：配方机制 + led / oled 两件专精
+- 21:54 记本机事实：ARMCC 中文字面量会吞引号 + 8791 残留服务的坑（工单 04 会话）
 
 ## 2026-09-18
 - 23:19 docs(闸门): commit-gate/04 CI 线上全绿收口（run 35098093620）
