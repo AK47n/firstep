@@ -77,6 +77,8 @@ from .config import (
     topic_library_dir,
 )
 from .context_manifest import (
+    CONTEXT_KIND_CONTEST,
+    CONTEXT_KIND_HWCHECK,
     CONTEXT_MANIFEST_FILENAME,
     ContextError,
     _infer_platform,
@@ -162,7 +164,20 @@ from .recent_jobs import (
     restore_recent,
     update_recent_status,
 )
-from .hwcheck import HwCheckConfig, render_main_c, render_output_hint
+from .hwcheck import (
+    HwCheckConfig,
+    HwCheckError,
+    hwcheck_modules,
+    render_checklist,
+    render_main_c,
+    render_output_hint,
+)
+from .hwcheck_store import (
+    DEFAULT_RECENT_LIMIT,
+    list_hwcheck_projects,
+    read_hwcheck_project,
+    resolve_hwcheck_output_dir,
+)
 from .impact import run_impact_analysis
 from .library import (
     add_module,
@@ -254,7 +269,7 @@ from .reference_library import (
     search_references,
     update_reference,
 )
-from .revision import restore_revision, revise_backup_root, run_revision
+from .revision import RevisionError, restore_revision, revise_backup_root, run_revision
 from .selection import (
     SelectionError,
     default_instances_for_multi,
@@ -638,9 +653,20 @@ def _load_revision_context(
     时快照——手工编辑不丢）；无清单自动反推（infer_context：平台 / 模块 /
     绑定 / main.c 尽力回读）。两者都过形状校验（平台词表 / slugs 库内存在性 /
     绑定键形状，非法 400 中文）。返回 (source, fields)。
+
+    **硬件检测工程在这里明确拒绝**（工单 module-hwcheck/02 的 `kind` 消费点）：
+    修订 / 深化要的是赛题的题面与功能需求，检测工程两样都没有（`kind=hwcheck`）。
+    不拦的话用户会在赛题侧看到一份"缺题面 / 缺需求"的残缺上下文，还以为是自己
+    生成错了。缺字段（旧清单 = 赛题工程）照旧走兼容路径，不受影响。
     """
     fields = read_context_fields(output_dir)
     if fields is not None:
+        if fields["kind"] != CONTEXT_KIND_CONTEST:
+            raise RevisionError(
+                "这是硬件检测工程（不是赛题工程）：修订 / 深化要用赛题的题面与功能"
+                "需求，检测工程没有这两样——请回「硬件检测」栏目里编译 / 烧录 / 对照"
+                "上板清单排查。"
+            )
         validate_context_fields(fields, module_library_dir)
         # main.c 统一现读磁盘（spec「main.c 原样保留，不丢手工编辑」）：
         # 清单里是生成时快照，用户生成后手改过 → 加载必须反映当前内容，
@@ -977,6 +1003,21 @@ def _optional_int_range(
     if not low <= value <= high:
         raise HTTPException(400, f"{key} 必须在 {low}-{high} 之间")
     return value
+
+
+def _recent_limit(raw: str) -> int:
+    """检测页「最近几次」的 limit 解析（查询参数 **字符串进**，校验归中文 400）。
+
+    空 / 缺省 = `DEFAULT_RECENT_LIMIT`；非正整数 / 非数字 → HwCheckError（400 中文）。
+    刻意不用 FastAPI 的 `int` 查询参数：它的校验失败会吐 **422 + 英文 detail**，
+    绕过本仓库「错误一律走 errors.py 的中文唯一出口」的约定（全站端点同此纪律）。
+    """
+    text = (raw or "").strip()
+    if not text:
+        return DEFAULT_RECENT_LIMIT
+    if not text.isdigit() or int(text) < 1:
+        raise HwCheckError(f"limit 必须是正整数（一次列几条），收到 {raw!r}")
+    return int(text)
 
 
 def _mask_api_key(api_key: str) -> str:
@@ -2216,6 +2257,139 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "oled": config.oled,
             "main_c": render_main_c(config),
             "output_hint": render_output_hint(config),
+        }
+
+    # 硬件检测：**真的上板**（工单 module-hwcheck/02）——生成检测工程。
+    # 走既有生成内核（generate_project），不新开第二条写盘路径：本路由只做
+    # 「推导选中模块 → 渲染 main.c → 选一个新子目录 → 交给内核」四件事。
+    # 与 /api/generate 的分道（工单 02 决策）：赛题专属副作用（题面装配 /
+    # 报告草稿 / 同名覆盖裁决 / **最近工程记录** / 自动开资源管理器）在检测
+    # 工程上一律不发生——检测工程不许污染赛题工作流。
+    @app.post("/api/hwcheck/generate")
+    @_map_errors
+    def hwcheck_generate(payload: dict) -> dict:
+        """生成一个检测工程（同步端点；零 LLM）。
+
+        payload：platform（必填，词表外 400 中文）、debug_uart / oled（可选
+        布尔，缺省 = 两个通道都在场）、parent_dir（可选，输出**父目录**；缺省
+        = 桌面）。每次生成一个新子目录 `hwcheck-<平台>-<YYYYMMDD-HHMMSS>`
+        （同秒撞车顺延一秒，**绝不覆盖**）。
+
+        返回 {platform, debug_uart, oled, output_dir, main_c, output_hint,
+        checklist（3-6 条，see render_checklist）, modules（实际进工程的模块，
+        依赖展开后）, structure, include_dirs, build_hint}。
+
+        选中的模块 = hwcheck_modules(config)（框架 led/delay + 各通道模块）——
+        检测程序调的函数必须真在工程里，这是生成门禁的硬要求，不是可选优化。
+        mspm0 无 CCS 工具链时只出 build_hint 提示（不阻断，与 /api/generate 同）。
+        """
+        platform = _require_str(payload, "platform")
+        config = HwCheckConfig(
+            platform=platform,
+            debug_uart=_optional_bool(payload, "debug_uart", default=True),
+            oled=_optional_bool(payload, "oled", default=True),
+        )
+        parent = _optional_str(payload, "parent_dir")
+        parent_dir = Path(parent) if parent else context.desktop_dir()
+        output_dir = resolve_hwcheck_output_dir(parent_dir, config.platform)
+        app_config = _current_config(context)
+        if app_config is None:
+            # 检测程序不调 LLM，但生成要读模块库 / 母版库——路径来自配置
+            raise HwCheckError(
+                "还没配置模块库 / 母版库目录：请先到设置页完成配置"
+                "（硬件检测不需要 AI，但要用到这两个库的路径）"
+            )
+        ccs_tools = None
+        if config.platform == PLATFORM_MSPM0:
+            ccs_tools = find_ccs_tools(
+                app_config.ccs_sdk_dir,
+                app_config.ccs_compiler_dir,
+                app_config.ccs_sysconfig_cli,
+            )
+        main_c = render_main_c(config)
+        # 同键互斥（既有 _generation_guard）：同一秒连点两次时第二个请求 409 收场，
+        # 不两个请求同时往同一个新目录里写（那才会真的写坏工程）。
+        with _generation_guard(context, f"hwcheck:{output_dir}"):
+            summary = generate_project(
+                platform=config.platform,
+                slugs=hwcheck_modules(config),
+                main_c_content=main_c,
+                output_dir=output_dir,
+                module_library_dir=app_config.module_library_dir,
+                masters_dir=app_config.masters_dir,
+                ccs_tools=ccs_tools,
+                tool_version=__version__,
+                kind=CONTEXT_KIND_HWCHECK,
+                write_demo_script=False,
+            )
+        return {
+            "platform": config.platform,
+            "debug_uart": config.debug_uart,
+            "oled": config.oled,
+            "output_dir": str(summary.output_dir),
+            "main_c": main_c,
+            "output_hint": render_output_hint(config),
+            "checklist": [item.to_dict() for item in render_checklist(config)],
+            "modules": [slug for slug, _files in summary.modules],
+            "structure": list(summary.structure),
+            "include_dirs": list(summary.include_dirs),
+            "build_hint": summary.build_hint,
+        }
+
+    # 硬件检测：最近几次检测（工单 module-hwcheck/02）——扫输出父目录的**磁盘
+    # 实况**，不是另一份记账（"最近工程记录"那份属于赛题工作流，检测工程不进）。
+    @app.get("/api/hwcheck/recent")
+    @_map_errors
+    def hwcheck_recent(parent_dir: str = "", limit: str = "") -> dict:
+        """父目录里的检测工程，新 → 旧。
+
+        parent_dir 缺省 / 空白 = 桌面。父目录不存在 / 还没检测过 = 空列表
+        （"一次都没跑过"是正常状态，不是错误）。只认自己人：目录名必须是
+        `hwcheck-<平台>-<时间戳>` 且平台在词表内。
+
+        limit 是**字符串**参数而不是 `int`：FastAPI 的 int 校验失败会吐 422 +
+        英文 detail，绕过本仓库「中文 message 走 errors.py 唯一出口」的约定
+        （全站其它端点也都不把校验交给 FastAPI）。非正整数 → HwCheckError 400 中文。
+        """
+        parent = Path(parent_dir.strip()) if parent_dir.strip() else context.desktop_dir()
+        return {
+            "items": [
+                {
+                    "name": ref.name,
+                    "dir": str(ref.dir),
+                    "platform": ref.platform,
+                    "created_at": ref.created_at,
+                }
+                for ref in list_hwcheck_projects(parent, limit=_recent_limit(limit))
+            ]
+        }
+
+    # 硬件检测：回读一次检测（工单 module-hwcheck/02）——刷新回显与"点最近一次
+    # 回到那次检测"的服务端真源。判据 = 清单的 kind（不是检测工程 → 400 中文）。
+    @app.get("/api/hwcheck/project")
+    @_map_errors
+    def hwcheck_project(output_dir: str = "") -> dict:
+        """给一个检测工程目录 → 它的平台 / 通道 / main.c / 上板清单。
+
+        main_c 读**盘上当前内容**（用户手改过就反映手改后的），清单与通道说明
+        按清单记的平台与通道集重渲染（确定性，与生成时逐字一致）。目录不存在 /
+        不是检测工程（赛题工程 / 缺清单）→ HwCheckError 400 中文。
+        """
+        target = output_dir.strip()
+        if not target:
+            raise HwCheckError("请指定检测工程目录（output_dir）")
+        path = Path(target)
+        if not path.is_dir():
+            raise HwCheckError(f"检测工程目录不存在：{path}")
+        config = read_hwcheck_project(path)
+        return {
+            "output_dir": str(path),
+            "platform": config.platform,
+            "debug_uart": config.debug_uart,
+            "oled": config.oled,
+            "main_c": read_project_main_c(path),
+            "output_hint": render_output_hint(config),
+            "checklist": [item.to_dict() for item in render_checklist(config)],
         }
 
     @app.post("/api/pick-directory")

@@ -46,6 +46,14 @@ CONTEXT_MANIFEST_FILENAME = ".contest_context.json"
 # 清单版本：向后兼容读（未知版本容忍：只读已知字段，缺省补空）
 CONTEXT_MANIFEST_VERSION = 1
 
+# 工程种类（工单 module-hwcheck/02）：`contest` = 赛题工程（缺省），
+# `hwcheck` = 硬件检测工程。判据单源在这里——写侧校验，读侧**缺字段 / 未知值
+# 一律读作 contest**（向后兼容 + 保守：不认识的工程宁可当赛题工程，也不能被
+# 检测页误当成"我的检测工程"）。
+CONTEXT_KIND_CONTEST = "contest"
+CONTEXT_KIND_HWCHECK = "hwcheck"
+CONTEXT_KINDS: tuple[str, ...] = (CONTEXT_KIND_CONTEST, CONTEXT_KIND_HWCHECK)
+
 
 class ContextError(ValueError):
     """上下文清单损坏 / 形状非法 / 平台无法识别（400 中文，登记 errors.py）。"""
@@ -65,18 +73,27 @@ def build_context_fields(
     instances: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
     python_templates: Mapping[str, str] | None = None,
     tool_version: str = "",
+    kind: str = CONTEXT_KIND_CONTEST,
 ) -> dict[str, Any]:
     """组装清单字段（写侧单源：generate 尾部与测试共用同一形状）。
 
     字段 = spec 清单（题面 / 平台 / slugs / 绑定 / 多实例 / 副产物模板 /
     Q&A / 功能需求清单 / 参考条目 / 生成时间 / 工具版本）+ 两个输入类扩展：
-    main_c（生成时骨架快照，深化工单消费）与 topic_id（历史赛题入口）。
+    main_c（生成时骨架快照，深化工单消费）与 topic_id（历史赛题入口）+
+    工程种类 `kind`（工单 module-hwcheck/02：检测工程与赛题工程分得开）。
     可选字段缺省 = 空/空集（缺省生成路径 = 旧行为逐字节，清单内容自洽：
     什么也没传就记什么也没用）。生成结果类字段（score_points 等）不入清单
     ——清单只记生成输入，结果可随时从产物树重算。
+
+    `kind` 非法（词表外）在这里大声失败：脏值不许写进清单让读侧去猜。
     """
+    if kind not in CONTEXT_KINDS:
+        raise ContextError(
+            f"未知的工程种类 {kind!r}（应为 {'、'.join(CONTEXT_KINDS)}）"
+        )
     return {
         "version": CONTEXT_MANIFEST_VERSION,
+        "kind": kind,
         "platform": platform,
         "slugs": list(slugs),
         "main_c": main_c,
@@ -134,8 +151,12 @@ def read_context_fields(output_dir: Path) -> dict[str, Any] | None:
     data = load_context_manifest(output_dir)
     if data is None:
         return None
+    raw_kind = data.get("kind")
     return {
         "version": data.get("version", 1),
+        # 缺字段 / 未知值 = 赛题工程（向后兼容 + 保守：不认识的工程不该被
+        # 检测页当成自己的检测工程）
+        "kind": raw_kind if raw_kind in CONTEXT_KINDS else CONTEXT_KIND_CONTEST,
         "platform": data.get("platform", ""),
         "slugs": data.get("slugs", []) if isinstance(data.get("slugs"), list) else [],
         "main_c": data.get("main_c", "") if isinstance(data.get("main_c"), str) else "",

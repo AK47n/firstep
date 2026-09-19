@@ -15,6 +15,13 @@ export const CCS_PROBE_NOTE =
 // 三件的中文名（探测说明行 / 来源一句话共用）
 export const CCS_PIECE_NAMES = { sdk: "SDK", compiler: "编译器", sysconfig: "SysConfig" };
 
+// 工具链展示名（单源）：环境体检行与硬件检测页的「缺工具链」降级文案共用——
+// 两处各写一遍的话，改名字会漂成两个说法（工单 module-hwcheck/02 评审整改）。
+export const TOOLCHAIN_NAMES = {
+  stm32: "Keil UV4（stm32）",
+  mspm0: "CCS + MSPM0 SDK（mspm0）· gmake",
+};
+
 // 路径最后一段（Windows / POSIX 分隔符都认，尾分隔符容错）：来源根只显示目录名
 // （ccs2051 比整条 C:\ti\ccs2051 更适合一眼对照），完整路径仍在各件行里。
 function _pathTail(p) {
@@ -91,8 +98,8 @@ export function envCheckStatusHTML(status, textCh, visionCh) {  if (!status) ret
   rows.push(envChannelHTML("llm-vision", "视觉通道", visionCh));
   const tc = status.toolchains || {};
   const tcMeta = {
-    stm32: { name: "Keil UV4（stm32）", miss: "未找到 UV4（可在设置页填 uv4_path 覆盖）", jump: { focus: "set-uv4-path", collapse: "toolchain" } },
-    mspm0: { name: "CCS + MSPM0 SDK（mspm0）· gmake", miss: "未找到 gmake / CCS 工具链（可在设置页填 gmake_path 或 CCS 三件套）", jump: { focus: "set-gmake-path", collapse: "toolchain" } },
+    stm32: { name: TOOLCHAIN_NAMES.stm32, miss: "未找到 UV4（可在设置页填 uv4_path 覆盖）", jump: { focus: "set-uv4-path", collapse: "toolchain" } },
+    mspm0: { name: TOOLCHAIN_NAMES.mspm0, miss: "未找到 gmake / CCS 工具链（可在设置页填 gmake_path 或 CCS 三件套）", jump: { focus: "set-gmake-path", collapse: "toolchain" } },
   };
   for (const [plat, meta] of Object.entries(tcMeta)) {
     const entry = tc[plat];
@@ -208,5 +215,6 @@ if (typeof window !== "undefined") {
   Object.assign(window, {
     envRowHTML, envChannelHTML, envCheckStatusHTML, toolchainProbeText,
     ccsSourceText, ENV_BADGE_GLYPH, CCS_PROBE_NOTE, CCS_PIECE_NAMES,
+    TOOLCHAIN_NAMES,
   });
 }

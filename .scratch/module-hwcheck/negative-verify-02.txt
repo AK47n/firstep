@@ -1,0 +1,88 @@
+# 工单 module-hwcheck/02 判据强度探针（停用守卫 → 必须变红）
+
+## A stm32 头名回退成 mspm0 的名字（工单 01 的原缺陷）→ 平台过滤器与 include 用例应红
+注入：src/contest_generator/hwcheck.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck.py -q -k include or stm32_does_not_include
+退出码：1（判据要求非 0）
+红证摘要：
+  E       AssertionError: HwCheckConfig(platform='stm32', debug_uart=True, oled=True) 引用了该平台工程里没有的头：['oled.h', 'delay.h']
+  tests\test_hwcheck.py:315: AssertionError
+  E       AssertionError: HwCheckConfig(platform='stm32', debug_uart=False, oled=False) 引用了该平台工程里没有的头：['delay.h']
+  tests\test_hwcheck.py:315: AssertionError
+  tests\test_hwcheck.py:473: AssertionError
+  FAILED tests/test_hwcheck.py::test_every_include_resolves_in_that_platforms_real_project[config0]
+  FAILED tests/test_hwcheck.py::test_every_include_resolves_in_that_platforms_real_project[config2]
+  FAILED tests/test_hwcheck.py::test_stm32_does_not_include_headers_the_stm32_project_lacks
+  3 failed, 2 passed, 45 deselected in 0.21s
+
+## B 目录名解析不再校验平台词表（赛题工程 / 瞎写的平台会被当检测工程）→ 扫描用例应红
+注入：src/contest_generator/hwcheck_store.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck_store.py -q -k rejects_foreign or scans_only
+退出码：1（判据要求非 0）
+红证摘要：
+  E       AssertionError: assert ('nope', '2026-09-20 15:30:12') is None
+  tests\test_hwcheck_store.py:88: AssertionError
+  FAILED tests/test_hwcheck_store.py::test_parse_rejects_foreign_and_malformed_names[hwcheck-nope-20260920-153012]
+  1 failed, 10 passed, 11 deselected in 0.62s
+
+## C 本地勾选态解码去掉坏值防护（JSON 坏了直接抛）→ 前端用例应红
+注入：src/contest_generator/static/js/fx/hwcheck.js
+命令：node --test tests/js/hwcheck.test.mjs
+退出码：1（判据要求非 0）
+红证摘要：
+  ✖ hwcheckCheckedIds：坏值一律当「一条都没勾」（本地备忘坏了不许炸页面） (0.1664ms)
+  ✖ failing tests:
+  ✖ hwcheckCheckedIds：坏值一律当「一条都没勾」（本地备忘坏了不许炸页面） (0.1664ms)
+
+## D 清单读侧不再把缺字段 / 未知值归一为赛题工程 → 上下文清单用例应红
+注入：src/contest_generator/context_manifest.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_context_manifest.py -q -k kind
+退出码：1（判据要求非 0）
+红证摘要：
+  E       AssertionError: assert None == 'contest'
+  tests\test_context_manifest.py:336: AssertionError
+  FAILED tests/test_context_manifest.py::test_read_side_treats_a_missing_or_unknown_kind_as_contest
+  1 failed, 4 passed, 20 deselected, 1 warning in 1.25s
+
+## E ui 手拼清单壳（不再走 fx 单源）→ 前端「不手拼壳」守卫应红
+注入：src/contest_generator/static/js/ui/hwcheck.js
+命令：node --test tests/js/hwcheck.test.mjs
+退出码：1（判据要求非 0）
+红证摘要：
+  ✖ ui 不手拼工程面板 / 清单 / 最近的壳（壳的单源在 fx/hwcheck.js） (3.4838ms)
+  ✖ failing tests:
+  ✖ ui 不手拼工程面板 / 清单 / 最近的壳（壳的单源在 fx/hwcheck.js） (3.4838ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+## F mspm0 双通道「生成前会撞脚」的引导被拿掉 → 引导用例应红
+注入：src/contest_generator/static/js/fx/hwcheck.js
+命令：node --test tests/js/hwcheck.test.mjs
+退出码：1（判据要求非 0）
+红证摘要：
+  ✖ hwcheckChannelNoteHTML：mspm0 双通道在**生成前**就给出路（评审整改） (0.6494ms)
+  ✖ failing tests:
+  ✖ hwcheckChannelNoteHTML：mspm0 双通道在**生成前**就给出路（评审整改） (0.6494ms)
+  AssertionError [ERR_ASSERTION]: stm32 默认不撞脚
+
+## G 赛题侧（修订 / 深化）不再拒绝检测工程 → kind 消费点用例应红
+注入：src/contest_generator/webapp.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck.py -q -k revise_context_rejects
+退出码：1（判据要求非 0）
+红证摘要：
+  E       AssertionError: {"source":"manifest","context":{"version":1,"kind":"hwcheck","platform":"stm32","slugs":["led","delay","config","debug_uart"],"main_c":"/**\n * @file main.c\n * @brief 硬件检测程序（最
+  tests\test_hwcheck.py:882: AssertionError
+  FAILED tests/test_hwcheck.py::test_revise_context_rejects_a_hwcheck_project_400
+  1 failed, 49 deselected, 1 warning in 14.71s
+
+## H 最近列表的 limit 不校验（非正整数照收）→ 查询参数用例应红
+注入：src/contest_generator/webapp.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck.py -q -k bad_limit
+退出码：1（判据要求非 0）
+红证摘要：
+  E           AssertionError: ('abc', 200, '{"items":[]}')
+  tests\test_hwcheck.py:835: AssertionError
+  FAILED tests/test_hwcheck.py::test_recent_endpoint_rejects_a_bad_limit_400_chinese
+  1 failed, 49 deselected, 1 warning in 0.55s
+
+## 结论
+全部 8 条注入都按预期变红，且文件已逐字节复原。

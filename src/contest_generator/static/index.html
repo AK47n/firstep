@@ -948,8 +948,9 @@
   .res-block .res-value { font-size: 13px; line-height: 1.7; min-width: 0;
                           overflow-wrap: break-word; }
   .res-block pre.result { max-height: 420px; margin: 0; }
-  /* 硬件检测栏目（工单 module-hwcheck/01）：输出通道勾选 + 通道说明 + main.c 预览。
-     main.c 复用 .result 的代码观感（等宽 / code-bg / 可滚），这里只放宽高度。 */
+  /* 硬件检测栏目（工单 module-hwcheck/01 + 02）：输出通道勾选 + 通道说明 + main.c 预览
+     + 工程面板 + 上板清单 + 最近几次检测。main.c 复用 .result 的代码观感
+     （等宽 / code-bg / 可滚），这里只放宽高度。 */
   .hwcheck-channels { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: var(--space-1); }
   .hwcheck-channel { display: inline-flex; align-items: center; gap: 6px; font-size: 13px;
                      color: var(--text); cursor: pointer; }
@@ -958,6 +959,32 @@
                   background: var(--panel-2); border: 1px solid var(--border);
                   border-radius: var(--radius-md); padding: 8px 12px; margin-bottom: var(--space-2); }
   pre.hwcheck-code { max-height: 520px; margin: 0; }
+  .hwcheck-parent { min-width: 320px; flex: 1 1 320px; }
+  .hwcheck-path { font-size: 13px; margin-bottom: var(--space-1); overflow-wrap: break-word; }
+  .hwcheck-actions { margin: var(--space-2) 0; }
+  /* 工具链缺失 = 大声降级（说清"未验证"，不假装编译过） */
+  .hwcheck-warn { font-size: 12.5px; line-height: 1.8; color: var(--warn);
+                  border: 1px solid var(--warn); border-radius: var(--radius-md);
+                  padding: 8px 12px; margin-bottom: var(--space-2); }
+  /* 上板清单：一条 = 一个勾选框 + 「应看到什么 / 不对先查哪里」两行 */
+  .hwcheck-check { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px;
+                   border: 1px solid var(--border); border-radius: var(--radius-md);
+                   margin-bottom: var(--space-1); cursor: pointer; }
+  .hwcheck-check input { width: auto; margin: 2px 0 0; flex: 0 0 auto; }
+  .hwcheck-check.done { border-color: var(--ok); opacity: .72; }
+  .hwcheck-check-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .hwcheck-check-expect { font-size: 13px; line-height: 1.7; color: var(--text); }
+  .hwcheck-check-tip { font-size: 12.5px; line-height: 1.7; color: var(--muted); }
+  /* 最近几次检测：点一行 = 回读那次检测 */
+  .hwcheck-recent-row { display: flex; align-items: center; gap: 10px; width: 100%;
+                        text-align: left; background: var(--panel); color: var(--text);
+                        border: 1px solid var(--border); border-radius: var(--radius-md);
+                        padding: 6px 12px; margin-bottom: var(--space-1); cursor: pointer;
+                        font-size: 13px; }
+  .hwcheck-recent-row:hover { border-color: var(--accent); }
+  .hwcheck-recent-row.current { border-color: var(--accent); }
+  .hwcheck-recent-time { color: var(--muted); font-size: 12.5px; flex: 0 0 auto; }
+  .hwcheck-recent-name { flex: 1 1 auto; min-width: 0; overflow-wrap: break-word; }
   /* 评分点核对清单（工单 score-checklist/01）：逐条 checkbox + 进度 +
      复制核对表；done 行弱化描边表示已核对 */
   .sp-actions { display: flex; align-items: center; gap: 10px; margin-bottom: var(--space-2); }
@@ -3777,17 +3804,18 @@
     </div><!-- /.gen-layout -->
   </section>
 
-  <!-- ============================ 硬件检测（工单 module-hwcheck/01） ============================
-       顶级栏目、完全独立于赛题工作流：选平台 →（后续工单：选器件）→ 生成检测程序
-       → 编译烧录 → 照清单上板确认。本工单只贯通到「零器件最小自检」的 main.c
-       预览（LED 心跳 + 输出通道自报，后端确定性渲染、零 LLM）。
-       ⚠ 不读题面、不读已选模块、不写最近工程记录——检测工程与赛题工程互不干扰。 -->
+  <!-- ============================ 硬件检测（工单 module-hwcheck/01 + 02） ============================
+       顶级栏目、完全独立于赛题工作流：选平台 →（后续工单：选器件）→ 生成检测工程
+       → 编译烧录 → 照清单上板确认。工单 02 起真的上板：生成走既有生成内核
+       （新子目录 hwcheck-平台-时间，不覆盖、不进最近工程记录），编译 / 烧录
+       复用既有面板与工具探测，清单勾选态本地备忘、刷新回显。
+       ⚠ 本栏目不读题面、不读已选模块、不写最近工程记录——检测工程与赛题工程互不干扰。 -->
   <section id="tab-hwcheck" class="page">
     <div class="card">
       <h2>硬件检测 <span class="muted">（手上这件器件通不通——不用赛题、不用先选模块；本版先做「板子活着」最小自检）</span></h2>
-      <p class="card-details">先选平台，再点「预览检测程序」看这一趟要烧进板子的 main.c。
-        它只做两件事：板载 LED 按固定周期闪（肉眼确认程序在跑）、每一段自检结果写到你在场的输出通道。
-        没有器件也能生成——那是先确认板子和烧录链路是好的。</p>
+      <p class="card-details">先选平台和输出通道，再点「预览检测程序」看这一趟要烧进板子的 main.c，
+        或直接「生成检测工程」——生成后会给你编译、烧录按钮和一张「应看到什么 / 不对先查哪里」的清单。
+        没有器件也能生成：那是先确认板子和烧录链路是好的。</p>
       <h3>1. 目标平台</h3>
       <div id="hwcheck-platforms" class="row"></div>
       <h3>2. 输出通道</h3>
@@ -3795,10 +3823,35 @@
         <label class="hwcheck-channel"><input type="checkbox" data-hwcheck-channel="debug_uart" checked> 调试串口（115200，能反复复测）</label>
         <label class="hwcheck-channel"><input type="checkbox" data-hwcheck-channel="oled" checked> OLED 屏（不拖串口线也能看结果）</label>
       </div>
+      <div id="hwcheck-channel-note"></div>
+      <h3>3. 保存位置</h3>
+      <div class="row">
+        <input type="text" id="hwcheck-parent" class="hwcheck-parent" placeholder="留空 = 桌面">
+        <button id="btn-hwcheck-pick-parent">选择文件夹</button>
+      </div>
+      <div class="hwcheck-hint">每次检测都会在里面新建一个
+        <span class="slug">hwcheck-平台-时间</span> 子目录，不会覆盖以前生成的工程，
+        也不会占用「生成」页的最近工程记录。</div>
       <div class="row" style="margin-top: var(--space-3)">
-        <button id="btn-hwcheck-preview" class="primary">预览检测程序</button>
+        <button id="btn-hwcheck-preview">预览检测程序</button>
+        <button id="btn-hwcheck-generate" class="primary">生成检测工程</button>
       </div>
       <div id="hwcheck-output" style="margin-top: var(--space-3)"></div>
+    </div>
+
+    <div class="card">
+      <h2>检测工程 <span class="muted">（生成在磁盘上，可直接编译烧录）</span></h2>
+      <div id="hwcheck-project"></div>
+    </div>
+
+    <div class="card">
+      <h2>上板确认清单 <span class="muted">（照着看，勾完就知道通没通）</span></h2>
+      <div id="hwcheck-checklist"></div>
+    </div>
+
+    <div class="card">
+      <h2>最近几次检测 <span class="muted">（这个输出位置下的）</span></h2>
+      <div id="hwcheck-recent"></div>
     </div>
   </section>
 

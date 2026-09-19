@@ -85,7 +85,11 @@ from .clex import (
     strip_comments,
     top_level_defines,
 )
-from .context_manifest import build_context_fields, write_context_manifest
+from .context_manifest import (
+    CONTEXT_KIND_CONTEST,
+    build_context_fields,
+    write_context_manifest,
+)
 from .demo_script import DEMO_SCRIPT_FILENAME, render_demo_script
 from .report_draft import REPORT_DRAFT_FILENAME, render_report_draft
 from .wiring import build_wiring_snapshot, write_wiring_snapshot
@@ -783,6 +787,12 @@ def generate_project(
     requirements: Sequence[Mapping[str, Any]] | None = None,
     references: Sequence[str] = (),
     tool_version: str = "",
+    # 工程种类（工单 module-hwcheck/02）：写进上下文清单的 `kind` 字段。
+    # 缺省 = 赛题工程（既有行为逐字节不变）。
+    kind: str = CONTEXT_KIND_CONTEST,
+    # 演示脚本开关（工单 module-hwcheck/02）：检测工程没有评分点 / 功能需求，
+    # 演示脚本写了也是空壳，故不写。缺省 True = 既有行为逐字节不变。
+    write_demo_script: bool = True,
     # 报告草稿（工单 report-draft-demo/02）：LLM 层先产出的报告文本（方案论证
     # + 软件流程拼接，契约见 report_draft.render_report_draft）；缺省空 = 不写
     # 设计报告草稿.md（旧行为逐字节不变），非空 = 写盘（README / 演示脚本
@@ -816,6 +826,11 @@ def generate_project(
     （旧行为逐字节不变）。模板级依赖覆盖（工单 k230-digit-vision/02）：
     resolve_selection 消费同参——所选模板声明 dependencies 时依赖展开按
     覆盖走（与展开端点同一答案来源）。
+
+    kind / write_demo_script（工单 module-hwcheck/02）= 硬件检测工程的生成形态
+    开关：`kind` 落进上下文清单（缺省 contest = 赛题工程），`write_demo_script`
+    = False 时不写演示脚本（检测工程没有评分点 / 需求，写了也是空壳）。两者
+    缺省值 = 既有行为逐字节不变。
     """
     resolved = resolve_selection(
         module_library_dir, platform, slugs, python_templates=python_templates
@@ -842,6 +857,8 @@ def generate_project(
         requirements=requirements,
         references=references,
         tool_version=tool_version,
+        kind=kind,
+        write_demo_script=write_demo_script,
         report_draft_text=report_draft_text,
     )
     return describe_generation(
@@ -1132,6 +1149,9 @@ def generate(
     requirements: Sequence[Mapping[str, Any]] | None = None,
     references: Sequence[str] = (),
     tool_version: str = "",
+    # 工程种类 / 演示脚本开关（工单 module-hwcheck/02）：见 generate_project。
+    kind: str = CONTEXT_KIND_CONTEST,
+    write_demo_script: bool = True,
     # 报告草稿（工单 report-draft-demo/02）：LLM 层先产出的报告文本，缺省空 =
     # 不写 设计报告草稿.md（旧行为逐字节不变）；非空 = README / 演示脚本之后
     # 写盘（纯新增文件，写失败走既有 rmtree 兜底，生成原子性不破）。
@@ -1173,6 +1193,9 @@ def generate(
     任何既有生成文件（逐字节契约不破）；板名取不到优雅降级为不显示。透传
     resolved_bindings + instance_plans（工单 03：引脚表生效引脚 = 绑定覆盖 /
     多实例每实例一行；两者空 = 缺省路径逐字节不变）。
+
+    kind / write_demo_script（工单 module-hwcheck/02）：前者落进上下文清单的
+    `kind` 字段，后者 False = 跳过演示脚本。缺省 = 既有行为逐字节不变。
     """
     patcher_registry = registry or default_registry()
     patcher = patcher_registry.get(platform)  # 未知平台在这里失败
@@ -1318,11 +1341,14 @@ def generate(
         # 调用），数据全来自既有参数（score_points / requirements /
         # manifests），零新参数；纯新增文件，不触碰任何既有生成文件。缺省
         # 数据（无评分点无需求）= 模块清单验证演示，内容自洽不空文件。写
-        # 失败走既有 rmtree 兜底，生成原子性不破。
-        (output_dir / DEMO_SCRIPT_FILENAME).write_text(
-            render_demo_script(score_points, requirements, manifests),
-            encoding="utf-8",
-        )
+        # 失败走既有 rmtree 兜底，生成原子性不破。write_demo_script=False
+        # （工单 module-hwcheck/02：检测工程没有评分点 / 需求，写了也是空壳）
+        # = 整段跳过。
+        if write_demo_script:
+            (output_dir / DEMO_SCRIPT_FILENAME).write_text(
+                render_demo_script(score_points, requirements, manifests),
+                encoding="utf-8",
+            )
 
         # 设计报告草稿（工单 report-draft-demo/02）：README / 演示脚本之后写
         # 工程根 设计报告草稿.md——LLM 文本（report_draft_text，方案论证 + 软件
@@ -1366,6 +1392,7 @@ def generate(
                 },
                 python_templates=template_choices or {},
                 tool_version=tool_version,
+                kind=kind,
             ),
         )
     except Exception:

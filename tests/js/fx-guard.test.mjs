@@ -34,7 +34,7 @@ const DOMAINS = {
     makeAbortable: "fn", isAbortError: "fn",
   },
   "env.js": {
-    ENV_BADGE_GLYPH: "object",
+    ENV_BADGE_GLYPH: "object", TOOLCHAIN_NAMES: "object",
     envRowHTML: "fn", envChannelHTML: "fn", envCheckStatusHTML: "fn",
     toolchainProbeText: "fn",
     CCS_PROBE_NOTE: "string", CCS_PIECE_NAMES: "object", ccsSourceText: "fn",
@@ -65,6 +65,21 @@ const DOMAINS = {
   "code-compile.js": {
     compileStatusText: "fn", compileStatusClass: "fn", compileErrorRowsHTML: "fn",
     isSyscfgConflict: "fn",
+  },
+  "hwcheck.js": {
+    hwcheckPlatformState: "fn", hwcheckSelectPlatform: "fn", hwcheckPickState: "fn",
+    hwcheckRequestPayload: "fn", hwcheckCanPreview: "fn", hwcheckPlatformCardsHTML: "fn",
+    hwcheckHintHTML: "fn", hwcheckErrorHTML: "fn", hwcheckGenerateErrorHTML: "fn",
+    hwcheckEmptyHTML: "fn", hwcheckPanelHTML: "fn", hwcheckCodeTarget: "fn", hwcheckPreviewState: "fn",
+    hwcheckPlatformLabel: "fn", hwcheckGeneratePayload: "fn", hwcheckChecklistKey: "fn",
+    hwcheckCheckedIds: "fn", hwcheckChecklistToggle: "fn", hwcheckChecklistHTML: "fn",
+    hwcheckChecklistProgressHTML: "fn", hwcheckProjectState: "fn",
+    hwcheckChannelText: "fn", hwcheckProjectInfoHTML: "fn", hwcheckToolchainNote: "fn",
+    hwcheckChannelNoteHTML: "fn", hwcheckActionsHTML: "fn",
+    hwcheckProjectPanelHTML: "fn", hwcheckRecentHTML: "fn",
+    hwcheckRecentEmptyHTML: "fn", hwcheckProjectEmptyHTML: "fn",
+    HWCHECK_CHANNEL_KEYS: "object",
+    HWCHECK_PARENT_KEY: "string", HWCHECK_LAST_DIR_KEY: "string",
   },
   "code-tree-ops.js": {
     treeNameValidate: "fn", treeOpAffected: "fn", treeRenamedPath: "fn",

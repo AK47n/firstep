@@ -15,6 +15,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from contest_generator.context_manifest import (
+    CONTEXT_KIND_CONTEST,
+    CONTEXT_KIND_HWCHECK,
     CONTEXT_MANIFEST_FILENAME,
     ContextError,
     build_context_fields,
@@ -289,6 +291,83 @@ def test_read_context_fields_bad_json_raises(tmp_path):
     (out / CONTEXT_MANIFEST_FILENAME).write_text("{not json", encoding="utf-8")
     with pytest.raises(ContextError):
         read_context_fields(out)
+
+
+# ---------------------------------------------------------------------------
+# kind 字段（工单 module-hwcheck/02）：检测工程与赛题工程分得开
+# ---------------------------------------------------------------------------
+
+
+def test_kind_defaults_to_contest_on_the_write_side():
+    """赛题工程的清单照写 `contest`（缺省路径行为不变，只是多一个字段）。"""
+    fields = build_context_fields(
+        platform=PLATFORM_STM32, slugs=["dht11"], main_c="int main(void) {}"
+    )
+    assert fields["kind"] == CONTEXT_KIND_CONTEST == "contest"
+
+
+def test_write_side_rejects_an_unknown_kind():
+    """写侧非法 kind 大声失败（不许把脏值写进清单让读侧去猜）。"""
+    with pytest.raises(ContextError):
+        build_context_fields(
+            platform=PLATFORM_STM32, slugs=[], main_c="", kind="hw-checks"
+        )
+
+
+def test_read_side_keeps_hwcheck_kind(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    write_context_manifest(
+        out,
+        build_context_fields(
+            platform=PLATFORM_STM32, slugs=["led"], main_c="", kind=CONTEXT_KIND_HWCHECK
+        ),
+    )
+    assert read_context_fields(out)["kind"] == CONTEXT_KIND_HWCHECK
+
+
+def test_read_side_treats_a_missing_or_unknown_kind_as_contest(tmp_path):
+    """向后兼容 + 保守：旧清单缺字段 / 写了没见过的值 → 一律读作赛题工程。"""
+    legacy = tmp_path / "legacy"
+    legacy.mkdir()
+    (legacy / CONTEXT_MANIFEST_FILENAME).write_text(
+        json.dumps({"platform": "stm32", "slugs": ["dht11"]}), encoding="utf-8"
+    )
+    assert read_context_fields(legacy)["kind"] == CONTEXT_KIND_CONTEST
+
+    unknown = tmp_path / "unknown"
+    unknown.mkdir()
+    (unknown / CONTEXT_MANIFEST_FILENAME).write_text(
+        json.dumps({"platform": "stm32", "slugs": [], "kind": "hw-checks"}),
+        encoding="utf-8",
+    )
+    assert read_context_fields(unknown)["kind"] == CONTEXT_KIND_CONTEST
+
+
+def test_generate_project_can_tag_kind_and_skip_the_demo_script(tmp_path):
+    """检测工程的生成形态：清单带 kind=hwcheck，且不写演示脚本。
+
+    两处都是**新增开关**（缺省 True / contest）——既有生成路径逐字节不变。
+    """
+    library = make_fake_module_library(tmp_path / "modules")
+    make_fake_master_project(tmp_path / "masters" / PLATFORM_STM32)
+    summary = generate_project(
+        platform=PLATFORM_STM32,
+        slugs=["dht11"],
+        main_c_content=MAIN_SKELETON,
+        output_dir=tmp_path / "out",
+        module_library_dir=library,
+        masters_dir=tmp_path / "masters",
+        kind=CONTEXT_KIND_HWCHECK,
+        write_demo_script=False,
+    )
+    fields = json.loads(
+        (summary.output_dir / CONTEXT_MANIFEST_FILENAME).read_text(encoding="utf-8")
+    )
+    assert fields["kind"] == CONTEXT_KIND_HWCHECK
+    assert (summary.output_dir / "README.md").is_file()
+    assert not (summary.output_dir / "演示脚本.md").exists()
+
 
 
 # ---------------------------------------------------------------------------
