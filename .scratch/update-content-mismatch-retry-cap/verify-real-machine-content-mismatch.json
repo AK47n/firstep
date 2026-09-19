@@ -1,0 +1,144 @@
+{
+  "problems": [],
+  "stuck": [],
+  "notes": [
+    "持久内容不符 = **永远 downloading + 每轮整卷重下**（spec 设计如此）：本机 30.6s 内重试 4 次、台账 5 次请求起始偏移全 0；退避封顶 60 秒，线上完整包 765 MB/轮 → 约 45 GB/小时的流量黑洞，且用户看不到任何终态或「重下不会有变化」的中文话术（那句只属于**不可重试**的 verify 分支，见下一格）。已按决策单记账。"
+  ],
+  "scenarios": {
+    "content-mismatch": {
+      "spec_reference": "spec 第 122 行：内容不符 → 删半成品 + 退避重试，直到对上或用户取消",
+      "terminal_reached": true,
+      "final_state": "failed",
+      "max_retry_count": 4,
+      "observations": [
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 0,
+          "retry_count": 0,
+          "retrying": false,
+          "error_kind": "",
+          "message": "",
+          "error": ""
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 3961701,
+          "retry_count": 1,
+          "retrying": true,
+          "error_kind": "verify",
+          "message": "下载内容与清单不符（3961701 字节），已删除重下，会重新下载整卷",
+          "error": ""
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 3961701,
+          "retry_count": 2,
+          "retrying": true,
+          "error_kind": "verify",
+          "message": "下载内容与清单不符（3961701 字节），已删除重下，会重新下载整卷",
+          "error": ""
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 3961701,
+          "retry_count": 3,
+          "retrying": true,
+          "error_kind": "verify",
+          "message": "下载内容与清单不符（3961701 字节），已删除重下，会重新下载整卷",
+          "error": ""
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 3961701,
+          "retry_count": 4,
+          "retrying": true,
+          "error_kind": "verify",
+          "message": "下载内容与清单不符（3961701 字节），已删除重下，会重新下载整卷",
+          "error": ""
+        },
+        {
+          "state": "failed",
+          "total_downloaded_bytes": 3961701,
+          "retry_count": 4,
+          "retrying": false,
+          "error_kind": "verify",
+          "message": "",
+          "error": "下载失败（卷 firstep-full-v1.2.1.zip）：连续 5 次整卷重下后内容仍与清单不符，重下不会有变化（可稍后再试，或把这一卷反馈给发布者）"
+        }
+      ],
+      "server_requests": 5,
+      "server_starts": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "partial_present_after": false,
+      "health_after": {
+        "app": "contest-generator",
+        "version": "1.2.1",
+        "ok": true
+      },
+      "observed_seconds": 30.6
+    }
+  },
+  "facts": {
+    "sim_root": "C:\\Users\\luoji\\Desktop\\firstep-sim",
+    "sim_version_on_disk": "1.2.1",
+    "sandbox_updates_entries": [
+      "backup",
+      "firstep-update-1.1.1.removed.txt",
+      "firstep-update-1.1.1.zip",
+      "firstep-update-1.2.1.removed.txt",
+      "firstep-update-1.2.1.zip",
+      "full",
+      "full-apply.log",
+      "last-update.json",
+      "updater.log"
+    ],
+    "port_8000_listeners": [
+      "43960"
+    ],
+    "port_8020_listeners": []
+  },
+  "sandbox_traces": {
+    "marker": true,
+    "drill_backups": [],
+    "sandbox_updates_untouched_entries": [
+      "backup",
+      "firstep-update-1.1.1.removed.txt",
+      "firstep-update-1.1.1.zip",
+      "firstep-update-1.2.1.removed.txt",
+      "firstep-update-1.2.1.zip",
+      "full",
+      "full-apply.log",
+      "last-update.json",
+      "updater.log"
+    ]
+  },
+  "cleanup": {
+    "killed": [
+      "31148"
+    ],
+    "leftover": []
+  },
+  "isolation": {
+    "real_data_mtime_untouched": true,
+    "real_updates_untouched": true,
+    "real_tree_untouched": true,
+    "port_8000_listeners": [
+      "43960"
+    ]
+  },
+  "real_tree_diff": {
+    "added": [],
+    "removed": [],
+    "changed": []
+  },
+  "verdict": {
+    "problems": [],
+    "stuck": [],
+    "pass": true
+  }
+}

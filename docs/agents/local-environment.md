@@ -5,26 +5,39 @@
 >
 > 更新纪律：改动了这里描述的东西（删沙箱、发新版、换端口），**当场回来改这份文件**。
 
-## 0. 交接区：main 上有什么还没到用户手上（2026-09-19 更新）
+## 0. 交接区：main 上有什么还没到用户手上（2026-09-19 晚更新）
 
-**当前状态：没有挂账——`main` 与线上包同源，且 v1.2.1 的资产已经重发过一次（含启动器修复）。**
+**当前状态：main 上有 6 笔提交没进任何发布包，且本轮拍板「不发版」。**
 
-这一轮做的是「更新完跑着的还是旧版」那条缺陷（`update-restart-stale-service/01`）：
-`start-app.bat` 现在会**再比一次版本**——端口上那个服务的版本比盘上的旧 → 判旧进程 → 踢掉重起
-（工单 01），外加起服务前先把数据目录建出来（工单 03 期间暴露的连带，见下）。
+这一轮做的是 B2 演练开出来的三张单（`.scratch/backlog.md` 第 8 节）：
+`update-verify-failure-leftovers/01`（不可重试的校验失败不再留整卷半成品）、
+`update-content-mismatch-retry-cap/02`（连续 5 次内容不符转终态）、
+`update-orphan-files/01-03`（产品文件判据单源 + 删除清单累计化 + `revise-backups` 出索引）。
 
 | 项 | 值 |
 |---|---|
-| 重发后的更新包 | `firstep-update-v1.2.1.zip` **304,785,030 B** / sha256 `9b98364d2f39b6f0…`（重发前是 304,729,724 B / `ec9921fc…`） |
-| 重发后的完整包 | `firstep-full-v1.2.1.zip` **801,928,759 B** / sha256 `6f6d29f59129d187…`（重发前是 801,873,335 B / `49faced3…`） |
-| **版本号没动** | tag `v1.2.1` 仍指向 `3263fa79`（与 v1.2.0 两次重发同例：只换资产）；**资产内容 = `main@7784fe8d`** |
-| 与线上原版的差 | 清单文件集 **+10 条、-0 条**（10 条是提交期闸门工具 `.githooks/pre-push` / `tools/prepush.py` / `tools/preflight.*` / `tests/test_{ci_workflow,preflight,prepush,prepush_hook}.py` 与本次的 `tools/launcher-stale.py`、`tests/test_launcher_stale_service.py`）；两套 `removed.txt` 与线上原版**逐字节相同** |
-| **已装旧 v1.2.1 的用户** | **收不到更新提示**（「检查更新」比的是版本号）——与 v1.2.0 两次重发留下的缺口同源，已知并接受（用户明确要求「就把这个发到 v1.2.1 里」） |
+| 未发布的提交 | 自 `7784fe8d`（= v1.2.1 重发资产的内容）之后的 6 笔（含 CHANGELOG 自动提交） |
+| 本轮**没有**重发资产 | 拍板：`update-orphan-files` 的修复要真机 drill-01 判据成立就必须换线上包，留给**下一个版本号**（见第 3 节末） |
+| 已装 v1.2.1 的用户 | 这三条修复都还没到他们手上（下载链的两条要新版本才生效；打包器那条要新包） |
+| 沙箱 | 被本轮的离线演练动过，现为「v1.1.1 起点 + 本机修复包」，见第 1 节 |
+
+**下次发版时要带上的判据**：真机 `drill-01-upgrade.py` 的 `not_in_official == 0`
+（现在线上包必然不为 0——它发着 1481 个本机库备份），以及 B2 的 `verify-size` / `content-mismatch`
+两格（本轮已用本地服务器复跑成立，随包发出后同一判据仍要在真机上跑一遍）。
+
+**这一轮踩到的两个工具坑**（都记在工单里，别再踩）：
+① `tools/pack-update.ps1` 的 `.ps1` **BOM 会被编辑工具吞掉**——改完必须复核
+`tests/test_ps1_encoding.py`，否则 PS 5.1 按 GBK 解码中文注释、吞掉行尾换行
+（本轮踩到两次，每次都是那条守卫当场抓住的）；
+② 判据强度探针**被强杀**时 `finally` 跑不到，源文件会停在注入态——三支探针现在都有
+「前置干净性检查」（锚点不在就拒绝开跑并给 `git checkout` 修法），另：探针读写改成
+**逐字节保真**（文本模式的 CRLF↔LF 归一会让「复原复核」假红）。
+
 
 **下次发版前只需记住**：`pack-full` 的 `core.autocrlf=false` 那处修复是**打包器代码**，
 不会随包分发——凡是换机器 / 换 clone 打包，先确认它还在（`tests/test_pack_update.py` 有跨包逐字节守卫）。
 
-**这一轮踩到的两个工具坑**（都记在工单里，别再踩）：
+**上一轮（`update-restart-stale-service`，2026-09-19 早）踩到的两个工具坑**（留档，别再踩）：
 ① `Select-Object -First N` 接在 `powershell -File tools\pack-update.ps1` 后面会**提前掐断上游**，
 打包器跑不到写 `sha256.txt` 那一步（zip 生成了、校验和文件是上一版的）——上传前务必对一次
 「zip 实算 vs `sha256.txt`」；② 更新器重启那一跳的日志重定向目标是**数据目录**，目录不存在时
@@ -40,7 +53,7 @@ cmd 整行不执行（真机上由 `install.bat` 的 bootstrap 配置保证存�
 | 端口 | **8020**（真身用 8000；`FIRSTEP_LAUNCHER_PORT=8020`） |
 | 入口 | `sim-run.py`（沙箱专用，因为生产入口的配置路径写死在真身数据目录）。**恢复副本在库里**：`.scratch/update-restart-stale-service/sandbox-entry-sim-run.py`（一次失败的重建把原件连目录删了，重建脚本会用它兜底） |
 | 构建脚本 | `.scratch/full-download/make_sim_sandbox.py`（**从当前工作树拷**，只给「干净沙箱」用）；**要还原旧版用** `.scratch/update-restart-stale-service/rebuild-sandbox-v111.py --write`（从 `firstep-pack\firstep-full-v1.1.1.zip` 解真 v1.1.1） |
-| 当前状态 | **2026-09-19：已被还原成真 v1.1.1 并跑完一轮升级，现在盘上是 1.2.1（重发后的那份包）**。资料库基线 = `v1.1.1` / 12 批次（重发前后没被动过——drill 的保命项逐条比过）。工具根里 8777 个文件来自 v1.1.1 全量包，`start-app.bat` 已是修好的那份（sha256 `e5d66d0b33b43cce…`） |
+| 当前状态 | **2026-09-19 晚：起点 = 真 v1.1.1（重建脚本还原），随后被本机**自己打的**修复包升到 1.2.1——盘上跑的是 `main` 的内容，不是线上那份 v1.2.1 资产**（`.scratch/update-orphan-files/drill-offline.py --write` 干的，不是发版）。资料库基线 = `v1.1.1` / 12 批次。工具根 8777 个文件来自 v1.1.1 全量包，`start-app.bat` 已是修好的那份（sha256 `e5d66d0b33b43cce…`）。**离线演练收尾时 8020 已释放、真身数据目录 mtime 未变**（证据 `verify-offline-drill.{txt,json}`） |
 
 **要再重演一次「从旧版升上来」**（一条命令，约 1 分钟）：
 
@@ -87,7 +100,7 @@ python .scratch\update-restart-stale-service\rebuild-sandbox-v111.py --write
 | 格 | 做什么 | 结果 | 证据 |
 |---|---|---|---|
 | **B1** 沙箱升级 | v1.1.1 → 走产品端点真下线上小发版包 → 替换 → 重启 | **2026-09-18 判据不成立**：盘上 1.2.1，**跑着的服务仍 1.1.1**（旧进程没被停；启动器判 `already_running`）→ 开缺陷单 `update-restart-stale-service/01`。**2026-09-19 修复 + 重发资产后复跑：PASS**（`restarted_by_updater=true` / `served=1.2.1`） | `verify-01-upgrade.{txt,json}`（最新一轮）、`-aftercare.*`、`-b1-failed.{txt,json}`（2026-09-18 那次失败证据另存） |
-| **B2** 三极端场景 | 本地可控服务器造弱网/断线/坏字节，走产品端点 | 弱网取消 **10/10**、断线重试 **12/12**、校验失败（不可重试）**11/13**（两条不成立 = 失败后残留整卷半成品 + 边车 → `update-verify-failure-leftovers/01`）、持久内容不符 = 观察格（与 spec 一致 → 决策单 `update-content-mismatch-retry-cap/01`） | `verify-02-degraded.{txt,json}` + `amend-02-corrections.py` |
+| **B2** 三极端场景 | 本地可控服务器造弱网/断线/坏字节，走产品端点 | 弱网取消 **10/10**、断线重试 **12/12**、校验失败（不可重试）**11/13**（两条不成立 = 失败后残留整卷半成品 + 边车 → `update-verify-failure-leftovers/01`）、持久内容不符 = 观察格（与 spec 一致 → 决策单 `update-content-mismatch-retry-cap/01`）。**2026-09-19 晚复核：两格都已转绿**——`verify-size` 的「半成品被清 / 边车被清」两条都成立（drill 判红 0），`content-mismatch` 出现终态 `failed` / `error_kind=verify` / 「重下不会有变化」文案、30.6 秒收敛、`retry_count=4`。复跑用**工作树的源码**当「用户机上那一代」（harness 偏离记账在 `.scratch/verify-gate-drills/run-drill-02-with-workspace-src.py`），drill 本身零改动 | `verify-02-degraded.{txt,json}` + `amend-02-corrections.py` + `.scratch/update-verify-failure-leftovers/verify-real-machine*` + `.scratch/update-content-mismatch-retry-cap/verify-real-machine*` |
 | **B3** 编码钉落点 | 沙箱真调 `POST /api/generate`（mspm0 + servo） | **PASS**：产物 `.settings/` 两件都在、正文含 `encoding/<project>=UTF-8`、sha256 与**母版**与**官方包清单**三方相等。**只证落点，不证 CCS 读取行为**（写进证据） | `verify-03-encoding-pin.{txt,json}`、`artifacts-b3/` |
 | **B4** 完整包换装 | 一次性根上**真下 801,873,335 B** → 校验 → 替换 → 重启 | **PASS**：服务 1.2.1（更新器自己带起来了）、基线写回（v1.2.1 / 12 批次）、包外与第三方安装包未动、隔离三判据成立 | `verify-04-full-pack.{txt,json}` + `-recheck.*` |
 | **B5** 账本收口 | 本节 + 第 0/2/2.5 节 + `real-acceptance/01` G1 + `E2E-8020.md` + `backlog.md` | 已完成（B1–B5 五张工单全 resolved） | `.scratch/sandbox-drill/issues/05-ledger-closeout.md` |
@@ -103,8 +116,8 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 
 | 端口 | 是什么 | 谁在用 |
 |---|---|---|
-| **8000** | 真身（`Desktop\firstep`，工作树即最新代码） | 你自己日常用；双击 `start-app.vbs` 启停。**2026-09-18 / 09-19 两轮演练全程未在跑**（B1–B4 与本轮 drill 前后各查一次，一直空） |
-| **8020** | 沙箱 | 演练用，随时可停。**2026-09-19 最后一次 drill-01 收尾已释放**（收掉监听 PID、验过「无残余监听 + 无残留 python 进程」） |
+| **8000** | 真身（`Desktop\firstep`，工作树即最新代码） | 你自己日常用；双击 `start-app.vbs` 启停。**2026-09-19 晚在跑**（`.venv\Scripts\python.exe -m contest_generator.webapp`，PID 43960，11:41 起）——本轮离线演练与 drill-02 复跑全程 `--no-stop`，**没碰它**（演练的收尾判据就是「真身数据目录 mtime 未变 + 8020 释放」） |
+| **8020** | 沙箱 | 演练用，随时可停。**2026-09-19 晚最后一支演练收尾已释放**（离线演练与 drill-02 复跑各自验过「无 8020 监听」） |
 | **8021** | 一次性实例（B4 完整包换装） | 只在这一格存在，跑完即释放。**为什么另开一个端口**：8020 要留给沙箱的 B2/B3，两格并行；`FIRSTEP_LAUNCHER_PORT=8021` 一路传到更新器的 `--port`，收尾验过 8021 已释放 |
 
 > **同机两个实例的坑**（已修，但知道一下）：更新器默认按 8000 停服。若在 8020 上点更新而没传端口，
@@ -287,6 +300,9 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
    `HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment` + `HKCU:\Environment`。
 
 ## 3. 发布状态：main 与线上包的落差
+
+**2026-09-19 晚：`main` 领先线上资产 6 笔提交（第 0 节），本轮拍板不发版。**
+下面这张表仍是「线上现在有什么」；下次发版（建议 v1.2.2）要把三张单的修复一起带上。
 
 | 版本 | 线上状态 | 说明 |
 |---|---|---|

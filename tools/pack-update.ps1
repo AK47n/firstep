@@ -79,30 +79,21 @@ $RemovedTxt = Join-Path $OutDir "firstep-update-$Tag.removed.txt"
 $ShaTxt   = Join-Path $OutDir "firstep-update-$Tag.sha256.txt"
 
 # ---------- 6.5 累计删除清单的输入（工单 update-orphan-files/02） ----------
-# 删除清单 = 上一版**发行集合** − 本版产品文件；**规则单源在 Python 侧**
-# （full_pack.previous_shipped_files / cumulative_removed）。这里只负责找齐输入：
-#   ① 上一版小发版清单（-Baseline）与它旁边的同名 .removed.txt（构成更早的历史）；
-#   ② 上一版完整包清单（OutDir 里 firstep-full-<上一版 tag>.manifest.json，找到才传）。
-# 为什么 ② 也要：两条打包路径发的东西不一样——完整包发过、而未被 git 跟踪的文件
-# （sources/contest/** 下的构建产物）在小发版清单里根本没有，只取 ① 就永远清不掉。
-# ① 的 .removed.txt 缺失时**拒绝发版**（少删 = 用户盘上永久残留且无人报警）；
+# 删除清单 = 上一版**发行集合** − 本版产品文件；规则与「按 tag 找齐上一版产物」**都在
+# Python 侧**（full_pack.previous_shipped_files / cumulative_removed / find_baseline_parts）。
+# 这里只把两个基线路径透传：-Baseline（上一版小发版清单）与 -OutDir（按 tag 找完整包清单）。
+# 为什么完整包清单也要：两条打包路径发的东西不一样——完整包发过、而未被 git 跟踪的文件
+# （sources/contest/** 下的构建产物）在小发版清单里根本没有，只取小发版清单就永远清不掉。
+# .removed.txt 缺失时核心会**拒绝发版**（少删 = 用户盘上永久残留且无人报警）；
 # 确实要这么发（首次发布）就加 -AllowMissingBaselineParts。
+# 为什么 tag 推导不放这里：tag 里带点（v1.1.1）、后缀里也有点，
+# `GetFileNameWithoutExtension` 只削一层 → 算出「firstep-update-v1.1.1.files.removed.txt」
+# 这种不存在的兄弟名（_.scratch/update-orphan-files/drill-offline.py 第一次跑就红在这）。
 $BaselineArgs = @()
 if ($Baseline) {
-    $PrevTag = [System.IO.Path]::GetFileNameWithoutExtension($Baseline)
-    $PrevTag = $PrevTag -replace '^firstep-update-', ''
-    $PrevRemoved = Join-Path ([System.IO.Path]::GetDirectoryName($Baseline)) "firstep-update-$PrevTag.removed.txt"
-    if (-not (Test-Path -LiteralPath $PrevRemoved) -and -not $AllowMissingBaselineParts) {
-        throw "上一版的小发版删除清单不见了：$PrevRemoved（累计删除清单少了它就写不完整；确认要这么发就加 -AllowMissingBaselineParts）"
-    }
-    $BaselineArgs += @('--baseline-update-files', $Baseline)
-    $PrevManifest = Join-Path $OutDir "firstep-full-$PrevTag.manifest.json"
-    if (Test-Path -LiteralPath $PrevManifest) {
-        $BaselineArgs += @('--baseline-full-manifest', $PrevManifest)
-        Write-Host "[删除清单] 上一版完整包清单：$PrevManifest"
-    } else {
-        Write-Host "[删除清单] 未找到上一版完整包清单 $PrevManifest（只按小发版清单累计）"
-    }
+    if (-not (Test-Path -LiteralPath $Baseline)) { throw "基线文件不存在：$Baseline" }
+    $BaselineArgs += @('--baseline-update-files', $Baseline,
+                       '--baseline-search-dir', $OutDir)
 }
 if ($AllowMissingBaselineParts) {
     $BaselineArgs += '--allow-missing-baseline-parts'

@@ -9,7 +9,7 @@
     "zip_bytes": 821352026,
     "manifest_exists": true,
     "sim_root_exists": true,
-    "sim_entry_exists": false,
+    "sim_entry_exists": true,
     "sim_entry_copy_exists": true,
     "sim_data_exists": true,
     "sim_data_config": true,
@@ -30,7 +30,7 @@
   "extract": {
     "members": 8777,
     "files_on_disk": 8777,
-    "seconds": 6.8
+    "seconds": 7.4
   },
   "baseline": {
     "batches": 12,

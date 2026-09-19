@@ -1,0 +1,29 @@
+# drill-02 真机复跑（用工作树的源码当「用户机上那一代代码」）
+  时间：2026-09-19 12:26:56
+  仓库：C:\Users\luoji\Desktop\firstep
+  沙箱：C:\Users\luoji\Desktop\firstep-sim
+
+  drill 脚本 sha256 = 30ebf6268f74aaa5…（**零改动**：下面是它的原文副本）
+  沙箱源码：225 个文件 / 聚合 b53c4a536fece04d…（盘上版本 '1.2.1'）
+  工作树源码：315 个文件 / 聚合 fb0b863bbcf6dcb0…
+  **harness 偏离**：下面把工作树的 src/contest_generator 放进沙箱＝模拟「用户机上已经是修好的那一版」；drill 与产品代码都没有为这次演练改过任何一行。
+  放进沙箱：315 个文件 / 聚合 fb0b863bbcf6dcb0…
+
+------------------------------------------------------------------------------
+## 场景：content-mismatch（drill-02 --only content-mismatch）
+  drill 退出码 0（耗时 37.4s）
+  成立：终态到达（terminal_reached） → True
+  成立：终态 = failed（final_state） → 'failed'
+  观察窗内请求 5 次 / 重试 4 次 / 观察 30.6s
+  终态：state='failed' error_kind='verify' retry_count=4
+  文案：'下载失败（卷 firstep-full-v1.2.1.zip）：连续 5 次整卷重下后内容仍与清单不符，重下不会有变化（可稍后再试，或把这一卷反馈给发布者）'
+
+  复原沙箱源码：225 个文件 / 聚合 b53c4a536fece04d… 与备份一致 ✓
+
+## 收尾
+  8020 监听：（无）
+  真身数据目录 mtime 未变：True
+
+## 总判
+  判红 0 条
+  复跑：PASS

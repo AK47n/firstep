@@ -17,6 +17,7 @@ import pytest
 
 from contest_generator.full_pack import prepare_full_package
 from contest_generator.pack_update import (
+    current_release_files,
     pack_update,
     read_files_manifest,
     select_product_files,
@@ -318,6 +319,31 @@ def test_removed_list_writes_a_placeholder_when_empty(tmp_path: Path) -> None:
     text = (out / "firstep-update-v9.9.9.removed.txt").read_bytes().decode("utf-8")
     assert text.startswith("#")
     assert len(text.encode("utf-8")) > 0
+
+
+def test_current_release_files_unions_small_pack_and_worktree(tmp_path: Path) -> None:
+    """本版发行集合 = 小发版清单 ∪ 工作树产品文件（**并集**，少一半就会误删）。
+
+    两边的真实差异：完整包会发一批**未被 git 跟踪**的产品文件（`Project.uvguix.*`、
+    `sources/contest/**` 下的构建产物），它们不在小发版清单里却不是「本版不再发」；
+    反过来，工作树可能比 HEAD 少文件（本地删了还没提交），而小发版包打的是 HEAD。
+    本机离线演练实测踩到过前者：`not_in_official == 0` 成立、而盘上少了那些文件。
+    """
+    tree = make_mini_repo(tmp_path / "repo")
+    # 工作树里多一个「被 git 忽略、但完整包会发」的产品文件（这里是模拟：不进索引）
+    (tree / "sources" / "materials" / "kit").mkdir(parents=True, exist_ok=True)
+    (tree / "sources" / "contest").mkdir(parents=True, exist_ok=True)
+    (tree / "sources" / "contest" / "untracked.pdf").write_bytes(b"%PDF")
+
+    candidates = tracked_files(tree)                      # 只有索引里的那些
+    merged = current_release_files(tree, candidates)
+
+    assert "README.md" in merged, "小发版清单那一半"
+    assert "sources/contest/untracked.pdf" in merged, "工作树那一半（未被跟踪但仍是产品文件）"
+    # 反向：两边都不是的（包外内容）不许混进来
+    (tree / "library" / "revise-backups" / "t").mkdir(parents=True)
+    (tree / "library" / "revise-backups" / "t" / "x.c").write_bytes(b"x")
+    assert "library/revise-backups/t/x.c" not in current_release_files(tree, candidates)
 
 
 def test_update_pack_shares_the_product_predicate_with_the_full_pack() -> None:

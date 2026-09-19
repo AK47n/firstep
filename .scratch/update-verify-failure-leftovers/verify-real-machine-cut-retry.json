@@ -1,0 +1,229 @@
+{
+  "problems": [],
+  "stuck": [],
+  "notes": [],
+  "scenarios": {
+    "cut-retry": {
+      "sim_url": "http://127.0.0.1:8391/p?mode=cut&fraction=0.4&cut_runs=2&kbps=512",
+      "request_starts": [
+        0,
+        1584680,
+        2535488
+      ],
+      "request_count": 3,
+      "max_retry_count": 2,
+      "saw_retry_message": true,
+      "observations": [
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 0,
+          "retry_count": 0,
+          "retrying": false,
+          "error_kind": "",
+          "message": "",
+          "resume_percent": -1
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 262144,
+          "retry_count": 0,
+          "retrying": false,
+          "error_kind": "",
+          "message": "",
+          "resume_percent": -1
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 524288,
+          "retry_count": 0,
+          "retrying": false,
+          "error_kind": "",
+          "message": "",
+          "resume_percent": -1
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 1048576,
+          "retry_count": 0,
+          "retrying": false,
+          "error_kind": "",
+          "message": "",
+          "resume_percent": -1
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 1310720,
+          "retry_count": 0,
+          "retrying": false,
+          "error_kind": "",
+          "message": "",
+          "resume_percent": -1
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 1584680,
+          "retry_count": 1,
+          "retrying": true,
+          "error_kind": "network",
+          "message": "连接中断：本次声明 3961701 字节，只收到 1584680 字节",
+          "resume_percent": 39
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 1846824,
+          "retry_count": 1,
+          "retrying": false,
+          "error_kind": "network",
+          "message": "",
+          "resume_percent": 39
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 2108968,
+          "retry_count": 1,
+          "retrying": false,
+          "error_kind": "network",
+          "message": "",
+          "resume_percent": 39
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 2535488,
+          "retry_count": 2,
+          "retrying": true,
+          "error_kind": "network",
+          "message": "连接中断：本次声明 3961701 字节，只收到 2535488 字节",
+          "resume_percent": 63
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 2535488,
+          "retry_count": 2,
+          "retrying": false,
+          "error_kind": "network",
+          "message": "",
+          "resume_percent": 63
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 3059776,
+          "retry_count": 2,
+          "retrying": false,
+          "error_kind": "network",
+          "message": "",
+          "resume_percent": 63
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 3321920,
+          "retry_count": 2,
+          "retrying": false,
+          "error_kind": "network",
+          "message": "",
+          "resume_percent": 63
+        },
+        {
+          "state": "downloading",
+          "total_downloaded_bytes": 3846208,
+          "retry_count": 2,
+          "retrying": false,
+          "error_kind": "network",
+          "message": "",
+          "resume_percent": 63
+        },
+        {
+          "state": "idle",
+          "total_downloaded_bytes": 0,
+          "retry_count": 0,
+          "retrying": false,
+          "error_kind": "",
+          "message": "",
+          "resume_percent": -1
+        }
+      ],
+      "checks": {
+        "夹具起点干净（上一次的成品/边车都不在）": true,
+        "观察到 retry_count 增长（>=1）": true,
+        "观察到重试窗口 retrying=True": true,
+        "重试窗口内有原因摘要（message 非空）": true,
+        "重试窗口内给出「从 X% 接着下」的数据源（resume_percent >= 0）": true,
+        "用户可见的那句话由前端拼（模板在 fx/core.js:96-97，静态出处）": true,
+        "服务器台账：第一次从 0，其后从断点（单调不减）": true,
+        "至少一次带 Range 的续传请求（起始偏移 > 0）": true,
+        "卷已下完（盘上长度 = 载荷大小）": true,
+        "终态 sha256 = 载荷 sha256": true,
+        "下载完成后替换链真的跑到了（更新器「更新完成」）": true,
+        "成功后边车已清": true
+      },
+      "updater_completed": true,
+      "final": {
+        "state": null,
+        "total_downloaded_bytes": null,
+        "total_bytes": null,
+        "error": null,
+        "error_kind": null,
+        "retry_count": null
+      }
+    }
+  },
+  "facts": {
+    "sim_root": "C:\\Users\\luoji\\Desktop\\firstep-sim",
+    "sim_version_on_disk": "1.2.1",
+    "sandbox_updates_entries": [
+      "backup",
+      "firstep-update-1.1.1.removed.txt",
+      "firstep-update-1.1.1.zip",
+      "firstep-update-1.2.1.removed.txt",
+      "firstep-update-1.2.1.zip",
+      "full",
+      "full-apply.log",
+      "last-update.json",
+      "updater.log"
+    ],
+    "port_8000_listeners": [
+      "43960"
+    ],
+    "port_8020_listeners": []
+  },
+  "sandbox_traces": {
+    "marker": true,
+    "drill_backups": [
+      "20260919-122547"
+    ],
+    "sandbox_updates_untouched_entries": [
+      "backup",
+      "firstep-update-1.1.1.removed.txt",
+      "firstep-update-1.1.1.zip",
+      "firstep-update-1.2.1.removed.txt",
+      "firstep-update-1.2.1.zip",
+      "full",
+      "full-apply.log",
+      "last-update.json",
+      "updater.log"
+    ]
+  },
+  "cleanup": {
+    "killed": [
+      "24104"
+    ],
+    "leftover": []
+  },
+  "isolation": {
+    "real_data_mtime_untouched": true,
+    "real_updates_untouched": true,
+    "real_tree_untouched": true,
+    "port_8000_listeners": [
+      "43960"
+    ]
+  },
+  "real_tree_diff": {
+    "added": [],
+    "removed": [],
+    "changed": []
+  },
+  "verdict": {
+    "problems": [],
+    "stuck": [],
+    "pass": true
+  }
+}

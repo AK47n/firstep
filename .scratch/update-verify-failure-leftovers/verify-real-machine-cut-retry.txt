@@ -1,0 +1,68 @@
+# B2 证据：三个极端场景（沙箱真机 + 本地可控服务器）
+  时间：2026-09-19 12:25:29
+  一次性目录（harness 与证据都在这里）：C:\Users\luoji\AppData\Local\Temp\fe02-20260919-122529
+
+## 零、前置事实与隔离基线
+  sim_root = 'C:\\Users\\luoji\\Desktop\\firstep-sim'
+  sim_version_on_disk = '1.2.1'
+  sandbox_updates_entries = ['backup', 'firstep-update-1.1.1.removed.txt', 'firstep-update-1.1.1.zip', 'firstep-update-1.2.1.removed.txt', 'firstep-update-1.2.1.zip', 'full', 'full-apply.log', 'last-update.json', 'updater.log']
+  port_8000_listeners = ['43960']
+  port_8020_listeners = []
+  载荷 zip：C:\Users\luoji\AppData\Local\Temp\fe02-20260919-122529\payload-firstep-full-v1.2.1.zip（3961701 字节 / sha256 3e90dbe58b425332…；含 4 MiB 存储条目，够限速与切断用）
+  本地假 GitHub：http://127.0.0.1:8388（release 列表 http://127.0.0.1:8388/repos/AK47n/firstep/releases?per_page=30）
+  本地可控服务器：port=8391 size=3961701 sha256=3e90dbe58b425332…
+  harness 应用：{'app': 'contest-generator', 'version': '1.2.1', 'ok': True}
+
+## 场景二：断线重试（mode=cut&fraction=0.4&cut_runs=2&kbps=512）
+  起始清理（挪走旧任务态）：（无）
+  分卷地址：http://127.0.0.1:8391/p?mode=cut&fraction=0.4&cut_runs=2&kbps=512
+  夹具自检：起点分卷存在=False / 边车存在=False / 快照存在=False → 起点干净
+  check：latest=v1.2.1 reason=no-installed / 分卷=[('firstep-full-v1.2.1.zip', 3961701, 'http://127.0.0.1:8391/p?mode=cut&fraction=0.4&cut_runs=2&kbps=512')]
+  apply：{'started': True, 'message': '已开始下载完整包（1 卷 / 约 3 MB）'}
+    state=downloading bytes=0 retry=0 retrying=False resume%=-1 kind='' msg=''
+    state=downloading bytes=262144 retry=0 retrying=False resume%=-1 kind='' msg=''
+    state=downloading bytes=524288 retry=0 retrying=False resume%=-1 kind='' msg=''
+    state=downloading bytes=1048576 retry=0 retrying=False resume%=-1 kind='' msg=''
+    state=downloading bytes=1310720 retry=0 retrying=False resume%=-1 kind='' msg=''
+    state=downloading bytes=1584680 retry=1 retrying=True resume%=39 kind='network' msg='连接中断：本次声明 3961701 字节，只收到 1584680 字节'
+    state=downloading bytes=1846824 retry=1 retrying=False resume%=39 kind='network' msg=''
+    state=downloading bytes=2108968 retry=1 retrying=False resume%=39 kind='network' msg=''
+    state=downloading bytes=2535488 retry=2 retrying=True resume%=63 kind='network' msg='连接中断：本次声明 3961701 字节，只收到 2535488 字节'
+    state=downloading bytes=2535488 retry=2 retrying=False resume%=63 kind='network' msg=''
+    state=downloading bytes=3059776 retry=2 retrying=False resume%=63 kind='network' msg=''
+    state=downloading bytes=3321920 retry=2 retrying=False resume%=63 kind='network' msg=''
+    state=downloading bytes=3846208 retry=2 retrying=False resume%=63 kind='network' msg=''
+    state=idle bytes=0 retry=0 retrying=False resume%=-1 kind='' msg=''
+  （状态回到 idle 且 harness 进程已退出 = 更新器已完成替换并重启，改用更新器留痕判定「续传完成」）
+  成立：夹具起点干净（上一次的成品/边车都不在）
+  成立：观察到 retry_count 增长（>=1）
+  成立：观察到重试窗口 retrying=True
+  成立：重试窗口内有原因摘要（message 非空）
+  成立：重试窗口内给出「从 X% 接着下」的数据源（resume_percent >= 0）
+  成立：用户可见的那句话由前端拼（模板在 fx/core.js:96-97，静态出处）
+  成立：服务器台账：第一次从 0，其后从断点（单调不减）
+  成立：至少一次带 Range 的续传请求（起始偏移 > 0）
+  成立：卷已下完（盘上长度 = 载荷大小）
+  成立：终态 sha256 = 载荷 sha256
+  成立：下载完成后替换链真的跑到了（更新器「更新完成」）
+  成立：成功后边车已清
+
+## 场景之后的痕迹（如实记账）
+  沙箱工具根 sources/materials/.b2-drill-marker.txt: 在（84 字节）
+  沙箱工具根 sources/materials/.b2-drill-payload.bin: 在（3961289 字节）
+  演练数据目录的备份目录：['20260919-122547']
+  沙箱**自己**的数据目录（本格应零触碰）：['backup', 'firstep-update-1.1.1.removed.txt', 'firstep-update-1.1.1.zip', 'firstep-update-1.2.1.removed.txt', 'firstep-update-1.2.1.zip', 'full', 'full-apply.log', 'last-update.json', 'updater.log']
+
+## 收尾
+  收掉 8020 监听进程：['24104']；残余：（无）
+
+## 隔离边界收尾校验（真身只读）
+  真身数据目录 mtime 未变：True
+  真身 updates/ 条目未变：True
+  真身工作树未变：True（11908 → 11908 个文件）
+  8000 监听：['43960']
+  （证据目录保留在 C:\Users\luoji\AppData\Local\Temp\fe02-20260919-122529；脚本不自动删——里面有每个场景的原始台账）
+
+## 总判
+  判红 0 条 / 卡住 0 条
+  B2「三极端场景」：PASS

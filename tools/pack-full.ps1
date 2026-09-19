@@ -82,19 +82,12 @@ $argsList = @(
 )
 if ($Baseline) {
     if (-not (Test-Path -LiteralPath $Baseline)) { throw "基线清单不存在：$Baseline" }
-    $argsList += @('--baseline', $Baseline)
+    $argsList += @('--baseline', $Baseline, '--baseline-search-dir', $OutDir)
     # 累计删除清单的第二个输入：上一版**小发版**清单（工单 update-orphan-files/02）。
     # 小发版包发的东西与完整包不一样（本机库备份那类完整包收不到、而小发版照发），
-    # 只按完整包清单做差，那部分就永远清不掉。同目录同 tag 找到才传。
-    $PrevTag = [System.IO.Path]::GetFileNameWithoutExtension($Baseline)
-    $PrevTag = $PrevTag -replace '^firstep-full-', ''
-    $PrevFiles = Join-Path $OutDir "firstep-update-$PrevTag.files.txt"
-    if (Test-Path -LiteralPath $PrevFiles) {
-        $argsList += @('--baseline-update-files', $PrevFiles)
-        Write-Host "[删除清单] 上一版小发版清单：$PrevFiles"
-    } else {
-        Write-Host "[删除清单] 未找到上一版小发版清单 $PrevFiles（只按完整包清单累计）"
-    }
+    # 只按完整包清单做差那部分就永远清不掉。**按 tag 找齐在 Python 侧做**
+    # （full_pack.find_update_files_for，有单测；PS 的 GetFileNameWithoutExtension
+    # 只削一层扩展名，tag 里的点会咬人——离线演练实测踩到过）。
 }
 if ($AllowMissingBaselineParts) {
     $argsList += '--allow-missing-baseline-parts'

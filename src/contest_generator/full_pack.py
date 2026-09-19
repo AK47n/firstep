@@ -139,16 +139,23 @@ __all__ = [
     "TOP_LEVEL_ENTRIES",
     "build_full_manifest",
     "build_zip_volumes",
+    "cumulative_removed",
     "ensure_paths_fit",
     "excluded_paths",
+    "find_baseline_parts",
+    "find_update_files_for",
     "full_manifest_filename",
     "is_product_file",
     "main",
     "materials_excluded",
     "overlong_entries",
     "prepare_full_package",
+    "previous_shipped_files",
     "product_file_reason",
+    "product_paths",
+    "read_release_file_list",
     "register_materials_dirs",
+    "release_tag_of",
     "scan_tree",
     "split_volumes",
 ]
@@ -260,6 +267,28 @@ def scan_tree(root: Path, *, skip_dir_names: frozenset[str] | None = None) -> li
         )
     entries.sort(key=lambda e: e.path)
     return entries
+
+
+def product_paths(root: Path, *, skip_dir_names: frozenset[str] | None = None) -> set[str]:
+    """扫工作树 → 产品文件**路径集合**（不算哈希，比 `scan_tree` 便宜得多）。
+
+    用途 = 发布侧删除清单的「本版发行集合」。小发版打包器**必须**拿它当基准（而不能只有
+    `git ls-files` 那份）：完整包会发一批**未被 git 跟踪**的产品文件（例如
+    `library/masters/**/Project.uvguix.*`、`sources/contest/**` 下的构建产物、`*.pdf`），
+    它们不在小发版清单里，却不是「本版不再发」的东西。拿小发版清单当基准，它们就会被写进
+    删除清单、升级时**真被删掉**——本机离线演练实测踩到：`not_in_official == 0` 成立、
+    而盘上少了 `Project.uvguix.luoji` 与几个 `sources/contest/**` 文件。
+    """
+    root = Path(root)
+    dir_skips = SKIP_DIR_NAMES if skip_dir_names is None else skip_dir_names
+    found: set[str] = set()
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        relative = "/".join(_relative_parts(root, path))
+        if product_file_reason(relative, skip_dir_names=dir_skips) is None:
+            found.add(relative)
+    return found
 
 
 def excluded_paths(root: Path) -> dict[str, str]:
@@ -496,6 +525,63 @@ def _removed_sibling(update_files: Path) -> Path:
     return Path(update_files).with_name(name[: -len(suffix)] + ".removed.txt")
 
 
+def release_tag_of(name: str) -> str:
+    """发布产物文件名 → tag。
+
+    `firstep-update-v1.1.1.files.txt` / `firstep-full-v1.1.1.manifest.json` / … → `v1.1.1`。
+
+    **为什么要有这个函数**（而不是让打包脚本自己切字符串）：tag 里带点（`v1.1.1`），
+    而后缀里也有点——PowerShell 的 `GetFileNameWithoutExtension` 只削**一层**扩展名，
+    于是 `firstep-update-v1.1.1.files.txt` 会被切成 `v1.1.1.files`，算出
+    `firstep-update-v1.1.1.files.removed.txt` 这个**不存在**的兄弟名
+    （`.scratch/update-orphan-files/drill-offline.py` 第一次跑就是这么红的）。
+    规则放在 Python 侧，才有单测钉得住。
+    """
+    stem = Path(str(name)).name
+    for suffix in (".files.txt", ".removed.txt", ".manifest.json", ".sha256.txt",
+                   ".txt", ".json"):
+        if stem.endswith(suffix):
+            stem = stem[: -len(suffix)]
+            break
+    for prefix in ("firstep-update-", "firstep-full-", "firstep-materials-"):
+        if stem.startswith(prefix):
+            stem = stem[len(prefix):]
+            break
+    return stem
+
+
+def find_baseline_parts(
+    update_files: Path, *, search_dir: Path | None = None
+) -> tuple[Path, Path | None]:
+    """→（上一版小发版删除清单, 上一版完整包清单或 `None`）。
+
+    - 删除清单：与 `update_files` 同目录、同 tag 的 `.removed.txt`
+      （找不到时由 `previous_shipped_files` 决定是拒绝发版还是放行）；
+    - 完整包清单：`search_dir`（缺省 = `update_files` 所在目录）里的
+      `firstep-full-<tag>.manifest.json`——有才算，没有就只是少一份输入。
+    """
+    update_files = Path(update_files)
+    tag = release_tag_of(update_files.name)
+    where = Path(search_dir) if search_dir is not None else update_files.parent
+    manifest = where / f"firstep-full-{tag}.manifest.json"
+    return _removed_sibling(update_files), (manifest if manifest.is_file() else None)
+
+
+def find_update_files_for(
+    manifest: Path, *, search_dir: Path | None = None
+) -> Path | None:
+    """给定上一版**完整包清单** → 同 tag 的小发版清单（`firstep-update-<tag>.files.txt`）。
+
+    反向的那个方向在 `find_baseline_parts`（给小发版清单 → 完整包清单）里。
+    两处都不在 PowerShell 里手写字符串切分——tag 里的点与后缀里的点会咬人。
+    """
+    manifest = Path(manifest)
+    tag = release_tag_of(manifest.name)
+    where = Path(search_dir) if search_dir is not None else manifest.parent
+    candidate = where / f"firstep-update-{tag}.files.txt"
+    return candidate if candidate.is_file() else None
+
+
 def previous_shipped_files(
     *,
     update_files: Path | None = None,
@@ -580,6 +666,7 @@ def prepare_full_package(
     published_at: str = "",
     baseline_path: Path | None = None,
     baseline_update_files: Path | None = None,
+    baseline_search_dir: Path | None = None,
     allow_missing_baseline_parts: bool = False,
     limit: int = PART_LIMIT_BYTES,
 ) -> tuple[dict[str, Any], list[Path]]:
@@ -605,6 +692,10 @@ def prepare_full_package(
     ensure_paths_fit(files)
 
     current_paths = [f.path for f in files]
+    if baseline_update_files is None and baseline_path is not None and baseline_search_dir:
+        # 同 tag 的上一版小发版清单：有就并进「发行集合」（两条打包路径发的东西不一样）
+        baseline_update_files = find_update_files_for(
+            Path(baseline_path), search_dir=Path(baseline_search_dir))
     if baseline_path is not None or baseline_update_files is not None:
         shipped_before = previous_shipped_files(
             update_files=baseline_update_files,
@@ -662,6 +753,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="上一版小发版清单（`firstep-update-<tag>.files.txt`，累计删除清单的第二个输入，可空）",
     )
     parser.add_argument(
+        "--baseline-search-dir",
+        default="",
+        help="按基线 tag 找上一版小发版清单的目录（缺省 = 不自动找）",
+    )
+    parser.add_argument(
         "--allow-missing-baseline-parts",
         action="store_true",
         help="允许基线旁边的 .removed.txt 缺失（首次发布等；缺省 = 缺了就拒绝发版）",
@@ -688,6 +784,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             baseline_path=Path(args.baseline) if args.baseline else None,
             baseline_update_files=(
                 Path(args.baseline_update_files) if args.baseline_update_files else None
+            ),
+            baseline_search_dir=(
+                Path(args.baseline_search_dir) if args.baseline_search_dir else None
             ),
             allow_missing_baseline_parts=bool(args.allow_missing_baseline_parts),
             limit=int(args.limit_mb * 1024 * 1024),

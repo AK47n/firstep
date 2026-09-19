@@ -1,0 +1,78 @@
+{
+  "problems": [],
+  "notes": [],
+  "facts": {
+    "sim_root": "C:\\Users\\luoji\\Desktop\\firstep-sim",
+    "rebuild_script": true,
+    "updater": true,
+    "pack_ps1": true,
+    "baseline_files": true,
+    "baseline_full_manifest": true,
+    "real_data": "C:\\Users\\luoji\\.contest_generator",
+    "real_data_mtime": 1789386306.649077,
+    "dirty_tracked_count": 12
+  },
+  "rebuild_ok": true,
+  "candidates": {
+    "shipped_before": 10339,
+    "current": 8152,
+    "obsolete": 4599
+  },
+  "planted": [
+    {
+      "path": "library/revise-backups/20260827-192944/.contest_context.json",
+      "sha256": "74feb068bd0bdf8307862a31816fe61140ea174cf8d565199b0e6aa599471a5c"
+    },
+    {
+      "path": "sources/car/car 1.1/.settings/org.eclipse.cdt.codan.core.prefs",
+      "sha256": "1d2cbada2f2217da93dc24d6b852d1a26a0c363e3739d2a3daa5d8194d07e5e9"
+    },
+    {
+      "path": "library/references/2026_04_地猛星电赛控制题配套资料/01_.vscode/.vscode/c_cpp_properties.json",
+      "sha256": "c48c846ccfa273073db0151dbdff2455269d67ba512f6f16c42afda68ba86319"
+    },
+    {
+      "path": "library/revise-backups/20260827-192944/.contest_tasks.json",
+      "sha256": "5a63d0f9c7fe01fe176c665817a3a16aee8f878ff3102cb8339bcefcf97ac139"
+    },
+    {
+      "path": "library/revise-backups/20260827-192944/.gitignore",
+      "sha256": "05ad5313d5663c584a85fbecee4c9e74d0bb9bb80cf6f37ac51d0961ac45bbbf"
+    }
+  ],
+  "pack_ok": true,
+  "pack": {
+    "zip_bytes": 300817976,
+    "files": 2858,
+    "removed": 4599,
+    "removed_covers_planted": [],
+    "files_exclude_backups": []
+  },
+  "updater_exit": 0,
+  "on_disk_version": "1.2.1",
+  "composition": {
+    "on_disk": 3071,
+    "official": 3071,
+    "same": 3068,
+    "stale": 3,
+    "stale_list": [
+      "src/contest_generator.egg-info/PKG-INFO",
+      "src/contest_generator.egg-info/SOURCES.txt",
+      "src/contest_generator.egg-info/requires.txt"
+    ],
+    "not_in_official": 0,
+    "not_in_official_list": [],
+    "missing": 0,
+    "missing_allowed": [],
+    "missing_unexpected": []
+  },
+  "planted_survivors": [],
+  "cleanup": {
+    "port_8020": [],
+    "port_8000": [
+      "TCP    127.0.0.1:8000         0.0.0.0:0              LISTENING       43960"
+    ],
+    "real_data_mtime_unchanged": true
+  },
+  "verdict": "PASS"
+}

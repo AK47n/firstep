@@ -1,0 +1,54 @@
+{
+  "problems": [],
+  "scenarios": {
+    "content-mismatch": {
+      "drill_exit_code": 0,
+      "seconds": 37.4,
+      "drill_problems": [],
+      "drill_stuck": [],
+      "notes": [
+        "持久内容不符 = **永远 downloading + 每轮整卷重下**（spec 设计如此）：本机 30.6s 内重试 4 次、台账 5 次请求起始偏移全 0；退避封顶 60 秒，线上完整包 765 MB/轮 → 约 45 GB/小时的流量黑洞，且用户看不到任何终态或「重下不会有变化」的中文话术（那句只属于**不可重试**的 verify 分支，见下一格）。已按决策单记账。"
+      ],
+      "extra": {
+        "终态到达（terminal_reached）": true,
+        "终态 = failed（final_state）": "failed"
+      },
+      "final": {
+        "state": "failed",
+        "error": "下载失败（卷 firstep-full-v1.2.1.zip）：连续 5 次整卷重下后内容仍与清单不符，重下不会有变化（可稍后再试，或把这一卷反馈给发布者）",
+        "error_kind": "verify",
+        "retry_count": 4,
+        "message": ""
+      },
+      "server_requests": 5,
+      "max_retry_count": 4
+    }
+  },
+  "facts": {
+    "drill_sha256": "30ebf6268f74aaa577ee9e58e7f636c918ba0175af5a6420b533fbb7a3ee9dad",
+    "drill_evidence_before": {
+      "verify-02-degraded.txt": "ea8581f055890deb8df11b7b9d39229301456f3299041e45df8dd99220d3d882",
+      "verify-02-degraded.json": "27ef35adff2a45dab4d49288dd326a5a1e5017adadc3cc8bd1eb94ea1e6a8a06"
+    },
+    "sim_src": [
+      225,
+      "b53c4a536fece04d4810f7f93eebe69133799404062cf88cee3c0154048a1d6e"
+    ],
+    "workspace_src": [
+      315,
+      "fb0b863bbcf6dcb038adfe2a118df1ca10e90dfeebcef1822e1584547e6223c7"
+    ],
+    "sandbox_version_on_disk": "1.2.1",
+    "real_data_mtime": 1789386306.649077
+  },
+  "swapped_src": [
+    315,
+    "fb0b863bbcf6dcb038adfe2a118df1ca10e90dfeebcef1822e1584547e6223c7"
+  ],
+  "cleanup": {
+    "port_8020_listening": [],
+    "real_data_mtime_unchanged": true,
+    "sim_data_untouched": true
+  },
+  "verdict": "PASS"
+}

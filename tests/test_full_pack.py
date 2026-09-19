@@ -24,6 +24,8 @@ from contest_generator.full_pack import (
     cumulative_removed,
     derive_slug,
     excluded_paths,
+    find_baseline_parts,
+    find_update_files_for,
     full_manifest_filename,
     is_product_file,
     main,
@@ -33,6 +35,7 @@ from contest_generator.full_pack import (
     previous_shipped_files,
     product_file_reason,
     register_materials_dirs,
+    release_tag_of,
     scan_tree,
     split_volumes,
 )
@@ -763,6 +766,40 @@ def test_prepare_full_package_removed_list_is_cumulative(tmp_path: Path) -> None
         tree, version="v9.9.9", out_dir=out, published_at="", baseline_path=baseline_path
     )
     assert manifest["removed"] == ["docs/old-page.md", "docs/older-page.md"]
+
+
+def test_release_tag_of_handles_dotted_tags(tmp_path: Path) -> None:
+    """发布产物文件名 → tag：**tag 里的点不能被当成扩展名切掉**。
+
+    这条是离线演练第一跑红的那个洞：PowerShell 的 `GetFileNameWithoutExtension` 只削一层
+    扩展名，`firstep-update-v1.1.1.files.txt` 会被切成 `v1.1.1.files`，于是去找
+    `firstep-update-v1.1.1.files.removed.txt` 这个**不存在**的兄弟名，打包直接拒绝开跑。
+    现在推导在 Python 侧，这里把三类名字都钉住。
+    """
+    assert release_tag_of("firstep-update-v1.1.1.files.txt") == "v1.1.1"
+    assert release_tag_of("firstep-update-v1.2.1.removed.txt") == "v1.2.1"
+    assert release_tag_of("firstep-full-v1.2.1.manifest.json") == "v1.2.1"
+    assert release_tag_of(r"C:\packs\firstep-full-v1.2.0.manifest.json") == "v1.2.0"
+
+
+def test_find_baseline_parts_locates_sibling_and_manifest(tmp_path: Path) -> None:
+    """两个方向都能按 tag 找齐上一版产物（找不到完整包清单只是少一份输入，不算错）。"""
+    update_files = tmp_path / "firstep-update-v1.1.1.files.txt"
+    update_files.write_text("a.md\n", encoding="utf-8")
+    removed = tmp_path / "firstep-update-v1.1.1.removed.txt"
+    removed.write_text("b.md\n", encoding="utf-8")
+    out = tmp_path / "pack"
+    out.mkdir()
+    manifest = out / "firstep-full-v1.1.1.manifest.json"
+    manifest.write_text(json.dumps({"files": []}), encoding="utf-8")
+
+    found_removed, found_manifest = find_baseline_parts(update_files, search_dir=out)
+    assert found_removed == removed
+    assert found_manifest == manifest
+    assert find_update_files_for(manifest, search_dir=tmp_path) == update_files
+
+    # 完整包清单不在 → None（而不是抛错）
+    assert find_baseline_parts(update_files, search_dir=tmp_path)[1] is None
 
 
 def test_prepare_full_package_sha256_sidecar(tmp_path: Path) -> None:

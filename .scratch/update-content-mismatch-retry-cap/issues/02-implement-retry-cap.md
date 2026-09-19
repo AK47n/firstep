@@ -8,9 +8,24 @@
 **被谁阻塞：** 无（与本目录工单 01 的决策单无关；与 `update-verify-failure-leftovers/01`
 的清理规则天然相容——本单新增的终态错误同样归 `verify` 且不可重试，会自动落进那条清理）。
 
-**状态：** resolved（2026-09-19，代码与守卫部分；真机复跑见下）
+**状态：** resolved（2026-09-19，含真机复跑）
 
-**完成记录。** 落地在下载域（两条链路自动同时生效）：
+**真机复跑完成（2026-09-19）。** 用 `.scratch/verify-gate-drills/run-drill-02-with-workspace-src.py
+--evidence-dir .scratch/update-content-mismatch-retry-cap --only content-mismatch`
+（drill 零改动，sha256 `30ebf6268f74aaa5…`；harness 把工作树的源码放进沙箱＝用户机上那一代代码）：
+
+| 判据 | 实测 |
+|---|---|
+| `terminal_reached` | **true**（改动前 150 秒观察窗内都没有终态） |
+| 终态 | `failed`，`error_kind = "verify"` |
+| 文案 | `下载失败（卷 firstep-full-v1.2.1.zip）：连续 5 次整卷重下后内容仍与清单不符，重下不会有变化（可稍后再试，或把这一卷反馈给发布者）` |
+| 收敛速度 | **30.6 秒**（观察窗 150s 内），服务器台账 **5 次请求 / retry_count 4** |
+| 收尾 | 沙箱源码逐字节复原、8020 无监听、真身数据目录未动；判红 0 / PASS |
+
+证据：`.scratch/update-content-mismatch-retry-cap/verify-real-machine.{txt,json}` +
+`verify-real-machine-content-mismatch.{txt,json}`。
+
+## 完成记录（代码与守卫）
 
 - 新终态错误 `DownloadContentMismatchPersistentError`：进 `_NOT_RETRYABLE`、`error_kind="verify"`、
   `describe_network_error` 原样返回它自己的中文文案（**不再**承诺「会重新下载整卷」）；
@@ -37,30 +52,32 @@
 
 聚焦测试：`test_download_resume.py` + `test_task_download.py` 63 passed；
 `test_full_task.py` + `test_materials_task.py` + `test_download_status_surface.py` 85 passed。
-真机复跑（`run-real-machine.py` + `drill-02 --only content-mismatch`）与 `--only verify-size`
-合并在一支包装脚本里跑，证据落 `.scratch/update-content-mismatch-retry-cap/verify-real-machine.*`。
+真机复跑用冻结量具旁边的通用包装器
+`.scratch/verify-gate-drills/run-drill-02-with-workspace-src.py`（工单里原写「本目录的
+`run-real-machine.py`」——实际写成通用件，与本批另一张单共用一处实现）。
 
 ## 验收标准
 
-- [ ] 下载域新增终态错误类型「内容不符 · 已连续多次」：进「重试必然同样结果」那张表、
+- [x] 下载域新增终态错误类型「内容不符 · 已连续多次」：进「重试必然同样结果」那张表、
       `error_kind == "verify"`、中文文案由既有 `describe_network_error` 单源给出且含
       「重下不会有变化」（不再说「会重新下载整卷」）
-- [ ] 重试循环里**连续**计数（内容不符 +1；任何别的错误或一次成功清零），
+- [x] 重试循环里**连续**计数（内容不符 +1；任何别的错误或一次成功清零），
       达上限（模块级常量 5）时抛新终态错误；前 4 次的行为**逐字不变**
       （仍「删半成品 + 退避重试」，进行中摘要照旧）
-- [ ] 网络类失败的重试策略零改动（既有「无上限」用例仍绿）
-- [ ] 单测（`tests/test_download_resume.py` 同族加格，沿用既有假 opener 夹具）：
-      永远坏 → 尝试次数 == 5 且抛新类型、`error_kind == "verify"`、文案含「重下不会有变化」；
-      坏 2 次后变好 → 成功且 `retried == True`；坏 → 截断 → 坏 → 计数被清零（连续语义）；
-      网络类仍走原路（用测试专用的小 `max_attempts` 剧本）
-- [ ] 组合断言：终态之后盘上是干净的（半成品与边车都没了）——防止两条修复各自正确、
-      合起来仍留垃圾
-- [ ] 反向注入探针（`.scratch/update-content-mismatch-retry-cap/probe-guard-strength.py`）：
+- [x] 网络类失败的重试策略零改动（既有「无上限」用例仍绿）
+- [x] 单测（`tests/test_download_resume.py` 同族加格，沿用既有假 opener 夹具）：
+      永远坏 → 5 次后抛新类型、`error_kind == "verify"`、文案含「重下不会有变化」；
+      坏 → 截断 → 坏 → 变好 → 成功（**连续**语义，累计口径会被判死而转红）；
+      网络类仍走原路（测试专用的小 `max_attempts` 剧本）
+- [x] 组合断言：终态之后盘上是干净的（半成品与边车都没了）——防止两条修复各自正确、
+      合起来仍留垃圾（`test_persistent_content_mismatch_clears_leftovers_at_the_task_layer`）
+- [x] 反向注入探针（`.scratch/update-content-mismatch-retry-cap/probe-guard-strength.py`）：
       去掉封顶（回到无上限）、把连续改成累计、把新错误从不可重试表里拿掉——三处注入
-      **都必须转红**；跑完复原并复核 sha256
-- [ ] 真机复跑（`.scratch/update-content-mismatch-retry-cap/run-real-machine.py`，drill-02 零改动）：
-      `--only content-mismatch` 的 `.json` 里 `terminal_reached == true`、终态 `failed`、
-      `error_kind == "verify"`、`error` 含「重下不会有变化」、`max_retry_count <= 5`；
-      脚本同样显式记账「沙箱源码来自工作树」
-- [ ] 既有守卫全绿：`tests/test_full_task.py`、`tests/test_materials_task.py`、
-      `tests/test_download_status_surface.py`（12 键契约）、`tests/test_task_progress.py` 的下载态用例
+      **3/3 都转红**；跑完复原并复核 sha256
+- [x] 真机复跑（通用包装器 + `drill-02 --only content-mismatch`，drill 零改动）：
+      `terminal_reached == true`、终态 `failed`、`error_kind == "verify"`、
+      `error` 含「重下不会有变化」、`max_retry_count == 4`（≤5）、30.6 秒收敛；
+      脚本显式记账「沙箱源码来自工作树」
+- [x] 既有守卫全绿：`tests/test_full_task.py`、`tests/test_materials_task.py`、
+      `tests/test_download_status_surface.py`（12 键契约）→ 聚焦 85 passed；
+      全套在账本收口时跑一次

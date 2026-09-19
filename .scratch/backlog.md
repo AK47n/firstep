@@ -152,15 +152,21 @@ UTF-8 stdout（原锚点版是崩在 GBK 编码上的）。第 7 节的两道候
 - **其余：D1 六个器件的 `kit` + `source_url` 仍等用户给链接**（未拍「永久不补」→
   `MODULE_KIND` 不动）。
 
-## 8. 沙箱真机演练第二梯队 B1–B5 开出来的三张单（2026-09-18）
+## 8. 沙箱真机演练第二梯队 B1–B5 开出来的三张单（2026-09-18；三张全部已修 2026-09-19）
 
 演练本体（spec + 五张工单 + 脚本 + 原始证据）在 `.scratch/sandbox-drill/` 与
 `.scratch/verify-gate-drills/`；下面是**演练暴露的真缺陷/待决策项**，都已开单，别漏看：
 
+> **2026-09-19 收口**：三张单全部落地。**本轮没有发版**——`update-orphan-files` 的修复
+> 在打包器与删除清单里，要真机 drill-01 判据成立就得换线上资产；已拍板留给**下一个版本号**
+> （见 `docs/agents/local-environment.md` 第 0/3 节）。另两张单的修复在下载链里，
+> 真机复跑用本地可控服务器完成，不需要发版。
+
 | 工单 | 级别 | 一句话 | 证据 |
 |---|---|---|---|
 | ~~`update-restart-stale-service/01`~~ ✅ **已修（2026-09-19）** | ~~🔴 用户可见~~ → **🟠 卫生**（射程更正） | **从旧版点「一键更新」：文件全换成新版，但跑着的服务还是旧版**（发起更新的那一代没传停服端口 → 旧进程没被停 → 启动器判 `already_running` 只开浏览器）。**射程更正**：更新器的默认端口与普通用户的端口都是 8000，**默认端口的人不受影响**——只有端口 ≠ 8000（沙箱 / 同机双实例）才中招，且只有**小发版**那条路缺 `--port`；原文「那批老用户都会中招」是推断过头。**修法**：启动器加版本一致性判据（新 CLI `tools/launcher-stale.py` + 谓词 `update.is_stale_service`；非 `stale` 一律走原路），顺手补上「起服务前先建数据目录」。**修复随 v1.2.1 资产重发出去**（同 tag 换资产），真机 drill 复跑 `restarted_by_updater=true` / `served=1.2.1` | `verify-gate-drills/verify-01-upgrade.{txt,json}`（最新一轮）+ `-b1-failed.*`（原失败证据）+ `.scratch/update-restart-stale-service/`（spec / 工单 / 探针 / 判据强度 9/9） |
-| `update-orphan-files/01` | 🟠 卫生 | 小发版删除清单只覆盖「上一版 → 本版」，**落后两版以上的用户升级后留下 1483 个孤儿文件**（全在 `library/` 备份目录与 `sources/` 下几个）；官方包比对 3057 一致 / 3 不同 / 0 缺。附带发现：`src/contest_generator.egg-info/*` 随包分发，且更新器的 `pip install -e .` 每次都会重写它 | `verify-01-upgrade-aftercare.txt` 的构成一节 |
-| `update-content-mismatch-retry-cap/01` | 🟡 决策单 | 持久「内容与清单不符」→ **永远 downloading + 每轮整卷重下**（spec 第 122 行明文如此，**不是实现 bug**）；真机量出 150 秒 6 次重试、台账起始偏移全 0。建议加「连续 N 次转终态」或至少把重试量写进摘要 | `verify-02-degraded.{txt,json}` 的 `content-mismatch` 一节 |
-| `update-verify-failure-leftovers/01` | 🟡 卫生（可自愈） | **不可重试**的校验失败（清单 size 与对端总长矛盾）终态 `failed` + 中文话术都对，但 `updates/full/` 里留下**整卷半成品**（实测 3,961,701 B）+ 边车，与 spec 第 147 行「校验失败一并删除」不符；线上完整包场景 = 失败后白占 ~765 MB（下次重试会因 416 自愈） | `verify-02-degraded.{txt,json}` 的 `verify-size` 一节 + 文末更正节 |
+| ~~`update-orphan-files/01`~~ ✅ **已修（2026-09-19，根因更正）** | 🟠 卫生 | 原判「删除清单只覆盖上一版 → 落后两版留下 **1483** 个孤儿」**与实测不符**：重新量（`.scratch/update-orphan-files/measure-sets.py`）后，那 1481 个 `library/revise-backups/**` 是**本轮小发版包自己写进去的**（沙箱里 mtime 全是解包那一刻，且就在 `firstep-update-v1.2.1.zip` 的条目表里），另 1 个是 `*.exe`；两者都是**完整包刻意排除、小发版包照发**。真根因 = 「哪些文件算产品文件」被实现了两遍且已漂移（小发版多发了 1481 个本机库备份 + 漏发了 `00-START-HERE.txt`——v1.1.1 的用户走小发版升级永远拿不到它）。**修法**：判据单源（`full_pack.product_file_reason` / `is_product_file`，两个打包器共用）+ `library/revise-backups/**` 移出 git 索引 + 删除清单改**累计口径**（`cumulative_removed`，跳版升级也清得掉）。**本轮不发版**（真机 drill-01 要下到修好的包，留给下一个版本号），验收 = 静态守卫 + 判据强度探针 6/6 + 本机离线演练 | `.scratch/update-orphan-files/`（spec / 四张工单 / 量具 / 离线演练 / 探针）+ `verify-01-upgrade-aftercare.txt`（原构成一节） |
+| ~~`update-content-mismatch-retry-cap/01`~~ ✅ **已修（2026-09-19）** | 🟡 决策单 → **已拍板选 1** | 持久「内容与清单不符」→ 永远 downloading + 每轮整卷重下（spec 第 122 行明文如此，**不是实现 bug**）；真机量出 150 秒 6 次重试、台账起始偏移全 0、约 45 GB/小时量级。**拍板**：同一卷**连续 5 次**内容不符 → 转终态 `failed`，中文说清「重下不会有变化」（网络类失败仍无上限）。真机复跑：30.6 秒收敛、`terminal_reached=true`、`retry_count=4` | `.scratch/update-content-mismatch-retry-cap/`（spec / 决策单 / 实施单 / 探针 3/3 / `verify-real-machine*`） |
+| ~~`update-verify-failure-leftovers/01`~~ ✅ **已修（2026-09-19）** | 🟡 卫生（可自愈） | **不可重试**的校验失败（清单 size 与对端总长矛盾）终态 `failed` + 中文话术都对，但 `updates/full/` 里留下**整卷半成品**（实测 3,961,701 B）+ 边车，与 spec 第 147 行「校验失败一并删除」不符；线上完整包场景 = 失败后白占 ~765 MB。**修法**：任务层共享原语的异常路径按分类单源区分——不可重试的 verify 清掉半成品与边车，网络/取消/可重试照旧留断点。真机复跑：`verify-size` 两条判据都成立、`cut-retry` 12 条全成立 | `.scratch/update-verify-failure-leftovers/`（spec / 两张工单 / 探针 3/3 / `verify-real-machine*`）+ `verify-02-degraded.{txt,json}` 的 `verify-size` 一节 |
+
 

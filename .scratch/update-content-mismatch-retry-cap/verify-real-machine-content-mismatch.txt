@@ -1,0 +1,54 @@
+# B2 证据：三个极端场景（沙箱真机 + 本地可控服务器）
+  时间：2026-09-19 12:26:58
+  一次性目录（harness 与证据都在这里）：C:\Users\luoji\AppData\Local\Temp\fe02-20260919-122658
+
+## 零、前置事实与隔离基线
+  sim_root = 'C:\\Users\\luoji\\Desktop\\firstep-sim'
+  sim_version_on_disk = '1.2.1'
+  sandbox_updates_entries = ['backup', 'firstep-update-1.1.1.removed.txt', 'firstep-update-1.1.1.zip', 'firstep-update-1.2.1.removed.txt', 'firstep-update-1.2.1.zip', 'full', 'full-apply.log', 'last-update.json', 'updater.log']
+  port_8000_listeners = ['43960']
+  port_8020_listeners = []
+  载荷 zip：C:\Users\luoji\AppData\Local\Temp\fe02-20260919-122658\payload-firstep-full-v1.2.1.zip（3961701 字节 / sha256 c8fe55d8455f2006…；含 4 MiB 存储条目，够限速与切断用）
+  本地假 GitHub：http://127.0.0.1:10706（release 列表 http://127.0.0.1:10706/repos/AK47n/firstep/releases?per_page=30）
+  本地可控服务器：port=10707 size=3961701 sha256=c8fe55d8455f2006…
+  harness 应用：{'app': 'contest-generator', 'version': '1.2.1', 'ok': True}
+
+## 场景四分枝：**持久内容不符**（mode=corrupt；长度不变、字节被改坏）
+  口径说明：spec `.scratch/resumable-download/spec.md` 第 122 行明文写着「下完但内容与清单 SHA256 不符 → 删半成品 + 走退避重试（从 0 整卷重来，**直到对上或用户取消**）」——所以这一格**不是**「该失败而没失败」的实现缺陷，而是**设计如此**；本格的用途是把这条设计的真机后果量出来（原先只有代码侧覆盖）。
+  起始清理（挪走旧任务态）：（无）
+  分卷地址：http://127.0.0.1:10707/p?mode=corrupt&at=1024&count=16
+  夹具自检：起点分卷存在=False → 干净
+  check：latest=v1.2.1 分卷大小=[3961701]
+  apply：{'started': True, 'message': '已开始下载完整包（1 卷 / 约 3 MB）'}
+    [   0.0s] state=downloading bytes=0 retry=0 kind='' msg='' err=''
+    [   0.7s] state=downloading bytes=3961701 retry=1 kind='verify' msg='下载内容与清单不符（3961701 字节），已删除重下，会重新下载整卷' err=''
+    [   1.4s] （仍在 downloading：retry=1）
+    [   2.2s] state=downloading bytes=3961701 retry=2 kind='verify' msg='下载内容与清单不符（3961701 字节），已删除重下，会重新下载整卷' err=''
+    [   6.4s] state=downloading bytes=3961701 retry=3 kind='verify' msg='下载内容与清单不符（3961701 字节），已删除重下，会重新下载整卷' err=''
+    [  14.3s] state=downloading bytes=3961701 retry=4 kind='verify' msg='下载内容与清单不符（3961701 字节），已删除重下，会重新下载整卷' err=''
+    [  22.1s] （仍在 downloading：retry=4）
+    [  30.6s] state=failed bytes=3961701 retry=4 kind='verify' msg='' err='下载失败（卷 firstep-full-v1.2.1.zip）：连续 5 次整卷'
+  观察窗口 30.6s：6 个状态变化 / 重试 4 次
+  服务器台账：5 次请求，起始偏移 [0, 0, 0, 0, 0]（全 0 = 每轮整卷重下）
+  半成品此刻在不在：False（每轮内容不符都会就地 clear_partial）
+  [记录] 持久内容不符 = **永远 downloading + 每轮整卷重下**（spec 设计如此）：本机 30.6s 内重试 4 次、台账 5 次请求起始偏移全 0；退避封顶 60 秒，线上完整包 765 MB/轮 → 约 45 GB/小时的流量黑洞，且用户看不到任何终态或「重下不会有变化」的中文话术（那句只属于**不可重试**的 verify 分支，见下一格）。已按决策单记账。
+
+## 场景之后的痕迹（如实记账）
+  沙箱工具根 sources/materials/.b2-drill-marker.txt: 在（84 字节）
+  沙箱工具根 sources/materials/.b2-drill-payload.bin: 在（3961289 字节）
+  演练数据目录的备份目录：[]
+  沙箱**自己**的数据目录（本格应零触碰）：['backup', 'firstep-update-1.1.1.removed.txt', 'firstep-update-1.1.1.zip', 'firstep-update-1.2.1.removed.txt', 'firstep-update-1.2.1.zip', 'full', 'full-apply.log', 'last-update.json', 'updater.log']
+
+## 收尾
+  收掉 8020 监听进程：['31148']；残余：（无）
+
+## 隔离边界收尾校验（真身只读）
+  真身数据目录 mtime 未变：True
+  真身 updates/ 条目未变：True
+  真身工作树未变：True（11908 → 11908 个文件）
+  8000 监听：['43960']
+  （证据目录保留在 C:\Users\luoji\AppData\Local\Temp\fe02-20260919-122658；脚本不自动删——里面有每个场景的原始台账）
+
+## 总判
+  判红 0 条 / 卡住 0 条
+  B2「三极端场景」：PASS

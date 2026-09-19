@@ -36,13 +36,16 @@ from typing import Sequence
 from .full_pack import (
     _validate_version,
     cumulative_removed,
+    find_baseline_parts,
     is_product_file,
     previous_shipped_files,
+    product_paths,
 )
 
 __all__ = [
     "EMPTY_REMOVED_PLACEHOLDER",
     "UPDATE_ZIP_PREFIX",
+    "current_release_files",
     "pack_update",
     "read_files_manifest",
     "select_product_files",
@@ -199,6 +202,21 @@ def select_product_files(candidates: Sequence[str]) -> list[str]:
     return picked
 
 
+def current_release_files(tree: Path, candidates: Sequence[str]) -> set[str]:
+    """本版**发行集合** = 小发版清单（候选 ∩ 产品判据）∪ **工作树产品文件**。
+
+    为什么是并集（工单 `update-orphan-files/02`，本机离线演练实测踩到）：两条打包路径发的
+    东西不一样——完整包会发一批**未被 git 跟踪**的产品文件（`library/masters/**/
+    Project.uvguix.*`、`sources/contest/**` 下的构建产物与 `*.pdf`…），它们不在小发版清单里，
+    却**不是**「本版不再发」的东西。拿小发版清单当删除基准，它们就会被写进删除清单、
+    升级时真被删掉（实测：`not_in_official == 0` 成立、而盘上少了那些文件）。
+
+    反向那一半也要（拿工作树扫描当基准是不够的）：工作树可能比 HEAD 少文件（本地删了、
+    还没提交），而小发版包打的是 `HEAD`——那些文件仍然随本版发出，同样不许当「本版不发」。
+    """
+    return set(select_product_files(candidates)) | product_paths(Path(tree))
+
+
 def write_removed_list(
     out_dir: Path,
     version: str,
@@ -304,6 +322,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="上一版完整包清单（`firstep-full-<tag>.manifest.json`；可空）",
     )
     parser.add_argument(
+        "--baseline-search-dir",
+        default="",
+        help="按 tag 找上一版完整包清单的目录（缺省 = `--baseline-update-files` 所在目录）",
+    )
+    parser.add_argument(
         "--allow-missing-baseline-parts",
         action="store_true",
         help="允许基线旁边的 .removed.txt 缺失（首次发布等；缺省 = 缺了就拒绝发版）",
@@ -319,16 +342,35 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         candidates = read_files_manifest(Path(args.files))
         selected = select_product_files(candidates)
+        baseline_update_files = (
+            Path(args.baseline_update_files) if args.baseline_update_files else None
+        )
+        baseline_full_manifest = (
+            Path(args.baseline_full_manifest) if args.baseline_full_manifest else None
+        )
+        if baseline_update_files is not None:
+            # tag 推导与兄弟文件定位都在 Python 侧（`find_baseline_parts`，有单测钉住）：
+            # PowerShell 的 `GetFileNameWithoutExtension` 只削一层扩展名，会把
+            # `firstep-update-v1.1.1.files.txt` 算成 `v1.1.1.files`（离线演练实测踩到）。
+            _removed, found_manifest = find_baseline_parts(
+                baseline_update_files,
+                search_dir=(
+                    Path(args.baseline_search_dir) if args.baseline_search_dir else None
+                ),
+            )
+            if baseline_full_manifest is None:
+                baseline_full_manifest = found_manifest
+            elif found_manifest is not None and found_manifest != baseline_full_manifest:
+                print(f"[提示] 显式给的完整包清单与按 tag 找到的不是同一份："
+                      f"{baseline_full_manifest} / {found_manifest}")
         removed = write_removed_list(
             Path(args.out),
             args.version,
-            current=selected,
-            baseline_update_files=(
-                Path(args.baseline_update_files) if args.baseline_update_files else None
-            ),
-            baseline_full_manifest=(
-                Path(args.baseline_full_manifest) if args.baseline_full_manifest else None
-            ),
+            # 「本版发行集合」= 小发版清单 ∪ 工作树产品文件（两条打包路径的并集）；
+            # 少算一半就会把本版仍在发的东西删掉（见 current_release_files 的说明）。
+            current=current_release_files(Path(args.tree), candidates),
+            baseline_update_files=baseline_update_files,
+            baseline_full_manifest=baseline_full_manifest,
             allow_missing_baseline_parts=bool(args.allow_missing_baseline_parts),
         )
     except Exception as exc:

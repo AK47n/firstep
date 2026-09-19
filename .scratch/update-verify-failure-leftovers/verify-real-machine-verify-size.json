@@ -1,0 +1,102 @@
+{
+  "problems": [],
+  "stuck": [],
+  "notes": [],
+  "scenarios": {
+    "verify-size": {
+      "sim_url": "http://127.0.0.1:11206/p?mode=stable",
+      "declared_size": 1048576,
+      "actual_payload_size": 3961701,
+      "checks": {
+        "夹具起点干净": true,
+        "终态 = failed": true,
+        "报错是中文（无英文异常名/Traceback）": true,
+        "报错指明清单与对端不一致": true,
+        "error_kind = verify": true,
+        "不再重试（retry_count 未增长出多轮）": true,
+        "半成品被清（updates/full/ 下不再有分卷）": true,
+        "边车被清": true,
+        "updating.lock 未留下": true,
+        "pending-update.json 未留下": true,
+        "旧版本仍可用（/api/health 正常）": true,
+        "旧版本没被换掉（服务版本仍是演练前那个）": true,
+        "工具根没被动过（VERSIONS.md 逐字节未变）": true
+      },
+      "final": {
+        "state": "failed",
+        "error": "下载失败（卷 firstep-full-v1.2.1.zip）：发布信息不一致：清单说 1048576 字节，服务器说 3961701 字节",
+        "error_kind": "verify",
+        "retry_count": 0,
+        "message": ""
+      },
+      "health_before": {
+        "app": "contest-generator",
+        "version": "1.2.1",
+        "ok": true
+      },
+      "health_after": {
+        "app": "contest-generator",
+        "version": "1.2.1",
+        "ok": true
+      }
+    }
+  },
+  "facts": {
+    "sim_root": "C:\\Users\\luoji\\Desktop\\firstep-sim",
+    "sim_version_on_disk": "1.2.1",
+    "sandbox_updates_entries": [
+      "backup",
+      "firstep-update-1.1.1.removed.txt",
+      "firstep-update-1.1.1.zip",
+      "firstep-update-1.2.1.removed.txt",
+      "firstep-update-1.2.1.zip",
+      "full",
+      "full-apply.log",
+      "last-update.json",
+      "updater.log"
+    ],
+    "port_8000_listeners": [
+      "43960"
+    ],
+    "port_8020_listeners": []
+  },
+  "sandbox_traces": {
+    "marker": true,
+    "drill_backups": [],
+    "sandbox_updates_untouched_entries": [
+      "backup",
+      "firstep-update-1.1.1.removed.txt",
+      "firstep-update-1.1.1.zip",
+      "firstep-update-1.2.1.removed.txt",
+      "firstep-update-1.2.1.zip",
+      "full",
+      "full-apply.log",
+      "last-update.json",
+      "updater.log"
+    ]
+  },
+  "cleanup": {
+    "killed": [
+      "6664"
+    ],
+    "leftover": []
+  },
+  "isolation": {
+    "real_data_mtime_untouched": true,
+    "real_updates_untouched": true,
+    "real_tree_untouched": true,
+    "port_8000_listeners": [
+      "43960"
+    ]
+  },
+  "real_tree_diff": {
+    "added": [],
+    "removed": [],
+    "changed": []
+  },
+  "verdict": {
+    "problems": [],
+    "stuck": [],
+    "pass": true
+  }
+}

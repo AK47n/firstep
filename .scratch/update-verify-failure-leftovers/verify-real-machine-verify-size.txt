@@ -1,0 +1,59 @@
+# B2 证据：三个极端场景（沙箱真机 + 本地可控服务器）
+  时间：2026-09-19 12:25:21
+  一次性目录（harness 与证据都在这里）：C:\Users\luoji\AppData\Local\Temp\fe02-20260919-122521
+
+## 零、前置事实与隔离基线
+  sim_root = 'C:\\Users\\luoji\\Desktop\\firstep-sim'
+  sim_version_on_disk = '1.2.1'
+  sandbox_updates_entries = ['backup', 'firstep-update-1.1.1.removed.txt', 'firstep-update-1.1.1.zip', 'firstep-update-1.2.1.removed.txt', 'firstep-update-1.2.1.zip', 'full', 'full-apply.log', 'last-update.json', 'updater.log']
+  port_8000_listeners = ['43960']
+  port_8020_listeners = []
+  载荷 zip：C:\Users\luoji\AppData\Local\Temp\fe02-20260919-122521\payload-firstep-full-v1.2.1.zip（3961701 字节 / sha256 bce3e6045a4b5039…；含 4 MiB 存储条目，够限速与切断用）
+  本地假 GitHub：http://127.0.0.1:11205（release 列表 http://127.0.0.1:11205/repos/AK47n/firstep/releases?per_page=30）
+  本地可控服务器：port=11206 size=3961701 sha256=bce3e6045a4b5039…
+  harness 应用：{'app': 'contest-generator', 'version': '1.2.1', 'ok': True}
+
+## 场景三：校验失败（**不可重试**那一支：清单 size 与对端总长矛盾）
+  做法：清单里把这个卷声明成 1 MiB，但服务器照真载荷（3.96 MB）发——客户端一读响应头就发现「清单说 1 MiB、对端说 3.96 MB」，按 spec 第 125 行这属于**发布物与清单不一致，不可重试**。
+  起始清理（挪走旧任务态）：（无）
+  分卷地址：http://127.0.0.1:11206/p?mode=stable
+  旧版本自证：跑着的服务版本 = 1.2.1
+  夹具自检：起点分卷存在=False → 干净
+  check：latest=v1.2.1 / 分卷=[('firstep-full-v1.2.1.zip', 1048576, 'http://127.0.0.1:11206/p?mode=stable')]
+  apply：{'started': True, 'message': '已开始下载完整包（1 卷 / 约 1 MB）'}
+    [  0.0s] state=downloading bytes=0 retry=0 kind=''
+    [  0.7s] state=failed bytes=3961701 retry=0 kind='verify'
+  终态：state=failed error_kind='verify' error='下载失败（卷 firstep-full-v1.2.1.zip）：发布信息不一致：清单说 1048576 字节，服务器说 3961701 字节'
+  成立：夹具起点干净
+  成立：终态 = failed
+  成立：报错是中文（无英文异常名/Traceback）
+  成立：报错指明清单与对端不一致
+  成立：error_kind = verify
+  成立：不再重试（retry_count 未增长出多轮）
+  成立：半成品被清（updates/full/ 下不再有分卷）
+  成立：边车被清
+  成立：updating.lock 未留下
+  成立：pending-update.json 未留下
+  成立：旧版本仍可用（/api/health 正常）
+  成立：旧版本没被换掉（服务版本仍是演练前那个）
+  成立：工具根没被动过（VERSIONS.md 逐字节未变）
+
+## 场景之后的痕迹（如实记账）
+  沙箱工具根 sources/materials/.b2-drill-marker.txt: 在（84 字节）
+  沙箱工具根 sources/materials/.b2-drill-payload.bin: 在（3961289 字节）
+  演练数据目录的备份目录：[]
+  沙箱**自己**的数据目录（本格应零触碰）：['backup', 'firstep-update-1.1.1.removed.txt', 'firstep-update-1.1.1.zip', 'firstep-update-1.2.1.removed.txt', 'firstep-update-1.2.1.zip', 'full', 'full-apply.log', 'last-update.json', 'updater.log']
+
+## 收尾
+  收掉 8020 监听进程：['6664']；残余：（无）
+
+## 隔离边界收尾校验（真身只读）
+  真身数据目录 mtime 未变：True
+  真身 updates/ 条目未变：True
+  真身工作树未变：True（11908 → 11908 个文件）
+  8000 监听：['43960']
+  （证据目录保留在 C:\Users\luoji\AppData\Local\Temp\fe02-20260919-122521；脚本不自动删——里面有每个场景的原始台账）
+
+## 总判
+  判红 0 条 / 卡住 0 条
+  B2「三极端场景」：PASS
