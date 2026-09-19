@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import shutil
 import subprocess
 import sys
@@ -119,10 +120,17 @@ def test_real_repo_files_are_readable_from_a_clean_checkout():
 
 
 def test_wrong_pyproject_version_is_red(copy_repo, capsys):
-    """pyproject 版本号与 __init__ 不一致 → 红，且说明改哪个文件。"""
+    """pyproject 版本号与 __init__ 不一致 → 红，且说明改哪个文件。
+
+    **夹具不写死版本号**：写死的话每次发版都要跟着改夹具（本仓有先例——这类
+    「用例把环境当夹具」的耦合已经踩过）。当前值从被测仓库的 pyproject 里现读。
+    """
     text = (copy_repo / "pyproject.toml").read_text(encoding="utf-8")
+    match = re.search(r'^version = "([^"]+)"$', text, re.MULTILINE)
+    assert match, "夹具仓库的 pyproject.toml 里找不到 version 行——用例前提不成立"
+    current = match.group(1)
     (copy_repo / "pyproject.toml").write_text(
-        text.replace('version = "1.2.1"', 'version = "9.9.9"'), encoding="utf-8")
+        text.replace(f'version = "{current}"', 'version = "9.9.9"'), encoding="utf-8")
 
     module = load_preflight(copy_repo)
     assert module.main([]) == 1

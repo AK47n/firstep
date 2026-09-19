@@ -1,0 +1,13 @@
+﻿[preflight] 解释器：C:\Users\luoji\Desktop\firstep\.venv\Scripts\python.exe
+=== 发版前自检 ===
+  [OK] 三处版本号一致（1.2.2）
+        __init__.py / pyproject.toml / VERSIONS.md（2026-09-19）/ README 全部 = 1.2.2
+  [OK] 母版 .settings/ 编码钉在盘 + 在库
+        library/masters/mspm0/.settings/ 两件都在盘且被跟踪，编码钉内容在场（encoding/…=UTF-8）
+  [OK] 下载文档一致性（offline）
+          [OK] 点名的包内文件都在包里：00-START-HERE.txt
+        （--offline：只查了第 1 组「README 与包内文件」，**没有**校验线上资产与 Release 说明）
+        === 结论 ===
+          PASS（离线）：README 与包内文件一致——**线上那一半没查**，发版前再跑一次完整版
+
+结论：全绿，可以发版（当前版本 v1.2.2）

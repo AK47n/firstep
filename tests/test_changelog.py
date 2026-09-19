@@ -509,7 +509,7 @@ def test_load_versions_unreadable_path_returns_empty(tmp_path):
 
 
 def test_load_versions_real_file_reflects_released_versions():
-    """真实 VERSIONS.md：已发布 v1.2.1 / v1.2.0 / v1.1.1 / v1.1.0 / v1.0.0（五块都进前台）。
+    """真实 VERSIONS.md：已发布 v1.2.2 / v1.2.1 / v1.2.0 / v1.1.1 / v1.1.0 / v1.0.0（六块都进前台）。
 
     契约守卫：官方格式示例注释（`<!-- … -->` 内含 `## v` / `- ` 行）不得
     击穿注释态解析出幽灵版本——真实块数与已发布版本数一致、新版本在最前、
@@ -518,8 +518,8 @@ def test_load_versions_real_file_reflects_released_versions():
     real = Path(__file__).resolve().parents[1] / "VERSIONS.md"
     releases = load_versions(real)
     versions = [r["version"] for r in releases]
-    assert versions == ["v1.2.1", "v1.2.0", "v1.1.1", "v1.1.0", "v1.0.0"], f"VERSIONS.md 版本块与顺序：{versions}"
-    assert releases[0]["date"] == "2026-09-16", "最新版日期"
+    assert versions == ["v1.2.2", "v1.2.1", "v1.2.0", "v1.1.1", "v1.1.0", "v1.0.0"], f"VERSIONS.md 版本块与顺序：{versions}"
+    assert releases[0]["date"] == "2026-09-19", "最新版日期"
     for release in releases:
         assert release["summary"], f"{release['version']} 应有主题一句话"
         assert release["items"], f"{release['version']} 应有要点条目"

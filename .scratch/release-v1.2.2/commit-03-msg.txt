@@ -1,0 +1,14 @@
+发版准备：版本号同步到 v1.2.2 + 发版自检四项全绿（工单 release-v1.2.2/03）
+
+四处版本号同步：__init__.py（唯一可信来源）/ pyproject.toml / VERSIONS.md 新版本块
+（## v1.2.2 (2026-09-19)，ASCII 括号 + 严格日期）/ README 当前版本行。
+
+VERSIONS.md 的四条要点按「用户听得懂」写：升级不多不少（不再写别人的库备份、不再漏发
+新增文件）、不再分发 *.egg-info、校验失败不留整卷残骸、内容不符半分钟内明确失败。
+
+preflight.ps1 四项全绿（原文落 .scratch/release-v1.2.2/verify-03-preflight.txt）。
+
+版号一动，两条既有守卫当场转红——都是用例把「当时那一版」写成夹具，不是产品问题：
+- tests/test_changelog.py：已发布版本列表写死五块 → 按其自身说明追加 v1.2.2、更新最新日期
+- tests/test_preflight.py：夹具 text.replace('version = "1.2.1"', …) 空转（写入没发生，
+  自检当然全绿、用例反红）→ 改成从被测仓库 pyproject 现读当前版本再替换
