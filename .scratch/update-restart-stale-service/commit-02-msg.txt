@@ -1,0 +1,28 @@
+修启动器判据的静默失效：for /f 少了 usebackq（真机演练第一次判红的根因）
+
+第一次重发 v1.2.1 后跑 drill-01，判据仍不成立（盘上 1.2.1、服务仍 1.1.1、launcher.log 记
+already_running）。根因不是判据写错，而是**判据压根没被执行**：
+
+  for /f "tokens=1,*" %%a in (`python "...\launcher-stale.py" --port 8020 2^>nul`) do (…
+
+批处理的 for /f 不带 usebackq 时，反引号不是「执行命令」而是**文件名**——cmd 去找一个叫
+`python "...\launcher-stale.py" --port 8020` 的文件，找不到就是零行 → 循环一次都不跑 →
+FIRSTEP_STALE 保持空 → 落到 already_running。既有的身份判定那一行是带 usebackq 的
+（抄近路时漏了这一个词，代价是一整轮重打重传 + 一次真机演练）。
+
+修：那一行加 usebackq，并把「为什么不能省」写进注释。
+
+守卫补三层（这正是原先漏过去的地方）：
+- 静态守卫加断言：调 CLI 的那行必须带 usebackq
+- 判据强度探针加一条注入：删掉 usebackq → 必须转红（现 8/8 全红）
+- 新增**行为守卫**（tests/test_launcher_stale_service.py 末段）：把 start-app.bat 从 chcp 到
+  「问完 CLI 那次分支」整段原样抽出，再把每个 goto 目标换成 echo+exit——弹窗 / 杀进程 /
+  起服务三条路都不可能执行，因此仍守住 test_launcher_log 开头那条「不跑会弹框的分支」的
+  硬约束——配桩 /api/health 真跑 cmd：旧版本 → RESULT=stale 且 NOTE 带 served/disk；
+  同版本与更新版本 → already_running；端口上没人听 → start_service
+
+诊断工具留档 .scratch/update-restart-stale-service/probe-launcher-decision.py：就是它把
+「反引号被当成文件名」这类静默失效钉出来的（它的第一版因切片少抄了 set PYEXE 误报过一次，
+这一条也写在注释里）。start-app.bat.utf8.md 镜像同步刷新。
+
+全仓测试：4555 passed, 1 skipped（新增 4 条行为守卫）。

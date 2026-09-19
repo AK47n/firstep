@@ -22,10 +22,13 @@ from __future__ import annotations
 import http.server
 import json
 import os
+import shutil
 import subprocess
 import sys
 import threading
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "tools" / "launcher-stale.py"
@@ -210,6 +213,9 @@ def test_bat_asks_the_cli_instead_of_comparing_versions_itself() -> None:
     index = _cli_call_index(lines)
     assert "tokens=1,*" in lines[index], f"调 CLI 的那行没有取首词：{lines[index]!r}"
     assert "2^>nul" in lines[index], "调 CLI 时要吞掉 stderr（判据只有 stdout 一行）"
+    assert "usebackq" in lines[index], (
+        "反引号前必须 usebackq：不加它时反引号不是「执行命令」而是**文件名**，"
+        "循环一次都不跑、判据静默失效（真机演练第一次就栽在这里）")
     # 反向 ①：启动器不许自己去 health 里刨版本号
     assert "get('version'" not in _bat_text(), "从 health 里刨版本号是 CLI 的活，不该出现在启动器里"
     # 反向 ②：启动器不许对版本字段做数值比较（端口那个 gtr 65535 不在此列）
@@ -275,3 +281,100 @@ def test_bat_logs_the_stale_verdict_as_extra_fields() -> None:
         index = _index_of(lines, needle)
         assert "%FIRSTEP_STALE_NOTE%" in lines[index], (
             f"{label} 那行没带上 CLI 给的字段：{lines[index]!r}")
+
+
+# ---------------------------------------------------------------------------
+# 启动器行为守卫：真跑 cmd，但**每个分支都落到 echo**
+#
+# 为什么非要它（用一次真机失败换来的）：静态守卫挡不住「反引号前少了 usebackq」——那一行
+# 字面上完全正常（有 tokens、有 2^>nul、有 stale 判据），而 cmd 会把反引号里的东西当成
+# **文件名**：循环一次都不跑、判据静默失效、启动器照旧走 already_running。第一次重发
+# v1.2.1 后跑真机演练就是这么红的（沙箱盘上 1.2.1、服务仍 1.1.1）。
+#
+# 所以这里把 `start-app.bat` 从 `chcp` 起、到「问完 CLI 的那次分支」为止**整段原样抽出**，
+# 再把每个 goto 目标换成 `echo + exit`：**弹窗 / 杀进程 / 起服务三条路都不可能执行**，
+# 于是它可以安全地进 pytest——`tests/test_launcher_log.py` 开头那条「不跑会弹框的分支」的
+# 硬约束仍然成立。
+# ---------------------------------------------------------------------------
+
+PROBE_LABELS = (
+    "updating", "update_left", "no_python", "old_python", "no_deps",
+    "already_running", "stale_service", "port_busy", "start_service", "timeout",
+)
+
+
+def _probe_bat_bytes(bat_bytes: bytes) -> bytes:
+    """抽出「头部设置 + 端口探测 + 身份判定 + 问 CLI + 分支」这一段，接上纯 echo 的标签尾巴。"""
+    lines = bat_bytes.decode("gbk").split("\r\n")
+
+    def find(pred) -> int:
+        for index, line in enumerate(lines):
+            if pred(line):
+                return index
+        raise AssertionError("start-app.bat 的结构变了：探针锚点找不到")
+
+    start = find(lambda s: s.startswith("chcp 936"))
+    end = find(lambda s: s.strip() == "goto :already_running")
+    tail: list[str] = [""]
+    for label in PROBE_LABELS:
+        tail.append(f":{label}")
+        if label in ("already_running", "stale_service"):
+            tail.append(f'echo RESULT={label} GOT=[%FIRSTEP_STALE%] '
+                        f'NOTE=[%FIRSTEP_STALE_NOTE%]')
+        else:
+            tail.append(f"echo RESULT={label}")
+        tail.append("exit /b 0")
+    return "\r\n".join(lines[start:end + 1] + tail).encode("gbk")
+
+
+def _stage_launcher_root(tmp_path: Path) -> tuple[Path, Path]:
+    """一次性工具根：真 `start-app.bat` + 真 CLI + 真 `src`（launcher 只需要这几件）。"""
+    root = tmp_path / "tool"
+    (root / "tools").mkdir(parents=True)
+    (root / "start-app.bat").write_bytes(BAT.read_bytes())
+    shutil.copy2(ROOT / "tools" / "launcher-stale.py", root / "tools" / "launcher-stale.py")
+    shutil.copytree(ROOT / "src", root / "src")
+    home = tmp_path / "home"
+    (home / ".contest_generator").mkdir(parents=True)
+    return root, home
+
+
+def _run_probe(root: Path, home: Path, port: int) -> str:
+    probe = root / "_probe-launcher.bat"
+    probe.write_bytes(_probe_bat_bytes((root / "start-app.bat").read_bytes()))
+    env = {**os.environ, "USERPROFILE": str(home), "HOME": str(home),
+           "FIRSTEP_LAUNCHER_PORT": str(port), "PYTHONIOENCODING": "utf-8"}
+    try:
+        proc = subprocess.run(["cmd", "/c", str(probe)], cwd=str(root), env=env,
+                              capture_output=True, text=True, encoding="gbk",
+                              errors="replace", timeout=300)
+    finally:
+        probe.unlink(missing_ok=True)
+    return proc.stdout
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="启动器是 Windows 批处理")
+@pytest.mark.parametrize(
+    ("served", "expected"),
+    [("1.0.0", "stale"), (ON_DISK, "already_running"), ("9.9.9", "already_running")],
+)
+def test_launcher_decision_really_fires(tmp_path, served, expected, ):
+    """真跑一遍启动器的判据段：旧版本 → 走 stale；同版本 / 更新版本 → 照旧复用。"""
+    root, home = _stage_launcher_root(tmp_path)
+    with _HealthStub({"app": "contest-generator", "version": served, "ok": True}) as stub:
+        stdout = _run_probe(root, home, stub.port)
+    if "RESULT=no_deps" in stdout:
+        pytest.skip("本机缺启动器依赖自检要的运行依赖（fastapi/uvicorn/pypdf/PIL/fitz）")
+    assert f"RESULT={expected}" in stdout, stdout[-2000:]
+    if expected == "stale":
+        assert f"NOTE=[stale=1 served={served} disk={ON_DISK}]" in stdout, stdout[-2000:]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="启动器是 Windows 批处理")
+def test_launcher_decision_leaves_the_normal_path_alone(tmp_path) -> None:
+    """端口上没人听 → 还是走原本的起服务路径（这条修复没有把正常路走歪）。"""
+    root, home = _stage_launcher_root(tmp_path)
+    stdout = _run_probe(root, home, _free_port())
+    if "RESULT=no_deps" in stdout:
+        pytest.skip("本机缺启动器依赖自检要的运行依赖（fastapi/uvicorn/pypdf/PIL/fitz）")
+    assert "RESULT=start_service" in stdout, stdout[-2000:]

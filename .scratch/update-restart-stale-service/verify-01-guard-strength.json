@@ -5,7 +5,7 @@
       "file": "src/contest_generator/update.py",
       "anchor_hits": 1,
       "turned_red": true,
-      "summary": "1 failed, 1 passed, 15 deselected, 1 warning in 0.38s",
+      "summary": "1 failed, 1 passed, 15 deselected, 1 warning in 0.44s",
       "weak": false
     },
     {
@@ -13,7 +13,7 @@
       "file": "src/contest_generator/update.py",
       "anchor_hits": 1,
       "turned_red": true,
-      "summary": "1 failed, 1 passed, 15 deselected, 1 warning in 0.37s",
+      "summary": "1 failed, 1 passed, 15 deselected, 1 warning in 0.39s",
       "weak": false
     },
     {
@@ -21,7 +21,7 @@
       "file": "start-app.bat",
       "anchor_hits": 1,
       "turned_red": true,
-      "summary": "1 failed, 12 passed in 6.70s",
+      "summary": "1 failed, 16 passed in 14.19s",
       "weak": false
     },
     {
@@ -29,7 +29,7 @@
       "file": "start-app.bat",
       "anchor_hits": 1,
       "turned_red": true,
-      "summary": "1 failed, 12 passed in 6.63s",
+      "summary": "3 failed, 14 passed in 14.06s",
       "weak": false
     },
     {
@@ -37,7 +37,15 @@
       "file": "start-app.bat",
       "anchor_hits": 1,
       "turned_red": true,
-      "summary": "1 failed, 12 passed in 6.61s",
+      "summary": "4 failed, 13 passed in 13.44s",
+      "weak": false
+    },
+    {
+      "name": "反引号前少了 usebackq（cmd 把命令当文件名，循环一次都不跑、判据静默失效）",
+      "file": "start-app.bat",
+      "anchor_hits": 1,
+      "turned_red": true,
+      "summary": "2 failed, 15 passed in 13.39s",
       "weak": false
     },
     {
@@ -45,7 +53,7 @@
       "file": "start-app.bat",
       "anchor_hits": 1,
       "turned_red": true,
-      "summary": "3 failed, 10 passed in 6.67s",
+      "summary": "4 failed, 13 passed in 13.41s",
       "weak": false
     },
     {
@@ -53,7 +61,7 @@
       "file": "start-app.bat",
       "anchor_hits": 1,
       "turned_red": true,
-      "summary": "1 failed, 12 passed in 6.67s",
+      "summary": "1 failed, 16 passed in 14.01s",
       "weak": false
     }
   ],

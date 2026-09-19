@@ -72,9 +72,17 @@ CASES: list[tuple[str, str, str, str, str, str]] = [
         "",
     ),
     (
+        "反引号前少了 usebackq（cmd 把命令当文件名，循环一次都不跑、判据静默失效）",
+        START_BAT,
+        'for /f "usebackq tokens=1,*" %%a in (`%PYEXE% "%LAUNCHER_STALE_PY%" --port',
+        'for /f "tokens=1,*" %%a in (`%PYEXE% "%LAUNCHER_STALE_PY%" --port',
+        "tests/test_launcher_stale_service.py",
+        "",
+    ),
+    (
         "干脆不问 CLI（判据退回原来的「只看身份」）",
         START_BAT,
-        'for /f "tokens=1,*" %%a in (`%PYEXE% "%LAUNCHER_STALE_PY%" --port %FIRSTEP_LAUNCHER_PORT% 2^>nul`) do (',
+        'for /f "usebackq tokens=1,*" %%a in (`%PYEXE% "%LAUNCHER_STALE_PY%" --port %FIRSTEP_LAUNCHER_PORT% 2^>nul`) do (',
         "rem （注入：这里不再问 CLI）",
         "tests/test_launcher_stale_service.py",
         "",
