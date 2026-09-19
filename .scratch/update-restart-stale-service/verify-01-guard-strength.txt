@@ -1,0 +1,48 @@
+# 判据强度探针：把守卫逐个弄坏，看它们会不会红
+  仓库：C:\Users\luoji\Desktop\firstep
+  判据：**每一条注入都必须转红**（有绿的 = 那条守卫是摆设）
+
+------------------------------------------------------------------------------
+[注入] 谓词放宽成「不相等」：服务比盘上更新也会被判旧进程（误杀别人的新版）
+  文件：src/contest_generator/update.py
+  测试：tests/test_update_check.py -k is_stale_service
+  结果：转红 ✓ —— 1 failed, 1 passed, 15 deselected, 1 warning in 0.38s
+------------------------------------------------------------------------------
+[注入] 判不了也硬判：非 semver 不再返回 None，而是当成「不是旧进程」
+  文件：src/contest_generator/update.py
+  测试：tests/test_update_check.py -k is_stale_service
+  结果：转红 ✓ —— 1 failed, 1 passed, 15 deselected, 1 warning in 0.37s
+------------------------------------------------------------------------------
+[注入] 踢进程的作用域写成死端口 8000（不再跟着本实例的端口走）
+  文件：start-app.bat
+  测试：tests/test_launcher_stale_service.py
+  结果：转红 ✓ —— 1 failed, 12 passed in 6.70s
+------------------------------------------------------------------------------
+[注入] 判据放宽成「不是 unknown 就踢」（fresh 也会被踢掉）
+  文件：start-app.bat
+  测试：tests/test_launcher_stale_service.py
+  结果：转红 ✓ —— 1 failed, 12 passed in 6.63s
+------------------------------------------------------------------------------
+[注入] 身份判据被写反（别的程序占着端口也算自己人）
+  文件：start-app.bat
+  测试：tests/test_launcher_stale_service.py
+  结果：转红 ✓ —— 1 failed, 12 passed in 6.61s
+------------------------------------------------------------------------------
+[注入] 干脆不问 CLI（判据退回原来的「只看身份」）
+  文件：start-app.bat
+  测试：tests/test_launcher_stale_service.py
+  结果：转红 ✓ —— 3 failed, 10 passed in 6.67s
+------------------------------------------------------------------------------
+[注入] 旧进程被踢这件事不留痕（事后分不清「踢了」还是「碰巧没旧进程」）
+  文件：start-app.bat
+  测试：tests/test_launcher_stale_service.py
+  结果：转红 ✓ —— 1 failed, 12 passed in 6.67s
+
+------------------------------------------------------------------------------
+## 复原复核
+  src/contest_generator/update.py sha256 未变 ✓
+  start-app.bat sha256 未变 ✓
+
+## 总判
+  7/7 条注入成功转红
+  探针：PASS

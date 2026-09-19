@@ -24,6 +24,8 @@ if errorlevel 1 set FIRSTEP_LAUNCHER_PORT=8000
 if %FIRSTEP_LAUNCHER_PORT% gtr 65535 set FIRSTEP_LAUNCHER_PORT=8000
 rem 留痕脚本的绝对路径（%~dp0 末尾自带反斜杠）
 set LAUNCHER_LOG_PS1=%~dp0tools\launcher-log.ps1
+rem 旧进程判据脚本的绝对路径（同一个 %~dp0 口径）
+set LAUNCHER_STALE_PY=%~dp0tools\launcher-stale.py
 rem ---------- 0. 更新中/待更新标记检测（工单 auto-update/06）----------
 set UPD_DIR=%USERPROFILE%\.contest_generator\updates
 if exist "%UPD_DIR%\updating.lock" goto :updating
@@ -70,8 +72,26 @@ rem （这一条是既有行为，本单只把它记进日志，没有改过它的走向）。
 if errorlevel 1 goto :port_busy
 set FIRSTEP_HEALTH_APP=unknown
 for /f "usebackq delims=" %%a in (`%PYEXE% -c "import urllib.request,json;d=json.load(urllib.request.urlopen('http://127.0.0.1:%FIRSTEP_LAUNCHER_PORT%/api/health',timeout=3));print(d.get('app',''))" 2^>nul`) do set FIRSTEP_HEALTH_APP=%%a
-if /i "%FIRSTEP_HEALTH_APP%"=="contest-generator" goto :already_running
-goto :port_busy
+if /i not "%FIRSTEP_HEALTH_APP%"=="contest-generator" goto :port_busy
+rem 身份是本应用：再比一次版本。更新换的是盘上的文件，跑着的进程不会跟着变——
+rem 旧进程还占着端口时，光看身份会把它当成「已在运行」（真机演练实测：盘上 1.2.1、服务仍 1.1.1）。
+rem 版本比较不在这里手写（批处理只会比字符串与整数），问 tools\launcher-stale.py：
+rem 它打印 stale / fresh / unknown 三选一，不是 stale（空、unknown、其它）一律走原来的复用路径。
+set FIRSTEP_STALE=
+set FIRSTEP_STALE_NOTE=
+for /f "tokens=1,*" %%a in (`%PYEXE% "%LAUNCHER_STALE_PY%" --port %FIRSTEP_LAUNCHER_PORT% 2^>nul`) do (
+    set FIRSTEP_STALE=%%a
+    set FIRSTEP_STALE_NOTE=%%b
+)
+if /i "%FIRSTEP_STALE%"=="stale" goto :stale_service
+goto :already_running
+
+:stale_service
+rem 端口上那个是本应用的旧进程（文件换了、进程没停）：踢掉它，再走下面原本的起服务流程。
+rem 身份已经在这条路的上游确认过，所以这里按本端口杀，不会被别的程序误伤。
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":%FIRSTEP_LAUNCHER_PORT%" ^| findstr "LISTENING"') do taskkill /F /PID %%p >nul 2>&1
+rem 等一拍再起：刚被杀的进程要放开端口，抢这一拍会让新进程绑不上、误报启动超时
+"%SystemRoot%\System32\ping.exe" -n 2 127.0.0.1 >nul 2>&1
 
 :start_service
 rem 后台启动服务，日志追加到用户配置目录
@@ -121,12 +141,12 @@ exit /b 1
 
 :already_running
 rem launcher-log
-"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "%LAUNCHER_LOG_PS1%" -Reason already_running port=%FIRSTEP_LAUNCHER_PORT%
+"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "%LAUNCHER_LOG_PS1%" -Reason already_running port=%FIRSTEP_LAUNCHER_PORT% %FIRSTEP_STALE_NOTE%
 start "" "http://127.0.0.1:%FIRSTEP_LAUNCHER_PORT%"
 exit /b 0
 
 :started
 rem launcher-log
-"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "%LAUNCHER_LOG_PS1%" -Reason started tries=%tries% port=%FIRSTEP_LAUNCHER_PORT%
+"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "%LAUNCHER_LOG_PS1%" -Reason started tries=%tries% port=%FIRSTEP_LAUNCHER_PORT% %FIRSTEP_STALE_NOTE%
 start "" "http://127.0.0.1:%FIRSTEP_LAUNCHER_PORT%"
 exit /b 0

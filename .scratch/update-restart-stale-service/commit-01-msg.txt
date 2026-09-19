@@ -1,0 +1,22 @@
+修启动器：端口上那个服务是旧进程就踢掉重起（工单 update-restart-stale-service/01）
+
+更新换的是盘上的文件，跑着的进程不会跟着变。旧进程还占着端口时，启动器只按身份判断
+「本应用已在运行」，于是只开一个浏览器标签就退出——用户永远停在旧版本，而界面说更新成功了
+（沙箱真机演练 B1 实测：盘上 1.2.1、服务仍 1.1.1、launcher.log 记的正是 already_running）。
+
+- 新谓词 update.is_stale_service（三态）：服务版本 < 盘上版本才算旧进程；相等或服务更新一律
+  不动它（不误杀另一个安装的新版）；非合法 semver 返回 None——判不了就不去 kill 用户的服务
+- 新 CLI tools/launcher-stale.py：stdout 恰好一行 stale / fresh / unknown，任何内部异常都走
+  unknown 且退出码 0（判据只有那一行；把启动器带崩是不可接受的一侧）
+- start-app.bat（GBK+CRLF，按字节改）：身份确认之后多问一句版本，只有 stale 才按【本端口】
+  踢掉正在监听的那个、等一拍、再走原本的 :start_service；**不新增 reason 码**——
+  留痕记在 started / already_running 那两行的附加字段上，launcher-failure-reason 的码表、
+  探针与其已封口状态全部未动
+- 守卫三层：谓词单测（含判不了的六种输入）+ CLI 契约（真 HTTP 桩 + 真子进程）+ .bat 静态守卫
+  （只认 stale 才踢 / 作用域是本端口 / 踢完回原起服务路径 / 启动器里不许手写版本比较）；
+  判据强度探针 7/7 注入全部转红，改完两文件逐字节复原
+
+顺带刷新 .scratch/launcher-failure-reason/start-app.bat.utf8.md（那份 GBK 文件的 UTF-8 镜像，
+改了 .bat 不同步它就会陈旧）。
+
+全仓测试：4551 passed, 1 skipped（新增 15 条用例）。

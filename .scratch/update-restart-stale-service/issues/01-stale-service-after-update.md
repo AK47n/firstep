@@ -1,50 +1,54 @@
-# 01 — 从 v1.1.1 点「一键更新」：文件换了，**跑着的服务还是旧版本**
+# 01 — 启动器版本一致性判据：端口上那个服务是旧进程就踢掉重起
 
-**Type:** task
-**Status:** open
-**发现于：** 沙箱真机演练 B1（`sandbox-drill/01`，2026-09-18 22:40，脚本 `.scratch/verify-gate-drills/drill-01-upgrade.py`）
+**要做什么：** 让「更新换完文件后重新打开工具」这一步拿到**新版本**：启动器在确认端口上确实是自己
+的应用之后，再比一次版本——服务版本**小于**盘上版本 → 判旧进程 → 按既有停服纪律踢掉 → 走原本的
+起服务路径。用户可观察结果：更新完成后打开的就是新版，不必自己关掉再重开。
 
-## 现象（真机实测，非推断）
+**被谁阻塞：** 无——spec 已拍板（`.scratch/update-restart-stale-service/spec.md`）。
 
-沙箱「模拟用户机」（`C:\Users\luoji\Desktop\firstep-sim`，盘上 v1.1.1）走**产品自己的**小发版更新到 v1.2.1：
+**状态：** claimed
+
+## 背景（本单就是这么发现的，别丢）
+
+沙箱真机演练 B1（`sandbox-drill/01`，2026-09-18 22:40，脚本 `.scratch/verify-gate-drills/drill-01-upgrade.py`）
+把这条链真跑了一遍：
 
 | 环节 | 实测 | 判据 |
 |---|---|---|
 | 检查更新 | `latest=1.2.1 size=304729724 sha256=ec9921fc…` | ✅ |
 | 真下载 + 校验 | 304,729,724 B，14.65 MB/s，sha256 与线上清单一致 | ✅ |
-| 替换 | 落位 4329 文件、删 727、备份 4312、盘上 `src/contest_generator/__init__.py` = **1.2.1** | ✅ |
+| 替换 | 落位 4329 文件、删 727、备份 4312、盘上 `__init__.py` = **1.2.1** | ✅ |
 | **跑起来的服务** | `GET /api/health` → `version = 1.1.1` | ❌ |
-| 重启 | `updates\launcher.log` 只有一行 `reason=already_running port=8020`（启动器认为「本应用已在运行」，只开了浏览器） | ❌ |
+| 重启 | `launcher.log` 只有 `reason=already_running port=8020`（认为「已在运行」，只开了浏览器） | ❌ |
 
-用户视角：点完更新、进度条走完、工具「重启」了，但打开的还是**旧版本**（`/api/health` 与设置页都还是 1.1.1），必须自己关掉再重开一次才到 1.2.1（**已验证**：收掉 8020 旧进程 + 重起 → `1.2.1`，见 `verify-01-upgrade-aftercare.txt`）。
+根因链：发起更新的那一代（v1.1.1）拉起更新器时**没传 `--port`** → 更新器按默认 8000 停服
+（`updater.log`：「端口 8000 无监听进程，跳过停服」）→ 旧进程还占着端口 → 更新器换完文件调启动器 →
+启动器看到 `/api/health` 应答且 `app == contest-generator` → 判「已在运行」→ 只开浏览器。
 
-## 根因（证据链完整，不是猜）
+**射程更正**（详见 spec「补充说明」）：更新器默认端口与普通用户的端口都是 8000，**两边默认值相同
+→ 停服停对了**；本缺陷只在端口 ≠ 8000 时咬人（沙箱 8020；同机双实例更糟：会把 8000 上用户正在用的
+那个停掉）。且只有小发版这条路缺 `--port`（v1.1.1 的完整包路径是传的）。
 
-1. **发起更新的那一代代码没传停服端口。** 备份里那份 v1.1.1 的 `webapp.spawn_updater`（`%USERPROFILE%\.contest_generator_sim\updates\backup\20260918-224039\src\contest_generator\webapp.py`）构造的命令是
-   `[python, update-app.py, --zip, …, --root, …, --data-dir, …]`——**没有 `--port`**；
-2. 于是更新器按默认端口停服：`updates\updater.log` 写着 **「端口 8000 无监听进程，跳过停服」**（8020 上的旧进程原封不动）；
-3. 更新器照常覆盖文件、写了 `pending`→清 `pending`、拉起 `start-app.vbs`；
-4. `start-app.bat` 的端口探测看到 8020 上有**合法**的 `/api/health`（旧进程应答）→ 走 `:already_running` → 只 `start "" http://127.0.0.1:8020` 就退出——**新版永远不会起来**。
+## 验收标准
 
-**这一条在产品里已经修过**（v1.2.0 `ba32e95a` 起两条更新路径都显式传端口；v1.2.1 的 `src/contest_generator/webapp.py:384` 已是 `"--port", str(resolve_launcher_port())`）。本单记录的不是「新代码还有这个 bug」，而是：
-**修复只对「发起更新的那一代 ≥ v1.2.0」有效；而 README/发布说明承诺的正是「老用户点一次检查更新就能升级」——那批人（≤ v1.1.1）现在会得到「说更新成功、其实是旧版」的结果，且没有任何提示。** 这个后果此前只有推断，本轮首次真机跑实。
-
-## 待定修法（择一或组合，动代码前先 spec）
-
-| # | 修法 | 代价 | 覆盖谁 |
-|---|---|---|---|
-| ① | 发布说明 / README 明写「v1.1.1 及更早：更新后请手动重开一次」 | 零代码 | 现有老用户（立刻） |
-| ② | 启动器加**版本一致性检查**：端口上服务的 `version` < 盘上 `__version__` → 判为「旧进程」，停掉再起 | 改 `start-app.bat` + 守卫 | 以后所有「旧进程存活」的情形 |
-| ③ | 重启协议不依赖「发起更新的那一代代码」：更新器只清 lock，由**启动器轮询 lock 消失**后自己拉起 | 改更新器 + 启动器，面较大 | 同上，且对更老的版本也有效 |
-
-倾向：①（立刻止血，本单可只做这条）+ ②（正向护栏）。③ 留作后续评估。
-
-## 验收
-
-在任一修法落地后，用一台 v1.1.1 沙箱重跑：
-
-```
-python .scratch/verify-gate-drills/drill-01-upgrade.py
-```
-
-判据：`RESULTS.endpoint.served == "1.2.1"` 且 `restarted_by_updater == true`（现在分别是 `"1.1.1"` / `false`）。
+- [ ] `src/contest_generator/update.py` 有纯谓词 `is_stale_service(served, on_disk)`：语义比较、
+      复用 `compare_versions`、非合法 semver 一律**不下判断**（False）；单测覆盖
+      真旧 / 相等 / 服务更新 / 空串 / 非 semver / `v` 前缀 / `1.10.0` vs `1.9.0` 七类，
+      且反向注入（改成 `<=`、改成字符串比较）必须转红
+- [ ] `tools/launcher-stale.py`：`--port P` → stdout **恰好一行**，三选一
+      `stale stale=1 served=<旧> disk=<盘上>` / `fresh served=… disk=…` / `unknown`；
+      任何异常、身份不符、health 缺 version、非法 semver 都是 `unknown` 且退出码 0；
+      契约测试用**进程内 HTTP 桩 + 真子进程**覆盖四种 unknown 路径与两种正常路径
+- [ ] `start-app.bat` 在「身份是本应用」分支后调用该 CLI，**只在 token 为 `stale` 时**走踢进程路径；
+      判据不在批处理里手写（不得出现版本字符串比较）
+- [ ] 踢进程：作用域 = `%FIRSTEP_LAUNCHER_PORT%`，只在身份已确认的分支里发生，踢完等一拍
+      （`ping -n 2`，不得用 `timeout /t`）再走**原本的** `:start_service`
+- [ ] **留痕不新增 reason 码**：旧进程被踢记在 `started` 行的附加字段（`stale=1 served=… disk=…`），
+      `already_running` 行同样带字段；`tools/launcher-log.ps1` 空值会让整行静默丢失，故取值前给初值
+- [ ] `tests/test_launcher_log.py` 全部既有判据**不动且全绿**（退出分支数仍 9、留痕调用数一一对应、
+      码集合 == 码表、`.bat` 仍 GBK + CRLF 无 BOM）；`.scratch/launcher-failure-reason/` 的 spec 与探针**零改动**
+- [ ] `.bat` 新增静态守卫（新测试文件）：断言它调用了 CLI、只在 `stale` 时踢、作用域是端口变量、
+      踢完回原起服务路径；并断言启动器里**没有**手写的版本比较
+- [ ] 既有内容断言全绿：`tests/test_onboarding_docs.py`（`/api/health` / `Popup` / `启动失败` / `.venv` 优先）
+- [ ] 全仓测试跑一次绿（`python -m pytest -n auto -q`）
+- [ ] 提交（中文提交信息；`.bat` 的 GBK 编码不得被编辑器改坏）

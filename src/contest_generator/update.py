@@ -65,6 +65,28 @@ def compare_versions(current: str, latest: str) -> int | None:
     return (b > a) - (b < a)  # type: ignore[operator]
 
 
+def is_stale_service(served: str, on_disk: str) -> bool | None:
+    """端口上跑着的那个服务是不是「旧进程」：**服务版本 < 盘上版本**。
+
+    为什么需要这条判据（工单 `update-restart-stale-service/01`）：更新做的事是「换盘上的文件」，
+    **跑着的进程不会跟着变**。旧进程还占着端口时，启动器探测到的 `/api/health` 一切正常
+    （`app` 也对得上），于是判定「本应用已在运行」→ 只开一个浏览器标签就退出，
+    用户就永远停在旧版本、且界面说更新成功了。
+
+    三态（不是二态——「判不了」必须与「不是旧进程」分开，调用方要打印不同的结论）：
+
+    - `True` = 是旧进程（服务的版本**小于**盘上版本）→ 该踢掉重起；
+    - `False` = 不是旧进程：版本相等（正常复用）或服务比盘上**新**（同一个端口上跑着另一个
+      安装的新版）→ 不动它，重启反而会把用户踢回旧代码；
+    - `None` = **判不了**（版本读不到 / 任一侧不是合法 semver）→ 宁可少踢一次，
+      也不拿解析不了的东西去 kill 用户的服务。
+    """
+    comparison = compare_versions(served, on_disk)
+    if comparison is None:
+        return None
+    return comparison == 1
+
+
 def resolve_assets(
     release: dict[str, Any],
 ) -> tuple[str | None, int, str | None, str | None]:

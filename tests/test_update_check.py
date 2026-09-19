@@ -21,6 +21,7 @@ from contest_generator.update import (
     MSG_NO_SHA,
     check_for_update,
     compare_versions,
+    is_stale_service,
     normalize_version,
     parse_sha256_text,
     parse_semver,
@@ -54,6 +55,39 @@ def test_compare_versions() -> None:
     assert compare_versions("v1.0.0", "1.1.0") == 1  # 容忍 v 前缀
     assert compare_versions("1.9.0", "1.10.0") == 1  # 数字比较非字符串
     assert compare_versions("1.0", "1.0.0") is None  # 非法 → None
+
+
+def test_is_stale_service() -> None:
+    """旧进程判据：端口上服务的版本**小于**盘上版本才算旧。
+
+    工单 `update-restart-stale-service/01`：更新的替换动作换掉了盘上的文件，但如果旧进程
+    还占着端口，启动器会把它当成「本应用已在运行」而只开浏览器——用户就永远停在旧版本。
+    """
+    assert is_stale_service("1.1.1", "1.2.1") is True  # 典型：换了文件、旧进程没停
+    assert is_stale_service("1.2.1", "1.2.1") is False  # 同版本 = 正常复用，不误杀
+    assert is_stale_service("1.2.2", "1.2.1") is False  # 服务比盘上还新（另一个根跑着新版）→ 不动它
+    assert is_stale_service("v1.1.1", "1.2.1") is True  # 容忍 v 前缀
+    assert is_stale_service(" 1.1.1 ", "1.2.1") is True  # 容忍空白
+    assert is_stale_service("1.9.0", "1.10.0") is True  # 数字比较，不是字符串比较
+
+
+def test_is_stale_service_refuses_to_guess() -> None:
+    """读不到 / 解析不了的版本一律**判不了**（`None`，不是 `False`）。
+
+    三态的意义：调用方对「不是旧进程」和「判不了」要给出不同结论——前者照旧只开浏览器，
+    后者同样不动服务，但留痕要说清是「没判」而不是「判过、没问题」。
+    """
+    for served, on_disk in (
+        ("", "1.2.1"),
+        ("1.2.1", ""),
+        ("", ""),
+        ("abc", "1.2.1"),
+        ("1.2.1", "abc"),
+        ("1.2", "1.2.1"),
+        ("1.2.1", "1.2"),
+        ("unknown", "1.2.1"),
+    ):
+        assert is_stale_service(served, on_disk) is None, (served, on_disk)
 
 
 # ---------------------------------------------------------------------------

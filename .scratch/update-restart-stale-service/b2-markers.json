@@ -1,0 +1,14 @@
+[
+  {
+    "path": "sources/materials/.b2-drill-marker.txt",
+    "exists": true,
+    "bytes": 84,
+    "sha256": "7e74566e6e633ee550fae75633f8676539857b33c8461318c5a78781118ec5be"
+  },
+  {
+    "path": "sources/materials/.b2-drill-payload.bin",
+    "exists": true,
+    "bytes": 3961289,
+    "sha256": "5fd0ac6359bd8fcd725c8349ce55fb6baca2ddcc7d30ae2142e99cef753e5071"
+  }
+]

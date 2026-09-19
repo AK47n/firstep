@@ -1,0 +1,25 @@
+# 沙箱还原：真 v1.1.1（工单 update-restart-stale-service/03）
+  时间：2026-09-19 10:38:06
+
+## 零、前置事实
+  zip_exists = True
+  zip_bytes = 821352026
+  manifest_exists = True
+  sim_root_exists = True
+  sim_entry_exists = True
+  sim_data_exists = True
+  sim_data_config = True
+  manifest_version = 'v1.1.1'
+  manifest_files = 8777
+  manifest_materials_batches = 12
+
+## 一、B2 演练标记（记账后随重建消失；内容可由 drill-02 确定性复现）
+  sources/materials/.b2-drill-marker.txt: 84 字节 / 7e74566e6e633ee5…
+  sources/materials/.b2-drill-payload.bin: 3961289 字节 / 5fd0ac6359bd8fcd…
+
+## 二、沙箱专用入口已暂存
+  sim-run.py → C:\Users\luoji\AppData\Local\Temp\fe-sandbox-entry-sw1n7fvz\sim-run.py（975 字节）
+
+（dry-run：加 --write 才真清空并解包）
+
+  沙箱还原：PASS
