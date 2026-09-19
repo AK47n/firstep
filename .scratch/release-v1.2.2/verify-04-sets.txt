@@ -1,0 +1,44 @@
+﻿## 数量
+  v1.2.2 小发版产品文件：2858
+  v1.2.1 小发版产品文件：4339
+  v1.2.1 完整包产品文件：8152
+  v1.2.2 删除清单：2215
+  差（本版 − 上版小发版）：-1481
+
+## 不再发的（v1.2.1 小发版有、本版没有）：1482
+    1481  library/revise-backups
+       1  sources/contest
+  样例（前 5）：
+    - library/revise-backups/20260827-192944/.contest_context.json
+    - library/revise-backups/20260827-192944/.contest_tasks.json
+    - library/revise-backups/20260827-192944/.gitignore
+    - library/revise-backups/20260827-192944/README.md
+    - library/revise-backups/20260827-192944/code/readme.txt
+
+## 新增发的（本版有、v1.2.1 小发版没有）：1
+       1  00-START-HERE.txt/
+  样例（前 5）：
+    - 00-START-HERE.txt
+
+## 关键路径在删除清单里吗（累计口径要清得掉用户盘上那批）
+  egg-info：6 条
+    - src/contest_generator.egg-info/PKG-INFO
+    - src/contest_generator.egg-info/SOURCES.txt
+    - src/contest_generator.egg-info/dependency_links.txt
+    - src/contest_generator.egg-info/entry_points.txt
+    - src/contest_generator.egg-info/requires.txt
+    - src/contest_generator.egg-info/top_level.txt
+  library/revise-backups/：1559 条（样例前 3）
+    - library/revise-backups/20260827-192944/.contest_context.json
+    - library/revise-backups/20260827-192944/.contest_tasks.json
+    - library/revise-backups/20260827-192944/.gitignore
+
+## 判据
+  ① 不再发的里面混进**产品文件**（判据 = full_pack.is_product_file）：0  ✓
+      排除原因 dir-name：1481 条
+      排除原因 installer-glob：1 条
+  ② egg-info 全在删除清单里：✓
+  ③ 库备份在删除清单里：✓
+  ④ 新增发的都在 v1.2.1 完整包里：✓
+
+  总判：PASS

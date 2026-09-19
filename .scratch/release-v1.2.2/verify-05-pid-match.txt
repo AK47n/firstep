@@ -1,0 +1,27 @@
+﻿# find_listening_pids 真机复核（实现来自 update-app.py）
+
+## 当前监听端口的行（前 15 条，看看都有谁）
+  TCP    127.0.0.1:1024         0.0.0.0:0              LISTENING       7208
+  TCP    127.0.0.1:1025         0.0.0.0:0              LISTENING       7208
+  TCP    127.0.0.1:1042         0.0.0.0:0              LISTENING       31012
+  TCP    127.0.0.1:4002         0.0.0.0:0              LISTENING       26860
+  TCP    127.0.0.1:6850         0.0.0.0:0              LISTENING       27456
+  TCP    127.0.0.1:7778         0.0.0.0:0              LISTENING       6940
+  TCP    127.0.0.1:8020         0.0.0.0:0              LISTENING       42564
+  TCP    127.0.0.1:8901         0.0.0.0:0              LISTENING       33064
+  TCP    127.0.0.1:9010         0.0.0.0:0              LISTENING       38228
+  TCP    127.0.0.1:9012         0.0.0.0:0              LISTENING       30224
+  TCP    127.0.0.1:9013         0.0.0.0:0              LISTENING       30224
+  TCP    127.0.0.1:9014         0.0.0.0:0              LISTENING       30040
+  TCP    127.0.0.1:9180         0.0.0.0:0              LISTENING       7436
+  TCP    127.0.0.1:9197         0.0.0.0:0              LISTENING       7548
+  TCP    127.0.0.1:9996         0.0.0.0:0              LISTENING       18032
+
+## 逐端口对照（实现判据 vs 原样命中行）
+  find_listening_pids(8000) = []
+  find_listening_pids(8020) = ['42564']
+      命中行：TCP    127.0.0.1:8020         0.0.0.0:0              LISTENING       42564
+  find_listening_pids(8021) = []
+
+判据 A（子串误命中）：未复现
+  说明：未复现 = 端口选错的原因不在这条判据上，去调用侧找（--port 传了什么）

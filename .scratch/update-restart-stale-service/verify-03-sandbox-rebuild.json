@@ -30,7 +30,7 @@
   "extract": {
     "members": 8777,
     "files_on_disk": 8777,
-    "seconds": 7.4
+    "seconds": 10.1
   },
   "baseline": {
     "batches": 12,

@@ -1,0 +1,28 @@
+{
+  "wrapper": "run-drill-01-v122.py",
+  "drill": "C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\verify-gate-drills\\drill-01-upgrade.py",
+  "drill_sha256_before": "52b6210061fde3974e3dcf8513f2609a26fa407a41336f1d09ef9bae994c7fe8",
+  "frozen_sha256_expected": "52b6210061fde3974e3dcf8513f2609a26fa407a41336f1d09ef9bae994c7fe8",
+  "frozen_matches": true,
+  "target_version": "1.2.2",
+  "drill_pinned_version": "1.2.1",
+  "deviation": {
+    "before": {
+      "target_version_constant": 1,
+      "banner_literals": 8,
+      "hardcoded_official": 4,
+      "evidence_stem": 1
+    },
+    "after": {
+      "target_version_constant": 1,
+      "banner_literals": 9,
+      "evidence_stem": 1,
+      "leftover_previous": 0
+    }
+  },
+  "dry_run": false,
+  "started_at": "20260919-134304",
+  "drill_sha256_after": "52b6210061fde3974e3dcf8513f2609a26fa407a41336f1d09ef9bae994c7fe8",
+  "drill_unchanged": true,
+  "exit_code": 0
+}

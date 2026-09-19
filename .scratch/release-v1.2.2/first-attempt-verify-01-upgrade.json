@@ -1,0 +1,204 @@
+{
+  "problems": [],
+  "stuck": [],
+  "notes": [
+    "目标位置已存在旧包 firstep-update-1.2.1.zip（304784233 字节）——产品会覆盖它，先记下来",
+    "升级后沙箱 tracked 树与官方 v1.2.1 包**不完全一致**：内容不同 1 个、缺 0 个（小发版更新包是全量 tracked 快照，但删除清单只覆盖「上一版 → 本版」的删除）"
+  ],
+  "facts": {
+    "sim_root_exists": true,
+    "sim_data_exists": true,
+    "sim_run_exists": true,
+    "sim_venv_absent": true,
+    "sim_version_on_disk": "1.1.1",
+    "sim_config": "C:\\Users\\luoji\\.contest_generator_sim\\config.json",
+    "real_data": "C:\\Users\\luoji\\.contest_generator",
+    "port_8000_listeners": [],
+    "port_8020_listeners": []
+  },
+  "before": {
+    "real_data_mtime": 1789386306.649077,
+    "real_updates": [],
+    "real_tree_files": 11908,
+    "materials": {
+      "count": 5088,
+      "total_bytes": 723226493,
+      "baseline": {
+        "exists": true,
+        "bytes": 1474678,
+        "sha256": "9e60e837a27292a75b858e76feca5b7a58d0efd303b6e662f97efbaa1a2514dc",
+        "version": "v1.1.1",
+        "batches": 12
+      },
+      "sample_sha256": {
+        "2026_04_地猛星电赛控制题配套资料/00_天猛星MSPM0G3507开发板原理图.pdf": "7ee56a15db1177f04a1b54e1aabed44899aba7506809dbc0f4f0648c9b936b4c",
+        "2026_04_地猛星电赛控制题配套资料/00_天猛星MSPM0G3507开发板引脚图.pdf": "3d6811afd5be0988980a75b3b8b990bae628660b730c93f8a441f06c34939bc1",
+        "2026_04_地猛星电赛控制题配套资料/00_立创·地猛星MSPM0G3507开发板原理图.pdf": "adc1c4b1320661884974a895f026033fa887045dd08b403feac2ae0ffa3cd1b2",
+        "2026_04_地猛星电赛控制题配套资料/00_立创·地猛星MSPM0G3507开发板引脚图.pdf": "74fe433149d40a19e598661e988f589c50eaf3788d6207783fbbbf48f07e88f1",
+        "2026_04_地猛星电赛控制题配套资料/01_.vscode.zip": "1228f67cabfd6c3b2d92eaea0b601dd1e95355e12e803214c14eae72d7c5a153"
+      }
+    },
+    "third_party": {
+      "count": 55,
+      "total_bytes": 95720464
+    },
+    "sim_data_files": [
+      "config.json",
+      "recent.json",
+      "tasks-simulated.json",
+      "updates/firstep-update-1.1.1.removed.txt",
+      "updates/firstep-update-1.1.1.zip",
+      "updates/firstep-update-1.2.1.removed.txt",
+      "updates/firstep-update-1.2.1.zip",
+      "updates/full-apply.log",
+      "updates/last-update.json",
+      "updates/updater.log"
+    ],
+    "sim_config_sha256": "214e15b0dc071a270f24cf8b678fceb797eef82c54adb43b729f57e8b85a9fca"
+  },
+  "startpoint": {
+    "served": "1.1.1",
+    "on_disk": "1.1.1"
+  },
+  "check": {
+    "latest_version": "1.2.1",
+    "current_version": "1.1.1",
+    "update_available": true,
+    "zip_url": "https://github.com/AK47n/firstep/releases/download/v1.2.1/firstep-update-v1.2.1.zip",
+    "size_bytes": 304785030,
+    "sha256": "9b98364d2f39b6f02b22bcf177825cc6d36f3d7fb5c5a8a6ac7fbacebdcf3d53",
+    "removed_url": "https://github.com/AK47n/firstep/releases/download/v1.2.1/firstep-update-v1.2.1.removed.txt",
+    "error": "",
+    "message": ""
+  },
+  "apply": {
+    "elapsed_seconds": 31.5,
+    "response": {
+      "started": true,
+      "message": "已开始更新，工具将自动重启（配置与资料库不受影响）"
+    },
+    "downloaded_bytes": 304785030,
+    "expected_bytes": 304785030,
+    "avg_mbps": 9.21
+  },
+  "status": {
+    "saw_lock": true,
+    "pending_left": false,
+    "final": {
+      "state": "done",
+      "message": "",
+      "result": {
+        "status": "ok",
+        "mode": "single",
+        "version": "1.2.1",
+        "finished_at": "20260919-113411",
+        "backup_dir": "C:\\Users\\luoji\\.contest_generator_sim\\updates\\backup\\20260919-113411"
+      }
+    }
+  },
+  "endpoint": {
+    "on_disk": "1.2.1",
+    "served": "1.2.1",
+    "restarted_by_updater": true
+  },
+  "composition": {
+    "available": true,
+    "official_tracked": 3070,
+    "on_disk_tracked": 4552,
+    "same": 3069,
+    "stale": 1,
+    "stale_examples": [
+      {
+        "path": "src/contest_generator.egg-info/SOURCES.txt",
+        "why": "size 9148 != 9085"
+      }
+    ],
+    "stale_by_top": {
+      "src": 1
+    },
+    "not_in_official": 1482,
+    "not_in_official_examples": [
+      "library/revise-backups/20260827-192944/.contest_context.json",
+      "library/revise-backups/20260827-192944/.contest_tasks.json",
+      "library/revise-backups/20260827-192944/.gitignore",
+      "library/revise-backups/20260827-192944/README.md",
+      "library/revise-backups/20260827-192944/code/readme.txt",
+      "library/revise-backups/20260827-192944/isr.c",
+      "library/revise-backups/20260827-192944/key/startup_stm32f10x_md.s",
+      "library/revise-backups/20260827-192944/led_instances.h",
+      "library/revise-backups/20260827-192944/main.c",
+      "library/revise-backups/20260827-192944/ml_libs/headfile.h",
+      "library/revise-backups/20260827-192944/ml_libs/ml_adc.c",
+      "library/revise-backups/20260827-192944/ml_libs/ml_adc.h",
+      "library/revise-backups/20260827-192944/ml_libs/ml_delay.c",
+      "library/revise-backups/20260827-192944/ml_libs/ml_delay.h",
+      "library/revise-backups/20260827-192944/ml_libs/ml_exti.c",
+      "library/revise-backups/20260827-192944/ml_libs/ml_exti.h",
+      "library/revise-backups/20260827-192944/ml_libs/ml_gpio.c",
+      "library/revise-backups/20260827-192944/ml_libs/ml_gpio.h",
+      "library/revise-backups/20260827-192944/ml_libs/ml_i2c.c",
+      "library/revise-backups/20260827-192944/ml_libs/ml_i2c.h"
+    ],
+    "not_in_official_by_top": {
+      "library": 1481,
+      "sources": 1
+    },
+    "official_missing_on_disk": 0,
+    "official_missing_on_disk_examples": [],
+    "official_missing_on_disk_by_top": {},
+    "blobs": {}
+  },
+  "safeguards": {
+    "config.json 未变": true,
+    "资料库文件数未变": true,
+    "资料库字节数未变": true,
+    "资料库基线清单未变": true,
+    "资料库抽样 sha256 未变": true,
+    "第三方安装包计数未变": true,
+    "第三方安装包字节未变": true,
+    "任务记录 recent.json 未变": true,
+    "任务记录 tasks-simulated.json 未变": true,
+    "pending-update.json 已清": true,
+    "updating.lock 已释放": true,
+    "备份目录已生成": true
+  },
+  "backup": {
+    "stamps": [
+      "20260913-002004",
+      "20260913-002734",
+      "20260918-224039",
+      "20260919-104456",
+      "20260919-110054",
+      "20260919-113411"
+    ],
+    "latest_files": 2830
+  },
+  "isolation": {
+    "real_data_mtime_untouched": true,
+    "real_updates_untouched": true,
+    "real_tree_untouched": true,
+    "real_launcher_log_untouched": true,
+    "port_8000_listeners": []
+  },
+  "real_tree_diff": {
+    "added": [],
+    "removed": [],
+    "changed": []
+  },
+  "redirect_profile": {
+    "launcher_log": true,
+    "webapp_log": true
+  },
+  "cleanup": {
+    "killed": [
+      "51912"
+    ],
+    "leftover": [],
+    "python_left": []
+  },
+  "verdict": {
+    "problems": [],
+    "stuck": [],
+    "pass": true
+  }
+}

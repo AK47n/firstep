@@ -1,0 +1,16 @@
+﻿# 线上核对：v1.2.2
+  资产 8 件
+
+  ✓ firstep-update-v1.2.2.zip                   300,820,891 B  uploaded
+  ✓ firstep-update-v1.2.2.files.txt                 165,596 B  uploaded
+  ✓ firstep-update-v1.2.2.removed.txt               150,480 B  uploaded
+  ✓ firstep-update-v1.2.2.sha256.txt                     92 B  uploaded
+  ✓ firstep-full-v1.2.2.zip                     801,949,226 B  uploaded
+  ✓ firstep-full-v1.2.2.manifest.json             3,714,630 B  uploaded
+  ✓ firstep-full-v1.2.2.removed.txt                 152,695 B  uploaded
+  ✓ firstep-full-v1.2.2.sha256.txt                       91 B  uploaded
+
+  完整包 zip 764.8 MB（新用户唯一入口，期望「约 770 MB」同量级）：✓
+  /releases/latest = v1.2.2：✓
+
+总判：PASS

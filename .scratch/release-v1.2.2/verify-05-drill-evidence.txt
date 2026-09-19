@@ -1,0 +1,49 @@
+﻿# drill-01 原始证据汇总（工单 release-v1.2.2/05）
+
+## 1. drill 的原始 JSON（verify-01-upgrade-v1.2.2.json）
+  pass = True
+  problems = []
+  stuck = []
+  startpoint = {'served': '1.1.1', 'on_disk': '1.1.1'}
+  endpoint = {'on_disk': '1.2.2', 'served': '1.2.2', 'restarted_by_updater': True}
+  check.latest_version = 1.2.2
+  composition.official_tracked = 3064
+  composition.on_disk_tracked = 3070
+  composition.same = 3064
+  composition.stale = 0
+  composition.not_in_official = 6
+  composition.official_missing_on_disk = 0
+  composition.not_in_official_examples = ['src/contest_generator.egg-info/PKG-INFO', 'src/contest_generator.egg-info/SOURCES.txt', 'src/contest_generator.egg-info/dependency_links.txt', 'src/contest_generator.egg-info/entry_points.txt', 'src/contest_generator.egg-info/requires.txt', 'src/contest_generator.egg-info/top_level.txt']
+
+## 2. 更新器日志：这 6 条被删过吗（证明它们不是包发进去的）
+  最后一轮（60919-135011）里删除 egg-info 的行数：6
+    删除已废弃文件：src/contest_generator.egg-info/PKG-INFO
+    删除已废弃文件：src/contest_generator.egg-info/SOURCES.txt
+    删除已废弃文件：src/contest_generator.egg-info/dependency_links.txt
+    删除已废弃文件：src/contest_generator.egg-info/entry_points.txt
+    删除已废弃文件：src/contest_generator.egg-info/requires.txt
+    删除已废弃文件：src/contest_generator.egg-info/top_level.txt
+
+## 3. 旁证：沙箱 vs 本机仓库（PKG-INFO / SOURCES.txt 必然随树与版本而变）
+  本机仓库 src/contest_generator.egg-info 存在：True（6 件）
+    · PKG-INFO                 沙箱 d0f60de3e955a0c8… / 本机 01ffd8c4f3d18160…（随树/版本而变，预期）
+    · SOURCES.txt              沙箱 d78d714a5477b868… / 本机 e69b1f7fd332716a…（随树/版本而变，预期）
+    ✓ dependency_links.txt     01ba4719c80b6fe9…
+    ✓ entry_points.txt         a8b123f916b92278…
+    ✓ requires.txt             d98574924f0bfec0…
+    ✓ top_level.txt            13ec4fe698a87c2a…
+  逐字节相同 4 / 不同 2
+
+## 4. 决定性实验（另一支量具）：官方包 0 个 egg-info → 照更新器原命令跑 pip → 6 个齐
+    egg-info 目录：[] → 官方包里没有它 ✓
+    ③ 跑完长出 6 个且与沙箱那 6 条一一对应：✓（6 个）
+    结论：egg-info 是**更新器那一步 pip** 现写的，不是包内容 —— 成立 ✓
+
+## 判据
+  ① drill 无判红 / 无卡住：✓
+  ② 起点 1.1.1 / 终点 served = 1.2.2：✓
+  ③ 官方缺失 0 / 内容不同 0：✓
+  ④ 多出来的**只有** egg-info 那 6 条：✓
+  ⑤ 那 6 条 = pip 现写的（决定性实验 ①②③ 全成立）：✓
+
+  总判：PASS

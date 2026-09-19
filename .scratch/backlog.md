@@ -66,6 +66,12 @@
   - **回填**（03）：9 条 / 6 slug 按可核实出处回填（motor·xunji·pid·servo ← 库内同硬件条目；oled·k230 ← wiki 手册页 / 庐山派板页），URL 全部 HEAD 200 实测，零编造。附带修正 `tests/test_lckfb_attribution.py` 的判据缺陷（原按 `source_url` 反推「wiki 派生」，把原生移植驱动的硬件出处页误判成源码缺来源标注；改取代码事实 = 头部来源块）。
   - **剩余 13 条 / 7 slug 待补**（04，`beep` / `ir_beam` / `key` / `led` / `led_beep` / `step_motor` / `zigbee_link`）：立创 wiki 模块手册索引里没有对应器件页（`probe_backlog_sources.py` 可复现），逐条依据与后续核法见工单 04；待补清单同时钉在 `tests/test_library_invariants.py::IDENTITY_BACKLOG`（strict-xfail 用例，补齐即 XPASS 判失败、逼摘标记）；`zigbee_link` 已补后剩 6 slug / 11 条，**人工取源队列 = 工单 `identity-fields/06`（ready-for-human）**。
   - **未做**：`led` / `key` 的「板载资源是否用入门教程页作 source_url」口径待定（工单 04 记录）；5.5 四条遗留本轮不动。
+  - **2026-09-19 第三轮复核（发 v1.2.2 时顺带做的）**：工单 `identity-fields/06` 的 6 slug / 11 条
+    仍**取不到可核实出处**——本轮又实测一轮 Web（立创商城 / 厂商页 / 内容站），命中的仍是
+    元件级商品页、资料站转载或 B 站视频，按工单 04「裁决一」三条都不算。**本轮显式记为
+    「不阻塞 v1.2.2 发版」**（全文与逐条排除理由见 `.scratch/identity-fields/issues/06-*.md`
+    的 Comments 与 `.scratch/release-v1.2.2/spec.md` 的「范围外」）。这 6 条卡在
+    「要的是**用户实际买过的那件实物**的链接」这一步，机器代不了。
 - **骨架「模块→参考例程」映射只覆盖 18/93**（`reference_library.py` `MODULE_PERIPHERAL_TERMS`）—— ✅ 已落地（2026-09-08，工单 preselect-visibility/03-05，提交 1b8c9a35 / 459b0cde）：判据归位为「每模块至少一个词项命中参考条目标题」（按模块算）+ 全库模块必须映射或显式豁免（`MODULE_REFERENCE_EXEMPT`，14 条内部件/协议切片）；参考库补 19 条器件条目（5 条救活 6 个死映射 + 14 条器件类别合集，素材 = lckfb 手册原文 / 库内代码切片），`PERIPHERAL_TERMS` 补 17 个器件类别词，映射 18 → 79 条；`tests/test_skeleton_mapping_coverage.py` 两条 xfail 全部转绿（93 模块全覆盖）。复测探针 `probe_term_effect.py` / `probe_unmapped.py`。
 - **批次快检脚本没进 CI** —— ✅ 已落地（工单 library-hookup-and-invariants/02，2026-09-08，提交 6ca1139d）：21 个 sweep 脚本里「对全库永远成立」的 7 条搬进 `tests/test_library_invariants.py`（slug 与目录名一致 / 声明文件存在 / 条目文件无重复 / 依赖不悬空 / 依赖无环 / 词表引用存在 / 模块有简介），红证用临时副本注入破坏实测四类全红；批次快照值不进测试（历史快照会失效）。
 
@@ -152,15 +158,19 @@ UTF-8 stdout（原锚点版是崩在 GBK 编码上的）。第 7 节的两道候
 - **其余：D1 六个器件的 `kit` + `source_url` 仍等用户给链接**（未拍「永久不补」→
   `MODULE_KIND` 不动）。
 
-## 8. 沙箱真机演练第二梯队 B1–B5 开出来的三张单（2026-09-18；三张全部已修 2026-09-19）
+## 8. 沙箱真机演练第二梯队 B1–B5 开出来的三张单（2026-09-18；三张全部已修 **且已随 v1.2.2 发到用户手上** 2026-09-19）
 
 演练本体（spec + 五张工单 + 脚本 + 原始证据）在 `.scratch/sandbox-drill/` 与
 `.scratch/verify-gate-drills/`；下面是**演练暴露的真缺陷/待决策项**，都已开单，别漏看：
 
-> **2026-09-19 收口**：三张单全部落地。**本轮没有发版**——`update-orphan-files` 的修复
-> 在打包器与删除清单里，要真机 drill-01 判据成立就得换线上资产；已拍板留给**下一个版本号**
-> （见 `docs/agents/local-environment.md` 第 0/3 节）。另两张单的修复在下载链里，
-> 真机复跑用本地可控服务器完成，不需要发版。
+> **2026-09-19 收口（两段，第二段是当天晚些的 v1.2.2 发版）**：
+> ① 三张单全部落地，当时**没有发版**——`update-orphan-files` 的修复在打包器与删除清单里，
+> 要真机 drill-01 判据成立就得换线上资产，拍板留给下一个版本号；
+> ② **当天晚些发了 v1.2.2 把它们带上**（工单 `.scratch/release-v1.2.2/01-05`）。真机
+> `drill-01` 复跑：沙箱真 v1.1.1 → 走产品端点升到 1.2.2，**判红 0 / 卡住 0 / PASS**，
+> `not_in_official` 1482 → **6**（那 6 条经决定性实验证明是更新器那一步 pip 现写的
+> `egg-info`，不是包内容），「官方缺失 0 / 内容不同 0」两条全绿。
+> 顺手做掉的第四条：`src/contest_generator.egg-info/**` 摘出产品文件（两个包都不再发）。
 
 | 工单 | 级别 | 一句话 | 证据 |
 |---|---|---|---|

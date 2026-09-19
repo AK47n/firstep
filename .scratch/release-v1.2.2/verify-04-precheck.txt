@@ -1,0 +1,32 @@
+﻿# 上传前校验：v1.2.2
+
+## 1. zip 实算 vs sha256.txt（上一轮就是这里被掐断的）
+  ✓ firstep-update-v1.2.2.zip（300,820,891 B）
+      实算 866416309ab1bfcf7ac585208e33f4b210ff59f43c7634acb85c4e11a9cff7b9
+      记录 866416309ab1bfcf7ac585208e33f4b210ff59f43c7634acb85c4e11a9cff7b9
+  ✓ firstep-full-v1.2.2.zip（801,949,226 B）
+      实算 3be2f0d6cd00173fd994487daffbe8d969db04387a856cb9a3b4d80454d2538e
+      记录 3be2f0d6cd00173fd994487daffbe8d969db04387a856cb9a3b4d80454d2538e
+
+## 2. 四件套齐整
+  ✓ firstep-update-v1.2.2.zip（300,820,891 B）
+  ✓ firstep-update-v1.2.2.files.txt（165,596 B）
+  ✓ firstep-update-v1.2.2.removed.txt（150,480 B）
+  ✓ firstep-update-v1.2.2.sha256.txt（92 B）
+  ✓ firstep-full-v1.2.2.zip（801,949,226 B）
+  ✓ firstep-full-v1.2.2.manifest.json（3,714,630 B）
+  ✓ firstep-full-v1.2.2.removed.txt（152,695 B）
+  ✓ firstep-full-v1.2.2.sha256.txt（91 B）
+
+## 3. 完整包内容关键项
+  zip 条目 8146 / 清单 8146：✓
+  00-START-HERE.txt 在场：✓
+  不含 egg-info：✓
+  不含 revise-backups：✓
+  清单内 removed 2215 条（更新器只读清单，删除清单必须同时进 JSON）
+  removed.txt 与清单 removed 一致：✓
+
+## 4. 小发版 zip 条目 == 清单
+  zip 条目 2858 / files.txt 2858：✓
+
+总判：PASS

@@ -1,0 +1,20 @@
+﻿updater.log 共 5214 行 / 7 轮
+
+## 本轮（20260919-133228）的关键行
+  更新包：C:\Users\luoji\.contest_generator_sim\updates\firstep-update-1.2.2.zip
+  工具根：C:\Users\luoji\Desktop\firstep-sim
+  更新包条目 2858 个，安全校验通过
+  停服：结束本应用进程 PID 43960
+  已备份 2830 个将被覆盖的文件到 C:\Users\luoji\.contest_generator_sim\updates\backup\20260919-133228
+  已落位 2858 个文件
+  已删除 653 个废弃文件
+  pyproject.toml 已变化，重装依赖（pip install -e .）…
+  已清除待更新标记（pending-update.json）
+  已记录更新结果：C:\Users\luoji\.contest_generator_sim\updates\last-update.json
+  重启应用（start-app.vbs）
+  === 更新完成 ===
+
+## 判据
+  日志里出现 8020：False
+  日志里出现 8000：False
+  停的是沙箱自己的端口（8020）、不是真身的 8000：✗

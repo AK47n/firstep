@@ -1,0 +1,18 @@
+﻿=== 1. README����ȡ��ʽ�� ===
+  [OK] û����������̬��7z �־� / ���������ѹ���� / Լ 6 GB ���ף�
+  [OK] ָ�� https://github.com/AK47n/firstep/releases/latest
+  [OK] �����İ����ļ����ڰ��00-START-HERE.txt
+
+=== 2. �������°� ===
+  ���� tag��v1.2.2���ʲ� 8 ��
+  [OK] firstep-full-v1.2.2.zip = 801,949,226 �ֽڣ�802 MB��
+  [OK] ��Լ 770 MB����Ӧ firstep-full-v1.2.2.zip ������ 802 MB
+  [OK] ��Լ 296 MB����Ӧ firstep-update-v1.2.2.zip ������ 301 MB
+  [OK] clone��Լ 270 MB���� git pack 291 MiB ͬ����
+
+=== 3. Release ˵����ǰ���� ===
+  [OK] ��ͷ���������û���ָ��
+  [OK] ��ͷ��������װ�û���ָ��
+
+=== ���� ===
+  PASS��README / Release ˵�� / �����ļ�����������ͬһ������

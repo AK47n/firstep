@@ -1,0 +1,38 @@
+发布：v1.2.2 上线 + 真机 drill-01 验收成立 + 账本回填（工单 release-v1.2.2/02、04、05）
+
+## 线上
+
+八件套齐、/releases/latest = v1.2.2：
+- 小发版 300,820,891 B（sha256 866416309ab1…）产品文件 2858（v1.2.1 是 4339，差的 1481
+  正是那批本机库备份）、删除清单 2215 条（累计口径）
+- 完整包 801,949,226 B（sha256 3be2f0d6cd00…）包内 8146 文件、资料库基线 12 批次 / 5081 文件
+
+上传前校验（zip 实算 vs sha256.txt、四件套齐、完整包含 00-START-HERE.txt 且不含
+egg-info/revise-backups、小发版 zip 条目 == files.txt 2858/2858）与联网自检
+（check-download-docs.py）双双 PASS。
+
+## 真机 drill-01（沙箱真 v1.1.1 → 产品端点升到 1.2.2）
+
+判红 0 / 卡住 0 / PASS：起点终点服务与盘上版本自证成立、restarted_by_updater=true、
+保命项 12/12、四条隔离判据全未变、8020 收尾释放。
+构成：官方 tracked 3064 逐字节一致，内容不同 0、官方有而沙箱缺 0；not_in_official 1482 → 6。
+那 6 条经决定性实验证明是更新器第 7 步 pip 现写的 egg-info（官方包 0 个 → 跑完 pip 6 个齐），
+不是包内容；把 pip 产物算进去该格为 0。
+
+## 工单 02 判据被证伪
+
+沙箱资料库基线早就有了（rebuild 脚本按 write_materials_baseline 同款口径写回），
+与 v1.1.1 包内清单逐文件全等（5087 文件 / 零差集）。local-environment 2.1 节末那句
+「沙箱还没补」已更正。
+
+## 本轮真机踩到的三件事（写进 local-environment 第 0/1 节）
+
+1. drill（起点 v1.1.1）会杀掉 8000 上的真身——v1.1.1 的 spawn_updater 没有 --port，
+   更新器按缺省 8000 停服（updater.log 记 PID 43960）。真身已按「挪到 8021 → 跑 → 挪回 8000」
+   处理，现为 v1.2.2 / 8000 在跑。
+2. 重建沙箱前必须先收 8020（drill 结尾会把沙箱拉起来 → WinError 32）。
+3. drill 的 OUTPUT_STEM 是模块级常量，两次运行互相覆盖证据；包装层要补模块级那一处，
+   并代做 drill 跳过的 __main__ 收尾。
+
+drill 本体逐字节未改（sha256 52b6210061fde397…），偏离记账落
+.scratch/release-v1.2.2/drill-01-deviation-*.json。

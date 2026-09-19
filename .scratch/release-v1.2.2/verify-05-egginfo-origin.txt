@@ -1,0 +1,35 @@
+﻿# 决定性实验 v2：照更新器原命令跑 pip（v1.2.2）
+  命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pip install -e <解压出的根>
+  开跑前先卸掉本机既有的 contest-generator 全局安装：WARNING: Skipping contest-generator as it is not installed.
+  一次性目录：C:\Users\luoji\AppData\Local\Temp\fe05b-egginfo-9i2h0x6_
+
+## 1. 解压后（226 个条目）
+  egg-info 目录：[] → 官方包里没有它 ✓
+
+## 2. 照更新器原命令跑 pip（不加任何额外参数）
+  退出码 = 0
+    |   Created wheel for contest-generator: filename=contest_generator-1.2.2-0.editable-py3-none-any.whl size=1835 sha256=1a1972341fabb5d201aab9132d5a68dd06f0bbfc8526a2647a4c6bb4e1a8849a
+    |   Stored in directory: C:\Users\luoji\AppData\Local\Temp\pip-ephem-wheel-cache-_dzzwj90\wheels\19\63\31\57ebbdf486b695145cb028f3ee9f8dcc37b247da18d945e53c
+    | Successfully built contest-generator
+    | Installing collected packages: contest-generator
+    | Successfully installed contest-generator-1.2.2
+
+## 3. 跑完之后的 egg-info
+  + src/contest_generator.egg-info/PKG-INFO
+  + src/contest_generator.egg-info/SOURCES.txt
+  + src/contest_generator.egg-info/dependency_links.txt
+  + src/contest_generator.egg-info/entry_points.txt
+  + src/contest_generator.egg-info/requires.txt
+  + src/contest_generator.egg-info/top_level.txt
+
+## 判据
+  ① 官方包里没有 egg-info：✓
+  ② pip 跑成功：✓
+  ③ 跑完长出 6 个且与沙箱那 6 条一一对应：✓（6 个）
+
+  结论：egg-info 是**更新器那一步 pip** 现写的，不是包内容 —— 成立 ✓
+  总判：PASS
+
+## 收尾：卸掉指向一次性目录的全局安装
+    Successfully uninstalled contest-generator-1.2.2
+  （一次性目录已清：C:\Users\luoji\AppData\Local\Temp\fe05b-egginfo-9i2h0x6_）
