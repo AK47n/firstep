@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=1e884b4bf25a63722b7c22ea0b6522ec3d399103 -->
+<!-- changelog-auto: last-commit=9a9d881af6aabd43d1b489865e7adda5c0ce9d2c -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -14,6 +14,7 @@
 - 11:37 账本收口：v1.2.1 资产重发 + 启动器修复的真机验收与事实更新（工单 update-restart-stale-service/04）
 - 11:37 留档：v1.2.1 重发后 drill-01 的最终一轮原始证据（判据两条都成立）
 - 12:05 修复：不可重试的校验失败不再留下整卷半成品与边车（工单 update-verify-failure-leftovers/01）
+- 12:11 修复：持久的「内容与清单不符」连续 5 次转终态（工单 update-content-mismatch-retry-cap/02）
 
 ## 2026-09-18
 - 23:19 docs(闸门): commit-gate/04 CI 线上全绿收口（run 35098093620）
