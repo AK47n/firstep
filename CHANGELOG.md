@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=9a9d881af6aabd43d1b489865e7adda5c0ce9d2c -->
+<!-- changelog-auto: last-commit=1afdf63f140a66558916527b12955f45fcc7cb68 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -15,6 +15,7 @@
 - 11:37 留档：v1.2.1 重发后 drill-01 的最终一轮原始证据（判据两条都成立）
 - 12:05 修复：不可重试的校验失败不再留下整卷半成品与边车（工单 update-verify-failure-leftovers/01）
 - 12:11 修复：持久的「内容与清单不符」连续 5 次转终态（工单 update-content-mismatch-retry-cap/02）
+- 12:18 修复：产品文件判据单源——小发版包不再多发，也不再漏发新文件（工单 update-orphan-files/01）
 
 ## 2026-09-18
 - 23:19 docs(闸门): commit-gate/04 CI 线上全绿收口（run 35098093620）
