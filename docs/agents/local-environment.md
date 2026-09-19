@@ -156,6 +156,27 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > 端口 **8791**——`tests/browser/hwcheck.spec.mjs` 的真浏览器验收用它（`tests/browser/server.mjs`
 > 自带起停，跑完自己收）；其余验证走 TestClient 与 `python -m pytest`。跑完实测 8000/8020/8021/8791
 > 都没在听。
+>
+> **2026-09-19 21:5x（module-hwcheck/04 会话）**：8000 仍未起。这一单新增三支**真编译**探针
+> （本机有 Keil：`C:\Keil5\Core\UV4\UV4.exe`，`compile_runner.find_uv4()` 能探到），
+> 用 `compile_runner.run_compile` 走产品那一路编了 7 次 stm32 工程（每次 3–5 秒）；
+> 浏览器验收照旧用 8791。**跑完实测 8000/8020/8021/8791 都没在听。**
+>
+> ⚠ **8791 的一个坑（本轮踩了两次，白等两轮 30 秒超时）**：`tests/browser/server.mjs`
+> 收服务是 `taskkill /T /F` + **5 秒兜底**；上一跑的 python 子进程若没被收干净，
+> 下一跑的 `startServer` 会连上**那个旧服务**（健康检查与端点哨兵都过），
+> 于是旧服务在下一跑中途被 taskkill 杀掉 → 后半截用例报 `ERR_CONNECTION_REFUSED`
+> 或 `waitForSelector` 30s 超时。**症状看着像产品坏了，其实是端口上残留的旧服务。**
+> 跑之前先清一遍：
+> `Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" | Where-Object { $_.CommandLine -like '*contest_generator.webapp*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }`
+>
+> **同轮的一条工具事实（对以后任何"生成 C 代码"的功能都适用）**：**Keil ARMCC 5.06 按本地
+> 多字节代码页（本机 GBK）解析源文件**——C 字符串字面量里直接写中文，会在某些字节收尾处把
+> 收尾引号当尾字节吞掉，报 `#8: missing closing quote`，整份 main.c 编不过（本轮实测 22 error）。
+> 两条出路都量过：工程加 `--locale=english`（要改母版编译开关，跨平台共享面）或
+> **把非 ASCII 转义成 `\xNN`**（不改母版、产出字节与原文逐字节相等）。检测程序取后者
+> （`hwcheck_recipe.c_string`），量具在 `.scratch/module-hwcheck/probe-04-armcc-*.py`。
+> **别在生成的 .c 里直接写中文串**；注释里可以（本机所有 `/* 中文 */` 都没问题）。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 
