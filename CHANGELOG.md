@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=ccab2d7ab812df26bf9b9c93c892ae7801ad821a -->
+<!-- changelog-auto: last-commit=b701d5b7fc513cd3f28798ceeb1b3665e5d74a0e -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -23,6 +23,7 @@
 - 12:58 修复：egg-info 摘出产品文件——两个打包器都不再收 pip 构建产物（工单 release-v1.2.2/01）
 - 13:00 发版准备：版本号同步到 v1.2.2 + 发版自检四项全绿（工单 release-v1.2.2/03）
 - 13:54 发布：v1.2.2 上线 + 真机 drill-01 验收成立 + 账本回填（工单 release-v1.2.2/02、04、05）
+- 14:14 记账：identity-fields/06 第四轮——用户暂不提供实物链接，缺口维持 6 slug / 11 条
 
 ## 2026-09-18
 - 23:19 docs(闸门): commit-gate/04 CI 线上全绿收口（run 35098093620）
