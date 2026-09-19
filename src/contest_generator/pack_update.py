@@ -33,18 +33,30 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Sequence
 
-from .full_pack import _validate_version, is_product_file
+from .full_pack import (
+    _validate_version,
+    cumulative_removed,
+    is_product_file,
+    previous_shipped_files,
+)
 
 __all__ = [
+    "EMPTY_REMOVED_PLACEHOLDER",
     "UPDATE_ZIP_PREFIX",
     "pack_update",
     "read_files_manifest",
     "select_product_files",
     "sha256_of",
+    "write_removed_list",
 ]
 
 # 更新包 zip 名前缀（与 `update.UPDATE_ZIP_PREFIX` 同口径：用户侧按它识别小发版资产）
 UPDATE_ZIP_PREFIX = "firstep-update-"
+
+# 空删除清单要写一行注释：0 字节文件会被 `gh release upload` 以
+# `HTTP 400: Bad Content-Length` 拒收（工单 full-download/08 现场踩到；
+# 更新器跳过 `#` 行，语义不变）。
+EMPTY_REMOVED_PLACEHOLDER = "# 无删除项（空清单占位：0 字节会被 gh 拒收）"
 
 # 单次 `git archive` 命令行里 pathspec 的总长度上限（保守值，远低于 Windows
 # CreateProcess 的 32767 限制；本机 tracked 快照约 3500 个文件、~150KB → 分 2 块）。
@@ -187,6 +199,39 @@ def select_product_files(candidates: Sequence[str]) -> list[str]:
     return picked
 
 
+def write_removed_list(
+    out_dir: Path,
+    version: str,
+    *,
+    current: Sequence[str],
+    baseline_update_files: Path | None = None,
+    baseline_full_manifest: Path | None = None,
+    allow_missing_baseline_parts: bool = False,
+) -> list[str]:
+    """写 `firstep-update-<tag>.removed.txt`（**累计口径**，工单 `update-orphan-files/02`）。
+
+    删除清单 = 上一版**发行集合**（`previous_shipped_files`）− 本版产品文件，
+    规则单源在 `full_pack.cumulative_removed`。**为什么是累计**：这份清单是给所有用户用的
+    ——跳版升级的用户只会执行本版这一份，只跟上一版做差就会永久留下被跳过版本的删除项。
+
+    清单为空时写一行 `#` 注释占位（0 字节资产会被 `gh release upload` 拒收）。
+    返回写出的名字列表（空清单时为空）。
+    """
+    shipped_before: set[str] = set()
+    if baseline_update_files is not None or baseline_full_manifest is not None:
+        shipped_before = previous_shipped_files(
+            update_files=baseline_update_files,
+            full_manifest=baseline_full_manifest,
+            allow_missing_parts=allow_missing_baseline_parts,
+        )
+    removed = cumulative_removed(shipped_before, current)
+    target = Path(out_dir) / f"{UPDATE_ZIP_PREFIX}{version}.removed.txt"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    body = "\n".join(removed) + "\n" if removed else EMPTY_REMOVED_PLACEHOLDER + "\n"
+    target.write_bytes(body.encode("utf-8"))
+    return removed
+
+
 def pack_update(
     tree: Path,
     *,
@@ -247,6 +292,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--version", required=True, help="版本号（与 GitHub tag 同号，如 v1.1.2）")
     parser.add_argument("--out", required=True, help="输出目录")
     parser.add_argument("--files", required=True, help="文件清单（每行一个相对路径）")
+    parser.add_argument(
+        "--baseline-update-files",
+        default="",
+        help="上一版小发版清单（`firstep-update-<tag>.files.txt`；与它旁边的 `.removed.txt` "
+             "一起构成累计删除清单的输入，可空）",
+    )
+    parser.add_argument(
+        "--baseline-full-manifest",
+        default="",
+        help="上一版完整包清单（`firstep-full-<tag>.manifest.json`；可空）",
+    )
+    parser.add_argument(
+        "--allow-missing-baseline-parts",
+        action="store_true",
+        help="允许基线旁边的 .removed.txt 缺失（首次发布等；缺省 = 缺了就拒绝发版）",
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     try:
@@ -256,17 +317,29 @@ def main(argv: Sequence[str] | None = None) -> int:
             out_dir=Path(args.out),
             files_manifest=Path(args.files),
         )
+        candidates = read_files_manifest(Path(args.files))
+        selected = select_product_files(candidates)
+        removed = write_removed_list(
+            Path(args.out),
+            args.version,
+            current=selected,
+            baseline_update_files=(
+                Path(args.baseline_update_files) if args.baseline_update_files else None
+            ),
+            baseline_full_manifest=(
+                Path(args.baseline_full_manifest) if args.baseline_full_manifest else None
+            ),
+            allow_missing_baseline_parts=bool(args.allow_missing_baseline_parts),
+        )
     except Exception as exc:
         print(f"[错误] 更新包打包失败：{exc}", file=sys.stderr)
         return 1
 
-    count = len(read_files_manifest(Path(args.files)))
-    written = read_files_manifest(
-        Path(args.out) / f"{UPDATE_ZIP_PREFIX}{args.version}.files.txt")
     size_mb = zip_path.stat().st_size / 1024 / 1024
     print(f"更新包已生成：{zip_path}")
-    print(f"  候选 {count} 条 → 产品文件 {len(written)} 条（筛掉 {count - len(written)} 条："
-          "本地备份目录 / 安装包 / 缓存 / 白名单外）")
+    print(f"  候选 {len(candidates)} 条 → 产品文件 {len(selected)} 条（筛掉 "
+          f"{len(candidates) - len(selected)} 条：本地备份目录 / 安装包 / 缓存 / 白名单外）")
+    print(f"  删除清单：{len(removed)} 条（累计口径：历史发过、本版不发）")
     print(f"  zip 大小：{size_mb:.1f} MB")
     print(f"  SHA256：{sha256_of(zip_path)}")
     return 0

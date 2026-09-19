@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import zipfile
@@ -20,6 +21,7 @@ from contest_generator.pack_update import (
     read_files_manifest,
     select_product_files,
     sha256_of,
+    write_removed_list,
 )
 
 # 发布侧自检脚本（`.scratch/full-download/`）里的跨包判据，测试直接调它——
@@ -269,6 +271,53 @@ def test_update_pack_drops_non_product_candidates(tmp_path: Path) -> None:
     assert read_files_manifest(out / "firstep-update-v9.9.9.files.txt") == selected
     assert "00-START-HERE.txt" in entries
     assert "library/revise-backups/20260101-000000/main.c" not in entries
+
+
+def test_removed_list_is_cumulative_and_unions_both_packers(tmp_path: Path) -> None:
+    """`.removed.txt` 走**累计**口径，且把小发版与完整包两条路径的发行集合并起来。
+
+    场景就是真实发布的形态：`-Baseline` 是上一版小发版清单，旁边有它的 `.removed.txt`
+    （装着更早的历史），OutDir 里还有上一版完整包清单。三份并集减去本版产品文件 = 本版
+    删除清单。只取「上一版清单」那一份，跳版升级的用户会留下残留。
+    """
+    out = tmp_path / "out"
+    out.mkdir()
+    baseline = tmp_path / "firstep-update-v9.9.8.files.txt"
+    baseline.write_text("src/app.py\ndocs/old.md\n", encoding="utf-8")
+    (tmp_path / "firstep-update-v9.9.8.removed.txt").write_text(
+        "docs/older.md\n", encoding="utf-8")
+    manifest = out / "firstep-full-v9.9.8.manifest.json"
+    manifest.write_text(
+        json.dumps({
+            "files": [{"path": "src/app.py"}, {"path": "sources/contest/x/Debug/a.o"}],
+            "removed": ["sources/contest/x/Debug/b.o"],
+        }),
+        encoding="utf-8",
+    )
+
+    removed = write_removed_list(
+        out, "v9.9.9", current=["src/app.py", "00-START-HERE.txt"],
+        baseline_update_files=baseline, baseline_full_manifest=manifest,
+    )
+
+    assert removed == [
+        "docs/old.md",                          # 上一版清单里有、本版没有
+        "docs/older.md",                        # 上一版**删除清单**里的（更早的历史）
+        "sources/contest/x/Debug/a.o",           # 完整包发过、而小发版清单里没有
+        "sources/contest/x/Debug/b.o",
+    ]
+    written = (out / "firstep-update-v9.9.9.removed.txt").read_bytes().decode("utf-8")
+    assert written == "\n".join(removed) + "\n"
+
+
+def test_removed_list_writes_a_placeholder_when_empty(tmp_path: Path) -> None:
+    """没有基线（首次发布）→ 写一行 `#` 占位：**0 字节资产会被 gh 拒收**。"""
+    out = tmp_path / "out"
+    removed = write_removed_list(out, "v9.9.9", current=["README.md"])
+    assert removed == []
+    text = (out / "firstep-update-v9.9.9.removed.txt").read_bytes().decode("utf-8")
+    assert text.startswith("#")
+    assert len(text.encode("utf-8")) > 0
 
 
 def test_update_pack_shares_the_product_predicate_with_the_full_pack() -> None:

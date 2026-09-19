@@ -6,26 +6,38 @@
 [注入] ① 谓词放宽：不再按目录名排除（本机库备份又成产品文件）
   文件：src/contest_generator/full_pack.py
   测试：-k 'product_file_predicate or scan_tree_matches'
-  结果：转红 ✓ —— 1 failed, 1 passed, 47 deselected in 0.23s
-  复原：逐字节相同 ✓（fcbbcf30d382 → fcbbcf30d382）
+  结果：转红 ✓ —— 1 failed, 1 passed, 54 deselected in 0.59s
+  复原：逐字节相同 ✓（f307317685b1 → f307317685b1）
 ------------------------------------------------------------------------------
 [注入] ② 筛选被摘掉：候选清单原样进包（小发版又开始多发）
   文件：src/contest_generator/pack_update.py
   测试：-k 'non_product_candidates'
-  结果：转红 ✓ —— 1 failed, 48 deselected in 0.50s
-  复原：逐字节相同 ✓（a979de454658 → a979de454658）
+  结果：转红 ✓ —— 1 failed, 55 deselected in 0.88s
+  复原：逐字节相同 ✓（dcb01f09cbc6 → dcb01f09cbc6）
 ------------------------------------------------------------------------------
 [注入] ③ 判据被抄回扫描函数（行为等价，但单源被破坏）
   文件：src/contest_generator/full_pack.py
   测试：-k 'scan_tree_asks_the_single_predicate'
-  结果：转红 ✓ —— 1 failed, 48 deselected in 0.15s
-  复原：逐字节相同 ✓（fcbbcf30d382 → fcbbcf30d382）
+  结果：转红 ✓ —— 1 failed, 55 deselected in 0.14s
+  复原：逐字节相同 ✓（f307317685b1 → f307317685b1）
 ------------------------------------------------------------------------------
 [注入] ④ 打包脚本里手抄顶层白名单（漂移的老路）
   文件：tools/pack-update.ps1
   测试：-k 'shares_the_product_predicate'
-  结果：转红 ✓ —— 1 failed, 48 deselected in 0.14s
-  复原：逐字节相同 ✓（8b33cabfa8f7 → 8b33cabfa8f7）
+  结果：转红 ✓ —— 1 failed, 55 deselected in 0.14s
+  复原：逐字节相同 ✓（d5ea4022c08b → d5ea4022c08b）
+------------------------------------------------------------------------------
+[注入] ⑤ 删除清单退回「只看上一版清单」（上一版的删除清单不再参与）
+  文件：src/contest_generator/full_pack.py
+  测试：-k 'unions_both_packers or removed_list_is_cumulative'
+  结果：转红 ✓ —— 2 failed, 1 passed, 53 deselected in 0.64s
+  复原：逐字节相同 ✓（f307317685b1 → f307317685b1）
+------------------------------------------------------------------------------
+[注入] ⑥ 删除清单只按小发版清单算（完整包发过的那些不再参与）
+  文件：src/contest_generator/full_pack.py
+  测试：-k 'removed_list_is_cumulative'
+  结果：转红 ✓ —— 1 failed, 1 passed, 54 deselected in 0.20s
+  复原：逐字节相同 ✓（f307317685b1 → f307317685b1）
 
 ------------------------------------------------------------------------------
 ## 复原复核
@@ -34,5 +46,5 @@
   tools/pack-update.ps1 sha256 未变 ✓
 
 ## 总判
-  4/4 条注入成功转红
+  6/6 条注入成功转红
   探针：PASS

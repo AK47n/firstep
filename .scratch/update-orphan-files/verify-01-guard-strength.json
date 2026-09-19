@@ -4,7 +4,7 @@
       "name": "① 谓词放宽：不再按目录名排除（本机库备份又成产品文件）",
       "file": "src/contest_generator/full_pack.py",
       "turned_red": true,
-      "summary": "1 failed, 1 passed, 47 deselected in 0.23s",
+      "summary": "1 failed, 1 passed, 54 deselected in 0.59s",
       "weak": false,
       "restored": true
     },
@@ -12,7 +12,7 @@
       "name": "② 筛选被摘掉：候选清单原样进包（小发版又开始多发）",
       "file": "src/contest_generator/pack_update.py",
       "turned_red": true,
-      "summary": "1 failed, 48 deselected in 0.50s",
+      "summary": "1 failed, 55 deselected in 0.88s",
       "weak": false,
       "restored": true
     },
@@ -20,7 +20,7 @@
       "name": "③ 判据被抄回扫描函数（行为等价，但单源被破坏）",
       "file": "src/contest_generator/full_pack.py",
       "turned_red": true,
-      "summary": "1 failed, 48 deselected in 0.15s",
+      "summary": "1 failed, 55 deselected in 0.14s",
       "weak": false,
       "restored": true
     },
@@ -28,7 +28,23 @@
       "name": "④ 打包脚本里手抄顶层白名单（漂移的老路）",
       "file": "tools/pack-update.ps1",
       "turned_red": true,
-      "summary": "1 failed, 48 deselected in 0.14s",
+      "summary": "1 failed, 55 deselected in 0.14s",
+      "weak": false,
+      "restored": true
+    },
+    {
+      "name": "⑤ 删除清单退回「只看上一版清单」（上一版的删除清单不再参与）",
+      "file": "src/contest_generator/full_pack.py",
+      "turned_red": true,
+      "summary": "2 failed, 1 passed, 53 deselected in 0.64s",
+      "weak": false,
+      "restored": true
+    },
+    {
+      "name": "⑥ 删除清单只按小发版清单算（完整包发过的那些不再参与）",
+      "file": "src/contest_generator/full_pack.py",
+      "turned_red": true,
+      "summary": "1 failed, 1 passed, 54 deselected in 0.20s",
       "weak": false,
       "restored": true
     }

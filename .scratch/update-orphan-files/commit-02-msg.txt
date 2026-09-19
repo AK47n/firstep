@@ -1,0 +1,18 @@
+修复：删除清单改累计口径——跨版升级也能清掉被跳过版本的删除项（工单 update-orphan-files/02）
+
+删除清单是给**所有**用户用的：任何版本的用户升级到本版都执行同一份。原先两套都是
+「上一版 − 本版」，跳版升级的用户于是永久留下被跳过版本删掉的文件；而「完整包发过、未被
+git 跟踪」的文件（sources/contest/** 下的构建产物）在小发版清单里根本没有，更是永远清不掉。
+
+规则收进 full_pack：cumulative_removed（唯一算法）+ previous_shipped_files
+（上一版发行集合 = 小发版清单 ∪ 它的 .removed.txt ∪ 完整包清单 files ∪ removed）。
+小发版侧清单一律由 Python 核心写出（新的 write_removed_list），pack-update.ps1 只找齐输入；
+完整包侧 prepare_full_package 新增 baseline_update_files。缺 .removed.txt 时拒绝发版
+（少删 = 用户盘上永久残留且无人报警），首次发布用 -AllowMissingBaselineParts 放行。
+更新器零改动——它本来就只按清单删，老用户的更新器也能执行新清单。
+
+安全边界：只删「发布过的名字」，用户自己补录的模块 / 归档的参考文件不可能被删。
+
+守卫：累计语义（跳版）/ 两路径并集 / 缺兄弟文件拒绝 / 空清单占位 / 完整包路径各一条单测，
+判据强度探针加到 6/6 转红（新增两条：上一版删除清单不参与、只按小发版清单算）。
+聚焦 70 passed。

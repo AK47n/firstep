@@ -80,6 +80,22 @@ CASES: list[tuple[str, str, str, str, str]] = [
         "$Files = @(git -c core.quotepath=false ls-files)",
         "shares_the_product_predicate",
     ),
+    (
+        "⑤ 删除清单退回「只看上一版清单」（上一版的删除清单不再参与）",
+        FULL_PACK,
+        "        if sibling.is_file():\n"
+        "            shipped.update(read_release_file_list(sibling))",
+        "        if False:  # 注入：不看上一版的删除清单\n"
+        "            shipped.update(read_release_file_list(sibling))",
+        "unions_both_packers or removed_list_is_cumulative",
+    ),
+    (
+        "⑥ 删除清单只按小发版清单算（完整包发过的那些不再参与）",
+        FULL_PACK,
+        "            full_manifest=Path(baseline_path) if baseline_path is not None else None,",
+        "            full_manifest=None,  # 注入：不看完整包清单",
+        "removed_list_is_cumulative",
+    ),
 ]
 
 LINES: list[str] = []

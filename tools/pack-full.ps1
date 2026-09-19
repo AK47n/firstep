@@ -4,10 +4,11 @@
 #   powershell -File tools\pack-full.ps1 -Tag v1.1.0 -Baseline <上版完整包清单.json>
 # 可选：-Tree <仓库根>（缺省 = 本脚本上级目录） -OutDir <输出目录> -Python <python.exe>
 #       -LimitMB <单卷上限 MB，缺省 1900> -AllowDirty
+#       -AllowMissingBaselineParts（允许基线旁边的 .removed.txt 缺失：首次发布等）
 # 产出（缺省 %USERPROFILE%\Desktop\firstep-pack）：
 #   firstep-full-<Tag>.zip[.part<N>]          完整包 zip 分卷（超单卷上限自动拆卷）
 #   firstep-full-<Tag>.manifest.json          完整包清单（含包内全部文件 + 资料库基线清单）
-#   firstep-full-<Tag>.removed.txt            相对上版完整包删除的文件（无基线 = 空）
+#   firstep-full-<Tag>.removed.txt            **累计**删除清单（历史发过、本版不发；无基线 = 空）
 #   firstep-full-<Tag>.sha256.txt             各分卷 SHA256
 # 依赖：python 在 PATH（或 -Python 指定）；核心逻辑在 src\contest_generator\full_pack.py。
 # 说明：包内只收「会变的内容」——工具本体 / 五个库 / 资料库内容文件；第三方安装包与
@@ -20,9 +21,9 @@ param(
     [string]$OutDir = (Join-Path $env:USERPROFILE 'Desktop\firstep-pack'),
     [string]$Python,
     [double]$LimitMB = 1900,
-    [switch]$AllowDirty
+    [switch]$AllowDirty,
+    [switch]$AllowMissingBaselineParts
 )
-
 $ErrorActionPreference = 'Stop'
 
 # ---------- 1. 定位仓库根（本脚本位于 tools\ 下） ----------
@@ -82,6 +83,21 @@ $argsList = @(
 if ($Baseline) {
     if (-not (Test-Path -LiteralPath $Baseline)) { throw "基线清单不存在：$Baseline" }
     $argsList += @('--baseline', $Baseline)
+    # 累计删除清单的第二个输入：上一版**小发版**清单（工单 update-orphan-files/02）。
+    # 小发版包发的东西与完整包不一样（本机库备份那类完整包收不到、而小发版照发），
+    # 只按完整包清单做差，那部分就永远清不掉。同目录同 tag 找到才传。
+    $PrevTag = [System.IO.Path]::GetFileNameWithoutExtension($Baseline)
+    $PrevTag = $PrevTag -replace '^firstep-full-', ''
+    $PrevFiles = Join-Path $OutDir "firstep-update-$PrevTag.files.txt"
+    if (Test-Path -LiteralPath $PrevFiles) {
+        $argsList += @('--baseline-update-files', $PrevFiles)
+        Write-Host "[删除清单] 上一版小发版清单：$PrevFiles"
+    } else {
+        Write-Host "[删除清单] 未找到上一版小发版清单 $PrevFiles（只按完整包清单累计）"
+    }
+}
+if ($AllowMissingBaselineParts) {
+    $argsList += '--allow-missing-baseline-parts'
 }
 
 Write-Host "[打包] 仓库根：$Tree"

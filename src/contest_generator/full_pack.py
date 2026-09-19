@@ -452,6 +452,95 @@ def _load_baseline_files(baseline_path: Path) -> list[str]:
     return [str(item["path"]) for item in data.get("files", [])]
 
 
+def cumulative_removed(shipped_before: Iterable[str], current: Iterable[str]) -> list[str]:
+    """**发布侧删除清单的唯一算法**：历史发过、本版不发的一律删（排序输出）。
+
+    为什么不能只跟「上一版」做差（工单 `update-orphan-files/02`）：删除清单是给**所有**用户
+    用的——任何版本的用户升级到本版都执行同一份。只看上一版，**跳版升级**的用户就会永久
+    留下被跳过那个版本删掉的文件（一个版本区间的洞）。所以输入取「上一版**发行集合**」，
+    而那一份本身已经含更早的历史（见 `previous_shipped_files`）。
+
+    **安全边界**：只删「发布过的名字」。用户自己补录的模块 / 归档的参考文件从不出现在任何
+    发布清单里，因此不可能被这条规则删掉——这正是本方案与「按本版文件集合扫盘清理」那条
+    危险修法的分界（那条会连用户内容一起删）。
+
+    空行与 `#` 注释跳过；输出排序，保证同一输入给出逐字节相同的清单。
+    """
+    now = {name for name in (str(item).strip() for item in current) if name}
+    names = {
+        name for name in (str(item).strip() for item in shipped_before)
+        if name and not name.startswith("#")
+    }
+    return sorted(names - now)
+
+
+def read_release_file_list(path: Path) -> list[str]:
+    """读发布清单（每行一个相对路径；空行与 `#` 注释跳过，容忍 BOM 与 CRLF）。
+
+    `tools/pack-update.ps1` 写出的 `.files.txt` / `.removed.txt` 就是这个形态；
+    更新器的 `remove_named_files` 读的也是同一形态。
+    """
+    text = Path(path).read_bytes().decode("utf-8-sig")
+    return [
+        line.strip() for line in text.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+
+def _removed_sibling(update_files: Path) -> Path:
+    """`firstep-update-<tag>.files.txt` → 同目录的 `.removed.txt`。"""
+    name = Path(update_files).name
+    suffix = ".files.txt"
+    if not name.endswith(suffix):
+        return Path(update_files).with_name(name + ".removed.txt")
+    return Path(update_files).with_name(name[: -len(suffix)] + ".removed.txt")
+
+
+def previous_shipped_files(
+    *,
+    update_files: Path | None = None,
+    full_manifest: Path | None = None,
+    allow_missing_parts: bool = False,
+) -> set[str]:
+    """上一版**发行集合** = 小发版清单 ∪ 小发版删除清单 ∪ 完整包清单的 files ∪ removed。
+
+    为什么要三项一起（工单 `update-orphan-files/02`）：两条打包路径发的东西**不一样**——
+    完整包收不到的（`library/revise-backups/**` 这类被排除的目录、`*.exe`）小发版包原先照发；
+    完整包发过的（未被 git 跟踪的 `sources/contest/**` 构建产物）小发版清单里根本没有。
+    只取其中一份，另一份发过的文件就永远清不掉。
+
+    `allow_missing_parts=False`（缺省）时，给了 `update_files` 却找不到它旁边的
+    `.removed.txt` → **大声失败**：宁可不发版，也不写出一份比用户盘面短的删除清单
+    （少删 = 用户盘上永久残留，且没有任何东西会报警）。
+    """
+    shipped: set[str] = set()
+    if update_files is not None:
+        shipped.update(read_release_file_list(Path(update_files)))
+        sibling = _removed_sibling(Path(update_files))
+        if sibling.is_file():
+            shipped.update(read_release_file_list(sibling))
+        elif not allow_missing_parts:
+            raise ValueError(
+                f"上一版的小发版删除清单不见了：{sibling}"
+                f"（与 {Path(update_files).name} 同目录同 tag）。"
+                "没有它就写不出完整的累计删除清单（跳版升级的用户会留下残留）。"
+                "确认过确实要这么发（例如首次发布）再传 allow_missing_parts=True。"
+            )
+    if full_manifest is not None:
+        data = json.loads(Path(full_manifest).read_bytes().decode("utf-8-sig"))
+        if not isinstance(data, dict):
+            raise ValueError(f"完整包清单格式非法（顶层不是对象）：{full_manifest}")
+        shipped.update(
+            str(item.get("path") or "")
+            for item in data.get("files") or [] if isinstance(item, dict)
+        )
+        shipped.update(str(name) for name in data.get("removed") or [])
+    return {
+        name for name in (str(item).strip() for item in shipped)
+        if name and not name.startswith("#")
+    }
+
+
 def overlong_entries(
     files: Sequence[PartFile], limit: int = MAX_ENTRY_PATH_CHARS
 ) -> list[PartFile]:
@@ -490,12 +579,19 @@ def prepare_full_package(
     out_dir: Path,
     published_at: str = "",
     baseline_path: Path | None = None,
+    baseline_update_files: Path | None = None,
+    allow_missing_baseline_parts: bool = False,
     limit: int = PART_LIMIT_BYTES,
 ) -> tuple[dict[str, Any], list[Path]]:
     """完整包打包编排：scan → zip 分卷 → 清单 / 删除清单 / SHA256 落盘。
 
     返回 `(manifest, written_zips)`；删除清单基线 = `baseline_path` 指向的
     上一版完整包清单（None = 首次发布，空清单）。
+
+    删除清单按**累计口径**算（`cumulative_removed`，工单 `update-orphan-files/02`）：
+    输入是上一版的**发行集合**——完整包清单的 `files` ∪ `removed`，外加（如果给了）
+    上一版小发版清单 `baseline_update_files` 及其 `.removed.txt`。只看上一版清单的话，
+    跳版升级的用户会永久留下被跳过版本的删除项。
     """
     _validate_version(version)
     tree = Path(tree)
@@ -509,11 +605,13 @@ def prepare_full_package(
     ensure_paths_fit(files)
 
     current_paths = [f.path for f in files]
-    current_set = set(current_paths)
-    if baseline_path is not None:
-        removed = [
-            p for p in _load_baseline_files(Path(baseline_path)) if p not in current_set
-        ]
+    if baseline_path is not None or baseline_update_files is not None:
+        shipped_before = previous_shipped_files(
+            update_files=baseline_update_files,
+            full_manifest=Path(baseline_path) if baseline_path is not None else None,
+            allow_missing_parts=allow_missing_baseline_parts,
+        )
+        removed = cumulative_removed(shipped_before, current_paths)
     else:
         removed = []
 
@@ -559,6 +657,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--published-at", default="", help="发布时间（UTC ISO8601，可空）")
     parser.add_argument("--baseline", default="", help="上一版完整包清单路径（删除清单基线，可空）")
     parser.add_argument(
+        "--baseline-update-files",
+        default="",
+        help="上一版小发版清单（`firstep-update-<tag>.files.txt`，累计删除清单的第二个输入，可空）",
+    )
+    parser.add_argument(
+        "--allow-missing-baseline-parts",
+        action="store_true",
+        help="允许基线旁边的 .removed.txt 缺失（首次发布等；缺省 = 缺了就拒绝发版）",
+    )
+    parser.add_argument(
         "--limit-mb",
         type=float,
         default=PART_LIMIT_BYTES / 1024 / 1024,
@@ -578,6 +686,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             out_dir=Path(args.out),
             published_at=args.published_at,
             baseline_path=Path(args.baseline) if args.baseline else None,
+            baseline_update_files=(
+                Path(args.baseline_update_files) if args.baseline_update_files else None
+            ),
+            allow_missing_baseline_parts=bool(args.allow_missing_baseline_parts),
             limit=int(args.limit_mb * 1024 * 1024),
         )
     except Exception as exc:

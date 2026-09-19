@@ -21,6 +21,7 @@ from contest_generator.full_pack import (
     TOP_LEVEL_ENTRIES,
     build_full_manifest,
     build_zip_volumes,
+    cumulative_removed,
     derive_slug,
     excluded_paths,
     full_manifest_filename,
@@ -29,6 +30,7 @@ from contest_generator.full_pack import (
     materials_excluded,
     overlong_entries,
     prepare_full_package,
+    previous_shipped_files,
     product_file_reason,
     register_materials_dirs,
     scan_tree,
@@ -687,6 +689,80 @@ def test_prepare_full_package_without_baseline_writes_empty_removed(tmp_path: Pa
     removed_file = out / "firstep-full-v9.9.9.removed.txt"
     assert removed_file.is_file()
     assert removed_file.read_text(encoding="utf-8").strip() == ""
+
+
+def test_cumulative_removed_covers_skipped_versions() -> None:
+    """删除清单是**累计**口径：被跳过那个版本删掉的文件也要在清单里（工单 02）。
+
+    这份清单是给**所有**用户用的——跳版升级的用户只会执行本版这一份。只跟「上一版」
+    做差的话，`docs/older.md`（更早一版删的）就永远留在他们盘上。
+    """
+    current = {"src/app.py"}
+    # 上一版清单里没有 docs/older.md（它更早就被删了），但上一版的**删除清单**里有
+    shipped_before = {"src/app.py", "docs/old.md", "docs/older.md"}
+    assert cumulative_removed(shipped_before, current) == ["docs/old.md", "docs/older.md"]
+
+
+def test_cumulative_removed_ignores_blank_comments_and_duplicates() -> None:
+    """空行 / `#` 注释不进清单（发布产物里两者都有），重复项去重，输出排序。"""
+    assert cumulative_removed(
+        ["b.md", "", "# 注释", "a.md", "b.md"], {"keep.md"}
+    ) == ["a.md", "b.md"]
+    assert cumulative_removed(["keep.md"], {"keep.md"}) == []
+
+
+def test_previous_shipped_files_unions_both_packers(tmp_path: Path) -> None:
+    """上一版发行集合 = 小发版清单 ∪ 小发版删除清单 ∪ 完整包清单 files ∪ removed。
+
+    两个打包器发的东西不一样（完整包收不到本机库备份、小发版清单里没有被跟踪但完整包
+    发过的构建产物），只取一份就会漏——漏掉的那部分永远清不掉。
+    """
+    update_files = tmp_path / "firstep-update-v9.9.8.files.txt"
+    update_files.write_text("a.md\n# 注释\n", encoding="utf-8")
+    (tmp_path / "firstep-update-v9.9.8.removed.txt").write_text("b.md\n", encoding="utf-8")
+    manifest = tmp_path / "firstep-full-v9.9.8.manifest.json"
+    manifest.write_text(
+        json.dumps({"files": [{"path": "c.md"}], "removed": ["d.md"]}), encoding="utf-8")
+
+    assert previous_shipped_files(
+        update_files=update_files, full_manifest=manifest
+    ) == {"a.md", "b.md", "c.md", "d.md"}
+
+
+def test_previous_shipped_files_refuses_a_missing_sibling(tmp_path: Path) -> None:
+    """基线旁边的 `.removed.txt` 不见就**拒绝发版**（少删 = 用户盘上永久残留且无人报警）。
+
+    反向也验：`allow_missing_parts=True`（首次发布）时放行。
+    """
+    update_files = tmp_path / "firstep-update-v9.9.8.files.txt"
+    update_files.write_text("a.md\n", encoding="utf-8")
+    with pytest.raises(ValueError) as caught:
+        previous_shipped_files(update_files=update_files)
+    assert "删除清单" in str(caught.value)
+    assert previous_shipped_files(
+        update_files=update_files, allow_missing_parts=True
+    ) == {"a.md"}
+
+
+def test_prepare_full_package_removed_list_is_cumulative(tmp_path: Path) -> None:
+    """完整包路径也走累计口径：基线清单的 `removed` 里的名字照旧要被删。"""
+    tree = make_mini_repo(tmp_path)
+    baseline = {
+        "version": "v9.9.8",
+        "files": [
+            {"path": "src/contest_generator/__init__.py", "size": 1, "sha256": "0" * 64},
+            {"path": "docs/old-page.md", "size": 1, "sha256": "0" * 64},
+        ],
+        "removed": ["docs/older-page.md"],
+    }
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(json.dumps(baseline, ensure_ascii=False), encoding="utf-8")
+
+    out = tmp_path / "pack"
+    manifest, _ = prepare_full_package(
+        tree, version="v9.9.9", out_dir=out, published_at="", baseline_path=baseline_path
+    )
+    assert manifest["removed"] == ["docs/old-page.md", "docs/older-page.md"]
 
 
 def test_prepare_full_package_sha256_sidecar(tmp_path: Path) -> None:

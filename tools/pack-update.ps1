@@ -3,10 +3,11 @@
 #   powershell -File tools\pack-update.ps1 -Tag v1.1.0
 #   可选：-Baseline <上次发布的 files.txt 路径> -OutDir <输出目录> -AllowDirty
 #         -Python <python.exe>（缺省找 PATH 上的 python）
+#         -AllowMissingBaselineParts（允许基线旁边的 .removed.txt 缺失：首次发布等）
 # 产出（缺省 %USERPROFILE%\Desktop\firstep-pack）：
 #   firstep-update-<Tag>.zip          仓库 tracked 快照（zip 内顶层 = 仓库根）
-#   firstep-update-<Tag>.files.txt    zip 内文件清单（相对路径，每行一个）
-#   firstep-update-<Tag>.removed.txt  自基线起被删除的文件（无基线 = 空清单）
+#   firstep-update-<Tag>.files.txt    zip 内**产品文件**清单（相对路径，每行一个）
+#   firstep-update-<Tag>.removed.txt  自基线起的**累计**删除清单（历史发过、本版不发）
 #   firstep-update-<Tag>.sha256.txt   zip 的 SHA256（sha256sum 格式）
 # 依赖：python 在 PATH（或 -Python 指定）；核心逻辑在 src\contest_generator\pack_update.py。
 # 口径（工单 full-download/08）：字节取源与完整包一致——核心里的 `git archive`
@@ -18,7 +19,8 @@ param(
     [string]$Baseline,
     [string]$OutDir = (Join-Path $env:USERPROFILE 'Desktop\firstep-pack'),
     [string]$Python,
-    [switch]$AllowDirty
+    [switch]$AllowDirty,
+    [switch]$AllowMissingBaselineParts
 )
 
 $ErrorActionPreference = 'Stop'
@@ -76,8 +78,38 @@ $FilesTxt = Join-Path $OutDir "firstep-update-$Tag.files.txt"
 $RemovedTxt = Join-Path $OutDir "firstep-update-$Tag.removed.txt"
 $ShaTxt   = Join-Path $OutDir "firstep-update-$Tag.sha256.txt"
 
-# ---------- 7. 调核心打包（zip 与 .files.txt 由核心写出，两者必然一一对应） ----------
-# 清单经临时文件传给核心：本机 tracked 快照约 3500 条、~150KB，直接上命令行
+# ---------- 6.5 累计删除清单的输入（工单 update-orphan-files/02） ----------
+# 删除清单 = 上一版**发行集合** − 本版产品文件；**规则单源在 Python 侧**
+# （full_pack.previous_shipped_files / cumulative_removed）。这里只负责找齐输入：
+#   ① 上一版小发版清单（-Baseline）与它旁边的同名 .removed.txt（构成更早的历史）；
+#   ② 上一版完整包清单（OutDir 里 firstep-full-<上一版 tag>.manifest.json，找到才传）。
+# 为什么 ② 也要：两条打包路径发的东西不一样——完整包发过、而未被 git 跟踪的文件
+# （sources/contest/** 下的构建产物）在小发版清单里根本没有，只取 ① 就永远清不掉。
+# ① 的 .removed.txt 缺失时**拒绝发版**（少删 = 用户盘上永久残留且无人报警）；
+# 确实要这么发（首次发布）就加 -AllowMissingBaselineParts。
+$BaselineArgs = @()
+if ($Baseline) {
+    $PrevTag = [System.IO.Path]::GetFileNameWithoutExtension($Baseline)
+    $PrevTag = $PrevTag -replace '^firstep-update-', ''
+    $PrevRemoved = Join-Path ([System.IO.Path]::GetDirectoryName($Baseline)) "firstep-update-$PrevTag.removed.txt"
+    if (-not (Test-Path -LiteralPath $PrevRemoved) -and -not $AllowMissingBaselineParts) {
+        throw "上一版的小发版删除清单不见了：$PrevRemoved（累计删除清单少了它就写不完整；确认要这么发就加 -AllowMissingBaselineParts）"
+    }
+    $BaselineArgs += @('--baseline-update-files', $Baseline)
+    $PrevManifest = Join-Path $OutDir "firstep-full-$PrevTag.manifest.json"
+    if (Test-Path -LiteralPath $PrevManifest) {
+        $BaselineArgs += @('--baseline-full-manifest', $PrevManifest)
+        Write-Host "[删除清单] 上一版完整包清单：$PrevManifest"
+    } else {
+        Write-Host "[删除清单] 未找到上一版完整包清单 $PrevManifest（只按小发版清单累计）"
+    }
+}
+if ($AllowMissingBaselineParts) {
+    $BaselineArgs += '--allow-missing-baseline-parts'
+}
+
+# ---------- 7. 调核心打包（zip / .files.txt / .removed.txt 都由核心写出） ----------
+# 清单经临时文件传给核心：本机 tracked 快照约 6900 条候选、~350KB，直接上命令行
 # 会逼近 Windows 命令行长度上限。
 $ManifestTmp = Join-Path ([System.IO.Path]::GetTempPath()) "firstep-files-$Tag-$PID.txt"
 [System.IO.File]::WriteAllLines($ManifestTmp, $Files, [System.Text.UTF8Encoding]::new($false))
@@ -91,7 +123,10 @@ try {
     $env:PYTHONPATH = Join-Path $RepoRoot 'src'
     # 核心按 UTF-8 输出：否则中文摘要在已设为 UTF-8 的 PS 控制台上显示为乱码
     $env:PYTHONIOENCODING = 'utf-8'
-    $CoreOut = & $Python -B -m contest_generator.pack_update --tree $RepoRoot --version $Tag --out $OutDir --files $ManifestTmp
+    $CoreArgs = @('-B', '-m', 'contest_generator.pack_update',
+                  '--tree', $RepoRoot, '--version', $Tag,
+                  '--out', $OutDir, '--files', $ManifestTmp) + $BaselineArgs
+    $CoreOut = & $Python @CoreArgs
     $code = $LASTEXITCODE
     if ($code -ne 0) {
         throw "更新包打包失败（退出码 $code）：见上方错误输出"
@@ -102,24 +137,13 @@ try {
 }
 
 if (-not (Test-Path -LiteralPath $Zip)) { throw "zip 未生成：$Zip" }
+if (-not (Test-Path -LiteralPath $RemovedTxt)) { throw "删除清单未生成：$RemovedTxt" }
 
-# ---------- 8. 删除清单（自基线 diff；无基线 = 空） ----------
+# ---------- 8. 本版产品文件（摘要用；清单正文由核心写出） ----------
 # 「本版产品文件」= 核心写出的 .files.txt——**不是** `$Files`：那是候选（含白名单外 /
-# 本地备份等包外内容），拿它做差会把删除清单一律算成空（工单 update-orphan-files/01）。
-# 基线文件必须以 UTF-8 显式读取：PowerShell 5.1 的 Get-Content 默认 ANSI(GBK)，
-# 会把 UTF-8 中文路径读成乱码，导致「基线有而当前无」误判为全部删除。
+# 本地备份等包外内容，工单 update-orphan-files/01）。
+# 以 UTF-8 显式读取：PowerShell 5.1 的 Get-Content 默认 ANSI(GBK)，会把中文路径读成乱码。
 $Current = @(Get-Content -LiteralPath $FilesTxt -Encoding UTF8 | Where-Object { $_ -and -not $_.StartsWith('#') })
-if ($Baseline) {
-    if (-not (Test-Path -LiteralPath $Baseline)) { throw "基线文件不存在：$Baseline" }
-    $BaseLines = @(Get-Content -LiteralPath $Baseline -Encoding UTF8 | Where-Object { $_ -and -not $_.StartsWith('#') })
-    $Removed = @($BaseLines | Where-Object { $_ -notin $Current })
-    [System.IO.File]::WriteAllLines($RemovedTxt, $Removed, [System.Text.UTF8Encoding]::new($false))
-} else {
-    # 空清单写注释行：0 字节文件会被 `gh release upload` 以
-    # `HTTP 400: Bad Content-Length` 拒收（工单 full-download/08 现场踩到；
-    # 更新器跳过 `#` 行，语义不变）
-    [System.IO.File]::WriteAllLines($RemovedTxt, @('# 无删除项（空清单占位：0 字节会被 gh 拒收）'), [System.Text.UTF8Encoding]::new($false))
-}
 
 # ---------- 9. SHA256（从核心输出里取，避免再算一遍） ----------
 $shaMatch = [regex]::Match(($CoreOut -join "`n"), '(?m)^\s*SHA256：([0-9a-fA-F]{64})')
