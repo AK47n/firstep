@@ -6,7 +6,25 @@ v1.1.1 全量包清单 / v1.2.1 全量包清单）——**修复不在线上包�
 
 **被谁阻塞：** 01（要先有修好的、已提交的工作树）。
 
-**状态：** ready-for-agent
+**状态：** resolved（2026-09-19）
+
+**完成记录。** 重发了两次（第一次的包里判据不执行，见工单 01 的完成记录），最终线上口径：
+
+| 资产 | 重发前 | 重发后 |
+|---|---|---|
+| `firstep-update-v1.2.1.zip` | 304,729,724 B / `ec9921fc…` | **304,785,030 B / `9b98364d2f39b6f0…`** |
+| `firstep-full-v1.2.1.zip` | 801,873,335 B / `49faced3…` | **801,928,759 B / `6f6d29f59129d187…`** |
+
+- 两套 `removed.txt` 与线上原版**逐字节相同**（基线选对了的判据：更新包用
+  `firstep-update-v1.1.1.files.txt`、完整包用 `firstep-full-v1.2.0.manifest.json`）
+- 清单文件集 +10 条 / −0 条；包内 `start-app.bat` = 工作树那份（`e5d66d0b…`，不再是 `88a9c45b…`）
+- tag `v1.2.1` 未动（仍指 `3263fa79`），资产内容 = `main@7784fe8d`
+- 线上复核 `python tools\check-download-docs.py`（联网版）**PASS**：它拿到的就是重发后的 802 MB / 305 MB
+- 重发前的参考副本留在 `firstep-pack\prerepublish-v1.2.1\`（那 6 个小件，用于逐字节对照）
+
+**新踩的一个工具坑**（记在 `local-environment` 第 0 节）：`Select-Object -First N` 接在
+`powershell -File tools\pack-update.ps1` 后面会**提前掐断上游**，打包器跑不到写 `sha256.txt`
+那一步（zip 是新的、校验和文件还是上一版的）——上传前务必对一次「zip 实算 vs `sha256.txt`」。
 
 ## 做法（版本号不动）
 
@@ -17,15 +35,15 @@ v1.1.1 全量包清单 / v1.2.1 全量包清单）——**修复不在线上包�
 
 ## 验收标准
 
-- [ ] 打包前 `powershell -File tools\preflight.ps1` 四项全绿（三处版本号 / 母版编码钉 / 下载文档 / README 版本行）
-- [ ] 打包前工作树干净（`pack-*.ps1` 默认拒绝脏树；**先提交修复再打包**，包内容 = 那笔提交）
-- [ ] **自校验（判据强）**：重打出来的 `firstep-update-v1.2.1.removed.txt` 与 `firstep-full-v1.2.1.removed.txt`
+- [x] 打包前 `powershell -File tools\preflight.ps1` 四项全绿（三处版本号 / 母版编码钉 / 下载文档 / README 版本行）
+- [x] 打包前工作树干净（`pack-*.ps1` 默认拒绝脏树；**先提交修复再打包**，包内容 = 那笔提交）
+- [x] **自校验（判据强）**：重打出来的 `firstep-update-v1.2.1.removed.txt` 与 `firstep-full-v1.2.1.removed.txt`
       与线上那份**逐字节相同**——本次改动只增不删，若不同说明基线选错（换了基线就会把大批文件误判成删除）
-- [ ] 两套资产各自 `.sha256.txt` 与本地 zip 的实算 sha256 一致（sha256sum 格式，更新器按它校验）
-- [ ] 更新包内 `start-app.bat` 的 sha256 **不再等于** `88a9c45b9917…`，且等于工作树那份（修复真进包了）
-- [ ] 线上 8 个附件齐全、字节数与本地一致（`gh api repos/AK47n/firstep/releases/tags/v1.2.1`）
-- [ ] **不回改 tag**：本地与线上 `v1.2.1` tag 仍指向原提交（照 v1.2.0 两次重发的先例），
+- [x] 两套资产各自 `.sha256.txt` 与本地 zip 的实算 sha256 一致（sha256sum 格式，更新器按它校验）
+- [x] 更新包内 `start-app.bat` 的 sha256 **不再等于** `88a9c45b9917…`，且等于工作树那份（修复真进包了）
+- [x] 线上 8 个附件齐全、字节数与本地一致（`gh api repos/AK47n/firstep/releases/tags/v1.2.1`）
+- [x] **不回改 tag**：本地与线上 `v1.2.1` tag 仍指向原提交（照 v1.2.0 两次重发的先例），
       在 `local-environment` 第 3 节如实记「资产内容 = 重发时的 main，tag 未动」
-- [ ] 重发后再跑一次 `python tools\check-download-docs.py`（联网版：拿线上最新 release 校验 README 体积口径）
-- [ ] 如实记账**用户可见代价**：已经装了旧 v1.2.1 的用户**不会收到更新提示**（检查更新比的是版本号），
+- [x] 重发后再跑一次 `python tools\check-download-docs.py`（联网版：拿线上最新 release 校验 README 体积口径）
+- [x] 如实记账**用户可见代价**：已经装了旧 v1.2.1 的用户**不会收到更新提示**（检查更新比的是版本号），
       与 v1.2.0 两次重发留下的缺口同源

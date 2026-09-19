@@ -7,7 +7,16 @@
 
 **被谁阻塞：** 无——可与 01 并行。
 
-**状态：** ready-for-agent
+**状态：** resolved（2026-09-19）
+
+**完成记录。** `rebuild-sandbox-v111.py --write` 可从本机 v1.1.1 全量包还原真旧树（六条判据全成立），
+跑完一轮演练后**会变成新版**——要再重演就再跑一次同一条命令（沙箱现状记在
+`local-environment` 第 1 节）。两处补充：
+
+1. **`sim-run.py` 的恢复副本入库了**（`.scratch/update-restart-stale-service/sandbox-entry-sim-run.py`）：
+   一次失败的重建把沙箱里的原件连目录一起删了（擦除时撞上「目录被别的进程占着」——那个进程是
+   我前一次探针留下的服务，cwd 就在沙箱里），重建脚本现在优先用沙箱那份、没有就用库里这份。
+2. **B2 两个标记已随重建消失**（内容由 `drill-02-degraded.py` 确定性复现），记账在 `b2-markers.json`。
 
 ## 做法
 
@@ -26,15 +35,15 @@
 
 ## 验收标准
 
-- [ ] 重建脚本落 `.scratch/update-restart-stale-service/`（默认 dry-run，`--write` 才动盘；自带前置断言）
-- [ ] `firstep-sim\src\contest_generator\__init__.py` == `1.1.1`（盘上真旧版本）
-- [ ] `firstep-sim\src\contest_generator\webapp.py` 的 `spawn_updater` **命令里没有 `--port`**
+- [x] 重建脚本落 `.scratch/update-restart-stale-service/`（默认 dry-run，`--write` 才动盘；自带前置断言）
+- [x] `firstep-sim\src\contest_generator\__init__.py` == `1.1.1`（盘上真旧版本）
+- [x] `firstep-sim\src\contest_generator\webapp.py` 的 `spawn_updater` **命令里没有 `--port`**
       （真旧代码的判据，脚本自己断言；同时断言 `full_apply.py` 里**有** `--port`——证明只缺那一条路）
-- [ ] `start-app.bat` 的 sha256 **等于** v1.1.1 全量包清单里那一份 `88a9c45b9917…`
+- [x] `start-app.bat` 的 sha256 **等于** v1.1.1 全量包清单里那一份 `88a9c45b9917…`
       （证明沙箱里的启动器也是真旧的那份，修复还没进沙箱）
-- [ ] `sim-run.py` 在位；数据目录 `C:\Users\luoji\.contest_generator_sim` 的 `config.json` 未被破坏
+- [x] `sim-run.py` 在位；数据目录 `C:\Users\luoji\.contest_generator_sim` 的 `config.json` 未被破坏
       （库目录仍指沙箱 `library`）
-- [ ] B2 两个标记已留档（位置写进 `local-environment` 第 1 节的痕迹表）
-- [ ] 起一次沙箱（8020）自证：`/api/health`.version == `1.1.1`；收尾释放端口、无残留 python 进程
-- [ ] `docs/agents/local-environment.md` 第 1 节当场改写：沙箱现在是什么、怎么重建、
+- [x] B2 两个标记已留档（位置写进 `local-environment` 第 1 节的痕迹表）
+- [x] 起一次沙箱（8020）自证：`/api/health`.version == `1.1.1`；收尾释放端口、无残留 python 进程
+- [x] `docs/agents/local-environment.md` 第 1 节当场改写：沙箱现在是什么、怎么重建、
       **更正「make_sim_sandbox.py 能还原旧版」那句错话**

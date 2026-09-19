@@ -1,12 +1,13 @@
 # 沙箱还原：真 v1.1.1（工单 update-restart-stale-service/03）
-  时间：2026-09-19 11:00:08
+  时间：2026-09-19 11:33:17
 
 ## 零、前置事实
   zip_exists = True
   zip_bytes = 821352026
   manifest_exists = True
   sim_root_exists = True
-  sim_entry_exists = True
+  sim_entry_exists = False
+  sim_entry_copy_exists = True
   sim_data_exists = True
   sim_data_config = True
   manifest_version = 'v1.1.1'
@@ -20,10 +21,11 @@
   sources/materials/.b2-drill-payload.bin: — 字节 / …
 
 ## 二、沙箱专用入口已暂存
-  sim-run.py → C:\Users\luoji\AppData\Local\Temp\fe-sandbox-entry-i0nza4xm\sim-run.py（975 字节）
+  来源：C:\Users\luoji\Desktop\firstep\.scratch\update-restart-stale-service\sandbox-entry-sim-run.py
+  → C:\Users\luoji\AppData\Local\Temp\fe-sandbox-entry-bsdpxnty\sim-run.py（975 字节）
 
 ## 三、清空工具根 → 解包 v1.1.1（Python zipfile，走长路径 API）
-  解包 8777 个条目 / 落盘 8777 个文件，耗时 8.2s
+  解包 8777 个条目 / 落盘 8777 个文件，耗时 6.8s
   补回 sim-run.py（包内没有，生产入口的配置路径写死在真身数据目录）
 
 ## 四、资料库基线写回（口径 = tools/update-app.py 的 write_materials_baseline）

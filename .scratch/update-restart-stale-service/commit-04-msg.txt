@@ -1,0 +1,20 @@
+账本收口：v1.2.1 资产重发 + 启动器修复的真机验收与事实更新（工单 update-restart-stale-service/04）
+
+验收（脚本零改动，`python .scratch/verify-gate-drills/drill-01-upgrade.py`）：
+- `served = 1.2.1`、`restarted_by_updater = true` —— 工单判据两条都成立
+- `launcher.log` = `reason=started tries=1 port=8020 stale=1 served=1.1.1 disk=1.2.1`
+  （走的正是「判旧进程 → 踢掉 → 起新的」那条路）
+- 判红 0 / 卡住 0；保命项十三条、隔离四条全成立；起点是**还原出来的真 v1.1.1**
+
+账本（当场更新，不留尾巴）：
+- `docs/agents/local-environment.md`：第 0 节换成「重发后的落差表」+ 两个工具坑；
+  第 1 节沙箱改写（现在是「真 v1.1.1 跑完一轮升级后的 1.2.1」+ 一条命令重演 + B2 标记去向 +
+  更正「make_sim_sandbox.py 能还原旧版」那句错话）；第 1.5 节 B1 那格转绿并说明口径；
+  第 2 节端口现状 + 射程更正；第 3 节 v1.2.1 重发记录（新 sha256 / tag 未动 / 已装旧版收不到提示）
+- `.scratch/backlog.md` 第 8 节：本单级别 🔴 → 🟠（射程更正）+ 标已修
+- `.scratch/sandbox-drill/issues/01-sandbox-upgrade.md`：那条未勾的判据补上复跑结论与原始输出路径
+- `VERSIONS.md`：v1.2.1 区块加一条用户话术（**版本头那一行没动**），`tests/test_changelog.py` 32 passed
+- 工单 01–04 全部 resolved、验收标准全部勾选
+
+线上自检：`python tools\check-download-docs.py`（联网版）PASS——它读到的就是重发后的
+802 MB / 305 MB，README 体积口径与 Release 说明三处一致。

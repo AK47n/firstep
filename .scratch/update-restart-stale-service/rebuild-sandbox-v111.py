@@ -47,8 +47,12 @@ SIM_DATA = HOME / ".contest_generator_sim"
 PACK_DIR = HOME / "Desktop" / "firstep-pack"
 ZIP = PACK_DIR / "firstep-full-v1.1.1.zip"
 MANIFEST = PACK_DIR / "firstep-full-v1.1.1.manifest.json"
-#: 包内没有、但沙箱起服务要用（生产入口的配置路径写死在真身数据目录）
+#: 包内没有、但沙箱起服务要用（生产入口的配置路径写死在真身数据目录）。
+#: 这里是它的**恢复副本**：2026-09-19 一次失败的重建把沙箱里的原件连目录一起删了
+#: （擦除中途撞上「目录被别的进程占着」→ 内容已清空、根没删掉），所以留一份在库里，
+#: 重建脚本优先用沙箱里那份、没有就用这份。
 SANDBOX_ENTRY = "sim-run.py"
+SANDBOX_ENTRY_COPY = HERE / "sandbox-entry-sim-run.py"
 #: 上一个演练留下的痕迹（记账后随重建消失；内容可由 drill-02 确定性复现）
 B2_MARKERS = (
     "sources/materials/.b2-drill-marker.txt",
@@ -132,6 +136,7 @@ def main() -> int:
         "manifest_exists": MANIFEST.is_file(),
         "sim_root_exists": SIM_ROOT.is_dir(),
         "sim_entry_exists": (SIM_ROOT / SANDBOX_ENTRY).is_file(),
+        "sim_entry_copy_exists": SANDBOX_ENTRY_COPY.is_file(),
         "sim_data_exists": SIM_DATA.is_dir(),
         "sim_data_config": (SIM_DATA / "config.json").is_file(),
     }
@@ -146,9 +151,11 @@ def main() -> int:
         log(f"  {key} = {value!r}")
     RESULTS["facts"] = facts
 
-    for key in ("zip_exists", "manifest_exists", "sim_root_exists", "sim_entry_exists"):
+    for key in ("zip_exists", "manifest_exists", "sim_root_exists"):
         if not facts[key]:
             problem(f"前置不成立：{key}")
+    if not (facts["sim_entry_exists"] or facts["sim_entry_copy_exists"]):
+        problem(f"前置不成立：{SANDBOX_ENTRY} 既不在沙箱也不在库里（{SANDBOX_ENTRY_COPY}）")
     if RESULTS["problems"]:
         return 2
     if facts.get("manifest_version", "").lstrip("vV") != EXPECTED_START_VERSION:
@@ -176,10 +183,12 @@ def main() -> int:
     # ---- 二、暂存包内没有的沙箱入口 ----
     staging = Path(tempfile.mkdtemp(prefix="fe-sandbox-entry-"))
     staged_entry = staging / SANDBOX_ENTRY
-    shutil.copy2(SIM_ROOT / SANDBOX_ENTRY, staged_entry)
+    source = (SIM_ROOT / SANDBOX_ENTRY) if facts["sim_entry_exists"] else SANDBOX_ENTRY_COPY
+    shutil.copy2(source, staged_entry)
     log("")
     log("## 二、沙箱专用入口已暂存")
-    log(f"  {SANDBOX_ENTRY} → {staged_entry}（{staged_entry.stat().st_size} 字节）")
+    log(f"  来源：{source}")
+    log(f"  → {staged_entry}（{staged_entry.stat().st_size} 字节）")
 
     if not args.write:
         log("")
