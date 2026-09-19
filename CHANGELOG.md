@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=298cae707cbfaf924c38e081ac5a139802408e77 -->
+<!-- changelog-auto: last-commit=f16c088df6c61b51eb7dbe27bdac47fcafece89f -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -32,6 +32,7 @@
 - 21:53 工单 module-hwcheck/04：配方机制 + led / oled 两件专精
 - 21:54 记本机事实：ARMCC 中文字面量会吞引号 + 8791 残留服务的坑（工单 04 会话）
 - 23:46 工单 module-hwcheck/05：MPU6050 双平台专精 + 互斥单选交换
+- 23:46 记本机事实：检测程序的转义改三位八进制 + 器件头必须由配方 include（工单 05 会话）
 
 ## 2026-09-18
 - 23:19 docs(闸门): commit-gate/04 CI 线上全绿收口（run 35098093620）
