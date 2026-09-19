@@ -1,0 +1,33 @@
+启动器起服务前先建数据目录：否则重定向整行失败、服务根本起不来
+
+第二次跑 drill-01 时判据的另一半露出来了：旧进程**确实被踢掉了**（服务端口空出来了，
+drill 的兜底起服务能绑上、报 1.2.1），但更新器那次重启仍没把服务带起来——
+`launcher.log` 记 `reason=timeout port=8020`，重定向 profile 里**没有 webapp.log**。
+
+根因（两轮探针钉出来的，过程留档在 .scratch/update-restart-stale-service/）：
+
+  start "" /b %PYEXE% -m contest_generator.webapp >> "%USERPROFILE%\.contest_generator\webapp.log" 2>&1
+
+`:start_service` 这条命令把日志重定向进数据目录，而**目录不存在时 cmd 直接报
+「系统找不到指定的路径」并整行不执行**——连子进程都不会创建，所以既没有 webapp.log、
+也永远不会 ready，20 次轮询走完就是 `:timeout`。
+真机演练把 USERPROFILE 重定向到一次性目录，那里没有 `%USERPROFILE%\.contest_generator`
+（那个目录平时是 install.bat 的 bootstrap 配置写出来的，真机上一直存在——所以这条
+在真机上不会犯，但启动器不该依赖别处先把目录建好；用户手动删过配置目录就会撞上）。
+
+修：`:start_service` 里、启动命令之前加一行条件建目录。
+
+探针（都留在 .scratch/update-restart-stale-service/，可复跑）：
+- probe-02-launcher-timeout.py：真跑沙箱启动器（假旧服务在独立进程里，否则会被启动器的
+  taskkill 连探针一起杀掉——第一版就是这么没输出的），捕获隐藏窗口看不到的控制台输出
+- probe-launcher-decision.py：把判据段整段抽出来配桩跑，钉「反引号/变量展开」这类静默失效
+
+守卫再加两条：
+- 静态守卫：起服务那一行之前必须有「不存在才建」的数据目录 mkdir
+- 判据强度探针加一条注入：删掉那行 → 必须转红（现 9/9 全红）
+
+另外把 patch-01-start-app-bat.py 补上第 6 条替换并加 `--bat` 目标，做了**可复现性核对**：
+从 `69d5a21f` 的原始 blob 出发跑一遍脚本，产出与当前文件**逐字节相同**（sha256 e5d66d0b…），
+即这份 GBK 文件的每一次改动都能由脚本原样重建。
+
+全仓测试：4556 passed, 1 skipped。

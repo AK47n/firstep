@@ -88,6 +88,14 @@ CASES: list[tuple[str, str, str, str, str, str]] = [
         "",
     ),
     (
+        "起服务前不建数据目录（virgin profile 下重定向整行失败、服务起不来）",
+        START_BAT,
+        'if not exist "%USERPROFILE%\\.contest_generator" mkdir "%USERPROFILE%\\.contest_generator"',
+        "rem （注入：不建目录，重定向会失败）",
+        "tests/test_launcher_stale_service.py",
+        "",
+    ),
+    (
         "旧进程被踢这件事不留痕（事后分不清「踢了」还是「碰巧没旧进程」）",
         START_BAT,
         "-Reason started tries=%tries% port=%FIRSTEP_LAUNCHER_PORT% %FIRSTEP_STALE_NOTE%",

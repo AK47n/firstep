@@ -77,18 +77,37 @@ PATCH_LOG_ALREADY = ANCHOR_LOG_ALREADY + " %FIRSTEP_STALE_NOTE%"
 ANCHOR_LOG_STARTED = "-Reason started tries=%tries% port=%FIRSTEP_LAUNCHER_PORT%"
 PATCH_LOG_STARTED = ANCHOR_LOG_STARTED + " %FIRSTEP_STALE_NOTE%"
 
+# ---- 锚点 6（第二轮补的）：起服务之前先把数据目录建出来 ----
+# 为什么（真机演练用一次红的换来的）：`:start_service` 那条 `start` 把日志重定向进
+# `%USERPROFILE%\.contest_generator\webapp.log`。**目录不在时 cmd 直接报「系统找不到指定的路径」，
+# 服务根本不会起**——演练把 USERPROFILE 重定向到一次性目录，那里没有这个目录，于是
+# `launcher.log` 记 `timeout`、`webapp.log` 压根不存在。真实用户那边这个目录由 install.bat 的
+# bootstrap 配置建出来（用户手动删掉配置目录就没这一层了），所以启动器自己保证它存在。
+ANCHOR_START_SERVICE = "rem 后台启动服务，日志追加到用户配置目录"
+PATCH_START_SERVICE = "\r\n".join([
+    "rem 数据目录必须先存在：下面这条启动命令把日志重定向进用户配置目录下的 webapp.log——",
+    "rem 目录不在时 cmd 直接报「系统找不到指定的路径」，服务根本不会起（真机演练的重定向 profile 撞上过；",
+    "rem 真实用户那边这个目录由 install.bat 的 bootstrap 配置建出来，用户手动删过就没了）。",
+    'if not exist "%USERPROFILE%\\.contest_generator" mkdir "%USERPROFILE%\\.contest_generator"',
+    ANCHOR_START_SERVICE,
+])
+
 REPLACEMENTS = [
     (ANCHOR_PATHS, PATCH_PATHS),
     (ANCHOR_IDENTITY, PATCH_IDENTITY),
     (ANCHOR_START, PATCH_START),
     (ANCHOR_LOG_ALREADY, PATCH_LOG_ALREADY),
     (ANCHOR_LOG_STARTED, PATCH_LOG_STARTED),
+    (ANCHOR_START_SERVICE, PATCH_START_SERVICE),
 ]
 
 
 def main() -> int:
     write = "--write" in sys.argv[1:]
-    raw = BAT.read_bytes()
+    target = BAT
+    if "--bat" in sys.argv[1:]:
+        target = Path(sys.argv[sys.argv.index("--bat") + 1])
+    raw = target.read_bytes()
     text = raw.decode("gbk")
 
     for old, _new in REPLACEMENTS:
@@ -120,11 +139,11 @@ def main() -> int:
         return 0
 
     # 原文件的换行口径也核一遍：不加 BOM、保留 CRLF
-    BAT.write_bytes(patched.encode("gbk"))
-    back = BAT.read_bytes()
+    target.write_bytes(patched.encode("gbk"))
+    back = target.read_bytes()
     assert back[:3] != b"\xef\xbb\xbf", "写坏了：出现 UTF-8 BOM"
     assert back.decode("gbk") == patched, "写坏了：GBK 往返不一致"
-    print(f"\n已落盘：{BAT}（{len(back)} 字节）")
+    print(f"\n已落盘：{target}（{len(back)} 字节）")
     return 0
 
 

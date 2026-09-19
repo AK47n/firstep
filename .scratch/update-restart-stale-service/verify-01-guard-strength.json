@@ -5,7 +5,7 @@
       "file": "src/contest_generator/update.py",
       "anchor_hits": 1,
       "turned_red": true,
-      "summary": "1 failed, 1 passed, 15 deselected, 1 warning in 0.44s",
+      "summary": "1 failed, 1 passed, 15 deselected, 1 warning in 0.49s",
       "weak": false
     },
     {
@@ -13,7 +13,7 @@
       "file": "src/contest_generator/update.py",
       "anchor_hits": 1,
       "turned_red": true,
-      "summary": "1 failed, 1 passed, 15 deselected, 1 warning in 0.39s",
+      "summary": "1 failed, 1 passed, 15 deselected, 1 warning in 0.45s",
       "weak": false
     },
     {
@@ -21,7 +21,7 @@
       "file": "start-app.bat",
       "anchor_hits": 1,
       "turned_red": true,
-      "summary": "1 failed, 16 passed in 14.19s",
+      "summary": "1 failed, 17 passed in 15.19s",
       "weak": false
     },
     {
@@ -29,7 +29,7 @@
       "file": "start-app.bat",
       "anchor_hits": 1,
       "turned_red": true,
-      "summary": "3 failed, 14 passed in 14.06s",
+      "summary": "3 failed, 15 passed in 30.41s",
       "weak": false
     },
     {
@@ -37,7 +37,7 @@
       "file": "start-app.bat",
       "anchor_hits": 1,
       "turned_red": true,
-      "summary": "4 failed, 13 passed in 13.44s",
+      "summary": "4 failed, 14 passed in 13.82s",
       "weak": false
     },
     {
@@ -45,7 +45,7 @@
       "file": "start-app.bat",
       "anchor_hits": 1,
       "turned_red": true,
-      "summary": "2 failed, 15 passed in 13.39s",
+      "summary": "2 failed, 16 passed in 14.24s",
       "weak": false
     },
     {
@@ -53,7 +53,15 @@
       "file": "start-app.bat",
       "anchor_hits": 1,
       "turned_red": true,
-      "summary": "4 failed, 13 passed in 13.41s",
+      "summary": "4 failed, 14 passed in 14.57s",
+      "weak": false
+    },
+    {
+      "name": "起服务前不建数据目录（virgin profile 下重定向整行失败、服务起不来）",
+      "file": "start-app.bat",
+      "anchor_hits": 1,
+      "turned_red": true,
+      "summary": "1 failed, 17 passed in 15.22s",
       "weak": false
     },
     {
@@ -61,7 +69,7 @@
       "file": "start-app.bat",
       "anchor_hits": 1,
       "turned_red": true,
-      "summary": "1 failed, 16 passed in 14.01s",
+      "summary": "1 failed, 17 passed in 14.98s",
       "weak": false
     }
   ],

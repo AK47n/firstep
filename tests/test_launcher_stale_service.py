@@ -283,6 +283,29 @@ def test_bat_logs_the_stale_verdict_as_extra_fields() -> None:
             f"{label} 那行没带上 CLI 给的字段：{lines[index]!r}")
 
 
+def test_bat_makes_sure_the_log_directory_exists_before_starting() -> None:
+    """起服务之前必须先把数据目录建出来。
+
+    `:start_service` 那条 `start` 把日志重定向进 `%USERPROFILE%\\.contest_generator\\webapp.log`；
+    **目录不在时 cmd 直接报「系统找不到指定的路径」，整行不执行、服务根本不会起**
+    （真机演练把 USERPROFILE 重定向到一次性目录时就撞上了：`launcher.log` 记 `timeout`、
+    `webapp.log` 压根不存在）。真实用户那边这个目录由 `install.bat` 的 bootstrap 配置建出来，
+    但那是别处的事——启动器不该依赖它存在（用户手动删过配置目录就没了）。
+    """
+    lines = _bat_lines()
+    mkdir_index = None
+    for index, line in enumerate(lines):
+        if "mkdir" in line and ".contest_generator" in line:
+            mkdir_index = index
+            break
+    assert mkdir_index is not None, (
+        "start-app.bat 起服务前没有建数据目录：重定向会整行失败、服务起不来")
+    start_index = _index_of(lines, 'start "" /b %PYEXE% -m contest_generator.webapp')
+    assert mkdir_index < start_index, "建目录必须在起服务那一行之前"
+    assert "if not exist" in lines[mkdir_index], (
+        f"应当是「不存在才建」而不是无条件 mkdir：{lines[mkdir_index]!r}")
+
+
 # ---------------------------------------------------------------------------
 # 启动器行为守卫：真跑 cmd，但**每个分支都落到 echo**
 #

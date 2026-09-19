@@ -96,6 +96,10 @@ rem 等一拍再起：刚被杀的进程要放开端口，抢这一拍会让新进程绑不上、误报启动超时
 "%SystemRoot%\System32\ping.exe" -n 2 127.0.0.1 >nul 2>&1
 
 :start_service
+rem 数据目录必须先存在：下面这条启动命令把日志重定向进用户配置目录下的 webapp.log——
+rem 目录不在时 cmd 直接报「系统找不到指定的路径」，服务根本不会起（真机演练的重定向 profile 撞上过；
+rem 真实用户那边这个目录由 install.bat 的 bootstrap 配置建出来，用户手动删过就没了）。
+if not exist "%USERPROFILE%\.contest_generator" mkdir "%USERPROFILE%\.contest_generator"
 rem 后台启动服务，日志追加到用户配置目录
 start "" /b %PYEXE% -m contest_generator.webapp >> "%USERPROFILE%\.contest_generator\webapp.log" 2>&1
 
