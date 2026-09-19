@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=41631faa1140f99a223d31a9df81ca683c7a955f -->
+<!-- changelog-auto: last-commit=f8e1402c91e8122c19783b6ef6110351f6e2e1ae -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -28,6 +28,7 @@
 - 15:36 立项：硬件检测（常用模块 bring-up 自检）——两轮 grilling 定稿 spec + 九张工单
 - 15:58 工单 module-hwcheck/01：硬件检测栏目贯通 + 前端测试门禁接通
 - 17:09 工单 module-hwcheck/02：最小自检走到板（生成 / 编译 / 烧录 / 上板清单）
+- 17:59 工单 module-hwcheck/03：器件选择 + 接线表 + 默认脚冲突预警
 
 ## 2026-09-18
 - 23:19 docs(闸门): commit-gate/04 CI 线上全绿收口（run 35098093620）
