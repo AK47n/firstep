@@ -1,0 +1,14 @@
+修复：不可重试的校验失败不再留下整卷半成品与边车（工单 update-verify-failure-leftovers/01）
+
+B2 真机演练量出来的：清单与对端总长矛盾这类**不可重试**的校验失败，终态、话术、
+error_kind、锁与 pending 全对，盘上却留下整卷 3,961,701 字节 + 边车，与
+.scratch/resumable-download/spec.md 第 147 行「校验失败时一并删除」不符（线上完整包
+765 MB/卷，失败后白占一份整卷）。
+
+修法落在任务层共享原语 task_download.download_and_verify：新增纯谓词
+is_terminal_verify = error_kind == "verify" 且不可重试 → clear_partial（半成品 + 边车）；
+其余（网络、取消、可重试的内容不符）维持「留断点」。判据只消费下载域既有两个单源函数，
+不列举异常类型（新增的终态 verify 错误会自动落进来）。
+
+守卫：单测四格（不可重试 verify 清光 / 可重试 verify 留边车 / 网络留断点 / 取消留断点）+
+判据强度探针 3/3 转红（一律不清、一律清、判据只看 error_kind）。聚焦 59 passed。

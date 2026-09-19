@@ -1,0 +1,30 @@
+# 03 — `library/revise-backups/**` 移出 git 索引（与 `fix-backups` 对齐）
+
+**要做什么：** 让本机的库修订备份不再进仓库、也不再进任何发布清单。用户可观察的结果：
+小发版更新包不再夹带开发者机器上的库备份（实测 1481 个文件）；`git clone` / `git status`
+不再被这批与本产品无关的东西污染。
+
+**被谁阻塞：** 无（可与 01 并行；但同批提交时放在 01 之后更清楚）。
+
+**状态：** ready-for-agent
+
+## 背景
+
+`library/fix-backups/` 早在 `.gitignore` 里（注释写着「fix-errors 运行产物：真机修复的备份目录
+（输出目录外，可回滚；不入库）」），而**同族的 `library/revise-backups/` 没被忽略**——
+2026-09-12 库自动提交（`e2e2b04e`）把 1481 个备份文件带进了索引，随后它们就随小发版包
+发到了每个用户盘上（本目录工单 01 修的就是「小发版多发」这一半；本单修的是仓库这一半）。
+
+## 验收标准
+
+- [ ] `.gitignore` 增加 `library/revise-backups/`，注释与既有 `library/fix-backups/` 那行同款
+      （说明「本机库备份，可回滚，不入库」）
+- [ ] `git rm -r --cached library/revise-backups` 执行并提交；**盘上文件一个不删**
+      （提交前记下文件数、提交后复核盘上文件数与 sha256 抽样未变）
+- [ ] `git status --porcelain` 之后是干净的（被忽略的文件不该以 untracked 形态冒出来）
+- [ ] 运行时行为零变化：`src/contest_generator/revision.py` 的备份读写只碰盘上目录，
+      与 git 索引无关；`python -m pytest tests/test_revision.py -q` 全绿
+- [ ] 库里其它扫描类测试全绿（`tests/test_library_invariants.py` / `tests/test_wordlist.py` /
+      `tests/test_reference_library.py` 的库根扫描不把备份目录当内容）
+- [ ] 工单里记一笔：这次 `git rm --cached` 之后，**老用户盘上已经收到的**那 1481 个备份文件
+      由工单 02 的累计删除清单清掉（两件事合起来才算闭环）

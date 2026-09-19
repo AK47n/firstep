@@ -21,6 +21,10 @@ import pytest
 from contest_generator import download_resume
 from contest_generator.download_resume import (
     DownloadCancelledError,
+    DownloadContentMismatchError,
+    DownloadLocalCorruptError,
+    DownloadRangeNotSatisfiableError,
+    DownloadSizeMismatchError,
     DownloadVerifyError,
     resumable_download,
 )
@@ -174,6 +178,70 @@ def test_cancelled_failure_writes_no_sidecar(tmp_path: Path) -> None:
 
     assert dest.is_file(), "取消也留着半成品"
     assert not download_resume.read_partial_marker(dest), "取消不写边车"
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        DownloadSizeMismatchError(
+            "发布信息不一致：清单说 1048576 字节，服务器说 3961701 字节"),
+        DownloadRangeNotSatisfiableError("服务器回了 416（本地记录与远端对不上）"),
+        DownloadLocalCorruptError("本地落盘文件来路不对"),
+    ],
+    ids=["size-mismatch", "range-not-satisfiable", "local-corrupt"],
+)
+def test_nonretryable_verify_failure_clears_partial_and_sidecar(
+    tmp_path: Path, error: Exception
+) -> None:
+    """**不可重试的校验失败** → 半成品与边车一起清掉（重下也不会有变化）。
+
+    这条分界是 B2 真机演练量出来的（工单 `update-verify-failure-leftovers/01`）：
+    失败态的终态、话术、`error_kind`、锁与 pending 全对，**盘上却留着整卷半成品**
+    （实测 3,961,701 字节 + 边车），与 `.scratch/resumable-download/spec.md` 第 147 行
+    「成功 / 校验失败时一并删除边车与半成品」不符——线上完整包 765 MB/卷，
+    用户看到「失败」之后白占一份整卷。
+
+    参数化覆盖这三支（都在下载域的「重试必然同样结果」表里、都归 `verify`）：
+    清单与对端矛盾、416 补救用尽、本地那份来路不对（后者按当前实现不可达，
+    但它是这张表的成员，成员变动时这条会提醒）。
+    """
+    dest = tmp_path / "full" / "part.zip"
+    dest.parent.mkdir(parents=True)
+    part = _Part("part.zip", "http://x/part.zip", len(PAYLOAD), _sha(PAYLOAD))
+
+    def boom(url, target, on_progress, **kwargs):  # noqa: ANN001, ANN003
+        target.write_bytes(PAYLOAD)                 # 整卷落了盘才判出「发布物不一致」
+        on_progress(len(PAYLOAD))
+        raise error
+
+    with pytest.raises(type(error)):
+        _call(part, dest, boom)
+
+    assert not dest.exists(), "不可重试的校验失败要连半成品一起清（不留孤儿）"
+    assert not download_resume.read_partial_marker(dest), "边车也要一起清"
+    assert part.ok is False, "失败不算 ok"
+
+
+def test_retryable_verify_failure_keeps_the_sidecar(tmp_path: Path) -> None:
+    """**可重试**的 verify（内容与清单不符）维持现状：边车照写。
+
+    边界判据（与上一条成对）：这一支的语义是「删掉半成品、退避重试、从 0 重来」，
+    边车是下一轮 / 下一个进程判「这份还能不能接着用」的依据。把它们一起清掉，
+    就是「一刀切全删」——那是另一半的错误。
+    """
+    dest = tmp_path / "full" / "part.zip"
+    dest.parent.mkdir(parents=True)
+    part = _Part("part.zip", "http://x/part.zip", len(PAYLOAD), _sha(PAYLOAD))
+
+    def boom(url, target, on_progress, **kwargs):  # noqa: ANN001, ANN003
+        raise DownloadContentMismatchError("下载内容与清单不符（122880 字节），已删除重下")
+
+    with pytest.raises(DownloadContentMismatchError):
+        _call(part, dest, boom)
+
+    assert download_resume.read_partial_marker(dest), (
+        "可重试的内容不符要留边车（它会走退避重试，边车是下一轮的判据）"
+    )
 
 
 def test_verify_failure_clears_everything_and_raises_domain_error(tmp_path: Path) -> None:

@@ -87,6 +87,23 @@ class PartLike(Protocol):
     downloaded_bytes: int
 
 
+def is_terminal_verify(exc: BaseException) -> bool:
+    """这次失败是不是**不可重试的校验失败**（＝「重下也不会有变化」那一支）。
+
+    为什么要有这个名字（而不是把两个条件内联在 `except` 里）：这是任务层的一条**分界**
+    ——「半成品留着当断点」还是「连半成品一起清掉」——而它必须能被守卫指名。
+    两个判据本身仍然只有下载域那一份（`error_kind` / `is_retryable`），这里不新增表。
+
+    **为什么不写成 `isinstance(exc, …)` 列举**：分类单源在下载域；
+    列类型名就等于在任务层再抄一份成员表，新增一支（例如「连续多次内容不符」那条终态错误）
+    时两边会脱节。本函数只消费那两个纯函数。
+
+    取消**不算**（调用方先判掉了它）：取消是「我下次还要接着下」，不是终态。
+    """
+    return (download_resume.error_kind(exc) == "verify"
+            and not download_resume.is_retryable(exc))
+
+
 def download_and_verify(
     part: PartLike,
     dest: Path,
@@ -115,6 +132,10 @@ def download_and_verify(
       摘要如实写「从多少接着下」；
     - **下载异常 → 半成品留着**（它就是断点），并把边车写出来——好让**换一次进程**
       也知道这份还能不能接着用；取消不算失败，不写边车；
+    - **例外：不可重试的校验失败**（清单与对端矛盾 / 416 补救用尽 / 本地那份来路不对）
+      → 连半成品与边车一起清掉（重下也不会有变化），判据 `is_terminal_verify`
+      取下载域的 `error_kind` / `is_retryable` 单源；真机实测过「一律留断点」的代价：
+      失败态之后盘上留着整卷 3,961,701 字节（线上完整包 765 MB/卷）；
     - **校验失败 → 清掉半成品与边车**（重下也不会有变化），抛下载域的
       `DownloadVerifyError`，好让 `error_kind` 仍是**单源**。
     """
@@ -147,8 +168,16 @@ def download_and_verify(
                           expected_sha256=part.sha256)
         except Exception as exc:
             if not isinstance(exc, DownloadCancelledError):
-                # 失败：半成品是断点，留着；边车（谁留下的、期望多大）一并写出。
-                download_resume.write_partial_marker(dest, part.url, part.size)
+                if is_terminal_verify(exc):
+                    # **不可重试的校验失败**（清单与对端矛盾 / 416 补救用尽 / 本地那份
+                    # 来路不对）：重下也不会有变化 → 整份清掉（半成品 + 边车），不留孤儿。
+                    # spec `.scratch/resumable-download/spec.md` 第 147 行就是这么写的，
+                    # 而改动前这里一律「留着当断点」——真机实测留下整卷 3,961,701 字节
+                    # （线上完整包 765 MB/卷，用户看到「失败」之后白占一份整卷）。
+                    download_resume.clear_partial(dest)
+                else:
+                    # 失败：半成品是断点，留着；边车（谁留下的、期望多大）一并写出。
+                    download_resume.write_partial_marker(dest, part.url, part.size)
             raise
         # 缺省下载器已经把整卷算过哈希了（`DownloadResult.sha256`），不必再读一遍盘；
         # 注入的下载器返回裸 sha 字符串（甚至什么都不返回）→ 读盘自己算，

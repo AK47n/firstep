@@ -1,7 +1,7 @@
 # 01 — 决策单：持久「内容与清单不符」会**永远重试**（无终态、每轮整卷重下）
 
 **Type:** task
-**Status:** open
+**Status:** resolved（2026-09-19：**选 1 —— 连续 N 次转终态，N = 5**）
 **发现于：** 沙箱真机演练 B2 场景四（`sandbox-drill/02`，2026-09-18），脚本 `.scratch/verify-gate-drills/drill-02-degraded.py --only content-mismatch`
 **证据：** `.scratch/verify-gate-drills/verify-02-degraded.txt` / `.json`（`scenarios.content-mismatch`）
 
@@ -46,6 +46,16 @@ verify 分支：416 持久 / 清单 size 与对端矛盾，见 B2 场景三，�
 
 倾向 1（与「网络故障无上限」区分开：网络是**瞬时**的，内容不符可能是**持久**的——这是两类不同的
 不确定性，不该共用同一个无上限策略）。
+
+## 拍板（2026-09-19，澄清一轮后）
+
+**选 1（加封顶），N = 5。** 理由与代价写进 `.scratch/update-content-mismatch-retry-cap/spec.md`：
+网络是**瞬时**不确定性（重试有救），内容不符是**持久**不确定性（重试改变不了服务器上那份字节），
+两类不该共用同一条无上限策略；备选 2（只加可见性）把判断留给用户但流量照烧，
+备选 3（维持现状）与 spec 第 177 行那句「重下不会有变化」的承诺直接冲突。
+
+实施单：`02-implement-retry-cap.md`。真机判据：`drill-02-degraded.py --only content-mismatch`
+的 `terminal_reached == true`。
 
 ## 验收（任一修法落地后）
 

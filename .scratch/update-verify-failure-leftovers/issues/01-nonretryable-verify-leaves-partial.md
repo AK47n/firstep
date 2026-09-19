@@ -1,57 +1,64 @@
-# 01 — 不可重试的校验失败（发布信息不一致）留下**整卷半成品 + 边车**
+# 01 — 不可重试的校验失败：清掉整卷半成品与边车（不留孤儿）
 
-**Type:** task
-**Status:** open
-**发现于：** 沙箱真机演练 B2 场景三（`sandbox-drill/02`，2026-09-18）
-**证据：** `.scratch/verify-gate-drills/verify-02-degraded.txt`（含 `verify-02-degraded.json` 的
-`scenarios.verify-size` 与文末「修订与更正」第 2 节）；原始产物量在
-`%TEMP%\fe02-20260918-231212\drill-updates-archive\full-231339\`
+**要做什么：** 任务层拿到下载域异常时，先问一次既有分类——`error_kind == "verify"` 且
+**不可重试** → 这份重下也不会有变化 → 清掉半成品与边车；其余（网络、取消、可重试的内容不符）
+一律维持「留着当断点」。用户可观察的结果：撞上「发布物与清单不一致」而失败之后，
+`updates/full/` 是空的，不再白占一整卷（线上完整包 ~765 MB）。
 
-## 现象（真机实测）
+**被谁阻塞：** 无——spec 已拍板（`.scratch/update-verify-failure-leftovers/spec.md`）。
 
-fixture：清单把这个卷声明成 **1 MiB**，服务器照真载荷（3,961,701 B）发 —— 客户端一读响应头就判
-「发布物与清单不一致」，按 spec 第 125 行这是**不可重试**的 verify 失败。产品行为：
+**状态：** resolved（2026-09-19）
 
-| 判据 | 实测 |
+**完成记录。** 修法按 spec 落地在**任务层共享原语**（`src/contest_generator/task_download.py`，
+两条链路共用，故只改一处）：
+
+- 新增纯谓词 `is_terminal_verify(exc)` = `error_kind(exc) == "verify" and not is_retryable(exc)`
+  ——**不列举异常类型**（那等于在任务层再抄一份成员表），只消费下载域既有两个单源判据，
+  于是后续新增的终态 verify 错误（见 `update-content-mismatch-retry-cap/02`）自动落进来；
+- 异常路径改成：终态 verify → `clear_partial(dest)`（半成品 + 边车）；其余 → 写边车（断点）；
+  取消路径与「长度到点 → 本地哈希不符」那条既有清理路径**一个字没动**；
+- 顺带把 `download_and_verify` 的规则清单 docstring 补上这条例外（免得下一个读码的人
+  以为「一律留断点」是全部）。
+
+**判据强度探针 3/3 转红**（`.scratch/update-verify-failure-leftovers/verify-01-guard-strength.{txt,json}`）：
+
+| 注入 | 结果 |
 |---|---|
-| 终态 | ✅ `failed`（**不重试**，retry_count=0） |
-| 错误话术 | ✅ 中文、指明不一致：`下载失败（卷 firstep-full-v1.2.1.zip）：发布信息不一致：清单说 1048576 字节，服务器说 3961701 字节` |
-| `error_kind` | ✅ `verify` |
-| `updating.lock` / `pending-update.json` | ✅ 都没留下 |
-| 旧版本 | ✅ 服务还在、版本没变、工具根 `VERSIONS.md` 逐字节未变 |
-| **`updates/full/` 里的残留** | ❌ **整卷 3,961,701 字节的 `firstep-full-v1.2.1.zip` + 边车 73 字节**（`{"url": ".../p?mode=stable", "expected_size": 1048576}`） |
+| ① 一律不清（回到改动前） | 转红 ✓（3 failed） |
+| ② 一律清（连网络失败的断点也删） | 转红 ✓（2 failed） |
+| ③ 判据换成「只看 error_kind」（可重试的内容不符也判终态） | 转红 ✓（1 failed） |
 
-## 期望（spec 明文）
+复原复核：`task_download.py` sha256 未变。聚焦测试：`test_task_download.py` /
+`test_download_sequence_home.py` / `test_download_status_surface.py` 共 **59 passed**。
 
-`.scratch/resumable-download/spec.md` 第 147 行：
+真机复跑单独一张单（`02-real-machine-and-ledger.md`，需要先把修好的源码放进沙箱）。
 
-> 成功 / **校验失败**时**一并删除边车与半成品**，不留孤儿。
+## 背景（真机原始证据）
 
-这条失败 `error_kind="verify"`（属于「校验失败」那支），却把整卷半成品与边车都留下了。
+演练 B2 场景三（`drill-02-degraded.py --only verify-size`，fixture 把卷声明成 1 MiB、
+服务器照真载荷 3,961,701 B 发）：终态 `failed`、不重试、中文话术与 `error_kind=verify` 都对，
+`updating.lock` / `pending-update.json` 都没留下，旧版本照常可用——**只有盘面不对**：
+`updates/full/` 里留着整卷 3,961,701 字节 + 边车 73 字节，与
+`.scratch/resumable-download/spec.md` 第 147 行「成功 / 校验失败时一并删除边车与半成品」不符。
 
-## 影响（不夸大，但要说清代价）
+## 验收标准
 
-- **磁盘**：线上完整包 765 MB/卷 → 用户看到「失败」之后，`updates\full\` 里白占 **~765 MB**；
-  一个磁盘不宽裕的机器上，这会直接影响他能不能重下（`full/apply` 的磁盘预检正是拿这附近的余量算的）。
-- **可自愈**：下次点重试时，本地那份（长度 > 清单声明）会让下载器收到 `416` → `_attempt`
-  就地 `clear_partial` 后从 0 重来（工单 08 的处置），所以不会永久坏；但**用户不点重试就一直在**。
-- **与「失败要留断点」的边界**：可重试的网络失败**必须**留半成品（那是断点，spec 第 145 行）。
-  本单要清的只有**不可重试**那一支——两者不能混（混了就会把断点删掉，退回到工单 08 之前的行为）。
-
-## 建议修法（一个可能的缝）
-
-任务层失败分支（`task_download.download_and_verify` 的异常路径 / 两链路的 `_download_one`）
-按 `download_resume.error_kind(exc) == "verify" and not download_resume.is_retryable(exc)`
-清掉 `dest` 与边车；`verify` 但**可重试**（内容不符，见决策单
-`update-content-mismatch-retry-cap/01`）保持现状（它每轮自己会清）。
-判据单源已经在 `download_resume`（`is_retryable` / `error_kind`），不要在任务层另写一张表。
-
-## 验收
-
-```
-python .scratch/verify-gate-drills/drill-02-degraded.py --only verify-size
-```
-
-期望：`.json` 的 `scenarios.verify-size.checks` 里 **「半成品被清」「边车被清」都成立**，
-且 `updates/full/` 目录为空；同时**不能**把网络失败那一支的断点删掉
-（`--only cut-retry` 的「成功后边车已清 / 失败态留边车」两条仍要成立）。
+- [x] 任务层共享原语（`.scratch/resumable-download` 那支 `download_and_verify`）的异常路径：
+      非取消异常下先判 `error_kind(exc) == "verify" and not is_retryable(exc)` →
+      `clear_partial(dest)`（半成品 + 边车一起），否则写边车；判据只用下载域既有两个纯函数，
+      **不新增第三张表**、不解析文案（谓词 `is_terminal_verify`）
+- [x] 取消路径**不动**（半成品保留、不写额外边车）；「长度到点 → 本地算出的哈希不符」那条
+      既有清理路径不动
+- [x] 单测（`tests/test_task_download.py` 同族加格，注入假下载器）四格：
+      不可重试 verify → **文件没了、边车没了**；可重试 verify（内容不符）→ 保持现状；
+      截断（网络）→ **文件在、边车在**；取消 → 文件在、边车在
+- [x] 反向注入探针（`.scratch/update-verify-failure-leftovers/probe-guard-strength.py`）：
+      「一律不清」（回到改动前）与「一律清」（连断点也删）两处注入**都必须转红**；
+      跑完复原并复核 sha256，探针输出落 `.txt`/`.json`（实测 3/3 转红、复原未变）
+- [ ] 真机复跑：`run-real-machine.py`（drill-02 零改动；把修好的源码放进沙箱＝用户机上那代代码，
+      这一步在证据里显式记账）→ `--only verify-size` 该格 `checks` 全为真、判红 0、
+      `updates/full/` 为空；`--only cut-retry` 的「失败态留边车 / 成功后边车已清」仍成立
+      → **移交工单 02**（真机是沙箱面的事，与本单的代码修复分开记账）
+- [x] 既有守卫全绿：`tests/test_download_status_surface.py`（12 键契约与 `error_kind` 单源）、
+      `tests/test_download_sequence_home.py`、`tests/test_full_task.py`、`tests/test_materials_task.py`
+      → 聚焦四文件实测 59 passed；全套在工单 04 收口时跑一次
