@@ -6,17 +6,17 @@
 [注入] ① 一律不清（回到改动前：不可重试的校验失败也留半成品与边车）
   文件：src/contest_generator/task_download.py
   测试：tests/test_task_download.py
-  结果：转红 ✓ —— 3 failed, 20 passed in 13.88s
+  结果：转红 ✓ —— 4 failed, 20 passed in 0.80s
 ------------------------------------------------------------------------------
 [注入] ② 一律清（过度修正：连网络失败的断点也删掉）
   文件：src/contest_generator/task_download.py
   测试：tests/test_task_download.py
-  结果：转红 ✓ —— 2 failed, 21 passed in 0.75s
+  结果：转红 ✓ —— 2 failed, 22 passed in 0.76s
 ------------------------------------------------------------------------------
 [注入] ③ 分类判据被换成「只看 error_kind」（把可重试的内容不符也判成终态）
   文件：src/contest_generator/task_download.py
   测试：tests/test_task_download.py
-  结果：转红 ✓ —— 1 failed, 22 passed in 0.73s
+  结果：转红 ✓ —— 1 failed, 23 passed in 0.75s
 
 ------------------------------------------------------------------------------
 ## 复原复核

@@ -11,9 +11,13 @@
   并返回自称成功的 SHA256，用户侧看到的是「100% → 校验失败 → 从头再来」；
 - **瞬时失败自动重试**：次数无上限，退避 2→4→8→16→32→60 秒封顶；每次重试经 `before_retry`
   如实上报；`cancel` 置位后**不再发起下一次尝试**，退避等待期间也能立刻中断；
-- **不可重试的只有两种**：清单与服务器总长互相矛盾（发布物不一致）、
-  服务器明确说没有/不给（HTTP 404/403 这类 4xx）。这两种直报中文错误，不进重试循环
-  ——否则就是死循环。
+- **持久的内容不符会收敛**（决策单 `update-content-mismatch-retry-cap/01`，N=5）：
+  同一卷**连续** 5 次「下完但内容与清单不符」⇒ 判为持久故障，抛
+  `DownloadContentMismatchPersistentError` 转终态（中文说清「重下不会有变化」）。
+  前 4 次仍走「删半成品 + 退避重试」；网络类失败**不受**这条影响（仍然无上限）；
+- **不可重试的只有三种**：清单与服务器总长互相矛盾（发布物不一致）、
+  服务器明确说没有/不给（HTTP 404/403 这类 4xx）、连续多次内容不符（上面那条）。
+  这几种直报中文错误，不进重试循环——否则就是死循环。
   > 工单 08 更正**第三条**：原文写「本地文件比远端大（本地坏）」也不可重试，实测是错的——
   > 它清了却没人重下，等于把那一卷判死。现在它与 `416`、内容不符一起归「删掉从 0 重下」。
 
@@ -25,6 +29,7 @@
     层级        下载错误
     ├─ DownloadTruncatedError       传输被截断 —— 可重试，半成品保留
     ├─ DownloadContentMismatchError 下完但内容与清单不符 —— 可重试，清掉从 0 重下
+    ├─ DownloadContentMismatchPersistentError 同上但**连续多次** —— 不可重试（终态）
     ├─ DownloadSizeMismatchError    发布物与清单不一致 —— 不可重试
     ├─ DownloadLocalCorruptError    本地文件来路不对 —— 不可重试（⚠️ 工单 08 起无人抛，见其 docstring）
     └─ DownloadCancelledError       用户取消 —— 不算失败，任务转 cancelled
@@ -103,6 +108,21 @@ class DownloadSizeMismatchError(DownloadError):
     """清单与服务器的总长互相矛盾（**不可重试**：重试必然同样结果）。"""
 
 
+class DownloadContentMismatchPersistentError(DownloadError):
+    """同一卷**连续多次**下完却与清单 sha256 不符（**终态**：重下不会有变化）。
+
+    为什么要有这一支（决策单 `update-content-mismatch-retry-cap/01` 选 1，N=5）：
+    `DownloadContentMismatchError` 可重试是对的（服务器上那份可能只是偶发坏了一次），
+    但**持久**的内容不符永远收敛不了——真机 150 秒观察窗内 6 次重试、每轮整卷重下、
+    退避封顶 60 秒 ⇒ 线上完整包 765 MB/卷、约 45 GB/小时量级，而且永远进不了失败态，
+    spec 第 177 行承诺的那句「重下不会有变化」一次都不会出现。
+    网络是**瞬时**不确定性（重试有救），内容不符可能是**持久**的——两类不该共用同一条
+    无上限策略，故这里给持久那一类一个终态。
+
+    归 `error_kind="verify"`：归因仍是内容（别说「网络问题、会自动重连」）。
+    """
+
+
 class DownloadLocalCorruptError(DownloadError):
     """本地落盘文件来路不对（**不可重试**）。
 
@@ -133,7 +153,14 @@ _NOT_RETRYABLE = (
     DownloadSizeMismatchError,
     DownloadLocalCorruptError,
     DownloadRangeNotSatisfiableError,
+    DownloadContentMismatchPersistentError,
 )
+
+# 同一卷「下完但内容与清单不符」连续多少次之后判为**持久**故障、转终态
+# （决策单 update-content-mismatch-retry-cap/01：N=5）。
+# 为什么是 5：退避 2+4+8+16 = 30 秒，加起来仍在本仓演练的 150 秒观察窗内一定收敛；
+# 同时对「偶发坏一次」留了足够余量（连续 5 次都坏基本可以断定是持久故障）。
+MAX_CONTENT_MISMATCH_ATTEMPTS = 5
 
 
 @dataclass
@@ -220,6 +247,9 @@ def describe_network_error(exc: BaseException) -> str:
     if isinstance(exc, DownloadContentMismatchError):
         # 归因是**内容**不是网络：别说「重连接着下」（实际动作是整卷重下）
         return f"{exc}，会重新下载整卷"
+    if isinstance(exc, DownloadContentMismatchPersistentError):
+        # 终态那一支：**不能**再承诺「会重新下载整卷」（那正是它被判定为持久故障的原因）
+        return str(exc)
     if isinstance(exc, DownloadTruncatedError):
         return f"{exc}，会自动重连接着下"
     if isinstance(exc, urllib.error.HTTPError):
@@ -265,7 +295,8 @@ def error_kind(exc: BaseException) -> str:
         return "cancelled"
     if isinstance(exc, (DownloadSizeMismatchError, DownloadLocalCorruptError,
                         DownloadRangeNotSatisfiableError,
-                        DownloadContentMismatchError, DownloadVerifyError)):
+                        DownloadContentMismatchError, DownloadVerifyError,
+                        DownloadContentMismatchPersistentError)):
         return "verify"
     return "network"
 
@@ -339,6 +370,7 @@ def resumable_download(
     min_resume_bytes: int = MIN_RESUME_BYTES,
     timeout: float = SOCKET_TIMEOUT_SECONDS,
     max_attempts: int | None = None,
+    max_content_mismatch: int = MAX_CONTENT_MISMATCH_ATTEMPTS,
     opener: Callable[[Any, float], Any] | None = None,
     on_start: Callable[[int], None] | None = None,
     before_attempt: Callable[[], None] | None = None,
@@ -362,6 +394,10 @@ def resumable_download(
       在 `on_start` 里关会把窗口压成 0 宽。异常不外抛。
     - `max_attempts`：**缺省 None = 无上限**（产品口径：网络故障要自己扛到成功）。
       只有给测试用的假服务器写「永远截断」的剧本时才需要它，真机上不必设。
+    - `max_content_mismatch`：同一卷**连续**多少次「下完但内容与清单不符」之后转终态
+      （缺省 `MAX_CONTENT_MISMATCH_ATTEMPTS`）。同样只有测试假剧本才需要覆盖它——
+      产品侧没有开关，要调就改那个常量与它的守卫。数字是**连续**口径：中途来一次别的
+      错误（截断 / 超时）就清零。
     - `opener`：注入用（测试）；缺省走 `urllib.request.urlopen`。
     """
     dest = Path(dest)
@@ -405,6 +441,9 @@ def resumable_download(
     # 现在**清掉这一步就地做了**（见下面内容不符那条：clear 之后才抛），旗标再没人置真，
     # 成了死代码——已删。留着它比删掉更危险：它看着像「有机制在管这件事」，实际不会执行。
     forced_restart = _RestartFlag()
+    # 「同一卷连续几次下完但内容不符」——**连续**计数：中途来一次别的错误就清零
+    # （累计口径会把「偶发坏一次、断一次线、又偶发坏一次」的服务器判死，那是过度修正）。
+    content_mismatch_streak = 0
     while True:
         if cancel is not None and cancel.is_set():
             write_partial_marker(dest, url, expected)
@@ -449,6 +488,22 @@ def resumable_download(
                 # 不可重试：不调 before_retry（它语义是「即将重试」），
                 # 但它自称的处置要落地——见 _attempt 里 clear_partial 的调用点。
                 raise
+            if isinstance(exc, DownloadContentMismatchError):
+                # 持久内容不符的封顶（决策单 update-content-mismatch-retry-cap/01）。
+                # 为什么在这里而不是在任务层：这是**下载策略**的一部分（重试到哪里为止），
+                # 与「半成品留不留」那条任务层策略分开；两条链路于是自动同时生效。
+                content_mismatch_streak += 1
+                if content_mismatch_streak >= max_content_mismatch:
+                    # 该收手了：连续 N 次整卷重下都对不上 ⇒ 不是瞬时故障。
+                    # 不调 before_retry（不承诺还会重试）、也不写边车（这份数据没有价值），
+                    # 半成品已在上面的 clear_partial 里清掉；任务层会按
+                    # `is_terminal_verify` 把边车一并清干净。
+                    raise DownloadContentMismatchPersistentError(
+                        f"连续 {content_mismatch_streak} 次整卷重下后内容仍与清单不符，"
+                        "重下不会有变化（可稍后再试，或把这一卷反馈给发布者）"
+                    ) from exc
+            else:
+                content_mismatch_streak = 0
             # 失败也补写一次边车（开跑时已经写过；这里是**兜底**：中途被别处删掉、
             # 或这段代码将来被挪动时，失败路径仍然留得下「这份是谁的」）。
             # 写在重试循环里而不是只在「重试用尽」分支：产品的重试是**无上限**的，

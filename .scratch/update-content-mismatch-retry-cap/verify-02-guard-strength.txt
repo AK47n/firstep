@@ -1,0 +1,7 @@
+# 判据强度探针：「连续 N 次内容不符转终态」（工单 update-content-mismatch-retry-cap/02）
+  仓库：C:\Users\luoji\Desktop\firstep
+  判据：**每一条注入都必须转红**（有绿的 = 那条守卫是摆设）
+
+------------------------------------------------------------------------------
+[注入] ① 去掉封顶（回到改动前：内容不符永远重试）
+  文件：src/contest_generator/download_resume.py

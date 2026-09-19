@@ -21,6 +21,7 @@ import pytest
 from contest_generator import download_resume as _dr
 from contest_generator.download_resume import (
     DownloadCancelledError,
+    DownloadContentMismatchPersistentError,
     DownloadLocalCorruptError,
     DownloadRangeNotSatisfiableError,
     DownloadResult,
@@ -549,6 +550,93 @@ def test_content_mismatch_is_retried_from_zero(dest: Path, monkeypatch) -> None:
     assert error_kind(DownloadContentMismatchError("x")) == "verify"
     assert "重新下载整卷" in describe_network_error(DownloadContentMismatchError("内容不对"))
     assert not marker_for(dest).is_file()
+
+class _ScriptedServer:
+    """按剧本逐次回应的假服务器（每次都是 200 整份，够本单用）。
+
+    剧本取值：`corrupt` = 长度对、内容被改坏；`truncate` = 声明整段却只发一半；
+    `ok` = 正确载荷。**不做 Range**：与本单的调用点一起把 `min_resume_bytes` 提到
+    比载荷还大，任何一轮都从 0 重写，剧本因此与「第几次请求」一一对应。
+    """
+
+    def __init__(self, script: list[str]) -> None:
+        self.script = script
+        self.n_requests = 0
+
+    def __call__(self, request, timeout):  # noqa: ANN001
+        index = min(self.n_requests, len(self.script) - 1)
+        self.n_requests += 1
+        kind = self.script[index]
+        if kind == "corrupt":
+            body = b"\xaa" * len(PAYLOAD)
+        elif kind == "truncate":
+            body = PAYLOAD[: len(PAYLOAD) // 2]
+        else:
+            body = PAYLOAD
+        return _FakeResponse(
+            200,
+            {"Content-Length": str(len(PAYLOAD)), "Accept-Ranges": "bytes"},
+            body,
+        )
+
+
+HUGE_RESUME_BYTES = 10 ** 9      # 比载荷大 → 每一轮都从 0 整卷重写（剧本可数）
+
+
+def test_persistent_content_mismatch_turns_terminal_after_the_cap(
+    dest: Path, monkeypatch
+) -> None:
+    """每一轮都坏 → **连续 5 次之后转终态**（工单 `update-content-mismatch-retry-cap/02`）。
+
+    改之前：`DownloadContentMismatchError` 可重试且没有上限，真机 150 秒观察窗内 6 次重试、
+    每轮整卷重下、**永远进不了失败态**（线上完整包 765 MB/卷 ⇒ 约 45 GB/小时量级），
+    spec 第 177 行那句「重下不会有变化」的终态话术一次都不会出现。
+
+    `max_attempts=8` 是给**反向注入**留的收场：判据强度探针会把封顶去掉，那时这条用例
+    若没有别的上限就会无限重试（探针实测卡死）。8 > 5，所以封顶在时仍然先由封顶收场。
+    """
+    monkeypatch.setattr("contest_generator.download_resume.retry_delay", lambda n: 0.0)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    server = _ScriptedServer(["corrupt"])
+
+    with pytest.raises(DownloadContentMismatchPersistentError) as err:
+        resumable_download(
+            "https://x/p.zip", dest, lambda n: None, opener=server,
+            expected_size=len(PAYLOAD), expected_sha256=PAYLOAD_SHA,
+            min_resume_bytes=HUGE_RESUME_BYTES, max_attempts=8,
+        )
+
+    assert server.n_requests == 5, "连续到上限就该收手（不再每 60 秒重下一整卷）"
+    assert "重下不会有变化" in str(err.value), "终态话术要接上 spec 第 177 行那句承诺"
+    assert "稍后再试" in str(err.value), "还得给一条可行动作"
+    assert error_kind(err.value) == "verify", "归因仍是内容，不是网络"
+    assert not is_retryable(err.value), "终态 = 重试必然同样结果"
+    assert not marker_for(dest).is_file(), "终态不该留下边车"
+    assert not dest.is_file(), "终态不该留下半成品"
+
+
+def test_content_mismatch_cap_counts_consecutive_not_cumulative(
+    dest: Path, monkeypatch
+) -> None:
+    """连续 ≠ 累计：中途来一次**别的**错误就把计数清零，坏两次也不该被判死。
+
+    判据是「同一卷连续 N 次内容不符」——累计口径会把「偶发坏一次、中间断一次线、
+    又偶发坏一次」的服务器判死，那是过度修正。
+    """
+    monkeypatch.setattr("contest_generator.download_resume.retry_delay", lambda n: 0.0)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    server = _ScriptedServer(["corrupt", "truncate", "corrupt", "ok"])
+
+    result = resumable_download(
+        "https://x/p.zip", dest, lambda n: None, opener=server,
+        expected_size=len(PAYLOAD), expected_sha256=PAYLOAD_SHA,
+        min_resume_bytes=HUGE_RESUME_BYTES, max_content_mismatch=2,
+    )
+
+    assert result.sha256 == PAYLOAD_SHA
+    assert dest.read_bytes() == PAYLOAD
+    assert server.n_requests == 4, "第 4 轮就该成功（第 3 轮的坏不该被算成「连续第 2 次」）"
+
 
 def test_manifest_size_mismatch_is_not_retried(dest: Path) -> None:
     """清单说 A、服务器说 B = 发布物与清单不一致：直报，不进重试循环。

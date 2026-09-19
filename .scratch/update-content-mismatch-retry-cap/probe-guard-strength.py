@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
-"""判据强度探针：把「不可重试的校验失败要清干净」这条守卫弄坏，看它会不会红。
+"""判据强度探针：把「连续 N 次内容不符转终态」这条守卫弄坏，看它会不会红。
 
 为什么要它：「守卫全绿」本身不说明任何事——**把被测行为改坏、守卫必须转红**才算数
 （照 `.scratch/update-restart-stale-service/probe-guard-strength.py` 的先例）。
 
-两个方向都要注入，因为这条分界有两边，只注入一边等于只证明了一半：
+三处注入各代表一种退化方式：
 
-- ①「一律不清」= 改动前的行为（不可重试的校验失败也留半成品 + 边车）；
-- ②「一律清」= 过度修正（连网络失败的断点也删掉）。
+- ① **去掉封顶** = 回到改动前（永远重试、永远 downloading）；
+- ② **连续改累计** = 过度修正（偶发坏两次就被判死）；
+- ③ **把新错误从「不可重试」表里拿掉** = 分类脱节（终态错误却说自己可重试）。
 
 每一个用例：改坏一处 → 跑对应测试 → 记「红/绿」→ **无论结果如何都复原**
 （`finally` 里按原字节写回，并复核 sha256）。
@@ -16,8 +17,8 @@
 
 用法::
 
-    python .scratch/update-verify-failure-leftovers/probe-guard-strength.py
-    # 证据落 verify-01-guard-strength.txt / .json
+    python .scratch/update-content-mismatch-retry-cap/probe-guard-strength.py
+    # 证据落 verify-02-guard-strength.txt / .json
 """
 
 from __future__ import annotations
@@ -39,26 +40,26 @@ for _stream in (sys.stdout, sys.stderr):
 ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 
-TASK_DOWNLOAD = "src/contest_generator/task_download.py"
-TEST_FILE = "tests/test_task_download.py"
+DOWNLOAD_RESUME = "src/contest_generator/download_resume.py"
+TEST_FILES = ("tests/test_download_resume.py", "tests/test_task_download.py")
 
 #: (名字, 改前（必须唯一命中）, 改后)
 CASES: list[tuple[str, str, str]] = [
     (
-        "① 一律不清（回到改动前：不可重试的校验失败也留半成品与边车）",
-        "                if is_terminal_verify(exc):",
-        "                if False:  # noqa: SIM223 —— 注入：一律不清",
+        "① 去掉封顶（回到改动前：内容不符永远重试）",
+        "                if content_mismatch_streak >= max_content_mismatch:",
+        "                if False:  # noqa: SIM223 —— 注入：不再封顶",
     ),
     (
-        "② 一律清（过度修正：连网络失败的断点也删掉）",
-        "                if is_terminal_verify(exc):",
-        "                if True:  # 注入：一律清",
+        "② 连续改累计（中途别的错误不再清零）",
+        "            else:\n                content_mismatch_streak = 0",
+        "            else:\n                pass  # 注入：累计口径",
     ),
     (
-        "③ 分类判据被换成「只看 error_kind」（把可重试的内容不符也判成终态）",
-        '    return (download_resume.error_kind(exc) == "verify"\n'
-        "            and not download_resume.is_retryable(exc))",
-        '    return download_resume.error_kind(exc) == "verify"',
+        "③ 新错误从「不可重试」表里拿掉（终态错误却自称可重试）",
+        "    DownloadRangeNotSatisfiableError,\n"
+        "    DownloadContentMismatchPersistentError,\n)",
+        "    DownloadRangeNotSatisfiableError,\n)",
     ),
 ]
 
@@ -84,42 +85,48 @@ def sha256(relative: str) -> str:
 
 
 def run_tests() -> tuple[bool, str]:
-    proc = subprocess.run(
-        [sys.executable, "-m", "pytest", TEST_FILE, "-q", "-p", "no:cacheprovider"],
-        cwd=str(ROOT), capture_output=True, text=True,
-        encoding="utf-8", errors="replace", timeout=900,
-    )
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-m", "pytest", *TEST_FILES, "-q", "-p", "no:cacheprovider"],
+            cwd=str(ROOT), capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=300,
+        )
+    except subprocess.TimeoutExpired:
+        # 卡住 = 没被守卫干净地抓住（多半是「去掉上限之后用例自己停不下来」）。
+        # 按**失败**记：判据的可信度要求它是红，不是挂。
+        return False, "卡住（300 秒未返回）"
     tail = [line for line in proc.stdout.strip().splitlines() if line.strip()]
     return proc.returncode == 0, (tail[-1] if tail else "(无输出)")
 
 
 def main() -> int:
-    log("# 判据强度探针：「不可重试的校验失败不留半成品」（工单 update-verify-failure-leftovers/01）")
+    log("# 判据强度探针：「连续 N 次内容不符转终态」（工单 update-content-mismatch-retry-cap/02）")
     log(f"  仓库：{ROOT}")
     log("  判据：**每一条注入都必须转红**（有绿的 = 那条守卫是摆设）")
     log("")
 
-    baseline_sha = sha256(TASK_DOWNLOAD)
-
-    # 前置：源文件必须是**干净的**（所有锚点都在）。探针被强杀（工具超时 / Ctrl-C）时
-    # `finally` 跑不到，源文件会停在注入态——那时后面每条都报「锚点失效」，
-    # 看起来像探针写错了，其实是上一轮没复原。这一步把那种情况变成一句明确的拒绝。
-    pristine = read_text(TASK_DOWNLOAD)
+    # 前置：源文件必须是**干净的**（所有锚点都在）。
+    # 为什么要有这一步：探针自己被强杀（工具超时 / Ctrl-C）时 `finally` 跑不到，
+    # 源文件会停在注入态——那时后面每一条都会报「锚点失效」，看起来像探针写错了，
+    # 其实是上一轮没复原。这一步把那种情况变成一句明确的拒绝。
+    pristine = read_text(DOWNLOAD_RESUME)
     missing = [name for name, old, _new in CASES if pristine.count(old) != 1]
     if missing:
         log("**拒绝开跑**：源文件不是干净状态（可能上一轮探针被强杀、没来得及复原）。")
         for name in missing:
             log(f"  · 锚点不在：{name}")
-        log(f"  修法：`git checkout -- {TASK_DOWNLOAD}` 之后重跑本探针。")
+        log(f"  修法：`git checkout -- {DOWNLOAD_RESUME}` 之后重跑本探针。")
         RESULTS["preflight_missing"] = missing
         RESULTS["verdict"] = "FAIL"
         return 2
+
+    baseline_sha = sha256(DOWNLOAD_RESUME)
     weak: list[str] = []
     for name, old, new in CASES:
         log("-" * 78)
         log(f"[注入] {name}")
-        log(f"  文件：{TASK_DOWNLOAD}")
-        original = read_text(TASK_DOWNLOAD)
+        log(f"  文件：{DOWNLOAD_RESUME}")
+        original = read_text(DOWNLOAD_RESUME)
         hits = original.count(old)
         if hits != 1:
             log(f"  **锚点命中 {hits} 次（应为 1）——探针自己失效了，本条按失败记**")
@@ -128,12 +135,12 @@ def main() -> int:
                                      "turned_red": False, "weak": True})
             continue
         try:
-            write_text(TASK_DOWNLOAD, original.replace(old, new, 1))
+            write_text(DOWNLOAD_RESUME, original.replace(old, new, 1))
             green, summary = run_tests()
         finally:
-            write_text(TASK_DOWNLOAD, original)      # 无论结果如何都复原
+            write_text(DOWNLOAD_RESUME, original)    # 无论结果如何都复原
         turned_red = not green
-        log(f"  测试：{TEST_FILE}")
+        log(f"  测试：{'、'.join(TEST_FILES)}")
         log(f"  结果：{'转红 ✓' if turned_red else '**仍然全绿 ✗**'} —— {summary}")
         RESULTS["cases"].append({"name": name, "anchor_hits": hits,
                                  "turned_red": turned_red, "summary": summary,
@@ -144,11 +151,11 @@ def main() -> int:
     log("")
     log("-" * 78)
     log("## 复原复核")
-    after = sha256(TASK_DOWNLOAD)
-    log(f"  {TASK_DOWNLOAD} sha256 "
+    after = sha256(DOWNLOAD_RESUME)
+    log(f"  {DOWNLOAD_RESUME} sha256 "
         f"{'未变 ✓' if after == baseline_sha else f'**变了 ✗（{baseline_sha[:12]} → {after[:12]}）**'}")
     if after != baseline_sha:
-        weak.append(f"{TASK_DOWNLOAD} 未复原")
+        weak.append(f"{DOWNLOAD_RESUME} 未复原")
 
     log("")
     log("## 总判")
@@ -167,9 +174,9 @@ if __name__ == "__main__":
     try:
         code = main()
     finally:
-        (HERE / "verify-01-guard-strength.txt").write_text("\n".join(LINES) + "\n",
+        (HERE / "verify-02-guard-strength.txt").write_text("\n".join(LINES) + "\n",
                                                            encoding="utf-8")
-        (HERE / "verify-01-guard-strength.json").write_text(
+        (HERE / "verify-02-guard-strength.json").write_text(
             json.dumps(RESULTS, ensure_ascii=False, indent=2), encoding="utf-8")
-        print("\n证据已写：verify-01-guard-strength.txt / .json")
+        print("\n证据已写：verify-02-guard-strength.txt / .json")
     raise SystemExit(code)

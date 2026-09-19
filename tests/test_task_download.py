@@ -22,6 +22,7 @@ from contest_generator import download_resume
 from contest_generator.download_resume import (
     DownloadCancelledError,
     DownloadContentMismatchError,
+    DownloadContentMismatchPersistentError,
     DownloadLocalCorruptError,
     DownloadRangeNotSatisfiableError,
     DownloadSizeMismatchError,
@@ -30,6 +31,7 @@ from contest_generator.download_resume import (
 )
 from contest_generator.task_download import (
     download_and_verify,
+    is_terminal_verify,
     resolve_task_download,
     restore_snapshot_parts,
 )
@@ -242,6 +244,36 @@ def test_retryable_verify_failure_keeps_the_sidecar(tmp_path: Path) -> None:
     assert download_resume.read_partial_marker(dest), (
         "可重试的内容不符要留边车（它会走退避重试，边车是下一轮的判据）"
     )
+
+
+def test_persistent_content_mismatch_clears_leftovers_at_the_task_layer(
+    tmp_path: Path,
+) -> None:
+    """**接缝判据**：下载域判出的「连续多次内容不符」终态，到任务层也会被清干净。
+
+    两条修复各自正确、合起来仍可能留垃圾：清理规则（`is_terminal_verify`）不认这支新错误
+    的话，终态之后半成品 / 边车会留在盘上。这条钉的就是两者的接缝
+    （`update-verify-failure-leftovers/01` × `update-content-mismatch-retry-cap/02`）。
+    """
+    dest = tmp_path / "full" / "part.zip"
+    dest.parent.mkdir(parents=True)
+    part = _Part("part.zip", "http://x/part.zip", len(PAYLOAD), _sha(PAYLOAD))
+    error = DownloadContentMismatchPersistentError(
+        "连续 5 次整卷重下后内容仍与清单不符，重下不会有变化（可稍后再试）")
+
+    def boom(url, target, on_progress, **kwargs):  # noqa: ANN001, ANN003
+        target.write_bytes(PAYLOAD)                  # 整卷落了盘才判出内容不符
+        on_progress(len(PAYLOAD))
+        raise error
+
+    with pytest.raises(DownloadContentMismatchPersistentError):
+        _call(part, dest, boom)
+
+    assert is_terminal_verify(error) is True, (
+        "新终态错误必须被任务层的清理谓词认下（否则两条修复的接缝会漏）"
+    )
+    assert not dest.exists(), "终态之后不该留下半成品"
+    assert not download_resume.read_partial_marker(dest), "终态之后不该留下边车"
 
 
 def test_verify_failure_clears_everything_and_raises_domain_error(tmp_path: Path) -> None:

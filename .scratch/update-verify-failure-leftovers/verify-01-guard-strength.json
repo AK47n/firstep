@@ -4,21 +4,21 @@
       "name": "① 一律不清（回到改动前：不可重试的校验失败也留半成品与边车）",
       "anchor_hits": 1,
       "turned_red": true,
-      "summary": "3 failed, 20 passed in 13.88s",
+      "summary": "4 failed, 20 passed in 0.80s",
       "weak": false
     },
     {
       "name": "② 一律清（过度修正：连网络失败的断点也删掉）",
       "anchor_hits": 1,
       "turned_red": true,
-      "summary": "2 failed, 21 passed in 0.75s",
+      "summary": "2 failed, 22 passed in 0.76s",
       "weak": false
     },
     {
       "name": "③ 分类判据被换成「只看 error_kind」（把可重试的内容不符也判成终态）",
       "anchor_hits": 1,
       "turned_red": true,
-      "summary": "1 failed, 22 passed in 0.73s",
+      "summary": "1 failed, 23 passed in 0.75s",
       "weak": false
     }
   ],

@@ -8,7 +8,37 @@
 **被谁阻塞：** 无（与本目录工单 01 的决策单无关；与 `update-verify-failure-leftovers/01`
 的清理规则天然相容——本单新增的终态错误同样归 `verify` 且不可重试，会自动落进那条清理）。
 
-**状态：** ready-for-agent
+**状态：** resolved（2026-09-19，代码与守卫部分；真机复跑见下）
+
+**完成记录。** 落地在下载域（两条链路自动同时生效）：
+
+- 新终态错误 `DownloadContentMismatchPersistentError`：进 `_NOT_RETRYABLE`、`error_kind="verify"`、
+  `describe_network_error` 原样返回它自己的中文文案（**不再**承诺「会重新下载整卷」）；
+- 模块级常量 `MAX_CONTENT_MISMATCH_ATTEMPTS = 5`；重试循环里**连续**计数
+  （中途别的错误清零），到上限即抛终态（不调 `before_retry`、不写边车）；前 4 次行为逐字不变；
+- 新关键字参数 `max_content_mismatch`（**只有测试假剧本才需要覆盖**，与既有 `max_attempts` 同款纪律）；
+- 模块 docstring 的「契约」与「异常谱系」两处同步更新（瞬时 vs 持久两类不确定性的分界写清）。
+
+**判据强度探针 3/3 转红**（`.scratch/update-content-mismatch-retry-cap/verify-02-guard-strength.{txt,json}`）：
+
+| 注入 | 结果 |
+|---|---|
+| ① 去掉封顶（回到改动前） | 转红 ✓（1 failed） |
+| ② 连续改累计（中途别的错误不再清零） | 转红 ✓（1 failed） |
+| ③ 新错误从「不可重试」表里拿掉 | 转红 ✓（2 failed） |
+
+**两条修复的接缝也有断言**：`tests/test_task_download.py` 里钉了「终态错误必须被
+`is_terminal_verify` 认下、且任务层把半成品与边车清干净」（缺它两条修复各自正确、合起来留垃圾）。
+
+**一处探针工程教训**（已内建防护）：第一次跑 ① 时封顶被去掉、用例当时还没有别的上限，
+探针**卡死在 300 秒**、被工具强杀 → `finally` 没跑 → 源文件停在注入态。两条修法都落地了：
+① 用例加 `max_attempts=8` 收场；② 两支探针都加了**前置干净性检查**（锚点不在就拒绝开跑并给出
+`git checkout` 修法），免得「上一轮没复原」被误读成「探针写坏了」。
+
+聚焦测试：`test_download_resume.py` + `test_task_download.py` 63 passed；
+`test_full_task.py` + `test_materials_task.py` + `test_download_status_surface.py` 85 passed。
+真机复跑（`run-real-machine.py` + `drill-02 --only content-mismatch`）与 `--only verify-size`
+合并在一支包装脚本里跑，证据落 `.scratch/update-content-mismatch-retry-cap/verify-real-machine.*`。
 
 ## 验收标准
 
