@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=6d0fba67cde2fcac89f8f0a4f710381cd0096785 -->
+<!-- changelog-auto: last-commit=1e884b4bf25a63722b7c22ea0b6522ec3d399103 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -13,6 +13,7 @@
 - 11:29 留档：第二次 drill-01 的原始证据（旧进程被踢掉、但更新器那次重启仍 timeout）
 - 11:37 账本收口：v1.2.1 资产重发 + 启动器修复的真机验收与事实更新（工单 update-restart-stale-service/04）
 - 11:37 留档：v1.2.1 重发后 drill-01 的最终一轮原始证据（判据两条都成立）
+- 12:05 修复：不可重试的校验失败不再留下整卷半成品与边车（工单 update-verify-failure-leftovers/01）
 
 ## 2026-09-18
 - 23:19 docs(闸门): commit-gate/04 CI 线上全绿收口（run 35098093620）
