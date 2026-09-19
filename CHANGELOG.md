@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=431e747136f813a1c7274aba74835a2d87bc5c6a -->
+<!-- changelog-auto: last-commit=c5ea33b99c01a820b91585debeccb838a32f989f -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -11,6 +11,7 @@
 - 10:56 留档：重发后第一次 drill-01 仍判红的原始证据 + B1 原始失败证据另存
 - 11:29 启动器起服务前先建数据目录：否则重定向整行失败、服务根本起不来
 - 11:29 留档：第二次 drill-01 的原始证据（旧进程被踢掉、但更新器那次重启仍 timeout）
+- 11:37 账本收口：v1.2.1 资产重发 + 启动器修复的真机验收与事实更新（工单 update-restart-stale-service/04）
 
 ## 2026-09-18
 - 23:19 docs(闸门): commit-gate/04 CI 线上全绿收口（run 35098093620）
