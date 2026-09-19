@@ -4,8 +4,7 @@
   ],
   "stuck": [],
   "notes": [
-    "目标位置已存在旧包 firstep-update-1.2.1.zip（304729724 字节）——产品会覆盖它，先记下来",
-    "升级后沙箱 tracked 树与官方 v1.2.1 包**不完全一致**：内容不同 2 个、缺 0 个（小发版更新包是全量 tracked 快照，但删除清单只覆盖「上一版 → 本版」的删除）"
+    "升级后沙箱 tracked 树与官方 v1.2.1 包**不完全一致**：内容不同 6 个、缺 0 个（小发版更新包是全量 tracked 快照，但删除清单只覆盖「上一版 → 本版」的删除）"
   ],
   "facts": {
     "sim_root_exists": true,
@@ -21,15 +20,15 @@
   "before": {
     "real_data_mtime": 1789386306.649077,
     "real_updates": [],
-    "real_tree_files": 11908,
+    "real_tree_files": 11906,
     "materials": {
-      "count": 5088,
-      "total_bytes": 723226493,
+      "count": 5089,
+      "total_bytes": 723226562,
       "baseline": {
         "exists": true,
         "bytes": 1474678,
-        "sha256": "9e60e837a27292a75b858e76feca5b7a58d0efd303b6e662f97efbaa1a2514dc",
-        "version": "v1.1.1",
+        "sha256": "9bd3a6fad545d1ff25aab3f28b424a87bb5020b1d09eb20f38d1a97b38a2b1cf",
+        "version": "v1.1.0",
         "batches": 12
       },
       "sample_sha256": {
@@ -41,8 +40,8 @@
       }
     },
     "third_party": {
-      "count": 55,
-      "total_bytes": 95720464
+      "count": 56,
+      "total_bytes": 95720533
     },
     "sim_data_files": [
       "config.json",
@@ -50,9 +49,8 @@
       "tasks-simulated.json",
       "updates/firstep-update-1.1.1.removed.txt",
       "updates/firstep-update-1.1.1.zip",
-      "updates/firstep-update-1.2.1.removed.txt",
-      "updates/firstep-update-1.2.1.zip",
       "updates/full-apply.log",
+      "updates/full-task.json",
       "updates/last-update.json",
       "updates/updater.log"
     ],
@@ -67,21 +65,21 @@
     "current_version": "1.1.1",
     "update_available": true,
     "zip_url": "https://github.com/AK47n/firstep/releases/download/v1.2.1/firstep-update-v1.2.1.zip",
-    "size_bytes": 304782206,
-    "sha256": "2c09bc8eb59e27ee5d66511f69bb60935c74ccefc24c6653a10bd5240f95c507",
+    "size_bytes": 304729724,
+    "sha256": "ec9921fc6e649478fb162e3d3207a7f681608f476f5030541a7222cb039bbecb",
     "removed_url": "https://github.com/AK47n/firstep/releases/download/v1.2.1/firstep-update-v1.2.1.removed.txt",
     "error": "",
     "message": ""
   },
   "apply": {
-    "elapsed_seconds": 24.9,
+    "elapsed_seconds": 19.8,
     "response": {
       "started": true,
       "message": "已开始更新，工具将自动重启（配置与资料库不受影响）"
     },
-    "downloaded_bytes": 304782206,
-    "expected_bytes": 304782206,
-    "avg_mbps": 11.68
+    "downloaded_bytes": 304729724,
+    "expected_bytes": 304729724,
+    "avg_mbps": 14.65
   },
   "status": {
     "saw_lock": true,
@@ -93,8 +91,8 @@
         "status": "ok",
         "mode": "single",
         "version": "1.2.1",
-        "finished_at": "20260919-104456",
-        "backup_dir": "C:\\Users\\luoji\\.contest_generator_sim\\updates\\backup\\20260919-104456"
+        "finished_at": "20260918-224039",
+        "backup_dir": "C:\\Users\\luoji\\.contest_generator_sim\\updates\\backup\\20260918-224039"
       }
     }
   },
@@ -105,26 +103,44 @@
   },
   "composition": {
     "available": true,
-    "official_tracked": 3070,
-    "on_disk_tracked": 4552,
-    "same": 3068,
-    "stale": 2,
+    "official_tracked": 3060,
+    "on_disk_tracked": 4543,
+    "same": 3054,
+    "stale": 6,
     "stale_examples": [
       {
-        "path": "CHANGELOG.md",
-        "why": "size 262337 != 262457"
+        "path": "library/references/2026_06_电赛视觉资料/代码资料与视频同步更新(1).txt",
+        "why": "size 0 != 0"
+      },
+      {
+        "path": "library/references/2026_06_电赛视觉资料/代码资料与视频同步更新.txt",
+        "why": "size 0 != 0"
+      },
+      {
+        "path": "src/contest_generator.egg-info/PKG-INFO",
+        "why": "size 539 != 441"
       },
       {
         "path": "src/contest_generator.egg-info/SOURCES.txt",
-        "why": "size 9148 != 9085"
+        "why": "size 9012 != 8698"
+      },
+      {
+        "path": "src/contest_generator.egg-info/requires.txt",
+        "why": "size 151 != 117"
+      },
+      {
+        "path": "tests/__init__.py",
+        "why": "size 0 != 0"
       }
     ],
     "stale_by_top": {
-      "CHANGELOG.md": 1,
-      "src": 1
+      "library": 2,
+      "src": 3,
+      "tests": 1
     },
-    "not_in_official": 1482,
+    "not_in_official": 1483,
     "not_in_official_examples": [
+      "library/fix-backups/20260101-000000/main.c",
       "library/revise-backups/20260827-192944/.contest_context.json",
       "library/revise-backups/20260827-192944/.contest_tasks.json",
       "library/revise-backups/20260827-192944/.gitignore",
@@ -143,16 +159,10 @@
       "library/revise-backups/20260827-192944/ml_libs/ml_exti.h",
       "library/revise-backups/20260827-192944/ml_libs/ml_gpio.c",
       "library/revise-backups/20260827-192944/ml_libs/ml_gpio.h",
-      "library/revise-backups/20260827-192944/ml_libs/ml_i2c.c",
-      "library/revise-backups/20260827-192944/ml_libs/ml_i2c.h"
+      "library/revise-backups/20260827-192944/ml_libs/ml_i2c.c"
     ],
-    "not_in_official_by_top": {
-      "library": 1481,
-      "sources": 1
-    },
     "official_missing_on_disk": 0,
     "official_missing_on_disk_examples": [],
-    "official_missing_on_disk_by_top": {},
     "blobs": {}
   },
   "safeguards": {
@@ -173,10 +183,9 @@
     "stamps": [
       "20260913-002004",
       "20260913-002734",
-      "20260918-224039",
-      "20260919-104456"
+      "20260918-224039"
     ],
-    "latest_files": 2830
+    "latest_files": 4312
   },
   "isolation": {
     "real_data_mtime_untouched": true,
@@ -196,7 +205,7 @@
   },
   "cleanup": {
     "killed": [
-      "16796"
+      "16904"
     ],
     "leftover": [],
     "python_left": []
