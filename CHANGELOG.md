@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=715ca1c883525d9608739c52a2a25f612b8c8fa3 -->
+<!-- changelog-auto: last-commit=298cae707cbfaf924c38e081ac5a139802408e77 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -31,6 +31,7 @@
 - 17:59 工单 module-hwcheck/03：器件选择 + 接线表 + 默认脚冲突预警
 - 21:53 工单 module-hwcheck/04：配方机制 + led / oled 两件专精
 - 21:54 记本机事实：ARMCC 中文字面量会吞引号 + 8791 残留服务的坑（工单 04 会话）
+- 23:46 工单 module-hwcheck/05：MPU6050 双平台专精 + 互斥单选交换
 
 ## 2026-09-18
 - 23:19 docs(闸门): commit-gate/04 CI 线上全绿收口（run 35098093620）
