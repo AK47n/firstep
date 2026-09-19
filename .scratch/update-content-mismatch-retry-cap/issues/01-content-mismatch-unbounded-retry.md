@@ -1,7 +1,7 @@
 # 01 — 决策单：持久「内容与清单不符」会**永远重试**（无终态、每轮整卷重下）
 
 **Type:** task
-**Status:** resolved（2026-09-19：**选 1 —— 连续 N 次转终态，N = 5**）
+**状态：** resolved（2026-09-19：**选 1 —— 连续 N 次转终态，N = 5**）
 **发现于：** 沙箱真机演练 B2 场景四（`sandbox-drill/02`，2026-09-18），脚本 `.scratch/verify-gate-drills/drill-02-degraded.py --only content-mismatch`
 **证据：** `.scratch/verify-gate-drills/verify-02-degraded.txt` / `.json`（`scenarios.content-mismatch`）
 
