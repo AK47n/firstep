@@ -994,7 +994,7 @@ export function moduleInfoReason(slug) {
   return (mod && mod.reason) || "";
 }
 
-// bindModuleInfoEntry(root)：容器级委托绑定（幂等——同一容器只挂一次）。
+// bindModuleInfoEntry(root, platformOf)：容器级委托绑定（幂等——同一容器只挂一次）。
 //
 // **必须用捕获阶段（第三个参数 true）**：说明按钮嵌在 `.chip.rec`（带
 // data-remove）里，而 chip 的移除监听是**挂在 chip 本体上**的——同一元素上的
@@ -1002,16 +1002,21 @@ export function moduleInfoReason(slug) {
 // 已经晚了，模块早被移除（真机验收抓到：点「说明」后已选清单里 ir_beam 没了）。
 // 捕获阶段在事件下行时就拦住，chip 的监听根本不触发；冒泡与 target 两段都不跑。
 // 只在命中 [data-mod-info] 时拦（普通点 chip 不受影响——仍走移除）。
-export function bindModuleInfoEntry(root) {
+//
+// platformOf（工单 module-hwcheck/03）= 可选：说明弹窗按哪个平台展示该模块的条目。
+// 缺省 = 生成页的当前平台（既有调用点零变化）；硬件检测栏目有自己的平台选择，
+// 传它自己的取法进去——**共用同一份委托实现**，不在那边再抄一遍捕获阶段的坑。
+export function bindModuleInfoEntry(root, platformOf) {
   if (!root || root.dataset.modInfoBound === "1") return;
   root.dataset.modInfoBound = "1";
+  const platformNow = typeof platformOf === "function" ? platformOf : () => chosenPlatform;
   root.addEventListener("click", (ev) => {
     const btn = ev.target.closest ? ev.target.closest("[data-mod-info]") : null;
     if (!btn) return;
     ev.stopPropagation();     // 捕获阶段拦住：chip 的 data-remove 不会再跑
     ev.stopImmediatePropagation();
     ev.preventDefault();      // 兼防 label 激活控件（组卡成员行的说明按钮在 label 内）
-    openModuleInfo(btn.dataset.modInfo, chosenPlatform, moduleInfoReason(btn.dataset.modInfo));
+    openModuleInfo(btn.dataset.modInfo, platformNow(), moduleInfoReason(btn.dataset.modInfo));
   }, true);
 }
 

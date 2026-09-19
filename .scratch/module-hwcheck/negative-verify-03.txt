@@ -1,0 +1,167 @@
+# 工单 module-hwcheck/03 判据强度探针（停用守卫 → 必须变红）
+
+## A 接线行不再照抄接线快照的推导（自己另排一遍）→ 与 README 逐格对比用例应红
+注入：src/contest_generator/hwcheck_board.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck_board.py -q -k readme_pin_table or verbatim
+退出码：1（判据要求非 0）
+红证摘要：
+  E       AssertionError: assert [('ml_mpu6050...ut���ؽӣ�'), ...] == [('config', '...pio_in'), ...]
+  tests\test_hwcheck_board.py:83: AssertionError
+  E               AssertionError: �ֶ� slug ����߿����Ƶ���һ��
+  tests\test_hwcheck_board.py:98: AssertionError
+  FAILED tests/test_hwcheck_board.py::test_rows_match_the_readme_pin_table_cell_by_cell
+  FAILED tests/test_hwcheck_board.py::test_rows_are_the_wiring_snapshot_projection_verbatim
+  2 failed, 21 deselected in 0.19s
+
+## B 板上共享注记被丢掉（PA0/PA1 的板载 LED 共用不再呈现）→ 暗雷用例应红
+注入：src/contest_generator/hwcheck_board.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck_board.py -q -k onboard_led or pin_note
+退出码：1（判据要求非 0）
+红证摘要：
+  E           AssertionError: {'slug': 'ml_mpu6050', 'role': 'I2C_0_SDA', 'role_id': 'I2C_0_SDA', 'role_label': '', ...}
+  tests\test_hwcheck_board.py:124: AssertionError
+  E       AssertionError: assert set() == {'PA0', 'PA1'}
+  tests\test_hwcheck_board.py:145: AssertionError
+  E       AssertionError: assert set() >= {'PA11', 'PA12', 'PC13'}
+  tests\test_hwcheck_board.py:157: AssertionError
+  FAILED tests/test_hwcheck_board.py::test_mspm0_mpu6050_shows_the_onboard_led_share_on_pa0_pa1
+  FAILED tests/test_hwcheck_board.py::test_board_shares_lift_the_onboard_led_overlap_out_of_the_rows
+  FAILED tests/test_hwcheck_board.py::test_board_shares_also_cover_the_stm32_onboard_leds_and_usb_pins
+  3 failed, 1 passed, 19 deselected in 0.17s
+
+## C 同脚组不再用既有分类（一律当合法共享）→ 冲突用例与分类同源用例应红
+注入：src/contest_generator/hwcheck_board.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck_board.py -q -k different_peripherals or existing_classifier
+退出码：1（判据要求非 0）
+红证摘要：
+  E       AssertionError: assert [] == ['PA22']
+  tests\test_hwcheck_board.py:194: AssertionError
+  E       AssertionError: assert ({'pin': 'PA2...������ͨ�����������'},) == ({'pin': 'PA2...������ͨ�����������'},)
+  tests\test_hwcheck_board.py:208: AssertionError
+  FAILED tests/test_hwcheck_board.py::test_same_pin_different_peripherals_is_a_conflict
+  FAILED tests/test_hwcheck_board.py::test_groups_come_from_the_existing_classifier
+  2 failed, 21 deselected in 0.14s
+
+## D 建议顺序不再走既有 bring-up 排序（按输入原序）→ 顺序用例应红
+注入：src/contest_generator/hwcheck_board.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck_board.py -q -k readme_verification_order or bring_up
+退出码：1（判据要求非 0）
+红证摘要：
+  E       AssertionError: assert ['led', 'dela... 'ml_mpu6050'] == ['led', 'dela... 'ml_mpu6050']
+  tests\test_hwcheck_board.py:228: AssertionError
+  FAILED tests/test_hwcheck_board.py::test_order_is_the_readme_verification_order
+  1 failed, 1 passed, 21 deselected in 0.13s
+
+## E 缺平台条目的判据被掐掉（缺条目器件静默消失）→ 点名用例应红
+注入：src/contest_generator/hwcheck_board.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck_board.py -q -k without_a_platform_entry or warning_table
+退出码：1（判据要求非 0）
+红证摘要：
+  E       AssertionError: assert [] == ['sr04']
+  tests\test_hwcheck_board.py:273: AssertionError
+  E       AssertionError: assert [] == ['sr04']
+  tests\test_hwcheck_board.py:299: AssertionError
+  FAILED tests/test_hwcheck_board.py::test_device_without_a_platform_entry_is_reported_not_silently_dropped
+  FAILED tests/test_hwcheck_board.py::test_missing_judgement_comes_from_the_platform_warning_table
+  2 failed, 21 deselected in 0.14s
+
+## F 回读不再取清单里的器件（刷新后器件选择丢失）→ 回读用例应红
+注入：src/contest_generator/hwcheck_store.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck.py -q -k restores_the_device_selection
+退出码：1（判据要求非 0）
+红证摘要：
+  E       AssertionError: assert [] == ['ml_mpu6050']
+  tests\test_hwcheck.py:1058: AssertionError
+  FAILED tests/test_hwcheck.py::test_project_endpoint_restores_the_device_selection
+  1 failed, 63 deselected, 1 warning in 15.11s
+
+## G 生成时不再把器件写进上下文清单 → 清单透传用例应红
+注入：src/contest_generator/context_manifest.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_context_manifest.py -q -k devices
+退出码：1（判据要求非 0）
+红证摘要：
+  E       AssertionError: assert [] == ['ml_mpu6050', 'sr04']
+  tests\test_context_manifest.py:404: AssertionError
+  FAILED tests/test_context_manifest.py::test_devices_key_is_absent_unless_the_caller_passes_it
+  FAILED tests/test_context_manifest.py::test_devices_round_trip - AssertionErr...
+  FAILED tests/test_context_manifest.py::test_generate_project_records_devices_in_the_manifest
+  3 failed, 2 passed, 25 deselected, 1 warning in 0.63s
+
+## H 选中器件不再进模块集（接线表与工程 README 分道）→ 模块集用例应红
+注入：src/contest_generator/hwcheck.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck.py -q -k selected_devices_join
+退出码：1（判据要求非 0）
+红证摘要：
+  E       AssertionError: assert ('led', 'delay', 'debug_uart') == ('led', 'dela...6050', 'sr04')
+  tests\test_hwcheck.py:929: AssertionError
+  FAILED tests/test_hwcheck.py::test_selected_devices_join_the_module_set_after_the_channels
+  1 failed, 63 deselected in 0.12s
+
+## I 冲突标记被抹平（⚠ 不再标）→ 前端冲突用例应红
+注入：src/contest_generator/static/js/fx/hwcheck.js
+命令：node --test tests/js/hwcheck.test.mjs
+退出码：1（判据要求非 0）
+红证摘要：
+  ✖ hwcheckPinGroupsHTML：冲突 ⚠ / 合法共享 ✓（kind 由服务端判，前端只上色） (1.776ms)
+  ✖ failing tests:
+  ✖ hwcheckPinGroupsHTML：冲突 ⚠ / 合法共享 ✓（kind 由服务端判，前端只上色） (1.776ms)
+  AssertionError [ERR_ASSERTION]: 冲突行要单独一类（红框）
+
+## J 接线行不再带板上共享标记 → 前端接线表用例应红
+注入：src/contest_generator/static/js/fx/hwcheck.js
+命令：node --test tests/js/hwcheck.test.mjs
+退出码：1（判据要求非 0）
+红证摘要：
+  ✖ hwcheckWiringTableHTML：列与 README 同序；板载共享注记挂在同一行 (0.6213ms)
+  ✖ failing tests:
+  ✖ hwcheckWiringTableHTML：列与 README 同序；板载共享注记挂在同一行 (0.6213ms)
+  AssertionError [ERR_ASSERTION]: 板上共享注记必须在行里
+
+## K 生成 / 预览请求体不再带器件（选了不生效）→ 前端载荷用例应红
+注入：src/contest_generator/static/js/fx/hwcheck.js
+命令：node --test tests/js/hwcheck.test.mjs
+退出码：1（判据要求非 0）
+红证摘要：
+  ✖ hwcheckGeneratePayload：带输出父目录（去空白），空 = 交后端按桌面处理 (2.3562ms)
+  ✖ 两个请求体都带器件数组（去重保序；空 = 一件都没选） (0.2686ms)
+  ✖ failing tests:
+  ✖ hwcheckGeneratePayload：带输出父目录（去空白），空 = 交后端按桌面处理 (2.3562ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  ✖ 两个请求体都带器件数组（去重保序；空 = 一件都没选） (0.2686ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+
+## L 板载共享不再投影（板载 LED 同脚这类板上事实从冲突区消失）→ 板上共享用例应红
+注入：src/contest_generator/hwcheck_board.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck_board.py -q -k board_shares
+退出码：1（判据要求非 0）
+红证摘要：
+  E       AssertionError: assert set() == {'PA0', 'PA1'}
+  tests\test_hwcheck_board.py:145: AssertionError
+  E       AssertionError: assert set() >= {'PA11', 'PA12', 'PC13'}
+  tests\test_hwcheck_board.py:157: AssertionError
+  FAILED tests/test_hwcheck_board.py::test_board_shares_lift_the_onboard_led_overlap_out_of_the_rows
+  FAILED tests/test_hwcheck_board.py::test_board_shares_also_cover_the_stm32_onboard_leds_and_usb_pins
+  2 failed, 1 passed, 20 deselected in 0.16s
+
+## M 板上共享不再渲染（页面又只剩「没有抢同一个引脚」的假安心）→ 前端用例应红
+注入：src/contest_generator/static/js/fx/hwcheck.js
+命令：node --test tests/js/hwcheck.test.mjs
+退出码：1（判据要求非 0）
+红证摘要：
+  ✖ hwcheckBoardSharesHTML：板载共享单独成条（板载 LED / 上拉这类暗雷） (0.3662ms)
+  ✖ failing tests:
+  ✖ hwcheckBoardSharesHTML：板载共享单独成条（板载 LED / 上拉这类暗雷） (0.3662ms)
+  AssertionError [ERR_ASSERTION]: 要说清这不是接线错误
+
+## N 在途触发不再排队重跑（连点两件器件会丢掉最后一次选择）→ 并发纪律守卫应红
+注入：src/contest_generator/static/js/ui/hwcheck.js
+命令：node --test tests/js/hwcheck.test.mjs
+退出码：1（判据要求非 0）
+红证摘要：
+  ✖ ui 的视图刷新守并发纪律（过期响应不写状态 + 在途触发排队） (0.5919ms)
+  ✖ failing tests:
+  ✖ ui 的视图刷新守并发纪律（过期响应不写状态 + 在途触发排队） (0.5919ms)
+  AssertionError [ERR_ASSERTION]: 收尾要用当前选择集重跑一次（不是只把标志清掉）
+
+## 结论
+全部 14 条注入都按预期变红，且文件已逐字节复原。

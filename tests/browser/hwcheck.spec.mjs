@@ -45,8 +45,15 @@ test.after(async () => {
 });
 
 // openTab()：打开页面并切到硬件检测栏目（首帧 / 刷新后都用它）。
+// 先等**启动完成的信号**（平台卡渲染出来 = index.html 的 init() 跑过，导航分发
+// 的监听也已就位）再点页签：不等它直接点会偶发"点了没反应"（本单复跑真机两次，
+// 第二次就撞上 section 一直 hidden——不是产品缺陷，是用例抢跑）。
 async function openTab() {
   await page.goto(server.url + "/", { waitUntil: "domcontentloaded" });
+  // 注意 state:"attached"——这个容器此时还在**未选中的页签**里（不可见），
+  // 等 visible 会一直等到超时；这里要的只是"服务端状态已到达并渲染过"
+  await page.waitForSelector("#hwcheck-platforms .platform-card",
+    { state: "attached", timeout: 30000 });
   await page.click(HWCHECK_TAB);
   await page.waitForSelector("#tab-hwcheck", { state: "visible" });
 }
@@ -121,3 +128,80 @@ test("编译复用既有面板与判读：真 UV4 编译绿（工具链缺失时
   assert.ok(status.includes("编译成功"), "状态行应报编译成功：" + status);
   assert.ok(/0 Error/.test(status), "应是 0 Error：" + status);
 });
+
+// ---------------------------------------------------------------------------
+// 工单 03：器件选择 → 接线表 / 默认脚冲突 / 建议顺序（真浏览器 + 真后端）
+//
+// 为什么这一层必须有：接线表/冲突/顺序全是"点了器件之后页面上到底显示什么"，
+// 纯函数用例只能证明 fx 渲染得出那段 HTML，证明不了**选器件真的触发了服务端
+// 投影、真的把结果画到那三个容器里**。
+// ---------------------------------------------------------------------------
+
+// pickDevice(slug)：在器件池里搜出来点一下（器件卡与模块库页同一套卡片渲染）。
+async function pickDevice(slug) {
+  await page.fill("#hwcheck-device-search", slug);
+  await page.waitForSelector(`#hwcheck-device-grid [data-add="${slug}"]`);
+  await page.click(`#hwcheck-device-grid [data-add="${slug}"]`);
+}
+
+test("选上 MPU6050：接线表带默认脚与板上共享注记、顺序把它排在最后、冲突预警标 ⚠", async () => {
+  await openTab();
+  await page.click('[data-hwcheck-platform="mspm0"]');
+  await pickDevice("ml_mpu6050");
+
+  // chips = 已选（复用推荐区 chip：data-remove 是"从工程里去掉"）
+  await page.waitForSelector('#hwcheck-device-chips [data-remove="ml_mpu6050"]');
+
+  // 接线表：MPU6050 的默认脚 PA1/PA0 + 板载 LED 共用（这条暗雷必须在页面上）
+  await page.waitForSelector("#hwcheck-wiring .hwcheck-table");
+  await page.waitForFunction(
+    () => document.querySelector("#hwcheck-wiring").textContent.includes("ml_mpu6050"));
+  const wiring = await page.textContent("#hwcheck-wiring");
+  assert.ok(wiring.includes("I2C_0_SCL") && wiring.includes("PA1"),
+    "接线表应给出 MPU6050 的 SCL 默认脚：\n" + wiring);
+  assert.ok(wiring.includes("I2C_0_SDA") && wiring.includes("PA0"), "SDA 同理");
+  assert.ok(wiring.includes("板载共享") && wiring.includes("板载 LED 共用"),
+    "板载 LED 同脚这条暗雷要如实呈现：\n" + wiring);
+
+  // 默认脚冲突：mspm0 默认双通道撞 PA22（工单 02 的生成 400 在页面上提前可见）
+  await page.waitForFunction(
+    () => document.querySelector("#hwcheck-conflicts").textContent.includes("PA22"));
+  const conflicts = await page.textContent("#hwcheck-conflicts");
+  assert.ok(conflicts.includes("引脚冲突") && conflicts.includes("PA22"),
+    "冲突预警应点名撞在一起的脚：\n" + conflicts);
+  // 板上自带的共享（板载 LED 与 I2C0 同脚）：同脚组看不见它，必须单独列出来
+  // ——否则冲突区那句"没有抢同一个引脚"就是假安心（工单 03 评审整改）
+  assert.ok(conflicts.includes("板上共享") && conflicts.includes("板载 LED 共用"),
+    "板载 LED 同脚要单独成条：\n" + conflicts);
+
+  // 建议顺序：bring-up 先做，器件排最后
+  const order = await page.textContent("#hwcheck-order");
+  assert.ok(order.includes("先做·板子活着"), "应标出先做的那几件：\n" + order);
+  assert.ok(order.includes("为什么是这个次序"), "应说明为什么按这个次序");
+  const slugs = await page.locator("#hwcheck-order .hwcheck-order-row .slug").allTextContents();
+  assert.equal(slugs[slugs.length - 1], "ml_mpu6050",
+    "器件应排在 bring-up 模块之后，实际：" + slugs.join(" → "));
+
+  // 去掉器件 → 表里不再有它（选择是活的，不是一次性快照）
+  await page.click('#hwcheck-device-chips [data-remove="ml_mpu6050"]');
+  await page.waitForFunction(
+    () => !document.querySelector('#hwcheck-device-chips [data-remove="ml_mpu6050"]'));
+  await page.waitForFunction(
+    () => !document.querySelector("#hwcheck-wiring").textContent.includes("ml_mpu6050"));
+});
+
+test("本平台没有条目的器件：点名「无法检测」，不静默省略", async () => {
+  await openTab();
+  await page.click('[data-hwcheck-platform="stm32"]');
+  await page.fill("#hwcheck-device-search", "sr04");
+  await page.waitForSelector('#hwcheck-device-grid [data-add="sr04"]');
+  await page.click('#hwcheck-device-grid [data-add="sr04"]');
+  await page.waitForSelector("#hwcheck-device-missing .hwcheck-warn");
+  const missing = await page.textContent("#hwcheck-device-missing");
+  assert.ok(missing.includes("sr04") && missing.includes("无本平台版本")
+    && missing.includes("无法检测"), "缺条目要点名：\n" + missing);
+  // 去掉它，别把这份状态留给后面的用例
+  await page.click('#hwcheck-device-chips [data-remove="sr04"]');
+  await page.fill("#hwcheck-device-search", "");
+});
+

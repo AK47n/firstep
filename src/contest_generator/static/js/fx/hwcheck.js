@@ -6,6 +6,9 @@
 // 工具链展示名单源取自 fx/env.js。
 import { esc } from "./core.js";
 import { TOOLCHAIN_NAMES } from "./env.js";
+// chip 渲染取自模块库既有纯件（工单 03：器件选择复用既有载荷与卡片/chip 渲染，
+// 不另造一套模块清单协议）。
+import { recommendChipHTML } from "./module.js";
 
 // —— 栏目内的平台选择状态 ——
 // hwcheckPlatformState(platforms, inherited, current)：
@@ -45,14 +48,27 @@ export function hwcheckPickState(state, key, value) {
   return { ...state, [key]: !!value };
 }
 
-// hwcheckRequestPayload(state)：预览请求体（只有这三个字段——端点不接受
-// 题面 / 已选模块：检测程序不依赖生成流程任何状态）。
+// hwcheckRequestPayload(state)：预览请求体（平台 / 两个通道 / 选中的器件——
+// 端点不接受题面 / 已选模块：检测程序不依赖生成流程任何状态）。
 export function hwcheckRequestPayload(state) {
   return {
     platform: state.platform,
     debug_uart: !!state.debug_uart,
     oled: !!state.oled,
+    devices: hwcheckDeviceSlugs(state),
   };
+}
+
+// hwcheckDeviceSlugs(state)：选中的器件 slug 数组（去重保序，空 = 一件都没选）。
+// 载荷里只出 slug——器件对象由服务端从模块库现读（前端不把自己那份缓存当判据）。
+export function hwcheckDeviceSlugs(state) {
+  const list = (state && Array.isArray(state.devices)) ? state.devices : [];
+  const out = [];
+  list.forEach((slug) => {
+    const key = String(slug == null ? "" : slug);
+    if (key && !out.includes(key)) out.push(key);
+  });
+  return out;
 }
 
 // hwcheckCanPreview(state)：平台可用才让点「预览检测程序」（空平台 = 后端必拒）。
@@ -147,6 +163,7 @@ export function hwcheckGeneratePayload(state) {
     platform: state.platform,
     debug_uart: !!state.debug_uart,
     oled: !!state.oled,
+    devices: hwcheckDeviceSlugs(state),
     parent_dir: String(state.parentDir || "").trim(),
   };
 }
@@ -208,12 +225,28 @@ export function hwcheckChecklistProgressHTML(items, checkedIds) {
     + (n === total ? "——这一趟都对了，可以开始写你的逻辑了。" : "。") + "</div>";
 }
 
+// hwcheckBoardState(state, payload)：一次响应里的「板侧」部分——器件回显 +
+// 接线视图（preview 与 generate / 回读三个端点都带这两项）。载荷缺键 = 保留
+// 当前状态（旧后端 / 出错响应不许把用户刚选的器件抹掉）。
+export function hwcheckBoardState(state, payload) {
+  const data = payload || {};
+  return {
+    ...state,
+    devices: Array.isArray(data.devices)
+      ? data.devices.map((slug) => String(slug))
+      : (Array.isArray(state && state.devices) ? state.devices : []),
+    wiring: (data.wiring && typeof data.wiring === "object")
+      ? data.wiring
+      : ((state && state.wiring) || null),
+  };
+}
+
 // hwcheckProjectState(state, payload)：生成 / 回读成功后的状态更新——把后端载荷
 // 归一成一个 project 对象（字段名前后端只在这里对一次，ui 不散读 payload）。
 export function hwcheckProjectState(state, payload) {
   const data = payload || {};
   return {
-    ...state,
+    ...hwcheckBoardState(state, data),
     project: {
       outputDir: String(data.output_dir || ""),
       platform: String(data.platform || ""),
@@ -265,13 +298,14 @@ export function hwcheckToolchainNote(platform, ready, platformLabel) {
 // 说清楚（工单 02 评审整改：spec 用户故事 4「一个器件都不选也能生成」在 mspm0 上
 // 默认不成立——地猛星两路的默认脚在原厂例程里是重叠的，生成门禁会如实 400，
 // 而检测页原本没有任何引导）。
-// 文案刻意**不写具体引脚号**：真正的判据是生成时的门禁（它报的引脚与角色才是权威），
-// 这里只是一句"先取消勾选一个"的引导——库内默认脚改了它也不会变成假话。
-// 引脚配置 / 接线表与冲突呈现是后续工单（spec 用户故事 3）的事，本单不越界。
+// 工单 03 起这句话**不再自称判据**：撞的是哪几个脚由接线表与冲突预警（服务端
+// 同脚组）逐条列出，这里只说"生成时还报冲突怎么办"这条出路——硬编码的
+// 平台专属说法与真判据并列会变成两个口径。
 export function hwcheckChannelNoteHTML(platform, debugUart, oled) {
   if (platform !== "mspm0" || !debugUart || !oled) return "";
   return '<div class="hwcheck-warn">注意：地猛星（mspm0）上「调试串口 + OLED」这两路的'
-    + "默认脚在原厂例程里是重叠的——生成时若报引脚冲突，请先只勾一个通道再生成"
+    + "默认脚在原厂例程里是重叠的——下面的接线表与冲突预警会把撞在一起的脚逐条"
+    + "列出来。生成时若报引脚冲突，请先只勾一个通道再生成"
     + "（要两个都用，需要在引脚配置里改绑，检测页暂时做不了）。</div>";
 }
 
@@ -343,6 +377,212 @@ export function hwcheckProjectEmptyHTML() {
 export const HWCHECK_PARENT_KEY = "firstep.hwcheck.parentDir";
 export const HWCHECK_LAST_DIR_KEY = "firstep.hwcheck.lastDir";
 
+// ===========================================================================
+// 工单 module-hwcheck/03：器件选择 + 接线表 + 默认脚冲突预警 + 建议顺序
+//
+// 分工不变：判据全在服务端（接线行 = 生成工程 README 同一推导；共享 / 冲突 =
+// 既有同脚分类；顺序 = 既有 bring-up 前置排序），本文件只把载荷渲染成 HTML 与
+// 维护选择态。**不在这里判冲突、不在这里推顺序**——两处各推一遍必然漂移。
+// ===========================================================================
+
+// hwcheckDevicePick(state, slug, on)：选中 / 取消一件器件 → 新状态（保序去重）。
+// 返回新对象（不改原对象）；空 slug / 状态本来就是这样 = 原样返回（幂等——
+// 重复点同一件不该把它挪到列表末尾，那会顺带改变"器件在建议顺序里的位置"）。
+export function hwcheckDevicePick(state, slug, on) {
+  const current = Array.isArray(state && state.devices) ? state.devices : [];
+  const key = String(slug == null ? "" : slug);
+  if (!key) return state;
+  const has = current.includes(key);
+  if (has === !!on) return state;
+  const next = current.filter((item) => item !== key);
+  if (on) next.push(key);
+  return { ...state, devices: next };
+}
+
+// hwcheckDevicePool(modules)：可挑选的器件池 = **模块库全量**（/api/modules 既有
+// 载荷，与模块库页 / 生成页同一份，卡片渲染也同一套）。
+//
+// 为什么**不按 kind 过滤**（工单 03 评审整改）：`library.MODULE_KIND` 分的是
+// 「要不要购买链接」，不是「能不能上板测」。按它过滤会把 spec 的 v1 专精清单里的
+// `adc`（internal，却有 ADC 引脚声明）关在门外——检测页会永远选不到它。挑选面
+// 的收敛留给配方与专精标注（后续工单），这里一个字都不判。
+export function hwcheckDevicePool(modules) {
+  return (Array.isArray(modules) ? modules : []).filter((m) => m && m.slug);
+}
+
+// hwcheckDeviceKit(modules, slug, platform)：已选器件的套件型号（chip 上那句
+// 小字）——取 /api/modules 载荷里该平台条目的 kit（人补的硬件身份字段）；
+// 没有 = 空串（不编造）。
+export function hwcheckDeviceKit(modules, slug, platform) {
+  const hit = (Array.isArray(modules) ? modules : []).find((m) => m && m.slug === slug);
+  const entry = hit && hit.platforms ? hit.platforms[platform] : null;
+  return String((entry && entry.kit) || "");
+}
+
+// hwcheckDeviceChipsHTML(devices, modules, platform)：已选器件 chips。
+// **复用推荐区的 chip 渲染**（fx/module.js recommendChipHTML：绿底 + ✕「点击
+// 从工程里移除」+ 内嵌「说明」按钮）——不另造一套卡片协议；点 chip = 把这一件
+// 从这次检测的工程里去掉（说明按钮由 ui 用既有 bindModuleInfoEntry 委托拦住）。
+export function hwcheckDeviceChipsHTML(devices, modules, platform) {
+  const list = (Array.isArray(devices) ? devices : []).filter(Boolean);
+  if (!list.length) return "";
+  return list.map((slug) => recommendChipHTML(
+    slug, hwcheckDeviceKit(modules, slug, platform), true)).join("");
+}
+
+// hwcheckDeviceEmptyHTML()：一件器件都没选时的说明（这不是错误状态——
+// 「先确认板子活着」本来就是检测页的第一条路）。
+export function hwcheckDeviceEmptyHTML() {
+  return '<div class="muted">还没选器件——也可以就这样生成：那是先确认板子和'
+    + '烧录链路是好的（灯在闪 = 程序在跑）。选上器件后，下面会出现它们的接线表、'
+    + '默认脚冲突与建议检测顺序。</div>';
+}
+
+// hwcheckMissingDevicesHTML(missing)：选了**本平台没有条目**的器件 → 逐条点名
+// （票面硬要求：不静默省略——悄悄从接线表里消失会让学生以为"选上了、能测"）。
+export function hwcheckMissingDevicesHTML(missing) {
+  const list = Array.isArray(missing) ? missing : [];
+  if (!list.length) return "";
+  return list.map((item) => {
+    const text = (item && (item.message || item.slug)) || "";
+    return `<div class="hwcheck-warn">⚠ ${esc(text)}</div>`;
+  }).join("");
+}
+
+// hwcheckWiringErrorHTML(message)：接线表取不到时的提示。与"预览失败"分开写一句
+// ——取不到表的原因（模块库没配好 / 库外 slug）跟"检测程序渲染失败"是两回事，
+// 说成一句会把用户引到错的地方去查。
+export function hwcheckWiringErrorHTML(message) {
+  return `<div class="error">接线表与冲突暂时取不到：${esc(message || "")}</div>`;
+}
+
+// hwcheckWiringTableHTML(rows, footnote)：接线表（列与工程 README「引脚接线表」
+// 同序：模块 / 角色 / 引脚 / 说明）。pin_note = 板上共享注记（如地猛星 PA0/PA1 的
+// 「板载 LED 共用」）——挂在同一行上：学生照着表和板子对线时才看得见这条暗雷。
+// footnote = 与工程 README 同一句尾注（服务端随载荷下发；空 = 不渲染）。
+export function hwcheckWiringTableHTML(rows, footnote) {
+  const list = Array.isArray(rows) ? rows : [];
+  const tail = footnote
+    ? `<div class="hwcheck-hint">${esc(footnote)}</div>` : "";
+  if (!list.length) {
+    return '<div class="muted">这次没有已声明引脚角色的接线行——所选模块的实现'
+      + "内嵌母版（如 stm32 的 led / delay），不产生独立接线。</div>" + tail;
+  }
+  const body = list.map((row) => {
+    const note = String((row && row.pin_note) || "").trim();
+    return "<tr>"
+      + `<td><span class="slug">${esc((row && row.slug) || "")}</span></td>`
+      + `<td>${esc((row && (row.role || row.role_id)) || "")}</td>`
+      + `<td><span class="hwcheck-pin">${esc((row && row.pin) || "")}</span></td>`
+      + `<td>${esc((row && row.remark) || "")}`
+      + (note ? `<span class="hwcheck-share">⚠ 板载共享：${esc(note)}</span>` : "")
+      + "</td></tr>";
+  }).join("");
+  return '<table class="hwcheck-table"><thead><tr>'
+    + "<th>模块</th><th>角色</th><th>引脚</th><th>说明</th>"
+    + `</tr></thead><tbody>${body}</tbody></table>`
+    + '<div class="hwcheck-hint">这张表与生成出来的工程 README「引脚接线表」'
+    + "是同一份推导（同一函数、同一字段）——照着它插线就行。</div>"
+    + tail;
+}
+
+// hwcheckRoleLabeler(rows)：同脚组里的角色键（`<slug>.<role_id>`，服务端既有
+// 角色键文法）→ 显示文本（`slug·角色`，角色取接线表里那一行的渲染文本）。
+// 找不到对应行 = 原样显示角色键（不猜、不丢——它仍是真实存在的角色）。
+function hwcheckRoleLabeler(rows) {
+  const by = new Map();
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    if (row && row.slug && row.role_id) {
+      by.set(row.slug + "." + row.role_id, String(row.role || row.role_id));
+    }
+  });
+  return (key) => {
+    const text = String(key == null ? "" : key);
+    const role = by.get(text);
+    if (!role) return esc(text);
+    return esc(text.split(".")[0] + "·" + role);
+  };
+}
+
+// hwcheckBoardSharesHTML(board_shares, rows)：**板上自带**的共享脚（板定义里写了
+// 注记的脚，如地猛星 PA0/PA1「板载 LED 共用」）。与模块之间的同脚组分开列：
+// 这类重叠不是"你选错了"，是板子本来就这么接的——但学生必须知道（灯会跟着串口
+// 通信微闪、I2C 上拉靠模块板自带），所以不能只藏在接线表的说明列里。
+export function hwcheckBoardSharesHTML(boardShares, rows) {
+  const list = Array.isArray(boardShares) ? boardShares : [];
+  if (!list.length) return "";
+  const label = hwcheckRoleLabeler(rows);
+  return '<div class="hwcheck-hint">板上自带的共享（原厂就这么接的，不是接线错误）：</div>'
+    + list.map((item) => {
+      const roles = ((item && item.roles) || []).map(label).join(" × ");
+      return '<div class="hwcheck-group board-share">'
+        + '<span class="hwcheck-group-mark">⚠ 板上共享</span>'
+        + `<span class="hwcheck-pin">${esc((item && item.pin) || "")}</span>`
+        + `<span class="hwcheck-group-roles">${roles}</span>`
+        + `<span class="hwcheck-group-reason">${esc((item && item.note) || "")}</span>`
+        + "</div>";
+    }).join("");
+}
+
+// hwcheckPinGroupsHTML(groups, rows)：模块之间的同脚组 → **物理冲突（⚠）/
+// 合法共享（✓）**。kind / reason 全部来自服务端既有同脚分类（同一 I2C 总线 =
+// 可共享；同脚分属不同外设 = 物理不通）；前端只上色，不改判。
+// 空集那句话必须**说准**：`_shared_groups` 只看模块角色，看不见板上自带的共享
+// （板载 LED / 板载上拉），所以不能写成"没有共用同一个引脚"——那是假安心
+// （工单 03 评审整改）。板载共享由 hwcheckBoardSharesHTML 单独列。
+export function hwcheckPinGroupsHTML(groups, rows) {
+  const list = Array.isArray(groups) ? groups : [];
+  if (!list.length) {
+    return '<div class="hwcheck-ok">✓ 没有两件模块抢同一个引脚'
+      + "（板上自带的共享另见下一条）。</div>";
+  }
+  const label = hwcheckRoleLabeler(rows);
+  return list.map((group) => {
+    const conflict = (group && group.kind) === "conflict";
+    const roles = ((group && group.roles) || []).map(label).join(" × ");
+    return `<div class="hwcheck-group ${conflict ? "conflict" : "share"}">`
+      + `<span class="hwcheck-group-mark">${conflict ? "⚠ 引脚冲突" : "✓ 可共享"}</span>`
+      + `<span class="hwcheck-pin">${esc((group && group.pin) || "")}</span>`
+      + `<span class="hwcheck-group-roles">${roles}</span>`
+      + `<span class="hwcheck-group-reason">${esc((group && group.reason) || "")}</span>`
+      + "</div>";
+  }).join("");
+}
+
+// hwcheckOrderDesc(text)：顺序行里的简介截断——顺序表是给人**扫一眼**的清单，
+// 不是读简介的地方（库内简介常有整段）。切点与推荐区「瘦身行」同一取舍：先找
+// 「。」再找「；」取更早的那个，再按字符上限兜底加省略号。
+const HWCHECK_ORDER_DESC_CHARS = 60;
+
+export function hwcheckOrderDesc(text) {
+  const raw = String(text == null ? "" : text).trim();
+  if (!raw) return "";
+  const stops = ["。", "；"].map((mark) => raw.indexOf(mark)).filter((i) => i >= 0);
+  let out = stops.length ? raw.slice(0, Math.min(...stops) + 1) : raw;
+  if (out.length > HWCHECK_ORDER_DESC_CHARS) {
+    out = out.slice(0, HWCHECK_ORDER_DESC_CHARS) + "…";
+  }
+  return out;
+}
+
+// hwcheckOrderHTML(order, guide, reason)：建议检测顺序（bring-up 前置，判据 =
+// 服务端既有排序；`bring_up` 标记同源）。空集 = 空串（调用方放占位）。
+export function hwcheckOrderHTML(order, guide, reason) {
+  const list = Array.isArray(order) ? order : [];
+  if (!list.length) return "";
+  const items = list.map((item, index) => {
+    const tag = item && item.bring_up ? '<span class="badge ok">先做·板子活着</span>' : "";
+    return '<li class="hwcheck-order-row">'
+      + `<span class="hwcheck-order-index">${index + 1}</span>`
+      + `<span class="slug">${esc((item && item.slug) || "")}</span>${tag}`
+      + `<span class="hwcheck-order-desc">${esc(hwcheckOrderDesc(item && item.description))}</span>`
+      + "</li>";
+  }).join("");
+  return `<div class="hwcheck-hint">${esc(guide || "")}</div>`
+    + `<ol class="hwcheck-order">${items}</ol>`
+    + `<div class="hwcheck-hint">为什么是这个次序：${esc(reason || "")}</div>`;
+}
+
 if (typeof window !== "undefined") {
   Object.assign(window, {
     hwcheckPlatformState, hwcheckSelectPlatform, hwcheckPickState,
@@ -358,6 +598,11 @@ if (typeof window !== "undefined") {
     hwcheckProjectPanelHTML,
     hwcheckRecentHTML, hwcheckRecentEmptyHTML, hwcheckProjectEmptyHTML,
     HWCHECK_PARENT_KEY, HWCHECK_LAST_DIR_KEY,
+    hwcheckDevicePick, hwcheckDevicePool, hwcheckDeviceKit,
+    hwcheckDeviceChipsHTML, hwcheckDeviceEmptyHTML, hwcheckMissingDevicesHTML,
+    hwcheckWiringErrorHTML, hwcheckWiringTableHTML, hwcheckPinGroupsHTML,
+    hwcheckBoardSharesHTML, hwcheckOrderHTML, hwcheckOrderDesc,
+    hwcheckDeviceSlugs, hwcheckBoardState,
   });
 }
 

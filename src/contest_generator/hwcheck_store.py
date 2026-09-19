@@ -10,9 +10,9 @@
   就顺延一秒（宁可变名字，也不覆盖别人刚生成的工程）。
 * **扫最近几次**（`list_hwcheck_projects`）：直接看父目录的磁盘实况，不是另一份
   记账（"最近工程记录"那份是赛题工作流的，检测工程不进去，见工单 02 决策）。
-* **回读一次检测**（`read_hwcheck_project`）：给目录 → 平台 + 通道开关。判据 =
-  工程根 `.contest_context.json` 的 `kind == "hwcheck"`——赛题工程（kind 缺省 =
-  contest）**不许**被当成检测工程读回来（这是 `kind` 字段存在的意义）。
+* **回读一次检测**（`read_hwcheck_project`）：给目录 → 平台 + 通道开关 + 选中的
+  器件。判据 = 工程根 `.contest_context.json` 的 `kind == "hwcheck"`——赛题工程
+  （kind 缺省 = contest）**不许**被当成检测工程读回来（这是 `kind` 字段存在的意义）。
 
 父目录不存在 = 大声报错（用户把路径打错时不许静默建树）；父目录为空 / 还没建 =
 空列表（"一次都没检测过"是正常状态，不是错误）。
@@ -154,16 +154,18 @@ def list_hwcheck_projects(
 
 
 def read_hwcheck_project(output_dir: Path) -> HwCheckConfig:
-    """把一个已有目录读回检测配置（平台 + 两个通道开关）。
+    """把一个已有目录读回检测配置（平台 + 两个通道开关 + 选中的器件）。
 
     判据 = 上下文清单的 `kind`，且**走 context_manifest.read_context_fields**
     （不自己解析 JSON）：`kind` 的解释（缺字段 / 未知值 = 赛题工程）与平台 /
-    slugs 的缺省补空只有那一个出口——本模块再解释一遍就是第二个判据来源，
-    两边迟早漂（读侧归一 vs 自己 get 的语义还不一样）。不是 `hwcheck` →
+    slugs / devices 的缺省补空只有那一个出口——本模块再解释一遍就是第二个判据
+    来源，两边迟早漂（读侧归一 vs 自己 get 的语义还不一样）。不是 `hwcheck` →
     HwCheckError（赛题工程 / 旧清单都读不出来，这正是 `kind` 存在的意义）。
 
     通道开关从**实际进工程的模块集**反推（slugs 里 `debug_uart` / `oled` 在不在）
-    ——比另存一份通道快照更可靠：用户手改过工程也读得对。
+    ——比另存一份通道快照更可靠：用户手改过工程也读得对。器件选择**不反推**
+    （slugs 里分不出"用户选的器件"与"它的依赖"），读清单的 `devices` 字段
+    （工单 03 写侧落的）；旧清单缺字段 = 没选器件（向后兼容）。
     """
     fields = read_context_fields(output_dir)
     if fields is None:
@@ -183,4 +185,5 @@ def read_hwcheck_project(output_dir: Path) -> HwCheckConfig:
         platform=platform,
         debug_uart="debug_uart" in fields["slugs"],
         oled="oled" in fields["slugs"],
+        devices=tuple(fields["devices"]),
     )

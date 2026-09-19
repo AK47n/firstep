@@ -1,0 +1,48 @@
+# 工单 module-hwcheck/03 真机口径证据（产品端点 + 真库真母版）
+
+## ① POST /api/hwcheck/preview（mspm0 + ml_mpu6050）→ 200
+接线行：
+  - led | LED | PA15 | gpio_out（必接）
+  - debug_uart | DEBUG_UART_TX | PA23 | uart_tx（必接）
+  - debug_uart | DEBUG_UART_RX | PA22 | uart_rx（必接）
+  - ml_mpu6050 | I2C_0_SCL | PA1 | i2c_scl（必接）  ［板上注记：板载 LED 共用（I2C_0 SCL，通信期间微闪）；板载 4.7k 上拉］
+  - ml_mpu6050 | I2C_0_SDA | PA0 | i2c_sda（必接）  ［板上注记：板载 LED 共用（I2C_0 SDA，通信期间微闪）；上拉位未焊依赖 MPU 板自带］
+同脚组（模块之间）：
+  （无）
+板上自带的共享（板定义注记）：
+  - PA1：板载 LED 共用（I2C_0 SCL，通信期间微闪）；板载 4.7k 上拉  ［ml_mpu6050.I2C_0_SCL］
+  - PA0：板载 LED 共用（I2C_0 SDA，通信期间微闪）；上拉位未焊依赖 MPU 板自带  ［ml_mpu6050.I2C_0_SDA］
+建议顺序：
+  1. led（先做·板子活着） — LED 指示灯驱动：接普通发光二极管（或板载 LED 排针），用电平点亮/熄灭，做状态指示、声光提示、计数显示等最基础的“看得见的输出”。接线二线制（串限流电阻后接 GPIO 与 GND），每个 LED 占 1 个 GPIO——stm32 默认板载 PC13/PC14/PC15 三色、mspm0 默认 PA15；多路 LED 按通道宏区分，最多 8 个实例。驱动接口：led_init() 初始化、led_on/led_off/led_toggle(通道宏) 控制亮灭翻转，通道宏用 LED_RED / LED_YELLOW / LED_GREEN（多实例时按颜色命名）；默认拉电流接法 1=亮，接法相反时容器内一处宏可反。适用于状态指示、声光提示、得分/次数显示等赛题功能。
+  2. delay（先做·板子活着） — MSPM0 毫秒延时：delay_ms 基于 CPUCLK_FREQ 换算调用 delay_cycles，任何时钟频率自动适配。
+  3. debug_uart（先做·板子活着） — 调试串口驱动（双平台）：UART2 调试输出 + 短命令接收回显，供联调阶段打印状态；适用于需要串口调试输出的各类联调场景。
+  4. config — 集中外设配置头文件：硬件引脚映射（UART/GPIO/LED/蜂鸣器/DIP 拨码）与通用显示、滤波参数统一集中定义，供各模块与主程序统一调用；适用于 UWB 定位、OLED 显示、LED/蜂鸣器指示等多外设联调场景。
+  5. ml_mpu6050 — MPU6050 六轴传感器的 I2C 通用驱动：提供初始化、寄存器读写以及加速度计和陀螺仪原始数据读取功能，供外部算法进一步解算姿态角；适用于航向保持（车头朝向）、直线行驶纠偏、倾角检测等需要陀螺仪/姿态数据的功能。
+引导语：按顺序逐个验证，前一个过了再接下一个
+理由：先确认「板子活着」——延时 / 串口 / 灯这类 bring-up 模块排在最前；其余按依赖序一件一件往下测（被依赖的在前），前一件不通，后一件的现象就不可信。
+尾注：其余外设引脚以工程内 pin_config.h（stm32）/ mspm0.syscfg 为准
+
+## ② POST /api/hwcheck/preview（stm32 + 只有 mspm0 条目的 sr04）
+  missing = [{'slug': 'sr04', 'message': 'sr04：该模块无本平台版本，无法检测（模块库里没有它在 stm32 上的条目）——请把它去掉，或换到它有版本的平台再测'}]
+
+## ③ POST /api/hwcheck/generate（同形态）→ 200
+落盘工程：hwcheck-mspm0-20260919-175656
+README 引脚接线表 5 行 / 载荷 5 行
+
+## ④ mspm0 默认双通道：页面预警 vs 生成门禁
+  页面冲突组：[{'pin': 'PA22', 'roles': ['debug_uart.DEBUG_UART_RX', 'oled.OLED_SPI_RES'], 'kind': 'conflict', 'reason': '同引脚但分属不同外设（物理不通）——请改线'}]
+  生成返回：400 mspm0 引脚冲突：落盘后的 mspm0.syscfg 有 1 个引脚被两只实例同时占用，SysConfig 会直接编译失败（Resource conflict）：
+  · PA22：oled（OLED_SPI.associatedPin
+
+## 结论
+- [PASS] ①a 地猛星 MPU6050 的 I2C0 默认脚 PA0/PA1 出现在接线表里 —— pins=['PA0', 'PA1', 'PA15', 'PA22', 'PA23']
+- [PASS] ①b PA0/PA1 带出板上共享注记（板载 LED 共用——这条暗雷如实呈现） —— 板载 LED 共用（I2C_0 SCL，通信期间微闪）；板载 4.7k 上拉
+- [PASS] ①c 顺序里 MPU6050 排在 bring-up 模块之后（先确认板子活着） —— led → delay → debug_uart → config → ml_mpu6050
+- [PASS] ①d PA0/PA1 同时进「板上共享」一列（评审整改：同脚组只看模块角色，看不见板载 LED，冲突区不能只说「没有共用同一个引脚」） —— PA0：板载 LED 共用（I2C_0 SDA，通信期间微闪）；上拉位未焊依赖 MPU 板自带；PA1：板载 LED 共用（I2C_0 SCL，通信期间微闪）；板载 4.7k 上拉
+- [PASS] ② sr04 在 stm32 上被点名「无本平台版本，无法检测」 —— sr04：该模块无本平台版本，无法检测（模块库里没有它在 stm32 上的条目）——请把它去掉，或换到它有版本的平台再测
+- [PASS] ③a 页面接线行 = 生成工程 README 的引脚接线表（逐格） —— README 5 行 vs 载荷 5 行
+- [PASS] ③b 上下文清单记下器件选择（回读的服务端真源） —— devices=['ml_mpu6050'] slugs=['led', 'delay', 'config', 'debug_uart', 'ml_mpu6050']
+- [PASS] ③c 回读拿回同一套器件与接线行（刷新回显） —— devices=['ml_mpu6050'] rows=5
+- [PASS] ④ 页面预警的冲突脚（PA22）与生成门禁报的是同一个脚 —— 预警=['PA22'] 生成=400
+
+合计 9 条，判红 0 条。全部成立。

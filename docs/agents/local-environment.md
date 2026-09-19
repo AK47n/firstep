@@ -151,6 +151,11 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > `.scratch/module-hwcheck/verify-02-real-machine.py`），一次服务器都没起——所以这一单不涉及端口纪律。
 > **新栏目「硬件检测」的新端点与新静态文件要重启才在浏览器里可见**（Python 模块 + `static/js/`），
 > 但库里**没有**任何常驻服务器需要你去重启。
+>
+> **2026-09-19 17:5x 复核（module-hwcheck/03 会话）**：8000 仍未起。该会话多起了一个**临时**
+> 端口 **8791**——`tests/browser/hwcheck.spec.mjs` 的真浏览器验收用它（`tests/browser/server.mjs`
+> 自带起停，跑完自己收）；其余验证走 TestClient 与 `python -m pytest`。跑完实测 8000/8020/8021/8791
+> 都没在听。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 

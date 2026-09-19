@@ -12,42 +12,60 @@
 //     GET /api/hwcheck/project 的服务端真源。
 import { $, apiGet, apiPost, state, toast, toastError } from "/js/app.js";
 import { chosenPlatform } from "/js/ui/generate-recommend.js";
+import { bindModuleInfoEntry, openModuleInfo } from "/js/ui/generate-recommend.js";
 import { flashRunShared } from "/js/ui/flash.js";
 import { runCompileOnceCore } from "/js/ui/fix-center-core.js";
 import {
   compileStatusText, compileStatusClass, compileErrorRowsHTML,
 } from "/js/fx/code-compile.js";
 import {
+  moduleGridHTML, moduleGridCountText,
+} from "/js/fx/module.js";
+import {
   hwcheckPlatformState, hwcheckSelectPlatform, hwcheckPickState,
   hwcheckRequestPayload, hwcheckCanPreview, hwcheckPlatformCardsHTML,
-  hwcheckErrorHTML, hwcheckGenerateErrorHTML, hwcheckEmptyHTML, hwcheckPanelHTML,
+  hwcheckGenerateErrorHTML, hwcheckEmptyHTML, hwcheckPanelHTML,
   hwcheckCodeTarget, hwcheckPreviewState, hwcheckPlatformLabel,
   hwcheckGeneratePayload, hwcheckChecklistKey, hwcheckCheckedIds,
   hwcheckChecklistToggle, hwcheckChecklistHTML, hwcheckChecklistProgressHTML,
   hwcheckProjectState, hwcheckProjectPanelHTML, hwcheckProjectEmptyHTML,
   hwcheckRecentHTML, hwcheckRecentEmptyHTML, hwcheckChannelNoteHTML,
+  hwcheckDevicePick, hwcheckDevicePool, hwcheckDeviceChipsHTML,
+  hwcheckDeviceEmptyHTML, hwcheckMissingDevicesHTML, hwcheckWiringTableHTML,
+  hwcheckPinGroupsHTML, hwcheckBoardSharesHTML, hwcheckOrderHTML,
+  hwcheckBoardState, hwcheckWiringErrorHTML,
   HWCHECK_PARENT_KEY, HWCHECK_LAST_DIR_KEY,
 } from "/js/fx/hwcheck.js";
 
 // 本栏目自己的状态（与生成流程零共享）：选中平台 + 两个输出通道开关 +
-// 输出父目录 + 最近一次预览/生成的结果 + 上板清单勾选态。
+// 选中的器件 + 器件搜索词 + 输出父目录 + 板侧视图（接线 / 冲突 / 顺序）+
+// 最近一次预览/生成的结果 + 上板清单勾选态。
 const hwcheckUI = {
   platform: "",
   debug_uart: true,
   oled: true,
+  devices: [],
+  deviceQuery: "",
   parentDir: "",
   preview: "",
   outputHint: "",
+  wiring: null,       // 板侧视图（服务端投影：接线行 / 同脚组 / 顺序 / 缺条目）
   project: null,      // 当前正在看的检测工程（生成或回读来的）
   checklistChecked: [],
   recent: [],
   generateError: "",
+  wiringError: "",
   busy: false,
   seeded: false,
 };
 
 function hwcheckPlatforms() {
   return (state && state.platforms) || [];
+}
+
+// 模块库载荷（/api/modules 由启动区拉进全局 state，与模块库页 / 生成页同一份）
+function hwcheckModules() {
+  return (state && state.modules) || [];
 }
 
 function platformLabel(id) {
@@ -151,10 +169,69 @@ function renderHwcheckRecent() {
   box.innerHTML = html || hwcheckRecentEmptyHTML();
 }
 
+// —— 器件挑选（工单 03）：chips（已选）+ 缺条目点名 + 卡片网格（可搜索） ——
+// 三块都只渲染服务端载荷与 fx 纯件：chips 复用推荐区 chip 渲染、网格复用模块库
+// 卡片渲染（moduleGridHTML），本层不判"哪个器件能测"。
+function renderHwcheckDevices() {
+  const modules = hwcheckModules();
+  const chips = $("hwcheck-device-chips");
+  if (chips) {
+    const html = hwcheckDeviceChipsHTML(
+      hwcheckUI.devices, modules, hwcheckUI.platform);
+    chips.innerHTML = html || hwcheckDeviceEmptyHTML();
+  }
+  const missing = $("hwcheck-device-missing");
+  if (missing) {
+    missing.innerHTML = hwcheckMissingDevicesHTML(
+      hwcheckUI.wiring ? hwcheckUI.wiring.missing : []);
+  }
+  const grid = $("hwcheck-device-grid");
+  if (grid) {
+    const pool = hwcheckDevicePool(modules);
+    grid.innerHTML = moduleGridHTML(
+      pool, hwcheckUI.devices, hwcheckUI.deviceQuery, hwcheckUI.platform);
+    const count = $("hwcheck-device-count");
+    if (count) {
+      count.textContent = moduleGridCountText(
+        pool, hwcheckUI.devices, hwcheckUI.deviceQuery);
+    }
+  }
+}
+
+// —— 接线表 / 默认脚冲突 / 建议顺序（工单 03）：三块全部来自服务端板侧视图 ——
+// 前端一个字都不判：撞不撞脚、能不能共享、谁先测，都是既有判据算出来的。
+function renderHwcheckWiring() {
+  const wiringBox = $("hwcheck-wiring");
+  const conflictBox = $("hwcheck-conflicts");
+  const orderBox = $("hwcheck-order");
+  const error = hwcheckUI.wiringError;
+  if (wiringBox) {
+    wiringBox.innerHTML = error
+      ? hwcheckWiringErrorHTML(error)
+      : (hwcheckUI.wiring
+        ? hwcheckWiringTableHTML(hwcheckUI.wiring.rows, hwcheckUI.wiring.footnote)
+        : '<div class="muted">选好平台后点「预览检测程序」（或选一件器件），'
+          + "这里会出现这一趟要接的线与默认脚冲突。</div>");
+  }
+  if (conflictBox) {
+    conflictBox.innerHTML = (error || !hwcheckUI.wiring)
+      ? "" : hwcheckPinGroupsHTML(hwcheckUI.wiring.groups, hwcheckUI.wiring.rows)
+        + hwcheckBoardSharesHTML(
+          hwcheckUI.wiring.board_shares, hwcheckUI.wiring.rows);
+  }
+  if (orderBox) {
+    orderBox.innerHTML = (error || !hwcheckUI.wiring)
+      ? "" : hwcheckOrderHTML(
+        hwcheckUI.wiring.order, hwcheckUI.wiring.guide, hwcheckUI.wiring.reason);
+  }
+}
+
 export function renderHwcheckPanel() {
   renderHwcheckPlatforms();
   renderHwcheckChannelNote();
   renderHwcheckOutput();
+  renderHwcheckDevices();
+  renderHwcheckWiring();
   renderHwcheckProject();
   renderHwcheckChecklist();
   renderHwcheckRecent();
@@ -168,22 +245,76 @@ function adoptProject(payload, dir) {
   hwcheckUI.checklistChecked = hwcheckCheckedIds(
     readStored(hwcheckChecklistKey(dir)));
   hwcheckUI.generateError = "";
+  hwcheckUI.wiringError = "";
   writeStored(HWCHECK_LAST_DIR_KEY, dir);
+}
+
+// refreshHwcheckView()：按**当前选择**重取一次板侧视图（接线 / 冲突 / 顺序）+
+// 检测程序文本。选平台、勾通道、增删器件都走这一条路——判据在服务端，前端
+// 不做增量更新（增量更新等于把判据抄一份到浏览器里）。
+//
+// 并发纪律（照 CONTEXT.md「展开收口」那条先例）：**过期响应绝不写状态，在途触发
+// 一律排队**。连点两件器件会连发两次请求，而响应里带着 devices 回显——慢的那个
+// 回来就把刚选的那件抹掉了。三条：
+//   ① 在途时的触发记 pending，收尾用**当前**选择集重跑一次（不静默丢弃）；
+//   ② 落地前比请求体快照，选择集变了 = 这次结果属于旧选择，不写状态；
+//   ③ 失败只清板侧视图，**不清 main.c**——检测程序只依赖平台与通道（选器件不到
+//      一分钟前刚渲染过的那份仍然有效），别让接线表取不到连坐预览（工单 03 评审）。
+let hwcheckViewBusy = false;
+let hwcheckViewPending = false;
+
+function hwcheckSelectionKey() {
+  return JSON.stringify(hwcheckRequestPayload(hwcheckUI));
+}
+
+async function refreshHwcheckView() {
+  if (!hwcheckCanPreview(hwcheckUI)) return;
+  if (hwcheckViewBusy) {
+    hwcheckViewPending = true;
+    return;
+  }
+  hwcheckViewBusy = true;
+  const requestKey = hwcheckSelectionKey();
+  try {
+    const payload = await apiPost("/api/hwcheck/preview", hwcheckRequestPayload(hwcheckUI));
+    if (hwcheckSelectionKey() !== requestKey) {
+      // 选择集在途中又变了：这次结果属于旧选择，丢掉（排队的那次会补上）
+    } else {
+      Object.assign(hwcheckUI, hwcheckPreviewState(hwcheckUI, payload));
+      Object.assign(hwcheckUI, hwcheckBoardState(hwcheckUI, payload));
+      hwcheckUI.wiringError = "";
+    }
+  } catch (e) {
+    if (hwcheckSelectionKey() === requestKey) {
+      hwcheckUI.wiring = null;
+      hwcheckUI.wiringError = e && e.message ? e.message : String(e);
+    }
+  } finally {
+    hwcheckViewBusy = false;
+    if (hwcheckViewPending) {
+      hwcheckViewPending = false;
+      await refreshHwcheckView();
+      return;   // 排队那次已经渲染过，别再渲染一遍
+    }
+  }
+  renderHwcheckOutput();
+  renderHwcheckDevices();
+  renderHwcheckWiring();
 }
 
 async function previewHwcheck() {
   if (!hwcheckCanPreview(hwcheckUI)) return;
   const box = $("hwcheck-output");
-  box.innerHTML = '<div class="muted">正在渲染检测程序…</div>';
-  try {
-    const payload = await apiPost("/api/hwcheck/preview", hwcheckRequestPayload(hwcheckUI));
-    Object.assign(hwcheckUI, hwcheckPreviewState(hwcheckUI, payload));
-    renderHwcheckOutput();
-  } catch (e) {
-    hwcheckUI.preview = "";
-    hwcheckUI.outputHint = "";
-    $("hwcheck-output").innerHTML = hwcheckErrorHTML(e && e.message ? e.message : String(e));
-  }
+  if (box) box.innerHTML = '<div class="muted">正在渲染检测程序…</div>';
+  await refreshHwcheckView();
+}
+
+// addHwcheckDevice(slug, on)：加 / 去一件器件 → 重绘挑选面 + 重取板侧视图。
+// 选器件本身就是"我想看它怎么接"——所以这里顺手刷新一次（本地请求，零 LLM）。
+function addHwcheckDevice(slug, on = true) {
+  Object.assign(hwcheckUI, hwcheckDevicePick(hwcheckUI, slug, on));
+  renderHwcheckDevices();
+  refreshHwcheckView();
 }
 
 // generateHwcheck()：生成检测工程（后端确定性渲染 + 既有生成内核）。
@@ -337,8 +468,11 @@ export function initHwcheck() {
       if (hwcheckUI.platform !== before) {
         hwcheckUI.preview = "";
         hwcheckUI.outputHint = "";
+        hwcheckUI.wiring = null;          // 换板 = 旧接线表作废（脚不一样）
+        hwcheckUI.wiringError = "";
       }
       renderHwcheckPanel();
+      refreshHwcheckView();               // 新平台的接线表 / 冲突立刻跟上
     });
     platforms.addEventListener("keydown", (e) => {
       if (e.key !== "Enter" && e.key !== " ") return;
@@ -351,7 +485,8 @@ export function initHwcheck() {
   const channels = $("hwcheck-channels");
   if (channels) {
     // 通道勾选走委托（工单 02 起通道清单可能变长，逐个绑定会漏）；
-    // 通道是渲染输入 → 改了就把旧预览清掉（旧文本是另一种形态的 main.c）。
+    // 通道是渲染输入 → 改了就把旧预览清掉（旧文本是另一种形态的 main.c），
+    // 并重取板侧视图（通道模块自己也会占脚、也会撞脚）。
     channels.addEventListener("change", (e) => {
       const input = e.target.closest("[data-hwcheck-channel]");
       if (!input) return;
@@ -359,9 +494,45 @@ export function initHwcheck() {
         hwcheckUI, input.dataset.hwcheckChannel, input.checked));
       hwcheckUI.preview = "";
       hwcheckUI.outputHint = "";
+      hwcheckUI.wiring = null;
+      hwcheckUI.wiringError = "";
       // 通道变了：生成前引导（mspm0 双通道会撞脚）要跟着变
       renderHwcheckChannelNote();
       renderHwcheckOutput();
+      refreshHwcheckView();
+    });
+  }
+
+  // —— 器件挑选（工单 03）：搜索框 / 卡片网格（点卡片 = 加一件）/ chips（点 = 去掉）——
+  const deviceSearch = $("hwcheck-device-search");
+  if (deviceSearch) {
+    deviceSearch.addEventListener("input", () => {
+      hwcheckUI.deviceQuery = deviceSearch.value || "";
+      renderHwcheckDevices();
+    });
+  }
+  const deviceGrid = $("hwcheck-device-grid");
+  if (deviceGrid) {
+    // 与生成页模块网格同一套委托语义：详情按钮优先（开说明弹窗），
+    // 卡片本体 = 加一件器件。平台用**本栏目自己的**（生成页的平台可能不同）。
+    deviceGrid.addEventListener("click", (e) => {
+      const infoBtn = e.target.closest(".mc-info");
+      if (infoBtn) {
+        openModuleInfo(infoBtn.dataset.info, hwcheckUI.platform);
+        return;
+      }
+      const card = e.target.closest("[data-add]");
+      if (!card) return;
+      addHwcheckDevice(card.dataset.add);
+    });
+  }
+  const deviceChips = $("hwcheck-device-chips");
+  if (deviceChips) {
+    // 说明按钮走既有委托（捕获阶段拦，否则会连带把 chip 从工程里移除）
+    bindModuleInfoEntry(deviceChips, () => hwcheckUI.platform);
+    deviceChips.addEventListener("click", (e) => {
+      const chip = e.target.closest("[data-remove]");
+      if (chip) addHwcheckDevice(chip.dataset.remove, false);
     });
   }
   const preview = $("btn-hwcheck-preview");

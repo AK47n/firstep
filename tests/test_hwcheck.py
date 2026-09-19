@@ -30,6 +30,7 @@ from contest_generator.hwcheck import (
 )
 from contest_generator.manifest import ModuleManifest
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
+from contest_generator.readme import parse_pin_table
 
 BOTH = HwCheckConfig(platform=PLATFORM_STM32, debug_uart=True, oled=True)
 SERIAL_ONLY = HwCheckConfig(platform=PLATFORM_STM32, debug_uart=True, oled=False)
@@ -371,24 +372,27 @@ def test_config_rejects_non_boolean_channel_flags():
 
 @pytest.fixture()
 def hwcheck_client(tmp_path):
-    """已配置的假上下文（复用 test_webapp 的搭法）+ TestClient，记录 holder 里的假 LLM。
+    """已配置的上下文 + TestClient，记录 holder 里的假 LLM。
 
     这个端点**不该碰 LLM**（spec：渲染零 LLM），所以假 LLM 的作用是"证明它没被调用"。
+    模块库用**真库**：工单 03 起预览要投影接线表与冲突（判据是库内真 pins 声明 +
+    真板定义），假库（dht11/oled/delay）连框架模块 `led` / `debug_uart` 都没有，
+    造不出任何一条真实接线与冲突。
     """
     from fastapi.testclient import TestClient
 
     from contest_generator.config import AppConfig
     from contest_generator.webapp import AppContext, create_app
-    from tests.fakes import FakeLLM, make_fake_module_library
+    from tests.fakes import FakeLLM
 
+    repo = Path(__file__).resolve().parents[1]
     config_path = tmp_path / "cfg" / "config.json"
-    library_dir = make_fake_module_library(tmp_path / "module_library")
     holder = {"llm": FakeLLM()}
     ctx = AppContext(
         config_path=config_path,
         config=AppConfig(
             api_key="sk-test",
-            module_library_dir=library_dir,
+            module_library_dir=repo / "library" / "modules",
             masters_dir=tmp_path / "masters",
         ),
         llm_factory=lambda config: holder["llm"],
@@ -899,5 +903,190 @@ def test_project_endpoint_rejects_a_contest_project_400(real_library_client, tmp
     response = client.get("/api/hwcheck/project", params={"output_dir": str(contest)})
     assert response.status_code == 400, response.text
     assert "检测工程" in response.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# 工单 03：器件选择（配置形状 + 模块集 + 端点载荷）
+# ---------------------------------------------------------------------------
+
+
+def test_devices_default_to_empty_and_do_not_change_the_module_set():
+    """不选器件 = 工单 02 的模块集逐项不变（旧调用点零回归）。"""
+    config = HwCheckConfig(platform=PLATFORM_STM32, debug_uart=True, oled=True)
+    assert config.devices == ()
+    assert hwcheck_modules(config) == ("led", "delay", "debug_uart", "oled")
+    assert render_main_c(config) == render_main_c(
+        HwCheckConfig(platform=PLATFORM_STM32, debug_uart=True, oled=True, devices=())
+    )
+
+
+def test_selected_devices_join_the_module_set_after_the_channels():
+    """选中的器件进工程（顺序：框架 → 通道 → 器件）——接线表才与工程 README 同源。"""
+    config = HwCheckConfig(
+        platform=PLATFORM_MSPM0, debug_uart=True, oled=False,
+        devices=("ml_mpu6050", "sr04"),
+    )
+    assert hwcheck_modules(config) == ("led", "delay", "debug_uart", "ml_mpu6050", "sr04")
+
+
+def test_device_list_is_deduplicated_and_order_preserving():
+    """同一件选两次 / 与框架模块重名 = 只算一次（不因为重复把依赖展开跑两遍）。"""
+    config = HwCheckConfig(
+        platform=PLATFORM_STM32, debug_uart=False, oled=False,
+        devices=("led", "ml_mpu6050", "led", "ml_mpu6050"),
+    )
+    assert config.devices == ("led", "ml_mpu6050", "led", "ml_mpu6050")
+    assert hwcheck_modules(config) == ("led", "delay", "ml_mpu6050")
+
+
+@pytest.mark.parametrize("bad", ["ml_mpu6050", ("", "led"), ("led", 3), ("led", None)])
+def test_devices_must_be_nonempty_strings(bad):
+    """器件是 slug 字符串：空串 / 非字符串一律 400 中文（不静默丢掉一个坏值）。"""
+    with pytest.raises(HwCheckError):
+        HwCheckConfig(
+            platform=PLATFORM_STM32, debug_uart=False, oled=False, devices=bad
+        )
+
+
+def test_preview_payload_carries_the_board_view_for_the_selected_devices(
+    real_library_client,
+):
+    """预览即带上板侧视图：接线行含所选器件、顺序里它的 bring_up=False。"""
+    client, _ = real_library_client
+    response = client.post(
+        "/api/hwcheck/preview",
+        json={"platform": PLATFORM_MSPM0, "debug_uart": True, "oled": False,
+              "devices": ["ml_mpu6050"]},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["devices"] == ["ml_mpu6050"]
+    wiring = body["wiring"]
+    pins = {(row["slug"], row["pin"]) for row in wiring["rows"]}
+    assert ("ml_mpu6050", "PA1") in pins and ("ml_mpu6050", "PA0") in pins
+    assert [item["slug"] for item in wiring["order"]][-1] == "ml_mpu6050"
+    assert wiring["guide"] and wiring["reason"] and wiring["footnote"]
+
+
+def test_preview_reports_a_device_without_this_platform_entry(real_library_client):
+    """本平台没有条目的器件：预览就点名"无法检测"（不静默省略）。"""
+    client, _ = real_library_client
+    body = client.post(
+        "/api/hwcheck/preview",
+        json={"platform": PLATFORM_STM32, "debug_uart": False, "oled": False,
+              "devices": ["sr04"]},
+    ).json()
+    missing = body["wiring"]["missing"]
+    assert [item["slug"] for item in missing] == ["sr04"]
+    assert "无本平台版本" in missing[0]["message"]
+
+
+def test_preview_rejects_a_device_that_is_not_in_the_library(real_library_client):
+    """库外 slug → 400 中文（未知模块异常已登记；不静默当空）。"""
+    client, _ = real_library_client
+    response = client.post(
+        "/api/hwcheck/preview",
+        json={"platform": PLATFORM_STM32, "devices": ["nope-不存在"]},
+    )
+    assert response.status_code == 400, response.text
+    assert "nope-不存在" in response.json()["detail"]
+
+
+def test_generate_wiring_rows_equal_the_generated_readme_pin_table(
+    real_library_client, tmp_path
+):
+    """**票面硬要求端到端**：返回的接线行 = 落盘工程 README 的引脚接线表（逐格）。
+
+    左边 = `/api/hwcheck/generate` 给页面的行，右边 = 真生成出来的 README.md 里
+    那张表（解析回来）。两条路任何一处另写推导，这里立刻分叉。
+    """
+    client, _ = real_library_client
+    parent = tmp_path / "out"
+    parent.mkdir()
+    response = client.post(
+        "/api/hwcheck/generate",
+        json={"platform": PLATFORM_MSPM0, "debug_uart": True, "oled": False,
+              "devices": ["ml_mpu6050"], "parent_dir": str(parent)},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    readme = (Path(body["output_dir"]) / "README.md").read_text(encoding="utf-8")
+    table = parse_pin_table(readme)
+    assert table, "生成的 README 里应有引脚接线表"
+    core = ("slug", "role", "role_id", "role_label", "pin", "remark")
+    assert [tuple(row[k] for k in core) for row in body["wiring"]["rows"]] == [
+        tuple(row[k] for k in core) for row in table
+    ]
+    # 板载注记不改变行本体，但页面要能看到它（地猛星 PA0/PA1 与板载 LED 同脚）
+    assert {row["pin_note"] for row in body["wiring"]["rows"] if row["pin"] == "PA0"}
+
+
+def test_generate_records_devices_in_the_context_manifest(
+    real_library_client, tmp_path
+):
+    """器件选择落进上下文清单（回读的服务端真源），slugs 里也真的含它。"""
+    from contest_generator.context_manifest import read_context_fields
+
+    client, _ = real_library_client
+    parent = tmp_path / "out"
+    parent.mkdir()
+    body = client.post(
+        "/api/hwcheck/generate",
+        json={"platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
+              "devices": ["ml_mpu6050"], "parent_dir": str(parent)},
+    ).json()
+    fields = read_context_fields(Path(body["output_dir"]))
+    assert fields["kind"] == "hwcheck"
+    assert fields["devices"] == ["ml_mpu6050"]
+    assert "ml_mpu6050" in fields["slugs"]
+    assert body["modules"] and "ml_mpu6050" in body["modules"]
+
+
+def test_project_endpoint_restores_the_device_selection(real_library_client, tmp_path):
+    """回读把器件选择一起读回来（刷新后 chip 与接线表仍然一致）。"""
+    client, _ = real_library_client
+    parent = tmp_path / "out"
+    parent.mkdir()
+    generated = client.post(
+        "/api/hwcheck/generate",
+        json={"platform": PLATFORM_MSPM0, "debug_uart": True, "oled": False,
+              "devices": ["ml_mpu6050"], "parent_dir": str(parent)},
+    ).json()
+    body = client.get(
+        "/api/hwcheck/project", params={"output_dir": generated["output_dir"]}
+    ).json()
+    assert body["devices"] == ["ml_mpu6050"]
+    assert body["wiring"]["rows"] == generated["wiring"]["rows"]
+    assert body["wiring"]["order"] == generated["wiring"]["order"]
+
+
+def test_project_endpoint_reports_mspm0_default_channel_conflict(
+    real_library_client, tmp_path
+):
+    """默认双通道（mspm0）的 PA22 冲突：**生成之前**页面就能看见（工单 02 的 400 前置）。
+
+    这条同时钉住"生成门禁与页面预警同判据"：生成会 400 报 PA22，页面预警也报 PA22。
+    """
+    client, _ = real_library_client
+    parent = tmp_path / "out"
+    parent.mkdir()
+    generated = client.post(
+        "/api/hwcheck/generate",
+        json={"platform": PLATFORM_MSPM0, "debug_uart": False, "oled": False,
+              "parent_dir": str(parent)},
+    ).json()
+    assert generated["wiring"]["groups"] == []  # 只开灯：默认集没有同脚
+    conflict = client.post(
+        "/api/hwcheck/preview",
+        json={"platform": PLATFORM_MSPM0, "debug_uart": True, "oled": True},
+    ).json()["wiring"]["groups"]
+    assert [g["pin"] for g in conflict if g["kind"] == "conflict"] == ["PA22"]
+    refused = client.post(
+        "/api/hwcheck/generate",
+        json={"platform": PLATFORM_MSPM0, "debug_uart": True, "oled": True,
+              "parent_dir": str(parent)},
+    )
+    assert refused.status_code == 400
+    assert "PA22" in refused.json()["detail"], "页面预警与生成门禁报的是同一个脚"
 
 

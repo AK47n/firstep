@@ -74,6 +74,7 @@ def build_context_fields(
     python_templates: Mapping[str, str] | None = None,
     tool_version: str = "",
     kind: str = CONTEXT_KIND_CONTEST,
+    devices: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     """组装清单字段（写侧单源：generate 尾部与测试共用同一形状）。
 
@@ -86,12 +87,15 @@ def build_context_fields(
     ——清单只记生成输入，结果可随时从产物树重算。
 
     `kind` 非法（词表外）在这里大声失败：脏值不许写进清单让读侧去猜。
+    `devices`（工单 module-hwcheck/03）= 检测页选中的**器件**（与 slugs 不同：
+    slugs 是依赖展开后的完整模块集，含框架与依赖）。缺省 None = **键不出现**
+    ——赛题工程与工单 02 的清单逐字节不变；读侧缺字段 = 空集（旧工程兼容）。
     """
     if kind not in CONTEXT_KINDS:
         raise ContextError(
             f"未知的工程种类 {kind!r}（应为 {'、'.join(CONTEXT_KINDS)}）"
         )
-    return {
+    fields: dict[str, Any] = {
         "version": CONTEXT_MANIFEST_VERSION,
         "kind": kind,
         "platform": platform,
@@ -108,6 +112,9 @@ def build_context_fields(
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "tool_version": tool_version,
     }
+    if devices is not None:
+        fields["devices"] = list(devices)
+    return fields
 
 
 def write_context_manifest(output_dir: Path, fields: Mapping[str, Any]) -> Path:
@@ -183,6 +190,13 @@ def read_context_fields(output_dir: Path) -> dict[str, Any] | None:
             data.get("python_templates", {})
             if isinstance(data.get("python_templates"), dict)
             else {}
+        ),
+        # 检测页选中的器件（工单 module-hwcheck/03）：缺字段 = 空集（旧清单 /
+        # 赛题工程都没有这个键，向后兼容；非字符串项丢弃，坏清单不带崩调用方）
+        "devices": (
+            [item for item in data["devices"] if isinstance(item, str)]
+            if isinstance(data.get("devices"), list)
+            else []
         ),
         "generated_at": (
             data.get("generated_at", "")
@@ -486,6 +500,7 @@ def validate_context_fields(
         ("instances", dict),
         ("python_templates", dict),
         ("score_points", list),
+        ("devices", list),
     ):
         value = fields.get(key)
         if value is not None and not isinstance(value, field):

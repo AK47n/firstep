@@ -369,6 +369,111 @@ def test_generate_project_can_tag_kind_and_skip_the_demo_script(tmp_path):
     assert not (summary.output_dir / "演示脚本.md").exists()
 
 
+# ---------------------------------------------------------------------------
+# devices 字段（工单 module-hwcheck/03）：检测页选中的器件随工程落盘
+# ---------------------------------------------------------------------------
+
+
+def test_devices_key_is_absent_unless_the_caller_passes_it():
+    """缺省不传 = **键不出现**（赛题工程与工单 02 的清单逐字节不变）。"""
+    fields = build_context_fields(
+        platform=PLATFORM_STM32, slugs=["dht11"], main_c=""
+    )
+    assert "devices" not in fields
+
+    explicit = build_context_fields(
+        platform=PLATFORM_STM32, slugs=["dht11"], main_c="", devices=()
+    )
+    assert explicit["devices"] == []  # 显式传空 = 落了键（"这次一件器件都没选"）
+
+
+def test_devices_round_trip(tmp_path):
+    """写→读：器件清单原样回来（保序，不去重——去重是域层的事）。"""
+    out = tmp_path / "out"
+    out.mkdir()
+    write_context_manifest(
+        out,
+        build_context_fields(
+            platform=PLATFORM_MSPM0,
+            slugs=["led", "delay", "ml_mpu6050"],
+            main_c="",
+            kind=CONTEXT_KIND_HWCHECK,
+            devices=["ml_mpu6050", "sr04"],
+        ),
+    )
+    assert read_context_fields(out)["devices"] == ["ml_mpu6050", "sr04"]
+
+
+def test_read_side_tolerates_a_missing_or_broken_devices_field(tmp_path):
+    """旧清单缺字段 = 空集；非数组 / 混了非字符串 = 能读多少读多少，不带崩调用方。"""
+    legacy = tmp_path / "legacy"
+    legacy.mkdir()
+    (legacy / CONTEXT_MANIFEST_FILENAME).write_text(
+        json.dumps({"platform": "stm32", "slugs": ["led"]}), encoding="utf-8"
+    )
+    assert read_context_fields(legacy)["devices"] == []
+
+    broken = tmp_path / "broken"
+    broken.mkdir()
+    (broken / CONTEXT_MANIFEST_FILENAME).write_text(
+        json.dumps({"platform": "stm32", "slugs": [], "devices": "ml_mpu6050"}),
+        encoding="utf-8",
+    )
+    assert read_context_fields(broken)["devices"] == []
+
+    mixed = tmp_path / "mixed"
+    mixed.mkdir()
+    (mixed / CONTEXT_MANIFEST_FILENAME).write_text(
+        json.dumps({"platform": "stm32", "slugs": [], "devices": ["led", 3, None]}),
+        encoding="utf-8",
+    )
+    assert read_context_fields(mixed)["devices"] == ["led"]
+
+
+def test_validate_context_fields_rejects_a_non_list_devices(tmp_path):
+    """形状校验：devices 必须是数组（字典 / 字符串都拒）。"""
+    for bad in ("ml_mpu6050", {"slug": "ml_mpu6050"}):
+        with pytest.raises(ContextError):
+            validate_context_fields(
+                {"platform": PLATFORM_STM32, "slugs": [], "devices": bad},
+                tmp_path / "library",
+            )
+
+
+def test_generate_project_records_devices_in_the_manifest(tmp_path):
+    """生成入口透传：`devices` 落进清单（缺省不传时键仍然不出现）。"""
+    library = make_fake_module_library(tmp_path / "modules")
+    make_fake_master_project(tmp_path / "masters" / PLATFORM_STM32)
+    summary = generate_project(
+        platform=PLATFORM_STM32,
+        slugs=["dht11"],
+        main_c_content=MAIN_SKELETON,
+        output_dir=tmp_path / "out",
+        module_library_dir=library,
+        masters_dir=tmp_path / "masters",
+        kind=CONTEXT_KIND_HWCHECK,
+        write_demo_script=False,
+        devices=["dht11"],
+    )
+    fields = json.loads(
+        (summary.output_dir / CONTEXT_MANIFEST_FILENAME).read_text(encoding="utf-8")
+    )
+    assert fields["devices"] == ["dht11"]
+
+    plain = generate_project(
+        platform=PLATFORM_STM32,
+        slugs=["dht11"],
+        main_c_content=MAIN_SKELETON,
+        output_dir=tmp_path / "out2",
+        module_library_dir=library,
+        masters_dir=tmp_path / "masters",
+    )
+    plain_fields = json.loads(
+        (plain.output_dir / CONTEXT_MANIFEST_FILENAME).read_text(encoding="utf-8")
+    )
+    assert "devices" not in plain_fields
+
+
 
 # ---------------------------------------------------------------------------
 # 反推：平台 / 模块 / 绑定 / main.c（无清单历史目录）

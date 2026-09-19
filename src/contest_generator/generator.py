@@ -793,6 +793,10 @@ def generate_project(
     # 演示脚本开关（工单 module-hwcheck/02）：检测工程没有评分点 / 功能需求，
     # 演示脚本写了也是空壳，故不写。缺省 True = 既有行为逐字节不变。
     write_demo_script: bool = True,
+    # 检测页选中的器件（工单 module-hwcheck/03）：落进上下文清单的 `devices`
+    # 字段（回读时器件选择与接线表才回得来）。缺省 None = 键不出现——赛题工程
+    # 的清单逐字节不变（向后兼容）。
+    devices: Sequence[str] | None = None,
     # 报告草稿（工单 report-draft-demo/02）：LLM 层先产出的报告文本（方案论证
     # + 软件流程拼接，契约见 report_draft.render_report_draft）；缺省空 = 不写
     # 设计报告草稿.md（旧行为逐字节不变），非空 = 写盘（README / 演示脚本
@@ -831,6 +835,8 @@ def generate_project(
     开关：`kind` 落进上下文清单（缺省 contest = 赛题工程），`write_demo_script`
     = False 时不写演示脚本（检测工程没有评分点 / 需求，写了也是空壳）。两者
     缺省值 = 既有行为逐字节不变。
+    devices（工单 03）= 检测页选中的器件，落进上下文清单的 `devices` 字段
+    （缺省 None = 键不出现，赛题工程清单逐字节不变）。
     """
     resolved = resolve_selection(
         module_library_dir, platform, slugs, python_templates=python_templates
@@ -859,6 +865,7 @@ def generate_project(
         tool_version=tool_version,
         kind=kind,
         write_demo_script=write_demo_script,
+        devices=devices,
         report_draft_text=report_draft_text,
     )
     return describe_generation(
@@ -1152,6 +1159,9 @@ def generate(
     # 工程种类 / 演示脚本开关（工单 module-hwcheck/02）：见 generate_project。
     kind: str = CONTEXT_KIND_CONTEST,
     write_demo_script: bool = True,
+    # 检测页选中的器件（工单 module-hwcheck/03）：见 generate_project（缺省 None
+    # = 清单里不落 `devices` 键）。
+    devices: Sequence[str] | None = None,
     # 报告草稿（工单 report-draft-demo/02）：LLM 层先产出的报告文本，缺省空 =
     # 不写 设计报告草稿.md（旧行为逐字节不变）；非空 = README / 演示脚本之后
     # 写盘（纯新增文件，写失败走既有 rmtree 兜底，生成原子性不破）。
@@ -1196,6 +1206,8 @@ def generate(
 
     kind / write_demo_script（工单 module-hwcheck/02）：前者落进上下文清单的
     `kind` 字段，后者 False = 跳过演示脚本。缺省 = 既有行为逐字节不变。
+    devices（工单 03）：检测页选中的器件，落进清单的 `devices` 字段（None =
+    键不出现，赛题工程清单逐字节不变）。
     """
     patcher_registry = registry or default_registry()
     patcher = patcher_registry.get(platform)  # 未知平台在这里失败
@@ -1393,6 +1405,7 @@ def generate(
                 python_templates=template_choices or {},
                 tool_version=tool_version,
                 kind=kind,
+                devices=devices,
             ),
         )
     except Exception:

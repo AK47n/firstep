@@ -985,6 +985,43 @@
   .hwcheck-recent-row.current { border-color: var(--accent); }
   .hwcheck-recent-time { color: var(--muted); font-size: 12.5px; flex: 0 0 auto; }
   .hwcheck-recent-name { flex: 1 1 auto; min-width: 0; overflow-wrap: break-word; }
+  /* 器件挑选 + 接线表 + 默认脚冲突 + 建议顺序（工单 module-hwcheck/03）：
+     接线表与工程 README 的引脚接线表同一份推导；冲突行 ⚠ 红 / 可共享行 ✓ 绿。 */
+  .hwcheck-device-search { min-width: 320px; flex: 1 1 320px; }
+  .hwcheck-device-count { color: var(--muted); font-size: 12.5px; align-self: center; }
+  #hwcheck-device-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: var(--space-2); }
+  #hwcheck-device-grid { max-height: 340px; overflow: auto; margin-top: var(--space-2); }
+  .hwcheck-table { width: 100%; border-collapse: collapse; font-size: 13px;
+                   margin-bottom: var(--space-2); }
+  .hwcheck-table th { text-align: left; font-size: 12px; color: var(--muted);
+                      border-bottom: 1px solid var(--border); padding: 4px 8px;
+                      font-weight: 600; }
+  .hwcheck-table td { border-bottom: 1px solid var(--border); padding: 5px 8px;
+                      vertical-align: top; line-height: 1.7; }
+  .hwcheck-pin { font-family: var(--mono); font-weight: 600; }
+  .hwcheck-share { display: block; color: var(--warn); font-size: 12px; }
+  .hwcheck-group { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px;
+                   padding: 6px 10px; border: 1px solid var(--border);
+                   border-radius: var(--radius-md); margin-bottom: var(--space-1);
+                   font-size: 12.5px; line-height: 1.7; }
+  .hwcheck-group.conflict { border-color: var(--warn); }
+  .hwcheck-group.share { border-color: var(--ok); }
+  /* 板上自带的共享（板载 LED / 上拉）：不是"选错了"，但必须看得见——用中性描边 */
+  .hwcheck-group.board-share { border-color: var(--border-strong); }
+  .hwcheck-group.board-share .hwcheck-group-mark { color: var(--warn); }
+  .hwcheck-group-mark { flex: 0 0 auto; font-weight: 600; }
+  .hwcheck-group.conflict .hwcheck-group-mark { color: var(--warn); }
+  .hwcheck-group.share .hwcheck-group-mark { color: var(--ok); }
+  .hwcheck-group-reason { color: var(--muted); }
+  .hwcheck-ok { font-size: 12.5px; color: var(--ok); margin-bottom: var(--space-2); }
+  .hwcheck-order { list-style: none; margin: 0 0 var(--space-2); padding: 0; }
+  .hwcheck-order-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px;
+                       padding: 4px 0; font-size: 13px; }
+  .hwcheck-order-index { flex: 0 0 auto; width: 20px; height: 20px; line-height: 20px;
+                         text-align: center; border-radius: var(--radius-full);
+                         background: var(--panel-2); border: 1px solid var(--border);
+                         font-size: 11.5px; color: var(--muted); }
+  .hwcheck-order-desc { color: var(--muted); min-width: 0; overflow-wrap: break-word; }
   /* 评分点核对清单（工单 score-checklist/01）：逐条 checkbox + 进度 +
      复制核对表；done 行弱化描边表示已核对 */
   .sp-actions { display: flex; align-items: center; gap: 10px; margin-bottom: var(--space-2); }
@@ -3824,7 +3861,20 @@
         <label class="hwcheck-channel"><input type="checkbox" data-hwcheck-channel="oled" checked> OLED 屏（不拖串口线也能看结果）</label>
       </div>
       <div id="hwcheck-channel-note"></div>
-      <h3>3. 保存位置</h3>
+      <h3>3. 要测的器件 <span class="muted">（选上就看得见接线表与默认脚冲突）</span></h3>
+      <div id="hwcheck-device-chips" class="row"></div>
+      <div id="hwcheck-device-missing"></div>
+      <div class="row">
+        <input type="search" id="hwcheck-device-search" class="hwcheck-device-search"
+               placeholder="搜索器件（模块名 / 简介 / 套件型号）…">
+        <span id="hwcheck-device-count" class="hwcheck-device-count"></span>
+      </div>
+      <div id="hwcheck-device-grid"></div>
+      <div class="hwcheck-hint">器件列表 = 模块库全量（与「模块库」页同一份，可按名字搜）。
+        选中的器件会一起编进检测工程，并出现在下面的接线表与检测顺序里；
+        <strong>逐件的检测小节与板上通断判定还在做</strong>——这一版烧上去跑的仍是
+        「板子活着」那一趟（灯闪 + 串口那行字）。</div>
+      <h3>4. 保存位置</h3>
       <div class="row">
         <input type="text" id="hwcheck-parent" class="hwcheck-parent" placeholder="留空 = 桌面">
         <button id="btn-hwcheck-pick-parent">选择文件夹</button>
@@ -3837,6 +3887,21 @@
         <button id="btn-hwcheck-generate" class="primary">生成检测工程</button>
       </div>
       <div id="hwcheck-output" style="margin-top: var(--space-3)"></div>
+    </div>
+
+    <div class="card">
+      <h2>接线表 <span class="muted">（这几根线各接哪里——与生成工程的 README 同一张表）</span></h2>
+      <div id="hwcheck-wiring"></div>
+    </div>
+
+    <div class="card">
+      <h2>默认脚冲突预警 <span class="muted">（哪两件不能同时用默认脚）</span></h2>
+      <div id="hwcheck-conflicts"></div>
+    </div>
+
+    <div class="card">
+      <h2>建议检测顺序 <span class="muted">（先确认板子活着，再一件一件测）</span></h2>
+      <div id="hwcheck-order"></div>
     </div>
 
     <div class="card">

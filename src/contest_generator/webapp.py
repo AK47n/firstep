@@ -167,11 +167,13 @@ from .recent_jobs import (
 from .hwcheck import (
     HwCheckConfig,
     HwCheckError,
+    hwcheck_devices,
     hwcheck_modules,
     render_checklist,
     render_main_c,
     render_output_hint,
 )
+from .hwcheck_board import hwcheck_board_view_for
 from .hwcheck_store import (
     DEFAULT_RECENT_LIMIT,
     list_hwcheck_projects,
@@ -705,6 +707,49 @@ def _llm(
 
 def _library_dir(ctx: AppContext) -> Path:
     return _require_config(ctx).module_library_dir
+
+
+def _hwcheck_devices(payload: dict) -> tuple[str, ...]:
+    """检测页选中的器件 slug 列表（工单 module-hwcheck/03）。
+
+    缺省 / 空 = 一件都没选（"先确认板子活着"那条路）。非字符串 / 空串 →
+    `_require_str_list` 的 400 中文（与全站其它列表参数同一处校验，不静默丢）。
+    """
+    return tuple(_require_str_list(payload, "devices"))
+
+
+def _hwcheck_library_config(ctx: AppContext) -> AppConfig:
+    """检测页要用的库路径（模块库 / 母版库），没配置 = 400 中文。
+
+    检测程序不调 LLM，但**接线表与生成都要读库**——库路径缺失时没有"部分可用"
+    这回事（给半张接线表比说清楚更坏）。文案单源在这里：预览、生成、回读三处
+    共用一句，免得三个端点各写一版"请先到设置页"。
+    """
+    app_config = _current_config(ctx)
+    if app_config is None:
+        raise HwCheckError(
+            "还没配置模块库 / 母版库目录：请先到设置页完成配置"
+            "（硬件检测不需要 AI，但接线表与生成都要用这两个库的路径）"
+        )
+    return app_config
+
+
+def _hwcheck_wiring(ctx: AppContext, config: HwCheckConfig) -> dict:
+    """检测页的板侧视图（接线行 / 同脚组 / 板载共享 / 建议顺序 / 缺平台条目）。
+
+    模块集判据单源 = `hwcheck_modules(config)`（框架 ∪ 通道 ∪ 器件，依赖由
+    `hwcheck_board` 展开）——生成工程用的是同一个集合，所以页面这张表与工程
+    README 那张表是同一份推导。投影本身全在 `hwcheck_board`（判据复用 wiring /
+    pin_bindings / readme），本处只把库根与板定义喂进去。
+    """
+    app_config = _hwcheck_library_config(ctx)
+    view = hwcheck_board_view_for(
+        app_config.module_library_dir,
+        config.platform,
+        hwcheck_modules(config),
+        devices=hwcheck_devices(config),
+    )
+    return view.to_dict()
 
 
 def _instance_known_slugs(module_library_dir: Path, slugs: Sequence[str]) -> list[str]:
@@ -2234,29 +2279,36 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     # **确定性渲染，零 LLM、零配方**：域层纯函数出文本，路由只取参转调。
     # 检测程序不依赖生成流程任何状态（不需要题面、不需要已选模块集），
     # 所以这里没有题面 / slugs 这些参数——这是它与 /api/skeleton 的根本区别。
+    # 工单 03 起预览还带**板侧视图**（接线行 / 同脚冲突 / 建议顺序）：它要读模块库
+    # 与板定义，所以本端点从"纯渲染"变成"要配置"，但依旧一个 LLM 都不碰。
     @app.post("/api/hwcheck/preview")
     @_map_errors
     def hwcheck_preview(payload: dict) -> dict:
-        """渲染检测程序 main.c 文本（不落盘：落盘走既有生成内核，见工单 02）。
+        """渲染检测程序 main.c 文本 + 板侧视图（不落盘；落盘走工单 02 的生成端点）。
 
         payload：platform（必填，词表外 400 中文）、debug_uart / oled（可选布尔，
-        缺省 = 请求没表态 → 按"两个通道都在场"渲染，与检测页勾选框的默认一致）。
+        缺省 = 请求没表态 → 按"两个通道都在场"渲染，与检测页勾选框的默认一致）、
+        devices（可选，选中的器件 slug 列表；库外 slug 400 中文）。
         返回 main_c 文本 + output_hint（「应看到什么」的输出通道部分）+ 通道形态
-        回显，供检测页明示。前端一律显式带上两个开关（见 fx/hwcheck.js
-        hwcheckRequestPayload）——缺省分支只是给脚本 / 手工调用兜底。
+        与器件回显 + wiring（接线行 / 同脚组 / 建议顺序 / 本平台无条目的器件）。
+        前端一律显式带上这些字段（见 fx/hwcheck.js hwcheckRequestPayload）——
+        缺省分支只是给脚本 / 手工调用兜底。
         """
         platform = _require_str(payload, "platform")
         config = HwCheckConfig(
             platform=platform,
             debug_uart=_optional_bool(payload, "debug_uart", default=True),
             oled=_optional_bool(payload, "oled", default=True),
+            devices=_hwcheck_devices(payload),
         )
         return {
             "platform": config.platform,
             "debug_uart": config.debug_uart,
             "oled": config.oled,
+            "devices": list(hwcheck_devices(config)),
             "main_c": render_main_c(config),
             "output_hint": render_output_hint(config),
+            "wiring": _hwcheck_wiring(context, config),
         }
 
     # 硬件检测：**真的上板**（工单 module-hwcheck/02）——生成检测工程。
@@ -2271,16 +2323,19 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         """生成一个检测工程（同步端点；零 LLM）。
 
         payload：platform（必填，词表外 400 中文）、debug_uart / oled（可选
-        布尔，缺省 = 两个通道都在场）、parent_dir（可选，输出**父目录**；缺省
-        = 桌面）。每次生成一个新子目录 `hwcheck-<平台>-<YYYYMMDD-HHMMSS>`
-        （同秒撞车顺延一秒，**绝不覆盖**）。
+        布尔，缺省 = 两个通道都在场）、devices（可选，检测页选中的器件 slug
+        列表）、parent_dir（可选，输出**父目录**；缺省 = 桌面）。每次生成一个
+        新子目录 `hwcheck-<平台>-<YYYYMMDD-HHMMSS>`（同秒撞车顺延一秒，
+        **绝不覆盖**）。
 
-        返回 {platform, debug_uart, oled, output_dir, main_c, output_hint,
-        checklist（3-6 条，see render_checklist）, modules（实际进工程的模块，
-        依赖展开后）, structure, include_dirs, build_hint}。
+        返回 {platform, debug_uart, oled, devices, output_dir, main_c,
+        output_hint, wiring, checklist（3-6 条，see render_checklist）,
+        modules（实际进工程的模块，依赖展开后）, structure, include_dirs,
+        build_hint}。
 
-        选中的模块 = hwcheck_modules(config)（框架 led/delay + 各通道模块）——
-        检测程序调的函数必须真在工程里，这是生成门禁的硬要求，不是可选优化。
+        选中的模块 = hwcheck_modules(config)（框架 led/delay + 各通道模块 +
+        选中的器件，工单 03）——检测程序调的函数必须真在工程里，这是生成门禁的
+        硬要求，不是可选优化；器件也进工程，页面接线表才与工程 README 同源。
         mspm0 无 CCS 工具链时只出 build_hint 提示（不阻断，与 /api/generate 同）。
         """
         platform = _require_str(payload, "platform")
@@ -2288,17 +2343,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             platform=platform,
             debug_uart=_optional_bool(payload, "debug_uart", default=True),
             oled=_optional_bool(payload, "oled", default=True),
+            devices=_hwcheck_devices(payload),
         )
         parent = _optional_str(payload, "parent_dir")
         parent_dir = Path(parent) if parent else context.desktop_dir()
         output_dir = resolve_hwcheck_output_dir(parent_dir, config.platform)
-        app_config = _current_config(context)
-        if app_config is None:
-            # 检测程序不调 LLM，但生成要读模块库 / 母版库——路径来自配置
-            raise HwCheckError(
-                "还没配置模块库 / 母版库目录：请先到设置页完成配置"
-                "（硬件检测不需要 AI，但要用到这两个库的路径）"
-            )
+        app_config = _hwcheck_library_config(context)
         ccs_tools = None
         if config.platform == PLATFORM_MSPM0:
             ccs_tools = find_ccs_tools(
@@ -2321,14 +2371,17 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 tool_version=__version__,
                 kind=CONTEXT_KIND_HWCHECK,
                 write_demo_script=False,
+                devices=hwcheck_devices(config),
             )
         return {
             "platform": config.platform,
             "debug_uart": config.debug_uart,
             "oled": config.oled,
+            "devices": list(hwcheck_devices(config)),
             "output_dir": str(summary.output_dir),
             "main_c": main_c,
             "output_hint": render_output_hint(config),
+            "wiring": _hwcheck_wiring(context, config),
             "checklist": [item.to_dict() for item in render_checklist(config)],
             "modules": [slug for slug, _files in summary.modules],
             "structure": list(summary.structure),
@@ -2369,10 +2422,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.get("/api/hwcheck/project")
     @_map_errors
     def hwcheck_project(output_dir: str = "") -> dict:
-        """给一个检测工程目录 → 它的平台 / 通道 / main.c / 上板清单。
+        """给一个检测工程目录 → 它的平台 / 通道 / 器件 / main.c / 上板清单 / 板侧视图。
 
         main_c 读**盘上当前内容**（用户手改过就反映手改后的），清单与通道说明
-        按清单记的平台与通道集重渲染（确定性，与生成时逐字一致）。目录不存在 /
+        按清单记的平台与通道集重渲染（确定性，与生成时逐字一致）；板侧视图按
+        清单里的平台 / 通道 / 器件重投影（依赖展开与生成时同一处），所以回读
+        出来的接线表与那次工程 README 里的表仍是同一份。目录不存在 /
         不是检测工程（赛题工程 / 缺清单）→ HwCheckError 400 中文。
         """
         target = output_dir.strip()
@@ -2387,9 +2442,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "platform": config.platform,
             "debug_uart": config.debug_uart,
             "oled": config.oled,
+            "devices": list(hwcheck_devices(config)),
             "main_c": read_project_main_c(path),
             "output_hint": render_output_hint(config),
             "checklist": [item.to_dict() for item in render_checklist(config)],
+            "wiring": _hwcheck_wiring(context, config),
         }
 
     @app.post("/api/pick-directory")

@@ -20,6 +20,10 @@ import {
   hwcheckProjectPanelHTML,
   hwcheckRecentHTML, hwcheckRecentEmptyHTML, hwcheckProjectEmptyHTML,
   HWCHECK_PARENT_KEY, HWCHECK_LAST_DIR_KEY,
+  hwcheckDevicePick, hwcheckDeviceSlugs, hwcheckDevicePool, hwcheckDeviceKit,
+  hwcheckDeviceChipsHTML, hwcheckDeviceEmptyHTML, hwcheckMissingDevicesHTML,
+  hwcheckWiringErrorHTML, hwcheckWiringTableHTML, hwcheckPinGroupsHTML,
+  hwcheckBoardSharesHTML, hwcheckOrderHTML, hwcheckOrderDesc, hwcheckBoardState,
 } from "../../src/contest_generator/static/js/fx/hwcheck.js";
 
 const html = readFileSync(
@@ -74,11 +78,13 @@ test("hwcheckPickState：通道词表内的键才生效（写错键名不静默�
   assert.deepEqual(HWCHECK_CHANNEL_KEYS, ["debug_uart", "oled"]);
 });
 
-test("hwcheckRequestPayload：只带平台与两个通道开关（不带题面 / 已选模块）", () => {
+test("hwcheckRequestPayload：只带平台 / 两个通道 / 器件（不带题面 / 已选模块）", () => {
   const payload = hwcheckRequestPayload({
     platform: "stm32", debug_uart: false, oled: true, preview: "x", junk: 1,
   });
-  assert.deepEqual(payload, { platform: "stm32", debug_uart: false, oled: true });
+  assert.deepEqual(payload, {
+    platform: "stm32", debug_uart: false, oled: true, devices: [],
+  });
 });
 
 test("hwcheckCanPreview：没选平台不给点（后端必拒）", () => {
@@ -224,7 +230,7 @@ test("hwcheckGeneratePayload：带输出父目录（去空白），空 = 交后�
     platform: "stm32", debug_uart: true, oled: false, parentDir: "  C:/out  ", junk: 1,
   });
   assert.deepEqual(payload, {
-    platform: "stm32", debug_uart: true, oled: false, parent_dir: "C:/out",
+    platform: "stm32", debug_uart: true, oled: false, devices: [], parent_dir: "C:/out",
   });
   assert.equal(hwcheckGeneratePayload({ platform: "stm32" }).parent_dir, "");
 });
@@ -436,5 +442,264 @@ test("ui 不手拼工程面板 / 清单 / 最近的壳（壳的单源在 fx/hwch
   const inSelector = ui.match(/\[data-hwcheck-(compile|check|open-project|flash)="/g) || [];
   assert.equal(markers.length, inSelector.length,
     "带值的 data-* 标记只许出现在选择器里（壳的唯一出处是 fx/hwcheck.js）");
+});
+
+// ---------------------------------------------------------------------------
+// ⑤ 工单 03：器件选择 + 接线表 + 默认脚冲突 + 建议顺序（fx 纯函数）
+// ---------------------------------------------------------------------------
+
+const MODULES = [
+  { slug: "led", description: "板载 LED", kind: "device", requires_identity: true,
+    platforms: { mspm0: { pins: [{ id: "LED", default: "PA15" }], kit: "板载" } } },
+  { slug: "ml_mpu6050", description: "MPU6050 六轴", kind: "device",
+    requires_identity: true,
+    platforms: { mspm0: { pins: [], kit: "MPU6050" } } },
+  { slug: "delay", description: "软件延时", kind: "internal", requires_identity: false,
+    platforms: { mspm0: {} } },
+  { slug: "filter", description: "滤波切片", kind: "protocol", requires_identity: false,
+    platforms: { mspm0: {} } },
+];
+
+test("hwcheckDevicePick：加 / 去一件器件，保序去重，幂等，返回新对象", () => {
+  const state = { platform: "mspm0", devices: [] };
+  const one = hwcheckDevicePick(state, "ml_mpu6050", true);
+  assert.deepEqual(one.devices, ["ml_mpu6050"]);
+  const two = hwcheckDevicePick(one, "led", true);
+  assert.deepEqual(two.devices, ["ml_mpu6050", "led"], "后加的排在后面");
+  assert.equal(hwcheckDevicePick(two, "ml_mpu6050", true), two,
+    "已经选中的再点一次 = no-op（不许把它挪到末尾，那会顺带改顺序分区）");
+  assert.equal(hwcheckDevicePick(two, "sr04", false), two, "没选过的取消也是 no-op");
+  assert.deepEqual(hwcheckDevicePick(two, "led", false).devices, ["ml_mpu6050"]);
+  assert.notEqual(one, state, "应返回新对象（纯函数）");
+  assert.equal(hwcheckDevicePick(state, "", true), state, "空 slug 不生效");
+  assert.deepEqual(hwcheckDevicePick({ platform: "mspm0" }, "led", true).devices, ["led"]);
+});
+
+test("两个请求体都带器件数组（去重保序；空 = 一件都没选）", () => {
+  const state = { platform: "mspm0", debug_uart: true, oled: false,
+                  devices: ["ml_mpu6050", "ml_mpu6050", "led"], parentDir: " C:/out " };
+  assert.deepEqual(hwcheckRequestPayload(state).devices, ["ml_mpu6050", "led"]);
+  assert.deepEqual(hwcheckGeneratePayload(state).devices, ["ml_mpu6050", "led"]);
+  assert.equal(hwcheckGeneratePayload(state).parent_dir, "C:/out");
+  assert.deepEqual(hwcheckRequestPayload({ platform: "stm32" }).devices, []);
+  assert.deepEqual(hwcheckDeviceSlugs({ devices: [null, "", "led", "led"] }), ["led"]);
+});
+
+test("hwcheckDevicePool：挑选面 = 模块库全量（不按 kind 过滤——adc 属 internal，必须可达）", () => {
+  const pool = hwcheckDevicePool(MODULES).map((m) => m.slug);
+  assert.deepEqual(pool, ["led", "ml_mpu6050", "delay", "filter"],
+    "内部件也要能选（spec 的 v1 专精清单里 adc 就是 internal）");
+  assert.deepEqual(hwcheckDevicePool(null), []);
+  assert.deepEqual(hwcheckDevicePool([null, { slug: "" }, { slug: "ok" }]).map((m) => m.slug),
+    ["ok"], "坏条目丢掉（没有 slug 的渲染不出卡片）");
+});
+
+test("hwcheckDeviceChipsHTML：复用推荐 chip 渲染（✕ 移除 + 说明按钮 + 套件小字）", () => {
+  const html = hwcheckDeviceChipsHTML(["ml_mpu6050"], MODULES, "mspm0");
+  assert.ok(html.includes('data-remove="ml_mpu6050"'), "chip 本体 = 移除开关（既有契约）");
+  assert.ok(html.includes('data-mod-info="ml_mpu6050"'), "内嵌说明按钮（既有渲染）");
+  assert.ok(html.includes("MPU6050"), "套件型号进 chip 小字（载荷里人补的那个字段）");
+  assert.ok(html.includes('title="点击从工程里移除"'), "文案与推荐区同一份");
+  assert.equal(hwcheckDeviceChipsHTML([], MODULES, "mspm0"), "");
+  assert.ok(hwcheckDeviceEmptyHTML().includes("灯在闪"),
+    "一件都没选不是错误状态（先确认板子活着）");
+});
+
+test("hwcheckWiringTableHTML：列与 README 同序；板载共享注记挂在同一行", () => {
+  const rows = [
+    { slug: "ml_mpu6050", role: "I2C_0_SCL", role_id: "I2C_0_SCL", pin: "PA1",
+      remark: "i2c_scl（必接）", pin_note: "板载 LED 共用（I2C_0 SCL，通信期间微闪）" },
+    { slug: "led", role: "LED", role_id: "LED", pin: "PA15", remark: "gpio_out（必接）",
+      pin_note: "" },
+  ];
+  const html = hwcheckWiringTableHTML(rows, "其余外设引脚以工程内 pin_config.h 为准");
+  for (const head of ["模块", "角色", "引脚", "说明"]) {
+    assert.ok(html.includes("<th>" + head + "</th>"), "缺列：" + head);
+  }
+  assert.ok(html.includes("I2C_0_SCL") && html.includes("PA1"));
+  assert.ok(html.includes("板载共享：板载 LED 共用"), "板上共享注记必须在行里");
+  assert.ok(html.includes("pin_config.h"), "尾注与 README 同一句");
+  const noNote = hwcheckWiringTableHTML([rows[1]], "");
+  assert.ok(!noNote.includes("板载共享"), "板上没注记就不编一句");
+  const empty = hwcheckWiringTableHTML([], "");
+  assert.ok(empty.includes("没有已声明引脚角色"), "空表要说清为什么空");
+  assert.ok(hwcheckWiringTableHTML([{ slug: "<x>", pin: "<PA0>" }], "")
+    .includes("&lt;PA0&gt;"), "必须转义");
+});
+
+test("hwcheckPinGroupsHTML：冲突 ⚠ / 合法共享 ✓（kind 由服务端判，前端只上色）", () => {
+  const rows = [
+    { slug: "ml_mpu6050", role: "I2C_0_SCL", role_id: "I2C_0_SCL", pin: "PA1" },
+    { slug: "relay", role: "RELAY_OUT", role_id: "RELAY_OUT", pin: "PA1" },
+  ];
+  const groups = [
+    { pin: "PA1", roles: ["ml_mpu6050.I2C_0_SCL", "relay.RELAY_OUT"],
+      kind: "conflict", reason: "同引脚但分属不同外设（物理不通）——请改线" },
+    { pin: "PA6", roles: ["hmc5883l.HMC5883L_SCL"], kind: "share",
+      reason: "I2C 总线共享" },
+  ];
+  const html = hwcheckPinGroupsHTML(groups, rows);
+  assert.ok(html.includes("hwcheck-group conflict"), "冲突行要单独一类（红框）");
+  assert.ok(html.includes("⚠ 引脚冲突"));
+  assert.ok(html.includes("物理不通"));
+  assert.ok(html.includes("hwcheck-group share") && html.includes("✓ 可共享"));
+  assert.ok(html.includes("ml_mpu6050·I2C_0_SCL"), "角色键显示成「模块·角色」");
+  assert.ok(html.includes("hmc5883l.HMC5883L_SCL"),
+    "接线表里没有那一行时原样带出角色键（不猜、不丢）");
+  // 空集那句话不许自称"没有共用同一个引脚"（那是假安心：板上自带的共享不在这里）
+  const empty = hwcheckPinGroupsHTML([], rows);
+  assert.ok(empty.includes("没有两件模块抢同一个引脚"));
+  assert.ok(empty.includes("板上自带的共享"), "要指向板载共享那一条");
+});
+
+test("hwcheckBoardSharesHTML：板载共享单独成条（板载 LED / 上拉这类暗雷）", () => {
+  const rows = [
+    { slug: "ml_mpu6050", role: "I2C_0_SCL", role_id: "I2C_0_SCL", pin: "PA1" },
+    { slug: "ml_mpu6050", role: "I2C_0_SDA", role_id: "I2C_0_SDA", pin: "PA0" },
+  ];
+  const shares = [
+    { pin: "PA0", note: "板载 LED 共用（I2C_0 SDA，通信期间微闪）",
+      roles: ["ml_mpu6050.I2C_0_SDA"] },
+    { pin: "PA1", note: "板载 LED 共用（I2C_0 SCL）；板载 4.7k 上拉",
+      roles: ["ml_mpu6050.I2C_0_SCL"] },
+  ];
+  const html = hwcheckBoardSharesHTML(shares, rows);
+  assert.ok(html.includes("板上自带的共享"), "要说清这不是接线错误");
+  assert.ok(html.includes("⚠ 板上共享"));
+  assert.ok(html.includes("hwcheck-group board-share"));
+  assert.ok(html.includes("板载 LED 共用"));
+  assert.ok(html.includes("ml_mpu6050·I2C_0_SCL"), "涉及哪些角色要列出来");
+  assert.equal(hwcheckBoardSharesHTML([], rows), "");
+  assert.equal(hwcheckBoardSharesHTML(null), "");
+  assert.ok(hwcheckBoardSharesHTML([{ pin: "<PA0>", note: "<x>" }], [])
+    .includes("&lt;PA0&gt;"), "必须转义");
+});
+
+test("hwcheckOrderHTML：编号 + 「先做·板子活着」标记 + 引导语与理由", () => {
+  const order = [
+    { slug: "delay", description: "软件延时", bring_up: true },
+    { slug: "led", description: "板载 LED", bring_up: true },
+    { slug: "ml_mpu6050", description: "MPU6050 六轴", bring_up: false },
+  ];
+  const html = hwcheckOrderHTML(order, "按顺序逐个验证，前一个过了再接下一个",
+    "先确认「板子活着」——延时 / 串口 / 灯这类 bring-up 模块排在最前");
+  assert.ok(html.includes("hwcheck-order-index"), "要编号（这是「顺序」）");
+  assert.equal((html.match(/先做·板子活着/g) || []).length, 2, "只有 bring-up 模块带标记");
+  assert.ok(html.includes("按顺序逐个验证"));
+  assert.ok(html.includes("为什么是这个次序："));
+  assert.ok(html.includes("板子活着"));
+  assert.equal(hwcheckOrderHTML([], "x", "y"), "");
+});
+
+test("hwcheckOrderDesc：顺序行只留一句话（库内简介常有整段）", () => {
+  assert.equal(hwcheckOrderDesc("软件延时。附带说明。"), "软件延时。");
+  assert.equal(hwcheckOrderDesc("先这样；再那样。"), "先这样；");
+  assert.equal(hwcheckOrderDesc(""), "");
+  assert.equal(hwcheckOrderDesc(null), "");
+  const long = "字".repeat(100);
+  const cut = hwcheckOrderDesc(long);
+  assert.equal(cut.length, 61, "超长按上限截断并加省略号");
+  assert.ok(cut.endsWith("…"));
+  assert.ok(!hwcheckOrderDesc(long).includes("<"), "纯文本（转义在渲染处做）");
+});
+
+test("hwcheckMissingDevicesHTML：本平台没有条目 = 点名（不静默省略）", () => {
+  const html = hwcheckMissingDevicesHTML([
+    { slug: "sr04", message: "sr04：该模块无本平台版本，无法检测（模块库里没有它在 stm32 上的条目）" },
+  ]);
+  assert.ok(html.includes("hwcheck-warn"));
+  assert.ok(html.includes("无本平台版本") && html.includes("无法检测"));
+  assert.ok(html.includes("sr04"));
+  assert.equal(hwcheckMissingDevicesHTML([]), "");
+  assert.equal(hwcheckMissingDevicesHTML(null), "");
+  assert.ok(hwcheckMissingDevicesHTML([{ slug: "<x>" }]).includes("&lt;x&gt;"));
+  assert.ok(hwcheckWiringErrorHTML("库中不存在模块 nope").includes("接线表"));
+});
+
+test("hwcheckBoardState：板侧载荷归一（缺键 = 保留当前选择，不抹掉用户刚选的）", () => {
+  const state = { devices: ["led"], wiring: null };
+  const next = hwcheckBoardState(state, {
+    devices: ["ml_mpu6050"], wiring: { rows: [], groups: [], order: [] },
+  });
+  assert.deepEqual(next.devices, ["ml_mpu6050"]);
+  assert.deepEqual(next.wiring.rows, []);
+  const kept = hwcheckBoardState(next, { main_c: "x" });
+  assert.deepEqual(kept.devices, ["ml_mpu6050"], "载荷缺 devices 不许清空选择");
+  assert.deepEqual(kept.wiring.rows, [], "缺 wiring 也不许把视图抹掉");
+});
+
+test("hwcheckProjectState：回读把器件与板侧视图一起带回来", () => {
+  const state = hwcheckProjectState({}, {
+    output_dir: "C:/out/hwcheck-mspm0-1", platform: "mspm0", debug_uart: true,
+    oled: false, main_c: "int main(void){}", output_hint: "只有串口",
+    checklist: [{ id: "flash", expect: "e", check: "c" }],
+    devices: ["ml_mpu6050"],
+    wiring: { rows: [{ slug: "led", pin: "PA15" }], groups: [], order: [], footnote: "f" },
+  });
+  assert.deepEqual(state.devices, ["ml_mpu6050"]);
+  assert.equal(state.wiring.rows[0].pin, "PA15");
+  assert.equal(state.project.outputDir, "C:/out/hwcheck-mspm0-1");
+});
+
+// ---------------------------------------------------------------------------
+// ⑥ 工单 03：接线守卫（控件齐备 / ui 只做胶水 / 器件池走既有载荷）
+// ---------------------------------------------------------------------------
+
+test("新控件齐备：器件搜索 / 计数 / chips / 网格 / 接线表 / 冲突 / 顺序容器", () => {
+  for (const id of ["hwcheck-device-search", "hwcheck-device-count",
+    "hwcheck-device-chips", "hwcheck-device-grid", "hwcheck-device-missing",
+    "hwcheck-wiring", "hwcheck-conflicts", "hwcheck-order"]) {
+    assert.ok(html.includes('id="' + id + '"'), "缺少控件 #" + id);
+  }
+});
+
+test("ui 的接线表 / 冲突 / 顺序 / chips 都走 fx 单源（不手拼表格与标记）", () => {
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  for (const name of ["hwcheckWiringTableHTML(", "hwcheckPinGroupsHTML(",
+    "hwcheckOrderHTML(", "hwcheckDeviceChipsHTML(", "hwcheckMissingDevicesHTML(",
+    "hwcheckDevicePick(", "hwcheckDevicePool("]) {
+    assert.ok(ui.includes(name), "ui 应调用 fx 的 " + name + "）");
+  }
+  assert.ok(!ui.includes("<table"), "ui 不得手拼接线表（单源在 fx/hwcheck.js）");
+  assert.ok(!ui.includes("板载共享"), "板载共享标记的单源在 fx/hwcheck.js");
+  // 器件选择复用既有卡片 / chip 渲染，不自造模块清单渲染器
+  assert.ok(ui.includes("moduleGridHTML("), "模块卡片应复用模块库既有渲染");
+  assert.ok(ui.includes('from "/js/fx/module.js"'), "器件池与卡片渲染取自既有纯件");
+  assert.ok(!/class="module-card/.test(ui), "ui 不得手拼模块卡（双源）");
+});
+
+test("ui 的说明弹窗走既有委托（捕获阶段拦，否则点说明会把器件去掉）", () => {
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  assert.ok(ui.includes("bindModuleInfoEntry("), "chip 里的说明按钮要用既有委托");
+  assert.ok(ui.includes("openModuleInfo("), "模块卡片的详情按钮走既有弹窗入口");
+  const recommend = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/generate-recommend.js", import.meta.url),
+    "utf8");
+  assert.ok(/export function bindModuleInfoEntry\(root, platformOf\)/.test(recommend),
+    "既有委托要能带「用哪个平台展示」（检测页有自己的平台选择）");
+});
+
+test("ui 的视图刷新守并发纪律（过期响应不写状态 + 在途触发排队）", () => {
+  // CONTEXT.md「展开收口」同款：响应里带着 devices 回显，慢响应回来会把刚选的
+  // 那件抹掉。这条钉住三条纪律在（改坏了只有真机连点才看得出来）。
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  assert.ok(ui.includes("hwcheckViewBusy") && ui.includes("hwcheckViewPending"),
+    "在途触发要记 pending（不是静默丢弃）");
+  assert.ok(ui.includes("hwcheckSelectionKey()"),
+    "落地前要比请求体快照（选择集变了 = 这次结果属于旧选择）");
+  assert.ok(/if \(hwcheckViewPending\) \{[\s\S]{0,160}?await refreshHwcheckView\(\)/
+    .test(ui), "收尾要用当前选择集重跑一次（不是只把标志清掉）");
+});
+
+test("ui 的接线表失败不连坐预览（main.c 只依赖平台与通道）", () => {
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const clears = ui.match(/hwcheckUI\.preview = ""/g) || [];
+  assert.equal(clears.length, 2,
+    "只允许「换平台」「换通道」两处清预览（那两处渲染输入真的变了）；"
+    + "接线表取不到不许把 02 已交付的 main.c 预览抹掉");
 });
 

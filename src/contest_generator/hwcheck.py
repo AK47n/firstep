@@ -15,6 +15,11 @@
 "落点与回读"（目录命名 / 扫最近 / 把一个已有目录读回配置）是盘侧的事，归
 `hwcheck_store.py`——本模块不碰盘，这个边界是刻意的（工单 02）。
 
+工单 03 补的一件事：**器件选择**（`HwCheckConfig.devices`）进模块集——页面上
+看到的接线表要与生成工程 README 的引脚接线表**同源**，前提是页面与工程用的是
+同一个模块集。板侧投影（接线行 / 同脚冲突 / 建议顺序 / 缺平台条目）不在这里，
+归 `hwcheck_board.py`（本模块继续只管"检测程序长什么样"）。
+
 为什么要按通道分形态渲染，而不是"全渲染 + 运行时判断"：没有输出通道的构建
 必须**一个打印调用都不产生**——渲染出来却跑不到，学生会以为"程序报了结果、
 只是我没看到"，而真相是这里根本没测（spec 判据「不假装测过」）。所以通道形态
@@ -35,6 +40,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Sequence
 
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 
@@ -48,10 +54,13 @@ __all__ = [
     "HwCheckError",
     "HWCHECK_CHANNELS",
     "HWCHECK_FRAMEWORK_MODULES",
+    "dedup_slugs",
+    "hwcheck_devices",
     "hwcheck_modules",
     "render_checklist",
     "render_main_c",
     "render_output_hint",
+    "require_known_platform",
 ]
 
 
@@ -145,33 +154,80 @@ HWCHECK_CHANNELS: tuple[str, ...] = tuple(channel for channel, _ in _CHANNEL_MOD
 
 
 
+def require_known_platform(platform: str) -> str:
+    """平台词表校验（单源）：词表外 → HwCheckError（400 中文，列出已注册平台）。
+
+    两处消费：`HwCheckConfig`（请求形状）与 `hwcheck_board.hwcheck_board_view_for`
+    （直接按平台取板定义的调用方）——同一句话只写一次，免得两处各写一版。
+    """
+    if platform not in KNOWN_PLATFORMS:
+        known = "、".join(sorted(KNOWN_PLATFORMS))
+        raise HwCheckError(f"未知平台 {platform!r}，已注册的平台：{known}")
+    return platform
+
+
 @dataclass(frozen=True)
 class HwCheckConfig:
-    """检测程序形态：平台 + 两个输出通道开关。
+    """检测程序形态：平台 + 两个输出通道开关 + 选中的器件。
 
     检测程序**不依赖生成流程任何状态**（spec：不需要赛题、不需要已选模块集），
-    所以这里的输入只有"给谁做、往哪儿报"。
+    所以这里的输入只有"给谁做、往哪报、要测哪几件"。
+
+    `devices`（工单 03）= 用户在检测页选中的器件 slug（保序，可重复——去重由
+    `hwcheck_devices` 负责）。它们进工程（接线表与工程 README 同源的前提），
+    逐件的检测小节由后续工单渲染；没有专精配方的器件走通用降级（spec）。
     """
 
     platform: str
     debug_uart: bool
     oled: bool
+    devices: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        if self.platform not in KNOWN_PLATFORMS:
-            known = ", ".join(sorted(KNOWN_PLATFORMS))
-            raise HwCheckError(
-                f"未知平台 {self.platform!r}，已注册的平台：{known}"
-            )
+        require_known_platform(self.platform)
         for name, value in (("debug_uart", self.debug_uart), ("oled", self.oled)):
             if not isinstance(value, bool):
                 raise HwCheckError(
                     f"通道开关 {name} 必须是布尔值（有 / 无），收到 {value!r}"
                 )
+        if isinstance(self.devices, str):
+            # 裸字符串是可迭代的：不拦就会把 "ml_mpu6050" 逐个字符当器件，
+            # 造出一串不存在的 slug（错得还很有迷惑性）
+            raise HwCheckError(
+                f"devices 必须是 slug 列表（字符串数组），收到单个字符串 {self.devices!r}"
+            )
+        for slug in self.devices:
+            if not isinstance(slug, str) or not slug.strip():
+                raise HwCheckError(
+                    f"器件 slug 必须是非空字符串，收到 {slug!r}"
+                )
 
     @property
     def has_output_channel(self) -> bool:
         return self.debug_uart or self.oled
+
+
+def dedup_slugs(slugs: Sequence[str]) -> tuple[str, ...]:
+    """slug 序列**保序去重**（空串丢掉）——单源。
+
+    三处消费：`hwcheck_devices`（配置里的器件）、`hwcheck_board._missing_devices`
+    （点名缺平台版本时不能重复点两遍）、生成侧的模块集。重复项不是无害的重复：
+    依赖展开与接线行会照做两遍，同一根线画两次。
+    """
+    out: list[str] = []
+    for slug in slugs:
+        if isinstance(slug, str) and slug and slug not in out:
+            out.append(slug)
+    return tuple(out)
+
+
+def hwcheck_devices(config: HwCheckConfig) -> tuple[str, ...]:
+    """选中的器件（**保序去重**）。
+
+    同一件选两次、或选了框架自带的模块（如 led），都只算一次——模块集是集合
+    语义，重复项会让下游（依赖展开 / 接线行）把同一条线画两遍。
+    """
+    return dedup_slugs(config.devices)
 
 
 def render_output_hint(config: HwCheckConfig) -> str:
@@ -194,11 +250,17 @@ def hwcheck_modules(config: HwCheckConfig) -> tuple[str, ...]:
     故检测工程不是"零模块"：框架自带 `led` + `delay`（心跳），两个输出通道各
     带自己的模块（oled 的 delay 依赖由生成内核自动展开）。
 
-    "一个器件都不选也能生成"指的是不选**器件**（本单还没有器件可选）。
+    **选中的器件也进这个集合**（工单 03）：页面上的接线表要与**生成工程 README
+    的引脚接线表**同源，前提就是页面上看到的模块集与工程里的模块集是同一个
+    ——器件不进工程，README 里就没有它那几根线，页面说"接这儿"、工程里查无此线。
+    "一个器件都不选也能生成"指的是不选**器件**时这一项为空，生成照旧。
     """
     modules = list(HWCHECK_FRAMEWORK_MODULES)
     for channel, slug in _CHANNEL_MODULES:
         if getattr(config, channel):
+            modules.append(slug)
+    for slug in hwcheck_devices(config):
+        if slug not in modules:
             modules.append(slug)
     return tuple(modules)
 
