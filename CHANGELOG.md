@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=1afdf63f140a66558916527b12955f45fcc7cb68 -->
+<!-- changelog-auto: last-commit=58763892eeb97bbaaa8c9ebe4a653e1ca08ffe8a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -16,6 +16,7 @@
 - 12:05 修复：不可重试的校验失败不再留下整卷半成品与边车（工单 update-verify-failure-leftovers/01）
 - 12:11 修复：持久的「内容与清单不符」连续 5 次转终态（工单 update-content-mismatch-retry-cap/02）
 - 12:18 修复：产品文件判据单源——小发版包不再多发，也不再漏发新文件（工单 update-orphan-files/01）
+- 12:19 卫生：library/revise-backups 移出 git 索引（工单 update-orphan-files/03）
 
 ## 2026-09-18
 - 23:19 docs(闸门): commit-gate/04 CI 线上全绿收口（run 35098093620）
