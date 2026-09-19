@@ -1,6 +1,6 @@
 # B1 证据：沙箱「模拟用户机」真机升级 v1.1.1 → v1.2.1
-  时间：2026-09-19 10:44:23
-  一次性演练目录：C:\Users\luoji\AppData\Local\Temp\fe01-20260919-104423
+  时间：2026-09-19 11:00:23
+  一次性演练目录：C:\Users\luoji\AppData\Local\Temp\fe01-20260919-110023
 
 ## 零、前置事实核对
   sim_root_exists = True
@@ -27,178 +27,29 @@
   盘上 `src/contest_generator/__init__.py` = 1.1.1
 
 ## 三、走产品端点：检查更新
-  latest=1.2.1 current='1.1.1' update_available=True size=304782206 error=''
+  latest=1.2.1 current='1.1.1' update_available=True size=304784233 error=''
   message=''
   zip_url=https://github.com/AK47n/firstep/releases/download/v1.2.1/firstep-update-v1.2.1.zip
-  sha256=2c09bc8eb59e27ee5d66511f69bb60935c74ccefc24c6653a10bd5240f95c507
+  sha256=a613731105f193c05899a46ec30c2bcc314b90b8b971955c752190c49b074241
   removed_url=https://github.com/AK47n/firstep/releases/download/v1.2.1/firstep-update-v1.2.1.removed.txt
 
 ## 四、一键更新：真下载线上 291 MB → 校验 → 拉起更新器
-  [记录] 目标位置已存在旧包 firstep-update-1.2.1.zip（304729724 字节）——产品会覆盖它，先记下来
-  apply 返回（耗时 24.9s）：{'started': True, 'message': '已开始更新，工具将自动重启（配置与资料库不受影响）'}
-  落盘 firstep-update-1.2.1.zip = 304782206 字节（清单 304782206；差 0），均速 11.68 MB/s
-  下载物 sha256 = 2c09bc8eb59e27ee5d66511f69bb60935c74ccefc24c6653a10bd5240f95c507
-  清单 sha256   = 2c09bc8eb59e27ee5d66511f69bb60935c74ccefc24c6653a10bd5240f95c507
+  [记录] 目标位置已存在旧包 firstep-update-1.2.1.zip（304782206 字节）——产品会覆盖它，先记下来
+  apply 返回（耗时 20.3s）：{'started': True, 'message': '已开始更新，工具将自动重启（配置与资料库不受影响）'}
+  落盘 firstep-update-1.2.1.zip = 304784233 字节（清单 304784233；差 0），均速 14.32 MB/s
+  下载物 sha256 = a613731105f193c05899a46ec30c2bcc314b90b8b971955c752190c49b074241
+  清单 sha256   = a613731105f193c05899a46ec30c2bcc314b90b8b971955c752190c49b074241
   → 真下载 + 校验一致（这一格是真下载，不是复用缓存）
 
 ## 五、更新状态与更新器替换（独立进程：停服 → 备份 → 覆盖 → 重启）
   state=applying lock=True pending=True
   state=applying lock=True pending=True
   state=applying lock=True pending=True
+  state=applying lock=True pending=True
   lock 出现过：True；pending 还在：False；last-update.json 更新：True
-  终态：{"state": "done", "message": "", "result": {"status": "ok", "mode": "single", "version": "1.2.1", "finished_at": "20260919-104456", "backup_dir": "C:\\Users\\luoji\\.contest_generator_sim\\updates\\backup\\20260919-104456"}}
+  终态：{"state": "done", "message": "", "result": {"status": "ok", "mode": "single", "version": "1.2.1", "finished_at": "20260919-110054", "backup_dir": "C:\\Users\\luoji\\.contest_generator_sim\\updates\\backup\\20260919-110054"}}
   更新器日志（本次新增部分）：
-  | bug/.clangd/.cache/clangd/index/dl_core.h.40383795BA8421DB.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_crc.h.DF880BA265476D5F.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_crcp.h.92C0AE69BCACE630.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_dac12.h.4EFEEFFD9F181290.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_dma.h.4D0C4ABB12C0B5A8.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_factoryregion.h.7D1303A06CA3C13E.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_flashctl.h.8EE7115481394B19.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_gpamp.h.7712EDC582317F84.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_gpio.h.2A06ACC8F41A6B4A.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_i2c.h.EA19C17CEA11AEF8.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_i2s.h.02DB65F8BE7D558E.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_interrupt.h.1E2262DD9303629F.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_iwdt.h.6D5C0F2A8A2ED0CA.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_keystorectl.h.72C4E5778F712345.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_lcd.h.3B70F265DC0023C8.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_lfss.h.7BA3EB123DCA412E.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_mathacl.h.481DF9CE000A3ED9.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_mcan.h.796DC61FE8B23DEA.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_npu.h.5B0040F20BDB2AD1.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_opa.h.3E6A24ECC5741765.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_rtc.h.0401B9A56B4F755C.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_rtc_a.h.0B4B5F0631158186.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_rtc_b.h.2F4EAB2FD06C1429.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_rtc_common.h.82C0D882957CE915.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_scratchpad.h.C393C0044F296077.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_spgss.h.49BF92100A08DDD4.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_spi.h.F3BE8194E2DF6F86.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_sysctl.h.7498F92D9905C16B.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_sysctl_mspm0g1x0x_g3x0x.h.FAF5EE765C168A34.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_systick.h.69384C8DAA976D23.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_tamperio.h.ED93FC04173FA9FC.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_timer.h.291FD84AC91ABF95.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_timera.h.05D1748BD8C55F3E.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_timerb.h.C57A73D35E801799.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_timerg.h.15E945C9A30588A9.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_trng.h.C25655378683C7DE.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_uart.h.6176C2B3AE5C6049.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_uart_extend.h.2043613DFC81D6B5.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_uart_main.h.FADF360DCF6EC1AA.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_unicomm.h.D5F9D982C4292985.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_unicommi2cc.h.F7134BCFD5448FB7.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_unicommi2ct.h.CA68F94817640F64.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_unicommspi.h.DA5810D95E8B239D.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_unicommuart.h.913CAB0AEE7366F2.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_vref.h.CD56F0AFC5C82859.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/dl_wwdt.h.183EA3E0A0EB0BD9.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/driverlib.h.58A5CF854BC3D328.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/empty.c.49DFB2136FC21A9B.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/empty.c.6AF969B64BE7F82A.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/empty.c.A5B5F3EC839E43CD.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/empty.c.E55B15BC2AB6A941.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_adc12.h.590A44DD86E39E63.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_aes.h.7313BD390062B087.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_comp.h.430DAE57C0A9F7BC.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_cpuss.h.EA8ED3A4A3144352.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_crc.h.D0B34E8AB8808006.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_dac12.h.963FD31B30370777.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_debugss.h.C6730C935AE513DF.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_dma.h.16062C3ABC9F498A.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_factoryregion.h.5D58315AE98F9C30.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_flashctl.h.AE143C633674573A.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_gpio.h.FFF15D95D813B4C0.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_gptimer.h.D18BE3E3A1B82364.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_i2c.h.C5516755BFFF8E34.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_iomux.h.744C0B536428067B.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_mathacl.h.EC6F4DE335C25EB7.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_mcan.h.DB73C75D6AC9CA9C.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_oa.h.8AC07E09DBEE291A.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_rtc.h.45E8F63BBC66E28F.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_spi.h.CBFD2E5B3ED24D58.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_sysctl.h.B0EA0ED95236C0E5.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_sysctl_mspm0g1x0x_g3x0x.h.6DB74E9A6FCD5669.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_trng.h.8AFDD77FB397BBFF.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_uart.h.1858E63E678C36F5.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_vref.h.F2E13DEEFB87DC3F.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_wuc.h.8CB3393032229725.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/hw_wwdt.h.FDE883C703B3355A.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/linkage.h.11516441E7E2D1F8.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/math.h.79874CE1A9F11772.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/math.h.C6653C06BFCD57F9.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/mpu_armv7.h.1EA703775E1955B4.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/msp.h.A6767A4CB6D22847.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/mspm0g350x.h.CBA12581BD168DDB.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdarg.h.00CE2FB531A71298.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdbool.h.272D9B723E75E78F.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdbool.h.FB0F1122B9F7E37F.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stddef.h.43F2384DD6D92B7C.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stddef.h.4C0A8993436CDC98.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdint.h.082F62A436690CD5.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdint.h.13B9E9BCB893B601.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdint.h.186A510D485999AD.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdint.h.908E94AF3F841B7E.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdio.h.392130EAC82A2928.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/stdio.h.C5625403AD742310.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/string.h.2BA20B455CA9CE02.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/string.h.2C4F102A6CCF6271.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.c.00D16DC78BBD9DE2.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.c.314F4E2F3E3C4ADC.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.c.40644CC7FFCA3C7F.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.c.531688F8F84C7765.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.h.220209A424CA270C.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.h.9518A34EAC91A517.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.h.95D1E5DFA78A8A52.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/.cache/clangd/index/ti_msp_dl_config.h.B5013561EC804897.idx
-  | 删除已废弃文件：sources/car/car 1.1/Debug/.clangd/compile_commands.json
-  | 删除已废弃文件：sources/car/car 1.1/Debug/Delay.d
-  | 删除已废弃文件：sources/car/car 1.1/Debug/Delay.o
-  | 删除已废弃文件：sources/car/car 1.1/Debug/Event.dot
-  | 删除已废弃文件：sources/car/car 1.1/Debug/PWM.map
-  | 删除已废弃文件：sources/car/car 1.1/Debug/PWM.out
-  | 删除已废弃文件：sources/car/car 1.1/Debug/PWM_linkInfo.xml
-  | 删除已废弃文件：sources/car/car 1.1/Debug/USART_JY61P/JY61P.d
-  | 删除已废弃文件：sources/car/car 1.1/Debug/USART_JY61P/JY61P.o
-  | 删除已废弃文件：sources/car/car 1.1/Debug/USART_JY61P/empty.d
-  | 删除已废弃文件：sources/car/car 1.1/Debug/USART_JY61P/empty.o
-  | 删除已废弃文件：sources/car/car 1.1/Debug/USART_JY61P/subdir_rules.mk
-  | 删除已废弃文件：sources/car/car 1.1/Debug/USART_JY61P/subdir_vars.mk
-  | 删除已废弃文件：sources/car/car 1.1/Debug/ccsObjs.opt
-  | 删除已废弃文件：sources/car/car 1.1/Debug/control.d
-  | 删除已废弃文件：sources/car/car 1.1/Debug/control.o
-  | 删除已废弃文件：sources/car/car 1.1/Debug/device.cmd.genlibs
-  | 删除已废弃文件：sources/car/car 1.1/Debug/device.opt
-  | 删除已废弃文件：sources/car/car 1.1/Debug/device_linker.cmd
-  | 删除已废弃文件：sources/car/car 1.1/Debug/empty.d
-  | 删除已废弃文件：sources/car/car 1.1/Debug/empty.o
-  | 删除已废弃文件：sources/car/car 1.1/Debug/makefile
-  | 删除已废弃文件：sources/car/car 1.1/Debug/objects.mk
-  | 删除已废弃文件：sources/car/car 1.1/Debug/sources.mk
-  | 删除已废弃文件：sources/car/car 1.1/Debug/startup_mspm0g350x_ticlang.d
-  | 删除已废弃文件：sources/car/car 1.1/Debug/startup_mspm0g350x_ticlang.o
-  | 删除已废弃文件：sources/car/car 1.1/Debug/subdir_rules.mk
-  | 删除已废弃文件：sources/car/car 1.1/Debug/subdir_vars.mk
-  | 删除已废弃文件：sources/car/car 1.1/Debug/ti_msp_dl_config.c
-  | 删除已废弃文件：sources/car/car 1.1/Debug/ti_msp_dl_config.d
-  | 删除已废弃文件：sources/car/car 1.1/Debug/ti_msp_dl_config.h
-  | 删除已废弃文件：sources/car/car 1.1/Debug/ti_msp_dl_config.o
-  | 删除已废弃文件：sources/car/car ref/.settings/org.eclipse.cdt.codan.core.prefs
-  | 删除已废弃文件：sources/car/car ref/.settings/org.eclipse.cdt.debug.core.prefs
-  | 删除已废弃文件：sources/car/car ref/.settings/org.eclipse.core.resources.prefs
-  | 删除已废弃文件：sources/car/car ref/Debug/.clangd/.cache/clangd/index/Delay.c.95E27F1C322013FB.idx
-  | 删除已废弃文件：sources/car/car ref/Debug/.clangd/.cache/clangd/index/Delay.h.95F21872203BD10A.idx
-  | 删除已废弃文件：sources/car/car ref/Debug/.clangd/.cache/clangd/index/DeviceFamily.h.B86197E44C39AF16.idx
-  | 删除已废弃文件：sources/car/car ref/Debug/.clangd/.cache/clangd/index/JY61P.c.F9CA710032F56FDF.idx
-  | 删除已废弃文件：sources/car/car ref/Debug/.clangd/.cache/clangd/index/JY61P.h.BD8DF109DA0EC055.idx
-  | 删除已废弃文件：sources/car/car ref/Debug/.clangd/.cache/clangd/index/__config.FDF3F56F607A0944.idx
-  | 删除已废弃文件：sources/car/car ref/Debug/.clangd/.cache/clangd/index/__config_site.544C22F370813B22.idx
-  | 删除已废弃文件：sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stdarg___gnuc_va_list.h.C4DAD2E66A6C1120.idx
-  | 删除已废弃文件：sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stdarg___va_copy.h.373C9DFA0B52F987.idx
-  | 删除已废弃文件：sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stdarg_va_arg.h.938C14164E5210E0.idx
-  | 删除已废弃文件：sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stdarg_va_copy.h.69598290CE7995B8.idx
-  | 删除已废弃文件：sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stdarg_va_list.h.7F0BEEA71B06DC9E.idx
+  | gd/.cache/clangd/index/__stdarg_va_list.h.7F0BEEA71B06DC9E.idx
   | 删除已废弃文件：sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stddef_max_align_t.h.54DD14193E18AC07.idx
   | 删除已废弃文件：sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stddef_null.h.50AA68BD56DBFBFD.idx
   | 删除已废弃文件：sources/car/car ref/Debug/.clangd/.cache/clangd/index/__stddef_offsetof.h.80C720B2B624660A.idx
@@ -647,21 +498,19 @@
 ## 六、终点判据（版本号从跑起来的服务读，不只看盘上文件）
   盘上 __init__.py = 1.2.1
   （更新器的重启没把服务带起来——按 local-environment 第 1 节的沙箱口径，用 sim-run.py 起一次，版本判据仍成立；但「更新器自己重启」这一格如实记为未成立）
-  **重启后 `/api/health`.version = 1.1.1**（工单判据 1.2.1）
-  [判红] 终点判据不成立：服务报 1.1.1，期望 1.2.1
+  **重启后 `/api/health`.version = 1.2.1**（工单判据 1.2.1）
 
 ## 七、升级后的构成（沙箱 tracked 树 vs 官方 v1.2.1 完整包清单）
   官方 tracked 文件：3070；沙箱 tracked 文件：4552
-  **内容与官方逐字节一致：3068**
-  **内容与官方不同（仍是旧版 / 被改过）：2**
+  **内容与官方逐字节一致：3069**
+  **内容与官方不同（仍是旧版 / 被改过）：1**
   官方没了但沙箱还在（多出来的）：1482
   官方有但沙箱没有（缺的）：0
-  旧内容按顶层目录分布：{'CHANGELOG.md': 1, 'src': 1}
+  旧内容按顶层目录分布：{'src': 1}
   旧内容样例（前 20）：
-    - CHANGELOG.md（size 262337 != 262457）
     - src/contest_generator.egg-info/SOURCES.txt（size 9148 != 9085）
   多出来的样例（前 20）：['library/revise-backups/20260827-192944/.contest_context.json', 'library/revise-backups/20260827-192944/.contest_tasks.json', 'library/revise-backups/20260827-192944/.gitignore', 'library/revise-backups/20260827-192944/README.md', 'library/revise-backups/20260827-192944/code/readme.txt', 'library/revise-backups/20260827-192944/isr.c', 'library/revise-backups/20260827-192944/key/startup_stm32f10x_md.s', 'library/revise-backups/20260827-192944/led_instances.h', 'library/revise-backups/20260827-192944/main.c', 'library/revise-backups/20260827-192944/ml_libs/headfile.h', 'library/revise-backups/20260827-192944/ml_libs/ml_adc.c', 'library/revise-backups/20260827-192944/ml_libs/ml_adc.h', 'library/revise-backups/20260827-192944/ml_libs/ml_delay.c', 'library/revise-backups/20260827-192944/ml_libs/ml_delay.h', 'library/revise-backups/20260827-192944/ml_libs/ml_exti.c', 'library/revise-backups/20260827-192944/ml_libs/ml_exti.h', 'library/revise-backups/20260827-192944/ml_libs/ml_gpio.c', 'library/revise-backups/20260827-192944/ml_libs/ml_gpio.h', 'library/revise-backups/20260827-192944/ml_libs/ml_i2c.c', 'library/revise-backups/20260827-192944/ml_libs/ml_i2c.h']
-  [记录] 升级后沙箱 tracked 树与官方 v1.2.1 包**不完全一致**：内容不同 2 个、缺 0 个（小发版更新包是全量 tracked 快照，但删除清单只覆盖「上一版 → 本版」的删除）
+  [记录] 升级后沙箱 tracked 树与官方 v1.2.1 包**不完全一致**：内容不同 1 个、缺 0 个（小发版更新包是全量 tracked 快照，但删除清单只覆盖「上一版 → 本版」的删除）
 
 ## 八、保命项（升级前后逐项比）
   成立：config.json 未变
@@ -676,7 +525,7 @@
   成立：pending-update.json 已清
   成立：updating.lock 已释放
   成立：备份目录已生成
-  备份：['20260913-002004', '20260913-002734', '20260918-224039', '20260919-104456']；最新一份 20260919-104456 含 2830 个文件
+  备份：['20260913-002004', '20260913-002734', '20260918-224039', '20260919-104456', '20260919-110054']；最新一份 20260919-110054 含 2830 个文件
 
 ## 九、隔离边界收尾校验（真身只读）
   真身数据目录 mtime 未变：True（1789386306.649077 → 1789386306.649077）
@@ -686,14 +535,13 @@
   8000 监听（应为空/与演练前一致）：[]
   重定向 profile 里：launcher.log=True / webapp.log=False
   重定向 profile 的 launcher.log 末尾：
-  | [2026-09-19T10:45:14+08:00] reason=already_running port=8020
+  | [2026-09-19T11:02:02+08:00] reason=timeout port=8020
 
 ## 收尾
-  收掉 8020 监听进程：['16796']
+  收掉 8020 监听进程：['18268']
   8020 端口已释放
   残留 python 进程：（无）
 
 ## 总判
-  判红 1 条 / 卡住 0 条
-    · 判红：终点判据不成立：服务报 1.1.1，期望 1.2.1
-  B1「沙箱升级到 1.2.1」：FAIL
+  判红 0 条 / 卡住 0 条
+  B1「沙箱升级到 1.2.1」：PASS
