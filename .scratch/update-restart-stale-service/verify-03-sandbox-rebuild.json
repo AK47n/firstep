@@ -27,6 +27,28 @@
       "sha256": "5fd0ac6359bd8fcd725c8349ce55fb6baca2ddcc7d30ae2142e99cef753e5071"
     }
   ],
+  "extract": {
+    "members": 8777,
+    "files_on_disk": 8777,
+    "seconds": 5.9
+  },
+  "baseline": {
+    "batches": 12,
+    "version": "v1.1.1",
+    "files": 0
+  },
+  "checks": {
+    "盘上版本 == 1.1.1": true,
+    "spawn_updater 命令里没有 --port（真旧缺陷）": true,
+    "full_apply.py 里有 --port（对照：只缺那一条路）": true,
+    "start-app.bat sha256 == v1.1.1 清单那一份（修复还没进沙箱）": true,
+    "沙箱入口 sim-run.py 在位": true,
+    "数据目录 config.json 未动": true
+  },
+  "on_disk_version": "1.1.1",
+  "start_app_bat_sha256": "88a9c45b991721692daab9588eb2dbe9d96c2838bd8ad0e42d845f287e1ec5ad",
+  "expected_start_app_bat_sha256": "88a9c45b991721692daab9588eb2dbe9d96c2838bd8ad0e42d845f287e1ec5ad",
+  "spawn_updater_has_port": false,
   "problems_count": 0,
   "pass": true
 }
