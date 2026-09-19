@@ -162,6 +162,7 @@ from .recent_jobs import (
     restore_recent,
     update_recent_status,
 )
+from .hwcheck import HwCheckConfig, render_main_c, render_output_hint
 from .impact import run_impact_analysis
 from .library import (
     add_module,
@@ -2187,6 +2188,35 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             return result
         finally:
             context.recent_llm_workflows.add_completed(collector)
+
+    # 硬件检测：零器件最小自检 main.c 预览（工单 module-hwcheck/01）——
+    # **确定性渲染，零 LLM、零配方**：域层纯函数出文本，路由只取参转调。
+    # 检测程序不依赖生成流程任何状态（不需要题面、不需要已选模块集），
+    # 所以这里没有题面 / slugs 这些参数——这是它与 /api/skeleton 的根本区别。
+    @app.post("/api/hwcheck/preview")
+    @_map_errors
+    def hwcheck_preview(payload: dict) -> dict:
+        """渲染检测程序 main.c 文本（不落盘：落盘走既有生成内核，见工单 02）。
+
+        payload：platform（必填，词表外 400 中文）、debug_uart / oled（可选布尔，
+        缺省 = 请求没表态 → 按"两个通道都在场"渲染，与检测页勾选框的默认一致）。
+        返回 main_c 文本 + output_hint（「应看到什么」的输出通道部分）+ 通道形态
+        回显，供检测页明示。前端一律显式带上两个开关（见 fx/hwcheck.js
+        hwcheckRequestPayload）——缺省分支只是给脚本 / 手工调用兜底。
+        """
+        platform = _require_str(payload, "platform")
+        config = HwCheckConfig(
+            platform=platform,
+            debug_uart=_optional_bool(payload, "debug_uart", default=True),
+            oled=_optional_bool(payload, "oled", default=True),
+        )
+        return {
+            "platform": config.platform,
+            "debug_uart": config.debug_uart,
+            "oled": config.oled,
+            "main_c": render_main_c(config),
+            "output_hint": render_output_hint(config),
+        }
 
     @app.post("/api/pick-directory")
     @_map_errors

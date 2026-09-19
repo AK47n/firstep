@@ -13,20 +13,30 @@
 | `tests/test_X.py` | 该文件（改测试就是改它自己） |
 | `src/contest_generator/X.py` | `tests/test_X.py`（**存在**才用）；**没有同名测试 → 全套** |
 | 被 ≥ `WIDE_IMPORT_THRESHOLD` 个测试文件 import 的模块（实测推导，非手写名单） | 全套（改它等于动半仓测试的公共面） |
+| **前端（`static/`，含 index.html / js/）+ `tests/js/`（工单 module-hwcheck/01）** | **前端门禁（`node --test "tests/js/*.test.mjs"`）+ 全套 pytest** |
 | `library/`（库内容） | 库与母版守卫族（见 `LIBRARY_FAMILY`） |
 | 纯文档（README / VERSIONS / CHANGELOG / docs/ / .scratch/） | 文档守卫族（见 `DOCUMENT_FAMILY`） |
 | **认不出来的任何路径** | 全套（倒向更严） |
 
-**绝不卡人的边界**：闸门自身故障（python 没装 / git 读不到改动 / 选择器抛错）
-一律**打印原因并放行**（exit 0）——闸门坏了不该把维护者堵在门外；但**测试真红了必须拒推**。
+**前端门禁为什么单列一支**（工单 module-hwcheck/01）：pytest 面**完全看不见**
+`tests/js/`——那 1500 多条前端用例此前没有任何自动触发点，全靠人记得手敲。
+于是"改了导航忘了同步守卫"这类错误只能等真机上发现（2026-09-12 那次
+「一打开就卡死」就是同一个盲区）。现在改前端文件时**两边都跑**：pytest 认不出
+前端落点（倒向更严，仍整套），前端门禁补上 `node --test`。node 不在 PATH 时
+按「闸门自身故障」政策打印原因并跳过——**但 node 跑了且用例红了，必须拒推**。
+
+**绝不卡人的边界**：闸门自身故障（python 没装 / git 读不到改动 / 选择器抛错 /
+node 缺失）一律**打印原因并放行**（exit 0）——闸门坏了不该把维护者堵在门外；
+但**测试真红了必须拒推**（pytest 或前端门禁任一红）。
 
 用法：
 
     python tools/prepush.py                    # 从 git 读本次推送的改动（pre-push 钩子走这条）
     python tools/prepush.py --changed src/contest_generator/manifest.py
-    python tools/prepush.py --full             # 强制全套
+    python tools/prepush.py --full             # 强制全套（pytest + 前端门禁）
     python tools/prepush.py --dry-run          # 只说要跑什么，不执行
     python tools/prepush.py --explain          # 打印每条改动的命中理由
+    python tools/prepush.py --no-js            # 已知不需要前端门禁时关掉这一支
     FIRSTEP_PREPUSH=full python tools/prepush.py    # 环境变量强制全套
     FIRSTEP_PREPUSH=select-only python tools/prepush.py   # 只选择、绝不执行（看会跑什么）
     FIRSTEP_PREPUSH=off  python tools/prepush.py    # 跳过（明写警告）
@@ -39,6 +49,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -46,6 +57,24 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TESTS_DIR = REPO_ROOT / "tests"
+
+# 前端守卫的落点与跑法（工单 module-hwcheck/01）：pytest 面看不见 tests/js/，
+# 这条支线把"改了前端就必须跑前端用例"接进闸门。
+#
+# **为什么把文件清单在 Python 侧展开、而不是把 glob 交给 node**：`node --test`
+# 的位置参数只有在 **Node ≥21** 才支持 glob（Node 20 会把 `tests/js/*.test.mjs`
+# 当成一个字面文件名，报 MODULE_NOT_FOUND）；而 windows-latest 预装的 node 版本
+# 会变。清单在 Python 侧展开后传给 node 的是一串**真实文件路径**，任何版本都认，
+# 也不依赖 shell 展开（跨平台一致）。JS_TESTS_GLOB 仍是对外契约文本（CI / 文档 /
+# 人工命令都用它，并有用例钉住两处一致）。
+JS_TESTS_GLOB = "tests/js/*.test.mjs"
+JS_TESTS_DIR = "tests/js/"
+
+# 前端改动落点（仓库根相对前缀）：改这些必须跑前端门禁。
+#   · src/contest_generator/static/  = 整个前端资产（index.html / js/fx / js/ui / js/app.js）
+#   · tests/js/                      = 前端用例自身
+FRONTEND_PREFIXES = ("src/contest_generator/static/", JS_TESTS_DIR)
+
 
 # 一个模块被这么多「测试文件」import 就算公共面：改它等于动半仓测试的地基，
 # 只跑同名测试等于自欺。阈值取自实测分布（2026-09-16：86 个模块里 ≥10 的有 13 个，
@@ -92,11 +121,12 @@ NONE = "NONE"
 
 @dataclass(frozen=True)
 class Selection:
-    """选择结果：要跑的文件（仓库根相对）、是否必须整套、逐条理由。"""
+    """选择结果：要跑的测试（仓库根相对）、是否必须整套、是否跑前端门禁、逐条理由。"""
 
     paths: tuple[str, ...]
     full: bool
     reasons: dict[str, str] = field(default_factory=dict)
+    js: bool = False
 
     def describe(self) -> str:
         if self.full:
@@ -105,6 +135,8 @@ class Selection:
             head = "不跑测试"
         else:
             head = f"{len(self.paths)} 个测试文件"
+        if self.js:
+            head += " + 前端门禁（" + JS_TESTS_GLOB + "）"
         why = "；".join(dict.fromkeys(self.reasons.values()))
         return f"{head}（{why or '无理由记录'}）"
 
@@ -158,10 +190,18 @@ def normalize(path: str) -> str:
     return text
 
 
+def is_frontend_path(rel: str) -> bool:
+    """前端落点判定（工单 module-hwcheck/01）：static/ 资产或 tests/js/ 用例。"""
+    path = normalize(rel)
+    return any(path.startswith(prefix) for prefix in FRONTEND_PREFIXES)
+
+
 def classify(path: str, *, tests: frozenset[str], wide: frozenset[str]) -> tuple[str, str, str]:
     """单条改动的归类 → (类, 要跑的测试或空串, 理由)。
 
     类 ∈ {FULL, TESTS, LIBRARY, DOCS, NONE}；FULL 表示「认不出/公共面 → 整套」。
+    前端落点（static/ 与 tests/js/）**仍归 FULL**（pytest 面认不出对应关系，
+    倒向更严），另由 select_tests 统一置 Selection.js——两支是叠加不是互斥。
     """
     rel = normalize(path)
     if not rel:
@@ -171,6 +211,11 @@ def classify(path: str, *, tests: frozenset[str], wide: frozenset[str]) -> tuple
     if rel.startswith("tests/"):
         if rel in tests:
             return TESTS, rel, f"测试文件自身（{rel}）"
+        if rel.startswith(JS_TESTS_DIR):
+            return FULL, "", (
+                f"{rel} 是前端用例（node --test {JS_TESTS_GLOB} 跑，"
+                "pytest 面照旧整套——倒向更严）"
+            )
         return FULL, "", f"{rel} 在 tests/ 下但认不出（不是 test_*.py，倒向更严）"
 
     # 纯文档
@@ -180,9 +225,14 @@ def classify(path: str, *, tests: frozenset[str], wide: frozenset[str]) -> tuple
     # 产品源码
     if rel.startswith("src/contest_generator/"):
         rest = rel[len("src/contest_generator/"):]
+        if is_frontend_path(rel):
+            return FULL, "", (
+                f"{rel} 是前端资产（pytest 面认不出对应关系，倒向更严：整套跑，"
+                f"另跑前端门禁 {JS_TESTS_GLOB}）"
+            )
         if "/" in rest:
             top = rest.split("/", 1)[0]
-            where = "前端/模板资产" if top in ("static", "templates") else f"{top}/ 子目录"
+            where = f"{top}/ 子目录"
             return FULL, "", f"{rel} 是{where}（pytest 面认不出对应关系，倒向更严）"
         if not rest.endswith(".py"):
             return FULL, "", f"{rel} 不是 .py（认不出，倒向更严）"
@@ -214,21 +264,36 @@ def classify(path: str, *, tests: frozenset[str], wide: frozenset[str]) -> tuple
 
 def select_tests(changed: list[str], *, tests: frozenset[str] | None = None,
                  wide: frozenset[str] | None = None) -> Selection:
-    """纯函数：一串改动路径 → 要跑的测试（含「必须整套」一支）。"""
+    """纯函数：一串改动路径 → 要跑的测试（含「必须整套」与「前端门禁」两支）。
+
+    前端门禁（Selection.js）与 pytest 选择**相互独立**：前端落点让 pytest
+    倒向整套（认不出对应关系），同时置 js=True——两支都跑，宁可贵一次。
+    """
     tests = known_test_files() if tests is None else tests
     wide = wide_modules() if wide is None else wide
 
     if not changed:
         return Selection(paths=(), full=False, reasons={})
 
+    # 前端门禁先整体判一次（**不能**在循环里"遇到前端才置位"）：下面碰到
+    # FULL 会提前 return，若 js 还在循环里累加，改动顺序一旦是「先公共面/
+    # 认不出的落点、后前端文件」，那次提前 return 就把前端门禁整个吞掉——
+    # 改了前端却一条前端用例都不跑，且不报错（"少跑"长得像"全绿"）。
+    js = any(is_frontend_path(raw) for raw in changed)
+
     picked: set[str] = set()
     reasons: dict[str, str] = {}
+    full = False
     for raw in changed:
         rel = normalize(raw)
         kind, target, why = classify(rel, tests=tests, wide=wide)
         reasons[rel or raw] = why
         if kind == FULL:
-            return Selection(paths=(), full=True, reasons=reasons)
+            # **不在这里 return**：提前返回会把后面那些改动的理由丢掉
+            # （--explain 只显示一部分，维护者据此判断"会跑什么"会被误导）。
+            # 整套是一票否决，但理由要收全。
+            full = True
+            continue
         if kind == DOCS:
             picked.update(p for p in DOCUMENT_FAMILY if p in tests)
         elif kind == LIBRARY:
@@ -236,7 +301,9 @@ def select_tests(changed: list[str], *, tests: frozenset[str] | None = None,
         elif kind == TESTS and target:
             picked.add(target)
 
-    return Selection(paths=tuple(sorted(picked)), full=False, reasons=reasons)
+    if full:
+        return Selection(paths=(), full=True, reasons=reasons, js=js)
+    return Selection(paths=tuple(sorted(picked)), full=False, reasons=reasons, js=js)
 
 
 # ---------------------------------------------------------------------------
@@ -358,9 +425,58 @@ def run_pytest(paths: tuple[str, ...], *, full: bool) -> int:
     return subprocess.run(cmd, cwd=str(REPO_ROOT)).returncode
 
 
+def js_test_files() -> tuple[str, ...]:
+    """前端用例清单（仓库根相对 POSIX 路径，排序）——JS_TESTS_GLOB 展开的唯一实现。
+
+    找不到任何用例 = 闸门判据失效（目录改名 / 清单过期）→ 返回空元组，调用方
+    大声报错而不是"跑 0 个用例"（静默的 0 用例正是这道门禁最坏的失效方式）。
+    """
+    if not (REPO_ROOT / JS_TESTS_DIR).is_dir():
+        return ()
+    return tuple(
+        path.relative_to(REPO_ROOT).as_posix()
+        for path in sorted((REPO_ROOT / "tests" / "js").glob("*.test.mjs"))
+    )
+
+
+def run_js_tests() -> int:
+    """跑前端门禁：`node --test <tests/js 下的每个 *.test.mjs>`（工单 module-hwcheck/01）。
+
+    失败语义分三层，**别混**：
+
+    * node 不在 PATH → 打印原因并返回 0（闸门自身能力缺失，不该把维护者堵在
+      门外——与 "python 没装" 同政策）；
+    * node 在、清单为空（目录改名等）→ 打印原因并返回 0（同上：判据失效不是
+      代码红，且**不许**静默跑 0 个用例装作通过）；
+    * node 在、用例跑了但红了 → 返回非 0（**这是真红，必须拒推**）。
+
+    命令里传的是**展开后的真实文件路径**（见 JS_TESTS_GLOB 上方注释：交 glob
+    给 node 要 ≥21，Node 20 会把它当字面文件名）。
+    """
+    exe = shutil.which("node")
+    if exe is None:
+        print(
+            f"[prepush] 跳过前端门禁：PATH 里找不到 node（无法跑 {JS_TESTS_GLOB}）"
+            "——装了 Node.js 后这条会自动生效",
+            flush=True,
+        )
+        return 0
+    files = js_test_files()
+    if not files:
+        print(
+            f"[prepush] 跳过前端门禁：{JS_TESTS_DIR} 下没有 *.test.mjs（目录改名 / 清单过期？）",
+            flush=True,
+        )
+        return 0
+    cmd = [exe, "--test", *files]
+    print(f"[prepush] 执行：{' '.join(cmd)}", flush=True)
+    return subprocess.run(cmd, cwd=str(REPO_ROOT)).returncode
+
+
 HINT = (
     "\n[prepush] 闸门拦下这次推送：上面的用例红了。\n"
     "  · 复跑：python tools/prepush.py --changed <你改的文件>\n"
+    "  · 只跑前端：node --test " + JS_TESTS_GLOB + "\n"
     "  · 强制整套：python tools/prepush.py --full\n"
     "  · 确知要绕过：FIRSTEP_PREPUSH=off git push（不鼓励）"
 )
@@ -368,13 +484,15 @@ HINT = (
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="推之前按改动选测试子集")
-    parser.add_argument("--full", action="store_true", help="强制整套")
+    parser.add_argument("--full", action="store_true", help="强制整套（pytest + 前端门禁）")
     parser.add_argument("--changed", nargs="*", default=None,
                         help="显式给改动路径（不给则从 git 读）")
     parser.add_argument("--dry-run", action="store_true", help="只说要跑什么，不执行")
     parser.add_argument("--select-only", action="store_true",
-                        help="只做选择、绝不执行 pytest（钩子契约测试用；同 --dry-run）")
+                        help="只做选择、绝不执行任何测试（钩子契约测试用；同 --dry-run）")
     parser.add_argument("--explain", action="store_true", help="打印每条改动的理由")
+    parser.add_argument("--no-js", action="store_true",
+                        help="跳过前端门禁（已知这次改动不需要跑 tests/js 时用）")
     parser.add_argument("--stdin-refs", action="store_true",
                         help="从 stdin 读 pre-push 协议的 refs（钩子用）")
     args = parser.parse_args(argv)
@@ -413,7 +531,13 @@ def main(argv: list[str] | None = None) -> int:
 
     selection = select_tests(changed)
     if full:
-        selection = Selection(paths=(), full=True, reasons=selection.reasons)
+        # 「整套」= pytest 全套 + 前端门禁（发版 / 推 tag 的口径）：前端那支
+        # 平时由"改动落在前端"带起，而整套跑时改动可能一件前端文件都没有
+        # （例如只改了 Python），照样要跑——不然"整套"名不副实。
+        selection = Selection(paths=(), full=True, reasons=selection.reasons, js=True)
+    if args.no_js:
+        selection = Selection(paths=selection.paths, full=selection.full,
+                              reasons=selection.reasons, js=False)
 
     print(f"[prepush] 改动 {len(changed)} 个文件 → {selection.describe()}", flush=True)
     if args.explain or not selection.full:
@@ -425,16 +549,24 @@ def main(argv: list[str] | None = None) -> int:
             print("    · （整套）", flush=True)
         for path in selection.paths:
             print(f"    · {path}", flush=True)
+        if selection.js:
+            print(f"    · 前端门禁：node --test {JS_TESTS_GLOB}", flush=True)
         return 0
 
-    if not selection.full and not selection.paths:
+    if not selection.full and not selection.paths and not selection.js:
         print("[prepush] 没有需要跑的守卫，放行", flush=True)
         return 0
 
-    code = run_pytest(selection.paths, full=selection.full)
-    if code != 0:
+    # 前端门禁先跑（几秒钟）：它红了就没必要再等整套 pytest——但**两支都要
+    # 如实报到**，不能因为前者红就吞掉后者（`&` 语义：跑完两支再定论）。
+    js_code = run_js_tests() if selection.js else 0
+    code = 0
+    if selection.full or selection.paths:
+        code = run_pytest(selection.paths, full=selection.full)
+    if js_code != 0 or code != 0:
         print(HINT, flush=True)
-    return code
+        return 1
+    return 0
 
 
 def safe_main(argv: list[str] | None = None) -> int:

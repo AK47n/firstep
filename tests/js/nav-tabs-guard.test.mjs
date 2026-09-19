@@ -1,10 +1,10 @@
 // 顶部导航 tab 分组守卫（工单 tab-grouping/01/02；工单 beginner-guide/01 增「指南」组；
 // 工单 code-viewer/04 增「代码」组内按钮；工单 version-changelog/04 更新记录挪入
-// 「指南」组并改名版本更新记录）：
+// 「指南」组并改名版本更新记录；工单 module-hwcheck/01 增「硬件检测」——做题组第 2 位）：
 // 读 index.html 静态标记锁定——组容器（做题 / 资料管理 / 指南）各恰好一个、
-// 10 个 tab 键无多余/缺失、组归属与组内顺序精确、组容器不可点击且无旧组标签
+// 组内全部 tab 键无多余/缺失、组归属与组内顺序精确、组容器不可点击且无旧组标签
 // （tab-group-label 随胶囊导航重构移除，防把分组拆掉或把标签升级成按钮）、
-// 10 个按钮均带非空中文 title（防占位半句话）、每个 tab 键有对应 section 容器
+// 组内每个按钮均带非空中文 title（防占位半句话）、每个 tab 键有对应 section 容器
 // （防死按钮）。
 // 仿 tab-nav-guard.test.mjs 先例：静态标记的守卫测试直接读 HTML 断言。
 import test from "node:test";
@@ -18,13 +18,18 @@ const html = readFileSync(
 );
 
 // 分组定义（与 index.html 顶部导航的标记契约）：组内顺序 = 组内按钮出现顺序。
-// 工单 wiki-materials/02 增「Markdown 资料」tab（PDF 旁，素材管理组内第 4 个）。
+// 工单 wiki-materials/02 增「Markdown 资料」tab（PDF 旁，素材管理组内第 4 个）；
+// 工单 module-hwcheck/01 增「硬件检测」tab（做题组第 2 位，紧跟生成——主流程
+// 入口仍排第一，检测是"拿到器件先验通路"的第二条路）。
 const GROUPS = [
-  { label: "做题", keys: ["generate", "topic", "code", "settings"] },
+  { label: "做题", keys: ["generate", "hwcheck", "topic", "code", "settings"] },
   { label: "资料管理", keys: ["library", "reference", "pdf", "md", "master"] },
   { label: "指南", keys: ["guide", "changelog"] },
 ];
 const ALL_KEYS = GROUPS.flatMap((g) => g.keys);
+// 每个组的第一颗按钮是键盘进入该组的落点（roving tabindex），必须 tabindex=0
+const GROUP_HEADS = GROUPS.map((g) => g.keys[0]);
+const TAB_COUNT = ALL_KEYS.length;
 
 function countOccurrences(text, needle) {
   return text.split(needle).length - 1;
@@ -69,13 +74,24 @@ test("tab 按钮 ARIA：role=tab + aria-selected + aria-controls + roving tabind
     assert.ok(btn[0].includes('aria-controls="tab-' + key + '"'),
       "tab '" + key + "' 应带 aria-controls=tab-" + key);
     const active = /class="[^"]*active/.test(btn[0]);
-    const expectedTabIndex = active ? "0" : (key === "generate" || key === "library" || key === "guide" ? "0" : "-1");
+    const expectedTabIndex = active ? "0" : (GROUP_HEADS.includes(key) ? "0" : "-1");
     assert.ok(btn[0].includes('tabindex="' + expectedTabIndex + '"'),
       "tab '" + key + "' tabindex 应为 " + expectedTabIndex + "（roving：激活/组首 0，其余 -1）");
   }
 });
 
-test("11 个 tab 键在顶部导航内各恰好一次，无多余/缺失", () => {
+test("组首白名单 = 每组第一颗键，且导航里 tabindex=0 的恰好就是这三颗（防白名单被顺手加长）", () => {
+  // 这条守的是"键盘可达性靠白名单"这件事本身：白名单只能等于 GROUPS 的组首。
+  // 反向判据在**标记**上：导航里 tabindex=0 的按钮数必须恰好等于组数——多一个
+  // （例如让组内第二颗也可 Tab 到）就破坏 roving 的单落点语义；少一个则有一组
+  // Tab 不进去。
+  assert.equal(new Set(GROUP_HEADS).size, GROUPS.length, "组首不应重复");
+  const zero = [...headerNavHTML().matchAll(/<button[^>]*tabindex="0"[^>]*>/g)].length;
+  assert.equal(zero, GROUPS.length,
+    "导航里 tabindex=0 的按钮应恰好 " + GROUPS.length + " 颗（每组首，实际 " + zero + "）");
+});
+
+test(`${TAB_COUNT} 个 tab 键在顶部导航内各恰好一次，无多余/缺失`, () => {
   const nav = headerNavHTML();
   for (const key of ALL_KEYS) {
     assert.equal(countOccurrences(nav, 'data-tab="' + key + '"'), 1,
@@ -90,7 +106,7 @@ test("11 个 tab 键在顶部导航内各恰好一次，无多余/缺失", () =>
     "nav-tabs-shared.mjs 的键清单应与分组结构定义一致（改导航需三处同步）");
 });
 
-test("组归属与组内顺序：做题 4 个、资料管理 5 个、指南 2 个，无串组", () => {
+test("组归属与组内顺序：做题 5 个、资料管理 5 个、指南 2 个，无串组", () => {
   for (const g of GROUPS) {
     const inner = groupInnerHTML(g.label);
     const keys = [...inner.matchAll(/data-tab="([^"]+)"/g)].map((m) => m[1]);
@@ -121,7 +137,7 @@ test("组先后顺序：做题组在资料管理组之前，指南组在最后�
   assert.ok(lib < guide, "组顺序应为「指南」在「资料管理」之后（工单 beginner-guide/01 契约）");
 });
 
-test("tab 按钮 title 覆盖：11 个均有非空中文 title（长度 ≥8）", () => {
+test(`tab 按钮 title 覆盖：${TAB_COUNT} 个均有非空中文 title（长度 ≥8）`, () => {
   const nav = headerNavHTML();
   const CJK = /[\u4e00-\u9fff]/;
   for (const key of ALL_KEYS) {

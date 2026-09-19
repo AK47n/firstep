@@ -37,8 +37,24 @@ jobs:
         with:
           python-version: "3.13"  # pyproject.toml 的 requires-python = ">=3.13"
           cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          # 前端门禁用的命令是 `node --test "tests/js/*.test.mjs"`（glob 位置参数
+          # 需要 **Node ≥21**；不钉版本时 windows-latest 预装的 node 会变，
+          # Node 20 会把 glob 当字面文件名而报 MODULE_NOT_FOUND——那时要么假红
+          # 要么静默跑 0 个用例）。钉在 22 这个 LTS 上，判据才可复现。
+          node-version: "22"
       - name: 装依赖（声明的那份：运行依赖 + dev 组）
         run: python -m pip install -e ".[dev]"
+      - name: 前端门禁（工单 module-hwcheck/01）
+        # pytest 面完全看不见 tests/js/（1500+ 条前端用例）——这条与本地
+        # pre-push 闸门同一条命令、同一个 glob（判据只有一份），改了导航 / fx /
+        # ui 却漏同步守卫时当场红。**放在 windows job**：前端资产是给
+        # Windows 用户机用的，且导航守卫读的就是 index.html 这份静态标记
+        # （2026-09-12 那次「一打开就卡死」只在这条链上暴露）。
+        # 前端用例只 import node:test / node:assert / node:fs（+ 两处 node --check
+        # 语法校验），不联网、不吃 secret。
+        run: node --test "tests/js/*.test.mjs"
       - name: 全套测试（并行，与本地同一条命令）
         run: python -m pytest -n auto -q
 

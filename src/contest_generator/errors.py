@@ -43,6 +43,7 @@ from .generator import (
     UartInstanceConflictError,
     UsartHandlerInMainError,
 )
+from .hwcheck import HwCheckError
 from .impact import ImpactError
 from .keil import KeilProjectError
 from .library import LibraryError
@@ -314,6 +315,7 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
             BackupRestoreError,  # 覆盖备份恢复失败（工单 ux-walkthrough-02/03）：目标名不合法 / 备份缺失 / 目标已存在
             RecentStatusError,  # 最近生成状态非法（工单 recent-jobs/01）：前端上报未知状态值
             CodeViewError,  # 代码查看器失败（工单 code-viewer/01-02）：目录不存在 / 路径穿越 / 二进制 / 超限
+            HwCheckError,  # 硬件检测请求形状非法（工单 module-hwcheck/01）：平台词表外 / 通道开关不是布尔值
             MaterialApplyError,  # 资料库应用失败（工单 materials-update/05）：zip slip / 备份失败 / 增量包缺失
         ),
         400,

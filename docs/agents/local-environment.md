@@ -286,6 +286,14 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 | 远端 CI | `.github/workflows/ci.yml` 已在跑：push 与 PR 上，windows 全套 + ubuntu 快速面。**不联网、不吃 secret** |
 | 发版前自检 | `powershell -File tools\preflight.ps1`（四项：三处版本号 / 母版编码钉 / 下载文档 / README 版本行） |
 | 想知道「这次 push 会跑什么」 | `python tools/prepush.py --dry-run`（或 `FIRSTEP_PREPUSH=select-only`） |
+| 前端用例（`tests/js/`） | **2026-09-20 起接进闸门**（工单 `module-hwcheck/01`）：改动落在 `src/contest_generator/static/` 或 `tests/js/` 时，本地闸门与 CI 都会跑 `node --test "tests/js/*.test.mjs"`（本地由 `tools/prepush.py` 在 Python 侧展开文件清单后传给 node——**Node 20 不认 glob 位置参数**，故不把 glob 交给 node；CI 另用 `setup-node` 钉在 22） |
+
+**本机前端测试口径**（2026-09-20 实测，Node v24.15.0）：`node --test tests/js`
+（目录形式）**跑不起来**——node 会把目录当模块解析并报
+`Cannot find module '...\tests\js'`。要么写 glob、要么列文件：`node --test
+"tests/js/*.test.mjs"`（≥21）或 `node --test tests/js/*.test.mjs`（由 shell 展开）。
+仓库里 30+ 个前端用例文件头注释仍写着目录形式，属于**过期注释**（不影响执行，
+改到哪个顺手改哪个）。
 
 **两条硬约束**（都是 2026-09-16 实测踩出来的）：
 1. **钩子文件必须 LF + 无 BOM** —— 带 BOM 时 git 报 `cannot spawn ...: No such file or

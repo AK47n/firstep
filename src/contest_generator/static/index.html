@@ -948,6 +948,16 @@
   .res-block .res-value { font-size: 13px; line-height: 1.7; min-width: 0;
                           overflow-wrap: break-word; }
   .res-block pre.result { max-height: 420px; margin: 0; }
+  /* 硬件检测栏目（工单 module-hwcheck/01）：输出通道勾选 + 通道说明 + main.c 预览。
+     main.c 复用 .result 的代码观感（等宽 / code-bg / 可滚），这里只放宽高度。 */
+  .hwcheck-channels { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: var(--space-1); }
+  .hwcheck-channel { display: inline-flex; align-items: center; gap: 6px; font-size: 13px;
+                     color: var(--text); cursor: pointer; }
+  .hwcheck-channel input { width: auto; margin: 0; }
+  .hwcheck-hint { font-size: 12.5px; line-height: 1.8; color: var(--muted);
+                  background: var(--panel-2); border: 1px solid var(--border);
+                  border-radius: var(--radius-md); padding: 8px 12px; margin-bottom: var(--space-2); }
+  pre.hwcheck-code { max-height: 520px; margin: 0; }
   /* 评分点核对清单（工单 score-checklist/01）：逐条 checkbox + 进度 +
      复制核对表；done 行弱化描边表示已核对 */
   .sp-actions { display: flex; align-items: center; gap: 10px; margin-bottom: var(--space-2); }
@@ -3001,6 +3011,7 @@
   <nav>
     <div class="tab-group" role="tablist" aria-label="做题">
       <button data-tab="generate" class="active" role="tab" aria-selected="true" aria-controls="tab-generate" tabindex="0" title="主流程：粘贴赛题 → AI 推荐 → 引脚配置 → 生成工程 → 编译修复。">生成</button>
+      <button data-tab="hwcheck" role="tab" aria-selected="false" aria-controls="tab-hwcheck" tabindex="-1" title="硬件检测：手上这件器件通不通——选平台（后续可选器件）→ 生成检测工程 → 照清单上板确认。不用赛题。">硬件检测</button>
       <button data-tab="topic" role="tab" aria-selected="false" aria-controls="tab-topic" tabindex="-1" title="历年真题（题面 + 附带程序），点「取题面」可一键填入生成页。">赛题库</button>
       <button data-tab="code" role="tab" aria-selected="false" aria-controls="tab-code" tabindex="-1" title="IDE 式代码编辑器：文件树 + 多标签编辑 + 保存（Ctrl+S）+ 大纲 + 搜索。">代码</button>
       <button data-tab="settings" role="tab" aria-selected="false" aria-controls="tab-settings" tabindex="-1" title="配置 AI API key、环境体检、工具链路径与库设置——第一次使用先来这里。">设置</button>
@@ -3766,6 +3777,31 @@
     </div><!-- /.gen-layout -->
   </section>
 
+  <!-- ============================ 硬件检测（工单 module-hwcheck/01） ============================
+       顶级栏目、完全独立于赛题工作流：选平台 →（后续工单：选器件）→ 生成检测程序
+       → 编译烧录 → 照清单上板确认。本工单只贯通到「零器件最小自检」的 main.c
+       预览（LED 心跳 + 输出通道自报，后端确定性渲染、零 LLM）。
+       ⚠ 不读题面、不读已选模块、不写最近工程记录——检测工程与赛题工程互不干扰。 -->
+  <section id="tab-hwcheck" class="page">
+    <div class="card">
+      <h2>硬件检测 <span class="muted">（手上这件器件通不通——不用赛题、不用先选模块；本版先做「板子活着」最小自检）</span></h2>
+      <p class="card-details">先选平台，再点「预览检测程序」看这一趟要烧进板子的 main.c。
+        它只做两件事：板载 LED 按固定周期闪（肉眼确认程序在跑）、每一段自检结果写到你在场的输出通道。
+        没有器件也能生成——那是先确认板子和烧录链路是好的。</p>
+      <h3>1. 目标平台</h3>
+      <div id="hwcheck-platforms" class="row"></div>
+      <h3>2. 输出通道</h3>
+      <div id="hwcheck-channels" class="hwcheck-channels">
+        <label class="hwcheck-channel"><input type="checkbox" data-hwcheck-channel="debug_uart" checked> 调试串口（115200，能反复复测）</label>
+        <label class="hwcheck-channel"><input type="checkbox" data-hwcheck-channel="oled" checked> OLED 屏（不拖串口线也能看结果）</label>
+      </div>
+      <div class="row" style="margin-top: var(--space-3)">
+        <button id="btn-hwcheck-preview" class="primary">预览检测程序</button>
+      </div>
+      <div id="hwcheck-output" style="margin-top: var(--space-3)"></div>
+    </div>
+  </section>
+
   <!-- ============================ 模块库页 ============================ -->
   <section id="tab-library" class="page">
     <div class="card">
@@ -4464,6 +4500,7 @@ import { renderUsageStats } from "/js/ui/usage.js";
 import { loadMasters, loadChangelog, renderNewPlatformOptions } from "/js/ui/master.js";
 import { loadPdfs, initPdfToolbar } from "/js/ui/pdf.js";
 import { loadMds, initMdToolbar } from "/js/ui/md.js";
+import { renderHwcheckPanel, initHwcheck } from "/js/ui/hwcheck.js";  // 硬件检测栏目（module-hwcheck/01）：选平台 + 预览检测程序（零 LLM）
 import { addFileRow, collectFiles, readPickedText, pickFilesInto, bindFilePicker } from "/js/ui/files.js";
 import { renderPlatforms, renderModulePool, renderSelected, renderWarnings, renderRecommendResult, startRecommend, loadReferencePicker, chosenPlatform, selectedSlugs, expanded, lastRecommend, currentTopicId, selectedReferenceIds, autoReferenceIds, pythonTemplates, scorePoints, setChosenPlatform, setSelectedSlugs, setCurrentTopicId, setRecommendClarifications, setClusterDeps } from "/js/ui/generate-recommend.js";
 import { stepCard, markStepDone, markStepUndone, syncStep7, stepDoneSet, STEP_NAV_CARD_SELECTOR, initCardCollapse, setOnStepChange } from "/js/ui/step-state.js";
@@ -4552,6 +4589,7 @@ document.querySelectorAll("nav button[data-tab]").forEach((btn) => {
     if (btn.dataset.tab === "reference") { loadReferences(); loadKitVocabulary(); loadTopicTypes(); }
     if (btn.dataset.tab === "pdf") loadPdfs();
     if (btn.dataset.tab === "md") loadMds();
+    if (btn.dataset.tab === "hwcheck") renderHwcheckPanel();  // 硬件检测：进栏目按全局状态渲染平台卡（选过则保留本栏目自己的选择）
     if (btn.dataset.tab === "topic") { loadTopics(); loadTopicGroupVocabulary(); }
     if (btn.dataset.tab === "master") loadMasters();
     if (btn.dataset.tab === "changelog") loadChangelog();
@@ -4884,6 +4922,7 @@ setSettingsDeps({ applyToolchains: (ts) => { setToolchains(ts); renderToolchainS
   setToolchains(state.toolchains || { stm32: false, mspm0: false });
   renderToolchainStatus();
   renderPlatforms();
+  renderHwcheckPanel();  // 硬件检测栏目平台卡（工单 module-hwcheck/01）：全局状态到达后重渲染一次；之后以本栏目自己的选择为准
   renderModulePool();
   renderPinCard();  // 引脚配置卡（工单 03）：初始占位文案
   renderNewPlatformOptions(state.platforms);
@@ -4928,6 +4967,7 @@ initAddSections();  // 添加模块分区折叠（工单 07）：分区头点击
 initReferenceToolbar();  // 参考库工具栏（工单 02）：防抖搜索 / 排序 / chips 事件绑定（DOM 已就绪）
 initPdfToolbar();  // PDF 资料库工具栏（工单 02）：防抖搜索 / 排序 / 批次 chips 事件绑定（DOM 已就绪）
 initMdToolbar();  // Markdown 资料工具栏（工单 wiki-materials/02）：防抖搜索 / 排序 / 批次 chips 事件绑定（DOM 已就绪）
+initHwcheck();  // 硬件检测栏目（工单 module-hwcheck/01）：平台卡 / 通道勾选 / 预览按钮接线（平台卡要等 /api/state → 见启动区 renderHwcheckPanel）
 </script>
 <div id="toast-root"></div>
 </body>
