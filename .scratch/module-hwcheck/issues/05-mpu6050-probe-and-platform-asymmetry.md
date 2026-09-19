@@ -39,6 +39,8 @@
 
 ## 实施结果
 
+> 会话时间：2026-09-19 23:xx（本机时钟；工单 04 同日晚 21:5x）。
+
 配方数据（`library/hwcheck_recipes.json`）+ 渲染机制（`hwcheck_recipe.py` / `hwcheck.py`）+ 载荷（`webapp.py`）
 + 前端（`fx/hwcheck.js` / `ui/hwcheck.js` / `index.html`）。本单顺带修掉**四条**上一单留下的真缺陷，见下。
 

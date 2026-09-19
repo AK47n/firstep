@@ -178,7 +178,7 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > （`hwcheck_recipe.c_string`），量具在 `.scratch/module-hwcheck/probe-04-armcc-*.py`。
 > **别在生成的 .c 里直接写中文串**；注释里可以（本机所有 `/* 中文 */` 都没问题）。
 >
-> ⚠ **2026-09-20（module-hwcheck/05）更正转义写法：`\xNN` → 三位八进制 `\NNN`**。
+> ⚠ **2026-09-19 23:4x（module-hwcheck/05 会话）更正转义写法：`\xNN` → 三位八进制 `\NNN`**。
 > `\x` 转义**贪婪吃十六进制数字**：`±2g` 的字节是 `C2 B1 32 67`，写成 `\xc2\xb12g`
 > 会被编译器读成 `\xb12`（一个越界转义）——ARMCC 报 `#27-D: character value is out of range`
 > 且字节不对（工单 05 的编译矩阵第一次跑就撞上，读数单位里的 `±2g` / `°1` 这类最容易中招）。
