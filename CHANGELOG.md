@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=22e325b92447a76bf1b385b201ee65e0cf83bf5c -->
+<!-- changelog-auto: last-commit=c915c755577e00a1928059c4fc12aed0e1f6dfc2 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -6,6 +6,7 @@
 
 ## 2026-09-19
 - 10:38 修启动器：端口上那个服务是旧进程就踢掉重起（工单 update-restart-stale-service/01）
+- 10:40 沙箱还原为真 v1.1.1 + 重打 v1.2.1 两套资产的自校验（工单 update-restart-stale-service/03）
 
 ## 2026-09-18
 - 23:19 docs(闸门): commit-gate/04 CI 线上全绿收口（run 35098093620）
