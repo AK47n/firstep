@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=f8e1402c91e8122c19783b6ef6110351f6e2e1ae -->
+<!-- changelog-auto: last-commit=af9a6917abb36b8f2bb53a6435529f9737a30b22 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -29,6 +29,7 @@
 - 15:58 工单 module-hwcheck/01：硬件检测栏目贯通 + 前端测试门禁接通
 - 17:09 工单 module-hwcheck/02：最小自检走到板（生成 / 编译 / 烧录 / 上板清单）
 - 17:59 工单 module-hwcheck/03：器件选择 + 接线表 + 默认脚冲突预警
+- 21:53 工单 module-hwcheck/04：配方机制 + led / oled 两件专精
 
 ## 2026-09-18
 - 23:19 docs(闸门): commit-gate/04 CI 线上全绿收口（run 35098093620）
