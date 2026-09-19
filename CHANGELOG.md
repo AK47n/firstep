@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=8708bffc2192c03da9405e783bf4acac5185e0ef -->
+<!-- changelog-auto: last-commit=5feaa3e5100d7242e75dc67a5468f7bfd0be8aa4 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -21,6 +21,7 @@
 - 12:35 验收：离线演练 + 账本收口——盘面与全新安装一致（工单 update-orphan-files/04）
 - 12:36 账本更正：未发布提交数与工单状态标签
 - 12:58 修复：egg-info 摘出产品文件——两个打包器都不再收 pip 构建产物（工单 release-v1.2.2/01）
+- 13:00 发版准备：版本号同步到 v1.2.2 + 发版自检四项全绿（工单 release-v1.2.2/03）
 
 ## 2026-09-18
 - 23:19 docs(闸门): commit-gate/04 CI 线上全绿收口（run 35098093620）
