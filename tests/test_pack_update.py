@@ -15,7 +15,12 @@ from pathlib import Path
 import pytest
 
 from contest_generator.full_pack import prepare_full_package
-from contest_generator.pack_update import pack_update, read_files_manifest, sha256_of
+from contest_generator.pack_update import (
+    pack_update,
+    read_files_manifest,
+    select_product_files,
+    sha256_of,
+)
 
 # 发布侧自检脚本（`.scratch/full-download/`）里的跨包判据，测试直接调它——
 # 免得「自检脚本自己写一份比对逻辑」与产品侧判据漂移。
@@ -221,6 +226,73 @@ def test_update_pack_files_txt_matches_zip_entries(tmp_path: Path) -> None:
     assert written == out / "firstep-update-v9.9.9.zip"
     assert read_files_manifest(out / "firstep-update-v9.9.9.files.txt") == ["README.md", "src/app.py"]
     assert sorted(zip_bytes(written)) == ["README.md", "src/app.py"]
+
+
+def test_update_pack_drops_non_product_candidates(tmp_path: Path) -> None:
+    """候选清单里的**包外内容**不许进包（工单 `update-orphan-files/01`）。
+
+    这是「小发版包不再多发」的判据：完整包刻意排除的那些（本机库备份目录 / 安装包 /
+    缓存 / 白名单外的顶层目录）必须同时被小发版包排除——实测它们曾经被发到用户盘上
+    （`library/revise-backups/**` 1481 个 + 一个 `*.exe`），而完整包永远不会给。
+
+    反向也验：**新版新增的顶层文件**（`00-START-HERE.txt`，v1.2.1 才有）必须进来
+    ——工单 01 的另一半正是「小发版漏发它」（白名单手抄漂移）。
+    """
+    tree = make_mini_repo(tmp_path / "repo")
+    (tree / "library" / "revise-backups" / "20260101-000000").mkdir(parents=True)
+    (tree / "library" / "revise-backups" / "20260101-000000" / "main.c").write_bytes(b"int main(void){}\n")
+    (tree / "sources" / "materials" / "kit").mkdir(parents=True, exist_ok=True)
+    (tree / "sources" / "materials" / "kit" / "CH341SER.EXE").write_bytes(b"MZ")
+    (tree / ".scratch" / "note").mkdir(parents=True)
+    (tree / ".scratch" / "note" / "a.md").write_bytes(b"x\n")
+    (tree / "00-START-HERE.txt").write_bytes("三步走\n".encode("utf-8"))
+    (tree / "src" / "app.log").write_bytes(b"log\n")
+    _git(tree, "add", "-A")
+    _git(tree, "commit", "-qm", "more")
+
+    candidates = tracked_files(tree)
+    selected = select_product_files(candidates)
+    assert "00-START-HERE.txt" in selected, "白名单里的新顶层文件必须被选中（漏发就是这条）"
+    for excluded in ("library/revise-backups/20260101-000000/main.c",
+                     "sources/materials/kit/CH341SER.EXE",
+                     ".scratch/note/a.md",
+                     "src/app.log"):
+        assert excluded not in selected, f"{excluded} 是包外内容，不该进小发版包"
+
+    out = tmp_path / "update"
+    manifest = tmp_path / "candidates.txt"
+    manifest.write_text("".join(f"{p}\n" for p in candidates), encoding="utf-8")
+    written = pack_update(tree, version="v9.9.9", out_dir=out, files_manifest=manifest)
+
+    entries = sorted(zip_bytes(written))
+    assert entries == sorted(selected), "zip 条目必须与筛出来的产品文件清单一致"
+    assert read_files_manifest(out / "firstep-update-v9.9.9.files.txt") == selected
+    assert "00-START-HERE.txt" in entries
+    assert "library/revise-backups/20260101-000000/main.c" not in entries
+
+
+def test_update_pack_shares_the_product_predicate_with_the_full_pack() -> None:
+    """静态守卫：小发版打包脚本里**不许**再手抄顶层白名单或排除规则。
+
+    判据（机械）：`tools/pack-update.ps1` 里不得出现白名单数组 / 规则常量名，
+    也不得自己做 `-match` 过滤——筛选只许发生在 Python 核心（`is_product_file`）。
+    代价已经付过：手抄那份漂移出两套盘面（多发 1481 个本机库备份、漏发
+    `00-START-HERE.txt`），而漂移没有任何东西会报警。
+    """
+    script = (Path(__file__).resolve().parent.parent / "tools" / "pack-update.ps1")
+    text = script.read_text(encoding="utf-8-sig")
+    # 只看**代码行**：注释里解释「为什么不再手抄」是好事，不该被判违规。
+    code = "\n".join(line for line in text.splitlines()
+                     if not line.lstrip().startswith("#"))
+    for forbidden in ("TopLevels", "TopPattern", "SKIP_DIR_NAMES", "INSTALLER_GLOBS",
+                      "revise-backups", "fix-backups", "TOP_LEVEL"):
+        assert forbidden not in code, (
+            f"pack-update.ps1 的代码里又出现了 {forbidden}——判据单源在 "
+            "contest_generator.full_pack.is_product_file，不要在这里再抄一份"
+        )
+    assert "git -c core.quotepath=false ls-files" in code, (
+        "pack-update.ps1 应当把 git ls-files 全量当候选交给核心筛"
+    )
 
 
 def test_update_pack_writes_sha256_sidecar_consistently(tmp_path: Path) -> None:

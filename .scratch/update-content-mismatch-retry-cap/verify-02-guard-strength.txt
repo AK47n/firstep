@@ -5,3 +5,23 @@
 ------------------------------------------------------------------------------
 [注入] ① 去掉封顶（回到改动前：内容不符永远重试）
   文件：src/contest_generator/download_resume.py
+  测试：tests/test_download_resume.py、tests/test_task_download.py
+  结果：转红 ✓ —— 1 failed, 62 passed in 1.55s
+------------------------------------------------------------------------------
+[注入] ② 连续改累计（中途别的错误不再清零）
+  文件：src/contest_generator/download_resume.py
+  测试：tests/test_download_resume.py、tests/test_task_download.py
+  结果：转红 ✓ —— 1 failed, 62 passed in 1.28s
+------------------------------------------------------------------------------
+[注入] ③ 新错误从「不可重试」表里拿掉（终态错误却自称可重试）
+  文件：src/contest_generator/download_resume.py
+  测试：tests/test_download_resume.py、tests/test_task_download.py
+  结果：转红 ✓ —— 2 failed, 61 passed in 1.33s
+
+------------------------------------------------------------------------------
+## 复原复核
+  src/contest_generator/download_resume.py sha256 未变 ✓
+
+## 总判
+  3/3 条注入成功转红
+  探针：PASS

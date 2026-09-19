@@ -48,21 +48,17 @@ if (-not $AllowDirty) {
     }
 }
 
-# ---------- 4. 顶层白名单（新增顶层目录时在此登记） ----------
-$TopLevels = @(
-    'src', 'library', 'sources', 'tests', 'docs', 'assets', 'tools', '.githooks',
-    '.gitattributes', '.gitignore', 'CLAUDE.md', 'README.md', 'CONTEXT.md',
-    'CHANGELOG.md', 'VERSIONS.md', 'pyproject.toml', 'install.bat', 'start-app.bat',
-    'start-app.vbs', 'stop-firstep.bat', 'stop-firstep.vbs'
-)
-$TopPattern = '^(' + (($TopLevels | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')(/|$)'
-
-# ---------- 5. 文件清单（仅 tracked；.venv / sources\materials / .scratch 不进清单） ----------
+# ---------- 4. 文件清单（仅 tracked；.venv / sources\materials / .scratch 不进清单） ----------
+# **顶层白名单与排除规则不在这里**（工单 update-orphan-files/01）：这里只把
+# `git ls-files` 全量当**候选**交给 Python 核心，由 `full_pack.is_product_file`
+# （产品文件判据单源，完整包扫描用的是同一份）筛。原先这里手抄过一份顶层数组，
+# 与完整包的排除规则漂移出两套盘面：小发版包把 library/revise-backups/**（本机库备份
+# 1481 个）与一个 *.exe 发给了用户，同时漏了 00-START-HERE.txt（白名单漂移）。
 # -c core.quotepath=false：显式要求真实 UTF-8 路径（默认配置会把中文转义成 \NNN，
 # 与 zip 内 UTF-8 文件名不一致，删除清单将无法定位文件；不依赖本机 git 全局配置）。
-$Files = @(git -c core.quotepath=false ls-files | Where-Object { $_ -match $TopPattern })
+$Files = @(git -c core.quotepath=false ls-files)
 if ($Files.Count -eq 0) {
-    throw 'git ls-files 无匹配文件，检查仓库状态'
+    throw 'git ls-files 无输出，检查仓库状态'
 }
 
 # ---------- 6. 定位 python（显式 > PATH） ----------
@@ -108,12 +104,15 @@ try {
 if (-not (Test-Path -LiteralPath $Zip)) { throw "zip 未生成：$Zip" }
 
 # ---------- 8. 删除清单（自基线 diff；无基线 = 空） ----------
+# 「本版产品文件」= 核心写出的 .files.txt——**不是** `$Files`：那是候选（含白名单外 /
+# 本地备份等包外内容），拿它做差会把删除清单一律算成空（工单 update-orphan-files/01）。
 # 基线文件必须以 UTF-8 显式读取：PowerShell 5.1 的 Get-Content 默认 ANSI(GBK)，
 # 会把 UTF-8 中文路径读成乱码，导致「基线有而当前无」误判为全部删除。
+$Current = @(Get-Content -LiteralPath $FilesTxt -Encoding UTF8 | Where-Object { $_ -and -not $_.StartsWith('#') })
 if ($Baseline) {
     if (-not (Test-Path -LiteralPath $Baseline)) { throw "基线文件不存在：$Baseline" }
     $BaseLines = @(Get-Content -LiteralPath $Baseline -Encoding UTF8 | Where-Object { $_ -and -not $_.StartsWith('#') })
-    $Removed = @($BaseLines | Where-Object { $_ -notin $Files })
+    $Removed = @($BaseLines | Where-Object { $_ -notin $Current })
     [System.IO.File]::WriteAllLines($RemovedTxt, $Removed, [System.Text.UTF8Encoding]::new($false))
 } else {
     # 空清单写注释行：0 字节文件会被 `gh release upload` 以
@@ -133,7 +132,7 @@ if ($verified -ne $sha) { throw "校验和不一致：核心报告 $sha，实测
 # ---------- 10. 摘要 ----------
 $sizeMB = [math]::Round((Get-Item -LiteralPath $Zip).Length / 1MB, 1)
 $baselineNote = if ($Baseline) { "（基线 $Baseline）" } else { "（无基线，空清单）" }
-Write-Host "更新包已生成：$Zip（$sizeMB MB，$($Files.Count) 个文件）"
+Write-Host "更新包已生成：$Zip（$sizeMB MB，产品文件 $($Current.Count) 个 / 候选 $($Files.Count) 条）"
 Write-Host "  文件清单：$FilesTxt"
 Write-Host "  删除清单：$RemovedTxt $baselineNote"
 Write-Host "  SHA256：$ShaTxt"

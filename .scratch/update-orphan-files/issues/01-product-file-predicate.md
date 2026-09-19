@@ -7,7 +7,47 @@
 
 **被谁阻塞：** 无——spec 已拍板（`.scratch/update-orphan-files/spec.md`，本轮澄清选 A）。
 
-**状态：** ready-for-agent
+**状态：** resolved（2026-09-19）
+
+**完成记录。** 判据收进 `src/contest_generator/full_pack.py` 的
+`product_file_reason` / `is_product_file`（判据本体从 `_exclude_reason` 收口而来，
+`scan_tree` 与 `excluded_paths` 都改成问它——三家共用一份规则）；小发版打包核心
+`src/contest_generator/pack_update.py` 新增 `select_product_files`，
+**筛选挪进 Python 核心**（zip 与 `.files.txt` 仍由核心一起写出，一一对应不变）；
+`tools/pack-update.ps1` 只剩「`git ls-files` 全量当候选 → 交给核心」两件事，
+手抄的 `$TopLevels` / `$TopPattern` 整段删掉。`pack-update.ps1` 的删除清单也顺手改成
+拿**核心写出的 `.files.txt`**做差（原先拿候选清单，会一律算成空）。
+
+**真仓库实测**（`git ls-files` 6897 条候选）：
+
+| 判据 | 实测 |
+|---|---|
+| 产品文件 | **2858 条**（筛掉 4039：`.scratch` 2534 / `library/revise-backups` 1481 / 其它） |
+| `00-START-HERE.txt` | **在**（原先小发版包漏发它） |
+| `library/revise-backups/**` | **0 条命中**（原先 1481 条随包发出） |
+| `*.exe` / `.scratch/**` | 0 / 0 |
+
+交叉核对：线上 v1.2.1 的 `firstep-update-v1.2.1.files.txt` 是 4339 条，减去它里面那 1481 条
+`revise-backups` 正好 **2858** —— 与本次筛出来的产品文件数逐条同量。
+
+**判据强度探针 4/4 转红**（`.scratch/update-orphan-files/verify-01-guard-strength.{txt,json}`）：
+
+| 注入 | 结果 |
+|---|---|
+| ① 谓词放宽（不再按目录名排除） | 转红 ✓ |
+| ② 筛选被摘掉（候选原样进包） | 转红 ✓ |
+| ③ 判据被抄回 `scan_tree`（行为等价、单源被破坏） | 转红 ✓ |
+| ④ 打包脚本里手抄顶层白名单 | 转红 ✓ |
+
+三处复原逐字节相同。**顺带修掉两个探针工程坑**（都写进探针注释）：
+① 探针被强杀时 `finally` 跑不到、源文件停在注入态 → 三支探针都加了**前置干净性检查**；
+② 读侧原先用文本模式（CRLF↔LF 往返会把混行文件整份归一 → 「复原复核」假红）→ 改成
+**逐字节保真读 + 按目标文件换行风格适配锚点**。另：`tools/pack-update.ps1` 少 BOM 会被
+`tests/test_ps1_encoding.py` 当场抓住（编辑工具会吞掉 BOM，改完 .ps1 必须复核 BOM）。
+
+聚焦测试：`tests/test_full_pack.py` + `tests/test_pack_update.py` **49 passed**
+（新增真值表、`scan_tree` 问单源的结构守卫、扫描结果与谓词一致的行为判据、
+小发版不许多发 / 必须带上新顶层文件的判据、打包脚本不许手抄白名单的静态守卫）。
 
 ## 背景（这份单子的根因是**更正后**的，别按原措辞读）
 

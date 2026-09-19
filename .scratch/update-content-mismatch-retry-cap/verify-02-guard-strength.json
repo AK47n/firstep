@@ -1,3 +1,27 @@
 {
-  "cases": []
+  "cases": [
+    {
+      "name": "① 去掉封顶（回到改动前：内容不符永远重试）",
+      "anchor_hits": 1,
+      "turned_red": true,
+      "summary": "1 failed, 62 passed in 1.55s",
+      "weak": false
+    },
+    {
+      "name": "② 连续改累计（中途别的错误不再清零）",
+      "anchor_hits": 1,
+      "turned_red": true,
+      "summary": "1 failed, 62 passed in 1.28s",
+      "weak": false
+    },
+    {
+      "name": "③ 新错误从「不可重试」表里拿掉（终态错误却自称可重试）",
+      "anchor_hits": 1,
+      "turned_red": true,
+      "summary": "2 failed, 61 passed in 1.33s",
+      "weak": false
+    }
+  ],
+  "weak": [],
+  "verdict": "PASS"
 }

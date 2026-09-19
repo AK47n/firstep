@@ -1,0 +1,21 @@
+修复：产品文件判据单源——小发版包不再多发，也不再漏发新文件（工单 update-orphan-files/01）
+
+原单写的「删除清单只覆盖上一版 → 落后两版留下 1483 个孤儿」与实测不符（更正见
+.scratch/update-orphan-files/spec.md 的补充说明）：那 1481 个是本轮小发版包自己写进去的
+（library/revise-backups/**），因为两个打包器各自实现了一套「哪些文件算产品文件」——
+完整包按排除规则扫工作树，小发版按一份**手抄且已漂移**的顶层白名单过滤 git ls-files。
+
+修法：判据收进 full_pack.product_file_reason / is_product_file（scan_tree 与
+excluded_paths 改成问它，三家共用一份规则）；小发版核心 pack_update.select_product_files
+在 Python 侧筛（zip 与 .files.txt 仍由核心一起写出）；tools/pack-update.ps1 只剩
+「git ls-files 全量当候选 → 交给核心」，手抄的 $TopLevels/$TopPattern 整段删除，
+删除清单也改拿核心写出的 .files.txt 做差（原先拿候选清单会一律算成空）。
+
+真仓库实测：候选 6897 → 产品文件 2858（= 线上 v1.2.1 files.txt 4339 − 其中的 1481 条
+revise-backups），00-START-HERE.txt 由「永远发不到」变成在包内。
+
+守卫：谓词真值表（含反斜杠形态）、scan_tree 必须问单源的结构守卫（不许引用规则常量）、
+扫描结果与谓词一致的行为判据、小发版不许多发 / 必须带上新顶层文件的判据、打包脚本
+不许手抄白名单的静态守卫；判据强度探针 4/4 转红。三支探针顺带修掉两个工程坑
+（强杀后残留注入态 → 加前置干净性检查；文本模式读写的换行归一 → 改逐字节保真读）。
+聚焦 49 passed。

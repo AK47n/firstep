@@ -72,11 +72,27 @@ def log(text: str = "") -> None:
 
 
 def read_text(relative: str) -> str:
-    return (ROOT / relative).read_text(encoding="utf-8")
+    """按**字节**读再解码（不用 `Path.read_text`）。
+
+    文本模式读会把 CRLF 归一成 LF、写回时再换回来——文件里只要有一处混行，一次往返
+    就把整份文件的换行统一了，于是「复原复核」报假红。判据要的是**逐字节复原**。
+    """
+    return (ROOT / relative).read_bytes().decode("utf-8")
 
 
 def write_text(relative: str, text: str) -> None:
-    (ROOT / relative).write_text(text, encoding="utf-8")
+    (ROOT / relative).write_bytes(text.encode("utf-8"))
+
+
+def newline_of(text: str) -> str:
+    """目标文件的换行风格（探针里的锚点一律以 LF 书写，注入前要适配）。"""
+    return "\r\n" if "\r\n" in text else "\n"
+
+
+def adapt(text: str, newline: str) -> str:
+    """把 LF 书写的锚点 / 注入文本适配到目标文件的换行风格（读侧逐字节保真，
+    所以 CRLF 文件里的多行锚点带 `\\r\\n`）。"""
+    return text.replace("\n", newline) if newline != "\n" else text
 
 
 def sha256(relative: str) -> str:
@@ -105,7 +121,9 @@ def main() -> int:
     # `finally` 跑不到，源文件会停在注入态——那时后面每条都报「锚点失效」，
     # 看起来像探针写错了，其实是上一轮没复原。这一步把那种情况变成一句明确的拒绝。
     pristine = read_text(TASK_DOWNLOAD)
-    missing = [name for name, old, _new in CASES if pristine.count(old) != 1]
+    pristine_newline = newline_of(pristine)
+    missing = [name for name, old, _new in CASES
+               if pristine.count(adapt(old, pristine_newline)) != 1]
     if missing:
         log("**拒绝开跑**：源文件不是干净状态（可能上一轮探针被强杀、没来得及复原）。")
         for name in missing:
@@ -120,7 +138,8 @@ def main() -> int:
         log(f"[注入] {name}")
         log(f"  文件：{TASK_DOWNLOAD}")
         original = read_text(TASK_DOWNLOAD)
-        hits = original.count(old)
+        newline = newline_of(original)
+        hits = original.count(adapt(old, newline))
         if hits != 1:
             log(f"  **锚点命中 {hits} 次（应为 1）——探针自己失效了，本条按失败记**")
             weak.append(f"{name}（锚点失效）")
@@ -128,7 +147,8 @@ def main() -> int:
                                      "turned_red": False, "weak": True})
             continue
         try:
-            write_text(TASK_DOWNLOAD, original.replace(old, new, 1))
+            write_text(TASK_DOWNLOAD,
+                       original.replace(adapt(old, newline), adapt(new, newline), 1))
             green, summary = run_tests()
         finally:
             write_text(TASK_DOWNLOAD, original)      # 无论结果如何都复原

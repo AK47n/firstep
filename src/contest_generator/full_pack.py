@@ -142,10 +142,12 @@ __all__ = [
     "ensure_paths_fit",
     "excluded_paths",
     "full_manifest_filename",
+    "is_product_file",
     "main",
     "materials_excluded",
     "overlong_entries",
     "prepare_full_package",
+    "product_file_reason",
     "register_materials_dirs",
     "scan_tree",
     "split_volumes",
@@ -167,16 +169,32 @@ def _relative_parts(root: Path, path: Path) -> tuple[str, ...]:
     return path.relative_to(root).parts
 
 
-def _exclude_reason(root: Path, path: Path) -> str | None:
-    """文件不满足进包条件时返回原因（中文可读），否则 None。"""
-    parts = _relative_parts(root, path)
+def product_file_reason(
+    relative: str, *, skip_dir_names: frozenset[str] | None = None
+) -> str | None:
+    """仓库根相对路径 → **不进包的原因**（中文可读）；`None` = 它是产品文件。
+
+    **这是「哪些文件算产品文件」的唯一判据**（工单 `update-orphan-files/01`）。
+    为什么必须单源：完整包按这套规则扫工作树，小发版包原先只按一份**手抄的顶层白名单**
+    过滤 `git ls-files`——于是同一次发布的两条更新路径给出两套盘面，实测已经漂移三处
+    （白名单漏了 `00-START-HERE.txt`、排除规则整套没抄、两者对「本机库备份目录」的判定相反）。
+    小发版包因此把 `library/revise-backups/**` 1481 个文件发到了每个用户盘上，
+    而完整包刻意不收它们。
+
+    判据本体住在 `full_pack`（完整包扫描先有它），`scan_tree` / `excluded_paths` /
+    小发版打包核心都问它，谁都不许再写一份。
+
+    `skip_dir_names` 只给测试用（造一个「只排除某类目录」的扫描面）；
+    产品路径一律用缺省的 `SKIP_DIR_NAMES`。
+    """
+    parts = [part for part in str(relative).replace("\\", "/").split("/") if part]
     if not parts:
         return "顶层之外"
+    dir_skips = SKIP_DIR_NAMES if skip_dir_names is None else skip_dir_names
     # 目录名排除优先判定（.git / .scratch 这类既非白名单也不该进包的）
-    for part in parts[:-1]:
-        if part in SKIP_DIR_NAMES:
-            return "dir-name"
-    if parts[-1] in SKIP_DIR_NAMES:
+    if any(part in dir_skips for part in parts[:-1]):
+        return "dir-name"
+    if parts[-1] in dir_skips:
         return "dir-name"
     if parts[0] not in TOP_LEVEL_ENTRIES:
         return "顶层不在白名单"
@@ -189,11 +207,31 @@ def _exclude_reason(root: Path, path: Path) -> str | None:
     return None
 
 
+def is_product_file(relative: str) -> bool:
+    """这个仓库根相对路径算不算产品文件（`product_file_reason` 的二值投影）。
+
+    两个打包器共用它：完整包扫工作树时筛盘上文件，小发版包筛 `git ls-files` 的候选清单。
+    于是「小发版包发的东西 ⊆ 完整包发的东西」这条不再靠人手同步两处。
+    """
+    return product_file_reason(relative) is None
+
+
+def _exclude_reason(root: Path, path: Path) -> str | None:
+    """文件不满足进包条件时返回原因（中文可读），否则 None。
+
+    只是把 `product_file_reason`（判据单源）套到「根 + 绝对路径」这对入参上——
+    规则一个字都不在这儿。
+    """
+    return product_file_reason("/".join(_relative_parts(root, path)))
+
+
 def scan_tree(root: Path, *, skip_dir_names: frozenset[str] | None = None) -> list[PartFile]:
     """扫描仓库树 → PartFile 列表（相对 POSIX 路径 / size / sha256，按路径排序）。
 
     只收白名单顶层下的文件，按 `SKIP_DIR_NAMES` / `SKIP_FILE_NAMES` /
     `INSTALLER_GLOBS` / `SKIP_FILE_SUFFIXES` 排除；排序保证清单与分卷确定性。
+    排除判据**不在这里**——它只住 `product_file_reason`（本函数与 `excluded_paths`、
+    小发版打包核心共用同一份，工单 `update-orphan-files/01`）。
 
     **取源口径（工单 full-download/08）**：读**工作树字节**，与小发版包同口径——
     小发版侧 `git archive` 被钉成 `core.autocrlf=false`，两边拿到的就是同一份
@@ -206,15 +244,8 @@ def scan_tree(root: Path, *, skip_dir_names: frozenset[str] | None = None) -> li
         if not path.is_file():
             continue
         parts = _relative_parts(root, path)
-        if not parts or parts[0] not in TOP_LEVEL_ENTRIES:
-            continue
-        if any(part in dir_skips for part in parts[:-1]):
-            continue
-        if parts[-1] in SKIP_FILE_NAMES:
-            continue
-        if _matches_any(parts[-1], INSTALLER_GLOBS):
-            continue
-        if parts[-1].lower().endswith(SKIP_FILE_SUFFIXES):
+        relative = "/".join(parts)
+        if product_file_reason(relative, skip_dir_names=dir_skips) is not None:
             continue
         digest = hashlib.sha256()
         with open(path, "rb") as handle:
@@ -222,7 +253,7 @@ def scan_tree(root: Path, *, skip_dir_names: frozenset[str] | None = None) -> li
                 digest.update(chunk)
         entries.append(
             PartFile(
-                path="/".join(parts),
+                path=relative,
                 size=path.stat().st_size,
                 sha256=digest.hexdigest(),
             )

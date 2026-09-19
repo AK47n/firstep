@@ -33,9 +33,15 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Sequence
 
-from .full_pack import _validate_version
+from .full_pack import _validate_version, is_product_file
 
-__all__ = ["UPDATE_ZIP_PREFIX", "pack_update", "read_files_manifest", "sha256_of"]
+__all__ = [
+    "UPDATE_ZIP_PREFIX",
+    "pack_update",
+    "read_files_manifest",
+    "select_product_files",
+    "sha256_of",
+]
 
 # 更新包 zip 名前缀（与 `update.UPDATE_ZIP_PREFIX` 同口径：用户侧按它识别小发版资产）
 UPDATE_ZIP_PREFIX = "firstep-update-"
@@ -159,6 +165,28 @@ def _pack_from_disk(tree: Path, paths: Sequence[str], target: Path) -> None:
             archive.writestr(name, source.read_bytes())
 
 
+def select_product_files(candidates: Sequence[str]) -> list[str]:
+    """候选清单（`git ls-files` 全量）→ **只留产品文件**（判据单源 = `full_pack.is_product_file`）。
+
+    为什么要这一步（工单 `update-orphan-files/01`）：小发版包原先靠 `tools/pack-update.ps1`
+    里一份**手抄的**顶层白名单过滤，与完整包的排除规则是两套——实测把
+    `library/revise-backups/**` 1481 个本机库备份与一个 `*.exe` 发到了用户盘上
+    （完整包刻意不收），同时**漏了** `00-START-HERE.txt`（白名单漂移），于是 v1.1.1 的用户
+    走小发版升级永远拿不到它。现在两边问同一个谓词，漂移不可能再发生。
+
+    保留顺序、去重；空段跳过（清单文件是人工也能编辑的文本）。
+    """
+    picked: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        name = str(candidate).strip()
+        if not name or name in seen or not is_product_file(name):
+            continue
+        seen.add(name)
+        picked.append(name)
+    return picked
+
+
 def pack_update(
     tree: Path,
     *,
@@ -166,9 +194,12 @@ def pack_update(
     out_dir: Path,
     files_manifest: Path,
 ) -> Path:
-    """打小发版更新包：读清单 → `git archive`（确定性）→ zip + `.files.txt`。
+    """打小发版更新包：读清单 → 按产品判据筛 → `git archive`（确定性）→ zip + `.files.txt`。
 
-    返回 zip 路径。清单不存在 / 为空 / 文件读不到，一律 `ValueError`。
+    返回 zip 路径。清单不存在 / 为空 / 一个产品文件都不剩，一律 `ValueError`。
+
+    `files_manifest` 收的是**候选**（`tools/pack-update.ps1` 直接喂 `git ls-files` 全量），
+    筛选在核心这一层做——这样 zip 与 `.files.txt` 天然一一对应，且判据只有一处。
     """
     _validate_version(version)
     tree = Path(tree)
@@ -179,9 +210,15 @@ def pack_update(
     if not files_manifest.is_file():
         raise ValueError(f"文件清单不存在：{files_manifest}")
 
-    paths = read_files_manifest(files_manifest)
-    if not paths:
+    candidates = read_files_manifest(files_manifest)
+    if not candidates:
         raise ValueError(f"文件清单为空：{files_manifest}")
+    paths = select_product_files(candidates)
+    if not paths:
+        raise ValueError(
+            "候选清单里一个产品文件都没有——顶层白名单或排除规则可能写错了"
+            f"（候选 {len(candidates)} 条，全被筛掉）"
+        )
 
     out_dir.mkdir(parents=True, exist_ok=True)
     zip_path = out_dir / f"{UPDATE_ZIP_PREFIX}{version}.zip"
@@ -224,9 +261,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     count = len(read_files_manifest(Path(args.files)))
+    written = read_files_manifest(
+        Path(args.out) / f"{UPDATE_ZIP_PREFIX}{args.version}.files.txt")
     size_mb = zip_path.stat().st_size / 1024 / 1024
     print(f"更新包已生成：{zip_path}")
-    print(f"  文件数：{count}")
+    print(f"  候选 {count} 条 → 产品文件 {len(written)} 条（筛掉 {count - len(written)} 条："
+          "本地备份目录 / 安装包 / 缓存 / 白名单外）")
     print(f"  zip 大小：{size_mb:.1f} MB")
     print(f"  SHA256：{sha256_of(zip_path)}")
     return 0

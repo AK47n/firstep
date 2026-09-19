@@ -1,0 +1,38 @@
+# 判据强度探针：「产品文件判据单源」（工单 update-orphan-files/01）
+  仓库：C:\Users\luoji\Desktop\firstep
+  判据：**每一条注入都必须转红**（有绿的 = 那条守卫是摆设）
+
+------------------------------------------------------------------------------
+[注入] ① 谓词放宽：不再按目录名排除（本机库备份又成产品文件）
+  文件：src/contest_generator/full_pack.py
+  测试：-k 'product_file_predicate or scan_tree_matches'
+  结果：转红 ✓ —— 1 failed, 1 passed, 47 deselected in 0.23s
+  复原：逐字节相同 ✓（fcbbcf30d382 → fcbbcf30d382）
+------------------------------------------------------------------------------
+[注入] ② 筛选被摘掉：候选清单原样进包（小发版又开始多发）
+  文件：src/contest_generator/pack_update.py
+  测试：-k 'non_product_candidates'
+  结果：转红 ✓ —— 1 failed, 48 deselected in 0.50s
+  复原：逐字节相同 ✓（a979de454658 → a979de454658）
+------------------------------------------------------------------------------
+[注入] ③ 判据被抄回扫描函数（行为等价，但单源被破坏）
+  文件：src/contest_generator/full_pack.py
+  测试：-k 'scan_tree_asks_the_single_predicate'
+  结果：转红 ✓ —— 1 failed, 48 deselected in 0.15s
+  复原：逐字节相同 ✓（fcbbcf30d382 → fcbbcf30d382）
+------------------------------------------------------------------------------
+[注入] ④ 打包脚本里手抄顶层白名单（漂移的老路）
+  文件：tools/pack-update.ps1
+  测试：-k 'shares_the_product_predicate'
+  结果：转红 ✓ —— 1 failed, 48 deselected in 0.14s
+  复原：逐字节相同 ✓（8b33cabfa8f7 → 8b33cabfa8f7）
+
+------------------------------------------------------------------------------
+## 复原复核
+  src/contest_generator/full_pack.py sha256 未变 ✓
+  src/contest_generator/pack_update.py sha256 未变 ✓
+  tools/pack-update.ps1 sha256 未变 ✓
+
+## 总判
+  4/4 条注入成功转红
+  探针：PASS

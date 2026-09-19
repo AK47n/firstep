@@ -4,7 +4,7 @@
       "name": "① 一律不清（回到改动前：不可重试的校验失败也留半成品与边车）",
       "anchor_hits": 1,
       "turned_red": true,
-      "summary": "4 failed, 20 passed in 0.80s",
+      "summary": "4 failed, 20 passed in 0.78s",
       "weak": false
     },
     {
@@ -18,7 +18,7 @@
       "name": "③ 分类判据被换成「只看 error_kind」（把可重试的内容不符也判成终态）",
       "anchor_hits": 1,
       "turned_red": true,
-      "summary": "1 failed, 23 passed in 0.75s",
+      "summary": "1 failed, 23 passed in 0.76s",
       "weak": false
     }
   ],

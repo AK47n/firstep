@@ -24,10 +24,12 @@ from contest_generator.full_pack import (
     derive_slug,
     excluded_paths,
     full_manifest_filename,
+    is_product_file,
     main,
     materials_excluded,
     overlong_entries,
     prepare_full_package,
+    product_file_reason,
     register_materials_dirs,
     scan_tree,
     split_volumes,
@@ -150,6 +152,72 @@ def test_scan_tree_ignores_non_allowlisted_top_level(tmp_path: Path) -> None:
     assert "random-notes.txt" not in paths
     assert "build/artifact.bin" not in paths
     assert "README.md" in paths
+
+
+def test_product_file_predicate_is_the_single_source() -> None:
+    """「哪些文件算产品文件」只有这一处判据（工单 `update-orphan-files/01`）。
+
+    为什么值得一张真值表：这套规则原先被实现了两遍（完整包扫工作树时一份、小发版包
+    在 PowerShell 里手抄一份），实测漂移出两套盘面——小发版**多发**了
+    `library/revise-backups/**`（本机库备份 1481 个）与一个 `*.exe`、**漏发**了
+    `00-START-HERE.txt`。现在两个打包器都问这个谓词。
+    """
+    assert is_product_file("00-START-HERE.txt") is True
+    assert is_product_file("src/contest_generator/full_pack.py") is True
+    assert is_product_file("library/modules/oled/code/oled.c") is True
+    assert is_product_file("sources/contest/2021F/main.c") is True
+    assert is_product_file("library/revise-backups/20260911-175124/main.c") is False
+    assert is_product_file("library/fix-backups/20260824/main.c") is False
+    assert is_product_file("sources/materials/kit/CH341SER.EXE") is False
+    assert is_product_file("sources/materials/x/__pycache__/m.pyc") is False
+    assert is_product_file("src/app.log") is False
+    assert is_product_file(".scratch/note/a.md") is False
+    assert is_product_file("") is False
+    # 原因串是「为什么不算」的可读说明（`excluded_paths` 的既有契约沿用）
+    assert product_file_reason("library/revise-backups/a/b.c") == "dir-name"
+    assert product_file_reason("sources/x/tool.exe") == "installer-glob"
+    assert product_file_reason("00-START-HERE.txt") is None
+    # 反斜杠形态也要判对（Windows 上有人会拿 Path 拼出来再传进来）
+    assert is_product_file("library\\revise-backups\\a\\b.c") is False
+
+
+def test_scan_tree_asks_the_single_predicate() -> None:
+    """结构守卫：`scan_tree` 不自己抄一份排除规则，而是问判据单源。
+
+    判据两条（都机械）：函数体里必须**调用** `product_file_reason`，
+    且不得直接引用那些**具体规则**常量（引用 = 又在函数里手写排除判断）。
+    `SKIP_DIR_NAMES` 例外：它是可参数化扫描面的缺省值（原样转交给谓词），
+    不是排除判断本身。
+
+    反向验证：把调用换回内联的 `parts[0] not in TOP_LEVEL_ENTRIES` 之类，这条会红。
+    """
+    import ast
+
+    from contest_generator import full_pack
+
+    source = Path(full_pack.__file__).read_text(encoding="utf-8")
+    function = next(
+        node for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.FunctionDef) and node.name == "scan_tree"
+    )
+    called = {node.func.id for node in ast.walk(function)
+              if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
+    assert "product_file_reason" in called, "scan_tree 不再问产品文件判据单源"
+
+    referenced = {node.id for node in ast.walk(function) if isinstance(node, ast.Name)}
+    for constant in ("TOP_LEVEL_ENTRIES", "SKIP_FILE_NAMES",
+                     "SKIP_FILE_SUFFIXES", "INSTALLER_GLOBS"):
+        assert constant not in referenced, (
+            f"scan_tree 里又出现了规则常量 {constant}（排除规则被抄回函数里了）"
+        )
+
+
+def test_scan_tree_matches_the_predicate_on_a_mini_tree(tmp_path: Path) -> None:
+    """行为侧：扫描结果 == 「盘上所有产品文件」（谓词判定的那批）。"""
+    tree = make_mini_repo(tmp_path)
+    on_disk = {p.relative_to(tree).as_posix() for p in tree.rglob("*") if p.is_file()}
+    scanned = {f.path for f in scan_tree(tree)}
+    assert scanned == {p for p in on_disk if is_product_file(p)}
 
 
 def test_excluded_paths_reports_reason(tmp_path: Path) -> None:

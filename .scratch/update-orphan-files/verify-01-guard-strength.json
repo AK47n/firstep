@@ -1,0 +1,38 @@
+{
+  "cases": [
+    {
+      "name": "① 谓词放宽：不再按目录名排除（本机库备份又成产品文件）",
+      "file": "src/contest_generator/full_pack.py",
+      "turned_red": true,
+      "summary": "1 failed, 1 passed, 47 deselected in 0.23s",
+      "weak": false,
+      "restored": true
+    },
+    {
+      "name": "② 筛选被摘掉：候选清单原样进包（小发版又开始多发）",
+      "file": "src/contest_generator/pack_update.py",
+      "turned_red": true,
+      "summary": "1 failed, 48 deselected in 0.50s",
+      "weak": false,
+      "restored": true
+    },
+    {
+      "name": "③ 判据被抄回扫描函数（行为等价，但单源被破坏）",
+      "file": "src/contest_generator/full_pack.py",
+      "turned_red": true,
+      "summary": "1 failed, 48 deselected in 0.15s",
+      "weak": false,
+      "restored": true
+    },
+    {
+      "name": "④ 打包脚本里手抄顶层白名单（漂移的老路）",
+      "file": "tools/pack-update.ps1",
+      "turned_red": true,
+      "summary": "1 failed, 48 deselected in 0.14s",
+      "weak": false,
+      "restored": true
+    }
+  ],
+  "weak": [],
+  "verdict": "PASS"
+}
