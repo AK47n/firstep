@@ -2,7 +2,7 @@
   "problems": [],
   "stuck": [],
   "notes": [
-    "目标位置已存在旧包 firstep-update-1.2.1.zip（304782206 字节）——产品会覆盖它，先记下来",
+    "目标位置已存在旧包 firstep-update-1.2.1.zip（304784233 字节）——产品会覆盖它，先记下来",
     "升级后沙箱 tracked 树与官方 v1.2.1 包**不完全一致**：内容不同 1 个、缺 0 个（小发版更新包是全量 tracked 快照，但删除清单只覆盖「上一版 → 本版」的删除）"
   ],
   "facts": {
@@ -65,21 +65,21 @@
     "current_version": "1.1.1",
     "update_available": true,
     "zip_url": "https://github.com/AK47n/firstep/releases/download/v1.2.1/firstep-update-v1.2.1.zip",
-    "size_bytes": 304784233,
-    "sha256": "a613731105f193c05899a46ec30c2bcc314b90b8b971955c752190c49b074241",
+    "size_bytes": 304785030,
+    "sha256": "9b98364d2f39b6f02b22bcf177825cc6d36f3d7fb5c5a8a6ac7fbacebdcf3d53",
     "removed_url": "https://github.com/AK47n/firstep/releases/download/v1.2.1/firstep-update-v1.2.1.removed.txt",
     "error": "",
     "message": ""
   },
   "apply": {
-    "elapsed_seconds": 20.3,
+    "elapsed_seconds": 31.5,
     "response": {
       "started": true,
       "message": "已开始更新，工具将自动重启（配置与资料库不受影响）"
     },
-    "downloaded_bytes": 304784233,
-    "expected_bytes": 304784233,
-    "avg_mbps": 14.32
+    "downloaded_bytes": 304785030,
+    "expected_bytes": 304785030,
+    "avg_mbps": 9.21
   },
   "status": {
     "saw_lock": true,
@@ -91,15 +91,15 @@
         "status": "ok",
         "mode": "single",
         "version": "1.2.1",
-        "finished_at": "20260919-110054",
-        "backup_dir": "C:\\Users\\luoji\\.contest_generator_sim\\updates\\backup\\20260919-110054"
+        "finished_at": "20260919-113411",
+        "backup_dir": "C:\\Users\\luoji\\.contest_generator_sim\\updates\\backup\\20260919-113411"
       }
     }
   },
   "endpoint": {
     "on_disk": "1.2.1",
     "served": "1.2.1",
-    "restarted_by_updater": false
+    "restarted_by_updater": true
   },
   "composition": {
     "available": true,
@@ -168,7 +168,8 @@
       "20260913-002734",
       "20260918-224039",
       "20260919-104456",
-      "20260919-110054"
+      "20260919-110054",
+      "20260919-113411"
     ],
     "latest_files": 2830
   },
@@ -186,11 +187,11 @@
   },
   "redirect_profile": {
     "launcher_log": true,
-    "webapp_log": false
+    "webapp_log": true
   },
   "cleanup": {
     "killed": [
-      "18268"
+      "51912"
     ],
     "leftover": [],
     "python_left": []
