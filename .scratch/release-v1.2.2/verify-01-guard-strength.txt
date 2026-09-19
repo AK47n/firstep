@@ -1,0 +1,24 @@
+# 判据强度探针：「egg-info 不进包」（工单 release-v1.2.2/01）
+  仓库：C:\Users\luoji\Desktop\firstep
+  判据：**每一条注入都必须转红**（有绿的 = 那条守卫是摆设）
+
+------------------------------------------------------------------------------
+[注入] ① 目录名通配被清空：*.egg-info 又成产品文件
+  文件：src/contest_generator/full_pack.py
+  测试：-k 'product_file_predicate or scan_tree_excludes_caches'
+  结果：转红 ✓ —— 2 failed, 57 deselected in 16.85s
+  复原：逐字节相同 ✓（2d1bd182eae7 → 2d1bd182eae7）
+------------------------------------------------------------------------------
+[注入] ② 谓词被抄回扫描函数：目录名只做精确匹配（装不下 <包名>.egg-info）
+  文件：src/contest_generator/full_pack.py
+  测试：-k 'scan_tree_asks_the_single_predicate'
+  结果：转红 ✓ —— 1 failed, 58 deselected in 0.16s
+  复原：逐字节相同 ✓（2d1bd182eae7 → 2d1bd182eae7）
+
+------------------------------------------------------------------------------
+## 复原复核
+  src/contest_generator/full_pack.py sha256 未变 ✓
+
+## 总判
+  2/2 条注入成功转红
+  探针：PASS

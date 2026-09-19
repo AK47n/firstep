@@ -1,0 +1,18 @@
+修复：egg-info 摘出产品文件——两个打包器都不再收 pip 构建产物（工单 release-v1.2.2/01）
+
+`SKIP_DIR_GLOBS = ("*.egg-info",)`：目录名通配，与 __pycache__ / revise-backups 同列。
+真实目录叫 `contest_generator.egg-info`，精确名装不住；产者对任何包都叫 `<包名>.egg-info`，
+规则天然是后缀通配。三处判定（product_file_reason / register_materials_dirs /
+materials_excluded）改成「精确名或通配命中」——不同口径会让「清单里的文件必须在包里」翻车。
+
+实测 v1.1.1 / v1.2.0 / v1.2.1 三版：egg-info 每个完整包都发、每个小发版包都不发
+（完整包扫工作树收下它，小发版按 git ls-files 收不到），于是「升级后盘面与全新安装一致」
+这条判据在两条路径上永远差这 6 个文件。真仓库实测 scan_tree 里 6 → 0，产品文件 8152 → 8146。
+
+副作用是有意的：升级用户盘上那 6 件会被删除清单点名删掉（旧更新器照单执行、不存在即跳过），
+它们由 pip install -e . 现写、下次装或换 .venv 时重建。
+
+- 单测：真值表补格 + 扫描面排除格（tests/test_full_pack.py 同族，不新开文件）
+- 探针：.scratch/release-v1.2.2/probe-guard-strength.py 2/2 转红、复原逐字节相同
+- 顺带：旧探针 ① 锚点与 ③ 注入文本跟着演进（原锚点命中数 1 → 0，探针会拒绝开跑）
+- 全套：4578 passed + 1 skipped

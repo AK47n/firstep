@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
-"""判据强度探针：把「产品文件判据单源」这条守卫弄坏，看它会不会红（工单 `update-orphan-files/01`）。
+"""判据强度探针：把「egg-info 不进包」这条守卫弄坏，看它会不会红（工单 `release-v1.2.2/01`）。
 
 为什么要它：「守卫全绿」本身不说明任何事——**把被测行为改坏、守卫必须转红**才算数
-（照 `.scratch/update-restart-stale-service/probe-guard-strength.py` 的先例）。
+（照 `.scratch/update-orphan-files/probe-guard-strength.py` 的先例）。
 
-四处注入各代表一种退化方式：
+两处注入各代表一种退化方式：
 
-- ① **谓词放宽**：不再按目录名排除（本机库备份又变成产品文件，会被发给用户）；
-- ② **筛选被摘掉**：候选清单原样进包（小发版又开始多发）；
-- ③ **判据被抄回扫描函数**：行为等价但单源被破坏（这正是静态守卫存在的意义）；
-- ④ **打包脚本里手抄白名单**：漂移的老路（静态守卫必须抓住）。
+- ① **目录名通配被清空**（`SKIP_DIR_GLOBS = ()`）：`*.egg-info` 又变成产品文件，
+  完整包会把它发给每个用户——真值表与扫描面两条守卫都必须抓住；
+- ② **判据被抄回扫描函数**：谓词不问了，改成内联的「目录名精确匹配」——
+  行为几乎等价，但 `.egg-info` 这种带前缀的目录名精确匹配装不下，
+  单源也被破坏（这正是静态守卫存在的意义）。
 
 每一个用例：改坏一处 → 跑对应测试 → 记「红/绿」→ **无论结果如何都复原**
 （`finally` 里按原字节写回，并复核 sha256）。
@@ -18,7 +19,7 @@
 
 用法::
 
-    python .scratch/update-orphan-files/probe-guard-strength.py
+    python .scratch/release-v1.2.2/probe-guard-strength.py
     # 证据落 verify-01-guard-strength.txt / .json
 """
 
@@ -42,59 +43,26 @@ ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 
 FULL_PACK = "src/contest_generator/full_pack.py"
-PACK_UPDATE = "src/contest_generator/pack_update.py"
-PACK_UPDATE_PS1 = "tools/pack-update.ps1"
 
 #: (名字, 文件, 改前（必须唯一命中）, 改后, -k 表达式)
 CASES: list[tuple[str, str, str, str, str]] = [
     (
-        "① 谓词放宽：不再按目录名排除（本机库备份又成产品文件）",
+        "① 目录名通配被清空：*.egg-info 又成产品文件",
         FULL_PACK,
-        '    if any(part in dir_skips or _matches_any(part, SKIP_DIR_GLOBS) for part in parts[:-1]):\n        return "dir-name"',
-        '    if False:  # 注入：不看目录名\n        return "dir-name"',
-        "product_file_predicate or scan_tree_matches",
+        'SKIP_DIR_GLOBS: tuple[str, ...] = ("*.egg-info",)',
+        'SKIP_DIR_GLOBS: tuple[str, ...] = ()  # 注入：不排除 egg-info',
+        "product_file_predicate or scan_tree_excludes_caches",
     ),
     (
-        "② 筛选被摘掉：候选清单原样进包（小发版又开始多发）",
-        PACK_UPDATE,
-        "        if not name or name in seen or not is_product_file(name):",
-        "        if not name or name in seen:  # 注入：不筛",
-        "non_product_candidates",
-    ),
-    (
-        "③ 判据被抄回扫描函数（行为等价，但单源被破坏）",
+        "② 谓词被抄回扫描函数：目录名只做精确匹配（装不下 <包名>.egg-info）",
         FULL_PACK,
-        "        if product_file_reason(relative, skip_dir_names=dir_skips) is not None:\n"
-        "            continue",
+        "        if product_file_reason(relative, skip_dir_names=dir_skips) is not None:",
         "        if not parts or parts[0] not in TOP_LEVEL_ENTRIES:  # 注入：内联规则\n"
         "            continue\n"
-        "        if any(part in dir_skips or _matches_any(part, SKIP_DIR_GLOBS) for part in parts[:-1]):\n"
-        "            continue",
+        "        if any(part in dir_skips for part in parts[:-1]):\n"
+        "            continue\n"
+        "        if product_file_reason(relative, skip_dir_names=dir_skips) is not None:",
         "scan_tree_asks_the_single_predicate",
-    ),
-    (
-        "④ 打包脚本里手抄顶层白名单（漂移的老路）",
-        PACK_UPDATE_PS1,
-        "$Files = @(git -c core.quotepath=false ls-files)",
-        "$TopLevels = @('src', 'library')\n"
-        "$Files = @(git -c core.quotepath=false ls-files)",
-        "shares_the_product_predicate",
-    ),
-    (
-        "⑤ 删除清单退回「只看上一版清单」（上一版的删除清单不再参与）",
-        FULL_PACK,
-        "        if sibling.is_file():\n"
-        "            shipped.update(read_release_file_list(sibling))",
-        "        if False:  # 注入：不看上一版的删除清单\n"
-        "            shipped.update(read_release_file_list(sibling))",
-        "unions_both_packers or removed_list_is_cumulative",
-    ),
-    (
-        "⑥ 删除清单只按小发版清单算（完整包发过的那些不再参与）",
-        FULL_PACK,
-        "            full_manifest=Path(baseline_path) if baseline_path is not None else None,",
-        "            full_manifest=None,  # 注入：不看完整包清单",
-        "removed_list_is_cumulative",
     ),
 ]
 
@@ -107,24 +75,17 @@ def log(text: str = "") -> None:
     LINES.append(text)
 
 
-def _encoding(relative: str) -> str:
-    if relative.endswith(".ps1") or relative.endswith(".bat"):
-        return "utf-8-sig"          # .ps1 必须带 BOM（本仓硬约定）
-    return "utf-8"
-
-
 def read_text(relative: str) -> str:
-    """按**字节**读再解码（不用 `Path.read_text`）。
+    """按**字节**读再解码（不用 `Path.read_text`），保证「复原复核」是逐字节判定。
 
-    为什么：文本模式读会把 CRLF 归一成 LF、写回时再按平台换回 CRLF——文件里只要有一处
-    混行（例如编辑器只改了其中几行），一次往返就把整份文件的换行统一了，于是「复原复核」
-    报假红（实测踩到过）。判据要的是**逐字节复原**，所以这里不经过换行归一化。
+    文本模式读会把 CRLF 归一成 LF、写回时再按平台换回 CRLF——文件里只要有一处混行，
+    一次往返就把整份文件的换行统一了，于是复核报假红（上一轮实测踩到过）。
     """
-    return (ROOT / relative).read_bytes().decode(_encoding(relative))
+    return (ROOT / relative).read_bytes().decode("utf-8")
 
 
 def write_text(relative: str, text: str) -> None:
-    (ROOT / relative).write_bytes(text.encode(_encoding(relative)))
+    (ROOT / relative).write_bytes(text.encode("utf-8"))
 
 
 def newline_of(text: str) -> str:
@@ -133,11 +94,7 @@ def newline_of(text: str) -> str:
 
 
 def adapt(text: str, newline: str) -> str:
-    """把 LF 书写的锚点 / 注入文本适配到目标文件的换行风格。
-
-    为什么需要它：读侧是**逐字节保真**的（见 `read_text`），所以 CRLF 文件里的
-    多行锚点在文本里带 `\\r\\n`，直接拿 LF 写的锚点去匹配会一条都命中不了。
-    """
+    """把 LF 书写的锚点 / 注入文本适配到目标文件的换行风格。"""
     return text.replace("\n", newline) if newline != "\n" else text
 
 
@@ -146,8 +103,9 @@ def sha256(relative: str) -> str:
 
 
 def run_tests(keyword: str) -> tuple[bool, str]:
+    """跑既有测试（本轮不新开文件：egg-info 判据加在 `test_full_pack.py` 同族里）。"""
     command = [sys.executable, "-m", "pytest",
-               "tests/test_pack_update.py", "tests/test_full_pack.py",
+               "tests/test_full_pack.py", "tests/test_pack_update.py",
                "-q", "-p", "no:cacheprovider"]
     if keyword:
         command += ["-k", keyword]
@@ -161,14 +119,13 @@ def run_tests(keyword: str) -> tuple[bool, str]:
 
 
 def main() -> int:
-    log("# 判据强度探针：「产品文件判据单源」（工单 update-orphan-files/01）")
+    log("# 判据强度探针：「egg-info 不进包」（工单 release-v1.2.2/01）")
     log(f"  仓库：{ROOT}")
     log("  判据：**每一条注入都必须转红**（有绿的 = 那条守卫是摆设）")
     log("")
 
-    # 前置：所有被改的文件必须是干净状态（探针被强杀时 finally 跑不到，
-    # 目标文件会停在注入态——那时后面每条都报「锚点失效」，看起来像探针写错了）。
-    targets = sorted({case[1] for case in CASES})
+    # 前置：目标文件必须是干净状态（探针被强杀时 finally 跑不到，文件会停在注入态——
+    # 那时后面每条都报「锚点失效」，看起来像探针写错了）。
     missing: list[str] = []
     for name, path, old, _new, _kw in CASES:
         text = read_text(path)
@@ -178,11 +135,12 @@ def main() -> int:
         log("**拒绝开跑**：目标文件不是干净状态（可能上一轮探针被强杀、没来得及复原）。")
         for item in missing:
             log(f"  · 锚点不在：{item}")
-        log("  修法：`git checkout -- " + " ".join(targets) + "` 之后重跑本探针。")
+        log(f"  修法：`git checkout -- {FULL_PACK}` 之后重跑本探针。")
         RESULTS["preflight_missing"] = missing
         RESULTS["verdict"] = "FAIL"
         return 2
 
+    targets = sorted({case[1] for case in CASES})
     baseline_sha = {path: sha256(path) for path in targets}
     weak: list[str] = []
     for name, path, old, new, keyword in CASES:
@@ -237,7 +195,7 @@ if __name__ == "__main__":
         code = main()
     finally:
         (HERE / "verify-01-guard-strength.txt").write_text("\n".join(LINES) + "\n",
-                                                           encoding="utf-8")
+                                                          encoding="utf-8")
         (HERE / "verify-01-guard-strength.json").write_text(
             json.dumps(RESULTS, ensure_ascii=False, indent=2), encoding="utf-8")
         print("\n证据已写：verify-01-guard-strength.txt / .json")

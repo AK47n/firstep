@@ -84,6 +84,9 @@ def make_mini_repo(root: Path) -> Path:
     _write(root / "library" / "fix-backups" / "20260824" / "main.c", "old")
     _write(root / "sources" / ".trash-pdf" / "old.pdf", "pdf")
     _write(root / "src" / "contest_generator" / "__pycache__" / "x.pyc", "bytecode")
+    # pip 的构建产物（工单 release-v1.2.2/01）：.egg-info 目录名带包名前缀，
+    # 所以它只能是**后缀通配**的目录规则，不能用 SKIP_DIR_NAMES 里的精确名
+    _write(root / "src" / "contest_generator.egg-info" / "PKG-INFO", "Metadata-Version: 2.1")
     _write(root / "sources" / "materials" / "K230-Cam-Example" / "例程" / "__pycache__" / "m.pyc", "bytecode")
     _write(root / "node_modules" / "left-pad" / "index.js", "module.exports = 1")
     _write(root / ".venv" / "Scripts" / "python.exe", "exe")
@@ -137,6 +140,7 @@ def test_scan_tree_excludes_caches_backups_and_workspace(tmp_path: Path) -> None
         "library/fix-backups/20260824/main.c",
         "sources/.trash-pdf/old.pdf",
         "src/contest_generator/__pycache__/x.pyc",
+        "src/contest_generator.egg-info/PKG-INFO",
         "sources/materials/K230-Cam-Example/例程/__pycache__/m.pyc",
         "node_modules/left-pad/index.js",
         ".venv/Scripts/python.exe",
@@ -171,6 +175,7 @@ def test_product_file_predicate_is_the_single_source() -> None:
     assert is_product_file("src/contest_generator/full_pack.py") is True
     assert is_product_file("library/modules/oled/code/oled.c") is True
     assert is_product_file("sources/contest/2021F/main.c") is True
+    assert is_product_file("src/contest_generator.egg-info/PKG-INFO") is False
     assert is_product_file("library/revise-backups/20260911-175124/main.c") is False
     assert is_product_file("library/fix-backups/20260824/main.c") is False
     assert is_product_file("sources/materials/kit/CH341SER.EXE") is False
@@ -180,6 +185,7 @@ def test_product_file_predicate_is_the_single_source() -> None:
     assert is_product_file("") is False
     # 原因串是「为什么不算」的可读说明（`excluded_paths` 的既有契约沿用）
     assert product_file_reason("library/revise-backups/a/b.c") == "dir-name"
+    assert product_file_reason("src/contest_generator.egg-info/PKG-INFO") == "dir-name"
     assert product_file_reason("sources/x/tool.exe") == "installer-glob"
     assert product_file_reason("00-START-HERE.txt") is None
     # 反斜杠形态也要判对（Windows 上有人会拿 Path 拼出来再传进来）

@@ -1,0 +1,22 @@
+{
+  "cases": [
+    {
+      "name": "① 目录名通配被清空：*.egg-info 又成产品文件",
+      "file": "src/contest_generator/full_pack.py",
+      "turned_red": true,
+      "summary": "2 failed, 57 deselected in 16.85s",
+      "weak": false,
+      "restored": true
+    },
+    {
+      "name": "② 谓词被抄回扫描函数：目录名只做精确匹配（装不下 <包名>.egg-info）",
+      "file": "src/contest_generator/full_pack.py",
+      "turned_red": true,
+      "summary": "1 failed, 58 deselected in 0.16s",
+      "weak": false,
+      "restored": true
+    }
+  ],
+  "weak": [],
+  "verdict": "PASS"
+}

@@ -96,6 +96,19 @@ SKIP_DIR_NAMES: frozenset[str] = frozenset(
 # 任意层级跳过的文件名
 SKIP_FILE_NAMES: frozenset[str] = frozenset({".DS_Store", "Thumbs.db", MANIFEST_FILENAME})
 
+# 任意层级跳过的**目录名通配**（精确匹配装不下的那类）。
+#
+# 为什么是通配而不是往 `SKIP_DIR_NAMES` 里再加一个名字：目录名带包名前缀——
+# 真实那个叫 `contest_generator.egg-info`，精确名一个都盖不住；而它的产者
+# （pip / setuptools）对任何包都叫 `<包名>.egg-info`，规则天然是后缀通配。
+#
+# 它为什么不该进包（工单 `release-v1.2.2/01`）：`*.egg-info` 是 pip 的**构建产物**
+# （由 `pip install -e .` 现写），与 `__pycache__` / `*.pyc` 同类，不是产品内容。
+# 实测（v1.1.1 / v1.2.0 / v1.2.1 三版）它**每个完整包都发、每个小发版包都不发**
+# ——完整包按工作树扫描收下它，小发版按 `git ls-files`（它被 `.gitignore` 排除）
+# 收不到——于是「升级后的盘面与全新安装一致」这条判据在两条路径上永远差这 6 个文件。
+SKIP_DIR_GLOBS: tuple[str, ...] = ("*.egg-info",)
+
 # 任意层级跳过的后缀（机器可再生的缓存 / 构建产物 / 日志）
 SKIP_FILE_SUFFIXES: tuple[str, ...] = (".pyc", ".pyo", ".log")
 
@@ -133,6 +146,7 @@ __all__ = [
     "INSTALLER_GLOBS",
     "MATERIALS_MANIFEST_KEY",
     "MAX_ENTRY_PATH_CHARS",
+    "SKIP_DIR_GLOBS",
     "SKIP_DIR_NAMES",
     "SKIP_FILE_NAMES",
     "SKIP_FILE_SUFFIXES",
@@ -198,10 +212,11 @@ def product_file_reason(
     if not parts:
         return "顶层之外"
     dir_skips = SKIP_DIR_NAMES if skip_dir_names is None else skip_dir_names
-    # 目录名排除优先判定（.git / .scratch 这类既非白名单也不该进包的）
-    if any(part in dir_skips for part in parts[:-1]):
+    # 目录名排除优先判定（.git / .scratch / *.egg-info 这类既非白名单也不该进包的）。
+    # 精确名走集合，带包名前缀的走通配——判据本体只有这两行，两个打包器都问这里。
+    if any(part in dir_skips or _matches_any(part, SKIP_DIR_GLOBS) for part in parts[:-1]):
         return "dir-name"
-    if parts[-1] in dir_skips:
+    if parts[-1] in dir_skips or _matches_any(parts[-1], SKIP_DIR_GLOBS):
         return "dir-name"
     if parts[0] not in TOP_LEVEL_ENTRIES:
         return "顶层不在白名单"
@@ -334,7 +349,8 @@ def register_materials_dirs(materials_root: Path) -> dict[str, str]:
         return {}
     extra: dict[str, str] = {}
     for child in sorted(root.iterdir()):
-        if not child.is_dir() or child.name in SKIP_DIR_NAMES:
+        if not child.is_dir() or child.name in SKIP_DIR_NAMES \
+                or _matches_any(child.name, SKIP_DIR_GLOBS):
             continue
         try:
             slug_for_dir(child.name)  # 已登记 / 全 ASCII 可规范化 → 无需补登记
@@ -348,13 +364,13 @@ def register_materials_dirs(materials_root: Path) -> dict[str, str]:
 def materials_excluded(relative: str) -> bool:
     """资料库内某个相对路径是否被完整包排除（与包本体规则同口径）。
 
-    按路径各段套用 `SKIP_DIR_NAMES` / `SKIP_FILE_NAMES` / `INSTALLER_GLOBS` /
-    `SKIP_FILE_SUFFIXES`——**清单与包必须一致**：清单里出现的文件必须在包里。
+    按路径各段套用 `SKIP_DIR_NAMES` / `SKIP_DIR_GLOBS` / `SKIP_FILE_NAMES` /
+    `INSTALLER_GLOBS` / `SKIP_FILE_SUFFIXES`——**清单与包必须一致**：清单里出现的文件必须在包里。
     """
     parts = tuple(p for p in relative.replace("\\", "/").split("/") if p)
     if not parts:
         return True
-    if any(part in SKIP_DIR_NAMES for part in parts):
+    if any(part in SKIP_DIR_NAMES or _matches_any(part, SKIP_DIR_GLOBS) for part in parts):
         return True
     name = parts[-1]
     if name in SKIP_FILE_NAMES:
