@@ -24,6 +24,8 @@ import {
   hwcheckDeviceChipsHTML, hwcheckDeviceEmptyHTML, hwcheckMissingDevicesHTML,
   hwcheckWiringErrorHTML, hwcheckWiringTableHTML, hwcheckPinGroupsHTML,
   hwcheckBoardSharesHTML, hwcheckOrderHTML, hwcheckOrderDesc, hwcheckBoardState,
+  hwcheckSectionsState, hwcheckSectionsHTML, hwcheckUnspecializedHTML,
+  hwcheckSectionPlanText, hwcheckSectionNoteHTML,
 } from "../../src/contest_generator/static/js/fx/hwcheck.js";
 
 const html = readFileSync(
@@ -701,5 +703,122 @@ test("ui 的接线表失败不连坐预览（main.c 只依赖平台与通道）"
   assert.equal(clears.length, 2,
     "只允许「换平台」「换通道」两处清预览（那两处渲染输入真的变了）；"
     + "接线表取不到不许把 02 已交付的 main.c 预览抹掉");
+});
+
+// ---------------------------------------------------------------------------
+// ⑦ 工单 04：这一趟真测哪几件（专精小节 + 未专精点名）
+// ---------------------------------------------------------------------------
+
+const SECTION_LED = {
+  slug: "led", platform: "stm32", specialized: true, tag: "[专精]",
+  prereq: [], init: ["led_init(LED_RED)"], init_expect: "0",
+  probe: null, has_probe: false,
+  read: [{ expression: "LED_CHANNEL_COUNT", unit: "通道" }],
+  console: null,
+  note: ["stm32 板载三色 LED 在 PC13 / PC14 / PC15"],
+};
+
+test("hwcheckSectionPlanText：按服务端事实说清这一节到底测什么", () => {
+  assert.ok(hwcheckSectionPlanText(SECTION_LED).includes("初始化返回值判定"));
+  assert.ok(hwcheckSectionPlanText(SECTION_LED).includes("1 项读数回显"));
+
+  const probed = {
+    ...SECTION_LED, has_probe: true,
+    probe: { calls: ["mpu6050_who_am_i()"], expect: "0x68" },
+  };
+  const text = hwcheckSectionPlanText(probed);
+  assert.ok(text.includes("通信探头带判定"), "有探头就要说带判定");
+  assert.ok(text.includes("0x68"), "期望值要写出来（学生能对照）");
+
+  // 只做动作不判定的探头：**不许说成"测过了"**（spec「不假装测过」）
+  const actingOnly = { ...SECTION_LED, probe: { calls: ["OLED_ShowString(0, 0, \"x\")"] } };
+  const acting = hwcheckSectionPlanText(actingOnly);
+  assert.ok(acting.includes("不做判定"), "只做动作的探头必须如实说不判定");
+
+  assert.equal(hwcheckSectionPlanText({}), "这一节没有实际动作");
+});
+
+test("hwcheckSectionsHTML：专精件带 [专精] 徽章 + 判定档位 + 平台说明", () => {
+  const htmlOut = hwcheckSectionsHTML([SECTION_LED]);
+  assert.ok(htmlOut.includes("[专精]"), "专精标记来自服务端 tag（外观可区分的判据）");
+  assert.ok(htmlOut.includes("led"));
+  assert.ok(htmlOut.includes("只看现象"), "没探头的件要标「只看现象」而不是「板上判定」");
+  assert.ok(htmlOut.includes("PC13"), "平台差异说明直接印出来（不折叠、不翻 manifest）");
+  assert.equal(hwcheckSectionsHTML([]), "", "一件都没有 = 空串（调用方不渲染空卡）");
+});
+
+test("hwcheckSectionsHTML：有探头的件标「板上判定」（两种外观真的不同）", () => {
+  const probed = {
+    ...SECTION_LED, has_probe: true,
+    probe: { calls: ["mpu6050_who_am_i()"], expect: "0x68" },
+  };
+  const out = hwcheckSectionsHTML([probed]);
+  assert.ok(out.includes("板上判定"));
+  assert.ok(!out.includes("只看现象"));
+});
+
+test("hwcheckSectionsHTML：文案转义（配方里出现 < > 也不破页面）", () => {
+  const nasty = { ...SECTION_LED, slug: "<img>", note: ["a < b"] };
+  const out = hwcheckSectionsHTML([nasty]);
+  assert.ok(!out.includes("<img>"));
+  assert.ok(out.includes("&lt;img&gt;"));
+});
+
+test("hwcheckUnspecializedHTML：没配方的件逐条点名（不许静默消失）", () => {
+  const out = hwcheckUnspecializedHTML([
+    { slug: "sr04", message: "sr04：这一件还没有专精配方——本版检测程序不会给它出检测小节" },
+  ]);
+  assert.ok(out.includes("sr04"));
+  assert.ok(out.includes("不会给它出检测小节"));
+  assert.equal(hwcheckUnspecializedHTML([]), "");
+});
+
+test("hwcheckSectionsState：载荷缺键 = 保留当前状态（旧后端不抹掉已有计划）", () => {
+  const state = { sections: [SECTION_LED], unspecialized: [{ slug: "x" }] };
+  const kept = hwcheckSectionsState(state, { platform: "stm32" });
+  assert.deepEqual(kept.sections, [SECTION_LED]);
+  assert.deepEqual(kept.unspecialized, [{ slug: "x" }]);
+  const replaced = hwcheckSectionsState(state, { sections: [], unspecialized: [] });
+  assert.deepEqual(replaced.sections, []);
+  assert.deepEqual(replaced.unspecialized, []);
+});
+
+test("hwcheckProjectState：回读把逐件小节与未专精点名一起带回来", () => {
+  const next = hwcheckProjectState({}, {
+    output_dir: "C:/out/hwcheck-stm32-20260920-153012",
+    platform: "stm32",
+    sections: [SECTION_LED],
+    unspecialized: [{ slug: "sr04", message: "sr04：…" }],
+  });
+  assert.deepEqual(next.sections, [SECTION_LED]);
+  assert.equal(next.unspecialized.length, 1);
+});
+
+test("新控件齐备：专精小节容器在检测页（在顺序之后、工程之前）", () => {
+  assert.ok(html.includes('id="hwcheck-sections"'), "缺少控件 #hwcheck-sections");
+  const orderAt = html.indexOf('id="hwcheck-order"');
+  const sectionsAt = html.indexOf('id="hwcheck-sections"');
+  const projectAt = html.indexOf('id="hwcheck-project"');
+  assert.ok(orderAt < sectionsAt && sectionsAt < projectAt,
+    "检测计划的阅读顺序：顺序 → 这一趟真测哪几件 → 检测工程");
+});
+
+test("ui 的小节渲染走 fx 单源（不手拼 [专精] 标记与徽章）", () => {
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  for (const name of ["hwcheckSectionsHTML(", "hwcheckUnspecializedHTML(",
+    "hwcheckSectionsState("]) {
+    assert.ok(ui.includes(name), "ui 应调用 fx 的 " + name + "）");
+  }
+  assert.ok(!ui.includes("[专精]"), "[专精] 标记的单源在 fx/hwcheck.js");
+  assert.ok(!/class="hwcheck-section/.test(ui), "ui 不得手拼小节壳（双源漂移）");
+});
+
+test("ui 换平台 / 换通道时清掉旧检测计划（配方按平台分，留着会误导）", () => {
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const clears = ui.match(/hwcheckUI\.sections = \[\]/g) || [];
+  assert.equal(clears.length, 3,
+    "三处该清：换平台 / 换通道 / 取视图失败（清 failed 视图时一并清计划）");
 });
 

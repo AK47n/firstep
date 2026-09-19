@@ -1022,6 +1022,16 @@
                          background: var(--panel-2); border: 1px solid var(--border);
                          font-size: 11.5px; color: var(--muted); }
   .hwcheck-order-desc { color: var(--muted); min-width: 0; overflow-wrap: break-word; }
+  /* 逐件专精小节（工单 module-hwcheck/04）：[专精] 徽章 + 这一节测什么 + 平台差异。
+     外观刻意与"未专精点名"（.hwcheck-warn）分开——一眼看出哪件真测了。 */
+  .hwcheck-section { border: 1px solid var(--border); border-left: 3px solid var(--ok);
+                     border-radius: var(--radius-md); padding: 8px 10px;
+                     margin-bottom: var(--space-2); }
+  .hwcheck-section-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px;
+                          margin-bottom: var(--space-1); }
+  .hwcheck-section-tag { font-size: 11.5px; font-weight: 600; color: var(--ok);
+                         border: 1px solid var(--ok); border-radius: var(--radius-full);
+                         padding: 0 7px; }
   /* 评分点核对清单（工单 score-checklist/01）：逐条 checkbox + 进度 +
      复制核对表；done 行弱化描边表示已核对 */
   .sp-actions { display: flex; align-items: center; gap: 10px; margin-bottom: var(--space-2); }
@@ -3902,6 +3912,11 @@
     <div class="card">
       <h2>建议检测顺序 <span class="muted">（先确认板子活着，再一件一件测）</span></h2>
       <div id="hwcheck-order"></div>
+    </div>
+
+    <div class="card">
+      <h2>这一趟真测哪几件 <span class="muted">（按库内配方渲染；没配方的会如实点名）</span></h2>
+      <div id="hwcheck-sections"></div>
     </div>
 
     <div class="card">

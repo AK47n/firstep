@@ -34,12 +34,15 @@ import {
   hwcheckDeviceEmptyHTML, hwcheckMissingDevicesHTML, hwcheckWiringTableHTML,
   hwcheckPinGroupsHTML, hwcheckBoardSharesHTML, hwcheckOrderHTML,
   hwcheckBoardState, hwcheckWiringErrorHTML,
+  hwcheckSectionsState, hwcheckSectionsHTML, hwcheckUnspecializedHTML,
+  hwcheckSectionsEmptyHTML,
   HWCHECK_PARENT_KEY, HWCHECK_LAST_DIR_KEY,
 } from "/js/fx/hwcheck.js";
 
 // 本栏目自己的状态（与生成流程零共享）：选中平台 + 两个输出通道开关 +
 // 选中的器件 + 器件搜索词 + 输出父目录 + 板侧视图（接线 / 冲突 / 顺序）+
-// 最近一次预览/生成的结果 + 上板清单勾选态。
+// 这一趟的检测计划（逐件专精小节 + 未专精点名，工单 04）+ 最近一次预览/生成
+// 的结果 + 上板清单勾选态。
 const hwcheckUI = {
   platform: "",
   debug_uart: true,
@@ -50,6 +53,8 @@ const hwcheckUI = {
   preview: "",
   outputHint: "",
   wiring: null,       // 板侧视图（服务端投影：接线行 / 同脚组 / 顺序 / 缺条目）
+  sections: [],       // 逐件专精小节（服务端按库内配方解析，工单 04）
+  unspecialized: [],  // 选了但没有配方的器件（点名，不假装测过）
   project: null,      // 当前正在看的检测工程（生成或回读来的）
   checklistChecked: [],
   recent: [],
@@ -226,12 +231,24 @@ function renderHwcheckWiring() {
   }
 }
 
+// —— 逐件专精小节 / 未专精点名（工单 04）：两块都只渲染服务端载荷 ——
+// 判据（这件的配方在不在、引用的接口真不真）全在服务端；前端一个字都不判。
+function renderHwcheckSections() {
+  const box = $("hwcheck-sections");
+  if (!box) return;
+  // 一件专精件都没有时说清"为什么这条是空的"（不是错误状态，但也不留空白）
+  const panel = hwcheckSectionsHTML(hwcheckUI.sections);
+  box.innerHTML = (panel || hwcheckSectionsEmptyHTML())
+    + hwcheckUnspecializedHTML(hwcheckUI.unspecialized);
+}
+
 export function renderHwcheckPanel() {
   renderHwcheckPlatforms();
   renderHwcheckChannelNote();
   renderHwcheckOutput();
   renderHwcheckDevices();
   renderHwcheckWiring();
+  renderHwcheckSections();
   renderHwcheckProject();
   renderHwcheckChecklist();
   renderHwcheckRecent();
@@ -282,11 +299,14 @@ async function refreshHwcheckView() {
     } else {
       Object.assign(hwcheckUI, hwcheckPreviewState(hwcheckUI, payload));
       Object.assign(hwcheckUI, hwcheckBoardState(hwcheckUI, payload));
+      Object.assign(hwcheckUI, hwcheckSectionsState(hwcheckUI, payload));
       hwcheckUI.wiringError = "";
     }
   } catch (e) {
     if (hwcheckSelectionKey() === requestKey) {
       hwcheckUI.wiring = null;
+      hwcheckUI.sections = [];
+      hwcheckUI.unspecialized = [];
       hwcheckUI.wiringError = e && e.message ? e.message : String(e);
     }
   } finally {
@@ -300,6 +320,7 @@ async function refreshHwcheckView() {
   renderHwcheckOutput();
   renderHwcheckDevices();
   renderHwcheckWiring();
+  renderHwcheckSections();
 }
 
 async function previewHwcheck() {
@@ -469,6 +490,8 @@ export function initHwcheck() {
         hwcheckUI.preview = "";
         hwcheckUI.outputHint = "";
         hwcheckUI.wiring = null;          // 换板 = 旧接线表作废（脚不一样）
+        hwcheckUI.sections = [];          // 换板 = 旧检测计划作废（配方按平台分）
+        hwcheckUI.unspecialized = [];
         hwcheckUI.wiringError = "";
       }
       renderHwcheckPanel();
@@ -495,6 +518,8 @@ export function initHwcheck() {
       hwcheckUI.preview = "";
       hwcheckUI.outputHint = "";
       hwcheckUI.wiring = null;
+      hwcheckUI.sections = [];          // 通道变了 = 工程模块集变了，计划重取
+      hwcheckUI.unspecialized = [];
       hwcheckUI.wiringError = "";
       // 通道变了：生成前引导（mspm0 双通道会撞脚）要跟着变
       renderHwcheckChannelNote();

@@ -1,0 +1,17 @@
+# 中文字面量：原样 UTF-8 vs \xNN 转义（真 armcc，不加开关）
+
+## 原样 UTF-8 → 退出码 1 / error 10
+  "C:\Users\luoji\AppData\Local\Temp\firstep-escaped-883f_lv7\raw.c", line 1: Error:  #8: missing closing quote
+  "C:\Users\luoji\AppData\Local\Temp\firstep-escaped-883f_lv7\raw.c", line 2: Error:  #65: expected a ";"
+  "C:\Users\luoji\AppData\Local\Temp\firstep-escaped-883f_lv7\raw.c", line 2: Error:  #8: missing closing quote
+  "C:\Users\luoji\AppData\Local\Temp\firstep-escaped-883f_lv7\raw.c", line 3: Error:  #8: missing closing quote
+  "C:\Users\luoji\AppData\Local\Temp\firstep-escaped-883f_lv7\raw.c", line 4: Error:  #8: missing closing quote
+  "C:\Users\luoji\AppData\Local\Temp\firstep-escaped-883f_lv7\raw.c", line 5: Error:  #8: missing closing quote
+
+## \xNN 转义 → 退出码 0 / error 0
+
+转义版源码是纯 ASCII：True
+转义产出的字节与原文 UTF-8 逐字节相等：True（判据：转义只是换个写法，上网后看到的字必须一模一样）
+
+## 结论
+见上（转义版若仍报错，这条路走不通）。

@@ -20,6 +20,20 @@
 同一个模块集。板侧投影（接线行 / 同脚冲突 / 建议顺序 / 缺平台条目）不在这里，
 归 `hwcheck_board.py`（本模块继续只管"检测程序长什么样"）。
 
+工单 04 补的一件事：**逐件专精小节**（`render_main_c(config, sections)`）——
+"每一件怎么测"由 `hwcheck_recipe.py` 从库内配方数据解析（形状 / 校验 / 渲成 C
+都在那边），本模块只负责把它插进框架、并渲染骨架期那套运行时（分节头 / 判定
+记账 / 结尾汇总）。两条**真机判例**留在这里免得后人踩：
+
+1. **所有 C 字面量都走 `hwcheck_recipe.c_string` 转义**（非 ASCII → `\\xNN`）：
+   ARMCC 5.06 按本地代码页解析源文件，中文字面量会把收尾引号吞掉 →
+   `#8: missing closing quote`，整份 main.c 编不过（22 error 实测；量具在
+   `.scratch/module-hwcheck/probe-04-armcc-utf8.py`）。
+2. **按需渲染**：一件带判定的都没有的形态（如只选 led）不渲染 `hwcheck_verdict`
+   与"失败"档、一件读数都没有时不渲染 `hwcheck_report_int`——否则 ARMCC 报
+   `#177-D: declared but never referenced`。生成的程序是给学生读的，死代码会让
+   人以为漏调了什么。
+
 为什么要按通道分形态渲染，而不是"全渲染 + 运行时判断"：没有输出通道的构建
 必须**一个打印调用都不产生**——渲染出来却跑不到，学生会以为"程序报了结果、
 只是我没看到"，而真相是这里根本没测（spec 判据「不假装测过」）。所以通道形态
@@ -42,6 +56,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence
 
+from .hwcheck_errors import HwCheckError
+from .hwcheck_recipe import (
+    SECTION_TAG,
+    RecipeSection,
+    c_string,
+    render_recipe_section,
+    render_recipe_summary,
+)
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 
 __all__ = [
@@ -62,16 +84,6 @@ __all__ = [
     "render_output_hint",
     "require_known_platform",
 ]
-
-
-class HwCheckError(Exception):
-    """硬件检测的域错误（登记 errors.py → 400 中文）。
-
-    平台词表外 / 通道开关不是布尔值这类"请求形状非法"在此抛出，路由只取参
-    转调（对照 SkeletonError 先例，工单 route-orchestration-homing/01）。
-    盘侧的同类错误（父目录不存在 / 不是检测工程）也复用本类——同一个功能的
-    用户可见失败面只走一条错误通道。
-    """
 
 
 # 心跳周期（毫秒）：主循环里 LED 翻转的间隔。够慢到肉眼看得见、够快到
@@ -380,17 +392,172 @@ def render_checklist(config: HwCheckConfig) -> tuple[ChecklistItem, ...]:
     return tuple(items)
 
 
-def render_main_c(config: HwCheckConfig) -> str:
-    """渲染检测程序 main.c（零器件最小自检：心跳 + 通道自报 + 汇总）。
+def _needs_verdict(sections: Sequence["RecipeSection"]) -> bool:
+    """这一趟有没有"能判出通过 / 失败"的小节（工单 04 编译矩阵实测的判据）。
+
+    判定走 `hwcheck_verdict(ok, trouble)` 的只有两类：初始化带期望值、通信探头带
+    期望值。一件都没有（如只选 led）时那个函数与"失败"计数就是死代码，ARMCC 会
+    报 `#177-D: declared but never referenced`——生成的程序是给学生读的，留一个
+    没人用的判定函数会让人以为漏调了什么。所以按需渲染。
+    """
+    return any(
+        section.init_expect or (section.probe and section.probe.expect)
+        for section in sections
+    )
+
+
+def _recipe_runtime(*, needs_verdict: bool) -> list[str]:
+    """逐件小节的运行时（工单 04）：分节头 / 细节行 / 判定记账 / 结尾汇总。
+
+    为什么记账要放板上：规格判据三层里第②层是"板端通信判定"，而"这一趟到底
+    真测了几件"取决于**运行时结果**（探头过没过）——渲染期只能列出"可能失败时
+    该看哪里"。所以板上分三档数（通过 / 失败 / 没探头），**没探头的绝不算通过**
+    （spec「不假装测过」）。
+
+    失败时 `hwcheck_verdict` 自己把排查话术打出来（`· ` 开头的细节行）。
+    这段运行时只在**有逐件小节**时渲染（见 render_main_c 的分支）。
+
+    `needs_verdict`（真机编译矩阵实测）：**一件带判定的都没有时（如只选 led）
+    不渲染 `hwcheck_verdict` 与"失败"那一档**——否则 ARMCC 报 `#177-D: function
+    "hwcheck_verdict" was declared but never referenced`，学生读代码会以为漏调了
+    什么（生成的程序是给人读的，死代码不是风格问题）。
+
+    ⚠ **每个字面量都过 `c_string`**（非 ASCII → `\\xNN` 转义）：ARMCC 5.06 按本地
+    代码页解析源文件，原样中文字面量会把收尾引号吞掉、整份 main.c 编不过
+    （真机判例见 `hwcheck_recipe.escape_c_string`）。
+    """
+    out: list[str] = [
+        "/* ---- 逐件小节运行时（判定在板上算，工单 module-hwcheck/04）---- */",
+        "static int hwcheck_summary_ok;",
+    ]
+    if needs_verdict:
+        out.append("static int hwcheck_summary_fail;")
+    out.extend([
+        "static int hwcheck_summary_probe_none;",
+        "",
+        "/** 小节头：空一行 + 标题（一串检测结果之间的分节）。 */",
+        "static void hwcheck_section(const char *title)",
+        "{",
+        f"    hwcheck_report({c_string('')});",
+        "    hwcheck_report(title);",
+        "    hwcheck_newline();",
+        "}",
+        "",
+        "/** 细节行（排查线索 / 平台说明）：行首缩进，和判定行区分开。 */",
+        "static void hwcheck_detail(const char *text)",
+        "{",
+        f"    hwcheck_report({c_string('    · ')});",
+        "    hwcheck_report(text);",
+        "    hwcheck_newline();",
+        "}",
+        "",
+    ])
+    if needs_verdict:
+        out.extend([
+            "/** 记一次判定（1 = 通过，0 = 失败）；失败顺带把排查话术打出来。 */",
+            "static void hwcheck_verdict(int ok, const char *trouble)",
+            "{",
+            "    if (ok)",
+            "    {",
+            "        hwcheck_summary_ok++;",
+            "    }",
+            "    else",
+            "    {",
+            "        hwcheck_summary_fail++;",
+            "        hwcheck_detail(trouble);",
+            "    }",
+            "}",
+            "",
+        ])
+    out.extend([
+        "/** 记一次「判不了」（没有读取型探头）：**不算通过**，只提示看现象。 */",
+        "static void hwcheck_verdict_probe_none(const char *hint)",
+        "{",
+        "    hwcheck_summary_probe_none++;",
+        "    hwcheck_detail(hint);",
+        "}",
+        "",
+        "/** 结尾汇总：三档分开数（没探头的绝不混进「通过」）。 */",
+        "static void hwcheck_summary(void)",
+        "{",
+        f"    hwcheck_report({c_string('')});",
+        f"    hwcheck_report({c_string('==== 检测汇总 ====')});",
+        "    hwcheck_newline();",
+        "    if (hwcheck_summary_ok > 0)",
+        "    {",
+        f"        hwcheck_report({c_string('  通过：')});",
+        "        hwcheck_report_int(hwcheck_summary_ok);",
+        f"        hwcheck_report({c_string(' 项')});",
+        "        hwcheck_newline();",
+        "    }",
+    ])
+    if needs_verdict:
+        out.extend([
+            "    if (hwcheck_summary_fail > 0)",
+            "    {",
+            f"        hwcheck_report({c_string('  失败：')});",
+            "        hwcheck_report_int(hwcheck_summary_fail);",
+            f"        hwcheck_report({c_string(' 项（排查线索见上面的 · 行）')});",
+            "        hwcheck_newline();",
+            "    }",
+        ])
+    out.extend([
+        "    if (hwcheck_summary_probe_none > 0)",
+        "    {",
+        f"        hwcheck_report({c_string('  未判定：')});",
+        "        hwcheck_report_int(hwcheck_summary_probe_none);",
+        f"        hwcheck_report({c_string(' 项——这些件没有读取型探头，板上判不了通断，')});",
+        "        hwcheck_newline();",
+        f"        hwcheck_report({c_string('    请对照检测页清单看现象（灯闪 / 屏亮）')});",
+        "        hwcheck_newline();",
+        "    }",
+        "    if (hwcheck_summary_ok == 0"
+        + (" && hwcheck_summary_fail == 0" if needs_verdict else "")
+        + ")",
+        "    {",
+        f"        hwcheck_report({c_string('  这一趟没有板上判定项：只确认了板子与烧录链路是活的')});",
+        "        hwcheck_newline();",
+        "    }",
+        "}",
+    ])
+    return out
+
+
+def _section_reports(sections: Sequence["RecipeSection"]) -> list[dict[str, object]]:
+    """逐件小节的观测清单（渲染期知道的那部分：有没有探头 / 失败时查哪里）。
+
+    "几件通过"要到板上才算得出，所以计数在 C 侧（`hwcheck_summary`）；这里只
+    收集"可能失败时该看哪里"给 `render_recipe_summary` 渲成细节行。
+    """
+    reports: list[dict[str, object]] = []
+    for section in sections:
+        report: dict[str, object] = {}
+        render_recipe_section(section, report)
+        reports.append(report)
+    return reports
+
+
+def render_main_c(
+    config: HwCheckConfig,
+    sections: Sequence["RecipeSection"] = (),
+) -> str:
+    """渲染检测程序 main.c（框架 + 逐件专精小节，全程零 LLM）。
 
     产物形态（确定性，逐字节可断言）：
 
-    * 头部注释说明"这是硬件检测程序、不是赛题工程"；
+    * 头部注释说明"这是硬件检测程序、不是赛题工程"，并说清**这一趟要测哪几件**；
     * 按形态 include：进门头恒在，通道 / 延时 / LED 头只在相关时才进；
-    * 有输出通道时定义 `hwcheck_report(line)`（把一行字写到所有在场通道），
+    * 有输出通道时定义报告三件套（`hwcheck_report` / `_newline` / `_int`）与
+      判定记账（`hwcheck_section` / `_detail` / `_verdict` / `_verdict_probe_none`
+      / `_summary`，工单 04：判定在**板上**算，渲染期只生成比较式）；
       没有通道时**不定义也不调用**（防"定义了却没人调"的死代码）；
-    * `main()`：平台初始化 → 通道初始化 → 上电先报一遍 → while(1) 闪灯 +
-      （有串口时）`debug_cmd_poll()` 让模块自带的命令通道继续活着。
+    * `main()`：平台初始化 → 通道初始化 → 上电先报一遍 → **逐件专精小节**
+      （`sections`，判据与顺序由 `hwcheck_recipe` 给）→ 结尾汇总 →
+      while(1) 闪灯 +（有串口时）`debug_cmd_poll()`。
+
+    `sections` 缺省空 = 只出框架（工单 02 的"零器件最小自检"形态，同时是
+    工单 04 里"未专精件没有逐件小节"的如实表达）。有通道才渲染小节——没有
+    输出通道时渲染了也没人看得见，那是"假装测过"。
 
     平台词表外抛 HwCheckError（路由转 400 中文）；未知平台在这里就出不去，
     所以下面的分支是穷尽的。
@@ -399,9 +566,9 @@ def render_main_c(config: HwCheckConfig) -> str:
     lines: list[str] = [
         "/**",
         " * @file main.c",
-        " * @brief 硬件检测程序（最小自检）—— 确定性渲染，非 AI 生成",
+        " * @brief 硬件检测程序 —— 确定性渲染，非 AI 生成",
         " *",
-        *_header_brief(config),
+        *_header_brief(config, sections),
         " *",
         " * 检测没过是正常结果：要么接线不对，要么库内驱动有问题。",
         " */",
@@ -417,13 +584,28 @@ def render_main_c(config: HwCheckConfig) -> str:
         lines.append(f'#include "{headers["led"]}"  /* 通道宏 {_LED_CHANNEL} */')
 
     lines.append("")
-    lines.append(f"/* 心跳周期（毫秒）：改这里改闪灯快慢 */")
+    lines.append("/* 心跳周期（毫秒）：改这里改闪灯快慢 */")
     lines.append(f"#define {_HEARTBEAT_MACRO} {HEARTBEAT_MS}")
     lines.append("")
 
     if config.has_output_channel:
-        lines.extend(_report_function(config))
+        lines.extend(_report_outputs(config))
         lines.append("")
+        lines.extend(_report_function(
+            config, needs_int=bool(sections) or bool(config.devices)))
+        lines.append("")
+        if sections:
+            lines.extend(_recipe_runtime(needs_verdict=_needs_verdict(sections)))
+            lines.append("")
+
+    if sections and config.has_output_channel:
+        lines.append("/* ---- 逐件检测小节（按库内配方渲染；未专精件本版不出小节）---- */")
+        for section in sections:
+            lines.append(f"static void hwcheck_check_{section.slug}(void)")
+            lines.append("{")
+            lines.extend(render_recipe_section(section))
+            lines.append("}")
+            lines.append("")
 
     lines.append("int main(void)")
     lines.append("{")
@@ -436,10 +618,18 @@ def render_main_c(config: HwCheckConfig) -> str:
     lines.append(f"    led_init({_LED_CHANNEL});")
     lines.append("")
     if config.has_output_channel:
-        lines.append('    hwcheck_report("上电：板子活着，检测程序开始跑");')
+        lines.append(f"    hwcheck_report({c_string('上电：板子活着，检测程序开始跑')});")
+        lines.append("    hwcheck_newline();")
     else:
         lines.append("    /* 没有输出通道：只闪灯，不打印（看到灯闪 = 程序在跑） */")
     lines.append("")
+    if sections and config.has_output_channel:
+        lines.append("    /* ---- 上电自动跑一遍逐件检测 ---- */")
+        for section in sections:
+            lines.append(f"    hwcheck_check_{section.slug}();")
+        lines.append("")
+        lines.extend(render_recipe_summary(_section_reports(sections)))
+        lines.append("")
     lines.append("    while (1)")
     lines.append("    {")
     if config.debug_uart:
@@ -451,10 +641,12 @@ def render_main_c(config: HwCheckConfig) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _header_brief(config: HwCheckConfig) -> list[str]:
-    """文件头"这一趟做什么"的说明行——**按通道形态说实话**。
+def _header_brief(
+    config: HwCheckConfig, sections: Sequence["RecipeSection"] = ()
+) -> list[str]:
+    """文件头"这一趟做什么"的说明行——**按通道形态与器件集说实话**。
 
-    有输出通道：两件事（闪灯 + 把自检结果写到通道）。
+    有输出通道：三件事（闪灯 + 上电先报一句 + 逐件小节）。
     没有输出通道：**只有闪灯一件事**——文件头若照抄"每一段结果写到输出通道"，
     而全文一个打印调用都没有（见 render_main_c 的分支），那份自述就是撒谎
     （与 OUTPUT_HINT_NONE 的"这一趟不打印任何检测结果"直接矛盾）。
@@ -462,11 +654,23 @@ def _header_brief(config: HwCheckConfig) -> list[str]:
     lines = [" * 这一趟用来确认「板子活着 + 烧录链路通」："]
     if config.has_output_channel:
         lines.append(" *   1. 板载 LED 按固定周期闪烁（心跳，肉眼可见）；")
-        lines.append(" *   2. 每一段自检结果写到在场的输出通道（串口 / OLED）。")
+        lines.append(" *   2. 上电先报一句「板子活着」，随后逐件跑检测小节。")
     else:
         lines.append(" *   1. 板载 LED 按固定周期闪烁（心跳，肉眼可见）。")
         lines.append(" *   本形态没有输出通道，因此**不打印任何检测结果**——")
         lines.append(" *   代码里也没有打印调用（不假装测过）。")
+    if sections and config.has_output_channel:
+        lines.append(" *")
+        lines.append(" * 逐件检测小节（按库内配方渲染，非 AI 生成）：")
+        for section in sections:
+            lines.append(
+                f" *   - {SECTION_TAG} {section.slug}（配方："
+                f"{_section_recipe_brief(section)}）"
+            )
+    elif config.has_output_channel:
+        lines.append(" *")
+        lines.append(" * 这一趟**没有专精件**：只确认板子与烧录链路是活的。")
+        lines.append(" * 选了器件却没有配方时会如实写在这里，不假装测过。")
     if config.platform == PLATFORM_MSPM0:
         lines.append(" *")
         lines.append(" * ⚠ 本平台已知限制：SysConfig 外设初始化（SYSCFG_DL_init）还没有被")
@@ -476,22 +680,149 @@ def _header_brief(config: HwCheckConfig) -> list[str]:
     return lines
 
 
-def _report_function(config: HwCheckConfig) -> list[str]:
-    """自检报告函数：把一行字写到所有在场的输出通道。
+def _section_recipe_brief(section: "RecipeSection") -> str:
+    """小节的一句话配料（文件头注释用）：初始化 / 探头 / 读数各有没有。"""
+    parts: list[str] = []
+    if section.init:
+        parts.append("初始化" + ("带判定" if section.init_expect else ""))
+    if section.probe is not None:
+        parts.append("通信探头带判定" if section.probe.expect else "只做动作不判定")
+    if section.read:
+        parts.append(f"{len(section.read)} 项读数")
+    if section.console is not None:
+        parts.append(f"控制台命令 {section.console.command!r}")
+    return "、".join(parts) if parts else "无动作"
 
-    骨架期只有两个通道（串口 / OLED）；后续工单往里加"逐件小节"时继续走
-    这一个出口——输出通道的差异只在这里出现，检测逻辑不必知道自己往哪儿写。
+
+def _report_outputs(config: HwCheckConfig) -> list[str]:
+    """行缓冲：把一段一段文本攒成一行，再送到在场的每个出口。
+
+    为什么要缓冲：逐件小节要打「初始化：OK」「读数 = 123」这种**半行 + 半行**
+    的组合，而 OLED 是显存式的——逐字符/逐段刷屏既慢又闪。所以报告文本先攒进
+    一块静态缓冲，遇到换行（或攒满）才整行送出去。
+
+    缓冲**溢出保护**是刻意的：一行超长（配方写了超长路径之类）时丢掉溢出部分而
+    不是踩内存——宁可截断一行，也不让检测程序自己跑飞。
     """
-    lines = [
-        "/** 自检结果出口：一行字写到所有在场的输出通道。 */",
-        "static void hwcheck_report(const char *line)",
-        "{",
+    lines: list[str] = [
+        "static char hwcheck_line[128];",
+        "static int hwcheck_line_len;",
+        "",
     ]
     if config.debug_uart:
-        lines.append('    DEBUG_PRINTF("%s\\r\\n", line);')
+        lines.extend([
+            "static void hwcheck_write_serial(const char *s)",
+            "{",
+            '    DEBUG_PRINTF("%s", s);',
+            "}",
+            "",
+        ])
     if config.oled:
-        lines.append("    /* 本屏 16×8 字符网格、可见 4 行：固定写第 0 行，保证每次都看得见 */")
-        lines.append("    oled_show_text(0, 0, line);")
-        lines.append("    oled_refresh();")
-    lines.append("}")
+        lines.extend([
+            "static void hwcheck_write_oled(const char *s)",
+            "{",
+            "    /* 本屏 16×8 字符网格、可见 4 行：整行从头写，保证每次都看得见。",
+            "     * 超过 16 列的整行会被屏自己截掉尾部（屏就这么宽）——检测页那几",
+            "     * 行文案都控制在 16 列内，超了也只是尾巴看不见，不影响判定。 */",
+            "    oled_show_text(0, 0, s);",
+            "    oled_refresh();",
+            "}",
+            "",
+        ])
+    lines.extend([
+        "/** 把攒好的一行送到所有在场的输出通道。 */",
+        "static void hwcheck_write_line(const char *line)",
+        "{",
+        *_report_dispatch(config),
+        "}",
+        "",
+    ])
     return lines
+
+
+def _report_function(
+    config: HwCheckConfig, *, needs_int: bool = True
+) -> list[str]:
+    """自检报告三件套：写文本 / 换行 / 写一个整数。
+
+    三个出口都**只做"把这段文本送到所有在场通道"**：通道差异只在各自的
+    `hwcheck_write_*` 里出现，框架与逐件小节都不必知道自己往哪儿写。
+
+    `needs_int`（真机编译矩阵实测）：一件读数都没有的形态（不选器件）不渲染
+    `hwcheck_report_int`——它是"读数回显"的出口，没人调时 ARMCC 报 `#177-D:
+    declared but never referenced`（生成的程序是给人读的，死代码会让人以为
+    漏调了什么）。
+    """
+    out: list[str] = [
+        "/** 自检结果出口：一段文本攒进当前行；遇到换行就整行送出。 */",
+        "static void hwcheck_report(const char *text)",
+        "{",
+        "    int i = 0;",
+        "    while (text[i] != 0)",
+        "    {",
+        "        char ch = text[i++];",
+        "        if (ch == '\\n')",
+        "        {",
+        "            hwcheck_line[hwcheck_line_len] = 0;",
+        "            hwcheck_write_line(hwcheck_line);",
+        "            hwcheck_line_len = 0;",
+        "            continue;",
+        "        }",
+        "        if (hwcheck_line_len < (int)sizeof(hwcheck_line) - 1)",
+        "        {",
+        "            hwcheck_line[hwcheck_line_len++] = ch;",
+        "        }",
+        "    }",
+        "}",
+        "",
+        "/** 换行（把当前攒的这一行送出去）。 */",
+        "static void hwcheck_newline(void)",
+        "{",
+        '    hwcheck_report("\\n");',
+        "}",
+    ]
+    if not needs_int:
+        return out
+    out.extend([
+        "",
+        "/** 把一个整数写成十进制（读数回显用；不判阈值——数据合理性归人看）。 */",
+        "static void hwcheck_report_int(int value)",
+        "{",
+        "    char buf[12];",
+        "    int i = 0;",
+        "    int neg = (value < 0);",
+        "    unsigned int v = neg ? (unsigned int)(-value) : (unsigned int)value;",
+        "    if (v == 0)",
+        "    {",
+        "        buf[i++] = '0';",
+        "    }",
+        "    while (v > 0)",
+        "    {",
+        "        buf[i++] = (char)('0' + (int)(v % 10u));",
+        "        v /= 10u;",
+        "    }",
+        "    if (neg)",
+        "    {",
+        '        hwcheck_report("-");',
+        "    }",
+        "    while (i > 0)",
+        "    {",
+        "        char one[2];",
+        "        one[0] = buf[--i];",
+        "        one[1] = 0;",
+        "        hwcheck_report(one);",
+        "    }",
+        "}",
+    ])
+    return out
+
+
+def _report_dispatch(config: HwCheckConfig) -> list[str]:
+    """`hwcheck_write_line` 的分派体：把一行文本送给每个在场的出口。"""
+    lines: list[str] = []
+    if config.debug_uart:
+        lines.append("    hwcheck_write_serial(line);")
+    if config.oled:
+        lines.append("    hwcheck_write_oled(line);")
+    return lines
+

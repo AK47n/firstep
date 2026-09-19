@@ -1,0 +1,45 @@
+# ARMCC 中文字符串字面量容忍边界（逐个真编译）
+
+## 全角冒号结尾：'  通过：' → FAIL（退出码 1）
+  "C:\Users\luoji\AppData\Local\Temp\firstep-armcc-utf8-z3v8_3w8\case00.c", line 3: Error:  #8: missing closing quote
+  "C:\Users\luoji\AppData\Local\Temp\firstep-armcc-utf8-z3v8_3w8\case00.c", line 4: Error:  #65: expected a ";"
+  C:\Users\luoji\AppData\Local\Temp\firstep-armcc-utf8-z3v8_3w8\case00.c: 0 warnings, 2 errors
+
+## 全角逗号结尾：'  未判定，' → OK（退出码 0）
+
+## 全角括号结尾：'（灯闪 / 屏亮）' → FAIL（退出码 1）
+  "C:\Users\luoji\AppData\Local\Temp\firstep-armcc-utf8-z3v8_3w8\case02.c", line 3: Error:  #8: missing closing quote
+  "C:\Users\luoji\AppData\Local\Temp\firstep-armcc-utf8-z3v8_3w8\case02.c", line 4: Error:  #65: expected a ";"
+  C:\Users\luoji\AppData\Local\Temp\firstep-armcc-utf8-z3v8_3w8\case02.c: 0 warnings, 2 errors
+
+## 句号结尾：'检测程序开始跑。' → FAIL（退出码 1）
+  "C:\Users\luoji\AppData\Local\Temp\firstep-armcc-utf8-z3v8_3w8\case03.c", line 3: Error:  #8: missing closing quote
+  "C:\Users\luoji\AppData\Local\Temp\firstep-armcc-utf8-z3v8_3w8\case03.c", line 4: Error:  #65: expected a ";"
+  C:\Users\luoji\AppData\Local\Temp\firstep-armcc-utf8-z3v8_3w8\case03.c: 0 warnings, 2 errors
+
+## 汉字结尾：'检测汇总' → FAIL（退出码 1）
+  "C:\Users\luoji\AppData\Local\Temp\firstep-armcc-utf8-z3v8_3w8\case04.c", line 3: Error:  #8: missing closing quote
+  "C:\Users\luoji\AppData\Local\Temp\firstep-armcc-utf8-z3v8_3w8\case04.c", line 4: Error:  #65: expected a ";"
+  C:\Users\luoji\AppData\Local\Temp\firstep-armcc-utf8-z3v8_3w8\case04.c: 0 warnings, 2 errors
+
+## 等号结尾：'==== 检测汇总 ====' → FAIL（退出码 0）
+  "C:\Users\luoji\AppData\Local\Temp\firstep-armcc-utf8-z3v8_3w8\case05.c", line 3: Warning:  #870-D: invalid multibyte character sequence
+  C:\Users\luoji\AppData\Local\Temp\firstep-armcc-utf8-z3v8_3w8\case05.c: 1 warning, 0 errors
+
+## 全角括号 + 汉字：'（排查线索）汇总' → FAIL（退出码 1）
+  "C:\Users\luoji\AppData\Local\Temp\firstep-armcc-utf8-z3v8_3w8\case06.c", line 3: Error:  #8: missing closing quote
+  "C:\Users\luoji\AppData\Local\Temp\firstep-armcc-utf8-z3v8_3w8\case06.c", line 4: Error:  #65: expected a ";"
+  C:\Users\luoji\AppData\Local\Temp\firstep-armcc-utf8-z3v8_3w8\case06.c: 0 warnings, 2 errors
+
+## 中间含全角括号：'先查供电 / 上拉（再查驱动）' → OK（退出码 0）
+
+## 短全角：'项——这些件' → OK（退出码 0）
+
+## ASCII 结尾：'  init: ' → OK（退出码 0）
+
+## 汉字 + 全角冒号：'led：初始化' → OK（退出码 0）
+
+## 全角冒号 + 汉字：'：初始化' → OK（退出码 0）
+
+## 结论
+12 个候选，6 个报错：全角冒号结尾、全角括号结尾、句号结尾、汉字结尾、等号结尾、全角括号 + 汉字

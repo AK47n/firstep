@@ -173,7 +173,14 @@ from .hwcheck import (
     render_main_c,
     render_output_hint,
 )
-from .hwcheck_board import hwcheck_board_view_for
+from .hwcheck_board import hwcheck_board_view
+from .hwcheck_recipe import (
+    SECTION_TAG,
+    interface_names,
+    load_recipes,
+    resolve_sections,
+    unspecialized_message,
+)
 from .hwcheck_store import (
     DEFAULT_RECENT_LIMIT,
     list_hwcheck_projects,
@@ -304,6 +311,7 @@ from .topic_library import (
 )
 from .update import check_for_update
 from .tool_root import find_tool_root
+from .treewalk import iter_project_files
 from .wordlist import DEFAULT_WORDLIST
 from .materials_update import (
     check_for_materials_update,
@@ -533,6 +541,10 @@ class AppContext:
     # 标签页 / 连点攒半成品目录（旧 unique 静默换名行为已废弃）。
     pending_generations: set[str] = field(default_factory=set)
     _generation_lock: threading.Lock = field(default_factory=threading.Lock)
+    # 检测页配方文件的**可选覆盖**（缺省 None = 按模块库根推，见
+    # hwcheck_recipe.recipe_library_path）：给测试注入"坏配方 / 缺配方"用——
+    # 不改真库那一份（并行跑用例时别的 worker 会读到半截，2026-09-19 踩过）。
+    hwcheck_recipe_path: Path | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -734,22 +746,125 @@ def _hwcheck_library_config(ctx: AppContext) -> AppConfig:
     return app_config
 
 
-def _hwcheck_wiring(ctx: AppContext, config: HwCheckConfig) -> dict:
-    """检测页的板侧视图（接线行 / 同脚组 / 板载共享 / 建议顺序 / 缺平台条目）。
+def _hwcheck_recipes(
+    ctx: AppContext,
+    app_config: AppConfig,
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+):
+    """读库内配方（工单 04）→ `{slug: RecipeCatalog}`。
 
-    模块集判据单源 = `hwcheck_modules(config)`（框架 ∪ 通道 ∪ 器件，依赖由
-    `hwcheck_board` 展开）——生成工程用的是同一个集合，所以页面这张表与工程
-    README 那张表是同一份推导。投影本身全在 `hwcheck_board`（判据复用 wiring /
-    pin_bindings / readme），本处只把库根与板定义喂进去。
+    接口清单 = `hwcheck_recipe.interface_names`（模块头 ∪ 母版头）——与生成
+    门禁同一套提取，所以"配方过了校验"就等于"生成门禁认这些调用"。母版头从
+    母版目录现读（stm32 的 led / oled / delay 是 `files: []` 的空条目，实现内嵌
+    母版，能调的函数全在母版头里）。
+
+    母版目录**不存在**（还没导入母版）时按"没有母版头"处理：配方校验的
+    `interface_names` 对空清单是宽免的（判不了就不判），页面照常可用——检测页
+    的"本平台能不能测"另有平台条目判据兜底（wiring.missing）；**配方文件本身
+    坏了仍然是 400**（那条判据不降级，否则坏配方会悄悄溜过去）。
+
+    `recipe_path` 走 AppContext 的可选覆盖（`hwcheck_recipe_path`）：测试要注入
+    坏配方时不必动真库文件（并行用例会互相读到半截）。
+    """
+    master_dir = master_project_dir(app_config.masters_dir, platform)
+    master_headers: list[tuple[str, str]] = []
+    if master_dir.is_dir():
+        master_headers = [
+            (path.relative_to(master_dir).as_posix(),
+             path.read_text(encoding="utf-8", errors="replace"))
+            for path in iter_project_files(master_dir, pattern="*.h")
+        ]
+    interfaces = interface_names(
+        manifests, app_config.module_library_dir, platform, master_headers
+    )
+    return load_recipes(
+        app_config.module_library_dir, manifests, interfaces,
+        recipe_path=ctx.hwcheck_recipe_path,
+    )
+
+
+def _hwcheck_view(ctx: AppContext, config: HwCheckConfig) -> dict:
+    """检测页的**一次投影**（板块载荷）：板侧视图 + 逐件专精小节 + 未专精点名。
+
+    返回的字典里 `board` = 载荷三键（`wiring` / `sections` / `unspecialized`，
+    端点用 `**board` 展开），`sections` = 域层的 `RecipeSection` 对象（生成端点
+    还要拿它去渲染 main.c，不必再解析一遍）。
+
+    三个端点（preview / generate / project）共用这一处装配：读库一次 → 展开
+    依赖（`resolve_dependencies` 的顺序即进工程顺序）→ 配方校验 → 板侧投影
+    （`hwcheck_board.hwcheck_board_view`）→ 小节解析（`resolve_sections`，顺序
+    走既有 bring-up 排序）。各端点各拼一遍就是三份判据来源，迟早漂。
+
+    库外 slug 由 `resolve_dependencies` 大声失败（UnknownModuleError 已登记 400）；
+    配方坏了由 `load_recipes` 大声失败（HwCheckError 400 中文）——两条都不静默，
+    也**不许**为了"至少能出接线表"而降级成跳过（那会让坏配方悄悄溜过去）。
     """
     app_config = _hwcheck_library_config(ctx)
-    view = hwcheck_board_view_for(
-        app_config.module_library_dir,
-        config.platform,
-        hwcheck_modules(config),
-        devices=hwcheck_devices(config),
+    by_slug = {m.slug: m for m in list_modules(app_config.module_library_dir)}
+    manifests = resolve_dependencies(list(hwcheck_modules(config)), by_slug)
+    recipes = _hwcheck_recipes(
+        ctx, app_config, list(by_slug.values()), config.platform
     )
-    return view.to_dict()
+    devices = hwcheck_devices(config)
+    view = hwcheck_board_view(
+        config.platform,
+        manifests,
+        board_for_platform(config.platform),
+        devices=devices,
+    )
+    sections = resolve_sections(config.platform, devices, recipes, manifests)
+    specialized = {section.slug for section in sections}
+    missing = {item["slug"] for item in view.missing}
+    return {
+        "board": {
+            "wiring": view.to_dict(),
+            "sections": _hwcheck_sections_payload(sections),
+            "unspecialized": [
+                {"slug": slug, "message": unspecialized_message(slug)}
+                for slug in devices
+                if slug not in specialized and slug not in missing
+            ],
+        },
+        "sections": sections,
+    }
+
+
+def _hwcheck_sections_payload(sections: Sequence[Any]) -> list[dict]:
+    """逐件专精小节的载荷（页面只渲染，不重推判据）。
+
+    字段 = 配方六段的可见面 + `tag`（专精件与未专精件外观可区分的判据，前端只
+    上样式）——`prereq` / `platform` 这一版页面用不上，但它们是配方契约的一部分
+    （工单 05/06 的探头与命令表都要读同一份载荷），留着不算投机抽象：前端不读
+    不等于载荷可以缺，缺了下一个工单就得改端点。
+    """
+    return [
+        {
+            "slug": section.slug,
+            "platform": section.platform,
+            "tag": SECTION_TAG,
+            "prereq": list(section.prereq),
+            "init": list(section.init),
+            "init_expect": section.init_expect,
+            "probe": (
+                None if section.probe is None
+                else {"calls": list(section.probe.calls),
+                      "expect": section.probe.expect}
+            ),
+            "has_probe": bool(section.probe and section.probe.expect),
+            "read": [
+                {"expression": item.expression, "unit": item.unit}
+                for item in section.read
+            ],
+            "console": (
+                None if section.console is None
+                else {"command": section.console.command,
+                      "description": section.console.description}
+            ),
+            "note": list(section.note),
+        }
+        for section in sections
+    ]
 
 
 def _instance_known_slugs(module_library_dir: Path, slugs: Sequence[str]) -> list[str]:
@@ -2301,14 +2416,15 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             oled=_optional_bool(payload, "oled", default=True),
             devices=_hwcheck_devices(payload),
         )
+        board = _hwcheck_view(context, config)
         return {
             "platform": config.platform,
             "debug_uart": config.debug_uart,
             "oled": config.oled,
             "devices": list(hwcheck_devices(config)),
-            "main_c": render_main_c(config),
+            "main_c": render_main_c(config, board["sections"]),
             "output_hint": render_output_hint(config),
-            "wiring": _hwcheck_wiring(context, config),
+            **board["board"],
         }
 
     # 硬件检测：**真的上板**（工单 module-hwcheck/02）——生成检测工程。
@@ -2349,6 +2465,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         parent_dir = Path(parent) if parent else context.desktop_dir()
         output_dir = resolve_hwcheck_output_dir(parent_dir, config.platform)
         app_config = _hwcheck_library_config(context)
+        board = _hwcheck_view(context, config)
         ccs_tools = None
         if config.platform == PLATFORM_MSPM0:
             ccs_tools = find_ccs_tools(
@@ -2356,7 +2473,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 app_config.ccs_compiler_dir,
                 app_config.ccs_sysconfig_cli,
             )
-        main_c = render_main_c(config)
+        main_c = render_main_c(config, board["sections"])
         # 同键互斥（既有 _generation_guard）：同一秒连点两次时第二个请求 409 收场，
         # 不两个请求同时往同一个新目录里写（那才会真的写坏工程）。
         with _generation_guard(context, f"hwcheck:{output_dir}"):
@@ -2381,7 +2498,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "output_dir": str(summary.output_dir),
             "main_c": main_c,
             "output_hint": render_output_hint(config),
-            "wiring": _hwcheck_wiring(context, config),
+            **board["board"],
             "checklist": [item.to_dict() for item in render_checklist(config)],
             "modules": [slug for slug, _files in summary.modules],
             "structure": list(summary.structure),
@@ -2446,7 +2563,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "main_c": read_project_main_c(path),
             "output_hint": render_output_hint(config),
             "checklist": [item.to_dict() for item in render_checklist(config)],
-            "wiring": _hwcheck_wiring(context, config),
+            **_hwcheck_view(context, config)["board"],
         }
 
     @app.post("/api/pick-directory")

@@ -43,7 +43,7 @@ from .generator import (
     UartInstanceConflictError,
     UsartHandlerInMainError,
 )
-from .hwcheck import HwCheckError
+from .hwcheck_errors import HwCheckError
 from .impact import ImpactError
 from .keil import KeilProjectError
 from .library import LibraryError

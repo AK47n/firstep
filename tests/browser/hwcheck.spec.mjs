@@ -205,3 +205,45 @@ test("本平台没有条目的器件：点名「无法检测」，不静默省�
   await page.fill("#hwcheck-device-search", "");
 });
 
+test("专精小节：选上 led 就在检测计划里出 [专精] 小节（未专精件不在这里）", async () => {
+  await openTab();
+  await page.click('[data-hwcheck-platform="stm32"]');
+  await page.fill("#hwcheck-device-search", "led");
+  await page.waitForSelector('#hwcheck-device-grid [data-add="led"]');
+  await page.click('#hwcheck-device-grid [data-add="led"]');
+  await page.waitForSelector("#hwcheck-sections .hwcheck-section");
+  const plan = await page.textContent("#hwcheck-sections");
+  assert.ok(plan.includes("[专精]") && plan.includes("led"),
+    "专精件要带 [专精] 标记：\n" + plan);
+  assert.ok(plan.includes("初始化（不判返回值）"),
+    "这一节测什么要说清（led_init 是 void → 如实说不判返回值）：\n" + plan);
+  assert.ok(plan.includes("只看现象"),
+    "没有读取型探头的件必须标「只看现象」，不许看起来像测过了：\n" + plan);
+  assert.ok(plan.includes("三色通道") || plan.includes("PC13"),
+    "平台差异说明直接印在检测页上：\n" + plan);
+
+  // 未专精件：有平台条目但这一版还没配方 → 单独点名（**不进专精小节清单**）
+  await page.fill("#hwcheck-device-search", "mpu6050");
+  await page.waitForSelector('#hwcheck-device-grid [data-add="ml_mpu6050"]');
+  await page.click('#hwcheck-device-grid [data-add="ml_mpu6050"]');
+  await page.waitForFunction(
+    () => document.querySelector("#hwcheck-sections").textContent
+      .includes("不会给它出检测小节"));
+  const withUnspecialized = await page.textContent("#hwcheck-sections");
+  assert.ok(withUnspecialized.includes("ml_mpu6050"),
+    "没配方的件要点名：\n" + withUnspecialized);
+  const sectionCount = await page.locator("#hwcheck-sections .hwcheck-section").count();
+  assert.equal(sectionCount, 1, "未专精件不产生专精小节（只点名）");
+
+  // 去掉器件 → 计划跟着变（选择是活的，不是一次性快照）。
+  // 用 dispatchEvent 而不是 click()：chip 容器在每次选择变化后被整体重绘
+  // （`box.innerHTML = …`），Playwright 的 click 会等"元素稳定"而重绘恰好
+  // 让它永远不稳定（本用例实测卡满 30s 超时）——事件委托挂在容器上，
+  // 派发事件同样走真实的产品路径。
+  await page.dispatchEvent('#hwcheck-device-chips [data-remove="led"]', "click");
+  await page.waitForFunction(
+    () => !document.querySelector("#hwcheck-sections").textContent.includes("[专精] led"));
+  await page.dispatchEvent('#hwcheck-device-chips [data-remove="ml_mpu6050"]', "click");
+  await page.fill("#hwcheck-device-search", "");
+});
+

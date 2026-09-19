@@ -1,0 +1,78 @@
+# 工单 module-hwcheck/04 真机口径证据（产品端点 + 真库真母版）
+
+## ① POST /api/hwcheck/preview（stm32 + oled + led）
+  sections = ['led', 'oled']
+  unspecialized = []
+  - [专精] led：init=['led_init(LED_RED)'] init_expect='' probe=None has_probe=False read=[{'expression': 'LED_CHANNEL_COUNT', 'unit': ''}]
+      · stm32 板载三色 LED 在 PC13 / PC14 / PC15，通道宏 LED_RED / LED_YELLOW / LED_GREEN 各占一路（led_instances.h 默认三通道）——三路都要看：灯在闪 = 程序在跑，灭的那一路说明那一路没接对。
+      · led_init() 是 void（没有返回值），所以本件**不判初始化返回值**；LED 又是纯输出件（没有可读的身份寄存器），板上判不了通断——本件的结论只看现象：灯按节奏闪就是好的。
+  - [专精] oled：init=['OLED_Init()'] init_expect='' probe={'calls': ['OLED_ShowString(0, 0, "OLED OK")'], 'expect': ''} has_probe=False read=[]
+      · stm32 的 OLED 走母版软 I2C（ml_oled，默认 PB8 = SCL / PB9 = SDA），函数声明在母版头 ml_oled.h 里（内嵌实现，模块目录里没有 oled.h）。
+      · **本平台没有浮点显示接口**（母版 ml_oled 只有 OLED_ShowNum / oled_show_number 这类整数接口）——检测页这一列只回显整数，角度这类小数由工单 05 的配方自己拆整数 / 小数两次显示。
+      · 屏是只写的：驱动里**没有可读的状态寄存器**，板上判不出通断。所以本件探头的动作是「让屏上出现一行 OLED OK」——判据交给你眼睛（屏亮且出了这行字 = 通了）。
+
+## ① POST /api/hwcheck/preview（mspm0 + oled + led）
+  sections = ['led', 'oled']
+  unspecialized = []
+  - [专精] led：init=['led_init(LED_RED)'] init_expect='' probe=None has_probe=False read=[{'expression': 'LED_CHANNEL_COUNT', 'unit': ''}]
+      · 地猛星用户 LED 只有 PA15 一个（LED_BEEP 组，高电平点亮）。**本平台的驱动会把越界通道静默钳回通道 0**，所以这一版只测通道 0（LED_RED）——这里不写 LED_YELLOW / LED_GREEN，那两路在本平台其实还是同一颗灯，写了会让人以为板上有三路。
+      · LED_CHANNEL_COUNT 就是本平台实际存在的通道数（单实例默认 1）：它小于宏里那三个别名是正常的，不是没测到。led_init() 是 void，本件不判返回值、也不判通断——只看灯闪不闪。
+  - [专精] oled：init=['OLED_Init()'] init_expect='' probe={'calls': ['OLED_ShowString(0, 0, "OLED OK", 16)'], 'expect': ''} has_probe=False read=[]
+      · 地猛星 OLED 走硬件 I2C1「OLED」实例（SysConfig 配置，7 位地址 0x3C）：**没配 I2C1 就没有屏**——上板前先确认 mspm0.syscfg 里有这个实例。
+      · **本平台没有浮点显示接口**（库内只有 OLED_ShowNum / oled_show_number 这类整数接口）。检测页的读数只回显整数；带小数的量（角度、电压）由配方自己拆成整数 / 小数两次显示——工单 05 的 MPU6050 配方就是这么做的。
+      · 屏是只写的：驱动里没有可读的状态寄存器，板端判不出通断。探头动作为「让屏上出现一行 OLED OK」，判据交给你眼睛。
+
+## ② POST /api/hwcheck/generate（stm32 + led）→ 200
+落盘工程：hwcheck-stm32-20260919-214901（main.c 6371 字节）
+
+## ③ 生成门禁独立复核（_check_main_calls 吃真语料）
+  门禁通过（led_init / LED_RED 都在语料里）
+
+## ④ 未专精件点名（stm32 + led + sr04）
+  sections = ['led']
+  unspecialized = []
+  wiring.missing = [{'slug': 'sr04', 'message': 'sr04：该模块无本平台版本，无法检测（模块库里没有它在 stm32 上的条目）——请把它去掉，或换到它有版本的平台再测'}]
+
+## ④b 未专精件点名（mspm0 + led + ml_mpu6050）
+  sections = ['led']
+  unspecialized = [{'slug': 'ml_mpu6050', 'message': 'ml_mpu6050：这一件还没有专精配方——本版检测程序不会给它出检测小节（通用降级在后续工单里做）。它仍然会接进工程并出现在接线表里，但板上不会对它做任何判定。'}]
+
+## ⑤ GET /api/hwcheck/project（回读）
+  sections = ['led']
+
+## ⑥ 红证：故意把 led 配方的函数名写错
+  注入后返回：400 hwcheck_recipes.json 的 'led' × stm32（C:\Users\luoji\Desktop\firstep\library\hwcheck_recipes.json） 的初始化段引用了不存在的接口 'led_initX'（表达式：led_initX(LED_RED)）——该模块 stm32 侧的头文件里没有这个名字，请改用真实接口（配方写错就该当场红，不学骨架兜底把它改
+  配方文件已复原：True
+
+## ⑦ 母版库缺失时的降级（配方校验判不了就不判）
+  母版库不存在 → 200 sections=['led']
+
+## ⑧ UV4 真编译（专精产物，中文字面量转义之后）
+  UV4 = C:\Keil5\Core\UV4\UV4.exe
+  ('led',) → passed=True error=0 warning=0
+  ('oled',) → passed=True error=0 warning=0
+  ('led', 'oled') → passed=True error=0 warning=0
+
+## 结论
+- [PASS] ①a stm32 上 led / oled 都出 [专精] 小节，且顺序把 led 排在前（bring-up 分区，与 README 验证顺序同一函数） —— sections=['led', 'oled']
+- [PASS] ①b led 的配方**不判返回值**（led_init 是 void）+ 无探头（如实「只看现象」）——真机判例：硬编 `r = led_init(...)` 编译不过 —— init=['led_init(LED_RED)'] expect='' probe=None
+- [PASS] ①c oled 的配方把「本平台没有浮点显示接口」写进 note（平台不对称如实呈现，不假装有角度） —— stm32 的 OLED 走母版软 I2C（ml_oled，默认 PB8 = SCL / PB9 = SDA），函数声明在母版头 ml_oled.h 里（内嵌实现，模块目录里没有 oled.h）。；**本平台没有浮点显示接口**（母版 ml_oled 只有 OLED_ShowNum / oled_show_number
+- [PASS] ①d mspm0 的 led 只测通道 0（越界通道被钳回 0，配方不照搬三色宏） —— init=['led_init(LED_RED)']
+- [PASS] ①e mspm0 的 oled note 写明要配 I2C1 实例 + 无浮点显示接口 —— 地猛星 OLED 走硬件 I2C1「OLED」实例（SysConfig 配置，7 位地址 0x3C）：**没配 I2C1 就没有屏**——上板前先确认 mspm0.syscfg 里有这个实例。；**本平台没有浮点显示接口**（库内只有 OLED_ShowNum / oled_show_number 这类整数接口）。检测页的读数只回显整数；带小数的量（角度、电压）由配方自己拆成整数 / 小数两次显示
+- [PASS] ②a 落盘 main.c 逐字节等于端点回的 main_c —— 6371 vs 6371 字节
+- [PASS] ②b main.c 里 [专精] 小节的函数本体与调用都在（渲染了也真被跑） —— 函数本体 + main() 调用 + 标题标记
+- [PASS] ②c 未选中的器件不出小节（oled 没选 → 盘上查无此节） —— hwcheck_check_oled 无命中
+- [PASS] ②d 分账运行时在（led 没有可判项 → 只渲「通过 / 未判定」两档；「失败」档与 hwcheck_verdict 按需渲染，不留死代码） —— 未判定计数 + 无判定函数（真机编译矩阵实测的 #177-D 死代码）
+- [PASS] ③ 配方引用的接口全在生成语料的接口清单里（门禁独立复核，不是自家判据） —— 门禁通过（led_init / LED_RED 都在语料里）
+- [PASS] ④a 本平台没有条目的 sr04 走 wiring.missing 点名「无本平台版本」 —— sr04：该模块无本平台版本，无法检测（模块库里没有它在 stm32 上的条目）——请把它去掉，或换到它有版本的平台再测
+- [PASS] ④b 有平台条目但没配方的 ml_mpu6050 走 unspecialized 点名「不会给它出检测小节」（不静默消失） —— ml_mpu6050：这一件还没有专精配方——本版检测程序不会给它出检测小节（通用降级在后续工单里做）。它仍然会接进工程并出现在接线表里，但板上不会对它做任何判定。
+- [PASS] ⑤ 回读拿回同一份逐件小节（刷新后页面上的检测计划不丢） —— 1 节
+- [PASS] ⑥ 配方写错函数名 → 构建期 400 + 点名（不学骨架兜底改成注释） —— 400 / hwcheck_recipes.json 的 'led' × stm32（C:\Users\luoji\Desktop\firstep\library\hwcheck_recipes.json） 的初始化段引用了不存在的接口 'led_in
+- [PASS] ⑥b 探针逐字节复原配方文件 —— 4435 字节
+- [PASS] ⑦ 母版库目录不存在时预览仍可用（不 500，配方校验宽免空接口清单） —— 200 / sections=['led']
+- [PASS] ⑦b 母版库目录已复原 —— masters 复位
+- [PASS] ⑧ stm32 专精产物编译绿（UV4，devices=['led']） —— passed=True error=0 warning=0
+- [PASS] ⑧ stm32 专精产物编译绿（UV4，devices=['oled']） —— passed=True error=0 warning=0
+- [PASS] ⑧ stm32 专精产物编译绿（UV4，devices=['led', 'oled']） —— passed=True error=0 warning=0
+
+合计 20 条，判红 0 条。全部成立。

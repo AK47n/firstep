@@ -1,0 +1,81 @@
+{
+  "_comment": "硬件检测的库内配方（工单 module-hwcheck/04）：键 = slug → 平台 → 配方。六段见 spec：prereq（前置调用）/ init（初始化；init_expect 缺省 = 这一件没有返回值可判，如 void led_init）/ probe（探头 + expect 期望；expect 缺省或空 = 只做动作不判通断）/ read（读数展示：expressions 简单写法，items[{expression,unit}] 带单位）/ console（控制台命令，消费方是工单 06）/ note（平台差异说明，直接印到检测页）。校验：init / read / probe 里出现的名字必须都能在该模块该平台的头文件里找到（read 的裸常量也查），找不到 = 构建期大声失败（hwcheck_recipe.validate_recipes）；判据与生成门禁同源（skeleton 的接口块提取）。⚠ 读数表达式必须是**整数**（常量或返回 int 的调用）——渲染走 hwcheck_report_int。",
+  "led": {
+    "stm32": {
+      "init": {
+        "calls": [
+          "led_init(LED_RED)"
+        ]
+      },
+      "read": {
+        "expressions": [
+          "LED_CHANNEL_COUNT"
+        ]
+      },
+      "note": {
+        "lines": [
+          "stm32 板载三色 LED 在 PC13 / PC14 / PC15，通道宏 LED_RED / LED_YELLOW / LED_GREEN 各占一路（led_instances.h 默认三通道）——三路都要看：灯在闪 = 程序在跑，灭的那一路说明那一路没接对。",
+          "led_init() 是 void（没有返回值），所以本件**不判初始化返回值**；LED 又是纯输出件（没有可读的身份寄存器），板上判不了通断——本件的结论只看现象：灯按节奏闪就是好的。"
+        ]
+      }
+    },
+    "mspm0": {
+      "init": {
+        "calls": [
+          "led_init(LED_RED)"
+        ]
+      },
+      "read": {
+        "expressions": [
+          "LED_CHANNEL_COUNT"
+        ]
+      },
+      "note": {
+        "lines": [
+          "地猛星用户 LED 只有 PA15 一个（LED_BEEP 组，高电平点亮）。**本平台的驱动会把越界通道静默钳回通道 0**，所以这一版只测通道 0（LED_RED）——这里不写 LED_YELLOW / LED_GREEN，那两路在本平台其实还是同一颗灯，写了会让人以为板上有三路。",
+          "LED_CHANNEL_COUNT 就是本平台实际存在的通道数（单实例默认 1）：它小于宏里那三个别名是正常的，不是没测到。led_init() 是 void，本件不判返回值、也不判通断——只看灯闪不闪。"
+        ]
+      }
+    }
+  },
+  "oled": {
+    "stm32": {
+      "init": {
+        "calls": [
+          "OLED_Init()"
+        ]
+      },
+      "probe": {
+        "calls": [
+          "OLED_ShowString(0, 0, \"OLED OK\")"
+        ]
+      },
+      "note": {
+        "lines": [
+          "stm32 的 OLED 走母版软 I2C（ml_oled，默认 PB8 = SCL / PB9 = SDA），函数声明在母版头 ml_oled.h 里（内嵌实现，模块目录里没有 oled.h）。",
+          "**本平台没有浮点显示接口**（母版 ml_oled 只有 OLED_ShowNum / oled_show_number 这类整数接口）——检测页这一列只回显整数，角度这类小数由工单 05 的配方自己拆整数 / 小数两次显示。",
+          "屏是只写的：驱动里**没有可读的状态寄存器**，板上判不出通断。所以本件探头的动作是「让屏上出现一行 OLED OK」——判据交给你眼睛（屏亮且出了这行字 = 通了）。"
+        ]
+      }
+    },
+    "mspm0": {
+      "init": {
+        "calls": [
+          "OLED_Init()"
+        ]
+      },
+      "probe": {
+        "calls": [
+          "OLED_ShowString(0, 0, \"OLED OK\", 16)"
+        ]
+      },
+      "note": {
+        "lines": [
+          "地猛星 OLED 走硬件 I2C1「OLED」实例（SysConfig 配置，7 位地址 0x3C）：**没配 I2C1 就没有屏**——上板前先确认 mspm0.syscfg 里有这个实例。",
+          "**本平台没有浮点显示接口**（库内只有 OLED_ShowNum / oled_show_number 这类整数接口）。检测页的读数只回显整数；带小数的量（角度、电压）由配方自己拆成整数 / 小数两次显示——工单 05 的 MPU6050 配方就是这么做的。",
+          "屏是只写的：驱动里没有可读的状态寄存器，板端判不出通断。探头动作为「让屏上出现一行 OLED OK」，判据交给你眼睛。"
+        ]
+      }
+    }
+  }
+}

@@ -10,6 +10,8 @@
 from __future__ import annotations
 
 import re
+import shutil
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -28,6 +30,12 @@ from contest_generator.hwcheck import (
     render_main_c,
     render_output_hint,
 )
+from contest_generator.hwcheck_recipe import (
+    SECTION_TAG,
+    RecipeRead,
+    RecipeSection,
+    escape_c_string,
+)
 from contest_generator.manifest import ModuleManifest
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from contest_generator.readme import parse_pin_table
@@ -39,6 +47,29 @@ LAMP_ONLY = HwCheckConfig(platform=PLATFORM_STM32, debug_uart=False, oled=False)
 
 
 _CONTROL_KEYWORDS = frozenset({"while", "if", "for", "switch", "return", "sizeof"})
+
+
+def unescape_c_string(text: str) -> str:
+    """渲染产物里的 `\\xNN` 字节转义 → 人能读的字符（断言"程序说了什么"用）。
+
+    渲染器把非 ASCII 字面量转义成 UTF-8 字节（ARMCC 5.06 按本地代码页解析源
+    文件，原样中文串会把收尾引号吞掉、整份 main.c 编不过——见 hwcheck_recipe
+    的 escape_c_string 真机判例）。判据仍然要落在"学生看到的那句话"上，所以
+    测试先还原再比。
+    """
+    out = bytearray()
+    index = 0
+    while index < len(text):
+        if text.startswith("\\x", index) and index + 4 <= len(text):
+            try:
+                out.append(int(text[index + 2:index + 4], 16))
+                index += 4
+                continue
+            except ValueError:
+                pass
+        out.extend(text[index].encode("utf-8"))
+        index += 1
+    return out.decode("utf-8", errors="replace")
 
 
 def _called_names(code: str) -> set[str]:
@@ -146,19 +177,26 @@ def test_header_comment_matches_the_form_it_renders():
     但文件头照抄模板写着"每一段结果写到输出通道"——学生读代码会以为报了结果。
     """
     with_channel = render_main_c(SERIAL_ONLY)
-    assert "写到在场的输出通道" in with_channel
+    assert "逐件跑检测小节" in with_channel
     lamp_only = render_main_c(LAMP_ONLY)
-    assert "写到在场的输出通道" not in lamp_only
+    assert "逐件跑检测小节" not in lamp_only
     assert "不打印任何检测结果" in lamp_only
 
 
 def test_summary_report_is_the_first_line_of_output():
-    """上电先跑一遍：逐件自报之前先出「板子活着」那行（bring-up 顺序）。"""
+    """上电先跑一遍：逐件自报之前先出「板子活着」那行（bring-up 顺序）。
+
+    判据抓的是 **main() 里第一次出字**（不是全文第一个 `hwcheck_report` 调用
+    ——那是运行时的分派函数，跟"什么时候报什么"无关）。中文字面量是转义写法
+    （`c_string`），所以断言先还原。
+    """
     for config in (BOTH, SERIAL_ONLY, OLED_ONLY):
         code = render_main_c(config)
-        first_call = re.search(r"hwcheck_report\(([^)]*)\);", code)
-        assert first_call is not None, "应至少有一次自检报告调用"
-        assert "上电" in first_call.group(1) or "板子" in first_call.group(1)
+        body = code.split("int main(void)", 1)[1]
+        first_call = re.search(r"hwcheck_report\((\"[^\n]*\")\);", body)
+        assert first_call is not None, "main() 里应至少有一次自检报告调用"
+        text = unescape_c_string(first_call.group(1).strip('"'))
+        assert "上电" in text or "板子" in text, text
 
 
 # ---------------------------------------------------------------------------
@@ -1088,5 +1126,345 @@ def test_project_endpoint_reports_mspm0_default_channel_conflict(
     )
     assert refused.status_code == 400
     assert "PA22" in refused.json()["detail"], "页面预警与生成门禁报的是同一个脚"
+
+
+# ---------------------------------------------------------------------------
+# 工单 module-hwcheck/04：逐件专精小节进检测程序（配方驱动、零 LLM）
+# ---------------------------------------------------------------------------
+
+LED_STM32 = RecipeSection(
+    slug="led", platform=PLATFORM_STM32,
+    init=("led_init(LED_RED)",),
+    read=(RecipeRead(expression="LED_CHANNEL_COUNT"),),
+    note=("stm32 三色通道",),
+)
+
+
+def test_sections_add_their_calls_and_a_summary_to_main():
+    """有专精件：main() 里逐件调用 + 结尾汇总；文件头列出这一趟测了哪几件。"""
+    code = render_main_c(SERIAL_ONLY, (LED_STM32,))
+    body = code.split("int main(void)", 1)[1]
+    assert "hwcheck_check_led();" in body          # 逐件小节被调用
+    assert "hwcheck_summary();" in body            # 结尾汇总
+    assert "上电：板子活着" in unescape_c_string(body)
+    head = code.split("int main(void)", 1)[0]
+    assert "[专精] led" in head                    # 文件头说清这一趟测了哪几件
+    assert "hwcheck_check_led" in code             # 小节函数本体在
+    assert "led_init(LED_RED)" in code
+
+
+def test_no_sections_keeps_the_framework_only_form():
+    """没有专精件：不渲染任何逐件小节，也不渲染假的"0 件通过"汇总。"""
+    code = render_main_c(SERIAL_ONLY, ())
+    assert "hwcheck_check_" not in code
+    assert "hwcheck_summary();" not in code
+    assert "没有专精件" in code
+    assert "hwcheck_section(" not in code
+
+
+def test_sections_require_an_output_channel_to_be_rendered():
+    """**不假装测过**：没有输出通道时不渲染逐件小节——渲染了也没人看得见。
+
+    这条是工单 01 那条结构断言（没通道 = 一个打印调用都没有）在工单 04 上的
+    延伸：小节里的判定全靠打印，没通道就等于"跑了但没有任何结论"。
+
+    判据同时钉住**不留悬空调用**：小节与汇总都不渲染时，`hwcheck_summary()`
+    这个调用也不许出现（否则生成的 main.c 会调用一个从未定义的函数——本次
+    实测踩到过，编译期才会发现）。
+    """
+    code = render_main_c(LAMP_ONLY, (LED_STM32,))
+    assert "hwcheck_check_led" not in code
+    assert "hwcheck_report" not in code
+    assert "hwcheck_summary" not in code
+    assert "hwcheck_section" not in code
+    assert "led_init(LED_RED)" in code   # 心跳仍在（那是框架）
+    # 文件头不得列出"这一趟测了 led"——它不会被跑
+    assert "[专精] led" not in code
+
+
+def test_preview_still_fails_loudly_when_the_recipe_file_is_broken(
+    real_library_client, tmp_path
+):
+    """**不许用"取不到配方"换"能出接线表"**：库内配方坏了时，预览必须 400 点名
+    ——不做"配方读失败就跳过、接线表照出"的降级。
+
+    这条钉的是装配路径上的一处诱惑：接线表只需要模块库，于是很容易写成"配方
+    读不到就算了"。那样坏配方会悄悄溜过去（学生在页面上什么异常都看不到），
+    而这正是本单要防的「看着测了其实没测」。
+
+    坏配方写进**本用例自己的 tmp 文件**（`AppContext.hwcheck_recipe_path` 覆盖），
+    不动真库那一份——真 `library/hwcheck_recipes.json` 是全仓共享夹具，`-n auto`
+    下别的 worker 正在读它（本轮实测：改真文件会让并行套件里另外两条生成用例
+    转红、串行却全绿）。
+    """
+    client, ctx = real_library_client
+    broken = tmp_path / "hwcheck_recipes.json"
+    broken.write_text("{ 这不是 JSON", encoding="utf-8")
+    ctx.hwcheck_recipe_path = broken
+    response = client.post(
+        "/api/hwcheck/preview",
+        json={"platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
+              "devices": ["led"]},
+    )
+    assert response.status_code == 400, response.text
+    assert "hwcheck_recipes.json" in response.json()["detail"]
+
+
+def test_preview_works_when_the_master_library_is_not_configured(
+    real_library_client, tmp_path
+):
+    """没配母版库也要能预览：配方校验在"拿不到接口清单"时**不冤枉好配方**
+    （判不了就不判），页面照常给出接线表与检测计划。
+
+    两种"没有母版"都要活：① 母版库目录在但里面是空的；② 母版库目录**根本
+    不存在**（还没导入过任何母版——`rglob` 打在缺失目录上会抛，必须先判存在，
+    否则检测页在没有母版的机器上直接 500）。
+
+    ⚠ **不许动真身的 `library/masters`**：本用例把 app_config 的 masters_dir
+    换成自己的 tmp_path 空目录——真目录是全仓共享的夹具，`-n auto` 下别的
+    worker 正在读它（本轮实测：改真目录会让并行套件里另外两条生成用例转红、
+    串行却全绿——典型的"用例把环境当夹具"，本仓库 2026-09-13 踩过同款）。
+    """
+    client, ctx = real_library_client
+    fake_masters = tmp_path / "masters-none"
+    (fake_masters / "stm32").mkdir(parents=True)
+    ctx.config = replace(ctx.config, masters_dir=fake_masters)
+    for label in ("目录在、里面空", "整个目录不存在"):
+        response = client.post(
+            "/api/hwcheck/preview",
+            json={"platform": PLATFORM_STM32, "debug_uart": True,
+                  "oled": False, "devices": ["led"]},
+        )
+        assert response.status_code == 200, f"{label}：{response.text}"
+        payload = response.json()
+        assert [item["slug"] for item in payload["sections"]] == ["led"], label
+        assert "hwcheck_check_led();" in payload["main_c"], label
+        if label == "目录在、里面空":
+            shutil.rmtree(fake_masters)
+    assert not fake_masters.exists()
+
+
+def test_specialized_section_is_visually_distinct_from_the_framework():
+    """票面验收线：专精件的段落外观可区分（[专精] 标记 + 注释块）。"""
+    code = render_main_c(SERIAL_ONLY, (LED_STM32,))
+    assert SECTION_TAG in code
+    assert f'/* ---- {SECTION_TAG} led：按库内配方测这一件 ---- */' in code
+    assert "按库内配方测这一件" in code
+
+
+def test_summary_counts_three_buckets_on_the_board():
+    """**不许把"没探头"算进"通过"**：三档分开数（板上算，渲染期只生成代码）。
+
+    规格判据三层里第③层只是回显、不做板上阈值判决——所以没有读取型探头的件
+    必须单独一档（"未判定"），否则学生会把"走过场"读成"测过了"。
+
+    判据抓的**不只是文案在不在**，还包括"记账那一行真的在"：`未判定` 出现在
+    汇总文案里而计数器没人加，学生看到的永远是 0 项未判定（比不写更坏）。
+    """
+    code = render_main_c(SERIAL_ONLY, (LED_STM32,))
+    readable = unescape_c_string(code)
+    assert "hwcheck_verdict_probe_none(" in code
+    assert "hwcheck_summary_probe_none++;" in code   # 记账那一行真的在
+    assert "未判定" in readable
+    assert "没有读取型探头" in readable
+
+
+def test_recipe_rendering_never_calls_a_model():
+    """渲染全程零 LLM（票面验收项，结构断言）。
+
+    判据：整条渲染路径只吃纯函数（配方解析 json / 小节渲染），`hwcheck.py` 与
+    `hwcheck_recipe.py` **都不 import LLM 层**，`render_main_c` / `load_recipes`
+    的签名里也没有 llm 参数。
+    """
+    import inspect
+
+    from contest_generator import hwcheck as hwcheck_module
+    from contest_generator import hwcheck_recipe as recipe_module
+
+    for module in (hwcheck_module, recipe_module):
+        source = inspect.getsource(module)
+        assert "from .llm" not in source
+        assert "import llm" not in source
+        assert "llm." not in source
+    params = inspect.signature(hwcheck_module.render_main_c).parameters
+    assert not [name for name in params if "llm" in name.lower()]
+    params = inspect.signature(recipe_module.load_recipes).parameters
+    assert not [name for name in params if "llm" in name.lower()]
+
+
+def test_preview_payload_carries_the_specialized_sections(real_library_client):
+    """端点把"这一趟真测哪几件"回给页面：选中 led → 载荷里有它的专精小节。
+
+    页面不重推判据（顺序与配方都是服务端的）：它只渲染 `sections`。
+    """
+    client, _ = real_library_client
+    body = client.post(
+        "/api/hwcheck/preview",
+        json={"platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
+              "devices": ["led"]},
+    ).json()
+    assert [item["slug"] for item in body["sections"]] == ["led"]
+    section = body["sections"][0]
+    assert section["tag"] == SECTION_TAG
+    assert section["platform"] == PLATFORM_STM32
+    assert section["note"] and section["has_probe"] is False
+    assert section["init"] == ["led_init(LED_RED)"]
+    # led_init 是 void：配方**不写** init_expect，载荷里也不许编一个期望值出来
+    assert section["init_expect"] == ""
+    assert section["read"] == [{"expression": "LED_CHANNEL_COUNT", "unit": ""}]
+    assert section["console"] is None   # 命令表归工单 06，本单只把数据落进载荷
+
+
+def test_preview_reports_devices_without_a_recipe_as_unspecialized(
+    real_library_client,
+):
+    """没配方的器件如实标"未专精"（**04 不渲染它的小节**，但绝不静默）。"""
+    client, _ = real_library_client
+    body = client.post(
+        "/api/hwcheck/preview",
+        json={"platform": PLATFORM_STM32, "debug_uart": False, "oled": False,
+              "devices": ["led", "ml_mpu6050"]},
+    ).json()
+    assert [item["slug"] for item in body["sections"]] == ["led"]
+    assert [item["slug"] for item in body["unspecialized"]] == ["ml_mpu6050"]
+    message = body["unspecialized"][0]["message"]
+    assert "ml_mpu6050" in message
+    assert "不会给它出检测小节" in message      # 说清"这一趟不真测它"
+
+
+def _strip_comments_keep_literals(code: str) -> str:
+    """只剥注释、**保留字符串字面量内容**（守卫用的窄词法）。
+
+    为什么不复用 `clex.strip_comments`：它同时剥字符串（那是"只看调用形态"的
+    用途）——用它做本守卫会**把要查的东西一起删掉**，注入"不转义"的改动照样
+    全绿（本轮实测踩到：守卫假绿）。
+    """
+    out: list[str] = []
+    index = 0
+    length = len(code)
+    while index < length:
+        char = code[index]
+        nxt = code[index + 1] if index + 1 < length else ""
+        if char == "/" and nxt == "*":
+            end = code.find("*/", index + 2)
+            index = length if end == -1 else end + 2
+            continue
+        if char == "/" and nxt == "/":
+            end = code.find("\n", index)
+            index = length if end == -1 else end
+            continue
+        if char in ('"', "'"):
+            quote = char
+            out.append(char)
+            index += 1
+            while index < length:
+                out.append(code[index])
+                if code[index] == "\\":
+                    index += 2
+                    if index - 1 < length:
+                        out.append(code[index - 1])
+                    continue
+                if code[index] == quote:
+                    index += 1
+                    break
+                index += 1
+            continue
+        out.append(char)
+        index += 1
+    return "".join(out)
+
+
+def test_generated_main_c_has_no_raw_non_ascii_outside_comments():
+    """**真机编译判据**：产物里除注释外必须是纯 ASCII（中文字面量全部转义）。
+
+    为什么这条是硬判据：Keil ARMCC 5.06 默认按本地代码页（本机 GBK）解析源文件，
+    中文字面量以特定字节收尾时会把收尾引号当成前导字节的尾字节吞掉 →
+    `#8: missing closing quote`，整份 main.c 编不过（实测 22 error，`.scratch/
+    module-hwcheck/probe-04-compile-matrix.py` 与 `probe-04-armcc-utf8.py` 是
+    复现量具）。渲染器因此把非 ASCII 一律转义成 `\\xNN`（`hwcheck_recipe.
+    c_string`）。
+
+    这条用例是那次事故的**回归守卫**：谁把渲染改回"原样输出中文"，这里立刻红
+    （不用等真机编译）。
+    """
+    variants = (
+        (BOTH, ()),
+        (SERIAL_ONLY, ()),
+        (OLED_ONLY, ()),
+        (LAMP_ONLY, ()),
+        (SERIAL_ONLY, (LED_STM32,)),
+    )
+    for config, sections in variants:
+        code = render_main_c(config, sections)
+        # 剥注释但**留着字面量**——要查的正是字面量里的裸中文
+        code_only = _strip_comments_keep_literals(code)
+        offenders = [
+            f"{number}: {line}"
+            for number, line in enumerate(code_only.splitlines(), 1)
+            if any(ord(char) > 127 for char in line)
+        ]
+        assert not offenders, (
+            f"{config.platform} / sections={len(sections)} 的产物代码里有裸非 ASCII：\n"
+            + "\n".join(offenders[:5])
+        )
+
+
+def test_unjudgeable_sections_do_not_declare_dead_helpers():
+    """一件带判定的都没有时（如只选 led）不许留死代码。
+
+    真机编译实测：`hwcheck_verdict` / `hwcheck_summary_fail` / `hwcheck_report_int`
+    在这类形态下"声明了没人调"，ARMCC 报 `#177-D`。生成的程序是给学生读的，
+    死代码会让人以为漏调了什么——所以按需渲染（`_needs_verdict`）。
+    """
+    code = render_main_c(SERIAL_ONLY, (LED_STM32,))
+    assert "hwcheck_verdict(" not in code          # 判定函数不渲染
+    assert "hwcheck_summary_fail" not in code     # 失败档也不渲染
+    assert "hwcheck_report_int" in code           # 但读数回显要留着（led 有读数）
+
+    framework = render_main_c(SERIAL_ONLY, ())
+    assert "hwcheck_report_int" not in framework  # 一件读数都没有：整数出口也不渲染
+    assert "hwcheck_report(" in framework         # 但"板子活着"那句要留着
+
+
+def test_generate_writes_the_specialized_sections_into_main_c(
+    real_library_client, tmp_path
+):
+    """真生成一遍：写出的 main.c 里有专精小节，且盘上内容与载荷逐字一致。"""
+    client, _ = real_library_client
+    parent = tmp_path / "out"
+    parent.mkdir()
+    response = client.post(
+        "/api/hwcheck/generate",
+        json={"platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
+              "devices": ["led"], "parent_dir": str(parent)},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    on_disk = (Path(body["output_dir"]) / "main.c").read_text(encoding="utf-8")
+    assert on_disk == body["main_c"]
+    assert f"{SECTION_TAG} led" in on_disk
+    assert "hwcheck_check_led();" in on_disk
+
+
+def test_project_endpoint_reads_back_the_specialized_sections(
+    real_library_client, tmp_path
+):
+    """回读也带 sections（刷新页面后"这一趟测了哪几件"不丢）。"""
+    client, _ = real_library_client
+    parent = tmp_path / "out"
+    parent.mkdir()
+    generated_response = client.post(
+        "/api/hwcheck/generate",
+        json={"platform": PLATFORM_MSPM0, "debug_uart": False, "oled": True,
+              "devices": ["oled"], "parent_dir": str(parent)},
+    )
+    assert generated_response.status_code == 200, generated_response.text
+    generated = generated_response.json()
+    body = client.get(
+        "/api/hwcheck/project", params={"output_dir": generated["output_dir"]}
+    ).json()
+    assert [item["slug"] for item in body["sections"]] == ["oled"]
+    assert body["sections"][0]["tag"] == SECTION_TAG
+    assert body["sections"] == generated["sections"]
 
 

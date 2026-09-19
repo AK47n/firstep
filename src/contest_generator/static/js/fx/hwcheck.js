@@ -247,6 +247,7 @@ export function hwcheckProjectState(state, payload) {
   const data = payload || {};
   return {
     ...hwcheckBoardState(state, data),
+    ...hwcheckSectionsState(state, data),
     project: {
       outputDir: String(data.output_dir || ""),
       platform: String(data.platform || ""),
@@ -583,6 +584,103 @@ export function hwcheckOrderHTML(order, guide, reason) {
     + `<div class="hwcheck-hint">为什么是这个次序：${esc(reason || "")}</div>`;
 }
 
+// ===========================================================================
+// 工单 module-hwcheck/04：这一趟**真测哪几件**（配方驱动的小节）+ 未专精点名
+//
+// 分工不变：配方与判据全在服务端（`GET/POST /api/hwcheck/*` 的 `sections` /
+// `unspecialized`），本文件只把载荷渲染成 HTML。**不在这里判"这件测不测得了"**
+// ——那会变成第二个判据来源，与后端的配方表迟早对不上。
+// ===========================================================================
+
+// hwcheckSectionsState(state, payload)：载荷里的"逐件小节 + 未专精点名"部分。
+// 载荷缺键 = 保留当前状态（旧后端 / 出错响应不许把已有的检测计划抹掉）。
+export function hwcheckSectionsState(state, payload) {
+  const data = payload || {};
+  return {
+    ...state,
+    sections: Array.isArray(data.sections)
+      ? data.sections
+      : ((state && Array.isArray(state.sections)) ? state.sections : []),
+    unspecialized: Array.isArray(data.unspecialized)
+      ? data.unspecialized
+      : ((state && Array.isArray(state.unspecialized)) ? state.unspecialized : []),
+  };
+}
+
+// hwcheckSectionPlanText(section)：一节"到底测什么"的一句话。
+// 判定档位由服务端事实决定（有探头 / 只有初始化返回值 / 只做动作不判定）——
+// 前端只选词，不改判：把"看着测了其实没测"如实说成"只看现象"。
+export function hwcheckSectionPlanText(section) {
+  const s = section || {};
+  const probe = s.probe && typeof s.probe === "object" ? s.probe : null;
+  const parts = [];
+  if (probe && probe.expect) {
+    parts.push(`通信探头带判定（期望 ${probe.expect}）`);
+  } else if (probe) {
+    parts.push("探头只做动作、板上不做判定");
+  }
+  if (s.init_expect) parts.push(`初始化返回值判定（期望 ${s.init_expect}）`);
+  else if ((s.init || []).length) parts.push("初始化（不判返回值）");
+  if ((s.read || []).length) parts.push(`${s.read.length} 项读数回显`);
+  if (s.console) parts.push(`串口命令 ${s.console.command}`);
+  return parts.length ? parts.join(" ｜ ") : "这一节没有实际动作";
+}
+
+// hwcheckSectionNoteHTML(section)：平台差异说明（直接印出来，不折叠）。
+// 规格要求"平台不对称如实呈现"——地猛星没有浮点显示接口、通道被钳回 0 这类
+// 事实写在配方的 note 里，学生看检测页就该看到，不该翻 manifest。
+export function hwcheckSectionNoteHTML(section) {
+  const notes = ((section && section.note) || []).filter(Boolean);
+  if (!notes.length) return "";
+  return notes.map((line) => `<div class="hwcheck-hint">▸ ${esc(line)}</div>`).join("");
+}
+
+// hwcheckSectionsHTML(sections)：逐件专精小节清单。
+// **外观可区分**（票面验收线）：专精件带 [专精] 徽章（服务端给的 tag），
+// 未专精件根本不在这里（由 hwcheckUnspecializedHTML 单独点名）。
+export function hwcheckSectionsHTML(sections) {
+  const list = Array.isArray(sections) ? sections : [];
+  if (!list.length) return "";
+  const rows = list.map((item) => {
+    const s = item || {};
+    const tag = esc(s.tag || "[专精]");
+    const probeBadge = s.has_probe
+      ? '<span class="badge ok">板上判定</span>'
+      : '<span class="badge">只看现象</span>';
+    return '<div class="hwcheck-section">'
+      + '<div class="hwcheck-section-head">'
+      + `<span class="hwcheck-section-tag">${tag}</span>`
+      + `<span class="slug">${esc(s.slug || "")}</span>${probeBadge}</div>`
+      + `<div class="hwcheck-hint">这一节：${esc(hwcheckSectionPlanText(s))}</div>`
+      + hwcheckSectionNoteHTML(s)
+      + "</div>";
+  }).join("");
+  return '<div class="hwcheck-hint">这一趟的检测程序会给下面这几件出专精小节'
+    + "（配方来自库内数据，不是 AI 写的）：</div>" + rows;
+}
+
+// hwcheckUnspecializedHTML(items)：选了但没有配方的器件 → **逐条点名**。
+// 不做通用降级的这一版必须说清"这一趟不会真测它"（spec「不假装测过」），
+// 不许它静默消失在检测清单里。
+export function hwcheckUnspecializedHTML(items) {
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) return "";
+  return list.map((item) => {
+    const text = (item && (item.message || item.slug)) || "";
+    return `<div class="hwcheck-warn">◻ ${esc(text)}</div>`;
+  }).join("");
+}
+
+// hwcheckSectionsEmptyHTML()：一件专精件都没有时的说明。
+// **不是错误状态**：不选器件 = 「先确认板子活着」那条路（spec 用户故事 4）；
+// 选了器件但都没配方由 hwcheckUnspecializedHTML 逐条点名。这里只要说清
+// "为什么这条是空的"，不留一块沉默的空白。
+export function hwcheckSectionsEmptyHTML() {
+  return '<div class="muted">这一趟没有专精件：检测程序只有 LED 心跳 + 通道自报，'
+    + "用来确认板子和烧录链路是好的。选上有配方的器件（当前是 led / oled）"
+    + "就会出现它们的检测小节。</div>";
+}
+
 if (typeof window !== "undefined") {
   Object.assign(window, {
     hwcheckPlatformState, hwcheckSelectPlatform, hwcheckPickState,
@@ -603,6 +701,8 @@ if (typeof window !== "undefined") {
     hwcheckWiringErrorHTML, hwcheckWiringTableHTML, hwcheckPinGroupsHTML,
     hwcheckBoardSharesHTML, hwcheckOrderHTML, hwcheckOrderDesc,
     hwcheckDeviceSlugs, hwcheckBoardState,
+    hwcheckSectionsState, hwcheckSectionsHTML, hwcheckUnspecializedHTML,
+    hwcheckSectionsEmptyHTML, hwcheckSectionPlanText, hwcheckSectionNoteHTML,
   });
 }
 

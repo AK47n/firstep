@@ -1,0 +1,15 @@
+# 工单 module-hwcheck/04 编译矩阵（stm32 / UV4 真编译）
+
+UV4：C:\Keil5\Core\UV4\UV4.exe
+
+## 框架（不选器件）（hwcheck-stm32-20260919-214844）→ passed=True exit=0 error=0 warning=0
+
+## led 专精（hwcheck-stm32-20260919-214848）→ passed=True exit=0 error=0 warning=0
+
+## oled 专精（hwcheck-stm32-20260919-214852）→ passed=True exit=0 error=0 warning=0
+
+## led + oled 专精（hwcheck-stm32-20260919-214856）→ passed=True exit=0 error=0 warning=0
+
+## 结论
+4 种形态，判红 0 种。全部编译绿。
+原始日志：C:\Users\luoji\Desktop\firstep\.scratch\module-hwcheck\probe-04-buildlogs

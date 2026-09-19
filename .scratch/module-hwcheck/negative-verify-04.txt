@@ -1,0 +1,161 @@
+# 工单 module-hwcheck/04 判据强度探针（停用守卫 → 必须变红）
+
+## A 配方引用的函数名不再校验（写错的接口名一路走到板上）→ 核心守卫用例应红
+注入：src/contest_generator/hwcheck_recipe.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck_recipe.py -q -k does_not_declare or read_and_probe_segments
+退出码：1（判据要求非 0）
+红证摘要：
+  FAILED tests/test_hwcheck_recipe.py::test_validate_rejects_a_function_the_module_does_not_declare
+  FAILED tests/test_hwcheck_recipe.py::test_validate_checks_the_read_and_probe_segments_too
+  2 failed, 41 deselected in 0.19s
+
+## B 期望值不再校验常量名（expect 里拼错的宏名一路进比较式）→ 期望值用例应红
+注入：src/contest_generator/hwcheck_recipe.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck_recipe.py -q -k neither_literal_nor_interface or names_an_interface_constant
+退出码：1（判据要求非 0）
+红证摘要：
+  FAILED tests/test_hwcheck_recipe.py::test_validate_rejects_an_expect_that_is_neither_literal_nor_interface
+  1 failed, 1 passed, 41 deselected in 0.17s
+
+## C 空壳配方放行（六段全空也算「专精」，学生以为这件被测过）→ 空壳用例应红
+注入：src/contest_generator/hwcheck_recipe.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck_recipe.py -q -k empty_recipe
+退出码：1（判据要求非 0）
+红证摘要：
+  FAILED tests/test_hwcheck_recipe.py::test_parse_rejects_an_empty_recipe - Fai...
+  1 failed, 42 deselected in 0.22s
+
+## D 探头段不再要求 expect 是字符串（数字也能过）→ 探头形状用例应红
+注入：src/contest_generator/hwcheck_recipe.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck_recipe.py -q -k bad_expect_type
+退出码：1（判据要求非 0）
+红证摘要：
+  FAILED tests/test_hwcheck_recipe.py::test_parse_rejects_a_probe_with_a_bad_expect_type
+  1 failed, 42 deselected in 0.19s
+
+## E 接口清单为空时不再宽免（只配模块库、没配母版库的场景被误判成配方坏）→ 端点预览用例应红
+注入：src/contest_generator/hwcheck_recipe.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck.py -q -k preview_endpoint_returns_main_c or honours_channel_flags
+退出码：1（判据要求非 0）
+红证摘要：
+  E       AssertionError: {"detail":"hwcheck_recipes.json �� 'led' �� stm32��C:\\Users\\luoji\\Desktop\\firstep\\library\\hwcheck_recipes.json�� �ĳ�ʼ���������˲����ڵĽӿ� 'led_init'������ʽ��led_init(LED_RE
+  tests\test_hwcheck.py:445: AssertionError
+  FAILED tests/test_hwcheck.py::test_preview_endpoint_returns_main_c_without_llm
+  FAILED tests/test_hwcheck.py::test_preview_endpoint_honours_channel_flags - K...
+  2 failed, 76 deselected, 1 warning in 0.96s
+
+## F 专精小节不再被 main() 调用（渲染了却没人跑 = 白渲染）→ 小节调用用例应红
+注入：src/contest_generator/hwcheck.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck.py -q -k add_their_calls or writes_the_specialized_sections
+退出码：1（判据要求非 0）
+红证摘要：
+  E       AssertionError: assert 'hwcheck_check_led();' in '\n{\n    SystemInit();  /* ʱ�ӳ�ʼ���������ļ��ѵ��ã�������ʽȷ�������� */\n    debug_uart_init();\n    led_init(LED_RED);\n\n    hwcheck_...ug_cmd_
+  tests\test_hwcheck.py:1147: AssertionError
+  E       AssertionError: assert 'hwcheck_check_led();' in '/**\n * @file main.c\n * @brief Ӳ�������� ���� ȷ������Ⱦ���� AI ����\n *\n * ��һ������ȷ�ϡ����ӻ��� + ��¼��·ͨ����\n *   1. ���� LED ���̶�������˸�
+  tests\test_hwcheck.py:1446: AssertionError
+  FAILED tests/test_hwcheck.py::test_sections_add_their_calls_and_a_summary_to_main
+  FAILED tests/test_hwcheck.py::test_generate_writes_the_specialized_sections_into_main_c
+  2 failed, 76 deselected, 1 warning in 1.18s
+
+## G 没有探头的件不再记账（与「通过」混为一谈 / 未判定永远数出 0）→ 三档分账用例应红
+注入：src/contest_generator/hwcheck.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck.py -q -k three_buckets
+退出码：1（判据要求非 0）
+红证摘要：
+  E       AssertionError: assert 'hwcheck_summary_probe_none++;' in '/**\n * @file main.c\n * @brief Ӳ�������� ���� ȷ������Ⱦ���� AI ����\n *\n * ��һ������ȷ�ϡ����ӻ��� + ��¼��·ͨ����\n *   1. ���� LED ���̶
+  tests\test_hwcheck.py:1267: AssertionError
+  FAILED tests/test_hwcheck.py::test_summary_counts_three_buckets_on_the_board
+  1 failed, 77 deselected in 0.19s
+
+## H 专精标记被抹平（专精件与未专精件外观不再可区分）→ 外观用例应红
+注入：src/contest_generator/hwcheck_recipe.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck.py -q -k visually_distinct or add_their_calls
+退出码：1（判据要求非 0）
+红证摘要：
+  tests\test_hwcheck.py:1151: AssertionError
+  FAILED tests/test_hwcheck.py::test_sections_add_their_calls_and_a_summary_to_main
+  1 failed, 1 passed, 76 deselected in 0.20s
+
+## I 小节顺序不再走既有 bring-up 排序（检测程序与 README 清单打脸）→ 顺序用例应红
+注入：src/contest_generator/hwcheck_recipe.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck_recipe.py -q -k verification_order or skips_devices_without_a_recipe
+退出码：1（判据要求非 0）
+红证摘要：
+  E       AssertionError: assert ['oled', 'led'] == ['led', 'oled']
+  tests\test_hwcheck_recipe.py:450: AssertionError
+  FAILED tests/test_hwcheck_recipe.py::test_resolve_sections_picks_the_selected_devices_in_verification_order
+  1 failed, 1 passed, 41 deselected in 0.17s
+
+## J 未专精件不再点名（选了却没配方 = 静默消失）→ 点名用例应红
+注入：src/contest_generator/hwcheck_recipe.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck.py -q -k without_a_recipe_as_unspecialized
+退出码：1（判据要求非 0）
+红证摘要：
+  E       AssertionError: assert 'ml_mpu6050' in '��ͨ�ý����ں�������������������Ȼ��ӽ����̲������ڽ��߱�������ϲ���������κ��ж���'
+  tests\test_hwcheck.py:1331: AssertionError
+  FAILED tests/test_hwcheck.py::test_preview_reports_devices_without_a_recipe_as_unspecialized
+  1 failed, 77 deselected, 1 warning in 0.92s
+
+## K 前端不再标「只看现象」（没探头的件看起来像测过了）→ 前端判定档位用例应红
+注入：src/contest_generator/static/js/fx/hwcheck.js
+命令：node --test tests/js/hwcheck.test.mjs
+退出码：1（判据要求非 0）
+红证摘要：
+  ✖ hwcheckSectionsHTML：专精件带 [专精] 徽章 + 判定档位 + 平台说明 (0.5726ms)
+  ✖ hwcheckSectionsHTML：有探头的件标「板上判定」（两种外观真的不同） (3.3566ms)
+  ✖ failing tests:
+  ✖ hwcheckSectionsHTML：专精件带 [专精] 徽章 + 判定档位 + 平台说明 (0.5726ms)
+  AssertionError [ERR_ASSERTION]: 没探头的件要标「只看现象」而不是「板上判定」
+  ✖ hwcheckSectionsHTML：有探头的件标「板上判定」（两种外观真的不同） (3.3566ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+## L 前端不再点名未专精件（选了没配方的件静默消失）→ 前端点名用例应红
+注入：src/contest_generator/static/js/fx/hwcheck.js
+命令：node --test tests/js/hwcheck.test.mjs
+退出码：1（判据要求非 0）
+红证摘要：
+  ✖ hwcheckChecklistHTML：逐项一个勾选框 + 「应看到 / 不对先查」两行 + 转义 (3.2881ms)
+  ✖ failing tests:
+  ✖ hwcheckChecklistHTML：逐项一个勾选框 + 「应看到 / 不对先查」两行 + 转义 (3.2881ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+## M 换平台 / 换通道不再清旧检测计划（旧平台的配方留在页面上误导）→ 清计划用例应红
+注入：src/contest_generator/static/js/ui/hwcheck.js
+命令：node --test tests/js/hwcheck.test.mjs
+退出码：1（判据要求非 0）
+红证摘要：
+  ✖ ui 换平台 / 换通道时清掉旧检测计划（配方按平台分，留着会误导） (0.9444ms)
+  ✖ failing tests:
+  ✖ ui 换平台 / 换通道时清掉旧检测计划（配方按平台分，留着会误导） (0.9444ms)
+  AssertionError [ERR_ASSERTION]: 三处该清：换平台 / 换通道 / 取视图失败（清 failed 视图时一并清计划）
+
+## N 中文字面量不再转义（原样写进 C → ARMCC 报 #8 编不过）→ 结构守卫应红
+注入：src/contest_generator/hwcheck_recipe.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck.py -q -k raw_non_ascii
+退出码：1（判据要求非 0）
+红证摘要：
+  E           AssertionError: stm32 / sections=0 �Ĳ������������� ASCII��
+  tests\test_hwcheck.py:1406: AssertionError
+  FAILED tests/test_hwcheck.py::test_generated_main_c_has_no_raw_non_ascii_outside_comments
+  1 failed, 77 deselected in 0.21s
+
+## O 判不了返回值的件也硬渲判定函数（留死代码 / 编出 #177-D）→ 死代码守卫应红
+注入：src/contest_generator/hwcheck.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck.py -q -k dead_helpers
+退出码：1（判据要求非 0）
+红证摘要：
+  E       AssertionError: assert 'hwcheck_verdict(' not in '/**\n * @fi...\n    }\n}\n'
+  tests\test_hwcheck.py:1420: AssertionError
+  FAILED tests/test_hwcheck.py::test_unjudgeable_sections_do_not_declare_dead_helpers
+  1 failed, 77 deselected in 0.21s
+
+## P 读数表达式里的裸常量不再查（跨平台常量漏到编译期）→ 裸常量判据用例应红
+注入：src/contest_generator/hwcheck_recipe.py
+命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pytest tests/test_hwcheck_recipe.py -q -k read_and_probe_segments
+退出码：1（判据要求非 0）
+红证摘要：
+  FAILED tests/test_hwcheck_recipe.py::test_validate_checks_the_read_and_probe_segments_too
+  1 failed, 42 deselected in 0.18s
+
+## 结论
+全部 16 条注入都按预期变红，且文件已逐字节复原。
