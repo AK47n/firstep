@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=5adebd38091e7e1508d1ce347ea7ec53c6f95133 -->
+<!-- changelog-auto: last-commit=7bd8e05f4b398837021b4835ccd862882c1db226 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -9,6 +9,7 @@
 - 10:40 沙箱还原为真 v1.1.1 + 重打 v1.2.1 两套资产的自校验（工单 update-restart-stale-service/03）
 - 10:56 修启动器判据的静默失效：for /f 少了 usebackq（真机演练第一次判红的根因）
 - 10:56 留档：重发后第一次 drill-01 仍判红的原始证据 + B1 原始失败证据另存
+- 11:29 启动器起服务前先建数据目录：否则重定向整行失败、服务根本起不来
 
 ## 2026-09-18
 - 23:19 docs(闸门): commit-gate/04 CI 线上全绿收口（run 35098093620）
