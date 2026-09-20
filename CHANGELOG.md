@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=fb885a4ad967299298c6b47fb9193b265143abde -->
+<!-- changelog-auto: last-commit=74b4aa05f3f915ac78c863f777b9877772304ee9 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -6,6 +6,8 @@
 
 ## 2026-09-20
 - 10:21 工单 module-hwcheck/06：交互式串口命令台（配方驱动复测 + 既有命令原样）
+- 11:18 工单 module-hwcheck/07：通用降级（未专精件 = 初始化 + I2C 总线扫描，如实标「未专精」）
+- 11:19 工单 module-hwcheck/07：通用降级（未专精件 = 初始化 + I2C 总线扫描，如实标「未专精」）
 
 ## 2026-09-19
 - 10:38 修启动器：端口上那个服务是旧进程就踢掉重起（工单 update-restart-stale-service/01）
