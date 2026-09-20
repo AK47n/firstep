@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=408abc13190a988050688bea6ded2b3b3b5e49cc -->
+<!-- changelog-auto: last-commit=a911196ce8ee84ed4eb8c12d70f4cacccc5134f5 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -18,6 +18,7 @@
 - 20:42 ﻿工单 cross-lang-mirror-c5a/02：pinShareClass 修掉已漂的 adc 分支 + 补生成对拍 fixture
 - 20:43 ﻿台账：架构评审候选 C5a（两条裸镜像补上）落地记账
 - 21:51 工单 ui-dom-contract-gate/01：browser 用例在 HEAD 上修到 21 绿（夹具改逐 spec 空闲端口 + 用例级隔离）
+- 21:53 工单 ui-dom-contract-gate/02：ui 层第一条测试缝——id 存在性与装载可达性（纯静态，进前端门禁）
 
 ## 2026-09-19
 - 10:38 修启动器：端口上那个服务是旧进程就踢掉重起（工单 update-restart-stale-service/01）
