@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=72fa68452f46a109c7343d29b4e1d810a1b3db5e -->
+<!-- changelog-auto: last-commit=bf5784ed33a76ac81649a1cb4580a21cc8cbc27a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -16,6 +16,7 @@
 - 19:07 ﻿台账：架构评审候选 C2（webapp 收口）落地记账 + 剩余挂账项
 - 19:43 ﻿工单 cross-lang-mirror-c5a/01：文件名校验规则改由后端下发（CODE_TREE_NAME_ILLEGAL 裸镜像退场）
 - 20:42 ﻿工单 cross-lang-mirror-c5a/02：pinShareClass 修掉已漂的 adc 分支 + 补生成对拍 fixture
+- 20:43 ﻿台账：架构评审候选 C5a（两条裸镜像补上）落地记账
 
 ## 2026-09-19
 - 10:38 修启动器：端口上那个服务是旧进程就踢掉重起（工单 update-restart-stale-service/01）
