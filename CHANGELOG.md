@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=c96d237906f486ad68f822245af8eb20cf1c310e -->
+<!-- changelog-auto: last-commit=45a392234044225b2167691202aa7f4f8d1a88f1 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -13,6 +13,7 @@
 - 18:10 工单 frontend-import-fossils/01：装载清单去化石——259 个零引用名字退场 + 5 条裸装载显式化「加载即接线」
 - 18:54 ﻿工单 webapp-consolidation/01：检测页装配回域（483 行退场）+ import 面结构钉
 - 19:07 ﻿工单 webapp-consolidation/02：LLM 工作流观测收成一处（25 处手写 → LLMRun 一个缝）
+- 19:07 ﻿台账：架构评审候选 C2（webapp 收口）落地记账 + 剩余挂账项
 
 ## 2026-09-19
 - 10:38 修启动器：端口上那个服务是旧进程就踢掉重起（工单 update-restart-stale-service/01）
