@@ -7,7 +7,7 @@
 
 **被谁阻塞：** 01（先修绿——红的用例接进闸门等于把闸门常年染红）。
 
-**状态：** claimed
+**状态：** resolved
 
 - [x] `tools/prepush.py` 增加一支与前端门禁并列、相互独立的浏览器门禁：
       - `BROWSER_PREFIXES` = `tests/browser/`、`src/contest_generator/static/js/ui/`、
@@ -104,3 +104,11 @@ CI 那个 job 的**云端行为本轮没跑过**（本机没有 GitHub runner）
 YAML 解析通过、job 结构完整（7 steps）、命令与本地字符串一致、四种 action 都是官方 action、
 `npm install` 有 `package.json`（devDependencies: playwright ^1.63.0）兜底。
 真正首次跑起来要等推上去才知道（`playwright install chromium` 在 windows runner 上的耗时是变量）。
+
+### 七、状态补正（2026-09-20 23:0x，另一会话盘点时发现）
+
+本单的验收项在提交 `0be1163b` 时已**全部落地**（prepush 浏览器门禁 + CI `browser-suite` job +
+契约用例），但状态行停在 `claimed` 没翻——仓库盘点脚本（`.scratch/tracker-audit/list_open_tickets.py`）
+因此每轮都把它列成在途项。按 issue-tracker 约定补正为 `resolved`，判据 = 该提交的 diff
+（`tools/prepush.py` / `ci.yml` / `tests/test_prepush.py` / `tests/test_ci_workflow.py`）
+与上面全勾的验收清单。**未改动正文任何其它内容。**

@@ -214,20 +214,24 @@ UTF-8 stdout（原锚点版是崩在 GBK 编码上的）。第 7 节的两道候
 - **把接线搬出 HTML**（`js/boot.js` + 给 import 时接线的 ui 模块补显式 `init()`）——本轮的
   下一步；今天只拆了地雷。做完它，`static-import-guard` 与 `fx-guard` 的 337 行名字登记表
   都可以退化成"index.html 零 import / 零 function 定义"这类结构不变量。
-- **`tests/browser/` 接进闸门**——它既不在 prepush 的 `FRONTEND_PREFIXES`，也不在 `ci.yml`；
-  接之前先要修掉 HEAD 上已知的 6 绿 3 红（`docs/agents/local-environment.md`）。
+- ~~**`tests/browser/` 接进闸门**~~ ✅ **已落地**（工单 `ui-dom-contract-gate/01` + `03`，2026-09-20，
+  见第 13 节）：先修绿再接手——**旧读数「6 绿 3 红」本身也不实**，HEAD 实测是 14 绿 7 红
+  （4 条夹具自杀的连锁假红 + 3 条真红全非产品缺陷）；现在 prepush 与 CI 各有一支与前端门禁
+  并列的浏览器门禁，四个 spec / 26 条用例一条命令跑完（≈78s）。
 - **删 index.html 里的迁移墓碑注释**（"已迁至 …"那一大段，数百行）——历史记录，本轮按 spec
   原样保留。
 - **`ui/delivery.js` 的 window 挂桥**（`Object.assign(window, {...})`）与 app.js 规则 3
   "不挂 window 桥"相抵——既有事实，本轮只记账不改。
 
 评审同时发现的**同向候选**（都在前端）：ui 层（17,996 行 / 515 监听器）只有 2 个
-测试文件 import 它，没有测试缝——**仍挂账**。六条跨语言镜像里 `CODE_TREE_NAME_ILLEGAL`
-（文件名非法字符）与 `pinShareClass`（同脚多角色）两条**已补上**（见第 12 节）。
+测试文件 import 它，没有测试缝——✅ **已落地**（第 13 节，两层守卫 + 真浏览器行为契约）。
+六条跨语言镜像里 `CODE_TREE_NAME_ILLEGAL`（文件名非法字符）与 `pinShareClass`（同脚多角色）
+两条**已补上**（见第 12 节）。
 
 ## 11. webapp 收口（2026-09-20，同一份架构评审的候选 C2；工单 webapp-consolidation/01–02 已落地）
 
-评审报告（`%TEMP%\architecture-review-20260920-1745.html`）的复审结论「该做的只有两件半」里，
+评审报告（**副本已入库**：`.scratch/ui-dom-contract-gate/architecture-review-20260920-1745.html`
+——早先这里引的是 `%TEMP%` 路径，临时目录会被清，2026-09-20 改指入库副本）的复审结论「该做的只有两件半」里，
 第 1 件就是本条（第 2 件是上面的第 10 节）：
 
 - **检测页装配回域**（01）：硬件检测页的四段装配（约 483 行）从 `webapp.create_app` 搬回
@@ -295,4 +299,19 @@ UTF-8 stdout（原锚点版是崩在 GBK 编码上的）。第 7 节的两道候
 
 另：C5 卡里「`ui/delivery.js` 的 window 挂桥」与「ui 模块 import 环」两条，前者第 10 节已记账、
 后者已有 `tests/js/ui-cycle.test.mjs` 守着，本轮未动。
+
+## 14. PDF 资料库真重复复核与回收（2026-09-20，证据补入库）
+
+用户要求「看看 PDF 资料库是不是真的重复，真的重复就删」。结论：应用标出的 **15 组「疑似重复」
+全部是真重复**——全量 SHA256 复算逐字节相同、**0 组假阳性**；按应用自身的回收语义删掉每组冗余
+的一份（**不真删**，移入 `sources/.trash-pdf/<日期>/`）→ 回收 **15 个文件 / 10.85 MiB**，
+库内 PDF **97 → 82**，且**内容层面零重复**（82 个文件 = 82 种唯一内容）。结论同时印证
+2026-09-13 那次实测：应用判据在这份真实库上零漏报、零误报。
+
+- 证据：`.scratch/pdf-dup-verify/`（`report.md` 复核报告 + `probe-01-verify.py` / `.txt`
+  全量哈希复核 + `probe-02-apply.py` 回收执行），回收实况 = `sources/.trash-pdf/2026-09-20/`
+  15 个文件（该目录与 `sources/materials/` 都在 `.gitignore` 里，不入包也不入库）。
+- 本条的**判据边界**：应用侧仍按「同名（大小写不敏感）+ 同大小 + >0 字节」判疑似重复
+  （纯客户端、不读内容 hash）——本次复核证明它在这份库上够用，**不代表**换成"改名的重复"
+  也抓得住（复核里另做了全库内容分组，那种情况本库为 0 组）。
 
