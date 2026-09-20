@@ -54,8 +54,11 @@ from typing import Any, Mapping, Sequence
 from .clex import strip_comments
 from .hwcheck_errors import HwCheckError
 from .manifest import ModuleManifest
+from .master_store import master_project_dir
 from .platforms import KNOWN_PLATFORMS
 from .readme import sort_verification_order
+from .treewalk import iter_project_files
+
 __all__ = [
     "RECIPE_FILENAME",
     "SECTION_TAG",
@@ -68,6 +71,7 @@ __all__ = [
     "c_string",
     "escape_c_string",
     "interface_names",
+    "load_library_recipes",
     "load_recipes",
     "local_names",
     "parse_includes",
@@ -78,6 +82,7 @@ __all__ = [
     "render_recipe_section",
     "render_recipe_summary",
     "resolve_sections",
+    "sections_payload",
     "validate_recipes",
 ]
 
@@ -972,6 +977,66 @@ def load_recipes(
     }
 
 
+def load_library_recipes(
+    module_library_dir: Path | str,
+    masters_dir: Path | str,
+    manifests: Sequence[ModuleManifest],
+    *,
+    recipe_path: Path | str | None = None,
+) -> dict[str, RecipeCatalog]:
+    """库内配方装载（检测页装配的装载入口）→ `{slug: RecipeCatalog}`。
+
+    接口清单 = `interface_names`（模块头 ∪ 母版头）——与生成门禁同一套提取，所以
+    "配方过了校验"就等于"生成门禁认这些调用"（**提取**同一套，不是"生成侧也读
+    配方"：配方只有检测页消费）。母版头从母版目录现读（stm32 的
+    led / oled / delay 是 `files: []` 的空条目，实现内嵌母版，能调的函数全在
+    母版头里）。
+
+    母版目录**不存在**（还没导入母版）时按"没有母版头"处理：配方校验的
+    `interface_names` 对空清单是宽免的（判不了就不判），页面照常可用——检测页
+    的"本平台能不能测"另有平台条目判据兜底（板侧视图的 missing）；**配方文件
+    本身坏了仍然是 400**（那条判据不降级，否则坏配方会悄悄溜过去）。
+
+    `recipe_path` 缺省 = 按库根推（`recipe_library_path`）；显式给 = 读另一个
+    文件（测试注入坏配方时用，不改真库那一份——并行用例会互相读到半截）。
+
+    **接口清单按平台分开装配**（工单 05 修的一处真缺陷）：配方文件是**全平台
+    一份**，校验时每段要按**它自己的平台**取接口清单——只给当前平台那一份的话，
+    平台不对称一出现就误报（实测：拿 mspm0 的清单去查 stm32 的 `ax`，mspm0 预览
+    直接 400）。所以这里把**所有已注册平台**的清单都装出来，与用户当前选哪个
+    平台无关：配方里任何一段写错，任何一次预览都会当场红。
+
+    **母版工程树不可用的平台跳过校验**（"判不了就不判"，工单 04 定、05 校准）：
+    清单 = 模块头 ∪ 母版头，而 stm32 侧有一批函数**只住在母版里**（`OLED_Init` /
+    `oled_show_text` 在 ml_oled，模块目录里一个声明都没有）。用户还没导入母版
+    （或母版目录是空的）时清单天然不全——照判会把好配方判成拼错（本单实测：
+    修好"大写函数名没过判据"这个漏洞后，空母版下 `OLED_Init` 立刻误报）。所以
+    只有**母版工程树真的在**（目录非空）才判那个平台；真实库的完整判据另有
+    地位断言（`test_real_library_recipes_reference_only_real_interfaces`）兜底。
+    """
+    library = Path(module_library_dir)
+    interfaces: dict[str, dict[str, frozenset[str]]] = {}
+    headers: dict[str, frozenset[str]] = {}
+    for name in sorted(KNOWN_PLATFORMS):
+        master_dir = master_project_dir(Path(masters_dir), name)
+        if not master_dir.is_dir() or next(iter(master_dir.iterdir()), None) is None:
+            continue
+        master_headers = [
+            (path.relative_to(master_dir).as_posix(),
+             path.read_text(encoding="utf-8", errors="replace"))
+            for path in iter_project_files(master_dir, pattern="*.h")
+        ]
+        interfaces[name] = interface_names(manifests, library, name, master_headers)
+        # include 段的判据面（工单 05）：库内每个模块该平台条目声明的 .h 基名
+        # ∪ 母版树的 .h 基名——与生成门禁的 include 解析门同口径。
+        headers[name] = platform_header_names(manifests, name, master_headers)
+    return load_recipes(
+        library, manifests, interfaces,
+        recipe_path=recipe_path,
+        headers=headers,
+    )
+
+
 def interface_names(
     manifests: Sequence[ModuleManifest],
     module_library_dir: Path | str,
@@ -1088,6 +1153,46 @@ def resolve_sections(
             key=lambda section: (order.get(section.slug, len(order)), section.slug),
         )
     )
+
+
+def sections_payload(sections: Sequence[RecipeSection]) -> list[dict[str, Any]]:
+    """逐件专精小节的载荷（页面只渲染，不重推判据）。
+
+    字段 = 配方各段的可见面 + `tag`（专精件与未专精件外观可区分的判据，前端只
+    上样式）——`include` / `locals` / `prereq` / `platform` 这一版页面用不上，但
+    它们是配方契约的一部分（工单 05 的头文件 / 局部变量与探头、06 的命令表都要
+    读同一份载荷），留着不算投机抽象：前端不读不等于载荷可以缺，缺了下一个工单
+    就得改端点。
+    """
+    return [
+        {
+            "slug": section.slug,
+            "platform": section.platform,
+            "tag": SECTION_TAG,
+            "include": list(section.include),
+            "locals": list(section.locals),
+            "prereq": list(section.prereq),
+            "init": list(section.init),
+            "init_expect": section.init_expect,
+            "probe": (
+                None if section.probe is None
+                else {"calls": list(section.probe.calls),
+                      "expect": section.probe.expect}
+            ),
+            "has_probe": bool(section.probe and section.probe.expect),
+            "read": [
+                {"expression": item.expression, "unit": item.unit}
+                for item in section.read
+            ],
+            "console": (
+                None if section.console is None
+                else {"command": section.console.command,
+                      "description": section.console.description}
+            ),
+            "note": list(section.note),
+        }
+        for section in sections
+    ]
 
 
 def render_recipe_section(

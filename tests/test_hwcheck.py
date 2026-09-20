@@ -1007,7 +1007,7 @@ def test_preview_and_generate_agree_on_mspm0(real_library_client, tmp_path):
     """预览与生成**判据一致**：能生成的形态两边都 200，装不下的两边都 400 且页面有出路。
 
     旧行为「预览 200 → 点生成 400」正是本单要灭掉的那类分家：两个端点吃的是
-    `_hwcheck_view` 同一份判据（引脚消解 + 落盘冲突报告）。
+    `hwcheck_board.hwcheck_view` 同一份判据（引脚消解 + 落盘冲突报告）。
     """
     client, _ = real_library_client
     parent = tmp_path / "out"
@@ -1030,6 +1030,80 @@ def test_preview_and_generate_agree_on_mspm0(real_library_client, tmp_path):
                 "拦下必须给出学生做得到的出口（不许只说「去引脚配置改绑」）"
             )
             assert "引脚配置里改绑上述角色" not in detail
+
+
+def test_all_hwcheck_endpoints_share_the_missing_library_400(real_library_client, tmp_path):
+    """库没配置 → 四个端点同一句 400 中文（工单 webapp-consolidation/01）。
+
+    装配搬进域层之后，「配置从哪儿来 / 缺了怎么办」的翻译只住在 webapp 一处
+    （`_hwcheck_library_config`），四个端点各调它一次——文案与状态码必须一模一样
+    （各写一版必然漂，而这句话是学生唯一的出路指引）。
+    """
+    client, ctx = real_library_client
+    parent = tmp_path / "out"
+    parent.mkdir()
+    created = client.post(
+        "/api/hwcheck/generate",
+        json={"platform": PLATFORM_STM32, "debug_uart": False, "oled": False,
+              "parent_dir": str(parent)},
+    ).json()
+    project_dir = created["output_dir"]
+
+    # 抹掉配置（config_path 指向不存在的文件 = 未配置）
+    ctx.config = None
+    ctx.config_path = tmp_path / "cfg" / "never-written.json"
+
+    calls = [
+        ("post", "/api/hwcheck/preview", {"json": {"platform": PLATFORM_STM32}}),
+        ("post", "/api/hwcheck/generate",
+         {"json": {"platform": PLATFORM_STM32, "parent_dir": str(parent)}}),
+        ("get", "/api/hwcheck/project", {"params": {"output_dir": project_dir}}),
+        ("post", "/api/hwcheck/triage",
+         {"json": {"output_dir": project_dir, "symptom": "灯不亮"}}),
+    ]
+    for method, path, kwargs in calls:
+        response = getattr(client, method)(path, **kwargs)
+        assert response.status_code == 400, f"{path}: {response.text[:200]}"
+        assert "还没配置模块库 / 母版库目录" in response.json()["detail"], path
+
+
+def test_preview_payload_equals_the_domain_projection(real_library_client):
+    """端点载荷 = 域层一次投影（工单 webapp-consolidation/01）。
+
+    装配搬进 `hwcheck_board.hwcheck_view` 之后，端点只是「取配置 → 转调 → 展开」：
+    所以响应里那六个键必须与域函数返回的 `board` **逐值相等**——两处各拼一遍
+    （旧形态：路由里再拼一次）正是这条用例要防的。
+    """
+    from contest_generator.hwcheck import HwCheckConfig
+    from contest_generator.hwcheck_board import hwcheck_view
+
+    client, ctx = real_library_client
+    devices = ["ml_mpu6050"]
+    response = client.post(
+        "/api/hwcheck/preview",
+        json={"platform": PLATFORM_STM32, "debug_uart": True, "oled": True,
+              "devices": devices},
+    )
+    assert response.status_code == 200, response.text
+
+    # 路径走夹具给的那两个（别手抄一份库根：夹具换成别处时这里会假绿）
+    view = hwcheck_view(
+        HwCheckConfig(
+            platform=PLATFORM_STM32, debug_uart=True, oled=True,
+            devices=tuple(devices),
+        ),
+        module_library_dir=ctx.config.module_library_dir,
+        masters_dir=ctx.config.masters_dir,
+        recipe_path=ctx.hwcheck_recipe_path,
+    )
+    body = response.json()
+    # 键集合也要逐字对：端点载荷 = 板侧视图的五键 ∪ 它自己那六个字段
+    # （`pin_fixes` 住在 `wiring` 里，不是顶层键——前端读的也是 wiring.pin_fixes）
+    assert set(body) == set(view.board) | {
+        "platform", "debug_uart", "oled", "devices", "main_c", "output_hint",
+    }
+    for key, value in view.board.items():
+        assert body[key] == value, f"{key} 与域层投影不一致（两处各拼一遍就会漂）"
 
 
 def test_recent_endpoint_lists_only_this_feature_projects(real_library_client, tmp_path):
@@ -1068,6 +1142,47 @@ def test_recent_endpoint_rejects_a_bad_limit_400_chinese(real_library_client):
         detail = response.json()["detail"]
         assert "limit" in detail and "正整数" in detail
     assert client.get("/api/hwcheck/recent", params={"limit": "2"}).status_code == 200
+
+
+def test_project_endpoint_reads_main_c_before_taking_the_library_config(
+    real_library_client, tmp_path, monkeypatch
+):
+    """回读端点的求值顺序 = 搬运前那一份（工单 webapp-consolidation/01 评审抓到的一处）。
+
+    从前的 dict 字面量从左到右：`main.c` / 清单渲染 → 板侧视图（取配置 + 装配）→
+    检测记录。搬运时板侧视图一度被提到最前，顺序就换了——差别只在"谁先抛"上，
+    所以判据得让前面那一步真的抛：把 `read_project_main_c` 换成一个抛 400 的桩，
+    **同时**把库配置抹掉，看用户看到哪一句。
+
+    （顺带答一条评审推断：板侧视图提前**不会**改变"坏记录文件 + 未配库"时报哪句——
+    取配置在两种顺序里都排在读记录之前。这条用例钉的是它前面那一段。）
+    """
+    from contest_generator import webapp
+    from contest_generator.hwcheck import HwCheckError
+
+    client, ctx = real_library_client
+    parent = tmp_path / "out"
+    parent.mkdir()
+    project_dir = client.post(
+        "/api/hwcheck/generate",
+        json={"platform": PLATFORM_STM32, "debug_uart": False, "oled": False,
+              "parent_dir": str(parent)},
+    ).json()["output_dir"]
+
+    def boom(_path):
+        raise HwCheckError("哨兵：main.c 先读")
+
+    monkeypatch.setattr(webapp, "read_project_main_c", boom)
+    ctx.config = None
+    ctx.config_path = tmp_path / "cfg" / "never-written.json"
+
+    response = client.get("/api/hwcheck/project", params={"output_dir": project_dir})
+    assert response.status_code == 400, response.text
+    detail = response.json()["detail"]
+    assert "哨兵" in detail, (
+        f"main.c 该在取配置之前读（搬运不许换求值顺序），实际报：{detail}"
+    )
+    assert "还没配置模块库" not in detail
 
 
 def test_project_endpoint_renders_back_a_generated_project(real_library_client, tmp_path):
@@ -1663,7 +1778,7 @@ def test_every_platforms_recipe_is_judged_when_the_masters_are_configured(
     """母版配齐时**两个平台都不免检**：任一处拼错，任何一次预览都 400。
 
     这条回答评审的一个合理追问（"没导入母版 = 全平台免检？"）：装配点对
-    **每个已注册平台**都单独装一份接口 / 头名清单（`_hwcheck_recipes`），而
+    **每个已注册平台**都单独装一份接口 / 头名清单（`load_library_recipes`），而
     `load_recipes` 校验的是**整份配方文件**——所以某一平台的配方段写错，
     即使用户当前选的是另一个平台，也会当场红（"配方写错就该当场红"）。
 

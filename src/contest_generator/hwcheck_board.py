@@ -19,21 +19,48 @@
 取自板定义 `BoardPin.notes`——那是**板的事实**，不是本模块的判断，页面照抄。
 
 为什么值得单独立一个域模块：这是本仓库第一次把「板侧事实」拼给一个**非赛题**
-的页面用（检测页不读题面、不进生成流程），而它的三块输入分别住在 wiring /
-pin_bindings / readme 三个模块里。拼装逻辑留在这里，路由只取参转调；`hwcheck.py`
-继续只管"检测程序长什么样"（纯函数、不碰盘），本模块是它的板侧对偶。
+的页面用（检测页不读题面、不进生成流程），而它的输入分别住在 wiring / pin_bindings
+/ readme / boards 与 hwcheck 族的配方 / 命令台 / 通用降级里。拼装逻辑留在这里，
+路由只取参转调；`hwcheck.py` 继续只管"检测程序长什么样"（纯函数、不碰盘），本模块
+是它的板侧对偶。
+
+工单 webapp-consolidation/01 起，**检测页的那一次完整投影**（`hwcheck_view`：板侧
+视图 + 逐件小节 + 通用降级 + 命令台 + 互斥组 + 引脚消解）也归本模块——它原先住在
+`webapp.create_app` 里（约 483 行），只能经 `TestClient` 端到端测，且每张检测页
+工单都要改那个热点文件。现在的接口是**路径进 / 载荷出**（`module_library_dir` /
+`masters_dir` / `recipe_path` + `HwCheckConfig`），不吃 HTTP 层的 `AppContext`。
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 from .boards import Board, board_for_platform
-from .hwcheck import dedup_slugs, require_known_platform
+from .hwcheck import (
+    HwCheckConfig,
+    dedup_slugs,
+    hwcheck_devices,
+    hwcheck_modules,
+    require_known_platform,
+)
+from .hwcheck_console import build_console_table, console_payload
+from .hwcheck_errors import HwCheckError
+from .hwcheck_generic import (
+    GenericSection,
+    generic_message,
+    resolve_generic_sections,
+)
+from .hwcheck_recipe import (
+    RecipeSection,
+    load_library_recipes,
+    resolve_sections,
+    sections_payload,
+)
 from .library import list_modules
-from .manifest import ModuleManifest
+from .manifest import ModuleManifest, collect_exclusive_groups
+from .master_store import master_project_dir
 from .pin_bindings import (
     ResolvedBinding,
     _shared_groups,
@@ -48,6 +75,7 @@ from .readme import (
     sort_verification_order,
 )
 from .selection import WARNING_MISSING, check_platform_warnings, resolve_dependencies
+from .syscfg_model import MSPM0_SYSCFG_FILENAME
 from .syscfg_prune import SyscfgPinConflictReport, syscfg_pin_conflict_report
 from .wiring import wiring_rows
 
@@ -56,11 +84,13 @@ __all__ = [
     "HWCHECK_PIN_EXIT_MARKER",
     "HwCheckBoardView",
     "HwCheckPinPlan",
+    "HwCheckView",
     "hwcheck_board_view",
     "hwcheck_board_view_for",
     "hwcheck_missing_message",
     "hwcheck_pin_message",
     "hwcheck_pin_plan",
+    "hwcheck_view",
 ]
 
 # 「为什么是这个次序」——顺序判据本身来自 readme（bring-up 前置 + 依赖序），
@@ -89,6 +119,25 @@ def hwcheck_missing_message(slug: str, platform: str) -> str:
 # 页面已说明原因」与「缺陷式静默拦下」——工单 hwcheck-pin-conflict-exit/01 的验收线）。
 # 写成带方括号的哨兵而不是一整句中文：句子会被顺手改写，改了就把判据悄悄挪走。
 HWCHECK_PIN_EXIT_MARKER = "【检测页出路】"
+
+
+def read_master_syscfg(masters_dir: Path | str, platform: str) -> str | None:
+    """母版 mspm0.syscfg 全文（检测页引脚消解用；该平台无此文件 / 读不了 = None）。
+
+    为什么要读母版这一份：装不装得下的判据 = **落盘后的 syscfg**
+    （`prune(选中集) → rewrite(绑定)`），而那份文本的起点就是母版文件。
+    读不到按"判不了就不判"处理（`hwcheck_pin_plan` 只做自动解冲突那一步）——
+    不静默放行：生成内核那一刻的门禁照旧。
+    """
+    if platform != PLATFORM_MSPM0:
+        return None
+    path = master_project_dir(Path(masters_dir), platform) / MSPM0_SYSCFG_FILENAME
+    if not path.is_file():
+        return None
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
 
 
 @dataclass(frozen=True)
@@ -366,4 +415,130 @@ def hwcheck_board_view_for(
     manifests = resolve_dependencies(list(slugs), by_slug)
     return hwcheck_board_view(
         platform, manifests, board_for_platform(platform), devices=devices
+    )
+
+
+@dataclass(frozen=True)
+class HwCheckView:
+    """检测页的**一次投影**（工单 webapp-consolidation/01：装配从 webapp 搬回域层）。
+
+    五个字段是五种不同的东西，所以具名而不是塞一个 dict：
+
+    * `board` = 载荷的五个键（`wiring` / `sections` / `console` / `unspecialized` /
+      `exclusive_groups`，端点用 `**view.board` 展开；「动了哪几根线」的 `pin_fixes`
+      住在 `wiring` 里，不是顶层键——前端读的也是 `wiring.pin_fixes`）；
+    * `sections` / `generic` = 域层对象（生成端点还要拿它们去渲染 main.c，不必再解析
+      一遍）；
+    * `pin_bindings` = 自动消解出的绑定增量（生成端点原样喂生成内核——页面接线表与
+      工程 README 同源的前提）；
+    * `known_slugs` = 整库模块 slug（排障的事实约束判据用，**不进任何载荷**）。
+    """
+
+    board: dict[str, Any]
+    sections: tuple[RecipeSection, ...]
+    generic: tuple[GenericSection, ...]
+    pin_bindings: dict[str, str]
+    known_slugs: tuple[str, ...]
+
+
+def hwcheck_view(
+    config: HwCheckConfig,
+    *,
+    module_library_dir: Path | str,
+    masters_dir: Path | str,
+    recipe_path: Path | str | None = None,
+    require_pins: bool = True,
+) -> HwCheckView:
+    """检测页装配的唯一出处：路径 + 配置进，一次投影出。
+
+    四个端点（preview / generate / project / triage）共用这一处装配：读库一次
+    → 展开依赖（`resolve_dependencies` 的顺序即进工程顺序）→ 配方装载
+    （`load_library_recipes`）→ **引脚消解**（`hwcheck_pin_plan`，工单
+    hwcheck-pin-conflict-exit/01：检测页没有引脚配置入口，默认脚撞脚在这里就解开）
+    → 板侧投影（`hwcheck_board_view`）→ 小节解析（`resolve_sections`，顺序走既有
+    bring-up 排序）→ **通用降级小节**（`resolve_generic_sections`，工单 07：专精件
+    之外的那些件，判据全在库内已声明的事实上）。各端点各拼一遍就是三份判据来源，
+    迟早漂。
+
+    **接口吃显式路径与配置对象，不吃 HTTP 层的 AppContext**（工单
+    webapp-consolidation/01）：所以本函数脱离 `TestClient` 可直测，也不必知道"配置
+    从哪儿来"。库路径缺失的 400 归调用方（路由侧取配置那一步），不在这里。
+
+    库外 slug 由 `resolve_dependencies` 大声失败（UnknownModuleError 已登记 400）；
+    配方坏了由 `load_library_recipes` 大声失败（HwCheckError 400 中文）——两条都不
+    静默，也**不许**为了"至少能出接线表"而降级成跳过（那会让坏配方悄悄溜过去）。
+    装不下（自动移脚后仍撞脚）由 `require_pins` 控：预览与生成**同一判据**（都
+    400），回读端点不算（它回放的是已经生成成功的那一次）。
+    """
+    library = Path(module_library_dir)
+    by_slug = {m.slug: m for m in list_modules(library)}
+    manifests = resolve_dependencies(list(hwcheck_modules(config)), by_slug)
+    recipes = load_library_recipes(
+        library, masters_dir, list(by_slug.values()), recipe_path=recipe_path
+    )
+    devices = hwcheck_devices(config)
+    board = board_for_platform(config.platform)
+    plan = hwcheck_pin_plan(
+        config.platform,
+        manifests,
+        board,
+        read_master_syscfg(masters_dir, config.platform),
+    )
+    if require_pins and not plan.ok:
+        raise HwCheckError(plan.conflict)
+    view = hwcheck_board_view(
+        config.platform,
+        manifests,
+        board,
+        devices=devices,
+        resolved_bindings=plan.resolved,
+        pin_fixes=plan.fixed,
+    )
+    sections = resolve_sections(config.platform, devices, recipes, manifests)
+    specialized = {section.slug for section in sections}
+    # 通用降级（工单 07）：专精件之外、且在本平台有条目的那些件。没有本平台
+    # 条目的件由 view.missing 那条路点名（两处都说一遍 = 两个口径）。
+    generic = resolve_generic_sections(
+        config.platform, devices, specialized, manifests, library
+    )
+    # 串口命令台（工单 06）：页面与产物读**同一张表**（`build_console_table`
+    # 是纯函数，这里与 `render_main_c` 各建一次，逐字相同）。冲突照旧在这里
+    # 就红 → 400 中文，学生不必等到点「生成」才知道两个器件抢了同一个字符。
+    # **只吃专精小节**：通用件没有配方，自然没有命令字符（07 的接口备忘）。
+    console = build_console_table(sections)
+    return HwCheckView(
+        board={
+            "wiring": view.to_dict(),
+            "sections": sections_payload(sections),
+            "console": console_payload(config.debug_uart, console),
+            "unspecialized": [
+                {
+                    "slug": section.slug,
+                    "label": section.label,
+                    "plan": section.plan_text,
+                    "message": generic_message(section),
+                }
+                for section in generic
+            ],
+            # 同组互斥（工单 05）：按**平台**投影的库级功能组——判据单源是库内
+            # manifest 的 exclusive_group（`collect_exclusive_groups`，与赛题侧
+            # 生成链路同一个函数）；成员取自**整库**而不是本次选中的模块集，
+            # 否则"点了同组第二件"时它还不在这份清单里，单选交换就无从下手。
+            "exclusive_groups": [
+                {"id": group.id, "label": group.label,
+                 "members": [member.slug for member in group.members]}
+                for group in collect_exclusive_groups(
+                    list(by_slug.values()), platform=config.platform
+                )
+            ],
+        },
+        sections=sections,
+        generic=generic,
+        # 引脚消解出的绑定增量（工单 hwcheck-pin-conflict-exit/01）：生成端点原样
+        # 喂生成内核——页面接线表与工程 README / 接线快照因此是同一组脚。
+        pin_bindings=plan.bindings,
+        # 整库 slug 词表（工单 08）：排障的事实约束要判"模型提到的模块是不是
+        # 库内别的件"——`by_slug` 反正已经在这儿了，不必再扫一遍库。
+        # 端点各自 `**view.board` 展开，这条**不进载荷**（页面用不上）。
+        known_slugs=tuple(by_slug),
     )

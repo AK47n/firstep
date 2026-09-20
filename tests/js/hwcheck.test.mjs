@@ -916,8 +916,8 @@ test("ui 换平台 / 换通道时清掉旧检测计划（配方按平台分，�
 // 工单 module-hwcheck/05：同组互斥 = 单选交换 + 提示（判据来自服务端载荷）
 // ---------------------------------------------------------------------------
 
-// 载荷形状与后端 `_hwcheck_view` 的 exclusive_groups 一致：按**平台**过滤后的
-// 库级功能组（成员取自整库，单成员组不出）。
+// 载荷形状与后端 `hwcheck_board.hwcheck_view` 的 exclusive_groups 一致：按**平台**
+// 过滤后的库级功能组（成员取自整库，单成员组不出）。
 const GROUPS = [
   { id: "attitude-hold", label: "航向保持 / 姿态传感器",
     members: ["imu_uart", "jy61p", "ml_mpu6050"] },

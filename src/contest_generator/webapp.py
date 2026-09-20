@@ -173,16 +173,7 @@ from .hwcheck import (
     render_main_c,
     render_output_hint,
 )
-from .hwcheck_board import hwcheck_board_view, hwcheck_pin_plan
-from .hwcheck_console import build_console_table, console_payload
-from .hwcheck_generic import generic_message, resolve_generic_sections
-from .hwcheck_recipe import (
-    SECTION_TAG,
-    interface_names,
-    load_recipes,
-    platform_header_names,
-    resolve_sections,
-)
+from .hwcheck_board import hwcheck_view
 from .hwcheck_store import (
     DEFAULT_RECENT_LIMIT,
     list_hwcheck_projects,
@@ -309,7 +300,6 @@ from .selection import (
     run_recommendation,
 )
 from .syscfg_instances import INSTANCES_BY_SLUG  # 同脚多角色 共享/冲突 判据（工单 pin-share-rule/01：前端 pinShareClass 的数据源）
-from .syscfg_model import MSPM0_SYSCFG_FILENAME  # 检测页引脚消解读母版 syscfg（工单 hwcheck-pin-conflict-exit/01）
 from .skeleton import run_skeleton
 from .sse import SseEmitter, run_sse
 from .stage import stage_project_files
@@ -328,7 +318,6 @@ from .topic_library import (
 )
 from .update import check_for_update
 from .tool_root import find_tool_root
-from .treewalk import iter_project_files
 from .wordlist import DEFAULT_WORDLIST
 from .materials_update import (
     check_for_materials_update,
@@ -767,8 +756,12 @@ def _hwcheck_library_config(ctx: AppContext) -> AppConfig:
     """检测页要用的库路径（模块库 / 母版库），没配置 = 400 中文。
 
     检测程序不调 LLM，但**接线表与生成都要读库**——库路径缺失时没有"部分可用"
-    这回事（给半张接线表比说清楚更坏）。文案单源在这里：预览、生成、回读三处
-    共用一句，免得三个端点各写一版"请先到设置页"。
+    这回事（给半张接线表比说清楚更坏）。文案单源在这里：预览、生成、回读、排障
+    四处共用一句，免得各写一版"请先到设置页"。
+
+    装配本身归域层（`hwcheck_board.hwcheck_view`，工单 webapp-consolidation/01）：
+    本函数只做「AppContext → AppConfig」这一层的翻译，各端点调它一次拿显式路径，
+    再直调域函数——检测页装配那条链上不再有 AppContext。
     """
     app_config = _current_config(ctx)
     if app_config is None:
@@ -777,222 +770,6 @@ def _hwcheck_library_config(ctx: AppContext) -> AppConfig:
             "（硬件检测不需要 AI，但接线表与生成都要用这两个库的路径）"
         )
     return app_config
-
-
-def _hwcheck_recipes(
-    ctx: AppContext,
-    app_config: AppConfig,
-    manifests: Sequence[ModuleManifest],
-):
-    """读库内配方（工单 04）→ `{slug: RecipeCatalog}`。
-
-    接口清单 = `hwcheck_recipe.interface_names`（模块头 ∪ 母版头）——与生成
-    门禁同一套提取，所以"配方过了校验"就等于"生成门禁认这些调用"。母版头从
-    母版目录现读（stm32 的 led / oled / delay 是 `files: []` 的空条目，实现内嵌
-    母版，能调的函数全在母版头里）。
-
-    母版目录**不存在**（还没导入母版）时按"没有母版头"处理：配方校验的
-    `interface_names` 对空清单是宽免的（判不了就不判），页面照常可用——检测页
-    的"本平台能不能测"另有平台条目判据兜底（wiring.missing）；**配方文件本身
-    坏了仍然是 400**（那条判据不降级，否则坏配方会悄悄溜过去）。
-
-    `recipe_path` 走 AppContext 的可选覆盖（`hwcheck_recipe_path`）：测试要注入
-    坏配方时不必动真库文件（并行用例会互相读到半截）。
-
-    **接口清单按平台分开装配**（工单 05 修的一处真缺陷）：配方文件是**全平台
-    一份**，校验时每段要按**它自己的平台**取接口清单——只给当前平台那一份的话，
-    平台不对称一出现就误报（实测：拿 mspm0 的清单去查 stm32 的 `ax`，mspm0 预览
-    直接 400）。所以这里把**所有已注册平台**的清单都装出来，与用户当前选哪个
-    平台无关：配方里任何一段写错，任何一次预览都会当场红。
-
-    **母版工程树不可用的平台跳过校验**（"判不了就不判"，工单 04 定、05 校准）：
-    清单 = 模块头 ∪ 母版头，而 stm32 侧有一批函数**只住在母版里**（`OLED_Init` /
-    `oled_show_text` 在 ml_oled，模块目录里一个声明都没有）。用户还没导入母版
-    （或母版目录是空的）时清单天然不全——照判会把好配方判成拼错（本单实测：
-    修好"大写函数名没过判据"这个漏洞后，空母版下 `OLED_Init` 立刻误报）。所以
-    只有**母版工程树真的在**（目录非空）才判那个平台；真实库的完整判据另有
-    地位断言（`test_real_library_recipes_reference_only_real_interfaces`）兜底。
-    """
-    library = app_config.module_library_dir
-    interfaces: dict[str, dict[str, frozenset[str]]] = {}
-    headers: dict[str, frozenset[str]] = {}
-    for name in sorted(KNOWN_PLATFORMS):
-        master_dir = master_project_dir(app_config.masters_dir, name)
-        if not master_dir.is_dir() or next(iter(master_dir.iterdir()), None) is None:
-            continue
-        master_headers = [
-            (path.relative_to(master_dir).as_posix(),
-             path.read_text(encoding="utf-8", errors="replace"))
-            for path in iter_project_files(master_dir, pattern="*.h")
-        ]
-        interfaces[name] = interface_names(manifests, library, name, master_headers)
-        # include 段的判据面（工单 05）：库内每个模块该平台条目声明的 .h 基名
-        # ∪ 母版树的 .h 基名——与生成门禁的 include 解析门同口径。
-        headers[name] = platform_header_names(manifests, name, master_headers)
-    return load_recipes(
-        library, manifests, interfaces,
-        recipe_path=ctx.hwcheck_recipe_path,
-        headers=headers,
-    )
-
-
-def _hwcheck_master_syscfg(app_config: AppConfig, platform: str) -> str | None:
-    """母版 mspm0.syscfg 全文（检测页引脚消解用；该平台无此文件 / 读不了 = None）。
-
-    为什么要读母版这一份：装不装得下的判据 = **落盘后的 syscfg**
-    （`prune(选中集) → rewrite(绑定)`），而那份文本的起点就是母版文件。
-    读不到按"判不了就不判"处理（`hwcheck_pin_plan` 只做自动解冲突那一步）——
-    不静默放行：生成内核那一刻的门禁照旧。
-    """
-    if platform != PLATFORM_MSPM0:
-        return None
-    path = master_project_dir(app_config.masters_dir, platform) / MSPM0_SYSCFG_FILENAME
-    if not path.is_file():
-        return None
-    try:
-        return path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return None
-
-
-def _hwcheck_view(
-    ctx: AppContext, config: HwCheckConfig, *, require_pins: bool = True
-) -> dict:
-    """检测页的**一次投影**（板块载荷）：引脚消解 + 板侧视图 + 逐件专精小节 +
-    通用降级小节 + 同组互斥组。
-
-    返回的字典里 `board` = 载荷的六个键（`wiring` / `sections` / `unspecialized` /
-    `console` / `exclusive_groups` / `pin_fixes`，端点用 `**board` 展开），
-    `sections` / `generic` = 域层对象（生成端点还要拿它们去渲染 main.c，不必再解析
-    一遍），`known_slugs` = 整库模块 slug（工单 08 的事实约束判据用，**不进任何
-    载荷**），`pin_bindings` = 自动消解出的绑定增量（生成端点原样喂生成内核——
-    页面接线表与工程 README 同源的前提）。
-
-    三个端点（preview / generate / project）共用这一处装配：读库一次 → 展开
-    依赖（`resolve_dependencies` 的顺序即进工程顺序）→ 配方校验 → **引脚消解**
-    （`hwcheck_pin_plan`，工单 hwcheck-pin-conflict-exit/01：检测页没有引脚配置
-    入口，默认脚撞脚在这里就解开）→ 板侧投影（`hwcheck_board.hwcheck_board_view`）
-    → 小节解析（`resolve_sections`，顺序走既有 bring-up 排序）→ **通用降级小节**
-    （`resolve_generic_sections`，工单 07：专精件之外的那些件，判据全在库内已声明
-    的事实上）。各端点各拼一遍就是三份判据来源，迟早漂。
-
-    库外 slug 由 `resolve_dependencies` 大声失败（UnknownModuleError 已登记 400）；
-    配方坏了由 `load_recipes` 大声失败（HwCheckError 400 中文）——两条都不静默，
-    也**不许**为了"至少能出接线表"而降级成跳过（那会让坏配方悄悄溜过去）。
-    装不下（自动移脚后仍撞脚）由 `require_pins` 控：预览与生成**同一判据**
-    （都 400），回读端点不算（它回放的是已经生成成功的那一次）。
-    """
-    app_config = _hwcheck_library_config(ctx)
-    by_slug = {m.slug: m for m in list_modules(app_config.module_library_dir)}
-    manifests = resolve_dependencies(list(hwcheck_modules(config)), by_slug)
-    recipes = _hwcheck_recipes(ctx, app_config, list(by_slug.values()))
-    devices = hwcheck_devices(config)
-    board = board_for_platform(config.platform)
-    plan = hwcheck_pin_plan(
-        config.platform,
-        manifests,
-        board,
-        _hwcheck_master_syscfg(app_config, config.platform),
-    )
-    if require_pins and not plan.ok:
-        raise HwCheckError(plan.conflict)
-    view = hwcheck_board_view(
-        config.platform,
-        manifests,
-        board,
-        devices=devices,
-        resolved_bindings=plan.resolved,
-        pin_fixes=plan.fixed,
-    )
-    sections = resolve_sections(config.platform, devices, recipes, manifests)
-    specialized = {section.slug for section in sections}
-    # 通用降级（工单 07）：专精件之外、且在本平台有条目的那些件。没有本平台
-    # 条目的件由 view.missing 那条路点名（两处都说一遍 = 两个口径）。
-    generic = resolve_generic_sections(
-        config.platform, devices, specialized, manifests,
-        app_config.module_library_dir,
-    )
-    # 串口命令台（工单 06）：页面与产物读**同一张表**（`build_console_table`
-    # 是纯函数，这里与 `render_main_c` 各建一次，逐字相同）。冲突照旧在这里
-    # 就红 → 400 中文，学生不必等到点「生成」才知道两个器件抢了同一个字符。
-    # **只吃专精小节**：通用件没有配方，自然没有命令字符（07 的接口备忘）。
-    console = build_console_table(sections)
-    return {
-        "board": {
-            "wiring": view.to_dict(),
-            "sections": _hwcheck_sections_payload(sections),
-            "console": console_payload(config.debug_uart, console),
-            "unspecialized": [
-                {
-                    "slug": section.slug,
-                    "label": section.label,
-                    "plan": section.plan_text,
-                    "message": generic_message(section),
-                }
-                for section in generic
-            ],
-            # 同组互斥（工单 05）：按**平台**投影的库级功能组——判据单源是库内
-            # manifest 的 exclusive_group（`collect_exclusive_groups`，与赛题侧
-            # 生成链路同一个函数）；成员取自**整库**而不是本次选中的模块集，
-            # 否则"点了同组第二件"时它还不在这份清单里，单选交换就无从下手。
-            "exclusive_groups": [
-                {"id": group.id, "label": group.label,
-                 "members": [member.slug for member in group.members]}
-                for group in collect_exclusive_groups(
-                    list(by_slug.values()), platform=config.platform
-                )
-            ],
-        },
-        "sections": sections,
-        "generic": generic,
-        # 引脚消解出的绑定增量（工单 hwcheck-pin-conflict-exit/01）：生成端点原样
-        # 喂生成内核——页面接线表与工程 README / 接线快照因此是同一组脚。
-        "pin_bindings": plan.bindings,
-        # 整库 slug 词表（工单 08）：排障的事实约束要判"模型提到的模块是不是
-        # 库内别的件"——`by_slug` 反正已经在这儿了，不必再扫一遍库。
-        # 三个端点各自 `**board` 展开，这条**不进载荷**（页面用不上）。
-        "known_slugs": tuple(by_slug),
-    }
-
-
-def _hwcheck_sections_payload(sections: Sequence[Any]) -> list[dict]:
-    """逐件专精小节的载荷（页面只渲染，不重推判据）。
-
-    字段 = 配方各段的可见面 + `tag`（专精件与未专精件外观可区分的判据，前端只
-    上样式）——`include` / `locals` / `prereq` / `platform` 这一版页面用不上，但
-    它们是配方契约的一部分（工单 05 的头文件 / 局部变量与探头、06 的命令表都要
-    读同一份载荷），留着不算投机抽象：前端不读不等于载荷可以缺，缺了下一个工单
-    就得改端点。
-    """
-    return [
-        {
-            "slug": section.slug,
-            "platform": section.platform,
-            "tag": SECTION_TAG,
-            "include": list(section.include),
-            "locals": list(section.locals),
-            "prereq": list(section.prereq),
-            "init": list(section.init),
-            "init_expect": section.init_expect,
-            "probe": (
-                None if section.probe is None
-                else {"calls": list(section.probe.calls),
-                      "expect": section.probe.expect}
-            ),
-            "has_probe": bool(section.probe and section.probe.expect),
-            "read": [
-                {"expression": item.expression, "unit": item.unit}
-                for item in section.read
-            ],
-            "console": (
-                None if section.console is None
-                else {"command": section.console.command,
-                      "description": section.console.description}
-            ),
-            "note": list(section.note),
-        }
-        for section in sections
-    ]
 
 
 def _instance_known_slugs(module_library_dir: Path, slugs: Sequence[str]) -> list[str]:
@@ -2549,15 +2326,21 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             oled=_optional_bool(payload, "oled", default=True),
             devices=_hwcheck_devices(payload),
         )
-        board = _hwcheck_view(context, config)
+        app_config = _hwcheck_library_config(context)
+        view = hwcheck_view(
+            config,
+            module_library_dir=app_config.module_library_dir,
+            masters_dir=app_config.masters_dir,
+            recipe_path=context.hwcheck_recipe_path,
+        )
         return {
             "platform": config.platform,
             "debug_uart": config.debug_uart,
             "oled": config.oled,
             "devices": list(hwcheck_devices(config)),
-            "main_c": render_main_c(config, board["sections"], board["generic"]),
+            "main_c": render_main_c(config, view.sections, view.generic),
             "output_hint": render_output_hint(config),
-            **board["board"],
+            **view.board,
         }
 
     # 硬件检测：**真的上板**（工单 module-hwcheck/02）——生成检测工程。
@@ -2598,7 +2381,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         parent_dir = Path(parent) if parent else context.desktop_dir()
         output_dir = resolve_hwcheck_output_dir(parent_dir, config.platform)
         app_config = _hwcheck_library_config(context)
-        board = _hwcheck_view(context, config)
+        view = hwcheck_view(
+            config,
+            module_library_dir=app_config.module_library_dir,
+            masters_dir=app_config.masters_dir,
+            recipe_path=context.hwcheck_recipe_path,
+        )
         ccs_tools = None
         if config.platform == PLATFORM_MSPM0:
             ccs_tools = find_ccs_tools(
@@ -2606,7 +2394,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 app_config.ccs_compiler_dir,
                 app_config.ccs_sysconfig_cli,
             )
-        main_c = render_main_c(config, board["sections"], board["generic"])
+        main_c = render_main_c(config, view.sections, view.generic)
         # 同键互斥（既有 _generation_guard）：同一秒连点两次时第二个请求 409 收场，
         # 不两个请求同时往同一个新目录里写（那才会真的写坏工程）。
         with _generation_guard(context, f"hwcheck:{output_dir}"):
@@ -2625,7 +2413,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 # 引脚消解（工单 hwcheck-pin-conflict-exit/01）：页面接线表上那些
                 # 新脚必须真的落到工程里（syscfg $assign + README 接线表）——
                 # 否则学生照页面接好线，工程里查无此脚。
-                bindings=board["pin_bindings"] or None,
+                bindings=view.pin_bindings or None,
             )
         return {
             "platform": config.platform,
@@ -2635,7 +2423,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "output_dir": str(summary.output_dir),
             "main_c": main_c,
             "output_hint": render_output_hint(config),
-            **board["board"],
+            **view.board,
             "checklist": [item.to_dict() for item in render_checklist(config)],
             "modules": [slug for slug, _files in summary.modules],
             "structure": list(summary.structure),
@@ -2693,7 +2481,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         if not path.is_dir():
             raise HwCheckError(f"检测工程目录不存在：{path}")
         config = read_hwcheck_project(path)
-        return {
+        # 载荷按**从前的求值顺序**拼：main.c / 清单先读，板侧视图随后，检测记录最后
+        # （原来 `**_hwcheck_view(...)` 就排在 `record` 前一位）——求值顺序换了，
+        # 「同一请求里谁先抛」就换了（判据见 tests/test_hwcheck.py 的
+        # test_project_endpoint_reads_main_c_before_taking_the_library_config）。
+        payload = {
             "output_dir": str(path),
             "platform": config.platform,
             "debug_uart": config.debug_uart,
@@ -2702,16 +2494,25 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "main_c": read_project_main_c(path),
             "output_hint": render_output_hint(config),
             "checklist": [item.to_dict() for item in render_checklist(config)],
+        }
+        app_config = _hwcheck_library_config(context)
+        view = hwcheck_view(
+            config,
+            module_library_dir=app_config.module_library_dir,
+            masters_dir=app_config.masters_dir,
+            recipe_path=context.hwcheck_recipe_path,
             # 回读**不跑**装不装得下的判据（工单 hwcheck-pin-conflict-exit/01）：
             # 这次检测是已经生成成功的那一次，没道理因为后来换了库 / 换了母版就
             # 让人打不开自己的工程。板侧视图仍按同一条消解重投影（确定性），
             # 所以回来看到的接线表还是那次工程里的表。
-            **_hwcheck_view(context, config, require_pins=False)["board"],
-            # 检测记录（工单 08）：现象 + 勾选 + 建议随这次检测落盘，刷新回显。
-            # 读在这里（而不是另开一个 GET）：页面回到某个检测工程时一次拿全，
-            # 少一个"清单回来了、记录还没回来"的中间态。
-            "record": read_hwcheck_record(path).to_dict(),
-        }
+            require_pins=False,
+        )
+        payload.update(view.board)
+        # 检测记录（工单 08）：现象 + 勾选 + 建议随这次检测落盘，刷新回显。
+        # 读在这里（而不是另开一个 GET）：页面回到某个检测工程时一次拿全，
+        # 少一个"清单回来了、记录还没回来"的中间态。
+        payload["record"] = read_hwcheck_record(path).to_dict()
+        return payload
 
     # 硬件检测：现象回填 + AI 排障（工单 module-hwcheck/08）——本功能里**唯一**
     # 的 LLM 入口（其余全程确定性渲染）。同步端点（不是 SSE）：模型不可用
@@ -2738,8 +2539,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         symptom = _require_str(payload, "symptom")
         checked_ids = tuple(_require_str_list(payload, "checked_ids"))
         config = read_hwcheck_project(output_dir)
-        view = _hwcheck_view(context, config)
-        board = view["board"]
+        app_config = _hwcheck_library_config(context)
+        view = hwcheck_view(
+            config,
+            module_library_dir=app_config.module_library_dir,
+            masters_dir=app_config.masters_dir,
+            recipe_path=context.hwcheck_recipe_path,
+        )
+        board = view.board
         triage_context = build_triage_context(
             platform=config.platform,
             devices=hwcheck_devices(config),
@@ -2753,7 +2560,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             checklist=[item.to_dict() for item in render_checklist(config)],
             checked_ids=checked_ids,
             symptom=symptom,
-            known_modules=view["known_slugs"],
+            known_modules=view.known_slugs,
         )
         record = read_hwcheck_record(output_dir)
         record = record_with_checked(record, checked_ids)

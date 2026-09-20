@@ -1,0 +1,74 @@
+# 工单 webapp-consolidation/01 —— 验证读数（2026-09-20，评审后终版）
+
+## 1. 红证：结构钉判据（迁移前为红、迁移后为绿）
+
+探针 `.scratch/webapp-consolidation/probe-01-pin-red-proof.py`，原始输出
+`verify-01-pin-red-proof.txt`：
+
+- HEAD 版（迁移前）泄漏 **11** 条装配原语：`hwcheck_recipe` 5（`SECTION_TAG` /
+  `interface_names` / `load_recipes` / `platform_header_names` / `resolve_sections`）、
+  `hwcheck_board` 2（`hwcheck_board_view` / `hwcheck_pin_plan`）、`hwcheck_console` 2、
+  `hwcheck_generic` 2
+- 工作树（迁移后）泄漏 **0** 条；留下的 import 面 = 配置 / 渲染 / `hwcheck_view` / 落点 / 记录
+
+判据本体只有一份：`tests/test_hwcheck_assembly_home.py` 的 `_hwcheck_import_leaks`
+（探针 import 它，不抄第二份）。
+
+## 2. 行为零变化
+
+- `tests/test_hwcheck*.py`（8 个文件）：**363 passed**（基线 354 + 本单新增 9 条）
+- **既有判据零改动**：`git diff HEAD -- tests/` 的删除行只有 **4 行注释**里的旧符号名
+  （`_hwcheck_view` → `hwcheck_view` / `hwcheck_board.hwcheck_view`、`_hwcheck_recipes` →
+  `load_library_recipes`），**没有一行断言被改**
+- 全量 `python -m pytest -n auto -q`：**4996 passed, 1 skipped**（100.1s）
+  （对照：干净 worktree 检出 HEAD 版 → 4983 passed / **5 skipped**；差的 4 条是
+  `sources/materials` 资料库缺失导致的 skip——该目录独立分发、不在 git 里，
+  所以**别拿 worktree 当全量基线**。4996 − 9（本单新增）= 4987 = 4983 + 那 4 条）
+- 新增 9 条：直测缝 4（五字段+五键 / `require_pins=False` / 坏配方 / 库外 slug）+
+  端点载荷 = 域投影 1 + 四端点共用缺库 400 1 + 回读求值顺序 1 + 结构钉 2（含合成片段红证）
+
+## 3. 评审驱动的一条红证（回读端点求值顺序）
+
+`test_project_endpoint_reads_main_c_before_taking_the_library_config`：把 `hwcheck_view`
+提到 `read_project_main_c` 之前（临时改动）→ 该用例**变红**；改回从前的顺序 → 绿。
+（临时改动已还原，工作树无 `TEMP-RED-PROOF` 残留。）
+
+## 4. 类型面：零新增
+
+`python -m mypy src`：工作树 **21 errors / 9 files**，HEAD 基线（干净 worktree 检出）同为
+**21 errors / 9 files**；唯一差异是一条**同源搬家**（`webapp.py:912` → `hwcheck_board.py:502`，
+`set[str]` 传给 `Sequence[str]` 的同一行代码），无新增。
+
+## 5. 前端门禁
+
+`node --test "tests/js/*.test.mjs"` → **1686 passed / 0 failed**。产品前端（`static/`）零改动；
+`tests/js/hwcheck.test.mjs` 只改了 1 处注释里的旧符号名（如实记账在工单 Comments）。
+
+## 6. 改动面
+
+```
+ CONTEXT.md                              |   2 +-
+ src/contest_generator/hwcheck_board.py  | 181 +++++++++++++++-
+ src/contest_generator/hwcheck_recipe.py | 104 ++++++++-
+ src/contest_generator/webapp.py         | 292 +++-------------------------
+ tests/js/hwcheck.test.mjs               |   4 +-
+ tests/test_hwcheck.py                   |  96 +++++-
+ tests/test_hwcheck_board.py             | 166 ++++++++-
+ tests/test_hwcheck_assembly_home.py     |  96 ++++++   （新文件）
+```
+
+四条装配 helper 消失于 webapp（约 483 行）；域层新增 `hwcheck_view` / `HwCheckView` /
+`read_master_syscfg`（hwcheck_board）与 `load_library_recipes` / `sections_payload`
+（hwcheck_recipe）。
+
+## 7. 纪律
+
+本单**一次服务器都没起**（验证全走进程内 TestClient + pytest + node）；跑完 8000/8020/8021/8791
+都未占用，无残留 python（未新增任何需要重启才可见的东西）。
+
+## 8. 工具坑（自记一笔）
+
+首次写这份读数用了 PowerShell 双引号 here-string（`@"..."@`）——文中的 Markdown 行内反引号
+被 PowerShell 当转义符吃掉（`` `v `` → 垂直制表、`` `t `` → 制表、`` `r `` → 回车），
+文件写出即损坏（`tests` 变 `ests`、`verify` 变 `erify`）。**带反引号的文本别走 PowerShell
+here-string**，用文件写入工具。
