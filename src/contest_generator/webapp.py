@@ -175,13 +175,13 @@ from .hwcheck import (
 )
 from .hwcheck_board import hwcheck_board_view
 from .hwcheck_console import build_console_table, console_payload
+from .hwcheck_generic import generic_message, resolve_generic_sections
 from .hwcheck_recipe import (
     SECTION_TAG,
     interface_names,
     load_recipes,
     platform_header_names,
     resolve_sections,
-    unspecialized_message,
 )
 from .hwcheck_store import (
     DEFAULT_RECENT_LIMIT,
@@ -811,17 +811,19 @@ def _hwcheck_recipes(
 
 
 def _hwcheck_view(ctx: AppContext, config: HwCheckConfig) -> dict:
-    """检测页的**一次投影**（板块载荷）：板侧视图 + 逐件专精小节 + 未专精点名 +
+    """检测页的**一次投影**（板块载荷）：板侧视图 + 逐件专精小节 + 通用降级小节 +
     同组互斥组。
 
-    返回的字典里 `board` = 载荷的四个键（`wiring` / `sections` / `unspecialized` /
-    `exclusive_groups`，端点用 `**board` 展开），`sections` = 域层的 `RecipeSection`
-    对象（生成端点还要拿它去渲染 main.c，不必再解析一遍）。
+    返回的字典里 `board` = 载荷的五个键（`wiring` / `sections` / `unspecialized` /
+    `console` / `exclusive_groups`，端点用 `**board` 展开），`sections` / `generic`
+    = 域层对象（生成端点还要拿它们去渲染 main.c，不必再解析一遍）。
 
     三个端点（preview / generate / project）共用这一处装配：读库一次 → 展开
     依赖（`resolve_dependencies` 的顺序即进工程顺序）→ 配方校验 → 板侧投影
     （`hwcheck_board.hwcheck_board_view`）→ 小节解析（`resolve_sections`，顺序
-    走既有 bring-up 排序）。各端点各拼一遍就是三份判据来源，迟早漂。
+    走既有 bring-up 排序）→ **通用降级小节**（`resolve_generic_sections`，工单 07：
+    专精件之外的那些件，判据全在库内已声明的事实上）。各端点各拼一遍就是三份
+    判据来源，迟早漂。
 
     库外 slug 由 `resolve_dependencies` 大声失败（UnknownModuleError 已登记 400）；
     配方坏了由 `load_recipes` 大声失败（HwCheckError 400 中文）——两条都不静默，
@@ -840,10 +842,16 @@ def _hwcheck_view(ctx: AppContext, config: HwCheckConfig) -> dict:
     )
     sections = resolve_sections(config.platform, devices, recipes, manifests)
     specialized = {section.slug for section in sections}
-    missing = {item["slug"] for item in view.missing}
+    # 通用降级（工单 07）：专精件之外、且在本平台有条目的那些件。没有本平台
+    # 条目的件由 view.missing 那条路点名（两处都说一遍 = 两个口径）。
+    generic = resolve_generic_sections(
+        config.platform, devices, specialized, manifests,
+        app_config.module_library_dir,
+    )
     # 串口命令台（工单 06）：页面与产物读**同一张表**（`build_console_table`
     # 是纯函数，这里与 `render_main_c` 各建一次，逐字相同）。冲突照旧在这里
     # 就红 → 400 中文，学生不必等到点「生成」才知道两个器件抢了同一个字符。
+    # **只吃专精小节**：通用件没有配方，自然没有命令字符（07 的接口备忘）。
     console = build_console_table(sections)
     return {
         "board": {
@@ -851,9 +859,13 @@ def _hwcheck_view(ctx: AppContext, config: HwCheckConfig) -> dict:
             "sections": _hwcheck_sections_payload(sections),
             "console": console_payload(config.debug_uart, console),
             "unspecialized": [
-                {"slug": slug, "message": unspecialized_message(slug)}
-                for slug in devices
-                if slug not in specialized and slug not in missing
+                {
+                    "slug": section.slug,
+                    "label": section.label,
+                    "plan": section.plan_text,
+                    "message": generic_message(section),
+                }
+                for section in generic
             ],
             # 同组互斥（工单 05）：按**平台**投影的库级功能组——判据单源是库内
             # manifest 的 exclusive_group（`collect_exclusive_groups`，与赛题侧
@@ -868,6 +880,7 @@ def _hwcheck_view(ctx: AppContext, config: HwCheckConfig) -> dict:
             ],
         },
         "sections": sections,
+        "generic": generic,
     }
 
 
@@ -2466,7 +2479,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "debug_uart": config.debug_uart,
             "oled": config.oled,
             "devices": list(hwcheck_devices(config)),
-            "main_c": render_main_c(config, board["sections"]),
+            "main_c": render_main_c(config, board["sections"], board["generic"]),
             "output_hint": render_output_hint(config),
             **board["board"],
         }
@@ -2517,7 +2530,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 app_config.ccs_compiler_dir,
                 app_config.ccs_sysconfig_cli,
             )
-        main_c = render_main_c(config, board["sections"])
+        main_c = render_main_c(config, board["sections"], board["generic"])
         # 同键互斥（既有 _generation_guard）：同一秒连点两次时第二个请求 409 收场，
         # 不两个请求同时往同一个新目录里写（那才会真的写坏工程）。
         with _generation_guard(context, f"hwcheck:{output_dir}"):

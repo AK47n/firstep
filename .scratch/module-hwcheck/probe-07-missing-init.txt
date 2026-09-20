@@ -1,0 +1,50 @@
+（本跑只为复核 12 格；已专精格 [('led', 'mspm0'), ('led', 'stm32'), ('ml_mpu6050', 'mspm0'), ('ml_mpu6050', 'stm32'), ('oled', 'mspm0'), ('oled', 'stm32')]）
+
+adc        stm32  files=[]
+    own_headers=[]
+    `<adc_init>` 在母版头里? True   在该平台接口集里? True
+    接口集里的 *_init 候选（前 8）：['I2C_Init', 'NVIC_init', 'OLED_Init', 'adc_init', 'adc_pin_init', 'exti_init', 'gpio_init', 'led_init']
+config     mspm0  files=['code/config_mspm0.h']
+    own_headers=['code/config_mspm0.h']
+    `<config_init>` 在母版头里? False   在该平台接口集里? False
+    接口集里的 *_init 候选（前 8）：[]
+config     stm32  files=['code/config.h']
+    own_headers=['code/config.h']
+    `<config_init>` 在母版头里? False   在该平台接口集里? False
+    接口集里的 *_init 候选（前 8）：['I2C_Init', 'NVIC_init', 'OLED_Init', 'adc_init', 'adc_pin_init', 'exti_init', 'gpio_init', 'led_init']
+delay      mspm0  files=['code/delay.c', 'code/delay.h']
+    own_headers=['code/delay.h']
+    `<delay_init>` 在母版头里? False   在该平台接口集里? False
+    接口集里的 *_init 候选（前 8）：[]
+delay      stm32  files=[]
+    own_headers=[]
+    `<delay_init>` 在母版头里? False   在该平台接口集里? False
+    接口集里的 *_init 候选（前 8）：['I2C_Init', 'NVIC_init', 'OLED_Init', 'adc_init', 'adc_pin_init', 'exti_init', 'gpio_init', 'led_init']
+huidu      mspm0  files=['code/huidu.c', 'code/huidu.h']
+    own_headers=['code/huidu.h']
+    `<huidu_init>` 在母版头里? False   在该平台接口集里? False
+    接口集里的 *_init 候选（前 8）：[]
+k230       mspm0  files=[]
+    own_headers=[]
+    `<k230_init>` 在母版头里? False   在该平台接口集里? False
+    接口集里的 *_init 候选（前 8）：[]
+k230       stm32  files=[]
+    own_headers=[]
+    `<k230_init>` 在母版头里? False   在该平台接口集里? False
+    接口集里的 *_init 候选（前 8）：['I2C_Init', 'NVIC_init', 'OLED_Init', 'adc_init', 'adc_pin_init', 'exti_init', 'gpio_init', 'led_init']
+ntb_time   mspm0  files=['code/ntb_time.c', 'code/ntb_time.h']
+    own_headers=['code/ntb_time.h']
+    `<ntb_time_init>` 在母版头里? False   在该平台接口集里? False
+    接口集里的 *_init 候选（前 8）：[]
+ntb_time   stm32  files=['code/ntb_time_stm32.c', 'code/ntb_time_stm32.h']
+    own_headers=['code/ntb_time_stm32.h']
+    `<ntb_time_init>` 在母版头里? False   在该平台接口集里? False
+    接口集里的 *_init 候选（前 8）：['I2C_Init', 'NVIC_init', 'OLED_Init', 'adc_init', 'adc_pin_init', 'exti_init', 'gpio_init', 'led_init']
+uart       mspm0  files=['code/uart.c', 'code/uart.h']
+    own_headers=['code/uart.h']
+    `<uart_init>` 在母版头里? False   在该平台接口集里? False
+    接口集里的 *_init 候选（前 8）：[]
+uart       stm32  files=['code/uart_stm32.c', 'code/uart_stm32.h']
+    own_headers=['code/uart_stm32.h']
+    `<uart_init>` 在母版头里? True   在该平台接口集里? True
+    接口集里的 *_init 候选（前 8）：['I2C_Init', 'NVIC_init', 'OLED_Init', 'adc_init', 'adc_pin_init', 'exti_init', 'gpio_init', 'led_init']

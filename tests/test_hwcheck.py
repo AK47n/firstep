@@ -30,14 +30,21 @@ from contest_generator.hwcheck import (
     render_main_c,
     render_output_hint,
 )
+from contest_generator.hwcheck_generic import (
+    GENERIC_LABEL,
+    GenericSection,
+    plan_generic_section,
+)
 from contest_generator.hwcheck_recipe import (
     SECTION_TAG,
     RecipeProbe,
     RecipeRead,
     RecipeSection,
+    c_string,
     escape_c_string,
     render_recipe_section,
 )
+from contest_generator.library import list_modules
 from contest_generator.manifest import ModuleManifest
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from contest_generator.readme import parse_pin_table
@@ -1248,11 +1255,18 @@ def test_sections_add_their_calls_and_a_summary_to_main():
 
 
 def test_no_sections_keeps_the_framework_only_form():
-    """没有专精件：不渲染任何逐件小节，也不渲染假的"0 件通过"汇总。"""
+    """没有专精件：不渲染任何逐件小节，也不渲染假的"0 件通过"汇总。
+
+    ⚠ 工单 07 改写了文件头那一句（原话是"选了器件却没有配方时会如实写在这里"
+    ——通用降级落地后那句话**变成了假话**：没配方的器件现在真出小节，只是不带
+    `[专精]`）。所以这里钉的是新实话："一件器件都没测"。陈旧文案当场修是本仓库
+    的既有标准（04/05 的评审同款）。
+    """
     code = render_main_c(SERIAL_ONLY, ())
     assert "hwcheck_check_" not in code
+    assert "hwcheck_generic_" not in code
     assert "hwcheck_summary();" not in code
-    assert "没有专精件" in code
+    assert "一件器件都没测" in code
     assert "hwcheck_section(" not in code
 
 
@@ -1274,6 +1288,188 @@ def test_sections_require_an_output_channel_to_be_rendered():
     assert "led_init(LED_RED)" in code   # 心跳仍在（那是框架）
     # 文件头不得列出"这一趟测了 led"——它不会被跑
     assert "[专精] led" not in code
+
+
+# ---------------------------------------------------------------------------
+# 工单 module-hwcheck/07：通用降级小节接进框架
+# ---------------------------------------------------------------------------
+
+
+def _generic_stm32(slug: str = "sht20") -> list[GenericSection]:
+    """真实库的一格通用件（sht20 × stm32，含总线扫描）——判据用真数据。"""
+    library = Path(__file__).resolve().parents[1] / "library" / "modules"
+    manifest = next(m for m in list_modules(library) if m.slug == slug)
+    entry = manifest.platforms[PLATFORM_STM32]
+    headers = [
+        (rel, (library / slug / rel).read_text(encoding="utf-8"))
+        for rel in entry.files if rel.lower().endswith(".h")
+    ]
+    return [plan_generic_section(PLATFORM_STM32, manifest, headers)]
+
+
+def test_generic_sections_render_with_their_own_header_and_no_specialized_tag():
+    """通用小节：函数本体 + main() 里调用 + 自带 include + 文件头如实标注。
+
+    `[专精]` 一个字都不许出现在通用件那一节（外观可区分是票面验收线）——
+    专精标记只属于"真测了"的那几件。
+    """
+    code = render_main_c(SERIAL_ONLY, (), _generic_stm32())
+    assert '#include "sht20_stm32.h"' in code
+    assert "static void hwcheck_generic_sht20(void)" in code
+    assert "sht20_init();" in code
+    assert "hwcheck_i2c_scan(" in code
+    body = code.split("int main(void)", 1)[1]
+    assert "hwcheck_generic_sht20();" in body
+    assert "hwcheck_summary();" in body
+    head = code.split("int main(void)", 1)[0]
+    assert GENERIC_LABEL in unescape_c_string(head)
+    assert "sht20" in head
+    assert SECTION_TAG not in code
+
+
+def test_generic_only_form_renders_the_shared_runtime_but_not_the_recipe_one():
+    """只有通用件时：共用运行时（分节 / 细节 / 汇总）照渲染，专精判定不渲染。
+
+    判定走 `hwcheck_verdict` 的只有"初始化带期望"与"通信探头"两类，通用件
+    一个都没有——渲染了就是死代码（ARMCC `#177-D`）。但 `hwcheck_section` /
+    `hwcheck_detail` / `hwcheck_verdict_probe_none` / `hwcheck_summary` 必须
+    在（通用小节真的会调它们，缺一个就是悬空调用）。
+
+    ⚠ 断言必须钉**定义**（`static void hwcheck_verdict_probe_none(...)`）而不是
+    "名字出现在产物里"：调用的那个名字也在产物里——只查名字的写法在本单的判据
+    强度探针里被证明是**摆设**（注入"needs_probe_none 不算通用件"后它照样绿，
+    见 `negative-verify-07.py` 的 P 条）。
+    """
+    code = render_main_c(SERIAL_ONLY, (), _generic_stm32())
+    assert "static void hwcheck_section(const char *title)" in code
+    assert "static void hwcheck_detail(const char *text)" in code
+    assert "static void hwcheck_verdict_probe_none(const char *hint)" in code
+    assert "static void hwcheck_summary(void)" in code
+    assert "hwcheck_verdict(" not in code
+    assert "hwcheck_summary_fail" not in code
+
+
+def test_generic_only_artifact_calls_no_undefined_helper():
+    """**悬空调用守卫**：产物里调用的每个 `hwcheck_*` 都必须有对应定义。
+
+    这条抓的是一整类"两半对不上"的缺陷：调用侧渲染了、定义侧按需渲染时漏了
+    ——生成的程序调用一个从未定义的函数，**编译期才发现**（学生那边就是一句
+    `undefined symbol`，而生成的 main.c 是给他读的）。工单 07 的判据强度探针
+    实测抓到过一次（`needs_probe_none` 忘了算上通用件），所以按调用/定义两面查。
+    """
+    for generic in (_generic_stm32("sht20"), _generic_stm32("beep")):
+        code = render_main_c(SERIAL_ONLY, (), generic)
+        defined = set(re.findall(
+            r"^\s*static\s+[A-Za-z_]\w*\s+\*?([A-Za-z_]\w*)\s*\(",
+            code, re.MULTILINE,
+        ))
+        called = {name for name in _called_names(code) if name.startswith("hwcheck_")}
+        assert called <= defined, sorted(called - defined)
+
+
+def test_every_reported_line_fits_the_line_buffer():
+    """**行缓冲守卫**：任何一条整行文案都不许超过 `hwcheck_line[128]`。
+
+    溢出保护是框架刻意的（宁可截一行，不让程序跑飞），但**截在哪儿**是学生看到
+    的东西：中文在 UTF-8 下一字 3 字节，超长会截在字中间——工单 07 的行为探针
+    真跑时抓到「无应答：…（有没有接反）」那一行末尾变成半个多字节字符（终端
+    显示 `�`）。所以整行文案的字节数必须留出余量。
+
+    判据 = 产物里每个 `hwcheck_report("…")` 的**字符串字面量**（八进制转义还原
+    成原文再数字节；单个字符的碎片行也一并数，反正它们更短）。
+    """
+    buffer_bytes = 128
+    variants = (
+        (SERIAL_ONLY, (), _generic_stm32("sht20")),
+        (SERIAL_ONLY, (), _generic_stm32("beep")),
+        (SERIAL_ONLY, (), _generic_stm32("servo")),
+        (SERIAL_ONLY, (LED_STM32,), _generic_stm32("sht20")),
+        (SERIAL_ONLY, (LED_STM32,), ()),
+        (SERIAL_ONLY, (_mpu_section(PLATFORM_STM32),), ()),
+        (BOTH, (_mpu_section(PLATFORM_STM32), LED_STM32), _generic_stm32("sht20")),
+    )
+    for config, sections, generic in variants:
+        code = render_main_c(config, sections, generic)
+        for literal in re.findall(r'hwcheck_report\(("(?:[^"\\]|\\.)*")\)', code):
+            text = decode_c_string(literal.strip('"'))
+            size = len(text.encode("utf-8"))
+            assert size < buffer_bytes, (
+                f"这一行文案 {size} 字节，会撞上 {buffer_bytes} 字节的行缓冲："
+                f"{text!r}"
+            )
+
+
+def test_generic_sections_require_an_output_channel_too():
+    """没有输出通道时通用小节同样不渲染（渲染了也没人看得见，见 04 的同款判据）。"""
+    code = render_main_c(LAMP_ONLY, (), _generic_stm32())
+    assert "hwcheck_generic_sht20" not in code
+    assert "hwcheck_report" not in code
+    assert "hwcheck_summary" not in code
+    assert "sht20_init();" not in code
+
+
+def test_a_scan_less_generic_run_declares_no_ping_helper():
+    """按需渲染：没有 I2C 扫描件时不留 ping 助手（0 warning 的验收线）。"""
+    code = render_main_c(SERIAL_ONLY, (), _generic_stm32("ws2812"))
+    assert "hwcheck_i2c_ping" not in code
+    assert "hwcheck_i2c_scan" not in code
+    assert "ws2812_init();" in code
+    with_scan = render_main_c(SERIAL_ONLY, (), _generic_stm32("sht20"))
+    assert "hwcheck_i2c_ping" in with_scan
+
+
+def test_the_console_never_dispatches_a_generic_section():
+    """通用件**不进命令表**（06 的接口备忘）：没有配方就没有命令字符可敲。
+
+    判据 = 通用小节函数在产物里**只被 main() 调用一次**（命令台的 switch 里
+    一次都不许出现）——出现了就是"页面没有这个命令、板上却有"的分家。
+    """
+    code = render_main_c(
+        HwCheckConfig(platform=PLATFORM_STM32, debug_uart=True, oled=False),
+        (), _generic_stm32())
+    assert "hwcheck_console_poll" in code          # 命令台在（有串口就有）
+    assert code.count("hwcheck_generic_sht20();") == 1
+    assert "hwcheck_check_sht20" not in code
+
+
+def test_a_mix_of_specialized_and_generic_sections_renders_both_in_order():
+    """两批同堂：先专精小节、再通用小节，两边都在 main() 里被调用。
+
+    顺序不是风格问题：专精件带板端判定，是这一趟的主结果；通用件是走过场，
+    排在后面学生一眼看得出"哪些是真测的"。
+    """
+    code = render_main_c(SERIAL_ONLY, (LED_STM32,), _generic_stm32())
+    assert code.index("hwcheck_check_led") < code.index("hwcheck_generic_sht20")
+    body = code.split("int main(void)", 1)[1]
+    assert "hwcheck_check_led();" in body
+    assert "hwcheck_generic_sht20();" in body
+    assert "hwcheck_check_led();" in body.split("hwcheck_generic_sht20();")[0]
+    head = code.split("int main(void)", 1)[0]
+    assert "[专精] led" in head and "sht20" in head
+
+
+def test_a_bus_scan_brings_in_pin_config_and_resolves_it():
+    """**真机判例**：扫描要用工程根的引脚宏，而 `headfile.h` **不带** pin_config.h。
+
+    宿主机行为探针（`.scratch/module-hwcheck/probe-07-scan-behaviour.py`）第一次跑
+    就报 `SHT20_SCL_GPIO undeclared`——真机 UV4 同样编不过。所以有扫描件时产物必须
+    自己 include `pin_config.h`，且这个头在**该平台的真实工程里解析得到**
+    （判据与 `test_every_include_resolves_in_that_platforms_real_project` 同一处：
+    母版树 ∪ 模块条目的头 ∪ 工具链外部头）。
+    """
+    code = render_main_c(SERIAL_ONLY, (), _generic_stm32("sht20"))
+    assert '#include "pin_config.h"' in code
+    known = (_platform_master_headers(PLATFORM_STM32)
+             | _platform_module_headers(PLATFORM_STM32)
+             | {"ti_msp_dl_config.h"})
+    unresolved = [
+        header for header in re.findall(r'#include\s+"([^"]+)"', code)
+        if header.lower() not in known
+    ]
+    assert unresolved == [], unresolved
+    # 没有扫描的形态不该平白多这一行（它不是这工程的一般依赖）
+    no_scan = render_main_c(SERIAL_ONLY, (), _generic_stm32("beep"))
+    assert '#include "pin_config.h"' not in no_scan
 
 
 def test_preview_still_fails_loudly_when_the_recipe_file_is_broken(
@@ -1411,24 +1607,30 @@ def test_summary_counts_three_buckets_on_the_board():
 def test_recipe_rendering_never_calls_a_model():
     """渲染全程零 LLM（票面验收项，结构断言）。
 
-    判据：整条渲染路径只吃纯函数（配方解析 json / 小节渲染），`hwcheck.py` 与
-    `hwcheck_recipe.py` **都不 import LLM 层**，`render_main_c` / `load_recipes`
-    的签名里也没有 llm 参数。
+    判据：整条渲染路径只吃纯函数（配方解析 json / 小节渲染），`hwcheck.py` /
+    `hwcheck_recipe.py` / `hwcheck_generic.py`（工单 07 的通用降级）**都不 import
+    LLM 层**，`render_main_c` / `load_recipes` / `resolve_generic_sections` 的
+    签名里也没有 llm 参数。
     """
     import inspect
 
     from contest_generator import hwcheck as hwcheck_module
+    from contest_generator import hwcheck_generic as generic_module
     from contest_generator import hwcheck_recipe as recipe_module
 
-    for module in (hwcheck_module, recipe_module):
+    for module in (hwcheck_module, recipe_module, generic_module):
         source = inspect.getsource(module)
         assert "from .llm" not in source
         assert "import llm" not in source
         assert "llm." not in source
-    params = inspect.signature(hwcheck_module.render_main_c).parameters
-    assert not [name for name in params if "llm" in name.lower()]
-    params = inspect.signature(recipe_module.load_recipes).parameters
-    assert not [name for name in params if "llm" in name.lower()]
+    for function in (
+        hwcheck_module.render_main_c,
+        recipe_module.load_recipes,
+        generic_module.resolve_generic_sections,
+        generic_module.plan_generic_section,
+    ):
+        params = inspect.signature(function).parameters
+        assert not [name for name in params if "llm" in name.lower()], function
 
 
 def test_preview_payload_carries_the_specialized_sections(real_library_client):
@@ -1465,11 +1667,16 @@ def test_preview_payload_carries_the_specialized_sections(real_library_client):
 def test_preview_reports_devices_without_a_recipe_as_unspecialized(
     real_library_client,
 ):
-    """没配方的器件如实标"未专精"（**不渲染它的小节**，但绝不静默）。
+    """没配方的器件如实标"未专精"，并说清这一趟对它做什么。
 
     ⚠ 夹具用的未专精件要挑**这一版真的还没有配方**的：工单 05 起
     `ml_mpu6050` 已经专精了（它正是那一单要闭环的器件），拿它当"未专精"的样本
     会变成一条假红——本用例改用 `beep`（本平台有条目、暂无配方）。
+
+    ⚠ 工单 07 改了这条的口径：04 那一版这里钉的是"**不渲染**它的小节"
+    （通用降级还没做，`unspecialized_message` 明说"本版检测程序不会给它出检测
+    小节"）。07 落地后未专精件**真出小节**（只验总线和初始化），所以断言换成
+    新的实话：官方标注 + 这一趟的真动作，且措辞与产物注释同一句（单源）。
     """
     client, _ = real_library_client
     body = client.post(
@@ -1479,9 +1686,82 @@ def test_preview_reports_devices_without_a_recipe_as_unspecialized(
     ).json()
     assert [item["slug"] for item in body["sections"]] == ["led"]
     assert [item["slug"] for item in body["unspecialized"]] == ["beep"]
-    message = body["unspecialized"][0]["message"]
-    assert "beep" in message
-    assert "不会给它出检测小节" in message      # 说清"这一趟不真测它"
+    entry = body["unspecialized"][0]
+    assert entry["label"] == GENERIC_LABEL
+    assert GENERIC_LABEL in entry["message"]
+    assert "beep_init()" in entry["plan"]                 # 真动作，不是走过场话术
+    # 没有输出通道 → 通用小节不渲染（渲染了也没人看得见，与专精件同一条判据）
+    assert "hwcheck_generic_beep" not in body["main_c"]
+    # 有串口那一趟：小节真进产物，检测页那句标注与产物注释**同一句**（单源）
+    serial = client.post(
+        "/api/hwcheck/preview",
+        json={"platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
+              "devices": ["led", "beep"]},
+    ).json()
+    code = serial["main_c"]
+    assert c_string(GENERIC_LABEL) in code
+    assert "hwcheck_generic_beep" in code
+    assert "beep_init();" in code
+    assert SECTION_TAG not in code.split("hwcheck_generic_beep")[1]
+
+
+def test_preview_generic_i2c_device_carries_its_bus_scan(real_library_client):
+    """端点这一层：软 I2C 件选进来就有"扫这一件那条总线"的小节与载荷。"""
+    client, _ = real_library_client
+    body = client.post(
+        "/api/hwcheck/preview",
+        json={"platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
+              "devices": ["sht20"]},
+    ).json()
+    assert body["sections"] == []
+    entry = body["unspecialized"][0]
+    assert entry["slug"] == "sht20"
+    assert "总线地址扫描" in entry["plan"]
+    assert "hwcheck_i2c_scan(" in body["main_c"]
+    assert "SHT20_SCL_GPIO" in body["main_c"]
+    # 命令表里没有它（通用件没有配方 → 没有命令字符，06 的接口备忘）
+    assert body["console"]["commands"] == []
+
+
+def test_generate_writes_the_generic_sections_into_main_c(
+    real_library_client, tmp_path
+):
+    """真生成：盘上的 main.c 里有通用小节，且与载荷逐字一致。"""
+    client, _ = real_library_client
+    parent = tmp_path / "out"
+    parent.mkdir()
+    response = client.post(
+        "/api/hwcheck/generate",
+        json={"platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
+              "devices": ["beep"], "parent_dir": str(parent)},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    on_disk = (Path(body["output_dir"]) / "main.c").read_text(encoding="utf-8")
+    assert on_disk == body["main_c"]
+    assert body["main_c"].count("hwcheck_generic_beep();") == 1
+    assert GENERIC_LABEL in unescape_c_string(body["main_c"])
+    # 未专精件仍进工程（接线表与 README 同源的前提）
+    assert "beep" in body["modules"]
+
+
+def test_project_endpoint_reads_back_the_generic_sections(
+    real_library_client, tmp_path
+):
+    """回读也带通用小节：刷新页面后"这一趟对它做什么"不丢。"""
+    client, _ = real_library_client
+    parent = tmp_path / "out"
+    parent.mkdir()
+    generated = client.post(
+        "/api/hwcheck/generate",
+        json={"platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
+              "devices": ["beep"], "parent_dir": str(parent)},
+    ).json()
+    body = client.get(
+        "/api/hwcheck/project", params={"output_dir": generated["output_dir"]},
+    ).json()
+    assert [item["slug"] for item in body["unspecialized"]] == ["beep"]
+    assert "hwcheck_generic_beep" in body["main_c"]
 
 
 def _strip_comments_keep_literals(code: str) -> str:

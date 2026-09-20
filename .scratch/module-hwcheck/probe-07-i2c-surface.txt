@@ -1,0 +1,91 @@
+=== ads1115 × stm32 ===
+  pin i2c_scl   PA6    macros=['ADS1115_SCL_GPIO', 'ADS1115_SCL_PIN']  note=''
+  pin i2c_sda   PA7    macros=['ADS1115_SDA_GPIO', 'ADS1115_SDA_PIN']  note=''
+  自己的头文件函数名（8）：['ads1115_init', 'ads1115_read', 'ads1115_read_voltage', 'ads1115_set_address', 'ads1115_set_data_rate', 'ads1115_set_gain', 'ads1115_write_config', 'ads1115_write_register']
+=== ags10 × stm32 ===
+  pin i2c_scl   PA6    macros=['AGS10_SCL_GPIO', 'AGS10_SCL_PIN']  note=''
+  pin i2c_sda   PA7    macros=['AGS10_SDA_GPIO', 'AGS10_SDA_PIN']  note=''
+  自己的头文件函数名（2）：['ags10_init', 'ags10_read']
+=== aht10 × stm32 ===
+  pin i2c_scl   PA6    macros=['AHT10_SCL_GPIO', 'AHT10_SCL_PIN']  note=''
+  pin i2c_sda   PA7    macros=['AHT10_SDA_GPIO', 'AHT10_SDA_PIN']  note=''
+  自己的头文件函数名（4）：['aht10_init', 'aht10_read', 'aht10_read_humidity', 'aht10_read_temperature']
+=== at24c02 × stm32 ===
+  pin i2c_scl   PA6    macros=['AT24C02_SCL_GPIO', 'AT24C02_SCL_PIN']  note=''
+  pin i2c_sda   PA7    macros=['AT24C02_SDA_GPIO', 'AT24C02_SDA_PIN']  note=''
+  自己的头文件函数名（6）：['at24c02_init', 'at24c02_read_block', 'at24c02_read_byte', 'at24c02_wait_write_done', 'at24c02_write_byte', 'at24c02_write_page']
+=== bh1750 × stm32 ===
+  pin i2c_scl   PA6    macros=['BH1750_SCL_GPIO', 'BH1750_SCL_PIN']  note=''
+  pin i2c_sda   PA7    macros=['BH1750_SDA_GPIO', 'BH1750_SDA_PIN']  note=''
+  自己的头文件函数名（3）：['bh1750_init', 'bh1750_read_lux', 'bh1750_start_measure']
+=== bmp180 × stm32 ===
+  pin i2c_scl   PA6    macros=['BMP180_SCL_GPIO', 'BMP180_SCL_PIN']  note=''
+  pin i2c_sda   PA7    macros=['BMP180_SDA_GPIO', 'BMP180_SDA_PIN']  note=''
+  自己的头文件函数名（3）：['bmp180_init', 'bmp180_read', 'bmp180_read_altitude']
+=== hmc5883l × stm32 ===
+  pin i2c_scl   PA6    macros=['HMC5883L_SCL_GPIO', 'HMC5883L_SCL_PIN']  note=''
+  pin i2c_sda   PA7    macros=['HMC5883L_SDA_GPIO', 'HMC5883L_SDA_PIN']  note=''
+  自己的头文件函数名（4）：['hmc5883l_heading_from_xy', 'hmc5883l_init', 'hmc5883l_read', 'hmc5883l_read_heading']
+=== ml_mpu6050 × mspm0 ===
+  pin i2c_scl   PA1    macros=[]  note=''
+  pin i2c_sda   PA0    macros=[]  note=''
+  自己的头文件函数名（74）：['DMP_Init', 'DMP_Read_Data', 'MPU_Read_Len', 'MPU_Write_Len', 'dmp_enable_6x_lp_quat', 'dmp_enable_feature', 'dmp_enable_gyro_cal', 'dmp_enable_lp_quat', 'dmp_get_enabled_features', 'dmp_get_fifo_rate', 'dmp_get_pedometer_step_count', 'dmp_get_pedometer_walk_time', 'dmp_load_motion_driver_firmware', 'dmp_read_fifo', 'dmp_set_accel_bias', 'dmp_set_fifo_rate', 'dmp_set_gyro_bias', 'dmp_set_interrupt_mode', 'dmp_set_orientation', 'dmp_set_pedometer_step_count', 'dmp_set_pedometer_walk_time', 'dmp_set_shake_reject_thresh', 'dmp_set_shake_reject_time', 'dmp_set_shake_reject_timeout']
+=== ml_mpu6050 × stm32 ===
+  pin i2c_scl   PA11   macros=['I2C_GPIO', 'I2C_SCL_GPIO_Pin']  note=''
+  pin i2c_sda   PA12   macros=['I2C_GPIO', 'I2C_SDA_GPIO_Pin']  note=''
+  自己的头文件函数名（4）：['MPU6050_GetData', 'MPU6050_Init', 'MPU6050_Read', 'MPU6050_Write']
+=== mlx90614 × stm32 ===
+  pin i2c_scl   PA6    macros=['MLX90614_SCL_GPIO', 'MLX90614_SCL_PIN']  note=''
+  pin i2c_sda   PA7    macros=['MLX90614_SDA_GPIO', 'MLX90614_SDA_PIN']  note=''
+  自己的头文件函数名（3）：['mlx90614_init', 'mlx90614_read_ambient_temp', 'mlx90614_read_object_temp']
+=== ms5611 × stm32 ===
+  pin i2c_scl   PA6    macros=['MS5611_SCL_GPIO', 'MS5611_SCL_PIN']  note=''
+  pin i2c_sda   PA7    macros=['MS5611_SDA_GPIO', 'MS5611_SDA_PIN']  note=''
+  自己的头文件函数名（3）：['ms5611_init', 'ms5611_read', 'ms5611_read_altitude']
+=== oled × mspm0 ===
+  pin i2c_scl   PB2    macros=[]  note=''
+  pin i2c_sda   PB3    macros=[]  note=''
+  pin gpio_out  PA28   macros=[]  note=''
+  pin gpio_out  PA31   macros=[]  note=''
+  pin gpio_out  PA13   macros=[]  note=''
+  pin gpio_out  PB18   macros=[]  note=''
+  pin gpio_out  PA22   macros=[]  note=''
+  自己的头文件函数名（28）：['I2C_Start', 'I2C_Stop', 'I2C_WaitAck', 'OLED_Clear', 'OLED_ClearPoint', 'OLED_ColorTurn', 'OLED_DisPlay_Off', 'OLED_DisPlay_On', 'OLED_DisplayTurn', 'OLED_DrawCircle', 'OLED_DrawLine', 'OLED_DrawPoint', 'OLED_Init', 'OLED_Refresh', 'OLED_SPI_Init', 'OLED_ShowChar', 'OLED_ShowChinese', 'OLED_ShowNum', 'OLED_ShowPicture', 'OLED_ShowString', 'OLED_Test', 'OLED_WR_BP', 'OLED_WR_Byte', 'Send_Byte']
+=== oled × stm32 ===
+  pin i2c_scl   PB8    macros=['OLED_GPIO', 'OLED_SCL_Pin']  note=''
+  pin i2c_sda   PB9    macros=['OLED_GPIO', 'OLED_SDA_Pin']  note=''
+  pin gpio_out  PB4    macros=['OLED_SPI_SCL_GPIO', 'OLED_SPI_SCL_PIN']  note=''
+  pin gpio_out  PB5    macros=['OLED_SPI_SDA_GPIO', 'OLED_SPI_SDA_PIN']  note=''
+  pin gpio_out  PB6    macros=['OLED_SPI_DC_GPIO', 'OLED_SPI_DC_PIN']  note=''
+  pin gpio_out  PB7    macros=['OLED_SPI_CS_GPIO', 'OLED_SPI_CS_PIN']  note=''
+  pin gpio_out  PA5    macros=['OLED_SPI_RES_GPIO', 'OLED_SPI_RES_PIN']  note=''
+  自己的头文件函数名（10）：['oled_init_sh1106', 'oled_set_res', 'oled_spi_clear', 'oled_spi_init', 'oled_spi_refresh', 'oled_spi_show_char', 'oled_spi_show_num', 'oled_spi_show_number', 'oled_spi_show_string', 'oled_spi_show_text']
+=== pca9685 × stm32 ===
+  pin i2c_scl   PA6    macros=['PCA9685_SCL_GPIO', 'PCA9685_SCL_PIN']  note=''
+  pin i2c_sda   PA7    macros=['PCA9685_SDA_GPIO', 'PCA9685_SDA_PIN']  note=''
+  自己的头文件函数名（5）：['pca9685_init', 'pca9685_set_address', 'pca9685_set_angle', 'pca9685_set_freq', 'pca9685_set_pwm']
+=== qmc5883l × stm32 ===
+  pin i2c_scl   PA6    macros=['QMC5883L_SCL_GPIO', 'QMC5883L_SCL_PIN']  note=''
+  pin i2c_sda   PA7    macros=['QMC5883L_SDA_GPIO', 'QMC5883L_SDA_PIN']  note=''
+  自己的头文件函数名（4）：['qmc5883l_heading_from_xy', 'qmc5883l_init', 'qmc5883l_read', 'qmc5883l_read_heading']
+=== sgp30 × stm32 ===
+  pin i2c_scl   PA6    macros=['SGP30_SCL_GPIO', 'SGP30_SCL_PIN']  note=''
+  pin i2c_sda   PA7    macros=['SGP30_SDA_GPIO', 'SGP30_SDA_PIN']  note=''
+  自己的头文件函数名（2）：['sgp30_init', 'sgp30_read']
+=== sht20 × stm32 ===
+  pin i2c_scl   PA6    macros=['SHT20_SCL_GPIO', 'SHT20_SCL_PIN']  note=''
+  pin i2c_sda   PA7    macros=['SHT20_SDA_GPIO', 'SHT20_SDA_PIN']  note=''
+  自己的头文件函数名（2）：['sht20_init', 'sht20_read']
+=== sht30 × stm32 ===
+  pin i2c_scl   PA6    macros=['SHT30_SCL_GPIO', 'SHT30_SCL_PIN']  note=''
+  pin i2c_sda   PA7    macros=['SHT30_SDA_GPIO', 'SHT30_SDA_PIN']  note=''
+  自己的头文件函数名（4）：['sht30_init', 'sht30_read', 'sht30_read_humidity', 'sht30_read_temperature']
+=== tcs34725 × stm32 ===
+  pin i2c_scl   PA6    macros=['TCS34725_SCL_GPIO', 'TCS34725_SCL_PIN']  note=''
+  pin i2c_sda   PA7    macros=['TCS34725_SDA_GPIO', 'TCS34725_SDA_PIN']  note=''
+  自己的头文件函数名（9）：['tcs34725_disable', 'tcs34725_enable', 'tcs34725_init', 'tcs34725_read_reg', 'tcs34725_read_rgb', 'tcs34725_rgb_to_hsl', 'tcs34725_set_gain', 'tcs34725_set_integration_time', 'tcs34725_write_reg']
+=== vl53l0x × stm32 ===
+  pin i2c_scl   PA6    macros=['VL53L0X_SCL_GPIO', 'VL53L0X_SCL_PIN']  note=''
+  pin i2c_sda   PA7    macros=['VL53L0X_SDA_GPIO', 'VL53L0X_SDA_PIN']  note=''
+  pin gpio_out  PB0    macros=['VL53L0X_XSHUT_GPIO', 'VL53L0X_XSHUT_PIN']  note=''
+  自己的头文件函数名（45）：['LOG_FUNCTION_END', 'LOG_FUNCTION_END_FMT', 'LOG_FUNCTION_START', 'PALDevDataGet', 'PALDevDataSet', 'VL53L0X_COPYSTRING', 'VL53L0X_ErrLog', 'VL53L0X_FIXPOINT08TOFIXPOINT1616', 'VL53L0X_FIXPOINT102TOFIXPOINT1616', 'VL53L0X_FIXPOINT1616TOFIXPOINT08', 'VL53L0X_FIXPOINT1616TOFIXPOINT102', 'VL53L0X_FIXPOINT1616TOFIXPOINT313', 'VL53L0X_FIXPOINT1616TOFIXPOINT412', 'VL53L0X_FIXPOINT1616TOFIXPOINT53', 'VL53L0X_FIXPOINT1616TOFIXPOINT88', 'VL53L0X_FIXPOINT1616TOFIXPOINT97', 'VL53L0X_FIXPOINT313TOFIXPOINT1616', 'VL53L0X_FIXPOINT412TOFIXPOINT1616', 'VL53L0X_FIXPOINT53TOFIXPOINT1616', 'VL53L0X_FIXPOINT88TOFIXPOINT1616', 'VL53L0X_FIXPOINT97TOFIXPOINT1616', 'VL53L0X_GETARRAYPARAMETERFIELD', 'VL53L0X_GETDEVICESPECIFICPARAMETER', 'VL53L0X_GETPARAMETERFIELD']

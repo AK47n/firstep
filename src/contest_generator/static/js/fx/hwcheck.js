@@ -719,26 +719,56 @@ export function hwcheckSectionsHTML(sections) {
     + "（配方来自库内数据，不是 AI 写的）：</div>" + rows;
 }
 
-// hwcheckUnspecializedHTML(items)：选了但没有配方的器件 → **逐条点名**。
-// 不做通用降级的这一版必须说清"这一趟不会真测它"（spec「不假装测过」），
-// 不许它静默消失在检测清单里。
+// hwcheckUnspecializedHTML(items)：没配方的器件 → **通用降级小节**（工单 07）。
+//
+// 这一版它们真出小节了（只做初始化 +（I2C 类件）总线地址扫描），所以页面不能再
+// 说"不会给它出检测小节"（04 那句已经过期）。三件事都**只渲染服务端给的字**：
+// `label`（官方的「未专精：…」标注，单源）、`plan`（这一趟对它做什么）、
+// `message`（点名那句完整话）——前端一个字都不另写，也不给缺字段编兜底句
+// （缺 label 就不画那个徽章；编一句就是同一句话两处写、迟早两种措辞）。
+//
+// **外观可区分**（票面验收线）：专精件是实心 `[专精]` 徽章 + 判定档位，通用件是
+// 描边 `◻` + 「不算通过」——学生一眼能看出哪些结论可信、哪些只是走了个过场
+// （spec 用户故事 10）。
+//
+// ⚠ 容器类名**不是** `.hwcheck-section`：那个类是"专精小节"的选择器（页面、
+// 浏览器验收与静态守卫都按它数"这一趟真测了几件"），通用件套上它会让那个数
+// 数不清（真机验收当场抓到：`sectionCount` 从 1 变 2）。通用件用
+// `.hwcheck-generic`，只复用结构性的 `.hwcheck-section-head` / `.hwcheck-section-tag`
+// （那是"节的头 / 节的徽章"，与专精与否无关）。
 export function hwcheckUnspecializedHTML(items) {
   const list = Array.isArray(items) ? items : [];
   if (!list.length) return "";
-  return list.map((item) => {
-    const text = (item && (item.message || item.slug)) || "";
-    return `<div class="hwcheck-warn">◻ ${esc(text)}</div>`;
+  const rows = list.map((item) => {
+    const one = item || {};
+    const label = String(one.label || "");
+    const plan = String(one.plan || "");
+    const message = String(one.message || one.slug || "");
+    const tag = label
+      ? `<span class="hwcheck-section-tag generic">◻ ${esc(label)}</span>`
+      : "";
+    return '<div class="hwcheck-generic">'
+      + '<div class="hwcheck-section-head">'
+      + tag
+      + `<span class="slug">${esc(one.slug || "")}</span>`
+      + '<span class="badge">不算通过</span></div>'
+      + (plan ? `<div class="hwcheck-hint">这一节：${esc(plan)}</div>` : "")
+      + `<div class="hwcheck-hint">${esc(message)}</div>`
+      + "</div>";
   }).join("");
+  return '<div class="hwcheck-hint">下面这几件没有专精配方，走通用降级'
+    + "——板上判不了通断，所以它们<strong>不算通过</strong>"
+    + "（每件这一趟到底做了什么，逐条列在下面）：</div>" + rows;
 }
 
 // hwcheckSectionsEmptyHTML()：一件专精件都没有时的说明。
 // **不是错误状态**：不选器件 = 「先确认板子活着」那条路（spec 用户故事 4）；
-// 选了器件但都没配方由 hwcheckUnspecializedHTML 逐条点名。这里只要说清
-// "为什么这条是空的"，不留一块沉默的空白。
+// 选了器件但都没配方时，它们由 hwcheckUnspecializedHTML 逐条点名**并且真的
+// 出通用小节**（工单 07）——这里说清"为什么这条是空的"，不留一块沉默的空白。
 export function hwcheckSectionsEmptyHTML() {
-  return '<div class="muted">这一趟没有专精件：检测程序只有 LED 心跳 + 通道自报，'
-    + "用来确认板子和烧录链路是好的。选上有配方的器件就会出现它们的检测小节"
-    + "（服务端按库内配方给，页面不猜哪几件有）。</div>";
+  return '<div class="muted">这一趟没有专精件：检测程序会跑 LED 心跳 + 通道自报，'
+    + "选中的器件走通用降级（只验总线和初始化，见下一条）。"
+    + "专精小节来自库内配方——服务端按库内配方给，页面不猜哪几件有。</div>";
 }
 
 // ===========================================================================

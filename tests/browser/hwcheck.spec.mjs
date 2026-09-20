@@ -222,20 +222,27 @@ test("专精小节：选上 led 就在检测计划里出 [专精] 小节（未�
   assert.ok(plan.includes("三色通道") || plan.includes("PC13"),
     "平台差异说明直接印在检测页上：\n" + plan);
 
-  // 未专精件：有平台条目但这一版还没配方 → 单独点名（**不进专精小节清单**）
+  // 未专精件（工单 07）：有平台条目但还没配方 → **出通用降级小节**（外观与专精件
+  // 可区分：`.hwcheck-generic` 而不是 `.hwcheck-section`），并如实标「未专精」。
   // ⚠ 样本是 `beep`，不能再用 ml_mpu6050：工单 05 起它已经专精了（本文件下面
   // 有它自己的用例），拿它当"未专精"的样本会变成一条假红。
   await page.fill("#hwcheck-device-search", "beep");
   await page.waitForSelector('#hwcheck-device-grid [data-add="beep"]');
   await page.click('#hwcheck-device-grid [data-add="beep"]');
-  await page.waitForFunction(
-    () => document.querySelector("#hwcheck-sections").textContent
-      .includes("不会给它出检测小节"));
+  await page.waitForSelector("#hwcheck-sections .hwcheck-generic");
   const withUnspecialized = await page.textContent("#hwcheck-sections");
   assert.ok(withUnspecialized.includes("beep"),
     "没配方的件要点名：\n" + withUnspecialized);
+  assert.ok(withUnspecialized.includes("未专精：只验总线和初始化"),
+    "要点名「未专精」这句官方标注（与产物注释同一句）：\n" + withUnspecialized);
+  assert.ok(withUnspecialized.includes("beep_init()"),
+    "要说清这一趟真做什么（无参初始化），不是一句走过场话术：\n" + withUnspecialized);
+  assert.ok(withUnspecialized.includes("不算通过"),
+    "通用件没有板上判定，必须明说「不算通过」：\n" + withUnspecialized);
   const sectionCount = await page.locator("#hwcheck-sections .hwcheck-section").count();
-  assert.equal(sectionCount, 1, "未专精件不产生专精小节（只点名）");
+  assert.equal(sectionCount, 1, "未专精件不进专精小节清单（只出通用小节）");
+  const genericCount = await page.locator("#hwcheck-sections .hwcheck-generic").count();
+  assert.equal(genericCount, 1, "未专精件出且只出一条通用小节");
 
   // 去掉器件 → 计划跟着变（选择是活的，不是一次性快照）。
   // 用 dispatchEvent 而不是 click()：chip 容器在每次选择变化后被整体重绘

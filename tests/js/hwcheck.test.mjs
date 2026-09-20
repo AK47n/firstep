@@ -778,13 +778,40 @@ test("hwcheckSectionsHTML：文案转义（配方里出现 < > 也不破页面�
   assert.ok(out.includes("&lt;img&gt;"));
 });
 
-test("hwcheckUnspecializedHTML：没配方的件逐条点名（不许静默消失）", () => {
+test("hwcheckUnspecializedHTML：没配方的件逐条点名 + 说清这一趟做什么（工单 07）", () => {
   const out = hwcheckUnspecializedHTML([
-    { slug: "sr04", message: "sr04：这一件还没有专精配方——本版检测程序不会给它出检测小节" },
+    {
+      slug: "sht20",
+      label: "未专精：只验总线和初始化",
+      plan: "初始化 sht20_init()（无参调用，不判返回值） + 总线地址扫描（SHT20_SCL PA6 / SHT20_SDA PA7，只 ping 地址、不读寄存器）",
+      message: "sht20：未专精：只验总线和初始化——这一趟对它做的事：…。",
+    },
+  ]);
+  assert.ok(out.includes("sht20"));
+  assert.ok(out.includes("未专精：只验总线和初始化"), "官方标注来自服务端 label（单源）");
+  assert.ok(out.includes("总线地址扫描"), "说清这一趟真做什么，不是一句走过场话术");
+  assert.ok(out.includes("不算通过"), "通用件没有板上判定，必须明说（不假装测过）");
+  assert.ok(!out.includes("[专精]"), "通用件不许带专精徽章（外观可区分是验收线）");
+  assert.equal(hwcheckUnspecializedHTML([]), "");
+});
+
+test("hwcheckUnspecializedHTML：旧载荷（只有 slug + message）不炸也不编造", () => {
+  // 缺 label / plan 的旧载荷：照渲染 message，但**不许**给徽章编一句兜底
+  // 措辞（同一句话两处写、迟早两种说法——06 的评审同款）。
+  const out = hwcheckUnspecializedHTML([
+    { slug: "sr04", message: "sr04：未专精：只验总线和初始化" },
   ]);
   assert.ok(out.includes("sr04"));
-  assert.ok(out.includes("不会给它出检测小节"));
-  assert.equal(hwcheckUnspecializedHTML([]), "");
+  assert.ok(out.includes("只验总线和初始化"), "message 原样带出");
+  assert.ok(!out.includes("hwcheck-section-tag"), "没有 label 就不画徽章（不编造）");
+});
+
+test("hwcheckUnspecializedHTML：文案转义（slug / 说明里带 < > 也不破页面）", () => {
+  const out = hwcheckUnspecializedHTML([
+    { slug: "<img>", label: "未专精", plan: "a < b", message: "m < n" },
+  ]);
+  assert.ok(!out.includes("<img>"));
+  assert.ok(out.includes("&lt;img&gt;"));
 });
 
 test("hwcheckSectionsState：载荷缺键 = 保留当前状态（旧后端不抹掉已有计划）", () => {

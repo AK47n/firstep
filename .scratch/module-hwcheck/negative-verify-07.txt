@@ -1,0 +1,48 @@
+# 工单 module-hwcheck/07 判据强度探针（逐条注入 → 对应用例必须变红）
+
+每条注入都先跑一遍**基线**（未注入时那条例用必须绿），再注入看它变红，最后逐字节复原——所以「工作区有未提交改动」不影响本探针的结论。
+
+## A 初始化判据不再要求无参声明（接受要参数的初始化）：变红 ✓（用例 test_plan_init_refuses_an_init_that_needs_arguments，退出码 1，复原干净 ✓）
+
+## B 认不出时编一个 <slug>_init 出来：变红 ✓（用例 test_plan_init_is_empty_without_any_header，退出码 1，复原干净 ✓）
+
+## C 多个候选里猜第一个：变红 ✓（用例 test_plan_init_refuses_to_guess_between_two_candidates，退出码 1，复原干净 ✓）
+
+## D 扫描不再要求引脚宏：变红 ✓（用例 test_real_library_mspm0_i2c_roles_carry_no_pin_macros_so_no_scan，退出码 1，复原干净 ✓）
+
+## E 扫描不再要求两个角色都在：变红 ✓（用例 test_scan_for_pins_needs_both_roles，退出码 1，复原干净 ✓）
+
+## F 「未专精」措辞改成第二句：变红 ✓（用例 test_real_library_generic_label_is_the_single_source_wording，退出码 1，复原干净 ✓）
+
+## G 通用小节里塞一个读调用（猜读函数）：变红 ✓（用例 test_render_generic_section_never_calls_anything_but_the_init，退出码 1，复原干净 ✓）
+
+## H 通用小节带上 [专精] 标记：变红 ✓（用例 test_render_generic_section_carries_the_label_and_not_the_specialized_tag，退出码 1，复原干净 ✓）
+
+## I 命令台也分派通用件：变红 ✓（用例 test_the_console_never_dispatches_a_generic_section，退出码 1，复原干净 ✓）
+
+## J 没有输出通道也渲染通用小节：变红 ✓（用例 test_generic_sections_require_an_output_channel_too，退出码 1，复原干净 ✓）
+
+## K 没有扫描也渲染 ping 助手：变红 ✓（用例 test_a_scan_less_generic_run_declares_no_ping_helper，退出码 1，复原干净 ✓）
+
+## L 产物不 include pin_config.h：变红 ✓（用例 test_a_bus_scan_brings_in_pin_config_and_resolves_it，退出码 1，复原干净 ✓）
+
+## M 规划不再过滤专精件：变红 ✓（用例 test_every_device_ends_up_in_exactly_one_bucket，退出码 1，复原干净 ✓）
+
+## N 规划不去重（同一件出两条小节）：变红 ✓（用例 test_resolve_generic_sections_is_idempotent_for_a_repeated_device，退出码 1，复原干净 ✓）
+
+## O 载荷的未专精点名不带标注：变红 ✓（用例 test_preview_reports_devices_without_a_recipe_as_unspecialized，退出码 1，复原干净 ✓）
+
+## P 通用件不带 probe_none 计数（共用运行时缺一块）：变红 ✓（用例 test_generic_only_artifact_calls_no_undefined_helper，退出码 1，复原干净 ✓）
+
+## Q 前端丢掉 label / plan（只回显旧那句）：变红 ✓（用例 hwcheckUnspecializedHTML：没配方的件逐条点名 + 说清这一趟做什么（工单 07），退出码 1，复原干净 ✓）
+
+## R 标注不按「真做了什么」分（一律印只验总线和初始化）：变红 ✓（用例 test_plan_generic_section_without_a_callable_init_still_plans_and_says_why，退出码 1，复原干净 ✓）
+
+## S 声明了 I2C 角色却扫不了时不说理由：变红 ✓（用例 test_plan_generic_section_says_why_it_did_not_scan_an_i2c_device，退出码 1，复原干净 ✓）
+
+## T 「无应答」那行写回超长文案（撞 128 字节行缓冲）：变红 ✓（用例 test_every_reported_line_fits_the_line_buffer，退出码 1，复原干净 ✓）
+
+## U 帮助行写回一条龙（06 的既有超长行）：变红 ✓（用例 test_every_reported_line_fits_the_line_buffer，退出码 1，复原干净 ✓）
+
+## 结论
+21 条注入，判红失败 0 条。全部注入后对应用例变红、文件逐字节复原。

@@ -78,7 +78,6 @@ __all__ = [
     "render_recipe_section",
     "render_recipe_summary",
     "resolve_sections",
-    "unspecialized_message",
     "validate_recipes",
 ]
 
@@ -1033,20 +1032,6 @@ def resolve_sections(
     )
 
 
-def unspecialized_message(slug: str) -> str:
-    """「这件还没有专精配方」的页面文案（判据在配方表，文案归检测页）。
-
-    工单 04 起检测程序**只给有配方的器件出小节**（通用降级归工单 07），所以
-    页面上必须点名说清"这一件这一趟不会真测它"——不然学生会以为选了 = 测了
-    （spec「不假装测过」）。
-    """
-    return (
-        f"{slug}：这一件还没有专精配方——本版检测程序不会给它出检测小节"
-        "（通用降级在后续工单里做）。它仍然会接进工程并出现在接线表里，"
-        "但板上不会对它做任何判定。"
-    )
-
-
 def render_recipe_section(
     section: RecipeSection, report: dict[str, Any] | None = None
 ) -> list[str]:
@@ -1084,7 +1069,10 @@ def render_recipe_section(
     ]
     for note in section.note:
         out.append(f"    /* 平台说明：{note} */")
-    out.append("    /* 专精件：这一节真的会驱动它 / 读它（未专精件本版不出小节）。 */")
+    out.append(
+        "    /* 专精件：这一节真的会驱动它 / 读它（库内配方给的动作）。"
+        "未专精件走通用降级，出的是另一套小节（工单 07，不带 [专精] 标记）。 */"
+    )
     out.append(f"    hwcheck_section({c_string(f'{SECTION_TAG} {section.slug}')});")
 
     if judged_init or judged_probe:

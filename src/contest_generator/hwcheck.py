@@ -62,6 +62,27 @@ SysTick 服务函数，而库内 DMP 端口会自己打开 SysTick 中断——�
 一个字都不加（那正是工单 02 的框架形态，既有 `r/y/g/o/b` 照旧由库内 poll 执行）；
 没有串口时文件头与检测页都**明说**"不能交互式复测"（不静默降级）。
 
+工单 07 补的一件事：**通用降级小节**（`render_main_c(config, sections, generic)`）
+——没有配方的那些件（库内 168 个「模块 × 平台」格）不再"什么都不做"，而是走
+`hwcheck_generic.py` 的通用路径（初始化 + I2C 类件的总线地址扫描）。本模块只负责
+把它插进框架，三条判据在这里：
+
+1. **两批互斥且专精在前**：一件走配方就不再出通用小节（`resolve_generic_sections`
+   按 `specialized` 过滤）；顺序是"真测了的在前、走过场的在后"，学生一眼看得出
+   哪些结论可信。
+2. **命令表只吃专精件**（`build_console_table(sections)`）：通用件没有配方，就没有
+   命令字符可敲——把它塞进命令表会出现"页面没这个命令、板上却认"的分家。
+3. **共用运行时按需渲染，且必须算上通用件**：通用小节会调 `hwcheck_section` /
+   `hwcheck_detail` / `hwcheck_verdict_probe_none` / `hwcheck_summary`，所以
+   `needs_probe_none` 要 `or bool(generic)`——漏了就是**调用一个从未定义的函数**
+   （编译期才发现；本单的判据强度探针 P 条实测抓到过，而当时的用例只查"名字在不在
+   产物里"，是摆设——现在按调用/定义两面查）。
+
+还有一条真机判例（宿主机真编译探针 `probe-07-scan-behaviour.py` 第一次跑就撞上）：
+**扫描要用工程根的引脚宏，而 `headfile.h` 不带 `pin_config.h`**（模块自己的 .c
+各自 include）——所以有扫描件时产物必须自己 include 它，否则 `main.c` 里那几个宏
+是未声明的标识符（ARMCC 直接报错）。
+
 为什么要按通道分形态渲染，而不是"全渲染 + 运行时判断"：没有输出通道的构建
 必须**一个打印调用都不产生**——渲染出来却跑不到，学生会以为"程序报了结果、
 只是我没看到"，而真相是这里根本没测（spec 判据「不假装测过」）。所以通道形态
@@ -89,6 +110,12 @@ from .hwcheck_console import (
     ConsoleTable,
     build_console_table,
     render_console_runtime,
+)
+from .hwcheck_generic import (
+    GENERIC_LABEL,
+    GenericSection,
+    render_generic_runtime,
+    render_generic_section,
 )
 from .hwcheck_recipe import (
     SECTION_TAG,
@@ -142,6 +169,11 @@ _PLATFORM_HEADERS: dict[str, dict[str, str | None]] = {
         "oled": None,
         "delay": None,
         "led": "led_instances.h",
+        # 工程根引脚宏（`SHT20_SCL_GPIO` / `I2C_GPIO` 这些）：**母版的 headfile.h
+        # 不 include 它**（模块自己的 .c 各自 include），所以通用降级的扫描要显式
+        # 带上——不然 `main.c` 里那几个宏是未声明的标识符（本单真机判例：宿主机
+        # 真编译探针 `probe-07-scan-behaviour.py` 当场报 undeclared）。
+        "pin_config": "pin_config.h",
     },
     PLATFORM_MSPM0: {
         "entry": "ti_msp_dl_config.h",
@@ -149,6 +181,8 @@ _PLATFORM_HEADERS: dict[str, dict[str, str | None]] = {
         "oled": "oled.h",
         "delay": "delay.h",
         "led": "led.h",
+        # mspm0 的引脚是 SysConfig 实例生成的，没有 pin_config.h
+        "pin_config": None,
     },
 }
 
@@ -454,18 +488,23 @@ def render_checklist(config: HwCheckConfig) -> tuple[ChecklistItem, ...]:
     return tuple(items)
 
 
-def _section_includes(
-    sections: Sequence["RecipeSection"], skip: Sequence[str] = ()
+def _ordered_includes(
+    groups: Sequence[Sequence[str]], skip: Sequence[str] = ()
 ) -> tuple[str, ...]:
-    """逐件小节声明的头文件（配方 `include` 段）→ **保序去重**的头名元组。
+    """若干组头名 → **保序去重**的头名元组（工单 04 / 07 共用一处判据）。
 
-    `skip` = 框架已经印过的头名（进门头 / 通道 / 心跳那几行，见
-    `_PLATFORM_HEADERS`）：配方与框架撞名时不再印第二遍——重复 include 有包含
-    卫士兜着不出错，但生成的程序是给学生读的，同一行印两遍像是有意为之。
+    `skip` = 前面已经印过的头名（框架固定的那几行、上一批器件小节）：撞名时不再
+    印第二遍——重复 include 有包含卫士兜着不出错，但生成的程序是给学生读的，
+    同一行印两遍像是有意为之。
+
+    两批消费方各给一组：
+    * 专精小节给配方 `include` 段（人指定）；
+    * 通用小节给 manifest 平台条目里**声明过的** `.h`（工单 07；没有配方数据可读，
+      而通用件要调 `sht20_init()`，不 include 就是隐式声明——工单 05 的真机判例）。
     """
     out: list[str] = []
-    for section in sections:
-        for header in section.include:
+    for group in groups:
+        for header in group:
             if header not in out and header not in skip:
                 out.append(header)
     return tuple(out)
@@ -645,24 +684,35 @@ def _section_reports(sections: Sequence["RecipeSection"]) -> list[dict[str, obje
 def render_main_c(
     config: HwCheckConfig,
     sections: Sequence["RecipeSection"] = (),
+    generic: Sequence["GenericSection"] = (),
 ) -> str:
-    """渲染检测程序 main.c（框架 + 逐件专精小节，全程零 LLM）。
+    """渲染检测程序 main.c（框架 + 逐件专精小节 + 通用降级小节，全程零 LLM）。
 
     产物形态（确定性，逐字节可断言）：
 
-    * 头部注释说明"这是硬件检测程序、不是赛题工程"，并说清**这一趟要测哪几件**；
-    * 按形态 include：进门头恒在，通道 / 延时 / LED 头只在相关时才进；
+    * 头部注释说明"这是硬件检测程序、不是赛题工程"，并说清**这一趟要测哪几件**
+      （专精件与通用件分开列，措辞不同）；
+    * 按形态 include：进门头恒在，通道 / 延时 / LED 头只在相关时才进，各件的头
+      （配方 `include` 段 / 通用件的 manifest 平台条目 `.h`）随小节进；
     * 有输出通道时定义报告三件套（`hwcheck_report` / `_newline` / `_int`）与
       判定记账（`hwcheck_section` / `_detail` / `_verdict` / `_verdict_probe_none`
       / `_summary`，工单 04：判定在**板上**算，渲染期只生成比较式）；
       没有通道时**不定义也不调用**（防"定义了却没人调"的死代码）；
     * `main()`：平台初始化 → 通道初始化 → 上电先报一遍 → **逐件专精小节**
-      （`sections`，判据与顺序由 `hwcheck_recipe` 给）→ 结尾汇总 →
-      while(1) 闪灯 +（有串口时）`debug_cmd_poll()`。
+      （`sections`）→ **通用降级小节**（`generic`，工单 07）→ 结尾汇总 →
+      while(1) 闪灯 +（有串口时）`hwcheck_console_poll()` + `debug_cmd_poll()`。
 
-    `sections` 缺省空 = 只出框架（工单 02 的"零器件最小自检"形态，同时是
-    工单 04 里"未专精件没有逐件小节"的如实表达）。有通道才渲染小节——没有
-    输出通道时渲染了也没人看得见，那是"假装测过"。
+    两批小节的关系（工单 07）：
+
+    * **互斥**：一件走专精就不会再出通用小节（`resolve_generic_sections` 按
+      `specialized` 过滤）——一件两条小节 = 两个同名 C 函数，编不过；
+    * **顺序**：专精件在前。它们带板端判定，是这一趟的主结果；通用件是走过场
+      （只验总线和初始化），排在后面学生一眼看得出哪些是真测的；
+    * **命令表只认专精件**：通用件没有配方，就没有命令字符可敲（工单 06 的
+      接口备忘），所以 `build_console_table` 只吃 `sections`。
+
+    `sections` / `generic` 缺省空 = 只出框架（工单 02 的"零器件最小硬件检测"形态）。
+    有通道才渲染小节——没有输出通道时渲染了也没人看得见，那是"假装测过"。
 
     平台词表外抛 HwCheckError（路由转 400 中文）；未知平台在这里就出不去，
     所以下面的分支是穷尽的。
@@ -671,6 +721,7 @@ def render_main_c(
     # 命令表（工单 06）：配方声明的复测字符 + 固定帮助命令。**无条件构建**
     # （不只是有串口的形态）——字符冲突 / 形状不对是**库内数据**的错，
     # 该在每一次构建期红，而不是"这次没勾串口所以放它过去"。
+    # **只吃专精小节**：通用件没有配方自然没有 `console` 段（07 的接口备忘）。
     console = build_console_table(sections)
     # 命令台的渲染条件（工单 06）：**有串口就有**（不看有没有配方命令）。
     # 为什么不是"有配方命令才渲染"：检测页那句提示写着"命令循环里敲 ? 看帮助"
@@ -688,12 +739,19 @@ def render_main_c(
         framework_headers.append(str(headers["delay"]))
     if headers["led"]:
         framework_headers.append(str(headers["led"]))
+    # 通用降级的扫描要用工程根的引脚宏（`SHT20_SCL_GPIO` 这类，manifest 声明的
+    # 那对宏）——**headfile.h 不带它**（模块自己的 .c 各自 include），不显式 include
+    # 就是未声明标识符（本单真机判例）。只有真有扫描件时才印：没有扫描的形态
+    # 不需要它，多一行 include 会让人以为"这工程依赖引脚宏"。
+    scan_rendered = any(section.scan is not None for section in generic)
+    if scan_rendered and headers["pin_config"]:
+        framework_headers.append(str(headers["pin_config"]))
     lines: list[str] = [
         "/**",
         " * @file main.c",
         " * @brief 硬件检测程序 —— 确定性渲染，非 AI 生成",
         " *",
-        *_header_brief(config, sections, console=console),
+        *_header_brief(config, sections, console=console, generic=generic),
         " *",
         " * 检测没过是正常结果：要么接线不对，要么库内驱动有问题。",
         " */",
@@ -707,11 +765,25 @@ def render_main_c(
         lines.append(f'#include "{headers["delay"]}"  /* 心跳节拍 */')
     if headers["led"]:
         lines.append(f'#include "{headers["led"]}"  /* 通道宏 {_LED_CHANNEL} */')
+    if scan_rendered and headers["pin_config"]:
+        lines.append(
+            f'#include "{headers["pin_config"]}"  /* 通用降级总线扫描的引脚宏'
+            "（SHT20_SCL_GPIO 这类，值在 pin_config.h） */"
+        )
     # 器件模块自己的头（配方 `include` 段，工单 05）：检测程序直接调模块函数，
     # 而上面那几行只覆盖通道与心跳——不 include 就会被当成隐式声明（真机判例：
     # stm32 侧 7 个 error：`#223-D function declared implicitly` +
     # `#20 identifier undefined`）。跨模块前置调用的头（如 ml_i2c.h）也走这里。
-    for header in _section_includes(sections, skip=framework_headers):
+    device_headers = _ordered_includes(
+        [section.include for section in sections], skip=framework_headers)
+    for header in device_headers:
+        lines.append(f'#include "{header}"')
+    # 通用降级小节的头（工单 07）：判据 = 该模块 manifest 平台条目声明的 .h。
+    # 器件小节的头先印，通用件与它撞名时不再印第二遍。
+    for header in _ordered_includes(
+        [section.headers for section in generic],
+        skip=[*framework_headers, *device_headers],
+    ):
         lines.append(f'#include "{header}"')
 
     lines.append("")
@@ -719,25 +791,46 @@ def render_main_c(
     lines.append(f"#define {_HEARTBEAT_MACRO} {HEARTBEAT_MS}")
     lines.append("")
 
+    any_section = bool(sections) or bool(generic)
     if config.has_output_channel:
         lines.extend(_report_outputs(config))
         lines.append("")
         lines.extend(_report_function(
-            config, needs_int=bool(sections) or bool(config.devices)))
+            config, needs_int=any_section or bool(config.devices)))
         lines.append("")
-        if sections:
+        if any_section:
+            # 通用件一律"判不了通断"（没有探头就是没有），所以它们参与时
+            # `hwcheck_verdict_probe_none` 必须在场——否则通用小节调用一个
+            # 从未定义的函数（编译期才发现）。
             lines.extend(_recipe_runtime(
                 needs_verdict=_needs_verdict(sections),
-                needs_probe_none=_needs_probe_none(sections),
+                needs_probe_none=_needs_probe_none(sections) or bool(generic),
             ))
+            lines.append("")
+        # 通用降级的共用运行时（I2C 地址 ping）：只有真有扫描件时才渲染
+        # ——按需渲染是 04/05 定下的 0 warning 验收线（见 render_generic_runtime）。
+        generic_runtime = render_generic_runtime(generic)
+        if generic_runtime:
+            lines.extend(generic_runtime)
             lines.append("")
 
     if sections and config.has_output_channel:
-        lines.append("/* ---- 逐件检测小节（按库内配方渲染；未专精件本版不出小节）---- */")
+        lines.append("/* ---- 逐件检测小节（按库内配方渲染；未专精件走通用降级）---- */")
         for section in sections:
             lines.append(f"static void hwcheck_check_{section.slug}(void)")
             lines.append("{")
             lines.extend(render_recipe_section(section))
+            lines.append("}")
+            lines.append("")
+
+    # 通用降级小节（工单 07）：排在专精小节之后（见 docstring「顺序」），
+    # 且必须在 `render_generic_runtime` 之后——C 要求调用点之前有定义。
+    if generic and config.has_output_channel:
+        lines.append(f"/* ---- 通用降级小节（{GENERIC_LABEL}；工单 07）---- */")
+        for section in generic:
+            lines.append(f"static void hwcheck_generic_{section.slug}(void)")
+            lines.append("{")
+            lines.extend(render_generic_section(section))
             lines.append("}")
             lines.append("")
 
@@ -765,12 +858,20 @@ def render_main_c(
     else:
         lines.append("    /* 没有输出通道：只闪灯，不打印（看到灯闪 = 程序在跑） */")
     lines.append("")
-    if sections and config.has_output_channel:
+    if any_section and config.has_output_channel:
         lines.append("    /* ---- 上电自动跑一遍逐件检测 ---- */")
         for section in sections:
             lines.append(f"    hwcheck_check_{section.slug}();")
+        for section in generic:
+            lines.append(f"    hwcheck_generic_{section.slug}();")
         lines.append("")
-        lines.extend(render_recipe_summary(_section_reports(sections)))
+        if sections:
+            lines.extend(render_recipe_summary(_section_reports(sections)))
+        else:
+            # 只有通用件：没有"万一判失败先查哪里"可印（通用件不判），
+            # 但汇总要印——它如实数出"未判定 N 项"（不假装测过）。
+            lines.append("    /* 这一趟只有未专精件：板上没有判定项，汇总如实计入「未判定」。 */")
+            lines.append("    hwcheck_summary();")
         lines.append("")
     lines.append("    while (1)")
     lines.append("    {")
@@ -792,6 +893,7 @@ def _header_brief(
     sections: Sequence["RecipeSection"] = (),
     *,
     console: ConsoleTable | None = None,
+    generic: Sequence["GenericSection"] = (),
 ) -> list[str]:
     """文件头"这一趟做什么"的说明行——**按通道形态与器件集说实话**。
 
@@ -803,6 +905,10 @@ def _header_brief(
     串口这一路还要说清**命令台**（工单 06）：有配方命令就逐条列出，没有串口
     就明说"不能交互式复测"——这两句是学生判断"我敲了没反应是不是坏了"的
     唯一线索，不能留在页面上、代码里却不写。
+
+    器件分两批如实列（工单 07）：专精件带 `SECTION_TAG`，通用件带
+    `GENERIC_LABEL` 与"这一趟对它做什么"——**标注在检测页与产出注释里同时
+    出现、措辞同一句**（票面验收线），学生才知道哪些结论可信。
     """
     lines = [" * 这一趟用来确认「板子活着 + 烧录链路通」："]
     if config.has_output_channel:
@@ -844,10 +950,19 @@ def _header_brief(
                 f" *   - {SECTION_TAG} {section.slug}（配方："
                 f"{_section_recipe_brief(section)}）"
             )
-    elif config.has_output_channel:
+    # 通用降级小节（工单 07）：**与检测页同一句措辞**（GENERIC_LABEL）——
+    # 学生拿串口上的输出对检测页时，两边说的是同一件事。这里不写 `SECTION_TAG`
+    # 那个字面量：产物里出现它就该是"这一节真测了"，一句否定式说明会让
+    # "通用件不带专精标记"这条结构守卫变得没法机械断言（本单实测踩到）。
+    if generic and config.has_output_channel:
         lines.append(" *")
-        lines.append(" * 这一趟**没有专精件**：只确认板子与烧录链路是活的。")
-        lines.append(" * 选了器件却没有配方时会如实写在这里，不假装测过。")
+        lines.append(f" * 通用降级小节（{GENERIC_LABEL}——**不是**专精小节）：")
+        for section in generic:
+            lines.append(f" *   - {section.slug}：{section.plan_text}")
+    if not sections and not generic and config.has_output_channel:
+        lines.append(" *")
+        lines.append(" * 这一趟**一件器件都没测**：只确认板子与烧录链路是活的。")
+        lines.append(" * （选中的器件若不在本平台，会在检测页被点名，不在这里。）")
     if config.platform == PLATFORM_MSPM0:
         lines.append(" *")
         lines.append(" * ⚠ 本平台已知限制：SysConfig 外设初始化（SYSCFG_DL_init）还没有被")

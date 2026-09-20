@@ -57,7 +57,7 @@ const hwcheckUI = {
   wiring: null,       // 板侧视图（服务端投影：接线行 / 同脚组 / 顺序 / 缺条目）
   exclusiveGroups: [], // 库级互斥组（服务端按平台投影，工单 05：单选交换的判据）
   sections: [],       // 逐件专精小节（服务端按库内配方解析，工单 04）
-  unspecialized: [],  // 选了但没有配方的器件（点名，不假装测过）
+  unspecialized: [],  // 走通用降级的器件（未专精：只验总线和初始化，工单 07）
   console: null,      // 串口命令台载荷（配方命令 + 既有命令 + 能不能复测，工单 06）
   project: null,      // 当前正在看的检测工程（生成或回读来的）
   checklistChecked: [],

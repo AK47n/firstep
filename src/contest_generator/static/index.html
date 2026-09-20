@@ -1023,7 +1023,7 @@
                          font-size: 11.5px; color: var(--muted); }
   .hwcheck-order-desc { color: var(--muted); min-width: 0; overflow-wrap: break-word; }
   /* 逐件专精小节（工单 module-hwcheck/04）：[专精] 徽章 + 这一节测什么 + 平台差异。
-     外观刻意与"未专精点名"（.hwcheck-warn）分开——一眼看出哪件真测了。 */
+     外观刻意与"通用降级小节"（.hwcheck-generic，工单 07）分开——一眼看出哪件真测了。 */
   .hwcheck-section { border: 1px solid var(--border); border-left: 3px solid var(--ok);
                      border-radius: var(--radius-md); padding: 8px 10px;
                      margin-bottom: var(--space-2); }
@@ -1032,6 +1032,14 @@
   .hwcheck-section-tag { font-size: 11.5px; font-weight: 600; color: var(--ok);
                          border: 1px solid var(--ok); border-radius: var(--radius-full);
                          padding: 0 7px; }
+  /* 通用降级小节（工单 module-hwcheck/07）：虚框 + 灰描边徽章（不是实心"专精"）。
+     配色刻意比专精件弱一档——它是"走过场"，不能看起来跟真测过一样。
+     类名刻意不是 .hwcheck-section：那个类是"专精小节"的选择器（页面与验收按它
+     数"这一趟真测了几件"）。 */
+  .hwcheck-generic { border: 1px dashed var(--border); border-left: 3px solid var(--muted);
+                     border-radius: var(--radius-md); padding: 8px 10px;
+                     margin-bottom: var(--space-2); }
+  .hwcheck-section-tag.generic { color: var(--muted); border-color: var(--muted); }
   /* 串口命令台（工单 module-hwcheck/06）：命令表 + 既有命令一行 + 帮助一行。
      没有串口时只出那句"不能交互式复测"（不摆用不了的命令表）。 */
   .hwcheck-console .hwcheck-table { margin-bottom: var(--space-1); }

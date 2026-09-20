@@ -1,0 +1,56 @@
+配方文件：C:\Users\luoji\Desktop\firstep\library\hwcheck_recipes.json  存在=True
+库内模块数：95；有配方的 slug：['led', 'ml_mpu6050', 'oled']
+
+未专精的「模块 × 平台」格：168
+
+其中声明了 I2C 类引脚角色的：16 格
+  ads1115          stm32  roles=('i2c_scl', 'i2c_sda')  exact_init=['ads1115_init']
+  ags10            stm32  roles=('i2c_scl', 'i2c_sda')  exact_init=['ags10_init']
+  aht10            stm32  roles=('i2c_scl', 'i2c_sda')  exact_init=['aht10_init']
+  at24c02          stm32  roles=('i2c_scl', 'i2c_sda')  exact_init=['at24c02_init']
+  bh1750           stm32  roles=('i2c_scl', 'i2c_sda')  exact_init=['bh1750_init']
+  bmp180           stm32  roles=('i2c_scl', 'i2c_sda')  exact_init=['bmp180_init']
+  hmc5883l         stm32  roles=('i2c_scl', 'i2c_sda')  exact_init=['hmc5883l_init']
+  mlx90614         stm32  roles=('i2c_scl', 'i2c_sda')  exact_init=['mlx90614_init']
+  ms5611           stm32  roles=('i2c_scl', 'i2c_sda')  exact_init=['ms5611_init']
+  pca9685          stm32  roles=('i2c_scl', 'i2c_sda')  exact_init=['pca9685_init']
+  qmc5883l         stm32  roles=('i2c_scl', 'i2c_sda')  exact_init=['qmc5883l_init']
+  sgp30            stm32  roles=('i2c_scl', 'i2c_sda')  exact_init=['sgp30_init']
+  sht20            stm32  roles=('i2c_scl', 'i2c_sda')  exact_init=['sht20_init']
+  sht30            stm32  roles=('i2c_scl', 'i2c_sda')  exact_init=['sht30_init']
+  tcs34725         stm32  roles=('i2c_scl', 'i2c_sda')  exact_init=['tcs34725_init']
+  vl53l0x          stm32  roles=('i2c_scl', 'i2c_sda', 'gpio_out')  exact_init=['vl53l0x_init']
+
+**没有**唯一 `<slug>_init` 命中的格：19
+  adc              stm32  files=0 init_like=[] 头文件名字数=0
+  config           mspm0  files=1 init_like=[] 头文件名字数=0
+  config           stm32  files=1 init_like=[] 头文件名字数=0
+  delay            mspm0  files=2 init_like=[] 头文件名字数=2
+  delay            stm32  files=0 init_like=[] 头文件名字数=0
+  gp2y1014au       mspm0  files=2 init_like=['gp2y1014_init'] 头文件名字数=2
+  gp2y1014au       stm32  files=2 init_like=['gp2y1014_init'] 头文件名字数=2
+  huidu            mspm0  files=2 init_like=[] 头文件名字数=1
+  imu_uart         mspm0  files=2 init_like=['IMU_Init'] 头文件名字数=6
+  ir_remote_tx     mspm0  files=2 init_like=['ir_tx_init'] 头文件名字数=3
+  ir_remote_tx     stm32  files=2 init_like=['ir_tx_init'] 头文件名字数=3
+  k230             mspm0  files=0 init_like=[] 头文件名字数=0
+  k230             stm32  files=0 init_like=[] 头文件名字数=0
+  ntb_time         mspm0  files=2 init_like=[] 头文件名字数=1
+  ntb_time         stm32  files=2 init_like=[] 头文件名字数=1
+  tp_xpt2046       mspm0  files=2 init_like=['xpt2046_init'] 头文件名字数=5
+  tp_xpt2046       stm32  files=2 init_like=['xpt2046_init'] 头文件名字数=5
+  uart             mspm0  files=2 init_like=[] 头文件名字数=3
+  uart             stm32  files=2 init_like=[] 头文件名字数=3
+
+有 `<slug>_init` 但还有别的 *_init 候选的格：3
+  motor            stm32  init_like=['encoder_init', 'motor_init']
+  pid              mspm0  init_like=['gray_init', 'pid_init']
+  pid              stm32  init_like=['gray_init', 'pid_init']
+
+模块自己的头文件里一个名字都没有的格：6
+  adc              stm32  files=0
+  config           mspm0  files=1
+  config           stm32  files=1
+  delay            stm32  files=0
+  k230             mspm0  files=0
+  k230             stm32  files=0

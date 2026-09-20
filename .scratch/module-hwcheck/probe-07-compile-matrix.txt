@@ -1,0 +1,32 @@
+# 工单 module-hwcheck/07 编译矩阵（stm32 UV4 + mspm0 gmake 真编译）
+
+UV4：C:\Keil5\Core\UV4\UV4.exe
+gmake：C:\ti\ccs2050\ccs\utils\bin\gmake.exe
+CCS 三件套：CcsTools(sdk_dir=WindowsPath('C:/ti/ccs2051/mspm0_sdk_2_10_00_04'), compiler_dir=WindowsPath('C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-armllvm_4.0.4.LTS'), sysconfig_cli=WindowsPath('C:/ti/ccs2051/sysconfig_1.26.2/sysconfig_cli.bat'))
+
+形态（stm32 五 + mspm0 二）：框架 → beep（只有初始化）→ sht20（I2C 扫描）→ servo（认不出初始化）→ led + sht20（两套运行时同堂）→ mspm0 的 ws2812 / aht10。
+
+## [stm32] 框架（不选器件：回归基线）（hwcheck-stm32-20260920-111819）→ passed=True exit=0 error=0 warning=0 通用小节=无 扫描=无 pin_config=无 命令表=空
+  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe07-x3v3z8ad\hwcheck-stm32-20260920-111819\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmptjkq4b1t.log
+
+## [stm32] beep 通用件（非 I2C：只有初始化）（hwcheck-stm32-20260920-111821）→ passed=True exit=0 error=0 warning=0 通用小节=['beep'] 扫描=无 pin_config=无 命令表=空
+  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe07-x3v3z8ad\hwcheck-stm32-20260920-111821\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmpscj60pm5.log
+
+## [stm32] sht20 通用件（I2C：初始化 + 总线扫描 + pin_config.h）（hwcheck-stm32-20260920-111824）→ passed=True exit=0 error=0 warning=0 通用小节=['sht20'] 扫描=有 pin_config=有 命令表=空
+  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe07-x3v3z8ad\hwcheck-stm32-20260920-111824\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmp9m3wihp8.log
+
+## [stm32] servo 通用件（初始化要参数 → 这一节不做动作）（hwcheck-stm32-20260920-111827）→ passed=True exit=0 error=0 warning=0 通用小节=['servo'] 扫描=无 pin_config=无 命令表=空
+  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe07-x3v3z8ad\hwcheck-stm32-20260920-111827\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmponi8fanb.log
+
+## [stm32] led 专精 + sht20 通用（两套运行时同堂）（hwcheck-stm32-20260920-111830）→ passed=True exit=0 error=0 warning=0 通用小节=['sht20'] 扫描=有 pin_config=有 命令表=['led']
+  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe07-x3v3z8ad\hwcheck-stm32-20260920-111830\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmph9wjm2uz.log
+
+## [mspm0] ws2812 通用件（非 I2C，无扫描）（hwcheck-mspm0-20260920-111832）→ passed=True exit=0 error=0 warning=0 通用小节=['ws2812'] 扫描=无 pin_config=无 命令表=空
+  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe07-x3v3z8ad\hwcheck-mspm0-20260920-111832\Debug -f makefile -B all
+
+## [mspm0] aht10 通用件（mspm0 侧 I2C 角色无宏 → 不扫）（hwcheck-mspm0-20260920-111841）→ passed=True exit=0 error=0 warning=0 通用小节=['aht10'] 扫描=无 pin_config=无 命令表=空
+  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe07-x3v3z8ad\hwcheck-mspm0-20260920-111841\Debug -f makefile -B all
+
+## 结论
+7 种形态真编译，判红 0 种。全部 0 error / 0 warning。
+原始日志：C:\Users\luoji\Desktop\firstep\.scratch\module-hwcheck\probe-07-buildlogs

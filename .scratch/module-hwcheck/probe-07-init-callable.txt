@@ -1,0 +1,33 @@
+0 认不出: 28
+1 精确 <slug>_init（模块头，无参）: 131
+2 唯一 *_init（模块头，无参）: 9
+
+认不出的格：
+  adc            mspm0  模块头 *_init=['adc_init'] 无参=[] 母版有<adc_init>=False
+  adc            stm32  模块头 *_init=[] 无参=[] 母版有<adc_init>=True
+  config         mspm0  模块头 *_init=[] 无参=[] 母版有<config_init>=False
+  config         stm32  模块头 *_init=[] 无参=[] 母版有<config_init>=False
+  delay          mspm0  模块头 *_init=[] 无参=[] 母版有<delay_init>=False
+  delay          stm32  模块头 *_init=[] 无参=[] 母版有<delay_init>=False
+  filter         mspm0  模块头 *_init=['filter_init'] 无参=[] 母版有<filter_init>=False
+  filter         stm32  模块头 *_init=['filter_init'] 无参=[] 母版有<filter_init>=False
+  huidu          mspm0  模块头 *_init=[] 无参=[] 母版有<huidu_init>=False
+  ili9341        stm32  模块头 *_init=['ili9341_init'] 无参=[] 母版有<ili9341_init>=False
+  ili9488        stm32  模块头 *_init=['ili9488_init'] 无参=[] 母版有<ili9488_init>=False
+  k230           mspm0  模块头 *_init=[] 无参=[] 母版有<k230_init>=False
+  k230           stm32  模块头 *_init=[] 无参=[] 母版有<k230_init>=False
+  l298n          mspm0  模块头 *_init=[] 无参=[] 母版有<l298n_init>=False
+  lcd            mspm0  模块头 *_init=['lcd_init'] 无参=[] 母版有<lcd_init>=False
+  lcd            stm32  模块头 *_init=['lcd_init'] 无参=[] 母版有<lcd_init>=False
+  max7219        mspm0  模块头 *_init=['max7219_init'] 无参=[] 母版有<max7219_init>=False
+  max7219        stm32  模块头 *_init=['max7219_init'] 无参=[] 母版有<max7219_init>=False
+  motor          mspm0  模块头 *_init=['motor_init'] 无参=[] 母版有<motor_init>=False
+  ntb_time       mspm0  模块头 *_init=[] 无参=[] 母版有<ntb_time_init>=False
+  ntb_time       stm32  模块头 *_init=[] 无参=[] 母版有<ntb_time_init>=False
+  pca9685        mspm0  模块头 *_init=['pca9685_init'] 无参=[] 母版有<pca9685_init>=False
+  pca9685        stm32  模块头 *_init=['pca9685_init'] 无参=[] 母版有<pca9685_init>=False
+  servo          mspm0  模块头 *_init=['servo_init'] 无参=[] 母版有<servo_init>=False
+  servo          stm32  模块头 *_init=['servo_init'] 无参=[] 母版有<servo_init>=False
+  st7789_para    stm32  模块头 *_init=['st7789_para_init'] 无参=[] 母版有<st7789_para_init>=False
+  uart           mspm0  模块头 *_init=[] 无参=[] 母版有<uart_init>=False
+  uart           stm32  模块头 *_init=[] 无参=[] 母版有<uart_init>=True

@@ -98,6 +98,11 @@ _LEGACY_KEYS: frozenset[str] = frozenset(
     command.lower() for command, _meaning in LEGACY_COMMANDS
 )
 
+# 帮助里每行列几条既有命令：判据是**行缓冲**（`hwcheck_line[128]`，框架的溢出
+# 保护），中文一字 3 字节——两条一排实测最长 60 字节上下，留足余量（工单 07 的
+# `test_every_reported_line_fits_the_line_buffer` 是全产物级的那道守卫）。
+_LEGACY_PER_HELP_LINE = 2
+
 
 def _normalize(command: str) -> str:
     """命令字符的**比较形态**：小写（库内既有命令也是 `r` / `R` 两写都收）。
@@ -166,13 +171,26 @@ class ConsoleTable:
         为什么要逐行：这些字最终要经 `hwcheck_recipe.c_string` 落进 C 字面量，
         而 C 字符串字面量**不能跨行**（真换行会让整份 main.c 编不过，04 的
         真机判例就在文件头上写着）。逐行 + `hwcheck_newline()` 才是安全的形状。
+
+        ⚠ **一行要短**：板上是 `hwcheck_line[128]` 的行缓冲（框架的溢出保护），
+        超了会截断——中文在 UTF-8 下一字 3 字节，截在字中间就是半个乱码
+        （工单 07 的行缓冲守卫实测抓到过：原来那行一条龙列五条既有命令，136
+        字节，**已经超了**）。所以既有命令**每行两条**排下去，措辞一个字不改
+        （那几句是镜像库内 `debug_uart.c` 的说明，改了就与库漂了）。
         """
-        legacy = " / ".join(
-            f"{command} {meaning}" for command, meaning in LEGACY_COMMANDS
-        )
+        legacy_rows: list[str] = []
+        row: list[str] = []
+        for command, meaning in LEGACY_COMMANDS:
+            row.append(f"{command} {meaning}")
+            if len(row) == _LEGACY_PER_HELP_LINE:
+                legacy_rows.append("    " + " / ".join(row))
+                row = []
+        if row:
+            legacy_rows.append("    " + " / ".join(row))
         lines = [
             "[帮助] 可用命令（单字符 + 回车）：",
-            f"  既有：{legacy}",
+            "  既有（库内 debug_cmd_poll 原样执行）：",
+            *legacy_rows,
         ]
         if self.entries:
             for entry in self.entries:
