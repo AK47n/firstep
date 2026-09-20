@@ -57,6 +57,14 @@ from .events import (
     _emit,
 )
 from .fix_errors import FixSuggestion
+from .hwcheck_errors import HwCheckError
+from .hwcheck_triage import (
+    TriageAdvice,
+    TriageContext,
+    TriageFactError,
+    parse_triage_advice,
+    triage_context_text,
+)
 from .library import TRUNCATION_NOTICE, ValidationResult, truncate_content
 from .impact import ImpactAnalysis, ImpactError, build_impact_analysis
 from .manifest import EXCLUSIVE_GROUP_TAG, ManifestSummary
@@ -487,6 +495,37 @@ IDEAFIX_SYSTEM_PROMPT = (
     "不要顺带修改它们的实现（是否重做由用户决定）。"
     "输出完整 main.c（整个文件，不是片段），纯 C 代码，不要用 ``` 或 ~~~ "
     "代码围栏包裹，不要输出任何 Markdown 标记。"
+)
+
+# 硬件检测排障（工单 module-hwcheck/08）：学生上板跑完把现象填回来 → AI 先定性
+# （接线 / 器件 / 代码），再给可能原因与下一步查什么。这是硬件检测功能里**唯一**
+# 的 LLM 入口（其余全程确定性渲染），立场 = 现场排障顾问：只依据给定上下文说话，
+# 绝不编造引脚 / 模块（事实约束在 hwcheck_triage.parse_triage_advice 查表，
+# 违规当场拒收重问）。只输出 JSON 契约。
+HWCHECK_TRIAGE_SYSTEM_PROMPT = (
+    "你是嵌入式硬件现场排障顾问。学生刚把一块板子上的检测程序跑完，现在把"
+    "实际现象填了回来。你会拿到本次检测的完整上下文：平台、本次要测的器件、"
+    "接线表（模块端子 → 板上的脚）、建议检测顺序、这一趟真测了哪几件"
+    "（[专精] 的才有板上通断判定，[未专精] 只验初始化与总线扫描）、上板确认"
+    "清单与学生的勾选状态、以及学生填的现象。规则："
+    "① verdict 先定性：wiring = 更像接线问题（接反 / 没接 / 共地 / 供电 / "
+    "波特率）；device = 更像器件本身的问题（模块坏了 / 型号不对 / 地址不对）；"
+    "code = 更像程序或库内驱动的问题（初始化失败 / 没做通信校验 / 平台没有该"
+    "能力）；证据不足就如实给 unknown，不要硬凑；"
+    "② causes 逐条给可能原因（每条一句话，按可能性排序），steps 逐条给"
+    "**下一步具体查什么**（可操作：量哪个脚、换哪根线、敲哪个命令、看哪一行"
+    "输出），不要写「请检查硬件」这种空话；"
+    "③ 只准引用上下文里出现过的引脚名（如接线表里的 PA0 / PC13）与模块名；"
+    "上下文里没有的引脚、模块、寄存器、函数一律不许提，也**不要**建议学生"
+    "改源码（本页面不改代码）；"
+    "④ 检测没过是正常结果：若是 [未专精] 的件或平台本身没有的姿态解算这类"
+    "能力，如实说明「这个结论不可信 / 本平台没有」；若现象已指向库内驱动缺陷"
+    "（板上报 FAIL / 初始化返回失败 / 通信探头无应答），在 issue_hint 里说清"
+    "「这更像库内模块的问题，可以把检测目录与串口最后几行反馈成一张修复单」；"
+    "⑤ 全部用中文，别用 Markdown 标记。"
+    '只输出 JSON 对象：{"verdict": "wiring" | "device" | "code" | "unknown", '
+    '"summary": "一句话判断", "causes": ["可能原因"], "steps": ["下一步查什么"], '
+    '"issue_hint": "必要时怎么反馈（没有就空串）"}'
 )
 
 # 骨架 / 自检冒烟共用的接口块引导语（两处曾各抄一份，改一处忘另一处即分叉）
@@ -1781,6 +1820,8 @@ class LLM(Protocol):
         main_c: str,
         global_note: str = "",
     ) -> str: ...
+
+    def triage_hwcheck_symptom(self, context: TriageContext) -> TriageAdvice: ...
 
     def topic_split_topics(self, pdf_text: str) -> tuple[TopicDraft, ...]: ...
 
@@ -3377,6 +3418,46 @@ class DeepSeekLLM:
             operation="apply_idea_fix",
         )
 
+    def triage_hwcheck_symptom(self, context: TriageContext) -> TriageAdvice:
+        """硬件检测排障（工单 module-hwcheck/08）：现象 + 本次检测上下文 → 建议。
+
+        输入 = `hwcheck_triage.TriageContext`（接线表 / 检测计划 / 清单与勾选 /
+        现象，材料与事实白名单同一处装配）；输出 JSON 由域层
+        `parse_triage_advice` 校验，**两类拒绝分道**（照 select_modules 先例）：
+
+        * **形状错**（verdict 词表外 / summary 空 / causes、steps 空）=
+          `HwCheckError` → `LLMError`（缺省 parse 类）：模型这次没按契约输出，
+          走 `_retry_parse` 的解析类快重试（≤SUMMARY_RETRY_LIMIT 轮）。
+        * **事实错**（引用了本次接线表里没有的引脚 / 本次没选的库内模块）=
+          `TriageFactError` → `LLMError(kind=ERROR_KIND_DOMAIN)`：这是**本地域
+          判决**（模型输出与库内事实的矛盾，CONTEXT.md「错误映射」），errors.py
+          的 domain 分支保留原文而不是套 key / 余额话术；同时开 `domain_retry`
+          ——带被拒理由重出一次（上限 DOMAIN_RETRY_LIMIT，先例
+          `real-acceptance/03`）。
+
+        仍不行由端点降级成兜底建议（检测记录照常保留，不阻断）。
+        """
+
+        def parse(content: str) -> TriageAdvice:
+            try:
+                return parse_triage_advice(
+                    extract_module_selection_data(content), context
+                )
+            except TriageFactError as exc:
+                raise LLMError(str(exc), kind=ERROR_KIND_DOMAIN) from exc
+            except HwCheckError as exc:
+                raise LLMError(str(exc)) from exc
+
+        return self._retry_parse(
+            system_prompt=HWCHECK_TRIAGE_SYSTEM_PROMPT,
+            user_prompt=_hwcheck_triage_user_prompt(context),
+            parse=parse,
+            label="硬件检测排障",
+            operation="triage_hwcheck_symptom",
+            json_mode=True,
+            domain_retry=True,
+        )
+
     def _observe_call(
         self,
         *,
@@ -4193,6 +4274,10 @@ class RoutingLLM:
             main_c, global_note,
         )
 
+    def triage_hwcheck_symptom(self, context: TriageContext) -> TriageAdvice:
+        # 硬件检测排障走 remote（现场判断质量优先，不进本地方法集）
+        return self._remote.triage_hwcheck_symptom(context)
+
 
 def build_llm(
     config: AppConfig,
@@ -4823,6 +4908,20 @@ def _param_scan_user_prompt(
         lines.extend(_truncate_content(block) for block in module_interfaces)
     lines += ["", "当前 main.c（识别其中的可调数值参数，anchor 取声明行原文）：", main_c]
     return "\n".join(lines)
+
+
+def _hwcheck_triage_user_prompt(context: TriageContext) -> str:
+    """硬件检测排障的 user 消息（工单 module-hwcheck/08）。
+
+    材料整段来自 `hwcheck_triage.triage_context_text`（接线表 / 检测计划 /
+    清单与勾选 / 现象）——**与事实白名单同一处装配**：prompt 里给的清单就是
+    校验时查的那份，不会出现"允许说的"与"看得到的"两张皮。
+    """
+    return (
+        "下面是本次硬件检测的上下文（接线表 / 检测计划 / 上板清单与勾选 / 现象）。"
+        "请只依据这里出现的事实给排障方向。\n\n"
+        + triage_context_text(context)
+    )
 
 
 def _idea_plan_summary(plan: Mapping[str, Any] | None) -> list[str]:

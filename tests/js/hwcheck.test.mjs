@@ -28,6 +28,10 @@ import {
   hwcheckSectionsState, hwcheckSectionsHTML, hwcheckUnspecializedHTML,
   hwcheckSectionPlanText, hwcheckSectionNoteHTML,
   hwcheckConsoleState, hwcheckConsoleHTML,
+  hwcheckSymptomText, hwcheckCanTriage, hwcheckTriagePayload,
+  hwcheckChecklistPayload, hwcheckAdviceState, hwcheckRecordState,
+  hwcheckChecklistState, hwcheckTriageErrorHTML, hwcheckAdviceHTML,
+  hwcheckAdviceEmptyHTML,
 } from "../../src/contest_generator/static/js/fx/hwcheck.js";
 
 const html = readFileSync(
@@ -1098,6 +1102,211 @@ test("ui 换平台 / 换通道时清掉旧命令表（配方按平台分，留�
   const clears = ui.match(/hwcheckUI\.console = null/g) || [];
   assert.equal(clears.length, 3,
     "三处该清：换平台 / 换通道 / 取视图失败（与 sections 同处置）");
+});
+
+
+// ---------------------------------------------------------------------------
+// 工单 module-hwcheck/08：现象回填 + AI 排障（唯一的 LLM 入口）
+// ---------------------------------------------------------------------------
+// 载荷形状与后端 `/api/hwcheck/triage` 一致：建议（定性 + 判断 + 原因 + 下一步
+// + 反馈出口）+ degraded/message（模型失败不阻断）。
+const ADVICE_PAYLOAD = {
+  advice: {
+    verdict: "wiring",
+    verdict_label: "更像接线问题",
+    summary: "串口没字、灯也不闪，先看供电与烧录链路。",
+    causes: ["烧录其实没成功（灯不闪说明程序没跑）", "串口 TX/RX 没交叉接"],
+    steps: ["按一次复位，看灯闪不闪", "把 TX 与 RX 对调再上电"],
+    issue_hint: "排查完还是指向驱动就往反馈里带上检测目录。",
+    degraded: false,
+  },
+  degraded: false,
+  message: "",
+  record: { version: 1, symptom: "灯也不闪", checked_ids: ["flash"], advice: null },
+};
+
+const DEGRADED_PAYLOAD = {
+  advice: {
+    verdict: "unknown",
+    verdict_label: "证据还不够，先按下面的线索查",
+    summary: "AI 排障暂时用不了：先按下面的线索自查",
+    causes: ["还没确认这条：串口出现「板子活着」"],
+    steps: ["逐根核对接线（先这四根）：led 的 LED_RED → PA15"],
+    issue_hint: "把检测目录与现象一起反馈，我们可以照着开一张修复单。",
+    degraded: true,
+  },
+  degraded: true,
+  message: "连接被拒绝",
+  record: { version: 1, symptom: "灯也不闪", checked_ids: [], advice: null },
+};
+
+test("hwcheckTriagePayload：只带工程目录 / 现象 / 当前勾选（现象去空白）", () => {
+  const payload = hwcheckTriagePayload({
+    project: { outputDir: "C:/out/hwcheck-stm32-x" },
+    symptom: "  灯在闪，串口没字  ",
+    checklistChecked: ["flash", "heartbeat"],
+  });
+  assert.deepEqual(payload, {
+    output_dir: "C:/out/hwcheck-stm32-x",
+    symptom: "灯在闪，串口没字",
+    checked_ids: ["flash", "heartbeat"],
+  });
+});
+
+test("hwcheckCanTriage：没有工程或没填现象都不给点（后端必拒，别让人白点）", () => {
+  assert.equal(hwcheckCanTriage({ project: null, symptom: "灯不亮" }), false);
+  assert.equal(hwcheckCanTriage({ project: { outputDir: "C:/x" }, symptom: "   " }), false);
+  assert.equal(hwcheckCanTriage({ project: { outputDir: "C:/x" }, symptom: "灯不亮" }), true);
+});
+
+test("hwcheckChecklistPayload：勾选落盘请求体（目录 + 勾选）", () => {
+  assert.deepEqual(hwcheckChecklistPayload({
+    project: { outputDir: "C:/x" }, checklistChecked: ["flash"],
+  }), { output_dir: "C:/x", checked_ids: ["flash"] });
+  assert.deepEqual(hwcheckChecklistPayload({}).checked_ids, []);
+});
+
+test("hwcheckAdviceState：建议 / 原因 / 降级标记各自落位", () => {
+  const ok = hwcheckAdviceState({}, ADVICE_PAYLOAD);
+  assert.equal(ok.advice.verdict, "wiring");
+  assert.equal(ok.adviceDegraded, false);
+  assert.equal(ok.adviceMessage, "");
+  const bad = hwcheckAdviceState({}, DEGRADED_PAYLOAD);
+  assert.equal(bad.advice.degraded, true);
+  assert.equal(bad.adviceDegraded, true);
+  assert.equal(bad.adviceMessage, "连接被拒绝", "失败原因单独存，不进建议正文");
+});
+
+test("hwcheckAdviceState：载荷缺 advice = 保留现有面板（出错响应不抹掉上一次结论）", () => {
+  const kept = hwcheckAdviceState({ advice: ADVICE_PAYLOAD.advice }, {});
+  assert.equal(kept.advice.verdict, "wiring");
+});
+
+test("hwcheckRecordState：工程回读把现象 / 勾选 / 建议一起带回来", () => {
+  const next = hwcheckRecordState({}, {
+    record: {
+      version: 1, symptom: "屏全黑", checked_ids: ["flash", "oled"],
+      advice: ADVICE_PAYLOAD.advice,
+    },
+  });
+  assert.equal(next.symptom, "屏全黑");
+  assert.deepEqual(next.checklistChecked, ["flash", "oled"]);
+  assert.equal(next.advice.verdict, "wiring");
+});
+
+test("hwcheckRecordState：载荷没有 record 键 = 什么都不动（preview / generate 不带它）", () => {
+  assert.deepEqual(hwcheckRecordState({ symptom: "保持" }, { platform: "stm32" }), {});
+});
+
+test("hwcheckRecordState：记录里没有建议 = advice 为 null（按「还没分析过」渲染）", () => {
+  const next = hwcheckRecordState({}, {
+    record: { version: 1, symptom: "灯不亮", checked_ids: [], advice: null },
+  });
+  assert.equal(next.advice, null);
+  assert.equal(next.adviceDegraded, false);
+});
+
+test("hwcheckChecklistState：只认勾选（别把还没提交的现象覆盖掉）", () => {
+  const next = hwcheckChecklistState({}, {
+    record: { symptom: "服务端旧值", checked_ids: ["flash"], advice: null },
+  });
+  assert.deepEqual(next, { checklistChecked: ["flash"] });
+  assert.equal("symptom" in next, false, "现象的真源是输入框，不由这个端点回写");
+});
+
+test("hwcheckAdviceHTML：定性 + 判断 + 两个列表 + 反馈出口都渲染", () => {
+  const out = hwcheckAdviceHTML(ADVICE_PAYLOAD.advice);
+  assert.ok(out.includes("更像接线问题"), "服务端给的定性标签原样渲染：" + out);
+  assert.ok(out.includes("串口没字、灯也不闪"));
+  assert.ok(out.includes("可能原因") && out.includes("下一步查什么"));
+  assert.ok(out.includes("按一次复位，看灯闪不闪"));
+  assert.ok(out.includes("反馈里带上检测目录"), "修复单出口要在");
+  assert.ok(!out.includes("兜底文案"), "正常建议不打兜底徽章");
+});
+
+test("hwcheckAdviceHTML：degraded 明说「兜底文案 + 可重试」，不装成模型结论", () => {
+  const out = hwcheckAdviceHTML(DEGRADED_PAYLOAD.advice);
+  assert.ok(out.includes("兜底文案"), out);
+  assert.ok(out.includes("degraded"), "样式上与真结论分开：" + out);
+  assert.ok(out.includes("还没确认这条：串口出现"));
+});
+
+test("hwcheckAdviceHTML：空建议 = 空态引导（不是一块空白）", () => {
+  assert.ok(hwcheckAdviceHTML(null).includes("让 AI 分析"));
+  assert.equal(hwcheckAdviceHTML(null), hwcheckAdviceEmptyHTML());
+});
+
+test("hwcheckAdviceHTML：文案过转义（模型输出含 < > 也不破页面）", () => {
+  const out = hwcheckAdviceHTML({
+    verdict: "unknown", verdict_label: "证据 < 不足 >",
+    summary: "a < b", causes: ["<img>"], steps: ["<b>x</b>"], issue_hint: "",
+  });
+  assert.ok(!out.includes("<img>") && !out.includes("<b>x</b>"));
+  assert.ok(out.includes("&lt;img&gt;") && out.includes("a &lt; b"));
+});
+
+test("hwcheckTriageErrorHTML：请求失败单独一句（与模型失败的兜底分开）", () => {
+  const out = hwcheckTriageErrorHTML("目录不存在");
+  assert.ok(out.includes("没能提交") && out.includes("目录不存在"));
+  assert.ok(out.includes("error"));
+});
+
+test("新控件齐备：现象输入框 / 分析按钮 / 状态行 / 建议容器都在检测页", () => {
+  for (const id of ["hwcheck-symptom", "btn-hwcheck-triage",
+    "hwcheck-triage-status", "hwcheck-advice"]) {
+    assert.ok(html.includes('id="' + id + '"'), "缺少控件 #" + id);
+  }
+  // 阅读顺序：清单（勾完之后）→ 现象回填与排障 → 最近几次检测
+  const checklistAt = html.indexOf('id="hwcheck-checklist"');
+  const triageAt = html.indexOf('id="hwcheck-symptom"');
+  const recentAt = html.indexOf('id="hwcheck-recent"');
+  assert.ok(checklistAt < triageAt && triageAt < recentAt,
+    "现象回填应在清单之后（照清单确认完才填现象）");
+  assert.ok(html.replace(/\s+/g, "").includes("检测没过是正常结果"),
+    "要明说「没过是正常结果」，不含糊");
+});
+
+test("ui 的建议渲染走 fx 单源 + 勾选落服务端（不手拼建议 HTML）", () => {
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  assert.ok(ui.includes("hwcheckAdviceHTML("), "ui 应调用 fx 的 hwcheckAdviceHTML(");
+  assert.ok(ui.includes("hwcheckAdviceState(") && ui.includes("hwcheckRecordState("));
+  assert.ok(ui.includes("hwcheckChecklistState("),
+    "勾选落盘响应只认勾选（整份采纳会吃掉还没提交的现象）");
+  assert.ok(ui.includes('"/api/hwcheck/triage"') && ui.includes('"/api/hwcheck/checklist"'));
+  assert.ok(!ui.includes("<li>"), "ui 不得手拼建议列表（双源漂移）");
+});
+
+test("ui 提交现象前先读输入框（现象的真源是 DOM，不是可能过期的 state）", () => {
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const submitAt = ui.indexOf("async function submitHwcheckTriage");
+  assert.ok(submitAt > 0);
+  const body = ui.slice(submitAt, submitAt + 600);
+  assert.ok(body.includes('$("hwcheck-symptom")'),
+    "提交前要把输入框的当前值收进 state：\n" + body);
+});
+
+test("ui 生成新工程时清掉上一次的现象与建议（旧建议属于另一个工程）", () => {
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const genAt = ui.indexOf("async function generateHwcheck");
+  const body = ui.slice(genAt, genAt + 1200);
+  assert.ok(body.includes("hwcheckUI.symptom = \"\"") && body.includes("hwcheckUI.advice = null"),
+    "生成成功后要归零现象与建议：\n" + body);
+});
+
+test("ui 回读勾选的判据是「这次带没带记录」而不是「记录里的勾选空不空」", () => {
+  // 评审整改：服务端把勾选全清空也是**有效状态**，拿"空"当"没有记录"会让
+  // localStorage 里的旧勾选复活（同一个页面两份真源，谁也说不清哪份对）。
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const adoptAt = ui.indexOf("function adoptProject");
+  const body = ui.slice(adoptAt, adoptAt + 1400);
+  assert.ok(body.includes("payload && payload.record"),
+    "判据要看 record 键在不在：\n" + body);
+  assert.ok(!/serverTicks\.length/.test(body),
+    "不得再用「勾选为空」当「没有记录」：\n" + body);
 });
 
 

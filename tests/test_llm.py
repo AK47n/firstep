@@ -42,6 +42,7 @@ from contest_generator.budget import (
 )
 from contest_generator.library import list_modules
 from contest_generator.fix_errors import FixSuggestion, read_file_contexts
+from contest_generator.hwcheck_triage import TriageContext, TriageFacts
 from contest_generator.wiring import WiringEntry
 from contest_generator.llm import (
     CLARIFICATION_HISTORY_CAP,
@@ -55,6 +56,7 @@ from contest_generator.llm import (
     EMBEDDED_CONTENT_CAP,
     ERROR_KIND_DOMAIN,
     ERROR_KIND_NETWORK,
+    ERROR_KIND_PARSE,
     EXCLUSIVE_GROUP_TAG,
     FIX_PREVIOUS_FIXES_CAP,
     FIX_SYSTEM_PROMPT,
@@ -6631,8 +6633,31 @@ PROTOCOL_METHOD_NAMES = frozenset(
         "analyze_idea",
         "apply_idea_fix",
         "scan_params",
+        "triage_hwcheck_symptom",
     }
 )
+
+
+def _triage_context() -> TriageContext:
+    """协议扫描用的最小硬件检测上下文（工单 module-hwcheck/08）。
+
+    派发测试只关心"这个方法落到哪个委托"，所以上下文取最小合法形状
+    （空接线 / 空清单 + 一句现象）——白名单判据另有 `tests/test_hwcheck_triage.py`。
+    """
+    return TriageContext(
+        platform=PLATFORM_STM32,
+        devices=(),
+        rows=(),
+        order=(),
+        sections=(),
+        unspecialized=(),
+        checklist=(),
+        checked_ids=(),
+        symptom="串口一行字都没有",
+        facts=TriageFacts(
+            pins=frozenset(), modules=frozenset(), known_modules=frozenset()
+        ),
+    )
 
 
 def _call_all_protocol_methods(router: RoutingLLM) -> None:
@@ -6661,6 +6686,7 @@ def _call_all_protocol_methods(router: RoutingLLM) -> None:
     router.analyze_idea("想法", "题面", "", [], [], (), "main.c", None)
     router.apply_idea_fix("想法", "建议", [], (), "题面", "", "main.c")
     router.scan_params("main.c", ())
+    router.triage_hwcheck_symptom(_triage_context())
 
 
 def test_routing_llm_routes_local_methods_to_local_and_rest_to_remote():
@@ -6699,6 +6725,7 @@ def test_routing_llm_routes_local_methods_to_local_and_rest_to_remote():
         "analyze_idea",
         "apply_idea_fix",
         "scan_params",
+        "triage_hwcheck_symptom",
     ]
 
 
@@ -7258,3 +7285,72 @@ def test_select_observation_content_excerpt_flattens_newlines():
     assert excerpt.startswith('{ "modules": [ {"slug": "dht11"')
     assert len(excerpt) <= 121  # 120 字符 + 省略号
     assert excerpt.endswith("…")
+
+
+# ---------------------------------------------------------------------------
+# 硬件检测排障（工单 module-hwcheck/08）：形状错 vs 事实错两条分道
+# ---------------------------------------------------------------------------
+
+
+def _hwcheck_triage_context():
+    """一次 stm32 检测的上下文（只有 led：白名单里没有 PA9、没有 ml_mpu6050）。"""
+    from contest_generator.hwcheck_triage import build_triage_context
+
+    return build_triage_context(
+        platform=PLATFORM_STM32,
+        devices=("led",),
+        modules=("led", "delay", "debug_uart"),
+        wiring={
+            "rows": [{"slug": "led", "role": "LED_RED", "role_id": "LED_RED", "pin": "PA15"}],
+            "board_shares": [],
+            "order": [{"slug": "led", "description": "板载灯", "bring_up": True}],
+        },
+        sections=({"slug": "led", "label": "LED", "plan": "点亮"},),
+        unspecialized=(),
+        checklist=({"id": "flash", "expect": "烧录成功", "check": "探针插好"},),
+        checked_ids=(),
+        symptom="灯不亮",
+        known_modules=("led", "delay", "debug_uart", "ml_mpu6050", "jy61p"),
+    )
+
+
+def test_triage_fact_rejection_is_domain_kind_and_retries_with_the_reason():
+    """事实约束拒收 = 域拒绝：`kind=domain` + **带被拒理由重出一次**。
+
+    判据三条：① 抛出的 `LLMError.kind` 是 domain（CONTEXT.md「错误映射」：
+    保留原文、不套 key / 余额话术）；② 确实重问了（假传输被调了两次 =
+    DOMAIN_RETRY_LIMIT 1 次重试）；③ 第二次请求的 user 消息带上了被拒理由
+    （点名的引脚 / 模块），模型才有机会改对。
+    """
+    from contest_generator.hwcheck_triage import TriageFactError  # noqa: F401
+
+    illegal = {
+        "verdict": "wiring",
+        "summary": "把线插到 PA9",
+        "causes": ["ml_mpu6050 没接好"],
+        "steps": ["换 PA9 试试"],
+    }
+    transport = FakeTransport(body=_api_response(json.dumps(illegal)))
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError) as exc_info:
+        llm.triage_hwcheck_symptom(_hwcheck_triage_context())
+
+    assert exc_info.value.kind == ERROR_KIND_DOMAIN
+    assert "PA9" in str(exc_info.value)
+    assert len(transport.calls) == 2, "域拒绝该带理由重出一次（DOMAIN_RETRY_LIMIT=1）"
+    retry_user = transport.calls[1][2]["messages"][1]["content"]
+    assert "PA9" in retry_user and "被拒绝" in retry_user
+    assert "不在本次接线表里" in retry_user
+
+
+def test_triage_shape_error_stays_parse_kind_and_retries_as_parse():
+    """形状错照旧走解析类快重试（不是域拒绝）：kind 保持缺省、理由不进域分支。"""
+    transport = FakeTransport(body=_api_response('{"verdict": "wiring"}'))
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError) as exc_info:
+        llm.triage_hwcheck_symptom(_hwcheck_triage_context())
+
+    assert exc_info.value.kind == ERROR_KIND_PARSE
+    assert len(transport.calls) > 1  # 解析类整次重问照旧

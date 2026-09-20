@@ -1,0 +1,9 @@
+﻿PASS  事实约束查表被停用（引脚 / 模块白名单）（变红=True / 逐字节复原=True）  3 failed, 1 warning in 1.59s
+PASS  LLM 失败不再兜底（把降级路径改成直接抛）（变红=True / 逐字节复原=True）  1 failed, 1 warning in 1.47s
+PASS  排障记录不落盘（triage 端点）（变红=True / 逐字节复原=True）  2 failed, 1 warning in 2.36s
+PASS  清单勾选不落盘（checklist 端点）（变红=True / 逐字节复原=True）  1 failed, 1 warning in 1.72s
+PASS  勾选响应整份采纳（会把没提交的现象吃掉）（变红=True / 逐字节复原=True）    }
+PASS  材料里出现过的脚不算事实（评审 ① 那条两张皮回到旧样）（变红=True / 逐字节复原=True）  2 failed in 0.16s
+PASS  勾选端点不判 kind（能往赛题工程里写检测记录）（变红=True / 逐字节复原=True）  1 failed, 1 warning in 1.22s
+PASS  事实错退回 parse 快重试（丢掉 domain 分道）（变红=True / 逐字节复原=True）  1 failed in 0.26s
+PASS  反馈出口缺省失效（模型不给就没有出口）（变红=True / 逐字节复原=True）  1 failed in 0.12s

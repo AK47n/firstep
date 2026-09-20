@@ -189,6 +189,15 @@ from .hwcheck_store import (
     read_hwcheck_project,
     resolve_hwcheck_output_dir,
 )
+from .hwcheck_triage import (
+    build_triage_context,
+    fallback_advice,
+    read_hwcheck_record,
+    record_with_advice,
+    record_with_checked,
+    record_with_symptom,
+    write_hwcheck_record,
+)
 from .impact import run_impact_analysis
 from .library import (
     add_module,
@@ -737,6 +746,22 @@ def _hwcheck_devices(payload: dict) -> tuple[str, ...]:
     return tuple(_require_str_list(payload, "devices"))
 
 
+def _hwcheck_record_dir(payload: dict) -> Path:
+    """排障 / 勾选两个端点的落点（工单 08）：目录必须已存在，**且真是检测工程**。
+
+    两处共用一处的理由：这两个端点都把记录写在**那次检测**旁边（同一个
+    `.contest_hwcheck_record.json`），"目录在不在 / 这是不是检测工程"的判据与
+    文案没有第二种答案。**kind 判据走 `read_hwcheck_project`**（不自己看清单）：
+    指到一个赛题工程目录就往里写记录，等于把两类工程搅在一起（spec「互不干扰」）。
+    目录不存在 / 不是检测工程 → HwCheckError 400 中文（不静默建树、不静默写）。
+    """
+    output_dir = Path(_require_str(payload, "output_dir"))
+    if not output_dir.is_dir():
+        raise HwCheckError(f"检测工程目录不存在：{output_dir}")
+    read_hwcheck_project(output_dir)
+    return output_dir
+
+
 def _hwcheck_library_config(ctx: AppContext) -> AppConfig:
     """检测页要用的库路径（模块库 / 母版库），没配置 = 400 中文。
 
@@ -816,7 +841,8 @@ def _hwcheck_view(ctx: AppContext, config: HwCheckConfig) -> dict:
 
     返回的字典里 `board` = 载荷的五个键（`wiring` / `sections` / `unspecialized` /
     `console` / `exclusive_groups`，端点用 `**board` 展开），`sections` / `generic`
-    = 域层对象（生成端点还要拿它们去渲染 main.c，不必再解析一遍）。
+    = 域层对象（生成端点还要拿它们去渲染 main.c，不必再解析一遍），`known_slugs`
+    = 整库模块 slug（工单 08 的事实约束判据用，**不进任何载荷**）。
 
     三个端点（preview / generate / project）共用这一处装配：读库一次 → 展开
     依赖（`resolve_dependencies` 的顺序即进工程顺序）→ 配方校验 → 板侧投影
@@ -881,6 +907,10 @@ def _hwcheck_view(ctx: AppContext, config: HwCheckConfig) -> dict:
         },
         "sections": sections,
         "generic": generic,
+        # 整库 slug 词表（工单 08）：排障的事实约束要判"模型提到的模块是不是
+        # 库内别的件"——`by_slug` 反正已经在这儿了，不必再扫一遍库。
+        # 三个端点各自 `**board` 展开，这条**不进载荷**（页面用不上）。
+        "known_slugs": tuple(by_slug),
     }
 
 
@@ -2596,12 +2626,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.get("/api/hwcheck/project")
     @_map_errors
     def hwcheck_project(output_dir: str = "") -> dict:
-        """给一个检测工程目录 → 它的平台 / 通道 / 器件 / main.c / 上板清单 / 板侧视图。
+        """给一个检测工程目录 → 它的平台 / 通道 / 器件 / main.c / 上板清单 /
+        板侧视图 / **检测记录**（工单 08：现象 + 勾选 + 建议）。
 
         main_c 读**盘上当前内容**（用户手改过就反映手改后的），清单与通道说明
         按清单记的平台与通道集重渲染（确定性，与生成时逐字一致）；板侧视图按
         清单里的平台 / 通道 / 器件重投影（依赖展开与生成时同一处），所以回读
-        出来的接线表与那次工程 README 里的表仍是同一份。目录不存在 /
+        出来的接线表与那次工程 README 里的表仍是同一份；`record` 读工程根的
+        记录文件（没有 = 空记录，坏文件 → 400 点名该删哪个）。目录不存在 /
         不是检测工程（赛题工程 / 缺清单）→ HwCheckError 400 中文。
         """
         target = output_dir.strip()
@@ -2621,7 +2653,97 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "output_hint": render_output_hint(config),
             "checklist": [item.to_dict() for item in render_checklist(config)],
             **_hwcheck_view(context, config)["board"],
+            # 检测记录（工单 08）：现象 + 勾选 + 建议随这次检测落盘，刷新回显。
+            # 读在这里（而不是另开一个 GET）：页面回到某个检测工程时一次拿全，
+            # 少一个"清单回来了、记录还没回来"的中间态。
+            "record": read_hwcheck_record(path).to_dict(),
         }
+
+    # 硬件检测：现象回填 + AI 排障（工单 module-hwcheck/08）——本功能里**唯一**
+    # 的 LLM 入口（其余全程确定性渲染）。同步端点（不是 SSE）：模型不可用
+    # **不阻断**——仍 200 + 兜底建议 + degraded=True，记录照常落盘，页面可重试；
+    # 与 buy-discuss / idea-chat 那批同步端点同款（事件常量登记在 events.py）。
+    @app.post("/api/hwcheck/triage")
+    @_map_errors
+    def hwcheck_triage(payload: dict) -> dict:
+        """现象 + 本次检测上下文 → 排障建议（并写入检测记录）。
+
+        payload：output_dir（必填，已有的检测工程目录；不是检测工程 → 400 中文）、
+        symptom（必填非空，学生填的实际现象）、checked_ids（可选，页面当前的清单
+        勾选状态——与检测页显示的同一份，落盘后刷新仍回显）。
+
+        上下文（接线表 / 引脚绑定 / 检测计划 / 清单与勾选 / 现象）由
+        `hwcheck_triage.build_triage_context` 一处装配；**事实白名单与 prompt
+        材料同源**：模型引用了本次接线表里没有的引脚、或本次没选的库内模块，
+        域层当场拒收（`TriageFactError` → LLM 层按域拒绝带理由重问一次）→
+        仍不行走兜底。返回 {advice, degraded, message, record}——degraded=True
+        时 advice 是确定性兜底文案（message = 模型失败原因），页面显示"可重试"，
+        不把它当模型结论。
+        """
+        output_dir = _hwcheck_record_dir(payload)
+        symptom = _require_str(payload, "symptom")
+        checked_ids = tuple(_require_str_list(payload, "checked_ids"))
+        config = read_hwcheck_project(output_dir)
+        view = _hwcheck_view(context, config)
+        board = view["board"]
+        triage_context = build_triage_context(
+            platform=config.platform,
+            devices=hwcheck_devices(config),
+            # 实际进工程的模块集（框架 + 通道 + 器件）：事实约束的白名单要
+            # 覆盖 `delay` / `config` 这类没有接线行的框架件，否则模型提一句
+            # 就会误杀（见 build_triage_context 的说明）。
+            modules=hwcheck_modules(config),
+            wiring=board["wiring"],
+            sections=board["sections"],
+            unspecialized=board["unspecialized"],
+            checklist=[item.to_dict() for item in render_checklist(config)],
+            checked_ids=checked_ids,
+            symptom=symptom,
+            known_modules=view["known_slugs"],
+        )
+        record = read_hwcheck_record(output_dir)
+        record = record_with_checked(record, checked_ids)
+        record = record_with_symptom(record, symptom)
+        collector = create_llm_observation_collector("hwcheck-triage")
+        message = ""
+        try:
+            llm = _llm(context, RetryBudget(), collector)
+            advice = llm.triage_hwcheck_symptom(triage_context)
+            degraded = False
+        except LLMError as exc:
+            # 不阻断（票面硬要求）：兜底文案 + 可重试，现象与勾选照常落盘。
+            # 失败原因只进 message（页面单独显示）——不混进建议正文。
+            message = str(exc)
+            advice = fallback_advice(triage_context)
+            degraded = True
+        finally:
+            # 观测收尾：漏调则观察面板 recent_llm_workflows 看不到这一轮
+            context.recent_llm_workflows.add_completed(collector)
+        record = record_with_advice(record, advice)
+        write_hwcheck_record(output_dir, record)
+        return {
+            "advice": advice.to_dict(),
+            "degraded": degraded,
+            "message": message,
+            "record": record.to_dict(),
+        }
+
+    # 硬件检测：清单勾选落盘（工单 module-hwcheck/08）——零 LLM 的轻端点：
+    # 勾一条就写一次，刷新 / 换机器回显的是**服务端真源**（localStorage 那份
+    # 只作离线兜底）。与 triage 共用一个记录文件，现象与建议原样保留。
+    @app.post("/api/hwcheck/checklist")
+    @_map_errors
+    def hwcheck_checklist(payload: dict) -> dict:
+        """清单勾选状态落盘：{output_dir, checked_ids} → {record}。
+
+        目录不存在 / 不是检测工程 → 400 中文；记录文件坏 → 400 中文点名该删
+        哪个文件（静默重置会把学生填过的现象抹掉）。
+        """
+        output_dir = _hwcheck_record_dir(payload)
+        record = read_hwcheck_record(output_dir)
+        record = record_with_checked(record, tuple(_require_str_list(payload, "checked_ids")))
+        write_hwcheck_record(output_dir, record)
+        return {"record": record.to_dict()}
 
     @app.post("/api/pick-directory")
     @_map_errors

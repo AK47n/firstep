@@ -138,6 +138,12 @@ EVENT_TASK_DISCUSS = "task_discuss"
 # （分钟级阻塞）；端点同步返回（非 SSE），事件供观察面板消费。
 EVENT_IDEA_CHAT = "idea_chat"
 
+# 硬件检测排障（工单 module-hwcheck/08）：把上板现象填回去让 AI 给排查方向的
+# 那一轮 LLM 调用（分钟级以内）；端点同步返回（**非 SSE**：模型不可用时端点
+# 走兜底建议 + degraded，仍 HTTP 200，不阻断），事件供观察面板消费——与
+# buy_discuss / task_discuss / idea_chat 同款（同步端点的词表登记）。
+EVENT_HWCHECK_TRIAGE = "hwcheck_triage"
+
 # 终端事件（收尾事件，sse 运行器发射；done / question / error 后流结束）：
 # done 的 data = 完整报告（提炼 = report.to_dict()，推荐 = 推荐结果 dict）；
 # question 的 data = {"questions": [...]}（推荐端点：模型拿不准向用户补问）；

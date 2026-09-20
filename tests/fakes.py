@@ -16,6 +16,7 @@ from pypdf import PdfWriter
 
 from contest_generator.events import ProgressEmitter
 from contest_generator.fix_errors import FixSuggestion
+from contest_generator.hwcheck_triage import TriageAdvice, TriageContext
 from contest_generator.impact import ImpactAnalysis
 from contest_generator.library import ValidationResult
 from contest_generator.llm import BuyDiscussion, IdeaAnalysis, StepReport, TaskDiscussion
@@ -611,6 +612,8 @@ class FakeLLM:
         global_discussion: TaskDiscussion | None = None,
         params_discussion: TaskDiscussion | None = None,
         param_list: ParamList | None = None,
+        triage_advice: TriageAdvice | None = None,
+        triage_error: Exception | None = None,
     ) -> None:
         self._selection = selection or ModuleSelection(modules=(), reasons={})
         # select_modules 输入记录（工单 module-preselect/03：预筛注记 / 摘要清单
@@ -671,6 +674,15 @@ class FakeLLM:
                 ),
             ),
         )
+        self._triage_advice = triage_advice or TriageAdvice(
+            verdict="wiring",
+            summary="更像接线问题（测试默认）。",
+            causes=("串口 TX/RX 没交叉接",),
+            steps=("把 TX 与 RX 对调，重新上电再看一次",),
+            issue_hint="",
+        )
+        self._triage_error = triage_error
+        self.triage_calls: list[TriageContext] = []
         self.discuss_calls: list[tuple[str, str, str, tuple, tuple]] = []
         self.task_discuss_calls: list[
             tuple[dict[str, Any], str, str, tuple, tuple[str, ...], str, tuple]
@@ -1098,6 +1110,16 @@ class FakeLLM:
         )
         return self._fixed_main_c
 
+    def triage_hwcheck_symptom(self, context: TriageContext) -> TriageAdvice:
+        """硬件检测排障（工单 module-hwcheck/08）：记录上下文，返回固定建议。
+
+        `triage_error` 非空时抛出它（端点降级路径的夹具：LLM 失败不阻断）。
+        """
+        self.triage_calls.append(context)
+        if self._triage_error is not None:
+            raise self._triage_error
+        return self._triage_advice
+
 
 class RecordingLLM:
     """记录型假 LLM（工单 local-llm-routing/02）：记录每个被调用的方法名，
@@ -1373,6 +1395,15 @@ class RecordingLLM:
     ) -> str:
         self._record("apply_idea_fix")
         return main_c
+
+    def triage_hwcheck_symptom(self, context: TriageContext) -> TriageAdvice:
+        self._record("triage_hwcheck_symptom")
+        return TriageAdvice(
+            verdict="unknown",
+            summary="占位排障建议",
+            causes=("占位原因",),
+            steps=("占位下一步",),
+        )
 
     def generate_report_draft(
         self,

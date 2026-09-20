@@ -1044,6 +1044,29 @@
      没有串口时只出那句"不能交互式复测"（不摆用不了的命令表）。 */
   .hwcheck-console .hwcheck-table { margin-bottom: var(--space-1); }
   .hwcheck-console .hwcheck-table td:first-child { width: 64px; text-align: center; }
+  /* 现象回填 + AI 排障（工单 module-hwcheck/08）：输入框 + 建议面板。
+     建议面板刻意与"清单一句话"区分开：定性标签 + 两个列表（可能原因 / 下一步），
+     degraded（兜底文案）时用虚线描边 + 徽章，不让人把它当成模型结论。 */
+  .hwcheck-symptom { width: 100%; min-height: 72px; margin-top: var(--space-2);
+                     font-family: inherit; font-size: 13px; line-height: 1.7;
+                     padding: 8px 10px; border: 1px solid var(--border-strong);
+                     border-radius: var(--radius-md); background: var(--panel);
+                     color: var(--text); resize: vertical; }
+  .hwcheck-advice { margin-top: var(--space-3); border: 1px solid var(--border);
+                    border-left: 3px solid var(--accent); border-radius: var(--radius-md);
+                    padding: 10px 12px; }
+  .hwcheck-advice.degraded { border-style: dashed; border-left: 3px solid var(--warn); }
+  .hwcheck-advice-head { display: flex; flex-wrap: wrap; align-items: baseline;
+                         gap: 8px; margin-bottom: var(--space-1); }
+  .hwcheck-advice-verdict { font-weight: 600; color: var(--accent); }
+  .hwcheck-advice.degraded .hwcheck-advice-verdict { color: var(--warn); }
+  .hwcheck-advice-summary { font-size: 13px; line-height: 1.7; margin-bottom: var(--space-2);
+                            overflow-wrap: break-word; }
+  .hwcheck-advice-block { margin-bottom: var(--space-2); }
+  .hwcheck-advice-title { font-size: 12px; color: var(--muted); margin-bottom: var(--space-1); }
+  .hwcheck-advice-block ul, .hwcheck-advice-block ol { margin: 0; padding-left: 20px; }
+  .hwcheck-advice-block li { font-size: 13px; line-height: 1.7;
+                             overflow-wrap: break-word; }
   /* 评分点核对清单（工单 score-checklist/01）：逐条 checkbox + 进度 +
      复制核对表；done 行弱化描边表示已核对 */
   .sp-actions { display: flex; align-items: center; gap: 10px; margin-bottom: var(--space-2); }
@@ -3946,6 +3969,22 @@
     <div class="card">
       <h2>上板确认清单 <span class="muted">（照着看，勾完就知道通没通）</span></h2>
       <div id="hwcheck-checklist"></div>
+    </div>
+
+    <!-- 现象回填 + AI 排障（工单 module-hwcheck/08）：本栏目唯一的 LLM 入口。
+         模型不可用不阻断——服务端给确定性兜底文案，现象与勾选照常落盘。 -->
+    <div class="card">
+      <h2>现象回填与排障 <span class="muted">（跑完把看到什么填回来，AI 说下一步查哪里）</span></h2>
+      <div class="hwcheck-hint">上板跑完一遍之后，把实际看到的写进来（例：灯在闪，但串口一行字
+        都没有）。AI 会先判断这更像接线、器件还是程序的问题，再给下一步查什么。检测没过是正常
+        结果——它要么指向接线，要么指向库内驱动；必要时可以顺着它的提示反馈成一张修复单。</div>
+      <textarea id="hwcheck-symptom" class="hwcheck-symptom" rows="3"
+                placeholder="例：灯在闪，串口一行字都没有；OLED 全黑；敲 l 没反应"></textarea>
+      <div class="row" style="margin-top: var(--space-2)">
+        <button id="btn-hwcheck-triage" disabled>让 AI 分析</button>
+        <span id="hwcheck-triage-status" class="hwcheck-hint"></span>
+      </div>
+      <div id="hwcheck-advice"></div>
     </div>
 
     <div class="card">

@@ -38,6 +38,9 @@ import {
   hwcheckSectionsState, hwcheckSectionsHTML, hwcheckUnspecializedHTML,
   hwcheckSectionsEmptyHTML,
   hwcheckConsoleState, hwcheckConsoleHTML,
+  hwcheckCanTriage, hwcheckTriagePayload, hwcheckChecklistPayload,
+  hwcheckAdviceState, hwcheckRecordState, hwcheckTriageErrorHTML,
+  hwcheckAdviceHTML, hwcheckChecklistState,
   HWCHECK_PARENT_KEY, HWCHECK_LAST_DIR_KEY,
 } from "/js/fx/hwcheck.js";
 
@@ -61,6 +64,11 @@ const hwcheckUI = {
   console: null,      // 串口命令台载荷（配方命令 + 既有命令 + 能不能复测，工单 06）
   project: null,      // 当前正在看的检测工程（生成或回读来的）
   checklistChecked: [],
+  symptom: "",        // 学生填的"实际现象"（工单 08：AI 排障的输入）
+  advice: null,       // 最近一次排障建议（服务端给；degraded = 兜底文案）
+  adviceMessage: "",  // 模型失败原因（只在降级时非空；与建议正文分开显示）
+  adviceDegraded: false,
+  triageError: "",    // 排障**请求**失败（网络 / 400）——与"模型失败"不是一回事
   recent: [],
   generateError: "",
   wiringError: "",
@@ -263,6 +271,29 @@ function renderHwcheckConsole() {
       + "复测命令（哪些能复测由库内配方决定），以及没有串口时为什么不能交互复测。</div>";
 }
 
+// renderHwcheckAdvice()：现象回填 + AI 排障面板（工单 08）。
+// 三种内容分开放：**请求失败**（triageError，红字）/ **模型失败**（兜底建议 +
+// message 一句）/ **模型结论**（建议正文）——把"模型没答上来"说成"检测失败"
+// 会把学生引到错的地方去查。
+function renderHwcheckAdvice() {
+  const box = $("hwcheck-advice");
+  const button = $("btn-hwcheck-triage");
+  if (button) {
+    button.disabled = !hwcheckCanTriage(hwcheckUI) || hwcheckUI.busy;
+    button.textContent = hwcheckUI.busy ? "分析中…" : "让 AI 分析";
+  }
+  const status = $("hwcheck-triage-status");
+  if (status) {
+    status.textContent = hwcheckUI.adviceMessage
+      ? "AI 这次没给出来：" + hwcheckUI.adviceMessage
+      : "";
+  }
+  if (!box) return;
+  box.innerHTML = (hwcheckUI.triageError
+    ? hwcheckTriageErrorHTML(hwcheckUI.triageError) : "")
+    + hwcheckAdviceHTML(hwcheckUI.advice);
+}
+
 export function renderHwcheckPanel() {
   renderHwcheckPlatforms();
   renderHwcheckChannelNote();
@@ -273,6 +304,7 @@ export function renderHwcheckPanel() {
   renderHwcheckConsole();
   renderHwcheckProject();
   renderHwcheckChecklist();
+  renderHwcheckAdvice();
   renderHwcheckRecent();
 }
 
@@ -292,8 +324,19 @@ function adoptProject(payload, dir, { keepSelection = false } = {}) {
     Object.assign(hwcheckUI, adopted);
     Object.assign(hwcheckUI, hwcheckPreviewState(hwcheckUI, payload));
   }
-  hwcheckUI.checklistChecked = hwcheckCheckedIds(
-    readStored(hwcheckChecklistKey(dir)));
+  const recordState = hwcheckRecordState(hwcheckUI, payload);
+  Object.assign(hwcheckUI, recordState);
+  // 勾选态：**服务端记录优先**（工单 08 起勾选也落盘）。判据是"这次回读**带没带
+  // 记录**"（record 键在不在），不是"记录里的勾选空不空"——服务端把勾选全清空
+  // 也是一种有效状态，拿空当"没有记录"会让本地备忘里的旧勾选复活（评审整改）。
+  const hasRecord = !!(payload && payload.record);
+  if (!hasRecord) {
+    hwcheckUI.checklistChecked = hwcheckCheckedIds(
+      readStored(hwcheckChecklistKey(dir)));
+  }
+  const symptomBox = $("hwcheck-symptom");
+  if (symptomBox) symptomBox.value = hwcheckUI.symptom || "";
+  hwcheckUI.triageError = "";
   hwcheckUI.generateError = "";
   hwcheckUI.wiringError = "";
   writeStored(HWCHECK_LAST_DIR_KEY, dir);
@@ -390,6 +433,13 @@ async function generateHwcheck() {
   try {
     const payload = await apiPost("/api/hwcheck/generate", hwcheckGeneratePayload(hwcheckUI));
     const dir = String(payload.output_dir || "");
+    // 新工程 = 新的一次检测：现象与上一次的建议都归零（旧建议属于另一个工程，
+    // 留着会让人以为"这个工程已经分析过了"）
+    hwcheckUI.symptom = "";
+    hwcheckUI.advice = null;
+    hwcheckUI.adviceMessage = "";
+    hwcheckUI.adviceDegraded = false;
+    hwcheckUI.triageError = "";
     adoptProject(payload, dir);
     writeStored(HWCHECK_PARENT_KEY, hwcheckUI.parentDir);
     toast("ok", "检测工程已生成：" + dir);
@@ -439,6 +489,46 @@ async function loadHwcheckRecent() {
     hwcheckUI.recent = [];   // 最近列表读不到不影响检测本身
   }
   renderHwcheckRecent();
+}
+
+// —— 现象回填 + AI 排障（工单 08）：本栏目唯一的 LLM 入口 ——
+//
+// 两条独立的失败通道，分开显示（票面：LLM 失败不阻断 + 可重试）：
+//   * 请求失败（网络 / 400：目录不在、记录文件坏）→ triageError 红字；
+//   * 模型失败（服务端 200 + degraded）→ 兜底建议 + 一句失败原因（message），
+//     现象与勾选**已经落盘**，学生改完现象再点一次就是重试。
+async function submitHwcheckTriage() {
+  if (!hwcheckCanTriage(hwcheckUI) || hwcheckUI.busy) return;
+  // 现象的真源是**输入框**（不是 state 里那份可能过期的回显）：提交前先取一次
+  const symptomBox = $("hwcheck-symptom");
+  if (symptomBox) hwcheckUI.symptom = symptomBox.value;
+  hwcheckUI.busy = true;
+  hwcheckUI.triageError = "";
+  renderHwcheckAdvice();
+  try {
+    const payload = await apiPost("/api/hwcheck/triage", hwcheckTriagePayload(hwcheckUI));
+    Object.assign(hwcheckUI, hwcheckAdviceState(hwcheckUI, payload));
+  } catch (e) {
+    hwcheckUI.triageError = e && e.message ? e.message : String(e);
+  } finally {
+    hwcheckUI.busy = false;
+  }
+  renderHwcheckAdvice();
+}
+
+// syncHwcheckChecklist()：勾选落盘（零 LLM 轻端点）。本地备忘照旧写一份
+// （离线 / 服务端读不到时的兜底）；服务端那份是"刷新 / 换机器也回显"的真源。
+// 失败了只提示一句，不回滚勾选——学生刚点的那一下是有效输入。
+async function syncHwcheckChecklist() {
+  if (!hwcheckUI.project || !hwcheckUI.project.outputDir) return;
+  try {
+    const payload = await apiPost(
+      "/api/hwcheck/checklist", hwcheckChecklistPayload(hwcheckUI));
+    // 只认勾选（hwcheckChecklistState 的说明：整份采纳会吃掉还没提交的现象）
+    Object.assign(hwcheckUI, hwcheckChecklistState(hwcheckUI, payload));
+  } catch (e) {
+    toastError(e, "清单勾选没能存进工程目录");
+  }
 }
 
 // —— 编译 / 烧录 / 打开工程：三个动作都复用既有能力，本模块只接 DOM ——
@@ -664,8 +754,20 @@ export function initHwcheck() {
         readStored(key), input.dataset.hwcheckCheck, input.checked));
       hwcheckUI.checklistChecked = hwcheckCheckedIds(readStored(key));
       renderHwcheckChecklist();
+      // 落服务端一份（工单 08）：刷新 / 换机器回显靠它；本地备忘退成兜底
+      syncHwcheckChecklist();
     });
   }
+  // —— 现象回填 + AI 排障（工单 08）：唯一的 LLM 入口 ——
+  const symptom = $("hwcheck-symptom");
+  if (symptom) {
+    symptom.addEventListener("input", () => {
+      hwcheckUI.symptom = symptom.value;
+      renderHwcheckAdvice();   // 按钮的可用性跟着"填没填"变
+    });
+  }
+  const triage = $("btn-hwcheck-triage");
+  if (triage) triage.addEventListener("click", submitHwcheckTriage);
   const recent = $("hwcheck-recent");
   if (recent) {
     recent.addEventListener("click", (e) => {

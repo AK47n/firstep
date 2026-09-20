@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 from dataclasses import replace
@@ -2172,5 +2173,278 @@ def test_a_full_probe_run_does_not_declare_the_probe_none_helper():
     assert "hwcheck_verdict_probe_none" in code
     assert "未判定" in unescape_c_string(code)
     assert "hwcheck_summary_fail" not in code     # 没有判定项 → 失败档不留
+
+
+# ---------------------------------------------------------------------------
+# 工单 08：现象回填 + AI 排障（本功能里唯一的 LLM 入口）
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def triage_client(tmp_path):
+    """真库 + 真母版 + **可检查的**假 LLM（holder 里那份）。
+
+    为什么不用 `real_library_client`：那个 fixture 每次请求新建 FakeLLM，
+    本单要断言"送进模型的是什么"（上下文 / 现象）与"模型失败时的降级行为"，
+    必须抓住同一个实例。桌面重定向保证不碰用户桌面。
+    """
+    from fastapi.testclient import TestClient
+
+    from contest_generator.config import AppConfig
+    from contest_generator.webapp import AppContext, create_app
+    from tests.fakes import FakeLLM
+
+    repo = Path(__file__).resolve().parents[1]
+    desktop = tmp_path / "desktop"
+    desktop.mkdir()
+    holder = {"llm": FakeLLM()}
+    ctx = AppContext(
+        config_path=tmp_path / "cfg" / "config.json",
+        config=AppConfig(
+            api_key="sk-test",
+            module_library_dir=repo / "library" / "modules",
+            masters_dir=repo / "library" / "masters",
+        ),
+        llm_factory=lambda config: holder["llm"],
+        desktop_dir=lambda: desktop,
+    )
+    return TestClient(create_app(ctx)), ctx, holder
+
+
+def _generate_hwcheck_project(client, parent: Path, **extra) -> dict:
+    """生成一个检测工程（本单的每个端点用例都从"真工程"出发）。"""
+    payload = {
+        "platform": PLATFORM_STM32,
+        "debug_uart": True,
+        "oled": False,
+        "devices": ["led"],
+        "parent_dir": str(parent),
+        **extra,
+    }
+    response = client.post("/api/hwcheck/generate", json=payload)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_triage_endpoint_returns_advice_and_persists_the_record(triage_client, tmp_path):
+    """一次排障：建议回给页面 + 现象 / 勾选 / 建议一起落盘（刷新可回显）。"""
+    from contest_generator.hwcheck_triage import HWCHECK_RECORD_FILENAME
+
+    client, _, holder = triage_client
+    parent = tmp_path / "out"
+    parent.mkdir()
+    generated = _generate_hwcheck_project(client, parent)
+    output_dir = generated["output_dir"]
+
+    response = client.post(
+        "/api/hwcheck/triage",
+        json={
+            "output_dir": output_dir,
+            "symptom": "串口一行字都没有，灯也不闪",
+            "checked_ids": ["flash"],
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["degraded"] is False
+    assert body["message"] == ""
+    assert body["advice"]["verdict"] == "wiring"
+    assert body["advice"]["causes"] == ["串口 TX/RX 没交叉接"]
+
+    # 送进模型的上下文：现象原样、接线行的脚进了白名单（"不编造"的判据）
+    context = holder["llm"].triage_calls[-1]
+    assert context.symptom == "串口一行字都没有，灯也不闪"
+    assert "PA15" in context.facts.pins  # 地猛星 stm32 的 led 默认脚
+    assert "led" in context.facts.modules
+
+    # 记录落盘（现象 + 勾选 + 建议三者都在同一份文件里）
+    on_disk = json.loads(
+        (Path(output_dir) / HWCHECK_RECORD_FILENAME).read_text(encoding="utf-8")
+    )
+    assert on_disk["symptom"] == "串口一行字都没有，灯也不闪"
+    assert on_disk["checked_ids"] == ["flash"]
+    assert on_disk["advice"]["verdict"] == "wiring"
+    assert body["record"] == on_disk
+
+
+def test_triage_endpoint_degrades_without_blocking_when_llm_fails(triage_client, tmp_path):
+    """模型失败**不阻断**：200 + 兜底建议 + degraded，记录照常保留（可重试）。"""
+    from contest_generator.hwcheck_triage import (
+        FALLBACK_REASON_PREFIX,
+        HWCHECK_RECORD_FILENAME,
+    )
+    from contest_generator.llm import LLMError
+
+    client, _, holder = triage_client
+    parent = tmp_path / "out"
+    parent.mkdir()
+    output_dir = _generate_hwcheck_project(client, parent)["output_dir"]
+    holder["llm"] = type(holder["llm"])(
+        triage_error=LLMError("连接被拒绝")
+    )
+
+    response = client.post(
+        "/api/hwcheck/triage",
+        json={"output_dir": output_dir, "symptom": "灯常亮不闪", "checked_ids": ["flash"]},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["degraded"] is True
+    assert "连接被拒绝" in body["message"]
+    assert FALLBACK_REASON_PREFIX in body["advice"]["summary"]
+    assert "连接被拒绝" not in body["advice"]["summary"]  # 原因只在 message 里
+    assert body["advice"]["degraded"] is True
+    # 记录照常落盘：现象没丢，建议是兜底那份
+    on_disk = json.loads(
+        (Path(output_dir) / HWCHECK_RECORD_FILENAME).read_text(encoding="utf-8")
+    )
+    assert on_disk["symptom"] == "灯常亮不闪"
+    assert on_disk["checked_ids"] == ["flash"]
+    assert on_disk["advice"]["degraded"] is True
+
+
+def test_triage_endpoint_rejects_facts_outside_the_context(triage_client, tmp_path):
+    """事实约束真的在链路上生效：模型点出本次没有的脚 / 模块 → 降级，不照单全收。
+
+    这里用**真 DeepSeekLLM + 假传输**（不是 FakeLLM）：事实判据住在
+    `parse_triage_advice`，绕过它就把这条验收标准测空了。传输永远返回带
+    `PA9`（本次接线表里没有）与 `jy61p`（本次没选的库内模块）的建议 →
+    每轮都被拒 → 端点拿兜底建议，且**兜底文案里不含那些非法名字**。
+    """
+    from fastapi.testclient import TestClient
+
+    from contest_generator.config import AppConfig
+    from contest_generator.llm import DeepSeekLLM
+    from contest_generator.webapp import AppContext, create_app
+    from tests.fakes import FakeTransport
+
+    repo = Path(__file__).resolve().parents[1]
+    desktop = tmp_path / "desktop2"
+    desktop.mkdir()
+    illegal = {
+        "verdict": "wiring",
+        "summary": "把线插到 PA9 上试试",
+        "causes": ["jy61p 那件没接好"],
+        "steps": ["换成 PA9 再看一次"],
+        "issue_hint": "",
+    }
+    transport = FakeTransport(body=json.dumps({"choices": [{"message": {"content": json.dumps(illegal)}}]}))
+    llm = DeepSeekLLM(
+        AppConfig(api_key="sk-test", module_library_dir=repo / "library" / "modules",
+                  masters_dir=repo / "library" / "masters"),
+        transport=transport,
+    )
+    ctx = AppContext(
+        config_path=tmp_path / "cfg" / "config.json",
+        config=AppConfig(
+            api_key="sk-test",
+            module_library_dir=repo / "library" / "modules",
+            masters_dir=repo / "library" / "masters",
+        ),
+        llm_factory=lambda config: llm,
+        desktop_dir=lambda: desktop,
+    )
+    client = TestClient(create_app(ctx))
+    output_dir = _generate_hwcheck_project(client, desktop)["output_dir"]
+
+    body = client.post(
+        "/api/hwcheck/triage",
+        json={"output_dir": output_dir, "symptom": "什么都没看到", "checked_ids": []},
+    ).json()
+    assert body["degraded"] is True
+    assert "PA9" in body["message"] and "jy61p" in body["message"]  # 拒收理由点名
+    assert "PA9" not in body["advice"]["summary"]
+    assert all("PA9" not in step for step in body["advice"]["steps"])
+    assert all("jy61p" not in cause for cause in body["advice"]["causes"])
+    assert transport.calls  # 确实问过模型（不是没调就降级）
+
+
+def test_triage_endpoint_400s_on_empty_symptom_and_unknown_dir(triage_client, tmp_path):
+    """缺现象 / 目录不存在 / 不是检测工程 → 400 中文（域层与路由层各守一段）。"""
+    client, _, _ = triage_client
+    parent = tmp_path / "out"
+    parent.mkdir()
+    output_dir = _generate_hwcheck_project(client, parent)["output_dir"]
+
+    empty = client.post(
+        "/api/hwcheck/triage",
+        json={"output_dir": output_dir, "symptom": "   "},
+    )
+    assert empty.status_code == 400, empty.text
+    missing = client.post(
+        "/api/hwcheck/triage",
+        json={"output_dir": str(parent / "没有这个目录"), "symptom": "灯不亮"},
+    )
+    assert missing.status_code == 400, missing.text
+    contest = tmp_path / "contest"
+    contest.mkdir()
+    (contest / ".contest_context.json").write_text(
+        json.dumps({"kind": "contest", "platform": PLATFORM_STM32, "slugs": ["led"]}),
+        encoding="utf-8",
+    )
+    wrong_kind = client.post(
+        "/api/hwcheck/triage",
+        json={"output_dir": str(contest), "symptom": "灯不亮"},
+    )
+    assert wrong_kind.status_code == 400, wrong_kind.text
+    assert "检测工程" in wrong_kind.json()["detail"]
+    # 勾选端点也守同一条判据：往赛题工程里写检测记录 = 把两类工程搅在一起
+    wrong_kind_ticks = client.post(
+        "/api/hwcheck/checklist",
+        json={"output_dir": str(contest), "checked_ids": ["flash"]},
+    )
+    assert wrong_kind_ticks.status_code == 400, wrong_kind_ticks.text
+    assert "检测工程" in wrong_kind_ticks.json()["detail"]
+    assert not (contest / ".contest_hwcheck_record.json").exists()
+
+
+def test_checklist_endpoint_persists_ticks_and_project_reads_them_back(
+    triage_client, tmp_path
+):
+    """勾选落服务端真源：勾一条写一次；回读工程时现象 / 勾选 / 建议一起回来。"""
+    client, _, _ = triage_client
+    parent = tmp_path / "out"
+    parent.mkdir()
+    output_dir = _generate_hwcheck_project(client, parent)["output_dir"]
+    client.post(
+        "/api/hwcheck/triage",
+        json={"output_dir": output_dir, "symptom": "屏全黑", "checked_ids": []},
+    )
+
+    saved = client.post(
+        "/api/hwcheck/checklist",
+        json={"output_dir": output_dir, "checked_ids": ["flash", "heartbeat"]},
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["record"]["checked_ids"] == ["flash", "heartbeat"]
+    # 勾选更新不吃掉现象与建议（同一个记录文件，三段互不覆盖）
+    assert saved.json()["record"]["symptom"] == "屏全黑"
+    assert saved.json()["record"]["advice"]["verdict"] == "wiring"
+
+    reloaded = client.get("/api/hwcheck/project", params={"output_dir": output_dir})
+    assert reloaded.status_code == 200, reloaded.text
+    record = reloaded.json()["record"]
+    assert record["checked_ids"] == ["flash", "heartbeat"]
+    assert record["symptom"] == "屏全黑"
+    assert record["advice"]["causes"] == ["串口 TX/RX 没交叉接"]
+
+
+def test_fresh_project_has_an_empty_record(triage_client, tmp_path):
+    """刚生成的工程没有记录 = 空记录（回显空态，不 400）。"""
+    client, _, _ = triage_client
+    parent = tmp_path / "out"
+    parent.mkdir()
+    output_dir = _generate_hwcheck_project(client, parent)["output_dir"]
+    body = client.get("/api/hwcheck/project", params={"output_dir": output_dir}).json()
+    assert body["record"]["symptom"] == ""
+    assert body["record"]["checked_ids"] == []
+    assert body["record"]["advice"] is None
+
+
+def test_hwcheck_event_constant_is_registered_in_the_single_source():
+    """事件词表单源：排障事件常量登记在 events.py（页面 / 观察面板按它消费）。"""
+    from contest_generator import events
+
+    assert events.EVENT_HWCHECK_TRIAGE == "hwcheck_triage"
 
 

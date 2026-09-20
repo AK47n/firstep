@@ -212,6 +212,19 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > 浏览器验收时端口上的旧服务把新起的挤掉，`startServer` 的健康检查与端点哨兵都过、
 > 却答的是旧进程；跑之前按第 2 节那条 `Get-CimInstance … contest_generator.webapp`
 > 清一遍即可。
+>
+> **2026-09-20 14:2x（module-hwcheck/08 会话）**：8000/8020/8021/8791 都没在听、
+> 无残留 python（实测命令见第 2 节那条 `Get-CimInstance`）。这一单一次服务器都没起：
+> 验证全走进程内 TestClient（新端点的假 LLM 桩 / 真 DeepSeekLLM + 假传输）+ 前端
+> `node --test "tests/js/*.test.mjs"`。跑过的读数：`tests/test_hwcheck*.py` +
+> `test_llm.py` + `test_webapp.py` = **1004 passed**；前端门禁 **1678 passed**。
+> **新端点（`POST /api/hwcheck/triage`、`POST /api/hwcheck/checklist`）与新静态文件
+> 同样要重启才在浏览器里可见**——与上面那条老话同一件事。
+>
+> ⚠ **同轮钉到的一条前端纪律（本轮真踩）**：`index.html` 的卡片说明若**跨行折行**，
+> 前端守卫里 `html.includes("整句话")` 这种判据会假红（HTML 里的换行 + 缩进空格把它
+> 断成两截）。判据要写 `html.replace(/\s+/g, "").includes("整句话")`，或挑一段不跨行的
+> 短语——本轮 `tests/js/hwcheck.test.mjs` 的"检测没过是正常结果"那一条就是这么修的。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 
