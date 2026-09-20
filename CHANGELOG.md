@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=3b8a0fe414f7a9bbcb01f5a31802ca0bf702b119 -->
+<!-- changelog-auto: last-commit=4db153762beb0316e50c96885d0d3ad3649ddfac -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -8,6 +8,7 @@
 - 10:21 工单 module-hwcheck/06：交互式串口命令台（配方驱动复测 + 既有命令原样）
 - 11:18 工单 module-hwcheck/07：通用降级（未专精件 = 初始化 + I2C 总线扫描，如实标「未专精」）
 - 14:31 工单 module-hwcheck/08：现象回填 + AI 排障（本功能唯一的 LLM 入口）
+- 15:17 工单 module-hwcheck/09：扩齐 pilot 配方（10 件 / 17 格）+ 收尾留档
 
 ## 2026-09-19
 - 10:38 修启动器：端口上那个服务是旧进程就踢掉重起（工单 update-restart-stale-service/01）
