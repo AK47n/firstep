@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=5df31e1ac3f10db49ab9993d81dd25ba14247d49 -->
+<!-- changelog-auto: last-commit=50f678918002b9917ff255f09c14066284be2024 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -25,6 +25,7 @@
 - 22:33 工单 ui-dom-contract-gate/05（补）：local-environment.md 第 2 节的浏览器验收口径与读数
 - 23:01 台账补正：ui-dom-contract-gate/03 状态翻 resolved + backlog 第 10/11 节两处过期口径改指已落地
 - 23:01 PDF 资料库真重复复核证据入库：15 组疑似全真重复（逐字节相同）+ 回收 15 件 / 10.85 MiB
+- 23:14 工单 release-channel-dedupe/01：发布通道公共件收回 update.py（机制一处定义 + 前端错误码契约守卫）
 
 ## 2026-09-19
 - 10:38 修启动器：端口上那个服务是旧进程就踢掉重起（工单 update-restart-stale-service/01）
