@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=8b2eb2e9b88271505de1962d15b26e6ff2dcbc53 -->
+<!-- changelog-auto: last-commit=68039da31ac49ae4a69c302d7ddd341139cd0184 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -10,6 +10,7 @@
 - 14:31 工单 module-hwcheck/08：现象回填 + AI 排障（本功能唯一的 LLM 入口）
 - 15:17 工单 module-hwcheck/09：扩齐 pilot 配方（10 件 / 17 格）+ 收尾留档
 - 17:17 工单 hwcheck-pin-conflict-exit/01：检测页在 mspm0 默认双通道不再必 400（自动解冲突 + ADC 孤儿槽位让位）
+- 18:10 工单 frontend-import-fossils/01：装载清单去化石——259 个零引用名字退场 + 5 条裸装载显式化「加载即接线」
 
 ## 2026-09-19
 - 10:38 修启动器：端口上那个服务是旧进程就踢掉重起（工单 update-restart-stale-service/01）
