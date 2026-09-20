@@ -262,6 +262,138 @@ def test_dry_run_does_not_execute_pytest(prepush, monkeypatch, capsys):
 
 
 # ---------------------------------------------------------------------------
+# 浏览器门禁那一支（工单 ui-dom-contract-gate/03）
+#
+# 它与前端门禁（js）**并列且独立**：改动落在浏览器门禁的落点才付"真浏览器 + 真后端"
+# 那份成本；落点之外一律不跑。这里把"哪类落点带起它"与"缺能力时怎么放行"都钉住——
+# 两支混淆的失效方式同样是静默的（该跑不跑 = 少跑看着像全绿）。
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("path", [
+    "tests/browser/hwcheck.spec.mjs",
+    "tests/browser/server.mjs",
+    "src/contest_generator/static/js/ui/hwcheck.js",
+    "src/contest_generator/static/js/ui/generate-recommend.js",
+    "src/contest_generator/static/index.html",
+    "src/contest_generator/static/js/app.js",
+])
+def test_browser_gate_covers_its_landings(selection, path):
+    """浏览器门禁的落点：用例 / ui 层 / 装载清单 / app.js —— 命中即置 browser。"""
+    assert selection(path).browser is True, f"{path} 没带起浏览器门禁"
+
+
+@pytest.mark.parametrize("path", [
+    "src/contest_generator/generator.py",     # 后端
+    "src/contest_generator/static/js/fx/module.js",  # fx（纯函数面在 tests/js 那支）
+    "docs/agents/workflow.md",                # 文档
+])
+def test_browser_gate_stays_off_outside_its_landings(selection, path):
+    """落点之外不跑浏览器门禁（那条支线贵，不能顺手带上）。"""
+    assert selection(path).browser is False, f"{path} 不该带起浏览器门禁"
+
+
+def test_browser_and_frontend_gates_are_independent(selection):
+    """ui 改动：两支都起（前端门禁 + 浏览器门禁）；只改 fx：只有前端门禁那一支。"""
+    ui = selection("src/contest_generator/static/js/ui/step-state.js")
+    assert ui.js is True and ui.browser is True
+    fx = selection("src/contest_generator/static/js/fx/module.js")
+    assert fx.js is True and fx.browser is False
+
+
+def test_describe_names_both_gates(selection):
+    """`describe()` 是"会跑什么"的唯一口头契约：两支门禁都要出现在里面。"""
+    text = selection("src/contest_generator/static/js/ui/step-state.js").describe()
+    assert "前端门禁" in text and "浏览器门禁" in text
+
+
+def test_dry_run_announces_browser_gate(prepush, monkeypatch, capsys):
+    """--dry-run 要说出"浏览器门禁会跑"——新增一支却在"会跑什么"里消失 = 静默少跑。"""
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("dry-run 不该执行任何测试")
+
+    monkeypatch.setattr(prepush, "run_browser_tests", forbidden)
+    code = prepush.main(["--changed", "src/contest_generator/static/js/ui/hwcheck.js", "--dry-run"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert prepush.BROWSER_TESTS_GLOB in out, out
+    assert "--test-concurrency=1" in out, "浏览器门禁必须串行跑（每个 spec 各起真后端 + 真 Chromium）"
+
+
+def test_browser_gate_passes_when_node_missing(prepush, monkeypatch, capsys):
+    """node 不在 PATH → 打印原因并返回 0（闸门能力缺失不该把维护者堵在门外）。"""
+    monkeypatch.setattr(prepush.shutil, "which", lambda name: None)
+    assert prepush.run_browser_tests() == 0
+    assert "找不到 node" in capsys.readouterr().out
+
+
+def test_browser_gate_passes_when_playwright_unavailable(prepush, monkeypatch, capsys):
+    """playwright / chromium 不可用（新 clone 没装）→ 打印原因并放行，**不是**代码红。
+
+    这条的政策与"node 没装"同源：环境没准备好的代价不该是"推不出去"，
+    但**必须说清缺什么**（否则下一个人只会看到"这条门禁从没跑过"）。
+    """
+    monkeypatch.setattr(prepush.shutil, "which", lambda name: "node")
+
+    class _Probe:
+        returncode = 1
+        stdout = ""
+        stderr = "Cannot find module 'playwright'"
+
+    monkeypatch.setattr(prepush.subprocess, "run", lambda *a, **k: _Probe())
+    assert prepush.run_browser_tests() == 0
+    out = capsys.readouterr().out
+    assert "playwright" in out and "npm install" in out
+
+
+def test_browser_gate_fails_loudly_when_cases_are_red(prepush, monkeypatch):
+    """用例真红 → 非 0（这是拒推的唯一依据，绝不能被"环境问题"那几条吞掉）。"""
+    monkeypatch.setattr(prepush.shutil, "which", lambda name: "node")
+    captured = {}
+
+    class _Probe:
+        returncode = 0
+        stdout = "/path/to/chromium"
+        stderr = ""
+
+    def fake_run(cmd, *args, **kwargs):
+        # playwright 探测命令 = 起 node 跑 -e；用例命令带 --test
+        captured["cmd"] = list(cmd)
+        return _Probe() if "-e" in cmd else type("_Red", (), {"returncode": 1})()
+
+    monkeypatch.setattr(prepush.subprocess, "run", fake_run)
+    monkeypatch.setattr(prepush, "browser_test_files", lambda: ("tests/browser/x.spec.mjs",))
+    assert prepush.run_browser_tests() == 1
+    assert "--test-concurrency=1" in captured["cmd"], "浏览器门禁必须串行（每个 spec 各起真后端）"
+
+
+def test_browser_gate_is_skipped_when_frontend_gate_already_red(prepush, monkeypatch, capsys):
+    """前端门禁已经红了 → 跳过浏览器门禁（最贵那支没必要再付），但仍要如实说一句。
+
+    两支都跑没有意义：前端那支红着就已经该拒推了。**不许静默跳过**——
+    "少跑"长得像"全绿"，这里要留下明确的"为什么没跑"。
+    """
+    monkeypatch.setattr(prepush, "run_js_tests", lambda: 1)
+
+    def forbidden():
+        raise AssertionError("前端门禁红了就不该再起真浏览器")
+
+    monkeypatch.setattr(prepush, "run_browser_tests", forbidden)
+    monkeypatch.setattr(prepush, "run_pytest", lambda *a, **k: 0)
+    code = prepush.main(["--changed", "src/contest_generator/static/js/ui/hwcheck.js"])
+    assert code == 1
+    assert "跳过浏览器门禁" in capsys.readouterr().out
+
+
+def test_browser_test_files_are_real(prepush):
+    """清单读的是真目录：仓库里确实有 *.spec.mjs（判据不悬空）。"""
+    files = prepush.browser_test_files()
+    assert files, "tests/browser/ 下应有 *.spec.mjs（目录改名 / 判据过期？）"
+    assert all(f.endswith(".spec.mjs") and f.startswith("tests/browser/") for f in files)
+
+
+# ---------------------------------------------------------------------------
 # 端到端判据（选择器侧）：真实 refs → 真实选择结果
 # ---------------------------------------------------------------------------
 

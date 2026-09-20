@@ -51,16 +51,49 @@ def test_workflow_runs_the_same_commands_as_local(workflow):
 
 
 def test_workflow_does_not_use_secrets_or_network_steps(workflow):
-    """不联网、不吃 secret（仓库既有约定：测试用桩，见 tests/fakes.py）。"""
+    """不吃 secret；action 只用 GitHub 官方的那几个（多一个就多一处供应链面）。
+
+    **「不联网」这条约定的真实边界**（工单 ui-dom-contract-gate/03 写明）：
+    说的是**测试本身不打网络**——`tests/**` 里的用例走 `tests/fakes.py` 的桩，
+    所以 CI 不需要任何凭据。而 CI 的**装依赖步骤本来就要联网**（pip / npm /
+    `npx playwright install chromium` 都是下载），那不是"测试联网"，
+    也不改变"测试不打网络"这条判据。别把两件事混起来读。
+    """
     text = WORKFLOW.read_text(encoding="utf-8")
     assert "secrets." not in text, "CI 用了 secret——本仓库测试刻意不联网，不该需要凭据"
     jobs = workflow.get("jobs") or {}
+    allowed = ("actions/checkout", "actions/setup-python", "actions/setup-node")
     for job in jobs.values():
         for step in (job.get("steps") or []):
             uses = str(step.get("uses", ""))
-            assert uses.startswith(("actions/checkout", "actions/setup-python", "")) or uses == "", (
-                f"出现了非预期的第三方 action：{uses}（多一个就多一处供应链面）"
+            assert uses == "" or uses.startswith(allowed), (
+                f"出现了非预期的第三方 action：{uses}（只许 GitHub 官方的 checkout / "
+                "setup-python / setup-node，多一个就多一处供应链面）"
             )
+
+
+def test_browser_suite_job_runs_the_same_command_as_local(workflow):
+    """浏览器门禁 job（工单 ui-dom-contract-gate/03）：存在、跑**与本地同一条命令**、装齐前置。
+
+    判据是"判据只有一份"——本地 `tools/prepush.py:run_browser_tests` 与 CI 里这条
+    必须是同一个 glob、同一串参数（`--test-concurrency=1` 是硬要求：每个 spec 各起
+    一个真后端 + 一个真 Chromium，并发跑只会让失败不可归因）。
+    """
+    jobs = workflow.get("jobs") or {}
+    browser_jobs = {name: job for name, job in jobs.items()
+                    if any("tests/browser/*.spec.mjs" in str(step.get("run", ""))
+                           for step in (job.get("steps") or []))}
+    assert browser_jobs, "CI 里没有跑 tests/browser/*.spec.mjs 的 job——浏览器门禁没接上远端"
+    runs = "\n".join(
+        str(step.get("run", ""))
+        for job in browser_jobs.values()
+        for step in (job.get("steps") or [])
+    )
+    assert "node --test --test-concurrency=1" in runs, f"浏览器门禁没串行跑：\n{runs}"
+    assert "npx playwright install chromium" in runs, "CI 没装 Chromium——浏览器用例起不来"
+    assert "npm install" in runs, "CI 没装 npm 依赖（playwright）"
+    runners = [str(job.get("runs-on", "")) for job in browser_jobs.values()]
+    assert any("windows" in runner for runner in runners), f"浏览器门禁不在 Windows 上跑：{runners}"
 
 
 def test_workflow_checks_out_and_installs_dev_extras(workflow):

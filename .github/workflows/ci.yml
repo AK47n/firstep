@@ -58,6 +58,40 @@ jobs:
       - name: 全套测试（并行，与本地同一条命令）
         run: python -m pytest -n auto -q
 
+  browser-suite:
+    # 浏览器门禁（工单 ui-dom-contract-gate/03）：真浏览器 + 真后端的 21 条验收用例。
+    # **为什么不并进上面那个 job**：它要 npm 依赖与 Chromium（下面两步），而上面那支
+    # 的前提是"零 npm 依赖也能跑"——混在一起会让 pytest 那一支也背上浏览器前提。
+    # 单独一个 job，本地闸门（tools/prepush.py）与这里跑**同一条命令**，判据只有一份。
+    name: 浏览器门禁（windows-latest，真 Chromium + 真后端）
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 与另两个 job 同口径：本支的夹具自己起后端，但 checkout 浅克隆会让
+          # 仓库根的事实守卫（CHANGELOG 锚点等）在需要它们的地方假红，统一取全历史。
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"  # pyproject.toml 的 requires-python = ">=3.13"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"      # playwright 的 engines 与本地口径
+          cache: npm
+      - name: 装依赖（声明的那份：运行依赖 + dev 组）
+        # 夹具起的是**真后端**（python -m contest_generator.webapp），要装运行依赖
+        run: python -m pip install -e ".[dev]"
+      - name: 装 npm 依赖（playwright）
+        run: npm install
+      - name: 装 Chromium（playwright 的浏览器二进制）
+        run: npx playwright install chromium
+      - name: 浏览器门禁（与本地 tools/prepush.py 同一条命令）
+        # 夹具自己向内核要空闲端口（不占 8791 / 8000），跑完自己收服务；
+        # --test-concurrency=1：每个 spec 各起一个真后端 + 一个真 Chromium，串行才可归因。
+        run: node --test --test-concurrency=1 "tests/browser/*.spec.mjs"
+
   fast-checks:
     # 快速面：不装运行依赖也能跑的机械守卫 + 发版自检
     name: 快速守卫（ubuntu-latest）

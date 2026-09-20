@@ -14,6 +14,7 @@
 | `src/contest_generator/X.py` | `tests/test_X.py`（**存在**才用）；**没有同名测试 → 全套** |
 | 被 ≥ `WIDE_IMPORT_THRESHOLD` 个测试文件 import 的模块（实测推导，非手写名单） | 全套（改它等于动半仓测试的公共面） |
 | **前端（`static/`，含 index.html / js/）+ `tests/js/`（工单 module-hwcheck/01）** | **前端门禁（`node --test "tests/js/*.test.mjs"`）+ 全套 pytest** |
+| **浏览器门禁落点（`tests/browser/`、`static/js/ui/`、`static/index.html`、`static/js/app.js`，工单 ui-dom-contract-gate/03）** | **浏览器门禁（`node --test --test-concurrency=1 "tests/browser/*.spec.mjs"`，真浏览器 + 真后端）+ 上面那支前端门禁 + 全套 pytest** |
 | `library/`（库内容） | 库与母版守卫族（见 `LIBRARY_FAMILY`） |
 | 纯文档（README / VERSIONS / CHANGELOG / docs/ / .scratch/） | 文档守卫族（见 `DOCUMENT_FAMILY`） |
 | **认不出来的任何路径** | 全套（倒向更严） |
@@ -24,6 +25,14 @@
 「一打开就卡死」就是同一个盲区）。现在改前端文件时**两边都跑**：pytest 认不出
 前端落点（倒向更严，仍整套），前端门禁补上 `node --test`。node 不在 PATH 时
 按「闸门自身故障」政策打印原因并跳过——**但 node 跑了且用例红了，必须拒推**。
+
+**浏览器门禁为什么又是一支**（工单 ui-dom-contract-gate/03）：`tests/browser/*.spec.mjs`
+是 21 条**真浏览器 + 真后端**的验收用例，它不满足前端门禁那支的前提（"只吃 `node:`
+内置模块、零 npm 依赖、几秒跑完"）——它要 playwright 与它下载的 chromium，本机实测
+三个 spec 串行约 35–45 秒。所以两支并列、各自独立开关：改动落在哪一支就付哪一支
+的成本，**不把浏览器用例混进 `tests/js/` 的 glob**（那会让每次改前端都多一个浏览器前提）。
+它的失败语义与前端门禁同在一条政策上（详见 `run_browser_tests` 的 docstring）：
+node/用例清单/playwright 缺失 → 打印原因放行；用例真红 → 拒推。
 
 **绝不卡人的边界**：闸门自身故障（python 没装 / git 读不到改动 / 选择器抛错 /
 node 缺失）一律**打印原因并放行**（exit 0）——闸门坏了不该把维护者堵在门外；
@@ -69,6 +78,28 @@ TESTS_DIR = REPO_ROOT / "tests"
 # 人工命令都用它，并有用例钉住两处一致）。
 JS_TESTS_GLOB = "tests/js/*.test.mjs"
 JS_TESTS_DIR = "tests/js/"
+
+# 浏览器门禁（工单 ui-dom-contract-gate/03）：**与上面那条并列、相互独立**的一支。
+#
+# 它跑的是 `tests/browser/*.spec.mjs`——真浏览器（playwright chromium）+ 真后端
+# （夹具自己起服务、自己挑空闲端口）。这些东西**不属于**上面那条门禁的前提：
+# 那条的前提是"只吃 node: 内置模块、零 npm 依赖、几秒跑完"，浏览器用例三条都不满足。
+# 所以两支并列、各自独立开关，改动落在哪一支就付哪一支的成本。
+BROWSER_TESTS_GLOB = "tests/browser/*.spec.mjs"
+BROWSER_TESTS_DIR = "tests/browser/"
+
+# 浏览器用例覆盖的是 ui 的交互，所以"改了 ui 就得跑它"：
+#   · tests/browser/                       = 用例与夹具自身
+#   · static/js/ui/                        = ui 层（用例断的就是它的 DOM 契约）
+#   · static/index.html                    = 装载清单与标记（用例驱动真页面）
+#   · static/js/app.js                     = $ / apiGet / state 这些胶水的出处
+# fx/ 不列：浏览器用例不直接断言 fx（那是 tests/js 纯函数面的事，已在另一支里）。
+BROWSER_PREFIXES = (
+    BROWSER_TESTS_DIR,
+    "src/contest_generator/static/js/ui/",
+    "src/contest_generator/static/index.html",
+    "src/contest_generator/static/js/app.js",
+)
 
 # 前端改动落点（仓库根相对前缀）：改这些必须跑前端门禁。
 #   · src/contest_generator/static/  = 整个前端资产（index.html / js/fx / js/ui / js/app.js）
@@ -121,12 +152,13 @@ NONE = "NONE"
 
 @dataclass(frozen=True)
 class Selection:
-    """选择结果：要跑的测试（仓库根相对）、是否必须整套、是否跑前端门禁、逐条理由。"""
+    """选择结果：要跑的测试（仓库根相对）、是否必须整套、是否跑前端门禁、是否跑浏览器门禁、逐条理由。"""
 
     paths: tuple[str, ...]
     full: bool
     reasons: dict[str, str] = field(default_factory=dict)
     js: bool = False
+    browser: bool = False
 
     def describe(self) -> str:
         if self.full:
@@ -137,6 +169,8 @@ class Selection:
             head = f"{len(self.paths)} 个测试文件"
         if self.js:
             head += " + 前端门禁（" + JS_TESTS_GLOB + "）"
+        if self.browser:
+            head += " + 浏览器门禁（" + BROWSER_TESTS_GLOB + "）"
         why = "；".join(dict.fromkeys(self.reasons.values()))
         return f"{head}（{why or '无理由记录'}）"
 
@@ -194,6 +228,12 @@ def is_frontend_path(rel: str) -> bool:
     """前端落点判定（工单 module-hwcheck/01）：static/ 资产或 tests/js/ 用例。"""
     path = normalize(rel)
     return any(path.startswith(prefix) for prefix in FRONTEND_PREFIXES)
+
+
+def is_browser_path(rel: str) -> bool:
+    """浏览器门禁落点判定（工单 ui-dom-contract-gate/03）：ui / 装载清单 / 用例夹具。"""
+    path = normalize(rel)
+    return any(path.startswith(prefix) for prefix in BROWSER_PREFIXES)
 
 
 def classify(path: str, *, tests: frozenset[str], wide: frozenset[str]) -> tuple[str, str, str]:
@@ -275,11 +315,12 @@ def select_tests(changed: list[str], *, tests: frozenset[str] | None = None,
     if not changed:
         return Selection(paths=(), full=False, reasons={})
 
-    # 前端门禁先整体判一次（**不能**在循环里"遇到前端才置位"）：下面碰到
-    # FULL 会提前 return，若 js 还在循环里累加，改动顺序一旦是「先公共面/
-    # 认不出的落点、后前端文件」，那次提前 return 就把前端门禁整个吞掉——
+    # 两支前端门禁都先整体判一次（**不能**在循环里"遇到才置位"）：下面碰到
+    # FULL 会提前 return，若标志还在循环里累加，改动顺序一旦是「先公共面/
+    # 认不出的落点、后前端文件」，那次提前 return 就把门禁整个吞掉——
     # 改了前端却一条前端用例都不跑，且不报错（"少跑"长得像"全绿"）。
     js = any(is_frontend_path(raw) for raw in changed)
+    browser = any(is_browser_path(raw) for raw in changed)
 
     picked: set[str] = set()
     reasons: dict[str, str] = {}
@@ -302,8 +343,8 @@ def select_tests(changed: list[str], *, tests: frozenset[str] | None = None,
             picked.add(target)
 
     if full:
-        return Selection(paths=(), full=True, reasons=reasons, js=js)
-    return Selection(paths=tuple(sorted(picked)), full=False, reasons=reasons, js=js)
+        return Selection(paths=(), full=True, reasons=reasons, js=js, browser=browser)
+    return Selection(paths=tuple(sorted(picked)), full=False, reasons=reasons, js=js, browser=browser)
 
 
 # ---------------------------------------------------------------------------
@@ -473,10 +514,69 @@ def run_js_tests() -> int:
     return subprocess.run(cmd, cwd=str(REPO_ROOT)).returncode
 
 
+def browser_test_files() -> tuple[str, ...]:
+    """浏览器用例清单（仓库根相对 POSIX 路径，排序）——BROWSER_TESTS_GLOB 展开的唯一实现。"""
+    if not (REPO_ROOT / BROWSER_TESTS_DIR).is_dir():
+        return ()
+    return tuple(
+        path.relative_to(REPO_ROOT).as_posix()
+        for path in sorted((REPO_ROOT / "tests" / "browser").glob("*.spec.mjs"))
+    )
+
+
+def run_browser_tests() -> int:
+    """跑浏览器门禁：真浏览器（playwright chromium）+ 真后端（工单 ui-dom-contract-gate/03）。
+
+    与 `run_js_tests` 的失败语义**同在一条政策上**（闸门自身能力缺失 → 打印原因放行；
+    用例真红 → 拒推），只是"能力"这一项多了一层：这条门禁还要 playwright 与它下载的
+    chromium。三道前置各查一次、各自说清缺什么：
+
+    * node 不在 PATH → 放行（同上）；
+    * 用例清单为空 → 放行（打印原因，不静默跑 0 个）；
+    * playwright 装不上 / 浏览器二进制缺失（`require("playwright")` 或 `chromium.executablePath()`
+      抛错）→ **放行并打印怎么装**（新 clone / CI 上这是"环境没准备好"，不是代码红）；
+    * 用例跑了但红了 → 返回非 0。
+
+    **`--test-concurrency=1` 是刻意的**：每个 spec 各起一个真后端 + 一个真 Chromium，
+    跑在同一份工作树与同一个库目录上；端口已经各用各的了（夹具向内核要空闲端口），
+    串行是为了失败可归因，也不再让三个 spec 抢同一份资源。
+    """
+    exe = shutil.which("node")
+    if exe is None:
+        print(
+            f"[prepush] 跳过浏览器门禁：PATH 里找不到 node（无法跑 {BROWSER_TESTS_GLOB}）",
+            flush=True,
+        )
+        return 0
+    files = browser_test_files()
+    if not files:
+        print(
+            f"[prepush] 跳过浏览器门禁：{BROWSER_TESTS_DIR} 下没有 *.spec.mjs（目录改名 / 清单过期？）",
+            flush=True,
+        )
+        return 0
+    probe = subprocess.run(
+        [exe, "-e", "const {chromium}=require('playwright');console.log(chromium.executablePath())"],
+        cwd=str(REPO_ROOT), capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    if probe.returncode != 0:
+        print(
+            "[prepush] 跳过浏览器门禁：playwright / chromium 不可用"
+            "（新 clone 或 CI 上先跑 `npm install` + `npx playwright install chromium`）"
+            f"\n    探测输出：{(probe.stderr or probe.stdout or '').strip()[:300]}",
+            flush=True,
+        )
+        return 0
+    cmd = [exe, "--test", "--test-concurrency=1", *files]
+    print(f"[prepush] 执行：{' '.join(cmd)}", flush=True)
+    return subprocess.run(cmd, cwd=str(REPO_ROOT)).returncode
+
+
 HINT = (
     "\n[prepush] 闸门拦下这次推送：上面的用例红了。\n"
     "  · 复跑：python tools/prepush.py --changed <你改的文件>\n"
     "  · 只跑前端：node --test " + JS_TESTS_GLOB + "\n"
+    "  · 只跑浏览器验收：node --test --test-concurrency=1 " + BROWSER_TESTS_GLOB + "\n"
     "  · 强制整套：python tools/prepush.py --full\n"
     "  · 确知要绕过：FIRSTEP_PREPUSH=off git push（不鼓励）"
 )
@@ -531,13 +631,16 @@ def main(argv: list[str] | None = None) -> int:
 
     selection = select_tests(changed)
     if full:
-        # 「整套」= pytest 全套 + 前端门禁（发版 / 推 tag 的口径）：前端那支
-        # 平时由"改动落在前端"带起，而整套跑时改动可能一件前端文件都没有
+        # 「整套」= pytest 全套 + 前端门禁 + 浏览器门禁（发版 / 推 tag 的口径）：
+        # 后两支平时由"改动落在对应落点"带起，而整套跑时改动可能一件前端文件都没有
         # （例如只改了 Python），照样要跑——不然"整套"名不副实。
-        selection = Selection(paths=(), full=True, reasons=selection.reasons, js=True)
+        # **浏览器门禁也进整套**：它是"改动落在 ui 才跑"的那一支，整套的意义就是
+        # 不看改动、全都跑一遍；不带上它，发版前反而漏掉真浏览器那一层。
+        selection = Selection(paths=(), full=True, reasons=selection.reasons,
+                              js=True, browser=True)
     if args.no_js:
         selection = Selection(paths=selection.paths, full=selection.full,
-                              reasons=selection.reasons, js=False)
+                              reasons=selection.reasons, js=False, browser=False)
 
     print(f"[prepush] 改动 {len(changed)} 个文件 → {selection.describe()}", flush=True)
     if args.explain or not selection.full:
@@ -551,19 +654,29 @@ def main(argv: list[str] | None = None) -> int:
             print(f"    · {path}", flush=True)
         if selection.js:
             print(f"    · 前端门禁：node --test {JS_TESTS_GLOB}", flush=True)
+        if selection.browser:
+            print(f"    · 浏览器门禁：node --test --test-concurrency=1 {BROWSER_TESTS_GLOB}",
+                  flush=True)
         return 0
 
-    if not selection.full and not selection.paths and not selection.js:
+    if not selection.full and not selection.paths and not selection.js and not selection.browser:
         print("[prepush] 没有需要跑的守卫，放行", flush=True)
         return 0
 
-    # 前端门禁先跑（几秒钟）：它红了就没必要再等整套 pytest——但**两支都要
-    # 如实报到**，不能因为前者红就吞掉后者（`&` 语义：跑完两支再定论）。
+    # 前端门禁先跑（几秒钟）：它红了就没必要再等整套 pytest——但**每一支都要
+    # 如实报到**，不能因为前者红就吞掉后面的（`&` 语义：跑完全部再定论）。
+    # 浏览器门禁放在前端门禁之后、pytest 之前：它是三支里最贵的（真浏览器 + 真后端），
+    # 前端那支红了就已经该拒推了，没必要再付这份成本；要是它自己红，pytest 也照跑。
     js_code = run_js_tests() if selection.js else 0
+    browser_code = 0
+    if selection.browser and js_code == 0:
+        browser_code = run_browser_tests()
+    elif selection.browser:
+        print("[prepush] 跳过浏览器门禁：前端门禁已经红了（先修它再复跑）", flush=True)
     code = 0
     if selection.full or selection.paths:
         code = run_pytest(selection.paths, full=selection.full)
-    if js_code != 0 or code != 0:
+    if js_code != 0 or browser_code != 0 or code != 0:
         print(HINT, flush=True)
         return 1
     return 0
