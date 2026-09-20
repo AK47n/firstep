@@ -221,9 +221,9 @@ UTF-8 stdout（原锚点版是崩在 GBK 编码上的）。第 7 节的两道候
 - **`ui/delivery.js` 的 window 挂桥**（`Object.assign(window, {...})`）与 app.js 规则 3
   "不挂 window 桥"相抵——既有事实，本轮只记账不改。
 
-评审同时发现的**同向候选**（都在前端，未立项）：ui 层（17,996 行 / 515 监听器）只有 2 个
-测试文件 import 它，没有测试缝；六条跨语言镜像里 `CODE_TREE_NAME_ILLEGAL`（文件名非法字符）
-与 `pinShareClass`（同脚多角色）两条无任何守卫。
+评审同时发现的**同向候选**（都在前端）：ui 层（17,996 行 / 515 监听器）只有 2 个
+测试文件 import 它，没有测试缝——**仍挂账**。六条跨语言镜像里 `CODE_TREE_NAME_ILLEGAL`
+（文件名非法字符）与 `pinShareClass`（同脚多角色）两条**已补上**（见第 12 节）。
 
 ## 11. webapp 收口（2026-09-20，同一份架构评审的候选 C2；工单 webapp-consolidation/01–02 已落地）
 
@@ -237,6 +237,28 @@ UTF-8 stdout（原锚点版是崩在 GBK 编码上的）。第 7 节的两道候
 - **LLM 工作流观测一处**（02）：25 处手写的「预算 + 收集器 + 派发 + 结算」收成 `webapp.LLMRun`
   一个缝；守卫与红证在 `tests/test_llm_run.py`。
 - 两单都**没做 route 分册**（评审同一段里也建议不做）：`tests/test_webapp.py` 那条按源码文本钉
-  recommend 路由形状的 AST 守卫会把它判红，先改守卫形状才谈分册。评审的其余项（C5a 两条裸镜像
-  「2.5」、C4 公共件收回 update.py、C7 私有符号公开化）仍挂账，未立项。
+  recommend 路由形状的 AST 守卫会把它判红，先改守卫形状才谈分册。评审的其余项（C4 公共件收回
+  update.py、C7 私有符号公开化）仍挂账，未立项。
+
+## 12. C5a 两条裸镜像补上（2026-09-20，同一份架构评审的候选 C5a「2.5」；工单 cross-lang-mirror-c5a/01–02 已落地）
+
+复审结论排在「两件半」之后的那半件。两条镜像各走仓库已有的一个成功先例，不新增第三套做法：
+
+- **01 文件名校验规则 → 后端下发模型**（先例 `/api/bindings/matrix`）：非法字符集与长度上限的
+  判据单源留在 `codeview`，经 `POST /api/code/open` 载荷 `name_rules` 下发；前端
+  `treeNameValidate` 按运行时装载值判定，源码常量退化为启动兜底，由
+  `tests/test_codeview.py::test_js_name_rules_fallback_mirrors_backend` 读 JS 真源码对账。
+  **顺带补了两个 tdd 红证挖出来的既存缺口**：`create_code_entry` 此前完全不校验名称
+  （超长名静默建出病态文件、含 `* ? " < > |` 的名字把 OSError 抛成 500），且补口必须逐段做
+  （中间段是目录名，同样直达 mkdir）。
+- **02 同脚多角色分类 → 生成对拍 fixture**（先例 `test_group_choice_mirror.py`）：场景表单一出处
+  在 `tests/test_pin_share_mirror.py`（14 条，真实库内 slug + 真实板），期望值由后端
+  `_shared_groups` 现算成 `tests/js/pin-share-mirror.fixture.json`，JS 侧复算 `pinShareClass`
+  逐场景比对（只对账 kind）。**同时修掉一处已在误导用户的漂移**：后端 `_role_resource_keys`
+  一直把 `adc` 归入「同一 ADC 实例 = 同一路模拟信号」（adc/us016/mq2 等共读 ADC12_0 的
+  MEM0=PA24），前端漏了这一支 → 判 conflict 并在角色行提示「建议改线」，而那根脚由 syscfg
+  单落点决定、改了就是另一条通路。
+
+两条都在**闸门内**变红（pytest 面 + 前端 `node --test` 面，均已进 prepush 与 CI 的子集/整套）。
+C5 卡里的其余部分（ui 层测试缝、18 个 browser 用例接闸门、index.html 与 ui 的 id 耦合）仍挂账。
 
