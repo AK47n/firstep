@@ -1,0 +1,11 @@
+# 赛题链路 vs 检测页：同一条 mspm0 默认脚冲突的两个出口（工单 09 取证）
+
+选中集：mspm0 + led / oled / debug_uart
+
+赛题生成 /api/generate → 502
+AI 服务拒绝了本次请求（可能是 API key 无效、账户余额不足或请求内容不被接受）。请在设置页核对 API key 与账户余额后重试。
+
+「自动配置」/api/bindings/auto → 200
+{'ok': True, 'bindings': {'debug_uart.DEBUG_UART_RX': 'PA24'}, 'fixed': ['debug_uart.DEBUG_UART_RX → PA24（原 PA22 与 oled.OLED_SPI_RES 冲突，已自动移开）'], 'shared': []}
+
+结论：同一条冲突在赛题链路有出口（上面那条改绑就是），而检测页没有引脚配置入口 —— 见 .scratch/hwcheck-pin-conflict-exit/。

@@ -225,6 +225,27 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > 前端守卫里 `html.includes("整句话")` 这种判据会假红（HTML 里的换行 + 缩进空格把它
 > 断成两截）。判据要写 `html.replace(/\s+/g, "").includes("整句话")`，或挑一段不跨行的
 > 短语——本轮 `tests/js/hwcheck.test.mjs` 的"检测没过是正常结果"那一条就是这么修的。
+>
+> **2026-09-20 14:5x（module-hwcheck/09 会话）**：同样一次服务器都没起（全量套件 +
+> 真编译矩阵走进程内 TestClient / 子进程）。这一单第一次**真编译 17 个检测工程**
+> （stm32 走 `C:\Keil5\Core\UV4\UV4.exe`、mspm0 走 `C:\ti\ccs2050\ccs\utils\bin\gmake.exe`，
+> 由 `compile_runner.find_uv4/find_make` 探测）——**16 种形态 0 error / 0 warning、
+> 3 格生成前拦下**（读数在 `.scratch/module-hwcheck/probe-09-compile-matrix.txt`）。
+> 相关面 pytest **1241 passed**、前端门禁 **1682 passed**。跑完实测
+> 8000/8020/8021/8791 都没在听、无残留 python。
+>
+> ⚠ **同轮的一条工具纪律（本轮自己踩的）**：判据强度探针会**真的改库内文件**
+> （`.scratch/module-hwcheck/probe-09-guard-strength.py` 删一格配方再复原）——
+> **别和测试套件同时跑**。本轮并行跑了一次，套件读到"少了 beep"的中间态，
+> 5 条无关用例假红（白排查一轮）。顺序固定：探针跑完 → 再跑套件。
+>
+> ⚠ **同轮量到的一条产品事实（不是本单引入，已开单）**：**mspm0 上"调试串口 + OLED"
+> 是检测页的默认形态，而母版里 `OLED_SPI_RES = PA22 = DEBUG_UART RX`——mspm0 任何器件
+> （含"一件都不选"）在默认双通道下生成必 400**，而检测页没有引脚配置入口
+> （400 的出路文案指向赛题页的「自动配置」）。赛题链路同一条冲突有出口：
+> `POST /api/bindings/auto` 会把 `debug_uart.DEBUG_UART_RX` 移到 PA24。
+> 细节与候选修法：`.scratch/hwcheck-pin-conflict-exit/issues/01-*.md`；
+> 复现：`.scratch/module-hwcheck/probe-09-contest-parity.py`。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 

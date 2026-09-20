@@ -639,6 +639,14 @@ def _define_names(headers: Sequence[tuple[str, str]]) -> frozenset[str]:
 # `extern` 声明（到分号为止）——模块的**公开数据接口**也是接口。
 _EXTERN_DECL_RE = re.compile(r"\bextern\b([^;{}]*);", re.MULTILINE)
 
+# 枚举体（`enum { … }` / `typedef enum { … } T;`）与 typedef 名字：配方侧的
+# 补充清单，见 `_enum_and_typedef_names`。枚举体不许跨 `;`（`enum { … }` 之后
+# 才是名字），`[^};]*` 保证不会把整个头文件当成一个枚举体。
+_ENUM_BODY_RE = re.compile(r"\benum\b[^;{}]*\{([^};]*)\}")
+_TYPEDEF_NAME_RE = re.compile(
+    r"\btypedef\b(?:[^;{}]|\{[^}]*\})*?\b([A-Za-z_]\w*)\s*;", re.DOTALL
+)
+
 # 声明里不是变量名的词：类型 / 限定词 / 存储类。判据刻意窄（只列这几类 + 下方
 # `struct`/`union`/`enum` 后的标签名）：多收的仍是头文件里真实写过的标识符，
 # 风险方向与 `_define_names` 一致——**宁可多认，不可冤枉真实存在的名字**。
@@ -677,6 +685,42 @@ def _extern_names(headers: Sequence[tuple[str, str]]) -> frozenset[str]:
                 if name in _C_TYPE_WORDS or name.endswith("_t"):
                     continue
                 out.add(name)
+    return frozenset(out)
+
+
+def _header_names(headers: Sequence[tuple[str, str]]) -> frozenset[str]:
+    """一份头文件列表能提供的**全部可引用名字**（配方侧白名单的补充提取器）。
+
+    生成门禁那套 `extract_header_functions` 只管「函数声明 + 类函数宏」；配方是
+    人写的 C 表达式，还会用到对象宏 / extern 全局量 / 枚举常量 / typedef 名——
+    这四个补充提取器收在这里，母版头与模块头两条路径共用（加第五个只改一处）。
+    """
+    return _define_names(headers) | _extern_names(headers) | _enum_and_typedef_names(headers)
+
+
+def _enum_and_typedef_names(
+    headers: Sequence[tuple[str, str]],
+) -> frozenset[str]:
+    """头文件里的 **enum 常量名 + typedef 类型名**（配方侧的补充清单，工单 09）。
+
+    为什么单独立一条：`typedef enum { ADC_Channel_0, … } ADCINx_enum;` 里的
+    常量是**真实存在的接口名**，也是"通道 / 模式"这类参数最自然的写法；而生成
+    门禁那套提取（函数声明 + `#define`）一个都不收。缺了它，配方会被逼着绕道
+    ——stm32 的 adc 读数只能写成"整型变量 + 强转"，代价是 4 个
+    `#188-D: enumerated type mixed with another type`（检测程序的验收线是
+    0 error / **0 warning**）。
+
+    枚举体**先剥注释**再取名字（`clex.strip_comments`）：枚举体里常写
+    `ADC_Channel_0,  //PA0` 这种行尾注记，不剥的话注释里的词也会进白名单
+    ——与 `_define_names` 的"不剥注释"不同，这里剥得起（枚举体短、注释密）。
+    方向仍是**宁可多认，不可冤枉真实存在的名字**（多认的仍是头文件里真写过的）。
+    """
+    out: set[str] = set()
+    for _rel, text in headers:
+        stripped = strip_comments(text)  # 每个头只剥一次（两个正则共用）
+        for body in _ENUM_BODY_RE.findall(stripped):
+            out.update(_IDENT_RE.findall(body))
+        out.update(_TYPEDEF_NAME_RE.findall(stripped))
     return frozenset(out)
 
 
@@ -959,6 +1003,20 @@ def interface_names(
     再并入 **`extern` 全局量名**（`extern int16_t ax, ay, az;`，`_extern_names`，
     工单 05）：模块的公开**数据**接口同样是接口——stm32 的 `ml_mpu6050` 把六轴
     原始值放在 extern 全局量里，配额不认它们，读数就写不出来。
+
+    再并入 **enum 常量名与 typedef 类型名**（工单 09 实测的真缺口）：
+    `typedef enum { ADC_Channel_0, … } ADCINx_enum;` 里的常量是**真实存在的
+    接口名**，而且是"通道 / 模式"这类参数最自然的写法——生成门禁的提取只收
+    函数声明与 `#define`，枚举体里的名字一个都不在里面。不并进来的后果不是
+    "少一个名字"，而是**配方被逼着绕道**：stm32 的 adc 读数只能写成"整型变量 +
+    强转"，代价是 4 个 `#188-D: enumerated type mixed with another type`
+    （检测程序的验收线是 0 error / **0 warning**）；直接写 `adc_get(ADC_1,
+    ADC_Channel_0)` 反而过不了校验。方向与 `_define_names` / `_extern_names`
+    一致：**宁可多认，不可冤枉头文件里真实写过的名字**。
+
+    四个补充提取器收在一处（`_header_names`）：母版头与模块头两条路径共用同一句，
+    加第五个提取器只改那一处（原来两个调用点各抄三行，改一处忘另一处就会让
+    "母版头认、模块头不认"这种半生效的怪状态——本单评审抓到）。
     """
     from .skeleton import extract_header_functions, format_interface_blocks
 
@@ -968,7 +1026,7 @@ def interface_names(
                 [("母版", rel, text) for rel, text in master_headers]
             )
         )
-    ) | _define_names(list(master_headers)) | _extern_names(list(master_headers))
+    ) | _header_names(master_headers)
     library = Path(module_library_dir)
     out: dict[str, frozenset[str]] = {}
     for manifest in manifests:
@@ -985,11 +1043,11 @@ def interface_names(
                     (manifest.slug, rel,
                      path.read_text(encoding="utf-8", errors="replace"))
                 )
+        plain = [(rel, text) for _slug, rel, text in headers]
         out[manifest.slug] = (
             frozenset(extract_header_functions(format_interface_blocks(headers)))
             | master_names
-            | _define_names([(rel, text) for _slug, rel, text in headers])
-            | _extern_names([(rel, text) for _slug, rel, text in headers])
+            | _header_names(plain)
         )
     return out
 

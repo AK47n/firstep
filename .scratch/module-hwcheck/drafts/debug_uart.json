@@ -1,0 +1,73 @@
+{
+  "debug_uart": {
+    "stm32": {
+      "include": {
+        "headers": [
+          "debug_uart.h"
+        ]
+      },
+      "init": {
+        "calls": [
+          "debug_uart_init()"
+        ]
+      },
+      "probe": {
+        "calls": [
+          "debug_uart_send(\"DEBUG UART TX OK -> type r + Enter, expect a reply\\r\\n\")"
+        ]
+      },
+      "read": {
+        "items": [
+          {
+            "expression": "gpio_get(DEBUG_UART_RX_GPIO, DEBUG_UART_RX_Pin)",
+            "unit": "RX（PA3）脚电平：1 = 对端 TX 正空闲拉高（线通、对端上电）；0 = 这根 RX 上没人拉高（没接 / 对端没上电 / 接错脚）——它证的是线，不是帧"
+          }
+        ]
+      },
+      "console": {
+        "command": "u",
+        "description": "调试串口：重跑一次初始化并打一行自报（TX），敲一个字符看库内回话（RX）"
+      },
+      "note": {
+        "lines": [
+          "本件**没有带期望值的探头**（板上判不了 OK/FAIL）：驱动这三个接口（`debug_uart_init()` / `debug_uart_send()` / `debug_cmd_poll()`）都返回 `void`；模块头 debug_uart.h 里唯一的只读接口是 `debug_cmd_peek()`，回的是「收到的命令」这个字符串（而且归串口命令台自己消费）——没有能比大小的状态寄存器，结论只能靠眼睛看现象。",
+          "**TX 这半其实已经在自证**：检测程序的打印出口就是 `DEBUG_PRINTF` → `debug_uart_send()`（框架的 hwcheck_write_serial），你能在串口助手上读到这一节 = 模块的发送路径已经通了。本节那句自报只是把这条线显式复测一次；真正**没被证过的是收（RX）**。",
+          "收怎么证（stm32 侧有现成动作）：敲一个字符 + 回车。`r` / `y` / `g` / `o` / `b50` 走库内 `debug_cmd_poll()` 的既有分支——亮红灯 / 亮黄灯 / 亮绿灯 / 全灭 / 蜂鸣 50ms：**灯动了或蜂鸣响了 = 串口中断 → 命令缓冲 → 主循环 poll 这整条接收链路是通的**。敲别的字符回一句 `? r/g/y/o/b<N>`，那是「不认识的命令」，不是坏了。",
+          "接线与参数：PA2 = TX / PA3 = RX（pin_config.h：`DEBUG_UART = UART_2`，115200 8N1）。最常见的「一个字都不出」是 TX/RX 接反——串口助手的 RX 要接板子 PA2、助手的 TX 接板子 PA3；波特率对不上会出一屏乱码，那不是驱动坏了。",
+          "那行读数是 RX 脚的实际电平（`gpio_get(DEBUG_UART_RX_GPIO, DEBUG_UART_RX_Pin)`，PA3）：本脚在 stm32 侧被配成**下拉输入**（ml_uart.c 的 `uart_pin_init_ex` 里 `gpio_init(rx, …, ID)`，`ID` = 下拉输入），所以**没接线时恒为 0**；接上一个空闲的 USB-TTL / 蓝牙模块（对端 TX 空闲是 UART 的高电平）才是 1。它是「线接上了吗」的最直接证据，但**不证明帧收得对**（波特率、数据位、对端是否真在发，要靠上面敲字符那一下）。",
+          "本节重跑一次 `debug_uart_init()`（= 母版 `uart_pin_init_ex(DEBUG_UART, …)`：重配 PA2/PA3 + 115200 + 开 RX 中断，重复调用安全），**不**重复调 `debug_cmd_poll()`：框架主循环每圈都在调它（渲染产物里那行注释就是它），而这里再点一下只会把复测时还留在缓冲里的那个字符（命令台要 peek 完才 consume）当成未知命令打掉。"
+        ]
+      }
+    },
+    "mspm0": {
+      "include": {
+        "headers": [
+          "debug_uart_mspm0.h"
+        ]
+      },
+      "init": {
+        "calls": [
+          "debug_uart_init()"
+        ]
+      },
+      "probe": {
+        "calls": [
+          "debug_uart_send(\"DEBUG UART TX OK -> type r + Enter, expect a reply\\r\\n\")"
+        ]
+      },
+      "console": {
+        "command": "u",
+        "description": "调试串口：重跑一次初始化并打一行自报（TX），敲一个字符看回显（RX）"
+      },
+      "note": {
+        "lines": [
+          "本件**没有带期望值的探头**（板上判不了通断，与 stm32 侧同一个理由）：`debug_uart_init()` / `debug_uart_send()` / `debug_cmd_poll()` 都返回 `void`，模块头 debug_uart_mspm0.h 里唯一的只读接口 `debug_cmd_peek()` 回的是命令字符串（归串口命令台消费）——没有可比的数值 / 状态，只能看现象。",
+          "**收的形态与 stm32 不同**：mspm0 的 `debug_cmd_poll()` 只原样回显（`CMD: x`），不点灯也不蜂鸣（要点灯 / 蜂鸣请用 led / beep 模块）。所以本平台敲 `r` 看到的是 `CMD: r`——那一行就是「收到了」的证据；敲完什么都没回，才是没通。",
+          "**TX 这半其实已经在自证**：检测程序的打印出口就是 `DEBUG_PRINTF` → `debug_uart_send()`，你能看到这一节 = 发送路径通了；本节那句自报只是显式复测一次。**没证明**的是：RX（要你敲一个字符 + 回车看到回显）、以及串口助手那头的线序与波特率。",
+          "**本平台这一格没有 read 段，不是漏了**：mspm0 母版没有 .h，本件能引用的名字只有 debug_uart_mspm0.h 里那几个 `void` 函数与命令台的 `debug_cmd_peek()` / `debug_cmd_consume()`——没有返回数值的接口，也没有等价的引脚读接口（stm32 侧那条读数读的是 PA3 的实际电平，本平台没有对应的头名可写）。",
+          "接线与中断：UART2，PA23 = TX / PA22 = RX（母版 SysConfig 的 `DEBUG_UART` 实例，115200 8N1）——`debug_uart_init()` 在本平台只做 `NVIC_ClearPendingIRQ()` + `NVIC_EnableIRQ()`，引脚与波特率是 `SYSCFG_DL_init()` 按 mspm0.syscfg 配好的：**syscfg 里没有 DEBUG_UART 实例就没有任何输出**；`DEBUG_UART_INST_IRQHandler`（= UART2_IRQHandler）在模块 .c 内已定义，main.c 不用再定义；本实例默认与 uwb_uart 同用 UART2，两件同选时靠引脚绑定换实例消解。"
+        ]
+      }
+    }
+  }
+}

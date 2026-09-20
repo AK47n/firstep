@@ -1121,6 +1121,34 @@ def test_preview_reports_a_device_without_this_platform_entry(real_library_clien
     assert "无本平台版本" in missing[0]["message"]
 
 
+@pytest.mark.parametrize("slug", ["sr04", "jy61p", "xunji"])
+def test_single_platform_devices_are_named_on_the_other_platform(
+    real_library_client, slug
+):
+    """**单平台件不产生"另一平台也能测"的误导**（工单 09 的验收项）。
+
+    这三件只有 mspm0 条目。在 stm32 页面上选中它们时，服务端必须在 `wiring.missing`
+    里**逐条点名**（页面据此渲染 ⚠ 行 + 接线表里不会出现它们）——静默省略会让
+    学生以为"选上了、能测"，而生成的工程里根本没有这件东西。
+
+    为什么参数化三件而不是只测 sr04：另两件（jy61p / xunji）是工单 09 新入库的
+    pilot 格，正是"容易被误当成双平台"的那类（库内其余件大多双平台）。
+    """
+    client, _ = real_library_client
+    body = client.post(
+        "/api/hwcheck/preview",
+        json={"platform": PLATFORM_STM32, "debug_uart": False, "oled": False,
+              "devices": [slug]},
+    ).json()
+    assert [item["slug"] for item in body["wiring"]["missing"]] == [slug]
+    assert "无本平台版本" in body["wiring"]["missing"][0]["message"]
+    # 接线表里也不许出现它（没有条目就没有行——两处一致，不各说各话）
+    assert all(row["slug"] != slug for row in body["wiring"]["rows"])
+    # 检测计划里同样没有它（没有配方 + 没有条目 = 不出小节，也不进通用降级）
+    assert all(item["slug"] != slug for item in body["sections"])
+    assert all(item["slug"] != slug for item in body["unspecialized"])
+
+
 def test_preview_rejects_a_device_that_is_not_in_the_library(real_library_client):
     """库外 slug → 400 中文（未知模块异常已登记；不静默当空）。"""
     client, _ = real_library_client
@@ -1671,8 +1699,9 @@ def test_preview_reports_devices_without_a_recipe_as_unspecialized(
     """没配方的器件如实标"未专精"，并说清这一趟对它做什么。
 
     ⚠ 夹具用的未专精件要挑**这一版真的还没有配方**的：工单 05 起
-    `ml_mpu6050` 已经专精了（它正是那一单要闭环的器件），拿它当"未专精"的样本
-    会变成一条假红——本用例改用 `beep`（本平台有条目、暂无配方）。
+    `ml_mpu6050` 已经专精了（它正是那一单要闭环的器件），工单 09 又把 v1 清单
+    补到 17 格（`beep` 也专精了）——拿专精件当"未专精"的样本会变成一条假红。
+    本用例改用 `sht20`（stm32 有条目、至今没有配方，工单 07 的通用降级样本）。
 
     ⚠ 工单 07 改了这条的口径：04 那一版这里钉的是"**不渲染**它的小节"
     （通用降级还没做，`unspecialized_message` 明说"本版检测程序不会给它出检测
@@ -1683,27 +1712,27 @@ def test_preview_reports_devices_without_a_recipe_as_unspecialized(
     body = client.post(
         "/api/hwcheck/preview",
         json={"platform": PLATFORM_STM32, "debug_uart": False, "oled": False,
-              "devices": ["led", "beep"]},
+              "devices": ["led", "sht20"]},
     ).json()
     assert [item["slug"] for item in body["sections"]] == ["led"]
-    assert [item["slug"] for item in body["unspecialized"]] == ["beep"]
+    assert [item["slug"] for item in body["unspecialized"]] == ["sht20"]
     entry = body["unspecialized"][0]
     assert entry["label"] == GENERIC_LABEL
     assert GENERIC_LABEL in entry["message"]
-    assert "beep_init()" in entry["plan"]                 # 真动作，不是走过场话术
+    assert "sht20_init()" in entry["plan"]                # 真动作，不是走过场话术
     # 没有输出通道 → 通用小节不渲染（渲染了也没人看得见，与专精件同一条判据）
-    assert "hwcheck_generic_beep" not in body["main_c"]
+    assert "hwcheck_generic_sht20" not in body["main_c"]
     # 有串口那一趟：小节真进产物，检测页那句标注与产物注释**同一句**（单源）
     serial = client.post(
         "/api/hwcheck/preview",
         json={"platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
-              "devices": ["led", "beep"]},
+              "devices": ["led", "sht20"]},
     ).json()
     code = serial["main_c"]
     assert c_string(GENERIC_LABEL) in code
-    assert "hwcheck_generic_beep" in code
-    assert "beep_init();" in code
-    assert SECTION_TAG not in code.split("hwcheck_generic_beep")[1]
+    assert "hwcheck_generic_sht20" in code
+    assert "sht20_init();" in code
+    assert SECTION_TAG not in code.split("hwcheck_generic_sht20")[1]
 
 
 def test_preview_generic_i2c_device_carries_its_bus_scan(real_library_client):
@@ -1727,23 +1756,27 @@ def test_preview_generic_i2c_device_carries_its_bus_scan(real_library_client):
 def test_generate_writes_the_generic_sections_into_main_c(
     real_library_client, tmp_path
 ):
-    """真生成：盘上的 main.c 里有通用小节，且与载荷逐字一致。"""
+    """真生成：盘上的 main.c 里有通用小节，且与载荷逐字一致。
+
+    样本件用 `sht20`（至今没有配方）——工单 09 起 `beep` 已专精，拿它当通用件
+    会变成假红（与上一条同款记账）。
+    """
     client, _ = real_library_client
     parent = tmp_path / "out"
     parent.mkdir()
     response = client.post(
         "/api/hwcheck/generate",
         json={"platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
-              "devices": ["beep"], "parent_dir": str(parent)},
+              "devices": ["sht20"], "parent_dir": str(parent)},
     )
     assert response.status_code == 200, response.text
     body = response.json()
     on_disk = (Path(body["output_dir"]) / "main.c").read_text(encoding="utf-8")
     assert on_disk == body["main_c"]
-    assert body["main_c"].count("hwcheck_generic_beep();") == 1
+    assert body["main_c"].count("hwcheck_generic_sht20();") == 1
     assert GENERIC_LABEL in unescape_c_string(body["main_c"])
     # 未专精件仍进工程（接线表与 README 同源的前提）
-    assert "beep" in body["modules"]
+    assert "sht20" in body["modules"]
 
 
 def test_project_endpoint_reads_back_the_generic_sections(
@@ -1756,13 +1789,13 @@ def test_project_endpoint_reads_back_the_generic_sections(
     generated = client.post(
         "/api/hwcheck/generate",
         json={"platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
-              "devices": ["beep"], "parent_dir": str(parent)},
+              "devices": ["sht20"], "parent_dir": str(parent)},
     ).json()
     body = client.get(
         "/api/hwcheck/project", params={"output_dir": generated["output_dir"]},
     ).json()
-    assert [item["slug"] for item in body["unspecialized"]] == ["beep"]
-    assert "hwcheck_generic_beep" in body["main_c"]
+    assert [item["slug"] for item in body["unspecialized"]] == ["sht20"]
+    assert "hwcheck_generic_sht20" in body["main_c"]
 
 
 def _strip_comments_keep_literals(code: str) -> str:

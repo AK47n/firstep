@@ -388,9 +388,13 @@ def test_generic_message_names_the_label_and_the_plan():
 def test_real_library_every_unspecialized_slot_can_be_planned():
     """**地板断言**：真实库每个未专精格都规划得出来（不报错、不拒绝）。
 
-    同时把实测基线钉住：能拿到无参初始化的格不许少于 140（2026-09-20 实测
-    131 精确 + 9 唯一兜底）——哪天库内改名把初始化判据打瘸了，这里当场红，
-    而不是让学生上板才发现"这一节什么都不做"。
+    同时把实测基线钉住：未专精格不许少于 157、能拿到无参初始化的格不许少于 132
+    （2026-09-20 实测：planned 157 / with_init 132）——哪天库内改名把初始化判据
+    打瘸了，这里当场红，而不是让学生上板才发现"这一节什么都不做"。
+
+    ⚠ **这两个数随 pilot 配方推进而下降**（工单 09 把 v1 清单补到 17 格，11 格从
+    "未专精"变成"专精"，于是 168→157 / 140→132）。降的时候要**如实改这里并写清
+    为什么**，别顺手删断言：它挡的是"初始化判据悄悄失灵"，不是"配方变多了"。
     """
     from contest_generator.hwcheck_recipe import load_recipes
 
@@ -416,8 +420,8 @@ def test_real_library_every_unspecialized_slot_can_be_planned():
                 with_init += 1
             else:
                 assert section.init.reason, f"{manifest.slug} × {platform} 没给出理由"
-    assert planned >= 168, f"未专精格少于实测基线 168：{planned}"
-    assert with_init >= 140, f"能无参初始化的格少于实测基线 140：{with_init}"
+    assert planned >= 157, f"未专精格少于实测基线 157：{planned}"
+    assert with_init >= 132, f"能无参初始化的格少于实测基线 132：{with_init}"
 
 
 # ---------------------------------------------------------------------------

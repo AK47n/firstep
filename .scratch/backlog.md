@@ -180,3 +180,22 @@ UTF-8 stdout（原锚点版是崩在 GBK 编码上的）。第 7 节的两道候
 | ~~`update-verify-failure-leftovers/01`~~ ✅ **已修（2026-09-19）** | 🟡 卫生（可自愈） | **不可重试**的校验失败（清单 size 与对端总长矛盾）终态 `failed` + 中文话术都对，但 `updates/full/` 里留下**整卷半成品**（实测 3,961,701 B）+ 边车，与 spec 第 147 行「校验失败一并删除」不符；线上完整包场景 = 失败后白占 ~765 MB。**修法**：任务层共享原语的异常路径按分类单源区分——不可重试的 verify 清掉半成品与边车，网络/取消/可重试照旧留断点。真机复跑：`verify-size` 两条判据都成立、`cut-retry` 12 条全成立 | `.scratch/update-verify-failure-leftovers/`（spec / 两张工单 / 探针 3/3 / `verify-real-machine*`）+ `verify-02-degraded.{txt,json}` 的 `verify-size` 一节 |
 
 
+
+## 9. 硬件检测（module-hwcheck）收尾时撞出来的两条既有缺陷（2026-09-20，已开单）
+
+工单 `module-hwcheck/09` 补 pilot 配方 + 跑真编译矩阵时撞出来。配方侧本身全过：
+**17 格校验通过；17 格 + 2 格全选里 16 种形态真编译 0 error / 0 warning，
+3 格「生成前拦下」**（`mspm0 adc` / `mspm0 xunji` / `mspm0 全选`）。两条都不是配方的问题：
+
+- **检测页遇到默认脚冲突没有出口**：mspm0 上「调试串口 + OLED」是检测页的默认形态，
+  而母版里 `OLED_SPI_RES = PA22 = DEBUG_UART RX` —— **mspm0 任何器件（含"一件都不选"）
+  在默认双通道下生成必 400**，而检测页没有引脚配置入口（400 的出路文案指向赛题页的
+  「自动配置」）。赛题链路同一条冲突有出口（`/api/bindings/auto` 会把它移到 PA24，
+  读数在 `.scratch/module-hwcheck/probe-09-contest-parity.txt`）。
+- **`ADC12_0.adcPin7`（PA22）角色未登记**：选 adc / us016 / mq2 这类共读 MEM 的件时，
+  只要开任一输出通道就 400（那颗脚只有选 flame 时才有主人，冲突求解器解不开）；
+  两个通道都关则能生成但逐件小节按设计不渲染 —— 这几格到不了板（xunji 也因 HUIDU
+  的 P2/P3 撞同样两个通道而中招）。
+
+细节、验收清单与候选修法：`.scratch/hwcheck-pin-conflict-exit/issues/01-default-pin-conflict-no-exit.md`
+（矩阵读数：`.scratch/module-hwcheck/probe-09-compile-matrix.txt`）。

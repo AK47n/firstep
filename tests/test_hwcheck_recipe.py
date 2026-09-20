@@ -47,11 +47,21 @@ from tests._c_escape import decode_c_string
 REAL_LIBRARY = Path(__file__).resolve().parents[1] / "library" / "modules"
 REAL_MASTERS = Path(__file__).resolve().parents[1] / "library" / "masters"
 
-# 真实库的 pilot 清单（spec「v1 专精范围」已落地的那几件）——地板断言的判据。
+# 真实库的 pilot 清单（spec「v1 专精范围」）——地板断言的判据。
 # 工单 05 起加上 ml_mpu6050 × 两个平台（**平台不对称**：stm32 只有原始六轴、
-# mspm0 走官方 DMP 出角度），这一格缩水会让学生以为新到的器件"没得测"。
+# mspm0 走官方 DMP 出角度）；工单 09 起把 v1 清单**补齐并全部钉死**（10 件 /
+# 17 格）——少任何一格当场红，防"配方悄悄少了一格没人发现"。
+# 单平台件（sr04 / jy61p / xunji 只有 mspm0 条目）按库内实况只列有条目那一格：
+# 给它们补 stm32 格反而会被 `validate_recipes` 判红（该平台没有条目）。
 PILOT = (("led", PLATFORM_STM32), ("led", PLATFORM_MSPM0),
          ("oled", PLATFORM_STM32), ("oled", PLATFORM_MSPM0),
+         ("debug_uart", PLATFORM_STM32), ("debug_uart", PLATFORM_MSPM0),
+         ("key", PLATFORM_STM32), ("key", PLATFORM_MSPM0),
+         ("beep", PLATFORM_STM32), ("beep", PLATFORM_MSPM0),
+         ("sr04", PLATFORM_MSPM0),
+         ("jy61p", PLATFORM_MSPM0),
+         ("xunji", PLATFORM_MSPM0),
+         ("adc", PLATFORM_STM32), ("adc", PLATFORM_MSPM0),
          ("ml_mpu6050", PLATFORM_STM32), ("ml_mpu6050", PLATFORM_MSPM0))
 
 
@@ -655,6 +665,93 @@ def test_real_library_recipes_reference_only_real_interfaces():
     assert recipes, "真实库应当至少有 pilot 清单那几件的配方"
     for catalog in recipes.values():
         assert catalog.usable
+
+
+def test_pilot_floor_covers_every_v1_slot():
+    """**地板条数**断言（工单 09）：pilot 清单 = 10 件 / 17 格，逐格钉住。
+
+    上面那条逐格断言保证"每格都有配方"，这条保证**清单本身**不被改小
+    （有人删掉 PILOT 里的一行，逐格断言就少跑一格、静默放行）——两条一起
+    才是地板：一格都不能少，且每一格都真的能读出来。
+    """
+    assert len(PILOT) == 17, f"pilot 清单格数变了：{len(PILOT)}（spec v1 清单 = 17 格）"
+    assert len({slug for slug, _ in PILOT}) == 10, "pilot 清单件数应是 10 件"
+
+
+def test_recipe_file_itself_keeps_the_floor_cell_count():
+    """**独立于 PILOT 常量**的地板（工单 09 评审整改）：直接数配方文件。
+
+    为什么单独立一条：上面两条都以 `PILOT` 为判据，而 `PILOT` 是**测试里手写的
+    常量**——有人"同步删一行 PILOT + 删配方文件里那一格"时，两条都静默变绿，
+    正是 spec「防止清单缩水而无人察觉」要挡的那种改法。这条不读 PILOT，只数
+    `library/hwcheck_recipes.json` 里**有实际动作的格**（prereq/init/probe/read
+    至少一项）：低于冻结下限 17 或件数低于 10 就红。
+    """
+    from contest_generator.library import list_modules
+
+    manifests = list_modules(REAL_LIBRARY)
+    recipes = load_recipes(
+        REAL_LIBRARY, manifests, _library_interfaces_all(REAL_LIBRARY, manifests))
+    cells = [
+        (slug, platform)
+        for slug, catalog in recipes.items()
+        for platform, section in catalog.sections.items()
+        if section.usable
+    ]
+    slugs = {slug for slug, _ in cells}
+    assert len(cells) >= 17, f"配方文件里有实际动作的格少于地板 17：{sorted(cells)}"
+    assert len(slugs) >= 10, f"配方文件覆盖的件数少于地板 10：{sorted(slugs)}"
+
+
+@pytest.mark.parametrize("slug", ["sr04", "jy61p", "xunji"])
+def test_single_platform_pilot_modules_have_no_other_platform_recipe(slug):
+    """单平台件（工单 09 的验收项之一）：**只有 mspm0 条目**的件不许出现 stm32 格。
+
+    为什么单独立一条：给它们补一格 stm32 配方，`validate_recipes` 会判红
+    （"该模块没有 stm32 平台条目"）——但那条红只在"有人写了"时才出现；这条
+    反过来钉住"现在没有、也不该有"，同时把"检测页在 stm32 上选到它 = 如实
+    报无本平台版本"这个事实写进测试（页面不产生"另一平台也能测"的误导）。
+    """
+    from contest_generator.library import list_modules
+
+    manifests = list_modules(REAL_LIBRARY)
+    by_slug = {m.slug: m for m in manifests}
+    entry = by_slug[slug].platforms
+    assert PLATFORM_STM32 not in entry, f"{slug} 居然有了 stm32 条目——本条前提变了"
+    recipes = load_recipes(
+        REAL_LIBRARY, manifests, _library_interfaces_all(REAL_LIBRARY, manifests))
+    catalog = recipes.get(slug)
+    assert catalog is not None and PLATFORM_MSPM0 in catalog.sections
+    assert PLATFORM_STM32 not in catalog.sections
+
+
+def test_enum_constants_and_typedefs_are_real_interface_names():
+    """**枚举常量与 typedef 名进白名单**（工单 09 修的一处真缺口）。
+
+    判据面原本只收函数声明 / `#define` / extern 全局量——`typedef enum {
+    ADC_Channel_0, … } ADCINx_enum;` 里的名字一个都不认。后果不是"少个名字"，
+    而是配方被逼绕道：stm32 的 adc 读数只能写"整型变量 + 强转"，编译出 4 个
+    `#188-D: enumerated type mixed with another type`（检测程序的验收线是
+    0 error / **0 warning**），而直接写 `adc_get(ADC_1, ADC_Channel_0)` 反而
+    过不了校验。这条钉住修好后的行为，并**同时**钉住"没变松"。
+    """
+    from contest_generator.hwcheck_recipe import interface_names
+
+    headers = [(
+        "ml_adc.h",
+        "typedef enum\n{\n\tADC_1,\n\tADC_2,\n}ADCx_enum;\n\n"
+        "typedef enum\n{\n\tADC_Channel_0,  //PA0\n\tADC_Channel_1,  //PA1\n}ADCINx_enum;\n\n"
+        "uint16_t adc_get(ADCx_enum adc, ADCINx_enum adc_channel);\n",
+    )]
+    manifests = [_manifest("adc")]
+    names = interface_names(manifests, REAL_LIBRARY, PLATFORM_STM32, headers)["adc"]
+    for name in ("ADC_1", "ADC_Channel_0", "ADC_Channel_1", "ADCx_enum", "ADCINx_enum"):
+        assert name in names, f"真实存在的枚举常量 / typedef 名被漏掉：{name}"
+    # 注释里的词**不**该被当成接口（枚举体先剥注释再取名字）
+    assert "PA0" not in names, "枚举体里的行尾注释被当成了接口名"
+    # 没变松：编造的名字照旧不在
+    assert "ADC_Channel_99" not in names
+    assert "adc_read_magic" not in names
 
 
 def _decode_like_c(escaped: str) -> bytes:

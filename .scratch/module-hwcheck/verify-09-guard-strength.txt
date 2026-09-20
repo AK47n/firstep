@@ -1,0 +1,4 @@
+﻿PASS  配方少一格（删掉 beep）（变红=True / 逐字节复原=True）  2 failed, 15 passed in 8.08s
+PASS  地板清单被改小（PILOT 少一行）（变红=True / 逐字节复原=True）  1 failed in 0.24s
+PASS  枚举常量 / typedef 名不进白名单（变红=True / 逐字节复原=True）  2 failed in 0.59s
+PASS  给单平台件补一格别的平台（sr04 加 stm32）（变红=True / 逐字节复原=True）  4 failed in 2.00s

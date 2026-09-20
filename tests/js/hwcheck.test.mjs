@@ -33,6 +33,8 @@ import {
   hwcheckChecklistState, hwcheckTriageErrorHTML, hwcheckAdviceHTML,
   hwcheckAdviceEmptyHTML,
 } from "../../src/contest_generator/static/js/fx/hwcheck.js";
+// 单平台件的「需切换平台」标记落在既有网格渲染上（工单 09 的行为判据要真跑它）
+import { moduleGridHTML } from "../../src/contest_generator/static/js/fx/module.js";
 
 const html = readFileSync(
   new URL("../../src/contest_generator/static/index.html", import.meta.url),
@@ -1307,6 +1309,55 @@ test("ui 回读勾选的判据是「这次带没带记录」而不是「记录�
     "判据要看 record 键在不在：\n" + body);
   assert.ok(!/serverTicks\.length/.test(body),
     "不得再用「勾选为空」当「没有记录」：\n" + body);
+});
+
+// ---------------------------------------------------------------------------
+// 工单 module-hwcheck/09：单平台件不误导（选它时页面不许像"另一平台也能测"）
+// ---------------------------------------------------------------------------
+
+test("单平台件不误导：器件挑选面按**本栏目当前平台**标记「需切换平台」", () => {
+  // 判据在既有网格渲染里（fx/module.js moduleGridHTML：platform 参数决定
+  // 卡片是否带 .off + 「需切换平台」）——检测页要做的只有"把当前平台传进去"。
+  // 不传 = sr04 / jy61p / xunji 这类只有 mspm0 条目的件在 stm32 页面上看着能测。
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const call = ui.match(/moduleGridHTML\(\s*([^)]*)\)/);
+  assert.ok(call, "ui 应复用既有网格渲染 moduleGridHTML");
+  assert.ok(call[1].includes("hwcheckUI.platform"),
+    "器件卡片必须带上本栏目当前平台（否则单平台件不会标「需切换平台」）：" + call[0]);
+});
+
+test("单平台件不误导：**行为**上，未选中的卡片就被标成需切换平台", () => {
+  // 上一条是源码文本判据（挡"忘了传平台"），这条真跑一遍挑选面的组合：
+  // 挑选池 → 网格渲染 → 卡片上必须带 .off + 「需切换平台」。
+  // 误导发生在**未选中**的卡片上，所以这里断言的是"还没点它之前"的样子。
+  const onlyMspm0 = {
+    slug: "sr04", description: "超声波测距", platforms: { mspm0: { files: [] } },
+  };
+  const both = {
+    slug: "led", description: "板载灯", platforms: { stm32: { files: [] }, mspm0: { files: [] } },
+  };
+  const pool = hwcheckDevicePool([onlyMspm0, both]);
+  const stm32View = moduleGridHTML(pool, [], "", "stm32");
+  assert.ok(stm32View.includes("需切换平台"),
+    "stm32 页面上 sr04 应被标「需切换平台」：" + stm32View);
+  assert.ok(moduleGridHTML([onlyMspm0], [], "", "stm32").includes("module-card off"),
+    "单平台件在无条目平台上应带 .off 样式");
+  assert.ok(!moduleGridHTML([onlyMspm0], [], "", "mspm0").includes("需切换平台"),
+    "它有 mspm0 条目，在 mspm0 页面上不该标");
+});
+
+test("单平台件不误导：已选中的单平台件由服务端载荷点名，前端只渲染不另写文案", () => {
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const panel = readFileSync(
+    new URL("../../src/contest_generator/static/js/fx/hwcheck.js", import.meta.url), "utf8");
+  assert.ok(ui.includes("hwcheckMissingDevicesHTML("),
+    "「本平台无条目」的逐条点名走 fx 单源（判据在服务端 wiring.missing）");
+  assert.ok(panel.includes("item.message"),
+    "点名文案取服务端给的那句（item.message）");
+  assert.ok(!panel.includes("无本平台版本"),
+    "前端不另写一版「无本平台版本」——文案单源在服务端（hwcheck_board）");
 });
 
 
