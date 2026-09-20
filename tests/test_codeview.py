@@ -4,6 +4,10 @@
 （路径穿越 / 二进制 / 超限三类均 400 中文），逐条用例钉死拒绝面。
 """
 
+import ast
+import re
+from pathlib import Path
+
 import pytest
 
 from contest_generator.codeview import (
@@ -17,12 +21,15 @@ from contest_generator.codeview import (
     create_code_entry,
     delete_code_entry,
     list_code_tree,
+    name_rules_payload,
     read_code_file,
     read_code_file_bytes,
     rename_code_entry,
     save_code_file,
     search_code_files,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _make_tree(root):
@@ -670,6 +677,167 @@ def test_rename_code_rejects_bad_name(tmp_path, bad_name):
 
     with pytest.raises(CodeViewError, match="名称不合法"):
         rename_code_entry(root, "main.c", bad_name)
+
+
+# ---------------------------------------------------------------------------
+# 名称规则下发与执行同源（工单 cross-lang-mirror-c5a/01）
+#
+# 规则（非法字符集 + 长度上限）此前在 `_validate_entry_name` 里写字面量、前端
+# `fx/code-tree-ops.js` 另写一份，两侧靠注释互指、零守卫。现在判据单源仍是
+# codeview 的具名常量，但**下发 DTO、校验函数、前端兜底**三处必须逐字对齐：
+# 下发口径比校验宽 → 前端放行、后端 400（用户填完名字才吃报错）；比校验窄 →
+# 合法名字被前端拦死。故下发的每个字符与上限边界都在这里实打实过一遍。
+# 前端**装载接线**（打开目录的响应真装进校验）由 `tests/js/code-tree-ops.test.mjs`
+# 的源码守卫守——那是前端测试面的事，不在这里读 JS 源码。
+# ---------------------------------------------------------------------------
+
+
+def test_name_rules_payload_shape_and_no_duplicate_chars():
+    rules = name_rules_payload()
+
+    assert set(rules) == {"illegal", "max_len"}
+    assert isinstance(rules["illegal"], str)
+    assert isinstance(rules["max_len"], int)
+    # 无重复字符（前端按它的长度渲染提示，重复会让文案与拒绝对不上）
+    assert len(set(rules["illegal"])) == len(rules["illegal"])
+    assert not set(rules["illegal"]) & set(" \t\r\n")
+
+
+def test_create_code_entry_accepts_exactly_what_name_rules_allow(tmp_path):
+    """规则放行的名字必须真能建出来（上限 = 恰好通过，多一个字符即拒）。"""
+    rules = name_rules_payload()
+    root = tmp_path / "proj"
+    root.mkdir()
+
+    for name in ("sensor.c", "新驱动_1.h", ".gitignore", "a" * rules["max_len"]):
+        create_code_entry(root, "file", name)
+        assert (root / name).exists()
+
+
+def test_name_rules_cover_every_rejected_single_char(tmp_path):
+    """下发的每个非法字符都真被后端拒；集合外的字符不许被误拒。
+
+    `a/b` 这种**带正斜杠**的形态是设计内的「嵌套新建」语义（末段才是名字），
+    故不在此例；它由 `test_create_code_entry_rejects_unsafe_path` 与
+    `test_create_code_file_nested_parents_created` 两侧覆盖。其余字符逐个过
+    `a<ch>b`：确认下发集合与后端实际拒绝面**逐字符对齐**（`:` 与 `\\` 被
+    上游 `is_unsafe_path` 先拦成「非法路径」，同样是 400，只是文案不同）。
+    """
+    rules = name_rules_payload()
+    root = tmp_path / "proj"
+    root.mkdir()
+
+    for ch in rules["illegal"]:
+        if ch == "/":  # 路径分隔符：末段之外的段由 _resolve_in_root 管
+            continue
+        with pytest.raises(CodeViewError, match="名称不合法|非法路径"):
+            create_code_entry(root, "file", "a" + ch + "b")
+    for ch in ("'", ",", "-", "~", " "):
+        create_code_entry(root, "file", "a" + ch + "b")
+
+
+def test_create_code_entry_rejects_over_max_len(tmp_path):
+    rules = name_rules_payload()
+    root = tmp_path / "proj"
+    root.mkdir()
+
+    with pytest.raises(CodeViewError, match="名称不合法"):
+        create_code_entry(root, "file", "a" * (rules["max_len"] + 1))
+
+
+@pytest.mark.parametrize("rel_path", ["a*b/x.c", "a?b/x.c", "a<x/y>z.c", "a|b/c"])
+def test_create_code_entry_rejects_illegal_mid_segment(tmp_path, rel_path):
+    """**中间段**（目录名）也要过名称规则（工单 01 评审整改）。
+
+    只校验末段时中间段直达 `mkdir`，未登记的 OSError 变 500——「`a*b.c` → 500」
+    换个形态（`a*b/x.c`）复现，正是本工单要关掉的洞。
+    """
+    root = tmp_path / "proj"
+    root.mkdir()
+
+    with pytest.raises(CodeViewError, match="名称不合法"):
+        create_code_entry(root, "file", rel_path)
+
+
+def test_tree_create_illegal_name_is_400_and_leaves_no_half_product(tmp_path):
+    """非法名必须 400 中文、且**不许留下半成品**（不能是未登记异常翻的 500）。
+
+    `a*b.c` 此前直达 `os.open` → OSError → 500（既不是 400 也不是设计的拒绝面）；
+    补口后判定前置在一切盘操作之前，被拒的名字连空文件都不该留下。
+    """
+    root = tmp_path / "proj"
+    root.mkdir()
+
+    with pytest.raises(CodeViewError, match="名称不合法"):
+        create_code_entry(root, "file", "a*b.c")
+
+    assert list(root.iterdir()) == []
+
+
+def test_rename_code_illegal_name_message_names_the_char(tmp_path):
+    """拒绝文案由常量现拼（工单 01 评审整改）：点名哪个字符非法，不含第二份字面量。"""
+    root = _make_tree(tmp_path / "proj")
+
+    with pytest.raises(CodeViewError, match="含非法字符") as exc:
+        rename_code_entry(root, "main.c", "a*b.c")
+
+    assert "*" in str(exc.value)
+
+
+# ---------------------------------------------------------------------------
+# 跨语言镜像守卫：JS 侧兜底常量必须等于后端常量（工单 cross-lang-mirror-c5a/01）
+#
+# 规则已经由后端下发（`POST /api/code/open` 的 name_rules），但前端仍持一份
+# 「后端尚未下发时的启动兜底」——那份兜底同样是判据的第二处实现，必须与后端
+# 逐字符一致，否则页面一打开（或后端旧版本）就按过期规则拦人。故读 JS 真源码
+# 抠出两个常量的**值**再与后端比（不逐字比源码：`\` 的转义写法与 Python 不同）。
+# 先例：tests/test_hwcheck.py 的通道词表镜像守卫、tests/test_library_invariants.py
+# 的模块类别枚举镜像守卫。
+# ---------------------------------------------------------------------------
+
+_JS_FX_TREE_OPS = (
+    REPO_ROOT / "src" / "contest_generator" / "static" / "js" / "fx" / "code-tree-ops.js"
+)
+
+
+def _js_source_literal(const_name: str) -> object:
+    """抠出 JS 源码里 `const <name> = <字面量>;` 的字面量并求值。
+
+    只认单行字符串 / 数字字面量（本模块两个常量都是）；形态变了即大声失败，
+    不静默跳过——静默跳过等于这条守卫消失。
+    """
+    src = _JS_FX_TREE_OPS.read_text(encoding="utf-8")
+    match = re.search(
+        r"^export const " + re.escape(const_name) + r"\s*=\s*(.+?);\s*$",
+        src,
+        re.MULTILINE,
+    )
+    assert match, f"fx/code-tree-ops.js 里找不到 `export const {const_name} = ...`"
+    try:
+        return ast.literal_eval(match.group(1).strip())
+    except (ValueError, SyntaxError) as exc:  # 形态变了（非字面量）= 守卫失效
+        raise AssertionError(
+            f"{const_name} 不再是可解析的字面量（{match.group(1).strip()!r}）：{exc}"
+        ) from None
+
+
+def test_js_name_rules_fallback_mirrors_backend():
+    """前端兜底规则 == 后端单源规则（改任一侧此测试即红）。"""
+    rules = name_rules_payload()
+    js_illegal = _js_source_literal("CODE_TREE_NAME_ILLEGAL")
+    js_max = _js_source_literal("CODE_TREE_NAME_MAX")
+
+    assert set(js_illegal) == set(rules["illegal"]), (
+        "fx/code-tree-ops.js 的 CODE_TREE_NAME_ILLEGAL 与后端 CODE_NAME_ILLEGAL 不一致："
+        f"JS={js_illegal!r} Python={rules['illegal']!r}"
+    )
+    assert len(js_illegal) == len(set(js_illegal)), (
+        "JS 兜底非法字符集有重复字符（提示文案长度会与拒绝对不上）"
+    )
+    assert js_max == rules["max_len"], (
+        "fx/code-tree-ops.js 的 CODE_TREE_NAME_MAX 与后端 CODE_NAME_MAX_LEN 不一致："
+        f"JS={js_max} Python={rules['max_len']}"
+    )
 
 
 def test_delete_code_file_removes(tmp_path):

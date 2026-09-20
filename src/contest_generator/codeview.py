@@ -558,27 +558,71 @@ def apply_code_diff(
 
 # 单段名称非法字符（Windows 保留集；路径分隔符靠 is_unsafe_path 拦，这里
 # 防「多段名」绕过 rename 语义——new_name 只允许单段，不做跨目录移动）。
-_CODE_NAME_ILLEGAL = set('/\\:*?"<>|')
+CODE_NAME_ILLEGAL = '/\\:*?"<>|'
+CODE_NAME_MAX_LEN = 120
+_CODE_NAME_ILLEGAL_SET = frozenset(CODE_NAME_ILLEGAL)
+
+
+def name_rules_payload() -> dict[str, Any]:
+    """名称规则下发 DTO（工单 cross-lang-mirror-c5a/01）：`{illegal, max_len}`。
+
+    判据单源的**唯一出口**——校验函数（`_validate_entry_name`）与前端求值
+    （`fx/code-tree-ops.js` 的 `treeNameValidate` 吃 `POST /api/code/open`
+    载荷的 `name_rules`）都照它执行。此前前端另写一份同口径常量、两侧靠注释
+    互指零守卫：改一侧另一侧静默失效（前端放行 → 后端 400 才报错；或合法名
+    被前端拦死）。畸形规则比没有规则更坏，故 DTO 走前缀下发、值即常量本体。
+
+    命名含 `payload`（评审整改）：本函数**不发送**任何东西，只做载荷投影，
+    与同族 `list_code_tree` / `read_code_file` 一致——`send_*` 会让人以为它
+    自己走网络。
+    """
+    return {"illegal": CODE_NAME_ILLEGAL, "max_len": CODE_NAME_MAX_LEN}
 
 
 def _validate_entry_name(name: object) -> None:
     """单段条目名称校验（tree 操作共用单源）：非空、非纯空白、首尾无空白、
-    ≤120 字符、不为 `.` / `..`、不含 Windows 保留字符 → 违规 400 中文。
+    ≤上限、不为 `.` / `..`、不含非法字符 → 违规 400 中文。
+
+    文案由常量现拼（工单 cross-lang-mirror-c5a/01 评审整改）：此前常量单源了、
+    400 文案却把「≤120 字符、不含 / \\ : * ? \" < > |」**又写死一遍**——改常量后
+    文案会说谎，正是本工单要消灭的「同一判据两处字面量」。分支理由各自点名
+    （哪个字符 / 多少长度），排查时不用猜。
 
     入参标 object（mypy 基线遗留）：函数本身做 isinstance 收窄，端点把
     payload 原值直接传进来；标 str 会让调用点被判类型不兼容。
     """
-    if (
-        not isinstance(name, str)
-        or not name
-        or name.strip() != name
-        or len(name) > 120
-        or name in (".", "..")
-        or (_CODE_NAME_ILLEGAL & set(name))
-    ):
+    if not isinstance(name, str) or not name:
+        raise CodeViewError("名称不合法（名称不能为空）")
+    if name.strip() != name:
+        raise CodeViewError("名称不合法（名称首尾不能有空格）")
+    if name in (".", ".."):
+        raise CodeViewError("名称不合法（不能是 . 或 ..）")
+    if len(name) > CODE_NAME_MAX_LEN:
         raise CodeViewError(
-            "名称不合法（非空、首尾无空格、≤120 字符、不能是 . 或 ..、不含 / \\ : * ? \" < > |）"
+            f"名称不合法（名称过长：{len(name)} 字符 > 上限 {CODE_NAME_MAX_LEN} 字符）"
         )
+    bad = sorted(_CODE_NAME_ILLEGAL_SET & set(name))
+    if bad:
+        raise CodeViewError(
+            "名称不合法（含非法字符："
+            + " ".join(bad)
+            + "；本文件系统不允许 "
+            + " ".join(CODE_NAME_ILLEGAL)
+            + "）"
+        )
+
+
+def _validate_entry_names(rel_path: str) -> None:
+    """相对路径里**每一段**都过 `_validate_entry_name`（工单 01 评审整改）。
+
+    只校验末段会漏中间段——中间段是目录名，同样直达 `mkdir`：`a*b/x.c` 的
+    `a*b` 会抛未登记的 `OSError` → 500，正是「`a*b.c` → OSError 500」换个形态
+    复现。空段不在本函数拦（`a//b`、`src/` 交给 `_resolve_in_root` 的
+    is_unsafe_path，保住既有的「非法路径」错误面与文案）。
+    """
+    for segment in rel_path.split("/"):
+        if segment:
+            _validate_entry_name(segment)
 
 
 def create_code_entry(root: Path, kind: object, rel_path: str) -> dict[str, Any]:
@@ -594,10 +638,19 @@ def create_code_entry(root: Path, kind: object, rel_path: str) -> dict[str, Any]
     size_bytes: 0, mtime_ns: 字符串}——mtime 即打开 tab 的保存基准（创建后
     立即编辑、Ctrl+S 保存，基准一致无 409）；dir = os.mkdir（父级已
     mkdirs），成功返回 {path}。
+
+    名称校验（工单 cross-lang-mirror-c5a/01 补口）：本函数此前只走
+    `_resolve_in_root`，**完全不校验名称**，于是「规则下发与规则执行」并不同源
+    ——超长名（>上限）静默建出病态文件、含 `* ? " < > |` 的名字把 `os.open`
+    的 OSError 抛成 500（既不是 400 也不是设计的拒绝面），而前端按同一份规则
+    早已拦下这些名字。现在 `_validate_entry_names` 逐段校验（中间段是目录名，
+    与末段同样直达 mkdir，必须同拦），判定排在 `_resolve_in_root` **之后**且
+    在一切盘操作（含 mkdirs）之前——路径安全那一层的错误面与文案保持原样。
     """
     if kind not in ("file", "dir"):
         raise CodeViewError("新建类型必须是 file 或 dir")
     candidate = _resolve_in_root(root, rel_path)
+    _validate_entry_names(rel_path)
     if candidate.exists():
         raise CodeViewError(f"已存在：{rel_path}")
     candidate.parent.mkdir(parents=True, exist_ok=True)

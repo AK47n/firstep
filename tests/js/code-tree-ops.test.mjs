@@ -3,6 +3,7 @@
 // 直接 import，子串断言防脆。运行：node --test tests/js/*.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   treeNameValidate,
   treeOpAffected,
@@ -14,9 +15,112 @@ import {
   treeOpConfirmMessage,
   treeNamePromptHTML,
   treeCtxItems,
+  setCodeTreeNameRules,
   CODE_TREE_NAME_ILLEGAL,
   CODE_TREE_NAME_MAX,
+  CODE_TREE_NAME_RULES_DEFAULT,
 } from "../../src/contest_generator/static/js/fx/code-tree-ops.js";
+
+// ---- 规则由后端下发（工单 cross-lang-mirror-c5a/01）----
+//
+// 判据单源 = 后端 codeview.name_rules_payload，经 POST /api/code/open 的
+// name_rules 下发；本模块的常量退化为「后端尚未下发时的启动兜底」。下面按
+// **后端下发值**驱动校验，确认校验真吃下发的那份（而不是恒读兜底）。
+
+test("setCodeTreeNameRules：按后端下发的规则驱动校验（兜底不是唯一出处）", () => {
+  try {
+    setCodeTreeNameRules({ illegal: "@", max_len: 5 });
+    assert.equal(treeNameValidate("a@b").ok, false);
+    assert.equal(treeNameValidate("a-b").ok, true);   // 兜底集合里的字符，下发后放行
+    assert.equal(treeNameValidate("abcde").ok, true);
+    assert.equal(treeNameValidate("abcdef").ok, false);
+  } finally {
+    setCodeTreeNameRules(CODE_TREE_NAME_RULES_DEFAULT);  // 复原本模块兜底，防串场景
+  }
+  assert.equal(treeNameValidate("a@b").ok, true);        // 复原后再按兜底判
+  assert.equal(treeNameValidate("x".repeat(CODE_TREE_NAME_MAX)).ok, true);
+});
+
+test("setCodeTreeNameRules：下发值含反斜杠 / 上限边界逐字生效", () => {
+  // 反斜杠是这条规则里最容易漏的一个：JS 源码里写作 "\\"，下发值是单个
+  // "\"——校验必须按**下发的那一个字符**判，不能被转义写法带偏。
+  try {
+    setCodeTreeNameRules({ illegal: "\\", max_len: 8 });
+    assert.equal(treeNameValidate("a\\b").ok, false);
+    assert.equal(treeNameValidate("a/b").ok, true);    // 未下发的分隔符不拦
+    assert.equal(treeNameValidate("a".repeat(8)).ok, true);
+    assert.equal(treeNameValidate("a".repeat(9)).ok, false);
+  } finally {
+    setCodeTreeNameRules(CODE_TREE_NAME_RULES_DEFAULT);
+  }
+});
+
+test("setCodeTreeNameRules：畸形下发一律忽略（空集合/空串/负数不许放行一切）", () => {
+  try {
+    for (const bad of [
+      { illegal: "", max_len: 120 },
+      { illegal: "/\\:*", max_len: 0 },
+      { illegal: "/\\:*", max_len: -1 },
+      { illegal: "/\\:*", max_len: 1.5 },
+      { illegal: null, max_len: 120 },
+      { illegal: "/\\:*" },
+      {},
+      null,
+    ]) {
+      setCodeTreeNameRules(bad);
+      // 规则没被改坏：兜底仍在生效（含兜底非法字符、上限仍是 120）
+      assert.equal(treeNameValidate("a/b").ok, false, "畸形下发不该把非法集清空");
+      assert.equal(treeNameValidate("x".repeat(CODE_TREE_NAME_MAX + 1)).ok, false,
+        "畸形下发不该把上限放开");
+    }
+  } finally {
+    setCodeTreeNameRules(CODE_TREE_NAME_RULES_DEFAULT);
+  }
+});
+
+// ---- 装载接线：打开目录的每个响应都要把规则装进本模块（工单 01 评审整改）----
+//
+// 这条是**源码守卫**而非行为测试：`ui/codeview.js` 依赖 DOM 与 fetch，进不了
+// node:test（仓库里 ui 层只有 2 个测试文件 import 它）。守卫只回答一件事——
+// 「每个 /api/code/open 调用点附近都调了装载函数」；漏装时前端会静默退回兜底
+// 常量，规则漂移就又成了没人发现的那类问题，所以这层守卫不能省。
+// 形态无关：`setCodeTreeNameRules(data.name_rules)` 与
+// `const r = data.name_rules; setCodeTreeNameRules(r)` 都算通过（先例：
+// tests/js/overlay-confirm.test.mjs:82 对 ui/code-tree-ops.js 的同款守卫）。
+test("ui/codeview.js：每个 /api/code/open 响应都装载名称规则", () => {
+  const src = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/codeview.js", import.meta.url), "utf8");
+  const lines = src.split("\n");
+  const calls = lines
+    .map((line, i) => [line, i])
+    .filter(([line]) => line.includes('apiPost("/api/code/open"'));
+  assert.ok(calls.length >= 1, "ui/codeview.js 应有 /api/code/open 调用点");
+
+  for (const [line, i] of calls) {
+    const window = lines.slice(i, i + 6).join("\n");
+    assert.ok(window.includes("setCodeTreeNameRules("),
+      `第 ${i + 1} 行的 /api/code/open 响应未装载名称规则：\n${line.trim()}`);
+  }
+});
+
+test("CODE_TREE_NAME_RULES_DEFAULT：可把校验复装回兜底口径", () => {
+  // 断言的是「复装后校验结论回到兜底」这一**能力**（不是常量对象等于自己）
+  try {
+    setCodeTreeNameRules({ illegal: "@", max_len: 3 });
+    assert.equal(treeNameValidate("a@b").ok, false);
+    assert.equal(treeNameValidate("abcd").ok, false);
+
+    setCodeTreeNameRules(CODE_TREE_NAME_RULES_DEFAULT);
+
+    assert.equal(treeNameValidate("a@b").ok, true);                       // "@" 只在下发里
+    assert.equal(treeNameValidate("a/b").ok, false);                      // 兜底非法字符回来了
+    assert.equal(treeNameValidate("abcd").ok, true);                      // 上限回到 120
+    assert.equal(treeNameValidate("a".repeat(CODE_TREE_NAME_MAX)).ok, true);
+    assert.equal(treeNameValidate("a".repeat(CODE_TREE_NAME_MAX + 1)).ok, false);
+  } finally {
+    setCodeTreeNameRules(CODE_TREE_NAME_RULES_DEFAULT);
+  }
+});
 
 test("treeNameValidate：合法名（含中文 / 点开头文件）", () => {
   assert.deepEqual(treeNameValidate("sensor.c"), { ok: true, msg: "" });

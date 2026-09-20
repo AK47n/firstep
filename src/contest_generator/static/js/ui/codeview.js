@@ -23,6 +23,7 @@ import {
 } from "/js/fx/disk-baseline.js";  // 磁盘基线对比纯件（code-ide-flow/01——事实源不依赖事件载荷）；内容快照（code-ide-ai/07）；mtimeEq（mtime 守卫单源）
 import { changesPanelHTML, changeSummaryText } from "/js/fx/change-panel.js";  // 「磁盘变更」面板条目渲染（code-ide-flow/03）
 import { lineDiffCompute } from "/js/fx/line-diff.js";  // 行级 diff 计算（code-ide-flow/03 main.c 起步；code-ide-ai/08 泛化——面板行级展示任意打开过的文件）
+import { setCodeTreeNameRules } from "/js/fx/code-tree-ops.js";  // 名称规则装载（cross-lang-mirror-c5a/01）：判据单源 = 后端 codeview.send_name_rules，随 /api/code/open 载荷下发
 import { getMainCDiskDir, loadDiskMainC, refreshMainCDiskState } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/03 + code-viewer-editor/05：保存后步骤 8 状态行刷新）
 import { scrollToStep } from "/js/ui/step-state.js";  // 跳回生成页滚动到步骤 8（mainc-codeview-bridge/03）
 import { setCodeAiDir, onCodeAiApplied } from "/js/ui/code-ai-chat.js";  // AI 对话面板（code-ide-ai/03-04）：目录打开 → 面板可见性 + 历史；apply 成功 → 立即感知
@@ -297,6 +298,7 @@ async function probeDiskBaseline(isCurrent, dir) {
   const target = codeDir;
   const mine = () => (isCurrent ? isCurrent() : true) && codeDir === target;
   const data = await apiPost("/api/code/open", { dir });
+  setCodeTreeNameRules(data.name_rules);  // 名称规则随目录打开下发（cross-lang-mirror-c5a/01）：前端只求值，不自持同口径常量
   if (!mine()) return null;   // 晚到：清单写入与基线都不做
   codeFiles = data.files || [];
   const diff = baselineDiffDisk(dir, codeFiles);
@@ -545,6 +547,7 @@ export async function refreshCodeTreeOnly() {
   const isCurrent = claimCodeDirSeq();
   try {
     const data = await apiPost("/api/code/open", { dir: codeDir });
+    setCodeTreeNameRules(data.name_rules);  // 同上（刷新路径也带规则，用户永不落在「未取到规则」的状态）
     if (!isCurrent()) return;   // 期间已切换目录：旧目录的清单不落界面
     codeFiles = data.files || [];
     await baselineCommitDisk(codeDir, codeFiles);

@@ -8,6 +8,14 @@
 //    按全局名取用；
 // 3. node 端（tests/js）直接 import 本模块做单测，不再字符串提取；
 // 4. 同域常量随函数入驻；新纯函数一律写进 fx 模块（勿回 index.html 内联）。
+//
+// 例外（唯一一处，工单 cross-lang-mirror-c5a/01）：**后端下发的运行时规则**
+// 允许在 fx 模块内持模块级状态 + 装载入口——`fx/code-tree-ops.js` 的
+// `setCodeTreeNameRules`（判据单源在后端 `codeview.name_rules_payload`，
+// 经 `POST /api/code/open` 下发；前端常量只作启动兜底）。理由：规则要在
+// **纯函数的调用点**生效（弹窗就地校验是同步的，传参得一路穿到每个调用方，
+// 那是把 ui 层的状态问题推给每个纯函数调用者）。除这类「下单即装」的规则外，
+// 仍不得引入状态；`let` 全 fx/ 仅此一处。
 export function esc(text) {
   return String(text).replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",

@@ -8551,6 +8551,23 @@ def test_code_open_requires_dir(client):
     assert "缺少必填字段：dir" in resp.json()["detail"]
 
 
+def test_code_open_ships_name_rules_from_backend(client, tmp_path):
+    """打开目录的响应带名称规则（工单 cross-lang-mirror-c5a/01）：非法字符集与
+    长度上限的判据单源在 codeview，经本端点下发给前端求值——前端不再自持一份
+    同口径实现（此前两侧靠注释互指，零守卫）。
+    """
+    root = tmp_path / "proj"
+    root.mkdir()
+
+    resp = client.post("/api/code/open", json={"dir": str(root)})
+
+    assert resp.status_code == 200
+    assert resp.json()["name_rules"] == {
+        "illegal": "/\\:*?\"<>|",
+        "max_len": 120,
+    }
+
+
 def test_code_file_returns_content_and_outline(client, tmp_path):
     root = tmp_path / "proj"
     root.mkdir()
@@ -8843,6 +8860,25 @@ def test_code_tree_create_bad_kind_400_chinese(client, tmp_path):
 
     assert resp.status_code == 400
     assert "新建类型必须是 file 或 dir" in resp.json()["detail"]
+
+
+def test_code_tree_create_illegal_name_400_chinese(client, tmp_path):
+    """非法名走端点 → 400 中文（工单 cross-lang-mirror-c5a/01）。
+
+    补口前 `a*b.c` 直达 `os.open` 抛未登记 OSError → 500：既不是 400 也不是
+    设计的拒绝面，而前端按同一份规则早已拦下它。
+    """
+    root = tmp_path / "proj"
+    root.mkdir()
+
+    resp = client.post(
+        "/api/code/tree/create",
+        json={"dir": str(root), "type": "file", "path": "a*b.c"},
+    )
+
+    assert resp.status_code == 400
+    assert "名称不合法" in resp.json()["detail"]
+    assert list(root.iterdir()) == []
 
 
 def test_code_tree_create_requires_fields(client):

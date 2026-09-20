@@ -5,24 +5,49 @@
 // 模块约定见 fx/core.js 头部。
 import { esc } from "./core.js";
 
-// 单段名称非法字符（与后端 codeview._CODE_NAME_ILLEGAL 同口径；路径分隔符
-// 靠后端 is_unsafe_path 拦，这里防「多段名」把 rename/新建语义弄混）。
+// 单段名称规则（工单 cross-lang-mirror-c5a/01）：判据单源 = 后端
+// `codeview.send_name_rules`，经 `POST /api/code/open` 载荷的 `name_rules`
+// 下发（`ui/codeview.js` 每次拿到响应就调 setCodeTreeNameRules 装上）。
+// 下面两个常量退化为**后端尚未下发时的启动兜底**——不再是与后端「同口径」
+// 的第二份实现（此前两侧靠注释互指、零守卫：改一侧另一侧静默失效）。
+// 兜底值与后端常量的一致性由 `tests/test_codeview.py::test_js_name_rules_fallback_mirrors_backend`
+// 读本文件真源码对账（改任一侧即红）。
 export const CODE_TREE_NAME_ILLEGAL = "/\\:*?\"<>|";
 export const CODE_TREE_NAME_MAX = 120;
 
+/** 兜底规则（= 上面两个常量）：复装 / 测试复原用。 */
+export const CODE_TREE_NAME_RULES_DEFAULT = {
+  illegal: CODE_TREE_NAME_ILLEGAL,
+  max_len: CODE_TREE_NAME_MAX,
+};
+
+// 运行时生效的规则（装载后 = 后端下发值）。畸形下发一律忽略而不是就地清零：
+// 空集合 / 0 上限会让校验形同虚设（前端放行一切、后端 400），比规则过期更坏。
+let nameRules = { ...CODE_TREE_NAME_RULES_DEFAULT };
+
+/** 装载后端下发的名称规则（畸形输入忽略并保持现值）。 */
+export function setCodeTreeNameRules(rules) {
+  if (!rules || typeof rules !== "object") return;
+  const illegal = rules.illegal;
+  const maxLen = rules.max_len;
+  if (typeof illegal !== "string" || !illegal.length) return;
+  if (!Number.isInteger(maxLen) || maxLen < 1) return;
+  nameRules = { illegal, max_len: maxLen };
+}
+
 // treeNameValidate(name)：单段条目名称校验 → {ok, msg}（msg 中文）。
-// 非空 / 非纯空白 / 首尾无空白 / ≤120 / 不为 . 或 .. / 不含保留字符。
+// 非空 / 非纯空白 / 首尾无空白 / ≤上限 / 不为 . 或 .. / 不含保留字符。
 export function treeNameValidate(name) {
   const n = String(name == null ? "" : name);
   if (!n || !n.trim()) return { ok: false, msg: "名称不能为空" };
   if (n !== n.trim()) return { ok: false, msg: "名称首尾不能有空格" };
-  if (n.length > CODE_TREE_NAME_MAX) {
-    return { ok: false, msg: "名称过长（最多 " + CODE_TREE_NAME_MAX + " 字符）" };
+  if (n.length > nameRules.max_len) {
+    return { ok: false, msg: "名称过长（最多 " + nameRules.max_len + " 字符）" };
   }
   if (n === "." || n === "..") return { ok: false, msg: "名称不能是 . 或 .." };
-  const bad = [...CODE_TREE_NAME_ILLEGAL].filter((c) => n.includes(c));
+  const bad = [...nameRules.illegal].filter((c) => n.includes(c));
   if (bad.length) {
-    return { ok: false, msg: "名称含非法字符：/ \\ : * ? \" < > |" };
+    return { ok: false, msg: "名称含非法字符：" + [...nameRules.illegal].join(" ") };
   }
   return { ok: true, msg: "" };
 }
@@ -132,7 +157,9 @@ if (typeof window !== "undefined") {
     treeOpConfirmMessage,
     treeNamePromptHTML,
     treeCtxItems,
+    setCodeTreeNameRules,
     CODE_TREE_NAME_ILLEGAL,
     CODE_TREE_NAME_MAX,
+    CODE_TREE_NAME_RULES_DEFAULT,
   });
 }

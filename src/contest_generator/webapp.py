@@ -54,6 +54,7 @@ from .codeview import (
     rename_code_entry,
     save_code_file,
     search_code_files,
+    name_rules_payload,
 )
 from .compile_runner import (
     CompileRunnerError,
@@ -5093,12 +5094,19 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         dir = 服务器本地绝对路径（与 /api/masters/import 同风险面——本机
         工具语义；来源为最近记录 output_dir 或原生文件夹对话框
         /api/pick-directory）。返回 {root, files: [{path, size_bytes} |
-        {path, is_dir: True}]}：统一噪音跳过的扁平清单（构建产物目录 /
-        .git 不计入；目录条目含空目录——树操作需要展示/删除，工单
+        {path, is_dir: True}], name_rules}：统一噪音跳过的扁平清单（构建产物
+        目录 / .git 不计入；目录条目含空目录——树操作需要展示/删除，工单
         code-tree-ops/01），条目超限 400 中文。只读浏览，零写侧、零落盘。
+        name_rules = 名称规则的**唯一出处**（codeview.name_rules_payload：
+        非法字符集 + 长度上限）——前端新建/重命名弹窗的就地校验吃它，不再自持
+        一份同口径实现（工单 cross-lang-mirror-c5a/01）。
         """
         dir_str = _require_str(payload, "dir")
-        return {"root": dir_str, "files": list_code_tree(Path(dir_str))}
+        return {
+            "root": dir_str,
+            "files": list_code_tree(Path(dir_str)),
+            "name_rules": name_rules_payload(),
+        }
 
     @app.get("/api/code/file")
     @_map_errors
