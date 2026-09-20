@@ -199,3 +199,29 @@ UTF-8 stdout（原锚点版是崩在 GBK 编码上的）。第 7 节的两道候
 
 细节、验收清单与候选修法：`.scratch/hwcheck-pin-conflict-exit/issues/01-default-pin-conflict-no-exit.md`
 （矩阵读数：`.scratch/module-hwcheck/probe-09-compile-matrix.txt`）。
+
+## 10. 前端装载清单去化石（2026-09-20，工单 frontend-import-fossils/01 已落地）
+
+一次架构评审（improve-codebase-architecture）把「页面装载清单」挑出来：页面唯一
+`<script type="module">` 的 import 清单是两轮模块化（纯函数迁 fx/、tab 迁 ui/）留下的**冻结
+产物**——69 条 import / 337 个名字里 **259 个宿主正文一次都没用过**，删改其中任一导出即整页
+`SyntaxError`（2026-09-12 真机现场，服务端全 200）。本轮把清单缩到 78 个真在用的具名 +
+5 条纯装载，并新增守卫 `tests/js/import-usage-guard.test.mjs`（判据单源
+`tests/js/import-usage.mjs`）钉住"页面不许导入它不使用的名字"。
+
+本轮**没做**的四件（各自另立，别当已做）：
+
+- **把接线搬出 HTML**（`js/boot.js` + 给 import 时接线的 ui 模块补显式 `init()`）——本轮的
+  下一步；今天只拆了地雷。做完它，`static-import-guard` 与 `fx-guard` 的 337 行名字登记表
+  都可以退化成"index.html 零 import / 零 function 定义"这类结构不变量。
+- **`tests/browser/` 接进闸门**——它既不在 prepush 的 `FRONTEND_PREFIXES`，也不在 `ci.yml`；
+  接之前先要修掉 HEAD 上已知的 6 绿 3 红（`docs/agents/local-environment.md`）。
+- **删 index.html 里的迁移墓碑注释**（"已迁至 …"那一大段，数百行）——历史记录，本轮按 spec
+  原样保留。
+- **`ui/delivery.js` 的 window 挂桥**（`Object.assign(window, {...})`）与 app.js 规则 3
+  "不挂 window 桥"相抵——既有事实，本轮只记账不改。
+
+评审同时发现的**同向候选**（都在前端，未立项）：ui 层（17,996 行 / 515 监听器）只有 2 个
+测试文件 import 它，没有测试缝；六条跨语言镜像里 `CODE_TREE_NAME_ILLEGAL`（文件名非法字符）
+与 `pinShareClass`（同脚多角色）两条无任何守卫。
+

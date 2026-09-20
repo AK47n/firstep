@@ -1,0 +1,13 @@
+﻿服务: http://127.0.0.1:8791
+  ✓ 0 个 pageerror / 模块图链接错误
+  ✓ 被删装载的 fx 探针桥全在（模块仍被消费者加载）
+  ✓ 加载期监听器记账共 592 条（仪器有效）
+  ✓ 5 个模块的顶层接线全在（监听器记账）
+  ✓ delivery.js 加载即写 #delivery-actions
+  ✓ 点击 #btn-params-chat 有行为反应
+  ✓ #step-nav 已渲染
+  ✓ #hwcheck-platforms 已渲染
+  HTTP >=400（记账不判红）: 400 POST /api/generate/preview-dir
+  ! console.error: Failed to load resource: the server responded with a status of 400 (Bad Request)
+
+PASS

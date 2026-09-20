@@ -4665,47 +4665,23 @@
 <script type="module">
 // 前端纯函数模块（工单 frontend-es-modules/01）：静态 import 保证本模块执行前
 // fx/*.js 已加载完毕——DOM 胶水里的裸引用即模块作用域绑定，时序零等待
-import { esc, formatSize, fmtDuration } from "/js/fx/core.js";
-import { envRowHTML, envChannelHTML, envCheckStatusHTML } from "/js/fx/env.js";
-import { btnIcon } from "/js/fx/btn-icon.js";
-import { platformClickAction } from "/js/fx/platform.js";
-import { cHighlight, cLineCount, codeZoomClamp, parseZoomStored, maincContentEmpty, maincFullscreenLabel, isMainCPath, maincLineOffsetRange } from "/js/fx/code.js";
-import { pdfEncodedPath, pdfSubdir, formatMtime, pdfBroken, pdfBadgeTags, pdfDupGroups, pdfHealth, pdfFilterEntries, pdfSortEntries, pdfStats, pdfStatsText, pdfChipRowHTML, pdfRowHTML, pdfPagesUrl, pdfPagesText, pdfDetailHTML, pdfTrashUrl, pdfDupRemainText, pdfTrashConfirmHTML } from "/js/fx/pdf.js";
-import { referencePlatformChip, refFilterEntries, refDanglingAnchors, refSortEntries, refStats, refStatsText, refMatchFiles, refAnchorBadge, refChipRowHTML, refRowHTML, refDetailHTML, refEditState, refEditValidate, refEditFilePlan, refEditPayload } from "/js/fx/reference.js";
-import { topicHasNotes, topicGroupVocabulary, topicDanglingGroups, topicHealthText, topicFilterEntries, topicSortEntries, topicStats, topicStatsText, topicChipRowHTML, topicDetailHTML, topicPagesHTML, topicPagesErrorHTML, topicEditHTML, topicEditValidate, topicEditPayload, topicCardHTML } from "/js/fx/topic.js";
-import { masterTableRowHTML, masterDeleteConfirmHTML, masterFileURL, masterKeyFileRowHTML, masterDetailHTML } from "/js/fx/master.js";
-import { moduleBadges, pythonArtifactSummary, groupOfSlug, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, moduleGridPlatformLabel, moduleGridStatusText, moduleGridBadgeClass, moduleGridFilter, moduleGridCountText, moduleGridHTML, moduleInfoHTML, multiInstanceModules, instancePayload, ensureDefaultInstances, libFilterModules, libSortModules, danglingDependencies, libStats, libStatsText, libChipRowHTML, moduleRowHTML, editDescStatus, libIsValidHttpUrl, libPlatformKits } from "/js/fx/module.js";
-import { genOverviewChipsHTML, genOverviewSummaryHTML, overviewFillPlan, overviewReadyToGenerate, cardStepStatusHTML, hasWarnContent } from "/js/fx/overview.js";
-import { stepNavTitles, stepNavItemsHTML, stepNavCurrent, draftState, draftSave, draftLoad, draftRestoreMeta, stepProgress, step7DoneState, syncStep4 } from "/js/fx/draft.js";
-import { waitLabel, WAIT_GENERIC_LINE } from "/js/fx/wait.js";
-import { CONFLICT_MSG_PREFIX, isConflictError, conflictDirName, genStageTexts, fmtWait, generationOutputDirPayload, collectBindings, formatResModules, attachCelebrate, collapseBtnLabel, syncCollapseBtn, collapseToggleAll } from "/js/fx/generate.js";
-import { recentStatusMeta, recentTimeLabel, recentPlatformLabel, recentChipHTML, recentListHTML, recentStatusNow } from "/js/fx/recent.js";
-import { buildCodeTree, codeTreeHTML, codeLineNumbersHTML, codeViewHTML, outlineHTML, outlineEmptyHTML, searchListHTML, fileFindFilter } from "/js/fx/codeview.js";
-import { generateReadinessChecks, readinessSoftChecks, readinessRowHTML, readinessRowsHTML } from "/js/fx/readiness.js";
-import { formatLLMTelemetry, parseSSE, usageDelta, usageAccumulate, llmCostEstimate, usageDisplay } from "/js/fx/llm.js";
-import { formatScorePoints, renderScorePointPanel, scoreChecklistPartLabel, scoreChecklistScoreText, scoreChecklistRefsText, scoreChecklistId, scoreChecklistChecked, scoreChecklistLineText, scoreChecklistKey, scoreChecklistItemsHTML, scoreChecklistProgressHTML, scoreChecklistExportText, scoreChecklistParse, scoreChecklistLoad, scoreChecklistSave } from "/js/fx/score.js";
-import { taskStatusLabel, taskStatusBadgeClass, taskVerifyLabel, taskScoreRefsText, taskCardHTML, tasksGridHTML, tasksProgressText, taskCardActions, verifyStatusMarkup } from "/js/fx/task.js";
-import { SETTINGS_COLLAPSE_KEY, SETTINGS_DEFAULT_COLLAPSED, parseSettingsCollapse, settingsDefaultCollapsed, effectiveCollapsed, settingsMasterLabel, sectionCollapseLabel, settingsSectionHead, applySettingsCollapseState } from "/js/fx/settings.js";
-import { formatWorkflowCall, formatWorkflowSummary } from "/js/fx/workflow.js";
-import { $, handle, apiGet, apiPost, apiPut, apiDelete, KIND_TEXT, state, setState, toast } from "/js/app.js";
-import { makeProgressPanel } from "/js/ui/progress.js";
+import { $, apiGet, state, setState } from "/js/app.js";
 import { renderUsageStats } from "/js/ui/usage.js";
 import { loadMasters, loadChangelog, renderNewPlatformOptions } from "/js/ui/master.js";
 import { loadPdfs, initPdfToolbar } from "/js/ui/pdf.js";
 import { loadMds, initMdToolbar } from "/js/ui/md.js";
 import { renderHwcheckPanel, initHwcheck } from "/js/ui/hwcheck.js";  // 硬件检测栏目（module-hwcheck/01）：选平台 + 预览检测程序（零 LLM）
-import { addFileRow, collectFiles, readPickedText, pickFilesInto, bindFilePicker } from "/js/ui/files.js";
-import { renderPlatforms, renderModulePool, renderSelected, renderWarnings, renderRecommendResult, startRecommend, loadReferencePicker, chosenPlatform, selectedSlugs, expanded, lastRecommend, currentTopicId, selectedReferenceIds, autoReferenceIds, pythonTemplates, scorePoints, setChosenPlatform, setSelectedSlugs, setCurrentTopicId, setRecommendClarifications, setClusterDeps } from "/js/ui/generate-recommend.js";
-import { stepCard, markStepDone, markStepUndone, syncStep7, stepDoneSet, STEP_NAV_CARD_SELECTOR, initCardCollapse, setOnStepChange } from "/js/ui/step-state.js";
-import { instances, pinBindings, pinUnbound, pinRoles, renderInstanceConfig, renderPinCard, loadPinBoard, resetPinState, resetInstances, clearInstanceTarget, backfillInstances, pinChangeCount, configuredInstanceCount } from "/js/ui/generate-pins.js";
-import { initMainCTools, syncMainCHighlight, currentCodeZoomPct, applyCodeZoom } from "/js/ui/generate-mainc.js";
+import { renderPlatforms, renderModulePool, loadReferencePicker, setClusterDeps } from "/js/ui/generate-recommend.js";
+import { stepDoneSet, initCardCollapse, setOnStepChange } from "/js/ui/step-state.js";
+import { renderInstanceConfig, renderPinCard, loadPinBoard, resetPinState, resetInstances, clearInstanceTarget, backfillInstances, pinChangeCount, configuredInstanceCount } from "/js/ui/generate-pins.js";
+import { initMainCTools } from "/js/ui/generate-mainc.js";
 import { initScoreChecklist } from "/js/ui/generate-core.js";
 import { renderToolchainStatus, setToolchains, updateFixCenterAvailability } from "/js/ui/generate-fix.js";
-import { reviseLoad, reviseAnalyze, reviseApply, reviseRollback, reviseRunDeepen, reviseResetAll, reviseRenderContext, reviseGetDir } from "/js/ui/generate-revise.js";  // 修订工坊：host 零调用点——import 只为加载模块（顶层监听器绑定）
-import { tasksPlan } from "/js/ui/generate-tasks.js";  // 任务推进：host 零调用点——import 只为加载模块（顶层监听器绑定）
-import { paramsScan } from "/js/ui/params.js";  // 参数速调：同上——import 只为加载模块
-import { paramsChatReset } from "/js/ui/params-chat.js";  // 参数速调 AI 咨询：同上——import 只为加载模块（顶层监听器绑定）
-import { deliveryOpen, deliveryCheck, deliveryPackage } from "/js/ui/delivery.js";  // 交付卡：同上
+import "/js/ui/generate-revise.js";  // 修订工坊：host 零调用点——import 只为加载模块（顶层监听器绑定）
+import "/js/ui/generate-tasks.js";  // 任务推进：host 零调用点——import 只为加载模块（顶层监听器绑定）
+import "/js/ui/params.js";  // 参数速调：同上——import 只为加载模块
+import "/js/ui/params-chat.js";  // 参数速调 AI 咨询：同上——import 只为加载模块（顶层监听器绑定）
+import "/js/ui/delivery.js";  // 交付卡：同上
 import { initReviseTabs } from "/js/ui/revise-tabs.js";  // 第11步卡内页签（工单 step11-tabs-ui/01）
 import { initResourceBoard } from "/js/ui/resource-board.js";  // 资源总览列表/板图切换（resource-overview-polish/02）
 import { initWiringToggle } from "/js/ui/wiring.js";  // 接线图「显示全部接线」开关（task-wiring-diagram/04）：document 级 change 委托
@@ -4714,15 +4690,15 @@ import { initGlossary } from "/js/ui/glossary.js";  // 生成页底部新手词�
 import { initGuide } from "/js/ui/guide.js";  // 新手指引页（beginner-guide/01）：四子页签切换
 import { initHandoffNote } from "/js/ui/handoff.js";  // 交接提示词说明 + 去任务推进（newcomer-glossary/03）
 import { restoreDraft, scheduleDraftSave, initGenOverview, refreshGenOverview } from "/js/ui/generate-steps.js";
-import { readinessState, refreshReadinessPanel, initReadinessCheck } from "/js/ui/generate-readiness.js";
-import { loadLibrary, initLibraryToolbar, initAddSections, editModule, deleteModule, newModulePayload } from "/js/ui/library.js";
-import { loadReferences, loadKitVocabulary, loadTopicTypes, initReferenceToolbar, deleteReference, editReference, openReferenceFile, viewReferenceDetail } from "/js/ui/reference.js";
-import { loadTopics, loadTopicGroupVocabulary, initTopicToolbar, viewTopicDetail, viewTopicEdit, deleteTopic, renderProofreadRows } from "/js/ui/topic.js";
-import { loadSettings, loadRecentWorkflows, initSettingsCollapse, renderPriceReference, setSettingsDeps } from "/js/ui/settings.js";
+import { refreshReadinessPanel, initReadinessCheck } from "/js/ui/generate-readiness.js";
+import { loadLibrary, initLibraryToolbar, initAddSections } from "/js/ui/library.js";
+import { loadReferences, loadKitVocabulary, loadTopicTypes, initReferenceToolbar } from "/js/ui/reference.js";
+import { loadTopics, loadTopicGroupVocabulary } from "/js/ui/topic.js";
+import { loadSettings, loadRecentWorkflows, initSettingsCollapse, setSettingsDeps } from "/js/ui/settings.js";
 import { initUpdatePanel } from "/js/ui/update.js";  // 设置页「软件更新」区（工单 auto-update/06）
 import { initMaterialsUpdate } from "/js/ui/materials-update.js";  // 设置页「资料库更新」区（工单 materials-update/06）
 import { initFullUpdate } from "/js/ui/full-update.js";  // 设置页「完整包下载」区（工单 full-download/05）
-import { renderRecentList, refreshRecent, reportRecentStatus, initRecent } from "/js/ui/recent.js";
+import { initRecent } from "/js/ui/recent.js";
 import { initCodeViewer, checkCodeDiskChanges } from "/js/ui/codeview.js";  // 代码查看器（code-viewer/04-06）：init 加载模块，openCodeViewer 由 recent.js 直接 import；checkCodeDiskChanges = 磁盘基线感知（code-ide-flow/02）
 import { initCodeAiChat } from "/js/ui/code-ai-chat.js";  // AI 对话面板（code-ide-ai/03）：选中代码问 AI + 对话历史
 import { initCodeFixPanel } from "/js/ui/code-fix-panel.js";  // 修复面板（code-ide-ai/06）：IDE 内跑修复循环（共享状态机双出口）
