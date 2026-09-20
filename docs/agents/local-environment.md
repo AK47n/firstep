@@ -278,6 +278,25 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > （第 2 节那条 `Get-CimInstance … contest_generator.webapp`），因为夹具现在不靠产品自杀兜底了。
 > 详细读数与红证见 `.scratch/ui-dom-contract-gate/issues/01-fix-browser-specs-green.md`。
 > 同一轮把「HEAD 上 6 绿 3 红」这个旧读数更正为 **14 绿 7 红**（根因与修法都变了，见同一份工单）。
+>
+> ✅ **2026-09-20 22:xx（ui-dom-contract-gate/04-05 会话）本机跑浏览器验收的口径与读数**：
+> 现在是**四个 spec / 26 条用例**（`module-intro` 9 + `code-tree-click` 2 + `hwcheck` 10 +
+> `ui-contract` 5，最后一个是本轮新增的 ui 行为契约）。前置一次性：
+> `npm install` + `npx playwright install chromium`（本机已装齐，`%LOCALAPPDATA%\ms-playwright` 下有
+> chromium-1234/1243）。跑法（**必须串行**：每个 spec 各起真后端 + 真 Chromium，跑同一份工作树与库）：
+>
+> ```powershell
+> node --test --test-concurrency=1 "tests/browser/*.spec.mjs"
+> ```
+>
+> 本机读数（Node v24.15.0，2026-09-20）：`ui-contract` 单跑 **5 passed / 0 fail**；
+> 四个 spec 串行全跑 **26 passed / 0 fail / 77.9s**；前端门禁 `node --test "tests/js/*.test.mjs"`
+> **1715 passed / 0 fail**；`python -m pytest -n auto` **5042 passed + 1 skipped / 115s**。
+> **这一支已经接进闸门**：改动落在 `tests/browser/`、`static/js/ui/`、`static/index.html`、
+> `static/js/app.js` 时本地 pre-push 会跑它（CI 另有 `browser-suite` job 跑同一条命令）；
+> 闸门自身缺能力（node / playwright / chromium 缺）时打印原因放行，用例真红才拒推。
+> 红证工具留在 `.scratch/ui-dom-contract-gate/`：`probe-ui-contract-red-proof.mjs`（真源码注入 +
+> 逐字节复原）、`probe-port-listening.mjs`（夹具端口判据自检）、`probe-guard-strength.mjs`（静态判据）。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 
@@ -640,6 +659,15 @@ v1.2.0 包内那份逐文件相等」——本机改造后它**必然报差异**
 它的用途是「证明本机与线上一致」，不是「就地重算」；要重算用上表第三支。
 **2026-09-14 重发之后，线上包与本机资料库重新同源**（资料库基线 12 批次 / 5081 文件），
 那份对比脚本又可以用了。
+
+**⚠ 2026-09-20 起，「同源」只对发布侧基线成立、对盘不再成立（PDF 去重，用户裁决）**：
+`sources/materials` 的 lckfb-地阔星移植手册两族模块包（`ili9341` / `ili9488`）**各带一份同名
+通用文档**，全量 SHA256 证实 **15 组逐字节相同**（0 组假重复）→ 回收 `ili9488` 侧
+**15 件 / 10.85 MiB** 到 `sources/.trash-pdf/2026-09-20/`（可手动恢复）；PDF 97 → 82，
+库内**内容层面零重复**。`.materials-manifest.json` **没跟着删**（仍是 12 批次 / 5081 文件），
+所以拿**本机盘**扫基线 / 打完整包时，`full_pack.scan_as_manifest`、`materials_pack`
+会把这 15 条算成 `removed`——**= 下一版会把它们从用户库里一并删掉**。想让删除进下一版就这么发；
+不想就先把回收目录那 15 件挪回原位。明细 / 复跑脚本见 `.scratch/pdf-dup-verify/report.md`。
 
 ## 7. 清理线的三笔账（2026-09-16）
 
