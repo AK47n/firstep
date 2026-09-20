@@ -49,14 +49,13 @@ from .patchers import (
     include_search_dirs,
 )
 from .pin_bindings import PinBindingError, ResolvedBinding, resolve_bindings
-from .pin_capacity import diagnose_pin_capacity, render_pin_capacity_diagnosis
 from .pinwriter import apply_pin_bindings
-from .syscfg_model import (
-    MSPM0_SYSCFG_FILENAME,
-    SyscfgModel,
-    parse_syscfg,
-    syscfg_path_matches,
+from .syscfg_prune import (
+    SyscfgPinConflictReport,
+    adc_slot_plan,
+    syscfg_pin_conflict_report,
 )
+from .syscfg_model import MSPM0_SYSCFG_FILENAME
 from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from .readme import README_FILENAME, render_readme
 from .reference_library import (
@@ -1283,12 +1282,19 @@ def generate(
         # stm32 按绑定覆写 pin_config.h；mspm0 读 syscfg 一次解析 →
         # prune(未选模块实例不落盘) → rewrite(绑定改写) 单 pipeline，先后由
         # 构造保证，不再靠调用顺序/注释。缺省路径（stm32 无绑定）不进写侧。
+        # 槽位级裁剪判据（工单 hwcheck-pin-conflict-exit/01）与门禁吃**同一份**
+        # `adc_slot_plan`——两处各算一遍迟早分家（门禁看不见的脚 = 编译期才炸）。
         if platform == PLATFORM_MSPM0 or resolved_bindings:
             apply_pin_bindings(
                 output_dir,
                 platform,
                 resolved_bindings,
                 selected_slugs=(m.slug for m in manifests),
+                adc_plan=(
+                    adc_slot_plan(manifests, platform, bindings)
+                    if platform == PLATFORM_MSPM0
+                    else None
+                ),
             )
 
         # 多实例渲染（工单 03）：led_instances.h + mspm0 syscfg 新实例——
@@ -1710,99 +1716,29 @@ def _check_syscfg_pin_conflicts(
     只在生成时裁剪未选实例），选中两个默认脚相同的模块 → 落盘即冲突、编译
     才炸；生成前拦下才守住「打开的工程就能编译」。
 
-    产物复核形态（`build_output_tree_corpus` + `run_generation_gates(corpus, [],
-    platform)`）没有选中集知识：语料里的 syscfg 已是生成时落盘的结果，**不再
-    prune / 不再 rewrite**，直接判现值——空 manifests 下若仍 prune 会把实例
-    全裁掉、判据静默失明。
-
-    非 mspm0（stm32 的默认脚重叠按 ADR 0010 是提示语义、不拦生成）与语料无
-    syscfg（假母版 / 测试树）直接返回。
+    **判据本体不在这里**（工单 hwcheck-pin-conflict-exit/01）：报告归
+    `syscfg_prune.syscfg_pin_conflict_report`，检测页的预览 / 生成共吃同一份
+    ——否则「预览说没问题、点生成 400」这类分家会一直在。本函数只负责把报告
+    翻成赛题页的 400（出路指向引脚配置 / 自动配置）；检测页的出路文案在
+    `hwcheck_board.hwcheck_pin_message`。
     """
-    if platform != PLATFORM_MSPM0 or not corpus.master_syscfg:
+    report: SyscfgPinConflictReport = syscfg_pin_conflict_report(
+        master_syscfg=corpus.master_syscfg,
+        manifests=manifests,
+        platform=platform,
+        board=context.board,
+        bindings=context.bindings,
+    )
+    if not report.lines:
         return
-    origin = parse_syscfg(corpus.master_syscfg)
-    if manifests:
-        resolved = (
-            resolve_bindings(manifests, platform, context.board, context.bindings)
-            if context.bindings and context.board is not None
-            else ()
-        )
-        model = origin.prune(manifest.slug for manifest in manifests).rewrite(resolved)
-        # 角色标签取「裁剪后、改写前」的那份：GPIO 组角色的 `$assign` 路径
-        # （<实例>.associatedPins[n].pin）只带实例名，一个实例下多条落点要按
-        # 「现脚 == 声明默认脚」消歧——改写后现脚已变，消歧就失效了；而改写
-        # 只改引号里的值、路径不变，故按路径回查仍成立。
-        roles = _syscfg_role_labels(
-            origin.prune(manifest.slug for manifest in manifests), manifests, platform
-        )
-    else:
-        # 产物复核形态：语料即生成时落盘结果，不裁剪不改写
-        model = origin
-        roles = {}
-    by_pin: dict[str, list[str]] = {}
-    for assign in model.assigns:
-        by_pin.setdefault(assign.pin, []).append(assign.path)
-    conflicts = {
-        pin: paths
-        for pin, paths in by_pin.items()
-        if len({path.split(".", 1)[0] for path in paths}) > 1
-    }
-    if not conflicts:
-        return
-    lines = []
-    for pin in sorted(conflicts):
-        sites = " × ".join(roles.get(path, f"{path}（角色未登记）") for path in conflicts[pin])
-        lines.append(f"  · {pin}：{sites}")
-    # 引脚容量诊断（工单 pin-capacity/01）：只升文案、不增拦截——判据与触发条件
-    # 一行未改，只在逐脚清单之后、出路之前补可操作数字（选中集规模 / 板上可用 IO /
-    # 占用与空闲 / 一键配置解开几组剩几组 / 最低代价几个模块）。两种形态没有诊断
-    # 可言，走缺省文案：① 无选中集知识（产物复核 `run_generation_gates(corpus, [],
-    # platform)`，manifests 为空）；② 板数据缺失（bindings 缺省且板加载降级为
-    # None）——都给不出「可用 IO / 落点」这些数，编不得。
-    capacity = ""
-    if manifests and context.board is not None:
-        capacity = "\n" + render_pin_capacity_diagnosis(
-            diagnose_pin_capacity(
-                manifests, platform, context.board, context.bindings
-            ),
-            context.board.name,
-        )
     raise SyscfgPinConflictError(
-        f"mspm0 引脚冲突：落盘后的 {MSPM0_SYSCFG_FILENAME} 有 {len(conflicts)} 个引脚"
+        f"mspm0 引脚冲突：落盘后的 {MSPM0_SYSCFG_FILENAME} 有 {report.pin_count} 个引脚"
         "被两只实例同时占用，SysConfig 会直接编译失败（Resource conflict）：\n"
-        + "\n".join(lines)
-        + capacity
+        + "\n".join(report.lines)
+        + report.capacity
         + "\n出路：在引脚配置里改绑上述角色（或点「自动配置」一键解开），"
         "或去掉冲突模块中的一个后重新生成。"
     )
-
-
-def _syscfg_role_labels(
-    model: SyscfgModel, manifests: Sequence[ModuleManifest], platform: str
-) -> dict[str, str]:
-    """`$assign` 路径 → 「模块（路径，角色 <slug>.<id>）」人话标签。
-
-    角色反查 = `syscfg_path_matches`（槽位身份原语，校验侧 / 写侧共用）；GPIO 组
-    一个实例下有多条落点（DC_MOTOR 十个脚）时，用「现脚 = 该角色声明默认脚」消歧
-    ——母版默认布局下这个等式恒成立（传入的必须是**未改写**的模型）。消歧不出唯一
-    角色（改写过 / 母版漂移）= 只报路径，不猜角色。
-    """
-    labels: dict[str, str] = {}
-    for assign in model.assigns:
-        candidates = [
-            (manifest.slug, decl)
-            for manifest in manifests
-            if manifest.platforms.get(platform) is not None
-            for decl in manifest.platforms[platform].pins
-            if syscfg_path_matches(decl.type, decl.id, manifest.slug, assign.path)
-        ]
-        for slug, decl in candidates:
-            if decl.default == assign.pin:
-                labels[assign.path] = f"{slug}（{assign.path}，角色 {slug}.{decl.id}）"
-                break
-        else:
-            labels.setdefault(assign.path, f"{assign.path}（角色未登记）")
-    return labels
 
 
 def _check_no_pin_literals_in_main(

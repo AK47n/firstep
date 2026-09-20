@@ -7,7 +7,7 @@
 
 ## 0. 交接区：main 上有什么还没到用户手上（2026-09-19 下午 · v1.2.2 发版后更新）
 
-**当前状态：main 与线上资产同步——v1.2.2 已发布，B1–B5 三张单的修复全部到了用户手上。**
+**当前状态：线上最新 = v1.2.2；但 main 上已比它多出一批未发布修复**（见下表最后一行）。
 
 | 项 | 值 |
 |---|---|
@@ -16,6 +16,7 @@
 | 顺手做掉的第四条 | `src/contest_generator.egg-info/**` 摘出产品文件（两个包都不再发 pip 构建产物） |
 | **真机验收** | `drill-01`：沙箱真 v1.1.1 → 走产品端点升到 1.2.2，**判红 0 / 卡住 0 / PASS**；`not_in_official` 1482 → **6**，那 6 条经决定性实验证明是**更新器那一步 pip 现写的**（官方包里 0 个 → 跑完 pip 6 个齐），「官方缺失 0 / 内容不同 0」两条全绿 |
 | 发版产物（本机留档） | `firstep-pack\firstep-{update,full}-v1.2.2.*` 全套 + `release-notes-v1.2.2.md`；**下一版的基线就是这两个清单** |
+| **main 上还没到用户手上的** | 2026-09-20 起：硬件检测栏目的两批修复（`module-hwcheck/01-09` 全新栏目本身 + `hwcheck-pin-conflict-exit/01` 的检测页引脚出口）。**它们只在本机工作树 / main 上，任何发布包里都没有**——下次发版要把这批带上（v1.2.2 的用户看不到「硬件检测」这一栏） |
 
 **下一轮动手前必须知道的三件事（都是本轮实测踩出来的）**：
 
@@ -246,6 +247,22 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > `POST /api/bindings/auto` 会把 `debug_uart.DEBUG_UART_RX` 移到 PA24。
 > 细节与候选修法：`.scratch/hwcheck-pin-conflict-exit/issues/01-*.md`；
 > 复现：`.scratch/module-hwcheck/probe-09-contest-parity.py`。
+>
+> ✅ **2026-09-20 17:0x（hwcheck-pin-conflict-exit/01 会话）上面那条已修**：检测页在
+> 预览与生成前跑**与赛题页「自动配置」同一个**求解器，把默认脚撞脚提前解开（仅 mspm0），
+> 并把动过的线如实打进载荷 `wiring.pin_fixes`；同时把「孤儿 ADC 槽位」（母版 ADC12_0 里
+> 属于**没选中**那几件的 MEM 脚）改成撞上就让位——两处判据都收敛到
+> `syscfg_prune`（落盘同脚冲突报告已从生成门禁抽出、两页共用）。
+> 最新读数：真编译矩阵 **18 种形态 0 error / 0 warning、生成前拦下 0 格、如实拦下 1 格**
+> （全选 9 件在地猛星上物理装不下，页面点名了是哪几件、该怎么去掉）——见
+> `.scratch/module-hwcheck/probe-09-compile-matrix.txt`；检测页验收读数
+> `.scratch/hwcheck-pin-conflict-exit/verify-01-page-exit.txt`，判据强度反向验证
+> `.scratch/hwcheck-pin-conflict-exit/probe-guard-strength.txt`。
+>
+> ⚠ **本轮的一处工具事实**（对"改配方数据"这类改动适用）：`probe-09-compile-matrix.py`
+> 每次重跑都会**先清空 `probe-09-buildlogs/`**（防上一轮日志混进来），所以它删掉的是
+> **已入库的上一轮日志**、留下的是未跟踪的新日志——跑它就会在工作树里造出 16 个 D + N 个
+> `??`。别把那些删除当成"证据丢了"：证据在 `probe-09-compile-matrix.txt` 与当轮 buildlog 里。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 

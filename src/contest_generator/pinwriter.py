@@ -23,12 +23,17 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 
 from .patchers import UnknownPlatformError
 from .pin_bindings import PinBindingError, ResolvedBinding
 from .platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from .syscfg_model import MSPM0_SYSCFG_FILENAME, SyscfgModelError, parse_syscfg
+
+if TYPE_CHECKING:
+    # 仅类型注解（槽位级裁剪判据的装配在 syscfg_prune，运行时不必 import——
+    # 判据由调用方算好传进来，写侧只消费）
+    from .syscfg_prune import AdcSlotPlan
 
 PIN_CONFIG_FILENAME = "pin_config.h"
 
@@ -74,6 +79,7 @@ def apply_pin_bindings(
     resolved: Sequence[ResolvedBinding],
     *,
     selected_slugs: Iterable[str],
+    adc_plan: "AdcSlotPlan | None" = None,
 ) -> Path | None:
     """写侧统一入口（generator 在 copytree 后挂钩）：stm32 覆写 pin_config.h、
     mspm0 改写 mspm0.syscfg。
@@ -83,6 +89,11 @@ def apply_pin_bindings(
     不再靠调用顺序/注释；selected_slugs 只 mspm0 用（未选模块实例不落盘，
     其引脚空出来可绑；必传，缺省会静默全裁故不设默认）。文本无变化（全默认 /
     未覆盖 / 全选理论模块）不落盘返回 None——缺省路径 = 旧行为逐字节。
+
+    `adc_plan`（工单 hwcheck-pin-conflict-exit/01）= 槽位级裁剪判据
+    （`syscfg_prune.adc_slot_plan`）——ADC12_0 这类一实例服务十几件的外设，
+    孤儿 MEM 槽位会在撞上本趟已声明角色的脚时让位。**门禁与写侧传同一份**；
+    缺省 None = 整实例粒度（旧行为逐字节，测试与独立调用方用）。
 
     未知平台抛 UnknownPlatformError（与 patchers 同缝；绑定在 stm32/mspm0
     之外无板定义，generate 入口的 board_for_platform 已先拦）。
@@ -99,7 +110,7 @@ def apply_pin_bindings(
         try:
             rendered = (
                 parse_syscfg(original)
-                .prune(selected_slugs)
+                .prune(selected_slugs, adc_plan=adc_plan)
                 .rewrite(resolved)
                 .to_text()
             )

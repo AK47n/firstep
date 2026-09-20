@@ -1,0 +1,32 @@
+# ADC12_0 孤儿 MEM 脚的 SysConfig 实验（检测页缺陷 B 取证）
+
+选中集：('led', 'delay', 'debug_uart', 'oled', 'adc')（先按真实生成口径 prune 再送 CLI）
+
+## a-pruned-base
+exit=1
+error: DEBUG_UART(/ti/driverlib/UART) peripheral.rxPin: Resource conflict
+error: ADC12_0(/ti/driverlib/ADC12) peripheral.adcPin7: Resource conflict
+
+## b-drop-pin7
+exit=1
+error: DEBUG_UART(/ti/driverlib/UART) peripheral.rxPin: Resource conflict
+error: ADC12_0(/ti/driverlib/ADC12) peripheral.adcPin7: Resource conflict
+
+## c-share-mem6
+exit=1
+error: DEBUG_UART(/ti/driverlib/UART) peripheral.rxPin: Resource conflict
+
+## d-drop-pin7-and-mem6
+exit=1
+error: DEBUG_UART(/ti/driverlib/UART) peripheral.rxPin: Resource conflict
+
+## e-auto-move-rx-pa24
+exit=1
+error: ADC12_0(/ti/driverlib/ADC12) peripheral.adcPin3: Resource conflict
+error: ADC12_0(/ti/driverlib/ADC12) peripheral.adcPin7: Resource conflict
+
+## f-move-rx-and-drop-pin7
+exit=1
+error: ADC12_0(/ti/driverlib/ADC12) peripheral.adcPin3: Resource conflict
+error: ADC12_0(/ti/driverlib/ADC12) peripheral.adcPin7: Resource conflict
+

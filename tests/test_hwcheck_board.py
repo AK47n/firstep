@@ -19,9 +19,11 @@ import pytest
 
 from contest_generator.boards import board_for_platform
 from contest_generator.hwcheck_board import (
+    HWCHECK_PIN_EXIT_MARKER,
     HwCheckBoardView,
     hwcheck_board_view,
     hwcheck_board_view_for,
+    hwcheck_pin_plan,
 )
 from contest_generator.library import list_modules
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
@@ -350,11 +352,98 @@ def test_payload_is_plain_json_shapes():
     payload = _view(PLATFORM_MSPM0, ["led", "delay", "debug_uart", "ml_mpu6050"],
                     ["ml_mpu6050"]).to_dict()
     assert set(payload) == {
-        "rows", "groups", "board_shares", "order", "missing", "guide", "reason",
-        "footnote",
+        "rows", "groups", "board_shares", "order", "missing", "pin_fixes",
+        "guide", "reason", "footnote",
     }
     assert json.loads(json.dumps(payload, ensure_ascii=False)) == payload
     assert all(isinstance(row, dict) for row in payload["rows"])
+    assert isinstance(payload["pin_fixes"], list)
+
+
+# ---------------------------------------------------------------------------
+# 引脚消解（工单 hwcheck-pin-conflict-exit/01）：检测页没有引脚配置入口，
+# 默认脚撞脚必须在生成前自己解开——判据与赛题页「自动配置」/ 落盘冲突门禁同源。
+# ---------------------------------------------------------------------------
+
+
+def _master_syscfg() -> str:
+    return (MASTERS / "mspm0" / "mspm0.syscfg").read_text(
+        encoding="utf-8", errors="replace"
+    )
+
+
+def test_pin_plan_resolves_default_channel_conflict():
+    """默认双通道（oled RES × debug_uart RX 撞 PA22）→ 自动让位，页面拿得到说明行。"""
+    manifests = _manifests(["led", "delay", "debug_uart", "oled"])
+    plan = hwcheck_pin_plan(
+        PLATFORM_MSPM0, manifests, board_for_platform(PLATFORM_MSPM0),
+        _master_syscfg(),
+    )
+    assert plan.ok
+    assert plan.bindings, "默认双通道必然要移一根（PA22）"
+    assert any("PA22" in line for line in plan.fixed)
+    assert {b.role_key for b in plan.resolved} == set(plan.bindings)
+
+
+def test_pin_plan_view_follows_resolved_pins_not_defaults():
+    """接线表 / 同脚组按**消解后**的脚渲染：学生照页面接线必须与工程 README 一致。"""
+    manifests = _manifests(["led", "delay", "debug_uart", "oled"])
+    board = board_for_platform(PLATFORM_MSPM0)
+    plan = hwcheck_pin_plan(PLATFORM_MSPM0, manifests, board, _master_syscfg())
+    view = hwcheck_board_view(
+        PLATFORM_MSPM0, manifests, board,
+        resolved_bindings=plan.resolved, pin_fixes=plan.fixed,
+    )
+    moved = {b.role_key: b.pin for b in plan.resolved}
+    rows = {f"{row['slug']}.{row['role_id']}": row["pin"] for row in view.rows}
+    for key, pin in moved.items():
+        assert rows[key] == pin, "接线表里的脚必须是移过之后的脚"
+    # 求解器说明行原样在；新脚若带板载注记，还会多一句注记（两种都给页面）
+    assert list(view.pin_fixes)[: len(plan.fixed)] == list(plan.fixed)
+    assert all(fix in view.pin_fixes for fix in plan.fixed)
+    assert all(
+        group["kind"] != "conflict" for group in view.groups
+    ), "移开之后页面不该再显示这条冲突"
+
+
+def test_pin_plan_stm32_untouched():
+    """stm32 不自动搬（默认重叠按 ADR 0010 是提示语义）：空计划、零绑定。"""
+    manifests = _manifests(["led", "delay", "debug_uart", "oled"])
+    plan = hwcheck_pin_plan(
+        PLATFORM_STM32, manifests, board_for_platform(PLATFORM_STM32), None
+    )
+    assert plan.ok
+    assert plan.bindings == {} and plan.resolved == () and plan.fixed == ()
+
+
+def test_pin_plan_unsolvable_gets_page_actionable_message():
+    """装不下 → 文案给检测页做得到的出路（探针按 `HWCHECK_PIN_EXIT_MARKER` 认它）。"""
+    slugs = [
+        "led", "oled", "debug_uart", "key", "beep", "sr04", "jy61p", "xunji",
+        "ml_mpu6050",
+    ]
+    manifests = _manifests(slugs)
+    plan = hwcheck_pin_plan(
+        PLATFORM_MSPM0, manifests, board_for_platform(PLATFORM_MSPM0),
+        _master_syscfg(),
+    )
+    assert not plan.ok
+    assert HWCHECK_PIN_EXIT_MARKER in plan.conflict
+    assert "只勾一个输出通道" in plan.conflict, "三条出路都要在"
+    assert "引脚配置里改绑上述角色" not in plan.conflict, (
+        "赛题页那句出路（不可执行）不许原样带过来"
+    )
+    # 断言冲突清单逐脚在（页面要能点名是哪些脚）
+    assert "·" in plan.conflict
+
+
+def test_pin_plan_without_master_syscfg_only_resolves_bindings():
+    """母版 syscfg 读不到 = 判不了就不判：只做自动解冲突，不编「装得下」的结论。"""
+    manifests = _manifests(["led", "delay", "debug_uart", "oled"])
+    plan = hwcheck_pin_plan(
+        PLATFORM_MSPM0, manifests, board_for_platform(PLATFORM_MSPM0), None
+    )
+    assert plan.ok and plan.bindings
 
 
 def test_view_is_deterministic_and_frozen():

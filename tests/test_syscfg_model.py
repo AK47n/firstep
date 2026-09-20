@@ -22,6 +22,7 @@ from contest_generator.pinwriter import rewrite_syscfg
 from contest_generator.syscfg_instances import INSTANCE_CONSUMERS
 from contest_generator.syscfg_model import (
     MSPM0_SYSCFG_FILENAME,
+    AdcSlotPlan,
     parse_syscfg,
     syscfg_path_matches,
 )
@@ -181,6 +182,38 @@ def test_pipeline_byte_identical_with_bindings():
         assert _model_pipeline(selected, resolved) == _old_pipeline(
             selected, resolved
         ), f"selected={selected} bindings={bindings}"
+
+
+# ---------------------------------------------------------------------------
+# 槽位级裁剪模型契约（工单 hwcheck-pin-conflict-exit/01）
+# ---------------------------------------------------------------------------
+
+
+def test_prune_records_no_adc_followers_without_claims():
+    """不给槽位判据 = 整实例粒度：跟随表恒空（`parse_syscfg` 也是空）。"""
+    model = parse_syscfg(MSPM0_MASTER_SYSCFG)
+    assert model.adc_followers == {}
+    assert model.prune(ALL_SLUGS).adc_followers == {}
+
+
+def test_prune_with_claims_but_no_collision_leaves_text_untouched():
+    """给了判据但没撞上 = 一个字节都不动（少动是硬要求）。"""
+    pruned = parse_syscfg(MSPM0_MASTER_SYSCFG).prune(
+        ["led", "delay", "adc"],
+        adc_plan=AdcSlotPlan(
+            claims={"ADC12_0": frozenset({0})},
+            occupied=frozenset({"PA15", "PA24"}),  # 只占 adc 自己那根
+        ),
+    )
+    assert pruned.adc_followers == {}
+    assert 'ADC12_0.peripheral.adcPin7.$assign = "PA22";' in pruned.to_text()
+
+
+def test_prune_without_claims_is_byte_identical_to_legacy():
+    """带 `selected_slugs` 的老调用形态逐字节不变（判据缺省 = 旧行为）。"""
+    assert prune_syscfg(MSPM0_MASTER_SYSCFG, ["led", "delay", "adc"]) == (
+        parse_syscfg(MSPM0_MASTER_SYSCFG).prune(["led", "delay", "adc"]).to_text()
+    )
 
 
 # ---------------------------------------------------------------------------

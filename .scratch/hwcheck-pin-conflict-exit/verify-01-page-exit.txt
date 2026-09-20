@@ -1,0 +1,22 @@
+# 工单 hwcheck-pin-conflict-exit/01 验收读数（检测页 mspm0 出口 + ADC 孤儿槽位）
+
+判据：10 条里 PASS 10 / FAIL 0
+
+PASS  默认双通道 一件器件都不选：预览 200 / 生成 200
+PASS  默认双通道 adc：预览 200 / 生成 200
+PASS  默认双通道 us016：预览 200 / 生成 200
+PASS  默认双通道 mq2：预览 200 / 生成 200
+PASS  默认双通道 xunji：预览 200 / 生成 200
+PASS  默认双通道 sr04：预览 200 / 生成 200
+PASS  默认双通道 9 件同堂：预览 400 / 生成 400（页面已说明原因）
+PASS  adc 单选（只开串口）：能生成，且孤儿槽位 adcPin7 让位、自己的 adcPin3 不动
+PASS  9 件同堂：400 且出路是检测页做得到的（不原样带赛题页那句）
+PASS  默认双通道：页面接线表与工程 README 逐行同脚（移过的是 ['oled.OLED_SPI_RES → PA0（原 PA22 与 debug_uart.DEBUG_UART_RX 冲突，已自动移开）', 'oled.OLED_SPI_RES → PA0：这根脚板上有注记——板载 LED 共用（I2C_0 SDA，通信期间微闪）；上拉位未焊依赖 MPU 板自带（下面接线表那一行也标着）']）
+
+自动移开的脚（生成载荷 wiring.pin_fixes）：
+  一件器件都不选: pin_fixes=['oled.OLED_SPI_RES → PA0（原 PA22 与 debug_uart.DEBUG_UART_RX 冲突，已自动移开）', 'oled.OLED_SPI_RES → PA0：这根脚板上有注记——板载 LED 共用（I2C_0 SDA，通信期间微闪）；上拉位未焊依赖 MPU 板自带（下面接线表那一行也标着）']
+  adc: pin_fixes=['oled.OLED_SPI_RES → PA0（原 PA22 与 debug_uart.DEBUG_UART_RX 冲突，已自动移开）', 'oled.OLED_SPI_RES → PA0：这根脚板上有注记——板载 LED 共用（I2C_0 SDA，通信期间微闪）；上拉位未焊依赖 MPU 板自带（下面接线表那一行也标着）']
+  us016: pin_fixes=['oled.OLED_SPI_RES → PA0（原 PA22 与 debug_uart.DEBUG_UART_RX 冲突，已自动移开）', 'oled.OLED_SPI_RES → PA0：这根脚板上有注记——板载 LED 共用（I2C_0 SDA，通信期间微闪）；上拉位未焊依赖 MPU 板自带（下面接线表那一行也标着）']
+  mq2: pin_fixes=['oled.OLED_SPI_RES → PA0（原 PA22 与 debug_uart.DEBUG_UART_RX 冲突，已自动移开）', 'oled.OLED_SPI_RES → PA0：这根脚板上有注记——板载 LED 共用（I2C_0 SDA，通信期间微闪）；上拉位未焊依赖 MPU 板自带（下面接线表那一行也标着）']
+  xunji: pin_fixes=['oled.OLED_SPI_DC → PA0（原 PA13 与 motor.PWMAB_C1 冲突，已自动移开）', 'xunji.P3 → PA1（原 PA22 与 debug_uart.DEBUG_UART_RX、oled.OLED_SPI_RES 冲突，已自动移开）', 'oled.OLED_SPI_RES → PA2（原 PA22 与 debug_uart.DEBUG_UART_RX 冲突，已自动移开）', 'xunji.P2 → PB24（原 PA23 与 debug_uart.DEBUG_UART_TX 冲突，已自动移开）', 'motor.BIN1 → PA8（原 PB18 与 oled.OLED_SPI_CS 冲突，已自动移开）', 'oled.OLED_SPI_DC → PA0：这根脚板上有注记——板载 LED 共用（I2C_0 SDA，通信期间微闪）；上拉位未焊依赖 MPU 板自带（下面接线表那一行也标着）', 'xunji.P3 → PA1：这根脚板上有注记——板载 LED 共用（I2C_0 SCL，通信期间微闪）；板载 4.7k 上拉（下面接线表那一行也标着）', 'oled.OLED_SPI_RES → PA2：这根脚板上有注记——ROSC 偏置（板载 100k 到地；KEY START 按键共用）（下面接线表那一行也标着）']
+  sr04: pin_fixes=['oled.OLED_SPI_RES → PA0（原 PA22 与 debug_uart.DEBUG_UART_RX 冲突，已自动移开）', 'oled.OLED_SPI_RES → PA0：这根脚板上有注记——板载 LED 共用（I2C_0 SDA，通信期间微闪）；上拉位未焊依赖 MPU 板自带（下面接线表那一行也标着）']

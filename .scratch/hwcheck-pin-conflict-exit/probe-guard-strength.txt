@@ -1,0 +1,10 @@
+# 判据强度探针：停掉本单三处判据，坏现象是否重现（工单 hwcheck-pin-conflict-exit/01）
+
+PASS  ① adc 共读同槽判 share（pin_bindings._role_resource_keys）
+      停用后：{'us016.US016_OUT_CH0': 'PB24'}；还原后：（没搬）
+PASS  ② 孤儿 ADC 槽位让位（syscfg_model.prune 的 adc_plan）
+      停用后 PA22 冲突：  · PA22：DEBUG_UART.peripheral.rxPin × ADC12_0.peripheral.adcPin7；还原后 PA22 冲突：（无）
+PASS  ③ 容量诊断基准（syscfg_pin_conflict_report.diagnosis_bindings）
+      原始选择基准：实测到的 6 组同脚冲突「自动配置」可解开 2 组，剩余 4 组无法靠改绑解开（任一方模块让位即可）： ｜ 解过一遍当基准：实测到的 4 组同脚冲突「自动配置」可解开 0 组，剩余 4 组无法靠改绑解开（任一方模块让位即可）：
+
+结论：3 处判据里 3 处「停掉即坏现象重现」。

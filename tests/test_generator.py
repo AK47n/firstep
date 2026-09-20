@@ -1123,6 +1123,35 @@ def test_syscfg_pin_conflicts_shares_and_single_module_pass(tmp_path):
     )
 
 
+def test_syscfg_pin_conflicts_cleared_by_adc_slot_relocation(tmp_path):
+    """ADC 孤儿槽位让位之后门禁放行，且**写侧同源**（工单 hwcheck-pin-conflict-exit/01）。
+
+    红证形态：`adc` + `debug_uart` 的旧口径下，母版 ADC12_0 把 flame 的脚
+    （adcPin7 = PA22）也落盘，而 flame 没选中 → 那只脚「角色未登记」、冲突求解器
+    解不开 → 检测页 400。让位之后放行——门禁吃 `adc_slot_plan`，写侧也吃同一份，
+    两边预测/落盘的文本因此一致（只测门禁会漏掉"写侧没跟上"这一类分家）。
+    """
+    from contest_generator.pinwriter import apply_pin_bindings
+    from contest_generator.syscfg_prune import adc_slot_plan
+
+    corpus = _real_mspm0_syscfg_corpus(tmp_path)
+    manifests = _real_mspm0_manifests("adc", "debug_uart")
+    _check_syscfg_pin_conflicts(corpus, manifests, PLATFORM_MSPM0, GateContext())
+
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "mspm0.syscfg").write_bytes(REAL_MSPM0_MASTER_SYSCFG.read_bytes())
+    apply_pin_bindings(
+        out, PLATFORM_MSPM0, (),
+        selected_slugs=[m.slug for m in manifests],
+        adc_plan=adc_slot_plan(manifests, PLATFORM_MSPM0, {}),
+    )
+    text = (out / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
+    assert "ADC12_0.peripheral.adcPin7.$assign" not in text, "孤儿槽位不再占 PA22"
+    assert 'ADC12_0.adcMem6chansel             = "DL_ADC12_INPUT_CHAN_3";' in text
+    assert 'ADC12_0.peripheral.adcPin3.$assign = "PA24";' in text, "adc 自己的槽位不动"
+
+
 def test_syscfg_pin_conflicts_skips_other_platform_and_missing_syscfg(tmp_path):
     """判据面收窄：非 mspm0（stm32 默认脚冲突按 ADR 0010 是提示语义，不拦生成）
     与语料无 syscfg（假母版 / 测试树）→ 直接返回。"""

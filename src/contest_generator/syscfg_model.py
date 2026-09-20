@@ -25,8 +25,8 @@ CRLF，读/写走 newline="" 原样保留行尾。工单 02/03/04 已把 syscfg_
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from collections.abc import Collection, Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .syscfg_instances import INSTANCE_CONSUMERS, INSTANCES_BY_SLUG
@@ -36,10 +36,12 @@ if TYPE_CHECKING:
 
 __all__ = [
     "MSPM0_SYSCFG_FILENAME",
+    "AdcSlotPlan",
     "SyscfgAssign",
     "SyscfgInstance",
     "SyscfgModel",
     "SyscfgModelError",
+    "adc_mem_index",
     "parse_syscfg",
     "syscfg_path_matches",
 ]
@@ -80,6 +82,19 @@ _ADC_MEM_RE = re.compile(
 # A0_<N> 与 CHAN_<N> 对应）；A1_* 组 v1 不支持（返回 None 大声失败）。
 _ADC_CHAN_RE = re.compile(r"A0_(\d+)\Z")
 
+# `adcMem<N>chansel` 的槽位号与通道号（孤儿槽位让位用，工单
+# hwcheck-pin-conflict-exit/01：`adcMem6chansel = "DL_ADC12_INPUT_CHAN_7"` →
+# 槽位 6 / 通道 7）。
+_ADC_MEM_SLOT_RE = re.compile(r"\.adcMem(?P<mem>\d+)chansel\Z")
+_ADC_CHAN_VALUE_RE = re.compile(r"DL_ADC12_INPUT_CHAN_(?P<chan>\d+)\Z")
+
+# ADC 引脚落点行：`<实例>.peripheral.adcPin<通道>.$assign = "<脚>"`——孤儿槽位
+# 让位时整行改成注释（见 `_relocate_unclaimed_adc_slots`）。
+_ADC_PIN_ASSIGN_RE = re.compile(
+    r'^(?P<head>\s*)(?P<inst>[A-Za-z_]\w*)\.peripheral\.adcPin(?P<chan>\d+)'
+    r'\.\$assign\s*=\s*"(?P<pin>[A-Za-z0-9]+)"(?P<tail>.*?)(?P<eol>\r?\n)?$'
+)
+
 
 class SyscfgModelError(ValueError):
     """syscfg 文件模型操作失败（母版漂移 / 数据漂移等防御路径）。
@@ -107,6 +122,21 @@ class SyscfgAssign:
     line: int
 
 
+@dataclass(frozen=True)
+class AdcSlotPlan:
+    """槽位级裁剪的判据（工单 hwcheck-pin-conflict-exit/01）：`prune` 的输入形状。
+
+    两个字段成对使用、成对传（装配在 `syscfg_prune.adc_slot_plan`，门禁与写侧传
+    同一份），所以合成一个类型而不是两个裸参数——两处各拆一次包迟早分家。
+
+    `claims` = 实例名 → 本趟声明的 ADC MEM 槽位号（role id 尾 `_CH<N>`）；
+    `occupied` = 本趟所有已声明角色的**生效脚**（默认脚 ∪ 绑定值）。
+    """
+
+    claims: Mapping[str, Collection[int]] = field(default_factory=dict)
+    occupied: Collection[str] = ()
+
+
 @dataclass
 class SyscfgModel:
     """mspm0.syscfg 的一次解析产物。
@@ -114,22 +144,42 @@ class SyscfgModel:
     prune 与 rewrite 是对同一解析的两个操作（产出新的 SyscfgModel；rewrite
     无生效绑定时返回原模型），to_text 是唯一回写出口——先后关系由调用方
     pipeline 构造保证。
+
+    `adc_followers`（工单 hwcheck-pin-conflict-exit/01）= **prune 记下的跟随表**：
+    已声明槽位的 `adcMem<N>chansel` 路径 → 跟着它共读同一 ADC 通道的孤儿槽位路径。
+    为什么必须记：孤儿槽位让位后没有自己的 `$assign` 行（它的脚靠「与已声明槽位
+    同通道」定位），一旦那次生成又给已声明槽位改绑了通道，孤儿槽位不跟着改就会
+    指回一个没有显式落点的通道——那属于 SysConfig 隐式分配，静态门禁看不见。
+    `parse_syscfg` 恒给空表（跟随关系只在 prune 里产生）。
     """
 
     lines: list[str]
     instances: dict[str, SyscfgInstance]  # 实例名 -> 实例声明
     assigns: list[SyscfgAssign]  # 全部 $assign 落点（行序）
+    adc_followers: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
     def to_text(self) -> str:
         """serialize：行列表拼回全文（splitlines keepends 无损往返）。"""
         return "".join(self.lines)
 
-    def prune(self, selected_slugs: Iterable[str]) -> "SyscfgModel":
+    def prune(
+        self,
+        selected_slugs: Iterable[str],
+        *,
+        adc_plan: AdcSlotPlan | None = None,
+    ) -> "SyscfgModel":
         """按选中模块裁剪（对同一解析的 prune 操作，与旧 syscfg_prune 逐字节
         等价）：实例的消费模块集与 selected_slugs 交集为空 → 裁掉该实例的
         `const X = MOD.addInstance();` 行与所有 `X.` 配置行；某模块变量
         （UART/I2C/TIMER/GPIO/PWM）的全部实例被裁 → 连 addModule 行一起裁。
-        Board/SYSCTL 与文件头注释不动。产出新的 SyscfgModel。"""
+        Board/SYSCTL 与文件头注释不动。产出新的 SyscfgModel。
+
+        `adc_plan`（工单 hwcheck-pin-conflict-exit/01）= **槽位级裁剪**的可选判据
+        （`AdcSlotPlan`，装配在 `syscfg_prune.adc_slot_plan`——门禁与写侧传同一份）：
+        给了就让**没被本趟声明、又撞上已声明角色生效脚的 ADC 槽位**让位（改成与
+        已声明槽位共读同一通道，撤掉它的 `adcPinN.$assign` 行）；没给 = 整实例
+        粒度，逐字节等于旧行为。
+        """
         selected = set(selected_slugs)
         module_instances: dict[str, list[str]] = {}
         for name, instance in self.instances.items():
@@ -171,7 +221,14 @@ class SyscfgModel:
                     # `INSTANCE.xxx` 配置行（含 `INSTANCE.associatedPins[n].pin`）
                     continue
             kept.append(line)
-        return parse_syscfg("".join(kept))
+        followers: dict[str, tuple[str, ...]] = {}
+        if adc_plan is not None:
+            followers = _relocate_unclaimed_adc_slots(
+                kept, self.instances, adc_plan
+            )
+        model = parse_syscfg("".join(kept))
+        model.adc_followers = followers
+        return model
 
     def rewrite(
         self, resolved: Sequence["ResolvedBinding"]
@@ -224,6 +281,7 @@ class SyscfgModel:
             if binding.declaration.type not in _MSPM0_PERIPHERAL_TYPES:
                 if binding.declaration.type == "adc":
                     _rewrite_adc_mem_line(lines, binding)
+                    _follow_adc_mem_line(lines, binding, self.adc_followers)
                 continue
             peripheral_path = _peripheral_path(m.group("path"))
             if peripheral_path is None:
@@ -254,12 +312,150 @@ class SyscfgModel:
         return parse_syscfg("".join(lines))
 
 
+def _adc_mem_channel(line: str) -> int | None:
+    """`adcMem<N>chansel` 行的通道号（非该形态 / 值不是 CHAN_<N> = None）。"""
+    match = _ADC_MEM_RE.match(line)
+    if match is None:
+        return None
+    chan = _ADC_CHAN_VALUE_RE.match(match.group("value"))
+    return int(chan.group("chan")) if chan else None
+
+
+def _relocate_unclaimed_adc_slots(
+    lines: list[str],
+    instances: Mapping[str, SyscfgInstance],
+    plan: AdcSlotPlan,
+) -> dict[str, tuple[str, ...]]:
+    """ADC 孤儿槽位让位（工单 hwcheck-pin-conflict-exit/01）：原地改 `lines`，返回跟随表。
+
+    **为什么需要**：母版 ADC12_0 把 8 个 MEM 脚全占了，而按选中集裁剪只到**实例**
+    粒度——没选中的模块（flame / soil / mq135 …）的那几根脚照样落盘（摘编自母版
+    注释的布局），冲突求解器看不见它们（它们不属于任何选中模块，角色「未登记」），
+    于是检测页在 mspm0 上必 400。
+
+    **为什么不是「把那几行删掉」**：真机 SysConfig CLI 实证
+    （`.scratch/hwcheck-pin-conflict-exit/recon-syscfg-lab.txt`）——只删
+    `ADC12_0.peripheral.adcPin7.$assign` 行，SysConfig 会按
+    `adcMem6chansel = CHAN_7` 把 PA22 **认回来**、照样报 Resource conflict。
+    能过的形态是：把槽位的 chansel 改成与已声明槽位**共读同一通道**，再撤掉它的
+    `adcPinN.$assign` 行（「薄封装共读同槽」的既有先例，多 MEM 读同一通道无害）。
+
+    **只动真撞上的**（少动是硬要求）：孤儿槽位占的脚不在 `plan.occupied` 里就保持
+    原样——`adc` 配方的第二路读数（MEM1 = PA26）因此仍是 PA26。**没撞上的孤儿脚
+    留着不会再挡住生成**：任何一次真撞上都会让它让位。
+
+    返回「跟随表」：已声明槽位（让位目标的取法 = 声明槽位里 MEM 索引最小者）的
+    `adcMem<N>chansel` 路径 → 跟着它共读同一通道的孤儿槽位路径元组。
+    """
+    occupied = set(plan.occupied)
+    followers: dict[str, list[str]] = {}
+    for name, instance in instances.items():
+        if not instance.module.startswith("ADC12"):
+            continue
+        # 槽位 与 引脚落点：先全量收集，再原地改（不删行——行号即索引）
+        slots: dict[int, tuple[int, int, str]] = {}  # mem -> (行号, 通道, 路径)
+        pins: dict[int, tuple[int, str, str, str]] = {}  # 通道 -> (行号, 脚, 行尾, 缩进)
+        for index, line in enumerate(lines):
+            mem_match = _ADC_MEM_RE.match(line)
+            if mem_match is not None:
+                path = mem_match.group("path")
+                if path.split(".", 1)[0] != name:
+                    continue
+                slot = _ADC_MEM_SLOT_RE.search(path)
+                channel = _adc_mem_channel(line)
+                if slot is None or channel is None:
+                    continue
+                slots[int(slot.group("mem"))] = (index, channel, path)
+                continue
+            pin_match = _ADC_PIN_ASSIGN_RE.match(line)
+            if pin_match is not None and pin_match.group("inst") == name:
+                pins[int(pin_match.group("chan"))] = (
+                    index, pin_match.group("pin"), pin_match.group("eol") or "\n",
+                    pin_match.group("head"),
+                )
+        claimed = sorted(mem for mem in plan.claims.get(name, ()) if mem in slots)
+        if not claimed:
+            continue  # 判不了就不判：母版漂移 / 本趟没有任何 ADC 声明
+        leader_path = slots[claimed[0]][2]
+        leader_channel = slots[claimed[0]][1]
+        claimed_channels = {slots[mem][1] for mem in claimed}
+        for mem in sorted(slots):
+            if mem in claimed:
+                continue
+            line_no, channel, path = slots[mem]
+            if channel in claimed_channels:
+                # 已经与某个已声明槽位共用同一通道（同一行落点，撤不得）：
+                # 记为跟随者即可——那次生成若给已声明槽位改绑，它跟着换。
+                if channel == leader_channel:
+                    followers.setdefault(leader_path, []).append(path)
+                continue
+            pin = pins.get(channel)
+            if pin is None:
+                continue  # 该通道没有显式落点行 = 判不了它占不占脚，保守不动
+            pin_line, pin_name, pin_eol, pin_indent = pin
+            if pin_name not in occupied:
+                continue  # 没撞上任何人 → 保持原样（少动是硬要求）
+            # 让位：撤掉落点行（改注释，不删行——行号是后续改写的索引；行尾原样
+            # 保留：母版是 CRLF，混一行 LF 会让"逐字节契约"名存实亡）
+            lines[pin_line] = (
+                f"{pin_indent}// {name}.peripheral.adcPin{channel} 未让位前 = "
+                f"\"{pin_name}\"（本趟没有模块声明这个 ADC 槽位，槽位与已声明"
+                f"槽位共读同一通道）{pin_eol}"
+            )
+            lines[line_no] = _with_adc_channel(lines[line_no], leader_channel)
+            followers.setdefault(leader_path, []).append(path)
+    return {path: tuple(items) for path, items in followers.items()}
+
+
+def _with_adc_channel(line: str, channel: int) -> str:
+    """`adcMem<N>chansel` 行的通道值换成 `channel`（其余逐字节保留）。"""
+    match = _ADC_MEM_RE.match(line)
+    assert match is not None  # 调用方已匹配过
+    return (
+        f'{match.group("head")}"DL_ADC12_INPUT_CHAN_{channel}"'
+        f'{match.group("tail")}{match.group("eol") or ""}'
+    )
+
+
+def _follow_adc_mem_line(
+    lines: list[str],
+    binding: "ResolvedBinding",
+    followers: Mapping[str, Sequence[str]],
+) -> None:
+    """让位过的孤儿槽位跟着已声明槽位换通道（prune 记的跟随表，见 SyscfgModel）。
+
+    已声明槽位改绑 = 换通道（`_rewrite_adc_mem_line`）；跟着它共读的孤儿槽位不跟着
+    换就会指回一个没有显式 `$assign` 落点的通道——那个脚由 SysConfig 隐式分配，
+    静态门禁看不见，真机上可能又撞回别的模块。
+    """
+    mem = adc_mem_index(binding.declaration.id)
+    instances = INSTANCES_BY_SLUG.get(binding.slug, ())
+    if not instances:
+        return
+    leader_path = f"{instances[0]}.adcMem{mem}chansel"
+    pairs = followers.get(leader_path)
+    if not pairs:
+        return
+    channel: int | None = None
+    for line in lines:
+        match = _ADC_MEM_RE.match(line)
+        if match is not None and match.group("path") == leader_path:
+            channel = _adc_mem_channel(line)
+            break
+    if channel is None:
+        return  # 母版漂移：已声明槽位的 chansel 行不在（改写那边已大声失败）
+    for index, line in enumerate(lines):
+        match = _ADC_MEM_RE.match(line)
+        if match is not None and match.group("path") in pairs:
+            lines[index] = _with_adc_channel(line, channel)
+
+
 def parse_syscfg(text: str) -> SyscfgModel:
     """mspm0.syscfg 全文 → 一次解析产物（独占文法，唯一解析实现）。
 
     逐行识别三类文法：实例声明（addInstance）、模块声明（addModule）、
     `$assign` 赋值；行列表原样保留（splitlines keepends）供 prune / rewrite
-    行级改写与 serialize 往返。
+    行级改写与 serialize 往返。`adc_followers` 恒空（跟随关系只在 prune 里产生）。
     """
     lines = text.splitlines(keepends=True)
     instances: dict[str, SyscfgInstance] = {}
@@ -365,10 +561,12 @@ def _locate_mspm0_site(
     )
 
 
-def _adc_mem_index(role_id: str) -> int:
+def adc_mem_index(role_id: str) -> int:
     """adc 角色 id 尾 `_CH<N>` → ADC12 MEM 索引（ADC_CH0 → 0、ADC_CH1 → 1）。
 
     非 _CH 尾形 = 声明漂移，大声失败（母版/模块数据错，宁明不默）。
+    两处消费：本模块的绑定改写（换槽位 / 换通道行），与 `syscfg_prune` 的
+    「本趟声明了哪些 MEM 槽位」（孤儿槽位让位判据）。
     """
     match = re.search(r"_CH(\d+)$", role_id)
     if match is None:
@@ -407,7 +605,7 @@ def _rewrite_adc_mem_line(
     新引脚通道号。通道号从绑定脚能力实例解析（类型级推导，如 PA26 → A0_1）；
     A1_* 组 v1 不支持，大声失败。通道行缺失 = 母版漂移，大声失败。
     """
-    mem = _adc_mem_index(binding.declaration.id)
+    mem = adc_mem_index(binding.declaration.id)
     channel = _binding_adc_channel(binding)
     instances = INSTANCES_BY_SLUG.get(binding.slug, ())
     if not instances:

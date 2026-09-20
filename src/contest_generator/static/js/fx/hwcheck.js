@@ -303,19 +303,19 @@ export function hwcheckToolchainNote(platform, ready, platformLabel) {
     + `或先按清单上板试——${esc(platformLabel || platform)} 的检测结果只有编译过才算数。</div>`;
 }
 
-// hwcheckChannelNoteHTML(platform, debugUart, oled)：**生成之前**就把"这条路会撞脚"
+// hwcheckChannelNoteHTML(platform, debugUart, oled)：**生成之前**就把"这两路默认撞脚"
 // 说清楚（工单 02 评审整改：spec 用户故事 4「一个器件都不选也能生成」在 mspm0 上
-// 默认不成立——地猛星两路的默认脚在原厂例程里是重叠的，生成门禁会如实 400，
-// 而检测页原本没有任何引导）。
-// 工单 03 起这句话**不再自称判据**：撞的是哪几个脚由接线表与冲突预警（服务端
-// 同脚组）逐条列出，这里只说"生成时还报冲突怎么办"这条出路——硬编码的
-// 平台专属说法与真判据并列会变成两个口径。
+// 默认不成立）。
+// 工单 hwcheck-pin-conflict-exit/01 起这句话**变了性质**：默认撞脚由检测页在生成前
+// 自动解开（`hwcheck_pin_plan`，与赛题页「自动配置」同一个求解器），所以这里不再教
+// 「先只勾一个通道」——那是把母版布局的账算到学生头上；现在说的是"会自动移开、
+// 移了哪几根请看下面的接线表与提示"。撞的是哪几个脚仍由接线表与同脚组逐条列出。
 export function hwcheckChannelNoteHTML(platform, debugUart, oled) {
   if (platform !== "mspm0" || !debugUart || !oled) return "";
   return '<div class="hwcheck-warn">注意：地猛星（mspm0）上「调试串口 + OLED」这两路的'
-    + "默认脚在原厂例程里是重叠的——下面的接线表与冲突预警会把撞在一起的脚逐条"
-    + "列出来。生成时若报引脚冲突，请先只勾一个通道再生成"
-    + "（要两个都用，需要在引脚配置里改绑，检测页暂时做不了）。</div>";
+    + "默认脚在原厂例程里是重叠的。**不用你自己改**——生成检测工程前，检测页会按"
+    + "同一套判据自动把它移开（移了哪几根见下面接线表上方的提示，接线表已经是新脚）。"
+    + "若这套器件组合真的装不下（板子脚不够），页面会点明是哪几件、建议去掉哪一件。</div>";
 }
 
 // hwcheckActionsHTML(outputDir, opts)：动作行 + 状态位 + 结果容器。
@@ -515,6 +515,21 @@ export function hwcheckMissingDevicesHTML(missing) {
 // 说成一句会把用户引到错的地方去查。
 export function hwcheckWiringErrorHTML(message) {
   return `<div class="error">接线表与冲突暂时取不到：${esc(message || "")}</div>`;
+}
+
+// hwcheckPinFixHTML(pinFixes)：生成前**自动移开的默认脚撞脚**（工单
+// hwcheck-pin-conflict-exit/01）。为什么必须明说：检测页没有引脚配置入口，学生
+// 照"原厂默认脚"接好线却生成了另一组脚，是最难查的一类不一致——所以页面把动过的
+// 每一根线原样打出来（说明行由服务端给，前端只渲染），并点明接线表已是新脚。
+// 空数组 = 这一趟一根都没动，不渲染任何东西（不制造"好像出过事"的错觉）。
+export function hwcheckPinFixHTML(pinFixes) {
+  const list = (Array.isArray(pinFixes) ? pinFixes : []).map((item) => String(item || ""))
+    .filter((item) => item);
+  if (!list.length) return "";
+  return '<div class="hwcheck-warn">⚠ 生成前自动移开了 '
+    + `${list.length} 处默认脚冲突（这几根线**不按原厂默认脚**，按下面接线表接）：`
+    + list.map((item) => `<div class="hwcheck-pin-fix">· ${esc(item)}</div>`).join("")
+    + "</div>";
 }
 
 // hwcheckWiringTableHTML(rows, footnote)：接线表（列与工程 README「引脚接线表」

@@ -25,6 +25,7 @@ import {
   hwcheckDeviceGroupNoticeHTML,
   hwcheckWiringErrorHTML, hwcheckWiringTableHTML, hwcheckPinGroupsHTML,
   hwcheckBoardSharesHTML, hwcheckOrderHTML, hwcheckOrderDesc, hwcheckBoardState,
+  hwcheckPinFixHTML,
   hwcheckSectionsState, hwcheckSectionsHTML, hwcheckUnspecializedHTML,
   hwcheckSectionPlanText, hwcheckSectionNoteHTML,
   hwcheckConsoleState, hwcheckConsoleHTML,
@@ -338,17 +339,34 @@ test("hwcheckToolchainNote：缺工具链要大声明说「未经验证」；齐
     "平台词表外也要有话说（不拼出 undefined）");
 });
 
-test("hwcheckChannelNoteHTML：mspm0 双通道在**生成前**就给出路（评审整改）", () => {
-  // spec 用户故事 4「一个器件都不选也能生成」在 mspm0 默认态不成立（两路默认脚重叠），
-  // 而检测页原本没有任何引导——这条钉住"生成前就告诉用户怎么办"。
+test("hwcheckChannelNoteHTML：mspm0 双通道说清「会自动移开」（工单 pin-conflict-exit）", () => {
+  // spec 用户故事 4「一个器件都不选也能生成」在 mspm0 默认态本来不成立（两路默认脚
+  // 重叠）。工单 hwcheck-pin-conflict-exit/01 起**检测页自己在生成前解开**，所以这句
+  // 话不能再教「先只勾一个通道」——那是把母版布局的账算到学生头上。
   const note = hwcheckChannelNoteHTML("mspm0", true, true);
   assert.ok(note.includes("hwcheck-warn"), "要显眼，不是一句灰字");
-  assert.ok(note.includes("引脚冲突"), "说清会出什么事");
-  assert.ok(/只勾一个|取消勾选/.test(note), "给出路：先只勾一个通道");
+  assert.ok(note.includes("重叠"), "说清会出什么事");
+  assert.ok(note.includes("自动"), "出路：生成前自动移开，不用学生自己改");
+  assert.ok(!/只勾一个/.test(note), "不再教「先只勾一个通道」（那是指向赛题页的旧出路）");
   assert.equal(hwcheckChannelNoteHTML("stm32", true, true), "", "stm32 默认不撞脚");
   assert.equal(hwcheckChannelNoteHTML("mspm0", true, false), "", "只勾一个就不提示");
   assert.equal(hwcheckChannelNoteHTML("mspm0", false, true), "");
   assert.equal(hwcheckChannelNoteHTML("mspm0", false, false), "");
+});
+
+test("hwcheckPinFixHTML：自动移开的脚逐根如实打出（接线表已是新脚）", () => {
+  const html = hwcheckPinFixHTML([
+    "oled.OLED_SPI_RES → PA0（原 PA22 与 debug_uart.DEBUG_UART_RX 冲突，已自动移开）",
+  ]);
+  assert.ok(html.includes("hwcheck-warn"), "要显眼");
+  assert.ok(html.includes("自动移开"), "说清发生了什么");
+  assert.ok(html.includes("PA0") && html.includes("PA22"), "原脚与新脚都在");
+  assert.ok(html.includes("hwcheck-pin-fix"), "一根线一行");
+  assert.ok(html.includes("不按原厂默认脚"), "点明照新脚接线");
+  assert.equal(hwcheckPinFixHTML([]), "", "一根都没动 = 不渲染（不制造错觉）");
+  assert.equal(hwcheckPinFixHTML(null), "");
+  assert.equal(hwcheckPinFixHTML(["", null]), "");
+  assert.ok(hwcheckPinFixHTML(["<x> → PA0"]).includes("&lt;x&gt;"), "转义");
 });
 
 test("hwcheckActionsHTML：三个动作带工程目录；编译不可用时按钮置灰", () => {

@@ -1255,6 +1255,39 @@ def test_shared_groups_marks_same_sensor_instance_share():
     assert "lcd.LCD_RES" not in group["roles"]
 
 
+def test_shared_groups_classifies_adc_same_slot_as_share():
+    """薄封装共读同槽（工单 hwcheck-pin-conflict-exit/01）：adc / us016 / mq2 … 十几件
+    按设计同读 ADC12_0 的 MEM0（PA24）——同脚 = 同一物理通道同一信号 → **share**。
+
+    为什么这条重要：判 conflict 会让「自动配置」把模拟输入脚搬走（实测
+    `us016.US016_OUT_CH0 → PB24`，等于悄悄换掉学生的模拟输入），而它们的代码
+    读的是 MEM0、引脚由 syscfg 单落点决定——搬走就是另一条通路了。
+    """
+    result = _auto_selected(("adc", "us016"), "mspm0", {})
+
+    group = next(
+        (s for s in result.shared
+         if {"adc.ADC_CH0", "us016.US016_OUT_CH0"} <= set(s["roles"])),
+        None,
+    )
+    assert group is not None and group["pin"] == "PA24"
+    assert group["kind"] == "share"
+    assert "共读同槽" in str(group["reason"])
+
+
+def test_auto_assign_never_moves_shared_adc_modules():
+    """共读同槽的件不许被「自动配置」搬脚（反向判据：判 conflict 就会搬）。
+
+    同一实例 + 同一默认脚 = 同一通道；`resolve_bindings` 层面它们本来合法
+    （`_check_slot_conflicts` 只拦同槽位异脚），搬走反而会撞上「同一槽位的两个
+    角色绑到不同引脚」——那是真会炸 SysConfig 的形态。
+    """
+    result = _auto_selected(("adc", "us016", "mq2"), "mspm0", {})
+
+    assert result.bindings == {}, "共读同槽的角色一根都不该动"
+    assert result.fixed == ()
+
+
 def test_shared_groups_marks_mixed_resource_same_pin_conflict():
     """同脚混入不同外设（灰度 × UART RX 同脚 PA22）→ 冲突（旧行为整组标
     「合法共享」——实际 UART 线与灰度线不能同接一脚）。"""

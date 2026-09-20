@@ -34,6 +34,7 @@ import {
   hwcheckDeviceEmptyHTML, hwcheckMissingDevicesHTML, hwcheckWiringTableHTML,
   hwcheckDeviceGroupNoticeHTML,
   hwcheckPinGroupsHTML, hwcheckBoardSharesHTML, hwcheckOrderHTML,
+  hwcheckPinFixHTML,
   hwcheckBoardState, hwcheckWiringErrorHTML,
   hwcheckSectionsState, hwcheckSectionsHTML, hwcheckUnspecializedHTML,
   hwcheckSectionsEmptyHTML,
@@ -233,7 +234,8 @@ function renderHwcheckWiring() {
     wiringBox.innerHTML = error
       ? hwcheckWiringErrorHTML(error)
       : (hwcheckUI.wiring
-        ? hwcheckWiringTableHTML(hwcheckUI.wiring.rows, hwcheckUI.wiring.footnote)
+        ? hwcheckPinFixHTML(hwcheckUI.wiring.pin_fixes)
+          + hwcheckWiringTableHTML(hwcheckUI.wiring.rows, hwcheckUI.wiring.footnote)
         : '<div class="muted">选好平台后点「预览检测程序」（或选一件器件），'
           + "这里会出现这一趟要接的线与默认脚冲突。</div>");
   }

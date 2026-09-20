@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from contest_generator.hwcheck import HwCheckError
+from contest_generator.hwcheck import HWCHECK_CHANNELS, HwCheckError
 from contest_generator.hwcheck_recipe import (
     RECIPE_FILENAME,
     RecipeCatalog,
@@ -896,6 +896,34 @@ def test_real_library_mpu6050_declares_the_headers_its_calls_need():
     mspm0 = catalog.for_platform(PLATFORM_MSPM0)
     assert set(stm32.include) == {"ml_mpu6050.h", "ml_i2c.h"}, stm32.include
     assert set(mspm0.include) == {"mpu_port.h"}, mspm0.include
+
+
+def test_real_library_channel_module_recipes_declare_their_headers():
+    """通道模块的配方必须**自己**声明头（工单 hwcheck-pin-conflict-exit/01 实测）。
+
+    为什么：框架那几行 include 只覆盖"勾了那个通道"的形态（`oled.h` 只在
+    OLED 通道打开时进 main.c）。而器件挑选里也能把 oled 当**器件**选——那时通道
+    可能没勾，配方小节照样渲染，头却没人 include → tiarmclang 一串
+    `call to undeclared function`（实测 mspm0 选 oled 当器件 + 只勾串口 = 4 warning，
+    验收线是 0 warning）。debug_uart 的配方早就自己声明了，oled 靠通道 include
+    蒙混过关——本单把那条路打通之后才暴露。
+    """
+    from contest_generator.library import list_modules
+
+    manifests = list_modules(REAL_LIBRARY)
+    recipes = load_recipes(
+        REAL_LIBRARY, manifests, _library_interfaces_all(REAL_LIBRARY, manifests))
+    for slug in HWCHECK_CHANNELS:
+        catalog = recipes.get(slug)
+        assert catalog is not None, f"{slug} 是通道模块，却没有配方"
+        for platform in (PLATFORM_STM32, PLATFORM_MSPM0):
+            section = catalog.for_platform(platform)
+            if section is None:
+                continue
+            assert section.include, (
+                f"{slug}:{platform} 的配方没声明 include——通道没勾时它的调用"
+                f"就是隐式声明（0 warning 验收线直接破）"
+            )
 
 
 def test_real_library_led_recipe_clamps_to_channel_zero_on_mspm0():

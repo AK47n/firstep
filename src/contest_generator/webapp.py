@@ -173,7 +173,7 @@ from .hwcheck import (
     render_main_c,
     render_output_hint,
 )
-from .hwcheck_board import hwcheck_board_view
+from .hwcheck_board import hwcheck_board_view, hwcheck_pin_plan
 from .hwcheck_console import build_console_table, console_payload
 from .hwcheck_generic import generic_message, resolve_generic_sections
 from .hwcheck_recipe import (
@@ -309,6 +309,7 @@ from .selection import (
     run_recommendation,
 )
 from .syscfg_instances import INSTANCES_BY_SLUG  # 同脚多角色 共享/冲突 判据（工单 pin-share-rule/01：前端 pinShareClass 的数据源）
+from .syscfg_model import MSPM0_SYSCFG_FILENAME  # 检测页引脚消解读母版 syscfg（工单 hwcheck-pin-conflict-exit/01）
 from .skeleton import run_skeleton
 from .sse import SseEmitter, run_sse
 from .stage import stage_project_files
@@ -835,36 +836,73 @@ def _hwcheck_recipes(
     )
 
 
-def _hwcheck_view(ctx: AppContext, config: HwCheckConfig) -> dict:
-    """检测页的**一次投影**（板块载荷）：板侧视图 + 逐件专精小节 + 通用降级小节 +
-    同组互斥组。
+def _hwcheck_master_syscfg(app_config: AppConfig, platform: str) -> str | None:
+    """母版 mspm0.syscfg 全文（检测页引脚消解用；该平台无此文件 / 读不了 = None）。
 
-    返回的字典里 `board` = 载荷的五个键（`wiring` / `sections` / `unspecialized` /
-    `console` / `exclusive_groups`，端点用 `**board` 展开），`sections` / `generic`
-    = 域层对象（生成端点还要拿它们去渲染 main.c，不必再解析一遍），`known_slugs`
-    = 整库模块 slug（工单 08 的事实约束判据用，**不进任何载荷**）。
+    为什么要读母版这一份：装不装得下的判据 = **落盘后的 syscfg**
+    （`prune(选中集) → rewrite(绑定)`），而那份文本的起点就是母版文件。
+    读不到按"判不了就不判"处理（`hwcheck_pin_plan` 只做自动解冲突那一步）——
+    不静默放行：生成内核那一刻的门禁照旧。
+    """
+    if platform != PLATFORM_MSPM0:
+        return None
+    path = master_project_dir(app_config.masters_dir, platform) / MSPM0_SYSCFG_FILENAME
+    if not path.is_file():
+        return None
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def _hwcheck_view(
+    ctx: AppContext, config: HwCheckConfig, *, require_pins: bool = True
+) -> dict:
+    """检测页的**一次投影**（板块载荷）：引脚消解 + 板侧视图 + 逐件专精小节 +
+    通用降级小节 + 同组互斥组。
+
+    返回的字典里 `board` = 载荷的六个键（`wiring` / `sections` / `unspecialized` /
+    `console` / `exclusive_groups` / `pin_fixes`，端点用 `**board` 展开），
+    `sections` / `generic` = 域层对象（生成端点还要拿它们去渲染 main.c，不必再解析
+    一遍），`known_slugs` = 整库模块 slug（工单 08 的事实约束判据用，**不进任何
+    载荷**），`pin_bindings` = 自动消解出的绑定增量（生成端点原样喂生成内核——
+    页面接线表与工程 README 同源的前提）。
 
     三个端点（preview / generate / project）共用这一处装配：读库一次 → 展开
-    依赖（`resolve_dependencies` 的顺序即进工程顺序）→ 配方校验 → 板侧投影
-    （`hwcheck_board.hwcheck_board_view`）→ 小节解析（`resolve_sections`，顺序
-    走既有 bring-up 排序）→ **通用降级小节**（`resolve_generic_sections`，工单 07：
-    专精件之外的那些件，判据全在库内已声明的事实上）。各端点各拼一遍就是三份
-    判据来源，迟早漂。
+    依赖（`resolve_dependencies` 的顺序即进工程顺序）→ 配方校验 → **引脚消解**
+    （`hwcheck_pin_plan`，工单 hwcheck-pin-conflict-exit/01：检测页没有引脚配置
+    入口，默认脚撞脚在这里就解开）→ 板侧投影（`hwcheck_board.hwcheck_board_view`）
+    → 小节解析（`resolve_sections`，顺序走既有 bring-up 排序）→ **通用降级小节**
+    （`resolve_generic_sections`，工单 07：专精件之外的那些件，判据全在库内已声明
+    的事实上）。各端点各拼一遍就是三份判据来源，迟早漂。
 
     库外 slug 由 `resolve_dependencies` 大声失败（UnknownModuleError 已登记 400）；
     配方坏了由 `load_recipes` 大声失败（HwCheckError 400 中文）——两条都不静默，
     也**不许**为了"至少能出接线表"而降级成跳过（那会让坏配方悄悄溜过去）。
+    装不下（自动移脚后仍撞脚）由 `require_pins` 控：预览与生成**同一判据**
+    （都 400），回读端点不算（它回放的是已经生成成功的那一次）。
     """
     app_config = _hwcheck_library_config(ctx)
     by_slug = {m.slug: m for m in list_modules(app_config.module_library_dir)}
     manifests = resolve_dependencies(list(hwcheck_modules(config)), by_slug)
     recipes = _hwcheck_recipes(ctx, app_config, list(by_slug.values()))
     devices = hwcheck_devices(config)
+    board = board_for_platform(config.platform)
+    plan = hwcheck_pin_plan(
+        config.platform,
+        manifests,
+        board,
+        _hwcheck_master_syscfg(app_config, config.platform),
+    )
+    if require_pins and not plan.ok:
+        raise HwCheckError(plan.conflict)
     view = hwcheck_board_view(
         config.platform,
         manifests,
-        board_for_platform(config.platform),
+        board,
         devices=devices,
+        resolved_bindings=plan.resolved,
+        pin_fixes=plan.fixed,
     )
     sections = resolve_sections(config.platform, devices, recipes, manifests)
     specialized = {section.slug for section in sections}
@@ -907,6 +945,9 @@ def _hwcheck_view(ctx: AppContext, config: HwCheckConfig) -> dict:
         },
         "sections": sections,
         "generic": generic,
+        # 引脚消解出的绑定增量（工单 hwcheck-pin-conflict-exit/01）：生成端点原样
+        # 喂生成内核——页面接线表与工程 README / 接线快照因此是同一组脚。
+        "pin_bindings": plan.bindings,
         # 整库 slug 词表（工单 08）：排障的事实约束要判"模型提到的模块是不是
         # 库内别的件"——`by_slug` 反正已经在这儿了，不必再扫一遍库。
         # 三个端点各自 `**board` 展开，这条**不进载荷**（页面用不上）。
@@ -2492,9 +2533,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         缺省 = 请求没表态 → 按"两个通道都在场"渲染，与检测页勾选框的默认一致）、
         devices（可选，选中的器件 slug 列表；库外 slug 400 中文）。
         返回 main_c 文本 + output_hint（「应看到什么」的输出通道部分）+ 通道形态
-        与器件回显 + wiring（接线行 / 同脚组 / 建议顺序 / 本平台无条目的器件）。
+        与器件回显 + wiring（接线行 / 同脚组 / 建议顺序 / 本平台无条目的器件 /
+        pin_fixes 生成前自动移开的脚）。
         前端一律显式带上这些字段（见 fx/hwcheck.js hwcheckRequestPayload）——
         缺省分支只是给脚本 / 手工调用兜底。
+
+        **判据与生成同源**（工单 hwcheck-pin-conflict-exit/01）：预览也跑引脚消解
+        与落盘冲突判据——装不下时这里就 400（同一句话），不再出现"预览通过、
+        点生成才 400"。
         """
         platform = _require_str(payload, "platform")
         config = HwCheckConfig(
@@ -2576,6 +2622,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 kind=CONTEXT_KIND_HWCHECK,
                 write_demo_script=False,
                 devices=hwcheck_devices(config),
+                # 引脚消解（工单 hwcheck-pin-conflict-exit/01）：页面接线表上那些
+                # 新脚必须真的落到工程里（syscfg $assign + README 接线表）——
+                # 否则学生照页面接好线，工程里查无此脚。
+                bindings=board["pin_bindings"] or None,
             )
         return {
             "platform": config.platform,
@@ -2652,7 +2702,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "main_c": read_project_main_c(path),
             "output_hint": render_output_hint(config),
             "checklist": [item.to_dict() for item in render_checklist(config)],
-            **_hwcheck_view(context, config)["board"],
+            # 回读**不跑**装不装得下的判据（工单 hwcheck-pin-conflict-exit/01）：
+            # 这次检测是已经生成成功的那一次，没道理因为后来换了库 / 换了母版就
+            # 让人打不开自己的工程。板侧视图仍按同一条消解重投影（确定性），
+            # 所以回来看到的接线表还是那次工程里的表。
+            **_hwcheck_view(context, config, require_pins=False)["board"],
             # 检测记录（工单 08）：现象 + 勾选 + 建议随这次检测落盘，刷新回显。
             # 读在这里（而不是另开一个 GET）：页面回到某个检测工程时一次拿全，
             # 少一个"清单回来了、记录还没回来"的中间态。

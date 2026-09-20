@@ -48,6 +48,11 @@
   },
   "oled": {
     "stm32": {
+      "include": {
+        "headers": [
+          "ml_oled.h"
+        ]
+      },
       "init": {
         "calls": [
           "OLED_Init()"
@@ -71,6 +76,11 @@
       }
     },
     "mspm0": {
+      "include": {
+        "headers": [
+          "oled.h"
+        ]
+      },
       "init": {
         "calls": [
           "OLED_Init()"

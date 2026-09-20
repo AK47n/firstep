@@ -12,8 +12,17 @@ import importlib
 import re
 from pathlib import Path
 
+from contest_generator.boards import board_for_platform
+from contest_generator.library import list_modules
+from contest_generator.pin_bindings import auto_assign_bindings, resolve_bindings
 from contest_generator.syscfg_instances import INSTANCE_CONSUMERS
-from contest_generator.syscfg_prune import prune_syscfg
+from contest_generator.syscfg_model import parse_syscfg
+from contest_generator.syscfg_prune import (
+    adc_slot_plan,
+    prune_syscfg,
+    syscfg_pin_conflict_report,
+)
+from contest_generator.selection import resolve_dependencies
 
 LIBRARY_ROOT = Path(__file__).resolve().parents[1] / "library"
 MASTER_SYSCFG = (
@@ -200,3 +209,155 @@ def test_syscfg_prune_does_not_import_pinwriter():
         and node.module.split(".")[-1] == "pinwriter"
     ]
     assert pinwriter_imports == []
+
+
+# ---------------------------------------------------------------------------
+# 槽位级裁剪 + 落盘冲突报告（工单 hwcheck-pin-conflict-exit/01）
+#
+# 母版 ADC12_0 把 8 个 MEM 脚全占了，而实例粒度裁剪只到「选了 ADC12_0 就整段保留」
+# ——没选中的模块（flame/soil/mq135…）的那几根脚照样落盘，冲突求解器看不见它们
+# （角色「未登记」）。这组用例钉住：让位的只有真撞上的，且让位后不再有落点行。
+# ---------------------------------------------------------------------------
+
+ALL_MANIFESTS = list_modules(LIBRARY_ROOT / "modules")
+MSPM0_BOARD = board_for_platform("mspm0")
+_WITH_ADC = ["led", "delay", "debug_uart", "oled", "adc"]
+
+
+def _manifests(slugs: list[str]):
+    """依赖展开后的 manifest 集（与生成 / 检测页同一口径：xunji 会带出 motor）。"""
+    by_slug = {m.slug: m for m in ALL_MANIFESTS}
+    return resolve_dependencies(slugs, by_slug)
+
+
+def _plan(slugs: list[str], bindings: dict[str, str] | None = None):
+    return adc_slot_plan(_manifests(slugs), "mspm0", bindings or {})
+
+
+def _report(slugs: list[str], bindings: dict[str, str] | None = None, **kw):
+    return syscfg_pin_conflict_report(
+        master_syscfg=MASTER_SYSCFG,
+        manifests=_manifests(slugs),
+        platform="mspm0",
+        board=MSPM0_BOARD,
+        bindings=bindings or {},
+        **kw,
+    )
+
+
+def test_adc_slot_plan_claims_only_declared_slots():
+    """claims = 本趟声明的 MEM 槽位（role id 尾 `_CH<N>`）；occupied = 已声明角色的生效脚。
+
+    ⚠ `occupied` 里**没有** PA26 / PA14：它们是孤儿槽位的脚（本趟没有模块声明），
+    所以「让位判据」要用 occupied 判**别人有没有要这根脚**，而不是判槽位归谁。
+    """
+    plan = _plan(_WITH_ADC)
+    assert plan.claims == {"ADC12_0": frozenset({0})}
+    assert {"PA22", "PA23", "PA24", "PA28"} <= plan.occupied
+    assert "PA26" not in plan.occupied and "PA14" not in plan.occupied
+    assert _plan(["led", "delay"]).claims == {}
+
+
+def test_slot_prune_relocates_only_the_colliding_orphan_slot():
+    """adc 单选：MEM6（PA22）撞上 debug_uart RX → 让位共读；MEM1（PA26）没撞上 → 原样。"""
+    text = prune_syscfg(
+        MASTER_SYSCFG, ["led", "delay", "debug_uart", "adc"],
+        plan=_plan(["led", "delay", "debug_uart", "adc"]),
+    )
+    assert 'ADC12_0.peripheral.adcPin3.$assign = "PA24";' in text, "自己的槽位不动"
+    assert 'ADC12_0.peripheral.adcPin1.$assign  = "PA26";' in text, (
+        "没撞上的孤儿槽位保持原样（少动是硬要求：adc 配方第二路读的就是 MEM1）"
+    )
+    assert "ADC12_0.peripheral.adcPin7.$assign" not in text, "撞上的槽位撤掉落点行"
+    assert 'ADC12_0.adcMem6chansel             = "DL_ADC12_INPUT_CHAN_3";' in text, (
+        "让位 = 与已声明槽位共读同一通道（只删落点行不够：SysConfig 会按 chansel 认回脚）"
+    )
+    assert '未让位前 = "PA22"' in text, "产物里留痕，读工程的人看得出这根脚动过"
+
+
+def test_slot_prune_keeps_all_slots_when_nobody_collides():
+    """只选 adc（无输出通道）：一根都不动（没人撞 = 不动）。"""
+    slugs = ["led", "delay", "adc"]
+    text = prune_syscfg(MASTER_SYSCFG, slugs, plan=_plan(slugs))
+    assert text.count("ADC12_0.peripheral.adcPin") == 8
+
+
+def test_slot_relocation_preserves_line_endings():
+    """让位只换那一行的内容，**行尾原样**（母版 CRLF；混一行 LF 会让逐字节契约名存实亡）。"""
+    slugs = ["led", "delay", "debug_uart", "adc"]
+    assert "\r\n" in MASTER_SYSCFG, "母版是 CRLF（这条判据的前提）"
+    text = prune_syscfg(MASTER_SYSCFG, slugs, plan=_plan(slugs))
+    assert "未让位前" in text
+    assert [line for line in text.split("\r\n") if "\n" in line] == []
+
+
+def test_slot_prune_without_plan_is_the_old_instance_granularity():
+    """不给 plan = 整实例粒度（旧行为逐字节，独立调用方与测试仍走这条）。"""
+    slugs = ["led", "delay", "debug_uart", "adc"]
+    assert "ADC12_0.peripheral.adcPin7" in prune_syscfg(MASTER_SYSCFG, slugs)
+
+
+def test_slot_prune_follows_the_leader_rebind():
+    """已声明槽位改绑换通道 → 跟着它共读的孤儿槽位跟着换。
+
+    不跟着换就会指回一个**没有显式落点行**的通道——那个脚由 SysConfig 隐式分配，
+    静态门禁看不见（真机上可能又撞回别的模块）。
+    """
+    slugs = ["led", "delay", "debug_uart", "adc"]
+    manifests = _manifests(slugs)
+    plan = adc_slot_plan(manifests, "mspm0", {})
+    resolved = resolve_bindings(
+        manifests, "mspm0", MSPM0_BOARD, {"adc.ADC_CH0": "PA26"}
+    )
+    model = parse_syscfg(MASTER_SYSCFG).prune(slugs, adc_plan=plan)
+    assert model.adc_followers, "让位过的槽位要记进跟随表"
+    text = model.rewrite(resolved).to_text()
+    assert 'ADC12_0.adcMem0chansel             = "DL_ADC12_INPUT_CHAN_1";' in text
+    assert 'ADC12_0.adcMem6chansel             = "DL_ADC12_INPUT_CHAN_1";' in text, (
+        "孤儿槽位跟着已声明槽位换通道"
+    )
+    assert 'ADC12_0.peripheral.adcPin1.$assign = "PA26";' in text
+    assert "adcPin3" not in text
+
+
+def test_conflict_report_clears_after_slot_relocation():
+    """让位之后那根脚不再被两只实例抢（门禁与检测页共吃的判据）。"""
+    assert _report(["led", "delay", "debug_uart", "adc"]).pin_count == 0
+    # 对照：不给槽位级裁剪的旧口径下，这根脚正是「角色未登记」的挡路者
+    from contest_generator.syscfg_model import parse_syscfg as _parse
+
+    manifests = _manifests(["led", "delay", "debug_uart", "adc"])
+    by_pin: dict[str, list[str]] = {}
+    for assign in _parse(MASTER_SYSCFG).prune(
+        [m.slug for m in manifests]
+    ).rewrite(()).assigns:
+        by_pin.setdefault(assign.pin, []).append(assign.path)
+    assert any(path.endswith("adcPin7") for path in by_pin["PA22"]), (
+        "旧口径下 PA22 上有 ADC12_0 的孤儿落点（本单要修的就是它）"
+    )
+
+
+def test_conflict_report_reports_remaining_and_diagnosis_baseline():
+    """装不下时：逐脚点名 + 容量诊断以**用户原始选择**为基准（不是自动搬过的增量）。"""
+    slugs = ["led", "oled", "debug_uart", "key", "beep", "sr04", "jy61p",
+             "xunji", "ml_mpu6050"]
+    manifests = _manifests(slugs)
+    solved = auto_assign_bindings(
+        manifests, "mspm0", MSPM0_BOARD, {}, resolve_default_conflicts=True
+    )
+    report = syscfg_pin_conflict_report(
+        master_syscfg=MASTER_SYSCFG, manifests=manifests, platform="mspm0",
+        board=MSPM0_BOARD, bindings=solved.bindings, diagnosis_bindings={},
+    )
+    assert report.pin_count > 0 and all("·" in line for line in report.lines)
+    assert "可解开 2 组" in report.capacity, (
+        "诊断基准是用户原始选择（这一组本来能解开 2 组）"
+    )
+    # 反例（本单实测撞到过）：拿已经搬过的增量当基准 → 那些角色被当成「用户显式
+    # 绑定」不可再让位 → 读成「可解开 0 组」，与事实相反。
+    wrong = syscfg_pin_conflict_report(
+        master_syscfg=MASTER_SYSCFG, manifests=manifests, platform="mspm0",
+        board=MSPM0_BOARD, bindings=solved.bindings,
+    )
+    assert "可解开 0 组" in wrong.capacity
+

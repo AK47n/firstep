@@ -31,6 +31,7 @@ from contest_generator.hwcheck import (
     render_main_c,
     render_output_hint,
 )
+from contest_generator.hwcheck_board import HWCHECK_PIN_EXIT_MARKER
 from contest_generator.hwcheck_generic import (
     GENERIC_LABEL,
     GenericSection,
@@ -923,13 +924,16 @@ def test_generate_endpoint_mspm0_serial_only(real_library_client, tmp_path):
     assert "SYSCFG_DL_init" not in _called_names(body["main_c"])
 
 
-def test_generate_endpoint_mspm0_both_channels_conflict_is_reported_400(
+def test_generate_endpoint_mspm0_default_dual_channel_resolves_conflict(
     real_library_client, tmp_path
 ):
-    """已知限制（如实记录，不假装）：mspm0 默认双通道撞 PA22 → 400 中文。
+    """mspm0 默认「串口 + OLED」现在**能生成**：检测页在生成前自动解开 PA22。
 
-    ⚠ **后续工单若给检测页引入自动配置 / 引脚配置，这条用例应当改成"能生成"**。
-    它现在钉的是"引擎如实报错、不静默产出一个编译不过的工程"。
+    本用例替换掉旧用例 `test_generate_endpoint_mspm0_both_channels_conflict_is_reported_400`
+    ——那条钉的是"引擎如实 400、不静默产出编译不过的工程"，旧用例自己也写着
+    「后续工单若给检测页引入自动配置，这条应当改成能生成」。工单
+    hwcheck-pin-conflict-exit/01 就是那次引入，所以判据变成两条：
+    ① 能生成；② 动了哪几根线页面拿得到、且真的落进了工程（学生照表接线）。
     """
     client, _ = real_library_client
     parent = tmp_path / "out"
@@ -939,9 +943,93 @@ def test_generate_endpoint_mspm0_both_channels_conflict_is_reported_400(
         json={"platform": PLATFORM_MSPM0, "debug_uart": True, "oled": True,
               "parent_dir": str(parent)},
     )
-    assert response.status_code == 400, response.text
-    detail = response.json()["detail"]
-    assert "引脚冲突" in detail and "PA22" in detail
+    assert response.status_code == 200, response.text
+    body = response.json()
+    fixes = body["wiring"]["pin_fixes"]
+    assert fixes, "默认双通道必然要移一根（PA22）"
+    assert any("PA22" in line for line in fixes), fixes
+    assert "PA22" not in body["main_c"]  # 引脚不进 main.c（单源纪律）
+
+    # 页面上那一行（接线表）拿到的必须是**移过之后**的脚
+    rows = {(row["slug"], row["role_id"]): row["pin"] for row in body["wiring"]["rows"]}
+    res_pin = rows[("oled", "OLED_SPI_RES")]
+    assert res_pin != "PA22", "接线表还是默认脚 = 页面与工程两套脚"
+    project = Path(body["output_dir"])
+    syscfg = (project / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
+    assert f'OLED_SPI.associatedPins[4].pin.$assign  = "{res_pin}"' in syscfg \
+        or f'OLED_SPI.associatedPins[4].pin.$assign = "{res_pin}"' in syscfg, (
+        "移过的脚必须真落进 syscfg"
+    )
+    assert 'DEBUG_UART.peripheral.rxPin.$assign = "PA22"' in syscfg, (
+        "让位的是 OLED 那一路（UART TX/RX 成对，留在原脚）"
+    )
+    # 工程 README 的接线表与页面同源（同一推导）
+    readme_map = {
+        (row["slug"], row["role_id"]): row["pin"]
+        for row in parse_pin_table(
+            (project / "README.md").read_text(encoding="utf-8")
+        ) or []
+    }
+    assert readme_map.get(("oled", "OLED_SPI_RES")) == res_pin, (
+        "页面接线表与工程 README 必须是同一组脚"
+    )
+
+
+def test_generate_endpoint_mspm0_adc_orphan_slot_no_longer_blocks(
+    real_library_client, tmp_path
+):
+    """选 adc（+ 只开串口）不再被「ADC12_0.adcPin7 角色未登记」挡下（缺陷 B）。
+
+    判据三层：① 能生成；② 那根脚不再占（让位成共读，撤掉落点行）；
+    ③ **本趟声明的槽位一根都没动**（adc 的 MEM0 = PA24 还在）。
+    """
+    client, _ = real_library_client
+    parent = tmp_path / "out"
+    parent.mkdir()
+    response = client.post(
+        "/api/hwcheck/generate",
+        json={"platform": PLATFORM_MSPM0, "debug_uart": True, "oled": False,
+              "devices": ["adc"], "parent_dir": str(parent)},
+    )
+    assert response.status_code == 200, response.text
+    project = Path(response.json()["output_dir"])
+    syscfg = (project / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
+    assert 'ADC12_0.peripheral.adcPin3.$assign = "PA24";' in syscfg, "adc 自己的槽位不动"
+    assert 'ADC12_0.peripheral.adcPin7.$assign = "PA22";' not in syscfg, (
+        "孤儿槽位不再占 PA22（撒落点行 + 与已声明槽位共读同一通道）"
+    )
+    assert 'ADC12_0.adcMem6chansel             = "DL_ADC12_INPUT_CHAN_3";' in syscfg
+    # 没撞上的孤儿槽位保持原样（少动是硬要求：adc 配方第二路读的 MEM1 仍指 PA26）
+    assert 'ADC12_0.peripheral.adcPin1.$assign  = "PA26";' in syscfg
+
+
+def test_preview_and_generate_agree_on_mspm0(real_library_client, tmp_path):
+    """预览与生成**判据一致**：能生成的形态两边都 200，装不下的两边都 400 且页面有出路。
+
+    旧行为「预览 200 → 点生成 400」正是本单要灭掉的那类分家：两个端点吃的是
+    `_hwcheck_view` 同一份判据（引脚消解 + 落盘冲突报告）。
+    """
+    client, _ = real_library_client
+    parent = tmp_path / "out"
+    parent.mkdir()
+    all_nine = ["led", "oled", "debug_uart", "key", "beep", "sr04", "jy61p",
+                "xunji", "ml_mpu6050"]
+    for devices in ([], ["adc"], all_nine):
+        payload = {"platform": PLATFORM_MSPM0, "debug_uart": True, "oled": True,
+                   "devices": devices}
+        preview = client.post("/api/hwcheck/preview", json=payload)
+        generate = client.post(
+            "/api/hwcheck/generate", json={**payload, "parent_dir": str(parent)}
+        )
+        assert preview.status_code == generate.status_code, (
+            devices, preview.status_code, generate.status_code
+        )
+        if preview.status_code == 400:
+            detail = preview.json()["detail"]
+            assert HWCHECK_PIN_EXIT_MARKER in detail, (
+                "拦下必须给出学生做得到的出口（不许只说「去引脚配置改绑」）"
+            )
+            assert "引脚配置里改绑上述角色" not in detail
 
 
 def test_recent_endpoint_lists_only_this_feature_projects(real_library_client, tmp_path):
@@ -1228,12 +1316,46 @@ def test_project_endpoint_restores_the_device_selection(real_library_client, tmp
     assert body["wiring"]["order"] == generated["wiring"]["order"]
 
 
-def test_project_endpoint_reports_mspm0_default_channel_conflict(
+def test_missing_platform_device_is_judged_by_both_endpoints(
     real_library_client, tmp_path
 ):
-    """默认双通道（mspm0）的 PA22 冲突：**生成之前**页面就能看见（工单 02 的 400 前置）。
+    """器件在本平台没有条目：预览 200 但**点名**该件，生成 400 说的是同一件事。
 
-    这条同时钉住"生成门禁与页面预警同判据"：生成会 400 报 PA22，页面预警也报 PA22。
+    这是「预览/生成判据一致」的**唯一**一处有意差异（都判"这一件在本平台测不了"，
+    只是 transport 不同）：预览必须留在 200——它还要把其余器件的接线表画出来，
+    而 `wiring.missing` 点名本来就是 200 级载荷（工单 module-hwcheck/03 明写
+    "点名，不静默省略"）。判据（两边点的是同一件、同一句理由）由本用例钉住，
+    免得日后被当成"预览通过 → 生成失败"的分家来回改。
+    """
+    client, _ = real_library_client
+    payload = {"platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
+               "devices": ["sr04"]}  # sr04 只有 mspm0 条目
+    preview = client.post("/api/hwcheck/preview", json=payload)
+    assert preview.status_code == 200, preview.text
+    missing = preview.json()["wiring"]["missing"]
+    assert [item["slug"] for item in missing] == ["sr04"]
+    assert "无本平台版本" in missing[0]["message"]
+
+    refused = client.post(
+        "/api/hwcheck/generate", json={**payload, "parent_dir": str(tmp_path)}
+    )
+    assert refused.status_code == 400, refused.text
+    detail = refused.json()["detail"]
+    assert "sr04" in detail and f"没有平台 {PLATFORM_STM32} 的版本条目" in detail, (
+        "生成侧说的必须是同一件事（同一件、同一句理由）"
+    )
+
+
+def test_project_endpoint_reports_mspm0_default_channel_resolution(
+    real_library_client, tmp_path
+):
+    """默认双通道（mspm0）的 PA22：**生成之前**页面就看得见"怎么解的"。
+
+    本用例替换掉旧用例 `..._reports_mspm0_default_channel_conflict`——旧判据是
+    「生成会 400 报 PA22、页面预警也报 PA22」（同判据、但两边都是坏消息）；
+    工单 hwcheck-pin-conflict-exit/01 之后同一条判据的正确形状是：**页面拿到的
+    是移过之后的脚 + 一句"动过哪根线"**，而"装不下"才 400（`test_preview_and_
+    generate_agree_on_mspm0` 覆盖）。
     """
     client, _ = real_library_client
     parent = tmp_path / "out"
@@ -1244,18 +1366,24 @@ def test_project_endpoint_reports_mspm0_default_channel_conflict(
               "parent_dir": str(parent)},
     ).json()
     assert generated["wiring"]["groups"] == []  # 只开灯：默认集没有同脚
-    conflict = client.post(
+    assert generated["wiring"]["pin_fixes"] == [], "没撞上就一根都不动"
+    preview = client.post(
         "/api/hwcheck/preview",
         json={"platform": PLATFORM_MSPM0, "debug_uart": True, "oled": True},
-    ).json()["wiring"]["groups"]
-    assert [g["pin"] for g in conflict if g["kind"] == "conflict"] == ["PA22"]
-    refused = client.post(
-        "/api/hwcheck/generate",
-        json={"platform": PLATFORM_MSPM0, "debug_uart": True, "oled": True,
-              "parent_dir": str(parent)},
     )
-    assert refused.status_code == 400
-    assert "PA22" in refused.json()["detail"], "页面预警与生成门禁报的是同一个脚"
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert [g["pin"] for g in body["wiring"]["groups"] if g["kind"] == "conflict"] == [], (
+        "移开之后页面不再报这条冲突"
+    )
+    fixes = body["wiring"]["pin_fixes"]
+    assert any("PA22" in line for line in fixes), fixes
+    # 回读那次"只开灯"的工程：没动过线 → pin_fixes 空（不制造出过事的错觉）
+    read_back = client.get(
+        "/api/hwcheck/project", params={"output_dir": generated["output_dir"]}
+    )
+    assert read_back.status_code == 200, read_back.text
+    assert read_back.json()["wiring"]["pin_fixes"] == []
 
 
 # ---------------------------------------------------------------------------

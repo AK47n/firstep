@@ -1242,14 +1242,19 @@ def _role_resource_keys(slug: str, decl: PinDeclaration, bound: BoardPin | None)
       I2C 总线按多挂语义单独判（_shared_groups 首分支），不依赖本键；
     - gpio_out / gpio_in：模块的 syscfg 实例集（INSTANCES_BY_SLUG）——
       同一器件/总线（HUIDU 灰度 8 路 / LED_BEEP / DC_MOTOR …）才能共用；
-    - 其余（pwm / enc / adc / spi …）= 空集：同脚即物理冲突（两路输出/两
-      个通道不可并——共用会短路或混线，除非两角色描述同一信号）。
+    - adc：模块的 syscfg 实例集（INSTANCES_BY_SLUG）——**薄封装共读同槽**
+      （工单 hwcheck-pin-conflict-exit/01）：adc / us016 / mq2 / mq3…ms1100
+      十几件按设计同读 ADC12_0 的 MEM0（PA24），同脚 = 同一物理通道同一信号，
+      属合法共享。不加这一支的实测后果：`auto_assign_bindings` 把它们当冲突
+      搬开——`us016.US016_OUT_CH0 → PB24`（等于悄悄换掉模拟输入脚）。
+    - 其余（pwm / enc / spi …）= 空集：同脚即物理冲突（两路输出/两个通道不可
+      并——共用会短路或混线，除非两角色描述同一信号）。
     """
     if bound is None:
         return set()
     if decl.type in ("uart_tx", "uart_rx", "i2c_scl", "i2c_sda"):
         return set(pin_capability_instances(bound, decl.type))
-    if decl.type in ("gpio_out", "gpio_in"):
+    if decl.type in ("gpio_out", "gpio_in", "adc"):
         return set(INSTANCES_BY_SLUG.get(slug, ()))
     return set()
 
@@ -1288,6 +1293,16 @@ def _shared_groups(
             common = set.intersection(*keysets) if keysets else set()
             if common and types & {"uart_tx", "uart_rx"}:
                 kind, reason = "share", "同一串口链路共享（共用同一 UART 实例）"
+            elif common and types == {"adc"}:
+                # 薄封装共读同槽（工单 hwcheck-pin-conflict-exit/01）：同一 ADC 实例
+                # 的两个 adc 角色落在同一脚 = 同一物理通道同一信号（us016/mq2 等
+                # 十几件按设计同读 MEM0），不是说"两根线接一起"。判 share 的**判据**
+                # 仍是上面的公共资源键（common），这里只挑一句更贴切的理由。
+                kind, reason = (
+                    "share",
+                    "同一 ADC 实例的通道（薄封装共读同槽：adc / us016 / mq2 等按"
+                    "设计同读一路模拟量）",
+                )
             elif common:
                 kind, reason = "share", "共用同一器件/总线（同一实例，共享合法）"
             else:

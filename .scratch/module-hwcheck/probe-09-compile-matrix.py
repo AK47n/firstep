@@ -14,10 +14,14 @@
 * **能生成 → 真编译**：判据 = passed 且 error=warning=0。通道形态按顺序试
   「只开串口 → 只开 OLED → 都不开」，取第一个能生成的——检测页两种通道都
   有各自的用途，矩阵要覆盖的是**配方**，不是通道组合。
-* **生成前就被拦下**：记进 `生成前拦下` 一节，**不算判红**（它不是配方的问题，
-  是母版默认脚布局 + 检测页没有引脚改绑入口的既有缺陷，已另开单）。同时逐格
-  记录**默认形态**（串口 + OLED 都开，就是检测页打开时的样子）能不能生成——
-  这一列是那条缺陷的直接证据。
+* **生成前就被拦下**：**分两类**（工单 hwcheck-pin-conflict-exit/01 起）——
+  ① **缺陷式拦下**：400 里没有检测页能执行的出路（学生按默认状态点生成，
+     拿到的是一句指向赛题页的话）。这一类记进 `生成前拦下` 一节，**算判红**。
+  ② **如实拦下**：400 带页面出路（被判据点名是哪些脚、哪几件、能怎么去掉）。
+     这一类记进 `如实拦下（页面已说明原因）` 一节，**不算判红**——板子真的装不下时，
+     拦下才是对的；判据是「有没有给学生做得到的话」，不是「能不能生成」。
+  同时逐格记录**默认形态**（串口 + OLED 都开，就是检测页打开时的样子）能不能生成
+  ——这一列是"检测页默认必 400"那条缺陷的直接证据。
 
 输出：probe-09-compile-matrix.txt + probe-09-buildlogs/ 下的原始日志。
 """
@@ -41,6 +45,7 @@ from contest_generator.compile_runner import (  # noqa: E402
     run_compile,
 )
 from contest_generator.config import AppConfig  # noqa: E402
+from contest_generator.hwcheck_board import HWCHECK_PIN_EXIT_MARKER  # noqa: E402
 from contest_generator.sse import SseEmitter  # noqa: E402
 from contest_generator.webapp import AppContext, create_app  # noqa: E402
 
@@ -113,11 +118,11 @@ def main() -> int:
         f"gmake：{make}",
         f"CCS 三件套：{ccs}",
         "",
-        "判据：能生成的那一格 → passed=True 且 error=warning=0；生成前被拦下的记进"
-        "「生成前拦下」一节（不算判红，另开单）。",
+        "判据：能生成的那一格 → passed=True 且 error=warning=0。被拦下的按**页面有没有"
+        "给出学生做得到的出路**分两类（工单 hwcheck-pin-conflict-exit/01）：有出路 = "
+        "「如实拦下」（板子真装不下，不算判红）；没有 = 「生成前拦下」（缺陷，算判红）。",
         "⚠ **逐格用的通道形态是「只串口 → 只 OLED → 都不开」里第一个能生成的那个**"
-        "（每行末尾记着它），与检测页默认的「两个都开」**不同**——默认形态在 mspm0 上"
-        "必 400（母版默认脚冲突，见下「生成前拦下」）。",
+        "（每行末尾记着它）；每行末尾另记检测页默认形态（串口 + OLED 都开）的状态。",
         "",
     ]
     missing = [name for name, tool in (("UV4", uv4), ("gmake", make)) if tool is None]
@@ -132,6 +137,7 @@ def main() -> int:
     compiled = 0
     failures = 0
     blocked: list[str] = []
+    honest: list[str] = []
     try:
         ctx = AppContext(
             config_path=root / "cfg" / "config.json",
@@ -151,6 +157,17 @@ def main() -> int:
                       "devices": list(devices), "parent_dir": str(root)},
             )
 
+        def preview(platform: str, devices: tuple[str, ...], uart: bool, oled: bool):
+            return client.post(
+                "/api/hwcheck/preview",
+                json={"platform": platform, "debug_uart": uart, "oled": oled,
+                      "devices": list(devices)},
+            )
+
+        def classify(note: str) -> str:
+            """拦下归哪一类：页面有没有给学生做得到的出路（本单的验收线）。"""
+            return "honest" if HWCHECK_PIN_EXIT_MARKER in note else "defect"
+
         for platform, label, devices in _CELLS:
             tool = uv4 if platform == "stm32" else make
             if tool is None:
@@ -161,16 +178,22 @@ def main() -> int:
                             else "默认双通道 400：" + _first_line(
                                 default_response.json().get("detail", ""))[:120])
             chosen = None
+            last_detail = ""
             for uart, oled in _CHANNELS:
                 response = generate(platform, devices, uart, oled)
                 if response.status_code == 200:
                     chosen = (uart, oled, response.json())
                     break
+                last_detail = str(response.json().get("detail", ""))
             if chosen is None:
-                blocked.append(
-                    f"[{platform}] {label}：三种通道形态都生成不了（{default_note}）"
-                )
-                lines.append(f"## [{platform}] {label}：**生成前拦下**（{default_note}）")
+                item = f"[{platform}] {label}：三种通道形态都生成不了（{default_note}）"
+                if classify(last_detail) == "honest":
+                    honest.append(item + f"；页面已说明：{HWCHECK_PIN_EXIT_MARKER}…")
+                    lines.append(f"## [{platform}] {label}：**如实拦下（页面已说明）**"
+                                 f"（{default_note}）")
+                else:
+                    blocked.append(item + "；400 里没有页面出路")
+                    lines.append(f"## [{platform}] {label}：**生成前拦下**（{default_note}）")
                 lines.append("")
                 continue
             uart, oled, payload = chosen
@@ -242,15 +265,41 @@ def main() -> int:
                 failures += 1
             lines.append("")
 
-        lines.append("## 生成前拦下（母版默认脚冲突 + 检测页没有引脚改绑入口——另开单）")
+        lines.append("## 生成前拦下（缺陷：400 里没有检测页能执行的出路）")
         if blocked:
             lines.extend(f"- {item}" for item in blocked)
         else:
             lines.append("- （无）")
         lines.append("")
+        lines.append("## 如实拦下（页面已说明原因，不算判红）")
+        if honest:
+            lines.extend(f"- {item}" for item in honest)
+        else:
+            lines.append("- （无）")
+        lines.append("")
+        # 预览 / 生成判据一致（工单 hwcheck-pin-conflict-exit/01 的验收线之一）：
+        # 同一形态两边状态码必须一样——"预览通过、点生成才失败"是这条单要灭的分家。
+        mismatches: list[str] = []
+        for platform, label, devices in _CELLS:
+            if (uv4 if platform == "stm32" else make) is None:
+                continue
+            p = preview(platform, devices, *_DEFAULT)
+            g = generate(platform, devices, *_DEFAULT)
+            if p.status_code != g.status_code:
+                mismatches.append(
+                    f"[{platform}] {label}：预览 {p.status_code} / 生成 {g.status_code}"
+                )
+        lines.append("## 预览 / 生成判据一致（默认形态逐格）")
+        if mismatches:
+            lines.extend(f"- {item}" for item in mismatches)
+            failures += len(mismatches)
+        else:
+            lines.append("- 全部一致（逐格两边同码）")
+        lines.append("")
         lines.append("## 结论")
         lines.append(
-            f"{compiled} 种形态真编译，判红 {failures} 种，生成前拦下 {len(blocked)} 种"
+            f"{compiled} 种形态真编译，判红 {failures} 种，生成前拦下 {len(blocked)} 种，"
+            f"如实拦下 {len(honest)} 种"
             f"（pilot {len(PILOT)} 格 + {len(_CELLS) - len(PILOT)} 格全选；每格用的通道形态见上文每行末尾）。"
             + ("真编译的部分全部 0 error / 0 warning。" if not failures else "**有形态不过。**")
         )

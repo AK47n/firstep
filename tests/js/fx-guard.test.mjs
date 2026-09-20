@@ -85,7 +85,7 @@ const DOMAINS = {
     hwcheckWiringErrorHTML: "fn", hwcheckWiringTableHTML: "fn",
     hwcheckPinGroupsHTML: "fn", hwcheckBoardSharesHTML: "fn",
     hwcheckOrderHTML: "fn", hwcheckOrderDesc: "fn",
-    hwcheckBoardState: "fn",
+    hwcheckBoardState: "fn", hwcheckPinFixHTML: "fn",
     hwcheckSectionsState: "fn", hwcheckSectionsHTML: "fn",
     hwcheckUnspecializedHTML: "fn", hwcheckSectionsEmptyHTML: "fn",
     hwcheckSectionPlanText: "fn", hwcheckSectionNoteHTML: "fn",
