@@ -12,32 +12,36 @@
 - 版本基准：线上清单顶层 version 为资料库版本（如 `v1.1.0`）；比较容忍
   `v` 前缀，任一侧非法 → 字符串比较 + 中文提示。
 
-HTTP 面（`_fetch_releases` / `_fetch_text`）用 urllib（标准库），测试注入
-假函数，不碰网络。
+HTTP 面与资产定位复用发布通道公共件（工单 release-channel-dedupe/01）：列表端点 / 取资产
+地址 / 找最新 release / 版本比较降级都住 `update.py`，本模块只留"资料库"特有的东西——
+`materials-` 前缀语义、批次差异载荷、基线缺失（`baseline-missing`）与中文文案。
+测试注入假函数，不碰网络。
 """
 
 from __future__ import annotations
 
 import json
-import urllib.error
-import urllib.request
 from pathlib import Path
 from typing import Any, Callable
 
 from .materials_pack import MANIFEST_FILENAME
 from .tool_root import find_tool_root
-from .update import compare_versions
+from .update import (
+    ERROR_BAD_MANIFEST,
+    ERROR_NETWORK,
+    ERROR_NO_RELEASE,
+    MATERIALS_TAG_PREFIX,
+    RELEASES_URL,
+    asset_url,
+    compare_versions_or_text,
+    http_json,
+    http_text,
+    latest_release,
+)
 
-GITHUB_API_BASE = "https://api.github.com"
-REPO = "AK47n/firstep"
-RELEASES_URL = f"{GITHUB_API_BASE}/repos/{REPO}/releases?per_page=30"
-
-MATERIALS_TAG_PREFIX = "materials-"
 MANIFEST_ASSET_SUFFIX = ".manifest.json"
 
-ERROR_NETWORK = "network"
-ERROR_NO_RELEASE = "no-release"
-ERROR_BAD_MANIFEST = "bad-manifest"
+# 资料库通道专有：本地缺基线（其余错误码与三条通道共用，住 update.py）
 ERROR_BASELINE_MISSING = "baseline-missing"
 
 MSG_NETWORK = "检查资料库更新失败（网络原因），请检查网络后重试"
@@ -51,28 +55,19 @@ MSG_BAD_VERSION = "资料库版本号格式异常，已按字符串比较，结�
 
 
 # ---------------------------------------------------------------------------
-# 线上数据获取（薄层，可注入）
+# 缺省 HTTP 面（委托壳）
 # ---------------------------------------------------------------------------
+# 实现（urllib / 请求头 / 超时 / UA）只在 update.py；这里留两个一行的壳，是**给端点与测试
+# 的注入缝**：`check_for_materials_update(fetch_json=None)` 走它们，端点的缺省路径与既有
+# 端点用例靠 patch 这两个名字替换网络（工单 release-channel-dedupe/01 保缝不改判据）。
 
 
 def _fetch_releases() -> list[dict[str, Any]]:
-    """GET GitHub releases 列表（per_page=30，最新在前）。"""
-    request = urllib.request.Request(
-        RELEASES_URL,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "firstep-materials-check",
-        },
-    )
-    with urllib.request.urlopen(request, timeout=15) as response:
-        return json.loads(response.read().decode("utf-8"))
+    return http_json(RELEASES_URL)
 
 
 def _fetch_text(url: str) -> str:
-    """GET 一个 URL 返回文本（清单资产）。"""
-    request = urllib.request.Request(url, headers={"User-Agent": "firstep-materials-check"})
-    with urllib.request.urlopen(request, timeout=15) as response:
-        return response.read().decode("utf-8")
+    return http_text(url)
 
 
 def materials_library_dir() -> Path:
@@ -113,39 +108,21 @@ def find_latest_materials_release(
 ) -> dict[str, Any] | None:
     """从 GitHub releases 列表找版本号最大的 `materials-` 前缀 release。
 
-    不依赖 API 返回顺序（GitHub 按创建时间排序，tag 乱序发版时首个匹配
-    未必最新）：过滤前缀 → 按 semver 比较选最大；非法版本号降级字符串
-    比较，仍无法比较 → 保留首个（API 惯例最新在前兜底）。
+    算法与降级兜底都在 `update.latest_release`（发布通道共用件）；本模块只提供
+    谓词（前缀）与**取版本串的方式**——资料库 tag 要先剥 `materials-` 前缀再比，
+    否则 `materials-v1.10.0` 会被字符串比较判成小于 `materials-v1.9.0`。
     """
-    candidates = [
-        r for r in releases
-        if str(r.get("tag_name") or "").startswith(MATERIALS_TAG_PREFIX)
-    ]
-    if not candidates:
-        return None
-    latest = candidates[0]
-    for release in candidates[1:]:
-        tag_a = _version_from_tag(str(latest.get("tag_name") or ""))
-        tag_b = _version_from_tag(str(release.get("tag_name") or ""))
-        cmp_val = compare_versions(tag_a, tag_b)
-        if cmp_val is None:
-            cmp_val = (tag_b > tag_a) - (tag_b < tag_a)
-        if cmp_val > 0:  # release 的版本比 latest 更大
-            latest = release
-    return latest
-
-
-def _asset_url(release: dict[str, Any], asset_name: str) -> str:
-    for asset in release.get("assets") or []:
-        if str(asset.get("name") or "") == asset_name:
-            return str(asset.get("browser_download_url") or "")
-    return ""
+    return latest_release(
+        releases,
+        lambda r: str(r.get("tag_name") or "").startswith(MATERIALS_TAG_PREFIX),
+        version_of=lambda r: _version_from_tag(str(r.get("tag_name") or "")),
+    )
 
 
 def _manifest_asset_url(release: dict[str, Any]) -> str:
     tag = str(release.get("tag_name") or "")
     version = tag[len(MATERIALS_TAG_PREFIX):]
-    return _asset_url(release, f"firstep-materials-{version}{MANIFEST_ASSET_SUFFIX}")
+    return asset_url(release, f"firstep-materials-{version}{MANIFEST_ASSET_SUFFIX}")
 
 
 def _version_from_tag(tag: str) -> str:
@@ -205,11 +182,8 @@ def check_for_materials_update(
 
     latest_version = _version_from_tag(str(release.get("tag_name") or ""))
     current_version = str(local.get("version") or "")
-    cmp = compare_versions(current_version, latest_version)
-    message = ""
-    if cmp is None:
-        cmp = (latest_version > current_version) - (latest_version < current_version)
-        message = MSG_BAD_VERSION
+    cmp, fell_back = compare_versions_or_text(current_version, latest_version)
+    message = MSG_BAD_VERSION if fell_back else ""
 
     local_batches = _batch_by_slug(local)
     online_batches = _batch_by_slug(online)
@@ -239,7 +213,7 @@ def check_for_materials_update(
         for part in parts:
             zip_name = str(part.get("zip_name") or "")
             parts_out.append({
-                "zip_url": _asset_url(release, zip_name),
+                "zip_url": asset_url(release, zip_name),
                 "size_bytes": int(part.get("size") or 0),
                 "sha256": str(part.get("sha256") or ""),
             })

@@ -1,0 +1,20 @@
+﻿== ① HEAD（收走前）的重复普查 ==
+ `_asset_url` 定义处：2（full_update.py, materials_update.py）
+ `_fetch_releases` / `_fetch_text` 定义处：1（materials_update.py）
+ `full_update` → `materials_update` 私有 import：1
+ 版本比较降级 idiom 出现次数：update.py=2，full_update.py=2，materials_update.py=2
+ 直接 import urllib 的模块：update.py, materials_update.py
+ 功能模块里各自定义的错误码字面量：['bad-manifest', 'baseline-missing', 'network', 'no-asset', 'no-release']
+
+== ② 同一套判据作用在 HEAD 上（应红）==
+  ✗ full_update.py: 机制自备（asset_url / 版本比较降级）
+  ✗ full_update.py: 又定义共享错误码 ['bad-manifest', 'network', 'no-asset', 'no-release']
+  ✗ materials_update.py: 机制自备（asset_url / 版本比较降级）
+  ✗ materials_update.py: 直接 import urllib
+  ✗ materials_update.py: 又定义共享错误码 ['bad-manifest', 'network', 'no-release']
+  ✗ full_update.py: import 了 materials_update
+
+== ③ 同一套判据作用在当前工作树上（应绿）==
+  （无违规）
+
+RED→GREEN 成立（红证 + 绿证同源）

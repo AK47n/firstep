@@ -14,8 +14,9 @@
   + 中文 `message`（不 500、不抛异常）；
 - 「已是最新」也保留分卷表：用户可能主动重下（修损坏 / 换机器）。
 
-HTTP 面复用 `materials_update` 的 fetch 实现（同一 GitHub 仓库、同一超时与
-UA 策略），测试注入假函数，不碰网络。
+HTTP 面与资产定位复用发布通道公共件（工单 release-channel-dedupe/01）：列表端点 / 取资产
+地址 / 找最新 release / 版本比较降级都住 `update.py`，本模块只留"完整包"特有的东西——
+清单资产名、分卷表解析、载荷形状与中文文案。测试注入假函数，不碰网络。
 """
 
 from __future__ import annotations
@@ -24,20 +25,25 @@ import json
 from pathlib import Path
 from typing import Any, Callable
 
-from .materials_update import _fetch_releases, _fetch_text
-from .update import compare_versions
+from .update import (
+    ERROR_BAD_MANIFEST,
+    ERROR_NETWORK,
+    ERROR_NO_ASSET,
+    ERROR_NO_RELEASE,
+    MATERIALS_TAG_PREFIX,
+    RELEASES_URL,
+    asset_url,
+    compare_versions_or_text,
+    http_json,
+    http_text,
+    latest_release,
+)
 
 FULL_MANIFEST_SUFFIX = ".manifest.json"
 FULL_ASSET_PREFIX = "firstep-full-"
-MATERIALS_TAG_PREFIX = "materials-"
 
 # 已装完整包标记（用户数据目录 updates/ 下，与 full-task.json 同级）
 INSTALLED_MARKER_FILENAME = "full-installed.json"
-
-ERROR_NETWORK = "network"
-ERROR_NO_RELEASE = "no-release"
-ERROR_NO_ASSET = "no-asset"
-ERROR_BAD_MANIFEST = "bad-manifest"
 
 REASON_OUTDATED = "outdated"
 REASON_UP_TO_DATE = "up-to-date"
@@ -47,6 +53,22 @@ MSG_NETWORK = "检查完整包更新失败（网络原因），请检查网络�
 MSG_NO_RELEASE = "还没有发布过完整包，请稍后再试"
 MSG_NO_ASSET = "该版本的 Release 上没有完整包资产，请联系发布者"
 MSG_BAD_MANIFEST = "完整包清单解析失败，请联系发布者"
+
+
+# ---------------------------------------------------------------------------
+# 缺省 HTTP 面（委托壳）
+# ---------------------------------------------------------------------------
+# 实现（urllib / 请求头 / 超时 / UA）只在 update.py；这里留两个一行的壳，是**给端点与测试
+# 的注入缝**：`check_for_full_update(fetch_json=None)` 走它们，端点的缺省路径与既有端点
+# 用例靠 patch 这两个名字替换网络（工单 release-channel-dedupe/01 保缝不改判据）。
+
+
+def _fetch_releases() -> list[dict[str, Any]]:
+    return http_json(RELEASES_URL)
+
+
+def _fetch_text(url: str) -> str:
+    return http_text(url)
 
 
 # ---------------------------------------------------------------------------
@@ -86,37 +108,21 @@ def _is_full_release(release: dict[str, Any]) -> bool:
 
 
 def find_latest_full_release(releases: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """releases 列表里版本最大的软件 Release（不依赖 API 顺序）。"""
-    candidates = [r for r in releases if _is_full_release(r)]
-    if not candidates:
-        return None
-    latest = candidates[0]
-    for release in candidates[1:]:
-        tag_a = str(latest.get("tag_name") or "")
-        tag_b = str(release.get("tag_name") or "")
-        cmp_val = compare_versions(tag_a, tag_b)
-        if cmp_val is None:  # 版本号非法 → 字符串比较兜底
-            cmp_val = (tag_b > tag_a) - (tag_b < tag_a)
-        if cmp_val > 0:
-            latest = release
-    return latest
+    """releases 列表里版本最大的软件 Release（不依赖 API 顺序）。
 
-
-def _asset_url(release: dict[str, Any], asset_name: str) -> str:
-    for asset in release.get("assets") or []:
-        if str(asset.get("name") or "") == asset_name:
-            return str(asset.get("browser_download_url") or "")
-    return ""
+    算法与降级兜底都在 `update.latest_release`（发布通道共用件）；本模块只提供谓词。
+    """
+    return latest_release(releases, _is_full_release)
 
 
 def _manifest_asset_url(release: dict[str, Any]) -> str:
     tag = str(release.get("tag_name") or "")
-    return _asset_url(release, full_manifest_asset_name(tag))
+    return asset_url(release, full_manifest_asset_name(tag))
 
 
 def resolve_part_url(release: dict[str, Any], zip_name: str) -> str:
     """分卷名 → 下载地址（Release 资产缺该名 → 空串，调用方按不可下处理）。"""
-    return _asset_url(release, zip_name)
+    return asset_url(release, zip_name)
 
 
 # ---------------------------------------------------------------------------
@@ -189,9 +195,9 @@ def check_for_full_update(
     `installed` = 本地已装完整包版本（None = 未知）。任何失败都返回 200 级
     契约 + 中文 message，绝不抛。
     """
-    from .materials_update import RELEASES_URL
-
     current = installed or ""
+    # 缺省 HTTP 面 = 委托壳 → update.py 的公共实现（同一 GitHub 仓库、同一超时策略）。
+    # 走壳而非直接调 http_json：端点的缺省路径与既有端点用例靠 patch `_fetch_*` 替换网络。
     if fetch_json is None:
         fetch_json = lambda url: _fetch_releases()  # noqa: E731
     if fetch_text is None:
@@ -260,9 +266,7 @@ def check_for_full_update(
             f"约 {total_bytes / 1024 / 1024:.0f} MB，可一键下载"
         )
     else:
-        cmp_val = compare_versions(current, tag)
-        if cmp_val is None:
-            cmp_val = (tag > current) - (tag < current)
+        cmp_val, _fell_back = compare_versions_or_text(current, tag)
         if cmp_val > 0:
             reason = REASON_OUTDATED
             update_available = True

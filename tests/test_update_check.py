@@ -21,6 +21,7 @@ from contest_generator.update import (
     MSG_NO_SHA,
     check_for_update,
     compare_versions,
+    compare_versions_or_text,
     is_stale_service,
     normalize_version,
     parse_sha256_text,
@@ -55,6 +56,27 @@ def test_compare_versions() -> None:
     assert compare_versions("v1.0.0", "1.1.0") == 1  # 容忍 v 前缀
     assert compare_versions("1.9.0", "1.10.0") == 1  # 数字比较非字符串
     assert compare_versions("1.0", "1.0.0") is None  # 非法 → None
+
+
+def test_compare_versions_or_text_keeps_raw_string_fallback() -> None:
+    """降级兜底按**传入的原样字符串**比较，不 normalize（工单 release-channel-dedupe/01 评审整改）。
+
+    三条通道历史上各自按自己传进来的形态比（`update` 传归一化后的 latest、`full_update`
+    传原始 tag、`materials_update` 传剥过 `materials-` 前缀的版本串）；统一 normalize 会
+    **把非法版本号下的判定方向翻过来**——本用例就是那条实证：
+    `("1.0-Release", "1.0-beta")` 原样比较是 1（有更新），归一化后会变成 -1（无更新）。
+    """
+    assert compare_versions_or_text("1.0.0", "1.1.0") == (1, False)
+    assert compare_versions_or_text("1.1.0", "1.0.0") == (-1, False)
+    assert compare_versions_or_text("1.0.0", "1.0.0") == (0, False)
+
+    # 非法 -> 降级，且方向按原样字符串（'R' < 'b'，故 latest 更大 = 1）
+    assert compare_versions_or_text("1.0-Release", "1.0-beta") == (1, True)
+    assert compare_versions_or_text("1.0-beta", "1.0-Release") == (-1, True)
+    # 任一侧非法即降级（"1.2" 不是三段 semver）：按原样字符串比——"1.10" < "1.2"（逐字符），
+    # 所以这里给 -1；这正是降级路径"结果仅供参考"的含义，也是老代码的行为（原样比，不 normalize）
+    assert compare_versions_or_text("1.2", "1.10") == (-1, True)
+    assert compare_versions_or_text("abc", "abd") == (1, True)
 
 
 def test_is_stale_service() -> None:
