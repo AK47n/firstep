@@ -28,8 +28,21 @@ UPDATE_PATH = SRC / "update.py"
 FULL_PATH = SRC / "full_update.py"
 MATERIALS_PATH = SRC / "materials_update.py"
 
-# 机制名 → 只许在 update.py 定义（其余模块只能 import 用）
-_SHARED_MECHANISMS = ("asset_url", "latest_release", "compare_versions_or_text", "http_json", "http_text")
+# 机制名 → 只许在 update.py 定义（其余模块只能 import 用）。
+# 含历史私有拼法 `_asset_url`：收走前两个功能模块定义的正是这个名字，
+# 只查公开名会让"把机制抄回去"这条判据**永不红**（工单 01 spec 轴评审抓到）。
+_SHARED_MECHANISMS = (
+    "asset_url",
+    "_asset_url",
+    "latest_release",
+    "compare_versions_or_text",
+    "http_json",
+    "http_text",
+)
+
+# 机制指纹（与命名无关）：取资产地址这件事只许在 update.py 里碰这个键。
+# 名字可以改（`_asset_url` / `find_url` / 内联），但"遍历 assets 取下载地址"必然读到它。
+_ASSET_LOOKUP_FINGERPRINT = "browser_download_url"
 
 # 通道区分字面量 → 同样只许在 update.py 定义
 # （完整包按它排除资料库 tag、资料库按它筛选、比较版本前还要剥它）
@@ -38,10 +51,14 @@ _SHARED_CONSTANTS = ("MATERIALS_TAG_PREFIX",)
 # 错误码：线上契约（前端按这些字符串分支）→ 字面量只许在 update.py 定义
 _SHARED_CODES = ("network", "no-asset", "no-release", "bad-manifest")
 
-_JS_ERROR_SWITCHES = (
-    REPO / "src" / "contest_generator" / "static" / "js" / "fx" / "update.js",
-    REPO / "src" / "contest_generator" / "static" / "js" / "fx" / "materials-update.js",
+_JS_ERROR_SWITCHES = tuple(
+    sorted((REPO / "src" / "contest_generator" / "static" / "js").rglob("*.js"))
 )
+
+
+def asset_lookup_sites(source: str) -> int:
+    """源码里"取资产下载地址"的指纹出现次数（机制与命名无关的判据）。"""
+    return source.count(_ASSET_LOOKUP_FINGERPRINT)
 
 
 # ---------------------------------------------------------------------------
@@ -104,8 +121,18 @@ def assigns_constant(source: str, name: str) -> bool:
 
 
 def js_error_literals(source: str) -> set[str]:
-    """前端按 `error` 码分支时写的字面量（`check.error === "network"`）。"""
-    return set(re.findall(r'\.error\s*===\s*"([^"]+)"', source))
+    """前端按 `error` 码分支时写的字面量。
+
+    覆盖三种真实写法（工单 01 spec 轴评审：只认 `.error === "…"` 太薄）：
+    ① `x.error == "code"` / `=== 'code'`（`==` 与两种引号都算）；
+    ② `switch (x.error) { case "code": … }`；
+    ③ 旧式的 `x["error"] === "code"`。
+    """
+    out = set(re.findall(r"""\.error\s*={2,3}\s*["']([^"']+)["']""", source))
+    out |= set(re.findall(r"""\[\s*["']error["']\s*\]\s*={2,3}\s*["']([^"']+)["']""", source))
+    for block in re.findall(r"switch\s*\([^)]*\.error[^)]*\)\s*\{(.*?)\n\s*\}", source, re.S):
+        out |= set(re.findall(r"""case\s*["']([^"']+)["']""", block))
+    return out
 
 
 def version_fallback_sites(source: str) -> int:
@@ -128,7 +155,11 @@ def test_shared_mechanisms_are_defined_only_in_update_module():
         source = path.read_text(encoding="utf-8")
         redefined = [name for name in _SHARED_MECHANISMS if defines_function(source, name)]
         assert not redefined, f"{path.name} 又定义了一份发布通道机制：{redefined}"
-        assert not imports_urllib(source), f"{path.name} 直接 import urllib（HTTP 实现应在 update.py）"
+        assert imports_urllib(source) is False, f"{path.name} 直接 import urllib（HTTP 实现应在 update.py）"
+        assert asset_lookup_sites(source) == 0, (
+            f"{path.name} 又自己取了一遍资产下载地址（机制与命名无关的指纹："
+            f"{_ASSET_LOOKUP_FINGERPRINT}）"
+        )
         dup_consts = [name for name in _SHARED_CONSTANTS if assigns_constant(source, name)]
         assert not dup_consts, f"{path.name} 又定义了一份通道区分字面量：{dup_consts}"
         # 形状型判据（正则数 idiom）：带合成红证，见 test_pin_is_not_vacuous
@@ -162,7 +193,11 @@ def test_error_codes_are_defined_once_and_are_the_same_objects():
 
 
 def test_frontend_error_switches_stay_inside_the_backend_codes():
-    """前端按 `error` 码分支的字面量必须都在后端声明的码集合内（跨语言契约对账）。"""
+    """前端按 `error` 码分支的字面量必须都在后端声明的码集合内（跨语言契约对账）。
+
+    扫**全前端 JS 树**（不只是两个更新面板）：今天只有那两个面板按 `error` 分支，
+    以后别的模块若引入自己的 error 词汇，这条会红——那正是"线上契约变了"该被看见的时刻。
+    """
     from contest_generator import materials_update as mu
     from contest_generator import update as up
 
@@ -171,9 +206,15 @@ def test_frontend_error_switches_stay_inside_the_backend_codes():
         getattr(up, name) for name in dir(up) if name.startswith("ERROR_")
     } | {mu.ERROR_BASELINE_MISSING}, "后端声明的错误码集合与预期不符（新增/改名要同步本守卫）"
 
+    seen_any = 0
     for path in _JS_ERROR_SWITCHES:
-        unknown = js_error_literals(path.read_text(encoding="utf-8")) - declared
+        literals = js_error_literals(path.read_text(encoding="utf-8"))
+        if not literals:
+            continue
+        seen_any += len(literals)
+        unknown = literals - declared
         assert not unknown, f"{path.name} 按未声明的 error 码分支：{sorted(unknown)}"
+    assert seen_any >= 4, f"前端 error 码分支只抽到 {seen_any} 处（抽取器或前端实现变了）"
 
 
 # ---------------------------------------------------------------------------
@@ -198,16 +239,25 @@ def test_pin_is_not_vacuous():
         'ERROR_NO_RELEASE = "no-release"\n'
     )
     assert defines_function(dup, "asset_url")
-    assert defines_function(dup, "latest_release")
+    # 历史私有拼法同样要认得（spec 轴评审：只查公开名会让这条判据对真重复名永不红）
+    assert defines_function('def _asset_url(release, name):\n    return ""\n', "_asset_url")
     assert imports_module(dup, "materials_update")
     assert assigns_constant(dup, "MATERIALS_TAG_PREFIX")
     assert defined_code_literals(dup) & set(_SHARED_CODES) == {"network", "no-release"}
     assert imports_urllib("import urllib.request\n") is True
+
+    # 机制指纹与命名无关：换个名字重写取址也抓得到
+    assert asset_lookup_sites('return asset.get("browser_download_url")') == 1
+    assert asset_lookup_sites('def find_url(r):\n    return r["assets"][0]["url"]') == 0  # 唯指纹可数
+    assert asset_lookup_sites("return asset_url(release, name)") == 0
 
     # 形状型判据的合成红证：把旧 idiom 写回去必须数得出来
     assert version_fallback_sites("cmp = (tag_b > tag_a) - (tag_b < tag_a)\n") == 1
     assert version_fallback_sites("return (b > a) - (b < a)\n") == 1
     assert version_fallback_sites("cmp = compare_versions_or_text(a, b)\n") == 0
 
-    # 前端写了个后端没声明的码 → 对账当场认出
-    assert js_error_literals('if (check.error === "no-realase") {}') == {"no-realase"}
+    # 前端三种写法的抽取红证：==、单引号、switch/case、下标式
+    assert js_error_literals('if (x.error == "no-realase") {}') == {"no-realase"}
+    assert js_error_literals("if (x.error === 'bad-manifest') {}") == {"bad-manifest"}
+    assert js_error_literals('switch (x.error) {\n  case "network":\n    break;\n}') == {"network"}
+    assert js_error_literals('if (x["error"] === "no-asset") {}') == {"no-asset"}

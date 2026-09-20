@@ -93,10 +93,11 @@
   本次**不改它们的断言**（只允许改 import 路径，若有必要）。先例：这三个文件本身就是契约测试。
 - **新增结构钉**（照 `tests/test_hwcheck_assembly_home.py` 与 `tests/test_llm_run.py` 的先例）：
   一份 `tests/test_release_channel_home.py`，判的是**边界与契约**（不是载荷行为）：
-  1. 机制与通道字面量只在 `update.py` 定义：`asset_url` / `latest_release` /
-     `compare_versions_or_text` / `http_json` / `http_text` 不在功能模块重新定义；
+  1. 机制与通道字面量只在 `update.py` 定义：`asset_url`（含历史私有拼法 `_asset_url`）/
+     `latest_release` / `compare_versions_or_text` / `http_json` / `http_text` 不在功能模块重新定义；
      `MATERIALS_TAG_PREFIX` 不在功能模块重新赋值；两个模块不 `import urllib`；
-     不再出现版本比较降级 idiom（形状型判据，带自己的合成红证）；
+     **机制指纹** `browser_download_url`（"遍历 assets 取下载地址"必然读到它，与命名无关）
+     不在功能模块出现；不再出现版本比较降级 idiom（形状型判据，带自己的合成红证）；
   2. `full_update` 不再 `from .materials_update import …`（跨功能私有依赖退场）；
   3. 两边导出的错误码与 `update.py` 的**同一对象**（`is` 判据，防重新定义漂移），
      列表端点 `RELEASES_URL` 同一个常量；
