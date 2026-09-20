@@ -1,0 +1,1462 @@
+{
+  "generated_by": "python tools/gen_pin_share_mirror.py —— 场景表在 tests/test_pin_share_mirror.py 的 CASES，期望值由后端 _shared_groups 现算",
+  "note": "期望值 [pin, role_key, kind] 由 Python 判据 _shared_groups 现算；JS 侧 pinShareClass 必须给出同一结论（只对账 kind，原因文案不进对拍）",
+  "boards": {
+    "mspm0": {
+      "platform": "mspm0",
+      "pins": [
+        {
+          "name": "PA1",
+          "capabilities": [
+            "gpio_out",
+            "gpio_in",
+            "enc",
+            "uart_rx:UART0",
+            "i2c_scl:I2C0",
+            "pwm:TIMA0_C1",
+            "pwm:TIMG8_C0"
+          ]
+        },
+        {
+          "name": "PB6",
+          "capabilities": [
+            "gpio_out",
+            "gpio_in",
+            "enc",
+            "uart_tx:UART1",
+            "spi_cs:SPI1_0",
+            "spi_cs:SPI0_1",
+            "pwm:TIMG8_C0",
+            "pwm:TIMA1_C0N",
+            "pwm:TIMG6_C0"
+          ]
+        },
+        {
+          "name": "PB7",
+          "capabilities": [
+            "gpio_out",
+            "gpio_in",
+            "enc",
+            "uart_rx:UART1",
+            "spi_miso:SPI1",
+            "spi_cs:SPI0_2",
+            "pwm:TIMG8_C1",
+            "pwm:TIMG6_C1",
+            "pwm:TIMA1_C1N"
+          ]
+        },
+        {
+          "name": "PA27",
+          "capabilities": [
+            "gpio_out",
+            "gpio_in",
+            "enc",
+            "pwm:TIMG7_C1",
+            "pwm:TIMG8_C1",
+            "adc:A0_0",
+            "spi_cs:SPI1_1"
+          ]
+        },
+        {
+          "name": "PA26",
+          "capabilities": [
+            "gpio_out",
+            "gpio_in",
+            "enc",
+            "pwm:TIMG7_C0",
+            "pwm:TIMG8_C0",
+            "adc:A0_1",
+            "spi_cs:SPI1_0",
+            "uart_tx:UART3"
+          ]
+        },
+        {
+          "name": "PA25",
+          "capabilities": [
+            "gpio_out",
+            "gpio_in",
+            "enc",
+            "pwm:TIMG12_C1",
+            "pwm:TIMA0_C3",
+            "pwm:TIMA0_C1N",
+            "adc:A0_2",
+            "spi_cs:SPI1_3",
+            "uart_rx:UART3"
+          ]
+        },
+        {
+          "name": "PA24",
+          "capabilities": [
+            "gpio_out",
+            "gpio_in",
+            "enc",
+            "pwm:TIMG7_C1",
+            "pwm:TIMA1_C1",
+            "pwm:TIMG0_C1",
+            "pwm:TIMA0_C3N",
+            "adc:A0_3",
+            "spi_cs:SPI0_2",
+            "uart_rx:UART2"
+          ]
+        },
+        {
+          "name": "PA23",
+          "capabilities": [
+            "gpio_out",
+            "gpio_in",
+            "enc",
+            "pwm:TIMG8_C0",
+            "pwm:TIMG7_C0",
+            "pwm:TIMG0_C0",
+            "pwm:TIMA0_C3",
+            "spi_cs:SPI0_3",
+            "uart_tx:UART2"
+          ]
+        },
+        {
+          "name": "PA22",
+          "capabilities": [
+            "gpio_out",
+            "gpio_in",
+            "enc",
+            "pwm:TIMG6_C1",
+            "pwm:TIMA0_C0N",
+            "pwm:TIMG8_C1",
+            "pwm:TIMA0_C1",
+            "adc:A0_7",
+            "uart_rx:UART2"
+          ]
+        }
+      ]
+    },
+    "stm32": {
+      "platform": "stm32",
+      "pins": [
+        {
+          "name": "PC13",
+          "capabilities": [
+            "i2c_scl",
+            "i2c_sda",
+            "gpio_out",
+            "gpio_in",
+            "exti:PC13",
+            "enc:13"
+          ]
+        },
+        {
+          "name": "PC14",
+          "capabilities": [
+            "i2c_scl",
+            "i2c_sda",
+            "gpio_out",
+            "gpio_in",
+            "exti:PC14",
+            "enc:14"
+          ]
+        },
+        {
+          "name": "PC15",
+          "capabilities": [
+            "i2c_scl",
+            "i2c_sda",
+            "gpio_out",
+            "gpio_in",
+            "exti:PC15",
+            "enc:15"
+          ]
+        },
+        {
+          "name": "PA6",
+          "capabilities": [
+            "i2c_scl",
+            "i2c_sda",
+            "gpio_out",
+            "gpio_in",
+            "pwm:TIM3_CH1",
+            "adc:ADC_Channel_6",
+            "exti:PA6",
+            "enc:6"
+          ]
+        },
+        {
+          "name": "PA7",
+          "capabilities": [
+            "i2c_scl",
+            "i2c_sda",
+            "gpio_out",
+            "gpio_in",
+            "pwm:TIM3_CH2",
+            "adc:ADC_Channel_7",
+            "exti:PA7",
+            "enc:7"
+          ]
+        },
+        {
+          "name": "PB10",
+          "capabilities": [
+            "i2c_scl",
+            "i2c_sda",
+            "gpio_out",
+            "gpio_in",
+            "uart_tx:UART_3",
+            "exti:PB10",
+            "enc:10"
+          ]
+        },
+        {
+          "name": "PB11",
+          "capabilities": [
+            "i2c_scl",
+            "i2c_sda",
+            "gpio_out",
+            "gpio_in",
+            "uart_rx:UART_3",
+            "exti:PB11",
+            "enc:11"
+          ]
+        },
+        {
+          "name": "PB7",
+          "capabilities": [
+            "i2c_scl",
+            "i2c_sda",
+            "gpio_out",
+            "gpio_in",
+            "pwm:TIM4_CH2",
+            "exti:PB7",
+            "enc:7"
+          ]
+        },
+        {
+          "name": "PB6",
+          "capabilities": [
+            "i2c_scl",
+            "i2c_sda",
+            "gpio_out",
+            "gpio_in",
+            "pwm:TIM4_CH1",
+            "exti:PB6",
+            "enc:6"
+          ]
+        },
+        {
+          "name": "PB3",
+          "capabilities": [
+            "i2c_scl",
+            "i2c_sda",
+            "gpio_out",
+            "gpio_in",
+            "exti:PB3",
+            "enc:3"
+          ]
+        },
+        {
+          "name": "PA15",
+          "capabilities": [
+            "i2c_scl",
+            "i2c_sda",
+            "gpio_out",
+            "gpio_in",
+            "exti:PA15",
+            "enc:15"
+          ]
+        },
+        {
+          "name": "PA8",
+          "capabilities": [
+            "i2c_scl",
+            "i2c_sda",
+            "gpio_out",
+            "gpio_in",
+            "exti:PA8",
+            "enc:8"
+          ]
+        },
+        {
+          "name": "PB15",
+          "capabilities": [
+            "i2c_scl",
+            "i2c_sda",
+            "gpio_out",
+            "gpio_in",
+            "exti:PB15",
+            "enc:15"
+          ]
+        },
+        {
+          "name": "PB14",
+          "capabilities": [
+            "i2c_scl",
+            "i2c_sda",
+            "gpio_out",
+            "gpio_in",
+            "exti:PB14",
+            "enc:14"
+          ]
+        },
+        {
+          "name": "PB13",
+          "capabilities": [
+            "i2c_scl",
+            "i2c_sda",
+            "gpio_out",
+            "gpio_in",
+            "exti:PB13",
+            "enc:13"
+          ]
+        },
+        {
+          "name": "PB12",
+          "capabilities": [
+            "i2c_scl",
+            "i2c_sda",
+            "gpio_out",
+            "gpio_in",
+            "exti:PB12",
+            "enc:12"
+          ]
+        }
+      ]
+    }
+  },
+  "cases": [
+    {
+      "name": "adc 共读同槽：adc + us016 默认同落 PA24（同一 ADC 实例）→ 共享",
+      "category": "share",
+      "platform": "mspm0",
+      "instances": {
+        "adc": [
+          "ADC12_0"
+        ],
+        "us016": [
+          "ADC12_0"
+        ]
+      },
+      "roles_by_pin": {
+        "PA24": [
+          {
+            "key": "adc.ADC_CH0",
+            "slug": "adc",
+            "type": "adc"
+          },
+          {
+            "key": "us016.US016_OUT_CH0",
+            "slug": "us016",
+            "type": "adc"
+          }
+        ]
+      },
+      "expected": [
+        [
+          "PA24",
+          "adc.ADC_CH0",
+          "share"
+        ],
+        [
+          "PA24",
+          "us016.US016_OUT_CH0",
+          "share"
+        ]
+      ]
+    },
+    {
+      "name": "adc 共读同槽三件（adc + us016 + mq2）→ 共享",
+      "category": "share",
+      "platform": "mspm0",
+      "instances": {
+        "adc": [
+          "ADC12_0"
+        ],
+        "us016": [
+          "ADC12_0"
+        ],
+        "mq2": [
+          "ADC12_0"
+        ]
+      },
+      "roles_by_pin": {
+        "PA24": [
+          {
+            "key": "adc.ADC_CH0",
+            "slug": "adc",
+            "type": "adc"
+          },
+          {
+            "key": "mq2.MQ2_AO_CH0",
+            "slug": "mq2",
+            "type": "adc"
+          },
+          {
+            "key": "us016.US016_OUT_CH0",
+            "slug": "us016",
+            "type": "adc"
+          }
+        ]
+      },
+      "expected": [
+        [
+          "PA24",
+          "adc.ADC_CH0",
+          "share"
+        ],
+        [
+          "PA24",
+          "mq2.MQ2_AO_CH0",
+          "share"
+        ],
+        [
+          "PA24",
+          "us016.US016_OUT_CH0",
+          "share"
+        ]
+      ]
+    },
+    {
+      "name": "uart 家族同实例：zigbee_uart + zigbee_link 共 PB10 → 共享",
+      "category": "share",
+      "platform": "stm32",
+      "instances": {
+        "zigbee_uart": [
+          "ZIGBEE_UART"
+        ],
+        "zigbee_link": [
+          "ZIGBEE_UART"
+        ]
+      },
+      "roles_by_pin": {
+        "PB10": [
+          {
+            "key": "zigbee_link.ZIGBEE_UART_TX",
+            "slug": "zigbee_link",
+            "type": "uart_tx"
+          },
+          {
+            "key": "zigbee_uart.ZIGBEE_UART_TX",
+            "slug": "zigbee_uart",
+            "type": "uart_tx"
+          }
+        ],
+        "PB11": [
+          {
+            "key": "zigbee_link.ZIGBEE_UART_RX",
+            "slug": "zigbee_link",
+            "type": "uart_rx"
+          },
+          {
+            "key": "zigbee_uart.ZIGBEE_UART_RX",
+            "slug": "zigbee_uart",
+            "type": "uart_rx"
+          }
+        ]
+      },
+      "expected": [
+        [
+          "PB10",
+          "zigbee_link.ZIGBEE_UART_TX",
+          "share"
+        ],
+        [
+          "PB10",
+          "zigbee_uart.ZIGBEE_UART_TX",
+          "share"
+        ],
+        [
+          "PB11",
+          "zigbee_link.ZIGBEE_UART_RX",
+          "share"
+        ],
+        [
+          "PB11",
+          "zigbee_uart.ZIGBEE_UART_RX",
+          "share"
+        ]
+      ]
+    },
+    {
+      "name": "同实例跨家族：zigbee_uart + zigbee_uart_key + ec01g 共 PB10 → 共享",
+      "category": "share",
+      "platform": "stm32",
+      "instances": {
+        "zigbee_uart": [
+          "ZIGBEE_UART"
+        ],
+        "zigbee_uart_key": [
+          "ZIGBEE_UART"
+        ]
+      },
+      "roles_by_pin": {
+        "PB10": [
+          {
+            "key": "ec01g.EC01G_TX",
+            "slug": "ec01g",
+            "type": "uart_tx"
+          },
+          {
+            "key": "zigbee_uart.ZIGBEE_UART_TX",
+            "slug": "zigbee_uart",
+            "type": "uart_tx"
+          },
+          {
+            "key": "zigbee_uart_key.ZIGBEE_UART_TX",
+            "slug": "zigbee_uart_key",
+            "type": "uart_tx"
+          }
+        ],
+        "PB11": [
+          {
+            "key": "ec01g.EC01G_RX",
+            "slug": "ec01g",
+            "type": "uart_rx"
+          },
+          {
+            "key": "zigbee_uart.ZIGBEE_UART_RX",
+            "slug": "zigbee_uart",
+            "type": "uart_rx"
+          },
+          {
+            "key": "zigbee_uart_key.ZIGBEE_UART_RX",
+            "slug": "zigbee_uart_key",
+            "type": "uart_rx"
+          }
+        ]
+      },
+      "expected": [
+        [
+          "PB10",
+          "ec01g.EC01G_TX",
+          "share"
+        ],
+        [
+          "PB10",
+          "zigbee_uart.ZIGBEE_UART_TX",
+          "share"
+        ],
+        [
+          "PB10",
+          "zigbee_uart_key.ZIGBEE_UART_TX",
+          "share"
+        ],
+        [
+          "PB11",
+          "ec01g.EC01G_RX",
+          "share"
+        ],
+        [
+          "PB11",
+          "zigbee_uart.ZIGBEE_UART_RX",
+          "share"
+        ],
+        [
+          "PB11",
+          "zigbee_uart_key.ZIGBEE_UART_RX",
+          "share"
+        ]
+      ]
+    },
+    {
+      "name": "I2C 总线多挂：aht10 + bh1750 共 PA6 → 共享",
+      "category": "share",
+      "platform": "stm32",
+      "instances": {
+        "aht10": [
+          "AHT10"
+        ],
+        "bh1750": [
+          "BH1750"
+        ]
+      },
+      "roles_by_pin": {
+        "PA6": [
+          {
+            "key": "aht10.AHT10_SCL",
+            "slug": "aht10",
+            "type": "i2c_scl"
+          },
+          {
+            "key": "bh1750.BH1750_SCL",
+            "slug": "bh1750",
+            "type": "i2c_scl"
+          }
+        ],
+        "PA7": [
+          {
+            "key": "aht10.AHT10_SDA",
+            "slug": "aht10",
+            "type": "i2c_sda"
+          },
+          {
+            "key": "bh1750.BH1750_SDA",
+            "slug": "bh1750",
+            "type": "i2c_sda"
+          }
+        ]
+      },
+      "expected": [
+        [
+          "PA6",
+          "aht10.AHT10_SCL",
+          "share"
+        ],
+        [
+          "PA6",
+          "bh1750.BH1750_SCL",
+          "share"
+        ],
+        [
+          "PA7",
+          "aht10.AHT10_SDA",
+          "share"
+        ],
+        [
+          "PA7",
+          "bh1750.BH1750_SDA",
+          "share"
+        ]
+      ]
+    },
+    {
+      "name": "gpio 位操作同器件实例：huidu + pid + xunji 共 PA24 → 共享",
+      "category": "share",
+      "platform": "mspm0",
+      "instances": {
+        "huidu": [
+          "HUIDU"
+        ],
+        "pid": [
+          "MOTOR_PID",
+          "HUIDU"
+        ],
+        "xunji": [
+          "HUIDU"
+        ]
+      },
+      "roles_by_pin": {
+        "PA22": [
+          {
+            "key": "huidu.L1",
+            "slug": "huidu",
+            "type": "gpio_in"
+          },
+          {
+            "key": "pid.GRAY_D1",
+            "slug": "pid",
+            "type": "gpio_in"
+          },
+          {
+            "key": "xunji.P3",
+            "slug": "xunji",
+            "type": "gpio_in"
+          }
+        ],
+        "PA23": [
+          {
+            "key": "huidu.L2",
+            "slug": "huidu",
+            "type": "gpio_in"
+          },
+          {
+            "key": "pid.GRAY_D2",
+            "slug": "pid",
+            "type": "gpio_in"
+          },
+          {
+            "key": "xunji.P2",
+            "slug": "xunji",
+            "type": "gpio_in"
+          }
+        ],
+        "PA24": [
+          {
+            "key": "huidu.L3",
+            "slug": "huidu",
+            "type": "gpio_in"
+          },
+          {
+            "key": "pid.GRAY_D3",
+            "slug": "pid",
+            "type": "gpio_in"
+          },
+          {
+            "key": "xunji.P1",
+            "slug": "xunji",
+            "type": "gpio_in"
+          }
+        ],
+        "PA25": [
+          {
+            "key": "huidu.L4",
+            "slug": "huidu",
+            "type": "gpio_in"
+          },
+          {
+            "key": "pid.GRAY_D4",
+            "slug": "pid",
+            "type": "gpio_in"
+          },
+          {
+            "key": "xunji.P6",
+            "slug": "xunji",
+            "type": "gpio_in"
+          }
+        ],
+        "PA26": [
+          {
+            "key": "huidu.R1",
+            "slug": "huidu",
+            "type": "gpio_in"
+          },
+          {
+            "key": "pid.GRAY_D5",
+            "slug": "pid",
+            "type": "gpio_in"
+          },
+          {
+            "key": "xunji.P4",
+            "slug": "xunji",
+            "type": "gpio_in"
+          }
+        ],
+        "PA27": [
+          {
+            "key": "huidu.R2",
+            "slug": "huidu",
+            "type": "gpio_in"
+          },
+          {
+            "key": "pid.GRAY_D6",
+            "slug": "pid",
+            "type": "gpio_in"
+          },
+          {
+            "key": "xunji.P5",
+            "slug": "xunji",
+            "type": "gpio_in"
+          }
+        ],
+        "PB6": [
+          {
+            "key": "huidu.R3",
+            "slug": "huidu",
+            "type": "gpio_in"
+          },
+          {
+            "key": "pid.GRAY_D7",
+            "slug": "pid",
+            "type": "gpio_in"
+          },
+          {
+            "key": "xunji.P7",
+            "slug": "xunji",
+            "type": "gpio_in"
+          }
+        ],
+        "PB7": [
+          {
+            "key": "huidu.R4",
+            "slug": "huidu",
+            "type": "gpio_in"
+          },
+          {
+            "key": "pid.GRAY_D8",
+            "slug": "pid",
+            "type": "gpio_in"
+          },
+          {
+            "key": "xunji.P8",
+            "slug": "xunji",
+            "type": "gpio_in"
+          }
+        ]
+      },
+      "expected": [
+        [
+          "PA22",
+          "huidu.L1",
+          "share"
+        ],
+        [
+          "PA22",
+          "pid.GRAY_D1",
+          "share"
+        ],
+        [
+          "PA22",
+          "xunji.P3",
+          "share"
+        ],
+        [
+          "PA23",
+          "huidu.L2",
+          "share"
+        ],
+        [
+          "PA23",
+          "pid.GRAY_D2",
+          "share"
+        ],
+        [
+          "PA23",
+          "xunji.P2",
+          "share"
+        ],
+        [
+          "PA24",
+          "huidu.L3",
+          "share"
+        ],
+        [
+          "PA24",
+          "pid.GRAY_D3",
+          "share"
+        ],
+        [
+          "PA24",
+          "xunji.P1",
+          "share"
+        ],
+        [
+          "PA25",
+          "huidu.L4",
+          "share"
+        ],
+        [
+          "PA25",
+          "pid.GRAY_D4",
+          "share"
+        ],
+        [
+          "PA25",
+          "xunji.P6",
+          "share"
+        ],
+        [
+          "PA26",
+          "huidu.R1",
+          "share"
+        ],
+        [
+          "PA26",
+          "pid.GRAY_D5",
+          "share"
+        ],
+        [
+          "PA26",
+          "xunji.P4",
+          "share"
+        ],
+        [
+          "PA27",
+          "huidu.R2",
+          "share"
+        ],
+        [
+          "PA27",
+          "pid.GRAY_D6",
+          "share"
+        ],
+        [
+          "PA27",
+          "xunji.P5",
+          "share"
+        ],
+        [
+          "PB6",
+          "huidu.R3",
+          "share"
+        ],
+        [
+          "PB6",
+          "pid.GRAY_D7",
+          "share"
+        ],
+        [
+          "PB6",
+          "xunji.P7",
+          "share"
+        ],
+        [
+          "PB7",
+          "huidu.R4",
+          "share"
+        ],
+        [
+          "PB7",
+          "pid.GRAY_D8",
+          "share"
+        ],
+        [
+          "PB7",
+          "xunji.P8",
+          "share"
+        ]
+      ]
+    },
+    {
+      "name": "混合同脚冲突（默认脚撞上）：灰度 D3 与 uwb_uart RX 同落 PA24 → 冲突",
+      "category": "conflict",
+      "platform": "mspm0",
+      "instances": {
+        "pid": [
+          "MOTOR_PID",
+          "HUIDU"
+        ],
+        "uwb_uart": [
+          "UWB_UART"
+        ]
+      },
+      "roles_by_pin": {
+        "PA22": [
+          {
+            "key": "pid.GRAY_D1",
+            "slug": "pid",
+            "type": "gpio_in"
+          }
+        ],
+        "PA23": [
+          {
+            "key": "pid.GRAY_D2",
+            "slug": "pid",
+            "type": "gpio_in"
+          },
+          {
+            "key": "uwb_uart.UWB_UART_TX",
+            "slug": "uwb_uart",
+            "type": "uart_tx"
+          }
+        ],
+        "PA24": [
+          {
+            "key": "pid.GRAY_D3",
+            "slug": "pid",
+            "type": "gpio_in"
+          },
+          {
+            "key": "uwb_uart.UWB_UART_RX",
+            "slug": "uwb_uart",
+            "type": "uart_rx"
+          }
+        ],
+        "PA25": [
+          {
+            "key": "pid.GRAY_D4",
+            "slug": "pid",
+            "type": "gpio_in"
+          }
+        ],
+        "PA26": [
+          {
+            "key": "pid.GRAY_D5",
+            "slug": "pid",
+            "type": "gpio_in"
+          }
+        ],
+        "PA27": [
+          {
+            "key": "pid.GRAY_D6",
+            "slug": "pid",
+            "type": "gpio_in"
+          }
+        ],
+        "PB6": [
+          {
+            "key": "pid.GRAY_D7",
+            "slug": "pid",
+            "type": "gpio_in"
+          }
+        ],
+        "PB7": [
+          {
+            "key": "pid.GRAY_D8",
+            "slug": "pid",
+            "type": "gpio_in"
+          }
+        ]
+      },
+      "expected": [
+        [
+          "PA23",
+          "pid.GRAY_D2",
+          "conflict"
+        ],
+        [
+          "PA23",
+          "uwb_uart.UWB_UART_TX",
+          "conflict"
+        ],
+        [
+          "PA24",
+          "pid.GRAY_D3",
+          "conflict"
+        ],
+        [
+          "PA24",
+          "uwb_uart.UWB_UART_RX",
+          "conflict"
+        ]
+      ]
+    },
+    {
+      "name": "不同外设同脚（绑定撞上）：ttp224 输出绑到 zigbee TX 的 PA26 → 冲突",
+      "category": "conflict",
+      "platform": "mspm0",
+      "instances": {
+        "ttp224": [
+          "TTP224"
+        ],
+        "zigbee_uart": [
+          "ZIGBEE_UART"
+        ],
+        "zigbee_uart_key": [
+          "ZIGBEE_UART"
+        ]
+      },
+      "roles_by_pin": {
+        "PA22": [
+          {
+            "key": "ttp224.TTP224_OUT1",
+            "slug": "ttp224",
+            "type": "gpio_in"
+          }
+        ],
+        "PA25": [
+          {
+            "key": "ttp224.TTP224_OUT2",
+            "slug": "ttp224",
+            "type": "gpio_in"
+          },
+          {
+            "key": "zigbee_uart.ZIGBEE_UART_RX",
+            "slug": "zigbee_uart",
+            "type": "uart_rx"
+          },
+          {
+            "key": "zigbee_uart_key.ZIGBEE_UART_RX",
+            "slug": "zigbee_uart_key",
+            "type": "uart_rx"
+          }
+        ],
+        "PA26": [
+          {
+            "key": "ttp224.TTP224_OUT3",
+            "slug": "ttp224",
+            "type": "gpio_in"
+          },
+          {
+            "key": "zigbee_uart.ZIGBEE_UART_TX",
+            "slug": "zigbee_uart",
+            "type": "uart_tx"
+          },
+          {
+            "key": "zigbee_uart_key.ZIGBEE_UART_TX",
+            "slug": "zigbee_uart_key",
+            "type": "uart_tx"
+          }
+        ],
+        "PA27": [
+          {
+            "key": "ttp224.TTP224_OUT4",
+            "slug": "ttp224",
+            "type": "gpio_in"
+          }
+        ]
+      },
+      "expected": [
+        [
+          "PA25",
+          "ttp224.TTP224_OUT2",
+          "conflict"
+        ],
+        [
+          "PA25",
+          "zigbee_uart.ZIGBEE_UART_RX",
+          "conflict"
+        ],
+        [
+          "PA25",
+          "zigbee_uart_key.ZIGBEE_UART_RX",
+          "conflict"
+        ],
+        [
+          "PA26",
+          "ttp224.TTP224_OUT3",
+          "conflict"
+        ],
+        [
+          "PA26",
+          "zigbee_uart.ZIGBEE_UART_TX",
+          "conflict"
+        ],
+        [
+          "PA26",
+          "zigbee_uart_key.ZIGBEE_UART_TX",
+          "conflict"
+        ]
+      ]
+    },
+    {
+      "name": "跨类型同脚（绑定撞上）：gp2y1014au 模拟量绑到 as32 TX 的 PA26 → 冲突",
+      "category": "conflict",
+      "platform": "mspm0",
+      "instances": {
+        "gp2y1014au": [
+          "ADC12_0",
+          "GP2Y1014"
+        ],
+        "as32": [
+          "AS32_UART"
+        ]
+      },
+      "roles_by_pin": {
+        "PA1": [
+          {
+            "key": "gp2y1014au.GP2Y1014_LED",
+            "slug": "gp2y1014au",
+            "type": "gpio_out"
+          }
+        ],
+        "PA25": [
+          {
+            "key": "as32.AS32_UART_RX",
+            "slug": "as32",
+            "type": "uart_rx"
+          }
+        ],
+        "PA26": [
+          {
+            "key": "as32.AS32_UART_TX",
+            "slug": "as32",
+            "type": "uart_tx"
+          },
+          {
+            "key": "gp2y1014au.GP2Y1014_AO_CH0",
+            "slug": "gp2y1014au",
+            "type": "adc"
+          }
+        ]
+      },
+      "expected": [
+        [
+          "PA26",
+          "as32.AS32_UART_TX",
+          "conflict"
+        ],
+        [
+          "PA26",
+          "gp2y1014au.GP2Y1014_AO_CH0",
+          "conflict"
+        ]
+      ]
+    },
+    {
+      "name": "跨类型同脚（绑定撞上）：key 输入绑到 zigbee TX 的 PB10 → 冲突",
+      "category": "conflict",
+      "platform": "stm32",
+      "instances": {
+        "key": [
+          "KEY"
+        ],
+        "zigbee_uart": [
+          "ZIGBEE_UART"
+        ]
+      },
+      "roles_by_pin": {
+        "PB10": [
+          {
+            "key": "key.KEY_START",
+            "slug": "key",
+            "type": "gpio_in"
+          },
+          {
+            "key": "zigbee_uart.ZIGBEE_UART_TX",
+            "slug": "zigbee_uart",
+            "type": "uart_tx"
+          }
+        ],
+        "PB11": [
+          {
+            "key": "zigbee_uart.ZIGBEE_UART_RX",
+            "slug": "zigbee_uart",
+            "type": "uart_rx"
+          }
+        ]
+      },
+      "expected": [
+        [
+          "PB10",
+          "key.KEY_START",
+          "conflict"
+        ],
+        [
+          "PB10",
+          "zigbee_uart.ZIGBEE_UART_TX",
+          "conflict"
+        ]
+      ]
+    },
+    {
+      "name": "同型实例交集为空（下发映射不含 gp2y1014au）→ 冲突，不是共享",
+      "category": "conflict",
+      "platform": "mspm0",
+      "instances": {
+        "adc": [
+          "ADC12_0"
+        ],
+        "gp2y1014au": [
+          "GP2Y1014"
+        ]
+      },
+      "roles_by_pin": {
+        "PA1": [
+          {
+            "key": "gp2y1014au.GP2Y1014_LED",
+            "slug": "gp2y1014au",
+            "type": "gpio_out"
+          }
+        ],
+        "PA24": [
+          {
+            "key": "adc.ADC_CH0",
+            "slug": "adc",
+            "type": "adc"
+          },
+          {
+            "key": "gp2y1014au.GP2Y1014_AO_CH0",
+            "slug": "gp2y1014au",
+            "type": "adc"
+          }
+        ]
+      },
+      "expected": [
+        [
+          "PA24",
+          "adc.ADC_CH0",
+          "conflict"
+        ],
+        [
+          "PA24",
+          "gp2y1014au.GP2Y1014_AO_CH0",
+          "conflict"
+        ]
+      ]
+    },
+    {
+      "name": "无资源键类型同脚：config 的 DIP 输入与 pid 灰度输入共 PB12 → 冲突",
+      "category": "conflict",
+      "platform": "stm32",
+      "instances": {
+        "pid": [
+          "MOTOR_PID",
+          "HUIDU"
+        ]
+      },
+      "roles_by_pin": {
+        "PA15": [
+          {
+            "key": "config.BUZZER",
+            "slug": "config",
+            "type": "gpio_out"
+          }
+        ],
+        "PA8": [
+          {
+            "key": "pid.GRAY_D5",
+            "slug": "pid",
+            "type": "gpio_in"
+          }
+        ],
+        "PB12": [
+          {
+            "key": "config.DIP0",
+            "slug": "config",
+            "type": "gpio_in"
+          },
+          {
+            "key": "pid.GRAY_D1",
+            "slug": "pid",
+            "type": "gpio_in"
+          }
+        ],
+        "PB13": [
+          {
+            "key": "config.DIP1",
+            "slug": "config",
+            "type": "gpio_in"
+          },
+          {
+            "key": "pid.GRAY_D2",
+            "slug": "pid",
+            "type": "gpio_in"
+          }
+        ],
+        "PB14": [
+          {
+            "key": "config.DIP2",
+            "slug": "config",
+            "type": "gpio_in"
+          },
+          {
+            "key": "pid.GRAY_D3",
+            "slug": "pid",
+            "type": "gpio_in"
+          }
+        ],
+        "PB15": [
+          {
+            "key": "config.DIP3",
+            "slug": "config",
+            "type": "gpio_in"
+          },
+          {
+            "key": "pid.GRAY_D4",
+            "slug": "pid",
+            "type": "gpio_in"
+          }
+        ],
+        "PB3": [
+          {
+            "key": "pid.GRAY_D6",
+            "slug": "pid",
+            "type": "gpio_in"
+          }
+        ],
+        "PB6": [
+          {
+            "key": "pid.GRAY_D7",
+            "slug": "pid",
+            "type": "gpio_in"
+          }
+        ],
+        "PB7": [
+          {
+            "key": "pid.GRAY_D8",
+            "slug": "pid",
+            "type": "gpio_in"
+          }
+        ],
+        "PC13": [
+          {
+            "key": "config.LED_RED",
+            "slug": "config",
+            "type": "gpio_out"
+          }
+        ],
+        "PC14": [
+          {
+            "key": "config.LED_YELLOW",
+            "slug": "config",
+            "type": "gpio_out"
+          }
+        ],
+        "PC15": [
+          {
+            "key": "config.LED_GREEN",
+            "slug": "config",
+            "type": "gpio_out"
+          }
+        ]
+      },
+      "expected": [
+        [
+          "PB12",
+          "config.DIP0",
+          "conflict"
+        ],
+        [
+          "PB12",
+          "pid.GRAY_D1",
+          "conflict"
+        ],
+        [
+          "PB13",
+          "config.DIP1",
+          "conflict"
+        ],
+        [
+          "PB13",
+          "pid.GRAY_D2",
+          "conflict"
+        ],
+        [
+          "PB14",
+          "config.DIP2",
+          "conflict"
+        ],
+        [
+          "PB14",
+          "pid.GRAY_D3",
+          "conflict"
+        ],
+        [
+          "PB15",
+          "config.DIP3",
+          "conflict"
+        ],
+        [
+          "PB15",
+          "pid.GRAY_D4",
+          "conflict"
+        ]
+      ]
+    },
+    {
+      "name": "两件 I2C 器件的 SCL/SDA 同落板外脚 PD0 → 两侧都不标注（不是「合法共享」）",
+      "category": "none",
+      "platform": "stm32",
+      "instances": {
+        "aht10": [
+          "AHT10"
+        ],
+        "bh1750": [
+          "BH1750"
+        ]
+      },
+      "roles_by_pin": {
+        "PD0": [
+          {
+            "key": "aht10.AHT10_SCL",
+            "slug": "aht10",
+            "type": "i2c_scl"
+          },
+          {
+            "key": "bh1750.BH1750_SCL",
+            "slug": "bh1750",
+            "type": "i2c_scl"
+          }
+        ],
+        "PD1": [
+          {
+            "key": "aht10.AHT10_SDA",
+            "slug": "aht10",
+            "type": "i2c_sda"
+          },
+          {
+            "key": "bh1750.BH1750_SDA",
+            "slug": "bh1750",
+            "type": "i2c_sda"
+          }
+        ]
+      },
+      "expected": []
+    },
+    {
+      "name": "单角色（无可比对象）→ 不标注",
+      "category": "none",
+      "platform": "mspm0",
+      "instances": {
+        "adc": [
+          "ADC12_0"
+        ]
+      },
+      "roles_by_pin": {
+        "PA24": [
+          {
+            "key": "adc.ADC_CH0",
+            "slug": "adc",
+            "type": "adc"
+          }
+        ]
+      },
+      "expected": []
+    }
+  ]
+}

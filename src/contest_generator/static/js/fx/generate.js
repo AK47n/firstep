@@ -76,32 +76,50 @@ export function collectBindings(selectedSlugs, bindings, instanceMap) {
 // pin_bindings._role_resource_keys / _shared_groups 同口径——同一 I2C 总线、
 // 同一 UART 实例、同一 syscfg 器件实例 = 合法共享；其余同脚 = 物理冲突。
 // 数据源：pinBoard.pins[].capabilities（uart/i2c 实例 token）+ state.module_instances
-// （gpio 的 syscfg 实例映射，来自 /api/state）。前端镜像此规则，判定结论与
+// （gpio/adc 的 syscfg 实例映射，来自 /api/state）。前端镜像此规则，判定结论与
 // /api/bindings/auto 的 shared[].kind 保持一致。
+//
+// 两份实现的结论由**跨语言对拍**守（工单 cross-lang-mirror-c5a/02，先例
+// group-choice-mirror）：场景表在 tests/test_pin_share_mirror.py，期望值由后端判据
+// 现算成 tests/js/pin-share-mirror.fixture.json，本文件的 pinShareClass 复算比对。
+// 只对账 kind，本文件的原因文案不进对拍。
 // ---------------------------------------------------------------------------
 
 /** 角色在指定引脚上的「物理资源键」集（无键 = 无法与任何角色合法共用）。 */
 export function pinRoleResourceKeys(role, pinName, pinBoard, instanceMap) {
   const t = role && role.decl && role.decl.type;
   if (!t) return [];
+  // 引脚不在板定义里 → 空集（与后端对板外脚直接跳过的口径一致：板外脚上的
+  // 重叠既非共享也非冲突，前端不该拿能力 token 去猜）
+  const pin = (pinBoard && pinBoard.pins || []).find((p) => p.name === pinName);
+  if (!pin) return [];
   if (["uart_tx", "uart_rx", "i2c_scl", "i2c_sda"].includes(t)) {
-    const pin = (pinBoard && pinBoard.pins || []).find((p) => p.name === pinName);
-    if (!pin) return [];
     const prefix = t + ":";
     return (pin.capabilities || [])
       .filter((c) => c.startsWith(prefix))
       .map((c) => c.slice(prefix.length));
   }
-  if (t === "gpio_out" || t === "gpio_in") {
+  // gpio_out / gpio_in / adc：模块的 syscfg 实例集——adc 与 gpio 同路
+  // （工单 cross-lang-mirror-c5a/02 修漂移）：同一 ADC 实例的模拟通道是**同一
+  // 物理信号**，adc / us016 / mq2 等十几件按设计共读 ADC12_0 的 MEM0（PA24）；
+  // 后端 _role_resource_keys 一直有这一支，前端此前漏了 → 判 conflict、角色行
+  // 打黄字「建议改线」，而那根脚改了就是另一条通路。
+  if (t === "gpio_out" || t === "gpio_in" || t === "adc") {
     return (instanceMap && instanceMap[role.slug]) || [];
   }
-  return [];  // pwm / enc / adc / spi …：同脚即冲突（两路输出/两通道不可并）
+  return [];  // pwm / enc / spi …：同脚即冲突（两路输出/两通道不可并）
 }
 
 /** 同脚多角色组分类：{kind: "share"|"conflict"|"none", reason}。 */
 export function pinShareClass(roles, pinName, pinBoard, instanceMap) {
   const list = (roles || []).filter(Boolean);
   if (list.length < 2) return { kind: "none", reason: "" };
+  // 板外脚不标注（与后端 _shared_groups 的 board.pin_index 门控同口径）：
+  // 排针没引出的脚上谈「共享/冲突」没意义。今天库数据下不可达（i2c/uart 角色的
+  // 默认脚全在板内），防御的是「软 I2C 默认脚落到板外」那类未来数据形态。
+  if (!((pinBoard && pinBoard.pins) || []).some((p) => p.name === pinName)) {
+    return { kind: "none", reason: "" };
+  }
   const types = list.map((r) => r.decl.type);
   if (types.every((t) => t === "i2c_scl" || t === "i2c_sda")) {
     return {
@@ -116,6 +134,14 @@ export function pinShareClass(roles, pinName, pinBoard, instanceMap) {
   if (common.length) {
     if (types.some((t) => t === "uart_tx" || t === "uart_rx")) {
       return { kind: "share", reason: "同一串口链路共享（共用同一 UART 实例）" };
+    }
+    if (types.every((t) => t === "adc")) {
+      // 判 share 的判据仍是上面的公共资源键，这里只挑一句更贴切的理由
+      // （与后端 _shared_groups 的 adc 分支同措辞）
+      return {
+        kind: "share",
+        reason: "同一 ADC 实例的通道（薄封装共读同槽：adc / us016 / mq2 等按设计同读一路模拟量）",
+      };
     }
     return { kind: "share", reason: "共用同一器件/总线（同一实例，共享合法）" };
   }
