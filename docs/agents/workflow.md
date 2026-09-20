@@ -120,19 +120,22 @@ Write one file per ticket under `.scratch/<feature-slug>/issues/<NN>-<slug>.md`,
 
 | 时机 | 谁 | 跑什么 |
 |---|---|---|
-| **push 之前**（本地） | `.githooks/pre-push` → `tools/prepush.py` | 按本次要推的改动选**关联子集**（改公共面模块 / 认不出的落点 / 推 tag → 整套）；**改动落在前端（`static/` 或 `tests/js/`）时另跑前端门禁** `node --test "tests/js/*.test.mjs"`（工单 module-hwcheck/01——pytest 面看不见那 1500+ 条前端用例）。测试红 → 拒推并点名失败用例 |
-| **push / PR 之后**（远端） | `.github/workflows/ci.yml` | windows-latest 跑全套 `pytest -n auto` + 同一条前端门禁；ubuntu-latest 跑发版自检（`tools/preflight.py`）+ 语言 / 编码 / 闸门自身用例。**不联网、不吃 secret** |
+| **push 之前**（本地） | `.githooks/pre-push` → `tools/prepush.py` | 按本次要推的改动选**关联子集**（改公共面模块 / 认不出的落点 / 推 tag → 整套）；**改动落在前端（`static/` 或 `tests/js/`）时另跑前端门禁** `node --test "tests/js/*.test.mjs"`（工单 module-hwcheck/01——pytest 面看不见那 1500+ 条前端用例）；**改动落在浏览器门禁的落点（`tests/browser/`、`static/js/ui/`、`static/index.html`、`static/js/app.js`）时再跑浏览器门禁** `node --test --test-concurrency=1 "tests/browser/*.spec.mjs"`（工单 ui-dom-contract-gate/03——26 条真浏览器 + 真后端用例，本机约 35–80 秒）。测试红 → 拒推并点名失败用例 |
+| **push / PR 之后**（远端） | `.github/workflows/ci.yml` | windows-latest 跑全套 `pytest -n auto` + 同一条前端门禁 + **独立 job `browser-suite`** 跑同一条浏览器门禁（要 `npm install` + `npx playwright install chromium`）；ubuntu-latest 跑发版自检（`tools/preflight.py`）+ 语言 / 编码 / 闸门自身用例。**测试不打网络、不吃 secret**（CI 装依赖当然要联网——两件事别混着读） |
 | **打 tag 之前**（发版） | `tools/preflight.ps1` | 三处版本号一致 / 母版 `.settings` 编码钉在库 / 下载文档一致性 / README 版本行 |
 
 用法与绕过：
 
 ```powershell
 python tools/prepush.py --changed <文件>        # 手动看会跑什么（--dry-run 只打印）
-python tools/prepush.py --full                  # 强制整套（pytest + 前端门禁）
-python tools/prepush.py --no-js                 # 明写跳过前端门禁一支（确知不需要时）
+python tools/prepush.py --full                  # 强制整套（pytest + 前端门禁 + 浏览器门禁）
+python tools/prepush.py --no-js                 # 明写跳过两支前端门禁（确知不需要时）
 node --test "tests/js/*.test.mjs"               # 只跑前端用例（glob 由 node 展开；
                                                 # 目录形式 `node --test tests/js` 在
                                                 # Node 24 上会把目录当模块解析而失败）
+node --test --test-concurrency=1 "tests/browser/*.spec.mjs"   # 只跑浏览器门禁（要
+                                                # npm install + npx playwright install chromium；
+                                                # 串行是刻意的：每个 spec 各起真后端 + 真 Chromium）
 FIRSTEP_PREPUSH=full git push                   # 临时整套；=off 跳过（不鼓励）；=select-only 只选择
 powershell -File tools\preflight.ps1            # 发版前一条命令
 ```

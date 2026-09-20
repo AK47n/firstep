@@ -260,5 +260,39 @@ UTF-8 stdout（原锚点版是崩在 GBK 编码上的）。第 7 节的两道候
   单落点决定、改了就是另一条通路。
 
 两条都在**闸门内**变红（pytest 面 + 前端 `node --test` 面，均已进 prepush 与 CI 的子集/整套）。
-C5 卡里的其余部分（ui 层测试缝、18 个 browser 用例接闸门、index.html 与 ui 的 id 耦合）仍挂账。
+
+## 13. C5 卡的剩余部分：ui 层测试缝 + browser 用例接闸门（2026-09-20，工单 ui-dom-contract-gate/01–05 已落地）
+
+同一份架构评审（`%TEMP%\architecture-review-20260920-1745.html`，副本已随工单入库
+`.scratch/ui-dom-contract-gate/`）的 C5 卡里，除了上面第 12 节那两条裸镜像，剩下的两件：
+
+- **ui 层第一次有了测试缝**（工单 02/04）。缝的位置 = **DOM**：模块绑哪些选择器、绑上之后用户
+  做一个动作会看到什么。**两层守卫**——① 静态健全性（`tests/js/ui-dom-contract.mjs` + 用例，
+  零依赖进前端门禁）：ui 里写死的 id 必须在页面真会出现的声明集合里（实测基线：声明 592 /
+  ui 引用 510 / **差集 0**），每个 ui 模块必须从 index.html 沿 import 图到得了、被 import 的
+  `init*` 必须有调用点；② 行为契约（`tests/browser/ui-contract.spec.mjs`，真页面 + 真后端）：
+  本轮 5 条 / 3 个模块（guide 子页签四态、step-state 折叠 + 记忆落盘 + 刷新生效、welcome
+  compact 行动路径 / 「不再显示」持久化 / 冷启动读记忆）。
+  两条判据各带红证（静态那层：判据纯函数 + 内存注入 7/7；行为那层：真源码注入 + 逐字节复原 4/4）。
+- **browser 用例接进闸门**（工单 01/03）。先修绿：HEAD 上实测是 **14 绿 7 红**（不是文档记的
+  6 绿 3 红），7 条红里 4 条是夹具让服务中途自杀的连锁假红、3 条真红**全不是产品缺陷**
+  （一条断言过期、一条抢跑、一条样本器件已被配方覆盖）。修法：夹具**不再设 `FIRSTEP_LAUNCHER`**、
+  端口改成**每个 spec 各向内核要一个空闲端口**（原固定 8791 在三个 spec 顺序跑时必然自踩）、
+  用例级隔离。然后接闸门：`tools/prepush.py` 新增与前端门禁**并列**的浏览器门禁，CI 新增
+  `browser-suite` job。现在四个 spec / **26 条**用例一条命令跑完（≈78s），改动落在
+  `tests/browser/`、`static/js/ui/`、`static/index.html`、`static/js/app.js` 时自动跑。
+
+**仍然挂账的三条（各自另立，别当已做）**：
+
+- **`index.html` 与 ui 的 id 耦合「改造」**：本轮只把它变成**可测的事实**（第一层守卫），
+  **没动标记结构**。真要去掉那 555 个 id 级别的耦合，是另一件事。
+- **把接线搬出 HTML（`js/boot.js` + 给 import 时接线的 ui 模块补显式 `init()`）**：
+  backlog 第 10 节那条，仍未立项（做完它，`static-import-guard` 与 `fx-guard` 的名字登记表
+  都可以退化成结构不变量）。
+- **产品侧「F5 重载慢过 1.5 秒会被应用自己关掉」的竞态**：本轮只在**夹具侧**绕开
+  （验收夹具不再设 `FIRSTEP_LAUNCHER`，服务生命周期归夹具）；真实用户按 F5 仍可能撞上，
+  要修得改 `webapp._schedule_exit_if_idle` 的退出判据并加产品侧用例 —— 未立项。
+
+另：C5 卡里「`ui/delivery.js` 的 window 挂桥」与「ui 模块 import 环」两条，前者第 10 节已记账、
+后者已有 `tests/js/ui-cycle.test.mjs` 守着，本轮未动。
 
