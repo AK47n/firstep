@@ -13,7 +13,8 @@
 // （生成一次还要真跑 UV4），不该让每次改前端都付这个成本；改动本栏目交互时手动跑。
 //
 // 假件：无。服务夹具（tests/browser/server.mjs）起的是**真后端**（真库真母版），
-// 端口 8791——不动用户默认的 8000。检测生成零 LLM，不花额度。
+// 端口由夹具自己向内核要一个空闲端口（工单 ui-dom-contract-gate/01 起不再固定 8791）
+// ——不动用户默认的 8000。检测生成零 LLM，不花额度。
 //
 // 隔离：生成父目录是本次的临时目录（不写用户桌面），跑完删掉。
 import test from "node:test";
@@ -42,6 +43,47 @@ test.after(async () => {
   if (browser) await browser.close();
   if (server) await server.stop();
   try { rmSync(parentDir, { recursive: true, force: true }); } catch { /* 临时目录 */ }
+});
+
+// clearDevices()：把器件集清空（**用例级隔离**，工单 ui-dom-contract-gate/01）。
+//
+// 为什么必须有：这些用例**共用一张页面**（`test.before` 开一次），前一条中途失败
+// （超时 / 断言红）会把它的器件留在选择集里，后一条就从"脏状态"开始——本机实测：
+// 「选上 MPU6050」超时后 ml_mpu6050 留下，紧接着「选上 led」变成两件同选 → 撞脚被
+// 如实拦下 → 面板不渲染 → 也 30s 超时。一条真红滚成两条，读的人会以为坏了两个地方。
+//
+// 用 `dispatchEvent` 而不是 `click()`：chip 容器每次选择变化后被整体重绘
+// （`box.innerHTML = …`），Playwright 的 click 会等"元素稳定"而重绘恰好让它永远
+// 不稳定（本文件下面那条用例的注释记着这个坑，实测卡满 30s）；事件委托挂在容器上，
+// 派发事件同样走真实的产品路径。
+async function clearDevices() {
+  const removed = await page.evaluate(() => {
+    const chips = [...document.querySelectorAll("#hwcheck-device-chips [data-remove]")];
+    for (const chip of chips) {
+      chip.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    }
+    return chips.map((c) => c.getAttribute("data-remove"));
+  });
+  if (!removed.length) return;
+  await page.waitForFunction(
+    () => document.querySelectorAll("#hwcheck-device-chips [data-remove]").length === 0,
+    undefined, { timeout: 10000 });
+}
+
+// 每条用例**收尾兜底**清一次（红了也清——`afterEach` 在用例失败后照样跑）。
+// 正常路径由用例自己清（"选择是活的"那些断言本来就要真点掉），这里只防**中途失败**：
+// 带着上一件的器件集进下一条，会把「撞脚被如实拦下」误读成"坏了两个地方"
+// （本机实测：「选上 MPU6050」超时后 ml_mpu6050 留下 → 紧接着「选上 led」也超时）。
+//
+// 机制说清楚（评审整改：原来那句"由清空 → 落盘保证"是错的）：`clearDevices` 点的是
+// 真的移除路径，选择集会随产品自己的防抖**异步落盘**；真正让下一条从干净集开始的，
+// 是**下一条 `openTab()` 的整页重载 + 服务端回读**——它读到的是落盘后的结果。
+// 所以这里不清 localStorage / 不等落盘，只要"点掉"这一步真的发出去了。
+test.afterEach(async () => {
+  if (!page || page.isClosed()) return;
+  try { await clearDevices(); } catch (e) { /* 清不干净不该掩盖真正的红：如实打一行 */
+    console.log(`[afterEach] 器件集未清干净：${e.message}`);
+  }
 });
 
 // openTab()：打开页面并切到硬件检测栏目（首帧 / 刷新后都用它）。
@@ -144,7 +186,7 @@ async function pickDevice(slug) {
   await page.click(`#hwcheck-device-grid [data-add="${slug}"]`);
 }
 
-test("选上 MPU6050：接线表带默认脚与板上共享注记、顺序把它排在最后、冲突预警标 ⚠", async () => {
+test("选上 MPU6050：接线表带默认脚与板上共享注记、顺序把它排在最后、默认脚撞脚已被解开", async () => {
   await openTab();
   await page.click('[data-hwcheck-platform="mspm0"]');
   await pickDevice("ml_mpu6050");
@@ -163,12 +205,36 @@ test("选上 MPU6050：接线表带默认脚与板上共享注记、顺序把它
   assert.ok(wiring.includes("板载共享") && wiring.includes("板载 LED 共用"),
     "板载 LED 同脚这条暗雷要如实呈现：\n" + wiring);
 
-  // 默认脚冲突：mspm0 默认双通道撞 PA22（工单 02 的生成 400 在页面上提前可见）
+  // 默认脚冲突：mspm0 默认双通道原撞 PA22（OLED_SPI_RES vs DEBUG_UART_RX）。
+  // **工单 hwcheck-pin-conflict-exit/01 之后这里不再是"预警"而是"已经解开"**：
+  // 检测页没有引脚配置入口，所以生成前自己跑与赛题页「自动配置」同一个求解器把
+  // 默认脚撞脚解开，并把动过的线如实打进载荷（`wiring.pin_fixes`）。
+  // 判据因此改成断言**新的正确行为**：冲突区说"没有抢同一个引脚"，接线表里
+  // OLED_SPI_RES 已落到 PA2、且写明"原 PA22 与 debug_uart.DEBUG_UART_RX 冲突，已自动移开"。
+  // （改动前的旧断言是等 `#hwcheck-conflicts` 里出现 PA22 —— 那条在求解器落地后
+  // 永远等不到，本机实测 30s 超时。）
   await page.waitForFunction(
-    () => document.querySelector("#hwcheck-conflicts").textContent.includes("PA22"));
+    () => document.querySelector("#hwcheck-conflicts").textContent.includes("没有两件模块抢同一个引脚"));
   const conflicts = await page.textContent("#hwcheck-conflicts");
-  assert.ok(conflicts.includes("引脚冲突") && conflicts.includes("PA22"),
-    "冲突预警应点名撞在一起的脚：\n" + conflicts);
+  assert.ok(conflicts.includes("没有两件模块抢同一个引脚"),
+    "默认脚冲突应已在生成前解开，冲突区该如实说没有冲突：\n" + conflicts);
+  // 解得开不等于没发生过：移走了哪根、为什么移，必须留在页面上。
+  //
+  // **判据要钉到那一格**（评审整改）：只查 `wiring.includes("PA2")` 是松的——
+  // `"PA24"` 里也含 `"PA2"`，脚被挪到 PA24（或在 PA2 / PA20 / PA24 之间漂）照样绿，
+  // 真正兜住判据的只剩 pin_fixes 那段文案。这里按**接线表的 DOM 契约**取：
+  // 模块格 `.slug` = oled、角色格 = OLED_SPI_RES 的那一行，它的引脚格必须是 PA2。
+  const resRow = page.locator("#hwcheck-wiring table.hwcheck-table tbody tr")
+    .filter({ has: page.locator('td .slug:text-is("oled")') })
+    .filter({ hasText: "OLED_SPI_RES" });
+  assert.equal(await resRow.count(), 1, "接线表里应有 oled · OLED_SPI_RES 那一行：\n" + wiring);
+  const resCells = await resRow.locator("td").allInnerTexts();
+  assert.equal(resCells[1], "OLED_SPI_RES", "该行第二格应是角色：\n" + resCells.join(" | "));
+  assert.equal(resCells[2], "PA2",
+    `求解器应把 OLED_SPI_RES 从 PA22 移到 PA2，实际引脚格是「${resCells[2]}」：\n`
+    + resCells.join(" | "));
+  assert.ok(wiring.includes("已自动移开") && wiring.includes("PA22"),
+    "求解器动过的线要如实写在接线表上（原脚 / 为什么）：\n" + wiring);
   // 板上自带的共享（板载 LED 与 I2C0 同脚）：同脚组看不见它，必须单独列出来
   // ——否则冲突区那句"没有抢同一个引脚"就是假安心（工单 03 评审整改）
   assert.ok(conflicts.includes("板上共享") && conflicts.includes("板载 LED 共用"),
@@ -200,8 +266,7 @@ test("本平台没有条目的器件：点名「无法检测」，不静默省�
   const missing = await page.textContent("#hwcheck-device-missing");
   assert.ok(missing.includes("sr04") && missing.includes("无本平台版本")
     && missing.includes("无法检测"), "缺条目要点名：\n" + missing);
-  // 去掉它，别把这份状态留给后面的用例
-  await page.click('#hwcheck-device-chips [data-remove="sr04"]');
+  // 去掉器件：件集由 afterEach 统一清（这里顺手清掉搜索框）
   await page.fill("#hwcheck-device-search", "");
 });
 
@@ -224,18 +289,25 @@ test("专精小节：选上 led 就在检测计划里出 [专精] 小节（未�
 
   // 未专精件（工单 07）：有平台条目但还没配方 → **出通用降级小节**（外观与专精件
   // 可区分：`.hwcheck-generic` 而不是 `.hwcheck-section`），并如实标「未专精」。
-  // ⚠ 样本是 `beep`，不能再用 ml_mpu6050：工单 05 起它已经专精了（本文件下面
-  // 有它自己的用例），拿它当"未专精"的样本会变成一条假红。
-  await page.fill("#hwcheck-device-search", "beep");
-  await page.waitForSelector('#hwcheck-device-grid [data-add="beep"]');
-  await page.click('#hwcheck-device-grid [data-add="beep"]');
+  //
+  // ⚠ 样本选择是这个用例最脆的一处（样本一旦被配方覆盖，断言就变成假红）：
+  //   · `ml_mpu6050` 从工单 05 起已专精 → 不能再用；
+  //   · `beep` 从工单 module-hwcheck/09（扩齐 pilot 配方，10 件 17 格）起也专精了
+  //     → 本条用例在 HEAD 上就是被它拖红的（本机实测 30s 超时，工单
+  //     ui-dom-contract-gate/01 定位并换样本）；
+  //   · 现在用 `photoresistance`（stm32 有条目、库内无配方，实测专精小节 0 / 通用小节 1）。
+  // 换样本的判据只有一条：**该器件在该平台没有 `hwcheck_recipes.json` 配方**。
+  const NO_RECIPE_DEVICE = "photoresistance";
+  await page.fill("#hwcheck-device-search", NO_RECIPE_DEVICE);
+  await page.waitForSelector(`#hwcheck-device-grid [data-add="${NO_RECIPE_DEVICE}"]`);
+  await page.click(`#hwcheck-device-grid [data-add="${NO_RECIPE_DEVICE}"]`);
   await page.waitForSelector("#hwcheck-sections .hwcheck-generic");
   const withUnspecialized = await page.textContent("#hwcheck-sections");
-  assert.ok(withUnspecialized.includes("beep"),
+  assert.ok(withUnspecialized.includes(NO_RECIPE_DEVICE),
     "没配方的件要点名：\n" + withUnspecialized);
   assert.ok(withUnspecialized.includes("未专精：只验总线和初始化"),
     "要点名「未专精」这句官方标注（与产物注释同一句）：\n" + withUnspecialized);
-  assert.ok(withUnspecialized.includes("beep_init()"),
+  assert.ok(withUnspecialized.includes(`${NO_RECIPE_DEVICE}_init()`),
     "要说清这一趟真做什么（无参初始化），不是一句走过场话术：\n" + withUnspecialized);
   assert.ok(withUnspecialized.includes("不算通过"),
     "通用件没有板上判定，必须明说「不算通过」：\n" + withUnspecialized);
@@ -252,7 +324,7 @@ test("专精小节：选上 led 就在检测计划里出 [专精] 小节（未�
   await page.dispatchEvent('#hwcheck-device-chips [data-remove="led"]', "click");
   await page.waitForFunction(
     () => !document.querySelector("#hwcheck-sections").textContent.includes("[专精] led"));
-  await page.dispatchEvent('#hwcheck-device-chips [data-remove="beep"]', "click");
+  await page.dispatchEvent(`#hwcheck-device-chips [data-remove="${NO_RECIPE_DEVICE}"]`, "click");
   await page.fill("#hwcheck-device-search", "");
 });
 

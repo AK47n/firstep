@@ -179,6 +179,28 @@ test("需求清单灰注（进了功能组的模块）+ 已选清单行：同样
   await modal(page).waitFor({ state: "detached" });
 
   // 已选清单行（xunji 的说明按钮在组卡里，已选清单走 ir_beam）
+  //
+  // **必须先等它渲染出来**（工单 ui-dom-contract-gate/01）：已选清单由推荐收尾的
+  // 异步渲染写入，上面那句只等了弹窗 detach——机器快的时候它还没写完，`count()` 直接
+  // 数到 0（本机与另两个 spec 连跑时实测命中：单跑该文件 9/9 绿、混跑这条红）。
+  // 判据要落在"渲染完成"这个事实上，不能靠"上一步耗时够久"兜。
+  //
+  // 超时**自己报现场**（列出清单里现在到底有什么）：不这么做的话，等超时后由下面的
+  // `count() === 0` 报出"已选清单行缺说明入口"，把人引向"产品少画了一个按钮"，
+  // 而实际原因多半是"还没渲染完 / 选择集不对"。
+  await page.waitForFunction(
+    () => document.querySelector('#selected-list [data-mod-info="ir_beam"]') !== null,
+    undefined, { timeout: 15000 }).catch(async () => {
+    const now = await page.evaluate(() => ({
+      text: (document.getElementById("selected-list") || {}).innerText || "（无 #selected-list）",
+      recChips: [...document.querySelectorAll("#rec-list .chip.rec")].map((c) => c.dataset.remove),
+    }));
+    assert.fail(
+      "等 15s 也没等到已选清单里的 ir_beam 说明入口——是渲染没完成或选择集不对，"
+      + `不是"产品少画了按钮"。现场：推荐 chip = [${now.recChips.join(", ")}]；`
+      + `已选清单 = ${JSON.stringify(now.text.slice(0, 400))}`
+    );
+  });
   const selectedBtn = page.locator('#selected-list [data-mod-info="ir_beam"]');
   assert.equal(await selectedBtn.count(), 1, "已选清单行缺说明入口");
   await selectedBtn.click();

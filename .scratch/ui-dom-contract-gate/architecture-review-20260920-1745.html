@@ -1,0 +1,918 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>架构评审 — firstep / 电赛工程生成器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose", flowchart: { curve: "basis" } });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 4 4; }
+      .leak { stroke: #dc2626; stroke-width: 2; }
+      .deep { background: linear-gradient(135deg, #0f172a, #1e293b); }
+      .lbl { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      pre.mermaid { font-size: 11px; }
+      .rule { border-left-width: 3px; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 antialiased">
+    <main class="max-w-6xl mx-auto px-6 py-12 space-y-12">
+      <!-- ============================== HEADER ============================== -->
+      <header class="space-y-5">
+        <div class="flex items-end justify-between gap-6 flex-wrap">
+          <div>
+            <p class="lbl text-slate-400">架构评审 · improve-codebase-architecture</p>
+            <h1 class="font-serif text-4xl mt-1">firstep · 电赛工程生成器</h1>
+            <p class="text-slate-500 mt-2 text-sm">
+              2,882 次提交 · 扫描面 = 最近 300 次提交的热点（<span class="mono">webapp.py</span> 19、
+              <span class="mono">index.html</span> 14、<span class="mono">llm.py</span> / hwcheck 族 8–10）
+              · 领域词表 <span class="mono">CONTEXT.md</span>（180 KB）· 16 篇 ADR
+            </p>
+          </div>
+          <div class="text-right text-xs text-slate-500 leading-6">
+            <div><span class="mono">src/contest_generator/</span> 98 个模块 · 前端 <span class="mono">js/</span> 130 个模块</div>
+            <div>Python 测试 219 文件 / 4,378 用例 · 前端 147 文件 / 1,596 用例</div>
+            <div>2026-09-20</div>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-600 bg-white border border-slate-200 rounded-lg px-4 py-3">
+          <span class="flex items-center gap-2"><span class="inline-block w-5 h-4 border-2 border-slate-700 bg-white"></span> module</span>
+          <span class="flex items-center gap-2"><svg width="30" height="8"><line x1="0" y1="4" x2="30" y2="4" stroke="#475569" stroke-width="2" class="seam"/></svg> seam</span>
+          <span class="flex items-center gap-2"><svg width="30" height="8"><line x1="0" y1="4" x2="30" y2="4" stroke="#dc2626" stroke-width="2"/></svg> leakage / 越缝</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-5 h-4 deep"></span> deep module（interface 小、implementation 厚）</span>
+        </div>
+
+        <p class="text-sm text-slate-600 max-w-3xl">
+          这个仓库的自我约束比多数项目强：判据单源（<span class="mono">product_file_reason</span>、<span class="mono">RULE_CATEGORIES</span>、
+          <span class="mono">GENERATION_GATES</span>）、结构守卫测试、ADR 逐条记「考虑过的方案」。所以下面七条都不是「判断重复」——
+          重复的判断这里基本已经收干净了；摩擦出现在 <b>interface 太宽</b>、<b>缝画在文件边界而不是概念边界</b>、
+          以及 <b>没有缝的地方靠 HTML 与约定在撑</b>（外加一条：73 个私有符号被测试翻墙，说明有 73 处缝的形状不对）。
+        </p>
+      </header>
+
+      <!-- ============================== CANDIDATES ============================== -->
+      <section id="candidates" class="space-y-12">
+
+        <!-- ==================== CARD 1 ==================== -->
+        <article id="c1" class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div class="px-6 pt-6 pb-4 border-b border-slate-100">
+            <div class="flex items-start justify-between gap-4 flex-wrap">
+              <h2 class="font-serif text-2xl">把 <span class="mono text-xl">LLM</span> 的 28 方法 interface 收成一条 workflow 缝</h2>
+              <div class="flex gap-2">
+                <span class="text-xs px-2.5 py-1 rounded-full bg-slate-200 text-slate-700 font-medium">Speculative · 复审已降级</span>
+                <span class="text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">in-process</span>
+              </div>
+            </div>
+            <p class="mono text-xs text-slate-500 mt-3 leading-6">
+              src/contest_generator/llm.py · selection.py · task_progress.py · hwcheck_triage.py · library.py · archive.py · tests/fakes.py
+            </p>
+            <div class="mt-3 rule border-red-400 bg-red-50 px-3 py-2 text-xs text-red-900">
+              <b>复审更正（本条原判 Strong，是错的）</b>：<span class="mono">llm.py</span> 近 <b>300 次提交只改过 1 次</b>
+              （近 1000 次 27 次，且基本集中在早期 LLM 功能建设期）—— 它是冻结区，不是活口。28 个方法也<b>不是"浅 interface"</b>：
+              它是宽端口，27/28 个方法共用同一条 <span class="mono">_retry_parse → _chat_once</span> 漏斗（implementation 已经厚），
+              单个调用方平均只碰 2–3 个方法。唯一站得住的残留是"提示词预算的 3 个私有名"（见
+              <a href="#c7" class="underline">C7</a>），顺手转公开即可，<b>不值得为它动 5,914 行</b>。
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-100">
+            <!-- BEFORE -->
+            <div class="p-6">
+              <p class="lbl text-slate-400 mb-3">Before</p>
+              <div class="flex items-end gap-6 h-[300px]">
+                <!-- mass diagram -->
+                <div class="flex items-end gap-3 h-full">
+                  <div class="flex flex-col justify-end h-full">
+                    <div class="text-[10px] text-slate-500 mb-1 text-center">interface</div>
+                    <div class="w-24 border-2 border-slate-700 bg-slate-100 flex items-end justify-center pb-1" style="height:44%">
+                      <span class="lbl text-slate-600">28 方法<br/>202 行</span>
+                    </div>
+                  </div>
+                  <div class="flex flex-col justify-end h-full">
+                    <div class="text-[10px] text-slate-500 mb-1 text-center">implementation</div>
+                    <div class="w-24 deep flex items-end justify-center pb-1" style="height:100%">
+                      <span class="lbl text-slate-200">5,914 行</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="flex-1 space-y-2 text-xs text-slate-600 pb-2">
+                  <p>Protocol 的宽度 = 调用方要学的全部：<b>28 个方法</b>，逐个绑在 <span class="mono">DeepSeekLLM</span>（1,865 行）、
+                    <span class="mono">RoutingLLM</span>（390 行）、<span class="mono">build_llm</span>、以及测试的
+                    <span class="mono">FakeLLM</span>（≈540 行）上。</p>
+                  <p class="text-slate-500">加一个 AI 功能 = 改 5 处。</p>
+                </div>
+              </div>
+              <div class="mt-4 rounded-lg border border-slate-200 bg-stone-50 p-3">
+                <pre class="mermaid">
+flowchart LR
+  S[selection.py] --> P
+  T[task_progress.py] --> P
+  W[webapp.py] --> P
+  H[hwcheck_triage.py] -.->|prompt 住在对面| P
+  X[其余 8 个模块] --> P
+  P[["LLM Protocol<br/>28 方法 / 202 行"]]
+  P --> D[DeepSeekLLM 1,865 行]
+  classDef leak stroke:#dc2626,stroke-width:2px;
+  class H leak
+                </pre>
+              </div>
+            </div>
+
+            <!-- AFTER -->
+            <div class="p-6">
+              <p class="lbl text-slate-400 mb-3">After</p>
+              <div class="flex items-end gap-6 h-[300px]">
+                <div class="flex items-end gap-3 h-full">
+                  <div class="flex flex-col justify-end h-full">
+                    <div class="text-[10px] text-slate-500 mb-1 text-center">interface</div>
+                    <div class="w-24 border-2 border-slate-700 bg-slate-100 flex items-end justify-center pb-1" style="height:8%">
+                      <span class="lbl text-slate-600">1 方法</span>
+                    </div>
+                  </div>
+                  <div class="flex flex-col justify-end h-full">
+                    <div class="text-[10px] text-slate-500 mb-1 text-center">implementation</div>
+                    <div class="w-24 deep flex items-end justify-center pb-1" style="height:100%">
+                      <span class="lbl text-slate-200">传输 / 重试 / 遥测<br/>/ 路由</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="flex-1 space-y-2 text-xs text-slate-600 pb-2">
+                  <p>提示词与解析回到<b>拥有这个功能的域模块</b>；<span class="mono">llm.py</span> 只留
+                    传输、重试退避、额度遥测、local/remote 路由。</p>
+                  <p class="text-slate-500">加一个 AI 功能 = 改 1 处 + 注册一行。</p>
+                </div>
+              </div>
+              <div class="mt-4 rounded-lg border border-slate-200 bg-stone-50 p-3">
+                <pre class="mermaid">
+flowchart LR
+  S[selection.py] --> WS[["workflow 声明<br/>系统提示词 + 组装 + 解析"]]
+  H[hwcheck_triage.py] --> WH[["本域 workflow"]]
+  WS --> L[["llm：传输 / 重试 / 遥测"]]
+  WH --> L
+                </pre>
+              </div>
+            </div>
+          </div>
+
+          <div class="px-6 py-5 border-t border-slate-100 grid md:grid-cols-2 gap-6">
+            <div>
+              <p class="lbl text-slate-400 mb-2">Problem</p>
+              <p class="text-sm text-slate-700">领域知识按技术层切开：<span class="mono">hwcheck_triage.py</span> 拿着领域，
+                它的提示词在 <span class="mono">llm.py:4913</span>——同一个功能的两个半边隔着 4,800 行。</p>
+            </div>
+            <div>
+              <p class="lbl text-slate-400 mb-2">Solution</p>
+              <p class="text-sm text-slate-700">让功能自己带自己的提示词与解析，<span class="mono">llm.py</span> 退成一条窄缝：
+                一次「带我这份输入去问，按我的约定解回来」。</p>
+            </div>
+          </div>
+
+          <div class="px-6 pb-6">
+            <p class="lbl text-slate-400 mb-2">Wins</p>
+            <ul class="grid sm:grid-cols-2 gap-x-8 gap-y-1.5 text-sm text-slate-700">
+              <li>· leverage：一条缝替 28 个方法</li>
+              <li>· locality：提示词、解析、领域同一处</li>
+              <li>· interface 收缩，重试与遥测留在 implementation</li>
+              <li>· 测试不必再从私有名翻墙（llm 占 19 个）</li>
+              <li>· FakeLLM 从 540 行缩到一个方法</li>
+              <li>· RoutingLLM 的 local/remote 名单按 workflow 名判</li>
+            </ul>
+            <p class="text-xs text-slate-500 mt-3">
+              证据：<span class="mono">llm.py</span> 5,914 行（Protocol L1635–1836 / 28 方法；<span class="mono">DeepSeekLLM</span>
+              L1974–3838 / 1,865 行）· 29 个 <span class="mono">*_SYSTEM_PROMPT</span> + 26 个
+              <span class="mono">_*_user_prompt</span> 构造器，<b>全包其余 33 个模块里 0 个</b> ·
+              传输漏斗 27/28 方法经 <span class="mono">_retry_parse</span> → <span class="mono">_chat_once</span>（265 行）·
+              协议调用点 31 处分布在 12 个模块，调用方只传领域对象
+            </p>
+            <p class="text-xs text-slate-500 mt-2">
+              另一侧的证词：测试直接 <span class="mono">from contest_generator.llm import _name</span> 的有
+              <b>19 个私有名</b>（<span class="mono">_fit_segment_wire</span> / <span class="mono">_wordlist_prompt_segment</span> /
+              <span class="mono">_unwrap_json_fence</span> …）—— 提示词拼段与预算这套真实现，唯一的入口是私有的。
+              全包 73 个私有符号被测试跨缝引入（见 <a href="#c7" class="underline">C7</a>）。
+            </p>
+          </div>
+        </article>
+
+        <!-- ==================== CARD 2 ==================== -->
+        <article id="c2" class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div class="px-6 pt-6 pb-4 border-b border-slate-100">
+            <div class="flex items-start justify-between gap-4 flex-wrap">
+              <h2 class="font-serif text-2xl">给 <span class="mono text-xl">create_app</span> 内部画缝：4,720 行、140 个闭包 handler</h2>
+              <div class="flex gap-2">
+                <span class="text-xs px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-medium">Strong</span>
+                <span class="text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">in-process</span>
+              </div>
+            </div>
+            <p class="mono text-xs text-slate-500 mt-3 leading-6">
+              src/contest_generator/webapp.py（6,286 行）· hwcheck.py · hwcheck_board.py · hwcheck_recipe.py · tests/test_webapp.py
+            </p>
+          </div>
+
+          <div class="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-100">
+            <!-- BEFORE -->
+            <div class="p-6">
+              <p class="lbl text-slate-400 mb-3">Before · 一个函数装下整个 HTTP 面</p>
+              <div class="relative h-[300px]">
+                <div class="absolute inset-y-0 left-0 w-40 border-2 border-slate-700 rounded-md flex flex-col overflow-hidden">
+                  <div class="bg-slate-800 text-white text-[10px] px-2 py-1 lbl">create_app(ctx)</div>
+                  <div class="flex-1 grid grid-cols-5 gap-px bg-slate-200 p-px overflow-hidden">
+                    <!-- 140 handler cells -->
+                    <div class="bg-white" title="handler"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div>
+                    <div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div>
+                    <div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div>
+                    <div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div>
+                    <div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div>
+                    <div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div>
+                    <div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div>
+                    <div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div>
+                    <div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div>
+                    <div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div>
+                    <div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div>
+                    <div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div>
+                    <div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div>
+                    <div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div><div class="bg-white"></div>
+                  </div>
+                  <div class="bg-slate-100 text-[9px] text-slate-600 px-2 py-1">140 handler · 176 嵌套 def</div>
+                </div>
+                <svg class="absolute inset-0 w-full h-full pointer-events-none">
+                  <line x1="164" y1="40" x2="190" y2="40" stroke="#475569" stroke-width="2" class="seam"/>
+                  <line x1="164" y1="150" x2="190" y2="150" stroke="#475569" stroke-width="2" class="seam"/>
+                  <line x1="164" y1="260" x2="190" y2="260" stroke="#475569" stroke-width="2" class="seam"/>
+                </svg>
+                <div class="absolute inset-y-0 left-[196px] right-0 flex flex-col gap-2">
+                  <div class="flex-1 border border-slate-300 rounded bg-stone-50 p-2">
+                    <p class="lbl text-slate-500">共享闭包 · 60 个 helper</p>
+                    <p class="text-[11px] text-slate-600 mt-1">ctx、_llm、_require_str、_generation_guard…<br/>
+                      谁都能调，谁调了看不出来</p>
+                  </div>
+                  <div class="border border-red-200 rounded bg-red-50 p-2">
+                    <p class="lbl text-red-600">域装配住在这里</p>
+                    <p class="text-[11px] text-slate-700 mt-1">hwcheck 面 <b>483 行</b>：<span class="mono">_hwcheck_view</span>(98)、
+                      <span class="mono">_hwcheck_recipes</span>(55)、<span class="mono">_hwcheck_master_syscfg</span>…</p>
+                  </div>
+                  <div class="border border-slate-300 rounded bg-stone-50 p-2">
+                    <p class="lbl text-slate-500">逐字重复</p>
+                    <p class="text-[11px] text-slate-600 mt-1"><span class="mono">_llm + RetryBudget + collector</span> 三件套 <b>20/140</b>；
+                      <span class="mono">add_completed</span> 24/140</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- AFTER -->
+            <div class="p-6">
+              <p class="lbl text-slate-400 mb-3">After · 按领域分册，装配回到域模块</p>
+              <div class="h-[300px] grid grid-cols-4 gap-2">
+                <div class="col-span-3 grid grid-cols-2 gap-2">
+                  <div class="border-2 border-slate-700 rounded p-2 flex flex-col">
+                    <p class="lbl text-slate-500">routes/hwcheck.py</p>
+                    <p class="text-[10px] text-slate-600 mt-1 mono">register(app, ctx)</p>
+                    <div class="flex-1 mt-2 bg-slate-800 rounded-sm"></div>
+                  </div>
+                  <div class="border-2 border-slate-700 rounded p-2 flex flex-col">
+                    <p class="lbl text-slate-500">routes/tasks.py</p>
+                    <p class="text-[10px] text-slate-600 mt-1 mono">register(app, ctx)</p>
+                    <div class="flex-1 mt-2 bg-slate-800 rounded-sm"></div>
+                  </div>
+                  <div class="border-2 border-slate-700 rounded p-2 flex flex-col">
+                    <p class="lbl text-slate-500">routes/code.py</p>
+                    <div class="flex-1 mt-2 bg-slate-800 rounded-sm"></div>
+                  </div>
+                  <div class="border-2 border-slate-700 rounded p-2 flex flex-col">
+                    <p class="lbl text-slate-500">routes/library.py</p>
+                    <p class="text-[10px] text-slate-500 mt-1">masters / topics / references / modules</p>
+                    <div class="flex-1 mt-2 bg-slate-800 rounded-sm"></div>
+                  </div>
+                  <div class="border-2 border-slate-700 rounded p-2 flex flex-col col-span-2">
+                    <p class="lbl text-slate-500">routes/update.py · routes/generate.py</p>
+                    <div class="flex-1 mt-2 bg-slate-800 rounded-sm"></div>
+                  </div>
+                </div>
+                <div class="flex flex-col gap-2">
+                  <div class="border border-slate-300 rounded bg-stone-50 p-2 flex-1">
+                    <p class="lbl text-slate-500">域 module 收下装配</p>
+                    <p class="text-[10px] text-slate-600 mt-1 mono">hwcheck_board<br/>hwcheck<br/>hwcheck_recipe</p>
+                    <p class="text-[10px] text-slate-500 mt-1">路径进 / 载荷出，<br/>不要 ctx</p>
+                  </div>
+                  <div class="border border-slate-300 rounded bg-stone-50 p-2">
+                    <p class="lbl text-slate-500">三件套一处</p>
+                    <p class="text-[10px] text-slate-600 mt-1 mono">ctx.llm_run(workflow)</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="px-6 py-5 border-t border-slate-100 grid md:grid-cols-2 gap-6">
+            <div>
+              <p class="lbl text-slate-400 mb-2">Problem</p>
+              <p class="text-sm text-slate-700">interface 只有一条（<span class="mono">create_app(ctx) → FastAPI</span>），
+                implementation 内部却一条缝也没有：140 个 handler 是同一个函数里的闭包，<span class="mono">context</span> 靠词法捕获，
+                一个 handler 真正依赖什么，读签名读不出来。</p>
+            </div>
+            <div>
+              <p class="lbl text-slate-400 mb-2">Solution</p>
+              <p class="text-sm text-slate-700">每个领域一册 route module（一册只拿 <span class="mono">app</span> 与
+                <span class="mono">ctx</span>），把属于领域的装配（检测页投影、接口清单、配方装载）搬回它的域 module；
+                20 处重复的 LLM 三件套收成一处。</p>
+            </div>
+          </div>
+
+          <div class="px-6 pb-6">
+            <p class="lbl text-slate-400 mb-2">Wins</p>
+            <ul class="grid sm:grid-cols-2 gap-x-8 gap-y-1.5 text-sm text-slate-700">
+              <li>· locality：一个功能的 HTTP 面与装配同册</li>
+              <li>· 检测页装配可脱离 TestClient 测</li>
+              <li>· 依赖写得出来（而不是"闭包里都有"）</li>
+              <li>· leverage：LLM 三件套一处，20 个调用点受益</li>
+              <li>· HTTP 面不动 → 4,378 个用例基本不重写</li>
+              <li>· 6,286 行的热文件降到若干百行册子</li>
+            </ul>
+            <p class="text-xs text-slate-500 mt-3">
+              证据：<span class="mono">create_app</span> L1492–6211 = 4,720 行（文件 75.1%）· 232 个函数定义 = 顶层 56 + 嵌套 176 ·
+              handler 中位 16 行（≤5 行 15 个 / &gt;40 行 34 个）· <span class="mono">@_map_errors</span> 133/140、
+              SSE 13/140 —— 这两条横切已经收好了，剩下的重复是校验（94/140）与 LLM 三件套（20/140）·
+              测试目前只能走 <span class="mono">create_app</span> + TestClient（59 / 57 处），域装配因此没有直接缝
+            </p>
+            <div class="mt-3 rule border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <b>要先处理的守卫</b>：<span class="mono">test_webapp.py:7291–7304</span> 用 AST 解析
+              <span class="mono">webapp.py</span> 源码，要求 <span class="mono">recommend</span> 路由"恰好一个且保持薄"——
+              它是<b>按文件文本</b>钉的形状。分册时这条要改成「按注册名唯一 + 行数上限」，否则它会把重构本身判红。
+            </div>
+          </div>
+        </article>
+
+        <!-- ==================== CARD 3 ==================== -->
+        <article id="c3" class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div class="px-6 pt-6 pb-4 border-b border-slate-100">
+            <div class="flex items-start justify-between gap-4 flex-wrap">
+              <h2 class="font-serif text-2xl">把装载清单从 <span class="mono text-xl">index.html</span> 搬进 module graph</h2>
+              <div class="flex gap-2">
+                <span class="text-xs px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-medium">Strong</span>
+                <span class="text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">in-process</span>
+              </div>
+            </div>
+            <p class="mono text-xs text-slate-500 mt-3 leading-6">
+              src/contest_generator/static/index.html（5,167 行）· js/app.js · js/ui/*.js · tests/js/fx-guard.test.mjs · tests/js/static-import-guard.test.mjs
+            </p>
+          </div>
+
+          <div class="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-100">
+            <!-- BEFORE -->
+            <div class="p-6">
+              <p class="lbl text-slate-400 mb-3">Before · 337 个名字，239 个是化石</p>
+              <div class="h-[300px] flex flex-col">
+                <div class="border-2 border-slate-700 rounded-md flex-1 flex flex-col overflow-hidden">
+                  <div class="bg-slate-800 text-white text-[10px] px-2 py-1 lbl">index.html &lt;script type="module"&gt; · 503 行</div>
+                  <div class="p-3 space-y-2 flex-1 overflow-hidden">
+                    <div class="flex items-stretch gap-2">
+                      <div class="w-24 shrink-0 text-[10px] text-slate-500 pt-1">69 条 import</div>
+                      <div class="flex-1 space-y-1">
+                        <div class="h-6 rounded bg-emerald-100 border border-emerald-300 flex items-center px-2 text-[10px] text-emerald-900">
+                          78 个名字真的在 host 体里用（46 个 ui init + 32 个其余）
+                        </div>
+                        <div class="h-8 rounded bg-red-100 border border-red-300 flex items-center px-2 text-[10px] text-red-900">
+                          187 个 fx 名字：一个都没用到 —— 改名 = 整页 SyntaxError
+                        </div>
+                        <div class="h-6 rounded bg-amber-100 border border-amber-300 flex items-center px-2 text-[10px] text-amber-900">
+                          52 个名字：同一行 import 里用了一半、剩一半
+                        </div>
+                        <div class="h-10 rounded bg-slate-100 border border-slate-300 flex items-center px-2 text-[10px] text-slate-700">
+                          7 个 ui 模块整条 import 一个名字都不用 →「import 只为加载模块」（顶层监听器绑定）
+                        </div>
+                      </div>
+                    </div>
+                    <div class="text-[10px] text-slate-500 pl-26">
+                      剩下的活：~40 个 <span class="mono">initXxx()</span> 调用 + <span class="mono">setClusterDeps / setOnStepChange / setSettingsDeps</span> 三处注入
+                    </div>
+                  </div>
+                </div>
+                <div class="mt-2 flex gap-2 text-[10px]">
+                  <div class="flex-1 border border-red-300 bg-red-50 rounded p-2 text-red-900">
+                    <b>2026-09-12 现场</b>：<span class="mono">fx/module.js</span> 删了一个导出、HTML 漏删 import → 整页脚本全灭；
+                    服务端 <span class="mono">/api/*</span> 全 200、静态资源全 200，「看起来像卡住」
+                  </div>
+                  <div class="w-40 border border-slate-300 bg-stone-50 rounded p-2 text-slate-700">
+                    为此养了两条守卫：<span class="mono">static-import-guard</span> + <span class="mono">fx-guard</span> 的 337 行名字登记表
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- AFTER -->
+            <div class="p-6">
+              <p class="lbl text-slate-400 mb-3">After · 接线是代码，不是标记</p>
+              <div class="h-[300px] flex flex-col">
+                <div class="border-2 border-slate-700 rounded-md overflow-hidden">
+                  <div class="bg-slate-800 text-white text-[10px] px-2 py-1 lbl">index.html</div>
+                  <div class="p-2 text-[11px] mono text-slate-600">&lt;script type="module" src="/js/boot.js"&gt;&lt;/script&gt;</div>
+                </div>
+                <svg height="26" class="w-full"><line x1="50%" y1="2" x2="50%" y2="24" stroke="#475569" stroke-width="2"/></svg>
+                <div class="border-2 border-slate-700 rounded-md flex-1 flex flex-col overflow-hidden">
+                  <div class="bg-slate-800 text-white text-[10px] px-2 py-1 lbl">js/boot.js · interface = boot()</div>
+                  <div class="p-3 grid grid-cols-2 gap-2 flex-1">
+                    <div class="border border-slate-300 rounded bg-stone-50 p-2">
+                      <p class="text-[10px] text-slate-600">import 清单回到 module graph：<br/>node 直接 import 它就能验证，坏名字在普通测试里红</p>
+                    </div>
+                    <div class="border border-slate-300 rounded bg-stone-50 p-2">
+                      <p class="text-[10px] text-slate-600">7 个副作用模块补显式 <span class="mono">init()</span><br/>→「import 即接线」退场</p>
+                    </div>
+                    <div class="border border-slate-300 rounded bg-stone-50 p-2 col-span-2">
+                      <p class="text-[10px] text-slate-600">337 行名字登记表 → 两条结构不变量：index.html 零 import / 零 function 定义；每个 fx 模块从 boot 可达</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="mt-2 border border-slate-200 rounded bg-white p-2 text-[10px] text-slate-500">
+                  fx / ui 的 130 个模块不动 —— 只把「谁装载谁、按什么顺序 init」这条知识从标记里挪回 JS
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="px-6 py-5 border-t border-slate-100 grid md:grid-cols-2 gap-6">
+            <div>
+              <p class="lbl text-slate-400 mb-2">Problem</p>
+              <p class="text-sm text-slate-700">模块边界写在 HTML 里：69 条 import、337 个名字，其中 239 个从不使用；
+                而删掉其中一个名字的代价是整页死 —— 一个只影响"装载"的改动，失败模式却是全局的。</p>
+            </div>
+            <div>
+              <p class="lbl text-slate-400 mb-2">Solution</p>
+              <p class="text-sm text-slate-700">接线住进一个 module（<span class="mono">js/boot.js</span>），HTML 只留一条 import；
+                副作用加载的 7 个 ui 模块给回显式入口。</p>
+            </div>
+          </div>
+
+          <div class="px-6 pb-6">
+            <p class="lbl text-slate-400 mb-2">Wins</p>
+            <ul class="grid sm:grid-cols-2 gap-x-8 gap-y-1.5 text-sm text-slate-700">
+              <li>· 死导入在测试里大声失败，不再靠守卫补网</li>
+              <li>· 一个导出的存在性从三处收成一处</li>
+              <li>· 装载顺序从"标记里的行序"变成代码</li>
+              <li>· module 边界回到 module graph 里可读</li>
+              <li>· 239 个化石名字退场，改名不再牵动 HTML</li>
+              <li>· 删掉整页致死的失败模式</li>
+            </ul>
+            <div class="mt-3 rule border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <b>复审更正（严重度）</b>：import 清单在近 300 次提交里只动过 <b>+3/−1 行</b> —— 它不是持续增长的税，
+              而是 ES 模块化迁移留下的<b>冻结产物</b>（同一窗口 index.html 的真实改动是 ±326 行 UI）。
+              真正在交的税是 <span class="mono">fx-guard</span> 的名字登记（300 次提交里 11 次改动、共 +41 个注册名），
+              以及"一个导出的存在性写在三处"（模块 / DOMAINS 表 / HTML import）——错一处就是整页死。
+              <b>因此第一刀不是 boot.js，而是删掉那 187 个零引用的 fx 名字</b>：不动装配、不动 ui，
+              把"改名即整页死"的面从 337 个名字缩到 78 个真在用的名字。
+            </div>
+            <p class="text-xs text-slate-500 mt-3">
+              证据（实测抽取 host 块）：503 行脚本 = 69 条 import + 337 个名字 + 166 行非 import 正文 ·
+              187 个 fx 名字零引用（<span class="mono">fx/module.js</span> 27、<span class="mono">fx/pdf.js</span> 19、
+              <span class="mono">fx/topic.js</span> 16…）· 7 个 ui 模块整条 import 零使用 · 10 个 ui 模块在列 0 处直接操作
+              <span class="mono">document/window</span>（import 时接线）· <span class="mono">fx-guard</span> 登记表 337 行 /
+              约 400 个名字，每迁移一批就要手改
+            </p>
+          </div>
+        </article>
+
+        <!-- ==================== CARD 4 ==================== -->
+        <article id="c4" class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div class="px-6 pt-6 pb-4 border-b border-slate-100">
+            <div class="flex items-start justify-between gap-4 flex-wrap">
+              <h2 class="font-serif text-2xl">发布通道：三份 check 实现，和一条已经越过的私有缝</h2>
+              <div class="flex gap-2">
+                <span class="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 font-medium">Worth exploring</span>
+                <span class="text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">ports &amp; adapters</span>
+              </div>
+            </div>
+            <p class="mono text-xs text-slate-500 mt-3 leading-6">
+              src/contest_generator/full_update.py · materials_update.py · update.py · full_task.py · materials_task.py · tools/update-app.py
+            </p>
+          </div>
+
+          <div class="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-100">
+            <div class="p-6">
+              <p class="lbl text-slate-400 mb-3">Before · 同一条「找 release、取资产」写了两遍</p>
+              <div class="h-[300px] rounded-lg border border-slate-200 bg-stone-50 p-3">
+                <pre class="mermaid">
+flowchart TB
+  subgraph FC[完整包]
+    A[full_update.py] --> A1["_asset_url (L105)"]
+    A --> A2["_manifest_asset_url (L112)"]
+    A --> A3["_response (L127)"]
+    A --> A4["ERROR_* / MSG_*"]
+  end
+  subgraph MC[资料库]
+    B[materials_update.py] --> B1["_asset_url (L138)"]
+    B --> B2["_manifest_asset_url (L145)"]
+    B --> B3["_response (L283)"]
+    B --> B4["ERROR_* / MSG_*"]
+  end
+  A ==>|"import 私有名 (L27)"| B
+  U[update.py 第三份 check] --> V[tools/update-app.py 508 行]
+  classDef leak stroke:#dc2626,stroke-width:2px;
+  class A,B leak
+                </pre>
+                <p class="text-[10px] text-slate-600 mt-1">
+                  相同的：按名取资产 · 取版本最大者（非法版本号降级字符串比较，兜底式
+                  <span class="mono">(b&gt;a)-(a&lt;b)</span> 出现 3 次：full_update L99 / L265、materials_update L132）· 200 级错误契约
+                </p>
+              </div>
+            </div>
+            <div class="p-6">
+              <p class="lbl text-slate-400 mb-3">After · 一条通道，三个载荷 adapter</p>
+              <div class="h-[300px] rounded-lg border border-slate-200 bg-stone-50 p-3">
+                <pre class="mermaid">
+flowchart TB
+  R[["release channel module<br/>找最新 release · 按名取资产 · 检查结果形状"]]
+  FA[完整包载荷 adapter] --> R
+  MA[资料库载荷 adapter] --> R
+  UA[小发版载荷 adapter] --> R
+  R --> GH[GitHub releases]
+  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
+  class R deep
+                </pre>
+                <p class="text-[10px] text-slate-600 mt-1">
+                  三份载荷形状<b>继续各不相同</b>——差异是真的（分卷表 / 批次差异 / 小发版资产）。
+                  变的只是"怎么找到它、怎么取它、怎么报错"。
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="px-6 py-5 border-t border-slate-100 grid md:grid-cols-2 gap-6">
+            <div>
+              <p class="lbl text-slate-400 mb-2">Problem</p>
+              <p class="text-sm text-slate-700">两个模块已经是同一个模块：<span class="mono">full_update.py:27</span> 直接
+                <span class="mono">from .materials_update import _fetch_releases, _fetch_text</span>（还有函数内的
+                <span class="mono">RELEASES_URL</span>）—— 缝早就被越过，只是没人把它画出来。</p>
+            </div>
+            <div>
+              <p class="lbl text-slate-400 mb-2">Solution</p>
+              <p class="text-sm text-slate-700">一条发布通道 module 认下"找 release / 取资产 / 错误分类与文案"，
+                三个功能各自只留把结果翻译成自己载荷的那层 adapter。</p>
+            </div>
+          </div>
+
+          <div class="px-6 pb-6">
+            <p class="lbl text-slate-400 mb-2">Wins</p>
+            <ul class="grid sm:grid-cols-2 gap-x-8 gap-y-1.5 text-sm text-slate-700">
+              <li>· locality：错误分类与文案一处</li>
+              <li>· 私有 import 变成正当的公开缝</li>
+              <li>· 三处版本比较兜底收成一处</li>
+              <li>· leverage：新发布形态只写载荷 adapter</li>
+              <li>· <span class="mono">_asset_url</span> / <span class="mono">_manifest_asset_url</span> 两个副本删掉</li>
+              <li>· 版本号解析的口径（<span class="mono">v</span> 前缀、非法降级）不再各说各话</li>
+            </ul>
+            <div class="mt-3 rule border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <b>与既有先例相抵，但值得翻案</b>：<span class="mono">CONTEXT.md</span> 对「条目库原语」写过
+              「库的 StoreError 翻译骨架不参数化共享 —— 参数化劣于清晰重复」。那条成立是因为各库<b>语义</b>不同；
+              这里重复的是<b>机制</b>（按名取资产、取最大版本、错误契约），而且已经出现私有名跨模块 import ——
+              证明两侧实际同源。翻案范围只限"发布通道"，不动条目库那条先例。
+            </div>
+          </div>
+        </article>
+
+        <!-- ==================== CARD 5 ==================== -->
+        <article id="c5" class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div class="px-6 pt-6 pb-4 border-b border-slate-100">
+            <div class="flex items-start justify-between gap-4 flex-wrap">
+              <h2 class="font-serif text-2xl">ui 层第一次有缝：把跨语言镜像和 18 个浏览器用例接上闸门</h2>
+              <div class="flex gap-2">
+                <span class="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 font-medium">Worth exploring</span>
+                <span class="text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">local-substitutable</span>
+              </div>
+            </div>
+            <p class="mono text-xs text-slate-500 mt-3 leading-6">
+              static/js/ui/*.js（57 模块 / 17,996 行）· pin_bindings.py ↔ fx/generate.js · codeview.py ↔ fx/code-tree-ops.js ·
+              tests/browser/*.spec.mjs · tools/prepush.py · .github/workflows/ci.yml
+            </p>
+          </div>
+
+          <div class="px-6 py-6">
+            <p class="lbl text-slate-400 mb-3">六条跨语言镜像判据 — 谁在守</p>
+            <div class="space-y-1.5">
+              <div class="flex items-center gap-3 text-xs">
+                <span class="w-64 shrink-0 mono text-slate-600">硬件检测通道词表</span>
+                <span class="flex-1 h-5 rounded bg-emerald-100 border border-emerald-300"></span>
+                <span class="w-56 text-slate-600">守卫：正则抠 JS 字面量与后端对账（test_hwcheck.py:662）</span>
+              </div>
+              <div class="flex items-center gap-3 text-xs">
+                <span class="w-64 shrink-0 mono text-slate-600">功能组「未选」判据</span>
+                <span class="flex-1 h-5 rounded bg-emerald-100 border border-emerald-300"></span>
+                <span class="w-56 text-slate-600">守卫：Python 现算 → 生成 fixture → JS 复算对拍</span>
+              </div>
+              <div class="flex items-center gap-3 text-xs">
+                <span class="w-64 shrink-0 mono text-slate-600">引脚可绑判据（曾漂 115/744）</span>
+                <span class="flex-1 h-5 rounded bg-indigo-100 border border-indigo-300"></span>
+                <span class="w-56 text-slate-600">已治本：后端下发模型（/api/bindings/matrix），前端只求值</span>
+              </div>
+              <div class="flex items-center gap-3 text-xs">
+                <span class="w-64 shrink-0 mono text-slate-600">文件名非法字符</span>
+                <span class="flex-1 h-5 rounded bg-red-100 border border-red-300"></span>
+                <span class="w-56 text-red-700">裸镜像：注释写「同口径」，零守卫</span>
+              </div>
+              <div class="flex items-center gap-3 text-xs">
+                <span class="w-64 shrink-0 mono text-slate-600">同脚多角色共享/冲突分类</span>
+                <span class="flex-1 h-5 rounded bg-red-100 border border-red-300"></span>
+                <span class="w-56 text-red-700">裸镜像：两侧注释互指，无对拍</span>
+              </div>
+              <div class="flex items-center gap-3 text-xs">
+                <span class="w-64 shrink-0 mono text-slate-600">task / module 若干词表</span>
+                <span class="flex-1 h-5 rounded bg-slate-100 border border-slate-300"></span>
+                <span class="w-56 text-slate-600">仅注释声明</span>
+              </div>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-4 mt-6">
+              <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+                <p class="lbl text-slate-500 mb-2">Before — ui 层没有测试缝</p>
+                <div class="flex items-end gap-6 h-24">
+                  <div class="flex-1">
+                    <div class="h-3 rounded bg-slate-800"></div>
+                    <p class="text-[10px] text-slate-500 mt-1">ui/ 17,996 行 · 515 个监听器 · 383 个 querySelector</p>
+                    <div class="mt-2 h-3 w-[2%] rounded bg-emerald-400"></div>
+                    <p class="text-[10px] text-emerald-700">147 个 js 测试里只有 2 个 import ui/</p>
+                    <div class="mt-2 h-3 w-[12%] rounded bg-amber-300"></div>
+                    <p class="text-[10px] text-amber-700">18 个真浏览器用例（tests/browser）· 自动触发点 0</p>
+                  </div>
+                </div>
+              </div>
+              <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+                <p class="lbl text-slate-500 mb-2">After — 用 DOM 契约当缝</p>
+                <ul class="text-xs text-slate-700 space-y-1.5">
+                  <li>· 18 个用例已存在，接进 <span class="mono">prepush</span> / CI 就变自动（它们覆盖的正是 ui 的交互）</li>
+                  <li>· 镜像按仓库自己的两条成功先例治本：<b>后端下发模型</b>（引脚矩阵）或 <b>生成对拍 fixture</b>（功能组）</li>
+                  <li>· 裸镜像要么补守卫、要么变成只渲染（判据单源这条规矩，前端补齐）</li>
+                  <li>· ui 与 index.html 的 555 个 id 耦合同样有缝可测，不再只靠 a11y / tab 两处窄检查</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="px-6 py-5 border-t border-slate-100 grid md:grid-cols-2 gap-6">
+            <div>
+              <p class="lbl text-slate-400 mb-2">Problem</p>
+              <p class="text-sm text-slate-700">这个仓库对 Python 的判断单源近乎苛刻，前端却有一条裸镜像、
+                一个 17,996 行没有缝的 ui 层，以及 18 个写好却从不自动跑的浏览器用例。</p>
+            </div>
+            <div>
+              <p class="lbl text-slate-400 mb-2">Solution</p>
+              <p class="text-sm text-slate-700">把「判据单源」这条自家规矩补到前端：镜像走已验过的两条路（后端下发 / 生成对拍），
+                浏览器用例接上闸门，ui 层以 DOM 契约作为可测的 interface。</p>
+            </div>
+          </div>
+
+          <div class="px-6 pb-6">
+            <p class="lbl text-slate-400 mb-2">Wins</p>
+            <ul class="grid sm:grid-cols-2 gap-x-8 gap-y-1.5 text-sm text-slate-700">
+              <li>· 漂移在闸门内变红，而不是上板才发现</li>
+              <li>· 18 个已写好的用例从手工变自动</li>
+              <li>· ui 层有了可测的 interface（DOM 契约）</li>
+              <li>· 裸镜像退场，判据回到单源</li>
+              <li>· 与后端下发的先例一致，不新增第三套做法</li>
+              <li>· 接缝守卫漏掉的 19 条相对 import 一并收紧</li>
+            </ul>
+          </div>
+        </article>
+
+        <!-- ==================== CARD 6 ==================== -->
+        <article id="c6" class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div class="px-6 pt-6 pb-4 border-b border-slate-100">
+            <div class="flex items-start justify-between gap-4 flex-wrap">
+              <h2 class="font-serif text-2xl">把进程级状态从模块全局搬进 <span class="mono text-xl">AppContext</span></h2>
+              <div class="flex gap-2">
+                <span class="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 font-medium">Worth exploring</span>
+                <span class="text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">in-process</span>
+              </div>
+            </div>
+            <p class="mono text-xs text-slate-500 mt-3 leading-6">
+              src/contest_generator/webapp.py（L449 / L1488–1489 / L6252）· full_task.py · materials_task.py · tests/test_task_progress.py · tests/test_webapp.py
+            </p>
+          </div>
+
+          <div class="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-100">
+            <div class="p-6">
+              <p class="lbl text-slate-400 mb-3">Before · 状态挂在模块上，测试伸手进模块改</p>
+              <div class="h-[300px] space-y-2">
+                <div class="border-2 border-slate-700 rounded p-2">
+                  <p class="lbl text-slate-500">webapp 模块级可变全局</p>
+                  <div class="mt-2 space-y-1 text-[11px] mono text-slate-700">
+                    <div class="bg-red-50 border border-red-200 rounded px-2 py-1">L449&nbsp;&nbsp;_running_task_execs = set()</div>
+                    <div class="bg-red-50 border border-red-200 rounded px-2 py-1">L1488 _MATERIALS_LAST_CHECK = {}</div>
+                    <div class="bg-red-50 border border-red-200 rounded px-2 py-1">L1489 _materials_task = None</div>
+                    <div class="bg-red-50 border border-red-200 rounded px-2 py-1">L6252 app = create_app() &nbsp;← import 即建 app</div>
+                  </div>
+                  <p class="text-[10px] text-slate-500 mt-2">配套 <span class="mono">global</span> 语句 3 处（L1539 / L1670 / L1742）</p>
+                </div>
+                <div class="border border-red-200 bg-red-50 rounded p-2">
+                  <p class="lbl text-red-600">测试因此越过 interface</p>
+                  <p class="text-[11px] text-slate-700 mt-1">
+                    <span class="mono">from contest_generator.webapp import _running_task_execs</span>（3 处）·
+                    monkeypatch <span class="mono">webapp._EXIT / _launcher_managed / DeepSeekLLM / download_to / spawn_updater</span>
+                  </p>
+                </div>
+                <div class="border border-slate-300 bg-stone-50 rounded p-2">
+                  <p class="text-[11px] text-slate-600">同一个进程里两个 app 实例会共用任务状态；测试之间也共用</p>
+                </div>
+              </div>
+            </div>
+            <div class="p-6">
+              <p class="lbl text-slate-400 mb-3">After · 实例自己的状态，测试拿新实例</p>
+              <div class="h-[300px] space-y-2">
+                <div class="border-2 border-slate-700 rounded p-2">
+                  <p class="lbl text-slate-500">AppContext（已存在，L546）</p>
+                  <div class="mt-2 space-y-1 text-[11px] mono text-slate-700">
+                    <div class="bg-emerald-50 border border-emerald-200 rounded px-2 py-1">pending_generations（已在）</div>
+                    <div class="bg-emerald-50 border border-emerald-200 rounded px-2 py-1">tab_registry（已在）</div>
+                    <div class="bg-slate-800 text-slate-100 rounded px-2 py-1">running_task_execs ← 搬进来</div>
+                    <div class="bg-slate-800 text-slate-100 rounded px-2 py-1">materials_last_check ← 搬进来</div>
+                    <div class="bg-slate-800 text-slate-100 rounded px-2 py-1">materials_task ← 搬进来</div>
+                  </div>
+                </div>
+                <div class="border border-slate-300 bg-stone-50 rounded p-2">
+                  <p class="text-[11px] text-slate-600">module 顶层不再建 app：入口显式建，测试想建几个建几个</p>
+                </div>
+                <div class="border border-emerald-300 bg-emerald-50 rounded p-2">
+                  <p class="text-[11px] text-emerald-900">测试不再 import 私有名、不再 monkeypatch 模块全局；删掉 <span class="mono">_running_task_execs</span> 这类跨缝引用</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="px-6 py-5 border-t border-slate-100 grid md:grid-cols-2 gap-6">
+            <div>
+              <p class="lbl text-slate-400 mb-2">Problem</p>
+              <p class="text-sm text-slate-700">DI 缝（<span class="mono">AppContext</span>）已经在了，但真正有状态的四处仍挂在模块上；
+                于是测试只能跨过 interface 去改模块全局。</p>
+            </div>
+            <div>
+              <p class="lbl text-slate-400 mb-2">Solution</p>
+              <p class="text-sm text-slate-700">有状态的东西全部归 <span class="mono">ctx</span>；
+                <span class="mono">import</span> 模块不再顺带建 app。测试与调用方走同一条缝。</p>
+            </div>
+          </div>
+
+          <div class="px-6 pb-6">
+            <p class="lbl text-slate-400 mb-2">Wins</p>
+            <ul class="grid sm:grid-cols-2 gap-x-8 gap-y-1.5 text-sm text-slate-700">
+              <li>· interface 就是测试面：不再伸手进模块</li>
+              <li>· 测试隔离：每个用例一个新实例</li>
+              <li>· import 无副作用</li>
+              <li>· 与既有 ctx 缝一致，不新增机制</li>
+              <li>· 删掉 3 处私有名跨缝 import</li>
+              <li>· 并行跑测试不再争同一份状态</li>
+            </ul>
+          </div>
+        </article>
+
+        <!-- ==================== CARD 7 ==================== -->
+        <article id="c7" class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div class="px-6 pt-6 pb-4 border-b border-slate-100">
+            <div class="flex items-start justify-between gap-4 flex-wrap">
+              <h2 class="font-serif text-2xl">73 个私有符号被测试翻墙：interface 形状不对的地方就在这份清单里</h2>
+              <div class="flex gap-2">
+                <span class="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 font-medium">Worth exploring</span>
+                <span class="text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">mock</span>
+              </div>
+            </div>
+            <p class="mono text-xs text-slate-500 mt-3 leading-6">
+              tests/*.py（69 个 from-import 私有名 + 4 个模块属性访问，跨 17 个模块）· 十余处 AST / 源码文本守卫 · 6 处测试反向读 .scratch/
+            </p>
+          </div>
+
+          <div class="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-100">
+            <div class="p-6">
+              <p class="lbl text-slate-400 mb-3">Before · 同一个实现，两个入口都不对</p>
+              <div class="h-[300px] rounded-lg border border-slate-200 bg-stone-50 p-3">
+                <pre class="mermaid">
+flowchart LR
+  subgraph T["测试"]
+    T1["test_llm.py"]
+    T2["test_generator.py"]
+    T3["test_webapp.py"]
+  end
+  subgraph M["module"]
+    I["interface（公开）"]
+    P["implementation（私有）"]
+  end
+  T1 -.->|"_fit_segment_wire 等 19 个"| P
+  T2 -.->|"_check_* 13 个校验器"| P
+  T3 -.->|"_running_task_execs"| P
+  I -.->|"调用方能用的那半边"| P
+  classDef leak stroke:#dc2626,stroke-width:2px;
+  class T1,T2,T3 leak
+                </pre>
+                <p class="text-[10px] text-slate-600 mt-1">
+                  调用方够不到的东西，测试只能翻墙够；于是重构一次实现 = 顺手改一批测试
+                </p>
+              </div>
+            </div>
+            <div class="p-6">
+              <p class="lbl text-slate-400 mb-3">After · 测试与调用方走同一条缝</p>
+              <div class="h-[300px] rounded-lg border border-slate-200 bg-stone-50 p-3">
+                <pre class="mermaid">
+flowchart LR
+  T["测试"] --> S
+  C["调用方"] --> S
+  S[["公开的缝<br/>提示词拼段与预算 / 门禁谓词 / 任务执行状态"]]
+  S --> P["implementation"]
+  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
+  class S deep
+                </pre>
+                <p class="text-[10px] text-slate-600 mt-1">
+                  判据：同一份私有名清单，翻墙的条数趋于 0；顺带把按源码文本钉形状的守卫换成按行为钉
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="px-6 py-5 border-t border-slate-100 grid md:grid-cols-2 gap-6">
+            <div>
+              <p class="lbl text-slate-400 mb-2">Problem</p>
+              <p class="text-sm text-slate-700">测试与调用方走的不是同一条缝：<span class="mono">_fit_segment_wire</span>（提示词拼段与预算）、
+                <span class="mono">_check_*</span>（生成门禁谓词）、<span class="mono">_running_task_execs</span>（任务执行状态）
+                都是真概念，却只有私有入口 —— 这既是测试脆的原因，也是调用方拿不到能力的原因。</p>
+            </div>
+            <div>
+              <p class="lbl text-slate-400 mb-2">Solution</p>
+              <p class="text-sm text-slate-700">逐簇判断那个私有物是不是一个概念：是，就把它变成拥有它的 module 的公开缝，
+                测试与调用方一起改走这条缝；顺带把"解析源码文本"的守卫换成按行为断言。</p>
+            </div>
+          </div>
+
+          <div class="px-6 pb-6">
+            <p class="lbl text-slate-400 mb-2">Wins</p>
+            <ul class="grid sm:grid-cols-2 gap-x-8 gap-y-1.5 text-sm text-slate-700">
+              <li>· interface 就是测试面：两边同一个缝</li>
+              <li>· 重构实现不再连坐测试</li>
+              <li>· 调用方拿回只有测试能用的能力</li>
+              <li>· 删掉按源码文本钉形状的守卫</li>
+              <li>· 测试不再反向依赖 .scratch/ 探针</li>
+              <li>· 与 C1 / C2 / C6 同向，是它们的验收尺</li>
+            </ul>
+            <p class="text-xs text-slate-500 mt-3">
+              证据：69 个 <span class="mono">from contest_generator.X import _name</span> 组合跨 17 个模块，另 4 个经模块属性访问
+              （<span class="mono">task_retry._retry_state</span>、<span class="mono">vision._backoff_sleep</span>、
+              <span class="mono">webapp._materials_task</span> / <span class="mono">_MATERIALS_LAST_CHECK</span>）·
+              集中度：<span class="mono">llm</span> 19、<span class="mono">generator</span> 15、<span class="mono">changelog</span> 8、
+              <span class="mono">selection</span> 6、<span class="mono">extraction</span> 4、<span class="mono">webapp</span> 4 ·
+              AST / 源码文本守卫十余处（<span class="mono">test_webapp.py:7291</span> 判 <span class="mono">recommend</span> 路由"恰好一个且薄"、
+              <span class="mono">test_generator.py:2467</span> 直接读 <span class="mono">keil.py</span>/<span class="mono">ccs.py</span> 文本）·
+              6 处测试反向读 <span class="mono">.scratch/</span>（<span class="mono">test_pack_update.py:30</span> 把它加进
+              <span class="mono">sys.path</span> 调发布脚本）
+            </p>
+          </div>
+        </article>
+
+      </section>
+
+      <!-- ============================== TOP ============================== -->
+      <section id="top-recommendation">
+        <div class="rounded-xl border-2 border-slate-800 bg-white overflow-hidden">
+          <div class="px-6 py-6">
+            <p class="lbl text-slate-400">复审后的结论 · 按"离下一次改动有多近"排</p>
+            <h2 class="font-serif text-3xl mt-1">该做的只有两件半，其余降级或顺路</h2>
+            <p class="text-sm text-slate-600 mt-3">
+              复审依据换了口径：不看文件有多大，看<b>谁在动</b>。逐提交统计（不用 pathspec —— 它走简化历史，会被 merge 提交污染）：
+              近 300 次提交里 <span class="mono">webapp.py</span> 19 次、<span class="mono">index.html</span> 14 次、
+              <span class="mono">fx-guard</span> 11 次、<span class="mono">llm.py</span> <b>1 次</b>；
+              近 40 次提交里 <span class="mono">webapp.py</span> 与 <span class="mono">index.html</span> 各 9 次、且两两同现
+              —— 每个功能工单都要穿过这两个文件。
+            </p>
+
+            <ol class="mt-5 space-y-3 text-sm">
+              <li class="rule border-emerald-500 bg-emerald-50 px-4 py-3 rounded">
+                <b>1 · C2 收口（webapp 域装配回域 + LLM 三件套一处）</b> —— 唯一"每次功能都经过"的地方：
+                最热的文件、每张 hwcheck 工单都改它，而检测页装配（483 行）与 20 处 LLM 三件套都住在这儿。
+                只做这两件，<b>不做 route 分册</b>（那是整理，且会撞上按源码文本钉形状的 AST 守卫）。
+              </li>
+              <li class="rule border-emerald-500 bg-emerald-50 px-4 py-3 rounded">
+                <b>2 · C3a 拆地雷（删 187 个零引用的 fx import + 52 个化石名）</b> —— 不动装配、不动 ui 模块，
+                把"改名即整页死"的面从 337 缩到 78。零行为变化，可独立成一张小工单。
+              </li>
+              <li class="rule border-slate-400 bg-stone-50 px-4 py-3 rounded">
+                <b>2.5 · C5a 两条裸镜像补上</b>（<span class="mono">CODE_TREE_NAME_ILLEGAL</span>、
+                <span class="mono">pinShareClass</span>）—— 一条改后端下发、一条补对拍，照仓库已有的两个成功先例。
+              </li>
+              <li class="rule border-slate-300 bg-white px-4 py-3 rounded">
+                <b>顺路（不单独立项）</b>：C4 的公共件收回 <span class="mono">update.py</span>（改哪块顺手改）；
+                C3b 的 <span class="mono">boot.js</span> 留到下次真要改前端装载时；C6 并进 C2；
+                C7 当验收尺（每做完一条，私有名清单该变短）；C1 只剩"3 个提示词预算私有名转公开"，顺手做。
+              </li>
+              <li class="rule border-amber-400 bg-amber-50 px-4 py-3 rounded">
+                <b>暂不做</b>：browser 用例接闸门 —— 文档记着它们<b>在 HEAD 上就 6 绿 3 红</b>
+                （<span class="mono">local-environment.md:207</span>），且依赖真浏览器 + 8791 端口。
+                先修绿再谈接闸门；现在不接是有据的选择，不是我原报告说的"该接就接"。
+              </li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <footer class="text-xs text-slate-400 pt-4">
+        评审只读：未改动仓库任何文件。所有数字取自 <span class="mono">git log -300</span> 热点、源码实测与
+        <span class="mono">tests/</span> 清点（2026-09-20）。
+      </footer>
+    </main>
+  </body>
+</html>
