@@ -723,6 +723,52 @@ def _llm(
     return factory(config)
 
 
+class LLMRun:
+    """一次 LLM 工作流的**观测单元**：预算 + 观测收集器 + 客户端派发 + 结算（工单
+    webapp-consolidation/02：三件套收成一处）。
+
+    从前这四件事在 25 个路由里各写一遍（20 处三件套 + 5 处只做视觉观测），而且
+    **必须一起做对**，漏一样不报错、只是行为悄悄变差：
+
+    * 预算（`RetryBudget`）要跨同一趟工作流的**多次派发**共享——各造各的，重试预算
+      就各算各的（`tests/test_webapp.py` 的 skeleton / recommend 两条用例钉着这条）；
+    * 观测收集器要能被 `bind_llm_telemetry` 挂上（否则 SSE 面板没有实时遥测）；
+    * 退出时要结算进 `recent_llm_workflows`（否则观察面板看不见这一轮）。
+
+    用法：`llm_run = LLMRun(context, "recommend")` 建它，`llm_run.llm()` 取客户端
+    （**每次调用现派发**，见 `llm`），收尾 `llm_run.settle()` 结算；只做观测不要
+    模型的工作流（视觉那 5 处）就只用 `llm_run.collector`，一个模型都不造。
+
+    判据（四件事各恰好一处、都在本类里）与红证见 `tests/test_llm_run.py`。
+    """
+
+    def __init__(self, context: AppContext, workflow: str) -> None:
+        self.budget = RetryBudget()
+        self.collector = create_llm_observation_collector(workflow)
+        self._context = context
+        self._settled = False
+
+    def llm(self) -> LLM:
+        """按 `llm_factory` **现造**一个客户端（不缓存）。
+
+        为什么是方法而不是缓存属性：同一趟工作流的多次取用本来就是多次派发
+        （骨架路由的题面装配与骨架生成各取一次），既有契约要求它们共享同一个
+        预算与收集器对象——`tests/test_webapp.py` 的
+        `test_llm_factory_receives_shared_retry_budget_and_collector_for_skeleton`
+        / `..._for_recommend` 断言工厂被调用 ≥2 次且两次拿到同一对对象。收口
+        不改这条语义，所以这里逐次派发、与从前的 `_llm(context, budget, collector)`
+        逐字等价。
+        """
+        return _llm(self._context, self.budget, self.collector)
+
+    def settle(self) -> None:
+        """把这一趟的观测结算进 `recent_llm_workflows`（幂等：同一趟只记一条）。"""
+        if self._settled:
+            return
+        self._settled = True
+        self._context.recent_llm_workflows.add_completed(self.collector)
+
+
 def _library_dir(ctx: AppContext) -> Path:
     return _require_config(ctx).module_library_dir
 
@@ -1864,30 +1910,30 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             vision_base_url, vision_api_key, vision_model = _resolve_vision(config)
             suffix = tmp_path.suffix.lower()
             if suffix in IMAGE_FILE_SUFFIXES:
-                collector = create_llm_observation_collector("vision-describe")
+                vision_run = LLMRun(context, "vision-describe")
                 result = extract_image(
                     tmp_path,
                     vision_base_url=vision_base_url,
                     vision_api_key=vision_api_key,
                     vision_model=vision_model,
-                    observation_collector=collector,
+                    observation_collector=vision_run.collector,
                     detail_qa=config.vision_detail_qa,
                 )
-                context.recent_llm_workflows.add_completed(collector)
+                vision_run.settle()
                 # 上传原图（工单 upload-image-preview/01）：视觉描述之外回传原图
                 # data URL，前端直接显示；读失败 → None（仅文字，不阻塞）
                 return {"text": result, "image_data_url": image_data_url(tmp_path)}
             if suffix == ".pdf":
-                collector = create_llm_observation_collector("vision-describe")
+                vision_run = LLMRun(context, "vision-describe")
                 result = extract_pdf_with_image_notes(
                     tmp_path,
                     vision_base_url=vision_base_url,
                     vision_api_key=vision_api_key,
                     vision_model=vision_model,
-                    observation_collector=collector,
+                    observation_collector=vision_run.collector,
                     detail_qa=config.vision_detail_qa,
                 )
-                context.recent_llm_workflows.add_completed(collector)
+                vision_run.settle()
                 # 上传页图（工单 upload-pdf-pages/01）：与题库 /pages 同款渲染，
                 # 前端页图展示；渲染失败降级为空 → 前端只显示文字，不阻塞
                 pages, total_pages = render_pdf_pages(tmp_path)
@@ -1989,13 +2035,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         # related（工单 02 相关候选自动扩容）= 未锚定相关条目按题面外设词
         # 列为候选（上限 RELATED_CANDIDATES_LIMIT，清单段 wire 预算兜底；
         # 两级照旧——清单 → 点名 → 回读，不直读）
-        budget = RetryBudget()
-        collector = create_llm_observation_collector("recommend")
+        llm_run = LLMRun(context, "recommend")
         topic = _assemble_topic_context(
             context,
             topic_id,
             problem_text,
-            _llm(context, budget, collector),
+            llm_run.llm(),
             reference_ids,
             platform,
             related_limit=RELATED_CANDIDATES_LIMIT,
@@ -2055,11 +2100,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         # 01 的未注入路径，行为逐字节不变。闭包在 run 外构造一次（多次 run
         # 复用）；视觉调用成本进独立观测器（finally 一并结算）
         vision_qa: Callable[[str], str | None] | None = None
-        vision_qa_collector = None
+        vision_qa_run: LLMRun | None = None
         if topic.figure_pdf is not None:
             vision_base_url, vision_api_key, vision_model = _resolve_vision(config)
             if vision_configured(vision_api_key):
-                vision_qa_collector = create_llm_observation_collector("vision-qa")
+                vision_qa_run = LLMRun(context, "vision-qa")
 
                 def vision_qa(question: str) -> str | None:
                     """图内问题 → 条目 PDF 渲染 + 视觉模型针对性作答（02 工单）。"""
@@ -2071,7 +2116,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                         vision_base_url=vision_base_url,
                         vision_api_key=vision_api_key,
                         vision_model=vision_model,
-                        observation_collector=vision_qa_collector,
+                        observation_collector=vision_qa_run.collector,
                     )
 
         def _write_cache(done_data: dict) -> None:
@@ -2114,7 +2159,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                             )
                             _emit_cached_recommend(emit, cached, warns)
                             return
-                with bind_llm_telemetry(collector, emit.progress):
+                with bind_llm_telemetry(llm_run.collector, emit.progress):
                     # 首个进度事件（工单 ux-walkthrough-02/13）：首个分钟级 LLM
                     # 调用前先送中文阶段标签，前端等待期间即有内容——不含任何
                     # 业务数据（stage 为 UI 文案，词表与事件契约见 events.py）
@@ -2124,7 +2169,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     ))
                     run_recommendation(
                         topic,
-                        _llm(context, budget, collector),
+                        llm_run.llm(),
                         clarifications,
                         emit=_CacheWriterEmitter(emit, _write_cache),
                         max_rounds=max_rounds,
@@ -2134,9 +2179,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                         preselect_note=preselect_note,
                     )
             finally:
-                context.recent_llm_workflows.add_completed(collector)
-                if vision_qa_collector is not None:
-                    context.recent_llm_workflows.add_completed(vision_qa_collector)
+                llm_run.settle()
+                if vision_qa_run is not None:
+                    vision_qa_run.settle()
 
         return StreamingResponse(
             run_sse(run, error_message=_error_message),
@@ -2246,14 +2291,13 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         main_mode = (
             _optional_str(payload, "main_mode") if "main_mode" in payload else "skeleton"
         )
-        budget = RetryBudget()
-        collector = create_llm_observation_collector("skeleton")
+        llm_run = LLMRun(context, "skeleton")
         try:
             topic = _assemble_topic_context(
                 context,
                 topic_id,
                 problem_text,
-                _llm(context, budget, collector),
+                llm_run.llm(),
                 reference_ids=reference_ids,
                 platform=platform,
                 slugs=slugs,
@@ -2275,7 +2319,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 else (None, None)
             )
             result = run_skeleton(
-                llm=_llm(context, budget, collector),
+                llm=llm_run.llm(),
                 problem_text=topic.problem_text,
                 manifests=resolved.manifests,
                 slugs=slugs,
@@ -2293,7 +2337,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             result["topic_framework"] = _topic_framework_response(framework, framework_entry)
             return result
         finally:
-            context.recent_llm_workflows.add_completed(collector)
+            llm_run.settle()
 
     # 硬件检测：零器件最小自检 main.c 预览（工单 module-hwcheck/01）——
     # **确定性渲染，零 LLM、零配方**：域层纯函数出文本，路由只取参转调。
@@ -2565,10 +2609,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         record = read_hwcheck_record(output_dir)
         record = record_with_checked(record, checked_ids)
         record = record_with_symptom(record, symptom)
-        collector = create_llm_observation_collector("hwcheck-triage")
+        llm_run = LLMRun(context, "hwcheck-triage")
         message = ""
         try:
-            llm = _llm(context, RetryBudget(), collector)
+            llm = llm_run.llm()
             advice = llm.triage_hwcheck_symptom(triage_context)
             degraded = False
         except LLMError as exc:
@@ -2579,7 +2623,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             degraded = True
         finally:
             # 观测收尾：漏调则观察面板 recent_llm_workflows 看不到这一轮
-            context.recent_llm_workflows.add_completed(collector)
+            llm_run.settle()
         record = record_with_advice(record, advice)
         write_hwcheck_record(output_dir, record)
         return {
@@ -2784,9 +2828,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         # （_retry_parse 观测 + recent_llm_workflows 收尾）。
         report_draft_text = ""
         if problem_text:
-            collector = create_llm_observation_collector("generate-report-draft")
+            llm_run = LLMRun(context, "generate-report-draft")
             try:
-                llm = _llm(context, RetryBudget(), collector)
+                llm = llm_run.llm()
                 selected_manifests = resolve_selection(
                     _library_dir(context), platform, slugs
                 ).manifests
@@ -2802,7 +2846,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             except LLMError:
                 report_draft_text = f"{PLACEHOLDER}\n\n{PLACEHOLDER}"
             finally:
-                context.recent_llm_workflows.add_completed(collector)
+                llm_run.settle()
         # 同键互斥 + 目录裁决（工单 generate-conflict-guard/01）：锁键 = 桌面
         # 用题名 / 手动用输出目录；已存在完整同名工程 → 400（不静默改名攒
         # 目录，不覆盖）；半成品残渣 → 清理后生成；失败 → 桌面模式不留半成品。
@@ -3068,14 +3112,13 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         ):
             raise ContextError("qa_count 必须是正整数（新 Q&A 条数）")
 
-        budget = RetryBudget()
-        collector = create_llm_observation_collector("revise-analyze")
+        llm_run = LLMRun(context, "revise-analyze")
         summaries = _module_library_summaries(module_library_dir)
-        llm = _llm(context, budget, collector)
+        llm = llm_run.llm()
 
         def run(emit: SseEmitter) -> None:
             try:
-                with bind_llm_telemetry(collector, emit.progress):
+                with bind_llm_telemetry(llm_run.collector, emit.progress):
                     result = run_impact_analysis(
                         llm=llm,
                         problem_text=fields["problem_text"],
@@ -3090,7 +3133,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     )
                 emit.done(result)
             finally:
-                context.recent_llm_workflows.add_completed(collector)
+                llm_run.settle()
 
         return StreamingResponse(
             run_sse(run, error_message=_error_message),
@@ -3153,13 +3196,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 config.ccs_compiler_dir,
                 config.ccs_sysconfig_cli,
             )
-        budget = RetryBudget()
-        collector = create_llm_observation_collector("revise-apply")
-        llm = _llm(context, budget, collector)
+        llm_run = LLMRun(context, "revise-apply")
+        llm = llm_run.llm()
 
         def run(emit: SseEmitter) -> None:
             try:
-                with bind_llm_telemetry(collector, emit.progress):
+                with bind_llm_telemetry(llm_run.collector, emit.progress):
                     result = run_revision(
                         llm=llm,
                         problem_text=fields.get("problem_text", ""),
@@ -3187,7 +3229,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     )
                 emit.done(result)
             finally:
-                context.recent_llm_workflows.add_completed(collector)
+                llm_run.settle()
 
         return StreamingResponse(
             run_sse(run, error_message=_error_message),
@@ -3250,13 +3292,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             raise DeepenError("工程 main.c 为空，无法深化（请先生成或修订工程）")
         platform = fields["platform"]
         resolved = resolve_selection(module_library_dir, platform, fields["slugs"])
-        budget = RetryBudget()
-        collector = create_llm_observation_collector("revise-deepen")
-        llm = _llm(context, budget, collector)
+        llm_run = LLMRun(context, "revise-deepen")
+        llm = llm_run.llm()
 
         def run(emit: SseEmitter) -> None:
             try:
-                with bind_llm_telemetry(collector, emit.progress):
+                with bind_llm_telemetry(llm_run.collector, emit.progress):
                     result = run_deepen(
                         llm=llm,
                         problem_text=fields.get("problem_text", ""),
@@ -3278,7 +3319,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     )
                 emit.done(result)
             finally:
-                context.recent_llm_workflows.add_completed(collector)
+                llm_run.settle()
 
         return StreamingResponse(
             run_sse(run, error_message=_error_message),
@@ -3340,13 +3381,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         # 前端据 deatil 引导「重新拆解」；域编排内部另有背兜）
         check_plan_replaceable(output_dir, force)
         resolved = resolve_selection(module_library_dir, platform, fields["slugs"])
-        budget = RetryBudget()
-        collector = create_llm_observation_collector("tasks-plan")
-        llm = _llm(context, budget, collector)
+        llm_run = LLMRun(context, "tasks-plan")
+        llm = llm_run.llm()
 
         def run(emit: SseEmitter) -> None:
             try:
-                with bind_llm_telemetry(collector, emit.progress):
+                with bind_llm_telemetry(llm_run.collector, emit.progress):
                     result = run_task_planning(
                         llm=llm,
                         problem_text=fields["problem_text"],
@@ -3366,7 +3406,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     )
                 emit.done(result)
             finally:
-                context.recent_llm_workflows.add_completed(collector)
+                llm_run.settle()
 
         return StreamingResponse(
             run_sse(run, error_message=_error_message),
@@ -3422,14 +3462,13 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         # 工程级全局结论（工单 idea-suite/01）：全局商量采纳的结论 → 注入
         # 本步执行 prompt（空串 = 未采纳，调用形状不变）
         global_note = _read_global_note(output_dir)
-        budget = RetryBudget()
-        collector = create_llm_observation_collector("tasks-execute")
-        llm = _llm(context, budget, collector)
+        llm_run = LLMRun(context, "tasks-execute")
+        llm = llm_run.llm()
 
         def run(emit: SseEmitter) -> None:
             _running_task_execs.add(task_id)
             try:
-                with bind_llm_telemetry(collector, emit.progress):
+                with bind_llm_telemetry(llm_run.collector, emit.progress):
                     result = run_task(
                         llm=llm,
                         task_id=task_id,
@@ -3455,7 +3494,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 emit.done(result)
             finally:
                 _running_task_execs.discard(task_id)
-                context.recent_llm_workflows.add_completed(collector)
+                llm_run.settle()
 
         return StreamingResponse(
             run_sse(run, error_message=_error_message),
@@ -3525,13 +3564,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             module_library_dir,
             master_project_dir(config.masters_dir, platform),
         )
-        budget = RetryBudget()
-        collector = create_llm_observation_collector("tasks-params-scan")
-        llm = _llm(context, budget, collector)
+        llm_run = LLMRun(context, "tasks-params-scan")
+        llm = llm_run.llm()
 
         def run(emit: SseEmitter) -> None:
             try:
-                with bind_llm_telemetry(collector, emit.progress):
+                with bind_llm_telemetry(llm_run.collector, emit.progress):
                     param_list = run_param_scan(
                         llm=llm,
                         main_c=main_c,
@@ -3542,7 +3580,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 emit.progress(ProgressEvent(type=EVENT_PARAM_RESULT))
                 emit.done({"params": [item.to_dict() for item in param_list.params]})
             finally:
-                context.recent_llm_workflows.add_completed(collector)
+                llm_run.settle()
 
         return StreamingResponse(
             run_sse(run, error_message=_error_message),
@@ -3588,13 +3626,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         main_c = read_project_main_c(output_dir) or fields.get("main_c", "")
         if not main_c.strip():
             raise TaskError("工程 main.c 为空，无法应用参数（请先生成或修订工程）")
-        budget = RetryBudget()
-        collector = create_llm_observation_collector("tasks-params-apply")
-        llm = _llm(context, budget, collector)
+        llm_run = LLMRun(context, "tasks-params-apply")
+        llm = llm_run.llm()
 
         def run(emit: SseEmitter) -> None:
             try:
-                with bind_llm_telemetry(collector, emit.progress):
+                with bind_llm_telemetry(llm_run.collector, emit.progress):
                     result = run_param_apply(
                         llm=llm,
                         param=param,
@@ -3610,7 +3647,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     )
                 emit.done(result)
             finally:
-                context.recent_llm_workflows.add_completed(collector)
+                llm_run.settle()
 
         return StreamingResponse(
             run_sse(run, error_message=_error_message),
@@ -3700,9 +3737,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         plan = read_task_plan(output_dir)
         chat = read_idea_chat(output_dir, PARAMS_CHAT_FILENAME)
 
-        collector = create_llm_observation_collector("params-chat")
+        llm_run = LLMRun(context, "params-chat")
         try:
-            llm = _llm(context, RetryBudget(), collector)
+            llm = llm_run.llm()
             discussion = llm.discuss_params(
                 problem_text=fields["problem_text"],
                 params=params_out,
@@ -3710,7 +3747,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 history=history,
             )
         finally:
-            context.recent_llm_workflows.add_completed(collector)
+            llm_run.settle()
         # 原子轮次：LLM 成功才追加两条消息落盘（失败 = 502，历史不动）
         chat = append_chat_message(chat, "user", history[-1][1])
         chat = append_chat_message(chat, "assistant", discussion.reply)
@@ -3888,9 +3925,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             raise TaskError("该目录尚未拆解任务——请先点「拆解任务」生成任务清单")
         task = find_task(plan, task_id)
 
-        collector = create_llm_observation_collector("tasks-discuss")
+        llm_run = LLMRun(context, "tasks-discuss")
         try:
-            llm = _llm(context, RetryBudget(), collector)
+            llm = llm_run.llm()
             discussion = llm.discuss_task(
                 task=task.to_dict(),
                 problem_text=fields["problem_text"],
@@ -3901,7 +3938,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 history=history,
             )
         finally:
-            context.recent_llm_workflows.add_completed(collector)
+            llm_run.settle()
         return {"reply": discussion.reply}
 
     # ------------------------------------------------------------------
@@ -3973,9 +4010,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         score_points = parse_score_points(payload.get("score_points"))
         chat = read_idea_chat(output_dir)
 
-        collector = create_llm_observation_collector("tasks-idea-chat")
+        llm_run = LLMRun(context, "tasks-idea-chat")
         try:
-            llm = _llm(context, RetryBudget(), collector)
+            llm = llm_run.llm()
             discussion = llm.discuss_global_idea(
                 problem_text=fields["problem_text"],
                 qa_text=fields.get("qa_text", ""),
@@ -3988,7 +4025,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 history=history,
             )
         finally:
-            context.recent_llm_workflows.add_completed(collector)
+            llm_run.settle()
         # 原子轮次：LLM 成功才追加两条消息落盘（失败 = 502，历史不动）
         chat = append_chat_message(chat, "user", history[-1][1])
         chat = append_chat_message(chat, "assistant", discussion.reply)
@@ -4067,14 +4104,13 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         )
         plan = read_task_plan(output_dir)
         score_points = parse_score_points(payload.get("score_points"))
-        budget = RetryBudget()
-        collector = create_llm_observation_collector("tasks-idea-analyze")
-        llm = _llm(context, budget, collector)
+        llm_run = LLMRun(context, "tasks-idea-analyze")
+        llm = llm_run.llm()
 
         def run(emit: SseEmitter) -> None:
             try:
                 emit.progress(ProgressEvent(type=EVENT_IDEA_ANALYZING))
-                with bind_llm_telemetry(collector, emit.progress):
+                with bind_llm_telemetry(llm_run.collector, emit.progress):
                     analysis = llm.analyze_idea(
                         idea=idea,
                         problem_text=fields["problem_text"],
@@ -4088,7 +4124,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 emit.progress(ProgressEvent(type=EVENT_IDEA_RESULT))
                 emit.done({"analysis": analysis.to_dict()})
             finally:
-                context.recent_llm_workflows.add_completed(collector)
+                llm_run.settle()
 
         return StreamingResponse(
             run_sse(run, error_message=_error_message),
@@ -4313,13 +4349,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             raise TaskError("该目录尚未拆解任务——无法标记受影响任务，请先拆解")
         # 工程级全局结论（工单 idea-suite/01）：注入本步修正 prompt（空串 = 未采纳）
         global_note = _read_global_note(output_dir)
-        budget = RetryBudget()
-        collector = create_llm_observation_collector("tasks-idea-fix")
-        llm = _llm(context, budget, collector)
+        llm_run = LLMRun(context, "tasks-idea-fix")
+        llm = llm_run.llm()
 
         def run(emit: SseEmitter) -> None:
             try:
-                with bind_llm_telemetry(collector, emit.progress):
+                with bind_llm_telemetry(llm_run.collector, emit.progress):
                     result = run_direct_fix(
                         llm=llm,
                         idea=idea,
@@ -4348,7 +4383,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     write_task_plan(output_dir, updated_plan)
                 emit.done({**result, "affected": list(affected)})
             finally:
-                context.recent_llm_workflows.add_completed(collector)
+                llm_run.settle()
 
         return StreamingResponse(
             run_sse(run, error_message=_error_message),
@@ -4428,9 +4463,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
         solutions = _solutions_for(suggestion_name, DEFAULT_WORDLIST)
 
-        collector = create_llm_observation_collector("buy-discuss")
+        llm_run = LLMRun(context, "buy-discuss")
         try:
-            llm = _llm(context, RetryBudget(), collector)
+            llm = llm_run.llm()
             discussion = llm.discuss_buy_options(
                 problem_text=problem_text,
                 requirement=requirement,
@@ -4441,7 +4476,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         finally:
             # 观测收尾（评审项 spec/①）：漏调则观察面板 recent_llm_workflows
             # 看不到 buy-discuss——docstring 承诺必须兑现
-            context.recent_llm_workflows.add_completed(collector)
+            llm_run.settle()
         return {
             "reply": discussion.reply,
             "review": discussion.review.to_dict() if discussion.review is not None else None,
@@ -4488,16 +4523,15 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         backup_root = fix_backup_root(
             _require_config(context).masters_dir.parent
         )
-        budget = RetryBudget()
-        collector = create_llm_observation_collector("fix-errors")
-        llm = _llm(context, budget, collector)
+        llm_run = LLMRun(context, "fix-errors")
+        llm = llm_run.llm()
 
         def run(emit: SseEmitter) -> None:
             # 五步编排归 run_fix_round（对照 run_recommendation 归位先例）：事件
             # 发射在域内（_emit 旁路），done 载荷由本路由 emit.done 收尾（终态
             # 保证仍归运行器，run 抛错补发 error 终态）
             try:
-                with bind_llm_telemetry(collector, emit.progress):
+                with bind_llm_telemetry(llm_run.collector, emit.progress):
                     result = run_fix_round(
                         llm,
                         error_text=error_text,
@@ -4512,7 +4546,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     )
                 emit.done(result)
             finally:
-                context.recent_llm_workflows.add_completed(collector)
+                llm_run.settle()
 
         # 终态保证归运行器：run 抛错由 run_sse 补发 error 终态（文案走错误映射表）
         return StreamingResponse(
@@ -4920,18 +4954,17 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         """
         platform = _require_str(payload, "platform")
         project_dirs = _require_str_list(payload, "project_dirs")
-        budget = RetryBudget()
-        collector = create_llm_observation_collector("masters-distill")
-        llm = _llm(context, budget, collector)
+        llm_run = LLMRun(context, "masters-distill")
+        llm = llm_run.llm()
 
         def run(emit: SseEmitter) -> None:
             try:
                 projects = [scan_project(Path(d)) for d in project_dirs]
-                with bind_llm_telemetry(collector, emit.progress):
+                with bind_llm_telemetry(llm_run.collector, emit.progress):
                     report = distill_master(llm, platform, projects, emit.progress)
                 emit.done(report.to_dict())
             finally:
-                context.recent_llm_workflows.add_completed(collector)
+                llm_run.settle()
 
         # 终态保证归运行器：run 抛错由 run_sse 补发 error 终态（文案走错误映射表）
         return StreamingResponse(
@@ -4950,11 +4983,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         """
         project_dirs = [Path(d) for d in _require_str_list(payload, "project_dirs")]
         config = _require_config(context)
-        budget = RetryBudget()
-        collector = create_llm_observation_collector("masters-confirm")
+        llm_run = LLMRun(context, "masters-confirm")
 
         def archive_llm_factory() -> LLM:
-            return _llm(context, budget, collector)
+            return llm_run.llm()
 
         try:
             meta = confirm_distillation(
@@ -4965,7 +4997,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 reference_library_dir=reference_library_dir(config.module_library_dir),
             )
         finally:
-            context.recent_llm_workflows.add_completed(collector)
+            llm_run.settle()
         return {
             "platform": meta.platform,
             "sources": list(meta.sources),
@@ -5813,16 +5845,16 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             config = _require_config(context)
             vision_base_url, vision_api_key, vision_model = _resolve_vision(config)
             if vision_configured(vision_api_key):
-                collector = create_llm_observation_collector("vision-describe")
+                vision_run = LLMRun(context, "vision-describe")
                 text = extract_pdf_with_image_notes(
                     tmp_path,
                     vision_base_url=vision_base_url,
                     vision_api_key=vision_api_key,
                     vision_model=vision_model,
-                    observation_collector=collector,
+                    observation_collector=vision_run.collector,
                     detail_qa=config.vision_detail_qa,
                 )
-                context.recent_llm_workflows.add_completed(collector)
+                vision_run.settle()
             else:
                 text = extract_file(tmp_path)
             if len(text) <= TOPIC_SPLIT_LLM_CHAR_CAP:
@@ -5943,17 +5975,17 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         vision_base_url, vision_api_key, vision_model = _resolve_vision(config)
         if vision_configured(vision_api_key):
             try:
-                collector = create_llm_observation_collector("vision-describe")
+                vision_run = LLMRun(context, "vision-describe")
                 entry = enrich_topic_image_notes(
                     topics_dir,
                     key,
                     vision_base_url=vision_base_url,
                     vision_api_key=vision_api_key,
                     vision_model=vision_model,
-                    observation_collector=collector,
+                    observation_collector=vision_run.collector,
                     detail_qa=config.vision_detail_qa,
                 )
-                context.recent_llm_workflows.add_completed(collector)
+                vision_run.settle()
             except Exception:
                 pass  # 视觉失败降级：返回原题面
         return entry.to_dict()

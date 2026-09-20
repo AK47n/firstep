@@ -5773,6 +5773,102 @@ def test_recommend_vision_qa_not_injected_without_figure_pdf(client, context, mo
     assert not called
 
 
+def test_recommend_settles_both_observations_even_when_the_body_raises(
+    client, context, monkeypatch
+):
+    """推荐路由的两个观测单元（工单 webapp-consolidation/02）：主流**先**结算、
+    按需视觉问答**后**结算——而且正文抛错时两者都要结算（从前的 finally 语义）。
+
+    判据取观察面板的真源（`recent_llm_workflows`）：两条都得在，先后按结算顺序
+    （面板 newest-first 展示，故视觉在前）。两个收集器各造一条观测，否则
+    `add_completed` 对空观测是空操作、这条用例会假绿。
+    """
+    from dataclasses import replace
+
+    from contest_generator.llm import LLMObservationCollector
+
+    def record_one(collector: LLMObservationCollector, operation: str) -> None:
+        """给收集器造一条观测（这里只关心"这趟有没有观测"，不关心内容）。"""
+        collector.collect(
+            operation=operation, provider="deepseek", route="remote", model="stub",
+            duration_ms=1, attempts=1, status="success", final=True, call_id=None,
+            budget_attempt=None, http_status=200, error_kind=None,
+            parse_status="ok", request_bytes=0,
+        )
+
+    ctx = context[0]
+    ctx.config = replace(ctx.config, vision_api_key="sk-vision")
+    make_fake_topic_library(
+        topic_library_dir(ctx.config.module_library_dir),
+        problem_text="2026C 数字钥匙题面全文。院区布局如图1所示。",
+    )
+    transport = FakeTransport(
+        body=json.dumps({"choices": [{"message": {"content": "Auto_Car"}}]})
+    )
+
+    def factory(config, retry_budget=None, observation_collector=None):
+        return build_llm(config, retry_budget, observation_collector, transport)
+
+    ctx.llm_factory = factory
+
+    def fake_answer(pdf_path, problem_text, question, *, observation_collector=None, **_kw):
+        record_one(observation_collector, "vision_qa")
+        return "走廊宽度 30cm"
+
+    monkeypatch.setattr("contest_generator.webapp.answer_figure_question", fake_answer)
+
+    def failing_run(topic, llm, clarifications, **kwargs):
+        vision_qa = kwargs.get("vision_qa")
+        assert vision_qa is not None, "条目带原 PDF + 视觉已配置 → 应当注入视觉回调"
+        assert vision_qa("图1中的走廊宽度是多少？") == "走廊宽度 30cm"
+        llm.name_topic_english("哨兵")  # 主流那条观测（真 DeepSeekLLM + 假传输）
+        raise LLMError("哨兵：正文中途失败")
+
+    monkeypatch.setattr("contest_generator.webapp.run_recommendation", failing_run)
+
+    events = _recommend_stream(
+        client, {"problem_text": TOPIC_PROBLEM_TEXT, "topic_id": "2026C"}
+    )
+
+    assert events[-1][0] == EVENT_ERROR, f"该以 error 收尾：{events}"
+    names = [
+        item["workflow_name"]
+        for item in ctx.recent_llm_workflows.to_dict()["workflows"]
+    ]
+    assert names == ["vision-qa", "recommend"], (
+        f"两条观测都要结算（主流先、视觉后 → 面板 newest-first 是视觉在前）：{names}"
+    )
+
+
+def test_vision_extract_never_dispatches_the_llm_factory(client, context, monkeypatch):
+    """视觉抽取是**只观测**的工作流（工单 webapp-consolidation/02 验收）：全程不碰
+    `llm_factory`——它的模型是视觉通道自己的，缝只借出收集器、一个模型都不造。
+    """
+    from dataclasses import replace
+
+    ctx = context[0]
+    ctx.config = replace(ctx.config, vision_api_key="sk-vision")
+    dispatched: list[tuple] = []
+
+    def recording_factory(*args, **kwargs):
+        dispatched.append(args)
+        return FakeLLM()
+
+    ctx.llm_factory = recording_factory
+    monkeypatch.setattr(
+        "contest_generator.webapp.extract_image", lambda *a, **k: "图里是一只猫"
+    )
+
+    resp = client.post(
+        "/api/extract",
+        files={"upload": ("图.png", b"\x89PNG\r\n\x1a\n", "image/png")},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["text"] == "图里是一只猫"
+    assert dispatched == [], "只做观测的工作流不许造模型"
+
+
 def test_recommend_clarify_questions_end_stream_with_question_event(client, context):
     """首跑（无澄清历史）澄清阶段先行：clarify 仍有疑问 → question 事件收尾
     （不发 round——澄清阶段不属于收敛轮次，补问不再作废已跑轮次）。"""

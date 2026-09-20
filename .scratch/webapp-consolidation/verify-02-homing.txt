@@ -1,0 +1,59 @@
+# 工单 webapp-consolidation/02 —— 验证读数（2026-09-20）
+
+## 1. 红证：单源守卫的判据（迁移前散落、迁移后单源）
+
+探针 `.scratch/webapp-consolidation/probe-02-triple-red-proof.py`，原始输出
+`verify-02-triple-red-proof.txt`（判据本体只有一份：`tests/test_llm_run.py` 的
+`_triple_sites`，探针 import 它）：
+
+| 判据 | HEAD 版（迁移前） | 工作树（迁移后） |
+|---|---|---|
+| 收集器创建 `create_llm_observation_collector` | **23** 处（散在 23 个路由函数里） | 1 处 → `LLMRun.__init__` |
+| 预算创建 `RetryBudget()` | **20** 处 | 1 处 → `LLMRun.__init__` |
+| 客户端派发 `_llm(ctx, budget, collector)` | **21** 处 | 1 处 → `LLMRun.llm` |
+| 观测结算 `recent_llm_workflows.add_completed` | **23** 处 | 1 处 → `LLMRun.settle` |
+
+（处数按"所在函数去重"记：HEAD 上 25 个收集器里有两个 `extract` 分支同函数、
+`recommend` 里两个收集器同函数，故 23。）
+
+## 2. 行为零变化
+
+- 全量 `python -m pytest -n auto -q`：**5008 passed, 1 skipped**（107.8s）
+  —— 迁移前同一套是 **4996 passed, 1 skipped**，差的 12 条就是本单新增用例（缝直测 10 +
+  路由面 2）。
+- 既有判据零改动：`git diff HEAD -- tests/` 只新增 `tests/test_llm_run.py`（新文件）与
+  `tests/test_webapp.py` 的两条**新增**用例；`tests/test_webapp.py` 的
+  `test_llm_factory_receives_shared_retry_budget_and_collector_for_{skeleton,recommend}`
+  两条工厂契约用例**未改一字**照旧绿。
+- 迁移是机械改写：`.scratch/webapp-consolidation/apply-02-migrate.py`（逐字形态规则 +
+  字符串/注释区间保护，共 73 处替换），无手工语义改动。
+
+## 3. 类型面：零新增
+
+`python -m mypy src` → **21 errors / 9 files**，与 HEAD 基线同数（那 21 条与上一张工单
+同源，本单未增）。
+
+## 4. 前端门禁
+
+`node --test "tests/js/*.test.mjs"` → **1686 passed / 0 failed**（本单不碰前端）。
+
+## 5. 新增 12 条用例
+
+`tests/test_llm_run.py`（10 条）：
+
+- 行为 7 条：跨派发共享预算与收集器 / 1 参数工厂兼容 / 只观测不造模型 / 结算记录且幂等 /
+  空趟不记 / 工作流名落在收集器身份里 / 幂等（合并在上一条里）；
+- 守卫 3 条：四件事按**调用点**各恰好一处且在缝内 + 合成片段红证 + 「同函数写两遍也要红」
+  与「裸 `_llm(ctx)` 不算派发」的口径。
+
+`tests/test_webapp.py`（2 条，路由面——缝直测盖不到的部分）：
+
+- `test_recommend_settles_both_observations_even_when_the_body_raises`：真实推荐端点上让正文
+  抛错，断言观察面板里 `["vision-qa", "recommend"]` 两条都在且先后正确（两个收集器各造一条
+  观测——`add_completed` 对空观测是空操作，不造就假绿）；
+- `test_vision_extract_never_dispatches_the_llm_factory`：真实 `/api/extract` + 记录型工厂 →
+  零派发。
+
+## 6. 纪律
+
+本单**一次服务器都没起**（进程内 TestClient + pytest + node）；未新增任何需要重启才可见的东西。
