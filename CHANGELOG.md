@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=f16c088df6c61b51eb7dbe27bdac47fcafece89f -->
+<!-- changelog-auto: last-commit=fb885a4ad967299298c6b47fb9193b265143abde -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-09-20
+- 10:21 工单 module-hwcheck/06：交互式串口命令台（配方驱动复测 + 既有命令原样）
 
 ## 2026-09-19
 - 10:38 修启动器：端口上那个服务是旧进程就踢掉重起（工单 update-restart-stale-service/01）
