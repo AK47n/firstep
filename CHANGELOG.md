@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=b455903c5143397de7fec3e128599acb1fe4ae56 -->
+<!-- changelog-auto: last-commit=b9133f8eed3b6261e117d4b741da357866cec64b -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -21,6 +21,7 @@
 - 21:53 工单 ui-dom-contract-gate/02：ui 层第一条测试缝——id 存在性与装载可达性（纯静态，进前端门禁）
 - 21:58 工单 ui-dom-contract-gate/03：浏览器门禁接进 prepush 与 CI（与前端门禁并列、相互独立）
 - 22:28 工单 ui-dom-contract-gate/04：ui 层第二层缝——DOM 行为契约（真浏览器，5 条 / 3 个模块）
+- 22:33 工单 ui-dom-contract-gate/05：收口——领域词表补「ui 层测试缝」+ 闸门文档 + 台账记账
 
 ## 2026-09-19
 - 10:38 修启动器：端口上那个服务是旧进程就踢掉重起（工单 update-restart-stale-service/01）
