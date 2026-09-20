@@ -225,3 +225,18 @@ UTF-8 stdout（原锚点版是崩在 GBK 编码上的）。第 7 节的两道候
 测试文件 import 它，没有测试缝；六条跨语言镜像里 `CODE_TREE_NAME_ILLEGAL`（文件名非法字符）
 与 `pinShareClass`（同脚多角色）两条无任何守卫。
 
+## 11. webapp 收口（2026-09-20，同一份架构评审的候选 C2；工单 webapp-consolidation/01–02 已落地）
+
+评审报告（`%TEMP%\architecture-review-20260920-1745.html`）的复审结论「该做的只有两件半」里，
+第 1 件就是本条（第 2 件是上面的第 10 节）：
+
+- **检测页装配回域**（01）：硬件检测页的四段装配（约 483 行）从 `webapp.create_app` 搬回
+  `hwcheck_board`（`hwcheck_view` / `HwCheckView` / `read_master_syscfg`）与 `hwcheck_recipe`
+  （`load_library_recipes` / `sections_payload`），接口从 `AppContext` 收成显式路径 + 配置对象；
+  结构钉 `tests/test_hwcheck_assembly_home.py` 钉住 webapp 的 hwcheck 族 import 面。
+- **LLM 工作流观测一处**（02）：25 处手写的「预算 + 收集器 + 派发 + 结算」收成 `webapp.LLMRun`
+  一个缝；守卫与红证在 `tests/test_llm_run.py`。
+- 两单都**没做 route 分册**（评审同一段里也建议不做）：`tests/test_webapp.py` 那条按源码文本钉
+  recommend 路由形状的 AST 守卫会把它判红，先改守卫形状才谈分册。评审的其余项（C5a 两条裸镜像
+  「2.5」、C4 公共件收回 update.py、C7 私有符号公开化）仍挂账，未立项。
+
