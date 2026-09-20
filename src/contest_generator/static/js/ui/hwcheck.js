@@ -37,6 +37,7 @@ import {
   hwcheckBoardState, hwcheckWiringErrorHTML,
   hwcheckSectionsState, hwcheckSectionsHTML, hwcheckUnspecializedHTML,
   hwcheckSectionsEmptyHTML,
+  hwcheckConsoleState, hwcheckConsoleHTML,
   HWCHECK_PARENT_KEY, HWCHECK_LAST_DIR_KEY,
 } from "/js/fx/hwcheck.js";
 
@@ -57,6 +58,7 @@ const hwcheckUI = {
   exclusiveGroups: [], // 库级互斥组（服务端按平台投影，工单 05：单选交换的判据）
   sections: [],       // 逐件专精小节（服务端按库内配方解析，工单 04）
   unspecialized: [],  // 选了但没有配方的器件（点名，不假装测过）
+  console: null,      // 串口命令台载荷（配方命令 + 既有命令 + 能不能复测，工单 06）
   project: null,      // 当前正在看的检测工程（生成或回读来的）
   checklistChecked: [],
   recent: [],
@@ -251,6 +253,16 @@ function renderHwcheckSections() {
     + hwcheckUnspecializedHTML(hwcheckUI.unspecialized);
 }
 
+// —— 串口命令台（工单 06）：只渲染服务端载荷（命令表 = 库内配方）——
+// 前端不判"哪个字符是谁的"：判重与保留字都在服务端（两件抢字符 = 构建期 400）。
+function renderHwcheckConsole() {
+  const box = $("hwcheck-console");
+  if (!box) return;
+  box.innerHTML = hwcheckConsoleHTML(hwcheckUI.console)
+    || '<div class="muted">选好器件后点「预览检测程序」：这里会列出这一趟的串口'
+      + "复测命令（哪些能复测由库内配方决定），以及没有串口时为什么不能交互复测。</div>";
+}
+
 export function renderHwcheckPanel() {
   renderHwcheckPlatforms();
   renderHwcheckChannelNote();
@@ -258,16 +270,28 @@ export function renderHwcheckPanel() {
   renderHwcheckDevices();
   renderHwcheckWiring();
   renderHwcheckSections();
+  renderHwcheckConsole();
   renderHwcheckProject();
   renderHwcheckChecklist();
   renderHwcheckRecent();
 }
 
-// adoptProject(payload, dir)：把一次生成 / 回读的结果放到页面上——同时记住
+// adoptProject(payload, dir, opts)：把一次生成 / 回读的结果放到页面上——同时记住
 // "上次看的是哪个目录"，并按该目录取出本地勾选态。
-function adoptProject(payload, dir) {
-  Object.assign(hwcheckUI, hwcheckProjectState(hwcheckUI, payload));
-  Object.assign(hwcheckUI, hwcheckPreviewState(hwcheckUI, payload));
+//
+// `keepSelection=true`：**只带工程本体**（main.c / 清单 / 通道 / 预览），不覆盖
+// 用户当前的器件与板侧视图。什么时候用：**自动回读**（页面加载时按上次目录回显）
+// 撞上用户已经动过选择——他那一下才是最新意图，用旧工程里的器件集覆盖就是静默
+// 抹掉他刚点的东西（照 refreshHwcheckView 的同一条并发纪律"过期响应绝不写状态"）。
+function adoptProject(payload, dir, { keepSelection = false } = {}) {
+  const adopted = hwcheckProjectState(hwcheckUI, payload);
+  if (keepSelection) {
+    Object.assign(hwcheckUI, hwcheckPreviewState(hwcheckUI, payload));
+    hwcheckUI.project = adopted.project;
+  } else {
+    Object.assign(hwcheckUI, adopted);
+    Object.assign(hwcheckUI, hwcheckPreviewState(hwcheckUI, payload));
+  }
   hwcheckUI.checklistChecked = hwcheckCheckedIds(
     readStored(hwcheckChecklistKey(dir)));
   hwcheckUI.generateError = "";
@@ -309,6 +333,7 @@ async function refreshHwcheckView() {
       Object.assign(hwcheckUI, hwcheckPreviewState(hwcheckUI, payload));
       Object.assign(hwcheckUI, hwcheckBoardState(hwcheckUI, payload));
       Object.assign(hwcheckUI, hwcheckSectionsState(hwcheckUI, payload));
+      Object.assign(hwcheckUI, hwcheckConsoleState(hwcheckUI, payload));
       hwcheckUI.wiringError = "";
     }
   } catch (e) {
@@ -316,6 +341,7 @@ async function refreshHwcheckView() {
       hwcheckUI.wiring = null;
       hwcheckUI.sections = [];
       hwcheckUI.unspecialized = [];
+      hwcheckUI.console = null;
       hwcheckUI.wiringError = e && e.message ? e.message : String(e);
     }
   } finally {
@@ -330,6 +356,7 @@ async function refreshHwcheckView() {
   renderHwcheckDevices();
   renderHwcheckWiring();
   renderHwcheckSections();
+  renderHwcheckConsole();   // 命令表也随载荷更新（真机验收抓到的漏渲染）
 }
 
 async function previewHwcheck() {
@@ -378,12 +405,20 @@ async function generateHwcheck() {
 }
 
 // restoreHwcheckProject(dir)：回读一次已有检测（刷新回显 / 点最近一次）。
+//
+// ⚠ **回读在途时用户动过选择就不覆盖他的器件**（工单 06 会话实测的静默抹除）：
+// 页面加载的自动回读是异步的，而用户可能已经点了平台 / 加了器件——旧工程里的
+// 器件集（常见是空的）一到就把刚选的那件抹掉，页面上看着像"点了没反应"。
+// 判据用与 refreshHwcheckView 同一个选择集快照。
 async function restoreHwcheckProject(dir) {
   if (!dir) return;
+  const requestKey = hwcheckSelectionKey();
   try {
     const payload = await apiGet(
       "/api/hwcheck/project?output_dir=" + encodeURIComponent(dir));
-    adoptProject(payload, dir);
+    adoptProject(payload, dir, {
+      keepSelection: hwcheckSelectionKey() !== requestKey,
+    });
     renderHwcheckPanel();
   } catch (e) {
     // 上次那个工程被删了 / 不是检测工程：清掉备忘，不留下一个永远报错的入口
@@ -504,6 +539,7 @@ export function initHwcheck() {
         hwcheckUI.wiring = null;          // 换板 = 旧接线表作废（脚不一样）
         hwcheckUI.sections = [];          // 换板 = 旧检测计划作废（配方按平台分）
         hwcheckUI.unspecialized = [];
+        hwcheckUI.console = null;         // 同理：命令字符也按平台 / 配方给
         hwcheckUI.wiringError = "";
       }
       renderHwcheckPanel();
@@ -532,6 +568,7 @@ export function initHwcheck() {
       hwcheckUI.wiring = null;
       hwcheckUI.sections = [];          // 通道变了 = 工程模块集变了，计划重取
       hwcheckUI.unspecialized = [];
+      hwcheckUI.console = null;         // 命令表也一样（有没有串口决定能不能复测）
       hwcheckUI.wiringError = "";
       // 通道变了：生成前引导（mspm0 双通道会撞脚）要跟着变
       renderHwcheckChannelNote();

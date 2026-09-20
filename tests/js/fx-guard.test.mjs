@@ -89,6 +89,7 @@ const DOMAINS = {
     hwcheckSectionsState: "fn", hwcheckSectionsHTML: "fn",
     hwcheckUnspecializedHTML: "fn", hwcheckSectionsEmptyHTML: "fn",
     hwcheckSectionPlanText: "fn", hwcheckSectionNoteHTML: "fn",
+    hwcheckConsoleState: "fn", hwcheckConsoleHTML: "fn",
     HWCHECK_CHANNEL_KEYS: "object",
     HWCHECK_PARENT_KEY: "string", HWCHECK_LAST_DIR_KEY: "string",
   },

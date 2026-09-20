@@ -174,6 +174,7 @@ from .hwcheck import (
     render_output_hint,
 )
 from .hwcheck_board import hwcheck_board_view
+from .hwcheck_console import build_console_table, console_payload
 from .hwcheck_recipe import (
     SECTION_TAG,
     interface_names,
@@ -840,10 +841,15 @@ def _hwcheck_view(ctx: AppContext, config: HwCheckConfig) -> dict:
     sections = resolve_sections(config.platform, devices, recipes, manifests)
     specialized = {section.slug for section in sections}
     missing = {item["slug"] for item in view.missing}
+    # 串口命令台（工单 06）：页面与产物读**同一张表**（`build_console_table`
+    # 是纯函数，这里与 `render_main_c` 各建一次，逐字相同）。冲突照旧在这里
+    # 就红 → 400 中文，学生不必等到点「生成」才知道两个器件抢了同一个字符。
+    console = build_console_table(sections)
     return {
         "board": {
             "wiring": view.to_dict(),
             "sections": _hwcheck_sections_payload(sections),
+            "console": console_payload(config.debug_uart, console),
             "unspecialized": [
                 {"slug": slug, "message": unspecialized_message(slug)}
                 for slug in devices

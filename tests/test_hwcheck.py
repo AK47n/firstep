@@ -145,6 +145,25 @@ def test_oled_only_has_no_serial_calls():
     assert '#include "headfile.h"' in code
 
 
+def test_serial_lines_end_with_crlf_so_a_terminal_does_not_overwrite():
+    """**行尾策略 = 串口上一行一个 `\\r\\n`**（工单 06 定，04 的备忘点名叫这一单定）。
+
+    为什么不能只发 `\\n`：串口助手（以及绝大多数串口终端）里裸 LF 只换行不回列，
+    下一行会**接着上一行的尾巴写**——多行帮助 / 逐件回显挤成一团。库内自己的消息
+    就是 `\\r\\n`（`debug_uart.c` 的 `DEBUG_PRINTF("LED: RED (lock)\\r\\n")`），
+    检测程序的输出与它同口径才不打架。
+
+    OLED 那一路**不受影响**：它是显存式整行刷新（`oled_show_text`），行尾不是它的
+    概念——所以 `\\r\\n` 只加在串口出口上，不进搬运/换行逻辑（进了会被当成两个字符
+    写进显存，白占两格）。
+    """
+    code = render_main_c(SERIAL_ONLY)
+    assert 'DEBUG_PRINTF("%s\\r\\n", s);' in code, "串口出口要给每行补 CRLF"
+    assert 'DEBUG_PRINTF("%s", s);' not in code
+    oled_code = render_main_c(OLED_ONLY)
+    assert "oled_show_text" in oled_code and "\\r\\n" not in oled_code
+
+
 def test_no_channel_renders_no_print_call_at_all():
     """**防"假装测过"的结构断言**：两个通道都没有 → 一句打印调用都不许有。
 
@@ -497,6 +516,79 @@ def test_hwcheck_error_registered_as_400():
     status, message = error_entry(HwCheckError("未知平台 'nope'，已注册的平台：mspm0, stm32"))
     assert status == 400
     assert "nope" in message
+
+
+# ---------------------------------------------------------------------------
+# 工单 06：串口命令台的载荷（页面与产物读同一张表）+ 冲突在预览这一层就红
+# ---------------------------------------------------------------------------
+
+
+def test_preview_payload_carries_the_serial_console_table(real_library_client):
+    """命令表进载荷，且与产物**同源**：页面说"敲 l 复测 led"，板上就一定认 l。"""
+    client, _ = real_library_client
+    body = client.post(
+        "/api/hwcheck/preview",
+        json={"platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
+              "devices": ["led", "ml_mpu6050"]},
+    ).json()
+    console = body["console"]
+    assert console["available"] is True
+    assert {item["slug"]: item["command"] for item in console["commands"]} == {
+        "led": "l", "ml_mpu6050": "m",
+    }
+    for item in console["commands"]:
+        assert item["description"] and item["echo"] == f"测的是：{item['description']}"
+    assert [item["command"] for item in console["legacy"]] == ["r", "y", "g", "o", "b"]
+    assert console["help_command"] == "?"
+    # 产物里真出现这两条分派 + 主循环里的命令台轮询（载荷不是另画的一张表）
+    assert "case 'l':" in body["main_c"]
+    assert "hwcheck_check_ml_mpu6050();" in body["main_c"]
+    assert "hwcheck_console_poll();" in body["main_c"]
+
+
+def test_preview_says_out_loud_when_there_is_no_serial(real_library_client):
+    """无串口：页面**明说**不能交互式复测，产物里也没有命令循环（不静默降级）。"""
+    client, _ = real_library_client
+    body = client.post(
+        "/api/hwcheck/preview",
+        json={"platform": PLATFORM_STM32, "debug_uart": False, "oled": True,
+              "devices": ["led"]},
+    ).json()
+    assert body["console"]["available"] is False
+    assert "不能交互式复测" in body["console"]["hint"]
+    assert "hwcheck_console_poll" not in body["main_c"]
+    # 命令表照给（勾上串口再生成就能用），只是这一趟不能用
+    assert [item["command"] for item in body["console"]["commands"]] == ["l"]
+
+
+def test_preview_400_when_two_devices_claim_the_same_command(
+    real_library_client, tmp_path
+):
+    """两件抢同一个命令字符 = **构建期**红（预览这一层），点名两件与那个字符。
+
+    注入只写 tmp 副本（不动真库那一份——`-n auto` 下别的 worker 正在读它，
+    照 `test_preview_still_fails_loudly_when_the_recipe_file_is_broken` 的记账）。
+    """
+    from contest_generator.hwcheck_recipe import RECIPE_FILENAME
+
+    client, ctx = real_library_client
+    repo = Path(__file__).resolve().parents[1]
+    original = (repo / "library" / RECIPE_FILENAME).read_text(encoding="utf-8")
+    target = tmp_path / "recipes-command-clash.json"
+    target.write_text(
+        original.replace('"command": "d"', '"command": "l"', 1), encoding="utf-8"
+    )
+    ctx.hwcheck_recipe_path = target
+    response = client.post(
+        "/api/hwcheck/preview",
+        json={"platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
+              "devices": ["led", "oled"]},
+    )
+    assert response.status_code == 400, response.text
+    detail = response.json()["detail"]
+    assert "led" in detail and "oled" in detail and "'l'" in detail
+    assert (repo / "library" / RECIPE_FILENAME).read_text(
+        encoding="utf-8") == original
 
 
 # ---------------------------------------------------------------------------
@@ -1359,7 +1451,15 @@ def test_preview_payload_carries_the_specialized_sections(real_library_client):
     # led_init 是 void：配方**不写** init_expect，载荷里也不许编一个期望值出来
     assert section["init_expect"] == ""
     assert section["read"] == [{"expression": "LED_CHANNEL_COUNT", "unit": ""}]
-    assert section["console"] is None   # 命令表归工单 06，本单只把数据落进载荷
+    # `console` 段（工单 06 起落地）：载荷里那一条命令要与**命令表**（页面用）
+    # 同源——两个字段不是各写一份，是同一条通行证。04 那一版这里钉的是
+    # `is None`（"命令表归工单 06"），06 落地后那句话过期了，改为钉内容。
+    assert section["console"] == {
+        "command": "l",
+        "description": "板载 LED：重跑一次点灯初始化并回显本平台通道数",
+    }
+    assert body["console"]["commands"][0]["command"] == section["console"]["command"]
+    assert body["console"]["commands"][0]["slug"] == section["slug"]
 
 
 def test_preview_reports_devices_without_a_recipe_as_unspecialized(

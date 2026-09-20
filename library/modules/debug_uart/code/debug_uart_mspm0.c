@@ -73,3 +73,22 @@ void debug_cmd_poll(void)
     DEBUG_PRINTF("CMD: %s\r\n", cmd_buf);
     cmd_buf[0] = '\0';
 }
+
+// ============================================================
+//  命令台接口（工单 module-hwcheck/06）
+//
+//  硬件检测程序按库内配方给每件器件挂一个复测字符，它需要先看一眼收到的
+//  命令再决定认不认领：认领（配方命令 / 帮助）才 consume，其余一律不碰，
+//  留给上面的 debug_cmd_poll()（本平台那条路是原样回显）。
+//
+//  peek 只读、consume 才清空。命令粒度同样是首字符（与 debug_cmd_poll 同款）。
+// ============================================================
+const char *debug_cmd_peek(void)
+{
+    return cmd_buf;     // 没有完整命令时是空串（首字符 '\0'）
+}
+
+void debug_cmd_consume(void)
+{
+    cmd_buf[0] = '\0';  // 与 debug_cmd_poll() 处理完那一下同一写法
+}

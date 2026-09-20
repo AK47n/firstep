@@ -191,6 +191,27 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > （`hwcheck_recipes.json` 的 `include.headers`）——不然 ARMCC 报一串
 > `#223-D function declared implicitly` + `#20 identifier undefined`（工单 05 实测 7 error）。
 > 跨模块前置调用的头（如 `I2C_Init` 的 `ml_i2c.h`）也走这同一个段。
+>
+> **2026-09-20 01:0x（module-hwcheck/06 会话）**：8000 仍未起；这一单一次服务器都没起
+> （全量套件 + 三支探针走进程内 TestClient / 子进程），浏览器验收照旧用 8791（夹具自带
+> 起停）。跑完实测 8000/8020/8021/8791 都没在听、无残留 python。
+>
+> ⚠ **同轮钉到的一条既有竞态（产品侧，本单没修，另开单）**：**F5 重载慢过 1.5 秒会被
+> 应用自己关掉**。链路：`app.js` 在每次页面加载时 `POST /api/tabs/register`、
+> 在 `pagehide` 时 `sendBeacon("/api/tabs/bye")`；启动器模式（`FIRSTEP_LAUNCHER=1`）
+> 下 `webapp._schedule_exit_if_idle` 见"注册表空了"就起 `_EXIT_GRACE = 1.5` 秒宽限然后
+> `os._exit(0)`。重载时旧页面的 bye 先到、新页面的 register 要等 `app.js` 求值才发出
+> ——**宽限内没到就自杀**（本机实测：浏览器验收连跑第 7 次 `goto` 时命中，现象是
+> 后端进程消失、后续请求 `ERR_CONNECTION_REFUSED`）。
+> **判据**：`tests/browser/hwcheck.spec.mjs` 在 **HEAD（工单 05 状态）上同样 6 绿 3 红**
+> ——与在跑的特性无关。夹具侧已修（`tests/browser/server.mjs` 起服务后替验收会话注册一个
+> 固定 tab_id，注册表不再为空）；**产品侧那条竞态仍在**，要修得单独开单（候选：宽限放宽 /
+> register 先于 bye 生效 / 只在真正"关窗口"时退出）。
+>
+> ⚠ **验收前先清 8791 的残留 python**（第 2 节那条老坑，本轮又踩）：本轮第一次跑
+> 浏览器验收时端口上的旧服务把新起的挤掉，`startServer` 的健康检查与端点哨兵都过、
+> 却答的是旧进程；跑之前按第 2 节那条 `Get-CimInstance … contest_generator.webapp`
+> 清一遍即可。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 

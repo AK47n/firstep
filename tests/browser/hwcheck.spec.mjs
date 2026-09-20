@@ -316,3 +316,50 @@ test("同组互斥 = 单选交换：mspm0 上点第二件姿态件会自动换�
   await page.fill("#hwcheck-device-search", "");
 });
 
+test("串口命令台：选上 led 就列出复测命令；不勾串口则明说不能交互复测", async () => {
+  await openTab();
+  await page.click('[data-hwcheck-platform="stm32"]');
+  await page.fill("#hwcheck-device-search", "led");
+  await page.waitForSelector('#hwcheck-device-grid [data-add="led"]');
+  await page.click('#hwcheck-device-grid [data-add="led"]');
+  await page.waitForSelector("#hwcheck-console .hwcheck-table");
+
+  const panel = await page.textContent("#hwcheck-console");
+  assert.ok(panel.includes("l") && panel.includes("led"),
+    "命令表要说清敲哪个字符复测哪一件：\n" + panel);
+  assert.ok(panel.includes("板载 LED：重跑一次点灯初始化"),
+    "配方给的那句说明要原样印出来（页面与板上回显同一句）：\n" + panel);
+  for (const command of ["r", "y", "g", "o", "b"]) {
+    assert.ok(panel.includes(command), "既有命令 " + command + " 也要列（语义没变）：\n" + panel);
+  }
+  assert.ok(panel.includes("能交互式复测"), "有串口就要说清能复测：\n" + panel);
+
+  // 产出的 main.c 与页面同源：命令台进产物，且排在库内 poll 之前。
+  await page.click("#btn-hwcheck-preview");
+  await page.waitForFunction(
+    () => document.querySelector("#hwcheck-output").textContent
+      .includes("hwcheck_console_poll();"));
+  const mainC = await page.textContent("#hwcheck-output");
+  assert.ok(mainC.includes("debug_cmd_peek()") && mainC.includes("debug_cmd_consume()"),
+    "命令台要经库侧 peek / consume 认领命令：\n" + mainC.slice(0, 2000));
+  assert.ok(mainC.indexOf("hwcheck_console_poll();") < mainC.indexOf("debug_cmd_poll();"),
+    "必须先我们的命令台再库内 poll（反了既有命令会先把缓冲清空）：\n"
+    + mainC.slice(0, 2000));
+  assert.ok(mainC.includes("/* 既有命令：原样留给库内 debug_cmd_poll()"),
+    "既有 r/y/g/o/b 那一支要原样留给库里：\n" + mainC.slice(0, 2000));
+
+  // 取消勾选「调试串口」→ 页面**明说**不能交互式复测（票面：不静默降级）
+  await page.uncheck('input[data-hwcheck-channel="debug_uart"]');
+  await page.waitForFunction(
+    () => document.querySelector("#hwcheck-console").textContent
+      .includes("不能交互式复测"));
+  const noSerial = await page.textContent("#hwcheck-console");
+  assert.ok(noSerial.includes("勾上"), "还要给出下一步（怎么才能复测）：\n" + noSerial);
+  assert.ok(!noSerial.includes("敲这个"), "不能用的一趟不摆命令表：\n" + noSerial);
+
+  await page.check('input[data-hwcheck-channel="debug_uart"]');
+  await page.waitForSelector("#hwcheck-console .hwcheck-table");
+  await page.dispatchEvent('#hwcheck-device-chips [data-remove="led"]', "click");
+  await page.fill("#hwcheck-device-search", "");
+});
+

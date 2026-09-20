@@ -228,10 +228,14 @@ export function hwcheckChecklistProgressHTML(items, checkedIds) {
 // hwcheckBoardState(state, payload)：一次响应里的「板侧」部分——器件回显 +
 // 接线视图 + 同组互斥组（preview 与 generate / 回读三个端点都带这几项）。载荷
 // 缺键 = 保留当前状态（旧后端 / 出错响应不许把用户刚选的器件抹掉）。
+//
+// ⚠ 只返回**自己那几个键**，不 `...state` 展开：`hwcheckProjectState` 把几个
+// 归一器叠在一起（`{...a, ...b, ...c}`），谁展开旧 state，谁就把前一个刚更新的
+// 键按旧值覆盖回去（评审实测的 spread 顺序回归：回读一次，器件与检测计划退回
+// 上一次的值）。"缺键保留"由每个字段各自的 `state.x` 回退负责，不需要整份 state。
 export function hwcheckBoardState(state, payload) {
   const data = payload || {};
   return {
-    ...state,
     devices: Array.isArray(data.devices)
       ? data.devices.map((slug) => String(slug))
       : (Array.isArray(state && state.devices) ? state.devices : []),
@@ -251,6 +255,7 @@ export function hwcheckProjectState(state, payload) {
   return {
     ...hwcheckBoardState(state, data),
     ...hwcheckSectionsState(state, data),
+    ...hwcheckConsoleState(state, data),
     project: {
       outputDir: String(data.output_dir || ""),
       platform: String(data.platform || ""),
@@ -649,10 +654,10 @@ export function hwcheckOrderHTML(order, guide, reason) {
 
 // hwcheckSectionsState(state, payload)：载荷里的"逐件小节 + 未专精点名"部分。
 // 载荷缺键 = 保留当前状态（旧后端 / 出错响应不许把已有的检测计划抹掉）。
+// 同样只返回自己的键（见 hwcheckBoardState 的 spread 说明）。
 export function hwcheckSectionsState(state, payload) {
   const data = payload || {};
   return {
-    ...state,
     sections: Array.isArray(data.sections)
       ? data.sections
       : ((state && Array.isArray(state.sections)) ? state.sections : []),
@@ -736,6 +741,69 @@ export function hwcheckSectionsEmptyHTML() {
     + "（服务端按库内配方给，页面不猜哪几件有）。</div>";
 }
 
+// ===========================================================================
+// 工单 module-hwcheck/06：串口命令台（复测不用重烧）
+//
+// 分工照旧：命令表由服务端从库内配方生成（`console_payload`），本文件只把
+// 载荷渲染成 HTML。**不在这里判"哪个字符是谁的"**——判重与保留字都在服务端
+// （两件抢字符 = 构建期 400），前端再判一次就是第二个判据来源。
+// ===========================================================================
+
+// hwcheckConsoleState(state, payload)：载荷里的"串口命令台"部分。
+// 载荷缺键 = 保留当前状态（旧后端 / 出错响应不许把已有的命令表抹掉）。
+// 同样只返回自己的键（见 hwcheckBoardState 的 spread 说明）。
+export function hwcheckConsoleState(state, payload) {
+  const data = payload || {};
+  const next = data.console;
+  return {
+    console: (next && typeof next === "object")
+      ? next
+      : ((state && state.console) || null),
+  };
+}
+
+// hwcheckConsoleHTML(console)：命令台面板。
+// 有串口：配方命令逐条列出（敲什么 / 哪一件 / 测什么）+ 既有 r/y/g/o/b 单列
+// + 帮助字符。**没有串口就不摆那张表**——摆出来像"敲了就行"，而这一趟根本
+// 没有命令循环（服务端那句 hint 会明说不能交互式复测，票面要求）。
+export function hwcheckConsoleHTML(console) {
+  const data = (console && typeof console === "object") ? console : null;
+  if (!data) return "";
+  const hint = String(data.hint || "");
+  const help = String(data.help_command || "?");
+  const commands = Array.isArray(data.commands) ? data.commands : [];
+  const legacy = Array.isArray(data.legacy) ? data.legacy : [];
+  if (!hint && !commands.length && !legacy.length) return "";
+  if (data.available === false) {
+    return hint ? `<div class="hwcheck-hint">${esc(hint)}</div>` : "";
+  }
+  const rows = commands.map((item) => {
+    const one = item || {};
+    return '<tr><td class="hwcheck-pin">' + esc(one.command || "") + "</td>"
+      + `<td>${esc(one.slug || "")}</td>`
+      // 说明由服务端恒填（缺省句的后端单源是 ConsoleEntry.detail）：前端不另写
+      // 一句兜底，否则同一句文案两处写、迟早两种措辞。
+      + `<td>${esc(one.description || "")}</td></tr>`;
+  }).join("");
+  const table = rows
+    ? '<table class="hwcheck-table"><thead><tr><th>敲这个</th><th>哪一件</th>'
+      + "<th>复测什么</th></tr></thead><tbody>" + rows + "</tbody></table>"
+    : "";
+  const legacyLine = legacy.length
+    ? '<div class="hwcheck-hint">既有命令（库内 debug_cmd_poll 执行，'
+      + "语义没变）："
+      + legacy.map((item) => esc((item || {}).command || "") + " "
+        + esc((item || {}).description || "")).join(" / ")
+      + "</div>"
+    : "";
+  return '<div class="hwcheck-console">'
+    + (hint ? `<div class="hwcheck-hint">${esc(hint)}</div>` : "")
+    + table + legacyLine
+    + `<div class="hwcheck-hint">帮助：敲 `
+    + `<span class="hwcheck-pin">${esc(help)}</span> 列出全部命令。</div>`
+    + "</div>";
+}
+
 if (typeof window !== "undefined") {
   Object.assign(window, {
     hwcheckPlatformState, hwcheckSelectPlatform, hwcheckPickState,
@@ -759,6 +827,7 @@ if (typeof window !== "undefined") {
     hwcheckDeviceSlugs, hwcheckBoardState,
     hwcheckSectionsState, hwcheckSectionsHTML, hwcheckUnspecializedHTML,
     hwcheckSectionsEmptyHTML, hwcheckSectionPlanText, hwcheckSectionNoteHTML,
+    hwcheckConsoleState, hwcheckConsoleHTML,
   });
 }
 

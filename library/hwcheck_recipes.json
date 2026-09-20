@@ -1,5 +1,5 @@
 {
-  "_comment": "硬件检测的库内配方（工单 module-hwcheck/04-05）：键 = slug → 平台 → 配方。段见 spec 六段 + include + locals：include（这一节的调用要 include 哪些头文件，`{headers:[...]}`，头名不带目录）/ locals（局部变量声明，`类型 名字 [= 数字]`，排在动作之前）/ prereq（跨模块前置调用）/ init（初始化；init_expect 缺省 = 这一件没有返回值可判，如 void led_init）/ probe（探头 + expect 期望；expect 缺省或空 = 只做动作不判通断）/ read（读数展示：expressions 简单写法，items[{expression,unit}] 带单位）/ console（控制台命令，消费方是工单 06）/ note（平台差异说明，直接印到检测页）。校验：include / locals / init / read / probe / prereq 里出现的名字必须都能在库内找到（read 的裸常量与 extern 全局量也查），找不到 = 构建期大声失败（hwcheck_recipe.validate_recipes）；判据与生成门禁同源（skeleton 的接口块提取 + 对象宏 + extern 全局量 + 头名清单）。⚠ 读数表达式必须是**整数**（常量、返回 int 的调用，或本节自己声明的变量）——渲染走 hwcheck_report_int；小数按 note 里写的拆整数 / 小数两次显示。",
+  "_comment": "硬件检测的库内配方（工单 module-hwcheck/04-05）：键 = slug → 平台 → 配方。段见 spec 六段 + include + locals：include（这一节的调用要 include 哪些头文件，`{headers:[...]}`，头名不带目录）/ locals（局部变量声明，`类型 名字 [= 数字]`，排在动作之前）/ prereq（跨模块前置调用）/ init（初始化；init_expect 缺省 = 这一件没有返回值可判，如 void led_init）/ probe（探头 + expect 期望；expect 缺省或空 = 只做动作不判通断）/ read（读数展示：expressions 简单写法，items[{expression,unit}] 带单位）/ console（控制台命令 `{command, description}`，工单 06 起由检测程序的串口命令台消费：**单个字符**、大小写不敏感、不得占用库内既有 r/y/g/o/b 与帮助 ?，两件抢同一字符 = 构建期 400）/ note（平台差异说明，直接印到检测页）。校验：include / locals / init / read / probe / prereq 里出现的名字必须都能在库内找到（read 的裸常量与 extern 全局量也查），找不到 = 构建期大声失败（hwcheck_recipe.validate_recipes）；判据与生成门禁同源（skeleton 的接口块提取 + 对象宏 + extern 全局量 + 头名清单）。⚠ 读数表达式必须是**整数**（常量、返回 int 的调用，或本节自己声明的变量）——渲染走 hwcheck_report_int；小数按 note 里写的拆整数 / 小数两次显示。",
   "led": {
     "stm32": {
       "init": {
@@ -11,6 +11,10 @@
         "expressions": [
           "LED_CHANNEL_COUNT"
         ]
+      },
+      "console": {
+        "command": "l",
+        "description": "板载 LED：重跑一次点灯初始化并回显本平台通道数"
       },
       "note": {
         "lines": [
@@ -29,6 +33,10 @@
         "expressions": [
           "LED_CHANNEL_COUNT"
         ]
+      },
+      "console": {
+        "command": "l",
+        "description": "板载 LED：重跑一次点灯初始化并回显本平台通道数"
       },
       "note": {
         "lines": [
@@ -50,6 +58,10 @@
           "OLED_ShowString(0, 0, \"OLED OK\")"
         ]
       },
+      "console": {
+        "command": "d",
+        "description": "OLED 屏：重新初始化并在屏上打一行 OLED OK"
+      },
       "note": {
         "lines": [
           "stm32 的 OLED 走母版软 I2C（ml_oled，默认 PB8 = SCL / PB9 = SDA），函数声明在母版头 ml_oled.h 里（内嵌实现，模块目录里没有 oled.h）。",
@@ -68,6 +80,10 @@
         "calls": [
           "OLED_ShowString(0, 0, \"OLED OK\", 16)"
         ]
+      },
+      "console": {
+        "command": "d",
+        "description": "OLED 屏：重新初始化并在屏上打一行 OLED OK"
       },
       "note": {
         "lines": [
@@ -102,6 +118,10 @@
           "MPU6050_Read(WHO_AM_I)"
         ],
         "expect": "0x68"
+      },
+      "console": {
+        "command": "m",
+        "description": "MPU6050 通信：读 WHO_AM_I 比对 0x68，再回显六轴原始值"
       },
       "read": {
         "items": [
@@ -164,6 +184,10 @@
           "DMP_Read_Data(&pitch, &roll, &yaw)"
         ],
         "expect": "0"
+      },
+      "console": {
+        "command": "m",
+        "description": "MPU6050 姿态：重跑 DMP 初始化与一帧角度读取"
       },
       "read": {
         "items": [

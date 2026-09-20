@@ -24,6 +24,13 @@ void debug_uart_send(const char *str);  // 阻塞发送字符串
 void debug_uart_rx_handler(void);       // 由 DEBUG_UART_INST_IRQHandler 调用
 void debug_cmd_poll(void);              // 主循环调用：回显已收命令
 
+// 命令台接口（工单 module-hwcheck/06）：把"收到了什么命令"交给应用层。
+// 检测程序给每件器件挂了复测字符，它要先看一眼再决定认不认领——认领才
+// consume，其余留给上面的 debug_cmd_poll()（本平台那条路是原样回显）。
+// peek 只读、consume 才清空；与 stm32 版同名同形（见 debug_uart.h）。
+const char *debug_cmd_peek(void);   // 收到的命令（没有 = 空串，只读）
+void debug_cmd_consume(void);       // 应用层处理完 → 清空命令缓冲
+
 #if DEBUG_UART_ENABLE
     #define DEBUG_PRINTF(fmt, ...)  \
         do { \

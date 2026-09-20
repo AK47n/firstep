@@ -25,6 +25,14 @@ void debug_uart_rx_handler(void);   // 由母版 isr.c 的 USART2_IRQHandler 经
                                  // main.c 定义 USARTx_IRQHandler）
 void debug_cmd_poll(void);          // 主循环调用
 
+// 命令台接口（工单 module-hwcheck/06）：把"收到了什么命令"交给应用层。
+// 检测程序给每件器件挂了复测字符，它要**先看一眼**再决定认不认领——认领
+// （配方命令 / 帮助）才 consume，其余一律不碰，留给上面的 debug_cmd_poll()。
+// 分工刻意拆成两个：peek 只读、consume 才清空；合成一个"取走"接口的话，
+// 既有 r/y/g/o/b 的语义就落到应用层手里了（那就不是"一个字节不动"）。
+const char *debug_cmd_peek(void);   // 收到的命令（没有 = 空串，只读）
+void debug_cmd_consume(void);       // 应用层处理完 → 清空命令缓冲
+
 #if DEBUG_UART_ENABLE
     #define DEBUG_PRINTF(fmt, ...)  \
         do { \

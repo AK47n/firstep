@@ -44,6 +44,29 @@ async function endpointSentinel(url) {
   }
 }
 
+// holdTab(url)：夹具自己占一个标签位（工单 module-hwcheck/06 会话实测的一段既有竞态）。
+//
+// 前端每次 `page.goto` 都会 `pagehide` → `POST /api/tabs/bye`；服务端（启动器模式，
+// 正是本夹具设的 FIRSTEP_LAUNCHER=1）见"最后一个标签走了"就起 1.5s 宽限
+// （`webapp._EXIT_GRACE`）准备 `os._exit`，而新页面的 `POST /api/tabs/register`
+// 要等 `app.js` 求值才发出。本机实测：跑到第 7 次 goto 时新页面的 register 没在
+// 宽限内到达 → 验收服务**自杀**，后面几条用例全是 ERR_CONNECTION_REFUSED
+// （**HEAD 上同样复现**，与当时在跑的特性无关——留个判据：那条断言是 goto 超时，
+// 不是任何产品端点红）。
+//
+// 夹具 = 一个常开的浏览器会话，自己注册一个固定 tab_id，注册表就不再为空，
+// 自动退出不会在验收中途开火。产品侧那条"F5 慢过 1.5s 会被自己关掉"的竞态
+// **不在本夹具的判据内**（如实记账在 docs/agents/local-environment.md）。
+async function holdTab(url) {
+  try {
+    await fetch(`${url}/api/tabs/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tab_id: "acceptance-fixture" }),
+    });
+  } catch (e) { /* 注册失败不该让夹具起不来：调用方的健康检查才是硬判据 */ }
+}
+
 // startServer()：起服务并等健康检查通过；返回 { proc, url, stop() }。
 // 启动失败（30s 内没活）抛错——验收环境问题要当场红，不要静默跳过。
 export async function startServer({ timeoutMs = 30000 } = {}) {
@@ -68,6 +91,7 @@ export async function startServer({ timeoutMs = 30000 } = {}) {
   while (Date.now() < deadline) {
     if (await healthy(BASE_URL)) {
       if (await endpointSentinel(BASE_URL)) {
+        await holdTab(BASE_URL);
         return {
           proc,
           url: BASE_URL,

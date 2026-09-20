@@ -1032,6 +1032,10 @@
   .hwcheck-section-tag { font-size: 11.5px; font-weight: 600; color: var(--ok);
                          border: 1px solid var(--ok); border-radius: var(--radius-full);
                          padding: 0 7px; }
+  /* 串口命令台（工单 module-hwcheck/06）：命令表 + 既有命令一行 + 帮助一行。
+     没有串口时只出那句"不能交互式复测"（不摆用不了的命令表）。 */
+  .hwcheck-console .hwcheck-table { margin-bottom: var(--space-1); }
+  .hwcheck-console .hwcheck-table td:first-child { width: 64px; text-align: center; }
   /* 评分点核对清单（工单 score-checklist/01）：逐条 checkbox + 进度 +
      复制核对表；done 行弱化描边表示已核对 */
   .sp-actions { display: flex; align-items: center; gap: 10px; margin-bottom: var(--space-2); }
@@ -3919,6 +3923,11 @@
     <div class="card">
       <h2>这一趟真测哪几件 <span class="muted">（按库内配方渲染；没配方的会如实点名）</span></h2>
       <div id="hwcheck-sections"></div>
+    </div>
+
+    <div class="card">
+      <h2>串口命令台 <span class="muted">（上电跑完一遍后敲一个字符就复测，不用重烧）</span></h2>
+      <div id="hwcheck-console"></div>
     </div>
 
     <div class="card">

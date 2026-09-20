@@ -46,6 +46,22 @@
 SysTick 服务函数，而库内 DMP 端口会自己打开 SysTick 中断——不补一个空的
 `SysTick_Handler` 就会掉进启动文件的 `Default_Handler` 死循环（灯都不闪）。
 
+工单 06 补的一件事：**交互式串口命令台**（`hwcheck_console.py` 是那半命令的
+所有者——命令表 / 纯解析 / C 分派都在那边）。本模块只负责把它插进框架、并守住
+两条顺序判据（两条都真跑证过，别改）：
+
+1. **命令台排在逐件小节之后**：`switch` 里直接调 `hwcheck_check_<slug>()`，
+   排在前面就是隐式声明（真机 0 warning 的验收线）。
+2. **主循环里先 `hwcheck_console_poll()` 再 `debug_cmd_poll()`**：反过来的话，
+   库内 poll 会先把命令缓冲清空，配方命令永远认不出来——现象是"敲了没反应、
+   既有命令照常"，最难查的一类静默失效。
+   `.scratch/module-hwcheck/probe-06-console-behaviour.py` 有这条的真跑反证
+   （同一份命令台代码，只换顺序就复测不了）。
+
+渲染条件也在这里：**有串口 且 至少一条配方命令**才渲染命令台。没有配方命令时
+一个字都不加（那正是工单 02 的框架形态，既有 `r/y/g/o/b` 照旧由库内 poll 执行）；
+没有串口时文件头与检测页都**明说**"不能交互式复测"（不静默降级）。
+
 为什么要按通道分形态渲染，而不是"全渲染 + 运行时判断"：没有输出通道的构建
 必须**一个打印调用都不产生**——渲染出来却跑不到，学生会以为"程序报了结果、
 只是我没看到"，而真相是这里根本没测（spec 判据「不假装测过」）。所以通道形态
@@ -69,6 +85,11 @@ from dataclasses import dataclass
 from typing import Sequence
 
 from .hwcheck_errors import HwCheckError
+from .hwcheck_console import (
+    ConsoleTable,
+    build_console_table,
+    render_console_runtime,
+)
 from .hwcheck_recipe import (
     SECTION_TAG,
     RecipeSection,
@@ -647,6 +668,16 @@ def render_main_c(
     所以下面的分支是穷尽的。
     """
     headers = _PLATFORM_HEADERS[config.platform]
+    # 命令表（工单 06）：配方声明的复测字符 + 固定帮助命令。**无条件构建**
+    # （不只是有串口的形态）——字符冲突 / 形状不对是**库内数据**的错，
+    # 该在每一次构建期红，而不是"这次没勾串口所以放它过去"。
+    console = build_console_table(sections)
+    # 命令台的渲染条件（工单 06）：**有串口就有**（不看有没有配方命令）。
+    # 为什么不是"有配方命令才渲染"：检测页那句提示写着"命令循环里敲 ? 看帮助"
+    # ——命令台不在，那句话就是假的（评审抓到的假话）；而且一件命令都没声明时，
+    # 学生更需要有人告诉他"能敲什么、既有那五条还在不在"。固定的帮助命令是
+    # 命令表的一部分，命令表为空它也在。
+    console_rendered = bool(config.debug_uart)
     # 框架这一趟印了哪些头（器件小节的 include 段据此去重，见 _section_includes）
     framework_headers: list[str] = [str(headers["entry"])]
     if config.debug_uart:
@@ -662,7 +693,7 @@ def render_main_c(
         " * @file main.c",
         " * @brief 硬件检测程序 —— 确定性渲染，非 AI 生成",
         " *",
-        *_header_brief(config, sections),
+        *_header_brief(config, sections, console=console),
         " *",
         " * 检测没过是正常结果：要么接线不对，要么库内驱动有问题。",
         " */",
@@ -710,6 +741,12 @@ def render_main_c(
             lines.append("}")
             lines.append("")
 
+    # 串口命令台（工单 06）：排在逐件小节**之后**——`switch` 里直接调
+    # `hwcheck_check_<slug>()`，排在前面就是隐式声明（真机口径 0 warning 的要求）
+    if console_rendered:
+        lines.extend(render_console_runtime(console))
+        lines.append("")
+
     # 平台垫片（文件作用域）：mspm0 的 SysTick 服务函数，见 _PLATFORM_FILE_SCOPE
     lines.extend(_PLATFORM_FILE_SCOPE[config.platform])
     lines.append("int main(void)")
@@ -738,6 +775,10 @@ def render_main_c(
     lines.append("    while (1)")
     lines.append("    {")
     if config.debug_uart:
+        if console_rendered:
+            # 先 peek 我们的命令，再让库内 poll 处理既有命令——反了的话库内
+            # `debug_cmd_poll()` 会先把缓冲清空，配方命令永远认不出来
+            lines.append("        hwcheck_console_poll();  /* 配方命令：复测不用重烧 */")
         lines.append("        debug_cmd_poll();  /* 串口命令通道：复测不用重烧 */")
     lines.append(f"        led_toggle({_LED_CHANNEL});")
     lines.append(f"        delay_ms({_HEARTBEAT_MACRO});")
@@ -747,7 +788,10 @@ def render_main_c(
 
 
 def _header_brief(
-    config: HwCheckConfig, sections: Sequence["RecipeSection"] = ()
+    config: HwCheckConfig,
+    sections: Sequence["RecipeSection"] = (),
+    *,
+    console: ConsoleTable | None = None,
 ) -> list[str]:
     """文件头"这一趟做什么"的说明行——**按通道形态与器件集说实话**。
 
@@ -755,6 +799,10 @@ def _header_brief(
     没有输出通道：**只有闪灯一件事**——文件头若照抄"每一段结果写到输出通道"，
     而全文一个打印调用都没有（见 render_main_c 的分支），那份自述就是撒谎
     （与 OUTPUT_HINT_NONE 的"这一趟不打印任何检测结果"直接矛盾）。
+
+    串口这一路还要说清**命令台**（工单 06）：有配方命令就逐条列出，没有串口
+    就明说"不能交互式复测"——这两句是学生判断"我敲了没反应是不是坏了"的
+    唯一线索，不能留在页面上、代码里却不写。
     """
     lines = [" * 这一趟用来确认「板子活着 + 烧录链路通」："]
     if config.has_output_channel:
@@ -764,6 +812,30 @@ def _header_brief(
         lines.append(" *   1. 板载 LED 按固定周期闪烁（心跳，肉眼可见）。")
         lines.append(" *   本形态没有输出通道，因此**不打印任何检测结果**——")
         lines.append(" *   代码里也没有打印调用（不假装测过）。")
+    table = console if console is not None else ConsoleTable()
+    if config.debug_uart:
+        lines.append(" *")
+        lines.append(" * 上电跑完一遍后进**串口命令台**（复测不用重烧，边动线边看现象）：")
+        if table.entries:
+            for entry in table.entries:
+                lines.append(
+                    f" *   - {entry.command}  复测 {entry.slug}：{entry.detail}"
+                )
+        else:
+            lines.append(" *   - 这一趟没有配方命令（选的器件都没声明复测字符）：")
+            lines.append(" *     命令循环里只有帮助与下面那几条既有命令。")
+        lines.append(
+            f" *   - {table.help_command}  显示全部命令（含下面那几条既有命令）"
+        )
+        lines.append(
+            " * 既有 r / y / g / o / b<N>（点灯 / 蜂鸣）**语义不变**——"
+            "它们仍由库内 debug_cmd_poll() 执行。"
+        )
+    else:
+        lines.append(" *")
+        lines.append(" * 本形态**没有串口**：跑完上面这一遍就只剩心跳，")
+        lines.append(" * **不能交互式复测**（没有命令循环）——想边动线边看现象，")
+        lines.append(" * 请回到检测页勾上「调试串口」重新生成一次。")
     if sections and config.has_output_channel:
         lines.append(" *")
         lines.append(" * 逐件检测小节（按库内配方渲染，非 AI 生成）：")
@@ -813,6 +885,13 @@ def _report_outputs(config: HwCheckConfig) -> list[str]:
 
     缓冲**溢出保护**是刻意的：一行超长（配方写了超长路径之类）时丢掉溢出部分而
     不是踩内存——宁可截断一行，也不让检测程序自己跑飞。
+
+    **行尾策略（工单 06 定，04 的备忘点名叫这一单定）：串口每行补 `\\r\\n`。**
+    裸 LF 在串口助手里只换行不回列，下一行会接着上一行的尾巴写（多行帮助 /
+    逐件回显挤成一团）；库内自己的消息就是 `\\r\\n`（`debug_uart.c` 的
+    `DEBUG_PRINTF("LED: RED (lock)\\r\\n")`），检测程序与它同口径才不打架。
+    **只加在串口出口**：OLED 是显存式整行刷新（`oled_show_text`），行尾不是它的
+    概念，`\\r\\n` 进去只会白占两格显存。
     """
     lines: list[str] = [
         "static char hwcheck_line[128];",
@@ -823,7 +902,9 @@ def _report_outputs(config: HwCheckConfig) -> list[str]:
         lines.extend([
             "static void hwcheck_write_serial(const char *s)",
             "{",
-            '    DEBUG_PRINTF("%s", s);',
+            "    /* 每行补 CRLF（行尾策略，工单 06）：串口助手上裸 LF 不回列，",
+            "     * 下一行会接着上一行的尾巴写。库内既有消息也是 \\r\\n 结尾。 */",
+            '    DEBUG_PRINTF("%s\\r\\n", s);',
             "}",
             "",
         ])

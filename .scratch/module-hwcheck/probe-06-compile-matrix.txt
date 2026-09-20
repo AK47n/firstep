@@ -1,0 +1,29 @@
+# 工单 module-hwcheck/06 编译矩阵（stm32 UV4 + mspm0 gmake 真编译）
+
+UV4：C:\Keil5\Core\UV4\UV4.exe
+gmake：C:\ti\ccs2050\ccs\utils\bin\gmake.exe
+CCS 三件套：CcsTools(sdk_dir=WindowsPath('C:/ti/ccs2051/mspm0_sdk_2_10_00_04'), compiler_dir=WindowsPath('C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-armllvm_4.0.4.LTS'), sysconfig_cli=WindowsPath('C:/ti/ccs2051/sysconfig_1.26.2/sysconfig_cli.bat'))
+
+形态（stm32 四 + mspm0 二）：框架（命令台只剩帮助）→ led（命令台 l）→ led + oled（l / d）→ ml_mpu6050（命令台调器件小节）。
+
+## [stm32] 框架（不选器件：命令台只剩帮助 case）（hwcheck-stm32-20260920-100026）→ passed=True exit=0 error=0 warning=0 命令台=有（0 条配方命令）
+  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe06-z2ewgxhc\hwcheck-stm32-20260920-100026\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmpd2f3gjtr.log
+
+## [stm32] led + 串口（命令台：l 复测）（hwcheck-stm32-20260920-100029）→ passed=True exit=0 error=0 warning=0 命令台=有（1 条配方命令）
+  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe06-z2ewgxhc\hwcheck-stm32-20260920-100029\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmpyx3zzeo4.log
+
+## [stm32] led + oled + 双通道（命令台：l / d 复测）（hwcheck-stm32-20260920-100033）→ passed=True exit=0 error=0 warning=0 命令台=有（2 条配方命令）
+  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe06-z2ewgxhc\hwcheck-stm32-20260920-100033\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmp30j4l3xb.log
+
+## [stm32] ml_mpu6050 + 串口（命令台命令调用器件小节）（hwcheck-stm32-20260920-100036）→ passed=True exit=0 error=0 warning=0 命令台=有（1 条配方命令）
+  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe06-z2ewgxhc\hwcheck-stm32-20260920-100036\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmpvfcvrz89.log
+
+## [mspm0] 框架（不选器件：命令台只剩帮助 case）（hwcheck-mspm0-20260920-100039）→ passed=True exit=0 error=0 warning=0 命令台=有（0 条配方命令）
+  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe06-z2ewgxhc\hwcheck-mspm0-20260920-100039\Debug -f makefile -B all
+
+## [mspm0] led + 串口（命令台：库内 peek/consume 的 mspm0 版）（hwcheck-mspm0-20260920-100043）→ passed=True exit=0 error=0 warning=0 命令台=有（1 条配方命令）
+  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe06-z2ewgxhc\hwcheck-mspm0-20260920-100043\Debug -f makefile -B all
+
+## 结论
+6 种形态真编译，判红 0 种。全部 0 error / 0 warning。
+原始日志：C:\Users\luoji\Desktop\firstep\.scratch\module-hwcheck\probe-06-buildlogs

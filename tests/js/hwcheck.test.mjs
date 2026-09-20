@@ -27,6 +27,7 @@ import {
   hwcheckBoardSharesHTML, hwcheckOrderHTML, hwcheckOrderDesc, hwcheckBoardState,
   hwcheckSectionsState, hwcheckSectionsHTML, hwcheckUnspecializedHTML,
   hwcheckSectionPlanText, hwcheckSectionNoteHTML,
+  hwcheckConsoleState, hwcheckConsoleHTML,
 } from "../../src/contest_generator/static/js/fx/hwcheck.js";
 
 const html = readFileSync(
@@ -697,6 +698,18 @@ test("ui 的视图刷新守并发纪律（过期响应不写状态 + 在途触�
     .test(ui), "收尾要用当前选择集重跑一次（不是只把标志清掉）");
 });
 
+test("ui 的自动回读不抹掉用户刚动的选择（工单 06 会话实测的静默抹除）", () => {
+  // 页面加载时的自动回读是异步的；用户可能已经点了平台 / 加了器件。旧工程里的
+  // 器件集（常见是空的）一到就把刚选的那件抹掉——页面上看着像"点了没反应"，
+  // 真机验收连着五条用例超时才暴露出来。判据同上：比选择集快照，变了就不覆盖。
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  assert.ok(/keepSelection: hwcheckSelectionKey\(\) !== requestKey/.test(ui),
+    "自动回读落地前要比选择集快照（变了 = 用户已动过，别覆盖）");
+  assert.ok(/adoptProject\(payload, dir, \{[\s\S]{0,80}?keepSelection/
+    .test(ui), "adoptProject 要能只带工程本体、不碰器件");
+});
+
 test("ui 的接线表失败不连坐预览（main.c 只依赖平台与通道）", () => {
   const ui = readFileSync(
     new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
@@ -793,6 +806,31 @@ test("hwcheckProjectState：回读把逐件小节与未专精点名一起带回�
   });
   assert.deepEqual(next.sections, [SECTION_LED]);
   assert.equal(next.unspecialized.length, 1);
+});
+
+test("hwcheckProjectState：三个归一器叠加后互不覆盖（spread 顺序回归）", () => {
+  // 每个归一器都返回"自己那几个键"；若它们各自 `...state` 展开旧状态，那么
+  // 后展开的那个会把前一个刚更新的键按**旧 state** 覆盖回去——回读一次，
+  // 器件与检测计划就退回上一次的值（评审实测的回归）。
+  const state = {
+    devices: ["old"], sections: [{ slug: "old" }], unspecialized: [],
+    console: null, exclusiveGroups: [],
+  };
+  const next = hwcheckProjectState(state, {
+    output_dir: "C:/out/hwcheck-stm32-20260920-153012",
+    platform: "stm32",
+    devices: ["ml_mpu6050"],
+    exclusive_groups: GROUPS,
+    sections: [SECTION_LED],
+    unspecialized: [{ slug: "sr04", message: "sr04：…" }],
+    console: CONSOLE_PAYLOAD,
+  });
+  assert.deepEqual(next.devices, ["ml_mpu6050"], "器件不许被后展开的归一器回退");
+  assert.deepEqual(next.sections, [SECTION_LED], "检测计划同理");
+  assert.equal(next.unspecialized.length, 1);
+  assert.deepEqual(next.exclusiveGroups, GROUPS);
+  assert.deepEqual(next.console, CONSOLE_PAYLOAD);
+  assert.equal(next.project.platform, "stm32");
 });
 
 test("新控件齐备：专精小节容器在检测页（在顺序之后、工程之前）", () => {
@@ -915,4 +953,124 @@ test("ui：器件挑选把组清单喂给单选交换，并渲染互斥提示", 
   assert.ok(html.includes('id="hwcheck-device-groups"'),
     "index.html 要有提示的落点");
 });
+
+// ---------------------------------------------------------------------------
+// 工单 module-hwcheck/06：串口命令台（命令表来自服务端，前端只渲染）
+// ---------------------------------------------------------------------------
+// 载荷形状与后端 `console_payload` 一致：配方命令（字符 + 哪件 + 说明 + 与板上
+// 同一句回显）+ 既有命令 + 帮助字符 + 那句"能不能交互式复测"。
+const CONSOLE_PAYLOAD = {
+  available: true,
+  hint: "有串口 = 能交互式复测：程序跑完上电那一遍后进命令循环…",
+  help_command: "?",
+  commands: [
+    { command: "l", slug: "led", description: "板载 LED：重跑一次点灯初始化",
+      echo: "测的是：板载 LED：重跑一次点灯初始化" },
+    { command: "m", slug: "ml_mpu6050", description: "MPU6050 通信：读 WHO_AM_I",
+      echo: "测的是：MPU6050 通信：读 WHO_AM_I" },
+  ],
+  legacy: [
+    { command: "r", description: "红灯亮，其余灭" },
+    { command: "y", description: "黄灯亮，其余灭" },
+    { command: "g", description: "绿灯亮，其余灭" },
+    { command: "o", description: "全灭" },
+    { command: "b", description: "蜂鸣器响 N 毫秒（如 b50）" },
+  ],
+};
+
+test("hwcheckConsoleHTML：配方命令逐条列出（敲什么 / 哪一件 / 测什么）", () => {
+  const out = hwcheckConsoleHTML(CONSOLE_PAYLOAD);
+  assert.ok(out.includes("l") && out.includes("led"), "字符与哪一件都要在：" + out);
+  assert.ok(out.includes("m") && out.includes("ml_mpu6050"));
+  assert.ok(out.includes("板载 LED：重跑一次点灯初始化"), "配方说明要原样印出来");
+  assert.ok(out.includes("能交互式复测"), "服务端那句提示原样渲染（前端不另写一版）");
+});
+
+test("hwcheckConsoleHTML：既有 r/y/g/o/b 单列，说清语义没变", () => {
+  const out = hwcheckConsoleHTML(CONSOLE_PAYLOAD);
+  for (const command of ["r", "y", "g", "o", "b"]) {
+    assert.ok(out.includes(command), "既有命令 " + command + " 要在表里");
+  }
+  assert.ok(out.includes("红灯亮，其余灭"), "含义来自服务端（与库内文档单源）");
+  assert.ok(out.includes("语义"), "要说明这几条既有命令的语义没变");
+});
+
+test("hwcheckConsoleHTML：没有串口时**明说**不能交互式复测，且不摆一张用不了的命令表", () => {
+  const out = hwcheckConsoleHTML({
+    ...CONSOLE_PAYLOAD,
+    available: false,
+    hint: "**没有串口 = 不能交互式复测**：这一趟只跑上电那一遍…",
+  });
+  assert.ok(out.includes("不能交互式复测"), "票面要求：明说不静默降级");
+  assert.ok(!out.includes("<table"), "不能用的一趟不摆命令表（免得像「敲了就行」）");
+});
+
+test("hwcheckConsoleHTML：没有配方命令时如实说，不留一块空白", () => {
+  const out = hwcheckConsoleHTML({
+    ...CONSOLE_PAYLOAD, commands: [],
+    hint: "有串口，但这一趟没有配方命令…敲 ? 看帮助",
+  });
+  assert.ok(out.includes("没有配方命令"));
+  assert.ok(out.includes("?"), "帮助命令照旧在（固定的那条）");
+});
+
+test("hwcheckConsoleHTML：文案过转义（配方说明里出现 < > 也不破页面）", () => {
+  const out = hwcheckConsoleHTML({
+    ...CONSOLE_PAYLOAD,
+    commands: [{ command: "l", slug: "<img>", description: "a < b" }],
+  });
+  assert.ok(!out.includes("<img>"), "转义：" + out);
+  assert.ok(out.includes("&lt;img&gt;"));
+  // 说明那一列也要转义（判据强度探针实测：只判 slug 时，把 description 的 esc
+  // 拿掉不会红——两列都要钉）
+  assert.ok(out.includes("a &lt; b"), "说明列没转义：" + out);
+  assert.ok(!out.includes("a < b"));
+});
+
+test("hwcheckConsoleHTML：空载荷 = 空串（调用方不渲染空卡）", () => {
+  assert.equal(hwcheckConsoleHTML(null), "");
+  assert.equal(hwcheckConsoleHTML({}), "");
+});
+
+test("hwcheckConsoleState：载荷缺键 = 保留当前状态（旧后端不抹掉已有的命令表）", () => {
+  const kept = hwcheckConsoleState({ console: CONSOLE_PAYLOAD }, { platform: "stm32" });
+  assert.deepEqual(kept.console, CONSOLE_PAYLOAD);
+  const replaced = hwcheckConsoleState({ console: CONSOLE_PAYLOAD },
+    { console: { ...CONSOLE_PAYLOAD, available: false } });
+  assert.equal(replaced.console.available, false, "明确给了新表就用新的");
+});
+
+test("hwcheckProjectState：回读把命令表一起带回来", () => {
+  const next = hwcheckProjectState({}, {
+    output_dir: "C:/out/hwcheck-stm32-20260920-153012",
+    platform: "stm32", console: CONSOLE_PAYLOAD,
+  });
+  assert.deepEqual(next.console, CONSOLE_PAYLOAD);
+});
+
+test("新控件齐备：命令台容器在检测页（在小节之后、工程之前）", () => {
+  assert.ok(html.includes('id="hwcheck-console"'), "缺少控件 #hwcheck-console");
+  const sectionsAt = html.indexOf('id="hwcheck-sections"');
+  const consoleAt = html.indexOf('id="hwcheck-console"');
+  const projectAt = html.indexOf('id="hwcheck-project"');
+  assert.ok(sectionsAt < consoleAt && consoleAt < projectAt,
+    "阅读顺序：这一趟真测哪几件 → 怎么复测 → 检测工程");
+});
+
+test("ui 的命令台渲染走 fx 单源（不手拼命令表）", () => {
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  assert.ok(ui.includes("hwcheckConsoleHTML("), "ui 应调用 fx 的 hwcheckConsoleHTML(");
+  assert.ok(ui.includes("hwcheckConsoleState("), "载荷归一走 fx 的 hwcheckConsoleState(");
+  assert.ok(!ui.includes("<table"), "ui 不得手拼表格（双源漂移）");
+});
+
+test("ui 换平台 / 换通道时清掉旧命令表（配方按平台分，留着会误导）", () => {
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const clears = ui.match(/hwcheckUI\.console = null/g) || [];
+  assert.equal(clears.length, 3,
+    "三处该清：换平台 / 换通道 / 取视图失败（与 sections 同处置）");
+});
+
 

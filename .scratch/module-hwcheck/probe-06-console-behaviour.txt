@@ -1,0 +1,89 @@
+# 工单 module-hwcheck/06 行为红证（真库既有命令台 + 渲染出的命令台，同一跑）
+
+主机编译器：C:\mingw64\bin\gcc.EXE
+编进来的三样：① 真 `library/modules/debug_uart/code/debug_uart.c`；② `render_console_runtime` 的真产出；③ 外设桩（`gpio_set` 打印）。
+喂字符走真 RX 中断（写 `DEBUG_UART_INST->DR` → `debug_uart_rx_handler()`），命令循环顺序与渲染出的 main.c 一致。
+
+## 敲 `l` —— 复测 led（小写）：PASS
+```
+== [复测] led ==
+   detail: 测的是：板载 LED：重跑一次点灯初始化并回显本平台通道数
+SECTION-BODY: led
+--END--
+
+
+## 敲 `L` —— 复测 led（大写也认）：PASS
+```
+== [复测] led ==
+   detail: 测的是：板载 LED：重跑一次点灯初始化并回显本平台通道数
+SECTION-BODY: led
+--END--
+
+
+## 敲 `m` —— 复测 ml_mpu6050：PASS
+```
+== [复测] ml_mpu6050 ==
+   detail: 测的是：MPU6050 通信：读 WHO_AM_I 比对 0x68，再回显六轴原始值
+SECTION-BODY: ml_mpu6050
+--END--
+
+
+## 敲 `?` —— 帮助命令：PASS
+```
+[帮助] 可用命令（单字符 + 回车）：
+  既有：r 红灯亮，其余灭 / y 黄灯亮，其余灭 / g 绿灯亮，其余灭 / o 全灭 / b 蜂鸣器响 N 毫秒（如 b50）
+  l  led：板载 LED：重跑一次点灯初始化并回显本平台通道数
+  d  oled：OLED 屏：重新初始化并在屏上打一行 OLED OK
+  m  ml_mpu6050：MPU6050 通信：读 WHO_AM_I 比对 0x68，再回显六轴原始值
+  ?  显示这份帮助
+--END--
+
+
+## 敲 `z` —— 未知命令：PASS
+```
+[未知命令] z
+[帮助] 可用命令（单字符 + 回车）：
+  既有：r 红灯亮，其余灭 / y 黄灯亮，其余灭 / g 绿灯亮，其余灭 / o 全灭 / b 蜂鸣器响 N 毫秒（如 b50）
+  l  led：板载 LED：重跑一次点灯初始化并回显本平台通道数
+  d  oled：OLED 屏：重新初始化并在屏上打一行 OLED OK
+  m  ml_mpu6050：MPU6050 通信：读 WHO_AM_I 比对 0x68，再回显六轴原始值
+  ?  显示这份帮助
+--END--
+
+
+## 敲 `r` —— 既有命令 r（库内跑）：PASS
+```
+LIB: gpio_set(port=0, pin=13, level=1)
+LIB: gpio_set(port=0, pin=14, level=0)
+LIB: gpio_set(port=0, pin=15, level=0)
+LIB-UART: LED: RED (lock)
+
+--END--
+
+
+## 敲 `b50` —— 既有命令 b50（库内跑，带参数）：PASS
+```
+LIB: gpio_set(port=1, pin=0, level=0)
+LIB: delay_ms(50)
+LIB: gpio_set(port=1, pin=0, level=1)
+LIB-UART: BUZZER: 50ms
+
+--END--
+
+
+## 敲 `(空)` —— 空输入（什么都没敲）：PASS
+```
+--END--
+
+
+## 反证：把主循环顺序倒过来（先库内 poll 再我们的）敲 `l`：PASS
+```
+LIB-UART: ? r/g/y/o/b<N>
+
+--END--
+```
+
+顺序倒过来就没法复测（库内 poll 先把缓冲清空），所以渲染出的 main.c 那条「先 hwcheck_console_poll() 再 debug_cmd_poll()」不是风格问题，是功能前提——守卫用例 `test_main_polls_our_console_before_the_library_poll` 钉的就是它。
+
+## 结论
+8 次真跑，8 次符合预期、0 次不符。既有五条命令走的是**库内真源码**（`gpio_set` / `delay_ms` 是它打的），配方命令走的是命令台；两边互不抢字符。

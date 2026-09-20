@@ -1,0 +1,62 @@
+# 工单 module-hwcheck/06 判据强度探针（停用守卫 → 用例必须变红）
+
+每条：注入故障 → 跑目标用例 → 期望**非零退出**（红）→ 逐字节复原。
+
+## A：红 ✓ exit=1 tests/test_hwcheck_console.py::test_recipe_may_not_take_over_a_library_command_character
+  注入：src/contest_generator/hwcheck_console.py —— **配方抢占库内既有命令字符不再拦**（保留字判据停用）：学生敲 r 会去复测某件器件而不再点灯（已上过板的既有行为被抢）——票面点名的构建期判据
+  用例：py:test_recipe_may_not_take_over_a_library_command_character 
+
+## B：红 ✓ exit=1 tests/test_hwcheck_console.py::test_two_devices_may_not_share_a_command_character / tests/test_hwcheck_console.py::test_main_raises_at_build_time_when_two_devices_share_a_command
+  注入：src/contest_generator/hwcheck_console.py —— **两件抢同一个字符不再拦**（重复判据停用）：命令循环按字符分派，后一件永远测不到（运行时静默覆盖）
+  用例：py:two_devices_may_not_share_a_command_character or build_time_when_two_devices_share_a_command 
+
+## C：红 ✓ exit=1 tests/test_hwcheck_console.py::test_console_runtime_hands_the_library_commands_back_untouched
+  注入：src/contest_generator/hwcheck_console.py —— **既有命令那一支改成 `break`（继续走到消费）**：库内 poll 再也收不到 r/y/g/o/b，五条既有命令全体静默失效
+  用例：py:hands_the_library_commands_back_untouched 
+
+## D：红 ✓ exit=1 tests/test_hwcheck_console.py::test_legacy_command_set_is_the_library_protocol / tests/test_hwcheck_console.py::test_our_legacy_command_mirror_matches_the_library_dispatch[debug_uart.h-debug_uart.c]
+  注入：src/contest_generator/hwcheck_console.py —— **镜像表漏登记一条既有命令**（LEGACY_COMMANDS 去掉 b）：库内 poll 认它、我们却不认，配方可以抢走 b<N> 的蜂鸣
+  用例：py:legacy_command_mirror_matches_the_library_dispatch or legacy_command_set_is_the_library_protocol 
+
+## E：红 ✓ exit=1 tests/test_hwcheck_console.py::test_library_peek_is_read_only_and_consume_is_the_only_consumer
+  注入：library/modules/debug_uart/code/debug_uart.c —— **库侧 peek 顺手清空缓冲**（只读契约破坏）：既有 r/y/g/o/b 永远收不到命令（库内 poll 拿到空串）
+  用例：py:peek_is_read_only_and_consume_is_the_only_consumer 
+
+## F：红 ✓ exit=1 tests/test_hwcheck_console.py::test_main_polls_our_console_before_the_library_poll
+  注入：src/contest_generator/hwcheck.py —— **主循环顺序倒过来**（先库内 poll 再我们的）：库内 poll 先把缓冲清空，配方命令永远认不出来——本探针的兄弟 `probe-06-console-behaviour.py` 有这条的真跑反证
+  用例：py:polls_our_console_before_the_library_poll 
+
+## G：红 ✓ exit=1 tests/test_hwcheck_console.py::test_main_without_serial_says_interactive_retest_is_impossible
+  注入：src/contest_generator/hwcheck.py —— **无串口也渲染命令台**（渲染条件丢掉 debug_uart）：产物里出现一个跑不到的命令循环，页面还说能复测——不静默降级那条验收线失效
+  用例：py:without_serial_says_interactive_retest_is_impossible 
+
+## H：红 ✓ exit=1 tests/test_hwcheck_console.py::test_console_retest_echo_has_the_three_fixed_segments
+  注入：src/contest_generator/hwcheck_console.py —— **复测的第三段没了**（case 不再调那一件的小节）：回显只剩「这是哪件 / 测的是什么」，结论与数值永远不出现
+  用例：py:retest_echo_has_the_three_fixed_segments 
+
+## I：红 ✓ exit=1 tests/test_hwcheck_console.py::test_console_runtime_reports_unknown_commands_with_a_help_line
+  注入：src/contest_generator/hwcheck_console.py —— **未知命令静默丢弃**（default 分支不再印帮助）：学生敲错一个字符就再无任何反馈，也不知道有哪些命令
+  用例：py:reports_unknown_commands_with_a_help_line 
+
+## J：红 ✓ exit=1 tests/test_hwcheck_console.py::test_console_hint_says_out_loud_when_there_is_no_serial / tests/test_hwcheck_console.py::test_console_payload_marks_availability_false_without_serial
+  注入：src/contest_generator/hwcheck_console.py —— **无串口时也印「能交互复测」**（hint 的通道判据停用）：页面说了假话——「没有串口 = 不能交互式复测」这条验收线失效
+  用例：py:says_out_loud_when_there_is_no_serial or says_out_loud_when_there_is_no_serial_endpoint or marks_availability_false_without_serial 
+
+## K：红 ✓ exit=1 tests/test_hwcheck_console.py::test_console_payload_carries_the_table_and_the_legacy_commands
+  注入：src/contest_generator/hwcheck_console.py —— **载荷不再带命令表**（commands 恒为空）：页面说不出敲什么字符，而板上认它——页面与产物两个来源
+  用例：py:payload_carries_the_table_and_the_legacy_commands 
+
+## L：红 ✓ exit=1 hwcheckConsoleHTML：文案过转义（配方说明里出现 < > 也不破页面） / hwcheckConsoleHTML：文案过转义（配方说明里出现 < > 也不破页面）
+  注入：src/contest_generator/static/js/fx/hwcheck.js —— **前端命令表不做转义**（配方说明里出现 < > 就破页面）：库内数据是不可信文本
+  用例：js:hwcheckConsoleHTML：文案过转义 
+
+## M：红 ✓ exit=1 hwcheckConsoleHTML：没有串口时**明说**不能交互式复测，且不摆一张用不了的命令表 / hwcheckConsoleHTML：没有串口时**明说**不能交互式复测，且不摆一张用不了的命令表
+  注入：src/contest_generator/static/js/fx/hwcheck.js —— **没有串口时照摆命令表**（前端 available 判据停用）：摆一张这一趟根本敲不了的表，像「敲了就行」
+  用例：js:hwcheckConsoleHTML：没有串口时 
+
+## N：红 ✓ exit=1 tests/test_hwcheck_console.py::test_uppercase_declaration_is_normalized_to_the_canonical_form
+  注入：src/contest_generator/hwcheck_console.py —— **命令字符不再规范化成小写**（声明 `L` 原样进表）：渲染器为它出`case 'L': case 'L':` 两个**重复标签**——生成的 main.c 编不过，而表里按小写判重又允许同一个字符被声明两次
+  用例：py:uppercase_declaration_is_normalized_to_the_canonical_form 
+
+## 结论
+14 条注入，14 条判红、0 条没红。每条守卫都真有牙。
