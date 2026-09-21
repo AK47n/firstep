@@ -1,0 +1,26 @@
+﻿=== 两种口径的读数 ===
+名字级（现实现）：108 处
+按模块归属（不跟再导出链）：111 处
+
+=== 差额 3 处：按模块算没人用、按名字算有人用 ===
+  ui/full-update.js::fullStateText —— 本文件 import 后再导出；同名导出被消费于：fx/full-update.js::fullStateText（2 个消费者）
+  ui/generate-fix.js::FIX_MAX_ROUNDS —— 本文件 import 后再导出；同名导出被消费于：ui/fix-center-core.js::FIX_MAX_ROUNDS（4 个消费者）
+  ui/generate-fix.js::fixLoop —— 本文件 import 后再导出；同名导出被消费于：ui/fix-center-core.js::fixLoop（1 个消费者）
+
+=== 同名的另一些两面都在的读数（供对照）===
+被 ≥2 个模块导出的名字：5 个 —— fullStateText, formatMtime, FIX_MAX_ROUNDS, fixLoop, gotoNavTab
+  fullStateText：导出方 2 个，其中被消费的 1 个（未消费：ui/full-update.js）
+  formatMtime：导出方 2 个，其中被消费的 2 个（未消费：无）
+  FIX_MAX_ROUNDS：导出方 2 个，其中被消费的 1 个（未消费：ui/generate-fix.js）
+  fixLoop：导出方 2 个，其中被消费的 1 个（未消费：ui/generate-fix.js）
+  gotoNavTab：导出方 2 个，其中被消费的 2 个（未消费：无）
+
+=== 差额里"转手再导出"的（本文件没声明）——清点它们等于删一行再导出 ===
+  ui/full-update.js::fullStateText —— （找不到再导出语句）
+  ui/generate-fix.js::FIX_MAX_ROUNDS —— export { FIX_MAX_ROUNDS, fixLoop } from "/js/ui/fix-center-core.js";
+  ui/generate-fix.js::fixLoop —— export { FIX_MAX_ROUNDS, fixLoop } from "/js/ui/fix-center-core.js";
+
+=== 差额里被 python/tests 源码文本提到的 ===
+  fullStateText → tests/js/full-update.test.mjs
+  FIX_MAX_ROUNDS → tests/js/fix-center-core.test.mjs, tests/test_generate_check_contract.py
+  fixLoop → tests/test_generate_check_contract.py

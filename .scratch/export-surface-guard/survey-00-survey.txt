@@ -1,0 +1,528 @@
+﻿=== 模块表 ===
+模块数 131，导出名合计 995
+=== 零 import 引用的导出：262 个 ===
+  app.js                     currentTheme                   本模块出现  2 次  探针桥=否
+  app.js                     applyTheme                     本模块出现  3 次  探针桥=否
+  app.js                     initTheme                      本模块出现  2 次  探针桥=否
+  fx/ai-actions.js           AI_ACTION_TEMPLATES            本模块出现  3 次  探针桥=是
+  fx/ai-chat.js              quoteRefParts                  本模块出现  3 次  探针桥=是
+  fx/code-brackets.js        bracketPairAt                  本模块出现  2 次  探针桥=是
+  fx/code-compile.js         SYSCFG_CONFLICT_KIND           本模块出现  3 次  探针桥=是
+  fx/code-fold.js            codeFoldPlaceholderText        本模块出现  3 次  探针桥=是
+  fx/code-fold.js            codeFoldGutterHTML             本模块出现  2 次  探针桥=是
+  fx/code-marks.js           MARK_PRIORITY                  本模块出现  3 次  探针桥=是
+  fx/code-shortcuts.js       SHORTCUT_GROUPS                本模块出现  3 次  探针桥=是
+  fx/code-tree-ops.js        treeOpIsDir                    本模块出现  2 次  探针桥=是
+  fx/code-tree-ops.js        CODE_TREE_NAME_ILLEGAL         本模块出现  3 次  探针桥=是
+  fx/code-tree-ops.js        CODE_TREE_NAME_MAX             本模块出现  3 次  探针桥=是
+  fx/code-tree-ops.js        CODE_TREE_NAME_RULES_DEFAULT   本模块出现  2 次  探针桥=是
+  fx/code.js                 maincScrollToRange             本模块出现  3 次  探针桥=是
+  fx/codeeditor.js           codeTabBadge                   本模块出现  4 次  探针桥=是
+  fx/codeeditor.js           moveTab                        本模块出现  2 次  探针桥=是
+  fx/codeeditor.js           codeEditorHighlight            本模块出现  3 次  探针桥=是
+  fx/codeeditor.js           codeWindowSpacers              本模块出现  1 次  探针桥=否
+  fx/codeview.js             codeLineNumbersHTML            本模块出现  3 次  探针桥=是
+  fx/codeview.js             CODE_TREE_WIDTH_MIN            本模块出现  4 次  探针桥=是
+  fx/diff.js                 diffStatsLineHTML              本模块出现  3 次  探针桥=是
+  fx/disk-baseline.js        SNAPSHOT_MAX                   本模块出现  2 次  探针桥=否
+  fx/draft.js                draftGroupChoices              本模块出现  3 次  探针桥=否
+  fx/env.js                  ccsSourceText                  本模块出现  3 次  探针桥=是
+  fx/env.js                  envRowHTML                     本模块出现 21 次  探针桥=是
+  fx/env.js                  envChannelHTML                 本模块出现  4 次  探针桥=是
+  fx/env.js                  ENV_BADGE_GLYPH                本模块出现  3 次  探针桥=是
+  fx/env.js                  CCS_PROBE_NOTE                 本模块出现  3 次  探针桥=是
+  fx/env.js                  CCS_PIECE_NAMES                本模块出现  3 次  探针桥=是
+  fx/errors.js               ERROR_LONG_THRESHOLD           本模块出现  3 次  探针桥=是
+  fx/exit-guard.js           unsavedSwitchMessage           本模块出现  1 次  探针桥=否
+  fx/exit-guard.js           UNSAVED_SWITCH_LIST_MAX        本模块出现  2 次  探针桥=否
+  fx/flash.js                flashOutputHTML                本模块出现  4 次  探针桥=是
+  fx/flash.js                flashCommandHTML               本模块出现  4 次  探针桥=是
+  fx/full-update.js          fullPlanText                   本模块出现  4 次  探针桥=是
+  fx/full-update.js          fullResultText                 本模块出现  3 次  探针桥=是
+  fx/generate.js             pinRoleResourceKeys            本模块出现  3 次  探针桥=是
+  fx/generate.js             collapseBtnLabel               本模块出现  3 次  探针桥=是
+  fx/generate.js             CONFLICT_MSG_PREFIX            本模块出现  3 次  探针桥=是
+  fx/glossary.js             GLOSSARY_TERMS                 本模块出现  3 次  探针桥=是
+  fx/guide.js                guideBlockHTML                 本模块出现  3 次  探针桥=是
+  fx/guide.js                guideBlocksOf                  本模块出现  2 次  探针桥=是
+  fx/highlight.js            highlightXml                   本模块出现  8 次  探针桥=是
+  fx/highlight.js            lineEndState                   本模块出现  4 次  探针桥=是
+  fx/highlight.js            stateEq                        本模块出现  3 次  探针桥=否
+  fx/highlight.js            HIGHLIGHT_MAX_BYTES            本模块出现  3 次  探针桥=是
+  fx/hwcheck.js              hwcheckDeviceSlugs             本模块出现  4 次  探针桥=是
+  fx/hwcheck.js              hwcheckHintHTML                本模块出现  4 次  探针桥=是
+  fx/hwcheck.js              hwcheckErrorHTML               本模块出现  2 次  探针桥=是
+  fx/hwcheck.js              hwcheckChannelText             本模块出现  2 次  探针桥=是
+  fx/hwcheck.js              hwcheckProjectInfoHTML         本模块出现  3 次  探针桥=是
+  fx/hwcheck.js              hwcheckToolchainNote           本模块出现  3 次  探针桥=是
+  fx/hwcheck.js              hwcheckActionsHTML             本模块出现  3 次  探针桥=是
+  fx/hwcheck.js              hwcheckDeviceKit               本模块出现  3 次  探针桥=是
+  fx/hwcheck.js              hwcheckOrderDesc               本模块出现  2 次  探针桥=是
+  fx/hwcheck.js              hwcheckSectionPlanText         本模块出现  2 次  探针桥=是
+  fx/hwcheck.js              hwcheckSectionNoteHTML         本模块出现  3 次  探针桥=是
+  fx/hwcheck.js              hwcheckSymptomText             本模块出现  4 次  探针桥=是
+  fx/hwcheck.js              hwcheckAdviceEmptyHTML         本模块出现  3 次  探针桥=是
+  fx/hwcheck.js              HWCHECK_CHANNEL_KEYS           本模块出现  3 次  探针桥=是
+  fx/hwcheck.js              HWCHECK_VERDICT_FALLBACK       本模块出现  3 次  探针桥=是
+  fx/line-diff.js            LINE_DIFF_MAX_CELLS            本模块出现  3 次  探针桥=是
+  fx/mainc-sync.js           maincDiskState                 本模块出现  3 次  探针桥=是
+  fx/master.js               masterHealthBadgeHTML          本模块出现  2 次  探针桥=是
+  fx/master.js               masterStatsHTML                本模块出现  2 次  探针桥=是
+  fx/master.js               masterDeleteConfirmHTML        本模块出现  2 次  探针桥=是
+  fx/master.js               masterKeyFileRowHTML           本模块出现  2 次  探针桥=是
+  fx/materials-update.js     materialsStateText             本模块出现  3 次  探针桥=是
+  fx/md.js                   mdEncodedPath                  本模块出现  4 次  探针桥=是
+  fx/md.js                   mdAssetUrl                     本模块出现  3 次  探针桥=是
+  fx/md.js                   mdSubdir                       本模块出现  6 次  探针桥=是
+  fx/md.js                   formatMtime                    本模块出现  2 次  探针桥=是
+  fx/module.js               pythonArtifactSummary          本模块出现  2 次  探针桥=是
+  fx/module.js               groupOfSlug                    本模块出现  4 次  探针桥=是
+  fx/module.js               renderableGroupCards           本模块出现  4 次  探针桥=是
+  fx/module.js               groupChoiceRequired            本模块出现  5 次  探针桥=是
+  fx/module.js               groupMemberPick                本模块出现  5 次  探针桥=是
+  fx/module.js               needsGroupChoice               本模块出现  2 次  探针桥=否
+  fx/module.js               moduleGridPlatformLabel        本模块出现  6 次  探针桥=是
+  fx/module.js               moduleGridStatusText           本模块出现  4 次  探针桥=是
+  fx/module.js               moduleGridBadgeClass           本模块出现  4 次  探针桥=是
+  fx/module.js               moduleGridFilter               本模块出现  4 次  探针桥=是
+  fx/module.js               moduleRequiresIdentity         本模块出现  3 次  探针桥=是
+  fx/module.js               identityExemptLabel            本模块出现  3 次  探针桥=是
+  fx/module.js               moduleIntroHTML                本模块出现  3 次  探针桥=是
+  fx/module.js               moduleReasonHTML               本模块出现  3 次  探针桥=是
+  fx/module.js               INTERNAL_KINDS                 本模块出现  3 次  探针桥=是
+  fx/module.js               MODULE_INFO_BTN_TEXT           本模块出现  3 次  探针桥=是
+  fx/module.js               MODULE_INFO_BTN_TITLE          本模块出现  3 次  探针桥=是
+  fx/overview.js             cardStepStatusHTML             本模块出现  2 次  探针桥=是
+  fx/params-chat.js          paramsChatMessageHTML          本模块出现  2 次  探针桥=否
+  fx/params-chat.js          paramsChatInputHTML            本模块出现  2 次  探针桥=否
+  fx/pdf.js                  pdfEncodedPath                 本模块出现  6 次  探针桥=是
+  fx/pdf.js                  pdfSubdir                      本模块出现  6 次  探针桥=是
+  fx/pdf.js                  formatMtime                    本模块出现  2 次  探针桥=是
+  fx/pdf.js                  pdfBadgeTags                   本模块出现  4 次  探针桥=是
+  fx/pdf.js                  pdfDupGroups                   本模块出现  3 次  探针桥=是
+  fx/pdf.js                  pdfTrashConfirmHTML            本模块出现  2 次  探针桥=是
+  fx/pin-model.js            pinModelEntry                  本模块出现  6 次  探针桥=否
+  fx/pin-model.js            pinModelConstraints            本模块出现  4 次  探针桥=否
+  fx/pin-model.js            pinInstanceTokens              本模块出现  8 次  探针桥=否
+  fx/pin-model.js            pinRoleChannel                 本模块出现  5 次  探针桥=否
+  fx/pin-model.js            pinConstraintHolds             本模块出现  3 次  探针桥=否
+  fx/recent.js               recentStatusMeta               本模块出现  3 次  探针桥=是
+  fx/recent.js               recentTimeLabel                本模块出现  3 次  探针桥=是
+  fx/recent.js               recentPlatformLabel            本模块出现  3 次  探针桥=是
+  fx/recent.js               recentChipHTML                 本模块出现  3 次  探针桥=是
+  fx/recommend.js            suggestionSolutionBadges       本模块出现  2 次  探针桥=是
+  fx/recommend.js            suggestionOptionRowHTML        本模块出现  3 次  探针桥=是
+  fx/recommend.js            suggestionOptionsHTML          本模块出现  2 次  探针桥=是
+  fx/recommend.js            decisionBadgeHTML              本模块出现  3 次  探针桥=是
+  fx/recommend.js            reviewBadgeHTML                本模块出现  3 次  探针桥=是
+  fx/recommend.js            discussionAreaHTML             本模块出现  2 次  探针桥=是
+  fx/recommend.js            BUY_DECISIONS_KEY              本模块出现  4 次  探针桥=是
+  fx/reference.js            referenceTopicTypeChip         本模块出现  2 次  探针桥=是
+  fx/reference.js            refDanglingAnchors             本模块出现  5 次  探针桥=是
+  fx/reference.js            refMatchFiles                  本模块出现  3 次  探针桥=是
+  fx/reference.js            refAnchorBadge                 本模块出现  3 次  探针桥=是
+  fx/reference.js            refServedTotal                 本模块出现  3 次  探针桥=否
+  fx/reference.js            refVolumeText                  本模块出现  2 次  探针桥=否
+  fx/reference.js            refVolumeTitle                 本模块出现  1 次  探针桥=否
+  fx/reset.js                isResettableKey                本模块出现  2 次  探针桥=否
+  fx/reset.js                RESETTABLE_EXACT_KEYS          本模块出现  2 次  探针桥=否
+  fx/reset.js                RESETTABLE_KEY_PREFIXES        本模块出现  2 次  探针桥=否
+  fx/resource-board.js       resourceBoardSVG               本模块出现  2 次  探针桥=否
+  fx/resource-board.js       RESOURCE_TASK_COLORS           本模块出现  3 次  探针桥=否
+  fx/score.js                scoreChecklistPartLabel        本模块出现  3 次  探针桥=是
+  fx/score.js                scoreChecklistScoreText        本模块出现  3 次  探针桥=是
+  fx/score.js                scoreChecklistRefsText         本模块出现  3 次  探针桥=是
+  fx/score.js                scoreChecklistChecked          本模块出现  4 次  探针桥=是
+  fx/score.js                scoreChecklistLineText         本模块出现  4 次  探针桥=是
+  fx/score.js                scoreChecklistParse            本模块出现  3 次  探针桥=是
+  fx/settings.js             settingsDefaultCollapsed       本模块出现  3 次  探针桥=是
+  fx/settings.js             sectionCollapseLabel           本模块出现  3 次  探针桥=是
+  fx/settings.js             SETTINGS_DEFAULT_COLLAPSED     本模块出现  3 次  探针桥=是
+  fx/task.js                 taskVerifyLabel                本模块出现  3 次  探针桥=是
+  fx/task.js                 taskScoreRefsText              本模块出现  3 次  探针桥=是
+  fx/task.js                 taskOrderLabel                 本模块出现  3 次  探针桥=是
+  fx/task.js                 taskNeedsRedoBadge             本模块出现  3 次  探针桥=是
+  fx/task.js                 taskCardHTML                   本模块出现  3 次  探针桥=是
+  fx/task.js                 taskPhaseHTML                  本模块出现  3 次  探针桥=是
+  fx/task.js                 taskIterationLabel             本模块出现  3 次  探针桥=是
+  fx/task.js                 taskIterationsHTML             本模块出现  3 次  探针桥=是
+  fx/task.js                 taskDialogAdoptHTML            本模块出现  3 次  探针桥=是
+  fx/task.js                 taskLatestFeedbackNote         本模块出现  2 次  探针桥=是
+  fx/task.js                 taskStepReportHTML             本模块出现  2 次  探针桥=是
+  fx/task.js                 resourceIsHardware             本模块出现  4 次  探针桥=是
+  fx/task.js                 taskResourcesHTML              本模块出现  2 次  探针桥=是
+  fx/task.js                 taskChecklistHTML              本模块出现  3 次  探针桥=否
+  fx/task.js                 wiringSectionHTML              本模块出现  3 次  探针桥=否
+  fx/task.js                 taskNextActionHTML             本模块出现  3 次  探针桥=是
+  fx/task.js                 taskErrorsHTML                 本模块出现  3 次  探针桥=是
+  fx/task.js                 taskMoreMenuHTML               本模块出现  3 次  探针桥=是
+  fx/task.js                 taskEditFormHTML               本模块出现  3 次  探针桥=是
+  fx/topic-preread.js        prereadGroupLabel              本模块出现  2 次  探针桥=是
+  fx/topic-preread.js        OTHER_GROUP_LABEL              本模块出现  3 次  探针桥=是
+  fx/topic.js                topicCategoryChip              本模块出现  4 次  探针桥=是
+  fx/topic.js                topicHasNotes                  本模块出现  5 次  探针桥=是
+  fx/topic.js                topicDanglingGroups            本模块出现  6 次  探针桥=是
+  fx/topic.js                topicHealthText                本模块出现  4 次  探针桥=是
+  fx/undo-stack.js           UNDO_LIMIT                     本模块出现  4 次  探针桥=是
+  fx/update.js               updateStateText                本模块出现  1 次  探针桥=否
+  fx/window-text.js          windowTextMatches              本模块出现  3 次  探针桥=是
+  fx/wiring.js               isPowerKind                    本模块出现  3 次  探针桥=否
+  fx/wiring.js               highlightWiringLines           本模块出现  2 次  探针桥=否
+  fx/wiring.js               wiringAllLines                 本模块出现  2 次  探针桥=否
+  fx/wiring.js               layoutWiring                   本模块出现  2 次  探针桥=否
+  fx/workflow.js             wfNum                          本模块出现  9 次  探针桥=是
+  fx/workflow.js             formatWorkflowUsage            本模块出现  4 次  探针桥=是
+  fx/workflow.js             formatWorkflowCost             本模块出现  3 次  探针桥=是
+  ui/a11y.js                 INPUT_A11Y_LABELS              本模块出现  3 次  探针桥=是
+  ui/code-bottom-panels.js   PANEL_LABELS                   本模块出现  1 次  探针桥=否
+  ui/code-compile.js         runCodeCompile                 本模块出现  3 次  探针桥=否
+  ui/code-flash.js           runCodeFlash                   本模块出现  2 次  探针桥=否
+  ui/codeeditor.js           getCompileErrors               本模块出现  5 次  探针桥=否
+  ui/codeeditor.js           currentMarks                   本模块出现  3 次  探针桥=否
+  ui/codeeditor.js           openDiskConflict               本模块出现  2 次  探针桥=否
+  ui/codeeditor.js           saveActiveTab                  本模块出现  3 次  探针桥=否
+  ui/codeview.js             clearCodeDiskChanges           本模块出现  2 次  探针桥=否
+  ui/delivery.js             deliveryOpen                   本模块出现  3 次  探针桥=是
+  ui/delivery.js             deliveryCheck                  本模块出现  3 次  探针桥=是
+  ui/delivery.js             deliveryPackage                本模块出现  3 次  探针桥=是
+  ui/delivery.js             deliveryReset                  本模块出现  4 次  探针桥=是
+  ui/files.js                readPickedText                 本模块出现  2 次  探针桥=否
+  ui/fix-center-core.js      syscfgConflictStateText        本模块出现  3 次  探针桥=否
+  ui/fix-center-core.js      fixLoopSnapshot                本模块出现  1 次  探针桥=否
+  ui/generate-core.js        generateMain                   本模块出现  4 次  探针桥=否
+  ui/generate-core.js        renderGenerateSuccess          本模块出现  4 次  探针桥=否
+  ui/generate-core.js        renderScoreChecklist           本模块出现  3 次  探针桥=否
+  ui/generate-core.js        scoreChecklistSyncCurrent      本模块出现  3 次  探针桥=否
+  ui/generate-core.js        scoreChecklistExportNow        本模块出现  3 次  探针桥=否
+  ui/generate-fix.js         continueFixCenter              本模块出现  3 次  探针桥=否
+  ui/generate-fix.js         runCompileOnce                 本模块出现  2 次  探针桥=否
+  ui/generate-fix.js         runFixOnce                     本模块出现  3 次  探针桥=否
+  ui/generate-fix.js         fixRounds                      本模块出现  2 次  探针桥=否
+  ui/generate-mainc.js       currentCodeZoomPct             本模块出现  4 次  探针桥=否
+  ui/generate-mainc.js       applyCodeZoom                  本模块出现  5 次  探针桥=否
+  ui/generate-pins.js        instancePinTarget              本模块出现 41 次  探针桥=否
+  ui/generate-pins.js        LED_COLORS                     本模块出现  3 次  探针桥=否
+  ui/generate-pins.js        pinBoard                       本模块出现 22 次  探针桥=否
+  ui/generate-pins.js        pinBoardError                  本模块出现  6 次  探针桥=否
+  ui/generate-pins.js        pinShowOptional                本模块出现  4 次  探针桥=否
+  ui/generate-pins.js        pinHighlight                   本模块出现 12 次  探针桥=否
+  ui/generate-pins.js        pinRotation                    本模块出现  3 次  探针桥=否
+  ui/generate-pins.js        pinOverview                    本模块出现 10 次  探针桥=否
+  ui/generate-pins.js        PIN_TYPE_STYLE                 本模块出现  7 次  探针桥=否
+  ui/generate-pins.js        PIN_TYPE_ZH                    本模块出现  1 次  探针桥=否
+  ui/generate-pins.js        MODULE_COLORS                  本模块出现  3 次  探针桥=否
+  ui/generate-pins.js        bindRole                       本模块出现  3 次  探针桥=否
+  ui/generate-pins.js        unbindRole                     本模块出现  4 次  探针桥=否
+  ui/generate-pins.js        assignInstancePin              本模块出现  3 次  探针桥=否
+  ui/generate-pins.js        addInstance                    本模块出现  3 次  探针桥=否
+  ui/generate-pins.js        delInstance                    本模块出现  3 次  探针桥=否
+  ui/generate-readiness.js   renderReadinessPanel           本模块出现  3 次  探针桥=否
+  ui/generate-recommend.js   groupChoiceGap                 本模块出现  1 次  探针桥=否
+  ui/generate-recommend.js   moduleInfoReason               本模块出现  2 次  探针桥=否
+  ui/generate-recommend.js   prereadReminders               本模块出现  5 次  探针桥=否
+  ui/generate-revise.js      reviseAnalyze                  本模块出现  3 次  探针桥=否
+  ui/generate-revise.js      reviseApply                    本模块出现  3 次  探针桥=否
+  ui/generate-revise.js      reviseRollback                 本模块出现  3 次  探针桥=否
+  ui/generate-revise.js      reviseRunDeepen                本模块出现  4 次  探针桥=否
+  ui/generate-revise.js      reviseResetAll                 本模块出现  3 次  探针桥=否
+  ui/generate-revise.js      reviseRenderContext            本模块出现  3 次  探针桥=否
+  ui/generate-steps.js       collectDraftState              本模块出现  3 次  探针桥=否
+  ui/generate-steps.js       clearDraft                     本模块出现  3 次  探针桥=否
+  ui/generate-steps.js       runOverviewFill                本模块出现  3 次  探针桥=否
+  ui/generate-steps.js       overviewPlanNow                本模块出现  4 次  探针桥=否
+  ui/generate-tasks.js       tasksPlan                      本模块出现  4 次  探针桥=否
+  ui/generate-tasks.js       tasksRender                    本模块出现 19 次  探针桥=否
+  ui/generate-tasks.js       tasksResetMessages             本模块出现  4 次  探针桥=否
+  ui/goto-nav.js             flashJumpTarget                本模块出现  2 次  探针桥=否
+  ui/guide.js                switchGuideTab                 本模块出现  3 次  探针桥=否
+  ui/library.js              editModule                     本模块出现  2 次  探针桥=否
+  ui/library.js              deleteModule                   本模块出现  2 次  探针桥=否
+  ui/library.js              newModulePayload               本模块出现  3 次  探针桥=否
+  ui/params-chat.js          paramsChatReset                本模块出现  4 次  探针桥=否
+  ui/params.js               paramsScan                     本模块出现  3 次  探针桥=否
+  ui/params.js               paramsApply                    本模块出现  4 次  探针桥=否
+  ui/params.js               paramsReload                   本模块出现  5 次  探针桥=否
+  ui/recent.js               renderRecentList               本模块出现  2 次  探针桥=否
+  ui/reference.js            deleteReference                本模块出现  2 次  探针桥=否
+  ui/reference.js            editReference                  本模块出现  2 次  探针桥=否
+  ui/reference.js            referenceFileUrl               本模块出现  2 次  探针桥=否
+  ui/reference.js            openReferenceFile              本模块出现  3 次  探针桥=否
+  ui/reference.js            viewReferenceDetail            本模块出现  2 次  探针桥=否
+  ui/resource-board.js       setResourceView                本模块出现  2 次  探针桥=否
+  ui/revise-tabs.js          refreshReviseBadges            本模块出现  2 次  探针桥=否
+  ui/settings.js             renderPriceReference           本模块出现  2 次  探针桥=否
+  ui/step-state.js           syncStepDone                   本模块出现  3 次  探针桥=否
+  ui/step-state.js           renderStepProgress             本模块出现  2 次  探针桥=否
+  ui/step-state.js           STEP_TOTAL                     本模块出现  2 次  探针桥=否
+  ui/step-state.js           CARD_COLLAPSE_SELECTOR         本模块出现  2 次  探针桥=否
+  ui/topic.js                viewTopicDetail                本模块出现  2 次  探针桥=否
+  ui/topic.js                viewTopicEdit                  本模块出现  2 次  探针桥=否
+  ui/topic.js                initTopicToolbar               本模块出现  2 次  探针桥=否
+  ui/topic.js                loadTopicCategories            本模块出现  2 次  探针桥=否
+  ui/topic.js                deleteTopic                    本模块出现  3 次  探针桥=否
+  ui/topic.js                renderProofreadRows            本模块出现  3 次  探针桥=否
+  ui/wiring.js               attachWiringInputs             本模块出现  2 次  探针桥=否
+  ui/wiring.js               tasksByIdMap                   本模块出现  2 次  探针桥=否
+=== 在 tests/ · tools/ · src/ 里被提及的零引用导出 ===
+  currentTheme → src/contest_generator/static/js/boot.js
+  applyTheme → src/contest_generator/static/js/boot.js
+  initTheme → src/contest_generator/static/js/boot.js
+  AI_ACTION_TEMPLATES → tests/js/ai-actions.test.mjs
+  quoteRefParts → tests/js/ai-chat.test.mjs
+  bracketPairAt → tests/js/code-brackets.test.mjs, src/contest_generator/static/js/ui/codeeditor.js
+  SYSCFG_CONFLICT_KIND → src/contest_generator/fix_errors.py
+  codeFoldPlaceholderText → tests/js/code-fold.test.mjs
+  codeFoldGutterHTML → tests/js/code-window.test.mjs
+  MARK_PRIORITY → src/contest_generator/static/index.html
+  SHORTCUT_GROUPS → tests/js/code-shortcuts.test.mjs
+  treeOpIsDir → tests/js/code-tree-ops.test.mjs
+  CODE_TREE_NAME_ILLEGAL → tests/js/code-tree-ops.test.mjs, tests/test_codeview.py
+  CODE_TREE_NAME_MAX → tests/js/code-tree-ops.test.mjs, tests/test_codeview.py
+  CODE_TREE_NAME_RULES_DEFAULT → tests/js/code-tree-ops.test.mjs
+  maincScrollToRange → tests/js/fx-guard.test.mjs, src/contest_generator/static/js/ui/generate-fix.js
+  codeTabBadge → tests/js/codeeditor.test.mjs
+  moveTab → tests/js/codeeditor.test.mjs, src/contest_generator/static/js/ui/codeeditor.js
+  codeEditorHighlight → tests/js/fx-guard.test.mjs
+  codeWindowSpacers → tests/js/code-window.test.mjs
+  codeLineNumbersHTML → tests/js/codeview.test.mjs
+  CODE_TREE_WIDTH_MIN → tests/js/codeview.test.mjs
+  diffStatsLineHTML → tests/js/diff.test.mjs
+  ccsSourceText → tests/js/env-check-center.test.mjs
+  envRowHTML → tests/js/env-check-center.test.mjs, src/contest_generator/static/js/ui/settings.js
+  envChannelHTML → tests/js/env-check-center.test.mjs, src/contest_generator/static/js/ui/settings.js
+  ENV_BADGE_GLYPH → tests/js/env-check-center.test.mjs, src/contest_generator/static/js/ui/settings.js
+  CCS_PROBE_NOTE → tests/js/env-check-center.test.mjs
+  CCS_PIECE_NAMES → tests/js/fx-guard.test.mjs
+  ERROR_LONG_THRESHOLD → tests/js/error-parse.test.mjs
+  unsavedSwitchMessage → tests/js/exit-guard.test.mjs
+  flashOutputHTML → tests/js/flash.test.mjs
+  flashCommandHTML → tests/js/flash.test.mjs
+  fullPlanText → tests/js/full-update.test.mjs
+  fullResultText → tests/js/download-progress.test.mjs, tests/js/full-update.test.mjs
+  pinRoleResourceKeys → tests/js/pin-share.test.mjs
+  collapseBtnLabel → tests/js/card-collapse.test.mjs, src/contest_generator/static/js/fx/settings.js
+  CONFLICT_MSG_PREFIX → tests/browser/gen-chain-audit.mjs, tests/browser/repro-overwrite-confirm.mjs, tests/js/generate-overwrite.test.mjs, src/contest_generator/static/js/ui/generate-core.js
+  GLOSSARY_TERMS → tests/js/glossary.test.mjs
+  guideBlockHTML → tests/js/guide.test.mjs
+  guideBlocksOf → tests/js/guide-refs.test.mjs, tests/js/guide.test.mjs
+  highlightXml → tests/js/highlight.test.mjs
+  stateEq → tests/js/highlight.test.mjs
+  HIGHLIGHT_MAX_BYTES → tests/js/highlight.test.mjs
+  hwcheckDeviceSlugs → tests/js/hwcheck.test.mjs
+  hwcheckHintHTML → tests/js/hwcheck.test.mjs
+  hwcheckErrorHTML → tests/js/hwcheck.test.mjs
+  hwcheckChannelText → tests/js/hwcheck.test.mjs
+  hwcheckProjectInfoHTML → tests/js/hwcheck.test.mjs
+  hwcheckToolchainNote → tests/js/hwcheck.test.mjs
+  hwcheckActionsHTML → tests/js/hwcheck.test.mjs
+  hwcheckDeviceKit → tests/js/hwcheck.test.mjs
+  hwcheckOrderDesc → tests/js/hwcheck.test.mjs
+  hwcheckSectionPlanText → tests/js/hwcheck.test.mjs
+  hwcheckSectionNoteHTML → tests/js/hwcheck.test.mjs
+  hwcheckSymptomText → tests/js/hwcheck.test.mjs
+  hwcheckAdviceEmptyHTML → tests/js/hwcheck.test.mjs
+  HWCHECK_CHANNEL_KEYS → tests/js/hwcheck.test.mjs, tests/test_hwcheck.py, src/contest_generator/hwcheck.py
+  HWCHECK_VERDICT_FALLBACK → tests/js/fx-guard.test.mjs
+  LINE_DIFF_MAX_CELLS → tests/js/line-diff.test.mjs
+  maincDiskState → tests/js/mainc-sync.test.mjs
+  masterHealthBadgeHTML → tests/js/master-ext-browser.test.mjs
+  masterStatsHTML → tests/js/master-ext-browser.test.mjs
+  masterDeleteConfirmHTML → tests/js/master-browser.test.mjs, src/contest_generator/static/js/ui/master.js
+  masterKeyFileRowHTML → tests/js/master-browser.test.mjs, src/contest_generator/static/js/ui/master.js
+  materialsStateText → tests/js/materials-update.test.mjs
+  mdEncodedPath → tests/js/md-library.test.mjs
+  mdAssetUrl → tests/js/md-library.test.mjs
+  mdSubdir → tests/js/md-library.test.mjs
+  formatMtime → tests/js/md-library.test.mjs, tests/js/pdf-library.test.mjs, src/contest_generator/static/js/fx/pdf.js
+  pythonArtifactSummary → tests/js/module-library.test.mjs
+  groupOfSlug → tests/js/group-cards.test.mjs
+  renderableGroupCards → tests/js/group-choice-required.test.mjs
+  groupChoiceRequired → tests/js/group-choice-required.test.mjs
+  groupMemberPick → tests/js/group-choice-required.test.mjs
+  moduleGridPlatformLabel → tests/js/module-grid.test.mjs
+  moduleGridStatusText → tests/js/module-grid.test.mjs
+  moduleGridBadgeClass → tests/js/module-grid.test.mjs
+  moduleGridFilter → tests/js/module-grid.test.mjs
+  moduleRequiresIdentity → tests/js/module-info-dialog.test.mjs
+  identityExemptLabel → tests/js/module-info-dialog.test.mjs
+  moduleIntroHTML → tests/js/module-intro-detail.test.mjs
+  moduleReasonHTML → tests/js/module-intro-detail.test.mjs
+  MODULE_INFO_BTN_TEXT → tests/js/module-intro-detail.test.mjs
+  MODULE_INFO_BTN_TITLE → tests/js/module-intro-detail.test.mjs
+  cardStepStatusHTML → tests/js/gen-overview.test.mjs, src/contest_generator/static/js/ui/generate-steps.js
+  paramsChatMessageHTML → tests/js/params-chat.test.mjs
+  paramsChatInputHTML → tests/js/params-chat.test.mjs
+  pdfEncodedPath → tests/js/pdf-library.test.mjs
+  pdfSubdir → tests/js/pdf-library.test.mjs
+  formatMtime → tests/js/md-library.test.mjs, tests/js/pdf-library.test.mjs, src/contest_generator/static/js/fx/md.js
+  pdfBadgeTags → tests/js/pdf-library.test.mjs
+  pdfDupGroups → tests/js/pdf-dup-guard.test.mjs, tests/js/pdf-library.test.mjs
+  pdfTrashConfirmHTML → tests/js/pdf-library.test.mjs
+  pinModelEntry → tests/js/pin-model.test.mjs
+  pinModelConstraints → tests/js/pin-model.test.mjs, tests/test_bindings_matrix.py
+  pinInstanceTokens → tests/test_bindings_matrix.py
+  pinRoleChannel → tests/js/pin-model.test.mjs
+  pinConstraintHolds → tests/js/pin-model.test.mjs, tests/test_bindings_matrix.py
+  recentStatusMeta → tests/js/recent-jobs.test.mjs, src/contest_generator/static/js/boot.js, src/contest_generator/static/js/ui/recent.js
+  recentTimeLabel → tests/js/recent-jobs.test.mjs, src/contest_generator/static/js/boot.js, src/contest_generator/static/js/ui/recent.js
+  recentPlatformLabel → tests/js/recent-jobs.test.mjs, src/contest_generator/static/js/boot.js, src/contest_generator/static/js/ui/recent.js
+  recentChipHTML → tests/js/recent-jobs.test.mjs, src/contest_generator/static/js/boot.js, src/contest_generator/static/js/ui/recent.js
+  suggestionSolutionBadges → tests/js/recommend.test.mjs
+  suggestionOptionRowHTML → tests/js/recommend.test.mjs
+  suggestionOptionsHTML → tests/js/recommend.test.mjs
+  decisionBadgeHTML → tests/js/recommend.test.mjs
+  reviewBadgeHTML → tests/js/recommend.test.mjs
+  discussionAreaHTML → tests/js/recommend.test.mjs
+  BUY_DECISIONS_KEY → tests/js/fx-guard.test.mjs
+  referenceTopicTypeChip → tests/js/reference-library.test.mjs, src/contest_generator/static/js/fx/topic.js
+  refDanglingAnchors → tests/js/pdf-library.test.mjs, tests/js/reference-library.test.mjs, src/contest_generator/static/js/fx/pdf.js, src/contest_generator/static/js/fx/topic.js
+  refMatchFiles → tests/js/reference-library.test.mjs
+  refAnchorBadge → tests/js/reference-library.test.mjs
+  refServedTotal → tests/js/reference-library.test.mjs
+  refVolumeText → tests/js/reference-library.test.mjs
+  refVolumeTitle → tests/js/reference-library.test.mjs
+  isResettableKey → tests/js/reset.test.mjs
+  RESETTABLE_EXACT_KEYS → tests/js/reset.test.mjs
+  RESETTABLE_KEY_PREFIXES → tests/js/reset.test.mjs
+  resourceBoardSVG → tests/js/resource-board.test.mjs, src/contest_generator/static/js/fx/wiring.js
+  RESOURCE_TASK_COLORS → tests/js/resource-board.test.mjs
+  scoreChecklistPartLabel → tests/js/score-checklist.test.mjs, src/contest_generator/static/js/ui/generate-core.js
+  scoreChecklistScoreText → tests/js/score-checklist.test.mjs, src/contest_generator/static/js/ui/generate-core.js
+  scoreChecklistRefsText → tests/js/score-checklist.test.mjs, src/contest_generator/static/js/ui/generate-core.js
+  scoreChecklistChecked → tests/js/score-checklist.test.mjs, src/contest_generator/static/js/ui/generate-core.js
+  scoreChecklistLineText → tests/js/score-checklist.test.mjs, src/contest_generator/static/js/ui/generate-core.js
+  scoreChecklistParse → tests/js/score-checklist.test.mjs, src/contest_generator/static/js/ui/generate-core.js
+  settingsDefaultCollapsed → tests/js/settings-collapse.test.mjs
+  sectionCollapseLabel → tests/js/settings-collapse.test.mjs
+  SETTINGS_DEFAULT_COLLAPSED → tests/js/fx-guard.test.mjs, src/contest_generator/static/js/ui/generate-core.js, src/contest_generator/static/js/ui/settings.js
+  taskVerifyLabel → tests/js/task.test.mjs
+  taskScoreRefsText → tests/js/task.test.mjs
+  taskOrderLabel → tests/js/task.test.mjs
+  taskNeedsRedoBadge → tests/js/task.test.mjs
+  taskCardHTML → tests/js/task-changes-refs.test.mjs, tests/js/task.test.mjs, src/contest_generator/static/js/ui/generate-tasks.js
+  taskPhaseHTML → tests/js/task.test.mjs
+  taskIterationLabel → tests/js/task.test.mjs
+  taskIterationsHTML → tests/js/task-changes-refs.test.mjs, tests/js/task.test.mjs
+  taskDialogAdoptHTML → tests/js/task.test.mjs
+  taskLatestFeedbackNote → tests/js/task.test.mjs
+  taskStepReportHTML → tests/js/task.test.mjs
+  resourceIsHardware → tests/js/task.test.mjs, src/contest_generator/static/js/ui/wiring.js
+  taskResourcesHTML → tests/js/task.test.mjs
+  taskChecklistHTML → tests/js/task.test.mjs
+  wiringSectionHTML → tests/js/task.test.mjs, src/contest_generator/static/js/ui/wiring.js
+  taskNextActionHTML → tests/js/task.test.mjs
+  taskErrorsHTML → tests/js/task.test.mjs
+  taskMoreMenuHTML → tests/js/task.test.mjs, src/contest_generator/static/js/ui/generate-tasks.js
+  taskEditFormHTML → tests/js/task.test.mjs, src/contest_generator/static/js/ui/generate-tasks.js
+  prereadGroupLabel → tests/js/topic-preread.test.mjs
+  OTHER_GROUP_LABEL → tests/js/topic-preread.test.mjs
+  topicCategoryChip → tests/js/topic-category.test.mjs
+  topicHasNotes → tests/js/topic-browser.test.mjs, tests/js/topic-cards.test.mjs, tests/js/topic-detail.test.mjs
+  topicDanglingGroups → tests/js/topic-browser.test.mjs, tests/js/topic-cards.test.mjs, tests/js/topic-detail.test.mjs
+  topicHealthText → tests/js/topic-browser.test.mjs, tests/js/topic-cards.test.mjs, tests/js/topic-detail.test.mjs
+  UNDO_LIMIT → tests/js/undo-stack.test.mjs
+  updateStateText → tests/js/update.test.mjs
+  windowTextMatches → tests/js/window-text.test.mjs
+  isPowerKind → tests/js/wiring.test.mjs
+  highlightWiringLines → tests/js/wiring.test.mjs
+  wiringAllLines → tests/js/wiring.test.mjs
+  wfNum → tests/js/fx-guard.test.mjs, src/contest_generator/static/js/ui/settings.js
+  formatWorkflowUsage → tests/js/recent-workflows-format.test.mjs, src/contest_generator/static/js/ui/settings.js
+  formatWorkflowCost → tests/js/recent-workflows-format.test.mjs, src/contest_generator/static/js/ui/settings.js
+  INPUT_A11Y_LABELS → tests/js/a11y-labels.test.mjs
+  runCodeCompile → src/contest_generator/static/js/ui/code-flash.js
+  currentMarks → src/contest_generator/static/js/fx/code-brackets.js, src/contest_generator/static/js/fx/edit-patch.js
+  readPickedText → tests/js/windows-text-encoding.test.mjs, src/contest_generator/static/js/ui/library.js, src/contest_generator/static/js/ui/reference.js
+  syscfgConflictStateText → tests/js/fix-center-core.test.mjs, src/contest_generator/fix_errors.py
+  fixLoopSnapshot → tests/js/fix-center-core.test.mjs
+  generateMain → src/contest_generator/static/js/boot.js, src/contest_generator/static/js/ui/generate-mainc.js, src/contest_generator/static/js/ui/generate-pins.js, src/contest_generator/static/js/ui/generate-recommend.js
+  renderGenerateSuccess → src/contest_generator/static/js/boot.js, src/contest_generator/static/js/ui/generate-pins.js, src/contest_generator/static/js/ui/recent.js
+  renderScoreChecklist → tests/js/score-points-format.test.mjs, src/contest_generator/static/js/boot.js
+  scoreChecklistSyncCurrent → src/contest_generator/static/js/boot.js
+  scoreChecklistExportNow → src/contest_generator/static/js/boot.js
+  runCompileOnce → src/contest_generator/static/js/fx/recent.js, src/contest_generator/static/js/ui/fix-center-core.js, src/contest_generator/static/js/ui/generate-revise.js
+  runFixOnce → src/contest_generator/static/js/ui/fix-center-core.js
+  fixRounds → tests/test_generate_check_contract.py, src/contest_generator/static/js/ui/fix-center-core.js
+  currentCodeZoomPct → src/contest_generator/static/js/boot.js, src/contest_generator/static/js/ui/codeview.js
+  applyCodeZoom → src/contest_generator/static/js/boot.js, src/contest_generator/static/js/ui/codeeditor.js, src/contest_generator/static/js/ui/codeview.js
+  instancePinTarget → src/contest_generator/static/js/boot.js, src/contest_generator/static/js/ui/generate-recommend.js
+  pinBoard → src/contest_generator/static/js/boot.js, src/contest_generator/static/js/fx/generate.js
+  pinHighlight → src/contest_generator/static/js/boot.js
+  pinRotation → src/contest_generator/static/js/boot.js
+  pinOverview → src/contest_generator/static/js/boot.js
+  MODULE_COLORS → tests/js/resource-board.test.mjs, src/contest_generator/static/js/fx/resource-board.js
+  bindRole → tests/js/pin-model.test.mjs, tests/test_bindings_matrix.py, src/contest_generator/static/js/boot.js, src/contest_generator/static/js/fx/pin-model.js
+  unbindRole → src/contest_generator/static/js/boot.js
+  addInstance → tests/test_syscfg_model.py, src/contest_generator/syscfg_model.py
+  renderReadinessPanel → src/contest_generator/static/js/boot.js, src/contest_generator/static/js/fx/readiness.js
+  moduleInfoReason → tests/js/module-intro-detail.test.mjs
+  collectDraftState → src/contest_generator/static/js/boot.js
+  clearDraft → src/contest_generator/static/js/boot.js
+  runOverviewFill → src/contest_generator/static/index.html, src/contest_generator/static/js/boot.js
+  overviewPlanNow → src/contest_generator/static/js/boot.js
+  tasksRender → src/contest_generator/static/js/fx/task.js, src/contest_generator/static/js/ui/resource-board.js
+  editModule → src/contest_generator/static/js/boot.js
+  deleteModule → src/contest_generator/static/js/boot.js
+  newModulePayload → src/contest_generator/static/js/boot.js, src/contest_generator/static/js/ui/files.js
+  renderRecentList → src/contest_generator/static/js/boot.js
+  deleteReference → src/contest_generator/static/js/boot.js
+  editReference → src/contest_generator/static/js/boot.js, src/contest_generator/static/js/ui/files.js
+  referenceFileUrl → src/contest_generator/static/js/boot.js
+  openReferenceFile → src/contest_generator/static/js/boot.js
+  viewReferenceDetail → src/contest_generator/static/js/boot.js
+  renderPriceReference → tests/js/price-reference-clear.test.mjs, src/contest_generator/static/js/boot.js
+  syncStepDone → src/contest_generator/static/js/boot.js
+  renderStepProgress → src/contest_generator/static/js/boot.js
+  STEP_TOTAL → src/contest_generator/static/js/boot.js, src/contest_generator/static/js/fx/draft.js
+  CARD_COLLAPSE_SELECTOR → src/contest_generator/static/js/boot.js, src/contest_generator/static/js/ui/settings.js
+  viewTopicDetail → src/contest_generator/static/js/boot.js
+  viewTopicEdit → src/contest_generator/static/js/boot.js
+  initTopicToolbar → tests/js/ui-dom-contract.mjs, src/contest_generator/static/js/boot.js
+  deleteTopic → src/contest_generator/static/js/boot.js
+  renderProofreadRows → src/contest_generator/static/js/boot.js
+  attachWiringInputs → src/contest_generator/static/js/fx/task.js
+=== 调用位导入名 1112 个；导出侧不是函数形态的 44 处 ===
+  boot.js ← ui/generate-pins.js :: renderPinCard
+  boot.js ← ui/generate-mainc.js :: initMainCTools
+  boot.js ← ui/generate-core.js :: initScoreChecklist
+  boot.js ← ui/generate-fix.js :: renderToolchainStatus
+  boot.js ← ui/generate-fix.js :: setToolchains
+  boot.js ← ui/generate-fix.js :: updateFixCenterAvailability
+  boot.js ← ui/generate-steps.js :: restoreDraft
+  boot.js ← ui/generate-steps.js :: scheduleDraftSave
+  boot.js ← ui/generate-steps.js :: initGenOverview
+  boot.js ← ui/generate-steps.js :: refreshGenOverview
+  boot.js ← ui/generate-readiness.js :: refreshReadinessPanel
+  boot.js ← ui/generate-readiness.js :: initReadinessCheck
+  ui/code-compile.js ← fx/code-compile.js :: compileStatusText
+  ui/code-compile.js ← ui/generate-fix.js :: startFixCenter
+  ui/code-fix-panel.js ← ui/generate-fix.js :: fixRenderResults
+  ui/codeeditor.js ← fx/codeeditor.js :: editorLineRange
+  ui/delivery.js ← ui/generate-revise.js :: reviseGetDir
+  ui/delivery.js ← ui/generate-tasks.js :: tasksSetBusy
+  ui/delivery.js ← ui/generate-tasks.js :: tasksIsBusy
+  ui/generate-core.js ← ui/generate-pins.js :: pinRoles
+  ui/generate-core.js ← ui/generate-mainc.js :: syncMainCHighlight
+  ui/generate-core.js ← ui/generate-steps.js :: scheduleDraftSave
+  ui/generate-core.js ← ui/generate-readiness.js :: readinessState
+  ui/generate-core.js ← ui/generate-readiness.js :: desktopTopicOutputEnabled
+  ui/generate-core.js ← ui/generate-fix.js :: startFixCenter
+  ui/generate-core.js ← ui/generate-fix.js :: compileBanner
+  ui/generate-steps.js ← ui/generate-readiness.js :: readinessState
+  ui/generate-steps.js ← ui/generate-readiness.js :: desktopTopicOutputEnabled
+  ui/generate-steps.js ← ui/generate-pins.js :: loadPinBoard
+  ui/generate-steps.js ← ui/generate-mainc.js :: syncMainCHighlight
+  ui/generate-tasks.js ← ui/generate-revise.js :: reviseGetDir
+  ui/goto-tasks.js ← ui/generate-revise.js :: reviseLoad
+  ui/goto-tasks.js ← ui/generate-revise.js :: reviseGetDir
+  ui/guide.js ← ui/nav-jump.js :: gotoNavTab
+  ui/hwcheck.js ← fx/code-compile.js :: compileStatusText
+  ui/params-chat.js ← ui/generate-revise.js :: reviseGetDir
+  ui/params-chat.js ← ui/generate-tasks.js :: tasksIsBusy
+  ui/params.js ← ui/generate-revise.js :: reviseGetDir
+  ui/params.js ← ui/generate-tasks.js :: tasksIsBusy
+  ui/params.js ← ui/generate-tasks.js :: tasksSetBusy
+  ui/resource-board.js ← ui/generate-revise.js :: reviseGetPlatform
+  ui/revise-tabs.js ← ui/generate-revise.js :: reviseGetDir
+  ui/welcome.js ← ui/nav-jump.js :: gotoNavTab
+  ui/wiring.js ← ui/generate-revise.js :: reviseGetPlatform

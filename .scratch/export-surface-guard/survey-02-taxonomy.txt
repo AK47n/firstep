@@ -1,0 +1,131 @@
+﻿=== 零 import 消费者的导出（页面图 ∪ tests/js ∪ tests/browser 的 import 边）===
+合计 111
+分类计数： {"摘 export 关键字（仅内部用）":95,"摘 export 关键字（window 桥保留）":15,"真死（只有定义行）→ 整条删":1}
+
+模块                          导出名                           码位    桥   py字面量     别处提及
+app.js                      currentTheme                  2     —   —         src/contest_generator/static/js/boot.js
+app.js                      applyTheme                    3     —   —         src/contest_generator/static/js/boot.js
+app.js                      initTheme                     2     —   —         src/contest_generator/static/js/boot.js
+fx/code-compile.js          SYSCFG_CONFLICT_KIND          4     是   —         src/contest_generator/fix_errors.py
+fx/code-marks.js            MARK_PRIORITY                 3     是   —         src/contest_generator/static/index.html
+fx/code.js                  maincScrollToRange            4     是   —         tests/js/boot-contract.mjs tests/js/fx-guard.test.mjs src/contest_generator/static/js/ui/generate-fix.js
+fx/codeeditor.js            codeEditorHighlight           4     是   —         tests/js/fx-guard.test.mjs
+fx/disk-baseline.js         SNAPSHOT_MAX                  3     —   —         （无）
+fx/draft.js                 draftGroupChoices             3     —   —         （无）
+fx/env.js                   CCS_PIECE_NAMES               3     是   —         tests/js/fx-guard.test.mjs
+fx/exit-guard.js            UNSAVED_SWITCH_LIST_MAX       2     —   —         （无）
+fx/highlight.js             lineEndState                  4     是   —         （无）
+fx/hwcheck.js               HWCHECK_VERDICT_FALLBACK      3     是   —         tests/js/fx-guard.test.mjs
+fx/module.js                needsGroupChoice              3     —   —         （无）
+fx/module.js                INTERNAL_KINDS                3     是   —         （无）
+fx/pin-model.js             pinInstanceTokens             8     —   —         tests/test_bindings_matrix.py
+fx/recommend.js             BUY_DECISIONS_KEY             4     是   —         tests/js/fx-guard.test.mjs
+fx/settings.js              SETTINGS_DEFAULT_COLLAPSED    4     是   —         tests/js/fx-guard.test.mjs src/contest_generator/static/js/ui/generate-core.js src/contest_generator/static/js/ui/settings.js
+fx/task.js                  wiringSectionHTML             5     —   —         tests/js/task.test.mjs src/contest_generator/static/js/ui/wiring.js
+fx/wiring.js                layoutWiring                  2     —   —         （无）
+fx/workflow.js              wfNum                         10    是   —         tests/js/fx-guard.test.mjs src/contest_generator/static/js/ui/settings.js
+ui/code-bottom-panels.js    PANEL_LABELS                  3     —   —         （无）
+ui/code-compile.js          runCodeCompile                8     —   —         src/contest_generator/static/js/ui/code-flash.js
+ui/code-flash.js            runCodeFlash                  3     —   —         （无）
+ui/codeeditor.js            getCompileErrors              7     —   —         （无）
+ui/codeeditor.js            currentMarks                  11    —   —         src/contest_generator/static/js/fx/code-brackets.js src/contest_generator/static/js/fx/edit-patch.js
+ui/codeeditor.js            openDiskConflict              3     —   —         （无）
+ui/codeeditor.js            saveActiveTab                 6     —   —         （无）
+ui/codeview.js              clearCodeDiskChanges          3     —   —         （无）
+ui/delivery.js              deliveryOpen                  3     是   —         （无）
+ui/delivery.js              deliveryCheck                 3     是   —         （无）
+ui/delivery.js              deliveryPackage               3     是   —         （无）
+ui/delivery.js              deliveryReset                 4     是   —         （无）
+ui/files.js                 readPickedText                3     —   —         tests/js/windows-text-encoding.test.mjs src/contest_generator/static/js/ui/library.js src/contest_generator/static/js/ui/reference.js
+ui/full-update.js           fullStateText                 2     —   —         tests/js/boot-contract.mjs tests/js/full-update.test.mjs src/contest_generator/static/js/fx/full-update.js
+ui/generate-core.js         generateMain                  6     —   —         src/contest_generator/static/js/boot.js src/contest_generator/static/js/ui/generate-mainc.js src/contest_generator/static/js/ui/generate-pins.js src/contest_generator/static/js/ui/generate-recommend.js
+ui/generate-core.js         renderGenerateSuccess         7     —   —         src/contest_generator/static/js/boot.js src/contest_generator/static/js/ui/generate-pins.js src/contest_generator/static/js/ui/recent.js
+ui/generate-core.js         renderScoreChecklist          5     —   —         tests/js/score-points-format.test.mjs src/contest_generator/static/js/boot.js
+ui/generate-core.js         scoreChecklistSyncCurrent     5     —   —         src/contest_generator/static/js/boot.js
+ui/generate-core.js         scoreChecklistExportNow       5     —   —         src/contest_generator/static/js/boot.js
+ui/generate-fix.js          FIX_MAX_ROUNDS                5     —   —         tests/js/boot-contract.mjs tests/js/fix-center-core.test.mjs tests/test_generate_check_contract.py src/contest_generator/static/js/boot.js src/contest_generator/static/js/ui/code-fix-panel.js src/contest_generator/static/js/ui/fix-center-core.js
+ui/generate-fix.js          fixLoop                       5     —   —         tests/js/boot-contract.mjs tests/test_generate_check_contract.py src/contest_generator/static/js/boot.js src/contest_generator/static/js/ui/fix-center-core.js
+ui/generate-fix.js          continueFixCenter             4     —   —         （无）
+ui/generate-fix.js          runCompileOnce                3     —   —         src/contest_generator/static/js/fx/recent.js src/contest_generator/static/js/ui/fix-center-core.js src/contest_generator/static/js/ui/generate-revise.js
+ui/generate-fix.js          runFixOnce                    4     —   —         src/contest_generator/static/js/ui/fix-center-core.js
+ui/generate-fix.js          fixRounds                     3     —   —         tests/test_generate_check_contract.py src/contest_generator/static/js/ui/fix-center-core.js
+ui/generate-mainc.js        currentCodeZoomPct            5     —   —         src/contest_generator/static/js/boot.js src/contest_generator/static/js/ui/codeview.js
+ui/generate-mainc.js        applyCodeZoom                 6     —   —         src/contest_generator/static/js/boot.js src/contest_generator/static/js/ui/codeeditor.js src/contest_generator/static/js/ui/codeview.js
+ui/generate-pins.js         instancePinTarget             42    —   —         src/contest_generator/static/js/boot.js src/contest_generator/static/js/ui/generate-recommend.js
+ui/generate-pins.js         LED_COLORS                    7     —   —         （无）
+ui/generate-pins.js         pinBoard                      25    —   —         src/contest_generator/static/js/boot.js src/contest_generator/static/js/fx/generate.js
+ui/generate-pins.js         pinBoardError                 7     —   —         （无）
+ui/generate-pins.js         pinShowOptional               5     —   —         （无）
+ui/generate-pins.js         pinHighlight                  13    —   —         src/contest_generator/static/js/boot.js
+ui/generate-pins.js         pinRotation                   4     —   —         src/contest_generator/static/js/boot.js
+ui/generate-pins.js         pinOverview                   11    —   —         src/contest_generator/static/js/boot.js
+ui/generate-pins.js         PIN_TYPE_STYLE                8     —   —         （无）
+ui/generate-pins.js         PIN_TYPE_ZH                   3     —   —         （无）
+ui/generate-pins.js         MODULE_COLORS                 4     —   —         tests/js/resource-board.test.mjs src/contest_generator/static/js/fx/resource-board.js
+ui/generate-pins.js         bindRole                      5     —   —         tests/js/pin-model.test.mjs tests/test_bindings_matrix.py src/contest_generator/static/js/boot.js src/contest_generator/static/js/fx/pin-model.js
+ui/generate-pins.js         unbindRole                    5     —   —         src/contest_generator/static/js/boot.js
+ui/generate-pins.js         assignInstancePin             4     —   —         （无）
+ui/generate-pins.js         addInstance                   4     —   —         tests/test_syscfg_model.py src/contest_generator/syscfg_model.py
+ui/generate-pins.js         delInstance                   4     —   —         （无）
+ui/generate-readiness.js    renderReadinessPanel          4     —   —         src/contest_generator/static/js/boot.js src/contest_generator/static/js/fx/readiness.js
+ui/generate-recommend.js    groupChoiceGap                1     —   —         （无）
+ui/generate-recommend.js    moduleInfoReason              3     —   —         tests/js/module-intro-detail.test.mjs
+ui/generate-recommend.js    prereadReminders              5     —   —         （无）
+ui/generate-revise.js       reviseAnalyze                 4     —   —         （无）
+ui/generate-revise.js       reviseApply                   4     —   —         （无）
+ui/generate-revise.js       reviseRollback                4     —   —         （无）
+ui/generate-revise.js       reviseRunDeepen               6     —   —         （无）
+ui/generate-revise.js       reviseResetAll                4     —   —         （无）
+ui/generate-revise.js       reviseRenderContext           4     —   —         （无）
+ui/generate-steps.js        collectDraftState             4     —   —         src/contest_generator/static/js/boot.js
+ui/generate-steps.js        clearDraft                    4     —   —         src/contest_generator/static/js/boot.js
+ui/generate-steps.js        runOverviewFill               5     —   —         src/contest_generator/static/index.html src/contest_generator/static/js/boot.js
+ui/generate-steps.js        overviewPlanNow               5     —   —         src/contest_generator/static/js/boot.js
+ui/generate-tasks.js        tasksPlan                     4     —   —         （无）
+ui/generate-tasks.js        tasksRender                   28    —   —         src/contest_generator/static/js/fx/task.js src/contest_generator/static/js/ui/resource-board.js
+ui/generate-tasks.js        tasksResetMessages            4     —   —         （无）
+ui/goto-nav.js              flashJumpTarget               2     —   —         （无）
+ui/guide.js                 switchGuideTab                3     —   —         （无）
+ui/library.js               editModule                    4     —   —         src/contest_generator/static/js/boot.js
+ui/library.js               deleteModule                  3     —   —         src/contest_generator/static/js/boot.js
+ui/library.js               newModulePayload              4     —   —         src/contest_generator/static/js/boot.js src/contest_generator/static/js/ui/files.js
+ui/params-chat.js           paramsChatReset               4     —   —         （无）
+ui/params.js                paramsScan                    3     —   —         （无）
+ui/params.js                paramsApply                   5     —   —         （无）
+ui/params.js                paramsReload                  5     —   —         （无）
+ui/recent.js                renderRecentList              2     —   —         src/contest_generator/static/js/boot.js
+ui/reference.js             deleteReference               3     —   —         src/contest_generator/static/js/boot.js
+ui/reference.js             editReference                 3     —   —         src/contest_generator/static/js/boot.js src/contest_generator/static/js/ui/files.js
+ui/reference.js             referenceFileUrl              2     —   —         src/contest_generator/static/js/boot.js
+ui/reference.js             openReferenceFile             4     —   —         src/contest_generator/static/js/boot.js
+ui/reference.js             viewReferenceDetail           3     —   —         src/contest_generator/static/js/boot.js
+ui/resource-board.js        setResourceView               2     —   —         （无）
+ui/revise-tabs.js           refreshReviseBadges           2     —   —         （无）
+ui/settings.js              renderPriceReference          3     —   —         tests/js/price-reference-clear.test.mjs src/contest_generator/static/js/boot.js
+ui/step-state.js            syncStepDone                  5     —   —         src/contest_generator/static/js/boot.js
+ui/step-state.js            renderStepProgress            3     —   —         src/contest_generator/static/js/boot.js
+ui/step-state.js            STEP_TOTAL                    3     —   —         src/contest_generator/static/js/boot.js src/contest_generator/static/js/fx/draft.js
+ui/step-state.js            CARD_COLLAPSE_SELECTOR        3     —   —         src/contest_generator/static/js/boot.js src/contest_generator/static/js/ui/settings.js
+ui/topic.js                 viewTopicDetail               2     —   —         src/contest_generator/static/js/boot.js
+ui/topic.js                 viewTopicEdit                 2     —   —         src/contest_generator/static/js/boot.js
+ui/topic.js                 initTopicToolbar              2     —   —         tests/js/ui-dom-contract.mjs src/contest_generator/static/js/boot.js
+ui/topic.js                 loadTopicCategories           2     —   —         （无）
+ui/topic.js                 deleteTopic                   4     —   —         src/contest_generator/static/js/boot.js
+ui/topic.js                 renderProofreadRows           3     —   —         src/contest_generator/static/js/boot.js
+ui/wiring.js                attachWiringInputs            3     —   —         src/contest_generator/static/js/fx/task.js
+ui/wiring.js                tasksByIdMap                  2     —   —         （无）
+
+=== 真死清单（只有定义行、无桥、无别处提及）===
+  ui/generate-recommend.js :: groupChoiceGap
+
+=== backlog 点名的 7 个在上述集合里的落点 ===
+  CCS_PIECE_NAMES              摘 export 关键字（window 桥保留）；别处提及：tests/js/fx-guard.test.mjs
+  maincScrollToRange           摘 export 关键字（window 桥保留）；别处提及：tests/js/boot-contract.mjs tests/js/fx-guard.test.mjs src/contest_generator/static/js/ui/generate-fix.js
+  codeEditorHighlight          摘 export 关键字（window 桥保留）；别处提及：tests/js/fx-guard.test.mjs
+  HWCHECK_VERDICT_FALLBACK     摘 export 关键字（window 桥保留）；别处提及：tests/js/fx-guard.test.mjs
+  BUY_DECISIONS_KEY            摘 export 关键字（window 桥保留）；别处提及：tests/js/fx-guard.test.mjs
+  SETTINGS_DEFAULT_COLLAPSED   摘 export 关键字（window 桥保留）；别处提及：tests/js/fx-guard.test.mjs src/contest_generator/static/js/ui/generate-core.js src/contest_generator/static/js/ui/settings.js
+  wfNum                        摘 export 关键字（window 桥保留）；别处提及：tests/js/fx-guard.test.mjs src/contest_generator/static/js/ui/settings.js
+
+=== 调用位 ⇒ 函数形态（再导出链与函数别名已解开）===
+调用位导入名 1112；非函数形态 0 处；解不开 0 处

@@ -1,0 +1,142 @@
+== ① base 自校验（base=27a7b46e）==
+  页面模块 132 个（git ls-tree 27a7b46e -- src/contest_generator/static/js）；消费侧 164 个 .mjs
+  判据 D 零消费者导出：111 处（基线 111）；判据 T 形态违规：0 处（基线 0）
+  星号导入：0 处；取数面体检：无问题
+  ✓ 通过（base 是清点前那一代）
+
+== ② 同一套判据作用在 base 上（判据 D 应红、判据 T 应绿）==
+  判据 D「每个导出必须有消费者」：红 —— 111 处
+      ui/generate-pins.js：16 个 —— instancePinTarget, LED_COLORS, pinBoard, pinBoardError, pinShowOptional, pinHighlight …
+      ui/generate-fix.js：6 个 —— FIX_MAX_ROUNDS, fixLoop, continueFixCenter, runCompileOnce, runFixOnce, fixRounds
+      ui/generate-revise.js：6 个 —— reviseAnalyze, reviseApply, reviseRollback, reviseRunDeepen, reviseResetAll, reviseRenderContext
+      ui/topic.js：6 个 —— viewTopicDetail, viewTopicEdit, initTopicToolbar, loadTopicCategories, deleteTopic, renderProofreadRows
+      ui/generate-core.js：5 个 —— generateMain, renderGenerateSuccess, renderScoreChecklist, scoreChecklistSyncCurrent, scoreChecklistExportNow
+      ui/reference.js：5 个 —— deleteReference, editReference, referenceFileUrl, openReferenceFile, viewReferenceDetail
+      …（其余 42 个模块略；完整清单见 --out 文件末尾）
+      backlog 点名的 7 个：7/7 在清单里（对）
+  判据 T「调用位 ⇒ 函数形态」：绿 —— 0 处违规（0 不是"判据没用"：见 ④ 的自检 6/7/8）
+
+== ③ 当前工作树读数 ==
+  页面模块 132 个；消费侧 164 个 .mjs
+  判据 D 零消费者导出：111 处 —— 红（清点尚未做：111 处，与 base 同数）
+  判据 T 形态违规：0 处（绿）
+  星号导入体检：0 处（绿）
+  取数面体检：绿
+
+== ④ 判据强度自检（内存注入，不写盘）==
+  ✔ 摘掉一条真 import 边 → 判据 D 报出该导出没人用 —— boot.js 不再 import renderUsageStats（来自 ui/usage.js）→ 报出
+  ✔ 正向对照：注入一个没人 import 的导出 → 判据 D 报出 —— 报出 fx/code.js::probeInjectedDead
+  ✔ 注释喂绿自检：名字只出现在注释里 → 判据 D 仍报出 —— 报出（注释不算消费者）
+  ✔ 测试侧消费者算数：摘掉测试侧 import → 判据 D 报出 —— tests/js/a11y-labels.test.mjs 不再 import INPUT_A11Y_LABELS → 报出
+  ✔ 星号导入体检：注入 `import * as ns` → 体检报出（判据 D 对它本来就是瞎的） —— 基线 0 处；注入后体检报出；判据 D 仍把它当没人用
+  ✔ 把被调用的 `export function` 换成同名数据 → 判据 T 报出 —— boot.js → app.js::apiGet 报出
+  ✔ 再导出链感知：链上声明改成数据 → 判据 T 报出（基线不报＝链跟通了） —— 基线不报 ✓；改成数据后报出 ✓（ui/guide.js → ui/nav-jump.js（再导出）→ ui/goto-nav.js::gotoNavTab）
+  ✔ 别名正向对照：`= 别的函数名` 不报（防假红）；改成数据 → 报出 —— 基线不报 ✓；改成数据后报出 ✓（锚点 fx/code-compile.js::compileStatusText）
+  ✔ 注释感知：值形态导出被当代码调用 → 报出；写在注释里 → 不报 —— 代码形态报出 ✓；注释形态不报 ✓（锚点 boot.js 里的 state）
+
+== 结论 ==
+  红证（判据 D 在 base 上必红、且 backlog 点名的 7 个都在清单里）：成立
+  强度自检：9/9 成立
+  当前工作树：红（清点尚未做：111 处，与 base 同数）；判据 T／星号体检／取数面体检：全绿
+
+PASS（判据能红，且不是靠选错 base 红的）
+
+== 附：base（27a7b46e）的零消费者导出完整清单（111 处）==
+  ui/generate-pins.js：instancePinTarget, LED_COLORS, pinBoard, pinBoardError, pinShowOptional, pinHighlight, pinRotation, pinOverview, PIN_TYPE_STYLE, PIN_TYPE_ZH, MODULE_COLORS, bindRole, unbindRole, assignInstancePin, addInstance, delInstance
+  ui/generate-fix.js：FIX_MAX_ROUNDS, fixLoop, continueFixCenter, runCompileOnce, runFixOnce, fixRounds
+  ui/generate-revise.js：reviseAnalyze, reviseApply, reviseRollback, reviseRunDeepen, reviseResetAll, reviseRenderContext
+  ui/topic.js：viewTopicDetail, viewTopicEdit, initTopicToolbar, loadTopicCategories, deleteTopic, renderProofreadRows
+  ui/generate-core.js：generateMain, renderGenerateSuccess, renderScoreChecklist, scoreChecklistSyncCurrent, scoreChecklistExportNow
+  ui/reference.js：deleteReference, editReference, referenceFileUrl, openReferenceFile, viewReferenceDetail
+  ui/codeeditor.js：getCompileErrors, currentMarks, openDiskConflict, saveActiveTab
+  ui/delivery.js：deliveryOpen, deliveryCheck, deliveryPackage, deliveryReset
+  ui/generate-steps.js：collectDraftState, clearDraft, runOverviewFill, overviewPlanNow
+  ui/step-state.js：syncStepDone, renderStepProgress, STEP_TOTAL, CARD_COLLAPSE_SELECTOR
+  app.js：currentTheme, applyTheme, initTheme
+  ui/generate-recommend.js：groupChoiceGap, moduleInfoReason, prereadReminders
+  ui/generate-tasks.js：tasksPlan, tasksRender, tasksResetMessages
+  ui/library.js：editModule, deleteModule, newModulePayload
+  ui/params.js：paramsScan, paramsApply, paramsReload
+  fx/module.js：needsGroupChoice, INTERNAL_KINDS
+  ui/generate-mainc.js：currentCodeZoomPct, applyCodeZoom
+  ui/wiring.js：attachWiringInputs, tasksByIdMap
+  fx/code-compile.js：SYSCFG_CONFLICT_KIND
+  fx/code-marks.js：MARK_PRIORITY
+  fx/code.js：maincScrollToRange
+  fx/codeeditor.js：codeEditorHighlight
+  fx/disk-baseline.js：SNAPSHOT_MAX
+  fx/draft.js：draftGroupChoices
+  fx/env.js：CCS_PIECE_NAMES
+  fx/exit-guard.js：UNSAVED_SWITCH_LIST_MAX
+  fx/highlight.js：lineEndState
+  fx/hwcheck.js：HWCHECK_VERDICT_FALLBACK
+  fx/pin-model.js：pinInstanceTokens
+  fx/recommend.js：BUY_DECISIONS_KEY
+  fx/settings.js：SETTINGS_DEFAULT_COLLAPSED
+  fx/task.js：wiringSectionHTML
+  fx/wiring.js：layoutWiring
+  fx/workflow.js：wfNum
+  ui/code-bottom-panels.js：PANEL_LABELS
+  ui/code-compile.js：runCodeCompile
+  ui/code-flash.js：runCodeFlash
+  ui/codeview.js：clearCodeDiskChanges
+  ui/files.js：readPickedText
+  ui/full-update.js：fullStateText
+  ui/generate-readiness.js：renderReadinessPanel
+  ui/goto-nav.js：flashJumpTarget
+  ui/guide.js：switchGuideTab
+  ui/params-chat.js：paramsChatReset
+  ui/recent.js：renderRecentList
+  ui/resource-board.js：setResourceView
+  ui/revise-tabs.js：refreshReviseBadges
+  ui/settings.js：renderPriceReference
+
+== 附：当前工作树的零消费者导出完整清单（111 处）==
+  ui/generate-pins.js：instancePinTarget, LED_COLORS, pinBoard, pinBoardError, pinShowOptional, pinHighlight, pinRotation, pinOverview, PIN_TYPE_STYLE, PIN_TYPE_ZH, MODULE_COLORS, bindRole, unbindRole, assignInstancePin, addInstance, delInstance
+  ui/generate-fix.js：FIX_MAX_ROUNDS, fixLoop, continueFixCenter, runCompileOnce, runFixOnce, fixRounds
+  ui/generate-revise.js：reviseAnalyze, reviseApply, reviseRollback, reviseRunDeepen, reviseResetAll, reviseRenderContext
+  ui/topic.js：viewTopicDetail, viewTopicEdit, initTopicToolbar, loadTopicCategories, deleteTopic, renderProofreadRows
+  ui/generate-core.js：generateMain, renderGenerateSuccess, renderScoreChecklist, scoreChecklistSyncCurrent, scoreChecklistExportNow
+  ui/reference.js：deleteReference, editReference, referenceFileUrl, openReferenceFile, viewReferenceDetail
+  ui/codeeditor.js：getCompileErrors, currentMarks, openDiskConflict, saveActiveTab
+  ui/delivery.js：deliveryOpen, deliveryCheck, deliveryPackage, deliveryReset
+  ui/generate-steps.js：collectDraftState, clearDraft, runOverviewFill, overviewPlanNow
+  ui/step-state.js：syncStepDone, renderStepProgress, STEP_TOTAL, CARD_COLLAPSE_SELECTOR
+  app.js：currentTheme, applyTheme, initTheme
+  ui/generate-recommend.js：groupChoiceGap, moduleInfoReason, prereadReminders
+  ui/generate-tasks.js：tasksPlan, tasksRender, tasksResetMessages
+  ui/library.js：editModule, deleteModule, newModulePayload
+  ui/params.js：paramsScan, paramsApply, paramsReload
+  fx/module.js：needsGroupChoice, INTERNAL_KINDS
+  ui/generate-mainc.js：currentCodeZoomPct, applyCodeZoom
+  ui/wiring.js：attachWiringInputs, tasksByIdMap
+  fx/code-compile.js：SYSCFG_CONFLICT_KIND
+  fx/code-marks.js：MARK_PRIORITY
+  fx/code.js：maincScrollToRange
+  fx/codeeditor.js：codeEditorHighlight
+  fx/disk-baseline.js：SNAPSHOT_MAX
+  fx/draft.js：draftGroupChoices
+  fx/env.js：CCS_PIECE_NAMES
+  fx/exit-guard.js：UNSAVED_SWITCH_LIST_MAX
+  fx/highlight.js：lineEndState
+  fx/hwcheck.js：HWCHECK_VERDICT_FALLBACK
+  fx/pin-model.js：pinInstanceTokens
+  fx/recommend.js：BUY_DECISIONS_KEY
+  fx/settings.js：SETTINGS_DEFAULT_COLLAPSED
+  fx/task.js：wiringSectionHTML
+  fx/wiring.js：layoutWiring
+  fx/workflow.js：wfNum
+  ui/code-bottom-panels.js：PANEL_LABELS
+  ui/code-compile.js：runCodeCompile
+  ui/code-flash.js：runCodeFlash
+  ui/codeview.js：clearCodeDiskChanges
+  ui/files.js：readPickedText
+  ui/full-update.js：fullStateText
+  ui/generate-readiness.js：renderReadinessPanel
+  ui/goto-nav.js：flashJumpTarget
+  ui/guide.js：switchGuideTab
+  ui/params-chat.js：paramsChatReset
+  ui/recent.js：renderRecentList
+  ui/resource-board.js：setResourceView
+  ui/revise-tabs.js：refreshReviseBadges
+  ui/settings.js：renderPriceReference

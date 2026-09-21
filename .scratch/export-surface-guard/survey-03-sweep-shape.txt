@@ -1,0 +1,92 @@
+﻿① 触达前端的 `import * as`：0 处
+② 零消费者导出 111 处
+③ 清扫形态：inline 74 处 / `export {…}` 清单 37 处 / 认不出 0 处
+   清单形态清单：
+     ui/full-update.js::fullStateText
+     ui/generate-core.js::generateMain
+     ui/generate-core.js::renderGenerateSuccess
+     ui/generate-core.js::renderScoreChecklist
+     ui/generate-core.js::scoreChecklistSyncCurrent
+     ui/generate-core.js::scoreChecklistExportNow
+     ui/generate-fix.js::FIX_MAX_ROUNDS
+     ui/generate-fix.js::fixLoop
+     ui/generate-fix.js::continueFixCenter
+     ui/generate-fix.js::runCompileOnce
+     ui/generate-fix.js::runFixOnce
+     ui/generate-fix.js::fixRounds
+     ui/generate-mainc.js::currentCodeZoomPct
+     ui/generate-mainc.js::applyCodeZoom
+     ui/generate-pins.js::bindRole
+     ui/generate-pins.js::unbindRole
+     ui/generate-pins.js::assignInstancePin
+     ui/generate-pins.js::addInstance
+     ui/generate-pins.js::delInstance
+     ui/generate-readiness.js::renderReadinessPanel
+     ui/generate-revise.js::reviseAnalyze
+     ui/generate-revise.js::reviseApply
+     ui/generate-revise.js::reviseRollback
+     ui/generate-revise.js::reviseRunDeepen
+     ui/generate-revise.js::reviseResetAll
+     ui/generate-revise.js::reviseRenderContext
+     ui/generate-steps.js::collectDraftState
+     ui/generate-steps.js::clearDraft
+     ui/generate-steps.js::runOverviewFill
+     ui/generate-steps.js::overviewPlanNow
+     ui/generate-tasks.js::tasksPlan
+     ui/generate-tasks.js::tasksRender
+     ui/generate-tasks.js::tasksResetMessages
+     ui/params-chat.js::paramsChatReset
+     ui/params.js::paramsScan
+     ui/params.js::paramsApply
+     ui/params.js::paramsReload
+   清单形态的来源（本文件声明 / 从别处 import 再导出）：
+     ui/full-update.js::fullStateText → 本文件声明；本地名来自 /js/fx/full-update.js
+     ui/generate-core.js::generateMain → 本文件声明
+     ui/generate-core.js::renderGenerateSuccess → 本文件声明
+     ui/generate-core.js::renderScoreChecklist → 本文件声明
+     ui/generate-core.js::scoreChecklistSyncCurrent → 本文件声明
+     ui/generate-core.js::scoreChecklistExportNow → 本文件声明
+     ui/generate-fix.js::FIX_MAX_ROUNDS → 再导出语句「export { FIX_MAX_ROUNDS, fixLoop } from "/js/ui/fix-center-core.js";」；本地名来自 /js/ui/fix-center-core.js
+     ui/generate-fix.js::fixLoop → 再导出语句「export { FIX_MAX_ROUNDS, fixLoop } from "/js/ui/fix-center-core.js";」；本地名来自 /js/ui/fix-center-core.js
+     ui/generate-fix.js::continueFixCenter → 本文件声明
+     ui/generate-fix.js::runCompileOnce → 本文件声明
+     ui/generate-fix.js::runFixOnce → 本文件声明
+     ui/generate-fix.js::fixRounds → 本文件声明
+     ui/generate-mainc.js::currentCodeZoomPct → 本文件声明
+     ui/generate-mainc.js::applyCodeZoom → 本文件声明
+     ui/generate-pins.js::bindRole → 本文件声明
+     ui/generate-pins.js::unbindRole → 本文件声明
+     ui/generate-pins.js::assignInstancePin → 本文件声明
+     ui/generate-pins.js::addInstance → 本文件声明
+     ui/generate-pins.js::delInstance → 本文件声明
+     ui/generate-readiness.js::renderReadinessPanel → 本文件声明
+     ui/generate-revise.js::reviseAnalyze → 本文件声明
+     ui/generate-revise.js::reviseApply → 本文件声明
+     ui/generate-revise.js::reviseRollback → 本文件声明
+     ui/generate-revise.js::reviseRunDeepen → 本文件声明
+     ui/generate-revise.js::reviseResetAll → 本文件声明
+     ui/generate-revise.js::reviseRenderContext → 本文件声明
+     ui/generate-steps.js::collectDraftState → 本文件声明
+     ui/generate-steps.js::clearDraft → 本文件声明
+     ui/generate-steps.js::runOverviewFill → 本文件声明
+     ui/generate-steps.js::overviewPlanNow → 本文件声明
+     ui/generate-tasks.js::tasksPlan → 本文件声明
+     ui/generate-tasks.js::tasksRender → 本文件声明
+     ui/generate-tasks.js::tasksResetMessages → 本文件声明
+     ui/params-chat.js::paramsChatReset → 本文件声明
+     ui/params.js::paramsScan → 本文件声明
+     ui/params.js::paramsApply → 本文件声明
+     ui/params.js::paramsReload → 本文件声明
+   清单摘完会不会变空：
+     ui/full-update.js：清单 1 项，其中 1 项要摘 → **整行删**
+     ui/generate-core.js：清单 6 项，其中 5 项要摘 → 摘名字，行留下
+     ui/generate-fix.js：清单 2 项，其中 2 项要摘 → **整行删**
+     ui/generate-fix.js：清单 11 项，其中 4 项要摘 → 摘名字，行留下
+     ui/generate-mainc.js：清单 4 项，其中 2 项要摘 → 摘名字，行留下
+     ui/generate-pins.js：清单 9 项，其中 5 项要摘 → 摘名字，行留下
+     ui/generate-readiness.js：清单 5 项，其中 1 项要摘 → 摘名字，行留下
+     ui/generate-revise.js：清单 9 项，其中 6 项要摘 → 摘名字，行留下
+     ui/generate-steps.js：清单 8 项，其中 4 项要摘 → 摘名字，行留下
+     ui/generate-tasks.js：清单 5 项，其中 3 项要摘 → 摘名字，行留下
+     ui/params-chat.js：清单 1 项，其中 1 项要摘 → **整行删**
+     ui/params.js：清单 3 项，其中 3 项要摘 → **整行删**

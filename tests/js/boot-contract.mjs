@@ -7,13 +7,16 @@
 //   3. 探针的判据强度自检（内存注入）
 // 放在 `.test.mjs` 里会让 import 方顺带注册并运行那批用例。
 //
-// ## 四类不变量（判据全部是纯函数：源码文本 / 模块表进，违规清单出）
+// ## 五类不变量（判据全部是纯函数：源码文本 / 模块表进，违规清单出）
 //
 //   ① `indexHtmlImports(html)` = 0    —— 装载根不在 HTML 里（判据 ①）
 //   ② `inlineDefinitions(html)` = 0   —— HTML 里零顶层 JS 定义（判据 ②）
 //   ③ `bareLoads(root)` = 0 且 `wiringViolations(root, modules)` = 0
 //                                      —— 零裸装载 ＋ 求值期零接线（判据 ③）
 //   ④ `graphBreaks(...)` / `reachable(...)` —— 全图 import↔export 对账 + 从装载根可达（判据 ④）
+//   ⑤ `unconsumedExports(...)` / `nonFunctionCallees(...)` —— **导出面**对账（工单
+//      export-surface-guard/01，判据 D/T）：导出必须真有消费者（import 边）＋ 被调用的导出必须是
+//      函数形态。④ 管"被 import 的名字有没有出处"，⑤ 管反向与形态——三条合起来把导出面夹住。
 //
 // ## 三个必须踩住的坑（都写进实现里了）
 //
@@ -334,7 +337,14 @@ export function parseModuleImports(text) {
       names = read.names; locals = read.locals; i = skipWsComments(text, read.end);
     } else if (text[i] === "*") {
       star = true; i = skipWsComments(text, i + 1);
-      if (/^as\b/.test(masked.slice(i, i + 3))) i = skipWsComments(text, i + 2);
+      if (/^as\b/.test(masked.slice(i, i + 3))) {
+        i = skipWsComments(text, i + 2);
+        // `* as ns`：别名标识符**必须吃掉**——不吃的话下面 `/^from\b/` 判在 "ns from …" 上，
+        // 整条星号导入被静默丢掉（工单 export-surface-guard/01 实测：`import * as ns from "…"`
+        // 与 `export * as ns from "…"` 都返回空数组，而 `export * from "…"` 正常）。
+        const alias = /^[A-Za-z_$][\w$]*/.exec(masked.slice(i, i + 80));
+        if (alias) i = skipWsComments(text, i + alias[0].length);   // 停在 `from` 上（不能留空格）
+      }
     } else if (text[i] === '"' || text[i] === "'") {
       // `import "…"` 裸装载：说明符就在当前位置，没有 from
       const bare = readString(text, i);
@@ -699,6 +709,254 @@ export function registryProblems(rootText, modules) {
 }
 
 // ---------------------------------------------------------------------------
+// ⑤ 导出面对账：判据 D（零消费者导出）与判据 T（调用位 ⇒ 函数形态）
+//
+// 工单 export-surface-guard/01。判据 ④（`graphBreaks`）管的是"被 import 的名字**有没有出处**"，
+// 本节两条管**另外两个方向**——合起来把导出面夹住：
+//   · **判据 D（下限）**：每个导出必须真有消费者（一条 import 边）。旧 `DOMAINS` 名字表被删掉
+//     之后，"没人用的导出"再没有任何东西看着（工单 frontend-boot-module/05 如实记的代价之一）。
+//   · **判据 T（形态）**：被**调用**的导出必须是函数形态。把 `export function x` 悄悄换成同名的
+//     `export const x = 数据`，④ 照样绿（名字还在），直到运行时那次调用炸成 TypeError。
+//
+// 两条都**零名单**：新增模块、改导出名都不需要登记——这正是 `DOMAINS` 那种表被拆掉的原因。
+// ---------------------------------------------------------------------------
+
+/**
+ * 消费侧（测试）文件的说明符 → 页面模块键（`fx/x.js`）；仓外/无关说明符返回 null。
+ *
+ * 测试侧实测两种写法都要认：`../../src/contest_generator/static/js/fx/x.js`（`tests/js` 与
+ * `tests/browser` 的通行写法）与 `/js/fx/x.js`。归一到**页面模块表那个键空间**（相对
+ * `static/js`）才谈得上对账——`resolveModuleKey` 的键空间是同一个，但它按**页面模块**的相对
+ * 位置解析，用在测试文件上会把 `../../` 解析到 `tests/` 外面去。
+ */
+export function consumerSpecToKey(spec) {
+  const norm = spec.split("\\").join("/");
+  const at = norm.indexOf("static/js/");
+  if (at >= 0) return norm.slice(at + "static/js/".length);
+  return norm.startsWith("/js/") ? norm.slice(4) : null;
+}
+
+/**
+ * 判据 D：**零消费者导出** → [{ key, name }]；空数组 = 每个导出都有人 import。
+ *
+ * 消费者 = 一条 **import 边**：页面模块图（`pageEntries`，含装载根 `boot.js`）∪ 消费侧
+ * （`consumerEntries` = `tests/js` 与 `tests/browser` 的 .mjs，说明符经 `consumerSpecToKey` 归一）。
+ *
+ * - **注释提及不算消费者**：工单 frontend-boot-module/05 评审实测过"墓碑注释把判据喂绿"
+ *   （boot.js 里满是"已迁至 …"）。`.scratch` 一次性探针同样不算——它们是历史证据，不是闸门。
+ * - **口径是"哪条导出"（`模块::名字`），不是"这个名字还有没有人用"**：改用全局名字集会放过
+ *   冗余的**转手再导出** —— 实测（`probe-05-duplicate-names`）全仓 5 个名字被 ≥2 个模块导出，
+ *   其中 3 处按模块算根本没人取（`ui/full-update.js::fullStateText`、
+ *   `ui/generate-fix.js::{FIX_MAX_ROUNDS, fixLoop}`），名字级口径会把它们静默放过。
+ * - 反过来**不会假红**：`export { x } from "M"` 本身就是一条指向 M 的 import 边，所以
+ *   "M 里声明 + R 里转手再导出"这两侧都会被记上（实测 `gotoNavTab`：`ui/goto-nav.js` 声明、
+ *   `ui/nav-jump.js` 转手，两侧都被正确判为有人用）。被判红的只有"没人从这儿取过"的那些。
+ */
+export function unconsumedExports(pageEntries, consumerEntries = []) {
+  const pageKeys = new Set(pageEntries.map((e) => e.key));
+  const consumed = new Set();                                // `模块键::名字`
+  const note = (key, name) => consumed.add(`${key}::${name}`);
+  for (const entry of pageEntries) {
+    for (const edge of parseModuleImports(entry.text)) {
+      const key = resolveModuleKey(edge.spec, entry.key);
+      if (key === null || !pageKeys.has(key)) continue;       // 仓外 / 指向不存在的模块
+      for (const name of edge.names) note(key, name);
+    }
+  }
+  for (const entry of consumerEntries) {
+    for (const edge of parseModuleImports(entry.text)) {
+      const key = consumerSpecToKey(edge.spec);
+      if (key === null || !pageKeys.has(key)) continue;       // 指向仓外 / 不存在的模块：不算消费
+      for (const name of edge.names) note(key, name);
+    }
+  }
+  const out = [];
+  for (const entry of pageEntries) {
+    for (const name of parseModuleExports(entry.text)) {
+      if (!consumed.has(`${entry.key}::${name}`)) out.push({ key: entry.key, name });
+    }
+  }
+  return out;
+}
+
+/**
+ * 星号导入体检 → [{ key, spec, line }]；空数组 = 判据 D 的"逐名对账"是完整的。
+ *
+ * `import * as ns from "…"` 一旦出现在**触达前端**的位置，判据 D 就**判不了**：它按名字对账，
+ * 而命名空间的成员是运行时属性——`ns.foo()` 这种用法在判据 D 眼里等于没人用 `foo`
+ * （实测：注入 `import * as ns …` + `ns.maincScrollToRange()` 后，判据 D 仍报
+ * `maincScrollToRange` 零消费者）。现状实测 0 处，所以判据不必处理它；一旦出现就报出来，
+ * 逼人显式决定（要么改成具名导入，要么把判据口径想清楚），而不是让判据悄悄失真。
+ */
+export function starImports(pageEntries, consumerEntries = []) {
+  const out = [];
+  const scan = (entry, normalizer) => {
+    for (const edge of parseModuleImports(entry.text)) {
+      if (edge.star && normalizer(edge.spec, entry.key) !== null) {
+        out.push({ key: entry.key, spec: edge.spec, line: edge.line });
+      }
+    }
+  };
+  for (const entry of pageEntries) scan(entry, resolveModuleKey);
+  for (const entry of consumerEntries) scan(entry, consumerSpecToKey);
+  return out;
+}
+
+// 声明形态：函数形态（`function` / `class` / 箭头 / 函数表达式）与非函数声明（值形态）。
+// `export const x = 别的名字;` 单独一档——形态要跟到那个名字的出处去（见 exportFormOf）。
+// 名字后面一律用 `(?![\w$])` 而不是 `\b`：`$`（本仓库真有 `export const $ = (id) => …`）
+// 是非单词字符，`\b` 在 `$(` 之间**不成立** —— 用它会把 `$` 这类名字的形态判成"解不开"，
+// 从而假红（工单 export-surface-guard/01 自检 7/9 实测踩到）。
+const DECL_FN_RE = (name) => new RegExp(
+  `(?:^|\\n)[ \\t]*(?:export\\s+)?(?:async\\s+)?function\\s+${escapeRe(name)}(?![\\w$])`
+  + `|(?:^|\\n)[ \\t]*(?:export\\s+)?class\\s+${escapeRe(name)}(?![\\w$])`
+  + `|(?:^|\\n)[ \\t]*(?:export\\s+)?(?:const|let|var)\\s+${escapeRe(name)}\\s*=`
+  + `\\s*(?:async\\s*)?(?:\\(|function\\b|[A-Za-z_$][\\w$]*\\s*=>)`);
+const DECL_ANY_RE = (name) => new RegExp(
+  `(?:^|\\n)[ \\t]*(?:export\\s+)?(?:async\\s+)?(?:function|class|const|let|var)\\s+`
+  + `${escapeRe(name)}(?![\\w$])`);
+const DECL_ALIAS_RE = (name) => new RegExp(
+  `(?:^|\\n)[ \\t]*(?:export\\s+)?(?:const|let|var)\\s+${escapeRe(name)}\\s*=\\s*([A-Za-z_$][\\w$]*)\\s*;`);
+
+/** `edge` 是不是**再导出**（`export { … } from "…"` / `export { … };`），而不是 `import`。 */
+function isReexportEdge(edge) {
+  return /^export/.test(edge.raw.trimStart());
+}
+
+/** `key` 模块里的本地名 `local` 是从哪个模块 **import** 进来的 → { key, name }；不是则 null。 */
+function importSourceOf(byKey, key, local) {
+  for (const edge of parseModuleImports(byKey.get(key).text)) {
+    if (isReexportEdge(edge)) continue;                     // 再导出不是 import
+    const at = edge.locals.indexOf(local);
+    if (at < 0) continue;
+    const target = resolveModuleKey(edge.spec, key);
+    return target === null ? null : { key: target, name: edge.names[at] };
+  }
+  return null;
+}
+
+/**
+ * 导出名的**形态** → `"fn"` / `"value"` / `null`（解不开）。
+ *
+ * 跟随两条链（不跟就会假红——实测：不做这两步，1112 条调用位里冒出 44 条假红）：
+ *   · **再导出链**：`export { x } from "…"` 递归进目标模块；
+ *   · **函数别名链**：`export const x = 别的名字;` —— 先看同名声明在不在本文件，
+ *     再看 `别的名字` import 自哪儿。
+ *
+ * 解不开返回 null，**由调用方当违规处理**（不许静默跳过）。已知的"解不开"来源：
+ * `= 全局函数名`（如 `= parseInt`）与工厂调用 `= makeClock()`（后者按值形态算）。
+ */
+function exportFormOf(byKey, key, name, seen = new Set()) {
+  const tag = `${key}::${name}`;
+  if (seen.has(tag)) return null;                            // 环：判"解不开"
+  seen.add(tag);
+  const entry = byKey.get(key);
+  if (!entry) return null;
+  const masked = maskCommentsAndStrings(entry.text);
+  if (DECL_FN_RE(name).test(masked)) return "fn";
+  const alias = DECL_ALIAS_RE(name).exec(masked);
+  if (alias) {
+    const target = alias[1];
+    if (DECL_FN_RE(target).test(masked)) return "fn";
+    const src = importSourceOf(byKey, key, target);
+    if (src) return exportFormOf(byKey, src.key, src.name, seen);
+    return DECL_ANY_RE(target).test(masked) ? "value" : null;
+  }
+  if (DECL_ANY_RE(name).test(masked)) return "value";
+  for (const edge of parseModuleImports(entry.text)) {        // 本文件没声明 → 只可能是再导出
+    if (!isReexportEdge(edge)) continue;
+    if (!edge.names.includes(name)) continue;
+    const next = resolveModuleKey(edge.spec, key);
+    return next === null ? null : exportFormOf(byKey, next, name, seen);
+  }
+  return null;
+}
+
+/**
+ * 判据 T 的适用面：**调用位的导入边** → [{ entry, edge, target, name, local }]。
+ * 判据 T 与取数面体检同用它（"调用位"这件事只解析一处，免得两处判定分叉）。**内部件**。
+ */
+function callPositionEdges(pageEntries) {
+  const byKey = new Map(pageEntries.map((e) => [e.key, e]));
+  const out = [];
+  for (const entry of pageEntries) {
+    const masked = maskCommentsAndStrings(entry.text);
+    for (const edge of parseModuleImports(entry.text)) {
+      const target = resolveModuleKey(edge.spec, entry.key);
+      if (target === null || edge.star || !byKey.has(target)) continue;
+      edge.locals.forEach((local, i) => {
+        if (!new RegExp(`(?<![\\w$.])${escapeRe(local)}\\s*\\(`).test(masked)) return;
+        out.push({ entry, edge, target, name: edge.names[i], local });
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * 判据 T：**调用位 ⇒ 函数形态** → [{ from, to, name, form }]；空数组 = 形态面合规。
+ *
+ * 一条 import 边的本地名若在**被导入方**处于调用位（`name(`），它在导出侧就必须解析成函数形态。
+ * 调用位判在 `maskCommentsAndStrings` 的正文上：注释里的 `x(` 不算调用位（评审先例：
+ * 注释喂绿）；代价是**模板串 `${…}` 里的调用也一并被掩掉**（该掩码件的已知限制）——
+ * 方向是保守的（漏报，不假红），如实记账。
+ *
+ * **只算页面模块图**（spec「实现决策」）：测试侧调用点实测也是 0 违规 0 解不开，但那条口径
+ * 要另外纳进 spec 才作数（本轮按 spec 走，读数记在工单 Comments）。
+ */
+export function nonFunctionCallees(pageEntries) {
+  const byKey = new Map(pageEntries.map((e) => [e.key, e]));
+  const out = [];
+  for (const { entry, target, name } of callPositionEdges(pageEntries)) {
+    const form = exportFormOf(byKey, target, name);
+    if (form !== "fn") out.push({ from: entry.key, to: target, name, form: form || "解不开" });
+  }
+  return out;
+}
+
+/**
+ * 导出面两条判据的**取数面下限**（数字取得比实测低一截——只在"抽取器静默失效"，
+ * 如目录搬了 / 说明符换了写法时才会触发，不追着现状贴脸）。
+ * 实测（base `27a7b46e`）：消费侧 164 个模块 / 导出条目 **995** / 调用位 1112；
+ * 清点后（工单 02）导出条目降到 **884** —— 下限必须按**清点后**那个数取，
+ * 否则清理一做完体检就先自己红了（工单 01 规范轴评审实测抓到的坑）。**内部件**。
+ */
+const EXPORT_FACE_FLOORS = { consumers: 120, exports: 800, callSites: 800 };
+
+/**
+ * 取数面体检 → [问题…]；空数组 = 判据 D/T 的分母还在。**断言为空必须配这个**——
+ * 抽取器一旦静默失效，`unconsumedExports` 会"全绿"（先例 `ui-dom-contract.test.mjs`
+ * 「那种绿比红更坏」）。
+ *
+ * 第一条专治"**少喂了装载根**"：`readJsModules` 按其文档**不含** boot.js，调用方必须自己把它
+ * 拼在最前面（`[{ key: "boot.js", text: readLoadRoot(dir) }, ...readJsModules(dir)]`）。
+ * 漏拼就会丢掉装载清单那 60 多条 import 边——实测判据 D 从 111 处飙到 189 处假红，
+ * 而消费侧计数照旧"正常"。这条体检让它当场现形，而不是等 ticket 03 接闸门时才发现。
+ */
+export function exportFaceProblems(pageEntries, consumerEntries = []) {
+  const problems = [];
+  const root = pageEntries.find((e) => e.key === LOAD_ROOT_KEY);
+  if (!root || typeof root.text !== "string" || !root.text) {
+    problems.push("页面模块表里没有装载根（boot.js）—— 装载清单的 import 边全丢，判据 D 会整片假红");
+  }
+  const consumers = consumerEntries.length;
+  const exports = pageEntries.reduce((n, e) => n + parseModuleExports(e.text).size, 0);
+  const callSites = callPositionEdges(pageEntries).length;
+  if (consumers < EXPORT_FACE_FLOORS.consumers) {
+    problems.push(`消费侧只抽到 ${consumers} 个模块（下限 ${EXPORT_FACE_FLOORS.consumers}）`
+      + "——判据 D 会当成「没人 import」整片假红");
+  }
+  if (exports < EXPORT_FACE_FLOORS.exports) {
+    problems.push(`页面导出名只抽到 ${exports} 个（下限 ${EXPORT_FACE_FLOORS.exports}）`);
+  }
+  if (callSites < EXPORT_FACE_FLOORS.callSites) {
+    problems.push(`调用位只抽到 ${callSites} 条（下限 ${EXPORT_FACE_FLOORS.callSites}）`
+      + "——判据 T 会真空绿");
+  }
+  return problems;
+}
+
+// ---------------------------------------------------------------------------
 // 取数面：把 static/js 下的模块读成 [{ key, text }]
 // ---------------------------------------------------------------------------
 
@@ -723,4 +981,29 @@ export function readJsModules(staticDir) {
 export function readLoadRoot(staticDir) {
   const path = `${staticDir.replace(/[\\/]+$/, "")}/js/boot.js`;
   return existsSync(path) ? readFileSync(path, "utf8") : null;
+}
+
+/**
+ * 读**消费侧**（`tests/js` 与 `tests/browser` 的 .mjs，含子目录）→ [{ key, text }]。
+ * key 是仓库相对路径（`tests/js/x.test.mjs`），只用于定位报错；说明符经 `consumerSpecToKey` 归一。
+ *
+ * 判据 D 的消费者集合有一半在这里——少了它，测试缝（`tests/js` 直接 import fx 模块的那 150+ 条边）
+ * 全部不算数，实测会把 108 处错报成 262 处。
+ */
+export function readConsumerModules(repoRoot) {
+  const out = [];
+  const walk = (abs, key) => {
+    if (!existsSync(abs)) return;
+    for (const entry of readdirSync(abs, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+      const childAbs = `${abs}/${entry.name}`;
+      const childKey = `${key}/${entry.name}`;
+      if (entry.isDirectory()) walk(childAbs, childKey);
+      else if (entry.name.endsWith(".mjs")) {
+        out.push({ key: childKey, text: readFileSync(childAbs, "utf8") });
+      }
+    }
+  };
+  const root = repoRoot.replace(/[\\/]+$/, "");
+  for (const dir of ["tests/js", "tests/browser"]) walk(`${root}/${dir}`, dir);
+  return out;
 }
