@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=48fa3ae2af542aea23e410d4a1eaed7bca4e494e -->
+<!-- changelog-auto: last-commit=ac5b068cde6c9993aaf303c8d2c2c3e765b0dcef -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -11,6 +11,7 @@
 - 20:05 工单 export-surface-guard/01：两条导出面判据单源 + 真红证
 - 20:56 ﻿工单 export-surface-guard/02：按判据清点 111 处零消费者导出（110 摘 export + 1 整条删）
 - 21:18 工单 export-surface-guard/03：两条判据进闸门 + 账本收尾
+- 22:07 工单 module-import-usage/01：判据单源（模板表达式感知掩码 + 模块级零未使用具名）+ 合成红证
 
 ## 2026-09-20
 - 10:21 工单 module-hwcheck/06：交互式串口命令台（配方驱动复测 + 既有命令原样）
