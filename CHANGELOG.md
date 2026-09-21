@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=5358186a03ca20e8cfe38fc62f49eb0d03f230a1 -->
+<!-- changelog-auto: last-commit=390ac6cdd33b428e8f36ba4bfb2f1058078143ed -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -6,6 +6,7 @@
 
 ## 2026-09-21
 - 12:38 工单 frontend-boot-module/01-02：装载根搬进 boot.js（index.html 只留一条标签 + 判据单源与守卫重定根）
+- 13:05 工单 frontend-boot-module/03-04：11 个模块的接线搬进显式 init()（裸装载退场 + 接线区显式调用）
 
 ## 2026-09-20
 - 10:21 工单 module-hwcheck/06：交互式串口命令台（配方驱动复测 + 既有命令原样）
