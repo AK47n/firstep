@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=5ffc1537fc1acfbea48c88fff1829091ce772405 -->
+<!-- changelog-auto: last-commit=10061555689a9c3a16a56cc00c9b8327c4220c2e -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -14,6 +14,7 @@
 - 22:07 工单 module-import-usage/01：判据单源（模板表达式感知掩码 + 模块级零未使用具名）+ 合成红证
 - 22:20 工单 module-import-usage/02：清点 12 处死具名 import + 1 处级联（字节级重放证据 + 真红证钉 f1c9e1c7）
 - 22:49 工单 module-import-usage/03：判据进闸门（全 132 模块 + 合成用例表单源）+ 账本更正与收尾
+- 23:46 工单 launcher-exit-race/01：把标签登记提前到模块图之前（head 内联脚本）+ 判据⑥ 与守卫
 
 ## 2026-09-20
 - 10:21 工单 module-hwcheck/06：交互式串口命令台（配方驱动复测 + 既有命令原样）
