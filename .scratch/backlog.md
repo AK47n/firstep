@@ -265,7 +265,28 @@ index.html 零 import、555 个 id 不变）；`03/04` 11 个模块显式 `init(
 - **9 处清点前就已死的模块级 import**（`WRITE_GUARD_ACTIONS` ×4、`resourcesOverviewHTML`、
   `readinessRowHTML`、`getMainCDiskDir`、`isTabSavable`、`resourcesToolbarHTML`）：
   `tests/js/import-usage.mjs` 的取数面**只有 `boot.js`**，所以"零未使用具名"这条判据对**模块级**
-  没有证明力（工单 02 §②-3 记账）。口径要不要扩到模块级、这 9 处怎么处置，**未立项**。
+  没有证明力（工单 02 §②-3 记账）。 → ✅ **已结清**（工单 `module-import-usage/01-03`，2026-09-21），
+  但**读数按实测更正了三处**：
+
+  - **真实体量是 12 处，不是 17/18**。旧口径（`unusedImports`：正文只剥整行 `//`、按**源名**查）
+    报 17 处 = **12 处真死 ＋ 5 处别名误报**。上面点名的 9 处里 **4 处 `WRITE_GUARD_ACTIONS` 是误报**
+    （`import { WRITE_GUARD_ACTIONS as WG }`，正文写的是 `WG.fix` / `WG.revise` / `WG.task` / `WG.params`，
+    **全都在用**；实测按同一错误口径是 **5** 处），真死的只有 5 处；另 **7 处**（`languageOf` /
+    `downloadedPercent` / `getCodeTreeFiles` / `$` / `aggregateSelection` / `toastError` /
+    `pdfDupRemainText`）**不在上面那 9 处的点名清单里** —— 注意口径：它们**不是"旧口径看不见"**
+    （实测 `C − A = 0`：旧口径同样报出它们，只是工单没点名）。
+  - **口径修对了**：「被使用」= 本地名出现在**代码**里（注释 / 字符串 / 正则 / 模板串**文本段**
+    里的同名词不算；**模板表达式**里的算——naive 掩码会把它误判成死的，实测 33 处假红），
+    再导出清单算消费，裸装载永远合法。掩码件扩了"模板表达式感知"模式
+    （`boot-contract.mjs::maskNonCode`；`maskCommentsAndStrings` 语义一字不变）。
+  - **判据面从装载根扩到全部 132 个模块并进闸门**（`tests/js/import-usage-guard.test.mjs`，
+    前端门禁 1688 → **1691**）；12 处死 import 一次清掉（11 摘名 ＋ 1 整条删），
+    另 **1 处级联**（`fx/core.js:115` 摘 `export ` 前缀）——**新发现**：一条死 import 会给判据 D
+    当**假消费者**（`fx/core.js::downloadedPercent` 的唯一消费者就是本轮摘掉的那条死 import，
+    不级联则判据 D 从 0 变 1）。
+  - 证据：`.scratch/module-import-usage/`（spec、3 张工单、合成红证 25/25 `synthetic-red-proof.txt`、
+    真红证 `red-proof.txt`（base 钉 `f1c9e1c7`，自校验有牙齿）、字节级重放 `verify-removal.txt`、
+    diff 归因 `diff-proof.txt`（归不了因 0 处 / 尾换行不一致 0 个）、闸门强度 `guard-strength.txt`）。
 
 评审同时发现的**同向候选**（都在前端）：ui 层（17,996 行 / 515 监听器）只有 2 个
 测试文件 import 它，没有测试缝——✅ **已落地**（第 13 节，两层守卫 + 真浏览器行为契约）。

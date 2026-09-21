@@ -56,15 +56,9 @@ const fail = (msg) => { say(`**拒写**：${msg}`); writeReport(); process.exit(
 
 const gitShow = (ref, path) => execFileSync("git", ["show", `${ref}:${path}`], { cwd: REPO, encoding: "buffer", maxBuffer: 64 * 1024 * 1024 });
 
-// ── 0. base 自校验：base 与 HEAD 的 static/js 必须**逐字节相同**（01 没碰产品源码）
-//      —— 这样"喂 base 的源码"与"喂工作树的源码"在清点前是同一份，重放证据才说得通。
+// ── 0. base 的**唯一**硬要求：它得是"清点前那一代"。核对放在算完锚点之后（见下面的 HEAD 状态核对）。
 const changedFiles = [...new Set([...NAME_EDITS.map((e) => e.path), CASCADE.path])];
-for (const path of changedFiles) {
-  const a = gitShow(BASE, path);
-  const b = gitShow("HEAD", path);
-  if (!a.equals(b)) fail(`base ${BASE} 与 HEAD 上的 ${path} 不同 —— base 选错了（或 01 动了产品源码）`);
-}
-say(`base 自校验：${changedFiles.length} 个改动文件在 ${BASE} 与 HEAD 上逐字节相同 ✓`);
+say(`base = ${BASE}（显式钉；产品面共 ${changedFiles.length} 个文件参与清点）`);
 
 // ── 1. 逐处定位 + 算出删除区间（全部在 base 文本上算）
 /** 在 base 文本里按「目标模块 + 具名清单」定位那条语句 → { raw, start, end }。 */
@@ -157,6 +151,19 @@ for (const spec of NAME_EDITS) {
 }
 const droppedStatements = plan.filter((p) => p.expectedSurvivors && !p.expectedSurvivors.length).length;
 const nameEdits = plan.length - 1;
+// HEAD 状态核对（**base 选对了吗**）：清点**前** HEAD 应当 == base；清点**后**应当 == base − 删除区间。
+// 两种都算对；其它情况（选错 base、或这些文件清点后又被改过）一律拒写。
+let headState = "";
+for (const p of plan) {
+  const headBytes = gitShow("HEAD", p.path);
+  const before = headBytes.equals(p.baseBytes);
+  const after = headBytes.equals(Buffer.from(applyRanges(p.text, p.ranges), "utf8"));
+  if (!before && !after) {
+    fail(`base ${BASE} 的 ${p.path} 既不是 HEAD 原样、也不是 HEAD − 删除区间 —— base 选错了，或这些文件清点后又被改过`);
+  }
+  headState = before ? "清点前（HEAD 未清点）" : "清点后（HEAD 已是清点结果）";
+}
+say(`HEAD 状态：${headState} —— base 与它的关系对得上 ✓`);
 say(`锚点定位：${plan.length} 处 = **摘名 ${nameEdits - droppedStatements}** ＋ **整条删 ${droppedStatements}** ＋ **级联 1**，全部对上 ✓`);
 say(`「唯一 import 边 → 改裸装载」支路触发：**${bareLoadBranch} 处**（spec 预期 0；真遇到时本脚本拒写，逼人显式决定）`);
 say("");

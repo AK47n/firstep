@@ -18,17 +18,17 @@
 
 === ② 判据在 base 上（f1c9e1c7）===
   未使用具名：**12** 处（应 12 处）
-    · fx/codeview.js::languageOf   ← 旧口径（工单 02）看不见
-    · fx/full-update.js::downloadedPercent   ← 旧口径（工单 02）看不见
+    · fx/codeview.js::languageOf   ← 不在工单 02 §②-3 的 9 处点名里
+    · fx/full-update.js::downloadedPercent   ← 不在工单 02 §②-3 的 9 处点名里
     · ui/code-compile.js::getMainCDiskDir
-    · ui/code-tree-ops.js::getCodeTreeFiles   ← 旧口径（工单 02）看不见
+    · ui/code-tree-ops.js::getCodeTreeFiles   ← 不在工单 02 §②-3 的 9 处点名里
     · ui/codeeditor.js::isTabSavable
-    · ui/flash.js::$   ← 旧口径（工单 02）看不见
+    · ui/flash.js::$   ← 不在工单 02 §②-3 的 9 处点名里
     · ui/generate-readiness.js::readinessRowHTML
     · ui/generate-tasks.js::resourcesOverviewHTML
-    · ui/materials-update.js::aggregateSelection   ← 旧口径（工单 02）看不见
-    · ui/md.js::toastError   ← 旧口径（工单 02）看不见
-    · ui/pdf.js::pdfDupRemainText   ← 旧口径（工单 02）看不见
+    · ui/materials-update.js::aggregateSelection   ← 不在工单 02 §②-3 的 9 处点名里
+    · ui/md.js::toastError   ← 不在工单 02 §②-3 的 9 处点名里
+    · ui/pdf.js::pdfDupRemainText   ← 不在工单 02 §②-3 的 9 处点名里
     · ui/resource-board.js::resourcesToolbarHTML
   base 上其余判据：graphBreaks=0 / orphans=0 / wiring=0 / registry=0 / bareLoads=0 / 判据 D=0 / 判据 T=0 / starImports=0 / 取数面体检=0 / unreachableModules=0
 

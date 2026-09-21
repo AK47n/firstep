@@ -313,6 +313,29 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > （工单 export-surface-guard/02 §⑥ 首次记账）：`tests/js/ai-action-refs.test.mjs` 与
 > `tests/js/module-intro-detail.test.mjs` 按**字面 LF** 断言源码，本机 `core.autocrlf=true` 时
 > **CRLF 检出**下这两条必红（1677 / 2 fail）——报读数前先看检出形态。
+>
+> **2026-09-21 追加（工单 module-import-usage/01-03）**：「零未使用具名 import」这条不变量的
+> **判据面从装载根扩到全部 132 个模块**并进闸门。本单收尾读数（**LF 检出**下测得——`1691` 这个数
+> 只在 LF 检出成立，见上面那条 CRLF 环境事实）：
+> 前端门禁 **1691 passed / 0 fail / 6.4s**（1688 ＋ 本单 3 条）；浏览器门禁 **26 passed / 0 fail / 80.7s**；
+> `python -m pytest -n auto -q` **5049 passed + 1 skipped / 138.9s**（另两次复跑 135.0s / 138.0s 同数）。
+> **落点与口径三条**：① 本条判据的两个文件（`tests/js/import-usage.mjs` 与 `boot-contract.mjs` 的掩码）
+> 属"判据共享件"——只改它们时本地 pre-push 不带起浏览器门禁（与上面那条已知落差同源）；
+> ② 掩码件现在有**两种口径**：`maskCommentsAndStrings`（模板串整串掩掉，判据 D/T 与通用掩码用，
+> **语义不得改动**）与 `maskNonCode`（`${…}` 表达式内部保留为代码，"未使用具名"判据用）。
+> 混用就是假红（实测 33 处）——改判据前先看 `tests/js/import-usage.mjs` 的文件头；
+> ③ 合成用例表 `tests/js/import-usage-cases.mjs` 被闸门与 `.scratch` 的红证脚本**共用**（判据单源那条纪律）。
+> **判据强度自检**（会真改库内文件、跑完逐字节复原，**别和测试套件同时跑**）：
+> `node .scratch/module-import-usage/probe-04-guard-strength.mjs`（3 条注入都让闸门变红，
+> 且**首条红的用例名**与注入声明逐条对上）。
+> 红证/证据都在 `.scratch/module-import-usage/`（base 钉 `f1c9e1c7`）。
+>
+> ⚠ **同轮量到的一条既有偶发（与本次改动无关，别误判成产品坏了）**：`python -m pytest -n auto -q`
+> 偶发 1 failed —— `tests/test_js_gate.py::test_full_mode_runs_js_gate_and_pytest`。根因是这条用例在
+> `--full` 路径上**真的会跑整支浏览器门禁**（26 条真浏览器用例），并行争用下某个 spec 会超时；
+> 证据：**同一工作树**里该文件单跑 **29 passed / 79s**、整支 `-n auto` 两次复跑 **5049 passed + 1 skipped**、
+> 独立的浏览器门禁 **26 passed**，而评审那一轮 `-n auto` 报 5048 passed + **1 failed** + 1 skipped。
+> 与工单 `export-surface-guard/02` §⑥ 记的两条"并行负载下假红"同源。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 

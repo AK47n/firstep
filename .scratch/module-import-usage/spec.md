@@ -138,9 +138,11 @@
 
 **与工单 02 记账的关系（要更正的三条）**：它记的 17/18 处里，**5 处是真死**
 （`resourcesOverviewHTML` / `readinessRowHTML` / `getMainCDiskDir` / `isTabSavable` / `resourcesToolbarHTML`），
-**4 处 `WRITE_GUARD_ACTIONS` 是误报**（别名按源名查），**7 处是正确口径才暴露的**
+**4 处 `WRITE_GUARD_ACTIONS` 是误报**（别名按源名查），**另 7 处是它没点名的**
 （`languageOf` / `downloadedPercent` / `getCodeTreeFiles` / `$` / `aggregateSelection` / `toastError` /
-`pdfDupRemainText`，旧口径把它们当"用了"）。**不改那份已 resolved 的工单**（照工单 03 的先例），
+`pdfDupRemainText`）。**注意口径**：这 7 处**不是"旧口径看不见"**——实测旧口径在 base 上同样报出它们
+（`C − A = 0 处`，见 `survey-00-criteria-delta.txt`），它们的准确身份是"**同一口径其实也报了、
+只是工单 02 §②-3 的 9 处点名清单里没有**"。**不改那份已 resolved 的工单**（照工单 03 的先例），
 更正写进 `.scratch/backlog.md` §10 与本轮工单 Comments。
 
 ### 硬约束（不许碰的）
@@ -206,8 +208,9 @@
   | 正确口径（`maskNonCode` ＋ 按本地名） | **12** | 本轮要处置的全部 |
   | 差集 17 − 12 = **5** | 5 | **全是 `WRITE_GUARD_ACTIONS` 的别名误报**（工单记成 ×4，实测 ×5） |
   | 工单 02 点名的"9 处早已死" | 9 | 5 真死（`resourcesOverviewHTML` / `readinessRowHTML` / `getMainCDiskDir` / `isTabSavable` / `resourcesToolbarHTML`）＋ 4 处 WG 误报（实测也是 5） |
-  | 正确口径**新暴露**的 | **7** | `languageOf` / `downloadedPercent` / `getCodeTreeFiles` / `$` / `aggregateSelection` / `toastError` / `pdfDupRemainText`（旧口径把它们当"用了"） |
+  | 正确口径 12 处里**工单 02 没点名**的 | **7** | `languageOf` / `downloadedPercent` / `getCodeTreeFiles` / `$` / `aggregateSelection` / `toastError` / `pdfDupRemainText`——**它们不是"旧口径看不见"**：`C − A = 0 处`（旧口径同样报出），只是不在 §②-3 的点名清单里 |
+  | 正确口径 − 旧口径（`C − A`） | **0** | 反向也说明白：新口径**没有**报出任何旧口径报不出的东西，它只**少报**了 5 处假红 |
 
-  即 `12 = 5（工单点名且真死）＋ 7（正确口径新暴露）`。实现时把这张表按**逐条销账**复核一遍。
+  即 `12 = 5（工单点名且真死）＋ 7（同一口径报出、但工单 02 没点名）`。实现时把这张表按**逐条销账**复核一遍。
 - **本机读数基线**（`docs/agents/local-environment.md`）：前端门禁 1688 / 浏览器 26 /
-  pytest 5049 + 1 skipped。收尾时把新读数写回去。
+  pytest 5049 + 1 skipped。收尾时把新读数写回去（**收尾实测：1691 / 26 / 5049 + 1 skipped**）。

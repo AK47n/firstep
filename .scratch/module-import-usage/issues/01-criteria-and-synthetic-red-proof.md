@@ -117,8 +117,11 @@ if (c === "$" && next === "{") { blank(i, i + 1); tplStack.push({ depth: 0 }); i
   `WG.fix` / `WG.continueFix` / `WG.revise` / `WG.deepen` / `WG.task` / `WG.params`，**全都在用**。
   工单 02 记的"`WRITE_GUARD_ACTIONS` ×4 是死的"**是误报**，实测按同一错误口径是 **5** 处。
 - **B − A = 33 处是模板表达式假红**（`${esc(x)}` 这类真使用）——这正是 `maskNonCode` 的存在理由。
-- **C − A = 7 处**是旧口径看不见的真死（`languageOf` / `downloadedPercent` / `getCodeTreeFiles` /
-  `$` / `aggregateSelection` / `toastError` / `pdfDupRemainText`）。
+- **C − A = 0 处**（这条要写对）：**旧口径在 base 上同样报出那 12 个名字**——它的 17 = 这 12 个
+  ＋ 5 处 WG 别名误报。正确口径**只少报假红、不多报真死**。工单 02 §②-3 的 9 处点名清单里没有的那 7 处
+  （`languageOf` / `downloadedPercent` / `getCodeTreeFiles` / `$` / `aggregateSelection` / `toastError` /
+  `pdfDupRemainText`）**不是"旧口径看不见"**，是"同一口径也报了、只是没点名"（03 评审实测更正，
+  原措辞已改）。
 - 12 处的逐条现场（语句原文 / 剩下谁 / 是否唯一 import 边）＝ `survey-00-dead-detail.txt`；
   内存模拟清点后复跑全部既有判据 ＝ `survey-00-simulate.txt`（**唯一变化：判据 D 0 → 1**，
   成因 `fx/core.js::downloadedPercent`，处置进 02）。

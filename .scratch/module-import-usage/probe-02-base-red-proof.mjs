@@ -50,8 +50,12 @@ const ANCHORS = [
 ];
 /** 期望的违规集（`模块::名字`）——**从锚点推**（同一文件内不抄第二份）。 */
 const EXPECTED = ANCHORS.map(([k, , d]) => `${k}::${d}`);
-/** 旧口径（工单 02）看不见的那些（正确口径才暴露的）——必须是 EXPECTED 的 7 元真子集。 */
-const INVISIBLE_TO_OLD = [
+/** 工单 `export-surface-guard/02` §②-3 的"9 处早已死"**点名清单里没有**的那些（7 处）。
+ *
+ * ⚠ **不是**"旧口径看不见"：实测旧口径（`hostBody` ＋ 按源名）在 base 上同样报出这 7 个
+ * （它的 17 处 = 这 12 个名字 ＋ 5 处 `WRITE_GUARD_ACTIONS` 别名误报；见 `survey-00b-criteria-delta.txt`
+ * 的"B − A：0 处"）。它们的准确身份是"**同一口径其实也报了、只是工单 02 没点名**"。 */
+const NOT_IN_TICKET02_LIST = [
   "fx/codeview.js::languageOf", "fx/full-update.js::downloadedPercent",
   "ui/code-tree-ops.js::getCodeTreeFiles", "ui/flash.js::$",
   "ui/materials-update.js::aggregateSelection", "ui/md.js::toastError",
@@ -96,9 +100,9 @@ const criteriaOf = (page) => {
   };
 };
 
-// 自检锚点表本身：INVISIBLE_TO_OLD 必须是 EXPECTED 的 7 元真子集（抄错就当场炸）
-check(INVISIBLE_TO_OLD.length === 7 && INVISIBLE_TO_OLD.every((v) => EXPECTED.includes(v)),
-  `INVISIBLE_TO_OLD 不是 EXPECTED 的 7 元子集（${INVISIBLE_TO_OLD.filter((v) => !EXPECTED.includes(v)).join(", ") || "条数不对"}）`);
+// 自检锚点表本身：NOT_IN_TICKET02_LIST 必须是 EXPECTED 的 7 元真子集（抄错就当场炸）
+check(NOT_IN_TICKET02_LIST.length === 7 && NOT_IN_TICKET02_LIST.every((v) => EXPECTED.includes(v)),
+  `NOT_IN_TICKET02_LIST 不是 EXPECTED 的 7 元子集（${NOT_IN_TICKET02_LIST.filter((v) => !EXPECTED.includes(v)).join(", ") || "条数不对"}）`);
 
 // ── ① base 自校验
 say("=== ① base 自校验（选错 base 必须当场大声失败）===");
@@ -134,7 +138,7 @@ const baseViolations = violations(basePage);
 say(`=== ② 判据在 base 上（${BASE}）===`);
 say(`  未使用具名：**${baseViolations.length}** 处（应 ${EXPECTED.length} 处）`);
 for (const v of baseViolations) {
-  say(`    · ${v}${INVISIBLE_TO_OLD.includes(v) ? "   ← 旧口径（工单 02）看不见" : ""}`);
+  say(`    · ${v}${NOT_IN_TICKET02_LIST.includes(v) ? "   ← 不在工单 02 §②-3 的 9 处点名里" : ""}`);
 }
 check(baseViolations.length === EXPECTED.length && EXPECTED.every((v) => baseViolations.includes(v)),
   `base 上的违规集与钉死的 12 处不一致（实得 ${baseViolations.length} 处）`);

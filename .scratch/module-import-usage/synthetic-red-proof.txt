@@ -21,7 +21,7 @@
   PASS  template-expression-braces       表达式里有对象字面量（花括号深度必须数对，否则 `}` 提前收尾、后面的代码被当文本段掩掉）
   PASS  reexport-clause                  经**再导出清单**被消费（`export { esc };` 本身就是一条消费边）
   PASS  import-then-reexport             工单点名的连写形态：`import { x } from "M"; export { x };` —— 导入的 x 由再导出消费，不许报
-  PASS  alias-local-used                 `import { A as B }` 里**本地名 B** 被用（按源名判会假红——工单 02 的 5 处误报都是这种）
+  PASS  alias-local-used                 `import { A as B }` 里**本地名 B** 被用（按源名判会假红——旧口径的 5 处误报都是这种）
   PASS  bare-load                        裸装载零具名 —— 判据不碰它（永远合法）
   PASS  dollar-real-use                  `$` 被当真（`$("id")`）
   PASS  quote-inside-regex               正则里的引号不能开启字符串状态（否则后面几十行被掩成空白 → 假红）
