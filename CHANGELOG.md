@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=9048da22ed7f210faa2ee7e3c8d73b3ea382257d -->
+<!-- changelog-auto: last-commit=48fa3ae2af542aea23e410d4a1eaed7bca4e494e -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -10,6 +10,7 @@
 - 13:36 工单 frontend-boot-module/05：337 行名字登记表退化成结构不变量（+ 接线不变量与全图对账进闸门）
 - 20:05 工单 export-surface-guard/01：两条导出面判据单源 + 真红证
 - 20:56 ﻿工单 export-surface-guard/02：按判据清点 111 处零消费者导出（110 摘 export + 1 整条删）
+- 21:18 工单 export-surface-guard/03：两条判据进闸门 + 账本收尾
 
 ## 2026-09-20
 - 10:21 工单 module-hwcheck/06：交互式串口命令台（配方驱动复测 + 既有命令原样）
