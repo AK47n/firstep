@@ -235,14 +235,37 @@ index.html 零 import、555 个 id 不变）；`03/04` 11 个模块显式 `init(
 证据与探针在 `.scratch/frontend-boot-module/`（spec、5 张工单、红证 `red-proof.txt`、
 搬家复算 `verify-move.txt`、冒烟 `smoke-*.txt`、普查 `survey-*.txt`）。
 
-**退化时如实记账的两条代价（本轮之后新开的候选，别当已守）**：
+**退化时如实记账的两条代价** —— ✅ **两条都已结清**（工单 `export-surface-guard/01-03`，2026-09-21）：
 
-- **类型维度**：旧 `DOMAINS` 表 469 个名字里 28 个带 `typeof` 断言（如 `resetPinState: "fn"`），
+- ~~**类型维度**~~：旧 `DOMAINS` 表 469 个名字里 28 个带 `typeof` 断言（如 `resetPinState: "fn"`），
   新判据只看"有没有被 import / 有没有定义"，**不管类型**。
-- **死导出清点**：全图零引用的导出改名或删除不再变红——评审点出 7 个：
+  → **fn 轴已收回**：判据 T（`tests/js/boot-contract.mjs` 单源，守卫
+  `tests/js/export-surface-guard.test.mjs`）——被调用的导入名必须解析成函数形态，跟随再导出链与
+  函数别名链，解不开按违规算。**仍不守**：常量的**值**形态（number/string/object，那 28 条断言的
+  另一半）——无法从用法派生，只能靠名单或生成式快照，与"拆掉名字表"的方向相抵，故明确不做。
+- ~~**死导出清点**~~：全图零引用的导出改名或删除不再变红——评审点出 7 个：
   `CCS_PIECE_NAMES` / `maincScrollToRange` / `codeEditorHighlight` / `HWCHECK_VERDICT_FALLBACK` /
   `BUY_DECISIONS_KEY` / `SETTINGS_DEFAULT_COLLAPSED` / `wfNum`（更该做的是**清点后删掉**它们，
   而不是再养一张表）。
+  → **判据 D 已立并清点完毕**：每条导出必须被一条 import 边消费（消费者 = 页面图 ∪ tests/js ∪
+  tests/browser；口径是**哪条导出**），111 处清成 **0**（110 处摘 `export` ＋ 1 条零引用函数
+  整条删）。**实测推翻了挂账时的假设**，两条更正：① **体量不是 7 而是 111**（评审那 7 个用的是
+  "全仓零引用"这个更松的口径）；② 那 7 个**不是死代码**，是"活的定义 ＋ 多余的 `export`"
+  （被本模块内部或 window 探针桥用着）——真正该整条删的只有 1 个
+  （`ui/generate-recommend.js::groupChoiceGap()`）。
+  证据：`.scratch/export-surface-guard/`（spec、3 张工单、红证 `red-proof.txt`、清点
+  `verify-sweep.txt` / `diff-proof.txt`、普查 `survey-*.txt`）。
+
+**本轮暴露、另立的新候选（别当已做）**：
+
+- **零调用私有死函数**：`ui/generate-fix.js::runCompileOnce` 摘掉 `export` 后全仓只剩定义行
+  1 处引用（工单 02 §⑨-2 实测）。按 spec 口径它不在判据 D 的清单里（**从来就零消费者**——判据 D
+  管的是"导出没人用"，不是"函数没人调"），本轮只摘关键字、**不删定义**。同类可用
+  `probe-14-topic-pin.mjs` 的做法再查 `ui/hwcheck.js` 一侧。**未立项。**
+- **9 处清点前就已死的模块级 import**（`WRITE_GUARD_ACTIONS` ×4、`resourcesOverviewHTML`、
+  `readinessRowHTML`、`getMainCDiskDir`、`isTabSavable`、`resourcesToolbarHTML`）：
+  `tests/js/import-usage.mjs` 的取数面**只有 `boot.js`**，所以"零未使用具名"这条判据对**模块级**
+  没有证明力（工单 02 §②-3 记账）。口径要不要扩到模块级、这 9 处怎么处置，**未立项**。
 
 评审同时发现的**同向候选**（都在前端）：ui 层（17,996 行 / 515 监听器）只有 2 个
 测试文件 import 它，没有测试缝——✅ **已落地**（第 13 节，两层守卫 + 真浏览器行为契约）。

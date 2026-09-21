@@ -46,8 +46,9 @@ export function syscfgConflictStateText(conflicts) {
     + "或去掉冲突模块中的一个，然后重新「一键编译修复」。";
 }
 
-// ---- 流程状态（live 对象——壳层 re-export / check_contract 读 .resume 结构；
-// 只经本模块 mutate）----
+// ---- 流程状态（live 对象——check_contract 读 .resume 结构；只经本模块 mutate）----
+//（工单 export-surface-guard/02：generate-fix.js 那条"壳层 re-export fixLoop"是零消费者
+//  导出，已删——`fixLoop` 现在只在本模块内用，对外读面 = isFixRunning / fixLoopSnapshot。）
 const fixLoop = { running: false, round: 0, batch: 1, resume: null };
 let lastFixDone = null;   // 最近一次 fix-errors done 载荷（批内回喂；上一批末轮载荷由 resume 携带）
 

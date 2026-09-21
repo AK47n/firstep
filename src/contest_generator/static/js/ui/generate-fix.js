@@ -293,21 +293,23 @@ function fixInput() {
   };
 }
 
-/** 单次编译（导出面保持——检查表 import 用）：fixInput 组好调核心。 */
+/** 单次编译：fixInput 组好调核心。（工单 export-surface-guard/02：零消费者导出，已摘 `export`；
+ *  摘后本函数全仓只剩定义行 1 处引用 = 零调用私有死函数，记在 backlog、本轮不删。） */
 async function runCompileOnce(outputDir) {
   const input = fixInput();
   if (outputDir) input.outputDir = outputDir;
   return runCompileOnceCore(input);
 }
 
-/** 单次修复（导出面保持）：手动贴文本模式经 runFixOnceCore（新生命周期）。 */
+/** 单次修复：手动贴文本模式经 runFixOnceCore（新生命周期）。（工单 export-surface-guard/02：
+ *  零消费者导出，已摘 `export`。） */
 async function runFixOnce(errorText, outputDir) {
   const input = fixInput();
   if (outputDir) input.outputDir = outputDir;
   return runFixOnceCore(input, errorText);
 }
 
-/** 修复轮批（导出面保持）。 */
+/** 修复轮批。（工单 export-surface-guard/02：零消费者导出，已摘 `export`。） */
 async function fixRounds(errorText, lastSummary, previousDone) {
   const input = fixInput();
   return fixRoundsCore(input, errorText, lastSummary, previousDone);
@@ -419,8 +421,13 @@ $("btn-fix-rollback").addEventListener("click", async () => {
 // 说明（工单 16 记录）：host 实际使用 renderToolchainStatus / setToolchains /
 // updateFixCenterAvailability（启动区与 setSettingsDeps 回调用）；generate-core
 // 导入 startFixCenter / compileBanner / toolchains（工单 15 的 setGenerateCoreDeps
-// 接缝已由静态 import 取代）。runCompileOnce / runFixOnce / fixRounds /
-// continueFixCenter / FIX_MAX_ROUNDS / fixLoop 经检查表导出为模块 API
-//（fixLoop.resume 结构钉在 tests/test_generate_check_contract.py；FIX_MAX_ROUNDS
-// 与 fixLoop 自工单 code-ide-ai/05 起 re-export 自 fix-center-core.js）。
+// 接缝已由静态 import 取代）。
+// **工单 export-surface-guard/02 更正**：runCompileOnce / runFixOnce / fixRounds /
+// continueFixCenter 是零消费者导出（已摘 `export`），下面那条
+// `export { FIX_MAX_ROUNDS, fixLoop } from "/js/ui/fix-center-core.js"` 也整行删了
+// ——本簇导出面就是下面那一行。`FIX_MAX_ROUNDS` 由 ui/code-fix-panel.js:27 直接
+// import fix-center-core.js；`fixLoop` 与它一样住在 ui/fix-center-core.js、**只在那里
+// mutate**（本模块连引用都没有；对外读面 = fix-center-core.js 的 isFixRunning /
+// fixLoopSnapshot），其 .resume 结构钉 tests/test_generate_check_contract.py 读的是
+// fix-center-core.js 的**源码文本**，不依赖 `export`。
 export { startFixCenter, renderToolchainStatus, updateFixCenterAvailability, fixRenderResults, toolchains, setToolchains, compileBanner };

@@ -737,6 +737,31 @@ export function consumerSpecToKey(spec) {
 }
 
 /**
+ * 全图**消费边**（页面侧 ＋ 消费侧）→ [{ kind, from, target, name, edge, entry }]。
+ *   · `kind` = `"page"`（页面模块之间的 import 边）｜`"consumer"`（tests/js · tests/browser 的边）
+ *   · `target` = 被 import 的模块键（页面键空间）；`edge` / `entry` 是原始切片（自检要拿它做注入）
+ *
+ * **判据 D 与守卫／红证的自检共用这一遍遍历**——工单 export-surface-guard/03 双轴评审指出守卫
+ * 那边抄了第三份走图代码（"同一件事解析三处必然分叉"）。
+ */
+export function consumptionEdges(pageEntries, consumerEntries = []) {
+  const pageKeys = new Set(pageEntries.map((e) => e.key));
+  const out = [];
+  const walk = (entries, kind, toKey) => {
+    for (const entry of entries) {
+      for (const edge of parseModuleImports(entry.text)) {
+        const target = toKey(edge.spec, entry.key);
+        if (target === null || !pageKeys.has(target)) continue;   // 仓外 / 指向不存在的模块
+        for (const name of edge.names) out.push({ kind, from: entry.key, target, name, edge, entry });
+      }
+    }
+  };
+  walk(pageEntries, "page", resolveModuleKey);
+  walk(consumerEntries, "consumer", consumerSpecToKey);
+  return out;
+}
+
+/**
  * 判据 D：**零消费者导出** → [{ key, name }]；空数组 = 每个导出都有人 import。
  *
  * 消费者 = 一条 **import 边**：页面模块图（`pageEntries`，含装载根 `boot.js`）∪ 消费侧
@@ -753,23 +778,8 @@ export function consumerSpecToKey(spec) {
  *   `ui/nav-jump.js` 转手，两侧都被正确判为有人用）。被判红的只有"没人从这儿取过"的那些。
  */
 export function unconsumedExports(pageEntries, consumerEntries = []) {
-  const pageKeys = new Set(pageEntries.map((e) => e.key));
-  const consumed = new Set();                                // `模块键::名字`
-  const note = (key, name) => consumed.add(`${key}::${name}`);
-  for (const entry of pageEntries) {
-    for (const edge of parseModuleImports(entry.text)) {
-      const key = resolveModuleKey(edge.spec, entry.key);
-      if (key === null || !pageKeys.has(key)) continue;       // 仓外 / 指向不存在的模块
-      for (const name of edge.names) note(key, name);
-    }
-  }
-  for (const entry of consumerEntries) {
-    for (const edge of parseModuleImports(entry.text)) {
-      const key = consumerSpecToKey(edge.spec);
-      if (key === null || !pageKeys.has(key)) continue;       // 指向仓外 / 不存在的模块：不算消费
-      for (const name of edge.names) note(key, name);
-    }
-  }
+  const consumed = new Set(
+    consumptionEdges(pageEntries, consumerEntries).map((e) => `${e.target}::${e.name}`));
   const out = [];
   for (const entry of pageEntries) {
     for (const name of parseModuleExports(entry.text)) {

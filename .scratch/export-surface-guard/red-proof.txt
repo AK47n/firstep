@@ -17,7 +17,7 @@
   判据 T「调用位 ⇒ 函数形态」：绿 —— 0 处违规（0 不是"判据没用"：见 ④ 的自检 6/7/8）
 
 == ③ 当前工作树读数 ==
-  页面模块 132 个；消费侧 164 个 .mjs
+  页面模块 132 个；消费侧 165 个 .mjs
   判据 D 零消费者导出：0 处 —— 绿（清点已完成）
   判据 T 形态违规：0 处（绿）
   星号导入体检：0 处（绿）
@@ -30,7 +30,7 @@
   ✔ 测试侧消费者算数：摘掉测试侧 import → 判据 D 报出 —— tests/js/a11y-labels.test.mjs 不再 import INPUT_A11Y_LABELS → 报出
   ✔ 星号导入体检：注入 `import * as ns` → 体检报出（判据 D 对它本来就是瞎的） —— 基线 0 处；注入后体检报出；判据 D 仍把它当没人用（内存注入锚点 fx/code.js::probeStarAnchor）
   ✔ 把被调用的 `export function` 换成同名数据 → 判据 T 报出 —— boot.js → app.js::apiGet 报出
-  ✔ 再导出链感知：链上声明改成数据 → 判据 T 报出（基线不报＝链跟通了） —— 基线不报 ✓；改成数据后报出 ✓（ui/guide.js → ui/nav-jump.js（再导出）→ ui/goto-nav.js::gotoNavTab）
+  ✔ 再导出链感知：链上声明改成数据 → 判据 T 报出（基线不报＝链跟通了） —— 基线不报 ✓；改成数据后报出 value ✓（ui/guide.js → ui/nav-jump.js（再导出）→ ui/goto-nav.js::gotoNavTab）
   ✔ 别名正向对照：`= 别的函数名` 不报（防假红）；改成数据 → 报出 —— 基线不报 ✓；改成数据后报出 ✓（锚点 fx/code-compile.js::compileStatusText）
   ✔ 注释感知：值形态导出被当代码调用 → 报出；写在注释里 → 不报 —— 代码形态报出 ✓；注释形态不报 ✓（锚点 boot.js 里的 state）
 

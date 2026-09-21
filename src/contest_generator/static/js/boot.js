@@ -250,6 +250,9 @@ document.querySelectorAll("nav .tab-group").forEach((group) => {
 // toolchains（export let + setToolchains——主写簇）/ fixLoop / lastFix* /
 // fixSourceCache + 25 函数 + 4 监听器（btn-fix-center / btn-fix-continue /
 // btn-fix-errors / btn-fix-rollback）。fmtSeconds 已迁 fx/generate.js（工单 16）。
+// 更正（工单 export-surface-guard/02）：FIX_MAX_ROUNDS 与 fixLoop 自工单 code-ide-ai/05 起
+// 归 static/js/ui/fix-center-core.js（generate-fix.js 只 re-export 过它们）；那条 re-export
+// 是零消费者导出，本轮已删。
 // host 经顶部 import 调用 renderToolchainStatus / setToolchains /
 // updateFixCenterAvailability（启动区与 setSettingsDeps 回调）；generate-core
 // 静态 import startFixCenter / compileBanner / toolchains（取代工单 15 的

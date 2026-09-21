@@ -16,13 +16,18 @@
 //      表达式形态内联 JS（`(function(){…})()`）
 //   ④ 每个 fx/ui 模块从装载根可达（掉出模块图 = 静默失效，2026-09-12 那类）
 //
-// **代价如实记账**（工单 05 双轴评审指出）：旧表还有两个方向是这次退化掉的——
-//   · **类型维度**：旧表 469 个名字里 28 个带 `typeof` 断言（如 `resetPinState: "fn"`），
-//     新判据不管类型（导出改名成常量也绿）；
-//   · **没人 import 的导出**：`graphBreaks` 只覆盖"被某个模块 import 的名字"，全图内零引用的
-//     导出（评审点出 7 个：`CCS_PIECE_NAMES` / `maincScrollToRange` / `codeEditorHighlight` /
+// **代价记账的更新**（工单 05 双轴评审指出两条退化掉的代价 → 工单 export-surface-guard/01-03
+// 把它们**收回来了**，但收在**另一个**守卫里，本文件仍只管上面四条结构不变量）：
+//   · **没人 import 的导出** → 由 **判据 D** 守（`tests/js/export-surface-guard.test.mjs`，
+//     判据本体在 boot-contract.mjs）：每条导出必须被一条 import 边消费，消费者 = 页面图 ∪
+//     tests/js ∪ tests/browser。清点先例：111 处清成 0（110 摘 `export` ＋ 1 条整条删）——
+//     评审当时点出的 7 个（`CCS_PIECE_NAMES` / `maincScrollToRange` / `codeEditorHighlight` /
 //     `HWCHECK_VERDICT_FALLBACK` / `BUY_DECISIONS_KEY` / `SETTINGS_DEFAULT_COLLAPSED` / `wfNum`）
-//     改名或删除不再变红——它们更像"死导出清点"的候选，另立（见 backlog）。
+//     实测**都是活的定义 ＋ 多余的 `export`**（被本模块内部或 window 探针桥用着），不是死代码。
+//   · **类型维度的 fn 轴** → 由 **判据 T** 守（同上那个守卫）：被调用的导入名必须解析成函数形态，
+//     跟随再导出链与函数别名链，**解不开按违规算**。
+//   · **仍不守**：常量的**值**形态（number/string/object，旧表 28 条 `typeof` 断言的另一半）——
+//     无法从用法派生，只能靠名单或生成式快照，而那正是本文件拆掉的东西。
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

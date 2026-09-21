@@ -17,7 +17,7 @@ import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   readJsModules, readLoadRoot, readConsumerModules, parseModuleImports, parseModuleExports,
-  resolveModuleKey, consumerSpecToKey, maskCommentsAndStrings,
+  resolveModuleKey, maskCommentsAndStrings, consumptionEdges,
   unconsumedExports, nonFunctionCallees, starImports, exportFaceProblems,
 } from "../../tests/js/boot-contract.mjs";
 
@@ -176,24 +176,15 @@ const worktreeOk = worktreeClean && (nowD.length === 0 || nowD.length === baseD.
 const pageKeys = new Set(nowPage.map((e) => e.key));
 const byKey = new Map(nowPage.map((e) => [e.key, e]));
 
-// 全图消费边清单（供自检挑锚点：挑"只被一条边消费"的名字，摘掉它才必然报出）
-const edges = [];
-for (const entry of nowPage) {
-  for (const edge of parseModuleImports(entry.text)) {
-    const target = resolveModuleKey(edge.spec, entry.key);
-    if (target === null || edge.star || !pageKeys.has(target)) continue;
-    for (const name of edge.names) edges.push({ kind: "page", entry, edge, target, name });
-  }
-}
-for (const entry of nowConsumers) {
-  for (const edge of parseModuleImports(entry.text)) {
-    const target = consumerSpecToKey(edge.spec);
-    if (target === null) continue;
-    for (const name of edge.names) edges.push({ kind: "consumer", entry, edge, target, name });
-  }
-}
+// 全图消费边清单：**用判据本体那一遍遍历**（`consumptionEdges`），不在这里另抄一份走图。
+// 挑锚点时按 `target::name`（与判据 D 同一口径）数"只被一条边消费"的那些。
+const edges = consumptionEdges(nowPage, nowConsumers);
 const edgeCount = new Map();
-for (const e of edges) edgeCount.set(e.name, (edgeCount.get(e.name) || 0) + 1);
+for (const e of edges) {
+  const tag = `${e.target}::${e.name}`;
+  edgeCount.set(tag, (edgeCount.get(tag) || 0) + 1);
+}
+const tagOf = (e) => `${e.target}::${e.name}`;
 
 const callEdge = (entry, edge, local) =>
   new RegExp(`(?<![\\w$.])${esc(local)}\\s*\\(`).test(maskCommentsAndStrings(entry.text));
@@ -207,7 +198,7 @@ function findCallEdge(where = () => true) {
       for (let i = 0; i < edge.locals.length; i++) {
         const local = edge.locals[i];
         if (!callEdge(entry, edge, local)) continue;
-        const found = { entry, edge, target, name: edge.names[i], local };
+        const found = { from: entry.key, entry, edge, target, name: edge.names[i], local };
         if (where(found)) return found;
       }
     }
@@ -243,13 +234,13 @@ const check = (name, ok, note) => strength.push({ name, ok, note });
 
 // 1) 摘掉一条真 import 边 → 判据 D 报出（锚点挑"只被一条边消费"的名字，摘掉必然报出）
 {
-  const anchor = edges.find((e) => e.kind === "page" && edgeCount.get(e.name) === 1);
+  const anchor = edges.find((e) => e.kind === "page" && edgeCount.get(tagOf(e)) === 1);
   if (!anchor) check("摘掉一条真 import 边 → 判据 D 报出", false, "找不到只被一条页面边消费的锚点");
   else {
-    const patched = patch(nowPage, anchor.entry.key, (t) => dropName(t, anchor.edge, anchor.name));
+    const patched = patch(nowPage, anchor.from, (t) => dropName(t, anchor.edge, anchor.name));
     const hit = unconsumedExports(patched, nowConsumers).some((v) => v.name === anchor.name);
     check("摘掉一条真 import 边 → 判据 D 报出该导出没人用", hit,
-      hit ? `${anchor.entry.key} 不再 import ${anchor.name}（来自 ${anchor.target}）→ 报出`
+      hit ? `${anchor.from} 不再 import ${anchor.name}（来自 ${anchor.target}）→ 报出`
         : `没报出（${anchor.name}）`);
   }
 }
@@ -266,25 +257,28 @@ const check = (name, ok, note) => strength.push({ name, ok, note });
 // 3) 注释喂绿自检：名字只出现在别处的注释（含 boot.js 墓碑注释、消费侧注释）→ 仍须报出
 {
   const target = "fx/code.js";
+  const CONSUMER_KEY = "tests/js/fx-guard.test.mjs";
   let patched = patch(nowPage, target, (t) => t + "\nexport function probeTombstone() {}\n");
   patched = patch(patched, "boot.js", (t) => t + "\n// probeTombstone 已迁至 fx/code.js（墓碑注释，不是消费者）\n");
   patched = patch(patched, "ui/topic.js", (t) => t + "\n// probeTombstone 同上\n");
-  patched = patch(patched, "tests/js/fx-guard.test.mjs", (t) => t + "\n// probeTombstone\n");
-  const hit = unconsumedExports(patched, nowConsumers).some((v) => v.name === "probeTombstone");
-  check("注释喂绿自检：名字只出现在注释里 → 判据 D 仍报出", hit,
-    hit ? "报出（注释不算消费者）" : "没报出 —— 被注释喂绿了");
+  const patchedConsumers = patch(nowConsumers, CONSUMER_KEY, (t) => t + "\n// probeTombstone\n");
+  const injected = patchedConsumers.some((e) => e.key === CONSUMER_KEY && e.text.includes("probeTombstone"));
+  const hit = unconsumedExports(patched, patchedConsumers).some((v) => v.name === "probeTombstone");
+  check("注释喂绿自检：名字只出现在注释里 → 判据 D 仍报出", injected && hit,
+    !injected ? `消费侧注释注入没落上（锚点键 \`${CONSUMER_KEY}\` 不存在？）—— 这条自检会静默空转`
+      : hit ? "报出（注释不算消费者）" : "没报出 —— 被注释喂绿了");
 }
 
 // 4) 测试侧消费者真的算数：摘掉"只被测试 import"的那条边 → 报出
 {
-  const anchor = edges.find((e) => e.kind === "consumer" && edgeCount.get(e.name) === 1);
+  const anchor = edges.find((e) => e.kind === "consumer" && edgeCount.get(tagOf(e)) === 1);
   if (!anchor) check("摘掉测试侧 import → 判据 D 报出", false, "找不到只被测试侧消费的锚点");
   else {
     const patched = nowConsumers.map((e) =>
-      (e.key === anchor.entry.key ? { ...e, text: dropName(e.text, anchor.edge, anchor.name) } : e));
+      (e.key === anchor.from ? { ...e, text: dropName(e.text, anchor.edge, anchor.name) } : e));
     const hit = unconsumedExports(nowPage, patched).some((v) => v.name === anchor.name);
     check("测试侧消费者算数：摘掉测试侧 import → 判据 D 报出", hit,
-      hit ? `${anchor.entry.key} 不再 import ${anchor.name} → 报出` : `没报出（${anchor.name}）`);
+      hit ? `${anchor.from} 不再 import ${anchor.name} → 报出` : `没报出（${anchor.name}）`);
   }
 }
 
@@ -319,9 +313,9 @@ const check = (name, ok, note) => strength.push({ name, ok, note });
       new RegExp(`export\\s+(?:async\\s+)?function\\s+${esc(anchor.name)}\\s*\\(`),
       `export const ${anchor.name} = 1; const _probeInjected = (`));
     const hit = nonFunctionCallees(patched).some((v) =>
-      v.from === anchor.entry.key && v.to === anchor.target && v.name === anchor.name);
+      v.from === anchor.from && v.to === anchor.target && v.name === anchor.name);
     check("把被调用的 `export function` 换成同名数据 → 判据 T 报出", hit,
-      hit ? `${anchor.entry.key} → ${anchor.target}::${anchor.name} 报出` : "没报出");
+      hit ? `${anchor.from} → ${anchor.target}::${anchor.name} 报出` : "没报出");
   }
 }
 
@@ -339,7 +333,7 @@ const check = (name, ok, note) => strength.push({ name, ok, note });
         if (locallyDeclared(target, name)) continue;             // 本文件就声明了 → 不是再导出
         const owner = declaringKey(target, name);
         if (owner === null || owner === target) continue;
-        anchor = { entry, target, name, owner };
+        anchor = { from: entry.key, entry, target, name, owner };
         break;
       }
       if (anchor) break;
@@ -352,11 +346,13 @@ const check = (name, ok, note) => strength.push({ name, ok, note });
     const patched = patch(nowPage, anchor.owner, (t) => t.replace(
       new RegExp(`export\\s+(?:async\\s+)?function\\s+${esc(anchor.name)}(?![\\w$])`),
       `export const ${anchor.name} = 1; const _probeInjected = (`));
+    // 断言的强度：`form` 必须是 **"value"** —— 链不跟通只会得到"解不开"，只有真的沿再导出链
+    // 走到声明处（`anchor.owner`）才判得出 "value"（工单 03 双轴评审指出原先只看名字，太弱）。
     const hit = nonFunctionCallees(patched).some((v) =>
-      v.from === anchor.entry.key && v.to === anchor.target && v.name === anchor.name);
+      v.from === anchor.from && v.to === anchor.target && v.name === anchor.name && v.form === "value");
     check("再导出链感知：链上声明改成数据 → 判据 T 报出（基线不报＝链跟通了）", !baseline && hit,
-      `基线${baseline ? "报了（链没跟通）" : "不报 ✓"}；改成数据后${hit ? "报出 ✓" : "没报出 ✗"}`
-      + `（${anchor.entry.key} → ${anchor.target}（再导出）→ ${anchor.owner}::${anchor.name}）`);
+      `基线${baseline ? "报了（链没跟通）" : "不报 ✓"}；改成数据后${hit ? "报出 value ✓" : "没报出 value ✗"}`
+      + `（${anchor.from} → ${anchor.target}（再导出）→ ${anchor.owner}::${anchor.name}）`);
   }
 }
 
@@ -389,16 +385,16 @@ const check = (name, ok, note) => strength.push({ name, ok, note });
   for (const e of edges) {
     if (e.kind !== "page") continue;
     if (++tried > 40) break;                                     // 每次试都跑一遍全图判据：设上限免得太慢
-    const asCode = patch(nowPage, e.entry.key, (t) => t + `\n${e.name}(1);\n`);
+    const asCode = patch(nowPage, e.from, (t) => t + `\n${e.name}(1);\n`);
     if (nonFunctionCallees(asCode).some((v) => v.name === e.name)) { anchor = e; break; }
   }
   if (!anchor) check("注释感知：注释里的 `x(` 不算调用位", false, "找不到「被调用就会报」的值形态导出锚点");
   else {
-    const asComment = patch(nowPage, anchor.entry.key, (t) => t + `\n// ${anchor.name}(1); ← 注释里的调用位\n`);
+    const asComment = patch(nowPage, anchor.from, (t) => t + `\n// ${anchor.name}(1); ← 注释里的调用位\n`);
     const commentHit = nonFunctionCallees(asComment).some((v) => v.name === anchor.name);
     check("注释感知：值形态导出被当代码调用 → 报出；写在注释里 → 不报", !commentHit,
       `代码形态报出 ✓；注释形态${commentHit ? "报了 ✗" : "不报 ✓"}`
-      + `（锚点 ${anchor.entry.key} 里的 ${anchor.name}）`);
+      + `（锚点 ${anchor.from} 里的 ${anchor.name}）`);
   }
 }
 

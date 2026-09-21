@@ -306,6 +306,13 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > （`boot-contract.mjs` / `import-usage.mjs` / `ui-dom-contract.mjs`）被浏览器夹具间接 import，
 > 但**只改它们**时本地 pre-push 不带起浏览器门禁（CI 的 `browser-suite` 不受路径筛选影响，
 > 照跑）——落点表要不要再扩，另立。
+>
+> **2026-09-21 追加（工单 export-surface-guard/01-03）**：新增导出面守卫 9 条用例后，前端门禁
+> 本机读数是 **1688 passed / 0 fail**（1679 ＋ 9）；三门禁同一轮实测 `pytest` **5049 passed +
+> 1 skipped / 101s**、浏览器门禁 **26 passed / 0 fail / 66s**。**一条与上面那份读数并列的环境事实**
+> （工单 export-surface-guard/02 §⑥ 首次记账）：`tests/js/ai-action-refs.test.mjs` 与
+> `tests/js/module-intro-detail.test.mjs` 按**字面 LF** 断言源码，本机 `core.autocrlf=true` 时
+> **CRLF 检出**下这两条必红（1677 / 2 fail）——报读数前先看检出形态。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 
