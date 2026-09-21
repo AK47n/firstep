@@ -17,8 +17,8 @@ import { stepNavTitles, stepNavItemsHTML, stepNavCurrent, stepProgress, step7Don
 import { attachCelebrate, syncCollapseBtn, collapseToggleAll, GEN_CARD_COLLAPSE_KEY, parseGenCardCollapse, genCardInitialCollapsed, saveGenCardCollapse } from "/js/fx/generate.js";
 
 export const STEP_NAV_CARD_SELECTOR = "#tab-generate .gen-steps > .card";
-export const STEP_TOTAL = 12;
-export const CARD_COLLAPSE_SELECTOR = "#tab-generate .gen-steps > .card";
+const STEP_TOTAL = 12;
+const CARD_COLLAPSE_SELECTOR = "#tab-generate .gen-steps > .card";
 
 export const stepDoneSet = new Set();
 
@@ -122,12 +122,12 @@ export function syncStep7(env) {
   if (done) markStepDone(7);
   else markStepUndone(7);
 }
-export function syncStepDone(n, done) {
+function syncStepDone(n, done) {
   if (done) stepDoneSet.add(n); else stepDoneSet.delete(n);
   renderStepProgress();
   if (onStepChange) onStepChange();
 }
-export function renderStepProgress() {
+function renderStepProgress() {
   const el = $("gen-progress");
   if (!el) return;
   const { pct, text } = stepProgress(stepDoneSet.size, STEP_TOTAL);

@@ -35,7 +35,7 @@ import { chosenPlatform, expanded, selectedSlugs } from "/js/ui/generate-recomme
 
 // ---- 全局状态：多实例 + 引脚板图（随簇；host 经 import 活绑定读） ----
 export let instances = {};               // 多实例配置（工单 04）：{ slug: [{name, variant, pin}] }
-export let instancePinTarget = null;     // 正在从板图选脚模式 { slug, index }（null = 非选脚模式）
+let instancePinTarget = null;     // 正在从板图选脚模式 { slug, index }（null = 非选脚模式）
 
 // ---- 绑定判据模型（工单 gen-chain-audit/05）----
 // 后端 `/api/bindings/matrix` 下发的「角色 × 可绑脚」判据（含跨角色谓词）。判据
@@ -55,7 +55,7 @@ const pinModelCache = new Map();         // 载荷键 → 模型（LRU 上限，
 // 不发 = 旧行为单默认实例）。
 // ---------------------------------------------------------------------------
 
-export const LED_COLORS = [["red", "红"], ["yellow", "黄"], ["green", "绿"], ["", "无颜色（通用编号）"]];
+const LED_COLORS = [["red", "红"], ["yellow", "黄"], ["green", "绿"], ["", "无颜色（通用编号）"]];
 
 // 多实例变体下拉选项（工单 key-multi-instance/06）：后端 expand 端点按策略表
 // 投影带 variants（[{value, label}]，token 序单源）——led = 红/黄/绿、
@@ -282,17 +282,17 @@ document.addEventListener("keydown", (e) => {
 // mspm0 排针满员 → v1 交互 = 替换两步换位（点已占用引脚 → 原角色红显未绑 →
 // 再绑目标脚）；stm32 LED_PORT / DIP_GPIO 共享宏族绑定给提示（不拦截）。
 // ---------------------------------------------------------------------------
-export let pinBoard = null;             // 当前平台板定义（GET /api/boards，切平台重取）
-export let pinBoardError = "";          // 板定义加载失败信息（占位文案用）
+let pinBoard = null;             // 当前平台板定义（GET /api/boards，切平台重取）
+let pinBoardError = "";          // 板定义加载失败信息（占位文案用）
 export let pinBindings = {};            // {"<slug>.<role_id>": "<PIN>"}（只含用户动过的角色）
 export let pinUnbound = new Set();      // 被替换/显式解除的角色 key（红显未绑，不发字段）
-export let pinShowOptional = false;     // 是否显示可选接线角色（默认只列必接）
-export let pinHighlight = null;         // 清单条目高亮中的角色 key（板图候选脚）
-export let pinRotation = 0;             // 板图视角旋转（每次 +90°，纯视图不影响数据）
-export let pinOverview = false;         // 总览模式：按模块着色已配置引脚（必接角色 + 可选已显式绑定）
+let pinShowOptional = false;     // 是否显示可选接线角色（默认只列必接）
+let pinHighlight = null;         // 清单条目高亮中的角色 key（板图候选脚）
+let pinRotation = 0;             // 板图视角旋转（每次 +90°，纯视图不影响数据）
+let pinOverview = false;         // 总览模式：按模块着色已配置引脚（必接角色 + 可选已显式绑定）
 
 // 角色类型配色（与 CSS :root 引脚令牌一一对应：全色 / 淡化色）
-export const PIN_TYPE_STYLE = {
+const PIN_TYPE_STYLE = {
   gpio_out: ["var(--pin-gpio)", "var(--pin-gpio-dim)"],
   gpio_in: ["var(--pin-gpio)", "var(--pin-gpio-dim)"],
   pwm: ["var(--pin-pwm)", "var(--pin-pwm-dim)"],
@@ -308,7 +308,7 @@ export const PIN_TYPE_STYLE = {
   adc: ["var(--pin-adc)", "var(--pin-adc-dim)"],
   exti: ["var(--pin-exti)", "var(--pin-exti-dim)"],
 };
-export const PIN_TYPE_ZH = {
+const PIN_TYPE_ZH = {
   gpio_out: "GPIO输出", gpio_in: "GPIO输入", pwm: "PWM", enc: "编码器",
   uart_tx: "UART发", uart_rx: "UART收", i2c_scl: "I2C时钟", i2c_sda: "I2C数据",
   spi_mosi: "SPI主出", spi_miso: "SPI主入", spi_sck: "SPI时钟", spi_cs: "SPI片选",
@@ -316,7 +316,7 @@ export const PIN_TYPE_ZH = {
 };
 
 // 总览模式模块配色（按角色出现顺序分配，超出循环复用）
-export const MODULE_COLORS = [
+const MODULE_COLORS = [
   "#60a5fa", "#f87171", "#34d399", "#fbbf24", "#a78bfa", "#f472b6",
   "#22d3ee", "#a3e635", "#fb923c", "#e879f9", "#38bdf8", "#facc15",
 ];
@@ -1141,4 +1141,4 @@ export function backfillInstances(dataInstances) {
 }
 
 // ---- 本簇导出面（host 顶部 import 代理 + 推荐簇 A 接缝导点名） ----
-export { renderInstanceConfig, renderPinCard, loadPinBoard, bindRole, unbindRole, assignInstancePin, addInstance, delInstance, pinRoles };
+export { renderInstanceConfig, renderPinCard, loadPinBoard, pinRoles };

@@ -48,7 +48,7 @@ export function syscfgConflictStateText(conflicts) {
 
 // ---- 流程状态（live 对象——壳层 re-export / check_contract 读 .resume 结构；
 // 只经本模块 mutate）----
-export const fixLoop = { running: false, round: 0, batch: 1, resume: null };
+const fixLoop = { running: false, round: 0, batch: 1, resume: null };
 let lastFixDone = null;   // 最近一次 fix-errors done 载荷（批内回喂；上一批末轮载荷由 resume 携带）
 
 export function isFixRunning() { return fixLoop.running; }

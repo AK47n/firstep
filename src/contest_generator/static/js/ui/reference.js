@@ -192,7 +192,7 @@ export async function loadReferences() {
   }
 }
 
-export async function deleteReference(entryId) {
+async function deleteReference(entryId) {
   const entry = refEntryCache.find((e) => e.id === entryId);
   const bulk = entry ? `（${entry.file_count} 个文件，${formatSize(entry.size_bytes)}）` : "";
   if (!await confirmModal({
@@ -211,7 +211,7 @@ export async function deleteReference(entryId) {
 // 骨架对偶模块库编辑弹窗（.lib-edit-*）；字段照录入表单；文件管理 = 勾选
 // 删除清单（磁盘实况） + 新增文本行（addFileRow / pickFilesInto 共用）。
 // 校验与后端同源（原生中文 400 原因保留弹窗）；成功 = 关窗 + 表格即时刷新。
-export async function editReference(entryId) {
+async function editReference(entryId) {
   const entry = (refEntryCache || []).find((e) => e.id === entryId);
   if (!entry) { toast("error", "未找到参考条目 " + entryId); return; }
   document.querySelectorAll(".lib-edit-overlay").forEach((o) => o.remove());
@@ -373,7 +373,7 @@ export async function editReference(entryId) {
 // （含中文和斜杠，服务端 :path 转换器接收）。
 const REF_TEXT_EXTENSIONS = ["txt", "md", "c", "h", "cpp", "hpp", "ino", "py", "json", "cfg", "ini"];
 
-export function referenceFileUrl(entryId, path) {
+function referenceFileUrl(entryId, path) {
   const segments = path.split("/").map(encodeURIComponent).join("/");
   return `/api/references/${encodeURIComponent(entryId)}/files/${segments}`;
 }
@@ -382,7 +382,7 @@ export function referenceFileUrl(entryId, path) {
 // 预览（浏览器原生预览器；服务端 FileResponse 带 Accept-Ranges，mp4 可拖
 // 进度条）；文本 fetch 内联；其余（zip / rar / bin 固件等）新窗口触发下载。
 // 判据单源 = fx/reference.js 的 refFileOpenKind（纯函数，tests/js 覆盖）。
-export async function openReferenceFile(entryId, path, viewer, viewerPre) {
+async function openReferenceFile(entryId, path, viewer, viewerPre) {
   const url = referenceFileUrl(entryId, path);
   const lower = path.toLowerCase();
   if (refFileOpenKind(path) === "inline") { window.open(url, "_blank"); return; }
@@ -400,7 +400,7 @@ export async function openReferenceFile(entryId, path, viewer, viewerPre) {
 
 // 参考文件详情（工单 02）：元数据（缓存全量在手）+ 文件清单（磁盘实况端点）
 // 合并一窗；文件打开行为沿用（.pdf 预览 / 文本内联 / 其余下载）。
-export function viewReferenceDetail(entryId) {
+function viewReferenceDetail(entryId) {
   const entry = (refEntryCache || []).find((e) => e.id === entryId);
   if (!entry) { toast("info", "未找到条目 " + entryId); return; }
   apiGet(`/api/references/${encodeURIComponent(entryId)}/files`).then((files) => {

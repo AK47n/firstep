@@ -7,7 +7,7 @@
 import { esc } from "./core.js";
 
 // 清单最多显示条数（超出以「等 N 个」省略——弹窗只提示用户有谁，不刷屏）
-export const UNSAVED_SWITCH_LIST_MAX = 8;
+const UNSAVED_SWITCH_LIST_MAX = 8;
 
 // unsavedSwitchMessage(dir, dirtyTabs)：目录切换确认消息（HTML 片段，全部
 // 转义）——dirtyTabs 为已按未保存判据过滤的标签数组（只需 .path）。

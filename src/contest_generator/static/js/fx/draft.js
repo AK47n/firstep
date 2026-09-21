@@ -49,7 +49,7 @@ export function stepNavCurrent(entries, threshold) {
 // 生成页草稿自动记忆（工单 ui-polish-3/01）：localStorage 防误刷新丢失；
 // 只存表单态，恢复不触发任何后端请求
 // ---------------------------------------------------------------------------
-export function draftGroupChoices(raw) {
+function draftGroupChoices(raw) {
   // 功能组用户选择（工单 group-choice-required/01）：{组 id: 成员 slug} 形状闸——
   // 只留「非空字符串键 → 非空字符串值」，损坏 / 旧草稿（无该字段）→ {}。
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};

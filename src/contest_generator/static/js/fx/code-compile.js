@@ -30,7 +30,7 @@ export function compileStatusClass(done) {
 // （引脚被两个模块同时占用）没有文件行号、也**不是 LLM 能修的**（没有源码可
 // 改）：前端据此把这类条目渲染成不可跳转的说明行，而不是「点开看源码」的错误行。
 // 旧载荷 / 源码级条目不带 kind（缺省语义 = 源码级，向后兼容）。
-export const SYSCFG_CONFLICT_KIND = "syscfg_conflict";
+const SYSCFG_CONFLICT_KIND = "syscfg_conflict";
 
 // isSyscfgConflict(entry)：条目是否配置级冲突（parsed_errors / parsed 同型
 // [{path, line, message, kind?}]）。非对象 / 无 kind → false（源码级缺省）。

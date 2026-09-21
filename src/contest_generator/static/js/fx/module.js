@@ -110,7 +110,7 @@ export function groupMemberPick(group, choices) {
   return (group.members || []).some((m) => m.slug === slug) ? slug : "";
 }
 
-export function needsGroupChoice(group, choices, selectedSlugs) {
+function needsGroupChoice(group, choices, selectedSlugs) {
   // 「还差用户点一下」的**单组**判据（与后端 missing_group_choices 逐条对齐）：
   //   ① 硬选择卡（choice_required + ≥2 成员）；
   //   ② 该组在选中集里有**≥2 个成员**（同功能被推了多个 → 必须收成一个；
@@ -344,7 +344,7 @@ export function moduleGridHTML(modules, selectedSet, query, platform) {
 // `library.MODULE_KIND`，载荷经 /api/modules 投影为 kind / requires_identity
 // （本文件不写 slug 名单）。`moduleRequiresIdentity` 对旧载荷（无字段）保守判
 // 「器件」——器件空字段语义 = 待补，与旧行为逐字一致。
-export const INTERNAL_KINDS = ["internal", "protocol"];
+const INTERNAL_KINDS = ["internal", "protocol"];
 
 export function moduleRequiresIdentity(m) {
   const kind = String((m && m.kind) || "");

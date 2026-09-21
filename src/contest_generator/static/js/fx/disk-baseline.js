@@ -74,7 +74,7 @@ export function baselineHasChanges(diff) {
 
 // SNAPSHOT_MAX：快照上限（字节 = JS 字符串 length——UTF-16 码元，与后端
 // 256KB 预算同口径的近似，超限 → null）。
-export const SNAPSHOT_MAX = 256 * 1024;
+const SNAPSHOT_MAX = 256 * 1024;
 
 // snapshotOf(content)：内容 → 快照（合法字符串且 ≤ 上限 → 内容本身；否则
 // null = 无行级）。main.c 特例与通用文件统一用这一个（旧 maincSnap 单源化）。

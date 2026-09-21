@@ -47,7 +47,7 @@ export function pinModelConstraints(entry) {
 }
 
 /** 从引脚能力 token 取某类型的实例名（`pwm:TIMG0_C0` + `pwm` → `TIMG0_C0`）。 */
-export function pinInstanceTokens(pin, type) {
+function pinInstanceTokens(pin, type) {
   const prefix = type + ":";
   return ((pin && pin.capabilities) || [])
     .filter((t) => typeof t === "string" && t.startsWith(prefix))

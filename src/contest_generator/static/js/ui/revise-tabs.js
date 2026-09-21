@@ -36,7 +36,7 @@ function refreshBadgeSpans() {
 }
 
 /** 徽章刷新（02 由 step11-state-changed 事件驱动；01 空操作）。 */
-export function refreshReviseBadges() {
+function refreshReviseBadges() {
   refreshBadgeSpans();
 }
 

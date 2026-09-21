@@ -18,7 +18,7 @@ import { getMainCDiskDir, setMainCDiskContext, refreshMainCDiskState } from "/js
 // 最近记录快照缓存（工单 ux-walkthrough-02/15：删除确认点名 + 撤销恢复用）
 let recentEntries = [];
 
-export function renderRecentList(entries) {
+function renderRecentList(entries) {
   recentEntries = Array.isArray(entries) ? entries : [];
   const list = $("gen-recent-list");
   const box = $("gen-recent");

@@ -294,5 +294,4 @@ function initGenOverview() {
 // host 实际使用：restoreDraft（启动区末位）/ initGenOverview（启动区）/
 // scheduleDraftSave（A 簇 clusterDeps 注册闭包）/ refreshGenOverview
 //（setOnStepChange 回调）。
-export { restoreDraft, scheduleDraftSave, collectDraftState, clearDraft,
-  initGenOverview, refreshGenOverview, runOverviewFill, overviewPlanNow };
+export { restoreDraft, scheduleDraftSave, initGenOverview, refreshGenOverview };

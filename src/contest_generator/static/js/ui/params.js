@@ -362,5 +362,3 @@ export function initParams() {
   window.addEventListener("revise-context-loaded", () => { paramsReset(); paramsReload(); });
   window.addEventListener("tasks-invalidated", () => { paramsReset(); });
 }
-
-export { paramsScan, paramsApply, paramsReload };

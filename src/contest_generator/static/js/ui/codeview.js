@@ -408,7 +408,7 @@ async function renderChangePanel() {
 // clearCodeDiskChanges()：「清空并确认已看」——基线推进为当前磁盘快照
 // （含 main.c 内容快照），待看清单/树徽章/标签「磁盘已变更」徽章全部清空；
 // 此后同类外部变更不再报（无变化）；外部再改 → 重新感知。
-export async function clearCodeDiskChanges() {
+async function clearCodeDiskChanges() {
   if (!codeDir) return;
   // 与 loadCodeDir / checkCodeDiskChanges 共用同一守卫（第十一轮）：本函数在
   // `await baselineCommitDisk` 之后渲染树，期间可能已切换目录（旧目录的徽章/

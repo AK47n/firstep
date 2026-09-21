@@ -138,7 +138,7 @@ export function maincLineOffsetRange(text, line) {
 // scrollTop 不动），这里在高亮层临时量测目标行视觉位置——hl-layer 与
 // textarea 排版参数同源（font/line-height/padding/pre-wrap/视口宽，三明治
 // 对齐设计保证换行点一致），折行场景同样精确，全程无像素行高公式。
-export function maincScrollToRange(ta, range) {
+function maincScrollToRange(ta, range) {
   const hl = document.getElementById("main-c-hl");
   if (!hl) return;
   const _probe_style = "display:block;white-space:pre-wrap;word-break:break-all;";

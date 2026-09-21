@@ -3,7 +3,7 @@
 // 四段格式化）。阶段 1 规划漏项：该组原经 recent-workflows-format.test.mjs
 // 正则抽取（非贪婪 \n\} 脆变体）复用，本次随迁为直接 import。域内常量无；
 // 无共享件依赖。模块约定见 fx/core.js 头部。
-export function wfNum(value) {
+function wfNum(value) {
   return Number.isFinite(Number(value)) ? Number(value).toLocaleString("en-US") : "0";
 }
 

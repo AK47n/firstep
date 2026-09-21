@@ -8,12 +8,7 @@
 // 无基线时资料库区的主按钮也走这里（双轨选路：有基线走增量、无基线走全量）。
 import { $, apiGet, apiPost, toast } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
-import {
-  fullCheckCardHTML,
-  fullConfirmHTML,
-  fullProgressHTML,
-  fullStateText,
-} from "/js/fx/full-update.js";
+import { fullCheckCardHTML, fullConfirmHTML, fullProgressHTML } from "/js/fx/full-update.js";
 import { overlayConfirmHTML } from "/js/fx/overlay.js";
 
 let pollTimer = null;
@@ -146,5 +141,3 @@ function stopPoll() {
   clearInterval(pollTimer);
   pollTimer = null;
 }
-
-export { fullStateText };

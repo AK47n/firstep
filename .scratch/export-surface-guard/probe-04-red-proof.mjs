@@ -289,16 +289,24 @@ const check = (name, ok, note) => strength.push({ name, ok, note });
 }
 
 // 5) 星号导入体检：注入 `import * as ns` 并真的用上 → 体检必须报出（判据 D 对它本来就是瞎的）
+//    锚点**不能写死某个名字**：清点（工单 02）之后 `maincScrollToRange` 已经不是导出了，
+//    写死会让这条自检在清点后变成假红。改成**内存注入一个专用锚点**（`probeStarAnchor`）——
+//    注入的 `export` 是一条已知的零消费者导出，再给它一个星号消费；判据 D 仍须看不见它。
 {
   const baseline = starImports(nowPage, nowConsumers).length;
-  const patched = patch(nowPage, "boot.js", (t) =>
-    t + '\nimport * as probeNs from "/js/fx/code.js";\nprobeNs.maincScrollToRange(null, null);\n');
-  const hit = starImports(patched, nowConsumers).some((s) => s.spec === "/js/fx/code.js");
+  const target = "fx/code.js";
+  const patched = patch(
+    patch(nowPage, target, (t) => t + "\nexport function probeStarAnchor() {}\n"),
+    "boot.js",
+    (t) => t + `\nimport * as probeNs from "/js/${target}";\nprobeNs.probeStarAnchor();\n`);
+  const hit = starImports(patched, nowConsumers).some((s) => s.spec === `/js/${target}`);
   // 如实记一句：星号导入用上了名字，判据 D 也**看不见**（逐名对账对命名空间是瞎的）——这就是体检的理由
-  const blind = unconsumedExports(patched, nowConsumers).some((v) => v.name === "maincScrollToRange");
+  const blind = unconsumedExports(patched, nowConsumers)
+    .some((v) => v.key === target && v.name === "probeStarAnchor");
   check("星号导入体检：注入 `import * as ns` → 体检报出（判据 D 对它本来就是瞎的）",
     baseline === 0 && hit && blind,
-    `基线 ${baseline} 处；注入后体检${hit ? "报出" : "没报出"}；判据 D ${blind ? "仍把它当没人用" : "意外认了"}`);
+    `基线 ${baseline} 处；注入后体检${hit ? "报出" : "没报出"}；判据 D ${blind ? "仍把它当没人用" : "意外认了"}`
+    + `（内存注入锚点 ${target}::probeStarAnchor）`);
 }
 
 // 6) 被调用的 `export function` 换成同名数据 → 判据 T 报出

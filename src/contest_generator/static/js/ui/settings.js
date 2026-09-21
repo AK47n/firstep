@@ -315,7 +315,7 @@ $("set-local-llm-model").addEventListener("change", () => {
  * price_reference），前端只渲染不硬编码；缺数据 = 面板隐藏。
  * 同时缓存到 window.__priceRef 供 periodPlaceholders 用（placeholder =
  * 所选时段的官方价）。 */
-export function renderPriceReference(ref) {
+function renderPriceReference(ref) {
   const rows = $("price-ref-rows");
   if (!ref || !rows) return;
   rows.innerHTML = "";   // 重绘前清空：loadSettings 每次进设置页都调用，不清空会累积重复

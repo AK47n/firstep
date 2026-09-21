@@ -151,7 +151,7 @@ export function codeTabStripHTML(tabs, activePath) {
 // codeEditorHighlight(content, lang)：高亮层内部 HTML 单源（逐行 span，
 // data-code-line 与只读视图同键）——codeEditorHTML 与 ui 胶水 input 重绘
 // 共用（胶水只换 hl.innerHTML，不重建 textarea——焦点/选区/滚动零抖动）。
-export function codeEditorHighlight(content, lang) {
+function codeEditorHighlight(content, lang) {
   const src = String(content == null ? "" : content);
   return highlightCodeLines(src, lang)
     .map((h, idx) =>

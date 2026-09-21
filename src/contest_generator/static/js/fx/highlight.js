@@ -217,7 +217,7 @@ function _xmlLineEndState(line, st) {
   return { comment, cdata, pi, doctype };
 }
 
-export function lineEndState(line, state, lang) {
+function lineEndState(line, state, lang) {
   if (lang === "c") return _cLineEndState(line, state);
   if (lang === "xml") return _xmlLineEndState(line, state);
   return null;

@@ -55,13 +55,13 @@ async function deliveryRun(action, render, okText) {
   }
 }
 
-export async function deliveryOpen() {
+async function deliveryOpen() {
   await deliveryRun(
     "open-ide", () => {}, (data) => data.message || "已打开工程。"
   );
 }
 
-export async function deliveryCheck() {
+async function deliveryCheck() {
   await deliveryRun(
     "check",
     (data) => {
@@ -75,7 +75,7 @@ export async function deliveryCheck() {
   );
 }
 
-export async function deliveryPackage() {
+async function deliveryPackage() {
   await deliveryRun(
     "package",
     (data) => { $("delivery-result").innerHTML = deliveryPackageHTML(data); },
@@ -90,7 +90,7 @@ function updateDeliveryEmptyHint() {
   if (hint) hint.classList.toggle("hidden", !!dir());
 }
 
-export function deliveryReset() {
+function deliveryReset() {
   state.busy = false;
   state.lastCheck = null;
   const result = $("delivery-result");

@@ -27,7 +27,7 @@ import { esc } from "/js/fx/core.js";
 import { platformClickAction } from "/js/fx/platform.js";
 import { platformSwitchConfirmMessage } from "/js/fx/danger.js";  // 切平台清空下游确认文案（工单 ux-walkthrough-02/01）
 import { confirmModal } from "/js/ui/confirm.js";
-import { moduleBadges, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, applyGroupChoices, recordGroupChoice, clearGroupChoiceForSlug, pruneGroupChoices, pendingGroupChoices, groupChoiceGapText, moduleGridCountText, moduleGridHTML, moduleInfoHTML, recommendChipHTML, moduleInfoBtnHTML } from "/js/fx/module.js";
+import { moduleBadges, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, applyGroupChoices, recordGroupChoice, clearGroupChoiceForSlug, pruneGroupChoices, groupChoiceGapText, moduleGridCountText, moduleGridHTML, moduleInfoHTML, recommendChipHTML, moduleInfoBtnHTML } from "/js/fx/module.js";
 import { bindModuleSource } from "/js/ui/module-source.js";  // 模块源码区（mainc-codeview-bridge/05）：弹窗文件行懒加载
 import { referencePlatformChip } from "/js/fx/reference.js";
 import {
@@ -57,11 +57,6 @@ export let groupChoices = {};            // 功能组用户选择（工单 group
                                           // {组 id: 用户点过的成员 slug}——组卡选中态与
                                           // 「未选不许生成」都只看它；AI 的推荐只作徽标展示
 export function setGroupChoices(v) { groupChoices = v && typeof v === "object" ? v : {}; }
-export function groupChoiceGap() {
-  // 还没由用户点过的功能组（数组）；空 = 可以生成。判据与后端 missing_group_choices 同口径
-  // （含「组没进选中集不算」——用户把组内模块删掉后不该被永久拦住）。
-  return pendingGroupChoices((lastRecommend || {}).exclusive_groups || [], groupChoices, selectedSlugs);
-}
 export function groupChoiceGapMessage() {
   // 拦截文案单源在 fx/module.js（前端两处生成入口/就绪单共用一份措辞）
   return groupChoiceGapText((lastRecommend || {}).exclusive_groups || [], groupChoices, selectedSlugs);
@@ -70,7 +65,7 @@ export let pythonTemplates = {};         // 副产物模板选择（工单 k230-
 export let warnings = [];                // 平台警告
 export let scorePoints = [];              // 推荐解析出的题面评分点（只读增强信息）
 export let prereadOverviewText = "";      // 步骤 2 赛题预读的一句话总览（交接提示词读取方 import，工单 topic-preread/02）
-export let prereadReminders = [];         // 步骤 2 赛题预读提醒（工单 03 钉卡分发读取方 import）
+let prereadReminders = [];         // 步骤 2 赛题预读提醒（工单 03 钉卡分发读取方 import）
 export let currentTopicId = "";      // 当前生效的赛题编号（历史赛题入口；工单 15 起
                                           // export——生成簇 generateMain 读取方 import）
 export function setCurrentTopicId(v) { currentTopicId = v; }
@@ -989,7 +984,7 @@ export function openModuleInfo(slug, platform = chosenPlatform, reason = "") {
 
 // moduleInfoReason(slug)：推荐区那句短线推荐理由（模块说明弹窗里「为什么推荐它」）。
 // 找不到（模块库页 / 非推荐来源）= "" → 弹窗不渲染该段（不编造）。
-export function moduleInfoReason(slug) {
+function moduleInfoReason(slug) {
   const mod = ((lastRecommend || {}).modules || []).find((m) => m.slug === slug);
   return (mod && mod.reason) || "";
 }

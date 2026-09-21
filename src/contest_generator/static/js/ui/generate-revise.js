@@ -587,5 +587,4 @@ function reviseGetPlatform() {
 }
 
 // ---- 本簇导出面（host 零调用点——按工单 17 检查表导出为模块 API） ----
-export { reviseLoad, reviseAnalyze, reviseApply, reviseRollback, reviseRunDeepen,
-  reviseResetAll, reviseRenderContext, reviseGetDir, reviseGetPlatform };
+export { reviseLoad, reviseGetDir, reviseGetPlatform };

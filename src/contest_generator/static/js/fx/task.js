@@ -896,7 +896,7 @@ export function taskWiringRefs(task, rows) {
  * perComputed = 调用方已取好的每任务装配（避免 wiringOpts(task) 执行两
  * 次——评审整改），缺省自行提取（03 契约调用方不传）。
  */
-export function wiringSectionHTML(task, opts, perComputed) {
+function wiringSectionHTML(task, opts, perComputed) {
   const o = opts || {};
   const perTask = perComputed !== undefined ? perComputed : wiringPer(task, o);
   const ctx = perTask ? perTask.wiringCtx : o.wiringCtx;

@@ -48,10 +48,10 @@ export const $ = (id) => document.getElementById(id);
 // 主题切换（工单 ui-polish-5/01）：亮/暗两套变量；偏好存 localStorage；
 // head 内联脚本已防闪烁，这里负责按钮图标 / 监听 / 持久化
 // ---------------------------------------------------------------------------
-export function currentTheme() {
+function currentTheme() {
   return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
 }
-export function applyTheme(theme) {
+function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
   try { localStorage.setItem("firstep.theme", theme); } catch (e) { /* 忽略 */ }
   const btn = $("btn-theme");
@@ -60,7 +60,7 @@ export function applyTheme(theme) {
     btn.title = theme === "light" ? "切换到深色主题" : "切换到亮色主题";
   }
 }
-export function initTheme() {
+function initTheme() {
   let t = "dark";
   try {
     const saved = localStorage.getItem("firstep.theme");

@@ -44,7 +44,7 @@ import {
   isFixRunning,
   FIX_MAX_ROUNDS,
 } from "/js/ui/fix-center-core.js";  // 流程核心（工单 code-ide-ai/05——无 DOM 状态机）
-export { FIX_MAX_ROUNDS, fixLoop } from "/js/ui/fix-center-core.js";  // 导出面保持（check_contract / generate-core 活引用）
+
 
 // ---------------------------------------------------------------------------
 // 生成页：10. 修复中心（工单 autocompile-loop/01）——生成 → 自动编译 →
@@ -423,6 +423,4 @@ $("btn-fix-rollback").addEventListener("click", async () => {
 // continueFixCenter / FIX_MAX_ROUNDS / fixLoop 经检查表导出为模块 API
 //（fixLoop.resume 结构钉在 tests/test_generate_check_contract.py；FIX_MAX_ROUNDS
 // 与 fixLoop 自工单 code-ide-ai/05 起 re-export 自 fix-center-core.js）。
-export { startFixCenter, continueFixCenter, runCompileOnce, runFixOnce, fixRounds,
-  renderToolchainStatus, updateFixCenterAvailability, fixRenderResults,
-  toolchains, setToolchains, compileBanner };
+export { startFixCenter, renderToolchainStatus, updateFixCenterAvailability, fixRenderResults, toolchains, setToolchains, compileBanner };

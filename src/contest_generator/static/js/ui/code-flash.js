@@ -24,7 +24,7 @@ function openPanel() {
 // runCodeFlash()：烧录入口——无目录提示；自动保存全部（取消 → 中止）→
 // 共享执行体（按钮防重 + busy 文案 + 结果/指引卡渲染）。重入保护从点击起
 // 生效（含自动保存阶段——保存期间再点不并发）。
-export async function runCodeFlash() {
+async function runCodeFlash() {
   const dir = getCodeDir();
   if (!dir) { toast("info", "请先打开工程目录（选择文件夹或最近生成记录「查看代码」）"); return; }
   if (flashBusy) return;

@@ -13,7 +13,7 @@ export const CCS_PROBE_NOTE =
   + "——排查时别按「一个 CCS 版本 = 一套工具链」；任一覆盖项留空 = 该件自动探测（各取最新）";
 
 // 三件的中文名（探测说明行 / 来源一句话共用）
-export const CCS_PIECE_NAMES = { sdk: "SDK", compiler: "编译器", sysconfig: "SysConfig" };
+const CCS_PIECE_NAMES = { sdk: "SDK", compiler: "编译器", sysconfig: "SysConfig" };
 
 // 工具链展示名（单源）：环境体检行与硬件检测页的「缺工具链」降级文案共用——
 // 两处各写一遍的话，改名字会漂成两个说法（工单 module-hwcheck/02 评审整改）。

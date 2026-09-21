@@ -114,7 +114,7 @@ async function runCompileOnceForCode(dir) {
 
 // runCodeCompile()：编译入口——自动保存全部（取消 → 中止）→ SSE 编译 → 面板。
 // 重入保护从点击起生效（含自动保存阶段——保存期间再点不会并发两套保存）。
-export async function runCodeCompile() {
+async function runCodeCompile() {
   const dir = getCodeDir();
   if (!dir) { toast("info", "请先打开工程目录（选择文件夹或最近生成记录「查看代码」）"); return; }
   if (compileBusy) return;

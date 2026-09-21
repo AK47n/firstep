@@ -105,7 +105,7 @@ export function setCompileErrors(errs) {
 
 // getCompileErrors()：读方访问器（与 setCompileErrors 成对导出——工单 05 接口
 // 对称；当前读方 = 本模块 currentMarks/winRenderMarks，外部可扩展）。
-export function getCompileErrors() {
+function getCompileErrors() {
   return compileErrors;
 }
 const fileCache = new Map();  // key = fileCacheKey(path) → {ok:true, data} | {ok:false, message}
@@ -343,7 +343,7 @@ function compileSigOf(errLines) {
 // 计算，折叠视图经 marksForView 映射——占位行被折叠的引导线自动丢弃）。
 // errLines 可选：由 winRenderMarks 预计算的当前文件错误行（评审整改：渲染
 // 路径避免 currentMarks 与 winRenderGutterErrors 各算一遍映射），缺省自算。
-export function currentMarks(errLines) {
+function currentMarks(errLines) {
   const out = [];
   const tab = getActiveTab();
   if (tab) out.push(...indentGuideMarksCached(tab.content));
@@ -1803,7 +1803,7 @@ export async function reloadTabFromDisk(path) {
 // openDiskConflict(path)：徽章点击入口——复用既有保存冲突三选模态
 // （覆盖我的修改 / 加载磁盘版 / 取消；Promise 落定路径与 saveAllDirtyTabs
 // 同一来源，不新造模态）。tab 不存在（已关闭）→ 静默。
-export function openDiskConflict(path) {
+function openDiskConflict(path) {
   const tab = tabOf(path);
   if (!tab) return;
   showConflictModal(tab);
@@ -1945,7 +1945,7 @@ function postSave(tab) {
   });
 }
 
-export async function saveActiveTab() {
+async function saveActiveTab() {
   const tab = getActiveTab();
   if (!tab) { toast("info", "没有打开的文件"); return; }
   if (tab.readonly) {

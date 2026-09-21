@@ -11,7 +11,7 @@
 // 清空/无内容时 hidePanel(id)；容器显隐 = 有无已触发面板。
 import { $ } from "/js/app.js";
 
-export const PANEL_LABELS = {
+const PANEL_LABELS = {
   compile: "编译",
   change: "磁盘变更",
   ai: "AI 对话",

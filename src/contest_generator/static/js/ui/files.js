@@ -42,7 +42,7 @@ export function collectFiles(container) {
 // 二进制（文件头含 NUL，与后端扫描同判据）与超大文件跳过不载入；老工程常见的
 // GBK 源文件按 gbk 兜底解码。
 const MAX_PICK_BYTES = 20 * 1024 * 1024;
-export async function readPickedText(file) {
+async function readPickedText(file) {
   const buf = await file.arrayBuffer();
   if (new Uint8Array(buf).subarray(0, 8192).includes(0)) return null;   // 二进制
   const text = new TextDecoder("utf-8", { fatal: false }).decode(buf);

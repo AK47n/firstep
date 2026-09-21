@@ -1,0 +1,509 @@
+== ⓪ 现场 ==
+  git 对 src/contest_generator/static/js 的未提交改动：
+M src/contest_generator/static/js/app.js
+ M src/contest_generator/static/js/boot.js
+ M src/contest_generator/static/js/fx/code-compile.js
+ M src/contest_generator/static/js/fx/code-marks.js
+ M src/contest_generator/static/js/fx/code.js
+ M src/contest_generator/static/js/fx/codeeditor.js
+ M src/contest_generator/static/js/fx/disk-baseline.js
+ M src/contest_generator/static/js/fx/draft.js
+ M src/contest_generator/static/js/fx/env.js
+ M src/contest_generator/static/js/fx/exit-guard.js
+ M src/contest_generator/static/js/fx/highlight.js
+ M src/contest_generator/static/js/fx/hwcheck.js
+ M src/contest_generator/static/js/fx/module.js
+ M src/contest_generator/static/js/fx/pin-model.js
+ M src/contest_generator/static/js/fx/recommend.js
+ M src/contest_generator/static/js/fx/settings.js
+ M src/contest_generator/static/js/fx/task.js
+ M src/contest_generator/static/js/fx/wiring.js
+ M src/contest_generator/static/js/fx/workflow.js
+ M src/contest_generator/static/js/ui/code-bottom-panels.js
+ M src/contest_generator/static/js/ui/code-compile.js
+ M src/contest_generator/static/js/ui/code-flash.js
+ M src/contest_generator/static/js/ui/codeeditor.js
+ M src/contest_generator/static/js/ui/codeview.js
+ M src/contest_generator/static/js/ui/delivery.js
+ M src/contest_generator/static/js/ui/files.js
+ M src/contest_generator/static/js/ui/fix-center-core.js
+ M src/contest_generator/static/js/ui/full-update.js
+ M src/contest_generator/static/js/ui/generate-core.js
+ M src/contest_generator/static/js/ui/generate-fix.js
+ M src/contest_generator/static/js/ui/generate-mainc.js
+ M src/contest_generator/static/js/ui/generate-pins.js
+ M src/contest_generator/static/js/ui/generate-readiness.js
+ M src/contest_generator/static/js/ui/generate-recommend.js
+ M src/contest_generator/static/js/ui/generate-revise.js
+ M src/contest_generator/static/js/ui/generate-steps.js
+ M src/contest_generator/static/js/ui/generate-tasks.js
+ M src/contest_generator/static/js/ui/goto-nav.js
+ M src/contest_generator/static/js/ui/guide.js
+ M src/contest_generator/static/js/ui/hwcheck.js
+ M src/contest_generator/static/js/ui/library.js
+ M src/contest_generator/static/js/ui/params-chat.js
+ M src/contest_generator/static/js/ui/params.js
+ M src/contest_generator/static/js/ui/recent.js
+ M src/contest_generator/static/js/ui/reference.js
+ M src/contest_generator/static/js/ui/resource-board.js
+ M src/contest_generator/static/js/ui/revise-tabs.js
+ M src/contest_generator/static/js/ui/settings.js
+ M src/contest_generator/static/js/ui/step-state.js
+ M src/contest_generator/static/js/ui/topic.js
+ M src/contest_generator/static/js/ui/wiring.js
+  行尾（工作树原文，CRLF 检出下与 git 对象不同）：LF
+
+== ① 清点前判据 D ==
+  页面模块 132 个；消费侧 164 个 .mjs
+  零消费者导出：111 处（实测基线 111）
+  导出条目总数：995（实测基线 995）
+
+  形态分布（实测 → 基线）：
+    摘 export 前缀：73 → 73 ✓
+    清单摘名字：30 → 30 ✓
+    清单整行删：7 → 7 ✓
+    整条删：1 → 1 ✓
+  整行删的清单（4 条）：ui/full-update.js:150-150（fullStateText）；ui/generate-fix.js:47-47（FIX_MAX_ROUNDS/fixLoop）；ui/params-chat.js:225-225（paramsChatReset）；ui/params.js:366-366（paramsScan/paramsApply/paramsReload）
+  摘名字的清单（8 条）：ui/generate-core.js:376-378 摘 5/6；ui/generate-fix.js:426-428 摘 4/11；ui/generate-mainc.js:134-134 摘 2/4；ui/generate-pins.js:1144-1144 摘 5/9；ui/generate-readiness.js:190-190 摘 1/5；ui/generate-revise.js:590-591 摘 6/9；ui/generate-steps.js:297-298 摘 4/8；ui/generate-tasks.js:1849-1849 摘 3/5
+  · 不动点第 1 轮：连带改动 +3
+  · 不动点第 2 轮：连带改动 +0
+
+== ② 预期副作用 ==
+  孤儿 import（改动前有人用、改动后没人用）：2 处
+    · ui/full-update.js：从 "/js/fx/full-update.js" 只取了 fullStateText → 连 import 一起摘
+    · ui/generate-recommend.js：从 "/js/fx/module.js" 只取了 pendingGroupChoices → 连 import 一起摘
+  级联（摘再导出后新暴露的零消费者导出）：1 处
+    · ui/fix-center-core.js:51 的 fixLoop —— 原消费者是 ui/generate-fix.js:47 那条转手再导出
+  如实记账（**本轮不动**）：另有 9 处 import 在本轮之前就已经是死的（不在判据 D 的 111 处清单里，也不由本轮造成；`import-usage-guard` 的取数面只有 boot.js，故至今无人报）
+    · ui/code-compile.js → getMainCDiskDir
+    · ui/codeeditor.js → isTabSavable
+    · ui/generate-fix.js → WRITE_GUARD_ACTIONS
+    · ui/generate-readiness.js → readinessRowHTML
+    · ui/generate-revise.js → WRITE_GUARD_ACTIONS
+    · ui/generate-tasks.js → resourcesOverviewHTML
+    · ui/generate-tasks.js → WRITE_GUARD_ACTIONS
+    · ui/params.js → WRITE_GUARD_ACTIONS
+    · ui/resource-board.js → resourcesToolbarHTML
+
+== ③ 逐处锚定 ==
+  ✓ 111 处改动全部唯一命中（49 个模块；存死锚点的形态按原文一次命中，清单/import 形态按当前文本现算）
+  ✓ 111 处改动逐处自校验通过（每一处都恰好是"删掉那个 export / import"的样子）
+
+== ④ 行为零变化：正文比对 ==
+  例外（工单明令整条删，正文确有删除）：ui/generate-recommend.js::groupChoiceGap()
+  例外核验：ui/generate-recommend.js 里 `groupChoiceGap` 已整条删干净（✓）
+  ✓ 其余 131 个模块剥掉 import/export 边语句后**逐字节相同**（正文零变化、零丢失）
+
+== ⑤ 落盘 ==
+  app.js：221 → 221 行（+0）
+  fx/code-compile.js：127 → 127 行（+0）
+  fx/code-marks.js：183 → 183 行（+0）
+  fx/code.js：183 → 183 行（+0）
+  fx/codeeditor.js：435 → 435 行（+0）
+  fx/disk-baseline.js：144 → 144 行（+0）
+  fx/draft.js：154 → 154 行（+0）
+  fx/env.js：220 → 220 行（+0）
+  fx/exit-guard.js：42 → 42 行（+0）
+  fx/highlight.js：356 → 356 行（+0）
+  fx/hwcheck.js：1032 → 1032 行（+0）
+  fx/module.js：763 → 763 行（+0）
+  fx/pin-model.js：285 → 285 行（+0）
+  fx/recommend.js：246 → 246 行（+0）
+  fx/settings.js：70 → 70 行（+0）
+  fx/task.js：1248 → 1248 行（+0）
+  fx/wiring.js：352 → 352 行（+0）
+  fx/workflow.js：68 → 68 行（+0）
+  ui/code-bottom-panels.js：91 → 91 行（+0）
+  ui/code-compile.js：286 → 286 行（+0）
+  ui/code-flash.js：77 → 77 行（+0）
+  ui/codeeditor.js：3230 → 3230 行（+0）
+  ui/codeview.js：1405 → 1405 行（+0）
+  ui/delivery.js：122 → 122 行（+0）
+  ui/files.js：75 → 75 行（+0）
+  ui/fix-center-core.js：405 → 405 行（+0）
+  ui/full-update.js：150 → 143 行（-7）
+  ui/generate-core.js：712 → 710 行（-2）
+  ui/generate-fix.js：428 → 426 行（-2）
+  ui/generate-mainc.js：134 → 134 行（+0）
+  ui/generate-pins.js：1144 → 1144 行（+0）
+  ui/generate-readiness.js：190 → 190 行（+0）
+  ui/generate-recommend.js：1252 → 1247 行（-5）
+  ui/generate-revise.js：591 → 590 行（-1）
+  ui/generate-steps.js：298 → 297 行（-1）
+  ui/generate-tasks.js：1849 → 1849 行（+0）
+  ui/goto-nav.js：32 → 32 行（+0）
+  ui/guide.js：83 → 83 行（+0）
+  ui/library.js：507 → 507 行（+0）
+  ui/params-chat.js：225 → 223 行（-2）
+  ui/params.js：366 → 364 行（-2）
+  ui/recent.js：103 → 103 行（+0）
+  ui/reference.js：530 → 530 行（+0）
+  ui/resource-board.js：88 → 88 行（+0）
+  ui/revise-tabs.js：106 → 106 行（+0）
+  ui/settings.js：733 → 733 行（+0）
+  ui/step-state.js：322 → 322 行（+0）
+  ui/topic.js：454 → 454 行（+0）
+  ui/wiring.js：172 → 172 行（+0）
+  合计行数变化：-22（只减不增）；行尾写法与尾部换行数逐文件还原 ✓
+  本批改动文件里：0 个 CRLF / 49 个 LF；还原后不一致：0 个
+  全仓 132 个模块的行尾：LF 132 个 / CRLF 0 个
+  window 探针桥（`Object.assign(window, {…})`）改动：零改动
+  index.html / 555 个 id：零改动（本轮只碰 static/js）
+  已写 49 个文件：app.js, fx/code-compile.js, fx/code-marks.js, fx/code.js, fx/codeeditor.js, fx/disk-baseline.js, fx/draft.js, fx/env.js, fx/exit-guard.js, fx/highlight.js, fx/hwcheck.js, fx/module.js, fx/pin-model.js, fx/recommend.js, fx/settings.js, fx/task.js, fx/wiring.js, fx/workflow.js, ui/code-bottom-panels.js, ui/code-compile.js, ui/code-flash.js, ui/codeeditor.js, ui/codeview.js, ui/delivery.js, ui/files.js, ui/fix-center-core.js, ui/full-update.js, ui/generate-core.js, ui/generate-fix.js, ui/generate-mainc.js, ui/generate-pins.js, ui/generate-readiness.js, ui/generate-recommend.js, ui/generate-revise.js, ui/generate-steps.js, ui/generate-tasks.js, ui/goto-nav.js, ui/guide.js, ui/library.js, ui/params-chat.js, ui/params.js, ui/recent.js, ui/reference.js, ui/resource-board.js, ui/revise-tabs.js, ui/settings.js, ui/step-state.js, ui/topic.js, ui/wiring.js
+  行尾归一（CRLF → LF，对齐仓库存储形态与那两条字面 LF 用例）：0 个文件
+
+== ⑥ 复跑判据（已落盘的工作树）==
+  判据 D 零消费者导出：0 处（0 = 目标达成）
+  逐处销账：清点前 111 处 → 仍红 0 处
+  判据 T 形态违规：0 处
+  星号导入体检：0 处
+  取数面体检：无问题
+  graphBreaks（全图 import↔export 对账）：0 处（绿）
+  wiringViolations：0 处（绿）
+  registryProblems：0 处（登记体检绿）
+  reachable 掉队模块：0 个（绿）
+  import-usage（装载根 boot.js）：0 处未使用具名
+  模块级未使用具名（全 132 个模块，清点前 18 处 → 清点后 17 处）：本轮未新增
+  导出条目总数：995 → 883（减少 112）
+
+== ⑦ 逐处改动清单（111 处）==
+  ① 摘 export 前缀  app.js:51  currentTheme
+      前：export function currentTheme() {
+      后：function currentTheme() {
+  ① 摘 export 前缀  app.js:54  applyTheme
+      前：export function applyTheme(theme) {
+      后：function applyTheme(theme) {
+  ① 摘 export 前缀  app.js:63  initTheme
+      前：export function initTheme() {
+      后：function initTheme() {
+  ① 摘 export 前缀  fx/code-compile.js:33  SYSCFG_CONFLICT_KIND
+      前：export const SYSCFG_CONFLICT_KIND = "syscfg_conflict";
+      后：const SYSCFG_CONFLICT_KIND = "syscfg_conflict";
+  ① 摘 export 前缀  fx/code-marks.js:19  MARK_PRIORITY
+      前：export const MARK_PRIORITY = { current: 3, hit: 2, word: 1, bracket: 1, error: 4 };
+      后：const MARK_PRIORITY = { current: 3, hit: 2, word: 1, bracket: 1, error: 4 };
+  ① 摘 export 前缀  fx/code.js:141  maincScrollToRange
+      前：export function maincScrollToRange(ta, range) {
+      后：function maincScrollToRange(ta, range) {
+  ① 摘 export 前缀  fx/codeeditor.js:154  codeEditorHighlight
+      前：export function codeEditorHighlight(content, lang) {
+      后：function codeEditorHighlight(content, lang) {
+  ① 摘 export 前缀  fx/disk-baseline.js:77  SNAPSHOT_MAX
+      前：export const SNAPSHOT_MAX = 256 * 1024;
+      后：const SNAPSHOT_MAX = 256 * 1024;
+  ① 摘 export 前缀  fx/draft.js:52  draftGroupChoices
+      前：export function draftGroupChoices(raw) {
+      后：function draftGroupChoices(raw) {
+  ① 摘 export 前缀  fx/env.js:16  CCS_PIECE_NAMES
+      前：export const CCS_PIECE_NAMES = { sdk: "SDK", compiler: "编译器", sysconfig: "SysConfig" };
+      后：const CCS_PIECE_NAMES = { sdk: "SDK", compiler: "编译器", sysconfig: "SysConfig" };
+  ① 摘 export 前缀  fx/exit-guard.js:10  UNSAVED_SWITCH_LIST_MAX
+      前：export const UNSAVED_SWITCH_LIST_MAX = 8;
+      后：const UNSAVED_SWITCH_LIST_MAX = 8;
+  ① 摘 export 前缀  fx/highlight.js:220  lineEndState
+      前：export function lineEndState(line, state, lang) {
+      后：function lineEndState(line, state, lang) {
+  ① 摘 export 前缀  fx/hwcheck.js:862  HWCHECK_VERDICT_FALLBACK
+      前：export const HWCHECK_VERDICT_FALLBACK = "先按下面的线索查";
+      后：const HWCHECK_VERDICT_FALLBACK = "先按下面的线索查";
+  ① 摘 export 前缀  fx/module.js:113  needsGroupChoice
+      前：export function needsGroupChoice(group, choices, selectedSlugs) {
+      后：function needsGroupChoice(group, choices, selectedSlugs) {
+  ① 摘 export 前缀  fx/module.js:347  INTERNAL_KINDS
+      前：export const INTERNAL_KINDS = ["internal", "protocol"];
+      后：const INTERNAL_KINDS = ["internal", "protocol"];
+  ① 摘 export 前缀  fx/pin-model.js:50  pinInstanceTokens
+      前：export function pinInstanceTokens(pin, type) {
+      后：function pinInstanceTokens(pin, type) {
+  ① 摘 export 前缀  fx/recommend.js:102  BUY_DECISIONS_KEY
+      前：export const BUY_DECISIONS_KEY = "firstep.buy-decisions.v1";
+      后：const BUY_DECISIONS_KEY = "firstep.buy-decisions.v1";
+  ① 摘 export 前缀  fx/settings.js:11  SETTINGS_DEFAULT_COLLAPSED
+      前：export const SETTINGS_DEFAULT_COLLAPSED =
+      后：const SETTINGS_DEFAULT_COLLAPSED =
+  ① 摘 export 前缀  fx/task.js:899  wiringSectionHTML
+      前：export function wiringSectionHTML(task, opts, perComputed) {
+      后：function wiringSectionHTML(task, opts, perComputed) {
+  ① 摘 export 前缀  fx/wiring.js:238  layoutWiring
+      前：export function layoutWiring(board, lines) {
+      后：function layoutWiring(board, lines) {
+  ① 摘 export 前缀  fx/workflow.js:6  wfNum
+      前：export function wfNum(value) {
+      后：function wfNum(value) {
+  ① 摘 export 前缀  ui/code-bottom-panels.js:14  PANEL_LABELS
+      前：export const PANEL_LABELS = {
+      后：const PANEL_LABELS = {
+  ① 摘 export 前缀  ui/code-compile.js:117  runCodeCompile
+      前：export async function runCodeCompile() {
+      后：async function runCodeCompile() {
+  ① 摘 export 前缀  ui/code-flash.js:27  runCodeFlash
+      前：export async function runCodeFlash() {
+      后：async function runCodeFlash() {
+  ① 摘 export 前缀  ui/codeeditor.js:108  getCompileErrors
+      前：export function getCompileErrors() {
+      后：function getCompileErrors() {
+  ① 摘 export 前缀  ui/codeeditor.js:346  currentMarks
+      前：export function currentMarks(errLines) {
+      后：function currentMarks(errLines) {
+  ① 摘 export 前缀  ui/codeeditor.js:1806  openDiskConflict
+      前：export function openDiskConflict(path) {
+      后：function openDiskConflict(path) {
+  ① 摘 export 前缀  ui/codeeditor.js:1948  saveActiveTab
+      前：export async function saveActiveTab() {
+      后：async function saveActiveTab() {
+  ① 摘 export 前缀  ui/codeview.js:411  clearCodeDiskChanges
+      前：export async function clearCodeDiskChanges() {
+      后：async function clearCodeDiskChanges() {
+  ① 摘 export 前缀  ui/delivery.js:58  deliveryOpen
+      前：export async function deliveryOpen() {
+      后：async function deliveryOpen() {
+  ① 摘 export 前缀  ui/delivery.js:64  deliveryCheck
+      前：export async function deliveryCheck() {
+      后：async function deliveryCheck() {
+  ① 摘 export 前缀  ui/delivery.js:78  deliveryPackage
+      前：export async function deliveryPackage() {
+      后：async function deliveryPackage() {
+  ① 摘 export 前缀  ui/delivery.js:93  deliveryReset
+      前：export function deliveryReset() {
+      后：function deliveryReset() {
+  ① 摘 export 前缀  ui/files.js:45  readPickedText
+      前：export async function readPickedText(file) {
+      后：async function readPickedText(file) {
+  ① 摘 export 前缀  ui/generate-pins.js:38  instancePinTarget
+      前：export let instancePinTarget = null;     // 正在从板图选脚模式 { slug, index }（null = 非选脚模式）
+      后：let instancePinTarget = null;     // 正在从板图选脚模式 { slug, index }（null = 非选脚模式）
+  ① 摘 export 前缀  ui/generate-pins.js:58  LED_COLORS
+      前：export const LED_COLORS = [["red", "红"], ["yellow", "黄"], ["green", "绿"], ["", "无颜色（通用编号）"]];
+      后：const LED_COLORS = [["red", "红"], ["yellow", "黄"], ["green", "绿"], ["", "无颜色（通用编号）"]];
+  ① 摘 export 前缀  ui/generate-pins.js:285  pinBoard
+      前：export let pinBoard = null;             // 当前平台板定义（GET /api/boards，切平台重取）
+      后：let pinBoard = null;             // 当前平台板定义（GET /api/boards，切平台重取）
+  ① 摘 export 前缀  ui/generate-pins.js:286  pinBoardError
+      前：export let pinBoardError = "";          // 板定义加载失败信息（占位文案用）
+      后：let pinBoardError = "";          // 板定义加载失败信息（占位文案用）
+  ① 摘 export 前缀  ui/generate-pins.js:289  pinShowOptional
+      前：export let pinShowOptional = false;     // 是否显示可选接线角色（默认只列必接）
+      后：let pinShowOptional = false;     // 是否显示可选接线角色（默认只列必接）
+  ① 摘 export 前缀  ui/generate-pins.js:290  pinHighlight
+      前：export let pinHighlight = null;         // 清单条目高亮中的角色 key（板图候选脚）
+      后：let pinHighlight = null;         // 清单条目高亮中的角色 key（板图候选脚）
+  ① 摘 export 前缀  ui/generate-pins.js:291  pinRotation
+      前：export let pinRotation = 0;             // 板图视角旋转（每次 +90°，纯视图不影响数据）
+      后：let pinRotation = 0;             // 板图视角旋转（每次 +90°，纯视图不影响数据）
+  ① 摘 export 前缀  ui/generate-pins.js:292  pinOverview
+      前：export let pinOverview = false;         // 总览模式：按模块着色已配置引脚（必接角色 + 可选已显式绑定）
+      后：let pinOverview = false;         // 总览模式：按模块着色已配置引脚（必接角色 + 可选已显式绑定）
+  ① 摘 export 前缀  ui/generate-pins.js:295  PIN_TYPE_STYLE
+      前：export const PIN_TYPE_STYLE = {
+      后：const PIN_TYPE_STYLE = {
+  ① 摘 export 前缀  ui/generate-pins.js:311  PIN_TYPE_ZH
+      前：export const PIN_TYPE_ZH = {
+      后：const PIN_TYPE_ZH = {
+  ① 摘 export 前缀  ui/generate-pins.js:319  MODULE_COLORS
+      前：export const MODULE_COLORS = [
+      后：const MODULE_COLORS = [
+  ① 摘 export 前缀  ui/generate-recommend.js:992  moduleInfoReason
+      前：export function moduleInfoReason(slug) {
+      后：function moduleInfoReason(slug) {
+  ① 摘 export 前缀  ui/generate-recommend.js:73  prereadReminders
+      前：export let prereadReminders = [];         // 步骤 2 赛题预读提醒（工单 03 钉卡分发读取方 import）
+      后：let prereadReminders = [];         // 步骤 2 赛题预读提醒（工单 03 钉卡分发读取方 import）
+  ① 摘 export 前缀  ui/goto-nav.js:12  flashJumpTarget
+      前：export function flashJumpTarget(el) {
+      后：function flashJumpTarget(el) {
+  ① 摘 export 前缀  ui/guide.js:38  switchGuideTab
+      前：export function switchGuideTab(key) {
+      后：function switchGuideTab(key) {
+  ① 摘 export 前缀  ui/library.js:210  editModule
+      前：export function editModule(slug) {
+      后：function editModule(slug) {
+  ① 摘 export 前缀  ui/library.js:418  deleteModule
+      前：export async function deleteModule(slug) {
+      后：async function deleteModule(slug) {
+  ① 摘 export 前缀  ui/library.js:431  newModulePayload
+      前：export function newModulePayload() {
+      后：function newModulePayload() {
+  ① 摘 export 前缀  ui/recent.js:21  renderRecentList
+      前：export function renderRecentList(entries) {
+      后：function renderRecentList(entries) {
+  ① 摘 export 前缀  ui/reference.js:195  deleteReference
+      前：export async function deleteReference(entryId) {
+      后：async function deleteReference(entryId) {
+  ① 摘 export 前缀  ui/reference.js:214  editReference
+      前：export async function editReference(entryId) {
+      后：async function editReference(entryId) {
+  ① 摘 export 前缀  ui/reference.js:376  referenceFileUrl
+      前：export function referenceFileUrl(entryId, path) {
+      后：function referenceFileUrl(entryId, path) {
+  ① 摘 export 前缀  ui/reference.js:385  openReferenceFile
+      前：export async function openReferenceFile(entryId, path, viewer, viewerPre) {
+      后：async function openReferenceFile(entryId, path, viewer, viewerPre) {
+  ① 摘 export 前缀  ui/reference.js:403  viewReferenceDetail
+      前：export function viewReferenceDetail(entryId) {
+      后：function viewReferenceDetail(entryId) {
+  ① 摘 export 前缀  ui/resource-board.js:33  setResourceView
+      前：export function setResourceView(v) {
+      后：function setResourceView(v) {
+  ① 摘 export 前缀  ui/revise-tabs.js:39  refreshReviseBadges
+      前：export function refreshReviseBadges() {
+      后：function refreshReviseBadges() {
+  ① 摘 export 前缀  ui/settings.js:318  renderPriceReference
+      前：export function renderPriceReference(ref) {
+      后：function renderPriceReference(ref) {
+  ① 摘 export 前缀  ui/step-state.js:125  syncStepDone
+      前：export function syncStepDone(n, done) {
+      后：function syncStepDone(n, done) {
+  ① 摘 export 前缀  ui/step-state.js:130  renderStepProgress
+      前：export function renderStepProgress() {
+      后：function renderStepProgress() {
+  ① 摘 export 前缀  ui/step-state.js:20  STEP_TOTAL
+      前：export const STEP_TOTAL = 12;
+      后：const STEP_TOTAL = 12;
+  ① 摘 export 前缀  ui/step-state.js:21  CARD_COLLAPSE_SELECTOR
+      前：export const CARD_COLLAPSE_SELECTOR = "#tab-generate .gen-steps > .card";
+      后：const CARD_COLLAPSE_SELECTOR = "#tab-generate .gen-steps > .card";
+  ① 摘 export 前缀  ui/topic.js:146  viewTopicDetail
+      前：export async function viewTopicDetail(key) {
+      后：async function viewTopicDetail(key) {
+  ① 摘 export 前缀  ui/topic.js:191  viewTopicEdit
+      前：export async function viewTopicEdit(key) {
+      后：async function viewTopicEdit(key) {
+  ① 摘 export 前缀  ui/topic.js:255  initTopicToolbar
+      前：export function initTopicToolbar() {
+      后：function initTopicToolbar() {
+  ① 摘 export 前缀  ui/topic.js:307  loadTopicCategories
+      前：export async function loadTopicCategories() {
+      后：async function loadTopicCategories() {
+  ① 摘 export 前缀  ui/topic.js:346  deleteTopic
+      前：export async function deleteTopic(key) {
+      后：async function deleteTopic(key) {
+  ① 摘 export 前缀  ui/topic.js:359  renderProofreadRows
+      前：export function renderProofreadRows() {
+      后：function renderProofreadRows() {
+  ① 摘 export 前缀  ui/wiring.js:124  attachWiringInputs
+      前：export function attachWiringInputs(root, tasksById, assets) {
+      后：function attachWiringInputs(root, tasksById, assets) {
+  ① 摘 export 前缀  ui/wiring.js:161  tasksByIdMap
+      前：export function tasksByIdMap(plan) {
+      后：function tasksByIdMap(plan) {
+  ③ 清单整行删  ui/full-update.js:150-151  fullStateText
+      前：2 行（第 150-151 行）
+      后：（清空该 export 语句与该空行）
+  ③ 清单整行删  ui/generate-fix.js:47-48  FIX_MAX_ROUNDS, fixLoop
+      前：2 行（第 47-48 行）
+      后：（清空该 export 语句与该空行）
+  ③ 清单整行删  ui/params-chat.js:225-226  paramsChatReset
+      前：2 行（第 225-226 行）
+      后：（清空该 export 语句与该空行）
+  ③ 清单整行删  ui/params.js:366-367  paramsScan, paramsApply, paramsReload
+      前：2 行（第 366-367 行）
+      后：（清空该 export 语句与该空行）
+  ② 清单摘名字  ui/generate-core.js:376-378  generateMain
+      前：generateMain
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-core.js:376-378  renderGenerateSuccess
+      前：renderGenerateSuccess
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-core.js:376-378  renderScoreChecklist
+      前：renderScoreChecklist
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-core.js:376-378  scoreChecklistSyncCurrent
+      前：scoreChecklistSyncCurrent
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-core.js:376-378  scoreChecklistExportNow
+      前：scoreChecklistExportNow
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-fix.js:426-428  continueFixCenter
+      前：continueFixCenter
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-fix.js:426-428  runCompileOnce
+      前：runCompileOnce
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-fix.js:426-428  runFixOnce
+      前：runFixOnce
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-fix.js:426-428  fixRounds
+      前：fixRounds
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-mainc.js:134-134  currentCodeZoomPct
+      前：currentCodeZoomPct
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-mainc.js:134-134  applyCodeZoom
+      前：applyCodeZoom
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-pins.js:1144-1144  bindRole
+      前：bindRole
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-pins.js:1144-1144  unbindRole
+      前：unbindRole
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-pins.js:1144-1144  assignInstancePin
+      前：assignInstancePin
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-pins.js:1144-1144  addInstance
+      前：addInstance
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-pins.js:1144-1144  delInstance
+      前：delInstance
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-readiness.js:190-190  renderReadinessPanel
+      前：renderReadinessPanel
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-revise.js:590-591  reviseAnalyze
+      前：reviseAnalyze
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-revise.js:590-591  reviseApply
+      前：reviseApply
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-revise.js:590-591  reviseRollback
+      前：reviseRollback
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-revise.js:590-591  reviseRunDeepen
+      前：reviseRunDeepen
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-revise.js:590-591  reviseResetAll
+      前：reviseResetAll
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-revise.js:590-591  reviseRenderContext
+      前：reviseRenderContext
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-steps.js:297-298  collectDraftState
+      前：collectDraftState
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-steps.js:297-298  clearDraft
+      前：clearDraft
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-steps.js:297-298  runOverviewFill
+      前：runOverviewFill
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-steps.js:297-298  overviewPlanNow
+      前：overviewPlanNow
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-tasks.js:1849-1849  tasksPlan
+      前：tasksPlan
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-tasks.js:1849-1849  tasksRender
+      前：tasksRender
+      后：（从清单里摘掉）
+  ② 清单摘名字  ui/generate-tasks.js:1849-1849  tasksResetMessages
+      前：tasksResetMessages
+      后：（从清单里摘掉）
+  ④ 整条删函数  ui/generate-recommend.js:60-64  groupChoiceGap()
+      前：5 行（第 60-64 行）
+      后：（删掉；零引用，语义由同文件 groupChoiceGapMessage 覆盖；上方无专属注释块）
+  ⑤ 摘孤儿 import  ui/full-update.js:11  fullStateText
+      前：import { fullCheckCardHTML, fullConfirmHTML, fullProgressHTML, fullStateText, } from "/js/fx/full-update.js";
+      后：{ fullCheckCardHTML, fullConfirmHTML, fullProgressHTML } from "/js/fx/full-update.js"
+  ⑤ 摘孤儿 import  ui/generate-recommend.js:30  pendingGroupChoices
+      前：import { moduleBadges, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, applyGroupChoices, recordGroupChoice, clearGroupChoiceForSlug, pruneGroupChoices, pendingGroupChoices, groupChoiceGapText, moduleGridCountText, moduleGridHTML, moduleInfoHTML, recommendChipHTML, moduleInfoBtnHTML } from "/js/fx/module.js";
+      后：{ moduleBadges, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, applyGroupChoices, recordGroupChoice, clearGroupChoiceForSlug, pruneGroupChoices, groupChoiceGapText, moduleGridCountText, moduleGridHTML, moduleInfoHTML, recommendChipHTML, moduleInfoBtnHTML } from "/js/fx/module.js"
+  ⑤-b 级联摘 export  ui/fix-center-core.js:51  fixLoop
+      前：export const fixLoop = { running: false, round: 0, batch: 1, resume: null };
+      后：const fixLoop = { running: false, round: 0, batch: 1, resume: null };
+
+== 结论 ==
+  判据 D：111 → 0（0 = 清点完成）
+  其余判据（T / 星号 / 取数面 / graphBreaks / wiring / registry / reachable / import-usage）：全绿
+  改动分类（按**名字**数）：摘 export 111 个（前缀 73 + 清单摘名字 30 + 清单整行删 7 + 级联 1）、整条删 1 个、孤儿 import 2 个
+
+PASS

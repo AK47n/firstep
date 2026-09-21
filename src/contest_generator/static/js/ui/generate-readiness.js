@@ -187,4 +187,4 @@ function initReadinessCheck() {
 
 
 // ---- 本簇导出面（host / generate-steps 顶部 import 活绑定调用点） ----
-export { readinessState, desktopTopicOutputEnabled, renderReadinessPanel, refreshReadinessPanel, initReadinessCheck };
+export { readinessState, desktopTopicOutputEnabled, refreshReadinessPanel, initReadinessCheck };

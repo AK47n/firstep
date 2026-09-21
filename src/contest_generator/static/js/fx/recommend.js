@@ -99,7 +99,7 @@ export function suggestionChipHTML(s, st) {
 // ===== 已定方案与商量（工单 buy-discuss/04）=====
 
 // localStorage 键（buy-decisions 记忆：重推 / 刷新 / 换题面不丢）
-export const BUY_DECISIONS_KEY = "firstep.buy-decisions.v1";
+const BUY_DECISIONS_KEY = "firstep.buy-decisions.v1";
 
 // decisionBadgeHTML(decision)：已定徽标。wordlist = 「✓ 已定：方案名」；
 // custom = 「✓ 已定·自定：标题」（用户想法 = 猜想，AI 校核后仍可确定，

@@ -131,4 +131,4 @@ function initMainCTools() {
 
 
 // ---- 本簇导出面（host 顶部 import 活绑定调用点） ----
-export { initMainCTools, syncMainCHighlight, currentCodeZoomPct, applyCodeZoom };
+export { initMainCTools, syncMainCHighlight };

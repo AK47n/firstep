@@ -207,7 +207,7 @@ async function editDescription(slug) {
 
 // —— 编辑弹窗（library-edit-dialog/06）：平台级编辑——硬件身份（kit/链接）+ 文件增删。
 // 复用 05 模态骨架（.lib-edit-*）、文件行（addFileRow/collectFiles/pickFilesInto）。
-export function editModule(slug) {
+function editModule(slug) {
   const module = (state.modules || []).find((mo) => mo.slug === slug);
   if (!module) { toast("info", "未找到模块 " + slug); return; }
   document.querySelectorAll(".lib-edit-overlay").forEach((o) => o.remove());
@@ -415,7 +415,7 @@ export function editModule(slug) {
   platSel.focus();
 }
 
-export async function deleteModule(slug) {
+async function deleteModule(slug) {
   if (!await confirmModal({
     title: "删除模块？",
     message: "删除模块 " + slug + " 的整个目录？",
@@ -428,7 +428,7 @@ export async function deleteModule(slug) {
   } catch (e) { toastError(e); }
 }
 
-export function newModulePayload() {
+function newModulePayload() {
   const files = collectFiles();
   if (files === null) return null;
   if (!Object.keys(files).length) { toast("error", "至少需要一个源文件"); return null; }

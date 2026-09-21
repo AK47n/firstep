@@ -221,5 +221,3 @@ export function initParamsChat() {
   window.addEventListener("revise-context-loaded", () => paramsChatReset());
   window.addEventListener("tasks-invalidated", () => paramsChatReset());
 }
-
-export { paramsChatReset };

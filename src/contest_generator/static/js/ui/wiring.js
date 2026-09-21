@@ -121,7 +121,7 @@ function filterGroupsForTask(groups, taskId) {
  * 此时需要。接线引用 = fx 单点 taskWiringRefs（最新轮引用 → 否则 resources
  * 反推，inferred 标记同源——评审整改：与渲染分支分居两处曾致 toggle 重渲
  * caption 漂移）；句柄带 inferred，重渲保持「按引脚资源标定」。 */
-export function attachWiringInputs(root, tasksById, assets) {
+function attachWiringInputs(root, tasksById, assets) {
   if (!root) return;
   root.querySelectorAll("[data-wiring-uid]").forEach((host) => {
     const uid = host.getAttribute("data-wiring-uid") || "";
@@ -158,7 +158,7 @@ export function initWiringToggle() {
 }
 
 /** 任务 id → task 的 Map（attachWiringInputs 查任务用）。 */
-export function tasksByIdMap(plan) {
+function tasksByIdMap(plan) {
   const map = new Map();
   ((plan || {}).tasks || []).forEach((t) => {
     if (t && t.id) map.set(t.id, t);

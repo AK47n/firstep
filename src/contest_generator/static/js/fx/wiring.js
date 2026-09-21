@@ -235,7 +235,7 @@ function boardPinParts(board, hlPins) {
  *    构造）→ 该侧改等距布局：按焊盘 cy 稳定排序，端子盒依次铺
  *    TOP_PAD+ROW_H/2+k*ROW_H（侧内单调 → 不交叉、盒不重叠）。
  * 输出 [{line, pad:{cx,cy,side}, boxX, boxY, boxCy, path}]。 */
-export function layoutWiring(board, lines) {
+function layoutWiring(board, lines) {
   const groupBySide = { L: [], R: [] };
   for (const line of lines) {
     const pad = padCenter(board, line.pin);

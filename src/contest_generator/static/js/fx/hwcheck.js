@@ -859,7 +859,7 @@ export function hwcheckConsoleHTML(console) {
 // ===========================================================================
 
 // 定性标签的兜底文案（服务端 verdict_label 缺失时才用；正常情况用服务端的）
-export const HWCHECK_VERDICT_FALLBACK = "先按下面的线索查";
+const HWCHECK_VERDICT_FALLBACK = "先按下面的线索查";
 
 // hwcheckSymptomText(state)：学生填的现象（去首尾空白；空串 = 还不能提交）。
 export function hwcheckSymptomText(state) {

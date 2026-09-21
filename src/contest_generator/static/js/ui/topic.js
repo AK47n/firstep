@@ -143,7 +143,7 @@ function renderTopicPages(box, cached) {
 /** 赛题详情弹窗：元数据 + 题面全文 + 页图懒加载 + 操作（用此题生成 / 编辑 /
  * 删除）。复用 .ref-files-overlay 遮罩与关闭模式（Esc / × / 点遮罩）；
  * 数据 = 浏览列表缓存同源（不另发请求）。编辑按钮的打开行为归工单 05。 */
-export async function viewTopicDetail(key) {
+async function viewTopicDetail(key) {
   const entry = (topicEntries || []).find((t) => t.key === key);
   if (!entry) { toast("info", "未找到赛题 " + key); return; }
   const overlay = document.createElement("div");
@@ -188,7 +188,7 @@ export async function viewTopicDetail(key) {
  * 复用 .ref-files-overlay 遮罩与关闭模式；年份 + 编号只读展示（身份不可改）；
  * 成功 = 刷新列表（health 服务端重算）+ 关窗，失败 = 弹窗内显示 400 中文
  * 原因（磁盘零变化）。 */
-export async function viewTopicEdit(key) {
+async function viewTopicEdit(key) {
   const entry = (topicEntries || []).find((t) => t.key === key);
   if (!entry) { toast("info", "未找到赛题 " + key); return; }
   const overlay = document.createElement("div");
@@ -252,7 +252,7 @@ function clearTopicFilter() {
   renderTopics();
 }
 
-export function initTopicToolbar() {
+function initTopicToolbar() {
   $("topic-filter").addEventListener("input", () => {
     clearTimeout(topicSearchTimer);
     // 防抖回调里直接读 DOM（不依赖事件对象 target 的异步引用——派发后就失效）
@@ -304,7 +304,7 @@ export async function loadTopicGroupVocabulary() {
 // /api/topics/categories（与后端校验同源——前端不硬编码词表）；失败降级 =
 // 空数组（筛选下拉只剩「全部」，编辑/校对下拉只剩「（未标记）」，后端校验
 // 兜底 400 中文）。
-export async function loadTopicCategories() {
+async function loadTopicCategories() {
   try {
     const data = await apiGet("/api/topics/categories");
     topicCategories = (data && Array.isArray(data.categories)) ? data.categories : [];
@@ -343,7 +343,7 @@ export async function loadTopics() {
   }
 }
 
-export async function deleteTopic(key) {
+async function deleteTopic(key) {
   if (!await confirmModal({
     title: "删除赛题条目？",
     message: "删除赛题 " + key + " 的整个条目目录（含题面与原 PDF）？",
@@ -356,7 +356,7 @@ export async function deleteTopic(key) {
   } catch (e) { toastError(e); }
 }
 
-export function renderProofreadRows() {
+function renderProofreadRows() {
   const box = $("topic-proofread-rows");
   box.innerHTML = "";
   if (!topicRows.length) {

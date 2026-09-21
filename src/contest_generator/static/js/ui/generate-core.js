@@ -373,9 +373,7 @@ async function flashRun() {
 //（监听器随簇迁入），按检查表导出为模块 API；host 实际使用
 // renderGenerateSuccess / initScoreChecklist /
 // 修复中心服务已随工单 16 改静态 import（startFixCenter / compileBanner / toolchains）。
-export { generateMain, renderGenerateSuccess,
-  renderScoreChecklist, scoreChecklistSyncCurrent, scoreChecklistExportNow,
-  initScoreChecklist };
+export { initScoreChecklist };
 
 
 /**

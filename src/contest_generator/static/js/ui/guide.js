@@ -35,7 +35,7 @@ function applyActive() {
 }
 
 /** 切换子页签（key 不在 GUIDE_TABS 内则忽略）。 */
-export function switchGuideTab(key) {
+function switchGuideTab(key) {
   if (!GUIDE_TABS.some((t) => t.key === key)) return;
   state.active = key;
   applyActive();

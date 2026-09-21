@@ -16,7 +16,7 @@ import { esc } from "./core.js";
 // 最高（4）——压过当前命中 current(3)/查找 hit(2)/词 word(1)/括号 bracket(1)；
 // bracket-depth-* 未登记 = 默认 0（最低——彩虹为底色，被当前对描边 bracket /
 // 选中词 word / 查找 hit 覆盖时让位，见工单 code-editor-refine/04）。
-export const MARK_PRIORITY = { current: 3, hit: 2, word: 1, bracket: 1, error: 4 };
+const MARK_PRIORITY = { current: 3, hit: 2, word: 1, bracket: 1, error: 4 };
 
 // 词字符（工单 05）：字母 / 数字 / 下划线连续段（VSCode 语义——中文与符号
 // 不构成标识符词；数字也是词字符，光标在数字上同样高亮同数字）。

@@ -8,7 +8,7 @@
 import { syncCollapseBtn } from "./generate.js";
 
 export const SETTINGS_COLLAPSE_KEY = "firstep.settingsCollapse.v1";
-export const SETTINGS_DEFAULT_COLLAPSED =
+const SETTINGS_DEFAULT_COLLAPSED =
   new Set(["libs", "toolchain", "local-llm", "vision", "ai-billing"]);
 export function parseSettingsCollapse(raw) {
   if (!raw) return {};
