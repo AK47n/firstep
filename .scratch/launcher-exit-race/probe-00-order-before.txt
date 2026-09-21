@@ -1,0 +1,22 @@
+== 现场测量：F5 重载时「旧页面的 bye」与「新页面的请求」谁先到 ==
+   服务：http://127.0.0.1:7233（FIRSTEP_LAUNCHER=1）；轮数 10
+
+✗ 第 4 轮：服务/页面已经没了（ready=false / health=false）——**竞态命中**
+   这一轮服务端处理顺序：GET / → POST /api/tabs/bye
+浏览器侧事件（请求**发出**的顺序；时间是相对各轮起点的近似）——共 7 条：
+   第 1 轮：GET / @+9ms
+   第 1 轮：POST /api/tabs/register @+446ms
+   第 2 轮：GET / @+5ms
+   第 2 轮：POST /api/tabs/register @+425ms
+   第 3 轮：GET / @+7ms
+   第 3 轮：POST /api/tabs/register @+421ms
+   第 4 轮：GET / @+6ms
+
+第 1 轮（reload → 页面可用 543ms；服务活着 true）：服务端处理顺序 = GET / → POST /api/tabs/bye → POST /api/tabs/register
+第 2 轮（reload → 页面可用 546ms；服务活着 true）：服务端处理顺序 = GET / → POST /api/tabs/bye → POST /api/tabs/register
+第 3 轮（reload → 页面可用 560ms；服务活着 true）：服务端处理顺序 = GET / → POST /api/tabs/bye → POST /api/tabs/register
+第 4 轮（reload → 页面可用 15447ms；服务活着 false）：服务端处理顺序 = GET / → POST /api/tabs/bye
+
+服务端进程还活着吗：已退出（exit 0）
+跑完的轮数：4 / 10（**中途命中竞态**）
+（服务已由本探针收掉）

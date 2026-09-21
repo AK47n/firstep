@@ -1,0 +1,39 @@
+== 现场测量：F5 重载时「旧页面的 bye」与「新页面的请求」谁先到 ==
+   服务：http://127.0.0.1:7732（FIRSTEP_LAUNCHER=1）；轮数 10
+
+浏览器侧事件（请求**发出**的顺序；时间是相对各轮起点的近似）——共 20 条：
+   第 1 轮：GET / @+7ms
+   第 1 轮：POST /api/tabs/register @+33ms
+   第 2 轮：GET / @+6ms
+   第 2 轮：POST /api/tabs/register @+37ms
+   第 3 轮：GET / @+8ms
+   第 3 轮：POST /api/tabs/register @+39ms
+   第 4 轮：GET / @+6ms
+   第 4 轮：POST /api/tabs/register @+33ms
+   第 5 轮：GET / @+4ms
+   第 5 轮：POST /api/tabs/register @+22ms
+   第 6 轮：GET / @+5ms
+   第 6 轮：POST /api/tabs/register @+23ms
+   第 7 轮：GET / @+4ms
+   第 7 轮：POST /api/tabs/register @+21ms
+   第 8 轮：GET / @+5ms
+   第 8 轮：POST /api/tabs/register @+30ms
+   第 9 轮：GET / @+4ms
+   第 9 轮：POST /api/tabs/register @+22ms
+   第 10 轮：GET / @+5ms
+   第 10 轮：POST /api/tabs/register @+46ms
+
+第 1 轮（reload → 页面可用 523ms；服务活着 true）：服务端处理顺序 = GET / → POST /api/tabs/bye → POST /api/tabs/register
+第 2 轮（reload → 页面可用 686ms；服务活着 true）：服务端处理顺序 = GET / → POST /api/tabs/bye → POST /api/tabs/register
+第 3 轮（reload → 页面可用 699ms；服务活着 true）：服务端处理顺序 = GET / → POST /api/tabs/bye → POST /api/tabs/register
+第 4 轮（reload → 页面可用 603ms；服务活着 true）：服务端处理顺序 = GET / → POST /api/tabs/bye → POST /api/tabs/register
+第 5 轮（reload → 页面可用 687ms；服务活着 true）：服务端处理顺序 = GET / → POST /api/tabs/bye → POST /api/tabs/register
+第 6 轮（reload → 页面可用 739ms；服务活着 true）：服务端处理顺序 = GET / → POST /api/tabs/bye → POST /api/tabs/register
+第 7 轮（reload → 页面可用 733ms；服务活着 true）：服务端处理顺序 = GET / → POST /api/tabs/bye → POST /api/tabs/register
+第 8 轮（reload → 页面可用 833ms；服务活着 true）：服务端处理顺序 = GET / → POST /api/tabs/bye → POST /api/tabs/register
+第 9 轮（reload → 页面可用 884ms；服务活着 true）：服务端处理顺序 = GET / → POST /api/tabs/bye → POST /api/tabs/register
+第 10 轮（reload → 页面可用 840ms；服务活着 true）：服务端处理顺序 = GET / → POST /api/tabs/bye → POST /api/tabs/register
+
+服务端进程还活着吗：活着
+跑完的轮数：10 / 10（全程活着）
+（服务已由本探针收掉）

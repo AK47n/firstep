@@ -1,13 +1,16 @@
-// boot-contract.mjs — 装载根契约的**判据单源**（工单 frontend-boot-module/01）。
+// boot-contract.mjs — 装载根契约的**判据单源**（工单 frontend-boot-module/01；判据⑥ 由
+// 工单 launcher-exit-race/01 加入）。
 //
 // 为什么单独一个文件（照 import-usage.mjs / ui-dom-contract.mjs 先例）：判据要被三处用——
-//   1. 守卫本体（fx-guard / static-import-guard / import-usage-guard / ui-dom-contract）
-//   2. 红证脚本 `.scratch/frontend-boot-module/probe-01-red-proof.mjs`
-//      （同一套判据作用在**收走前那个提交**的源码上）
+//   1. 守卫本体（fx-guard / static-import-guard / import-usage-guard / ui-dom-contract /
+//      tab-register-guard）
+//   2. 红证脚本（`.scratch/frontend-boot-module/probe-01-red-proof.mjs`、
+//      `.scratch/launcher-exit-race/probe-01-red-proof.mjs`）
+//      （同一套判据作用在**收走前 / 修复前那个提交**的源码上）
 //   3. 探针的判据强度自检（内存注入）
 // 放在 `.test.mjs` 里会让 import 方顺带注册并运行那批用例。
 //
-// ## 五类不变量（判据全部是纯函数：源码文本 / 模块表进，违规清单出）
+// ## 六类不变量（判据全部是纯函数：源码文本 / 模块表进，违规清单出）
 //
 //   ① `indexHtmlImports(html)` = 0    —— 装载根不在 HTML 里（判据 ①）
 //   ② `inlineDefinitions(html)` = 0   —— HTML 里零顶层 JS 定义（判据 ②）
@@ -17,6 +20,9 @@
 //   ⑤ `unconsumedExports(...)` / `nonFunctionCallees(...)` —— **导出面**对账（工单
 //      export-surface-guard/01，判据 D/T）：导出必须真有消费者（import 边）＋ 被调用的导出必须是
 //      函数形态。④ 管"被 import 的名字有没有出处"，⑤ 管反向与形态——三条合起来把导出面夹住。
+//   ⑥ `earlyRegisterProblems(html, appJs)` = 0 —— **最早的标签登记在模块图之前**（工单
+//      launcher-exit-race/01-02）：它决定"F5 时会不会被应用自己关掉服务"，是功能正确性，
+//      不是风格（缘由见⑥那节的注释）。
 //
 // ## 三个必须踩住的坑（都写进实现里了）
 //
@@ -177,8 +183,10 @@ export function maskNonCode(text) {
 // ① / ② index.html：零 import、零顶层 JS 定义
 // ---------------------------------------------------------------------------
 
-/** 抽 HTML 里全部 `<script …>…</script>` 块 → [{ attrs, src, text, line }]。
- *  fx-guard 的"index.html 脚本块恰好两处"判据用它（内联 JS 的表达式形态只有它能看见）。 */
+/** 抽 HTML 里全部 `<script …>…</script>` 块 → [{ attrs, src, text, line, index, raw }]。
+ *  fx-guard 的"index.html 脚本块恰好两处"判据用它（内联 JS 的表达式形态只有它能看见）；
+ *  `index` / `raw` = 块首偏移与**整块原文**（含标签）——判据⑥ 比"登记在不在装载标签之前"，
+ *  守卫的合成注入按 `raw` 整块替换（按行号比会被同行的多语句骗过去）。 */
 export function scriptBlocks(html) {
   const out = [];
   const re = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi;
@@ -191,6 +199,8 @@ export function scriptBlocks(html) {
       src: srcMatch ? srcMatch[1] : null,
       text: m[2],
       line: html.slice(0, m.index).split("\n").length,
+      index: m.index,
+      raw: m[0],
     });
   }
   return out;
@@ -1021,6 +1031,234 @@ export function exportFaceProblems(pageEntries, consumerEntries = []) {
   if (callSites < EXPORT_FACE_FLOORS.callSites) {
     problems.push(`调用位只抽到 ${callSites} 条（下限 ${EXPORT_FACE_FLOORS.callSites}）`
       + "——判据 T 会真空绿");
+  }
+  return problems;
+}
+
+// ---------------------------------------------------------------------------
+// ⑥ 早注册：最早的 /api/tabs/register 必须在装载标签之前（工单 launcher-exit-race/01-02）
+//
+// ## 为什么这条不变量值得一条判据
+//
+// 启动器模式（`FIRSTEP_LAUNCHER=1`）下"最后一个标签关闭 = 停服务"：前端在 `pagehide` 时
+// `POST /api/tabs/bye`，服务端见注册表空了就起 `_EXIT_GRACE`（1.5s）宽限，宽限内没有新的
+// register 就 `os._exit(0)`。而**旧实现里 register 住在 `app.js`**——它要等 `boot.js` 的
+// 整张模块图（132 个模块 + 4,668 行的 index.html）装载完才发得出来；F5 时旧页面的 bye 先到、
+// 新页面的 register 迟到 ⇒ **应用把自己的服务关掉**（现场：连接跑第 4 次 reload 命中，
+// `.scratch/launcher-exit-race/probe-00-order.*`）。
+//
+// 所以"登记必须早于模块图"这件事不是风格问题，是**功能正确性**。而且窗口只有一处放得下：
+// `index.html` head 的内联脚本（ESM 静态 import 会先把整张图取完才求值，所以写在 `boot.js`
+// 正文第一行也没用）。这条判据就是钉住那个位置与那份 payload 的形状。
+//
+// ## 判据（纯函数：源码文本进，违规清单出）
+//
+//   ① `index.html` 的**内联**脚本里真有 register 调用（端点字面量拿**原文**匹配，再用
+//      "该标识符在掩码文本里还完整在"当锚点 ⇒ 注释里的同名字样不算、`src=` 指向的模块
+//      文件也不算 —— 端点写在字符串字面量里，只看掩码文本会把它整段掩掉，判不了）；
+//   ② 那一处出现在**装载标签之前**（字符偏移比较，不是"看着在前面"）；
+//   ③ 两侧的 `sessionStorage` 键**同源**（内联脚本 ∩ `app.js` 必须一致）：分叉 = 登记用的 id
+//      与注销用的 id 不是同一个 = 注册表里留下永远没人注销的条目 = **"关浏览器 = 停服务"坏掉**；
+//   ④ 两处 payload 都带**文档实例令牌**（`epoch`）：它是"这是哪一次加载"的身份——缺了它，
+//      乱序到达的旧告别会把**刚登记的新页面**注销掉，秒级竞态原地复现（工单 02）。
+//      判在**调用点之后的 payload 窗口**里，不是"整份源码里有这个字段"（否则页面上任何
+//      同名对象字段都能把它喂绿）。
+//
+// 判据**不绑写法**：变量名、`getItem` 调几次、payload 怎么拼、注释怎么写都不管；管的是
+// "最早的登记在不在模块图之前"「两侧用的是不是同一个 id」这两个事实。
+// ---------------------------------------------------------------------------
+
+/** 标签登记端点（契约字面量单源：判据、守卫、红证探针共用一份）。 */
+export const TAB_REGISTER_ENDPOINT = "/api/tabs/register";
+/** 标签注销端点（内部件：判据 ④ 用；对外没有消费者就不导出——判据 D 会红）。 */
+const TAB_BYE_ENDPOINT = "/api/tabs/bye";
+/** 文档实例令牌的字段名（两处 payload 都必须带）。**内部件**，同上。 */
+const TAB_EPOCH_FIELD = "epoch";
+/** 早注册的对侧文件（判据 ③/④ 要读的那一份）。**内部件**。 */
+const APP_JS_KEY = "app.js";
+
+/**
+ * 「这处匹配在**真代码**里，不是注释里」的判据 —— 掩码件保长度、且只掩**内容**
+ * （注释 / 字符串 / 正则的内容变空格，标识符原样保留），所以：
+ * **匹配起点那个标识符在掩码文本里还完整在 = 它不是注释里的同名字样**。
+ *
+ * 为什么不能直接拿端点字面量去掩码文本里找：端点写在**字符串字面量**里，它的内容
+ * 恰好被掩掉了（实测踩到：「整份 HTML 里都没有 /api/tabs/register」这句假读数）。
+ * 所以端点只能拿**原文**匹配，再用标识符当"这是代码"的锚点。
+ */
+function codeAnchorHolds(raw, masked, m, name) {
+  const at = m.index + (m[0].length - m[0].trimStart().length);
+  return raw.slice(at, at + name.length) === name
+    && masked.slice(at, at + name.length) === name;
+}
+
+/**
+ * 端点调用点（**真代码**里的 `fetch("<端点>"` / `sendBeacon("<端点>"`；注释里的不算）
+ * → [{ index, call }]（index 相对于传入的 `text`）。内部件：判据 ① 与 ④ 共用。
+ */
+function endpointCalls(text, endpoint) {
+  const masked = maskCommentsAndStrings(text);
+  const esc = endpoint.replace(/[/.]/g, (c) => "\\" + c);
+  const re = new RegExp("(fetch|sendBeacon)\\s*\\(\\s*[\"'`]" + esc + "[\"'`]", "g");
+  const out = [];
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    if (codeAnchorHolds(text, masked, m, m[1])) out.push({ index: m.index, call: m[1] });
+  }
+  return out;
+}
+
+/** 真代码里的 `名字 = "字面量"` → 字面量；注释里 / 大写常量（`TAB_EPOCH`）不算 → null。 */
+function literalOf(text, name) {
+  if (!/^[A-Za-z_$][\w$]*$/.test(name)) return null;
+  const masked = maskCommentsAndStrings(text);
+  const re = new RegExp(`\\b${name.replace(/\$/g, "\\$&")}\\s*=\\s*["']([^"']+)["']`, "g");
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    if (codeAnchorHolds(text, masked, m, name)) return m[1];
+  }
+  return null;
+}
+
+/**
+ * 一段源码里 `sessionStorage` 用到的字符串键 → Set<键>（`getItem` / `setItem` / `removeItem`）。
+ *
+ * 两种写法都要认（实测两种都在用）：**直接给字面量**（index.html 内联脚本，那里不许有
+ * 顶层定义，只能写字符串）与**给命名常量**（`app.js` 的 `TAB_ID_KEY`）。注释里举例的键名不算。
+ */
+export function sessionStorageKeys(text) {
+  const masked = maskCommentsAndStrings(text);
+  const out = new Set();
+  const re = /sessionStorage\s*\.\s*(?:getItem|setItem|removeItem)\s*\(\s*([^,)]+)/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    if (!codeAnchorHolds(text, masked, m, "sessionStorage")) continue;
+    const arg = m[1].trim();
+    const literal = /^["']([^"']+)["']$/.exec(arg);
+    if (literal) { out.add(literal[1]); continue; }
+    const named = literalOf(text, arg);
+    if (named !== null) out.add(named);
+  }
+  return out;
+}
+
+/**
+ * 端点调用的**实参区间**（从 `(` 到配对的 `)`）→ { from, to }；数不出来返回 null。
+ *
+ * 在**掩码**文本上数括号：字符串 / 注释 / 正则的**内容**已被掩成空格（里面的括号不会来捣乱），
+ * 模板串的 `${…}` 表达式保留花括号但不影响**圆括号**平衡。用实参区间而不是"往后 N 个字符的
+ * 窗口"，是为了让判据 ④ 判的确实是**这次调用的 payload**——窗口给的是"附近有就算过"，
+ * 紧跟调用的一句 `window.x = { epoch: 1 }` 就能把它喂绿（评审实测）。
+ */
+function callArguments(text, call) {
+  const masked = maskCommentsAndStrings(text);
+  const open = masked.indexOf("(", call.index);
+  if (open < 0) return null;
+  let depth = 0;
+  for (let i = open; i < masked.length; i++) {
+    if (masked[i] === "(") depth++;
+    else if (masked[i] === ")" && --depth === 0) return { from: call.index, to: i + 1 };
+  }
+  return null;
+}
+
+/**
+ * 端点调用的 **payload 里**有没有某个字段（`名字:`）。
+ *
+ * 为什么不能拿整份源码找 `/\bepoch\s*:/`：页面上任何同名的对象字段都能把它喂绿
+ * （`window.__x = { epoch: 1 }`），判据就与"这两处 payload 带了令牌"脱钩了。
+ */
+function payloadFieldNear(text, endpoint, field) {
+  const masked = maskCommentsAndStrings(text);
+  for (const call of endpointCalls(text, endpoint)) {
+    const args = callArguments(text, call);
+    if (args === null) continue;
+    const raw = text.slice(args.from, args.to);
+    const maskedArgs = masked.slice(args.from, args.to);
+    const re = new RegExp(`\\b${field}\\s*:`, "g");
+    let m;
+    while ((m = re.exec(raw)) !== null) {
+      if (codeAnchorHolds(raw, maskedArgs, m, field)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * 判据 ⑥：早注册契约 → [{ why }]；空数组 = 不变量成立。
+ *
+ * `html` = `static/index.html` 原文；`appJs` = `static/js/app.js` 原文（两侧的键要对账）。
+ */
+export function earlyRegisterProblems(html, appJs) {
+  const problems = [];
+  const blocks = scriptBlocks(html);
+  const inline = blocks.filter((b) => b.src === null);
+  const loadTags = blocks.filter((b) => /type\s*=\s*["']module["']/i.test(b.attrs));
+  const sites = inline.map((b) => ({
+    block: b,
+    // 块内文本在全文的偏移（`<script …>` 开标签之后）
+    innerStart: b.index + b.raw.indexOf(">") + 1,
+    calls: endpointCalls(b.text, TAB_REGISTER_ENDPOINT),
+  }));
+  const early = sites.find((s) => s.calls.length > 0);
+
+  // ① 内联脚本里真有 register 调用
+  if (!early) {
+    const anywhere = html.includes(TAB_REGISTER_ENDPOINT);
+    problems.push({
+      why: `index.html 的**内联**脚本里没有 ${TAB_REGISTER_ENDPOINT} 的调用`
+        + (anywhere ? "（字样出现了，但不是内联脚本里的真调用——注释里 / 模块文件里都不算）"
+          : "（整份 HTML 里都没有）"),
+    });
+  }
+
+  // ② 那一处在装载标签之前
+  if (early) {
+    const at = early.innerStart + early.calls[0].index;
+    if (loadTags.length === 0) {
+      problems.push({ why: "找不到装载标签（type=module 的 script）——判据 ② 失去参照，拒绝给绿灯" });
+    } else if (at > loadTags[0].index) {
+      problems.push({
+        why: `最早的 register 在装载标签之后（偏移 ${at} > ${loadTags[0].index}）`
+          + "——它要等整张模块图装载完才发得出来，F5 竞态原样复现",
+      });
+    }
+  }
+
+  // ③ 两侧的 sessionStorage 键同源
+  const inlineKeys = new Set(sites.flatMap((s) => [...sessionStorageKeys(s.block.text)]));
+  const appKeys = appJs === null ? new Set() : sessionStorageKeys(appJs);
+  if (inlineKeys.size === 0) {
+    problems.push({ why: "内联脚本没读 sessionStorage —— 登记拿不到（稳定的）tab_id" });
+  }
+  if (appKeys.size === 0) {
+    problems.push({ why: `${APP_JS_KEY} 里没读 sessionStorage —— 抽取面失效（判据 ③ 会真空绿）` });
+  }
+  if (inlineKeys.size && appKeys.size
+      && ([...inlineKeys].some((k) => !appKeys.has(k)) || [...appKeys].some((k) => !inlineKeys.has(k)))) {
+    problems.push({
+      why: "两侧的 sessionStorage 键不一致（登记与注销会算成两个不同的标签 = 留下永不注销的幽灵条目）"
+        + `：内联脚本 [${[...inlineKeys].join(", ")}] vs ${APP_JS_KEY} [${[...appKeys].join(", ")}]`,
+    });
+  }
+
+  // ④ 两处 payload 都带文档实例令牌
+  const payloadSites = [
+    ["index.html 内联脚本的 register", early ? early.block.text : null, TAB_REGISTER_ENDPOINT],
+    [`${APP_JS_KEY} 的 bye`, appJs, TAB_BYE_ENDPOINT],
+  ];
+  for (const [label, text, endpoint] of payloadSites) {
+    if (text === null) continue;                          // 该站缺席已由 ①/③ 报出
+    if (endpointCalls(text, endpoint).length === 0) {
+      problems.push({ why: `${label}：没找到 ${endpoint} 的调用` });
+      continue;
+    }
+    if (!payloadFieldNear(text, endpoint, TAB_EPOCH_FIELD)) {
+      problems.push({
+        why: `${label} 的 payload 没带 ${TAB_EPOCH_FIELD}（文档实例令牌）`
+          + "——乱序到达的旧告别会注销掉刚登记的新页面",
+      });
+    }
   }
   return problems;
 }

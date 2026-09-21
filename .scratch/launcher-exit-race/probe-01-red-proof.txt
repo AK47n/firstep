@@ -1,0 +1,24 @@
+== ① base 自校验（base=eae57b43）==
+  base index.html：内联脚本里 register 字样 没有（对）
+  base app.js：register 调用 有（对：登记住在模块里）
+  ✓ 通过（base 是修复前那一代）
+
+== ② 判据⑥ 作用在 base 上（应红）==
+  · index.html 的**内联**脚本里没有 /api/tabs/register 的调用（整份 HTML 里都没有）
+  · 内联脚本没读 sessionStorage —— 登记拿不到（稳定的）tab_id
+  · app.js 的 bye 的 payload 没带 epoch（文档实例令牌）——乱序到达的旧告别会注销掉刚登记的新页面
+  读数：脚本块 2 个 / 内联 1 个；装载标签偏移 544850；内联脚本里的 register 偏移 （没有）
+
+== ③ 当前工作树读数（本工单要求绿）==
+  判据⑥ 违规：0 条（绿）
+  读数（给人看，不是判据）：脚本块 2 个 / 内联 1 个；装载标签偏移 550691；内联脚本里的 register 偏移 172
+  登记点单源：app.js 里 已无 register（对）
+
+== ④ 判据非真空自检（最小 HTML，应报出）==
+  ✔ 报出 3 条：index.html 的**内联**脚本里没有 /api/tabs/register 的调用（整份 HTML 里都没有）
+
+== 结论 ==
+  红证（base 上必红）：成立
+  当前工作树：绿
+
+PASS（判据在修复前那一代上真会红，且当前树满足早注册契约）

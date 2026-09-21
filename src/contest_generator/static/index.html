@@ -11,6 +11,27 @@
       document.documentElement.setAttribute("data-theme", "light");
     }
   } catch (e) { /* 存储不可用时保持默认深色 */ }
+  // 标签登记（工单 launcher-exit-race/01）：**必须早于模块图**。启动器模式
+  // （FIRSTEP_LAUNCHER=1）下"关掉最后一个标签 = 停服务"：服务端见注册表空了只等
+  // 1.5 秒（webapp._EXIT_GRACE）就 os._exit，而 boot.js 那张模块图（132 个模块 +
+  // 本文件 4,668 行）装载完可能要好几秒——F5 时旧页面的 bye 先到、新页面的登记迟到，
+  // 应用会把自己的服务关掉（修复前现场：连跑第 4 次 reload 命中、进程 exit 0，
+  // 读数见 .scratch/launcher-exit-race/probe-00-order-before.txt；修复后同一探针
+  // 10/10 轮全程活着，见 -after.txt）。登记放在这一段（装载标签之前、模块图还没开始取）
+  // = 窗口从"秒级"降到"毫秒级"。
+  // tab_id 与 app.js 同取 sessionStorage（同一个键，判据在 tests/js/tab-register-guard.test.mjs；
+  // 本段不许有顶层定义，所以没有局部变量可存，键要读两次）。
+  // epoch = 本文档实例（performance.timeOrigin 在同一文档里恒定），由 app.js 注销时带上，
+  // 服务端据此忽略"上一个文档迟到的告别"（工单 launcher-exit-race/02）。
+  // 本段受 fx-guard 判据①②约束（零顶层定义 / 零 import 语句），所以只用表达式与语句写。
+  try {
+    if (!sessionStorage.getItem("firstep_tab_id")) {
+      sessionStorage.setItem("firstep_tab_id", crypto.randomUUID());
+    }
+    fetch("/api/tabs/register", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tab_id: sessionStorage.getItem("firstep_tab_id"),
+        epoch: performance.timeOrigin }) }).catch(() => {});
+  } catch (e) { /* 存储 / 加密接口不可用时登记失败：不影响页面本身 */ }
 </script>
 <style>
   /* 深色科技感单主题（工单 ui-dark-theme/01）：近黑底 #0d1117 + 青色强调 + 克制平面。

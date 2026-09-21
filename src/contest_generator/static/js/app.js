@@ -110,14 +110,27 @@ export const KIND_TEXT = { missing: "缺平台版本（生成将失败）", unve
 
 // ---------------------------------------------------------------------------
 // 标签会话（启动器模式）：打开登记、关闭注销——最后一个标签关掉 = 停服务
+//
+// **登记（register）不在这里**（工单 launcher-exit-race/01）：它必须**早于模块图**，住在
+// index.html head 的内联脚本里。原因不是风格：本模块要等 boot.js 整张模块图（132 个模块 +
+// 4,668 行的 index.html）装载完才求值，而服务端见注册表空了只等 1.5 秒（`_EXIT_GRACE`）
+// 就停服务——F5 时旧页面的 bye 先到、这里的登记迟到 ⇒ 应用把自己的服务关掉（修复前现场：
+// 连跑第 4 次 reload 命中，读数见 `.scratch/launcher-exit-race/probe-00-order-before.txt`）。
+// 所以这里只留「注销」一半。
+//
+// epoch = 本文档实例（performance.timeOrigin；同一个文档里恒定）。它与内联脚本那次登记
+// 天然同源（同一次加载 = 同一个值，不需要存、也不可能两侧漂移），服务端据此忽略"上一个
+// 文档迟到的告别"（不这么办的话，乱序到达的旧 bye 会把刚登记的新页面注销掉；工单 02）。
+// 键与端点的同源契约由 tests/js/tab-register-guard.test.mjs 钉住。
 // ---------------------------------------------------------------------------
 const TAB_ID_KEY = "firstep_tab_id";
+const TAB_EPOCH = performance.timeOrigin;
 let tabId = sessionStorage.getItem(TAB_ID_KEY);
+// 兜底：内联脚本万一没跑成（存储被拒等），这里仍建一个 id——注销不会拿 null 去发
 if (!tabId) { tabId = crypto.randomUUID(); sessionStorage.setItem(TAB_ID_KEY, tabId); }
-fetch("/api/tabs/register", { method: "POST", headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ tab_id: tabId }) }).catch(() => {});
 window.addEventListener("pagehide", () => {
-  navigator.sendBeacon("/api/tabs/bye", new Blob([JSON.stringify({ tab_id: tabId })],
+  navigator.sendBeacon("/api/tabs/bye", new Blob(
+    [JSON.stringify({ tab_id: tabId, epoch: TAB_EPOCH })],
     { type: "application/json" }));
 });
 
