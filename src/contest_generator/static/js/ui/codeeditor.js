@@ -31,7 +31,6 @@ import {
   codeWindowSpacerHTML,
   conflictHTML,
   editorLineRange,
-  isTabSavable,
   dirtySavableTabs,
   caretLineOf,
   caretColOf,

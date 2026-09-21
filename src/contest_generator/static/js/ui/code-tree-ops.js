@@ -23,7 +23,6 @@ import {
 import { openContextMenu, closeContextMenu } from "/js/ui/context-menu.js";  // 共享浮层菜单（工单 06 创建 / 07 复用）
 import {
   refreshCodeTreeOnly,
-  getCodeTreeFiles,
   getCodeTreeDir,
   isMainCDiskDir,
 } from "/js/ui/codeview.js";

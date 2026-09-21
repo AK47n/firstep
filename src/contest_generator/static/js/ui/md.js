@@ -5,7 +5,7 @@
 // fx/md.js（过滤/排序/统计/行渲染/弹窗壳），渲染管线 = fx/markdown.js
 // parseMarkdownBlocks + markdownPreviewHTML（与 code-viewer md 预览同管线，
 // 代码块语言分发/高亮单源）。
-import { $, apiGet, toast, toastError, copyText } from "/js/app.js";
+import { $, apiGet, toast, copyText } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
 import { parseMarkdownBlocks, markdownPreviewHTML } from "/js/fx/markdown.js";
 import {

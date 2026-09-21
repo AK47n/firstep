@@ -9,7 +9,7 @@ import { confirmModal } from "/js/ui/confirm.js";
 import {
   pdfHealth, pdfBroken, pdfFilterEntries, pdfSortEntries,
   pdfStats, pdfStatsText, pdfChipRowHTML, pdfRowHTML, pdfPagesUrl, pdfPagesText,
-  pdfDetailHTML, pdfTrashUrl, pdfRefsUrl, pdfTrashMessage, pdfDupRemainText, pdfTrashBodyHTML,
+  pdfDetailHTML, pdfTrashUrl, pdfRefsUrl, pdfTrashMessage, pdfTrashBodyHTML,
   pdfFileUrl,
 } from "/js/fx/pdf.js";
 

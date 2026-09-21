@@ -6,7 +6,7 @@
 // 但独立实现——母版语义（详情弹窗 / 关键文件白名单）与本工具无关，不 import
 // 耦合。模块约定见 fx/core.js 头部。
 import { esc, formatSize } from "./core.js";
-import { languageOf, highlightText } from "./highlight.js";
+import { highlightText } from "./highlight.js";
 
 // 树徽章变更类型（code-ide-flow/02 磁盘基线感知）：changes 映射的值单源——
 // fx 渲染层与 ui 胶水层共用同一常量（评审整改：裸字符串 "new"/"modified"

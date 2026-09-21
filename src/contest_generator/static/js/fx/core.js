@@ -112,7 +112,7 @@ export function retryNoteText(retryCount) {
 }
 
 /** 「已下载 X%」的百分比（总量未知 = 0；`error_kind` 只作分类不作百分比来源）。 */
-export function downloadedPercent(status) {
+function downloadedPercent(status) {
   const s = status || {};
   const total = s.total_bytes || 0;
   if (total <= 0) return 0;

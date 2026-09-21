@@ -25,7 +25,7 @@ import { parseHttpError, parseError } from "/js/fx/errors.js";  // SSE 终态错
 import { makeWaitClock, makeCancelButton } from "/js/ui/progress.js";  // 长任务秒表/取消（工单 ux-walkthrough-02/12/14）
 import { makeAbortable, isAbortError } from "/js/fx/abortable.js";
 import { draftDeleteMessage } from "/js/fx/danger.js";  // 草稿删除确认文案（工单 ux-walkthrough-02/15）
-import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, resourcesOverviewHTML, aggregateResourceGroups, scoreRefsOverviewHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML, ideaDraftListHTML, checklistStateKey, tasksDoneCount, unresolvedPrereqs, taskStatusLabel, taskChangesHTML, taskDetailsSnapshot, taskDetailsRestore } from "/js/fx/task.js";
+import { taskCanFeedback, taskCardActions, tasksGridHTML, tasksProgressText, tasksOverviewHTML, aggregateResourceGroups, scoreRefsOverviewHTML, taskStepReportBlocksHTML, verifyStatusMarkup, taskDialogButtonHTML, taskDialogAreaHTML, nextTaskHint, taskNextHintHTML, ideaResultHTML, globalChatHTML, globalNoteBadgeHTML, ideaDraftListHTML, checklistStateKey, tasksDoneCount, unresolvedPrereqs, taskStatusLabel, taskChangesHTML, taskDetailsSnapshot, taskDetailsRestore } from "/js/fx/task.js";
 import { maincJumpToLine } from "/js/fx/code.js";  // 错误行跳转单源（error-jump-task/02）
 import { flashContainer } from "/js/fx/flash.js";
 import { flashRunShared } from "/js/ui/flash.js";

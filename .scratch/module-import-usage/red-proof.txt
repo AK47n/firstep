@@ -1,0 +1,42 @@
+=== ① base 自校验（选错 base 必须当场大声失败）===
+  base = f1c9e1c7（解析为 f1c9e1c7d8d7142109d4d2e6cead2aff86f1f4e5）
+  base 与工作树的差异文件：13 个
+    · fx/codeview.js
+    · fx/core.js
+    · fx/full-update.js
+    · ui/code-compile.js
+    · ui/code-tree-ops.js
+    · ui/codeeditor.js
+    · ui/flash.js
+    · ui/generate-readiness.js
+    · ui/generate-tasks.js
+    · ui/materials-update.js
+    · ui/md.js
+    · ui/pdf.js
+    · ui/resource-board.js
+  12 处锚点 ＋ 级联锚点：全部还在 ✓（选错 base 时这几条会先炸）
+
+=== ② 判据在 base 上（f1c9e1c7）===
+  未使用具名：**12** 处（应 12 处）
+    · fx/codeview.js::languageOf   ← 旧口径（工单 02）看不见
+    · fx/full-update.js::downloadedPercent   ← 旧口径（工单 02）看不见
+    · ui/code-compile.js::getMainCDiskDir
+    · ui/code-tree-ops.js::getCodeTreeFiles   ← 旧口径（工单 02）看不见
+    · ui/codeeditor.js::isTabSavable
+    · ui/flash.js::$   ← 旧口径（工单 02）看不见
+    · ui/generate-readiness.js::readinessRowHTML
+    · ui/generate-tasks.js::resourcesOverviewHTML
+    · ui/materials-update.js::aggregateSelection   ← 旧口径（工单 02）看不见
+    · ui/md.js::toastError   ← 旧口径（工单 02）看不见
+    · ui/pdf.js::pdfDupRemainText   ← 旧口径（工单 02）看不见
+    · ui/resource-board.js::resourcesToolbarHTML
+  base 上其余判据：graphBreaks=0 / orphans=0 / wiring=0 / registry=0 / bareLoads=0 / 判据 D=0 / 判据 T=0 / starImports=0 / 取数面体检=0 / unreachableModules=0
+
+=== ③ 当前工作树 ===
+  未使用具名：**0** 处 ✓
+  其余判据：graphBreaks=0 / orphans=0 / wiring=0 / registry=0 / bareLoads=0 / 判据 D=0 / 判据 T=0 / starImports=0 / 取数面体检=0 / unreachableModules=0
+
+=== ④ 合成自检（synthetic-cases.mjs，与 probe-01 同一张表）===
+  25/25 成立
+
+**PASS**

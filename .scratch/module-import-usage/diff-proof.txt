@@ -1,0 +1,43 @@
+=== git diff 逐行归因（base f1c9e1c7 → 工作树）===
+改动文件：13 个（只看产品面 src/contest_generator/static/js/）
+
+  fx/codeview.js  语句 2 → 2 / 老行 458 / 只有 - 的行 0 / 摘名
+  fx/core.js  语句 0 → 0 / 老行 128 / 只有 - 的行 0 / 级联
+  fx/full-update.js  语句 1 → 1 / 老行 166 / 只有 - 的行 0 / 摘名
+  ui/code-compile.js  语句 10 → 9 / 老行 286 / 只有 - 的行 1 / 整条删
+  ui/code-tree-ops.js  语句 8 → 8 / 老行 274 / 只有 - 的行 1 / 整行摘名
+  ui/codeeditor.js  语句 19 → 19 / 老行 3230 / 只有 - 的行 1 / 整行摘名
+  ui/flash.js  语句 2 → 2 / 老行 38 / 只有 - 的行 0 / 摘名
+  ui/generate-readiness.js  语句 4 → 4 / 老行 190 / 只有 - 的行 0 / 摘名
+  ui/generate-tasks.js  语句 24 → 24 / 老行 1849 / 只有 - 的行 0 / 摘名
+  ui/materials-update.js  语句 4 → 4 / 老行 150 / 只有 - 的行 1 / 整行摘名
+  ui/md.js  语句 4 → 4 / 老行 188 / 只有 - 的行 0 / 摘名
+  ui/pdf.js  语句 4 → 4 / 老行 314 / 只有 - 的行 0 / 摘名
+  ui/resource-board.js  语句 5 → 5 / 老行 88 / 只有 - 的行 0 / 摘名
+
+归因：
+  未改动老行 7359
+  摘名 8
+  整行摘名 3
+  整条删 1
+  级联 1
+  （口径：**摘名 = 11**，其中 8 处摘同行的名字、3 处删"名字独占的一行"；整条删 = 1；级联 = 1）
+**归不了因的差异：0 处**
+
+=== 行尾写法与尾部换行（逐文件逐字节）===
+  PASS  fx/codeview.js  末 6 字节 7d293b0a7d0a → 7d293b0a7d0a  换行 0 CRLF + 458 LF → 0 CRLF + 458 LF（整行删 0 行）
+  PASS  fx/core.js  末 6 字节 7d293b0a7d0a → 7d293b0a7d0a  换行 0 CRLF + 128 LF → 0 CRLF + 128 LF（整行删 0 行）
+  PASS  fx/full-update.js  末 6 字节 7d293b0a7d0a → 7d293b0a7d0a  换行 0 CRLF + 166 LF → 0 CRLF + 166 LF（整行删 0 行）
+  PASS  ui/code-compile.js  末 6 字节 7d293b0a7d0a → 7d293b0a7d0a  换行 0 CRLF + 286 LF → 0 CRLF + 285 LF（整行删 1 行）
+  PASS  ui/code-tree-ops.js  末 6 字节 7d293b0a7d0a → 7d293b0a7d0a  换行 0 CRLF + 274 LF → 0 CRLF + 273 LF（整行删 1 行）
+  PASS  ui/codeeditor.js  末 6 字节 20207d0a7d0a → 20207d0a7d0a  换行 0 CRLF + 3230 LF → 0 CRLF + 3229 LF（整行删 1 行）
+  PASS  ui/flash.js  末 6 字节 20207d0a7d0a → 20207d0a7d0a  换行 0 CRLF + 38 LF → 0 CRLF + 38 LF（整行删 0 行）
+  PASS  ui/generate-readiness.js  末 6 字节 636b207d3b0a → 636b207d3b0a  换行 0 CRLF + 190 LF → 0 CRLF + 190 LF（整行删 0 行）
+  PASS  ui/generate-tasks.js  末 6 字节 7379207d3b0a → 7379207d3b0a  换行 0 CRLF + 1849 LF → 0 CRLF + 1849 LF（整行删 0 行）
+  PASS  ui/materials-update.js  末 6 字节 6c6c3b0a7d0a → 6c6c3b0a7d0a  换行 0 CRLF + 150 LF → 0 CRLF + 149 LF（整行删 1 行）
+  PASS  ui/md.js  末 6 字节 7d293b0a7d0a → 7d293b0a7d0a  换行 0 CRLF + 188 LF → 0 CRLF + 188 LF（整行删 0 行）
+  PASS  ui/pdf.js  末 6 字节 7d293b0a7d0a → 7d293b0a7d0a  换行 0 CRLF + 314 LF → 0 CRLF + 314 LF（整行删 0 行）
+  PASS  ui/resource-board.js  末 6 字节 7d293b0a7d0a → 7d293b0a7d0a  换行 0 CRLF + 88 LF → 0 CRLF + 88 LF（整行删 0 行）
+**尾部换行/行尾不一致的文件：0 个**
+
+**diff 归因：PASS**

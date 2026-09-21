@@ -5,7 +5,7 @@
 // 工具缺失）→ flashGuideHTML 指引卡（中文，不甩裸报错）。差异（busy 守卫
 // 方式、状态/结果元素、平台名）由调用方以参数注入——本模块只做「执行 +
 // 渲染」共享段。
-import { $, apiPost, toast } from "/js/app.js";
+import { apiPost, toast } from "/js/app.js";
 import { flashBusyText, flashResultHTML, flashGuideHTML } from "/js/fx/flash.js";
 
 /** 共享烧录执行体。opts：{dir, platform, statusEl, resultEl, setBusy,

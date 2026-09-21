@@ -6,7 +6,7 @@
 import { $, apiGet } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
 import { aggregateResourceGroups, resourcesOverviewHTML } from "/js/fx/task.js";
-import { resourceBoardHTML, resourcesToolbarHTML, resourceTaskColorMap } from "/js/fx/resource-board.js";
+import { resourceBoardHTML, resourceTaskColorMap } from "/js/fx/resource-board.js";
 import { reviseGetPlatform } from "./generate-revise.js";
 
 let view = "list";                    // list = 分组列表（01）｜board = 板图视角

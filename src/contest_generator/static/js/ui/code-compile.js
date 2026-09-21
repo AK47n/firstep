@@ -24,7 +24,6 @@ import {
   setCompileErrors,   // 编辑器侧错误显示态（工单 code-editor-refine/05：状态归 codeeditor——UI 单向依赖约定，见其模块态注释）
   onFileSaved,        // 保存成功监听（工单 10：自动编译只认手工保存）
 } from "/js/ui/codeeditor.js";
-import { getMainCDiskDir } from "/js/ui/generate-mainc-sync.js";
 import { isMainCDiskDir } from "/js/ui/codeview.js";  // 单源谓词（评审整改：本模块不再重复实现）
 import { scrollToStep } from "/js/ui/step-state.js";
 import { startFixCenter } from "/js/ui/generate-fix.js";  // 一键编译修复入口（工单 code-ide-flow/04：跳转后自动开始）

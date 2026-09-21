@@ -9,7 +9,6 @@ import { $, apiGet, apiPost, toast } from "/js/app.js";
 import { esc } from "/js/fx/core.js";
 import {
   materialsCheckCardHTML,
-  aggregateSelection,
   materialsPickHTML,
   materialsPickFooterHTML,
   materialsProgressHTML,

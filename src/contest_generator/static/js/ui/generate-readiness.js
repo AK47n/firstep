@@ -16,7 +16,7 @@
 // 监听器）/ refreshReadinessPanel（setOnStepChange 回调）/ initReadinessCheck（启动区）。
 import { $, apiPost } from "/js/app.js";
 import {
-  generateReadinessChecks, readinessSoftChecks, readinessRowHTML,
+  generateReadinessChecks, readinessSoftChecks,
   readinessRowsHTML, readinessSummaryHTML, outputDirWarnRow,
 } from "/js/fx/readiness.js";
 import { stepDoneSet, scrollToStep } from "/js/ui/step-state.js";

@@ -9,7 +9,7 @@
 // **慢**（速度低 → 明写「网络较慢」）／**在重试**（`retrying` → 明写第几次、从多少接着下）
 // ／**真失败**（`error_kind` 选话术）。分类只认 `error_kind` 字段，**不许解析 error 文案**。
 import {
-  esc, formatSize, fmtEta, downloadedPercent,
+  esc, formatSize, fmtEta,
   downloadFailureText, retryProgressText, retryNoteText, SLOW_SPEED_BPS,
 } from "./core.js";
 

@@ -1,0 +1,54 @@
+base 自校验：13 个改动文件在 f1c9e1c7 与 HEAD 上逐字节相同 ✓
+锚点定位：13 处 = **摘名 11** ＋ **整条删 1** ＋ **级联 1**，全部对上 ✓
+「唯一 import 边 → 改裸装载」支路触发：**0 处**（spec 预期 0；真遇到时本脚本拒写，逼人显式决定）
+
+逐处（base 上的删除区间）：
+  · fx/codeview.js  [名字 + 后随逗号]  删 "languageOf, "
+  · fx/full-update.js  [前导逗号 + 名字（该名字在本行末尾）]  删 ", downloadedPercent"
+  · ui/code-compile.js  [整条语句（含该行行尾换行）]  删 "import { getMainCDiskDir } from \"/js/ui/generate-mainc-sync.js\";\n"
+  · ui/code-tree-ops.js  [整行（该名字独占一行）]  删 "  getCodeTreeFiles,\n"
+  · ui/codeeditor.js  [整行（该名字独占一行）]  删 "  isTabSavable,\n"
+  · ui/flash.js  [名字 + 后随逗号]  删 "$, "
+  · ui/generate-readiness.js  [前导逗号 + 名字（该名字在本行末尾）]  删 ", readinessRowHTML"
+  · ui/generate-tasks.js  [名字 + 后随逗号]  删 "resourcesOverviewHTML, "
+  · ui/materials-update.js  [整行（该名字独占一行）]  删 "  aggregateSelection,\n"
+  · ui/md.js  [名字 + 后随逗号]  删 "toastError, "
+  · ui/pdf.js  [名字 + 后随逗号]  删 "pdfDupRemainText, "
+  · ui/resource-board.js  [名字 + 后随逗号]  删 "resourcesToolbarHTML, "
+  · fx/core.js  [级联：摘 `export ` 前缀]  删 "export "
+
+摘除后自校验：剩下的名字 / 导出状态 / 行尾 / 尾部换行 全部对上 ✓
+
+**dry-run**：未写盘（加 --write 才落盘）
+
+=== 字节级重放（base 原始字节 → 按锚点独立重算区间 → 重放 → 比意图（dry-run 未落盘）字节）===
+  PASS  fx/codeview.js  字节数 21566 → 21554（Δ -12）  末 6 字节 7d293b0a7d0a → 7d293b0a7d0a
+  PASS  fx/full-update.js  字节数 8618 → 8599（Δ -19）  末 6 字节 7d293b0a7d0a → 7d293b0a7d0a
+  PASS  ui/code-compile.js  字节数 12331 → 12266（Δ -65）  末 6 字节 7d293b0a7d0a → 7d293b0a7d0a
+  PASS  ui/code-tree-ops.js  字节数 12357 → 12337（Δ -20）  末 6 字节 7d293b0a7d0a → 7d293b0a7d0a
+  PASS  ui/codeeditor.js  字节数 161988 → 161972（Δ -16）  末 6 字节 20207d0a7d0a → 20207d0a7d0a
+  PASS  ui/flash.js  字节数 2141 → 2138（Δ -3）  末 6 字节 20207d0a7d0a → 20207d0a7d0a
+  PASS  ui/generate-readiness.js  字节数 8759 → 8741（Δ -18）  末 6 字节 636b207d3b0a → 636b207d3b0a
+  PASS  ui/generate-tasks.js  字节数 92647 → 92624（Δ -23）  末 6 字节 7379207d3b0a → 7379207d3b0a
+  PASS  ui/materials-update.js  字节数 5410 → 5388（Δ -22）  末 6 字节 6c6c3b0a7d0a → 6c6c3b0a7d0a
+  PASS  ui/md.js  字节数 9076 → 9064（Δ -12）  末 6 字节 7d293b0a7d0a → 7d293b0a7d0a
+  PASS  ui/pdf.js  字节数 17335 → 17317（Δ -18）  末 6 字节 7d293b0a7d0a → 7d293b0a7d0a
+  PASS  ui/resource-board.js  字节数 4336 → 4314（Δ -22）  末 6 字节 7d293b0a7d0a → 7d293b0a7d0a
+  PASS  fx/core.js  字节数 6535 → 6528（Δ -7）  末 6 字节 7d293b0a7d0a → 7d293b0a7d0a
+**字节级重放：全部相等 ✓**
+
+=== 清点后判据复跑（dry-run：跑在**清点后的内存文本**上）===
+  ✓ 未使用具名（全模块）: 0
+  ✓ graphBreaks: 0
+  ✓ orphans: 0
+  ✓ wiring: 0
+  ✓ registry: 0
+  ✓ bareLoads: 0
+  ✓ 判据 D（零消费者导出）: 0
+  ✓ 判据 T（调用位形态）: 0
+  ✓ starImports: 0
+  ✓ 取数面体检: 0
+  ✓ ui-dom-contract：孤立模块 / import 了却没人调: 0
+**全部为 0 ✓**
+
+**应用清点：PASS**
