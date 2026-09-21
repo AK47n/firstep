@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=d88a8dd12f2509845d86168d244205fff93948d0 -->
+<!-- changelog-auto: last-commit=5358186a03ca20e8cfe38fc62f49eb0d03f230a1 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-09-21
+- 12:38 工单 frontend-boot-module/01-02：装载根搬进 boot.js（index.html 只留一条标签 + 判据单源与守卫重定根）
 
 ## 2026-09-20
 - 10:21 工单 module-hwcheck/06：交互式串口命令台（配方驱动复测 + 既有命令原样）
