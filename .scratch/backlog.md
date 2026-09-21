@@ -211,17 +211,38 @@ UTF-8 stdout（原锚点版是崩在 GBK 编码上的）。第 7 节的两道候
 
 本轮**没做**的四件（各自另立，别当已做）：
 
-- **把接线搬出 HTML**（`js/boot.js` + 给 import 时接线的 ui 模块补显式 `init()`）——本轮的
-  下一步；今天只拆了地雷。做完它，`static-import-guard` 与 `fx-guard` 的 337 行名字登记表
-  都可以退化成"index.html 零 import / 零 function 定义"这类结构不变量。
+- ~~**把接线搬出 HTML**（`js/boot.js` + 给 import 时接线的 ui 模块补显式 `init()`）~~ ✅
+  **已落地**（工单 `frontend-boot-module/01-05`，2026-09-21，见本节末）：装载根搬进
+  `static/js/boot.js`，index.html 只剩一条装载标签；11 个"靠被加载才接线"的模块各得显式
+  `init*()`（求值期零接线进闸门）；`static-import-guard` 与 `fx-guard` 的 337 行名字登记表
+  **已退化成结构不变量**（index.html 零定义 / boot 零顶层定义 / 每个 fx/ui 模块从 boot 可达），
+  导出存在性改由**全图 import↔export 对账**兜住。
 - ~~**`tests/browser/` 接进闸门**~~ ✅ **已落地**（工单 `ui-dom-contract-gate/01` + `03`，2026-09-20，
   见第 13 节）：先修绿再接手——**旧读数「6 绿 3 红」本身也不实**，HEAD 实测是 14 绿 7 红
   （4 条夹具自杀的连锁假红 + 3 条真红全非产品缺陷）；现在 prepush 与 CI 各有一支与前端门禁
-  并列的浏览器门禁，四个 spec / 26 条用例一条命令跑完（≈78s）。
+  并列的浏览器门禁，四个 spec / 26 条用例一条命令跑完（≈78s）。**落点又随装载根搬家补了一条
+  `static/js/boot.js`**（工单 frontend-boot-module/02）。
 - **删 index.html 里的迁移墓碑注释**（"已迁至 …"那一大段，数百行）——历史记录，本轮按 spec
-  原样保留。
+  原样保留。**它们现在住在 `static/js/boot.js`**（随宿主块整块搬过去，逐字未动）。
 - **`ui/delivery.js` 的 window 挂桥**（`Object.assign(window, {...})`）与 app.js 规则 3
-  "不挂 window 桥"相抵——既有事实，本轮只记账不改。
+  "不挂 window 桥"相抵——既有事实，本轮只记账不改（工单 03 把它挪进了 `initDelivery()`，
+  语义不变：仍在上线前装好）。
+
+**本节挂账结清记录（工单 frontend-boot-module，2026-09-21）**：`01` 判据单源 + 红证（base 钉
+`b52022f1`、自校验选错即失败、11 条强度自检）；`02` 装载根搬家（机械判定 7/7：块逐字搬运、
+index.html 零 import、555 个 id 不变）；`03/04` 11 个模块显式 `init()`（求值期接线 96 → 0，
+冒烟记账 434 条多重集与改前逐条相同）；`05` 守卫退化 + 不变量进闸门 + 账本。
+证据与探针在 `.scratch/frontend-boot-module/`（spec、5 张工单、红证 `red-proof.txt`、
+搬家复算 `verify-move.txt`、冒烟 `smoke-*.txt`、普查 `survey-*.txt`）。
+
+**退化时如实记账的两条代价（本轮之后新开的候选，别当已守）**：
+
+- **类型维度**：旧 `DOMAINS` 表 469 个名字里 28 个带 `typeof` 断言（如 `resetPinState: "fn"`），
+  新判据只看"有没有被 import / 有没有定义"，**不管类型**。
+- **死导出清点**：全图零引用的导出改名或删除不再变红——评审点出 7 个：
+  `CCS_PIECE_NAMES` / `maincScrollToRange` / `codeEditorHighlight` / `HWCHECK_VERDICT_FALLBACK` /
+  `BUY_DECISIONS_KEY` / `SETTINGS_DEFAULT_COLLAPSED` / `wfNum`（更该做的是**清点后删掉**它们，
+  而不是再养一张表）。
 
 评审同时发现的**同向候选**（都在前端）：ui 层（17,996 行 / 515 监听器）只有 2 个
 测试文件 import 它，没有测试缝——✅ **已落地**（第 13 节，两层守卫 + 真浏览器行为契约）。
@@ -289,10 +310,12 @@ UTF-8 stdout（原锚点版是崩在 GBK 编码上的）。第 7 节的两道候
 **仍然挂账的三条（各自另立，别当已做）**：
 
 - **`index.html` 与 ui 的 id 耦合「改造」**：本轮只把它变成**可测的事实**（第一层守卫），
-  **没动标记结构**。真要去掉那 555 个 id 级别的耦合，是另一件事。
-- **把接线搬出 HTML（`js/boot.js` + 给 import 时接线的 ui 模块补显式 `init()`）**：
-  backlog 第 10 节那条，仍未立项（做完它，`static-import-guard` 与 `fx-guard` 的名字登记表
-  都可以退化成结构不变量）。
+  **没动标记结构**。真要去掉那 555 个 id 级别的耦合，是另一件事（工单 frontend-boot-module
+  也没动它：装载根搬家只挪 JS，555 个 id 一个没变）。
+- ~~**把接线搬出 HTML（`js/boot.js` + 给 import 时接线的 ui 模块补显式 `init()`）**~~ ✅
+  **已落地**（工单 `frontend-boot-module/01-05`，2026-09-21，见第 10 节末）：装载根 =
+  `static/js/boot.js`，11 个模块显式 `init*()`，"求值期零接线"进闸门，两张名字登记表退化成
+  结构不变量 + 全图对账。
 - **产品侧「F5 重载慢过 1.5 秒会被应用自己关掉」的竞态**：本轮只在**夹具侧**绕开
   （验收夹具不再设 `FIRSTEP_LAUNCHER`，服务生命周期归夹具）；真实用户按 F5 仍可能撞上，
   要修得改 `webapp._schedule_exit_if_idle` 的退出判据并加产品侧用例 —— 未立项。

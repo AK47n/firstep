@@ -42,15 +42,20 @@
 == ④ 判据强度自检（内存注入，不写盘）==
   ✔ 删掉一条装载 → 可达性判据报出掉队模块 —— 掉队：fx/topic.js, ui/topic.js
   ✔ 摘掉一个导出 → 全图对账报出未导出名 —— 报出 renderHwcheckPanel
-  ✔ index.html 塞一个 function → 零定义判据报出 —— 报出 1 条：function probeInjected() {}
+  ✔ index.html 塞一个**缩进**的 const → 零定义判据报出 —— 报出 7 条：const probeIndented = 1;
   ✔ 装载指向不存在的模块 → 对账报出文件不存在 —— 报出 does-not-exist.js
   ✔ import 了 init 却不调用 → 判据报出；补上调用 → 转绿 —— 报出：initGlossary 被 import 了却没人调用：可达正文里找不到 initGlossary( 的调用点
   ✔ 注释感知：花括号里的注释不被当成导入名，全图对账零断裂 —— 全图断裂 0 处
   ✔ 判据③ 登记那一半兜底：结构判据抓不到的模块也被判红 —— 结构判据漏掉 4 个（delivery.js, generate-revise.js, generate-tasks.js, params.js），其中判红 4 个
+  ✔ 装载根塞一个顶层 function → 零定义判据报出 —— 报出 1 条：function probeLeak() { return 1; }
+  ✔ 给已显式化的模块加一条求值期接线 → 接线不变量报出 —— 报出 ui/params.js
+  ✔ 删掉真调用（只留注释里的同名文字）→ 登记表体检报出 —— 报出 ui/generate-core.js 没人调用
+  ✔ index.html 塞一段 IIFE 内联脚本 → 脚本块计数判据报出 —— 脚本块 3 个（内联 3 个）——判据要的是恰好 2 个
+  ✔ 注释掉真调用（只留墓碑注释里的同名文字）→ 调用点判据报出 —— 报出 initGlossary 没人调用
 
 == 结论 ==
   红证（base 上必红）：成立
-  强度自检：7/7 成立
+  强度自检：12/12 成立
   当前工作树：绿（收口状态）
 
 PASS（判据能红，且不是靠选错 base 红的）

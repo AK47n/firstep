@@ -293,10 +293,19 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > 四个 spec 串行全跑 **26 passed / 0 fail / 77.9s**；前端门禁 `node --test "tests/js/*.test.mjs"`
 > **1715 passed / 0 fail**；`python -m pytest -n auto` **5042 passed + 1 skipped / 115s**。
 > **这一支已经接进闸门**：改动落在 `tests/browser/`、`static/js/ui/`、`static/index.html`、
-> `static/js/app.js` 时本地 pre-push 会跑它（CI 另有 `browser-suite` job 跑同一条命令）；
-> 闸门自身缺能力（node / playwright / chromium 缺）时打印原因放行，用例真红才拒推。
+> `static/js/boot.js`（**装载根**，工单 frontend-boot-module/02 起——模块清单 / 接线 / 启动都在
+> 这里，落点跟着搬家）、`static/js/app.js` 时本地 pre-push 会跑它（CI 另有 `browser-suite` job
+> 跑同一条命令）；闸门自身缺能力（node / playwright / chromium 缺）时打印原因放行，用例真红才拒推。
 > 红证工具留在 `.scratch/ui-dom-contract-gate/`：`probe-ui-contract-red-proof.mjs`（真源码注入 +
 > 逐字节复原）、`probe-port-listening.mjs`（夹具端口判据自检）、`probe-guard-strength.mjs`（静态判据）。
+>
+> **2026-09-21 更新（工单 frontend-boot-module/05）**：装载根搬家后的本机读数 —— 前端门禁
+> `node --test "tests/js/*.test.mjs"` **1679 passed / 0 fail**（退化删掉 57 条逐名用例、新增 11 条
+> 结构判据后的条数）；四个 spec 串行 **26 passed / 0 fail / ≈113s**；`python -m pytest -n auto`
+> **5049 passed + 1 skipped / ≈200s**。**一处已知的本地/CI 落差**：`tests/js/` 下的判据共享件
+> （`boot-contract.mjs` / `import-usage.mjs` / `ui-dom-contract.mjs`）被浏览器夹具间接 import，
+> 但**只改它们**时本地 pre-push 不带起浏览器门禁（CI 的 `browser-suite` 不受路径筛选影响，
+> 照跑）——落点表要不要再扩，另立。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 

@@ -33,8 +33,8 @@
 
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 
-/** 装载根在模块表里的键（图里的"根节点"，不属于图内节点）。 */
-export const LOAD_ROOT_KEY = "boot.js";
+/** 装载根在模块表里的键（图里的"根节点"，不属于图内节点）。本文件内部用。 */
+const LOAD_ROOT_KEY = "boot.js";
 
 // ---------------------------------------------------------------------------
 // 掩码：把注释、字符串字面量与正则字面量的内容换成空格（保留换行与行结构）
@@ -115,7 +115,8 @@ export function maskCommentsAndStrings(text) {
 // ① / ② index.html：零 import、零顶层 JS 定义
 // ---------------------------------------------------------------------------
 
-/** 抽 HTML 里全部 `<script …>…</script>` 块 → [{ attrs, src, text, line }]。 */
+/** 抽 HTML 里全部 `<script …>…</script>` 块 → [{ attrs, src, text, line }]。
+ *  fx-guard 的"index.html 脚本块恰好两处"判据用它（内联 JS 的表达式形态只有它能看见）。 */
 export function scriptBlocks(html) {
   const out = [];
   const re = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi;
@@ -133,8 +134,8 @@ export function scriptBlocks(html) {
   return out;
 }
 
-/** HTML 里**内联**脚本（无 src）的块清单。 */
-export function inlineScripts(html) {
+/** HTML 里**内联**脚本（无 src）的块清单。（内部件：判据 ①② 用） */
+function inlineScripts(html) {
   return scriptBlocks(html).filter((b) => b.src === null);
 }
 
@@ -165,23 +166,54 @@ export function indexHtmlImports(html) {
 }
 
 /**
- * 判据 ②：HTML 内联脚本里的 **顶层 JS 定义行**（列 0 的 `function` / `class` /
- * `const` / `let` / `var`，含 `export` / `async` 前缀）→ [{ line, text }]。
- * 空数组 = HTML 里零 JS 定义。
+ * 判据 ②：**任意源码文本**里的顶层定义行（列 0 的 `function` / `class` / `const` /
+ * `let` / `var`，含 `export` / `async` 前缀）→ [{ line, text }]。
  *
- * 只认**列 0**（顶层）——缩进在函数/回调体内的 `const` 不是"HTML 里定义了一个东西"
+ * 只认**列 0**（顶层）——缩进在函数/回调体内的 `const` 不是"这个文件里定义了一个东西"
  * （与判据 ③ 同一套"列 0 = 顶层"口径）。
+ */
+export function topLevelDefinitions(text) {
+  const masked = maskCommentsAndStrings(text);
+  const raw = text.split("\n");
+  const out = [];
+  masked.split("\n").forEach((line, n) => {
+    if (DECLARATION_RE.test(line)) {
+      out.push({ line: n + 1, text: (raw[n] || "").trim() });
+    }
+  });
+  return out;
+}
+
+/**
+ * **任意缩进**的定义行（`function` / `class` / `const` / `let` / `var`，含 `export` / `async`
+ * 前缀）→ [{ line, text }]。
+ *
+ * 只用在 **HTML 内联脚本**这一侧（`inlineDefinitions`）：HTML 里就不该有 JS，缩进四格的
+ * `const` 同样是"HTML 重新变成模块图的一部分"（工单 05 评审实测：只认列 0 会让缩进形态溜过去）。
+ * **不要**拿它判装载根：boot.js 的回调体里满是缩进的 `const`（页签分发器先例），会全假红。
+ */
+export function anyDepthDefinitions(text) {
+  const masked = maskCommentsAndStrings(text);
+  const raw = text.split("\n");
+  const out = [];
+  masked.split("\n").forEach((line, n) => {
+    if (DECLARATION_RE.test(line.trimStart())) {
+      out.push({ line: n + 1, text: (raw[n] || "").trim() });
+    }
+  });
+  return out;
+}
+
+/**
+ * 判据 ②（HTML 侧）：`index.html` 内联脚本里的 **JS 定义行**（任意缩进）。
+ * 空数组 = HTML 里零 JS 定义。
  */
 export function inlineDefinitions(html) {
   const out = [];
   for (const block of inlineScripts(html)) {
-    const masked = maskCommentsAndStrings(block.text);
-    const raw = block.text.split("\n");
-    masked.split("\n").forEach((line, n) => {
-      if (/^(export\s+)?(async\s+)?(function|class|const|let|var)\b/.test(line)) {
-        out.push({ line: block.line + n, text: (raw[n] || "").trim() });
-      }
-    });
+    for (const def of anyDepthDefinitions(block.text)) {
+      out.push({ line: block.line + def.line - 1, text: def.text });
+    }
   }
   return out;
 }
@@ -197,8 +229,12 @@ const PROBE_BRIDGE_RE = /^if\s*\(\s*typeof\s+window\b/;
 // 续行形态（`\n  .then(…)` 写成列 0 时不该被当成独立语句；首字符类已含 `.`）
 const CONTINUATION_RE = /^[.)\]},?:]|^[+-]\s|^=>|^&&|^\|\|/;
 
-/** 判据 ③：模块的**求值期副作用语句**（列 0 的非声明语句）→ [{ line, text, bridge }]。 */
-export function topLevelEffects(text) {
+/**
+ * 模块的求值期副作用语句（列 0 的非声明语句）→ [{ line, text, bridge }]。
+ * **内部件**：对外只有 `wiringEffects`（"真接线"，排除探针桥）——没有任何消费方需要
+ * 单独看带 bridge 标记的全集，就不导出（工单 01 评审要求"仍无消费方的导出删掉"）。
+ */
+function topLevelEffects(text) {
   const masked = maskCommentsAndStrings(text);
   const raw = text.split("\n");
   const out = [];
@@ -458,8 +494,8 @@ const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 // （ui-dom-contract-gate 红证实测踩到：删掉启动区的调用点后守卫照样绿）。
 const CALL_SITE_RE = (name) => new RegExp(`(?<![\\w$.])${escapeRe(name)}\\s*\\(`);
 
-/** 去掉每个 init 的**定义行**之后的正文（调用点判据的取数面）。 */
-export function withoutInitDefinitions(text, initNames) {
+/** 去掉每个 init 的**定义行**之后的正文（调用点判据的取数面）。**内部件**。 */
+function withoutInitDefinitions(text, initNames) {
   let out = text;
   for (const name of initNames) {
     const def = new RegExp(
@@ -481,8 +517,10 @@ export function hasCallSite(text, name) {
  * hostText = 装载根原文（import 边就在这里）；modules = [{ key, text }]（key 形如 `ui/x.js`）。
  * `importedNames` 收的是**本地名**（`import { a as b }` 收 b）——"谁被导入了却没被调用"要按
  * 调用处写的那个名字判。
+ *
+ * **内部件**：对外只有 `reachable`（只要可达集合与掉队清单）。
  */
-export function reachableWithBodies(hostText, modules) {
+function reachableWithBodies(hostText, modules) {
   const byKey = new Map(modules.map((m) => [m.key, m]));
   const reachableKeys = new Set();
   const importedNames = new Set();
@@ -556,6 +594,24 @@ export function importersOf(key, modules) {
 }
 
 /**
+ * 禁环判据：**有没有模块 import 装载根**（boot.js）→ [{ key, line }]；空数组 = 分层成立。
+ *
+ * 分层规则（照 js/app.js 的禁环约定）：boot 可以 import ui/app，**任何 ui/app 都不得
+ * import boot**——否则成环，且"谁先求值"会变成隐式约定。
+ */
+export function modulesImportingLoadRoot(modules) {
+  const out = [];
+  for (const m of modules) {
+    for (const edge of parseModuleImports(m.text)) {
+      if (resolveModuleKey(edge.spec, m.key) === LOAD_ROOT_KEY) {
+        out.push({ key: m.key, line: edge.line, spec: edge.spec });
+      }
+    }
+  }
+  return out;
+}
+
+/**
  * 判据 ③ 的适用面（本次 spec 的 B 档）——**两半**：
  *
  *   ③-b-1 **结构那一半**：boot 装载的 ui 模块中，boot 是它唯一装载来源的那些
@@ -615,10 +671,18 @@ export const EXPLICIT_WIRING_MODULES = [
  *
  * 每一行必须：① 模块存在；② 是 ui/ 模块；③ 被装载根装载；④ 它导出的某个 `init*`
  * 在装载根正文里**有调用点**（"登记了却没人调"= 接线其实没搬出去，或 boot 忘了调）。
+ *
+ * **单向**：只查"登记了的必须成立"，不查"成立了的必须登记"——后者不可判定（没有任何结构标记
+ * 能区分"接线被搬过"与"本来就没有接线"）。`ui-dom-contract.test.mjs` 的断言文案与 CONTEXT.md
+ * 已按这个事实写（工单 05 评审抓出过"双向"的过度声称）。
+ *
+ * 调用点判在**掩码文本**上：boot.js 里满是墓碑注释（"…已迁至 …initHandoffNote()…"），
+ * 未掩码正文会让"删掉真调用"照样绿（同一轮评审实测：删 `initGenerateActions();` 后体检报绿）。
  */
 export function registryProblems(rootText, modules) {
   const byKey = new Map(modules.map((m) => [m.key, m]));
   const booted = loadRootKeys(rootText);
+  const maskedBoot = maskCommentsAndStrings(rootText);
   const problems = [];
   for (const key of EXPLICIT_WIRING_MODULES) {
     const entry = byKey.get(key);
@@ -627,7 +691,7 @@ export function registryProblems(rootText, modules) {
     if (!booted.has(key)) { problems.push({ key, why: "登记了，但装载根没装载它" }); continue; }
     const inits = ownInitExports(entry.text);
     if (!inits.length) { problems.push({ key, why: "登记了，但它没有导出 init*()" }); continue; }
-    if (!inits.some((name) => hasCallSite(rootText, name))) {
+    if (!inits.some((name) => hasCallSite(maskedBoot, name))) {
       problems.push({ key, why: `登记了，但装载根没调用它导出的 init*（${inits.join(" / ")}）` });
     }
   }

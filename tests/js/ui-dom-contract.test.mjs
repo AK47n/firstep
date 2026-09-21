@@ -30,7 +30,7 @@ import { fileURLToPath } from "node:url";
 import {
   listJs, declaredIds, danglingIds, referencedIds, unreachableModules,
 } from "./ui-dom-contract.mjs";
-import { readLoadRoot } from "./boot-contract.mjs";
+import { readLoadRoot, readJsModules, wiringViolations, registryProblems } from "./boot-contract.mjs";
 
 const STATIC = fileURLToPath(new URL("../../src/contest_generator/static/", import.meta.url));
 const read = (p) => readFileSync(STATIC + p, "utf8");
@@ -44,6 +44,8 @@ const UI_SOURCES = MODULES
 const HTML = read("index.html");
 // 装载根 = boot.js 全文（它没有 HTML 外壳，整份就是宿主正文）
 const HOST_SCRIPT = readLoadRoot(STATIC) || "";
+// 判据 ③ 要的是"不含装载根"的模块表（boot-contract 的键空间：相对 static/js）
+const BOOT_MODULES = readJsModules(STATIC);
 
 test("抽取器不静默失效：声明集合、ui 模块、id 引用都抽得到", () => {
   // 这三条是**判据自己的健康检查**：抽取器写坏时下面的断言会"全绿"，
@@ -85,4 +87,29 @@ test("每个 ui 模块都必须从装载根（boot.js）装载得到（防写了
     + "要么在装载根 boot.js 里具名 import 并调用它的 init，要么让它被别的 ui 模块 import：\n"
     + detail.join("\n")
   );
+});
+
+// ---------------------------------------------------------------------------
+// ③ 接线不住求值期（工单 frontend-boot-module/05 进闸门）
+// ---------------------------------------------------------------------------
+
+test("接线不变量：boot 装载且唯一来源的 ui 模块 ＋ 登记表 11 项，求值期零接线", () => {
+  const problems = wiringViolations(HOST_SCRIPT, BOOT_MODULES);
+  const detail = problems.map((p) =>
+    `  ${p.key}：${p.effects.length} 条（首条 ${p.effects[0].line}: ${p.effects[0].text.slice(0, 60)}）`);
+  assert.deepEqual(
+    detail,
+    [],
+    "这些模块在**求值期**就绑了监听器 / 写了 DOM —— 那是「靠被加载才接线」的隐式边：\n"
+    + "接线要写成导出的 init*()，再由装载根 boot.js 的接线区显式调用：\n" + detail.join("\n")
+  );
+});
+
+test("登记表体检：登记的每个模块都存在 / 是 ui/ / 被装载根装载 / 导出了 init* 且被调用（单向）", () => {
+  const problems = registryProblems(HOST_SCRIPT, BOOT_MODULES);
+  const detail = problems.map((p) => `  ${p.key}：${p.why}`);
+  assert.deepEqual(detail, [],
+    "EXPLICIT_WIRING_MODULES 与现状不一致（登记了却没搬 / 搬了却没调用）：\n" + detail.join("\n")
+    + "\n（体检是**单向**的：只查「登记了的必须成立」——反向「接线搬了却没登记」没有可判定的"
+    + "结构标记，要靠新增模块时自觉登记 + 这条体检在登记后立刻报错。）");
 });

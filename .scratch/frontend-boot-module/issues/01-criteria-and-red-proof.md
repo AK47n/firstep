@@ -23,10 +23,10 @@
 
 ## 验收标准
 
-- [ ] `tests/js/boot-contract.mjs` 落地：上表四类判据的纯函数实现（零依赖、无 npm、
+- [x] `tests/js/boot-contract.mjs` 落地：上表四类判据的纯函数实现（零依赖、无 npm、
       **不注册 `node:test` 用例**——它是共享件，进闸门不会自己变红；先例
       `tests/js/import-usage.mjs` / `tests/js/ui-dom-contract.mjs`）
-- [ ] `.scratch/frontend-boot-module/probe-01-red-proof.mjs` 落地，喂 `git show <base>:<path>`
+- [x] `.scratch/frontend-boot-module/probe-01-red-proof.mjs` 落地，喂 `git show <base>:<path>`
       的源码（只读，不碰工作区），四段读数：
       1. **base 自校验**：base 的 `index.html` 必须**有** 45 条 import、且**没有** `boot.js`、
          且 11 个目标模块各自有求值期接线——不满足就大声失败（选错 base = 假绿，2026-09-20 刚踩过）
@@ -36,11 +36,11 @@
          对账红；`import` 了 init 却不调用 → 调用点判据红（补上调用即转绿）；
          花括号里的注释不被当导入名
       4. **当前工作树读数**（打印，不作本工单退出条件；收口工单 05 要求它绿）
-- [ ] base 显式钉住：缺省 `b52022f1`（收走前那个提交），**不写 HEAD**；`--base <rev>` 可覆盖
-- [ ] 红证原始输出落档：`.scratch/frontend-boot-module/red-proof.txt`（真跑一次，退出码 0）
-- [ ] base 选错时必须失败：喂一个"已经有 boot.js"或"index.html 已零 import"的 rev →
+- [x] base 显式钉住：缺省 `b52022f1`（收走前那个提交），**不写 HEAD**；`--base <rev>` 可覆盖
+- [x] 红证原始输出落档：`.scratch/frontend-boot-module/red-proof.txt`（真跑一次，退出码 0）
+- [x] base 选错时必须失败：喂一个"已经有 boot.js"或"index.html 已零 import"的 rev →
       自校验拦下并返回非 0（当场实测一次，读数记进 Comments）
-- [ ] `node --test "tests/js/*.test.mjs"` 全绿（新增共享件不该改变任何既有用例的红绿）
+- [x] `node --test "tests/js/*.test.mjs"` 全绿（新增共享件不该改变任何既有用例的红绿）
 
 ## Comments
 

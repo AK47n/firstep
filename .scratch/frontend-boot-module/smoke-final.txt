@@ -1,9 +1,10 @@
-服务: http://127.0.0.1:11904
-记账：421 条；排序后指纹 2039342746；id 551；平台卡 2；步骤导航 13；总览 2318 字符；词表 1894 字符；检测卡 2；交付区 245 字符
+服务: http://127.0.0.1:13709
+记账：434 条；排序后指纹 4288323085；id 551；平台卡 2；步骤导航 13；总览 2318 字符；词表 1894 字符；检测卡 2；交付区 245 字符
   ✓ 0 个 pageerror / 模块图链接错误
   ✓ fx 探针桥全在
-  ✓ 加载期监听器记账 421 条（仪器有效）
-  ✓ 5 个模块的接线全在（监听器记账）
+  ✓ 加载期监听器记账 434 条（仪器有效）
+  ✓ 工单 03 的 5 个模块接线全在（监听器记账）
+  ✓ 工单 04 的 6 个模块接线全在（监听器记账）
   ✓ delivery.js 加载即写 #delivery-actions
   ✓ 点击 #btn-params-chat 有行为反应
   ✓ 平台卡 / 步骤导航 / 总览 / 词表 / 检测栏目都渲染了
@@ -15,14 +16,6 @@
   #btn-theme#click
   window#pagehide
   #btn-usage-reset#click
-  #btn-pick-dirs#click
-  #pick-dirs#change
-  #btn-scan#click
-  #prog-log-head#click
-  #btn-distill#click
-  #btn-confirm#click
-  #btn-direct-import#click
-  #import-pick-dirs#change
   window#wheel
   window#touchmove
   window#keydown
@@ -90,6 +83,15 @@
   #btn-fix-continue#click
   #btn-fix-errors#click
   #btn-fix-rollback#click
+  .wait-cancel#click
+  #btn-pick-dirs#click
+  #pick-dirs#change
+  #btn-scan#click
+  #prog-log-head#click
+  #btn-distill#click
+  #btn-confirm#click
+  #btn-direct-import#click
+  #import-pick-dirs#change
   #btn-skeleton#click
   #btn-smoke#click
   #btn-restore-bak#click
@@ -105,34 +107,6 @@
   #btn-edit-mainc#click
   document#click
   #btn-generate#click
-  .wait-cancel#click
-  #btn-add-file-row#click
-  .file-row-x#click
-  #btn-pick-mod-files#click
-  #pick-mod-files#change
-  #btn-pick-mod-dir#click
-  #pick-mod-dir#change
-  #btn-draft-desc#click
-  #btn-add-module-submit#click
-  #ref-anchor-kind#change
-  #btn-ref-add-file-row#click
-  .file-row-x#click
-  #btn-ref-draft-desc#click
-  #btn-ref-add#click
-  #btn-ref-pick-files#click
-  #ref-pick-files#change
-  #btn-ref-pick-dir#click
-  #ref-pick-dir#change
-  #topic-filter#input
-  #topic-filter#keydown
-  #topic-category#change
-  #topic-sort#change
-  #topic-sort-dir#click
-  #topic-filter-clear#click
-  #topic-year-chips#click
-  #topic-stats#click
-  #btn-topic-split#click
-  #btn-topic-confirm#click
   #btn-revise-session#click
   #btn-revise-load-dir#click
   #revise-dir-input#keydown
@@ -182,6 +156,33 @@
   #btn-delivery-package#click
   window#revise-context-loaded
   window#tasks-invalidated
+  #btn-add-file-row#click
+  .file-row-x#click
+  #btn-pick-mod-files#click
+  #pick-mod-files#change
+  #btn-pick-mod-dir#click
+  #pick-mod-dir#change
+  #btn-draft-desc#click
+  #btn-add-module-submit#click
+  #ref-anchor-kind#change
+  #btn-ref-add-file-row#click
+  .file-row-x#click
+  #btn-ref-draft-desc#click
+  #btn-ref-add#click
+  #btn-ref-pick-files#click
+  #ref-pick-files#change
+  #btn-ref-pick-dir#click
+  #ref-pick-dir#change
+  #topic-filter#input
+  #topic-filter#keydown
+  #topic-category#change
+  #topic-sort#change
+  #topic-sort-dir#click
+  #topic-filter-clear#click
+  #topic-year-chips#click
+  #topic-stats#click
+  #btn-topic-split#click
+  #btn-topic-confirm#click
   .active#click
   BUTTON#click
   BUTTON#click
@@ -422,6 +423,19 @@
   #hwcheck-symptom#input
   #btn-hwcheck-triage#click
   #hwcheck-recent#click
+  window#__playwright_global_listeners_check__
+  window#mousemove
+  window#pointerdown
+  window#pointerup
+  window#touchstart
+  window#touchend
+  window#touchcancel
+  window#mousedown
+  window#mouseup
+  window#click
+  window#auxclick
+  window#dblclick
+  window#contextmenu
   #btn-update-check#click
   .platform-card#click
   .platform-card#click
@@ -434,4 +448,4 @@
   #tab-guide#click
   #btn-goto-tasks#click
 
-PASS；证据 .scratch/frontend-boot-module/smoke-03.txt
+PASS；证据 .scratch/frontend-boot-module/smoke-final.txt

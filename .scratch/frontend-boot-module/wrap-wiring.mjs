@@ -18,7 +18,7 @@
 //   加 --doc "一句话" 覆盖默认 doc 注释。
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { maskCommentsAndStrings, topLevelEffects, wiringEffects } from "../../tests/js/boot-contract.mjs";
+import { maskCommentsAndStrings, wiringEffects } from "../../tests/js/boot-contract.mjs";
 
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
 const [rel, initName, ...rest] = process.argv.slice(2);

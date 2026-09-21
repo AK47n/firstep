@@ -26,7 +26,9 @@
 // （`$("tab-" + x)`）静态看不出来，不进判据（那靠行为契约那一层）。
 
 import { readFileSync, readdirSync } from "node:fs";
-import { parseModuleImports, listJs, ownInitExports, hasCallSite } from "./boot-contract.mjs";
+import {
+  parseModuleImports, listJs, ownInitExports, hasCallSite, maskCommentsAndStrings,
+} from "./boot-contract.mjs";
 
 // 这三个通用取件现在归 tests/js/boot-contract.mjs（唯一一份实现），本文件**转发**它们，
 // 好让既有消费方（守卫、红证探针）不用改 import 路径。
@@ -174,7 +176,9 @@ export function reachableFromHost(hostText, modules) {
 export function unreachableModules(uiModules, hostText, allModules) {
   const modules = new Map(allModules.map((m) => [m.key, m.text]));
   const { reachable, importedNames, bodies } = reachableFromHost(hostText, modules);
-  const bodyText = bodies.join("\n");
+  // 调用点判据必须**注释感知**（工单 05 评审实测的洞）：boot.js 里满是墓碑注释
+  // （"…已迁至 …initHandoffNote()…"），未掩码正文会把"删掉真调用"喂成绿。
+  const bodyText = bodies.map((t) => maskCommentsAndStrings(t)).join("\n");
   const problems = [];
   for (const { path, text } of uiModules) {
     const key = `js/${path}`;

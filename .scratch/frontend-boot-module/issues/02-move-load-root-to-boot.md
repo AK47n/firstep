@@ -11,16 +11,16 @@
 
 ## 验收标准
 
-- [ ] `index.html` 里 `<script type="module">…</script>` 整块消失，原处只有
+- [x] `index.html` 里 `<script type="module">…</script>` 整块消失，原处只有
       `<script type="module" src="/js/boot.js"></script>`；head 那条主题防闪烁 `<script>`、
       CSS、markup 一个字节不动（555 个 id 不变）
-- [ ] **机械判定"这是纯搬运"**：`git show b52022f1:src/contest_generator/static/index.html`
+- [x] **机械判定"这是纯搬运"**：`git show b52022f1:src/contest_generator/static/index.html`
       的块内容（去掉 `<script …>` / `</script>` 两行）与 `boot.js` 去掉新增文件头后
       **逐字相同**；`git diff -U0` 对 index.html 的增删只有标签那一处
-- [ ] import 清单 **45 条逐字保序**（不排序 / 不分组 / 不合并不删；含 5 条裸装载与全部注释）
-- [ ] `boot.js` 文件头写清分层规则：boot 可 import ui/app，**不许被任何 ui/app 模块 import**
-- [ ] 墓碑注释随块搬进 `boot.js` 且逐字保留（数量与文本不变）
-- [ ] **重定根（装载根取数面从 index.html 换成 boot.js）**，逐处改到位：
+- [x] import 清单 **45 条逐字保序**（不排序 / 不分组 / 不合并不删；含 5 条裸装载与全部注释）
+- [x] `boot.js` 文件头写清分层规则：boot 可 import ui/app，**不许被任何 ui/app 模块 import**
+- [x] 墓碑注释随块搬进 `boot.js` 且逐字保留（数量与文本不变）
+- [x] **重定根（装载根取数面从 index.html 换成 boot.js）**，逐处改到位：
       - `tests/js/static-import-guard.test.mjs`：新增"index.html 零 import"不变量；
         清单↔导出对账指向 `boot.js`（等价强度，先原样搬家）
       - `tests/js/import-usage-guard.test.mjs`：根 = `boot.js`（"零未使用具名"照旧绿）
@@ -30,14 +30,14 @@
         `tests/js/glossary-refs.test.mjs`、`tests/js/handoff-note-guard.test.mjs`、
         `tests/js/hwcheck.test.mjs`（"成对接入"断言指向 boot.js）
       - `tests/browser/ui-contract-fixture.mjs` 的 `staticAnchor`（index.html ∪ boot.js）
-- [ ] 闸门落点跟随：`tools/prepush.py` 的浏览器门禁落点加 `static/js/boot.js`；
+- [x] 闸门落点跟随：`tools/prepush.py` 的浏览器门禁落点加 `static/js/boot.js`；
       `tests/test_prepush.py` 落点用例补一行（改了装载清单必须跑真浏览器）
-- [ ] `node --test "tests/js/*.test.mjs"` 全绿
-- [ ] 浏览器门禁 `node --test --test-concurrency=1 "tests/browser/*.spec.mjs"` 26 条全绿
-- [ ] 真浏览器冒烟：0 个 pageerror / 模块图链接错误；**加载期监听器记账与 base 逐条相同**
+- [x] `node --test "tests/js/*.test.mjs"` 全绿
+- [x] 浏览器门禁 `node --test --test-concurrency=1 "tests/browser/*.spec.mjs"` 26 条全绿
+- [x] 真浏览器冒烟：0 个 pageerror / 模块图链接错误；**加载期监听器记账与 base 逐条相同**
       （复用 `.scratch/frontend-import-fossils/smoke-page.mjs` 的做法，改前读数先落档）；
       fx 探针桥仍在；`#delivery-actions` 仍被写
-- [ ] `python -m pytest -n auto -q` 全绿
+- [x] `python -m pytest -n auto -q` 全绿
 
 ## Comments
 

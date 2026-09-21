@@ -13,16 +13,21 @@
 //      打崩整页）；
 //   ② 装载标签唯一且指向装载根；清单里每条路径都指向真实存在的模块文件；
 //   ③ **清单里每个名字都真的被对应模块导出**（同一类事故的现行形态：boot.js 与模块导出不一致）；
-//   ④ 抽取器不静默失效（清单条数与具名数下限）。
+//   ④ **全图 import↔export 对账**（工单 05）：不止装载根那一层——**每个前端模块**的每条具名
+//      import 都必须是目标模块真导出的名字。2026-09-12 那类事故（改一个导出 → SyntaxError）
+//      在图的任何一处都可能发生，而 fx-guard 的 337 行名字表已退化成结构不变量，这一条是它的替代：
+//      不挑名字、对整张图成立；
+//   ⑤ **分层禁环**：boot 可 import ui/app，**任何 ui/app 不得 import boot**（否则成环）；
+//   ⑥ 抽取器不静默失效（清单条数与具名数下限）。
 //
 // 判据单源 = tests/js/boot-contract.mjs（红证脚本 import 同一份）。
-// 全图对账（不止装载根那一层）由工单 05 补齐——那是这条守卫的加强版，不是替代。
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   indexHtmlImports, loadRootTag, parseModuleImports, parseModuleExports, readLoadRoot, listJs,
+  graphBreaks, readJsModules, modulesImportingLoadRoot,
 } from "./boot-contract.mjs";
 
 const STATIC = fileURLToPath(new URL("../../src/contest_generator/static/", import.meta.url));
@@ -53,23 +58,29 @@ test("② 装载标签唯一且指向装载根；清单路径都真实存在", (
   assert.deepEqual(missing, [], `装载清单指向不存在的模块文件：${missing.join(", ")}`);
 });
 
-test("③ 装载根导入的每个名字都真的被对应模块导出（防死导入打崩整页）", () => {
-  const problems = [];
-  for (const { spec, names } of IMPORTS) {
-    if (!names.length || !spec.startsWith("/js/")) continue;   // 裸装载没有名字要对账
-    const exported = parseModuleExports(readFileSync(STATIC + spec.slice(1), "utf8"));
-    for (const name of names) {
-      if (!exported.has(name)) problems.push(`${spec} 未导出 ${name}`);
-    }
-  }
+test("③ 全图 import↔export 对账：每个前端模块的每条具名 import 都真有出处（工单 05）", () => {
+  // 这一条**包含**"装载根清单 ↔ 导出对账"（load root 也是图里的一个 entry），
+  // 故不再单列一条弱副本（工单 05 评审：「缝越少越好」）。
+  const modules = readJsModules(STATIC);
+  const breaks = graphBreaks([{ key: "boot.js", text: ROOT }, ...modules]);
+  const detail = breaks.map((b) =>
+    `  ${b.from} → ${b.spec}：${b.why}${b.missing.length ? " " + b.missing.join(", ") : ""}`);
   assert.deepEqual(
-    problems,
+    detail,
     [],
-    "boot.js 与模块导出不一致（浏览器会抛 SyntaxError 且整页不初始化）：\n" + problems.join("\n")
+    "模块图里有死导入（浏览器会抛 SyntaxError 且整页不初始化——2026-09-12 的形态）：\n"
+    + detail.join("\n")
   );
 });
 
-test("④ 抽取器不静默失效：装载根抽得到清单、且有具名导入", () => {
+test("⑤ 装载根不被任何 ui/app 模块 import（分层禁环：boot 可 import ui/app，不许反过来）", () => {
+  const back = modulesImportingLoadRoot(readJsModules(STATIC))
+    .map((m) => `  ${m.key}:${m.line} → ${m.spec}`);
+  assert.deepEqual(back, [],
+    "有模块 import 了装载根 boot.js —— 分层成环（谁先求值会变成隐式约定）：\n" + back.join("\n"));
+});
+
+test("⑥ 抽取器不静默失效：装载根抽得到清单、且有具名导入", () => {
   assert.ok(IMPORTS.length >= 30, `只抽到 ${IMPORTS.length} 条 import（boot.js 结构变了？）`);
   const names = IMPORTS.reduce((n, i) => n + i.names.length, 0);
   assert.ok(names >= 50, `具名导入只抽到 ${names} 个（抽取器或清单形态变了）`);

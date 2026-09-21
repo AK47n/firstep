@@ -24,18 +24,18 @@
 
 ## 验收标准
 
-- [ ] 5 个模块各导出显式 `init*()`（名字与既有导出不冲突，命名照各模块既有风格），
+- [x] 5 个模块各导出显式 `init*()`（名字与既有导出不冲突，命名照各模块既有风格），
       上述列 0 副作用语句**逐条**搬进 init 函数体
-- [ ] 被其它函数读的模块作用域声明（`analyzeAbort` / `chatCancel` / `tasksAbortSlot` 等）
+- [x] 被其它函数读的模块作用域声明（`analyzeAbort` / `chatCancel` / `tasksAbortSlot` 等）
       **留在原地**——只搬副作用，不搬声明（搬错 = 别处引用断）
-- [ ] `ui/delivery.js` 的 `Object.assign(window, {...})` 随接线进 init：语义不变
+- [x] `ui/delivery.js` 的 `Object.assign(window, {...})` 随接线进 init：语义不变
       （仍在上线前装好；探针按全局名取用照旧），**不是**"顺手删桥"
-- [ ] boot.js 里这 5 条裸装载换成具名 import ＋ 接线区显式调用，**调用顺序 = import 顺序**
-- [ ] 判据自证：`boot-contract` 的"列 0 副作用"判据对这 5 个模块报 0 条（探针桥除外）
-- [ ] 真浏览器冒烟（改前 / 改后各一次）：加载期监听器记账里这 5 个模块的绑定**逐条相同**
+- [x] boot.js 里这 5 条裸装载换成具名 import ＋ 接线区显式调用，**调用顺序 = import 顺序**
+- [x] 判据自证：`boot-contract` 的"列 0 副作用"判据对这 5 个模块报 0 条（探针桥除外）
+- [x] 真浏览器冒烟（改前 / 改后各一次）：加载期监听器记账里这 5 个模块的绑定**逐条相同**
       （target + 事件类型都对得上）；`#delivery-actions` 仍被写；delivery 的 window 桥仍在；
       `#btn-params-chat` 真点击仍有行为反应；0 pageerror
-- [ ] `node --test "tests/js/*.test.mjs"` 全绿、浏览器门禁 26 条全绿
+- [x] `node --test "tests/js/*.test.mjs"` 全绿、浏览器门禁 26 条全绿
 
 ## Comments
 

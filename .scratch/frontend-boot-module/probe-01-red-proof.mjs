@@ -19,7 +19,7 @@ import { tee } from "./tee.mjs";
 import {
   indexHtmlImports, inlineDefinitions, wiringViolations, wiringEffects, registryProblems,
   graphBreaks, reachable, readJsModules, loadRootTag, parseModuleImports, bareLoads,
-  importersOf, loadRootKeys, EXPLICIT_WIRING_MODULES,
+  importersOf, loadRootKeys, EXPLICIT_WIRING_MODULES, topLevelDefinitions, scriptBlocks,
 } from "../../tests/js/boot-contract.mjs";
 import { unreachableModules } from "../../tests/js/ui-dom-contract.mjs";
 import { hostScript } from "../../tests/js/import-usage.mjs";
@@ -183,11 +183,12 @@ const check = (name, ok, note) => strength.push({ name, ok, note });
     hit ? "报出 renderHwcheckPanel" : `没报出（断裂 ${breaks.length} 处）`);
 }
 
-// c) 往 index.html 塞一个定义 → 零定义判据报出
+// c) 往 index.html 塞一个定义（**缩进形态**）→ 零定义判据报出
+//    （工单 05 评审实测：只认列 0 会让缩进四格的 `const` 溜过去）
 {
-  const injected = baseHtml.replace("<script>", "<script>\nfunction probeInjected() {}");
+  const injected = baseHtml.replace("<script>", "<script>\n    const probeIndented = 1;");
   const defs = inlineDefinitions(injected);
-  check("index.html 塞一个 function → 零定义判据报出", defs.length > 0,
+  check("index.html 塞一个**缩进**的 const → 零定义判据报出", defs.length > 0,
     defs.length ? `报出 ${defs.length} 条：${defs[0].text}` : "没报出");
 }
 
@@ -237,6 +238,67 @@ const check = (name, ok, note) => strength.push({ name, ok, note });
     registryOnly.length === 4 && caught.length === 4,
     `结构判据漏掉 ${registryOnly.length} 个（${registryOnly.map((k) => k.split("/")[1]).join(", ")}），`
     + `其中判红 ${caught.length} 个`);
+}
+
+// h) 往装载根塞一个顶层定义 → fx-guard 的"装配根零定义"判据必须报出（工单 05 新不变量）
+{
+  const injected = 'function probeLeak() { return 1; }\n' + baseHost;
+  const defs = topLevelDefinitions(injected);
+  check("装载根塞一个顶层 function → 零定义判据报出",
+    defs.some((d) => d.text.includes("probeLeak")),
+    defs.length ? `报出 ${defs.length} 条：${defs[0].text}` : "没报出");
+}
+
+// i) 给一个"已显式化"的模块加一条求值期接线 → 接线不变量必须报出（工单 05 进闸门的那条）
+{
+  const key = "ui/params.js";
+  const patched = baseModules.map((m) => (m.key === key
+    ? { ...m, text: m.text + '\n$("btn-params-scan").addEventListener("click", () => {});\n' }
+    : m));
+  const hit = wiringViolations(baseHost, patched).some((p) => p.key === key);
+  check("给已显式化的模块加一条求值期接线 → 接线不变量报出", hit,
+    hit ? `报出 ${key}` : "没报出");
+}
+
+// j) 登记表体检必须**看得见注释**：删掉一条真调用、只留墓碑注释里的同名文字 → 体检要红
+//    （工单 05 评审实测的洞：未掩码正文会被墓碑注释喂绿）
+{
+  const nowRootText = existsSync(REPO + BOOT) ? readFileSync(REPO + BOOT, "utf8") : null;
+  if (nowRootText === null) {
+    check("删掉真调用（只留注释里的同名文字）→ 登记表体检报出", false, "没有装载根，跳过");
+  } else {
+    const maskedNoCall = nowRootText.replace(/^initGenerateActions\(\);.*$/m,
+      "// initGenerateActions();  ← 注释里的同名文字，不算调用");
+    const hit = registryProblems(maskedNoCall, nowModules).some((p) => p.key === "ui/generate-core.js");
+    check("删掉真调用（只留注释里的同名文字）→ 登记表体检报出", hit,
+      hit ? "报出 ui/generate-core.js 没人调用" : "没报出（被注释喂绿了）");
+  }
+}
+
+// k) index.html 塞一段**表达式形态**的内联 JS（IIFE）→ fx-guard 的"脚本块恰好两处"报出
+{
+  const injected = baseHtml.replace("</body>",
+    "<script>(function probeIife(){ return 1; })();</script>\n</body>");
+  const blocks = scriptBlocks(injected);
+  const inline = blocks.filter((b) => b.src === null);
+  check("index.html 塞一段 IIFE 内联脚本 → 脚本块计数判据报出",
+    blocks.length !== 2,
+    `脚本块 ${blocks.length} 个（内联 ${inline.length} 个）——判据要的是恰好 2 个`);
+}
+
+// l) "init 没人调"判据必须**注释感知**（工单 05 spec 轴评审实测的洞）
+{
+  const ui = [{ path: "ui/glossary.js", text: baseModules.find((m) => m.key === "ui/glossary.js").text }];
+  const all = baseModules.map((m) => ({ key: `js/${m.key}`, text: m.text }));
+  const nowRootText = existsSync(REPO + BOOT) ? readFileSync(REPO + BOOT, "utf8") : null;
+  if (nowRootText === null) {
+    check("注释掉真调用（只留墓碑注释里的同名文字）→ 调用点判据报出", false, "没有装载根，跳过");
+  } else {
+    const commented = nowRootText.replace(/^[ \t]*initGlossary\(\);.*$/m, "// initGlossary();（墓碑）");
+    const hit = unreachableModules(ui, commented, all).some((p) => p.why.includes("initGlossary"));
+    check("注释掉真调用（只留墓碑注释里的同名文字）→ 调用点判据报出", hit,
+      hit ? "报出 initGlossary 没人调用" : "没报出（被注释喂绿了）");
+  }
 }
 
 console.log(`\n== ④ 判据强度自检（内存注入，不写盘）==`);

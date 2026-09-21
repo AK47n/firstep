@@ -22,15 +22,15 @@
 
 ## 验收标准
 
-- [ ] 6 个模块求值期列 0 副作用清零（`subscribeFixCenter` 那条并入既有 init）
-- [ ] boot.js 接线区按 import 顺序显式调用新 init；**不新增/不改既有启动区调用的顺序**
-- [ ] 被其它函数读的模块作用域声明（`distPanel` / `refUI` / `topicPageCache` / `libUI` 等）
+- [x] 6 个模块求值期列 0 副作用清零（`subscribeFixCenter` 那条并入既有 init）
+- [x] boot.js 接线区按 import 顺序显式调用新 init；**不新增/不改既有启动区调用的顺序**
+- [x] 被其它函数读的模块作用域声明（`distPanel` / `refUI` / `topicPageCache` / `libUI` 等）
       留在原地（只搬副作用）
-- [ ] 真浏览器冒烟（改前 / 改后各一次）：加载期监听器记账里这 6 个模块的绑定**逐条相同**；
+- [x] 真浏览器冒烟（改前 / 改后各一次）：加载期监听器记账里这 6 个模块的绑定**逐条相同**；
       `#platforms` 平台卡、母版页扫描/提炼按钮、模块库新增表单、参考库录入表单、赛题库拆条
       的接线都在；0 pageerror
-- [ ] 判据自证：boot 装载的 11 个模块里，"boot 是唯一装载来源"的那 6 个 列 0 副作用 = 0
-- [ ] `node --test "tests/js/*.test.mjs"` 全绿、浏览器门禁 26 条全绿、`python -m pytest -n auto -q` 全绿
+- [x] 判据自证：boot 装载的 11 个模块里，"boot 是唯一装载来源"的那 6 个 列 0 副作用 = 0
+- [x] `node --test "tests/js/*.test.mjs"` 全绿、浏览器门禁 26 条全绿、`python -m pytest -n auto -q` 全绿
 
 ## Comments
 

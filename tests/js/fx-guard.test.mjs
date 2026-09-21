@@ -1,337 +1,85 @@
-// fx-guard.test.mjs — 前端纯函数模块化结构护栏（工单 frontend-es-modules/11）：
-// 全部已搬名称（工单 01-10 累计）必须仍在 fx 模块导出，且 index.html 不得再出现
-// 其 function/const 定义（双源回退即漂移——防回退语义同 v5 结构测试「not hasattr」）。
-// 后续迁移批次把新名称登记进 DOMAINS 表即可；建议新域文件命名照规范
-// fx/<domain>.js（模块约定见 fx/core.js 头部）。
+// fx-guard.test.mjs — 纯函数单源不回流（工单 frontend-es-modules/11 立，工单
+// frontend-boot-module/05 **退化**）。
+//
+// ## 为什么退化
+//
+// 这个文件原先养着一张 **337 行手工登记表**（`DOMAINS`：把工单 01-10 累计搬出去的每一个
+// 名字逐个列出来，再拿正则去 index.html 里查"有没有被重新定义"）。它有三个代价：
+//   · 名字表是手抄的——迁一个新函数忘了登记，守卫就少看一眼；
+//   · 检查面只有 index.html——宿主块搬进 boot.js 之后，回退到装载根里它就看不见了；
+//   · "某个导出存不存在"这件事被写在三处（模块 / 登记表 / 宿主 import），错一处就整页死。
+//
+// 工单 05 把它换成**四条结构不变量**（判据单源 = tests/js/boot-contract.mjs，不需要任何名字表）：
+//   ① `index.html` 零顶层 JS 定义（HTML 不再是模块图的一部分）
+//   ② 装载根 `boot.js` 零顶层定义（纯函数没有"回流到装载根"这条路）
+//   ③ index.html 的脚本块恰好两处（head 主题脚本 ＋ 一条装载标签）——补 ①② 抓不到的
+//      表达式形态内联 JS（`(function(){…})()`）
+//   ④ 每个 fx/ui 模块从装载根可达（掉出模块图 = 静默失效，2026-09-12 那类）
+//
+// **代价如实记账**（工单 05 双轴评审指出）：旧表还有两个方向是这次退化掉的——
+//   · **类型维度**：旧表 469 个名字里 28 个带 `typeof` 断言（如 `resetPinState: "fn"`），
+//     新判据不管类型（导出改名成常量也绿）；
+//   · **没人 import 的导出**：`graphBreaks` 只覆盖"被某个模块 import 的名字"，全图内零引用的
+//     导出（评审点出 7 个：`CCS_PIECE_NAMES` / `maincScrollToRange` / `codeEditorHighlight` /
+//     `HWCHECK_VERDICT_FALLBACK` / `BUY_DECISIONS_KEY` / `SETTINGS_DEFAULT_COLLAPSED` / `wfNum`）
+//     改名或删除不再变红——它们更像"死导出清点"的候选，另立（见 backlog）。
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import {
+  inlineDefinitions, topLevelDefinitions, readLoadRoot, readJsModules, reachable, scriptBlocks,
+} from "./boot-contract.mjs";
 
-const html = readFileSync(
-  new URL("../../src/contest_generator/static/index.html", import.meta.url),
-  "utf8"
-);
+const STATIC = fileURLToPath(new URL("../../src/contest_generator/static/", import.meta.url));
+const html = readFileSync(STATIC + "index.html", "utf8");
+const boot = readLoadRoot(STATIC);
+const MODULES = readJsModules(STATIC);
+const FX = MODULES.filter((m) => m.key.startsWith("fx/"));
+const UI = MODULES.filter((m) => m.key.startsWith("ui/"));
 
-// 全部已搬名称 + 期望形态：fn = 函数（含 async）；否则为期望 typeof 字符串
-const DOMAINS = {
-  "core.js": {
-    esc: "fn", formatSize: "fn", fmtClock: "fn", fmtDuration: "fn", fmtEta: "fn",
-    truncate: "fn",
-  },
-  "danger.js": {
-    reviseApplyConfirmMessage: "fn", platformSwitchConfirmMessage: "fn",
-    pinResetConfirmMessage: "fn", overwriteBakHint: "fn",
-    draftDeleteMessage: "fn", recentDeleteMessage: "fn",
-  },
-  "errors.js": {
-    parseError: "fn", parseHttpError: "fn", isLongError: "fn",
-    ERROR_LONG_THRESHOLD: "number",
-  },
-  "wait.js": {
-    waitLabel: "fn", WAIT_GENERIC_LINE: "string",
-  },
-  "abortable.js": {
-    makeAbortable: "fn", isAbortError: "fn",
-  },
-  "env.js": {
-    ENV_BADGE_GLYPH: "object", TOOLCHAIN_NAMES: "object",
-    envRowHTML: "fn", envChannelHTML: "fn", envCheckStatusHTML: "fn",
-    toolchainProbeText: "fn",
-    CCS_PROBE_NOTE: "string", CCS_PIECE_NAMES: "object", ccsSourceText: "fn",
-  },
-  "btn-icon.js": { btnIcon: "fn" },
-  "platform.js": { platformClickAction: "fn" },
-  "code.js": {
-    cHighlight: "fn", cLineCount: "fn", codeZoomClamp: "fn", parseZoomStored: "fn",
-    maincLineOffsetRange: "fn", isMainCPath: "fn", maincContentEmpty: "fn",
-    maincFullscreenLabel: "fn", maincScrollToRange: "fn", maincJumpToLine: "fn",
-  },
-  "codeview.js": {
-    buildCodeTree: "fn", fileIconHTML: "fn",
-    codeTreeHTML: "fn", codeLineNumbersHTML: "fn", highlightCodeLines: "fn",
-    codeViewHTML: "fn", outlineHTML: "fn", outlineEmptyHTML: "fn",
-    searchListHTML: "fn", fileFindFilter: "fn",
-    treeWidthClamp: "fn", parseTreeWidthStored: "fn",
-    CODE_TREE_WIDTH_MIN: "number", CODE_TREE_WIDTH_MAX: "number",
-    CODE_TREE_WIDTH_DEFAULT: "number",
-  },
-  "codeeditor.js": {
-    codeTabBadge: "fn", codeTabStripHTML: "fn", codeEditorHighlight: "fn",
-    codeEditorHTML: "fn", conflictHTML: "fn", editorLineRange: "fn",
-    isTabSavable: "fn", dirtySavableTabs: "fn", caretLineOf: "fn",
-    indentOnEnter: "fn", indentLines: "fn", replaceAllText: "fn",
-    EDITOR_TABS_MAX: "number",
-  },
-  "code-compile.js": {
-    compileStatusText: "fn", compileStatusClass: "fn", compileErrorRowsHTML: "fn",
-    isSyscfgConflict: "fn",
-  },
-  "hwcheck.js": {
-    hwcheckPlatformState: "fn", hwcheckSelectPlatform: "fn", hwcheckPickState: "fn",
-    hwcheckRequestPayload: "fn", hwcheckCanPreview: "fn", hwcheckPlatformCardsHTML: "fn",
-    hwcheckHintHTML: "fn", hwcheckErrorHTML: "fn", hwcheckGenerateErrorHTML: "fn",
-    hwcheckEmptyHTML: "fn", hwcheckPanelHTML: "fn", hwcheckCodeTarget: "fn", hwcheckPreviewState: "fn",
-    hwcheckPlatformLabel: "fn", hwcheckGeneratePayload: "fn", hwcheckChecklistKey: "fn",
-    hwcheckCheckedIds: "fn", hwcheckChecklistToggle: "fn", hwcheckChecklistHTML: "fn",
-    hwcheckChecklistProgressHTML: "fn", hwcheckProjectState: "fn",
-    hwcheckChannelText: "fn", hwcheckProjectInfoHTML: "fn", hwcheckToolchainNote: "fn",
-    hwcheckChannelNoteHTML: "fn", hwcheckActionsHTML: "fn",
-    hwcheckProjectPanelHTML: "fn", hwcheckRecentHTML: "fn",
-    hwcheckRecentEmptyHTML: "fn", hwcheckProjectEmptyHTML: "fn",
-    hwcheckDevicePick: "fn", hwcheckDeviceSlugs: "fn", hwcheckDevicePool: "fn",
-    hwcheckDeviceKit: "fn", hwcheckDeviceChipsHTML: "fn",
-    hwcheckDeviceEmptyHTML: "fn", hwcheckMissingDevicesHTML: "fn",
-    hwcheckDeviceGroupNoticeHTML: "fn",
-    hwcheckWiringErrorHTML: "fn", hwcheckWiringTableHTML: "fn",
-    hwcheckPinGroupsHTML: "fn", hwcheckBoardSharesHTML: "fn",
-    hwcheckOrderHTML: "fn", hwcheckOrderDesc: "fn",
-    hwcheckBoardState: "fn", hwcheckPinFixHTML: "fn",
-    hwcheckSectionsState: "fn", hwcheckSectionsHTML: "fn",
-    hwcheckUnspecializedHTML: "fn", hwcheckSectionsEmptyHTML: "fn",
-    hwcheckSectionPlanText: "fn", hwcheckSectionNoteHTML: "fn",
-    hwcheckConsoleState: "fn", hwcheckConsoleHTML: "fn",
-    hwcheckSymptomText: "fn", hwcheckCanTriage: "fn", hwcheckTriagePayload: "fn",
-    hwcheckChecklistPayload: "fn", hwcheckAdviceState: "fn",
-    hwcheckRecordState: "fn", hwcheckChecklistState: "fn",
-    hwcheckTriageErrorHTML: "fn", hwcheckAdviceHTML: "fn",
-    hwcheckAdviceEmptyHTML: "fn",
-    HWCHECK_VERDICT_FALLBACK: "string",
-    HWCHECK_CHANNEL_KEYS: "object",
-    HWCHECK_PARENT_KEY: "string", HWCHECK_LAST_DIR_KEY: "string",
-  },
-  "code-tree-ops.js": {
-    treeNameValidate: "fn", treeOpAffected: "fn", treeRenamedPath: "fn",
-    treeOpIsDir: "fn", treeOpTitle: "fn", createPromptMessage: "fn",
-    renamePromptMessage: "fn", treeOpConfirmMessage: "fn", treeNamePromptHTML: "fn",
-    CODE_TREE_NAME_ILLEGAL: "string", CODE_TREE_NAME_MAX: "number",
-  },
-  "write-guard.js": {
-    writeGuardNeeded: "fn", writeGuardTitle: "fn", writeGuardMessage: "fn",
-    WRITE_GUARD_ACTIONS: "object",
-  },
-  "pdf.js": {
-    pdfEncodedPath: "fn", pdfSubdir: "fn", formatMtime: "fn", pdfBroken: "fn",
-    pdfBadgeTags: "fn", pdfDupGroups: "fn", pdfHealth: "fn",
-    pdfFilterEntries: "fn", pdfSortEntries: "fn", pdfStats: "fn",
-    pdfStatsText: "fn", pdfChipRowHTML: "fn", pdfRowHTML: "fn",
-    pdfPagesUrl: "fn", pdfPagesText: "fn", pdfDetailHTML: "fn",
-    pdfTrashUrl: "fn", pdfDupRemainText: "fn", pdfTrashConfirmHTML: "fn",
-    pdfTrashBodyHTML: "fn", pdfRefsUrl: "fn", pdfTrashMessage: "fn",
-    pdfFileUrl: "fn",
-  },
-  "md.js": {
-    mdEncodedPath: "fn", mdSubdir: "fn", formatMtime: "fn",
-    mdFilterEntries: "fn", mdSortEntries: "fn", mdStats: "fn",
-    mdStatsText: "fn", mdChipRowHTML: "fn", mdRowHTML: "fn",
-    mdPreviewShellHTML: "fn", mdFileUrl: "fn",
-  },
-  "reference.js": {
-    referencePlatformChip: "fn",
-    referenceTopicTypeChip: "fn",
-    refFilterEntries: "fn", refDanglingAnchors: "fn", refSortEntries: "fn",
-    refStats: "fn", refStatsText: "fn", refMatchFiles: "fn", refAnchorBadge: "fn",
-    refChipRowHTML: "fn", refRowHTML: "fn", refDetailHTML: "fn",
-    refEditState: "fn", refEditValidate: "fn", refEditFilePlan: "fn",
-    refEditPayload: "fn",
-  },
-  "topic.js": {
-    topicHasNotes: "fn", topicGroupVocabulary: "fn", topicDanglingGroups: "fn",
-    topicHealthText: "fn", topicFilterEntries: "fn", topicSortEntries: "fn",
-    topicStats: "fn", topicStatsText: "fn", topicChipRowHTML: "fn",
-    topicDetailHTML: "fn", topicPagesHTML: "fn", topicPagesErrorHTML: "fn",
-    topicEditHTML: "fn", topicEditValidate: "fn", topicEditPayload: "fn",
-    topicCardHTML: "fn",
-  },
-  "master.js": {
-    masterTableRowHTML: "fn", masterDeleteConfirmHTML: "fn", masterDeleteBodyHTML: "fn", masterFileURL: "fn",
-    masterKeyFileRowHTML: "fn", masterDetailHTML: "fn", decisionItem: "fn",
-    archiveItem: "fn",
-  },
-  "module.js": {
-    moduleBadges: "fn", pythonArtifactSummary: "fn", groupOfSlug: "fn",
-    autoAddDedup: "fn", groupConflicts: "fn",
-    renderGroupCards: "fn", groupRequirementNote: "fn",
-    // 功能组显式选择（工单 group-choice-required/01）：applyGroupRadio 已被取代（删除）
-    renderableGroupCards: "fn", groupChoiceRequired: "fn", groupMemberPick: "fn",
-    pendingGroupChoices: "fn", applyGroupChoices: "fn", recordGroupChoice: "fn",
-    clearGroupChoiceForSlug: "fn", pruneGroupChoices: "fn", groupChoiceGapText: "fn",
-    moduleGridPlatformLabel: "fn", moduleGridStatusText: "fn",
-    moduleGridBadgeClass: "fn", moduleGridFilter: "fn", moduleGridCountText: "fn",
-    moduleGridHTML: "fn", moduleInfoHTML: "fn", multiInstanceModules: "fn",
-    instancePayload: "fn", ensureDefaultInstances: "fn", instanceGapCount: "fn",
-    libFilterModules: "fn", libSortModules: "fn", danglingDependencies: "fn",
-    libStats: "fn", libStatsText: "fn", libChipRowHTML: "fn",
-    moduleRowHTML: "fn", editDescStatus: "fn", libIsValidHttpUrl: "fn",
-    libPlatformKits: "fn",
-  },
-  "overview.js": {
-    genOverviewChipsHTML: "fn", genOverviewSummaryHTML: "fn", overviewFillPlan: "fn",
-    overviewReadyToGenerate: "fn", cardStepStatusHTML: "fn", hasWarnContent: "fn",
-  },
-  "draft.js": {
-    stepNavTitles: "fn", stepNavItemsHTML: "fn", stepNavCurrent: "fn",
-    draftState: "fn", draftSave: "fn", draftLoad: "fn", draftRestoreMeta: "fn",
-    stepProgress: "fn", step7DoneState: "fn", step7WireMode: "fn", syncStep4: "fn",
-  },
-  "generate.js": {
-    CONFLICT_MSG_PREFIX: "string",
-    isConflictError: "fn", conflictDirName: "fn", dirBasename: "fn", genStageTexts: "fn",
-    fmtWait: "fn", generationOutputDirPayload: "fn", collectBindings: "fn",
-    formatResModules: "fn", attachCelebrate: "fn", collapseBtnLabel: "fn",
-    syncCollapseBtn: "fn", collapseToggleAll: "fn", GEN_CARD_COLLAPSE_KEY: "string",
-    parseGenCardCollapse: "fn", genCardInitialCollapsed: "fn", saveGenCardCollapse: "fn",
-    fmtSeconds: "fn",
-    frameworkNoteHTML: "fn", fixLogGroupHidden: "fn",
-    compileSummaryText: "fn",
-  },
-  "pin-model.js": {
-    pinModelEntry: "fn", pinModelVerdict: "fn", pinModelMissReason: "fn",
-    pinInstanceTokens: "fn", pinSelectableByType: "fn",
-    pinModelConstraints: "fn", pinConstraintHolds: "fn", pinRoleChannel: "fn",
-    pinPairFollow: "fn",
-  },
-  "recommend.js": {
-    suggestionSolutionBadges: "fn", suggestionOptionRowHTML: "fn",
-    suggestionOptionsHTML: "fn", suggestionChipHTML: "fn",
-    BUY_DECISIONS_KEY: "string", decisionBadgeHTML: "fn", reviewBadgeHTML: "fn",
-    decisionPayload: "fn", suggestionKey: "fn", loadBuyDecisions: "fn",
-    saveBuyDecisions: "fn", matchBuyDecision: "fn", discussionAreaHTML: "fn",
-  },
-  "recent.js": {
-    recentStatusMeta: "fn", recentTimeLabel: "fn", recentPlatformLabel: "fn",
-    recentChipHTML: "fn", recentListHTML: "fn", recentStatusNow: "fn",
-  },
-  "readiness.js": {
-    generateReadinessChecks: "fn", readinessSoftChecks: "fn",
-    readinessRowHTML: "fn", readinessRowsHTML: "fn",
-    readinessSummaryHTML: "fn",
-  },
-  "llm.js": {
-    formatLLMTelemetry: "fn", parseSSE: "fn", usageDelta: "fn",
-    usageAccumulate: "fn", llmCostEstimate: "fn", usageDisplay: "fn",
-  },
-  "score.js": {
-    formatScorePoints: "fn", renderScorePointPanel: "fn",
-    scoreChecklistPartLabel: "fn", scoreChecklistScoreText: "fn",
-    scoreChecklistRefsText: "fn", scoreChecklistId: "fn",
-    scoreChecklistChecked: "fn", scoreChecklistLineText: "fn",
-    scoreChecklistKey: "fn", scoreChecklistItemsHTML: "fn",
-    scoreChecklistProgressHTML: "fn", scoreChecklistExportText: "fn",
-    scoreChecklistParse: "fn", scoreChecklistLoad: "fn",
-    scoreChecklistSave: "fn",
-  },
-  "task.js": {
-    taskStatusLabel: "fn", taskStatusBadgeClass: "fn", taskVerifyLabel: "fn",
-    taskScoreRefsText: "fn", taskCardHTML: "fn", tasksGridHTML: "fn",
-    tasksProgressText: "fn", tasksOverviewHTML: "fn",
-    taskStepReportHTML: "fn", taskNextActionHTML: "fn",
-    verifyStatusMarkup: "fn", taskCardActions: "fn",
-    taskCanFeedback: "fn", taskIterationLabel: "fn", taskIterationsHTML: "fn",
-    taskLatestFeedbackNote: "fn",
-    taskOrderLabel: "fn", taskDialogAdoptHTML: "fn", taskDialogButtonHTML: "fn",
-    taskDialogAreaHTML: "fn",
-    nextTaskHint: "fn", taskNextHintHTML: "fn",
-    ideaResultHTML: "fn", taskNeedsRedoBadge: "fn",
-    taskStepReportBlocksHTML: "fn",
-    globalChatHTML: "fn", globalNoteBadgeHTML: "fn",
-    taskEditFormHTML: "fn", taskMoreMenuHTML: "fn",
-    ideaDraftListHTML: "fn",
-    taskResourcesHTML: "fn", resourceIsHardware: "fn", aggregateResourceGroups: "fn", resourcesOverviewHTML: "fn",
-    scoreRefsOverviewHTML: "fn",
-    taskChecklistHTML: "fn", checklistStateKey: "fn",
-    taskErrorsHTML: "fn", tasksDoneCount: "fn",
-    unresolvedPrereqs: "fn",
-    taskPhaseHTML: "fn", taskDetailsSnapshot: "fn", taskDetailsRestore: "fn",
-  },
-  "flash.js": {
-    flashBusyText: "fn", flashResultHTML: "fn", flashGuideHTML: "fn",
-    flashOutputHTML: "fn", flashCommandHTML: "fn", flashPanelHTML: "fn",
-    flashContainer: "fn",
-  },
-  "diff.js": {
-    mainDiffHTML: "fn", diffStatsLineHTML: "fn",
-  },
-  "delivery.js": {
-    deliveryActionsHTML: "fn", deliveryCheckHTML: "fn", deliveryPackageHTML: "fn",
-  },
-  "params.js": {
-    paramListHTML: "fn", paramResultHTML: "fn",
-  },
-  "params-chat.js": {
-    paramsChatMessageHTML: "fn", paramsChatInputHTML: "fn", paramsChatHTML: "fn",
-  },
-  "resource-board.js": {
-    RESOURCE_TASK_COLORS: "object",
-    resourcesToolbarHTML: "fn", resourceTaskColorMap: "fn",
-    resourceBoardSVG: "fn", resourceBoardHTML: "fn",
-  },
-  "settings.js": {
-    SETTINGS_COLLAPSE_KEY: "string", SETTINGS_DEFAULT_COLLAPSED: "object",
-    parseSettingsCollapse: "fn", settingsDefaultCollapsed: "fn",
-    effectiveCollapsed: "fn", settingsMasterLabel: "fn",
-    sectionCollapseLabel: "fn", settingsSectionHead: "fn",
-    applySettingsCollapseState: "fn", secretEyeState: "fn",
-  },
-  "workflow.js": {
-    wfNum: "fn", formatWorkflowUsage: "fn", formatWorkflowCost: "fn",
-    formatWorkflowSummary: "fn", formatWorkflowCall: "fn",
-  },
-  "revise-tabs.js": {
-    REVISE_TABS: "object",
-    revisePanelFor: "fn", reviseTabsHTML: "fn", reviseTabBadge: "fn",
-    reviseTabNext: "fn",
-  },
-  "welcome.js": {
-    WELCOME_DISMISS_KEY: "string",
-    welcomeMode: "fn", welcomeCardHTML: "fn",
-  },
-  "glossary.js": {
-    GLOSSARY_TERMS: "object",
-    glossaryHTML: "fn",
-  },
-  "guide.js": {
-    GUIDE_TABS: "object",
-    GUIDE_CHAPTERS: "object",
-    guidePanelFor: "fn", guideTabNext: "fn",
-    guideBlockHTML: "fn", guideChapterHTML: "fn", guideBlocksOf: "fn",
-  },
-  "update.js": {
-    updateStateText: "fn", updateCheckCardHTML: "fn", updateStatusHTML: "fn",
-  },
-  "materials-update.js": {
-    materialsCheckCardHTML: "fn", aggregateSelection: "fn",
-    materialsPickHTML: "fn", materialsPickFooterHTML: "fn",
-    materialsProgressHTML: "fn", materialsStateText: "fn",
-  },
-  "full-update.js": {
-    fullCheckCardHTML: "fn", fullConfirmHTML: "fn", fullProgressHTML: "fn",
-    fullStateText: "fn", fullResultText: "fn", fullPlanText: "fn",
-  },
-};
+test("抽取器不静默失效：装载根在、模块表抽得到、且判据**能报出**注入的定义", () => {
+  assert.ok(boot !== null, "找不到装载根 static/js/boot.js");
+  assert.ok(MODULES.length >= 120, `只抽到 ${MODULES.length} 个模块（目录结构变了？）`);
+  assert.ok(FX.length >= 60, `只抽到 ${FX.length} 个 fx 模块`);
+  assert.ok(UI.length >= 50, `只抽到 ${UI.length} 个 ui 模块`);
+  // **正向对照**：下面 ①② 是"断言为空"，抽取器一旦静默失效会**真空绿**
+  //（先例 ui-dom-contract.test.mjs：「那种绿比红更坏」）。所以这里先证明判据真的会报。
+  assert.equal(topLevelDefinitions("function probeControl() {}").length, 1,
+    "topLevelDefinitions 对注入的顶层 function 没反应（抽取器失效？）");
+  assert.equal(inlineDefinitions('<script>const probeControl = 1;</script>').length, 1,
+    "inlineDefinitions 对注入的内联 const 没反应（抽取器失效？）");
+});
 
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+test("① index.html 零顶层 JS 定义（HTML 不再是模块图的一部分）", () => {
+  const defs = inlineDefinitions(html).map((d) => `  ${d.line}: ${d.text}`);
+  assert.deepEqual(defs, [],
+    "index.html 里出现顶层 JS 定义 —— 它必须住在 fx/ 或 ui/ 模块里：\n" + defs.join("\n"));
+});
 
-for (const [file, names] of Object.entries(DOMAINS)) {
-  test(`fx/${file}：已搬名称单源在模块，index.html 无定义（防双源回退）`, async () => {
-    const mod = await import(new URL("../../src/contest_generator/static/js/fx/" + file, import.meta.url));
-    const missing = [];
-    const redefined = [];
-    for (const [name, kind] of Object.entries(names)) {
-      if (kind === "fn") {
-        if (typeof mod[name] !== "function") missing.push(name);
-        if (new RegExp("function\\s+" + escapeRe(name) + "\\s*\\(").test(html)) redefined.push(name);
-      } else {
-        if (typeof mod[name] !== kind) missing.push(name + "（期望 " + kind + "）");
-        if (new RegExp("const\\s+" + escapeRe(name) + "\\s*=").test(html)) redefined.push(name);
-      }
-    }
-    assert.deepEqual(
-      missing, [],
-      `fx/${file} 缺少导出或类型不符：${missing.join(", ")}`
-    );
-    assert.deepEqual(
-      redefined, [],
-      `index.html 重新定义了（双源回退）：${redefined.join(", ")}`
-    );
-  });
-}
+test("② 装载根 boot.js 零顶层定义（纯函数没有回流到装载根这条路）", () => {
+  const defs = topLevelDefinitions(boot).map((d) => `  ${d.line}: ${d.text}`);
+  assert.deepEqual(defs, [],
+    "boot.js 里出现顶层定义 —— 装载根只该有 import、接线调用、页签分发器与启动 IIFE：\n"
+    + defs.join("\n"));
+});
+
+test("③ index.html 的脚本块恰好两处：head 内联主题脚本 ＋ 一条 type=module 装载标签", () => {
+  // 这条补 ①② 的缝（工单 05 评审指出）：`(function(){…})()` 这类**表达式**形态的内联 JS
+  // 既不是 import 也不是"顶层定义"，①② 都抓不到。直接把"HTML 里还有别的 JS"这件事判死。
+  const blocks = scriptBlocks(html).map((b) => ({ src: b.src, attrs: b.attrs.trim(), line: b.line }));
+  const inline = blocks.filter((b) => b.src === null);
+  const withSrc = blocks.filter((b) => b.src !== null);
+  assert.equal(blocks.length, 2, `index.html 的脚本块应为 2 个，实际 ${blocks.length}：`
+    + JSON.stringify(blocks));
+  assert.equal(inline.length, 1, "只允许 head 里那一条主题防闪烁内联脚本");
+  assert.equal(withSrc.length, 1, "只允许一条带 src 的装载标签");
+  assert.equal(withSrc[0].src, "/js/boot.js", `装载标签应指向 /js/boot.js（实际 ${withSrc[0].src}）`);
+});
+
+test("④ 每个 fx/ui 模块都必须从装载根可达（防写了却从没生效）", () => {
+  const { orphans } = reachable(boot, MODULES);
+  assert.deepEqual(orphans, [],
+    "这些模块掉出了模块图（没有任何路径从装载根走到它）—— 代码写了、跑了、也测不到：\n"
+    + orphans.map((o) => "  " + o).join("\n"));
+});

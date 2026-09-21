@@ -136,10 +136,21 @@
 
 ## 补充说明
 
-- 本 spec 的每个数字都有出处，原始读数在 `.scratch/frontend-boot-module/`：
-  `survey-01-landing.txt`（清单逐条）、`survey-02-toplevel.txt`（顶层副作用逐条）、
-  `survey-03-block.txt`（宿主块构成）、`survey-04-graph.txt`（全图对账 + 可达性基线，
-  现状 131/131 全可达）。
+- 本 spec 的每个数字都有出处，原始读数与工具都在 `.scratch/frontend-boot-module/`：
+  - **判据与红证**：`probe-01-red-proof.mjs`（喂收走前那个提交；base 自校验 + 9 条强度自检）→
+    `red-proof.txt`（收口时 ③ 当前工作树绿）。
+  - **搬运与复算**：`apply-move.mjs`（02 的机械搬运，自带校验）→ `verify-move.mjs` /
+    `verify-move.txt`（7/7，独立从 git 复算）；`wrap-wiring.mjs`（03/04 把散落接线包进 init，
+    查产物的自校验）。
+  - **现场普查**：`survey.mjs` / `survey-01-landing.txt`（清单逐条）、`survey2.mjs` /
+    `survey-02-toplevel.txt`（**收走前**各模块求值期接线逐条，合计 96 条）/
+    `survey-05-worktree-wiring.txt`（当前树，0 条）、`survey3.mjs` / `survey-03-block.txt`
+    （宿主块构成）、`check-graph.mjs` / `survey-04-graph.txt`（全图对账 + 可达性，131/131）。
+  - **真浏览器冒烟**：`smoke-page.mjs`（加载期监听器记账 + 渲染实况 + 真点击）→
+    `smoke-before.txt` / `smoke-after.txt`（02 复跑对）、`smoke-03-before.txt` /
+    `smoke-03-after.txt`（03）、`smoke-04.txt`（04）、`smoke-final.txt`（收口）。
+  - **仪器诊断**：`tee.mjs`（证据落 UTF-8，避开 PowerShell `>` 的 UTF-16LE）、
+    `diag-listeners.mjs` / `diag-listeners.txt`（定位"固定 sleep 漏记 171 条监听器"的假差异）。
 - 命名纪律：「装载清单」特指 boot.js 里那张 import 表；「登记表」特指 fx-guard 被删掉的
-  `DOMAINS`；「装载根」= boot.js。
+  `DOMAINS`（以及接替它的 `EXPLICIT_WIRING_MODULES` 11 项）；「装载根」= boot.js。
 - 现场基线（收走前的提交）：`b52022f1`。
