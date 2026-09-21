@@ -11,6 +11,10 @@ const html = readFileSync(
   new URL("../../src/contest_generator/static/index.html", import.meta.url),
   "utf8"
 );
+const boot = readFileSync(
+  new URL("../../src/contest_generator/static/js/boot.js", import.meta.url),
+  "utf8"
+);
 
 const conflictMsg = "桌面上已有同名工程「Auto_Car_STM32」：为避免覆盖你的已有工程，请先删除该目录或修改题名后再生成（不会自动改名或覆盖）。同一赛题换平台再生成时，会自动使用带平台后缀的新目录（如 Auto_Car_MSPM0），不会误删旧工程";
 
@@ -81,7 +85,8 @@ test("dirBasename：取输出目录路径末段（正反斜杠都认，工单 ux
 
 test("isConflictError 与 400 文案前缀一致性锚点（防前后端漂移）", () => {
   // 后端 GenerationConflictError 消息以本常量开头 → isConflictError 才能识别；
-  // 单源 = fx/generate.js（index.html 不再定义，防双源回退）
+  // 单源 = fx/generate.js（宿主 index.html ∪ boot.js 都不得再定义，防双源回退）
   assert.equal(CONFLICT_MSG_PREFIX, "桌面上已有同名工程「");
-  assert.ok(!html.includes("const CONFLICT_MSG_PREFIX"));
+  assert.ok(!html.includes("const CONFLICT_MSG_PREFIX"), "index.html 定义了 CONFLICT_MSG_PREFIX");
+  assert.ok(!boot.includes("const CONFLICT_MSG_PREFIX"), "boot.js 定义了 CONFLICT_MSG_PREFIX");
 });

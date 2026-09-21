@@ -91,13 +91,17 @@ BROWSER_TESTS_DIR = "tests/browser/"
 # 浏览器用例覆盖的是 ui 的交互，所以"改了 ui 就得跑它"：
 #   · tests/browser/                       = 用例与夹具自身
 #   · static/js/ui/                        = ui 层（用例断的就是它的 DOM 契约）
-#   · static/index.html                    = 装载清单与标记（用例驱动真页面）
+#   · static/index.html                    = 标记（用例驱动真页面：555 个 id 都在这里）
+#   · static/js/boot.js                    = **装载根**（模块清单 + 接线 + 启动；工单
+#                                            frontend-boot-module/02 从 index.html 搬来的
+#                                            —— 落点跟着搬家，否则"改了装载清单不跑真浏览器"）
 #   · static/js/app.js                     = $ / apiGet / state 这些胶水的出处
 # fx/ 不列：浏览器用例不直接断言 fx（那是 tests/js 纯函数面的事，已在另一支里）。
 BROWSER_PREFIXES = (
     BROWSER_TESTS_DIR,
     "src/contest_generator/static/js/ui/",
     "src/contest_generator/static/index.html",
+    "src/contest_generator/static/js/boot.js",
     "src/contest_generator/static/js/app.js",
 )
 

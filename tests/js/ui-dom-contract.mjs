@@ -26,17 +26,11 @@
 // （`$("tab-" + x)`）静态看不出来，不进判据（那靠行为契约那一层）。
 
 import { readFileSync, readdirSync } from "node:fs";
+import { parseModuleImports, listJs, ownInitExports, hasCallSite } from "./boot-contract.mjs";
 
-/** 递归列出目录下所有 .js（POSIX 相对路径，排序确定）。 */
-export function listJs(dir) {
-  const out = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const path = `${dir}/${entry.name}`;
-    if (entry.isDirectory()) out.push(...listJs(path));
-    else if (entry.name.endsWith(".js")) out.push(path);
-  }
-  return out.sort();
-}
+// 这三个通用取件现在归 tests/js/boot-contract.mjs（唯一一份实现），本文件**转发**它们，
+// 好让既有消费方（守卫、红证探针）不用改 import 路径。
+export { listJs, ownInitExports, hasCallSite };
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -98,32 +92,17 @@ export function danglingIds(uiSources, declared) {
 }
 
 // ---------------------------------------------------------------------------
-// 装载图：从 index.html 的宿主脚本出发，沿 import 边走到得了哪些 ui 模块
+// 装载图：从**装载根**（static/js/boot.js；工单 frontend-boot-module/02 起，此前是
+// index.html 的宿主脚本块）出发，沿 import 边走到得了哪些 ui 模块
+//
+// 解析器**不在本文件**：`parseModuleImports` / `listJs` / `ownInitExports` / `hasCallSite`
+// 都来自 `tests/js/boot-contract.mjs`（唯一一份 ESM 解析器，注释感知）。此前这里、那里、
+// import-usage.mjs 各有一份，工单 02 的双轴评审把"判据抄两份必然分叉"挑出来后收敛了。
 // ---------------------------------------------------------------------------
 
-const NAMED_IMPORT_RE = /^[ \t]*import\s*\{([^}]*)\}\s*from\s*["']([^"']+)["']/gm;
-const BARE_IMPORT_RE = /^[ \t]*import\s*["']([^"']+)["']/gm;
-const DEFINES_INIT_RE = /^[ \t]*export\s+(?:async\s+)?function\s+(init[A-Za-z0-9_]*)\s*\(/gm;
-const REEXPORT_LINE_RE = /^[ \t]*export\s*\{([^}]*)\}\s*from\s*["'][^"']+["']/gm;
-
-/** 该文本里的 import 边 → [{ spec, names, bare }]。 */
+/** 该文本里的 import 边 → [{ spec, names, bare }]（names = **本地名**，`a as b` 收 b）。 */
 export function importEdges(text) {
-  const edges = [];
-  for (const m of text.matchAll(NAMED_IMPORT_RE)) {
-    edges.push({
-      spec: m[2],
-      bare: false,
-      names: m[1].split(",")
-        .map((p) => p.trim().split(/\s+as\s+/).pop().trim())
-        .filter(Boolean),
-    });
-  }
-  const named = new Set(edges.map((e) => e.spec));
-  for (const m of text.matchAll(BARE_IMPORT_RE)) {
-    if (named.has(m[1])) continue;      // 具名那条已经收过
-    edges.push({ spec: m[1], bare: true, names: [] });
-  }
-  return edges;
+  return parseModuleImports(text).map((e) => ({ spec: e.spec, bare: e.bare, names: e.locals }));
 }
 
 /** 把说明符归一成 `js/…` 仓库内相对键；不是仓内前端模块则返回 null。 */
@@ -139,53 +118,15 @@ export function resolveSpec(spec, importerKey) {
   return base.join("/");
 }
 
-/** 模块自己定义并导出的 init 名（`export { x } from` 的 re-export **不算**它的）。 */
-export function ownInitExports(text) {
-  const reexported = new Set();
-  for (const m of text.matchAll(REEXPORT_LINE_RE)) {
-    for (const name of m[1].split(",")) {
-      const clean = name.trim().split(/\s+as\s+/).pop().trim();
-      if (clean) reexported.add(clean);
-    }
-  }
-  const names = [];
-  for (const m of text.matchAll(DEFINES_INIT_RE)) {
-    if (!reexported.has(m[1])) names.push(m[1]);
-  }
-  return [...new Set(names)].sort();
-}
-
 // 标识符边界不能用 \b：`$` 不是 word 字符（import-usage.mjs 记着同一个坑）
 export function identRe(name) {
   return new RegExp("(?<![\\w$])" + escapeRe(name) + "(?![\\w$])");
 }
 
-// 声明/定义行（`export function initXxx(` / `function initXxx(`）——判"有没有调用点"时
-// 必须先把它们抠掉：定义本身也含 `initXxx(`，留在正文里会让"忘了调用"永远看不出来
-// （本工单红证实测踩到：删掉启动区的调用点后守卫照样绿）。
-const CALL_SITE_RE = (name) => new RegExp(`(?<![\\w$.])${escapeRe(name)}\\s*\\(`);
-
-/** 去掉每个 init 的**定义行**之后的正文（调用点判据的取数面）。 */
-export function withoutInitDefinitions(text, initNames) {
-  let out = text;
-  for (const name of initNames) {
-    const def = new RegExp(
-      `^[ \\t]*(?:export\\s+)?(?:async\\s+)?function\\s+${escapeRe(name)}\\b[^\\n]*$`,
-      "gm");
-    out = out.replace(def, "");
-  }
-  return out;
-}
-
-/** 正文里有没有该 init 的**调用点**（排除定义行、排除 `function` 关键字那行）。 */
-export function hasCallSite(text, name) {
-  return CALL_SITE_RE(name).test(withoutInitDefinitions(text, [name]));
-}
-
 /**
  * reachableFromHost(hostText, modules) → { reachable, importedNames, bodies }。
  *
- * hostText = index.html 的**宿主脚本块原文**（要带 import 语句——装载图的边就在那里）。
+ * hostText = **装载根原文**（static/js/boot.js 全文；要带 import 语句——装载图的边在那里）。
  * modules = Map<key, text>，key 形如 `js/ui/guide.js`（**不含** static/ 前缀）。
  * 广度优先走 import 边；走不到的键就是"从没被装载"。
  */
@@ -218,8 +159,8 @@ export function reachableFromHost(hostText, modules) {
  * 判据②：→ [{ path, why }]；空数组 = 不变量成立。
  *
  * 两种失效形态（**只判"本该生效却没生效"**，不逼所有 init 都公开——见下）：
- *   · **孤立模块**：从 index.html 沿 import 图走不到它（写了却从没进页面）；
- *   · **导入的 init 没人调**：有人从 index.html 或可达模块里**具名导入了**某个 `init*`，
+ *   · **孤立模块**：从装载根沿 import 图走不到它（写了却从没进页面）；
+ *   · **导入的 init 没人调**：有人从装载根或可达模块里**具名导入了**某个 `init*`，
  *     但可达的全部正文里没有它的**调用点**（"import 了却忘调"）——这是本轮要防的
  *     真实事故形态：导出与 import 都写了，忘了在启动区调用，页面安安静静什么都不发生。
  *     「调用点」的判据 = `名字(` **且那一行不是定义行**（定义本身也含 `名字(`，
@@ -227,7 +168,7 @@ export function reachableFromHost(hostText, modules) {
  *
  * 为什么**不**要求"每个 init* 导出都必须被外部具名导入"：ui 里 legit 地存在
  * 「模块顶部自己调」的写法和「导出给别的 ui 模块调」的写法，前者（如 ui/topic.js 的
- * `initTopicToolbar` 在模块底部自调）本来就不该出现在 index.html 的装载清单里——
+ * `initTopicToolbar` 在模块底部自调）本来就不该出现在装载根的清单里——
  * 一刀切会逼出一批为过守卫而加的假导出。可达性由上面那条「孤立模块」保证。
  */
 export function unreachableModules(uiModules, hostText, allModules) {
@@ -238,7 +179,7 @@ export function unreachableModules(uiModules, hostText, allModules) {
   for (const { path, text } of uiModules) {
     const key = `js/${path}`;
     if (!reachable.has(key)) {
-      problems.push({ path, why: "孤立模块：从 index.html 走 import 图到不了它" });
+      problems.push({ path, why: "孤立模块：从装载根走 import 图到不了它" });
       continue;
     }
     for (const name of ownInitExports(text)) {

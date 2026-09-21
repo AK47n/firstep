@@ -9,8 +9,9 @@
 //   ① **id 存在性**：ui 源码里写死的 id，必须在"页面真正会出现的声明集合"里找得到。
 //      游离的 id 就是"点了没反应"的来源——`$("outpt-dir")` 静默返回 null，事件监听挂空，
 //      用户点半天没反应、控制台一片安静。
-//   ② **装载可达性**：每个 `ui/*.js` 都必须从 index.html 沿 import 图到得了（"写了却从没
-//      进页面"），且导出 `init*` 的模块该 init 必须有人具名导入、有人调用
+//   ② **装载可达性**：每个 `ui/*.js` 都必须从**装载根**（static/js/boot.js；工单
+//      frontend-boot-module/02 起，此前是 index.html 的宿主脚本块）沿 import 图到得了
+//      （"写了却从没进页面"），且导出 `init*` 的模块该 init 必须有人具名导入、有人调用
 //      （"导入了却忘调" / 改了名忘了跟）。
 //
 // 行为那一半（点下去真的变、刷新后记不记得住）在真浏览器上，见
@@ -20,7 +21,7 @@
 // 判据本体在 tests/js/ui-dom-contract.mjs（单源——红证/探针脚本也 import 它）。
 // 与既有守卫的分工：
 //   import-usage-guard.test.mjs   导入的名字必须真的被用（防化石回流）
-//   static-import-guard.test.mjs  抽 import ↔ 模块导出对账（防死导入打崩整页）
+//   static-import-guard.test.mjs  装载根清单 ↔ 模块导出对账 + index.html 零 import
 //   本文件                        id 真的存在 + 模块真的可达、init 真的被调
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -29,7 +30,7 @@ import { fileURLToPath } from "node:url";
 import {
   listJs, declaredIds, danglingIds, referencedIds, unreachableModules,
 } from "./ui-dom-contract.mjs";
-import { hostScript } from "./import-usage.mjs";
+import { readLoadRoot } from "./boot-contract.mjs";
 
 const STATIC = fileURLToPath(new URL("../../src/contest_generator/static/", import.meta.url));
 const read = (p) => readFileSync(STATIC + p, "utf8");
@@ -41,7 +42,8 @@ const UI_SOURCES = MODULES
   .filter((m) => m.key.startsWith("js/ui/"))
   .map((m) => ({ path: m.key.slice(3), text: m.text }));
 const HTML = read("index.html");
-const HOST_SCRIPT = hostScript(HTML);
+// 装载根 = boot.js 全文（它没有 HTML 外壳，整份就是宿主正文）
+const HOST_SCRIPT = readLoadRoot(STATIC) || "";
 
 test("抽取器不静默失效：声明集合、ui 模块、id 引用都抽得到", () => {
   // 这三条是**判据自己的健康检查**：抽取器写坏时下面的断言会"全绿"，
@@ -54,7 +56,7 @@ test("抽取器不静默失效：声明集合、ui 模块、id 引用都抽得�
   const referenced = new Set(UI_SOURCES.flatMap((s) => referencedIds(s.path, s.text).map((r) => r.id)));
   assert.ok(referenced.size >= 300,
     `ui 只引用到 ${referenced.size} 个 id（选择器写法变了？抽取器过期？）`);
-  assert.ok(HOST_SCRIPT.length > 0, "index.html 里找不到 <script type=\"module\"> 宿主块");
+  assert.ok(HOST_SCRIPT.length > 0, "找不到装载根 static/js/boot.js");
 });
 
 test("ui 引用的 id 必须真的会被声明（防游离选择器 → 点了没反应）", () => {
@@ -72,7 +74,7 @@ test("ui 引用的 id 必须真的会被声明（防游离选择器 → 点了�
   );
 });
 
-test("每个 ui 模块都必须从 index.html 装载得到（防写了却从没生效）", () => {
+test("每个 ui 模块都必须从装载根（boot.js）装载得到（防写了却从没生效）", () => {
   const problems = unreachableModules(UI_SOURCES, HOST_SCRIPT, MODULES);
   const detail = problems.map((p) => `${p.path} — ${p.why}`);
   assert.deepEqual(
@@ -80,8 +82,7 @@ test("每个 ui 模块都必须从 index.html 装载得到（防写了却从没�
     [],
     "有 ui 模块没有被页面装载，或它的 init 没人调用 —— 代码写了、跑了、也测不到，"
     + "用户那边就是\"这个功能从来就没出现过\"。\n"
-    + "要么在 index.html 的装载清单里具名 import 并调用 init，"
-    + "要么（靠被加载才接线的模块）写成裸 import：\n"
+    + "要么在装载根 boot.js 里具名 import 并调用它的 init，要么让它被别的 ui 模块 import：\n"
     + detail.join("\n")
   );
 });

@@ -1,7 +1,7 @@
 // tests/js/handoff-note-guard.test.mjs — Y4 交接提示词说明结构护栏
 // （工单 newcomer-glossary/03）：静态断言第 12 步卡说明文案存在且位于
 // #btn-handoff 上方、「去任务推进」按钮存在、ui/handoff.js 的 initHandoffNote
-// 接线、ui/revise-tabs.js 导出 switchReviseTab、index.html 成对接入。
+// 接线、ui/revise-tabs.js 导出 switchReviseTab、装载根（boot.js）成对接入。
 // 工单 beginner-gap-closure/02 扩展：「去任务推进」跳转单源迁至 ui/goto-tasks.js
 // （第 9 步生成结果区与第 12 步交接卡共用），守卫锁住「一处定义、两处使用」。
 import { readFileSync } from "node:fs";
@@ -10,6 +10,10 @@ import assert from "node:assert/strict";
 
 const html = readFileSync(
   new URL("../../src/contest_generator/static/index.html", import.meta.url),
+  "utf8"
+);
+const boot = readFileSync(
+  new URL("../../src/contest_generator/static/js/boot.js", import.meta.url),
   "utf8"
 );
 const handoff = readFileSync(
@@ -86,7 +90,7 @@ test("生成结果区按钮接线：generate-core.js import goTaskProgress 并�
   assert.match(core, /addEventListener\("click", goTaskProgress\)/);
 });
 
-test("index.html 成对接入：import + initHandoffNote() 调用", () => {
-  assert.match(html, /import \{ initHandoffNote \} from "\/js\/ui\/handoff\.js"/);
-  assert.match(html, /initHandoffNote\(\);/);
+test("装载根成对接入：import + initHandoffNote() 调用", () => {
+  assert.match(boot, /import \{ initHandoffNote \} from "\/js\/ui\/handoff\.js"/);
+  assert.match(boot, /initHandoffNote\(\);/);
 });

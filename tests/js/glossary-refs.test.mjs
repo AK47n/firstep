@@ -1,13 +1,18 @@
 // 结构护栏（工单 newcomer-glossary/01）：静态断言新手词表核心件存在
 // ——index.html 槽位 #glossary-card（位于左侧 .gen-sidebar 内、step-nav 之后）、
-// ui/glossary.js 导出 initGlossary、index.html 成对 import + 调用。
+// ui/glossary.js 导出 initGlossary、装载根成对 import + 调用。
 // 防删防改名（对齐 ai-action-refs / step-done-refs 先例）。
+// 装载根 = boot.js（工单 frontend-boot-module/02 起；此前是 index.html 的宿主块）。
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
 const html = readFileSync(
   new URL("../../src/contest_generator/static/index.html", import.meta.url),
+  "utf8"
+);
+const boot = readFileSync(
+  new URL("../../src/contest_generator/static/js/boot.js", import.meta.url),
   "utf8"
 );
 const glue = readFileSync(
@@ -34,7 +39,7 @@ test("ui/glossary.js 导出 initGlossary", () => {
   assert.match(glue, /export function initGlossary\(\)/);
 });
 
-test("index.html 成对接入：import + initGlossary() 调用", () => {
-  assert.match(html, /import \{ initGlossary \} from "\/js\/ui\/glossary\.js"/);
-  assert.match(html, /initGlossary\(\);/);
+test("装载根成对接入：import + initGlossary() 调用", () => {
+  assert.match(boot, /import \{ initGlossary \} from "\/js\/ui\/glossary\.js"/);
+  assert.match(boot, /initGlossary\(\);/);
 });

@@ -41,6 +41,11 @@ const html = readFileSync(
   new URL("../../src/contest_generator/static/index.html", import.meta.url),
   "utf8",
 );
+// 装载根（工单 frontend-boot-module/02 起装载清单与启动区都住在这里）
+const boot = readFileSync(
+  new URL("../../src/contest_generator/static/js/boot.js", import.meta.url),
+  "utf8",
+);
 
 const PLATFORMS = [
   { id: "stm32", name: "STM32F103C8T6 最小系统板 · Keil5", status: "ready" },
@@ -165,21 +170,21 @@ test("hwcheckPlatformLabel：取展示名，找不到回 id", () => {
 // ② 三处注册接线（静态 import / 启动调用 / 切换时懒加载）
 // ---------------------------------------------------------------------------
 
-test("静态 import：index.html 从 /js/ui/hwcheck.js 导入 renderHwcheckPanel + initHwcheck", () => {
-  const m = html.match(/import\s*\{([^}]*)\}\s*from\s*"\/js\/ui\/hwcheck\.js"/);
-  assert.ok(m, "index.html 应有 ui/hwcheck.js 的静态 import");
+test("静态 import：装载根（boot.js）从 /js/ui/hwcheck.js 导入 renderHwcheckPanel + initHwcheck", () => {
+  const m = boot.match(/import\s*\{([^}]*)\}\s*from\s*"\/js\/ui\/hwcheck\.js"/);
+  assert.ok(m, "boot.js 应有 ui/hwcheck.js 的静态 import");
   const names = m[1].split(",").map((s) => s.trim()).filter(Boolean);
   assert.ok(names.includes("renderHwcheckPanel"), "应导入 renderHwcheckPanel");
   assert.ok(names.includes("initHwcheck"), "应导入 initHwcheck");
 });
 
 test("启动调用：initHwcheck() 在启动区被调一次", () => {
-  assert.ok(/^initHwcheck\(\);/m.test(html), "启动区应调用 initHwcheck()");
+  assert.ok(/^initHwcheck\(\);/m.test(boot), "启动区应调用 initHwcheck()");
 });
 
 test("切换时懒加载：页签分发器对 hwcheck 调 renderHwcheckPanel()", () => {
   assert.ok(
-    html.includes('if (btn.dataset.tab === "hwcheck") renderHwcheckPanel();'),
+    boot.includes('if (btn.dataset.tab === "hwcheck") renderHwcheckPanel();'),
     "页签分发器应在本栏目激活时重渲染（全局状态到达 / 切回来都要刷新平台卡）",
   );
 });

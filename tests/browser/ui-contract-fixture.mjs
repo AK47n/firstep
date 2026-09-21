@@ -2,13 +2,13 @@
 //
 // 为什么单列一个文件：三个契约用例都要"开一张干净的页面 + 等启动完成 + 真点页签"，
 // 而其中两处细节是**踩出来的**（不是从文档抄的）——
-//   ① 要等 index.html 的启动区跑过（平台卡渲染出来 = 所有 init 都已调用），
-//      不等就点会偶发"点了没反应"（导航分发还没绑上）；
+//   ① 要等装载根（static/js/boot.js，工单 frontend-boot-module/02 起）的启动区跑过
+//      （平台卡渲染出来 = 所有 init 都已调用），不等就点会偶发"点了没反应"
+//      （导航分发还没绑上）；
 //   ② 点页签必须**真点**（`page.click`）而不是 `classList.add`——
 //      契约的一多半正是"监听器真的绑上了"，自己改类名等于跳过被测对象。
 //
 // 夹具服务沿用 tests/browser/server.mjs（真后端；每个 spec 各向内核要一个空闲端口）。
-import { hostScript } from "../js/import-usage.mjs";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -57,11 +57,16 @@ export async function gotoNavTab(page, tab) {
 }
 
 /**
- * 从 index.html 真源码里抠出某个 id 的**静态容器**（判据锚点取自产品标记，不手抄）。
+ * 从**产品源码**里抠出某个 id 的**静态容器**（判据锚点取自产品标记，不手抄）。
  * 用途：某条契约要断言"这个容器里的东西"时，别在用例里再写一遍选择器字面量。
+ *
+ * 取数面 = index.html（标记）∪ boot.js（装载根正文；工单 frontend-boot-module/02 把宿主
+ * 脚本块搬去了那里）。
  */
 export function staticAnchor(needle) {
   const html = readFileSync(fileURLToPath(
     new URL("../../src/contest_generator/static/index.html", import.meta.url)), "utf8");
-  return hostScript(html).includes(needle) || html.includes(needle);
+  const boot = readFileSync(fileURLToPath(
+    new URL("../../src/contest_generator/static/js/boot.js", import.meta.url)), "utf8");
+  return html.includes(needle) || boot.includes(needle);
 }

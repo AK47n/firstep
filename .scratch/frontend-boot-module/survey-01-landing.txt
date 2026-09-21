@@ -1,0 +1,29 @@
+① 宿主块：0 条 import / 0 个具名 / 0 条裸装载
+
+② ui 模块：求值期副作用 / 其它 importer 数 / 是否被装载根装载
+   ui/code-fix-panel.js             副作用  1  其它 importer  0  装载根无
+   ui/codeview.js                   副作用  2  其它 importer  7  装载根无
+   ui/context-menu.js               副作用  3  其它 importer  2  装载根无
+   ui/delivery.js                   副作用  5  其它 importer  1  装载根无
+   ui/generate-core.js              副作用 17  其它 importer  0  装载根无
+   ui/generate-fix.js               副作用  6  其它 importer  3  装载根无
+   ui/generate-mainc.js             副作用  2  其它 importer  2  装载根无
+   ui/generate-pins.js              副作用  5  其它 importer  2  装载根无
+   ui/generate-recommend.js         副作用 17  其它 importer 12  装载根无
+   ui/generate-revise.js            副作用 11  其它 importer  8  装载根无
+   ui/generate-steps.js             副作用  6  其它 importer  1  装载根无
+   ui/generate-tasks.js             副作用 24  其它 importer  4  装载根无
+   ui/library.js                    副作用  6  其它 importer  0  装载根无
+   ui/master.js                     副作用  8  其它 importer  0  装载根无
+   ui/params-chat.js                副作用  7  其它 importer  0  装载根无
+   ui/params.js                     副作用  7  其它 importer  2  装载根无
+   ui/reference.js                  副作用  7  其它 importer  0  装载根无
+   ui/settings.js                   副作用 15  其它 importer  2  装载根无
+   ui/step-state.js                 副作用  4  其它 importer 10  装载根无
+   ui/topic.js                      副作用  3  其它 importer  0  装载根无
+   ui/usage.js                      副作用  1  其它 importer  7  装载根无
+
+③ ★「装载根装载 ＋ 唯一装载来源 ＋ 求值期有接线」= 显式 init() 候选（判据③-b 的适用面）
+   —— 共 0 个
+
+④ 装载根里的裸装载（判据③-a 的适用面）

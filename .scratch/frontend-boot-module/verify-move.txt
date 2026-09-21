@@ -1,0 +1,9 @@
+✔ ① boot.js 去掉文件头 = 收走前搬走的块内容（逐字，行尾归一后） —— 476 行对 476 行
+✔ ② index.html 零 import —— 0 条
+✔ ③ index.html 一条装载标签且 src=/js/boot.js —— count=1 src=/js/boot.js
+✔ ④ index.html 除块之外逐字节未动 —— 一致
+✔ ⑤ 装载清单 45 条且逐字保序 —— 45 条（base）→ 45 条（boot.js）
+✔ ⑥ index.html 的 id 声明数不变 —— 555 → 555
+✔ ⑦ index.html 的 CSS/标记行数不变（块除外） —— 5143 → 4668（−475）
+
+PASS：7/7 条成立（base=b52022f1）

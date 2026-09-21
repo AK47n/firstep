@@ -1,0 +1,111 @@
+装载根：0 条 import，装载 0 个模块
+
+== ui/generate-revise.js：求值期接线 11 条；其它 importer 8 个（ui/delivery.js, ui/generate-tasks.js, ui/goto-tasks.js, ui/params-chat.js）
+        70: analyzeCancel.onClick(() => analyzeAbort.abort());
+        71: execCancel.onClick(() => execAbort.abort());
+       544: $("btn-revise-session").addEventListener("click", () => {
+       549: $("btn-revise-load-dir").addEventListener("click", () => {
+       554: $("revise-dir-input").addEventListener("keydown", (e) => {
+       557: $("btn-revise-analyze").addEventListener("click", reviseAnalyze);
+       558: $("btn-revise-discard").addEventListener("click", reviseDiscard);
+       559: $("btn-revise-apply").addEventListener("click", reviseApply);
+       560: $("btn-revise-deepen").addEventListener("click", reviseDeepen);
+       561: $("btn-revise-rollback").addEventListener("click", reviseRollback);
+       563: $("revise-problem-text").addEventListener("input", () => {
+== ui/generate-tasks.js：求值期接线 24 条；其它 importer 4 个（ui/delivery.js, ui/params-chat.js, ui/params.js, ui/revise-tabs.js）
+        59: tasksCancel.onClick(() => { if (tasksAbortSlot) tasksAbortSlot.abort(); });
+      1559: $("btn-tasks-plan").addEventListener("click", () => tasksPlan(false));
+      1560: $("btn-tasks-replan").addEventListener("click", () => tasksPlan(true));
+      1562: $("btn-tasks-idea").addEventListener("click", () => tasksIdeaAnalyze());
+      1565: $("btn-tasks-global-chat").addEventListener("click", () => tasksChatToggle());
+      1566: $("tasks-box").addEventListener("click", (event) => {
+      1578: $("btn-tasks-draft-add").addEventListener("click", () => tasksDraftAdd());
+      1579: $("tasks-box").addEventListener("click", (event) => {
+      1587: $("tasks-idea-result").addEventListener("click", (event) => {
+      1597: $("tasks-grid").addEventListener("click", async (event) => {
+      1627: $("tasks-grid").addEventListener("click", (event) => {
+      1634: $("tasks-grid").addEventListener("click", (event) => {
+      1668: $("tasks-grid").addEventListener("click", (event) => {
+      1682: document.addEventListener("click", (event) => {
+      1691: $("tasks-overview").addEventListener("click", (event) => {
+      1699: $("tasks-grid").addEventListener("click", (event) => {
+      1706: $("tasks-grid").addEventListener("click", (event) => {
+      1718: $("tasks-grid").addEventListener("click", (event) => {
+      1724: $("tasks-grid").addEventListener("click", (event) => {
+      1730: $("tasks-grid").addEventListener("click", (event) => {
+      1742: $("tasks-grid").addEventListener("change", (event) => {
+      1775: window.addEventListener("revise-context-loaded", (event) => {
+      1797: window.addEventListener("tasks-invalidated", (event) => {
+      1820: document.addEventListener("click", (e) => {
+== ui/params.js：求值期接线 7 条；其它 importer 2 个（ui/params-chat.js, ui/revise-tabs.js）
+        46: paramsCancel.onClick(() => paramsAbort.abort());
+       330: $("btn-params-scan").addEventListener("click", () => paramsScan());
+       331: $("params-grid").addEventListener("click", (event) => {
+       341: $("params-grid").addEventListener("keydown", (event) => {
+       350: $("params-result").addEventListener("click", (event) => {
+       357: window.addEventListener("revise-context-loaded", () => { paramsReset(); paramsReload(); });
+       358: window.addEventListener("tasks-invalidated", () => { paramsReset(); });
+== ui/params-chat.js：求值期接线 7 条；其它 importer 0 个（无）
+        38: chatCancel.onClick(() => chatAbort.abort());
+       195: $("btn-params-chat").addEventListener("click", () => paramsChatToggle());
+       196: $("params-chat").addEventListener("click", (event) => {
+       203: $("params-chat").addEventListener("keydown", (event) => {
+       212: window.addEventListener("step11-state-changed", () => {
+       216: window.addEventListener("revise-context-loaded", () => paramsChatReset());
+       217: window.addEventListener("tasks-invalidated", () => paramsChatReset());
+== ui/delivery.js：求值期接线 5 条；其它 importer 1 个（ui/revise-tabs.js）
+       109: $("delivery-actions").innerHTML = deliveryActionsHTML(false);
+       110: bindDeliveryActions();
+       112: window.addEventListener("revise-context-loaded", () => deliveryReset());
+       113: window.addEventListener("tasks-invalidated", () => deliveryReset());
+       115: Object.assign(window, { deliveryActionsHTML, deliveryOpen, deliveryCheck, deliveryPackage, d
+== ui/generate-core.js：求值期接线 17 条；其它 importer 0 个（无）
+       114: $("btn-skeleton").addEventListener("click", () => generateMain("skeleton"));
+       115: $("btn-smoke").addEventListener("click", () => generateMain("smoke"));
+       188: $("btn-restore-bak").addEventListener("click", async () => {
+       212: $("desktop-topic-output").addEventListener("change", () => {
+       217: $("output-dir").disabled = desktopTopicOutputEnabled();
+       218: $("btn-pick-output-dir").disabled = desktopTopicOutputEnabled();
+       220: $("btn-pick-output-dir").addEventListener("click", async () => {
+       393: $("btn-handoff").addEventListener("click", async () => {
+       483: $("btn-handoff-copy").addEventListener("click", async () => {
+       496: $("btn-copy-dir").addEventListener("click", async () => {
+       521: $("btn-flash").addEventListener("click", flashRun);
+       523: $("btn-goto-tasks-result").addEventListener("click", goTaskProgress);
+       527: $("btn-goto-code-result").addEventListener("click", () => openCodeViewer(getMainCDiskDir()))
+       528: $("btn-goto-code-mainc").addEventListener("click", () => openCodeViewer(getMainCDiskDir()));
+       529: $("btn-edit-mainc").addEventListener("click", () => openCodeViewer(getMainCDiskDir(), "main.
+       533: document.addEventListener("click", async (event) => {
+       564: $("btn-generate").addEventListener("click", async () => {
+== ui/library.js：求值期接线 6 条；其它 importer 0 个（无）
+       433: $("btn-add-file-row").addEventListener("click", () => addFileRow());
+       434: addFileRow();
+       439: bindFilePicker("btn-pick-mod-files", "pick-mod-files", "new-files", "add-msg");
+       440: bindFilePicker("btn-pick-mod-dir", "pick-mod-dir", "new-files", "add-msg");
+       458: $("btn-draft-desc").addEventListener("click", async () => {
+       481: $("btn-add-module-submit").addEventListener("click", async () => {
+== ui/master.js：求值期接线 8 条；其它 importer 0 个（无）
+        43: $("btn-pick-dirs").addEventListener("click", () => $("pick-dirs").click());
+        44: $("pick-dirs").addEventListener("change", async () => {
+        71: $("btn-scan").addEventListener("click", async () => {
+       221: $("prog-log-head").addEventListener("click", () => {
+       269: $("btn-distill").addEventListener("click", async () => {
+       346: $("btn-confirm").addEventListener("click", async () => {
+       573: $("btn-direct-import").addEventListener("click", () => $("import-pick-dirs").click());
+       575: $("import-pick-dirs").addEventListener("change", async () => {
+== ui/reference.js：求值期接线 7 条；其它 importer 0 个（无）
+       155: $("ref-anchor-kind").addEventListener("change", () => {
+       454: $("btn-ref-add-file-row").addEventListener("click", () => addFileRow($("ref-files")));
+       455: addFileRow($("ref-files"));
+       459: $("btn-ref-draft-desc").addEventListener("click", async () => {
+       481: $("btn-ref-add").addEventListener("click", async () => {
+       522: bindFilePicker("btn-ref-pick-files", "ref-pick-files", "ref-files", "ref-draft-msg");
+       523: bindFilePicker("btn-ref-pick-dir", "ref-pick-dir", "ref-files", "ref-draft-msg");
+== ui/topic.js：求值期接线 3 条；其它 importer 0 个（无）
+       292: initTopicToolbar();
+       388: $("btn-topic-split").addEventListener("click", async () => {
+       418: $("btn-topic-confirm").addEventListener("click", async () => {
+== ui/code-fix-panel.js：求值期接线 1 条；其它 importer 0 个（无）
+       104: subscribeFixCenter(fixCb);
+
+合计 96 条接线话句（11 个模块）

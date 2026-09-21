@@ -276,10 +276,11 @@ def test_dry_run_does_not_execute_pytest(prepush, monkeypatch, capsys):
     "src/contest_generator/static/js/ui/hwcheck.js",
     "src/contest_generator/static/js/ui/generate-recommend.js",
     "src/contest_generator/static/index.html",
+    "src/contest_generator/static/js/boot.js",      # 装载根（工单 frontend-boot-module/02）
     "src/contest_generator/static/js/app.js",
 ])
 def test_browser_gate_covers_its_landings(selection, path):
-    """浏览器门禁的落点：用例 / ui 层 / 装载清单 / app.js —— 命中即置 browser。"""
+    """浏览器门禁的落点：用例 / ui 层 / 装载根与标记 / app.js —— 命中即置 browser。"""
     assert selection(path).browser is True, f"{path} 没带起浏览器门禁"
 
 

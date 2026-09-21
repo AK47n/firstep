@@ -12,15 +12,21 @@ import {
   discussionAreaHTML, recommendCoverageNote,
 } from "../../src/contest_generator/static/js/fx/recommend.js";
 
-// 结构护栏：纯函数单源在 fx/recommend.js，index.html / ui 层不得再定义
+// 结构护栏：纯函数单源在 fx/recommend.js，宿主（index.html ∪ 装载根 boot.js）不得再定义
 const html = readFileSync(
   new URL("../../src/contest_generator/static/index.html", import.meta.url),
   "utf8"
 );
+const boot = readFileSync(
+  new URL("../../src/contest_generator/static/js/boot.js", import.meta.url),
+  "utf8"
+);
 for (const name of ["suggestionSolutionBadges", "suggestionOptionRowHTML",
   "suggestionOptionsHTML", "suggestionChipHTML", "recommendCoverageNote"]) {
-  test(`纯函数单源：${name} 不在 index.html 内联定义`, () => {
-    assert.ok(!new RegExp("function\\s+" + name + "\\s*\\(").test(html));
+  test(`纯函数单源：${name} 不在宿主内联定义`, () => {
+    const re = new RegExp("function\\s+" + name + "\\s*\\(");
+    assert.ok(!re.test(html), `index.html 内联定义了 ${name}`);
+    assert.ok(!re.test(boot), `boot.js 内联定义了 ${name}`);
   });
 }
 

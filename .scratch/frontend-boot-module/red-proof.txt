@@ -1,0 +1,56 @@
+== ① base 自校验（base=b52022f1）==
+  收走前宿主脚本：import 45 条；boot.js：不存在（对）
+  模块表：131 个 .js（git ls-tree b52022f1）
+  ✓ 通过（base 是收走前那一代）
+
+== ② 同一套判据作用在 base 上（应红）==
+  判据①「index.html 零 import」：红 —— 45 条
+      4668: import { $, apiGet, state, setState } from "/js/app.js";
+      4669: import { renderUsageStats } from "/js/ui/usage.js";
+      4670: import { loadMasters, loadChangelog, renderNewPlatformOptions } from "
+      …（其余 42 条略）
+  判据③-a「装载清单零裸装载」：红 —— 5 条
+      16: import "/js/ui/generate-revise.js"
+      17: import "/js/ui/generate-tasks.js"
+      18: import "/js/ui/params.js"
+      19: import "/js/ui/params-chat.js"
+      20: import "/js/ui/delivery.js"
+  判据③-b「接线不住求值期」（适用面 = 登记表 11 个模块 ∪ boot 唯一装载来源的 ui 模块）：红 —— 11 个模块 / 96 条列 0 副作用
+      ui/code-fix-panel.js: 1 条（首条 104: subscribeFixCenter(fixCb);）
+      ui/delivery.js: 5 条（首条 109: $("delivery-actions").innerHTML = deliveryActionsHTML(fa）
+      ui/generate-core.js: 17 条（首条 114: $("btn-skeleton").addEventListener("click", () => genera）
+      ui/generate-revise.js: 11 条（首条 70: analyzeCancel.onClick(() => analyzeAbort.abort());）
+      ui/generate-tasks.js: 24 条（首条 59: tasksCancel.onClick(() => { if (tasksAbortSlot) tasksAbo）
+      ui/library.js: 6 条（首条 433: $("btn-add-file-row").addEventListener("click", () => ad）
+      ui/master.js: 8 条（首条 43: $("btn-pick-dirs").addEventListener("click", () => $("pi）
+      ui/params-chat.js: 7 条（首条 38: chatCancel.onClick(() => chatAbort.abort());）
+      ui/params.js: 7 条（首条 46: paramsCancel.onClick(() => paramsAbort.abort());）
+      ui/reference.js: 7 条（首条 155: $("ref-anchor-kind").addEventListener("change", () => {）
+      ui/topic.js: 3 条（首条 292: initTopicToolbar();）
+  登记表体检（11 项）：红 —— ui/delivery.js：登记了，但它没有导出 init*()；ui/generate-core.js：登记了，但它没有导出 init*()；ui/generate-revise.js：登记了，但它没有导出 init*()；ui/generate-tasks.js：登记了，但它没有导出 init*()；ui/master.js：登记了，但它没有导出 init*()；ui/params-chat.js：登记了，但它没有导出 init*()；ui/params.js：登记了，但它没有导出 init*()；ui/topic.js：登记了，但装载根没调用它导出的 init*（initTopicToolbar）
+
+== ③ 当前工作树读数（收口时要求全绿）==
+  判据① index.html import：0 条（绿）
+  判据② index.html JS 定义：0 条（绿）
+  装载标签：type=module 共 1 个，src=/js/boot.js
+  判据③-a 装载清单裸装载：5 条（红：/js/ui/generate-revise.js, /js/ui/generate-tasks.js, /js/ui/params.js, /js/ui/params-chat.js, /js/ui/delivery.js）
+  判据③-b 接线不住求值期：11 个模块（红：ui/code-fix-panel.js, ui/delivery.js, ui/generate-core.js, ui/generate-revise.js, ui/generate-tasks.js, ui/library.js, ui/master.js, ui/params-chat.js, ui/params.js, ui/reference.js, ui/topic.js）
+  登记表体检（11 项）：（红：ui/delivery.js, ui/generate-core.js, ui/generate-revise.js, ui/generate-tasks.js, ui/master.js, ui/params-chat.js, ui/params.js, ui/topic.js）
+  判据④-a 全图对账断裂（根=boot.js）：0 处（绿）
+  判据④-b 从装载根可达：131/131（绿）
+
+== ④ 判据强度自检（内存注入，不写盘）==
+  ✔ 删掉一条装载 → 可达性判据报出掉队模块 —— 掉队：fx/topic.js, ui/topic.js
+  ✔ 摘掉一个导出 → 全图对账报出未导出名 —— 报出 renderHwcheckPanel
+  ✔ index.html 塞一个 function → 零定义判据报出 —— 报出 1 条：function probeInjected() {}
+  ✔ 装载指向不存在的模块 → 对账报出文件不存在 —— 报出 does-not-exist.js
+  ✔ import 了 init 却不调用 → 判据报出；补上调用 → 转绿 —— 报出：initGlossary 被 import 了却没人调用：可达正文里找不到 initGlossary( 的调用点
+  ✔ 注释感知：花括号里的注释不被当成导入名，全图对账零断裂 —— 全图断裂 0 处
+  ✔ 判据③ 登记那一半兜底：结构判据抓不到的模块也被判红 —— 结构判据漏掉 4 个（delivery.js, generate-revise.js, generate-tasks.js, params.js），其中判红 4 个
+
+== 结论 ==
+  红证（base 上必红）：成立
+  强度自检：7/7 成立
+  当前工作树：红（实现期间正常；工单 05 要求转绿）
+
+PASS（判据能红，且不是靠选错 base 红的）
