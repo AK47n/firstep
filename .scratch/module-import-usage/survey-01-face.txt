@@ -1,0 +1,28 @@
+=== module-import-usage/01 取数面读数（判据面 = static/js/**，含 js/ 根 app.js / boot.js）===
+
+模块文件数            132
+有 import 边的模块    106
+零 import 的模块      26
+import 语句总数       496
+具名导入名字总数      1249
+裸装载（import "…"）  0
+星号导入              0
+
+闸门用例的**保守下限**（只在抽取器静默失效时才响；不追着现状贴脸）：
+  模块数    >= 120   （实测 132）
+  语句数    >= 400   （实测 496）
+  具名数    >= 1000  （实测 1249）
+
+本条判据当前读数（清点是 02 的交付，此刻应为红）：未使用具名 **12** 处
+  · fx/codeview.js::languageOf
+  · fx/full-update.js::downloadedPercent
+  · ui/code-compile.js::getMainCDiskDir
+  · ui/code-tree-ops.js::getCodeTreeFiles
+  · ui/codeeditor.js::isTabSavable
+  · ui/flash.js::$
+  · ui/generate-readiness.js::readinessRowHTML
+  · ui/generate-tasks.js::resourcesOverviewHTML
+  · ui/materials-update.js::aggregateSelection
+  · ui/md.js::toastError
+  · ui/pdf.js::pdfDupRemainText
+  · ui/resource-board.js::resourcesToolbarHTML

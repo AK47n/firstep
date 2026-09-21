@@ -41,6 +41,17 @@ const LOAD_ROOT_KEY = "boot.js";
 
 // ---------------------------------------------------------------------------
 // 掩码：把注释、字符串字面量与正则字面量的内容换成空格（保留换行与行结构）
+//
+// **两种口径、一份实现**（工单 module-import-usage/01）：
+//   · `maskCommentsAndStrings`（`templateExpressions = false`）：模板串**整串**掩掉，含 `${…}`。
+//     判据 D / T、图对账、接线全依赖它——语义与行为**一字不变**。
+//   · `maskNonCode`（`templateExpressions = true`）：模板串按「**文本段**掩掉、`${…}` 表达式内部
+//     **当代码**（内部照旧掩注释 / 字符串 / 正则 / 嵌套模板的文本段）」处理。
+//
+// 为什么必须有第二种口径：掩掉模板表达式对**判据 T**（"调用位 ⇒ 函数形态"）是**保守**的
+// （漏报，不假红）；但对**「零未使用具名 import」**方向**相反**——`${esc(x)}` 里的 `esc` 会被
+// 判成死的（**假红**），照它删就是运行时 `ReferenceError`。实测：naive 口径报 45 处，
+// 其中 **33 处**是这种假红（工单 module-import-usage/01 的读数）。
 // ---------------------------------------------------------------------------
 
 const REGEX_ALLOWED_BEFORE = "(,=:[!&|?{};+-*%~^<>";
@@ -50,20 +61,38 @@ const KEYWORDS_BEFORE_REGEX = new Set([
 ]);
 
 /**
- * maskCommentsAndStrings(text) → 同长度文本：注释、字符串与正则字面量的**内容**变空格；
+ * 掩码**核心**（全仓唯一一份分词）→ 同长度文本：注释、字符串与正则字面量的**内容**变空格；
  * 引号/斜杠定界符与换行保留（列 0 判定与行号不受影响）。
+ *
+ * `templateExpressions = true` 时额外维护"模板状态"：模板字面量的**文本段**整段掩掉，
+ * `${` 之后切回代码模式，用**花括号深度栈**找它自己的收尾 `}`（嵌套模板 / 表达式里的对象字面量
+ * 都靠这个栈）。`false` 时模板串与普通字符串同款处理（整串掩掉），与本次改动前逐字符相同。
  */
-export function maskCommentsAndStrings(text) {
+function mask(text, templateExpressions) {
   const out = text.split("");                 // UTF-16 码元切（见文件头第 1 个坑）
   const blank = (from, to) => {
     for (let k = from; k < to && k < out.length; k++) if (out[k] !== "\n") out[k] = " ";
   };
+  const tplStack = [];                        // 每个 `${` 一层：{ depth } = 表达式内的花括号深度
+  let inTplText = false;                      // 当前在模板字面量的**文本段**（只掩、不算代码）
   let i = 0;
   let lastSig = "";                           // 上一个有意义的字符（判 `/` 是不是除号）
   let lastIdent = "";                         // 紧邻的上一个标识符（判 `return /re/` 这类）
   while (i < text.length) {
     const c = text[i];
     const next = text[i + 1];
+    if (inTplText) {                          // 模板文本段：整段掩掉（只有 templateExpressions 口径会进来）
+      if (c === "\\") { blank(i, i + 2); i += 2; continue; }
+      if (c === "`") { inTplText = false; lastSig = "`"; lastIdent = ""; i++; continue; }
+      if (c === "$" && next === "{") {
+        // `$` 是**模板替换的语法**、不是标识符 —— 掩掉它（`{` 留着无所谓）。
+        // 不掩的话，任何含模板串的模块里那个名为 `$` 的 import 都会被喂绿
+        //（`(?<![\w$])\$(?![\w$])` 会匹配到 `${` 的 `$`），判据当场漏一处死 import。
+        blank(i, i + 1);
+        tplStack.push({ depth: 0 }); inTplText = false; i += 2; continue;
+      }
+      blank(i, i + 1); i++; continue;
+    }
     if (/\s/.test(c)) { i++; continue; }
     if (c === "/" && next === "/") {                       // 行注释
       let j = i;
@@ -75,7 +104,7 @@ export function maskCommentsAndStrings(text) {
       const j = end < 0 ? text.length : end + 2;
       blank(i, j); i = j; continue;
     }
-    if (c === '"' || c === "'" || c === "`") {             // 字符串 / 模板串
+    if (c === '"' || c === "'" || (c === "`" && !templateExpressions)) {   // 字符串 /（旧口径的）模板串
       let j = i + 1;
       while (j < text.length) {
         if (text[j] === "\\") { j += 2; continue; }
@@ -85,6 +114,9 @@ export function maskCommentsAndStrings(text) {
       }
       blank(i + 1, j - 1);
       lastSig = c; lastIdent = ""; i = j; continue;
+    }
+    if (c === "`") {                                       // 模板串开头（表达式感知口径）
+      inTplText = true; lastSig = c; lastIdent = ""; i++; continue;
     }
     if (c === "/" && (lastSig === "" || REGEX_ALLOWED_BEFORE.includes(lastSig)
         || KEYWORDS_BEFORE_REGEX.has(lastIdent))) {        // 正则字面量
@@ -102,6 +134,13 @@ export function maskCommentsAndStrings(text) {
       blank(i + 1, j - 1);                                 // 正则内容掩掉（里面的引号不算字符串）
       lastSig = "/"; lastIdent = ""; i = j; continue;
     }
+    if ((c === "{" || c === "}") && tplStack.length) {     // `\${…}` 表达式内的花括号：只数深度
+      const top = tplStack[tplStack.length - 1];
+      if (c === "{") top.depth++;
+      else if (top.depth === 0) { tplStack.pop(); inTplText = true; }   // `}` 收尾 → 回到文本段
+      else top.depth--;
+      lastSig = c; lastIdent = ""; i++; continue;
+    }
     if (/[A-Za-z_$]/.test(c)) {                            // 标识符：记下来给正则判定用
       let j = i;
       while (j < text.length && /[\w$]/.test(text[j])) j++;
@@ -112,6 +151,26 @@ export function maskCommentsAndStrings(text) {
     lastSig = c; lastIdent = ""; i++;
   }
   return out.join("");
+}
+
+/**
+ * 注释 / 字符串 / 正则字面量 / 模板串**整串**（含 `${…}`）的内容变空格。
+ * 判据 D / T、图对账、接线与通用掩码都走这个口径——**语义与行为不得改动**。
+ */
+export function maskCommentsAndStrings(text) {
+  return mask(text, false);
+}
+
+/**
+ * 注释 / 字符串 / 正则字面量 / 模板串**文本段**的内容变空格，`${…}` **表达式内部保留为代码**
+ * （内部照旧掩注释 / 字符串 / 正则 / 嵌套模板的文本段）；`${` 那两个字符本身也掩掉
+ * （它们是替换语法、不是标识符——留着会把名为 `$` 的 import 喂绿）。
+ *
+ * 「零未使用具名 import」判据的正文口径（工单 module-import-usage/01）：用 `maskCommentsAndStrings`
+ * 会把 `${esc(x)}` 这种**真使用**判成死的。
+ */
+export function maskNonCode(text) {
+  return mask(text, true);
 }
 
 // ---------------------------------------------------------------------------

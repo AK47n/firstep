@@ -1,0 +1,32 @@
+=== 合成红证：判据的假绿反例 ＋ 防假红反向对照（module-import-usage/01）===
+用例数：25
+
+逐条（判据 = tests/js/import-usage.mjs::unusedImports；差分校准见用例表）：
+  PASS  comment-line                     名字只在行注释里（旧口径正是被它喂绿的）
+  PASS  comment-block                    名字只在块注释里
+  PASS  comment-trailing-block           名字只在**行尾**块注释里（旧口径只剥整行 `//`，这行剥不掉）
+  PASS  string-double                    名字只在双引号字符串里
+  PASS  string-single                    名字只在单引号字符串里
+  PASS  regex-literal                    名字只在正则字面量里（正则要被识别成正则，不能当除号——否则引号会开启字符串状态）
+  PASS  template-text-segment            名字只在模板串的**文本段**里
+  PASS  template-text-then-expr          模板串里既有文本段的 `esc` 又有别的表达式 —— 文本段那个不算使用
+  PASS  comment-inside-template-expr     名字在模板**表达式**里的注释中（表达式是代码区，但注释里的同名不算使用）
+  PASS  longer-identifier                名字只是更长标识符的前缀/子串（标识符边界）—— 朴素子串口径在这里假绿
+  PASS  dollar-suffix                    `$` 只出现在更长标识符里（用 \b 会恒假，用 lookaround 才对）—— 朴素子串口径在这里假绿
+  PASS  dollar-template-substitution     `$` 只作为**模板替换语法**出现（`${` 是语法不是标识符）—— 既不能喂绿、也不能算用
+  PASS  never-mentioned                  名字在正文里一次都没出现（最朴素的那条；旧口径在这个形态上也是对的）
+  PASS  code-call                        代码里的直接调用
+  PASS  template-expression              **模板表达式**里的使用 —— naive 掩码口径会把整串掩掉、判成死的（假红）；`maskNonCode` 必须判活
+  PASS  template-expression-nested       嵌套模板表达式（`${` 里再开一个模板串）里的使用
+  PASS  template-expression-braces       表达式里有对象字面量（花括号深度必须数对，否则 `}` 提前收尾、后面的代码被当文本段掩掉）
+  PASS  reexport-clause                  经**再导出清单**被消费（`export { esc };` 本身就是一条消费边）
+  PASS  import-then-reexport             工单点名的连写形态：`import { x } from "M"; export { x };` —— 导入的 x 由再导出消费，不许报
+  PASS  alias-local-used                 `import { A as B }` 里**本地名 B** 被用（按源名判会假红——工单 02 的 5 处误报都是这种）
+  PASS  bare-load                        裸装载零具名 —— 判据不碰它（永远合法）
+  PASS  dollar-real-use                  `$` 被当真（`$("id")`）
+  PASS  quote-inside-regex               正则里的引号不能开启字符串状态（否则后面几十行被掩成空白 → 假红）
+  PASS  comment-before-code              注释里出现名字、代码里也出现 —— 必须判活（不能因为注释就报）
+  PASS  multi-name-partial               同一条语句里一个真用一个没用 —— 只报没用的那个
+
+合成自检：25/25 成立
+**PASS**
