@@ -5,8 +5,8 @@
 // 删除确认 / 更新记录。纯件在 fx/master.js（masterTableRowHTML 等表格行 /
 // 判定行 / 归档行 / URL / 详情 HTML），本模块只做 DOM 转发与事件接线。
 // 顶层 addEventListener（btn-pick-dirs / pick-dirs / btn-scan / prog-log-head /
-// btn-distill / btn-confirm / btn-usage-reset）在 import 时绑定——module
-// 脚本延迟执行，DOM 已就绪（与 stage 1 桥接约定同理）。
+// btn-distill / btn-confirm / btn-usage-reset）由 initMasterWorkflow() 绑定
+//（工单 frontend-boot-module/04：从求值期搬进显式 init，装载根 boot.js 调用）。
 import { $, handle, apiGet, apiPost, apiDelete, toast, toastError, copyText } from "/js/app.js";
 import { makeProgressPanel } from "/js/ui/progress.js";
 import { confirmModal } from "/js/ui/confirm.js";
@@ -39,54 +39,6 @@ function renderStagedDirs() {
       $("btn-distill").disabled = true;
     }));
 }
-
-$("btn-pick-dirs").addEventListener("click", () => $("pick-dirs").click());
-$("pick-dirs").addEventListener("change", async () => {
-  const input = $("pick-dirs");
-  const files = Array.from(input.files).filter((f) => {
-    const parts = f.webkitRelativePath.split("/");
-    return parts.length > 1 && !parts.includes(".git");
-  });
-  input.value = "";
-  if (!files.length) return;
-  $("scan-msg").classList.remove("ok");
-  $("scan-msg").textContent = "";
-  $("scan-result").innerHTML = "";
-  const form = new FormData();
-  for (const f of files) form.append("files", f, f.webkitRelativePath);
-  $("btn-pick-dirs").disabled = true;
-  try {
-    const data = await handle(await fetch("/api/masters/stage", { method: "POST", body: form }));
-    for (const s of data.staged) if (!stagedDirs.some((d) => d.path === s.path)) stagedDirs.push(s);
-    renderStagedDirs();
-    $("scan-msg").classList.add("ok");
-    $("scan-msg").textContent = "已导入 " + data.staged.length + " 个文件夹（" + files.length
-      + " 个文件），点「扫描工程」继续";
-  } catch (e) {
-    $("scan-msg").classList.remove("ok");
-    $("scan-msg").textContent = e.message;
-  } finally { $("btn-pick-dirs").disabled = false; }
-});
-
-$("btn-scan").addEventListener("click", async () => {
-  $("scan-msg").classList.remove("ok");
-  $("scan-msg").textContent = "";
-  $("report").classList.add("hidden");
-  $("distill-progress").classList.add("hidden");   // 重新扫描 = 新的提炼上下文，收起旧进度
-  const dirs = projectDirs();
-  if (!dirs.length) { $("scan-msg").textContent = "请先选择或填写至少一个旧工程目录"; return; }
-  try {
-    scannedProjects = await apiPost("/api/masters/scan", { project_dirs: dirs });
-    $("scan-result").innerHTML = scannedProjects.map((p) => `
-      <div class="item"><div class="head">
-        <span class="slug">${esc(p.name)}</span>
-        <span class="muted">平台：${esc(p.platform)}</span>
-        <span class="muted">${p.files.length} 个文件</span>
-      </div>
-      <div class="reason">${esc(p.config_summary.join("；") || "无配置摘要")}</div></div>`).join("");
-    $("btn-distill").disabled = false;
-  } catch (e) { $("scan-msg").textContent = e.message; }
-});
 
 // 提炼进度面板实例（共享工厂 makeProgressPanel 在 ui/progress.js）。
 // 生命周期 = 一次点击到 done / error / 断线；词表镜像 events.py：
@@ -218,11 +170,6 @@ function addBatchLine(ev) {
   log.scrollTop = log.scrollHeight;
 }
 
-$("prog-log-head").addEventListener("click", () => {
-  const log = $("prog-log");
-  $("prog-log-caret").textContent = log.classList.toggle("hidden") ? "▾" : "▸";
-});
-
 function startProgress() {
   distPanel.start();   // 计时归零 + 秒表跳起（自动清旧定时器，防双击）
   const p = distPanel.p;
@@ -265,34 +212,6 @@ function failProgress(message) {
   $("prog-log-caret").textContent = "▾";
   distPanel.tick();   // 计时器停在最后读数
 }
-
-$("btn-distill").addEventListener("click", async () => {
-  $("distill-msg").textContent = "";
-  $("btn-distill").disabled = true;   // 进度区替代按钮静态转圈
-  aiActionStart("母版提炼");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
-  startProgress();
-  try {
-    const dirs = projectDirs();
-    const platform = scannedProjects[0].platform;
-    const resp = await fetch("/api/masters/distill", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ platform, project_dirs: dirs }),
-    });
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(parseHttpError(resp.status, err).text);
-    }
-    await parseSSE(resp, distPanel.handleEvent);
-    if (!distPanel.p.finished) {   // 流结束但没等到 done / error = 断线：放弃本次，刷新安全重试
-      failProgress("连接中断：本次提炼未完成（确认前不落任何东西），刷新页面后可安全重试");
-    }
-  } catch (e) {
-    if (!distPanel.p.finished) failProgress(e.message);
-  } finally {
-    $("btn-distill").disabled = false;
-    $("btn-distill").textContent = "重新提炼";
-  }
-});
 
 function renderReport() {
   $("report").classList.remove("hidden");
@@ -342,44 +261,6 @@ function renderReport() {
       renderReport();
     }));
 }
-
-$("btn-confirm").addEventListener("click", async () => {
-  $("confirm-msg").textContent = "";
-  if (!currentReport) return;
-  const archiveCount = (currentReport.archive || []).length;
-  const suffix = archiveCount
-    ? "\n另有 " + archiveCount + " 条归档动作：复制入库参考文件库并锚定赛题编号（需 AI 服务，失败可去掉归档后重试）。"
-    : "";
-  const ok = await confirmModal({
-    title: "确认提炼母版并入库？",
-    message: "确认按此报告提炼母版并入库？（将整体替换该平台的旧母版）" + suffix,
-    danger: true,
-    confirmText: "确认并入库",
-  });
-  if (!ok) return;
-  $("btn-confirm").disabled = true;
-  $("confirm-status").innerHTML = '<span class="spinner"></span>落盘与入库中…';
-  try {
-    const data = await apiPost("/api/masters/confirm", {
-      platform: currentReport.platform,
-      project_dirs: projectDirs(),
-      projects: currentReport.projects,
-      keep: currentReport.keep, merge: currentReport.merge, exclude: currentReport.exclude,
-      // 归档动作（工单 02）：只透传 path / topic / reason 契约字段，内部标记不进载荷
-      archive: (currentReport.archive || []).map((a) => ({ path: a.path, topic: a.topic, reason: a.reason })),
-    });
-    $("confirm-status").textContent = "";
-    $("confirm-msg").classList.add("ok");
-    $("confirm-msg").textContent = "母版已入库：平台 " + data.platform + "（来源：" + data.sources.join("、") + "）"
-      + (data.warnings.length ? "，警告：" + data.warnings.join("；") : "");
-    $("report").classList.add("hidden");
-    loadMasters();
-  } catch (e) {
-    $("confirm-msg").classList.remove("ok");
-    $("confirm-msg").textContent = e.message;
-    $("confirm-status").textContent = "";  // 失败也要清掉"落盘与入库中"，不留进行中假象
-  } finally { $("btn-confirm").disabled = false; }
-});
 
 // ===== 母版库表格（工单 master-library-ui/03）：增强行渲染 + 删除确认弹窗 =====
 // 交互逻辑下沉纯函数（extract 范式对偶 pdf* / ref* 系列），DOM 层只转发。
@@ -570,69 +451,6 @@ function importPlatformOptions() {
   }));
 }
 
-$("btn-direct-import").addEventListener("click", () => $("import-pick-dirs").click());
-
-$("import-pick-dirs").addEventListener("change", async () => {
-  const input = $("import-pick-dirs");
-  const files = Array.from(input.files).filter((f) => {
-    const parts = f.webkitRelativePath.split("/");
-    return parts.length > 1 && !parts.includes(".git");
-  });
-  input.value = "";
-  if (!files.length) return;
-  // 整夹暂存（与扫描同一条流程 /api/masters/stage：路径穿越拒绝 / 目录名
-  // 清洗 / 噪音跳过 / 512MB 上限）
-  const form = new FormData();
-  for (const f of files) form.append("files", f, f.webkitRelativePath);
-  let staged;
-  try {
-    const data = await handle(await fetch("/api/masters/stage", { method: "POST", body: form }));
-    staged = data.staged[0];
-  } catch (e) {
-    toastError(e, "暂存失败");
-    return;
-  }
-  if (!staged) {
-    toast("error", "未获得暂存目录（所选文件夹没有可用的文件？）");
-    return;
-  }
-  const options = importPlatformOptions();
-  if (!options.length) {
-    toast("error", "平台列表不可用（请先刷新页面）");
-    return;
-  }
-  const baseMessage = "选择目标平台后，该平台的旧母版将被整体替换（来源：「"
-    + staged.name + "」目录）。结构校验通过才落盘，旧母版先备份、失败自动"
-    + "回滚，库写入自动进 git 历史；替换后该平台的生成以新母版为准。";
-  const extra = `<div class="import-platform-field"><label>目标平台</label>`
-    + `<select data-confirm-value>`
-    + options.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("")
-    + `</select></div>`;
-  // 失败弹窗保留可重试：失败原因并入消息重新打开确认弹窗（免重选文件夹）
-  let errorNote = "";
-  for (;;) {
-    const platform = await confirmModal({
-      title: "直接导入替换母版？",
-      message: (errorNote ? "导入失败：" + errorNote + "\n\n" : "") + baseMessage,
-      danger: true,
-      confirmText: "确认替换",
-      cancelText: "取消",
-      extra,
-    });
-    if (!platform) return;   // 取消 / 遮罩 / Esc：零写库
-    try {
-      const meta = await apiPost("/api/masters/import", {
-        platform, project_dir: staged.path,
-      });
-      toast("ok", "已导入平台 " + platform + " 的母版（来源：" + meta.sources.join("、") + "）");
-      loadMasters();
-      return;
-    } catch (e) {
-      errorNote = e.message;   // 结构校验失败等：零库写入，弹窗重开可重试
-    }
-  }
-});
-
 export async function loadMasters() {
   try {
     const masters = await apiGet("/api/masters");
@@ -707,4 +525,193 @@ function toggleReleaseCard(head) {
   if (!card) return;
   const collapsed = card.classList.toggle("collapsed");
   head.setAttribute("aria-expanded", collapsed ? "false" : "true");
+}
+
+
+/**
+ * 接线：由装载根 boot.js 显式调用（工单 frontend-boot-module/04）
+ * 语句顺序 = 原文件里的先后顺序；绑定的 target 与事件类型一字未改。
+ */
+export function initMasterWorkflow() {
+  $("btn-pick-dirs").addEventListener("click", () => $("pick-dirs").click());
+  $("pick-dirs").addEventListener("change", async () => {
+    const input = $("pick-dirs");
+    const files = Array.from(input.files).filter((f) => {
+      const parts = f.webkitRelativePath.split("/");
+      return parts.length > 1 && !parts.includes(".git");
+    });
+    input.value = "";
+    if (!files.length) return;
+    $("scan-msg").classList.remove("ok");
+    $("scan-msg").textContent = "";
+    $("scan-result").innerHTML = "";
+    const form = new FormData();
+    for (const f of files) form.append("files", f, f.webkitRelativePath);
+    $("btn-pick-dirs").disabled = true;
+    try {
+      const data = await handle(await fetch("/api/masters/stage", { method: "POST", body: form }));
+      for (const s of data.staged) if (!stagedDirs.some((d) => d.path === s.path)) stagedDirs.push(s);
+      renderStagedDirs();
+      $("scan-msg").classList.add("ok");
+      $("scan-msg").textContent = "已导入 " + data.staged.length + " 个文件夹（" + files.length
+        + " 个文件），点「扫描工程」继续";
+    } catch (e) {
+      $("scan-msg").classList.remove("ok");
+      $("scan-msg").textContent = e.message;
+    } finally { $("btn-pick-dirs").disabled = false; }
+  });
+
+  $("btn-scan").addEventListener("click", async () => {
+    $("scan-msg").classList.remove("ok");
+    $("scan-msg").textContent = "";
+    $("report").classList.add("hidden");
+    $("distill-progress").classList.add("hidden");   // 重新扫描 = 新的提炼上下文，收起旧进度
+    const dirs = projectDirs();
+    if (!dirs.length) { $("scan-msg").textContent = "请先选择或填写至少一个旧工程目录"; return; }
+    try {
+      scannedProjects = await apiPost("/api/masters/scan", { project_dirs: dirs });
+      $("scan-result").innerHTML = scannedProjects.map((p) => `
+        <div class="item"><div class="head">
+          <span class="slug">${esc(p.name)}</span>
+          <span class="muted">平台：${esc(p.platform)}</span>
+          <span class="muted">${p.files.length} 个文件</span>
+        </div>
+        <div class="reason">${esc(p.config_summary.join("；") || "无配置摘要")}</div></div>`).join("");
+      $("btn-distill").disabled = false;
+    } catch (e) { $("scan-msg").textContent = e.message; }
+  });
+
+  $("prog-log-head").addEventListener("click", () => {
+    const log = $("prog-log");
+    $("prog-log-caret").textContent = log.classList.toggle("hidden") ? "▾" : "▸";
+  });
+
+  $("btn-distill").addEventListener("click", async () => {
+    $("distill-msg").textContent = "";
+    $("btn-distill").disabled = true;   // 进度区替代按钮静态转圈
+    aiActionStart("母版提炼");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
+    startProgress();
+    try {
+      const dirs = projectDirs();
+      const platform = scannedProjects[0].platform;
+      const resp = await fetch("/api/masters/distill", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ platform, project_dirs: dirs }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(parseHttpError(resp.status, err).text);
+      }
+      await parseSSE(resp, distPanel.handleEvent);
+      if (!distPanel.p.finished) {   // 流结束但没等到 done / error = 断线：放弃本次，刷新安全重试
+        failProgress("连接中断：本次提炼未完成（确认前不落任何东西），刷新页面后可安全重试");
+      }
+    } catch (e) {
+      if (!distPanel.p.finished) failProgress(e.message);
+    } finally {
+      $("btn-distill").disabled = false;
+      $("btn-distill").textContent = "重新提炼";
+    }
+  });
+
+  $("btn-confirm").addEventListener("click", async () => {
+    $("confirm-msg").textContent = "";
+    if (!currentReport) return;
+    const archiveCount = (currentReport.archive || []).length;
+    const suffix = archiveCount
+      ? "\n另有 " + archiveCount + " 条归档动作：复制入库参考文件库并锚定赛题编号（需 AI 服务，失败可去掉归档后重试）。"
+      : "";
+    const ok = await confirmModal({
+      title: "确认提炼母版并入库？",
+      message: "确认按此报告提炼母版并入库？（将整体替换该平台的旧母版）" + suffix,
+      danger: true,
+      confirmText: "确认并入库",
+    });
+    if (!ok) return;
+    $("btn-confirm").disabled = true;
+    $("confirm-status").innerHTML = '<span class="spinner"></span>落盘与入库中…';
+    try {
+      const data = await apiPost("/api/masters/confirm", {
+        platform: currentReport.platform,
+        project_dirs: projectDirs(),
+        projects: currentReport.projects,
+        keep: currentReport.keep, merge: currentReport.merge, exclude: currentReport.exclude,
+        // 归档动作（工单 02）：只透传 path / topic / reason 契约字段，内部标记不进载荷
+        archive: (currentReport.archive || []).map((a) => ({ path: a.path, topic: a.topic, reason: a.reason })),
+      });
+      $("confirm-status").textContent = "";
+      $("confirm-msg").classList.add("ok");
+      $("confirm-msg").textContent = "母版已入库：平台 " + data.platform + "（来源：" + data.sources.join("、") + "）"
+        + (data.warnings.length ? "，警告：" + data.warnings.join("；") : "");
+      $("report").classList.add("hidden");
+      loadMasters();
+    } catch (e) {
+      $("confirm-msg").classList.remove("ok");
+      $("confirm-msg").textContent = e.message;
+      $("confirm-status").textContent = "";  // 失败也要清掉"落盘与入库中"，不留进行中假象
+    } finally { $("btn-confirm").disabled = false; }
+  });
+
+  $("btn-direct-import").addEventListener("click", () => $("import-pick-dirs").click());
+
+  $("import-pick-dirs").addEventListener("change", async () => {
+    const input = $("import-pick-dirs");
+    const files = Array.from(input.files).filter((f) => {
+      const parts = f.webkitRelativePath.split("/");
+      return parts.length > 1 && !parts.includes(".git");
+    });
+    input.value = "";
+    if (!files.length) return;
+    // 整夹暂存（与扫描同一条流程 /api/masters/stage：路径穿越拒绝 / 目录名
+    // 清洗 / 噪音跳过 / 512MB 上限）
+    const form = new FormData();
+    for (const f of files) form.append("files", f, f.webkitRelativePath);
+    let staged;
+    try {
+      const data = await handle(await fetch("/api/masters/stage", { method: "POST", body: form }));
+      staged = data.staged[0];
+    } catch (e) {
+      toastError(e, "暂存失败");
+      return;
+    }
+    if (!staged) {
+      toast("error", "未获得暂存目录（所选文件夹没有可用的文件？）");
+      return;
+    }
+    const options = importPlatformOptions();
+    if (!options.length) {
+      toast("error", "平台列表不可用（请先刷新页面）");
+      return;
+    }
+    const baseMessage = "选择目标平台后，该平台的旧母版将被整体替换（来源：「"
+      + staged.name + "」目录）。结构校验通过才落盘，旧母版先备份、失败自动"
+      + "回滚，库写入自动进 git 历史；替换后该平台的生成以新母版为准。";
+    const extra = `<div class="import-platform-field"><label>目标平台</label>`
+      + `<select data-confirm-value>`
+      + options.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("")
+      + `</select></div>`;
+    // 失败弹窗保留可重试：失败原因并入消息重新打开确认弹窗（免重选文件夹）
+    let errorNote = "";
+    for (;;) {
+      const platform = await confirmModal({
+        title: "直接导入替换母版？",
+        message: (errorNote ? "导入失败：" + errorNote + "\n\n" : "") + baseMessage,
+        danger: true,
+        confirmText: "确认替换",
+        cancelText: "取消",
+        extra,
+      });
+      if (!platform) return;   // 取消 / 遮罩 / Esc：零写库
+      try {
+        const meta = await apiPost("/api/masters/import", {
+          platform, project_dir: staged.path,
+        });
+        toast("ok", "已导入平台 " + platform + " 的母版（来源：" + meta.sources.join("、") + "）");
+        loadMasters();
+        return;
+      } catch (e) {
+        errorNote = e.message;   // 结构校验失败等：零库写入，弹窗重开可重试
+      }
+    }
+  });
 }

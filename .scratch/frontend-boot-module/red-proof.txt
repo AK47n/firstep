@@ -33,9 +33,9 @@
   判据① index.html import：0 条（绿）
   判据② index.html JS 定义：0 条（绿）
   装载标签：type=module 共 1 个，src=/js/boot.js
-  判据③-a 装载清单裸装载：5 条（红：/js/ui/generate-revise.js, /js/ui/generate-tasks.js, /js/ui/params.js, /js/ui/params-chat.js, /js/ui/delivery.js）
-  判据③-b 接线不住求值期：11 个模块（红：ui/code-fix-panel.js, ui/delivery.js, ui/generate-core.js, ui/generate-revise.js, ui/generate-tasks.js, ui/library.js, ui/master.js, ui/params-chat.js, ui/params.js, ui/reference.js, ui/topic.js）
-  登记表体检（11 项）：（红：ui/delivery.js, ui/generate-core.js, ui/generate-revise.js, ui/generate-tasks.js, ui/master.js, ui/params-chat.js, ui/params.js, ui/topic.js）
+  判据③-a 装载清单裸装载：0 条（绿）
+  判据③-b 接线不住求值期：0 个模块（绿）
+  登记表体检（11 项）：（绿）
   判据④-a 全图对账断裂（根=boot.js）：0 处（绿）
   判据④-b 从装载根可达：131/131（绿）
 
@@ -51,6 +51,6 @@
 == 结论 ==
   红证（base 上必红）：成立
   强度自检：7/7 成立
-  当前工作树：红（实现期间正常；工单 05 要求转绿）
+  当前工作树：绿（收口状态）
 
 PASS（判据能红，且不是靠选错 base 红的）

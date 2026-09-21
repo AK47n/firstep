@@ -25,13 +25,23 @@ const out = tee(fileURLToPath(import.meta.url), process.argv.slice(2));
 // fx 模块底部的探针桥（证明模块仍被消费者加载）
 const BRIDGES = ["waitLabel", "pdfFilterEntries", "moduleGridHTML", "taskCardHTML", "scoreChecklistItemsHTML", "settingsSectionHead"];
 
-// 5 个"靠被加载才接线"的模块 → 它们顶层绑定的代表性子集（工单 03 会把它们改成显式 init）
-const BINDINGS = {
+// 工单 03 的 5 个模块 → 它们顶层绑定的代表性子集
+const BINDINGS_03 = {
   "ui/generate-revise.js": ["#btn-revise-analyze#click", "#btn-revise-apply#click", "#btn-revise-load-dir#click"],
   "ui/generate-tasks.js": ["#btn-tasks-plan#click", "#btn-tasks-replan#click", "window#revise-context-loaded"],
   "ui/params.js": ["#btn-params-scan#click", "#params-grid#click", "window#tasks-invalidated"],
   "ui/params-chat.js": ["#btn-params-chat#click", "#params-chat#keydown", "window#step11-state-changed"],
   "ui/delivery.js": ["window#revise-context-loaded", "window#tasks-invalidated"],
+};
+
+// 工单 04 的 6 个模块（boot 唯一装载来源）→ 同一套记账断言
+const BINDINGS_04 = {
+  "ui/generate-core.js": ["#btn-skeleton#click", "#btn-smoke#click", "#btn-generate#click", "#btn-handoff#click"],
+  "ui/master.js": ["#btn-pick-dirs#click", "#btn-scan#click", "#btn-distill#click", "#btn-confirm#click"],
+  "ui/library.js": ["#btn-add-file-row#click", "#btn-add-module-submit#click", "#btn-draft-desc#click"],
+  "ui/reference.js": ["#btn-ref-add#click", "#btn-ref-add-file-row#click", "#ref-anchor-kind#change"],
+  "ui/topic.js": ["#btn-topic-split#click", "#btn-topic-confirm#click", "#topic-stats#click"],
+  "ui/code-fix-panel.js": ["#btn-code-compile-fix-here#click"],
 };
 
 const server = await startServer();
@@ -67,7 +77,20 @@ try {
   });
 
   await page.goto(server.url, { waitUntil: "load" });
-  await page.waitForTimeout(1500);   // 等 /api/state 与各 init 落地
+  // 等**确定性**的就绪信号：容器出现（平台卡 / 模块池）＋**监听器计数连续两次采样不变**
+  // （不再用固定 sleep——固定等待会让"最后一批"监听器在机器忙时漏记，制造假差异：
+  // 本轮实测过一次 592 → 421 的假读数，根因就是这个）。
+  await page.waitForFunction(
+    () => document.querySelectorAll("#platforms .platform-card").length > 0
+      && document.querySelectorAll("#module-grid > *").length > 0,
+    undefined, { timeout: 30000 });
+  let prev = -1;
+  for (let i = 0; i < 25; i++) {                       // 最多 5 秒
+    const now = await page.evaluate(() => window.__listeners.length);
+    if (now === prev) break;
+    prev = now;
+    await page.waitForTimeout(200);
+  }
 
   const facts = await page.evaluate((bridgeNames) => ({
     ids: document.querySelectorAll("[id]").length,
@@ -91,9 +114,11 @@ try {
   );
   const missingBridges = BRIDGES.filter((n) => facts.bridges[n] !== "function");
   const seen = new Set(facts.listeners);
-  const missingBindings = Object.entries(BINDINGS)
+  const missingOf = (map) => Object.entries(map)
     .map(([mod, want]) => [mod, want.filter((w) => !seen.has(w))])
     .filter(([, miss]) => miss.length);
+  const missingBindings = missingOf(BINDINGS_03);
+  const missing04 = missingOf(BINDINGS_04);
   const sorted = [...facts.listeners].sort();
   const digest = sorted.join("|").split("").reduce((h, c) => ((h * 31 + c.charCodeAt(0)) >>> 0), 7);
 
@@ -101,7 +126,8 @@ try {
     ["0 个 pageerror / 模块图链接错误", linkErrors.length === 0],
     ["fx 探针桥全在", missingBridges.length === 0],
     [`加载期监听器记账 ${facts.listeners.length} 条（仪器有效）`, facts.listeners.length > 100],
-    ["5 个模块的接线全在（监听器记账）", missingBindings.length === 0],
+    ["工单 03 的 5 个模块接线全在（监听器记账）", missingBindings.length === 0],
+    ["工单 04 的 6 个模块接线全在（监听器记账）", missing04.length === 0],
     ["delivery.js 加载即写 #delivery-actions", facts.deliveryActions > 0],
     ["点击 #btn-params-chat 有行为反应", msgBefore !== msgAfter],
     ["平台卡 / 步骤导航 / 总览 / 词表 / 检测栏目都渲染了",
@@ -114,7 +140,8 @@ try {
     + `词表 ${facts.glossary} 字符；检测卡 ${facts.hwcheckPlatforms}；交付区 ${facts.deliveryActions} 字符`);
   for (const [name, ok] of checks) console.log(`  ${ok ? "✓" : "✗"} ${name}`);
   if (missingBridges.length) console.log("  缺桥: " + missingBridges.join(", "));
-  for (const [mod, miss] of missingBindings) console.log(`  缺绑定 ${mod}: ${miss.join(", ")}`);
+  for (const [mod, miss] of missingBindings) console.log(`  缺绑定(03) ${mod}: ${miss.join(", ")}`);
+  for (const [mod, miss] of missing04) console.log(`  缺绑定(04) ${mod}: ${miss.join(", ")}`);
   console.log(`  HTTP >=400（记账不判红）: ${httpFailures.length ? [...new Set(httpFailures)].join(" | ") : "（无）"}`);
   for (const e of errors) console.log("  ! " + e);
   console.log("\n--- 监听器记账（原序，逐条可对）---");

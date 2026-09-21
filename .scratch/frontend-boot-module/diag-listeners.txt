@@ -1,0 +1,10 @@
+{
+  "anonCount": 171,
+  "callers": [
+    "7289/js/ui/generate-recommend.js:880:8"
+  ],
+  "moduleCards": 95,
+  "poolCards": 0,
+  "checkboxes": 179,
+  "platforms": 2
+}

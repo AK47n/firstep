@@ -10,8 +10,8 @@
 // reviseRunDeepen / reviseRenderVerify / reviseRollback）+ 7 监听器（btn-revise-session /
 // btn-revise-load-dir / revise-dir-input Enter / btn-revise-analyze /
 // btn-revise-discard / btn-revise-apply / btn-revise-deepen /
-// btn-revise-rollback / revise-problem-text input——import 时绑定：module 脚本
-// 延迟执行，DOM 已就绪）。
+// btn-revise-rollback / revise-problem-text input——工单 frontend-boot-module/03 起由
+// initRevise() 绑定，装载根 boot.js 的接线区显式调用）。
 // 纯件：reviseCountQa / reviseRenderDiff 均为纯计算，tests/js 无直测（工单
 // 17 裁定：保持胶水随簇迁，如需直测后续单补——到时按「纯函数迁 fx +
 // fx-guard 登记」先例处理）。效果 diff 渲染已迁 fx/diff.js（工单
@@ -67,8 +67,6 @@ const analyzeAbort = makeAbortable();
 const execAbort = makeAbortable();
 const analyzeCancel = makeCancelButton("revise-analyze-status");
 const execCancel = makeCancelButton("revise-exec-status");
-analyzeCancel.onClick(() => analyzeAbort.abort());
-execCancel.onClick(() => execAbort.abort());
 
 function reviseCurrentDir() {
   return $("res-dir").textContent.trim() || $("output-dir").value.trim();
@@ -541,30 +539,40 @@ async function reviseRollback() {
   }
 }
 
-$("btn-revise-session").addEventListener("click", () => {
-  const dir = reviseCurrentDir();
-  if (!dir) { $("revise-load-msg").textContent = "请先生成工程（或填写输出目录）"; return; }
-  reviseLoad(dir);
-});
-$("btn-revise-load-dir").addEventListener("click", () => {
-  const dir = $("revise-dir-input").value.trim();
-  if (!dir) { $("revise-load-msg").textContent = "请填写输出目录路径"; return; }
-  reviseLoad(dir);
-});
-$("revise-dir-input").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") $("btn-revise-load-dir").click();
-});
-$("btn-revise-analyze").addEventListener("click", reviseAnalyze);
-$("btn-revise-discard").addEventListener("click", reviseDiscard);
-$("btn-revise-apply").addEventListener("click", reviseApply);
-$("btn-revise-deepen").addEventListener("click", reviseDeepen);
-$("btn-revise-rollback").addEventListener("click", reviseRollback);
-// 补题面输入即时更新上下文区题面展示（无需重新加载；无输入时回落到上下文清单值）
-$("revise-problem-text").addEventListener("input", () => {
-  const fill = $("revise-problem-text").value.trim();
-  $("revise-problem").textContent = fill
-    || (revise.context && revise.context.problem_text) || "（缺失）";
-});
+/**
+ * 接线（工单 frontend-boot-module/03）：原先在模块求值期绑定（module 脚本延迟执行，DOM 已就绪），
+ * 现由装载根 boot.js 显式调用。语句顺序 = 原文件里的先后顺序（两条取消按钮的回调在最前），
+ * 绑定的 target 与事件类型一字未改。
+ */
+export function initRevise() {
+  analyzeCancel.onClick(() => analyzeAbort.abort());
+  execCancel.onClick(() => execAbort.abort());
+
+  $("btn-revise-session").addEventListener("click", () => {
+    const dir = reviseCurrentDir();
+    if (!dir) { $("revise-load-msg").textContent = "请先生成工程（或填写输出目录）"; return; }
+    reviseLoad(dir);
+  });
+  $("btn-revise-load-dir").addEventListener("click", () => {
+    const dir = $("revise-dir-input").value.trim();
+    if (!dir) { $("revise-load-msg").textContent = "请填写输出目录路径"; return; }
+    reviseLoad(dir);
+  });
+  $("revise-dir-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") $("btn-revise-load-dir").click();
+  });
+  $("btn-revise-analyze").addEventListener("click", reviseAnalyze);
+  $("btn-revise-discard").addEventListener("click", reviseDiscard);
+  $("btn-revise-apply").addEventListener("click", reviseApply);
+  $("btn-revise-deepen").addEventListener("click", reviseDeepen);
+  $("btn-revise-rollback").addEventListener("click", reviseRollback);
+  // 补题面输入即时更新上下文区题面展示（无需重新加载；无输入时回落到上下文清单值）
+  $("revise-problem-text").addEventListener("input", () => {
+    const fill = $("revise-problem-text").value.trim();
+    $("revise-problem").textContent = fill
+      || (revise.context && revise.context.problem_text) || "（缺失）";
+  });
+}
 
 
 /** 已加载上下文的输出目录（跨簇只读访问：任务推进簇经此复用，不重复选目录）。 */

@@ -15,8 +15,8 @@
 // host 页签分发器 / 启动区经顶部 import 调 loadLibrary / initLibraryToolbar /
 // initAddSections；editModule / deleteModule / newModulePayload 亦导出（后续
 // 收尾工单核对使用面）。顶层监听（btn-add-file-row / 模块库两个 bindFilePicker /
-// btn-draft-desc / btn-add-module-submit）在 import 时绑定（module 延迟执行，
-// DOM 已就绪）。
+// btn-draft-desc / btn-add-module-submit）由 initLibraryAddForm() 绑定
+//（工单 frontend-boot-module/04：从求值期搬进显式 init，装载根 boot.js 调用）。
 import { $, apiGet, apiPost, apiPut, apiDelete, toast, toastError, state } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc } from "/js/fx/core.js";
@@ -428,17 +428,6 @@ export async function deleteModule(slug) {
   } catch (e) { toastError(e); }
 }
 
-// 动态文件行（模块库 / 参考文件库共用）已迁至 static/js/ui/files.js（阶段 2 工单 06）；
-// 添加模块表单的初始行与 + 文件 按钮（本簇）在此绑定；参考库簇的绑定留 host（工单 08 迁）。
-$("btn-add-file-row").addEventListener("click", () => addFileRow());
-addFileRow();
-
-// ===== 选择文件 / 文件夹 → 读为文本填入文件行（模块库 / 参考库共用）=====
-// 已迁至 static/js/ui/files.js（阶段 2 工单 06）：collectFiles / readPickedText /
-// pickFilesInto / bindFilePicker / MAX_PICK_BYTES。
-bindFilePicker("btn-pick-mod-files", "pick-mod-files", "new-files", "add-msg");
-bindFilePicker("btn-pick-mod-dir", "pick-mod-dir", "new-files", "add-msg");
-
 export function newModulePayload() {
   const files = collectFiles();
   if (files === null) return null;
@@ -455,46 +444,64 @@ export function newModulePayload() {
   };
 }
 
-$("btn-draft-desc").addEventListener("click", async () => {
-  // 草稿反馈内联到简介框旁（工单 ux-walkthrough-02/07 评审整改）：不再散落
-  // 到卡片底部 #add-msg——结果与反馈都在同区同线
-  const box = $("new-desc-msg");
-  if (box) { box.textContent = ""; box.classList.remove("ok", "error"); }
-  const payload = newModulePayload();
-  if (!payload) return;
-  if (!$("new-slug").value.trim()) {
-    if (box) { box.textContent = "请先填写模块 slug"; box.classList.add("error"); }
-    return;
-  }
-  try {
-    const data = await apiPost("/api/modules", { ...payload, description: "" });
-    $("new-desc").value = data.draft;
-    if (box) {
-      box.textContent = "AI 简介草稿已填入，可修改后点击「校验并入库」。";
-      box.classList.add("ok");
-    }
-  } catch (e) {
-    if (box) { box.textContent = e.message; box.classList.add("error"); }
-  }
-});
 
-$("btn-add-module-submit").addEventListener("click", async () => {
-  $("add-msg").textContent = "";
-  const payload = newModulePayload();
-  if (!payload) return;
-  if (!$("new-slug").value.trim()) { $("add-msg").textContent = "请先填写模块 slug"; return; }
-  if (!$("new-desc").value.trim()) { $("add-msg").textContent = "请填写功能简介（或先让 AI 出草稿）"; return; }
-  try {
-    const manifest = await apiPost("/api/modules", payload);
-    $("add-msg").classList.add("ok");
-    $("add-msg").textContent = "模块 " + manifest.slug + " 已入库（简介与代码一致性校验通过）。";
-    ["new-slug", "new-desc", "new-deps", "new-notes"].forEach((id) => ($(id).value = ""));
-    $("new-hw").checked = $("new-verified").checked = false;
-    $("new-files").innerHTML = "";
-    addFileRow();
-    loadLibrary();
-  } catch (e) {
-    $("add-msg").classList.remove("ok");
-    $("add-msg").textContent = e.message;
-  }
-});
+/**
+ * 接线：由装载根 boot.js 显式调用（工单 frontend-boot-module/04）
+ * 语句顺序 = 原文件里的先后顺序；绑定的 target 与事件类型一字未改。
+ */
+export function initLibraryAddForm() {
+  // 动态文件行（模块库 / 参考文件库共用）已迁至 static/js/ui/files.js（阶段 2 工单 06）；
+  // 添加模块表单的初始行与 + 文件 按钮（本簇）在此绑定；参考库簇的绑定留 host（工单 08 迁）。
+  $("btn-add-file-row").addEventListener("click", () => addFileRow());
+  addFileRow();
+
+  // ===== 选择文件 / 文件夹 → 读为文本填入文件行（模块库 / 参考库共用）=====
+  // 已迁至 static/js/ui/files.js（阶段 2 工单 06）：collectFiles / readPickedText /
+  // pickFilesInto / bindFilePicker / MAX_PICK_BYTES。
+  bindFilePicker("btn-pick-mod-files", "pick-mod-files", "new-files", "add-msg");
+  bindFilePicker("btn-pick-mod-dir", "pick-mod-dir", "new-files", "add-msg");
+
+  $("btn-draft-desc").addEventListener("click", async () => {
+    // 草稿反馈内联到简介框旁（工单 ux-walkthrough-02/07 评审整改）：不再散落
+    // 到卡片底部 #add-msg——结果与反馈都在同区同线
+    const box = $("new-desc-msg");
+    if (box) { box.textContent = ""; box.classList.remove("ok", "error"); }
+    const payload = newModulePayload();
+    if (!payload) return;
+    if (!$("new-slug").value.trim()) {
+      if (box) { box.textContent = "请先填写模块 slug"; box.classList.add("error"); }
+      return;
+    }
+    try {
+      const data = await apiPost("/api/modules", { ...payload, description: "" });
+      $("new-desc").value = data.draft;
+      if (box) {
+        box.textContent = "AI 简介草稿已填入，可修改后点击「校验并入库」。";
+        box.classList.add("ok");
+      }
+    } catch (e) {
+      if (box) { box.textContent = e.message; box.classList.add("error"); }
+    }
+  });
+
+  $("btn-add-module-submit").addEventListener("click", async () => {
+    $("add-msg").textContent = "";
+    const payload = newModulePayload();
+    if (!payload) return;
+    if (!$("new-slug").value.trim()) { $("add-msg").textContent = "请先填写模块 slug"; return; }
+    if (!$("new-desc").value.trim()) { $("add-msg").textContent = "请填写功能简介（或先让 AI 出草稿）"; return; }
+    try {
+      const manifest = await apiPost("/api/modules", payload);
+      $("add-msg").classList.add("ok");
+      $("add-msg").textContent = "模块 " + manifest.slug + " 已入库（简介与代码一致性校验通过）。";
+      ["new-slug", "new-desc", "new-deps", "new-notes"].forEach((id) => ($(id).value = ""));
+      $("new-hw").checked = $("new-verified").checked = false;
+      $("new-files").innerHTML = "";
+      addFileRow();
+      loadLibrary();
+    } catch (e) {
+      $("add-msg").classList.remove("ok");
+      $("add-msg").textContent = e.message;
+    }
+  });
+}

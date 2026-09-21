@@ -106,10 +106,17 @@ export function deliverySummary() {
   return { checked: !!state.lastCheck, ok: state.lastCheck ? !!state.lastCheck.ok : false };
 }
 
-$("delivery-actions").innerHTML = deliveryActionsHTML(false);
-bindDeliveryActions();
-// 输出目录切换（加载其他工程 / 修订重生成清清单）→ 清结果，防跨工程误读
-window.addEventListener("revise-context-loaded", () => deliveryReset());
-window.addEventListener("tasks-invalidated", () => deliveryReset());
+/**
+ * 接线（工单 frontend-boot-module/03）：原先在模块求值期执行，现由装载根 boot.js 显式调用。
+ * 语义一字未改——首帧写一次 `#delivery-actions`、绑两个跨簇重置监听、装 window 兼容桥
+ * （探针 / devtools 按全局名取用；既有事实，见 backlog 第 10 节）。
+ */
+export function initDelivery() {
+  $("delivery-actions").innerHTML = deliveryActionsHTML(false);
+  bindDeliveryActions();
+  // 输出目录切换（加载其他工程 / 修订重生成清清单）→ 清结果，防跨工程误读
+  window.addEventListener("revise-context-loaded", () => deliveryReset());
+  window.addEventListener("tasks-invalidated", () => deliveryReset());
 
-Object.assign(window, { deliveryActionsHTML, deliveryOpen, deliveryCheck, deliveryPackage, deliveryReset });
+  Object.assign(window, { deliveryActionsHTML, deliveryOpen, deliveryCheck, deliveryPackage, deliveryReset });
+}

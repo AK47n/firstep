@@ -56,7 +56,6 @@ const tasksWait = makeWaitClock("tasks-status");   // 长任务秒表（工单 u
 // 共享一个 abortable 会在并发时静默取消用户合法流程）
 let tasksAbortSlot = null;
 const tasksCancel = makeCancelButton("tasks-status");
-tasksCancel.onClick(() => { if (tasksAbortSlot) tasksAbortSlot.abort(); });
 
 // 新想法 / 问题区状态（工单 idea-fix/02）：analysis = 最近一次 /api/tasks/idea/
 // analyze 的 done 载荷（{kind, reply, new_task, fix_summary, affected_task_ids}）；
@@ -1556,286 +1555,295 @@ async function tasksMove(taskId, direction) {
   }
 }
 
-$("btn-tasks-plan").addEventListener("click", () => tasksPlan(false));
-$("btn-tasks-replan").addEventListener("click", () => tasksPlan(true));
-// 新想法 / 问题（工单 idea-fix/02）：分析按钮 + 结果卡落地按钮委托
-$("btn-tasks-idea").addEventListener("click", () => tasksIdeaAnalyze());
-// 全局商量（工单 idea-suite/02）：开关按钮 + 区内委托（发送 / 转任务 / 转修正 /
-// 采纳——采纳与清除按钮在聊天区与徽标区两处，委托挂 tasks-box 一并覆盖）
-$("btn-tasks-global-chat").addEventListener("click", () => tasksChatToggle());
-$("tasks-box").addEventListener("click", (event) => {
-  const send = event.target.closest(".btn-global-chat-send");
-  if (send) { tasksChatSend(); return; }
-  const action = event.target.closest(".btn-global-chat-action");
-  if (!action) return;
-  const kind = action.dataset.globalAction;
-  if (kind === "clear") { tasksChatAdopt(""); return; }
-  if (kind === "adopt") { tasksChatAdopt(action.dataset.globalText); return; }
-  tasksChatConvert(kind, action.dataset.globalText);
-});
-// 草稿箱（工单 idea-suite/06）：存入草稿按钮 + 区内委托（分析这条 / 删除 /
-// 全部逐条分析——同样挂 tasks-box，只认 .btn-draft-*）
-$("btn-tasks-draft-add").addEventListener("click", () => tasksDraftAdd());
-$("tasks-box").addEventListener("click", (event) => {
-  const btn = event.target.closest(".btn-draft-analyze, .btn-draft-delete, .btn-draft-all");
-  if (!btn) return;
-  const action = btn.dataset.draftAction;
-  if (action === "analyze") { tasksDraftAnalyze(btn.dataset.draftText); return; }
-  if (action === "delete") { tasksDraftDelete(btn.dataset.draftId); return; }
-  tasksDraftAnalyzeAll();
-});
-$("tasks-idea-result").addEventListener("click", (event) => {
-  const btn = event.target.closest(".btn-idea-insert, .btn-idea-fix, .btn-idea-to-task, .btn-idea-to-fix");
-  if (!btn) return;
-  const kind = btn.dataset.ideaKind;
-  if (kind === "new_task") { tasksIdeaInsert(); return; }
-  if (kind === "direct_fix") { tasksIdeaFix(); return; }
-  if (btn.classList.contains("btn-idea-to-task")) { tasksIdeaConvert("new_task"); return; }
-  tasksIdeaConvert("direct_fix");
-});
-// 任务卡「做这一步」事件委托（列随状态重渲染，监听器挂容器）
-$("tasks-grid").addEventListener("click", async (event) => {
-  const btn = event.target.closest(".btn-task-run");
-  if (!btn) return;
-  const taskId = btn.dataset.task;
-  // 温和引导（工单 prereq-soft-guide/01）：前置未完成 → 确认弹窗（可取消或
-  // 仍继续；skipped 视为完成不拦）。只挂「做这一步」——重做/上板反馈是已
-  // 执行过的卡，不弹，避免噪音。
-  const task = ((tasks.plan && tasks.plan.tasks) || []).find((t) => t.id === taskId);
-  const pend = unresolvedPrereqs(task, tasks.plan);
-  if (pend.length) {
-    const seqOf = (id) => {
-      const i = ((tasks.plan && tasks.plan.tasks) || []).findIndex((t) => t.id === id);
-      return i >= 0 ? "第 " + (i + 1) + " 步 " : "";
-    };
-    const names = pend.map((p) => "「" + seqOf(p.id) + p.title + "」（"
-      + taskStatusLabel(p.status) + "）").join("、");
-    const go = await confirmModal({
-      title: "前置任务还未完成",
-      message: "这张卡依赖的前置还没做完：" + names + "。"
-        + "建议先完成前置任务（前置产出的代码/接线是这张卡的前提，先做容易对不上）。"
-        + "确认要继续的话点「仍然继续」。",
-      danger: false,
-      confirmText: "仍然继续",
-      cancelText: "先去做前置",
-    });
-    if (!go) return;
-  }
-  tasksExecute(taskId, "");
-});
-// 上板反馈：展开输入区 / 发送反馈（工单 task-feedback/03）
-$("tasks-grid").addEventListener("click", (event) => {
-  const toggle = event.target.closest(".btn-task-feedback");
-  if (toggle) { tasksFeedbackToggle(toggle.dataset.task); return; }
-  const send = event.target.closest(".btn-task-feedback-send");
-  if (send) tasksFeedbackSend(send.dataset.task);
-});
-// 任务卡状态按钮（跳过 / 恢复 / 重做 / 上板确认 / 执行中断恢复）
-$("tasks-grid").addEventListener("click", (event) => {
-  const btn = event.target.closest(".btn-task-skip, .btn-task-revert, .btn-task-mark, .btn-task-redo, .btn-task-recover");
-  if (!btn) return;
-  if (btn.classList.contains("btn-task-redo")) {
-    tasksRedoTask(btn.dataset.task);
-    return;
-  }
-  if (btn.classList.contains("btn-task-recover")) {
-    tasksRecover(btn.dataset.task);
-    return;
-  }
-  const taskId = btn.dataset.task;
-  // 跳过确认（工单 ux-polish-02/05）：前置/联动不明的破坏性操作——点名
-  // 依赖连锁与恢复入口，确认后才置 skipped
-  if (btn.classList.contains("btn-task-skip")) {
-    const task = ((tasks.plan && tasks.plan.tasks) || []).find((t) => t.id === taskId);
-    const title = task && task.title ? "「" + task.title + "」" : "这一步";
-    confirmModal({
-      title: "跳过这一步？",
-      message: "跳过 " + title + " 后，它不会被算作完成（进度计数不含它）；"
-        + "依赖它的任务可能无法正常运行（前置未完成会在卡上黄字提示）。"
-        + "随时可点「恢复此步」改回待做。",
-      danger: false,
-      confirmText: "跳过",
-      cancelText: "取消",
-    }).then((go) => { if (go) tasksSetStatus(taskId, "skipped", "已跳过——不计入完成，可随时恢复"); });
-    return;
-  }
-  const status = btn.classList.contains("btn-task-mark") ? "verified" : "pending";
-  tasksSetStatus(taskId, status);
-});
-// 任务卡微编辑 + 调序（工单 idea-suite/04，收编为「⋯ 更多」下拉）：菜单项
-// 点击先收起 details（open=false）再派发动作——动作成功后 tasksRender 重建
-// 网格本就默认收起，此收尾管 busy 拦截（toast）等不重渲染的路径。
-$("tasks-grid").addEventListener("click", (event) => {
-  const btn = event.target.closest(".btn-task-edit, .btn-task-edit-save, .btn-task-edit-cancel, .btn-task-move");
-  if (!btn) return;
-  const menu = btn.closest(".task-more-details");
-  if (menu) menu.open = false;
-  const taskId = btn.dataset.task;
-  const action = btn.dataset.taskAction;
-  if (action === "edit") { tasksEditToggle(taskId); return; }
-  if (action === "edit-save") { tasksEditSave(taskId); return; }
-  if (action === "edit-cancel") { tasksEditCancel(taskId); return; }
-  tasksMove(taskId, action === "move-up" ? "up" : "down");
-});
-// 「⋯ 更多」菜单（收编 idea-suite/04）：点击菜单外任意处收起；summary 原生
-// toggle 不受影响（目标在任一 details 内则跳过——同开一菜单、点外部全收）。
-document.addEventListener("click", (event) => {
-  const wins = document.querySelectorAll(".task-more-details[open]");
-  if (!wins.length) return;
-  wins.forEach((d) => {
-    if (!d.contains(event.target)) d.open = false;
-  });
-});
-// 全部完成 →「去交付」（工单 ux-polish-02/06）：切到交付页签（直接点
-// revise-tabs 的交付按钮 = 复用既有页签切换与 user:true 语义，零模块耦合）
-$("tasks-overview").addEventListener("click", (event) => {
-  const btn = event.target.closest(".btn-task-goto-delivery");
-  if (!btn) return;
-  const tab = document.querySelector('#revise-tabs .revise-tab[data-tab="delivery"]');
-  if (tab) tab.click();
-});
-// 「本轮变化」区 / 直接修正面板「回滚到本任务执行前」（同备份族，复用
-// /api/revise/rollback——域委托覆盖网格内后代：变化区注入在任务卡内）
-$("tasks-grid").addEventListener("click", (event) => {
-  const btn = event.target.closest(".btn-task-rollback");
-  if (!btn) return;
-  tasksRollback(btn.dataset.backup, btn.dataset.task);
-});
-// 编译错误行跳转 main.c（工单 error-jump-task/02）：跳转单源 = fx/code.js
-// maincJumpToLine（返回错误码，toast 在本层——原修复中心三条消息逐字保留）
-$("tasks-grid").addEventListener("click", (event) => {
-  const span = event.target.closest(".task-err-jump");
-  if (!span) return;
-  const reason = maincJumpToLine(Number(span.dataset.line));
-  if (reason === "empty") toast("info", "main.c 还没有内容，先「生成骨架」再跳转");
-  else if (reason === "out-of-range") toast("info", "行号超出 main.c 范围：" + span.dataset.line);
-});
-// 任务卡 / 结果面板「烧录到板子」（工单 flash-deploy/02 + flash-step-button/01）：
-// 两类入口同域委托——按钮 data-task-flash = 容器 uid（任务卡 = task.id，结果
-// 面板 = "result"——缺省兼容），data-dir = 渲染时目录快照（任务卡 = tasksRender
-// 抓取 tasks.outputDir，结果面板 = 结果面板渲染时快照，两者同为快照语义）；
-// click 后各自写入自己的状态/结果容器，互不干扰
-$("tasks-grid").addEventListener("click", (event) => {
-  const btn = event.target.closest(".btn-task-flash");
-  if (!btn) return;
-  tasksFlash(btn.dataset.taskFlash, btn.dataset.dir);
-});
-// 轮次历史「回到这轮之前」（工单 task-feedback/03：撤销语义）
-$("tasks-grid").addEventListener("click", (event) => {
-  const btn = event.target.closest(".btn-task-iteration-rollback");
-  if (!btn) return;
-  tasksRollbackIteration(btn.dataset.task, btn.dataset.seq);
-});
-// 每卡对话（工单 task-chat/03）：展开/收起 → 发送 → 采纳 → 取消采纳
-$("tasks-grid").addEventListener("click", (event) => {
-  const toggle = event.target.closest(".btn-task-dialog");
-  if (toggle) { tasksDialogToggle(toggle.dataset.task); return; }
-  const send = event.target.closest(".btn-task-dialog-send");
-  if (send) { tasksDialogSend(send.dataset.task); return; }
-  const adopt = event.target.closest(".btn-task-dialog-adopt");
-  if (adopt) { tasksDialogAdopt(adopt.dataset.task, adopt.dataset.idx); return; }
-  const clear = event.target.closest(".btn-task-dialog-clear");
-  if (clear) tasksDialogClear(clear.dataset.task);
-});
-// 上板自检清单勾选（工单 task-insight/02）：change 委托（checkbox 勾选不触发
-// click 委托分支）——写 localStorage 备忘，不重渲染（DOM 态已由浏览器更新）
-$("tasks-grid").addEventListener("change", (event) => {
-  const input = event.target.closest ? event.target.closest(".task-check-input") : null;
-  if (!input) return;
-  const key = input.dataset.checkKey;
-  const idx = Number(input.dataset.checkIdx);
-  if (!key || Number.isNaN(idx)) return;
-  const parts = key.split("/");
-  if (parts.length !== 2) return;
-  const [taskId, seq] = parts;
-  const map = checklistRead(taskId, seq);
-  if (input.checked) map[idx] = true;
-  else delete map[idx];
-  checklistWrite(taskId, seq, map);
-});
-// 清空任务面板（保留类名容器状态；评审整改：两处跨簇重置与 tasksRender 的
-// 隐藏逻辑收敛——曾三处手写相同的 overview/resources 清空块，漂移即漏清）
-function clearTasksPanel() {
-  $("tasks-grid").classList.add("hidden");
-  $("tasks-grid").innerHTML = "";
-  const overview = $("tasks-overview");
-  if (overview) { overview.innerHTML = ""; overview.classList.add("hidden"); }
-  const resBox = $("tasks-resources");
-  if (resBox) { resBox.innerHTML = ""; resBox.classList.add("hidden"); }
-  $("tasks-progress").textContent = "";
-  $("btn-tasks-replan").classList.add("hidden");
-  updateTasksEmptyHint();
-  // 状态徽章（step11-tabs-ui/02）：清空路径未走 tasksRender，也要广播重置快照
-  window.dispatchEvent(new CustomEvent("step11-state-changed"));
-}
+/**
+ * 接线（工单 frontend-boot-module/03）：原先在模块求值期绑定（module 脚本延迟执行，DOM 已就绪），
+ * 现由装载根 boot.js 显式调用。语句顺序 = 原文件里的先后顺序（取消按钮回调在最前），
+ * 绑定的 target 与事件类型一字未改。
+ */
+export function initTaskProgress() {
+  tasksCancel.onClick(() => { if (tasksAbortSlot) tasksAbortSlot.abort(); });
 
-// 跨簇通知（revise 上下文入口加载后广播）：目录不同 = 旧清单与当前目录无关，
-// 清空本簇状态（显示占位，等用户拆解）——revise 簇负责状态生命周期与广播时机，
-// 本簇只消费事件（零模块耦合：跨簇取值走 reviseGetDir 单点已够）。
-window.addEventListener("revise-context-loaded", (event) => {
-  const dir = event.detail && event.detail.output_dir;
-  if (dir !== tasks.outputDir) {
+  $("btn-tasks-plan").addEventListener("click", () => tasksPlan(false));
+  $("btn-tasks-replan").addEventListener("click", () => tasksPlan(true));
+  // 新想法 / 问题（工单 idea-fix/02）：分析按钮 + 结果卡落地按钮委托
+  $("btn-tasks-idea").addEventListener("click", () => tasksIdeaAnalyze());
+  // 全局商量（工单 idea-suite/02）：开关按钮 + 区内委托（发送 / 转任务 / 转修正 /
+  // 采纳——采纳与清除按钮在聊天区与徽标区两处，委托挂 tasks-box 一并覆盖）
+  $("btn-tasks-global-chat").addEventListener("click", () => tasksChatToggle());
+  $("tasks-box").addEventListener("click", (event) => {
+    const send = event.target.closest(".btn-global-chat-send");
+    if (send) { tasksChatSend(); return; }
+    const action = event.target.closest(".btn-global-chat-action");
+    if (!action) return;
+    const kind = action.dataset.globalAction;
+    if (kind === "clear") { tasksChatAdopt(""); return; }
+    if (kind === "adopt") { tasksChatAdopt(action.dataset.globalText); return; }
+    tasksChatConvert(kind, action.dataset.globalText);
+  });
+  // 草稿箱（工单 idea-suite/06）：存入草稿按钮 + 区内委托（分析这条 / 删除 /
+  // 全部逐条分析——同样挂 tasks-box，只认 .btn-draft-*）
+  $("btn-tasks-draft-add").addEventListener("click", () => tasksDraftAdd());
+  $("tasks-box").addEventListener("click", (event) => {
+    const btn = event.target.closest(".btn-draft-analyze, .btn-draft-delete, .btn-draft-all");
+    if (!btn) return;
+    const action = btn.dataset.draftAction;
+    if (action === "analyze") { tasksDraftAnalyze(btn.dataset.draftText); return; }
+    if (action === "delete") { tasksDraftDelete(btn.dataset.draftId); return; }
+    tasksDraftAnalyzeAll();
+  });
+  $("tasks-idea-result").addEventListener("click", (event) => {
+    const btn = event.target.closest(".btn-idea-insert, .btn-idea-fix, .btn-idea-to-task, .btn-idea-to-fix");
+    if (!btn) return;
+    const kind = btn.dataset.ideaKind;
+    if (kind === "new_task") { tasksIdeaInsert(); return; }
+    if (kind === "direct_fix") { tasksIdeaFix(); return; }
+    if (btn.classList.contains("btn-idea-to-task")) { tasksIdeaConvert("new_task"); return; }
+    tasksIdeaConvert("direct_fix");
+  });
+  // 任务卡「做这一步」事件委托（列随状态重渲染，监听器挂容器）
+  $("tasks-grid").addEventListener("click", async (event) => {
+    const btn = event.target.closest(".btn-task-run");
+    if (!btn) return;
+    const taskId = btn.dataset.task;
+    // 温和引导（工单 prereq-soft-guide/01）：前置未完成 → 确认弹窗（可取消或
+    // 仍继续；skipped 视为完成不拦）。只挂「做这一步」——重做/上板反馈是已
+    // 执行过的卡，不弹，避免噪音。
+    const task = ((tasks.plan && tasks.plan.tasks) || []).find((t) => t.id === taskId);
+    const pend = unresolvedPrereqs(task, tasks.plan);
+    if (pend.length) {
+      const seqOf = (id) => {
+        const i = ((tasks.plan && tasks.plan.tasks) || []).findIndex((t) => t.id === id);
+        return i >= 0 ? "第 " + (i + 1) + " 步 " : "";
+      };
+      const names = pend.map((p) => "「" + seqOf(p.id) + p.title + "」（"
+        + taskStatusLabel(p.status) + "）").join("、");
+      const go = await confirmModal({
+        title: "前置任务还未完成",
+        message: "这张卡依赖的前置还没做完：" + names + "。"
+          + "建议先完成前置任务（前置产出的代码/接线是这张卡的前提，先做容易对不上）。"
+          + "确认要继续的话点「仍然继续」。",
+        danger: false,
+        confirmText: "仍然继续",
+        cancelText: "先去做前置",
+      });
+      if (!go) return;
+    }
+    tasksExecute(taskId, "");
+  });
+  // 上板反馈：展开输入区 / 发送反馈（工单 task-feedback/03）
+  $("tasks-grid").addEventListener("click", (event) => {
+    const toggle = event.target.closest(".btn-task-feedback");
+    if (toggle) { tasksFeedbackToggle(toggle.dataset.task); return; }
+    const send = event.target.closest(".btn-task-feedback-send");
+    if (send) tasksFeedbackSend(send.dataset.task);
+  });
+  // 任务卡状态按钮（跳过 / 恢复 / 重做 / 上板确认 / 执行中断恢复）
+  $("tasks-grid").addEventListener("click", (event) => {
+    const btn = event.target.closest(".btn-task-skip, .btn-task-revert, .btn-task-mark, .btn-task-redo, .btn-task-recover");
+    if (!btn) return;
+    if (btn.classList.contains("btn-task-redo")) {
+      tasksRedoTask(btn.dataset.task);
+      return;
+    }
+    if (btn.classList.contains("btn-task-recover")) {
+      tasksRecover(btn.dataset.task);
+      return;
+    }
+    const taskId = btn.dataset.task;
+    // 跳过确认（工单 ux-polish-02/05）：前置/联动不明的破坏性操作——点名
+    // 依赖连锁与恢复入口，确认后才置 skipped
+    if (btn.classList.contains("btn-task-skip")) {
+      const task = ((tasks.plan && tasks.plan.tasks) || []).find((t) => t.id === taskId);
+      const title = task && task.title ? "「" + task.title + "」" : "这一步";
+      confirmModal({
+        title: "跳过这一步？",
+        message: "跳过 " + title + " 后，它不会被算作完成（进度计数不含它）；"
+          + "依赖它的任务可能无法正常运行（前置未完成会在卡上黄字提示）。"
+          + "随时可点「恢复此步」改回待做。",
+        danger: false,
+        confirmText: "跳过",
+        cancelText: "取消",
+      }).then((go) => { if (go) tasksSetStatus(taskId, "skipped", "已跳过——不计入完成，可随时恢复"); });
+      return;
+    }
+    const status = btn.classList.contains("btn-task-mark") ? "verified" : "pending";
+    tasksSetStatus(taskId, status);
+  });
+  // 任务卡微编辑 + 调序（工单 idea-suite/04，收编为「⋯ 更多」下拉）：菜单项
+  // 点击先收起 details（open=false）再派发动作——动作成功后 tasksRender 重建
+  // 网格本就默认收起，此收尾管 busy 拦截（toast）等不重渲染的路径。
+  $("tasks-grid").addEventListener("click", (event) => {
+    const btn = event.target.closest(".btn-task-edit, .btn-task-edit-save, .btn-task-edit-cancel, .btn-task-move");
+    if (!btn) return;
+    const menu = btn.closest(".task-more-details");
+    if (menu) menu.open = false;
+    const taskId = btn.dataset.task;
+    const action = btn.dataset.taskAction;
+    if (action === "edit") { tasksEditToggle(taskId); return; }
+    if (action === "edit-save") { tasksEditSave(taskId); return; }
+    if (action === "edit-cancel") { tasksEditCancel(taskId); return; }
+    tasksMove(taskId, action === "move-up" ? "up" : "down");
+  });
+  // 「⋯ 更多」菜单（收编 idea-suite/04）：点击菜单外任意处收起；summary 原生
+  // toggle 不受影响（目标在任一 details 内则跳过——同开一菜单、点外部全收）。
+  document.addEventListener("click", (event) => {
+    const wins = document.querySelectorAll(".task-more-details[open]");
+    if (!wins.length) return;
+    wins.forEach((d) => {
+      if (!d.contains(event.target)) d.open = false;
+    });
+  });
+  // 全部完成 →「去交付」（工单 ux-polish-02/06）：切到交付页签（直接点
+  // revise-tabs 的交付按钮 = 复用既有页签切换与 user:true 语义，零模块耦合）
+  $("tasks-overview").addEventListener("click", (event) => {
+    const btn = event.target.closest(".btn-task-goto-delivery");
+    if (!btn) return;
+    const tab = document.querySelector('#revise-tabs .revise-tab[data-tab="delivery"]');
+    if (tab) tab.click();
+  });
+  // 「本轮变化」区 / 直接修正面板「回滚到本任务执行前」（同备份族，复用
+  // /api/revise/rollback——域委托覆盖网格内后代：变化区注入在任务卡内）
+  $("tasks-grid").addEventListener("click", (event) => {
+    const btn = event.target.closest(".btn-task-rollback");
+    if (!btn) return;
+    tasksRollback(btn.dataset.backup, btn.dataset.task);
+  });
+  // 编译错误行跳转 main.c（工单 error-jump-task/02）：跳转单源 = fx/code.js
+  // maincJumpToLine（返回错误码，toast 在本层——原修复中心三条消息逐字保留）
+  $("tasks-grid").addEventListener("click", (event) => {
+    const span = event.target.closest(".task-err-jump");
+    if (!span) return;
+    const reason = maincJumpToLine(Number(span.dataset.line));
+    if (reason === "empty") toast("info", "main.c 还没有内容，先「生成骨架」再跳转");
+    else if (reason === "out-of-range") toast("info", "行号超出 main.c 范围：" + span.dataset.line);
+  });
+  // 任务卡 / 结果面板「烧录到板子」（工单 flash-deploy/02 + flash-step-button/01）：
+  // 两类入口同域委托——按钮 data-task-flash = 容器 uid（任务卡 = task.id，结果
+  // 面板 = "result"——缺省兼容），data-dir = 渲染时目录快照（任务卡 = tasksRender
+  // 抓取 tasks.outputDir，结果面板 = 结果面板渲染时快照，两者同为快照语义）；
+  // click 后各自写入自己的状态/结果容器，互不干扰
+  $("tasks-grid").addEventListener("click", (event) => {
+    const btn = event.target.closest(".btn-task-flash");
+    if (!btn) return;
+    tasksFlash(btn.dataset.taskFlash, btn.dataset.dir);
+  });
+  // 轮次历史「回到这轮之前」（工单 task-feedback/03：撤销语义）
+  $("tasks-grid").addEventListener("click", (event) => {
+    const btn = event.target.closest(".btn-task-iteration-rollback");
+    if (!btn) return;
+    tasksRollbackIteration(btn.dataset.task, btn.dataset.seq);
+  });
+  // 每卡对话（工单 task-chat/03）：展开/收起 → 发送 → 采纳 → 取消采纳
+  $("tasks-grid").addEventListener("click", (event) => {
+    const toggle = event.target.closest(".btn-task-dialog");
+    if (toggle) { tasksDialogToggle(toggle.dataset.task); return; }
+    const send = event.target.closest(".btn-task-dialog-send");
+    if (send) { tasksDialogSend(send.dataset.task); return; }
+    const adopt = event.target.closest(".btn-task-dialog-adopt");
+    if (adopt) { tasksDialogAdopt(adopt.dataset.task, adopt.dataset.idx); return; }
+    const clear = event.target.closest(".btn-task-dialog-clear");
+    if (clear) tasksDialogClear(clear.dataset.task);
+  });
+  // 上板自检清单勾选（工单 task-insight/02）：change 委托（checkbox 勾选不触发
+  // click 委托分支）——写 localStorage 备忘，不重渲染（DOM 态已由浏览器更新）
+  $("tasks-grid").addEventListener("change", (event) => {
+    const input = event.target.closest ? event.target.closest(".task-check-input") : null;
+    if (!input) return;
+    const key = input.dataset.checkKey;
+    const idx = Number(input.dataset.checkIdx);
+    if (!key || Number.isNaN(idx)) return;
+    const parts = key.split("/");
+    if (parts.length !== 2) return;
+    const [taskId, seq] = parts;
+    const map = checklistRead(taskId, seq);
+    if (input.checked) map[idx] = true;
+    else delete map[idx];
+    checklistWrite(taskId, seq, map);
+  });
+  // 清空任务面板（保留类名容器状态；评审整改：两处跨簇重置与 tasksRender 的
+  // 隐藏逻辑收敛——曾三处手写相同的 overview/resources 清空块，漂移即漏清）
+  function clearTasksPanel() {
+    $("tasks-grid").classList.add("hidden");
+    $("tasks-grid").innerHTML = "";
+    const overview = $("tasks-overview");
+    if (overview) { overview.innerHTML = ""; overview.classList.add("hidden"); }
+    const resBox = $("tasks-resources");
+    if (resBox) { resBox.innerHTML = ""; resBox.classList.add("hidden"); }
+    $("tasks-progress").textContent = "";
+    $("btn-tasks-replan").classList.add("hidden");
+    updateTasksEmptyHint();
+    // 状态徽章（step11-tabs-ui/02）：清空路径未走 tasksRender，也要广播重置快照
+    window.dispatchEvent(new CustomEvent("step11-state-changed"));
+  }
+
+  // 跨簇通知（revise 上下文入口加载后广播）：目录不同 = 旧清单与当前目录无关，
+  // 清空本簇状态（显示占位，等用户拆解）——revise 簇负责状态生命周期与广播时机，
+  // 本簇只消费事件（零模块耦合：跨簇取值走 reviseGetDir 单点已够）。
+  window.addEventListener("revise-context-loaded", (event) => {
+    const dir = event.detail && event.detail.output_dir;
+    if (dir !== tasks.outputDir) {
+      tasks.outputDir = "";
+      tasks.plan = null;
+      taskDialogs.clear();
+      taskEditOpen.clear();
+      clearTasksPanel();
+      $("tasks-status").textContent = "";
+      $("tasks-msg").textContent = "";
+      resetIdeaArea();
+      resetGlobalChatArea();
+      resetDraftsArea();
+      // 目录已加载：自动读回磁盘任务清单（若该目录拆解过）——任务卡与
+      // 「重新拆解」按钮随之出现；无清单则保持占位等用户拆解。修复「提示
+      // 已有清单却看不到重新拆解按钮」的死锁：此前只有 plan 已加载才显示
+      // 按钮，而加载目录从未 plan-read，用户只能点「拆解任务」撞同样的错。
+      tasksReload();
+    }
+  });
+  // 修订重生成 → 任务清单已作废（后端已删除清单文件）：清空本簇缓存 + 提示
+  //（含陈旧结果面板——重置状态一致性，照 revise-context-loaded 同款）
+  window.addEventListener("tasks-invalidated", (event) => {
+    const dir = event.detail && event.detail.output_dir;
+    if (dir && tasks.outputDir && dir !== tasks.outputDir) return;  // 与当前目录无关：不动本簇状态
     tasks.outputDir = "";
     tasks.plan = null;
     taskDialogs.clear();
     taskEditOpen.clear();
+    const stale = $("tasks-result");
+    if (stale) stale.remove();
     clearTasksPanel();
     $("tasks-status").textContent = "";
-    $("tasks-msg").textContent = "";
+    $("tasks-msg").textContent = "任务清单已作废（修订重生成）：请点「拆解任务」按新工程重新拆解";
     resetIdeaArea();
     resetGlobalChatArea();
     resetDraftsArea();
-    // 目录已加载：自动读回磁盘任务清单（若该目录拆解过）——任务卡与
-    // 「重新拆解」按钮随之出现；无清单则保持占位等用户拆解。修复「提示
-    // 已有清单却看不到重新拆解按钮」的死锁：此前只有 plan 已加载才显示
-    // 按钮，而加载目录从未 plan-read，用户只能点「拆解任务」撞同样的错。
-    tasksReload();
-  }
-});
-// 修订重生成 → 任务清单已作废（后端已删除清单文件）：清空本簇缓存 + 提示
-//（含陈旧结果面板——重置状态一致性，照 revise-context-loaded 同款）
-window.addEventListener("tasks-invalidated", (event) => {
-  const dir = event.detail && event.detail.output_dir;
-  if (dir && tasks.outputDir && dir !== tasks.outputDir) return;  // 与当前目录无关：不动本簇状态
-  tasks.outputDir = "";
-  tasks.plan = null;
-  taskDialogs.clear();
-  taskEditOpen.clear();
-  const stale = $("tasks-result");
-  if (stale) stale.remove();
-  clearTasksPanel();
-  $("tasks-status").textContent = "";
-  $("tasks-msg").textContent = "任务清单已作废（修订重生成）：请点「拆解任务」按新工程重新拆解";
-  resetIdeaArea();
-  resetGlobalChatArea();
-  resetDraftsArea();
-});
+  });
 
-// 「有问题？去问 AI」直达（工单 ux-walkthrough-02/23）：母版提炼 / 编译修复 /
-// 修订深化长跑时随时可问——切到生成页（母版页直达必须先回顶层页签）+ 任务
-// 推进子页签 + 展开全局商量 + 滚动定位。页签切换经顶层 nav 按钮与 .revise-tab
-// 按钮 click（revise-tabs 委托 → user 语义），与本模块零 import 环（反向依赖
-// 已存在于 revise-tabs → tasksSummary；goto-tasks → revise-tabs 同理有环，
-// 故不复用 goTaskProgress——评审 H1 整改：母版页不能只切隐藏子页签）。
-document.addEventListener("click", (e) => {
-  if (!e.target.closest("[data-goto-global-chat]")) return;
-  const topBtn = document.querySelector('nav button[data-tab="generate"]');
-  if (topBtn) topBtn.click();   // 顶层页签（已激活 = 幂等：tab 处理器无 generate 分支）
-  const tabBtn = document.querySelector('.revise-tab[data-tab="tasks"]');
-  if (tabBtn) tabBtn.click();
-  // 评审整改：修订页签已加载目录但工程尚未拆解时 tasks.outputDir 为空而
-  // reviseGetDir() 有值——全局商量（tasksChatToggle 用 outputDir || reviseGetDir）
-  // 仍可用，守卫须按同一口径判断，否则长跑屏直达被误拦
-  const dirReady = tasks.outputDir || reviseGetDir();
-  if (!dirReady
-      && $("tasks-empty-hint") && !$("tasks-empty-hint").classList.contains("hidden")) {
-    toast("info", "请先在「修订」页签加载输出目录，再使用全局商量");
-    return;
-  }
-  const area = $("tasks-global-chat");
-  if (area && area.classList.contains("hidden")) void tasksChatToggle();
-  const target = $("btn-tasks-global-chat");
-  if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
-});
+  // 「有问题？去问 AI」直达（工单 ux-walkthrough-02/23）：母版提炼 / 编译修复 /
+  // 修订深化长跑时随时可问——切到生成页（母版页直达必须先回顶层页签）+ 任务
+  // 推进子页签 + 展开全局商量 + 滚动定位。页签切换经顶层 nav 按钮与 .revise-tab
+  // 按钮 click（revise-tabs 委托 → user 语义），与本模块零 import 环（反向依赖
+  // 已存在于 revise-tabs → tasksSummary；goto-tasks → revise-tabs 同理有环，
+  // 故不复用 goTaskProgress——评审 H1 整改：母版页不能只切隐藏子页签）。
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("[data-goto-global-chat]")) return;
+    const topBtn = document.querySelector('nav button[data-tab="generate"]');
+    if (topBtn) topBtn.click();   // 顶层页签（已激活 = 幂等：tab 处理器无 generate 分支）
+    const tabBtn = document.querySelector('.revise-tab[data-tab="tasks"]');
+    if (tabBtn) tabBtn.click();
+    // 评审整改：修订页签已加载目录但工程尚未拆解时 tasks.outputDir 为空而
+    // reviseGetDir() 有值——全局商量（tasksChatToggle 用 outputDir || reviseGetDir）
+    // 仍可用，守卫须按同一口径判断，否则长跑屏直达被误拦
+    const dirReady = tasks.outputDir || reviseGetDir();
+    if (!dirReady
+        && $("tasks-empty-hint") && !$("tasks-empty-hint").classList.contains("hidden")) {
+      toast("info", "请先在「修订」页签加载输出目录，再使用全局商量");
+      return;
+    }
+    const area = $("tasks-global-chat");
+    if (area && area.classList.contains("hidden")) void tasksChatToggle();
+    const target = $("btn-tasks-global-chat");
+    if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+}
 
 export { tasksPlan, tasksRender, tasksResetMessages, tasksIsBusy, tasksSetBusy };

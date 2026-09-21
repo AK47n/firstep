@@ -35,7 +35,6 @@ const chatWait = makeWaitClock("params-chat-status");   // 长任务秒表（工
 // 长任务取消（工单 ux-walkthrough-02/14）：AI 咨询一轮 = 分钟级同步调用
 const chatAbort = makeAbortable();
 const chatCancel = makeCancelButton("params-chat-status");
-chatCancel.onClick(() => chatAbort.abort());
 
 function paramsChatDir() {
   return reviseGetDir();
@@ -191,29 +190,36 @@ function paramsChatReset() {
   if (btn) btn.textContent = "问 AI：我该调哪个参数？";
 }
 
-// 监听器（import 时绑定：module 脚本延迟执行，DOM 已就绪）
-$("btn-params-chat").addEventListener("click", () => paramsChatToggle());
-$("params-chat").addEventListener("click", (event) => {
-  const send = event.target.closest(".btn-params-chat-send");
-  if (send) { paramsChatSend(); return; }
-  const ref = event.target.closest(".btn-param-ref");
-  if (ref && ref.dataset.paramRef) paramsLocateParam(ref.dataset.paramRef);
-});
-// 输入框内 Enter 直接发送（与点「发送」同路径——busy 守卫 / 空值校验在内）
-$("params-chat").addEventListener("keydown", (event) => {
-  if (event.key !== "Enter") return;
-  const input = event.target.closest("#params-chat-input");
-  if (!input) return;
-  event.preventDefault();
-  paramsChatSend();
-});
-// 参数表刷新（识别/应用/重读/重置）后：对话开着则重渲染——提及 chip 集合
-// 同步当前参数表（旧的失效参数名不再可点）。
-window.addEventListener("step11-state-changed", () => {
-  if (paramsChatState.open) paramsChatRender();
-});
-// 跨簇重置：目录切换 / 清单作废 → 关区清状态
-window.addEventListener("revise-context-loaded", () => paramsChatReset());
-window.addEventListener("tasks-invalidated", () => paramsChatReset());
+/**
+ * 接线（工单 frontend-boot-module/03）：原先在模块求值期绑定（module 脚本延迟执行，DOM 已就绪），
+ * 现由装载根 boot.js 显式调用。语句顺序 = 原文件里的先后顺序，语义一字未改。
+ */
+export function initParamsChat() {
+  chatCancel.onClick(() => chatAbort.abort());
+
+  $("btn-params-chat").addEventListener("click", () => paramsChatToggle());
+  $("params-chat").addEventListener("click", (event) => {
+    const send = event.target.closest(".btn-params-chat-send");
+    if (send) { paramsChatSend(); return; }
+    const ref = event.target.closest(".btn-param-ref");
+    if (ref && ref.dataset.paramRef) paramsLocateParam(ref.dataset.paramRef);
+  });
+  // 输入框内 Enter 直接发送（与点「发送」同路径——busy 守卫 / 空值校验在内）
+  $("params-chat").addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    const input = event.target.closest("#params-chat-input");
+    if (!input) return;
+    event.preventDefault();
+    paramsChatSend();
+  });
+  // 参数表刷新（识别/应用/重读/重置）后：对话开着则重渲染——提及 chip 集合
+  // 同步当前参数表（旧的失效参数名不再可点）。
+  window.addEventListener("step11-state-changed", () => {
+    if (paramsChatState.open) paramsChatRender();
+  });
+  // 跨簇重置：目录切换 / 清单作废 → 关区清状态
+  window.addEventListener("revise-context-loaded", () => paramsChatReset());
+  window.addEventListener("tasks-invalidated", () => paramsChatReset());
+}
 
 export { paramsChatReset };

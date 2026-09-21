@@ -43,7 +43,6 @@ const paramsWait = makeWaitClock("params-status");   // 长任务秒表（工单
 // 长任务取消（工单 ux-walkthrough-02/14）：扫描 / 应用共用一条中止器（busy 闸防并发）
 const paramsAbort = makeAbortable();
 const paramsCancel = makeCancelButton("params-status");
-paramsCancel.onClick(() => paramsAbort.abort());
 
 function paramsDir() {
   return reviseGetDir();
@@ -326,35 +325,42 @@ async function tasksRunSSE(url, body, handlers, signal) {
   return done;
 }
 
-// 监听器（import 时绑定：module 脚本延迟执行，DOM 已就绪）
-$("btn-params-scan").addEventListener("click", () => paramsScan());
-$("params-grid").addEventListener("click", (event) => {
-  const btn = event.target.closest(".btn-params-apply");
-  if (btn && btn.dataset.paramName) paramsApply(btn.dataset.paramName);
-  else {
-    const reset = event.target.closest(".btn-params-reset");
-    if (reset && reset.dataset.paramName) paramsResetInput(reset.dataset.paramName);
-  }
-});
-// 输入框内 Enter 直接应用（工单 step11-tabs-ui/03）：values 输入完回车即走
-// paramsApply——与点「应用」同一条路径（busy 守卫 / 空值校验在 apply 内）。
-$("params-grid").addEventListener("keydown", (event) => {
-  if (event.key !== "Enter") return;
-  const input = event.target.closest(".param-input");
-  if (!input) return;
-  event.preventDefault();
-  const card = input.closest(".param-card");
-  const name = card && card.dataset.paramName;
-  if (name) paramsApply(name);
-});
-$("params-result").addEventListener("click", (event) => {
-  const btn = event.target.closest(".btn-params-rollback");
-  if (btn && btn.dataset.backup) paramsRollback(btn.dataset.backup);
-});
+/**
+ * 接线（工单 frontend-boot-module/03）：原先在模块求值期绑定（module 脚本延迟执行，DOM 已就绪），
+ * 现由装载根 boot.js 显式调用。语句顺序 = 原文件里的先后顺序，语义一字未改。
+ */
+export function initParams() {
+  paramsCancel.onClick(() => paramsAbort.abort());
 
-// 跨簇重置：目录切换清空 + 静默重读（已有参数表则回填）；
-// 清单作废（修订重生成）只清空（新工程无参数表）
-window.addEventListener("revise-context-loaded", () => { paramsReset(); paramsReload(); });
-window.addEventListener("tasks-invalidated", () => { paramsReset(); });
+  $("btn-params-scan").addEventListener("click", () => paramsScan());
+  $("params-grid").addEventListener("click", (event) => {
+    const btn = event.target.closest(".btn-params-apply");
+    if (btn && btn.dataset.paramName) paramsApply(btn.dataset.paramName);
+    else {
+      const reset = event.target.closest(".btn-params-reset");
+      if (reset && reset.dataset.paramName) paramsResetInput(reset.dataset.paramName);
+    }
+  });
+  // 输入框内 Enter 直接应用（工单 step11-tabs-ui/03）：values 输入完回车即走
+  // paramsApply——与点「应用」同一条路径（busy 守卫 / 空值校验在 apply 内）。
+  $("params-grid").addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    const input = event.target.closest(".param-input");
+    if (!input) return;
+    event.preventDefault();
+    const card = input.closest(".param-card");
+    const name = card && card.dataset.paramName;
+    if (name) paramsApply(name);
+  });
+  $("params-result").addEventListener("click", (event) => {
+    const btn = event.target.closest(".btn-params-rollback");
+    if (btn && btn.dataset.backup) paramsRollback(btn.dataset.backup);
+  });
+
+  // 跨簇重置：目录切换清空 + 静默重读（已有参数表则回填）；
+  // 清单作废（修订重生成）只清空（新工程无参数表）
+  window.addEventListener("revise-context-loaded", () => { paramsReset(); paramsReload(); });
+  window.addEventListener("tasks-invalidated", () => { paramsReset(); });
+}
 
 export { paramsScan, paramsApply, paramsReload };

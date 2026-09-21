@@ -6,7 +6,11 @@
 
 **被谁阻塞：** 02（装载根搬家）
 
-**状态：** ready-for-agent
+**状态：** resolved
+
+> 评审与整改记录在两轴一起覆盖 03+04 的那一份里，见 `04-host-only-modules-get-init.md`
+> 的 Comments「双轴评审整改」一节（结论：搬运逐字无损、绑定集合完全相同、判据 96→0；
+> 9 条整改已落地）。
 
 ## 范围（实测清单见 spec「实现决策」）
 
@@ -35,4 +39,46 @@
 
 ## Comments
 
-（实现时补：各模块 init 名、冒烟对照读数）
+### 2026-09-21 实现记录
+
+**5 个模块各得一个显式 init**（语句逐条搬进函数体，顺序 = 原文件先后顺序）：
+
+| 模块 | init | 搬走的语句 |
+|---|---|---|
+| `ui/generate-revise.js` | `initRevise()` | 2 条取消按钮回调 + 11 条监听器 |
+| `ui/generate-tasks.js` | `initTaskProgress()` | 1 条取消按钮回调 + 24 条监听器（尾部 281 行整块，脚本机械包裹 + 自校验"缩进复原后逐字相同"） |
+| `ui/params.js` | `initParams()` | 1 + 7 条 |
+| `ui/params-chat.js` | `initParamsChat()` | 1 + 7 条 |
+| `ui/delivery.js` | `initDelivery()` | 5 条（含 window 兼容桥，语义不变） |
+
+**boot.js**：5 条裸装载换成具名 import（顺序不动）＋ 正文最前新增**接线区**按 import 顺序显式
+调用；顺带删掉 `"use strict";`（ESM 恒严格模式，冗余，且按"列 0 副作用"口径会被算成一条接线
+——工单 02 评审指出）。
+
+**判据自证**（`survey2.mjs` / `probe-01-red-proof.mjs`）：
+- 11 个模块的求值期接线 **96 → 42 条**（少掉的 54 条正是这 5 个模块的）；这 5 个模块各自
+  **0 条**；
+- 判据③-a「零裸装载」：base 5 条红 → **工作树 0 条绿**；
+- 判据③-b：11 个模块红 → **6 个模块红**（剩下的正是工单 04 的 6 个）；
+- 登记表体检：8 红 → **3 红**（`generate-core` / `master` / `topic`，属工单 04）。
+
+**真浏览器冒烟（改前 = HEAD（02 状态）/ 改后 = 本工单，同一支）**：`smoke-03-before.txt` /
+`smoke-03-after.txt` —— **记账 434 条，排序后指纹两份同为 `4288323085`**（监听器的
+**多重集完全一致**：target + 事件类型 + 条数），0 pageerror / 0 模块图链接错误、6 个 fx 探针桥
+全在、5 个模块的接线全在、`#delivery-actions` 加载即写、`#btn-params-chat` 真点击有反应、
+平台卡 / 步骤导航 / 总览 / 词表 / 检测卡读数一致。
+
+**顺序（按设计位移，如实记账）**：接线区在 boot 正文最前 → 这 5 个模块的绑定从"import 求值期
+（清单第 13–17 位）"挪到"所有 import 求值完之后"，因此它们在记账里的位置后移
+（`#btn-revise-analyze#click` 52 → 124、`#btn-tasks-plan#click` 59 → 130、
+`window#revise-context-loaded` 79 → 150），**集合与多重集不变**。这正是 spec「保序」一节的
+明文约定（用监听器记账证明集合相同，边界顺序位移如实记录）。
+
+**冒烟仪器自身的一个坑（本轮踩到并修掉）**：原先固定 `waitForTimeout(1500)` 等加载完成——
+机器忙时**模块池最后那 171 条 checkbox 监听器**（`ui/generate-recommend.js:880`）会漏记，
+读数出现"592 → 421"这种假差异（诊断脚本 `diag-listeners.mjs` 用调用栈定位到绑定点，实为
+时序竞态，不是产品行为变化）。现在改成**确定性就绪信号**（等 `#platforms .platform-card`
+与 `#module-grid > *` 都出现 + 300ms 收尾），两份读数稳定复现。
+
+**门禁**：前端门禁 **1717 passed / 0 fail**（+1 = `import-usage-guard` 新增的"零裸装载"）；
+浏览器门禁与 pytest 读数见下。

@@ -22,7 +22,7 @@
 // fx/*.js 已加载完毕——DOM 胶水里的裸引用即模块作用域绑定，时序零等待
 import { $, apiGet, state, setState } from "/js/app.js";
 import { renderUsageStats } from "/js/ui/usage.js";
-import { loadMasters, loadChangelog, renderNewPlatformOptions } from "/js/ui/master.js";
+import { loadMasters, loadChangelog, renderNewPlatformOptions, initMasterWorkflow } from "/js/ui/master.js";  // initMasterWorkflow = 母版页工具链接线（工单 frontend-boot-module/04）
 import { loadPdfs, initPdfToolbar } from "/js/ui/pdf.js";
 import { loadMds, initMdToolbar } from "/js/ui/md.js";
 import { renderHwcheckPanel, initHwcheck } from "/js/ui/hwcheck.js";  // 硬件检测栏目（module-hwcheck/01）：选平台 + 预览检测程序（零 LLM）
@@ -30,13 +30,13 @@ import { renderPlatforms, renderModulePool, loadReferencePicker, setClusterDeps 
 import { stepDoneSet, initCardCollapse, setOnStepChange } from "/js/ui/step-state.js";
 import { renderInstanceConfig, renderPinCard, loadPinBoard, resetPinState, resetInstances, clearInstanceTarget, backfillInstances, pinChangeCount, configuredInstanceCount } from "/js/ui/generate-pins.js";
 import { initMainCTools } from "/js/ui/generate-mainc.js";
-import { initScoreChecklist } from "/js/ui/generate-core.js";
+import { initScoreChecklist, initGenerateActions } from "/js/ui/generate-core.js";  // initGenerateActions = 生成页动作接线（工单 frontend-boot-module/04）
 import { renderToolchainStatus, setToolchains, updateFixCenterAvailability } from "/js/ui/generate-fix.js";
-import "/js/ui/generate-revise.js";  // 修订工坊：host 零调用点——import 只为加载模块（顶层监听器绑定）
-import "/js/ui/generate-tasks.js";  // 任务推进：host 零调用点——import 只为加载模块（顶层监听器绑定）
-import "/js/ui/params.js";  // 参数速调：同上——import 只为加载模块
-import "/js/ui/params-chat.js";  // 参数速调 AI 咨询：同上——import 只为加载模块（顶层监听器绑定）
-import "/js/ui/delivery.js";  // 交付卡：同上
+import { initRevise } from "/js/ui/generate-revise.js";  // 修订工坊（工单 frontend-boot-module/03：接线改显式 init，见下面接线区）
+import { initTaskProgress } from "/js/ui/generate-tasks.js";  // 任务推进（工单 frontend-boot-module/03：同上）
+import { initParams } from "/js/ui/params.js";  // 参数速调（工单 frontend-boot-module/03：同上）
+import { initParamsChat } from "/js/ui/params-chat.js";  // 参数速调 AI 咨询（工单 frontend-boot-module/03：同上）
+import { initDelivery } from "/js/ui/delivery.js";  // 交付卡（工单 frontend-boot-module/03：同上）
 import { initReviseTabs } from "/js/ui/revise-tabs.js";  // 第11步卡内页签（工单 step11-tabs-ui/01）
 import { initResourceBoard } from "/js/ui/resource-board.js";  // 资源总览列表/板图切换（resource-overview-polish/02）
 import { initWiringToggle } from "/js/ui/wiring.js";  // 接线图「显示全部接线」开关（task-wiring-diagram/04）：document 级 change 委托
@@ -46,9 +46,9 @@ import { initGuide } from "/js/ui/guide.js";  // 新手指引页（beginner-guid
 import { initHandoffNote } from "/js/ui/handoff.js";  // 交接提示词说明 + 去任务推进（newcomer-glossary/03）
 import { restoreDraft, scheduleDraftSave, initGenOverview, refreshGenOverview } from "/js/ui/generate-steps.js";
 import { refreshReadinessPanel, initReadinessCheck } from "/js/ui/generate-readiness.js";
-import { loadLibrary, initLibraryToolbar, initAddSections } from "/js/ui/library.js";
-import { loadReferences, loadKitVocabulary, loadTopicTypes, initReferenceToolbar } from "/js/ui/reference.js";
-import { loadTopics, loadTopicGroupVocabulary } from "/js/ui/topic.js";
+import { loadLibrary, initLibraryToolbar, initAddSections, initLibraryAddForm } from "/js/ui/library.js";  // initLibraryAddForm = 新建模块表单接线（工单 frontend-boot-module/04）
+import { loadReferences, loadKitVocabulary, loadTopicTypes, initReferenceToolbar, initReferenceAddForm } from "/js/ui/reference.js";  // initReferenceAddForm = 参考库录入表单接线（工单 frontend-boot-module/04）
+import { loadTopics, loadTopicGroupVocabulary, initTopicPanel } from "/js/ui/topic.js";  // initTopicPanel = 赛题库工具栏 + 拆条/入库接线（工单 frontend-boot-module/04）
 import { loadSettings, loadRecentWorkflows, initSettingsCollapse, setSettingsDeps } from "/js/ui/settings.js";
 import { initUpdatePanel } from "/js/ui/update.js";  // 设置页「软件更新」区（工单 auto-update/06）
 import { initMaterialsUpdate } from "/js/ui/materials-update.js";  // 设置页「资料库更新」区（工单 materials-update/06）
@@ -65,7 +65,28 @@ import { initQuickOpen } from "/js/ui/quick-open.js";  // Ctrl+P 快速打开（
 import { initMainCDiskSync } from "/js/ui/generate-mainc-sync.js";  // main.c 磁盘同步（mainc-codeview-bridge/01）：状态行加载按钮委托
 import { initSkeletonRefs } from "/js/ui/skeleton-refs.js";  // 骨架引用模块锚定（mainc-codeview-bridge/04）：编辑框下方 chips 委托
 import { applyInputA11y } from "/js/ui/a11y.js";  // 裸输入 aria-label 补齐（工单 ux-walkthrough-02/19）
-"use strict";
+// ---------------------------------------------------------------------------
+// 接线区（工单 frontend-boot-module/03-04）
+// ---------------------------------------------------------------------------
+// 这些模块原先靠"被装载"接线（模块求值期直接绑监听器 / 写首帧 DOM），宿主正文里一个调用点
+// 都没有——"点了为什么会有人响应"这件事只写在 import 的副作用里。现在接线住在各模块导出的
+// init*() 里，在这里**显式调用**：
+//   · 调用顺序 = 上面装载清单里的出现顺序（与改动前"求值期接线"的相对顺序一致）；
+//   · 位置在正文最前，等价于原来的"所有 import 求值完 → 才轮到宿主正文"。
+// 原 `"use strict";` 一并删掉：ESM 恒严格模式，该指令冗余（评审指出它还会被"列 0 副作用"
+// 口径算成一条接线）。
+initMasterWorkflow();  // 母版页工具链：选目录 / 扫描 / 提炼 / 确认 / 直接导入（8 条绑定）
+initGenerateActions(); // 生成页动作：骨架 / 冒烟 / 恢复备份 / 输出目录 / 交接 / 复制 / 烧录 / 生成（17 条）
+initRevise();        // 修订工坊：影响分析 / 执行修订 / 深化 / 回滚（11 条绑定）
+initTaskProgress();  // 任务推进：计划 / 重排 / 想法 / 全局商量 / 草稿箱 / 任务卡（24 条绑定）
+initParams();        // 参数速调：扫描 / 应用 / 回滚 + 2 条跨簇重置
+initParamsChat();    // 参数速调 AI 咨询：开区 / 发送 / 回车 + 3 条跨簇重置
+initDelivery();      // 交付卡：首帧渲染 + 2 条跨簇重置 + window 兼容桥
+initLibraryAddForm();   // 模块库：新建模块表单 + 文件选择（6 条绑定）
+initReferenceAddForm(); // 参考文件库：录入表单 + 文件选择（7 条绑定）
+initTopicPanel();       // 赛题库：工具栏 + 拆条 / 确认入库（3 条绑定）
+// 注：code-fix-panel 的接线仍旧在文末**启动区**调用（原来就在那里）——它现在顺带承担
+// 原先在模块求值期做的 `subscribeFixCenter(fixCb)`，见 ui/code-fix-panel.js。
 
 // 主题切换（工单 ui-polish-5/01）：currentTheme / applyTheme / initTheme 及
 // initTheme() 启动调用已迁至 static/js/app.js（阶段 2 工单 02）。
@@ -207,7 +228,8 @@ document.querySelectorAll("nav .tab-group").forEach((group) => {
 // 已迁至 static/js/fx/generate.js（工单 08）：formatResModules。
 
 // btn-generate 覆盖重发监听器（readiness 前置校验 / payload 组装 / 覆盖确认）已迁至
-// static/js/ui/generate-core.js（阶段 2 工单 20 补迁）——模块顶层绑定。
+// static/js/ui/generate-core.js（阶段 2 工单 20 补迁）——现由 initGenerateActions()
+// 绑定（工单 frontend-boot-module/04）。
 
 // ---------------------------------------------------------------------------
 // 生成页：11. 交接提示词（Handoff）+ 自动附带产物 / 评分点核对清单
@@ -216,7 +238,8 @@ document.querySelectorAll("nav .tab-group").forEach((group) => {
 // renderScoreChecklist / scoreChecklistIdsNow / scoreChecklistSyncCurrent /
 // scoreChecklistExportNow / initScoreChecklist / handoffPlatformLabel /
 // handoffPlatformIde / handoffModuleLines / handoffWarnings / handoffPinLines /
-// handoffReferenceLines + 交接 / 复制路径 / 复制核对表监听器（import 时绑定）。
+// handoffReferenceLines + 交接 / 复制路径 / 复制核对表监听器（由 initGenerateActions()
+// 绑定，工单 frontend-boot-module/04）。
 // host 启动区只调 initScoreChecklist()。
 
 // ---------------------------------------------------------------------------
@@ -340,7 +363,8 @@ document.querySelectorAll("nav .tab-group").forEach((group) => {
 // ---------------------------------------------------------------------------
 // 已迁至 static/js/ui/generate-steps.js（阶段 2 工单 18）：DRAFT_KEY /
 // DRAFT_FIELDS / collectDraftState / draftTimer / scheduleDraftSave /
-// clearDraft / restoreDraft + 清除按钮 / 4 输入监听（import 时绑定）。
+// clearDraft / restoreDraft + 清除按钮 / 4 输入监听（仍在 import 时绑定——该模块本轮不在
+// "显式 init" 范围内，因为它另有 importer，见 spec「实现决策」）。
 // host 启动区经顶部 import 调 restoreDraft；A 簇 clusterDeps 注册闭包用
 // scheduleDraftSave（host 启动区注册行不变）。
 

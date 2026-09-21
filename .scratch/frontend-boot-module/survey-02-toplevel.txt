@@ -1,6 +1,6 @@
-装载根：0 条 import，装载 0 个模块
+来源：收走前那个提交 b52022f1；装载根 45 条 import
 
-== ui/generate-revise.js：求值期接线 11 条；其它 importer 8 个（ui/delivery.js, ui/generate-tasks.js, ui/goto-tasks.js, ui/params-chat.js）
+== ui/generate-revise.js：求值期接线 11 条
         70: analyzeCancel.onClick(() => analyzeAbort.abort());
         71: execCancel.onClick(() => execAbort.abort());
        544: $("btn-revise-session").addEventListener("click", () => {
@@ -12,7 +12,7 @@
        560: $("btn-revise-deepen").addEventListener("click", reviseDeepen);
        561: $("btn-revise-rollback").addEventListener("click", reviseRollback);
        563: $("revise-problem-text").addEventListener("input", () => {
-== ui/generate-tasks.js：求值期接线 24 条；其它 importer 4 个（ui/delivery.js, ui/params-chat.js, ui/params.js, ui/revise-tabs.js）
+== ui/generate-tasks.js：求值期接线 24 条
         59: tasksCancel.onClick(() => { if (tasksAbortSlot) tasksAbortSlot.abort(); });
       1559: $("btn-tasks-plan").addEventListener("click", () => tasksPlan(false));
       1560: $("btn-tasks-replan").addEventListener("click", () => tasksPlan(true));
@@ -37,7 +37,7 @@
       1775: window.addEventListener("revise-context-loaded", (event) => {
       1797: window.addEventListener("tasks-invalidated", (event) => {
       1820: document.addEventListener("click", (e) => {
-== ui/params.js：求值期接线 7 条；其它 importer 2 个（ui/params-chat.js, ui/revise-tabs.js）
+== ui/params.js：求值期接线 7 条
         46: paramsCancel.onClick(() => paramsAbort.abort());
        330: $("btn-params-scan").addEventListener("click", () => paramsScan());
        331: $("params-grid").addEventListener("click", (event) => {
@@ -45,7 +45,7 @@
        350: $("params-result").addEventListener("click", (event) => {
        357: window.addEventListener("revise-context-loaded", () => { paramsReset(); paramsReload(); });
        358: window.addEventListener("tasks-invalidated", () => { paramsReset(); });
-== ui/params-chat.js：求值期接线 7 条；其它 importer 0 个（无）
+== ui/params-chat.js：求值期接线 7 条
         38: chatCancel.onClick(() => chatAbort.abort());
        195: $("btn-params-chat").addEventListener("click", () => paramsChatToggle());
        196: $("params-chat").addEventListener("click", (event) => {
@@ -53,13 +53,13 @@
        212: window.addEventListener("step11-state-changed", () => {
        216: window.addEventListener("revise-context-loaded", () => paramsChatReset());
        217: window.addEventListener("tasks-invalidated", () => paramsChatReset());
-== ui/delivery.js：求值期接线 5 条；其它 importer 1 个（ui/revise-tabs.js）
+== ui/delivery.js：求值期接线 5 条
        109: $("delivery-actions").innerHTML = deliveryActionsHTML(false);
        110: bindDeliveryActions();
        112: window.addEventListener("revise-context-loaded", () => deliveryReset());
        113: window.addEventListener("tasks-invalidated", () => deliveryReset());
        115: Object.assign(window, { deliveryActionsHTML, deliveryOpen, deliveryCheck, deliveryPackage, d
-== ui/generate-core.js：求值期接线 17 条；其它 importer 0 个（无）
+== ui/generate-core.js：求值期接线 17 条
        114: $("btn-skeleton").addEventListener("click", () => generateMain("skeleton"));
        115: $("btn-smoke").addEventListener("click", () => generateMain("smoke"));
        188: $("btn-restore-bak").addEventListener("click", async () => {
@@ -77,14 +77,14 @@
        529: $("btn-edit-mainc").addEventListener("click", () => openCodeViewer(getMainCDiskDir(), "main.
        533: document.addEventListener("click", async (event) => {
        564: $("btn-generate").addEventListener("click", async () => {
-== ui/library.js：求值期接线 6 条；其它 importer 0 个（无）
+== ui/library.js：求值期接线 6 条
        433: $("btn-add-file-row").addEventListener("click", () => addFileRow());
        434: addFileRow();
        439: bindFilePicker("btn-pick-mod-files", "pick-mod-files", "new-files", "add-msg");
        440: bindFilePicker("btn-pick-mod-dir", "pick-mod-dir", "new-files", "add-msg");
        458: $("btn-draft-desc").addEventListener("click", async () => {
        481: $("btn-add-module-submit").addEventListener("click", async () => {
-== ui/master.js：求值期接线 8 条；其它 importer 0 个（无）
+== ui/master.js：求值期接线 8 条
         43: $("btn-pick-dirs").addEventListener("click", () => $("pick-dirs").click());
         44: $("pick-dirs").addEventListener("change", async () => {
         71: $("btn-scan").addEventListener("click", async () => {
@@ -93,7 +93,7 @@
        346: $("btn-confirm").addEventListener("click", async () => {
        573: $("btn-direct-import").addEventListener("click", () => $("import-pick-dirs").click());
        575: $("import-pick-dirs").addEventListener("change", async () => {
-== ui/reference.js：求值期接线 7 条；其它 importer 0 个（无）
+== ui/reference.js：求值期接线 7 条
        155: $("ref-anchor-kind").addEventListener("change", () => {
        454: $("btn-ref-add-file-row").addEventListener("click", () => addFileRow($("ref-files")));
        455: addFileRow($("ref-files"));
@@ -101,11 +101,11 @@
        481: $("btn-ref-add").addEventListener("click", async () => {
        522: bindFilePicker("btn-ref-pick-files", "ref-pick-files", "ref-files", "ref-draft-msg");
        523: bindFilePicker("btn-ref-pick-dir", "ref-pick-dir", "ref-files", "ref-draft-msg");
-== ui/topic.js：求值期接线 3 条；其它 importer 0 个（无）
+== ui/topic.js：求值期接线 3 条
        292: initTopicToolbar();
        388: $("btn-topic-split").addEventListener("click", async () => {
        418: $("btn-topic-confirm").addEventListener("click", async () => {
-== ui/code-fix-panel.js：求值期接线 1 条；其它 importer 0 个（无）
+== ui/code-fix-panel.js：求值期接线 1 条
        104: subscribeFixCenter(fixCb);
 
-合计 96 条接线话句（11 个模块）
+合计 96 条接线语句（11 个模块）

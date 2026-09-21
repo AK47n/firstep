@@ -18,7 +18,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { parseImports, unusedImports } from "./import-usage.mjs";
-import { readLoadRoot } from "./boot-contract.mjs";
+import { readLoadRoot, bareLoads } from "./boot-contract.mjs";
 
 const STATIC = fileURLToPath(new URL("../../src/contest_generator/static/", import.meta.url));
 const ROOT = readLoadRoot(STATIC);
@@ -46,8 +46,18 @@ test("装载根不许导入它不使用的名字（零化石）", () => {
 
 test("具名清单非空且无重复名（防 `import {} from` 与重复登记）", () => {
   for (const { spec, names, raw } of IMPORTS) {
-    if (!/^[ \t]*import\s*\{/.test(raw)) continue; // 裸 import 由"零裸装载"那条单独判（工单 03）
+    if (!/^[ \t]*import\s*\{/.test(raw)) continue; // 裸 import 归末尾那条「零裸装载」判
     assert.ok(names.length > 0, `${spec} 写成空具名清单`);
     assert.equal(new Set(names).size, names.length, `${spec} 的具名清单里有重复名字`);
   }
+});
+
+test("装载根零裸装载（\"靠被加载才接线\"这条隐式边已退场，不许回潮）", () => {
+  const bare = bareLoads(ROOT).map((b) => `  ${b.line}: import "${b.spec}"`);
+  assert.deepEqual(
+    bare,
+    [],
+    "装载清单里出现裸装载（import \"…\"）—— 那是「这个模块靠被加载才生效」的隐式边：\n"
+      + "接线要写成模块导出的 init*()，再由装载根显式调用：\n" + bare.join("\n")
+  );
 });

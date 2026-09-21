@@ -10,8 +10,8 @@
 // 交接 6 函数（handoffPlatformLabel / handoffPlatformIde / handoffModuleLines /
 // handoffWarnings / handoffPinLines / handoffReferenceLines）+ 顶层监听器
 //（btn-skeleton / btn-smoke / desktop-topic-output change / btn-pick-output-dir /
-// btn-handoff / btn-handoff-copy / btn-copy-dir——import 时绑定：module 脚本
-// 延迟执行，DOM 已就绪，同 generate-recommend 先例）。纯件在 fx/*.js
+// btn-handoff / btn-handoff-copy / btn-copy-dir——工单 frontend-boot-module/04 起由
+// initGenerateActions() 绑定，装载根 boot.js 的接线区显式调用）。纯件在 fx/*.js
 //（generate / module / score / draft，本模块 import 调用）。
 // 状态读（只读，写经各 setter）：A 簇 generate-recommend 的 chosenPlatform /
 // selectedSlugs / expanded / warnings / scorePoints / selectedReferenceIds /
@@ -111,9 +111,6 @@ async function generateMain(mode) {
   }
 }
 
-$("btn-skeleton").addEventListener("click", () => generateMain("skeleton"));
-$("btn-smoke").addEventListener("click", () => generateMain("smoke"));
-
 // ---------------------------------------------------------------------------
 // 生成页：9. 输出目录并生成
 // ---------------------------------------------------------------------------
@@ -185,45 +182,9 @@ function showBackupRestore(dirName) {
   msg.classList.remove("ok", "error");
   box.classList.remove("hidden");
 }
-$("btn-restore-bak").addEventListener("click", async () => {
-  const msg = $("res-bak-msg");
-  msg.textContent = "";
-  msg.classList.remove("ok", "error");
-  if (!bakRestoreName) return;
-  const btn = $("btn-restore-bak");
-  btn.disabled = true;
-  try {
-    const data = await apiPost("/api/generate/restore-backup", { name: bakRestoreName });
-    msg.textContent = (data && data.message) || "恢复成功";
-    msg.classList.add("ok");
-    $("res-backup-restore").classList.add("hidden");  // 备份已恢复，按钮使命完成
-    toast("ok", (data && data.message) || "已恢复覆盖前备份");
-  } catch (e) {
-    msg.textContent = e.message;
-    msg.classList.add("error");
-  } finally {
-    btn.disabled = false;
-  }
-});
 // 已迁至 static/js/fx/generate.js（工单 08）：genStageTexts / fmtWait。
 
 // 已迁至 static/js/fx/generate.js（工单 08）：generationOutputDirPayload。
-
-$("desktop-topic-output").addEventListener("change", () => {
-  const manual = !desktopTopicOutputEnabled();
-  $("output-dir").disabled = !manual;
-  $("btn-pick-output-dir").disabled = !manual;
-});
-$("output-dir").disabled = desktopTopicOutputEnabled();
-$("btn-pick-output-dir").disabled = desktopTopicOutputEnabled();
-
-$("btn-pick-output-dir").addEventListener("click", async () => {
-  try {
-    const data = await apiPost("/api/pick-directory", {});
-    if (data.path) $("output-dir").value = data.path;  // 取消 = null，不覆盖手输
-  } catch (e) { $("generate-msg").textContent = e.message; }
-});
-
 
 // ---------------------------------------------------------------------------
 // （btn-generate 覆盖重发监听器与 readiness 前置校验已随工单 20 补迁至本簇：
@@ -335,7 +296,6 @@ function initScoreChecklist() {
   });
 }
 
-
 function handoffPlatformLabel() {
   const pf = (state.platforms || []).find((p) => p.id === chosenPlatform);
   return pf ? pf.name : (chosenPlatform || "未选择");
@@ -390,118 +350,6 @@ async function handoffReferenceLines() {
   } catch { return "（参考资料读取失败，可忽略）"; }
 }
 
-$("btn-handoff").addEventListener("click", async () => {
-  const msg = $("handoff-msg");
-  msg.textContent = "";
-  const problem = $("problem").value.trim();
-  if (!problem) { msg.textContent = "请先填写赛题原文"; return; }
-  if (!chosenPlatform) { msg.textContent = "请先选择目标平台"; return; }
-  $("btn-handoff").disabled = true;
-  try {
-    const platform = handoffPlatformLabel();
-    const ide = handoffPlatformIde();
-    const summary = (prereadOverviewText || "").trim();
-    const mainC = $("main-c").value.trim();
-    const dir = $("res-dir").textContent.trim();   // 生成成功后才非空
-    const structure = $("res-structure").textContent.trim();
-    const fixRound = $("fix-center-round").textContent.trim();
-    const fixStatus = $("fix-status").textContent.trim();
-    const fixLog = $("fix-center-log").value.trim();
-    const refs = await handoffReferenceLines();
-    const warns = handoffWarnings();
-    const pins = handoffPinLines();
-    const hasScores = scorePoints.length > 0;
-    const scores = formatScorePoints(scorePoints);
-    const scoreSection = hasScores ? ["", "## 五、评分点验收清单", "", scores] : [];
-    const lines = [
-      "# 电赛工程交接提示词（Handoff）",
-      "",
-      "你是嵌入式开发工程师，接手一个由「电赛工程生成器」搭好的基础工程。平台 / 模块 / 骨架已就绪，你的任务是精准打磨，最终交付一份功能完整、编译零错误、可直接参赛提交的工程。",
-      "",
-      "## 一、赛题原文",
-      "",
-      problem,
-      "",
-      "## 二、赛题总览（AI 预读）",
-      "",
-      summary || "（未预读，可在打磨时自行通读题面提炼要点）",
-      "",
-      "## 三、目标平台",
-      "",
-      platform + (ide ? "（IDE：" + ide + "）" : ""),
-      "",
-      "## 四、模块清单",
-      "",
-      handoffModuleLines(),
-      ...scoreSection,
-      "",
-      "## 五、平台警告",
-      "",
-      warns,
-      "",
-      "## 六、引脚绑定配置",
-      "",
-      pins,
-      "",
-      "## 七、main.c 骨架",
-      "",
-      "```c",
-      mainC || "（未生成骨架）",
-      "```",
-      "",
-      "## 八、工程位置",
-      "",
-      dir ? "- 输出目录：" + dir : "（工程尚未生成；可先以 1~5 项上下文开始打磨，或先在本工具生成）",
-      ...(dir && structure ? ["", "工程结构：", "", "```", structure, "```"] : []),
-      "",
-      "## 九、编译与修复状态",
-      "",
-      ...(fixRound ? [fixRound] : []),
-      fixStatus || "（未运行修复中心）",
-      ...(fixLog ? ["", "编译输出：", "", "```", fixLog, "```"] : []),
-      "",
-      "## 十、参考资料",
-      "",
-      refs,
-      "",
-      "## 十一、打磨要求",
-      "",
-      "1. 通读 main.c，把注释占位 / 未实现的调用全部按模块真实接口补齐；",
-      "2. 逐模块核对与题面要求的符合度，缺的功能先落到骨架与工程内；",
-      "3. 用 " + ide + " 编译至 0 error 0 warning；",
-      "4. 按题面评分点逐条自检，确认每个要求都有对应实现；",
-      "5. 只修改生成工程目录内的文件，不要改动模块库 / 参考库等仓库内容。",
-    ];
-    $("handoff-text").value = lines.join("\n");
-    $("btn-handoff-copy").classList.remove("hidden");
-    markStepDone(12);
-  } catch (e) {
-    msg.textContent = e.message;
-  } finally { $("btn-handoff").disabled = false; }
-});
-
-$("btn-handoff-copy").addEventListener("click", async () => {
-  // 机制 = app.js copyText 单源（工单 06 评审整改）；失败也提示（原实现失败静默）
-  const ok = await copyText($("handoff-text").value);
-  if (ok) {
-    const btn = $("btn-handoff-copy");
-    btn.textContent = "已复制";
-    toast("ok", "已复制到剪贴板");
-    setTimeout(() => { btn.textContent = "复制"; }, 1500);
-  } else {
-    toast("error", "复制失败：请手动复制");
-  }
-});
-
-$("btn-copy-dir").addEventListener("click", async () => {
-  const dir = $("res-dir").textContent.trim();
-  if (!dir) return;
-  // copyText 单源（原实现仅 clipboard 无兜底；工单 06 评审整改补 execCommand 保底）
-  const ok = await copyText(dir);
-  if (ok) toast("ok", "已复制输出路径");
-  else toast("error", "复制失败：请手动复制");
-});
-
 /** 烧录到板子（工单 flash-deploy/02）：生成结果面板一键烧录——执行体共享
  * ui/flash.js flashRunShared（POST /api/flash → flashResultHTML / 400 →
  * flashGuideHTML）；本簇只做按钮防重（disabled）+ 平台名（busy 文案探针名，
@@ -518,182 +366,6 @@ async function flashRun() {
     setBusy: (busy) => { btn.disabled = busy; },
   });
 }
-$("btn-flash").addEventListener("click", flashRun);
-// 结果区「去任务推进」（工单 beginner-gap-closure/02）：与第 12 步交接卡同源跳转
-$("btn-goto-tasks-result").addEventListener("click", goTaskProgress);
-// 双向跳转桥（mainc-codeview-bridge/03，code-editor-utilize/02 增补）：在代码
-// 查看器中打开工程——结果区与步骤 8 工具栏同一入口（openCodeViewer 切 tab +
-// 加载目录；目录 = 生成上下文）；「编辑 main.c」精确入口直接打开 main.c
-$("btn-goto-code-result").addEventListener("click", () => openCodeViewer(getMainCDiskDir()));
-$("btn-goto-code-mainc").addEventListener("click", () => openCodeViewer(getMainCDiskDir()));
-$("btn-edit-mainc").addEventListener("click", () => openCodeViewer(getMainCDiskDir(), "main.c"));
-// 「复制烧录命令」（工单 flash-deploy/02，spec 故事 4 一键复制）：document 级
-// 委托统一处理——生成结果面板与任务结果面板的复制按钮共用（任务结果在
-// tasks-grid 容器内，网格委托只处理动作按钮；命令复制与网格解耦，单点）。
-document.addEventListener("click", async (event) => {
-  const btn = event.target.closest(".btn-flash-copy-cmd");
-  if (btn) {
-    const cmd = btn.dataset.cmd || "";
-    if (!cmd) return;
-    // 机制 = app.js copyText 单源（工单 06 评审整改：原 clipboard-only 补 execCommand 兜底）
-    const ok = await copyText(cmd);
-    if (ok) toast("ok", "烧录命令已复制");
-    else toast("error", "复制失败：请手动复制");
-    return;
-  }
-  // 指引卡「去设置页配置」（spec 前端决策）：切到设置 tab（工具链卡的烧录
-  // 小节填路径）——同 tab 按钮点击先例（generate-recommend useTopic）。
-  // 修复（工单 flash-guide-settings/03）：只切 tab 不够——烧录工具输入框藏在
-  // 默认折叠的「工具链」卡内（SETTINGS_DEFAULT_COLLAPSED 含 toolchain），用户
-  // 只看得到折叠卡片 = 误以为没跳转；展开该卡 + 按平台滚动到对应输入框。
-  const goto = event.target.closest(".btn-flash-goto-settings");
-  if (goto) {
-    const tab = document.querySelector('[data-tab="settings"]');
-    if (tab) tab.click();
-    expandSettingsCollapse("toolchain");
-    requestAnimationFrame(() => {
-      const field = document.getElementById(
-        chosenPlatform === "mspm0" ? "set-dslite-path" : "set-openocd-path"
-      );
-      if (field) field.scrollIntoView({ behavior: "smooth", block: "center" });
-    });
-  }
-});
-
-
-$("btn-generate").addEventListener("click", async () => {
-  $("generate-msg").textContent = "";
-  $("generate-result").classList.add("hidden");
-  // 前置校验（工单 a3-readiness-check/01）：判据单一事实源——与「检查能否生成」
-  // 共用 generateReadinessChecks，文案/顺序与旧逻辑逐字一致（平台 → 模块 → 题面 → 目录）
-  const rstate = readinessState();
-  const missing = generateReadinessChecks(rstate).filter((c) => !c.ok);
-  if (missing.length) { $("generate-msg").textContent = missing[0].reason; return; }
-  const desktopOutput = rstate.desktopOutput;
-  const problem = rstate.problem;
-  const outputDir = rstate.outputDir;
-  const status = $("gen-status");
-  // 阶段播报（工单 ui-polish-8/04）：校验（真实）→ 生成轮播 + 计时 → 清理
-  let stageTimer = null;
-  let waitSecs = 0;
-  const genStatus = (text) => { status.innerHTML = '<span class="spinner"></span>' + text; };
-  const stopStage = () => {
-    if (stageTimer) { clearInterval(stageTimer); stageTimer = null; }
-    waitSecs = 0;
-  };
-  genStatus("正在准备…");
-  $("btn-generate").disabled = true;
-  aiActionStart("生成工程");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
-  // 横幅 stop 哨兵（评审整改）：catch 首段 stop（覆盖确认弹窗等待期）+ finally
-  // stop 两处收口取其一——非冲突错误路径只 start 一次却有两个 stop 会打穿共享
-  // 计数（并发时误隐同伴横幅）；确认重发前重置哨兵开新一对。
-  let bannerReleased = false;
-  const releaseBanner = () => {
-    if (!bannerReleased) { bannerReleased = true; aiActionStop(); }
-  };
-  // 覆盖重发（工单 generate-overwrite/01）：payload 声明在 try 外——catch
-  // 块引用 try 块内 const 会 ReferenceError（块级作用域）
-  let payload;
-  try {
-    // bindings（工单 03 + pin-verdict-seam/01）：单源 collectBindings——validate
-    // 与 generate 发同一份；未配任何引脚不发字段（缺省 = 全默认，旧行为逐字节不变）
-    const inst = instancePayload(expanded, instances);  // 多实例清单（工单 04）：空 = 不发（旧行为）
-    const bindings = collectBindings(selectedSlugs, pinBindings, inst);
-
-    // 校验端点（工单 pin-verdict-seam/01）：进入生成前跑 resolve_bindings，跨角色
-    // 冲突（mspm0 槽位 / GPIO 同端口 / PWM 通道对 / 成对实例）在生成前暴露并阻断，
-    // 不发起 generate；空 bindings / 全默认 = ok:true（不误拦）
-    const checkPayload = { platform: chosenPlatform, slugs: selectedSlugs };
-    if (Object.keys(bindings).length) checkPayload.bindings = bindings;
-    genStatus("正在校验引脚绑定…");
-    const check = await apiPost("/api/bindings/validate", checkPayload);
-    if (check.ok === false) {
-      stopStage();
-      $("generate-msg").classList.remove("ok");
-      $("generate-msg").textContent = check.error;
-      status.textContent = "";
-      markStepUndone(7);  // 引脚校验不过 = 第 7 步未完成
-      return;
-    }
-
-    const payloadData = {
-      platform: chosenPlatform, slugs: selectedSlugs,
-      main_c: $("main-c").value,
-      problem_text: problem,
-      output_dir: generationOutputDirPayload(outputDir, desktopOutput),
-      create_desktop_topic_dir: desktopOutput,
-      topic_id: currentTopicId || undefined,
-    };
-    payload = payloadData;
-    if (Object.keys(bindings).length) payload.bindings = bindings;
-    if (Object.keys(inst).length) payload.instances = inst;
-    // 功能组用户选择（工单 group-choice-required/01）：随生成请求回传（未选时
-    // 就绪检查单那条硬判据已经拦下，这里只在通过后带上——服务端同源复核）。
-    payload.group_choices = groupChoices;
-    // 副产物模板选择（工单 k230-multi-template/04）：只带用户改过的（≠默认）；
-    // 空 = 不发字段 = 旧行为（默认模板）逐字节不变
-    if (Object.keys(pythonTemplates).length) payload.python_templates = pythonTemplates;
-    if (scorePoints.length) payload.score_points = scorePoints;
-    // 上下文清单字段（工单 revise-deepen/01）：功能需求清单（推荐产物摘要）/
-    // 赛题答疑 Q&A 随生成请求回传并落盘，供「修订与深化」历史目录直读；
-    // 没推荐过 / 没填 Q&A = 不带字段（清单内容缺省，旧行为逐字节不变）
-    if (lastRecommend && lastRecommend.requirements && lastRecommend.requirements.length) {
-      payload.requirements = lastRecommend.requirements;
-    }
-    const qa = $("qa-text").value.trim();
-    if (qa) payload.qa_text = qa;
-    // 生成请求期间：子阶段文案轮播（每 2s 切一个）+ 等待计时（每秒刷新）
-    waitSecs = 0;
-    genStatus(genStageTexts(0));
-    stageTimer = setInterval(() => {
-      waitSecs += 1;
-      genStatus(genStageTexts(Math.floor(waitSecs / 2)) + "（已等待 " + fmtWait(waitSecs) + "）");
-    }, 1000);
-    const data = await apiPost("/api/generate", payload);
-    stopStage();
-    renderGenerateSuccess(data);
-  } catch (e) {
-    stopStage();
-    releaseBanner();   // 首段请求已终态：覆盖确认弹窗等待期无 AI 行动（工单 ai-action-banner/02）
-    $("generate-msg").classList.remove("ok");
-    status.textContent = "";
-    // 生成前覆盖保护（工单 generate-overwrite/01）：同名完整工程 400 →
-    // 确认框（旧工程将备份为 .bak）→ 确认后自动重发 overwrite=true；
-    // 取消 = 显示原 400 文案
-    if (isConflictError(e.message)) {
-      const dirName = conflictDirName(e.message);
-      const hint = dirName
-        ? "旧工程将先备份为「" + dirName + ".bak」，然后覆盖生成全新工程"
-        : "旧工程将先备份为同名 .bak 备份";
-      if (await confirmModal({
-        title: "覆盖生成？",
-        message: "桌面上已有同名工程"
-          + (dirName ? "「" + dirName + "」" : "")
-          + "：" + hint + "。" + overwriteBakHint(dirName) + "确定覆盖并重新生成？",
-        danger: true,
-        confirmText: "确定覆盖",
-      })) {
-        genStatus("正在覆盖生成…");
-        bannerReleased = false;   // 重发 = 新一对 start/stop
-        aiActionStart("生成工程");   // 确认后重发：新一段 AI 行动（工单 ai-action-banner/02）
-        try {
-          const data = await apiPost("/api/generate", { ...payload, overwrite: true });
-          stopStage();
-          renderGenerateSuccess(data);   // 内部按 .bak 实际存在显示恢复按钮（工单 ux-walkthrough-02/03）
-          toast("ok", "已覆盖生成（旧工程备份为 .bak，可在结果区一键恢复）");
-          return;
-        } catch (e2) {
-          $("generate-msg").textContent = e2.message;
-        }
-      } else {
-        $("generate-msg").textContent = e.message;
-      }
-    } else {
-      $("generate-msg").textContent = e.message;
-    }
-    toast("error", "生成失败");
-  } finally { releaseBanner(); $("btn-generate").disabled = false; }
-});
 
 // ---- 本簇导出面（host 顶部 import 活绑定调用点） ----
 // 说明（工单 15 记录，工单 16 修订）：generateMain / renderScoreChecklist /
@@ -704,3 +376,337 @@ $("btn-generate").addEventListener("click", async () => {
 export { generateMain, renderGenerateSuccess,
   renderScoreChecklist, scoreChecklistSyncCurrent, scoreChecklistExportNow,
   initScoreChecklist };
+
+
+/**
+ * 接线：由装载根 boot.js 显式调用（工单 frontend-boot-module/04）
+ * 语句顺序 = 原文件里的先后顺序；绑定的 target 与事件类型一字未改。
+ */
+export function initGenerateActions() {
+  $("btn-skeleton").addEventListener("click", () => generateMain("skeleton"));
+  $("btn-smoke").addEventListener("click", () => generateMain("smoke"));
+
+  $("btn-restore-bak").addEventListener("click", async () => {
+    const msg = $("res-bak-msg");
+    msg.textContent = "";
+    msg.classList.remove("ok", "error");
+    if (!bakRestoreName) return;
+    const btn = $("btn-restore-bak");
+    btn.disabled = true;
+    try {
+      const data = await apiPost("/api/generate/restore-backup", { name: bakRestoreName });
+      msg.textContent = (data && data.message) || "恢复成功";
+      msg.classList.add("ok");
+      $("res-backup-restore").classList.add("hidden");  // 备份已恢复，按钮使命完成
+      toast("ok", (data && data.message) || "已恢复覆盖前备份");
+    } catch (e) {
+      msg.textContent = e.message;
+      msg.classList.add("error");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $("desktop-topic-output").addEventListener("change", () => {
+    const manual = !desktopTopicOutputEnabled();
+    $("output-dir").disabled = !manual;
+    $("btn-pick-output-dir").disabled = !manual;
+  });
+  $("output-dir").disabled = desktopTopicOutputEnabled();
+  $("btn-pick-output-dir").disabled = desktopTopicOutputEnabled();
+
+  $("btn-pick-output-dir").addEventListener("click", async () => {
+    try {
+      const data = await apiPost("/api/pick-directory", {});
+      if (data.path) $("output-dir").value = data.path;  // 取消 = null，不覆盖手输
+    } catch (e) { $("generate-msg").textContent = e.message; }
+  });
+
+  $("btn-handoff").addEventListener("click", async () => {
+    const msg = $("handoff-msg");
+    msg.textContent = "";
+    const problem = $("problem").value.trim();
+    if (!problem) { msg.textContent = "请先填写赛题原文"; return; }
+    if (!chosenPlatform) { msg.textContent = "请先选择目标平台"; return; }
+    $("btn-handoff").disabled = true;
+    try {
+      const platform = handoffPlatformLabel();
+      const ide = handoffPlatformIde();
+      const summary = (prereadOverviewText || "").trim();
+      const mainC = $("main-c").value.trim();
+      const dir = $("res-dir").textContent.trim();   // 生成成功后才非空
+      const structure = $("res-structure").textContent.trim();
+      const fixRound = $("fix-center-round").textContent.trim();
+      const fixStatus = $("fix-status").textContent.trim();
+      const fixLog = $("fix-center-log").value.trim();
+      const refs = await handoffReferenceLines();
+      const warns = handoffWarnings();
+      const pins = handoffPinLines();
+      const hasScores = scorePoints.length > 0;
+      const scores = formatScorePoints(scorePoints);
+      const scoreSection = hasScores ? ["", "## 五、评分点验收清单", "", scores] : [];
+      const lines = [
+        "# 电赛工程交接提示词（Handoff）",
+        "",
+        "你是嵌入式开发工程师，接手一个由「电赛工程生成器」搭好的基础工程。平台 / 模块 / 骨架已就绪，你的任务是精准打磨，最终交付一份功能完整、编译零错误、可直接参赛提交的工程。",
+        "",
+        "## 一、赛题原文",
+        "",
+        problem,
+        "",
+        "## 二、赛题总览（AI 预读）",
+        "",
+        summary || "（未预读，可在打磨时自行通读题面提炼要点）",
+        "",
+        "## 三、目标平台",
+        "",
+        platform + (ide ? "（IDE：" + ide + "）" : ""),
+        "",
+        "## 四、模块清单",
+        "",
+        handoffModuleLines(),
+        ...scoreSection,
+        "",
+        "## 五、平台警告",
+        "",
+        warns,
+        "",
+        "## 六、引脚绑定配置",
+        "",
+        pins,
+        "",
+        "## 七、main.c 骨架",
+        "",
+        "```c",
+        mainC || "（未生成骨架）",
+        "```",
+        "",
+        "## 八、工程位置",
+        "",
+        dir ? "- 输出目录：" + dir : "（工程尚未生成；可先以 1~5 项上下文开始打磨，或先在本工具生成）",
+        ...(dir && structure ? ["", "工程结构：", "", "```", structure, "```"] : []),
+        "",
+        "## 九、编译与修复状态",
+        "",
+        ...(fixRound ? [fixRound] : []),
+        fixStatus || "（未运行修复中心）",
+        ...(fixLog ? ["", "编译输出：", "", "```", fixLog, "```"] : []),
+        "",
+        "## 十、参考资料",
+        "",
+        refs,
+        "",
+        "## 十一、打磨要求",
+        "",
+        "1. 通读 main.c，把注释占位 / 未实现的调用全部按模块真实接口补齐；",
+        "2. 逐模块核对与题面要求的符合度，缺的功能先落到骨架与工程内；",
+        "3. 用 " + ide + " 编译至 0 error 0 warning；",
+        "4. 按题面评分点逐条自检，确认每个要求都有对应实现；",
+        "5. 只修改生成工程目录内的文件，不要改动模块库 / 参考库等仓库内容。",
+      ];
+      $("handoff-text").value = lines.join("\n");
+      $("btn-handoff-copy").classList.remove("hidden");
+      markStepDone(12);
+    } catch (e) {
+      msg.textContent = e.message;
+    } finally { $("btn-handoff").disabled = false; }
+  });
+
+  $("btn-handoff-copy").addEventListener("click", async () => {
+    // 机制 = app.js copyText 单源（工单 06 评审整改）；失败也提示（原实现失败静默）
+    const ok = await copyText($("handoff-text").value);
+    if (ok) {
+      const btn = $("btn-handoff-copy");
+      btn.textContent = "已复制";
+      toast("ok", "已复制到剪贴板");
+      setTimeout(() => { btn.textContent = "复制"; }, 1500);
+    } else {
+      toast("error", "复制失败：请手动复制");
+    }
+  });
+
+  $("btn-copy-dir").addEventListener("click", async () => {
+    const dir = $("res-dir").textContent.trim();
+    if (!dir) return;
+    // copyText 单源（原实现仅 clipboard 无兜底；工单 06 评审整改补 execCommand 保底）
+    const ok = await copyText(dir);
+    if (ok) toast("ok", "已复制输出路径");
+    else toast("error", "复制失败：请手动复制");
+  });
+
+  $("btn-flash").addEventListener("click", flashRun);
+  // 结果区「去任务推进」（工单 beginner-gap-closure/02）：与第 12 步交接卡同源跳转
+  $("btn-goto-tasks-result").addEventListener("click", goTaskProgress);
+  // 双向跳转桥（mainc-codeview-bridge/03，code-editor-utilize/02 增补）：在代码
+  // 查看器中打开工程——结果区与步骤 8 工具栏同一入口（openCodeViewer 切 tab +
+  // 加载目录；目录 = 生成上下文）；「编辑 main.c」精确入口直接打开 main.c
+  $("btn-goto-code-result").addEventListener("click", () => openCodeViewer(getMainCDiskDir()));
+  $("btn-goto-code-mainc").addEventListener("click", () => openCodeViewer(getMainCDiskDir()));
+  $("btn-edit-mainc").addEventListener("click", () => openCodeViewer(getMainCDiskDir(), "main.c"));
+  // 「复制烧录命令」（工单 flash-deploy/02，spec 故事 4 一键复制）：document 级
+  // 委托统一处理——生成结果面板与任务结果面板的复制按钮共用（任务结果在
+  // tasks-grid 容器内，网格委托只处理动作按钮；命令复制与网格解耦，单点）。
+  document.addEventListener("click", async (event) => {
+    const btn = event.target.closest(".btn-flash-copy-cmd");
+    if (btn) {
+      const cmd = btn.dataset.cmd || "";
+      if (!cmd) return;
+      // 机制 = app.js copyText 单源（工单 06 评审整改：原 clipboard-only 补 execCommand 兜底）
+      const ok = await copyText(cmd);
+      if (ok) toast("ok", "烧录命令已复制");
+      else toast("error", "复制失败：请手动复制");
+      return;
+    }
+    // 指引卡「去设置页配置」（spec 前端决策）：切到设置 tab（工具链卡的烧录
+    // 小节填路径）——同 tab 按钮点击先例（generate-recommend useTopic）。
+    // 修复（工单 flash-guide-settings/03）：只切 tab 不够——烧录工具输入框藏在
+    // 默认折叠的「工具链」卡内（SETTINGS_DEFAULT_COLLAPSED 含 toolchain），用户
+    // 只看得到折叠卡片 = 误以为没跳转；展开该卡 + 按平台滚动到对应输入框。
+    const goto = event.target.closest(".btn-flash-goto-settings");
+    if (goto) {
+      const tab = document.querySelector('[data-tab="settings"]');
+      if (tab) tab.click();
+      expandSettingsCollapse("toolchain");
+      requestAnimationFrame(() => {
+        const field = document.getElementById(
+          chosenPlatform === "mspm0" ? "set-dslite-path" : "set-openocd-path"
+        );
+        if (field) field.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    }
+  });
+
+  $("btn-generate").addEventListener("click", async () => {
+    $("generate-msg").textContent = "";
+    $("generate-result").classList.add("hidden");
+    // 前置校验（工单 a3-readiness-check/01）：判据单一事实源——与「检查能否生成」
+    // 共用 generateReadinessChecks，文案/顺序与旧逻辑逐字一致（平台 → 模块 → 题面 → 目录）
+    const rstate = readinessState();
+    const missing = generateReadinessChecks(rstate).filter((c) => !c.ok);
+    if (missing.length) { $("generate-msg").textContent = missing[0].reason; return; }
+    const desktopOutput = rstate.desktopOutput;
+    const problem = rstate.problem;
+    const outputDir = rstate.outputDir;
+    const status = $("gen-status");
+    // 阶段播报（工单 ui-polish-8/04）：校验（真实）→ 生成轮播 + 计时 → 清理
+    let stageTimer = null;
+    let waitSecs = 0;
+    const genStatus = (text) => { status.innerHTML = '<span class="spinner"></span>' + text; };
+    const stopStage = () => {
+      if (stageTimer) { clearInterval(stageTimer); stageTimer = null; }
+      waitSecs = 0;
+    };
+    genStatus("正在准备…");
+    $("btn-generate").disabled = true;
+    aiActionStart("生成工程");   // 全局「AI 行动中」横幅（工单 ai-action-banner/02）
+    // 横幅 stop 哨兵（评审整改）：catch 首段 stop（覆盖确认弹窗等待期）+ finally
+    // stop 两处收口取其一——非冲突错误路径只 start 一次却有两个 stop 会打穿共享
+    // 计数（并发时误隐同伴横幅）；确认重发前重置哨兵开新一对。
+    let bannerReleased = false;
+    const releaseBanner = () => {
+      if (!bannerReleased) { bannerReleased = true; aiActionStop(); }
+    };
+    // 覆盖重发（工单 generate-overwrite/01）：payload 声明在 try 外——catch
+    // 块引用 try 块内 const 会 ReferenceError（块级作用域）
+    let payload;
+    try {
+      // bindings（工单 03 + pin-verdict-seam/01）：单源 collectBindings——validate
+      // 与 generate 发同一份；未配任何引脚不发字段（缺省 = 全默认，旧行为逐字节不变）
+      const inst = instancePayload(expanded, instances);  // 多实例清单（工单 04）：空 = 不发（旧行为）
+      const bindings = collectBindings(selectedSlugs, pinBindings, inst);
+
+      // 校验端点（工单 pin-verdict-seam/01）：进入生成前跑 resolve_bindings，跨角色
+      // 冲突（mspm0 槽位 / GPIO 同端口 / PWM 通道对 / 成对实例）在生成前暴露并阻断，
+      // 不发起 generate；空 bindings / 全默认 = ok:true（不误拦）
+      const checkPayload = { platform: chosenPlatform, slugs: selectedSlugs };
+      if (Object.keys(bindings).length) checkPayload.bindings = bindings;
+      genStatus("正在校验引脚绑定…");
+      const check = await apiPost("/api/bindings/validate", checkPayload);
+      if (check.ok === false) {
+        stopStage();
+        $("generate-msg").classList.remove("ok");
+        $("generate-msg").textContent = check.error;
+        status.textContent = "";
+        markStepUndone(7);  // 引脚校验不过 = 第 7 步未完成
+        return;
+      }
+
+      const payloadData = {
+        platform: chosenPlatform, slugs: selectedSlugs,
+        main_c: $("main-c").value,
+        problem_text: problem,
+        output_dir: generationOutputDirPayload(outputDir, desktopOutput),
+        create_desktop_topic_dir: desktopOutput,
+        topic_id: currentTopicId || undefined,
+      };
+      payload = payloadData;
+      if (Object.keys(bindings).length) payload.bindings = bindings;
+      if (Object.keys(inst).length) payload.instances = inst;
+      // 功能组用户选择（工单 group-choice-required/01）：随生成请求回传（未选时
+      // 就绪检查单那条硬判据已经拦下，这里只在通过后带上——服务端同源复核）。
+      payload.group_choices = groupChoices;
+      // 副产物模板选择（工单 k230-multi-template/04）：只带用户改过的（≠默认）；
+      // 空 = 不发字段 = 旧行为（默认模板）逐字节不变
+      if (Object.keys(pythonTemplates).length) payload.python_templates = pythonTemplates;
+      if (scorePoints.length) payload.score_points = scorePoints;
+      // 上下文清单字段（工单 revise-deepen/01）：功能需求清单（推荐产物摘要）/
+      // 赛题答疑 Q&A 随生成请求回传并落盘，供「修订与深化」历史目录直读；
+      // 没推荐过 / 没填 Q&A = 不带字段（清单内容缺省，旧行为逐字节不变）
+      if (lastRecommend && lastRecommend.requirements && lastRecommend.requirements.length) {
+        payload.requirements = lastRecommend.requirements;
+      }
+      const qa = $("qa-text").value.trim();
+      if (qa) payload.qa_text = qa;
+      // 生成请求期间：子阶段文案轮播（每 2s 切一个）+ 等待计时（每秒刷新）
+      waitSecs = 0;
+      genStatus(genStageTexts(0));
+      stageTimer = setInterval(() => {
+        waitSecs += 1;
+        genStatus(genStageTexts(Math.floor(waitSecs / 2)) + "（已等待 " + fmtWait(waitSecs) + "）");
+      }, 1000);
+      const data = await apiPost("/api/generate", payload);
+      stopStage();
+      renderGenerateSuccess(data);
+    } catch (e) {
+      stopStage();
+      releaseBanner();   // 首段请求已终态：覆盖确认弹窗等待期无 AI 行动（工单 ai-action-banner/02）
+      $("generate-msg").classList.remove("ok");
+      status.textContent = "";
+      // 生成前覆盖保护（工单 generate-overwrite/01）：同名完整工程 400 →
+      // 确认框（旧工程将备份为 .bak）→ 确认后自动重发 overwrite=true；
+      // 取消 = 显示原 400 文案
+      if (isConflictError(e.message)) {
+        const dirName = conflictDirName(e.message);
+        const hint = dirName
+          ? "旧工程将先备份为「" + dirName + ".bak」，然后覆盖生成全新工程"
+          : "旧工程将先备份为同名 .bak 备份";
+        if (await confirmModal({
+          title: "覆盖生成？",
+          message: "桌面上已有同名工程"
+            + (dirName ? "「" + dirName + "」" : "")
+            + "：" + hint + "。" + overwriteBakHint(dirName) + "确定覆盖并重新生成？",
+          danger: true,
+          confirmText: "确定覆盖",
+        })) {
+          genStatus("正在覆盖生成…");
+          bannerReleased = false;   // 重发 = 新一对 start/stop
+          aiActionStart("生成工程");   // 确认后重发：新一段 AI 行动（工单 ai-action-banner/02）
+          try {
+            const data = await apiPost("/api/generate", { ...payload, overwrite: true });
+            stopStage();
+            renderGenerateSuccess(data);   // 内部按 .bak 实际存在显示恢复按钮（工单 ux-walkthrough-02/03）
+            toast("ok", "已覆盖生成（旧工程备份为 .bak，可在结果区一键恢复）");
+            return;
+          } catch (e2) {
+            $("generate-msg").textContent = e2.message;
+          }
+        } else {
+          $("generate-msg").textContent = e.message;
+        }
+      } else {
+        $("generate-msg").textContent = e.message;
+      }
+      toast("error", "生成失败");
+    } finally { releaseBanner(); $("btn-generate").disabled = false; }
+  });
+}

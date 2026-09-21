@@ -17,8 +17,8 @@
 // initReferenceToolbar；deleteReference / editReference / openReferenceFile /
 // viewReferenceDetail 亦导出（收尾工单核对使用面）。
 // 顶层监听（ref-anchor-kind / btn-ref-add-file-row+初始行 / btn-ref-draft-desc /
-// btn-ref-add / 两个 bindFilePicker）在 import 时绑定（module 延迟执行，
-// DOM 已就绪）。
+// btn-ref-add / 两个 bindFilePicker）由 initReferenceAddForm() 绑定
+//（工单 frontend-boot-module/04：从求值期搬进显式 init，装载根 boot.js 调用）。
 import { $, apiGet, apiPost, apiPut, apiDelete, toast, toastError } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc, formatSize } from "/js/fx/core.js";
@@ -151,12 +151,6 @@ export async function loadKitVocabulary() {
     renderReferences();
   }
 }
-
-$("ref-anchor-kind").addEventListener("change", () => {
-  const kind = $("ref-anchor-kind").value;
-  $("ref-anchor-kit").classList.toggle("hidden", kind !== "kit");
-  $("ref-anchor-topic").classList.toggle("hidden", kind !== "topic");
-});
 
 // 题型词表（工单 topic-framework/04）：选项单源 = GET /api/references/topic-types
 // （与后端校验同源——前端不硬编码词表）；失败降级 = 空白选项（前端不阻断，
@@ -451,73 +445,86 @@ function showReferenceDetail(entry, files) {
   document.body.appendChild(overlay);
 }
 
-$("btn-ref-add-file-row").addEventListener("click", () => addFileRow($("ref-files")));
-addFileRow($("ref-files"));
-
 function refCollectFiles() { return collectFiles($("ref-files")); }
 
-$("btn-ref-draft-desc").addEventListener("click", async () => {
-  // 草稿反馈留在 ② 素材与锚定区（对应按钮就近可见；入库反馈仍走 ③ 的 ref-add-msg）
-  $("ref-draft-msg").textContent = "";
-  const files = refCollectFiles();
-  if (files === null) return;
-  if (!Object.keys(files).length) { $("ref-draft-msg").textContent = "至少需要一个素材文件"; return; }
-  $("btn-ref-draft-desc").disabled = true;
-  $("btn-ref-draft-desc").innerHTML = '<span class="spinner"></span>生成中…';
-  try {
-    const data = await apiPost("/api/references/draft", { files });
-    $("ref-desc").value = data.draft;
-    $("ref-draft-msg").classList.add("ok");
-    $("ref-draft-msg").textContent = "AI 简介草稿已填入，可修改后点击「入库」。（请求体有大小预算，素材过大后端会报 413）";
-  } catch (e) {
-    $("ref-draft-msg").classList.remove("ok");
-    $("ref-draft-msg").textContent = e.message;
-  } finally {
-    $("btn-ref-draft-desc").disabled = false;
-    $("btn-ref-draft-desc").innerHTML = "AI 生成简介草稿";
-  }
-});
 
-$("btn-ref-add").addEventListener("click", async () => {
-  $("ref-add-msg").textContent = "";
-  const files = refCollectFiles();
-  if (files === null) return;
-  if (!Object.keys(files).length) { $("ref-add-msg").textContent = "至少需要一个素材文件"; return; }
-  const title = $("ref-title").value.trim();
-  const type = $("ref-type").value.trim();
-  const description = $("ref-desc").value.trim();
-  if (!title) { $("ref-add-msg").textContent = "请填写标题"; return; }
-  if (!type) { $("ref-add-msg").textContent = "请填写类型"; return; }
-  if (!description) { $("ref-add-msg").textContent = "请填写简介（或先让 AI 生成草稿）"; return; }
-  const anchorKind = $("ref-anchor-kind").value;
-  const anchorValue = anchorKind === "kit"
-    ? $("ref-anchor-kit").value
-    : anchorKind === "none" ? "" : $("ref-anchor-topic").value.trim();
-  const platform = document.querySelector('input[name="ref-platform"]:checked').value;
-  const topicType = $("ref-topic-type").value;
-  $("btn-ref-add").disabled = true;
-  $("btn-ref-add").innerHTML = '<span class="spinner"></span>入库中…';
-  try {
-    const entry = await apiPost("/api/references", {
-      title, type, description, anchor_kind: anchorKind, anchor_value: anchorValue, platform, topic_type: topicType, files,
-    });
-    $("ref-add-msg").classList.add("ok");
-    $("ref-add-msg").textContent = "已入库：" + entry.title;
-    ["ref-title", "ref-type", "ref-desc", "ref-anchor-topic"].forEach((id) => ($(id).value = ""));
-    $("ref-topic-type").value = "";
-    $("ref-files").innerHTML = "";
-    addFileRow($("ref-files"));
-    loadReferences();
-  } catch (e) {
-    $("ref-add-msg").classList.remove("ok");
-    $("ref-add-msg").textContent = e.message;
-  } finally {
-    $("btn-ref-add").disabled = false;
-    $("btn-ref-add").innerHTML = "入库";
-  }
-});
+/**
+ * 接线：由装载根 boot.js 显式调用（工单 frontend-boot-module/04）
+ * 语句顺序 = 原文件里的先后顺序；绑定的 target 与事件类型一字未改。
+ */
+export function initReferenceAddForm() {
+  $("ref-anchor-kind").addEventListener("change", () => {
+    const kind = $("ref-anchor-kind").value;
+    $("ref-anchor-kit").classList.toggle("hidden", kind !== "kit");
+    $("ref-anchor-topic").classList.toggle("hidden", kind !== "topic");
+  });
 
-// 本条目的两个文件选择绑定（与模块库簇同件）：按钮 → 隐藏 input → change 走
-// pickFilesInto（readPickedText + MAX_PICK_BYTES 守卫在 files.js 内）。
-bindFilePicker("btn-ref-pick-files", "ref-pick-files", "ref-files", "ref-draft-msg");
-bindFilePicker("btn-ref-pick-dir", "ref-pick-dir", "ref-files", "ref-draft-msg");
+  $("btn-ref-add-file-row").addEventListener("click", () => addFileRow($("ref-files")));
+  addFileRow($("ref-files"));
+
+  $("btn-ref-draft-desc").addEventListener("click", async () => {
+    // 草稿反馈留在 ② 素材与锚定区（对应按钮就近可见；入库反馈仍走 ③ 的 ref-add-msg）
+    $("ref-draft-msg").textContent = "";
+    const files = refCollectFiles();
+    if (files === null) return;
+    if (!Object.keys(files).length) { $("ref-draft-msg").textContent = "至少需要一个素材文件"; return; }
+    $("btn-ref-draft-desc").disabled = true;
+    $("btn-ref-draft-desc").innerHTML = '<span class="spinner"></span>生成中…';
+    try {
+      const data = await apiPost("/api/references/draft", { files });
+      $("ref-desc").value = data.draft;
+      $("ref-draft-msg").classList.add("ok");
+      $("ref-draft-msg").textContent = "AI 简介草稿已填入，可修改后点击「入库」。（请求体有大小预算，素材过大后端会报 413）";
+    } catch (e) {
+      $("ref-draft-msg").classList.remove("ok");
+      $("ref-draft-msg").textContent = e.message;
+    } finally {
+      $("btn-ref-draft-desc").disabled = false;
+      $("btn-ref-draft-desc").innerHTML = "AI 生成简介草稿";
+    }
+  });
+
+  $("btn-ref-add").addEventListener("click", async () => {
+    $("ref-add-msg").textContent = "";
+    const files = refCollectFiles();
+    if (files === null) return;
+    if (!Object.keys(files).length) { $("ref-add-msg").textContent = "至少需要一个素材文件"; return; }
+    const title = $("ref-title").value.trim();
+    const type = $("ref-type").value.trim();
+    const description = $("ref-desc").value.trim();
+    if (!title) { $("ref-add-msg").textContent = "请填写标题"; return; }
+    if (!type) { $("ref-add-msg").textContent = "请填写类型"; return; }
+    if (!description) { $("ref-add-msg").textContent = "请填写简介（或先让 AI 生成草稿）"; return; }
+    const anchorKind = $("ref-anchor-kind").value;
+    const anchorValue = anchorKind === "kit"
+      ? $("ref-anchor-kit").value
+      : anchorKind === "none" ? "" : $("ref-anchor-topic").value.trim();
+    const platform = document.querySelector('input[name="ref-platform"]:checked').value;
+    const topicType = $("ref-topic-type").value;
+    $("btn-ref-add").disabled = true;
+    $("btn-ref-add").innerHTML = '<span class="spinner"></span>入库中…';
+    try {
+      const entry = await apiPost("/api/references", {
+        title, type, description, anchor_kind: anchorKind, anchor_value: anchorValue, platform, topic_type: topicType, files,
+      });
+      $("ref-add-msg").classList.add("ok");
+      $("ref-add-msg").textContent = "已入库：" + entry.title;
+      ["ref-title", "ref-type", "ref-desc", "ref-anchor-topic"].forEach((id) => ($(id).value = ""));
+      $("ref-topic-type").value = "";
+      $("ref-files").innerHTML = "";
+      addFileRow($("ref-files"));
+      loadReferences();
+    } catch (e) {
+      $("ref-add-msg").classList.remove("ok");
+      $("ref-add-msg").textContent = e.message;
+    } finally {
+      $("btn-ref-add").disabled = false;
+      $("btn-ref-add").innerHTML = "入库";
+    }
+  });
+
+  // 本条目的两个文件选择绑定（与模块库簇同件）：按钮 → 隐藏 input → change 走
+  // pickFilesInto（readPickedText + MAX_PICK_BYTES 守卫在 files.js 内）。
+  bindFilePicker("btn-ref-pick-files", "ref-pick-files", "ref-files", "ref-draft-msg");
+  bindFilePicker("btn-ref-pick-dir", "ref-pick-dir", "ref-files", "ref-draft-msg");
+}

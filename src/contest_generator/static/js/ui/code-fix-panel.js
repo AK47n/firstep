@@ -101,7 +101,6 @@ const fixCb = {
     checkCodeDiskChanges();
   },
 };
-subscribeFixCenter(fixCb);
 
 // ---- 入口：编译失败 → 「在此修复」 ----
 function fixInput() {
@@ -185,6 +184,10 @@ async function rollbackFix() {
 
 // ===== 接线 =====
 export function initCodeFixPanel() {
+  // 订阅共享修复状态机（工单 frontend-boot-module/04）：原先在模块求值期订阅，
+  // 现随其余接线一起由装载根 boot.js 显式调用（顺序：订阅在绑定之前，与原来一致）。
+  subscribeFixCenter(fixCb);
+
   const here = $("btn-code-compile-fix-here");
   if (here) here.addEventListener("click", startFixHere);
 

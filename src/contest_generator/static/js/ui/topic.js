@@ -11,7 +11,8 @@
 // topicEntries / topicGroupVocab / topicSearchTimer / topicLoading /
 // topicPageCache（页图 memo Map）。无跨簇 mutable 状态。
 // host 页签分发器经顶部 import 调 loadTopics / loadTopicGroupVocabulary；
-// initTopicToolbar 在模块顶部调用（import 时绑定，DOM 已就绪）。
+// initTopicPanel 由装载根 boot.js 的接线区调用（工单 frontend-boot-module/04：
+// 工具栏 + 拆条 / 入库接线从求值期搬进这个显式 init）。
 import { $, apiGet, apiPut, apiDelete, toast, toastError, handle } from "/js/app.js";
 import { confirmModal } from "/js/ui/confirm.js";
 import { esc } from "/js/fx/core.js";
@@ -289,7 +290,6 @@ export function initTopicToolbar() {
     renderTopics();
   });
 }
-initTopicToolbar();
 
 // 功能组词表（hint 悬空判定数据源）：/api/modules 派生；未配置 / 拉取失败 =
 // 空词表（hint 方向降级不判定，不误报）。
@@ -385,61 +385,70 @@ export function renderProofreadRows() {
   });
 }
 
-$("btn-topic-split").addEventListener("click", async () => {
-  $("topic-split-msg").classList.remove("ok");  // 早退路径（无文件）也按错误红显
-  $("topic-split-msg").textContent = "";
-  $("topic-proofread").classList.add("hidden");
-  const file = $("topic-pdf").files[0];
-  if (!file) { $("topic-split-msg").textContent = "请先选择 PDF 文件"; return; }
-  $("btn-topic-split").disabled = true;
-  $("btn-topic-split").innerHTML = '<span class="spinner"></span>拆条中…';
-  try {
-    const form = new FormData();
-    form.append("upload", file);
-    const data = await handle(await fetch("/api/topics/split", { method: "POST", body: form }));
-    topicPdfFile = file;
-    topicRows = data.topics.map((t) => ({
-      year: t.year, number: t.number, problem_text: t.problem_text,
-      category: t.category || "control",  // 新建默认控制题（后端同样默认，双保险）
-    }));
-    renderProofreadRows();
-    $("topic-proofread").classList.remove("hidden");
-    $("topic-split-msg").classList.add("ok");
-    $("topic-split-msg").textContent = "拆出 " + topicRows.length + " 条赛题草稿，请逐条校对后确认入库。";
-  } catch (e) {
-    $("topic-split-msg").classList.remove("ok");
-    $("topic-split-msg").textContent = e.message;
-  } finally {
-    $("btn-topic-split").disabled = false;
-    $("btn-topic-split").innerHTML = "重新拆条";
-  }
-});
 
-$("btn-topic-confirm").addEventListener("click", async () => {
-  $("topic-confirm-msg").classList.remove("ok");  // 早退路径（空校对表）也按错误红显
-  $("topic-confirm-msg").textContent = "";
-  if (!topicRows.length) { $("topic-confirm-msg").textContent = "校对表为空，无可入库条目"; return; }
-  if (!topicPdfFile) { $("topic-confirm-msg").textContent = "原 PDF 已丢失，请重新上传拆条"; return; }
-  $("btn-topic-confirm").disabled = true;
-  $("btn-topic-confirm").innerHTML = '<span class="spinner"></span>入库中…';
-  try {
-    const form = new FormData();
-    form.append("pdf", topicPdfFile);
-    form.append("payload", JSON.stringify({ entries: topicRows, program_dirs: [] }));
-    const data = await handle(await fetch("/api/topics/confirm", { method: "POST", body: form }));
-    $("topic-confirm-msg").classList.add("ok");
-    $("topic-confirm-msg").textContent = "已入库 " + data.topics.length + " 条："
-      + data.topics.map((t) => t.key).join("、");
-    topicRows = [];
-    topicPdfFile = null;
+/**
+ * 接线：由装载根 boot.js 显式调用（工单 frontend-boot-module/04）
+ * 语句顺序 = 原文件里的先后顺序；绑定的 target 与事件类型一字未改。
+ */
+export function initTopicPanel() {
+  initTopicToolbar();
+
+  $("btn-topic-split").addEventListener("click", async () => {
+    $("topic-split-msg").classList.remove("ok");  // 早退路径（无文件）也按错误红显
+    $("topic-split-msg").textContent = "";
     $("topic-proofread").classList.add("hidden");
-    $("topic-pdf").value = "";
-    loadTopics();
-  } catch (e) {
-    $("topic-confirm-msg").classList.remove("ok");
-    $("topic-confirm-msg").textContent = e.message;
-  } finally {
-    $("btn-topic-confirm").disabled = false;
-    $("btn-topic-confirm").innerHTML = "确认入库";
-  }
-});
+    const file = $("topic-pdf").files[0];
+    if (!file) { $("topic-split-msg").textContent = "请先选择 PDF 文件"; return; }
+    $("btn-topic-split").disabled = true;
+    $("btn-topic-split").innerHTML = '<span class="spinner"></span>拆条中…';
+    try {
+      const form = new FormData();
+      form.append("upload", file);
+      const data = await handle(await fetch("/api/topics/split", { method: "POST", body: form }));
+      topicPdfFile = file;
+      topicRows = data.topics.map((t) => ({
+        year: t.year, number: t.number, problem_text: t.problem_text,
+        category: t.category || "control",  // 新建默认控制题（后端同样默认，双保险）
+      }));
+      renderProofreadRows();
+      $("topic-proofread").classList.remove("hidden");
+      $("topic-split-msg").classList.add("ok");
+      $("topic-split-msg").textContent = "拆出 " + topicRows.length + " 条赛题草稿，请逐条校对后确认入库。";
+    } catch (e) {
+      $("topic-split-msg").classList.remove("ok");
+      $("topic-split-msg").textContent = e.message;
+    } finally {
+      $("btn-topic-split").disabled = false;
+      $("btn-topic-split").innerHTML = "重新拆条";
+    }
+  });
+
+  $("btn-topic-confirm").addEventListener("click", async () => {
+    $("topic-confirm-msg").classList.remove("ok");  // 早退路径（空校对表）也按错误红显
+    $("topic-confirm-msg").textContent = "";
+    if (!topicRows.length) { $("topic-confirm-msg").textContent = "校对表为空，无可入库条目"; return; }
+    if (!topicPdfFile) { $("topic-confirm-msg").textContent = "原 PDF 已丢失，请重新上传拆条"; return; }
+    $("btn-topic-confirm").disabled = true;
+    $("btn-topic-confirm").innerHTML = '<span class="spinner"></span>入库中…';
+    try {
+      const form = new FormData();
+      form.append("pdf", topicPdfFile);
+      form.append("payload", JSON.stringify({ entries: topicRows, program_dirs: [] }));
+      const data = await handle(await fetch("/api/topics/confirm", { method: "POST", body: form }));
+      $("topic-confirm-msg").classList.add("ok");
+      $("topic-confirm-msg").textContent = "已入库 " + data.topics.length + " 条："
+        + data.topics.map((t) => t.key).join("、");
+      topicRows = [];
+      topicPdfFile = null;
+      $("topic-proofread").classList.add("hidden");
+      $("topic-pdf").value = "";
+      loadTopics();
+    } catch (e) {
+      $("topic-confirm-msg").classList.remove("ok");
+      $("topic-confirm-msg").textContent = e.message;
+    } finally {
+      $("btn-topic-confirm").disabled = false;
+      $("btn-topic-confirm").innerHTML = "确认入库";
+    }
+  });
+}
