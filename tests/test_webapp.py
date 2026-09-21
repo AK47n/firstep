@@ -6715,6 +6715,95 @@ def test_tabs_bye_never_exits_outside_launcher_mode(client, context, monkeypatch
 
 
 # ---------------------------------------------------------------------------
+# 文档实例令牌（工单 launcher-exit-race/02）：F5 时旧页面的 bye 与新页面的 register 是
+# 方向相反的两个操作在赛跑——迟到的旧告别不许注销刚登记的新页面（否则退出判据又回到
+# "新页面必须再登记一次"，1.5 秒宽限的秒级竞态原地复现）。
+# ---------------------------------------------------------------------------
+
+
+def _launcher_exits(monkeypatch, grace: float = 0.01) -> list[int]:
+    """把服务端切到"启动器模式 + 注入退出 + 极短宽限"，返回退出码收集表。"""
+    import contest_generator.webapp as webapp
+
+    exits: list[int] = []
+    monkeypatch.setattr(webapp, "_EXIT", lambda code: exits.append(code))
+    monkeypatch.setattr(webapp, "_launcher_managed", lambda: True)
+    monkeypatch.setattr(webapp, "_EXIT_GRACE", grace)
+    return exits
+
+
+def test_tabs_bye_from_older_document_never_unregisters_the_new_one(
+    client, context, monkeypatch
+):
+    """乱序到达的旧告别：epoch 对不上 → 不注销、不调度退出（修复前必红）。
+
+    现场顺序是 `GET /` → `bye` → `register`，但**两个方向的操作谁先到不由我们决定**：
+    一旦 `register` 先到（新页面已登记），旧实现里那个迟到的 `bye` 会把注册表清空 →
+    服务自杀。本用例把这个顺序反过来打一遍。
+    """
+    ctx, _ = context
+    exits = _launcher_exits(monkeypatch)
+    client.post("/api/tabs/register", json={"tab_id": "t1", "epoch": 2.0})   # 新文档先到
+    client.post("/api/tabs/bye", json={"tab_id": "t1", "epoch": 1.0})        # 旧告别后到
+    time.sleep(0.05)
+    assert len(ctx.tab_registry) == 1, "旧文档的 bye 把新文档的登记注销了"
+    assert exits == [], "旧文档迟到的告别把服务关掉了"
+
+
+def test_tabs_bye_with_matching_epoch_still_unregisters_and_exits(
+    client, context, monkeypatch
+):
+    """正向对照：epoch 一致的 bye 照旧注销、照旧退出（新规则没把正常关闭拦下）。"""
+    ctx, _ = context
+    exits = _launcher_exits(monkeypatch)
+    client.post("/api/tabs/register", json={"tab_id": "t1", "epoch": 7.0})
+    client.post("/api/tabs/bye", json={"tab_id": "t1", "epoch": 7.0})
+    time.sleep(0.05)
+    assert len(ctx.tab_registry) == 0
+    assert exits == [0]
+
+
+def test_tabs_bye_without_epoch_keeps_legacy_behaviour(client, context, monkeypatch):
+    """epoch 缺省 = 旧语义（旧客户端 / curl 探针）：照旧注销、照旧退出。"""
+    ctx, _ = context
+    exits = _launcher_exits(monkeypatch)
+    client.post("/api/tabs/register", json={"tab_id": "t1", "epoch": 7.0})
+    client.post("/api/tabs/bye", json={"tab_id": "t1"})          # 不带令牌
+    time.sleep(0.05)
+    assert len(ctx.tab_registry) == 0
+    assert exits == [0]
+
+
+def test_tabs_same_id_two_documents_only_the_live_one_governs(
+    client, context, monkeypatch
+):
+    """同一个 tab_id 的两个文档实例（"复制标签页"会把 sessionStorage 一起复制）：
+    旧实例的 bye 不注销新实例，新实例的 bye 才注销并触发退出。"""
+    ctx, _ = context
+    exits = _launcher_exits(monkeypatch)
+    client.post("/api/tabs/register", json={"tab_id": "t1", "epoch": 1.0})   # 原标签
+    client.post("/api/tabs/register", json={"tab_id": "t1", "epoch": 2.0})   # 复制出来的
+    client.post("/api/tabs/bye", json={"tab_id": "t1", "epoch": 1.0})        # 关掉原标签
+    time.sleep(0.05)
+    assert len(ctx.tab_registry) == 1, "关掉其中一个标签就把另一个的登记一起注销了"
+    assert exits == [], "还有一个标签开着，不该停服务"
+    client.post("/api/tabs/bye", json={"tab_id": "t1", "epoch": 2.0})        # 关掉最后一个
+    time.sleep(0.05)
+    assert len(ctx.tab_registry) == 0
+    assert exits == [0]
+
+
+def test_tabs_epoch_must_be_number(client):
+    """epoch 是可选字段，但给了就必须是数字（bool 不算——`True` 会静默变成 1.0）。"""
+    assert client.post("/api/tabs/register", json={"tab_id": "t1", "epoch": "abc"}).status_code == 400
+    assert client.post("/api/tabs/register", json={"tab_id": "t1", "epoch": True}).status_code == 400
+    assert client.post("/api/tabs/bye", json={"tab_id": "t1", "epoch": []}).status_code == 400
+    assert client.post("/api/tabs/register", json={"tab_id": "t1", "epoch": None}).status_code == 200
+    assert client.post("/api/tabs/register", json={"tab_id": "t1", "epoch": 12.5}).status_code == 200
+    assert client.post("/api/tabs/bye", json={"tab_id": "t1"}).status_code == 200
+
+
+# ---------------------------------------------------------------------------
 # 工单 01：手动选参考资料（reference_ids 契约 / 追加准入 / 全文直读 / 幻觉 400 /
 # 缺省兼容 / 最终参考清单透明闭环）
 # ---------------------------------------------------------------------------

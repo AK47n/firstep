@@ -457,29 +457,48 @@ RECOMMEND_START_STAGE = "AI 正在读题并选模块…（可能要几分钟）"
 # ---------------------------------------------------------------------------
 
 _LAUNCHER_ENV = "FIRSTEP_LAUNCHER"  # 启动器置 1：启用"关浏览器 = 停服务"
-_EXIT_GRACE = 1.5  # 秒：注销后宽限窗口，覆盖 F5 重载的 unload→reload 竞态
+# 秒：注销后宽限窗口。覆盖的是**旧页面的告别（bye）→ 新页面自报家门（register）**之间的
+# 时序抖动：工单 launcher-exit-race/01 把 register 提前到模块图之前（index.html head 的内联
+# 脚本）之后，这段实测是毫秒级（探针读数 .scratch/launcher-exit-race/probe-00-order-*.txt）。
+# 它**不再**覆盖模块图装载时间——那是 0.4–1.5s⁺、随机器负载走的尾长（修复前正是它把应用
+# 自己的服务关掉的）。
+_EXIT_GRACE = 1.5
 _EXIT: Callable[[int], Any] = os._exit  # 可注入（测试断言调度，不真自杀）
 
 
 class TabRegistry:
     """标签会话注册表：register / unregister，空 = 没有打开的前端页面。
 
-    只记 tab_id 集合、不持业务形状；线程安全（多标签并发注册）。unregister
-    返回是否变空，路由据此调度延迟退出（空 → 关浏览器 = 停服务）。
+    只记 `tab_id → 本次登记的文档实例`（epoch）、不持业务形状；线程安全（多标签并发
+    注册）。unregister 返回是否变空，路由据此调度延迟退出（空 → 关浏览器 = 停服务）。
+
+    **为什么要 epoch**（工单 launcher-exit-race/02）：F5 时旧页面的 bye 与新页面的 register
+    是方向相反的两个操作在赛跑。旧实现只靠"宽限内复查空集"兜住"register 晚到"；可一旦
+    顺序反过来（bye 晚到），那个迟到的告别会把**刚登记的新页面**注销掉——退出判据又回到
+    "新页面必须再登记一次"，秒级竞态原地复现。epoch = `performance.timeOrigin`（同一个
+    文档里恒定、跨文档必不同，客户端不用存、也不可能两侧漂移）：告别带的 epoch 与注册表里
+    记的不一致 = 那是**上一个文档**的告别 → 忽略，不注销。
     """
 
     def __init__(self) -> None:
-        self._tabs: set[str] = set()
+        self._tabs: dict[str, float | None] = {}
         self._lock = threading.Lock()
 
-    def register(self, tab_id: str) -> None:
+    def register(self, tab_id: str, epoch: float | None = None) -> None:
+        """登记（或刷新）一个标签的文档实例（同一个 tab 重新加载 = 新 epoch 覆盖旧的）。"""
         with self._lock:
-            self._tabs.add(tab_id)
+            self._tabs[tab_id] = epoch
 
-    def unregister(self, tab_id: str) -> bool:
-        """注销一个标签；返回注销后注册表是否为空（空 = 可退出）。"""
+    def unregister(self, tab_id: str, epoch: float | None = None) -> bool:
+        """注销一个标签；返回注销后注册表是否为空（空 = 可退出）。
+
+        `epoch` 与注册表里记的不一致 = **旧文档迟到的告别** → 忽略（返回 False：没变空）。
+        `epoch` 缺省（旧客户端 / curl 探针）= 不做实例比对，照旧注销（向后兼容）。
+        """
         with self._lock:
-            self._tabs.discard(tab_id)
+            if epoch is not None and tab_id in self._tabs and self._tabs[tab_id] != epoch:
+                return False
+            self._tabs.pop(tab_id, None)
             return not self._tabs
 
     def __len__(self) -> int:
@@ -1115,6 +1134,20 @@ def _optional_int_range(
     if not low <= value <= high:
         raise HTTPException(400, f"{key} 必须在 {low}-{high} 之间")
     return value
+
+
+def _optional_number(payload: dict, key: str) -> float | None:
+    """可选数字：缺省 / null → None；类型非法抛 400。
+
+    用在校验"文档实例令牌"（`epoch = performance.timeOrigin`）上：`bool` 明确不算数字
+    （`True` 会静默变成 1.0，与"缺省"混在一起分不出来）。
+    """
+    value = payload.get(key)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise HTTPException(400, f"{key} 必须是数字")
+    return float(value)
 
 
 def _recent_limit(raw: str) -> int:
@@ -1874,17 +1907,25 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.post("/api/tabs/register")
     @_map_errors
     def tabs_register(payload: dict) -> dict:
-        """标签页打开时登记（tab_id 由前端 sessionStorage 生成，跨刷新稳定）。"""
+        """标签页打开时登记（tab_id 由前端 sessionStorage 生成，跨刷新稳定；epoch = 本次
+        文档实例，见 TabRegistry）。
+
+        这一发由 index.html head 的内联脚本在**模块图之前**发出（工单 launcher-exit-race/01）
+        ——登记迟到过 1.5 秒宽限就会让服务把自己关掉（F5 竞态）。
+        """
         tab_id = _require_str(payload, "tab_id")
-        context.tab_registry.register(tab_id)
+        context.tab_registry.register(tab_id, _optional_number(payload, "epoch"))
         return {"ok": True}
 
     @app.post("/api/tabs/bye")
     @_map_errors
     def tabs_bye(payload: dict) -> dict:
-        """标签页关闭时注销（pagehide + sendBeacon）；最后一个离开 → 停服务。"""
+        """标签页关闭时注销（pagehide + sendBeacon）；最后一个离开 → 停服务。
+
+        `epoch` 与注册表里记的不一致 = 旧文档迟到的告别（F5 乱序）→ 不注销（见 TabRegistry）。
+        """
         tab_id = _require_str(payload, "tab_id")
-        if context.tab_registry.unregister(tab_id):
+        if context.tab_registry.unregister(tab_id, _optional_number(payload, "epoch")):
             _schedule_exit_if_idle(context.tab_registry)
         return {"ok": True}
 
