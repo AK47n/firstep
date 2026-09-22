@@ -6696,7 +6696,7 @@ def test_tabs_bye_schedules_exit_only_when_last_tab_and_launcher_managed(
     time.sleep(0.05)
     assert exits == []  # 还有 t2 在开，不退出
     client.post("/api/tabs/bye", json={"tab_id": "t2"})
-    time.sleep(0.05)
+    _wait_for_exit(exits)          # 等结果，不睡固定时长（并行负载下睡短了会假红）
     assert exits == [0]  # 最后一个离开 → 宽限后退出
 
 
@@ -6730,6 +6730,18 @@ def _launcher_exits(monkeypatch, grace: float = 0.01) -> list[int]:
     monkeypatch.setattr(webapp, "_launcher_managed", lambda: True)
     monkeypatch.setattr(webapp, "_EXIT_GRACE", grace)
     return exits
+
+
+def _wait_for_exit(exits: list[int], *, timeout: float = 3.0) -> None:
+    """等退出调度真的落地（落地即返回；超时如实返回，让断言去报）。
+
+    为什么要等**结果**而不是睡固定时长：调度线程醒来的时刻受机器负载影响，固定睡觉在
+    `pytest -n auto` 下会把"到点该退"读成"没退"（本机实测：新用例在全量并行那一轮红过）。
+    负向断言（"不该退"）那边仍得睡过宽限——那里睡短了会假绿，所以宽限取大、睡觉取更大。
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline and not exits:
+        time.sleep(0.01)
 
 
 def test_tabs_bye_from_older_document_never_unregisters_the_new_one(
@@ -6801,6 +6813,105 @@ def test_tabs_epoch_must_be_number(client):
     assert client.post("/api/tabs/register", json={"tab_id": "t1", "epoch": None}).status_code == 200
     assert client.post("/api/tabs/register", json={"tab_id": "t1", "epoch": 12.5}).status_code == 200
     assert client.post("/api/tabs/bye", json={"tab_id": "t1"}).status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# 在途退出（工单 launcher-exit-race/03）：布防 / 撤防 / 到点取走并退出。
+#
+# 注册表级那三条**不睡觉**（直接驱动状态机：`arm_exit` → `register` → `exit_if_due`），
+# 路由级那三条sleep 过宽限（它们验的是 HTTP 面 + 真的起了调度线程）。
+# 六条**一律**经 `_launcher_exits()` 注入 `_EXIT`（硬约束：测试里绝不真自杀），注册表级另把
+# 自己的桩作为 `exit_if_due` 的入参——退出动作在**锁内**执行，谁都不许调到真的 `os._exit`。
+# ---------------------------------------------------------------------------
+
+
+def test_tabs_pending_exit_is_armed_once(context, monkeypatch):
+    """重复 / 迟到的 bye 只布防一次：第二次拿到 False（旧实现会叠出第二个退出调度）。"""
+    ctx, _ = context
+    exits = _launcher_exits(monkeypatch)
+    registry = ctx.tab_registry
+    assert registry.arm_exit() is True, "注册表空时第一次布防应当成功"
+    assert registry.arm_exit() is False, "已布防时又布防了一次（会叠出第二个退出线程）"
+    assert registry.exit_if_due(exits.append) is True, "到点应当取走布防并退出"
+    assert registry.exit_if_due(exits.append) is False, "布防已被取走，不该再欠一次退出"
+    assert exits == [0]
+
+
+def test_tabs_register_cancels_pending_exit(context, monkeypatch):
+    """宽限窗口内 register 到达 → 撤销在途退出（到点不该退）。"""
+    ctx, _ = context
+    exits = _launcher_exits(monkeypatch)
+    registry = ctx.tab_registry
+    registry.register("t1", 1.0)
+    registry.unregister("t1", 1.0)
+    assert registry.arm_exit() is True
+    registry.register("t1", 2.0)                      # 新页面自报家门
+    assert registry.exit_if_due(exits.append) is False, "register 已经撤防，到点不该退"
+    assert exits == []
+
+
+def test_tabs_arm_exit_refuses_while_a_tab_is_open(context, monkeypatch):
+    """还有标签开着就不布防（关掉一个 ≠ 关掉浏览器）。"""
+    ctx, _ = context
+    exits = _launcher_exits(monkeypatch)
+    registry = ctx.tab_registry
+    registry.register("t1", 1.0)
+    registry.register("t2", 1.0)
+    assert registry.unregister("t1", 1.0) is False, "还有 t2 在开，不该说'空了'"
+    assert registry.arm_exit() is False
+    assert registry.exit_if_due(exits.append) is False
+    assert exits == []
+
+
+def test_tabs_duplicate_bye_schedules_exit_once(client, context, monkeypatch):
+    """路由级：同一标签的重复 bye（重复信标 / 跨会话迟到的信标）只调度一次退出。
+
+    旧实现会起两个线程、两个都 `_EXIT(0)`（生产上第一个就把进程带走、看不出来，
+    但它意味着"退出调度不幂等"这件事没人钉）。
+
+    宽限取 **0.5 秒**（比两次 POST 的间隔大两个数量级）：判据说的是"同一轮在途退出内
+    不叠加第二个"——两次 bye 必须落在同一个宽限窗口里，睡 10ms 那种取法在并行负载下
+    会读成"第二轮"（本机实测：全量 `-n auto` 那一轮红过）。
+    """
+    exits = _launcher_exits(monkeypatch, grace=0.5)
+    client.post("/api/tabs/register", json={"tab_id": "t1", "epoch": 1.0})
+    client.post("/api/tabs/bye", json={"tab_id": "t1", "epoch": 1.0})
+    client.post("/api/tabs/bye", json={"tab_id": "t1", "epoch": 1.0})     # 重复信标
+    _wait_for_exit(exits)
+    time.sleep(0.2)                     # 若第二轮真的布了防，它也会在这段里落地
+    assert exits == [0], f"重复的 bye 叠加了退出调度：{exits}"
+
+
+def test_tabs_register_within_grace_cancels_scheduled_exit(client, context, monkeypatch):
+    """路由级（F5 的正常路径）：bye 之后宽限内 register 到达 → 不退。"""
+    ctx, _ = context
+    exits = _launcher_exits(monkeypatch, grace=0.2)
+    client.post("/api/tabs/register", json={"tab_id": "t1", "epoch": 1.0})
+    client.post("/api/tabs/bye", json={"tab_id": "t1", "epoch": 1.0})
+    client.post("/api/tabs/register", json={"tab_id": "t1", "epoch": 2.0})   # 新页面回来了
+    time.sleep(0.5)                                                          # 睡过宽限（负向断言）
+    assert len(ctx.tab_registry) == 1
+    assert exits == [], "宽限内 register 到达了，服务还是退了"
+
+
+def test_tabs_close_again_after_cancel_rearms_exit(client, context, monkeypatch):
+    """撤防之后再关 → **重新布防并退出**（不是"一次布防永久有效"）。
+
+    分两段读，专治"到底是谁退的"：第一轮布防被 register 撤掉之后，**先等过它的宽限**再断言
+    `exits == []`（那一轮的线程醒来看见已撤防 → 什么都不做）；然后第二次 bye 才布防，
+    再等它落地 → `exits == [0]`。若第二次 bye 不重新布防，第二段的断言会红。
+    """
+    ctx, _ = context
+    exits = _launcher_exits(monkeypatch, grace=0.2)
+    client.post("/api/tabs/register", json={"tab_id": "t1", "epoch": 1.0})
+    client.post("/api/tabs/bye", json={"tab_id": "t1", "epoch": 1.0})        # 第一轮布防
+    client.post("/api/tabs/register", json={"tab_id": "t1", "epoch": 2.0})   # 撤销
+    time.sleep(0.5)                                                          # 越过第一轮宽限
+    assert exits == [], "第一轮已经被 register 撤销，却还是退了"
+    client.post("/api/tabs/bye", json={"tab_id": "t1", "epoch": 2.0})        # 再关 → 新一轮
+    _wait_for_exit(exits)
+    assert len(ctx.tab_registry) == 0
+    assert exits == [0], f"撤防之后再关没有重新布防：{exits}"
 
 
 # ---------------------------------------------------------------------------

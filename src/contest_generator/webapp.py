@@ -469,8 +469,9 @@ _EXIT: Callable[[int], Any] = os._exit  # 可注入（测试断言调度，不�
 class TabRegistry:
     """标签会话注册表：register / unregister，空 = 没有打开的前端页面。
 
-    只记 `tab_id → 本次登记的文档实例`（epoch）、不持业务形状；线程安全（多标签并发
-    注册）。unregister 返回是否变空，路由据此调度延迟退出（空 → 关浏览器 = 停服务）。
+    只记 `tab_id → 本次登记的文档实例`（epoch）与一个**在途退出**标记，不持业务形状；
+    线程安全（多标签并发注册）。unregister 返回是否变空，路由据此调度延迟退出（空 →
+    关浏览器 = 停服务）。
 
     **为什么要 epoch**（工单 launcher-exit-race/02）：F5 时旧页面的 bye 与新页面的 register
     是方向相反的两个操作在赛跑。旧实现只靠"宽限内复查空集"兜住"register 晚到"；可一旦
@@ -478,16 +479,40 @@ class TabRegistry:
     "新页面必须再登记一次"，秒级竞态原地复现。epoch = `performance.timeOrigin`（同一个
     文档里恒定、跨文档必不同，客户端不用存、也不可能两侧漂移）：告别带的 epoch 与注册表里
     记的不一致 = 那是**上一个文档**的告别 → 忽略，不注销。
+
+    **为什么把"在途退出"做成显式状态**（工单 launcher-exit-race/03）：旧实现是"睡 1.5 秒
+    再查一次空集"，三件事说不清——① "查空"与"退出"之间没有确定先后：register 可能在两者
+    之间到达并**拿到 200**，然后进程照样消失；② 重复 / 迟到的 bye 会叠出第二个退出线程
+    （各调一次 `_EXIT`）；③ "宽限内 register 撤销了退出"这件事只能靠时序去撞、没法确定性地测。
+    现在三个动作（布防 / 撤防 / 到点取走并退出）都在同一把锁里：
+      · `arm_exit()`       注册表空且未布防 → 布防（多标签同时关 / 重复 bye 只布防一次）；
+      · `register()`       顺带**撤防**（新页面自报家门 = 撤销在途退出）；
+      · `exit_if_due(fn)`  到点仍布防且仍空 → **取走布防并在同一把锁里执行 `fn(0)`**。
+    多标签语义：关掉一个（还有别的在开）→ 根本不调度；同时关 N 个 → 只布防一次；布防之后
+    任何 register（含**同一个 tab_id** 的 F5 回来）→ 撤防；撤防之后再关 → **重新布防**（新的
+    一轮，不是"一次布防永久有效"）。
+
+    **退出为什么在锁内执行**（`exit_if_due` 的 `fn(0)`）：这是"决定退出"与"register 能被受理"
+    之间的线性化点——要么 register 先拿到锁（撤防 ⇒ 退出作废），要么退出先拿到锁（进程随即
+    消失 ⇒ 那一发 register 拿不到 200）。**不存在"register 回了 200 但服务还是没了"**。
+    `fn` 在生产里是 `os._exit`（不返回）、在测试里是注入的桩（返回后锁正常释放），
+    两者都不回调注册表，故锁内调用无死锁面。
     """
 
     def __init__(self) -> None:
         self._tabs: dict[str, float | None] = {}
+        self._exit_armed = False          # 在途退出：宽限窗口内等新页面自报家门
         self._lock = threading.Lock()
 
     def register(self, tab_id: str, epoch: float | None = None) -> None:
-        """登记（或刷新）一个标签的文档实例（同一个 tab 重新加载 = 新 epoch 覆盖旧的）。"""
+        """登记（或刷新）一个标签的文档实例（同一个 tab 重新加载 = 新 epoch 覆盖旧的）。
+
+        顺带**撤销在途退出**：新页面自报家门 = 宽限窗口内那次退出作废（判据是随后的
+        `exit_if_due` 返回 False，不另设返回值——没人消费的信号不该出现在公开面上）。
+        """
         with self._lock:
             self._tabs[tab_id] = epoch
+            self._exit_armed = False
 
     def unregister(self, tab_id: str, epoch: float | None = None) -> bool:
         """注销一个标签；返回注销后注册表是否为空（空 = 可退出）。
@@ -501,6 +526,32 @@ class TabRegistry:
             self._tabs.pop(tab_id, None)
             return not self._tabs
 
+    def arm_exit(self) -> bool:
+        """布防一次在途退出：注册表空 且 当前没有在途退出 → True（由本次调度负责退出）。
+
+        注册表非空（还有标签在开）或已经布防（多标签同时关 / 重复与迟到的 bye）→ False，
+        调用方**不重复调度**。
+        """
+        with self._lock:
+            if self._tabs or self._exit_armed:
+                return False
+            self._exit_armed = True
+            return True
+
+    def exit_if_due(self, exit_fn: Callable[[int], Any]) -> bool:
+        """宽限到点的**最终判据**：仍布防 且 仍空 → 取走布防、**在同一把锁里** `exit_fn(0)`。
+
+        返回是否真的退了（`True` 只可能来自"这一次真的调用了 `exit_fn`"）。取走（清零）而不是
+        留着：注入桩的测试里"退出"不会真发生，留着布防会让下一轮关闭永远布不了防
+        ——功能会**静默**坏掉。
+        """
+        with self._lock:
+            if not self._exit_armed or self._tabs:
+                return False
+            self._exit_armed = False
+            exit_fn(0)
+            return True
+
     def __len__(self) -> int:
         with self._lock:
             return len(self._tabs)
@@ -512,18 +563,22 @@ def _launcher_managed() -> bool:
 
 
 def _schedule_exit_if_idle(registry: TabRegistry) -> None:
-    """最后一个标签关闭后：宽限窗口内无新标签注册 → 退出进程。
+    """最后一个标签关闭后：宽限窗口内没有新页面回来 → 退出进程。
 
-    非启动器模式直接返回（正常开发 / 测试运行不受影响）；daemon 线程不
-    阻塞请求。本地无状态工具，退出即 os._exit（端口随之释放，双击重启）。
+    非启动器模式直接返回（正常开发 / 测试运行不受影响）；daemon 线程不阻塞请求。
+    `arm_exit()` 保证**不重复调度**（多标签同时关 / 重复与迟到的 bye）；宽限到点以
+    `exit_if_due(_EXIT)` 为**最终判据**——窗口内 register 到达过（撤防）就不再退出，
+    且"决定退出"与"register 能被受理"由注册表那把锁线性化（见 `TabRegistry` 的 docstring）。
+    本地无状态工具，退出即 os._exit（端口随之释放，双击重启）。
     """
     if not _launcher_managed():
+        return
+    if not registry.arm_exit():
         return
 
     def delayed() -> None:
         time.sleep(_EXIT_GRACE)
-        if len(registry) == 0:
-            _EXIT(0)
+        registry.exit_if_due(_EXIT)
 
     threading.Thread(target=delayed, daemon=True).start()
 
