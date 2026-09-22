@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=0397fc3e0d7d99d11049e2c96e9be23bf469c9a4 -->
+<!-- changelog-auto: last-commit=da8ebd1470c6b6c09eb75a0f7a03cf30efaa047b -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -16,6 +16,7 @@
 - 20:10 工单 full-update-state-into-ctx/02：并发 apply 只放一个任务进闸（_full_task_lock）
 - 21:45 工单 full-update-state-into-ctx/03：结构钉扩面（full_task 腿 + src 全域 global = 0）
 - 21:50 工单 full-update-state-into-ctx/04：账本与文档收尾（C6 的尾巴结清）
+- 23:14 工单 hwcheck-unknown-device/01：库内新增总线原语模块 i2c_probe（两平台）
 
 ## 2026-09-21
 - 12:38 工单 frontend-boot-module/01-02：装载根搬进 boot.js（index.html 只留一条标签 + 判据单源与守卫重定根）
