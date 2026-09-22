@@ -381,6 +381,28 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > 第 2 节那条 `Get-CimInstance … contest_generator.webapp`（按 PID `taskkill /PID … /T /F`）。
 > 另：**临时 `git worktree` 用完必须 `git worktree remove`**——留在 `.scratch/<feature>/base-worktree/`
 > 时 `tests/test_ps1_encoding.py` 会扫进它 `sources/**` 里第三方缺 BOM 的 `.ps1` 而报红（本轮踩到）。
+>
+> **2026-09-22（webapp-state-into-ctx/01–04 会话，C6 落地）**：这一单把三处进程级会话态搬进
+> `AppContext`（账见 `.scratch/backlog.md` §17），**不改端口 / 工具根 / 快照路径 / 端点契约**，
+> 前端只动了 `static/js/fx/task.js` 里一行注释的名字。**本单一次服务器都没起**
+> （全走进程内 TestClient + 探针）；收尾实测 **2026-09-22 18:28**：8000/8020/8021/8791 都没在听、
+> 无残留 `contest_generator.webapp` 进程。所以**第 0 节的发布落差表不动**（main-only 的仍是硬件
+> 检测那两批）。
+> ⚠ **别把套件的临时后端当残留**（本轮实测）：跑全套 `pytest -n auto` 时它会自己起真后端
+> 子进程（**内核分配端口**，本轮在 11883 / 13157 上看到过，PID 起于 18:25–18:26、18:28 自己
+> 消失）——那是夹具，不是孤儿；同节上文那条「孤儿 python」指的是**截断输出管道**把 node 带走
+> 留下的那种。判据用上面那条 `Get-CimInstance … contest_generator.webapp`，并且**跑完再看一次**。
+> 读数：`python -m pytest -n auto -q` **5070 passed + 1 skipped**、`node --test "tests/js/*.test.mjs"`
+> **1702 passed / 0 fail**；判据强度与红证见 `.scratch/webapp-state-into-ctx/`。
+> ⚠ **本单的判据强度探针会真改库内文件**（`probe-02-guard-strength.py` 往 `tests` 的守卫里追加
+> stub 再逐字节复原）——**别和测试套件同时跑**（先例：`module-hwcheck/09` 那条纪律）。
+> ⚠ **本轮量到的两条工具事实**（证据文件类工作适用）：
+> ① **PowerShell 5.1 的 `>` / `Tee-Object` 写 UTF-16LE**——`read` 工具把它当二进制拒读，
+> 证据文件让探针自己落盘（`python probe.py --out <file>`，UTF-8）。**这条的真源与判据早已在
+> 仓库里**（`tests/js/windows-text-encoding.test.mjs` 的文件头 ②，工单 gen-chain-audit/04），
+> 这里只记"本单又撞了一次、出路是 `--out`"。
+> ② `git show <rev>:<path>` 的 path 要 **POSIX 正斜杠**，Windows 的 `str(Path)` 给反斜杠时
+> 那条路会静默取不到文件（红证的测试侧两条腿曾凭空消失）。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 

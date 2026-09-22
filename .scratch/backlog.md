@@ -307,7 +307,9 @@ index.html 零 import、555 个 id 不变）；`03/04` 11 个模块显式 `init(
   一个缝；守卫与红证在 `tests/test_llm_run.py`。
 - 两单都**没做 route 分册**（评审同一段里也建议不做）：`tests/test_webapp.py` 那条按源码文本钉
   recommend 路由形状的 AST 守卫会把它判红，先改守卫形状才谈分册。评审的其余项：**C4 已落地**
-  （见第 15 节）、**C7（73 个私有符号公开化）仍挂账、未立项**。
+  （见第 15 节）、**C6 已落地**（工单 `webapp-state-into-ctx/01–04`，2026-09-22，见第 17 节）、
+  **C7（73 个私有符号公开化）仍挂账、未立项**——C7 只是**验收尺**（拿它量"测试不再翻墙"的
+  进展），不是待办功能，别当任务排期。
 
 ## 12. C5a 两条裸镜像补上（2026-09-20，同一份架构评审的候选 C5a「2.5」；工单 cross-lang-mirror-c5a/01–02 已落地）
 
@@ -409,12 +411,15 @@ index.html 零 import、555 个 id 不变）；`03/04` 11 个模块显式 `init(
 评审抓到一条真回归并已修：降级兜底**不能 normalize**（会把非法版本号下的判定方向翻掉，
 实证 `("1.0-Release","1.0-beta")`），已补回归用例。
 
-**仍然挂账的（评审候选里最后两条）**：
+**仍然挂账的（评审候选里最后一条）**：
 
-- **C6 进程级状态进 `AppContext`**：`_running_task_execs` / `_MATERIALS_LAST_CHECK` /
-  `_materials_task` 仍在 `webapp` 模块级（23 处引用），测试靠跨缝 import 它们——未立项。
+- ~~**C6 进程级状态进 `AppContext`**~~ ✅ **已落地**（工单 `webapp-state-into-ctx/01–04`，
+  2026-09-22，见第 17 节）：`_running_task_execs` / `_MATERIALS_LAST_CHECK` / `_materials_task`
+  搬进 `AppContext`、模块级 `global` 清零、测试改在**自己构造的 ctx** 上注入与断言，
+  并新增结构钉 + 真红证。**只换归属、语义未变**。
 - **C7 私有符号公开化**（评审里的"73 个私有符号被测试翻墙"，`llm` 19 / `generator` 15）：
-  当验收尺用，未立项（`llm` 那簇是冻结区，价值有限）。
+  当**验收尺**用，未立项——**它是尺子不是功能**（量"测试还翻不翻墙"的进展；`llm` 那簇是
+  冻结区，价值有限）。
 
 ## 16. 启动器模式下 F5 会把应用自己关掉（2026-09-21～22，工单 launcher-exit-race/01–05 已落地）
 
@@ -465,4 +470,36 @@ index.html 零 import、555 个 id 不变）；`03/04` 11 个模块显式 `init(
 （修法：`pageshow` 补一次登记）；② 浏览器门禁**模拟不了真关窗口**：`page.close()` 走 CDP 关
 目标、`pagehide`/信标都不跑（实测 `probe-02-close-page.txt`），故用例 C 用"真导航离开"验
 同一条产品不变量。
+
+## 17. C6 三处进程级状态进 AppContext（2026-09-22，工单 webapp-state-into-ctx/01–04 已落地）
+
+第 11 节与第 15 节末「仍挂账」的 C6 结清。**问题**：`webapp` 把三样会话态挂在模块级
+（任务执行注册表 / 资料库 check 缓存 / 进行中的资料库下载任务）→ 同一个进程里两个 app 实例
+**共用**同一份状态（用例里「每个用例建一个 AppContext」的隔离只在纸面上成立），测试只能跨缝
+import 私有名 + 一个 autouse 夹具事后清扫，`global` 语句 3 处。
+
+**做法（只换归属、不换判据）**：三样搬进 `AppContext`（`running_task_execs` /
+`materials_last_check` / `materials_task`——三个**公开**字段；锁私有 `_materials_task_lock`，
+形状照既有的 `pending_generations` / `_generation_lock`：缝外的状态公开、缝内的互斥件私有），
+端点与 helper 全经 `context.*`；随搬家补
+`_materials_task_lock`（「查在跑 → 建 / 取消任务」两段 check-then-act 原子化，**语句次序逐字
+留在原位**——判定次序也是判据）；`create_app()` 与 uvicorn 入口 `contest_generator.webapp:app`
+**照旧**（评审提过的「import 模块不再顺带建 app」不在本条范围）。
+
+**判据三处**：① 既有端点用例断言零改动（只改「取状态的姿势」：`tests/test_task_progress.py`
+的夹具拆 `tasks_context` + `tasks_client`、`tests/test_materials_task.py` 的 `_client()` 返回
+`(client, ctx)` 且 autouse 清扫夹具删除）；② 两条新行为判据「两个 app 实例互不可见」；
+③ 结构钉 `tests/test_webapp_state_home.py`（判据纯函数 + 每条腿各有合成红证）。
+
+**红证与读数**：`.scratch/webapp-state-into-ctx/`（spec、4 张工单、`probe-00-sharing.py` 的
+前后对读 `verify-00-sharing-{before,after}.txt`；真红证 `probe-01-pin-red-proof.py`（base
+**显式钉** `5c9fc8b0`，不写 HEAD）→ `red-proof.txt`：base **6 条 / 4 类**、当前树 0 条；
+判据强度 `probe-02-guard-strength.py` → `guard-strength.txt`：**13/13** 条腿 stub 后变红）。
+全量 `python -m pytest -n auto -q` **5070 passed + 1 skipped**。
+
+**顺带记账**：本轮量到的两条**工具事实**（PowerShell `>` 写 UTF-16LE；`git show <rev>:<path>`
+要 POSIX 正斜杠）记在 `docs/agents/local-environment.md` 的本轮会话段里——那条属于"这台机器 +
+此刻"，不在这里重抄一份。
+
+**剩余**：C7 只是验收尺（见第 15 节），未立项。
 

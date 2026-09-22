@@ -162,7 +162,7 @@ class _BatchState:
 
 
 class ApplyTask(TaskRetryMixin):
-    """资料库增量下载任务（一任务一实例；webapp 模块级单例）。
+    """资料库增量下载任务（一任务一实例；住在 AppContext 上，工单 webapp-state-into-ctx/02）。
 
     构造时不启动线程；run() 在调用方线程执行（端点用 daemon 线程包一层）。
     download 可注入（测试不碰网络）；快照持久化在 task_dir/materials-task.json。

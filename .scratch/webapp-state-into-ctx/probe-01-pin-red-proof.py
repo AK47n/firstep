@@ -15,8 +15,8 @@
     python .scratch/webapp-state-into-ctx/probe-01-pin-red-proof.py [--out red-proof.txt]
     python .scratch/webapp-state-into-ctx/probe-01-red-proof.py --base <rev>
 
-`--out` 的理由：PowerShell 5.1 的 `>` 重定向写 UTF-16LE（read 工具当二进制拒读），
-证据文件要 UTF-8 才好被读——所以让它自己落盘。
+`--out` 的理由：PowerShell 5.1 的 `>` 重定向写 UTF-16LE（`read` 工具当二进制拒读；这条坑的
+真源与判据在 `tests/js/windows-text-encoding.test.mjs` 的文件头 ②），所以让探针自己按 UTF-8 落盘。
 """
 
 from __future__ import annotations
