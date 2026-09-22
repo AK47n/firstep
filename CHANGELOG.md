@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=5e60743a71cd8682c729e9bcda391ad4db8a6c73 -->
+<!-- changelog-auto: last-commit=ec29dbd9177ba26c0e9685e7ea70716da2c5b33d -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -10,6 +10,7 @@
 - 12:36 工单 launcher-exit-race/05：账本与文档收尾（这条竞态从'未立项'改成'已落地'）
 - 13:50 工单 webapp-state-into-ctx/01：任务执行注册表进 AppContext（每个 app 实例一张）
 - 13:59 工单 webapp-state-into-ctx/02：资料库更新会话态进 AppContext（每个实例一份 + 一把锁）
+- 18:23 工单 webapp-state-into-ctx/03：结构钉——会话态不许回到 webapp 模块级
 
 ## 2026-09-21
 - 12:38 工单 frontend-boot-module/01-02：装载根搬进 boot.js（index.html 只留一条标签 + 判据单源与守卫重定根）
