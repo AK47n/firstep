@@ -5,6 +5,10 @@
 → 重试只下卷 2）、cancel 在卷边界停止、status 状态机（idle / downloading /
 downloading+partial / done / failed / applying）、状态落盘节流与重启恢复、
 ApplyTask 纯逻辑（不依赖网络）。
+
+会话态归属（工单 webapp-state-into-ctx/02）：check 缓存与下载任务单例长在
+**AppContext** 上，测试在**自己构造的那个 ctx** 上注入与断言——`_client()` 把 ctx
+一起返回，不再有跨用例清扫夹具（每个用例一个新实例，天然隔离）。
 """
 
 from __future__ import annotations
@@ -29,16 +33,7 @@ from contest_generator.materials_task import (
     write_task_snapshot,
 )
 from contest_generator.webapp import AppContext, create_app
-import contest_generator.webapp as webapp_mod
 from tests._byte_server import ByteServer
-
-
-@pytest.fixture(autouse=True)
-def _reset_module_state():
-    """每个测试后清模块级会话态（_materials_task / check 缓存），防跨测试污染。"""
-    yield
-    webapp_mod._materials_task = None
-    webapp_mod._MATERIALS_LAST_CHECK = {}
 
 
 # ---------------------------------------------------------------------------
@@ -154,9 +149,42 @@ def _release(batch_slugs: list[str]) -> list[dict[str, Any]]:
     }]
 
 
-def _client(tmp_path: Path) -> TestClient:
+def _online_release(slug: str) -> list[dict[str, Any]]:
+    """线上 releases 列表（check 端点的取数面）：一个 `materials-` release + 清单/卷两个资产。"""
+    return [{
+        "tag_name": "materials-v1.1.0",
+        "assets": [
+            {
+                "name": "firstep-materials-v1.1.0.manifest.json",
+                "browser_download_url": "https://example.com/firstep-materials-v1.1.0.manifest.json",
+                "size": 100,
+            },
+            {
+                "name": f"firstep-materials-v1.1.0-{slug}.zip",
+                "browser_download_url": f"https://example.com/firstep-materials-v1.1.0-{slug}.zip",
+                "size": 200,
+            },
+        ],
+    }]
+
+
+def _seed_check(ctx: AppContext, batches: list[dict]) -> None:
+    """把一份 check 结果注入**本实例**的 ctx（apply 的白名单来源）。
+
+    这是「check 结果 → 白名单」那条缝的注入形状（单源一处）：不走真 check 端点时用它，
+    要连端点一起验的用例见 `test_check_then_apply_keeps_the_whitelist_on_this_instance`。
+    """
+    ctx.materials_last_check.update(_check_result(batches))
+
+
+def _client(tmp_path: Path) -> tuple[TestClient, AppContext]:
+    """本用例的客户端 + **它自己那个 AppContext**。
+
+    资料库更新的会话态（check 缓存 / 下载任务）长在 ctx 上（工单 webapp-state-into-ctx/02）：
+    要注入或断言就在这一个实例上做，不再伸手进 webapp 模块（也不再需要跨用例清扫夹具）。
+    """
     ctx = AppContext(config_path=tmp_path / "config.json")
-    return TestClient(create_app(ctx))
+    return TestClient(create_app(ctx)), ctx
 
 
 # ---------------------------------------------------------------------------
@@ -561,37 +589,103 @@ def test_write_task_snapshot_roundtrip(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_apply_endpoint_rejects_unknown_batch(tmp_path: Path, monkeypatch) -> None:
+def test_apply_endpoint_rejects_unknown_batch(tmp_path: Path) -> None:
     """批次 slug 白名单：不在 check 返回里的批次 → 400。"""
-    client = _client(tmp_path)
+    client, _ = _client(tmp_path)
     resp = client.post("/api/update/materials/apply", json={"batches": ["evil-slug"]})
     assert resp.status_code == 400
     assert "未知批次" in resp.json()["detail"]
 
 
 def test_apply_endpoint_rejects_missing_batches(tmp_path: Path) -> None:
-    client = _client(tmp_path)
+    client, _ = _client(tmp_path)
     resp = client.post("/api/update/materials/apply", json={})
     assert resp.status_code == 400
 
 
-def test_apply_endpoint_runs_task_and_status_visible(tmp_path: Path, monkeypatch) -> None:
-    check = _check_result([
+def test_apply_endpoint_runs_task_and_status_visible(tmp_path: Path) -> None:
+    """apply 吃**本实例** ctx 上的 check 缓存（白名单来源）。"""
+    client, ctx = _client(tmp_path)
+    _seed_check(ctx, [
         _batch("k230", "k230资料", [_part("https://example.com/files/k230.zip", 100, "a" * 64, "k230.zip")]),
     ])
-    monkeypatch.setattr(
-        "contest_generator.webapp._MATERIALS_LAST_CHECK",
-        check,  # apply 吃 check 缓存（模块级 dict）
-    )
-    client = _client(tmp_path)
     resp = client.post("/api/update/materials/apply", json={"batches": ["k230"]})
     assert resp.status_code == 200
     body = resp.json()
     assert body["started"] is True
 
 
+def test_check_then_apply_keeps_the_whitelist_on_this_instance(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """check → apply 的白名单缝在**同一个实例**内闭环（工单 webapp-state-into-ctx/02）。
+
+    check 端点把结果写进本实例的 ctx，apply 从同一个 ctx 取白名单。让线上清单报一个
+    「1 PB 的卷」→ apply 走过了批次校验、卡在磁盘空间那一关（400「磁盘空间不足」而不是
+    400「未知批次」）——白名单确实来自这次 check，**且不真起下载**（卡在磁盘校验这一步）。
+    """
+    materials_dir = tmp_path / "materials"
+    materials_dir.mkdir()
+    (materials_dir / mu.MANIFEST_FILENAME).write_text(
+        json.dumps(_manifest("v1.0.0", []), ensure_ascii=False), encoding="utf-8"
+    )
+    online = _manifest("v1.1.0", [{
+        "slug": "k230",
+        "name": "k230资料",
+        "files": [{"path": "k230资料/a.bin", "size": 3, "sha256": "x" * 64}],
+        "removed": [],
+        "parts": [{
+            "zip_name": "firstep-materials-v1.1.0-k230.zip",
+            "size": 10 ** 15,
+            "sha256": "y" * 64,
+        }],
+    }])
+    monkeypatch.setattr(mu, "_fetch_releases", lambda: _online_release("k230"))
+    monkeypatch.setattr(mu, "_fetch_text", lambda url: json.dumps(online, ensure_ascii=False))
+    # 端点内的资料库目录 = 工具根/sources/materials；monkeypatch 读取函数最薄
+    monkeypatch.setattr(
+        "contest_generator.webapp.materials_library_dir", lambda: materials_dir
+    )
+
+    client, _ = _client(tmp_path)
+    check = client.get("/api/update/materials/check")
+    assert check.status_code == 200
+    assert [b["slug"] for b in check.json()["batches"]] == ["k230"]
+
+    resp = client.post("/api/update/materials/apply", json={"batches": ["k230"]})
+    assert resp.status_code == 400
+    assert "磁盘空间不足" in resp.json()["detail"]
+
+
+def test_two_app_instances_do_not_share_the_batch_whitelist(tmp_path: Path) -> None:
+    """两个 app 实例互不可见（工单 webapp-state-into-ctx/02）：A 实例的 check 结果对
+    **B 实例**的 apply 不是白名单——B 报「未知批次」，A 自己认（走过批次校验、卡在磁盘
+    空间那一关）。
+
+    收走前两边共用 webapp 的模块级全局，B 会认下 A 的批次（行为红读数：
+    `.scratch/webapp-state-into-ctx/verify-00-sharing-before.txt`）。
+    """
+    client_a, ctx_a = _client(tmp_path / "a")
+    client_b, _ = _client(tmp_path / "b")
+    # 1 PB 的卷：两个实例都卡在「磁盘空间不足」，不真起下载
+    _seed_check(ctx_a, [
+        _batch("k230", "k230资料", [
+            _part("https://example.com/files/k230.zip", 10 ** 15, "a" * 64, "k230.zip")
+        ]),
+    ])
+    payload = {"batches": ["k230"]}
+
+    resp_a = client_a.post("/api/update/materials/apply", json=payload)
+    assert resp_a.status_code == 400
+    assert "磁盘空间不足" in resp_a.json()["detail"]  # A：白名单认（判据没变）
+
+    resp_b = client_b.post("/api/update/materials/apply", json=payload)
+    assert resp_b.status_code == 400
+    assert "未知批次" in resp_b.json()["detail"]  # B：看不见 A 的白名单
+
+
 def test_status_endpoint_idle(tmp_path: Path) -> None:
-    client = _client(tmp_path)
+    client, _ = _client(tmp_path)
     resp = client.get("/api/update/materials/status")
     assert resp.status_code == 200
     assert resp.json()["state"] == "idle"

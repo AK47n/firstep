@@ -621,6 +621,16 @@ class AppContext:
     # pending 后并发双写 main.c）。**归属在 ctx = 每个 app 实例一份**：测试建几个实例就几份，
     # 互不可见（收走前是模块级全局，同进程的两个实例共用一张表）。
     running_task_execs: set[str] = field(default_factory=set)
+    # 资料库更新会话态（工单 materials-update/03+04；工单 webapp-state-into-ctx/02 从模块级
+    # 搬进 ctx）——**归属在 ctx = 每个 app 实例一份**（测试建几个实例就几份，互不可见；
+    # 收走前是模块级全局，同进程的两个实例共用同一份 check 缓存与同一个任务槽）：
+    # - materials_last_check：最近一次 check 结果（apply 的批次白名单来源；dict 就地 update）
+    # - materials_task：进行中的下载任务实例（进程死 = 任务自然终止；快照落盘可恢复）
+    # - _materials_task_lock：只让「查在跑 → 建 / 取消任务」这两段 check-then-act 原子
+    #   （同步端点跑在线程池 worker 上，两个并发 apply 能同时通过检查）
+    materials_last_check: dict = field(default_factory=dict)
+    materials_task: ApplyTask | None = None
+    _materials_task_lock: threading.Lock = field(default_factory=threading.Lock)
     # 检测页配方文件的**可选覆盖**（缺省 None = 按模块库根推，见
     # hwcheck_recipe.recipe_library_path）：给测试注入"坏配方 / 缺配方"用——
     # 不改真库那一份（并行跑用例时别的 worker 会读到半截，2026-09-19 踩过）。
@@ -1392,14 +1402,6 @@ def _resolve_generation_output_dir(
 
 
 
-# 资料库更新会话态（工单 materials-update/03+04，模块级单例）：
-# - _MATERIALS_LAST_CHECK：最近一次 check 结果（apply 的批次白名单来源；dict 就地
-#   update，跨 create_app 实例共享——多个 TestClient 同进程复用）
-# - _materials_task：进行中的下载任务实例（进程死 = 任务自然终止；快照落盘可恢复）
-_MATERIALS_LAST_CHECK: dict = {}
-_materials_task: ApplyTask | None = None
-
-
 def create_app(ctx: AppContext | None = None) -> FastAPI:
     context = ctx or AppContext()
     app = FastAPI(title="电赛工程生成器")
@@ -1443,15 +1445,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
     # 资料库检查更新（工单 materials-update/03）：本地基线 + 线上清单对比；
     # 与软件检查更新平级（独立 tag `materials-vX.Y.Z`），不依赖 releases/latest。
-    # 结果缓存进模块级 _MATERIALS_LAST_CHECK（apply 端点的批次白名单来源）。
+    # 结果缓存进**本实例 ctx** 的 materials_last_check（apply 端点的批次白名单来源）。
     @app.get("/api/update/materials/check")
     @_map_errors
     def materials_update_check() -> dict:
-        global _MATERIALS_LAST_CHECK
         result = check_for_materials_update(
             load_local_manifest(materials_library_dir())
         )
-        _MATERIALS_LAST_CHECK.update(result)
+        context.materials_last_check.update(result)
         return result
 
     # 资料库下载任务（工单 materials-update/04）：后台线程 + 卷级断点。
@@ -1578,13 +1579,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.post("/api/update/materials/apply")
     @_map_errors
     def materials_update_apply(payload: dict) -> dict:
-        global _materials_task
         slugs = payload.get("batches")
         if not isinstance(slugs, list) or not slugs:
             raise HTTPException(400, "缺少所选批次（batches）")
         if not all(isinstance(s, str) for s in slugs):
             raise HTTPException(400, "批次列表格式非法")
-        check = _MATERIALS_LAST_CHECK
+        check = context.materials_last_check
         allowed = {b["slug"] for b in check.get("batches", [])}
         unknown = [s for s in slugs if s not in allowed]
         if unknown:
@@ -1603,60 +1603,67 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 f"磁盘空间不足：需要约 {needed // (1024 * 1024)} MB，"
                 f"剩余 {free // (1024 * 1024)} MB，请清理后重试",
             )
-        if _materials_task is not None and _materials_task.state.value in (
-            "downloading", "applying",
-        ):
-            raise HTTPException(400, "已有资料库更新任务在进行中，请稍候")
-        # 重建新基线清单（应用期写回 .materials-manifest.json）：
-        # 选中批次取 check 的 files / removed / zip_names；version = 线上版本
-        new_manifest = {
-            "version": str(check.get("latest_version") or ""),
-            "published_at": "",
-            "batches": [
-                {
-                    "slug": b["slug"],
-                    "name": b["name"],
-                    "files": b.get("files", []),
-                    "removed": b.get("removed", []),
-                    "parts": [
-                        {"zip_name": zn, "size": 0, "sha256": ""}
-                        for zn in b.get("zip_names", [])
-                    ],
-                }
-                for b in selected
-            ],
-        }
-        materials_root = materials_library_dir()
-        old_manifest = load_local_manifest(materials_root)
+        # 「查在跑 → 建任务并占槽」是 check-then-act（同步端点跑在线程池 worker 上）：
+        # 查与赋必须在同一把锁里，否则两个并发 apply 能同时通过检查，第二个静默顶掉
+        # 第一个的槽位（那个任务还在跑，却再也查不到 / 取消不了）。**这一段整段留在原位**
+        # （磁盘校验之后、建清单之前）——判定次序也是判据：任务在跑时不该先去做那堆
+        # 建清单的活（读本地基线清单会抛错，那会把「已有任务在跑」换成别的答复）。
+        with context._materials_task_lock:
+            if context.materials_task is not None and context.materials_task.state.value in (
+                "downloading", "applying",
+            ):
+                raise HTTPException(400, "已有资料库更新任务在进行中，请稍候")
+            # 重建新基线清单（应用期写回 .materials-manifest.json）：
+            # 选中批次取 check 的 files / removed / zip_names；version = 线上版本
+            new_manifest = {
+                "version": str(check.get("latest_version") or ""),
+                "published_at": "",
+                "batches": [
+                    {
+                        "slug": b["slug"],
+                        "name": b["name"],
+                        "files": b.get("files", []),
+                        "removed": b.get("removed", []),
+                        "parts": [
+                            {"zip_name": zn, "size": 0, "sha256": ""}
+                            for zn in b.get("zip_names", [])
+                        ],
+                    }
+                    for b in selected
+                ],
+            }
+            materials_root = materials_library_dir()
+            old_manifest = load_local_manifest(materials_root)
 
-        def _apply() -> None:
-            apply_materials_update(
-                materials_root=materials_root,
-                manifest=new_manifest,
-                zip_dir=updates_dir / "materials",
-                backup_dir=updates_dir / "materials-backup",
-                old_manifest=old_manifest,
-            )
+            def _apply() -> None:
+                apply_materials_update(
+                    materials_root=materials_root,
+                    manifest=new_manifest,
+                    zip_dir=updates_dir / "materials",
+                    backup_dir=updates_dir / "materials-backup",
+                    old_manifest=old_manifest,
+                )
 
-        task = ApplyTask(updates_dir, selected, on_complete=_apply)
-        _materials_task = task
+            task = ApplyTask(updates_dir, selected, on_complete=_apply)
+            context.materials_task = task
         worker = threading.Thread(target=task.run, daemon=True)
         worker.start()
         return {"started": True, "message": "已开始下载资料库增量包"}
 
     @app.get("/api/update/materials/status")
     def materials_update_status() -> dict:
-        return task_status(_materials_task)
+        return task_status(context.materials_task)
 
     @app.post("/api/update/materials/cancel")
     def materials_update_cancel() -> dict:
-        global _materials_task
-        if _materials_task is None or _materials_task.state.value not in (
-            "downloading", "applying",
-        ):
-            return {"cancelled": False, "message": "当前没有进行中的下载"}
-        _materials_task.cancel()
-        write_task_snapshot(_materials_task)
+        # 「查在跑 → 取消并快照」整段在同一把锁里：与 apply 的建任务互斥，
+        # 防「刚判定可取消、槽位被新任务顶掉」那一跳（快照写的也是同一个任务）。
+        with context._materials_task_lock:
+            task = context.materials_task
+            if task is None or task.state.value not in ("downloading", "applying"):
+                return {"cancelled": False, "message": "当前没有进行中的下载"}
+            task.cancel()
+            write_task_snapshot(task)
         return {"cancelled": True, "message": "已请求取消，将在当前卷下载完成后停止"}
 
     # 检查更新（工单 auto-update/03）：GitHub Releases API + 本地版本比对；
