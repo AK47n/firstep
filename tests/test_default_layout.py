@@ -482,6 +482,11 @@ WHITELIST = {
         # magnetometer-modules/02：qmc5883l SCL——同为磁力计件（互替件，默认脚
         # 在 mspm0 侧刻意错开，stm32 侧并入同一软 I2C 总线；地址 0x0D/0x0E 全异）
         "qmc5883l.QMC5883L_SCL",
+        # hwcheck-unknown-device/01：i2c_probe SCL——**库内工具件不是器件**，
+        # 它借这条总线去问「这个地址上有没有东西应答」（地址由调用方当场给，
+        # 不挂器件地址，故不与任何既有件冲突）；并入软 I2C 总线共享组即
+        # 「探测用的就是库内那一条软 I2C 总线」这条事实的落盘
+        "i2c_probe.I2C_PROBE_SCL",
     },
     "PA7": {
         "motor.MOTOR_A_DIR2",
@@ -506,6 +511,9 @@ WHITELIST = {
         "hmc5883l.HMC5883L_SDA",
         # magnetometer-modules/02：qmc5883l SDA——同 PA6 登记
         "qmc5883l.QMC5883L_SDA",
+        # hwcheck-unknown-device/01：i2c_probe SDA——同 PA6 登记（软 I2C 总线
+        # 共享组；本件不挂器件地址，与既有件零地址冲突）
+        "i2c_probe.I2C_PROBE_SDA",
     },
 }
 

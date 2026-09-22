@@ -896,6 +896,10 @@ MSPM0_DEFAULT_MAP = {
     ("step_motor", "DCC_100_PWM2_C0"): ("DCC_100_PWM2", "ccp0Pin"),
     ("ml_mpu6050", "I2C_0_SCL"): ("I2C_0", "sclPin"),
     ("ml_mpu6050", "I2C_0_SDA"): ("I2C_0", "sdaPin"),
+    # hwcheck-unknown-device/01：i2c_probe 借用的就是同一个 I2C_0 实例
+    # （mspm0 硬件 I2C，PA1=SCL / PA0=SDA）——本件不新增 syscfg 行
+    ("i2c_probe", "I2C_0_SCL"): ("I2C_0", "sclPin"),
+    ("i2c_probe", "I2C_0_SDA"): ("I2C_0", "sdaPin"),
 }
 
 

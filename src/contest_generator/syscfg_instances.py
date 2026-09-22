@@ -89,7 +89,12 @@ INSTANCE_CONSUMERS: dict[str, tuple[str, ...]] = {
     "ZIGBEE_UART": ("zigbee_uart", "zigbee_uart_key", "zigbee_link"),
     "OLED": ("oled",),
     "OLED_SPI": ("oled",),
-    "I2C_0": ("ml_mpu6050",),
+    # I2C_0 由 ml_mpu6050（姿态）与 i2c_probe（通用总线原语，
+    # hwcheck-unknown-device/01）共用：两者是同一对物理脚 PA0/PA1 上的
+    # 「谁在跑」二选一（同一时刻只有一份代码用这条总线），裁剪后各自独占。
+    # i2c_probe 这条登记是**它能不能被选中的前提**——不登记则选中它时
+    # I2C_0 被裁掉、I2C_0_INST 不存在（工单 01 反证项）。
+    "I2C_0": ("ml_mpu6050", "i2c_probe"),
     "ADC12_0": ("adc", "joystick", "us016", "ir_distance", "mq2", "mq135", "mq5", "flame", "soil", "photoresistance", "rain", "gp2y1014au", "s12sd", "mq3", "mq4", "mq6", "mq7", "mq8", "mq9", "ms1100"),
     "GP2Y1014": ("gp2y1014au",),
     "RELAY": ("relay",),

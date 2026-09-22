@@ -558,6 +558,7 @@ MODULE_REFERENCE_EXEMPT: dict[str, str] = {
     "ec01g": "暂无器件条目（NB-IoT+GPS 透传）",
     "esp01s": "暂无器件条目（WiFi 透传）",
     "huidu": "内部件（同传感器切片：灰度读取，关联归 xunji / pid）",
+    "i2c_probe": "内部件（I2C 总线原语：参考库里没有「总线原语」这种条目——它不对应任何器件手册或例程）",
     "ir_beam": "暂无器件条目（红外对射）",
     "neo_6m": "暂无器件条目（GPS 定位）",
     "tp_xpt2046": "暂无器件条目（电阻触摸控制器）",

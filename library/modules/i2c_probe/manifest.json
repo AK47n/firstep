@@ -1,0 +1,65 @@
+{
+  "slug": "i2c_probe",
+  "description": "I2C 总线原语（双平台，库内工具件）：借一对脚加一条总线，只做两件最小的事——i2c_probe_ping(addr7) 问「这个 7 位地址上有没有器件应答」，i2c_probe_read_reg(addr7, reg, &value) 读回一个 8 位寄存器（返回码与读回值分开，失败不会和读到的 0x00 混淆）。它不含任何器件语义：不认识 WHO_AM_I、不写寄存器、不读数据。接线：stm32 默认 SCL=PA6 / SDA=PA7（与库内软 I2C 件共挂同一条总线），mspm0 默认 SCL=PA1 / SDA=PA0（母版 SysConfig 的 I2C_0 实例，与板载 LED 同脚，通信期间 LED 微闪）。适用于「手上这件器件不在模块库里、只有卖家给的地址与身份寄存器」时自己拼一次通信探测，也适用于任何要确认「这根线这根脚上到底有没有东西应答」的场合。",
+  "dependencies": [],
+  "platforms": {
+    "mspm0": {
+      "files": [
+        "code/i2c_probe.c",
+        "code/i2c_probe.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**总线原语（非器件驱动）**：mspm0 走母版 SysConfig 的**硬件 I2C 实例 I2C_0**（`I2C_0_INST` + SDK `DL_I2C_*`）。照 ml_mpu6050 的 mpu_port.c 先例的部分 = 轮询控制器模式 + `timeout` 递减出口；**地址应答判据（`ADDR_ACK` 置起且 `ERROR` 未置起）是本件按 SDK 文档新写的**——mpu_port.c 只看 `ERROR`，从不读 `ADDR_ACK`（评审更正的一处先例误述）。**裁剪判据 = 消费者 ∩ 选中集**：本件已在 `syscfg_instances.INSTANCE_CONSUMERS[\"I2C_0\"]` 登记为消费者——不登记则选中本模块时 I2C_0 实例连同 PA0/PA1 的 `$assign` 一起被裁掉、`I2C_0_INST` 不存在（工单 01 反证项实测：拿掉登记行 → 裁剪后 `I2C_0.$name` 与两条 `$assign` 全消失）。`i2c_probe_init()` 是**空实现占位**（总线由 `SYSCFG_DL_init()` 配置，本件没有自己的初始化序列——joystick/ttp224 空实现先例），留它是给调用方一个「按需初始化总线」的位置。\n**平台已知代价（如实写在页面与工程注释里）**：I2C0 = PA0(SDA)/PA1(SCL) 与**板载 LED 共用**（板定义注记原文），通信期间 LED 微闪属正常现象；**PA0 的板载上拉位未焊**（依赖模块板自带的上拉电阻，飞线过长仍会丢）。引脚走 SysConfig 实例、**不带宏**（改脚改 mspm0.syscfg，不改模块）。\n**ping 两平台同一个问法（评审整改后定稿）**：两平台都发「START + 器件地址 + **读位** + 读 1 字节（丢弃）+ 停止」，问的是同一件事——「这个地址的**读方向**有没有东西应答」。**线上字节刻意对齐**：不一致会让同一件器件在 mspm0 上说通、在 stm32 上说通不了（本单第一版正是这样：mspm0 读位、stm32 写位，评审指出后改成同向）。两边都**不发任何写数据字节**（本件不写器件寄存器），读回的那一字节不参与判定、也不出参；两边的 ping 都看不出器件型号。**已知代价**：只应答写地址的从机（罕见）在两平台都判无应答——宁可两边一致，不要一边通一边不通；要更进一步的确认用 `i2c_probe_read_reg` 走一整条读写事务。mspm0 侧为什么不发 0 长度突发：SDK 头虽写长度范围 `[0x00, 0xFFF]`，但没有 0 长度用法的先例，**赌不起**（ping 静默永远无应答 = 把「线/供电没接好」误报成真相）。\n**读寄存器用重复起始**：阶段①写寄存器指针时**不发停止条件**（`DL_I2C_CONTROLLER_STOP_DISABLE`），阶段②重复起始 + 读地址 + 读 1 字节 + 停止——这是与 mpu_port.c 两段各自带停止条件**不同的**一处刻意偏离：停止条件会让一部分器件复位寄存器指针、读回错值，而本件的用途恰恰是面对不认识的器件。真机若出现偶发误判，先核对这里（`I2C_PROBE_SETTLE_LOOPS` 的起始沉降）。\n**未上板**（本平台硬件 I2C 路径的真机验证留后续：编译矩阵只证「能编译」，不证器件真能应答）。",
+      "kit": "",
+      "source_url": "",
+      "pins": [
+        {
+          "id": "I2C_0_SCL",
+          "type": "i2c_scl",
+          "default": "PA1",
+          "required": true
+        },
+        {
+          "id": "I2C_0_SDA",
+          "type": "i2c_sda",
+          "default": "PA0",
+          "required": true
+        }
+      ]
+    },
+    "stm32": {
+      "files": [
+        "code/i2c_probe_stm32.c",
+        "code/i2c_probe_stm32.h"
+      ],
+      "verified": true,
+      "hardware_bound": false,
+      "notes": "**总线原语（非器件驱动）**：stm32 走**位操作软 I2C 自实现**（照 aht10/sht20/qmc5883l 先例：SDA 方向运行时切换 `gpio_init(.., OUT_OD/IU)`、SCL 显式初始化、半周期 5us ≈ 100kHz 级），**不用母版 ml_i2c**——其 `I2C_GPIO` 硬绑 PA11/PA12，那两个脚在蓝药丸上是 **USB DM/DP**（库内软 I2C 件明确不用它的既有决策，spec 补充说明已按实测更正）。引脚走**自己的一组宏** `I2C_PROBE_SCL_GPIO/_SCL_PIN/_SDA_GPIO/_SDA_PIN`（母版 `pin_config.h` 单源，库内每个软 I2C 件都有自己那组，属常规）。\n**默认脚 = PA6（SCL）/ PA7（SDA）**——与库内软 I2C 件**共挂同一条总线**（地址各异、多挂协议允许 = 合法共享，`test_default_layout` 白名单 PA6/PA7 已登记）；与 motor `MOTOR_A_DIR/DIR2` 默认重叠属既有权衡（同选经引脚绑定消解）。页面无此件（库内工具件，非 wiki 页面派生），代码按库内软 I2C 原语族规范自写。\n**ping 与 mspm0 侧同一个问法（评审整改后定稿）**：发「START + 器件地址 + **读位** + 读 1 字节（丢弃）+ 停止」——与 mspm0 侧线上字节刻意对齐（第一版是写位，同一件器件会在两平台得到相反判定，评审指出后改成同向）；**不发任何写数据字节**。已知代价同 mspm0 条目：只应答写地址的从机（罕见）两平台都判无应答。\n**读寄存器 = 写寄存器指针 → 重复起始 → 读地址 → 读 1 字节 → NACK → 停止**：中途不发停止条件（停止会让一部分器件复位寄存器指针）；两者都**不写器件寄存器**（写侧调用集为空——渲染器的「只读」结构守卫据此成立）。\n**未上板**（编译矩阵只证「能编译」，不证器件真能应答：真机口径见 spec「编译绿 + 用户照清单上板跑一轮并把现象回填，没跑过就写未上板」）。",
+      "kit": "",
+      "source_url": "",
+      "pins": [
+        {
+          "id": "I2C_PROBE_SCL",
+          "type": "i2c_scl",
+          "default": "PA6",
+          "required": true,
+          "macros": [
+            "I2C_PROBE_SCL_GPIO",
+            "I2C_PROBE_SCL_PIN"
+          ]
+        },
+        {
+          "id": "I2C_PROBE_SDA",
+          "type": "i2c_sda",
+          "default": "PA7",
+          "required": true,
+          "macros": [
+            "I2C_PROBE_SDA_GPIO",
+            "I2C_PROBE_SDA_PIN"
+          ]
+        }
+      ]
+    }
+  }
+}

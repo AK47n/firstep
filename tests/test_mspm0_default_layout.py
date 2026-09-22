@@ -43,12 +43,14 @@ def _group_by_pin() -> dict[str, set[str]]:
 # 共享白名单（同默认脚合法，按引脚精确钉死；理由 = 同选概率最低/不同框/
 # 互斥组/同总线族）。变更必须同步此处并附注释。
 WHITELIST = {
-    "PA0": {  # I2C_0 SDA × 红外发射：姿态采集 × 红外链路不同框
+    "PA0": {  # I2C_0 SDA × 红外发射 × i2c_probe：姿态采集/总线探测 × 红外链路不同框
+        "i2c_probe.I2C_0_SDA",
         "ir_remote_tx.IR_TX_OUT",
         "ml_mpu6050.I2C_0_SDA",
     },
-    "PA1": {  # I2C_0 SCL × 粉尘 LED × 继电器：姿态/粉尘 × 执行机构不同框
+    "PA1": {  # I2C_0 SCL × 粉尘 LED × 继电器 × i2c_probe：姿态/探测/粉尘 × 执行机构不同框
         "gp2y1014au.GP2Y1014_LED",
+        "i2c_probe.I2C_0_SCL",
         "ml_mpu6050.I2C_0_SCL",
         "relay.RELAY_OUT",
     },

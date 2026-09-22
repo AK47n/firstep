@@ -304,6 +304,16 @@
 #define QMC5883L_SCL_PIN      Pin_6
 #define QMC5883L_SDA_GPIO     GPIO_A
 #define QMC5883L_SDA_PIN      Pin_7
+/* I2C_PROBE 通用 I2C 总线原语（hwcheck-unknown-device/01）：库内**工具件**、
+ * 不是器件——它借用这条软 I2C 总线去问「这个 7 位地址上有没有东西应答、
+ * 这个寄存器读回什么」，好让「手上这件不在模块库里」的器件也测得上。
+ * 默认 PA6/PA7 = 库内软 I2C 总线共享组；它不挂任何器件地址（地址由调用方
+ * 当场给），因此不与既有件冲突；与 motor MOTOR_A_DIR/DIR2 的默认重叠同
+ * 既有各件口径，同选时经引脚绑定消解 ---- */
+#define I2C_PROBE_SCL_GPIO    GPIO_A
+#define I2C_PROBE_SCL_PIN     Pin_6
+#define I2C_PROBE_SDA_GPIO    GPIO_A
+#define I2C_PROBE_SDA_PIN     Pin_7
 #define SHT20_SCL_GPIO        GPIO_A
 #define SHT20_SCL_PIN         Pin_6
 #define SHT20_SDA_GPIO        GPIO_A

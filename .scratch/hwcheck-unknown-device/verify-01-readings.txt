@@ -1,0 +1,74 @@
+hwcheck-unknown-device/01 — i2c_probe（库内总线原语，两平台）验收读数
+=====================================================================
+
+一、真编译矩阵（0 error / 0 warning 验收线）
+-------------------------------------------
+
+命令：python .scratch\hwcheck-unknown-device\compile_matrix.py
+原始日志：.scratch/hwcheck-unknown-device/matrix-logs/i2c_probe-{mspm0,stm32}.log
+（生成 + 编译产物在 matrix/，按既有惯例 gitignore，可重跑重建）
+
+  [i2c_probe/mspm0] exit=0 passed=True warnings=0
+  [i2c_probe/stm32] exit=0 passed=True warnings=0
+
+stm32（Keil UV4，C:\Keil5\Core\UV4\UV4.exe）日志汇总行原文：
+
+  compiling i2c_probe_stm32.c...
+  ".\Objects\Project.axf" - 0 Error(s), 0 Warning(s).
+
+mspm0（CCS Tools SysConfig CLI + gmake，tiarmclang 4.0.4.LTS，SDK
+mspm0_sdk_2_10_00_04）编译并链接了模块本体：
+
+  'Arm Compiler - building file: "../modules/i2c_probe/code/i2c_probe.c"'
+  'Finished building: "../modules/i2c_probe/code/i2c_probe.c"'
+  ... -o "mspm0_project.out" ./ti_msp_dl_config.o ./startup_mspm0g350x_ticlang.o
+      ./main.o ./modules/i2c_probe/code/i2c_probe.o ...
+
+  全日志 0 条 error / 0 条 warning。
+  （第一版矩阵脚本的关键字过滤把末尾汇总行 `0 Warning(s)` 数成了 1 条告警；
+  评审指出后已修过滤规则——排除工具自己的 `... Warning(s).` 汇总行，重跑读数
+  即两平台 warnings=0。上面两行是**评审整改后的复跑读数**。）
+
+二、I2C_0 实例端到端活着（消费者登记的落点证据）
+------------------------------------------------
+
+落盘 mspm0.syscfg：
+
+  I2C_0.peripheral.sdaPin.$assign = "PA0";
+  I2C_0.peripheral.sclPin.$assign = "PA1";
+
+SysConfig CLI 生成产物 Debug/ti_msp_dl_config.h（**i2c_probe.c 编得过的前提**）：
+
+  #define I2C_0_INST                                                          I2C0
+  #define I2C_0_INST_IRQHandler                                    I2C0_IRQHandler
+  #define I2C_0_INST_INT_IRQN                                        I2C0_INT_IRQn
+
+stm32 侧 uvprojx 真收编模块（不是只落盘不编译）：
+
+  <FileName>i2c_probe_stm32.c</FileName>
+  <FilePath>.\..\modules\i2c_probe\code\i2c_probe_stm32.c</FilePath>
+
+三、反证：拿掉「I2C_0 消费者登记」那一行
+----------------------------------------
+
+命令：python .scratch\hwcheck-unknown-device\probe-01-c1-reverse.py
+读数：.scratch/hwcheck-unknown-device/probe-01-c1-reverse.txt
+
+  注入前（登记在）：SURVIVES I2C_0.$name / sdaPin(PA0) / sclPin(PA1)
+  注入后（登记没了）：PRUNED  I2C_0.$name / sdaPin(PA0) / sclPin(PA1)
+  复原复核：sha256 与原文相等（逐字节复原，e5cd1236c2eda86fdcdb1f399b88b5f6…）
+  复原后复跑正断言：三条 SURVIVES 全回来
+
+  → 结论：登记行是 I2C_0 存活的**唯一**判据；不登记 = 选中本模块时
+    I2C_0_INST 不存在 = i2c_probe.c 编不过（工单验收项 9 成立）。
+
+四、测试面读数
+--------------
+
+  python -m pytest tests/test_module_i2c_probe.py -q      → 19 passed
+  python -m pytest -n auto -q（全量）                      → 5101 passed + 1 skipped
+  node --test "tests/js/*.test.mjs"（前端门禁）             → 1702 passed / 0 fail
+  两平台真编译矩阵                                         → 2/2 PASS（0 error / 0 warning）
+
+  （19 = 16 条初版契约 ＋ 评审整改新增 3 条：`/api/modules` 内部件载荷、
+  两平台 ping 同向的判据化、检测页板载注记可见性的判据化。）

@@ -1,0 +1,30 @@
+== 反证：拿掉 I2C_0 消费者登记，看 I2C_0 是否真被裁 ==
+目标文件：src\contest_generator\syscfg_instances.py
+原文 sha256：e5cd1236c2eda86fdcdb1f399b88b5f673ed0101758ae427b38132f34d02b4cf
+母版 syscfg：library\masters\mspm0\mspm0.syscfg
+
+[1] 前置检查：登记行出现 1 次（应为 1）
+    干净：登记行在且只在一处，未登记形态不存在
+
+[2] 注入前（登记在）：prune(master, ["i2c_probe"])
+    SURVIVES I2C_0.$name
+    SURVIVES I2C_0.peripheral.sdaPin.$assign = "PA0";
+    SURVIVES I2C_0.peripheral.sclPin.$assign = "PA1";
+
+[3] 已注入（逐字节备份原文 5502 B）
+[4] 注入后（登记没了）：prune(master, ["i2c_probe"])
+    PRUNED I2C_0.$name
+    PRUNED I2C_0.peripheral.sdaPin.$assign = "PA0";
+    PRUNED I2C_0.peripheral.sclPin.$assign = "PA1";
+    ✓ 反证成立：I2C_0 的 $name 与两条 $assign 全被裁掉——不登记就没有 I2C_0_INST，i2c_probe.c 编不过
+
+[5] 复原复核：sha256 e5cd1236c2eda86fdcdb1f399b88b5f673ed0101758ae427b38132f34d02b4cf
+    ✓ 逐字节复原（与原文 sha256 相等）
+
+[6] 复原后复跑正断言（应与 [2] 同形）
+    SURVIVES I2C_0.$name
+    SURVIVES I2C_0.peripheral.sdaPin.$assign = "PA0";
+    SURVIVES I2C_0.peripheral.sclPin.$assign = "PA1";
+
+== 结论 ==
+PASS：登记行是 I2C_0 存活的唯一判据（拿掉即裁、放回即活）
