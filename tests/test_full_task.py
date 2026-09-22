@@ -957,3 +957,82 @@ def test_two_app_instances_do_not_share_the_task_slot(
     assert resp_b.status_code == 200, "另一个实例的任务槽不该挡这一边"
     assert ctx_b.full_task is not None
     assert ctx_a.full_task is running, "B 的 apply 不该动 A 的槽位"
+
+
+# ---------------------------------------------------------------------------
+# 并发：两个 apply 只放一个任务进闸（工单 full-update-state-into-ctx/02）
+# ---------------------------------------------------------------------------
+
+
+def test_concurrent_apply_lets_only_one_task_through(tmp_path: Path, monkeypatch) -> None:
+    """同一个 app 的两次并发 apply 只能有一个建出任务（收走前第二个会同时过关）。
+
+    确定性做法（不靠 sleep 碰运气）：把**第一个**请求卡在临界区里——建下载任务时先举手
+    （`entered`）再等放行（`release`）；「查在跑 → 建任务 → 占槽（→ 起线程）」这一段正是
+    判定与占位之间那条缝，也是收走前两个请求能同时走过去的地方。
+    - 收走前没有锁：第二个请求在第一个还卡着的时候进来，看到的仍是空槽 → 它也建任务 → 200，
+      `created` 里于是有两个任务（后一个静默顶掉前一个）；
+    - 收走后：第二个请求在锁上等，第一个放行后槽里已是在跑的任务 → 400「已有…在进行中」。
+
+    `start_full_update` 的桩**同步**把状态置成 `downloading`（真实现是起后台线程、由
+    `run()` 的第一件事置这个状态）——于是判据不依赖线程调度：锁内跑完「占槽 + 起线程」，
+    锁外拿到的必然是在跑的任务。生产里这一跳剩下的余量 = 线程启动延迟，比收走前的整段构造
+    （含读磁盘快照）小几个数量级；**真正无懈可击的写法是把判据从「状态在跑」改成「槽位被占」，
+    那是改语义，不在本单**。
+    """
+    parts = _parts(["firstep-full-v1.1.0.zip"])
+    entered = threading.Event()
+    release = threading.Event()
+    created: list[FullDownloadTask] = []
+    free_calls = {"n": 0}
+    second_at_disk_check = threading.Event()
+
+    class _BlockingTask(FullDownloadTask):
+        """只把**第一个**构造卡住；第二个若能走到这里，说明它压根没被挡住。"""
+
+        def __init__(self, **kwargs):
+            if not entered.is_set():
+                entered.set()
+                assert release.wait(timeout=30), "等不到放行——判据自己失败，别挂住整场"
+            super().__init__(**kwargs)
+            created.append(self)
+
+    def fake_free(path):
+        free_calls["n"] += 1
+        if free_calls["n"] >= 2:  # 第一次是卡在临界区里的那个请求；这次是第二个
+            second_at_disk_check.set()
+        return 10 * 1024**3
+
+    def fake_start(task) -> None:
+        task._state = ft.TaskState.DOWNLOADING  # 真实现：起线程，由 run() 置这个状态
+
+    monkeypatch.setattr("contest_generator.webapp.FullDownloadTask", _BlockingTask)
+    monkeypatch.setattr("contest_generator.webapp.free_bytes", fake_free)
+    monkeypatch.setattr("contest_generator.webapp.start_full_update", fake_start)
+
+    ctx = AppContext(config_path=tmp_path / "config.json")
+    _seed_check(ctx, parts)
+    client = TestClient(create_app(ctx))
+    body = {"parts": [parts[0]["name"]]}
+    results: dict[str, object] = {}
+
+    def _post(tag: str) -> None:
+        results[tag] = client.post("/api/update/full/apply", json=body)
+
+    first = threading.Thread(target=_post, args=("first",), daemon=True)
+    first.start()
+    assert entered.wait(timeout=30), "第一个请求没进临界区"
+    second = threading.Thread(target=_post, args=("second",), daemon=True)
+    second.start()
+    # 等第二个请求真的走起来（它已过了磁盘校验这一跳）再放行第一个——否则可能在它发请求
+    # 之前第一个就登记完了，收走前那一格于是假绿（白证不出红）
+    assert second_at_disk_check.wait(timeout=30), "第二个请求没走到磁盘校验"
+    release.set()
+    first.join(timeout=30)
+    second.join(timeout=30)
+
+    assert results["first"].status_code == 200
+    assert results["second"].status_code == 400, "第二个请求不该同时过关"
+    assert "进行中" in results["second"].json()["detail"]
+    assert len(created) == 1, f"只该建出一个任务，实际建了 {len(created)} 个"
+    assert ctx.full_task is created[0], "槽位该是第一个请求那个任务，不该被顶掉"

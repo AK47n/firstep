@@ -633,8 +633,12 @@ class AppContext:
     # - full_last_check：最近一次 check 结果（apply 的**分卷**白名单来源；**先 clear 再 update**
     #   ——旧结果里消失的键必须跟着消失，与资料库那半的裸 update 不是一回事）
     # - full_task：进行中的下载任务实例（进程死 = 任务自然终止；快照落盘可恢复）
+    # - _full_task_lock：只让「查在跑 → 建 / 取消任务」这两段 check-then-act 原子（工单
+    #   full-update-state-into-ctx/02；同步端点跑在线程池 worker 上，两个并发 apply 能同时
+    #   通过检查，后一个静默顶掉前一个的槽位——那个任务还在跑却查不到 / 取消不了）
     full_last_check: dict = field(default_factory=dict)
     full_task: FullDownloadTask | None = None
+    _full_task_lock: threading.Lock = field(default_factory=threading.Lock)
     # 检测页配方文件的**可选覆盖**（缺省 None = 按模块库根推，见
     # hwcheck_recipe.recipe_library_path）：给测试注入"坏配方 / 缺配方"用——
     # 不改真库那一份（并行跑用例时别的 worker 会读到半截，2026-09-19 踩过）。
@@ -1544,25 +1548,36 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 f"磁盘空间不足：需要约 {needed // (1024 * 1024)} MB，"
                 f"剩余 {free // (1024 * 1024)} MB，请清理后重试",
             )
-        running = context.full_task
-        if running is not None and running.state.value in ("downloading", "applying"):
-            raise HTTPException(400, "已有完整包下载任务在进行中，请稍候")
-        # 演练开关（真机冒烟用）：不下载、不起进程，只回成功文案——让浏览器里
-        # 能把「检查 → 确认 → 已开始下载」整条链路走完而不产生副作用。
-        if payload.get("dry_run"):
-            total_mb = total_bytes // (1024 * 1024)
-            return {
-                "started": True,
-                "dry_run": True,
-                "message": f"演练模式：已接受 {len(selected)} 卷 / 约 {total_mb} MB（未真下载）",
-            }
-        task = FullDownloadTask(
-            task_dir=updates_dir,
-            parts=selected,
-            on_complete=_full_apply_complete,
-        )
-        context.full_task = task
-        start_full_update(task)
+        # 「查在跑 → 建任务 → 占槽 → 起线程」整段在同一把锁里（工单 full-update-state-into-ctx/02）：
+        # 查与占必须原子，否则两个并发 apply 能同时通过检查，第二个静默顶掉第一个的槽位（那个
+        # 任务还在跑，却再也查不到 / 取消不了，两个线程还往同一批卷里写）。**这一段整段留在
+        # 原位**（磁盘校验之后）——判定次序也是判据：任务在跑时不该先去做读快照那类慢活
+        # （`FullDownloadTask` 构造要读盘上的断点快照，那正是收走前那道缝的宽度）。
+        # 起线程一并留在锁内（**比资料库那半宽一条语句**，spec 的「实现决策」已按修订追认）：
+        # 占槽之后、`run()` 把状态置成 downloading 之前任务仍是 IDLE，那一跳若被第二个请求读到
+        # 照样放行；`Thread.start()` 本身等到新线程真的跑起来才返回（不做 I/O，不阻塞），于是
+        # 那道缝从「整段构造（读快照）」缩到「线程调度一跳」——**是收紧，不是硬保证**；真要做到
+        # 无懈可击得把判据从「状态在跑」改成「槽位被占」，那是改语义，不在本单。
+        with context._full_task_lock:
+            running = context.full_task
+            if running is not None and running.state.value in ("downloading", "applying"):
+                raise HTTPException(400, "已有完整包下载任务在进行中，请稍候")
+            # 演练开关（真机冒烟用）：不下载、不起进程，只回成功文案——让浏览器里
+            # 能把「检查 → 确认 → 已开始下载」整条链路走完而不产生副作用。
+            if payload.get("dry_run"):
+                total_mb = total_bytes // (1024 * 1024)
+                return {
+                    "started": True,
+                    "dry_run": True,
+                    "message": f"演练模式：已接受 {len(selected)} 卷 / 约 {total_mb} MB（未真下载）",
+                }
+            task = FullDownloadTask(
+                task_dir=updates_dir,
+                parts=selected,
+                on_complete=_full_apply_complete,
+            )
+            context.full_task = task
+            start_full_update(task)
         total_mb = total_bytes // (1024 * 1024)
         return {
             "started": True,
@@ -1576,11 +1591,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.post("/api/update/full/cancel")
     @_map_errors
     def full_update_cancel() -> dict:
-        task = context.full_task
-        if task is None or task.state.value not in ("downloading", "applying"):
-            return {"cancelled": False, "message": "当前没有进行中的下载"}
-        task.cancel()
-        write_full_snapshot(task)
+        # 「查在跑 → 取消并快照」整段在同一把锁里（工单 full-update-state-into-ctx/02）：与 apply
+        # 的占槽互斥，防「刚判定可取消、槽位被新任务顶掉」那一跳（快照写的也是同一个任务）。
+        with context._full_task_lock:
+            task = context.full_task
+            if task is None or task.state.value not in ("downloading", "applying"):
+                return {"cancelled": False, "message": "当前没有进行中的下载"}
+            task.cancel()
+            write_full_snapshot(task)
         return {"cancelled": True, "message": "已请求取消，将在当前卷下载完成后停止"}
 
     @app.post("/api/update/materials/apply")
