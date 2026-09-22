@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=e5121d708f1bfe798e228527623cd799b175a6e2 -->
+<!-- changelog-auto: last-commit=46f3100a9560f59930fc3bc62150bb048de32f7c -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -8,6 +8,7 @@
 - 12:28 工单 launcher-exit-race/03：退出调度显式化（布防 / 撤防 / 到点取走并退出）
 - 12:28 工单 launcher-exit-race/04：真浏览器验收——启动器模式下连续 F5（含确定性与'最后一个页面离开 = 停服务'）
 - 12:36 工单 launcher-exit-race/05：账本与文档收尾（这条竞态从'未立项'改成'已落地'）
+- 13:50 工单 webapp-state-into-ctx/01：任务执行注册表进 AppContext（每个 app 实例一张）
 
 ## 2026-09-21
 - 12:38 工单 frontend-boot-module/01-02：装载根搬进 boot.js（index.html 只留一条标签 + 判据单源与守卫重定根）
