@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=b5c80c691aa6898c0ed483368170f54c3f0b0e49 -->
+<!-- changelog-auto: last-commit=e64b39e256f5cd1d7505ba657403f339e5347c4d -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-09-22
+- 12:28 工单 launcher-exit-race/03：退出调度显式化（布防 / 撤防 / 到点取走并退出）
 
 ## 2026-09-21
 - 12:38 工单 frontend-boot-module/01-02：装载根搬进 boot.js（index.html 只留一条标签 + 判据单源与守卫重定根）
