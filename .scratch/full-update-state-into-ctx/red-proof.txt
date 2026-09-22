@@ -1,0 +1,23 @@
+== ① 引用面普查（base=c6040566 vs 当前工作树；人读读数，不是判据）==
+  收走前：src/contest_generator/full_task.py::_FULL_TASK=4，src/contest_generator/full_task.py::_LAST_CHECK=4，src/contest_generator/full_task.py::get_full_task=1，src/contest_generator/full_task.py::last_check=1，src/contest_generator/full_task.py::set_full_task=1，src/contest_generator/full_task.py::set_last_check=1，src/contest_generator/webapp.py::full_task=1，src/contest_generator/webapp.py::get_full_task=4，src/contest_generator/webapp.py::last_check=3，src/contest_generator/webapp.py::set_full_task=2，src/contest_generator/webapp.py::set_last_check=3，tests/test_download_sequence_home.py::full_task=4，tests/test_download_status_surface.py::full_task=6，tests/test_download_status_surface.py::set_full_task=1，tests/test_full_apply.py::full_task=1，tests/test_full_apply.py::set_full_task=2，tests/test_full_apply.py::set_last_check=4，tests/test_full_task.py::_FULL_TASK=3，tests/test_full_task.py::_LAST_CHECK=3，tests/test_full_task.py::full_task=2，tests/test_full_task.py::get_full_task=1，tests/test_full_task.py::set_full_task=2，tests/test_full_task.py::set_last_check=2
+  收走后：src/contest_generator/full_task.py::_FULL_TASK=1，src/contest_generator/full_task.py::_LAST_CHECK=1，src/contest_generator/full_task.py::full_last_check=1，src/contest_generator/full_task.py::full_task=2，src/contest_generator/webapp.py::full_last_check=9，src/contest_generator/webapp.py::full_task=8，tests/test_download_sequence_home.py::full_task=4，tests/test_download_status_surface.py::full_task=6，tests/test_full_apply.py::full_last_check=4，tests/test_full_apply.py::full_task=1，tests/test_full_task.py::_FULL_TASK=1，tests/test_full_task.py::_LAST_CHECK=1，tests/test_full_task.py::full_last_check=3，tests/test_full_task.py::full_task=14，tests/test_webapp_state_home.py::_FULL_TASK=20，tests/test_webapp_state_home.py::_LAST_CHECK=10，tests/test_webapp_state_home.py::full_last_check=5，tests/test_webapp_state_home.py::full_task=36，tests/test_webapp_state_home.py::get_full_task=3，tests/test_webapp_state_home.py::last_check=1，tests/test_webapp_state_home.py::set_full_task=5，tests/test_webapp_state_home.py::set_last_check=3
+  full_task 模块级会话态：收走前 ['_FULL_TASK', '_LAST_CHECK'] → 收走后 （无）
+  full_task global 语句：收走前 1 处 → 收走后 0 处
+
+== ② 同一套判据作用在 base 上（应红）：7 条 ==
+  ✗ full_task.py：global 语句 1 处（行 [73]）
+  ✗ full_task.py：模块级「会话态形状」赋值 {'_LAST_CHECK': '{}', '_FULL_TASK': 'None'}
+  ✗ full_task.py：会话态名字回到模块级 / global 名单 ['_FULL_TASK', '_LAST_CHECK']
+  ✗ AppContext：缺会话态字段 ['full_last_check', 'full_task']
+  ✗ tests/test_download_status_surface.py：跨缝取会话态 ['set_full_task']
+  ✗ tests/test_full_apply.py：跨缝取会话态 ['set_full_task', 'set_last_check']
+  ✗ tests/test_full_task.py：跨缝取会话态 ['_FULL_TASK', '_LAST_CHECK', 'get_full_task', 'set_full_task', 'set_last_check']
+
+== ③ 同一套判据作用在当前工作树上（应绿）==
+  （无违规）
+
+== ④ src/ 全域 global 腿（base 97 个文件 vs 当前 97 个）==
+  收走前：{'src/contest_generator/full_task.py': [73]}
+  收走后：（无）
+
+RED→GREEN 成立（两条腿的红证 + 绿证同源）

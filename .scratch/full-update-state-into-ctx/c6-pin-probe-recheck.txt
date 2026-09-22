@@ -1,0 +1,18 @@
+== ① 引用面普查（base=5c9fc8b0 vs 当前工作树；人读读数，不是判据）==
+  收走前：src/contest_generator/webapp.py::_MATERIALS_LAST_CHECK=6，src/contest_generator/webapp.py::_materials_task=12，src/contest_generator/webapp.py::_running_task_execs=5，src/contest_generator/webapp.py::materials_task=1，tests/test_download_sequence_home.py::materials_task=4，tests/test_download_status_surface.py::_materials_task=2，tests/test_download_status_surface.py::materials_task=4，tests/test_materials_task.py::_MATERIALS_LAST_CHECK=2，tests/test_materials_task.py::_materials_task=2，tests/test_materials_task.py::materials_task=1，tests/test_task_progress.py::_running_task_execs=8
+  收走后：src/contest_generator/webapp.py::materials_last_check=5，src/contest_generator/webapp.py::materials_task=8，src/contest_generator/webapp.py::running_task_execs=5，tests/test_download_sequence_home.py::materials_task=4，tests/test_download_status_surface.py::_materials_task=2，tests/test_download_status_surface.py::materials_task=4，tests/test_materials_task.py::materials_last_check=1，tests/test_materials_task.py::materials_task=1，tests/test_task_progress.py::running_task_execs=8，tests/test_webapp_state_home.py::_MATERIALS_LAST_CHECK=12，tests/test_webapp_state_home.py::_materials_task=27，tests/test_webapp_state_home.py::_running_task_execs=11，tests/test_webapp_state_home.py::materials_last_check=4，tests/test_webapp_state_home.py::materials_task=4，tests/test_webapp_state_home.py::running_task_execs=7
+  webapp 模块级会话态：收走前 ['_MATERIALS_LAST_CHECK', '_materials_task', '_running_task_execs'] → 收走后 （无）
+  webapp global 语句：收走前 3 处 → 收走后 0 处
+
+== ② 同一套判据作用在 base 上（应红）：6 条 ==
+  ✗ webapp.py：global 语句 3 处（行 [1451, 1582, 1654]）
+  ✗ webapp.py：模块级「会话态形状」赋值 {'_running_task_execs': 'set()', '_MATERIALS_LAST_CHECK': '{}', '_materials_task': 'None'}
+  ✗ webapp.py：会话态名字回到模块级 / global 名单 ['_MATERIALS_LAST_CHECK', '_materials_task', '_running_task_execs']
+  ✗ AppContext：缺会话态字段 ['running_task_execs', 'materials_last_check', 'materials_task']
+  ✗ tests/test_materials_task.py：跨缝取会话态 ['_MATERIALS_LAST_CHECK', '_materials_task']
+  ✗ tests/test_task_progress.py：跨缝取会话态 ['_running_task_execs']
+
+== ③ 同一套判据作用在当前工作树上（应绿）==
+  （无违规）
+
+RED→GREEN 成立（红证 + 绿证同源）

@@ -1,0 +1,25 @@
+== 判据强度自检：每条腿 stub 掉之后守卫必须红 ==
+
+  基线（不动文件）：绿 —— 15 passed in 16.95s
+
+  ✅ 变红  global_statements          判据① 不再看得见 global —— 2 failed, 13 passed in 4.38s
+  ✅ 变红  global_names               判据③ 的 global 名单腿 —— 2 failed, 13 passed in 4.68s
+  ✅ 变红  module_level_assignments   模块级赋值抽取 —— 2 failed, 13 passed in 4.75s
+  ✅ 变红  module_level_names         模块级名字腿 —— 2 failed, 13 passed in 4.65s
+  ✅ 变红  session_state_assignments  判据② 本体 —— 2 failed, 13 passed in 4.55s
+  ✅ 变红  _is_session_shape          判据② 的形状判据 —— 2 failed, 13 passed in 4.63s
+  ✅ 变红  imported_names             跨缝 import 腿 —— 2 failed, 13 passed in 3.96s
+  ✅ 变红  module_object_aliases      模块对象别名腿 —— 2 failed, 13 passed in 3.80s
+  ✅ 变红  module_object_uses         别名直改腿 —— 2 failed, 13 passed in 3.00s
+  ✅ 变红  module_attribute_paths     monkeypatch 路径腿 —— 2 failed, 13 passed in 3.81s
+  ✅ 变红  annotated_class_fields     判据④ 正向腿 —— 5 failed, 10 passed in 4.47s
+  ✅ 变红  state_violations           webapp 腿聚合（C6 探针跑的就是它） —— 1 failed, 14 passed in 3.90s
+  ✅ 变红  module_state_violations    两条腿共用的那条聚合 —— 2 failed, 13 passed in 2.96s
+  ✅ 变红  full_chain_state_violations 完整包腿聚合（本单探针跑的就是它） —— 1 failed, 14 passed in 3.86s
+  ✅ 变红  src_global_statements      src 全域 global 腿本体 —— 1 failed, 14 passed in 4.09s
+  ✅ 变红  _test_sources              真树扫描面（测试侧） —— 4 failed, 11 passed in 0.62s
+  ✅ 变红  _src_sources               真树扫描面（src 侧） —— 1 failed, 14 passed in 4.05s
+
+逐字节复原：✅ sha256 一致（8719c95bda23…）
+
+结论：17/17 条腿 stub 后变红；没有'没有红证'的腿
