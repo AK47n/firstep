@@ -501,5 +501,57 @@ import 私有名 + 一个 autouse 夹具事后清扫，`global` 语句 3 处。
 要 POSIX 正斜杠）记在 `docs/agents/local-environment.md` 的本轮会话段里——那条属于"这台机器 +
 此刻"，不在这里重抄一份。
 
-**剩余**：C7 只是验收尺（见第 15 节），未立项。
+**剩余**：C7 只是验收尺（见第 15 节），未立项。**（2026-09-22 补记：C6 的另一条尾巴——
+完整包链路的模块级会话态——见 §18，已结清。）**
+
+## 18. 完整包链路的会话态进 AppContext（C6 的尾巴结清；2026-09-22，工单 full-update-state-into-ctx/01–04 已落地）
+
+C6（§17）只收了 `webapp` 那三样，spec 的「不做」段与第 17 节当时都记着**完整包那一路的模块级
+会话态另议**——就是这一节。
+
+**问题**：`full_task.py` 把「最近一次 check 结果」（= apply 的分卷白名单来源）与「进行中的下载
+任务」挂在模块级，外面包着四个 accessor（`get_full_task` / `set_full_task` / `last_check` /
+`set_last_check`）。三层同款症状：同一个进程里两个 app 实例**共用**一份 check 缓存与同一个任务槽
+（用例里「每个用例建一个 AppContext」的隔离只在纸面上成立）；测试只能跨缝改 `ft._FULL_TASK` /
+`ft._LAST_CHECK` + 两份 autouse 清扫夹具；`full_task.py` 那一处 `global` 是**全 `src/` 仅剩的
+最后一处**。另有一条**用户可见的真竞态**：apply 的「查在跑 → 建任务 → 占槽」是 check-then-act，
+中间夹着要读磁盘断点快照的任务构造，两个并发 apply 能同时过关——第二个静默顶掉第一个的槽位
+（那个任务还在跑却查不到 / 取消不了），两个线程还往同一个 `updates/full/` 与同一份快照里写；
+前端 `startDownload` 与重试按钮都没有防重（两个标签页即可触发）。
+
+**做法（只换归属 + 补一把锁，判据与文案一字不改）**：两样状态搬进 `AppContext`
+（`full_last_check` / `full_task`，形状照 `materials_last_check` / `materials_task`：缝外的状态
+公开、缝内的互斥件私有），四个 accessor **整条退场**（不留兼容别名），四个端点与
+`_full_apply_complete` 全经 `context.*`；check 结果仍是**先 `clear()` 再 `update()`** 的就地写
+（与资料库那半的裸 `update` 不是一回事，统一即改语义）；后台线程仍在**任务完成那一刻**读 check。
+随搬家补 `_full_task_lock`：apply 的「查在跑 → 建任务 → 占槽 → **起线程**」与 cancel 的
+「查在跑 → 取消 + 快照」两段原子化（起线程那条**比资料库那半宽一句**：占槽后、`run()` 置
+downloading 前任务仍是 IDLE，那一跳会被第二个请求读到；`Thread.start()` 本身等到新线程跑起来才
+返回，缝从「整段构造（读快照）」缩到「线程调度一跳」——**是收紧不是硬保证**，spec 已按修订追认；
+资料库那半留着同一条缝，本轮不动）。`create_app()` 与 uvicorn 入口照旧。
+
+**判据三处**：① 既有端点用例断言零改动（只改「取状态的姿势」：`_client()` 返回 `(client, ctx)`、
+`_seed_check()` 写自建 ctx、两份 autouse 清扫夹具删除）；② 三条新行为判据——「两个 app 实例互不
+可见」两条（分卷白名单：B 走兜底自查 400；任务槽：B 不被拒 200 且不动 A 的槽位）＋「并发 apply
+只放一个任务进闸」一条（同一个 app 的一个 client ＋ 两个线程，事件把第一个卡在临界区里再放第二个：
+修前第二个 200 且建出两个任务 → 修后 400）；③ 结构钉扩面
+（`tests/test_webapp_state_home.py` 规则参数化跑两条腿 + 新增 `src/` 全域「`global` 语句 = 0」腿）。
+
+**红证与读数**：`.scratch/full-update-state-into-ctx/`（spec、4 张工单、前后对读
+`probe-00-sharing.py` → `verify-00-sharing-{before,after}.txt`（模块级缝 → B 认白名单 200 /
+B 跟着拒 400；ctx 缝 → B 400 / B 200）；真红证 `probe-01-pin-red-proof.py`（base **显式钉**
+`c6040566`）→ `red-proof.txt`：base **7 条 / 4 类**、当前树 0 条，另给 `src/` 全域腿两份真读数
+（base `full_task.py:73` → 当前无）；判据强度读数 `guard-strength.txt`：**17/17** 条腿 stub 后
+变红 + 逐字节复原 —— ⚠ **那支探针本体住在 `.scratch/webapp-state-into-ctx/probe-02-guard-strength.py`**
+（它是**整个守卫文件**的自检，两支工单目录共用；工单 03 已把这份「归属错位」如实记账）；
+C6 红证探针复跑读数 `c6-pin-probe-recheck.txt`）。
+全量 `python -m pytest -n auto -q` **5081 passed + 1 skipped**；前端门禁 **1702 passed / 0 fail**
+（本轮前端零字节改动）。
+
+**顺带记账**：本轮量到的**工具事实**（本机控制台 GBK 让探针报告里的 `✗`/`✅` 在 print 上抛
+UnicodeEncodeError、连带丢掉证据文件；base 版源码清单要从 base 取而不是当前树）记在
+`docs/agents/local-environment.md` 的本轮会话段里——那条属于"这台机器 + 此刻"，不在这里重抄。
+
+**剩余**：架构评审的候选**到此全部结清**（C2 §11 / C5a §12 / C5 剩余 §13 / C4 §15 / C6 §17 +
+本条）。C7「73 个私有符号被测试翻墙」仍只是**验收尺**、未立项（见第 15 节）。
 

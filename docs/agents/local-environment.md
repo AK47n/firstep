@@ -403,6 +403,32 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > 这里只记"本单又撞了一次、出路是 `--out`"。
 > ② `git show <rev>:<path>` 的 path 要 **POSIX 正斜杠**，Windows 的 `str(Path)` 给反斜杠时
 > 那条路会静默取不到文件（红证的测试侧两条腿曾凭空消失）。
+>
+> **2026-09-22（full-update-state-into-ctx/01–04 会话，C6 的尾巴结清）**：这一单把完整包链路的
+> 模块级会话态搬进 `AppContext` 并补上 `_full_task_lock`（账见 `.scratch/backlog.md` §18）。
+> 与环境有关的事实**只记与上一条不同的部分**：本轮**同样一次服务器都没起**（全走进程内
+> TestClient + 探针；那条并发判据起的是同进程的两个线程，不是服务器）、**前端零字节改动**、
+> 收尾实测 **2026-09-22 21:4x**：8000/8020/8021/8791 都没在听、无残留
+> `contest_generator.webapp` 进程 —— 「不改端口 / 工具根 / 快照路径 / 端点契约」与
+> 「第 0 节发布落差表不动」同上一条（不重抄）。**新增一条与本机有关的最小事实**：本轮把
+> `tests/test_webapp_state_home.py` 的判据面扩到两条腿 + `src/` 全域，该文件单跑
+> **15 passed / 6.6s**（扩面前 7 条 / 9s；中途因两腿反复解析涨到 34s，给 `_parse` 加
+> `lru_cache` 后回落）。
+> 读数：`python -m pytest -n auto -q` **5081 passed + 1 skipped**；`node --test "tests/js/*.test.mjs"`
+> **1702 passed / 0 fail**。红证与判据强度见 `.scratch/full-update-state-into-ctx/`
+> （另：C6 的红证探针复跑读数 `c6-pin-probe-recheck.txt`）。
+> ⚠「强度探针会真改库内文件、别和套件同时跑」的纪律同上（本轮的 `probe-02-guard-strength.py`
+> 仍是那一支，17 条腿；它住在 `.scratch/webapp-state-into-ctx/`，管的是**整个**守卫文件）。
+> ⚠ **本轮量到的两条工具事实**（探针/证据文件类工作适用）：
+> ① **本机控制台是 GBK + 探针「先 print 再写 `--out`」= 证据文件会连带丢**：报告里的
+> `✗` / `✅` / `→` 在 `print` 上抛 `UnicodeEncodeError`，而写盘在 print 之后 → 整份证据没落盘
+> （本轮两条探针各撞一次）。两条出路：给**不许改**的既有探针设 `PYTHONIOENCODING=utf-8`
+> （C6 的红证探针就是这么复跑的），或把探针改成**先落盘再打印** +
+> `sys.stdout.reconfigure(encoding="utf-8", errors="replace")`（新写的与本轮维护过的那支已改）。
+> ② **红证要按 base 的文件清单取源码**（`git ls-tree -r --name-only <rev> src`）：拿当前树的
+> 清单去 `git show <rev>:<path>`，base 里有、今天已删的文件会**静默漏掉**（读数会缺一块）。
+> 另：`pytest -n auto` 本轮又撞上一次 `tests/test_js_gate.py::test_full_mode_runs_js_gate_and_pytest`
+> 的并行争用偶发（该文件单跑 29 passed / 78s，复跑全绿）——与上文那条同源，不是产品问题。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 
