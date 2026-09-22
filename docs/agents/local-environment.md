@@ -197,17 +197,32 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > （全量套件 + 三支探针走进程内 TestClient / 子进程），浏览器验收照旧用 8791（夹具自带
 > 起停）。跑完实测 8000/8020/8021/8791 都没在听、无残留 python。
 >
-> ⚠ **同轮钉到的一条既有竞态（产品侧，本单没修，另开单）**：**F5 重载慢过 1.5 秒会被
-> 应用自己关掉**。链路：`app.js` 在每次页面加载时 `POST /api/tabs/register`、
-> 在 `pagehide` 时 `sendBeacon("/api/tabs/bye")`；启动器模式（`FIRSTEP_LAUNCHER=1`）
-> 下 `webapp._schedule_exit_if_idle` 见"注册表空了"就起 `_EXIT_GRACE = 1.5` 秒宽限然后
-> `os._exit(0)`。重载时旧页面的 bye 先到、新页面的 register 要等 `app.js` 求值才发出
-> ——**宽限内没到就自杀**（本机实测：浏览器验收连跑第 7 次 `goto` 时命中，现象是
-> 后端进程消失、后续请求 `ERR_CONNECTION_REFUSED`）。
-> **判据**：`tests/browser/hwcheck.spec.mjs` 在 **HEAD（工单 05 状态）上同样 6 绿 3 红**
+> ⚠ **同轮钉到的一条既有竞态**（当时：产品侧，本单没修，另开单）——**✅ 2026-09-21～22 已修**
+> （工单 `launcher-exit-race/01–05`，账见 `.scratch/backlog.md` §16）。原文留档（它是这条竞态
+> 被发现的现场）：**F5 重载慢过 1.5 秒会被应用自己关掉**。链路：`app.js` 在每次页面加载时
+> `POST /api/tabs/register`、在 `pagehide` 时 `sendBeacon("/api/tabs/bye")`；启动器模式
+> （`FIRSTEP_LAUNCHER=1`）下 `webapp._schedule_exit_if_idle` 见"注册表空了"就起
+> `_EXIT_GRACE = 1.5` 秒宽限然后 `os._exit(0)`。重载时旧页面的 bye 先到、新页面的 register
+> 要等 `app.js` 求值才发出——**宽限内没到就自杀**（本机实测：浏览器验收连跑第 7 次 `goto`
+> 时命中，现象是后端进程消失、后续请求 `ERR_CONNECTION_REFUSED`）。
+> **当时判据**：`tests/browser/hwcheck.spec.mjs` 在 **HEAD（工单 05 状态）上同样 6 绿 3 红**
 > ——与在跑的特性无关。夹具侧已修（`tests/browser/server.mjs` 起服务后替验收会话注册一个
 > 固定 tab_id，注册表不再为空）；**产品侧那条竞态仍在**，要修得单独开单（候选：宽限放宽 /
 > register 先于 bye 生效 / 只在真正"关窗口"时退出）。
+> （**末句三条候选与"夹具侧那个补丁"都留档**：补丁后来在工单 04 里随"夹具不再替验收会话注册"
+> 一起删掉了——它只在那个 tab_id 留在注册表里时成立，实测仍会中途死；夹具现行做法是**其余
+> spec 一律不设 `FIRSTEP_LAUNCHER`**、启动器模式由 `launcher-reload.spec.mjs` 专门验。）
+>
+> **✅ 修法与现在的判据**（2026-09-21～22，本机重测：修复前 10 轮第 4 轮命中 → 修复后 10/10 全程
+> 活着，探针读数 `.scratch/launcher-exit-race/probe-00-order-{before,after}.txt`）：
+> ① 登记搬到 `index.html` **head 的内联脚本**（模块图之前——放 `boot.js` 没用，ESM 静态 import
+> 会先把整张图取完才求值）；② `register`/`bye` 都带文档实例令牌 `epoch = performance.timeOrigin`
+> （旧文档迟到的告别不许注销新文档的登记）；③ 退出调度显式化（布防 / 撤防 / 到点取走，同锁）。
+> `_EXIT_GRACE` **仍是 1.5、未新增时间常量**；关浏览器那条路实测 **1.53–1.65 秒**停服
+> （`probe-02-close-page.txt` 记 1638ms，本 spec 用例 C 各次 1525–1652ms）。
+> 新判据三处：pytest（`tests/test_webapp.py` 的「标签会话」段 15 条）、结构判据
+> （`tests/js/boot-contract.mjs` 判据⑥ + `tests/js/tab-register-guard.test.mjs`）、真浏览器
+> `tests/browser/launcher-reload.spec.mjs`（**唯一**开 `FIRSTEP_LAUNCHER` 的 spec）。
 >
 > ⚠ **验收前先清 8791 的残留 python**（第 2 节那条老坑，本轮又踩）：本轮第一次跑
 > 浏览器验收时端口上的旧服务把新起的挤掉，`startServer` 的健康检查与端点哨兵都过、
@@ -336,6 +351,36 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > 证据：**同一工作树**里该文件单跑 **29 passed / 79s**、整支 `-n auto` 两次复跑 **5049 passed + 1 skipped**、
 > 独立的浏览器门禁 **26 passed**，而评审那一轮 `-n auto` 报 5048 passed + **1 failed** + 1 skipped。
 > 与工单 `export-surface-guard/02` §⑥ 记的两条"并行负载下假红"同源。
+>
+> **2026-09-21～22 追加（工单 launcher-exit-race/01-05：启动器模式下 F5 会把应用自己关掉）**：
+> 第 2 节上面那条"产品侧竞态仍在"的现场记录**已结清**（修法见那段 ✅ 与 `.scratch/backlog.md` §16）。
+> 本轮的**环境事实四条**：
+> ① **浏览器门禁现在五个 spec / 29 条**（`module-intro` 9 + `code-tree-click` 2 + `hwcheck` 10 +
+> `ui-contract` 5 + **新增 `launcher-reload` 3**），本机读数 **29 passed / 0 fail / 94.2s**；
+> 前端门禁 **1702 passed / 0 fail / 10.1s**（1691 ＋ 判据⑥ 的 11 条）；
+> `python -m pytest -n auto -q` **5060 passed + 1 skipped / 131.1s**（5049 ＋ 本单 11 条 tab 用例）。
+> ② **`launcher-reload.spec.mjs` 是唯一**用 `startServer({ launcher: true })` 的 spec（给子进程加
+> `FIRSTEP_LAUNCHER=1`）；其余 spec **仍然不设**（服务生命周期归夹具那条决策没变）。
+> ③ **浏览器门禁模拟不了"真关窗口"**：playwright 的 `page.close()`（含 `runBeforeUnload:true`）
+> 走 CDP 关目标，`pagehide` 与 `sendBeacon` **都不跑**——服务端一条 bye 都收不到（实测
+> `.scratch/launcher-exit-race/probe-02-close-page.txt`）。所以用例 C 用**真导航离开**（`goto("about:blank")`）
+> 验"最后一个页面走了 = 停服务"这条产品不变量。真关窗口那一跳由浏览器自己保证（`sendBeacon`
+> 的设计用途），夹具证不了。
+> ④ **夹具现在给子进程 `PYTHONUNBUFFERED=1`**：服务被自己关掉/崩掉时，uvicorn 的 access log
+> 若压在块缓冲里就随进程一起没了——而那正是这套日志最要被读到的时候（实测只收到 8 行、零请求）。
+> 另：**`reload` 之后别只看"平台卡在不在"**——`page.reload({waitUntil:"domcontentloaded"})` 返回时
+> 平台卡是 0 个（要再等一次 ready，实测 `probe-03-timeorigin.txt`），而"读到上一个文档的 DOM"
+> 会让用例抢跑（本单实测把正在装载的模块图拦腰掐断，看着像产品把自己关了）。判据用
+> `performance.timeOrigin`（跨 reload 必不同，实测同份探针）。
+>
+> ⚠ **怎么会有"孤儿 python"**（本轮实测三次，别怀疑产品）：`node --test … | Select-Object -First N`
+> 这种**截断输出管道**的跑法会在收到 SIGPIPE 时把 node 直接带走，`test.after` 里的
+> `server.stop()` **来不及跑** ⇒ 夹具起的后端留在内核分配的那个端口上（形态：`python -m
+> contest_generator.webapp` 起于某时刻、听着 `127.0.0.1:<高位端口>`；**不是** 8000）。
+> 跑浏览器验收时想看前几十行就用 `Tee-Object` 落文件再读文件，别截断管道。清残留：
+> 第 2 节那条 `Get-CimInstance … contest_generator.webapp`（按 PID `taskkill /PID … /T /F`）。
+> 另：**临时 `git worktree` 用完必须 `git worktree remove`**——留在 `.scratch/<feature>/base-worktree/`
+> 时 `tests/test_ps1_encoding.py` 会扫进它 `sources/**` 里第三方缺 BOM 的 `.ps1` 而报红（本轮踩到）。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 

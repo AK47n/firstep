@@ -96,7 +96,9 @@ initTopicPanel();       // 赛题库：工具栏 + 拆条 / 确认入库（3 条
 // KIND_TEXT（平台警告文案映射）已迁至 static/js/app.js（阶段 2 工单 02）。
 
 // 标签会话（启动器模式）：TAB_ID_KEY / tabId 登记与 pagehide sendBeacon 已迁至
-// static/js/app.js（阶段 2 工单 02）。
+// static/js/app.js（阶段 2 工单 02）。**登记（register）后于工单 launcher-exit-race/01
+// 又从 app.js 迁到 index.html head 的内联脚本**——它必须早于模块图（服务端见注册表空
+// 只等 1.5 秒就停服务，登记迟到会把应用自己的服务关掉）；app.js 只剩注销一半。
 
 // ---------------------------------------------------------------------------
 // 页签

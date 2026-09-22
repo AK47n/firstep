@@ -171,15 +171,19 @@
 ### 服务端（`src/contest_generator/webapp.py`）
 
 - `TabRegistry` 从 `set[str]` 改成 **`dict[tab_id, epoch]` + 一个在途退出标记**，仍是一把锁：
-  - `register(tab_id, epoch)` → 写 epoch；**返回是否撤销了一个在途退出**；
+  - `register(tab_id, epoch)` → 写 epoch，并**撤销在途退出**（不另设返回值：没人消费的信号
+    不该出现在公开面上——判据是随后的 `exit_if_due` 返回 False）；
   - `unregister(tab_id, epoch)` → **epoch 与注册表里的不一致 ⇒ 忽略（返回 False，不是"空了"）**；
     否则摘掉，返回"是否空了"；
-  - `arm_exit()`（注册表空且未布防 ⇒ 布防，返回 True）／`exit_due()`（仍布防且仍空 ⇒
-    **取走布防并返回 True**）／`cancel_exit()`（撤防，返回是否真撤了）。
-    **三个动作都在同一把锁里**，"查空 → 退出"之间不再有缝。
+  - `arm_exit()`（注册表空且未布防 ⇒ 布防，返回 True）／`exit_if_due(exit_fn)`（仍布防且仍空 ⇒
+    **取走布防并在同一把锁里 `exit_fn(0)`**，返回是否真退了）。
+    **三个动作都在同一把锁里**：要么 register 先拿到锁（撤防 ⇒ 退出作废），要么退出先拿到锁
+    （进程随即消失 ⇒ 那一发 register 拿不到 200）——**不存在"register 回了 200 但服务还是没了"**。
+    退出动作是**注入的入参**（生产传 `_EXIT`）：它不返回（`os._exit`）或返回（测试桩），
+    两者都不回调注册表，故锁内调用无死锁面。
 - `_schedule_exit_if_idle(registry)`：非启动器模式直接返回（**`_launcher_managed()` 仍是唯一
   判据**）；`arm_exit()` 失败（还有标签在开 / 已布防）**不重复调度**；daemon 线程 `sleep`
-  到点后以 `exit_due()` 为**最终判据**，只有它返回 True 才 `_EXIT(0)`。`_EXIT` / `_EXIT_GRACE`
+  到点后调 `exit_if_due(_EXIT)` —— 它在锁内做最终判定并退出。`_EXIT` / `_EXIT_GRACE`
   保持**模块级、可注入**（既有先例：`tests/test_webapp.py` 里 monkeypatch）。
 - 路由：`/api/tabs/register` 透传 `epoch`（新增 `_optional_number(payload, key)` 校验：
   缺省 / null → None；非数字 ⇒ 400，与既有 `_optional_*` 家族同款）；`/api/tabs/bye` 同款
@@ -260,9 +264,14 @@
   （`frontend-boot-module`：把接线搬出 HTML）相背。
 - **本单的三层与"只调宽限"的区别**：三层各自对应一个**已实测 / 可确定性复现**的失败模式，
   且都不需要新的时间常量；只调宽限是把概率往下压。
-- **读数基线**（收尾时按最终状态回填）：前端门禁 **1691**；pytest **5049 passed + 1 skipped**；
-  浏览器门禁 **26**（本单新增 spec 后 +3）。修复前的现场读数（probe-00-order-before）：
-  10 轮里第 4 轮命中自杀；修复后（-after）：10/10 全程活着。
+- **读数基线（收尾按最终状态回填）**：前端门禁 **1702 passed / 0 fail / 10.1s**（1691 ＋ 判据⑥ 11 条）；
+  pytest **5060 passed + 1 skipped / 131.1s**（5049 + 1 skip ＋ 本特性 11 条）；
+  浏览器门禁 **29 passed / 0 fail / 94.2s**（26 ＋ 本特性 3）。修复前的现场读数
+  （`probe-00-order-before.txt`）：10 轮里第 4 轮命中自杀；修复后（`-after.txt`）：10/10 全程活着。
+  与"关浏览器"那条路径的实测延迟：**1525–1652ms**（宽限 1500ms + 进程退出；其中
+  `probe-02-close-page.txt` 记的那次是 1638ms）——不变。
+  三条与本特性同轮的环境事实（`-n auto` 下两条假红、worktree 残留会让 ps1 编码用例红）记在
+  工单 05 的 Comments ② 与 `docs/agents/local-environment.md`。
 - **工单边界的两次调整（都是实现时发现"原拆法要改两遍同一行"，如实记在这里）**：
   ① `epoch` 的**客户端一半**（两处 payload 各一个字段）落在 02 的清单里，实际在 01 就写了
   （同一段代码；01 的 Comments ① 有完整理由），02 只负责**服务端的裁决语义**与 pytest；

@@ -360,9 +360,18 @@ index.html 零 import、555 个 id 不变）；`03/04` 11 个模块显式 `init(
   **已落地**（工单 `frontend-boot-module/01-05`，2026-09-21，见第 10 节末）：装载根 =
   `static/js/boot.js`，11 个模块显式 `init*()`，"求值期零接线"进闸门，两张名字登记表退化成
   结构不变量 + 全图对账。
-- **产品侧「F5 重载慢过 1.5 秒会被应用自己关掉」的竞态**：本轮只在**夹具侧**绕开
-  （验收夹具不再设 `FIRSTEP_LAUNCHER`，服务生命周期归夹具）；真实用户按 F5 仍可能撞上，
-  要修得改 `webapp._schedule_exit_if_idle` 的退出判据并加产品侧用例 —— 未立项。
+- ~~**产品侧「F5 重载慢过 1.5 秒会被应用自己关掉」的竞态**~~ ✅ **已落地**（工单
+  `launcher-exit-race/01-05`，2026-09-21～22，见第 16 节）：三层修法 = ① 登记（`register`）提前到
+  `index.html` head 的内联脚本（**模块图之前**；放 `boot.js` 没用——ESM 静态 import 会先把整张
+  图取完才求值）；② 文档实例令牌 `epoch = performance.timeOrigin`——旧文档迟到的告别**不许**
+  注销新文档的登记；③ 退出调度显式化（布防 / 撤防 / 到点取走，三件事同锁）。
+  `_EXIT_GRACE = 1.5` **保持原值**（它现在覆盖的是"旧告别 → 新页面自报家门"的到达抖动，
+  毫秒级，不再覆盖模块图装载）。判据三处：产品侧 pytest（乱序 / 重复 bye / 宽限内 register
+  撤销 / 多标签语义）、结构判据（`tests/js/boot-contract.mjs` 判据⑥ + 守卫
+  `tab-register-guard.test.mjs`）、真浏览器 `tests/browser/launcher-reload.spec.mjs`
+  （启动器模式：连续 8 次 reload 服务始终活着 / 拖慢模块图仍活着 / 最后一个页面离开服务自己停）。
+  现场探针读数：修复前 10 轮第 4 轮命中自杀（`probe-00-order-before.txt`）→ 修复后 10/10 全程
+  活着（`-after.txt`）；浏览器 spec 在修复前那一代（`eae57b43` worktree）上 **3 条全红**。
 
 另：C5 卡里「`ui/delivery.js` 的 window 挂桥」与「ui 模块 import 环」两条，前者第 10 节已记账、
 后者已有 `tests/js/ui-cycle.test.mjs` 守着，本轮未动。
@@ -406,4 +415,54 @@ index.html 零 import、555 个 id 不变）；`03/04` 11 个模块显式 `init(
   `_materials_task` 仍在 `webapp` 模块级（23 处引用），测试靠跨缝 import 它们——未立项。
 - **C7 私有符号公开化**（评审里的"73 个私有符号被测试翻墙"，`llm` 19 / `generator` 15）：
   当验收尺用，未立项（`llm` 那簇是冻结区，价值有限）。
+
+## 16. 启动器模式下 F5 会把应用自己关掉（2026-09-21～22，工单 launcher-exit-race/01–05 已落地）
+
+第 13 节那条候选结清。**现场**：启动器模式（`FIRSTEP_LAUNCHER=1`，双击 `start-app.vbs` 的
+正常路径）下按 F5 —— 旧页面的 `pagehide` 先发 `POST /api/tabs/bye` → 注册表空 → 服务端起
+`_EXIT_GRACE = 1.5` 秒宽限 → 新页面的 `POST /api/tabs/register` 要等 `index.html`（4,668 行）
+＋ 132 个模块装载完才发（它住在 `app.js` 里）→ 宽限内没到 → 后台线程 `os._exit(0)` →
+**应用把自己的服务关了**，用户看到死页面。本机重测：**10 轮 reload 里第 4 轮命中**
+（`.scratch/launcher-exit-race/probe-00-order-before.txt`，服务 exit 0、`page.reload` 抛
+`ERR_CONNECTION_REFUSED`）。
+
+**三层修法**（每层挡一个已实测 / 可确定性复现的失败模式）：
+
+1. **登记提前到模块图之前**：`index.html` head 那段已有的内联脚本里 `fetch("/api/tabs/register")`
+   —— 它在装载标签之前执行，模块图连**取**都还没开始。窗口从"HTML + 模块图装载"（实测
+   0.42–1.5s⁺ 的尾长）降到毫秒级。**放 `boot.js` 没用**（ESM 静态 import 会先把整张图取完
+   才求值）；另开一条 `<script src>` 会撞 fx-guard「脚本块恰好两处」。
+2. **文档实例令牌 `epoch = performance.timeOrigin`**：`register` / `bye` 都带。旧实现只靠
+   "宽限内复查空集"兜住"register 晚到"，兜不住**顺序反过来**（迟到的 `bye` 把刚登记的新页面
+   注销掉 ⇒ 秒级竞态原地复现）。同一文档里 epoch 恒定、跨文档必不同 ⇒ 客户端不用存、
+   不可能两侧漂移；告别带的 epoch 对不上就忽略。顺带修掉"复制标签页（sessionStorage 被
+   复制 ⇒ 两个文档同一个 tab_id）里，关掉一个就把服务停了"。
+3. **退出调度显式化**：`TabRegistry.arm_exit()` 布防（多标签同时关 / 重复与迟到的 bye
+   **只布防一次**）／`register()` 撤防／`exit_if_due(exit_fn)` 到点**取走布防并在同一把锁里**
+   执行退出。"决定退出"与"register 能被受理"因此有确定的先后——**不存在"register 回了 200
+   但服务还是没了"**。
+
+`_EXIT_GRACE = 1.5` **保持原值、没新增任何时间常量**：它现在覆盖的只是"旧告别 → 新页面
+自报家门"的到达抖动。**关掉浏览器那条路径的延迟不变**（实测最后一个页面离开 → 服务自己停
+**1.53–1.65 秒**；`probe-02-close-page.txt` 记 1638ms）。
+
+**判据三处**（既有缝，不新造）：产品侧 pytest **4 → 15 条**（起点 = `eae57b43` 的 4 条
+`test_tabs*`，本特性新增 11 条：乱序不注销 / epoch 一致照旧退 / 缺省向后兼容 / 同 id 两实例 /
+类型校验 / 重复 bye 只调度一次 / 宽限内 register 撤销 / 撤防后再关重新布防 / 还有标签在开不布防 …）；
+结构判据 `tests/js/boot-contract.mjs` **判据⑥** + 守卫 `tests/js/tab-register-guard.test.mjs`
+（11 条，含"端点字样只在注释里""令牌只在别处的同名字段里"这些假绿反例）；真浏览器
+`tests/browser/launcher-reload.spec.mjs`（**开启动器模式**的夹具上：连续 8 次 reload 服务
+始终活着、把 `boot.js` 拖到宽限之外仍活着、最后一个页面离开服务自己停）。
+
+**红证**：现场探针 `probe-00-order-before/after.txt`（第 4 轮命中 → 10/10 全程活着）；
+结构判据 `probe-01-red-proof.mjs`（base 显式钉 `eae57b43` + base 自校验）；
+浏览器 spec 放进 `eae57b43` 的 worktree 跑 → **3 条全红**（`probe-04-browser-red-proof.txt`），
+其中 B 单独跑的红证把服务端日志的"bye → 没有 register → exit 0"钉在
+`probe-04-b-only-server.log` 里。
+
+**同轮记下的两条相邻洞（本轮不修，另立）**：① `bfcache`——`pagehide(event.persisted === true)`
+（进 bfcache）时也发 bye，而 `pageshow` 不重新登记 ⇒ "离开又 1.5 秒内后退回来"会看到死页面
+（修法：`pageshow` 补一次登记）；② 浏览器门禁**模拟不了真关窗口**：`page.close()` 走 CDP 关
+目标、`pagehide`/信标都不跑（实测 `probe-02-close-page.txt`），故用例 C 用"真导航离开"验
+同一条产品不变量。
 
