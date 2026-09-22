@@ -16,7 +16,7 @@
 | 顺手做掉的第四条 | `src/contest_generator.egg-info/**` 摘出产品文件（两个包都不再发 pip 构建产物） |
 | **真机验收** | `drill-01`：沙箱真 v1.1.1 → 走产品端点升到 1.2.2，**判红 0 / 卡住 0 / PASS**；`not_in_official` 1482 → **6**，那 6 条经决定性实验证明是**更新器那一步 pip 现写的**（官方包里 0 个 → 跑完 pip 6 个齐），「官方缺失 0 / 内容不同 0」两条全绿 |
 | 发版产物（本机留档） | `firstep-pack\firstep-{update,full}-v1.2.2.*` 全套 + `release-notes-v1.2.2.md`；**下一版的基线就是这两个清单** |
-| **main 上还没到用户手上的（三批）** | ① **硬件检测栏目本身**（`module-hwcheck/01-09`，2026-09-20 起）＋ **检测页引脚出口**（`hwcheck-pin-conflict-exit/01`：默认脚撞脚提前解开）——v1.2.2 的用户看不到「硬件检测」这一栏；② **完整包会话态进 `AppContext` ＋ `_full_task_lock`**（`full-update-state-into-ctx/01-04`，2026-09-22，账见 `.scratch/backlog.md` §18：纯内部换归属 + 修「并发 apply 建出两个任务」的竞态，**前端零字节**）。**三批都只在本机工作树 / main 上，任何发布包里都没有**——下次发版要一起带上 |
+| **main 上还没到用户手上的（四批）** | ① **硬件检测栏目本身**（`module-hwcheck/01-09`，2026-09-20 起）＋ **检测页引脚出口**（`hwcheck-pin-conflict-exit/01`：默认脚撞脚提前解开）——v1.2.2 的用户看不到「硬件检测」这一栏；② **完整包会话态进 `AppContext` ＋ `_full_task_lock`**（`full-update-state-into-ctx/01-04`，2026-09-22，账见 `.scratch/backlog.md` §18：纯内部换归属 + 修「并发 apply 建出两个任务」的竞态，**前端零字节**）；③ **陌生器件（库外件）探测**（`hwcheck-unknown-device`，2026-09-22 起：规格 + 10 张工单已落 `.scratch/hwcheck-unknown-device/`，**工单 01 支点模块 `i2c_probe` 已落地**，02–10 未开工）。**四批都只在本机工作树 / main 上，任何发布包里都没有**——下次发版要一起带上 |
 
 **发版尚未启动（2026-09-22 22:0x 实测）**：这一轮只走到「决定要发」就停了——**版本号仍 `1.2.2`、
 没打包、没打 tag、没建 Release**（用户要先继续改动再发，所以别把这份落差当成"发过了"）。
@@ -438,6 +438,37 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > 清单去 `git show <rev>:<path>`，base 里有、今天已删的文件会**静默漏掉**（读数会缺一块）。
 > 另：`pytest -n auto` 本轮又撞上一次 `tests/test_js_gate.py::test_full_mode_runs_js_gate_and_pytest`
 > 的并行争用偶发（该文件单跑 29 passed / 78s，复跑全绿）——与上文那条同源，不是产品问题。
+>
+> **2026-09-22（hwcheck-unknown-device/01 会话：库内新增总线原语模块 `i2c_probe`）**：
+> 同样**一次服务器都没起**（真编译矩阵走子进程、端点用例走进程内 TestClient）；
+> 收尾实测 8000/8020/8021 都没在听。读数：新增契约 `tests/test_module_i2c_probe.py`
+> **19 passed**、全量 `pytest -n auto -q` **5101 passed + 1 skipped**、
+> 前端门禁 **1702 passed / 0 fail**、两平台真编译 **2/2 PASS（0 error / 0 warning）**。
+> 证据与红证：`.scratch/hwcheck-unknown-device/`（`compile_matrix.py` +
+> `matrix-logs/`、`probe-01-c1-reverse.py{,.txt}`、`verify-01-readings.txt`；
+> `matrix/` 是生成+编译产物，按惯例 gitignore）。
+>
+> ⚠ **本轮量到的一条工具事实（对任何「编译矩阵」探针适用）**：**别再按
+> 「行里含 `warning`」数告警** —— Keil 的收尾汇总行 `0 Error(s), 0 Warning(s).`
+> 自己就含这个子串，会把 0 告警读成 1 条（本单第一版就是这么误报的，被
+> Standards 轴评审抓到）。排除掉 `... Warning(s).` 那种汇总行再数。
+>
+> ⚠ **同轮量到的一条产品事实（写 mspm0 硬件 I2C 代码时适用）**：SDK 的
+> `DL_I2C_startControllerTransfer` 长度参数文档范围是 `[0x00, 0xFFF]`，但**全 SDK
+> 没有 0 长度用法的示例**——0 长度突发到底发不发 START 没人能给准话。面对
+> 「ping 静默永远无应答 = 把线/供电问题误报成真相」这种代价，本单选了**读 1 字节
+> 丢弃**（有例可循），并把这一选择写进模块 notes。另外 `ADDR_ACK` 状态位是判地址
+> 应答的正解——**库内先例 `ml_mpu6050/mpu_port.c` 并不读它**（只看 `ERROR`），
+> 别把「双位判据」记成 mpu_port.c 的做法。
+>
+> ⚠ **上一轮那条「强度探针会真改库内文件、别和套件同时跑」的纪律本轮同样适用**
+> （`probe-01-c1-reverse.py` 会临时注入 `syscfg_instances.py` 再逐字节复原；
+> 本轮做法 = 探针跑完再跑套件，且探针自带「前置干净性检查 + sha256 复原复核」，
+> 评审又补了「子进程崩溃不许被误读成反证成立」）。
+>
+> **第 0 节的发布落差表：本轮又添一批 main-only 改动**（工单
+> `hwcheck-unknown-device/01`：库内新模块 `i2c_probe` ＋ 两平台实现 ＋ 四处登记；
+> 后续 02–10 张工单仍未开工）——下次发版要连同上面那三批一起带上。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 
