@@ -15,7 +15,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-import pytest
 from fastapi.testclient import TestClient
 
 from contest_generator import download_resume
@@ -40,20 +39,6 @@ def _payload(name: str) -> bytes:
     """
     filler = bytes((i * 7 + 11) % 251 for i in range(300 * 1024))
     return f"内容-{name}".encode("utf-8") + filler
-
-
-@pytest.fixture(autouse=True)
-def _reset_full_state():
-    """每个测试前后重置模块级单例（任务 + 上次检查）。
-
-    这两个是全进程共享的（webapp 端点与测试同源），不复位会让相邻测试互相
-    污染：上一个测试留下的白名单/任务态会让下一个测试的 400 分支不触发。
-    """
-    ft.set_last_check({})
-    ft.set_full_task(None)
-    yield
-    ft.set_last_check({})
-    ft.set_full_task(None)
 
 
 def _sha(data: bytes) -> str:
@@ -720,13 +705,22 @@ def test_snapshot_written_and_recoverable(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _client(tmp_path: Path) -> TestClient:
-    return TestClient(create_app(AppContext(config_path=tmp_path / "config.json")))
+def _client(tmp_path: Path) -> tuple[TestClient, AppContext]:
+    """→（这个实例的 client, **这个实例的 ctx**）：会话态长在自己构造的那个 ctx 上，
+    注入与断言都走它（工单 full-update-state-into-ctx/01；先例 = `tests/test_materials_task.py`
+    的同名工厂）。
+
+    收走前这里是「只返回 client」+ 一个 autouse 清扫夹具：状态挂在 `full_task` 模块级，
+    测试只能跨缝改 `ft._LAST_CHECK` / `ft._FULL_TASK`，再靠夹具事后抹干净。
+    """
+    ctx = AppContext(config_path=tmp_path / "config.json")
+    return TestClient(create_app(ctx)), ctx
 
 
-def _seed_check(parts: list[dict[str, Any]]) -> None:
-    ft._LAST_CHECK.clear()
-    ft._LAST_CHECK.update(
+def _seed_check(ctx: AppContext, parts: list[dict[str, Any]]) -> None:
+    """把一份 check 结果写进**这个实例**的会话态（= apply 的分卷白名单来源）。"""
+    ctx.full_last_check.clear()
+    ctx.full_last_check.update(
         {
             "latest_version": "v1.1.0",
             "total_bytes": sum(p["size"] for p in parts),
@@ -741,7 +735,8 @@ def test_apply_rejects_unknown_part_name(tmp_path: Path, monkeypatch) -> None:
     这里桩掉自查用的 check（否则会真打 GitHub），断言走的是「未知分卷」这条。
     """
     parts = _parts(["firstep-full-v1.1.0.zip"])
-    _seed_check(parts)
+    client, ctx = _client(tmp_path)
+    _seed_check(ctx, parts)
     monkeypatch.setattr(
         "contest_generator.webapp.check_for_full_update",
         lambda installed: {
@@ -754,22 +749,22 @@ def test_apply_rejects_unknown_part_name(tmp_path: Path, monkeypatch) -> None:
         },
     )
     monkeypatch.setattr("contest_generator.webapp.free_bytes", lambda path: 10 * 1024**3)
-    client = _client(tmp_path)
     resp = client.post("/api/update/full/apply", json={"parts": ["../evil.zip"]})
     assert resp.status_code == 400
     assert "未知分卷" in resp.json()["detail"]
 
 
 def test_apply_rejects_empty_list(tmp_path: Path) -> None:
-    _seed_check(_parts(["firstep-full-v1.1.0.zip"]))
-    client = _client(tmp_path)
+    client, ctx = _client(tmp_path)
+    _seed_check(ctx, _parts(["firstep-full-v1.1.0.zip"]))
     assert client.post("/api/update/full/apply", json={"parts": []}).status_code == 400
     assert client.post("/api/update/full/apply", json={}).status_code == 400
 
 
 def test_apply_without_check_first_is_400(tmp_path: Path, monkeypatch) -> None:
     """白名单空 → 兜底自查一次；仍无可下（真实 GitHub 上还没有完整包资产）→ 400 中文。"""
-    ft._LAST_CHECK.clear()
+    client, ctx = _client(tmp_path)
+    ctx.full_last_check.clear()
     monkeypatch.setattr(
         "contest_generator.webapp.check_for_full_update",
         lambda installed: {
@@ -784,7 +779,6 @@ def test_apply_without_check_first_is_400(tmp_path: Path, monkeypatch) -> None:
             "manifest_url": "",
         },
     )
-    client = _client(tmp_path)
     resp = client.post("/api/update/full/apply", json={"parts": ["a.zip"]})
     assert resp.status_code == 400
     assert "完整包" in resp.json()["detail"]
@@ -792,9 +786,9 @@ def test_apply_without_check_first_is_400(tmp_path: Path, monkeypatch) -> None:
 
 def test_apply_insufficient_disk_is_400(tmp_path: Path, monkeypatch) -> None:
     parts = _parts(["firstep-full-v1.1.0.zip"])
-    _seed_check(parts)
+    client, ctx = _client(tmp_path)
+    _seed_check(ctx, parts)
     monkeypatch.setattr("contest_generator.webapp.free_bytes", lambda path: 1024)
-    client = _client(tmp_path)
     resp = client.post("/api/update/full/apply", json={"parts": [parts[0]["name"]]})
     assert resp.status_code == 400
     assert "磁盘空间不足" in resp.json()["detail"]
@@ -802,7 +796,8 @@ def test_apply_insufficient_disk_is_400(tmp_path: Path, monkeypatch) -> None:
 
 def test_apply_starts_and_status_reports_progress(tmp_path: Path, monkeypatch) -> None:
     parts = _parts(["firstep-full-v1.1.0.zip"])
-    _seed_check(parts)
+    client, ctx = _client(tmp_path)
+    _seed_check(ctx, parts)
     monkeypatch.setattr("contest_generator.webapp.free_bytes", lambda path: 10 * 1024**3)
     ran = {"count": 0}
 
@@ -822,7 +817,6 @@ def test_apply_starts_and_status_reports_progress(tmp_path: Path, monkeypatch) -
             "contest_generator.full_apply", fromlist=["FullApplyResult"]
         ).FullApplyResult(ok=True, version="v1.1.0", message="已开始应用"),
     )
-    client = _client(tmp_path)
     resp = client.post("/api/update/full/apply", json={"parts": [parts[0]["name"]]})
     assert resp.status_code == 200
     assert resp.json()["started"] is True
@@ -841,7 +835,8 @@ def test_apply_starts_and_status_reports_progress(tmp_path: Path, monkeypatch) -
 def test_apply_dry_run_does_not_start_task_or_spawn(tmp_path: Path, monkeypatch) -> None:
     """演练模式：真机冒烟用——不下载、不起进程、只回成功文案。"""
     parts = _parts(["firstep-full-v1.1.0.zip"])
-    _seed_check(parts)
+    client, ctx = _client(tmp_path)
+    _seed_check(ctx, parts)
     monkeypatch.setattr("contest_generator.webapp.free_bytes", lambda path: 10 * 1024**3)
     spawned: list[str] = []
 
@@ -850,7 +845,6 @@ def test_apply_dry_run_does_not_start_task_or_spawn(tmp_path: Path, monkeypatch)
         return ""
 
     monkeypatch.setattr(FullDownloadTask, "_download", spy)
-    client = _client(tmp_path)
     resp = client.post(
         "/api/update/full/apply", json={"parts": [parts[0]["name"]], "dry_run": True}
     )
@@ -859,20 +853,20 @@ def test_apply_dry_run_does_not_start_task_or_spawn(tmp_path: Path, monkeypatch)
     assert body["started"] is True and body["dry_run"] is True
     assert "演练" in body["message"]
     assert spawned == [], "演练不该真下载"
-    assert ft.get_full_task() is None, "演练不该登记任务"
+    assert ctx.full_task is None, "演练不该登记任务"
 
 
 def test_status_idle_before_any_task(tmp_path: Path) -> None:
-    ft._FULL_TASK = None
-    client = _client(tmp_path)
+    client, ctx = _client(tmp_path)
+    assert ctx.full_task is None, "新实例起手就该是空槽"
     body = client.get("/api/update/full/status").json()
     assert body["state"] == "idle"
     assert body["parts"] == []
 
 
 def test_cancel_without_task_is_noop(tmp_path: Path) -> None:
-    ft._FULL_TASK = None
-    client = _client(tmp_path)
+    client, ctx = _client(tmp_path)
+    assert ctx.full_task is None, "新实例起手就该是空槽"
     body = client.post("/api/update/full/cancel").json()
     assert body["cancelled"] is False
     assert "没有进行中的下载" in body["message"]
@@ -880,14 +874,86 @@ def test_cancel_without_task_is_noop(tmp_path: Path) -> None:
 
 def test_apply_rejects_when_task_running(tmp_path: Path, monkeypatch) -> None:
     parts = _parts(["firstep-full-v1.1.0.zip"])
-    _seed_check(parts)
+    client, ctx = _client(tmp_path)
+    _seed_check(ctx, parts)
     monkeypatch.setattr("contest_generator.webapp.free_bytes", lambda path: 10 * 1024**3)
     running = FullDownloadTask(
         task_dir=tmp_path / "updates", parts=parts, download=_fake_download([])
     )
     running._state = ft.TaskState.DOWNLOADING  # type: ignore[attr-defined]
-    ft._FULL_TASK = running
-    client = _client(tmp_path)
+    ctx.full_task = running
     resp = client.post("/api/update/full/apply", json={"parts": [parts[0]["name"]]})
     assert resp.status_code == 400
     assert "进行中" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# 两个 app 实例互不可见（工单 full-update-state-into-ctx/01）
+# ---------------------------------------------------------------------------
+#
+# 收走前这两样会话态挂在 `full_task` 模块级：同一个进程里两个 app 实例**共用**一份
+# check 缓存与同一个任务槽——这两条用例在收走前是红的（行为红由
+# `.scratch/full-update-state-into-ctx/probe-00-sharing.py` 的前后对读承担，那时
+# `AppContext` 上还没有这两个字段，用例只能红在 AttributeError）。
+
+
+def test_two_app_instances_do_not_share_the_parts_whitelist(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A 实例 check 出来的分卷**不是** B 实例 apply 的白名单（收走前 B 会认）。"""
+    parts = _parts(["firstep-full-v1.1.0.zip"])
+    # 兜底自查的桩答复：没有可用分卷——B 的白名单空 → 自查 → 仍空 → 400
+    monkeypatch.setattr(
+        "contest_generator.webapp.check_for_full_update",
+        lambda installed: {
+            "latest_version": "",
+            "total_bytes": 0,
+            "parts": [],
+            "error": "",
+            "message": "该版本的 Release 上没有完整包资产，请联系发布者",
+            "manifest_url": "",
+        },
+    )
+    monkeypatch.setattr("contest_generator.webapp.free_bytes", lambda path: 10 * 1024**3)
+    monkeypatch.setattr("contest_generator.webapp.start_full_update", lambda task: None)
+    client_a, ctx_a = _client(tmp_path / "a")
+    client_b, ctx_b = _client(tmp_path / "b")
+    _seed_check(ctx_a, parts)
+
+    resp_a = client_a.post("/api/update/full/apply", json={"parts": [parts[0]["name"]]})
+    assert resp_a.status_code == 200, "持有白名单的实例自己该照常放行"
+    # A 的这次 apply 占上了自己的槽位；两边的槽互不可见，故 B 与它无关
+    assert ctx_a.full_task is not None
+    resp_b = client_b.post("/api/update/full/apply", json={"parts": [parts[0]["name"]]})
+    assert resp_b.status_code == 400, "B 不该拿 A 的白名单当自己的"
+    # 钉住 B 走的是**兜底自查**（拿回桩的那句 message）——只断言「400 且含完整包」分不清
+    # 「自查回来没有」与「暂无可用的完整包信息」，判别力会掉到只剩状态码
+    assert "该版本的 Release 上没有完整包资产" in resp_b.json()["detail"]
+    assert ctx_b.full_task is None, "B 没被放行，也不该登记任务"
+
+
+def test_two_app_instances_do_not_share_the_task_slot(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A 实例「正在下载」的任务**不挡** B 实例的 apply（收走前 B 会跟着被拒）。"""
+    parts = _parts(["firstep-full-v1.1.0.zip"])
+    monkeypatch.setattr("contest_generator.webapp.free_bytes", lambda path: 10 * 1024**3)
+    monkeypatch.setattr("contest_generator.webapp.start_full_update", lambda task: None)
+    client_a, ctx_a = _client(tmp_path / "a")
+    client_b, ctx_b = _client(tmp_path / "b")
+    # 两边都先有白名单：这一格的判据只落在「任务在跑」那一跳上
+    _seed_check(ctx_a, parts)
+    _seed_check(ctx_b, parts)
+    running = FullDownloadTask(
+        task_dir=tmp_path / "a" / "updates", parts=parts, download=_fake_download([])
+    )
+    running._state = ft.TaskState.DOWNLOADING  # type: ignore[attr-defined]
+    ctx_a.full_task = running
+
+    resp_a = client_a.post("/api/update/full/apply", json={"parts": [parts[0]["name"]]})
+    assert resp_a.status_code == 400, "占着任务槽的实例自己该拒"
+    assert "进行中" in resp_a.json()["detail"]
+    resp_b = client_b.post("/api/update/full/apply", json={"parts": [parts[0]["name"]]})
+    assert resp_b.status_code == 200, "另一个实例的任务槽不该挡这一边"
+    assert ctx_b.full_task is not None
+    assert ctx_a.full_task is running, "B 的 apply 不该动 A 的槽位"

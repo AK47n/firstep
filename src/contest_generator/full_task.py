@@ -59,29 +59,10 @@ PARTS_DIRNAME = "full"
 DISK_HEADROOM_FACTOR = 1.5
 DISK_HEADROOM_BYTES = 16 * 1024 * 1024
 
-# check 端点最近一次结果（apply 的分卷白名单来源；webapp 模块级单例语义）
-_LAST_CHECK: dict[str, Any] = {}
-_FULL_TASK: "FullDownloadTask | None" = None
-
-
-def get_full_task() -> "FullDownloadTask | None":
-    return _FULL_TASK
-
-
-def set_full_task(task: "FullDownloadTask | None") -> None:
-    """登记当前任务（webapp 端点与测试都用它，状态单源在本模块）。"""
-    global _FULL_TASK
-    _FULL_TASK = task
-
-
-def last_check() -> dict[str, Any]:
-    """最近一次 check 结果（apply 白名单来源）。"""
-    return _LAST_CHECK
-
-
-def set_last_check(result: dict[str, Any]) -> None:
-    _LAST_CHECK.clear()
-    _LAST_CHECK.update(result)
+# 本模块**不持会话态**（工单 full-update-state-into-ctx/01）：check 结果与「进行中的任务」
+# 都归 `AppContext` 的 `full_last_check` / `full_task`（每个 app 实例一份）。收走前这里是
+# 模块级 `_LAST_CHECK` / `_FULL_TASK` 加四个 accessor——同一进程的两个 app 实例会共用一份
+# 状态，测试也只能跨缝改私有名。
 
 
 @dataclass
@@ -139,7 +120,7 @@ free_bytes = _free_bytes
 
 
 class FullDownloadTask(TaskRetryMixin):
-    """完整包下载任务（一任务一实例；webapp 模块级单例）。
+    """完整包下载任务（一任务一实例；进行中的那一个登记在 `AppContext.full_task` 上）。
 
     构造时不启动线程；`run()` 在调用方线程执行（端点用 daemon 线程包一层）。
     `download` 可注入（测试不碰网络）；快照持久化在 task_dir/full-task.json。

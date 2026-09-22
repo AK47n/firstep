@@ -489,11 +489,13 @@ def test_endpoints_expose_new_fields(tmp_path: Path) -> None:
     """两条 status 端点直接透出新字段（不加新端点、不包一层）。"""
     from fastapi.testclient import TestClient
 
-    from contest_generator import full_task as ft
     from contest_generator.webapp import AppContext, create_app
 
-    ft.set_full_task(None)
-    client = TestClient(create_app(AppContext(config_path=tmp_path / "config.json")))
+    # 会话态长在**自己构造的这个 ctx** 上（工单 full-update-state-into-ctx/01）：空槽起手，
+    # 不再需要「重置模块级单例」那一句。
+    ctx = AppContext(config_path=tmp_path / "config.json")
+    assert ctx.full_task is None
+    client = TestClient(create_app(ctx))
     for path in ("/api/update/full/status", "/api/update/materials/status"):
         body = client.get(path).json()
         assert set(body) == STATUS_KEYS, path

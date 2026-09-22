@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
 
 from contest_generator import full_task as ft
@@ -22,16 +21,6 @@ from contest_generator.full_apply import (
     build_updater_command,
 )
 from contest_generator.webapp import AppContext, create_app
-
-
-@pytest.fixture(autouse=True)
-def _reset_full_state():
-    """重置模块级单例（任务 + 上次检查），防相邻测试互相污染。"""
-    ft.set_last_check({})
-    ft.set_full_task(None)
-    yield
-    ft.set_last_check({})
-    ft.set_full_task(None)
 
 
 def _ready_parts(tmp_path: Path, names: list[str]) -> list[dict]:
@@ -188,7 +177,9 @@ def test_endpoint_full_flow_starts_updater(tmp_path: Path, monkeypatch) -> None:
         "message": "",
         "manifest_url": "https://example.com/firstep-full-v1.1.0.manifest.json",
     }
-    ft.set_last_check(check)
+    ctx = AppContext(config_path=tmp_path / "config.json")
+    ctx.full_last_check.clear()
+    ctx.full_last_check.update(check)
 
     def fake_download(url: str, dest: Path, on_progress) -> str:
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -217,7 +208,7 @@ def test_endpoint_full_flow_starts_updater(tmp_path: Path, monkeypatch) -> None:
 
     monkeypatch.setattr("contest_generator.webapp.apply_full_package", spy_apply_full_package)
 
-    client = TestClient(create_app(AppContext(config_path=tmp_path / "config.json")))
+    client = TestClient(create_app(ctx))
     resp = client.post("/api/update/full/apply", json={"parts": [part_name]})
     assert resp.status_code == 200
     status = client.get("/api/update/full/status").json()
@@ -242,7 +233,9 @@ def test_endpoint_apply_without_manifest_url_marks_failed(
     payload = b"zip-bytes"
     sha = hashlib.sha256(payload).hexdigest()
     part_name = "firstep-full-v1.1.0.zip"
-    ft.set_last_check(
+    ctx = AppContext(config_path=tmp_path / "config.json")
+    ctx.full_last_check.clear()
+    ctx.full_last_check.update(
         {
             "latest_version": "v1.1.0",
             "total_bytes": len(payload),
@@ -263,7 +256,7 @@ def test_endpoint_apply_without_manifest_url_marks_failed(
     monkeypatch.setattr(ft.FullDownloadTask, "_download", fake_download)
     monkeypatch.setattr("contest_generator.webapp.free_bytes", lambda path: 10 * 1024**3)
     monkeypatch.setattr("contest_generator.webapp.start_full_update", lambda task: task.run())
-    client = TestClient(create_app(AppContext(config_path=tmp_path / "config.json")))
+    client = TestClient(create_app(ctx))
     assert client.post("/api/update/full/apply", json={"parts": [part_name]}).status_code == 200
     status = client.get("/api/update/full/status").json()
     assert status["state"] == "failed"

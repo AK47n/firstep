@@ -335,10 +335,6 @@ from .full_task import (
     FullDownloadTask,
     free_bytes,
     full_task_status,
-    get_full_task,
-    last_check,
-    set_full_task,
-    set_last_check,
     start_full_update,
     write_full_snapshot,
 )
@@ -631,6 +627,14 @@ class AppContext:
     materials_last_check: dict = field(default_factory=dict)
     materials_task: ApplyTask | None = None
     _materials_task_lock: threading.Lock = field(default_factory=threading.Lock)
+    # 完整包（一键全量更新）会话态（工单 full-download/03+04；工单 full-update-state-into-ctx/01
+    # 从 `full_task` 模块级搬进 ctx）——**归属在 ctx = 每个 app 实例一份**（测试建几个实例就
+    # 几份，互不可见；收走前是模块级全局，同进程的两个实例共用同一份 check 缓存与同一个任务槽）：
+    # - full_last_check：最近一次 check 结果（apply 的**分卷**白名单来源；**先 clear 再 update**
+    #   ——旧结果里消失的键必须跟着消失，与资料库那半的裸 update 不是一回事）
+    # - full_task：进行中的下载任务实例（进程死 = 任务自然终止；快照落盘可恢复）
+    full_last_check: dict = field(default_factory=dict)
+    full_task: FullDownloadTask | None = None
     # 检测页配方文件的**可选覆盖**（缺省 None = 按模块库根推，见
     # hwcheck_recipe.recipe_library_path）：给测试注入"坏配方 / 缺配方"用——
     # 不改真库那一份（并行跑用例时别的 worker 会读到半截，2026-09-19 踩过）。
@@ -1462,12 +1466,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
     # 完整包检查更新（工单 full-download/02）：软件 Release 上的完整包清单；
     # 无基线 / 未知已装版本也返回 200 级 + 中文提示（可一键下载完整包）。
+    # 结果缓存进**本实例 ctx** 的 full_last_check（apply 的分卷白名单来源）。
     @app.get("/api/update/full/check")
     @_map_errors
     def full_update_check() -> dict:
         updates_dir = context.config_path.parent / "updates"
         result = check_for_full_update(load_installed_marker(updates_dir))
-        set_last_check(result)
+        context.full_last_check.clear()
+        context.full_last_check.update(result)
         return result
 
     # 完整包下载（工单 full-download/03）：分卷白名单 + 磁盘预检 → 后台线程；
@@ -1481,7 +1487,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         都由更新器自己做（Windows 上运行中的 python 进程占着自己的文件，
         就地覆盖必失败）。
         """
-        check = last_check()
+        check = context.full_last_check
         # 工具根必须绝对：更新器以独立进程跑，cwd 与相对路径都可能对不上
         result = apply_full_package(
             parts=parts,
@@ -1501,14 +1507,15 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             raise HTTPException(400, "缺少所选分卷（parts）")
         if not all(isinstance(n, str) for n in names):
             raise HTTPException(400, "分卷列表格式非法")
-        check = last_check()
+        check = context.full_last_check
         available = {p["name"]: p for p in check.get("parts", [])}
 
         def _refresh_check() -> dict[str, Any]:
             result = check_for_full_update(
                 load_installed_marker(context.config_path.parent / "updates")
             )
-            set_last_check(result)
+            context.full_last_check.clear()
+            context.full_last_check.update(result)
             return result
 
         # 兜底自查一次：白名单为空或请求的分卷不在其中，都说明本次进程看到的
@@ -1537,7 +1544,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 f"磁盘空间不足：需要约 {needed // (1024 * 1024)} MB，"
                 f"剩余 {free // (1024 * 1024)} MB，请清理后重试",
             )
-        running = get_full_task()
+        running = context.full_task
         if running is not None and running.state.value in ("downloading", "applying"):
             raise HTTPException(400, "已有完整包下载任务在进行中，请稍候")
         # 演练开关（真机冒烟用）：不下载、不起进程，只回成功文案——让浏览器里
@@ -1554,7 +1561,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             parts=selected,
             on_complete=_full_apply_complete,
         )
-        set_full_task(task)
+        context.full_task = task
         start_full_update(task)
         total_mb = total_bytes // (1024 * 1024)
         return {
@@ -1564,12 +1571,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
     @app.get("/api/update/full/status")
     def full_update_status() -> dict:
-        return full_task_status(get_full_task())
+        return full_task_status(context.full_task)
 
     @app.post("/api/update/full/cancel")
     @_map_errors
     def full_update_cancel() -> dict:
-        task = get_full_task()
+        task = context.full_task
         if task is None or task.state.value not in ("downloading", "applying"):
             return {"cancelled": False, "message": "当前没有进行中的下载"}
         task.cancel()
