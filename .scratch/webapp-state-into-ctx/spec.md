@@ -92,8 +92,9 @@ check 结果缓存（`_MATERIALS_LAST_CHECK`）、进行中的资料库下载任
   5. 合成红证：把收走前的写法（模块级 `X = set()` / `{}` / `None` + `global X`）喂进同一套判据，
      当场认出。
 - **真红证**：`.scratch/webapp-state-into-ctx/probe-01-pin-red-proof.py` 把**收走前那个提交**
-  （显式钉 `5c9fc8b0`，**不写 HEAD**）的 `webapp.py` 喂进同一套判据 → 3 条违规；当前树 → 0 条；
-  **base 自校验**：base 版里若已经找不到那三处模块级状态就大声失败（选错 base 不许产假绿）。
+  （显式钉 `5c9fc8b0`，**不写 HEAD**）的 `webapp.py` 与全部测试源码喂进同一套判据 → 6 条
+  违规（4 类）；当前树 → 0 条；**base 自校验**：base 版里若已经找不到那三处模块级状态就大声
+  失败（选错 base 不许产假绿）。判据**只有一份聚合函数**（`state_violations`），探针与守卫共用。
 - **全绿**：`python -m pytest -n auto -q` 全绿；`node --test "tests/js/*.test.mjs"` 全绿
   （前端只动过一行注释，属回归确认）。
 

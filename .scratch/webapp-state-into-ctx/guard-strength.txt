@@ -1,0 +1,21 @@
+== 判据强度自检：每条腿 stub 掉之后守卫必须红 ==
+
+  基线（不动文件）：绿 —— 7 passed in 16.09s
+
+  ✅ 变红  global_statements          判据① 不再看得见 global —— 1 failed, 6 passed in 5.52s
+  ✅ 变红  global_names               判据③ 的 global 名单腿 —— 1 failed, 6 passed in 5.48s
+  ✅ 变红  module_level_assignments   模块级赋值抽取 —— 1 failed, 6 passed in 5.41s
+  ✅ 变红  module_level_names         模块级名字腿 —— 1 failed, 6 passed in 5.40s
+  ✅ 变红  session_state_assignments  判据② 本体 —— 1 failed, 6 passed in 5.55s
+  ✅ 变红  _is_session_shape          判据② 的形状判据 —— 1 failed, 6 passed in 5.53s
+  ✅ 变红  imported_names             跨缝 import 腿 —— 1 failed, 6 passed in 4.41s
+  ✅ 变红  module_object_aliases      模块对象别名腿 —— 1 failed, 6 passed in 4.35s
+  ✅ 变红  module_object_uses         别名直改腿 —— 1 failed, 6 passed in 3.15s
+  ✅ 变红  webapp_attribute_paths     monkeypatch 路径腿 —— 1 failed, 6 passed in 4.42s
+  ✅ 变红  annotated_class_fields     判据④ 正向腿 —— 3 failed, 4 passed in 5.37s
+  ✅ 变红  state_violations           聚合（探针跑的就是它） —— 1 failed, 6 passed in 2.82s
+  ✅ 变红  _test_sources              真树扫描面 —— 2 failed, 5 passed in 0.70s
+
+逐字节复原：✅ sha256 一致（9d413d26b574…）
+
+结论：13/13 条腿 stub 后变红；没有'没有红证'的腿
