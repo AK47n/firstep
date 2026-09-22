@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=e64b39e256f5cd1d7505ba657403f339e5347c4d -->
+<!-- changelog-auto: last-commit=e8b55b48d654da0d612e84c5b8f5b271c9cffa42 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -6,6 +6,7 @@
 
 ## 2026-09-22
 - 12:28 工单 launcher-exit-race/03：退出调度显式化（布防 / 撤防 / 到点取走并退出）
+- 12:28 工单 launcher-exit-race/04：真浏览器验收——启动器模式下连续 F5（含确定性与'最后一个页面离开 = 停服务'）
 
 ## 2026-09-21
 - 12:38 工单 frontend-boot-module/01-02：装载根搬进 boot.js（index.html 只留一条标签 + 判据单源与守卫重定根）
