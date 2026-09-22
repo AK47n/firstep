@@ -17,7 +17,10 @@ const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function healthy(url) {
+/** 服务在答话吗（`/api/health` 200）。**导出**给 spec 用：用例要判"服务还活着吗"，
+ *  各自再抄一份 fetch + try/catch 就是第二份同形实现（工单 launcher-exit-race/04 评审）。
+ *  夹具内部沿用旧名 `healthy`。 */
+export async function serverAlive(url) {
   try {
     const resp = await fetch(`${url}/api/health`);
     return resp.ok;
@@ -25,6 +28,8 @@ async function healthy(url) {
     return false;
   }
 }
+
+const healthy = serverAlive;
 
 // 端点哨兵（工单 gen-chain-audit/06 的现场教训）：`startServer` 之前只等健康检查，
 // 端口上**已有一个旧后端**时 `spawn` 静默失败、健康检查却立刻通过 → 整轮验收跑在
@@ -95,25 +100,24 @@ function killListeners(port) {
   });
 }
 
-// **不复现的假红：本夹具刻意不设 FIRSTEP_LAUNCHER**（工单 ui-dom-contract-gate/01）。
+// **默认不主动设 FIRSTEP_LAUNCHER**（工单 ui-dom-contract-gate/01）：设了它，服务就进了启动器的
+// "关浏览器 = 停服务"模式——前端每次 `page.goto` / `reload` 都 `pagehide` → `POST /api/tabs/bye`，
+// 服务见"最后一个标签走了"就起宽限准备 `os._exit`。验收根本不需要产品侧的自动退出：本夹具
+// 自己 `stop()` 收服务（**服务生命周期归夹具**，不归产品），去掉这个开关 = 整类假红消失，
+// 且服务行为与"手动跑源码"完全一致。
 //
-// 为什么必须不设（别"顺手补回去"）：设了它，服务就进了启动器的"关浏览器 = 停服务"
-// 模式——前端每次 `page.goto` 都 `pagehide` → `POST /api/tabs/bye`，服务见"最后一个
-// 标签走了"就起 1.5s 宽限（`webapp._EXIT_GRACE`）准备 `os._exit`，而新页面的
-// `POST /api/tabs/register` 要等 `app.js` 求值才发出。本机实测（module-hwcheck/06 会话
-// 与本轮各一次）：register 没在宽限内到达 → 验收服务**自杀**，后面每条用例全是
-// `ERR_CONNECTION_REFUSED`。曾在夹具侧用"注册一个常开 tab_id"打补丁，但那个补丁只在
-// 该 tab_id 留在注册表里时成立，实测仍会中途死。
+// ⚠ 措辞要说准：**"不主动设"不等于"保证不设"**——`env` 是 `{...process.env}` 展开的，
+// 外壳里若已有 `FIRSTEP_LAUNCHER=1` 会照样透给子进程（`.scratch/launcher-exit-race/probe-00-order.mjs`
+// 正是靠这条进启动器模式）；要显式开就传 `launcher: true`。
 //
-// 验收根本不需要产品侧的自动退出：本夹具自己 `stop()` 收服务（**服务生命周期归夹具**，
-// 不归产品）。去掉这个开关 = 整类假红消失，且服务行为与"手动跑源码"完全一致。
+// ⚠ 这条决策**不因产品侧那半张修好而改变**（工单 launcher-exit-race/01-03 已把"F5 会被应用
+// 自己关掉"那条竞态修掉：登记提前到 index.html head 的内联脚本、旧文档迟到的告别不再注销新
+// 登记、退出调度幂等）——服务生命周期归夹具这条理由与竞态无关。启动器模式本身（含"最后一个
+// 页面离开 → 服务自己停"这个功能）由 `launcher-reload.spec.mjs` 用
+// `startServer({ launcher: true })` 专门验（**其余 spec** 一律不设；一次性探针可以自己开）。
 //
-// ⚠ 副作用要认下来：服务不再自杀 ⇒ spec 崩溃时可能留下**孤儿 python**。所以
-// startServer 自己保证"端口是干净的"（见下），不指望上一轮收干净。
-//
-// 产品侧那条"F5 重载慢过 1.5 秒会被应用自己关掉"的竞态**不在本夹具判据内**，也**不因
-// 这条改动而消失**——它是真实用户会撞上的问题，如实记账在 docs/agents/local-environment.md，
-// 要修另开单（工单 ui-dom-contract-gate/05 会把这条继续留在台账上）。
+// ⚠ 副作用要认下来：默认不自杀 ⇒ spec 崩溃时可能留下**孤儿 python**。所以 startServer
+// 自己保证"端口是干净的"（见下），不指望上一轮收干净。
 
 // startServer(opts)：起服务并等健康检查通过；返回 { proc, port, url, log(), stop() }。
 //
@@ -132,13 +136,17 @@ function killListeners(port) {
 // `FIRSTEP_BROWSER_SERVER_LOG=<路径>`：把后端 stdout/stderr **边跑边追加**到该文件
 // （排查用：验收中途服务没了时，`log()` 里的最后一段常常拿不到——异常已经抛出来了）。
 // 不设 = 只留在内存里，零影响。
-export async function startServer({ timeoutMs = 30000, requestedPort = 0 } = {}) {
-  if (requestedPort) return spawnOn(requestedPort, timeoutMs, { reclaim: true });
+//
+// `launcher`（工单 launcher-exit-race/04）：置 true 时给子进程加 `FIRSTEP_LAUNCHER=1`
+// —— 服务进"关浏览器 = 停服务"模式。**只有 `launcher-reload.spec.mjs` 用它**（那条 spec
+// 要的就是产品侧的自动退出行为）；其余 spec 一律不设（理由见上）。
+export async function startServer({ timeoutMs = 30000, requestedPort = 0, launcher = false } = {}) {
+  if (requestedPort) return spawnOn(requestedPort, timeoutMs, { reclaim: true, launcher });
   // 内核分配的空闲端口有"要完到用上"的窗口：抢输了就再要一个（最多三次）
   let lastError = null;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      return await spawnOn(await freePort(), timeoutMs, { reclaim: false });
+      return await spawnOn(await freePort(), timeoutMs, { reclaim: false, launcher });
     } catch (e) {
       lastError = e;
       if (!/EADDRINUSE|10048|已被占用/.test(String(e && e.message))) throw e;
@@ -148,7 +156,7 @@ export async function startServer({ timeoutMs = 30000, requestedPort = 0 } = {})
 }
 
 /** 在指定端口上起服务。reclaim=true 时先收掉端口上的遗留进程（钉死端口的场景）。 */
-async function spawnOn(port, timeoutMs, { reclaim }) {
+async function spawnOn(port, timeoutMs, { reclaim, launcher }) {
   if (await portListening(port)) {
     if (!reclaim) throw new Error(`端口 ${port} 已被占用（EADDRINUSE）`);
     await killListeners(port);
@@ -158,16 +166,21 @@ async function spawnOn(port, timeoutMs, { reclaim }) {
       throw new Error(`端口 ${port} 上的遗留服务收不掉——请手动收掉再跑`);
     }
   }
-  return spawnServer({ port, url: `http://127.0.0.1:${port}`, timeoutMs });
+  return spawnServer({ port, url: `http://127.0.0.1:${port}`, timeoutMs, launcher });
 }
 
-async function spawnServer({ port, url, timeoutMs }) {
+async function spawnServer({ port, url, timeoutMs, launcher }) {
   const env = {
     ...process.env,
     PYTHONPATH: "src",
     PYTHONIOENCODING: "utf-8",
     FIRSTEP_LAUNCHER_PORT: String(port),
+    // 不缓冲：**服务被自己关掉**（或崩掉）时，uvicorn 的 access log 若还压在块缓冲里，
+    // 就随进程一起没了——而那正是这套日志最要被读到的时候（工单 launcher-exit-race/04
+    // 实测：`FIRSTEP_BROWSER_SERVER_LOG` 只收到 8 行、一条请求都没有）。
+    PYTHONUNBUFFERED: "1",
   };
+  if (launcher) env.FIRSTEP_LAUNCHER = "1";
   const proc = spawn("python", ["-m", "contest_generator.webapp"], {
     cwd: REPO_ROOT,
     env,

@@ -1,0 +1,6 @@
+首次加载：timeOrigin = 1790006241575.2
+第 1 次 reload：timeOrigin = 1790006242010.9（与首次不同 ✓；与上一次—）
+第 2 次 reload：timeOrigin = 1790006242247.5（与首次不同 ✓；与上一次见上）
+第 3 次 reload：timeOrigin = 1790006242527.8（与首次不同 ✓；与上一次见上）
+reload({waitUntil:"domcontentloaded"}) 返回瞬间：平台卡 0 个（0 = DOMContentLoaded 早于模块图/init，用例必须再等一次 ready）
+（服务已由本探针收掉）
