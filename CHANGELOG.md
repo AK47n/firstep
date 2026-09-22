@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=78d69b807e25d3ff92513aee7067691a1a655bbc -->
+<!-- changelog-auto: last-commit=884894cb7505372eb363f0dcb18aad800ac82472 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -14,6 +14,7 @@
 - 18:31 工单 webapp-state-into-ctx/04：文档与账本收尾（C6 结清）
 - 19:33 工单 full-update-state-into-ctx/01：完整包会话态进 AppContext（check 缓存 + 任务单例）
 - 20:10 工单 full-update-state-into-ctx/02：并发 apply 只放一个任务进闸（_full_task_lock）
+- 21:45 工单 full-update-state-into-ctx/03：结构钉扩面（full_task 腿 + src 全域 global = 0）
 
 ## 2026-09-21
 - 12:38 工单 frontend-boot-module/01-02：装载根搬进 boot.js（index.html 只留一条标签 + 判据单源与守卫重定根）
