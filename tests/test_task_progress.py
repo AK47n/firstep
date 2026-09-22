@@ -382,8 +382,14 @@ def test_run_task_planning_force_backs_up_old_plan(tmp_path):
 
 
 @pytest.fixture
-def tasks_client(tmp_path):
-    """已配置的假上下文：假模块库 + 假母版 + 假 LLM（照 deepen_client 先例）。"""
+def tasks_context(tmp_path):
+    """已配置的假上下文：假模块库 + 假母版 + 假 LLM（照 test_webapp.py 的 context 先例）。
+
+    返回 `(ctx, holder)`：`holder["llm"]` 是当前 LLM，测试可随时换掉它（llm_factory 每次
+    请求读 holder）。**`ctx` 就是本用例那个 app 实例的上下文**——会话态（任务执行注册表
+    等）长在它上面，测试要注入或断言就在自己这一个实例上做，不再伸手进 webapp 模块
+    （工单 webapp-state-into-ctx/01）。
+    """
     config_path = tmp_path / "cfg" / "config.json"
     library_dir = make_fake_module_library(tmp_path / "module_library")
     make_fake_master_project(tmp_path / "masters" / PLATFORM_STM32)
@@ -398,6 +404,16 @@ def tasks_client(tmp_path):
         llm_factory=lambda config: holder["llm"],
         desktop_dir=lambda: tmp_path / "Desktop",
     )
+    return ctx, holder
+
+
+@pytest.fixture
+def tasks_client(tasks_context, tmp_path):
+    """本用例的 TestClient：与 `tasks_context` **同一个 ctx 实例**。
+
+    返回值形状与拆分前一致（`client, holder, tmp_path`），既有用例的解包一行不动。
+    """
+    ctx, holder = tasks_context
     return TestClient(create_app(ctx)), holder, tmp_path
 
 
@@ -418,6 +434,24 @@ def _generate_project(client, tmp_path) -> str:
     )
     assert resp.status_code == 200, resp.text
     return resp.json()["output_dir"]
+
+
+def _make_zombie_doing(client, holder, tmp_path) -> str:
+    """造一份「僵尸 doing」清单：生成工程 → 拆解 → 该任务改 doing → 返回工程目录。
+
+    两条改标用例共用的前置（占用即拒 / 清空后恢复 / 两实例互不可见）：转移表允许
+    doing→pending，所以这是「执行中断后人工恢复」那条通道的入口。
+    """
+    output_dir = _generate_project(client, tmp_path)
+    holder["llm"] = FakeLLM(
+        task_plan=TaskPlan(tasks=(Task(id="t1", title="循迹", description="循迹决策"),))
+    )
+    client.post("/api/tasks/plan", json={"output_dir": output_dir})
+    path = Path(output_dir) / TASKS_MANIFEST_FILENAME
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    saved["tasks"][0]["status"] = STATUS_DOING
+    path.write_text(json.dumps(saved), encoding="utf-8")
+    return output_dir
 
 
 def test_tasks_plan_sse_flow(tasks_client):
@@ -866,9 +900,10 @@ def test_tasks_plan_read_endpoint(tasks_client):
     assert resp.json()["plan"]["tasks"][0]["title"] == "循迹"
 
 
-def test_tasks_execute_sse_flow(tasks_client, monkeypatch):
+def test_tasks_execute_sse_flow(tasks_client, tasks_context, monkeypatch):
     """执行端点：task_executing → done（verified）；清单状态已回填。"""
     client, holder, tmp_path = tasks_client
+    ctx, _ = tasks_context
     output_dir = _generate_project(client, tmp_path)
     holder["llm"] = FakeLLM(
         task_plan=TaskPlan(
@@ -890,15 +925,13 @@ def test_tasks_execute_sse_flow(tasks_client, monkeypatch):
     # 执行注册表（工单 stuck-doing-recover/01）：执行登记 → finally 清理。
     # 断言必须放在 _sse_events 消费之后——run() 惰性执行，add/discard 发生在
     # SSE 事件迭代内（spec 轴评审整改：post 后即刻断言读到的是「从未注册」，
-    # 无法证明 add/discard 触发）。
-    from contest_generator.webapp import _running_task_execs
-
+    # 无法证明 add/discard 触发）。注册表住在 ctx 上（工单 webapp-state-into-ctx/01）。
     resp = client.post(
         "/api/tasks/execute", json={"output_dir": output_dir, "task_id": "t1"}
     )
     assert resp.status_code == 200, resp.text
     events = _sse_events(resp)
-    assert "t1" not in _running_task_execs  # finally 已清（完成路径）
+    assert "t1" not in ctx.running_task_execs  # finally 已清（完成路径）
     types = [event_type for event_type, _ in events]
     assert types[-1] == "done"
     assert "task_executing" in types
@@ -950,13 +983,12 @@ def test_tasks_execute_unknown_task_error_event(tasks_client):
     assert "t99" in events[-1][1]["message"]
 
 
-def test_tasks_execute_run_error_clears_registry(tasks_client, monkeypatch):
+def test_tasks_execute_run_error_clears_registry(tasks_client, tasks_context, monkeypatch):
     """执行注册表异常路径（工单 stuck-doing-recover/01）：run_task 抛异常 →
     SSE 流内 error（run_task 自身恢复任务状态）→ finally discard 注册表——
     进程内异常后恢复功能仍可用（僵尸态可再恢复）。"""
-    from contest_generator.webapp import _running_task_execs
-
     client, holder, tmp_path = tasks_client
+    ctx, _ = tasks_context
     output_dir = _generate_project(client, tmp_path)
     holder["llm"] = FakeLLM(
         task_plan=TaskPlan(tasks=(Task(id="t1", title="循迹", description="循迹决策"),))
@@ -974,7 +1006,7 @@ def test_tasks_execute_run_error_clears_registry(tasks_client, monkeypatch):
     assert resp.status_code == 200, resp.text
     events = _sse_events(resp)
     assert events[-1][0] == "error"
-    assert "t1" not in _running_task_execs  # 异常路径 finally 已清
+    assert "t1" not in ctx.running_task_execs  # 异常路径 finally 已清
 
 
 def test_tasks_execute_feedback_flow(tasks_client, monkeypatch):
@@ -2750,28 +2782,15 @@ def test_tasks_status_endpoint(tasks_client):
     assert "尚未拆解" in resp.json()["detail"]
 
 
-def test_tasks_status_endpoint_running_task_rejected(tasks_client):
-    """执行注册表（工单 stuck-doing-recover/01）：task 在 _running_task_execs
+def test_tasks_status_endpoint_running_task_rejected(tasks_client, tasks_context):
+    """执行注册表（工单 stuck-doing-recover/01）：task 在 `ctx.running_task_execs`
     中 = 真在执行 → 人工改标 400「正在执行中」；注册表清空后同请求恢复成功
     （僵尸 doing → pending 恢复通道）。"""
-    from contest_generator.webapp import _running_task_execs
-
     client, holder, tmp_path = tasks_client
-    output_dir = _generate_project(client, tmp_path)
-    holder["llm"] = FakeLLM(
-        task_plan=TaskPlan(tasks=(Task(id="t1", title="循迹", description="循迹决策"),))
-    )
-    client.post("/api/tasks/plan", json={"output_dir": output_dir})
-    # 先人为制造僵尸 doing 态（绕过执行——转移表允许 doing→pending 恢复）
-    saved = json.loads(
-        (Path(output_dir) / TASKS_MANIFEST_FILENAME).read_text(encoding="utf-8")
-    )
-    saved["tasks"][0]["status"] = STATUS_DOING
-    (Path(output_dir) / TASKS_MANIFEST_FILENAME).write_text(
-        json.dumps(saved), encoding="utf-8"
-    )
+    ctx, _ = tasks_context
+    output_dir = _make_zombie_doing(client, holder, tmp_path)
     # 真实执行中（注册表占用）→ 拒绝，防并发双写
-    _running_task_execs.add("t1")
+    ctx.running_task_execs.add("t1")
     try:
         resp = client.post(
             "/api/tasks/status",
@@ -2780,7 +2799,7 @@ def test_tasks_status_endpoint_running_task_rejected(tasks_client):
         assert resp.status_code == 400
         assert "正在执行中" in resp.json()["detail"]
     finally:
-        _running_task_execs.discard("t1")
+        ctx.running_task_execs.discard("t1")
     # 进程已死（注册表空）→ 恢复成功：doing → pending
     resp = client.post(
         "/api/tasks/status",
@@ -2788,6 +2807,42 @@ def test_tasks_status_endpoint_running_task_rejected(tasks_client):
     )
     assert resp.status_code == 200
     assert resp.json()["task"]["status"] == STATUS_PENDING
+
+
+def test_running_registry_is_per_app_instance(tasks_client, tasks_context):
+    """执行注册表随 app 实例走（工单 webapp-state-into-ctx/01）：A 实例登记为「正在执行」
+    的 task，B 实例看不见——B 的改标端点不再被 A 的状态拒。
+
+    收走前两边共用 webapp 的模块级全局，B 会跟着 400（同一个进程里两个 app 实例共用
+    任务状态，这正是本条要治的病）；那段**行为红**的读数在
+    `.scratch/webapp-state-into-ctx/probe-00-sharing.py` + `verify-00-sharing-before.txt`
+    ——本用例在收走前只能红在 AttributeError（那时还没有 `ctx.running_task_execs` 这个缝）。
+    A 自己仍然拒（判据没变，只是归属变了）。
+    """
+    client, holder, tmp_path = tasks_client
+    ctx, _ = tasks_context
+    output_dir = _make_zombie_doing(client, holder, tmp_path)
+    ctx.running_task_execs.add("t1")
+    try:
+        # A 实例自己：占用即拒（同一条缝，判据未变）
+        resp_a = client.post(
+            "/api/tasks/status",
+            json={"output_dir": output_dir, "task_id": "t1", "status": "pending"},
+        )
+        assert resp_a.status_code == 400
+        assert "正在执行中" in resp_a.json()["detail"]
+        # 另一个实例（另一个 AppContext）：看不见 A 的注册表 → 恢复成功
+        client_b = TestClient(
+            create_app(AppContext(config_path=tmp_path / "cfg-b" / "config.json"))
+        )
+        resp_b = client_b.post(
+            "/api/tasks/status",
+            json={"output_dir": output_dir, "task_id": "t1", "status": "pending"},
+        )
+        assert resp_b.status_code == 200, resp_b.text
+        assert resp_b.json()["task"]["status"] == STATUS_PENDING
+    finally:
+        ctx.running_task_execs.discard("t1")
 
 
 def test_revision_regeneration_invalidates_tasks(tmp_path, monkeypatch):

@@ -430,14 +430,6 @@ def spawn_updater(
         stderr=subprocess.DEVNULL,
     )
 
-# 任务执行注册表（工单 stuck-doing-recover/01）：task_id → 正在执行。
-# 模块级 = 测试可注入/断言；单进程本地工具的语义：进程活着 = 注册表有记录 =
-# 任务真在执行；进程死了 = 注册表自然清空 = 「僵尸 doing 恢复」安全。
-# tasks_execute 进 run() 时 add、finally discard（完成 / 异常都清）；
-# tasks_status 见占用记录即拒人工改标（防把正在跑的任务恢复为 pending 后
-# 并发双写 main.c）。
-_running_task_execs: set[str] = set()
-
 # 平台展示名（仅界面用；平台词表本体在 platforms.py）
 PLATFORM_DISPLAY_NAMES = {
     PLATFORM_STM32: "STM32F103C8T6 最小系统板 · Keil5",
@@ -622,6 +614,13 @@ class AppContext:
     # 标签页 / 连点攒半成品目录（旧 unique 静默换名行为已废弃）。
     pending_generations: set[str] = field(default_factory=set)
     _generation_lock: threading.Lock = field(default_factory=threading.Lock)
+    # 任务执行注册表（工单 stuck-doing-recover/01；工单 webapp-state-into-ctx/01 从模块级
+    # 搬进 ctx）：task_id → 正在执行。进程活着 = 集合里有记录 = 任务真在执行；进程死了 =
+    # 集合自然清空 = 「僵尸 doing 恢复」安全。tasks_execute 进 run() 时 add、finally discard
+    # （完成 / 异常都清）；tasks_status 见占用记录即拒人工改标（防把正在跑的任务恢复为
+    # pending 后并发双写 main.c）。**归属在 ctx = 每个 app 实例一份**：测试建几个实例就几份，
+    # 互不可见（收走前是模块级全局，同进程的两个实例共用一张表）。
+    running_task_execs: set[str] = field(default_factory=set)
     # 检测页配方文件的**可选覆盖**（缺省 None = 按模块库根推，见
     # hwcheck_recipe.recipe_library_path）：给测试注入"坏配方 / 缺配方"用——
     # 不改真库那一份（并行跑用例时别的 worker 会读到半截，2026-09-19 踩过）。
@@ -3563,7 +3562,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         llm = llm_run.llm()
 
         def run(emit: SseEmitter) -> None:
-            _running_task_execs.add(task_id)
+            context.running_task_execs.add(task_id)
             try:
                 with bind_llm_telemetry(llm_run.collector, emit.progress):
                     result = run_task(
@@ -3590,7 +3589,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                     )
                 emit.done(result)
             finally:
-                _running_task_execs.discard(task_id)
+                context.running_task_execs.discard(task_id)
                 llm_run.settle()
 
         return StreamingResponse(
@@ -3864,7 +3863,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
         status ∈ pending（重做 / 执行中断恢复）/ verified（上板人工确认）/
         skipped（跳过）。非法转移 → TaskError 400 中文（消息带允许目标清单）；
-        正在执行中（_running_task_execs 占用）拒绝人工改标——防止「僵尸恢复」
+        正在执行中（`running_task_execs` 占用）拒绝人工改标——防止「僵尸恢复」
         误伤真实运行的任务；清单未拆解 / 任务不存在 → TaskError。
 
         返回 {"task": 改标后的任务 to_dict, "plan": 全量清单 to_dict}——
@@ -3876,7 +3875,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         if not output_dir.is_dir():
             raise TaskError(f"输出目录不存在：{output_dir}")
         task_id = _require_str(payload, "task_id")
-        if task_id in _running_task_execs:
+        if task_id in context.running_task_execs:
             raise TaskError(
                 f"任务 {task_id} 正在执行中，无法恢复——请等待完成"
                 "（或重启服务终止旧执行）"
