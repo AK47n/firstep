@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=c29abda36b66ec9c70d2b9e19d27c645a4d043fd -->
+<!-- changelog-auto: last-commit=743f2b20986bfa9dce230cb3d081eafd23d84bef -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -8,6 +8,7 @@
 - 00:39 工单 hwcheck-unknown-device/12：自建件 id 文法收紧到 C 标识符（连字符建不出坏工程）
 - 01:40 工单 hwcheck-unknown-device/07：资料 → 事实草稿（AI 只填草稿，确认前不落盘）
 - 03:35 工单 hwcheck-unknown-device/08：定义/资料/草稿归档进工程 + 回读以快照为准
+- 07:42 工单 hwcheck-unknown-device/09：AI 排障带自建件事实（上下文 + 白名单 + 快照口径）
 
 ## 2026-09-23
 - 12:21 ﻿工单 hwcheck-unknown-device/02：「我的器件」（库外件）定义 + 数据目录 + 端点 + 检测页表单
