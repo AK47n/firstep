@@ -1,0 +1,103 @@
+exit_code=0
+compile_passed=True
+device_slugs=['led', 'delay', 'debug_uart', 'oled', 'i2c_probe']
+notes=[]
+warnings_ours=0
+warnings_known_toolchain=0
+
+gmake: Entering directory 'C:/Users/luoji/Desktop/firstep/.scratch/hwcheck-unknown-device/matrix/custom-shape3-judge-mspm0/Debug'
+'SysConfig - building file: "../mspm0.syscfg"'
+"C:\ti\ccs2051\sysconfig_1.26.2\sysconfig_cli.bat" -s "C:\ti\ccs2051\mspm0_sdk_2_10_00_04/.metadata/product.json" --script "../mspm0.syscfg" -o "." --compiler ticlang
+Running script...
+Validating...
+Generating Code (mspm0.syscfg)...
+Writing C:\Users\luoji\Desktop\firstep\.scratch\hwcheck-unknown-device\matrix\custom-shape3-judge-mspm0\Debug\device_linker.cmd...
+Writing C:\Users\luoji\Desktop\firstep\.scratch\hwcheck-unknown-device\matrix\custom-shape3-judge-mspm0\Debug\device.opt...
+Writing C:\Users\luoji\Desktop\firstep\.scratch\hwcheck-unknown-device\matrix\custom-shape3-judge-mspm0\Debug\device.cmd.genlibs...
+Writing C:\Users\luoji\Desktop\firstep\.scratch\hwcheck-unknown-device\matrix\custom-shape3-judge-mspm0\Debug\ti_msp_dl_config.c...
+Writing C:\Users\luoji\Desktop\firstep\.scratch\hwcheck-unknown-device\matrix\custom-shape3-judge-mspm0\Debug\ti_msp_dl_config.h...
+Writing C:\Users\luoji\Desktop\firstep\.scratch\hwcheck-unknown-device\matrix\custom-shape3-judge-mspm0\Debug\Event.dot...
+'Finished building: "../mspm0.syscfg"'
+' '
+'Arm Compiler - building file: "ti_msp_dl_config.c"'
+"C:\ti\ccs2050\ccs\tools\compiler\ti-cgt-armllvm_4.0.4.LTS/bin/tiarmclang.exe" -c @"./device.opt" -march=thumbv6m -mcpu=cortex-m0plus -mfloat-abi=soft -mlittle-endian -mthumb -O0 -gdwarf-3 -Wall -MMD -MP -I".." -I"." -I"../modules/led/code" -I"../modules/delay/code" -I"../modules/debug_uart/code" -I"../modules/oled/code" -I"../modules/i2c_probe/code" -I"../modules/config/code" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source/third_party/CMSIS/Core/Include" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source" -MF"ti_msp_dl_config.d_raw" -MT"ti_msp_dl_config.o"  @"./device.opt" -o"ti_msp_dl_config.o" "ti_msp_dl_config.c"
+'Finished building: "ti_msp_dl_config.c"'
+' '
+'Arm Compiler - building file: "C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source/ti/devices/msp/m0p/startup_system_files/ticlang/startup_mspm0g350x_ticlang.c"'
+"C:\ti\ccs2050\ccs\tools\compiler\ti-cgt-armllvm_4.0.4.LTS/bin/tiarmclang.exe" -c @"./device.opt" -march=thumbv6m -mcpu=cortex-m0plus -mfloat-abi=soft -mlittle-endian -mthumb -O0 -gdwarf-3 -Wall -MMD -MP -I".." -I"." -I"../modules/led/code" -I"../modules/delay/code" -I"../modules/debug_uart/code" -I"../modules/oled/code" -I"../modules/i2c_probe/code" -I"../modules/config/code" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source/third_party/CMSIS/Core/Include" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source" -MF"startup_mspm0g350x_ticlang.d_raw" -MT"startup_mspm0g350x_ticlang.o"  @"./device.opt" -o"startup_mspm0g350x_ticlang.o" "C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source/ti/devices/msp/m0p/startup_system_files/ticlang/startup_mspm0g350x_ticlang.c"
+'Finished building: "C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source/ti/devices/msp/m0p/startup_system_files/ticlang/startup_mspm0g350x_ticlang.c"'
+' '
+'Arm Compiler - building file: "../main.c"'
+"C:\ti\ccs2050\ccs\tools\compiler\ti-cgt-armllvm_4.0.4.LTS/bin/tiarmclang.exe" -c @"./device.opt" -march=thumbv6m -mcpu=cortex-m0plus -mfloat-abi=soft -mlittle-endian -mthumb -O0 -gdwarf-3 -Wall -MMD -MP -I".." -I"." -I"../modules/led/code" -I"../modules/delay/code" -I"../modules/debug_uart/code" -I"../modules/oled/code" -I"../modules/i2c_probe/code" -I"../modules/config/code" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source/third_party/CMSIS/Core/Include" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source" -MF"main.d_raw" -MT"main.o"  @"./device.opt" -o"main.o" "../main.c"
+'Finished building: "../main.c"'
+' '
+'Arm Compiler - building file: "../modules/led/code/led.c"'
+"C:\ti\ccs2050\ccs\tools\compiler\ti-cgt-armllvm_4.0.4.LTS/bin/tiarmclang.exe" -c @"./device.opt" -march=thumbv6m -mcpu=cortex-m0plus -mfloat-abi=soft -mlittle-endian -mthumb -O0 -gdwarf-3 -Wall -MMD -MP -I".." -I"." -I"../modules/led/code" -I"../modules/delay/code" -I"../modules/debug_uart/code" -I"../modules/oled/code" -I"../modules/i2c_probe/code" -I"../modules/config/code" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source/third_party/CMSIS/Core/Include" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source" -MF"modules/led/code/led.d_raw" -MT"modules/led/code/led.o"  @"./device.opt" -o"modules/led/code/led.o" "../modules/led/code/led.c"
+'Finished building: "../modules/led/code/led.c"'
+' '
+'Arm Compiler - building file: "../modules/delay/code/delay.c"'
+"C:\ti\ccs2050\ccs\tools\compiler\ti-cgt-armllvm_4.0.4.LTS/bin/tiarmclang.exe" -c @"./device.opt" -march=thumbv6m -mcpu=cortex-m0plus -mfloat-abi=soft -mlittle-endian -mthumb -O0 -gdwarf-3 -Wall -MMD -MP -I".." -I"." -I"../modules/led/code" -I"../modules/delay/code" -I"../modules/debug_uart/code" -I"../modules/oled/code" -I"../modules/i2c_probe/code" -I"../modules/config/code" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source/third_party/CMSIS/Core/Include" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source" -MF"modules/delay/code/delay.d_raw" -MT"modules/delay/code/delay.o"  @"./device.opt" -o"modules/delay/code/delay.o" "../modules/delay/code/delay.c"
+'Finished building: "../modules/delay/code/delay.c"'
+' '
+'Arm Compiler - building file: "../modules/debug_uart/code/debug_uart_mspm0.c"'
+"C:\ti\ccs2050\ccs\tools\compiler\ti-cgt-armllvm_4.0.4.LTS/bin/tiarmclang.exe" -c @"./device.opt" -march=thumbv6m -mcpu=cortex-m0plus -mfloat-abi=soft -mlittle-endian -mthumb -O0 -gdwarf-3 -Wall -MMD -MP -I".." -I"." -I"../modules/led/code" -I"../modules/delay/code" -I"../modules/debug_uart/code" -I"../modules/oled/code" -I"../modules/i2c_probe/code" -I"../modules/config/code" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source/third_party/CMSIS/Core/Include" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source" -MF"modules/debug_uart/code/debug_uart_mspm0.d_raw" -MT"modules/debug_uart/code/debug_uart_mspm0.o"  @"./device.opt" -o"modules/debug_uart/code/debug_uart_mspm0.o" "../modules/debug_uart/code/debug_uart_mspm0.c"
+'Finished building: "../modules/debug_uart/code/debug_uart_mspm0.c"'
+' '
+'Arm Compiler - building file: "../modules/oled/code/oled.c"'
+"C:\ti\ccs2050\ccs\tools\compiler\ti-cgt-armllvm_4.0.4.LTS/bin/tiarmclang.exe" -c @"./device.opt" -march=thumbv6m -mcpu=cortex-m0plus -mfloat-abi=soft -mlittle-endian -mthumb -O0 -gdwarf-3 -Wall -MMD -MP -I".." -I"." -I"../modules/led/code" -I"../modules/delay/code" -I"../modules/debug_uart/code" -I"../modules/oled/code" -I"../modules/i2c_probe/code" -I"../modules/config/code" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source/third_party/CMSIS/Core/Include" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source" -MF"modules/oled/code/oled.d_raw" -MT"modules/oled/code/oled.o"  @"./device.opt" -o"modules/oled/code/oled.o" "../modules/oled/code/oled.c"
+'Finished building: "../modules/oled/code/oled.c"'
+' '
+'Arm Compiler - building file: "../modules/i2c_probe/code/i2c_probe.c"'
+"C:\ti\ccs2050\ccs\tools\compiler\ti-cgt-armllvm_4.0.4.LTS/bin/tiarmclang.exe" -c @"./device.opt" -march=thumbv6m -mcpu=cortex-m0plus -mfloat-abi=soft -mlittle-endian -mthumb -O0 -gdwarf-3 -Wall -MMD -MP -I".." -I"." -I"../modules/led/code" -I"../modules/delay/code" -I"../modules/debug_uart/code" -I"../modules/oled/code" -I"../modules/i2c_probe/code" -I"../modules/config/code" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source/third_party/CMSIS/Core/Include" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source" -MF"modules/i2c_probe/code/i2c_probe.d_raw" -MT"modules/i2c_probe/code/i2c_probe.o"  @"./device.opt" -o"modules/i2c_probe/code/i2c_probe.o" "../modules/i2c_probe/code/i2c_probe.c"
+'Finished building: "../modules/i2c_probe/code/i2c_probe.c"'
+' '
+'SysConfig - building file: "../mspm0.syscfg"'
+"C:\ti\ccs2051\sysconfig_1.26.2\sysconfig_cli.bat" -s "C:\ti\ccs2051\mspm0_sdk_2_10_00_04/.metadata/product.json" --script "../mspm0.syscfg" -o "." --compiler ticlang
+Running script...
+Validating...
+Generating Code (mspm0.syscfg)...
+Unchanged C:\Users\luoji\Desktop\firstep\.scratch\hwcheck-unknown-device\matrix\custom-shape3-judge-mspm0\Debug\device_linker.cmd...
+Unchanged C:\Users\luoji\Desktop\firstep\.scratch\hwcheck-unknown-device\matrix\custom-shape3-judge-mspm0\Debug\device.opt...
+Unchanged C:\Users\luoji\Desktop\firstep\.scratch\hwcheck-unknown-device\matrix\custom-shape3-judge-mspm0\Debug\device.cmd.genlibs...
+Unchanged C:\Users\luoji\Desktop\firstep\.scratch\hwcheck-unknown-device\matrix\custom-shape3-judge-mspm0\Debug\ti_msp_dl_config.c...
+Unchanged C:\Users\luoji\Desktop\firstep\.scratch\hwcheck-unknown-device\matrix\custom-shape3-judge-mspm0\Debug\ti_msp_dl_config.h...
+Unchanged C:\Users\luoji\Desktop\firstep\.scratch\hwcheck-unknown-device\matrix\custom-shape3-judge-mspm0\Debug\Event.dot...
+'Finished building: "../mspm0.syscfg"'
+' '
+'Arm Compiler - building file: "ti_msp_dl_config.c"'
+"C:\ti\ccs2050\ccs\tools\compiler\ti-cgt-armllvm_4.0.4.LTS/bin/tiarmclang.exe" -c @"./device.opt" -march=thumbv6m -mcpu=cortex-m0plus -mfloat-abi=soft -mlittle-endian -mthumb -O0 -gdwarf-3 -Wall -MMD -MP -I".." -I"." -I"../modules/led/code" -I"../modules/delay/code" -I"../modules/debug_uart/code" -I"../modules/oled/code" -I"../modules/i2c_probe/code" -I"../modules/config/code" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source/third_party/CMSIS/Core/Include" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source" -MF"ti_msp_dl_config.d_raw" -MT"ti_msp_dl_config.o"  @"./device.opt" -o"ti_msp_dl_config.o" "ti_msp_dl_config.c"
+'Finished building: "ti_msp_dl_config.c"'
+' '
+'Arm Compiler - building file: "C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source/ti/devices/msp/m0p/startup_system_files/ticlang/startup_mspm0g350x_ticlang.c"'
+"C:\ti\ccs2050\ccs\tools\compiler\ti-cgt-armllvm_4.0.4.LTS/bin/tiarmclang.exe" -c @"./device.opt" -march=thumbv6m -mcpu=cortex-m0plus -mfloat-abi=soft -mlittle-endian -mthumb -O0 -gdwarf-3 -Wall -MMD -MP -I".." -I"." -I"../modules/led/code" -I"../modules/delay/code" -I"../modules/debug_uart/code" -I"../modules/oled/code" -I"../modules/i2c_probe/code" -I"../modules/config/code" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source/third_party/CMSIS/Core/Include" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source" -MF"startup_mspm0g350x_ticlang.d_raw" -MT"startup_mspm0g350x_ticlang.o"  @"./device.opt" -o"startup_mspm0g350x_ticlang.o" "C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source/ti/devices/msp/m0p/startup_system_files/ticlang/startup_mspm0g350x_ticlang.c"
+'Finished building: "C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source/ti/devices/msp/m0p/startup_system_files/ticlang/startup_mspm0g350x_ticlang.c"'
+' '
+'Arm Compiler - building file: "../main.c"'
+"C:\ti\ccs2050\ccs\tools\compiler\ti-cgt-armllvm_4.0.4.LTS/bin/tiarmclang.exe" -c @"./device.opt" -march=thumbv6m -mcpu=cortex-m0plus -mfloat-abi=soft -mlittle-endian -mthumb -O0 -gdwarf-3 -Wall -MMD -MP -I".." -I"." -I"../modules/led/code" -I"../modules/delay/code" -I"../modules/debug_uart/code" -I"../modules/oled/code" -I"../modules/i2c_probe/code" -I"../modules/config/code" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source/third_party/CMSIS/Core/Include" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source" -MF"main.d_raw" -MT"main.o"  @"./device.opt" -o"main.o" "../main.c"
+'Finished building: "../main.c"'
+' '
+'Arm Compiler - building file: "../modules/led/code/led.c"'
+"C:\ti\ccs2050\ccs\tools\compiler\ti-cgt-armllvm_4.0.4.LTS/bin/tiarmclang.exe" -c @"./device.opt" -march=thumbv6m -mcpu=cortex-m0plus -mfloat-abi=soft -mlittle-endian -mthumb -O0 -gdwarf-3 -Wall -MMD -MP -I".." -I"." -I"../modules/led/code" -I"../modules/delay/code" -I"../modules/debug_uart/code" -I"../modules/oled/code" -I"../modules/i2c_probe/code" -I"../modules/config/code" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source/third_party/CMSIS/Core/Include" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source" -MF"modules/led/code/led.d_raw" -MT"modules/led/code/led.o"  @"./device.opt" -o"modules/led/code/led.o" "../modules/led/code/led.c"
+'Finished building: "../modules/led/code/led.c"'
+' '
+'Arm Compiler - building file: "../modules/delay/code/delay.c"'
+"C:\ti\ccs2050\ccs\tools\compiler\ti-cgt-armllvm_4.0.4.LTS/bin/tiarmclang.exe" -c @"./device.opt" -march=thumbv6m -mcpu=cortex-m0plus -mfloat-abi=soft -mlittle-endian -mthumb -O0 -gdwarf-3 -Wall -MMD -MP -I".." -I"." -I"../modules/led/code" -I"../modules/delay/code" -I"../modules/debug_uart/code" -I"../modules/oled/code" -I"../modules/i2c_probe/code" -I"../modules/config/code" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source/third_party/CMSIS/Core/Include" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source" -MF"modules/delay/code/delay.d_raw" -MT"modules/delay/code/delay.o"  @"./device.opt" -o"modules/delay/code/delay.o" "../modules/delay/code/delay.c"
+'Finished building: "../modules/delay/code/delay.c"'
+' '
+'Arm Compiler - building file: "../modules/debug_uart/code/debug_uart_mspm0.c"'
+"C:\ti\ccs2050\ccs\tools\compiler\ti-cgt-armllvm_4.0.4.LTS/bin/tiarmclang.exe" -c @"./device.opt" -march=thumbv6m -mcpu=cortex-m0plus -mfloat-abi=soft -mlittle-endian -mthumb -O0 -gdwarf-3 -Wall -MMD -MP -I".." -I"." -I"../modules/led/code" -I"../modules/delay/code" -I"../modules/debug_uart/code" -I"../modules/oled/code" -I"../modules/i2c_probe/code" -I"../modules/config/code" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source/third_party/CMSIS/Core/Include" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source" -MF"modules/debug_uart/code/debug_uart_mspm0.d_raw" -MT"modules/debug_uart/code/debug_uart_mspm0.o"  @"./device.opt" -o"modules/debug_uart/code/debug_uart_mspm0.o" "../modules/debug_uart/code/debug_uart_mspm0.c"
+'Finished building: "../modules/debug_uart/code/debug_uart_mspm0.c"'
+' '
+'Arm Compiler - building file: "../modules/oled/code/oled.c"'
+"C:\ti\ccs2050\ccs\tools\compiler\ti-cgt-armllvm_4.0.4.LTS/bin/tiarmclang.exe" -c @"./device.opt" -march=thumbv6m -mcpu=cortex-m0plus -mfloat-abi=soft -mlittle-endian -mthumb -O0 -gdwarf-3 -Wall -MMD -MP -I".." -I"." -I"../modules/led/code" -I"../modules/delay/code" -I"../modules/debug_uart/code" -I"../modules/oled/code" -I"../modules/i2c_probe/code" -I"../modules/config/code" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source/third_party/CMSIS/Core/Include" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source" -MF"modules/oled/code/oled.d_raw" -MT"modules/oled/code/oled.o"  @"./device.opt" -o"modules/oled/code/oled.o" "../modules/oled/code/oled.c"
+'Finished building: "../modules/oled/code/oled.c"'
+' '
+'Arm Compiler - building file: "../modules/i2c_probe/code/i2c_probe.c"'
+"C:\ti\ccs2050\ccs\tools\compiler\ti-cgt-armllvm_4.0.4.LTS/bin/tiarmclang.exe" -c @"./device.opt" -march=thumbv6m -mcpu=cortex-m0plus -mfloat-abi=soft -mlittle-endian -mthumb -O0 -gdwarf-3 -Wall -MMD -MP -I".." -I"." -I"../modules/led/code" -I"../modules/delay/code" -I"../modules/debug_uart/code" -I"../modules/oled/code" -I"../modules/i2c_probe/code" -I"../modules/config/code" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source/third_party/CMSIS/Core/Include" -I"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source" -MF"modules/i2c_probe/code/i2c_probe.d_raw" -MT"modules/i2c_probe/code/i2c_probe.o"  @"./device.opt" -o"modules/i2c_probe/code/i2c_probe.o" "../modules/i2c_probe/code/i2c_probe.c"
+'Finished building: "../modules/i2c_probe/code/i2c_probe.c"'
+' '
+'Arm Linker - building target: "mspm0_project.out"'
+"C:\ti\ccs2050\ccs\tools\compiler\ti-cgt-armllvm_4.0.4.LTS/bin/tiarmclang.exe" @"device.opt"  -march=thumbv6m -mcpu=cortex-m0plus -mfloat-abi=soft -mlittle-endian -mthumb -O0 -gdwarf-3 -Wall -Wl,-m"mspm0_project.map" -Wl,-i"C:\ti\ccs2051\mspm0_sdk_2_10_00_04/source" -Wl,-i".." -Wl,-i"./syscfg" -Wl,-i"C:\ti\ccs2050\ccs\tools\compiler\ti-cgt-armllvm_4.0.4.LTS/lib" -Wl,--diag_wrap=off -Wl,--display_error_number -Wl,--warn_sections -Wl,--xml_link_info="mspm0_project_linkInfo.xml" -Wl,--rom_model -o "mspm0_project.out" ./ti_msp_dl_config.o ./startup_mspm0g350x_ticlang.o ./main.o ./modules/led/code/led.o ./modules/delay/code/delay.o ./modules/debug_uart/code/debug_uart_mspm0.o ./modules/oled/code/oled.o ./modules/i2c_probe/code/i2c_probe.o -Wl,-l"./device_linker.cmd" -Wl,-ldevice.cmd.genlibs -Wl,-llibc.a
+'Finished building target: "mspm0_project.out"'
+' '
+gmake: Leaving directory 'C:/Users/luoji/Desktop/firstep/.scratch/hwcheck-unknown-device/matrix/custom-shape3-judge-mspm0/Debug'

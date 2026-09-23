@@ -88,6 +88,27 @@ PROBE_HEADERS: dict[str, str] = {
     PLATFORM_MSPM0: "i2c_probe.h",
 }
 
+# **这一对脚的平台代价**（工单 04 验收项 4：产物注释与页面同一句措辞）。
+#
+# 为什么产物里可以写它、而引脚字面量不行（两件事别混）：生成门禁
+# （`generator._check_no_pin_literals_in_main`）是**剥注释后**判的（`clex.strip_comments`），
+# 注释与字符串里的针脚名无害——它挡的是"代码内联引脚"（那样换板就得重写骨架、
+# 也绕开了 ADR 0010 的改绑机制）。而下面这两句里**一个引脚名都没有**，说的是
+# 板子上的既有接线与焊接事实，正是学生照表接线时会撞上的那颗暗雷。
+#
+# 判据来源（**不许在这里另写一份**）：板定义 `boards/mspm0-dimx.json` 的
+# `BoardPin.notes`（PA0/PA1）——页面接线行的 `pin_note` 与工程 README 读的是同一份。
+# 这两句是那份注记的**人读复述**（去掉引脚名，因为脚名在接线表里已经有了），
+# `tests/test_hwcheck_custom.py::test_the_platform_cost_sentence_matches_the_board_definition`
+# 按关键词逐条对账，板定义改了它就会红。
+PLATFORM_PIN_COST: dict[str, str] = {
+    PLATFORM_MSPM0: (
+        "与板载 LED 共用（通信期间 LED 微闪属正常）；"
+        "SDA 那根的板载上拉位未焊，依赖模块板自带的上拉电阻"
+    ),
+    PLATFORM_STM32: "",
+}
+
 # 这一节可以调的**框架运行时**（由 hwcheck.py 按需渲染）。多一个都不行：
 # 框架没渲那个函数时产物编不过，而这正是"按需渲染"验收线的负向判据。
 RUNTIME_CALLS: tuple[str, ...] = (
@@ -227,7 +248,10 @@ def _comment_text(text: str) -> str:
 
 
 def render_custom_section(
-    device: CustomDevice, *, has_output_channel: bool = True
+    device: CustomDevice,
+    *,
+    has_output_channel: bool = True,
+    platform: str = "",
 ) -> list[str]:
     """一件自建件的探测小节 → 缩进好的 C 语句行（纯函数，可逐字断言）。
 
@@ -237,11 +261,17 @@ def render_custom_section(
     产物形态（确定性）：
 
     1. 注释块说明这是**按用户确认的事实**探测的（不是库内驱动、不是 AI 写的）；
+       平台词表内还带一句**这一对脚的平台代价**（`PLATFORM_PIN_COST`，工单 04
+       验收项 4：与页面同一句措辞——学生在产物里读到的与在检测页读到的是同一条
+       硬件事实，不必回页面才想起来"LED 怎么在闪"）；
     2. `hwcheck_section(...)` 分节头；
     3. `i2c_probe_init()` → `i2c_probe_ping(0xNN)`：不通就报 FAIL、给排查话术、
        **直接 return**（不通还接着读寄存器只会得到一串无意义的失败）；
     4. 有寄存器：读回值与返回码**两分**；有期望值就板上比较 → `hwcheck_verdict`，
        没有就**只回显**（十六进制）并明说"没有期望值可比"。
+
+    `platform` 缺省空 = 不印代价那句（纯设备侧渲染的既有调用方照旧；平台词表外
+    同样不印——产物的**结构**仍与平台无关，多出来的只是一句人读注释）。
 
     ⚠ **字面量一律经 `c_string` 转义**（非 ASCII → 三位八进制）：ARMCC 5.06 按
     本地代码页解析源文件，原样中文会让整份 main.c 编不过（工单 05 真机判例）。
@@ -260,6 +290,9 @@ def render_custom_section(
         "       寄存器，不写任何寄存器（猜出来的读法比不测更坏）。总线与引脚由",
         "       i2c_probe 决定——接线见检测页与工程 README。 */",
     ]
+    if cost := PLATFORM_PIN_COST.get(platform, ""):
+        # 与页面同一句措辞（接线行 / 板上共享那两处的注记原文的人读复述）
+        out.append(f"    /* 这一对脚的平台代价（与检测页同一句）：{cost}。 */")
     if device.notes:
         out.append(f"    /* 你填的备注：{_comment_text(device.notes)} */")
     out.append(

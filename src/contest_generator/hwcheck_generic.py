@@ -479,19 +479,24 @@ def resolve_generic_sections(
 def render_generic_runtime(sections: Sequence[GenericSection]) -> list[str]:
     """通用降级的**共用运行时**（缩进好的文件作用域语句）。
 
-    **按需渲染**（04/05 编译矩阵纪律）：只有真的有扫描件时才渲染这三个助手
+    **按需渲染**（04/05 编译矩阵纪律）：只有真的有扫描件时才渲染这两个助手
     ——声明了没人调的函数，ARMCC 报 `#177-D`、tiarmclang 报 `-Wunused-function`，
     而验收线是 0 error / 0 warning。
 
-    三个助手的形状：
+    两个助手的形状：
 
     * `hwcheck_i2c_ping` —— 发一个起始位 + 地址字节，读第 9 拍的应答。
       **只 ping 地址，一个寄存器都不读**（这是"不猜读函数"的结构证据）。
-    * `hwcheck_report_hex` —— 把地址打成 `0x3C`（读数回显只认十进制，
-      地址用十六进制才是学生能在器件手册上对上的那一个）。
     * `hwcheck_i2c_scan` —— 扫 `SCAN_ADDRESS_FIRST..SCAN_ADDRESS_LAST`，
       打「应答：0xNN」清单；一个都没有时打「无应答」+ 排查话术
       （供电 / 上拉 / 线序——I2C 不通的三个最常见原因）。
+
+    ⚠ **十六进制助手（`hwcheck_report_hex`）不在这里印**（工单 04 编译矩阵抓到的
+    真缺陷）：自建件的「只回显」那一档也要用它，两处各印一份时产物里就出现两个
+    同名定义（`error #247: function "hwcheck_report_hex" has already been
+    defined`）——两批小节单跑都绿，同趟才炸。现在**唯一产地 = `hwcheck._report_function`**
+    （按需渲染的判据在 `render_main_c`：自建件读寄存器 **或** 这一批真有扫描件
+    就要），本函数只管"扫"这件事本身。
 
     引脚由**宏名**参数化（manifest 声明的那两个），不是写死的 `GPIO_A/Pin_6`：
     宏的值住在生成工程的 `pin_config.h`，用户改绑引脚只改那一处（ADR 0010）。
@@ -537,18 +542,6 @@ def render_generic_runtime(sections: Sequence[GenericSection]) -> list[str]:
         "    gpio_set(scl_port, scl_pin, 1);",
         "    gpio_set(sda_port, sda_pin, 1);",
         "    return ack == 0;",
-        "}",
-        "",
-        "/** 把 8 位地址打成两位十六进制（0x3C——学生能在器件手册上对上）。 */",
-        "static void hwcheck_report_hex(int value)",
-        "{",
-        '    static const char hwcheck_hex_digits[] = "0123456789ABCDEF";',
-        "    char pair[3];",
-        "",
-        "    pair[0] = hwcheck_hex_digits[(value >> 4) & 0x0F];",
-        "    pair[1] = hwcheck_hex_digits[value & 0x0F];",
-        "    pair[2] = 0;",
-        "    hwcheck_report(pair);",
         "}",
         "",
         "/** 扫一遍这一件声明的那条总线（只 ping 地址）。 */",

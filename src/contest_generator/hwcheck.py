@@ -37,10 +37,11 @@
 2. **器件模块的头由配方的 `include` 段带进来**：框架那几行只覆盖通道与心跳，
    检测程序直接调模块函数——不 include 就是隐式声明（05 实测 stm32 侧 7 error）。
 3. **按需渲染**（每种形态都要 0 error / 0 warning）：一件带判定的都没有时不留
-   `hwcheck_verdict` / "失败"档（ARMCC `#177-D`）；一件读数都没有时不渲染
-   `hwcheck_report_int`；整趟都是带判定的探头时不留 `hwcheck_verdict_probe_none`
-   （tiarmclang `-Wunused-function`，05 实测）。生成的程序是给学生读的，死代码
-   会让人以为漏调了什么。
+   `hwcheck_verdict` / "失败"档（ARMCC `#177-D`）；**一件小节都没有时**不渲染
+   `hwcheck_report_int`（它有两个消费者：配方的 `read` 段与结尾汇总——两批小节
+   都没有，两个消费者也就一起没了）；整趟都是带判定的探头时不留
+   `hwcheck_verdict_probe_none`（tiarmclang `-Wunused-function`，05 实测）。
+   生成的程序是给学生读的，死代码会让人以为漏调了什么。
 
 还有一处**平台垫片**（`_PLATFORM_FILE_SCOPE`，05 的读源码判例）：mspm0 母版没有
 SysTick 服务函数，而库内 DMP 端口会自己打开 SysTick 中断——不补一个空的
@@ -748,6 +749,10 @@ def render_main_c(
     # 学生更需要有人告诉他"能敲什么、既有那五条还在不在"。固定的帮助命令是
     # 命令表的一部分，命令表为空它也在。
     console_rendered = bool(config.debug_uart)
+    # 「这一趟有没有要扫总线的通用件」——三处消费（引脚宏 include / 十六进制出口 /
+    # 共用运行时的渲染条件），算一次：判据各写一遍就会静默漂移（评审点名的
+    # Duplicated Code）。
+    scan_rendered = any(section.scan is not None for section in generic)
     # 框架这一趟印了哪些头（器件小节的 include 段据此去重，见 _section_includes）
     framework_headers: list[str] = [str(headers["entry"])]
     if config.debug_uart:
@@ -762,7 +767,6 @@ def render_main_c(
     # 那对宏）——**headfile.h 不带它**（模块自己的 .c 各自 include），不显式 include
     # 就是未声明标识符（本单真机判例）。只有真有扫描件时才印：没有扫描的形态
     # 不需要它，多一行 include 会让人以为"这工程依赖引脚宏"。
-    scan_rendered = any(section.scan is not None for section in generic)
     if scan_rendered and headers["pin_config"]:
         framework_headers.append(str(headers["pin_config"]))
     lines: list[str] = [
@@ -828,9 +832,25 @@ def render_main_c(
         lines.append("")
         lines.extend(_report_function(
             config,
-            needs_int=any_section or bool(config.devices),
-            # 自建件里"有寄存器、无期望值"那一档要按十六进制回显一个字节
-            needs_hex=any(section.reads_register for section in custom),
+            # 十进制读数出口的**消费者有两个**（工单 04 真编译矩阵逼出来的判据）：
+            # ① 库内配方的 `read` 段（`hwcheck_recipe` 的
+            #    `hwcheck_report_int(<表达式>)`）；② **结尾汇总**——板上一有判定
+            #    项就逐档打「通过 N 项 / 未判定 N 项」，那三行也走这个出口。
+            # 所以判据 = 「这台程序里有没有小节」（`any_section`），不是"有没有
+            # 选器件"：选了件但一件小节都没出的形态（非 I2C 自建件、本平台没有
+            # 配方的件）原先会渲出一个没人调的 `hwcheck_report_int`，ARMCC 报
+            # `#177-D: function "hwcheck_report_int" was declared but never
+            # referenced`，0 warning 验收线当场破（矩阵抓到的真缺陷）。
+            needs_int=any_section,
+            # 十六进制出口的**两个消费者**：自建件里"有寄存器、无期望值"那一档
+            # 要回显读到的字节；通用降级的**总线地址扫描**要把地址打成 0x3C
+            # （那一批原先自己印一个同名助手——两批小节同趟时产物里就出现两个
+            # `hwcheck_report_hex` 定义，ARMCC 报 `#247: has already been
+            # defined`，同一个矩阵抓到的另一条）。
+            # 现在它只有这一个产地：判据 = **这台程序里有没有人要它**。
+            needs_hex=(
+                any(section.reads_register for section in custom) or scan_rendered
+            ),
         ))
         lines.append("")
         if any_section:
@@ -877,7 +897,9 @@ def render_main_c(
         for section in custom:
             lines.append(f"static void {section.func_name}(void)")
             lines.append("{")
-            lines.extend(render_custom_section(section.device))
+            lines.extend(
+                render_custom_section(section.device, platform=config.platform)
+            )
             lines.append("}")
             lines.append("")
 
@@ -1108,14 +1130,23 @@ def _report_function(
     三个出口都**只做"把这段文本送到所有在场通道"**：通道差异只在各自的
     `hwcheck_write_*` 里出现，框架与逐件小节都不必知道自己往哪儿写。
 
-    `needs_int`（真机编译矩阵实测）：一件读数都没有的形态（不选器件）不渲染
+    `needs_int`（真机编译矩阵实测）：一件小节都没有的形态（不选器件）不渲染
     `hwcheck_report_int`——它是"读数回显"的出口，没人调时 ARMCC 报 `#177-D:
     declared but never referenced`（生成的程序是给人读的，死代码会让人以为
-    漏调了什么）。
+    漏调了什么）。判据是 `any_section`（**有消费者才渲**）：消费者有两个——
+    配方的 `read` 段，以及**结尾汇总**那三行（通过 / 失败 / 未判定各要一个十进制
+    数，`_recipe_runtime` 里恒引用它）；两批小节都没有时两个消费者一起消失，
+    所以"有没有小节"就是"有没有人要它"。
 
-    `needs_hex`（工单 hwcheck-unknown-device/03）同一条口径：自建件"有寄存器、
-    无期望值"那一档要按十六进制回显一个字节——**没有自建件读寄存器时不渲染**
-    它，否则又是死代码（这是 04/05 定下、07 复述的按需渲染纪律）。
+    `needs_hex`（工单 hwcheck-unknown-device/03，04 补齐第二个消费者）同一条口径：
+    它是**唯一产地**（通用降级批次原先自己印一个同名助手，两批同趟时产物里就出现
+    两个定义 = 编译期 `#247`）。消费者有两个：自建件里"有寄存器、无期望值"那一档
+    要按十六进制回显一个字节；通用降级的**总线地址扫描**要把地址打成 `0x3C`。
+    两个都没有时不渲染它——同一条按需渲染纪律。
+
+    ⚠ 两个出口**互相独立**（04 实测踩到）：`needs_hex` 的渲染不能串在
+    `needs_int` 的提前 return 之后——"只有自建件读寄存器"的形态里 `needs_int`
+    恰好是 False，串起来就永远不渲它，而产物里那行调用照样在。
     """
     out: list[str] = [
         "/** 自检结果出口：一段文本攒进当前行；遇到换行就整行送出。 */",
@@ -1145,39 +1176,42 @@ def _report_function(
         '    hwcheck_report("\\n");',
         "}",
     ]
-    if not needs_int:
-        return out
-    out.extend([
-        "",
-        "/** 把一个整数写成十进制（读数回显用；不判阈值——数据合理性归人看）。 */",
-        "static void hwcheck_report_int(int value)",
-        "{",
-        "    char buf[12];",
-        "    int i = 0;",
-        "    int neg = (value < 0);",
-        "    unsigned int v = neg ? (unsigned int)(-value) : (unsigned int)value;",
-        "    if (v == 0)",
-        "    {",
-        "        buf[i++] = '0';",
-        "    }",
-        "    while (v > 0)",
-        "    {",
-        "        buf[i++] = (char)('0' + (int)(v % 10u));",
-        "        v /= 10u;",
-        "    }",
-        "    if (neg)",
-        "    {",
-        '        hwcheck_report("-");',
-        "    }",
-        "    while (i > 0)",
-        "    {",
-        "        char one[2];",
-        "        one[0] = buf[--i];",
-        "        one[1] = 0;",
-        "        hwcheck_report(one);",
-        "    }",
-        "}",
-    ])
+    # ⚠ 两个出口**互相独立**（工单 04 实测踩到）：`needs_hex` 的判据不再是
+    # `needs_int` 的后续——形态"只有自建件读寄存器"里 `needs_int` 恰好是 False
+    # （没有配方 `read` 段），把 hex 段接在 `needs_int` 的提前 return 之后就等于
+    # 永远不渲它，而产物里那行 `hwcheck_report_hex(value)` 照样在（编译期才发现）。
+    if needs_int:
+        out.extend([
+            "",
+            "/** 把一个整数写成十进制（读数回显用；不判阈值——数据合理性归人看）。 */",
+            "static void hwcheck_report_int(int value)",
+            "{",
+            "    char buf[12];",
+            "    int i = 0;",
+            "    int neg = (value < 0);",
+            "    unsigned int v = neg ? (unsigned int)(-value) : (unsigned int)value;",
+            "    if (v == 0)",
+            "    {",
+            "        buf[i++] = '0';",
+            "    }",
+            "    while (v > 0)",
+            "    {",
+            "        buf[i++] = (char)('0' + (int)(v % 10u));",
+            "        v /= 10u;",
+            "    }",
+            "    if (neg)",
+            "    {",
+            '        hwcheck_report("-");',
+            "    }",
+            "    while (i > 0)",
+            "    {",
+            "        char one[2];",
+            "        one[0] = buf[--i];",
+            "        one[1] = 0;",
+            "        hwcheck_report(one);",
+            "    }",
+            "}",
+        ])
     if not needs_hex:
         return out
     out.extend([

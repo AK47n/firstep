@@ -26,12 +26,14 @@ import pytest
 
 from contest_generator.hwcheck_custom import (
     CUSTOM_TAG,
+    PLATFORM_PIN_COST,
     CustomSection,
     custom_headers,
     render_custom_section,
     resolve_custom_sections,
     sections_payload,
 )
+from contest_generator.clex import strip_comments as _strip_comments
 from contest_generator.my_devices import BUS_I2C, CustomDevice
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
 
@@ -460,6 +462,102 @@ def test_custom_sections_run_after_the_library_ones_in_main():
     )
 
 
+def test_main_c_renders_no_readout_helper_nobody_calls():
+    """**没人调的助手一个都不许渲**（0 warning 验收线；编译矩阵抓到的第二类缺陷）。
+
+    形态：选了自建件、但它**不出小节**（非 I2C = 这一版不生成探测程序）。判据原先
+    是"选了器件就渲 `hwcheck_report_int`"，于是产物里留一个没人调的十进制读数出口
+    ——ARMCC 报 `#177-D: function "hwcheck_report_int" was declared but never
+    referenced`。生成的程序是给人读的，死代码不是风格问题（04/05/07 反复划过
+    这条线）。
+
+    两格对照：非 I2C 自建件（无小节）不该有；有寄存器可读的自建件（形态③）**要有**
+    ——后者是"只回显"那一档的出口，删过头同样是缺陷。
+    """
+    from contest_generator.hwcheck import HwCheckConfig, render_main_c
+
+    config = HwCheckConfig(
+        platform=PLATFORM_STM32, debug_uart=True, oled=False, devices=("mine_spi",)
+    )
+    spi = _device(id="mine_spi", bus="spi", address=None, register=None, expect=None)
+    code = render_main_c(
+        config, (), (), resolve_custom_sections([spi], has_output_channel=True)
+    )
+    assert "hwcheck_custom_mine_spi" not in code, "非 I2C 件不该出小节"
+    assert "static void hwcheck_report_int(" not in code, (
+        "没有小节就没有读数，没人调的出口不许渲（死代码 = 编译告警）：\n"
+        + code[code.index("static void hwcheck_report"):][:300]
+    )
+    # 反面（删过头同样是缺陷）：有配方读数段的形态**必须**留着它——
+    # 没有它，那行 `hwcheck_report_int(value)` 就是编译期才发现的隐式声明。
+    from contest_generator.hwcheck_recipe import RecipeRead, RecipeSection
+
+    library = RecipeSection(
+        slug="adc", platform=PLATFORM_STM32, read=(RecipeRead(expression="value"),)
+    )
+    with_read = render_main_c(config, (library,), (), ())
+    assert "static void hwcheck_report_int(" in with_read, (
+        "有配方读数段时它必须在场：\n" + with_read[:200]
+    )
+
+
+def test_main_c_never_defines_a_helper_twice():
+    """**同一份 `main.c` 里每个助手只许定义一个**（编译矩阵在票面形态上抓到的真缺陷）。
+
+    形态：自建件（有寄存器 → 要 `hwcheck_report_hex` 回显）**与一件未专精的 I2C
+    器件同趟**（通用降级要总线地址扫描 → 它自己也印一个同名的十六进制助手）。
+    两条路各印一份，产物就成了：
+
+    ```
+    ..\\main.c(247): error:  #247: function "hwcheck_report_hex" has already been defined
+    ```
+
+    这正是"零 LLM 的确定性渲染"最该挡住的一类错（两处渲染器各管一段，谁也不知道
+    对方印了什么）——而它只在**两批小节同时在场**时才现形，单跑任一批都绿。
+
+    判据取**通用件**（未专精 I2C 件）而不是 `i2c_probe`：后者的通用小节依赖真实库
+    里那件的引脚声明，换一件就换一个形态；这里要的是"两批都在"这个交点。
+    """
+    from contest_generator.hwcheck import HwCheckConfig, render_main_c
+    from contest_generator.hwcheck_generic import plan_generic_section
+
+    sht20, headers = _real_module("sht20", PLATFORM_STM32)
+    config = HwCheckConfig(
+        platform=PLATFORM_STM32, debug_uart=True, oled=False, devices=("sht20",)
+    )
+    code = render_main_c(
+        config, (), (plan_generic_section(PLATFORM_STM32, sht20, headers),),
+        resolve_custom_sections([_device()], has_output_channel=True),
+    )
+    definitions = code.count("static void hwcheck_report_hex(")
+    assert definitions == 1, (
+        f"hwcheck_report_hex 被定义了 {definitions} 次（两批小节各印一份 = 编译期 "
+        "#247 has already been defined）：\n"
+        + "\n".join(line for line in code.splitlines() if "report_hex" in line)
+    )
+
+
+def _real_module(slug: str, platform: str):
+    """真实库里某个模块的 (manifest, 它在该平台上的头文件文本)。
+
+    用例从不手搓 manifest：通用降级那条路的判据（有没有引脚声明、有没有可扫的
+    宏）全靠真数据，假数据造出来的形态不代表产品会遇到的形态。读法照
+    `tests/test_hwcheck_generic.py::_real` 的先例（同一份真库、同一条判据）。
+    """
+    from contest_generator.library import list_modules
+
+    manifest = next(
+        m for m in list_modules(REPO / "library" / "modules") if m.slug == slug
+    )
+    headers: list[tuple[str, str]] = []
+    for rel in manifest.platforms[platform].files:
+        if rel.lower().endswith(".h"):
+            path = REPO / "library" / "modules" / slug / rel
+            if path.is_file():
+                headers.append((rel, path.read_text(encoding="utf-8")))
+    return manifest, headers
+
+
 def test_preview_and_generate_share_the_same_render_source():
     """注入点在 main.c 的**唯一产地**（票面验收线：两处产物逐字节一致）。
 
@@ -546,3 +644,158 @@ def test_user_text_is_sanitised_in_the_payload_too():
     device = _device(name="正常名字", notes="手册写的 0x68")
     item = sections_payload(resolve_custom_sections([device], has_output_channel=True))[0]
     assert item["name"] == "正常名字" and item["notes"] == "手册写的 0x68"
+
+
+# ---------------------------------------------------------------------------
+# mspm0 分支（工单 04）：题面「与页面同一句措辞」
+# ---------------------------------------------------------------------------
+
+# mspm0 上这条总线的**平台代价**（判据 = 板定义与模块 manifest，不是这里）：
+# 板定义的原话片段 + 卡片那句代价里的独有片段。
+_BOARD_NOTE_FRAGMENT = "板载 LED 共用"
+
+
+def test_mspm0_custom_device_pins_are_in_the_page_payload():
+    """**页面要说的那两件事，数据在载荷里**（票面第 3 条的数据面）。
+
+    一件自建件在检测页上要说清"接哪两个脚、以及这两个脚的地猛星代价"——
+    `PA0`(SDA)/`PA1`(SCL) 与「板载 LED 共用（通信期间微闪）」「PA0 上拉位未焊」。
+
+    判据面为什么取**检测页的载荷**而不是渲染出的页面：接线说明 / 上板清单 /
+    标注整块是工单 05 的活（票面第一条把"页面写 PA0/PA1"派给那一单），本单要钉的
+    是**那两句话的数据从哪儿来**——自建件不是模块、没有 `pins` 声明，它的脚全部
+    来自支点 `i2c_probe`（`hwcheck_view` 自动补进模块集），所以：
+
+    * 接线行里有 PA0/PA1 两条（`wiring.rows`，页面接线表的唯一来源）；
+    * 每条行上的板载注记**原样来自板定义**（`pin_note` → `board_shares`），
+      不是这一层新编的一句话。
+
+    数据面成立 + 05 渲染它 = 票面第 3 条成立；本单不许为了"页面上先看到"把文案
+    在渲染层再抄一份（那就是判据分家，第 4 条要防的正是这个）。
+    """
+    import tempfile
+
+    from contest_generator.hwcheck import HwCheckConfig
+    from contest_generator.hwcheck_board import hwcheck_view
+    from contest_generator.my_devices import my_devices_dir, save_device
+
+    with tempfile.TemporaryDirectory() as tmp:
+        save_device(my_devices_dir(Path(tmp)), _device())
+        view = hwcheck_view(
+            HwCheckConfig(
+                platform=PLATFORM_MSPM0, debug_uart=True, oled=False,
+                devices=("mine_gyro",),
+            ),
+            module_library_dir=REPO / "library" / "modules",
+            masters_dir=REPO / "library" / "masters",
+            data_dir=Path(tmp),
+        )
+    assert "i2c_probe" in view.generation_slugs, "脚来自支点模块，它必须在模块集里"
+    rows = {
+        row["pin"]: row for row in view.board["wiring"]["rows"]
+        if row["slug"] == "i2c_probe"
+    }
+    assert set(rows) == {"PA0", "PA1"}, f"接线表要有这一对脚：{sorted(rows)}"
+    assert "板载 LED 共用" in rows["PA0"]["pin_note"], rows["PA0"]
+    assert "板载 LED 共用" in rows["PA1"]["pin_note"], rows["PA1"]
+    assert "上拉位未焊" in rows["PA0"]["pin_note"], (
+        "PA0 的板载上拉位未焊是板定义的事实，页面照抄这一份：" + rows["PA0"]["pin_note"]
+    )
+    shares = {item["pin"]: item for item in view.board["wiring"]["board_shares"]}
+    assert {"PA0", "PA1"} <= set(shares), "板上共享单独成列（页面据此单列一条）"
+    assert shares["PA0"]["note"] == rows["PA0"]["pin_note"], (
+        "同一句话两个落点必须是同一个来源（板定义），不许各写一份"
+    )
+
+
+def test_the_platform_cost_sentence_matches_the_board_definition():
+    """**mspm0 那一对脚的平台代价只有一个说法**，产物与页面说的是同一句。
+
+    票面第 4 条要的是"产物注释写同样这两条，与页面同一句措辞"。两条事实各有
+    唯一来源（`boards/mspm0-dimx.json` 的 `BoardPin.notes`：板子本来就接着什么）
+    ——页面接线行的 `pin_note` / 板上共享那两处读它，产物注释读的是**同一份注记
+    的人读复述**（`PLATFORM_PIN_COST`，去掉脚名：脚名在接线表里已经有了）。
+
+    ⚠ 产物里写这两句**不违反**"无引脚字面量"那条硬边界（两件事别混）：生成门禁
+    是**剥注释后**判的（`generator._check_no_pin_literals_in_main` +
+    `clex.strip_comments`），它挡的是**代码内联引脚**（那样换板要重写骨架、也
+    绕开 ADR 0010 的改绑机制）；而这两句里一个引脚名都没有。本文件第 ③ 块那条
+    `test_no_pin_or_instance_literal_in_the_product` 判的也正是**代码**。
+
+    判据三条腿：① 板定义里那两条事实都在；② `PLATFORM_PIN_COST` 的关键词与它
+    逐条对得上（板定义改了这里就红——它是复述，不许自说自话）；③ 产物里真的
+    印出来了，且**只印在 mspm0**（stm32 没有这条代价，不许编）。
+    """
+    import json
+
+    board = json.loads(
+        (REPO / "src" / "contest_generator" / "boards" / "mspm0-dimx.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    by_pin = {pin["name"]: pin.get("notes", "") for pin in board["pins"]}
+    for pin in ("PA0", "PA1"):
+        assert _BOARD_NOTE_FRAGMENT in by_pin[pin], (
+            f"{pin} 的板上注记要写清它与板载 LED 同脚（页面照抄这一份）：{by_pin[pin]}"
+        )
+    assert "上拉" in by_pin["PA0"] and "未焊" in by_pin["PA0"], (
+        "PA0 的板载上拉位未焊是**板子的事实**，写在板定义里（PA1 相反是板载 4.7k）："
+        + by_pin["PA0"]
+    )
+
+    cost = PLATFORM_PIN_COST[PLATFORM_MSPM0]
+    for needle in ("板载 LED 共用", "微闪", "上拉位未焊"):
+        assert needle in cost, (
+            f"产物那句要复述板定义的原话（缺 {needle}）：{cost}"
+        )
+
+    artifact = _main_c(PLATFORM_MSPM0, ["mine_gyro"])
+    assert cost in artifact, (
+        "mspm0 的产物注释要带这句平台代价（与页面同一句）：\n" + artifact[:600]
+    )
+    assert PLATFORM_PIN_COST[PLATFORM_STM32] == "", (
+        "stm32 那一对脚没有这条代价——不许为了对称编一句"
+    )
+    assert "平台代价" not in _main_c(PLATFORM_STM32, ["mine_gyro"]), (
+        "stm32 产物里不该出现这句（它只属于 mspm0 的 I2C_0）"
+    )
+    # 产物侧：两平台同一份渲染，**代码**里引脚字面量一个都不许有（第 ③ 块那条判据）
+    assert "PA0" not in _strip_comments(artifact)
+
+
+def test_the_compile_probe_covers_both_platforms_and_the_four_receipt_categories():
+    """**编译矩阵探针本身**要两平台都覆盖（票面第 6 条：矩阵一起复跑）。
+
+    为什么要给探针写用例：探针是这一单唯一的"真编译"判据来源，而它自己很容易
+    退化成只跑一个平台（03 起就是这么长起来的）——那样"mspm0 也能生成"就没有
+    任何真编译证据，只剩一句自述。这里只钉**覆盖形状**（跑不跑真编译是探针
+    运行时的读数，用例不替它跑）：
+
+    * 两平台都在；
+    * 票面点名的四类形态都在：一件都不选 / 只有自建件 / 自建件 + 库内器件 /
+      全选（"全选"那一格按平台**能装下的最大子集**自动收敛，见探针里的说明——
+      原始集合在地猛星上物理装不下，装不下那条路本身也是产品行为）；
+    * 每格的形态两平台都有定义（缺一个平台 = 那一格没有那一侧的读数）。
+    """
+    import importlib.util
+
+    path = REPO / ".scratch" / "hwcheck-unknown-device" / "probe-03-compile-matrix.py"
+    assert path.is_file(), f"编译矩阵探针不在：{path}"
+    spec = importlib.util.spec_from_file_location("probe_03_compile_matrix", path)
+    probe = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(probe)                 # 只读模块级定义，不跑 main()
+    assert set(probe.PLATFORMS) == {PLATFORM_MSPM0, PLATFORM_STM32}
+    for name in probe.CASES:
+        for platform in probe.PLATFORMS:
+            assert platform in probe.CASES[name], f"{name} 缺 {platform} 的定义"
+    kinds = {
+        name: probe.CASES[name][PLATFORM_MSPM0]["kind"] for name in probe.CASES
+    }
+    for kind in ("empty", "custom-only", "custom+library", "all-library"):
+        assert kind in kinds.values(), f"票面点名的形态缺 `{kind}`：{kinds}"
+    # 「全选到底有多大」的边界格（票面第 6 条的"全选"就是这个规模）：检测页给得出
+    # 的全部器件，按平台算，**不设让位**——读数如实记产品在真实规模上怎么答。
+    assert "all-recipes" in kinds, f"缺全选边界格：{kinds}"
+    # 「只有自建件」与「空形态」都得真有自建件 / 真没有器件
+    assert probe.CASES["custom-only"][PLATFORM_MSPM0]["custom"], "custom-only 要有自建件"
+    assert not probe.CASES["empty"][PLATFORM_MSPM0]["devices"], "empty 不该选任何器件"

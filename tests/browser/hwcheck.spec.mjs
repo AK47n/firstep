@@ -488,6 +488,39 @@ test("选上 MPU6050：接线表带默认脚与板上共享注记、顺序把它
     () => !document.querySelector("#hwcheck-wiring").textContent.includes("ml_mpu6050"));
 });
 
+test("自建件在地猛星上的接线：页面给出 PA0 / PA1 与那两句平台代价", async () => {
+  // 工单 hwcheck-unknown-device/04 验收第 3 条（**页面面**）：自建件不是模块、
+  // 没有 pins 声明，它那一对脚全部来自支点 `i2c_probe`（视图自动补进模块集）——
+  // 所以"页面到底显示得出 PA0/PA1 与那两句代价"必须端到端验一次：载荷里有
+  // （`tests/test_hwcheck_custom.py` 已钉）不等于**画出来了**（这里是真浏览器）。
+  await openTab();
+  await page.click('[data-hwcheck-platform="mspm0"]');
+  await myDeviceFill({
+    name: "自建件接线验收", bus: "i2c", address: "0x68", id: MY_DEVICE_ID,
+  });
+  await page.click("[data-my-device-save]");
+  await page.waitForSelector(`[data-my-device-row="${MY_DEVICE_ID}"]`);
+  await page.click(`[data-my-device-pick="${MY_DEVICE_ID}"]`);
+  await page.waitForSelector(`#hwcheck-device-chips [data-remove="${MY_DEVICE_ID}"]`);
+
+  await page.waitForSelector("#hwcheck-wiring .hwcheck-table");
+  await page.waitForFunction(
+    () => document.querySelector("#hwcheck-wiring").textContent.includes("i2c_probe"));
+  const wiring = await page.textContent("#hwcheck-wiring");
+  assert.ok(wiring.includes("PA0") && wiring.includes("PA1"),
+    "地猛星上这一对脚是 PA0(SDA)/PA1(SCL)，接线表要真给出来：\n" + wiring);
+  assert.ok(wiring.includes("板载 LED 共用") && wiring.includes("微闪"),
+    "与板载 LED 共用（通信期间微闪）这条暗雷要在页面上：\n" + wiring);
+  assert.ok(wiring.includes("上拉位未焊"),
+    "PA0 的板载上拉位未焊也要在（学生照表接线时会撞上它）：\n" + wiring);
+  // 板上共享单独成条（冲突区那句"没有抢同一个引脚"不能替代它）
+  const conflicts = await page.textContent("#hwcheck-conflicts");
+  assert.ok(conflicts.includes("板上共享") && conflicts.includes("板载 LED 共用"),
+    "板上共享要单独成条：\n" + conflicts);
+
+  await myDeviceCleanup([MY_DEVICE_ID]);
+});
+
 test("本平台没有条目的器件：点名「无法检测」，不静默省略", async () => {
   await openTab();
   await page.click('[data-hwcheck-platform="stm32"]');

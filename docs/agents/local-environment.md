@@ -15,7 +15,7 @@
 | 顺手做掉的第四条 | `src/contest_generator.egg-info/**` 摘出产品文件（两个包都不再发 pip 构建产物） |
 | **真机验收** | `drill-01`：沙箱真 v1.1.1 → 走产品端点升到 1.2.2，**判红 0 / 卡住 0 / PASS**；`not_in_official` 1482 → **6**，那 6 条经决定性实验证明是**更新器那一步 pip 现写的**（官方包里 0 个 → 跑完 pip 6 个齐），「官方缺失 0 / 内容不同 0」两条全绿 |
 | 发版产物（本机留档） | `firstep-pack\firstep-{update,full}-v1.2.2.*` 全套 + `release-notes-v1.2.2.md`；**下一版的基线就是这两个清单** |
-| **main 上还没到用户手上的（四批）** | ① **硬件检测栏目本身**（`module-hwcheck/01-09`，2026-09-20 起）＋ **检测页引脚出口**（`hwcheck-pin-conflict-exit/01`：默认脚撞脚提前解开）——v1.2.2 的用户看不到「硬件检测」这一栏；② **完整包会话态进 `AppContext` ＋ `_full_task_lock`**（`full-update-state-into-ctx/01-04`，2026-09-22，账见 `.scratch/backlog.md` §18：纯内部换归属 + 修「并发 apply 建出两个任务」的竞态，**前端零字节**）；③ **陌生器件（库外件）探测**（`hwcheck-unknown-device`，2026-09-22 起：规格 + 10 张工单已落 `.scratch/hwcheck-unknown-device/`，**工单 01 支点模块 `i2c_probe` 已落地**、**工单 02「我的器件」已落地**（数据目录 + 三端点 + 检测页卡片）、**工单 03 探测小节渲染 + stm32 真编译已落地**（库外件第一次真的产出 C 代码），04–10 未开工）。**四批都只在本机工作树 / main 上，任何发布包里都没有**——下次发版要一起带上 |
+| **main 上还没到用户手上的（四批）** | ① **硬件检测栏目本身**（`module-hwcheck/01-09`，2026-09-20 起）＋ **检测页引脚出口**（`hwcheck-pin-conflict-exit/01`：默认脚撞脚提前解开）——v1.2.2 的用户看不到「硬件检测」这一栏；② **完整包会话态进 `AppContext` ＋ `_full_task_lock`**（`full-update-state-into-ctx/01-04`，2026-09-22，账见 `.scratch/backlog.md` §18：纯内部换归属 + 修「并发 apply 建出两个任务」的竞态，**前端零字节**）；③ **陌生器件（库外件）探测**（`hwcheck-unknown-device`，2026-09-22 起：规格 + 11 张工单已落 `.scratch/hwcheck-unknown-device/`，**工单 01 支点模块 `i2c_probe` 已落地**、**工单 02「我的器件」已落地**（数据目录 + 三端点 + 检测页卡片）、**工单 03 探测小节渲染 + stm32 真编译已落地**（库外件第一次真的产出 C 代码）、**工单 04 mspm0 分支 + 两平台编译矩阵已落地**（11 格 × 2 平台 0 error / 0 warning；顺带修掉渲染器两条真缺陷），05–10 未开工；**11 是本轮新开的缺陷单**（母版引脚符号重名）。**四批都只在本机工作树 / main 上，任何发布包里都没有**——下次发版要一起带上 |
 
 **发版尚未启动（2026-09-22 22:0x 实测）**：这一轮只走到「决定要发」就停了——**版本号仍 `1.2.2`、
 没打包、没打 tag、没建 Release**（用户要先继续改动再发，所以别把这份落差当成"发过了"）。
@@ -530,6 +530,55 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > 的形态不出小节，但它们**仍然不是模块**——漏摘一件就在 `resolve_dependencies`
 > 报「库中没有这个模块」，端点是 400。判据：
 > `tests/test_my_devices_endpoint.py::test_a_non_i2c_custom_device_still_does_not_render_a_probe`。
+>
+> **2026-09-23（hwcheck-unknown-device/04 会话：mspm0 探测分支 + 两平台编译矩阵）**：
+> 环境事实与读数：
+> ① **同样一次服务器都没起**（验证全走进程内域函数 + 真 UV4/gmake 子进程 +
+> 真浏览器 spec、夹具自带后端）；收尾实测 8000/8020/8021/8791 都没在听、
+> 无残留 `contest_generator.webapp` 进程。
+> ② **本机真编译 23 次**：mspm0 走 `C:\ti\ccs2050\ccs\utils\bin\gmake.exe`
+> （每格含 SysConfig CLI，约 15–40 秒）、stm32 走 `C:\Keil5\Core\UV4\UV4.exe`
+> （3–5 秒）；**11 格 × 2 平台 0 error / 0 warning**
+> （读数 `.scratch/hwcheck-unknown-device/probe-04-compile-matrix.txt`，
+> 逐格原始日志 `matrix-logs/custom-<格>-<平台>.log`）。
+> ③ **探针改名**：`probe-03-compile-stm32.py` → **`probe-03-compile-matrix.py`**
+> （mspm0 那一轴并进来；旧的 `probe-03-compile-stm32.txt` 读数仍在，只是里面记的
+> 命令名已过期）。04 之前那几个读数是 `probe-03-*.txt`、04 的是 `probe-04-*.txt`
+> （同名不同轮，认文件名时注意）。
+> ④ 读数：`python -m pytest -n auto -q` **5234 passed + 1 skipped / 153.3s**、
+> 前端门禁 **1739 passed / 0 fail**、浏览器门禁 **35 passed / 0 fail / 123.3s**
+> （新增一条真浏览器用例「自建件在地猛星上的接线」）；反证（三条注入各自变红 +
+> 逐字节复原）见 `.scratch/hwcheck-unknown-device/probe-04-guard-strength.txt`。
+>
+> ⚠ **本轮量到的三条工具事实**（对后面任何"编译矩阵"或"渲染产物"改动都适用）：
+> ① **探针必须走产品那条路**：自己 `resolve_dependencies()` + `generate()` 会漏掉
+> `view.pin_bindings`（检测页生成前自动移开的脚）→ 产物撞 PA22、mspm0 全格 400。
+> 产品端点在 webapp 里调的是 `generate_project(slugs=…, bindings=…)`；
+> ② **`Debug/ti_msp_dl_config.h` 是编译期产物**（`Debug/makefile` 第一条规则跑
+> SysConfig CLI）：判 `I2C_0_INST` 必须在 gmake **之后**，放在生成后判永远读到
+> "文件不在"；
+> ③ **"逐字节复原"的探针要用 bytes 读写**：文本模式会把 CRLF 归一成 LF，写回去
+> 与原文差行尾 →「复原复核」假红（本轮 `probe-04-guard-strength.py` 第一版就是
+> 这么红的，注入与守卫其实都对）。
+>
+> ⚠ **同轮量到的一条工具链事实（不是本仓库代码的告警）**：TI 链接器在**选了用堆的
+> 模块**（`ml_mpu6050` 一族）时开一个默认 0x800 的 `.sysmem` 段并提示
+> `warning #10210-D ... use the -heap option`。实测同一份配置**去掉 `ml_mpu6050`
+> 就一条都没有**——编译矩阵要把它单列一栏，别混进"我们代码的告警数"（否则
+> "0 warning"这条验收线永远红在一个改不动的点上：要改得动 mspm0 母版的链接选项，
+> 属跨平台共享面，另议）。
+>
+> **同轮发现并开单的一条既有母版缺陷**：`library/masters/mspm0/mspm0.syscfg` 里
+> **14 组重名引脚符号**（`SCL`/`SDA` 各 17 件、`CS` 5 件、`OUT` 6 件…）。SysConfig
+> 对 `$name` 有全局唯一要求，于是**一个自建件都不选、只勾 OLED + JY61P 就是 4 个
+> error**（`Duplicate name: 'SCL'`）；而既有的 `syscfg_pin_conflict_report` 只判
+> "同一个脚被两个实例占用"，看不见这一轴。明细与最小复现：
+> `.scratch/hwcheck-unknown-device/issues/11-mspm0-pin-name-collision.md`。
+>
+> **第 0 节的发布落差表：本轮再添一批 main-only 改动**（工单
+> `hwcheck-unknown-device/04`：两平台编译矩阵探针重命名 ＋ 渲染器两条缺陷修
+> （重复定义 / 死代码）＋ 平台代价进产物注释 ＋ 一条真浏览器用例）。
+> 后续 05–11 张工单仍未开工（11 是本轮新开的）。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 

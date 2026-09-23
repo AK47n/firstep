@@ -1,0 +1,17 @@
+[1] 前置检查（源文件指纹）
+    hwcheck_custom.py: 0c4bd225d51c6559…
+    hwcheck_generic.py: 12219f130cc5d7f3…
+    hwcheck.py: ec7b81451ee22a15…
+[2] 注入前（守卫在）：PASS  ｜ 1 passed, 45 deselected in 0.13s / 1 passed, 45 deselected in 0.09s / 1 passed, 45 deselected in 0.10s
+[3] 注入 A: 通用批次又印一份十六进制助手 → RED（守卫变红） ｜ 1 failed, 45 deselected in 0.25s
+[4] 复原复核：hwcheck_generic.py sha256 相等 ✓（12219f130cc5d7f3…）
+[3] 注入 B: 十进制出口退回「选了器件就渲」 → RED（守卫变红） ｜ 1 failed, 45 deselected in 0.20s
+[4] 复原复核：hwcheck.py sha256 相等 ✓（ec7b81451ee22a15…）
+[3] 注入 C: 产物不再印平台代价那句（验收项 4） → RED（守卫变红） ｜ 1 failed, 45 deselected in 0.15s
+[4] 复原复核：hwcheck_custom.py sha256 相等 ✓（0c4bd225d51c6559…）
+[5] 复原后复跑：test_main_c_never_defines_a_helper_twice PASS（回绿） ｜ 1 passed, 45 deselected in 0.09s
+[5] 复原后复跑：test_main_c_renders_no_readout_helper_nobody_calls PASS（回绿） ｜ 1 passed, 45 deselected in 0.09s
+[5] 复原后复跑：test_the_platform_cost_sentence_matches_the_board_definition PASS（回绿） ｜ 1 passed, 45 deselected in 0.10s
+[6] 收尾指纹：三个文件逐字节未变 ✓
+
+=== 结论：反证成立（两条注入都让对应用例变红，且逐字节复原） ===

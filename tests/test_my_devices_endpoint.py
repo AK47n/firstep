@@ -23,7 +23,7 @@ from contest_generator.my_devices import (
     MY_DEVICES_DIRNAME,
     my_devices_dir,
 )
-from contest_generator.platforms import PLATFORM_STM32
+from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
 
 DEVICE_BODY = {
     "id": "mine_gyro",
@@ -462,6 +462,58 @@ def test_generate_with_a_custom_device_is_not_a_400(generate_client, tmp_path):
     assert fields is not None and "i2c_probe" in fields["slugs"], fields
     assert "mine_gyro" not in fields["slugs"], "自建件不是模块，不许进 slugs"
     assert fields["devices"] == ["mine_gyro"], "但器件选择要记进清单（回读要用）"
+
+
+def test_generate_on_mspm0_keeps_the_i2c_instance_alive(generate_client, tmp_path):
+    """**mspm0 上真的生成一份带探测小节的工程**（工单 04 的端点面）。
+
+    与 stm32 那一格（上一条）的分工：stm32 的探测走模块自己那组引脚宏，mspm0 的
+    探测走**母版 SysConfig 的 `I2C_0` 实例**——而实例的裁剪判据是"消费者 ∩ 选中
+    集"。生成链里真正被选中进工程的 slug 集是 `view.generation_slugs`（自建件已
+    摘、`i2c_probe` 已补），所以这一格判的是**落盘产物**：裁剪后的 `mspm0.syscfg`
+    里 `I2C_0` 的 `$assign` 还在、SysConfig 生成的 `I2C_0_INST` 还在。
+
+    没有它 `i2c_probe.c` 直接编不过（01 的反证项实测过那条链）——但那条链此前
+    只在"单独选 `i2c_probe`"的形态上证过；**带自建件的那条路**是这一单新开的，
+    少一个 slug 就整格塌掉，所以判据落在这里而不是靠编译探针兜。
+    """
+    client, _ = generate_client
+    client.post("/api/my-devices", json={"device": DEVICE_BODY})
+    output_parent = tmp_path / "out-mspm0"
+    output_parent.mkdir()
+    response = client.post(
+        "/api/hwcheck/generate",
+        json={
+            "platform": PLATFORM_MSPM0,
+            "debug_uart": True,
+            "oled": False,
+            "devices": ["mine_gyro"],
+            "parent_dir": str(output_parent),
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    project = Path(body["output_dir"])
+    assert "hwcheck_custom_mine_gyro" in body["main_c"], "自建件小节要真的进工程"
+    assert 'i2c_probe.h' in body["main_c"], (
+        "mspm0 侧的头是 `i2c_probe.h`（两平台不同名）：\n" + body["main_c"][:400]
+    )
+    assert "DL_I2C" not in body["main_c"], (
+        "`main.c` 一个字都不许直接调 SDK（母版没有 .h，写进 main.c 会被门禁判"
+        "未定义）——`DL_*` 全部封在 `i2c_probe.c` 里：\n" + body["main_c"][:400]
+    )
+    syscfg = (project / "mspm0.syscfg").read_text(encoding="utf-8")
+    assert 'I2C_0.peripheral.sdaPin.$assign = "PA0";' in syscfg, (
+        "带自建件这一路也要让 I2C_0 活下来（消费者 ∩ 选中集）"
+    )
+    assert 'I2C_0.peripheral.sclPin.$assign = "PA1";' in syscfg, syscfg[:200]
+    # `I2C_0_INST` 本体（`Debug/ti_msp_dl_config.h`）是 **SysConfig CLI 在编译
+    # 那一步**生成的，不是生成端点产出的：生成端点只负责把 Debug/makefile 摆好
+    # （编译链的入口）。所以这里判到 makefile 为止，`I2C_0_INST` 那条判据归真编译
+    # 探针（`check_mspm0`，它跑在 gmake 之后）——两处各判各的，不越界。
+    assert (project / "Debug" / "makefile").is_file(), (
+        "编译链入口（Debug/makefile）要摆好，否则这一份工程在检测页点不动「编译」"
+    )
 
 
 def test_preview_and_generate_render_byte_identical_main_c(generate_client, tmp_path):
