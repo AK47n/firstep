@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=946e9cc4ab9f9928eb92ccc76db044cd7903bbe3 -->
+<!-- changelog-auto: last-commit=828c22d441d127ebaab4dc4b8958a90522657dfe -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-09-24
+- 00:39 工单 hwcheck-unknown-device/12：自建件 id 文法收紧到 C 标识符（连字符建不出坏工程）
 
 ## 2026-09-23
 - 12:21 ﻿工单 hwcheck-unknown-device/02：「我的器件」（库外件）定义 + 数据目录 + 端点 + 检测页表单
