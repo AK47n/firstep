@@ -25,7 +25,6 @@ mspm0 侧多证两件事（否则 `i2c_probe.c` 直接编不过，是 01 反证�
 
 **已知受限的两格**（矩阵如实记，但不为它们变红——都是**独立于本单**的既有限制，
 各有自己的单）：
-
 * `all-library` 在 mspm0 上让位到"装得下的最大子集"：一是板载 31 脚放不下十件
   （产品正确行为，页面会点名），二是**母版引脚符号重名**（`SCL`/`SDA` 一组 17 件）
   ——后者是工单 `11-mspm0-pin-name-collision`，最小复现里连自建件都不需要；
@@ -259,12 +258,11 @@ def _largest_that_fits(platform: str, candidates: Sequence[str]) -> tuple[tuple[
 
     两条让位判据，顺序固定：
 
-    1. **引脚符号重名的组**（mspm0 独有，见下）：同一批里出现 `SCL`/`SDA`
-       这类同名引脚符号，SysConfig 直接 `Duplicate name` 报错——这是母版级的
-       既有限制，**独立于本单**（一个自建件都不选、只勾 OLED + JY61P 就能复现），
-       已开单 `.scratch/hwcheck-unknown-device/issues/11-mspm0-pin-name-collision.md`。
-       这一格不为它变红（那会把 04 的验收线绑在一个别处修的缺陷上），但也不假装
-       没这回事：让位清单里点名，读数里可见；
+    1. **引脚符号重名的组**（mspm0 独有）：同一批里出现 `SCL`/`SDA` 这类同名引脚
+       符号，SysConfig 直接 `Duplicate name` 报错。这条**独立于本单**，已由工单 11
+       修成"生成前拦下"（`.scratch/hwcheck-unknown-device/issues/
+       11-mspm0-pin-name-collision.md`）。这一格不为它变红（那会把 04 的验收线绑在
+       别处的判据上），但也不假装没这回事：让位清单里点名，读数里可见；
     2. **装不下**（板载脚不够 / 改绑解不开）：走产品同一条判据
        （`hwcheck_pin_plan`，页面上那条 400 的判据），逐件让位到 `plan.ok`。
 
@@ -297,7 +295,8 @@ def _largest_that_fits(platform: str, candidates: Sequence[str]) -> tuple[tuple[
                 dropped_pairs.append(f"{slug}（与 {present[0]} 同名）")
         if dropped_pairs:
             notes.append(
-                "引脚符号重名让位（工单 11 的既有限制，与本单无关）："
+                "引脚符号重名让位（工单 11；该单已把这类组合改成生成前拦下，"
+                "矩阵仍按最小子集取材）："
                 + "、".join(dropped_pairs)
             )
 

@@ -1,0 +1,20 @@
+[1] 前置检查（源文件指纹）
+    syscfg_prune.py: c7e2566dd782afa9…
+    hwcheck_board.py: ba4a4ef4fb162f44…
+[2] 注入前（守卫在）：test_syscfg_pin_name_collision_is_a_loud_failure PASS ｜ 1 passed in 0.09s
+[2] 注入前（守卫在）：test_syscfg_pin_name_collision_is_solved_by_dropping_one_module PASS ｜ 1 passed in 0.08s
+[2] 注入前（守卫在）：test_hwcheck_view_surfaces_the_pin_name_collision PASS ｜ 1 passed in 0.69s
+[3] 注入 A: 重名判据整个关掉 → RED（守卫变红） ｜ 1 failed in 0.15s
+[4] 复原复核：syscfg_prune.py sha256 相等 ✓（c7e2566dd782afa9…）
+[3] 注入 B: 判在母版全文上（没裁剪） → RED（守卫变红） ｜ 1 failed in 0.16s
+[4] 复原复核：syscfg_prune.py sha256 相等 ✓（c7e2566dd782afa9…）
+[3] 注入 C: 两根轴并成一根（重名塞进 lines） → RED（守卫变红） ｜ 1 failed in 0.15s
+[4] 复原复核：syscfg_prune.py sha256 相等 ✓（c7e2566dd782afa9…）
+[3] 注入 D: 检测页那支分支关掉 → RED（守卫变红） ｜ 1 failed in 0.43s
+[4] 复原复核：hwcheck_board.py sha256 相等 ✓（ba4a4ef4fb162f44…）
+[5] 复原后复跑：test_syscfg_pin_name_collision_is_a_loud_failure PASS（回绿） ｜ 1 passed in 0.11s
+[5] 复原后复跑：test_syscfg_pin_name_collision_is_solved_by_dropping_one_module PASS（回绿） ｜ 1 passed in 0.08s
+[5] 复原后复跑：test_hwcheck_view_surfaces_the_pin_name_collision PASS（回绿） ｜ 1 passed in 0.67s
+[6] 收尾指纹：源文件逐字节未变 ✓
+
+=== 结论：反证成立（4 条注入都让对应用例变红，且逐字节复原） ===

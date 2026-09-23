@@ -175,6 +175,7 @@ from .hwcheck import (
     render_output_hint,
 )
 from .hwcheck_board import hwcheck_view
+from .syscfg_prune import syscfg_pin_name_conflict_for
 from .hwcheck_store import (
     DEFAULT_RECENT_LIMIT,
     list_hwcheck_projects,
@@ -2951,6 +2952,20 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             resolve_bindings(resolved.manifests, platform, board, bindings)
         except PinBindingError as exc:
             return {"ok": False, "error": str(exc)}
+        # 引脚**符号**重名（工单 11）：绑定本身合法，但这一组编不过（生成门禁同样
+        # 会拦）。与 auto 同一判据——前端"离开引脚配置、进生成前"这一跳若回 ok:true
+        # 而生成 400，学生就白配了一遍。
+        if clash := syscfg_pin_name_conflict_for(
+            _masters_dir(context), platform, resolved.manifests
+        ):
+            return {
+                "ok": False,
+                "error": (
+                    "这一组选择编不过：mspm0 的引脚**符号**重名（SysConfig 会报 "
+                    "Duplicate name），改绑引脚解不开——去掉其中一件模块：\n"
+                    + clash
+                ),
+            }
         return {"ok": True}
 
     @app.post("/api/bindings/matrix")
@@ -3018,6 +3033,21 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             )
         except PinBindingError as exc:
             return {"ok": False, "error": str(exc)}
+        # 引脚**符号**重名（工单 11）：这一组就算一键配完也编不过（SysConfig 的
+        # `Duplicate name`），而求解器只管脚、不管符号名——不在这里说，学生就会
+        # 看到 ok:true 然后点生成吃 400。判据与生成门禁同源（同一个
+        # `_duplicate_pin_names`），不像"自动配置说好了、生成却拦下"那样分家。
+        if clash := syscfg_pin_name_conflict_for(
+            _masters_dir(context), platform, resolved.manifests
+        ):
+            return {
+                "ok": False,
+                "error": (
+                    "这一组选择编不过：mspm0 的引脚**符号**重名（SysConfig 会报 "
+                    "Duplicate name），改绑引脚解不开——去掉其中一件模块：\n"
+                    + clash
+                ),
+            }
         return {
             "ok": True,
             "bindings": result.bindings,

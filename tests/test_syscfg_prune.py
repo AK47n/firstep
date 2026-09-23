@@ -337,6 +337,50 @@ def test_conflict_report_clears_after_slot_relocation():
     )
 
 
+def test_conflict_report_catches_duplicate_pin_names(tmp_path):
+    """**同名引脚符号**也要报（工单 11 的判据）：`SCL`/`SDA` 这类 `$name` 是
+    SysConfig 的另一条全局唯一约束，`$assign` 判据看不见它。
+
+    形态取真库上最日常的一组：地猛星 + 板子活着 + 调试串口 + OLED + JY61P
+    （**一个自建件都不需要**），并按用户实际动作先点一次「自动配置」
+    （`auto_assign_bindings(resolve_default_conflicts=True)`）——那一跳解得开
+    **同脚**冲突（PA22 那条），于是剩下的就只有这一根轴。今天 `name_count == 0`
+    ——门禁一声不吭，而 SysConfig 会报 `Duplicate name: 'SCL'`、工程编不过
+    （工单 11 实测 exit=2 / 4 个 error）。
+
+    判据三条腿：① 引脚冲突被自动配置解得干干净净（**同一个脚**没人抢）；
+    ② 同名冲突报出来；③ 报的那一行点到两件模块的名字（学生据此去掉一件）。
+    """
+    manifests = _manifests(["led", "delay", "debug_uart", "oled", "jy61p"])
+    solved = auto_assign_bindings(
+        manifests, "mspm0", MSPM0_BOARD, {}, resolve_default_conflicts=True
+    )
+    report = syscfg_pin_conflict_report(
+        master_syscfg=MASTER_SYSCFG, manifests=manifests, platform="mspm0",
+        board=MSPM0_BOARD, bindings=solved.bindings, diagnosis_bindings={},
+    )
+    assert report.pin_count == 0, (
+        "这一组没有人抢同一个脚（自动配置解得开）——本单要抓的是另一轴：\n"
+        + "\n".join(report.lines)
+    )
+    assert report.name_count > 0, (
+        "OLED_SPI 与 JY61P 的 SCL/SDA 同名，必须报出来（今天它静默放行了）"
+    )
+    text = "\n".join(report.name_lines)
+    for slug in ("oled", "jy61p"):
+        assert slug in text, f"要点名两件模块（学生据此去掉一件）：{text}"
+    assert "SCL" in text and "SDA" in text, text
+
+
+def test_duplicate_pin_names_are_judged_after_pruning(tmp_path):
+    """判据看**裁剪后**的模型：没选中的实例被裁掉，就不该因为它报冲突。
+
+    对照：只选 `oled`（不选 `jy61p`）→ 母版里 `JY61P` 那一份 `SCL` 已被裁掉
+    → 一条同名冲突都不该有。判在**母版全文**上就会误报（母版里永远有 17 组）。
+    """
+    assert _report(["led", "delay", "debug_uart", "oled"]).name_count == 0
+
+
 def test_conflict_report_reports_remaining_and_diagnosis_baseline():
     """装不下时：逐脚点名 + 容量诊断以**用户原始选择**为基准（不是自动搬过的增量）。"""
     slugs = ["led", "oled", "debug_uart", "key", "beep", "sr04", "jy61p",

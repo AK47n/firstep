@@ -854,6 +854,74 @@ def test_bindings_auto_resolves_conflict_and_keeps_sharing(client, context):
     assert "共享" in str(group["reason"])
 
 
+def test_bindings_auto_reports_the_pin_name_collision_on_the_real_library(tmp_path):
+    """**自动配置端点也要说**「这一组编不过」（工单 11）。
+
+    为什么必须钉这一跳：赛题页的动作顺序是「选模块 → 点自动配置 → 生成」。点完
+    自动配置若回 `ok:true`，学生以为已经没问题了，**直到点生成才吃 400**——P0 段
+    点名的"点『自动配置』也照常"就是这一格。判据 = 同一条冲突判据（`syscfg_pin_
+    conflict_report` 的 `_duplicate_pin_names`，prune 后判定）在这个端点上也要走到。
+
+    用**真库 + 真母版**：重名是母版里的事实（`SCL`/`SDA` 十七件共用），假库造不出来。
+    """
+    from fastapi.testclient import TestClient
+
+    from contest_generator.config import AppConfig
+    from contest_generator.webapp import AppContext, create_app
+    from tests.fakes import FakeLLM
+
+    repo = Path(__file__).resolve().parents[1]
+    ctx = AppContext(
+        config_path=tmp_path / "cfg" / "config.json",
+        config=AppConfig(
+            api_key="sk-test",
+            module_library_dir=repo / "library" / "modules",
+            masters_dir=repo / "library" / "masters",
+        ),
+        llm_factory=lambda config: FakeLLM(),
+    )
+    real_client = TestClient(create_app(ctx))
+
+    blocked = real_client.post(
+        "/api/bindings/auto",
+        json={"platform": "mspm0", "slugs": ["led", "delay", "debug_uart",
+                                             "oled", "jy61p"]},
+    )
+    assert blocked.status_code == 200, blocked.text
+    body = blocked.json()
+    assert body["ok"] is False, (
+        "OLED + JY61P 的引脚符号同名、SysConfig 编不过——自动配置不许回 ok："
+        + json.dumps(body, ensure_ascii=False)
+    )
+    message = body["error"]
+    assert "SCL" in message and "SDA" in message, message
+    for slug in ("oled", "jy61p"):
+        assert slug in message, f"要点名撞车的模块 {slug}：{message}"
+
+    # 对照（判据不许把好路也拦掉）：同平台换掉撞名那件 → ok:true
+    ok_body = real_client.post(
+        "/api/bindings/auto",
+        json={"platform": "mspm0", "slugs": ["led", "delay", "debug_uart",
+                                             "oled", "ml_mpu6050"]},
+    ).json()
+    assert ok_body["ok"] is True, ok_body
+
+    # validate 同一跳也要说（前端"离开引脚配置、进生成前"调它）
+    checked = real_client.post(
+        "/api/bindings/validate",
+        json={"platform": "mspm0", "slugs": ["led", "delay", "debug_uart",
+                                             "oled", "jy61p"]},
+    ).json()
+    assert checked["ok"] is False, checked
+    assert "SCL" in checked["error"], checked
+    ok_checked = real_client.post(
+        "/api/bindings/validate",
+        json={"platform": "mspm0", "slugs": ["led", "delay", "debug_uart",
+                                             "oled", "ml_mpu6050"]},
+    ).json()
+    assert ok_checked["ok"] is True, ok_checked
+
+
 def test_bindings_auto_no_conflict_returns_empty(client, context):
     """无冲突 → 空增量 + ok（不误动）。"""
     _add_pin_modules(client, context)

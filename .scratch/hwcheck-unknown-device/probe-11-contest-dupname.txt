@@ -1,0 +1,21 @@
+=== oled+mpu6050（期望照常生成；自动配置解出 {'oled.OLED_SPI_RES': 'PA2'}）===
+  生成 OK → 真编译 exit=0，Duplicate name 0 条
+=== oled+jy61p（期望拦下；自动配置解出 {'oled.OLED_SPI_RES': 'PA0', 'jy61p.JY61P_SCL': 'PA1', 'jy61p.JY61P_SDA': 'PA2'}）===
+  生成期**按预期拦下**：SyscfgPinConflictError
+    mspm0 引脚符号重名：落盘后的 mspm0.syscfg 里，2 个引脚**符号**被两只实例同时使用，SysConfig 会直接报 Duplicate name（工程编不过）：
+    · SCL：jy61p(JY61P) × oled(OLED_SPI)
+    · SDA：jy61p(JY61P) × oled(OLED_SPI)
+    这一条**改绑引脚解不开**（撞的是符号名，不是脚）：去掉其中一件模块后重新生成。母版里这两件的引脚符号同名（库内 17 件 I2C 器件共用 SCL/SDA 这两个名字），要两件同用只能改母版——已记在工单 11。
+=== led-beep+gp2y1014au（期望拦下；自动配置解出 无需动）===
+  生成期**按预期拦下**：SyscfgPinConflictError
+    mspm0 引脚符号重名：落盘后的 mspm0.syscfg 里，1 个引脚**符号**被两只实例同时使用，SysConfig 会直接报 Duplicate name（工程编不过）：
+    · LED：gp2y1014au(GP2Y1014) × led(LED_BEEP)
+    这一条**改绑引脚解不开**（撞的是符号名，不是脚）：去掉其中一件模块后重新生成。母版里这两件的引脚符号同名（库内 17 件 I2C 器件共用 SCL/SDA 这两个名字），要两件同用只能改母版——已记在工单 11。
+=== rc522+nrf24l01（期望拦下；自动配置解出 无需动）===
+  生成期**按预期拦下**：SyscfgPinConflictError
+    mspm0 引脚符号重名：落盘后的 mspm0.syscfg 里，2 个引脚**符号**被两只实例同时使用，SysConfig 会直接报 Duplicate name（工程编不过）：
+    · MISO：nrf24l01(NRF24L01) × rc522(RC522)
+    · MOSI：nrf24l01(NRF24L01) × rc522(RC522)
+    这一条**改绑引脚解不开**（撞的是符号名，不是脚）：去掉其中一件模块后重新生成。母版里这两件的引脚符号同名（库内 17 件 I2C 器件共用 SCL/SDA 这两个名字），要两件同用只能改母版——已记在工单 11。
+
+=== 结论：撞名组合全被拦下 + 不撞名组合编译绿（两条腿都成立） ===

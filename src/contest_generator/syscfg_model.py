@@ -4,8 +4,9 @@
 文法、pinwriter 拥有 `$assign` 文法与路径匹配、槽位身份在 pin_bindings 又
 实现了一遍。本模块把它们收敛成单一文件模型：
 
-- `parse_syscfg` 独占两份文法（实例声明 addInstance / 模块声明 addModule /
-  `$assign` 赋值），一次解析为 `SyscfgModel`；
+- `parse_syscfg` 独占几份文法（实例声明 addInstance / `$assign` 赋值 / 关联引脚
+  符号 `associatedPins[n].$name`；模块声明 addModule 的匹配归 `prune`），一次
+  解析为 `SyscfgModel`；
 - `SyscfgModel.prune` / `SyscfgModel.rewrite` 是对同一解析的两个操作，各自
   产出新的模型，`SyscfgModel.to_text` 是唯一回写出口（先后由调用方 pipeline
   构造保证，不再靠注释）；
@@ -64,6 +65,13 @@ _MODULE_DECL_RE = re.compile(
 _SYSCFG_ASSIGN_RE = re.compile(
     r'^(?P<head>\s*(?P<path>.+?)\.\$assign\s*=\s*)"(?P<pin>[A-Za-z0-9]+)"'
     r"(?P<tail>.*?)(?P<eol>\r?\n)?$"
+)
+# 关联引脚的**符号名**：`<实例>.associatedPins[n].$name = "SCL"`（工单 11）。
+# 与 `$assign` 分开一条：`$name` 的值是**符号**（SysConfig 里全局唯一），
+# `$assign` 的值是**引脚**（同一个脚只许一只实例占）——两根轴的判据不同。
+_SYSCFG_PIN_NAME_RE = re.compile(
+    r'^\s*(?P<instance>[A-Za-z_]\w*)\.associatedPins\[\d+\]\.\$name\s*=\s*'
+    r'"(?P<name>[^"]*)"\s*;?\s*(?:\r?\n)?$'
 )
 
 # 需要连带改写 peripheral 行的角色类型（工单 pin-full-unlock/03）：
@@ -157,6 +165,13 @@ class SyscfgModel:
     instances: dict[str, SyscfgInstance]  # 实例名 -> 实例声明
     assigns: list[SyscfgAssign]  # 全部 $assign 落点（行序）
     adc_followers: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    # 实例名 -> 关联引脚**符号名**（`associatedPins[n].$name` 的值，行序）。
+    # 为什么单独收一栏（工单 11）：`$name` 是 SysConfig 的**全局唯一**约束，
+    # 与 `$assign`（同一个脚被两只实例占用）是**两根轴**——只判 `$assign` 会让
+    # 「OLED_SPI 与 JY61P 都叫 SCL」这种产物一路生成到编译期才报
+    # `Duplicate name`。prune 之后重新 `parse_syscfg` 即天然只留活着的实例，
+    # 所以这一栏不需要额外的裁剪逻辑（判据看的就是落盘那一份）。
+    pin_names: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
     def to_text(self) -> str:
         """serialize：行列表拼回全文（splitlines keepends 无损往返）。"""
@@ -453,13 +468,17 @@ def _follow_adc_mem_line(
 def parse_syscfg(text: str) -> SyscfgModel:
     """mspm0.syscfg 全文 → 一次解析产物（独占文法，唯一解析实现）。
 
-    逐行识别三类文法：实例声明（addInstance）、模块声明（addModule）、
-    `$assign` 赋值；行列表原样保留（splitlines keepends）供 prune / rewrite
-    行级改写与 serialize 往返。`adc_followers` 恒空（跟随关系只在 prune 里产生）。
+    逐行识别四类文法：实例声明（addInstance）、`$assign` 赋值、关联引脚**符号名**
+    （`associatedPins[n].$name`）、ADC 通道行（`adcMem<N>chansel`，由
+    `_ADC_MEM_RE` 在 rewrite 侧消费）；模块声明（addModule）不在这条扫描里——
+    它归 `prune`（`_MODULE_DECL_RE`）。行列表原样保留（splitlines keepends）供
+    prune / rewrite 行级改写与 serialize 往返。`adc_followers` 恒空（跟随关系
+    只在 prune 里产生）。
     """
     lines = text.splitlines(keepends=True)
     instances: dict[str, SyscfgInstance] = {}
     assigns: list[SyscfgAssign] = []
+    pin_names: dict[str, list[str]] = {}
     for i, line in enumerate(lines):
         m = _INSTANCE_DECL_RE.match(line)
         if m:
@@ -472,7 +491,16 @@ def parse_syscfg(text: str) -> SyscfgModel:
             assigns.append(
                 SyscfgAssign(path=m.group("path"), pin=m.group("pin"), line=i)
             )
-    return SyscfgModel(lines=lines, instances=instances, assigns=assigns)
+            continue
+        m = _SYSCFG_PIN_NAME_RE.match(line)
+        if m:
+            pin_names.setdefault(m.group("instance"), []).append(m.group("name"))
+    return SyscfgModel(
+        lines=lines,
+        instances=instances,
+        assigns=assigns,
+        pin_names={name: tuple(names) for name, names in pin_names.items()},
+    )
 
 
 def syscfg_path_matches(

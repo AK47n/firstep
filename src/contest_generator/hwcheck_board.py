@@ -213,7 +213,7 @@ def hwcheck_pin_plan(
         # 一遍之后的增量——否则"本来能解开几组"会读成 0（见 report 的 docstring）。
         diagnosis_bindings={},
     )
-    if not report.lines:
+    if not report.conflict_count:
         return HwCheckPinPlan(dict(solved.bindings), resolved, solved.fixed)
     return HwCheckPinPlan(
         dict(solved.bindings),
@@ -230,11 +230,29 @@ def hwcheck_pin_message(report: SyscfgPinConflictReport, board_name: str) -> str
     （或点自动配置）」对学生是不可执行的指令（本单的由来）。所以这里给三条
     检测页做得到的动作，把「去赛题页改绑」降为第三条而不是唯一一条。
 
+    **两根轴两套话**（工单 11）：同脚冲突有容量数字可讲（脚不够 / 改绑解得开几组），
+    而**同名引脚符号**与脚数无关——撞的是 `$name`，改绑解不开，出路是去掉一件或
+    改母版名。所以那一支**不套容量诊断**，直接点名是哪两件模块撞了。
+
     `board_name` 由调用方传（板上就那一块板，`hwcheck_pin_plan` 手里有板对象）
     ——板名是单源事实（`boards/*.json`），不在这句话里另写一份；容量诊断段自己
     也用同一份板名，两处必须同一块板。
     文案里的 `HWCHECK_PIN_EXIT_MARKER` 是判据哨兵（见常量说明）。
     """
+    if not report.lines:
+        return (
+            f"这套选择在「{board_name}」上装不下：落盘后的 mspm0.syscfg 里 "
+            f"{report.name_count} 个引脚**符号**被两只实例同时使用，SysConfig 会"
+            "直接报 Duplicate name（工程编不过）：\n"
+            + "\n".join(report.name_lines)
+            + "\n这一条**改绑引脚解不开**（撞的是符号名，不是脚——母版给这些实例起的"
+            "引脚符号本来就同名；实测换四种绑定 `name_count` 恒为 2）。"
+            + f"\n{HWCHECK_PIN_EXIT_MARKER} 检测页能做到的出路（挑一条）：\n"
+            "  1. 回到上面的器件选择，把上面点名的那几件里**去掉一件**；\n"
+            "  2. 换一件同类替代（比如显示屏换一路不挂 I2C 的），再回来生成；\n"
+            "  3. 两件都要 → 这一版做不到（要改母版的引脚符号，见工单 11）——"
+            "别去引脚配置里试，改绑解不开它。"
+        )
     return (
         f"这套选择在「{board_name}」上装不下：落盘后的 mspm0.syscfg 有 "
         f"{report.pin_count} 个引脚被两只实例同时占用，SysConfig 会直接报 "

@@ -29,14 +29,17 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
 from .boards import Board
 from .manifest import ModuleManifest
+from .master_store import master_project_dir
 from .pin_bindings import _role_entries, resolve_bindings
 from .pin_capacity import diagnose_pin_capacity, render_pin_capacity_diagnosis
 from .platforms import PLATFORM_MSPM0
-from .syscfg_instances import INSTANCES_BY_SLUG
+from .syscfg_instances import INSTANCE_CONSUMERS, INSTANCES_BY_SLUG
 from .syscfg_model import (
+    MSPM0_SYSCFG_FILENAME,
     AdcSlotPlan,
     SyscfgModel,
     adc_mem_index,
@@ -50,6 +53,8 @@ __all__ = [
     "adc_slot_plan",
     "prune_syscfg",
     "syscfg_pin_conflict_report",
+    "syscfg_pin_name_conflict",
+    "syscfg_pin_name_conflict_for",
 ]
 
 
@@ -112,22 +117,46 @@ def prune_syscfg(
     )
 
 
+# 实例名 → 消费模块名（人读标签；`INSTANCE_CONSUMERS` 是元组，这里摊成一行文本）。
+# 算一次：它在**每次**冲突报告里都要用（原先每次调用重造一遍）。
+_INSTANCE_LABELS: dict[str, str] = {
+    instance: "、".join(slugs) for instance, slugs in INSTANCE_CONSUMERS.items()
+}
+
+
 @dataclass(frozen=True)
 class SyscfgPinConflictReport:
-    """落盘 syscfg 的同脚冲突报告。
+    """落盘 syscfg 的冲突报告（**两根轴**，判据单源）。
 
-    `lines` = 逐脚一行「  · PA22：角色 × 角色」（空 = 无冲突）；
+    `lines` = 逐脚一行「  · PA22：角色 × 角色」（空 = 无同脚冲突）——
+    「同一个脚被两只实例同时占用」= SysConfig 的 Resource conflict；
+    `name_lines`（工单 11）= 逐名一行「  · SCL：oled(OLED_SPI) × jy61p(JY61P)」
+    （空 = 无重名）——「两个实例的引脚**符号**同名」= SysConfig 的另一条全局唯一
+    约束 `Duplicate name`。两根轴是**两种错**、也是**两种出路**（前者改绑解得开，
+    后者只能去掉一件或改母版名），所以分行记、不合并。
+
     `capacity` = 引脚容量诊断段（前面带换行；两种形态没有诊断可言 = 空串：
     ① 无选中集知识（产物复核）② 板数据缺失）。
     """
 
     lines: tuple[str, ...]
     capacity: str
+    name_lines: tuple[str, ...] = ()
 
     @property
     def pin_count(self) -> int:
-        """冲突引脚数（调用方文案里的「N 个引脚」）。"""
+        """同脚冲突引脚数（调用方文案里的「N 个引脚」）。"""
         return len(self.lines)
+
+    @property
+    def name_count(self) -> int:
+        """同名引脚符号数（工单 11）。"""
+        return len(self.name_lines)
+
+    @property
+    def conflict_count(self) -> int:
+        """两根轴合计（调用方判「这份报告是不是空的」用）。"""
+        return len(self.lines) + len(self.name_lines)
 
 
 def syscfg_pin_conflict_report(
@@ -187,7 +216,8 @@ def syscfg_pin_conflict_report(
         for pin, paths in by_pin.items()
         if len({path.split(".", 1)[0] for path in paths}) > 1
     }
-    if not conflicts:
+    name_conflicts = _duplicate_pin_names(model)
+    if not conflicts and not name_conflicts:
         return SyscfgPinConflictReport(lines=(), capacity="")
     lines = [
         "  · " + pin + "：" + " × ".join(
@@ -195,13 +225,20 @@ def syscfg_pin_conflict_report(
         )
         for pin in sorted(conflicts)
     ]
+    name_lines = [
+        "  · " + name + "：" + " × ".join(where)
+        for name, where in sorted(name_conflicts.items())
+    ]
     # 引脚容量诊断（工单 pin-capacity/01）：只升文案、不增拦截——判据与触发条件
     # 一行未改，只在逐脚清单之后、出路之前补可操作数字（选中集规模 / 板上可用 IO /
     # 占用与空闲 / 一键配置解开几组剩几组 / 最低代价几个模块）。两种形态没有诊断
     # 可言，走缺省文案：① 无选中集知识（产物复核，manifests 为空）；② 板数据缺失
     # ——都给不出「可用 IO / 落点」这些数，编不得。
+    #
+    # ⚠ 只有**同脚**那一轴才配容量诊断：重名与"脚够不够"无关（去掉一件、或改母版
+    # 名才是出路），拿容量数字去解释它只会把人指错方向。
     capacity = ""
-    if manifests and board is not None:
+    if conflicts and manifests and board is not None:
         capacity = "\n" + render_pin_capacity_diagnosis(
             diagnose_pin_capacity(
                 manifests,
@@ -211,7 +248,92 @@ def syscfg_pin_conflict_report(
             ),
             board.name,
         )
-    return SyscfgPinConflictReport(lines=tuple(lines), capacity=capacity)
+    return SyscfgPinConflictReport(
+        lines=tuple(lines), capacity=capacity, name_lines=tuple(name_lines)
+    )
+
+
+def syscfg_pin_name_conflict(
+    *,
+    master_syscfg: str | None,
+    manifests: Sequence[ModuleManifest],
+    platform: str,
+) -> str:
+    """**只有同名引脚符号**那一轴的冲突（空串 = 没有）——给"还没到生成"的调用方用。
+
+    为什么单独一个入口：赛题页的「自动配置」与「校验」端点手里有选中集，却没有
+    board / bindings 那套载荷——它们要回答的是"这一组一键配完还编得过吗"。判据与
+    生成门禁**同一个** `_duplicate_pin_names`（跑在 prune 后的模型上，与
+    `syscfg_pin_conflict_report` 里那条完全同源），所以不会出现"自动配置说好了、
+    生成却 400"。
+
+    同脚那一轴不在这里：它由求解器自己解（`resolve_default_conflicts=True`），
+    解不开时另有既有报错路径（`auto_assign_bindings` 的结果本身带说明）。
+    """
+    if platform != PLATFORM_MSPM0 or not master_syscfg or not manifests:
+        return ""
+    pruned = parse_syscfg(master_syscfg).prune(
+        (manifest.slug for manifest in manifests)
+    )
+    names = _duplicate_pin_names(pruned)
+    if not names:
+        return ""
+    return "\n".join(
+        "  · " + name + "：" + " × ".join(where)
+        for name, where in sorted(names.items())
+    )
+
+
+def syscfg_pin_name_conflict_for(
+    masters_dir: Path | str,
+    platform: str,
+    manifests: Sequence[ModuleManifest],
+) -> str:
+    """`syscfg_pin_name_conflict` 的**读盘**入口（母版目录 + 平台 + 选中集）。
+
+    为什么读盘这一步也留在域层（工单 hwcheck-unknown-device/11 评审整改）：
+    webapp 的 import 面被 `tests/test_hwcheck_assembly_home.py` 钉着——装配原语
+    （含"读母版 syscfg"）回 webapp 就等于域函数被架空。所以端点只调这一个名字，
+    读盘与判据都在这儿。
+
+    母版文件缺失 / 读不了 = 空串（"判不了就不判"）——生成那一刻的门禁照旧，
+    不静默放行。
+    """
+    if platform != PLATFORM_MSPM0:
+        return ""
+    path = master_project_dir(Path(masters_dir), platform) / MSPM0_SYSCFG_FILENAME
+    if not path.is_file():
+        return ""
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    return syscfg_pin_name_conflict(
+        master_syscfg=text, manifests=manifests, platform=platform
+    )
+
+
+def _duplicate_pin_names(model: SyscfgModel) -> dict[str, list[str]]:
+    """同名引脚符号 → 用到它的「模块（实例）」清单（工单 11；空 = 无重名）。
+
+    判据 = SysConfig 的 `$name` **全局唯一**（与 `$assign` 的"一个脚一只实例"是
+    两根轴）。**只看传进来的模型**（调用方给的是 prune + rewrite 之后那一份），
+    所以没选中的实例天然不在判据里——在母版全文上判会把存量的 **14 组**重名全报
+    出来（母版本来就有；14 = 组数，不是件数，见 issues/11 的表）。
+
+    名字取自 `SyscfgModel.pin_names`（解析单源），模块名用 `INSTANCE_CONSUMERS`
+    反查（哪几件模块消费这个实例）——未登记实例只报实例名，不猜模块。
+    """
+    by_name: dict[str, set[str]] = {}
+    for instance, names in model.pin_names.items():
+        label = _INSTANCE_LABELS.get(instance) or instance
+        for name in names:
+            by_name.setdefault(name, set()).add(f"{label}({instance})")
+    return {
+        name: sorted(where)
+        for name, where in by_name.items()
+        if len(where) > 1
+    }
 
 
 def _syscfg_role_labels(

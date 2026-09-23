@@ -1200,6 +1200,75 @@ def test_syscfg_pin_conflicts_binding_moves_the_conflict(tmp_path):
     assert "motor.BIN2" in str(excinfo.value)
 
 
+def test_syscfg_pin_name_collision_is_a_loud_failure(tmp_path):
+    """**同名引脚符号**也要在生成前拦下（工单 11）：地猛星 + 板子活着 + 调试串口
+    + OLED + JY61P。
+
+    这一组是**最日常的搭配**（显示屏 + 一件传感器），而它今天能一路生成到编译期：
+    生成端点返回 200、工程落盘，然后在 CCS 里报 4 个
+    `Duplicate name: 'SCL'`（工单 11 实测 exit=2）。用户拿到的是一份"生成了但编译
+    不过"的工程——「打开的工程就能编译」这条底线当场破。
+
+    走**用户实际动作的那条序**：先原样生成一次（这一跳会先撞上 PA22 那条**已知**
+    的同脚冲突——`debug_uart` 与 `oled` 抢 PA22，属于既有判据），再点一次
+    「自动配置」把那一条解开后重来。第二跳才轮到本单要抓的重名轴。
+
+    判据三条腿：① 拦下来了（`SyscfgPinConflictError`）；② 文案说的是**重名**、
+    不是"脚被占"（两根轴两套话——拿"改绑"去指路会把人带沟里）；③ 点名了撞车的
+    两件模块，学生知道去掉哪件。
+    """
+    from contest_generator.pin_bindings import auto_assign_bindings
+
+    corpus = _real_mspm0_syscfg_corpus(tmp_path)
+    manifests = _real_mspm0_manifests("led", "delay", "debug_uart", "oled", "jy61p")
+    board = _mspm0_board()
+
+    # 第一跳：原样生成（同脚冲突先拦——那是既有判据，不是本单的）
+    with pytest.raises(SyscfgPinConflictError) as first:
+        _check_syscfg_pin_conflicts(
+            corpus, manifests, PLATFORM_MSPM0, GateContext(board=board)
+        )
+    assert "Resource conflict" in str(first.value), str(first.value)
+
+    # 第二跳：点「自动配置」→ 同一组选择，只剩重名这一轴
+    solved = auto_assign_bindings(
+        manifests, PLATFORM_MSPM0, board, {}, resolve_default_conflicts=True
+    )
+    with pytest.raises(SyscfgPinConflictError) as excinfo:
+        _check_syscfg_pin_conflicts(
+            corpus, manifests, PLATFORM_MSPM0,
+            GateContext(board=board, bindings=solved.bindings),
+        )
+
+    message = str(excinfo.value)
+    assert "引脚符号重名" in message, message
+    assert "Duplicate name" in message, message
+    assert "改绑引脚解不开" in message, "重名的出路是去掉一件，不是改绑：" + message
+    assert "SCL" in message and "SDA" in message, message
+    for slug in ("oled", "jy61p"):
+        assert slug in message, f"要点名撞车的模块 {slug}：{message}"
+
+
+def test_syscfg_pin_name_collision_is_solved_by_dropping_one_module(tmp_path):
+    """反向：去掉 JY61P（只留 OLED），并点过「自动配置」→ 门禁放行。
+
+    判据是**裁剪后**的模型：没选中的实例已被 prune 掉，它那份 `SCL` 不该再算数。
+    在母版全文上判就会永远报错（母版里本来就有 14 组存量重名），那等于把整条路堵死。
+    """
+    from contest_generator.pin_bindings import auto_assign_bindings
+
+    corpus = _real_mspm0_syscfg_corpus(tmp_path)
+    manifests = _real_mspm0_manifests("led", "delay", "debug_uart", "oled")
+    board = _mspm0_board()
+    solved = auto_assign_bindings(
+        manifests, PLATFORM_MSPM0, board, {}, resolve_default_conflicts=True
+    )
+    _check_syscfg_pin_conflicts(
+        corpus, manifests, PLATFORM_MSPM0,
+        GateContext(board=board, bindings=solved.bindings),
+    )
+
+
 def test_syscfg_pin_conflicts_output_tree_corpus_judges_current_text(tmp_path):
     """产物复核形态（generate_check 现状 `run_generation_gates(corpus, [], platform)`）：
     manifests 为空 = 无选中集知识 → **不 prune、不 rewrite**，直接判语料现值——

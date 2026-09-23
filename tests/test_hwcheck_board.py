@@ -533,6 +533,31 @@ def test_hwcheck_view_require_pins_false_skips_the_capacity_verdict():
     assert view.board["wiring"]["rows"], "回读照旧给出接线表"
 
 
+def test_hwcheck_view_surfaces_the_pin_name_collision(tmp_path):
+    """**同名引脚符号**在检测页也要拦下（工单 11 的第二条路）。
+
+    形态是最日常的一组：地猛星 + 默认双通道 + OLED + JY61P。检测页在生成前跑
+    与赛题页「自动配置」同一个求解器，PA22 那条同脚冲突解得开，**重名那一轴解不开**
+    ——今天它就一路生成出去，学生在 CCS 里看到 4 个 `Duplicate name`（工单 11 实测）。
+
+    判据：`require_pins=True`（预览 / 生成）大声失败 + 给检测页三条出路；文案说的是
+    重名（不是"装不下"），并点名撞车的两件。`require_pins=False`（回读那次已生成的
+    检测）照常投影——与既有「装不下」同一条口径。
+    """
+    devices = ["oled", "jy61p"]
+    with pytest.raises(HwCheckError) as excinfo:
+        _page_view(PLATFORM_MSPM0, devices=devices)
+    message = str(excinfo.value)
+    assert HWCHECK_PIN_EXIT_MARKER in message, "失败时要给页面出路"
+    assert "符号" in message and "Duplicate name" in message, message
+    assert "SCL" in message and "SDA" in message, message
+    for slug in ("oled", "jy61p"):
+        assert slug in message, f"要点名撞车的模块 {slug}：{message}"
+    assert "改绑引脚解不开" in message, "别把重名的出路说成改绑：" + message
+    view = _page_view(PLATFORM_MSPM0, devices=devices, require_pins=False)
+    assert view.board["wiring"]["rows"], "回读照旧给出接线表"
+
+
 def test_hwcheck_view_reads_the_recipe_override_path(tmp_path):
     """`recipe_path` 是显式入参（原先走 AppContext 覆盖）：坏配方仍大声失败。"""
     broken = tmp_path / "hwcheck_recipes.json"

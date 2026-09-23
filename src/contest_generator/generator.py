@@ -1705,12 +1705,17 @@ def _check_syscfg_pin_conflicts(
     platform: str,
     context: "GateContext",
 ) -> None:
-    """mspm0 生成期引脚冲突门禁（工单 pin-conflict-gate/01）。
+    """mspm0 生成期引脚冲突门禁（工单 pin-conflict-gate/01；工单 11 补第二根轴）。
 
     判据 = **写侧将要落盘的那份 syscfg**：`parse_syscfg` → `prune(选中集)` →
-    `rewrite(绑定)`（与 pinwriter.apply_pin_bindings 同一条 pipeline），按
-    `$assign` 引脚分组，同一引脚被**两只实例**同时占用 = SysConfig 的
-    Resource conflict（真机 2026H 的 7 条逐脚对上）。
+    `rewrite(绑定)`（与 pinwriter.apply_pin_bindings 同一条 pipeline）。**两根轴**：
+
+    * 同脚：同一 `$assign` 引脚被两只实例同时占用 = Resource conflict
+      （真机 2026H 的 7 条逐脚对上）；
+    * 同名（工单 11）：两只实例的**引脚符号** `$name` 撞车 = SysConfig 的另一条
+      全局唯一约束，报 `Duplicate name: 'SCL'`（地猛星上 17 件 I2C 器件互撞：
+      OLED + 任意传感器、只勾两件就中）。这条**改绑解不开**——出路是去掉一件，
+      所以文案与前者分开写（拿"改绑"去指路会把人带沟里）。
 
     为什么在这里拦：母版默认布局按「同选概率最低者重叠」铺满（syscfg-prune
     只在生成时裁剪未选实例），选中两个默认脚相同的模块 → 落盘即冲突、编译
@@ -1719,8 +1724,8 @@ def _check_syscfg_pin_conflicts(
     **判据本体不在这里**（工单 hwcheck-pin-conflict-exit/01）：报告归
     `syscfg_prune.syscfg_pin_conflict_report`，检测页的预览 / 生成共吃同一份
     ——否则「预览说没问题、点生成 400」这类分家会一直在。本函数只负责把报告
-    翻成赛题页的 400（出路指向引脚配置 / 自动配置）；检测页的出路文案在
-    `hwcheck_board.hwcheck_pin_message`。
+    翻成赛题页的 400（同脚出路指向引脚配置 / 自动配置；同名出路指向去掉一件）；
+    检测页的出路文案在 `hwcheck_board.hwcheck_pin_message`。
     """
     report: SyscfgPinConflictReport = syscfg_pin_conflict_report(
         master_syscfg=corpus.master_syscfg,
@@ -1729,12 +1734,27 @@ def _check_syscfg_pin_conflicts(
         board=context.board,
         bindings=context.bindings,
     )
-    if not report.lines:
+    if not report.conflict_count:
         return
+    if not report.lines:
+        # 只有同名这一轴：**改绑引脚无解**（撞的是 `$name` 这个符号，不是脚；
+        # 实测 oled+jy61p 换四种绑定 name_count 恒为 2），文案与同脚那条分开，
+        # 且**不许**再把用户支去"改绑"——那是做不到的动作。
+        raise SyscfgPinConflictError(
+            f"mspm0 引脚符号重名：落盘后的 {MSPM0_SYSCFG_FILENAME} 里，"
+            f"{report.name_count} 个引脚**符号**被两只实例同时使用，"
+            "SysConfig 会直接报 Duplicate name（工程编不过）：\n"
+            + "\n".join(report.name_lines)
+            + "\n这一条**改绑引脚解不开**（撞的是符号名，不是脚）：去掉其中一件模块"
+            "后重新生成。母版给这些实例起的引脚符号本来就同名（如库内 17 件 I2C "
+            "器件共用 SCL/SDA），要两件同用只能改母版——已记在工单 11。"
+        )
     raise SyscfgPinConflictError(
         f"mspm0 引脚冲突：落盘后的 {MSPM0_SYSCFG_FILENAME} 有 {report.pin_count} 个引脚"
         "被两只实例同时占用，SysConfig 会直接编译失败（Resource conflict）：\n"
         + "\n".join(report.lines)
+        + ("\n同名引脚符号（另一条约束）：\n" + "\n".join(report.name_lines)
+           if report.name_lines else "")
         + report.capacity
         + "\n出路：在引脚配置里改绑上述角色（或点「自动配置」一键解开），"
         "或去掉冲突模块中的一个后重新生成。"
