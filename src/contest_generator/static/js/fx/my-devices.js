@@ -23,8 +23,14 @@ export const MY_DEVICE_ID_PREFIX = "mine_";
 export const MY_DEVICE_ADDRESS_MIN = 0x08;
 export const MY_DEVICE_ADDRESS_MAX = 0x77;
 
-// id 文法 = 前缀 + slug 形（与服务端 `entry_store.SLUG_PATTERN` 同一文法）
-const MY_DEVICE_ID_RE = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
+// id 文法 = 前缀 + C 标识符可用字符（字母数字下划线，**不含连字符**——id 会拼进
+// 检测程序的 C 函数名，`mine_gyro-2` 拼出来不是合法 C 标识符；工单 12 收紧，
+// 与服务端 `my_devices.DEVICE_ID_PATTERN` 同一文法，跨语言守卫逐字对账）
+const MY_DEVICE_ID_RE = /^[A-Za-z0-9_]+$/;
+
+// id 总长上限（与服务端 `DEVICE_ID_MAX_CHARS` 同源）：C 函数名的一段，太长有
+// 截断后撞名的理论风险
+export const MY_DEVICE_ID_MAX_CHARS = 48;
 
 // 总线词表 + 中文展示名（与服务端 `BUS_VOCABULARY` / `BUS_LABELS` 同源。
 // 只有 i2c 这一版会生成探测程序，其余如实说"不生成"——见 myDeviceRowHTML）
@@ -57,8 +63,10 @@ const NAME_MAX_CHARS = 60;
 // 有一个能改的默认值比让用户对着空框想"该填什么"好。
 export function myDeviceSlugFromName(name) {
   const raw = String(name == null ? "" : name).toLowerCase();
+  // 连字符也换掉（工单 12）：派生的 id 要过 C 标识符文法，不然"帮你填好"
+  // 的 id 会被服务端当场拒收
   const body = raw
-    .replace(/[^a-z0-9_-]+/g, "_")
+    .replace(/[^a-z0-9_]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 32);
   return MY_DEVICE_ID_PREFIX + (body || "device");
@@ -160,10 +168,14 @@ export function myDeviceFormCheck(form, knownSlugs = [], existingIds = [], editi
   const name = String(f.name || "").trim();
   const bus = String(f.bus || "");
   if (!id) return "请填 id（这件东西在你工具里的唯一名字，如 mine_gyro）";
+  if (id.length > MY_DEVICE_ID_MAX_CHARS) {
+    return `id 太长了（${id.length} 字符，上限 ${MY_DEVICE_ID_MAX_CHARS}）——`
+      + "它是检测程序里 C 函数名的一段（hwcheck_custom_<id>），换短一点的名字";
+  }
   if (!id.startsWith(MY_DEVICE_ID_PREFIX) || !MY_DEVICE_ID_RE.test(id)
       || id.length <= MY_DEVICE_ID_PREFIX.length) {
-    return `id 必须是 ${MY_DEVICE_ID_PREFIX} 开头、后面只跟字母数字下划线连字符`
-      + "（例：mine_gyro）";
+    return `id 必须是 ${MY_DEVICE_ID_PREFIX} 开头、后面只跟字母数字下划线`
+      + "（不能用连字符——id 会拼进检测程序的 C 函数名；例：mine_gyro）";
   }
   if (!name) return "请填名称（写你认得出来的那个名字）";
   if (name.length > NAME_MAX_CHARS) return `名称太长了（上限 ${NAME_MAX_CHARS} 字）`;

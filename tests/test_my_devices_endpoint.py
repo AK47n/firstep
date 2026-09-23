@@ -223,14 +223,74 @@ def test_create_rejects_a_missing_device_object(devices_client):
     assert "device" in response.json()["detail"]
 
 
-@pytest.mark.parametrize("bad_id", ["gyro", "mine gyro", "mine_", "mine/../evil"])
-def test_create_rejects_an_id_outside_the_mine_prefixed_grammar(devices_client, bad_id):
+@pytest.mark.parametrize(
+    "bad_id", ["gyro", "mine gyro", "mine_", "mine/../evil", "mine_gyro-2", "mine_gy-ro"]
+)
+def test_create_rejects_an_id_outside_the_device_grammar(devices_client, bad_id):
     client, _ = devices_client
     response = client.post(
         "/api/my-devices", json={"device": {**DEVICE_BODY, "id": bad_id}}
     )
     assert response.status_code == 400, response.text
     assert "mine_" in response.json()["detail"]
+
+
+def test_create_rejects_a_hyphen_id_and_says_why(devices_client):
+    """工单 12 的**建件入口**：连字符 id 必须 400，且说清为什么（拼进 C 函数名）。
+
+    `02` 定的 id 文法允许 `-`，而 `03` 把 id 原样拼进 C 函数名——`mine_gyro-2`
+    造出的检测工程里是 `static void hwcheck_custom_mine_gyro-2(void)`，不是合法
+    C 标识符，整份工程编不过（现场与量具：`probe-12-hyphen-id.py`）。
+    """
+    client, data_dir = devices_client
+    response = client.post(
+        "/api/my-devices", json={"device": {**DEVICE_BODY, "id": "mine_gyro-2"}}
+    )
+    assert response.status_code == 400, response.text
+    detail = response.json()["detail"]
+    assert "连字符" in detail, detail
+    assert not (my_devices_dir(data_dir) / "mine_gyro-2").exists(), "不许静默存下"
+
+
+def test_a_stale_hyphen_entry_is_named_loudly_and_never_reaches_a_project(
+    generate_client, tmp_path
+):
+    """工单 12 的**预览 / 生成入口**：盘上已有的坏 id（旧条目）大声拦下，不落工程。
+
+    收紧文法之前建的条目还躺在数据目录里（目录名 = id = `mine_gyro-2`）。
+    列表、预览、生成三个入口都要 400 点名；**生成绝不落盘**——缺陷现场是
+    「三个端点全 200、坏工程已经写进磁盘」，这条按同一个量具反向钉。
+    """
+    client, data_dir = generate_client
+    root = my_devices_dir(data_dir)
+    entry = root / "mine_gyro-2"
+    (entry / "materials").mkdir(parents=True)
+    (entry / DEVICE_JSON).write_text(
+        json.dumps(
+            {"id": "mine_gyro-2", "name": "旧条目", "bus": "i2c", "address": 0x68}
+        ),
+        encoding="utf-8",
+    )
+    listed = client.get("/api/my-devices")
+    assert listed.status_code == 400, listed.text
+    assert "mine_gyro-2" in listed.json()["detail"]
+
+    request = {
+        "platform": PLATFORM_STM32,
+        "debug_uart": True,
+        "oled": False,
+        "devices": ["mine_gyro-2"],
+    }
+    output_parent = tmp_path / "out"
+    output_parent.mkdir()
+    preview = client.post("/api/hwcheck/preview", json=request)
+    assert preview.status_code == 400, preview.text
+    assert "mine_gyro-2" in preview.json()["detail"]
+    generated = client.post(
+        "/api/hwcheck/generate", json={**request, "parent_dir": str(output_parent)}
+    )
+    assert generated.status_code == 400, generated.text
+    assert list(output_parent.iterdir()) == [], "坏工程一个目录都不该落"
 
 
 # ---------------------------------------------------------------------------

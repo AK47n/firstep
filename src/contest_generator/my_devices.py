@@ -36,6 +36,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -43,7 +44,6 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from .entry_store import (
-    SLUG_PATTERN,
     StoreError,
     read_json,
     write_json,
@@ -53,6 +53,9 @@ __all__ = [
     "BUS_I2C",
     "BUS_LABELS",
     "BUS_VOCABULARY",
+    "DEVICE_ID_MAX_CHARS",
+    "DEVICE_ID_PATTERN",
+    "DEVICE_ID_PREFIX",
     "DEVICE_JSON",
     "MATERIALS_DIRNAME",
     "MY_DEVICES_DIRNAME",
@@ -89,6 +92,22 @@ MATERIALS_DIRNAME = "materials"
 
 # id 前缀：库外件一眼看得出是"我的"（页面也按它区分两类东西）
 DEVICE_ID_PREFIX = "mine_"
+
+# id 文法（工单 12 收紧）：`mine_` 前缀 + **C 标识符可用字符**（字母数字下划线，
+# **不含连字符**）。原因：id 会被原样拼进检测程序的 C 函数名（`hwcheck_custom` 的
+# `CustomSection.func_name` = f"hwcheck_custom_{id}"），`mine_gyro-2` 拼出来是
+# `hwcheck_custom_mine_gyro-2`——不是合法 C 标识符，整份工程编不过。这条文法因此
+# **不再复用** `entry_store.SLUG_PATTERN`：那是库内键文法（`0-96-iic` 这类带连字符
+# 的库内 slug 靠它），而库内 slug 永远不进 C 标识符——两条文法管两件事，判据各自
+# 单源（"id 会拼进 C 标识符"的判据全仓库只有这里一处）。前缀以字母开头，所以
+# 拼出的 `hwcheck_custom_*` 恒为合法 C 标识符，渲染侧不必再验一遍。
+DEVICE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
+
+# id 总长上限（工单 12 评审补的长度维）：小节函数是 `static`（内部链接），C99 对
+# 内部标识符只保证前 63 个字符有效——`hwcheck_custom_` 前缀占 15 个，id 本体最长
+# 48 个字符，再长就有"两个长 id 截断后同名 C 函数"的理论风险（那是票面自己点名
+# 过的危害，字符集收紧关不掉它，上限才能）。
+DEVICE_ID_MAX_CHARS = 48
 
 # 总线词表（spec 定的那串）+ 展示名。词表外大声失败——`bus` 决定这一版能不能
 # 生成探测程序（只有 i2c 能），放一个不认识的词进来等于把它当 I2C 猜。
@@ -377,21 +396,30 @@ def address_forms(address: int | None) -> dict[str, str]:
 
 
 def _require_device_id(value: Any) -> str:
-    """id 文法 = `mine_` 前缀 + 库内 slug 同一文法（它同时是**目录名**）。
+    """id 文法 = `mine_` 前缀 + C 标识符可用字符（`DEVICE_ID_PATTERN`，工单 12）。
 
     目录名 = id，所以这里既挡手滑（空格 / 中文 / 大写 M 开头）也挡路径穿越
-    （`mine/../evil` 这种）；`SLUG_PATTERN` 与库内键文法单源，不自造第二套。
+    （`mine/../evil` 这种）。**不复用** `entry_store.SLUG_PATTERN`（02 时的决定，
+    12 推翻）：那是库内键文法、允许连字符，而 id 要拼进 C 函数名——判据见
+    `DEVICE_ID_PATTERN` 那条注释，全仓库只有这一处。
     """
     text = value if isinstance(value, str) else ""
+    if len(text) > DEVICE_ID_MAX_CHARS:
+        raise MyDeviceError(
+            f"器件 id 太长了（{len(text)} 字符，上限 {DEVICE_ID_MAX_CHARS}）——"
+            "它是检测程序里 C 函数名的一段（hwcheck_custom_<id>），"
+            "换短一点的名字"
+        )
     if (
         not text.startswith(DEVICE_ID_PREFIX)
         or len(text) <= len(DEVICE_ID_PREFIX)
-        or SLUG_PATTERN.fullmatch(text) is None
+        or DEVICE_ID_PATTERN.fullmatch(text) is None
     ):
         raise MyDeviceError(
             f"器件 id {value!r} 不合法：必须是 {DEVICE_ID_PREFIX!r} 开头、"
-            "后面只跟字母数字下划线连字符（例：mine_gyro）——"
-            "它是这件东西在你工具里的唯一名字，也是存它的目录名"
+            "后面只跟字母数字下划线，不能用连字符——id 会原样拼进检测程序的 "
+            "C 函数名，连字符拼出来的不是合法 C 标识符（例：mine_gyro）。"
+            "带着连字符的旧条目请删掉后用新 id 重建"
         )
     return text
 
@@ -473,7 +501,11 @@ def _device_from_payload(data: dict[str, Any], entry_name: str) -> CustomDevice:
             updated_at=str(data.get("updated_at") or ""),
         ).validated()
     except MyDeviceError as exc:
-        raise MyDeviceError(f"这件器件的定义不合法（{entry_name}）：{exc}") from exc
+        raise MyDeviceError(
+            f"这件器件的定义不合法（{entry_name}）：{exc} —— "
+            f"要么手工修好 hwcheck_devices/{entry_name}/{DEVICE_JSON}，"
+            "要么删掉这个条目重填"
+        ) from exc
     if device.id != entry_name:
         raise MyDeviceError(
             f"条目目录名与里面的 id 不一致（目录 {entry_name!r} / 文件 {device.id!r}）："

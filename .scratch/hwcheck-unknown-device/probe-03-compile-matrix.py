@@ -53,6 +53,7 @@ mspm0 侧多证两件事（否则 `i2c_probe.c` 直接编不过，是 01 反证�
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import sys
 from pathlib import Path
@@ -144,6 +145,32 @@ def _dev(device_id: str, name: str, address=None, register=None, expect=None, bu
     )
 
 
+def _save_with_retry(root: Path, device: CustomDevice, attempts: int = 5):
+    """`save_device` 整调用重试：矩阵在几分钟里连发几十次落盘，Windows 的
+    实时扫描 / 索引器偶尔会把刚写完的暂存目录句柄占住一拍，原子改名撞
+    `PermissionError [WinError 5]`（本机实测，两次矩阵各废在**不同格**上）。
+    每次重试都是**完整的产品调用**（不是绕过校验的分步操作），失败仍如实抛。"""
+    import time
+
+    last: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            return save_device(root, device)
+        except PermissionError as exc:
+            last = exc
+            time.sleep(0.5 * (attempt + 1))
+    assert last is not None
+    raise last
+
+
+# 工单 12 的边界格用：**旧文法下建的**带连字符 id（建件端点已进不去，
+# 只会以"盘上旧条目"的形态存在）
+HYPHEN_ID = "mine_gyro-2"
+
+# 边界格的 kind：生成/装载期被产品拦下是**正确行为**，读数如实记、不计入验收线
+BOUNDARY_KINDS = frozenset({"all-recipes", "hyphen-id-refused"})
+
+
 # 矩阵的格子（键 = 格名，值 = {平台: 形态}）。**格名出现在日志文件名与读数里**，
 # 改名前先想清楚 03 已经发布过的那几个读数还认不认得出来。
 CASES: dict[str, dict[str, dict]] = {
@@ -191,7 +218,35 @@ CASES: dict[str, dict[str, dict]] = {
     "custom-not-i2c": _case("reverse", custom=(
         _dev("mine_spi", "SPI 的库外件（不该出探测小节）", None, None, None, bus="spi"),
     )),
+
+    # ---- 工单 12 的边界格：id 文法收紧后的**盘上旧条目** ----
+    # 带连字符的 id 在建件端点已进不去（工单 12 收紧文法），但**收紧之前**建的
+    # 条目可能还躺在数据目录里。这一格把那样的条目**手工**写进数据目录（绕过
+    # `save_device` 的校验，模拟"它是在旧文法下建的"），预期两平台的装载阶段
+    # 都大声拦下（`MyDeviceError` 点名条目 + 指路）——到不了生成、更到不了编译。
+    # 它与 `all-recipes` 同属**边界读数**（`BOUNDARY_KINDS`），不计入 0e/0w 验收线。
+    "hyphen-id-refused": _case("hyphen-id-refused", devices=(HYPHEN_ID,)),
 }
+
+
+def _write_stale_hyphen_entry(root: Path) -> None:
+    """把一件**旧文法下建的**带连字符条目手工写进数据目录（绕过 `save_device`）。
+
+    `save_device` 会按现行文法校验（工单 12 起连字符直接 400），而这一格要模拟的
+    恰恰是"它是在收紧之前建的"——所以按目录即数据库的落盘形状直接写文件。
+    先清后写：两平台先后跑同一格，上一格留下的条目不能让下一格撞 `FileExistsError`
+    （第一版就是这么把 stm32 那格的读数从 `MyDeviceError` 污染成探针自己的异常的）。
+    """
+    entry = root / HYPHEN_ID
+    if entry.exists():
+        shutil.rmtree(entry)
+    (entry / "materials").mkdir(parents=True)
+    (entry / "device.json").write_text(
+        json.dumps(
+            {"id": HYPHEN_ID, "name": "旧文法下建的库外件", "bus": "i2c", "address": 0x68}
+        ),
+        encoding="utf-8",
+    )
 
 
 def build_case(name: str, platform: str) -> tuple[Path, str, tuple[str, ...], list[str]]:
@@ -201,6 +256,13 @@ def build_case(name: str, platform: str) -> tuple[Path, str, tuple[str, ...], li
     认它）：它不是验收格，是"全选到底有多大、产品怎么答"的边界读数。
     """
     case = CASES[name][platform]
+    # 起手先清上一格可能留下的坏条目：`hyphen-id-refused` 把带连字符的旧条目
+    # 手工写进数据目录，而 `hwcheck_view` 装载时 `list_devices` **全量**读目录——
+    # 条目若还在，后面任何一格都会在装载期假红（评审 🟡 抓到的位置隐式依赖，
+    # 修成与格顺序无关）
+    stale = my_devices_dir(WORK_DIR) / HYPHEN_ID
+    if stale.exists():
+        shutil.rmtree(stale)
     devices = tuple(case["devices"])
     notes: list[str] = []
     if case["kind"] == "all-library":
@@ -212,6 +274,12 @@ def build_case(name: str, platform: str) -> tuple[Path, str, tuple[str, ...], li
             "配方的那些，不设让位）"
         )
     devices = devices + tuple(d.id for d in case["custom"])
+    if case["kind"] == "hyphen-id-refused":
+        _write_stale_hyphen_entry(my_devices_dir(WORK_DIR))
+        notes.append(
+            f"盘上旧条目（旧文法下建的 id）{HYPHEN_ID!r} 已手工落进数据目录"
+            "——预期装载期大声拦下"
+        )
     config = HwCheckConfig(
         platform=platform,
         debug_uart=case["channel"],
@@ -222,7 +290,7 @@ def build_case(name: str, platform: str) -> tuple[Path, str, tuple[str, ...], li
     # 落点是 `my_devices_dir(data_dir)`（`<数据目录>/hwcheck_devices/`），与
     # `hwcheck_view(data_dir=…)` 读的那个目录**同一个推导**（写这儿读那儿）。
     for device in case["custom"]:
-        save_device(my_devices_dir(WORK_DIR), device)
+        _save_with_retry(my_devices_dir(WORK_DIR), device)
     view = hwcheck_view(
         config,
         module_library_dir=MODULES,
@@ -526,11 +594,12 @@ def main() -> int:
             try:
                 ok, block = run_case(name, platform)
             except Exception as exc:  # 生成期失败也算不通过，如实记录
-                # `all-recipes` 是**边界格**（不是验收格）：它在生成期就被产品拦下是
-                # **正确行为**（引脚装不下 → 400 点名哪几件），所以这里如实记读数、
-                # 不计入验收线。判据仍是"产品有没有拦"——异常被换成一个"生成了但
-                # 编不过"的产物才是缺陷。
-                boundary = CASES[name][platform]["kind"] == "all-recipes"
+                # **边界格**（`BOUNDARY_KINDS`，不是验收格）：生成 / 装载期被产品
+                # 拦下是**正确行为**——`all-recipes` 是引脚装不下 → 400 点名哪几件，
+                # `hyphen-id-refused` 是盘上旧坏条目 → 装载期点名（工单 12）。这里
+                # 如实记读数、不计入验收线。判据仍是"产品有没有拦"——异常被换成
+                # 一个"生成了但编不过"的产物才是缺陷。
+                boundary = CASES[name][platform]["kind"] in BOUNDARY_KINDS
                 ok = boundary
                 detail = str(exc).splitlines()
                 block = [

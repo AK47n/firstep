@@ -3,7 +3,8 @@
 // 判据重点：
 // ① **地址双向显示**——7 位值进，7 位 + 8 位读 / 写形式一起出（手册里 0x68 与
 //    0xD0 两种写法都要能对上，这是填错地址最常见的一处坑）；
-// ② 表单校验必须与后端**同一套规则**（`mine_` 前缀 + slug 文法、7 位地址区间、
+// ② 表单校验必须与后端**同一套规则**（`mine_` 前缀 + C 标识符文法（工单 12
+//    收紧，不含连字符）、7 位地址区间、
 //    expect 必须与 register 同行）——前端只是"别让用户白跑一趟"，判据本体在服务端；
 // ③ 载荷形状 = 服务端要的那个 `{device: {...}}`（空的可选字段发 null，不是空串）。
 import test from "node:test";
@@ -26,6 +27,7 @@ import {
   myDeviceAddressPreviewHTML,
   MY_DEVICE_ADDRESS_MIN,
   MY_DEVICE_ADDRESS_MAX,
+  MY_DEVICE_ID_MAX_CHARS,
 } from "../../src/contest_generator/static/js/fx/my-devices.js";
 
 const PAYLOAD = {
@@ -105,19 +107,53 @@ test("合法表单通过校验（真库 slug 集里没有同名）", () => {
   assert.equal(myDeviceFormCheck(form, ["oled", "led", "i2c_probe"]), "");
 });
 
-test("id 必须是 mine_ 前缀 + slug 文法（与后端同规则）", () => {
+test("id 必须是 mine_ 前缀 + C 标识符文法（与后端同规则，不含连字符）", () => {
   for (const bad of ["gyro", "mine gyro", "mine_", "mine/../evil", "Mine_gyro", "mine_陀螺仪"]) {
     const error = myDeviceFormCheck({ ...myDeviceFormBlank(), id: bad, name: "x", address: "0x68" }, []);
     assert.ok(error, `${bad} 应被拒`);
     assert.ok(error.includes("mine_"), `${bad} → ${error}`);
   }
   assert.equal(MY_DEVICE_ID_PREFIX, "mine_");
-  for (const ok of ["mine_gyro", "mine_a", "mine_gyro-2", "mine_1"]) {
+  for (const ok of ["mine_gyro", "mine_a", "mine_gyro_2", "mine_1"]) {
     assert.equal(
       myDeviceFormCheck({ ...myDeviceFormBlank(), id: ok, name: "x", address: "0x68" }, []),
       "", ok,
     );
   }
+});
+
+test("连字符 id 被拒且说清为什么（id 会拼进检测程序的 C 函数名）", () => {
+  // 工单 12：`mine_gyro-2` 拼出 `hwcheck_custom_mine_gyro-2`——不是合法 C 标识符。
+  for (const bad of ["mine_gyro-2", "mine_gy-ro"]) {
+    const error = myDeviceFormCheck({ ...myDeviceFormBlank(), id: bad, name: "x", address: "0x68" }, []);
+    assert.ok(error, `${bad} 应被拒`);
+    assert.ok(error.includes("连字符"), `${bad} → ${error}`);
+  }
+});
+
+test("id 太长被拒（C 函数名的一段，截断撞名的理论风险）", () => {
+  const okId = "mine_" + "a".repeat(MY_DEVICE_ID_MAX_CHARS - 5);
+  assert.equal(
+    myDeviceFormCheck({ ...myDeviceFormBlank(), id: okId, name: "x", address: "0x68" }, []),
+    "", "恰好到上限 = 合法");
+  const error = myDeviceFormCheck(
+    { ...myDeviceFormBlank(), id: "mine_" + "a".repeat(MY_DEVICE_ID_MAX_CHARS - 4), name: "x", address: "0x68" }, []);
+  assert.ok(error.includes("太长"), error);
+});
+
+test("id 文法正则与后端 DEVICE_ID_PATTERN 逐字一致（读真源码对账）", () => {
+  const py = readFileSync(
+    new URL("../../src/contest_generator/my_devices.py", import.meta.url), "utf8");
+  const js = readFileSync(
+    new URL("../../src/contest_generator/static/js/fx/my-devices.js", import.meta.url), "utf8");
+  const pyMatch = py.match(/DEVICE_ID_PATTERN = re\.compile\(r"([^"]+)"\)/);
+  assert.ok(pyMatch, "my_devices.py 里应有 DEVICE_ID_PATTERN 字面量");
+  const jsMatch = js.match(/MY_DEVICE_ID_RE = \/(.+?)\/;\r?\n/);
+  assert.ok(jsMatch, "fx/my-devices.js 里应有 MY_DEVICE_ID_RE 字面量");
+  assert.equal(jsMatch[1], pyMatch[1]);
+  const pyMax = py.match(/DEVICE_ID_MAX_CHARS = (\d+)/);
+  assert.ok(pyMax, "my_devices.py 里应有 DEVICE_ID_MAX_CHARS");
+  assert.equal(MY_DEVICE_ID_MAX_CHARS, Number(pyMax[1]));
 });
 
 test("id 撞库内 slug / 撞已有自建件 → 提交前就拦住（同一句话）", () => {
@@ -221,6 +257,9 @@ test("myDeviceSlugFromName：中文名派生不出合法 slug 时给一个能用
   assert.equal(myDeviceSlugFromName(""), "mine_device");
   assert.equal(myDeviceSlugFromName("9轴"), "mine_9");
   assert.ok(myDeviceSlugFromName("x".repeat(80)).length <= 40);
+  // 工单 12：派生的 id 也必须过 C 标识符文法（连字符 → 下划线）——
+  // 不然"帮你填好"的 id 会被服务端当场拒收
+  assert.equal(myDeviceSlugFromName("My-Gyro 2"), "mine_my_gyro_2");
 });
 
 // ---------------------------------------------------------------------------

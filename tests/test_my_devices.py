@@ -19,13 +19,16 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 
 import pytest
 
-from contest_generator.entry_store import SLUG_PATTERN
 from contest_generator.my_devices import (
+    DEVICE_ID_MAX_CHARS,
+    DEVICE_ID_PATTERN,
+    DEVICE_ID_PREFIX,
     DEVICE_JSON,
     MATERIALS_DIRNAME,
     MY_DEVICES_DIRNAME,
@@ -203,22 +206,90 @@ def test_bus_vocabulary_is_the_spec_list():
 
 @pytest.mark.parametrize(
     "value",
-    ["gyro", "mine", "mine gyro", "mine_陀螺仪", "MINE_gyro", "mine/../evil", "..", ""],
+    [
+        "gyro", "mine", "mine gyro", "mine_陀螺仪", "MINE_gyro", "mine/../evil",
+        "..", "",
+        # 工单 12：连字符不再合法——id 会被原样拼进检测程序的 C 函数名，
+        # `mine_gyro-2` 拼出来是 `hwcheck_custom_mine_gyro-2`（不是合法 C 标识符）
+        "mine_gyro-2", "mine_gy-ro",
+    ],
 )
-def test_id_must_be_a_mine_prefixed_slug(value):
-    """id 文法 = `mine_` 前缀 + 库内 slug 同一文法（它同时是**目录名**）。
+def test_id_must_be_a_mine_prefixed_c_identifier(value):
+    """id 文法 = `mine_` 前缀 + **C 标识符可用字符**（工单 12 收紧，不含连字符）。
 
-    目录名 = id，所以这里既挡手滑也挡路径穿越（`mine/../evil` 这种）。
+    目录名 = id，所以这里既挡手滑也挡路径穿越（`mine/../evil` 这种）；连字符
+    这条是工单 12 加的：id 拼进 C 函数名，文法必须只收 C 标识符可用字符。
+    这条文法因此**不再复用** `entry_store.SLUG_PATTERN`——那是库内键文法
+    （`0-96-iic` 这类带连字符的库内 slug 靠它），库内 slug 永远不进 C 标识符，
+    两条文法管两件事，判据各自单源。
     """
     with pytest.raises(MyDeviceError) as excinfo:
         _device(id=value).validated()
     assert "mine_" in str(excinfo.value)
-    assert SLUG_PATTERN.fullmatch(value) is None or not value.startswith("mine_")
 
 
-def test_valid_id_passes_and_its_shape_matches_the_store_key_grammar():
-    assert _device().validated().id == "mine_gyro"
-    assert SLUG_PATTERN.fullmatch("mine_gyro") is not None
+@pytest.mark.parametrize("value", ["mine_gyro", "mine_a", "mine_gyro_2", "mine_1"])
+def test_valid_id_passes_and_keeps_its_shape(value):
+    assert _device(id=value).validated().id == value
+
+
+def test_every_accepted_id_yields_a_legal_c_function_name():
+    """判据本体（工单 12）：文法收下的**每个** id，拼进 C 函数名都必须合法。
+
+    抽样几个代表形态走**真的渲染路径**（`hwcheck_custom.CustomSection.func_name`，
+    与命令台复测分派读的是同一个名字）——文法与 C 标识符的关系在这里钉死，
+    以后放宽文法而不改渲染侧时这条会红。
+    """
+    from contest_generator.hwcheck_custom import CustomSection
+
+    c_identifier = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+    for value in ("mine_gyro", "mine_a", "mine_gyro_2", "mine_1", "mine_M2x", "mine_" + "a" * 40):
+        section = CustomSection(device=_device(id=value).validated(), plan="按你确认的事实探测")
+        assert c_identifier.fullmatch(section.func_name), value
+        assert section.func_name == f"hwcheck_custom_{value}"
+
+
+def test_the_device_id_grammar_only_admits_c_identifier_characters():
+    """文法面逐字钉住：前缀以字母开头，其余字符集 ⊆ C 标识符字符集。"""
+    assert DEVICE_ID_PREFIX == "mine_"
+    for ch in "abcXYZ019_":
+        assert DEVICE_ID_PATTERN.fullmatch(f"mine_x{ch}y") is not None, ch
+    for ch in "-. /\\:+":
+        assert DEVICE_ID_PATTERN.fullmatch(f"mine_x{ch}y") is None, ch
+
+
+def test_the_device_id_has_a_length_cap():
+    """id 总长有上限（工单 12 评审补的长度维）：C 函数名的一段，太长有截断撞名的
+    理论风险——C99 对内部标识符只保证前 63 个字符，`hwcheck_custom_` 占 15。"""
+    assert DEVICE_ID_MAX_CHARS == 48
+    assert len("hwcheck_custom_") == 15
+    ok = "mine_" + "a" * (DEVICE_ID_MAX_CHARS - 5)
+    assert _device(id=ok).validated().id == ok
+    with pytest.raises(MyDeviceError) as excinfo:
+        _device(id="mine_" + "a" * (DEVICE_ID_MAX_CHARS - 4)).validated()
+    assert "太长" in str(excinfo.value)
+
+
+def test_a_stale_hyphen_entry_on_disk_is_named_loudly(tmp_path):
+    """盘上已有的坏 id（工单 12 收紧文法之前的旧条目）：读不回来时**如实点名 + 指路**。
+
+    静默跳过会让一件再也读不出来的器件从页面上消失（`list_devices` 的既定
+    约定）；这条钉的是**报错里要点名条目、说清怎么修**。
+    """
+    entry = tmp_path / "mine_gyro-2"
+    entry.mkdir()
+    (entry / DEVICE_JSON).write_text(
+        json.dumps({"id": "mine_gyro-2", "name": "旧条目", "bus": "i2c", "address": 0x68}),
+        encoding="utf-8",
+    )
+    with pytest.raises(MyDeviceError) as excinfo:
+        list_devices(tmp_path)
+    message = str(excinfo.value)
+    assert "mine_gyro-2" in message, message
+    assert "连字符" in message, "报错要说清为什么不行（id 会拼进 C 函数名）"
+    assert "删掉" in message, "报错要指路（手工删条目重填）"
+    with pytest.raises(MyDeviceError):
+        load_device(tmp_path, "mine_gyro-2")
 
 
 @pytest.mark.parametrize("value", [None, "", "   "])

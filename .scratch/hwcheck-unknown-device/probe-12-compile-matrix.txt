@@ -1,0 +1,39 @@
+[custom/mspm0/empty] exit=0 passed=True warnings=0 devices=4
+[custom/stm32/empty] exit=0 passed=True warnings=0 devices=4
+[custom/mspm0/custom-only] exit=0 passed=True warnings=0 devices=5
+[custom/stm32/custom-only] exit=0 passed=True warnings=0 devices=5
+[custom/mspm0/custom+library] exit=0 passed=True warnings=0 devices=8（另有已知工具链 1 条）
+    (已知工具链) warning #10210-D: creating ".sysmem" section with default size of 0x800; use the -heap option to change the default size
+[custom/stm32/custom+library] exit=0 passed=True warnings=0 devices=8
+[custom/mspm0/all-library] exit=0 passed=True warnings=0 devices=9（另有已知工具链 1 条）
+    · 引脚符号重名让位（工单 11；该单已把这类组合改成生成前拦下，矩阵仍按最小子集取材）：jy61p（与 oled 同名）
+    · 装不下让位：xunji（原候选 10 件，留下这一格自己选的 8 件）
+    (已知工具链) warning #10210-D: creating ".sysmem" section with default size of 0x800; use the -heap option to change the default size
+[custom/stm32/all-library] exit=0 passed=True warnings=0 devices=8
+[custom/mspm0/all-recipes] 产品按预期在生成前拦下（边界读数，不计入验收线）：HwCheckError
+    这套选择在「地猛星 MSPM0G3507」上装不下：落盘后的 mspm0.syscfg 有 5 个引脚被两只实例同时占用，SysConfig 会直接报 Resource conflict（工程编不过）。自动移脚已经尽力，剩下的靠改绑解不开：
+    · PA23：xunji（HUIDU.associatedPins[1].pin，角色 xunji.P2） × debug_uart（DEBUG_UART.peripheral.txPin，角色 debug_uart.DEBUG_UART_TX）
+    · PA24：xunji（HUIDU.associatedPins[2].pin，角色 xunji.P1） × adc（ADC12_0.peripheral.adcPin3，角色 adc.ADC_CH0）
+    · PA28：jy61p（JY61P.associatedPins[0].pin，角色 jy61p.JY61P_SCL） × oled（OLED_SPI.associatedPins[0].pin，角色 oled.OLED_SPI_SCL）
+    · PA31：jy61p（JY61P.associatedPins[1].pin，角色 jy61p.JY61P_SDA） × oled（OLED_SPI.associatedPins[1].pin，角色 oled.OLED_SPI_SDA）
+    · PB18：motor（DC_MOTOR.associatedPins[2].pin，角色 motor.BIN1） × oled（OLED_SPI.associatedPins[3].pin，角色 oled.OLED_SPI_CS）
+[custom/stm32/all-recipes] exit=0 passed=True warnings=0 devices=8
+    · 全选规模：7 件（检测页给得出的全部——库内有 stm32 配方的那些，不设让位）
+[custom/mspm0/shape1-ping-only] exit=0 passed=True warnings=0 devices=5
+[custom/stm32/shape1-ping-only] exit=0 passed=True warnings=0 devices=5
+[custom/mspm0/shape2-echo] exit=0 passed=True warnings=0 devices=5
+[custom/stm32/shape2-echo] exit=0 passed=True warnings=0 devices=5
+[custom/mspm0/shape3-judge] exit=0 passed=True warnings=0 devices=5
+[custom/stm32/shape3-judge] exit=0 passed=True warnings=0 devices=5
+[custom/mspm0/no-channel] exit=0 passed=True warnings=0 devices=2
+[custom/stm32/no-channel] exit=0 passed=True warnings=0 devices=2
+[custom/mspm0/probe-already-selected] exit=0 passed=True warnings=0 devices=5
+[custom/stm32/probe-already-selected] exit=0 passed=True warnings=0 devices=5
+[custom/mspm0/custom-not-i2c] exit=0 passed=True warnings=0 devices=4
+[custom/stm32/custom-not-i2c] exit=0 passed=True warnings=0 devices=4
+[custom/mspm0/hyphen-id-refused] 产品按预期在生成前拦下（边界读数，不计入验收线）：MyDeviceError
+    这件器件的定义不合法（mine_gyro-2）：器件 id 'mine_gyro-2' 不合法：必须是 'mine_' 开头、后面只跟字母数字下划线，不能用连字符——id 会原样拼进检测程序的 C 函数名，连字符拼出来的不是合法 C 标识符（例：mine_gyro）。带着连字符的旧条目请删掉后用新 id 重建 —— 要
+[custom/stm32/hyphen-id-refused] 产品按预期在生成前拦下（边界读数，不计入验收线）：MyDeviceError
+    这件器件的定义不合法（mine_gyro-2）：器件 id 'mine_gyro-2' 不合法：必须是 'mine_' 开头、后面只跟字母数字下划线，不能用连字符——id 会原样拼进检测程序的 C 函数名，连字符拼出来的不是合法 C 标识符（例：mine_gyro）。带着连字符的旧条目请删掉后用新 id 重建 —— 要
+
+=== 结果：全部 PASS（0 error / 0 warning） ===（12 格 × 2 平台）

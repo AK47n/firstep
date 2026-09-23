@@ -185,7 +185,8 @@ class CustomSection:
 
     @property
     def func_name(self) -> str:
-        """小节函数名（按 id 派生：id 是 slug 形，天然是合法 C 标识符片段）。"""
+        """小节函数名（按 id 派生：id 文法只收 C 标识符字符——判据单源在
+        `my_devices.DEVICE_ID_PATTERN`，工单 12；这里不必再验一遍）。"""
         return f"hwcheck_custom_{self.device.id}"
 
     @property

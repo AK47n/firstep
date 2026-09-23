@@ -1,0 +1,15 @@
+[1] 前置检查（源文件指纹与锚点唯一性）
+    my_devices.py: 15d5da72b91f40cd…（锚点各一处 ✓）
+[2] 注入前（守卫在）：PASS（3 条全绿）  ｜ 1 passed, 64 deselected in 0.05s / 1 passed, 36 deselected, 1 warning in 11.25s / 1 passed, 64 deselected in 0.12s
+[3] 注入 A: DEVICE_ID_PATTERN 放宽回允许连字符的旧文法 → RED（守卫变红） ｜ 1 failed, 64 deselected in 0.14s
+[4] 复原复核：my_devices.py sha256 相等 ✓（15d5da72b91f40cd…）
+[3] 注入 B: 保存路径不再查字符集（判据本体在、执行点被绕过） → RED（守卫变红） ｜ 1 failed, 36 deselected, 1 warning in 0.80s
+[4] 复原复核：my_devices.py sha256 相等 ✓（15d5da72b91f40cd…）
+[3] 注入 C: 列表装载吞掉坏条目（静默跳过，不再大声点名） → RED（守卫变红） ｜ 1 failed, 64 deselected in 0.12s
+[4] 复原复核：my_devices.py sha256 相等 ✓（15d5da72b91f40cd…）
+[5] 复原后复跑：test_the_device_id_grammar_only_admits_c_identifier_characters PASS（回绿） ｜ 1 passed, 64 deselected in 0.05s
+[5] 复原后复跑：test_create_rejects_a_hyphen_id_and_says_why PASS（回绿） ｜ 1 passed, 36 deselected, 1 warning in 0.42s
+[5] 复原后复跑：test_a_stale_hyphen_entry_on_disk_is_named_loudly PASS（回绿） ｜ 1 passed, 64 deselected in 0.06s
+[6] 收尾指纹：1 个文件逐字节未变 ✓
+
+=== 结论：反证成立（3 条注入都让对应用例变红，且逐字节复原） ===

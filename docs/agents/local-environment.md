@@ -660,6 +660,24 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > 下一单（12）注意：**自建件 id 的文法允许 `-`，而 id 会被拼进 C 函数名**——
 > `mine_gyro-2` 产物编不过但三个端点全 200；量具
 > `.scratch/hwcheck-unknown-device/probe-12-hyphen-id.py` 现在返回 0 = 缺陷复现。
+> （**12 已修**，见下一条：量具现在返回 1 = 守卫在。）
+>
+> **2026-09-23（hwcheck-unknown-device/12 会话：自建件 id 文法收紧到 C 标识符）**：
+> 同样**一次服务器都没起**（验证走进程内 TestClient + 域层纯函数 + 前端门禁 +
+> 真浏览器夹具 + 真 UV4/gmake 子进程）。读数：`python -m pytest -n auto -q`
+> **5285 passed + 1 skipped**、前端门禁 **1755 passed / 0 fail**、浏览器门禁
+> **37 passed / 0 fail**（首跑 2 红为 `launcher-reload` 已知并行偶发，单跑 3/3 复证）；
+> 编译矩阵 **12 格 × 2 平台全 PASS**（新 `hyphen-id-refused` 边界格两平台都在装载期
+> 被拦下，读数 `probe-12-compile-matrix.txt`）；反证 3 后端 + 1 前端注入全红逐字节
+> 复原（`probe-12-guard-strength{,-front}.txt`）。
+> ⚠ **本轮量到的矩阵探针环境事实**：`save_device` 的原子改名在 Windows 上会被
+> 实时扫描 / 索引器**瞬时占住句柄**（`PermissionError [WinError 5]`），矩阵连发
+> 几十次落盘把概率放大（4 跑 3 中，且**每次废在不同的格**——别把它当成某一格的
+> 产品缺陷）。探针已加"`save_device` 整调用重试"（每次重试仍是完整产品调用）；
+> 产品侧单次保存要不要也加，另议。
+> ⚠ **一条产品限制（评审抓的，如实记）**：盘上旧坏条目（带连字符 id）**在产品里
+> 删不掉**——`delete_device` 与文法判据共用一条路径防线，旧 id 过不去；要手工删
+> `hwcheck_devices/<id>/`。拆"路径安全 / C 标识符文法"两条判据的小票是候选。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 
