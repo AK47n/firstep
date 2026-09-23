@@ -6,15 +6,85 @@
 
 **状态：** ready-for-agent
 
-- [ ] 母版 `mspm0.syscfg` 里 14 组重名引脚符号盘点清楚，逐组判"同趟真会撞"还是"结构上不可能同趟"（候选清单见下）
+> ⚠ **优先级：P0（2026-09-23 实测升级）**——这条**咬赛题主线**，不只是检测页：
+> mspm0 + 板子活着 + 显示 + 一件 I2C 传感器这条**最常见的组合**上，
+> 生成端点返回 200、点「自动配置」也照常、工程照常落盘，**然后在 CCS 里编不过**
+> （实测 exit=2 / 4 个 error）。用户拿到的是一份"生成了但编译失败"的工程，
+> 而门禁在生成期一声不吭——这正是 `syscfg_prune` 那条判据存在的意义所在，
+> 它只是没覆盖这一轴。读数见下面「实测（两条路）」。
+
+- [ ] 母版 `mspm0.syscfg` 里重名引脚符号盘点清楚，逐组判"同趟真会撞"还是"结构上不可能同趟"（14 组清单见下）
 - [ ] 判据进**生成前**：选中集里两个实例的同名引脚 → 大声失败（400 中文，出路照检测页那三条）或自动改名，二选一，不许"生成了、编译时才炸"
+- [ ] **两条路都要判**：`/api/generate`（赛题主线，门禁 `check_syscfg_pin_conflicts`）与检测页（`hwcheck_pin_plan`，生成前 400）——同一条判据两处各算一遍就是"预览 200 → 生成 400"那类事（工单 03 已经踩过一次）
 - [ ] 真编译矩阵复跑：至少 `oled + jy61p`（今天 4 个 error）、`led_beep + gp2y1014au`（`LED` 重名）、`rc522 + nrf24l01`（`MISO`/`MOSI`/`CLK` 重名）三格 0 error / 0 warning，或按上面的裁决被生成前拦下
 - [ ] 既有守卫不破：`syscfg_pin_conflict_report`（同脚冲突那条）判据与文案不变；母版实测读数不受影响（改了 `.syscfg` 要复跑既有编译矩阵）
 - [ ] 反证：把改名/拦截拿掉 → 对应用例变红（读数记进本工单）
 
 ---
 
-## 现场（发现于工单 04 的编译矩阵，2026-09-23）
+## 实测（两条路都撞，2026-09-23）
+
+**① 赛题主线**（`/api/generate` 那条路，探针 `.scratch/hwcheck-unknown-device/tmp-diag-contest-dupname.py`）：
+
+```
+=== oled+mpu6050（自动配置解出 {'oled.OLED_SPI_RES': 'PA2'}）===
+  生成 OK → 真编译 exit=0，Duplicate name 0 条      ← 这一组没事：ml_mpu6050 走 I2C_0 实例，
+                                                      它的脚叫 I2C_0_SCL，不与 OLED_SPI 撞
+=== oled+jy61p（自动配置解出 {'oled.OLED_SPI_RES': 'PA0', 'jy61p.JY61P_SCL': 'PA1',
+                              'jy61p.JY61P_SDA': 'PA2'}）===
+  生成 OK → 真编译 exit=2，Duplicate name 4 条
+     >> error: JY61P(/ti/driverlib/GPIO) associatedPins[0].$name: Duplicate name: 'SCL' ...
+     >> error: OLED_SPI(/ti/driverlib/GPIO) associatedPins[0].$name: Duplicate name: 'SCL' ...
+```
+
+→ 生成端点 200、工程落盘、**CCS 里编不过**。门禁 `check_syscfg_pin_conflicts`
+只判「同一个脚被两个实例占用」（`$assign` 的 pin 值重复），看不见 `$name` 这一轴。
+
+**② 检测页**（`hwcheck_pin_plan`，同样在生成前判）：
+
+```
+检测页 mspm0、只勾 OLED + JY61P（没有自建件、没有 i2c_probe）→ 生成 200 → 编译 exit=2
+```
+
+两条路表现一模一样：**判据缺失，不是判据算错**——所以修法也是同一处
+（`syscfg_pin_conflict_report` 加一条同名引脚检查，或母版改名），修完两条路一起好。
+
+**母版里 14 组重名**（扫描脚本 `.scratch/hwcheck-unknown-device/tmp-diag-names.py`）：
+
+| 引脚符号 | 出现在哪些实例 |
+|---|---|
+| `SCL` / `SDA` | ADS1115、AGS10、AHT10、AT24C02、BH1750、BMP180、HMC5883L、**JY61P**、LCD、MLX90614、MS5611、**OLED_SPI**、PCA9685、QMC5883L、SGP30、SHT20、SHT30、TCS34725（**17 件**） |
+| `CS` | LCD、MAX7219、OLED_SPI、RC522、TP_XPT2046 |
+| `OUT` | HUMAN_IR、IR_BEAM、IR_REMOTE、IR_TX、MICROWAVE、RELAY |
+| `CLK` / `DIN` | MAX7219、NRF24L01(=CLK)、TP_XPT2046 |
+| `MOSI` / `MISO` | NRF24L01、RC522 |
+| `DATA` | DHT11、DS18B20 |
+| `DC` / `RES` | LCD、OLED_SPI |
+| `LED` | GP2Y1014、LED_BEEP |
+| `SCK` | HX711、RC522 |
+| `TX` | JQ8900、SYN6288 |
+
+**影响面**：`SCL`/`SDA` 那一组最要命——库内 17 件 I2C 器件**任选两件**（如 OLED + 任意
+传感器）在地猛星上就是 4 个 error。这不是冷门组合，是每天都会走到的路。
+
+**修法候选**（动手前先判，别直接挑）：
+
+1. **母版改名**：把 `<实例>.associatedPins[n].$name` 改成实例前缀（`OLED_SPI_SCL`、
+   `JY61P_SDA`…）——母版里本来就有这一形态（`STEP_MOTOR.RST2` / `DC_MOTOR.AIN1`
+   是前缀式的），一致。代价：**是跨模块的共享面**，要看有没有模块代码引用这些
+   生成出来的符号，并复跑全部 mspm0 编译矩阵（含赛题主线那几组常见组合）；
+2. **判据前移**：在 `syscfg_pin_conflict_report` 里加一条"同名引脚"检查，撞上就
+   400 并给检测页那三条出路——与既有"装不下"同形，代价是**缩小了可用组合**
+   （OLED + 传感器仍然不能同选，只是从"编不过"变成"生成前说清"）；
+3. 两者都做（先拦后治）：短期 2、长期 1。
+
+**与工单 04 的关系**：04 的验收线是"自建件探测程序两平台 0 error / 0 warning"，
+这条缺陷**独立于自建件**（最小复现里一个自建件都没有），故不在 04 内修；04 的
+编译矩阵把 `all-library` / `all-recipes` 两格记为"已知受限形态"，读数与本条互指。
+
+---
+
+## 原始现场（发现于工单 04 的编译矩阵，2026-09-23）
 
 **最小复现**（`.scratch/hwcheck-unknown-device/tmp-diag-dupname.py` 就是它，跑完可删）：
 检测页 mspm0、只勾 OLED + JY61P（**没有自建件、没有 i2c_probe**）→ 生成成功（200）
