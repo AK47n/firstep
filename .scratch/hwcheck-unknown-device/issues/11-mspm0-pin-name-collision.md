@@ -24,7 +24,8 @@
 
 ## 实测（两条路都撞，2026-09-23）
 
-**① 赛题主线**（`/api/generate` 那条路，探针 `.scratch/hwcheck-unknown-device/tmp-diag-contest-dupname.py`）：
+**① 赛题主线**（`/api/generate` 那条路，探针
+`.scratch/hwcheck-unknown-device/probe-11-contest-dupname.py`，跑一遍就有读数）：
 
 ```
 === oled+mpu6050（自动配置解出 {'oled.OLED_SPI_RES': 'PA2'}）===
@@ -49,7 +50,7 @@
 两条路表现一模一样：**判据缺失，不是判据算错**——所以修法也是同一处
 （`syscfg_pin_conflict_report` 加一条同名引脚检查，或母版改名），修完两条路一起好。
 
-**母版里 14 组重名**（扫描脚本 `.scratch/hwcheck-unknown-device/tmp-diag-names.py`）：
+**母版里 14 组重名**（扫描口径：`.$name` 的路径含 `.associatedPins[`，按路径前缀取实例名，同一取值出现在两个以上实例 = 一组）：
 
 | 引脚符号 | 出现在哪些实例 |
 |---|---|
@@ -86,7 +87,7 @@
 
 ## 原始现场（发现于工单 04 的编译矩阵，2026-09-23）
 
-**最小复现**（`.scratch/hwcheck-unknown-device/tmp-diag-dupname.py` 就是它，跑完可删）：
+**最小复现**（检测页那半；探针 `probe-11-contest-dupname.py` 是赛题主线那半）：
 检测页 mspm0、只勾 OLED + JY61P（**没有自建件、没有 i2c_probe**）→ 生成成功（200）
 → 点「编译」→ gmake 退出 2：
 
@@ -99,7 +100,7 @@ error: OLED_SPI(/ti/driverlib/GPIO) associatedPins[1].$name: Duplicate name: 'SD
 4 error(s), 0 warning(s)
 ```
 
-**母版里 14 组重名**（扫描脚本 `.scratch/hwcheck-unknown-device/tmp-diag-names.py`）：
+**母版里 14 组重名**（扫描口径：`.$name` 的路径含 `.associatedPins[`，按路径前缀取实例名，同一取值出现在两个以上实例 = 一组）：
 
 | 引脚符号 | 出现在哪些实例 |
 |---|---|
