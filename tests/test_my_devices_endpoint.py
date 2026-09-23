@@ -356,15 +356,16 @@ async def test_delete_cannot_walk_out_of_the_data_dir(devices_client):
 
 
 # ---------------------------------------------------------------------------
-# 提前把自建件当器件发进检测计划：不许 400，也不许放松库外 slug 守卫
+# 自建件进检测计划：**02 只让它"能被选"，03 起它真的產出探测小节**
 # ---------------------------------------------------------------------------
 
 
 def test_passing_a_custom_device_id_as_a_device_does_not_400(devices_client):
-    """本单的接缝：自建件还不是模块（工单 03 才接进渲染）。
+    """自建件出现在请求里不该让整次预览 400（页面已经能勾它了）。
 
-    所以它**不进模块集**（那会被生成链上游的「库外 slug」守卫拒），但它出现在
-    这次请求里不该让整次预览 400——页面已经能勾它了。
+    工单 02 时它只是"被记下"（不进模块集、不进产物）；**工单 03 起它真的出
+    探测小节**——所以这里断言的是"不 400 + 回显 + 真出了它的小节"，而
+    "它不是模块、不许当 slug 解析"那条守卫由下面的对照组盯着。
     """
     client, _ = devices_client
     client.post("/api/my-devices", json={"device": DEVICE_BODY})
@@ -373,8 +374,140 @@ def test_passing_a_custom_device_id_as_a_device_does_not_400(devices_client):
         json={"platform": PLATFORM_STM32, "devices": ["mine_gyro"]},
     )
     assert response.status_code == 200, response.text
-    assert response.json()["devices"] == ["mine_gyro"], "选择要回显（页面据此画 chip）"
-    assert "mine_gyro" not in response.json()["main_c"], "这一版不生成它的探测代码"
+    body = response.json()
+    assert body["devices"] == ["mine_gyro"], "选择要回显（页面据此画 chip）"
+    assert "hwcheck_custom_mine_gyro" in body["main_c"], (
+        "自建件的探测小节要真的进 main.c（工单 03）：\n" + body["main_c"][:400]
+    )
+    assert "0x68" in body["main_c"], "ping 的是它自己的地址"
+
+
+def test_the_probe_module_rides_along_with_a_custom_device(devices_client, tmp_path):
+    """有自建件 → 模块集**自动带上 `i2c_probe`**（探测代码要调它的接口）。"""
+    client, _ = devices_client
+    client.post("/api/my-devices", json={"device": DEVICE_BODY})
+    body = client.post(
+        "/api/hwcheck/preview",
+        json={"platform": PLATFORM_STM32, "devices": ["mine_gyro"]},
+    ).json()
+    assert 'i2c_probe_stm32.h' in body["main_c"], "要 include 该平台的头"
+    # 页面载荷里也如实说这一趟测了它（工单 05 的接线说明会用同一份）
+    assert [item["slug"] for item in body["custom"]] == ["mine_gyro"]
+    assert body["custom"][0]["plan"], "三档文案要下发（页面不另写一份）"
+
+
+@pytest.fixture()
+def generate_client(tmp_path):
+    """能**真的生成**一份工程的 TestClient：真模块库 + **真母版**，输出落 tmp。
+
+    为什么生成那两条用例不能复用 `devices_client`：那个夹具的 `masters_dir` 是空的
+    （预览只要库、不要母版），而生成要复制真母版工程——空母版目录会 400。
+    """
+    from fastapi.testclient import TestClient
+
+    from contest_generator.config import AppConfig
+    from contest_generator.webapp import AppContext, create_app
+    from tests.fakes import FakeLLM
+
+    repo = Path(__file__).resolve().parents[1]
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    ctx = AppContext(
+        config_path=data_dir / "config.json",
+        config=AppConfig(
+            api_key="sk-test",
+            module_library_dir=repo / "library" / "modules",
+            masters_dir=repo / "library" / "masters",
+        ),
+        llm_factory=lambda config: FakeLLM(),
+    )
+    return TestClient(create_app(ctx)), data_dir
+
+
+def test_generate_with_a_custom_device_is_not_a_400(generate_client, tmp_path):
+    """**预览 200 → 生成 400 那个缺陷的回归判据**（评审抓到的真缺陷）。
+
+    生成端点原先吃 `hwcheck_modules(config)`——那个集合含 `mine_*`，于是自建件被
+    当成模块送进生成链、在 `resolve_dependencies` 那里抛「库中不存在模块」；
+    而预览走视图的局部 manifests，所以**预览照样 200**。同一条判据两处各算一遍
+    就是这个下场（`tests/test_hwcheck.py` 有一条"预览 200 / 生成 400 不许分家"
+    的既有判据正是要灭这类事）。
+    """
+    from contest_generator.context_manifest import read_context_fields
+
+    client, _ = generate_client
+    client.post("/api/my-devices", json={"device": DEVICE_BODY})
+    output_parent = tmp_path / "out"
+    output_parent.mkdir()
+    response = client.post(
+        "/api/hwcheck/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "debug_uart": True,
+            "oled": False,
+            "devices": ["mine_gyro"],
+            "parent_dir": str(output_parent),
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    project = Path(body["output_dir"])
+    assert "hwcheck_custom_mine_gyro" in body["main_c"], "自建件小节要真的进工程"
+    assert "i2c_probe" in body["modules"], (
+        "支点模块要真进工程（它不在的话 main.c 调的函数无处可寻）：" + repr(body["modules"])
+    )
+    # 落盘的工程里真有那一节（不只看响应体）
+    assert "hwcheck_custom_mine_gyro" in (project / "main.c").read_text(encoding="utf-8")
+    fields = read_context_fields(project)
+    assert fields is not None and "i2c_probe" in fields["slugs"], fields
+    assert "mine_gyro" not in fields["slugs"], "自建件不是模块，不许进 slugs"
+    assert fields["devices"] == ["mine_gyro"], "但器件选择要记进清单（回读要用）"
+
+
+def test_preview_and_generate_render_byte_identical_main_c(generate_client, tmp_path):
+    """票面验收线：**两处产物逐字节一致**（注入点在 main.c 的唯一产地）。
+
+    这是工单第 6 条的**行为**判据（源码正则判据在
+    `tests/test_hwcheck_custom.py::test_preview_and_generate_share_the_same_render_source`
+    ——那条只挡"谁又自己拼了一份"，证不了两次渲染真的同字节）。
+    """
+    client, _ = generate_client
+    client.post("/api/my-devices", json={"device": DEVICE_BODY})
+    output_parent = tmp_path / "out"
+    output_parent.mkdir()
+    request = {
+        "platform": PLATFORM_STM32,
+        "debug_uart": True,
+        "oled": True,
+        "devices": ["mine_gyro"],
+    }
+    preview = client.post("/api/hwcheck/preview", json=request).json()
+    generated = client.post(
+        "/api/hwcheck/generate", json={**request, "parent_dir": str(output_parent)}
+    ).json()
+    assert preview["main_c"] == generated["main_c"], (
+        "预览与生成必须逐字节相同（同一份渲染、同一处注入）"
+    )
+    assert preview["main_c"] == (
+        Path(generated["output_dir"]) / "main.c"
+    ).read_text(encoding="utf-8"), "落盘的那份也要一样"
+
+
+def test_a_non_i2c_custom_device_still_does_not_render_a_probe(devices_client):
+    """非 I2C 的库外件：这一版**不生成探测程序**（清单与排障是工单 05 的事）。"""
+    client, _ = devices_client
+    client.post(
+        "/api/my-devices",
+        json={"device": {**DEVICE_BODY, "bus": "spi", "address": None,
+                         "register": None, "expect": None}},
+    )
+    body = client.post(
+        "/api/hwcheck/preview",
+        json={"platform": PLATFORM_STM32, "devices": ["mine_gyro"]},
+    ).json()
+    assert "hwcheck_custom_mine_gyro" not in body.get("main_c", ""), body
+    assert "i2c_probe" not in body.get("main_c", ""), "不该顺手带上支点模块"
+    assert body.get("custom") == [], "页面载荷里也不该有它的小节"
 
 
 def test_an_unknown_slug_is_still_a_loud_failure(devices_client):

@@ -46,6 +46,12 @@ from .hwcheck import (
     require_known_platform,
 )
 from .hwcheck_console import build_console_table, console_payload
+from .hwcheck_custom import (
+    PROBE_MODULE_SLUG,
+    CustomSection,
+    resolve_custom_sections,
+    sections_payload as custom_sections_payload,
+)
 from .hwcheck_errors import HwCheckError
 from .hwcheck_generic import (
     GenericSection,
@@ -61,6 +67,7 @@ from .hwcheck_recipe import (
 from .library import list_modules
 from .manifest import ModuleManifest, collect_exclusive_groups
 from .master_store import master_project_dir
+from .my_devices import CustomDevice, list_devices, my_devices_dir
 from .pin_bindings import (
     ResolvedBinding,
     _shared_groups,
@@ -381,6 +388,26 @@ def _board_shares(rows: Sequence[dict]) -> tuple[dict, ...]:
     return tuple(merged.values())
 
 
+def _custom_devices_for(
+    data_dir: Path | str, config: HwCheckConfig
+) -> tuple[CustomDevice, ...]:
+    """这一趟**选中的**自建件定义（按 `config.devices` 里的 id 从数据目录读）。
+
+    只读选中的那几件：收藏里躺着的不进这一趟（也不该让一次预览去扫整个数据目录
+    ——读一件失败会让整页 400，而那件根本没参与这次检测）。
+    读不出来（条目坏了 / 已被删）= 大声失败（`list_devices` 的既定约定）——
+    静默跳过会让"我明明选了它"变成一次悄无声息的少测。
+    """
+    root = my_devices_dir(data_dir)
+    wanted = set(hwcheck_devices(config))
+    if not wanted:
+        return ()
+    known = {device.id: device for device in list_devices(root)}
+    return tuple(
+        known[slug] for slug in hwcheck_devices(config) if slug in known
+    )
+
+
 def _missing_devices(
     platform: str,
     manifests: Sequence[ModuleManifest],
@@ -437,23 +464,30 @@ def hwcheck_board_view_for(
 class HwCheckView:
     """检测页的**一次投影**（工单 webapp-consolidation/01：装配从 webapp 搬回域层）。
 
-    五个字段是五种不同的东西，所以具名而不是塞一个 dict：
+    字段各是各的东西，所以具名而不是塞一个 dict：
 
-    * `board` = 载荷的五个键（`wiring` / `sections` / `console` / `unspecialized` /
-      `exclusive_groups`，端点用 `**view.board` 展开；「动了哪几根线」的 `pin_fixes`
-      住在 `wiring` 里，不是顶层键——前端读的也是 `wiring.pin_fixes`）；
-    * `sections` / `generic` = 域层对象（生成端点还要拿它们去渲染 main.c，不必再解析
-      一遍）；
+    * `board` = 载荷的键（`wiring` / `sections` / `console` / `unspecialized` /
+      `exclusive_groups` / `custom`，端点用 `**view.board` 展开；「动了哪几根线」的
+      `pin_fixes` 住在 `wiring` 里，不是顶层键——前端读的也是 `wiring.pin_fixes`）；
+    * `sections` / `generic` / `custom` = 域层对象（生成端点还要拿它们去渲染 main.c，
+      不必再解析一遍）；
     * `pin_bindings` = 自动消解出的绑定增量（生成端点原样喂生成内核——页面接线表与
       工程 README 同源的前提）；
-    * `known_slugs` = 整库模块 slug（排障的事实约束判据用，**不进任何载荷**）。
+    * `known_slugs` = 整库模块 slug（排障的事实约束判据用，**不进任何载荷**）；
+    * `generation_slugs` = 这一趟**真正要进工程的 slug 集**（`hwcheck_modules` 去掉
+      自建件、有自建件小节时补上 `i2c_probe`）。生成端点必须吃它——吃
+      `hwcheck_modules(config)` 会把 `mine_*` 当模块送进生成链、在
+      `resolve_dependencies` 那里 400，而**预览走本模块的局部 manifests 所以看不出
+      来**：同一条判据两处各算一遍，就是"预览 200 → 生成 400"（本单实测踩到）。
     """
 
     board: dict[str, Any]
     sections: tuple[RecipeSection, ...]
     generic: tuple[GenericSection, ...]
+    custom: tuple[CustomSection, ...]
     pin_bindings: dict[str, str]
     known_slugs: tuple[str, ...]
+    generation_slugs: tuple[str, ...]
 
 
 def hwcheck_view(
@@ -463,7 +497,7 @@ def hwcheck_view(
     masters_dir: Path | str,
     recipe_path: Path | str | None = None,
     require_pins: bool = True,
-    custom_device_ids: Sequence[str] = (),
+    data_dir: Path | str | None = None,
 ) -> HwCheckView:
     """检测页装配的唯一出处：路径 + 配置进，一次投影出。
 
@@ -486,23 +520,38 @@ def hwcheck_view(
     装不下（自动移脚后仍撞脚）由 `require_pins` 控：预览与生成**同一判据**（都
     400），回读端点不算（它回放的是已经生成成功的那一次）。
 
-    `custom_device_ids`（工单 hwcheck-unknown-device/02）= 用户自建件的 id 集，
-    **不进模块集**：它们是数据、不是模块（没有 manifest，库外 slug 会在生成链上游
-    被 `UnknownModuleError` 拒）。但它们已经能被页面勾上，所以这里把它们从
-    "要进工程的模块"里摘掉——同时**不放松** `resolve_dependencies` 对真·库外
-    slug 的守卫：容忍自建件与容忍手滑写错是两件事（判据见
-    `tests/test_my_devices_endpoint.py` 的对照组）。自建件接进渲染是工单 03 的事。
+    `data_dir`（工单 hwcheck-unknown-device/02-03）= **工具数据目录**（HTTP 层 =
+    `AppContext.config_path.parent`）；给了才读「我的器件」并解析自建件小节。
+    自建件**不进 slugs**（它们是数据、不是模块：没有 manifest，库外 slug 会在生成
+    链上游被 `UnknownModuleError` 拒），所以这里把它们从"要进工程的模块"里摘掉，
+    并在真有自建件小节时**自动带上 `i2c_probe`**（探测代码要调它的接口——生成门禁
+    要求"调的函数在被选模块头里真实存在"）。同时**不放松** `resolve_dependencies`
+    对真·库外 slug 的守卫：容忍自建件与容忍手滑写错是两件事（对照组判据见
+    `tests/test_my_devices_endpoint.py`）。不给 `data_dir` = 没有自建件（旧调用方
+    与纯板侧测试照旧，零行为变化）。
     """
     library = Path(module_library_dir)
     by_slug = {m.slug: m for m in list_modules(library)}
-    # 只摘**这一趟真选中的**自建件：收藏里躺着的那几件与本次模块集无关，混进来
-    # 会让「自建件」这个概念在载荷里比实际更宽（且 `custom` 是从这里往下传的
-    # 唯一一份，两处过滤天然一致）。
+    # 自建件小节（工单 03）：只有给了数据目录才读（没给 = 这一趟没有自建件）。
+    # 读盘只在这一处：四个端点共用同一次装配，页面上说的与 main.c 里做的是同一份。
+    custom_devices: tuple[CustomDevice, ...] = ()
+    custom_sections: tuple[CustomSection, ...] = ()
+    if data_dir is not None:
+        custom_devices = _custom_devices_for(data_dir, config)
+        custom_sections = resolve_custom_sections(
+            custom_devices, has_output_channel=config.has_output_channel
+        )
+    # 选中的自建件**全体**都要从模块集里摘掉（不只是"出了小节"的那几件）：
+    # 它们不是模块（没有 manifest），漏一件就会在 `resolve_dependencies` 那里
+    # 报"库中没有这个模块"——非 I2C 件与"没勾输出通道"的形态正是这样漏出去的。
     selected = hwcheck_devices(config)
-    custom = set(custom_device_ids) & set(selected)
-    manifests = resolve_dependencies(
-        [slug for slug in hwcheck_modules(config) if slug not in custom], by_slug
-    )
+    custom = {device.id for device in custom_devices} & set(selected)
+    module_slugs = [slug for slug in hwcheck_modules(config) if slug not in custom]
+    # 有自建件小节 → 探测代码要调 `i2c_probe` 的接口，它必须在模块集里（否则
+    # 生成门禁判"调了不存在的函数"，mspm0 上更是连编译都过不去）。
+    if custom_sections and PROBE_MODULE_SLUG not in module_slugs:
+        module_slugs.append(PROBE_MODULE_SLUG)
+    manifests = resolve_dependencies(module_slugs, by_slug)
     recipes = load_library_recipes(
         library, masters_dir, list(by_slug.values()), recipe_path=recipe_path
     )
@@ -551,6 +600,10 @@ def hwcheck_view(
                 }
                 for section in generic
             ],
+            # 自建件小节（工单 03）：库内两批之后那一批——判据来自**用户确认的
+            # 事实**、不是库内配方，所以页面与产物的顺序都是"库内验证过的在前"。
+            # 文案（tag / plan / 三档说明）全部来自 `hwcheck_custom` 单源。
+            "custom": custom_sections_payload(custom_sections),
             # 同组互斥（工单 05）：按**平台**投影的库级功能组——判据单源是库内
             # manifest 的 exclusive_group（`collect_exclusive_groups`，与赛题侧
             # 生成链路同一个函数）；成员取自**整库**而不是本次选中的模块集，
@@ -565,6 +618,7 @@ def hwcheck_view(
         },
         sections=sections,
         generic=generic,
+        custom=custom_sections,
         # 引脚消解出的绑定增量（工单 hwcheck-pin-conflict-exit/01）：生成端点原样
         # 喂生成内核——页面接线表与工程 README / 接线快照因此是同一组脚。
         pin_bindings=plan.bindings,
@@ -572,4 +626,7 @@ def hwcheck_view(
         # 库内别的件"——`by_slug` 反正已经在这儿了，不必再扫一遍库。
         # 端点各自 `**view.board` 展开，这条**不进载荷**（页面用不上）。
         known_slugs=tuple(by_slug),
+        # 生成端点要吃的那个 slug 集（与上面 manifests 同源——页面接线表、main.c、
+        # 工程里进哪些模块，三处因此是同一个集合）。
+        generation_slugs=tuple(module_slugs),
     )

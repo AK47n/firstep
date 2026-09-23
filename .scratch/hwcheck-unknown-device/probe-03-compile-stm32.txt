@@ -1,0 +1,7 @@
+[custom/shape1-ping-only] exit=0 passed=True warnings=0
+[custom/shape2-echo] exit=0 passed=True warnings=0
+[custom/shape3-judge] exit=0 passed=True warnings=0
+[custom/mixed-library] exit=0 passed=True warnings=0
+[custom/no-channel] exit=0 passed=True warnings=0
+
+=== 结果：全部 PASS（0 error / 0 warning） ===

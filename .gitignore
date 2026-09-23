@@ -28,6 +28,8 @@ __pycache__/
 # 陌生器件（hwcheck-unknown-device）两平台真编译矩阵：matrix/ = 生成 + 编译产物
 # （可重建），matrix-logs/ = 逐组原始日志（入库当证据）——magnetometer-modules 同款两分
 .scratch/hwcheck-unknown-device/matrix/
+# 编译探针的临时数据目录（探针每次自建自清；留着会与真身 ~/.contest_generator 混起来看花眼）
+.scratch/hwcheck-unknown-device/probe-0*-data/
 
 # 本地服务运行日志（uvicorn stdout 重定向）
 webapp.log

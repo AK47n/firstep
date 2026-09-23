@@ -495,12 +495,13 @@ def _page_view(
 
 
 def test_hwcheck_view_projects_the_page_payload_without_http():
-    """真库真母版：一次投影的五个字段与载荷五键齐全（判据不再只能经端点验）。"""
+    """真库真母版：一次投影的字段与载荷键齐全（判据不再只能经端点验）。"""
     view = _page_view(PLATFORM_STM32, devices=["ml_mpu6050"])
     assert isinstance(view, HwCheckView)
     assert set(view.board) == {
         "wiring", "sections", "console", "unspecialized", "exclusive_groups",
-    }, "载荷五键是前端契约（多一个少一个都是破坏）"
+        "custom",
+    }, "载荷键是前端契约（多一个少一个都是破坏）"
     assert "pin_fixes" in view.board["wiring"], (
         "「动了哪几根线」住在 wiring 里（前端读的也是 wiring.pin_fixes）"
     )
@@ -511,6 +512,8 @@ def test_hwcheck_view_projects_the_page_payload_without_http():
     # sections / generic 是域对象（生成端点拿它们去渲染 main.c，不必再解析一遍）
     assert view.sections and all(hasattr(section, "slug") for section in view.sections)
     assert all(hasattr(section, "slug") for section in view.generic)
+    # 自建件小节（工单 03）：没给 data_dir = 这一趟没有自建件（旧调用方零变化）
+    assert view.custom == () and view.board["custom"] == []
     # 整库 slug 词表：排障的事实约束用（不进任何载荷）
     assert "ml_mpu6050" in view.known_slugs and "led" in view.known_slugs
     assert "known_slugs" not in view.board
@@ -537,9 +540,10 @@ def test_hwcheck_view_reads_the_recipe_override_path(tmp_path):
     with pytest.raises(HwCheckError) as excinfo:
         _page_view(PLATFORM_STM32, devices=[], recipe_path=broken)
     assert "不是合法 JSON" in str(excinfo.value)
-    # 缺省（库内那份）= 正常装载：响应里照旧有那五个键
+    # 缺省（库内那份）= 正常装载：响应里照旧有那几个键
     assert set(_page_view(PLATFORM_STM32, devices=[]).board) == {
         "wiring", "sections", "console", "unspecialized", "exclusive_groups",
+        "custom",
     }
 
 

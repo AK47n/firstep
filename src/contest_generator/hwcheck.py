@@ -106,6 +106,12 @@ from dataclasses import dataclass
 from typing import Sequence
 
 from .hwcheck_errors import HwCheckError
+from .hwcheck_custom import (
+    CUSTOM_TAG_TEXT,
+    CustomSection,
+    custom_headers,
+    render_custom_section,
+)
 from .hwcheck_console import (
     ConsoleTable,
     build_console_table,
@@ -132,6 +138,7 @@ __all__ = [
     "OUTPUT_HINT_SERIAL",
     "OUTPUT_HINT_SERIAL_OLED",
     "ChecklistItem",
+    "CustomSection",
     "HwCheckConfig",
     "HwCheckError",
     "HWCHECK_CHANNELS",
@@ -536,7 +543,12 @@ def _needs_verdict(sections: Sequence["RecipeSection"]) -> bool:
     )
 
 
-def _recipe_runtime(*, needs_verdict: bool, needs_probe_none: bool) -> list[str]:
+def _recipe_runtime(
+    *,
+    needs_verdict: bool,
+    needs_probe_none: bool,
+    needs_hex: bool = False,
+) -> list[str]:
     """逐件小节的运行时（工单 04）：分节头 / 细节行 / 判定记账 / 结尾汇总。
 
     为什么记账要放板上：规格判据三层里第②层是"板端通信判定"，而"这一趟到底
@@ -685,6 +697,7 @@ def render_main_c(
     config: HwCheckConfig,
     sections: Sequence["RecipeSection"] = (),
     generic: Sequence["GenericSection"] = (),
+    custom: Sequence["CustomSection"] = (),
 ) -> str:
     """渲染检测程序 main.c（框架 + 逐件专精小节 + 通用降级小节，全程零 LLM）。
 
@@ -713,6 +726,12 @@ def render_main_c(
 
     `sections` / `generic` 缺省空 = 只出框架（工单 02 的"零器件最小硬件检测"形态）。
     有通道才渲染小节——没有输出通道时渲染了也没人看得见，那是"假装测过"。
+
+    `custom`（工单 hwcheck-unknown-device/03）= **自建件**（库外件）的探测小节，
+    排在库内两批之后：它的判据来自用户确认的事实、不是库内配方，所以排在最后
+    （"哪些结论可信"的顺序照旧：bring-up → 库内器件 → 按你给的事实试的）。
+    与另外两批的关系同 07 那条：**互斥**（自建件不进 `sections` / `generic`）、
+    **头文件由框架统一印**（`custom_headers` 给的那一份）。
 
     平台词表外抛 HwCheckError（路由转 400 中文）；未知平台在这里就出不去，
     所以下面的分支是穷尽的。
@@ -780,9 +799,21 @@ def render_main_c(
         lines.append(f'#include "{header}"')
     # 通用降级小节的头（工单 07）：判据 = 该模块 manifest 平台条目声明的 .h。
     # 器件小节的头先印，通用件与它撞名时不再印第二遍。
-    for header in _ordered_includes(
+    generic_headers = _ordered_includes(
         [section.headers for section in generic],
         skip=[*framework_headers, *device_headers],
+    )
+    for header in generic_headers:
+        lines.append(f'#include "{header}"')
+    # 自建件小节的头（工单 03）：`i2c_probe` 在该平台的头（两平台不同名）。
+    # 判据 = **这一趟真有自建件小节**才印——没有它就不该出现这一行（多一行会
+    # 让人以为这工程依赖总线原语）。有 custom 却没有头 = 平台词表外，直接抛。
+    # `skip` 必须带上**前面两批**（器件批 + 通用批）：用户可以把 `i2c_probe`
+    # 自己选上，那样它已经在上面印过了——漏掉通用批就是同一行印两遍
+    # （本单实测复现，评审抓到）。
+    for header in _ordered_includes(
+        [custom_headers(config.platform) if custom else ()],
+        skip=[*framework_headers, *device_headers, *generic_headers],
     ):
         lines.append(f'#include "{header}"')
 
@@ -791,19 +822,24 @@ def render_main_c(
     lines.append(f"#define {_HEARTBEAT_MACRO} {HEARTBEAT_MS}")
     lines.append("")
 
-    any_section = bool(sections) or bool(generic)
+    any_section = bool(sections) or bool(generic) or bool(custom)
     if config.has_output_channel:
         lines.extend(_report_outputs(config))
         lines.append("")
         lines.extend(_report_function(
-            config, needs_int=any_section or bool(config.devices)))
+            config,
+            needs_int=any_section or bool(config.devices),
+            # 自建件里"有寄存器、无期望值"那一档要按十六进制回显一个字节
+            needs_hex=any(section.reads_register for section in custom),
+        ))
         lines.append("")
         if any_section:
             # 通用件一律"判不了通断"（没有探头就是没有），所以它们参与时
             # `hwcheck_verdict_probe_none` 必须在场——否则通用小节调用一个
             # 从未定义的函数（编译期才发现）。
+            # **自建件相反**：它 ping 一次就是一个判定，从不走"未判定"那一档。
             lines.extend(_recipe_runtime(
-                needs_verdict=_needs_verdict(sections),
+                needs_verdict=_needs_verdict(sections) or bool(custom),
                 needs_probe_none=_needs_probe_none(sections) or bool(generic),
             ))
             lines.append("")
@@ -831,6 +867,17 @@ def render_main_c(
             lines.append(f"static void hwcheck_generic_{section.slug}(void)")
             lines.append("{")
             lines.extend(render_generic_section(section))
+            lines.append("}")
+            lines.append("")
+
+    # 自建件小节（工单 03）：排在库内两批**之后**——它的判据来自用户确认的事实、
+    # 不是库内配方，所以学生在页面上读到的顺序是"库内验证过的 → 按你给的事实试的"。
+    if custom and config.has_output_channel:
+        lines.append(f"/* ---- 自建件小节（{CUSTOM_TAG_TEXT}；工单 03）---- */")
+        for section in custom:
+            lines.append(f"static void {section.func_name}(void)")
+            lines.append("{")
+            lines.extend(render_custom_section(section.device))
             lines.append("}")
             lines.append("")
 
@@ -864,9 +911,16 @@ def render_main_c(
             lines.append(f"    hwcheck_check_{section.slug}();")
         for section in generic:
             lines.append(f"    hwcheck_generic_{section.slug}();")
+        for section in custom:
+            lines.append(f"    {section.func_name}();")
         lines.append("")
         if sections:
             lines.extend(render_recipe_summary(_section_reports(sections)))
+        elif custom:
+            # 只有自建件：库内那批没有"万一判失败先查哪里"可印（它们不判），
+            # 但自建件会产生判定 → 汇总照旧要印（它如实数通过 / 失败）。
+            lines.append("    /* 这一趟只有自建件：判定由自建件小节产生，汇总照旧。 */")
+            lines.append("    hwcheck_summary();")
         else:
             # 只有通用件：没有"万一判失败先查哪里"可印（通用件不判），
             # 但汇总要印——它如实数出"未判定 N 项"（不假装测过）。
@@ -1047,9 +1101,9 @@ def _report_outputs(config: HwCheckConfig) -> list[str]:
 
 
 def _report_function(
-    config: HwCheckConfig, *, needs_int: bool = True
+    config: HwCheckConfig, *, needs_int: bool = True, needs_hex: bool = False
 ) -> list[str]:
-    """自检报告三件套：写文本 / 换行 / 写一个整数。
+    """自检报告三件套：写文本 / 换行 / 写一个整数（+ 按需的十六进制一个字节）。
 
     三个出口都**只做"把这段文本送到所有在场通道"**：通道差异只在各自的
     `hwcheck_write_*` 里出现，框架与逐件小节都不必知道自己往哪儿写。
@@ -1058,6 +1112,10 @@ def _report_function(
     `hwcheck_report_int`——它是"读数回显"的出口，没人调时 ARMCC 报 `#177-D:
     declared but never referenced`（生成的程序是给人读的，死代码会让人以为
     漏调了什么）。
+
+    `needs_hex`（工单 hwcheck-unknown-device/03）同一条口径：自建件"有寄存器、
+    无期望值"那一档要按十六进制回显一个字节——**没有自建件读寄存器时不渲染**
+    它，否则又是死代码（这是 04/05 定下、07 复述的按需渲染纪律）。
     """
     out: list[str] = [
         "/** 自检结果出口：一段文本攒进当前行；遇到换行就整行送出。 */",
@@ -1117,6 +1175,27 @@ def _report_function(
         "        one[0] = buf[--i];",
         "        one[1] = 0;",
         "        hwcheck_report(one);",
+        "    }",
+        "}",
+    ])
+    if not needs_hex:
+        return out
+    out.extend([
+        "",
+        "/** 把一个字节写成 `0xNN`（大写两位；自建件「只回显」那一档用）。 */",
+        "static void hwcheck_report_hex(uint8_t value)",
+        "{",
+        '    static const char digits[] = "0123456789ABCDEF";',
+        '    hwcheck_report("0x");',
+        "    {",
+        "        char hi[2];",
+        "        char lo[2];",
+        "        hi[0] = digits[(value >> 4) & 0x0F];",
+        "        hi[1] = 0;",
+        "        lo[0] = digits[value & 0x0F];",
+        "        lo[1] = 0;",
+        "        hwcheck_report(hi);",
+        "        hwcheck_report(lo);",
         "    }",
         "}",
     ])

@@ -15,7 +15,7 @@
 | 顺手做掉的第四条 | `src/contest_generator.egg-info/**` 摘出产品文件（两个包都不再发 pip 构建产物） |
 | **真机验收** | `drill-01`：沙箱真 v1.1.1 → 走产品端点升到 1.2.2，**判红 0 / 卡住 0 / PASS**；`not_in_official` 1482 → **6**，那 6 条经决定性实验证明是**更新器那一步 pip 现写的**（官方包里 0 个 → 跑完 pip 6 个齐），「官方缺失 0 / 内容不同 0」两条全绿 |
 | 发版产物（本机留档） | `firstep-pack\firstep-{update,full}-v1.2.2.*` 全套 + `release-notes-v1.2.2.md`；**下一版的基线就是这两个清单** |
-| **main 上还没到用户手上的（四批）** | ① **硬件检测栏目本身**（`module-hwcheck/01-09`，2026-09-20 起）＋ **检测页引脚出口**（`hwcheck-pin-conflict-exit/01`：默认脚撞脚提前解开）——v1.2.2 的用户看不到「硬件检测」这一栏；② **完整包会话态进 `AppContext` ＋ `_full_task_lock`**（`full-update-state-into-ctx/01-04`，2026-09-22，账见 `.scratch/backlog.md` §18：纯内部换归属 + 修「并发 apply 建出两个任务」的竞态，**前端零字节**）；③ **陌生器件（库外件）探测**（`hwcheck-unknown-device`，2026-09-22 起：规格 + 10 张工单已落 `.scratch/hwcheck-unknown-device/`，**工单 01 支点模块 `i2c_probe` 已落地**、**工单 02「我的器件」已落地**（数据目录 + 三端点 + 检测页卡片，**仍不生成任何代码**），03–10 未开工）。**四批都只在本机工作树 / main 上，任何发布包里都没有**——下次发版要一起带上 |
+| **main 上还没到用户手上的（四批）** | ① **硬件检测栏目本身**（`module-hwcheck/01-09`，2026-09-20 起）＋ **检测页引脚出口**（`hwcheck-pin-conflict-exit/01`：默认脚撞脚提前解开）——v1.2.2 的用户看不到「硬件检测」这一栏；② **完整包会话态进 `AppContext` ＋ `_full_task_lock`**（`full-update-state-into-ctx/01-04`，2026-09-22，账见 `.scratch/backlog.md` §18：纯内部换归属 + 修「并发 apply 建出两个任务」的竞态，**前端零字节**）；③ **陌生器件（库外件）探测**（`hwcheck-unknown-device`，2026-09-22 起：规格 + 10 张工单已落 `.scratch/hwcheck-unknown-device/`，**工单 01 支点模块 `i2c_probe` 已落地**、**工单 02「我的器件」已落地**（数据目录 + 三端点 + 检测页卡片）、**工单 03 探测小节渲染 + stm32 真编译已落地**（库外件第一次真的产出 C 代码），04–10 未开工）。**四批都只在本机工作树 / main 上，任何发布包里都没有**——下次发版要一起带上 |
 
 **发版尚未启动（2026-09-22 22:0x 实测）**：这一轮只走到「决定要发」就停了——**版本号仍 `1.2.2`、
 没打包、没打 tag、没建 Release**（用户要先继续改动再发，所以别把这份落差当成"发过了"）。
@@ -506,6 +506,30 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > 检测页卡片 ＋ 三个新端点；**用户数据目录里多一个 `hwcheck_devices/`**——
 > 那是运行时数据、不进发布包，但升级后第一次用会新建它）。
 > 后续 03–10 张工单仍未开工。
+>
+> **2026-09-23（hwcheck-unknown-device/03 会话：自建件探测小节 + stm32 真编译）**：
+> 库外件第一次真的产出 C 代码（`hwcheck_custom.py` 渲染三种形态的探测小节，
+> 注入 `main.c` 的**唯一产地** `render_main_c`）。与环境有关的事实：
+> ① **同样一次服务器都没起**（验证走进程内域函数 + 真 UV4 子进程 + 浏览器门禁）；
+> 收尾实测 8000/8020/8021/8791 都没在听、无残留 `contest_generator.webapp` 进程。
+> ② **本机 Keil 真编译 4 次**（`find_uv4()` 探到 `C:\Keil5\Core\UV4\UV4.exe`，
+> 每次 3–5 秒）：四种形态（三档文案 ＋ 无输出通道）**全部 0 error / 0 warning**，
+> 读数 `.scratch/hwcheck-unknown-device/probe-03-compile-stm32.txt`、逐格原始日志
+> `matrix-logs/custom-*.log`。探针**不手写 main.c**（走 `hwcheck_view` +
+> `render_main_c` 真路径），否则验的就不是要验的东西。
+> ③ **新落点（探针用）**：`.scratch/hwcheck-unknown-device/probe-03-data/`
+> ——编译探针自建的临时数据目录（探针每次自清，**已加 .gitignore**）；
+> 它模拟的是真机的 `~\.contest_generator\hwcheck_devices\`，跑完不留东西。
+> ④ 读数：`python -m pytest -n auto -q` **5222 passed + 1 skipped**、
+> 前端门禁 **1739 passed / 0 fail**、浏览器门禁 **34 passed / 0 fail**；
+> 反证（多插一个头里不存在的函数 → 守卫四条全红、逐字节复原）见
+> `.scratch/hwcheck-unknown-device/probe-03-guard-strength.txt`。
+>
+> ⚠ **同轮量到的一条产品事实（自己踩的，已补用例钉住）**：**"从模块集里摘掉自建件"
+> 必须摘"选中的全体"，不能只摘"出了小节的那几件"**。非 I2C 件与"没勾输出通道"
+> 的形态不出小节，但它们**仍然不是模块**——漏摘一件就在 `resolve_dependencies`
+> 报「库中没有这个模块」，端点是 400。判据：
+> `tests/test_my_devices_endpoint.py::test_a_non_i2c_custom_device_still_does_not_render_a_probe`。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 

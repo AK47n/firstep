@@ -2515,14 +2515,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             recipe_path=context.hwcheck_recipe_path,
             # 自建件（工单 hwcheck-unknown-device/02）：页面能勾，但它们还不是
             # 模块——摘出模块集，同时不放松库外 slug 守卫（见 hwcheck_view 说明）。
-            custom_device_ids=_my_device_ids(),
+            data_dir=context.config_path.parent,
         )
         return {
             "platform": config.platform,
             "debug_uart": config.debug_uart,
             "oled": config.oled,
             "devices": list(hwcheck_devices(config)),
-            "main_c": render_main_c(config, view.sections, view.generic),
+            "main_c": render_main_c(config, view.sections, view.generic, view.custom),
             "output_hint": render_output_hint(config),
             **view.board,
         }
@@ -2570,7 +2570,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             module_library_dir=app_config.module_library_dir,
             masters_dir=app_config.masters_dir,
             recipe_path=context.hwcheck_recipe_path,
-            custom_device_ids=_my_device_ids(),
+            data_dir=context.config_path.parent,
         )
         ccs_tools = None
         if config.platform == PLATFORM_MSPM0:
@@ -2579,13 +2579,18 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 app_config.ccs_compiler_dir,
                 app_config.ccs_sysconfig_cli,
             )
-        main_c = render_main_c(config, view.sections, view.generic)
+        main_c = render_main_c(config, view.sections, view.generic, view.custom)
         # 同键互斥（既有 _generation_guard）：同一秒连点两次时第二个请求 409 收场，
         # 不两个请求同时往同一个新目录里写（那才会真的写坏工程）。
         with _generation_guard(context, f"hwcheck:{output_dir}"):
             summary = generate_project(
                 platform=config.platform,
-                slugs=hwcheck_modules(config),
+                # 进工程的模块集 = **视图算好的那一份**（自建件不是模块、已摘掉；
+                # 有自建件小节时 `i2c_probe` 已补上）。这里绝不能改成
+                # `hwcheck_modules(config)` —— 那个集合含 `mine_*`，会在生成链上游
+                # 400，而预览（走视图的局部 manifests）照样 200：同一条判据两处各算
+                # 一遍就是"预览 200 → 生成 400"。
+                slugs=view.generation_slugs,
                 main_c_content=main_c,
                 output_dir=output_dir,
                 module_library_dir=app_config.module_library_dir,
@@ -2666,14 +2671,6 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         建 app 那一刻了。
         """
         return my_devices_dir(context.config_path.parent)
-
-    def _my_device_ids() -> tuple[str, ...]:
-        """现有自建件的 id 集（`hwcheck_view` 用它把自建件从模块集里摘掉）。
-
-        读不出来（坏条目）时**大声失败**：这正是 `list_devices` 的约定——静默
-        跳过会让一件再也读不出来的器件从页面上消失，而用户以为它还在。
-        """
-        return tuple(device.id for device in list_devices(_my_devices_root()))
 
     def _my_device_body(payload: dict) -> CustomDevice:
         """请求体 → CustomDevice（形状判决在这里，字段级校验在域层）。
@@ -2798,7 +2795,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             # 让人打不开自己的工程。板侧视图仍按同一条消解重投影（确定性），
             # 所以回来看到的接线表还是那次工程里的表。
             require_pins=False,
-            custom_device_ids=_my_device_ids(),
+            data_dir=context.config_path.parent,
         )
         payload.update(view.board)
         # 检测记录（工单 08）：现象 + 勾选 + 建议随这次检测落盘，刷新回显。
@@ -2838,7 +2835,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             module_library_dir=app_config.module_library_dir,
             masters_dir=app_config.masters_dir,
             recipe_path=context.hwcheck_recipe_path,
-            custom_device_ids=_my_device_ids(),
+            data_dir=context.config_path.parent,
         )
         board = view.board
         triage_context = build_triage_context(
