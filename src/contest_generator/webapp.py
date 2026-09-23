@@ -2918,11 +2918,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             masters_dir=app_config.masters_dir,
             recipe_path=context.hwcheck_recipe_path,
             data_dir=context.config_path.parent,
-            # ⚠ 09 记账（工单 hwcheck-unknown-device/08 评审）：排障的重投影
-            # **还没**吃工程内快照（回读端点吃了）——用户改 / 删「我的器件」后，
-            # 排障上下文与工程事实可能分叉。09 动 triage 时把
-            # `custom_snapshot_dir=output_dir` 一起带上（理由与回读端点逐字
-            # 相同，别留两条口径）。
+            # 排障的重投影也吃工程内快照（工单 hwcheck-unknown-device/09 结清 08
+            # 留的记账）：用户改 / 删「我的器件」后，排障上下文里的自建件事实仍
+            # 是**那一次生成**的事实——与回读端点逐字同一条口径，不留两条。
+            custom_snapshot_dir=output_dir,
         )
         board = view.board
         triage_context = build_triage_context(
@@ -2939,6 +2938,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             checked_ids=checked_ids,
             symptom=symptom,
             known_modules=view.known_slugs,
+            # 自建器件事实（工单 09）：检测页计划里那几行原样进上下文——id /
+            # 名称 / 地址两种写法 / 寄存器 / 期望值 / 探测形态 / 共总线。
+            customs=board["custom"],
         )
         record = read_hwcheck_record(output_dir)
         record = record_with_checked(record, checked_ids)

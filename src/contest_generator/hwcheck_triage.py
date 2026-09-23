@@ -31,7 +31,9 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+from .hwcheck_custom import PROBE_MODULE_SLUG
 from .hwcheck_errors import HwCheckError
+from .my_devices import DEVICE_ID_PREFIX
 
 __all__ = [
     "ADVICE_VERDICTS",
@@ -83,13 +85,20 @@ FALLBACK_REASON_PREFIX = "AI 排障暂时用不了"
 # 引脚名形态（stm32 / mspm0 两平台都是 `P<端口><序号>`：PA0 / PC13 / PB24）。
 # 前后不许再跟标识符字符——`PAGE12` 这种偶然串不算引脚名。
 _PIN_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9_])P[A-Z]\d{1,2}(?![A-Za-z0-9_])")
-
 # 词形 token（小写开头，可含数字 / 下划线）——**只在库内 slug 词表里找命中者**
 # 时才成立判据：`jy61p`（无下划线）与 `ml_mpu6050` 都是模块名形态，靠"有没有
 # 下划线"分不出来；而 `main_c` / `i2c_scl` / `keil` 这类技术词查表不命中，
 # 自然放过（宁放过不误杀整份建议）。`WHO_AM_I` 这类大写 token 不在 slug 词表里，
 # 也不会被误判。
 _SLUG_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9_])[a-z][a-z0-9_]*[a-z0-9](?![A-Za-z0-9_])")
+
+# 自建件 id 形态（`mine_` + C 标识符字符，工单 09）。**不靠 `_SLUG_TOKEN_RE`**：
+# 那一支只认小写 token，而 `my_devices.DEVICE_ID_PATTERN` 允许大写
+# （`mine_MPU6050` 是合法 id）——用 slug 词形判 id 会让大小写混写的 id
+# **两个方向都判不到**（提到没选的也不拒）。这里前缀照文法小写、后半段大小写不挑。
+_CUSTOM_ID_RE = re.compile(
+    rf"(?<![A-Za-z0-9_]){re.escape(DEVICE_ID_PREFIX)}[A-Za-z0-9_]+(?![A-Za-z0-9_])"
+)
 
 # 兜底建议里最多点名几条没勾的清单项（全列会变成一堵墙，学生反而不看）
 _FALLBACK_MAX_UNCHECKED = 4
@@ -181,16 +190,22 @@ class TriageAdvice:
 
 @dataclass(frozen=True)
 class TriageFacts:
-    """事实约束的白名单（可查表的那两类话题词）。
+    """事实约束的白名单（可查表的那几类话题词）。
 
     pins = 本次接线表与板上共享脚里出现的引脚名（含 3V3 / GND 这类供电脚名）；
     modules = 本次检测涉及的模块 slug（器件 + 依赖 + 框架）；known_modules =
-    **整库**模块 slug（判"编造了本次没有的件"用）。
+    **整库**模块 slug（判"编造了本次没有的件"用）；customs = 本次选中的
+    **自建件** id（`mine_*`——工单 09：库内词表判不到它们，单独一张表，且它
+    还要**反向判**在不在本次）；custom_words = 本次自建件**名称里**的 slug 形词
+    （工单 09：件名可能正好含库内 slug——"卖家给的 oled 模块"——名称会印进
+    上下文材料，模型复述它不该被判成编造）。
     """
 
     pins: frozenset[str]
     modules: frozenset[str]
     known_modules: frozenset[str]
+    customs: frozenset[str] = frozenset()
+    custom_words: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -201,7 +216,10 @@ class TriageContext:
     order = 建议顺序（[{slug, description, bring_up}]）；sections = 专精小节载荷
     （slug / label / plan）；unspecialized = 通用降级件（slug / label / plan /
     message）；checklist = 上板清单（{id, expect, check}）；checked_ids = 已勾选的
-    清单项 id；symptom = 学生填的现象；facts = 事实约束白名单。
+    清单项 id；symptom = 学生填的现象；facts = 事实约束白名单；
+    customs_rows = **自建器件事实**（工单 09：检测页计划载荷那几行，加上排障侧
+    派生的 `shared_with_library`——这些是**用户确认的事实**，不是库内验证过的
+    驱动结论，材料段与白名单都要带上它们）。
     """
 
     platform: str
@@ -214,6 +232,7 @@ class TriageContext:
     checked_ids: tuple[str, ...]
     symptom: str
     facts: TriageFacts
+    customs_rows: tuple[Mapping[str, Any], ...] = ()
 
     @property
     def unchecked_ids(self) -> tuple[str, ...]:
@@ -330,9 +349,12 @@ def build_triage_facts(
     modules: Sequence[str],
     known_modules: Sequence[str],
     material_texts: Sequence[str] = (),
+    customs: Sequence[str] = (),
+    custom_words: Sequence[str] = (),
 ) -> TriageFacts:
     """白名单装配（纯函数）：引脚名来自**本次接线行 + 板上共享脚 + 材料里出现过的
-    脚**，模块名来自本次检测的模块集与整库词表。
+    脚**，模块名来自本次检测的模块集与整库词表，自建件 id 与"件名里的词"各一张
+    表（工单 09）。
 
     引脚判据取"接线表里出现的脚"而不是"板定义全部脚"：模型点出一个本次
     材料里根本没有的脚（`PA9`），那正是"编造接线"——放行它比拒收坏处大。
@@ -359,6 +381,8 @@ def build_triage_facts(
         pins=frozenset(pins),
         modules=frozenset(str(slug) for slug in modules if slug),
         known_modules=frozenset(str(slug) for slug in known_modules if slug),
+        customs=frozenset(str(slug) for slug in customs if slug),
+        custom_words=frozenset(str(word) for word in custom_words if word),
     )
 
 
@@ -374,6 +398,7 @@ def build_triage_context(
     checked_ids: Sequence[str],
     symptom: str,
     known_modules: Sequence[str],
+    customs: Sequence[Mapping[str, Any]] = (),
 ) -> TriageContext:
     """一次排障的上下文（纯函数）。
 
@@ -383,6 +408,11 @@ def build_triage_context(
     没有引脚、`config` 也不在接线表里，只靠接线行归并的话，模型提一句 `delay`
     就会被事实判据误杀。现象为空 → `HwCheckError`（没现象可分析；路由层另有
     `_require_str` 的 400）。
+
+    `customs`（工单 09）= 检测页计划载荷里自建件的那几行（`view.board["custom"]`）。
+    每行补一个排障侧派生的 `shared_with_library`（这件借的总线上还有没有库内件
+    ——判据 = 支点 `i2c_probe` 的脚是否被别的模块也占着）：共总线时"先查同一条
+    总线上的库内件"才是有效线索，单挂时那句话反而是误导。
     """
     text = symptom.strip() if isinstance(symptom, str) else ""
     if not text:
@@ -392,6 +422,17 @@ def build_triage_context(
     checklist_rows = tuple(dict(item) for item in checklist)
     section_rows = tuple(dict(item) for item in sections)
     generic_rows = tuple(dict(item) for item in unspecialized)
+    customs_rows = tuple(dict(row) for row in customs)
+    probe_pins = {
+        row.get("pin") for row in rows if row.get("slug") == PROBE_MODULE_SLUG
+    }
+    for row in customs_rows:
+        row["shared_with_library"] = any(
+            row2.get("pin") in probe_pins
+            and row2.get("slug") not in (PROBE_MODULE_SLUG, row.get("slug"))
+            and not str(row2.get("slug", "")).startswith(DEVICE_ID_PREFIX)
+            for row2 in rows
+        )
     modules_in_play: list[str] = []
     for candidates in (
         list(modules),
@@ -422,9 +463,19 @@ def build_triage_context(
             # 材料里出现过的脚也算上下文事实（清单的「不对先查」里就写着
             # PC13/PC14/PC15 这类板载 LED 脚——模型复述它不该被判非法）
             material_texts=_material_texts(
-                checklist_rows, section_rows, generic_rows, order, text
+                checklist_rows, section_rows, generic_rows, order,
+                customs_rows, text,
             ),
+            # 自建件 id 与"件名里的词"各一张表（工单 09）：库内词表判不到 mine_*，
+            # 件名又可能正好含库内 slug（"卖家给的 oled 模块"），两张表各管一条判据
+            customs=[row.get("slug") for row in customs_rows],
+            custom_words=[
+                token
+                for row in customs_rows
+                for token in _SLUG_TOKEN_RE.findall(str(row.get("name", "")))
+            ],
         ),
+        customs_rows=customs_rows,
     )
 
 
@@ -433,13 +484,15 @@ def _material_texts(
     sections: Sequence[Mapping[str, Any]],
     unspecialized: Sequence[Mapping[str, Any]],
     order: Sequence[Mapping[str, Any]],
+    customs: Sequence[Mapping[str, Any]],
     symptom: str,
 ) -> tuple[str, ...]:
     """模型看得到的那些自由文本（引脚白名单的补充来源，见 build_triage_facts）。
 
     只收**会印进 `triage_context_text` 的字段**：清单的 expect / check、小节的
-    plan、通用件计划、顺序里的 description、以及学生填的现象——收多了会放行
-    模型没见过的脚，收少了就是评审抓到的那条"材料说得的、判据说不得"。
+    plan、通用件计划、顺序里的 description、自建件的 plan / 备注（工单 09）、
+    以及学生填的现象——收多了会放行模型没见过的脚，收少了就是评审抓到的那条
+    "材料说得的、判据说不得"。
     """
     chunks: list[str] = [symptom]
     for item in checklist:
@@ -452,6 +505,9 @@ def _material_texts(
         chunks.append(str(item.get("message", "")))
     for item in order:
         chunks.append(str(item.get("description", "")))
+    for item in customs:
+        chunks.append(str(item.get("plan", "")))
+        chunks.append(str(item.get("notes", "")))
     return tuple(chunk for chunk in chunks if chunk)
 
 
@@ -459,8 +515,8 @@ def triage_context_text(context: TriageContext) -> str:
     """上下文 → 模型看到的材料（纯函数；材料与白名单同一处装配）。
 
     逐段：平台与器件 → 接线表（模块 / 端子 / 板脚）→ 这一趟的检测计划 →
-    上板清单与勾选状态 → 学生填的现象。空段整段不印（不印"（空）"那种噪声：
-    模型读到空标题会以为漏了数据）。
+    **自建器件事实**（工单 09）→ 上板清单与勾选状态 → 学生填的现象。空段整段
+    不印（不印"（空）"那种噪声：模型读到空标题会以为漏了数据）。
     """
     lines: list[str] = [f"平台：{context.platform}"]
     if context.devices:
@@ -491,6 +547,44 @@ def triage_context_text(context: TriageContext) -> str:
             lines.append(
                 f"- [未专精] {section.get('slug', '')}：{section.get('plan', '')}"
                 "（只验初始化与总线扫描，判不了通断）"
+            )
+
+    if context.customs_rows:
+        lines.append("")
+        lines.append(
+            "【自建器件】（学生自己登记的库外件——下面每一项都是**用户确认的事实**，"
+            "不是库内验证过的驱动结论）"
+        )
+        for row in context.customs_rows:
+            lines.append(
+                f"- [自建件] {row.get('slug', '')}（{row.get('name', '')}）："
+                f"{row.get('plan', '')}"
+            )
+            address = str(row.get("address_text", ""))
+            # 非 I2C 件没有地址（`address=None` 是合法状态）：**整行不印**——
+            # 印「地址：（8 位写法：读  / 写 ）」就是把一行空事实塞给模型，
+            # 与本函数「空段整段不印」同一条纪律（评审抓到的那处）。
+            if address:
+                lines.append(
+                    f"      地址：{address}"
+                    f"（8 位写法：读 {row.get('read8', '')} / 写 {row.get('write8', '')}）"
+                )
+            register = str(row.get("register_text", ""))
+            if register:
+                expect = str(row.get("expect_text", ""))
+                detail = f"      身份寄存器：{register}"
+                if expect:
+                    detail += f"，期望读回 {expect}"
+                elif row.get("echo_only"):
+                    detail += "（没填期望值，这一趟只回显读到的字节，不判）"
+                lines.append(detail)
+            notes = str(row.get("notes", ""))
+            if notes:
+                lines.append(f"      你填的备注：{notes}")
+            lines.append(f"      本次探测形态：{row.get('probe_form', '')}")
+            lines.append(
+                "      与库内件共总线："
+                + ("是" if row.get("shared_with_library") else "否")
             )
 
     if context.checklist:
@@ -561,11 +655,14 @@ def check_advice_facts(
 ) -> tuple[str, ...]:
     """事实约束查表（纯函数）→ 违规说明元组（空 = 通过）。
 
-    两类可查表的话题词：
+    三类可查表的话题词：
     * **引脚名**（`P[A-Z]<数字>` 形态）必须在本次接线表 / 板上共享脚里；
     * **库内模块 slug**（在整库 slug 词表里命中的小写 token——`ml_mpu6050` 与
       `jy61p` 都算，**不要求带下划线**）必须在本次模块集里："只选了 led 却让你
-      去查 ml_mpu6050"就是这一类。
+      去查 ml_mpu6050"就是这一类；
+    * **自建件**（工单 09）：`mine_*` 形态的 id 必须在**本次**的自建件集里
+      （不在 = 编造，照拒）；件**名称里**的 slug 形词放行（名称会印进材料，
+      而它可能正好撞上库内 slug——"卖家给的 oled 模块"）。
     整库也不认识的名字不判（`main_c` / `i2c_scl` 这类技术词与模块 slug 同形，
     查表无从判决；误杀整份建议的代价比放过一个大）。
     """
@@ -576,7 +673,18 @@ def check_advice_facts(
     for pin in dict.fromkeys(_PIN_TOKEN_RE.findall(text)):
         if pin not in facts.pins:
             violations.append(f"引脚 {pin} 不在本次接线表里")
+    # 自建件 id 走**自己那一张表**（工单 09）：库内 slug 词表里没有 `mine_*`，
+    # 而 id 的大小写不受 slug 词形约束——专用形态 + 专用表，两个方向都判得动。
+    for token in dict.fromkeys(_CUSTOM_ID_RE.findall(text)):
+        if token not in facts.customs:
+            violations.append(f"自建件 {token} 不在本次检测里")
     for token in dict.fromkeys(_SLUG_TOKEN_RE.findall(text)):
+        if token.startswith(DEVICE_ID_PREFIX):
+            continue  # 自建件 id 归上面那一遍（大小写无关），不在这张表里重判
+        # 件名里的词（工单 09）：名称会印进上下文材料，而它可能正好撞上库内
+        # slug（"卖家给的 oled 模块"）——模型复述材料，不该被判成编造。
+        if token in facts.custom_words:
+            continue
         if token in facts.known_modules and token not in facts.modules:
             violations.append(f"模块 {token} 不在本次检测的模块集里")
     return tuple(violations)

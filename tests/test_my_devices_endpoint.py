@@ -18,10 +18,13 @@ from pathlib import Path
 
 import pytest
 
+from contest_generator.hwcheck_triage import triage_context_text
 from contest_generator.my_devices import (
     DEVICE_JSON,
     MY_DEVICES_DIRNAME,
+    CustomDevice,
     my_devices_dir,
+    save_device,
 )
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from tests._c_escape import decode_c_string
@@ -1162,3 +1165,161 @@ def test_readback_without_custom_devices_stays_clean(generate_client, tmp_path):
     payload = readback.json()
     assert payload["custom"] == []
     assert not [k for k in payload if "snapshot" in k or "archive" in k], sorted(payload)
+
+
+# ---------------------------------------------------------------------------
+# AI 排障带自建件事实（工单 hwcheck-unknown-device/09）
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def triage_client(tmp_path):
+    """真库 + 真母版 + **可观测的 FakeLLM**：排障端点送进模型的上下文从这里读。
+
+    `generate_client` 的 `llm_factory` 每次现造一个 FakeLLM（拿不到实例），而本组
+    用例的判据全落在"送进模型的上下文"上，所以单开一个带 holder 的夹具。
+    """
+    from fastapi.testclient import TestClient
+
+    from contest_generator.config import AppConfig
+    from contest_generator.webapp import AppContext, create_app
+    from tests.fakes import FakeLLM
+
+    repo = Path(__file__).resolve().parents[1]
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    holder: dict[str, object] = {"llm": FakeLLM()}
+    ctx = AppContext(
+        config_path=data_dir / "config.json",
+        config=AppConfig(
+            api_key="sk-test",
+            module_library_dir=repo / "library" / "modules",
+            masters_dir=repo / "library" / "masters",
+        ),
+        llm_factory=lambda config: holder["llm"],
+    )
+    return TestClient(create_app(ctx)), data_dir, holder
+
+
+def _generate_with_custom(client, tmp_path, devices) -> str:
+    """生成一份含自建件的检测工程（09 的两条用例都从真工程出发）。"""
+    output_parent = tmp_path / "out"
+    output_parent.mkdir()
+    response = client.post(
+        "/api/hwcheck/generate",
+        json={
+            "platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
+            "devices": list(devices), "parent_dir": str(output_parent),
+        },
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["output_dir"]
+
+
+def test_triage_context_carries_the_custom_device_facts(triage_client, tmp_path):
+    """票面第 1 条：排障上下文里有「自建器件事实」（id / 名称 / 地址两种写法 /
+    寄存器 / 期望值 / 探测形态 / 共总线），不是只在页面上有。"""
+    client, _, holder = triage_client
+    client.post("/api/my-devices", json={"device": DEVICE_BODY})
+    output_dir = _generate_with_custom(client, tmp_path, ["led", "mine_gyro"])
+
+    response = client.post(
+        "/api/hwcheck/triage",
+        json={"output_dir": output_dir, "symptom": "卖家给的六轴模块地址没有应答"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["degraded"] is False, body
+
+    context = holder["llm"].triage_calls[-1]
+    rows = context.customs_rows
+    assert [row["slug"] for row in rows] == ["mine_gyro"], rows
+    row = rows[0]
+    assert row["name"] == "卖家给的六轴模块"
+    # 地址两种写法都在（手册 0x68 与 8 位 0xD0 是同一个地址——填错地址最常见的坑）
+    assert (row["address_text"], row["read8"], row["write8"]) == ("0x68", "0xD1", "0xD0")
+    assert (row["register_text"], row["expect_text"]) == ("0x75", "0x68")
+    assert row["probe_form"] == "板上判定"
+    assert row["shared_with_library"] is False, "stm32 上 led 不占支点那对脚"
+    # 材料里印出来（模型据此才知道这件该怎么查），且标明来源分量
+    text = triage_context_text(context)
+    assert "【自建器件】" in text and "0x68" in text, text
+    assert "用户确认的事实" in text, text
+    # 白名单：这件 id 进了单独那张表（库内词表里没有 mine_*）
+    assert "mine_gyro" in context.facts.customs
+
+
+def test_triage_context_prefers_the_project_snapshot(triage_client, tmp_path):
+    """08 留的记账（09 结清）：排障的重投影**也吃工程内快照**。
+
+    生成后改了「我的器件」的地址，排障上下文里仍是**那一次**的事实——与回读
+    端点同一口径（不留"页面读快照、排障读现况"两条）。
+    """
+    client, data_dir, holder = triage_client
+    save_device(
+        my_devices_dir(data_dir),
+        CustomDevice(id="mine_gyro", name="卖家给的六轴模块", bus="i2c",
+                     address=0x68, register=0x75, expect=0x68),
+    )
+    output_dir = _generate_with_custom(client, tmp_path, ["mine_gyro"])
+    save_device(
+        my_devices_dir(data_dir),
+        CustomDevice(id="mine_gyro", name="卖家给的六轴模块", bus="i2c",
+                     address=0x6B, register=0x75, expect=0x68),
+    )
+
+    client.post(
+        "/api/hwcheck/triage",
+        json={"output_dir": output_dir, "symptom": "地址没有应答"},
+    )
+    row = holder["llm"].triage_calls[-1].customs_rows[0]
+    assert row["address_text"] == "0x68", "排障上下文以工程内快照为准（不吃改后的定义）"
+
+
+def test_triage_context_marks_a_shared_bus_in_the_real_chain(triage_client, tmp_path):
+    """「与库内件共总线」的**是**那一格要走真链路（评审点：只用手搓 fixture 证不够）。
+
+    stm32 上库内软 I2C 件（aht10 等六件）与支点 `i2c_probe` 共挂 PA6/PA7——选一件
+    就是共总线，上下文要如实标"是"（共总线时"先查同一条总线上的库内件"才是有效
+    线索；单挂时那句话反而是误导）。
+    """
+    client, _, holder = triage_client
+    client.post("/api/my-devices", json={"device": DEVICE_BODY})
+    output_dir = _generate_with_custom(client, tmp_path, ["aht10", "mine_gyro"])
+
+    client.post(
+        "/api/hwcheck/triage",
+        json={"output_dir": output_dir, "symptom": "地址没有应答"},
+    )
+    context = holder["llm"].triage_calls[-1]
+    row = context.customs_rows[0]
+    assert row["shared_with_library"] is True
+    assert "与库内件共总线：是" in triage_context_text(context)
+
+
+def test_triage_with_a_custom_device_still_degrades_without_blocking(
+    triage_client, tmp_path
+):
+    """票面第 5 条：模型不可用 → 兜底建议照旧、检测记录照常落盘（**含自建件时
+    也不阻断**——自建件是数据不是链路，模型挂了不影响把现象存下来）。"""
+    from contest_generator.hwcheck_triage import HWCHECK_RECORD_FILENAME
+    from contest_generator.llm import LLMError
+    from tests.fakes import FakeLLM
+
+    client, _, holder = triage_client
+    client.post("/api/my-devices", json={"device": DEVICE_BODY})
+    output_dir = _generate_with_custom(client, tmp_path, ["mine_gyro"])
+    holder["llm"] = FakeLLM(triage_error=LLMError("连接被拒绝"))
+
+    response = client.post(
+        "/api/hwcheck/triage",
+        json={"output_dir": output_dir, "symptom": "地址没有应答"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["degraded"] is True and "连接被拒绝" in body["message"]
+    on_disk = json.loads(
+        (Path(output_dir) / HWCHECK_RECORD_FILENAME).read_text(encoding="utf-8")
+    )
+    assert on_disk["symptom"] == "地址没有应答"
+    assert on_disk["advice"]["degraded"] is True

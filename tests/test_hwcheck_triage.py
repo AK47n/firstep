@@ -471,3 +471,224 @@ def test_record_path_is_relative_to_the_project_dir(tmp_path):
     )
     assert written.parent == Path(tmp_path)
     assert written.name == HWCHECK_RECORD_FILENAME
+
+
+# ---------------------------------------------------------------------------
+# 自建器件事实（工单 hwcheck-unknown-device/09）
+# ---------------------------------------------------------------------------
+
+# 一件自建件（I2C，0x68，身份寄存器 0x75，期望 0x68）+ 一条本次接线行
+# （支点 i2c_probe 的脚与库内件同脚 = 共总线）
+_CUSTOM_ROW = {
+    "slug": "mine_gyro",
+    "name": "卖家给的六轴模块",
+    "address_text": "0x68",
+    "read8": "0xD1",
+    "write8": "0xD0",
+    "register_text": "0x75",
+    "expect_text": "0x68",
+    "echo_only": False,
+    "notes": "卖家页写的 WHO_AM_I，SCL 接 PB6",
+    "probe_form": "板上判定",
+    "probes": True,
+}
+
+_WIRING_WITH_PROBE = {
+    "rows": [
+        {"slug": "i2c_probe", "role": "SCL", "role_id": "SCL", "pin": "PB6"},
+        {"slug": "i2c_probe", "role": "SDA", "role_id": "SDA", "pin": "PB7"},
+        {"slug": "ml_mpu6050", "role": "SCL", "role_id": "SCL", "pin": "PB6"},
+    ],
+    "board_shares": [],
+    "order": [{"slug": "mine_gyro", "description": "自建件", "bring_up": False}],
+}
+
+
+def _custom_context(*, customs=(_CUSTOM_ROW,), wiring=_WIRING_WITH_PROBE):
+    return build_triage_context(
+        platform=PLATFORM_STM32,
+        devices=("mine_gyro", "ml_mpu6050"),
+        modules=("mine_gyro", "i2c_probe", "ml_mpu6050", "delay", "config"),
+        wiring=wiring,
+        sections=(),
+        unspecialized=(),
+        checklist=_CHECKLIST,
+        checked_ids=("flash",),
+        symptom="mine_gyro 串口报无应答",
+        known_modules=_KNOWN_MODULES,
+        customs=customs,
+    )
+
+
+def test_context_text_carries_the_custom_device_facts_section():
+    """「自建器件事实」段：id / 名称 / 地址两种写法 / 寄存器 / 期望值 / 备注 /
+    探测形态 / 共总线——模型据此才知道"这件该怎么查"。"""
+    text = triage_context_text(_custom_context())
+    for fragment in (
+        "【自建器件】",
+        "mine_gyro",
+        "卖家给的六轴模块",
+        "0x68",
+        "0xD1",
+        "0xD0",
+        "0x75",
+        "板上判定",
+        "与库内件共总线：是",
+        "你填的备注：",
+    ):
+        assert fragment in text, fragment
+    assert "用户确认的事实" in text, "段落头要说明这些事实的来源与分量"
+
+
+def test_context_without_custom_devices_keeps_the_old_text_verbatim():
+    """票面硬要求：没有自建件时上下文**逐字**与改动前一致（新段落整段不印）。"""
+    text = triage_context_text(_context())
+    assert "【自建器件】" not in text
+    assert "自建件" not in text
+
+
+def test_custom_bus_sharing_is_computed_from_the_wiring_rows():
+    """共总线判据来自接线行：支点（i2c_probe）的脚被别的模块也占着 = 是。"""
+    context = _custom_context()
+    assert context.customs_rows[0]["shared_with_library"] is True
+    alone = {**_WIRING_WITH_PROBE,
+             "rows": [row for row in _WIRING_WITH_PROBE["rows"]
+                      if row["slug"] != "ml_mpu6050"]}
+    context = _custom_context(wiring=alone)
+    assert context.customs_rows[0]["shared_with_library"] is False
+
+
+def test_custom_words_are_in_the_facts_whitelist():
+    """白名单扩容：自建件的 id / 名称里的 slug 形词 / 地址——模型提它们不再被
+    当"上下文里没有的东西"拒收。"""
+    context = _custom_context()
+    advice = _advice(
+        summary="mine_gyro 无应答，更像地址或接线问题",
+        causes=["卖家给的六轴模块的地址 0x68 可能写错（8 位写法 0xD0）"],
+        steps=["核对 mine_gyro 的地址接线"],
+    )
+    parsed = parse_triage_advice(advice, context)
+    assert parsed.verdict == "wiring"
+
+
+def test_advice_rejects_a_custom_device_that_is_not_in_this_run():
+    """反向判据：白名单不是照单全收——提一个**不在本次**的自建件仍被拒收。"""
+    context = _custom_context()
+    with pytest.raises(TriageFactError) as excinfo:
+        parse_triage_advice(
+            _advice(summary="更像 mine_other 的地址问题",
+                    causes=["mine_other 没接好"],
+                    steps=["检查 mine_other 的地址"]),
+            context,
+        )
+    assert "mine_other" in str(excinfo.value)
+
+
+def test_the_triage_prompt_says_custom_conclusions_come_from_user_facts():
+    """提示词要写明：[自建件] 的结论来自用户确认的事实，不许说成"库内模块有问题"。"""
+    from contest_generator.llm import HWCHECK_TRIAGE_SYSTEM_PROMPT
+
+    assert "自建件" in HWCHECK_TRIAGE_SYSTEM_PROMPT
+    assert "用户确认" in HWCHECK_TRIAGE_SYSTEM_PROMPT
+    assert "库内模块" in HWCHECK_TRIAGE_SYSTEM_PROMPT
+
+
+def test_a_custom_name_that_collides_with_a_library_slug_is_not_rejected():
+    """白名单扩容的另一半：**名称**（票面「id / 名称 / 地址」里的那个"名称"）。
+
+    学生给自己的件起名时很自然会带上看到的东西（"卖家给的 oled 模块"）——名称
+    会**印进上下文材料**，模型复述它不该被判成"编造了本次没选的库内模块"
+    （`oled` 正是库内 slug 且本次没选）。名称词单收一张表（`facts.custom_words`），
+    **不动** `known_modules` / `modules` 那对既有判据。
+    """
+    context = _custom_context(customs=({**_CUSTOM_ROW, "name": "卖家给的 oled 模块"},))
+    assert "oled" in context.facts.custom_words
+    parsed = parse_triage_advice(
+        _advice(
+            summary="你那件 oled 模块更像地址问题",
+            causes=["卖家给的 oled 模块的地址写成了 8 位写法"],
+            steps=["核对 oled 模块的地址与接线"],
+        ),
+        context,
+    )
+    assert parsed.verdict == "wiring"
+
+
+def test_advice_may_quote_the_custom_address_in_both_forms():
+    """地址（7 位 + 8 位两种写法）在材料里，模型照手册复述它不该被拒。
+
+    这条是**钉住射程**用的：地址既不是引脚也不是 slug 形词，今天的 token 判据
+    本来就碰不到它——写下来是为了哪天判据放宽到"认数字 token"时这一格立刻变红，
+    而不是悄悄把手册上的写法误杀。（票面「白名单扩容到 id / 名称 / 地址」里
+    "地址"这一半的实现形态就是**这一格**：它印进材料、判据不碰它。）
+    """
+    context = _custom_context()
+    parsed = parse_triage_advice(
+        _advice(
+            summary="0x68 没有应答（手册上另一种写法是 0xD0，读地址 0xD1）",
+            causes=["0xD0 这个 8 位写法可能对应另一件器件"],
+            steps=["把 0x68 与 0xD0 两个写法都核一遍"],
+        ),
+        context,
+    )
+    assert parsed.verdict == "wiring"
+
+
+def test_a_custom_id_is_judged_regardless_of_case():
+    """id 的判据不靠 slug 词形（`mine_MPU6050` 是合法 id，而 `_SLUG_TOKEN_RE`
+    只认小写）：专用形态 `_CUSTOM_ID_RE` 让大小写混写的 id **也判得动**——
+    提一个没选的 `mine_MPU6050` 照样拒收（不然这条反向判据在合法 id 上失效）。
+    """
+    context = _custom_context(
+        customs=({**_CUSTOM_ROW, "slug": "mine_MPU6050", "name": "上限大写的件"},)
+    )
+    assert parse_triage_advice(
+        _advice(summary="mine_MPU6050 没有应答"), context
+    ).verdict == "wiring"
+    with pytest.raises(TriageFactError) as excinfo:
+        parse_triage_advice(_advice(summary="更像 mine_OTHER 的问题"), context)
+    assert "mine_OTHER" in str(excinfo.value)
+
+
+def test_a_custom_name_outside_this_run_is_not_judged():
+    """**射程边界**（如实钉住，不是漏掉）：只有 id 形态的自建件判得动"在不在本次"。
+
+    件名是用户自由文本（中文为主），"另一个件叫什么名字"没有可判据的词形；
+    地址同理（不是 token）。这条把边界写成判据：提到一个本次没有的件名/地址
+    **会放过**——与既有「整库也不认识的名字不判」同一条口径（误杀整份建议的
+    代价比放过一个大）。要收窄它得先在域层立"登记表 ∩ 本次"的判据，另议。
+    """
+    context = _custom_context()
+    parsed = parse_triage_advice(
+        _advice(
+            summary="更像卖家那件 bme280 的问题（地址可能是 0x76）",
+            causes=["bme280 与本次这件不同"],
+            steps=["核对 bme280 的地址 0x76"],
+        ),
+        context,
+    )
+    assert parsed.verdict == "wiring"
+
+
+def test_a_library_module_outside_this_run_is_still_rejected():
+    """反向判据的对照组：库内 slug 不在本次、也不在任何自建件名字里 → 照旧拒收。
+
+    上一条给"名称里的词"开了口子，这一条保证口子只对着**本次自建件的名字**开：
+    不是"提到任何库内 slug 都放行"。
+    """
+    context = _custom_context(customs=({**_CUSTOM_ROW, "name": "卖家给的 oled 模块"},))
+    with pytest.raises(TriageFactError) as excinfo:
+        parse_triage_advice(_advice(summary="更像 jy61p 的问题"), context)
+    assert "jy61p" in str(excinfo.value)
+
+
+def test_a_custom_device_without_an_address_prints_no_empty_address_line():
+    """非 I2C 件没有地址（`address=None` 是合法状态，票面明确覆盖 SPI/UART 件）：
+    上下文里**不该**出现「地址：（8 位写法：读  / 写 ）」这种空行——同段里
+    寄存器那行有守卫、段头又承诺"空段整段不印"，漏这一行就是把一行空事实塞给模型。
+    """
+    blank = {**_CUSTOM_ROW, "address_text": "", "read8": "", "write8": ""}
+    text = triage_context_text(_custom_context(customs=(blank,)))
+    assert "【自建器件】" in text, "件本身仍在（它这一趟只是没有地址）"
+    assert "地址：" not in text
+    assert "8 位写法" not in text

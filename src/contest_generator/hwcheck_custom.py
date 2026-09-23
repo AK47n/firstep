@@ -51,7 +51,7 @@ from typing import Any, Mapping, Sequence
 
 from .hwcheck_errors import HwCheckError
 from .hwcheck_recipe import c_string
-from .my_devices import BUS_I2C, CustomDevice
+from .my_devices import BUS_I2C, CustomDevice, address_forms
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 
 __all__ = [
@@ -132,7 +132,7 @@ PLAN_PING_ONLY = "只 ping 地址：这一趟只验了应答，没有验型号"
 PLAN_ECHO_ONLY = "ping 地址 + 读身份寄存器：没有期望值可比，只回显读到的字节"
 PLAN_JUDGE = "ping 地址 + 读身份寄存器并与期望值比较：板上判 OK / FAIL"
 
-# **不出探测小节**的两句（工单 05：页面计划也要覆盖这些件，见 `resolve_custom_plan`）。
+# 「不出小节」的两句（工单 05：页面计划也要覆盖这些件，见 `resolve_custom_plan`）。
 # 两句同样是"这一趟对它做什么"，所以与小节的三档**并列**而不是另起一套话术：
 # 页面那一行读的永远是 `CustomPlanEntry.plan`，是不是探测小节由 `probes` 说明。
 NOT_PROBED_NOT_I2C = (
@@ -143,6 +143,16 @@ NOT_PROBED_NO_CHANNEL = (
     "这一趟没有勾输出通道：探测小节渲染了也没人看得见，所以不出"
     "（想测就在上面勾上「调试串口」或「OLED」再预览）"
 )
+
+# 探测形态的**短标签**（排障上下文的「本次探测形态」那一行读它，工单 09）：
+# 与长句 `PLAN_*` 同判据、两处写法——改三档判据时这一张表跟着 `_plan_for` 一起
+# 看（`_probe_form` 按 `PLAN_*` 查表，缺一档 = KeyError 大声失败）。
+_PROBE_FORM_LABELS = {
+    PLAN_PING_ONLY: "只 ping",
+    PLAN_ECHO_ONLY: "只回显",
+    PLAN_JUDGE: "板上判定",
+}
+NO_PROBE_FORM_LABEL = "这一趟没有它的探测小节"
 
 # 失败时的排查话术（贴在判定行下面）。四件事按"最可能先出错"的顺序排：
 # 供电 / 上拉是硬件、线序是接线、地址写法是最常见的一处填错（7 位 vs 8 位）。
@@ -260,10 +270,17 @@ class CustomPlanEntry:
         return self.device.id
 
     def to_payload(self) -> dict[str, Any]:
+        forms = address_forms(self.device.address)
         return {
             **_device_facts(self.device, self.plan),
             "probes": self.probes,
             "wiring_text": self.wiring_text,
+            # 地址的 8 位读写形式 + 探测形态（工单 09：AI 排障的「自建器件事实」
+            # 段读这份载荷——手册两种写法都能对上，模型才知道 0x68 与 0xD0 是
+            # 同一个地址）。派生单源 `my_devices.address_forms` / `_probe_form`。
+            "read8": forms["read8"],
+            "write8": forms["write8"],
+            "probe_form": _probe_form(self.device, probes=self.probes),
         }
 
 
@@ -378,14 +395,15 @@ def sections_payload(sections: Sequence[CustomSection]) -> list[dict[str, Any]]:
 # 「不出小节」那一条的排查话术：三条按"学生最可能做错的动作"排（把它当坏了 /
 # 去等一个不会出现的输出 / 白白扔掉一次能问 AI 的机会）。
 #
-# ⚠ 第③条的措辞**不许承诺 09 还没做的那件事**（工单 05 评审抓到的假承诺）：自建件的
-# 事实（地址 / 寄存器 / 期望值）进 AI 排障上下文是**工单 09**，这一版排障手上只有
-# 平台与检测计划——写"AI 会带上你填的地址"就是让学生去等一个不存在的能力。
+# 第③条说的"AI 会带上你填的事实"**现在是真话**（工单 09 落地：排障上下文新增
+# 「自建器件事实」段；05 那一版这里挂过一句"还进不了它的上下文"的旧措辞，已随 09
+# 改口）——改这句话之前先确认排障侧还在带这些事实（判据在
+# `hwcheck_triage.build_triage_context` 与 tests/test_hwcheck_triage.py 的自建件段）。
 _CHECK_NOT_PROBED = (
     "① 别把「没有它的输出」当成它坏了——这一趟本来就没给它出探测小节；"
     "② 接线照它自己的手册接（这一版没有自动检测）；"
-    "③ 现象照常填到下面的「现象回填与排障」里——它按平台与检测计划给"
-    "「下一步查什么」的方向（你填的地址 / 寄存器这一版还进不了它的上下文）"
+    "③ 现象照常填到下面的「现象回填与排障」里——AI 会带上你填的总线 / 地址 / "
+    "寄存器一起给排查方向"
 )
 
 
@@ -614,6 +632,19 @@ def _plan_for(device: CustomDevice) -> str:
     if device.expect is None:
         return PLAN_ECHO_ONLY
     return PLAN_JUDGE
+
+
+def _probe_form(device: CustomDevice, *, probes: bool) -> str:
+    """探测形态的**短标签**（排障上下文那一行；判据 = `_plan_for`，工单 09）。
+
+    短标签与长句（`PLAN_*`）是**同一判据的两个写法**，所以按 `PLAN_*` 查表派生，
+    不另写一遍三档条件——多一份条件链就是"改一处忘一处"的下一个现场。新增一档
+    却忘了配标签 = `KeyError` 大声失败（`test_every_probe_plan_has_a_short_label`
+    在结构面钉着），不静默印一个空标签给模型看。
+    """
+    if not probes:
+        return NO_PROBE_FORM_LABEL
+    return _PROBE_FORM_LABELS[_plan_for(device)]
 
 
 def _ping_trouble(device: CustomDevice) -> str:

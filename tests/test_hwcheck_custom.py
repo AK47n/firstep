@@ -991,6 +991,39 @@ def test_the_checklist_tells_the_truth_for_a_device_without_a_probe():
     assert "不是故障" in item["expect"] or "别把" in item["check"], item
 
 
+def test_the_no_probe_sentence_no_longer_says_the_facts_miss_the_context():
+    """05 留下的那句欠账（工单 09 结清）。
+
+    第③条原先写的是"你填的地址 / 寄存器这一版**还进不了它的上下文**"——
+    09 落地后自建件的事实真的进了排障上下文，页面上那句话必须跟着改：
+    页面是学生唯一能看到的口径，**不许比产品落后**（说了不会带上、实际会带上，
+    学生就会不敢填现象）。
+    """
+    item = custom_checklist(_plan([_spi_device()]))[0]
+    blob = item["expect"] + item["check"]
+    assert "进不了它的上下文" not in blob, blob
+    assert "地址" in blob and "寄存器" in blob, blob
+    # 学生可见的文案里**不许出现工单号**（"09 已落地"这种内部口径不该印给学生）
+    assert "工单" not in blob and "已落地" not in blob, blob
+
+
+def test_every_probe_plan_has_a_short_label():
+    """短标签表（`_PROBE_FORM_LABELS`）必须覆盖全部三档 `PLAN_*`（工单 09）。
+
+    短标签由 `PLAN_*` 查表派生（不另写一遍三档条件）——漏配一档就是排障上下文
+    里一个 `KeyError`，这条结构判据把它挡在测试里。
+    """
+    from contest_generator.hwcheck_custom import (
+        _PROBE_FORM_LABELS,
+        PLAN_ECHO_ONLY,
+        PLAN_JUDGE,
+        PLAN_PING_ONLY,
+    )
+
+    assert set(_PROBE_FORM_LABELS) == {PLAN_PING_ONLY, PLAN_ECHO_ONLY, PLAN_JUDGE}
+    assert all(label.strip() for label in _PROBE_FORM_LABELS.values())
+
+
 def test_the_checklist_is_empty_when_no_custom_device_is_selected():
     """一件自建件都没有 → 清单**一个字都不多**（票面第 6 条的前半）。"""
     assert custom_checklist(()) == ()

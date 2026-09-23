@@ -1,0 +1,33 @@
+[1] 前置检查（源文件指纹与锚点唯一性）
+    hwcheck_triage.py: 8d5421f51c9463c4…（锚点各一处 ✓）
+    hwcheck_custom.py: 07fc71cad6a3aef5…（锚点各一处 ✓）
+    webapp.py: 5220fbe6df3b2ffb…（锚点各一处 ✓）
+    llm.py: 4546585a9477de26…（锚点各一处 ✓）
+[2] 注入前（守卫在）：PASS（8 条全绿）  ｜ 1 passed, 43 deselected in 0.05s / 1 passed, 43 deselected in 0.06s / 1 passed, 43 deselected in 0.04s / 1 passed, 53 deselected, 1 warning in 1.54s / 1 passed, 53 deselected, 1 warning in 13.74s / 1 passed, 43 deselected in 0.04s / 1 passed, 65 deselected in 0.05s / 1 passed, 43 deselected in 0.04s
+[3] 注入 A: 上下文不再印「自建器件」段 → RED（守卫变红） ｜ 1 failed, 43 deselected in 0.11s
+[4] 复原复核：hwcheck_triage.py sha256 相等 ✓（8d5421f51c9463c4…）
+[3] 注入 B: 自建件 id 的专用判据拿掉（只靠 slug 词形） → RED（守卫变红） ｜ 1 failed, 43 deselected in 0.10s
+[4] 复原复核：hwcheck_triage.py sha256 相等 ✓（8d5421f51c9463c4…）
+[3] 注入 C: 件名里的词不再放行 → RED（守卫变红） ｜ 1 failed, 43 deselected in 0.10s
+[4] 复原复核：hwcheck_triage.py sha256 相等 ✓（8d5421f51c9463c4…）
+[3] 注入 D: 排障端点不再把自建件计划送进上下文 → RED（守卫变红） ｜ 1 failed, 53 deselected, 1 warning in 1.58s
+[4] 复原复核：webapp.py sha256 相等 ✓（5220fbe6df3b2ffb…）
+[3] 注入 E: 排障重投影不再吃工程内快照 → RED（守卫变红） ｜ 1 failed, 53 deselected, 1 warning in 1.40s
+[4] 复原复核：webapp.py sha256 相等 ✓（5220fbe6df3b2ffb…）
+[3] 注入 F: 地址行不再空段守卫（非 I2C 件印空地址行） → RED（守卫变红） ｜ 1 failed, 43 deselected in 0.10s
+[4] 复原复核：hwcheck_triage.py sha256 相等 ✓（8d5421f51c9463c4…）
+[3] 注入 G: 05 那句旧措辞改回去（还进不了它的上下文） → RED（守卫变红） ｜ 1 failed, 65 deselected in 0.10s
+[4] 复原复核：hwcheck_custom.py sha256 相等 ✓（07fc71cad6a3aef5…）
+[3] 注入 H: 提示词拿掉「自建件」那一段 → RED（守卫变红） ｜ 1 failed, 43 deselected in 0.10s
+[4] 复原复核：llm.py sha256 相等 ✓（4546585a9477de26…）
+[5] 复原后复跑：test_context_text_carries_the_custom_device_facts_section PASS（回绿） ｜ 1 passed, 43 deselected in 0.05s
+[5] 复原后复跑：test_a_custom_id_is_judged_regardless_of_case PASS（回绿） ｜ 1 passed, 43 deselected in 0.04s
+[5] 复原后复跑：test_a_custom_name_that_collides_with_a_library_slug_is_not_rejected PASS（回绿） ｜ 1 passed, 43 deselected in 0.04s
+[5] 复原后复跑：test_triage_context_carries_the_custom_device_facts PASS（回绿） ｜ 1 passed, 53 deselected, 1 warning in 1.31s
+[5] 复原后复跑：test_triage_context_prefers_the_project_snapshot PASS（回绿） ｜ 1 passed, 53 deselected, 1 warning in 1.29s
+[5] 复原后复跑：test_a_custom_device_without_an_address_prints_no_empty_address_line PASS（回绿） ｜ 1 passed, 43 deselected in 0.04s
+[5] 复原后复跑：test_the_no_probe_sentence_no_longer_says_the_facts_miss_the_context PASS（回绿） ｜ 1 passed, 65 deselected in 0.05s
+[5] 复原后复跑：test_the_triage_prompt_says_custom_conclusions_come_from_user_facts PASS（回绿） ｜ 1 passed, 43 deselected in 0.04s
+[6] 收尾指纹：4 个文件逐字节未变 ✓
+
+=== 结论：反证成立（8 条注入都让对应用例变红，且逐字节复原） ===
