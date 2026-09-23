@@ -1,25 +1,25 @@
 [1] 前置检查（源文件指纹与锚点唯一性）
     hwcheck_console.py: ebf288fb1dd33a62…（锚点各一处 ✓）
-    hwcheck_board.py: f1fe0619bc1631a1…（锚点各一处 ✓）
+    hwcheck_board.py: e3731117409ab158…（锚点各一处 ✓）
     hwcheck.py: eb71db767fc53f0e…（锚点各一处 ✓）
-[2] 注入前（守卫在）：PASS（6 条全绿）  ｜ 1 passed, 55 deselected in 0.07s / 1 passed, 55 deselected in 0.06s / 1 passed, 55 deselected in 0.06s / 1 passed, 55 deselected in 0.06s / 1 passed, 32 deselected, 1 warning in 1.21s / 1 passed, 55 deselected in 0.06s
-[3] 注入 A: 复测改调一份不存在的小节函数（不再复用上电那一遍） → RED（守卫变红） ｜ 1 failed, 55 deselected in 0.13s
+[2] 注入前（守卫在）：PASS（6 条全绿）  ｜ 1 passed, 55 deselected in 0.05s / 1 passed, 55 deselected in 0.05s / 1 passed, 55 deselected in 0.05s / 1 passed, 55 deselected in 0.05s / 1 passed, 53 deselected, 1 warning in 1.28s / 1 passed, 55 deselected in 0.06s
+[3] 注入 A: 复测改调一份不存在的小节函数（不再复用上电那一遍） → RED（守卫变红） ｜ 1 failed, 55 deselected in 0.12s
 [4] 复原复核：hwcheck_console.py sha256 相等 ✓（ebf288fb1dd33a62…）
-[3] 注入 B: 分配不再避开保留字与已占用的字符 → RED（守卫变红） ｜ 1 failed, 55 deselected in 0.12s
+[3] 注入 B: 分配不再避开保留字与已占用的字符 → RED（守卫变红） ｜ 1 failed, 55 deselected in 0.11s
 [4] 复原复核：hwcheck_console.py sha256 相等 ✓（ebf288fb1dd33a62…）
-[3] 注入 C: 分不出字符时静默少一条（吞掉大声失败） → RED（守卫变红） ｜ 1 failed, 55 deselected in 0.15s
+[3] 注入 C: 分不出字符时静默少一条（吞掉大声失败） → RED（守卫变红） ｜ 1 failed, 55 deselected in 0.12s
 [4] 复原复核：hwcheck_console.py sha256 相等 ✓（ebf288fb1dd33a62…）
 [3] 注入 D: 载荷不再告诉前端这是自建件 → RED（守卫变红） ｜ 1 failed, 55 deselected in 0.12s
 [4] 复原复核：hwcheck_console.py sha256 相等 ✓（ebf288fb1dd33a62…）
-[3] 注入 E: 板侧视图不再把自建件喂给命令表（页面一张表、产物另一张） → RED（守卫变红） ｜ 1 failed, 32 deselected, 1 warning in 0.83s
-[4] 复原复核：hwcheck_board.py sha256 相等 ✓（f1fe0619bc1631a1…）
-[3] 注入 F: 顺手改掉「这一趟没有配方命令」那两句（破票面第 5 条的逐字一致） → RED（守卫变红） ｜ 1 failed, 55 deselected in 0.13s
+[3] 注入 E: 板侧视图不再把自建件喂给命令表（页面一张表、产物另一张） → RED（守卫变红） ｜ 1 failed, 53 deselected, 1 warning in 0.84s
+[4] 复原复核：hwcheck_board.py sha256 相等 ✓（e3731117409ab158…）
+[3] 注入 F: 顺手改掉「这一趟没有配方命令」那两句（破票面第 5 条的逐字一致） → RED（守卫变红） ｜ 1 failed, 55 deselected in 0.12s
 [4] 复原复核：hwcheck.py sha256 相等 ✓（eb71db767fc53f0e…）
-[5] 复原后复跑：test_the_custom_retest_runs_the_same_section_as_the_power_on_pass PASS（回绿） ｜ 1 passed, 55 deselected in 0.07s
-[5] 复原后复跑：test_a_custom_character_never_takes_a_reserved_or_declared_one PASS（回绿） ｜ 1 passed, 55 deselected in 0.06s
-[5] 复原后复跑：test_running_out_of_command_characters_fails_loudly_at_build_time PASS（回绿） ｜ 1 passed, 55 deselected in 0.06s
-[5] 复原后复跑：test_console_payload_marks_custom_rows_without_touching_library_rows PASS（回绿） ｜ 1 passed, 55 deselected in 0.06s
-[5] 复原后复跑：test_the_page_console_table_carries_the_custom_retest_command PASS（回绿） ｜ 1 passed, 32 deselected, 1 warning in 12.84s
+[5] 复原后复跑：test_the_custom_retest_runs_the_same_section_as_the_power_on_pass PASS（回绿） ｜ 1 passed, 55 deselected in 0.06s
+[5] 复原后复跑：test_a_custom_character_never_takes_a_reserved_or_declared_one PASS（回绿） ｜ 1 passed, 55 deselected in 0.05s
+[5] 复原后复跑：test_running_out_of_command_characters_fails_loudly_at_build_time PASS（回绿） ｜ 1 passed, 55 deselected in 0.05s
+[5] 复原后复跑：test_console_payload_marks_custom_rows_without_touching_library_rows PASS（回绿） ｜ 1 passed, 55 deselected in 0.05s
+[5] 复原后复跑：test_the_page_console_table_carries_the_custom_retest_command PASS（回绿） ｜ 1 passed, 53 deselected, 1 warning in 1.26s
 [5] 复原后复跑：test_a_run_without_custom_devices_keeps_the_old_console_text PASS（回绿） ｜ 1 passed, 55 deselected in 0.06s
 [6] 收尾指纹：3 个文件逐字节未变 ✓
 

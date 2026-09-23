@@ -30,6 +30,8 @@ __pycache__/
 .scratch/hwcheck-unknown-device/matrix/
 # 编译探针的临时数据目录（探针每次自建自清；留着会与真身 ~/.contest_generator 混起来看花眼）
 .scratch/hwcheck-unknown-device/probe-0*-data/
+# 赛题主线重名探针的生成工程（probe-11-contest-dupname.py 自建；读数入库、工程树不入库）
+.scratch/hwcheck-unknown-device/tmp-matrix/
 
 # 本地服务运行日志（uvicorn stdout 重定向）
 webapp.log

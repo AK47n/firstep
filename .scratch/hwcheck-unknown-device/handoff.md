@@ -15,8 +15,8 @@
 | 12 id 连字符编不过 | **resolved** | `828c22d4` | 三门禁 5285+1 / 1755 / 37（首跑 2 红=launcher-reload 已知偶发，单跑复证）；量具改判 1（三端点全 400）；反证 3+1 条注入全红；矩阵 12 格 × 2 平台全 PASS（含 hyphen-id-refused 边界格） |
 | 07 资料→草稿 | **resolved** | `132e1058` | 三门禁 5322+1 / 1764 / 38；反证 4+1 条注入全红（`probe-07-guard-strength{,-front}.txt`）；浏览器用例零 LLM（夹具继承真环境，真点=真额度） |
 | 08 快照+回读 | **resolved** | `c29abda3` | 三门禁 5338+1 / 1768 / 38；反证 4+1 条注入全红；评审抓到 2 红（混选快照门失效 / 前端跨件来源污染）全修 |
-| 09 排障带事实 | **resolved** | 见 `git log` | 三门禁 5356+1 / 1768 / 38；反证 8 条注入全红逐字节复原（`probe-09-guard-strength.txt`）；08 的记账已结清（排障也吃快照）；两轴评审 5 项整改 + 2 处如实记账（名/地址不在 token 判据射程，边界有用例钉住） |
-| 10 收口 | ready-for-agent | — | 必须最后做；验收线"含连字符 id 那一格"按 12 的边界格口径读 |
+| 09 排障带事实 | **resolved** | `743f2b20` | 三门禁 5356+1 / 1768 / 38；反证 8 条注入全红逐字节复原（`probe-09-guard-strength.txt`）；08 的记账已结清（排障也吃快照）；两轴评审 5 项整改 + 2 处如实记账（名/地址不在 token 判据射程，边界有用例钉住） |
+| 10 收口 | **resolved** | 见 `git log`（收口提交） | 17 支强度探针在同一冻结版逐支重跑全 PASS + 2 量具读数一致 + 646 文件逐字节未变（`probe-10-guard-strength-all.txt`）；三门禁 5356+1 / 1768 / 38；矩阵引用 `probe-12-compile-matrix.txt`（12 格 × 2 平台 0e/0w，含三类形态与连字符边界格）；CONTEXT.md + ADR 0016 补齐；**未上板如实** |
 
 ## 剩余队列与建议顺序
 
@@ -123,11 +123,11 @@ CCS gmake `C:/ti/ccs2050/ccs/utils/bin/gmake.exe`（`find_make()`）。
 - CHANGELOG 与提交信息中文；**未上板就写未上板**；本机环境事实有变化就同步
   `docs/agents/local-environment.md`（含**第 0 节 main-only 发布落差表**：本特性整批还没进任何发布包）。
 
-## 全做完的验收线（自查清单）
+## 全做完的验收线（自查清单）——**2026-09-23 全部成立（详见 `issues/10-gate-and-ledger.md` 结论）**
 
-- [ ] 06–10、12 全部 `resolved`，每单结论里有实测读数
-- [ ] `git log` 里每单一次中文提交（+ 自动 CHANGELOG 提交）
-- [ ] `python -m pytest -n auto -q` 与两支前端门禁全绿（偶发那条除外，且能单跑复证）
-- [ ] 两平台真编译矩阵 0 error / 0 warning（含连字符 id 那一格）
-- [ ] `CONTEXT.md` / `docs/adr/` / `CHANGELOG.md` / `docs/agents/local-environment.md` 四份文档与新行为一致
-- [ ] 工作树干净（`.scratch/hwcheck-unknown-device/matrix/`、`probe-*-data/` 这类产物按惯例 gitignore）
+- [x] 06–10、12 全部 `resolved`，每单结论里有实测读数
+- [x] `git log` 里每单一次中文提交（+ 自动 CHANGELOG 提交）：`946e9cc4`（06）/ `828c22d4`（12）/ `132e1058`（07）/ `c29abda3`（08）/ `743f2b20`（09）/ 收口单（10，见 `git log`）
+- [x] `python -m pytest -n auto -q` 与两支前端门禁全绿（偶发那条除外，且能单跑复证）
+- [x] 两平台真编译矩阵 0 error / 0 warning（含连字符 id 那一格——两平台都在装载期拦下）
+- [x] `CONTEXT.md` / `docs/adr/` / `CHANGELOG.md` / `docs/agents/local-environment.md` 四份文档与新行为一致
+- [x] 工作树干净（`.scratch/hwcheck-unknown-device/matrix/`、`probe-*-data/`、`tmp-matrix/` 这类产物按惯例 gitignore）

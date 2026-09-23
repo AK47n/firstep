@@ -15,7 +15,7 @@
 | 顺手做掉的第四条 | `src/contest_generator.egg-info/**` 摘出产品文件（两个包都不再发 pip 构建产物） |
 | **真机验收** | `drill-01`：沙箱真 v1.1.1 → 走产品端点升到 1.2.2，**判红 0 / 卡住 0 / PASS**；`not_in_official` 1482 → **6**，那 6 条经决定性实验证明是**更新器那一步 pip 现写的**（官方包里 0 个 → 跑完 pip 6 个齐），「官方缺失 0 / 内容不同 0」两条全绿 |
 | 发版产物（本机留档） | `firstep-pack\firstep-{update,full}-v1.2.2.*` 全套 + `release-notes-v1.2.2.md`；**下一版的基线就是这两个清单** |
-| **main 上还没到用户手上的（四批）** | ① **硬件检测栏目本身**（`module-hwcheck/01-09`，2026-09-20 起）＋ **检测页引脚出口**（`hwcheck-pin-conflict-exit/01`：默认脚撞脚提前解开）——v1.2.2 的用户看不到「硬件检测」这一栏；② **完整包会话态进 `AppContext` ＋ `_full_task_lock`**（`full-update-state-into-ctx/01-04`，2026-09-22，账见 `.scratch/backlog.md` §18：纯内部换归属 + 修「并发 apply 建出两个任务」的竞态，**前端零字节**）；③ **陌生器件（库外件）探测**（`hwcheck-unknown-device`，2026-09-22 起：规格 + 12 张工单已落 `.scratch/hwcheck-unknown-device/`，**工单 01–06、11、12 已落地**（支点模块 `i2c_probe` / 「我的器件」/ 探测小节渲染 + stm32 真编译 / mspm0 分支 + 两平台编译矩阵 / 检测页计划投影 / 串口复测命令台接入自建件 / mspm0 引脚符号重名拦下），**工单 12 已开单**（自建件 id 带连字符产物编不过——发现于 06 会话，现场/量具/读数已落），07–10 未开工）。**四批都只在本机工作树 / main 上，任何发布包里都没有**——下次发版要一起带上 |
+| **main 上还没到用户手上的（四批）** | ① **硬件检测栏目本身**（`module-hwcheck/01-09`，2026-09-20 起）＋ **检测页引脚出口**（`hwcheck-pin-conflict-exit/01`：默认脚撞脚提前解开）——v1.2.2 的用户看不到「硬件检测」这一栏；② **完整包会话态进 `AppContext` ＋ `_full_task_lock`**（`full-update-state-into-ctx/01-04`，2026-09-22，账见 `.scratch/backlog.md` §18：纯内部换归属 + 修「并发 apply 建出两个任务」的竞态，**前端零字节**）；③ **陌生器件（库外件）探测**（`hwcheck-unknown-device`，2026-09-22 起：规格 + 12 张工单已落 `.scratch/hwcheck-unknown-device/`，**12 张全部 resolved**（支点模块 `i2c_probe` / 「我的器件」库外件定义与数据目录 / 探测小节渲染（stm32 真编译 + mspm0 分支 + 两平台编译矩阵）/ 检测页计划投影 / 串口复测命令台接入自建件 / mspm0 引脚符号重名拦下 / 自建件 id 文法收紧到 C 标识符 / 资料 → 事实草稿 / 工程内快照与回读 / 排障带自建件事实 / 闸门与真机验收收口））。**四批都只在本机工作树 / main 上，任何发布包里都没有**——下次发版要一起带上 |
 
 **发版尚未启动（2026-09-22 22:0x 实测）**：这一轮只走到「决定要发」就停了——**版本号仍 `1.2.2`、
 没打包、没打 tag、没建 Release**（用户要先继续改动再发，所以别把这份落差当成"发过了"）。
@@ -737,6 +737,33 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > `hwcheck-unknown-device/09`：排障上下文的自建器件事实段 + 两张白名单表 +
 > 两条提示词 + 计划载荷三键）；**至此 01–09、11、12 全部 resolved，只剩工单 10
 > （收口）**——本特性整批还没进任何发布包。
+>
+> **2026-09-23（hwcheck-unknown-device/10 会话：收口）**：本特性 12 张工单全部
+> resolved。与环境/工具有关的四条：
+> ① **同样一次服务器都没起**（收口只跑探针、套件与文档）；收尾实测
+> 8000/8020/8021/8791 都没在听、无残留 `contest_generator.webapp` 进程。
+> ② **收口驱动**：`.scratch/hwcheck-unknown-device/probe-10-guard-strength-all.py`
+> 把 17 支强度探针（12 支 Python + 5 支 Node）**在一份冻结 revision 上逐支重跑**并
+> 汇总成一张表（读数 `probe-10-guard-strength-all.txt`），顺带核 `src/` + `tests/`
+> 646 个文件整轮前后逐字节未变。**跑它时别跑套件**（探针会真改源文件）。
+> 本机读数：全 PASS、约 2 分钟。
+> ③ **编译矩阵按交接单口径引用、没重跑**（`probe-12-compile-matrix.txt`：12 格 ×
+> 2 平台 0 error / 0 warning）——09/10 两单都没碰 C 渲染。要复跑仍是一条命令：
+> `python .scratch\hwcheck-unknown-device\probe-03-compile-matrix.py --out <证据.txt>`
+> （约 4–6 分钟）。
+> ④ **`tmp-matrix/` 的 gitignore 缺口已补**：`probe-11-contest-dupname.py` 的
+> docstring 早写着"产物落 `tmp-matrix/contest-dupname/`（gitignore）"，但
+> `.gitignore` 里一直没有这条规则——跑一次它就在工作树里留下 4 套生成工程
+> （`?? tmp-matrix/`）。已补规则并删掉残留；**下次谁再写"（gitignore）"的注释，
+> 顺手确认规则真的在**。
+> 读数：`python -m pytest -n auto -q` **5356 passed + 1 skipped / 137.0s**、
+> 前端门禁 **1768 passed / 0 fail**、浏览器门禁 **38 条里首跑 36 passed / 2 failed**
+> ——那 2 条又是 `launcher-reload.spec.mjs`（A 在 `page.reload` 上 30s 超时 → B/C 速败），
+> **单跑该 spec 3/3 全绿**（`browser-10-launcher-isolated.txt`）；同一工作树收口文档
+> 改动前的整支跑是 **38 passed / 0 fail**（`browser-10-all-specs.txt` 是这一跑）。
+> ⚠ **这条偶发的形态值得记死**：整支连跑时它每几轮中一次，**单跑必绿**，而且红的那两条
+> 永远跟着 A 的超时走（B/C 是 7ms 级速败，不是真失败）——见到"B/C 瞬间红 + A 30s 超时"
+> 就按它办，别去查产品。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 

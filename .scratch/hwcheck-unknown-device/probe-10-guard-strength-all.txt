@@ -1,0 +1,28 @@
+[1] 前置指纹：src/ + tests/ 共 646 个文件
+
+[2] 强度探针（反证）——逐支重跑，退出码 0 = 反证成立
+    probe-01-c1-reverse.py               PASS（反证成立）  ｜    0.5s ｜ PASS：登记行是 I2C_0 存活的唯一判据（拿掉即裁、放回即活） ｜ 读数已落盘：C:\Users\luoji\Desktop\firstep\.scratch\hwcheck-unknown-device\probe-01-c1-reverse.txt
+    probe-02-guard-strength.py           PASS（反证成立）  ｜   15.8s ｜ [5] 复原后复跑：PASS（回绿） ｜ 4 passed, 1 warning in 12.12s ｜ 结论：反证成立（守卫是撞名用例变红的唯一判据）
+    probe-03-guard-strength.py           PASS（反证成立）  ｜    2.3s ｜ [5] 复原后复跑：PASS（回绿） ｜ 4 passed in 0.07s ｜ 结论：反证成立（多调一个不存在的函数 = 守卫当场变红）
+    probe-03b-sanitize-strength.py       PASS（反证成立）  ｜    2.2s ｜ [5] 复原后复跑：PASS（回绿） ｜ 1 passed in 0.05s ｜ 结论：反证成立（消毒是那条用例变红的唯一判据）
+    probe-04-guard-strength.py           PASS（反证成立）  ｜    6.2s ｜ [6] 收尾指纹：三个文件逐字节未变 ✓ ｜ === 结论：反证成立（3 条注入都让对应用例变红，且逐字节复原） ===
+    probe-05-guard-strength.py           PASS（反证成立）  ｜   14.2s ｜ [6] 收尾指纹：4 个文件逐字节未变 ✓ ｜ === 结论：反证成立（5 条注入都让对应用例变红，且逐字节复原） ===
+    probe-05-guard-strength.mjs          PASS（反证成立）  ｜    0.5s ｜ 复原复核：被注入文件与注入前**逐字节相同** ｜ **强度自检：PASS**（两条注入都让前端门禁变红）
+    probe-06-guard-strength.py           PASS（反证成立）  ｜   15.6s ｜ [6] 收尾指纹：3 个文件逐字节未变 ✓ ｜ === 结论：反证成立（6 条注入都让对应用例变红，且逐字节复原） ===
+    probe-06-guard-strength.mjs          PASS（反证成立）  ｜    0.5s ｜ 复原复核：被注入文件与注入前**逐字节相同** ｜ **强度自检：PASS**（两条注入都让前端门禁变红）
+    probe-07-guard-strength.py           PASS（反证成立）  ｜    7.9s ｜ [6] 收尾指纹：1 个文件逐字节未变 ✓ ｜ === 结论：反证成立（4 条注入都让对应用例变红，且逐字节复原） ===
+    probe-07-guard-strength.mjs          PASS（反证成立）  ｜    0.3s ｜ 复原复核：被注入文件与注入前**逐字节相同** ｜ **强度自检：PASS**（注入都让前端门禁变红）
+    probe-08-guard-strength.py           PASS（反证成立）  ｜   16.3s ｜ [6] 收尾指纹：4 个文件逐字节未变 ✓ ｜ === 结论：反证成立（4 条注入都让对应用例变红，且逐字节复原） ===
+    probe-08-guard-strength.mjs          PASS（反证成立）  ｜    0.4s ｜ 复原复核：被注入文件与注入前**逐字节相同** ｜ **强度自检：PASS**（注入都让前端门禁变红）
+    probe-09-guard-strength.py           PASS（反证成立）  ｜   24.2s ｜ [6] 收尾指纹：4 个文件逐字节未变 ✓ ｜ === 结论：反证成立（8 条注入都让对应用例变红，且逐字节复原） ===
+    probe-11-guard-strength.py           PASS（反证成立）  ｜    9.1s ｜ [6] 收尾指纹：源文件逐字节未变 ✓ ｜ === 结论：反证成立（4 条注入都让对应用例变红，且逐字节复原） ===
+    probe-12-guard-strength.py           PASS（反证成立）  ｜    7.7s ｜ [6] 收尾指纹：1 个文件逐字节未变 ✓ ｜ === 结论：反证成立（3 条注入都让对应用例变红，且逐字节复原） ===
+    probe-12-guard-strength.mjs          PASS（反证成立）  ｜    0.3s ｜ 复原复核：被注入文件与注入前**逐字节相同** ｜ **强度自检：PASS**（注入都让前端门禁变红）
+
+[3] 量具（不是反证，退出码按各自约定）
+    probe-12-hyphen-id.py                PASS（读数与预期一致）  ｜    0.9s ｜ [4] 'hwcheck_custom_mine_gyro-2' 是合法 C 标识符吗：False ｜ === 结论：缺陷不成立（今天已经拦住 / 拼出来是合法标识符）——请复核判据 ===
+    probe-11-contest-dupname.py          PASS（读数与预期一致）  ｜   10.5s ｜ 这一条**改绑引脚解不开**（撞的是符号名，不是脚）：去掉其中一件模块后重新生成。母版给这些实例起的引脚符号本来就同名（如库内 17 件 I2C 器件共用 SCL/SDA），要两件同用只能改母版——已记在工单 11。 ｜ === 结论：撞名组合全被拦下 + 不撞名组合编译绿（两条腿都成立） ===
+
+[4] 收尾指纹：646 个文件逐字节未变 ✓
+
+=== 结论：收口成立（17 支强度探针全 PASS + 2 支量具读数一致 + 工作树逐字节未变） ===
