@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=19e24d9454e527703bf8ed69022383f9b6cbb9a1 -->
+<!-- changelog-auto: last-commit=07e2bb0a5e61a9b1a44146a8aa9d5903dfd0fd84 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -12,6 +12,7 @@
 - 13:59 工单 hwcheck-unknown-device/04：mspm0 探测分支 + 两平台编译矩阵（11 格 × 2 平台 0 error / 0 warning）
 - 18:46 工单 hwcheck-unknown-device/05：检测页的自建件计划投影（接线行 / 顺序 / 标注 / 上板清单三类）
 - 21:17 工单 hwcheck-unknown-device/11：实测把这条缺陷升成 P0（赛题主线一样撞）
+- 21:17 工单 hwcheck-unknown-device/11：探针路径改成入库后的名字
 
 ## 2026-09-22
 - 12:28 工单 launcher-exit-race/03：退出调度显式化（布防 / 撤防 / 到点取走并退出）
