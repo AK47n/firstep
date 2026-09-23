@@ -364,3 +364,99 @@ export function myDeviceSavedDevice(payload) {
   const data = payload || {};
   return (data.device && typeof data.device === "object") ? data.device : null;
 }
+
+// ---------------------------------------------------------------------------
+// 资料 → 事实草稿（工单 hwcheck-unknown-device/07）：纯件只渲染载荷，判据在服务端
+// （草稿形状与"出处必须真的在原文里"都在 my_device_draft；这里不重复判）。
+// ---------------------------------------------------------------------------
+
+// 知情文案（票面硬要求：页面**明说**资料会被送到 AI 通道）。单源在这里——
+// 渲染与测试都读它，别在别处抄第二句。
+export const MY_DEVICE_MATERIAL_NOTICE =
+  "有手册 / 卖家页？把关键几行贴进来（或选一个文件），AI 抽成草稿你逐字段确认。"
+  + "资料会被送到 AI 通道抽取——AI 只填草稿：不写代码、不生成判据；不想传就手填，一样能测。";
+
+// 草稿字段顺序与中文标签（与服务端 DRAFT_FIELDS 同序；id 不在抽取范围）
+const DRAFT_FIELD_LABELS = [
+  ["name", "名称"],
+  ["bus", "总线"],
+  ["address", "地址（7 位）"],
+  ["register", "身份寄存器"],
+  ["expect", "期望值"],
+  ["notes", "备注"],
+];
+
+// myDeviceMaterialHTML(m)：资料入口（m = {text, busy, message}）。
+// busy 时按钮置灰并换字；message 是给用户的提示（本地提示或服务端降级原因）。
+export function myDeviceMaterialHTML(m) {
+  const state = m || {};
+  const busy = !!state.busy;
+  const text = String(state.text || "");
+  const message = String(state.message || "");
+  return '<div class="my-device-material">'
+    + '<div class="my-device-material-notice">' + esc(MY_DEVICE_MATERIAL_NOTICE) + "</div>"
+    + '<textarea class="my-device-material-text" data-my-device-material rows="3"'
+    + ' placeholder="把卖家页 / 手册里写地址和寄存器的那几行贴到这里（可选）">'
+    + esc(text) + "</textarea>"
+    + '<div class="my-device-material-actions">'
+    + '<input type="file" data-my-device-file accept=".pdf,.txt,.md,.docx,.png,.jpg,.jpeg,.webp,.bmp" />'
+    + '<button type="button" class="primary" data-my-device-draft'
+    + (busy ? " disabled" : "") + ">" + (busy ? "抽取中…" : "AI 抽成草稿") + "</button>"
+    + "</div>"
+    + (message ? '<div class="my-device-material-message">' + esc(message) + "</div>" : "")
+    + "</div>";
+}
+
+// myDeviceDraftPanelHTML(draft, applied)：抽取结果面板。
+// draft = 服务端载荷 {fields, missing, missing_text}；有值的字段带**出处片段**
+// （用户能对回原文——这是"AI 没编"的可见证据），没找到的照 missing_text 说实话。
+// applied = 已填进表单（按钮换成核对提示，不许重复填）。
+export function myDeviceDraftPanelHTML(draft, applied) {
+  const data = draft && typeof draft === "object" ? draft : null;
+  const fields = (data && data.fields) || {};
+  // "手册里没找到"那句话单源在服务端（my_device_draft.MISSING_TEXT）——
+  // 载荷没带就不渲染兜底句（不在这里抄第二句）；照纪律一并过 esc。
+  const missingText = esc(String((data && data.missing_text) || ""));
+  const rows = DRAFT_FIELD_LABELS.map(([key, label]) => {
+    const entry = fields[key] || {};
+    const found = !!entry.found;
+    const value = found ? esc(String(entry.value || "")) : missingText;
+    const source = found && entry.source
+      ? '<span class="my-device-draft-source">出处：' + esc(String(entry.source)) + "</span>"
+      : "";
+    return '<div class="my-device-draft-row' + (found ? "" : " missing") + '">'
+      + '<span class="my-device-draft-label">' + esc(label) + "</span>"
+      + '<span class="my-device-draft-value">' + value + "</span>"
+      + source
+      + "</div>";
+  }).join("");
+  const footer = applied
+    ? '<div class="my-device-draft-note">已按草稿填进上面的表单——请逐字段核对后再保存，AI 抄错了改过来就行。</div>'
+    : '<button type="button" class="primary" data-my-device-draft-apply>把草稿填进表单（可再改）</button>';
+  return '<div class="my-device-draft">'
+    + '<div class="my-device-draft-title">AI 抽出的草稿（未确认前不保存）</div>'
+    + rows
+    + footer
+    + '<button type="button" class="link" data-my-device-draft-dismiss>不用这份草稿</button>'
+    + "</div>";
+}
+
+// myDeviceDraftToForm(draft, base)：草稿载荷 → 表单值。
+// 只覆盖**找到了的**字段——用户先填了半截再抽草稿时，没找到的字段不会把他
+// 已填的字清掉；id 是用户的决定（已填就不覆盖），没填才从名称派生一个建议。
+export function myDeviceDraftToForm(draft, base) {
+  const fields = (draft && draft.fields) || {};
+  const form = { ...(base || myDeviceFormBlank()) };
+  const take = (key) => {
+    const entry = fields[key];
+    return entry && entry.found ? String(entry.value || "") : String(form[key] == null ? "" : form[key]);
+  };
+  form.name = take("name");
+  form.bus = take("bus") || "i2c";
+  form.address = take("address");
+  form.register = take("register");
+  form.expect = take("expect");
+  form.notes = take("notes");
+  if (!String(form.id || "")) form.id = myDeviceSlugFromName(form.name);
+  return form;
+}

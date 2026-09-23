@@ -876,3 +876,23 @@ test("自建件的串口复测：页面给出字符与说明，产物里那条 c
   await myDeviceCleanup([ID]);
 });
 
+
+test("资料 → 事实草稿：入口与知情文案在页面上；空文本点击给本地提示（零 LLM）", async () => {
+  // 本支 spec 的既有纪律是「检测生成零 LLM，不花额度」——这条用例守住同一条线：
+  // 只验**入口渲染**与**本地提示**，不点出任何一次真抽取（浏览器夹具继承真机
+  // 配置，真点一次就是真调 LLM）。抽取 / 填表 / 降级三路都有端点与 fx 用例钉着。
+  await page.click(HWCHECK_TAB);
+  await page.waitForSelector("#my-devices-material .my-device-material-notice");
+
+  // ① 知情文案（票面硬要求：页面**明说**资料会被送到 AI 通道 + AI 不写代码）
+  const notice = await page.textContent(".my-device-material-notice");
+  const flat = notice.replace(/\s+/g, "");
+  assert.ok(flat.includes("资料会被送到AI通道"), notice);
+  assert.ok(flat.includes("不写代码"), notice);
+
+  // ② 空文本点击 → 本地提示（先贴一段资料），不发任何请求
+  await page.click("[data-my-device-draft]");
+  await page.waitForSelector(".my-device-material-message");
+  const message = await page.textContent(".my-device-material-message");
+  assert.ok(message.includes("先贴一段资料"), message);
+});

@@ -767,3 +767,132 @@ def test_the_stored_json_holds_seven_bit_address_only(devices_client):
     assert data["address"] == 0x68
     assert "address_forms" not in data
     assert "read8" not in json.dumps(data)
+
+
+# ---------------------------------------------------------------------------
+# 资料 → 事实草稿（工单 hwcheck-unknown-device/07）：一次 LLM 抽取，草稿不落盘
+# ---------------------------------------------------------------------------
+
+DRAFT_MATERIAL = (
+    "BMP280 气压传感器模块。供电 3.3V。I2C 地址：0x76（SDO 接地时）或 0x77。"
+    "芯片 ID 寄存器 0xD0，读回值应为 0x58。"
+)
+
+
+def _good_device_draft():
+    from contest_generator.my_device_draft import parse_device_draft
+
+    raw = {
+        "name": {"value": "BMP280", "source": "BMP280 气压传感器模块"},
+        "bus": {"value": "i2c", "source": "I2C 地址：0x76"},
+        "address": {"value": "0x76", "source": "I2C 地址：0x76"},
+        "register": {"value": "0xD0", "source": "芯片 ID 寄存器 0xD0"},
+        "expect": {"value": "0x58", "source": "读回值应为 0x58"},
+        "notes": {"value": "SDO 接地时 0x76", "source": "SDO 接地时"},
+    }
+    return parse_device_draft(raw, DRAFT_MATERIAL)
+
+
+def _draft_client(tmp_path, fake):
+    """带可控 FakeLLM 的 TestClient（草稿端点的成功 / 降级两路共用）。"""
+    from fastapi.testclient import TestClient
+
+    from contest_generator.config import AppConfig
+    from contest_generator.webapp import AppContext, create_app
+
+    repo = Path(__file__).resolve().parents[1]
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    ctx = AppContext(
+        config_path=data_dir / "config.json",
+        config=AppConfig(
+            api_key="sk-test",
+            module_library_dir=repo / "library" / "modules",
+            masters_dir=tmp_path / "masters",
+        ),
+        llm_factory=lambda config: fake,
+    )
+    return TestClient(create_app(ctx)), data_dir
+
+
+def test_draft_endpoint_extracts_a_draft_and_never_touches_disk(tmp_path):
+    """成功路：200 + 草稿载荷；**数据目录一个字节不多**（未确认前不落盘——
+    草稿只变成表单预填，确认后走既有的保存路径）。"""
+    from tests.fakes import FakeLLM
+
+    fake = FakeLLM(device_draft=_good_device_draft())
+    client, data_dir = _draft_client(tmp_path, fake)
+    response = client.post("/api/my-devices/draft", json={"text": DRAFT_MATERIAL})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["degraded"] is False
+    assert body["message"] == ""
+    assert body["draft"]["fields"]["address"] == {
+        "value": "0x76", "source": "I2C 地址：0x76", "found": True,
+    }
+    assert body["draft"]["missing"] == []
+    assert fake.draft_calls == [DRAFT_MATERIAL], "模型吃的必须是原文"
+    assert not (data_dir / "hwcheck_devices").exists(), "草稿不许落盘"
+
+
+def test_draft_endpoint_degrades_to_manual_fill_when_the_model_fails(tmp_path):
+    """AI 不可用 = 200 + draft:null + degraded:true（页面走纯手填，不报错不阻断）。"""
+    from contest_generator.llm import LLMError
+    from tests.fakes import FakeLLM
+
+    fake = FakeLLM(device_draft_error=LLMError("未配置 API Key"))
+    client, _ = _draft_client(tmp_path, fake)
+    response = client.post("/api/my-devices/draft", json={"text": DRAFT_MATERIAL})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["draft"] is None
+    assert body["degraded"] is True
+    assert "API Key" in body["message"]
+
+
+def test_draft_endpoint_requires_material_text(tmp_path):
+    from tests.fakes import FakeLLM
+
+    client, _ = _draft_client(tmp_path, FakeLLM())
+    for payload in ({}, {"text": ""}, {"text": "   "}):
+        response = client.post("/api/my-devices/draft", json=payload)
+        assert response.status_code == 400, f"{payload} → {response.text}"
+
+
+def test_draft_endpoint_with_irrelevant_text_yields_all_missing(tmp_path):
+    """票面点名的用例：喂一段**无关文本**，草稿必须是空字段 + "手册里没找到"。
+
+    FakeLLM 缺省返回全字段未抽取的空草稿（= 模型如实说"资料里没有"的形态）；
+    这条钉的是"没有值就绝不编一个默认值"。
+    """
+    from tests.fakes import FakeLLM
+
+    client, _ = _draft_client(tmp_path, FakeLLM())
+    response = client.post(
+        "/api/my-devices/draft",
+        json={"text": "今天天气不错，适合出门散步。"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["degraded"] is False
+    assert body["draft"]["missing"] == [
+        "name", "bus", "address", "register", "expect", "notes",
+    ]
+    assert body["draft"]["missing_text"] == "手册里没找到"
+    for entry in body["draft"]["fields"].values():
+        assert entry == {"value": "", "source": "", "found": False}
+
+
+def test_draft_endpoint_unconfigured_is_a_hinted_400(tmp_path):
+    """完全没配置（连 config 都没有）= 400 中文指路（去设置页填 API）——
+    前端通用 catch 把它放进消息区，表单完好、不阻断（与降级路同一 UX）。
+    """
+    from fastapi.testclient import TestClient
+
+    from contest_generator.webapp import AppContext, create_app
+
+    ctx = AppContext(config_path=tmp_path / "cfg" / "config.json", config=None)
+    client = TestClient(create_app(ctx))
+    response = client.post("/api/my-devices/draft", json={"text": "BMP280 地址 0x76"})
+    assert response.status_code == 400, response.text
+    assert "未配置 AI API" in response.json()["detail"]

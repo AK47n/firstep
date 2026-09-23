@@ -10,7 +10,7 @@
 //   → 烧录复用既有共享执行体 ui/flash.js flashRunShared（400 出中文指引卡）
 //   → 上板清单勾选态存 localStorage（按检测工程目录分），刷新回显走
 //     GET /api/hwcheck/project 的服务端真源。
-import { $, apiGet, apiPost, apiDelete, state, toast, toastError } from "/js/app.js";
+import { $, apiGet, apiPost, apiDelete, handle, state, toast, toastError } from "/js/app.js";
 import { chosenPlatform } from "/js/ui/generate-recommend.js";
 import { bindModuleInfoEntry, openModuleInfo } from "/js/ui/generate-recommend.js";
 import { flashRunShared } from "/js/ui/flash.js";
@@ -53,6 +53,7 @@ import {
   myDeviceFormCheck, myDevicePayload, myDeviceSlugFromName,
   myDeviceListHTML, myDeviceFormHTML, myDeviceKnownSlugs, myDeviceList,
   myDeviceSavedDevice, myDeviceEditTarget,
+  myDeviceMaterialHTML, myDeviceDraftPanelHTML, myDeviceDraftToForm,
 } from "/js/fx/my-devices.js";
 
 // 本栏目自己的状态（与生成流程零共享）：选中平台 + 两个输出通道开关 +
@@ -94,6 +95,11 @@ const hwcheckUI = {
   myFormError: "",      // 表单校验理由（服务端 400 的中文原样带出）
   myError: "",          // 列表读不出来的理由（坏条目等）
   myBusy: false,
+  myMaterial: "",       // 资料文本框里的字（工单 07：贴的文字 / 文件抽出的文本）
+  myMaterialBusy: false, // 抽取进行中（按钮置灰）
+  myMaterialMessage: "", // 资料入口的提示（本地提示或降级原因）
+  myDraft: null,        // 最近一次草稿载荷（未确认前不落盘——它只是表单预填）
+  myDraftApplied: false, // 草稿已填进表单（面板按钮换成核对提示）
 };
 
 function hwcheckPlatforms() {
@@ -263,6 +269,21 @@ function renderMyDevices() {
     formBox.innerHTML = hwcheckUI.myForm
       ? myDeviceFormHTML(hwcheckUI.myForm, hwcheckUI.myFormError) : "";
   }
+  // 资料入口与草稿面板（工单 07）：只在显式动作后整块重绘——文本框打字只同步
+  // state（见下面的 input 委托），不打断输入。
+  const materialBox = $("my-devices-material");
+  if (materialBox) {
+    materialBox.innerHTML = myDeviceMaterialHTML({
+      text: hwcheckUI.myMaterial,
+      busy: hwcheckUI.myMaterialBusy,
+      message: hwcheckUI.myMaterialMessage,
+    });
+  }
+  const draftBox = $("my-devices-draft");
+  if (draftBox) {
+    draftBox.innerHTML = hwcheckUI.myDraft
+      ? myDeviceDraftPanelHTML(hwcheckUI.myDraft, hwcheckUI.myDraftApplied) : "";
+  }
   const open = $("btn-my-device-new");
   if (open) open.disabled = !!hwcheckUI.myBusy;
 }
@@ -320,6 +341,89 @@ function openMyDeviceForm(device) {
   // 正在编辑的那一件（新建 = 空串）：校验"撞已有件"时要把自己排除在外
   hwcheckUI.myEditId = device ? String(device.id || "") : "";
   hwcheckUI.myFormError = myDeviceFormError(hwcheckUI.myForm);
+  if (device) hwcheckUI.myDraftApplied = false;  // 表单换成编辑态了，"已填进表单"那句不再成立
+  renderMyDevices();
+}
+
+// —— 资料 → 事实草稿（工单 hwcheck-unknown-device/07）——
+// 抽取 / 填表都在服务端判过形状了；这里只管发请求、把载荷交给 fx、把降级原因
+// 说成人话。**草稿永远不会自己保存**：它只变成表单预填，保存走既有的
+// saveMyDevice（服务端照旧全量校验）。
+
+// applyDraftResponse(payload)：抽取响应 → 状态（成功 = 草稿 + 填进表单；
+// 降级 = 不报错，说清"直接手填"——票面硬要求：AI 不可用流程不阻断）。
+function applyDraftResponse(payload) {
+  if (payload && payload.degraded) {
+    hwcheckUI.myDraft = null;
+    hwcheckUI.myDraftApplied = false;
+    hwcheckUI.myMaterialMessage =
+      "AI 没接上（" + String(payload.message || "原因不明") + "）——直接手填，一样能测";
+    return;
+  }
+  hwcheckUI.myDraft = payload ? payload.draft : null;
+  hwcheckUI.myDraftApplied = false;
+  if (hwcheckUI.myDraft) applyMyDraft();
+}
+
+// applyMyDraft()：把草稿填进表单（可再改）。**只用于新建**：正在编辑已有器件时
+// 草稿不许覆盖（编辑态保存按 id 幂等覆盖，填错一件会冲掉那件的原事实）。
+function applyMyDraft() {
+  if (!hwcheckUI.myDraft) return;
+  if (hwcheckUI.myEditId) {
+    hwcheckUI.myMaterialMessage =
+      "正在编辑已有的器件——草稿只用于新建；先「取消」再抽一次";
+    return;
+  }
+  hwcheckUI.myForm = myDeviceDraftToForm(hwcheckUI.myDraft, hwcheckUI.myForm);
+  hwcheckUI.myFormError = myDeviceFormError(hwcheckUI.myForm);
+  hwcheckUI.myDraftApplied = true;
+}
+
+async function draftMyDevice() {
+  if (hwcheckUI.myMaterialBusy) return;
+  const text = String(hwcheckUI.myMaterial || "").trim();
+  if (!text) {
+    hwcheckUI.myMaterialMessage = "先贴一段资料文字（或选一个文件）——没有资料就直接手填";
+    renderMyDevices();
+    return;
+  }
+  hwcheckUI.myMaterialBusy = true;
+  hwcheckUI.myMaterialMessage = "";
+  renderMyDevices();
+  try {
+    applyDraftResponse(await apiPost("/api/my-devices/draft", { text }));
+  } catch (e) {
+    hwcheckUI.myMaterialMessage = e && e.message ? e.message : String(e);
+  } finally {
+    hwcheckUI.myMaterialBusy = false;
+  }
+  renderMyDevices();
+}
+
+// draftFromMyDeviceFile(file)：文件先走**既有抽取通道**（/api/extract，赛题页
+// 同一条路——不新开第二条抽取路），拿回文本再进草稿端点。抽出的文字回填到
+// 文本框：用户看得到送出去的是什么（知情权）。
+async function draftFromMyDeviceFile(file) {
+  if (!file || hwcheckUI.myMaterialBusy) return;
+  hwcheckUI.myMaterialBusy = true;
+  hwcheckUI.myMaterialMessage = "";
+  renderMyDevices();
+  try {
+    const form = new FormData();
+    form.append("upload", file);
+    const data = await handle(await fetch("/api/extract", { method: "POST", body: form }));
+    const text = String((data && data.text) || "");
+    if (!text.trim()) {
+      hwcheckUI.myMaterialMessage = "这份文件抽不出文字——换个文件，或直接手填";
+      return;
+    }
+    hwcheckUI.myMaterial = text;
+    applyDraftResponse(await apiPost("/api/my-devices/draft", { text }));
+  } catch (e) {
+    hwcheckUI.myMaterialMessage = e && e.message ? e.message : String(e);
+  } finally {
+    hwcheckUI.myMaterialBusy = false;
+  }
   renderMyDevices();
 }
 
@@ -942,6 +1046,21 @@ export function initHwcheck() {
         saveMyDevice();
         return;
       }
+      if (e.target.closest("[data-my-device-draft]")) {
+        draftMyDevice();
+        return;
+      }
+      if (e.target.closest("[data-my-device-draft-apply]")) {
+        applyMyDraft();
+        renderMyDevices();
+        return;
+      }
+      if (e.target.closest("[data-my-device-draft-dismiss]")) {
+        hwcheckUI.myDraft = null;
+        hwcheckUI.myDraftApplied = false;
+        renderMyDevices();
+        return;
+      }
       if (e.target.closest("[data-my-device-cancel]")) {
         closeMyDeviceForm();
         renderMyDevices();
@@ -949,10 +1068,22 @@ export function initHwcheck() {
     });
     // 表单输入：`input` 覆盖打字（地址预览与校验理由实时跟上），`change` 单独
     // 接一次是为了 `<select>`（总线下拉在部分浏览器上不触发 input）。
+    // 资料文本框（工单 07）只同步 state —— **不许重绘**（正在打字，同表单纪律）。
     myBox.addEventListener("input", (e) => {
+      if (e.target.matches("[data-my-device-material]")) {
+        hwcheckUI.myMaterial = e.target.value;
+        return;
+      }
       if (e.target.closest("[data-my-device-field]")) syncMyDeviceForm();
     });
     myBox.addEventListener("change", (e) => {
+      const fileInput = e.target.closest("[data-my-device-file]");
+      if (fileInput) {
+        const file = fileInput.files && fileInput.files[0];
+        if (file) draftFromMyDeviceFile(file);
+        fileInput.value = "";   // 清掉选择：允许重复选同一个文件再抽一次
+        return;
+      }
       if (e.target.closest("[data-my-device-field]")) syncMyDeviceForm();
     });
     // 名称 → id 建议：只在 id 还是空 / 还是上一次自动填的那值时补一下，

@@ -21,6 +21,7 @@ from contest_generator.impact import ImpactAnalysis
 from contest_generator.library import ValidationResult
 from contest_generator.llm import BuyDiscussion, IdeaAnalysis, StepReport, TaskDiscussion
 from contest_generator.manifest import ManifestSummary
+from contest_generator.my_device_draft import DeviceDraft, empty_draft
 from contest_generator.params import ParamItem, ParamList
 from contest_generator.report import FileDecision, JudgmentFile, ReferenceCandidate
 from contest_generator.selection import ModuleSelection, ReferenceSuggestion
@@ -614,6 +615,8 @@ class FakeLLM:
         param_list: ParamList | None = None,
         triage_advice: TriageAdvice | None = None,
         triage_error: Exception | None = None,
+        device_draft: DeviceDraft | None = None,
+        device_draft_error: Exception | None = None,
     ) -> None:
         self._selection = selection or ModuleSelection(modules=(), reasons={})
         # select_modules 输入记录（工单 module-preselect/03：预筛注记 / 摘要清单
@@ -683,6 +686,9 @@ class FakeLLM:
         )
         self._triage_error = triage_error
         self.triage_calls: list[TriageContext] = []
+        self._device_draft = device_draft
+        self._device_draft_error = device_draft_error
+        self.draft_calls: list[str] = []
         self.discuss_calls: list[tuple[str, str, str, tuple, tuple]] = []
         self.task_discuss_calls: list[
             tuple[dict[str, Any], str, str, tuple, tuple[str, ...], str, tuple]
@@ -1120,6 +1126,17 @@ class FakeLLM:
             raise self._triage_error
         return self._triage_advice
 
+    def draft_device_facts(self, material_text: str) -> DeviceDraft:
+        """器件资料抽取（工单 hwcheck-unknown-device/07）：记录资料文本，返回草稿。
+
+        `device_draft` 未给 = 全字段未抽取的空草稿（= 纯手填的起点）；
+        `device_draft_error` 非空时抛出它（端点降级路径的夹具）。
+        """
+        self.draft_calls.append(material_text)
+        if self._device_draft_error is not None:
+            raise self._device_draft_error
+        return self._device_draft or empty_draft()
+
 
 class RecordingLLM:
     """记录型假 LLM（工单 local-llm-routing/02）：记录每个被调用的方法名，
@@ -1404,6 +1421,10 @@ class RecordingLLM:
             causes=("占位原因",),
             steps=("占位下一步",),
         )
+
+    def draft_device_facts(self, material_text: str) -> DeviceDraft:
+        self._record("draft_device_facts")
+        return empty_draft()
 
     def generate_report_draft(
         self,

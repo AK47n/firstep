@@ -1025,6 +1025,25 @@
     font-size: 12.5px; color: var(--muted); }
   .hwcheck-my-device-field input, .hwcheck-my-device-field select { width: 100%; }
   .hwcheck-my-device-field.wide { flex: 1 1 100%; }
+  /* 资料 → 事实草稿（工单 hwcheck-unknown-device/07）：AI 只填草稿，判据在服务端。
+     出处片段 = "AI 没编"的可见证据（逐字引用，用户能对回原文）。 */
+  .my-device-material { margin-top: var(--space-2); font-size: 12.5px; }
+  .my-device-material-notice { color: var(--muted); margin-bottom: var(--space-1); }
+  .my-device-material-text { width: 100%; box-sizing: border-box; }
+  .my-device-material-actions { display: flex; align-items: center; gap: var(--space-2);
+    margin-top: var(--space-1); }
+  .my-device-material-message { color: var(--muted); margin-top: var(--space-1); }
+  .my-device-draft { border: 1px dashed var(--border-strong); border-radius: var(--radius-md);
+    padding: var(--space-2); margin-top: var(--space-2); font-size: 12.5px; }
+  .my-device-draft-title { font-weight: 600; margin-bottom: var(--space-1); }
+  .my-device-draft-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px;
+    padding: 2px 0; }
+  .my-device-draft-label { color: var(--muted); min-width: 88px; }
+  .my-device-draft-row.missing .my-device-draft-value { color: var(--muted); font-style: italic; }
+  .my-device-draft-source { color: var(--muted); overflow-wrap: anywhere; }
+  .my-device-draft-source::before { content: "「"; }
+  .my-device-draft-source::after { content: "」"; }
+  .my-device-draft-note { color: var(--ok); margin-top: var(--space-1); }
   /* 器件挑选 + 接线表 + 默认脚冲突 + 建议顺序（工单 module-hwcheck/03）：
      接线表与工程 README 的引脚接线表同一份推导；冲突行 ⚠ 红 / 可共享行 ✓ 绿。 */
   .hwcheck-device-search { min-width: 320px; flex: 1 1 320px; }
@@ -3976,6 +3995,10 @@
         </div>
         <div id="my-devices-list"></div>
         <div id="my-devices-form"></div>
+        <!-- 资料 → 事实草稿（工单 hwcheck-unknown-device/07）：可选的 AI 助手。
+             草稿只填进上面的表单、未确认前不落盘；AI 不写代码、不生成判据。 -->
+        <div id="my-devices-material"></div>
+        <div id="my-devices-draft"></div>
       </div>
       <div class="row">
         <input type="search" id="hwcheck-device-search" class="hwcheck-device-search"

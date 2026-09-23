@@ -213,6 +213,7 @@ from .manifest import (
     collect_exclusive_groups,
 )
 from .module_intro import intro_sections
+from .my_device_draft import draft_payload
 from .my_devices import (
     CustomDevice,
     MyDeviceError,
@@ -2766,6 +2767,39 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         """删掉一件（连同 `materials/` 里那份资料副本）；查无此条 400 中文。"""
         delete_device(_my_devices_root(), device_id)
         return {"ok": True}
+
+    @app.post("/api/my-devices/draft")
+    @_map_errors
+    def my_devices_draft(payload: dict) -> dict:
+        """资料文本 → 事实草稿（工单 hwcheck-unknown-device/07）：一次 LLM 抽取。
+
+        payload：text（必填非空——学生贴的文字，或既有抽取通道（`/api/extract`
+        同款）拿回的 PDF / 图片文本）。模型只做机械抽取，形状与"出处必须真的在
+        原文里"的判据在 `my_device_draft.parse_device_draft`（域拒绝带理由重问
+        一次）。
+
+        **草稿一律不落盘**：返回的载荷只用来填页面表单，用户逐字段确认后走
+        既有的保存端点。AI 不可用 / 抽取失败 = 200 + draft:null + degraded:true
+        （页面直接走纯手填，流程不阻断——照 triage 的降级口径，报错不冒泡）。
+        """
+        material_text = _require_str(payload, "text")
+        llm_run = LLMRun(context, "my-device-draft")
+        message = ""
+        try:
+            llm = llm_run.llm()
+            draft = llm.draft_device_facts(material_text)
+            return {
+                "draft": draft_payload(draft),
+                "degraded": False,
+                "message": "",
+            }
+        except LLMError as exc:
+            # 不阻断（票面硬要求）：降级为纯手填，失败原因只进 message。
+            message = str(exc)
+            return {"draft": None, "degraded": True, "message": message}
+        finally:
+            # 观测收尾：漏调则观察面板 recent_llm_workflows 看不到这一轮
+            llm_run.settle()
 
     # 硬件检测：回读一次检测（工单 module-hwcheck/02）——刷新回显与"点最近一次
     # 回到那次检测"的服务端真源。判据 = 清单的 kind（不是检测工程 → 400 中文）。

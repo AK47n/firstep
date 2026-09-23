@@ -65,6 +65,12 @@ from .hwcheck_triage import (
     parse_triage_advice,
     triage_context_text,
 )
+from .my_device_draft import (
+    DeviceDraft,
+    DeviceDraftError,
+    DeviceDraftFactError,
+    parse_device_draft,
+)
 from .library import TRUNCATION_NOTICE, ValidationResult, truncate_content
 from .impact import ImpactAnalysis, ImpactError, build_impact_analysis
 from .manifest import EXCLUSIVE_GROUP_TAG, ManifestSummary
@@ -526,6 +532,27 @@ HWCHECK_TRIAGE_SYSTEM_PROMPT = (
     '只输出 JSON 对象：{"verdict": "wiring" | "device" | "code" | "unknown", '
     '"summary": "一句话判断", "causes": ["可能原因"], "steps": ["下一步查什么"], '
     '"issue_hint": "必要时怎么反馈（没有就空串）"}'
+)
+
+# 器件资料 → 事实草稿（工单 hwcheck-unknown-device/07）：学生把卖家页 / 手册的
+# 文字贴进来，模型做**一次机械抽取**填草稿。立场 = 抄写员不是顾问：只从给定资料
+# 里抄事实，每条带原文出处片段（域层做"出处必须真的在原文里"的机械比对），
+# 抽不到就 null——绝不编造。**不写代码、不生成判据、不决定探测动作**（探测程序
+# 永远由确认后的定义走确定性渲染）。形状与校验在 my_device_draft.parse_device_draft。
+DEVICE_DRAFT_SYSTEM_PROMPT = (
+    "你是硬件资料抄写员。学生会给你一段器件资料（卖家页 / 手册片段 / 图片的"
+    "文字描述），你从中抽取六个字段的事实填成草稿。规则："
+    "① 只抄资料里**写明了的**事实：每条有值的事实必须带 source 字段，值 = "
+    "资料原文里**逐字的一段话**（不许改写、不许概括、不许从别处补充）；"
+    "② 资料里没写的字段一律 {\"value\": null, \"source\": \"\"}——猜一个地址"
+    "比不填坏得多，六个字段都必须出现，没找到也要显式给 null；"
+    "③ address 是 7 位 I2C 地址（0x08–0x77；手册常见的 0xD0 这类 8 位写法要"
+    "换算成 7 位）；register / expect 是 8 位寄存器地址与期望读回值；bus 只能是"
+    " i2c / spi / uart / onewire / analog / gpio / other 之一；"
+    "④ 你**只填草稿**：不写任何代码、不生成检测判据、不建议探测动作；"
+    "⑤ 全部用中文（引用的原文片段保持原文），不要 Markdown 标记。"
+    "只输出 JSON 对象，六个键各一个 {\"value\": 值或 null, \"source\": \"原文片段\"}："
+    '{"name": …, "bus": …, "address": …, "register": …, "expect": …, "notes": …}'
 )
 
 # 骨架 / 自检冒烟共用的接口块引导语（两处曾各抄一份，改一处忘另一处即分叉）
@@ -1822,6 +1849,8 @@ class LLM(Protocol):
     ) -> str: ...
 
     def triage_hwcheck_symptom(self, context: TriageContext) -> TriageAdvice: ...
+
+    def draft_device_facts(self, material_text: str) -> DeviceDraft: ...
 
     def topic_split_topics(self, pdf_text: str) -> tuple[TopicDraft, ...]: ...
 
@@ -3458,6 +3487,42 @@ class DeepSeekLLM:
             domain_retry=True,
         )
 
+    def draft_device_facts(self, material_text: str) -> DeviceDraft:
+        """器件资料 → 事实草稿（工单 hwcheck-unknown-device/07）：一次机械抽取。
+
+        输入 = 学生提供的资料文本（贴的文字，或既有抽取通道拿回的 PDF / 图片
+        文本）；输出 JSON 由域层 `parse_device_draft` 校验，**两类拒绝分道**
+        （照 triage_hwcheck_symptom 先例）：
+
+        * **形状错**（白名单外的字段 / 缺字段 / 数值或词表不合法 / 有值没出处）
+          = `DeviceDraftError` → `LLMError`（缺省 parse 类）：模型这次没按契约
+          输出，走解析类快重试；
+        * **编造**（出处片段在资料原文里找不到）= `DeviceDraftFactError` →
+          `LLMError(kind=ERROR_KIND_DOMAIN)`：本地域判决，带被拒理由重出一次。
+
+        仍不行由端点降级为纯手填（草稿不落盘，流程不阻断——票面硬要求）。
+        """
+
+        def parse(content: str) -> DeviceDraft:
+            try:
+                return parse_device_draft(
+                    extract_module_selection_data(content), material_text
+                )
+            except DeviceDraftFactError as exc:
+                raise LLMError(str(exc), kind=ERROR_KIND_DOMAIN) from exc
+            except DeviceDraftError as exc:
+                raise LLMError(str(exc)) from exc
+
+        return self._retry_parse(
+            system_prompt=DEVICE_DRAFT_SYSTEM_PROMPT,
+            user_prompt=_device_draft_user_prompt(material_text),
+            parse=parse,
+            label="器件资料抽取",
+            operation="draft_device_facts",
+            json_mode=True,
+            domain_retry=True,
+        )
+
     def _observe_call(
         self,
         *,
@@ -4278,6 +4343,10 @@ class RoutingLLM:
         # 硬件检测排障走 remote（现场判断质量优先，不进本地方法集）
         return self._remote.triage_hwcheck_symptom(context)
 
+    def draft_device_facts(self, material_text: str) -> DeviceDraft:
+        # 器件资料抽取走 remote（抄写质量优先，不进本地方法集——照 triage 同判）
+        return self._remote.draft_device_facts(material_text)
+
 
 def build_llm(
     config: AppConfig,
@@ -4921,6 +4990,19 @@ def _hwcheck_triage_user_prompt(context: TriageContext) -> str:
         "下面是本次硬件检测的上下文（接线表 / 检测计划 / 上板清单与勾选 / 现象）。"
         "请只依据这里出现的事实给排障方向。\n\n"
         + triage_context_text(context)
+    )
+
+
+def _device_draft_user_prompt(material_text: str) -> str:
+    """器件资料抽取的 user 消息（工单 hwcheck-unknown-device/07）。
+
+    资料整段原样进 prompt——出处比对的判据（`parse_device_draft` 查"片段是否
+    真的在原文里"）查的就是这份文本，模型看得到什么、允许引什么，是同一份。
+    """
+    return (
+        "下面是这件器件的资料原文。请照系统提示词的规则抽成草稿："
+        "每条事实的 source 必须是下面原文里逐字的一段。\n\n"
+        + material_text
     )
 
 

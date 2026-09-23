@@ -1,0 +1,18 @@
+[1] 前置检查（源文件指纹与锚点唯一性）
+    my_device_draft.py: 8b8a91dca422090e…（锚点各一处 ✓）
+[2] 注入前（守卫在）：PASS（4 条全绿）  ｜ 1 passed, 29 deselected in 0.05s / 1 passed, 29 deselected in 0.05s / 7 passed, 23 deselected in 0.06s / 1 passed, 29 deselected in 0.05s
+[3] 注入 A: 出处比对绕过（资料里没有的片段照单全收 = 编造放行） → RED（守卫变红） ｜ 1 failed, 29 deselected in 0.10s
+[4] 复原复核：my_device_draft.py sha256 相等 ✓（8b8a91dca422090e…）
+[3] 注入 B: 字段白名单放宽（模型自己发明的字段照收） → RED（守卫变红） ｜ 1 failed, 29 deselected in 0.10s
+[4] 复原复核：my_device_draft.py sha256 相等 ✓（8b8a91dca422090e…）
+[3] 注入 C: 数值区间放开（7 位地址的区间守卫短路） → RED（守卫变红） ｜ 4 failed, 3 passed, 23 deselected in 0.11s
+[4] 复原复核：my_device_draft.py sha256 相等 ✓（8b8a91dca422090e…）
+[3] 注入 D: import 面破戒（草稿链路顺手 import 生成侧模块） → RED（守卫变红） ｜ exit=4
+[4] 复原复核：my_device_draft.py sha256 相等 ✓（8b8a91dca422090e…）
+[5] 复原后复跑：test_a_source_quote_not_in_the_material_is_fabrication PASS（回绿） ｜ 1 passed, 29 deselected in 0.05s
+[5] 复原后复跑：test_a_field_outside_the_whitelist_is_rejected PASS（回绿） ｜ 1 passed, 29 deselected in 0.04s
+[5] 复原后复跑：test_an_out_of_range_or_non_numeric_address_is_rejected PASS（回绿） ｜ 7 passed, 23 deselected in 0.05s
+[5] 复原后复跑：test_the_draft_chain_imports_nothing_that_renders_c PASS（回绿） ｜ 1 passed, 29 deselected in 0.05s
+[6] 收尾指纹：1 个文件逐字节未变 ✓
+
+=== 结论：反证成立（4 条注入都让对应用例变红，且逐字节复原） ===

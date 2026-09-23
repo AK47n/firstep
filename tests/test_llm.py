@@ -6634,6 +6634,7 @@ PROTOCOL_METHOD_NAMES = frozenset(
         "apply_idea_fix",
         "scan_params",
         "triage_hwcheck_symptom",
+        "draft_device_facts",
     }
 )
 
@@ -6687,6 +6688,7 @@ def _call_all_protocol_methods(router: RoutingLLM) -> None:
     router.apply_idea_fix("想法", "建议", [], (), "题面", "", "main.c")
     router.scan_params("main.c", ())
     router.triage_hwcheck_symptom(_triage_context())
+    router.draft_device_facts("BMP280 气压传感器模块。I2C 地址：0x76。")
 
 
 def test_routing_llm_routes_local_methods_to_local_and_rest_to_remote():
@@ -6726,6 +6728,7 @@ def test_routing_llm_routes_local_methods_to_local_and_rest_to_remote():
         "apply_idea_fix",
         "scan_params",
         "triage_hwcheck_symptom",
+        "draft_device_facts",
     ]
 
 
@@ -7351,6 +7354,53 @@ def test_triage_shape_error_stays_parse_kind_and_retries_as_parse():
 
     with pytest.raises(LLMError) as exc_info:
         llm.triage_hwcheck_symptom(_hwcheck_triage_context())
+
+    assert exc_info.value.kind == ERROR_KIND_PARSE
+    assert len(transport.calls) > 1  # 解析类整次重问照旧
+
+
+_DRAFT_MATERIAL = "BMP280 气压传感器模块。I2C 地址：0x76（SDO 接地时）。"
+
+
+def test_device_draft_fabricated_source_is_domain_kind_and_retries_with_reason():
+    """草稿编造出处 = 域拒绝（工单 hwcheck-unknown-device/07）：kind=domain、
+    带被拒理由重出一次——照 triage_hwcheck_symptom 的两条同款用例。
+
+    判据三条：① kind 是 domain（本地域判决：输出与给定资料的事实矛盾）；
+    ② 确实重问了（假传输被调两次 = DOMAIN_RETRY_LIMIT 1 次重试）；③ 重问的
+    user 消息带上了被拒理由（点名的字段与"只准逐字引用"），模型才有机会改对。
+    """
+    fabricated = json.dumps(
+        {
+            "name": {"value": "BMP280", "source": "BMP280 气压传感器模块"},
+            "bus": {"value": "i2c", "source": "I2C 地址：0x76"},
+            "address": {"value": "0x76", "source": "手册第 3 页写明地址是 0x76"},
+            "register": {"value": None, "source": ""},
+            "expect": {"value": None, "source": ""},
+            "notes": {"value": "", "source": ""},
+        },
+        ensure_ascii=False,
+    )
+    transport = FakeTransport(body=_api_response(fabricated))
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError) as exc_info:
+        llm.draft_device_facts(_DRAFT_MATERIAL)
+
+    assert exc_info.value.kind == ERROR_KIND_DOMAIN
+    assert "地址" in str(exc_info.value)
+    assert len(transport.calls) == 2, "编造出处该带理由重出一次（DOMAIN_RETRY_LIMIT=1）"
+    retry_user = transport.calls[1][2]["messages"][1]["content"]
+    assert "地址" in retry_user and "被拒绝" in retry_user
+
+
+def test_device_draft_shape_error_stays_parse_kind_and_retries_as_parse():
+    """草稿形状错照旧走解析类快重试（不是域拒绝）：缺字段 = 没按契约输出。"""
+    transport = FakeTransport(body=_api_response('{"name": {"value": "BMP280"}}'))
+    llm = _llm(transport)
+
+    with pytest.raises(LLMError) as exc_info:
+        llm.draft_device_facts(_DRAFT_MATERIAL)
 
     assert exc_info.value.kind == ERROR_KIND_PARSE
     assert len(transport.calls) > 1  # 解析类整次重问照旧

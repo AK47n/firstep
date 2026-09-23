@@ -28,6 +28,10 @@ import {
   MY_DEVICE_ADDRESS_MIN,
   MY_DEVICE_ADDRESS_MAX,
   MY_DEVICE_ID_MAX_CHARS,
+  myDeviceMaterialHTML,
+  myDeviceDraftPanelHTML,
+  myDeviceDraftToForm,
+  MY_DEVICE_MATERIAL_NOTICE,
 } from "../../src/contest_generator/static/js/fx/my-devices.js";
 
 const PAYLOAD = {
@@ -376,4 +380,136 @@ test("id 前缀与地址区间与后端逐字一致（读真源码对账）", ()
   assert.ok(lo && hi);
   assert.equal(MY_DEVICE_ADDRESS_MIN, Number(lo[1]));
   assert.equal(MY_DEVICE_ADDRESS_MAX, Number(hi[1]));
+});
+
+// ---------------------------------------------------------------------------
+// ⑥ 资料 → 事实草稿（工单 hwcheck-unknown-device/07）
+// ---------------------------------------------------------------------------
+
+const GOOD_DRAFT = {
+  fields: {
+    name: { value: "BMP280", source: "BMP280 气压传感器模块", found: true },
+    bus: { value: "i2c", source: "I2C 地址：0x76", found: true },
+    address: { value: "0x76", source: "I2C 地址：0x76", found: true },
+    register: { value: "0xD0", source: "芯片 ID 寄存器 0xD0", found: true },
+    expect: { value: "0x58", source: "读回值应为 0x58", found: true },
+    notes: { value: "SDO 接地时 0x76", source: "SDO 接地时", found: true },
+  },
+  missing: [],
+  missing_text: "手册里没找到",
+};
+
+test("资料入口明说「资料会被送到 AI 通道」（用户知情权，票面硬要求）", () => {
+  const html = myDeviceMaterialHTML({ text: "", busy: false, message: "" });
+  const flat = html.replace(/\s+/g, "");
+  assert.ok(flat.includes("资料会被送到AI通道"), flat.slice(0, 200));
+  assert.ok(flat.includes("不写代码"), "同一句里要说清 AI 不写代码");
+  assert.ok(html.includes("data-my-device-material"), "要有资料文本框");
+  assert.ok(html.includes("data-my-device-draft"), "要有抽取按钮");
+});
+
+test("资料入口：忙时按钮置灰、消息原样显示、文字回填", () => {
+  const busy = myDeviceMaterialHTML({ text: "abc", busy: true, message: "" });
+  assert.ok(/data-my-device-draft disabled/.test(busy), busy);
+  assert.ok(busy.includes("抽取中"));
+  const withMessage = myDeviceMaterialHTML({ text: "", busy: false, message: "先贴一段资料" });
+  assert.ok(withMessage.includes("先贴一段资料"));
+  assert.ok(/data-my-device-material[^>]*>abc</.test(myDeviceMaterialHTML({ text: "abc", busy: false, message: "" })), "用户贴的文字要回填");
+});
+
+test("草稿面板：有值的字段带出处片段，没找到的显示「手册里没找到」", () => {
+  const draft = {
+    ...GOOD_DRAFT,
+    fields: {
+      ...GOOD_DRAFT.fields,
+      register: { value: "", source: "", found: false },
+      expect: { value: "", source: "", found: false },
+    },
+    missing: ["register", "expect"],
+  };
+  const html = myDeviceDraftPanelHTML(draft, false);
+  assert.ok(html.includes("BMP280"));
+  assert.ok(html.includes("0x76"));
+  assert.ok(html.includes("I2C 地址：0x76"), "出处片段要显示（用户能对回原文）");
+  const flat = html.replace(/\s+/g, "");
+  assert.ok(flat.includes("手册里没找到"), "没找到的字段要如实说");
+  assert.ok(html.includes("data-my-device-draft-apply"), "要有「填进表单」按钮");
+});
+
+test("草稿面板：用户贴的值一律 esc（资料是外面来的文本，进 innerHTML）", () => {
+  const draft = {
+    ...GOOD_DRAFT,
+    fields: {
+      ...GOOD_DRAFT.fields,
+      name: { value: '<img src=x onerror=alert(1)>', source: "BMP280 气压传感器模块", found: true },
+    },
+  };
+  const html = myDeviceDraftPanelHTML(draft, false);
+  assert.ok(!html.includes("<img src=x"), "不许原样进 HTML：" + html.slice(0, 200));
+  assert.ok(html.includes("&lt;img"));
+});
+
+test("草稿面板：已填进表单后按钮换成核对提示", () => {
+  const applied = myDeviceDraftPanelHTML(GOOD_DRAFT, true);
+  assert.ok(!applied.includes("data-my-device-draft-apply"), "已填就不许再重复填");
+  const flat = applied.replace(/\s+/g, "");
+  assert.ok(flat.includes("逐字段核对"), flat.slice(0, 200));
+});
+
+test("草稿 → 表单：找到的字段填入（数值已是 0xNN 形态），没找到的保留原值，id 从名称派生", () => {
+  const draft = {
+    ...GOOD_DRAFT,
+    fields: {
+      ...GOOD_DRAFT.fields,
+      register: { value: "", source: "", found: false },
+      expect: { value: "", source: "", found: false },
+    },
+  };
+  const form = myDeviceDraftToForm(draft);
+  assert.equal(form.name, "BMP280");
+  assert.equal(form.id, "mine_bmp280");
+  assert.equal(form.address, "0x76");
+  assert.equal(form.bus, "i2c");
+  assert.equal(form.register, "", "没找到的留空，不编");
+  assert.equal(form.expect, "");
+});
+
+test("草稿 → 表单：用户已填的 id 不被覆盖；用户填过的字段不被没找到的草稿清掉", () => {
+  const base = { ...myDeviceFormBlank(), id: "mine_my_gyro", name: "我起的名字" };
+  const draft = {
+    ...GOOD_DRAFT,
+    fields: {
+      ...GOOD_DRAFT.fields,
+      register: { value: "", source: "", found: false },
+      expect: { value: "", source: "", found: false },
+    },
+  };
+  const form = myDeviceDraftToForm(draft, base);
+  assert.equal(form.id, "mine_my_gyro", "用户起的 id 是他的决定");
+  assert.equal(form.name, "BMP280", "草稿找到的名称照填（用户可再改）");
+  assert.equal(form.notes, "SDO 接地时 0x76");
+});
+
+test("草稿 → 表单：空草稿 = 空白表单 + 派生 id 占位", () => {
+  const form = myDeviceDraftToForm({ fields: {}, missing: [], missing_text: "x" });
+  assert.equal(form.name, "");
+  assert.equal(form.address, "");
+  assert.equal(form.bus, "i2c");
+});
+
+test("草稿字段表与后端 DRAFT_FIELDS 逐字一致（读真源码对账）", () => {
+  // 后端加/改草稿字段而前端面板没跟上 = 静默渲染成"手册里没找到"——
+  // 这条把两边的字段与顺序逐字钉住（先例：id 文法正则的跨语言对账）。
+  const py = readFileSync(
+    new URL("../../src/contest_generator/my_device_draft.py", import.meta.url), "utf8");
+  const js = readFileSync(
+    new URL("../../src/contest_generator/static/js/fx/my-devices.js", import.meta.url), "utf8");
+  const pyMatch = py.match(/^DRAFT_FIELDS = \(([^)]*)\)/m);
+  assert.ok(pyMatch, "my_device_draft.py 里应有 DRAFT_FIELDS 字面量");
+  const pyFields = [...pyMatch[1].matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
+  assert.ok(pyFields.length >= 6, `解析出的字段数不对：${pyFields}`);
+  const jsMatch = js.match(/^const DRAFT_FIELD_LABELS = \[([\s\S]*?)^\];/m);
+  assert.ok(jsMatch, "fx/my-devices.js 里应有 DRAFT_FIELD_LABELS 字面量");
+  const jsFields = [...jsMatch[1].matchAll(/\["([a-z_]+)",/g)].map((m) => m[1]);
+  assert.deepEqual(jsFields, pyFields);
 });

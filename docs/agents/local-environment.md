@@ -678,6 +678,23 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > ⚠ **一条产品限制（评审抓的，如实记）**：盘上旧坏条目（带连字符 id）**在产品里
 > 删不掉**——`delete_device` 与文法判据共用一条路径防线，旧 id 过不去；要手工删
 > `hwcheck_devices/<id>/`。拆"路径安全 / C 标识符文法"两条判据的小票是候选。
+>
+> **2026-09-23（hwcheck-unknown-device/07 会话：资料 → 事实草稿）**：
+> 同样**一次服务器都没起**（验证走进程内 TestClient + FakeLLM 桩 + 域层纯函数 +
+> 前端门禁 + 真浏览器夹具）。读数：`python -m pytest -n auto -q`
+> **5322 passed + 1 skipped**、前端门禁 **1764 passed / 0 fail**、浏览器门禁
+> **38 passed / 0 fail**（首跑 2 红又是 launcher-reload 已知偶发，复跑全绿）；
+> 反证 4 后端 + 1 前端注入全红逐字节复原（`probe-07-guard-strength{,-front}.txt`）。
+> ⚠ **本轮一条与"浏览器夹具"有关的设计纪律**（对以后任何要调 LLM 的页面都适用）：
+> 浏览器夹具**继承真机环境**起真后端——页面上真点一次"AI 抽取"就是真调一次
+> LLM（花真额度）。所以 07 的浏览器用例刻意停在**零请求**（入口渲染 + 知情文案 +
+> 空文本本地提示），抽取 / 降级路由 TestClient + FakeLLM 桩钉住。别学有的 spec
+> 直接点按钮——先想清楚那个按钮背后是不是真模型。
+> ⚠ **LLM 协议加新方法的完整清单**（07 实测漏了两处、评审抓回）：①
+> `llm.py` 的 LLM 协议 + DeepSeekLLM + RoutingLLM 三处实现；② `tests/fakes.py`
+> 的 FakeLLM 与 RecordingLLM 两个假件；③ **`tests/test_llm.py` 的
+> `PROTOCOL_METHOD_NAMES` 覆盖清单 + `_call_all_protocol_methods` 扫描 +
+> 派发测试的 remote 名单**——漏了它，"协议全量覆盖"那条不变量静默失效。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 
