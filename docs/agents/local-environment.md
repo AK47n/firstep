@@ -8,7 +8,6 @@
 ## 0. 交接区：main 上有什么还没到用户手上（2026-09-22 夜更新 · 线上最新仍是 v1.2.2）
 
 **当前状态：线上最新 = v1.2.2；但 main 上已比它多出三批未发布改动**（见下表最后一行）。
-
 | 项 | 值 |
 |---|---|
 | 线上最新 | **v1.2.2**（2026-09-19 发布）八件套齐全，`/releases/latest` 指向本版 |
@@ -16,7 +15,7 @@
 | 顺手做掉的第四条 | `src/contest_generator.egg-info/**` 摘出产品文件（两个包都不再发 pip 构建产物） |
 | **真机验收** | `drill-01`：沙箱真 v1.1.1 → 走产品端点升到 1.2.2，**判红 0 / 卡住 0 / PASS**；`not_in_official` 1482 → **6**，那 6 条经决定性实验证明是**更新器那一步 pip 现写的**（官方包里 0 个 → 跑完 pip 6 个齐），「官方缺失 0 / 内容不同 0」两条全绿 |
 | 发版产物（本机留档） | `firstep-pack\firstep-{update,full}-v1.2.2.*` 全套 + `release-notes-v1.2.2.md`；**下一版的基线就是这两个清单** |
-| **main 上还没到用户手上的（四批）** | ① **硬件检测栏目本身**（`module-hwcheck/01-09`，2026-09-20 起）＋ **检测页引脚出口**（`hwcheck-pin-conflict-exit/01`：默认脚撞脚提前解开）——v1.2.2 的用户看不到「硬件检测」这一栏；② **完整包会话态进 `AppContext` ＋ `_full_task_lock`**（`full-update-state-into-ctx/01-04`，2026-09-22，账见 `.scratch/backlog.md` §18：纯内部换归属 + 修「并发 apply 建出两个任务」的竞态，**前端零字节**）；③ **陌生器件（库外件）探测**（`hwcheck-unknown-device`，2026-09-22 起：规格 + 10 张工单已落 `.scratch/hwcheck-unknown-device/`，**工单 01 支点模块 `i2c_probe` 已落地**，02–10 未开工）。**四批都只在本机工作树 / main 上，任何发布包里都没有**——下次发版要一起带上 |
+| **main 上还没到用户手上的（四批）** | ① **硬件检测栏目本身**（`module-hwcheck/01-09`，2026-09-20 起）＋ **检测页引脚出口**（`hwcheck-pin-conflict-exit/01`：默认脚撞脚提前解开）——v1.2.2 的用户看不到「硬件检测」这一栏；② **完整包会话态进 `AppContext` ＋ `_full_task_lock`**（`full-update-state-into-ctx/01-04`，2026-09-22，账见 `.scratch/backlog.md` §18：纯内部换归属 + 修「并发 apply 建出两个任务」的竞态，**前端零字节**）；③ **陌生器件（库外件）探测**（`hwcheck-unknown-device`，2026-09-22 起：规格 + 10 张工单已落 `.scratch/hwcheck-unknown-device/`，**工单 01 支点模块 `i2c_probe` 已落地**、**工单 02「我的器件」已落地**（数据目录 + 三端点 + 检测页卡片，**仍不生成任何代码**），03–10 未开工）。**四批都只在本机工作树 / main 上，任何发布包里都没有**——下次发版要一起带上 |
 
 **发版尚未启动（2026-09-22 22:0x 实测）**：这一轮只走到「决定要发」就停了——**版本号仍 `1.2.2`、
 没打包、没打 tag、没建 Release**（用户要先继续改动再发，所以别把这份落差当成"发过了"）。
@@ -469,6 +468,44 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > **第 0 节的发布落差表：本轮又添一批 main-only 改动**（工单
 > `hwcheck-unknown-device/01`：库内新模块 `i2c_probe` ＋ 两平台实现 ＋ 四处登记；
 > 后续 02–10 张工单仍未开工）——下次发版要连同上面那三批一起带上。
+>
+> **2026-09-23（hwcheck-unknown-device/02 会话：「我的器件」库外件落地）**：
+> 这一单把「库外件」这条数据路打通（域模块 `my_devices.py` ＋ 三个端点 ＋
+> 检测页卡片；**不生成任何代码**）。与环境有关的事实：
+> ① **同样一次服务器都没起**（端点用例走进程内 TestClient，浏览器验收走夹具
+> 自带的真后端 + 内核分配端口）；收尾实测 8000/8020/8021/8791 都没在听、
+> 无残留 `contest_generator.webapp` 进程。
+> ② **新落点 = `<配置目录>/hwcheck_devices/<id>/`**（真机上 =
+> `~\.contest_generator\hwcheck_devices\`，与 `updates\` / `cache\` 同级）。
+> 浏览器验收那几条自建件用例**会真的往这个目录写**（它们自己收尾时删掉），
+> 跑完留一个**空目录**是正常的——本次会话收尾已手工删掉那个空目录。
+> ③ 读数：`python -m pytest -n auto -q` **5183 passed + 1 skipped**、
+> 前端门禁 **1739 passed / 0 fail**、浏览器门禁 **34 passed / 0 fail**；
+> 反证（拿掉撞名守卫 → 两条撞名用例变红、逐字节复原）见
+> `.scratch/hwcheck-unknown-device/probe-02-guard-strength.txt`。
+>
+> ⚠ **本机量到的一条门禁偶发（不是产品缺陷，别误判）**：浏览器门禁**连跑 34 条**时
+> `launcher-reload.spec.mjs` 会偶发红（A 在 `page.reload` 上 30 秒超时 → B/C 跟着
+> 9ms/37ms 速败）；**单跑这一支 3/3 全绿**（读数
+> `.scratch/hwcheck-unknown-device/browser-02-launcher-isolated.txt`）。那支 spec
+> 不碰检测页，与本次改动无交集——与第 2 节记的「并行争用下假红」同源。
+>
+> ⚠ **同轮量到的两条工具事实**（对后面 03–10 张工单同样适用）：
+> ① **`TestClient` 会先把 URL 归一化**：想验「原始路径打进来」的判据
+> （`DELETE /api/my-devices/%2e%2e` 这类编码穿越），必须用
+> `httpx.ASGITransport` + `extensions={"path": ...}` 直接喂 ASGI——写成
+> `client.delete("/api/my-devices/..")` 会假绿（请求被归一成 `/api/`，
+> 根本到不了那个路由）。
+> ② **`console.log` 在 `node --test`（真浏览器 spec）里可能整条不见**：
+> 本次排查一个按钮态问题时，诊断输出一行都没进 tee 的日志文件，
+> 最后是靠**断言消息**（assert 的第三个参数带 JSON 现场）拿到读数的。
+> 排查这类问题优先用"会随失败打印的断言消息"，别指望 console.log。
+>
+> **第 0 节的发布落差表：本轮再添一批 main-only 改动**（工单
+> `hwcheck-unknown-device/02`：新域模块 `my_devices.py` ＋ 前端 fx/ui ＋
+> 检测页卡片 ＋ 三个新端点；**用户数据目录里多一个 `hwcheck_devices/`**——
+> 那是运行时数据、不进发布包，但升级后第一次用会新建它）。
+> 后续 03–10 张工单仍未开工。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 
