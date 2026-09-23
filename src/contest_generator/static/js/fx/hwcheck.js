@@ -1070,6 +1070,15 @@ export function hwcheckCustomPlanHTML(items) {
     const badge = one.probes
       ? '<span class="badge ok">板上判定</span>'
       : '<span class="badge">这一趟没有它的探测小节</span>';
+    // 快照出处（工单 hwcheck-unknown-device/08）：回读以工程内快照为准——
+    // 行上如实标"来自我的器件 <id>"；那条已被删掉时再补一句（不静默、不报错）。
+    // 现读行（预览 / 08 之前的工程）不画标记。
+    const source = one.snapshot
+      ? `<div class="hwcheck-hint hwcheck-custom-snapshot">来自我的器件 ${esc(one.slug || "")} `
+        + (one.stored
+          ? "</div>"
+          : "（这一条已从「我的器件」删除——这里显示的是工程内快照）</div>")
+      : "";
     return `<div class="hwcheck-custom-plan" data-custom-plan="${esc(one.slug || "")}">`
       + '<div class="hwcheck-section-head">'
       + tag
@@ -1078,6 +1087,7 @@ export function hwcheckCustomPlanHTML(items) {
       + (facts ? `<div class="hwcheck-hint">${facts}</div>` : "")
       + `<div class="hwcheck-hint">这一趟对它做什么：${esc(one.plan || "")}</div>`
       + (one.notes ? `<div class="hwcheck-hint">你填的备注：${esc(one.notes)}</div>` : "")
+      + source
       + "</div>";
   }).join("");
   return rows;

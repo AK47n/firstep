@@ -70,7 +70,8 @@ from .hwcheck_recipe import (
 from .library import list_modules
 from .manifest import ModuleManifest, collect_exclusive_groups
 from .master_store import master_project_dir
-from .my_devices import CustomDevice, list_devices, my_devices_dir
+from .hwcheck_store import read_custom_snapshots
+from .my_devices import DEVICE_ID_PREFIX, CustomDevice, list_devices, my_devices_dir
 from .pin_bindings import (
     ResolvedBinding,
     _shared_groups,
@@ -410,22 +411,41 @@ def _board_shares(rows: Sequence[dict]) -> tuple[dict, ...]:
 
 
 def _custom_devices_for(
-    data_dir: Path | str, config: HwCheckConfig
-) -> tuple[CustomDevice, ...]:
-    """这一趟**选中的**自建件定义（按 `config.devices` 里的 id 从数据目录读）。
+    data_dir: Path | str, config: HwCheckConfig, snapshot_dir: Path | str | None = None
+) -> tuple[tuple[CustomDevice, ...], frozenset[str]]:
+    """这一趟**选中的**自建件定义（按 `config.devices` 里的 id 读）＋ 快照来源集。
 
     只读选中的那几件：收藏里躺着的不进这一趟（也不该让一次预览去扫整个数据目录
     ——读一件失败会让整页 400，而那件根本没参与这次检测）。
     读不出来（条目坏了 / 已被删）= 大声失败（`list_devices` 的既定约定）——
     静默跳过会让"我明明选了它"变成一次悄无声息的少测。
+
+    **快照优先**（工单 hwcheck-unknown-device/08）：给了 `snapshot_dir`（工程
+    目录）且选中的**每一件自建件**都有工程内快照时，回读吃快照——用户之后改了
+    或删了「我的器件」不影响已生成的工程。⚠ 快照门只判**自建件子集**（`mine_`
+    前缀是两类东西的分界，库内件不归档也没有快照）——拿全量选中集判 `all()`
+    的第一版在混选（自建件 + 任意库内件）时永远走不进快照分支，被评审当场抓红。
+    部分 / 全部没有快照（08 之前的工程）→ 照旧走数据目录（行上的 `snapshot`
+    标记据此如实标）。返回 `(定义, 来自快照的 id 集)`。
     """
     root = my_devices_dir(data_dir)
-    wanted = set(hwcheck_devices(config))
+    wanted = hwcheck_devices(config)
     if not wanted:
-        return ()
+        return (), frozenset()
+    if snapshot_dir is not None:
+        custom_ids = [
+            slug for slug in wanted if slug.startswith(DEVICE_ID_PREFIX)
+        ]
+        snapshots = read_custom_snapshots(snapshot_dir, custom_ids)
+        if custom_ids and all(slug in snapshots for slug in custom_ids):
+            return (
+                tuple(snapshots[slug] for slug in custom_ids),
+                frozenset(snapshots),
+            )
     known = {device.id: device for device in list_devices(root)}
-    return tuple(
-        known[slug] for slug in hwcheck_devices(config) if slug in known
+    return (
+        tuple(known[slug] for slug in wanted if slug in known),
+        frozenset(),
     )
 
 
@@ -523,6 +543,7 @@ def hwcheck_view(
     recipe_path: Path | str | None = None,
     require_pins: bool = True,
     data_dir: Path | str | None = None,
+    custom_snapshot_dir: Path | str | None = None,
 ) -> HwCheckView:
     """检测页装配的唯一出处：路径 + 配置进，一次投影出。
 
@@ -559,10 +580,14 @@ def hwcheck_view(
     by_slug = {m.slug: m for m in list_modules(library)}
     # 自建件小节（工单 03）：只有给了数据目录才读（没给 = 这一趟没有自建件）。
     # 读盘只在这一处：四个端点共用同一次装配，页面上说的与 main.c 里做的是同一份。
+    # `custom_snapshot_dir`（工单 08）= 工程目录：回读时**以工程内快照为准**。
     custom_devices: tuple[CustomDevice, ...] = ()
+    snapshot_ids: frozenset[str] = frozenset()
     custom_sections: tuple[CustomSection, ...] = ()
     if data_dir is not None:
-        custom_devices = _custom_devices_for(data_dir, config)
+        custom_devices, snapshot_ids = _custom_devices_for(
+            data_dir, config, snapshot_dir=custom_snapshot_dir
+        )
         custom_sections = resolve_custom_sections(
             custom_devices, has_output_channel=config.has_output_channel
         )
@@ -615,6 +640,14 @@ def hwcheck_view(
     # 自建件**接在它后面**——"库内验证过的在前、按你给的事实试的在最后"。
     board_payload["order"] = [*board_payload["order"], *plan_order_rows(custom_plan)]
     custom_payload = custom_plan_payload(custom_plan)
+    # 出处标记（工单 hwcheck-unknown-device/08）：这一行的定义来自**工程内快照**
+    # 还是**数据目录现读**；快照行还要如实说「我的器件」里那条还在不在——已删的
+    # 件照常显示（以快照为准），页面上点名"这是快照"，不静默也不报错。
+    data_root = my_devices_dir(data_dir) if data_dir is not None else None
+    for row in custom_payload:
+        slug = row.get("slug", "")
+        row["snapshot"] = slug in snapshot_ids
+        row["stored"] = bool(data_root and (data_root / slug).is_dir())
     sections = resolve_sections(config.platform, devices, recipes, manifests)
     specialized = {section.slug for section in sections}
     # 通用降级（工单 07）：专精件之外、且在本平台有条目的那些件。没有本平台

@@ -31,8 +31,11 @@ _ALLOWED_HWCHECK_IMPORTS: dict[str, frozenset[str]] = {
     "hwcheck_generic": frozenset(),
     "hwcheck_recipe": frozenset(),
     "hwcheck_store": frozenset({
-        "DEFAULT_RECENT_LIMIT", "list_hwcheck_projects", "read_hwcheck_project",
-        "resolve_hwcheck_output_dir",
+        "DEFAULT_RECENT_LIMIT", "archive_custom_devices", "list_hwcheck_projects",
+        "read_hwcheck_project", "resolve_hwcheck_output_dir",
+        # `archive_custom_devices`（工单 hwcheck-unknown-device/08）是工程目录的
+        # **落盘原语**，与 `write_hwcheck_record` 同族——归档不是检测页装配，
+        # 守卫拦的是装配原语（`hwcheck_view`）回 webapp，不是落盘原语。
     }),
     "hwcheck_triage": frozenset({
         "build_triage_context", "fallback_advice", "read_hwcheck_record",

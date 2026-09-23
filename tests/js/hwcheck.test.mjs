@@ -1697,3 +1697,62 @@ test("ui 的空态文案把自建件也算进「哪些能复测」（否则页�
 });
 
 
+
+// ---------------------------------------------------------------------------
+// 工单 hwcheck-unknown-device/08：回读行上的快照出处标记
+// ---------------------------------------------------------------------------
+
+test("计划面板：快照行标出「来自我的器件 <id>」（回读以工程内快照为准）", () => {
+  const row = {
+    slug: "mine_gyro", name: "卖家给的六轴模块", tag: "custom",
+    tag_text: "自建件：按你确认的事实探测", plan: "有寄存器有期望值 → 板上判定",
+    address_text: "0x68", register_text: "0x75", expect_text: "0x68",
+    echo_only: false, notes: "", probes: true,
+    snapshot: true, stored: true,
+  };
+  const html = hwcheckCustomPlanHTML([row]);
+  assert.ok(html.includes("来自我的器件 mine_gyro"), html);
+  assert.ok(!html.includes("已从「我的器件」删除"), html);
+});
+
+test("计划面板：快照行 + 条目已删除 → 如实说明（不静默、不报错）", () => {
+  const row = {
+    slug: "mine_gyro", name: "卖家给的六轴模块", tag_text: "自建件：按你确认的事实探测",
+    plan: "只 ping", address_text: "0x68", register_text: "", expect_text: "",
+    echo_only: false, notes: "", probes: true,
+    snapshot: true, stored: false,
+  };
+  const html = hwcheckCustomPlanHTML([row]);
+  const flat = html.replace(/\s+/g, "");
+  assert.ok(flat.includes("已从「我的器件」删除"), flat);
+  assert.ok(flat.includes("工程内快照"), flat);
+});
+
+test("计划面板：现读行（预览 / 08 之前的工程）不画快照标记", () => {
+  const row = {
+    slug: "mine_gyro", name: "卖家给的六轴模块", tag_text: "自建件：按你确认的事实探测",
+    plan: "只 ping", address_text: "0x68", register_text: "", expect_text: "",
+    echo_only: false, notes: "", probes: true,
+    snapshot: false, stored: true,
+  };
+  const html = hwcheckCustomPlanHTML([row]);
+  assert.ok(!html.includes("来自我的器件"), html);
+  assert.ok(html.includes("mine_gyro"), "行本体照旧渲染");
+});
+
+test("结构钉：表单收起 / 切换必须清掉资料与草稿（跨件来源污染的正面防线）", () => {
+  // 评审 🔴：给 A 抽了草稿 → 改编辑 B → 保存会把 A 的资料 / 草稿写进 B 的条目。
+  // 判据 = closeMyDeviceForm / openMyDeviceForm 的编辑分支都清 myMaterial 与 myDraft。
+  const source = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const closeBody = source.match(
+    /function closeMyDeviceForm\(\) \{([\s\S]*?)\n\}/);
+  assert.ok(closeBody, "ui/hwcheck.js 里应有 closeMyDeviceForm");
+  assert.ok(closeBody[1].includes("myMaterial"), "收起表单要清资料原文");
+  assert.ok(closeBody[1].includes("myDraft"), "收起表单要清草稿");
+  const openBody = source.match(
+    /function openMyDeviceForm\(device\) \{([\s\S]*?)\n\}/);
+  assert.ok(openBody, "ui/hwcheck.js 里应有 openMyDeviceForm");
+  assert.ok(/if \(device\) \{[\s\S]*?myMaterial[\s\S]*?myDraft/.test(openBody[1]),
+    "编辑已有器件时不带任何残留的资料 / 草稿");
+});

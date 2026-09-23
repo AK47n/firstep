@@ -40,6 +40,7 @@ from contest_generator.my_devices import (
     delete_device,
     list_devices,
     load_device,
+    load_device_entry,
     my_devices_dir,
     read_device_payload,
     save_device,
@@ -478,3 +479,64 @@ def test_payload_of_an_spi_device_has_empty_address_forms():
     assert payload["address"] is None
     assert payload["address_forms"]["address7"] == ""
     assert payload["bus_label"] == "SPI"
+
+
+# ---------------------------------------------------------------------------
+# 资料副本与抽取草稿的落盘（工单 hwcheck-unknown-device/08：归档的源头）
+# ---------------------------------------------------------------------------
+
+
+def test_save_persists_material_text_and_draft_when_given(tmp_path):
+    """保存时给了资料原文 / 抽取草稿 → 原样落进条目（归档时的源头在这里）。"""
+    root = my_devices_dir(tmp_path / "data")
+    saved = save_device(
+        root,
+        _device(),
+        now=MOMENT,
+        material_text="I2C 地址：0x76（SDO 接地时）",
+        draft={"missing": ["register"], "missing_text": "手册里没找到"},
+    )
+    assert saved.id == "mine_gyro"
+    entry = root / "mine_gyro"
+    assert (entry / "materials" / "material.txt").read_text(encoding="utf-8") == (
+        "I2C 地址：0x76（SDO 接地时）"
+    )
+    draft = json.loads((entry / "draft.json").read_text(encoding="utf-8"))
+    assert draft["missing"] == ["register"]
+
+
+def test_save_carries_over_provenance_when_not_given_again(tmp_path):
+    """幂等更新没再给资料 / 草稿 → **原样保留**（改个名字不该抹掉"当时凭什么"）；
+    给了新的资料原文 → 覆盖旧的。"""
+    root = my_devices_dir(tmp_path / "data")
+    save_device(
+        root, _device(), now=MOMENT,
+        material_text="旧的资料原文", draft={"missing": ["register"]},
+    )
+    save_device(root, _device(name="改过名的件"), now=MOMENT)
+    entry = root / "mine_gyro"
+    assert (entry / "materials" / "material.txt").read_text(encoding="utf-8") == "旧的资料原文"
+    assert (entry / "draft.json").is_file()
+    save_device(root, _device(name="又改了一次"), now=MOMENT, material_text="新的资料原文")
+    assert (entry / "materials" / "material.txt").read_text(encoding="utf-8") == "新的资料原文"
+    assert (entry / "draft.json").is_file(), "没给新草稿时旧草稿照旧保留"
+
+
+def test_load_device_entry_reads_a_snapshot_dir(tmp_path):
+    """`load_device_entry`：给一个条目目录（工程内快照同形状）→ 校验过的定义。"""
+    root = my_devices_dir(tmp_path / "data")
+    save_device(root, _device(), now=MOMENT)
+    device = load_device_entry(root / "mine_gyro")
+    assert device.id == "mine_gyro"
+    with pytest.raises(MyDeviceError):
+        load_device_entry(tmp_path / "nowhere")
+
+
+def test_save_with_blank_material_text_counts_as_not_given(tmp_path):
+    """`material_text` 只有空白 = 视同没给（旧资料原样保留）——不存在"给了空白
+    却把旧资料悄悄删掉"的第三态（评审 🟡：两个判据要统一）。"""
+    root = my_devices_dir(tmp_path / "data")
+    save_device(root, _device(), now=MOMENT, material_text="旧的资料原文")
+    save_device(root, _device(name="改名"), now=MOMENT, material_text="   ")
+    entry = root / "mine_gyro"
+    assert (entry / "materials" / "material.txt").read_text(encoding="utf-8") == "旧的资料原文"

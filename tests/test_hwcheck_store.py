@@ -196,3 +196,85 @@ def test_read_project_rejects_a_dir_without_manifest(tmp_path):
     with pytest.raises(HwCheckError) as excinfo:
         read_hwcheck_project(plain)
     assert "检测工程" in str(excinfo.value)
+
+
+# ---------------------------------------------------------------------------
+# 自建件归档与快照（工单 hwcheck-unknown-device/08）
+# ---------------------------------------------------------------------------
+
+
+def _make_device_entry(root, device_id="mine_gyro", *, draft=True) -> None:
+    """数据目录里造一件自建件（定义 + 资料副本 + 抽取草稿）。"""
+    from contest_generator.my_devices import DEVICE_JSON, save_device, CustomDevice
+
+    save_device(root, CustomDevice(id=device_id, name="卖家给的六轴模块", bus="i2c", address=0x68))
+    entry = root / device_id
+    (entry / "materials" / "material.txt").write_text("I2C 地址：0x76", encoding="utf-8")
+    if draft:
+        (entry / "draft.json").write_text(
+            json.dumps({"missing": ["register"], "missing_text": "手册里没找到"}),
+            encoding="utf-8",
+        )
+    assert (entry / DEVICE_JSON).is_file()
+
+
+def test_archive_copies_definition_material_and_draft_into_the_project(tmp_path):
+    """生成后归档：定义快照 + 资料副本 + 抽取草稿原样进工程 `custom_device/<id>/`。"""
+    from contest_generator.hwcheck_store import (
+        CUSTOM_DEVICE_DIRNAME,
+        archive_custom_devices,
+    )
+    from contest_generator.my_devices import my_devices_dir
+
+    data_root = my_devices_dir(tmp_path / "data")
+    _make_device_entry(data_root)
+    project = tmp_path / "project"
+    project.mkdir()
+
+    archived = archive_custom_devices(project, tmp_path / "data", ("mine_gyro",))
+
+    assert archived == ("mine_gyro",)
+    snapshot = project / CUSTOM_DEVICE_DIRNAME / "mine_gyro"
+    assert (snapshot / "device.json").is_file()
+    assert (snapshot / "materials" / "material.txt").read_text(encoding="utf-8") == "I2C 地址：0x76"
+    assert json.loads((snapshot / "draft.json").read_text(encoding="utf-8"))["missing"] == ["register"]
+
+
+def test_archive_without_devices_creates_nothing(tmp_path):
+    """一件自建件都没有 = 不建 `custom_device/` 目录（旧工程的工程树一个字节不多）。"""
+    from contest_generator.hwcheck_store import archive_custom_devices
+
+    project = tmp_path / "project"
+    project.mkdir()
+    archived = archive_custom_devices(project, tmp_path / "data", ())
+    assert archived == ()
+    assert not (project / "custom_device").exists(), "空归档不许留空目录"
+
+
+def test_archive_is_loud_when_the_definition_has_vanished(tmp_path):
+    """选中的自建件在数据目录里不见了 = 大声报错（工程里调着它的探测函数，
+    归档却少了它的定义——静默跳过就是一次悄无声息的少档案）。"""
+    from contest_generator.hwcheck_store import archive_custom_devices
+
+    project = tmp_path / "project"
+    project.mkdir()
+    with pytest.raises(HwCheckError) as excinfo:
+        archive_custom_devices(project, tmp_path / "data", ("mine_gone",))
+    assert "mine_gone" in str(excinfo.value)
+
+
+def test_read_custom_snapshots_returns_only_existing_entries(tmp_path):
+    """读快照：有快照的回定义；没有的（08 之前的工程 / 归档缺失）不在字典里。"""
+    from contest_generator.hwcheck_store import (
+        CUSTOM_DEVICE_DIRNAME,
+        read_custom_snapshots,
+    )
+
+    project = tmp_path / "project"
+    _make_device_entry(project / CUSTOM_DEVICE_DIRNAME)
+
+    snapshots = read_custom_snapshots(project, ("mine_gyro", "mine_gone"))
+
+    assert set(snapshots) == {"mine_gyro"}
+    assert snapshots["mine_gyro"].id == "mine_gyro"
+    assert snapshots["mine_gyro"].address == 0x68

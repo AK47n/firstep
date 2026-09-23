@@ -896,3 +896,269 @@ def test_draft_endpoint_unconfigured_is_a_hinted_400(tmp_path):
     response = client.post("/api/my-devices/draft", json={"text": "BMP280 地址 0x76"})
     assert response.status_code == 400, response.text
     assert "未配置 AI API" in response.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# 工程内快照与回读（工单 hwcheck-unknown-device/08）
+# ---------------------------------------------------------------------------
+
+
+def test_generate_archives_the_custom_device_into_the_project(generate_client, tmp_path):
+    """生成后 `custom_device/<id>/` 里有定义快照 + 资料副本 + 抽取草稿；
+    上下文清单不被归档污染（devices 照记、slugs 里没有它）。"""
+    from contest_generator.context_manifest import read_context_fields
+
+    client, data_dir = generate_client
+    from tests.fakes import FakeLLM
+
+    fake = FakeLLM()
+    # 用带草稿的那支夹具：直接走保存端点 + 手工把资料/草稿带上（save 端点
+    # 的载荷只收 device；资料与草稿在 08 起走 save 的可选字段，端点先不暴露——
+    # 这里用域函数保存，端到端面在 generate / readback 两条路上）
+    from contest_generator.my_devices import save_device, my_devices_dir, CustomDevice
+
+    save_device(
+        my_devices_dir(data_dir),
+        CustomDevice(id="mine_gyro", name="卖家给的六轴模块", bus="i2c",
+                     address=0x68, register=0x75, expect=0x68),
+        material_text="I2C 地址：0x76（SDO 接地时）",
+        draft={"missing": [], "missing_text": "手册里没找到"},
+    )
+    output_parent = tmp_path / "out"
+    output_parent.mkdir()
+    response = client.post(
+        "/api/hwcheck/generate",
+        json={
+            "platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
+            "devices": ["mine_gyro"], "parent_dir": str(output_parent),
+        },
+    )
+    assert response.status_code == 200, response.text
+    project = Path(response.json()["output_dir"])
+    snapshot = project / "custom_device" / "mine_gyro"
+    assert (snapshot / "device.json").is_file(), "定义快照要进工程"
+    assert (snapshot / "materials" / "material.txt").read_text(encoding="utf-8") == (
+        "I2C 地址：0x76（SDO 接地时）"
+    )
+    assert (snapshot / "draft.json").is_file(), "抽取草稿要进工程"
+    fields = read_context_fields(project)
+    assert fields is not None and fields["devices"] == ["mine_gyro"]
+    assert "custom_device" not in json.dumps(fields), "归档不许污染上下文清单"
+
+
+def test_readback_prefers_the_project_snapshot_after_the_device_is_deleted(
+    generate_client, tmp_path
+):
+    """用户删掉「我的器件」之后，已生成工程的回读**不变**（以工程内快照为准），
+    并如实标注：这一行来自快照、条目已不存在（不静默、不报错）。"""
+    from contest_generator.my_devices import save_device, my_devices_dir, CustomDevice
+
+    client, data_dir = generate_client
+    save_device(
+        my_devices_dir(data_dir),
+        CustomDevice(id="mine_gyro", name="卖家给的六轴模块", bus="i2c",
+                     address=0x68, register=0x75, expect=0x68),
+    )
+    output_parent = tmp_path / "out"
+    output_parent.mkdir()
+    generated = client.post(
+        "/api/hwcheck/generate",
+        json={
+            "platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
+            "devices": ["mine_gyro"], "parent_dir": str(output_parent),
+        },
+    )
+    assert generated.status_code == 200, generated.text
+    project = generated.json()["output_dir"]
+    before = client.get("/api/hwcheck/project", params={"output_dir": project})
+    assert before.status_code == 200, before.text
+    import shutil
+
+    shutil.rmtree(my_devices_dir(data_dir) / "mine_gyro")
+    after = client.get("/api/hwcheck/project", params={"output_dir": project})
+    assert after.status_code == 200, "删掉定义不许让工程读不回来"
+    rows = after.json()["custom"]
+    assert [row["slug"] for row in rows] == ["mine_gyro"], "计划仍完整"
+    row = rows[0]
+    assert row["snapshot"] is True, "回读以工程内快照为准"
+    assert row["stored"] is False, "条目已不存在要如实标注"
+    assert row["address_text"] == "0x68", "事实面与生成那次一致"
+
+
+def test_readback_falls_back_to_the_data_dir_without_a_snapshot(generate_client, tmp_path):
+    """08 之前的工程没有快照目录 → 回读走数据目录（既有行为，行上如实标
+    snapshot=False / stored=True）。"""
+    from contest_generator.my_devices import save_device, my_devices_dir, CustomDevice
+    import shutil
+
+    client, data_dir = generate_client
+    save_device(
+        my_devices_dir(data_dir),
+        CustomDevice(id="mine_gyro", name="卖家给的六轴模块", bus="i2c",
+                     address=0x68, register=0x75, expect=0x68),
+    )
+    output_parent = tmp_path / "out"
+    output_parent.mkdir()
+    generated = client.post(
+        "/api/hwcheck/generate",
+        json={
+            "platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
+            "devices": ["mine_gyro"], "parent_dir": str(output_parent),
+        },
+    )
+    assert generated.status_code == 200, generated.text
+    project = Path(generated.json()["output_dir"])
+    shutil.rmtree(project / "custom_device")  # 模拟 08 之前生成的工程
+    readback = client.get("/api/hwcheck/project", params={"output_dir": str(project)})
+    assert readback.status_code == 200, readback.text
+    rows = readback.json()["custom"]
+    assert [row["slug"] for row in rows] == ["mine_gyro"]
+    assert rows[0]["snapshot"] is False
+    assert rows[0]["stored"] is True
+
+
+def test_save_endpoint_persists_material_and_draft_keys(devices_client):
+    """保存端点收 `material_text` / `draft` 可选键 → 随定义落进条目（08 归档的
+    源头走的是产品保存路径，不是只有域函数能落）；不带这两键的旧客户端零变化。"""
+    client, data_dir = devices_client
+    response = client.post("/api/my-devices", json={
+        "device": DEVICE_BODY,
+        "material_text": "I2C 地址：0x76（SDO 接地时）",
+        "draft": {"missing": ["register"], "missing_text": "手册里没找到"},
+    })
+    assert response.status_code == 200, response.text
+    entry = my_devices_dir(data_dir) / "mine_gyro"
+    assert (entry / "materials" / "material.txt").read_text(encoding="utf-8") == (
+        "I2C 地址：0x76（SDO 接地时）"
+    )
+    assert json.loads((entry / "draft.json").read_text(encoding="utf-8"))["missing"] == ["register"]
+    # 旧的保存载荷（没有这两个键）照常工作，且不清掉已存的资料与草稿
+    client.post("/api/my-devices", json={"device": {**DEVICE_BODY, "name": "改个名"}})
+    assert (entry / "materials" / "material.txt").exists()
+    assert (entry / "draft.json").exists()
+
+
+def test_mixed_selection_archives_only_the_custom_device(generate_client, tmp_path):
+    """混选（库内件 + 自建件——检测页上是同一个选择池，这是常态用法）：
+    归档只含自建件；删掉数据条目后回读**仍完整**（快照分支在混选下照样生效——
+    评审抓到的第一版按全量选中集判 `all()`，混选时永远走不进快照分支）。"""
+    from contest_generator.my_devices import save_device, my_devices_dir, CustomDevice
+    import shutil
+
+    client, data_dir = generate_client
+    save_device(
+        my_devices_dir(data_dir),
+        CustomDevice(id="mine_gyro", name="卖家给的六轴模块", bus="i2c",
+                     address=0x68, register=0x75, expect=0x68),
+    )
+    output_parent = tmp_path / "out"
+    output_parent.mkdir()
+    generated = client.post(
+        "/api/hwcheck/generate",
+        json={
+            "platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
+            "devices": ["led", "mine_gyro"], "parent_dir": str(output_parent),
+        },
+    )
+    assert generated.status_code == 200, generated.text
+    project = Path(generated.json()["output_dir"])
+    assert (project / "custom_device" / "mine_gyro" / "device.json").is_file()
+    assert not (project / "custom_device" / "led").exists(), "库内器件不进归档"
+
+    shutil.rmtree(my_devices_dir(data_dir) / "mine_gyro")
+    readback = client.get("/api/hwcheck/project", params={"output_dir": str(project)})
+    assert readback.status_code == 200, readback.text
+    rows = readback.json()["custom"]
+    assert [row["slug"] for row in rows] == ["mine_gyro"], "混选删定义后计划仍完整"
+    assert rows[0]["snapshot"] is True and rows[0]["stored"] is False
+
+
+def test_readback_uses_the_snapshot_even_when_the_definition_was_later_edited(
+    generate_client, tmp_path
+):
+    """票面第 2 条的「改了」半边：生成后改了「我的器件」的地址 → 回读仍是
+    **生成那次**的事实（以快照为准，不是数据目录现读）。"""
+    from contest_generator.my_devices import save_device, my_devices_dir, CustomDevice
+
+    client, data_dir = generate_client
+    save_device(
+        my_devices_dir(data_dir),
+        CustomDevice(id="mine_gyro", name="卖家给的六轴模块", bus="i2c",
+                     address=0x68, register=0x75, expect=0x68),
+    )
+    output_parent = tmp_path / "out"
+    output_parent.mkdir()
+    generated = client.post(
+        "/api/hwcheck/generate",
+        json={
+            "platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
+            "devices": ["mine_gyro"], "parent_dir": str(output_parent),
+        },
+    )
+    assert generated.status_code == 200, generated.text
+    project = generated.json()["output_dir"]
+    save_device(
+        my_devices_dir(data_dir),
+        CustomDevice(id="mine_gyro", name="卖家给的六轴模块", bus="i2c",
+                     address=0x6B, register=0x75, expect=0x68),
+    )
+    readback = client.get("/api/hwcheck/project", params={"output_dir": project})
+    assert readback.status_code == 200, readback.text
+    row = readback.json()["custom"][0]
+    assert row["address_text"] == "0x68", "回读以快照为准，不吃改后的定义"
+    assert row["snapshot"] is True and row["stored"] is True
+
+
+def test_partial_snapshot_falls_back_to_the_data_dir(generate_client, tmp_path):
+    """部分快照（手删工程里一个条目的归档）→ 整体回退数据目录（all-or-nothing
+    的既有口径），行上如实标 snapshot=False。"""
+    from contest_generator.my_devices import save_device, my_devices_dir, CustomDevice
+    import shutil
+
+    client, data_dir = generate_client
+    for device_id in ("mine_gyro", "mine_echo"):
+        save_device(
+            my_devices_dir(data_dir),
+            CustomDevice(id=device_id, name="库外件 " + device_id, bus="i2c",
+                         address=0x68, register=0x75, expect=0x68),
+        )
+    output_parent = tmp_path / "out"
+    output_parent.mkdir()
+    generated = client.post(
+        "/api/hwcheck/generate",
+        json={
+            "platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
+            "devices": ["mine_gyro", "mine_echo"], "parent_dir": str(output_parent),
+        },
+    )
+    assert generated.status_code == 200, generated.text
+    project = Path(generated.json()["output_dir"])
+    shutil.rmtree(project / "custom_device" / "mine_echo")
+    readback = client.get("/api/hwcheck/project", params={"output_dir": str(project)})
+    assert readback.status_code == 200, readback.text
+    rows = readback.json()["custom"]
+    assert sorted(row["slug"] for row in rows) == ["mine_echo", "mine_gyro"]
+    assert all(row["snapshot"] is False and row["stored"] is True for row in rows)
+
+
+def test_readback_without_custom_devices_stays_clean(generate_client, tmp_path):
+    """零自建件的工程：回读载荷**顶层不新增任何键**（snapshot / archive 这类
+    字样一个都不出现）——「逐字与改动前一致」的结构面钉在这里。"""
+    client, _ = generate_client
+    output_parent = tmp_path / "out"
+    output_parent.mkdir()
+    generated = client.post(
+        "/api/hwcheck/generate",
+        json={
+            "platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
+            "devices": ["led"], "parent_dir": str(output_parent),
+        },
+    )
+    assert generated.status_code == 200, generated.text
+    project = generated.json()["output_dir"]
+    assert not (Path(project) / "custom_device").exists(), "零自建件不建归档目录"
+    readback = client.get("/api/hwcheck/project", params={"output_dir": project})
+    assert readback.status_code == 200, readback.text
+    payload = readback.json()
+    assert payload["custom"] == []
+    assert not [k for k in payload if "snapshot" in k or "archive" in k], sorted(payload)

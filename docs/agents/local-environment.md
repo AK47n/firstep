@@ -695,6 +695,23 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > 的 FakeLLM 与 RecordingLLM 两个假件；③ **`tests/test_llm.py` 的
 > `PROTOCOL_METHOD_NAMES` 覆盖清单 + `_call_all_protocol_methods` 扫描 +
 > 派发测试的 remote 名单**——漏了它，"协议全量覆盖"那条不变量静默失效。
+>
+> **2026-09-23（hwcheck-unknown-device/08 会话：工程内快照 + 回读以快照为准）**：
+> 同样**一次服务器都没起**。读数：`python -m pytest -n auto -q`
+> **5338 passed + 1 skipped**、前端门禁 **1768 passed / 0 fail**、浏览器门禁
+> **38 passed / 0 fail**；反证 4 后端 + 1 前端注入全红逐字节复原
+> （`probe-08-guard-strength{,-front}.txt`）。
+> ⚠ **本轮踩出来的一条门禁纪律（对"改 JS"的改动适用）**：改完 JS **必须先跑
+> `node --test "tests/js/*.test.mjs"` 再跑浏览器门禁**——js 门禁 import 全部
+> 模块，一个重名声明（`const saved` 撞既有声明）就会当场红；跳过它直接跑浏览器
+> 门禁，代价是 38 条真浏览器用例**全部**在页面加载时超时（读数像"产品全坏"，
+> 其实是一个语法错）。另：**别在浏览器门禁跑着时并发跑别的套件**（本轮实测：
+> 并发的 pytest 自带的浏览器子套件与它抢同一棵工作树，38 条互相拖死、还留了
+> 两个孤儿后端进程）。
+> ⚠ **`tests/test_hwcheck_assembly_home.py` 的 import 白名单改法**：08 给 webapp
+> 加了 `hwcheck_store.archive_custom_devices` import，守卫当场红——修法不是绕
+> 守卫，是把名字加进白名单并在判据旁写明理由（它是**落盘原语**，与
+> `write_hwcheck_record` 同族；守卫拦的是装配原语回 webapp）。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 

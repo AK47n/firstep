@@ -21,30 +21,47 @@
 from __future__ import annotations
 
 import re
+import shutil
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Sequence
 
 from .context_manifest import (
     CONTEXT_KIND_HWCHECK,
     read_context_fields,
 )
 from .hwcheck import HwCheckConfig, HwCheckError
+from .my_devices import (
+    DEVICE_JSON,
+    DEVICE_ID_PATTERN,
+    CustomDevice,
+    load_device_entry,
+    my_devices_dir,
+)
 from .platforms import KNOWN_PLATFORMS
 
 __all__ = [
+    "CUSTOM_DEVICE_DIRNAME",
     "DEFAULT_RECENT_LIMIT",
     "HWCHECK_DIR_PREFIX",
     "HwcheckProjectRef",
+    "archive_custom_devices",
     "hwcheck_output_name",
     "list_hwcheck_projects",
     "parse_hwcheck_dir_name",
+    "read_custom_snapshots",
     "read_hwcheck_project",
     "resolve_hwcheck_output_dir",
 ]
 
 # 子目录前缀（生成侧与扫描侧共用同一常量：改名只改这一处）
 HWCHECK_DIR_PREFIX = "hwcheck"
+
+# 自建件快照在工程里的目录名（工单 hwcheck-unknown-device/08）：生成后把本次
+# 用到的自建件定义 + 资料副本 + 抽取草稿复制进这里——回读**以工程内快照为准**，
+# 用户之后改了或删了「我的器件」不影响已生成的工程。
+CUSTOM_DEVICE_DIRNAME = "custom_device"
 
 # 目录名文法：hwcheck-<平台>-<YYYYMMDD>-<HHMMSS>（平台 = 词表内 slug）
 _NAME_RE = re.compile(
@@ -187,3 +204,72 @@ def read_hwcheck_project(output_dir: Path) -> HwCheckConfig:
         oled="oled" in fields["slugs"],
         devices=tuple(fields["devices"]),
     )
+
+
+# ---------------------------------------------------------------------------
+# 自建件快照：归档与回读（工单 hwcheck-unknown-device/08）
+# ---------------------------------------------------------------------------
+
+
+def archive_custom_devices(
+    output_dir: Path | str,
+    data_dir: Path | str,
+    device_ids: Sequence[str],
+) -> tuple[str, ...]:
+    """生成成功后把本次选中的自建件**快照**进工程（`custom_device/<id>/`）。
+
+    复制的是数据目录里那一刻的定义（`device.json`）+ 资料副本（`materials/`）
+    + 抽取草稿（`draft.json`，有才复制）——"过几天回头看，清楚知道当时凭什么
+    填了那个地址"。**一件都没有 = 不建目录**（零自建件的工程树一个字节不多，
+    回读的向后兼容就落在这上面）。
+
+    选中的 id 在数据目录里不见了 = 大声报错：工程里调着它的探测函数，归档却
+    少了它的定义，静默跳过就是一次悄无声息的少档案。
+
+    id 先过文法（`DEVICE_ID_PATTERN`）再拼路径——这是把 id 变成路径的函数自己的
+    防线（照 `my_devices._entry_dir` 那条规矩），不是手滑防御。
+    """
+    root = my_devices_dir(data_dir)
+    archived: list[str] = []
+    for device_id in device_ids:
+        if DEVICE_ID_PATTERN.fullmatch(device_id) is None:
+            raise HwCheckError(
+                f"自建件 id {device_id!r} 不合法，归档不了——请回检测页重试一次生成"
+            )
+        source = root / device_id
+        if not source.is_dir():
+            raise HwCheckError(
+                f"自建件 {device_id!r} 的定义在数据目录里不见了，归档不了——"
+                "请回检测页重试一次生成"
+            )
+        target = Path(output_dir) / CUSTOM_DEVICE_DIRNAME / device_id
+        if target.exists():
+            shutil.rmtree(target)
+        shutil.copytree(source, target)
+        archived.append(device_id)
+    return tuple(archived)
+
+
+def read_custom_snapshots(
+    output_dir: Path | str, device_ids: Sequence[str]
+) -> dict[str, CustomDevice]:
+    """工程内快照 → 校验过的定义（只收**真的有快照**的那几件）。
+
+    08 之前生成的工程没有 `custom_device/` 目录、或某件的归档缺失 → 那件不在
+    返回里（调用方据此回退数据目录，行上的 `snapshot` 标记也据此如实标）。
+    快照也是"定义"：坏 JSON / 形状非法照 `my_devices` 的约定大声点名该条目，
+    不许悄悄变成半截事实混进回读。
+
+    id 先过文法（`DEVICE_ID_PATTERN`）再拼路径——id 从**盘上清单**进来（手改
+    `.contest_context.json` 即可控），文法不过的（含 `..` 这类穿越形态）直接
+    跳过，交给调用方的数据目录回退路径去说"没有这件"。
+    """
+    base = Path(output_dir) / CUSTOM_DEVICE_DIRNAME
+    snapshots: dict[str, CustomDevice] = {}
+    for device_id in device_ids:
+        if DEVICE_ID_PATTERN.fullmatch(device_id) is None:
+            continue
+        entry = base / device_id
+        if (entry / DEVICE_JSON).is_file():
+            snapshots[device_id] = load_device_entry(entry)
+    return snapshots

@@ -13,9 +13,9 @@
 |---|---|---|---|
 | 06 串口复测命令台 | **resolved** | `946e9cc4` | 三门禁 5272+1skipped / 1752 / 37 全绿；反证 6+2 条注入全红逐字节复原；编译矩阵 11 格 × 2 平台 0e/0w |
 | 12 id 连字符编不过 | **resolved** | `828c22d4` | 三门禁 5285+1 / 1755 / 37（首跑 2 红=launcher-reload 已知偶发，单跑复证）；量具改判 1（三端点全 400）；反证 3+1 条注入全红；矩阵 12 格 × 2 平台全 PASS（含 hyphen-id-refused 边界格） |
-| 07 资料→草稿 | **resolved** | 见 `git log` | 三门禁 5322+1 / 1764 / 38；反证 4+1 条注入全红（`probe-07-guard-strength{,-front}.txt`）；浏览器用例零 LLM（夹具继承真环境，真点=真额度） |
-| 08 快照+回读 | ready-for-agent | — | — |
-| 09 排障带事实 | ready-for-agent | — | — |
+| 07 资料→草稿 | **resolved** | `132e1058` | 三门禁 5322+1 / 1764 / 38；反证 4+1 条注入全红（`probe-07-guard-strength{,-front}.txt`）；浏览器用例零 LLM（夹具继承真环境，真点=真额度） |
+| 08 快照+回读 | **resolved** | 见 `git log` | 三门禁 5338+1 / 1768 / 38；反证 4+1 条注入全红；评审抓到 2 红（混选快照门失效 / 前端跨件来源污染）全修 |
+| 09 排障带事实 | ready-for-agent | — | webapp 排障端点留了记账注释：动 triage 时把 `custom_snapshot_dir=output_dir` 一起带上 |
 | 10 收口 | ready-for-agent | — | 必须最后做；验收线"含连字符 id 那一格"按 12 的边界格口径读 |
 
 ## 剩余队列与建议顺序

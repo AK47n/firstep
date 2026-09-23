@@ -1,0 +1,21 @@
+[1] 前置检查（源文件指纹与锚点唯一性）
+    hwcheck_board.py: e3731117409ab158…（锚点各一处 ✓）
+    hwcheck_store.py: a464d4ec88e9fa03…（锚点各一处 ✓）
+    my_devices.py: 31f57c3e5286b9d6…（锚点各一处 ✓）
+    webapp.py: 4cbf6c8986e41194…（锚点各一处 ✓）
+[2] 注入前（守卫在）：PASS（4 条全绿）  ｜ 1 passed, 49 deselected, 1 warning in 1.57s / 1 passed, 25 deselected in 0.06s / 1 passed, 68 deselected in 0.41s / 1 passed, 49 deselected, 1 warning in 0.95s
+[3] 注入 A: 回读不再吃工程内快照（照旧读数据目录） → RED（守卫变红） ｜ 1 failed, 49 deselected, 1 warning in 1.33s
+[4] 复原复核：hwcheck_board.py sha256 相等 ✓（e3731117409ab158…）
+[3] 注入 B: 归档时定义不见了就静默跳过（不再大声报错） → RED（守卫变红） ｜ 1 error in 0.28s
+[4] 复原复核：hwcheck_store.py sha256 相等 ✓（a464d4ec88e9fa03…）
+[3] 注入 C: 幂等保存不再带走上一次的资料与草稿 → RED（守卫变红） ｜ 1 failed, 68 deselected in 0.14s
+[4] 复原复核：my_devices.py sha256 相等 ✓（31f57c3e5286b9d6…）
+[3] 注入 D: 生成后不再调用归档 → RED（守卫变红） ｜ 1 failed, 49 deselected, 1 warning in 1.06s
+[4] 复原复核：webapp.py sha256 相等 ✓（4cbf6c8986e41194…）
+[5] 复原后复跑：test_readback_prefers_the_project_snapshot_after_the_device_is_deleted PASS（回绿） ｜ 1 passed, 49 deselected, 1 warning in 1.65s
+[5] 复原后复跑：test_archive_is_loud_when_the_definition_has_vanished PASS（回绿） ｜ 1 passed, 25 deselected in 0.06s
+[5] 复原后复跑：test_save_carries_over_provenance_when_not_given_again PASS（回绿） ｜ 1 passed, 68 deselected in 0.09s
+[5] 复原后复跑：test_generate_archives_the_custom_device_into_the_project PASS（回绿） ｜ 1 passed, 49 deselected, 1 warning in 0.95s
+[6] 收尾指纹：4 个文件逐字节未变 ✓
+
+=== 结论：反证成立（4 条注入都让对应用例变红，且逐字节复原） ===

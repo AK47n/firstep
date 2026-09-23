@@ -329,10 +329,16 @@ function syncMyDeviceForm() {
 // closeMyDeviceForm()：收起表单——**唯一出口**（新建 / 编辑共用一份表单状态，
 // 三处（保存成功 / 取消 / 删掉的正是编辑对象）都必须连 `myEditId` 一起清掉：
 // 漏清一处，下次"新建"就会被上一条的 id 顶掉"撞已有件"判据）。
+// 资料原文与草稿**一起清**（工单 08）：它们是"这一件"的来源记录——留着的话，
+// 下一件（尤其是编辑另一件）保存时会把上一件的资料 / 草稿悄悄写进它的条目。
 function closeMyDeviceForm() {
   hwcheckUI.myForm = null;
   hwcheckUI.myEditId = "";
   hwcheckUI.myFormError = "";
+  hwcheckUI.myMaterial = "";
+  hwcheckUI.myMaterialMessage = "";
+  hwcheckUI.myDraft = null;
+  hwcheckUI.myDraftApplied = false;
 }
 
 function openMyDeviceForm(device) {
@@ -342,6 +348,12 @@ function openMyDeviceForm(device) {
   hwcheckUI.myEditId = device ? String(device.id || "") : "";
   hwcheckUI.myFormError = myDeviceFormError(hwcheckUI.myForm);
   if (device) hwcheckUI.myDraftApplied = false;  // 表单换成编辑态了，"已填进表单"那句不再成立
+  if (device) {
+    // 编辑已有器件时不带任何残留的资料 / 草稿（跨件来源污染的另一半：
+    // 表单侧 applyMyDraft 挡了"填"，保存侧这里挡"发"）
+    hwcheckUI.myMaterial = "";
+    hwcheckUI.myDraft = null;
+  }
   renderMyDevices();
 }
 
@@ -451,11 +463,18 @@ async function saveMyDevice() {
   }
   hwcheckUI.myBusy = true;
   try {
-    const payload = await apiPost("/api/my-devices", myDevicePayload(hwcheckUI.myForm));
-    const saved = myDeviceSavedDevice(payload);
+    const payload = myDevicePayload(hwcheckUI.myForm);
+    // 资料原文与抽取草稿随保存落进条目（工单 08：归档的源头）。没给 = 服务端
+    // 保留旧的那份——改个名字不该抹掉"当时凭什么填了那个地址"。
+    if (String(hwcheckUI.myMaterial || "").trim()) {
+      payload.material_text = hwcheckUI.myMaterial;
+    }
+    if (hwcheckUI.myDraft) payload.draft = hwcheckUI.myDraft;
+    const saved = await apiPost("/api/my-devices", payload);
+    const savedDevice = myDeviceSavedDevice(saved);
     closeMyDeviceForm();
     await loadMyDevices();
-    toast("ok", "已存进「我的器件」：" + ((saved && saved.name) || ""));
+    toast("ok", "已存进「我的器件」：" + ((savedDevice && savedDevice.name) || ""));
   } catch (e) {
     hwcheckUI.myFormError = e && e.message ? e.message : String(e);
   } finally {

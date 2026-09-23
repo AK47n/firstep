@@ -41,7 +41,7 @@ import shutil
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from .entry_store import (
     StoreError,
@@ -57,7 +57,9 @@ __all__ = [
     "DEVICE_ID_PATTERN",
     "DEVICE_ID_PREFIX",
     "DEVICE_JSON",
+    "DRAFT_FILENAME",
     "MATERIALS_DIRNAME",
+    "MATERIAL_TEXT_FILENAME",
     "MY_DEVICES_DIRNAME",
     "NAME_MAX_CHARS",
     "NOTES_MAX_CHARS",
@@ -67,6 +69,7 @@ __all__ = [
     "delete_device",
     "list_devices",
     "load_device",
+    "load_device_entry",
     "my_devices_dir",
     "read_device_payload",
     "save_device",
@@ -89,6 +92,11 @@ MY_DEVICES_DIRNAME = "hwcheck_devices"
 # 条目内文件名与资料目录名（工单 07 往 `materials/` 里放用户提供的资料副本）
 DEVICE_JSON = "device.json"
 MATERIALS_DIRNAME = "materials"
+
+# 资料原文与抽取草稿（工单 08：保存时随定义落进条目，生成时一并归档进工程
+# ——"过几天回头看，清楚知道当时凭什么填了那个地址"）
+MATERIAL_TEXT_FILENAME = "material.txt"
+DRAFT_FILENAME = "draft.json"
 
 # id 前缀：库外件一眼看得出是"我的"（页面也按它区分两类东西）
 DEVICE_ID_PREFIX = "mine_"
@@ -253,6 +261,8 @@ def save_device(
     *,
     library_slugs: Sequence[str] = (),
     now: datetime | None = None,
+    material_text: str | None = None,
+    draft: Mapping[str, Any] | None = None,
 ) -> CustomDevice:
     """落盘一件定义（按 id 幂等更新），返回**存下来的**那件（带时间戳）。
 
@@ -267,7 +277,16 @@ def save_device(
     `entry_store.iter_entry_dirs` 都跳过点开头的目录。
 
     `created_at` 语义：已存在且读得回 → **原样保留**；否则 = 本次写入时刻。
+
+    **资料原文与抽取草稿**（工单 08，可选项）：`material_text`（用户贴 / 传的
+    资料文本）与 `draft`（抽取草稿载荷）给了就随定义落进条目；**没给就原样
+    保留旧的那份**——改个名字不该抹掉"当时凭什么填了那个地址"，这是归档的
+    源头（生成时 `hwcheck_store.archive_custom_devices` 把它们一并复制进工程）。
+    `material_text` 给了但**只有空白** = 视同没给（两态选一：不存在"给了空白
+    却把旧资料悄悄删掉"的第三态）。
     """
+    if material_text is not None and not material_text.strip():
+        material_text = None
     moment = now or datetime.now()
     stamp = moment.strftime("%Y-%m-%d %H:%M:%S")
     checked = device.validated(library_slugs=library_slugs)
@@ -286,13 +305,51 @@ def save_device(
         (staging / MATERIALS_DIRNAME).mkdir(parents=True)
         write_json(staging, DEVICE_JSON, saved.to_payload())
         if entry_dir.exists():
+            _carry_over_provenance(entry_dir, staging, material_text, draft)
             shutil.rmtree(entry_dir)
+        if material_text is not None and material_text.strip():
+            (staging / MATERIALS_DIRNAME / MATERIAL_TEXT_FILENAME).write_text(
+                material_text, encoding="utf-8"
+            )
+        if draft is not None:
+            (staging / DRAFT_FILENAME).write_text(
+                json.dumps(dict(draft), ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
         staging.rename(entry_dir)
     except Exception:
         # 清理失败不掩盖原始错误（照 entry_store.discard_entry_dirs 的口径）
         shutil.rmtree(staging, ignore_errors=True)
         raise
     return saved
+
+
+def _carry_over_provenance(
+    entry_dir: Path,
+    staging: Path,
+    material_text: str | None,
+    draft: Mapping[str, Any] | None,
+) -> None:
+    """旧条目的资料副本与抽取草稿**原样带进**新条目（没给新的就保留旧的）。
+
+    幂等保存每次都从空暂存目录重写整份条目——不带这一步，改一次名字就会把
+    上次的资料与草稿冲掉（归档的源头悄悄丢一半）。
+    """
+    old_materials = entry_dir / MATERIALS_DIRNAME
+    if old_materials.is_dir():
+        for item in old_materials.iterdir():
+            if item.name == MATERIAL_TEXT_FILENAME and material_text is not None:
+                continue  # 这次给了新的资料原文，覆盖旧的
+            target = staging / MATERIALS_DIRNAME / item.name
+            if target.exists():
+                continue
+            if item.is_dir():
+                shutil.copytree(item, target)
+            else:
+                shutil.copy2(item, target)
+    old_draft = entry_dir / DRAFT_FILENAME
+    if old_draft.is_file() and draft is None:
+        shutil.copy2(old_draft, staging / DRAFT_FILENAME)
 
 
 def load_device(root: Path | str, device_id: str) -> CustomDevice:
@@ -302,6 +359,13 @@ def load_device(root: Path | str, device_id: str) -> CustomDevice:
     就挡掉——读一次不该有写副作用，但"读到了什么"同样不该由 caller 保证。
     """
     return _load_entry(_entry_dir(root, device_id))
+
+
+def load_device_entry(entry_dir: Path | str) -> CustomDevice:
+    """读一个**条目目录**（`hwcheck_store.read_custom_snapshots` 读工程内快照
+    与 `load_device` 读数据目录共用同一条解析 + 校验——快照也是"定义"，坏快照
+    同样大声点名，不许悄悄变成半截事实）。"""
+    return _load_entry(Path(entry_dir))
 
 
 def list_devices(root: Path | str) -> tuple[CustomDevice, ...]:

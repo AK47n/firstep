@@ -178,6 +178,7 @@ from .hwcheck_board import hwcheck_view
 from .syscfg_prune import syscfg_pin_name_conflict_for
 from .hwcheck_store import (
     DEFAULT_RECENT_LIMIT,
+    archive_custom_devices,
     list_hwcheck_projects,
     read_hwcheck_project,
     resolve_hwcheck_output_dir,
@@ -2621,6 +2622,16 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 # 否则学生照页面接好线，工程里查无此脚。
                 bindings=view.pin_bindings or None,
             )
+        # 自建件快照归档（工单 hwcheck-unknown-device/08）：生成成功后把本次用到的
+        # 自建件定义 + 资料副本 + 抽取草稿复制进工程 `custom_device/<id>/`——回读
+        # 以快照为准，之后改 / 删「我的器件」不影响已生成的工程。**只归档计划里的
+        # 自建件**（`view.custom_plan` = 选中的每一件自建件；库内器件不是"我的
+        # 器件"，没有快照可归档）。一件自建件都没有时不建目录（工程树一个字节不多）。
+        archive_custom_devices(
+            summary.output_dir,
+            context.config_path.parent,
+            [entry.slug for entry in view.custom_plan],
+        )
         return {
             "platform": config.platform,
             "debug_uart": config.debug_uart,
@@ -2758,7 +2769,18 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             if app_config is not None
             else ()
         )
-        saved = save_device(_my_devices_root(), device, library_slugs=known_slugs)
+        # 资料原文与抽取草稿（工单 hwcheck-unknown-device/08，可选键）：带了就随
+        # 定义落进条目（归档的源头）；没带 = 幂等更新时**原样保留**旧的那份
+        # （改个名字不该抹掉"当时凭什么填了那个地址"）。
+        material_text = payload.get("material_text")
+        draft = payload.get("draft")
+        saved = save_device(
+            _my_devices_root(),
+            device,
+            library_slugs=known_slugs,
+            material_text=material_text if isinstance(material_text, str) else None,
+            draft=draft if isinstance(draft, dict) else None,
+        )
         return {"ok": True, "device": read_device_payload(saved)}
 
     @app.delete("/api/my-devices/{device_id}")
@@ -2848,6 +2870,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             # 所以回来看到的接线表还是那次工程里的表。
             require_pins=False,
             data_dir=context.config_path.parent,
+            # 回读**以工程内快照为准**（工单 hwcheck-unknown-device/08）：选中的
+            # 自建件在工程里有快照就吃快照——用户之后改 / 删「我的器件」不影响
+            # 已生成工程的回读；08 之前的工程没有快照，照旧走数据目录。
+            custom_snapshot_dir=path,
         )
         payload.update(view.board)
         # 清单在**视图之后**拼（它要吃自建件计划，工单 hwcheck-unknown-device/05）：
@@ -2892,6 +2918,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             masters_dir=app_config.masters_dir,
             recipe_path=context.hwcheck_recipe_path,
             data_dir=context.config_path.parent,
+            # ⚠ 09 记账（工单 hwcheck-unknown-device/08 评审）：排障的重投影
+            # **还没**吃工程内快照（回读端点吃了）——用户改 / 删「我的器件」后，
+            # 排障上下文与工程事实可能分叉。09 动 triage 时把
+            # `custom_snapshot_dir=output_dir` 一起带上（理由与回读端点逐字
+            # 相同，别留两条口径）。
         )
         board = view.board
         triage_context = build_triage_context(
