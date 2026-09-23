@@ -29,6 +29,10 @@ let server = null;
 let browser = null;
 let page = null;
 let parentDir = "";
+// 「我的器件」这一组用例的 id：**带时间戳保唯一**——数据目录在真机上（
+// `~/.contest_generator/hwcheck_devices/`），固定 id 会与用户自己建的那件撞名。
+// 每条用完即删（`myDeviceCleanup`），跑完不在用户数据目录里留东西。
+const MY_DEVICE_ID = `mine_probe${Date.now().toString().slice(-6)}`;
 
 const HWCHECK_TAB = 'nav button[data-tab="hwcheck"]';
 
@@ -106,6 +110,234 @@ async function setParent(dir) {
   await page.fill("#hwcheck-parent", dir);
   await page.dispatchEvent("#hwcheck-parent", "change");
 }
+
+// myDeviceType(selector, value)：像真人一样填一个字段——聚焦 → 输值 → **失焦**。
+//
+// 为什么不能只用 `page.fill()`：产品在**失焦**时按名称补 id 建议（真人的操作顺序
+// 就是"打完名字点下一个框"）。Playwright 的 `fill` 只发 input / change、**不发
+// blur**，于是"补建议"这条路根本没被走到——那样验的就不是用户会遇到的路径了。
+async function myDeviceType(selector, value) {
+  await page.focus(selector);
+  await page.fill(selector, value);
+  await page.dispatchEvent(selector, "blur");
+}
+
+// myDeviceFill(fields)：展开「+ 我的器件」表单并逐字段填值（真点真填）。
+//
+// ⚠ 先**取消**可能已经开着的表单（用例级隔离）：这些用例共用一张页面，前一条中途
+// 失败会把它的表单留在页面上；不先收掉，本条的 `#btn-my-device-new` 就是"点了没
+// 反应"（表单已经开着，只是装着上一条的内容）——实测会滚成 30s 超时。
+//
+// `blur` 触发的"按名称建议 id"在填完 name 之后可能改写 id，所以 id 最后填
+// （照真人顺序：先写名字再定 id，或者直接填 id 压过建议）。
+async function myDeviceFill(fields) {
+  if (await page.$("[data-my-device-cancel]")) {
+    await page.click("[data-my-device-cancel]");
+    await page.waitForSelector("[data-my-device-form]", { state: "detached" });
+  }
+  await page.click("#btn-my-device-new");
+  await page.waitForSelector("[data-my-device-form]");
+  for (const [key, value] of Object.entries(fields)) {
+    if (key === "id") continue;
+    const selector = `[data-my-device-field="${key}"]`;
+    // 总线是 <select>（fill 只认输入类元素），其余是 <input>
+    if (key === "bus") {
+      await page.selectOption(selector, value);
+      await page.dispatchEvent(selector, "blur");
+    } else {
+      await myDeviceType(selector, value);
+    }
+  }
+  if (fields.id) await myDeviceType('[data-my-device-field="id"]', fields.id);
+}
+
+// myDeviceCleanup(ids)：直接走产品端点删掉本次用例建的件（idempotent——没有就跳过）。
+// 为什么收尾用 API 而不是点页面：用例中途失败时页面可能已经不在那一块上，
+// 而"别在用户数据目录里留垃圾"这件事不该依赖页面状态。
+async function myDeviceCleanup(ids) {
+  for (const id of ids) {
+    try {
+      await fetch(`${server.url}/api/my-devices/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+    } catch { /* 收尾失败不该掩盖真正的红 */ }
+  }
+}
+
+test("「我的器件」：能建（地址双向显示）、能存住（刷新还在）、能改、能删", async () => {
+  await openTab();
+  await myDeviceFill({
+    name: "验收用的库外件", bus: "i2c", address: "0x68",
+    register: "0x75", expect: "0x68", notes: "买卖家页抄的",
+    id: MY_DEVICE_ID,
+  });
+  // 地址双向显示：7 位值 + 派生的 8 位读 / 写形式（0x68 → 读 0xD1 / 写 0xD0）
+  const preview = await page.textContent("[data-my-device-address-preview]");
+  for (const token of ["0x68", "0xD0", "0xD1"]) {
+    assert.ok(preview.includes(token), `地址预览应给出 ${token}：${preview}`);
+  }
+  const snapshot = await page.evaluate((id) => ({
+    error: document.querySelector("[data-my-device-form-error]").textContent,
+    disabled: document.querySelector("[data-my-device-save]").disabled,
+    values: [...document.querySelectorAll("[data-my-device-field]")]
+      .map((el) => `${el.dataset.myDeviceField}=${el.value}`),
+    rows: [...document.querySelectorAll("[data-my-device-row]")]
+      .map((el) => el.dataset.myDeviceRow),
+    want: id,
+  }), MY_DEVICE_ID);
+  assert.deepEqual(snapshot.values, [
+    "id=" + MY_DEVICE_ID, "name=验收用的库外件", "bus=i2c", "address=0x68",
+    "register=0x75", "expect=0x68", "notes=买卖家页抄的",
+  ], "表单现场： " + JSON.stringify(snapshot));
+  assert.equal(snapshot.disabled, false, "保存前：按钮该是可点的 —— " + JSON.stringify(snapshot));
+  assert.equal(snapshot.error, "", "保存前不该有校验理由 —— " + JSON.stringify(snapshot));
+  await page.click("[data-my-device-save]");
+  await page.waitForSelector(`[data-my-device-row="${MY_DEVICE_ID}"]`);
+  const row = await page.textContent(`[data-my-device-row="${MY_DEVICE_ID}"]`);
+  assert.ok(row.includes("验收用的库外件"), row);
+  assert.ok(row.includes("0x68") && row.includes("0xD0"),
+    "列表行也要两种写法都给出来：" + row);
+
+  // 存住了：整页刷新后仍在（服务端真源，不是页面内存）
+  await openTab();
+  await page.waitForSelector(`[data-my-device-row="${MY_DEVICE_ID}"]`);
+
+  // 能改：点「编辑」改名称 → 保存 → 行里是新名字（按 id 幂等更新，不新建第二份）
+  await page.click(`[data-my-device-edit="${MY_DEVICE_ID}"]`);
+  await page.waitForSelector("[data-my-device-form]");
+  await myDeviceType('[data-my-device-field="name"]', "改过名字的库外件");
+  await page.click("[data-my-device-save]");
+  await page.waitForFunction(
+    (id) => {
+      const row = document.querySelector(`[data-my-device-row="${id}"]`);
+      return !!row && row.textContent.includes("改过名字的库外件");
+    }, MY_DEVICE_ID, { timeout: 10000 });
+  const count = await page.evaluate(
+    (id) => document.querySelectorAll(`[data-my-device-row="${id}"]`).length, MY_DEVICE_ID);
+  assert.equal(count, 1, "按 id 幂等更新：不该建出第二行");
+
+  // 能删：点「删除」→ 行消失（服务端也真删了）
+  await page.click(`[data-my-device-del="${MY_DEVICE_ID}"]`);
+  await page.waitForFunction(
+    (id) => !document.querySelector(`[data-my-device-row="${id}"]`),
+    MY_DEVICE_ID, { timeout: 10000 });
+  const listed = await page.evaluate(async () => {
+    const body = await (await fetch("/api/my-devices")).json();
+    return body.devices.map((d) => d.id);
+  });
+  assert.ok(!listed.includes(MY_DEVICE_ID), "服务端也该没有这件：" + listed.join(","));
+});
+
+// 这条判据的**真源在服务端**（`CustomDevice.validated(library_slugs=…)` →
+// 400 点名要求改名），服务端那条腿的判据在 `tests/test_my_devices.py` /
+// `tests/test_my_devices_endpoint.py`（那里造了一个真叫 `mine_gyro` 的库内模块，
+// 撞得成）。这里验的是**页面这一层**做得到的那一件：撞**已有自建件**时当场拦住
+// ——这是真库上唯一会发生的撞名，也是学生真正会踩的那一下。
+//
+// 为什么不在真浏览器里造"库内 slug 撞名"：id 文法强制 `mine_` 前缀，而真库
+// 96 个 slug 一个都不以 `mine_` 开头（`test_library_slugs_never_take_the_mine_prefix`
+// 钉着这条事实）。要在浏览器里撞成，就得给这个 spec 换一个含 `mine_*` 模块的
+// 假库——那会连带把检测页的框架件（led / delay / 通道）一起换掉，验收跑的就
+// 不是真库了。判据强度的价值不如"验的是真东西"。
+test("「我的器件」：撞已有自建件时页面当场拦住（改名 / 覆盖二选一，不静默存）", async () => {
+  await openTab();
+  await myDeviceFill({
+    name: "第一件", bus: "i2c", address: "0x68", id: MY_DEVICE_ID,
+  });
+  await page.click("[data-my-device-save]");
+  await page.waitForSelector(`[data-my-device-row="${MY_DEVICE_ID}"]`);
+
+  // 再建一件、填同一个 id：保存按钮当场置灰，并明说"已经有一件叫这个了"
+  await myDeviceFill({
+    name: "想用同一个 id 的第二件", bus: "i2c", address: "0x69", id: MY_DEVICE_ID,
+  });
+  assert.ok(await page.isDisabled("[data-my-device-save]"),
+    "撞已有自建件时保存按钮该置灰");
+  const inline = await page.textContent("[data-my-device-form-error]");
+  assert.ok(inline.includes(MY_DEVICE_ID) && inline.includes("已经有一件"), inline);
+  // 那条 id 名下还是一行（没有被静默加后缀建出第二件）
+  const rows = await page.evaluate(
+    (id) => document.querySelectorAll(`[data-my-device-row="${id}"]`).length, MY_DEVICE_ID);
+  assert.equal(rows, 1, "不该多出一件");
+  await myDeviceCleanup([MY_DEVICE_ID]);
+});
+
+test("「我的器件」：库内 slug 集里没有 mine_ 开头的（前缀就是两类东西的分界）", async () => {
+  // 这条是**事实**、不是守卫：它说明真库上"id 撞库内 slug"撞不成（id 必须
+  // `mine_` 开头）。页面仍然按 `known_slugs` 判一次，是给"哪天真有 `mine_*`
+  // 模块入库"留的提前拦截；服务端那条腿（400 点名）与它同一条判据、不是两个真相。
+  await openTab();
+  const known = await page.evaluate(async () => {
+    const body = await (await fetch("/api/my-devices")).json();
+    return body.known_slugs;
+  });
+  assert.ok(known.length > 0, "真库应读得到 slug");
+  assert.deepEqual(known.filter((slug) => slug.startsWith("mine_")), []);
+});
+
+test("「我的器件」：能选（加进这次检测、与库内器件同一次预览不报错）", async () => {
+  // 工单验收第 6 条：「能建、能列、**能选**、能改、能删」。
+  // 选中之后它会跟库内器件一起进 devices（页面画 chip、服务端回显），但**这一版
+  // 它还不是模块**——预览不许因此 400（接进渲染是工单 03 的事）。
+  await openTab();
+  await myDeviceFill({
+    name: "要选上的库外件", bus: "i2c", address: "0x68", id: MY_DEVICE_ID,
+  });
+  await page.click("[data-my-device-save]");
+  await page.waitForSelector(`[data-my-device-row="${MY_DEVICE_ID}"]`);
+
+  // 加选：行上的按钮 → 出现在已选 chips 里（与库内器件同一套 chip）
+  await page.click(`[data-my-device-pick="${MY_DEVICE_ID}"]`);
+  await page.waitForSelector(`#hwcheck-device-chips [data-remove="${MY_DEVICE_ID}"]`);
+
+  // 选了它之后预览照常出 main.c（不是 400），且服务端把选择回显回来
+  await page.click("#btn-hwcheck-preview");
+  await page.waitForSelector("[data-hwcheck-code]");
+  const code = await page.textContent("[data-hwcheck-code]");
+  assert.ok(code.includes("int main(void)"), code.slice(0, 200));
+  const devices = await page.evaluate(() =>
+    [...document.querySelectorAll("#hwcheck-device-chips [data-remove]")]
+      .map((el) => el.dataset.remove));
+  assert.ok(devices.includes(MY_DEVICE_ID), "选中的自建件要在已选里：" + devices.join(","));
+
+  // 取消加选：chip 点掉 → 回到未选中（行上的按钮文案跟着变回「加进这次检测」）
+  await page.evaluate((id) => {
+    document.querySelector(`#hwcheck-device-chips [data-remove="${id}"]`)
+      .dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+  }, MY_DEVICE_ID);
+  await page.waitForFunction(
+    (id) => !document.querySelector(`#hwcheck-device-chips [data-remove="${id}"]`),
+    MY_DEVICE_ID, { timeout: 10000 });
+  const pick = await page.textContent(`[data-my-device-pick="${MY_DEVICE_ID}"]`);
+  assert.ok(pick.includes("加进这次检测"), pick);
+  await myDeviceCleanup([MY_DEVICE_ID]);
+});
+
+test("「我的器件」：件与平台无关（切平台不丢）+ 非 I2C 如实说这一版不出探测程序", async () => {
+  await openTab();
+  await myDeviceFill({
+    name: "验收用的 SPI 件", bus: "spi", address: "", id: MY_DEVICE_ID,
+  });
+  // 非 I2C 不摆地址预览（那一类压根没有地址——摆出来等于教用户填一个用不上的
+  // 字段），但**如实说**这一版不出探测程序
+  assert.equal(await page.$("[data-my-device-address-preview]"), null,
+    "非 I2C 不该摆地址预览");
+  await page.click("[data-my-device-save]");
+  await page.waitForSelector(`[data-my-device-row="${MY_DEVICE_ID}"]`);
+  const row = await page.textContent(`[data-my-device-row="${MY_DEVICE_ID}"]`);
+  assert.ok(row.includes("只对 I2C 器件生成探测程序"), row);
+  assert.ok(row.includes("不假装测过"), row);
+
+  // 切平台：件**不丢**（件与平台无关——总线脚由平台决定，地址与寄存器是器件的事实）
+  const before = await page.getAttribute(
+    `[data-my-device-row="${MY_DEVICE_ID}"]`, "data-my-device-row");
+  await page.click('[data-hwcheck-platform="mspm0"]');
+  await page.waitForSelector(`[data-my-device-row="${MY_DEVICE_ID}"]`);
+  const after = await page.getAttribute(
+    `[data-my-device-row="${MY_DEVICE_ID}"]`, "data-my-device-row");
+  assert.equal(after, before, "切平台后这件还该在列表里");
+  await myDeviceCleanup([MY_DEVICE_ID]);
+});
 
 test("栏目可点开：平台卡可选、预览出真 main.c（零 LLM 渲染）", async () => {
   await openTab();

@@ -290,6 +290,7 @@ def hwcheck_board_view(
     devices: Sequence[str] = (),
     resolved_bindings: Sequence[ResolvedBinding] = (),
     pin_fixes: Sequence[str] = (),
+    custom_device_ids: Sequence[str] = (),
 ) -> HwCheckBoardView:
     """投影一次（纯函数：吃已解析的 manifest 集与板定义，不碰盘）。
 
@@ -300,6 +301,8 @@ def hwcheck_board_view(
     `resolved_bindings` / `pin_fixes`（工单 hwcheck-pin-conflict-exit/01）=
     `hwcheck_pin_plan` 的消解结果：接线行按**生效脚**渲染、冲突组按生效布局判
     （学生照页面接线，页面的脚必须与工程 README 一致），`pin_fixes` 原样带给页面。
+    `custom_device_ids`（工单 02）= 自建件——它们**不是模块**，所以既不算"本平台
+    没有条目"（那会点错名：它不是缺版本，是根本还没接进渲染），也不再往下游走。
     """
     pin_notes: dict[str, str] = {}
     for pin in board.pins:
@@ -330,7 +333,9 @@ def hwcheck_board_view(
         ),
         board_shares=_board_shares(rows),
         order=order,
-        missing=_missing_devices(platform, manifests, devices),
+        missing=_missing_devices(
+            platform, manifests, devices, custom_device_ids=custom_device_ids
+        ),
         pin_fixes=_pin_fixes(pin_fixes, resolved_bindings, pins),
     )
 
@@ -377,14 +382,24 @@ def _board_shares(rows: Sequence[dict]) -> tuple[dict, ...]:
 
 
 def _missing_devices(
-    platform: str, manifests: Sequence[ModuleManifest], devices: Sequence[str]
+    platform: str,
+    manifests: Sequence[ModuleManifest],
+    devices: Sequence[str],
+    *,
+    custom_device_ids: Sequence[str] = (),
 ) -> tuple[dict, ...]:
     """选中器件里本平台没有条目的那些（判据 = selection 的平台警告表）。
 
     保序去重（用户点选的顺序，`dedup_slugs` 单源），逐条给中文文案——**点名，
     不静默省略**：悄悄从接线表里消失会让学生以为"选上了、待会儿就能测"。
+
+    自建件（`custom_device_ids`）先摘掉：它们不是"本平台没有条目"，是**还不是模块**
+    （工单 02 只打通事实那条路，接进渲染是工单 03）——混进来会点一个错名。
+    传进来的集合应已与 `devices` 取过交集（`hwcheck_view` 那一层做），所以这里的
+    逐条判断只按 id 比一次。
     """
-    wanted = list(dedup_slugs(devices))
+    custom = set(custom_device_ids)
+    wanted = [slug for slug in dedup_slugs(devices) if slug not in custom]
     if not wanted:
         return ()
     by_slug = {manifest.slug: manifest for manifest in manifests}
@@ -448,6 +463,7 @@ def hwcheck_view(
     masters_dir: Path | str,
     recipe_path: Path | str | None = None,
     require_pins: bool = True,
+    custom_device_ids: Sequence[str] = (),
 ) -> HwCheckView:
     """检测页装配的唯一出处：路径 + 配置进，一次投影出。
 
@@ -469,14 +485,28 @@ def hwcheck_view(
     静默，也**不许**为了"至少能出接线表"而降级成跳过（那会让坏配方悄悄溜过去）。
     装不下（自动移脚后仍撞脚）由 `require_pins` 控：预览与生成**同一判据**（都
     400），回读端点不算（它回放的是已经生成成功的那一次）。
+
+    `custom_device_ids`（工单 hwcheck-unknown-device/02）= 用户自建件的 id 集，
+    **不进模块集**：它们是数据、不是模块（没有 manifest，库外 slug 会在生成链上游
+    被 `UnknownModuleError` 拒）。但它们已经能被页面勾上，所以这里把它们从
+    "要进工程的模块"里摘掉——同时**不放松** `resolve_dependencies` 对真·库外
+    slug 的守卫：容忍自建件与容忍手滑写错是两件事（判据见
+    `tests/test_my_devices_endpoint.py` 的对照组）。自建件接进渲染是工单 03 的事。
     """
     library = Path(module_library_dir)
     by_slug = {m.slug: m for m in list_modules(library)}
-    manifests = resolve_dependencies(list(hwcheck_modules(config)), by_slug)
+    # 只摘**这一趟真选中的**自建件：收藏里躺着的那几件与本次模块集无关，混进来
+    # 会让「自建件」这个概念在载荷里比实际更宽（且 `custom` 是从这里往下传的
+    # 唯一一份，两处过滤天然一致）。
+    selected = hwcheck_devices(config)
+    custom = set(custom_device_ids) & set(selected)
+    manifests = resolve_dependencies(
+        [slug for slug in hwcheck_modules(config) if slug not in custom], by_slug
+    )
     recipes = load_library_recipes(
         library, masters_dir, list(by_slug.values()), recipe_path=recipe_path
     )
-    devices = hwcheck_devices(config)
+    devices = selected
     board = board_for_platform(config.platform)
     plan = hwcheck_pin_plan(
         config.platform,
@@ -493,6 +523,7 @@ def hwcheck_view(
         devices=devices,
         resolved_bindings=plan.resolved,
         pin_fixes=plan.fixed,
+        custom_device_ids=custom,
     )
     sections = resolve_sections(config.platform, devices, recipes, manifests)
     specialized = {section.slug for section in sections}

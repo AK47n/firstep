@@ -1383,4 +1383,128 @@ test("单平台件不误导：已选中的单平台件由服务端载荷点名�
     "前端不另写一版「无本平台版本」——文案单源在服务端（hwcheck_board）");
 });
 
+// ---------------------------------------------------------------------------
+// 工单 hwcheck-unknown-device/02：「我的器件」（库外件）这块卡片的接线
+//
+// 判据放在这里（而不是另开一个文件）：这块卡片住在**检测页**里，三处接线的坏法
+// 与栏目其它部分一样——「点了没反应」「首帧空白」「换了平台把用户填的东西弄丢」。
+// 纯函数判据在 tests/js/my-devices.test.mjs。
+// ---------------------------------------------------------------------------
+
+test("新控件齐备：「+ 我的器件」按钮 / 列表容器 / 表单容器都在检测页", () => {
+  for (const id of ["btn-my-device-new", "my-devices-list", "my-devices-form"]) {
+    assert.ok(html.includes('id="' + id + '"'), "缺少控件 #" + id);
+  }
+  // 位置：在器件挑选区之内（它就是"要测的器件"的一部分），且排在下拉搜索之前
+  const cardAt = html.indexOf('id="my-devices"');
+  const gridAt = html.indexOf('id="hwcheck-device-grid"');
+  assert.ok(cardAt > 0 && gridAt > cardAt,
+    "「我的器件」应排在器件挑选区里（库内挑选之前：库里没有的件是最先要说的）");
+  assert.ok(html.replace(/\s+/g, "").includes("库外件"),
+    "卡面要说明它是「库外件」——不与库内器件混为一谈");
+});
+
+test("ui 静态 import fx/my-devices.js（不 import = 点开表单就报 undefined）", () => {
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  assert.ok(ui.includes('from "/js/fx/my-devices.js"'),
+    "ui/hwcheck.js 应静态 import fx/my-devices.js");
+  for (const fn of ["myDeviceFormHTML(", "myDeviceFormCheck(", "myDevicePayload(",
+    "myDeviceListHTML("]) {
+    assert.ok(ui.includes(fn), "ui 应调用 fx 的 " + fn);
+  }
+  assert.ok(!ui.includes("<input type=\"text\" data-my-device-field"),
+    "ui 不得手拼表单 HTML（双源漂移：校验理由与表单必须同源）");
+});
+
+test("ui 读写端点走既有 apiGet / apiPost / apiDelete（不自造 fetch）", () => {
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  assert.ok(ui.includes('apiGet("/api/my-devices")'));
+  assert.ok(ui.includes('apiPost("/api/my-devices"'));
+  assert.ok(ui.includes('apiDelete("/api/my-devices/"'));
+  assert.ok(!/fetch\(\s*["']\/api\/my-devices/.test(ui), "不得绕开 app.js 的 api* 辅助");
+});
+
+test("ui 删掉一件时把它从**这次检测的选择**里去掉（否则下次预览 400 未知模块）", () => {
+  // 删掉之后那个 id 既不在库里、也不再是自建件 —— 而页面上 chip 还挂着，
+  // 学生根本不知道是自己刚删的那件（这是最容易变成"莫名其妙打不开"的一处）。
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const delAt = ui.indexOf("async function deleteMyDevice");
+  assert.ok(delAt > 0, "应有 deleteMyDevice");
+  const body = ui.slice(delAt, delAt + 1100);
+  assert.ok(body.includes("hwcheckUI.devices.filter"),
+    "删除后要把它从选中集合里摘掉：\n" + body);
+});
+
+test("ui 的 id 建议不覆盖用户手填的 id（只在空 / 还是建议值时补）", () => {
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const at = ui.indexOf("myDeviceSlugFromName(");
+  assert.ok(at > 0, "应按名称给一个 id 建议");
+  const body = ui.slice(Math.max(0, at - 700), at + 200);
+  assert.ok(/current/.test(body) && /mine_/.test(body),
+    "补建议前要先看用户填过没有：\n" + body);
+});
+
+test("ui 的 id 建议也只改那一个输入框（不许整块重绘把在填的字段清掉）", () => {
+  // 同一个坑的另一处：`blur` 时按名称补 id 建议，若顺手整块重绘，用户刚填的
+  // 地址 / 寄存器全被换成初值（浏览器验收实测：地址填了却报「必须填地址」）。
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const at = ui.indexOf('myBox.addEventListener("blur"');
+  assert.ok(at > 0, "应有按名称补 id 建议的 blur 委托");
+  const body = ui.slice(at, at + 900);
+  assert.ok(body.includes("syncMyDeviceForm()"),
+    "补完建议要走就地同步：\n" + body);
+  assert.ok(!body.includes("renderMyDevices("),
+    "补建议不得整块重绘表单：\n" + body);
+});
+
+test("「我的器件」的行随选择集重绘（从 chip 侧取消加选后，行上按钮不许还说「已在」）", () => {
+  // 两个容器（#hwcheck-device-chips 与 #my-devices-list）显示同一份选择集——
+  // 只重绘一个就是界面自相矛盾：chip 没了、行上还写着「✓ 已在这次检测里」。
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const at = ui.indexOf("function renderHwcheckDevices()");
+  assert.ok(at > 0);
+  const body = ui.slice(at, ui.indexOf("\n}", at) + 2);
+  assert.ok(body.includes("myDeviceListHTML(hwcheckUI.myDevices, hwcheckUI.devices)"),
+    "器件面重绘时要带上选中集重绘「我的器件」列表：\n" + body);
+  assert.ok(!/renderMyDevices\(/.test(body),
+    "不许整块 renderMyDevices（它会把正在填的表单刷掉）：\n" + body);
+});
+
+test("ui 打字期间**不整块重绘表单**（重绘 = 正在打字的输入框被换掉，字全丢）", () => {
+  // 本单浏览器验收当场抓到的 bug：`input` 委托里调了整块 `renderMyDevices()`，
+  // 于是用户刚敲进去的字符所在的 `<input>` 被 innerHTML 换掉——现象是"打一个字
+  // 表单就清空"，而按钮与地址预览看着还正常。判据：syncMyDeviceForm 里一个
+  // `innerHTML` 都不许有（就地更新那两个小节点），整块重绘只走显式动作。
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const at = ui.indexOf("function syncMyDeviceForm()");
+  assert.ok(at > 0);
+  const body = ui.slice(at, ui.indexOf("\n}", at) + 2);
+  assert.ok(!/\brenderMyDevices\s*\(/.test(body),
+    "syncMyDeviceForm 不得整块重绘表单：\n" + body);
+  assert.ok(!/box\.innerHTML\s*=/.test(body),
+    "syncMyDeviceForm 不得写 box.innerHTML：\n" + body);
+  assert.ok(body.includes("data-my-device-address-preview-slot")
+    && body.includes("data-my-device-form-error"),
+    "预览与校验理由要就地更新（不重绘也要跟着走）：\n" + body);
+});
+
+test("「我的器件」不随平台清空（件与平台无关：切平台不该把用户填的件弄丢）", () => {
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const at = ui.indexOf('const card = e.target.closest("[data-hwcheck-platform]")');
+  assert.ok(at > 0);
+  const body = ui.slice(at, at + 900);
+  for (const key of ["myDevices", "myForm", "knownSlugs"]) {
+    assert.ok(!body.includes("hwcheckUI." + key + " = []") && !body.includes("hwcheckUI." + key + " = null"),
+      `换平台不该清掉 hwcheckUI.${key}：\n` + body);
+  }
+});
+
 

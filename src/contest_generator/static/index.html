@@ -1008,6 +1008,23 @@
   .hwcheck-recent-row.current { border-color: var(--accent); }
   .hwcheck-recent-time { color: var(--muted); font-size: 12.5px; flex: 0 0 auto; }
   .hwcheck-recent-name { flex: 1 1 auto; min-width: 0; overflow-wrap: break-word; }
+  /* 「我的器件」（库外件，工单 hwcheck-unknown-device/02）：列表 + 表单。
+     与库内器件挑选区分开（左边竖条 + 浅底）：一眼看出哪些结论是"按我确认的事实"
+     试的、哪些是库内验证过的。 */
+  .hwcheck-my-devices { border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    border-radius: var(--radius-md); padding: var(--space-2); margin-bottom: var(--space-2); }
+  .hwcheck-my-device { border-bottom: 1px solid var(--border); padding: var(--space-1) 0; }
+  .hwcheck-my-device:last-child { border-bottom: none; }
+  .hwcheck-my-device-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+  .hwcheck-my-device-name { font-size: 13px; overflow-wrap: break-word; }
+  /* 已加进这一趟检测的那件：左侧高亮（与库内器件的 chip 选中态同一个意思） */
+  .hwcheck-my-device.picked { border-left: 3px solid var(--ok); padding-left: var(--space-1); }
+  .hwcheck-my-device-form { border: 1px solid var(--border-strong); border-radius: var(--radius-md);
+    padding: var(--space-2); margin-top: var(--space-2); }
+  .hwcheck-my-device-field { display: flex; flex-direction: column; gap: 3px; flex: 1 1 180px;
+    font-size: 12.5px; color: var(--muted); }
+  .hwcheck-my-device-field input, .hwcheck-my-device-field select { width: 100%; }
+  .hwcheck-my-device-field.wide { flex: 1 1 100%; }
   /* 器件挑选 + 接线表 + 默认脚冲突 + 建议顺序（工单 module-hwcheck/03）：
      接线表与工程 README 的引脚接线表同一份推导；冲突行 ⚠ 红 / 可共享行 ✓ 绿。 */
   .hwcheck-device-search { min-width: 320px; flex: 1 1 320px; }
@@ -3933,6 +3950,17 @@
       <div id="hwcheck-device-chips" class="row"></div>
       <div id="hwcheck-device-missing"></div>
       <div id="hwcheck-device-groups"></div>
+      <!-- 「我的器件」（库外件，工单 hwcheck-unknown-device/02）：手上这件不在模块库里
+           也能填进来——名称 / 总线 / 7 位地址 / 身份寄存器 / 期望值 / 备注。
+           件与平台无关（切平台不丢）；这一版先打通"事实"这条路，不生成任何代码。 -->
+      <div id="my-devices" class="hwcheck-my-devices">
+        <div class="row">
+          <strong>我的器件 <span class="muted">（库外件：手上这件模块库里没有？填它的名称与地址）</span></strong>
+          <button type="button" id="btn-my-device-new">+ 我的器件</button>
+        </div>
+        <div id="my-devices-list"></div>
+        <div id="my-devices-form"></div>
+      </div>
       <div class="row">
         <input type="search" id="hwcheck-device-search" class="hwcheck-device-search"
                placeholder="搜索器件（模块名 / 简介 / 套件型号）…">

@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=da8ebd1470c6b6c09eb75a0f7a03cf30efaa047b -->
+<!-- changelog-auto: last-commit=0f3e25a5a435d51c99c0fb16ac250dfad6ed6966 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-09-23
+- 12:21 ﻿工单 hwcheck-unknown-device/02：「我的器件」（库外件）定义 + 数据目录 + 端点 + 检测页表单
 
 ## 2026-09-22
 - 12:28 工单 launcher-exit-race/03：退出调度显式化（布防 / 撤防 / 到点取走并退出）

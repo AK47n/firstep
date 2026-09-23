@@ -212,6 +212,15 @@ from .manifest import (
     collect_exclusive_groups,
 )
 from .module_intro import intro_sections
+from .my_devices import (
+    CustomDevice,
+    MyDeviceError,
+    delete_device,
+    list_devices,
+    my_devices_dir,
+    read_device_payload,
+    save_device,
+)
 from .llm import (
     LLM,
     LLMError,
@@ -2504,6 +2513,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             module_library_dir=app_config.module_library_dir,
             masters_dir=app_config.masters_dir,
             recipe_path=context.hwcheck_recipe_path,
+            # 自建件（工单 hwcheck-unknown-device/02）：页面能勾，但它们还不是
+            # 模块——摘出模块集，同时不放松库外 slug 守卫（见 hwcheck_view 说明）。
+            custom_device_ids=_my_device_ids(),
         )
         return {
             "platform": config.platform,
@@ -2558,6 +2570,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             module_library_dir=app_config.module_library_dir,
             masters_dir=app_config.masters_dir,
             recipe_path=context.hwcheck_recipe_path,
+            custom_device_ids=_my_device_ids(),
         )
         ccs_tools = None
         if config.platform == PLATFORM_MSPM0:
@@ -2631,6 +2644,113 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             ]
         }
 
+    # ------------------------------------------------------------------
+    # 「我的器件」（库外件，工单 hwcheck-unknown-device/02）
+    #
+    # 学生手上那件不在模块库里的东西：名称 / 总线 / 7 位地址 / 身份寄存器 /
+    # 期望值 / 备注。落点 = **配置目录**下的 hwcheck_devices/<id>/（不是 library/
+    # ——那是产品库，会 git 提交、随发布包分发到别人手上）。这一版不生成任何代码：
+    # 先把"事实"这条路打通（接进检测计划是工单 03–06）。
+    # ------------------------------------------------------------------
+
+    def _my_devices_root() -> Path:
+        """数据根 = `AppContext.config_path.parent / hwcheck_devices`。
+
+        按 `config_path` 推而**不是**按模块库推：数据目录是"这台机器上这份工具
+        的数据"（与 `updates/` / `cache/` 同一个地方），模块库是可配置的产品库
+        （仓库布局下 = `<仓库>/library`，跟着 git 走）——两者混一起就会把用户
+        自建的东西提交进产品库。
+
+        `context.config_path` **每次现读**（不在 create_app 里捕获）：浏览器验收
+        与用例都可以中途换配置路径，捕获一次就把"读的是哪个数据目录"钉死在
+        建 app 那一刻了。
+        """
+        return my_devices_dir(context.config_path.parent)
+
+    def _my_device_ids() -> tuple[str, ...]:
+        """现有自建件的 id 集（`hwcheck_view` 用它把自建件从模块集里摘掉）。
+
+        读不出来（坏条目）时**大声失败**：这正是 `list_devices` 的约定——静默
+        跳过会让一件再也读不出来的器件从页面上消失，而用户以为它还在。
+        """
+        return tuple(device.id for device in list_devices(_my_devices_root()))
+
+    def _my_device_body(payload: dict) -> CustomDevice:
+        """请求体 → CustomDevice（形状判决在这里，字段级校验在域层）。
+
+        时间戳不从这里来（服务端写）、平台字段不存在（件与平台无关）。
+        """
+        body = payload.get("device")
+        if not isinstance(body, dict):
+            raise MyDeviceError(
+                "请求体缺少 device 对象（这件器件的定义：id / name / bus / address …）"
+            )
+        return CustomDevice(
+            id=body.get("id") if isinstance(body.get("id"), str) else "",
+            name=body.get("name") if isinstance(body.get("name"), str) else "",
+            bus=body.get("bus") if isinstance(body.get("bus"), str) else "",
+            address=body.get("address"),
+            register=body.get("register"),
+            expect=body.get("expect"),
+            notes=body.get("notes") if isinstance(body.get("notes"), str) else "",
+        )
+
+    @app.get("/api/my-devices")
+    @_map_errors
+    def my_devices_list() -> dict:
+        """现有自建件（新 → 旧）+ 库内 slug 集。
+
+        `known_slugs` 一起下发，是为了让**页面当场**拦住撞库内 slug 的 id
+        （服务端照样会拒——同一条判据两处用，但不是两个真相：页面那份只是提前
+        提示，判据本体仍是 `library.list_modules`）。库读不到（没配模块库）=
+        空集：没有库就没有可撞的名字，不是错误。
+        """
+        app_config = _current_config(context)
+        known: tuple[str, ...] = ()
+        if app_config is not None:
+            known = tuple(
+                manifest.slug
+                for manifest in list_modules(app_config.module_library_dir)
+            )
+        return {
+            "devices": [
+                read_device_payload(device) for device in list_devices(_my_devices_root())
+            ],
+            "known_slugs": list(known),
+        }
+
+    @app.post("/api/my-devices")
+    @_map_errors
+    def my_devices_save(payload: dict) -> dict:
+        """新增 / 更新一件（**按 id 幂等**）→ {ok, device}。
+
+        id 撞库内 slug → 400 中文当场点名要求改名（判据在 `CustomDevice.validated`
+        的 `library_slugs`，不静默加后缀）。地址按 7 位存（0x08–0x77），
+        8 位读 / 写形式是载荷里派生的，不落盘。
+
+        校验**只在 `save_device` 一处**做（它自己吃 `library_slugs`）：路由不预先
+        `validated()` 一遍——两道校验的第二道是白跑，且将来加规则容易只改一处。
+        """
+        device = _my_device_body(payload)
+        app_config = _current_config(context)
+        known_slugs = (
+            tuple(
+                manifest.slug
+                for manifest in list_modules(app_config.module_library_dir)
+            )
+            if app_config is not None
+            else ()
+        )
+        saved = save_device(_my_devices_root(), device, library_slugs=known_slugs)
+        return {"ok": True, "device": read_device_payload(saved)}
+
+    @app.delete("/api/my-devices/{device_id}")
+    @_map_errors
+    def my_devices_delete(device_id: str) -> dict:
+        """删掉一件（连同 `materials/` 里那份资料副本）；查无此条 400 中文。"""
+        delete_device(_my_devices_root(), device_id)
+        return {"ok": True}
+
     # 硬件检测：回读一次检测（工单 module-hwcheck/02）——刷新回显与"点最近一次
     # 回到那次检测"的服务端真源。判据 = 清单的 kind（不是检测工程 → 400 中文）。
     @app.get("/api/hwcheck/project")
@@ -2678,6 +2798,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             # 让人打不开自己的工程。板侧视图仍按同一条消解重投影（确定性），
             # 所以回来看到的接线表还是那次工程里的表。
             require_pins=False,
+            custom_device_ids=_my_device_ids(),
         )
         payload.update(view.board)
         # 检测记录（工单 08）：现象 + 勾选 + 建议随这次检测落盘，刷新回显。
@@ -2717,6 +2838,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             module_library_dir=app_config.module_library_dir,
             masters_dir=app_config.masters_dir,
             recipe_path=context.hwcheck_recipe_path,
+            custom_device_ids=_my_device_ids(),
         )
         board = view.board
         triage_context = build_triage_context(

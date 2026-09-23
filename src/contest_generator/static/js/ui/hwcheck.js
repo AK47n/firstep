@@ -10,7 +10,7 @@
 //   → 烧录复用既有共享执行体 ui/flash.js flashRunShared（400 出中文指引卡）
 //   → 上板清单勾选态存 localStorage（按检测工程目录分），刷新回显走
 //     GET /api/hwcheck/project 的服务端真源。
-import { $, apiGet, apiPost, state, toast, toastError } from "/js/app.js";
+import { $, apiGet, apiPost, apiDelete, state, toast, toastError } from "/js/app.js";
 import { chosenPlatform } from "/js/ui/generate-recommend.js";
 import { bindModuleInfoEntry, openModuleInfo } from "/js/ui/generate-recommend.js";
 import { flashRunShared } from "/js/ui/flash.js";
@@ -44,6 +44,15 @@ import {
   hwcheckAdviceHTML, hwcheckChecklistState,
   HWCHECK_PARENT_KEY, HWCHECK_LAST_DIR_KEY,
 } from "/js/fx/hwcheck.js";
+// 「我的器件」（库外件，工单 hwcheck-unknown-device/02）：纯件在 fx/my-devices.js，
+// 本模块只做"读状态 / 写 DOM / 发请求"。**这一版不生成任何代码**——自建件先能被
+// 建、被列、被选、被改、被删（接进检测计划是工单 03–06）。
+import {
+  myDeviceFormBlank, myDeviceFormFromPayload, myDeviceAddressPreviewHTML,
+  myDeviceFormCheck, myDevicePayload, myDeviceSlugFromName,
+  myDeviceListHTML, myDeviceFormHTML, myDeviceKnownSlugs, myDeviceList,
+  myDeviceSavedDevice, myDeviceEditTarget,
+} from "/js/fx/my-devices.js";
 
 // 本栏目自己的状态（与生成流程零共享）：选中平台 + 两个输出通道开关 +
 // 选中的器件 + 器件搜索词 + 输出父目录 + 板侧视图（接线 / 冲突 / 顺序）+
@@ -75,6 +84,14 @@ const hwcheckUI = {
   wiringError: "",
   busy: false,
   seeded: false,
+  // —— 「我的器件」（库外件，工单 02）：件与平台无关，所以这些键不随平台清空 ——
+  myDevices: [],        // 现有自建件（服务端真源；页面不自己记账）
+  knownSlugs: [],       // 库内 slug 集（页面据此在提交前拦住撞名的 id）
+  myForm: null,         // 正在编辑 / 新建的表单值（null = 表单收起）
+  myEditId: "",         // 正在编辑的那一件的 id（新建 = 空串；校验"撞已有件"时要排除自己）
+  myFormError: "",      // 表单校验理由（服务端 400 的中文原样带出）
+  myError: "",          // 列表读不出来的理由（坏条目等）
+  myBusy: false,
 };
 
 function hwcheckPlatforms() {
@@ -221,6 +238,148 @@ function renderHwcheckDevices() {
         pool, hwcheckUI.devices, hwcheckUI.deviceQuery);
     }
   }
+  // 「我的器件」的行也随选择集重绘：它那行的加选按钮是**两态**的（加进 / 已在），
+  // 而它跟 chips 是两个容器——只重绘 chips 的话，从 chip 那侧取消加选后，
+  // 行上还写着「✓ 已在这次检测里」（界面自相矛盾）。这里刻意只换列表那一块：
+  // 表单必须原样留着（整块重绘会把正在填的字刷掉——见 syncMyDeviceForm 的说明）。
+  const myList = $("my-devices-list");
+  if (myList) myList.innerHTML = myDeviceListHTML(hwcheckUI.myDevices, hwcheckUI.devices);
+}
+
+// —— 「我的器件」（库外件，工单 02）：列表 + 表单 ——
+// 三块都只渲染服务端载荷与 fx 纯件：判据（id 文法等）在服务端，表单那个校验只是
+// "别让用户白跑一趟"（同一个函数也用来给保存按钮置灰的理由）。
+function renderMyDevices() {
+  const listBox = $("my-devices-list");
+  if (listBox) {
+    listBox.innerHTML = hwcheckUI.myError
+      ? `<div class="error">「我的器件」读不出来：${hwcheckUI.myError}</div>`
+      : myDeviceListHTML(hwcheckUI.myDevices, hwcheckUI.devices);
+  }
+  const formBox = $("my-devices-form");
+  if (formBox) {
+    formBox.innerHTML = hwcheckUI.myForm
+      ? myDeviceFormHTML(hwcheckUI.myForm, hwcheckUI.myFormError) : "";
+  }
+  const open = $("btn-my-device-new");
+  if (open) open.disabled = !!hwcheckUI.myBusy;
+}
+
+// myDeviceFormError(form)：按当前表单算一次校验理由（保存按钮与提示共用同一句）。
+// `myEditId` = 正在编辑的那一件的 id（新建时空串）——**必须传**：不传的话编辑
+// 自己那件会被判成"撞已有件"，保存按钮永远灰着（编辑功能整个用不了）。
+function myDeviceFormError(form) {
+  return myDeviceFormCheck(
+    form,
+    hwcheckUI.knownSlugs,
+    hwcheckUI.myDevices.map((d) => (d && d.id) || "").filter(Boolean),
+    hwcheckUI.myEditId,
+  );
+}
+
+// syncMyDeviceForm()：**就地把输入框里的字交给 state**，并只更新那两个小节点
+// （地址预览 + 校验理由/保存按钮）。
+//
+// ⚠ 这里**绝不能整块重绘表单**（本单浏览器验收当场抓到的 bug）：整块重绘 =
+// 用户正在打字的那个 `<input>` 被换掉——浏览器里看着就是"打一个字表单就清空、
+// 后面的字全丢"，而按钮与预览还像是正常的。所以本函数一个 `innerHTML =` 都不做
+// （整块重绘只发生在"打开 / 编辑 / 保存 / 取消"这类显式动作上）。
+function syncMyDeviceForm() {
+  const box = $("my-devices-form");
+  if (!box || !hwcheckUI.myForm) return;
+  const form = { ...hwcheckUI.myForm };
+  box.querySelectorAll("[data-my-device-field]").forEach((el) => {
+    form[el.dataset.myDeviceField] = el.value;
+  });
+  hwcheckUI.myForm = form;
+  hwcheckUI.myFormError = myDeviceFormError(form);
+  const preview = box.querySelector("[data-my-device-address-preview-slot]");
+  if (preview) {
+    preview.innerHTML = myDeviceAddressPreviewHTML(form.address, form.bus);
+  }
+  const save = box.querySelector("[data-my-device-save]");
+  if (save) save.disabled = !!hwcheckUI.myFormError;
+  const errorBox = box.querySelector("[data-my-device-form-error]");
+  if (errorBox) errorBox.textContent = hwcheckUI.myFormError;
+}
+
+// closeMyDeviceForm()：收起表单——**唯一出口**（新建 / 编辑共用一份表单状态，
+// 三处（保存成功 / 取消 / 删掉的正是编辑对象）都必须连 `myEditId` 一起清掉：
+// 漏清一处，下次"新建"就会被上一条的 id 顶掉"撞已有件"判据）。
+function closeMyDeviceForm() {
+  hwcheckUI.myForm = null;
+  hwcheckUI.myEditId = "";
+  hwcheckUI.myFormError = "";
+}
+
+function openMyDeviceForm(device) {
+  hwcheckUI.myForm = device
+    ? myDeviceFormFromPayload(device) : myDeviceFormBlank();
+  // 正在编辑的那一件（新建 = 空串）：校验"撞已有件"时要把自己排除在外
+  hwcheckUI.myEditId = device ? String(device.id || "") : "";
+  hwcheckUI.myFormError = myDeviceFormError(hwcheckUI.myForm);
+  renderMyDevices();
+}
+
+async function loadMyDevices() {
+  try {
+    const payload = await apiGet("/api/my-devices");
+    hwcheckUI.myDevices = myDeviceList(payload);
+    hwcheckUI.knownSlugs = myDeviceKnownSlugs(payload);
+    hwcheckUI.myError = "";
+  } catch (e) {
+    hwcheckUI.myDevices = [];
+    hwcheckUI.myError = e && e.message ? e.message : String(e);
+  }
+  renderMyDevices();
+}
+
+// saveMyDevice()：提交这一件（按 id 幂等）。失败 = 服务端 400 的中文原样带出
+// （表单不关、用户填的东西一个字不丢——这正是"当场点名要求改名"那条判据的用法）。
+async function saveMyDevice() {
+  if (!hwcheckUI.myForm || hwcheckUI.myBusy) return;
+  hwcheckUI.myFormError = myDeviceFormError(hwcheckUI.myForm);
+  if (hwcheckUI.myFormError) {
+    renderMyDevices();
+    return;
+  }
+  hwcheckUI.myBusy = true;
+  try {
+    const payload = await apiPost("/api/my-devices", myDevicePayload(hwcheckUI.myForm));
+    const saved = myDeviceSavedDevice(payload);
+    closeMyDeviceForm();
+    await loadMyDevices();
+    toast("ok", "已存进「我的器件」：" + ((saved && saved.name) || ""));
+  } catch (e) {
+    hwcheckUI.myFormError = e && e.message ? e.message : String(e);
+  } finally {
+    hwcheckUI.myBusy = false;
+  }
+  renderMyDevices();
+}
+
+// deleteMyDevice(id)：删掉一件；同时把它从**这次检测的选择**里去掉。
+// 为什么不"直接不管"：删掉之后那个 id 既不在库里、也不再是自建件，下次预览就是
+// 400「未知模块」——而页面上那个 chip 还挂着，学生根本不知道是自己刚删的那件。
+async function deleteMyDevice(id) {
+  if (!id || hwcheckUI.myBusy) return;
+  hwcheckUI.myBusy = true;
+  try {
+    await apiDelete("/api/my-devices/" + encodeURIComponent(id));
+    if (hwcheckUI.myForm && hwcheckUI.myForm.id === id) closeMyDeviceForm();
+    if ((hwcheckUI.devices || []).includes(id)) {
+      hwcheckUI.devices = hwcheckUI.devices.filter((slug) => slug !== id);
+      renderHwcheckDevices();
+      refreshHwcheckView();
+    }
+    await loadMyDevices();
+    toast("ok", "已删掉这件：" + id);
+  } catch (e) {
+    toastError(e, "删不掉这件器件");
+  } finally {
+    hwcheckUI.myBusy = false;
+  }
+  renderMyDevices();
 }
 
 // —— 接线表 / 默认脚冲突 / 建议顺序（工单 03）：三块全部来自服务端板侧视图 ——
@@ -299,6 +458,7 @@ function renderHwcheckAdvice() {
 export function renderHwcheckPanel() {
   renderHwcheckPlatforms();
   renderHwcheckChannelNote();
+  renderMyDevices();
   renderHwcheckOutput();
   renderHwcheckDevices();
   renderHwcheckWiring();
@@ -729,6 +889,67 @@ export function initHwcheck() {
     });
   }
 
+  // —— 「我的器件」（库外件，工单 02）：新建 / 编辑 / 删除 / 保存 / 取消 ——
+  // 全部走容器级委托（innerHTML 全量重绘后仍有效，与器件网格同一套纪律）。
+  const myNew = $("btn-my-device-new");
+  if (myNew) myNew.addEventListener("click", () => openMyDeviceForm(null));
+  const myBox = $("my-devices");
+  if (myBox) {
+    myBox.addEventListener("click", (e) => {
+      // 加选 / 取消（工单验收第 6 条「能选」）：走**库内器件同一条路**
+      // （addHwcheckDevice → hwcheckUI.devices → 既有 chip / 检测计划 / 生成都认它），
+      // 不另造一套"自建件的选择"。
+      const pick = e.target.closest("[data-my-device-pick]");
+      if (pick) {
+        const id = pick.dataset.myDevicePick;
+        addHwcheckDevice(id, !(hwcheckUI.devices || []).includes(id));
+        renderMyDevices();   // 按钮两态跟着选择变（chip 那边由 addHwcheckDevice 重绘）
+        return;
+      }
+      const edit = e.target.closest("[data-my-device-edit]");
+      if (edit) {
+        openMyDeviceForm(myDeviceEditTarget(hwcheckUI.myDevices, edit.dataset.myDeviceEdit));
+        return;
+      }
+      const del = e.target.closest("[data-my-device-del]");
+      if (del) {
+        deleteMyDevice(del.dataset.myDeviceDel);
+        return;
+      }
+      if (e.target.closest("[data-my-device-save]")) {
+        saveMyDevice();
+        return;
+      }
+      if (e.target.closest("[data-my-device-cancel]")) {
+        closeMyDeviceForm();
+        renderMyDevices();
+      }
+    });
+    // 表单输入：`input` 覆盖打字（地址预览与校验理由实时跟上），`change` 单独
+    // 接一次是为了 `<select>`（总线下拉在部分浏览器上不触发 input）。
+    myBox.addEventListener("input", (e) => {
+      if (e.target.closest("[data-my-device-field]")) syncMyDeviceForm();
+    });
+    myBox.addEventListener("change", (e) => {
+      if (e.target.closest("[data-my-device-field]")) syncMyDeviceForm();
+    });
+    // 名称 → id 建议：只在 id 还是空 / 还是上一次自动填的那值时补一下，
+    // 用户手填过 id 就不动它（不覆盖用户输入）。
+    // ⚠ 只改 id 那个输入框的 value 再 syncMyDeviceForm —— **不许整块重绘**：
+    // 用户正在表单里往下填（或刚填完其它字段），整块重绘会把它们一起清掉
+    // （与 syncMyDeviceForm 那条同一个坑：真正在编辑的表单不能被替换）。
+    myBox.addEventListener("blur", (e) => {
+      const el = e.target.closest('[data-my-device-field="name"]');
+      if (!el || !hwcheckUI.myForm) return;
+      const current = String(hwcheckUI.myForm.id || "");
+      if (current && !/^mine_(device)?$/.test(current)) return;
+      const idBox = myBox.querySelector('[data-my-device-field="id"]');
+      if (!idBox) return;
+      idBox.value = myDeviceSlugFromName(el.value);
+      syncMyDeviceForm();
+    }, true);
+  }
+
   const project = $("hwcheck-project");
   if (project) {
     project.addEventListener("click", (e) => {
@@ -779,7 +1000,9 @@ export function initHwcheck() {
   }
 
   renderHwcheckPanel();
-  // 刷新回显：上次看的那个检测工程按服务端真源读回来（清单内容与勾选态都回来）
+  // 「我的器件」拉一次（与平台无关，所以不随换平台重取）；刷新回显：上次看的那个
+  // 检测工程按服务端真源读回来（清单内容与勾选态都回来）
+  loadMyDevices();
   const last = readStored(HWCHECK_LAST_DIR_KEY);
   if (last) restoreHwcheckProject(last);
   loadHwcheckRecent();

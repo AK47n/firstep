@@ -60,6 +60,7 @@ from .llm import (
 )
 from .materials_apply import MaterialApplyError
 from .master_store import MasterError
+from .my_devices import MyDeviceError
 from .patchers import UnknownPlatformError
 from .pin_bindings import PinBindingError
 from .recent_jobs import RecentStatusError
@@ -316,6 +317,7 @@ _ERROR_TABLE: tuple[_ErrorEntry, ...] = (
             RecentStatusError,  # 最近生成状态非法（工单 recent-jobs/01）：前端上报未知状态值
             CodeViewError,  # 代码查看器失败（工单 code-viewer/01-02）：目录不存在 / 路径穿越 / 二进制 / 超限
             HwCheckError,  # 硬件检测请求形状非法（工单 module-hwcheck/01）：平台词表外 / 通道开关不是布尔值
+            MyDeviceError,  # 「我的器件」定义不合法（工单 hwcheck-unknown-device/02）：id 文法 / 地址非 7 位 / expect 无 register / id 撞库内 slug
             MaterialApplyError,  # 资料库应用失败（工单 materials-update/05）：zip slip / 备份失败 / 增量包缺失
         ),
         400,

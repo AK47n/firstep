@@ -1,0 +1,6 @@
+[1] 前置检查：源文件 sha256=02f5154c208bcb6b11c39ac759b82119…，注入目标唯一 ✓
+[2] 注入前：PASS（全绿） ｜ 4 passed, 1 warning in 14.96s
+[3] 注入后：RED（撞名用例变红） ｜ 2 failed, 2 passed, 1 warning in 0.62s
+[4] 复原复核：sha256 相等 ✓（02f5154c208bcb6b11c39ac759b82119…）
+[5] 复原后复跑：PASS（回绿） ｜ 4 passed, 1 warning in 0.78s
+结论：反证成立（守卫是撞名用例变红的唯一判据）
