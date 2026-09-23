@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=fd1d56ae0e0ff2817473bf26e6b8b972e7abc738 -->
+<!-- changelog-auto: last-commit=a2f0d0ebbbe04aecb1f66cd22faefe476b7ce60e -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -9,6 +9,7 @@
 - 12:22 工单 hwcheck-unknown-device/02：「我的器件」（库外件）定义 + 数据目录 + 端点 + 检测页表单
 - 12:23 文档：local-environment 记下「我的器件」这一轮的落点与新落盘目录
 - 12:54 工单 hwcheck-unknown-device/03：自建件探测小节渲染 + 注入 main.c + stm32 真编译
+- 13:59 工单 hwcheck-unknown-device/04：mspm0 探测分支 + 两平台编译矩阵（11 格 × 2 平台 0 error / 0 warning）
 
 ## 2026-09-22
 - 12:28 工单 launcher-exit-race/03：退出调度显式化（布防 / 撤防 / 到点取走并退出）
