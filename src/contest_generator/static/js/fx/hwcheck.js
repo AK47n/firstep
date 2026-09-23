@@ -256,6 +256,7 @@ export function hwcheckProjectState(state, payload) {
     ...hwcheckBoardState(state, data),
     ...hwcheckSectionsState(state, data),
     ...hwcheckConsoleState(state, data),
+    ...hwcheckCustomState(state, data),
     project: {
       outputDir: String(data.output_dir || ""),
       platform: String(data.platform || ""),
@@ -643,15 +644,24 @@ export function hwcheckOrderDesc(text) {
 
 // hwcheckOrderHTML(order, guide, reason)：建议检测顺序（bring-up 前置，判据 =
 // 服务端既有排序；`bring_up` 标记同源）。空集 = 空串（调用方放占位）。
+//
+// 自建件那几行（工单 hwcheck-unknown-device/05）**排在库内之后**（服务端拼好，
+// 这里不重排）：多两个服务端字段——`tag_text`（标注词「自建件：按你确认的事实
+// 探测」，与库内 `[专精]` 严格区分）与 `name`（slug 之外给人认的那个名字）。
 export function hwcheckOrderHTML(order, guide, reason) {
   const list = Array.isArray(order) ? order : [];
   if (!list.length) return "";
   const items = list.map((item, index) => {
-    const tag = item && item.bring_up ? '<span class="badge ok">先做·板子活着</span>' : "";
+    const one = item || {};
+    const tag = one.bring_up ? '<span class="badge ok">先做·板子活着</span>' : "";
+    const custom = one.custom
+      ? (one.tag_text ? `<span class="badge custom">${esc(one.tag_text)}</span>` : "")
+        + (one.name ? `<span class="hwcheck-order-name">${esc(one.name)}</span>` : "")
+      : "";
     return '<li class="hwcheck-order-row">'
       + `<span class="hwcheck-order-index">${index + 1}</span>`
-      + `<span class="slug">${esc((item && item.slug) || "")}</span>${tag}`
-      + `<span class="hwcheck-order-desc">${esc(hwcheckOrderDesc(item && item.description))}</span>`
+      + `<span class="slug">${esc(one.slug || "")}</span>${tag}${custom}`
+      + `<span class="hwcheck-order-desc">${esc(hwcheckOrderDesc(one.description))}</span>`
       + "</li>";
   }).join("");
   return `<div class="hwcheck-hint">${esc(guide || "")}</div>`
@@ -999,6 +1009,80 @@ export function hwcheckAdviceHTML(advice) {
     + "</div>";
 }
 
+// ===========================================================================
+// 工单 hwcheck-unknown-device/05：自建件的**检测计划**（接线行 / 标注 / 为什么
+// 没有它的探测小节）
+//
+// 分工不变：标注词（「自建件：按你确认的事实探测」）、接线那一行（名称 + 地址 +
+// 支点那对脚）、"这一趟对它做什么"——**全部来自服务端载荷**（`hwcheck_custom`
+// 单源），本文件一个字都不另写。尤其**不在这里判"这件的总线是不是 I2C"**：
+// 那是"出不出探测小节"的判据，服务端已经判过一次（`probes`），前端再判一次就是
+// 两处各说各话——页面上说会测、产物里没有它。
+// ===========================================================================
+
+// hwcheckCustomState(state, payload)：载荷里的"自建件计划"部分。
+// 载荷缺键 = 保留当前状态（旧后端 / 出错响应不许把已有的计划抹掉）。
+// 同样只返回自己的键（见 hwcheckBoardState 的 spread 说明）。
+export function hwcheckCustomState(state, payload) {
+  const data = payload || {};
+  return {
+    custom: Array.isArray(data.custom)
+      ? data.custom
+      : ((state && Array.isArray(state.custom)) ? state.custom : []),
+  };
+}
+
+// hwcheckCustomPlanHTML(items)：自建件的检测计划面板。
+//
+// **空 = 空串**：一件自建件都没有时检测页逐字与改动前一致（票面第 6 条）。
+// 出小节的件与不出小节的件**都画**（后者把"为什么没有它的探测程序"原样带出来）
+// ——只画前者就是一次悄无声息的少测。
+//
+// 外观与库内 `.hwcheck-section` 刻意不同（自己的类名 + 服务端给的标注词）：
+// 学生要一眼看出哪些结论是库内验证过的、哪些只是"按我给的地址试了一下"。
+export function hwcheckCustomPlanHTML(items) {
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) return "";
+  const rows = list.map((item) => {
+    const one = item || {};
+    const facts = [
+      one.address_text ? `地址 ${esc(one.address_text)}` : "",
+      one.register_text ? `身份寄存器 ${esc(one.register_text)}` : "",
+      one.expect_text ? `期望值 ${esc(one.expect_text)}` : "",
+    ].filter(Boolean).join(" ｜ ");
+    const tag = one.tag_text
+      ? `<span class="hwcheck-section-tag custom">${esc(one.tag_text)}</span>`
+      : "";
+    const badge = one.probes
+      ? '<span class="badge ok">板上判定</span>'
+      : '<span class="badge">这一趟没有它的探测小节</span>';
+    return `<div class="hwcheck-custom-plan" data-custom-plan="${esc(one.slug || "")}">`
+      + '<div class="hwcheck-section-head">'
+      + tag
+      + `<span class="slug">${esc(one.slug || "")}</span>`
+      + `<span class="hwcheck-custom-name">${esc(one.name || "")}</span>${badge}</div>`
+      + (facts ? `<div class="hwcheck-hint">${facts}</div>` : "")
+      + `<div class="hwcheck-hint">这一趟对它做什么：${esc(one.plan || "")}</div>`
+      + (one.notes ? `<div class="hwcheck-hint">你填的备注：${esc(one.notes)}</div>` : "")
+      + "</div>";
+  }).join("");
+  return rows;
+}
+
+// hwcheckCustomWiringHTML(items)：接线区里自建件那一行（服务端算好的整句）。
+//
+// 只画**有接线说明**的那几件（`wiring_text` 非空 = 这一趟真借了支点那条总线）：
+// 没有它就没有线可接，编一行出来等于让学生去找一根不存在的线。
+export function hwcheckCustomWiringHTML(items) {
+  const list = (Array.isArray(items) ? items : []).filter(
+    (item) => item && item.wiring_text);
+  if (!list.length) return "";
+  return list.map((item) =>
+    `<div class="hwcheck-custom-wiring" data-custom-wiring="${esc(item.slug || "")}">`
+    + `<span class="hwcheck-section-tag custom">${esc(item.tag_text || "")}</span>`
+    + esc(item.wiring_text) + "</div>").join("");
+}
+
 if (typeof window !== "undefined") {
   Object.assign(window, {
     hwcheckPlatformState, hwcheckSelectPlatform, hwcheckPickState,
@@ -1028,6 +1112,7 @@ if (typeof window !== "undefined") {
     hwcheckChecklistState,
     hwcheckTriageErrorHTML, hwcheckAdviceHTML, hwcheckAdviceEmptyHTML,
     HWCHECK_VERDICT_FALLBACK,
+    hwcheckCustomState, hwcheckCustomPlanHTML, hwcheckCustomWiringHTML,
   });
 }
 

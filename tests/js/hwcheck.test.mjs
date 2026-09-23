@@ -33,7 +33,10 @@ import {
   hwcheckChecklistPayload, hwcheckAdviceState, hwcheckRecordState,
   hwcheckChecklistState, hwcheckTriageErrorHTML, hwcheckAdviceHTML,
   hwcheckAdviceEmptyHTML,
+  hwcheckCustomState, hwcheckCustomPlanHTML, hwcheckCustomWiringHTML,
 } from "../../src/contest_generator/static/js/fx/hwcheck.js";
+// 转义单源（判定渲染出的 HTML 里有没有把用户文本原样吐出去）
+import { esc } from "../../src/contest_generator/static/js/fx/core.js";
 // 单平台件的「需切换平台」标记落在既有网格渲染上（工单 09 的行为判据要真跑它）
 import { moduleGridHTML } from "../../src/contest_generator/static/js/fx/module.js";
 
@@ -1505,6 +1508,132 @@ test("「我的器件」不随平台清空（件与平台无关：切平台不�
     assert.ok(!body.includes("hwcheckUI." + key + " = []") && !body.includes("hwcheckUI." + key + " = null"),
       `换平台不该清掉 hwcheckUI.${key}：\n` + body);
   }
+});
+
+// ===========================================================================
+// 工单 hwcheck-unknown-device/05：自建件的**检测计划**面板（接线行 / 标注 /
+// 不出小节的原因）
+//
+// 分工照旧：判据与文案全在服务端（`hwcheck_custom`），本文件只把载荷渲染成
+// HTML。所以这里的用例一条都不许自己拼文案——它们断言的是"服务端给的那句
+// 原样出现在页面上"，以及"一件自建件都没有时一个字都不多"。
+// ===========================================================================
+
+// 计划载荷（形状 = `hwcheck_custom.CustomPlanEntry.to_payload`，服务端真源）
+const CUSTOM_PLAN = [
+  {
+    slug: "mine_gyro", name: "卖家给的六轴模块", tag: "自建件",
+    tag_text: "自建件：按你确认的事实探测",
+    plan: "ping 地址 + 读身份寄存器并与期望值比较：板上判 OK / FAIL",
+    address_text: "0x68", register_text: "0x75", expect_text: "0x68",
+    echo_only: false, notes: "卖家页写的 WHO_AM_I",
+    user_confirmed: true, probes: true, not_probed: "",
+    pins: [{ role: "I2C_PROBE_SCL", pin: "PA6" }, { role: "I2C_PROBE_SDA", pin: "PA7" }],
+    wiring_text: "你的器件 卖家给的六轴模块（地址 0x68）接到上面接线表里 i2c_probe 的那对脚："
+      + "I2C_PROBE_SCL → PA6、I2C_PROBE_SDA → PA7",
+  },
+  {
+    slug: "mine_spi_screen", name: "卖家给的 SPI 屏", tag: "自建件",
+    tag_text: "自建件：按你确认的事实探测",
+    plan: "这一版只对 I2C 器件生成探测程序：它这一趟没有探测小节（清单与 AI 排障照旧，不假装测过）",
+    address_text: "", register_text: "", expect_text: "",
+    echo_only: false, notes: "", user_confirmed: true, probes: false,
+    not_probed: "这一版只对 I2C 器件生成探测程序：它这一趟没有探测小节（清单与 AI 排障照旧，不假装测过）",
+    pins: [], wiring_text: "",
+  },
+];
+
+test("hwcheckCustomState：载荷缺 custom 键 = 保留当前计划（出错响应不许把计划抹掉）", () => {
+  const state = { custom: CUSTOM_PLAN };
+  assert.deepEqual(hwcheckCustomState(state, {}).custom, CUSTOM_PLAN);
+  assert.deepEqual(hwcheckCustomState(state, null).custom, CUSTOM_PLAN);
+  assert.deepEqual(hwcheckCustomState(state, { custom: [] }).custom, []);
+  assert.deepEqual(hwcheckCustomState(null, {}).custom, []);
+});
+
+test("计划面板：**一件自建件都没有 = 空串**（既有页面逐字不变）", () => {
+  assert.equal(hwcheckCustomPlanHTML([]), "");
+  assert.equal(hwcheckCustomPlanHTML(null), "");
+  assert.equal(hwcheckCustomWiringHTML([]), "");
+  assert.equal(hwcheckCustomWiringHTML(CUSTOM_PLAN.filter((d) => !d.probes)), "",
+    "没有接线说明的那几件不进接线区（不许编一行脚）");
+});
+
+test("计划面板：标注词 / 名称 / 地址 / 这一趟做什么——全部照抄载荷，不另写一句", () => {
+  const out = hwcheckCustomPlanHTML(CUSTOM_PLAN);
+  for (const item of CUSTOM_PLAN) {
+    assert.ok(out.includes(esc(item.tag_text)), "标注词要来自载荷 tag_text：" + item.slug);
+    assert.ok(out.includes(esc(item.name)), item.slug);
+  }
+  assert.ok(out.includes(esc(CUSTOM_PLAN[0].plan)), "这一趟做什么要来自载荷 plan");
+  assert.ok(out.includes("0x68") && out.includes("0x75"), "地址 / 寄存器照原样显示");
+  assert.ok(out.includes(esc(CUSTOM_PLAN[1].not_probed)),
+    "不出小节的那件要给出原因（页面不许留一块沉默的空白）");
+  assert.ok(out.includes("不假装测过"), "非 I2C 那句「这版不给它生成」的意思要留着");
+});
+
+test("计划面板：与库内专精件**外观可区分**——自建件那一栏不许出现 [专精]", () => {
+  const out = hwcheckCustomPlanHTML(CUSTOM_PLAN);
+  assert.ok(!out.includes("[专精]"), "自建件不冒充库内验证过的结论：\n" + out);
+  assert.ok(out.includes("hwcheck-custom-plan"), "要有自己的类名（不套 .hwcheck-section）");
+});
+
+test("计划面板：用户文本一律 esc（名称 / 备注是用户随手填的）", () => {
+  const nasty = [{ ...CUSTOM_PLAN[0], name: "<img src=x onerror=alert(1)>", notes: "a & b" }];
+  const out = hwcheckCustomPlanHTML(nasty);
+  assert.ok(!out.includes("<img"), out);
+  assert.ok(out.includes("&lt;img"), out);
+  assert.ok(out.includes("a &amp; b"), out);
+});
+
+test("接线区：自建件那一行照抄服务端的 wiring_text（脚与接线表同源）", () => {
+  const out = hwcheckCustomWiringHTML(CUSTOM_PLAN);
+  assert.ok(out.includes(esc(CUSTOM_PLAN[0].wiring_text)), out);
+  assert.ok(out.includes("i2c_probe"), "那一行要点出脚来自支点模块");
+  assert.ok(!out.includes(esc(CUSTOM_PLAN[1].name)),
+    "不出小节的那件不进接线区（它没有线可接）");
+});
+
+test("顺序表：自建件那几行带标注词与名称，且**不是** [专精] 徽章", () => {
+  const order = [
+    { slug: "led", description: "板载灯", bring_up: true },
+    { slug: "mine_gyro", description: CUSTOM_PLAN[0].plan, bring_up: false,
+      custom: true, name: CUSTOM_PLAN[0].name, tag_text: CUSTOM_PLAN[0].tag_text },
+  ];
+  const out = hwcheckOrderHTML(order, "引导语", "理由");
+  assert.ok(out.includes(esc(CUSTOM_PLAN[0].tag_text)), out);
+  assert.ok(out.includes(esc(CUSTOM_PLAN[0].name)), "顺序表要认得出是哪一件（slug 之外给名称）");
+  assert.ok(!out.includes("[专精]"), out);
+  // 库内那几行的既有渲染一个字没动
+  assert.ok(out.includes("先做·板子活着"), out);
+  assert.ok(out.indexOf("先做·板子活着") < out.indexOf(esc(CUSTOM_PLAN[0].tag_text)),
+    "自建件排在库内 bring-up 件之后");
+});
+
+test("新控件齐备：计划容器在检测页里，紧跟在「这一趟真测哪几件」的专精小节之后", () => {
+  const planAt = html.indexOf('id="hwcheck-custom"');
+  assert.ok(planAt > 0, "缺少计划容器 #hwcheck-custom");
+  const sectionsAt = html.indexOf('id="hwcheck-sections"');
+  const consoleAt = html.indexOf('id="hwcheck-console"');
+  assert.ok(sectionsAt < planAt && planAt < consoleAt,
+    "自建件的计划要排在专精小节之后、命令台之前（同一张卡里）："
+    + `${sectionsAt} / ${planAt} / ${consoleAt}`);
+  // ⚠ 判据不许靠注释喂绿：容器必须在**卡片正文**里，而不是被写进 HTML 注释
+  const cardAt = html.lastIndexOf("<div class=\"card\">", sectionsAt);
+  assert.ok(cardAt > 0 && cardAt < sectionsAt, "找不到专精小节所在的卡片");
+  assert.ok(!/<!--[\s\S]*id="hwcheck-custom"[\s\S]*?-->/.test(html.slice(cardAt, planAt + 40)),
+    "计划容器落在注释里了 —— 那等于没有这个控件");
+});
+
+test("ui 接线：载荷 → 计划容器 + 接线区（fx 单源，不手拼 HTML）", () => {
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  for (const fn of ["hwcheckCustomState(", "hwcheckCustomPlanHTML(", "hwcheckCustomWiringHTML("]) {
+    assert.ok(ui.includes(fn), "ui 应调用 fx 的 " + fn);
+  }
+  assert.ok(ui.includes('$("hwcheck-custom")'), "计划容器要有渲染落点");
+  assert.ok(!ui.includes("<span class=\"hwcheck-section-tag"),
+    "ui 不得手拼标注（标注词单源在服务端载荷 + fx）");
 });
 
 

@@ -394,6 +394,44 @@ def test_the_probe_module_rides_along_with_a_custom_device(devices_client, tmp_p
     # 页面载荷里也如实说这一趟测了它（工单 05 的接线说明会用同一份）
     assert [item["slug"] for item in body["custom"]] == ["mine_gyro"]
     assert body["custom"][0]["plan"], "三档文案要下发（页面不另写一份）"
+    # 接线那一行（工单 05）：名称 + 地址 + 支点声明的那对脚，脚与接线表逐字同源
+    entry = body["custom"][0]
+    assert entry["probes"] is True
+    rows = [
+        row for row in body["wiring"]["rows"] if row["slug"] == "i2c_probe"
+    ]
+    assert entry["wiring_text"].endswith(
+        "、".join(f"{row['role']} → {row['pin']}" for row in rows)
+    ), entry["wiring_text"]
+    # 顺序表（工单 05）：自建件接在库内排序之后（库内那几件一个不动）
+    order = [item["slug"] for item in body["wiring"]["order"]]
+    assert order[-1] == "mine_gyro", order
+    assert body["wiring"]["order"][-1]["custom"] is True
+
+
+def test_the_checklist_carries_the_custom_device_classes(generate_client, tmp_path):
+    """上板清单（工单 05 验收第 2 条）：自建件三类各一条，端点逐条给出来。"""
+    client, _ = generate_client
+    client.post("/api/my-devices", json={"device": DEVICE_BODY})
+    parent = tmp_path / "out"
+    parent.mkdir()
+    body = client.post(
+        "/api/hwcheck/generate",
+        json={"platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
+              "devices": ["mine_gyro"], "parent_dir": str(parent)},
+    ).json()
+    ids = [item["id"] for item in body["checklist"]]
+    for tail in ("answered", "mismatch", "silent"):
+        assert f"custom-mine_gyro-{tail}" in ids, ids
+    assert "reset" in ids and ids.index("custom-mine_gyro-answered") < ids.index("reset")
+    # 每一条都是"应看到什么 / 不对先查哪里"两栏（前端照这个形状渲染）
+    for item in body["checklist"]:
+        assert item["expect"] and item["check"], item
+    # 回读端点给同一份清单（刷新回显的服务端真源）
+    back = client.get(
+        "/api/hwcheck/project", params={"output_dir": body["output_dir"]}
+    ).json()
+    assert back["checklist"] == body["checklist"]
 
 
 @pytest.fixture()
@@ -546,7 +584,14 @@ def test_preview_and_generate_render_byte_identical_main_c(generate_client, tmp_
 
 
 def test_a_non_i2c_custom_device_still_does_not_render_a_probe(devices_client):
-    """非 I2C 的库外件：这一版**不生成探测程序**（清单与排障是工单 05 的事）。"""
+    """非 I2C 的库外件：这一版**不生成探测程序**（清单与排障是工单 05 的事）。
+
+    工单 05 起 `custom` 这一栏的语义是**检测页计划**（选中的每一件都在，含不出
+    小节的），所以判据从"载荷里空数组"改成"这一件在，但 `probes=False`"——那才是
+    页面说得出"为什么不给它出探测程序"的前提（见
+    `tests/test_hwcheck_custom.py::test_the_page_payload_carries_the_plan_for_every_selected_custom_device`）。
+    **产物那一半一个字没松**：main.c 里既没有它的小节，也没有支点模块。
+    """
     client, _ = devices_client
     client.post(
         "/api/my-devices",
@@ -559,7 +604,11 @@ def test_a_non_i2c_custom_device_still_does_not_render_a_probe(devices_client):
     ).json()
     assert "hwcheck_custom_mine_gyro" not in body.get("main_c", ""), body
     assert "i2c_probe" not in body.get("main_c", ""), "不该顺手带上支点模块"
-    assert body.get("custom") == [], "页面载荷里也不该有它的小节"
+    plan = {item["slug"]: item for item in body["custom"]}
+    assert set(plan) == {"mine_gyro"}, plan
+    assert plan["mine_gyro"]["probes"] is False, plan
+    assert plan["mine_gyro"]["plan"], "要说清为什么没有它的探测程序"
+    assert plan["mine_gyro"]["wiring_text"] == "", "没有它的线，就不许编一行接线说明"
 
 
 def test_an_unknown_slug_is_still_a_loud_failure(devices_client):

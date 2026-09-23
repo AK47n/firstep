@@ -109,7 +109,9 @@ from typing import Sequence
 from .hwcheck_errors import HwCheckError
 from .hwcheck_custom import (
     CUSTOM_TAG_TEXT,
+    CustomPlanEntry,
     CustomSection,
+    custom_checklist,
     custom_headers,
     render_custom_section,
 )
@@ -139,6 +141,7 @@ __all__ = [
     "OUTPUT_HINT_SERIAL",
     "OUTPUT_HINT_SERIAL_OLED",
     "ChecklistItem",
+    "CustomPlanEntry",
     "CustomSection",
     "HwCheckConfig",
     "HwCheckError",
@@ -418,12 +421,21 @@ _MSPM0_BOOT_ITEM = ChecklistItem(
 )
 
 
-def render_checklist(config: HwCheckConfig) -> tuple[ChecklistItem, ...]:
-    """上板确认清单（3-6 条，随平台与通道形态变化）。
+def render_checklist(
+    config: HwCheckConfig,
+    custom: Sequence["CustomPlanEntry"] = (),
+) -> tuple[ChecklistItem, ...]:
+    """上板确认清单（3-6 条，随平台与通道形态变化；自建件另加几条）。
 
     为什么要清单：本功能要回答的是"我不知道怎么看它正常不正常"——只给一段
     代码和一个"检测通过"的断言，学生仍然只能猜。清单把**可肉眼核对的现象**
     与**最常见的三个原因**摆出来，勾选态本地留着，下次进来还知道自己走到哪。
+
+    `custom`（工单 hwcheck-unknown-device/05）= 这一趟选中的自建件**计划**
+    （`hwcheck_custom.resolve_custom_plan`）：出小节的件加三类（有应答 /
+    期望值不符 / 无应答，"不对先查"复用产物里那两句排查话术），不出小节的件加
+    一条如实说明。**文案一个字都不在这里写**——全部来自 `hwcheck_custom`
+    （那三条的形状是 `{id, expect, check}`，这里只把它装成 `ChecklistItem`）。
     """
     items: list[ChecklistItem] = [
         ChecklistItem(
@@ -481,6 +493,13 @@ def render_checklist(config: HwCheckConfig) -> tuple[ChecklistItem, ...]:
                 ),
             )
         )
+    # 自建件（工单 hwcheck-unknown-device/05）：位置在**通道形态那几条之后、
+    # `reset` 之前**——学生的阅读次序 = 板子活着 → 往哪儿看 → 我这件看到什么 →
+    # 复位再来一遍。文案全部来自 `hwcheck_custom.custom_checklist`（单源）。
+    items.extend(
+        ChecklistItem(id=raw["id"], expect=raw["expect"], check=raw["check"])
+        for raw in custom_checklist(custom)
+    )
     items.append(
         ChecklistItem(
             id="reset",

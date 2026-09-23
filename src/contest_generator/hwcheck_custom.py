@@ -47,25 +47,32 @@ mspm0 = `i2c_probe.h`）——接口同名同语义，所以**同一份渲染产
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from .hwcheck_errors import HwCheckError
 from .hwcheck_recipe import c_string
-from .my_devices import CustomDevice
+from .my_devices import BUS_I2C, CustomDevice
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
 
 __all__ = [
     "CUSTOM_TAG",
     "CUSTOM_TAG_TEXT",
+    "NOT_PROBED_NOT_I2C",
+    "NOT_PROBED_NO_CHANNEL",
     "PLAN_ECHO_ONLY",
     "PLAN_JUDGE",
     "PLAN_PING_ONLY",
     "PROBE_HEADERS",
     "PROBE_MODULE_SLUG",
     "RUNTIME_CALLS",
+    "CustomPlanEntry",
     "CustomSection",
+    "custom_checklist",
     "custom_headers",
+    "plan_order_rows",
+    "plan_payload",
     "render_custom_section",
+    "resolve_custom_plan",
     "resolve_custom_sections",
     "sections_payload",
 ]
@@ -125,6 +132,18 @@ PLAN_PING_ONLY = "只 ping 地址：这一趟只验了应答，没有验型号"
 PLAN_ECHO_ONLY = "ping 地址 + 读身份寄存器：没有期望值可比，只回显读到的字节"
 PLAN_JUDGE = "ping 地址 + 读身份寄存器并与期望值比较：板上判 OK / FAIL"
 
+# **不出探测小节**的两句（工单 05：页面计划也要覆盖这些件，见 `resolve_custom_plan`）。
+# 两句同样是"这一趟对它做什么"，所以与小节的三档**并列**而不是另起一套话术：
+# 页面那一行读的永远是 `CustomPlanEntry.plan`，是不是探测小节由 `probes` 说明。
+NOT_PROBED_NOT_I2C = (
+    "这一版只对 I2C 器件生成探测程序：它这一趟没有探测小节"
+    "（清单与 AI 排障照旧，不假装测过）"
+)
+NOT_PROBED_NO_CHANNEL = (
+    "这一趟没有勾输出通道：探测小节渲染了也没人看得见，所以不出"
+    "（想测就在上面勾上「调试串口」或「OLED」再预览）"
+)
+
 # 失败时的排查话术（贴在判定行下面）。四件事按"最可能先出错"的顺序排：
 # 供电 / 上拉是硬件、线序是接线、地址写法是最常见的一处填错（7 位 vs 8 位）。
 _TROUBLE_PING = (
@@ -133,6 +152,14 @@ _TROUBLE_PING = (
 )
 _TROUBLE_READ = "寄存器读失败：先核对寄存器地址，再查器件是否要求别的读法"
 _TROUBLE_JUDGE = "读到的不等于你填的期望值：先核对寄存器地址与期望值，再查供电 / 上拉 / 线序"
+
+# **板上会打出来的那几段文本**（工单 05：上板清单要学生拿着这几段去比对，所以
+# 清单与产物必须是同一份字面量——两边各写一遍就是"改一处忘一处"）。
+_ANSWER_LABEL = "应答："
+_ANSWER_YES = "有"
+_ANSWER_NO = "没有"
+_MATCH_YES = "（与期望值一致）"
+_MATCH_NO = "（与期望值不一致）"
 
 # 版式符号（半角 + 全角各一处：C 字符串里的说明句与注释里的分隔）
 _COLON = "："
@@ -181,20 +208,61 @@ class CustomSection:
         return self.device.register is not None
 
     def to_payload(self) -> dict[str, Any]:
-        device = self.device
+        return _device_facts(self.device, self.plan)
+
+
+def _device_facts(device: CustomDevice, plan: str) -> dict[str, Any]:
+    """自建件的**事实面**载荷（两个投影共用：探测小节 / 检测页计划）。
+
+    页面渲染只读这些键——所以它只有一处出处：改字段名时两个投影一起动，
+    不会出现"小节载荷改了、计划载荷没跟上"。
+    """
+    return {
+        "slug": device.id,
+        "name": device.name,
+        "tag": CUSTOM_TAG,
+        "tag_text": CUSTOM_TAG_TEXT,
+        "plan": plan,
+        "address_text": _hex2(device.address),
+        "register_text": _hex2(device.register),
+        "expect_text": _hex2(device.expect),
+        "echo_only": device.echo_only,
+        "notes": device.notes,
+        # 用户故事 8：页面要说清"这是按我确认的事实试的"，不是库内验证过的结论
+        "user_confirmed": True,
+    }
+
+
+@dataclass(frozen=True)
+class CustomPlanEntry:
+    """一件**选中的**自建件在检测页上的计划（工单 05：接线行 / 顺序 / 清单那一栏）。
+
+    与 `CustomSection` 的分工：小节是"进产物的那几件"（C 侧真源，`probes=True`）；
+    计划是"**这一趟选中的每一件**"——不出小节的件（非 I2C、没勾输出通道）也在里面，
+    `plan` 那句就是"为什么没有它的探测小节"。页面读计划，产物读小节，判据只有一处
+    （`_probes`，两个函数共用）。
+
+    `pins` / `wiring_text` = **支点 `i2c_probe` 的那对脚**（取自接线行，含引脚消解
+    后的生效脚）——这件不是模块、没有 `pins` 声明，脚只能来自支点；`wiring_text`
+    是页面那一行的人读句，前端一个字不另写。`pins` 只在这里用（拼那句话），
+    **不进载荷**：页面要的是那句话，给它一份脚清单等于让它自己再拼一遍。
+    """
+
+    device: CustomDevice
+    plan: str
+    probes: bool
+    pins: tuple[dict[str, str], ...] = ()
+    wiring_text: str = ""
+
+    @property
+    def slug(self) -> str:
+        return self.device.id
+
+    def to_payload(self) -> dict[str, Any]:
         return {
-            "slug": self.slug,
-            "name": device.name,
-            "tag": CUSTOM_TAG,
-            "tag_text": CUSTOM_TAG_TEXT,
-            "plan": self.plan,
-            "address_text": _hex2(device.address),
-            "register_text": _hex2(device.register),
-            "expect_text": _hex2(device.expect),
-            "echo_only": device.echo_only,
-            "notes": device.notes,
-            # 用户故事 8：页面要说清"这是按我确认的事实试的"，不是库内验证过的结论
-            "user_confirmed": True,
+            **_device_facts(self.device, self.plan),
+            "probes": self.probes,
+            "wiring_text": self.wiring_text,
         }
 
 
@@ -206,26 +274,200 @@ def custom_headers(platform: str) -> tuple[str, ...]:
     return (PROBE_HEADERS[platform],)
 
 
+def _probes(device: CustomDevice, *, has_output_channel: bool) -> bool:
+    """这一趟给不给它出探测小节（**判据单源**：C 侧小节与页面计划共用）。
+
+    两条都要：勾了输出通道（否则渲染了也没人看得见）且是 I2C 件（这一版只对
+    I2C 生成探测程序）。两处各判一次就会漂——页面上说"会测"、产物里没有它。
+    """
+    return has_output_channel and device.bus == BUS_I2C
+
+
 def resolve_custom_sections(
     devices: Sequence[CustomDevice], *, has_output_channel: bool
 ) -> tuple[CustomSection, ...]:
-    """选中的自建件 → 小节清单（保序；空 / 无输出通道 = 不出小节）。
+    """选中的自建件 → 探测小节清单（保序；空 / 无输出通道 / 非 I2C = 不出小节）。
 
     **只有 I2C 件出小节**：这一版只对 I2C 生成探测程序（spi / uart / 单总线 /
     模拟类只给清单与排障，那是工单 05 的事）——不假装测过。
     """
-    if not has_output_channel:
-        return ()
     return tuple(
         CustomSection(device=device, plan=_plan_for(device))
         for device in devices
-        if device.bus == "i2c"
+        if _probes(device, has_output_channel=has_output_channel)
     )
+
+
+def resolve_custom_plan(
+    devices: Sequence[CustomDevice],
+    *,
+    has_output_channel: bool,
+    probe_rows: Sequence[Mapping[str, Any]] = (),
+) -> tuple[CustomPlanEntry, ...]:
+    """选中的自建件 → **检测页计划**（保序，每一件都在，含不出小节的那几件）。
+
+    `probe_rows` = 支点 `i2c_probe` 的接线行（`wiring_rows` 的输出，含引脚消解后
+    的生效脚）。只读 `role` / `pin` 两列——**不在这里另写一份脚**：接线表那一行
+    是同一份数据，页面这一行与工程 README 因此是同一组脚。
+    """
+    rows = tuple(
+        {"role": str(row.get("role", "")), "pin": str(row.get("pin", ""))}
+        for row in probe_rows
+    )
+    entries: list[CustomPlanEntry] = []
+    for device in devices:
+        probing = _probes(device, has_output_channel=has_output_channel)
+        plan = (
+            _plan_for(device)
+            if probing
+            else _not_probed_reason(device, has_output_channel=has_output_channel)
+        )
+        pins = rows if probing else ()
+        entries.append(
+            CustomPlanEntry(
+                device=device,
+                plan=plan,
+                probes=probing,
+                pins=pins,
+                wiring_text=_wiring_text(device, pins),
+            )
+        )
+    return tuple(entries)
+
+
+def plan_payload(entries: Sequence[CustomPlanEntry]) -> list[dict[str, Any]]:
+    """计划 → 页面载荷（前端只渲染，不另写一句文案）。"""
+    return [entry.to_payload() for entry in entries]
+
+
+def plan_order_rows(entries: Sequence[CustomPlanEntry]) -> list[dict[str, Any]]:
+    """计划里**出小节**的那几件 → 建议顺序表的追加行（**接在库内排序之后**）。
+
+    形状与库内那几行同形（`{slug, description, bring_up}`，票面："判据复用既有排序，
+    不另立一套"），多三个前端渲染用得上的键：`custom`（是自建件，不许冒充库内件）、
+    `name` / `tag_text`（标注词单源）。
+
+    **不出小节的那几件不进顺序表**：顺序表是"这一趟的测试次序"，把它排进去等于让
+    学生以为它被测了（它们仍在计划与上板清单里，如实说没有探测程序）。
+    """
+    return [
+        {
+            "slug": entry.slug,
+            "description": entry.plan,
+            "bring_up": False,
+            "custom": True,
+            "name": entry.device.name,
+            "tag_text": CUSTOM_TAG_TEXT,
+        }
+        for entry in entries
+        if entry.probes
+    ]
 
 
 def sections_payload(sections: Sequence[CustomSection]) -> list[dict[str, Any]]:
     """小节 → 页面载荷（前端只渲染，不另写一句文案）。"""
     return [section.to_payload() for section in sections]
+
+
+# 上板清单里自建件那几条的 id 尾巴（**稳定键**：勾选态按它存本地备忘、刷新回显；
+# 渲染文案改了也不会串位——与既有 `ChecklistItem.id` 同一条约定）。三类的判据在
+# `custom_checklist` 里（`answered` / `mismatch` / `silent`，外加不出小节的
+# `not-probed`），**不为它单立一张表**：id 只在这一个模块里拼，前端照渲染不认名字。
+
+# 「不出小节」那一条的排查话术：三条按"学生最可能做错的动作"排（把它当坏了 /
+# 去等一个不会出现的输出 / 白白扔掉一次能问 AI 的机会）。
+#
+# ⚠ 第③条的措辞**不许承诺 09 还没做的那件事**（工单 05 评审抓到的假承诺）：自建件的
+# 事实（地址 / 寄存器 / 期望值）进 AI 排障上下文是**工单 09**，这一版排障手上只有
+# 平台与检测计划——写"AI 会带上你填的地址"就是让学生去等一个不存在的能力。
+_CHECK_NOT_PROBED = (
+    "① 别把「没有它的输出」当成它坏了——这一趟本来就没给它出探测小节；"
+    "② 接线照它自己的手册接（这一版没有自动检测）；"
+    "③ 现象照常填到下面的「现象回填与排障」里——它按平台与检测计划给"
+    "「下一步查什么」的方向（你填的地址 / 寄存器这一版还进不了它的上下文）"
+)
+
+
+def custom_checklist(
+    entries: Sequence[CustomPlanEntry],
+) -> tuple[dict[str, str], ...]:
+    """检测页**上板清单**里自建件那几条（`{id, expect, check}`，形状同 `ChecklistItem`）。
+
+    为什么在域层：这三条说的是"板上会打出什么"，与产物里那几句判定**必须同一句**——
+    所以应看到的那几段文本直接复用渲染用的那几个常量（`_ANSWER_YES` /
+    `_MATCH_YES` / `_ping_trouble`），"不对先查"复用 `_TROUBLE_PING` /
+    `_TROUBLE_JUDGE`；页面不另写一遍。形状是 dict 而不是 `ChecklistItem`：那个
+    类型住在 `hwcheck.py`，而 `hwcheck` 已经 import 本模块（反向 import 就是环）。
+
+    **不为一件器件编它产生不了的类**：只有地址（形态①）与有寄存器无期望值（形态②）
+    都没有"期望值不符"这一档——编一条学生照着比、板上永远不会发生的事，比少一条更坏。
+    """
+    items: list[dict[str, str]] = []
+    for entry in entries:
+        device = entry.device
+        name = device.name
+        prefix = f"custom-{entry.slug}-"
+        if not entry.probes:
+            items.append(
+                {
+                    "id": prefix + "not-probed",
+                    "expect": (
+                        f"「你的器件 {name}」这一趟没有探测小节：{entry.plan}"
+                        "——串口 / 屏上不会出现它的任何结论，这是说好的，不是故障"
+                    ),
+                    "check": _CHECK_NOT_PROBED,
+                }
+            )
+            continue
+        address_text = _hex2(device.address)
+        items.append(
+            {
+                "id": prefix + "answered",
+                "expect": (
+                    f"你的器件「{name}」（地址 {address_text}）那一节打出"
+                    f"「{_ANSWER_LABEL}{_ANSWER_YES}」"
+                ),
+                "check": (
+                    "一条都没打 = 程序没跑到那一节（先看上面「灯在闪」「串口有字」两条）；"
+                    f"打的是「{_ANSWER_LABEL}{_ANSWER_NO}」→ 看下面「无应答」那一条"
+                ),
+            }
+        )
+        if device.expect is not None:
+            items.append(
+                {
+                    "id": prefix + "mismatch",
+                    "expect": (
+                        f"读回的字节等于你填的期望值 {_hex2(device.expect)}"
+                        f"（那一节会打出「{_MATCH_YES}」）"
+                    ),
+                    "check": _TROUBLE_JUDGE,
+                }
+            )
+        items.append(
+            {
+                "id": prefix + "silent",
+                "expect": f"不出现「{_ping_trouble(device)}」",
+                "check": _TROUBLE_PING,
+            }
+        )
+    return tuple(items)
+
+
+def _wiring_text(
+    device: CustomDevice, pins: Sequence[Mapping[str, str]]
+) -> str:
+    """「你的器件 X（地址 0xNN）接到 i2c_probe 的那对脚」那一行（**文案单源**）。
+
+    没有支点接线行 = **空串**（不编一对脚出来）：非 I2C 件在页面上根本没有它的线。
+    """
+    if not pins:
+        return ""
+    bus = "、".join(f"{pin.get('role', '')} → {pin.get('pin', '')}" for pin in pins)
+    return (
+        f"你的器件 {device.name}（地址 {_hex2(device.address)}）"
+        f"接到上面接线表里 {PROBE_MODULE_SLUG} 的那对脚：{bus}"
+    )
 
 
 def _comment_text(text: str) -> str:
@@ -283,7 +525,7 @@ def render_custom_section(
     name_text = _comment_text(device.name)
     # 「地址上没有应答」那句在失败支与通过支**是同一个常量**（通过支不打印它，
     # 但两支传的是同一句话——抄两份就会改一处忘一处）。
-    ping_trouble = f"{device.name}{_COLON}地址上没有应答"
+    ping_trouble = _ping_trouble(device)
     out: list[str] = [
         f"    /* ---- {CUSTOM_TAG_TEXT}：{name_text}（地址 {address_text}）---- */",
         "    /* 这是**你自己填的事实**，不是库内验证过的驱动：只 ping 地址、只读一个",
@@ -301,8 +543,10 @@ def render_custom_section(
     out.append("    i2c_probe_init();")
     out.append("    int r;")
     out.append(f"    r = i2c_probe_ping({address_text});")
-    out.append(f"    hwcheck_report({c_string('  应答：')});")
-    out.append(f"    hwcheck_report((r == 0) ? {c_string('有')} : {c_string('没有')});")
+    out.append(f"    hwcheck_report({c_string('  ' + _ANSWER_LABEL)});")
+    out.append(
+        f"    hwcheck_report((r == 0) ? {c_string(_ANSWER_YES)} : {c_string(_ANSWER_NO)});"
+    )
     out.append("    hwcheck_newline();")
     out.append("    if (r != 0)")
     out.append("    {")
@@ -351,7 +595,7 @@ def render_custom_section(
     expect_text = _hex2(device.expect)
     out.append(
         f"    hwcheck_report((value == {expect_text}) ? "
-        f"{c_string('（与期望值一致）')} : {c_string('（与期望值不一致）')});"
+        f"{c_string(_MATCH_YES)} : {c_string(_MATCH_NO)});"
     )
     out.append("    hwcheck_newline();")
     out.append(
@@ -369,6 +613,27 @@ def _plan_for(device: CustomDevice) -> str:
     if device.expect is None:
         return PLAN_ECHO_ONLY
     return PLAN_JUDGE
+
+
+def _ping_trouble(device: CustomDevice) -> str:
+    """「X：地址上没有应答」那一句（**产物与上板清单同一份**）。
+
+    产物里它在失败支与通过支是同一个常量（通过支不打印它）；上板清单的"无应答"
+    那一条则要学生**去找它有没有出现**——两处各写一遍就是改一处忘一处。
+    """
+    return f"{device.name}{_COLON}地址上没有应答"
+
+
+def _not_probed_reason(device: CustomDevice, *, has_output_channel: bool) -> str:
+    """没有探测小节时的那一句（**与三档并列的单源**，不是另写一套话术）。
+
+    排序：先判总线——非 I2C 件**不管勾没勾通道**都出不来小节（那是这一版的能力
+    边界，学生该知道的是这条，而不是"你没勾串口"）。
+    """
+    if device.bus != BUS_I2C:
+        return NOT_PROBED_NOT_I2C
+    assert not has_output_channel, "I2C 件 + 有通道却没出小节：判据 `_probes` 漂了"
+    return NOT_PROBED_NO_CHANNEL
 
 
 def _hex2(value: int | None) -> str:

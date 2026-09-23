@@ -707,3 +707,100 @@ test("串口命令台：选上 led 就列出复测命令；不勾串口则明说
   await page.fill("#hwcheck-device-search", "");
 });
 
+// ---------------------------------------------------------------------------
+// 工单 hwcheck-unknown-device/05：自建件的**检测计划**（接线行 / 计划面板 /
+// 顺序 / 上板清单）在真页面上的样子
+//
+// 为什么必须真浏览器：载荷里有 `custom` 不等于画出来了（工单 04 的同一条教训）。
+// 这一条把三块都点出来：接线区那一行（名称 + 地址 + 支点那对脚）、计划面板
+// （标注词 + 这一趟做什么）、上板清单（三类），以及非 I2C 那件的如实说明。
+//
+// ⚠ **刻意排在文件最后**：这一条会**生成一个新工程**（清单要生成后才出现在页面上），
+// 而本 spec 后面的用例靠"上一次生成的目录"回读（`HWCHECK_LAST_DIR_KEY`）。
+// 排在中间会让它们读到这一条生成的工程。
+// ---------------------------------------------------------------------------
+test("自建件的检测计划：接线那一行 / 计划面板 / 顺序 / 上板清单三类", async () => {
+  const SPI_ID = `${MY_DEVICE_ID}spi`;
+  await openTab();
+  await page.click('[data-hwcheck-platform="stm32"]');
+  await myDeviceFill({
+    name: "验收用的六轴", bus: "i2c", address: "0x68",
+    register: "0x75", expect: "0x68", id: MY_DEVICE_ID,
+  });
+  await page.click("[data-my-device-save]");
+  await page.waitForSelector(`[data-my-device-row="${MY_DEVICE_ID}"]`);
+  await page.click(`[data-my-device-pick="${MY_DEVICE_ID}"]`);
+  await page.waitForSelector(`#hwcheck-device-chips [data-remove="${MY_DEVICE_ID}"]`);
+
+  // ① 接线区出现自建件那一行：名称 + 地址 + **支点声明的那对脚**（stm32 = PA6/PA7）
+  await page.waitForSelector(`#hwcheck-wiring [data-custom-wiring="${MY_DEVICE_ID}"]`);
+  const wiring = await page.textContent(`[data-custom-wiring="${MY_DEVICE_ID}"]`);
+  assert.ok(wiring.includes("验收用的六轴") && wiring.includes("0x68"),
+    "接线那一行要给出名称与地址：\n" + wiring);
+  assert.ok(wiring.includes("i2c_probe") && wiring.includes("PA6") && wiring.includes("PA7"),
+    "它那一对脚来自支点 i2c_probe（学生照这一行插线）：\n" + wiring);
+  const afterTable = await page.evaluate((id) => {
+    const box = document.querySelector("#hwcheck-wiring");
+    const table = box.querySelector("table.hwcheck-table");
+    const row = box.querySelector(`[data-custom-wiring="${id}"]`);
+    return !!table && !!row
+      && (table.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+  }, MY_DEVICE_ID);
+  assert.ok(afterTable, "那一行要接在接线表**之后**（它说的是「上面接线表里那两行」）");
+
+  // ② 计划面板：标注词 + 这一趟做什么；**不许出现 [专精]**
+  const plan = await page.textContent(`[data-custom-plan="${MY_DEVICE_ID}"]`);
+  assert.ok(plan.includes("自建件：按你确认的事实探测"), "标注词要原样印出来：\n" + plan);
+  assert.ok(plan.includes("板上判 OK / FAIL"), "三档文案来自服务端单源：\n" + plan);
+  assert.ok(plan.includes("0x68") && plan.includes("0x75"), "地址 / 寄存器要看得见：\n" + plan);
+  assert.ok(!plan.includes("[专精]"), "自建件不冒充库内验证过的结论：\n" + plan);
+  assert.ok(plan.includes("板上判定"), "有探测小节要说清这一趟真判：\n" + plan);
+
+  // ③ 顺序表：自建件**排最后**，带标注词与名称（库内那几件一个不动）
+  await page.waitForSelector("#hwcheck-order .hwcheck-order-row");
+  const lastRow = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll("#hwcheck-order .hwcheck-order-row")];
+    return rows.length ? rows[rows.length - 1].textContent : "";
+  });
+  assert.ok(lastRow.includes(MY_DEVICE_ID) && lastRow.includes("验收用的六轴"),
+    "自建件排在最后（库里验证过的在前）：\n" + lastRow);
+  assert.ok(lastRow.includes("自建件：按你确认的事实探测"), lastRow);
+
+  // ④ 上板清单：**三类各一条**（有应答 / 期望值不符 / 无应答）——清单要生成后才在页面上
+  await setParent(parentDir);
+  await page.click("#btn-hwcheck-generate");
+  await page.waitForSelector("[data-hwcheck-compile]", { timeout: 120000 });
+  await page.waitForSelector("#hwcheck-checklist .hwcheck-check");
+  const checklist = await page.textContent("#hwcheck-checklist");
+  assert.ok(checklist.includes("应答：有"), "「有应答」那一条：\n" + checklist);
+  assert.ok(checklist.includes("期望值 0x68") && checklist.includes("与期望值一致"),
+    "「期望值不符」那一条：\n" + checklist);
+  assert.ok(checklist.includes("地址上没有应答"),
+    "「无应答」那一条（连排查话术一起给）：\n" + checklist);
+  const tagged = await page.locator(
+    `#hwcheck-checklist [data-hwcheck-check^="custom-${MY_DEVICE_ID}"]`).count();
+  assert.equal(tagged, 3, "自建件那三条要在清单里，实际 " + tagged + " 条：\n" + checklist);
+
+  // ⑤ 非 I2C 那件：计划面板如实说"这一趟没有它的探测小节"，产物里一个字都没有
+  await myDeviceFill({
+    name: "验收用的 SPI 屏", bus: "spi", address: "", id: SPI_ID,
+  });
+  await page.click("[data-my-device-save]");
+  await page.waitForSelector(`[data-my-device-row="${SPI_ID}"]`);
+  await page.click(`[data-my-device-pick="${SPI_ID}"]`);
+  await page.waitForSelector(`#hwcheck-device-chips [data-remove="${SPI_ID}"]`);
+  await page.waitForSelector(`[data-custom-plan="${SPI_ID}"]`);
+  const spiPlan = await page.textContent(`[data-custom-plan="${SPI_ID}"]`);
+  assert.ok(spiPlan.includes("没有探测小节") || spiPlan.includes("不假装测过"),
+    "非 I2C 那件要如实说这一版不给它生成探测程序：\n" + spiPlan);
+  assert.ok(spiPlan.includes("这一趟没有它的探测小节"), spiPlan);
+  assert.equal(await page.$(`[data-custom-wiring="${SPI_ID}"]`), null,
+    "它没有线可接：接线区不许编一行出来");
+  await page.click("#btn-hwcheck-preview");
+  await page.waitForSelector("[data-hwcheck-code]");
+  const code = await page.textContent("[data-hwcheck-code]");
+  assert.ok(!code.includes(SPI_ID), "非 I2C 件不许进产物（不假装测过）：\n" + code.slice(0, 600));
+
+  await myDeviceCleanup([MY_DEVICE_ID, SPI_ID]);
+});
+

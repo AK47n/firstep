@@ -38,6 +38,7 @@ import {
   hwcheckBoardState, hwcheckWiringErrorHTML,
   hwcheckSectionsState, hwcheckSectionsHTML, hwcheckUnspecializedHTML,
   hwcheckSectionsEmptyHTML,
+  hwcheckCustomState, hwcheckCustomPlanHTML, hwcheckCustomWiringHTML,
   hwcheckConsoleState, hwcheckConsoleHTML,
   hwcheckCanTriage, hwcheckTriagePayload, hwcheckChecklistPayload,
   hwcheckAdviceState, hwcheckRecordState, hwcheckTriageErrorHTML,
@@ -71,6 +72,7 @@ const hwcheckUI = {
   exclusiveGroups: [], // 库级互斥组（服务端按平台投影，工单 05：单选交换的判据）
   sections: [],       // 逐件专精小节（服务端按库内配方解析，工单 04）
   unspecialized: [],  // 走通用降级的器件（未专精：只验总线和初始化，工单 07）
+  custom: [],         // 自建件的检测计划（服务端投影：标注 / 接线 / 出不出小节，工单 05）
   console: null,      // 串口命令台载荷（配方命令 + 既有命令 + 能不能复测，工单 06）
   project: null,      // 当前正在看的检测工程（生成或回读来的）
   checklistChecked: [],
@@ -395,6 +397,9 @@ function renderHwcheckWiring() {
       : (hwcheckUI.wiring
         ? hwcheckPinFixHTML(hwcheckUI.wiring.pin_fixes)
           + hwcheckWiringTableHTML(hwcheckUI.wiring.rows, hwcheckUI.wiring.footnote)
+          // 自建件那一行接在表**下面**（"你的器件 … 接到上面接线表里 i2c_probe 的
+          // 那对脚"——那句话指的就是刚读完的这张表）。空 = 空串（既有页面不变）。
+          + hwcheckCustomWiringHTML(hwcheckUI.custom)
         : '<div class="muted">选好平台后点「预览检测程序」（或选一件器件），'
           + "这里会出现这一趟要接的线与默认脚冲突。</div>");
   }
@@ -420,6 +425,16 @@ function renderHwcheckSections() {
   const panel = hwcheckSectionsHTML(hwcheckUI.sections);
   box.innerHTML = (panel || hwcheckSectionsEmptyHTML())
     + hwcheckUnspecializedHTML(hwcheckUI.unspecialized);
+}
+
+// —— 自建件的检测计划（工单 hwcheck-unknown-device/05）：只渲染服务端载荷 ——
+// 标注词 / 接线那一行 / "这一趟对它做什么" / 出不出小节的判据全部在服务端
+// （`hwcheck_custom` 单源）；前端一个字都不判，也**不自己判总线**——那会让页面与
+// 产物两处各说各话。一件自建件都没有时写空串（既有页面逐字不变）。
+function renderHwcheckCustom() {
+  const box = $("hwcheck-custom");
+  if (!box) return;
+  box.innerHTML = hwcheckCustomPlanHTML(hwcheckUI.custom);
 }
 
 // —— 串口命令台（工单 06）：只渲染服务端载荷（命令表 = 库内配方）——
@@ -463,6 +478,7 @@ export function renderHwcheckPanel() {
   renderHwcheckDevices();
   renderHwcheckWiring();
   renderHwcheckSections();
+  renderHwcheckCustom();
   renderHwcheckConsole();
   renderHwcheckProject();
   renderHwcheckChecklist();
@@ -538,6 +554,7 @@ async function refreshHwcheckView() {
       Object.assign(hwcheckUI, hwcheckPreviewState(hwcheckUI, payload));
       Object.assign(hwcheckUI, hwcheckBoardState(hwcheckUI, payload));
       Object.assign(hwcheckUI, hwcheckSectionsState(hwcheckUI, payload));
+      Object.assign(hwcheckUI, hwcheckCustomState(hwcheckUI, payload));
       Object.assign(hwcheckUI, hwcheckConsoleState(hwcheckUI, payload));
       hwcheckUI.wiringError = "";
     }
@@ -546,6 +563,7 @@ async function refreshHwcheckView() {
       hwcheckUI.wiring = null;
       hwcheckUI.sections = [];
       hwcheckUI.unspecialized = [];
+      hwcheckUI.custom = [];
       hwcheckUI.console = null;
       hwcheckUI.wiringError = e && e.message ? e.message : String(e);
     }
@@ -561,6 +579,7 @@ async function refreshHwcheckView() {
   renderHwcheckDevices();
   renderHwcheckWiring();
   renderHwcheckSections();
+  renderHwcheckCustom();
   renderHwcheckConsole();   // 命令表也随载荷更新（真机验收抓到的漏渲染）
 }
 

@@ -48,9 +48,12 @@ from .hwcheck import (
 from .hwcheck_console import build_console_table, console_payload
 from .hwcheck_custom import (
     PROBE_MODULE_SLUG,
+    CustomPlanEntry,
     CustomSection,
+    plan_order_rows,
+    plan_payload as custom_plan_payload,
+    resolve_custom_plan,
     resolve_custom_sections,
-    sections_payload as custom_sections_payload,
 )
 from .hwcheck_errors import HwCheckError
 from .hwcheck_generic import (
@@ -471,6 +474,9 @@ class HwCheckView:
       `pin_fixes` 住在 `wiring` 里，不是顶层键——前端读的也是 `wiring.pin_fixes`）；
     * `sections` / `generic` / `custom` = 域层对象（生成端点还要拿它们去渲染 main.c，
       不必再解析一遍）；
+    * `custom_plan` = 自建件的**检测页计划**（`CustomPlanEntry`，工单 05）：选中的
+      每一件都在（含不出小节的那几件），页面读它、`board["custom"]` 是它的载荷；
+      与 `custom` 的关系 = "计划里出小节的那几件"（`probes` 判据单源）；
     * `pin_bindings` = 自动消解出的绑定增量（生成端点原样喂生成内核——页面接线表与
       工程 README 同源的前提）；
     * `known_slugs` = 整库模块 slug（排障的事实约束判据用，**不进任何载荷**）；
@@ -485,6 +491,7 @@ class HwCheckView:
     sections: tuple[RecipeSection, ...]
     generic: tuple[GenericSection, ...]
     custom: tuple[CustomSection, ...]
+    custom_plan: tuple[CustomPlanEntry, ...]
     pin_bindings: dict[str, str]
     known_slugs: tuple[str, ...]
     generation_slugs: tuple[str, ...]
@@ -574,6 +581,22 @@ def hwcheck_view(
         pin_fixes=plan.fixed,
         custom_device_ids=custom,
     )
+    # 自建件的**检测页计划**（工单 05）：选中的每一件都在，出不出的来小节由
+    # `hwcheck_custom` 那一处判（`resolve_custom_plan` → `_probes`，与上面 `custom`
+    # 同一判据）。脚**取自板侧视图的接线行**（支点那一行，含引脚消解后的生效脚）
+    # ——本模块只做投影，不重推任何一根线的落点。
+    custom_plan = resolve_custom_plan(
+        custom_devices,
+        has_output_channel=config.has_output_channel,
+        probe_rows=[
+            row for row in view.rows if row.get("slug") == PROBE_MODULE_SLUG
+        ],
+    )
+    board_payload = view.to_dict()
+    # 建议顺序（工单 05）：库内那份照旧（`sort_verification_order`，判据不动），
+    # 自建件**接在它后面**——"库内验证过的在前、按你给的事实试的在最后"。
+    board_payload["order"] = [*board_payload["order"], *plan_order_rows(custom_plan)]
+    custom_payload = custom_plan_payload(custom_plan)
     sections = resolve_sections(config.platform, devices, recipes, manifests)
     specialized = {section.slug for section in sections}
     # 通用降级（工单 07）：专精件之外、且在本平台有条目的那些件。没有本平台
@@ -588,7 +611,7 @@ def hwcheck_view(
     console = build_console_table(sections)
     return HwCheckView(
         board={
-            "wiring": view.to_dict(),
+            "wiring": board_payload,
             "sections": sections_payload(sections),
             "console": console_payload(config.debug_uart, console),
             "unspecialized": [
@@ -600,10 +623,11 @@ def hwcheck_view(
                 }
                 for section in generic
             ],
-            # 自建件小节（工单 03）：库内两批之后那一批——判据来自**用户确认的
-            # 事实**、不是库内配方，所以页面与产物的顺序都是"库内验证过的在前"。
-            # 文案（tag / plan / 三档说明）全部来自 `hwcheck_custom` 单源。
-            "custom": custom_sections_payload(custom_sections),
+            # 自建件计划（工单 03 落数据、工单 05 起页面渲染它）：库内两批之后那一批
+            # ——判据来自**用户确认的事实**、不是库内配方，所以页面与产物的顺序都是
+            # "库内验证过的在前"。文案（tag / plan / 三档说明 / 不出小节那句）与
+            # 接线那一行全部来自 `hwcheck_custom` 单源，前端一个字不另写。
+            "custom": custom_payload,
             # 同组互斥（工单 05）：按**平台**投影的库级功能组——判据单源是库内
             # manifest 的 exclusive_group（`collect_exclusive_groups`，与赛题侧
             # 生成链路同一个函数）；成员取自**整库**而不是本次选中的模块集，
@@ -619,6 +643,7 @@ def hwcheck_view(
         sections=sections,
         generic=generic,
         custom=custom_sections,
+        custom_plan=custom_plan,
         # 引脚消解出的绑定增量（工单 hwcheck-pin-conflict-exit/01）：生成端点原样
         # 喂生成内核——页面接线表与工程 README / 接线快照因此是同一组脚。
         pin_bindings=plan.bindings,

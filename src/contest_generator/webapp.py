@@ -883,6 +883,20 @@ def _hwcheck_devices(payload: dict) -> tuple[str, ...]:
     return tuple(_require_str_list(payload, "devices"))
 
 
+def _hwcheck_checklist_payload(config: HwCheckConfig, view) -> list[dict]:
+    """上板清单的载荷投影（预览之外的三个端点共用一处）。
+
+    为什么要一个函数而不是在三处各写一遍列表推导（工单 05 评审点名的复制粘贴）：
+    `render_checklist` 的自建件那几条**只有把这一趟的计划喂进去才会有**，而漏掉
+    那个参数**不会报错**——只是清单里静悄悄少几条（正是本功能一路在防的"悄无声息
+    的少测"）。收成一处之后，新增端点照抄的就不再是"可能漏参数的一句话"，而是
+    "吃视图的函数"（结构与 `tests/test_hwcheck_custom.py` 的源码判据一起钉住）。
+    """
+    return [
+        item.to_dict() for item in render_checklist(config, view.custom_plan)
+    ]
+
+
 def _hwcheck_record_dir(payload: dict) -> Path:
     """排障 / 勾选两个端点的落点（工单 08）：目录必须已存在，**且真是检测工程**。
 
@@ -2614,7 +2628,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "main_c": main_c,
             "output_hint": render_output_hint(config),
             **view.board,
-            "checklist": [item.to_dict() for item in render_checklist(config)],
+            # 上板清单吃**这一趟的自建件计划**（工单 hwcheck-unknown-device/05）：
+            # 出小节的件加三类（有应答 / 期望值不符 / 无应答），不出小节的件加一条
+            # 如实说明——文案单源在 `hwcheck_custom`，投影单源在
+            # `_hwcheck_checklist_payload`（三个端点共用）。
+            "checklist": _hwcheck_checklist_payload(config, view),
             "modules": [slug for slug, _files in summary.modules],
             "structure": list(summary.structure),
             "include_dirs": list(summary.include_dirs),
@@ -2782,7 +2800,6 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "devices": list(hwcheck_devices(config)),
             "main_c": read_project_main_c(path),
             "output_hint": render_output_hint(config),
-            "checklist": [item.to_dict() for item in render_checklist(config)],
         }
         app_config = _hwcheck_library_config(context)
         view = hwcheck_view(
@@ -2798,6 +2815,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             data_dir=context.config_path.parent,
         )
         payload.update(view.board)
+        # 清单在**视图之后**拼（它要吃自建件计划，工单 hwcheck-unknown-device/05）：
+        # 求值顺序里 `read_project_main_c` 仍在取库配置之前（见上面那段说明与
+        # tests/test_hwcheck.py::test_project_endpoint_reads_main_c_before_taking_the_library_config）。
+        payload["checklist"] = _hwcheck_checklist_payload(config, view)
         # 检测记录（工单 08）：现象 + 勾选 + 建议随这次检测落盘，刷新回显。
         # 读在这里（而不是另开一个 GET）：页面回到某个检测工程时一次拿全，
         # 少一个"清单回来了、记录还没回来"的中间态。
@@ -2848,7 +2869,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             wiring=board["wiring"],
             sections=board["sections"],
             unspecialized=board["unspecialized"],
-            checklist=[item.to_dict() for item in render_checklist(config)],
+            checklist=_hwcheck_checklist_payload(config, view),
             checked_ids=checked_ids,
             symptom=symptom,
             known_modules=view.known_slugs,

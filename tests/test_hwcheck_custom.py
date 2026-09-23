@@ -26,13 +26,24 @@ import pytest
 
 from contest_generator.hwcheck_custom import (
     CUSTOM_TAG,
+    CUSTOM_TAG_TEXT,
+    NOT_PROBED_NOT_I2C,
+    NOT_PROBED_NO_CHANNEL,
+    PLAN_JUDGE,
     PLATFORM_PIN_COST,
+    PROBE_MODULE_SLUG,
     CustomSection,
+    _TROUBLE_JUDGE,
+    _TROUBLE_PING,
+    _hex2,
+    custom_checklist,
     custom_headers,
     render_custom_section,
+    resolve_custom_plan,
     resolve_custom_sections,
     sections_payload,
 )
+from contest_generator.hwcheck_recipe import SECTION_TAG
 from contest_generator.clex import strip_comments as _strip_comments
 from contest_generator.my_devices import BUS_I2C, CustomDevice
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
@@ -799,3 +810,383 @@ def test_the_compile_probe_covers_both_platforms_and_the_four_receipt_categories
     # 「只有自建件」与「空形态」都得真有自建件 / 真没有器件
     assert probe.CASES["custom-only"][PLATFORM_MSPM0]["custom"], "custom-only 要有自建件"
     assert not probe.CASES["empty"][PLATFORM_MSPM0]["devices"], "empty 不该选任何器件"
+
+
+# ---------------------------------------------------------------------------
+# 工单 05：检测页的「器件计划」（接线行 / 顺序 / 标注 / 上板清单）
+#
+# 03/04 已经算好了"页面上说的与板上做的一致"（三档文案单源）。这一单把那份
+# 计划**显示出来**，并且要覆盖 03 没管的那一半：**不出小节的件也要在计划里**
+# （非 I2C、没勾输出通道——它们不是模块、没有 C 产物，但这一趟确实选了它们，
+# 页面上必须如实说"为什么没有它的探测程序"，否则就是一次悄无声息的少测）。
+# ---------------------------------------------------------------------------
+
+# 支点 `i2c_probe` 的接线行（真形态：`wiring_rows` 的字段，本单只读 role / pin）。
+PROBE_ROWS_STM32 = (
+    {"slug": "i2c_probe", "role": "I2C_PROBE_SCL", "role_id": "I2C_PROBE_SCL", "pin": "PA6"},
+    {"slug": "i2c_probe", "role": "I2C_PROBE_SDA", "role_id": "I2C_PROBE_SDA", "pin": "PA7"},
+)
+
+
+def _spi_device(**overrides) -> CustomDevice:
+    data = {
+        "id": "mine_spi_screen",
+        "name": "卖家给的 SPI 屏",
+        "bus": "spi",
+        "address": None,
+    }
+    data.update(overrides)
+    return CustomDevice(**data)
+
+
+def _plan(devices, *, has_output_channel=True, probe_rows=PROBE_ROWS_STM32):
+    return resolve_custom_plan(
+        list(devices),
+        has_output_channel=has_output_channel,
+        probe_rows=list(probe_rows),
+    )
+
+
+def test_the_plan_lists_every_selected_custom_device_not_only_the_probing_ones():
+    """计划里**每一件选中的自建件都在**，出不出的来小节是另一栏（`probes`）。
+
+    只列"出了小节的"就是把非 I2C 件从页面上抹掉——那正是 spec 用户故事 14
+    反对的（"非 I2C 也要如实处理"）。计划里那句 `plan` 就是原因，页面照抄。
+    """
+    entries = {entry.slug: entry for entry in _plan([_device(), _spi_device()])}
+    assert set(entries) == {"mine_gyro", "mine_spi_screen"}
+    assert entries["mine_gyro"].probes is True
+    # 出小节的那件：页面那一行读的就是 C 侧同一个字符串（三档文案单源不破）
+    assert entries["mine_gyro"].plan == PLAN_JUDGE
+    assert entries["mine_spi_screen"].probes is False
+    # 不出小节的那件：它的"这一趟做什么"**就是**不出小节那句（不许另写一句）
+    assert entries["mine_spi_screen"].plan == NOT_PROBED_NOT_I2C
+
+
+def test_the_plan_says_the_output_channel_is_missing_instead_of_the_three_tiers():
+    """没勾输出通道 → 三档文案换成"没通道"，而不是照旧说"这一趟会 ping 它"。"""
+    entry = _plan([_device()], has_output_channel=False)[0]
+    assert entry.probes is False
+    assert entry.plan == NOT_PROBED_NO_CHANNEL
+
+
+def test_the_checklist_projection_has_a_single_home():
+    """三处端点共用**一处**清单投影（工单 05 评审整改）。
+
+    为什么值得一条判据：`render_checklist(config, custom)` 的第二个参数**漏了不报错**
+    ——清单里只是静悄悄地少掉自建件那几条，正是本功能一路在防的"悄无声息的少测"。
+    所以判据钉在路由层：`render_checklist(` 只许出现在那个共用件里，三个端点都得
+    调它（新增端点照抄的是"吃视图的函数"，不是"可能漏参数的一句话"）。
+    """
+    src = (REPO / "src" / "contest_generator" / "webapp.py").read_text(encoding="utf-8")
+    calls = re.findall(r"render_checklist\(([^)]*)\)", src)
+    assert calls == ["config, view.custom_plan"], (
+        "路由层出现了第二处清单投影（漏喂自建件计划不会报错，只会少几条）：" + repr(calls)
+    )
+    assert src.count("_hwcheck_checklist_payload(config, view)") == 3, (
+        "三个端点（生成 / 回读 / 排障）都要走同一处清单投影"
+    )
+
+
+def test_the_probes_verdict_has_a_single_home():
+    """**"这一趟给不给它出小节"只有一个判据**：C 侧 sections 与页面 plan 同源。
+
+    两处各判一次（一处写 `bus == "i2c"`、另一处写 `has_output_channel and ...`）
+    就会漂：页面上说"会测"、产物里没有它。
+    """
+    devices = [_device(), _spi_device()]
+    for has_channel in (True, False):
+        from_sections = {
+            section.slug
+            for section in resolve_custom_sections(
+                devices, has_output_channel=has_channel
+            )
+        }
+        from_plan = {
+            entry.slug
+            for entry in _plan(devices, has_output_channel=has_channel)
+            if entry.probes
+        }
+        assert from_sections == from_plan, f"has_output_channel={has_channel}"
+
+
+def test_the_wiring_line_is_built_from_the_probe_rows_and_names_the_bus():
+    """接线那一行 = 名称 + 地址 + **支点声明的那对脚**（脚不在这里另写一份）。
+
+    `probe_rows` 是 `wiring_rows` 的输出（已含引脚消解后的**生效脚**），所以
+    页面这一行与接线表、与工程 README 是同一组脚。
+    """
+    entry = _plan([_device()])[0]
+    assert entry.wiring_text == (
+        "你的器件 卖家给的六轴模块（地址 0x68）接到上面接线表里 i2c_probe 的那对脚："
+        "I2C_PROBE_SCL → PA6、I2C_PROBE_SDA → PA7"
+    )
+    assert [pin["pin"] for pin in entry.pins] == ["PA6", "PA7"]
+    assert [pin["role"] for pin in entry.pins] == ["I2C_PROBE_SCL", "I2C_PROBE_SDA"]
+
+
+def test_the_plan_never_invents_pins_when_the_bus_rows_are_missing():
+    """没有支点接线行 = **编不出脚**（不许自己造一对 PA6/PA7 出来）。
+
+    非 I2C 件根本没有这一行（总线不是 I2C，页面上没有它的线）；支点缺席时同理。
+    """
+    spi = _plan([_spi_device()])[0]
+    assert spi.pins == () and spi.wiring_text == ""
+    missing = _plan([_device()], probe_rows=())[0]
+    assert missing.pins == () and missing.wiring_text == ""
+
+
+def test_the_checklist_names_the_three_verdict_classes_for_a_probing_device():
+    """上板清单：**有应答 / 期望值不符 / 无应答**三类各一条（票面第 2 条）。
+
+    三类都是"板上会打出来的东西"，所以清单说的是**可肉眼核对的现象**；
+    "不对先查哪里"两句直接复用产物里的排查话术常量（`_TROUBLE_*`）——页面与
+    板上同一句，改一处两处都动。
+    """
+    items = custom_checklist(_plan([_device()]))
+    assert [item["id"] for item in items] == [
+        "custom-mine_gyro-answered",
+        "custom-mine_gyro-mismatch",
+        "custom-mine_gyro-silent",
+    ]
+    answered, mismatch, silent = items
+    for item in items:
+        assert item["expect"] and item["check"], item
+        assert _device().name in item["expect"] + item["check"] or _hex2(0x68) in (
+            item["expect"] + item["check"]
+        ), f"每条都要点得出是哪一件 / 哪个地址：{item}"
+    assert "应答：有" in answered["expect"], answered
+    assert _hex2(0x68) in mismatch["expect"] and "期望值一致" in mismatch["expect"], mismatch
+    assert "地址上没有应答" in silent["expect"], silent
+    assert _TROUBLE_JUDGE in mismatch["check"], "「不对先查」要复用产物里那句"
+    assert _TROUBLE_PING in silent["check"], "同上"
+
+
+def test_the_checklist_never_invents_a_class_the_device_cannot_produce():
+    """只有地址（形态①）出不了"期望值不符"这一类——**不为它编一条**。
+
+    编一条学生照着比、板上永远不会发生的事，比少一条更坏（既有口径：
+    不假装测过）。
+    """
+    ping_only = _device(register=None, expect=None)
+    ids = [item["id"] for item in custom_checklist(_plan([ping_only]))]
+    assert ids == ["custom-mine_gyro-answered", "custom-mine_gyro-silent"]
+    echo_only = _device(expect=None)
+    assert [item["id"] for item in custom_checklist(_plan([echo_only]))] == [
+        "custom-mine_gyro-answered",
+        "custom-mine_gyro-silent",
+    ]
+
+
+def test_the_checklist_tells_the_truth_for_a_device_without_a_probe():
+    """不出小节的件也要进清单（票面第 5 条：**只给清单与 AI 排障**）。
+
+    它的那一条必须把"为什么没有探测程序"说清，并**明说别把没有输出当失败**。
+    """
+    items = custom_checklist(_plan([_spi_device()]))
+    assert len(items) == 1, items
+    item = items[0]
+    assert item["id"] == "custom-mine_spi_screen-not-probed"
+    assert NOT_PROBED_NOT_I2C in item["expect"], item
+    assert "不是故障" in item["expect"] or "别把" in item["check"], item
+
+
+def test_the_checklist_is_empty_when_no_custom_device_is_selected():
+    """一件自建件都没有 → 清单**一个字都不多**（票面第 6 条的前半）。"""
+    assert custom_checklist(()) == ()
+
+
+# ---------------------------------------------------------------------------
+# 接进检测页载荷（工单 05）：计划 / 顺序 / 上板清单三处都读同一份
+# ---------------------------------------------------------------------------
+
+
+def _page_view(
+    platform: str,
+    custom_devices=(),
+    *,
+    devices=(),
+    debug_uart: bool = True,
+    oled: bool = False,
+    device_ids=(),
+):
+    """真库真母版的一次投影（自建件落在临时数据目录里）。
+
+    `devices` = 这一趟选中的 slug（缺省 = 传进来的自建件全选）；
+    `device_ids` = 想选但**数据目录里没有**的 id（模拟"选了这件、盘上又没了"）。
+    """
+    import tempfile
+
+    from contest_generator.hwcheck import HwCheckConfig
+    from contest_generator.hwcheck_board import hwcheck_view
+    from contest_generator.my_devices import my_devices_dir, save_device
+
+    with tempfile.TemporaryDirectory() as tmp:
+        for device in custom_devices:
+            save_device(my_devices_dir(Path(tmp)), device)
+        selected = tuple(devices) or (
+            tuple(device.id for device in custom_devices) + tuple(device_ids)
+        )
+        return hwcheck_view(
+            HwCheckConfig(
+                platform=platform,
+                debug_uart=debug_uart,
+                oled=oled,
+                devices=selected,
+            ),
+            module_library_dir=REPO / "library" / "modules",
+            masters_dir=REPO / "library" / "masters",
+            data_dir=Path(tmp),
+        )
+
+
+def test_the_page_payload_carries_the_plan_for_every_selected_custom_device():
+    """载荷 `custom` = **选中的每一件**的计划（票面第 1 / 5 条的数据面）。
+
+    非 I2C 那件也要在（`probes=False` + 原因），否则页面无从说"为什么不给它出
+    探测程序"——那就是一次悄无声息的少测。
+    """
+    view = _page_view(PLATFORM_STM32, [_device(), _spi_device()])
+    plan = {item["slug"]: item for item in view.board["custom"]}
+    assert set(plan) == {"mine_gyro", "mine_spi_screen"}
+    i2c = plan["mine_gyro"]
+    assert i2c["probes"] is True
+    assert i2c["wiring_text"].startswith("你的器件 卖家给的六轴模块（地址 0x68）")
+    assert i2c["wiring_text"].endswith("I2C_PROBE_SCL → PA6、I2C_PROBE_SDA → PA7"), (
+        "脚要来自支点的接线行（stm32 = PA6/PA7）"
+    )
+    spi = plan["mine_spi_screen"]
+    assert spi["probes"] is False and spi["plan"] == NOT_PROBED_NOT_I2C
+    assert spi["wiring_text"] == ""
+    # 标注词单源：两个投影（小节 / 计划）读的是同一份常量
+    assert i2c["tag"] == CUSTOM_TAG and i2c["tag_text"] == CUSTOM_TAG_TEXT
+    # 载荷只给"那句话"，不给脚清单（给了就是让前端自己再拼一遍）
+    assert "pins" not in i2c and "not_probed" not in spi
+
+
+def test_the_wiring_line_wins_over_the_cost_sentence_but_not_the_pins():
+    """mspm0 上那一行给的是**生效脚**（PA0/PA1），与接线表逐字对得上。"""
+    view = _page_view(PLATFORM_MSPM0, [_device()])
+    entry = view.board["custom"][0]
+    rows = [
+        row for row in view.board["wiring"]["rows"] if row["slug"] == PROBE_MODULE_SLUG
+    ]
+    assert entry["wiring_text"].endswith(
+        "、".join(f"{row['role']} → {row['pin']}" for row in rows)
+    ), entry["wiring_text"]
+    assert {row["pin"] for row in rows} == {"PA0", "PA1"}, "地猛星上这一对脚"
+
+
+def test_the_order_puts_the_custom_device_after_every_library_module():
+    """顺序（票面第 3 条）：库内 bring-up 件在前，**自建件排最后**。
+
+    判据复用既有排序——这里只断言"接在它后面"，不另立一套次序。
+    """
+    view = _page_view(PLATFORM_STM32, [_device()], devices=("mine_gyro", "led"))
+    order = view.board["wiring"]["order"]
+    assert [item["slug"] for item in order][-1] == "mine_gyro", order
+    assert order[0]["slug"] == "led" and order[0]["bring_up"] is True, (
+        "库内 bring-up 件仍排在前面（既有排序没动）：" + repr(order[0])
+    )
+    last = order[-1]
+    assert last["custom"] is True and last["bring_up"] is False
+    assert last["tag_text"] == CUSTOM_TAG_TEXT and last["name"] == _device().name
+    assert last["description"] == PLAN_JUDGE, "顺序表那一行读的也是计划单源"
+
+
+def test_the_order_never_lists_an_unprobed_device_as_something_to_test():
+    """不出小节的件**不进顺序表**（顺序表 = 这一趟的测试次序）。
+
+    它仍在计划与清单里（如实说没有探测程序）——但排在"建议检测顺序"里等于让它
+    看起来被测了。
+    """
+    view = _page_view(PLATFORM_STM32, [_device(), _spi_device()])
+    slugs = [item["slug"] for item in view.board["wiring"]["order"]]
+    assert "mine_gyro" in slugs and "mine_spi_screen" not in slugs, slugs
+
+
+def test_the_checklist_grows_by_the_custom_device_classes_in_the_right_place():
+    """上板清单：既有几条一个不动，自建件三类接在**通道那几条之后**、复位之前。"""
+    from contest_generator.hwcheck import HwCheckConfig, render_checklist
+
+    view = _page_view(PLATFORM_STM32, [_device()], devices=("mine_gyro", "led"))
+    config = HwCheckConfig(
+        platform=PLATFORM_STM32, debug_uart=True, oled=False, devices=("mine_gyro", "led")
+    )
+    plain = [item.id for item in render_checklist(config)]
+    with_custom = [item.id for item in render_checklist(config, view.custom_plan)]
+    assert with_custom[: len(plain)] == plain or plain == [
+        i for i in with_custom if not i.startswith("custom-")
+    ], with_custom
+    assert "custom-mine_gyro-answered" in with_custom
+    assert with_custom.index("custom-mine_gyro-answered") > with_custom.index("serial")
+    assert with_custom.index("custom-mine_gyro-answered") < with_custom.index("reset")
+    # 没有自建件时逐字与改动前一致（票面第 6 条）
+    assert render_checklist(config) == render_checklist(config, ())
+
+
+def test_the_product_never_marks_a_custom_section_as_specialized():
+    """标注词不互串（票面第 4 条）：产物里自建件那一批**不出现 `[专精]`**。
+
+    库内件那一批照旧带 `[专精]`（它是"库内验证过的"唯一标记）——两个词各归各的
+    批次，学生才分得清哪些结论可信。
+    """
+    view = _page_view(PLATFORM_STM32, [_device()], devices=("mine_gyro", "ml_mpu6050"))
+    custom_block = _section_block(
+        [line for line in _custom_lines(_main_c_of(view)) if line.strip()],
+        CUSTOM_TAG_TEXT,
+    )
+    assert CUSTOM_TAG_TEXT in custom_block
+    assert SECTION_TAG not in custom_block, (
+        "自建件那一段里出现了 `[专精]`（两个词互串了）：\n" + custom_block
+    )
+    assert SECTION_TAG in _main_c_of(view), "库内专精件那一段照旧带 [专精]"
+    for item in view.board["custom"]:
+        assert SECTION_TAG not in (item["tag"] + item["tag_text"] + item["plan"]), item
+
+
+def test_a_non_i2c_custom_device_never_reaches_the_product():
+    """非 I2C 件**不进 C 产物**（票面第 5 条后半：不假装测过）。
+
+    它这一趟在页面上有位置（计划 + 清单 + AI 排障），但 main.c 里一个字都不该有。
+    """
+    view = _page_view(PLATFORM_STM32, [_spi_device()])
+    code = _main_c_of(view)
+    assert "mine_spi_screen" not in code, code[:400]
+    assert "hwcheck_custom_mine_spi_screen" not in code
+    assert PROBE_MODULE_SLUG not in view.generation_slugs, (
+        "没有探测小节时不该顺手把支点模块带进工程：" + repr(view.generation_slugs)
+    )
+
+
+def test_the_render_injection_point_is_still_the_only_one():
+    """预览与生成仍走同一处渲染（工单 03 的验收线，本单没动它）。"""
+    view = _page_view(PLATFORM_STM32, [_device()])
+    assert [section.slug for section in view.custom] == ["mine_gyro"]
+    assert [entry.slug for entry in view.custom_plan] == ["mine_gyro"]
+
+
+def _main_c_of(view) -> str:
+    """这一趟的产物（与两个端点同一条渲染路径：吃视图里那三批小节）。"""
+    from contest_generator.hwcheck import HwCheckConfig, render_main_c
+
+    config = HwCheckConfig(platform=PLATFORM_STM32, debug_uart=True, oled=False)
+    return render_main_c(config, view.sections, view.generic, view.custom)
+
+
+def _custom_lines(code: str) -> list[str]:
+    """产物里**自建件那一批**的语句行（从 `hwcheck_custom_` 那个小节函数起算）。"""
+    lines = code.splitlines()
+    start = next(
+        (i for i, line in enumerate(lines) if line.startswith("static void hwcheck_custom_")),
+        0,
+    )
+    return lines[start:]
+
+
+def _section_block(lines: list[str], marker: str) -> str:
+    """取含 `marker` 的那一段（到下一个空行 / 下一个注释块头为止）。"""
+    text = "\n".join(lines)
+    at = text.find(marker)
+    assert at >= 0, f"产物里没有 {marker}：\n{text[:400]}"
+    return text[at:]

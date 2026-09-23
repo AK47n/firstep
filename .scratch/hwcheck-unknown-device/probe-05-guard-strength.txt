@@ -1,0 +1,24 @@
+[1] 前置检查（源文件指纹与锚点唯一性）
+    hwcheck_custom.py: fbb2f7df9d715383…（锚点各一处 ✓）
+    hwcheck_board.py: 00ae1579f6cd2914…（锚点各一处 ✓）
+    hwcheck.py: af3994eec2d98963…（锚点各一处 ✓）
+    webapp.py: ea406dc209c71ebe…（锚点各一处 ✓）
+[2] 注入前（守卫在）：PASS（四条全绿）  ｜ 1 passed, 63 deselected in 0.38s / 1 passed, 63 deselected in 0.38s / 1 passed, 63 deselected in 0.42s / 1 passed, 63 deselected in 0.38s / 1 passed, 63 deselected in 0.06s
+[3] 注入 A: 顺序不再把自建件排在最后 → RED（守卫变红） ｜ 1 failed, 63 deselected in 0.45s
+[4] 复原复核：hwcheck_board.py sha256 相等 ✓（00ae1579f6cd2914…）
+[3] 注入 B: 计划只列出了小节的那几件 → RED（守卫变红） ｜ 1 failed, 63 deselected in 0.46s
+[4] 复原复核：hwcheck_custom.py sha256 相等 ✓（fbb2f7df9d715383…）
+[3] 注入 C: 上板清单不再接自建件那几条 → RED（守卫变红） ｜ 1 failed, 63 deselected in 0.46s
+[4] 复原复核：hwcheck.py sha256 相等 ✓（af3994eec2d98963…）
+[3] 注入 D: 出不出探测小节不再看总线 → RED（守卫变红） ｜ 1 failed, 63 deselected in 0.46s
+[4] 复原复核：hwcheck_custom.py sha256 相等 ✓（fbb2f7df9d715383…）
+[3] 注入 E: 回读端点自己拼一份清单（漏喂自建件计划） → RED（守卫变红） ｜ 1 failed, 63 deselected in 0.13s
+[4] 复原复核：webapp.py sha256 相等 ✓（ea406dc209c71ebe…）
+[5] 复原后复跑：test_the_order_puts_the_custom_device_after_every_library_module PASS（回绿） ｜ 1 passed, 63 deselected in 0.38s
+[5] 复原后复跑：test_the_page_payload_carries_the_plan_for_every_selected_custom_device PASS（回绿） ｜ 1 passed, 63 deselected in 0.38s
+[5] 复原后复跑：test_the_checklist_grows_by_the_custom_device_classes_in_the_right_place PASS（回绿） ｜ 1 passed, 63 deselected in 0.39s
+[5] 复原后复跑：test_a_non_i2c_custom_device_never_reaches_the_product PASS（回绿） ｜ 1 passed, 63 deselected in 0.39s
+[5] 复原后复跑：test_the_checklist_projection_has_a_single_home PASS（回绿） ｜ 1 passed, 63 deselected in 0.06s
+[6] 收尾指纹：4 个文件逐字节未变 ✓
+
+=== 结论：反证成立（5 条注入都让对应用例变红，且逐字节复原） ===
