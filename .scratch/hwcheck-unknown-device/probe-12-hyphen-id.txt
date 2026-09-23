@@ -1,0 +1,13 @@
+自建件 id = 'mine_gyro-2'
+
+[1] 建件端点：200（200 = id 文法收下了连字符）
+[2] 预览端点：200
+    产物里的那几行（**都不是合法 C**）：
+      static void hwcheck_custom_mine_gyro-2(void)
+      hwcheck_custom_mine_gyro-2();
+      hwcheck_custom_mine_gyro-2();
+    命令表：[{'command': '2', 'slug': 'mine_gyro-2', 'description': 'ping 地址 + 读身份寄存器并与期望值比较：板上判 OK / FAIL', 'echo': '测的是：ping 地址 + 读身份寄存器并与期望值比较：板上判 OK / FAIL', 'tag': '自建件', 'name': '连字符 id 的库外件'}]
+[3] 生成端点：200（200 = 界面会说「生成成功」，坏工程已经落盘）
+
+[4] 'hwcheck_custom_mine_gyro-2' 是合法 C 标识符吗：False
+=== 结论：缺陷成立：id 直接拼进 C 函数名，产物编不过（页面与端点都不拦） ===

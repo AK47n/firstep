@@ -818,9 +818,14 @@ export function hwcheckConsoleState(state, payload) {
 }
 
 // hwcheckConsoleHTML(console)：命令台面板。
-// 有串口：配方命令逐条列出（敲什么 / 哪一件 / 测什么）+ 既有 r/y/g/o/b 单列
+// 有串口：命令逐条列出（敲什么 / 哪一件 / 测什么）+ 既有 r/y/g/o/b 单列
 // + 帮助字符。**没有串口就不摆那张表**——摆出来像"敲了就行"，而这一趟根本
 // 没有命令循环（服务端那句 hint 会明说不能交互式复测，票面要求）。
+//
+// 自建件那几行（工单 hwcheck-unknown-device/06）：字符是服务端分配的，页面
+// **只渲染**；多出来的两个键（`tag` 标注词 / `name` 人读名）判据全在服务端，
+// 这里按"有没有 `tag`"分两种画法——缺字段 = 库内件（与 fx/module.js 那处
+// "旧载荷无字段 = 保守按库内件"同一条口径）。前端不判"哪个字符是谁的"。
 export function hwcheckConsoleHTML(console) {
   const data = (console && typeof console === "object") ? console : null;
   if (!data) return "";
@@ -834,8 +839,17 @@ export function hwcheckConsoleHTML(console) {
   }
   const rows = commands.map((item) => {
     const one = item || {};
+    const name = String(one.name || "");
+    const tag = String(one.tag || "");
+    // 「哪一件」那一格：自建件带名称与标注词——名字与后端 `ConsoleEntry.label`
+    // 同一个意思（跨语言读同一个词），库内件就是 slug。
+    const label = tag
+      ? `<span class="slug">${esc(one.slug || "")}</span>`
+        + (name ? ` <span class="hwcheck-custom-name">${esc(name)}</span>` : "")
+        + ` <span class="badge custom">${esc(tag)}</span>`
+      : esc(one.slug || "");
     return '<tr><td class="hwcheck-pin">' + esc(one.command || "") + "</td>"
-      + `<td>${esc(one.slug || "")}</td>`
+      + `<td>${label}</td>`
       // 说明由服务端恒填（缺省句的后端单源是 ConsoleEntry.detail）：前端不另写
       // 一句兜底，否则同一句文案两处写、迟早两种措辞。
       + `<td>${esc(one.description || "")}</td></tr>`;

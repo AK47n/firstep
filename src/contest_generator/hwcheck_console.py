@@ -40,20 +40,36 @@ spec「板上行为与判据」：程序形态 = **上电自动跑一遍**，之
 与库内既有命令同一口径：`debug_cmd_poll()` 也只看 `cmd_buf[0]`（所以 `r50`
 就是红灯、`b50` 才把数字当参数）。配方命令是单字符，多打的尾巴忽略——
 解析与渲染两侧都按首字符分派，免得"手滑多敲一个字符 = 命令不认"。
+
+## 自建件（库外件）的字符是**分出来的**（工单 hwcheck-unknown-device/06）
+
+自建件没有配方、没人给它声明字符（「我的器件」的字段全是器件的事实，没有一个
+字是"这个工具怎么用它"），所以命令空间**自己分**一个：候选顺序 = ① id 去掉
+`mine_` 前缀后出现的字母 / 数字（保序去重，`mine_hall` → 先试 `h`，可记）
+② 兜底池（`a`–`z`、`0`–`9`）。保留字（`r/y/g/o/b/?`）与已被配方占用的都跳过；
+**一个都分不出来 = 构建期 `HwCheckError`**（不静默少一条——页面上写着"敲这个
+复测"、板上却不认，正是这一层一路在防的那类坏法）。
+
+分配是**纯函数**且只依赖输入（配方小节 + 自建件小节的顺序）：同一次装配里，
+页面上的字符与产物里 `case 'x':` 的字符必然是同一个。
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Mapping, Sequence
 
+from .hwcheck_custom import CUSTOM_TAG, CustomSection
 from .hwcheck_errors import HwCheckError
 from .hwcheck_recipe import RecipeSection, c_string
+from .my_devices import DEVICE_ID_PREFIX
 
 __all__ = [
     "CONSOLE_HINT_NONE",
     "CONSOLE_HINT_SERIAL",
     "CONSOLE_HINT_SERIAL_NO_COMMAND",
+    "CONSOLE_NO_COMMAND",
+    "CUSTOM_COMMAND_FALLBACK",
     "HELP_COMMAND",
     "LEGACY_COMMANDS",
     "RESERVED_COMMANDS",
@@ -116,24 +132,66 @@ def _normalize(command: str) -> str:
 # 帮助文案、检测页命令表与产物文件头，四处各写一份就会漂成两种措辞（评审抓过）。
 DEFAULT_COMMAND_DESCRIPTION = "按这一件的配方重跑一遍检测小节"
 
+# 自建件分字符时的**兜底池**（id 里挑不出可用的就按这个顺序往下找）。
+# 只有 `a`–`z` 与 `0`–`9`：串口上敲得出来、进得了 C 字符字面量 `case 'x':`，
+# 而且大小写不敏感（`A` 与 `a` 是同一个命令）——所以池子就是这 36 个，
+# 保留字与配方占掉的那些再从中扣掉。
+CUSTOM_COMMAND_FALLBACK = "abcdefghijklmnopqrstuvwxyz0123456789"
+
 
 @dataclass(frozen=True)
 class ConsoleEntry:
-    """一条配方命令：字符 + 哪一件 + 一句说明。
+    """一条命令：字符 + 哪一件 + 一句说明。
 
-    `description` 来自配方（`console.description`），进帮助文案与检测页；
-    `echo_title` / `echo_what` 是**复测回显**的前两段（第三段"结论 / 数值"
-    要到板上跑这一节才算得出来，见 `tests/test_hwcheck_console.py` 的格式锁）。
+    两种来源共用这一个形状（工单 hwcheck-unknown-device/06）：
+
+    | 来源 | 字符从哪来 | 复测入口 |
+    |---|---|---|
+    | 库内配方（`custom=False`） | 配方 `console` 段声明 | `hwcheck_check_<slug>()` |
+    | 自建件（`custom=True`） | 命令空间分配（`_assign_custom_command`） | 自建件的小节函数 |
+
+    `description` 来自配方（`console.description`）或自建件的"这一趟对它做什么"
+    （`CustomSection.plan`），进帮助文案与检测页；`echo_title` / `echo_what` 是
+    **复测回显**的前两段（第三段"结论 / 数值"要到板上跑这一节才算得出来，
+    见 `tests/test_hwcheck_console.py` 的格式锁）。
+
+    `name` 只有自建件有（用户填的人读名；配方件没有"另一个名字"）。
+    `func_name` 空 = 配方件（按 slug 派生），自建件的名字**由 `hwcheck_custom`
+    给**（`CustomSection.func_name`）——命名规则不在两处各写一遍。
     """
 
     command: str
     slug: str
     description: str = ""
+    func_name: str = ""
+    custom: bool = False
+    name: str = ""
 
     @property
     def detail(self) -> str:
         """复测这一件到底做什么（配方说明缺省时的兜底句也走这里，单源）。"""
         return self.description or DEFAULT_COMMAND_DESCRIPTION
+
+    @property
+    def call_target(self) -> str:
+        """板上复测时调的那个 C 函数。
+
+        判别式**只有 `custom` 一个**（三处 `if entry.custom` 看的是同一个事实，
+        不拿 `func_name` 是不是空串当第二个哨兵）：自建件调它自己的小节函数
+        （名字由 `hwcheck_custom` 给），配方件调按 slug 派生的小节函数。
+        """
+        if self.custom:
+            return self.func_name
+        return f"hwcheck_check_{self.slug}"
+
+    @property
+    def label(self) -> str:
+        """帮助 / 文件头里"哪一件"那一栏（前端那一格叫同名：`label`）。
+
+        自建件带上标注词（`CUSTOM_TAG`）——板上与页面上都要能一眼看出哪些结论是
+        库内验证过的、哪些只是"按你确认的事实试的"（spec 用户故事 8）。
+        """
+        return f"{self.slug}（{CUSTOM_TAG}）" if self.custom else self.slug
 
     @property
     def echo_title(self) -> str:
@@ -148,10 +206,10 @@ class ConsoleEntry:
 
 @dataclass(frozen=True)
 class ConsoleTable:
-    """这一趟检测程序认的**全部**串口命令：配方命令 + 固定的帮助命令。
+    """这一趟检测程序认的**全部**串口命令：配方命令（+ 自建件命令）+ 固定的帮助命令。
 
-    `entries` 保序（= 配方的顺序），`by_command` 是渲染期与解析共用的索引
-    （键已归一成小写）。
+    `entries` 保序（= 配方顺序、自建件接在最后），`by_command` 是渲染期与解析共用
+    的索引（键已归一成小写）。
     """
 
     entries: tuple[ConsoleEntry, ...] = ()
@@ -162,7 +220,7 @@ class ConsoleTable:
         return {_normalize(entry.command): entry for entry in self.entries}
 
     def lookup(self, command: str) -> ConsoleEntry | None:
-        """首字符 → 配方命令（大小写不敏感；没有 = None）。"""
+        """首字符 → 表里那一条命令（大小写不敏感；没有 = None）。"""
         return self.by_command.get(_normalize(command))
 
     def help_lines(self) -> tuple[str, ...]:
@@ -194,8 +252,14 @@ class ConsoleTable:
         ]
         if self.entries:
             for entry in self.entries:
-                lines.append(f"  {entry.command}  {entry.slug}：{entry.detail}")
+                lines.append(f"  {entry.command}  {entry.label}：{entry.detail}")
         else:
+            # ⚠ 这一句（与 hint / 文件头那两句）**保持改动前的字面量**：自建件从不
+            # 声明字符，所以"没有配方命令"在新世界里仍然为真；而票面第 5 条要求
+            # "一件自建件都没有时命令台产物逐字与改动前一致"——统一措辞就得动它，
+            # 动了就破票面（工单 06 评审提过"三处措辞不一"，判为不改，取舍记账在
+            # 工单结论里；`test_a_run_without_custom_devices_keeps_the_old_console_text`
+            # 把这几个字面量钉住了）。
             lines.append("  这一趟没有配方命令（配方里没声明复测字符）")
         lines.append(f"  {self.help_command}  显示这份帮助")
         return tuple(lines)
@@ -334,10 +398,10 @@ def render_console_runtime(table: ConsoleTable) -> list[str]:
         out.append(f"    case '{entry.command}':")
         if entry.command.isalpha():
             out.append(f"    case '{entry.command.upper()}':")
-        out.append(f"        /* {entry.slug}：{entry.detail} */")
+        out.append(f"        /* {entry.label}：{entry.detail} */")
         out.append(f"        hwcheck_section({c_string(entry.echo_title)});")
         out.append(f"        hwcheck_detail({c_string(entry.echo_what)});")
-        out.append(f"        hwcheck_check_{entry.slug}();")
+        out.append(f"        {entry.call_target}();")
         out.append("        break;")
     out.append(f"    case '{table.help_command}':")
     out.append("        hwcheck_console_help();")
@@ -365,6 +429,11 @@ def render_console_runtime(table: ConsoleTable) -> list[str]:
     ])
     return out
 
+
+# 「这一趟一条命令都没有」那三句（板上帮助 / 检测页 hint / 产物文件头）**保持原样**
+# ——自建件也会往表里放命令之后它们**仍然为真**（自建件从不声明字符），而票面第 5 条
+# 要求"一件自建件都没有时命令台产物逐字与改动前一致"：统一措辞就得动这三句，动了
+# 就破票面（工单 06 评审提过"三处措辞不一"，判为**不改**，取舍记在工单结论里）。
 
 # 检测页的「应看到什么」两句话（后端给文案，前端只渲染——照 OUTPUT_HINT_*
 # 的既有分工）。无串口那句必须**明说不能交互式复测**（票面：不静默降级）。
@@ -395,9 +464,14 @@ def console_payload(debug_uart: bool, table: ConsoleTable) -> dict:
     """检测页的命令台载荷（三个端点共用；前端只渲染，不重推判据）。
 
     字段就是页面要显示的全部：能不能复测（`available` + 那句 `hint`）、
-    配方命令（`commands`，含与板上**同一句**回显文案 `echo`）、既有命令
+    命令（`commands`，含与板上**同一句**回显文案 `echo`）、既有命令
     （`legacy`，给人看"r/y/g/o/b 还在"）、帮助字符。页面与板上读的是同一张
     表——页面说"敲 l 复测 led"，板上就一定认 `l`。
+
+    自建件那几行多两个键：`tag`（标注词，`hwcheck_custom` 单源）与 `name`
+    （用户填的人读名）。**只在自建件那几行加**——既有那几行的形状是页面与用例
+    的契约，动它就是动契约；前端按"有没有 `tag`"分两种画法（缺字段 = 库内件，
+    与 `fx/module.js` 的旧载荷口径同一条）。
     """
     return {
         "available": bool(debug_uart),
@@ -411,6 +485,7 @@ def console_payload(debug_uart: bool, table: ConsoleTable) -> dict:
                 # 否则就是"同一句话两处写、两种措辞"（评审抓过）
                 "description": entry.detail,
                 "echo": entry.echo_what,
+                **({"tag": CUSTOM_TAG, "name": entry.name} if entry.custom else {}),
             }
             for entry in table.entries
         ],
@@ -421,13 +496,14 @@ def console_payload(debug_uart: bool, table: ConsoleTable) -> dict:
     }
 
 
-def _require_command_shape(section: RecipeSection, command: str) -> None:
+def _require_command_shape(slug: str, command: str) -> None:
     """命令字符的形状判据：单个可打印 ASCII（不含空白、不含 `'` 与 `\\`）。
 
     形状在 `hwcheck_recipe` 的 `console` 段已经判过（必须单字符），这里再判
     一次是因为**校验的判据面不同**：那边判的是"配方文件写得对不对"，这里判的
     是"能不能当命令表的一格"（非 ASCII / 空白字符在串口上敲不出来，也不是
-    命令）。两处都在，错的方向才安全。
+    命令）。两处都在，错的方向才安全。**自建件分出来的字符也过这一处**
+    （工单 06：形状判据只有这一个出处，分配的池子将来改了也同样受它管）。
 
     ⚠ **多排除 `'` 与 `\\`**（评审实测）：命令最终落成 C 字符字面量 `case 'x':`，
     这两个字符会渲染出 `case ''':` / `case '\\':`——**编译器直接报错**，而构建期
@@ -439,7 +515,7 @@ def _require_command_shape(section: RecipeSection, command: str) -> None:
     if len(command) != 1 or not command.isascii() or not command.isprintable() \
             or command.isspace() or dangerous:
         raise HwCheckError(
-            f"{section.slug!r} 的控制台命令 {command!r} 不能当命令字符："
+            f"{slug!r} 的控制台命令 {command!r} 不能当命令字符："
             "只能是**一个可打印的 ASCII 字符**（串口上敲得出来的那种，"
             "不要空白 / 中文 / 多字符），也不要单引号 `'` 与反斜杠 `\\`"
             "——这两个字符进不了 C 字符字面量（`case '\\'':` 编不过），"
@@ -447,21 +523,77 @@ def _require_command_shape(section: RecipeSection, command: str) -> None:
         )
 
 
-def build_console_table(sections: Sequence[RecipeSection]) -> ConsoleTable:
-    """逐件小节 → 命令表（纯函数）。冲突 / 形状不对 → `HwCheckError`（构建期）。
+def _custom_candidates(slug: str) -> tuple[str, ...]:
+    """自建件分字符时的**候选顺序**：先 id 里出现的字母 / 数字，再兜底池。
+
+    为什么先看 id：分出来的字符要**可记**——学生手里那件叫 `mine_hall`，命令台
+    给它的字符就是 `h`，比"按顺序发一个 `a`"好记得多。id 里的字符都被占了才退到
+    `CUSTOM_COMMAND_FALLBACK`（`mine_gyro` 恰好四个字母全是保留字 `g/y/r/o`，
+    于是它拿兜底池的第一个可用字符——这条不是缺陷，是"保留字不许被抢"的必然）。
+
+    判据与渲染共用一个形态：候选一律**小写**（大小写不敏感是"同一个命令"，
+    与配方那一侧 `_normalize` 同一口径）。
+    """
+    stem = slug[len(DEVICE_ID_PREFIX):] if slug.startswith(DEVICE_ID_PREFIX) else slug
+    candidates: list[str] = []
+    for char in stem.lower():
+        if char.isascii() and char.isalnum() and char not in candidates:
+            candidates.append(char)
+    for char in CUSTOM_COMMAND_FALLBACK:
+        if char not in candidates:
+            candidates.append(char)
+    return tuple(candidates)
+
+
+def _assign_custom_command(slug: str, seen: Mapping[str, ConsoleEntry]) -> str:
+    """给一件自建件分一个**没被占用**的字符；分不出来 = 构建期大声失败。
+
+    两条判据（与配方那一侧**同一处**）：保留字（`r/y/g/o/b` 与帮助命令）不碰、
+    表里已有的字符不抢。分不出来只有一种可能——可用字符真的用完了，那时点名是
+    哪一件排不上号、池子多大、已经被占掉几个，并给出出路（去掉几件 / 换个短一点的
+    id）。静默少一条是这一层最坏的坏法：页面上写着"敲这个复测"，板上却不认。
+    """
+    for candidate in _custom_candidates(slug):
+        key = _normalize(candidate)
+        if key in RESERVED_COMMANDS or key in seen:
+            continue
+        _require_command_shape(slug, candidate)
+        return candidate
+    pool = sum(
+        1 for char in CUSTOM_COMMAND_FALLBACK if char not in RESERVED_COMMANDS
+    )
+    raise HwCheckError(
+        f"自建件 {slug!r} 分不到复测字符了：可用的字符一共 {pool} 个"
+        f"（字母数字里除去既有命令 {'/'.join(sorted(RESERVED_COMMANDS))}），"
+        f"现在表里已经占了 {len(seen)} 个（配方命令 + 其它自建件）——"
+        "请去掉几件自建件，或者给它们换短一点的 id（字符优先取自 id），再生成一次"
+    )
+
+
+def build_console_table(
+    sections: Sequence[RecipeSection],
+    custom: Sequence[CustomSection] = (),
+) -> ConsoleTable:
+    """逐件小节 + 自建件小节 → 命令表（纯函数）。冲突 / 形状不对 → `HwCheckError`。
 
     三条判据（任一不满足即红，**不静默覆盖**）：
 
     1. 配方声明的字符不得是库内既有命令（`r/y/g/o/b`）或帮助命令（`?`）
        ——抢了它们的后果是"学生敲 r 不再点灯"，而那是已上过板的既有行为；
-    2. 两件不得声明同一个字符（大小写不敏感）——静默覆盖会让第二件永远测不到；
+    2. 两件不得占用同一个字符（大小写不敏感）——静默覆盖会让第二件永远测不到；
+       **自建件的字符是分配的**，所以它与配方命令、与另一件自建件都不会撞
+       （分配时就避开已占用的）；真的分不出来（可用字符用尽）同样当场红
+       （`_assign_custom_command`）；
     3. 字符必须是一个可打印 ASCII 字符（`_require_command_shape`）。
 
     表里的命令一律**规范化为小写**（声明 `L` 就是声明 `l`）：大小写不敏感是
     "同一个命令"而不是两个，规范化之后"判重"与"渲染 `case 'x': case 'X':`"
     才在同一个形态上成立（不规范化会出两个 `case 'L':` 重复标签，编不过）。
 
-    没有 `console` 段的小节不进表（缺段 = 这一件没有复测命令，合法）。
+    没有 `console` 段的小节不进表（缺段 = 这一件没有复测命令，合法）；
+    **自建件一律进表**（它们的探测小节就是"复测"本身，不存在"没声明"这回事）。
+    顺序 = 配方命令（配方顺序）在前、自建件在后——与 main.c 里小节的顺序同一套
+    "库内验证过的在前"（页面与板上读同一张表）。
     """
     entries: list[ConsoleEntry] = []
     seen: dict[str, ConsoleEntry] = {}
@@ -470,7 +602,7 @@ def build_console_table(sections: Sequence[RecipeSection]) -> ConsoleTable:
         if console is None:
             continue
         command = console.command
-        _require_command_shape(section, command)
+        _require_command_shape(section.slug, command)
         # 规范化到**小写**（判据与渲染共用的唯一形态）：声明 `L` 就是声明 `l`
         # ——大小写不敏感是"同一个命令"，不是两个。不规范化的后果是渲染器为它
         # 出 `case 'L': case 'L':` 两个**重复标签**（编译器直接报错），而表里
@@ -500,5 +632,19 @@ def build_console_table(sections: Sequence[RecipeSection]) -> ConsoleTable:
             command=command, slug=section.slug, description=console.description
         )
         seen[key] = entry
+        entries.append(entry)
+    for section in custom:
+        command = _assign_custom_command(section.slug, seen)
+        entry = ConsoleEntry(
+            command=command,
+            slug=section.slug,
+            description=section.plan,
+            # 复测入口 = 自建件自己的小节函数（命名规则归 hwcheck_custom：
+            # 这里再拼一次 `hwcheck_custom_<id>` 就是第二个真相来源）
+            func_name=section.func_name,
+            custom=True,
+            name=section.device.name,
+        )
+        seen[_normalize(command)] = entry
         entries.append(entry)
     return ConsoleTable(entries=tuple(entries))

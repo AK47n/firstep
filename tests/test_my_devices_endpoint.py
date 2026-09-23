@@ -24,6 +24,7 @@ from contest_generator.my_devices import (
     my_devices_dir,
 )
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
+from tests._c_escape import decode_c_string
 
 DEVICE_BODY = {
     "id": "mine_gyro",
@@ -609,6 +610,50 @@ def test_a_non_i2c_custom_device_still_does_not_render_a_probe(devices_client):
     assert plan["mine_gyro"]["probes"] is False, plan
     assert plan["mine_gyro"]["plan"], "要说清为什么没有它的探测程序"
     assert plan["mine_gyro"]["wiring_text"] == "", "没有它的线，就不许编一行接线说明"
+
+
+def test_the_page_console_table_carries_the_custom_retest_command(generate_client, tmp_path):
+    """检测页命令区里的自建件那一行 = 产物里真认的那个字符（**页面与板上同源**）。
+
+    工单 06 的票面："页面命令区显示自建件的字符与说明"。判据落在**同一次装配**
+    上：预览载荷给的字符必须出现在生成的 main.c 的那条 `case` 里，而那个 case
+    调的必须是**上电那一遍同一个函数**（输出同措辞的结构前提）。两处各建一张表
+    就是这个功能最容易出的分家。
+    """
+    client, _ = generate_client
+    client.post("/api/my-devices", json={"device": DEVICE_BODY})
+    request = {
+        "platform": PLATFORM_STM32,
+        "debug_uart": True,
+        "oled": False,
+        "devices": ["mine_gyro"],
+    }
+    preview = client.post("/api/hwcheck/preview", json=request)
+    assert preview.status_code == 200, preview.text
+    commands = preview.json()["console"]["commands"]
+    assert [item["slug"] for item in commands] == ["mine_gyro"], commands
+    entry = commands[0]
+    assert entry["command"] == "a", entry        # mine_gyro 的 g/y/r/o 全是保留字
+    assert entry["tag"] == "自建件", entry        # 标注词来自服务端单源
+    assert entry["name"] == DEVICE_BODY["name"], entry
+    assert entry["description"], "说明恒非空（页面那一列不许是空的）"
+
+    output_parent = tmp_path / "out-console"
+    output_parent.mkdir()
+    generated = client.post(
+        "/api/hwcheck/generate", json={**request, "parent_dir": str(output_parent)}
+    )
+    assert generated.status_code == 200, generated.text
+    main_c = generated.json()["main_c"]
+    assert f"case '{entry['command']}':" in main_c, (
+        "页面说敲这个字符，产物里就必须真有这条 case：\n" + main_c[:500]
+    )
+    assert main_c.count("hwcheck_custom_mine_gyro();") == 2, (
+        "上电那一遍 + 命令台复测那一遍（同一个函数 = 同一措辞）"
+    )
+    text = decode_c_string(main_c)
+    assert f"[复测] mine_gyro" in text, text[:500]
+    assert entry["description"] in text, "页面给的那句说明与板上回显同一句"
 
 
 def test_an_unknown_slug_is_still_a_loud_failure(devices_client):

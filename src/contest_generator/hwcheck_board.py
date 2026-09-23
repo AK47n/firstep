@@ -625,8 +625,12 @@ def hwcheck_view(
     # 串口命令台（工单 06）：页面与产物读**同一张表**（`build_console_table`
     # 是纯函数，这里与 `render_main_c` 各建一次，逐字相同）。冲突照旧在这里
     # 就红 → 400 中文，学生不必等到点「生成」才知道两个器件抢了同一个字符。
-    # **只吃专精小节**：通用件没有配方，自然没有命令字符（07 的接口备忘）。
-    console = build_console_table(sections)
+    # 两批进表：**专精小节**（配方声明字符）与**自建件**（工单
+    # hwcheck-unknown-device/06：没有配方，字符由命令空间分配——复用同一处
+    # 保留字 / 形状 / 判重判据，复测入口是它们自己的小节函数，所以页面给的字符与
+    # 产物里那条 `case` 必然是同一个）。通用件不进表（没有配方自然没有命令字符，
+    # 07 的接口备忘）。
+    console = build_console_table(sections, custom_sections)
     return HwCheckView(
         board={
             "wiring": board_payload,

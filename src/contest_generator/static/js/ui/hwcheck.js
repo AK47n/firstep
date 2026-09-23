@@ -437,14 +437,17 @@ function renderHwcheckCustom() {
   box.innerHTML = hwcheckCustomPlanHTML(hwcheckUI.custom);
 }
 
-// —— 串口命令台（工单 06）：只渲染服务端载荷（命令表 = 库内配方）——
-// 前端不判"哪个字符是谁的"：判重与保留字都在服务端（两件抢字符 = 构建期 400）。
+// —— 串口命令台（工单 module-hwcheck/06）：只渲染服务端载荷（命令表 = 库内配方
+// + 自建件那几件）——
+// 前端不判"哪个字符是谁的"：判重与保留字都在服务端（两件抢字符 = 构建期 400），
+// 自建件的字符也是服务端分配的（工单 hwcheck-unknown-device/06）。
 function renderHwcheckConsole() {
   const box = $("hwcheck-console");
   if (!box) return;
   box.innerHTML = hwcheckConsoleHTML(hwcheckUI.console)
     || '<div class="muted">选好器件后点「预览检测程序」：这里会列出这一趟的串口'
-      + "复测命令（哪些能复测由库内配方决定），以及没有串口时为什么不能交互复测。</div>";
+      + "复测命令（库内器件按配方、自建件按它自己的探测小节），"
+      + "以及没有串口时为什么不能交互复测。</div>";
 }
 
 // renderHwcheckAdvice()：现象回填 + AI 排障面板（工单 08）。

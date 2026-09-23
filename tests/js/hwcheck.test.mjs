@@ -1636,4 +1636,64 @@ test("ui 接线：载荷 → 计划容器 + 接线区（fx 单源，不手拼 HT
     "ui 不得手拼标注（标注词单源在服务端载荷 + fx）");
 });
 
+// ---------------------------------------------------------------------------
+// 工单 hwcheck-unknown-device/06：自建件也进命令台（字符由服务端分配、页面照渲染）
+//
+// 载荷形状与后端 `console_payload` 一致：自建件那几行**多两个键**（`tag` 标注词 /
+// `name` 人读名），库内件那几行一个字不动。前端按"有没有 `tag`"分两种画法
+// （缺字段 = 库内件），不在这里判"哪个字符是谁的"——判据全在服务端。
+// ---------------------------------------------------------------------------
+const CUSTOM_COMMAND = {
+  command: "a",
+  slug: "mine_gyro",
+  description: "ping 地址 + 读身份寄存器并与期望值比较：板上判 OK / FAIL",
+  echo: "测的是：ping 地址 + 读身份寄存器并与期望值比较：板上判 OK / FAIL",
+  tag: "自建件",
+  name: "卖家给的六轴模块",
+};
+const CUSTOM_CONSOLE_PAYLOAD = {
+  ...CONSOLE_PAYLOAD,
+  commands: [...CONSOLE_PAYLOAD.commands, CUSTOM_COMMAND],
+};
+
+test("命令表：自建件那行带标注词与名称（字符 / 说明照抄服务端）", () => {
+  const out = hwcheckConsoleHTML(CUSTOM_CONSOLE_PAYLOAD);
+  assert.ok(out.includes(esc(CUSTOM_COMMAND.command))
+    && out.includes(esc(CUSTOM_COMMAND.slug)), out);
+  assert.ok(out.includes(esc(CUSTOM_COMMAND.name)), "要认得出手上那件（slug 之外给名称）：" + out);
+  assert.ok(out.includes(esc(CUSTOM_COMMAND.tag)), "标注词来自载荷 tag（前端不另写一版）：" + out);
+  assert.ok(out.includes(esc(CUSTOM_COMMAND.description)), "复用说明那列（与板上回显同一句）");
+  assert.ok(out.indexOf(esc(CONSOLE_PAYLOAD.commands[0].slug)) < out.indexOf(esc(CUSTOM_COMMAND.slug)),
+    "库内件在前、自建件在后（与 main.c 里小节的顺序同一条）：" + out);
+});
+
+test("命令表：没有自建件那几行时逐字与改动前一致（不许冒出标注词）", () => {
+  const out = hwcheckConsoleHTML(CONSOLE_PAYLOAD);
+  assert.ok(!out.includes("自建件"), "库内配方那一趟不许出现自建件字样：\n" + out);
+  assert.ok(!out.includes("hwcheck-custom-name"), out);
+  // 旧载荷（缺 tag / name）= 按库内件画：slug 原样，不编一个徽章出来
+  const legacy = hwcheckConsoleHTML({
+    ...CONSOLE_PAYLOAD,
+    commands: [{ command: "a", slug: "mine_gyro", description: "某一件" }],
+  });
+  assert.ok(legacy.includes("mine_gyro") && !legacy.includes("自建件"), legacy);
+});
+
+test("命令表：自建件的名称是用户随手填的，一律 esc", () => {
+  const out = hwcheckConsoleHTML({
+    ...CUSTOM_CONSOLE_PAYLOAD,
+    commands: [{ ...CUSTOM_COMMAND, name: "<img src=x onerror=alert(1)>" }],
+  });
+  assert.ok(!out.includes("<img"), out);
+  assert.ok(out.includes("&lt;img"), out);
+});
+
+test("ui 的空态文案把自建件也算进「哪些能复测」（否则页面在说谎）", () => {
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  // 判据落在**整段字面量**上（不截窗口：占位文案本身就是一句话，截窗口改措辞就误红）
+  assert.ok(ui.includes("复测命令（库内器件按配方、自建件按它自己的探测小节）"),
+    "自建件也有复测命令了，占位文案不能只说「由库内配方决定」");
+});
+
 

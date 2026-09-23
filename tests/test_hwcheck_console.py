@@ -35,6 +35,13 @@ from contest_generator.hwcheck_console import (
     parse_console_command,
     render_console_runtime,
 )
+from contest_generator.hwcheck_custom import (
+    CUSTOM_TAG,
+    PLAN_JUDGE,
+    PLAN_PING_ONLY,
+    CustomSection,
+    resolve_custom_sections,
+)
 from contest_generator.hwcheck_errors import HwCheckError
 from contest_generator.hwcheck_recipe import (
     RecipeConsole,
@@ -42,6 +49,7 @@ from contest_generator.hwcheck_recipe import (
     RecipeRead,
     RecipeSection,
 )
+from contest_generator.my_devices import BUS_I2C, CustomDevice
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from tests._c_escape import decode_c_string
 
@@ -720,7 +728,249 @@ def test_real_library_recipes_declare_distinct_console_commands(platform):
         assert entry.description, f"{entry.slug} 的命令没写说明（回显会变成空话）"
 
 
+# ---------------------------------------------------------------------------
+# 自建件也进命令台（工单 hwcheck-unknown-device/06）：库外件没有配方，没人给它
+# 声明字符——命令空间**自己分**一个，分不出就构建期大声失败（不静默少一条）
+# ---------------------------------------------------------------------------
 
 
+def _device(**overrides) -> "CustomDevice":
+    """一件自建件（定义全是**事实**：地址 / 寄存器 / 期望值）。"""
+    data: dict = {
+        "id": "mine_gyro",
+        "name": "卖家给的六轴模块",
+        "bus": BUS_I2C,
+        "address": 0x68,
+        "register": 0x75,
+        "expect": 0x68,
+    }
+    data.update(overrides)
+    return CustomDevice(**data)
+
+
+def _custom(*devices) -> tuple[CustomSection, ...]:
+    """自建件定义 → 探测小节（走 `resolve_custom_sections` 真路径：三档文案单源）。
+
+    **不手搓 `CustomSection`**：`plan` 那句与页面 / 产物同一份，手搓一份就等于
+    在用例里造了第二个判据来源。
+    """
+    return resolve_custom_sections(
+        devices or (_device(),), has_output_channel=True
+    )
+
+
+def test_a_custom_device_gets_a_free_command_character_from_its_id():
+    """自建件分到一个复测字符，且**取自它自己的 id**（可记：hall → h）。
+
+    它是命令表里的一等公民（与配方命令同一张表、同一个 `ConsoleEntry` 形状），
+    差别只有一处：它没有配方，所以字符是分出来的、复测入口是自建件的小节函数。
+    """
+    table = build_console_table((), _custom(_device(id="mine_hall", name="霍尔传感器")))
+    assert [entry.command for entry in table.entries] == ["h"]
+    entry = table.entries[0]
+    assert entry.slug == "mine_hall"
+    assert entry.custom is True
+    assert entry.name == "霍尔传感器"
+    assert entry.description == PLAN_JUDGE      # 描述 = 这一趟对它做什么（单源）
+    assert entry.func_name == "hwcheck_custom_mine_hall"
+
+
+def test_a_custom_character_never_takes_a_reserved_or_declared_one():
+    """保留字（`r/y/g/o/b/?`）与配方声明的字符都**不许被自建件抢走**。
+
+    三种落点各判一条：
+    ① id 里的字母全是保留字（`mine_gyro` 的 g/y/r/o）→ 退到兜底池，仍不碰保留字；
+    ② 配方已经声明了那个字符 → 自建件让开（配方是库内已上过板的那份数据）；
+    ③ 分出来的字符永远不会是保留字（逐条对 `RESERVED_COMMANDS` 断言）。
+    """
+    gyro = build_console_table((), _custom(_device()))
+    assert gyro.entries[0].command == "a", "g/y/r/o 全被保留，退到兜底池第一个空闲字符"
+    assert gyro.entries[0].command.lower() not in RESERVED_COMMANDS
+
+    taken = build_console_table(
+        [_section("library_hall", "h", "库内也有一件 hall")],
+        _custom(_device(id="mine_hall", name="霍尔传感器")),
+    )
+    assert [entry.command for entry in taken.entries] == ["h", "a"], "配方的 h 优先"
+    assert [entry.slug for entry in taken.entries] == ["library_hall", "mine_hall"]
+    for entry in taken.entries:
+        assert entry.command.lower() not in RESERVED_COMMANDS
+
+
+def test_the_custom_retest_runs_the_same_section_as_the_power_on_pass():
+    """板上敲那个字符 = 重跑这一件的小节，**与上电那一遍同一个函数**。
+
+    这是票面"输出与上电那一遍同一措辞"的结构证据：命令台不是把那一段 C 抄一遍
+    （抄一份就会改一处忘一处），而是调同一个 `hwcheck_custom_<id>()`——文案只有
+    一个产地，两处的输出逐字节相同。
+    """
+    custom = _custom()
+    entry = build_console_table((), custom).entries[0]
+    code = render_main_c(WITH_CONSOLE, (), (), custom)
+    block = _case_block(code, f"case '{entry.command}':")
+    # 三段回显：小节头 + 细节行 + **那一件的小节体**（多一个少一个都红）
+    assert _called_names(block) == {
+        "hwcheck_section", "hwcheck_detail", entry.call_target,
+    }
+    auto = code[code.index("上电自动跑一遍逐件检测"):code.index("while (1)")]
+    assert f"{entry.call_target}();" in auto, "上电那一遍调的就是它"
+    assert code.count(f"static void {entry.call_target}(void)") == 1, (
+        "小节只定义一处（命令台不许自带一份副本）"
+    )
+    # 命令台排在自建件小节**之后**（switch 里直接调它，排在前面就是隐式声明）
+    assert code.index(f"static void {entry.call_target}(void)") < code.index(
+        "static void hwcheck_console_poll(void)"
+    )
+
+
+def test_custom_rows_are_marked_as_such_in_the_help_and_the_header():
+    """帮助与文件头里"哪一件"那一栏：自建件带标注词，库内件那一行一个字不动。
+
+    spec 用户故事 8：学生要一眼看出哪些结论是库内验证过的、哪些只是"按你确认的
+    事实试的"。标注词读 `hwcheck_custom` 的单源（`CUSTOM_TAG`），这里不另写一份。
+    """
+    sections = [_section("led", "l", "复测板载 LED")]
+    table = build_console_table(sections, _custom())
+    help_text = table.help_text()
+    assert "  l  led：复测板载 LED" in help_text, help_text
+    assert f"  a  mine_gyro（{CUSTOM_TAG}）：{PLAN_JUDGE}" in help_text, help_text
+    code = unescape_c_string("\n".join(render_console_runtime(table)))
+    for line in table.help_lines():
+        assert line in code, line
+    header = unescape_c_string(render_main_c(WITH_CONSOLE, sections, (), _custom()))
+    assert f"{table.entries[0].command}  复测 {table.entries[0].label}：" in header
+    assert f"{table.entries[1].command}  复测 {table.entries[1].label}：" in header
+
+
+def test_a_custom_help_line_still_fits_the_line_buffer():
+    """**行缓冲守卫**（照 `tests/test_hwcheck.py` 那条先例）：自建件那几行也不许超。
+
+    板上是 `hwcheck_line[128]` 的行缓冲（框架的溢出保护），超了会截断——中文在
+    UTF-8 下一字 3 字节，截在字中间就是半个乱码。自建件那一行的长度 = 字符 +
+    id + 标注词 + 三档文案之一，三档各判一条（id 取常规长度）。
+    """
+    devices = (
+        _device(id="mine_gyro", register=None, expect=None),      # 只 ping
+        _device(id="mine_echo", expect=None),                     # 只回显
+        _device(id="mine_judge"),                                 # 板上判定
+    )
+    table = build_console_table((), _custom(*devices))
+    assert len(table.entries) == 3
+    for line in table.help_lines():
+        size = len(line.encode("utf-8"))
+        assert size < 128, f"这一行 {size} 字节，会撞上行缓冲：{line!r}"
+
+
+def test_console_payload_marks_custom_rows_without_touching_library_rows():
+    """检测页载荷：库内件那几项**逐字不动**，自建件多带标注词与名称。
+
+    为什么多出来的键只在自建件那几行（不是每条都补一个 `custom: false`）：
+    载荷形状是既有页面与用例的契约，多两个键就改了一次契约；前端按"有没有
+    `tag`"读——与 `fx/module.js` 那处"旧载荷无字段 = 保守按库内件"同一条口径。
+    """
+    sections = [_section("led", "l", "复测板载 LED")]
+    payload = console_payload(True, build_console_table(sections, _custom()))
+    assert payload["commands"][0] == {
+        "command": "l", "slug": "led",
+        "description": "复测板载 LED", "echo": "测的是：复测板载 LED",
+    }
+    assert payload["commands"][1] == {
+        "command": "a", "slug": "mine_gyro",
+        "description": PLAN_JUDGE, "echo": f"测的是：{PLAN_JUDGE}",
+        "tag": CUSTOM_TAG, "name": "卖家给的六轴模块",
+    }
+    # 没有自建件时载荷逐字与改动前一致（票面第 5 条：既有命令台用例全绿）
+    recipe_only = console_payload(True, build_console_table(sections))
+    assert recipe_only == console_payload(
+        True, build_console_table(sections, ())
+    )
+    assert [item["command"] for item in recipe_only["commands"]] == ["l"]
+
+
+def test_two_custom_devices_get_distinct_characters_deterministically():
+    """两件自建件各分一个字符，且**纯函数**：同一份输入 → 同一张表。
+
+    分配只依赖输入（配方小节 + 自建件小节的顺序），所以页面（预览）与板上
+    （生成）两次装配读到的是同一组字符——不会有"页面说 g、板上认 h"。
+    """
+    devices = (_device(id="mine_hall", name="霍尔传感器"), _device(id="mine_gyro"))
+    first = build_console_table((), _custom(*devices))
+    again = build_console_table((), _custom(*devices))
+    assert first == again
+    assert [entry.command for entry in first.entries] == ["h", "a"]
+    assert {entry.slug for entry in first.entries} == {"mine_hall", "mine_gyro"}
+
+
+def test_running_out_of_command_characters_fails_loudly_at_build_time():
+    """分不出字符 = 构建期大声失败，**不静默少一条**（票面第 1 条的后半句）。
+
+    静默少一条的下场：页面上这件写着"敲这个复测"，板上敲了没反应——学生只会
+    以为线没插好。所以这里是 400 中文点名是哪一件排不上号。
+    """
+    devices = tuple(_device(id=f"mine_dev{i}") for i in range(1, 32))
+    table = build_console_table((), _custom(*devices))
+    assert len(table.entries) == 31, (
+        "31 个可用字符刚好分完（36 个字母数字减掉 5 个在池子里的保留字）"
+    )
+    with pytest.raises(HwCheckError) as excinfo:
+        build_console_table((), _custom(*devices, _device(id="mine_overflow")))
+    message = str(excinfo.value)
+    assert "mine_overflow" in message
+    assert "分不到复测字符" in message
+    assert "去掉几件" in message, "要给一条出路（不然学生只能猜）"
+    # 两个数都要**对得上**（评审抓过：只扣保留字、不扣已占用的，报错读数就是假的）
+    assert "一共 31 个" in message, message
+    assert "已经占了 31 个" in message, message
+
+
+def test_a_run_without_custom_devices_keeps_the_old_console_text():
+    """一件自建件都没有时，命令台那几行**逐字还是改动前那几句**（票面第 5 条）。
+
+    判据是**改动前的字面量**（不是"新代码等于新代码"——那种断言改前改后都绿，
+    评审点名它是摆设）：命令表为空时板上帮助那句、产物文件头那句，本单一个字节
+    都不许动。自建件从不声明字符，所以"没有配方命令"在新世界里仍然为真；
+    要"统一三处措辞"就得动它们，那就破了票面——取舍记在 `hwcheck_console`
+    帮助行那段注释与本工单结论里。
+    """
+    rendered = render_main_c(SERIAL_NO_COMMAND, _sections_without_commands())
+    text = unescape_c_string(rendered)
+    assert "这一趟没有配方命令（配方里没声明复测字符）" in text, text
+    assert "这一趟没有配方命令（选的器件都没声明复测字符）" in text, text
+    # 空自建件参数 = 与改动前的调用形状逐字相同（两条腿：默认参数 / 显式空元组）
+    assert render_main_c(SERIAL_NO_COMMAND, _sections_without_commands(), (), ()) == rendered
+    assert render_main_c(SERIAL_NO_COMMAND, _sections_without_commands()) == rendered
+    assert build_console_table(_sections_without_commands(), ()) == build_console_table(
+        _sections_without_commands()
+    )
+
+
+def test_the_library_commands_stay_untouched_with_a_custom_device_in_the_run():
+    """既有 `r/y/g/o/b` 那一组**一个字节不动**：自建件进场也只走"追加"这一条路。
+
+    判据同既有那条：那一组 `case` 底下只有 `return;`（原样留给库内
+    `debug_cmd_poll()`），而且九个大写 / 小写标签一个不少。
+    """
+    code = render_main_c(
+        WITH_CONSOLE, [_section("led", "l", "复测板载 LED")], (), _custom()
+    )
+    legacy_block = _case_block(code, "case 'r':")
+    assert _called_names(legacy_block) == set(), "既有命令的分支里不许有动作"
+    assert "return;" in legacy_block
+    for label in ("case 'R':", "case 'y':", "case 'Y':", "case 'g':",
+                  "case 'G':", "case 'o':", "case 'O':", "case 'b':", "case 'B':"):
+        assert label in code, label
+
+
+@pytest.mark.parametrize("platform", [PLATFORM_STM32, PLATFORM_MSPM0])
+def test_real_library_recipes_and_a_custom_device_share_one_table(platform):
+    """真库三件配方 + 一件自建件 = 四个互不相同的字符（读真数据，不手写替身）。"""
+    table = build_console_table(_real_sections(platform), _custom())
+    assert len(table.entries) == 4
+    assert len({entry.command for entry in table.entries}) == 4
+    assert table.entries[-1].custom is True
+    assert table.entries[-1].slug == "mine_gyro"
+    assert table.entries[-1].func_name == "hwcheck_custom_mine_gyro"
+    for entry in table.entries[:3]:
+        assert entry.custom is False and entry.func_name == ""
 
 

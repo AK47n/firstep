@@ -804,3 +804,75 @@ test("自建件的检测计划：接线那一行 / 计划面板 / 顺序 / 上�
   await myDeviceCleanup([MY_DEVICE_ID, SPI_ID]);
 });
 
+// ---------------------------------------------------------------------------
+// 工单 hwcheck-unknown-device/06：自建件的**串口复测命令**
+//
+// 一句话判据：页面命令区说"敲这个字符复测这件"，产物里就必须真有那条 `case`，
+// 而且它调的是**上电那一遍同一个函数**（"复测输出与上电同措辞"的结构前提）。
+//
+// 为什么必须真浏览器：载荷里有 `commands` 不等于命令区画出来了、也不等于它与
+// 产物里那条 case 是同一个字符——这条把页面读到的字符直接拿去产物里找。
+//
+// ⚠ 同样**排在文件最后**：这一条也会生成一个新工程（与上一条同一条理由）。
+// ---------------------------------------------------------------------------
+test("自建件的串口复测：页面给出字符与说明，产物里那条 case 认同一个函数", async () => {
+  const ID = `${MY_DEVICE_ID}rt`;
+  await openTab();
+  await page.click('[data-hwcheck-platform="stm32"]');
+  await page.check('input[data-hwcheck-channel="debug_uart"]');
+  await myDeviceFill({
+    name: "验收用的复测件", bus: "i2c", address: "0x68",
+    register: "0x75", expect: "0x68", id: ID,
+  });
+  await page.click("[data-my-device-save]");
+  await page.waitForSelector(`[data-my-device-row="${ID}"]`);
+  await page.click(`[data-my-device-pick="${ID}"]`);
+  await page.waitForSelector(`#hwcheck-device-chips [data-remove="${ID}"]`);
+
+  // ① 命令区：自建件那一行有字符 / 名称 / 标注词 / 说明（全部来自服务端载荷）
+  await page.waitForSelector("#hwcheck-console .hwcheck-table");
+  const row = await page.evaluate((id) => {
+    const rows = [...document.querySelectorAll("#hwcheck-console .hwcheck-table tbody tr")];
+    const hit = rows.find((r) => r.textContent.includes(id));
+    if (!hit) return null;
+    const cells = [...hit.querySelectorAll("td")].map((td) => td.textContent);
+    return { command: cells[0].trim(), label: cells[1], description: cells[2] };
+  }, ID);
+  assert.ok(row, "命令表里要有自建件那一行：\n"
+    + await page.textContent("#hwcheck-console"));
+  assert.equal(row.command.length, 1, "复测字符是单字符：" + JSON.stringify(row));
+  assert.ok(row.label.includes("验收用的复测件"), "要认得出是哪一件（名称）：" + row.label);
+  assert.ok(row.label.includes("自建件"), "要标出这是自建件（不冒充库内验证过的结论）：" + row.label);
+  assert.ok(row.description.trim(), "说明那一列不许空着：" + row.description);
+
+  // ② 产物：同一个字符的 case 在，且复测调的是上电那一遍同一个函数
+  await page.click("#btn-hwcheck-preview");
+  await page.waitForFunction(
+    (command) => document.querySelector("#hwcheck-output").textContent
+      .includes(`case '${command}':`),
+    row.command, { timeout: 30000 });
+  const mainC = await page.textContent("#hwcheck-output");
+  const call = `hwcheck_custom_${ID}();`;
+  const calls = mainC.split(call).length - 1;
+  assert.equal(calls, 2,
+    "上电那一遍 + 命令台复测那一遍（同一个函数 = 同一措辞），实际 " + calls + " 次：\n"
+    + mainC.slice(0, 2000));
+  const defined = mainC.split(`static void hwcheck_custom_${ID}(void)`).length - 1;
+  assert.equal(defined, 1, "小节只定义一处（命令台不许自带一份副本）");
+  assert.ok(mainC.indexOf(call) < mainC.indexOf("while (1)"),
+    "上电那一遍要先调到它：\n" + mainC.slice(0, 2000));
+  assert.ok(mainC.includes("hwcheck_console_poll();"),
+    "命令台要在产物里（不然页面那个字符没人认）：\n" + mainC.slice(0, 2000));
+
+  // ③ 不勾串口 → 明说不能交互式复测（照既有口径），命令表不摆出来
+  await page.uncheck('input[data-hwcheck-channel="debug_uart"]');
+  await page.waitForFunction(
+    () => document.querySelector("#hwcheck-console").textContent
+      .includes("不能交互式复测"));
+  assert.ok(!(await page.textContent("#hwcheck-console")).includes(ID),
+    "不能复测的一趟不摆命令表");
+  await page.check('input[data-hwcheck-channel="debug_uart"]');
+
+  await myDeviceCleanup([ID]);
+});
+

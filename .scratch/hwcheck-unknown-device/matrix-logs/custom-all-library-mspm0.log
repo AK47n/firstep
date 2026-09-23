@@ -1,7 +1,7 @@
 exit_code=0
 compile_passed=True
 device_slugs=['led', 'delay', 'debug_uart', 'oled', 'beep', 'key', 'adc', 'ml_mpu6050', 'sr04']
-notes=['引脚符号重名让位（工单 11 的既有限制，与本单无关）：jy61p（与 oled 同名）', '装不下让位：xunji（原候选 10 件，留下这一格自己选的 8 件）']
+notes=['引脚符号重名让位（工单 11；该单已把这类组合改成生成前拦下，矩阵仍按最小子集取材）：jy61p（与 oled 同名）', '装不下让位：xunji（原候选 10 件，留下这一格自己选的 8 件）']
 warnings_ours=0
 warnings_known_toolchain=1
 
