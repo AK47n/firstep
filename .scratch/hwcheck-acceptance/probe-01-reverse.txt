@@ -1,0 +1,46 @@
+=== 工单 01 反证探针（三针）===
+
+注入前 sha256：
+  skeleton.py: d05b5ff998a24c45…
+  hwcheck.py: a2cd1b671eeef36a…
+  syscfg_model.py: 001358dab9fc6ae9…
+
+--- 基线（未注入）---
+骨架这一路（出稿没写 init）：活调用=True、blocked=()
+骨架这一路（出稿写了 init）：活调用=True、blocked=()
+赛题这一路：门禁放行（生成成功）
+检测页这一路：启动行活调用=True、该名字在构建期接口面里=True
+基线四条读数都绿——开始扎针。
+
+--- 针 A：`syscfg_model.syscfg_init_functions` 恒空（关掉放行面，注在**判据单源**上）---
+（清进程内缓存 58 个模块后重跑判据）
+骨架这一路（出稿没写 init）：活调用=False、写掉的形态=没出现、blocked=()
+骨架这一路（出稿写了 init）：活调用=False、写掉的形态=TODO 注释占位、blocked=('SYSCFG_DL_init',)
+赛题这一路：门禁红（UndefinedCallsError）——main.c 调用了所选模块头文件中不存在的函数：SYSCFG_DL_init —— 请改用真实接口，或让骨架阶段自检改写为注释占位
+检测页这一路：启动行活调用=True、该名字在构建期接口面里=False  ← 对不上（红）
+
+--- 针 B：再让 `ensure_sysconfig_init` 恒返回原文（叠在针 A 上）---
+骨架这一路（出稿没写 init）：活调用=False、写掉的形态=没出现、blocked=()
+骨架这一路（出稿写了 init）：活调用=False、写掉的形态=TODO 注释占位、blocked=('SYSCFG_DL_init',)
+赛题这一路：门禁红（UndefinedCallsError）——main.c 调用了所选模块头文件中不存在的函数：SYSCFG_DL_init —— 请改用真实接口，或让骨架阶段自检改写为注释占位
+检测页这一路：启动行活调用=True、该名字在构建期接口面里=False  ← 对不上（红）
+syscfg_model.py / skeleton.py 已复原（sha256 一致 ✓）
+
+--- 针 C：渲染器写 `SYSCFG_DL_TYPO_init()`（不许被放行）---
+针 C：门禁仍红（UndefinedCallsError）——main.c 调用了所选模块头文件中不存在的函数：SYSCFG_DL_TYPO_init、delay_ms、led_init、led_tog
+hwcheck.py 已复原
+
+--- 复原复核 ---
+skeleton.py: d05b5ff998a24c45… == 注入前 ✓
+hwcheck.py: a2cd1b671eeef36a… == 注入前 ✓
+syscfg_model.py: 001358dab9fc6ae9… == 注入前 ✓
+git 工作树（这两份文件）：M src/contest_generator/hwcheck.py
+ M src/contest_generator/skeleton.py
+ M src/contest_generator/syscfg_model.py
+骨架这一路（出稿没写 init）：活调用=True、blocked=()
+骨架这一路（出稿写了 init）：活调用=True、blocked=()
+赛题这一路：门禁放行（生成成功）
+检测页这一路：启动行活调用=True、该名字在构建期接口面里=True
+复原后三条路与基线逐字一致。
+
+=== 结论：反证成立（A 扎红赛题路、A+B 扎红骨架路、C 证明门禁仍红） ===

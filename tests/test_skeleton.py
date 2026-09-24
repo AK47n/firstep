@@ -15,6 +15,7 @@ from contest_generator.patchers import PLATFORM_MSPM0, PLATFORM_STM32
 from contest_generator.skeleton import (
     SkeletonError,
     build_skeleton_interfaces,
+    ensure_sysconfig_init,
     extract_header_functions,
     find_undefined_calls,
     generate_skeleton,
@@ -23,6 +24,8 @@ from contest_generator.skeleton import (
     sanitize_skeleton,
     verify_main_c_interfaces,
 )
+from contest_generator.clex import strip_comments
+from contest_generator.syscfg_model import MSPM0_SYSCFG_INIT_NAME
 from tests.fakes import FakeLLM, make_fake_stm32_ml_master
 
 
@@ -751,3 +754,275 @@ def test_skeleton_error_registered_400_chinese():
     )
     assert status == 400
     assert message == "自检骨架需要 OLED 或 debug_uart 模块作为输出通道"
+
+
+# ---------------------------------------------------------------------------
+# 工单 hwcheck-acceptance/01：mspm0 的构建期外部接口面（SysConfig 的 SYSCFG_DL_*）
+# ---------------------------------------------------------------------------
+#
+# 缺口现场：`SYSCFG_DL_init` 由 SysConfig **构建期**生成（`ti_msp_dl_config.h`
+# 生成时还不存在），既不在模块头里也不在母版树里——接口面里没有它，sanitize
+# 就把 `SYSCFG_DL_init();` 注释掉，学生烧进去"灯不闪、串口一个字没有"。
+#
+# 这一批用**真母版真 syscfg**（判据是母版现算的，假件测不出真判据）：
+# `_syscfg_init_functions(真母版 mspm0.syscfg, 选中集)` 与喂 LLM 的接口块、
+# 与 `ensure_sysconfig_init` 的补行，三者必须一致。
+
+
+def _real_mspm0_master() -> Path:
+    return Path(__file__).resolve().parents[1] / "library" / "masters" / "mspm0"
+
+
+def _real_library() -> Path:
+    return Path(__file__).resolve().parents[1] / "library" / "modules"
+
+
+def _real_manifests(*slugs: str) -> list[ModuleManifest]:
+    return _manifests(_real_library(), *slugs)
+
+
+def _mspm0_syscfg_names(master: Path) -> tuple[str, ...]:
+    """真母版 syscfg 现算出的构建期接口面（与产品侧同一处判据，不手抄名字）。"""
+    from contest_generator.syscfg_model import parse_syscfg, syscfg_init_functions
+
+    text = (master / "mspm0.syscfg").read_text(encoding="utf-8")
+    return syscfg_init_functions(parse_syscfg(text))
+
+
+def test_mspm0_interface_block_carries_the_build_time_surface():
+    """喂 LLM 的接口块 = SysConfig 构建期会生成的名字（恒有四个 + 按实例现算）。
+
+    判据不是手抄名字清单，而是与产品侧同一处判据（`syscfg_init_functions`）
+    现算——两块文本必须一致，否则"喂 LLM 的"与"门禁认的"又会分家。
+    """
+    master = _real_mspm0_master()
+    manifests = _real_manifests("led", "delay", "debug_uart")
+
+    blocks = build_skeleton_interfaces(
+        manifests, PLATFORM_MSPM0, _real_library(), master
+    )
+    block = next(b for b in blocks if b.startswith("### 平台外部接口（构建期生成"))
+
+    from contest_generator.syscfg_model import parse_syscfg, syscfg_init_functions
+
+    model = parse_syscfg(
+        (master / "mspm0.syscfg").read_text(encoding="utf-8")
+    ).prune([m.slug for m in manifests])
+    expected = syscfg_init_functions(model)
+    for name in expected:
+        assert f"void {name}(void);" in block, name
+        assert name in extract_header_functions([block]), name
+    # 没选中的实例、拼错名、条件生成的 save/restore 都不在
+    assert "SYSCFG_DL_LCD_init" not in block
+    assert "SYSCFG_DL_TYPO_init" not in block
+    assert "SYSCFG_DL_saveConfiguration" not in block
+    assert "SYSCFG_DL_restoreConfiguration" not in block
+    # stm32 侧一个字都不加（平台外部接口是 mspm0 的事实）
+    stm32_blocks = build_skeleton_interfaces(
+        manifests, PLATFORM_STM32, _real_library(), master
+    )
+    assert not [b for b in stm32_blocks if "平台外部接口" in b]
+
+
+def test_mspm0_skeleton_keeps_syscfg_init_as_a_live_call():
+    """**骨架这一路**：LLM 写了 `SYSCFG_DL_init();` 就不再被 sanitize 注释掉。
+
+    缺口现场的原始形态就在这里——修之前这条会红（sanitize 判它"不存在的调用"
+    → `/* SYSCFG_DL_init(); */` + TODO），也就是本单的票面第一条验收。
+    """
+    master = _real_mspm0_master()
+    manifests = _real_manifests("led", "delay", "debug_uart")
+    llm = FakeLLM(
+        main_skeleton=(
+            "int main(void)\n"
+            "{\n"
+            "    SYSCFG_DL_init();\n"
+            "    led_init(LED_RED);\n"
+            "    while (1) { led_toggle(LED_RED); delay_ms(500); }\n"
+            "}\n"
+        )
+    )
+
+    main_c, blocked = generate_skeleton(
+        llm, "环境监测仪", manifests, PLATFORM_MSPM0, _real_library(), master
+    )
+
+    assert blocked == ()
+    assert "SYSCFG_DL_init();" in strip_comments(main_c)
+    assert "TODO" not in main_c  # 没被改写为注释占位
+    assert "/* SYSCFG_DL_init(); */" not in main_c
+
+
+def test_mspm0_skeleton_inserts_syscfg_init_when_the_llm_forgot_it():
+    """**确定性补行**：LLM 完全没写 init → 落盘 main.c 仍有活调用，且只出现一次。
+
+    门禁放宽接口面只解决"别删"，"LLM 压根没写"同样等于没初始化——现象与注释掉
+    一样（灯不闪、串口一个字没有）。所以补行是**确定性**的，不赌 LLM 想起来。
+    缩进沿用出稿风格（这里是两格）。
+    """
+    master = _real_mspm0_master()
+    manifests = _real_manifests("led", "delay")
+    llm = FakeLLM(
+        main_skeleton=(
+            "int main(void)\n"
+            "{\n"
+            "  led_init(LED_RED);\n"
+            "  while (1) { led_toggle(LED_RED); delay_ms(500); }\n"
+            "}\n"
+        )
+    )
+
+    main_c, blocked = generate_skeleton(
+        llm, "环境监测仪", manifests, PLATFORM_MSPM0, _real_library(), master
+    )
+
+    assert blocked == ()
+    live = [
+        line for line in strip_comments(main_c).splitlines()
+        if "SYSCFG_DL_init()" in line
+    ]
+    assert len(live) == 1, live
+    assert live[0].strip() == "SYSCFG_DL_init();"
+    assert live[0].startswith("  ") and not live[0].startswith("   "), (
+        "缩进沿用 LLM 出稿（这里是两格）：" + repr(live[0])
+    )
+    assert "板子上什么都不动" in main_c  # 那一行自己带的中文说明
+    # 补行后的文本再跑一遍不再插（幂等）
+    assert ensure_sysconfig_init(main_c, MSPM0_SYSCFG_INIT_NAME) == main_c
+
+
+def test_mspm0_skeleton_does_not_duplicate_an_existing_live_call():
+    """LLM 已经写了活调用 → 补行**一个字都不改**（不重复插）。"""
+    master = _real_mspm0_master()
+    llm = FakeLLM(
+        main_skeleton=(
+            "int main(void)\n"
+            "{\n"
+            "    SYSCFG_DL_init();\n"
+            "    while (1) { }\n"
+            "}\n"
+        )
+    )
+
+    main_c, _ = generate_skeleton(
+        llm, "环境监测仪", _real_manifests("led", "delay"), PLATFORM_MSPM0,
+        _real_library(), master,
+    )
+
+    assert main_c == (
+        "int main(void)\n"
+        "{\n"
+        "    SYSCFG_DL_init();\n"
+        "    while (1) { }\n"
+        "}\n"
+    )
+
+
+def test_mspm0_skeleton_replaces_the_old_comment_placeholder():
+    """旧的注释占位（`/* SYSCFG_DL_init(); */`，本单要消灭的形态）不算"已写"。
+
+    判据是**词法级**的（`iter_c_regions` / 注释剥离）：注释里的调用不算，
+    字符串里的同名字样同样不算——所以两种情况都会补出活的调用。
+
+    补法是**就地复活那一行**（不是另插一行）：`SYSCFG_DL_init();` 紧跟一行
+    `/* SYSCFG_DL_init(); */` 会读成"还得我再取消注释一次"——正是本单要消灭的
+    困惑，所以旧占位必须消失，且活调用恰好一处。
+    """
+    master = _real_mspm0_master()
+    commented = (
+        "int main(void)\n"
+        "{\n"
+        "    /* SYSCFG_DL_init(); */\n"
+        "    while (1) { }\n"
+        "}\n"
+    )
+
+    fixed = ensure_sysconfig_init(commented, MSPM0_SYSCFG_INIT_NAME)
+
+    assert "SYSCFG_DL_init();" in strip_comments(fixed)
+    assert fixed.index("SYSCFG_DL_init();") < fixed.index("while (1)")
+    assert "/* SYSCFG_DL_init(); */" not in fixed, (
+        "旧占位要就地复活，不能与活调用并排：\n" + fixed
+    )
+    assert strip_comments(fixed).count("SYSCFG_DL_init();") == 1, fixed
+    assert fixed == (
+        "int main(void)\n"
+        "{\n"
+        "    SYSCFG_DL_init();\n"
+        "    while (1) { }\n"
+        "}\n"
+    ), "就地复活 = 只换那一段注释文本，缩进与其余行逐字不动：\n" + fixed
+    # 字符串里的同名字样（比如一句提示文案）也不许被当成"已经初始化了"
+    quoted = (
+        "int main(void)\n"
+        "{\n"
+        '    DEBUG_PRINTF("SYSCFG_DL_init() 没写");\n'
+        "    while (1) { }\n"
+        "}\n"
+    )
+    assert "SYSCFG_DL_init();" not in strip_comments(
+        quoted.replace('DEBUG_PRINTF("SYSCFG_DL_init() 没写");', "")
+    )
+    assert "SYSCFG_DL_init();" in strip_comments(
+        ensure_sysconfig_init(quoted, MSPM0_SYSCFG_INIT_NAME)
+    )
+
+
+def test_mspm0_skeleton_insertion_is_lexical_not_string_matching():
+    """补行的判据是**词法级**的：`MY_SYSCFG_DL_init()` 不算"已经有 init"。
+
+    名字按标识符边界匹配，前缀/后缀相似的名字不冒充——否则真正的初始化照样
+    缺失，而补行以为已经写过了（假阴性）。
+    """
+    master = _real_mspm0_master()
+    other = (
+        "int main(void)\n"
+        "{\n"
+        "    MY_SYSCFG_DL_init();\n"
+        "    while (1) { }\n"
+        "}\n"
+    )
+
+    fixed = ensure_sysconfig_init(other, MSPM0_SYSCFG_INIT_NAME)
+
+    assert "    SYSCFG_DL_init();" in fixed
+    assert fixed.count("MY_SYSCFG_DL_init();") == 1
+
+
+def test_mspm0_syscfg_insertion_survives_a_formatted_main_and_stm32_is_untouched():
+    """缩进风格保留（四空格）＋ stm32 路径一个字符都不动。
+
+    stm32 那一半是硬性约定：本单的补行只在 mspm0 生效——`main.c` 里插一行
+    `SYSCFG_DL_init()` 到 stm32 工程就是编译错误。
+    """
+    formatted = "int main(void)\n{\n    x();\n}\n"
+    assert ensure_sysconfig_init(formatted, MSPM0_SYSCFG_INIT_NAME) == (
+        "int main(void)\n{\n"
+        "    /* SYSCFG_DL_init()：SysConfig 外设初始化（构建期生成）"
+        "——缺了它板子上什么都不动 */\n"
+        "    SYSCFG_DL_init();\n"
+        "    x();\n}\n"
+    )
+    # 没有函数体的残缺稿不猜（原样返回）；stm32（init_function=None）同样原样返回
+    assert ensure_sysconfig_init("/* main 还没写 */\n", None) == "/* main 还没写 */\n"
+    assert ensure_sysconfig_init(formatted, None) == formatted
+    # stm32：同一条出稿管线跑下来，main.c 里绝不能出现这个名字
+    stm32_llm = FakeLLM(main_skeleton="int main(void)\n{\n    dht11_read();\n}\n")
+    stm32_main, _ = generate_skeleton(
+        stm32_llm, "环境监测仪", _real_manifests("aht10", "delay"), PLATFORM_STM32,
+        _real_library(), _real_mspm0_master(),
+    )
+    assert "SYSCFG_DL" not in stm32_main
+
+
+def test_mspm0_smoke_main_gets_the_same_deterministic_insertion():
+    """冒烟出稿与骨架共用 `_generate_main_c` → 补行同样生效（两条路一起修）。"""
+    master = _real_mspm0_master()
+    llm = FakeLLM(smoke_skeleton="int main(void)\n{\n    led_init(LED_RED);\n}\n")
+
+    main_c, _ = generate_smoke_main(
+        llm, "环境监测仪", _real_manifests("led", "delay"), PLATFORM_MSPM0,
+        _real_library(), master,
+    )
+
+    assert "SYSCFG_DL_init();" in strip_comments(main_c)

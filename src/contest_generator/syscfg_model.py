@@ -21,6 +21,13 @@ CRLF，读/写走 newline="" 原样保留行尾。工单 02/03/04 已把 syscfg_
 
 实例 ↔ 消费模块映射单源表仍在 syscfg_instances.py（那是数据，不是文法，本
 模块只消费 INSTANCE_CONSUMERS / INSTANCES_BY_SLUG）。
+
+还有一条**构建期外部接口面**的知识也在这里（工单 hwcheck-acceptance/01）：
+`ti_msp_dl_config.h` 由 SysConfig **构建期**生成，不在这条链能读到的任何头
+文件里，所以「SysConfig 会生成哪些 `SYSCFG_DL_*_init`」是一份需要单独持有
+的事实——`MSPM0_SYSCFG_ALWAYS_INIT_FUNCTIONS`（恒有四个，109 份真产物实测）
+与 `syscfg_init_functions`（＋按裁剪后实例现算）。喂 LLM 的接口块、骨架
+sanitize、生成门禁、检测页渲染器都从这一处投影，避免"某处认某处不认"。
 """
 
 from __future__ import annotations
@@ -36,7 +43,10 @@ if TYPE_CHECKING:
     from .pin_bindings import ResolvedBinding
 
 __all__ = [
+    "MSPM0_GPIO_MODULE",
+    "MSPM0_SYSCFG_ALWAYS_INIT_FUNCTIONS",
     "MSPM0_SYSCFG_FILENAME",
+    "MSPM0_SYSCFG_INIT_NAME",
     "AdcSlotPlan",
     "SyscfgAssign",
     "SyscfgInstance",
@@ -44,10 +54,86 @@ __all__ = [
     "SyscfgModelError",
     "adc_mem_index",
     "parse_syscfg",
+    "syscfg_init_functions",
     "syscfg_path_matches",
 ]
 
 MSPM0_SYSCFG_FILENAME = "mspm0.syscfg"
+
+# SysConfig **构建期**生成的初始化函数里**恒有**的四个（工单 hwcheck-acceptance/01）。
+#
+# 判据来源不是模板约定，是本机实测：扫 **109 份**真产物头
+# （`Debug/ti_msp_dl_config.h`，来自 `.scratch/**` 与 `library/**` 的历次生成）
+# 的读数 `.scratch/hwcheck-acceptance/probe-01-symbol-surface.txt` ——
+# 这 4 个名字 **109/109 全部出现**，与选中了哪些模块无关；其余名字都按实例
+# 生成（`SYSCFG_DL_OLED_init` 这种，见 `syscfg_init_functions`），出现次数随
+# 选中集变化。
+#
+# **为什么不含 `SYSCFG_DL_saveConfiguration` / `restoreConfiguration`**：
+# 它们**不是恒有**（109 份里只有 65 份有——SysConfig 按是否启用「保存/恢复
+# 配置」条件生成）。放行 = 让一条真会编不过的调用过关，正好是门禁该拦的东西。
+MSPM0_SYSCFG_ALWAYS_INIT_FUNCTIONS: tuple[str, ...] = (
+    "SYSCFG_DL_init",
+    "SYSCFG_DL_initPower",
+    "SYSCFG_DL_SYSCTL_init",
+    "SYSCFG_DL_GPIO_init",
+)
+
+# 母版 syscfg 里 **GPIO 模块**的变量名（`const GPIO = scripting.addModule(
+# "/ti/driverlib/GPIO", {}, false)`）——实例级 init 的判据要用它把 GPIO 实例
+# 摘出去（见 `syscfg_init_functions` 的实测依据）。母版把这个变量改名/删掉会
+# 被守卫用例当场钉住，不会静默退化成"GPIO 实例也放行"。
+MSPM0_GPIO_MODULE = "GPIO"
+
+# 那四个里**唯一由 main() 调用**的那个：`SYSCFG_DL_init()` 内部会把
+# `initPower` / `SYSCTL_init` / `GPIO_init` 与逐实例的 `SYSCFG_DL_<实例>_init`
+# 全串起来（TI 生成的实现即如此）。所以"生成链要保证的那一行"和"检测程序
+# 启动时要调的那一行"是同一个名字——引用它的地方（骨架确定性补行、检测页
+# 渲染器）都从本常量投影，不各自抄字符串。
+# 显式写名字而不是取 `MSPM0_SYSCFG_ALWAYS_INIT_FUNCTIONS[0]`：位置耦合会让
+# "调整那个元组顺序"变成一次静默的行为改动（用例 `test_syscfg_init_name_...`
+# 钉住它确实在恒有那四个里）。
+MSPM0_SYSCFG_INIT_NAME = "SYSCFG_DL_init"
+
+
+def syscfg_init_functions(model: SyscfgModel) -> tuple[str, ...]:
+    """SysConfig 构建期会生成哪些初始化函数（**喂 LLM 的接口面 = 门禁认的接口面**）。
+
+    输入是**裁剪后**的模型（`parse_syscfg(...).prune(选中集)` 的既有 pipeline，
+    与写侧落盘的那一份同源），返回：
+
+    * 恒有四个（``MSPM0_SYSCFG_ALWAYS_INIT_FUNCTIONS``）——顺序 = 该常量的顺序；
+    * ＋ 仍活着（未被裁掉）的每个**外设**实例各一条 ``SYSCFG_DL_<实例名>_init``
+      （`SyscfgModel.instances` 的插入序 = 母版文件行序，确定性）。
+
+    **为什么 GPIO 实例不算**（本机 109 份真产物实测，读数
+    `.scratch/hwcheck-acceptance/probe-01-symbol-surface.txt`）：GPIO 实例的引脚
+    初始化走**模块级**的 `SYSCFG_DL_GPIO_init`（109/109 恒有），SysConfig
+    **不为**它们生成实例级 init——`SYSCFG_DL_LED_BEEP_init` /
+    `SYSCFG_DL_OLED_SPI_init` / `SYSCFG_DL_LCD_init` 这类名字在 109 份里出现
+    **0 次**（那 46 个 GPIO 实例在历次生成里选中过很多次）；而外设实例的 init
+    都有实测出现（`SYSCFG_DL_OLED_init` 15/109、`SYSCFG_DL_DEBUG_UART_init`
+    16/109、`SYSCFG_DL_PWMAB_init` 42/109、`SYSCFG_DL_ADC12_0_init` 5/109）。
+    不排除就会放行一条**真会编不过**的调用——门禁被削弱，正是票面不许做的事。
+
+    **为什么不按前缀放行**（裁决见工单 `.scratch/hwcheck-acceptance/issues/
+    01-mspm0-sysconfig-init-injection.md` 的「2026-09-24 先量后定」）：判据由
+    母版 + 选中集**现算**，所以「调一个没选中实例的 init」（`SYSCFG_DL_LCD_init()`
+    而 lcd 没选）照样判未定义、「拼错名」（`SYSCFG_DL_TYPO_init`）照样判未定义、
+    「GPIO 实例的 init」照样判未定义——门禁只多认**真会生成**的名字，没被削弱。
+    恒有四个的实测依据与 `saveConfiguration` / `restoreConfiguration` 为什么不在内，
+    见 `MSPM0_SYSCFG_ALWAYS_INIT_FUNCTIONS` 的注释。
+    """
+    instance_functions = (
+        f"SYSCFG_DL_{name}_init"
+        for name, instance in model.instances.items()
+        if instance.module != MSPM0_GPIO_MODULE
+    )
+    return MSPM0_SYSCFG_ALWAYS_INIT_FUNCTIONS + tuple(
+        name
+        for name in instance_functions
+        if name not in MSPM0_SYSCFG_ALWAYS_INIT_FUNCTIONS
+    )
 
 # 实例声明：`const PWMAB = PWM.addInstance();`（行尾可带分号/CRLF）。
 _INSTANCE_DECL_RE = re.compile(

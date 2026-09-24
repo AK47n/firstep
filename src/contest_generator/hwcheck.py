@@ -102,11 +102,19 @@ SysTick 服务函数，而库内 DMP 端口会自己打开 SysTick 中断——�
 1. **include 按平台的真实工程认**。stm32 侧 `oled.h` / `delay.h` **不存在**
    （delay / led / oled 由母版聚合头 `headfile.h` 拉齐 `ml_*.h`），工单 01
    照 mspm0 的名字渲染 stm32，喂真生成内核直接 UnresolvedIncludeError。
-2. **mspm0 的 SysConfig 初始化只能是注释占位**：`SYSCFG_DL_init` 不在任何
-   头文件里（`ti_msp_dl_config.h` 构建期生成），生成内核的「main.c 不许调
-   不存在的接口」门禁会判它未定义。这是既有生成链的已知限制，本单如实
-   输出注释占位 + 说明（文件头、清单第一条都写明"上板前取消注释"），
-   不假装测过、也不偷改生成门禁（另开单）。
+2. **include 按平台的真实工程认**。stm32 侧 `oled.h` / `delay.h` **不存在**
+   （delay / led / oled 由母版聚合头 `headfile.h` 拉齐 `ml_*.h`），工单 01
+   照 mspm0 的名字渲染 stm32，喂真生成内核直接 UnresolvedIncludeError。
+3. **mspm0 的 SysConfig 初始化是活调用**（工单 hwcheck-acceptance/01 起）。
+   这里曾经只能输出 `/* SYSCFG_DL_init(); */` 注释占位，因为 `SYSCFG_DL_init`
+   不在任何头文件里（`ti_msp_dl_config.h` 构建期生成），生成内核的「main.c
+   不许调不存在的接口」门禁会判它未定义。现在那条生成链的限制已经修掉
+   （母版 syscfg 现算出构建期接口面，骨架 sanitize 与生成门禁认同一份），
+   所以检测程序**直接输出活调用**——"上板前先取消注释"这一步连同它的失败形态
+   （"灯不闪、串口一个字没有"）一起消失。**边界如实说**：本单证的是"那一行在
+   产物里是活代码 + 工程真编译 0 error / 0 warning"（读数
+   `.scratch/hwcheck-acceptance/probe-01-compile-matrix.txt`）；板上真的动起来
+   要真机上板，见工单 hwcheck-acceptance/05（**未上板**）。
 """
 
 from __future__ import annotations
@@ -142,6 +150,7 @@ from .hwcheck_recipe import (
     render_recipe_summary,
 )
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
+from .syscfg_model import MSPM0_SYSCFG_INIT_NAME
 
 __all__ = [
     "OUTPUT_HINT_NONE",
@@ -208,15 +217,16 @@ _PLATFORM_HEADERS: dict[str, dict[str, str | None]] = {
 # 各平台启动时的既有初始化动作（生成工程里"别的东西已经做了这件事"）：
 # stm32 启动文件调 SystemInit，这里显式再调一次确保时钟就绪（母版模板 main.c
 # 同款，声明在母版 sys/system_stm32f10x.h，生成门禁认母版头）；mspm0 的外设
-# 初始化是 SYSCFG_DL_init()——但它由 SysConfig 构建期生成的头声明，生成门禁
-# 不认（见模块头注释），故**注释占位**输出。
+# 初始化是 SYSCFG_DL_init()——由 SysConfig **构建期**生成（`ti_msp_dl_config.h`），
+# 生成链自工单 hwcheck-acceptance/01 起认它是本平台的外部接口（母版 syscfg
+# 现算），所以这里输出的是**活调用**：学生手上没有"先取消
+# 注释"这一步（那一步的失败形态是"灯不闪、串口一个字没有"，最像板子坏）。
+# **能编译 ≠ 板上验过**——真机上板见工单 hwcheck-acceptance/05。
 _PLATFORM_BOOT_LINES: dict[str, str] = {
     PLATFORM_STM32: "    SystemInit();  /* 时钟初始化（启动文件已调用，这里显式确保就绪） */",
     PLATFORM_MSPM0: (
-        "    /* 本平台的 SysConfig 外设初始化：暂时注释——生成链还没有把这一行\n"
-        "     * 注入出来（见文件头说明）。上板前先取消注释，否则串口 / LED 都不会\n"
-        "     * 初始化（灯不闪不是板子坏）。 */\n"
-        "    /* SYSCFG_DL_init(); */"
+        f"    {MSPM0_SYSCFG_INIT_NAME}();  /* SysConfig 外设初始化（构建期生成，"
+        "由生成链作为本平台的外部接口注入） */"
     ),
 }
 
@@ -414,21 +424,6 @@ class ChecklistItem:
         return {"id": self.id, "expect": self.expect, "check": self.check}
 
 
-# 平台差异项：mspm0 侧 SysConfig 初始化还不在生成链里（既有生成链限制，
-# 见模块头注释）——上板前必须手动取消注释，否则外设不初始化。
-_MSPM0_BOOT_ITEM = ChecklistItem(
-    id="syscfg-init",
-    expect=(
-        "mspm0 专属：打开工程根 main.c，确认 `SYSCFG_DL_init();` 那一行**已取消注释**"
-        "（本平台的生成链暂时没有把这一行注入出来）"
-    ),
-    check=(
-        "没取消注释 = 串口 / LED 都没初始化，灯不会闪、串口不会有字——"
-        "这不是板子坏，把 `/* SYSCFG_DL_init(); */` 的注释去掉再编译烧录一次"
-    ),
-)
-
-
 def render_checklist(
     config: HwCheckConfig,
     custom: Sequence["CustomPlanEntry"] = (),
@@ -518,8 +513,10 @@ def render_checklist(
             ),
         )
     )
-    if config.platform == PLATFORM_MSPM0:
-        items.append(_MSPM0_BOOT_ITEM)
+    # 曾经这里还有一条 mspm0 专属的「上板前把 SYSCFG_DL_init() 取消注释」
+    # （工单 02 立的）：那是生成链缺口的补丁说明。工单 hwcheck-acceptance/01
+    # 把缺口修在生成链里（骨架 sanitize / 生成门禁 / 本渲染器都输出活调用），
+    # 两个平台都不再需要学生手改一行代码——这条随之删掉。
     return tuple(items)
 
 
@@ -1072,11 +1069,6 @@ def _header_brief(
         lines.append(" * 这一趟**一件器件都没测**：只确认板子与烧录链路是活的。")
         lines.append(" * （选中的器件若不在本平台，会在检测页被点名，不在这里。）")
     if config.platform == PLATFORM_MSPM0:
-        lines.append(" *")
-        lines.append(" * ⚠ 本平台已知限制：SysConfig 外设初始化（SYSCFG_DL_init）还没有被")
-        lines.append(" *   生成链注入出来，所以下面那行初始化是**注释状态**。")
-        lines.append(" *   上板前请先取消注释再重新编译，否则串口 / LED 都不会初始化")
-        lines.append(" *   （灯不闪 ≠ 板子坏）。")
         lines.append(" *")
         lines.append(" * 另外本平台母版**没有 SysTick 服务函数**（stm32 侧由 ml_systick.c 提供）")
         lines.append(" *   ——文件末尾那个空的 SysTick_Handler 就是补这一格的：自己打开 SysTick")

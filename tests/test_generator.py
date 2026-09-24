@@ -469,6 +469,45 @@ def test_corpus_main_calls_accept_master_header_functions(tmp_path):
     _check_main_calls(corpus)  # 母版头里的函数 → 通过
 
 
+def test_mspm0_syscfg_surface_comes_from_the_corpus_not_the_disk(tmp_path):
+    """**门禁吃语料、不读盘**（工单 01 评审整改）：放行面按 `corpus.master_syscfg`
+    算，不是按盘上那份母版算。
+
+    反证形态：同一组 slug，语料里给一份**没有任何实例**的 syscfg → 连
+    `SYSCFG_DL_OLED_init()` 也判未定义（盘上母版里它有，但门禁不该去读盘）；
+    换成真母版文本 → `SYSCFG_DL_OLED_init()` 放行。判据跟着语料走，"语料说什么"
+    与"门禁判什么"才不会分家（`ModuleCorpus` 字段契约 + 工单 pin-conflict-gate/01）。
+    """
+    empty_master = "const Board = scripting.addModule('/ti/boards/LP_MSPM0G3507');\n"
+    body = (
+        "int main(void) { SYSCFG_DL_OLED_init(); "
+        "SYSCFG_DL_init(); while (1); }\n"
+    )
+    slugs = ["oled", "delay"]
+
+    def _corpus(syscfg_text: str) -> ModuleCorpus:
+        return ModuleCorpus(
+            platform=PLATFORM_MSPM0,
+            modules=tuple((slug, ()) for slug in slugs),
+            missing_platforms=(), missing_files=(), master_headers=(),
+            master_search_dirs=(), search_dir_headers=(),
+            master_project_dir=tmp_path,
+            main_c=body,
+            master_syscfg=syscfg_text,
+        )
+
+    with pytest.raises(UndefinedCallsError) as excinfo:
+        _check_main_calls(_corpus(empty_master))
+    assert "SYSCFG_DL_OLED_init" in str(excinfo.value), str(excinfo.value)
+    assert "SYSCFG_DL_init" not in str(excinfo.value), (
+        "恒有那四个与选中集无关，语料再空也在：" + str(excinfo.value)
+    )
+
+    _check_main_calls(
+        _corpus(REAL_MSPM0_MASTER_SYSCFG.read_text(encoding="utf-8"))
+    )  # 真母版文本 + 选中 oled → 放行
+
+
 def test_corpus_self_include_checks_own_headers_from_memory(tmp_path):
     corpus = _memory_corpus(
         tmp_path,
@@ -2608,16 +2647,38 @@ def test_source_read_primitives_single_origin():
 
 
 def test_skeleton_source_has_no_raw_read_text():
-    """结构自证：skeleton.py 的 read_text 恰两处——模块源读盘唯一读点在原语
-    read_module_sources 体内，母版头读盘在 build_master_interface_blocks（工单
-    02，母版头段允许裸读，与 generator 的语料母版头段同规；新增模块源裸读即红）。"""
+    """结构自证：skeleton.py 的 read_text 恰三处，且**逐处落在允许的函数体内**。
+
+    三处 = 模块源读盘唯一读点（原语 `read_module_sources`）、母版头读盘
+    （`build_master_interface_blocks`，工单 02，母版头段允许裸读，与 generator
+    的语料母版头段同规）、母版 `mspm0.syscfg` 读盘（`syscfg_init_functions_for`，
+    工单 hwcheck-acceptance/01——构建期外部接口面的判据原料，不是模块源）。
+    第四处出现在别处即红：新增读点必须回这里登记过一遍（照旧纪律——
+    "模块源裸读"这条仍然钉死）。
+
+    为什么第 03 处不塞进原语里：原语 `read_module_sources` 只认 manifest
+    声明的模块文件（按 slug/rel 走 library_dir）；`mspm0.syscfg` 是**母版工程
+    根**的文件，与母版头同族但不是一回事（它是数据、不进任何头文件清单），
+    两者混成一个原语会让"模块源读法"多一个与模块无关的分支。
+    """
     import contest_generator.skeleton as skeleton
     from pathlib import Path
 
     text = (Path(skeleton.__file__).parent / "skeleton.py").read_text(
         encoding="utf-8"
     )
-    assert text.count("read_text") == 2
+    assert text.count("read_text") == 3
+    for forbidden in ("def read_module_sources", "def build_master_interface_blocks"):
+        assert forbidden in text, f"骨架读盘原语不见了：{forbidden}"
+    # 逐处落在允许的函数体里（按函数体切段核对，别只数总数）
+    def _body(name: str) -> str:
+        start = text.index(f"def {name}(")
+        nxt = text.find("\ndef ", start)
+        return text[start:] if nxt == -1 else text[start:nxt]
+
+    assert _body("read_module_sources").count("read_text") == 1
+    assert _body("build_master_interface_blocks").count("read_text") == 1
+    assert _body("syscfg_init_functions_for").count("read_text") == 1
 
 
 def test_generator_module_file_segment_has_no_raw_read_text():

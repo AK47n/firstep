@@ -1,0 +1,29 @@
+=== 工单 01 领单复核（判据精确性 / 确定性 / 平台边界）===
+
+[PASS] 骨架/赛题门禁放行恒有的 SYSCFG_DL_init()
+[PASS] **没选 lcd** 时 SYSCFG_DL_LCD_init() 仍红（精确判据，不是前缀白名单）：main.c 调用了所选模块头文件中不存在的函数：SYSCFG_DL_LCD_init —— 请改用真实接口，或让骨架阶段自检改写为注释占位
+[PASS] **选中 lcd** 也不放行 SYSCFG_DL_LCD_init()（GPIO 实例无实例级 init）：main.c 调用了所选模块头文件中不存在的函数：SYSCFG_DL_LCD_init —— 请改用真实接口，或让骨架阶段自检改写为注释占位
+[PASS] GPIO 实例 OLED_SPI 的 init 不放行（0/109）：main.c 调用了所选模块头文件中不存在的函数：SYSCFG_DL_OLED_SPI_init —— 请改用真实接口，或让骨架阶段自检改写为注释占位
+[PASS] 选中 oled 时 SYSCFG_DL_OLED_init() 放行（I2C 实例）
+[PASS] 没选 oled 时 SYSCFG_DL_OLED_init() 仍红：main.c 调用了所选模块头文件中不存在的函数：SYSCFG_DL_OLED_init —— 请改用真实接口，或让骨架阶段自检改写为注释占位
+[PASS] 选中 debug_uart 时 SYSCFG_DL_DEBUG_UART_init() 放行（UART 实例）
+[PASS] 拼错名 SYSCFG_DL_TYPO_init() 仍红：main.c 调用了所选模块头文件中不存在的函数：SYSCFG_DL_TYPO_init —— 请改用真实接口，或让骨架阶段自检改写为注释占位
+[PASS] 条件生成的 saveConfiguration() 不放行（109 份里只有 65 份有）：main.c 调用了所选模块头文件中不存在的函数：SYSCFG_DL_saveConfiguration —— 请改用真实接口，或让骨架阶段自检改写为注释占位
+[PASS] 凭空造的名字仍红（门禁没被削弱）：main.c 调用了所选模块头文件中不存在的函数：SYSCFG_DL_TOTALLY_MADE_UP —— 请改用真实接口，或让骨架阶段自检改写为注释占位
+[PASS] 语料里没有 syscfg 文本时不静默放行（也不去读盘）
+[PASS] 骨架确定性：出稿没写 → 补恰好一行：活调用 1 处（期望 1）
+[PASS] 骨架确定性：出稿写了活的 → 不重复：活调用 1 处（期望 1）
+[PASS] 骨架确定性：出稿只写了注释占位 → 仍恰好一行活调用：活调用 1 处（期望 1）
+      产出样张（只写了注释占位那一格）：
+        #include "ti_msp_dl_config.h"
+        int main(void)
+        {
+            SYSCFG_DL_init();
+            while (1) {}
+        }
+[PASS] stm32 骨架不插 SYSCFG_DL_init（平台边界）：活调用 0 处
+[PASS] 检测页渲染器输出活调用：活调用 1 处
+[PASS] 检测页不再叫学生「取消注释」
+[PASS] 检测页 stm32 不出现 SYSCFG_DL_init
+
+=== 结论：全部成立 ===

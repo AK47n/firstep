@@ -1,0 +1,33 @@
+=== 工单 01 量具：`ti_msp_dl_config.h` 的函数面（本机真产物扫描）===
+扫到 109 份构建期生成的头（.scratch/** 与 library/** 下的真产物）
+
+出现次数 / 总数——**恒有**的（= 与选中集无关）：
+  109/109  SYSCFG_DL_GPIO_init
+  109/109  SYSCFG_DL_SYSCTL_init
+  109/109  SYSCFG_DL_init
+  109/109  SYSCFG_DL_initPower
+
+**按实例**生成的（名字随选中集变）——逐条给出一个出现它的工程：
+    5/109  SYSCFG_DL_ADC12_0_init             例：.scratch/b1-adc-servo/out_matrix/bound_mspm0
+    1/109  SYSCFG_DL_DAC12_init               例：library/references
+   16/109  SYSCFG_DL_DEBUG_UART_init          例：.scratch/hwcheck-acceptance/matrix/A-aht10+bh1750
+    1/109  SYSCFG_DL_DMA_init                 例：library/references
+   34/109  SYSCFG_DL_I2C_0_init               例：.scratch/hwcheck-unknown-device/matrix/custom-all-library-mspm0
+   14/109  SYSCFG_DL_IMU601_init              例：library/revise-backups/20260824-235533
+   11/109  SYSCFG_DL_MOTOR_PID_init           例：library/revise-backups/20260829-211102
+    2/109  SYSCFG_DL_MSPMotor_init            例：library/references
+   15/109  SYSCFG_DL_OLED_init                例：.scratch/hwcheck-acceptance/matrix/A-oled+aht10
+   42/109  SYSCFG_DL_PWMAB_init               例：.scratch/real-run/out_18_A5_mspm0_2026H
+    6/109  SYSCFG_DL_SERVO_PWM_init           例：.scratch/b1-adc-servo/out_matrix/bound_mspm0
+    3/109  SYSCFG_DL_SYSTICK_init             例：library/references
+    2/109  SYSCFG_DL_TIMER_0_init             例：library/references
+    1/109  SYSCFG_DL_UART_0_init              例：library/references
+   65/109  SYSCFG_DL_restoreConfiguration     例：.scratch/b1-adc-servo/out_matrix/bound_mspm0
+   65/109  SYSCFG_DL_saveConfiguration        例：.scratch/b1-adc-servo/out_matrix/bound_mspm0
+    2/109  SYSCFG_DL_user_init                例：library/references
+
+=== 与实例名的关系（抽一份看）===
+工程：.scratch/b1-adc-servo/out_matrix/bound_mspm0
+  活着的实例：ADC12、ADC12_0、Board、PWM、SERVO_PWM、SYSCTL
+  该工程里按实例的 init：SYSCFG_DL_ADC12_0_init、SYSCFG_DL_SERVO_PWM_init、SYSCFG_DL_restoreConfiguration、SYSCFG_DL_saveConfiguration
+  判据：`SYSCFG_DL_<实例>_init` 的 <实例> 必须在该工程的实例集里（不选中的实例那个 init 不会生成 → 调它就是真错，门禁该红）

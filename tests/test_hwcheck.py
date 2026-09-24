@@ -50,6 +50,7 @@ from contest_generator.library import list_modules
 from contest_generator.manifest import ModuleManifest
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from contest_generator.readme import parse_pin_table
+from contest_generator.syscfg_model import parse_syscfg, syscfg_init_functions
 from tests._c_escape import decode_c_string
 
 BOTH = HwCheckConfig(platform=PLATFORM_STM32, debug_uart=True, oled=True)
@@ -115,21 +116,22 @@ def test_stm32_serial_and_oled_render_both_report_paths():
 def test_mspm0_uses_its_own_driver_header_and_init():
     """同名模块在两平台的头文件名与初始化不同——渲染器必须按平台取。
 
-    **SysConfig 初始化是注释占位（工单 02 更正）**：`SYSCFG_DL_init` 不在任何
-    头文件里（`ti_msp_dl_config.h` 由 SysConfig 构建期生成），生成内核的
-    「main.c 不许调不存在的接口」门禁会判它未定义——骨架 sanitize 今天就会把
-    这行注释掉（既有生成链限制，见 `.scratch/architecture-deepening-v5/issues/08`）。
-    所以渲染器如实输出注释占位 + 说明，**不输出一个过不了自己门禁的活调用**；
-    上板前取消注释这条写在文件头与检测页清单里（不假装测过）。
+    **SysConfig 初始化是活调用（工单 hwcheck-acceptance/01 更正）**：这里曾经
+    只能输出 `/* SYSCFG_DL_init(); */` 注释占位——`SYSCFG_DL_init` 由 SysConfig
+    构建期生成（`ti_msp_dl_config.h` 生成时还不存在），生成内核的「main.c 不许
+    调不存在的接口」门禁判它未定义。那条生成链限制已经修掉（母版 syscfg 现算
+    出构建期接口面，骨架 sanitize 与生成门禁认同一份文本），所以检测程序直接
+    输出**活调用**：学生烧进去外设就初始化，不再需要"上板前取消注释"。
     """
     code = render_main_c(
         HwCheckConfig(platform=PLATFORM_MSPM0, debug_uart=True, oled=True)
     )
     assert '#include "debug_uart_mspm0.h"' in code
     assert '#include "debug_uart.h"' not in code
-    assert "SYSCFG_DL_init" not in _called_names(code)
-    assert "/* SYSCFG_DL_init(); */" in code
-    assert "取消注释" in code
+    # 活调用判据是**词法级**的（`_called_names` 先剥注释）：注释里的旧占位不算
+    assert "SYSCFG_DL_init" in _called_names(code)
+    assert "/* SYSCFG_DL_init(); */" not in code
+    assert "取消注释" not in code
     assert "DEBUG_UART_INST_IRQHandler" not in code  # 模块内已定义，main.c 不得再定义
 
 
@@ -152,6 +154,86 @@ def test_oled_only_has_no_serial_calls():
     assert '#include "debug_uart.h"' not in code
     # stm32 的 OLED 函数由母版聚合头提供（工程里没有 oled.h，见工单 02 更正）
     assert '#include "headfile.h"' in code
+
+
+# ---------------------------------------------------------------------------
+# 工单 hwcheck-acceptance/01：mspm0 的 SysConfig 初始化是**活调用**
+# ---------------------------------------------------------------------------
+#
+# 这一批的判据一律是**词法级**的（`_called_names` 先剥注释）：注释里的旧占位
+# `/* SYSCFG_DL_init(); */` 与字符串里的同名字样**都不算**。"那一行在不在"
+# 用 `in` 字符串匹配是抓不到本单要修的形态的——注释占位同样含那个子串。
+
+
+def test_mspm0_boot_line_is_a_live_call_in_every_channel_form():
+    """检测程序这一路：三种通道形态下 `SYSCFG_DL_init()` 都是活代码，且只调一次。
+
+    为什么必须有这一路：它是学生**第一眼看到的现象**（"灯不闪、串口一个字
+    没有"那种最像板子坏掉的失败形态就出在这里）。渲染器曾经只能输出注释占位，
+    因为那一行过不了生成链自己的门禁；缺口修在生成链里之后，这里必须是活调用。
+    """
+    for debug_uart in (True, False):
+        for oled in (True, False):
+            config = HwCheckConfig(
+                platform=PLATFORM_MSPM0, debug_uart=debug_uart, oled=oled
+            )
+            code = render_main_c(config)
+            assert "SYSCFG_DL_init" in _called_names(code), config
+            body = code.split("int main(void)", 1)[1]
+            lines = [line for line in body.splitlines() if "SYSCFG_DL_init()" in line]
+            assert len(lines) == 1, lines
+            assert lines[0].strip().startswith("SYSCFG_DL_init();"), lines[0]
+            assert "/*" not in lines[0].split("SYSCFG_DL_init()", 1)[0], lines[0]
+            assert "取消注释" not in code
+
+
+def test_mspm0_syscfg_init_surface_is_exact_not_a_prefix_whitelist():
+    """**门禁不许被削弱**：放行的是"真会生成的名字"，不是 `SYSCFG_DL_` 前缀。
+
+    判据由母版 syscfg 现算（`syscfg_init_functions(parse_syscfg(...).prune(...))`），
+    这条用例直接打在判据函数上（三条路共用它）。四条腿，前两条是"该红的红"：
+
+    * **没选中的实例** → 不放行（`SYSCFG_DL_LCD_init` 而 lcd 没选）；
+    * **GPIO 实例的 init** → 不放行（`SYSCFG_DL_LCD_init` 即使 lcd 选中也不放行）
+      ——SysConfig 的 GPIO 实例**没有**实例级 init（引脚初始化走模块级的
+      `SYSCFG_DL_GPIO_init`），本机 109 份真产物头里
+      `SYSCFG_DL_LCD_init`/`SYSCFG_DL_OLED_SPI_init`/`SYSCFG_DL_LED_BEEP_init`
+      出现 **0 次**（读数 `.scratch/hwcheck-acceptance/probe-01-symbol-surface.txt`）。
+      放行它们 = 让一条真会编不过的调用过关（工单 01 评审抓到的过度放行）；
+    * **外设实例的 init** → 选中时放行、没选中不放行（`SYSCFG_DL_OLED_init` 是
+      I2C 实例、`SYSCFG_DL_DEBUG_UART_init` 是 UART 实例，两者在 109 份里
+      15/109、16/109 实测出现）；
+    * 拼错名 / 条件生成的 `save`·`restoreConfiguration` 一律不放行。
+    """
+    repo = Path(__file__).resolve().parents[1]
+    master = (repo / "library" / "masters" / "mspm0" / "mspm0.syscfg").read_text(
+        encoding="utf-8"
+    )
+    without_lcd = syscfg_init_functions(parse_syscfg(master).prune(["led", "delay"]))
+    assert "SYSCFG_DL_init" in without_lcd  # 恒有四个之一
+    assert "SYSCFG_DL_LCD_init" not in without_lcd
+    assert "SYSCFG_DL_TYPO_init" not in without_lcd
+    # 条件生成的 save/restoreConfiguration **刻意不放行**（109 份真产物只有 65 份有）
+    assert "SYSCFG_DL_saveConfiguration" not in without_lcd
+    assert "SYSCFG_DL_restoreConfiguration" not in without_lcd
+    with_lcd = syscfg_init_functions(parse_syscfg(master).prune(["led", "delay", "lcd"]))
+    assert "SYSCFG_DL_LCD_init" not in with_lcd, (
+        "LCD 是 GPIO 实例——SysConfig 不给它生成实例级 init（0/109 实测），"
+        "放行等于门禁被削弱"
+    )
+    # 外设实例：选中就放行（I2C 的 OLED 实例 / UART 的 DEBUG_UART 实例）
+    with_oled = syscfg_init_functions(parse_syscfg(master).prune(["oled", "delay"]))
+    assert "SYSCFG_DL_OLED_init" in with_oled
+    assert "SYSCFG_DL_OLED_SPI_init" not in with_oled, "OLED_SPI 是 GPIO 实例（0/109）"
+    without_oled = syscfg_init_functions(parse_syscfg(master).prune(["led", "delay"]))
+    assert "SYSCFG_DL_OLED_init" not in without_oled
+    with_uart = syscfg_init_functions(
+        parse_syscfg(master).prune(["debug_uart", "delay"])
+    )
+    assert "SYSCFG_DL_DEBUG_UART_init" in with_uart
+    # 恒有四个在两份里都在（与选中集无关——109/109 实测）
+    for name in ("SYSCFG_DL_initPower", "SYSCFG_DL_SYSCTL_init", "SYSCFG_DL_GPIO_init"):
+        assert name in without_lcd and name in with_lcd
 
 
 def test_serial_lines_end_with_crlf_so_a_terminal_does_not_overwrite():
@@ -237,8 +319,18 @@ def test_summary_report_is_the_first_line_of_output():
 # 每条 = (名字, (出处文件, …))——出处必须真存在且真含该名字（下面有用例核对）。
 # 为什么允许这样一张小表：母版工程根的头（headfile.h / ti_msp_dl_config.h）不在
 # 库的 modules/ 下，判据读不到它们；但表要小、要可核对，且不许当后门长大。
+#
+# `SYSCFG_DL_init` 的出处自工单 hwcheck-acceptance/01 起**不再是母版 main.c**
+# （那一份只是"模板里曾经这么写"，不是判据）：它由 SysConfig **构建期**生成，
+# 唯一出处是生成链里那份"构建期外部接口面"单源——`syscfg_model` 的
+# `MSPM0_SYSCFG_ALWAYS_INIT_FUNCTIONS`（109 份真产物实测恒有四个），判据的
+# 原料是母版 `mspm0.syscfg`（裁剪后按实例现算）。两条都列进来：名字在代码
+# 常量里，判据原料在数据文件里——**两条一起才是完整的出处**。
 _MASTER_EXTERNAL_FACTS: dict[str, tuple[str, ...]] = {
-    "SYSCFG_DL_init": ("library/masters/mspm0/main.c",),
+    "SYSCFG_DL_init": (
+        "src/contest_generator/syscfg_model.py",
+        "library/masters/mspm0/mspm0.syscfg",
+    ),
     "SystemInit": (
         "library/masters/stm32/sys/system_stm32f10x.h",
         "library/masters/stm32/main.c",
@@ -300,7 +392,15 @@ def test_every_called_name_comes_from_the_real_library(platform):
 
 
 def test_master_external_whitelist_entries_have_real_evidence():
-    """白名单里的每条都必须在仓库里找得到出处（防止白名单被当成后门慢慢长大）。"""
+    """白名单里的每条都必须在仓库里找得到出处（防止白名单被当成后门慢慢长大）。
+
+    这里比"名字字符串出现在某个文件里"强一档：**真出处必须能重新算出这个名字**
+    ——查文件存在只是防拼错路径，查"出处真含该名字"对 `SYSCFG_DL_init` 这类
+    **构建期生成**的名字还不够（它压根不在任何头文件里，出处在生成链的单源
+    判据里）。所以除文本核对之外，另加一条按名字把出处"跑一遍"：
+    `SYSCFG_DL_*` → `syscfg_model.syscfg_init_functions` 现算（工单
+    hwcheck-acceptance/01 的判据），算不出来 = 白名单记了一个不存在的事实。
+    """
     repo = Path(__file__).resolve().parents[1]
     for name, sources in _MASTER_EXTERNAL_FACTS.items():
         assert sources, f"{name} 没写出处"
@@ -315,6 +415,18 @@ def test_master_external_whitelist_entries_have_real_evidence():
         assert any(name in text for text in texts), (
             f"{name} 在登记的出处里一个都找不到：{sources}"
         )
+    # 构建期生成的名字：出处要能**现算出**它（不是把名字抄进某个文件就算数）
+    model = parse_syscfg(
+        (repo / "library" / "masters" / "mspm0" / "mspm0.syscfg").read_text(
+            encoding="utf-8"
+        )
+    )
+    computed = set(syscfg_init_functions(model))
+    for name in _MASTER_EXTERNAL_FACTS:
+        if name.startswith("SYSCFG_DL_"):
+            assert name in computed, (
+                f"{name} 不在母版 syscfg 现算出的构建期接口面里：{sorted(computed)}"
+            )
 
 
 def _platform_master_headers(platform: str) -> set[str]:
@@ -726,18 +838,25 @@ def test_checklist_is_pure_and_deterministic():
     assert render_checklist(BOTH) == render_checklist(BOTH)
 
 
-def test_mspm0_checklist_says_the_syscfg_init_must_be_uncommented():
-    """mspm0 侧如实告知既有限制：不取消注释外设就不初始化（不假装测过）。"""
-    ids = {item.id for item in render_checklist(
+def test_mspm0_checklist_no_longer_asks_students_to_edit_generated_code():
+    """**两个平台都不再需要学生手改一行代码**（工单 hwcheck-acceptance/01）。
+
+    这里曾经有一条 mspm0 专属项「打开 main.c，确认 `SYSCFG_DL_init();` 已取消
+    注释」——它是生成链缺口的补丁说明。缺口修在生成链里（那一行现在是活代码），
+    所以这条清单项随之删掉：清单上留着一条学生照做也没有意义的动作，比不写
+    更糟（他会以为自己漏了一步）。
+    """
+    mspm0 = render_checklist(
         HwCheckConfig(platform=PLATFORM_MSPM0, debug_uart=True, oled=False)
-    )}
-    assert "syscfg-init" in ids
-    assert "syscfg-init" not in {item.id for item in render_checklist(BOTH)}
-    text = " ".join(
-        item.expect + item.check
-        for item in render_checklist(HwCheckConfig(platform=PLATFORM_MSPM0, debug_uart=True, oled=False))
     )
-    assert "SYSCFG_DL_init" in text and "注释" in text
+    assert "syscfg-init" not in {item.id for item in mspm0}
+    text = " ".join(item.expect + item.check for item in mspm0)
+    assert "取消注释" not in text and "注释去掉" not in text
+    # stm32 侧本来就没有这条（清单形态按平台与通道变化）
+    assert "syscfg-init" not in {item.id for item in render_checklist(BOTH)}
+    assert "取消注释" not in " ".join(
+        item.expect + item.check for item in render_checklist(BOTH)
+    )
 
 
 def test_checklist_item_shape_is_a_frozen_dataclass():
@@ -908,6 +1027,9 @@ def test_generate_endpoint_mspm0_serial_only(real_library_client, tmp_path):
     只开串口是有原因的——mspm0 默认「串口 + OLED」会撞 PA22（OLED_SPI_RES 对
     DEBUG_UART RX），生成内核如实 400（见下一条用例）。本单不引引脚配置 UI，
     出路是用户在检测页取消勾选其中一个通道。
+
+    产物里那一行**是活调用**（工单 hwcheck-acceptance/01）：判据走词法级
+    `_called_names`（先剥注释），注释占位不算数——正是本单要消灭的形态。
     """
     client, _ = real_library_client
     parent = tmp_path / "out"
@@ -921,7 +1043,8 @@ def test_generate_endpoint_mspm0_serial_only(real_library_client, tmp_path):
     body = response.json()
     project = Path(body["output_dir"])
     assert (project / "mspm0.syscfg").is_file()
-    assert "SYSCFG_DL_init" not in _called_names(body["main_c"])
+    assert "SYSCFG_DL_init" in _called_names(body["main_c"])
+    assert "/* SYSCFG_DL_init(); */" not in body["main_c"]
 
 
 def test_generate_endpoint_mspm0_default_dual_channel_resolves_conflict(
@@ -973,6 +1096,55 @@ def test_generate_endpoint_mspm0_default_dual_channel_resolves_conflict(
     assert readme_map.get(("oled", "OLED_SPI_RES")) == res_pin, (
         "页面接线表与工程 README 必须是同一组脚"
     )
+
+
+def test_generate_endpoint_mspm0_main_is_live_and_the_gate_still_bites(
+    real_library_client, tmp_path
+):
+    """赛题这一路（真库真母版 + 真生成内核）：那一行是**活调用**，
+    而且门禁**没被削弱**——本轮真生成的产物上，一个真不存在的调用照样被判死。
+
+    判据全走词法级 `_called_names`（先剥注释）：注释占位含同样的子串，
+    用 `in` 匹配是抓不到本单要修的形态的（工单 hwcheck-acceptance/01）。
+    """
+    client, ctx = real_library_client
+    parent = tmp_path / "out"
+    parent.mkdir()
+    response = client.post(
+        "/api/hwcheck/generate",
+        json={"platform": PLATFORM_MSPM0, "debug_uart": True, "oled": False,
+              "parent_dir": str(parent)},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    project = Path(body["output_dir"])
+    on_disk = (project / "main.c").read_text(encoding="utf-8")
+    assert "SYSCFG_DL_init" in _called_names(on_disk)
+    assert on_disk == body["main_c"]
+    assert "/* SYSCFG_DL_init(); */" not in on_disk
+
+    # 反证：同一趟的真库真母版上，把那行替换成一个真不存在的调用 → 门禁仍红
+    from contest_generator.generator import (
+        GateContext,
+        UndefinedCallsError,
+        build_module_corpus,
+        run_generation_gates,
+    )
+    from contest_generator.selection import resolve_selection
+
+    resolved = resolve_selection(
+        ctx.config.module_library_dir, PLATFORM_MSPM0, ["debug_uart"]
+    )
+    corpus = build_module_corpus(
+        resolved.manifests,
+        PLATFORM_MSPM0,
+        ctx.config.module_library_dir,
+        ctx.config.masters_dir / "mspm0",
+        on_disk.replace("SYSCFG_DL_init();", "SYSCFG_DL_TYPO_init();"),
+    )
+    with pytest.raises(UndefinedCallsError) as excinfo:
+        run_generation_gates(corpus, resolved.manifests, PLATFORM_MSPM0, GateContext())
+    assert "SYSCFG_DL_TYPO_init" in str(excinfo.value)
 
 
 def test_generate_endpoint_mspm0_adc_orphan_slot_no_longer_blocks(

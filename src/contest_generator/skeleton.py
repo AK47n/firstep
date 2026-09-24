@@ -2,9 +2,17 @@
 
 流程：LLM 基于所选模块在目标平台的头文件接口（build_skeleton_interfaces 的
 输出块）生成 main.c 骨架 → 静态自检（find_undefined_calls）→ 不存在的调用
-改写为注释占位（sanitize_skeleton，语句保持可编译）。自检只认喂给 LLM 的
-同一份接口块，保证 AI 引用的每个函数都在所选模块头文件中真实存在，骨架可编译。
+改写为注释占位（sanitize_skeleton，语句保持可编译）→（**mspm0**）外设初始化
+补行（ensure_sysconfig_init）→ 可落盘。自检只认喂给 LLM 的同一份接口块，
+保证 AI 引用的每个函数都在所选模块头文件中真实存在，骨架可编译。
 生成器在落盘前还会做一次同样的静态校验，任何漏网的调用明确报错。
+
+**mspm0 的构建期接口面**（工单 hwcheck-acceptance/01）：SysConfig 生成的
+`SYSCFG_DL_*` 不在任何可读头文件里（`ti_msp_dl_config.h` 构建期生成），
+于是 `SYSCFG_DL_init()` 曾被 sanitize 当成"不存在的调用"注释掉——学生烧进去
+就是"灯不闪、串口一个字没有"（最像板子坏掉的失败形态）。现在两件事一起做：
+`syscfg_interface_block` 把它作为接口块喂给 LLM（并与生成门禁**共用同一份
+文本**，单源），`ensure_sysconfig_init` 再兜一道确定性的底（LLM 没写也补上）。
 
 函数识别是文本级启发式：声明/定义要求类型名前缀（void/int/自定义 _t/…），
 调用提取排除控制关键字、预处理指令行（#define 除外）、main.c 自建函数
@@ -32,6 +40,14 @@ from .instance_render import (
     managed_header_rels,
 )
 from .manifest import ModuleManifest
+from .platforms import PLATFORM_MSPM0
+from .syscfg_model import (
+    MSPM0_SYSCFG_FILENAME,
+    MSPM0_SYSCFG_INIT_NAME,
+    SyscfgModel,
+    parse_syscfg,
+    syscfg_init_functions,
+)
 
 if TYPE_CHECKING:
     # 仅类型注解用（skeleton 是纯文本模块，运行时导入 llm 会把整条 LLM 栈
@@ -149,6 +165,10 @@ def build_skeleton_interfaces(
     instance_plans 非空时按注册表注入多实例通道块（工单
     module-multi-instance/03：LLM 见到的通道宏清单 = 工程里实际生成的文件
     内容，冒烟能逐个 led_init(<通道宏>)）——空计划 = 单实例默认通道宏。
+    platform 是 mspm0 且母版目录给定时，另并入**平台外部接口（构建期生成）**
+    块（`syscfg_interface_block`，工单 hwcheck-acceptance/01）：SysConfig 的
+    `SYSCFG_DL_*_init` 不在任何可读头文件里，不并入就会被自检当成不存在的
+    调用注释掉。这一块与生成门禁 `_check_main_calls` 并的是**同一份文本**。
     读盘归 read_module_sources（编码 errors="replace" 单源，与门禁同读法）、
     形态判断归 is_header_path、块格式化归 format_interface_blocks（生成
     门禁用语料文本走同一格式化）。
@@ -178,9 +198,116 @@ def build_skeleton_interfaces(
     blocks.extend(format_interface_blocks(headers))
     if master_project_dir is not None:
         blocks.extend(build_master_interface_blocks(master_project_dir))
+    blocks.extend(
+        syscfg_interface_block(
+            master_project_dir, platform, [m.slug for m in manifests]
+        )
+    )
     if instance_plans:
         blocks.extend(instance_interface_blocks(instance_plans, platform))
     return blocks
+
+
+def syscfg_interface_block(
+    master_project_dir: Path,
+    platform: str,
+    selected_slugs: Sequence[str],
+) -> list[str]:
+    """mspm0 的「平台外部接口（构建期生成）」接口块；不适用 = 空列表。
+
+    **为什么需要这一块**（工单 hwcheck-acceptance/01）：接口面的定义是"喂给
+    LLM 的接口集 = sanitize / 生成门禁认的接口集"，而 SysConfig 生成的
+    `SYSCFG_DL_*` 由**构建期**产出（`Debug/ti_msp_dl_config.h` 生成时还不
+    存在），既不在模块头里也不在母版树里——不放行就只能把 `SYSCFG_DL_init()`
+    注释掉，学生烧进去"灯不闪、串口一个字没有"。
+
+    **判据**（与 `generator._check_main_calls` 门禁同一份）：
+    `syscfg_init_functions_for` ——恒有四个 + 按**裁剪后**仍活着的实例各一条。
+    返回的是**喂 LLM 的块文本**，声明即接口，`extract_header_functions` 从中
+    提取名字；三处（LLM 输入 / 骨架 sanitize / 生成门禁）因此认同一套。
+
+    不适用 = 平台不是 mspm0 / 母版目录为 None / 母版里没有 `mspm0.syscfg`
+    （假母版、stm32 都走这条）→ 空列表，行为退回现状，**不静默放行别的名字**。
+    """
+    names = syscfg_init_functions_for(master_project_dir, platform, selected_slugs)
+    return [] if names is None else _syscfg_block_lines(names)
+
+
+def syscfg_interface_block_from_text(
+    syscfg_text: str,
+    platform: str,
+    selected_slugs: Sequence[str],
+) -> list[str]:
+    """同一块的**纯文本入口**（字符串进 / 字符串出，不读盘）。
+
+    **为什么要有它**（工单 01 评审整改）：生成门禁的契约是"吃语料、不各自读盘"
+    （`generator.ModuleCorpus` 的字段注释 + `pin-conflict-gate/01` 的先例），
+    而语料里本来就有 `master_syscfg` 文本（`build_output_tree_corpus` 那条路给的
+    是产物树现值）——门禁那一侧必须从**语料**算，否则"语料说什么"与"门禁判什么"
+    分家：把语料里的 syscfg 换成一份没有实例的文本，门禁仍按盘上的母版放行
+    （评审实测复现）。
+
+    判据与 `syscfg_interface_block`（读盘入口）**同一份**：
+    `syscfg_init_functions(parse_syscfg(text).prune(选中集))`，块文本由
+    `_syscfg_block_lines` 单源生成。空文本 / 非 mspm0 → 空列表（判不了就不判，
+    不静默放行别的名字）。
+    """
+    if platform != PLATFORM_MSPM0 or not (syscfg_text or "").strip():
+        return []
+    names = syscfg_init_functions(parse_syscfg(syscfg_text).prune(selected_slugs))
+    return _syscfg_block_lines(names)
+
+
+def _syscfg_block_lines(names: Sequence[str]) -> list[str]:
+    """「平台外部接口（构建期生成）」块文本（两个入口共用的唯一出处）。
+
+    声明即接口：`extract_header_functions` 从这行 `void <name>(void);` 里取名字，
+    所以喂 LLM 的接口集 = sanitize / 生成门禁认的接口集。
+    """
+    return [
+        "### 平台外部接口（构建期生成，不是头文件）\n"
+        "// 本平台的 SysConfig 装配代码由构建期生成（ti_msp_dl_config.h 在生成"
+        "工程时还不存在），\n"
+        "// 下面这些初始化函数在那份生成头里声明，可以直接调用：\n"
+        + "\n".join(f"void {name}(void);" for name in names)
+        + f"\n// {MSPM0_SYSCFG_INIT_NAME}() 是总入口（内部串起上面其余初始化），"
+        "在 main() 开头调用它；\n"
+        "// 缺了它板子上什么都不动：灯不闪、串口一个字都没有。\n"
+    ]
+
+
+def syscfg_init_functions_for(
+    master_project_dir: Path | None,
+    platform: str,
+    selected_slugs: Sequence[str],
+) -> tuple[str, ...] | None:
+    """母版 mspm0.syscfg + 选中集 → 构建期会生成的初始化函数名；不适用 = None。
+
+    **"这一趟算不算 mspm0 的构建期接口面"只在这一处判**（接口块、骨架 sanitize、
+    生成门禁三处共用）——两处各判一次迟早分家，而分家的表现正好是"接口块认了、
+    补行不认"这种半修状态。
+
+    母版 syscfg 是**唯一判据来源**（构建期生成的头不在树里），读法沿用
+    `parse_syscfg` + `prune(选中集)` 的既有 pipeline——即写侧将要落盘的那一份
+    的同一个操作，不另立口径。非 mspm0 平台 / 无母版目录 / 无此文件 → None
+    （调用方按"退回现状"处理）。
+
+    ⚠ **每调用一次读一次盘**：骨架那一路要用两次（接口块一次、确定性补行要知道
+    "这一趟保证哪个名字"再算一次），所以一次生成会读两次这个小文件——两次的输入
+    相同（同一份母版、同一个选中集），结果必然相同；不引入缓存是因为缓存失效
+    判据（母版被改）比这次读盘贵。门禁那一侧走
+    `syscfg_interface_block_from_text`（语料文本进），不经过这里。
+    """
+    if platform != PLATFORM_MSPM0 or master_project_dir is None:
+        return None
+    path = master_project_dir / MSPM0_SYSCFG_FILENAME
+    if not path.is_file():
+        return None
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:  # 母版读不了 = 判不了就不判（门禁那一刻照旧）
+        return None
+    return syscfg_init_functions(parse_syscfg(text).prune(selected_slugs))
 
 
 def build_master_interface_blocks(master_project_dir: Path) -> list[str]:
@@ -276,6 +403,157 @@ def sanitize_skeleton(
         _replace_undefined_calls(main_c, undefined) if undefined else (main_c, ())
     )
     return _strip_unreachable_return(fixed), blocked
+
+
+def ensure_sysconfig_init(
+    main_c: str, init_function: str | None
+) -> str:
+    """`main()` 体里没有活的 `init_function();` 就补在函数体首；None = 原样返回。
+
+    **为什么门禁认了名字还不够**（工单 hwcheck-acceptance/01）：放宽接口面只
+    解决"别把这一行删掉"，LLM 压根没写同样等于没初始化——现象与注释掉一模
+    一样（灯不闪、串口一个字没有）。所以这一道是**确定性**兜底，不依赖 LLM
+    是否想起来写。
+
+    `init_function` = 这一趟要保证的那一行（mspm0 = `SYSCFG_DL_init`，由
+    `syscfg_init_functions_for` 现算；**stm32 / 拿不到母版 = None**，本函数
+    一个字符都不动——stm32 路径硬约束）。名字从外面传而不是在这里现取：判据
+    只有一处（`syscfg_init_functions_for`），且一次生成只读一次母版。
+
+    判据是**词法级"活代码调用"**（走 clex 的注释/字符串剥离，与 sanitize 同
+    一套）：注释里的旧占位（`/* SYSCFG_DL_init(); */`）与字符串里的同名字样
+    **都不算**——前者正是本单要消灭的形态（"上板前取消注释"），后者根本不是
+    调用。已经写了活调用就**一个字符都不改**（幂等：补行后的文本再跑一遍仍
+    判"有活调用"）。
+
+    插入位置 = `main()` 的 `{` 之后第一行，缩进沿用函数体首行（体为空则四
+    空格）；找不到 `main()` 定义（残缺稿 / 非 main 形态）原样返回——不猜。
+    若函数体里已经有**整行注释形态**的旧占位（`/* SYSCFG_DL_init(); */`，
+    旧版生成链与参考例程里就是这个形态），则**就地复活那一行**而不是另插一行
+    （`_revive_commented_placeholder`）——两行并排会读成"还得再取消注释一次"。
+    """
+    if init_function is None:
+        return main_c
+    body = _main_function_body(main_c)
+    if body is None:
+        return main_c
+    brace, close_brace = body
+    if _has_live_call(main_c[brace:close_brace], init_function):
+        return main_c
+    revived = _revive_commented_placeholder(
+        main_c, brace, close_brace, init_function
+    )
+    if revived is not None:
+        return revived
+    indent = _body_indent(_masked_code(main_c), brace, close_brace)
+    injected = (
+        f"\n{indent}/* {init_function}()：SysConfig 外设初始化（构建期生成）"
+        f"——缺了它板子上什么都不动 */"
+        f"\n{indent}{init_function}();"
+    )
+    return main_c[: brace + 1] + injected + main_c[brace + 1 :]
+
+
+def _revive_commented_placeholder(
+    code: str, brace: int, close_brace: int, name: str
+) -> str | None:
+    """函数体里**整行注释形态**的旧占位（`/* SYSCFG_DL_init(); */`）→ 就地复活。
+
+    为什么要它：补行不能与旧占位并排出现——`SYSCFG_DL_init();` 紧跟着一行
+    `/* SYSCFG_DL_init(); */`，读起来像"还得我再取消注释一次"，正是本单要消灭
+    的那份困惑（工单 hwcheck-acceptance/01 之前，检测程序渲染出来的就是那个
+    形态；学生手上的 main.c 也可能是从旧工程 / 参考例程抄来的）。
+
+    判据收得很紧：注释去掉定界符后**逐字**就是 `name();`（或 `name()`）——
+    带别的字（`TODO:` / 说明文字 / 混着代码）一律不动，交回"函数体首补行"：
+    宁可多一行，也不改用户 / LLM 自己写的注释原文。找不到 = None。
+    """
+    body = code[brace:close_brace]
+    for kind, start, end in iter_c_regions(body, preprocessor=False):
+        if not kind.endswith("comment"):  # clex 给的是 block_comment / line_comment
+            continue
+        inner = _comment_inner_text(body[start:end])
+        if inner is None or inner.strip() not in (f"{name}();", f"{name}()"):
+            continue
+        return code[: brace + start] + f"{name}();" + code[brace + end:]
+    return None
+
+
+def _comment_inner_text(raw: str) -> str | None:
+    """注释原文 → 去掉定界符的内容；不是注释形态 = None。"""
+    if raw.startswith("/*") and raw.endswith("*/"):
+        return raw[2:-2]
+    if raw.startswith("//"):
+        return raw[2:]
+    return None
+
+
+def _main_function_body(code: str) -> tuple[int, int] | None:
+    """`main` 定义的函数体区间 `(左花括号位置, 右花括号位置)`；找不到 = None。
+
+    定位走"词法判据 + clex 括号配对"：先在**掩码文本**上找 `main` 的 `(`
+    （注释 / 字符串里的 `main(` 不算——掩码把非代码区域整段换成空白，
+    **位置与原文一一对应**，所以配对结果可以直接当原文下标用），再用
+    `match_bracket` 配对到 `)`（顺带跳过参数列表里的括号），然后取它后面
+    （跳过空白与注释）的 `{`。原型声明 `int main(void);` 不是定义，继续往后
+    找下一个 `main`；残缺稿（括号不配平 / 没有函数体）返回 None，由调用方
+    原样返回。
+    """
+    masked = _masked_code(code)
+    for name in re.finditer(r"\bmain\b", masked):
+        open_paren = next_significant(masked, name.end())
+        if open_paren >= len(masked) or masked[open_paren] != "(":
+            continue
+        close_paren = match_bracket(masked, open_paren, "(", ")")
+        if close_paren == -1:
+            return None
+        brace = next_significant(masked, close_paren + 1)
+        if brace >= len(masked) or masked[brace] != "{":
+            continue  # 声明 / 调用形态，不是定义
+        close_brace = match_bracket(masked, brace, "{", "}")
+        if close_brace == -1:
+            return None
+        return brace, close_brace
+    return None
+
+
+def _masked_code(code: str) -> str:
+    """**等长**掩码：注释 / 字符串区域换成同长度空白（换行保留）。
+
+    用它是为了"位置对齐"：`strip_comments` 会删字符（后续下标全部错位），
+    而本函数的消费方（`_main_function_body` 的括号配对、切片注入）必须拿到
+    能落回**原文**的下标。换行保留 = 掩码后的行号与原文一致；空白不影响
+    `match_bracket` / 缩进判定的语义（它们本来就跳过空白）。
+    """
+    out = list(code)
+    for kind, start, end in iter_c_regions(code, preprocessor=False):
+        if kind == "code":
+            continue
+        for i in range(start, end):
+            if out[i] != "\n":
+                out[i] = " "
+    return "".join(out)
+
+
+def _has_live_call(body: str, name: str) -> bool:
+    """函数体文本里有没有**活代码**的 `name(...)` 调用（注释 / 字符串不算）。
+
+    `strip_comments` 与 sanitize 侧同源（clex 的注释 / 字符串区域知识只有
+    一处）；名字按标识符边界匹配，`MY_SYSCFG_DL_init()` 不算。
+    """
+    return re.search(rf"\b{re.escape(name)}\s*\(", strip_comments(body)) is not None
+
+
+def _body_indent(masked: str, brace: int, close_brace: int) -> str:
+    """函数体首条语句的缩进（保留 LLM 出稿的缩进风格）；无语句 = 四空格。
+
+    在掩码文本上取"左花括号后第一行非空内容"的行首空白：两空格就跟着两格、
+    制表符同理，不让补行的那一行看起来是别人塞进来的。
+    """
+    for line in masked[brace + 1 : close_brace].splitlines():
+        if line.strip():
+            return line[: len(line) - len(line.lstrip())]
+    return "    "
 
 
 def _replace_undefined_calls(
@@ -548,7 +826,8 @@ def _generate_main_c(
     topic_framework: TopicFramework | None = None,
     reference_sources: Mapping[str, str] | None = None,
 ) -> tuple[str, tuple[str, ...]]:
-    """骨架 / 冒烟共用的出稿管线：接口块 → LLM 出稿 → 剥围栏 → 静态自检。
+    """骨架 / 冒烟共用的出稿管线：接口块 → LLM 出稿 → 剥围栏 → 静态自检
+    →（mspm0）外设初始化补行。
 
     reference_fulltexts / topic_framework / reference_sources 都只对骨架路径
     有意义（冒烟不写题逻辑不传，走两参调用）。零注入形态（三者全 None）按
@@ -557,6 +836,13 @@ def _generate_main_c(
     避免逐参加分支）。instances 经 expand_instance_plans 展开后注入接口块
     （与生成侧渲染同源——LLM 见到的通道宏 = 工程实际生成的宏；board 缺省
     时展开层现加载板定义）。
+
+    最后一道只在 **mspm0** 生效（`ensure_sysconfig_init`，工单
+    hwcheck-acceptance/01）：sanitize 之后若 main() 体里没有活的
+    `SYSCFG_DL_init();` 就补行。判据不另立——"这一趟算不算 mspm0 的构建期
+    接口面"由 `syscfg_init_functions_for` 一处判（接口块与补行共用同一份现算
+    结果，一次生成只读一次母版），拿不到母版就两边都不动（退回现状）。
+    stm32 路径一个字符都不经过这里。
     """
     plans = expand_instance_plans(manifests, instances, platform)
     interfaces = build_skeleton_interfaces(
@@ -574,7 +860,13 @@ def _generate_main_c(
         )
     raw = strip_code_fences(raw)  # 首尾包裹形态先剥（契约见 clex）
     raw = strip_all_code_fences(raw)  # 残留围栏行全剥（LLM 偶发多重围栏，判例见 clex）
-    return sanitize_skeleton(raw, extract_header_functions(interfaces))
+    main_c, blocked = sanitize_skeleton(raw, extract_header_functions(interfaces))
+    surface = syscfg_init_functions_for(
+        master_project_dir, platform, [m.slug for m in manifests]
+    )
+    if surface is not None and MSPM0_SYSCFG_INIT_NAME in surface:
+        main_c = ensure_sysconfig_init(main_c, MSPM0_SYSCFG_INIT_NAME)
+    return main_c, blocked
 
 
 def _extract_calls(code: str) -> set[str]:

@@ -96,6 +96,7 @@ from .skeleton import (
     format_interface_blocks,
     is_header_path,
     read_module_sources,
+    syscfg_interface_block_from_text,
     verify_main_c_interfaces,
 )
 from .topic_library import (
@@ -1473,6 +1474,14 @@ def _check_main_calls(corpus: ModuleCorpus) -> None:
     接口集 = 模块头 + 母版头（corpus.master_headers 已收集，直接并入）——
     main.c 调母版内嵌实现的 ml_* API 不再误报未定义（工单 02，骨架阶段
     已把母版头喂给 LLM，门禁必须认同一套；mspm0 母版无 .h，并入为空）。
+    mspm0 另并入**平台外部接口（构建期生成）**块（工单 hwcheck-acceptance/01，
+    `skeleton.syscfg_interface_block`——骨架阶段喂 LLM 的就是这一份文本）：
+    `SYSCFG_DL_init()` 由 SysConfig 构建期生成、不在任何头文件里，不并入就
+    会被判"不存在的调用"（真机现象是灯不闪、串口一个字没有）。判据用
+    语料现算（`corpus.master_syscfg` + `corpus.modules` 的 slug），**拿不到
+    母版 syscfg（None / 空）= 不并入**——退回现状，不静默放行别的名字；
+    放行的名字仍受 `syscfg_init_functions` 的精确判据约束（没选中实例的
+    init、拼错名照样红，见该函数 docstring）。
     """
     for i, line in fence_line_indices(corpus.main_c):
         raise FencedMainCError(
@@ -1495,6 +1504,7 @@ def _check_main_calls(corpus: ModuleCorpus) -> None:
             [("母版", rel, text) for rel, text in corpus.master_headers]
         )
     )
+    interfaces.extend(_corpus_syscfg_interface_blocks(corpus))
     undefined = verify_main_c_interfaces(corpus.main_c, interfaces)
     if undefined:
         raise UndefinedCallsError(
@@ -1502,6 +1512,30 @@ def _check_main_calls(corpus: ModuleCorpus) -> None:
             + "、".join(undefined)
             + " —— 请改用真实接口，或让骨架阶段自检改写为注释占位"
         )
+
+
+def _corpus_syscfg_interface_blocks(corpus: ModuleCorpus) -> list[str]:
+    """语料 → mspm0「平台外部接口（构建期生成）」块（不适用 = 空列表）。
+
+    **吃语料文本、不读盘**（工单 01 评审整改）：门禁的契约是"退化为吃语料的纯
+    谓词、不各自读盘"（`ModuleCorpus` 的字段注释 + 工单 pin-conflict-gate/01）；
+    这里用的就是 `corpus.master_syscfg`（母版全文，或产物树那条路给的产物现值）
+    + 语料的 slug 清单，走 `skeleton.syscfg_interface_block_from_text`——与骨架
+    阶段**同一个纯函数**（那边先读盘再转调它），所以"喂 LLM 的接口面"与"门禁认的
+    接口面"永远是同一份文本。
+
+    产物复核路径（`build_output_tree_corpus`）传进来的 syscfg 已是 prune 过的
+    产物文本，再 prune 一次是幂等的——两条路径判据同源，不各自实现
+    （工单 generate-check-parity/01 的纪律）。
+
+    非 mspm0 平台 / 语料里没有 syscfg 文本（None 或只有空白）= 空列表
+    （判不了就不判，**不静默放行别的名字**）。
+    """
+    return syscfg_interface_block_from_text(
+        corpus.master_syscfg or "",
+        corpus.platform,
+        [slug for slug, _ in corpus.modules],
+    )
 
 
 def _check_unresolved_includes(corpus: ModuleCorpus) -> None:

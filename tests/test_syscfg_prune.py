@@ -16,7 +16,12 @@ from contest_generator.boards import board_for_platform
 from contest_generator.library import list_modules
 from contest_generator.pin_bindings import auto_assign_bindings, resolve_bindings
 from contest_generator.syscfg_instances import INSTANCE_CONSUMERS
-from contest_generator.syscfg_model import parse_syscfg
+from contest_generator.syscfg_model import (
+    MSPM0_GPIO_MODULE,
+    MSPM0_SYSCFG_ALWAYS_INIT_FUNCTIONS,
+    MSPM0_SYSCFG_INIT_NAME,
+    parse_syscfg,
+)
 from contest_generator.syscfg_prune import (
     adc_slot_plan,
     prune_syscfg,
@@ -384,6 +389,34 @@ def test_conflict_report_catches_duplicate_pin_names(collision_reverted_syscfg):
     for slug in ("oled", "jy61p"):
         assert slug in text, f"要点名两件模块（学生据此去掉一件）：{text}"
     assert "SCL" in text and "SDA" in text, text
+
+
+def test_master_keeps_a_gpio_module_for_the_init_surface_rule():
+    """母版数据守卫：**实例级 init 的判据依赖"哪些实例属于 GPIO 模块"**。
+
+    `syscfg_init_functions`（工单 01）把 GPIO 实例排除在实例级 init 之外——
+    实测依据是 109 份真产物头里 `SYSCFG_DL_LCD_init` / `SYSCFG_DL_OLED_SPI_init`
+    这类名字出现 0 次（GPIO 实例的引脚初始化走模块级 `SYSCFG_DL_GPIO_init`）。
+    这条规则读的是 `SyscfgInstance.module`，也就是母版里那个模块变量名：
+
+    * 母版把 GPIO 模块**改名**（`const GPIO = ...` → `const GPIO_B = ...`）→
+      判据会认不出 GPIO 实例、把它们当外设放行（**门禁被削弱**）；
+    * 母版把 `MSPM0_SYSCFG_INIT_NAME` 从恒有那四个里挪走 → 补行补了个不存在
+       的名字。
+
+    两条都靠这条守卫当场红，而不是等学生拿到编不过的工程。
+    """
+    model = parse_syscfg(MASTER_SYSCFG)
+    modules: dict[str, int] = {}
+    for instance in model.instances.values():
+        modules[instance.module] = modules.get(instance.module, 0) + 1
+    assert modules.get(MSPM0_GPIO_MODULE, 0) > 0, (
+        f"母版里没有名为 {MSPM0_GPIO_MODULE} 的模块——实例级 init 的排除判据"
+        f"（GPIO 实例不算）会失效，请同步 {__name__} 与本用例：{sorted(modules)}"
+    )
+    assert MSPM0_SYSCFG_INIT_NAME in MSPM0_SYSCFG_ALWAYS_INIT_FUNCTIONS, (
+        "总入口必须仍在恒有那四个里（补行 / 检测页渲染器都引用它）"
+    )
 
 
 def test_master_pin_symbols_are_globally_unique():
