@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=e80d40d886583226c928fd14d3b20c8769a1a52b -->
+<!-- changelog-auto: last-commit=bb7c3816a94a173318759116ec991c6f0d119618 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-09-25
+- 00:21 工单 hwcheck-acceptance/01：mspm0 生成链认下 SysConfig 构建期接口面（那一行从注释占位变活代码）
 
 ## 2026-09-24
 - 00:39 工单 hwcheck-unknown-device/12：自建件 id 文法收紧到 C 标识符（连字符建不出坏工程）
