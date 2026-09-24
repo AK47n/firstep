@@ -106,8 +106,8 @@ def test_jy61p_mspm0_syscfg_instances():
     """mspm0 母版：JY61P GPIO 实例（SCL/SDA 输出，运行时 SDA 切输入）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const JY61P = GPIO.addInstance();" in syscfg
-    assert 'JY61P.associatedPins[0].$name        = "SCL";' in syscfg
-    assert 'JY61P.associatedPins[1].$name        = "SDA";' in syscfg
+    assert 'JY61P.associatedPins[0].$name        = "JY61P_SCL";' in syscfg
+    assert 'JY61P.associatedPins[1].$name        = "JY61P_SDA";' in syscfg
     assert 'JY61P.associatedPins[0].pin.$assign  = "PA28";' in syscfg
     assert 'JY61P.associatedPins[1].pin.$assign  = "PA31";' in syscfg
 

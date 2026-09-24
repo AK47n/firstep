@@ -6,11 +6,11 @@
 
 #include "tcs34725.h"
 #include "delay.h" /* delay_us：软 I2C 位操作延时 */
-#include "ti_msp_dl_config.h" /* TCS34725_PORT / TCS34725_SCL_PIN /
-                               * TCS34725_SDA_PIN / TCS34725_SCL_IOMUX /
-                               * TCS34725_SDA_IOMUX
+#include "ti_msp_dl_config.h" /* TCS34725_PORT / TCS34725_TCS34725_SCL_PIN /
+                               * TCS34725_TCS34725_SDA_PIN / TCS34725_TCS34725_SCL_IOMUX /
+                               * TCS34725_TCS34725_SDA_IOMUX
                                * （SysConfig 生成命名：<实例>_<引脚名>_IOMUX，
-                               * 编译矩阵实测；照 AHT10_SCL_IOMUX 先例） */
+                               * 编译矩阵实测；照 AHT10_AHT10_SCL_IOMUX 先例） */
 
 /* TCS34725 软 I2C 位操作原语（立创 bsp 同款时序，照 aht10 先例：SCL 半周期
  * 2us ≈ 100kHz 级总线速度，TCS34725 规格 ≤400kHz，裕量充足；页面
@@ -19,34 +19,34 @@
 
 #define TCS34725_SDA_OUT()                                  \
     do {                                                    \
-        DL_GPIO_initDigitalOutput(TCS34725_SDA_IOMUX);      \
-        DL_GPIO_setPins(TCS34725_PORT, TCS34725_SDA_PIN);   \
-        DL_GPIO_enableOutput(TCS34725_PORT, TCS34725_SDA_PIN); \
+        DL_GPIO_initDigitalOutput(TCS34725_TCS34725_SDA_IOMUX);      \
+        DL_GPIO_setPins(TCS34725_PORT, TCS34725_TCS34725_SDA_PIN);   \
+        DL_GPIO_enableOutput(TCS34725_PORT, TCS34725_TCS34725_SDA_PIN); \
     } while (0)
 
 #define TCS34725_SDA_IN()                          \
     do {                                           \
-        DL_GPIO_initDigitalInput(TCS34725_SDA_IOMUX); \
+        DL_GPIO_initDigitalInput(TCS34725_TCS34725_SDA_IOMUX); \
     } while (0)
 
 #define TCS34725_SDA_GET() \
-    ((DL_GPIO_readPins(TCS34725_PORT, TCS34725_SDA_PIN) & TCS34725_SDA_PIN) ? 1 : 0)
+    ((DL_GPIO_readPins(TCS34725_PORT, TCS34725_TCS34725_SDA_PIN) & TCS34725_TCS34725_SDA_PIN) ? 1 : 0)
 
 #define TCS34725_SDA(level)                                    \
     do {                                                       \
         if (level) {                                           \
-            DL_GPIO_setPins(TCS34725_PORT, TCS34725_SDA_PIN);  \
+            DL_GPIO_setPins(TCS34725_PORT, TCS34725_TCS34725_SDA_PIN);  \
         } else {                                               \
-            DL_GPIO_clearPins(TCS34725_PORT, TCS34725_SDA_PIN); \
+            DL_GPIO_clearPins(TCS34725_PORT, TCS34725_TCS34725_SDA_PIN); \
         }                                                      \
     } while (0)
 
 #define TCS34725_SCL(level)                                    \
     do {                                                       \
         if (level) {                                           \
-            DL_GPIO_setPins(TCS34725_PORT, TCS34725_SCL_PIN);  \
+            DL_GPIO_setPins(TCS34725_PORT, TCS34725_TCS34725_SCL_PIN);  \
         } else {                                               \
-            DL_GPIO_clearPins(TCS34725_PORT, TCS34725_SCL_PIN); \
+            DL_GPIO_clearPins(TCS34725_PORT, TCS34725_TCS34725_SCL_PIN); \
         }                                                      \
     } while (0)
 

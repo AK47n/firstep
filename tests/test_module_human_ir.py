@@ -116,7 +116,7 @@ def test_human_ir_mspm0_syscfg_instances():
     """mspm0 母版：HUMAN_IR GPIO 实例（OUT 输入，内部上拉，默认 PB8）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const HUMAN_IR = GPIO.addInstance();" in syscfg
-    assert 'HUMAN_IR.associatedPins[0].$name            = "OUT";' in syscfg
+    assert 'HUMAN_IR.associatedPins[0].$name            = "HUMAN_IR_OUT";' in syscfg
     assert 'HUMAN_IR.associatedPins[0].direction        = "INPUT";' in syscfg
     assert 'HUMAN_IR.associatedPins[0].internalResistor = "PULL_UP";' in syscfg
     assert 'HUMAN_IR.associatedPins[0].pin.$assign      = "PB8";' in syscfg

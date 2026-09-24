@@ -6,8 +6,8 @@
 
 #include "sht30.h"
 #include "delay.h" /* delay_us / delay_ms：软 I2C 位操作与读应答重试 */
-#include "ti_msp_dl_config.h" /* SHT30_PORT / SHT30_SCL_PIN / SHT30_SDA_PIN /
-                                * SHT30_SCL_IOMUX / SHT30_SDA_IOMUX
+#include "ti_msp_dl_config.h" /* SHT30_PORT / SHT30_SHT30_SCL_PIN / SHT30_SHT30_SDA_PIN /
+                                * SHT30_SHT30_SCL_IOMUX / SHT30_SHT30_SDA_IOMUX
                                 * （SysConfig 生成命名：<实例>_<引脚名>_IOMUX，
                                 * 编译矩阵实测；照 AHT10 先例） */
 
@@ -17,34 +17,34 @@
 
 #define SHT30_SDA_OUT()                                        \
     do {                                                       \
-        DL_GPIO_initDigitalOutput(SHT30_SDA_IOMUX);            \
-        DL_GPIO_setPins(SHT30_PORT, SHT30_SDA_PIN);            \
-        DL_GPIO_enableOutput(SHT30_PORT, SHT30_SDA_PIN);       \
+        DL_GPIO_initDigitalOutput(SHT30_SHT30_SDA_IOMUX);            \
+        DL_GPIO_setPins(SHT30_PORT, SHT30_SHT30_SDA_PIN);            \
+        DL_GPIO_enableOutput(SHT30_PORT, SHT30_SHT30_SDA_PIN);       \
     } while (0)
 
 #define SHT30_SDA_IN()                    \
     do {                                  \
-        DL_GPIO_initDigitalInput(SHT30_SDA_IOMUX); \
+        DL_GPIO_initDigitalInput(SHT30_SHT30_SDA_IOMUX); \
     } while (0)
 
 #define SHT30_SDA_GET() \
-    ((DL_GPIO_readPins(SHT30_PORT, SHT30_SDA_PIN) & SHT30_SDA_PIN) ? 1 : 0)
+    ((DL_GPIO_readPins(SHT30_PORT, SHT30_SHT30_SDA_PIN) & SHT30_SHT30_SDA_PIN) ? 1 : 0)
 
 #define SHT30_SDA(x)                                              \
     do {                                                          \
         if (x) {                                                  \
-            DL_GPIO_setPins(SHT30_PORT, SHT30_SDA_PIN);           \
+            DL_GPIO_setPins(SHT30_PORT, SHT30_SHT30_SDA_PIN);           \
         } else {                                                  \
-            DL_GPIO_clearPins(SHT30_PORT, SHT30_SDA_PIN);         \
+            DL_GPIO_clearPins(SHT30_PORT, SHT30_SHT30_SDA_PIN);         \
         }                                                         \
     } while (0)
 
 #define SHT30_SCL(x)                                              \
     do {                                                          \
         if (x) {                                                  \
-            DL_GPIO_setPins(SHT30_PORT, SHT30_SCL_PIN);           \
+            DL_GPIO_setPins(SHT30_PORT, SHT30_SHT30_SCL_PIN);           \
         } else {                                                  \
-            DL_GPIO_clearPins(SHT30_PORT, SHT30_SCL_PIN);         \
+            DL_GPIO_clearPins(SHT30_PORT, SHT30_SHT30_SCL_PIN);         \
         }                                                         \
     } while (0)
 

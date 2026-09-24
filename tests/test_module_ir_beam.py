@@ -92,7 +92,7 @@ def test_ir_beam_mspm0_syscfg_instance():
     上拉（PULL_UP，与 stm32 侧 IU 对等——遮挡高电平依赖上拉钳位）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const IR_BEAM = GPIO.addInstance();" in syscfg
-    assert 'IR_BEAM.associatedPins[0].$name            = "OUT";' in syscfg
+    assert 'IR_BEAM.associatedPins[0].$name            = "IR_BEAM_OUT";' in syscfg
     assert 'IR_BEAM.associatedPins[0].direction        = "INPUT";' in syscfg
     assert 'IR_BEAM.associatedPins[0].internalResistor = "PULL_UP";' in syscfg
     assert 'IR_BEAM.associatedPins[0].pin.$assign      = "PA8";' in syscfg

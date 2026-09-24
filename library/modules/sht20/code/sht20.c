@@ -6,8 +6,8 @@
 
 #include "sht20.h"
 #include "delay.h" /* delay_us / delay_ms：软 I2C 位操作与读应答重试 */
-#include "ti_msp_dl_config.h" /* SHT20_PORT / SHT20_SCL_PIN / SHT20_SDA_PIN /
-                                * SHT20_SCL_IOMUX / SHT20_SDA_IOMUX
+#include "ti_msp_dl_config.h" /* SHT20_PORT / SHT20_SHT20_SCL_PIN / SHT20_SHT20_SDA_PIN /
+                                * SHT20_SHT20_SCL_IOMUX / SHT20_SHT20_SDA_IOMUX
                                 * （SysConfig 生成命名：<实例>_<引脚名>_IOMUX，
                                 * 照 AHT10/SHT30 先例） */
 
@@ -17,34 +17,34 @@
 
 #define SHT20_SDA_OUT()                                        \
     do {                                                       \
-        DL_GPIO_initDigitalOutput(SHT20_SDA_IOMUX);            \
-        DL_GPIO_setPins(SHT20_PORT, SHT20_SDA_PIN);            \
-        DL_GPIO_enableOutput(SHT20_PORT, SHT20_SDA_PIN);       \
+        DL_GPIO_initDigitalOutput(SHT20_SHT20_SDA_IOMUX);            \
+        DL_GPIO_setPins(SHT20_PORT, SHT20_SHT20_SDA_PIN);            \
+        DL_GPIO_enableOutput(SHT20_PORT, SHT20_SHT20_SDA_PIN);       \
     } while (0)
 
 #define SHT20_SDA_IN()                    \
     do {                                  \
-        DL_GPIO_initDigitalInput(SHT20_SDA_IOMUX); \
+        DL_GPIO_initDigitalInput(SHT20_SHT20_SDA_IOMUX); \
     } while (0)
 
 #define SHT20_SDA_GET() \
-    ((DL_GPIO_readPins(SHT20_PORT, SHT20_SDA_PIN) & SHT20_SDA_PIN) ? 1 : 0)
+    ((DL_GPIO_readPins(SHT20_PORT, SHT20_SHT20_SDA_PIN) & SHT20_SHT20_SDA_PIN) ? 1 : 0)
 
 #define SHT20_SDA(x)                                              \
     do {                                                          \
         if (x) {                                                  \
-            DL_GPIO_setPins(SHT20_PORT, SHT20_SDA_PIN);           \
+            DL_GPIO_setPins(SHT20_PORT, SHT20_SHT20_SDA_PIN);           \
         } else {                                                  \
-            DL_GPIO_clearPins(SHT20_PORT, SHT20_SDA_PIN);         \
+            DL_GPIO_clearPins(SHT20_PORT, SHT20_SHT20_SDA_PIN);         \
         }                                                         \
     } while (0)
 
 #define SHT20_SCL(x)                                              \
     do {                                                          \
         if (x) {                                                  \
-            DL_GPIO_setPins(SHT20_PORT, SHT20_SCL_PIN);           \
+            DL_GPIO_setPins(SHT20_PORT, SHT20_SHT20_SCL_PIN);           \
         } else {                                                  \
-            DL_GPIO_clearPins(SHT20_PORT, SHT20_SCL_PIN);         \
+            DL_GPIO_clearPins(SHT20_PORT, SHT20_SHT20_SCL_PIN);         \
         }                                                         \
     } while (0)
 

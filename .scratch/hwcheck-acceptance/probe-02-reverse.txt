@@ -1,0 +1,24 @@
+=== 工单 02 反证探针（母版 syscfg：逐字节复原 + sha256 复核）===
+母版：library/masters/mspm0/mspm0.syscfg
+注入前 sha256：d40e7fe750a8696a0273f943ebdf1fd7f6fbbe726b29ce7dbb71b3c473741bfa
+
+── 注入 A｜撤回一组改名（OLED_SPI + JY61P）
+     守卫用例：RED（1 failed in 0.15s）
+     组合用例：RED（1 failed in 0.79s）
+     期望：守卫 RED✓
+     期望：组合用例 RED✓
+
+── 注入 B｜再塞一个撞名实例（借既有的 TRIG）
+     守卫用例：RED（1 failed in 0.13s）
+     期望：守卫 RED✓
+
+── 注入 C｜只撤回一边（阴性对照）
+     守卫用例：GREEN（1 passed in 0.07s）
+     组合用例：GREEN（1 passed in 0.18s）
+     期望：守卫 GREEN✓
+     期望：组合用例 GREEN✓
+
+复原 sha256：d40e7fe750a8696a0273f943ebdf1fd7f6fbbe726b29ce7dbb71b3c473741bfa（相等 ✓）
+复原后回绿：守卫 PASS（1 passed in 0.06s）｜组合 PASS（1 passed in 0.16s）
+
+=== 结论：反证成立 ===

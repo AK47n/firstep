@@ -5,7 +5,7 @@
  * 标明来源与链接。 */
 
 #include "relay.h"
-#include "ti_msp_dl_config.h" /* RELAY_PORT / RELAY_OUT_PIN
+#include "ti_msp_dl_config.h" /* RELAY_PORT / RELAY_RELAY_OUT_PIN
                                 * （SysConfig 生成命名：<实例>_<引脚名>_PIN
                                 * + 单 <实例>_PORT 宏；单脚输出实例，
                                 * IR_TX/GP2Y1014 先例） */
@@ -15,10 +15,10 @@
  * = 引脚低电平吸合——页面「低电平吸合」模块）。 */
 
 /* 页面 RELAY_OUT 宏原式保留为底层：x ? 引脚高 : 引脚低（页面
- * DL_GPIO_setPins/clearPins 分发，GPIO_IN1_PIN → RELAY_OUT_PIN） */
+ * DL_GPIO_setPins/clearPins 分发，GPIO_IN1_PIN → RELAY_RELAY_OUT_PIN） */
 #define RELAY_OUT(x) \
-    ((x) ? DL_GPIO_setPins(RELAY_PORT, RELAY_OUT_PIN) \
-         : DL_GPIO_clearPins(RELAY_PORT, RELAY_OUT_PIN))
+    ((x) ? DL_GPIO_setPins(RELAY_PORT, RELAY_RELAY_OUT_PIN) \
+         : DL_GPIO_clearPins(RELAY_PORT, RELAY_RELAY_OUT_PIN))
 
 void relay_init(void)
 {

@@ -71,15 +71,15 @@ def test_rc522_mspm0_syscfg_instances():
     """mspm0 母版：RC522 GPIO 实例（5 associatedPins 全 GPIOA 单口）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const RC522 = GPIO.addInstance();" in syscfg
-    assert 'RC522.associatedPins[0].$name        = "CS";' in syscfg
+    assert 'RC522.associatedPins[0].$name        = "RC522_CS";' in syscfg
     assert 'RC522.associatedPins[0].pin.$assign  = "PA7";' in syscfg
     assert 'RC522.associatedPins[1].$name        = "RST";' in syscfg
     assert 'RC522.associatedPins[1].pin.$assign  = "PA18";' in syscfg
-    assert 'RC522.associatedPins[2].$name        = "SCK";' in syscfg
+    assert 'RC522.associatedPins[2].$name        = "RC522_SCK";' in syscfg
     assert 'RC522.associatedPins[2].pin.$assign  = "PA14";' in syscfg
-    assert 'RC522.associatedPins[3].$name        = "MOSI";' in syscfg
+    assert 'RC522.associatedPins[3].$name        = "RC522_MOSI";' in syscfg
     assert 'RC522.associatedPins[3].pin.$assign  = "PA16";' in syscfg
-    assert 'RC522.associatedPins[4].$name        = "MISO";' in syscfg
+    assert 'RC522.associatedPins[4].$name        = "RC522_MISO";' in syscfg
     assert 'RC522.associatedPins[4].direction    = "INPUT";' in syscfg
     assert 'RC522.associatedPins[4].pin.$assign  = "PA17";' in syscfg
 

@@ -135,7 +135,7 @@ def test_hx711_mspm0_syscfg_instance():
     """mspm0 母版必须有 HX711 实例（SCK=PA28 输出 / DT=PA31 输入带上拉）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const HX711 = GPIO.addInstance();" in syscfg
-    assert 'HX711.associatedPins[0].$name        = "SCK";' in syscfg
+    assert 'HX711.associatedPins[0].$name        = "HX711_SCK";' in syscfg
     assert 'HX711.associatedPins[0].pin.$assign  = "PA28";' in syscfg
     assert 'HX711.associatedPins[1].$name        = "DT";' in syscfg
     assert 'HX711.associatedPins[1].pin.$assign  = "PA31";' in syscfg

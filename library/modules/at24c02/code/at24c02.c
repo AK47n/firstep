@@ -6,10 +6,10 @@
 
 #include "at24c02.h"
 #include "delay.h" /* delay_ms：软 I2C 位操作延时与写周期等待 */
-#include "ti_msp_dl_config.h" /* AT24C02_PORT / AT24C02_SCL_PIN / AT24C02_SDA_PIN /
-                               * AT24C02_SCL_IOMUX / AT24C02_SDA_IOMUX
+#include "ti_msp_dl_config.h" /* AT24C02_PORT / AT24C02_AT24C02_SCL_PIN / AT24C02_AT24C02_SDA_PIN /
+                               * AT24C02_AT24C02_SCL_IOMUX / AT24C02_AT24C02_SDA_IOMUX
                                * （SysConfig 生成命名：<实例>_<引脚名>_IOMUX，
-                               * 编译矩阵实测；照 AHT10_SCL_IOMUX 先例） */
+                               * 编译矩阵实测；照 AHT10_AHT10_SCL_IOMUX 先例） */
 
 /* AT24C02 软 I2C 位操作原语（立创 bsp 同款时序，照 aht10 先例：SCL 半周期
  * 2us ≈ 100kHz 级总线速度，AT24C02 400kHz 规格裕量充足；页面 `delay_us(1)/5/5`
@@ -18,34 +18,34 @@
 
 #define AT24C02_SDA_OUT()                                 \
     do {                                                  \
-        DL_GPIO_initDigitalOutput(AT24C02_SDA_IOMUX);     \
-        DL_GPIO_setPins(AT24C02_PORT, AT24C02_SDA_PIN);   \
-        DL_GPIO_enableOutput(AT24C02_PORT, AT24C02_SDA_PIN); \
+        DL_GPIO_initDigitalOutput(AT24C02_AT24C02_SDA_IOMUX);     \
+        DL_GPIO_setPins(AT24C02_PORT, AT24C02_AT24C02_SDA_PIN);   \
+        DL_GPIO_enableOutput(AT24C02_PORT, AT24C02_AT24C02_SDA_PIN); \
     } while (0)
 
 #define AT24C02_SDA_IN()                          \
     do {                                          \
-        DL_GPIO_initDigitalInput(AT24C02_SDA_IOMUX); \
+        DL_GPIO_initDigitalInput(AT24C02_AT24C02_SDA_IOMUX); \
     } while (0)
 
 #define AT24C02_SDA_GET() \
-    ((DL_GPIO_readPins(AT24C02_PORT, AT24C02_SDA_PIN) & AT24C02_SDA_PIN) ? 1 : 0)
+    ((DL_GPIO_readPins(AT24C02_PORT, AT24C02_AT24C02_SDA_PIN) & AT24C02_AT24C02_SDA_PIN) ? 1 : 0)
 
 #define AT24C02_SDA(level)                                    \
     do {                                                      \
         if (level) {                                          \
-            DL_GPIO_setPins(AT24C02_PORT, AT24C02_SDA_PIN);   \
+            DL_GPIO_setPins(AT24C02_PORT, AT24C02_AT24C02_SDA_PIN);   \
         } else {                                              \
-            DL_GPIO_clearPins(AT24C02_PORT, AT24C02_SDA_PIN); \
+            DL_GPIO_clearPins(AT24C02_PORT, AT24C02_AT24C02_SDA_PIN); \
         }                                                     \
     } while (0)
 
 #define AT24C02_SCL(level)                                    \
     do {                                                      \
         if (level) {                                          \
-            DL_GPIO_setPins(AT24C02_PORT, AT24C02_SCL_PIN);   \
+            DL_GPIO_setPins(AT24C02_PORT, AT24C02_AT24C02_SCL_PIN);   \
         } else {                                              \
-            DL_GPIO_clearPins(AT24C02_PORT, AT24C02_SCL_PIN); \
+            DL_GPIO_clearPins(AT24C02_PORT, AT24C02_AT24C02_SCL_PIN); \
         }                                                     \
     } while (0)
 

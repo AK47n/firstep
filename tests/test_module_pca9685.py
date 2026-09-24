@@ -135,9 +135,9 @@ def test_pca9685_mspm0_syscfg_instance():
     """mspm0 母版必须有 PCA9685 实例（SCL=PB6 / SDA=PB7，输出）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const PCA9685 = GPIO.addInstance();" in syscfg
-    assert 'PCA9685.associatedPins[0].$name        = "SCL";' in syscfg
+    assert 'PCA9685.associatedPins[0].$name        = "PCA9685_SCL";' in syscfg
     assert 'PCA9685.associatedPins[0].pin.$assign  = "PB6";' in syscfg
-    assert 'PCA9685.associatedPins[1].$name        = "SDA";' in syscfg
+    assert 'PCA9685.associatedPins[1].$name        = "PCA9685_SDA";' in syscfg
     assert 'PCA9685.associatedPins[1].pin.$assign  = "PB7";' in syscfg
 
 

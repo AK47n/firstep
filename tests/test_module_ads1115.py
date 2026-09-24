@@ -140,8 +140,8 @@ def test_ads1115_mspm0_syscfg_instance():
     """mspm0 母版必须有 ADS1115 实例（SCL=PA16 / SDA=PA17，输出）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const ADS1115 = GPIO.addInstance();" in syscfg
-    assert 'ADS1115.associatedPins[0].$name        = "SCL";' in syscfg
-    assert 'ADS1115.associatedPins[1].$name        = "SDA";' in syscfg
+    assert 'ADS1115.associatedPins[0].$name        = "ADS1115_SCL";' in syscfg
+    assert 'ADS1115.associatedPins[1].$name        = "ADS1115_SDA";' in syscfg
     assert 'ADS1115.associatedPins[0].pin.$assign  = "PA16";' in syscfg
     assert 'ADS1115.associatedPins[1].pin.$assign  = "PA17";' in syscfg
 

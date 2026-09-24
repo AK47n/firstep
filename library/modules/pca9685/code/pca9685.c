@@ -6,8 +6,8 @@
 
 #include "pca9685.h"
 #include "delay.h" /* delay_us / delay_ms：软 I2C 位操作与 5ms 唤醒延时 */
-#include "ti_msp_dl_config.h" /* PCA9685_PORT / PCA9685_SCL_PIN / PCA9685_SDA_PIN /
-                                * PCA9685_SCL_IOMUX / PCA9685_SDA_IOMUX
+#include "ti_msp_dl_config.h" /* PCA9685_PORT / PCA9685_PCA9685_SCL_PIN / PCA9685_PCA9685_SDA_PIN /
+                                * PCA9685_PCA9685_SCL_IOMUX / PCA9685_PCA9685_SDA_IOMUX
                                 * （SysConfig 生成命名：<实例>_<引脚名>_IOMUX，
                                 * 编译矩阵实测；照 AHT10 先例） */
 
@@ -24,34 +24,34 @@
  * PCA9685 规格支持到 400kHz+；SDA 方向运行时切换） */
 #define PCA9685_SDA_OUT()                                          \
     do {                                                           \
-        DL_GPIO_initDigitalOutput(PCA9685_SDA_IOMUX);              \
-        DL_GPIO_setPins(PCA9685_PORT, PCA9685_SDA_PIN);            \
-        DL_GPIO_enableOutput(PCA9685_PORT, PCA9685_SDA_PIN);       \
+        DL_GPIO_initDigitalOutput(PCA9685_PCA9685_SDA_IOMUX);              \
+        DL_GPIO_setPins(PCA9685_PORT, PCA9685_PCA9685_SDA_PIN);            \
+        DL_GPIO_enableOutput(PCA9685_PORT, PCA9685_PCA9685_SDA_PIN);       \
     } while (0)
 
 #define PCA9685_SDA_IN()                    \
     do {                                    \
-        DL_GPIO_initDigitalInput(PCA9685_SDA_IOMUX); \
+        DL_GPIO_initDigitalInput(PCA9685_PCA9685_SDA_IOMUX); \
     } while (0)
 
 #define PCA9685_SDA_GET() \
-    ((DL_GPIO_readPins(PCA9685_PORT, PCA9685_SDA_PIN) & PCA9685_SDA_PIN) ? 1 : 0)
+    ((DL_GPIO_readPins(PCA9685_PORT, PCA9685_PCA9685_SDA_PIN) & PCA9685_PCA9685_SDA_PIN) ? 1 : 0)
 
 #define PCA9685_SDA(x)                                            \
     do {                                                          \
         if (x) {                                                  \
-            DL_GPIO_setPins(PCA9685_PORT, PCA9685_SDA_PIN);       \
+            DL_GPIO_setPins(PCA9685_PORT, PCA9685_PCA9685_SDA_PIN);       \
         } else {                                                  \
-            DL_GPIO_clearPins(PCA9685_PORT, PCA9685_SDA_PIN);     \
+            DL_GPIO_clearPins(PCA9685_PORT, PCA9685_PCA9685_SDA_PIN);     \
         }                                                         \
     } while (0)
 
 #define PCA9685_SCL(x)                                            \
     do {                                                          \
         if (x) {                                                  \
-            DL_GPIO_setPins(PCA9685_PORT, PCA9685_SCL_PIN);       \
+            DL_GPIO_setPins(PCA9685_PORT, PCA9685_PCA9685_SCL_PIN);       \
         } else {                                                  \
-            DL_GPIO_clearPins(PCA9685_PORT, PCA9685_SCL_PIN);     \
+            DL_GPIO_clearPins(PCA9685_PORT, PCA9685_PCA9685_SCL_PIN);     \
         }                                                         \
     } while (0)
 

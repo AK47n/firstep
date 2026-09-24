@@ -130,9 +130,9 @@ def test_bmp180_mspm0_syscfg_instances():
     """mspm0 母版：BMP180 GPIO 实例（SCL/SDA 输出 PA23/PA24）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const BMP180 = GPIO.addInstance();" in syscfg
-    assert 'BMP180.associatedPins[0].$name        = "SCL";' in syscfg
+    assert 'BMP180.associatedPins[0].$name        = "BMP180_SCL";' in syscfg
     assert 'BMP180.associatedPins[0].pin.$assign  = "PA23";' in syscfg
-    assert 'BMP180.associatedPins[1].$name        = "SDA";' in syscfg
+    assert 'BMP180.associatedPins[1].$name        = "BMP180_SDA";' in syscfg
     assert 'BMP180.associatedPins[1].pin.$assign  = "PA24";' in syscfg
 
 

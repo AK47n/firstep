@@ -1200,14 +1200,19 @@ def test_syscfg_pin_conflicts_binding_moves_the_conflict(tmp_path):
     assert "motor.BIN2" in str(excinfo.value)
 
 
-def test_syscfg_pin_name_collision_is_a_loud_failure(tmp_path):
-    """**同名引脚符号**也要在生成前拦下（工单 11）：地猛星 + 板子活着 + 调试串口
-    + OLED + JY61P。
+def test_syscfg_pin_name_collision_is_a_loud_failure(
+    tmp_path, collision_reverted_syscfg
+):
+    """**同名引脚符号**也要在生成前拦下（工单 11），母版上真撞名时（工单 02 之后
+    靠"撤回改名一处"造现场）。
 
-    这一组是**最日常的搭配**（显示屏 + 一件传感器），而它今天能一路生成到编译期：
-    生成端点返回 200、工程落盘，然后在 CCS 里报 4 个
-    `Duplicate name: 'SCL'`（工单 11 实测 exit=2）。用户拿到的是一份"生成了但编译
-    不过"的工程——「打开的工程就能编译」这条底线当场破。
+    现场：工单 `hwcheck-acceptance/02` 已把母版 14 组同名符号全部改名，真母版今天
+    一组重名都没有，判据不会自己红。`collision_reverted_syscfg` = 真母版 + 把
+    OLED_SPI / JY61P 的 SCL/SDA **撤回**成裸名，等价于"将来又有模块把引脚起成
+    同名"。地猛星 + 板子活着 + 调试串口 + OLED + JY61P 这一组是**最日常的搭配**
+    （显示屏 + 一件传感器）：判据缺席时它能一路生成到编译期——生成端点返回 200、
+    工程落盘，然后在 CCS 里报 4 个 `Duplicate name: 'SCL'`（工单 11 实测 exit=2）。
+    用户拿到的是一份"生成了但编译不过"的工程——「打开的工程就能编译」这条底线当场破。
 
     走**用户实际动作的那条序**：先原样生成一次（这一跳会先撞上 PA22 那条**已知**
     的同脚冲突——`debug_uart` 与 `oled` 抢 PA22，属于既有判据），再点一次
@@ -1215,11 +1220,14 @@ def test_syscfg_pin_name_collision_is_a_loud_failure(tmp_path):
 
     判据三条腿：① 拦下来了（`SyscfgPinConflictError`）；② 文案说的是**重名**、
     不是"脚被占"（两根轴两套话——拿"改绑"去指路会把人带沟里）；③ 点名了撞车的
-    两件模块，学生知道去掉哪件。
+    两件模块，学生知道去掉哪件。第四条腿是**真母版上必须放行**（02 打开的那一格，
+    判据不许把好路也拦掉）。
     """
     from contest_generator.pin_bindings import auto_assign_bindings
 
-    corpus = _real_mspm0_syscfg_corpus(tmp_path)
+    corpus = _memory_corpus(
+        tmp_path, platform=PLATFORM_MSPM0, master_syscfg=collision_reverted_syscfg
+    )
     manifests = _real_mspm0_manifests("led", "delay", "debug_uart", "oled", "jy61p")
     board = _mspm0_board()
 
@@ -1248,16 +1256,58 @@ def test_syscfg_pin_name_collision_is_a_loud_failure(tmp_path):
     for slug in ("oled", "jy61p"):
         assert slug in message, f"要点名撞车的模块 {slug}：{message}"
 
+    # 第四跳：真母版（02 之后）+ 同一组选择 → 放行
+    real = _real_mspm0_syscfg_corpus(tmp_path)
+    _check_syscfg_pin_conflicts(
+        real, manifests, PLATFORM_MSPM0,
+        GateContext(board=board, bindings=solved.bindings),
+    )
 
-def test_syscfg_pin_name_collision_is_solved_by_dropping_one_module(tmp_path):
-    """反向：去掉 JY61P（只留 OLED），并点过「自动配置」→ 门禁放行。
 
-    判据是**裁剪后**的模型：没选中的实例已被 prune 掉，它那份 `SCL` 不该再算数。
-    在母版全文上判就会永远报错（母版里本来就有 14 组存量重名），那等于把整条路堵死。
+def test_mspm0_oled_plus_i2c_sensor_passes_the_gate(tmp_path):
+    """工单 `hwcheck-acceptance/02` 打开的那一格：**「OLED 屏 + 一件 I2C 器件」
+    在地猛星上能生成**（判据 = 生成门禁放行，引脚按用户动作先点过「自动配置」）。
+
+    02 之前这四格全部 400（`SCL`/`SDA` 撞名，实测读数
+    `.scratch/hwcheck-acceptance/probe-02-combos.txt`）。同批打开的还有
+    `led_beep + gp2y1014au`（`LED` 那一组）——一并钉在这里，防回归。
     """
     from contest_generator.pin_bindings import auto_assign_bindings
 
     corpus = _real_mspm0_syscfg_corpus(tmp_path)
+    board = _mspm0_board()
+    combos = (
+        ("led", "delay", "debug_uart", "oled", "jy61p"),
+        ("led", "delay", "debug_uart", "oled", "aht10"),
+        ("led", "delay", "debug_uart", "oled", "bh1750"),
+        ("led", "delay", "debug_uart", "oled", "sht30"),
+        ("led", "delay", "debug_uart", "aht10", "bh1750"),
+        ("led_beep", "gp2y1014au"),
+    )
+    for slugs in combos:
+        manifests = _real_mspm0_manifests(*slugs)
+        solved = auto_assign_bindings(
+            manifests, PLATFORM_MSPM0, board, {}, resolve_default_conflicts=True
+        )
+        _check_syscfg_pin_conflicts(
+            corpus, manifests, PLATFORM_MSPM0,
+            GateContext(board=board, bindings=solved.bindings),
+        )
+
+
+def test_syscfg_pin_name_collision_is_solved_by_dropping_one_module(
+    tmp_path, collision_reverted_syscfg
+):
+    """反向：在重名现场上去掉 JY61P（只留 OLED），并点过「自动配置」→ 门禁放行。
+
+    判据是**裁剪后**的模型：没选中的实例已被 prune 掉，它那份 `SCL` 不该再算数。
+    在母版全文上判就会永远报错，那等于把整条路堵死。
+    """
+    from contest_generator.pin_bindings import auto_assign_bindings
+
+    corpus = _memory_corpus(
+        tmp_path, platform=PLATFORM_MSPM0, master_syscfg=collision_reverted_syscfg
+    )
     manifests = _real_mspm0_manifests("led", "delay", "debug_uart", "oled")
     board = _mspm0_board()
     solved = auto_assign_bindings(

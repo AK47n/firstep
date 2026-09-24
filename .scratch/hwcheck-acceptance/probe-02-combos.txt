@@ -1,0 +1,32 @@
+=== 工单 02 裁决依据：mspm0 眼下哪些组合撞在墙上（生成期读数）===
+合计 12 格：生成 200 = 2 格，生成前拦下 = 10 格
+
+[200  ] 骨架（只有通道）
+[400/重名] oled＋aht10
+          · SCL：aht10(AHT10) × oled(OLED_SPI)
+          · SDA：aht10(AHT10) × oled(OLED_SPI)
+[400/重名] aht10＋bh1750（环境站）
+          · SCL：aht10(AHT10) × bh1750(BH1750)
+          · SDA：aht10(AHT10) × bh1750(BH1750)
+[400/重名] aht10＋sht30（同族互替）
+          · SCL：aht10(AHT10) × sht30(SHT30)
+          · SDA：aht10(AHT10) × sht30(SHT30)
+[400/重名] oled＋lcd（两块屏）
+          · CS：lcd(LCD) × oled(OLED_SPI)
+          · DC：lcd(LCD) × oled(OLED_SPI)
+          · RES：lcd(LCD) × oled(OLED_SPI)
+          · SCL：lcd(LCD) × oled(OLED_SPI)
+[200  ] mpu6050＋aht10（硬 I2C＋软 I2C）
+[400/重名] led_beep＋gp2y1014au
+          · LED：gp2y1014au(GP2Y1014) × led(LED_BEEP)
+[400/重名] rc522＋nrf24l01
+          · MISO：nrf24l01(NRF24L01) × rc522(RC522)
+          · MOSI：nrf24l01(NRF24L01) × rc522(RC522)
+[400/重名] dht11＋ds18b20
+          · DATA：dht11(DHT11) × ds18b20(DS18B20)
+[400/重名] jq8900＋syn6288（两路语音）
+          · TX：jq8900(JQ8900) × syn6288(SYN6288)
+[400/重名] hx711＋rc522
+          · SCK：hx711(HX711) × rc522(RC522)
+[400/重名] relay＋human_ir
+          · OUT：human_ir(HUMAN_IR) × relay(RELAY)

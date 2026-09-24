@@ -6,8 +6,8 @@
 
 #include "ds18b20.h"
 #include "delay.h" /* delay_us / delay_ms：单总线位时序与转换等待 */
-#include "ti_msp_dl_config.h" /* DS18B20_PORT / DS18B20_DATA_PIN /
-                                * DS18B20_DATA_IOMUX（SysConfig 生成命名
+#include "ti_msp_dl_config.h" /* DS18B20_PORT / DS18B20_DS18B20_DATA_PIN /
+                                * DS18B20_DS18B20_DATA_IOMUX（SysConfig 生成命名
                                 * <实例>_<引脚名>_IOMUX，aht10 编译矩阵实测） */
 
 /* DS18B20 1-Wire 单总线位操作原语（立创 bsp 同款时序：复位低 750us、
@@ -18,25 +18,25 @@
 
 #define DS18B20_DATA_OUT()                                     \
     do {                                                       \
-        DL_GPIO_initDigitalOutput(DS18B20_DATA_IOMUX);         \
-        DL_GPIO_setPins(DS18B20_PORT, DS18B20_DATA_PIN);       \
-        DL_GPIO_enableOutput(DS18B20_PORT, DS18B20_DATA_PIN);  \
+        DL_GPIO_initDigitalOutput(DS18B20_DS18B20_DATA_IOMUX);         \
+        DL_GPIO_setPins(DS18B20_PORT, DS18B20_DS18B20_DATA_PIN);       \
+        DL_GPIO_enableOutput(DS18B20_PORT, DS18B20_DS18B20_DATA_PIN);  \
     } while (0)
 
 #define DS18B20_DATA_IN()                    \
     do {                                     \
-        DL_GPIO_initDigitalInput(DS18B20_DATA_IOMUX); \
+        DL_GPIO_initDigitalInput(DS18B20_DS18B20_DATA_IOMUX); \
     } while (0)
 
 #define DS18B20_DATA_GET() \
-    ((DL_GPIO_readPins(DS18B20_PORT, DS18B20_DATA_PIN) & DS18B20_DATA_PIN) ? 1 : 0)
+    ((DL_GPIO_readPins(DS18B20_PORT, DS18B20_DS18B20_DATA_PIN) & DS18B20_DS18B20_DATA_PIN) ? 1 : 0)
 
 #define DS18B20_DATA_SET(level)                                  \
     do {                                                         \
         if (level) {                                             \
-            DL_GPIO_setPins(DS18B20_PORT, DS18B20_DATA_PIN);     \
+            DL_GPIO_setPins(DS18B20_PORT, DS18B20_DS18B20_DATA_PIN);     \
         } else {                                                 \
-            DL_GPIO_clearPins(DS18B20_PORT, DS18B20_DATA_PIN);   \
+            DL_GPIO_clearPins(DS18B20_PORT, DS18B20_DS18B20_DATA_PIN);   \
         }                                                        \
     } while (0)
 

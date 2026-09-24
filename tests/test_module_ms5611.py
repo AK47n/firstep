@@ -180,9 +180,9 @@ def test_ms5611_mspm0_syscfg_instances():
     """mspm0 母版：MS5611 GPIO 实例（SCL/SDA 输出 PA28/PA31）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const MS5611 = GPIO.addInstance();" in syscfg
-    assert 'MS5611.associatedPins[0].$name        = "SCL";' in syscfg
+    assert 'MS5611.associatedPins[0].$name        = "MS5611_SCL";' in syscfg
     assert 'MS5611.associatedPins[0].pin.$assign  = "PA28";' in syscfg
-    assert 'MS5611.associatedPins[1].$name        = "SDA";' in syscfg
+    assert 'MS5611.associatedPins[1].$name        = "MS5611_SDA";' in syscfg
     assert 'MS5611.associatedPins[1].pin.$assign  = "PA31";' in syscfg
 
 

@@ -9,9 +9,9 @@
 #include "qmc5883l.h"
 #include "delay.h" /* delay_ms：软复位后等待器件进 Standby、DRDY 轮询 */
 #include "math.h"  /* atan2f：航向角换算（bmp180 编译先例） */
-#include "ti_msp_dl_config.h" /* QMC5883L_PORT / QMC5883L_SCL_PIN /
-                               * QMC5883L_SDA_PIN / QMC5883L_SCL_IOMUX /
-                               * QMC5883L_SDA_IOMUX
+#include "ti_msp_dl_config.h" /* QMC5883L_PORT / QMC5883L_QMC5883L_SCL_PIN /
+                               * QMC5883L_QMC5883L_SDA_PIN / QMC5883L_QMC5883L_SCL_IOMUX /
+                               * QMC5883L_QMC5883L_SDA_IOMUX
                                * （SysConfig 生成命名：<实例>_<引脚名>_IOMUX） */
 
 /* QMC5883L 软 I2C 位操作原语（照 bh1750 先例：半周期 2us ≈ 100kHz 级，
@@ -20,34 +20,34 @@
 
 #define QMC5883L_SDA_OUT()                                   \
     do {                                                     \
-        DL_GPIO_initDigitalOutput(QMC5883L_SDA_IOMUX);       \
-        DL_GPIO_setPins(QMC5883L_PORT, QMC5883L_SDA_PIN);    \
-        DL_GPIO_enableOutput(QMC5883L_PORT, QMC5883L_SDA_PIN); \
+        DL_GPIO_initDigitalOutput(QMC5883L_QMC5883L_SDA_IOMUX);       \
+        DL_GPIO_setPins(QMC5883L_PORT, QMC5883L_QMC5883L_SDA_PIN);    \
+        DL_GPIO_enableOutput(QMC5883L_PORT, QMC5883L_QMC5883L_SDA_PIN); \
     } while (0)
 
 #define QMC5883L_SDA_IN()                                \
     do {                                                 \
-        DL_GPIO_initDigitalInput(QMC5883L_SDA_IOMUX);    \
+        DL_GPIO_initDigitalInput(QMC5883L_QMC5883L_SDA_IOMUX);    \
     } while (0)
 
 #define QMC5883L_SDA_GET() \
-    ((DL_GPIO_readPins(QMC5883L_PORT, QMC5883L_SDA_PIN) & QMC5883L_SDA_PIN) ? 1 : 0)
+    ((DL_GPIO_readPins(QMC5883L_PORT, QMC5883L_QMC5883L_SDA_PIN) & QMC5883L_QMC5883L_SDA_PIN) ? 1 : 0)
 
 #define QMC5883L_SDA(level)                                      \
     do {                                                         \
         if (level) {                                             \
-            DL_GPIO_setPins(QMC5883L_PORT, QMC5883L_SDA_PIN);    \
+            DL_GPIO_setPins(QMC5883L_PORT, QMC5883L_QMC5883L_SDA_PIN);    \
         } else {                                                 \
-            DL_GPIO_clearPins(QMC5883L_PORT, QMC5883L_SDA_PIN);  \
+            DL_GPIO_clearPins(QMC5883L_PORT, QMC5883L_QMC5883L_SDA_PIN);  \
         }                                                        \
     } while (0)
 
 #define QMC5883L_SCL(level)                                      \
     do {                                                         \
         if (level) {                                             \
-            DL_GPIO_setPins(QMC5883L_PORT, QMC5883L_SCL_PIN);    \
+            DL_GPIO_setPins(QMC5883L_PORT, QMC5883L_QMC5883L_SCL_PIN);    \
         } else {                                                 \
-            DL_GPIO_clearPins(QMC5883L_PORT, QMC5883L_SCL_PIN);  \
+            DL_GPIO_clearPins(QMC5883L_PORT, QMC5883L_QMC5883L_SCL_PIN);  \
         }                                                        \
     } while (0)
 

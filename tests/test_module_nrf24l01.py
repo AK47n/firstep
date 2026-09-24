@@ -72,11 +72,11 @@ def test_nrf24l01_mspm0_syscfg_instance():
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const NRF24L01 = GPIO.addInstance();" in syscfg
     assert "NRF24L01.associatedPins.create(6);" in syscfg
-    assert 'NRF24L01.associatedPins[0].$name        = "CLK";' in syscfg
+    assert 'NRF24L01.associatedPins[0].$name        = "NRF24L01_CLK";' in syscfg
     assert 'NRF24L01.associatedPins[0].pin.$assign  = "PA26";' in syscfg
-    assert 'NRF24L01.associatedPins[1].$name        = "MOSI";' in syscfg
+    assert 'NRF24L01.associatedPins[1].$name        = "NRF24L01_MOSI";' in syscfg
     assert 'NRF24L01.associatedPins[1].pin.$assign  = "PA25";' in syscfg
-    assert 'NRF24L01.associatedPins[2].$name        = "MISO";' in syscfg
+    assert 'NRF24L01.associatedPins[2].$name        = "NRF24L01_MISO";' in syscfg
     assert 'NRF24L01.associatedPins[2].direction    = "INPUT";' in syscfg
     assert 'NRF24L01.associatedPins[2].pin.$assign  = "PA9";' in syscfg
     assert 'NRF24L01.associatedPins[3].$name        = "CSN";' in syscfg

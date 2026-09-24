@@ -133,7 +133,7 @@ def test_jq8900_mspm0_syscfg_instances():
     """mspm0 母版：JQ8900 GPIO 实例（TX 输出，初始 SET = 空闲高）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const JQ8900 = GPIO.addInstance();" in syscfg
-    assert 'JQ8900.associatedPins[0].$name        = "TX";' in syscfg
+    assert 'JQ8900.associatedPins[0].$name        = "JQ8900_TX";' in syscfg
     assert 'JQ8900.associatedPins[0].direction    = "OUTPUT";' in syscfg
     assert 'JQ8900.associatedPins[0].initialValue = "SET";' in syscfg
     assert 'JQ8900.associatedPins[0].pin.$assign  = "PB19";' in syscfg

@@ -64,7 +64,7 @@ def test_ir_remote_mspm0_syscfg_instance():
     """mspm0 母版必须有 IR_REMOTE 输入实例（OUT = PA26，上拉）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const IR_REMOTE = GPIO.addInstance();" in syscfg
-    assert 'IR_REMOTE.associatedPins[0].$name            = "OUT";' in syscfg
+    assert 'IR_REMOTE.associatedPins[0].$name            = "IR_REMOTE_OUT";' in syscfg
     assert 'IR_REMOTE.associatedPins[0].direction        = "INPUT";' in syscfg
     assert 'IR_REMOTE.associatedPins[0].internalResistor = "PULL_UP";' in syscfg
     assert 'IR_REMOTE.associatedPins[0].pin.$assign      = "PA26";' in syscfg

@@ -15,9 +15,9 @@
 #define LED_GREEN   2
 
 // 每通道 (port, pin)：led.c 读 LED_PIN_TABLE 建表（LED_BEEP 宏由 SysConfig
-// 按 mspm0.syscfg 生成）
+// 按 mspm0.syscfg 生成；引脚符号名 = 实例名_原名，故宏名里实例名出现两次）
 #define LED_CHANNEL_0_PORT LED_BEEP_PORT
-#define LED_CHANNEL_0_PIN  LED_BEEP_LED_PIN
+#define LED_CHANNEL_0_PIN  LED_BEEP_LED_BEEP_LED_PIN
 
 #define LED_PIN_TABLE { {LED_CHANNEL_0_PORT, LED_CHANNEL_0_PIN} }
 

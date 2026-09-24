@@ -478,8 +478,10 @@ def _page_view(
     oled: bool = True,
     recipe_path=None,
     require_pins: bool = True,
+    masters_dir=None,
 ):
-    """直调域层装配（不经 HTTP）：库根 / 母版根都是本仓真库。"""
+    """直调域层装配（不经 HTTP）：库根 / 母版根都是本仓真库
+    （`masters_dir` 只在"造重名现场"的用例里换成临时副本）。"""
     return hwcheck_view(
         HwCheckConfig(
             platform=platform,
@@ -488,7 +490,7 @@ def _page_view(
             devices=tuple(devices),
         ),
         module_library_dir=LIBRARY,
-        masters_dir=MASTERS,
+        masters_dir=MASTERS if masters_dir is None else masters_dir,
         recipe_path=recipe_path,
         require_pins=require_pins,
     )
@@ -533,12 +535,21 @@ def test_hwcheck_view_require_pins_false_skips_the_capacity_verdict():
     assert view.board["wiring"]["rows"], "回读照旧给出接线表"
 
 
-def test_hwcheck_view_surfaces_the_pin_name_collision(tmp_path):
-    """**同名引脚符号**在检测页也要拦下（工单 11 的第二条路）。
+def test_hwcheck_view_surfaces_the_pin_name_collision(
+    collision_reverted_masters_dir,
+):
+    """**同名引脚符号**在检测页也要拦下（工单 11 的第二条路；工单 02 之后现场
+    改为"撤回改名一处"）。
+
+    现场：工单 `hwcheck-acceptance/02` 已把母版 14 组同名符号全部改名，真母版今天
+    一组重名都没有——判据不会自己红。`collision_reverted_masters_dir` = 母版库的
+    临时副本 + 把 OLED_SPI / JY61P 的 SCL/SDA 撤回成裸名，等价于"将来又有模块把
+    引脚起成同名"。
 
     形态是最日常的一组：地猛星 + 默认双通道 + OLED + JY61P。检测页在生成前跑
     与赛题页「自动配置」同一个求解器，PA22 那条同脚冲突解得开，**重名那一轴解不开**
-    ——今天它就一路生成出去，学生在 CCS 里看到 4 个 `Duplicate name`（工单 11 实测）。
+    ——判据缺席时它就一路生成出去，学生在 CCS 里看到 4 个 `Duplicate name`
+    （工单 11 实测）。
 
     判据：`require_pins=True`（预览 / 生成）大声失败 + 给检测页三条出路；文案说的是
     重名（不是"装不下"），并点名撞车的两件。`require_pins=False`（回读那次已生成的
@@ -546,7 +557,10 @@ def test_hwcheck_view_surfaces_the_pin_name_collision(tmp_path):
     """
     devices = ["oled", "jy61p"]
     with pytest.raises(HwCheckError) as excinfo:
-        _page_view(PLATFORM_MSPM0, devices=devices)
+        _page_view(
+            PLATFORM_MSPM0, devices=devices,
+            masters_dir=collision_reverted_masters_dir,
+        )
     message = str(excinfo.value)
     assert HWCHECK_PIN_EXIT_MARKER in message, "失败时要给页面出路"
     assert "符号" in message and "Duplicate name" in message, message
@@ -554,8 +568,23 @@ def test_hwcheck_view_surfaces_the_pin_name_collision(tmp_path):
     for slug in ("oled", "jy61p"):
         assert slug in message, f"要点名撞车的模块 {slug}：{message}"
     assert "改绑引脚解不开" in message, "别把重名的出路说成改绑：" + message
-    view = _page_view(PLATFORM_MSPM0, devices=devices, require_pins=False)
+    view = _page_view(
+        PLATFORM_MSPM0, devices=devices, require_pins=False,
+        masters_dir=collision_reverted_masters_dir,
+    )
     assert view.board["wiring"]["rows"], "回读照旧给出接线表"
+
+
+def test_hwcheck_view_opens_oled_plus_i2c_sensor():
+    """工单 `hwcheck-acceptance/02` 打开的那一格：**真母版上「OLED 屏 + 一件
+    I2C 器件」检测页不再拦**（判据 = 投影照常产出接线表；02 之前这四件全 400）。
+
+    「勾着屏幕看结果 + 我新买的那件传感器」是学生最自然的一次上板组合，
+    02 之前它是死的（实测读数 `.scratch/hwcheck-acceptance/probe-02-combos.txt`）。
+    """
+    for slug in ("jy61p", "aht10", "bh1750", "sht30"):
+        view = _page_view(PLATFORM_MSPM0, devices=["oled", slug])
+        assert view.board["wiring"]["rows"], f"oled + {slug} 应能生成接线表"
 
 
 def test_hwcheck_view_reads_the_recipe_override_path(tmp_path):

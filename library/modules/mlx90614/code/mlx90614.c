@@ -6,11 +6,11 @@
 
 #include "mlx90614.h"
 #include "delay.h" /* delay_us：软 I2C 位操作延时 */
-#include "ti_msp_dl_config.h" /* MLX90614_PORT / MLX90614_SCL_PIN /
-                               * MLX90614_SDA_PIN / MLX90614_SCL_IOMUX /
-                               * MLX90614_SDA_IOMUX
+#include "ti_msp_dl_config.h" /* MLX90614_PORT / MLX90614_MLX90614_SCL_PIN /
+                               * MLX90614_MLX90614_SDA_PIN / MLX90614_MLX90614_SCL_IOMUX /
+                               * MLX90614_MLX90614_SDA_IOMUX
                                * （SysConfig 生成命名：<实例>_<引脚名>_IOMUX，
-                               * 编译矩阵实测；照 AHT10_SCL_IOMUX 先例） */
+                               * 编译矩阵实测；照 AHT10_AHT10_SCL_IOMUX 先例） */
 
 /* MLX90614 软 I2C（SMBus 兼容）位操作原语（立创 bsp 同款时序，照 aht10 先例：
  * SCL 半周期 2us → 标称 ≈250kHz（含软件开销实际略低），高于 SMBus 100kHz
@@ -20,34 +20,34 @@
 
 #define MLX90614_SDA_OUT()                                 \
     do {                                                   \
-        DL_GPIO_initDigitalOutput(MLX90614_SDA_IOMUX);     \
-        DL_GPIO_setPins(MLX90614_PORT, MLX90614_SDA_PIN);  \
-        DL_GPIO_enableOutput(MLX90614_PORT, MLX90614_SDA_PIN); \
+        DL_GPIO_initDigitalOutput(MLX90614_MLX90614_SDA_IOMUX);     \
+        DL_GPIO_setPins(MLX90614_PORT, MLX90614_MLX90614_SDA_PIN);  \
+        DL_GPIO_enableOutput(MLX90614_PORT, MLX90614_MLX90614_SDA_PIN); \
     } while (0)
 
 #define MLX90614_SDA_IN()                          \
     do {                                           \
-        DL_GPIO_initDigitalInput(MLX90614_SDA_IOMUX); \
+        DL_GPIO_initDigitalInput(MLX90614_MLX90614_SDA_IOMUX); \
     } while (0)
 
 #define MLX90614_SDA_GET() \
-    ((DL_GPIO_readPins(MLX90614_PORT, MLX90614_SDA_PIN) & MLX90614_SDA_PIN) ? 1 : 0)
+    ((DL_GPIO_readPins(MLX90614_PORT, MLX90614_MLX90614_SDA_PIN) & MLX90614_MLX90614_SDA_PIN) ? 1 : 0)
 
 #define MLX90614_SDA(level)                                    \
     do {                                                       \
         if (level) {                                           \
-            DL_GPIO_setPins(MLX90614_PORT, MLX90614_SDA_PIN);  \
+            DL_GPIO_setPins(MLX90614_PORT, MLX90614_MLX90614_SDA_PIN);  \
         } else {                                               \
-            DL_GPIO_clearPins(MLX90614_PORT, MLX90614_SDA_PIN); \
+            DL_GPIO_clearPins(MLX90614_PORT, MLX90614_MLX90614_SDA_PIN); \
         }                                                      \
     } while (0)
 
 #define MLX90614_SCL(level)                                    \
     do {                                                       \
         if (level) {                                           \
-            DL_GPIO_setPins(MLX90614_PORT, MLX90614_SCL_PIN);  \
+            DL_GPIO_setPins(MLX90614_PORT, MLX90614_MLX90614_SCL_PIN);  \
         } else {                                               \
-            DL_GPIO_clearPins(MLX90614_PORT, MLX90614_SCL_PIN); \
+            DL_GPIO_clearPins(MLX90614_PORT, MLX90614_MLX90614_SCL_PIN); \
         }                                                      \
     } while (0)
 

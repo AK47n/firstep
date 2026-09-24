@@ -101,7 +101,7 @@ def test_ds18b20_mspm0_syscfg_instances():
     """mspm0 母版：DS18B20 GPIO 实例（DATA 输出，initialValue SET = 空闲高）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const DS18B20 = GPIO.addInstance();" in syscfg
-    assert 'DS18B20.associatedPins[0].$name        = "DATA";' in syscfg
+    assert 'DS18B20.associatedPins[0].$name        = "DS18B20_DATA";' in syscfg
     assert 'DS18B20.associatedPins[0].direction    = "OUTPUT";' in syscfg
     assert 'DS18B20.associatedPins[0].initialValue = "SET";' in syscfg
     assert 'DS18B20.associatedPins[0].pin.$assign  = "PA7";' in syscfg

@@ -25,8 +25,8 @@
 
 static uint8_t _level(void)
 {
-    return (DL_GPIO_readPins(IR_REMOTE_PORT, IR_REMOTE_OUT_PIN)
-            & IR_REMOTE_OUT_PIN) ? 1 : 0;
+    return (DL_GPIO_readPins(IR_REMOTE_PORT, IR_REMOTE_IR_REMOTE_OUT_PIN)
+            & IR_REMOTE_IR_REMOTE_OUT_PIN) ? 1 : 0;
 }
 
 static volatile uint8_t _have = 0;

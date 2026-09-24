@@ -102,7 +102,7 @@ def test_dht11_mspm0_syscfg_instances():
     """mspm0 母版：DHT11 GPIO 实例（DATA 输出，initialValue SET = 空闲高）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const DHT11 = GPIO.addInstance();" in syscfg
-    assert 'DHT11.associatedPins[0].$name        = "DATA";' in syscfg
+    assert 'DHT11.associatedPins[0].$name        = "DHT11_DATA";' in syscfg
     assert 'DHT11.associatedPins[0].direction    = "OUTPUT";' in syscfg
     assert 'DHT11.associatedPins[0].initialValue = "SET";' in syscfg
     assert 'DHT11.associatedPins[0].pin.$assign  = "PB7";' in syscfg

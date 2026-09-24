@@ -133,8 +133,8 @@ def test_bh1750_mspm0_syscfg_instance():
     """mspm0 母版必须有 BH1750 实例（SCL=PA12 / SDA=PA13）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const BH1750 = GPIO.addInstance();" in syscfg
-    assert 'BH1750.associatedPins[0].$name        = "SCL";' in syscfg
-    assert 'BH1750.associatedPins[1].$name        = "SDA";' in syscfg
+    assert 'BH1750.associatedPins[0].$name        = "BH1750_SCL";' in syscfg
+    assert 'BH1750.associatedPins[1].$name        = "BH1750_SDA";' in syscfg
     assert 'BH1750.associatedPins[0].pin.$assign  = "PA12";' in syscfg
     assert 'BH1750.associatedPins[1].pin.$assign  = "PA13";' in syscfg
 

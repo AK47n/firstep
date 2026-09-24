@@ -6,8 +6,8 @@
 
 #include "jy61p.h"
 #include "delay.h" /* delay_us / delay_ms：软 I2C 位操作与初始化序列 */
-#include "ti_msp_dl_config.h" /* JY61P_PORT / JY61P_SCL_PIN / JY61P_SDA_PIN /
-                                * JY61P_SCL_IOMUX / JY61P_SDA_IOMUX
+#include "ti_msp_dl_config.h" /* JY61P_PORT / JY61P_JY61P_SCL_PIN / JY61P_JY61P_SDA_PIN /
+                                * JY61P_JY61P_SCL_IOMUX / JY61P_JY61P_SDA_IOMUX
                                 * （SysConfig 生成命名：<实例>_<引脚名>_IOMUX，
                                 * 照 AHT10/SHT30 先例） */
 
@@ -17,34 +17,34 @@
 
 #define JY61P_SDA_OUT()                                        \
     do {                                                       \
-        DL_GPIO_initDigitalOutput(JY61P_SDA_IOMUX);            \
-        DL_GPIO_setPins(JY61P_PORT, JY61P_SDA_PIN);            \
-        DL_GPIO_enableOutput(JY61P_PORT, JY61P_SDA_PIN);       \
+        DL_GPIO_initDigitalOutput(JY61P_JY61P_SDA_IOMUX);            \
+        DL_GPIO_setPins(JY61P_PORT, JY61P_JY61P_SDA_PIN);            \
+        DL_GPIO_enableOutput(JY61P_PORT, JY61P_JY61P_SDA_PIN);       \
     } while (0)
 
 #define JY61P_SDA_IN()                    \
     do {                                  \
-        DL_GPIO_initDigitalInput(JY61P_SDA_IOMUX); \
+        DL_GPIO_initDigitalInput(JY61P_JY61P_SDA_IOMUX); \
     } while (0)
 
 #define JY61P_SDA_GET() \
-    ((DL_GPIO_readPins(JY61P_PORT, JY61P_SDA_PIN) & JY61P_SDA_PIN) ? 1 : 0)
+    ((DL_GPIO_readPins(JY61P_PORT, JY61P_JY61P_SDA_PIN) & JY61P_JY61P_SDA_PIN) ? 1 : 0)
 
 #define JY61P_SDA(x)                                              \
     do {                                                          \
         if (x) {                                                  \
-            DL_GPIO_setPins(JY61P_PORT, JY61P_SDA_PIN);           \
+            DL_GPIO_setPins(JY61P_PORT, JY61P_JY61P_SDA_PIN);           \
         } else {                                                  \
-            DL_GPIO_clearPins(JY61P_PORT, JY61P_SDA_PIN);         \
+            DL_GPIO_clearPins(JY61P_PORT, JY61P_JY61P_SDA_PIN);         \
         }                                                         \
     } while (0)
 
 #define JY61P_SCL(x)                                              \
     do {                                                          \
         if (x) {                                                  \
-            DL_GPIO_setPins(JY61P_PORT, JY61P_SCL_PIN);           \
+            DL_GPIO_setPins(JY61P_PORT, JY61P_JY61P_SCL_PIN);           \
         } else {                                                  \
-            DL_GPIO_clearPins(JY61P_PORT, JY61P_SCL_PIN);         \
+            DL_GPIO_clearPins(JY61P_PORT, JY61P_JY61P_SCL_PIN);         \
         }                                                         \
     } while (0)
 

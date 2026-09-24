@@ -6,8 +6,8 @@
 
 #include "sgp30.h"
 #include "delay.h" /* delay_us / delay_ms：软 I2C 位操作与测量延时 */
-#include "ti_msp_dl_config.h" /* SGP30_SCL_PORT/PIN、SGP30_SDA_PORT/PIN、
-                                * SGP30_SCL_IOMUX / SGP30_SDA_IOMUX
+#include "ti_msp_dl_config.h" /* SGP30_SGP30_SCL_PORT/PIN、SGP30_SGP30_SDA_PORT/PIN、
+                                * SGP30_SGP30_SCL_IOMUX / SGP30_SGP30_SDA_IOMUX
                                 * （SysConfig 生成命名：<实例>_<引脚名>_PORT/
                                 * PIN/_IOMUX——SCL/SDA 跨 GPIOA/GPIOB 两端口，
                                 * 生成器按引脚名分派各口宏，无组合 SGP30_PORT；
@@ -19,34 +19,34 @@
 
 #define SGP30_SDA_OUT()                                        \
     do {                                                       \
-        DL_GPIO_initDigitalOutput(SGP30_SDA_IOMUX);            \
-        DL_GPIO_setPins(SGP30_SDA_PORT, SGP30_SDA_PIN);        \
-        DL_GPIO_enableOutput(SGP30_SDA_PORT, SGP30_SDA_PIN);   \
+        DL_GPIO_initDigitalOutput(SGP30_SGP30_SDA_IOMUX);            \
+        DL_GPIO_setPins(SGP30_SGP30_SDA_PORT, SGP30_SGP30_SDA_PIN);        \
+        DL_GPIO_enableOutput(SGP30_SGP30_SDA_PORT, SGP30_SGP30_SDA_PIN);   \
     } while (0)
 
 #define SGP30_SDA_IN()                          \
     do {                                        \
-        DL_GPIO_initDigitalInput(SGP30_SDA_IOMUX); \
+        DL_GPIO_initDigitalInput(SGP30_SGP30_SDA_IOMUX); \
     } while (0)
 
 #define SGP30_SDA_GET() \
-    ((DL_GPIO_readPins(SGP30_SDA_PORT, SGP30_SDA_PIN) & SGP30_SDA_PIN) ? 1 : 0)
+    ((DL_GPIO_readPins(SGP30_SGP30_SDA_PORT, SGP30_SGP30_SDA_PIN) & SGP30_SGP30_SDA_PIN) ? 1 : 0)
 
 #define SGP30_SDA(x)                                                 \
     do {                                                             \
         if (x) {                                                     \
-            DL_GPIO_setPins(SGP30_SDA_PORT, SGP30_SDA_PIN);          \
+            DL_GPIO_setPins(SGP30_SGP30_SDA_PORT, SGP30_SGP30_SDA_PIN);          \
         } else {                                                     \
-            DL_GPIO_clearPins(SGP30_SDA_PORT, SGP30_SDA_PIN);        \
+            DL_GPIO_clearPins(SGP30_SGP30_SDA_PORT, SGP30_SGP30_SDA_PIN);        \
         }                                                            \
     } while (0)
 
 #define SGP30_SCL(x)                                                 \
     do {                                                             \
         if (x) {                                                     \
-            DL_GPIO_setPins(SGP30_SCL_PORT, SGP30_SCL_PIN);          \
+            DL_GPIO_setPins(SGP30_SGP30_SCL_PORT, SGP30_SGP30_SCL_PIN);          \
         } else {                                                     \
-            DL_GPIO_clearPins(SGP30_SCL_PORT, SGP30_SCL_PIN);        \
+            DL_GPIO_clearPins(SGP30_SGP30_SCL_PORT, SGP30_SGP30_SCL_PIN);        \
         }                                                            \
     } while (0)
 

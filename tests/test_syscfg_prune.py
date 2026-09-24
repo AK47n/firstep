@@ -234,9 +234,16 @@ def _plan(slugs: list[str], bindings: dict[str, str] | None = None):
     return adc_slot_plan(_manifests(slugs), "mspm0", bindings or {})
 
 
-def _report(slugs: list[str], bindings: dict[str, str] | None = None, **kw):
+def _report(
+    slugs: list[str],
+    bindings: dict[str, str] | None = None,
+    master_syscfg: str | None = None,
+    **kw,
+):
+    """落盘冲突报告（判据本体）。`master_syscfg` 缺省 = 真母版；造重名现场时传
+    注入过的那一份（真母版 02 之后恒为 0 组，见 `collision_reverted_syscfg`）。"""
     return syscfg_pin_conflict_report(
-        master_syscfg=MASTER_SYSCFG,
+        master_syscfg=MASTER_SYSCFG if master_syscfg is None else master_syscfg,
         manifests=_manifests(slugs),
         platform="mspm0",
         board=MSPM0_BOARD,
@@ -337,16 +344,22 @@ def test_conflict_report_clears_after_slot_relocation():
     )
 
 
-def test_conflict_report_catches_duplicate_pin_names(tmp_path):
-    """**同名引脚符号**也要报（工单 11 的判据）：`SCL`/`SDA` 这类 `$name` 是
-    SysConfig 的另一条全局唯一约束，`$assign` 判据看不见它。
+def test_conflict_report_catches_duplicate_pin_names(collision_reverted_syscfg):
+    """**同名引脚符号**也要报（工单 11 的判据，工单 02 之后改在注入现场上判）：
+    `SCL`/`SDA` 这类 `$name` 是 SysConfig 的另一条全局唯一约束，`$assign` 判据
+    看不见它。
+
+    现场怎么造：工单 `hwcheck-acceptance/02` 已把母版 14 组同名符号全部改名
+    （`SCL` → `OLED_SPI_SCL` 这种），**真母版今天一组重名都没有**——判据不会自己
+    红。所以这里用 `collision_reverted_syscfg`：真母版 + 把 OLED_SPI 那两个符号
+    **撤回**成 `SCL`/`SDA`，等价于"将来又有一件模块把引脚起成同名"。判据必须在这
+    份现场上抓住它（真母版上则必须 `name_count == 0`，见
+    `test_master_pin_symbols_are_globally_unique`）。
 
     形态取真库上最日常的一组：地猛星 + 板子活着 + 调试串口 + OLED + JY61P
     （**一个自建件都不需要**），并按用户实际动作先点一次「自动配置」
     （`auto_assign_bindings(resolve_default_conflicts=True)`）——那一跳解得开
-    **同脚**冲突（PA22 那条），于是剩下的就只有这一根轴。今天 `name_count == 0`
-    ——门禁一声不吭，而 SysConfig 会报 `Duplicate name: 'SCL'`、工程编不过
-    （工单 11 实测 exit=2 / 4 个 error）。
+    **同脚**冲突（PA22 那条），于是剩下的就只有这一根轴。
 
     判据三条腿：① 引脚冲突被自动配置解得干干净净（**同一个脚**没人抢）；
     ② 同名冲突报出来；③ 报的那一行点到两件模块的名字（学生据此去掉一件）。
@@ -356,15 +369,16 @@ def test_conflict_report_catches_duplicate_pin_names(tmp_path):
         manifests, "mspm0", MSPM0_BOARD, {}, resolve_default_conflicts=True
     )
     report = syscfg_pin_conflict_report(
-        master_syscfg=MASTER_SYSCFG, manifests=manifests, platform="mspm0",
-        board=MSPM0_BOARD, bindings=solved.bindings, diagnosis_bindings={},
+        master_syscfg=collision_reverted_syscfg, manifests=manifests,
+        platform="mspm0", board=MSPM0_BOARD, bindings=solved.bindings,
+        diagnosis_bindings={},
     )
     assert report.pin_count == 0, (
         "这一组没有人抢同一个脚（自动配置解得开）——本单要抓的是另一轴：\n"
         + "\n".join(report.lines)
     )
     assert report.name_count > 0, (
-        "OLED_SPI 与 JY61P 的 SCL/SDA 同名，必须报出来（今天它静默放行了）"
+        "OLED_SPI 与 JY61P 的 SCL/SDA 同名，必须报出来（工单 11 之前它静默放行）"
     )
     text = "\n".join(report.name_lines)
     for slug in ("oled", "jy61p"):
@@ -372,13 +386,50 @@ def test_conflict_report_catches_duplicate_pin_names(tmp_path):
     assert "SCL" in text and "SDA" in text, text
 
 
-def test_duplicate_pin_names_are_judged_after_pruning(tmp_path):
+def test_master_pin_symbols_are_globally_unique():
+    """**构建期守卫**（工单 hwcheck-acceptance/02）：母版 `mspm0.syscfg` 的引脚
+    符号名必须全局唯一。
+
+    判据复用既有的落盘冲突报告（`manifests=()` = 产物复核形态：不 prune、不
+    rewrite，直接判传进来的全文），所以**新加一个与既有实例同名的引脚符号，这条
+    用例当场红**——不必等谁去生成一次工程、更不必等 CCS 报
+    `Duplicate name`。02 之前母版有 14 组这样的同名（`SCL` 一组就 18 个实例）。
+
+    为什么这条判据能立起来：02 把撞名的符号改成了 `<实例名>_<原符号>`
+    （生成宏因此是 `<实例>_<实例>_<符号>_<后缀>` 形态，见 CONTEXT.md
+    「syscfg 文件模型」），母版从此满足"全局唯一"这一条不变量。
+    """
+    report = syscfg_pin_conflict_report(
+        master_syscfg=MASTER_SYSCFG, manifests=(), platform="mspm0",
+        board=None, bindings=None,
+    )
+    assert report.name_count == 0, (
+        "母版引脚符号又撞名了——SysConfig 会报 Duplicate name、工程编不过。"
+        "新加实例时把 `$name` 起成 `<实例名>_<原名>`：\n"
+        + "\n".join(report.name_lines)
+    )
+
+
+def test_duplicate_pin_names_are_judged_after_pruning(collision_reverted_syscfg):
     """判据看**裁剪后**的模型：没选中的实例被裁掉，就不该因为它报冲突。
 
-    对照：只选 `oled`（不选 `jy61p`）→ 母版里 `JY61P` 那一份 `SCL` 已被裁掉
-    → 一条同名冲突都不该有。判在**母版全文**上就会误报（母版里永远有 17 组）。
+    现场必须用撤回改名的那份母版：真母版在工单 `hwcheck-acceptance/02` 之后
+    **恒为 0 组**，拿它跑这条用例会退化成恒绿空断言（判全文也过）。
+
+    判据两条腿（同一份母版、同一天）：① `oled + jy61p` **两件都选** → 报出来
+    （撞名是实打实的，不是判据在猜）；② 只选 `oled` → 一条都不报
+    （`JY61P` 那个实例已被裁掉，它那份 `SCL` 不该再算数）。
     """
-    assert _report(["led", "delay", "debug_uart", "oled"]).name_count == 0
+    both = _report(
+        ["led", "delay", "debug_uart", "oled", "jy61p"],
+        master_syscfg=collision_reverted_syscfg,
+    )
+    assert both.name_count > 0, "两件都选中 → 重名必须报出来（对照腿）"
+    only_oled = _report(
+        ["led", "delay", "debug_uart", "oled"],
+        master_syscfg=collision_reverted_syscfg,
+    )
+    assert only_oled.name_count == 0, "只选 oled：JY61P 已被裁掉，不该再报"
 
 
 def test_conflict_report_reports_remaining_and_diagnosis_baseline():

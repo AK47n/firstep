@@ -6,10 +6,10 @@
 
 #include "ads1115.h"
 #include "delay.h" /* delay_us / delay_ms：软 I2C 位操作与转换等待 */
-#include "ti_msp_dl_config.h" /* ADS1115_PORT / ADS1115_SCL_PIN / ADS1115_SDA_PIN /
-                               * ADS1115_SCL_IOMUX / ADS1115_SDA_IOMUX
+#include "ti_msp_dl_config.h" /* ADS1115_PORT / ADS1115_ADS1115_SCL_PIN / ADS1115_ADS1115_SDA_PIN /
+                               * ADS1115_ADS1115_SCL_IOMUX / ADS1115_ADS1115_SDA_IOMUX
                                * （SysConfig 生成命名：<实例>_<引脚名>_IOMUX，
-                               * 编译矩阵实测；照 AHT10_SCL_IOMUX 先例） */
+                               * 编译矩阵实测；照 AHT10_AHT10_SCL_IOMUX 先例） */
 
 /* ADS1115 软 I2C 位操作原语（立创 bsp 同款时序，照 aht10 先例：SCL 半周期
  * 2us ≈ 100kHz 级总线速度，ADS1115 规格 ≤400kHz，裕量充足；页面 `delay_us(2)/
@@ -18,34 +18,34 @@
 
 #define ADS1115_SDA_OUT()                                 \
     do {                                                  \
-        DL_GPIO_initDigitalOutput(ADS1115_SDA_IOMUX);     \
-        DL_GPIO_setPins(ADS1115_PORT, ADS1115_SDA_PIN);   \
-        DL_GPIO_enableOutput(ADS1115_PORT, ADS1115_SDA_PIN); \
+        DL_GPIO_initDigitalOutput(ADS1115_ADS1115_SDA_IOMUX);     \
+        DL_GPIO_setPins(ADS1115_PORT, ADS1115_ADS1115_SDA_PIN);   \
+        DL_GPIO_enableOutput(ADS1115_PORT, ADS1115_ADS1115_SDA_PIN); \
     } while (0)
 
 #define ADS1115_SDA_IN()                          \
     do {                                          \
-        DL_GPIO_initDigitalInput(ADS1115_SDA_IOMUX); \
+        DL_GPIO_initDigitalInput(ADS1115_ADS1115_SDA_IOMUX); \
     } while (0)
 
 #define ADS1115_SDA_GET() \
-    ((DL_GPIO_readPins(ADS1115_PORT, ADS1115_SDA_PIN) & ADS1115_SDA_PIN) ? 1 : 0)
+    ((DL_GPIO_readPins(ADS1115_PORT, ADS1115_ADS1115_SDA_PIN) & ADS1115_ADS1115_SDA_PIN) ? 1 : 0)
 
 #define ADS1115_SDA(level)                                    \
     do {                                                      \
         if (level) {                                          \
-            DL_GPIO_setPins(ADS1115_PORT, ADS1115_SDA_PIN);   \
+            DL_GPIO_setPins(ADS1115_PORT, ADS1115_ADS1115_SDA_PIN);   \
         } else {                                              \
-            DL_GPIO_clearPins(ADS1115_PORT, ADS1115_SDA_PIN); \
+            DL_GPIO_clearPins(ADS1115_PORT, ADS1115_ADS1115_SDA_PIN); \
         }                                                     \
     } while (0)
 
 #define ADS1115_SCL(level)                                    \
     do {                                                      \
         if (level) {                                          \
-            DL_GPIO_setPins(ADS1115_PORT, ADS1115_SCL_PIN);   \
+            DL_GPIO_setPins(ADS1115_PORT, ADS1115_ADS1115_SCL_PIN);   \
         } else {                                              \
-            DL_GPIO_clearPins(ADS1115_PORT, ADS1115_SCL_PIN); \
+            DL_GPIO_clearPins(ADS1115_PORT, ADS1115_ADS1115_SCL_PIN); \
         }                                                     \
     } while (0)
 

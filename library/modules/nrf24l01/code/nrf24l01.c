@@ -48,19 +48,19 @@ static uint8_t _spi_read_write_byte(uint8_t tx)
 {
     uint8_t rx = 0;
     for (int8_t i = 7; i >= 0; i--) {
-        DL_GPIO_clearPins(NRF24L01_PORT, NRF24L01_CLK_PIN);
+        DL_GPIO_clearPins(NRF24L01_PORT, NRF24L01_NRF24L01_CLK_PIN);
         if (tx & (1u << i)) {
-            DL_GPIO_setPins(NRF24L01_PORT, NRF24L01_MOSI_PIN);
+            DL_GPIO_setPins(NRF24L01_PORT, NRF24L01_NRF24L01_MOSI_PIN);
         } else {
-            DL_GPIO_clearPins(NRF24L01_PORT, NRF24L01_MOSI_PIN);
+            DL_GPIO_clearPins(NRF24L01_PORT, NRF24L01_NRF24L01_MOSI_PIN);
         }
-        DL_GPIO_setPins(NRF24L01_PORT, NRF24L01_CLK_PIN); /* 上升沿，从机锁存 MOSI */
-        if (DL_GPIO_readPins(NRF24L01_PORT, NRF24L01_MISO_PIN)
-            & NRF24L01_MISO_PIN) {
+        DL_GPIO_setPins(NRF24L01_PORT, NRF24L01_NRF24L01_CLK_PIN); /* 上升沿，从机锁存 MOSI */
+        if (DL_GPIO_readPins(NRF24L01_PORT, NRF24L01_NRF24L01_MISO_PIN)
+            & NRF24L01_NRF24L01_MISO_PIN) {
             rx |= (uint8_t)(1u << i);
         }
     }
-    DL_GPIO_clearPins(NRF24L01_PORT, NRF24L01_CLK_PIN);
+    DL_GPIO_clearPins(NRF24L01_PORT, NRF24L01_NRF24L01_CLK_PIN);
     return rx;
 }
 

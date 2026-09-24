@@ -7,59 +7,59 @@ CCS 三件套：CcsTools(sdk_dir=WindowsPath('C:/ti/ccs2051/mspm0_sdk_2_10_00_04
 判据：能生成的那一格 → passed=True 且 error=warning=0。被拦下的按**页面有没有给出学生做得到的出路**分两类（工单 hwcheck-pin-conflict-exit/01）：有出路 = 「如实拦下」（板子真装不下，不算判红）；没有 = 「生成前拦下」（缺陷，算判红）。
 ⚠ **逐格用的通道形态是「只串口 → 只 OLED → 都不开」里第一个能生成的那个**（每行末尾记着它）；每行末尾另记检测页默认形态（串口 + OLED 都开）的状态。
 
-## [stm32] led（hwcheck-stm32-20260920-171248）→ passed=True exit=0 error=0 warning=0 专精小节=['led'] 未专精=无 命令表=l=led ｜通道=串口1/OLED0（默认双通道可生成）
-  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe09-2sljrflx\hwcheck-stm32-20260920-171248\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmprbsxya7p.log
+## [stm32] led（hwcheck-stm32-20260924-211114）→ passed=True exit=0 error=0 warning=0 专精小节=['led'] 未专精=无 命令表=l=led ｜通道=串口1/OLED0（默认双通道可生成）
+  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe09-puler531\hwcheck-stm32-20260924-211114\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmp5cgi_ddn.log
 
-## [mspm0] led（hwcheck-mspm0-20260920-171252）→ passed=True exit=0 error=0 warning=0 专精小节=['led'] 未专精=无 命令表=l=led ｜通道=串口1/OLED0（默认双通道可生成）
-  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe09-2sljrflx\hwcheck-mspm0-20260920-171252\Debug -f makefile -B all
+## [mspm0] led（hwcheck-mspm0-20260924-211119）→ passed=True exit=0 error=0 warning=0 专精小节=['led'] 未专精=无 命令表=l=led ｜通道=串口1/OLED0（默认双通道可生成）
+  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe09-puler531\hwcheck-mspm0-20260924-211119\Debug -f makefile -B all
 
-## [stm32] oled（hwcheck-stm32-20260920-171303）→ passed=True exit=0 error=0 warning=0 专精小节=['oled'] 未专精=无 命令表=d=oled ｜通道=串口1/OLED0（默认双通道可生成）
-  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe09-2sljrflx\hwcheck-stm32-20260920-171303\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmp2xawq0r1.log
+## [stm32] oled（hwcheck-stm32-20260924-211123）→ passed=True exit=0 error=0 warning=0 专精小节=['oled'] 未专精=无 命令表=d=oled ｜通道=串口1/OLED0（默认双通道可生成）
+  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe09-puler531\hwcheck-stm32-20260924-211123\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmpsqzbc1wo.log
 
-## [mspm0] oled（hwcheck-mspm0-20260920-171307）→ passed=True exit=0 error=0 warning=0 专精小节=['oled'] 未专精=无 命令表=d=oled ｜通道=串口1/OLED0（默认双通道可生成）
-  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe09-2sljrflx\hwcheck-mspm0-20260920-171307\Debug -f makefile -B all
+## [mspm0] oled（hwcheck-mspm0-20260924-211127）→ passed=True exit=0 error=0 warning=0 专精小节=['oled'] 未专精=无 命令表=d=oled ｜通道=串口1/OLED0（默认双通道可生成）
+  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe09-puler531\hwcheck-mspm0-20260924-211127\Debug -f makefile -B all
 
-## [stm32] debug_uart（hwcheck-stm32-20260920-171313）→ passed=True exit=0 error=0 warning=0 专精小节=['debug_uart'] 未专精=无 命令表=u=debug_uart ｜通道=串口1/OLED0（默认双通道可生成）
-  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe09-2sljrflx\hwcheck-stm32-20260920-171313\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmpqdfvz80d.log
+## [stm32] debug_uart（hwcheck-stm32-20260924-211132）→ passed=True exit=0 error=0 warning=0 专精小节=['debug_uart'] 未专精=无 命令表=u=debug_uart ｜通道=串口1/OLED0（默认双通道可生成）
+  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe09-puler531\hwcheck-stm32-20260924-211132\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmp2_p_j67d.log
 
-## [mspm0] debug_uart（hwcheck-mspm0-20260920-171317）→ passed=True exit=0 error=0 warning=0 专精小节=['debug_uart'] 未专精=无 命令表=u=debug_uart ｜通道=串口1/OLED0（默认双通道可生成）
-  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe09-2sljrflx\hwcheck-mspm0-20260920-171317\Debug -f makefile -B all
+## [mspm0] debug_uart（hwcheck-mspm0-20260924-211136）→ passed=True exit=0 error=0 warning=0 专精小节=['debug_uart'] 未专精=无 命令表=u=debug_uart ｜通道=串口1/OLED0（默认双通道可生成）
+  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe09-puler531\hwcheck-mspm0-20260924-211136\Debug -f makefile -B all
 
-## [stm32] key（hwcheck-stm32-20260920-171322）→ passed=True exit=0 error=0 warning=0 专精小节=['key'] 未专精=无 命令表=k=key ｜通道=串口1/OLED0（默认双通道可生成）
-  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe09-2sljrflx\hwcheck-stm32-20260920-171322\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmpd6jnqqrv.log
+## [stm32] key（hwcheck-stm32-20260924-211140）→ passed=True exit=0 error=0 warning=0 专精小节=['key'] 未专精=无 命令表=k=key ｜通道=串口1/OLED0（默认双通道可生成）
+  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe09-puler531\hwcheck-stm32-20260924-211140\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmpgjotdaid.log
 
-## [mspm0] key（hwcheck-mspm0-20260920-171326）→ passed=True exit=0 error=0 warning=0 专精小节=['key'] 未专精=无 命令表=k=key ｜通道=串口1/OLED0（默认双通道可生成）
-  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe09-2sljrflx\hwcheck-mspm0-20260920-171326\Debug -f makefile -B all
+## [mspm0] key（hwcheck-mspm0-20260924-211144）→ passed=True exit=0 error=0 warning=0 专精小节=['key'] 未专精=无 命令表=k=key ｜通道=串口1/OLED0（默认双通道可生成）
+  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe09-puler531\hwcheck-mspm0-20260924-211144\Debug -f makefile -B all
 
-## [stm32] beep（hwcheck-stm32-20260920-171331）→ passed=True exit=0 error=0 warning=0 专精小节=['beep'] 未专精=无 命令表=p=beep ｜通道=串口1/OLED0（默认双通道可生成）
-  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe09-2sljrflx\hwcheck-stm32-20260920-171331\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmpk_y1s97d.log
+## [stm32] beep（hwcheck-stm32-20260924-211149）→ passed=True exit=0 error=0 warning=0 专精小节=['beep'] 未专精=无 命令表=p=beep ｜通道=串口1/OLED0（默认双通道可生成）
+  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe09-puler531\hwcheck-stm32-20260924-211149\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmplbxex1zs.log
 
-## [mspm0] beep（hwcheck-mspm0-20260920-171335）→ passed=True exit=0 error=0 warning=0 专精小节=['beep'] 未专精=无 命令表=p=beep ｜通道=串口1/OLED0（默认双通道可生成）
-  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe09-2sljrflx\hwcheck-mspm0-20260920-171335\Debug -f makefile -B all
+## [mspm0] beep（hwcheck-mspm0-20260924-211153）→ passed=True exit=0 error=0 warning=0 专精小节=['beep'] 未专精=无 命令表=p=beep ｜通道=串口1/OLED0（默认双通道可生成）
+  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe09-puler531\hwcheck-mspm0-20260924-211153\Debug -f makefile -B all
 
-## [mspm0] sr04（hwcheck-mspm0-20260920-171340）→ passed=True exit=0 error=0 warning=0 专精小节=['sr04'] 未专精=无 命令表=s=sr04 ｜通道=串口1/OLED0（默认双通道可生成）
-  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe09-2sljrflx\hwcheck-mspm0-20260920-171340\Debug -f makefile -B all
+## [mspm0] sr04（hwcheck-mspm0-20260924-211158）→ passed=True exit=0 error=0 warning=0 专精小节=['sr04'] 未专精=无 命令表=s=sr04 ｜通道=串口1/OLED0（默认双通道可生成）
+  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe09-puler531\hwcheck-mspm0-20260924-211158\Debug -f makefile -B all
 
-## [mspm0] jy61p（hwcheck-mspm0-20260920-171345）→ passed=True exit=0 error=0 warning=0 专精小节=['jy61p'] 未专精=无 命令表=j=jy61p ｜通道=串口1/OLED0（默认双通道可生成）
-  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe09-2sljrflx\hwcheck-mspm0-20260920-171345\Debug -f makefile -B all
+## [mspm0] jy61p（hwcheck-mspm0-20260924-211202）→ passed=True exit=0 error=0 warning=0 专精小节=['jy61p'] 未专精=无 命令表=j=jy61p ｜通道=串口1/OLED0（默认双通道可生成）
+  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe09-puler531\hwcheck-mspm0-20260924-211202\Debug -f makefile -B all
 
-## [mspm0] xunji（hwcheck-mspm0-20260920-171350）→ passed=True exit=0 error=0 warning=0 专精小节=['xunji'] 未专精=无 命令表=x=xunji ｜通道=串口1/OLED0（默认双通道可生成）
-  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe09-2sljrflx\hwcheck-mspm0-20260920-171350\Debug -f makefile -B all
+## [mspm0] xunji（hwcheck-mspm0-20260924-211207）→ passed=True exit=0 error=0 warning=0 专精小节=['xunji'] 未专精=无 命令表=x=xunji ｜通道=串口1/OLED0（默认双通道可生成）
+  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe09-puler531\hwcheck-mspm0-20260924-211207\Debug -f makefile -B all
 
-## [stm32] adc（hwcheck-stm32-20260920-171356）→ passed=True exit=0 error=0 warning=0 专精小节=['adc'] 未专精=无 命令表=a=adc ｜通道=串口1/OLED0（默认双通道可生成）
-  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe09-2sljrflx\hwcheck-stm32-20260920-171356\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmpe2bg26fk.log
+## [stm32] adc（hwcheck-stm32-20260924-211212）→ passed=True exit=0 error=0 warning=0 专精小节=['adc'] 未专精=无 命令表=a=adc ｜通道=串口1/OLED0（默认双通道可生成）
+  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe09-puler531\hwcheck-stm32-20260924-211212\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmpt74ijvbf.log
 
-## [mspm0] adc（hwcheck-mspm0-20260920-171401）→ passed=True exit=0 error=0 warning=0 专精小节=['adc'] 未专精=无 命令表=a=adc ｜通道=串口1/OLED0（默认双通道可生成）
-  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe09-2sljrflx\hwcheck-mspm0-20260920-171401\Debug -f makefile -B all
+## [mspm0] adc（hwcheck-mspm0-20260924-211216）→ passed=True exit=0 error=0 warning=0 专精小节=['adc'] 未专精=无 命令表=a=adc ｜通道=串口1/OLED0（默认双通道可生成）
+  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe09-puler531\hwcheck-mspm0-20260924-211216\Debug -f makefile -B all
 
-## [stm32] ml_mpu6050（hwcheck-stm32-20260920-171406）→ passed=True exit=0 error=0 warning=0 专精小节=['ml_mpu6050'] 未专精=无 命令表=m=ml_mpu6050 ｜通道=串口1/OLED0（默认双通道可生成）
-  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe09-2sljrflx\hwcheck-stm32-20260920-171406\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmp38sq31hr.log
+## [stm32] ml_mpu6050（hwcheck-stm32-20260924-211221）→ passed=True exit=0 error=0 warning=0 专精小节=['ml_mpu6050'] 未专精=无 命令表=m=ml_mpu6050 ｜通道=串口1/OLED0（默认双通道可生成）
+  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe09-puler531\hwcheck-stm32-20260924-211221\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmpqrx55bd5.log
 
-## [mspm0] ml_mpu6050（hwcheck-mspm0-20260920-171411）→ passed=True exit=0 error=0 warning=0 专精小节=['ml_mpu6050'] 未专精=无 命令表=m=ml_mpu6050 ｜通道=串口1/OLED0（默认双通道可生成）
-  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe09-2sljrflx\hwcheck-mspm0-20260920-171411\Debug -f makefile -B all
+## [mspm0] ml_mpu6050（hwcheck-mspm0-20260924-211225）→ passed=True exit=0 error=0 warning=0 专精小节=['ml_mpu6050'] 未专精=无 命令表=m=ml_mpu6050 ｜通道=串口1/OLED0（默认双通道可生成）
+  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\AppData\Local\Temp\firstep-probe09-puler531\hwcheck-mspm0-20260924-211225\Debug -f makefile -B all
 
-## [stm32] 全选（7 件同堂）（hwcheck-stm32-20260920-171417）→ passed=True exit=0 error=0 warning=0 专精小节=['led', 'debug_uart', 'oled', 'key', 'beep', 'adc', 'ml_mpu6050'] 未专精=无 命令表=l=led u=debug_uart d=oled k=key p=beep a=adc m=ml_mpu6050 ｜通道=串口1/OLED0（默认双通道可生成）
-  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe09-2sljrflx\hwcheck-stm32-20260920-171417\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmpn678tc8_.log
+## [stm32] 全选（7 件同堂）（hwcheck-stm32-20260924-211230）→ passed=True exit=0 error=0 warning=0 专精小节=['led', 'debug_uart', 'oled', 'key', 'beep', 'adc', 'ml_mpu6050'] 未专精=无 命令表=l=led u=debug_uart d=oled k=key p=beep a=adc m=ml_mpu6050 ｜通道=串口1/OLED0（默认双通道可生成）
+  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\AppData\Local\Temp\firstep-probe09-puler531\hwcheck-stm32-20260924-211230\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmp_gbvglnw.log
 
 ## [mspm0] 全选（9 件同堂）：**如实拦下（页面已说明）**（默认双通道 400：这套选择在「地猛星 MSPM0G3507」上装不下：落盘后的 mspm0.syscfg 有 4 个引脚被两只实例同时占用，SysConfig 会直接报 Resource conflict（工程编不过）。自动移脚已经尽力，剩下的靠改绑解不开：）
 

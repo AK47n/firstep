@@ -143,8 +143,8 @@ def test_hmc5883l_mspm0_syscfg_instance():
     """mspm0 母版必须有 HMC5883L 实例（SCL=PB6 / SDA=PB7）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const HMC5883L = GPIO.addInstance();" in syscfg
-    assert 'HMC5883L.associatedPins[0].$name        = "SCL";' in syscfg
-    assert 'HMC5883L.associatedPins[1].$name        = "SDA";' in syscfg
+    assert 'HMC5883L.associatedPins[0].$name        = "HMC5883L_SCL";' in syscfg
+    assert 'HMC5883L.associatedPins[1].$name        = "HMC5883L_SDA";' in syscfg
     assert 'HMC5883L.associatedPins[0].pin.$assign  = "PB6";' in syscfg
     assert 'HMC5883L.associatedPins[1].pin.$assign  = "PB7";' in syscfg
 
@@ -284,10 +284,10 @@ def test_hmc5883l_heading_pure_function_numeric(tmp_path):
     (stub / "ti_msp_dl_config.h").write_text(
         "#ifndef STUB_TI_MSP_DL_CONFIG_H\n#define STUB_TI_MSP_DL_CONFIG_H\n"
         "#define HMC5883L_PORT 0u\n"
-        "#define HMC5883L_SCL_PIN 1u\n"
-        "#define HMC5883L_SDA_PIN 2u\n"
-        "#define HMC5883L_SCL_IOMUX 3u\n"
-        "#define HMC5883L_SDA_IOMUX 4u\n"
+        "#define HMC5883L_HMC5883L_SCL_PIN 1u\n"
+        "#define HMC5883L_HMC5883L_SDA_PIN 2u\n"
+        "#define HMC5883L_HMC5883L_SCL_IOMUX 3u\n"
+        "#define HMC5883L_HMC5883L_SDA_IOMUX 4u\n"
         "void DL_GPIO_initDigitalOutput(unsigned int iomux);\n"
         "void DL_GPIO_initDigitalInput(unsigned int iomux);\n"
         "void DL_GPIO_setPins(unsigned int port, unsigned int pins);\n"

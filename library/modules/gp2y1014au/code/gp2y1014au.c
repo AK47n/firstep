@@ -7,7 +7,7 @@
 #include "gp2y1014au.h"
 #include "adc_mspm0.h" /* adc_init / adc_get：共享 ADC12_0 MEM0（薄封装） */
 #include "delay.h"     /* delay_us：LED 脉冲时序（延时走库内 delay 模块） */
-#include "ti_msp_dl_config.h" /* GP2Y1014_PORT / GP2Y1014_LED_PIN / CPUCLK_FREQ */
+#include "ti_msp_dl_config.h" /* GP2Y1014_PORT / GP2Y1014_GP2Y1014_LED_PIN / CPUCLK_FREQ */
 
 /* GP2Y1014AU 粉尘传感器（mspm0 纯驱动薄封装）：
  * - ADC 薄封装：依赖 adc 模块读 ADC12_0 MEM0 槽位（默认 PA24/A0_3）——
@@ -24,12 +24,12 @@
 
 static void gp2y1014_led_on(void)
 {
-    DL_GPIO_clearPins(GP2Y1014_PORT, GP2Y1014_LED_PIN); /* 页面极性：clear = LED 亮 */
+    DL_GPIO_clearPins(GP2Y1014_PORT, GP2Y1014_GP2Y1014_LED_PIN); /* 页面极性：clear = LED 亮 */
 }
 
 static void gp2y1014_led_off(void)
 {
-    DL_GPIO_setPins(GP2Y1014_PORT, GP2Y1014_LED_PIN);
+    DL_GPIO_setPins(GP2Y1014_PORT, GP2Y1014_GP2Y1014_LED_PIN);
 }
 
 /* 10 点静态滑动平均（页面 Filter 原式——内嵌：页面滤波逻辑简单（10 值环形

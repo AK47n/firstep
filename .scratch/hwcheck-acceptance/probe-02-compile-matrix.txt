@@ -1,0 +1,55 @@
+=== 工单 02 编译矩阵（改名改了生成宏，真编译兜底）===
+格数：50，FAIL：0
+
+[PASS] A/oled+jy61p：exit=0、error 0、warning 0
+[PASS] A/oled+aht10：exit=0、error 0、warning 0
+[PASS] A/oled+bh1750：exit=0、error 0、warning 0
+[PASS] A/oled+sht30：exit=0、error 0、warning 0
+[PASS] A/led_beep+gp2y1014au：exit=0、error 0、warning 0
+[PASS] A/aht10+bh1750：exit=0、error 0、warning 0
+[PASS] A/oled+lcd：exit=0、error 0、warning 0
+[PASS] A/rc522+nrf24l01：exit=0、error 0、warning 0（其中 rc522 既有死函数 2 条）
+[PASS] A/dht11+ds18b20：exit=0、error 0、warning 0
+[PASS] A/hx711+rc522：exit=0、error 0、warning 0（其中 rc522 既有死函数 2 条）
+[PASS] A/relay+human_ir：exit=0、error 0、warning 0
+[PASS] A/jq8900+syn6288：exit=0、error 0、warning 0
+[PASS] B/ads1115：exit=0、error 0、warning 0
+[PASS] B/ags10：exit=0、error 0、warning 0
+[PASS] B/aht10：exit=0、error 0、warning 0
+[PASS] B/at24c02：exit=0、error 0、warning 0
+[PASS] B/bh1750：exit=0、error 0、warning 0
+[PASS] B/bmp180：exit=0、error 0、warning 0
+[PASS] B/dht11：exit=0、error 0、warning 0
+[PASS] B/ds18b20：exit=0、error 0、warning 0
+[PASS] B/gp2y1014au：exit=0、error 0、warning 0
+[PASS] B/hmc5883l：exit=0、error 0、warning 0
+[PASS] B/human_ir：exit=0、error 0、warning 0
+[PASS] B/hx711：exit=0、error 0、warning 0
+[PASS] B/ir_beam：exit=0、error 0、warning 0
+[PASS] B/ir_remote：exit=0、error 0、warning 0
+[PASS] B/ir_remote_tx：exit=0、error 0、warning 0
+[PASS] B/jq8900：exit=0、error 0、warning 0
+[PASS] B/jy61p：exit=0、error 0、warning 0
+[PASS] B/lcd：exit=0、error 0、warning 0
+[PASS] B/led：exit=0、error 0、warning 0
+[PASS] B/max7219：exit=0、error 0、warning 0
+[PASS] B/microwave_radar：exit=0、error 0、warning 0
+[PASS] B/mlx90614：exit=0、error 0、warning 0
+[PASS] B/ms5611：exit=0、error 0、warning 0
+[PASS] B/nrf24l01：exit=0、error 0、warning 0
+[PASS] B/oled：exit=0、error 0、warning 0
+[PASS] B/pca9685：exit=0、error 0、warning 0
+[PASS] B/qmc5883l：exit=0、error 0、warning 0
+[PASS] B/rc522：exit=0、error 0、warning 0（其中 rc522 既有死函数 2 条）
+[PASS] B/relay：exit=0、error 0、warning 0
+[PASS] B/sgp30：exit=0、error 0、warning 0
+[PASS] B/sht20：exit=0、error 0、warning 0
+[PASS] B/sht30：exit=0、error 0、warning 0
+[PASS] B/syn6288：exit=0、error 0、warning 0
+[PASS] B/tcs34725：exit=0、error 0、warning 0
+[PASS] B/tp_xpt2046：exit=0、error 0、warning 0
+[PASS] C/stm32/aht10：exit=0、error 0、warning 0
+[PASS] C/stm32/hmc5883l：exit=0、error 0、warning 0
+[PASS] C/stm32/lcd：exit=0、error 0、warning 0
+
+=== 结论：全绿（0 error / 0 warning） ===

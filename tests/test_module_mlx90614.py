@@ -138,8 +138,8 @@ def test_mlx90614_mspm0_syscfg_instance():
     """mspm0 母版必须有 MLX90614 实例（SCL=PA9 / SDA=PA8，输出）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const MLX90614 = GPIO.addInstance();" in syscfg
-    assert 'MLX90614.associatedPins[0].$name        = "SCL";' in syscfg
-    assert 'MLX90614.associatedPins[1].$name        = "SDA";' in syscfg
+    assert 'MLX90614.associatedPins[0].$name        = "MLX90614_SCL";' in syscfg
+    assert 'MLX90614.associatedPins[1].$name        = "MLX90614_SDA";' in syscfg
     assert 'MLX90614.associatedPins[0].pin.$assign  = "PA9";' in syscfg
     assert 'MLX90614.associatedPins[1].pin.$assign  = "PA8";' in syscfg
 

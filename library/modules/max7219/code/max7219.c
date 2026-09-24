@@ -5,8 +5,8 @@
  * 标明来源与链接。 */
 
 #include "max7219.h"
-#include "ti_msp_dl_config.h" /* MAX7219_DIN_PORT/PIN、MAX7219_CLK_PORT/PIN、
-                                * MAX7219_CS_PORT/PIN（SysConfig 生成命名：
+#include "ti_msp_dl_config.h" /* MAX7219_MAX7219_DIN_PORT/PIN、MAX7219_MAX7219_CLK_PORT/PIN、
+                                * MAX7219_MAX7219_CS_PORT/PIN（SysConfig 生成命名：
                                 * <实例>_<引脚名>_PORT/PIN——三脚跨 GPIOA/GPIOB
                                 * 两端口，生成器按引脚名分派各口宏，无组合
                                 * MAX7219_PORT；输出脚不需要 _IOMUX） */
@@ -25,27 +25,27 @@
 #define MAX7219_DIN(x)                                                \
     do {                                                              \
         if (x) {                                                      \
-            DL_GPIO_setPins(MAX7219_DIN_PORT, MAX7219_DIN_PIN);       \
+            DL_GPIO_setPins(MAX7219_MAX7219_DIN_PORT, MAX7219_MAX7219_DIN_PIN);       \
         } else {                                                      \
-            DL_GPIO_clearPins(MAX7219_DIN_PORT, MAX7219_DIN_PIN);     \
+            DL_GPIO_clearPins(MAX7219_MAX7219_DIN_PORT, MAX7219_MAX7219_DIN_PIN);     \
         }                                                             \
     } while (0)
 
 #define MAX7219_CLK(x)                                                \
     do {                                                              \
         if (x) {                                                      \
-            DL_GPIO_setPins(MAX7219_CLK_PORT, MAX7219_CLK_PIN);       \
+            DL_GPIO_setPins(MAX7219_MAX7219_CLK_PORT, MAX7219_MAX7219_CLK_PIN);       \
         } else {                                                      \
-            DL_GPIO_clearPins(MAX7219_CLK_PORT, MAX7219_CLK_PIN);     \
+            DL_GPIO_clearPins(MAX7219_MAX7219_CLK_PORT, MAX7219_MAX7219_CLK_PIN);     \
         }                                                             \
     } while (0)
 
 #define MAX7219_CS(x)                                                 \
     do {                                                              \
         if (x) {                                                      \
-            DL_GPIO_setPins(MAX7219_CS_PORT, MAX7219_CS_PIN);         \
+            DL_GPIO_setPins(MAX7219_MAX7219_CS_PORT, MAX7219_MAX7219_CS_PIN);         \
         } else {                                                      \
-            DL_GPIO_clearPins(MAX7219_CS_PORT, MAX7219_CS_PIN);       \
+            DL_GPIO_clearPins(MAX7219_MAX7219_CS_PORT, MAX7219_MAX7219_CS_PIN);       \
         }                                                             \
     } while (0)
 

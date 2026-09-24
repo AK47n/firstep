@@ -128,7 +128,7 @@ def test_microwave_radar_mspm0_syscfg_instances():
     """mspm0 母版：MICROWAVE GPIO 实例（OUT 输入，内部上拉，默认 PA31）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const MICROWAVE = GPIO.addInstance();" in syscfg
-    assert 'MICROWAVE.associatedPins[0].$name            = "OUT";' in syscfg
+    assert 'MICROWAVE.associatedPins[0].$name            = "MICROWAVE_OUT";' in syscfg
     assert 'MICROWAVE.associatedPins[0].direction        = "INPUT";' in syscfg
     assert 'MICROWAVE.associatedPins[0].internalResistor = "PULL_UP";' in syscfg
     assert 'MICROWAVE.associatedPins[0].pin.$assign      = "PA31";' in syscfg

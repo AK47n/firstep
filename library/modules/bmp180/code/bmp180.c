@@ -7,8 +7,8 @@
 #include "bmp180.h"
 #include "delay.h" /* delay_us / delay_ms：软 I2C 位操作与读应答重试 */
 #include "math.h"  /* pow：海拔换算（ir_distance 先例） */
-#include "ti_msp_dl_config.h" /* BMP180_PORT / BMP180_SCL_PIN / BMP180_SDA_PIN /
-                                * BMP180_SCL_IOMUX / BMP180_SDA_IOMUX
+#include "ti_msp_dl_config.h" /* BMP180_PORT / BMP180_BMP180_SCL_PIN / BMP180_BMP180_SDA_PIN /
+                                * BMP180_BMP180_SCL_IOMUX / BMP180_BMP180_SDA_IOMUX
                                 * （SysConfig 生成命名：<实例>_<引脚名>_IOMUX，
                                 * 编译矩阵实测；照 AHT10 先例） */
 
@@ -18,34 +18,34 @@
 
 #define BMP180_SDA_OUT()                                        \
     do {                                                       \
-        DL_GPIO_initDigitalOutput(BMP180_SDA_IOMUX);           \
-        DL_GPIO_setPins(BMP180_PORT, BMP180_SDA_PIN);          \
-        DL_GPIO_enableOutput(BMP180_PORT, BMP180_SDA_PIN);     \
+        DL_GPIO_initDigitalOutput(BMP180_BMP180_SDA_IOMUX);           \
+        DL_GPIO_setPins(BMP180_PORT, BMP180_BMP180_SDA_PIN);          \
+        DL_GPIO_enableOutput(BMP180_PORT, BMP180_BMP180_SDA_PIN);     \
     } while (0)
 
 #define BMP180_SDA_IN() \
     do {                \
-        DL_GPIO_initDigitalInput(BMP180_SDA_IOMUX); \
+        DL_GPIO_initDigitalInput(BMP180_BMP180_SDA_IOMUX); \
     } while (0)
 
 #define BMP180_SDA_GET() \
-    ((DL_GPIO_readPins(BMP180_PORT, BMP180_SDA_PIN) & BMP180_SDA_PIN) ? 1 : 0)
+    ((DL_GPIO_readPins(BMP180_PORT, BMP180_BMP180_SDA_PIN) & BMP180_BMP180_SDA_PIN) ? 1 : 0)
 
 #define BMP180_SDA(x)                                              \
     do {                                                           \
         if (x) {                                                   \
-            DL_GPIO_setPins(BMP180_PORT, BMP180_SDA_PIN);          \
+            DL_GPIO_setPins(BMP180_PORT, BMP180_BMP180_SDA_PIN);          \
         } else {                                                   \
-            DL_GPIO_clearPins(BMP180_PORT, BMP180_SDA_PIN);        \
+            DL_GPIO_clearPins(BMP180_PORT, BMP180_BMP180_SDA_PIN);        \
         }                                                          \
     } while (0)
 
 #define BMP180_SCL(x)                                              \
     do {                                                           \
         if (x) {                                                   \
-            DL_GPIO_setPins(BMP180_PORT, BMP180_SCL_PIN);          \
+            DL_GPIO_setPins(BMP180_PORT, BMP180_BMP180_SCL_PIN);          \
         } else {                                                   \
-            DL_GPIO_clearPins(BMP180_PORT, BMP180_SCL_PIN);        \
+            DL_GPIO_clearPins(BMP180_PORT, BMP180_BMP180_SCL_PIN);        \
         }                                                          \
     } while (0)
 

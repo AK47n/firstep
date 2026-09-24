@@ -15,45 +15,45 @@ u8 OLED_GRAM[144][8];
 #define OLED_SPI_SCL(x)                                                \
     do {                                                               \
         if (x) {                                                       \
-            DL_GPIO_setPins(OLED_SPI_SCL_PORT, OLED_SPI_SCL_PIN);      \
+            DL_GPIO_setPins(OLED_SPI_OLED_SPI_SCL_PORT, OLED_SPI_OLED_SPI_SCL_PIN);      \
         } else {                                                       \
-            DL_GPIO_clearPins(OLED_SPI_SCL_PORT, OLED_SPI_SCL_PIN);    \
+            DL_GPIO_clearPins(OLED_SPI_OLED_SPI_SCL_PORT, OLED_SPI_OLED_SPI_SCL_PIN);    \
         }                                                              \
     } while (0)
 
 #define OLED_SPI_SDA(x)                                                \
     do {                                                               \
         if (x) {                                                       \
-            DL_GPIO_setPins(OLED_SPI_SDA_PORT, OLED_SPI_SDA_PIN);      \
+            DL_GPIO_setPins(OLED_SPI_OLED_SPI_SDA_PORT, OLED_SPI_OLED_SPI_SDA_PIN);      \
         } else {                                                       \
-            DL_GPIO_clearPins(OLED_SPI_SDA_PORT, OLED_SPI_SDA_PIN);    \
+            DL_GPIO_clearPins(OLED_SPI_OLED_SPI_SDA_PORT, OLED_SPI_OLED_SPI_SDA_PIN);    \
         }                                                              \
     } while (0)
 
 #define OLED_SPI_DC(x)                                                 \
     do {                                                               \
         if (x) {                                                       \
-            DL_GPIO_setPins(OLED_SPI_DC_PORT, OLED_SPI_DC_PIN);        \
+            DL_GPIO_setPins(OLED_SPI_OLED_SPI_DC_PORT, OLED_SPI_OLED_SPI_DC_PIN);        \
         } else {                                                       \
-            DL_GPIO_clearPins(OLED_SPI_DC_PORT, OLED_SPI_DC_PIN);      \
+            DL_GPIO_clearPins(OLED_SPI_OLED_SPI_DC_PORT, OLED_SPI_OLED_SPI_DC_PIN);      \
         }                                                              \
     } while (0)
 
 #define OLED_SPI_CS(x)                                                 \
     do {                                                               \
         if (x) {                                                       \
-            DL_GPIO_setPins(OLED_SPI_CS_PORT, OLED_SPI_CS_PIN);        \
+            DL_GPIO_setPins(OLED_SPI_OLED_SPI_CS_PORT, OLED_SPI_OLED_SPI_CS_PIN);        \
         } else {                                                       \
-            DL_GPIO_clearPins(OLED_SPI_CS_PORT, OLED_SPI_CS_PIN);      \
+            DL_GPIO_clearPins(OLED_SPI_OLED_SPI_CS_PORT, OLED_SPI_OLED_SPI_CS_PIN);      \
         }                                                              \
     } while (0)
 
 #define OLED_SPI_RES(x)                                                \
     do {                                                               \
         if (x) {                                                       \
-            DL_GPIO_setPins(OLED_SPI_RES_PORT, OLED_SPI_RES_PIN);      \
+            DL_GPIO_setPins(OLED_SPI_OLED_SPI_RES_PORT, OLED_SPI_OLED_SPI_RES_PIN);      \
         } else {                                                       \
-            DL_GPIO_clearPins(OLED_SPI_RES_PORT, OLED_SPI_RES_PIN);    \
+            DL_GPIO_clearPins(OLED_SPI_OLED_SPI_RES_PORT, OLED_SPI_OLED_SPI_RES_PIN);    \
         }                                                              \
     } while (0)
 

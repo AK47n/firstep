@@ -6,8 +6,8 @@
 
 #include "bh1750.h"
 #include "delay.h" /* delay_us / delay_ms：软 I2C 位操作与测量等待 */
-#include "ti_msp_dl_config.h" /* BH1750_PORT / BH1750_SCL_PIN / BH1750_SDA_PIN /
-                               * BH1750_SCL_IOMUX / BH1750_SDA_IOMUX
+#include "ti_msp_dl_config.h" /* BH1750_PORT / BH1750_BH1750_SCL_PIN / BH1750_BH1750_SDA_PIN /
+                               * BH1750_BH1750_SCL_IOMUX / BH1750_BH1750_SDA_IOMUX
                                * （SysConfig 生成命名：<实例>_<引脚名>_IOMUX） */
 
 /* BH1750 软 I2C 位操作原语（立创 bsp 同款时序：半周期 2us ≈ 100kHz 级，
@@ -22,34 +22,34 @@
 
 #define BH1750_SDA_OUT()                                 \
     do {                                                 \
-        DL_GPIO_initDigitalOutput(BH1750_SDA_IOMUX);     \
-        DL_GPIO_setPins(BH1750_PORT, BH1750_SDA_PIN);    \
-        DL_GPIO_enableOutput(BH1750_PORT, BH1750_SDA_PIN); \
+        DL_GPIO_initDigitalOutput(BH1750_BH1750_SDA_IOMUX);     \
+        DL_GPIO_setPins(BH1750_PORT, BH1750_BH1750_SDA_PIN);    \
+        DL_GPIO_enableOutput(BH1750_PORT, BH1750_BH1750_SDA_PIN); \
     } while (0)
 
 #define BH1750_SDA_IN()                    \
     do {                                  \
-        DL_GPIO_initDigitalInput(BH1750_SDA_IOMUX); \
+        DL_GPIO_initDigitalInput(BH1750_BH1750_SDA_IOMUX); \
     } while (0)
 
 #define BH1750_SDA_GET() \
-    ((DL_GPIO_readPins(BH1750_PORT, BH1750_SDA_PIN) & BH1750_SDA_PIN) ? 1 : 0)
+    ((DL_GPIO_readPins(BH1750_PORT, BH1750_BH1750_SDA_PIN) & BH1750_BH1750_SDA_PIN) ? 1 : 0)
 
 #define BH1750_SDA(level)                                  \
     do {                                                   \
         if (level) {                                       \
-            DL_GPIO_setPins(BH1750_PORT, BH1750_SDA_PIN);  \
+            DL_GPIO_setPins(BH1750_PORT, BH1750_BH1750_SDA_PIN);  \
         } else {                                           \
-            DL_GPIO_clearPins(BH1750_PORT, BH1750_SDA_PIN); \
+            DL_GPIO_clearPins(BH1750_PORT, BH1750_BH1750_SDA_PIN); \
         }                                                  \
     } while (0)
 
 #define BH1750_SCL(level)                                  \
     do {                                                   \
         if (level) {                                       \
-            DL_GPIO_setPins(BH1750_PORT, BH1750_SCL_PIN);  \
+            DL_GPIO_setPins(BH1750_PORT, BH1750_BH1750_SCL_PIN);  \
         } else {                                           \
-            DL_GPIO_clearPins(BH1750_PORT, BH1750_SCL_PIN); \
+            DL_GPIO_clearPins(BH1750_PORT, BH1750_BH1750_SCL_PIN); \
         }                                                  \
     } while (0)
 

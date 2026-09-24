@@ -133,9 +133,9 @@ def test_sgp30_mspm0_master_syscfg_instance():
     """mspm0 母版必须有 SGP30 实例（SCL=PA18 / SDA=PB9，输出）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const SGP30 = GPIO.addInstance();" in syscfg
-    assert 'SGP30.associatedPins[0].$name        = "SCL";' in syscfg
+    assert 'SGP30.associatedPins[0].$name        = "SGP30_SCL";' in syscfg
     assert 'SGP30.associatedPins[0].pin.$assign  = "PA18";' in syscfg
-    assert 'SGP30.associatedPins[1].$name        = "SDA";' in syscfg
+    assert 'SGP30.associatedPins[1].$name        = "SGP30_SDA";' in syscfg
     assert 'SGP30.associatedPins[1].pin.$assign  = "PB9";' in syscfg
 
 

@@ -1,6 +1,14 @@
 # -*- coding: utf-8 -*-
 """工单 11 的复现 / 验收探针：`SCL` 重名那组在**赛题主线**上现在怎么答？
 
+> ⚠ **2026-09-24 标注（工单 `hwcheck-acceptance/02` 之后）**：本探针的期望已被那一单
+> **翻转**——02 把母版 14 组同名引脚符号全部改名（`OLED_SPI.SCL` → `OLED_SPI_SCL`），
+> 所以下面 `COMBOS` 里标 `expect_collision=True` 的四组**今天都该照常生成并编译绿**；
+> 再跑本探针会得到四条"该拦的没拦住"。**那不是判据坏了**：判据（`_duplicate_pin_names`）
+> 一条没删，只是真库不再有重名可抓——回归现场改由 `tests/conftest.py` 的
+> `collision_reverted_*` 夹具（撤回一处改名）在内存/临时目录里造，
+> 读数见 `.scratch/hwcheck-acceptance/probe-02-reverse.txt`。本文件保留原样当历史证据。
+
 判据两条腿（跑一遍就有读数）：
 
 * `oled + jy61p`（撞名组）→ **期望在生成前 400**，文案说的是"引脚符号重名"并点名

@@ -7,8 +7,8 @@
 #include "ms5611.h"
 #include "delay.h" /* delay_us / delay_ms：软 I2C 位操作与 10ms 转换等待 */
 #include "math.h"  /* pow：海拔换算（ir_distance 先例） */
-#include "ti_msp_dl_config.h" /* MS5611_PORT / MS5611_SCL_PIN / MS5611_SDA_PIN /
-                                * MS5611_SCL_IOMUX / MS5611_SDA_IOMUX
+#include "ti_msp_dl_config.h" /* MS5611_PORT / MS5611_MS5611_SCL_PIN / MS5611_MS5611_SDA_PIN /
+                                * MS5611_MS5611_SCL_IOMUX / MS5611_MS5611_SDA_IOMUX
                                 * （SysConfig 生成命名：<实例>_<引脚名>_IOMUX，
                                 * 编译矩阵实测；照 AHT10 先例） */
 
@@ -18,34 +18,34 @@
 
 #define MS5611_SDA_OUT()                                        \
     do {                                                       \
-        DL_GPIO_initDigitalOutput(MS5611_SDA_IOMUX);           \
-        DL_GPIO_setPins(MS5611_PORT, MS5611_SDA_PIN);          \
-        DL_GPIO_enableOutput(MS5611_PORT, MS5611_SDA_PIN);     \
+        DL_GPIO_initDigitalOutput(MS5611_MS5611_SDA_IOMUX);           \
+        DL_GPIO_setPins(MS5611_PORT, MS5611_MS5611_SDA_PIN);          \
+        DL_GPIO_enableOutput(MS5611_PORT, MS5611_MS5611_SDA_PIN);     \
     } while (0)
 
 #define MS5611_SDA_IN() \
     do {                \
-        DL_GPIO_initDigitalInput(MS5611_SDA_IOMUX); \
+        DL_GPIO_initDigitalInput(MS5611_MS5611_SDA_IOMUX); \
     } while (0)
 
 #define MS5611_SDA_GET() \
-    ((DL_GPIO_readPins(MS5611_PORT, MS5611_SDA_PIN) & MS5611_SDA_PIN) ? 1 : 0)
+    ((DL_GPIO_readPins(MS5611_PORT, MS5611_MS5611_SDA_PIN) & MS5611_MS5611_SDA_PIN) ? 1 : 0)
 
 #define MS5611_SDA(x)                                              \
     do {                                                           \
         if (x) {                                                   \
-            DL_GPIO_setPins(MS5611_PORT, MS5611_SDA_PIN);          \
+            DL_GPIO_setPins(MS5611_PORT, MS5611_MS5611_SDA_PIN);          \
         } else {                                                   \
-            DL_GPIO_clearPins(MS5611_PORT, MS5611_SDA_PIN);        \
+            DL_GPIO_clearPins(MS5611_PORT, MS5611_MS5611_SDA_PIN);        \
         }                                                          \
     } while (0)
 
 #define MS5611_SCL(x)                                              \
     do {                                                           \
         if (x) {                                                   \
-            DL_GPIO_setPins(MS5611_PORT, MS5611_SCL_PIN);          \
+            DL_GPIO_setPins(MS5611_PORT, MS5611_MS5611_SCL_PIN);          \
         } else {                                                   \
-            DL_GPIO_clearPins(MS5611_PORT, MS5611_SCL_PIN);        \
+            DL_GPIO_clearPins(MS5611_PORT, MS5611_MS5611_SCL_PIN);        \
         }                                                          \
     } while (0)
 

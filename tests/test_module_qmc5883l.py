@@ -230,8 +230,8 @@ def test_qmc5883l_mspm0_syscfg_instance():
     """mspm0 母版必须有 QMC5883L 实例（SCL=PA23 / SDA=PA24，两脚 OUTPUT）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const QMC5883L = GPIO.addInstance();" in syscfg
-    assert 'QMC5883L.associatedPins[0].$name        = "SCL";' in syscfg
-    assert 'QMC5883L.associatedPins[1].$name        = "SDA";' in syscfg
+    assert 'QMC5883L.associatedPins[0].$name        = "QMC5883L_SCL";' in syscfg
+    assert 'QMC5883L.associatedPins[1].$name        = "QMC5883L_SDA";' in syscfg
     assert 'QMC5883L.associatedPins[0].pin.$assign  = "PA23";' in syscfg
     assert 'QMC5883L.associatedPins[1].pin.$assign  = "PA24";' in syscfg
 

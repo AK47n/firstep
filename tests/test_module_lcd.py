@@ -83,8 +83,8 @@ def test_lcd_mspm0_syscfg_instances():
     assert "const LCD = GPIO.addInstance();" in syscfg
     assert "LCD.associatedPins.create(6);" in syscfg
     for i, (name, pin) in enumerate([
-        ("SCL", "PA16"), ("SDA", "PA17"), ("RES", "PA27"),
-        ("DC", "PA22"), ("CS", "PB19"), ("BLK", "PB20"),
+        ("LCD_SCL", "PA16"), ("LCD_SDA", "PA17"), ("LCD_RES", "PA27"),
+        ("LCD_DC", "PA22"), ("LCD_CS", "PB19"), ("BLK", "PB20"),
     ]):
         assert f'LCD.associatedPins[{i}].$name        = "{name}";' in syscfg
         assert f"LCD.associatedPins[{i}].direction    = \"OUTPUT\";" in syscfg

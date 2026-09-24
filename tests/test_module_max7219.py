@@ -65,11 +65,11 @@ def test_max7219_mspm0_syscfg_instances():
     """mspm0 母版：MAX7219 GPIO 实例（DIN/CLK/CS 三输出，CS 初始高）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const MAX7219 = GPIO.addInstance();" in syscfg
-    assert 'MAX7219.associatedPins[0].$name        = "DIN";' in syscfg
+    assert 'MAX7219.associatedPins[0].$name        = "MAX7219_DIN";' in syscfg
     assert 'MAX7219.associatedPins[0].direction    = "OUTPUT";' in syscfg
     assert 'MAX7219.associatedPins[0].pin.$assign  = "PB9";' in syscfg
     assert 'MAX7219.associatedPins[1].pin.$assign  = "PA18";' in syscfg
-    assert 'MAX7219.associatedPins[2].$name        = "CS";' in syscfg
+    assert 'MAX7219.associatedPins[2].$name        = "MAX7219_CS";' in syscfg
     assert 'MAX7219.associatedPins[2].initialValue = "SET";' in syscfg
     assert 'MAX7219.associatedPins[2].pin.$assign  = "PB18";' in syscfg
 

@@ -18,45 +18,45 @@
 #define LCD_SCL(x)                                                     \
     do {                                                               \
         if (x) {                                                       \
-            DL_GPIO_setPins(LCD_SCL_PORT, LCD_SCL_PIN);                \
+            DL_GPIO_setPins(LCD_LCD_SCL_PORT, LCD_LCD_SCL_PIN);                \
         } else {                                                       \
-            DL_GPIO_clearPins(LCD_SCL_PORT, LCD_SCL_PIN);              \
+            DL_GPIO_clearPins(LCD_LCD_SCL_PORT, LCD_LCD_SCL_PIN);              \
         }                                                              \
     } while (0)
 
 #define LCD_SDA(x)                                                     \
     do {                                                               \
         if (x) {                                                       \
-            DL_GPIO_setPins(LCD_SDA_PORT, LCD_SDA_PIN);                \
+            DL_GPIO_setPins(LCD_LCD_SDA_PORT, LCD_LCD_SDA_PIN);                \
         } else {                                                       \
-            DL_GPIO_clearPins(LCD_SDA_PORT, LCD_SDA_PIN);              \
+            DL_GPIO_clearPins(LCD_LCD_SDA_PORT, LCD_LCD_SDA_PIN);              \
         }                                                              \
     } while (0)
 
 #define LCD_RES(x)                                                     \
     do {                                                               \
         if (x) {                                                       \
-            DL_GPIO_setPins(LCD_RES_PORT, LCD_RES_PIN);                \
+            DL_GPIO_setPins(LCD_LCD_RES_PORT, LCD_LCD_RES_PIN);                \
         } else {                                                       \
-            DL_GPIO_clearPins(LCD_RES_PORT, LCD_RES_PIN);              \
+            DL_GPIO_clearPins(LCD_LCD_RES_PORT, LCD_LCD_RES_PIN);              \
         }                                                              \
     } while (0)
 
 #define LCD_DC(x)                                                      \
     do {                                                               \
         if (x) {                                                       \
-            DL_GPIO_setPins(LCD_DC_PORT, LCD_DC_PIN);                  \
+            DL_GPIO_setPins(LCD_LCD_DC_PORT, LCD_LCD_DC_PIN);                  \
         } else {                                                       \
-            DL_GPIO_clearPins(LCD_DC_PORT, LCD_DC_PIN);                \
+            DL_GPIO_clearPins(LCD_LCD_DC_PORT, LCD_LCD_DC_PIN);                \
         }                                                              \
     } while (0)
 
 #define LCD_CS(x)                                                      \
     do {                                                               \
         if (x) {                                                       \
-            DL_GPIO_setPins(LCD_CS_PORT, LCD_CS_PIN);                  \
+            DL_GPIO_setPins(LCD_LCD_CS_PORT, LCD_LCD_CS_PIN);                  \
         } else {                                                       \
-            DL_GPIO_clearPins(LCD_CS_PORT, LCD_CS_PIN);                \
+            DL_GPIO_clearPins(LCD_LCD_CS_PORT, LCD_LCD_CS_PIN);                \
         }                                                              \
     } while (0)
 

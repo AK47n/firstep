@@ -148,8 +148,8 @@ def test_tcs34725_mspm0_syscfg_instance():
     """mspm0 母版必须有 TCS34725 实例（SCL=PA23 / SDA=PA24，输出）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const TCS34725 = GPIO.addInstance();" in syscfg
-    assert 'TCS34725.associatedPins[0].$name        = "SCL";' in syscfg
-    assert 'TCS34725.associatedPins[1].$name        = "SDA";' in syscfg
+    assert 'TCS34725.associatedPins[0].$name        = "TCS34725_SCL";' in syscfg
+    assert 'TCS34725.associatedPins[1].$name        = "TCS34725_SDA";' in syscfg
     assert 'TCS34725.associatedPins[0].pin.$assign  = "PA23";' in syscfg
     assert 'TCS34725.associatedPins[1].pin.$assign  = "PA24";' in syscfg
 

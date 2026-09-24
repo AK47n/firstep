@@ -19,9 +19,9 @@
 static void _tx_bit(uint8_t level)
 {
     if (level) {
-        DL_GPIO_setPins(SYN6288_PORT, SYN6288_TX_PIN);
+        DL_GPIO_setPins(SYN6288_PORT, SYN6288_SYN6288_TX_PIN);
     } else {
-        DL_GPIO_clearPins(SYN6288_PORT, SYN6288_TX_PIN);
+        DL_GPIO_clearPins(SYN6288_PORT, SYN6288_SYN6288_TX_PIN);
     }
     delay_us(SYN6288_UART_BIT_US);
 }
@@ -40,7 +40,7 @@ static void _tx_byte(uint8_t ch)
 void syn6288_init(void)
 {
     /* 空闲高电平（SysConfig 已配初始 SET，此处再显式置一次保险） */
-    DL_GPIO_setPins(SYN6288_PORT, SYN6288_TX_PIN);
+    DL_GPIO_setPins(SYN6288_PORT, SYN6288_SYN6288_TX_PIN);
 }
 
 void syn6288_send_cmd(uint8_t cmd_type, uint8_t cmd_par, const char *text)

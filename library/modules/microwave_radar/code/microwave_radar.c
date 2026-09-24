@@ -5,7 +5,7 @@
  * 标明来源与链接。 */
 
 #include "microwave_radar.h"
-#include "ti_msp_dl_config.h" /* MICROWAVE_PORT / MICROWAVE_OUT_PIN
+#include "ti_msp_dl_config.h" /* MICROWAVE_PORT / MICROWAVE_MICROWAVE_OUT_PIN
                                 * （SysConfig 生成命名：<实例>_<引脚名>_PIN
                                 * + 单 <实例>_PORT 宏；单脚输入实例，
                                 * TTP224 先例） */
@@ -19,8 +19,8 @@
 
 static uint8_t microwave_radar_raw_level(void)
 {
-    uint32_t bits = DL_GPIO_readPins(MICROWAVE_PORT, MICROWAVE_OUT_PIN);
-    return (bits & MICROWAVE_OUT_PIN) ? 1 : 0;
+    uint32_t bits = DL_GPIO_readPins(MICROWAVE_PORT, MICROWAVE_MICROWAVE_OUT_PIN);
+    return (bits & MICROWAVE_MICROWAVE_OUT_PIN) ? 1 : 0;
 }
 
 void microwave_radar_init(void)

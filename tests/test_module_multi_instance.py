@@ -739,7 +739,7 @@ FAKE_SYSCFG = (
     "const LED_BEEP = GPIO.addInstance();\n"
     'LED_BEEP.$name = "LED_BEEP";\n'
     "LED_BEEP.associatedPins.create(1);\n"
-    'LED_BEEP.associatedPins[0].$name        = "LED";\n'
+    'LED_BEEP.associatedPins[0].$name        = "LED_BEEP_LED";\n'
     'LED_BEEP.associatedPins[0].direction    = "OUTPUT";\n'
     'LED_BEEP.associatedPins[0].initialValue = "CLEARED";\n'
     'LED_BEEP.associatedPins[0].pin.$assign  = "PA15";\n'
@@ -843,7 +843,7 @@ def test_render_mspm0_multi_plan_channels_and_instance_macros():
 
     assert "#define LED_CHANNEL_COUNT 4" in text
     assert "#define LED_CHANNEL_0_PORT LED_BEEP_PORT" in text
-    assert "#define LED_CHANNEL_0_PIN  LED_BEEP_LED_PIN" in text
+    assert "#define LED_CHANNEL_0_PIN  LED_BEEP_LED_BEEP_LED_PIN" in text
     assert "#define LED_CHANNEL_1_PORT LED_2_PORT" in text
     assert "#define LED_CHANNEL_1_PIN  LED_2_LED2_PIN" in text
     assert "#define LED_CHANNEL_3_PORT LED_4_PORT" in text
@@ -888,7 +888,7 @@ def test_render_matrix_4_light_channel_and_pin_macros():
     mspm0 = render_led_instances_text(_expand(MATRIX_4, "mspm0"), "mspm0")
     assert "#define LED_CHANNEL_COUNT 4" in mspm0
     assert "#define LED_CHANNEL_0_PORT LED_BEEP_PORT" in mspm0
-    assert "#define LED_CHANNEL_0_PIN  LED_BEEP_LED_PIN" in mspm0
+    assert "#define LED_CHANNEL_0_PIN  LED_BEEP_LED_BEEP_LED_PIN" in mspm0
     assert "#define LED_CHANNEL_1_PORT LED_2_PORT" in mspm0
     assert "#define LED_CHANNEL_1_PIN  LED_2_LED2_PIN" in mspm0
     assert "#define LED_CHANNEL_2_PORT LED_3_PORT" in mspm0

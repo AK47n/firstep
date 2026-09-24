@@ -6,8 +6,8 @@
 
 #include "dht11.h"
 #include "delay.h" /* delay_us / delay_ms：单总线位时序延时 */
-#include "ti_msp_dl_config.h" /* DHT11_PORT / DHT11_DATA_PIN /
-                               * DHT11_DATA_IOMUX（SysConfig 生成命名
+#include "ti_msp_dl_config.h" /* DHT11_PORT / DHT11_DHT11_DATA_PIN /
+                               * DHT11_DHT11_DATA_IOMUX（SysConfig 生成命名
                                * <实例>_<引脚名>_IOMUX，aht10 编译矩阵实测） */
 
 /* DHT11 单总线位操作原语（立创 bsp 同款时序：起始低电平 19ms、响应等待
@@ -16,25 +16,25 @@
 
 #define DHT11_DATA_OUT()                                     \
     do {                                                     \
-        DL_GPIO_initDigitalOutput(DHT11_DATA_IOMUX);         \
-        DL_GPIO_setPins(DHT11_PORT, DHT11_DATA_PIN);         \
-        DL_GPIO_enableOutput(DHT11_PORT, DHT11_DATA_PIN);    \
+        DL_GPIO_initDigitalOutput(DHT11_DHT11_DATA_IOMUX);         \
+        DL_GPIO_setPins(DHT11_PORT, DHT11_DHT11_DATA_PIN);         \
+        DL_GPIO_enableOutput(DHT11_PORT, DHT11_DHT11_DATA_PIN);    \
     } while (0)
 
 #define DHT11_DATA_IN()                    \
     do {                                  \
-        DL_GPIO_initDigitalInput(DHT11_DATA_IOMUX); \
+        DL_GPIO_initDigitalInput(DHT11_DHT11_DATA_IOMUX); \
     } while (0)
 
 #define DHT11_DATA_GET() \
-    ((DL_GPIO_readPins(DHT11_PORT, DHT11_DATA_PIN) & DHT11_DATA_PIN) ? 1 : 0)
+    ((DL_GPIO_readPins(DHT11_PORT, DHT11_DHT11_DATA_PIN) & DHT11_DHT11_DATA_PIN) ? 1 : 0)
 
 #define DHT11_DATA_SET(level)                                  \
     do {                                                       \
         if (level) {                                           \
-            DL_GPIO_setPins(DHT11_PORT, DHT11_DATA_PIN);       \
+            DL_GPIO_setPins(DHT11_PORT, DHT11_DHT11_DATA_PIN);       \
         } else {                                               \
-            DL_GPIO_clearPins(DHT11_PORT, DHT11_DATA_PIN);     \
+            DL_GPIO_clearPins(DHT11_PORT, DHT11_DHT11_DATA_PIN);     \
         }                                                      \
     } while (0)
 

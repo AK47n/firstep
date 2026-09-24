@@ -6,7 +6,7 @@
 
 #include "ir_remote_tx.h"
 #include "delay.h" /* delay_us：位时序空闲段（延时走库内 delay 模块） */
-#include "ti_msp_dl_config.h" /* IR_TX_PORT / IR_TX_OUT_PIN / CPUCLK_FREQ */
+#include "ti_msp_dl_config.h" /* IR_TX_PORT / IR_TX_IR_TX_OUT_PIN / CPUCLK_FREQ */
 
 /* NEC 帧时序（与批次 1 ir_remote 解码阈值一对一，20us 拍全落在脉宽中央） */
 #define IR_TX_LEADER_LOW_US   9000u  /* 引导码：载波 */
@@ -19,12 +19,12 @@
 
 static void ir_tx_carrier_on(void)
 {
-    DL_GPIO_setPins(IR_TX_PORT, IR_TX_OUT_PIN);
+    DL_GPIO_setPins(IR_TX_PORT, IR_TX_IR_TX_OUT_PIN);
 }
 
 static void ir_tx_carrier_off(void)
 {
-    DL_GPIO_clearPins(IR_TX_PORT, IR_TX_OUT_PIN);
+    DL_GPIO_clearPins(IR_TX_PORT, IR_TX_IR_TX_OUT_PIN);
 }
 
 /* 38kHz 载波 burst：半周期 = 1/(2×38000) ≈ 13.16us —— 按 CPUCLK_FREQ 精确

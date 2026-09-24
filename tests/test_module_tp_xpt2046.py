@@ -75,8 +75,8 @@ def test_tp_xpt2046_mspm0_syscfg_instances():
     assert "const TP_XPT2046 = GPIO.addInstance();" in syscfg
     assert "TP_XPT2046.associatedPins.create(5);" in syscfg
     for i, (name, pin, direction) in enumerate([
-        ("CS", "PA8", "OUTPUT"), ("CLK", "PA13", "OUTPUT"),
-        ("DIN", "PA9", "OUTPUT"), ("DOUT", "PA28", "INPUT"),
+        ("TP_XPT2046_CS", "PA8", "OUTPUT"), ("TP_XPT2046_CLK", "PA13", "OUTPUT"),
+        ("TP_XPT2046_DIN", "PA9", "OUTPUT"), ("DOUT", "PA28", "INPUT"),
         ("PEN", "PB24", "INPUT"),
     ]):
         assert f'TP_XPT2046.associatedPins[{i}].$name        = "{name}";' in syscfg

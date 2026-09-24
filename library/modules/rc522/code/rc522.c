@@ -25,18 +25,18 @@
 
 /* ---------- 软 SPI 原语（MSB 先，页 200us 半周期） ---------- */
 
-static void _cs_low(void)  { DL_GPIO_clearPins(RC522_PORT, RC522_CS_PIN); }
-static void _cs_high(void) { DL_GPIO_setPins(RC522_PORT, RC522_CS_PIN); }
+static void _cs_low(void)  { DL_GPIO_clearPins(RC522_PORT, RC522_RC522_CS_PIN); }
+static void _cs_high(void) { DL_GPIO_setPins(RC522_PORT, RC522_RC522_CS_PIN); }
 static void _rst_enable(void)  { DL_GPIO_clearPins(RC522_PORT, RC522_RST_PIN); }
 static void _rst_disable(void) { DL_GPIO_setPins(RC522_PORT, RC522_RST_PIN); }
-static void _sck_low(void)  { DL_GPIO_clearPins(RC522_PORT, RC522_SCK_PIN); }
-static void _sck_high(void) { DL_GPIO_setPins(RC522_PORT, RC522_SCK_PIN); }
-static void _mosi_low(void)  { DL_GPIO_clearPins(RC522_PORT, RC522_MOSI_PIN); }
-static void _mosi_high(void) { DL_GPIO_setPins(RC522_PORT, RC522_MOSI_PIN); }
+static void _sck_low(void)  { DL_GPIO_clearPins(RC522_PORT, RC522_RC522_SCK_PIN); }
+static void _sck_high(void) { DL_GPIO_setPins(RC522_PORT, RC522_RC522_SCK_PIN); }
+static void _mosi_low(void)  { DL_GPIO_clearPins(RC522_PORT, RC522_RC522_MOSI_PIN); }
+static void _mosi_high(void) { DL_GPIO_setPins(RC522_PORT, RC522_RC522_MOSI_PIN); }
 
 static uint8_t _miso_level(void)
 {
-    return (DL_GPIO_readPins(RC522_PORT, RC522_MISO_PIN) & RC522_MISO_PIN) ? 1u : 0u;
+    return (DL_GPIO_readPins(RC522_PORT, RC522_RC522_MISO_PIN) & RC522_RC522_MISO_PIN) ? 1u : 0u;
 }
 
 /* 软件模拟 SPI 发送一个字节（高位先行；页面时序原样） */

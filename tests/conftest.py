@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -127,6 +128,80 @@ def make_ccs_project(fake_ccs_master_project, fake_module_library, mspm0_selecti
         return output_dir
 
     return _make
+
+
+# ---------------------------------------------------------------------------
+# 引脚符号重名的回归现场（工单 hwcheck-acceptance/02）
+# ---------------------------------------------------------------------------
+#
+# 02 把母版里 14 组同名的引脚符号（`SCL`/`SDA`/`LED`/`OUT`…）改成
+# `<实例名>_<原符号>`，于是**真母版不再有重名**——而"同名引脚符号必须在生成前
+# 被拦下"这条判据（工单 hwcheck-unknown-device/11）仍要有人守：SysConfig 的
+# `$name` 全局唯一约束还在，将来任何一件新模块把引脚起成同名，工程就会在 CCS 里
+# 编不过。下面几个夹具把**改名撤回一处**，造出"将来又撞名"的现场——判据必须在这
+# 份现场上变红（真母版上则必须放行）。
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+REAL_MSPM0_MASTER = REPO_ROOT / "library" / "masters" / "mspm0" / "mspm0.syscfg"
+
+# 撤回的那两处：OLED_SPI 与 JY61P 的 SCL/SDA 还原成撞名的 `SCL`/`SDA`——正是
+# 工单 11 实测的那一组（其余 64 个符号保持 02 之后的样子）。两边都要撤：只撤一边
+# 就不撞了（对面已叫 `JY61P_SCL`）。
+_REVERTED_PIN_NAMES = (
+    ("OLED_SPI", "OLED_SPI_SCL", "SCL"),
+    ("OLED_SPI", "OLED_SPI_SDA", "SDA"),
+    ("JY61P", "JY61P_SCL", "SCL"),
+    ("JY61P", "JY61P_SDA", "SDA"),
+)
+
+
+def _revert_pin_names(text: str) -> str:
+    """母版文本 → 把工单 02 的那几处改名撤回（造重名现场）。
+
+    按「实例 + 当前符号名」定位（不是抄一整行字面量）：母版哪天重排 / 改缩进，
+    夹具不会跟着碎。找不齐就是母版漂移——当场大声失败，不静默造出一个"不撞"的
+    假现场（第一版按整行字面量匹配，行内空格一改就废）。
+    """
+    for instance, current, reverted in _REVERTED_PIN_NAMES:
+        pattern = re.compile(
+            r'(?m)^(?P<head>\s*' + re.escape(instance)
+            + r'\.associatedPins\[\d+\]\.\$name\s*=\s*)"' + re.escape(current) + r'";'
+        )
+        text, count = pattern.subn('\\g<head>"' + reverted + '";', text)
+        assert count == 1, (
+            f"母版里找不到 {(instance, current)} 这个改名落点（命中 {count} 处）"
+        )
+    return text
+
+
+@pytest.fixture
+def mspm0_master_syscfg_text() -> str:
+    """真母版 `mspm0.syscfg` 全文（判据按文本吃的那些入口用）。"""
+    return REAL_MSPM0_MASTER.read_text(encoding="utf-8")
+
+
+@pytest.fixture
+def collision_reverted_syscfg(mspm0_master_syscfg_text) -> str:
+    """真母版 + **把 02 的改名撤回一处** = 重名回归现场（`SCL`/`SDA` 又撞上）。"""
+    return _revert_pin_names(mspm0_master_syscfg_text)
+
+
+@pytest.fixture
+def collision_reverted_masters_dir(tmp_path) -> Path:
+    """整棵母版库的临时副本，其中 `mspm0/mspm0.syscfg` 是上面那份回归现场。
+
+    整树拷贝（不是只放一个 syscfg 文件）：检测页投影还会读母版里其它文件
+    （配方接口清单要母版工程头），只放一个文件会造出另一种失败。
+    """
+    import shutil
+
+    target = tmp_path / "masters"
+    shutil.copytree(REPO_ROOT / "library" / "masters", target)
+    syscfg = target / "mspm0" / "mspm0.syscfg"
+    syscfg.write_text(
+        _revert_pin_names(syscfg.read_text(encoding="utf-8")), encoding="utf-8"
+    )
+    return target
 
 
 # ---------------------------------------------------------------------------

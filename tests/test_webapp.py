@@ -854,15 +854,24 @@ def test_bindings_auto_resolves_conflict_and_keeps_sharing(client, context):
     assert "共享" in str(group["reason"])
 
 
-def test_bindings_auto_reports_the_pin_name_collision_on_the_real_library(tmp_path):
-    """**自动配置端点也要说**「这一组编不过」（工单 11）。
+def test_bindings_auto_reports_the_pin_name_collision_after_a_regression(
+    tmp_path, collision_reverted_masters_dir
+):
+    """**自动配置端点也要说**「这一组编不过」（工单 11 的判据，工单
+    `hwcheck-acceptance/02` 之后现场改为"撤回改名一处"）。
+
+    ⚠ 本条原名 `..._on_the_real_library`：02 把母版 14 组同名引脚符号全改名之后，
+    真母版上**已经没有重名可抓**（真库跑这一格现在是 `ok:true`，见下面的对照腿），
+    所以现场换成"母版副本 + 把 OLED_SPI / JY61P 的 SCL/SDA 撤回成裸名"——等价于
+    "将来又有模块把引脚起成同名"。判据本体（同一条 `_duplicate_pin_names`）没动。
 
     为什么必须钉这一跳：赛题页的动作顺序是「选模块 → 点自动配置 → 生成」。点完
     自动配置若回 `ok:true`，学生以为已经没问题了，**直到点生成才吃 400**——P0 段
-    点名的"点『自动配置』也照常"就是这一格。判据 = 同一条冲突判据（`syscfg_pin_
-    conflict_report` 的 `_duplicate_pin_names`，prune 后判定）在这个端点上也要走到。
+    点名的"点『自动配置』也照常"就是这一格。
 
-    用**真库 + 真母版**：重名是母版里的事实（`SCL`/`SDA` 十七件共用），假库造不出来。
+    三条腿：① 重名现场上自动配置回 `ok:false` 并点名两件；② 同一现场上
+    `validate` 也说；③ **真库上 `oled + jy61p` 现在是 `ok:true`**（02 打开的那一格，
+    判据不许把好路也拦住）。
     """
     from fastapi.testclient import TestClient
 
@@ -871,21 +880,25 @@ def test_bindings_auto_reports_the_pin_name_collision_on_the_real_library(tmp_pa
     from tests.fakes import FakeLLM
 
     repo = Path(__file__).resolve().parents[1]
-    ctx = AppContext(
-        config_path=tmp_path / "cfg" / "config.json",
-        config=AppConfig(
-            api_key="sk-test",
-            module_library_dir=repo / "library" / "modules",
-            masters_dir=repo / "library" / "masters",
-        ),
-        llm_factory=lambda config: FakeLLM(),
-    )
-    real_client = TestClient(create_app(ctx))
 
-    blocked = real_client.post(
-        "/api/bindings/auto",
-        json={"platform": "mspm0", "slugs": ["led", "delay", "debug_uart",
-                                             "oled", "jy61p"]},
+    def _client(masters_dir: Path) -> TestClient:
+        ctx = AppContext(
+            config_path=tmp_path / "cfg" / "config.json",
+            config=AppConfig(
+                api_key="sk-test",
+                module_library_dir=repo / "library" / "modules",
+                masters_dir=masters_dir,
+            ),
+            llm_factory=lambda config: FakeLLM(),
+        )
+        return TestClient(create_app(ctx))
+
+    colliding = ["led", "delay", "debug_uart", "oled", "jy61p"]
+
+    # ① 重名现场：自动配置必须回 ok:false
+    regressed = _client(collision_reverted_masters_dir)
+    blocked = regressed.post(
+        "/api/bindings/auto", json={"platform": "mspm0", "slugs": colliding}
     )
     assert blocked.status_code == 200, blocked.text
     body = blocked.json()
@@ -898,23 +911,30 @@ def test_bindings_auto_reports_the_pin_name_collision_on_the_real_library(tmp_pa
     for slug in ("oled", "jy61p"):
         assert slug in message, f"要点名撞车的模块 {slug}：{message}"
 
-    # 对照（判据不许把好路也拦掉）：同平台换掉撞名那件 → ok:true
-    ok_body = real_client.post(
+    # ② validate 同一跳也要说（前端"离开引脚配置、进生成前"调它）
+    checked = regressed.post(
+        "/api/bindings/validate", json={"platform": "mspm0", "slugs": colliding}
+    ).json()
+    assert checked["ok"] is False, checked
+    assert "SCL" in checked["error"], checked
+
+    # ③ 真库（02 之后）：撞名那一格已经打开——自动配置回 ok:true
+    real = _client(repo / "library" / "masters")
+    opened = real.post(
+        "/api/bindings/auto", json={"platform": "mspm0", "slugs": colliding}
+    ).json()
+    assert opened["ok"] is True, (
+        "工单 hwcheck-acceptance/02 之后母版不再有同名引脚符号，"
+        "oled + jy61p 应放行：" + json.dumps(opened, ensure_ascii=False)
+    )
+    # 对照（判据不许把好路也拦掉）：同平台换掉那一件 → ok:true
+    ok_body = real.post(
         "/api/bindings/auto",
         json={"platform": "mspm0", "slugs": ["led", "delay", "debug_uart",
                                              "oled", "ml_mpu6050"]},
     ).json()
     assert ok_body["ok"] is True, ok_body
-
-    # validate 同一跳也要说（前端"离开引脚配置、进生成前"调它）
-    checked = real_client.post(
-        "/api/bindings/validate",
-        json={"platform": "mspm0", "slugs": ["led", "delay", "debug_uart",
-                                             "oled", "jy61p"]},
-    ).json()
-    assert checked["ok"] is False, checked
-    assert "SCL" in checked["error"], checked
-    ok_checked = real_client.post(
+    ok_checked = real.post(
         "/api/bindings/validate",
         json={"platform": "mspm0", "slugs": ["led", "delay", "debug_uart",
                                              "oled", "ml_mpu6050"]},

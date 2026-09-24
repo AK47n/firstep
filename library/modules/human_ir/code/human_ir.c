@@ -5,7 +5,7 @@
  * 标明来源与链接。 */
 
 #include "human_ir.h"
-#include "ti_msp_dl_config.h" /* HUMAN_IR_PORT / HUMAN_IR_OUT_PIN
+#include "ti_msp_dl_config.h" /* HUMAN_IR_PORT / HUMAN_IR_HUMAN_IR_OUT_PIN
                                 * （SysConfig 生成命名：<实例>_<引脚名>_PIN
                                 * + 单 <实例>_PORT 宏；单脚输入实例，
                                 * TTP224 先例） */
@@ -18,8 +18,8 @@
 
 static uint8_t human_ir_raw_level(void)
 {
-    uint32_t bits = DL_GPIO_readPins(HUMAN_IR_PORT, HUMAN_IR_OUT_PIN);
-    return (bits & HUMAN_IR_OUT_PIN) ? 1 : 0;
+    uint32_t bits = DL_GPIO_readPins(HUMAN_IR_PORT, HUMAN_IR_HUMAN_IR_OUT_PIN);
+    return (bits & HUMAN_IR_HUMAN_IR_OUT_PIN) ? 1 : 0;
 }
 
 void human_ir_init(void)

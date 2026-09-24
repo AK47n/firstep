@@ -317,9 +317,13 @@ def _duplicate_pin_names(model: SyscfgModel) -> dict[str, list[str]]:
     """同名引脚符号 → 用到它的「模块（实例）」清单（工单 11；空 = 无重名）。
 
     判据 = SysConfig 的 `$name` **全局唯一**（与 `$assign` 的"一个脚一只实例"是
-    两根轴）。**只看传进来的模型**（调用方给的是 prune + rewrite 之后那一份），
-    所以没选中的实例天然不在判据里——在母版全文上判会把存量的 **14 组**重名全报
-    出来（母版本来就有；14 = 组数，不是件数，见 issues/11 的表）。
+    两根轴）。**只看传进来的模型**：调用方给 prune + rewrite 之后那一份 = "这一组
+    选中集里有没有撞名"；给母版全文那一份（`manifests=()`）= "母版数据本身守不守
+    规矩"——后者正是构建期守卫
+    （`tests/test_syscfg_prune.py::test_master_pin_symbols_are_globally_unique`）
+    吃的口径。工单 `hwcheck-acceptance/02` 之前母版有 **14 组**存量重名
+    （`SCL` 一组 18 个实例），全文判定会恒报；改名去重之后母版恒为 0 组，
+    这条口径才立得起来。
 
     名字取自 `SyscfgModel.pin_names`（解析单源），模块名用 `INSTANCE_CONSUMERS`
     反查（哪几件模块消费这个实例）——未登记实例只报实例名，不猜模块。

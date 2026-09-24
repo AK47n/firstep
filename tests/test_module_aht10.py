@@ -133,9 +133,9 @@ def test_aht10_mspm0_syscfg_instance():
     """mspm0 母版必须有 AHT10 实例（SCL=PB6 / SDA=PB7，输出）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const AHT10 = GPIO.addInstance();" in syscfg
-    assert 'AHT10.associatedPins[0].$name        = "SCL";' in syscfg
+    assert 'AHT10.associatedPins[0].$name        = "AHT10_SCL";' in syscfg
     assert 'AHT10.associatedPins[0].pin.$assign  = "PB6";' in syscfg
-    assert 'AHT10.associatedPins[1].$name        = "SDA";' in syscfg
+    assert 'AHT10.associatedPins[1].$name        = "AHT10_SDA";' in syscfg
     assert 'AHT10.associatedPins[1].pin.$assign  = "PB7";' in syscfg
 
 

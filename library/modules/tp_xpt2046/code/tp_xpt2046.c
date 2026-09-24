@@ -13,27 +13,27 @@
 #define TP_CLK(x)                                                          \
     do {                                                                   \
         if (x) {                                                           \
-            DL_GPIO_setPins(TP_XPT2046_CLK_PORT, TP_XPT2046_CLK_PIN);      \
+            DL_GPIO_setPins(TP_XPT2046_TP_XPT2046_CLK_PORT, TP_XPT2046_TP_XPT2046_CLK_PIN);      \
         } else {                                                           \
-            DL_GPIO_clearPins(TP_XPT2046_CLK_PORT, TP_XPT2046_CLK_PIN);    \
+            DL_GPIO_clearPins(TP_XPT2046_TP_XPT2046_CLK_PORT, TP_XPT2046_TP_XPT2046_CLK_PIN);    \
         }                                                                  \
     } while (0)
 
 #define TP_DIN(x)                                                          \
     do {                                                                   \
         if (x) {                                                           \
-            DL_GPIO_setPins(TP_XPT2046_DIN_PORT, TP_XPT2046_DIN_PIN);      \
+            DL_GPIO_setPins(TP_XPT2046_TP_XPT2046_DIN_PORT, TP_XPT2046_TP_XPT2046_DIN_PIN);      \
         } else {                                                           \
-            DL_GPIO_clearPins(TP_XPT2046_DIN_PORT, TP_XPT2046_DIN_PIN);    \
+            DL_GPIO_clearPins(TP_XPT2046_TP_XPT2046_DIN_PORT, TP_XPT2046_TP_XPT2046_DIN_PIN);    \
         }                                                                  \
     } while (0)
 
 #define TP_CS(x)                                                           \
     do {                                                                   \
         if (x) {                                                           \
-            DL_GPIO_setPins(TP_XPT2046_CS_PORT, TP_XPT2046_CS_PIN);        \
+            DL_GPIO_setPins(TP_XPT2046_TP_XPT2046_CS_PORT, TP_XPT2046_TP_XPT2046_CS_PIN);        \
         } else {                                                           \
-            DL_GPIO_clearPins(TP_XPT2046_CS_PORT, TP_XPT2046_CS_PIN);      \
+            DL_GPIO_clearPins(TP_XPT2046_TP_XPT2046_CS_PORT, TP_XPT2046_TP_XPT2046_CS_PIN);      \
         }                                                                  \
     } while (0)
 

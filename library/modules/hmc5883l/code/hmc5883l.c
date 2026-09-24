@@ -7,8 +7,8 @@
 
 #include "hmc5883l.h"
 #include "delay.h" /* delay_us：软 I2C 位操作半周期 */
-#include "ti_msp_dl_config.h" /* HMC5883L_PORT / HMC5883L_SCL_PIN / HMC5883L_SDA_PIN /
-                               * HMC5883L_SCL_IOMUX / HMC5883L_SDA_IOMUX
+#include "ti_msp_dl_config.h" /* HMC5883L_PORT / HMC5883L_HMC5883L_SCL_PIN / HMC5883L_HMC5883L_SDA_PIN /
+                               * HMC5883L_HMC5883L_SCL_IOMUX / HMC5883L_HMC5883L_SDA_IOMUX
                                * （SysConfig 生成命名：<实例>_<引脚名>_IOMUX） */
 
 /* 软 I2C 位操作原语（照 aht10/bh1750 先例：半周期 2us ≈ 100kHz 级；
@@ -17,34 +17,34 @@
 
 #define HMC5883L_SDA_OUT()                                   \
     do {                                                     \
-        DL_GPIO_initDigitalOutput(HMC5883L_SDA_IOMUX);       \
-        DL_GPIO_setPins(HMC5883L_PORT, HMC5883L_SDA_PIN);    \
-        DL_GPIO_enableOutput(HMC5883L_PORT, HMC5883L_SDA_PIN); \
+        DL_GPIO_initDigitalOutput(HMC5883L_HMC5883L_SDA_IOMUX);       \
+        DL_GPIO_setPins(HMC5883L_PORT, HMC5883L_HMC5883L_SDA_PIN);    \
+        DL_GPIO_enableOutput(HMC5883L_PORT, HMC5883L_HMC5883L_SDA_PIN); \
     } while (0)
 
 #define HMC5883L_SDA_IN()                            \
     do {                                             \
-        DL_GPIO_initDigitalInput(HMC5883L_SDA_IOMUX); \
+        DL_GPIO_initDigitalInput(HMC5883L_HMC5883L_SDA_IOMUX); \
     } while (0)
 
 #define HMC5883L_SDA_GET() \
-    ((DL_GPIO_readPins(HMC5883L_PORT, HMC5883L_SDA_PIN) & HMC5883L_SDA_PIN) ? 1 : 0)
+    ((DL_GPIO_readPins(HMC5883L_PORT, HMC5883L_HMC5883L_SDA_PIN) & HMC5883L_HMC5883L_SDA_PIN) ? 1 : 0)
 
 #define HMC5883L_SDA(level)                                     \
     do {                                                        \
         if (level) {                                            \
-            DL_GPIO_setPins(HMC5883L_PORT, HMC5883L_SDA_PIN);   \
+            DL_GPIO_setPins(HMC5883L_PORT, HMC5883L_HMC5883L_SDA_PIN);   \
         } else {                                                \
-            DL_GPIO_clearPins(HMC5883L_PORT, HMC5883L_SDA_PIN); \
+            DL_GPIO_clearPins(HMC5883L_PORT, HMC5883L_HMC5883L_SDA_PIN); \
         }                                                       \
     } while (0)
 
 #define HMC5883L_SCL(level)                                     \
     do {                                                        \
         if (level) {                                            \
-            DL_GPIO_setPins(HMC5883L_PORT, HMC5883L_SCL_PIN);   \
+            DL_GPIO_setPins(HMC5883L_PORT, HMC5883L_HMC5883L_SCL_PIN);   \
         } else {                                                \
-            DL_GPIO_clearPins(HMC5883L_PORT, HMC5883L_SCL_PIN); \
+            DL_GPIO_clearPins(HMC5883L_PORT, HMC5883L_HMC5883L_SCL_PIN); \
         }                                                       \
     } while (0)
 

@@ -137,7 +137,7 @@ def test_syn6288_mspm0_syscfg_instances():
     """mspm0 母版：SYN6288 GPIO 实例（TX 输出，初始 SET = 空闲高）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const SYN6288 = GPIO.addInstance();" in syscfg
-    assert 'SYN6288.associatedPins[0].$name        = "TX";' in syscfg
+    assert 'SYN6288.associatedPins[0].$name        = "SYN6288_TX";' in syscfg
     assert 'SYN6288.associatedPins[0].direction    = "OUTPUT";' in syscfg
     assert 'SYN6288.associatedPins[0].initialValue = "SET";' in syscfg
     assert 'SYN6288.associatedPins[0].pin.$assign  = "PB20";' in syscfg

@@ -6,8 +6,8 @@
 
 #include "ags10.h"
 #include "delay.h" /* delay_us / delay_ms：软 I2C 位操作与读应答重试 */
-#include "ti_msp_dl_config.h" /* AGS10_SCL_PORT/PIN、AGS10_SDA_PORT/PIN、
-                                * AGS10_SCL_IOMUX / AGS10_SDA_IOMUX
+#include "ti_msp_dl_config.h" /* AGS10_AGS10_SCL_PORT/PIN、AGS10_AGS10_SDA_PORT/PIN、
+                                * AGS10_AGS10_SCL_IOMUX / AGS10_AGS10_SDA_IOMUX
                                 * （SysConfig 生成命名：<实例>_<引脚名>_PORT/
                                 * PIN/_IOMUX——SCL/SDA 跨 GPIOB/GPIOA 两端口，
                                 * 生成器按引脚名分派各口宏，无组合 AGS10_PORT；
@@ -20,34 +20,34 @@
 
 #define AGS10_SDA_OUT()                                        \
     do {                                                       \
-        DL_GPIO_initDigitalOutput(AGS10_SDA_IOMUX);            \
-        DL_GPIO_setPins(AGS10_SDA_PORT, AGS10_SDA_PIN);        \
-        DL_GPIO_enableOutput(AGS10_SDA_PORT, AGS10_SDA_PIN);   \
+        DL_GPIO_initDigitalOutput(AGS10_AGS10_SDA_IOMUX);            \
+        DL_GPIO_setPins(AGS10_AGS10_SDA_PORT, AGS10_AGS10_SDA_PIN);        \
+        DL_GPIO_enableOutput(AGS10_AGS10_SDA_PORT, AGS10_AGS10_SDA_PIN);   \
     } while (0)
 
 #define AGS10_SDA_IN()                          \
     do {                                        \
-        DL_GPIO_initDigitalInput(AGS10_SDA_IOMUX); \
+        DL_GPIO_initDigitalInput(AGS10_AGS10_SDA_IOMUX); \
     } while (0)
 
 #define AGS10_SDA_GET() \
-    ((DL_GPIO_readPins(AGS10_SDA_PORT, AGS10_SDA_PIN) & AGS10_SDA_PIN) ? 1 : 0)
+    ((DL_GPIO_readPins(AGS10_AGS10_SDA_PORT, AGS10_AGS10_SDA_PIN) & AGS10_AGS10_SDA_PIN) ? 1 : 0)
 
 #define AGS10_SDA(x)                                                 \
     do {                                                             \
         if (x) {                                                     \
-            DL_GPIO_setPins(AGS10_SDA_PORT, AGS10_SDA_PIN);          \
+            DL_GPIO_setPins(AGS10_AGS10_SDA_PORT, AGS10_AGS10_SDA_PIN);          \
         } else {                                                     \
-            DL_GPIO_clearPins(AGS10_SDA_PORT, AGS10_SDA_PIN);        \
+            DL_GPIO_clearPins(AGS10_AGS10_SDA_PORT, AGS10_AGS10_SDA_PIN);        \
         }                                                            \
     } while (0)
 
 #define AGS10_SCL(x)                                                 \
     do {                                                             \
         if (x) {                                                     \
-            DL_GPIO_setPins(AGS10_SCL_PORT, AGS10_SCL_PIN);          \
+            DL_GPIO_setPins(AGS10_AGS10_SCL_PORT, AGS10_AGS10_SCL_PIN);          \
         } else {                                                     \
-            DL_GPIO_clearPins(AGS10_SCL_PORT, AGS10_SCL_PIN);        \
+            DL_GPIO_clearPins(AGS10_AGS10_SCL_PORT, AGS10_AGS10_SCL_PIN);        \
         }                                                            \
     } while (0)
 

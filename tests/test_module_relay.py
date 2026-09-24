@@ -123,7 +123,7 @@ def test_relay_mspm0_syscfg_instance():
     （模块低电平吸合 → SET = 引脚高 = 初始断开）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const RELAY = GPIO.addInstance();" in syscfg
-    assert 'RELAY.associatedPins[0].$name        = "OUT";' in syscfg
+    assert 'RELAY.associatedPins[0].$name        = "RELAY_OUT";' in syscfg
     assert 'RELAY.associatedPins[0].direction    = "OUTPUT";' in syscfg
     assert 'RELAY.associatedPins[0].initialValue = "SET";' in syscfg
     assert 'RELAY.associatedPins[0].pin.$assign  = "PA1";' in syscfg

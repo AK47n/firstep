@@ -100,9 +100,9 @@ MSPM0_DEFAULT_LED_INSTANCES = """/* led_instances.h —— LED 通道宏 + 每�
 #define LED_GREEN   2
 
 // 每通道 (port, pin)：led.c 读 LED_PIN_TABLE 建表（LED_BEEP 宏由 SysConfig
-// 按 mspm0.syscfg 生成）
+// 按 mspm0.syscfg 生成；引脚符号名 = 实例名_原名，故宏名里实例名出现两次）
 #define LED_CHANNEL_0_PORT LED_BEEP_PORT
-#define LED_CHANNEL_0_PIN  LED_BEEP_LED_PIN
+#define LED_CHANNEL_0_PIN  LED_BEEP_LED_BEEP_LED_PIN
 
 #define LED_PIN_TABLE { {LED_CHANNEL_0_PORT, LED_CHANNEL_0_PIN} }
 
@@ -524,7 +524,7 @@ def _mspm0_port_macro(entry: ExpandedInstance) -> str:
 
 def _mspm0_pin_macro(entry: ExpandedInstance) -> str:
     if entry.index == 1:
-        return "LED_BEEP_LED_PIN"
+        return "LED_BEEP_LED_BEEP_LED_PIN"
     # 新实例的关联 pin $name = "LED<实例号>"（SysConfig 要求全局唯一，真机
     # 编译判例：同名 LED 撞 LED_BEEP 的 pin 名 → 4 error）→ 生成宏
     # LED_2_LED2_PIN 形态

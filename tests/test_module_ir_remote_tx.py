@@ -61,7 +61,7 @@ def test_ir_remote_tx_mspm0_syscfg_instances():
     """mspm0 母版：IR_TX GPIO 实例（OUT 输出，初始 CLEARED = 载波空闲低）。"""
     syscfg = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
     assert "const IR_TX = GPIO.addInstance();" in syscfg
-    assert 'IR_TX.associatedPins[0].$name        = "OUT";' in syscfg
+    assert 'IR_TX.associatedPins[0].$name        = "IR_TX_OUT";' in syscfg
     assert 'IR_TX.associatedPins[0].direction    = "OUTPUT";' in syscfg
     assert 'IR_TX.associatedPins[0].initialValue = "CLEARED";' in syscfg
     assert 'IR_TX.associatedPins[0].pin.$assign  = "PA0";' in syscfg

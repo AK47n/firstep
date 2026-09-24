@@ -93,9 +93,9 @@ def test_oled_mspm0_syscfg_spi_instance():
     assert "const OLED_SPI = GPIO.addInstance();" in syscfg
     assert "OLED_SPI.associatedPins.create(5);" in syscfg
     for i, (name, pin, initial) in enumerate([
-        ("SCL", "PA28", "CLEARED"), ("SDA", "PA31", "CLEARED"),
-        ("DC", "PA13", "CLEARED"), ("CS", "PB18", "SET"),
-        ("RES", "PA22", "SET"),
+        ("OLED_SPI_SCL", "PA28", "CLEARED"), ("OLED_SPI_SDA", "PA31", "CLEARED"),
+        ("OLED_SPI_DC", "PA13", "CLEARED"), ("OLED_SPI_CS", "PB18", "SET"),
+        ("OLED_SPI_RES", "PA22", "SET"),
     ]):
         assert f'OLED_SPI.associatedPins[{i}].$name        = "{name}";' in syscfg
         assert f'OLED_SPI.associatedPins[{i}].pin.$assign  = "{pin}";' in syscfg
