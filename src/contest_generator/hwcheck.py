@@ -162,7 +162,11 @@ __all__ = [
     "CustomSection",
     "HwCheckConfig",
     "HwCheckError",
+    "HWCHECK_CHANNEL_LABELS",
+    "HWCHECK_CHANNEL_MODULES",
+    "HWCHECK_CHANNEL_SECTION",
     "HWCHECK_CHANNELS",
+    "HWCHECK_DEVICE_SECTION",
     "HWCHECK_FRAMEWORK_MODULES",
     "dedup_slugs",
     "hwcheck_devices",
@@ -281,13 +285,32 @@ HWCHECK_FRAMEWORK_MODULES: tuple[str, ...] = ("led", "delay")
 # 通道**词表**（= 前端勾选框的键）单源从这里投影：`HWCHECK_CHANNELS` 由前端
 # `fx/hwcheck.js` 的 `HWCHECK_CHANNEL_KEYS` 镜像（跨语言守卫用例钉住，
 # 照 library.MODULE_KIND 的镜像先例）——两边各写一份会让"勾了没反应"成为静默失效。
-_CHANNEL_MODULES: tuple[tuple[str, str], ...] = (
-    ("debug_uart", "debug_uart"),
-    ("oled", "oled"),
-)
+#
+# 工单 hwcheck-acceptance/03 起这张表还多一个消费方：**出口文案**要说清"这个实例
+# 属于哪个勾选框"（`hwcheck_board.hwcheck_pin_message`），判据就是"通道开着 +
+# 该通道的模块在 `syscfg_instances.INSTANCE_CONSUMERS` 里消费这只实例"——所以
+# 通道与模块的对应关系必须从这里读，不许在文案那边另抄一份实例名清单。
+HWCHECK_CHANNEL_MODULES: dict[str, str] = {
+    "debug_uart": "debug_uart",
+    "oled": "oled",
+}
 
 # 通道词表（顺序 = 页面勾选框顺序）
-HWCHECK_CHANNELS: tuple[str, ...] = tuple(channel for channel, _ in _CHANNEL_MODULES)
+HWCHECK_CHANNELS: tuple[str, ...] = tuple(HWCHECK_CHANNEL_MODULES)
+
+# 通道 → 页面上那个勾选框的**文字**（出口文案点名控件时说的就是这几个字）。
+# 与 `static/index.html` 的 `<label ... data-hwcheck-channel="…">` 同一句：
+# 守卫用例读真源码对账（`test_exit_copy_names_controls_that_exist_on_the_page`）
+# ——页面上改一个字，出口文案指的就是一个不存在的控件。
+HWCHECK_CHANNEL_LABELS: dict[str, str] = {
+    "debug_uart": "调试串口",
+    "oled": "OLED 屏",
+}
+
+# 检测页两处控件的**栏位标题**（出口文案要说清"去哪一栏动手"）。同上：与
+# index.html 的 `<h3>` 同一句、由守卫用例读真源码对账（页面重排编号时当场红）。
+HWCHECK_CHANNEL_SECTION = "2. 输出通道"
+HWCHECK_DEVICE_SECTION = "3. 要测的器件"
 
 
 
@@ -313,6 +336,11 @@ class HwCheckConfig:
     `devices`（工单 03）= 用户在检测页选中的器件 slug（保序，可重复——去重由
     `hwcheck_devices` 负责）。它们进工程（接线表与工程 README 同源的前提），
     逐件的检测小节由后续工单渲染；没有专精配方的器件走通用降级（spec）。
+
+    本对象同时是**出口文案的判据输入**（工单 hwcheck-acceptance/03）：装不下时那句
+    "取消勾选哪个通道 / 去掉哪件器件"要按**这一趟页面上真实存在的控件**说话，而
+    "哪个通道勾着、哪几件器件选着"只有这里知道（同一个 `oled` 模块，勾着通道时它
+    属于通道勾选框，只从器件列表里选时它属于器件清单）。
     """
 
     platform: str
@@ -393,7 +421,7 @@ def hwcheck_modules(config: HwCheckConfig) -> tuple[str, ...]:
     "一个器件都不选也能生成"指的是不选**器件**时这一项为空，生成照旧。
     """
     modules = list(HWCHECK_FRAMEWORK_MODULES)
-    for channel, slug in _CHANNEL_MODULES:
+    for channel, slug in HWCHECK_CHANNEL_MODULES.items():
         if getattr(config, channel):
             modules.append(slug)
     for slug in hwcheck_devices(config):

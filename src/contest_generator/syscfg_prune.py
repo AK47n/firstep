@@ -37,7 +37,7 @@ from .master_store import master_project_dir
 from .pin_bindings import _role_entries, resolve_bindings
 from .pin_capacity import diagnose_pin_capacity, render_pin_capacity_diagnosis
 from .platforms import PLATFORM_MSPM0
-from .syscfg_instances import INSTANCE_CONSUMERS, INSTANCES_BY_SLUG
+from .syscfg_instances import INSTANCES_BY_SLUG, instance_label
 from .syscfg_model import (
     MSPM0_SYSCFG_FILENAME,
     AdcSlotPlan,
@@ -117,13 +117,6 @@ def prune_syscfg(
     )
 
 
-# 实例名 → 消费模块名（人读标签；`INSTANCE_CONSUMERS` 是元组，这里摊成一行文本）。
-# 算一次：它在**每次**冲突报告里都要用（原先每次调用重造一遍）。
-_INSTANCE_LABELS: dict[str, str] = {
-    instance: "、".join(slugs) for instance, slugs in INSTANCE_CONSUMERS.items()
-}
-
-
 @dataclass(frozen=True)
 class SyscfgPinConflictReport:
     """落盘 syscfg 的冲突报告（**两根轴**，判据单源）。
@@ -137,11 +130,19 @@ class SyscfgPinConflictReport:
 
     `capacity` = 引脚容量诊断段（前面带换行；两种形态没有诊断可言 = 空串：
     ① 无选中集知识（产物复核）② 板数据缺失）。
+
+    `pin_instances` / `name_instances`（工单 hwcheck-acceptance/03）= 两根轴各自
+    涉及哪些 **syscfg 实例**（保序去重），给**出口文案**用：文案要按成因分派到
+    页面控件（"取消勾选哪个输出通道"/"去掉哪件器件"），而那一步的输入就是
+    "是哪几只实例撞了"。**不解析上面那两行渲染文本**反推（句子一改就散）——
+    实例名在算 `lines` / `name_lines` 时本来就在手里，顺手记下来。
     """
 
     lines: tuple[str, ...]
     capacity: str
     name_lines: tuple[str, ...] = ()
+    pin_instances: tuple[str, ...] = ()
+    name_instances: tuple[str, ...] = ()
 
     @property
     def pin_count(self) -> int:
@@ -214,7 +215,7 @@ def syscfg_pin_conflict_report(
     conflicts = {
         pin: paths
         for pin, paths in by_pin.items()
-        if len({path.split(".", 1)[0] for path in paths}) > 1
+        if len({_path_instance(path) for path in paths}) > 1
     }
     name_conflicts = _duplicate_pin_names(model)
     if not conflicts and not name_conflicts:
@@ -226,8 +227,8 @@ def syscfg_pin_conflict_report(
         for pin in sorted(conflicts)
     ]
     name_lines = [
-        "  · " + name + "：" + " × ".join(where)
-        for name, where in sorted(name_conflicts.items())
+        _render_name_line(name, instances)
+        for name, instances in sorted(name_conflicts.items())
     ]
     # 引脚容量诊断（工单 pin-capacity/01）：只升文案、不增拦截——判据与触发条件
     # 一行未改，只在逐脚清单之后、出路之前补可操作数字（选中集规模 / 板上可用 IO /
@@ -249,7 +250,58 @@ def syscfg_pin_conflict_report(
             board.name,
         )
     return SyscfgPinConflictReport(
-        lines=tuple(lines), capacity=capacity, name_lines=tuple(name_lines)
+        lines=tuple(lines),
+        capacity=capacity,
+        name_lines=tuple(name_lines),
+        # 两根轴各自的实例清单（出口文案按成因分派到页面控件时吃它；保序去重）
+        pin_instances=_instances_of(conflicts),
+        name_instances=tuple(
+            dict.fromkeys(
+                instance
+                for _name, instances in sorted(name_conflicts.items())
+                for instance in instances
+            )
+        ),
+    )
+
+
+def _instances_of(conflicts: Mapping[str, Sequence[str]]) -> tuple[str, ...]:
+    """逐脚冲突（脚 → `$assign` 路径序列）→ 涉及哪些实例（保序去重）。
+
+    实例名 = 路径的第一段（`DC_MOTOR.associatedPins[3].pin` → `DC_MOTOR`）——与
+    上面按 `_path_instance(path)` 判"两只实例"**同一口径**，不另立一套切法。
+    """
+    return tuple(
+        dict.fromkeys(
+            _path_instance(path)
+            for pin in sorted(conflicts)
+            for path in conflicts[pin]
+        )
+    )
+
+
+def _path_instance(path: str) -> str:
+    """`$assign` 路径 → 实例名（`DC_MOTOR.associatedPins[3].pin` → `DC_MOTOR`）。
+
+    唯一出处：同脚轴的"两只实例"判据与报告里的 `pin_instances` 都走它——
+    两处各切一遍迟早分家（评审点名的重复）。
+    """
+    return path.split(".", 1)[0]
+
+
+def _render_name_line(name: str, instances: Sequence[str]) -> str:
+    """重名轴的一行「  · SCL：aht10(AHT10) × oled(OLED_SPI)」。
+
+    实例标签走 `syscfg_instances.instance_label` 单源（检测页出口文案也用它）——
+    同一只实例在这一段话里只有一个名字。
+
+    **按标签排序后再拼**（不是按实例名）：判据那一层为了"出口文案按实例判控件"
+    改成了回裸实例名（工单 hwcheck-acceptance/03），但**渲染出来的这一行必须与
+    工单 11 的既有输出逐字一致**——它是生成门禁 / 赛题页共用的落盘报告，顺序
+    翻转就是一次没人点名的静默变化。标签序 = 旧口径（当年就是排过序的标签串）。
+    """
+    return "  · " + name + "：" + " × ".join(
+        sorted(instance_label(instance) for instance in instances)
     )
 
 
@@ -279,8 +331,8 @@ def syscfg_pin_name_conflict(
     if not names:
         return ""
     return "\n".join(
-        "  · " + name + "：" + " × ".join(where)
-        for name, where in sorted(names.items())
+        _render_name_line(name, instances)
+        for name, instances in sorted(names.items())
     )
 
 
@@ -313,8 +365,8 @@ def syscfg_pin_name_conflict_for(
     )
 
 
-def _duplicate_pin_names(model: SyscfgModel) -> dict[str, list[str]]:
-    """同名引脚符号 → 用到它的「模块（实例）」清单（工单 11；空 = 无重名）。
+def _duplicate_pin_names(model: SyscfgModel) -> dict[str, tuple[str, ...]]:
+    """同名引脚符号 → 用到它的**实例**清单（工单 11；空 = 无重名）。
 
     判据 = SysConfig 的 `$name` **全局唯一**（与 `$assign` 的"一个脚一只实例"是
     两根轴）。**只看传进来的模型**：调用方给 prune + rewrite 之后那一份 = "这一组
@@ -325,18 +377,18 @@ def _duplicate_pin_names(model: SyscfgModel) -> dict[str, list[str]]:
     （`SCL` 一组 18 个实例），全文判定会恒报；改名去重之后母版恒为 0 组，
     这条口径才立得起来。
 
-    名字取自 `SyscfgModel.pin_names`（解析单源），模块名用 `INSTANCE_CONSUMERS`
-    反查（哪几件模块消费这个实例）——未登记实例只报实例名，不猜模块。
+    名字取自 `SyscfgModel.pin_names`（解析单源），这里只回**实例名**（人读标签由
+    `instance_label` / `_render_name_line` 渲染）——出口文案要按实例判"它属于哪个
+    页面控件"，所以判据这一层不能先把实例名拼进句子再让人反解。
     """
     by_name: dict[str, set[str]] = {}
     for instance, names in model.pin_names.items():
-        label = _INSTANCE_LABELS.get(instance) or instance
         for name in names:
-            by_name.setdefault(name, set()).add(f"{label}({instance})")
+            by_name.setdefault(name, set()).add(instance)
     return {
-        name: sorted(where)
-        for name, where in by_name.items()
-        if len(where) > 1
+        name: tuple(sorted(instances))
+        for name, instances in by_name.items()
+        if len(instances) > 1
     }
 
 

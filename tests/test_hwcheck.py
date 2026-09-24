@@ -23,7 +23,10 @@ from contest_generator.hwcheck import (
     OUTPUT_HINT_OLED,
     OUTPUT_HINT_SERIAL,
     OUTPUT_HINT_SERIAL_OLED,
+    HWCHECK_CHANNEL_LABELS,
+    HWCHECK_CHANNEL_SECTION,
     HWCHECK_CHANNELS,
+    HWCHECK_DEVICE_SECTION,
     HwCheckConfig,
     HwCheckError,
     hwcheck_modules,
@@ -788,6 +791,36 @@ def test_channel_vocabulary_mirrors_the_frontend():
     assert js_keys == HWCHECK_CHANNELS, (
         f"前端通道词表 {js_keys} 与后端 {HWCHECK_CHANNELS} 不一致"
     )
+
+
+def test_exit_copy_names_controls_that_exist_on_the_page():
+    """出口文案点名的控件必须**真的在页面上**（读 index.html 对账，不是自称）。
+
+    被判据点名的：两处栏位标题（`HWCHECK_CHANNEL_SECTION` / `HWCHECK_DEVICE_SECTION`）
+    与每个通道勾选框的文字（`HWCHECK_CHANNEL_LABELS`）——工单 hwcheck-acceptance/03
+    要的正是"学生读到的出路 = 这一页上做得到的动作"，所以这句话里的每一个控件名
+    都得在真页面上找得到。页面重排 / 改勾选框文字 = 文案当场指错控件，本用例必须红
+    （所以读真源码，不把字面量抄一份进测试）。
+    """
+    html = (
+        Path(__file__).resolve().parents[1]
+        / "src" / "contest_generator" / "static" / "index.html"
+    ).read_text(encoding="utf-8")
+    assert f"<h3>{HWCHECK_CHANNEL_SECTION}</h3>" in html, (
+        f"页面上应有栏位标题「{HWCHECK_CHANNEL_SECTION}」"
+    )
+    assert f"<h3>{HWCHECK_DEVICE_SECTION}" in html, (
+        f"页面上应有栏位标题「{HWCHECK_DEVICE_SECTION}」（后面跟着 muted 说明）"
+    )
+    for channel, label in HWCHECK_CHANNEL_LABELS.items():
+        match = re.search(
+            r'data-hwcheck-channel="' + re.escape(channel) + r'"[^>]*>\s*'
+            + re.escape(label),
+            html,
+        )
+        assert match, (
+            f"勾选框 {channel} 上的文字应是「{label}」——出口文案点的是这个名字"
+        )
 
 
 # ---------------------------------------------------------------------------

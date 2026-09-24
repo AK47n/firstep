@@ -896,3 +896,55 @@ test("资料 → 事实草稿：入口与知情文案在页面上；空文本点
   const message = await page.textContent(".my-device-material-message");
   assert.ok(message.includes("先贴一段资料"), message);
 });
+
+// ---------------------------------------------------------------------------
+// 工单 hwcheck-acceptance/03：被拦下时的**出路**要点名这一页上真有的控件
+//
+// 一句话判据：学生读到的那句话，照着做必须走得通。所以这条用例不满足于读文本
+// ——它**照着那句话做一遍**（取消勾选「OLED 屏」）再生成，必须成功。
+//
+// 现场 = 地猛星 + 默认双通道 + xunji + rc522（与 tests/test_hwcheck_board.py 的
+// 同脚那一条同一个组合）：撞的既有通道带进来的 oled、也有器件 rc522。旧文案
+// （"回到上面的器件选择去掉一件"）在这儿是指错的——oled 根本不在器件列表里，
+// 它是「2. 输出通道」里的勾选框。
+//
+// ⚠ **排在文件最后**：这一条会生成一个新工程（与上面两条自建件用例同一条理由
+// ——它们靠"上一次生成的目录"回读，不能被这一条抢走）。
+// ---------------------------------------------------------------------------
+test("装不下时的出路点名这一页的控件：照着它做（取消勾选 OLED 屏）真能生成", async () => {
+  await openTab();
+  await page.click('[data-hwcheck-platform="mspm0"]');
+  await pickDevice("xunji");
+  await pickDevice("rc522");
+  await page.waitForSelector('#hwcheck-device-chips [data-remove="rc522"]');
+
+  // 选齐两件就被拦下：**生成之前**接线区就给出 400 原文（不是等点了生成才知道）
+  await page.waitForFunction(
+    () => document.querySelector("#hwcheck-wiring").textContent
+      .includes("【检测页出路】"), undefined, { timeout: 30000 });
+  const wiring = await page.textContent("#hwcheck-wiring");
+  assert.ok(wiring.includes("取消勾选「2. 输出通道」里的「OLED 屏」"),
+    "通道带进来的那一方要点名那个勾选框：\n" + wiring);
+  assert.ok(wiring.includes("去掉「3. 要测的器件」里勾上的 rc522"),
+    "器件带进来的那一方要点名器件清单里那一件：\n" + wiring);
+  assert.ok(!wiring.includes("回到上面的器件选择"),
+    "旧文案把人支去器件列表——oled 不在那儿（票面反例）：\n" + wiring);
+
+  // 点「生成检测工程」是同一句话（预览 / 生成同一判据，都 400）
+  await setParent(parentDir);
+  await page.click("#btn-hwcheck-generate");
+  await page.waitForSelector("#hwcheck-project .error", { timeout: 60000 });
+  const error = await page.textContent("#hwcheck-project .error");
+  assert.ok(error.includes("取消勾选「2. 输出通道」里的「OLED 屏」"), error);
+  assert.ok(error.includes("去掉「3. 要测的器件」里勾上的 rc522"), error);
+
+  // **照着那句话做**：取消勾选「OLED 屏」→ 拦下消失 → 再生成一次，成功。
+  await page.uncheck('input[data-hwcheck-channel="oled"]');
+  await page.waitForSelector("#hwcheck-wiring .hwcheck-table", { timeout: 30000 });
+  await page.click("#btn-hwcheck-generate");
+  await page.waitForSelector("[data-hwcheck-compile]", { timeout: 120000 });
+  const path = await page.textContent(".hwcheck-path");
+  assert.ok(path.includes(parentDir), "照着做之后应真的生成出工程：" + path);
+  assert.match(path, /hwcheck-mspm0-\d{8}-\d{6}/, "目录名形态固定");
+  await page.check('input[data-hwcheck-channel="oled"]');
+});

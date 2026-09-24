@@ -39,6 +39,11 @@ from typing import Any, Mapping, Sequence
 
 from .boards import Board, board_for_platform
 from .hwcheck import (
+    HWCHECK_CHANNEL_LABELS,
+    HWCHECK_CHANNEL_MODULES,
+    HWCHECK_CHANNEL_SECTION,
+    HWCHECK_DEVICE_SECTION,
+    HWCHECK_FRAMEWORK_MODULES,
     HwCheckConfig,
     dedup_slugs,
     hwcheck_devices,
@@ -87,6 +92,7 @@ from .readme import (
 )
 from .selection import WARNING_MISSING, check_platform_warnings, resolve_dependencies
 from .syscfg_model import MSPM0_SYSCFG_FILENAME
+from .syscfg_instances import INSTANCE_CONSUMERS, instance_label
 from .syscfg_prune import SyscfgPinConflictReport, syscfg_pin_conflict_report
 from .wiring import wiring_rows
 
@@ -103,7 +109,6 @@ __all__ = [
     "hwcheck_pin_plan",
     "hwcheck_view",
 ]
-
 # 「为什么是这个次序」——顺序判据本身来自 readme（bring-up 前置 + 依赖序），
 # 这句话只是把它讲给学生听；页面显式展示它（票面：「在页面显式展示建议按这个
 # 次序测的理由」）。文案单源在这里：页面两处（顺序区标题与脚注）共用一句。
@@ -176,6 +181,7 @@ def hwcheck_pin_plan(
     manifests: Sequence[ModuleManifest],
     board: Board,
     master_syscfg: str | None,
+    config: HwCheckConfig,
 ) -> HwCheckPinPlan:
     """检测页生成前的引脚消解（纯函数：吃已解析的 manifest / 板 / 母版 syscfg 文本）。
 
@@ -187,6 +193,11 @@ def hwcheck_pin_plan(
     2. **装不装得下** = `syscfg_prune.syscfg_pin_conflict_report`（落盘文本的同脚
        多实例冲突）——与生成门禁**同一个函数**，所以「预览通过 → 生成 400」这类
        分家不可能再出现；装不下时给出检测页能执行的出路（`hwcheck_pin_message`）。
+
+    `config`（工单 hwcheck-acceptance/03）= **页面上那一趟选择本身**（两个通道勾选
+    框 + 器件清单）：出口文案要说"取消勾选哪个通道 / 去掉哪件器件"，那一步的判据
+    就是它（同一个 `oled` 模块，勾着通道时它是通道、只从器件列表里选时它是器件）
+    ——所以这里必须吃配置，不能只吃 manifests。
 
     **只对 mspm0 自动搬**：stm32 的默认脚重叠按 ADR 0010 是提示语义、不拦生成，
     搬了反而改掉既有工程（逐字节回归），故 stm32 返回空计划。
@@ -220,26 +231,40 @@ def hwcheck_pin_plan(
         dict(solved.bindings),
         resolved,
         solved.fixed,
-        hwcheck_pin_message(report, board.name),
+        hwcheck_pin_message(report, board.name, config),
     )
 
 
-def hwcheck_pin_message(report: SyscfgPinConflictReport, board_name: str) -> str:
+def hwcheck_pin_message(
+    report: SyscfgPinConflictReport, board_name: str, config: HwCheckConfig
+) -> str:
     """「这套选择装不下」的页面文案（**检测页**出路，不是赛题页那句话）。
 
     为什么必须单独一句：检测页没有引脚配置入口，生成门禁那句「在引脚配置里改绑
-    （或点自动配置）」对学生是不可执行的指令（本单的由来）。所以这里给三条
-    检测页做得到的动作，把「去赛题页改绑」降为第三条而不是唯一一条。
+    （或点自动配置）」对学生是不可执行的指令（本单的由来）。所以这里给几条
+    检测页做得到的动作，把「去赛题页改绑」降为最后一条而不是唯一一条。
 
     **两根轴两套话**（工单 11）：同脚冲突有容量数字可讲（脚不够 / 改绑解得开几组），
     而**同名引脚符号**与脚数无关——撞的是 `$name`，改绑解不开，出路是去掉一件或
     改母版名。所以那一支**不套容量诊断**，直接点名是哪两件模块撞了。
+
+    **出路按成因分派到页面控件**（工单 hwcheck-acceptance/03）：撞的实例属于某个
+    **输出通道**（勾选框在「2. 输出通道」）就说"取消勾选那个通道"；属于**器件清单**
+    里的某一件就说"去掉这一件"。SysConfig 实例名只作括号里的补充信息——旧文案把人
+    支去"上面的器件选择"，可 `oled` 根本不在器件列表里（它是通道勾选框），学生照着
+    做走不通。分派判据是**现算**的（`_page_action_lines`：通道开关 + 通道模块 +
+    `INSTANCE_CONSUMERS` 反查），不抄实例名清单。
 
     `board_name` 由调用方传（板上就那一块板，`hwcheck_pin_plan` 手里有板对象）
     ——板名是单源事实（`boards/*.json`），不在这句话里另写一份；容量诊断段自己
     也用同一份板名，两处必须同一块板。
     文案里的 `HWCHECK_PIN_EXIT_MARKER` 是判据哨兵（见常量说明）。
     """
+    actions = _page_action_lines(report, config)
+    numbered = "\n".join(
+        f"  {index}. {line}" for index, line in enumerate(actions, start=1)
+    )
+    last = f"  {len(actions) + 1}. "
     if not report.lines:
         return (
             f"这套选择在「{board_name}」上装不下：落盘后的 mspm0.syscfg 里 "
@@ -249,10 +274,9 @@ def hwcheck_pin_message(report: SyscfgPinConflictReport, board_name: str) -> str
             + "\n这一条**改绑引脚解不开**（撞的是符号名，不是脚——母版给这些实例起的"
             "引脚符号本来就同名；实测换四种绑定 `name_count` 恒为 2）。"
             + f"\n{HWCHECK_PIN_EXIT_MARKER} 检测页能做到的出路（挑一条）：\n"
-            "  1. 回到上面的器件选择，把上面点名的那几件里**去掉一件**；\n"
-            "  2. 换一件同类替代（比如显示屏换一路不挂 I2C 的），再回来生成；\n"
-            "  3. 两件都要 → 这一版做不到（要改母版的引脚符号，见工单 11）——"
-            "别去引脚配置里试，改绑解不开它。"
+            + numbered
+            + f"\n{last}上面这些都要 → 这一版做不到（要改母版的引脚符号，见工单 11）"
+            "——别去引脚配置里试，改绑解不开它。"
         )
     return (
         f"这套选择在「{board_name}」上装不下：落盘后的 mspm0.syscfg 有 "
@@ -261,12 +285,133 @@ def hwcheck_pin_message(report: SyscfgPinConflictReport, board_name: str) -> str
         + "\n".join(report.lines)
         + report.capacity
         + f"\n{HWCHECK_PIN_EXIT_MARKER} 检测页能做到的出路（挑一条）：\n"
-        "  1. 回到上面的器件选择，把冲突的那几件去掉——上面【引脚容量】那段"
-        "点名了是哪些件、至少要去掉几个；\n"
-        "  2. 只勾一个输出通道（「调试串口」或「OLED」）再生成；\n"
-        "  3. 两路都要、这几件也都要 → 先到「做题」页的引脚配置里把它们分开，"
+        + numbered
+        + f"\n{last}上面这些都要 → 先到「做题」页的引脚配置里把它们分开，"
         "再回来生成（检测页暂时没有改绑入口）。"
     )
+
+
+def _page_action_lines(
+    report: SyscfgPinConflictReport, config: HwCheckConfig
+) -> tuple[str, ...]:
+    """出口文案里**点名页面控件**的那几条（工单 hwcheck-acceptance/03）。
+
+    判据 = "这一趟页面上哪些控件能把这些实例从工程里拿掉"，全部现算：
+
+    * **输出通道**：实例的消费模块 = 某个**开着**的通道的模块（`HWCHECK_CHANNEL_MODULES`）
+      → "取消勾选「2. 输出通道」里的「OLED 屏」"（勾选框的文字单源在
+      `HWCHECK_CHANNEL_LABELS`，与 index.html 对过账）；
+    * **器件清单**：实例的消费模块在 `hwcheck_devices(config)` 里 → "去掉
+      「3. 要测的器件」里的 aht10 这一件"（页面上的 chip 印的就是这个 slug）；
+    * **都不是**（检测框架自带的心跳 led / delay，或别的器件带进来的依赖 / 母版没登记
+      归属的新实例）→ 如实说它不在这一页的勾选框里，别编一个做不到的动作。
+
+    ⚠ 框架模块（`HWCHECK_FRAMEWORK_MODULES`）**不算器件**：它恒在工程里，从器件
+    列表里点掉也不影响这一趟——把它算作"器件"会让学生照着点、点完照旧 400。
+
+    实例名与它属于哪条通道/哪件器件都是 `syscfg_instances` 单源（`instance_label`
+    + `INSTANCE_CONSUMERS`），只作括号里的补充信息。
+    """
+    instances = tuple(
+        dict.fromkeys((*report.pin_instances, *report.name_instances))
+    )
+    selected = hwcheck_devices(config)
+    owned: dict[str, list[str]] = {}        # 控件 → 它带进来的实例
+    devices: dict[str, list[str]] = {}      # 器件 slug → 它带进来的实例
+    orphans: list[str] = []                 # 这一页没有控件能单独拿掉的实例
+    # 孤儿实例的**三种成因分开记**（评审整改）：说错成因比不点名更坏——
+    # 学生会照着一条做不到的动作去点。
+    framework_orphans: list[str] = []       # 只由框架模块（led / delay）带进来
+    dependency_orphans: list[str] = []      # 由别的器件的依赖带进来
+    unregistered_orphans: list[str] = []    # 母版里根本没登记归属（新加的实例）
+    for instance in instances:
+        consumers = INSTANCE_CONSUMERS.get(instance, ())
+        channels = [
+            channel
+            for channel, module in HWCHECK_CHANNEL_MODULES.items()
+            if getattr(config, channel) and module in consumers
+        ]
+        # 框架模块不算"器件在清单里"：它在工程里恒存在（见上面 docstring）
+        hits = [
+            slug
+            for slug in selected
+            if slug in consumers and slug not in HWCHECK_FRAMEWORK_MODULES
+        ]
+        for channel in channels:
+            owned.setdefault(channel, []).append(instance)
+        for slug in hits:
+            devices.setdefault(slug, []).append(instance)
+        if not channels and not hits:
+            orphans.append(instance)
+            if not consumers:
+                # INSTANCE_CONSUMERS 里没有它 = 判据不认识的实例。**不能**说它是
+                # "检测程序自带的心跳模块"——那是另一回事（consumers 只含框架模块）。
+                unregistered_orphans.append(instance)
+            elif all(slug in HWCHECK_FRAMEWORK_MODULES for slug in consumers):
+                framework_orphans.append(instance)
+            else:
+                dependency_orphans.append(instance)
+
+    lines: list[str] = []
+    if owned:
+        # 按**页面上的勾选框顺序**（`HWCHECK_CHANNEL_MODULES`）点名，不按实例出现序
+        labels = "、".join(
+            f"「{HWCHECK_CHANNEL_LABELS[channel]}」"
+            for channel in HWCHECK_CHANNEL_MODULES
+            if channel in owned
+        )
+        owned_instances = [i for channel in HWCHECK_CHANNEL_MODULES
+                           for i in owned.get(channel, ())]
+        lines.append(
+            f"取消勾选「{HWCHECK_CHANNEL_SECTION}」里的{labels}再生成"
+            f"（撞上的实例：{_instances_note(owned_instances)}）；"
+        )
+    if devices:
+        # 同上：按器件清单里的**选择顺序**（`hwcheck_devices`，页面上 chip 的顺序）
+        slugs = "、".join(slug for slug in selected if slug in devices)
+        device_instances = [i for slug in selected for i in devices.get(slug, ())]
+        lines.append(
+            f"去掉「{HWCHECK_DEVICE_SECTION}」里勾上的 {slugs} 再生成"
+            f"（撞上的实例：{_instances_note(device_instances)}）；"
+        )
+    if framework_orphans:
+        lines.append(
+            f"上面点名的 {_instances_note(framework_orphans)} 是检测程序自带的"
+            "心跳模块（led / delay），这一页去不掉它——换一件落点不撞的器件再生成；"
+        )
+    if dependency_orphans:
+        lines.append(
+            f"上面点名的 {_instances_note(dependency_orphans)} 在"
+            f"「{HWCHECK_DEVICE_SECTION}」里没有它自己"
+            "（是别的器件带进来的依赖）——去掉带它进来的那一件器件，"
+            "或换一件落点不撞的；"
+        )
+    if unregistered_orphans:
+        # 未登记实例（母版新增、判据表还没跟上）：**如实说这一页没有对应控件**，
+        # 不编一个"去掉某件"的动作（学生在这一页上找不到它）。
+        lines.append(
+            f"上面点名的 {_instances_note(unregistered_orphans)} 是母版新加的实例，"
+            "这一页没有对应的勾选控件——换一件落点不撞的器件，或先把这组选择"
+            "报给维护者（母版实例归属表还没登记它）；"
+        )
+    if not lines:
+        # 兜底（报告说冲突、却一只实例都没登记）：**仍然只点这一页真有的控件**。
+        # ⚠ 不许写回工单 03 点名删掉的那句"回到上面的器件选择，去掉一件"——它把
+        # 只存在于器件清单之外的实例（输出通道）也支到器件列表里，做不到。
+        lines.append(
+            f"这一趟装不下：先取消勾选「{HWCHECK_CHANNEL_SECTION}」里的通道，"
+            f"或去掉「{HWCHECK_DEVICE_SECTION}」里勾上的一件器件，再生成；"
+        )
+    return tuple(lines)
+
+
+def _instances_note(instances: Sequence[str]) -> str:
+    """实例清单 → 「oled(OLED_SPI)、jy61p(JY61P)」（人读标签单源）。
+
+    只作**括号里的补充信息**（工单 hwcheck-acceptance/03）：学生按页面控件动作，
+    对不上号时再看这几个实例名——所以它永远跟在一条点名控件的出路后面，不单独成句。
+    """
+    return "、".join(instance_label(instance) for instance in instances)
 
 
 @dataclass(frozen=True)
@@ -612,6 +757,7 @@ def hwcheck_view(
         manifests,
         board,
         read_master_syscfg(masters_dir, config.platform),
+        config,
     )
     if require_pins and not plan.ok:
         raise HwCheckError(plan.conflict)

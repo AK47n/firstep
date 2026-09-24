@@ -13,12 +13,19 @@ I2C0 = PA0/PA1 与板载 LED 同脚这条暗雷只有在真数据上才会现形
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 
 from contest_generator.boards import board_for_platform
-from contest_generator.hwcheck import HwCheckConfig, HwCheckError
+from contest_generator.hwcheck import (
+    HWCHECK_CHANNEL_LABELS,
+    HWCHECK_CHANNEL_SECTION,
+    HWCHECK_DEVICE_SECTION,
+    HwCheckConfig,
+    HwCheckError,
+)
 from contest_generator.hwcheck_board import (
     HWCHECK_PIN_EXIT_MARKER,
     HwCheckBoardView,
@@ -58,6 +65,24 @@ def _view(platform: str, slugs: list[str], devices: list[str] | None = None):
         manifests,
         board_for_platform(platform),
         devices=devices if devices is not None else (),
+    )
+
+
+def _config(
+    platform: str = PLATFORM_MSPM0,
+    *,
+    devices: tuple[str, ...] = (),
+    debug_uart: bool = True,
+    oled: bool = True,
+) -> HwCheckConfig:
+    """页面上那一趟选择（通道勾选框 + 器件清单）——出口文案点名哪个控件由它判。
+
+    出口文案说的是"这一页上做得到的动作"，所以判据必须吃**与页面同一份配置**：
+    只给 manifests 是造不出"这个实例属于哪个勾选框"的（同一个 oled 模块，勾着
+    通道时它是通道，只从器件列表里选时它是器件）。
+    """
+    return HwCheckConfig(
+        platform=platform, debug_uart=debug_uart, oled=oled, devices=devices
     )
 
 
@@ -380,7 +405,7 @@ def test_pin_plan_resolves_default_channel_conflict():
     manifests = _manifests(["led", "delay", "debug_uart", "oled"])
     plan = hwcheck_pin_plan(
         PLATFORM_MSPM0, manifests, board_for_platform(PLATFORM_MSPM0),
-        _master_syscfg(),
+        _master_syscfg(), _config(),
     )
     assert plan.ok
     assert plan.bindings, "默认双通道必然要移一根（PA22）"
@@ -392,7 +417,9 @@ def test_pin_plan_view_follows_resolved_pins_not_defaults():
     """接线表 / 同脚组按**消解后**的脚渲染：学生照页面接线必须与工程 README 一致。"""
     manifests = _manifests(["led", "delay", "debug_uart", "oled"])
     board = board_for_platform(PLATFORM_MSPM0)
-    plan = hwcheck_pin_plan(PLATFORM_MSPM0, manifests, board, _master_syscfg())
+    plan = hwcheck_pin_plan(
+        PLATFORM_MSPM0, manifests, board, _master_syscfg(), _config()
+    )
     view = hwcheck_board_view(
         PLATFORM_MSPM0, manifests, board,
         resolved_bindings=plan.resolved, pin_fixes=plan.fixed,
@@ -413,26 +440,41 @@ def test_pin_plan_stm32_untouched():
     """stm32 不自动搬（默认重叠按 ADR 0010 是提示语义）：空计划、零绑定。"""
     manifests = _manifests(["led", "delay", "debug_uart", "oled"])
     plan = hwcheck_pin_plan(
-        PLATFORM_STM32, manifests, board_for_platform(PLATFORM_STM32), None
+        PLATFORM_STM32, manifests, board_for_platform(PLATFORM_STM32), None,
+        _config(PLATFORM_STM32),
     )
     assert plan.ok
     assert plan.bindings == {} and plan.resolved == () and plan.fixed == ()
 
 
 def test_pin_plan_unsolvable_gets_page_actionable_message():
-    """装不下 → 文案给检测页做得到的出路（探针按 `HWCHECK_PIN_EXIT_MARKER` 认它）。"""
+    """装不下 → 文案给检测页做得到的出路（探针按 `HWCHECK_PIN_EXIT_MARKER` 认它）。
+
+    这一组（地猛星 + 默认双通道 + 6 件器件）撞脚的两侧既有通道模块（oled /
+    debug_uart）也有器件，所以出路里两个控件都要点名——且都必须带**这一页的
+    栏位名**（`HWCHECK_CHANNEL_SECTION` / `HWCHECK_DEVICE_SECTION`，与
+    index.html 的 <h3> 对过账）。
+    """
     slugs = [
         "led", "oled", "debug_uart", "key", "beep", "sr04", "jy61p", "xunji",
         "ml_mpu6050",
     ]
+    devices = ("key", "beep", "sr04", "jy61p", "xunji", "ml_mpu6050")
     manifests = _manifests(slugs)
     plan = hwcheck_pin_plan(
         PLATFORM_MSPM0, manifests, board_for_platform(PLATFORM_MSPM0),
-        _master_syscfg(),
+        _master_syscfg(), _config(devices=devices),
     )
     assert not plan.ok
     assert HWCHECK_PIN_EXIT_MARKER in plan.conflict
-    assert "只勾一个输出通道" in plan.conflict, "三条出路都要在"
+    exit_block = plan.conflict.split(HWCHECK_PIN_EXIT_MARKER, 1)[1]
+    assert f"取消勾选「{HWCHECK_CHANNEL_SECTION}」里的" in exit_block, exit_block
+    oled_label = HWCHECK_CHANNEL_LABELS["oled"]
+    assert f"「{oled_label}」" in exit_block, exit_block
+    assert f"去掉「{HWCHECK_DEVICE_SECTION}」里勾上的" in exit_block, exit_block
+    assert "回到上面的器件选择" not in plan.conflict, (
+        "旧文案把人支去器件列表——通道模块（oled / debug_uart）不在那儿"
+    )
     assert "引脚配置里改绑上述角色" not in plan.conflict, (
         "赛题页那句出路（不可执行）不许原样带过来"
     )
@@ -444,9 +486,144 @@ def test_pin_plan_without_master_syscfg_only_resolves_bindings():
     """母版 syscfg 读不到 = 判不了就不判：只做自动解冲突，不编「装得下」的结论。"""
     manifests = _manifests(["led", "delay", "debug_uart", "oled"])
     plan = hwcheck_pin_plan(
-        PLATFORM_MSPM0, manifests, board_for_platform(PLATFORM_MSPM0), None
+        PLATFORM_MSPM0, manifests, board_for_platform(PLATFORM_MSPM0), None,
+        _config(),
     )
     assert plan.ok and plan.bindings
+
+
+# ---------------------------------------------------------------------------
+# 工单 hwcheck-acceptance/03：被拦下时的**出路**必须点名这一页上真有的控件
+#
+# 反例（工单立项时的实测原文，见 `.scratch/hwcheck-acceptance/exit-aht10.txt`）：
+# 出路第 1、2 条把人支去"回到上面的器件选择去掉一件"——可 oled **根本不在器件
+# 列表里**（它是「2. 输出通道」里的勾选框），屏幕上没有那个动作可做。
+#
+# 判据 = 「哪个实例属于哪个控件」现算（通道开关 → 通道模块 → `INSTANCE_CONSUMERS`
+# 反查实例），不手抄一份实例名清单；实例名只作括号里的补充信息。
+# ---------------------------------------------------------------------------
+
+
+def _plan_with_config(
+    slugs: list[str], config: HwCheckConfig, master_syscfg: str
+):
+    return hwcheck_pin_plan(
+        config.platform, _manifests(slugs), board_for_platform(config.platform),
+        master_syscfg, config,
+    )
+
+
+def test_exit_copy_splits_channel_and_device_branches(collision_reverted_syscfg):
+    """重名那一支：撞名的一方来自**输出通道**、另一方来自**器件清单**——各点名各的。
+
+    现场（注入）：真母版 + 撤回一处改名（`collision_reverted_syscfg`）＝"将来又有
+    模块把引脚起成同名"；地猛星 + 默认双通道 + 只选一件 jy61p。撞名的是
+    oled(OLED_SPI)（**通道**带进来的）与 jy61p(JY61P)（**器件**带进来的）。
+    """
+    config = _config(devices=("jy61p",))
+    plan = _plan_with_config(
+        ["led", "delay", "debug_uart", "oled", "jy61p"], config,
+        collision_reverted_syscfg,
+    )
+    assert not plan.ok
+    message = plan.conflict
+    exit_block = message.split(HWCHECK_PIN_EXIT_MARKER, 1)[1]
+    oled_label = HWCHECK_CHANNEL_LABELS["oled"]
+    assert f"取消勾选「{HWCHECK_CHANNEL_SECTION}」里的「{oled_label}」" in exit_block, (
+        "通道带进来的那一方要点名那个勾选框：\n" + exit_block
+    )
+    assert f"去掉「{HWCHECK_DEVICE_SECTION}」里勾上的 jy61p" in exit_block, (
+        "器件带进来的那一方要点名器件清单里那一件：\n" + exit_block
+    )
+    # SysConfig 实例名只作括号里的补充信息（不是唯一线索）
+    for instance in ("OLED_SPI", "JY61P"):
+        assert re.search("（[^）]*" + instance + "[^）]*）", exit_block), (
+            f"实例名 {instance} 只该出现在括号里：\n" + exit_block
+        )
+    # 工单 11 的约定不许退化：重名那一支不说"能靠改绑"
+    assert "改绑引脚解不开" in message, message
+    assert "去掉其中一件" not in exit_block, (
+        "不许再把重名的出路压成一句「去掉一件」（那一件可能是通道）：\n" + exit_block
+    )
+
+
+def test_exit_copy_never_invents_a_cause_for_unregistered_instances():
+    """**未登记的实例不许被说成"心跳模块"**（01/03 评审抓到的说错成因）。
+
+    `INSTANCE_CONSUMERS` 里没有这只实例 = 判据不认识的实例（母版新加、表还没跟上）。
+    旧写法把"consumers 为空"和"consumers 只含框架模块"合并成同一个 `framework_only`
+    标志，于是对未登记实例说出"它是检测程序自带的心跳模块（led / delay）"——一句
+    **不成立**的成因，学生会照着一条做不到的动作去点。这里直接打文案函数：三条成因
+    各说各的，且都不指错控件。
+    """
+    from contest_generator.hwcheck_board import _page_action_lines
+    from contest_generator.syscfg_prune import SyscfgPinConflictReport
+
+    config = _config(devices=("aht10",))
+    report = SyscfgPinConflictReport(
+        lines=("  · PA7：…",), capacity="", name_lines=(),
+        pin_instances=("PROBE_UNKNOWN",),
+    )
+    text = "\n".join(_page_action_lines(report, config))
+    assert "心跳模块" not in text, (
+        "未登记实例（INSTANCE_CONSUMERS 里没有）不是框架心跳模块：\n" + text
+    )
+    assert "母版新加的实例" in text and "没有对应的勾选控件" in text, text
+    # 兜底也不许写回工单 03 点名删掉的那句"回到上面的器件选择"
+    assert "回到上面的器件选择" not in text, text
+
+
+def test_exit_copy_uses_the_device_list_when_no_channel_is_involved(
+    collision_reverted_syscfg,
+):
+    """同一个 oled 模块，**只从器件列表里选**时出路就只说器件清单，一个字不提通道。
+
+    这是判据是"现算"而不是"抄一份实例名清单"的证明：模块集与上一条**逐字相同**
+    （oled 照样进工程、照样撞名），只是通道勾选框关着、改从器件列表里选——所以
+    屏幕上唯一做得到的动作是"去掉这一件"，不能再教人"取消勾选"。
+    """
+    config = _config(devices=("oled", "jy61p"), oled=False)
+    plan = _plan_with_config(
+        ["led", "delay", "debug_uart", "oled", "jy61p"], config,
+        collision_reverted_syscfg,
+    )
+    assert not plan.ok
+    exit_block = plan.conflict.split(HWCHECK_PIN_EXIT_MARKER, 1)[1]
+    assert "取消勾选" not in exit_block, (
+        "这一趟根本没有「OLED 屏」这个勾选框可取消（通道关着）：\n" + exit_block
+    )
+    assert f"去掉「{HWCHECK_DEVICE_SECTION}」里勾上的 oled、jy61p" in exit_block, (
+        "两件都在器件清单里，就按页面上 chip 的顺序一起点名：\n" + exit_block
+    )
+
+
+def test_exit_copy_for_a_same_pin_conflict_names_controls_not_roles():
+    """同脚那一支（真库真母版）：同样按控件分派，且照旧保留"可去引脚配置改绑"这句。
+
+    现场 = 地猛星 + 默认双通道 + xunji + rc522（**浏览器验收用的同一组**，
+    见 `tests/browser/hwcheck.spec.mjs`）：撞脚的一方是 OLED 通道带进来的 oled，
+    另一方是器件 rc522，另有被 xunji 带进来的依赖 motor（它不是这一趟选的器件）。
+    """
+    config = _config(devices=("xunji", "rc522"))
+    plan = _plan_with_config(
+        ["led", "delay", "debug_uart", "oled", "xunji", "rc522"], config,
+        _master_syscfg(),
+    )
+    assert not plan.ok
+    exit_block = plan.conflict.split(HWCHECK_PIN_EXIT_MARKER, 1)[1]
+    assert f"取消勾选「{HWCHECK_CHANNEL_SECTION}」里的" in exit_block, exit_block
+    assert f"去掉「{HWCHECK_DEVICE_SECTION}」里勾上的 rc522" in exit_block, (
+        "撞脚的器件要点名：\n" + exit_block
+    )
+    assert "motor" in exit_block, (
+        "依赖件（motor 由 xunji 带进来）也要如实说它不在器件清单里：\n" + exit_block
+    )
+    assert "引脚配置" in exit_block and "改绑" in exit_block, (
+        "同脚那一支照旧可以去赛题页改绑（工单 11：与重名分开写）：\n" + exit_block
+    )
+    assert "先只勾一个输出通道" not in exit_block, (
+        "通道要不要去掉由上面那条点名控件的出路说，不再当万能出路：\n" + exit_block
+    )
 
 
 def test_view_is_deterministic_and_frozen():

@@ -108,3 +108,14 @@ for _instance, _slugs in INSTANCE_CONSUMERS.items():
         INSTANCES_BY_SLUG.setdefault(_slug, ())
         if _instance not in INSTANCES_BY_SLUG[_slug]:
             INSTANCES_BY_SLUG[_slug] += (_instance,)
+
+
+def instance_label(instance: str) -> str:
+    """实例名 → 「消费模块（实例名）」人读标签（未登记 = 只报实例名）。**单源**。
+
+    两个消费方：落盘冲突报告的重名行（`syscfg_prune._render_name_line`）与检测页
+    的出口文案（`hwcheck_board`）——两处各拼一遍会让同一只实例在页面上有两个名字
+    （学生按 A 处去对 B 处，对不上）。未登记实例只报实例名，**不猜模块**。
+    """
+    slugs = INSTANCE_CONSUMERS.get(instance)
+    return f"{'、'.join(slugs)}({instance})" if slugs else instance

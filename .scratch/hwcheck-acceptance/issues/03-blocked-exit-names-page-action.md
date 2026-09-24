@@ -12,19 +12,19 @@
 
 **被谁阻塞：** 无——可立即开始（与 01、02 互不阻塞，可并行）
 
-**状态：** ready-for-agent
+**状态：** resolved
 
-- [ ] 出路文案按**成因**分派，且各自点名页面控件：
+- [x] 出路文案按**成因**分派，且各自点名页面控件：
       * 重名来自某个**输出通道**（如 OLED / 调试串口）→ 点名"取消勾选那个通道"；
       * 重名或冲突来自**器件选择** → 点名"去掉这件器件"；
       * SysConfig 实例名只作括号里的补充信息，**不能是唯一线索**
-- [ ] 文案仍由**域层产出**、前端只渲染（沿用既有出口文案单源），因此可纯函数直测——新增用例覆盖上面两分支
-- [ ] 现状反例必须被改掉：`.scratch/hwcheck-acceptance/exit-aht10.txt` 里那三句话，
+- [x] 文案仍由**域层产出**、前端只渲染（沿用既有出口文案单源），因此可纯函数直测——新增用例覆盖上面两分支
+- [x] 现状反例必须被改掉：`.scratch/hwcheck-acceptance/exit-aht10.txt` 里那三句话，
       今天的第 1、2 条指向一个并不存在的出口（器件列表里没有 `oled`）
-- [ ] 两个成因的文案继续**分开写**：`Resource conflict`（同脚，可改绑）与 `Duplicate name`（重名，改绑解不开），
+- [x] 两个成因的文案继续**分开写**：`Resource conflict`（同脚，可改绑）与 `Duplicate name`（重名，改绑解不开），
       不许拿"去引脚配置改绑"给重名指路（工单 11 的既有约定，别退化回去）
-- [ ] 浏览器人工验收一次：在检测页真的选一组装不下的组合，确认看到的那句话照着做能走通
-- [ ] 不碰已 resolved 的两块机制（只改文案与它的产出分支）
+- [x] 浏览器人工验收一次：在检测页真的选一组装不下的组合，确认看到的那句话照着做能走通
+- [x] 不碰已 resolved 的两块机制（只改文案与它的产出分支）
 
 ---
 
@@ -44,3 +44,62 @@
 问题在第 1、2 条：屏幕上没有叫 `oled` 的器件可去掉——OLED 是「2. 输出通道」里的一个勾选框；
 第 2 条的"显示屏换一路不挂 I2C 的"也不是一个页面动作（学生只有"勾 / 不勾"这个通道）。
 真实可执行的出路是"取消勾选『OLED 屏』"，而这句话现在一个字都没出现。
+
+### 2026-09-24 结论
+
+**一句话**：被拦下时读到的出路现在按**成因**点名这一页上真有的控件——撞的是输出通道就说
+"取消勾选「2. 输出通道」里的「OLED 屏」"，撞的是器件就说"去掉「3. 要测的器件」里勾上的 aht10"；
+SysConfig 实例名降为括号里的补充信息（`（撞上的实例：oled(OLED_SPI)）`），旧文案那句
+"回到上面的器件选择去掉一件"（对 `oled` 指错地方）已删。
+
+**改法**（判据全部现算，不手抄实例名清单）：
+
+* `syscfg_prune.py`：冲突报告新增两个**结构化**字段 `pin_instances` / `name_instances`（两根轴各自
+  涉及哪些实例）——算 `lines` / `name_lines` 时顺手记下，**不反解渲染文本**；`_duplicate_pin_names`
+  改回实例名、渲染抽成 `_render_name_line`；实例人读标签单源搬到
+  `syscfg_instances.instance_label`（原先 `syscfg_prune._INSTANCE_LABELS` 那份删掉）。
+* `hwcheck.py`：`_CHANNEL_MODULES` → 公开 `HWCHECK_CHANNEL_MODULES`（通道 → 通道模块）；新增
+  `HWCHECK_CHANNEL_LABELS`（勾选框文字）与 `HWCHECK_CHANNEL_SECTION` / `HWCHECK_DEVICE_SECTION`
+  （两处栏位标题）——即"页面上那句话"的单源，守卫用例读 `index.html` 对账。
+* `hwcheck_board.py`：`hwcheck_pin_plan` 多吃一个 `config`（**这一页的选择本身**——
+  "哪个通道勾着、哪几件器件选着"只有它知道），`hwcheck_pin_message(report, board_name, config)`
+  按成因分派：实例的消费模块 ∈ 开着通道的模块 → 通道动作；∈ 器件清单（且不是框架自带的
+  `led`/`delay`）→ 器件动作；都不是（依赖件 / 框架件 / 母版未登记实例）→ 如实说它不在这一页的
+  勾选框里，不编做不到的动作。两轴的结尾句照旧分开（同脚可去赛题页改绑、重名改绑解不开）。
+
+**读数**：
+
+* `.scratch/hwcheck-acceptance/probe-03-exit-copy.txt`：两分支 400 原文 + 逐条核对——点名的控件都在
+  `index.html` 里、摘掉括号后不剩实例名、**两条出路都照着做了一遍**（uncheck「OLED 屏」→ 不再被拦下；
+  去掉「3. 要测的器件」里的 aht10 → 也不再被拦下），并逐条断言票面点名的那两句旧文案（"回到上面的
+  器件选择…"/"换一件同类替代…"）**已不再出现**。
+* `exit-aht10.txt` **保持改之前的 HEAD 实测**（它是票面「现状反例」的原始证据，spec 补充说明也按
+  "重名拦下的 400 原文"引用它）——改之后同一幕的读数在 `probe-03-exit-copy.txt`。
+  > 评审整改：中途一度把它覆盖成探针输出的副本、再让探针 `body == message` 自证（循环对账，
+  > 原始反例只剩 git 历史）。已复原为 HEAD 版，判据改为**硬编码的禁句断言**（不是自证）。
+* 浏览器（`node --test --test-concurrency=1 "tests/browser/hwcheck.spec.mjs"` → **20 passed / 0 fail**，
+  新增那条 14.8s）：地猛星 + 默认双通道 + `xunji` + `rc522` 被拦下 → 页面（接线区与生成错误面板）
+  给出「取消勾选「2. 输出通道」里的「OLED 屏」」→ **照做**（uncheck）→ 再生成**成功**
+  （`hwcheck-mspm0-<时间戳>`）。读数 `.scratch/hwcheck-acceptance/probe-03-browser.txt`。
+* 全量收尾读数：`python -m pytest -n 4 -q` → **5376 passed + 1 skipped / 0 fail**（含本单新增 4 条）；
+  `python -m pytest -n auto -q` 亦拿到过一次同数绿，另三次复跑各命中一次**既有并行偶发**
+  （两种都记在 `docs/agents/local-environment.md`：`test_js_gate.py::test_full_mode_runs_js_gate_and_pytest`
+  的嵌套并行 §2.0 ④、`test_launcher_stale_service.py` 的「刚问到的空闲端口被另一个 worker 抢走」），
+  与本单无关：两支单跑各自全绿（29 passed / 单测文件全绿）。
+
+### 2026-09-24 双轴评审与整改（领单 agent 复核）
+
+| # | 评审意见 | 处置 |
+|---|---|---|
+| S1 | **硬违规**：未登记实例（`INSTANCE_CONSUMERS` 里没有它）被说成"检测程序自带的心跳模块（led / delay）"——旧写法把"consumers 为空"与"只含框架模块"并成一个 `framework_only` 标志，**说了一句不成立的成因** | **已修**：三条成因分开记（框架件 / 依赖件 / 母版未登记），各说各的；未登记那一支如实说"这一页没有对应的勾选控件"。新增用例 `test_exit_copy_never_invents_a_cause_for_unregistered_instances`（直接打文案函数，构造未登记实例） |
+| S2/Sp1 | 兜底句把票面点名要删的旧文案「回到上面的器件选择…」又拼了回去（真报告里不可达，但是回归地雷） | **已修**：兜底改成只点这一页真有的两个控件（"先取消勾选「2. 输出通道」里的通道，或去掉「3. 要测的器件」里勾上的一件"），并在用例里断言该旧句不出现 |
+| S3 | `_duplicate_pin_names` 排序基准由标签串换成实例名 → 生成门禁 / 赛题页共用的落盘报告**顺序可能翻转**（没人点名的静默变化） | **已修**：`_render_name_line` 按**标签排序**后再拼（与工单 11 的既有输出逐字一致），结构化字段仍是实例名；docstring 写明为什么渲染要排 |
+| S4 | `path.split(".", 1)[0]` 在两处各切一遍（自称"同一口径"却没共用） | **已修**：抽 `_path_instance(path)` 单源 |
+| Sp2 | 票面「来自器件选择 → 点名去掉这件器件」只验了**点名**，那条动作从没照着做过（读数缺一半） | **已修**：探针补走第二条第 2 条（去掉 aht10 → 不再被拦下），读数第 19 行 |
+| Sp3 | `exit-aht10.txt` 被覆盖成探针输出副本、探针自证（循环对账），票面点名的 HEAD 实测反例只剩 git 历史 | **已修**：文件复原为 HEAD 版（作为立项证据），判据换成**硬编码禁句断言** |
+| S5 | 「2. 输出通道」「OLED 屏」在 Python 常量 / index.html / 浏览器 spec 三处各一份，e2e 那份无守卫 | **接受**：e2e 用例的职责就是"断言它真看到的页面文字"，与 Python 常量的对账由域层那条读 `index.html` 的守卫负责（已存在） |
+| Sp4 | `hwcheck_pin_plan` 多吃一个必填 `config`（公开签名变更），票面未要求 | **接受并记账**：判据确需"这一页选了什么"（哪个通道勾着、哪几件器件选着），否则只能靠反解渲染文本——比签名变更更坏；调用点与 `__all__` 一起更新，既有用例全绿 |
+
+* 整改后复跑：`tests/test_hwcheck_board.py` 等四支 **291 passed**；浏览器 spec **20 passed / 0 fail**
+  （`probe-03-browser.txt`，76s）；探针 `probe-03-exit-copy.txt`（含新增两条"照着做"）；
+  全量最终复跑 `python -m pytest -n auto -q` → **5377 passed + 1 skipped / 171s**。
