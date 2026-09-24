@@ -1,0 +1,264 @@
+==============================================================================
+# 场景 A：只验板子活着（一件器件都不选）
+# 平台=mspm0  器件=（一件都不选）  串口=True OLED=True
+==============================================================================
+
+-- 接线表 rows --
+    {'slug': 'led', 'role': 'LED', 'role_id': 'LED', 'role_label': '', 'pin': 'PA15', 'remark': 'gpio_out（必接）', 'pin_note': ''}
+    {'slug': 'debug_uart', 'role': 'DEBUG_UART_TX', 'role_id': 'DEBUG_UART_TX', 'role_label': '', 'pin': 'PA23', 'remark': 'uart_tx（必接）', 'pin_note': ''}
+    {'slug': 'debug_uart', 'role': 'DEBUG_UART_RX', 'role_id': 'DEBUG_UART_RX', 'role_label': '', 'pin': 'PA22', 'remark': 'uart_rx（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SCL', 'role_id': 'OLED_SCL', 'role_label': '', 'pin': 'PB2', 'remark': 'i2c_scl（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SDA', 'role_id': 'OLED_SDA', 'role_label': '', 'pin': 'PB3', 'remark': 'i2c_sda（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SPI_SCL', 'role_id': 'OLED_SPI_SCL', 'role_label': '', 'pin': 'PA28', 'remark': 'gpio_out（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SPI_SDA', 'role_id': 'OLED_SPI_SDA', 'role_label': '', 'pin': 'PA31', 'remark': 'gpio_out（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SPI_DC', 'role_id': 'OLED_SPI_DC', 'role_label': '', 'pin': 'PA13', 'remark': 'gpio_out（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SPI_CS', 'role_id': 'OLED_SPI_CS', 'role_label': '', 'pin': 'PB18', 'remark': 'gpio_out（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SPI_RES', 'role_id': 'OLED_SPI_RES', 'role_label': '', 'pin': 'PA0', 'remark': 'gpio_out（必接）', 'pin_note': '板载 LED 共用（I2C_0 SDA，通信期间微闪）；上拉位未焊依赖 MPU 板自带'}
+    pin_fixes: ['oled.OLED_SPI_RES → PA0（原 PA22 与 debug_uart.DEBUG_UART_RX 冲突，已自动移开）', 'oled.OLED_SPI_RES → PA0：这根脚板上有注记——板载 LED 共用（I2C_0 SDA，通信期间微闪）；上拉位未焊依赖 MPU 板自带（下面接线表那一行也标着）']
+    footnote: 其余外设引脚以工程内 pin_config.h（stm32）/ mspm0.syscfg 为准
+
+-- 默认脚冲突组 groups --
+    board_shares: [{'pin': 'PA0', 'note': '板载 LED 共用（I2C_0 SDA，通信期间微闪）；上拉位未焊依赖 MPU 板自带', 'roles': ['oled.OLED_SPI_RES']}]
+
+-- 建议检测顺序 order --
+    {'slug': 'led', 'description': 'LED 指示灯驱动：接普通发光二极管（或板载 LED 排针），用电平点亮/熄灭，做状态指示、声光提示、计数显示等最基础的“看得见的输出”。接线二线制（串限流电阻后接 GPIO 与 GND），每个 LED 占 1 个 GPIO——stm32 默认板载 PC13/PC14/PC15 三色、mspm0 默认 PA15；多路 LED 按通道宏区分，最多 8 个实例。驱动接口：led_init() 初始化、led_on/led_off/led_toggle(通道宏) 控制亮灭翻转，通道宏用 LED_RED / LED_YELLOW / LED_GREEN（多实例时按颜色命名）；默认拉电流接法 1=亮，接法相反时容器内一处宏可反。适用于状态指示、声光提示、得分/次数显示等赛题功能。', 'bring_up': True}
+    {'slug': 'delay', 'description': 'MSPM0 毫秒延时：delay_ms 基于 CPUCLK_FREQ 换算调用 delay_cycles，任何时钟频率自动适配。', 'bring_up': True}
+    {'slug': 'debug_uart', 'description': '调试串口驱动（双平台）：UART2 调试输出 + 短命令接收回显，供联调阶段打印状态；适用于需要串口调试输出的各类联调场景。', 'bring_up': True}
+    {'slug': 'config', 'description': '集中外设配置头文件：硬件引脚映射（UART/GPIO/LED/蜂鸣器/DIP 拨码）与通用显示、滤波参数统一集中定义，供各模块与主程序统一调用；适用于 UWB 定位、OLED 显示、LED/蜂鸣器指示等多外设联调场景。', 'bring_up': False}
+    {'slug': 'oled', 'description': '0.96 寸 OLED（SSD1306）显示驱动：I2C 硬件总线（默认，OLED_Init）与 SPI 总线变体（批次 12/07 决策 B——软 SPI 位操作 5 脚 SCL/SDA/DC/CS/RES、OLED_SPI_Init，适配 0.96 SPI 单色屏），显存式绘图（画点/字符/字符串/汉字，支持反色与 180° 旋转），带 16×8 ASCII 字库；分辨率支持 128×64（默认）与 128×32（0.91 寸，oled_set_res）。', 'bring_up': False}
+    guide: 按顺序逐个验证，前一个过了再接下一个
+    reason: 先确认「板子活着」——延时 / 串口 / 灯这类 bring-up 模块排在最前；其余按依赖序一件一件往下测（被依赖的在前），前一件不通，后一件的现象就不可信。
+    missing: []
+
+-- 专精小节 sections --
+    unspecialized: []
+    custom: []
+    exclusive_groups: [{'id': 'zigbee-rx', 'label': '无线链路 / 数传', 'members': ['as32', 'hc05', 'nrf24l01', 'zigbee_link', 'zigbee_uart']}, {'id': 'sound-prompt', 'label': '提示输出 / 声', 'members': ['beep', 'jq8900']}, {'id': 'barometer', 'label': '气压 / 海拔传感器', 'members': ['bmp180', 'ms5611']}, {'id': 'gray-track', 'label': '8 路灰度传感器驱动', 'members': ['huidu', 'pid', 'xunji']}, {'id': 'display', 'label': '显示 / 屏幕', 'members': ['lcd', 'max7219', 'oled']}, {'id': 'attitude-hold', 'label': '航向保持 / 姿态传感器', 'members': ['imu_uart', 'jy61p', 'ml_mpu6050']}, {'id': 'distance', 'label': '距离测量 / 测距传感器', 'members': ['ir_distance', 'sr04', 'us016']}]
+
+-- 串口命令台 console --
+    available: True
+    hint: 有串口，但这一趟没有配方命令（选的器件没声明复测字符）：命令循环里敲 ? 看帮助，既有的 r / y / g / o / b<N> 照旧可用。
+
+-- 上板确认清单 --
+    [flash] 应看到: 烧录工具最后报成功（Keil 的 Programming Done / Verify OK，或 DSLite 的 Success）
+           不对先查: ① 探针 / 下载线有没有插好、板子有没有单独供电；② 下载口被别的程序占用（串口助手、另一个 IDE）会写不进去；③ 目标芯片型号要与板子一致（stm32 选 STM32F103C8，mspm0 选 MSPM0G3507）
+    [heartbeat] 应看到: 板载 LED 按约 200 毫秒的节奏规律闪烁（一亮一灭，不是常亮也不是全灭）
+           不对先查: ① 先按一次复位，看是不是根本没跑起来；② stm32 板载三色 LED 在 PC13/PC14/PC15（本程序用红灯通道 LED_RED），地猛星用户 LED 是 PA15；③ 灯常亮或常灭不动 = 程序卡住了（多半卡在外设初始化）
+    [serial] 应看到: 串口助手（115200 / 8 / 无校验 / 1 停止位）出现一行「上电：板子活着，检测程序开始跑」
+           不对先查: ① 串口号选错（拔插一次，看哪个口消失）；② TX/RX 要交叉接、GND 必须与板子共地；③ 波特率不对就是乱码——固定 115200；④ 板子没复位 / 没烧进去
+    [oled] 应看到: OLED 屏上出现同一行「上电：板子活着…」（屏是亮的，不是全黑也不是全白）
+           不对先查: ① SCL/SDA 接反或没接（本工程的默认脚见工程 README 的接线表）；② 屏供电 3.3V；③ 0.96 寸 SSD1306 与 1.3 寸屏初始化序列不同，换屏要改驱动
+    [reset] 应看到: 按一下复位键，现象从头再来一遍（灯继续闪、输出通道再打一次那一行）
+           不对先查: ① 复位键没接 / 按下没反应 → 直接断电重新上电；② 只打印一次就停 = 程序进了死循环或硬件异常（HardFault）
+    [syscfg-init] 应看到: mspm0 专属：打开工程根 main.c，确认 `SYSCFG_DL_init();` 那一行**已取消注释**（本平台的生成链暂时没有把这一行注入出来）
+           不对先查: 没取消注释 = 串口 / LED 都没初始化，灯不会闪、串口不会有字——这不是板子坏，把 `/* SYSCFG_DL_init(); */` 的注释去掉再编译烧录一次
+
+==============================================================================
+# 场景 B：地猛星 + MPU6050（平台不对称那一格）
+# 平台=mspm0  器件=['ml_mpu6050']  串口=True OLED=True
+==============================================================================
+
+-- 接线表 rows --
+    {'slug': 'led', 'role': 'LED', 'role_id': 'LED', 'role_label': '', 'pin': 'PA15', 'remark': 'gpio_out（必接）', 'pin_note': ''}
+    {'slug': 'debug_uart', 'role': 'DEBUG_UART_TX', 'role_id': 'DEBUG_UART_TX', 'role_label': '', 'pin': 'PA23', 'remark': 'uart_tx（必接）', 'pin_note': ''}
+    {'slug': 'debug_uart', 'role': 'DEBUG_UART_RX', 'role_id': 'DEBUG_UART_RX', 'role_label': '', 'pin': 'PA22', 'remark': 'uart_rx（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SCL', 'role_id': 'OLED_SCL', 'role_label': '', 'pin': 'PB2', 'remark': 'i2c_scl（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SDA', 'role_id': 'OLED_SDA', 'role_label': '', 'pin': 'PB3', 'remark': 'i2c_sda（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SPI_SCL', 'role_id': 'OLED_SPI_SCL', 'role_label': '', 'pin': 'PA28', 'remark': 'gpio_out（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SPI_SDA', 'role_id': 'OLED_SPI_SDA', 'role_label': '', 'pin': 'PA31', 'remark': 'gpio_out（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SPI_DC', 'role_id': 'OLED_SPI_DC', 'role_label': '', 'pin': 'PA13', 'remark': 'gpio_out（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SPI_CS', 'role_id': 'OLED_SPI_CS', 'role_label': '', 'pin': 'PB18', 'remark': 'gpio_out（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SPI_RES', 'role_id': 'OLED_SPI_RES', 'role_label': '', 'pin': 'PA2', 'remark': 'gpio_out（必接）', 'pin_note': 'ROSC 偏置（板载 100k 到地；KEY START 按键共用）'}
+    {'slug': 'ml_mpu6050', 'role': 'I2C_0_SCL', 'role_id': 'I2C_0_SCL', 'role_label': '', 'pin': 'PA1', 'remark': 'i2c_scl（必接）', 'pin_note': '板载 LED 共用（I2C_0 SCL，通信期间微闪）；板载 4.7k 上拉'}
+    {'slug': 'ml_mpu6050', 'role': 'I2C_0_SDA', 'role_id': 'I2C_0_SDA', 'role_label': '', 'pin': 'PA0', 'remark': 'i2c_sda（必接）', 'pin_note': '板载 LED 共用（I2C_0 SDA，通信期间微闪）；上拉位未焊依赖 MPU 板自带'}
+    pin_fixes: ['oled.OLED_SPI_RES → PA2（原 PA22 与 debug_uart.DEBUG_UART_RX 冲突，已自动移开）', 'oled.OLED_SPI_RES → PA2：这根脚板上有注记——ROSC 偏置（板载 100k 到地；KEY START 按键共用）（下面接线表那一行也标着）']
+    footnote: 其余外设引脚以工程内 pin_config.h（stm32）/ mspm0.syscfg 为准
+
+-- 默认脚冲突组 groups --
+    board_shares: [{'pin': 'PA2', 'note': 'ROSC 偏置（板载 100k 到地；KEY START 按键共用）', 'roles': ['oled.OLED_SPI_RES']}, {'pin': 'PA1', 'note': '板载 LED 共用（I2C_0 SCL，通信期间微闪）；板载 4.7k 上拉', 'roles': ['ml_mpu6050.I2C_0_SCL']}, {'pin': 'PA0', 'note': '板载 LED 共用（I2C_0 SDA，通信期间微闪）；上拉位未焊依赖 MPU 板自带', 'roles': ['ml_mpu6050.I2C_0_SDA']}]
+
+-- 建议检测顺序 order --
+    {'slug': 'led', 'description': 'LED 指示灯驱动：接普通发光二极管（或板载 LED 排针），用电平点亮/熄灭，做状态指示、声光提示、计数显示等最基础的“看得见的输出”。接线二线制（串限流电阻后接 GPIO 与 GND），每个 LED 占 1 个 GPIO——stm32 默认板载 PC13/PC14/PC15 三色、mspm0 默认 PA15；多路 LED 按通道宏区分，最多 8 个实例。驱动接口：led_init() 初始化、led_on/led_off/led_toggle(通道宏) 控制亮灭翻转，通道宏用 LED_RED / LED_YELLOW / LED_GREEN（多实例时按颜色命名）；默认拉电流接法 1=亮，接法相反时容器内一处宏可反。适用于状态指示、声光提示、得分/次数显示等赛题功能。', 'bring_up': True}
+    {'slug': 'delay', 'description': 'MSPM0 毫秒延时：delay_ms 基于 CPUCLK_FREQ 换算调用 delay_cycles，任何时钟频率自动适配。', 'bring_up': True}
+    {'slug': 'debug_uart', 'description': '调试串口驱动（双平台）：UART2 调试输出 + 短命令接收回显，供联调阶段打印状态；适用于需要串口调试输出的各类联调场景。', 'bring_up': True}
+    {'slug': 'config', 'description': '集中外设配置头文件：硬件引脚映射（UART/GPIO/LED/蜂鸣器/DIP 拨码）与通用显示、滤波参数统一集中定义，供各模块与主程序统一调用；适用于 UWB 定位、OLED 显示、LED/蜂鸣器指示等多外设联调场景。', 'bring_up': False}
+    {'slug': 'oled', 'description': '0.96 寸 OLED（SSD1306）显示驱动：I2C 硬件总线（默认，OLED_Init）与 SPI 总线变体（批次 12/07 决策 B——软 SPI 位操作 5 脚 SCL/SDA/DC/CS/RES、OLED_SPI_Init，适配 0.96 SPI 单色屏），显存式绘图（画点/字符/字符串/汉字，支持反色与 180° 旋转），带 16×8 ASCII 字库；分辨率支持 128×64（默认）与 128×32（0.91 寸，oled_set_res）。', 'bring_up': False}
+    {'slug': 'ml_mpu6050', 'description': 'MPU6050 六轴传感器的 I2C 通用驱动：提供初始化、寄存器读写以及加速度计和陀螺仪原始数据读取功能，供外部算法进一步解算姿态角；适用于航向保持（车头朝向）、直线行驶纠偏、倾角检测等需要陀螺仪/姿态数据的功能。', 'bring_up': False}
+    guide: 按顺序逐个验证，前一个过了再接下一个
+    reason: 先确认「板子活着」——延时 / 串口 / 灯这类 bring-up 模块排在最前；其余按依赖序一件一件往下测（被依赖的在前），前一件不通，后一件的现象就不可信。
+    missing: []
+
+-- 专精小节 sections --
+    [ml_mpu6050] 计划: 
+      平台差异: ('**本平台（mspm0）走官方 DMP 姿态解算**：直接出 pitch / roll / yaw 三维角度（100Hz）——这是与 stm32 侧最大的不同（那边只有原始六轴）。', '**本平台没有浮点显示接口**，所以每个角度拆成两次回显：「整数部分」和「小数第一位」，读数时要**把相邻两行拼起来看**（例如 pitch 整数 = 12、pitch 小数 = 3 → 12.3°）。负数按截断显示（-12 与 -3 就是 -12.3°）。', '两级自证（都不信「初始化没报错就是好的」）：① DMP_Init() 返回 0——官方库内部会读设备 ID 做校验；② 探头 DMP_Read_Data() 返回 0——真的从 FIFO 读回一帧，顺带把角度搬进变量。探头判 FAIL 就不再打读数（读数只会是没意义的 0）。', '地猛星 MPU6050 默认 I2C0 = SDA PA0 / SCL PA1，**与板载 LED 同脚**（通信期间 LED 微闪是正常现象）；SysConfig 里必须有 I2C_0 实例（母版已含），否则 mpu_port.c 编不过（报 I2C_0_INST 缺失）。', '读数怎么算合理：板子**静止放平**时 pitch / roll ≈ 0°（真实值可能差个一两度，属正常）；**yaw 会缓慢漂移**——这套 DMP 只用陀螺仪与加速度计、没有磁力计做绝对朝向，漂是物理决定的，不是坏了。数值一直在跳或差得离谱，先确认线长 / 供电，再怀疑器件。', 'DMP 端口（mpu_port.c 的 DMP_Init）自己会打开 SysTick 中断，而 mspm0 母版**没有** SysTick 服务函数（stm32 侧由母版 ml_systick.c 提供）——检测程序已在 main.c 里补了一个空的 SysTick_Handler：**别删**，删了会掉进启动文件的 Default_Handler 死循环，表现是灯都不闪。')
+    unspecialized: []
+    custom: []
+    exclusive_groups: [{'id': 'zigbee-rx', 'label': '无线链路 / 数传', 'members': ['as32', 'hc05', 'nrf24l01', 'zigbee_link', 'zigbee_uart']}, {'id': 'sound-prompt', 'label': '提示输出 / 声', 'members': ['beep', 'jq8900']}, {'id': 'barometer', 'label': '气压 / 海拔传感器', 'members': ['bmp180', 'ms5611']}, {'id': 'gray-track', 'label': '8 路灰度传感器驱动', 'members': ['huidu', 'pid', 'xunji']}, {'id': 'display', 'label': '显示 / 屏幕', 'members': ['lcd', 'max7219', 'oled']}, {'id': 'attitude-hold', 'label': '航向保持 / 姿态传感器', 'members': ['imu_uart', 'jy61p', 'ml_mpu6050']}, {'id': 'distance', 'label': '距离测量 / 测距传感器', 'members': ['ir_distance', 'sr04', 'us016']}]
+
+-- 串口命令台 console --
+    available: True
+    hint: 有串口 = 能交互式复测：程序跑完上电那一遍后进命令循环，敲下面任一个字符就复测那一件（不用重烧、边动线边看现象）；敲 ? 看全部命令（含既有的 r / y / g / o / b<N>）。
+    命令 'm' → ml_mpu6050: MPU6050 姿态：重跑 DMP 初始化与一帧角度读取
+
+-- 上板确认清单 --
+    [flash] 应看到: 烧录工具最后报成功（Keil 的 Programming Done / Verify OK，或 DSLite 的 Success）
+           不对先查: ① 探针 / 下载线有没有插好、板子有没有单独供电；② 下载口被别的程序占用（串口助手、另一个 IDE）会写不进去；③ 目标芯片型号要与板子一致（stm32 选 STM32F103C8，mspm0 选 MSPM0G3507）
+    [heartbeat] 应看到: 板载 LED 按约 200 毫秒的节奏规律闪烁（一亮一灭，不是常亮也不是全灭）
+           不对先查: ① 先按一次复位，看是不是根本没跑起来；② stm32 板载三色 LED 在 PC13/PC14/PC15（本程序用红灯通道 LED_RED），地猛星用户 LED 是 PA15；③ 灯常亮或常灭不动 = 程序卡住了（多半卡在外设初始化）
+    [serial] 应看到: 串口助手（115200 / 8 / 无校验 / 1 停止位）出现一行「上电：板子活着，检测程序开始跑」
+           不对先查: ① 串口号选错（拔插一次，看哪个口消失）；② TX/RX 要交叉接、GND 必须与板子共地；③ 波特率不对就是乱码——固定 115200；④ 板子没复位 / 没烧进去
+    [oled] 应看到: OLED 屏上出现同一行「上电：板子活着…」（屏是亮的，不是全黑也不是全白）
+           不对先查: ① SCL/SDA 接反或没接（本工程的默认脚见工程 README 的接线表）；② 屏供电 3.3V；③ 0.96 寸 SSD1306 与 1.3 寸屏初始化序列不同，换屏要改驱动
+    [reset] 应看到: 按一下复位键，现象从头再来一遍（灯继续闪、输出通道再打一次那一行）
+           不对先查: ① 复位键没接 / 按下没反应 → 直接断电重新上电；② 只打印一次就停 = 程序进了死循环或硬件异常（HardFault）
+    [syscfg-init] 应看到: mspm0 专属：打开工程根 main.c，确认 `SYSCFG_DL_init();` 那一行**已取消注释**（本平台的生成链暂时没有把这一行注入出来）
+           不对先查: 没取消注释 = 串口 / LED 都没初始化，灯不会闪、串口不会有字——这不是板子坏，把 `/* SYSCFG_DL_init(); */` 的注释去掉再编译烧录一次
+
+==============================================================================
+# 场景 C：stm32 + MPU6050（原文说只有原始六轴）
+# 平台=stm32  器件=['ml_mpu6050']  串口=True OLED=True
+==============================================================================
+
+-- 接线表 rows --
+    {'slug': 'config', 'role': 'LED_RED', 'role_id': 'LED_RED', 'role_label': '', 'pin': 'PC13', 'remark': 'gpio_out', 'pin_note': '板载 LED 共用（低电平点亮）'}
+    {'slug': 'config', 'role': 'LED_YELLOW', 'role_id': 'LED_YELLOW', 'role_label': '', 'pin': 'PC14', 'remark': 'gpio_out', 'pin_note': ''}
+    {'slug': 'config', 'role': 'LED_GREEN', 'role_id': 'LED_GREEN', 'role_label': '', 'pin': 'PC15', 'remark': 'gpio_out', 'pin_note': ''}
+    {'slug': 'config', 'role': 'BUZZER', 'role_id': 'BUZZER', 'role_label': '', 'pin': 'PA15', 'remark': 'gpio_out', 'pin_note': ''}
+    {'slug': 'config', 'role': 'DIP0', 'role_id': 'DIP0', 'role_label': '', 'pin': 'PB12', 'remark': 'gpio_in', 'pin_note': ''}
+    {'slug': 'config', 'role': 'DIP1', 'role_id': 'DIP1', 'role_label': '', 'pin': 'PB13', 'remark': 'gpio_in', 'pin_note': ''}
+    {'slug': 'config', 'role': 'DIP2', 'role_id': 'DIP2', 'role_label': '', 'pin': 'PB14', 'remark': 'gpio_in', 'pin_note': ''}
+    {'slug': 'config', 'role': 'DIP3', 'role_id': 'DIP3', 'role_label': '', 'pin': 'PB15', 'remark': 'gpio_in', 'pin_note': ''}
+    {'slug': 'debug_uart', 'role': 'DEBUG_UART_TX', 'role_id': 'DEBUG_UART_TX', 'role_label': '', 'pin': 'PA2', 'remark': 'uart_tx（必接）', 'pin_note': ''}
+    {'slug': 'debug_uart', 'role': 'DEBUG_UART_RX', 'role_id': 'DEBUG_UART_RX', 'role_label': '', 'pin': 'PA3', 'remark': 'uart_rx（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SCL', 'role_id': 'OLED_SCL', 'role_label': '', 'pin': 'PB8', 'remark': 'i2c_scl（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SDA', 'role_id': 'OLED_SDA', 'role_label': '', 'pin': 'PB9', 'remark': 'i2c_sda（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SPI_SCL', 'role_id': 'OLED_SPI_SCL', 'role_label': '', 'pin': 'PB4', 'remark': 'gpio_out（必接）', 'pin_note': 'NJTRST（复位后可用）'}
+    {'slug': 'oled', 'role': 'OLED_SPI_SDA', 'role_id': 'OLED_SPI_SDA', 'role_label': '', 'pin': 'PB5', 'remark': 'gpio_out（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SPI_DC', 'role_id': 'OLED_SPI_DC', 'role_label': '', 'pin': 'PB6', 'remark': 'gpio_out（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SPI_CS', 'role_id': 'OLED_SPI_CS', 'role_label': '', 'pin': 'PB7', 'remark': 'gpio_out（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SPI_RES', 'role_id': 'OLED_SPI_RES', 'role_label': '', 'pin': 'PA5', 'remark': 'gpio_out（必接）', 'pin_note': ''}
+    {'slug': 'ml_mpu6050', 'role': 'MPU6050_SCL', 'role_id': 'MPU6050_SCL', 'role_label': '', 'pin': 'PA11', 'remark': 'i2c_scl（必接）', 'pin_note': 'USB DM（板载 USB 插座共用——用 USB 时勿占用）'}
+    {'slug': 'ml_mpu6050', 'role': 'MPU6050_SDA', 'role_id': 'MPU6050_SDA', 'role_label': '', 'pin': 'PA12', 'remark': 'i2c_sda（必接）', 'pin_note': 'USB DP（板载 USB 插座共用——用 USB 时勿占用）'}
+    pin_fixes: []
+    footnote: 其余外设引脚以工程内 pin_config.h（stm32）/ mspm0.syscfg 为准
+
+-- 默认脚冲突组 groups --
+    board_shares: [{'pin': 'PC13', 'note': '板载 LED 共用（低电平点亮）', 'roles': ['config.LED_RED']}, {'pin': 'PB4', 'note': 'NJTRST（复位后可用）', 'roles': ['oled.OLED_SPI_SCL']}, {'pin': 'PA11', 'note': 'USB DM（板载 USB 插座共用——用 USB 时勿占用）', 'roles': ['ml_mpu6050.MPU6050_SCL']}, {'pin': 'PA12', 'note': 'USB DP（板载 USB 插座共用——用 USB 时勿占用）', 'roles': ['ml_mpu6050.MPU6050_SDA']}]
+
+-- 建议检测顺序 order --
+    {'slug': 'led', 'description': 'LED 指示灯驱动：接普通发光二极管（或板载 LED 排针），用电平点亮/熄灭，做状态指示、声光提示、计数显示等最基础的“看得见的输出”。接线二线制（串限流电阻后接 GPIO 与 GND），每个 LED 占 1 个 GPIO——stm32 默认板载 PC13/PC14/PC15 三色、mspm0 默认 PA15；多路 LED 按通道宏区分，最多 8 个实例。驱动接口：led_init() 初始化、led_on/led_off/led_toggle(通道宏) 控制亮灭翻转，通道宏用 LED_RED / LED_YELLOW / LED_GREEN（多实例时按颜色命名）；默认拉电流接法 1=亮，接法相反时容器内一处宏可反。适用于状态指示、声光提示、得分/次数显示等赛题功能。', 'bring_up': True}
+    {'slug': 'delay', 'description': 'MSPM0 毫秒延时：delay_ms 基于 CPUCLK_FREQ 换算调用 delay_cycles，任何时钟频率自动适配。', 'bring_up': True}
+    {'slug': 'debug_uart', 'description': '调试串口驱动（双平台）：UART2 调试输出 + 短命令接收回显，供联调阶段打印状态；适用于需要串口调试输出的各类联调场景。', 'bring_up': True}
+    {'slug': 'config', 'description': '集中外设配置头文件：硬件引脚映射（UART/GPIO/LED/蜂鸣器/DIP 拨码）与通用显示、滤波参数统一集中定义，供各模块与主程序统一调用；适用于 UWB 定位、OLED 显示、LED/蜂鸣器指示等多外设联调场景。', 'bring_up': False}
+    {'slug': 'oled', 'description': '0.96 寸 OLED（SSD1306）显示驱动：I2C 硬件总线（默认，OLED_Init）与 SPI 总线变体（批次 12/07 决策 B——软 SPI 位操作 5 脚 SCL/SDA/DC/CS/RES、OLED_SPI_Init，适配 0.96 SPI 单色屏），显存式绘图（画点/字符/字符串/汉字，支持反色与 180° 旋转），带 16×8 ASCII 字库；分辨率支持 128×64（默认）与 128×32（0.91 寸，oled_set_res）。', 'bring_up': False}
+    {'slug': 'ml_mpu6050', 'description': 'MPU6050 六轴传感器的 I2C 通用驱动：提供初始化、寄存器读写以及加速度计和陀螺仪原始数据读取功能，供外部算法进一步解算姿态角；适用于航向保持（车头朝向）、直线行驶纠偏、倾角检测等需要陀螺仪/姿态数据的功能。', 'bring_up': False}
+    guide: 按顺序逐个验证，前一个过了再接下一个
+    reason: 先确认「板子活着」——延时 / 串口 / 灯这类 bring-up 模块排在最前；其余按依赖序一件一件往下测（被依赖的在前），前一件不通，后一件的现象就不可信。
+    missing: []
+
+-- 专精小节 sections --
+    [ml_mpu6050] 计划: 
+      平台差异: ('**本平台（stm32）没有姿态解算**：这里的驱动只有原始六轴（ax / ay / az / gx / gy / gz），没有 pitch / roll / yaw——要角度请换到 mspm0 侧（官方 DMP 姿态解算），或改用串口姿态模块（jy61p / imu_uart）。**所以这一版在本平台不给你角度，别把「没有角度」读成「我接错了线」。**', '前置调用：MPU6050_Init() **不初始化 I2C 总线**（它只写寄存器），检测程序已先调母版 I2C_Init() 初始化软 I2C（默认 SCL = PA11 / SDA = PA12，见工程 README 的引脚接线表）。总线没起来时读回来的是固定值（0x00 / 0xFF），不是「器件坏了」。', '本件自己带探头（不看驱动的初始化返回值）：读 WHO_AM_I（寄存器 0x75）比对 0x68。库里这份 stm32 驱动**不做身份校验**（通信失败也照样往下写寄存器），所以板上判 FAIL 就是通信真的没通——先查供电 / 上拉（SDA/SCL 要有 4.7k 上拉）/ 地址（AD0 接 GND = 0x68）/ 线序（SCL、SDA 有没有接反）。', '读数怎么算合理：加速度计 ±2g 量程 = 16384 LSB/g，板子放平静止时 Z 轴 ≈ ±16384、X/Y ≈ 0；陀螺仪 ±2000dps 量程 = 16.4 LSB/(°/s)，静止时三轴都 ≈ 0。数值一直在跳或差得很远，先确认线长 / 供电，再怀疑器件。')
+    unspecialized: []
+    custom: []
+    exclusive_groups: [{'id': 'zigbee-rx', 'label': '无线链路 / 数传', 'members': ['as32', 'ec01g', 'esp01s', 'hc05', 'nrf24l01', 'zigbee_link', 'zigbee_uart']}, {'id': 'sound-prompt', 'label': '提示输出 / 声', 'members': ['beep', 'jq8900']}, {'id': 'barometer', 'label': '气压 / 海拔传感器', 'members': ['bmp180', 'ms5611']}, {'id': 'display', 'label': '显示 / 屏幕', 'members': ['ili9341', 'ili9488', 'lcd', 'max7219', 'oled', 'st7789_para']}, {'id': 'distance', 'label': '距离测量 / 测距传感器', 'members': ['ir_distance', 'us016', 'vl53l0x']}, {'id': 'positioning', 'label': '定位 / 位置测量', 'members': ['neo_6m', 'uwb_uart']}]
+
+-- 串口命令台 console --
+    available: True
+    hint: 有串口 = 能交互式复测：程序跑完上电那一遍后进命令循环，敲下面任一个字符就复测那一件（不用重烧、边动线边看现象）；敲 ? 看全部命令（含既有的 r / y / g / o / b<N>）。
+    命令 'm' → ml_mpu6050: MPU6050 通信：读 WHO_AM_I 比对 0x68，再回显六轴原始值
+
+-- 上板确认清单 --
+    [flash] 应看到: 烧录工具最后报成功（Keil 的 Programming Done / Verify OK，或 DSLite 的 Success）
+           不对先查: ① 探针 / 下载线有没有插好、板子有没有单独供电；② 下载口被别的程序占用（串口助手、另一个 IDE）会写不进去；③ 目标芯片型号要与板子一致（stm32 选 STM32F103C8，mspm0 选 MSPM0G3507）
+    [heartbeat] 应看到: 板载 LED 按约 200 毫秒的节奏规律闪烁（一亮一灭，不是常亮也不是全灭）
+           不对先查: ① 先按一次复位，看是不是根本没跑起来；② stm32 板载三色 LED 在 PC13/PC14/PC15（本程序用红灯通道 LED_RED），地猛星用户 LED 是 PA15；③ 灯常亮或常灭不动 = 程序卡住了（多半卡在外设初始化）
+    [serial] 应看到: 串口助手（115200 / 8 / 无校验 / 1 停止位）出现一行「上电：板子活着，检测程序开始跑」
+           不对先查: ① 串口号选错（拔插一次，看哪个口消失）；② TX/RX 要交叉接、GND 必须与板子共地；③ 波特率不对就是乱码——固定 115200；④ 板子没复位 / 没烧进去
+    [oled] 应看到: OLED 屏上出现同一行「上电：板子活着…」（屏是亮的，不是全黑也不是全白）
+           不对先查: ① SCL/SDA 接反或没接（本工程的默认脚见工程 README 的接线表）；② 屏供电 3.3V；③ 0.96 寸 SSD1306 与 1.3 寸屏初始化序列不同，换屏要改驱动
+    [reset] 应看到: 按一下复位键，现象从头再来一遍（灯继续闪、输出通道再打一次那一行）
+           不对先查: ① 复位键没接 / 按下没反应 → 直接断电重新上电；② 只打印一次就停 = 程序进了死循环或硬件异常（HardFault）
+
+==============================================================================
+# 场景 D：地猛星 + LED + OLED + 按键
+# 平台=mspm0  器件=['led', 'oled', 'key']  串口=True OLED=True
+==============================================================================
+
+-- 接线表 rows --
+    {'slug': 'led', 'role': 'LED', 'role_id': 'LED', 'role_label': '', 'pin': 'PA15', 'remark': 'gpio_out（必接）', 'pin_note': ''}
+    {'slug': 'debug_uart', 'role': 'DEBUG_UART_TX', 'role_id': 'DEBUG_UART_TX', 'role_label': '', 'pin': 'PA23', 'remark': 'uart_tx（必接）', 'pin_note': ''}
+    {'slug': 'debug_uart', 'role': 'DEBUG_UART_RX', 'role_id': 'DEBUG_UART_RX', 'role_label': '', 'pin': 'PA22', 'remark': 'uart_rx（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SCL', 'role_id': 'OLED_SCL', 'role_label': '', 'pin': 'PB2', 'remark': 'i2c_scl（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SDA', 'role_id': 'OLED_SDA', 'role_label': '', 'pin': 'PB3', 'remark': 'i2c_sda（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SPI_SCL', 'role_id': 'OLED_SPI_SCL', 'role_label': '', 'pin': 'PA28', 'remark': 'gpio_out（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SPI_SDA', 'role_id': 'OLED_SPI_SDA', 'role_label': '', 'pin': 'PA31', 'remark': 'gpio_out（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SPI_DC', 'role_id': 'OLED_SPI_DC', 'role_label': '', 'pin': 'PA13', 'remark': 'gpio_out（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SPI_CS', 'role_id': 'OLED_SPI_CS', 'role_label': '', 'pin': 'PB18', 'remark': 'gpio_out（必接）', 'pin_note': ''}
+    {'slug': 'oled', 'role': 'OLED_SPI_RES', 'role_id': 'OLED_SPI_RES', 'role_label': '', 'pin': 'PA0', 'remark': 'gpio_out（必接）', 'pin_note': '板载 LED 共用（I2C_0 SDA，通信期间微闪）；上拉位未焊依赖 MPU 板自带'}
+    {'slug': 'key', 'role': 'KEY_START', 'role_id': 'KEY_START', 'role_label': '', 'pin': 'PA2', 'remark': 'gpio_in（必接）', 'pin_note': 'ROSC 偏置（板载 100k 到地；KEY START 按键共用）'}
+    pin_fixes: ['oled.OLED_SPI_RES → PA0（原 PA22 与 debug_uart.DEBUG_UART_RX 冲突，已自动移开）', 'oled.OLED_SPI_RES → PA0：这根脚板上有注记——板载 LED 共用（I2C_0 SDA，通信期间微闪）；上拉位未焊依赖 MPU 板自带（下面接线表那一行也标着）']
+    footnote: 其余外设引脚以工程内 pin_config.h（stm32）/ mspm0.syscfg 为准
+
+-- 默认脚冲突组 groups --
+    board_shares: [{'pin': 'PA0', 'note': '板载 LED 共用（I2C_0 SDA，通信期间微闪）；上拉位未焊依赖 MPU 板自带', 'roles': ['oled.OLED_SPI_RES']}, {'pin': 'PA2', 'note': 'ROSC 偏置（板载 100k 到地；KEY START 按键共用）', 'roles': ['key.KEY_START']}]
+
+-- 建议检测顺序 order --
+    {'slug': 'led', 'description': 'LED 指示灯驱动：接普通发光二极管（或板载 LED 排针），用电平点亮/熄灭，做状态指示、声光提示、计数显示等最基础的“看得见的输出”。接线二线制（串限流电阻后接 GPIO 与 GND），每个 LED 占 1 个 GPIO——stm32 默认板载 PC13/PC14/PC15 三色、mspm0 默认 PA15；多路 LED 按通道宏区分，最多 8 个实例。驱动接口：led_init() 初始化、led_on/led_off/led_toggle(通道宏) 控制亮灭翻转，通道宏用 LED_RED / LED_YELLOW / LED_GREEN（多实例时按颜色命名）；默认拉电流接法 1=亮，接法相反时容器内一处宏可反。适用于状态指示、声光提示、得分/次数显示等赛题功能。', 'bring_up': True}
+    {'slug': 'delay', 'description': 'MSPM0 毫秒延时：delay_ms 基于 CPUCLK_FREQ 换算调用 delay_cycles，任何时钟频率自动适配。', 'bring_up': True}
+    {'slug': 'debug_uart', 'description': '调试串口驱动（双平台）：UART2 调试输出 + 短命令接收回显，供联调阶段打印状态；适用于需要串口调试输出的各类联调场景。', 'bring_up': True}
+    {'slug': 'config', 'description': '集中外设配置头文件：硬件引脚映射（UART/GPIO/LED/蜂鸣器/DIP 拨码）与通用显示、滤波参数统一集中定义，供各模块与主程序统一调用；适用于 UWB 定位、OLED 显示、LED/蜂鸣器指示等多外设联调场景。', 'bring_up': False}
+    {'slug': 'oled', 'description': '0.96 寸 OLED（SSD1306）显示驱动：I2C 硬件总线（默认，OLED_Init）与 SPI 总线变体（批次 12/07 决策 B——软 SPI 位操作 5 脚 SCL/SDA/DC/CS/RES、OLED_SPI_Init，适配 0.96 SPI 单色屏），显存式绘图（画点/字符/字符串/汉字，支持反色与 180° 旋转），带 16×8 ASCII 字库；分辨率支持 128×64（默认）与 128×32（0.91 寸，oled_set_res）。', 'bring_up': False}
+    {'slug': 'key', 'description': '按键读取（双平台）：get_key_state(channel) 按通道读取（上拉低电平按下）；多实例 = 多路独立按键（内置变体 start/stop/mode/set）；stm32 默认 PB3（JTDO 复位后可用），mspm0 默认 PA2。', 'bring_up': False}
+    guide: 按顺序逐个验证，前一个过了再接下一个
+    reason: 先确认「板子活着」——延时 / 串口 / 灯这类 bring-up 模块排在最前；其余按依赖序一件一件往下测（被依赖的在前），前一件不通，后一件的现象就不可信。
+    missing: []
+
+-- 专精小节 sections --
+    [led] 计划: 
+      平台差异: ('地猛星用户 LED 只有 PA15 一个（LED_BEEP 组，高电平点亮）。**本平台的驱动会把越界通道静默钳回通道 0**，所以这一版只测通道 0（LED_RED）——这里不写 LED_YELLOW / LED_GREEN，那两路在本平台其实还是同一颗灯，写了会让人以为板上有三路。', 'LED_CHANNEL_COUNT 就是本平台实际存在的通道数（单实例默认 1）：它小于宏里那三个别名是正常的，不是没测到。led_init() 是 void，本件不判返回值、也不判通断——只看灯闪不闪。')
+    [oled] 计划: 
+      平台差异: ('地猛星 OLED 走硬件 I2C1「OLED」实例（SysConfig 配置，7 位地址 0x3C）：**没配 I2C1 就没有屏**——上板前先确认 mspm0.syscfg 里有这个实例。', '**本平台没有浮点显示接口**（库内只有 OLED_ShowNum / oled_show_number 这类整数接口）。检测页的读数只回显整数；带小数的量（角度、电压）由配方自己拆成整数 / 小数两次显示——工单 05 的 MPU6050 配方就是这么做的。', '屏是只写的：驱动里没有可读的状态寄存器，板端判不出通断。探头动作为「让屏上出现一行 OLED OK」，判据交给你眼睛。', "探头那句里的 `(unsigned char *)` 强转是**必须**的：本平台 `OLED_ShowString(u8 x, u8 y, u8 *chr, u8 size1)` 第三个形参是 `u8 *`（= `unsigned char *`），直接传字符串常量会被 tiarmclang 判 `warning: passing 'char[8]' to parameter of type 'u8 *'`——检测程序的验收线是 0 error / **0 warning**（工单 09 编译矩阵实测 2 条）。强转写 `unsigned char *` 而不是 `u8 *`：前者只用 C 关键字，不依赖哪个头 typedef 了 `u8`。")
+    [key] 计划: 
+      平台差异: ('本件是**输入件**：检测程序没法替你按下按键，按键也没有可读的身份 / 状态寄存器——所以本件**不写通信探头、板上不打 OK / FAIL**（检测页这一件显示「没有读取型探头，只看现象」），只回显**这一刻**的电平状态。', '要确认按键好使，只能**人按一下**：地猛星板载启动键默认 = **PA2**（SysConfig 的 KEY 实例、引脚名 START，宏 KEY_PORT / KEY_START_PIN 由 SysConfig 生成）。按住它时 get_key_state(KEY_START) 那一行应为 1，松手回 0（低电平 = 按下）。敲 k 复测时也按着看它变不变：**数字跟着手指变 = 按键 + 引脚配置这一路是通的**；怎么按都不动，先查电平（松开应为高、按下应为低），再怀疑按键本身。', '⚠ **上板前先把 main.c 里 SYSCFG_DL_init() 那一行的注释去掉**（它现在是注释状态——本平台生成链的已知限制，见 main.c 文件头与检测页清单）：这一行不生效 = KEY 的输入配置根本没配上，读数不可信——那不是按键坏。', 'key_init() 在本平台是**空实现**（头文件里声明成 void，key.c 里什么都不做——输入方向由 SysConfig 配、SYSCFG_DL_init 生效）；没有返回值可判，所以本件**不判初始化返回值**（初始化那行只显示「已调用（本件不判返回值）」）。', '母版 syscfg 里 KEY 实例只声明了 direction = INPUT、**没有配内部上拉**（对比 IR_BEAM / TTP224 / HX711 那些带 PULL_UP 的输入实例），多实例追加的 KEY_<实例号> 实例同样不配内部电阻——偏置靠板载（本件口径：PA2 板载偏置）。**改引脚改 mspm0.syscfg，不改 key_instances.h**。', '多通道：KEY_CHANNEL_COUNT 就是本工程真实的按键通道数（默认单实例 = 1）。默认下 KEY_STOP / KEY_MODE / KEY_SET 全是首通道的**别名**（越界通道被钳回首通道，见 key_instances.h 的注释），所以本件只读首通道；工程里配了多路按键时（生成器改写 key_instances.h 与 syscfg，KEY_CHANNEL_COUNT 会大于 1）同一函数换实参就是另一路：get_key_state(KEY_STOP) 读第 2 路。')
+    unspecialized: []
+    custom: []
+    exclusive_groups: [{'id': 'zigbee-rx', 'label': '无线链路 / 数传', 'members': ['as32', 'hc05', 'nrf24l01', 'zigbee_link', 'zigbee_uart']}, {'id': 'sound-prompt', 'label': '提示输出 / 声', 'members': ['beep', 'jq8900']}, {'id': 'barometer', 'label': '气压 / 海拔传感器', 'members': ['bmp180', 'ms5611']}, {'id': 'gray-track', 'label': '8 路灰度传感器驱动', 'members': ['huidu', 'pid', 'xunji']}, {'id': 'display', 'label': '显示 / 屏幕', 'members': ['lcd', 'max7219', 'oled']}, {'id': 'attitude-hold', 'label': '航向保持 / 姿态传感器', 'members': ['imu_uart', 'jy61p', 'ml_mpu6050']}, {'id': 'distance', 'label': '距离测量 / 测距传感器', 'members': ['ir_distance', 'sr04', 'us016']}]
+
+-- 串口命令台 console --
+    available: True
+    hint: 有串口 = 能交互式复测：程序跑完上电那一遍后进命令循环，敲下面任一个字符就复测那一件（不用重烧、边动线边看现象）；敲 ? 看全部命令（含既有的 r / y / g / o / b<N>）。
+    命令 'l' → led: 板载 LED：重跑一次点灯初始化并回显本平台通道数
+    命令 'd' → oled: OLED 屏：重新初始化并在屏上打一行 OLED OK
+    命令 'k' → key: 按键：重跑一次初始化并回显这一刻的状态（按住按键应看到 1）
+
+-- 上板确认清单 --
+    [flash] 应看到: 烧录工具最后报成功（Keil 的 Programming Done / Verify OK，或 DSLite 的 Success）
+           不对先查: ① 探针 / 下载线有没有插好、板子有没有单独供电；② 下载口被别的程序占用（串口助手、另一个 IDE）会写不进去；③ 目标芯片型号要与板子一致（stm32 选 STM32F103C8，mspm0 选 MSPM0G3507）
+    [heartbeat] 应看到: 板载 LED 按约 200 毫秒的节奏规律闪烁（一亮一灭，不是常亮也不是全灭）
+           不对先查: ① 先按一次复位，看是不是根本没跑起来；② stm32 板载三色 LED 在 PC13/PC14/PC15（本程序用红灯通道 LED_RED），地猛星用户 LED 是 PA15；③ 灯常亮或常灭不动 = 程序卡住了（多半卡在外设初始化）
+    [serial] 应看到: 串口助手（115200 / 8 / 无校验 / 1 停止位）出现一行「上电：板子活着，检测程序开始跑」
+           不对先查: ① 串口号选错（拔插一次，看哪个口消失）；② TX/RX 要交叉接、GND 必须与板子共地；③ 波特率不对就是乱码——固定 115200；④ 板子没复位 / 没烧进去
+    [oled] 应看到: OLED 屏上出现同一行「上电：板子活着…」（屏是亮的，不是全黑也不是全白）
+           不对先查: ① SCL/SDA 接反或没接（本工程的默认脚见工程 README 的接线表）；② 屏供电 3.3V；③ 0.96 寸 SSD1306 与 1.3 寸屏初始化序列不同，换屏要改驱动
+    [reset] 应看到: 按一下复位键，现象从头再来一遍（灯继续闪、输出通道再打一次那一行）
+           不对先查: ① 复位键没接 / 按下没反应 → 直接断电重新上电；② 只打印一次就停 = 程序进了死循环或硬件异常（HardFault）
+    [syscfg-init] 应看到: mspm0 专属：打开工程根 main.c，确认 `SYSCFG_DL_init();` 那一行**已取消注释**（本平台的生成链暂时没有把这一行注入出来）
+           不对先查: 没取消注释 = 串口 / LED 都没初始化，灯不会闪、串口不会有字——这不是板子坏，把 `/* SYSCFG_DL_init(); */` 的注释去掉再编译烧录一次
+
+==============================================================================
+# 场景 E：未专精件（看通用降级怎么说话）
+# 平台=mspm0  器件=['aht10']  串口=True OLED=True
+==============================================================================
+
+!! 生成前被拦下（HwCheckError → 400），页面文案如下：
+
+这套选择在「地猛星 MSPM0G3507」上装不下：落盘后的 mspm0.syscfg 里 2 个引脚**符号**被两只实例同时使用，SysConfig 会直接报 Duplicate name（工程编不过）：
+  · SCL：aht10(AHT10) × oled(OLED_SPI)
+  · SDA：aht10(AHT10) × oled(OLED_SPI)
+这一条**改绑引脚解不开**（撞的是符号名，不是脚——母版给这些实例起的引脚符号本来就同名；实测换四种绑定 `name_count` 恒为 2）。
+【检测页出路】 检测页能做到的出路（挑一条）：
+  1. 回到上面的器件选择，把上面点名的那几件里**去掉一件**；
+  2. 换一件同类替代（比如显示屏换一路不挂 I2C 的），再回来生成；
+  3. 两件都要 → 这一版做不到（要改母版的引脚符号，见工单 11）——别去引脚配置里试，改绑解不开它。
+
