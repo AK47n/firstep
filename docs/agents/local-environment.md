@@ -15,7 +15,8 @@
 | 顺手做掉的第四条 | `src/contest_generator.egg-info/**` 摘出产品文件（两个包都不再发 pip 构建产物） |
 | **真机验收** | `drill-01`：沙箱真 v1.1.1 → 走产品端点升到 1.2.2，**判红 0 / 卡住 0 / PASS**；`not_in_official` 1482 → **6**，那 6 条经决定性实验证明是**更新器那一步 pip 现写的**（官方包里 0 个 → 跑完 pip 6 个齐），「官方缺失 0 / 内容不同 0」两条全绿 |
 | 发版产物（本机留档） | `firstep-pack\firstep-{update,full}-v1.2.2.*` 全套 + `release-notes-v1.2.2.md`；**下一版的基线就是这两个清单** |
-| **main 上还没到用户手上的（六批）** | ① **硬件检测栏目本身**（`module-hwcheck/01-09`，2026-09-20 起）＋ **检测页引脚出口**（`hwcheck-pin-conflict-exit/01`：默认脚撞脚提前解开）——v1.2.2 的用户看不到「硬件检测」这一栏；② **完整包会话态进 `AppContext` ＋ `_full_task_lock`**（`full-update-state-into-ctx/01-04`，2026-09-22，账见 `.scratch/backlog.md` §18：纯内部换归属 + 修「并发 apply 建出两个任务」的竞态，**前端零字节**）；③ **陌生器件（库外件）探测**（`hwcheck-unknown-device`，2026-09-22 起：规格 + 12 张工单已落 `.scratch/hwcheck-unknown-device/`，**12 张全部 resolved**（支点模块 `i2c_probe` / 「我的器件」库外件定义与数据目录 / 探测小节渲染（stm32 真编译 + mspm0 分支 + 两平台编译矩阵）/ 检测页计划投影 / 串口复测命令台接入自建件 / mspm0 引脚符号重名拦下 / 自建件 id 文法收紧到 C 标识符 / 资料 → 事实草稿 / 工程内快照与回读 / 排障带自建件事实 / 闸门与真机验收收口）；④ **bfcache 后退回来补登记 + 「应用服务已停止」可见态**（`bfcache-return-register/01`，2026-09-24：前端三处——`index.html` 内联脚本 + 可见态标记 + CSS、新 `ui/service-stopped.js`、`boot.js` 接线；**服务端 / 打包器 / 库零改动**）。⑤ **生成工程 README 的 mspm0「打开姿势」修正**（`a0602718`，2026-09-24：CCS Theia 只把工作区的**子目录**认成工程，原话术「`File → Open Project` 选择工程目录」按字面做 `Build Project` 是灰的 → 改成实测姿势 + 「两份 mspm0 工程别放进同一个工作区」警告；账见 `.scratch/backlog.md` §20）。⑥ **母版 mspm0 引脚符号全局去重**（`hwcheck-acceptance/02`，2026-09-24：14 组同名符号 / 68 个符号 / 35 个实例全部改成 `<实例名>_<原符号>`，生成宏随之变成 `<实例>_<实例>_<符号>_<后缀>`；35 个模块的 mspm0 源码（36 个文件）+ 27 个 manifest 的 mspm0 段 notes 同批改，**stm32 零改动**；建了构建期守卫「母版引脚符号全局唯一」）——**这条对用户可见的影响是"OLED 屏 + I2C 器件"等 10 组此前必 400 的组合能生成、能编译了**。**六批都只在本机工作树 / main 上，任何发布包里都没有**——下次发版要一起带上 |
+| **main 上还没到用户手上的（六批）** | ① **硬件检测栏目本身**（`module-hwcheck/01-09`，2026-09-20 起）＋ **检测页引脚出口**（`hwcheck-pin-conflict-exit/01`：默认脚撞脚提前解开）——v1.2.2 的用户看不到「硬件检测」这一栏；② **完整包会话态进 `AppContext` ＋ `_full_task_lock`**（`full-update-state-into-ctx/01-04`，2026-09-22，账见 `.scratch/backlog.md` §18：纯内部换归属 + 修「并发 apply 建出两个任务」的竞态，**前端零字节**）；③ **陌生器件（库外件）探测**（`hwcheck-unknown-device`，2026-09-22 起：规格 + 12 张工单已落 `.scratch/hwcheck-unknown-device/`，**12 张全部 resolved**（支点模块 `i2c_probe` / 「我的器件」库外件定义与数据目录 / 探测小节渲染（stm32 真编译 + mspm0 分支 + 两平台编译矩阵）/ 检测页计划投影 / 串口复测命令台接入自建件 / mspm0 引脚符号重名拦下 / 自建件 id 文法收紧到 C 标识符 / 资料 → 事实草稿 / 工程内快照与回读 / 排障带自建件事实 / 闸门与真机验收收口）；④ **bfcache 后退回来补登记 + 「应用服务已停止」可见态**（`bfcache-return-register/01`，2026-09-24：前端三处——`index.html` 内联脚本 + 可见态标记 + CSS、新 `ui/service-stopped.js`、`boot.js` 接线；**服务端 / 打包器 / 库零改动**）。⑤ **生成工程 README 的 mspm0「打开姿势」修正**（`a0602718`，2026-09-24：CCS Theia 只把工作区的**子目录**认成工程，原话术「`File → Open Project` 选择工程目录」按字面做 `Build Project` 是灰的 → 改成实测姿势 + 「两份 mspm0 工程别放进同一个工作区」警告；账见 `.scratch/backlog.md` §20）。⑥ **母版 mspm0 引脚符号全局去重**（`hwcheck-acceptance/02`，2026-09-24：14 组同名符号 / 68 个符号 / 35 个实例全部改成 `<实例名>_<原符号>`，生成宏随之变成 `<实例>_<实例>_<符号>_<后缀>`；35 个模块的 mspm0 源码（36 个文件）+ 27 个 manifest 的 mspm0 段 notes 同批改，**stm32 零改动**；建了构建期守卫「母版引脚符号全局唯一」）——**这条对用户可见的影响是"OLED 屏 + I2C 器件"等 10 组此前必 400 的组合能生成、能编译了**。⑦ **mspm0 生成链认下 SysConfig 构建期接口面**（`hwcheck-acceptance/01`，2026-09-24：`SYSCFG_DL_init()` 那一行从**注释占位**变**活代码**——骨架 / 赛题 / 检测三条路都保证它在 main() 里、生成门禁按"恒有四个 + 裁剪后**外设**实例"精确放行（GPIO 实例不放行，实测 0/109）；检测页那条"上板前取消注释"清单项与两处配方文案随之删改）——**用户可见影响：地猛星上生成的工程烧进去外设真的初始化了**（此前"灯不闪、串口一个字没有"，最像板子坏）。**七批都只在本机工作树 / main 上，任何发布包里都没有**——下次发版要一起带上 |
+| **硬件检测验收补齐（本批）进度** | `.scratch/hwcheck-acceptance/`：**01、02 已 resolved 并提交**（`e80d40d8` / `bb7c3816`）；**03（被拦下的出路文案点名页面动作）、04（检测页 → 生成页衔接入口）、05（真机上板）未开工**——05 被 01、02 阻塞这一点已解开（两单都落地了），但它要真板子，等用户在场。**发版动作（v1.3.0）未启动**，见下条 |
 
 **发版尚未启动（2026-09-22 22:0x 实测）**：这一轮只走到「决定要发」就停了——**版本号仍 `1.2.2`、
 没打包、没打 tag、没建 Release**（用户要先继续改动再发，所以别把这份落差当成"发过了"）。
@@ -819,6 +820,29 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > 见 `probe-02-reverse.txt`；`tests/test_syscfg_prune.py` 的阴性对照注入同理）。
 > ⑤ 新增构建期守卫：`tests/test_syscfg_prune.py::test_master_pin_symbols_are_globally_unique`
 > （母版全文 `name_count == 0`）——**以后往母版加实例，引脚符号撞名会当场红**。
+
+> **2026-09-24（hwcheck-acceptance/01 会话：mspm0 生成链认下 SysConfig 构建期接口面）**：
+> 本单把 `SYSCFG_DL_init()` 从**注释占位**变**活代码**（账见
+> `.scratch/hwcheck-acceptance/issues/01-mspm0-sysconfig-init-injection.md`）。
+> 与环境/工具有关的事实四条：
+> ① **同样一次常驻服务器都没起**（判据走 pytest / 域层直调 / 真编译子进程）；收尾实测
+> 8000/8020/8021/8791 都没在听。真编译两套工具链都用上了：mspm0
+> `C:/ti/ccs2050/ccs/utils/bin/gmake.exe`、stm32 `C:\Keil5\Core\UV4\UV4.exe`。
+> ② 读数：真编译矩阵 **4 格全绿**（骨架式 / 赛题式 / 检测程序 mspm0 + stm32 不回归，
+> `.scratch/hwcheck-acceptance/probe-01-compile-matrix.txt`）；既有 hwcheck 矩阵复跑
+> **18 形态判红 0**（含 **[stm32] adc / ml_mpu6050 / 全选**三格，补上"检测工程 stm32"这一格，
+> `.scratch/module-hwcheck/probe-09-compile-matrix.txt`）；领单复核
+> `.scratch/hwcheck-acceptance/verify-01-lead.txt`（另一条路线，14 条全过）；
+> 全量 `python -m pytest -n auto -q` **5372 passed + 1 skipped / 154s**。
+> ③ ⚠ **反证探针没扎中会"假绿"**（本轮连撞两次，都写进读数文件了）：注入点要选在**判据
+> 单源**上（针扎在转调层 `syscfg_init_functions_for`，而门禁走的是语料文本入口 → 针下去
+> 赛题路仍放行）；清缓存要**整包清**（`contest_generator*` 全删）——只清被改的那个文件时，
+> `from .syscfg_model import …` 的模块仍握着**旧函数对象**，看着像"断言是摆设"。
+> 这两条对以后任何"改一处、多处共用"的反证探针都适用。
+> ④ ⚠ **`tests/test_js_gate.py::test_full_mode_runs_js_gate_and_pytest` 在 `-n auto` 下会偶发失败**
+> （本轮撞一次）：它真的调 `prepush.main(["--full"])`，而 `run_pytest(full=True)` 里写死
+> `-n auto` → 嵌套并行，机器一忙就输。形态与既有的"并行争用假红"同源，**单跑该文件或换
+> `-n 4` 即过**（本轮复跑 5372 passed）。别把它当成产品坏了。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 
