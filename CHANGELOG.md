@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=50c8952cf5aa362b959d5e0cd79a8510d0e4f7df -->
+<!-- changelog-auto: last-commit=50d1f0bc90cc2800b3ae713d976e30a4e5bf5778 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -10,6 +10,7 @@
 - 03:35 工单 hwcheck-unknown-device/08：定义/资料/草稿归档进工程 + 回读以快照为准
 - 07:42 工单 hwcheck-unknown-device/09：AI 排障带自建件事实（上下文 + 白名单 + 快照口径）
 - 07:55 工单 hwcheck-unknown-device/10：闸门与真机验收收口（本特性 12 张全部 resolved）
+- 12:26 盘点收口：bfcache 相邻洞立单 + full-download/07 翻 resolved
 
 ## 2026-09-23
 - 12:21 ﻿工单 hwcheck-unknown-device/02：「我的器件」（库外件）定义 + 数据目录 + 端点 + 检测页表单
