@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=420356b439816a52423a9649d8423e23acb0ac38 -->
+<!-- changelog-auto: last-commit=4a348357f1234b01dd29df5743912ba53e4a9ba5 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -13,6 +13,7 @@
 - 12:26 盘点收口：bfcache 相邻洞立单 + full-download/07 翻 resolved
 - 18:54 工单 bfcache-return-register/01：bfcache 后退回来补登记 + 「应用服务已停止」可见态
 - 19:46 工单 real-acceptance/01：A4/A5/A7 真机验收收口（A 组 11/11）+ CCS Theia 工程模型与假绿教训入库
+- 19:54 盘点收口：backlog 全盘复核——本台账无「代码可做」待办，改正两处陈旧标记
 
 ## 2026-09-23
 - 12:21 ﻿工单 hwcheck-unknown-device/02：「我的器件」（库外件）定义 + 数据目录 + 端点 + 检测页表单
