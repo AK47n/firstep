@@ -9,7 +9,10 @@
 - [x] 解析并改写 .uvprojx：所选模块的源文件注册进工程，include path 加入模块头文件所在目录
 - [x] 不破坏母版原有配置（设备型号、烧录设置等）
 - [x] fixture 母版下测试：生成的工程配置内容正确（pytest 断言）
-- [ ] 真实工程在 Keil5 中编译通过（由用户验证一次）— 用户手工验证点，AI 替不了（见 RUNBOOK 手工验证点表）
+- [x] 真实工程在 Keil5 中编译通过（由用户验证一次）— **2026-09-24 勾选**：uVision V5.37 里 Rebuild 全量重建
+  → 25 条 `compiling` + 1 条 `assembling`、`linking`、`Build Time 00:00:01`，
+  `".\Objects\Project.axf" - 0 Error(s), 0 Warning(s).`。证据与「首次假绿」教训见
+  `.scratch/real-run/verify-18-A4-keil-rebuild.txt` 与挂账单 `real-acceptance/01` 的 A4。
 - [x] 重复生成幂等：同一输入两次生成，工程配置一致
 
 ## Comments

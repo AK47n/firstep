@@ -9,7 +9,10 @@
 - [x] 改写 .cproject：include path 正确写入所选模块头文件所在目录
 - [x] 模块源文件复制到工程对应目录，CCS 工程树中可见
 - [x] fixture 母版下测试：生成的工程配置内容正确（pytest 断言）
-- [ ] 真实工程在 CCS 中编译通过（由用户验证一次）— 用户手工验证点，AI 替不了（见 RUNBOOK 手工验证点表）
+- [x] 真实工程在 CCS 中编译通过（由用户验证一次）— **2026-09-24 勾选**：CCS Theia 20.5 Clean + Build →
+  `Finished building target: "mspm0_project.out"`，0 error 0 warning；且产品写的 `.cproject` 模块 include
+  真的进了 CCS 的编译命令（`-I"…/modules/motor/code" -I"…/servo/code"`）。
+  证据 `.scratch/real-run/verify-18-A5-ccs-theia-build.txt`；执行姿势见挂账单 `real-acceptance/01`「A 组附带」。
 - [x] 重复生成幂等：同一输入两次生成，工程配置一致
 
 ## Comments

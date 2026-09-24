@@ -1,0 +1,69 @@
+第十八轮真机验收 A7 —— CCS Theia GUI 编译（用户手工执行，2026-09-24）
+
+工程来源：.scratch/real-run/out_18_A7_mspm0_min
+          （按 HEAD 确定性重放 out_16_mspm0_min 的记录输入，见 regenerate-for-acceptance.py）
+平台 / 选中集：mspm0 / **只选 servo**（最小工程；无 bindings，走默认脚）
+执行姿势：与 A5 同（拷成 CCS workspace 子目录 → 打开 workspace → Project → Build）
+          workspace = C:\Users\luoji\workspace_ccstheia_a7，工程 = 其下 mspm0_project
+注意：拷入前**删掉了 Debug/**，故本日志是 CCS 自己跑 SysConfig + 全量编译的结果。
+
+判定：**0 errors / 0 warnings，链接产出 mspm0_project.out → PASS**
+
+采信的要点（日志自身即可辨认这是 A7 而非 A5）：
+1. 编译的模块源文件**只有** `../modules/servo/code/servo_mspm0.c`
+   —— 没有 motor.c（对比 A5 的日志有 motor.c + servo_mspm0.c）。
+2. include 路径**只有** `.../modules/servo/code`
+   —— 没有 motor/code（对比 A5 两个都在）。
+3. SysConfig 由 CCS 自己跑（`SysConfig - building file: "../mspm0.syscfg"`）；
+   本次**没有** A5 那条 `[0]info: SERVO_PWM(...) STOP/STANDBY` 提示。
+4. 链接成功：`Finished building target: "mspm0_project.out"`。
+
+附带事实：A7 的 SERVO_PWM 走默认脚 TIMG8 / PA7（A5 是绑定后的 TIMA0 / PA0）。
+
+--- 原始构建日志（用户粘贴，逐字）---
+
+**** Clean-only build of configuration 'Debug' for project 'mspm0_project' ****
+
+"C:\\ti\\ccs2050\\ccs\\utils\\bin\\gmake" -k -j 32 clean -r -O
+
+**** Build finished ****
+
+
+**** Build of configuration 'Debug' for project 'mspm0_project' ****
+
+"C:\\ti\\ccs2050\\ccs\\utils\\bin\\gmake" -k -j 32 all -r -O
+
+SysConfig - building file: "../mspm0.syscfg"
+"C:/ti/ccs2051/sysconfig_1.26.2/sysconfig_cli.bat" -s "C:/ti/mspm0_sdk_2_11_00_07/.metadata/product.json" --script "C:/Users/luoji/workspace_ccstheia_a7/mspm0_project/mspm0.syscfg" -o "." --compiler ticlang
+Running script...
+Validating...
+Generating Code (mspm0.syscfg)...
+Writing C:\Users\luoji\workspace_ccstheia_a7\mspm0_project\Debug\device_linker.cmd...
+Writing C:\Users\luoji\workspace_ccstheia_a7\mspm0_project\Debug\device.opt...
+Writing C:\Users\luoji\workspace_ccstheia_a7\mspm0_project\Debug\device.cmd.genlibs...
+Writing C:\Users\luoji\workspace_ccstheia_a7\mspm0_project\Debug\ti_msp_dl_config.c...
+Writing C:\Users\luoji\workspace_ccstheia_a7\mspm0_project\Debug\ti_msp_dl_config.h...
+Writing C:\Users\luoji\workspace_ccstheia_a7\mspm0_project\Debug\Event.dot...
+Finished building: "../mspm0.syscfg"
+
+Arm Compiler - building file: "../main.c"
+"C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-armllvm_4.0.4.LTS/bin/tiarmclang.exe" -c @"device.opt"  -march=thumbv6m -mcpu=cortex-m0plus -mfloat-abi=soft -mlittle-endian -mthumb -O2 -I"C:/Users/luoji/workspace_ccstheia_a7/mspm0_project" -I"C:/Users/luoji/workspace_ccstheia_a7/mspm0_project/Debug" -I"C:/ti/mspm0_sdk_2_11_00_07/source/third_party/CMSIS/Core/Include" -I"C:/ti/mspm0_sdk_2_11_00_07/source" -I"C:/Users/luoji/workspace_ccstheia_a7/mspm0_project/modules/servo/code" -g -Wall -MMD -MP -MF"main.d_raw" -MT"main.o"  @"./device.opt"  -o"main.o" "../main.c"
+Finished building: "../main.c"
+
+Arm Compiler - building file: "C:/ti/mspm0_sdk_2_11_00_07/source/ti/devices/msp/m0p/startup_system_files/ticlang/startup_mspm0g350x_ticlang.c"
+"C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-armllvm_4.0.4.LTS/bin/tiarmclang.exe" -c @"device.opt"  -march=thumbv6m -mcpu=cortex-m0plus -mfloat-abi=soft -mlittle-endian -mthumb -O2 -I"C:/Users/luoji/workspace_ccstheia_a7/mspm0_project" -I"C:/Users/luoji/workspace_ccstheia_a7/mspm0_project/Debug" -I"C:/ti/mspm0_sdk_2_11_00_07/source/third_party/CMSIS/Core/Include" -I"C:/ti/mspm0_sdk_2_11_00_07/source" -I"C:/Users/luoji/workspace_ccstheia_a7/mspm0_project/modules/servo/code" -g -Wall -MMD -MP -MF"startup_mspm0g350x_ticlang.d_raw" -MT"startup_mspm0g350x_ticlang.o"  @"./device.opt"  -o"startup_mspm0g350x_ticlang.o" "C:/ti/mspm0_sdk_2_11_00_07/source/ti/devices/msp/m0p/startup_system_files/ticlang/startup_mspm0g350x_ticlang.c"
+Finished building: "C:/ti/mspm0_sdk_2_11_00_07/source/ti/devices/msp/m0p/startup_system_files/ticlang/startup_mspm0g350x_ticlang.c"
+
+Arm Compiler - building file: "ti_msp_dl_config.c"
+"C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-armllvm_4.0.4.LTS/bin/tiarmclang.exe" -c @"device.opt"  -march=thumbv6m -mcpu=cortex-m0plus -mfloat-abi=soft -mlittle-endian -mthumb -O2 -I"C:/Users/luoji/workspace_ccstheia_a7/mspm0_project" -I"C:/Users/luoji/workspace_ccstheia_a7/mspm0_project/Debug" -I"C:/ti/mspm0_sdk_2_11_00_07/source/third_party/CMSIS/Core/Include" -I"C:/ti/mspm0_sdk_2_11_00_07/source" -I"C:/Users/luoji/workspace_ccstheia_a7/mspm0_project/modules/servo/code" -g -Wall -MMD -MP -MF"ti_msp_dl_config.d_raw" -MT"ti_msp_dl_config.o"  @"./device.opt"  -o"ti_msp_dl_config.o" "ti_msp_dl_config.c"
+Finished building: "ti_msp_dl_config.c"
+
+Arm Compiler - building file: "../modules/servo/code/servo_mspm0.c"
+"C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-armllvm_4.0.4.LTS/bin/tiarmclang.exe" -c @"device.opt"  -march=thumbv6m -mcpu=cortex-m0plus -mfloat-abi=soft -mlittle-endian -mthumb -O2 -I"C:/Users/luoji/workspace_ccstheia_a7/mspm0_project" -I"C:/Users/luoji/workspace_ccstheia_a7/mspm0_project/Debug" -I"C:/ti/mspm0_sdk_2_11_00_07/source/third_party/CMSIS/Core/Include" -I"C:/ti/mspm0_sdk_2_11_00_07/source" -I"C:/Users/luoji/workspace_ccstheia_a7/mspm0_project/modules/servo/code" -g -Wall -MMD -MP -MF"modules/servo/code/servo_mspm0.d_raw" -MT"modules/servo/code/servo_mspm0.o"  @"./device.opt"  -o"modules/servo/code/servo_mspm0.o" "../modules/servo/code/servo_mspm0.c"
+Finished building: "../modules/servo/code/servo_mspm0.c"
+
+Arm Linker - building target: "mspm0_project.out"
+"C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-armllvm_4.0.4.LTS/bin/tiarmclang.exe" @"device.opt"  -march=thumbv6m -mcpu=cortex-m0plus -mfloat-abi=soft -mlittle-endian -mthumb -O2 -g -Wall -Wl,-m"mspm0_project.map" -Wl,-i"C:/ti/mspm0_sdk_2_11_00_07/source" -Wl,-i"C:/Users/luoji/workspace_ccstheia_a7/mspm0_project" -Wl,-i"C:/Users/luoji/workspace_ccstheia_a7/mspm0_project/Debug/syscfg" -Wl,-i"C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-armllvm_4.0.4.LTS/lib" -Wl,--diag_wrap=off -Wl,--display_error_number -Wl,--warn_sections -Wl,--xml_link_info="mspm0_project_linkInfo.xml" -Wl,--rom_model -o "mspm0_project.out" "./main.o" "./ti_msp_dl_config.o" "./startup_mspm0g350x_ticlang.o" "./modules/servo/code/servo_mspm0.o" -Wl,-l"./device_linker.cmd"  -Wl,-ldevice.cmd.genlibs -Wl,-llibc.a
+Finished building target: "mspm0_project.out"
+
+**** Build finished ****

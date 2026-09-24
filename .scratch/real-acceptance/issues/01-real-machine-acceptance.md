@@ -53,16 +53,40 @@ SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_ru
   横幅四态里的 running/success/fail 三态实况取到（running 经 `onBanner("running")` 与
   mock 首编超时路径；success 见 A2；fail 见 A11 场景），**判读单源**（`compileSummaryText`）
   与状态行文案「0 错 0 警」逐条对齐；`fixErrorCount` 仍在库中零命中。
-- [ ] **A4 来源 `contest-project-generator/02`**：生成的 stm32 工程在 Keil5 里编译一次（`RUNBOOK.md:38`）。
-  → **需用户点一次**（第十六轮清单：打开 `C:\Users\luoji\Desktop\firstep\.scratch\real-run\out_2026C_stm32\user\Project.uvprojx`
-  → F7 Build；期望 `0 Error(s), 0 Warning(s)`）。CLI 侧同一工程已由 A9 真机 UV4 全量重建证过。
-- [ ] **A5 来源 `contest-project-generator/03`**：生成的 mspm0 工程在 CCS 里编译一次（`RUNBOOK.md:39`）。
-  → **需用户点一次**（第十六轮清单：CCS 导入 `.scratch/real-run/out_2026H_mspm0` → Build）。
+- [x] **A4 来源 `contest-project-generator/02`**：生成的 stm32 工程在 Keil5 里编译一次（`RUNBOOK.md:38`）。
+  → **2026-09-24 第十八轮完成（GUI 真全量重建）**。工程 = `.scratch/real-run/out_18_A4_stm32_2026C/user/Project.uvprojx`
+  ——按 HEAD 确定性重放旧树的记录输入（脚本 `.scratch/real-run/regenerate-for-acceptance.py`）；
+  **不能拿旧树 `out_2026C_stm32` 当 HEAD 证据**：它是 09-11 的产物，其后 `library/masters/stm32/pin_config.h`
+  被 `hwcheck-unknown-device/01`（09-22）加了 28 行（HMC5883L / QMC5883L / I2C_PROBE），旧树里**零命中**。
+  uVision V5.37（MDK-ARM Professional，ARMCC V5.06 update 7）里 **Rebuild** → 25 条 `compiling` + 1 条
+  `assembling` → `linking` → `FromELF: creating hex file` → `Program Size: Code=8228 RO-data=1796
+  RW-data=88 ZI-data=2040` → `".\Objects\Project.axf" - 0 Error(s), 0 Warning(s).` → `Build Time 00:00:01`。
+  证据 `.scratch/real-run/verify-18-A4-keil-rebuild.txt`。CLI 侧同一工程另由 A9 真机 UV4 全量重建证过。
+  **⚠ 首次「判过」是假绿（本轮实测）**：先用 CLI（UV4）编过再把树交给 GUI，uVision 判「无需重编」→
+  空转 `Build Time 00:00:00`、一条 `compiling` 都没有，只是翻出上一版结果报 0/0——那只证到「uVision 能
+  解析 .uvprojx」，没证到「能编」。**教训（对以后任何 GUI 侧验收都适用）：交给 GUI 前必须清掉旧构建产物
+  （Keil `user/Objects/*` + `user/Listings/*`；CCS `Debug/`）；判据必须带「这次真编了」的旁证（Build Time
+  非 0 / 有 compiling 行 / 产物 mtime 是本次）。** 空转日志留档
+  `.scratch/real-run/verify-18-A4-keil-first-attempt-noop.htm`。
+- [x] **A5 来源 `contest-project-generator/03`**：生成的 mspm0 工程在 CCS 里编译一次（`RUNBOOK.md:39`）。
+  → **2026-09-24 第十八轮完成**。工程 = `.scratch/real-run/out_18_A5_mspm0_2026H`（按 HEAD 重放；选中集
+  motor + servo，bindings `servo.SERVO_PWM_C0=PA0`）。CCS Theia 20.5 Clean + Build → SysConfig 自跑
+  （`SysConfig - building file: "../mspm0.syscfg"` → 写 `Debug/ti_msp_dl_config.*`）→ 编译 5 个文件
+  （startup / main.c / ti_msp_dl_config.c / **motor.c** / **servo_mspm0.c**）→
+  `Finished building target: "mspm0_project.out"`；**0 error 0 warning**（另有一条 SysConfig `[0]info:`
+  提示 PWM 在 STOP/STANDBY 模式不保持寄存器，属信息非告警）。
+  **实质判据命中**：产品写的 `.cproject` 模块 include 真的进了 CCS 的编译命令
+  （`-I"…/modules/motor/code" -I"…/modules/servo/code"`）——这条链正是本项要证的。
+  证据 `.scratch/real-run/verify-18-A5-ccs-theia-build.txt`。执行姿势见下方「A 组附带」。
   **2026-09-18 口径更新**：该工程（7 条 SysConfig 引脚冲突）现在**根本生成不出来**——生成期
   门禁按「写侧将要落盘的 syscfg」拦下并逐脚列出双方（`pin-conflict-gate/01`，HTTP 路径 400 见
   `verify-01-real-machine-generate-check.txt`）。所以 CCS 复验改用**可解形态**：
   生成时带 `--bindings {"servo.SERVO_PWM_C0":"PA0"}`（= 网页「一键配置」同一动作），
   命令行已验 gmake exit=0；期望 CCS 里也编过，作为跨工具链交叉印证。
+  **2026-09-24 前提更正**：上面这条「该工程（7 条 SysConfig 引脚冲突）根本生成不出来」记的 7 条冲突属
+  **12 模块**的 2026H 选中集；而盘上 `out_2026H_mspm0` 的清单记的是 `slugs: ["motor","servo"]` +
+  `bindings: {"servo.SERVO_PWM_C0":"PA0"}`，**它本来就是可解形态**（syscfg 落点无重复）。此前把两者
+  混为一谈是误读，记此更正；上面那段历史原文保留不改。
 - [x] **A6 来源 `ascii-project-name/01` #03**：真实生成 2024H → 桌面目录名 `2024H_Auto_Car` + gmake exit=0 + `.out` 产出。
   已就位：`generation_output.py:38-96`、`tests/test_generation_output.py` 断言 `2024H_Auto_Car`。
   **2026-09-10 第十六轮完成**：真机走 `/api/generate`（`create_desktop_topic_dir=true`）生成到
@@ -73,11 +97,15 @@ SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_ru
   `desktop-platform-suffix/01`（后于本单）已给桌面目录名加平台后缀 → 现状是
   `2024H_Auto_Car_MSPM0`（同题双平台可并存）。ascii 判据（全 ASCII、无中文路径残留）
   与「gmake exit=0 + .out 产出」两条口径不变，仍逐条验过。
-- [ ] **A7 来源 `mspm0-syscfg-default/01`**：用户用 CCS Theia 打开生成工程，GUI 编译复验。
+- [x] **A7 来源 `mspm0-syscfg-default/01`**：用户用 CCS Theia 打开生成工程，GUI 编译复验。
   已就位：`library/masters/mspm0/mspm0.syscfg` 默认外设实例齐全（`:93-129`、`:1053-1186`）。
-  → **需用户点一次**（第十六轮清单：CCS Theia 打开 `.scratch/real-run/out_16_mspm0_min`
-  ——最小工程（只选 servo）命令行已 0 错 0 警，适合做「GUI 编过」的干净样本；
-  再开 `out_2026H_mspm0` 复验新单 02 的冲突形态）。
+  → **2026-09-24 第十八轮完成**。工程 = `.scratch/real-run/out_18_A7_mspm0_min`（最小工程，只选 servo）。
+  CCS Theia 20.5 Clean + Build → SysConfig 自跑 → 编译 4 个文件（startup / main.c / ti_msp_dl_config.c /
+  **servo_mspm0.c**，**无 motor.c**；include 路径**只有** `modules/servo/code`）→
+  `Finished building target: "mspm0_project.out"`；**0 error 0 warning**。
+  证据 `.scratch/real-run/verify-18-A7-ccs-theia-build.txt`。
+  原句后半「再开 `out_2026H_mspm0` 复验新单 02 的冲突形态」**已废**：那棵树是 motor+servo 可解形态，
+  其 CCS 复验已由 A5 覆盖（见 A5 的前提更正）。执行姿势见下方「A 组附带」。
 - [x] **A8 来源 `pin-board-config/01`**：真机 UV4（2021F / 2026C 0 Error）+ gmake（2026H mspm0 0 错）。
   **2026-09-10 第十六轮：stm32 线完成 / mspm0 线验出真缺陷（另开单 02）**——
   stm32：2026C 真机 UV4 `exit=0 Build Time 2s（0 错误 0 警）`（`.scratch/real-run/verify-16-A9-stm32-2026C-reuse.txt`，
@@ -136,6 +164,31 @@ SysConfig `C:\ti\sysconfig_1.20.0`（探测表 `src/contest_generator/compile_ru
   横幅 `fail` + 文案「编译超时（工具链 180s 未返回）」+ 状态行「已停止循环」+ **`/api/fix-errors` 零调用**
   + 回滚按钮保持隐藏 + 按钮恢复可用。
 
+
+### A 组附带：CCS Theia 打开生成工程的正确姿势（2026-09-24 实测——旧指令按字面做走不通）
+
+**症状**：照旧指令「CCS Theia 打开 `<工程目录>`」打开后，Explorer 根节点显示**目录名**、
+`Build Project` **灰掉**、`Build All` 点了没反应（Output 的 `ccs project-build` 一个字都没有）。
+**根因**：**CCS Theia 的模型是「打开的文件夹 = workspace，工程 = 它的子目录」**（靠子目录里的
+`.ccsproject` 注册）；**workspace 根自己就是工程时它扫不到** → 没有注册任何工程 → 无对象可构建。
+
+**可行姿势**（与 `architecture-deepening-v5/08` 记的 2026-08-09 首次 GUI 编译通过一致——那次也是
+「生成工程**拷入** CCS Theia 工作区打开」）：
+
+1. 建一个干净 workspace 目录，把生成工程**拷成它的子目录**：A5 → `~\workspace_ccstheia_a5\mspm0_project\`，
+   A7 → `~\workspace_ccstheia_a7\mspm0_project\`；
+2. **删掉副本里的 `Debug/`**（见 A4 的假绿教训：留着会让 GUI 构建空转）；
+3. CCS Theia（`C:\ti\ccs2050\ccs\theia\ccstudio.exe`）**File → Open Folder** 打开那个 workspace 目录。
+   自检 = Explorer 里出现**工程节点**（带工程图标）、`Build Project` 变亮；
+4. 点选工程 → `Project → Build Project`（或工具栏锤子）。
+
+**两条附带事实（本轮踩到）**：
+
+- **观察项 O-2：两份 mspm0 工程的 CCS 工程名都写死 `mspm0_project`**（母版 `library/masters/mspm0/.project`
+  就是这个名字，产品无改名机制）→ **同一个 workspace 里导入两份必然重名冲突**，必须各用各的 workspace。
+  真实用户「两道题各生成一份 mspm0 工程」也会撞上，且产品没有改名入口——建议另开单（尚未开）。
+- **CCS 打开工程时会改写 `.cproject`**（补它自己的设置）：本轮实测**模块 include 路径原样保住**，
+  只抹掉了产品写的 `builtIn="false"` 属性 → 不影响产物可用性。
 
 ## B. 浏览器 / CDP 目检与截图（27 项）
 

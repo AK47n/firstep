@@ -23,7 +23,10 @@
 - [x] 替换后 `python .scratch/real-run/generate_check.py --platform mspm0 --topic-file "sources/contest/2026H/26H/H题_车载平衡滚球运动控制系统.md" --clarify .scratch/real-run/clarify_2026H.json --add imu_uart,led_beep --drop pid,digit_uart,filter,ml_mpu6050 2026H` 全绿（推荐 4 轮收敛 done / 骨架 / 生成 26 文件 / 产物检查无围栏残留、include 全可解析）
 - [x] 生成产物 `.scratch/real-run/out_2026H_mspm0/Debug` 下 `gmake all` 0 error（**不再需要手工换 syscfg**——sysconfig_cli 0 err 1 布局建议，编译 0 err，链接出 mspm0_project.out；syscfg 克隆进生成工程与母版逐字节一致；构建方式 = build_makefiles.py 生成 CCS 标准 makefile 集，命令见下）
 - [x] 全量 pytest 1009 绿 + mypy src 干净
-- [ ] 用户 CCS Theia 打开生成工程 GUI 编译复验（最终证明，可选——命令行已证）
+- [x] 用户 CCS Theia 打开生成工程 GUI 编译复验（最终证明，可选——命令行已证）— **2026-09-24 勾选**：
+  最小工程（只选 servo）在 CCS Theia 20.5 里全量编译 0 error 0 warning，产出 `mspm0_project.out`
+  （日志里只有 `servo_mspm0.c`，include 只有 `modules/servo/code`）。
+  证据 `.scratch/real-run/verify-18-A7-ccs-theia-build.txt`。
 
 命令行 gmake 构建复现：`python .scratch/real-run/build_makefiles.py .scratch/real-run/out_2026H_mspm0 && cd .scratch/real-run/out_2026H_mspm0/Debug && gmake all`（gmake = C:/ti/ccs2050/ccs/utils/bin，tiarmclang = ccs2050 ti-cgt-armllvm_4.0.4.LTS，sysconfig_cli = ccs2051/sysconfig_1.26.2，SDK = ccs2051/mspm0_sdk_2_10_00_04；main.c 骨架有 1 条 now_ms 未使用变量警告，属骨架质量不属本工单）
 

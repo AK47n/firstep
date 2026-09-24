@@ -1,0 +1,59 @@
+# 第十八轮真机验收 A4/A5/A7：按 HEAD 重生成（确定性重放）+ 产品编译器预跑
+
+生成器版本：1.2.2
+旧树 = 2026-09-10/11 的产物；新树 = 本次按 HEAD 重放。
+
+## A4_stm32_2026C — A4（Keil5 里编译一次）
+来源旧树：out_2026C_stm32
+逐一对比旧树：
+  文件数：旧 149 / 新 66
+  仅在旧树的编译产物 83 个（新树编译后会自己长出来，非差异）
+  仅在旧树的源文件 0 个：（无）
+  仅在新树的源文件 0 个：（无）
+  仅在新树的编译产物 0 个：（无）
+  源文件内容已变 3 个：
+    - README.md
+    - pin_config.h
+    - 演示脚本.md
+  预期变化（清单时间戳/工具版本）1 个：['.contest_context.json']
+产品编译器预跑：
+  编译入口：C:\Users\luoji\Desktop\firstep\.scratch\real-run\out_18_A4_stm32_2026C\user\Project.uvprojx
+  命令：C:\Keil5\Core\UV4\UV4.exe -j0 -r -b C:\Users\luoji\Desktop\firstep\.scratch\real-run\out_18_A4_stm32_2026C\user\Project.uvprojx -o C:\Users\luoji\AppData\Local\Temp\tmpsgnmv7bp.log
+  exit=0 超时=False 错误=0 警告=0 耗时=4.1s → PASS
+
+## A5_mspm0_2026H — A5（CCS 里编译一次）
+来源旧树：out_2026H_mspm0
+逐一对比旧树：
+  文件数：旧 45 / 新 26
+  仅在旧树的编译产物 19 个（新树编译后会自己长出来，非差异）
+  仅在旧树的源文件 0 个：（无）
+  仅在新树的源文件 0 个：（无）
+  仅在新树的编译产物 0 个：（无）
+  源文件内容已变 3 个：
+    - README.md
+    - mspm0.syscfg
+    - 演示脚本.md
+  预期变化（清单时间戳/工具版本）1 个：['.contest_context.json']
+产品编译器预跑：
+  编译入口：C:\Users\luoji\Desktop\firstep\.scratch\real-run\out_18_A5_mspm0_2026H\Debug\makefile
+  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\Desktop\firstep\.scratch\real-run\out_18_A5_mspm0_2026H\Debug -f makefile -B all
+  exit=0 超时=False 错误=0 警告=0 耗时=8.5s → PASS
+
+## A7_mspm0_min — A7（CCS Theia GUI 编译复验）
+来源旧树：out_16_mspm0_min
+逐一对比旧树：
+  文件数：旧 39 / 新 22
+  仅在旧树的编译产物 17 个（新树编译后会自己长出来，非差异）
+  仅在旧树的源文件 0 个：（无）
+  仅在新树的源文件 0 个：（无）
+  仅在新树的编译产物 0 个：（无）
+  源文件内容已变 3 个：
+    - README.md
+    - mspm0.syscfg
+    - 演示脚本.md
+  预期变化（清单时间戳/工具版本）1 个：['.contest_context.json']
+产品编译器预跑：
+  编译入口：C:\Users\luoji\Desktop\firstep\.scratch\real-run\out_18_A7_mspm0_min\Debug\makefile
+  命令：C:\ti\ccs2050\ccs\utils\bin\gmake.exe -C C:\Users\luoji\Desktop\firstep\.scratch\real-run\out_18_A7_mspm0_min\Debug -f makefile -B all
+  exit=0 超时=False 错误=0 警告=0 耗时=2.8s → PASS
+

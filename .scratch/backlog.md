@@ -605,3 +605,31 @@ UnicodeEncodeError、连带丢掉证据文件；base 版源码清单要从 base 
 - 仓库根 `%SystemDrive%` 残留目录（`gitignore` 里的变量没展开产物）已删——2026-09-09 盘点记为"0 文件、
   等你点头删"，本轮实测里已有 3 个 Windows 缓存文件，一并清掉。
 
+
+## 20. CCS 工程名写死 `mspm0_project`，同 workspace 两份必冲突（2026-09-24 记，未开单）
+
+**来源**：真机验收第十八轮（A5/A7）现场踩到。完整描述与账户见
+`.scratch/real-acceptance/issues/01-real-machine-acceptance.md` 的「A 组附带」段（观察项 **O-2**）
+与 `docs/agents/local-environment.md` §2.4。
+
+**现象**：`library/masters/mspm0/.project` 里 `<name>mspm0_project</name>` 是**写死的**，生成侧没有
+改名机制（CCS 侧也没有工程改名入口）→ **任何两份 mspm0 生成工程都叫同一个名字** → 导入同一个
+CCS workspace 时第二份被拒（同一 workspace 内工程名必须唯一）。
+
+**射程**：真实用户的常见动作就会踩——「同一道题再生成一次」或「两道题各生成一份 mspm0 工程」，
+只要两份放进同一个 CCS workspace 就撞。本轮验收之所以没撞上，只是因为 A5/A7 被各自放进了独立
+workspace（那是绕开 CCS 工程模型的副产品，不是有意设计）。
+
+**候选修法（未拍板，故未开单）**：
+
+① 生成时按**题号 / 目录名**改写 `.project` 的 `<name>`（如 `2026H_Auto_Car_MSPM0`）——最贴合用户
+   预期，但要动 `ccs.py` 写侧，且须一并处理 `.cproject` 与 `targetConfigs/*.ccxml` 里的自引用
+   （需一次真机实测确认不会碰坏 build config）；
+② 只改生成工程的**目录名**、不动 `.project`——**不管用**，CCS 认的是 `.project` 里的名字；
+③ 维持现状 + 在导入说明 / 生成工程 README 里写明「两份 mspm0 工程请用不同 workspace」——零风险，
+   但把问题留给用户。
+
+**为什么先记不开单**：这条正是 `architecture-deepening-v5/08` 在「明确不动的（边界，勿越）」段里
+**已明确划走**的那一项——那段原文列的是「SYSCFG_DL_init 骨架注入 / **生成工程赛题级重命名** /
+母版 .syscfg 地猛星化 → 均留后续工单」。也就是说它不是新发现，而是那条**已知延后项**终于以
+「用户看得见的症状」露了头。要拍板，先得回答「改 `.project` 名会不会碰坏 CCS 的 build config 自引用」。

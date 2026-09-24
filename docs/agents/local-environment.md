@@ -840,6 +840,52 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 `firstep-pack\firstep-full-v1.2.0.manifest.json` 里的 `materials_manifest` 即可，**不必**再单独留一份
 `firstep-materials-*.manifest.json`——两者本来就是同一份东西（本次已实测逐文件相等）。
 
+## 2.4 真机验收第十八轮（2026-09-24，A4/A5/A7）留下的东西
+
+**结论：挂账单 A 组 11 项全部勾满**（本轮补齐 A4 Keil5 / A5 CCS / A7 CCS Theia）。
+证据在 `.scratch/real-run/`：`verify-18-A4-keil-rebuild.txt`、`verify-18-A5-ccs-theia-build.txt`、
+`verify-18-A7-ccs-theia-build.txt`、`regenerate-for-acceptance.py`（三份工程的重放脚本，
+`--force` 可重跑）。挂账单剩下的未勾项：**D1**（6 器件人工取源）、**E1**（干净机器）、
+**F 组**（按该单自己的定义不是待办，只是登记以免重判）。
+
+**盘上多出来的东西**（要清就清这两个；`empty` 别碰）：
+
+| 位置 | 是什么 |
+|---|---|
+| `~\workspace_ccstheia_a5\mspm0_project\` | A5 的 CCS 工作区（工程是它的**子目录**） |
+| `~\workspace_ccstheia_a7\mspm0_project\` | A7 同上 |
+| `~\workspace_ccstheia\empty\` | **TI 官方 empty 示例 = mspm0 母版源，只读，别删**（`architecture-deepening-v5/08` 定的） |
+
+本轮还按 HEAD 重放了三份新树 `out_18_A4_stm32_2026C` / `out_18_A5_mspm0_2026H` /
+`out_18_A7_mspm0_min`；**旧树没动**（`out_2026C_stm32` / `out_2026H_mspm0` / `out_16_mspm0_min` 留作对照）。
+新旧树的实测差异：stm32 的 `pin_config.h` 多 28 行（HMC5883L / QMC5883L / I2C_PROBE，来自
+`hwcheck-unknown-device/01`），mspm0 只多 12 行 `syscfg` 注释、**落点零变化**。
+
+⚠ **CCS Theia 的工程模型（本轮卡住半小时，务必记住）**：**打开的文件夹 = workspace，工程 = 它的子目录**
+（靠子目录里的 `.ccsproject` 注册）。**把工程目录本身当 workspace 打开时它扫不到** → `Build Project`
+灰掉、`Build All` 点了没反应、Output 的 `ccs project-build` 一个字都没有。可行姿势 = 建工作区目录 +
+把工程**拷成子目录** + `File → Open Folder` 打开那个目录（与 `architecture-deepening-v5/08` 记的
+2026-08-09 首次 GUI 编译通过一致，那次也是「拷入工作区」）。完整步骤写在挂账单的「A 组附带」段。
+
+⚠ **两份 mspm0 工程的 CCS 工程名都写死 `mspm0_project`**（母版 `library/masters/mspm0/.project`，
+产品无改名机制）→ 同一 workspace 里导入两份必然重名冲突 → **各用各的 workspace**。
+真实用户两道题各生成一份也会撞上（挂账单记为观察项 O-2，尚未开单）。
+
+⚠ **交给 GUI 验收前必须清掉旧构建产物，且别提前用 CLI 预编同一棵树**（本轮实测踩到假绿）：
+Keil 要清 `user/Objects/*` + `user/Listings/*`，CCS 要清工程下 `Debug/`。不清的话 IDE 判「无需重编」→
+**空转 `Build Time 00:00:00`、一条 `compiling` 都没有**，只翻出上一版结果报 0/0——那只证到「IDE 能解析
+工程文件」，**没证到「能编」**。判据必须带「这次真编了」的旁证（Build Time 非 0 / 有 compiling 行 /
+产物 mtime 是本次）。本轮 A4 第一次就是这么假绿的，空转日志留档
+`.scratch/real-run/verify-18-A4-keil-first-attempt-noop.htm`。
+
+**顺带纠正的一处误读**：盘上 `out_2026H_mspm0` 的清单是 `slugs: ["motor","servo"]` +
+`bindings: {"servo.SERVO_PWM_C0":"PA0"}`，**本来就是可解形态**；挂账单 A5 里那条「7 条 SysConfig
+引脚冲突」说的是**12 模块**的 2026H 选中集，两者此前被混为一谈（已在挂账单补更正）。
+
+**CCS 打开工程时会改写 `.cproject`**（补它自己的设置）：本轮实测模块 include 路径原样保住，
+只抹掉了产品写的 `builtIn="false"` 属性 → 不影响产物可用性。
+
+
 ## 2.5 本机 Python 与依赖现状（2026-09-13 实测，动过就回来改）
 
 | 项 | 值 |
