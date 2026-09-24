@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=c6bb8038653d14182dbb4939ddf04034f997e0cc -->
+<!-- changelog-auto: last-commit=b2399a10d584d9ce23c3217b3f9354f9c3bee976 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -16,6 +16,7 @@
 - 19:54 盘点收口：backlog 全盘复核——本台账无「代码可做」待办，改正两处陈旧标记
 - 20:02 工单 real-acceptance/01 后续：CCS 打开姿势写回生成工程 README（backlog §20 走 ②）
 - 20:03 交接区回填：发布落差表「四批」→「五批」（补生成工程 README 的 CCS 打开姿势修正）
+- 20:25 立项：硬件检测验收补齐——实测核查报告 + spec + 五张工单
 
 ## 2026-09-23
 - 12:21 ﻿工单 hwcheck-unknown-device/02：「我的器件」（库外件）定义 + 数据目录 + 端点 + 检测页表单
