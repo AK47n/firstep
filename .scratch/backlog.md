@@ -643,3 +643,23 @@ workspace（那是绕开 CCS 工程模型的副产品，不是有意设计）。
 **已明确划走**的那一项——那段原文列的是「SYSCFG_DL_init 骨架注入 / **生成工程赛题级重命名** /
 母版 .syscfg 地猛星化 → 均留后续工单」。也就是说它不是新发现，而是那条**已知延后项**终于以
 「用户看得见的症状」露了头。要拍板，先得回答「改 `.project` 名会不会碰坏 CCS 的 build config 自引用」。
+
+**✅ 2026-09-24 拍板走 ② 并当场落地**（不改生成器的工程元数据；① 留给以后带真机实测单独做）：
+
+- `src/contest_generator/readme.py` 的 `QUICK_START_STEPS["mspm0"]`：原来那句「用 CCS 打开工程：
+  `File → Open Project 选择工程目录`」**按字面做 `Build Project` 是灰的**（CCS Theia 只把工作区的
+  **子目录**认成工程）——本轮 A5/A7 就卡在这里。已换成实测姿势（先把工程目录放进一个工作区文件夹、
+  再 `File → Open Folder` 打开那个文件夹），并补一条 `⚠`：工程名固定 `mspm0_project`、**两份 mspm0
+  工程别放进同一个工作区**。
+- 同一句错话术在 `DIRECTORY_STRUCTURE["mspm0"]` 的 `.ccsproject` 行还有一份 → 一并改。
+- 守卫改为**反证式**：`tests/test_readme.py::test_render_readme_quick_start_mspm0` 断言渲染结果含
+  「工作区文件夹」与 `File → Open Folder`，且**不含**旧话术 `File → Open Project`，并钉住
+  `mspm0_project` 与「同一个工作区」。这条反证当场就抓到第二处残留（DIRECTORY_STRUCTURE）。
+- 读数：`tests/test_readme.py` **42 passed**；全量 `python -m pytest -n auto -q` **5356 passed + 1 skipped**。
+- **未动**：应用内「打开工程」按钮的 tooltip（`static/js/fx/delivery.js` 写「mspm0 打开文件夹
+  （CCS 手动导入）」）——属前端面，留到需要时再改。
+
+**仍未做**：候选 ①（生成时按题号/目录名改写 `.project` 的 `<name>`）——要动 `ccs.py` 写侧并处理
+`.cproject` / `targetConfigs/*.ccxml` 自引用，得配一次 CCS 真机实测才敢拍（它也是
+`architecture-deepening-v5/08`「明确不动」段划走的「生成工程赛题级重命名」）。**本项至此不算待办。**
+

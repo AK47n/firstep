@@ -79,8 +79,18 @@ QUICK_START_STEPS: dict[str, tuple[str, ...]] = {
         "烧录：接好 ST-Link，点击 Download（或按 F8）下载到 STM32F103C8T6",
     ),
     "mspm0": (
-        "用 TI Code Composer Studio（CCS）打开工程：File → Open Project 选择工程目录",
-        "构建：点击 Build（或按 Ctrl+B）生成可烧录固件",
+        # 打开姿势 = 真机实测那一版（挂账单 real-acceptance/01 第十八轮 A5/A7，2026-09-24）：
+        # CCS Theia 只把**工作区的子目录**认成工程——直接打开工程目录本身时 Build Project 灰、
+        # Build All 空转、Output 一个字都没有。旧话术「File → Open Project 选择工程目录」
+        # 按字面做走不通，故不再写。
+        "用 TI Code Composer Studio（CCS）打开工程：先把**工程目录放进一个工作区文件夹里**"
+        "（工程要当它的子目录），再用 File → Open Folder 打开那个工作区文件夹"
+        "——CCS 只把工作区的子目录认成工程，直接打开工程目录本身会让 Build 变灰",
+        # O-2（同轮实测）：母版 library/masters/mspm0/.project 里工程名写死 mspm0_project，
+        # 生成侧无改名机制 → 两份 mspm0 工程导入同一工作区必重名冲突。
+        "⚠ 本工程的 CCS 工程名固定为 `mspm0_project`（由母版决定，工具不改名）："
+        "**两份 mspm0 工程别放进同一个工作区**（工作区内工程名必须唯一），各用一个工作区文件夹即可",
+        "构建：在左侧选中工程 → Project → Build Project（或工具栏锤子）",
         "下载：接好调试器，点击 Debug（或按 F11）下载到 MSPM0G3507",
     ),
 }
@@ -118,7 +128,8 @@ DIRECTORY_STRUCTURE: dict[str, tuple[tuple[str, str], ...]] = {
         ("main.c", "主程序骨架——赛题逻辑从这里开始（第 8 步骨架、第 11 步任务推进逐步写入）"),
         ("mspm0.syscfg", "SysConfig 外设布局（时钟 / 外设 / 引脚配置，第 7 步写入——与实际接线一一对应）"),
         ("Debug/", "CCS 构建产物（makefile 由生成器写入——配置了 CCS 工具链时；*.out 可烧录固件，点击构建后生成）"),
-        (".ccsproject", "CCS 工程文件——用 CCS：File → Open Project 选择工程目录导入"),
+        # 同日改：旧注「File → Open Project 选择工程目录导入」按字面做 Build 是灰的
+        (".ccsproject", "CCS 工程文件——用 CCS 打开：**把工程目录放进一个工作区文件夹**（工程当它的子目录），再 File → Open Folder 打开那个工作区文件夹"),
         (".cproject", "CCS 工程文件（与 .ccsproject 同套——无需单独处理）"),
         (".settings/", "CCS 辅助配置——无需改动"),
         ("targetConfigs/", "调试器目标配置——无需改动"),

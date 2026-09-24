@@ -1080,12 +1080,25 @@ def test_render_readme_quick_start_stm32():
 
 
 def test_render_readme_quick_start_mspm0():
-    """快速上手章（mspm0）：CCS 打开工程 / 构建 / 下载固定话术。"""
+    """快速上手章（mspm0）：CCS 打开工程 / 构建 / 下载固定话术。
+
+    打开姿势是**真机实测**那一版（挂账单 real-acceptance/01 第十八轮 A5/A7，2026-09-24）：
+    CCS Theia 只把工作区的**子目录**认成工程，直接打开工程目录本身 → Build Project 灰、
+    Build All 空转。故这里**反证式**钉住旧话术不许写回来。
+    """
     text = render_readme("mspm0", None, [])
     assert "## 快速上手：编译 + 烧录" in text
     assert "CCS" in text
     assert "MSPM0G3507" in text
     assert "下载" in text
+    # 真机实测的正确姿势：工程必须是「工作区的子目录」
+    assert "工作区文件夹" in text
+    assert "File → Open Folder" in text
+    # 旧话术按字面做 Build 是灰的——不许写回来
+    assert "File → Open Project" not in text
+    # 观察项 O-2：CCS 工程名固定 → 两份 mspm0 工程不能同工作区
+    assert "mspm0_project" in text
+    assert "同一个工作区" in text
 
 
 def test_render_readme_verification_checklist_format():
