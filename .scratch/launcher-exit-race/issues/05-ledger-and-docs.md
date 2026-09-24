@@ -68,6 +68,11 @@ C6（进程级状态进 `AppContext`）、C7（私有符号公开化）、墓碑
 启动器 `start-app.bat` / `launcher-stale.py` 一侧的改动、`tests/js/**` 与 `tests/browser/**`
 自身的问题。
 
+**更新（2026-09-24）**：这串里的 C6 / C7 已分别由 `webapp-state-into-ctx` 与 `full-update-state-into-ctx`
+收尾（见 `backlog.md` §17/§18）；**bfcache 相邻洞已正式立单** =
+`.scratch/bfcache-return-register/issues/01-pageshow-register.md`（`ready-for-agent`；此前只在
+`backlog.md` §16 与本文件记账、**没有工单**——本轮补上，免得下轮盘点又把它当"已记账"跳过）。
+
 #### ③b 双轴评审整改（`code-review`：Standards + Spec 并行，只报告不修改）
 
 | 轴的发现 | 处理 |
