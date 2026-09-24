@@ -16,7 +16,7 @@
 | **真机验收** | `drill-01`：沙箱真 v1.1.1 → 走产品端点升到 1.2.2，**判红 0 / 卡住 0 / PASS**；`not_in_official` 1482 → **6**，那 6 条经决定性实验证明是**更新器那一步 pip 现写的**（官方包里 0 个 → 跑完 pip 6 个齐），「官方缺失 0 / 内容不同 0」两条全绿 |
 | 发版产物（本机留档） | `firstep-pack\firstep-{update,full}-v1.2.2.*` 全套 + `release-notes-v1.2.2.md`；**下一版的基线就是这两个清单** |
 | **main 上还没到用户手上的（六批）** | ① **硬件检测栏目本身**（`module-hwcheck/01-09`，2026-09-20 起）＋ **检测页引脚出口**（`hwcheck-pin-conflict-exit/01`：默认脚撞脚提前解开）——v1.2.2 的用户看不到「硬件检测」这一栏；② **完整包会话态进 `AppContext` ＋ `_full_task_lock`**（`full-update-state-into-ctx/01-04`，2026-09-22，账见 `.scratch/backlog.md` §18：纯内部换归属 + 修「并发 apply 建出两个任务」的竞态，**前端零字节**）；③ **陌生器件（库外件）探测**（`hwcheck-unknown-device`，2026-09-22 起：规格 + 12 张工单已落 `.scratch/hwcheck-unknown-device/`，**12 张全部 resolved**（支点模块 `i2c_probe` / 「我的器件」库外件定义与数据目录 / 探测小节渲染（stm32 真编译 + mspm0 分支 + 两平台编译矩阵）/ 检测页计划投影 / 串口复测命令台接入自建件 / mspm0 引脚符号重名拦下 / 自建件 id 文法收紧到 C 标识符 / 资料 → 事实草稿 / 工程内快照与回读 / 排障带自建件事实 / 闸门与真机验收收口）；④ **bfcache 后退回来补登记 + 「应用服务已停止」可见态**（`bfcache-return-register/01`，2026-09-24：前端三处——`index.html` 内联脚本 + 可见态标记 + CSS、新 `ui/service-stopped.js`、`boot.js` 接线；**服务端 / 打包器 / 库零改动**）。⑤ **生成工程 README 的 mspm0「打开姿势」修正**（`a0602718`，2026-09-24：CCS Theia 只把工作区的**子目录**认成工程，原话术「`File → Open Project` 选择工程目录」按字面做 `Build Project` 是灰的 → 改成实测姿势 + 「两份 mspm0 工程别放进同一个工作区」警告；账见 `.scratch/backlog.md` §20）。⑥ **母版 mspm0 引脚符号全局去重**（`hwcheck-acceptance/02`，2026-09-24：14 组同名符号 / 68 个符号 / 35 个实例全部改成 `<实例名>_<原符号>`，生成宏随之变成 `<实例>_<实例>_<符号>_<后缀>`；35 个模块的 mspm0 源码（36 个文件）+ 27 个 manifest 的 mspm0 段 notes 同批改，**stm32 零改动**；建了构建期守卫「母版引脚符号全局唯一」）——**这条对用户可见的影响是"OLED 屏 + I2C 器件"等 10 组此前必 400 的组合能生成、能编译了**。⑦ **mspm0 生成链认下 SysConfig 构建期接口面**（`hwcheck-acceptance/01`，2026-09-24：`SYSCFG_DL_init()` 那一行从**注释占位**变**活代码**——骨架 / 赛题 / 检测三条路都保证它在 main() 里、生成门禁按"恒有四个 + 裁剪后**外设**实例"精确放行（GPIO 实例不放行，实测 0/109）；检测页那条"上板前取消注释"清单项与两处配方文案随之删改）——**用户可见影响：地猛星上生成的工程烧进去外设真的初始化了**（此前"灯不闪、串口一个字没有"，最像板子坏）。**七批都只在本机工作树 / main 上，任何发布包里都没有**——下次发版要一起带上 |
-| **硬件检测验收补齐（本批）进度** | `.scratch/hwcheck-acceptance/`：**01、02 已 resolved 并提交**（`e80d40d8` / `bb7c3816`）；**03（被拦下的出路文案点名页面动作）、04（检测页 → 生成页衔接入口）、05（真机上板）未开工**——05 被 01、02 阻塞这一点已解开（两单都落地了），但它要真板子，等用户在场。**发版动作（v1.3.0）未启动**，见下条 |
+| **硬件检测验收补齐（本批）进度** | `.scratch/hwcheck-acceptance/`：**01、02、03 已 resolved 并提交**（`e80d40d8` / `bb7c3816` / `91a4d270`）；**04（检测页 → 生成页衔接入口）未开工**、**05（真机上板）未开工**——05 被 01、02 阻塞这一点已解开（两单都落地了），但它要真板子，等用户在场。**发版动作（v1.3.0）未启动**，见下条 |
 
 **发版尚未启动（2026-09-22 22:0x 实测）**：这一轮只走到「决定要发」就停了——**版本号仍 `1.2.2`、
 没打包、没打 tag、没建 Release**（用户要先继续改动再发，所以别把这份落差当成"发过了"）。
@@ -843,6 +843,22 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > （本轮撞一次）：它真的调 `prepush.main(["--full"])`，而 `run_pytest(full=True)` 里写死
 > `-n auto` → 嵌套并行，机器一忙就输。形态与既有的"并行争用假红"同源，**单跑该文件或换
 > `-n 4` 即过**（本轮复跑 5372 passed）。别把它当成产品坏了。
+> ⑤ **同一族偶发还有一条**（工单 03 会话实测一次）：`tests/test_launcher_stale_service.py::
+> test_launcher_decision_leaves_the_normal_path_alone` 在 `-n auto` 下失败一次、单跑
+> **18 passed / 17.6s** 全绿——形态是"刚向内核要到的空闲端口被另一个 worker 抢走"。
+> 判据同上：单跑全绿就不是产品问题。
+
+> **2026-09-24（hwcheck-acceptance/03 会话：被拦下时的出路点名页面控件）**：
+> 本单把 400 的出路从"SysConfig 实例名"改成"这一页上做得到的动作"（账见
+> `.scratch/hwcheck-acceptance/issues/03-blocked-exit-names-page-action.md`）。环境/工具事实三条：
+> ① 一次常驻服务器都没起（域层直调 + 夹具自带后端）；浏览器验收走
+> `node --test --test-concurrency=1 "tests/browser/hwcheck.spec.mjs"`（本机 **20 passed / 0 fail / 76s**）。
+> ② 读数：探针 `.scratch/hwcheck-acceptance/probe-03-exit-copy.txt`（两分支 400 原文 + 两条出路
+> **都照着做过**）、全量 `python -m pytest -n auto -q` **5377 passed + 1 skipped**。
+> ③ **页面上那两处栏位标题/勾选框文字现在是常量并有守卫**：`HWCHECK_CHANNEL_SECTION` /
+> `HWCHECK_DEVICE_SECTION` / `HWCHECK_CHANNEL_LABELS`（`hwcheck.py`）与
+> `static/index.html` 的 `<h3>2. 输出通道</h3>` / `<h3>3. 要测的器件` / 「OLED 屏」对账
+> ——**改页面标题就得同步改这几个常量，反之亦然**（守卫会读 index.html 当场红）。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 
