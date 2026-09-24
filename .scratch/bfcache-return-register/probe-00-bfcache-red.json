@@ -1,0 +1,799 @@
+{
+  "probe": "probe-00-bfcache-red",
+  "baseSha": "f357869124692f09e3fdfabc9b0083c75d2dd24f",
+  "repoRootUsed": "C:\\Users\\luoji\\Desktop\\firstep\\.scratch\\bfcache-return-register\\base-worktree",
+  "runAt": "2026-09-24T04:58:05.346Z",
+  "nodeVersion": "v24.15.0",
+  "playwrightVersion": "1.63.0",
+  "exitGraceMs": 1500,
+  "extraArgs": [],
+  "modes": [
+    "default",
+    "bfcache",
+    "bfcache-channel",
+    "bfcache-headed"
+  ],
+  "repeat": 2,
+  "results": [
+    {
+      "mode": "default",
+      "runIndex": 1,
+      "label": "playwright 默认 launch（默认 args **含** --disable-back-forward-cache）",
+      "launchOptions": {
+        "headless": true
+      },
+      "ranAt": "2026-09-24T04:58:05.347Z",
+      "graceMs": 1500,
+      "steps": {
+        "launch": {
+          "ok": true,
+          "browserVersion": "153.0.8010.12"
+        },
+        "probeInstalled": {
+          "docId": "o5dy7o5oqz",
+          "timeOrigin": 1790225887274.7,
+          "navType": "navigate"
+        },
+        "beforeLeave": {
+          "logLength": 10459,
+          "exitCode": null,
+          "doc": {
+            "docId": "o5dy7o5oqz",
+            "timeOrigin": 1790225887274.7,
+            "navType": "navigate"
+          }
+        },
+        "leave": {
+          "error": null,
+          "byeSeenBeforeBack": true,
+          "byeLatencyMs": 19
+        },
+        "goBack": {
+          "error": null,
+          "returnedUrl": "http://127.0.0.1:12906/",
+          "elapsedMs": 344,
+          "sinceLeaveMs": 19
+        },
+        "afterBack": {
+          "pageshowPersisted": "NO_WINDOW___ps（整页重载 = 新文档，探针变量不存在）",
+          "pageshowAt": null,
+          "docId": "NO_WINDOW___docId（整页重载 = 新文档）",
+          "timeOrigin": 1790225887999,
+          "navType0": "back_forward",
+          "navCount": 1,
+          "navTypeLast": "back_forward",
+          "activationStart0": 0,
+          "activationStartLast": 0,
+          "url": "http://127.0.0.1:12906/",
+          "restoreElapsedMs": null,
+          "withinGraceWindow": null
+        },
+        "afterBackLog": {
+          "newRegisterCount": 1,
+          "newByeCount": 1,
+          "apiLines": "INFO:     127.0.0.1:2804 - \"POST /api/tabs/bye HTTP/1.1\" 200 OK\r\nINFO:     127.0.0.1:2804 - \"POST /api/tabs/register HTTP/1.1\" 200 OK\r"
+        },
+        "afterGrace": {
+          "exitCode": null,
+          "exitTimestampMs": null,
+          "exitedWithinWindow": false,
+          "waitedExtraMs": 3540,
+          "pageFetch": "HTTP_200",
+          "reload": "reload 成功"
+        },
+        "endLog": {
+          "exitCode": null,
+          "logLength": 30372
+        }
+      },
+      "server": {
+        "url": "http://127.0.0.1:12906",
+        "port": 12906,
+        "launcherMode": true
+      },
+      "verdict": {
+        "readingsUsable": true,
+        "bfcacheUsed": false,
+        "fullReload": true,
+        "persistedSequence": "NO_WINDOW___ps（整页重载 = 新文档，探针变量不存在）",
+        "restoreElapsedMs": null,
+        "returnWithinGraceWindow": null,
+        "newRegistersAfterBack": 1,
+        "exitCodeAfterGrace": null,
+        "pageFetchAfterGrace": "HTTP_200",
+        "byeSeenBeforeBack": true,
+        "reproduced": false,
+        "healed": false,
+        "text": "本组配置下**这一跳是整页重载**（探针变量消失 = 新文档，内联登记会重跑）⇒ **复现不成立**（新 register 1 次、退出码 null）：缺陷需要一个 bfcache 恢复的文档才谈得上。"
+      }
+    },
+    {
+      "mode": "bfcache",
+      "runIndex": 1,
+      "label": "去掉 --disable-back-forward-cache（默认 headless = chromium_headless_shell）",
+      "launchOptions": {
+        "headless": true,
+        "ignoreDefaultArgs": [
+          "--disable-back-forward-cache"
+        ]
+      },
+      "ranAt": "2026-09-24T04:58:20.198Z",
+      "graceMs": 1500,
+      "steps": {
+        "launch": {
+          "ok": true,
+          "browserVersion": "153.0.8010.12"
+        },
+        "probeInstalled": {
+          "docId": "qj78jzdzp9",
+          "timeOrigin": 1790225902096.4,
+          "navType": "navigate"
+        },
+        "beforeLeave": {
+          "logLength": 10464,
+          "exitCode": null,
+          "doc": {
+            "docId": "qj78jzdzp9",
+            "timeOrigin": 1790225902096.4,
+            "navType": "navigate"
+          }
+        },
+        "leave": {
+          "error": null,
+          "byeSeenBeforeBack": true,
+          "byeLatencyMs": 21
+        },
+        "goBack": {
+          "error": null,
+          "returnedUrl": "http://127.0.0.1:12432/",
+          "elapsedMs": 380,
+          "sinceLeaveMs": 21
+        },
+        "afterBack": {
+          "pageshowPersisted": "NO_WINDOW___ps（整页重载 = 新文档，探针变量不存在）",
+          "pageshowAt": null,
+          "docId": "NO_WINDOW___docId（整页重载 = 新文档）",
+          "timeOrigin": 1790225902856.7,
+          "navType0": "back_forward",
+          "navCount": 1,
+          "navTypeLast": "back_forward",
+          "activationStart0": 0,
+          "activationStartLast": 0,
+          "url": "http://127.0.0.1:12432/",
+          "restoreElapsedMs": null,
+          "withinGraceWindow": null
+        },
+        "afterBackLog": {
+          "newRegisterCount": 1,
+          "newByeCount": 1,
+          "apiLines": "INFO:     127.0.0.1:10895 - \"POST /api/tabs/bye HTTP/1.1\" 200 OK\r\nINFO:     127.0.0.1:10895 - \"POST /api/tabs/register HTTP/1.1\" 200 OK\r"
+        },
+        "afterGrace": {
+          "exitCode": null,
+          "exitTimestampMs": null,
+          "exitedWithinWindow": false,
+          "waitedExtraMs": 3551,
+          "pageFetch": "HTTP_200",
+          "reload": "reload 成功"
+        },
+        "endLog": {
+          "exitCode": null,
+          "logLength": 30410
+        }
+      },
+      "server": {
+        "url": "http://127.0.0.1:12432",
+        "port": 12432,
+        "launcherMode": true
+      },
+      "verdict": {
+        "readingsUsable": true,
+        "bfcacheUsed": false,
+        "fullReload": true,
+        "persistedSequence": "NO_WINDOW___ps（整页重载 = 新文档，探针变量不存在）",
+        "restoreElapsedMs": null,
+        "returnWithinGraceWindow": null,
+        "newRegistersAfterBack": 1,
+        "exitCodeAfterGrace": null,
+        "pageFetchAfterGrace": "HTTP_200",
+        "byeSeenBeforeBack": true,
+        "reproduced": false,
+        "healed": false,
+        "text": "本组配置下**这一跳是整页重载**（探针变量消失 = 新文档，内联登记会重跑）⇒ **复现不成立**（新 register 1 次、退出码 null）：缺陷需要一个 bfcache 恢复的文档才谈得上。"
+      }
+    },
+    {
+      "mode": "bfcache-channel",
+      "runIndex": 1,
+      "label": "去掉该 flag + channel=chromium（完整 chromium，非 headless shell）",
+      "launchOptions": {
+        "headless": true,
+        "channel": "chromium",
+        "ignoreDefaultArgs": [
+          "--disable-back-forward-cache"
+        ]
+      },
+      "ranAt": "2026-09-24T04:58:34.991Z",
+      "graceMs": 1500,
+      "steps": {
+        "launch": {
+          "ok": true,
+          "browserVersion": "153.0.8010.12"
+        },
+        "probeInstalled": {
+          "docId": "n9w5k0zyvip",
+          "timeOrigin": 1790225916977.3,
+          "navType": "navigate"
+        },
+        "beforeLeave": {
+          "logLength": 10532,
+          "exitCode": null,
+          "doc": {
+            "docId": "n9w5k0zyvip",
+            "timeOrigin": 1790225916977.3,
+            "navType": "navigate"
+          }
+        },
+        "leave": {
+          "error": null,
+          "byeSeenBeforeBack": true,
+          "byeLatencyMs": 105
+        },
+        "goBack": {
+          "error": "Error: 超时：goBack（8000ms）",
+          "returnedUrl": null,
+          "elapsedMs": 8009,
+          "sinceLeaveMs": 105
+        },
+        "afterBack": {
+          "pageshowPersisted": [
+            true
+          ],
+          "pageshowAt": [
+            905.7000000178814
+          ],
+          "docId": "n9w5k0zyvip",
+          "timeOrigin": 1790225916977.3,
+          "navType0": "navigate",
+          "navCount": 1,
+          "navTypeLast": "navigate",
+          "activationStart0": 0,
+          "activationStartLast": 0,
+          "url": "http://127.0.0.1:7135/",
+          "restoreElapsedMs": 162,
+          "withinGraceWindow": true
+        },
+        "afterBackLog": {
+          "newRegisterCount": 0,
+          "newByeCount": 1,
+          "apiLines": "INFO:     127.0.0.1:11443 - \"POST /api/tabs/bye HTTP/1.1\" 200 OK\r\n[fixture] 后端进程退出（端口 7135）code=0 signal=null"
+        },
+        "afterGrace": {
+          "exitCode": 0,
+          "exitTimestampMs": 1624,
+          "exitedWithinWindow": true,
+          "waitedExtraMs": 0,
+          "pageFetch": "FETCH_FAIL:TypeError",
+          "reload": "RELOAD_FAIL: Error: page.reload: net::ERR_CONNECTION_REFUSED ⏎ Call log: ⏎ \u001b[2m  - waiting for navigation until \"domcontentloaded\"\u001b[22m ⏎ "
+        },
+        "endLog": {
+          "exitCode": 0,
+          "logLength": 10709
+        }
+      },
+      "server": {
+        "url": "http://127.0.0.1:7135",
+        "port": 7135,
+        "launcherMode": true
+      },
+      "verdict": {
+        "readingsUsable": true,
+        "bfcacheUsed": true,
+        "fullReload": false,
+        "persistedSequence": [
+          true
+        ],
+        "restoreElapsedMs": 162,
+        "returnWithinGraceWindow": true,
+        "newRegistersAfterBack": 0,
+        "exitCodeAfterGrace": 0,
+        "pageFetchAfterGrace": "FETCH_FAIL:TypeError",
+        "byeSeenBeforeBack": true,
+        "reproduced": true,
+        "healed": false,
+        "text": "**复现成立**：走了 bfcache（persisted=true）→ 后退后**没有**新的 `POST /api/tabs/register` → 宽限到点后端 exitCode=0（产品把自己关了）→ 页面上真请求 FETCH_FAIL:TypeError = 死页面。"
+      }
+    },
+    {
+      "mode": "bfcache-headed",
+      "runIndex": 1,
+      "label": "去掉该 flag + headless:false（有头真窗口）",
+      "launchOptions": {
+        "headless": false,
+        "ignoreDefaultArgs": [
+          "--disable-back-forward-cache"
+        ]
+      },
+      "ranAt": "2026-09-24T04:58:46.682Z",
+      "graceMs": 1500,
+      "steps": {
+        "launch": {
+          "ok": true,
+          "browserVersion": "153.0.8010.12"
+        },
+        "probeInstalled": {
+          "docId": "xj84sbabhrc",
+          "timeOrigin": 1790225928936,
+          "navType": "navigate"
+        },
+        "beforeLeave": {
+          "logLength": 10483,
+          "exitCode": null,
+          "doc": {
+            "docId": "xj84sbabhrc",
+            "timeOrigin": 1790225928936,
+            "navType": "navigate"
+          }
+        },
+        "leave": {
+          "error": null,
+          "byeSeenBeforeBack": true,
+          "byeLatencyMs": 101
+        },
+        "goBack": {
+          "error": "Error: 超时：goBack（8000ms）",
+          "returnedUrl": null,
+          "elapsedMs": 8008,
+          "sinceLeaveMs": 101
+        },
+        "afterBack": {
+          "pageshowPersisted": [
+            true
+          ],
+          "pageshowAt": [
+            914.7999999821186
+          ],
+          "docId": "xj84sbabhrc",
+          "timeOrigin": 1790225928936,
+          "navType0": "navigate",
+          "navCount": 1,
+          "navTypeLast": "navigate",
+          "activationStart0": 0,
+          "activationStartLast": 0,
+          "url": "http://127.0.0.1:3145/",
+          "restoreElapsedMs": 141,
+          "withinGraceWindow": true
+        },
+        "afterBackLog": {
+          "newRegisterCount": 0,
+          "newByeCount": 1,
+          "apiLines": "INFO:     127.0.0.1:2875 - \"POST /api/tabs/bye HTTP/1.1\" 200 OK\r\n[fixture] 后端进程退出（端口 3145）code=0 signal=null"
+        },
+        "afterGrace": {
+          "exitCode": 0,
+          "exitTimestampMs": 1632,
+          "exitedWithinWindow": true,
+          "waitedExtraMs": 0,
+          "pageFetch": "FETCH_FAIL:TypeError",
+          "reload": "RELOAD_FAIL: Error: page.reload: net::ERR_CONNECTION_REFUSED ⏎ Call log: ⏎ \u001b[2m  - waiting for navigation until \"domcontentloaded\"\u001b[22m ⏎ "
+        },
+        "endLog": {
+          "exitCode": 0,
+          "logLength": 10659
+        }
+      },
+      "server": {
+        "url": "http://127.0.0.1:3145",
+        "port": 3145,
+        "launcherMode": true
+      },
+      "verdict": {
+        "readingsUsable": true,
+        "bfcacheUsed": true,
+        "fullReload": false,
+        "persistedSequence": [
+          true
+        ],
+        "restoreElapsedMs": 141,
+        "returnWithinGraceWindow": true,
+        "newRegistersAfterBack": 0,
+        "exitCodeAfterGrace": 0,
+        "pageFetchAfterGrace": "FETCH_FAIL:TypeError",
+        "byeSeenBeforeBack": true,
+        "reproduced": true,
+        "healed": false,
+        "text": "**复现成立**：走了 bfcache（persisted=true）→ 后退后**没有**新的 `POST /api/tabs/register` → 宽限到点后端 exitCode=0（产品把自己关了）→ 页面上真请求 FETCH_FAIL:TypeError = 死页面。"
+      }
+    },
+    {
+      "mode": "default",
+      "runIndex": 2,
+      "label": "playwright 默认 launch（默认 args **含** --disable-back-forward-cache）",
+      "launchOptions": {
+        "headless": true
+      },
+      "ranAt": "2026-09-24T04:58:58.604Z",
+      "graceMs": 1500,
+      "steps": {
+        "launch": {
+          "ok": true,
+          "browserVersion": "153.0.8010.12"
+        },
+        "probeInstalled": {
+          "docId": "1qkvnqe0x6a",
+          "timeOrigin": 1790225940214.3,
+          "navType": "navigate"
+        },
+        "beforeLeave": {
+          "logLength": 10508,
+          "exitCode": null,
+          "doc": {
+            "docId": "1qkvnqe0x6a",
+            "timeOrigin": 1790225940214.3,
+            "navType": "navigate"
+          }
+        },
+        "leave": {
+          "error": null,
+          "byeSeenBeforeBack": true,
+          "byeLatencyMs": 21
+        },
+        "goBack": {
+          "error": null,
+          "returnedUrl": "http://127.0.0.1:4210/",
+          "elapsedMs": 357,
+          "sinceLeaveMs": 21
+        },
+        "afterBack": {
+          "pageshowPersisted": "NO_WINDOW___ps（整页重载 = 新文档，探针变量不存在）",
+          "pageshowAt": null,
+          "docId": "NO_WINDOW___docId（整页重载 = 新文档）",
+          "timeOrigin": 1790225940984,
+          "navType0": "back_forward",
+          "navCount": 1,
+          "navTypeLast": "back_forward",
+          "activationStart0": 0,
+          "activationStartLast": 0,
+          "url": "http://127.0.0.1:4210/",
+          "restoreElapsedMs": null,
+          "withinGraceWindow": null
+        },
+        "afterBackLog": {
+          "newRegisterCount": 1,
+          "newByeCount": 1,
+          "apiLines": "INFO:     127.0.0.1:10911 - \"POST /api/tabs/bye HTTP/1.1\" 200 OK\r\nINFO:     127.0.0.1:11961 - \"POST /api/tabs/register HTTP/1.1\" 200 OK\r"
+        },
+        "afterGrace": {
+          "exitCode": null,
+          "exitTimestampMs": null,
+          "exitedWithinWindow": false,
+          "waitedExtraMs": 3536,
+          "pageFetch": "HTTP_200",
+          "reload": "reload 成功"
+        },
+        "endLog": {
+          "exitCode": null,
+          "logLength": 30479
+        }
+      },
+      "server": {
+        "url": "http://127.0.0.1:4210",
+        "port": 4210,
+        "launcherMode": true
+      },
+      "verdict": {
+        "readingsUsable": true,
+        "bfcacheUsed": false,
+        "fullReload": true,
+        "persistedSequence": "NO_WINDOW___ps（整页重载 = 新文档，探针变量不存在）",
+        "restoreElapsedMs": null,
+        "returnWithinGraceWindow": null,
+        "newRegistersAfterBack": 1,
+        "exitCodeAfterGrace": null,
+        "pageFetchAfterGrace": "HTTP_200",
+        "byeSeenBeforeBack": true,
+        "reproduced": false,
+        "healed": false,
+        "text": "本组配置下**这一跳是整页重载**（探针变量消失 = 新文档，内联登记会重跑）⇒ **复现不成立**（新 register 1 次、退出码 null）：缺陷需要一个 bfcache 恢复的文档才谈得上。"
+      }
+    },
+    {
+      "mode": "bfcache",
+      "runIndex": 2,
+      "label": "去掉 --disable-back-forward-cache（默认 headless = chromium_headless_shell）",
+      "launchOptions": {
+        "headless": true,
+        "ignoreDefaultArgs": [
+          "--disable-back-forward-cache"
+        ]
+      },
+      "ranAt": "2026-09-24T04:59:13.236Z",
+      "graceMs": 1500,
+      "steps": {
+        "launch": {
+          "ok": true,
+          "browserVersion": "153.0.8010.12"
+        },
+        "probeInstalled": {
+          "docId": "kv5zwyq308a",
+          "timeOrigin": 1790225955138.4,
+          "navType": "navigate"
+        },
+        "beforeLeave": {
+          "logLength": 10490,
+          "exitCode": null,
+          "doc": {
+            "docId": "kv5zwyq308a",
+            "timeOrigin": 1790225955138.4,
+            "navType": "navigate"
+          }
+        },
+        "leave": {
+          "error": null,
+          "byeSeenBeforeBack": true,
+          "byeLatencyMs": 19
+        },
+        "goBack": {
+          "error": null,
+          "returnedUrl": "http://127.0.0.1:9561/",
+          "elapsedMs": 415,
+          "sinceLeaveMs": 19
+        },
+        "afterBack": {
+          "pageshowPersisted": "NO_WINDOW___ps（整页重载 = 新文档，探针变量不存在）",
+          "pageshowAt": null,
+          "docId": "NO_WINDOW___docId（整页重载 = 新文档）",
+          "timeOrigin": 1790225955799.9,
+          "navType0": "back_forward",
+          "navCount": 1,
+          "navTypeLast": "back_forward",
+          "activationStart0": 0,
+          "activationStartLast": 0,
+          "url": "http://127.0.0.1:9561/",
+          "restoreElapsedMs": null,
+          "withinGraceWindow": null
+        },
+        "afterBackLog": {
+          "newRegisterCount": 1,
+          "newByeCount": 1,
+          "apiLines": "INFO:     127.0.0.1:12905 - \"POST /api/tabs/bye HTTP/1.1\" 200 OK\r\nINFO:     127.0.0.1:12905 - \"POST /api/tabs/register HTTP/1.1\" 200 OK\r"
+        },
+        "afterGrace": {
+          "exitCode": null,
+          "exitTimestampMs": null,
+          "exitedWithinWindow": false,
+          "waitedExtraMs": 3530,
+          "pageFetch": "HTTP_200",
+          "reload": "reload 成功"
+        },
+        "endLog": {
+          "exitCode": null,
+          "logLength": 30464
+        }
+      },
+      "server": {
+        "url": "http://127.0.0.1:9561",
+        "port": 9561,
+        "launcherMode": true
+      },
+      "verdict": {
+        "readingsUsable": true,
+        "bfcacheUsed": false,
+        "fullReload": true,
+        "persistedSequence": "NO_WINDOW___ps（整页重载 = 新文档，探针变量不存在）",
+        "restoreElapsedMs": null,
+        "returnWithinGraceWindow": null,
+        "newRegistersAfterBack": 1,
+        "exitCodeAfterGrace": null,
+        "pageFetchAfterGrace": "HTTP_200",
+        "byeSeenBeforeBack": true,
+        "reproduced": false,
+        "healed": false,
+        "text": "本组配置下**这一跳是整页重载**（探针变量消失 = 新文档，内联登记会重跑）⇒ **复现不成立**（新 register 1 次、退出码 null）：缺陷需要一个 bfcache 恢复的文档才谈得上。"
+      }
+    },
+    {
+      "mode": "bfcache-channel",
+      "runIndex": 2,
+      "label": "去掉该 flag + channel=chromium（完整 chromium，非 headless shell）",
+      "launchOptions": {
+        "headless": true,
+        "channel": "chromium",
+        "ignoreDefaultArgs": [
+          "--disable-back-forward-cache"
+        ]
+      },
+      "ranAt": "2026-09-24T04:59:28.646Z",
+      "graceMs": 1500,
+      "steps": {
+        "launch": {
+          "ok": true,
+          "browserVersion": "153.0.8010.12"
+        },
+        "probeInstalled": {
+          "docId": "zvffu4kl3m",
+          "timeOrigin": 1790225975197,
+          "navType": "navigate"
+        },
+        "beforeLeave": {
+          "logLength": 10579,
+          "exitCode": null,
+          "doc": {
+            "docId": "zvffu4kl3m",
+            "timeOrigin": 1790225975197,
+            "navType": "navigate"
+          }
+        },
+        "leave": {
+          "error": null,
+          "byeSeenBeforeBack": true,
+          "byeLatencyMs": 158
+        },
+        "goBack": {
+          "error": "Error: 超时：goBack（8000ms）",
+          "returnedUrl": null,
+          "elapsedMs": 8009,
+          "sinceLeaveMs": 158
+        },
+        "afterBack": {
+          "pageshowPersisted": [
+            true
+          ],
+          "pageshowAt": [
+            2097.199999988079
+          ],
+          "docId": "zvffu4kl3m",
+          "timeOrigin": 1790225975197,
+          "navType0": "navigate",
+          "navCount": 1,
+          "navTypeLast": "navigate",
+          "activationStart0": 0,
+          "activationStartLast": 0,
+          "url": "http://127.0.0.1:5386/",
+          "restoreElapsedMs": 286,
+          "withinGraceWindow": true
+        },
+        "afterBackLog": {
+          "newRegisterCount": 0,
+          "newByeCount": 1,
+          "apiLines": "INFO:     127.0.0.1:12165 - \"POST /api/tabs/bye HTTP/1.1\" 200 OK\r\n[fixture] 后端进程退出（端口 5386）code=0 signal=null"
+        },
+        "afterGrace": {
+          "exitCode": 0,
+          "exitTimestampMs": 1693,
+          "exitedWithinWindow": true,
+          "waitedExtraMs": 0,
+          "pageFetch": "FETCH_FAIL:TypeError",
+          "reload": "RELOAD_FAIL: Error: page.reload: net::ERR_CONNECTION_REFUSED ⏎ Call log: ⏎ \u001b[2m  - waiting for navigation until \"domcontentloaded\"\u001b[22m ⏎ "
+        },
+        "endLog": {
+          "exitCode": 0,
+          "logLength": 10756
+        }
+      },
+      "server": {
+        "url": "http://127.0.0.1:5386",
+        "port": 5386,
+        "launcherMode": true
+      },
+      "verdict": {
+        "readingsUsable": true,
+        "bfcacheUsed": true,
+        "fullReload": false,
+        "persistedSequence": [
+          true
+        ],
+        "restoreElapsedMs": 286,
+        "returnWithinGraceWindow": true,
+        "newRegistersAfterBack": 0,
+        "exitCodeAfterGrace": 0,
+        "pageFetchAfterGrace": "FETCH_FAIL:TypeError",
+        "byeSeenBeforeBack": true,
+        "reproduced": true,
+        "healed": false,
+        "text": "**复现成立**：走了 bfcache（persisted=true）→ 后退后**没有**新的 `POST /api/tabs/register` → 宽限到点后端 exitCode=0（产品把自己关了）→ 页面上真请求 FETCH_FAIL:TypeError = 死页面。"
+      }
+    },
+    {
+      "mode": "bfcache-headed",
+      "runIndex": 2,
+      "label": "去掉该 flag + headless:false（有头真窗口）",
+      "launchOptions": {
+        "headless": false,
+        "ignoreDefaultArgs": [
+          "--disable-back-forward-cache"
+        ]
+      },
+      "ranAt": "2026-09-24T04:59:50.153Z",
+      "graceMs": 1500,
+      "steps": {
+        "launch": {
+          "ok": true,
+          "browserVersion": "153.0.8010.12"
+        },
+        "probeInstalled": {
+          "docId": "26xkveehynz",
+          "timeOrigin": 1790225997905,
+          "navType": "navigate"
+        },
+        "beforeLeave": {
+          "logLength": 10528,
+          "exitCode": null,
+          "doc": {
+            "docId": "26xkveehynz",
+            "timeOrigin": 1790225997905,
+            "navType": "navigate"
+          }
+        },
+        "leave": {
+          "error": null,
+          "byeSeenBeforeBack": false,
+          "byeLatencyMs": null
+        },
+        "goBack": {
+          "error": "Error: 超时：goBack（8000ms）",
+          "returnedUrl": null,
+          "elapsedMs": 8025,
+          "sinceLeaveMs": 3192
+        },
+        "afterBack": {
+          "pageshowPersisted": [
+            true
+          ],
+          "pageshowAt": [
+            7233.5999999940395
+          ],
+          "docId": "26xkveehynz",
+          "timeOrigin": 1790225997905,
+          "navType0": "navigate",
+          "navCount": 1,
+          "navTypeLast": "navigate",
+          "activationStart0": 0,
+          "activationStartLast": 0,
+          "url": "http://127.0.0.1:7135/",
+          "restoreElapsedMs": 4621,
+          "withinGraceWindow": false
+        },
+        "afterBackLog": {
+          "newRegisterCount": 0,
+          "newByeCount": 1,
+          "apiLines": "INFO:     127.0.0.1:5486 - \"POST /api/tabs/bye HTTP/1.1\" 200 OK\r\n[fixture] 后端进程退出（端口 7135）code=0 signal=null"
+        },
+        "afterGrace": {
+          "exitCode": 0,
+          "exitTimestampMs": 6113,
+          "exitedWithinWindow": true,
+          "waitedExtraMs": 0,
+          "pageFetch": "FETCH_FAIL:TypeError",
+          "reload": "RELOAD_FAIL: Error: page.reload: net::ERR_CONNECTION_REFUSED ⏎ Call log: ⏎ \u001b[2m  - waiting for navigation until \"domcontentloaded\"\u001b[22m ⏎ "
+        },
+        "endLog": {
+          "exitCode": 0,
+          "logLength": 10704
+        }
+      },
+      "server": {
+        "url": "http://127.0.0.1:7135",
+        "port": 7135,
+        "launcherMode": true
+      },
+      "verdict": {
+        "readingsUsable": true,
+        "bfcacheUsed": true,
+        "fullReload": false,
+        "persistedSequence": [
+          true
+        ],
+        "restoreElapsedMs": 4621,
+        "returnWithinGraceWindow": false,
+        "newRegistersAfterBack": 0,
+        "exitCodeAfterGrace": 0,
+        "pageFetchAfterGrace": "FETCH_FAIL:TypeError",
+        "byeSeenBeforeBack": false,
+        "reproduced": true,
+        "healed": false,
+        "text": "**复现成立**：走了 bfcache（persisted=true）→ 后退后**没有**新的 `POST /api/tabs/register` → 宽限到点后端 exitCode=0（产品把自己关了）→ 页面上真请求 FETCH_FAIL:TypeError = 死页面。"
+      }
+    }
+  ]
+}

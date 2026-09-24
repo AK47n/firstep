@@ -11,14 +11,18 @@
 // `boot.js` 整张模块图装载完才发（住在 `app.js` 里）→ 宽限内没到 → `os._exit(0)`
 // → **应用把自己的服务关了**，后面每次请求都是 `ERR_CONNECTION_REFUSED`。
 //
-// ## 三条用例（各自钉一件事）
+// ## 五条用例（各自钉一件事）
 //
 //   A. **连续 reload N ≥ 8**（覆盖现场"第 7 次命中"的量级）：服务始终活着 + 页面每次都能用。
 //   B. **确定性用例**：把 `boot.js` 的响应拖到宽限之外（2s > 1.5s）—— 修复前 `register` 要等
 //      它 ⇒ 服务自杀（**必红**）；修复后登记住在 `index.html` head 的内联脚本里，与模块图
 //      无关 ⇒ 服务活着、页面最终仍装载可用。
 //   C. **最后一个页面离开 → 服务自己停**：把"关浏览器 = 停服务"这个功能钉进闸门
-//      ——修竞态最容易顺手弄丢的就是它。
+//      ——修竞态最容易顺手弄丢的就是它。（必须是**最后一条**：它把服务关掉。）
+//   D. **bfcache 回来补登记**（工单 bfcache-return-register/01）：冻结再恢复那一跳要补登记，
+//      宽限过去后服务还活着、页面还能拿到数据。
+//   E. **回来时服务已退出 → 可见态 + 自动接回**：中文说明与下一步要出现，服务回来（同一端口
+//      重新起）后页面自己接回去。
 //
 // ## 一条实测出来的写法约束（别改成 `page.close()`）
 //
@@ -94,15 +98,22 @@ async function openApp(page, server) {
   await waitReady(page, server);
 }
 
+/** 轮询到 `fn()` 返回真值 → 返回那个值；超时返回 null。
+ *  一处实现两处用（评审指出 `waitForLog` 与 `exitObservedAt` 各抄了一遍 deadline 轮询）。 */
+async function pollUntil(fn, timeoutMs, every = 100) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const value = await fn();
+    if (value) return value;
+    await sleep(every);
+  }
+  return null;
+}
+
 /** 等后端进程真的退出 → **观测到退出的时刻**（`Date.now()`）；超时返回 null。
  *  返回时刻而不是布尔：调用方要拿它算"离开 → 停服"用了多久（读数进 Comments）。 */
 async function exitObservedAt(server, timeoutMs) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (server.proc.exitCode !== null) return Date.now();
-    await sleep(100);
-  }
-  return null;
+  return pollUntil(() => (server.proc.exitCode !== null ? Date.now() : null), timeoutMs);
 }
 
 /** 本文档实例（`performance.timeOrigin`）：同一文档恒定、跨文档必不同。 */
@@ -111,7 +122,7 @@ function documentEpoch(page) {
 }
 
 /**
- * reload 一次，并**确认接下来看到的是新文档**，再等页面可用。
+ * 等**新文档**出现（`performance.timeOrigin` 变了）——`reload` 与"服务回来后自动接回"共用。
  *
  * 判据用 `performance.timeOrigin`（与产品那个 `epoch` 同源）：**只有真换了文档它才会变**，
  * 所以"后面看到的 DOM 属于新文档"这件事是被证过的，不依赖对浏览器内部时序的推测。
@@ -122,17 +133,24 @@ function documentEpoch(page) {
  *     reload 会把正在装载的模块图拦腰掐断（服务端日志：那一轮只取到 `boot.js` + 两个模块就
  *     没了下一次 `GET /`），再下一轮 `DOMContentLoaded` 永远等不来（30s 超时）——现象与
  *     "产品把自己关了"一模一样（先例：`hwcheck.spec.mjs` 记过同族抢跑假红）。
+ * 用例 E 里同一件事还有第二层理由：旧文档的 DOM 里平台卡**本来就在**（它"崩"之前是好的），
+ * 拿"平台卡在不在"当重载判据会当场假绿（那一条第一版就是这么红的）。
  */
-async function reloadAndReady(page, server) {
-  const prevEpoch = await documentEpoch(page);
-  await page.reload({ waitUntil: "domcontentloaded" });
+async function waitNewDocument(page, server, prevEpoch, what = "reload") {
   try {
     await page.waitForFunction(
       (prev) => performance.timeOrigin !== prev, prevEpoch, { timeout: 60000 });
   } catch (e) {
-    throw new Error(`reload 之后没看到新文档：${e.message}\n`
+    throw new Error(`${what} 之后没看到新文档：${e.message}\n`
       + `（服务端日志尾段：\n${logTail(server)}\n）`);
   }
+}
+
+/** reload 一次，确认看到的是新文档，再等页面可用。 */
+async function reloadAndReady(page, server) {
+  const prevEpoch = await documentEpoch(page);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await waitNewDocument(page, server, prevEpoch, "reload");
   await waitReady(page, server);
 }
 
@@ -182,6 +200,97 @@ test("B：模块图被拖到宽限之外，登记仍然早到——服务活着�
   } finally {
     await page.unroute("**/js/boot.js");
   }
+});
+
+// ## 两条 bfcache 用例（D / E，工单 bfcache-return-register/01）
+//
+// 用户从应用**导航走**时浏览器可能把本文档冻结进 bfcache：那一下同样触发 `pagehide`
+//（`persisted === true`），产品照发告别 ⇒ 服务端开始 1.5 秒倒计时；而按**后退**回来时
+// 文档恢复、**脚本一行都不重跑**，只有已经注册过的监听器还会被调用 ⇒ 没补登记就没人救。
+//
+// **为什么用合成事件而不是真导航 + goBack**：playwright 默认给 chromium 传了
+// `--disable-back-forward-cache`（实测 `playwright-core/lib/coreBundle.js:34858`），
+// **bfcache 在门禁里根本不会发生** —— 拿 `goto → goBack` 写用例只会得到"整页重载"，
+// 看起来是绿的、其实什么都没验（那是假绿，比红更坏）。真 bfcache 的读数与"要不要
+// `ignoreDefaultArgs` 才能打开"记在 `.scratch/bfcache-return-register/probe-00-bfcache-red.*`。
+// 所以这里用**同一条时序的合成事件**（产品侧监听器、端点、服务端退出调度全是真的）：
+//   ① `pagehide(persisted=true)` = 冻结那一下（产品真的会发告别）；
+//   ② `pageshow(persisted=true)` = 恢复那一下（脚本不重跑，只有监听器被调用）。
+// 两条用例分别钉住"宽限内回来 ⇒ 补登记救回"与"回来太晚 ⇒ 说清楚发生了什么"。
+
+/** 等某段新日志出现（默认 5 秒）。返回是否等到，调用方决定断言。 */
+async function waitForLog(server, from, needle, timeoutMs = 5000) {
+  return Boolean(await pollUntil(
+    () => (server.log().slice(from).includes(needle) ? true : null), timeoutMs));
+}
+
+/** 派发一次页面转移事件（`pagehide` / `pageshow`，带 `persisted`）——产品监听器照常被调用。 */
+function dispatchTransition(page, type, persisted) {
+  return page.evaluate(([t, p]) => window.dispatchEvent(
+    new PageTransitionEvent(t, { persisted: p })), [type, persisted]);
+}
+
+test("D：文档被冻结（bfcache）后按后退回来——补登记救回服务与页面", async () => {
+  await openApp(page, server);
+  const logMark = server.log().length;
+
+  // ① 冻结那一下：产品发告别（注册表空 ⇒ 服务端布防退出，宽限 GRACE_MS）。
+  await dispatchTransition(page, "pagehide", true);
+  assert.ok(await waitForLog(server, logMark, "POST /api/tabs/bye"),
+    `合成的 pagehide(persisted) 之后服务端没收到告别——用例没有牙齿（后面红了也说明不了什么）`
+    + `（服务端日志尾段：\n${logTail(server)}\n）`);
+  const afterBye = server.log().length;
+  const registerBefore = server.log().slice(logMark).split("POST /api/tabs/register").length - 1;
+
+  // ② 恢复那一下：脚本不重跑 ⇒ 只有 pageshow 监听能补登记。
+  await dispatchTransition(page, "pageshow", true);
+  assert.ok(await waitForLog(server, afterBye, "POST /api/tabs/register"),
+    `后退回来（pageshow persisted）之后没有补登记——修复前正是这条：宽限到点服务自杀`
+    + `（服务端日志尾段：\n${logTail(server)}\n）`);
+  assert.equal(server.log().slice(logMark).split("POST /api/tabs/register").length - 1,
+    registerBefore + 1, "补登记应当恰好发一次（多发的每一条都是一次会漂的 payload）");
+
+  // ③ 宽限过去之后：服务活着 + 页面自己还能拿到数据（产品不变量）。
+  await sleep(GRACE_MS + 1500);
+  assert.equal(server.proc.exitCode, null,
+    `补登记之后服务仍然退出了（exit ${server.proc.exitCode}）——bfcache 回来还是死页面`
+    + `（服务端日志尾段：\n${logTail(server)}\n）`);
+  assert.ok(await serverAlive(server.url), "补登记之后服务不健康");
+  const health = await page.evaluate(() => fetch("/api/health")
+    .then((r) => r.status).catch((e) => "FETCH_FAIL:" + e.name));
+  assert.equal(health, 200, `页面自己拿不到数据（${health}）——用户面前仍是死页面`);
+});
+
+test("E：回来时服务已经退出——给中文可见态，服务回来后自动接回", async () => {
+  // 这一条把"晚于宽限回来"那条路走完：服务**真的**停掉（不是模拟的），补登记必然失败
+  // ⇒ 广播 ⇒ 可见态；然后用户重启启动器（= 同一端口重新起服务）⇒ 轮询发现 ⇒ 自动重新载入。
+  const port = server.port;
+  await openApp(page, server);
+  await dispatchTransition(page, "pagehide", true);
+  const exitedAt = await exitObservedAt(server, GRACE_MS + 5000);
+  assert.ok(exitedAt !== null,
+    `告别之后服务没有按宽限退出——这一条要验的"服务已经停了"前提不成立`
+    + `（服务端日志尾段：\n${logTail(server)}\n）`);
+
+  await dispatchTransition(page, "pageshow", true);
+  await page.waitForSelector("#service-stopped:not([hidden])", { timeout: 15000 });
+  const box = await page.textContent("#service-stopped");
+  assert.ok(box.includes("应用服务已停止"), `可见态没说清发生了什么：${box}`);
+  assert.ok(box.includes("start-app.vbs"), `可见态没给下一步（双击启动器）：${box}`);
+  assert.ok(await page.isVisible("#btn-service-reload"), "可见态缺「重新载入」按钮");
+  // 落地态：广播是一次性的，模块图还没装载时事件会丢 —— 所以恢复那一刻还要在 DOM 上留下
+  // 可回读的状态（`documentElement.dataset.serviceStopped`），ui 层装载时按它补显示。
+  assert.equal(await page.evaluate(
+    () => document.documentElement.dataset.serviceStopped), "1",
+  "补登记失败没留下可回读的落地态（模块图装载途中被冻结再恢复时，可见态就永远不会亮）");
+
+  // 用户重新双击启动器 = 同一端口重新起服务；页面每 2 秒探一次健康端点，回来就自动接上。
+  const prevEpoch = await documentEpoch(page);
+  server = await startServer({ launcher: true, requestedPort: port });
+  await waitNewDocument(page, server, prevEpoch, "服务回来后自动接回");
+  await waitReady(page, server);
+  assert.equal(await page.$eval("#service-stopped", (el) => el.hidden), true,
+    "接回之后可见态没有收起来（新文档应当是隐藏态）");
 });
 
 test("C：最后一个页面离开 → 服务自己停（关浏览器 = 停服务没被弄丢）", async () => {

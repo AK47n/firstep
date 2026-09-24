@@ -567,10 +567,37 @@ UnicodeEncodeError、连带丢掉证据文件；base 版源码清单要从 base 
   只能给中文可见态）。
 - **推荐修法**：保留告别 + `pageshow(persisted)` 用同一 `tab_id` + 同一 epoch 补登记（服务端零改动）；
   **不要**单独用"bfcache 就不发告别"——冻结文档不会再发 `pagehide`，服务会永不自停、留下常驻进程。
-- **未复现如实记**：本轮只读代码取证（file:line 见工单 Comments），红证配方与「headless 走不走 bfcache 待实测」
+- **未复现如实记**：立单那轮只读代码取证（file:line 见工单 Comments），红证配方与「headless 走不走 bfcache 待实测」
   都写在工单里。
 
-**同日顺带的两件收口（与本条同轮盘点做的）**：
+**✅ 同日落地（2026-09-24，工单 `01-pageshow-register` resolved）**：
+
+- **红证先做**：真 bfcache 需要 **`ignoreDefaultArgs: ["--disable-back-forward-cache"]` + `channel: "chromium"`**
+  ——playwright **默认**就传那条 flag（`playwright-core/lib/coreBundle.js:34858`），所以门禁里 `goBack`
+  只会得到整页重载（**假绿**）。四组 launch 配置的读数在 `.scratch/bfcache-return-register/probe-00-bfcache-red.{txt,json}`
+  （base 钉 `f3578691`）：只有摘 flag 且用完整 chromium / 有头窗口那两组真走 bfcache，并且**复现成立**
+  （`persisted=true` → 后退后 0 次新 register → 宽限后 `exitCode=0`(~1.6s) → 页面请求 `FETCH_FAIL`）。
+- **修法（服务端零改动，前端 3 个文件）**：`index.html` head 内联脚本补 `pageshow(persisted)` 补登记
+  （payload 与初载逐字同源）+ 失败广播 `service-stopped`；新增 `ui/service-stopped.js` 给中文可见态与
+  「每 2 秒探活 → 服务回来自动重载一次」；`boot.js` 具名 import + `initServiceStopped()`。
+- **口径改一处**：原验收写"至多一次自动重试"→ 改成"补登记只发一次、不重试；恢复靠探活 + 自动重载一次"
+  （理由：晚于宽限时服务已退出，重试必然失败；真正的恢复来源是用户重启启动器）。工单里有完整口径段。
+- **判据三处**：`boot-contract.mjs` 新增**判据 ⑦**（`restoreRegisterProblems`）+ 守卫 12 条（23/23）；
+  浏览器 `launcher-reload.spec.mjs` 新增用例 D / E。读数（整改后那一版）：前端门禁 **1780 passed**、
+  浏览器门禁 **40 passed / 0 fail**、全量 pytest **5356 passed + 1 skipped / 166s**。
+- **双轴评审（`code-review`，跑在未提交的工作树上）改了 9 条**（共 11 条：9 改 / 1 有意保留 / 1 非违规），
+  其中三条值得记：① **失败要留可回读的落地态**——只广播一次性事件不够，"模块图装载途中被冻结再恢复"
+  这条时序里 ui 层还没装载、事件会丢，所以内联脚本同时写 `documentElement.dataset.serviceStopped = "1"`、
+  ui 模块装载时回读（判据 ⑦ 新增子条款 ⑤）；② 失败判据从 `!r.ok` **收窄到网络错或 5xx**（4xx 是我方
+  载荷问题，不是服务停了）；③ `endpointCalls` 改为**委托** `stringArgCallSites`，把同型抽取器收敛回一份
+  （评审点的"最该修一条"）。保留的一条 = 闸门里不放真 bfcache（理由见工单与 spec「落地回填」第 2 条）。
+  整改后复跑：守卫 **23 passed**、前端门禁 **1780 passed / 0 fail**、浏览器门禁 **40 passed / 0 fail**
+  （整支首跑撞过两次已记档偶发，单跑该 spec 5/5 三次）、全量 pytest **5356 passed + 1 skipped**）。
+- **顺带一条工具事实**：改文本别用 PowerShell 文本往返（`Get-Content -Raw` → `Set-Content -Encoding utf8`）
+  ——会把 UTF-8 中文按 GBK 解码再写回（乱码），**GBK 硬配对还会吞掉行尾换行符**（本轮把探针文件搞坏过一次，
+  已用编辑工具复原）。见 `docs/agents/local-environment.md` 本轮会话段。
+
+**同日顺带的两件收口（与本轮盘点做的）**：
 
 - `full-download/07`（真机演练）**标签没跟 → 已翻 resolved**：它自述"唯一剩下的是真发一次 Release"，
   而该动作已由挂账单 `real-acceptance/01` 的 **G1 三段**在 2026-09-13 / 09-18 做掉（v1.1.0 / v1.1.1 真发布 +

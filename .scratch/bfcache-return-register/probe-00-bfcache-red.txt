@@ -1,0 +1,119 @@
+probe-00-bfcache-red —— bfcache 后退回来「没人补登记 ⇒ 服务已退出 ⇒ 死页面」真浏览器红证
+====================================================================================================
+base sha         : f357869124692f09e3fdfabc9b0083c75d2dd24f
+跑的时刻         : 2026-09-24T04:58:05.346Z（本机时区 Asia/Shanghai）
+Node 版本        : v24.15.0
+playwright 版本  : 1.63.0
+_EXIT_GRACE      : 1500ms（从 src/contest_generator/webapp.py 抠出，非手抄）
+服务的那一代代码 : C:\Users\luoji\Desktop\firstep\.scratch\bfcache-return-register\base-worktree（= 本探针所在树；夹具 REPO_ROOT 由它自己的 URL 推出）
+跑过的配置       : default, bfcache, bfcache-channel, bfcache-headed（共 2 轮）
+
+判据（写死在探针里，不为了结论好看而改）：
+  · bfcache 走了吗 = pageshow 的 persisted 序列里有 true（且 window 探针变量还在 = 还是同一个文档）
+  · 复现成立 = 走了 bfcache + 后退后**零**新 register + 宽限后 exitCode=0 + 页面真请求 FETCH_FAIL
+  · 整页重载（window.__ps 变 NO_WINDOW…）= 这一跳**根本没走 bfcache** ⇒ 复现不成立，如实记
+  · ⚠ bfcache 恢复时 `page.goBack()` **不会返回**（playwright 等不到它认得的导航事件，8 秒超时抛错）——读数照旧有效：页面侧判据是 pageshow.persisted，服务端判据是日志与退出码
+
+----------------------------------------------------------------------------------------------------
+【配置 default】playwright 默认 launch（默认 args **含** --disable-back-forward-cache）
+  launchOptions       : {"headless":true}
+  夹具后端            : http://127.0.0.1:12906
+  浏览器              : 153.0.8010.12
+  离开前（本文档）    : docId=o5dy7o5oqz timeOrigin=1790225887274.7 navType=navigate
+  离开（goto blank）  : 成功｜bye 在后退前到达服务端 = true（离开后 19ms 看到）
+  goBack              : 成功（URL=http://127.0.0.1:12906/）｜耗时 344ms｜离开后 19ms 发起
+  ★ pageshow.persisted: "NO_WINDOW___ps（整页重载 = 新文档，探针变量不存在）"
+  ★ 文档身份          : docId=NO_WINDOW___docId（整页重载 = 新文档） timeOrigin=1790225887999
+  ★ navigation.type   : 共 1 条｜[0]=back_forward（activationStart=0）  last=back_forward（activationStart=0）
+  ★ 回到本文档的时刻  : 离开后 nullms（宽限 1500ms 内 = null）｜URL=http://127.0.0.1:12906/
+  ★ 后退后**新**register 次数: 1（新 bye 1 次）
+  ── 这一段里的 /api/tabs/ 行 ──
+     INFO:     127.0.0.1:2804 - "POST /api/tabs/bye HTTP/1.1" 200 OK
+     INFO:     127.0.0.1:2804 - "POST /api/tabs/register HTTP/1.1" 200 OK
+  ★ 后端退出          : exitCode=null｜观测到退出 = false｜离开后 nullms 咽气
+  ★ 页面上真请求      : "HTTP_200"
+  ★ 整页 reload       : reload 成功
+  判定                : 本组配置下**这一跳是整页重载**（探针变量消失 = 新文档，内联登记会重跑）⇒ **复现不成立**（新 register 1 次、退出码 null）：缺陷需要一个 bfcache 恢复的文档才谈得上。
+
+----------------------------------------------------------------------------------------------------
+【配置 bfcache】去掉 --disable-back-forward-cache（默认 headless = chromium_headless_shell）
+  launchOptions       : {"headless":true,"ignoreDefaultArgs":["--disable-back-forward-cache"]}
+  夹具后端            : http://127.0.0.1:12432
+  浏览器              : 153.0.8010.12
+  离开前（本文档）    : docId=qj78jzdzp9 timeOrigin=1790225902096.4 navType=navigate
+  离开（goto blank）  : 成功｜bye 在后退前到达服务端 = true（离开后 21ms 看到）
+  goBack              : 成功（URL=http://127.0.0.1:12432/）｜耗时 380ms｜离开后 21ms 发起
+  ★ pageshow.persisted: "NO_WINDOW___ps（整页重载 = 新文档，探针变量不存在）"
+  ★ 文档身份          : docId=NO_WINDOW___docId（整页重载 = 新文档） timeOrigin=1790225902856.7
+  ★ navigation.type   : 共 1 条｜[0]=back_forward（activationStart=0）  last=back_forward（activationStart=0）
+  ★ 回到本文档的时刻  : 离开后 nullms（宽限 1500ms 内 = null）｜URL=http://127.0.0.1:12432/
+  ★ 后退后**新**register 次数: 1（新 bye 1 次）
+  ── 这一段里的 /api/tabs/ 行 ──
+     INFO:     127.0.0.1:10895 - "POST /api/tabs/bye HTTP/1.1" 200 OK
+     INFO:     127.0.0.1:10895 - "POST /api/tabs/register HTTP/1.1" 200 OK
+  ★ 后端退出          : exitCode=null｜观测到退出 = false｜离开后 nullms 咽气
+  ★ 页面上真请求      : "HTTP_200"
+  ★ 整页 reload       : reload 成功
+  判定                : 本组配置下**这一跳是整页重载**（探针变量消失 = 新文档，内联登记会重跑）⇒ **复现不成立**（新 register 1 次、退出码 null）：缺陷需要一个 bfcache 恢复的文档才谈得上。
+
+----------------------------------------------------------------------------------------------------
+【配置 bfcache-channel】去掉该 flag + channel=chromium（完整 chromium，非 headless shell）
+  launchOptions       : {"headless":true,"channel":"chromium","ignoreDefaultArgs":["--disable-back-forward-cache"]}
+  夹具后端            : http://127.0.0.1:7135
+  浏览器              : 153.0.8010.12
+  离开前（本文档）    : docId=n9w5k0zyvip timeOrigin=1790225916977.3 navType=navigate
+  离开（goto blank）  : 成功｜bye 在后退前到达服务端 = true（离开后 105ms 看到）
+  goBack              : 抛错 Error: 超时：goBack（8000ms）｜耗时 8009ms｜离开后 105ms 发起
+  ★ pageshow.persisted: [true]
+  ★ 文档身份          : docId=n9w5k0zyvip timeOrigin=1790225916977.3
+  ★ navigation.type   : 共 1 条｜[0]=navigate（activationStart=0）  last=navigate（activationStart=0）
+  ★ 回到本文档的时刻  : 离开后 162ms（宽限 1500ms 内 = true）｜URL=http://127.0.0.1:7135/
+  ★ 后退后**新**register 次数: 0（新 bye 1 次）
+  ── 这一段里的 /api/tabs/ 行 ──
+     INFO:     127.0.0.1:11443 - "POST /api/tabs/bye HTTP/1.1" 200 OK
+     [fixture] 后端进程退出（端口 7135）code=0 signal=null
+  ★ 后端退出          : exitCode=0｜观测到退出 = true｜离开后 1624ms 咽气
+  ★ 页面上真请求      : "FETCH_FAIL:TypeError"
+  ★ 整页 reload       : RELOAD_FAIL: Error: page.reload: net::ERR_CONNECTION_REFUSED ⏎ Call log: ⏎ [2m  - waiting for navigation until "domcontentloaded"[22m ⏎ 
+  判定                : **复现成立**：走了 bfcache（persisted=true）→ 后退后**没有**新的 `POST /api/tabs/register` → 宽限到点后端 exitCode=0（产品把自己关了）→ 页面上真请求 FETCH_FAIL:TypeError = 死页面。
+
+----------------------------------------------------------------------------------------------------
+【配置 bfcache-headed】去掉该 flag + headless:false（有头真窗口）
+  launchOptions       : {"headless":false,"ignoreDefaultArgs":["--disable-back-forward-cache"]}
+  夹具后端            : http://127.0.0.1:3145
+  浏览器              : 153.0.8010.12
+  离开前（本文档）    : docId=xj84sbabhrc timeOrigin=1790225928936 navType=navigate
+  离开（goto blank）  : 成功｜bye 在后退前到达服务端 = true（离开后 101ms 看到）
+  goBack              : 抛错 Error: 超时：goBack（8000ms）｜耗时 8008ms｜离开后 101ms 发起
+  ★ pageshow.persisted: [true]
+  ★ 文档身份          : docId=xj84sbabhrc timeOrigin=1790225928936
+  ★ navigation.type   : 共 1 条｜[0]=navigate（activationStart=0）  last=navigate（activationStart=0）
+  ★ 回到本文档的时刻  : 离开后 141ms（宽限 1500ms 内 = true）｜URL=http://127.0.0.1:3145/
+  ★ 后退后**新**register 次数: 0（新 bye 1 次）
+  ── 这一段里的 /api/tabs/ 行 ──
+     INFO:     127.0.0.1:2875 - "POST /api/tabs/bye HTTP/1.1" 200 OK
+     [fixture] 后端进程退出（端口 3145）code=0 signal=null
+  ★ 后端退出          : exitCode=0｜观测到退出 = true｜离开后 1632ms 咽气
+  ★ 页面上真请求      : "FETCH_FAIL:TypeError"
+  ★ 整页 reload       : RELOAD_FAIL: Error: page.reload: net::ERR_CONNECTION_REFUSED ⏎ Call log: ⏎ [2m  - waiting for navigation until "domcontentloaded"[22m ⏎ 
+  判定                : **复现成立**：走了 bfcache（persisted=true）→ 后退后**没有**新的 `POST /api/tabs/register` → 宽限到点后端 exitCode=0（产品把自己关了）→ 页面上真请求 FETCH_FAIL:TypeError = 死页面。
+
+====================================================================================================
+逐轮对照表（同一矩阵连跑 2 轮：红证不该只跑一次）
+  轮   配置                  persisted     新register   exitCode  页面请求                  判定
+  1   default             "NO_WINDOW___ps（整页重载 = 新文档，探针变量不存在）"1           null      HTTP_200              复现不成立
+  1   bfcache             "NO_WINDOW___ps（整页重载 = 新文档，探针变量不存在）"1           null      HTTP_200              复现不成立
+  1   bfcache-channel     [true]        0           0         FETCH_FAIL:TypeError  复现成立
+  1   bfcache-headed      [true]        0           0         FETCH_FAIL:TypeError  复现成立
+  2   default             "NO_WINDOW___ps（整页重载 = 新文档，探针变量不存在）"1           null      HTTP_200              复现不成立
+  2   bfcache             "NO_WINDOW___ps（整页重载 = 新文档，探针变量不存在）"1           null      HTTP_200              复现不成立
+  2   bfcache-channel     [true]        0           0         FETCH_FAIL:TypeError  复现成立
+  2   bfcache-headed      [true]        0           0         FETCH_FAIL:TypeError  复现成立
+
+====================================================================================================
+逐配置结论（一句话）
+  · default：复现不成立——本组配置下**这一跳是整页重载**（探针变量消失 = 新文档，内联登记会重跑）⇒ **复现不成立**（新 register 1 次、退出码 null）：缺陷需要一个 bfcache 恢复的文档才谈得上。
+  · bfcache：复现不成立——本组配置下**这一跳是整页重载**（探针变量消失 = 新文档，内联登记会重跑）⇒ **复现不成立**（新 register 1 次、退出码 null）：缺陷需要一个 bfcache 恢复的文档才谈得上。
+  · bfcache-channel：复现成立——**复现成立**：走了 bfcache（persisted=true）→ 后退后**没有**新的 `POST /api/tabs/register` → 宽限到点后端 exitCode=0（产品把自己关了）→ 页面上真请求 FETCH_FAIL:TypeError = 死页面。
+  · bfcache-headed：复现成立——**复现成立**：走了 bfcache（persisted=true）→ 后退后**没有**新的 `POST /api/tabs/register` → 宽限到点后端 exitCode=0（产品把自己关了）→ 页面上真请求 FETCH_FAIL:TypeError = 死页面。
+

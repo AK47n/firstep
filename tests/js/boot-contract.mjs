@@ -1,5 +1,5 @@
 // boot-contract.mjs — 装载根契约的**判据单源**（工单 frontend-boot-module/01；判据⑥ 由
-// 工单 launcher-exit-race/01 加入）。
+// 工单 launcher-exit-race/01 加入，判据⑦ 由工单 bfcache-return-register/01 加入）。
 //
 // 为什么单独一个文件（照 import-usage.mjs / ui-dom-contract.mjs 先例）：判据要被三处用——
 //   1. 守卫本体（fx-guard / static-import-guard / import-usage-guard / ui-dom-contract /
@@ -10,7 +10,7 @@
 //   3. 探针的判据强度自检（内存注入）
 // 放在 `.test.mjs` 里会让 import 方顺带注册并运行那批用例。
 //
-// ## 六类不变量（判据全部是纯函数：源码文本 / 模块表进，违规清单出）
+// ## 七类不变量（判据全部是纯函数：源码文本 / 模块表进，违规清单出）
 //
 //   ① `indexHtmlImports(html)` = 0    —— 装载根不在 HTML 里（判据 ①）
 //   ② `inlineDefinitions(html)` = 0   —— HTML 里零顶层 JS 定义（判据 ②）
@@ -23,6 +23,10 @@
 //   ⑥ `earlyRegisterProblems(html, appJs)` = 0 —— **最早的标签登记在模块图之前**（工单
 //      launcher-exit-race/01-02）：它决定"F5 时会不会被应用自己关掉服务"，是功能正确性，
 //      不是风格（缘由见⑥那节的注释）。
+//   ⑦ `restoreRegisterProblems(html, uiJs)` = 0 —— **bfcache 恢复时补登记**（工单
+//      bfcache-return-register/01）：⑥ 管"新文档要早报到"，⑦ 管"被浏览器冻结的老文档
+//      回来时要再报到一次"——两半合起来才挡住"最后一个页面离开 = 停服务"误伤"只是导航走了"。
+//      缘由与四条子判据见⑦那节。
 //
 // ## 三个必须踩住的坑（都写进实现里了）
 //
@@ -1095,17 +1099,18 @@ function codeAnchorHolds(raw, masked, m, name) {
 /**
  * 端点调用点（**真代码**里的 `fetch("<端点>"` / `sendBeacon("<端点>"`；注释里的不算）
  * → [{ index, call }]（index 相对于传入的 `text`）。内部件：判据 ① 与 ④ 共用。
+ *
+ * 抽取器**只有一份**：调用点定位与"首实参解析成字符串"都走 `stringArgCallSites`
+ *（工单 bfcache-return-register/01 的评审指出：判据文件里长出第二套同型抽取器，
+ * 正是 `ui-dom-contract.mjs` 记下并已收敛过一次的那条教训）。这里只说清
+ * "哪些函数算端点调用"与"哪一个端点"。
  */
 function endpointCalls(text, endpoint) {
-  const masked = maskCommentsAndStrings(text);
-  const esc = endpoint.replace(/[/.]/g, (c) => "\\" + c);
-  const re = new RegExp("(fetch|sendBeacon)\\s*\\(\\s*[\"'`]" + esc + "[\"'`]", "g");
-  const out = [];
-  let m;
-  while ((m = re.exec(text)) !== null) {
-    if (codeAnchorHolds(text, masked, m, m[1])) out.push({ index: m.index, call: m[1] });
-  }
-  return out;
+  return ["fetch", "sendBeacon"]
+    .flatMap((fn) => stringArgCallSites(text, fn)
+      .filter((c) => c.value === endpoint)
+      .map((c) => ({ index: c.index, call: fn })))
+    .sort((a, b) => a.index - b.index);   // 位置序（原实现是全文左到右扫，调用方按首个判"最早"）
 }
 
 /** 真代码里的 `名字 = "字面量"` → 字面量；注释里 / 大写常量（`TAB_EPOCH`）不算 → null。 */
@@ -1257,6 +1262,221 @@ export function earlyRegisterProblems(html, appJs) {
       problems.push({
         why: `${label} 的 payload 没带 ${TAB_EPOCH_FIELD}（文档实例令牌）`
           + "——乱序到达的旧告别会注销掉刚登记的新页面",
+      });
+    }
+  }
+  return problems;
+}
+
+// ---------------------------------------------------------------------------
+// ⑦ bfcache 恢复补登记（工单 bfcache-return-register/01）
+//
+// ## 为什么这条不变量值得一条判据
+//
+// 用户从应用**导航走**（点外链 / 改地址栏）时，浏览器可能把本文档**冻结进 bfcache**——
+// 那一下同样触发 `pagehide`，而 `pagehide` 的监听器**不判 `event.persisted`**、照发
+// `POST /api/tabs/bye` ⇒ 服务端按「最后一个页面离开 = 停服务」在 `_EXIT_GRACE`（1.5s）后
+// `os._exit(0)`。用户**按后退**回来时：文档从 bfcache 恢复，**脚本一行都不重跑**
+//（head 里那次登记不会再来），于是没人补登记 ⇒ 服务已经停了 ⇒ 页面每个请求都连不上。
+//
+// 所以"恢复时要补一次登记"与判据 ⑥ 的"登记要早于模块图"是**同一件事的两半**：
+// 前者管"新文档要早报到"，后者管"老文档回来要再报到一次"。两半都只能住在
+// `index.html` head 那段内联脚本里（恢复时只有**已经注册过的监听器**还会被调用，
+// 模块图里的代码根本没机会跑）。
+//
+// ## 判据（纯函数：源码文本进，违规清单出）
+//
+//   ① 内联脚本里**监听 `pageshow`**，且回调里**判 `persisted`**
+//      （不判 `persisted` = 每次普通加载都再登记一次：症状被掩盖，且"回来"与"新开"分不开）；
+//   ② **第二处 register 调用落在那个监听体内**（恢复时脚本不重跑，初载那一次不会再来）；
+//   ③ 两处 register 的 **payload 逐字同源**（`callArguments` 数出实参区间后规范化比对——
+//      "两处会漂"正是判据 ⑥ 那条"登记点单源"要防的东西，这里给恢复那一处补上同一把锁）；
+//   ④ 补登记失败时**广播 `service-stopped`**、且那处广播**真在 pageshow 监听体内**，
+//      并且 `ui/service-stopped.js` **监听同一个字面量**（两侧同源：广播没人接 = 用户看不到
+//      任何说明，仍是死页面；挪在块内别处 = 不会在恢复那一刻发出来）；
+//   ⑤ 失败还要**留下可回读的落地态**（`documentElement.dataset.<键>`），且 UI 侧**装载时回读
+//      同一个键**：广播是一次性的，而"模块图装载途中被冻结再恢复"这条时序里，广播发出时
+//      ui 层还没装载 —— 事件会丢，没有落地态可见态就永远不亮（评审实测指出的洞）。
+//
+// 判据**不绑写法**：变量名、链条怎么接、注释怎么写都不管；管的是"恢复事件里有没有补登记"
+// "两处 payload 是不是同一份""失败能不能被看见"这三个事实。
+// ---------------------------------------------------------------------------
+
+/** bfcache 恢复失败时页面内广播的事件名（契约字面量单源，判据与守卫共用）。 */
+export const SERVICE_STOPPED_EVENT = "service-stopped";
+/** 可见态那一半的对侧文件（判据 ④ 要读的那一份）。**内部件**。 */
+const SERVICE_STOPPED_UI_KEY = "ui/service-stopped.js";
+
+/**
+ * `fn(<第一实参>, …)` 的第一实参**解析成字符串**的调用点 → [{ index, value }]。
+ *
+ * 两种写法都认（与 `sessionStorageKeys` 同一条理由：**判据不绑写法**）：直接给字面量
+ * （`addEventListener("pageshow", …)`）与给命名常量（`addEventListener(EVENT, …)` +
+ * `const EVENT = "…"`）。解不开的（表达式 / 变量拼出来的）返回 `value: null` ——
+ * 当成"没有这一处"，绝不当作"匹配上了"。注释里的同名字样不算。
+ */
+function stringArgCallSites(text, fnName) {
+  const masked = maskCommentsAndStrings(text);
+  const re = new RegExp("\\b" + fnName + "\\s*\\(", "g");
+  const out = [];
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    if (!codeAnchorHolds(text, masked, m, fnName)) continue;
+    const span = callArguments(text, { index: m.index });
+    if (!span) continue;
+    const open = text.indexOf("(", m.index);
+    let depth = 0;
+    let end = -1;
+    for (let i = open; i < span.to; i++) {
+      const ch = masked[i];
+      if (ch === "(") depth++;
+      else if (ch === ")") { if (--depth === 0) { end = i; break; } }
+      else if (ch === "," && depth === 1) { end = i; break; }
+    }
+    if (end < 0) continue;
+    const arg = text.slice(open + 1, end).trim();
+    const literal = /^["'`]([^"'`]+)["'`]$/.exec(arg);
+    out.push({ index: m.index, value: literal ? literal[1] : literalOf(text, arg) });
+  }
+  return out;
+}
+
+/**
+ * `addEventListener("<event>", …)` / `addEventListener(常量, …)` 的**实参区间**清单。
+ *
+ * 复用 `callArguments`（配对括号 span）而不是"往后 N 个字符的窗口"：窗口给的是
+ * "附近有就算过"，紧跟监听的一句同名标识符就能把判据喂绿（与判据 ④ 同一条理由）。
+ */
+function addEventListenerSpans(text, eventName) {
+  return stringArgCallSites(text, "addEventListener")
+    .filter((c) => c.value === eventName)
+    .map((c) => callArguments(text, { index: c.index }))
+    .filter(Boolean);
+}
+
+/** 真代码里的 `new CustomEvent("<name>", …)`（或事件名走命名常量）调用点 → [{ index }]。 */
+function customEventCalls(text, eventName) {
+  return stringArgCallSites(text, "CustomEvent").filter((c) => c.value === eventName);
+}
+
+/**
+ * `<ident>.dataset.<key>` 的读写点 → Set<键>（判据 ⑦⑤ 的落地态同源；注释里的不算）。
+ *
+ * 只认**成员访问**形态（`documentElement.dataset.x`）：计算属性（`dataset[KEY]`）静态看不出
+ * 键名，判不了同源——所以两侧都写成成员访问（这也让"键名"这件事没有第二处定义）。
+ */
+function datasetKeys(text) {
+  const masked = maskCommentsAndStrings(text);
+  const out = new Set();
+  const re = /documentElement\s*\.\s*dataset\s*\.\s*([A-Za-z_$][\w$]*)/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    if (codeAnchorHolds(text, masked, m, "documentElement")) out.add(m[1]);
+  }
+  return out;
+}
+
+/**
+ * 判据 ⑦：bfcache 恢复补登记 → [{ why }]；空数组 = 不变量成立。
+ *
+ * `html` = `static/index.html` 原文；`uiJs` = `static/js/ui/service-stopped.js` 原文
+ *（传 `null` = 只判广播、不判对侧——供"文件还没建"的中间态用，正式守卫一律传原文）。
+ */
+export function restoreRegisterProblems(html, uiJs) {
+  const problems = [];
+  const sites = scriptBlocks(html).filter((b) => b.src === null)
+    .map((b) => ({ block: b, calls: endpointCalls(b.text, TAB_REGISTER_ENDPOINT) }));
+  const early = sites.find((s) => s.calls.length > 0);
+  if (!early) {
+    // 判据 ⑥ ① 已报"内联脚本里没有 register 调用"；这里不重复报，也不装作判过。
+    return problems;
+  }
+  const text = early.block.text;
+
+  // ① 监听 pageshow + 判 persisted
+  const spans = addEventListenerSpans(text, "pageshow");
+  if (spans.length === 0) {
+    problems.push({
+      why: "内联脚本没监听 pageshow —— 文档从 bfcache 恢复时不执行任何脚本，"
+        + "没有这一处就没人补登记（离开时那次告别已经把自己注销掉了）",
+    });
+  } else if (!spans.some((s) => /\bpersisted\b/.test(maskCommentsAndStrings(text.slice(s.from, s.to))))) {
+    problems.push({
+      why: "pageshow 监听里没判 event.persisted —— 每次普通加载都会再登记一次"
+        + "（症状被掩盖，且「bfcache 回来」与「新开文档」分不开）",
+    });
+  }
+
+  // ② 补登记那一处落在监听体内
+  if (early.calls.length < 2) {
+    problems.push({
+      why: `内联脚本里只有 ${early.calls.length} 处 ${TAB_REGISTER_ENDPOINT} 调用`
+        + "——bfcache 恢复那一次没地方发（恢复时脚本不重跑，初载那一次不会再来）",
+    });
+  } else {
+    const restoreAt = early.calls[early.calls.length - 1].index;
+    if (!spans.some((s) => restoreAt > s.from && restoreAt < s.to)) {
+      problems.push({
+        why: "第二处 register 调用不在 pageshow 监听体内 —— 补登记得由恢复事件触发，"
+          + "写在别处等于没有",
+      });
+    }
+  }
+
+  // ③ 两处 payload 逐字同源
+  if (early.calls.length >= 2) {
+    const argsOf = (call) => {
+      const span = callArguments(text, call);
+      return span ? text.slice(span.from, span.to).replace(/\s+/g, " ").trim() : null;
+    };
+    const first = argsOf(early.calls[0]);
+    const last = argsOf(early.calls[early.calls.length - 1]);
+    if (first === null || last === null) {
+      problems.push({ why: "数不出 register 调用的实参区间 —— payload 同源判不了（抽取器失效？）" });
+    } else if (first !== last) {
+      problems.push({
+        why: "初载与补登记的 register payload 不一致（两处会漂：改了一处、另一处悄悄发旧形状）\n"
+          + `  初载：${first}\n  补登记：${last}`,
+      });
+    }
+  }
+
+  // ④ 失败广播（必须真在监听体内：挪在块内别处照样"存在"，但不会在恢复那一刻发出来）
+  const insideSpan = (idx) => spans.some((s) => idx > s.from && idx < s.to);
+  const broadcasts = customEventCalls(text, SERVICE_STOPPED_EVENT);
+  if (broadcasts.length === 0) {
+    problems.push({
+      why: `补登记失败时没有广播 ${SERVICE_STOPPED_EVENT} —— 服务已经停了，`
+        + "用户却看不到任何说明（仍是死页面）",
+    });
+  } else if (!broadcasts.some((c) => insideSpan(c.index))) {
+    problems.push({
+      why: `${SERVICE_STOPPED_EVENT} 的广播不在 pageshow 监听体内 —— `
+        + "写在块内别处等于不会在恢复那一刻发出来",
+    });
+  }
+  if (uiJs !== null && uiJs !== undefined) {
+    if (addEventListenerSpans(uiJs, SERVICE_STOPPED_EVENT).length === 0) {
+      problems.push({
+        why: `${SERVICE_STOPPED_UI_KEY} 没监听 ${SERVICE_STOPPED_EVENT} —— 广播没人接，可见态不存在`,
+      });
+    }
+  }
+
+  // ⑤ 失败要留下可回读的落地态，且 UI 侧装载时回读同一个键
+  const latchKeys = datasetKeys(text);
+  if (latchKeys.size === 0) {
+    problems.push({
+      why: "补登记失败只广播了一次性事件、没留可回读的落地态（`documentElement.dataset.<键>`）——"
+        + "模块图装载途中被冻结再恢复时，广播发出时 ui 层还没装载，事件会丢，可见态永远不亮",
+    });
+  } else if (uiJs !== null && uiJs !== undefined) {
+    const uiKeys = datasetKeys(uiJs);
+    const missing = [...latchKeys].filter((k) => !uiKeys.has(k));
+    if (missing.length > 0) {
+      problems.push({
+        why: `落地态两侧不同源：内联脚本写 dataset.${missing.join(" / ")}，`
+          + `${SERVICE_STOPPED_UI_KEY} 装载时没回读同名键 —— 广播丢了就再没人知道服务停了`,
       });
     }
   }

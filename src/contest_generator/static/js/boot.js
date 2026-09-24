@@ -41,6 +41,7 @@ import { initReviseTabs } from "/js/ui/revise-tabs.js";  // 第11步卡内页签
 import { initResourceBoard } from "/js/ui/resource-board.js";  // 资源总览列表/板图切换（resource-overview-polish/02）
 import { initWiringToggle } from "/js/ui/wiring.js";  // 接线图「显示全部接线」开关（task-wiring-diagram/04）：document 级 change 委托
 import { initWelcome } from "/js/ui/welcome.js";  // 首次欢迎卡 + gen-banner 行动化（newcomer-onboarding/03）
+import { initServiceStopped } from "/js/ui/service-stopped.js";  // 服务已停止的可见态（bfcache-return-register/01）：导航走后按后退回来、后端已退出那条路
 import { initGlossary } from "/js/ui/glossary.js";  // 生成页底部新手词表（newcomer-glossary/01）
 import { initGuide } from "/js/ui/guide.js";  // 新手指引页（beginner-guide/01）：四子页签切换
 import { initHandoffNote } from "/js/ui/handoff.js";  // 交接提示词说明 + 去任务推进（newcomer-glossary/03）
@@ -497,6 +498,7 @@ initMainCTools();  // main.c 工具栏（复制/下载/全屏）：DOM 已就绪
 initMainCDiskSync();  // main.c 磁盘同步状态行（mainc-codeview-bridge/01）：加载按钮委托（DOM 已就绪）
 initSkeletonRefs();  // 骨架引用模块锚定（mainc-codeview-bridge/04）：input 防抖 + chips 委托 + 首帧渲染
 initRecent();  // 最近生成列表：拉取历史 + 事件委托（复制路径/删除/刷新）
+initServiceStopped();  // 服务已停止的可见态（工单 bfcache-return-register/01）：只装监听，不主动显示
 initCodeViewer();  // 代码查看器（工单 code-viewer/04）：选择文件夹 / 树 / 视图 / 侧栏接线（DOM 已就绪）
 initCodeAiChat();  // AI 对话面板（工单 code-ide-ai/03）：选中代码问 AI + 对话收发接线
 initCodeFixPanel();  // 修复面板（工单 code-ide-ai/06）：「在此修复」入口 + 回滚/继续/收起接线

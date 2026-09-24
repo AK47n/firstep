@@ -7,7 +7,7 @@
 
 ## 0. 交接区：main 上有什么还没到用户手上（2026-09-22 夜更新 · 线上最新仍是 v1.2.2）
 
-**当前状态：线上最新 = v1.2.2；但 main 上已比它多出三批未发布改动**（见下表最后一行）。
+**当前状态：线上最新 = v1.2.2；但 main 上已比它多出四批未发布改动**（见下表最后一行）。
 | 项 | 值 |
 |---|---|
 | 线上最新 | **v1.2.2**（2026-09-19 发布）八件套齐全，`/releases/latest` 指向本版 |
@@ -15,7 +15,7 @@
 | 顺手做掉的第四条 | `src/contest_generator.egg-info/**` 摘出产品文件（两个包都不再发 pip 构建产物） |
 | **真机验收** | `drill-01`：沙箱真 v1.1.1 → 走产品端点升到 1.2.2，**判红 0 / 卡住 0 / PASS**；`not_in_official` 1482 → **6**，那 6 条经决定性实验证明是**更新器那一步 pip 现写的**（官方包里 0 个 → 跑完 pip 6 个齐），「官方缺失 0 / 内容不同 0」两条全绿 |
 | 发版产物（本机留档） | `firstep-pack\firstep-{update,full}-v1.2.2.*` 全套 + `release-notes-v1.2.2.md`；**下一版的基线就是这两个清单** |
-| **main 上还没到用户手上的（四批）** | ① **硬件检测栏目本身**（`module-hwcheck/01-09`，2026-09-20 起）＋ **检测页引脚出口**（`hwcheck-pin-conflict-exit/01`：默认脚撞脚提前解开）——v1.2.2 的用户看不到「硬件检测」这一栏；② **完整包会话态进 `AppContext` ＋ `_full_task_lock`**（`full-update-state-into-ctx/01-04`，2026-09-22，账见 `.scratch/backlog.md` §18：纯内部换归属 + 修「并发 apply 建出两个任务」的竞态，**前端零字节**）；③ **陌生器件（库外件）探测**（`hwcheck-unknown-device`，2026-09-22 起：规格 + 12 张工单已落 `.scratch/hwcheck-unknown-device/`，**12 张全部 resolved**（支点模块 `i2c_probe` / 「我的器件」库外件定义与数据目录 / 探测小节渲染（stm32 真编译 + mspm0 分支 + 两平台编译矩阵）/ 检测页计划投影 / 串口复测命令台接入自建件 / mspm0 引脚符号重名拦下 / 自建件 id 文法收紧到 C 标识符 / 资料 → 事实草稿 / 工程内快照与回读 / 排障带自建件事实 / 闸门与真机验收收口））。**四批都只在本机工作树 / main 上，任何发布包里都没有**——下次发版要一起带上 |
+| **main 上还没到用户手上的（四批）** | ① **硬件检测栏目本身**（`module-hwcheck/01-09`，2026-09-20 起）＋ **检测页引脚出口**（`hwcheck-pin-conflict-exit/01`：默认脚撞脚提前解开）——v1.2.2 的用户看不到「硬件检测」这一栏；② **完整包会话态进 `AppContext` ＋ `_full_task_lock`**（`full-update-state-into-ctx/01-04`，2026-09-22，账见 `.scratch/backlog.md` §18：纯内部换归属 + 修「并发 apply 建出两个任务」的竞态，**前端零字节**）；③ **陌生器件（库外件）探测**（`hwcheck-unknown-device`，2026-09-22 起：规格 + 12 张工单已落 `.scratch/hwcheck-unknown-device/`，**12 张全部 resolved**（支点模块 `i2c_probe` / 「我的器件」库外件定义与数据目录 / 探测小节渲染（stm32 真编译 + mspm0 分支 + 两平台编译矩阵）/ 检测页计划投影 / 串口复测命令台接入自建件 / mspm0 引脚符号重名拦下 / 自建件 id 文法收紧到 C 标识符 / 资料 → 事实草稿 / 工程内快照与回读 / 排障带自建件事实 / 闸门与真机验收收口）；④ **bfcache 后退回来补登记 + 「应用服务已停止」可见态**（`bfcache-return-register/01`，2026-09-24：前端三处——`index.html` 内联脚本 + 可见态标记 + CSS、新 `ui/service-stopped.js`、`boot.js` 接线；**服务端 / 打包器 / 库零改动**）。**四批都只在本机工作树 / main 上，任何发布包里都没有**——下次发版要一起带上 |
 
 **发版尚未启动（2026-09-22 22:0x 实测）**：这一轮只走到「决定要发」就停了——**版本号仍 `1.2.2`、
 没打包、没打 tag、没建 Release**（用户要先继续改动再发，所以别把这份落差当成"发过了"）。
@@ -764,6 +764,37 @@ B1/B4 各带 `--dry-run`（不下包）与 `--aftercare` / `--recheck`（对已�
 > ⚠ **这条偶发的形态值得记死**：整支连跑时它每几轮中一次，**单跑必绿**，而且红的那两条
 > 永远跟着 A 的超时走（B/C 是 7ms 级速败，不是真失败）——见到"B/C 瞬间红 + A 30s 超时"
 > 就按它办，别去查产品。
+>
+> **2026-09-24（bfcache-return-register/01 会话：启动器模式「导航走后按后退」看到死页面）**：
+> 本单把「被浏览器冻结进 bfcache 的文档回来时要补登记」做进产品（账见 `.scratch/backlog.md` §19）。
+> 与环境/工具有关的事实四条：
+> ① **真 bfcache 在本机要三件一起满足**：`chromium.launch({ ignoreDefaultArgs: ["--disable-back-forward-cache"] })`
+> **＋** `channel: "chromium"`（完整 chromium；默认 headless 用的是 headless shell，**它不出 bfcache**）
+> **或** `headless: false`。根因是 **playwright 默认就传 `--disable-back-forward-cache`**
+> （实测 `node_modules/playwright-core/lib/coreBundle.js:34858`）——所以浏览器门禁里
+> `goto → goBack` 只会得到**整页重载**，拿它写"bfcache 用例"是**假绿**（比红更坏）。
+> 四组 launch 配置的实测矩阵 + 真复现读数：`.scratch/bfcache-return-register/probe-00-bfcache-red.{txt,json}`
+> （base 钉 `f3578691`，在冻结的 base worktree 上跑；探针 `--mode=default|bfcache|bfcache-channel|bfcache-headed`）。
+> ② 读数：**整改后那一版**（双轴评审改完）——全量 `python -m pytest -n auto -q`
+> **5356 passed + 1 skipped / 166s**（读数 `.scratch/bfcache-return-register/pytest-run-03.txt`）、
+> 前端门禁 **1780 passed / 0 fail**（`js-gate-run-03.txt`）、浏览器门禁 **40 passed / 0 fail**
+> （`browser-gate-run-04.txt`；该 spec 单跑 **5/5 三次**：`browser-spec-run-02/03/04.txt`）。
+> **整改前那一版**：前端 1775、浏览器 40 passed、全量 pytest 5355 passed + 1 skipped + **1 failed**
+> （`tests/test_js_gate.py::test_full_mode_runs_js_gate_and_pytest`——它在 `--full` 路径上真跑整支
+> 浏览器门禁；**同一工作树单跑该文件 29 passed / 125.67s**，`js-gate-pytest-isolated.txt`）。
+> **本单两次整支浏览器门禁首跑撞上偶发**（`browser-gate-run-02.txt` 36/40、`-03.txt` 35/40）：形态是
+> `launcher-reload` 的 A/B 在 `page.goto` / `page.reload` 上 **30s 超时**、后面几条 **5–40ms 速败**；
+> **紧接着单跑该 spec 立刻 5/5 全绿**（A 6.5s / B 5.7s / D 3.7s / E 4.0s / C 1.2s）。与本节上面那条
+> "A 30s 超时 + B/C 速败 = 偶发，别去查产品"逐条对上——本单给它加了两条用例，撞上的概率只会更高，
+> 见到这个形态**先单跑该 spec 复证**再谈产品。
+> ③ **又踩了一次 PowerShell 文本往返的坑**（CLAUDE.md 那条硬性约定的实例）：`Get-Content -Raw` 把
+> UTF-8 当 GBK 解码 → `Set-Content -Encoding utf8` 写回 = 文件彻底乱码，且**GBK 硬配对吞掉了行尾
+> 换行符**（探针 .mjs 从 ~591 行掉到 543 行、多行并成一行）。**改文本一律用编辑工具**（write/edit），
+> 别用 PowerShell 读写做替换；这类探针文件不在 git 里，坏了没有 `git checkout` 可回滚。
+> ④ 本单没起常驻服务器（浏览器用例走夹具自带的真后端 + 内核分配端口）；探针另起过自己的实例，
+> 收尾实测 8000/8020/8021/8791 都没在听、无残留 `contest_generator.webapp` 进程。
+> 新落点两个：可见态标记 `#service-stopped` / `.service-stopped-box`（`index.html` 末尾 + CSS）与
+> 新 ui 模块 `static/js/ui/service-stopped.js`（由 `boot.js` 显式 `initServiceStopped()` 接线）。
 
 ### 2.1 「重启」与「全量更新」不是一回事（2026-09-13 实测）
 

@@ -1,0 +1,118 @@
+{
+  "probe": "probe-00-bfcache-red",
+  "baseSha": "f357869124692f09e3fdfabc9b0083c75d2dd24f",
+  "repoRootUsed": "C:\\Users\\luoji\\Desktop\\firstep",
+  "runAt": "2026-09-24T10:30:04.944Z",
+  "nodeVersion": "v24.15.0",
+  "playwrightVersion": "1.63.0",
+  "exitGraceMs": 1500,
+  "extraArgs": [],
+  "modes": [
+    "bfcache-channel"
+  ],
+  "repeat": 1,
+  "results": [
+    {
+      "mode": "bfcache-channel",
+      "runIndex": 1,
+      "label": "去掉该 flag + channel=chromium（完整 chromium，非 headless shell）",
+      "launchOptions": {
+        "headless": true,
+        "channel": "chromium",
+        "ignoreDefaultArgs": [
+          "--disable-back-forward-cache"
+        ]
+      },
+      "ranAt": "2026-09-24T10:30:04.945Z",
+      "graceMs": 1500,
+      "steps": {
+        "launch": {
+          "ok": true,
+          "browserVersion": "153.0.8010.12"
+        },
+        "probeInstalled": {
+          "docId": "6duughzfrst",
+          "timeOrigin": 1790245807743.2,
+          "navType": "navigate"
+        },
+        "beforeLeave": {
+          "logLength": 10586,
+          "exitCode": null,
+          "doc": {
+            "docId": "6duughzfrst",
+            "timeOrigin": 1790245807743.2,
+            "navType": "navigate"
+          }
+        },
+        "leave": {
+          "error": null,
+          "byeSeenBeforeBack": true,
+          "byeLatencyMs": 83
+        },
+        "goBack": {
+          "error": "Error: 超时：goBack（8000ms）",
+          "returnedUrl": null,
+          "elapsedMs": 8009,
+          "sinceLeaveMs": 83
+        },
+        "afterBack": {
+          "pageshowPersisted": [
+            true
+          ],
+          "pageshowAt": [
+            708.5
+          ],
+          "docId": "6duughzfrst",
+          "timeOrigin": 1790245807743.2,
+          "navType0": "navigate",
+          "navCount": 1,
+          "navTypeLast": "navigate",
+          "activationStart0": 0,
+          "activationStartLast": 0,
+          "url": "http://127.0.0.1:14338/",
+          "restoreElapsedMs": 137,
+          "withinGraceWindow": true
+        },
+        "afterBackLog": {
+          "newRegisterCount": 1,
+          "newByeCount": 1,
+          "apiLines": "INFO:     127.0.0.1:6052 - \"POST /api/tabs/bye HTTP/1.1\" 200 OK\r\nINFO:     127.0.0.1:6052 - \"POST /api/tabs/register HTTP/1.1\" 200 OK\r"
+        },
+        "afterGrace": {
+          "exitCode": null,
+          "exitTimestampMs": null,
+          "exitedWithinWindow": false,
+          "waitedExtraMs": 3529,
+          "pageFetch": "HTTP_200",
+          "reload": "reload 成功"
+        },
+        "endLog": {
+          "exitCode": null,
+          "logLength": 20500
+        }
+      },
+      "server": {
+        "url": "http://127.0.0.1:14338",
+        "port": 14338,
+        "launcherMode": true
+      },
+      "verdict": {
+        "readingsUsable": true,
+        "bfcacheUsed": true,
+        "fullReload": false,
+        "persistedSequence": [
+          true
+        ],
+        "restoreElapsedMs": 137,
+        "returnWithinGraceWindow": true,
+        "newRegistersAfterBack": 1,
+        "exitCodeAfterGrace": null,
+        "pageFetchAfterGrace": "HTTP_200",
+        "byeSeenBeforeBack": true,
+        "reproduced": false,
+        "healed": true,
+        "text": "**已修（绿）**：走了 bfcache（persisted=true）→ 恢复时**补登记 1 次** → 后端没退（exitCode=null）、页面真请求 HTTP_200 ⇒ 这一跳被补登记救回。"
+      }
+    }
+  ]
+}

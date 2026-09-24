@@ -31,6 +31,35 @@
     fetch("/api/tabs/register", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tab_id: sessionStorage.getItem("firstep_tab_id"),
         epoch: performance.timeOrigin }) }).catch(() => {});
+    // bfcache 恢复补登记（工单 bfcache-return-register/01）：用户从本应用**导航走**时，
+    // 浏览器可能把本文档冻结进 bfcache —— 那一下同样触发 pagehide，app.js 照发告别，
+    // 服务端见注册表空了就开始 1.5 秒倒计时；而用户**按后退**回来时文档从 bfcache 恢复、
+    // **脚本一行都不重跑**（上面那次登记不会再来）。所以恢复时要在这里再登记一次，
+    // 否则服务到点就停，用户看到一片连不上的死页面。
+    // 只补一次、不重试：离开超过宽限时服务已经退出，重试必然也失败 —— 那种情况交给下面的
+    // 落地态 + 广播，由 ui/service-stopped.js 给可见态（本段不碰 DOM 结构，只写一个属性）。
+    // 失败判据只看「到不了服务」：网络错（服务已退出，fetch 直接 reject）或 5xx；
+    // **4xx 不算** —— 那说明是我们自己的载荷不对（不是服务停了），不该报「服务已停止」。
+    // 载荷与上面那次**逐字同源**（判据 ⑦ 会逐字比对，防两处漂）。
+    // 为什么广播之外还要写 dataset：模块图装载途中被冻结再恢复时，广播发出时
+    // ui/service-stopped.js 还没装载，事件会丢 —— 状态要能回读（判据 ⑦⑤ 两侧同源）。
+    window.addEventListener("pageshow", function (event) {
+      if (!event.persisted) return;                  // 普通加载：上面那次登记已经发过了
+      Promise.resolve()                              // 同步抛错（如存储被拒）也并进同一条失败路径
+        .then(function () {
+          return fetch("/api/tabs/register", { method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tab_id: sessionStorage.getItem("firstep_tab_id"),
+              epoch: performance.timeOrigin }) });
+        })
+        .then(function (r) {
+          if (r.ok || r.status < 500) return null;   // 4xx = 载荷问题，不是服务停了
+          throw new Error("register failed: " + r.status);
+        })
+        .catch(function () {
+          document.documentElement.dataset.serviceStopped = "1";
+          window.dispatchEvent(new CustomEvent("service-stopped"));
+        });
+    });
   } catch (e) { /* 存储 / 加密接口不可用时登记失败：不影响页面本身 */ }
 </script>
 <style>
@@ -3018,6 +3047,21 @@
                   transition: width var(--dur-slow) var(--ease-ui); }
   #gen-progress .gp-text { position: absolute; right: 10px; top: 6px;
                   font-size: 11px; color: var(--muted); white-space: nowrap; }
+  /* 服务已停止的可见态（工单 bfcache-return-register/01）：页面还在、后端已退出那条路
+     （用户导航走 → 浏览器把本页冻结进 bfcache → 服务按「最后一个页面离开 = 停服务」自停
+     → 按后退回来）。z-index 压过 #toast-root（200）：这时页面已经不可用，说明必须最上层。 */
+  #service-stopped { position: fixed; inset: 0; z-index: 300; display: flex;
+                     align-items: center; justify-content: center; padding: 24px;
+                     background: rgba(4, 8, 12, .82); }
+  #service-stopped[hidden] { display: none; }   /* display:flex 会盖掉 [hidden] 的默认值 */
+  .service-stopped-box { max-width: 540px; padding: 20px 22px; border: 1px solid var(--border-strong);
+                     border-radius: var(--radius-md); background: var(--panel);
+                     box-shadow: var(--shadow-pop); }
+  .service-stopped-box h2 { margin: 0 0 10px; font-size: 16px; color: var(--text); }
+  .service-stopped-box p { margin: 0 0 10px; font-size: 13px; line-height: 1.7; color: var(--text); }
+  .service-stopped-box code { font-family: var(--mono); font-size: 12px;
+                     padding: 1px 5px; border-radius: var(--radius-xs); background: var(--code-bg); color: var(--code-text); }
+  .service-stopped-box .muted { margin-bottom: 0; }
   /* Toast 轻通知（工单 ui-polish-3/03）：右上角堆叠，2.5s 自动淡出。
      位置（工单 toast-offset/01）：下移避开吸顶栏——原 top:14px 与 header
      （--header-h，JS 按视口宽实时刷新）重叠，改 calc 跟随实际栏高 */
@@ -4756,5 +4800,17 @@
 
 <script type="module" src="/js/boot.js"></script>
 <div id="toast-root"></div>
+<!-- 服务已停止的可见态（工单 bfcache-return-register/01）：默认隐藏，由
+     ui/service-stopped.js 在收到 service-stopped 广播时显示——用户导航走后按后退回来、
+     服务已经退出时，至少要说清楚发生了什么与下一步。 -->
+<div id="service-stopped" hidden>
+  <div class="service-stopped-box" role="alertdialog" aria-labelledby="service-stopped-title">
+    <h2 id="service-stopped-title">应用服务已停止</h2>
+    <p>你从这个标签页导航到了别的页面，浏览器把本页冻结收进了缓存 —— 应用按「最后一个页面离开 = 停服务」把自己关掉了。</p>
+    <p>重新启动 firstep：双击 <code>start-app.vbs</code>（或你平时启动它的方式）。服务回来后本页会自动继续，也可以点下面的按钮。</p>
+    <button type="button" id="btn-service-reload" class="primary">重新载入</button>
+    <p class="muted">正在等待服务回来……</p>
+  </div>
+</div>
 </body>
 </html>
