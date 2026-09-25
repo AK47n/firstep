@@ -164,6 +164,15 @@
 （AEN=0）再写 `PON|AEN` ⇒ **每次 init 都重启积分**；默认积分 24ms，而 init 之后到读 STATUS 只隔
 ~1ms ⇒ **AVALID 没置位，`tcs34725_read_rgb()` 返回 0，通道数据一个字都没写**。加上 mspm0 的
 init/probe/read 里**没有 `delay_ms` 可用**：**mspm0 侧任何"init 之后立刻读"的形状都拿不到真实颜色值**。
+
+> ⚠ **2026-09-25 落地时的实测修正（工单 05，正文原文保留不改）**：出路 (c) 的**确切形状**是
+> 「把**读 + 拷贝**那一串放进 `prereq`」，**`tcs34725_init()` 不能放在 `prereq` 开头**——
+> `enable()` 会重启积分并清掉 AVALID，而 `prereq` 渲染在 init **之前**且紧接着就读 STATUS
+> ⇒ 读回 0（`tcs34725.c:266-268` 直接 return、不动出参），**上电第一遍与每次复测都恒 0**，
+> 拿不到下面那句"复测拿到真值"。init 留在 `init` 段与 `probe` 里，形状才成立。
+> 读数与反证：`.scratch/hwcheck-specialize/probe-compile-matrix-05.txt`
+> 与工单 05 的「双轴评审整改」第 4 条。
+
 三条出路，挑一条并在 note 说清：
 
 - **(a) stm32（推荐）**：把"等待+读+拷贝"放进**没写 init_expect 的 init 段**（裸语句），

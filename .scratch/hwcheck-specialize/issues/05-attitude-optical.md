@@ -9,46 +9,50 @@
 **被谁阻塞：** 01（命令字符让位——三件都要声明首选 + 候选，不留让位机制就等着撞车）、
 02（未专精样本夹具解耦——内容批次的统一前置；本批 6 格不在它点名的耦合点上，见 Comments）。
 
-**状态：** ready-for-agent
+**状态：** resolved
 
-- [ ] 六格配方（`hmc5883l` / `qmc5883l` / `tcs34725` × `stm32` / `mspm0`）写进
+- [x] 六格配方（`hmc5883l` / `qmc5883l` / `tcs34725` × `stm32` / `mspm0`）写进
       `library/hwcheck_recipes.json`，事实底稿 = `.scratch/hwcheck-specialize/recon-04-attitude-optical.md`
       §1（hmc5883l）、§2（qmc5883l）、§3（tcs34725）；形状约束见该报告 §0.2、共同坑 §7
-- [ ] `include` 用**该平台真头名**（六格互不相同）：`hmc5883l.h` / `hmc5883l_stm32.h`、
+- [x] `include` 用**该平台真头名**（六格互不相同）：`hmc5883l.h` / `hmc5883l_stm32.h`、
       `qmc5883l.h` / `qmc5883l_stm32.h`、`tcs34725.h` / `tcs34725_stm32.h`——mspm0 写成
       `xxx_stm32.h` 构建期红（recon-04 §0.1 的实测反证）；delay 头不用写（框架已 include）
-- [ ] `prereq`：五格留空（三件都是软 I2C 位操作，不用母版 ml_i2c），**只有 `tcs34725 × mspm0` 一格有**
+- [x] `prereq`：五格留空（三件都是软 I2C 位操作，不用母版 ml_i2c），**只有 `tcs34725 × mspm0` 一格有**
       （见下面 `tcs34725` 那条）；别照抄 `ml_mpu6050` 的 `prereq: ["I2C_Init()"]`——那是母版软 I2C 的
       PA11/PA12，与本批无关
-- [ ] `hmc5883l` / `qmc5883l`：`init` = `xxx_init()` + `init_expect: "0"`（0=成功 / 1=总线无应答 /
+- [x] `hmc5883l` / `qmc5883l`：`init` = `xxx_init()` + `init_expect: "0"`（0=成功 / 1=总线无应答 /
       **2=ID 不符**）；`probe` = `["xxx_read(&mx, &my, &mz)", "xxx_read_heading(&deg, 0, 0)"]` +
       `expect: "0"`（probe 段多条时**只有最后一条**参与比较：采集调用放前面、判据调用放末尾）；
       `locals` = `int16_t mx = 0` / `my` / `mz` + `float deg = 0`
-- [ ] `hmc5883l` / `qmc5883l` 的**身份判据只能落在 init 的返回码上**：两件的寄存器读原语都是
+- [x] `hmc5883l` / `qmc5883l` 的**身份判据只能落在 init 的返回码上**：两件的寄存器读原语都是
       `static` ⇒ 配方写不出 ID 字节给学生看（recon-04 §6③）；`expect` **不许写**
       `HMC5883L_ID_A_VALUE` / `QMC5883L_CHIP_ID`（会渲成永远 FAIL 的比较式，recon-04 §0.2 实测）
-- [ ] `hmc5883l` / `qmc5883l` 判定计数**知情**：`init_expect` 与 `probe.expect` 都写 = 同一件记两笔
+- [x] `hmc5883l` / `qmc5883l` 判定计数**知情**：`init_expect` 与 `probe.expect` 都写 = 同一件记两笔
       （ID 一笔 + 读事务一笔；spec 硬约束⑥ 允许但要写明），note 里说清两笔各证明什么
-- [ ] `tcs34725`：`init` 段**裸写、不写 `init_expect`**（init 段里有 void 的 `tcs34725_read_reg`，
+- [x] `tcs34725`：`init` 段**裸写、不写 `init_expect`**（init 段里有 void 的 `tcs34725_read_reg`，
       一写 expect 就会渲成 `r = tcs34725_read_reg(...)` 编不过）；身份判据落在
       `probe: {"calls": ["tcs34725_init()"], "expect": "1"}`——**极性 1 = 检出**（recon-04 §3）
-- [ ] `tcs34725` 的时序形状按 recon §3 的三条出路挑定：**stm32 走 (a)**（`init.calls` =
+- [x] `tcs34725` 的时序形状按 recon §3 的三条出路挑定：**stm32 走 (a)**（`init.calls` =
       `tcs34725_init()` → `delay_ms(100)` → 读 `TCS34725_ID` → `rgb.* = 0` 兜底 →
-      `tcs34725_read_rgb(&rgb)` → 四通道拷进标量）；**mspm0 走 (c)**（同一串去掉 `delay_ms` 放进
-      `prereq`：上电第一遍读 0、敲 `c` 复测才拿真值，代价是读到"上一轮"的采样）；**(b) 不选**——
+      `tcs34725_read_rgb(&rgb)` → 四通道拷进标量）；**mspm0 走 (c)**（~~同一串去掉 `delay_ms` 放进
+      `prereq`~~ → **`prereq` 里只放"读 + 拷贝"、`tcs34725_init()` 留在 init 段与 probe 里**；
+      上电第一遍读 0、敲复测字符才拿真值，代价是读到"上一轮"的采样。**照字面把 init 放进 prereq
+      会让复测也恒 0**——理由与源码证据见「双轴评审整改」第 4 条）；**(b) 不选**——
       它把这一格降成"读数恒 0"，与"给读数"这条深度目标冲突。(a) / (c) 都是 recon 实测 PASS 的形状
-- [ ] `tcs34725` 的 `locals`：`TCS34725_RGBC rgb`（**不带初值**——结构体 locals 不能带初值）+
+- [x] `tcs34725` 的 `locals`：`TCS34725_RGBC rgb`（**不带初值**——结构体 locals 不能带初值）+
       `uint8_t id = 0` + `uint16_t cc = 0` / `rc` / `gc` / `bc`；结构体出参**必须先拷进标量**
       （`rgb.c` 在 read 里会被拆成裸名 `c` 报错）；read 项 = `id` + `cc` `rc` `gc` `bc`
-- [ ] `read` 照 recon 写：hmc / qmc = `mx` `my` `mz`（LSB，有符号）+ `(int)deg` + 小数行
+- [x] `read` 照 recon 写：hmc / qmc = `mx` `my` `mz`（LSB，有符号）+ `(int)deg` + 小数行
       `(int)((deg - (int)deg) * 10)`；tcs34725 = `id` + 四个通道计数。**read 表达式里不许出现
       十六进制字面量**（`0x00` 会被切出 `x00`）——0x44 / 0x4D 这类期望值只写在 `unit` 文字里
-- [ ] `console`：`console.command`（首选）+ `console.candidates`（候选，工单 01 落地的字段形状）——
+- [x] `console`：`console.command`（首选）+ `console.candidates`（候选，工单 01 落地的字段形状）——
       `hmc5883l` 首选 `h`、候选 `i`、`n`；`qmc5883l` 首选 `q`、候选 `w`、`z`；
-      `tcs34725` 首选 `c`、候选 `e`、`f`；**两平台同一组**（命令表按平台各一张，平台内不许重复）。
+      `tcs34725` 首选 `c`、候选 ~~`e`、`f`~~ → **改为 `n`、`v`、`w`、`z`**（落地理由见下面
+      「双轴评审整改」第 3 条：`e` / `f` 是别人的首选，勾四件就把 sht30 挤成 400）；
+      **两平台同一组**（命令表按平台各一张，平台内不许重复）。
       候选全部取自实测空闲池 `c e f h i n q t v w z` + 数字 `0-9`（池 31 / 现状已占 10）；
       保留字 `r/y/g/o/b` 与帮助 `?` 一个不碰
-- [ ] `note` 至少覆盖：① **探头到底证明了什么**（hmc / qmc 的 `init == 0` 含 ID 比对 = 身份判据，
+- [x] `note` 至少覆盖：① **探头到底证明了什么**（hmc / qmc 的 `init == 0` 含 ID 比对 = 身份判据，
       probe 的 `== 0` 只证读事务通；tcs34725 的 `tcs34725_init() == 1` 才是身份判据，而
       `tcs34725_read_rgb()` **在 mspm0 侧器件没接时也返回 1**，绝不能当通信判据）；② 判 FAIL 时
       **按返回码排查**（hmc：1=总线无应答（供电 / 上拉 / 线序 / 地址）、2=ID 不符=手上这颗不是
@@ -67,21 +71,21 @@
       ⑥ 平台差异（mspm0 无母版 .h ⇒ init / probe / read 里不许写 `delay_ms` / `gpio_get`，跨模块调用
       只能进 `prereq`；mspm0 的 SCL 只写电平、输出方向完全依赖 SysConfig + `SYSCFG_DL_init()`，
       那行不生效 = 总线死）；⑦ hmc5883l 的数据区顺序是 **X-Z-Y** 不是 X-Y-Z，别看寄存器表名猜轴
-- [ ] 上板状态照旧如实写**「未上板」**（三件两平台 `verified: true / hardware_bound: false`）——
+- [x] 上板状态照旧如实写**「未上板」**（三件两平台 `verified: true / hardware_bound: false`）——
       编译绿不是板上证据
-- [ ] 检测页实测：三件两平台显示 `[专精]`（不是 `未专精`），命令表里是**分配后**的字符
-- [ ] **扩张地板**追加这 6 格到 `EXPANSION`（工单 03 立的那一处：`EXPANSION` 只装**扩张**格；
+- [x] 检测页实测：三件两平台显示 `[专精]`（不是 `未专精`），命令表里是**分配后**的字符
+- [x] **扩张地板**追加这 6 格到 `EXPANSION`（工单 03 立的那一处：`EXPANSION` 只装**扩张**格；
       `EXPANSION_CELL_COUNT` 是**手写字面量**——**别写成 `len(EXPANSION)`**，那是恒真断言）：
       落地后 `EXPANSION_CELL_COUNT` 改成 **18**（+ `PILOT` 那 17 格 = 配方文件应有的总覆盖 **35**）；
       **只追加、不改写**已有行；`PILOT` 常量**不动**——它钉的是 v1 清单，有 `len(PILOT) == 17` 的精确断言
-- [ ] `tests/test_hwcheck_generic.py` 的未专精基线（写单时是 `planned >= 157` / `with_init >= 132`；
+- [x] `tests/test_hwcheck_generic.py` 的未专精基线（写单时是 `planned >= 157` / `with_init >= 132`；
       **批次 A 落地后已降到 153 / 128**——以你落地当时的实数为准）**按实数
       如实下调并写原因**：本批 6 格每格各 -1（实测这 6 格的通用规划都拿得到无参初始化）；写单时实测
       （批次 A/B 尚未落地）`planned = 159` / `with_init = 134` ⇒ 本批落地后 **153 / 128**（若 A/B
       先落地，就在它们之后的数上再 -6）。跟着实数改数，**不许删断言**
-- [ ] **真编译矩阵**：`py -3 .scratch/hwcheck-specialize/probe-compile-matrix.py --slugs hmc5883l,qmc5883l,tcs34725`
+- [x] **真编译矩阵**：`py -3 .scratch/hwcheck-specialize/probe-compile-matrix.py --slugs hmc5883l,qmc5883l,tcs34725`
       → 六格全 `[PASS]`（exit=0、编译器 0 error / 0 warning；**链接器形态告警另记**），读数落盘
-- [ ] **反证**：把 `tcs34725 × mspm0` 那一格配方撤掉 → 扩张地板断言必须红（35 → 34）
+- [x] **反证**：把 `tcs34725 × mspm0` 那一格配方撤掉 → 扩张地板断言必须红（35 → 34）
 
 ---
 
@@ -134,3 +138,86 @@
   合法共享视图），它不吃配方 ⇒ 本批**不需要改任何既有用例**（正是 02 立的那条判据）；02 的耦合表
   只点名 `sht20`（`tests/test_hwcheck.py:2166` / `:2245`），本批 6 格不在表上——仍把 02 列为前置，
   是为了内容批次统一按同一条流水线走（配方多 6 格后地板与基线一次改到位）。
+
+### 2026-09-25 落地记录（实现 + 读数）
+
+**配方**：6 格写进 `library/hwcheck_recipes.json`，事实底稿 = recon-04 §1 / §2 / §3：
+
+- `hmc5883l` / `qmc5883l`（两平台只差 include 头名）：`locals` = `int16_t mx/my/mz = 0` +
+  `float deg = 0`；`init` + `init_expect: "0"`（0 = **ID 比对通过**，是硬身份判据）；
+  `probe` = `["xxx_read(&mx,&my,&mz)", "xxx_read_heading(&deg, 0, 0)"]` + `expect: "0"`
+  （多条时**只有最后一条**进比较式，采集调用放前面）；read = 三轴 LSB + `(int)deg` + 小数位一行。
+- `tcs34725`：`locals` 里 `TCS34725_RGBC rgb`（**不带初值**——结构体 locals 不能带初值）+
+  `uint8_t id` + 四个 `uint16_t` 通道标量；`init_expect` **不写**（init 段里有 void 的
+  `tcs34725_read_reg`）；身份判据落在 `probe = {"calls":["tcs34725_init()"], "expect":"1"}`
+  ——**极性 1 = 检出**。
+- `console`：`hmc5883l` 首选 `h`、`qmc5883l` 首选 `q`、`tcs34725` 首选 `c`；候选见下面第 3 条
+  （**本单改过 tcs34725 的候选表**，不是工单原文的 `e`/`f`）。
+- note 每格 5~6 行，工单点名的覆盖项逐条落格（详见"整改"第 5 条）。
+
+**扩张地板**：`EXPANSION` **只追加**这 6 格，`EXPANSION_CELL_COUNT` **12 → 18**（手写字面量），
+`PILOT` 一个字没动（既有两条断言各自复跑过）。
+**未专精基线**：`tests/test_hwcheck_generic.py` **147 / 122 → 141 / 116**（实测 `planned=141` /
+`with_init=116`，与 `probe-batch-cells.txt` 的【05】段一致：本批 6 格每格都拿得到无参初始化
+`hmc5883l_init` / `qmc5883l_init` / `tcs34725_init` ⇒ 两个数各降 6）。
+
+**真编译矩阵**（`probe-compile-matrix-05.txt`，`--out` 单独落盘）：
+
+| 平台 | hmc5883l | qmc5883l | tcs34725 |
+|---|---|---|---|
+| mspm0 | `[PASS]` `[专精]` 0/0 | `[PASS]` `[专精]` 0/0 | `[PASS]` `[专精]` 0/0 |
+| stm32 | `[PASS]` `[专精]` 0/0 | `[PASS]` `[专精]` 0/0 | `[PASS]` `[专精]` 0/0 |
+
+六格 exit=0、编译器 0 error / 0 warning、链接器 0 告警；页面标记逐格 `[专精]`。
+⚠ 中间踩过一次**自己造成的假读数**：第一遍矩阵与撤格反证**同时**跑，反证窗口期内
+`tcs34725` 被临时移出配方文件 ⇒ 那一行印成 `页面标记=未专精`。已把两者改成串行重跑，
+现在这份读数是干净前提下的（教训：**会让配方文件变的探针不能与任何"读配方"的验证并行**）。
+
+**反证**（`probe-expansion-floor-05.txt`，探针本批新增 `--platform`，可只撤一格）：
+撤掉 **`tcs34725 × mspm0` 一格** → 地板 rc 0 → **1（2 failed，红因点名该格）** → 拿回来 0；
+配方文件按原字节回滚、sha256 前后一致。这正是工单要的"总覆盖 35 → 34"那一格。
+
+**结论**：完成。三件"真判身份 / 只证通信 / 极性与常规相反"的差别都写进了页面文案；
+⚠ 上板状态照旧如实写**「未上板」**（`verified: true / hardware_bound: false`）。
+
+### 2026-09-25 双轴评审整改（固定点 `fe0ba541`）
+
+**两轴一致点名（已改）**：
+
+1. **stm32 格又抄了 mspm0 的行号**（批次 B 同类错误的第三次）：`hmc5883l_read_regs` 真出处
+   `hmc5883l.c:172` / **`hmc5883l_stm32.c:140`**；`qmc5883l_read_regs` 真出处
+   `qmc5883l.c:177` / **`qmc5883l_stm32.c:154`**（两平台 note 的首行原先几乎逐字相同，只换了
+   文件名没换行号——正是批次 B 整改第 2 条预言的那条通道）。已把引用行拆成平台各自一份，
+   并补齐 tcs34725 的 `tcs34725_stm32.c:197`（应答检查那处）。
+2. **note 里写死了复测字符**（工单本单第 124 行明令禁止"文案里别写死敲 h"）：字符是**分配后**
+   的——实测 `{aht10, hmc5883l}` 下 hmc5883l 拿到的是 `i`、`{ms5611, qmc5883l}` 下 qmc5883l 拿到 `w`、
+   `{bmp180, tcs34725}` 下 tcs34725 拿到 `n`。学生照 note 敲会动到别的件。六格全部改成
+   「**敲复测字符**（页面上命令表里显示的字母）」。**跨批顺手修**：批次 B 的 `ms5611` note 也写死了
+   `q`（同一类缺陷）——已一并改成不写死；批次 B 的编译矩阵读数已随之重跑
+   （`probe-compile-matrix-04.txt`），批次 B 工单里补了一行说明。
+3. **`tcs34725` 的候选表改了，工单原文没写这件事**：工单原文给的是候选 `e`、`f`。实测这两枚
+   **都是别人的首选**（`e` = sht30、`f` = bh1750），而 `c` 又被 bmp180 占 ⇒ 勾
+   `{bh1750, bmp180, tcs34725, sht30}` 四件时 tcs34725 抢走 sht30 的 `e`、把 sht30 挤到
+   "分不出来"（构建期 400）。改成 **`["n","v","w","z"]`**——**候选只从"既不是保留字、也不是任何
+   一件首选"的字符里挑**，实测单件 / 四件 / 六件 / 全库都不再撞。这条口径写进
+   `docs/agents/local-environment.md` §0，后续批次照它挑候选。
+4. **`tcs34725 × mspm0` 的形状与工单字面不同（有意，且已核过源码）**：工单说"同一串去掉
+   `delay_ms` 放进 `prereq`"。照字面把 `tcs34725_init()` 放在 `prereq` 开头时，
+   `enable()`（`tcs34725.c:224-230`）会**重启积分并清掉 AVALID**，紧接着那次
+   `tcs34725_read_rgb()` 读 STATUS 得 0x00 ⇒ 直接 return 0、通道一个字都不写
+   （`tcs34725.c:266-268`）⇒ **上电第一遍与每次复测都恒 0**，拿不到工单括号里"敲字符复测拿真值"。
+   实施改为 recon-04 §3(c) 的原始形状：**`prereq` 只放"读 + 拷贝"**，`tcs34725_init()`
+   留在 `init` 段与 probe 里 ⇒ 上电第一遍 0、复测拿"上一轮"的采样。recon-04 §3 已补一条
+   标注日期的修正说明（原文保留不改）。
+
+**另一轴点名的 note 缺口（已补）**：
+
+5. 三件都补上「**地址是驱动里写死的常量**、没有 `set_address` 之类改址接口 ⇒ 换地址只能换器件 /
+   换总线」；mspm0 六格补「**SCL 只写电平、输出方向完全依赖 SysConfig + `SYSCFG_DL_init()`**，
+   那行不生效 = 总线死」；`hmc5883l` / `qmc5883l` 补「**init 判 FAIL 不 return**（只有探头 FAIL 才
+   return）⇒ 读数照样打出来、但那时不可信」；stm32 三格都补「与库内其余软 I2C 件**同一组脚** ⇒
+   同选撞脚、检测页会标 ⚠」（原先只写在 hmc5883l 一格）。
+6. **航向小数位那行的单位写短**（自查发现）：`hwcheck_line[128]` 下这一行原本 123 字节、
+   余量只剩 5 ⇒ 改成「（航向小数位，与上一行拼：123 与 4 → 123.4°）」，本批最宽行随之落到
+   **105 字节**（余 23）。这是本批行缓冲守卫（工单 04 立的那条）覆盖到的。
+

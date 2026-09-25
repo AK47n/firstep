@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """专精面扩张的**反证**：**撤掉一条本轮专精化的配方**，扩张地板断言必须红。
 
-判据（spec「反证要求」①）：把被点名的那一件的两格（stm32 / mspm0）从
+判据（spec「反证要求」①）：把被点名的件（或**一格**）从
 `library/hwcheck_recipes.json` 里临时拿掉 → `tests/test_hwcheck_recipe.py` 的
 扩张地板（逐格 + 条数）必须**当场红**；拿回来 → 又全绿。两条读数都要有，
 否则"地板钉住了这一格"只是一句承诺。
@@ -9,9 +9,12 @@
 **每批跑一次、各留各的读数**（工单 03 起）：被撤的件与输出文件都从命令行给，
 缺省仍是批次 A 的 `sht30` / `probe-expansion-floor.txt`——这样后一批不会把前一批
 的证据覆写掉（批次 A 的记录仍对得上它跑出来的那份文件）。
+`--platform` 可只撤**一格**（工单 05 的判据原文是撤 `tcs34725 × mspm0` 一格）；
+缺省 = 撤整件那两格（工单 03 / 04 的口径）。
 本仓的每批读数：
   * 批次 A（工单 03）`sht30`  → `probe-expansion-floor.txt`
   * 批次 B（工单 04）`bh1750` → `probe-expansion-floor-04.txt`
+  * 批次 C（工单 05）`tcs34725 × mspm0` 一格 → `probe-expansion-floor-05.txt`
 
 回滚纪律与 `probe-sample-decouple.py` 同款：**只在文件仍逐字节等于我们写进去的那份时**
 才写回原字节；窗口期内被外力改动就不碰它并大声报错（宁可不还原，也不回滚别人的改动）。
@@ -20,6 +23,8 @@
 用法：`py -3 .scratch/hwcheck-specialize/probe-expansion-floor.py`
       `py -3 .scratch/hwcheck-specialize/probe-expansion-floor.py --victim bh1750 \\
           --out probe-expansion-floor-04.txt`
+      `py -3 .scratch/hwcheck-specialize/probe-expansion-floor.py --victim tcs34725 \\
+          --platform mspm0 --out probe-expansion-floor-05.txt`
 读数先落盘再打印。
 """
 import argparse
@@ -39,13 +44,17 @@ RECIPES = REPO / "library" / "hwcheck_recipes.json"
 _parser = argparse.ArgumentParser()
 _parser.add_argument("--victim", default="sht30",
                      help="被撤掉的那一件（缺省 = 批次 A 的 sht30）")
+_parser.add_argument("--platform", default="",
+                     help="只撤这一格（stm32 / mspm0）；缺省 = 撤整件那两格")
 _parser.add_argument("--out", default="probe-expansion-floor.txt",
                      help="读数文件名（落在本目录；缺省 = 批次 A 的那份）")
 _args = _parser.parse_args()
 
 VICTIM = _args.victim
+PLATFORM = _args.platform.strip()
+SCOPE = f"{VICTIM} × {PLATFORM}" if PLATFORM else f"{VICTIM} 那两格"
 OUT = REPO / ".scratch" / "hwcheck-specialize" / _args.out
-LINES: list[str] = [f"=== 反证：撤掉 {VICTIM} 那两格配方 → 扩张地板必须红 ===", ""]
+LINES: list[str] = [f"=== 反证：撤掉 {SCOPE} 配方 → 扩张地板必须红 ===", ""]
 FAILURES: list[str] = []
 FLOOR = "tests/test_hwcheck_recipe.py"
 
@@ -70,9 +79,13 @@ original = RECIPES.read_bytes()
 before = _digest(original)
 document = json.loads(original.decode("utf-8"))
 assert VICTIM in document, f"{VICTIM} 不在配方文件里——这条反证的前提变了"
+if PLATFORM:
+    assert PLATFORM in document[VICTIM], (
+        f"{VICTIM} 没有 {PLATFORM} 这一格（它有 {sorted(document[VICTIM])}）——前提变了")
 
 LINES.append(f"0) 前置：配方文件 sha256 = {before[:16]}…；"
-             f"被撤的格 = {VICTIM} × {sorted(document[VICTIM])}")
+             f"被撤的格 = {SCOPE}"
+             + ("" if PLATFORM else f"（{sorted(document[VICTIM])}）"))
 rc_before, tail_before, _out_before = _run_floor()
 LINES.append(f"1) 撤之前：地板 rc={rc_before}（{tail_before[:110]}）")
 if rc_before != 0:
@@ -82,7 +95,11 @@ LINES.append("")
 patched_bytes: bytes | None = None
 restored = False
 try:
-    document.pop(VICTIM)
+    if PLATFORM:
+        # 只撤一格（工单 05 的判据原文：撤 `tcs34725 × mspm0` 一格 ⇒ 总覆盖 35 → 34）
+        document[VICTIM].pop(PLATFORM)
+    else:
+        document.pop(VICTIM)
     # 换行形态跟原文件走：配方文件在盘上是 **CRLF**，反证窗口期内若被强杀，
     # 留下的也得是同一种换行（LF 半成品会被 git 当成整文件改写，也让"逐字节复原"难判）。
     _newline = "\r\n" if "\r\n" in original.decode("utf-8") else "\n"
@@ -92,7 +109,7 @@ try:
     ).encode("utf-8")
     RECIPES.write_bytes(patched_bytes)
     rc_after, tail_after, out_after = _run_floor()
-    LINES.append(f"2) 撤掉 {VICTIM} 之后：地板 rc={rc_after}（{tail_after[:110]}）")
+    LINES.append(f"2) 撤掉 {SCOPE} 之后：地板 rc={rc_after}（{tail_after[:110]}）")
     # 判据不止"非零"：红的**原因**必须点到被撤的那一格（否则可能是别处坏了而"假红"）
     named = any(mark in out_after for mark in (
         f"({VICTIM},", f"'{VICTIM}'", f"{VICTIM} ×", f"{VICTIM}×"))
