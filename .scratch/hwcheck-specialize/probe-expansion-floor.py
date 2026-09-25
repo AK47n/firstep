@@ -15,6 +15,7 @@
   * 批次 A（工单 03）`sht30`  → `probe-expansion-floor.txt`
   * 批次 B（工单 04）`bh1750` → `probe-expansion-floor-04.txt`
   * 批次 C（工单 05）`tcs34725 × mspm0` 一格 → `probe-expansion-floor-05.txt`
+  * 批次 D（工单 06）`at24c02 × mspm0` 一格 → `probe-expansion-floor-06.txt`
 
 回滚纪律与 `probe-sample-decouple.py` 同款：**只在文件仍逐字节等于我们写进去的那份时**
 才写回原字节；窗口期内被外力改动就不碰它并大声报错（宁可不还原，也不回滚别人的改动）。

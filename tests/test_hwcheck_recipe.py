@@ -88,7 +88,10 @@ EXPANSION = (("aht10", PLATFORM_STM32), ("aht10", PLATFORM_MSPM0),
              ("ms5611", PLATFORM_STM32), ("ms5611", PLATFORM_MSPM0),
              ("hmc5883l", PLATFORM_STM32), ("hmc5883l", PLATFORM_MSPM0),
              ("qmc5883l", PLATFORM_STM32), ("qmc5883l", PLATFORM_MSPM0),
-             ("tcs34725", PLATFORM_STM32), ("tcs34725", PLATFORM_MSPM0))
+             ("tcs34725", PLATFORM_STM32), ("tcs34725", PLATFORM_MSPM0),
+             ("mlx90614", PLATFORM_STM32), ("mlx90614", PLATFORM_MSPM0),
+             ("sgp30", PLATFORM_STM32), ("sgp30", PLATFORM_MSPM0),
+             ("at24c02", PLATFORM_STM32), ("at24c02", PLATFORM_MSPM0))
 
 # 扩张清单的**精确条数**（= `len(EXPANSION)`；每批长一次：追加了几格就改成几）。
 # 判据不是"至少"，是"就是这么多"——有人悄悄删一行 `EXPANSION`，逐格断言就少跑一格、
@@ -96,7 +99,7 @@ EXPANSION = (("aht10", PLATFORM_STM32), ("aht10", PLATFORM_MSPM0),
 # 数字改小"三处一起动仍然会全绿（`PILOT` 当年正是为这个洞加了按**配方文件实数**判的
 # 第三条地板）；本 spec 明说既有的文件级下限断言（`>= 17` 格 / `>= 10` 件）属 v1 那 17 格、
 # **不改**，所以这条残留的洞如实记在这里，不靠措辞掩盖。
-EXPANSION_CELL_COUNT = 18
+EXPANSION_CELL_COUNT = 24
 
 
 def _unescape_c(code: str) -> str:

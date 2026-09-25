@@ -9,48 +9,48 @@
 **被谁阻塞：** 01（命令字符让位——三件都要声明首选 + 候选，不留让位机制就等着撞车）、
 02（未专精样本夹具解耦——内容批次的统一前置）。
 
-**状态：** ready-for-agent
+**状态：** resolved
 
-- [ ] 六格配方（`mlx90614` / `sgp30` / `at24c02` × `stm32` / `mspm0`）写进
+- [x] 六格配方（`mlx90614` / `sgp30` / `at24c02` × `stm32` / `mspm0`）写进
       `library/hwcheck_recipes.json`，事实底稿 = `.scratch/hwcheck-specialize/recon-04-attitude-optical.md`
       §4（mlx90614）、§5（sgp30）+ `.scratch/hwcheck-specialize/recon-02-i2c-generic-1wire.md`
       §2 的 at24c02 小节（并吃它的 §1 四条 schema 判据、§4 缺陷、§5 共同坑）
-- [ ] `include` 用**该平台真头名**：`mlx90614.h` / `mlx90614_stm32.h`、`sgp30.h` / `sgp30_stm32.h`、
+- [x] `include` 用**该平台真头名**：`mlx90614.h` / `mlx90614_stm32.h`、`sgp30.h` / `sgp30_stm32.h`、
       `at24c02.h` / `at24c02_stm32.h`（写反构建期红）；`at24c02 × stm32` 的 read 若用到引脚宏
       （`AT24C02_SDA_GPIO`）**必须同时 include `pin_config.h`**——它只在有通用降级件时才自动 include
       （recon-02 §1）
-- [ ] `prereq` 六格全空（三件都是软 I2C 位操作，不用母版 ml_i2c；at24c02 的 5ms 写周期由
+- [x] `prereq` 六格全空（三件都是软 I2C 位操作，不用母版 ml_i2c；at24c02 的 5ms 写周期由
       `at24c02_wait_write_done()` 自己等）
-- [ ] `mlx90614`：`init` = `mlx90614_init()`（**void**：mspm0 空实现 / stm32 只配两脚、不做任何通信）
+- [x] `mlx90614`：`init` = `mlx90614_init()`（**void**：mspm0 空实现 / stm32 只配两脚、不做任何通信）
       ⇒ **不写 `init_expect`**（写了会渲成 `r = mlx90614_init();` 编不过——校验器不查返回类型，
       这是构建期守卫的漏，recon-04 §0.2 / §4 实测）；`probe` =
       `["mlx90614_read_ambient_temp(&ta)", "mlx90614_read_object_temp(&to)"]` + `expect: "0"`
       （0=成功 / 1=通信失败，每处 ACK 都查）；`locals` = `float ta = 0` / `float to = 0`；
       read = 四条：`(int)ta` + `(int)((ta - (int)ta) * 10)`、`(int)to` + `(int)((to - (int)to) * 10)`
-- [ ] `mlx90614` **不编身份探头**：RAM 里没有身份寄存器（只有 Ta=0x06 / To=0x07 这类测量字），
+- [x] `mlx90614` **不编身份探头**：RAM 里没有身份寄存器（只有 Ta=0x06 / To=0x07 这类测量字），
       厂商确有 EEPROM 段 ID 字段但库内**一条 EEPROM 通路都没有**；"温度在合理范围"也不算探头
       （不是可编译成 `call == expect` 的比较式 + 合理范围是人为阈值 + 不证身份）——note 按这三条如实写
-- [ ] `sgp30`：`init` = `sgp30_init()`（**void**，只发 0x2003；`write_cmd` 的失败码被 `(void)` 丢弃）
+- [x] `sgp30`：`init` = `sgp30_init()`（**void**，只发 0x2003；`write_cmd` 的失败码被 `(void)` 丢弃）
       ⇒ 不写 `init_expect`；`probe` = `["sgp30_read(&tv, &co)"]` + `expect: "0"`（签名是
       `sgp30_read(uint16_t *tvoc_ppb, uint16_t *co2_ppm)`：**tv 在前、co 在后**）；返回码分段
       写进 note：1/2/3=写命令应答失败、4=读地址失败、**5=CRC 校验失败**；`locals` =
       `uint16_t tv = 0` / `uint16_t co = 0`；read = `co`（CO2 当量 ppm）+ `tv`（TVOC ppb）
-- [ ] `sgp30` 的 feature set（0x202F）/ 序列号（0x3682）是**器件有、库内一个都没实现**
+- [x] `sgp30` 的 feature set（0x202F）/ 序列号（0x3682）是**器件有、库内一个都没实现**
       （`sgp30_write_cmd` 是 static）⇒ 配方层做不出身份探头；**本单不改驱动**，只在 note 如实写
-- [ ] `at24c02`：`init` = `at24c02_init()`（stm32 真配两脚 / mspm0 空实现）**void** ⇒ 不写
+- [x] `at24c02`：`init` = `at24c02_init()`（stm32 真配两脚 / mspm0 空实现）**void** ⇒ 不写
       `init_expect`；`probe` = **一条逗号表达式**
       `["(at24c02_write_byte(0, 0x5A), at24c02_wait_write_done(), at24c02_read_byte(0))"]` +
       `expect: "0x5A"`（probe / expect **允许**十六进制，read 不允许）；`AT24C02_ADDR`(0x50)
       **是器件地址不是身份寄存器**，不能当期望值
-- [ ] `at24c02` 的 read：`at24c02_read_byte(0)`（参数写**十进制**！`0x00` 会被切出 `x00`——recon-02 §1
+- [x] `at24c02` 的 read：`at24c02_read_byte(0)`（参数写**十进制**！`0x00` 会被切出 `x00`——recon-02 §1
       的实测报错原文）+ `AT24C02_SIZE`(256) + `AT24C02_PAGE_SIZE`(16)；可选加
       `gpio_get(AT24C02_SDA_GPIO, AT24C02_SDA_PIN)`（SDA 是 OUT_OD 空闲高 ⇒ 读到 1 = 总线上真有
       上拉 / 模块在），但**它只在探头通过后才打印**；读数里那个 0x5A 是刚写进去的记号、不是测量值
-- [ ] `console`：`console.command`（首选）+ `console.candidates`（候选，工单 01 落地的字段形状）——
+- [x] `console`：`console.command`（首选）+ `console.candidates`（候选，工单 01 落地的字段形状）——
       `mlx90614` 首选 `t`、候选 `f`、`e`；`sgp30` 首选 `v`、候选 `z`、`w`；
       `at24c02` 首选 `e`、候选 `i`、`n`（首选与候选全部取自实测空闲池 `c e f h i n q t v w z` +
       数字 `0-9`；保留字 `r/y/g/o/b` 与帮助 `?` 一个不碰）；两平台同一组，平台内不许重复
-- [ ] `note` 至少覆盖：① **每件的探头到底证明了什么**（sgp30 = 通信 + 两组 CRC8 两级自证；
+- [x] `note` 至少覆盖：① **每件的探头到底证明了什么**（sgp30 = 通信 + 两组 CRC8 两级自证；
       mlx90614 = 只有 ACK、**无 PEC/CRC**、不证型号更不证测温准；at24c02 = "写进去能读回来"是强自证，
       而 `write_byte` 的三次 `wait_ack` 结果全丢、`read_byte` 无应答返 0xFF 与合法 0xFF 不可分）；
       ② 判 FAIL 时**按返回码排查**（sgp30 的 1/2/3/4/5 分段；mlx90614 的 1 = 0x5A 没人应答；
@@ -70,21 +70,21 @@
       at24c02 = PB24/PB8 与 STEP_MOTOR / SR04 / HC05 重叠；at24c02 会**覆盖 0 号单元**）；⑥ 平台差异
       （mspm0 无母版 .h ⇒ init / probe / read 里不许写 `delay_ms` / `gpio_get`；mlx90614 的时序差见③；
       at24c02 mspm0 头写"引脚配置由 init 内 gpio_init 完成"与实现（空函数）不符）
-- [ ] 上板状态照旧如实写**「未上板」**（三件两平台 `verified: true / hardware_bound: false`）——
+- [x] 上板状态照旧如实写**「未上板」**（三件两平台 `verified: true / hardware_bound: false`）——
       编译绿不是板上证据
-- [ ] 检测页实测：三件两平台显示 `[专精]`（不是 `未专精`），命令表里是**分配后**的字符
-- [ ] **扩张地板**追加这 6 格到 `EXPANSION`（工单 03 立的那一处：`EXPANSION` 只装**扩张**格；
+- [x] 检测页实测：三件两平台显示 `[专精]`（不是 `未专精`），命令表里是**分配后**的字符
+- [x] **扩张地板**追加这 6 格到 `EXPANSION`（工单 03 立的那一处：`EXPANSION` 只装**扩张**格；
       `EXPANSION_CELL_COUNT` 是**手写字面量**——**别写成 `len(EXPANSION)`**，那是恒真断言）：
       落地后 `EXPANSION_CELL_COUNT` 改成 **24**（+ `PILOT` 那 17 格 = 总覆盖 **41**）；
       **只追加、不改写**已有行；`PILOT` 常量**不动**（有 `len == 17` 的精确断言）
-- [ ] `tests/test_hwcheck_generic.py` 的未专精基线（写单时是 `planned >= 157` / `with_init >= 132`；
+- [x] `tests/test_hwcheck_generic.py` 的未专精基线（写单时是 `planned >= 157` / `with_init >= 132`；
       **批次 A 落地后已降到 153 / 128**——以你落地当时的实数为准）**按实数
       如实下调并写原因**：本批 6 格每格各 -1（实测这 6 格的通用规划都拿得到无参初始化）；
       写单时实测 `planned = 159` / `with_init = 134` ⇒ 若前面三批（A/B/C，共 18 格）都已落地
       则为 **141 / 116**（否则按落地当日实数 -6）。跟着实数改数，**不许删断言**
-- [ ] **真编译矩阵**：`py -3 .scratch/hwcheck-specialize/probe-compile-matrix.py --slugs mlx90614,sgp30,at24c02`
+- [x] **真编译矩阵**：`py -3 .scratch/hwcheck-specialize/probe-compile-matrix.py --slugs mlx90614,sgp30,at24c02`
       → 六格全 `[PASS]`（exit=0、编译器 0 error / 0 warning；**链接器形态告警另记**），读数落盘
-- [ ] **反证**：把 `at24c02 × mspm0` 那一格配方撤掉 → 扩张地板断言必须红（41 → 40）
+- [x] **反证**：把 `at24c02 × mspm0` 那一格配方撤掉 → 扩张地板断言必须红（41 → 40）
 
 ---
 
@@ -132,3 +132,73 @@
   `sgp30_init` / `at24c02_init`）⇒ 按落地当日实数 -6；`PILOT`（`len == 17`）不动，扩张部分另立新常量。
 - 三件两平台都是 `verified: true / hardware_bound: false`（recon-02 §5.11「这 6 件全部未上板」、
   recon-04 §7.9）⇒ 验收记录照旧写「未上板」。
+
+### 2026-09-25 落地记录（实现 + 读数）
+
+**配方**：6 格写进 `library/hwcheck_recipes.json`，事实底稿 = recon-04 §4 / §5 + recon-02 §2：
+
+- `mlx90614`：`locals` = `float ta = 0` / `float to = 0`；**不写 `init_expect`**（init 两平台都是
+  void：mspm0 空实现、stm32 只配两脚）；probe = `["mlx90614_read_ambient_temp(&ta)",
+  "mlx90614_read_object_temp(&to)"]` + `expect: "0"`；read = Ta / To 各拆「整数 + 小数第一位」两行。
+- `sgp30`：`locals` = `uint16_t tv = 0` / `uint16_t co = 0`；不写 `init_expect`（void）；
+  probe = `sgp30_read(&tv, &co)` + `expect: "0"`（**tv 在前、co 在后**，照头文件签名）；
+  read = `co`（CO2 当量 ppm）+ `tv`（TVOC ppb）。
+- `at24c02`：不写 `init_expect`（void）；probe = **一条逗号表达式**
+  `(at24c02_write_byte(0, 0x5A), at24c02_wait_write_done(), at24c02_read_byte(0))` +
+  `expect: "0x5A"`（probe / expect 允许十六进制，`read` 不允许 ⇒ read 全是十进制）；
+  read = 0 号单元回读值 + 容量 + 页大小（+ stm32 一格 `gpio_get(AT24C02_SDA_GPIO, …)` 的 SDA
+  空闲电平），stm32 的 `include` 因此带上 `pin_config.h`。
+- `console`：`mlx90614` 首选 `t`、`sgp30` 首选 `v`、`at24c02` 首选 `e`；候选见"整改"第 3 条。
+- note 每格 6 行，工单点名的覆盖项逐条落格（probe 语义与边界、FAIL 排查、失败模式、
+  正常范围、接线与地址、平台差异），另按工单 05 的口径**不写死复测字符**。
+
+**扩张地板**：`EXPANSION` 只追加这 6 格，`EXPANSION_CELL_COUNT` **18 → 24**（手写字面量），
+`PILOT` 未动。**未专精基线**：**141 / 116 → 135 / 110**（实测 `planned=135` / `with_init=110`，
+与 `probe-batch-cells.txt` 的【06】段一致）。
+
+**真编译矩阵**（`probe-compile-matrix-06.txt`）：六格全 `[PASS]`、页面标记 `[专精]`、
+exit=0、编译器 0 error / 0 warning、**链接器 0 告警**（探针自身的退出码实测 = 0）。
+
+**反证**（`probe-expansion-floor-06.txt`）：撤掉 **`at24c02 × mspm0` 一格** → 地板 rc 0 →
+**1（2 failed，红因点名该格）** → 拿回来 0；配方文件逐字节还原、sha256 前后一致。
+
+**行缓冲自查**（工单 04 立的守卫）：本批最宽一行 = **115 字节**（`mlx90614` 的 To 小数位那行，
+余 13）；`at24c02_read_byte(0)` 那行整改后是 **102 字节**（余 26）。
+
+**结论**：完成。三件的"最强可用探头"分三档（sgp30 的通信 + 两组 CRC8 > at24c02 的写回读强自证 >
+mlx90614 的纯 ACK），note 把三档差别写给了学生；⚠ 上板状态照旧如实写**「未上板」**。
+宽读一处如实记：工单写"新常量 + 新用例"，而常量与三条地板用例是工单 03 立的，本批按
+spec「只追加、不改写」扩格（与工单 04/05 同口径）。
+
+### 2026-09-25 双轴评审整改（固定点 `6d115bbf`）
+
+1. **本批新增了一处构建期 400（已修）**：`{at24c02, bh1750, bmp180, sht30}` 及其超集
+   （含"全选"）会让 **sht30 分不到字符**——它的首选 `e` 被 `at24c02` 先占，而它的候选
+   `f` / `c` 恰好是 `bh1750` / `bmp180` 的**首选**（验收顺序里都在它前面）。
+   修法 = 按工单 05 立的口径把 **sht30 的候选换成 `["n","z"]`**（都不是任何一件的首选）。
+   复跑读数：该组合与"全部配方件"两平台都分得出（`cefn` / 全库 19 与 22 件）。
+   这条**动了批次 A 的一格配方**——属于同一 spec 内的被动适配（改的是数据、不是机制），
+   批次 A 的单件分配结果不变（单选 sht30 仍是 `e`），所以它的编译矩阵读数不受影响。
+2. **at24c02 的「头实不符」是假警告（已删）**：文案原写「`at24c02.h` 写着『引脚配置由 init 内
+   `gpio_init` 完成』而本平台 init 一行都不做」——**那句在 `at24c02_stm32.h:60-62`，而且 stm32 上
+   为真**（`at24c02_stm32.c:128-131` 真配两脚）；mspm0 头 `at24c02.h:48-49` 写的是「空实现占位」。
+   错源是 **recon-02 §4.1**（把 stm32 头的话安到了 mspm0 头上），工单第 72 行照抄了它。
+   配方文案已按平台各写实的；**recon-02 §4.1 已补一条标注日期的更正**（原文保留不改）。
+   教训写进 recon：**recon 也是二手来源，落进学生可见文案前要回驱动源码核**。
+3. **候选表与工单原文不同（已记录）**：工单给 `mlx90614` `f`/`e`、`sgp30` `z`/`w`、`at24c02` `i`/`n`；
+   实际统一用 `["n","z","0","1"]` 一族。理由 = 工单 05 立的口径（**候选不得取任何一件的首选**：
+   `f` = bh1750、`e` = sht30、`w` = hx711），再加数字尾巴（池子被占满时的最后出路）。
+   评审实测：数字在 2~5 件全组合与随机 6~14 件组合里**从未改变分配**（只在"全选"时才用上，
+   `at24c02` 落到 `0`）；全库只占 18/31 字符，池子没耗尽。
+4. **mlx90614 的探头文案说岔了（已改）**：原写"两条调用的返回码 ⇒ 探头…"，而渲染器**只把最后一条**
+   的返回码放进比较式（`hwcheck_recipe.py:1332-1340`）⇒ 被判的是 `read_object_temp()` 那一次，
+   `read_ambient_temp()` 的返回码被丢弃（读事务仍真的跑了一遍）。文案已改成准的。
+5. **补工单 ⑥ 的 mspm0 侧约束（已补）**：六格里 mspm0 的三格现在都写明「母版没有 .h ⇒
+   `init`/`probe`/`read` 里不许写 `delay_ms` / `gpio_get`，跨模块调用只能进 `prereq`」；
+   借这次把「init 是 void / 空实现」那条也按平台分开写（`mlx90614` / `sgp30` 两平台逐字相同的行
+   从 5/6 降到 **4/6**，`at24c02` 5/6——那条"整块共享"正是前两批传错平台引用的通道）。
+6. `at24c02` 的 `at24c02_read_byte(0)` 那行单位写短（116 → **102 字节**，余量 12 → 26）。
+
+**本单记录、未修的口径问题**：`gpio_get(AT24C02_SDA_GPIO, AT24C02_SDA_PIN)` 那行是**可选**证据
+（只在探头通过后打印，证的是"总线上真有上拉 / 模块在"），代价是 stm32 格多 include 一个
+`pin_config.h`——工单原文允许（"可选加"），本单保留并在 note 里如实说明它的边界，不当作探头。
