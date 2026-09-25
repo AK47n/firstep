@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=1b0e21ad345c4b55fa21293f98188225b715e7fd -->
+<!-- changelog-auto: last-commit=cfa836078026737caab16b689e9f3144f9d6dcdc -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -11,6 +11,7 @@
 - 01:21 收尾：工单 03 记账进交接区（本批进度 + 会话注记 + 两条并行偶发）
 - 11:20 工单 hwcheck-acceptance/04：检测页把验过的器件一键带进生成页
 - 14:24 工单 hwcheck-specialize：首批 20 件的立项、四份侦察与八张内容工单落盘
+- 14:24 工单 hwcheck-specialize/01：配方命令字符让位（首选 + 候选，撞车不再等于 400）
 
 ## 2026-09-24
 - 00:39 工单 hwcheck-unknown-device/12：自建件 id 文法收紧到 C 标识符（连字符建不出坏工程）
