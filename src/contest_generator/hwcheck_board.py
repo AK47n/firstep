@@ -813,7 +813,17 @@ def hwcheck_view(
     return HwCheckView(
         board={
             "wiring": board_payload,
-            "sections": sections_payload(sections),
+            # 小节载荷里的命令字符 = **分配后**的那一个（工单 hwcheck-specialize/01）：
+            # 首选被别的器件占了时会按候选让位，页面必须跟着表走（不然两件都写着
+            # "敲 l 复测"，只有一件是真的）。
+            "sections": sections_payload(
+                sections,
+                {
+                    entry.slug: entry.command
+                    for entry in console.entries
+                    if not entry.custom
+                },
+            ),
             "console": console_payload(config.debug_uart, console),
             "unspecialized": [
                 {

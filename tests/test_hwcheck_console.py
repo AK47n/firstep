@@ -3,9 +3,10 @@
 
 **为什么这样测**：命令台的三块判据都是域层纯函数（字符串进 / 结果出）——
 
-* **命令表**（`build_console_table`）：配方声明的命令字符 + 固定的帮助命令；
-  字符冲突（两件抢同一个字符、或抢了库内既有 `r/y/g/o/b`）必须**构建期**红，
-  不是运行时静默覆盖；
+* **命令表**（`build_console_table`）：配方声明的命令字符 + 固定的帮助命令。首选被
+  别的器件占用时按 `console.candidates` **让位**（工单 hwcheck-specialize/01）；让不开、
+  或抢了库内既有 `r/y/g/o/b` / 帮助 `?`、或形状不对（多字符 / 空白 / 引号），必须
+  **构建期**红，不是运行时静默覆盖；
 * **命令解析**（`parse_console_command`）：合法命令 / 未知命令 / 多字符参数 /
   空输入四类，都在内存里直测；
 * **回显格式**（渲染出的 C）：三段固定（这是哪件 / 测的是什么 / 结论·数值）。
@@ -24,6 +25,7 @@ import pytest
 from contest_generator.clex import iter_c_regions, match_bracket, strip_comments
 from contest_generator.hwcheck import HwCheckConfig, render_main_c
 from contest_generator.hwcheck_console import (
+    COMMAND_POOL,
     HELP_COMMAND,
     LEGACY_COMMANDS,
     RESERVED_COMMANDS,
@@ -76,6 +78,7 @@ def _section(
     command: str | None = None,
     description: str = "",
     *,
+    candidates: tuple[str, ...] = (),
     platform: str = PLATFORM_STM32,
     init: tuple[str, ...] = (),
     init_expect: str = "",
@@ -90,7 +93,8 @@ def _section(
         init_expect=init_expect,
         probe=probe,
         read=read,
-        console=None if command is None else RecipeConsole(command, description),
+        console=None if command is None else RecipeConsole(
+            command, description, candidates),
     )
 
 
@@ -129,6 +133,135 @@ def test_two_devices_may_not_share_a_command_character():
     message = str(excinfo.value)
     assert "l" in message and "led" in message and "oled" in message
     assert "命令" in message
+
+
+# ---------------------------------------------------------------------------
+# 候选字符让位（工单 hwcheck-specialize/01）：首选被占时按候选顺序让位，
+# 而不是把"两件都想用同一个字符"直接兑换成一次 400
+# ---------------------------------------------------------------------------
+
+
+def test_a_taken_character_falls_back_to_the_declared_candidate():
+    """首选被占 → 让位到候选：学生勾两件传感器不再是"生成不出来"。"""
+    table = build_console_table([
+        _section("led", "l", "复测 LED"),
+        _section("sht20", "l", "复测 SHT20", candidates=("t", "w")),
+    ])
+    assert [entry.command for entry in table.entries] == ["l", "t"]
+    assert [entry.slug for entry in table.entries] == ["led", "sht20"]
+    assert table.entries[1].description == "复测 SHT20"
+
+
+def test_candidates_are_tried_in_the_declared_order():
+    """让位顺序 = **声明顺序**（不排序、不随机）：同一份配方恒定同一结果。"""
+    table = build_console_table([
+        _section("led", "t", "占掉 t"),
+        _section("oled", "w", "占掉 w"),
+        _section("sht20", "t", "复测 SHT20", candidates=("w", "z")),
+    ])
+    assert [entry.command for entry in table.entries] == ["t", "w", "z"]
+
+
+def test_a_recipe_without_candidates_still_collides_loudly():
+    """不带候选的老配方**行为逐字不变**：没有候选可让 → 还是构建期红。
+
+    向后兼容的判据是"老配方一个字节不改、结果一模一样"——让位只在**声明了候选**
+    的那一件身上发生，不会顺手替没声明的配方做决定。
+    """
+    with pytest.raises(HwCheckError) as excinfo:
+        build_console_table([
+            _section("led", "l", "复测 LED"),
+            _section("sht20", "l", "复测 SHT20"),
+        ])
+    assert "sht20" in str(excinfo.value)
+
+
+def test_running_out_of_candidates_fails_loudly_with_the_numbers():
+    """候选也用完 = 构建期大声失败，**不静默少一条**，且数字要对得上。
+
+    报错要能直接回答三个问题：哪一件排不上号、池子多大、已经被谁占了——
+    只说"撞车了"的报错会让学生在两件之间反复换字符试。
+    """
+    with pytest.raises(HwCheckError) as excinfo:
+        build_console_table([
+            _section("led", "l", "占掉 l"),
+            _section("oled", "d", "占掉 d"),
+            _section("sht20", "l", "复测 SHT20", candidates=("d",)),
+        ])
+    message = str(excinfo.value)
+    assert "sht20" in message
+    assert f"一共 {len(COMMAND_POOL)} 个" in message, "池子多大要说出来"
+    assert "已经占了 2 个" in message, "已被占几个要说出来（两个：l 与 d）"
+    assert "'led'" in message and "'oled'" in message, "占位的是谁要点名"
+    assert "候选" in message, "出路之一 = 多加几个候选字符"
+
+
+def test_a_reserved_candidate_is_rejected_even_when_the_first_choice_is_free():
+    """候选里也不许出现保留字——**声明即判**，不看这次用不用得上。
+
+    为什么不在"轮到它时"才判：那样同一份配方会因为旁边勾了哪几件而时而报错、
+    时而静默通过，"保留字永不被抢"就成了一条看运气的判据。配方写错就该当场红。
+    """
+    for reserved in sorted(RESERVED_COMMANDS):
+        with pytest.raises(HwCheckError) as excinfo:
+            build_console_table([
+                _section("led", "l", "复测 LED", candidates=(reserved,)),
+            ])
+        assert reserved in str(excinfo.value)
+
+
+def test_the_assignment_is_a_pure_function_of_the_selection():
+    """同一选中集 → 同一张表（页面与板上各建一次，必须逐字相同）。
+
+    顺带钉住让位的**连锁**：`sht20` 的首选 `l` 被 `led` 占了 → 它拿走候选里的
+    `t`；于是后面 `sht30` 的首选 `t` 也没了 → 它再让到 `e`。两件都还是一件
+    一个字符，谁都没被静默丢掉。
+    """
+    def build():
+        return build_console_table([
+            _section("led", "l", "复测 LED"),
+            _section("sht20", "l", "复测 SHT20", candidates=("t", "w")),
+            _section("sht30", "t", "复测 SHT30", candidates=("e",)),
+        ])
+
+    first, again = build(), build()
+    assert first == again
+    assert [entry.command for entry in first.entries] == ["l", "t", "e"]
+
+
+def test_two_recipes_declaring_the_same_candidates_each_get_their_own():
+    """两条配方声明**同一组候选**时各拿各的、不撞（验收第 6 条）。
+
+    为什么单列一条：这是让位机制最容易写成"第二个把第一个挤掉"的地方——两边
+    候选表一样，实现若按集合而不是按顺序分配、或先算后写，就会给出同一个字符。
+    判据 = 两件都在表里、字符互不相同、且**都没被静默丢掉**。
+    """
+    table = build_console_table([
+        _section("led", "l", "占掉 l"),
+        _section("sht20", "l", "复测 SHT20", candidates=("w", "z")),
+        _section("sht30", "l", "复测 SHT30", candidates=("w", "z")),
+    ])
+    assert [entry.command for entry in table.entries] == ["l", "w", "z"]
+    assert len({entry.command for entry in table.entries}) == 3
+
+
+def test_the_page_and_the_board_both_show_the_assigned_character():
+    """页面载荷与板上分派读的是**分配后**的字符（不是配方里写的首选）。
+
+    否则会出现最坏的那种错位：检测页写着"敲 t 复测 sht20"，板上却把 `t` 分给了
+    另一件——学生敲下去复测的是别人。
+    """
+    table = build_console_table([
+        _section("led", "t", "占掉 t"),
+        _section("sht20", "t", "复测 SHT20", candidates=("w", "z")),
+    ])
+    payload = console_payload(True, table)
+    assert [(item["slug"], item["command"]) for item in payload["commands"]] == [
+        ("led", "t"), ("sht20", "w")]
+    code = _rendered(table)
+    assert "case 'w':" in code
+    assert "hwcheck_check_sht20();" in code
+    assert "case 'z':" not in code, "没轮到的候选不许出现在产物里"
 
 
 def test_recipe_may_not_take_over_a_library_command_character():
@@ -536,6 +669,24 @@ def test_main_header_lists_the_console_commands_when_they_exist():
     assert "复测板载 LED" not in without
     assert "?" in without, "没有配方命令时也要说清帮助命令在哪"
     assert "没有配方命令" in without or "只有帮助" in without
+
+
+def test_main_header_lists_the_assigned_console_character():
+    """文件头那条配料行与上面那张命令表写的是**同一个**字符（单源不破）。
+
+    首选被占、这一件让位到候选之后，两处若各读各的（表读分配值、配料行读配方声明值），
+    产物里就会同时出现 `敲 w 复测 oled` 与 `控制台命令 'l'`——学生照注释敲，板上不认。
+    """
+    sections = (
+        _section("led", "l", "复测 LED"),
+        _section("oled", "l", "复测 OLED", candidates=("w", "z")),
+    )
+    text = unescape_c_string(render_main_c(WITH_CONSOLE, sections))
+    oled_brief = next(
+        line for line in text.splitlines() if "oled（配方：" in line
+    )
+    assert "控制台命令 'w'" in oled_brief, oled_brief
+    assert "'l'" not in oled_brief, "让位后的那一格不许再写首选字符"
 
 
 def test_main_raises_at_build_time_when_two_devices_share_a_command():

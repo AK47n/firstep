@@ -1078,10 +1078,18 @@ def _header_brief(
     if sections and config.has_output_channel:
         lines.append(" *")
         lines.append(" * 逐件检测小节（按库内配方渲染，非 AI 生成）：")
+        # 命令字符取**分配后**的那一个（工单 hwcheck-specialize/01）：配方里写的首选
+        # 被别的器件占了时会按候选让位，文件头里这两行必须与上面那张命令表同字符
+        # ——两个字符并存会让学生照注释敲错键。
+        assigned = {
+            entry.slug: entry.command
+            for entry in table.entries
+            if not entry.custom
+        }
         for section in sections:
             lines.append(
                 f" *   - {SECTION_TAG} {section.slug}（配方："
-                f"{_section_recipe_brief(section)}）"
+                f"{_section_recipe_brief(section, assigned.get(section.slug, ''))}）"
             )
     # 通用降级小节（工单 07）：**与检测页同一句措辞**（GENERIC_LABEL）——
     # 学生拿串口上的输出对检测页时，两边说的是同一件事。这里不写 `SECTION_TAG`
@@ -1105,8 +1113,14 @@ def _header_brief(
     return lines
 
 
-def _section_recipe_brief(section: "RecipeSection") -> str:
-    """小节的一句话配料（文件头注释用）：初始化 / 探头 / 读数各有没有。"""
+def _section_recipe_brief(section: "RecipeSection", assigned_command: str = "") -> str:
+    """小节的一句话配料（文件头注释用）：初始化 / 探头 / 读数各有没有。
+
+    `assigned_command`（工单 hwcheck-specialize/01）= 命令表**分配后**的字符；不给
+    （旧调用方 / 纯函数直测）= 退回配方里声明的首选。为什么必须能覆盖：首选被别的
+    器件占用时实际敲的是候选里的某一个，而同一段文件头里那张命令表印的是分配后的
+    字符——两处不一致就是"照注释敲，板上不认"。
+    """
     parts: list[str] = []
     if section.init:
         parts.append("初始化" + ("带判定" if section.init_expect else ""))
@@ -1115,7 +1129,8 @@ def _section_recipe_brief(section: "RecipeSection") -> str:
     if section.read:
         parts.append(f"{len(section.read)} 项读数")
     if section.console is not None:
-        parts.append(f"控制台命令 {section.console.command!r}")
+        character = assigned_command or section.console.command
+        parts.append(f"控制台命令 {character!r}")
     return "、".join(parts) if parts else "无动作"
 
 

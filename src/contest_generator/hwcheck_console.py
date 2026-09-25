@@ -28,12 +28,14 @@ spec「板上行为与判据」：程序形态 = **上电自动跑一遍**，之
 任何一行重写那五条命令的代码（守卫用例还逐字符核对本模块的保留字与库内
 `debug_uart.c` 的分派分支一致，见 `tests/test_hwcheck_console.py`）。
 
-## 字符冲突 = 构建期大声失败
+## 字符冲突 = 构建期大声失败（工单 hwcheck-specialize/01 起：先让位，让不开才红）
 
-两件抢同一个字符（或抢了库内既有字符 / 帮助字符）= `HwCheckError`（→ 400
-中文，点名两件与那个字符）。为什么不运行时静默覆盖：那会让"复测第二件"
-永远测到第一件，而页面上两件都写着"有命令"——正是 spec 要防的"看着测了
-其实没测"。
+配方可以给一件声明**首选 + 候选**（`console.command` / `console.candidates`）：首选被
+别的器件占了就按候选顺序**让位**（`_recipe_command`），学生勾两件传感器不再因为"两件
+都想用同一个字符"而生成不出来。让不开（候选也用完）或声明了保留字 = `HwCheckError`
+（→ 400 中文，点名哪一件排不上号、池子多大、已被谁占）。为什么不运行时静默覆盖：那会让
+"复测第二件"永远测到第一件，而页面上两件都写着"有命令"——正是 spec 要防的"看着测了
+其实没测"。**不带候选的老配方行为逐字不变**：首选被占时仍然当场红。
 
 ## 命令的粒度是"首字符"
 
@@ -65,6 +67,7 @@ from .hwcheck_recipe import RecipeSection, c_string
 from .my_devices import DEVICE_ID_PREFIX
 
 __all__ = [
+    "COMMAND_POOL",
     "CONSOLE_HINT_NONE",
     "CONSOLE_HINT_SERIAL",
     "CONSOLE_HINT_SERIAL_NO_COMMAND",
@@ -137,6 +140,23 @@ DEFAULT_COMMAND_DESCRIPTION = "按这一件的配方重跑一遍检测小节"
 # 而且大小写不敏感（`A` 与 `a` 是同一个命令）——所以池子就是这 36 个，
 # 保留字与配方占掉的那些再从中扣掉。
 CUSTOM_COMMAND_FALLBACK = "abcdefghijklmnopqrstuvwxyz0123456789"
+
+# **命令空间**（配方与自建件共用）：字母数字里除去保留字。`?` 本来就不在这 36 个
+# 里面，所以池子 = 36 - 5 = 31 个。报错文案里的"池子多大"读它——分配的两条腿
+# （配方让位 / 自建件分配）各算一遍，迟早有一边算漂。
+COMMAND_POOL: tuple[str, ...] = tuple(
+    char for char in CUSTOM_COMMAND_FALLBACK if char not in RESERVED_COMMANDS
+)
+
+
+def _pool_description() -> str:
+    """报错文案里"池子多大"那半句——两条腿（配方让位 / 自建件分配）共用一处措辞。
+
+    两处各写一遍的后果不是"啰嗦"：其中一个数改了、另一个没改，报错就会给出自相
+    矛盾的读数（工单 06 评审已经抓过一次"只扣保留字、不扣已占用"的假读数）。
+    """
+    return (f"可用字符一共 {len(COMMAND_POOL)} 个"
+            f"（字母数字里除去既有命令 {'/'.join(sorted(RESERVED_COMMANDS))}）")
 
 
 @dataclass(frozen=True)
@@ -545,6 +565,85 @@ def _custom_candidates(slug: str) -> tuple[str, ...]:
     return tuple(candidates)
 
 
+def _declared_command_characters(console: RecipeConsole) -> tuple[str, ...]:
+    """一条配方声明的**首选 + 候选**（按声明顺序、按归一形态去重）= 让位顺序。
+
+    归一后去重是必须的：`command = "t"` 与 `candidates = ["T"]` 是同一个命令
+    （大小写不敏感），不去重就会"试两遍同一个字符"，白占一格让位机会。
+    """
+    ordered: list[str] = []
+    keys: set[str] = set()
+    for char in (console.command, *console.candidates):
+        key = _normalize(char)
+        if key in keys:
+            continue
+        keys.add(key)
+        ordered.append(char)
+    return tuple(ordered)
+
+
+def _recipe_command(
+    slug: str, console: RecipeConsole, seen: Mapping[str, ConsoleEntry]
+) -> str:
+    """给一条配方分配命令字符：**首选优先、候选次之**，取第一个没被占用的。
+
+    工单 `hwcheck-specialize/01` 的让位机制。为什么要有它：命令空间一共 31 个
+    字符，而专精件一多，"首字母记法"必然撞车（`sht20` / `sht30` / `sgp30` /
+    `servo` / `sr04` 都想用 `s`）——撞车的后果是**构建期 400**，等于"专精面变宽"
+    直接兑换成"能勾的组合变少"。让位之后，学生看到的仍是"一件一个字符"。
+
+    三条判据（任一不满足即红，**不静默覆盖**）：
+
+    1. **保留字不碰**（`r/y/g/o/b` 与帮助 `?`）：`_require_command_shape` 之后逐字
+       判——**声明即判**，不看这次轮不轮得到它。若等到"轮到它时"才判，同一份配方
+       会因为旁边勾了哪几件而时而报错、时而静默通过；
+    2. **已占用的不抢**：按声明顺序找第一个空闲字符；
+    3. **分不出来当场红**（大声、带数字、给两条出路）：不静默少一条——页面上写着
+       "敲这个复测"、板上却不认，是这一层最坏的坏法。
+
+    确定性 = 纯函数：只依赖（声明顺序 + 表里已占的字符），不排序、不看时间、不随机。
+    """
+    declared = _declared_command_characters(console)
+    for char in declared:
+        _require_command_shape(slug, char)
+        key = _normalize(char)
+        if key not in RESERVED_COMMANDS:
+            continue
+        owner = dict(LEGACY_COMMANDS).get(key)
+        origin = (
+            f"库内既有命令（{key}：{owner}，已上过板）"
+            if owner
+            else "固定的帮助命令"
+        )
+        raise HwCheckError(
+            f"{slug!r} 的控制台命令 {key!r} 与{origin}冲突："
+            "既有命令的语义一个字节不动，配方命令只能**追加**——"
+            "请换一个字符（检测页的帮助文案会列出现有命令）"
+        )
+    for char in declared:
+        key = _normalize(char)
+        if key in seen:
+            continue
+        return key
+    occupied = "、".join(
+        f"{char!r}（{seen[_normalize(char)].slug!r}）"
+        for char in declared
+        if _normalize(char) in seen
+    )
+    candidates = (
+        f"，候选 {list(console.candidates)!r}" if console.candidates else "，没有声明候选"
+    )
+    raise HwCheckError(
+        f"配方件 {slug!r} 的控制台命令字符分不出来了：它声明要用的字符 "
+        + "、".join(repr(char) for char in declared)
+        + f"（首选 {console.command!r}{candidates}）这一趟都已被占用：{occupied}；"
+        + _pool_description()
+        + f"，这一趟表里已经占了 {len(seen)} 个。"
+        "出路：给这一件多加几个候选字符（`console.candidates`）、"
+        "给首选换一个字符，或者去掉几件器件再生成一次"
+    )
+
+
 def _assign_custom_command(slug: str, seen: Mapping[str, ConsoleEntry]) -> str:
     """给一件自建件分一个**没被占用**的字符；分不出来 = 构建期大声失败。
 
@@ -559,13 +658,9 @@ def _assign_custom_command(slug: str, seen: Mapping[str, ConsoleEntry]) -> str:
             continue
         _require_command_shape(slug, candidate)
         return candidate
-    pool = sum(
-        1 for char in CUSTOM_COMMAND_FALLBACK if char not in RESERVED_COMMANDS
-    )
     raise HwCheckError(
-        f"自建件 {slug!r} 分不到复测字符了：可用的字符一共 {pool} 个"
-        f"（字母数字里除去既有命令 {'/'.join(sorted(RESERVED_COMMANDS))}），"
-        f"现在表里已经占了 {len(seen)} 个（配方命令 + 其它自建件）——"
+        f"自建件 {slug!r} 分不到复测字符了：" + _pool_description()
+        + f"，现在表里已经占了 {len(seen)} 个（配方命令 + 其它自建件）——"
         "请去掉几件自建件，或者给它们换短一点的 id（字符优先取自 id），再生成一次"
     )
 
@@ -578,12 +673,13 @@ def build_console_table(
 
     三条判据（任一不满足即红，**不静默覆盖**）：
 
-    1. 配方声明的字符不得是库内既有命令（`r/y/g/o/b`）或帮助命令（`?`）
-       ——抢了它们的后果是"学生敲 r 不再点灯"，而那是已上过板的既有行为；
-    2. 两件不得占用同一个字符（大小写不敏感）——静默覆盖会让第二件永远测不到；
-       **自建件的字符是分配的**，所以它与配方命令、与另一件自建件都不会撞
-       （分配时就避开已占用的）；真的分不出来（可用字符用尽）同样当场红
-       （`_assign_custom_command`）；
+    1. 配方声明（首选与候选）的字符不得是库内既有命令（`r/y/g/o/b`）或帮助命令
+       （`?`）——抢了它们的后果是"学生敲 r 不再点灯"，而那是已上过板的既有行为；
+    2. **一件一个字符**：先试首选，被占则按 `console.candidates` 的声明顺序让位
+       （工单 hwcheck-specialize/01，`_recipe_command`）；候选也用完 = 当场红，
+       点名哪一件排不上号、池子多大、已被谁占。**自建件的字符是分配的**，所以它
+       与配方命令、与另一件自建件都不会撞；真的分不出来（可用字符用尽）同样当场
+       红（`_assign_custom_command`）；
     3. 字符必须是一个可打印 ASCII 字符（`_require_command_shape`）。
 
     表里的命令一律**规范化为小写**（声明 `L` 就是声明 `l`）：大小写不敏感是
@@ -592,8 +688,9 @@ def build_console_table(
 
     没有 `console` 段的小节不进表（缺段 = 这一件没有复测命令，合法）；
     **自建件一律进表**（它们的探测小节就是"复测"本身，不存在"没声明"这回事）。
-    顺序 = 配方命令（配方顺序）在前、自建件在后——与 main.c 里小节的顺序同一套
-    "库内验证过的在前"（页面与板上读同一张表）。
+    顺序 = 配方命令（配方顺序 = `resolve_sections` 的验证顺序）在前、自建件在后
+    ——与 main.c 里小节的顺序同一套"库内验证过的在前"，也是让位结果的唯一依据
+    （页面与板上各建一次这张表，因此拿到的是同一组字符）。
     """
     entries: list[ConsoleEntry] = []
     seen: dict[str, ConsoleEntry] = {}
@@ -601,37 +698,15 @@ def build_console_table(
         console = section.console
         if console is None:
             continue
-        command = console.command
-        _require_command_shape(section.slug, command)
-        # 规范化到**小写**（判据与渲染共用的唯一形态）：声明 `L` 就是声明 `l`
-        # ——大小写不敏感是"同一个命令"，不是两个。不规范化的后果是渲染器为它
-        # 出 `case 'L': case 'L':` 两个**重复标签**（编译器直接报错），而表里
-        # 又按小写判重（同一个字符能声明两次）。
-        command = command.lower()
-        key = _normalize(command)
-        if key in RESERVED_COMMANDS:
-            owner = dict(LEGACY_COMMANDS).get(key)
-            origin = (
-                f"库内既有命令（{command}：{owner}，已上过板）"
-                if owner
-                else "固定的帮助命令"
-            )
-            raise HwCheckError(
-                f"{section.slug!r} 的控制台命令 {command!r} 与{origin}冲突："
-                "既有命令的语义一个字节不动，配方命令只能**追加**——"
-                "请换一个字符（检测页的帮助文案会列出现有命令）"
-            )
-        if key in seen:
-            raise HwCheckError(
-                f"控制台命令字符 {command!r} 被 {seen[key].slug!r} 与 "
-                f"{section.slug!r} 同时声明——命令循环按字符分派，重复会让"
-                "其中一件永远测不到（运行期静默覆盖，正是本单要防的）："
-                "请给其中一件换一个字符"
-            )
+        # 分配（工单 hwcheck-specialize/01）：首选可用就用首选；首选被占就按候选
+        # 顺序让位；全被占 / 声明了保留字 = 构建期红（`_recipe_command` 三条判据）。
+        # 返回值**已经是归一形态**（小写）——声明的 `L` 就是 `l`，也只有一个小写
+        # 形态，渲染器才不会出两个重复的 `case` 标签（编译器直接报错）。
+        command = _recipe_command(section.slug, console, seen)
         entry = ConsoleEntry(
             command=command, slug=section.slug, description=console.description
         )
-        seen[key] = entry
+        seen[command] = entry
         entries.append(entry)
     for section in custom:
         command = _assign_custom_command(section.slug, seen)

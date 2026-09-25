@@ -13,6 +13,7 @@ I2C0 = PA0/PA1 与板载 LED 同脚这条暗雷只有在真数据上才会现形
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -671,6 +672,38 @@ def _page_view(
         recipe_path=recipe_path,
         require_pins=require_pins,
     )
+
+
+def test_page_payload_shows_the_assigned_console_character(tmp_path):
+    """页面那一格显示的是**分配后**的字符（工单 hwcheck-specialize/01）。
+
+    前端「串口命令 <字符>」读的就是 `board["sections"][].console.command`
+    （`fx/hwcheck.js`），所以首选被别的器件占用、命令表按候选让位之后，这一格必须
+    跟着表走——否则页面写着一个板上不认的键。判据用一份**临时配方文件**造出撞车
+    现场（真库这一刻还没有两件抢同一字符的配方），库与母版仍是本仓真库。
+    """
+    recipes = tmp_path / "hwcheck_recipes.json"
+    recipes.write_text(json.dumps({
+        "led": {"stm32": {
+            "init": {"calls": ["led_init(LED_RED)"]},
+            "console": {"command": "l", "description": "占住 l"},
+        }},
+        "oled": {"stm32": {
+            "init": {"calls": ["OLED_Init()"]},
+            "console": {"command": "l", "candidates": ["w", "z"],
+                        "description": "让位到候选"},
+        }},
+    }, ensure_ascii=False), encoding="utf-8")
+    view = _page_view(
+        PLATFORM_STM32, devices=["led", "oled"], recipe_path=recipes,
+        require_pins=False,
+    )
+    table = {item["slug"]: item["command"] for item in view.board["console"]["commands"]}
+    sections = {
+        item["slug"]: item["console"]["command"] for item in view.board["sections"]
+    }
+    assert table == {"led": "l", "oled": "w"}, table
+    assert sections == table, "页面那一格与命令表必须是同一个字符（单源不破）"
 
 
 def test_hwcheck_view_projects_the_page_payload_without_http():

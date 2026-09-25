@@ -119,12 +119,20 @@ _IDENT_RE = re.compile(r"[A-Za-z_]\w*")
 
 @dataclass(frozen=True)
 class RecipeConsole:
-    """串口控制台命令（`console` 段）：一个字符 + 一句说明。
+    """串口控制台命令（`console` 段）：一个**首选**字符 + 若干**候选**字符 + 一句说明。
 
     单字符是**硬要求**（库内既有的 `r` / `y` / `g` / `o` / `b<N>` 都是单字符，
     命令循环按字符分派）；说明进检测页与回显。
 
-    **本类只管形状**；那张"谁能用哪个字符"的表（保留字 / 重复 / 形状加严）与
+    `candidates`（工单 hwcheck-specialize/01）＝ **首选被别的器件占用时按顺序让位
+    到哪几个字符**。为什么要它：命令空间一共 31 个可用字符（字母数字除去保留字
+    `r/y/g/o/b/?`），专精件一多，"首字母记法"必然撞车（`sht20` / `sht30` /
+    `sgp30` / `servo` / `sr04` 都想用 `s`），而撞车的后果是**构建期 400**——
+    学生勾两件传感器就生成不出来。给一件声明候选，撞车时它自己让位，学生看到的
+    仍是"一件一个字符"。候选只在**首选不可用时**才轮到，顺序就是声明顺序
+    （确定性：同一选中集恒定同一结果）。
+
+    **本类只管形状**；那张"谁能用哪个字符"的表（保留字 / 让位 / 形状加严）与
     C 侧分派都在 `hwcheck_console.py`（`build_console_table` / `console_payload`
     / `render_console_runtime`，工单 06 落地）——配方数据与"命令空间"是两件事，
     分开放，配方的形状判据就不必知道库内既有命令叫什么。
@@ -132,6 +140,7 @@ class RecipeConsole:
 
     command: str
     description: str = ""
+    candidates: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -439,6 +448,39 @@ def _parse_read(where: str, raw: Any) -> tuple[RecipeRead, ...]:
     return tuple(RecipeRead(expression=text) for text in expressions)
 
 
+def _parse_console_candidates(
+    raw: Any, where: str, command: str
+) -> tuple[str, ...]:
+    """`console.candidates` → 候选字符元组（纯函数；**形状**判据，保序）。
+
+    判据刻意与 `console.command` 同款：每个候选必须是**单个字符**（命令循环按
+    字符分派），多字符 / 空串 / 非字符串一律点名字段大声失败——静默丢掉一个写错
+    的候选，表现是"这一件老是撞车"，查不出是哪一行写坏了。
+
+    缺省 = 没有候选（空元组）：老配方**逐字兼容**。与首选重复（或候选之间重复）
+    不算错，只是冗余——分配时按归一形态去重，不会出现"同一个字符试两遍"。
+    """
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise HwCheckError(
+            f"{where} 必须是字符数组（如 [\"w\", \"z\"]，首选被占用时按这个顺序"
+            f"让位），收到 {raw!r}"
+        )
+    out: list[str] = []
+    for item in raw:
+        text = item.strip() if isinstance(item, str) else ""
+        if len(text) != 1:
+            raise HwCheckError(
+                f"{where} 里的 {item!r} 不是**单个字符**——候选与首选同款判据："
+                "命令循环按字符分派，多字符 / 空候选没人认得出"
+            )
+        if text == command or text in out:
+            continue  # 首选自己 / 重复声明：冗余但合法，去重即可
+        out.append(text)
+    return tuple(out)
+
+
 def _parse_section(slug: str, platform: str, data: Any, source: str) -> RecipeSection:
     """一条配方 → RecipeSection（**形状**判据；函数名判据归 validate_recipes）。"""
     if not isinstance(data, dict):
@@ -531,7 +573,12 @@ def _parse_section(slug: str, platform: str, data: Any, source: str) -> RecipeSe
                     f"收到 {raw_desc!r}"
                 )
             description = raw_desc.strip()
-        console = RecipeConsole(command=command, description=description)
+        candidates = _parse_console_candidates(
+            raw_console.get("candidates"), f"{console_where}的 console.candidates",
+            command,
+        )
+        console = RecipeConsole(command=command, description=description,
+                                candidates=candidates)
 
     section = RecipeSection(
         slug=slug, platform=platform, include=include, locals=locals_,
@@ -1155,7 +1202,10 @@ def resolve_sections(
     )
 
 
-def sections_payload(sections: Sequence[RecipeSection]) -> list[dict[str, Any]]:
+def sections_payload(
+    sections: Sequence[RecipeSection],
+    commands: Mapping[str, str] | None = None,
+) -> list[dict[str, Any]]:
     """逐件专精小节的载荷（页面只渲染，不重推判据）。
 
     字段 = 配方各段的可见面 + `tag`（专精件与未专精件外观可区分的判据，前端只
@@ -1163,7 +1213,14 @@ def sections_payload(sections: Sequence[RecipeSection]) -> list[dict[str, Any]]:
     它们是配方契约的一部分（工单 05 的头文件 / 局部变量与探头、06 的命令表都要
     读同一份载荷），留着不算投机抽象：前端不读不等于载荷可以缺，缺了下一个工单
     就得改端点。
+
+    `commands`（工单 hwcheck-specialize/01）＝ **分配后的命令字符**（`slug → 字符`，
+    由 `hwcheck_console.build_console_table` 产出）。配方里的 `console.command` 只是
+    "这一件想用哪个字符"，首选被别的器件占了之后实际敲的是候选里的某一个——页面
+    必须显示**实际那一个**，否则会出现"两件都写着敲 l"的错位。不给（旧调用方 /
+    纯载荷测试）= 照旧读配方首选；给空映射与不给同义（没分配结果可覆盖）。
     """
+    assigned = commands or {}
     return [
         {
             "slug": section.slug,
@@ -1186,7 +1243,7 @@ def sections_payload(sections: Sequence[RecipeSection]) -> list[dict[str, Any]]:
             ],
             "console": (
                 None if section.console is None
-                else {"command": section.console.command,
+                else {"command": assigned.get(section.slug, section.console.command),
                       "description": section.console.description}
             ),
             "note": list(section.note),

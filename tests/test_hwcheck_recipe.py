@@ -39,6 +39,7 @@ from contest_generator.hwcheck_recipe import (
     render_recipe_section,
     render_recipe_summary,
     resolve_sections,
+    sections_payload,
 )
 from contest_generator.manifest import ModuleManifest
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
@@ -160,6 +161,84 @@ def test_parse_reads_the_probe_and_console_segments():
     assert section.probe.calls == ("mpu6050_read_id()",)
     assert section.probe.expect == "0x68"
     assert section.console == RecipeConsole(command="m", description="复测 MPU6050")
+
+
+def test_sections_payload_reports_the_assigned_console_character():
+    """页面上的"敲哪个字符"必须是**分配后**的字符（工单 hwcheck-specialize/01）。
+
+    配方里写的首选只是"想用哪个"：两件都想用 `l` 时，第二件会被分到候选字符。
+    小节载荷若照抄首选，页面就会出现两件都写着"敲 l 复测"——一件真、一件假，
+    而这正是"页面与板上读同一张表"要挡的错位。
+    """
+    from contest_generator.hwcheck_console import build_console_table
+
+    sections = (
+        RecipeSection(slug="led", platform=PLATFORM_STM32,
+                      init=("led_init(LED_RED)",),
+                      console=RecipeConsole("l", "复测 LED")),
+        RecipeSection(slug="sht20", platform=PLATFORM_STM32,
+                      init=("sht20_init()",),
+                      console=RecipeConsole("l", "复测 SHT20", ("t",))),
+    )
+    table = build_console_table(sections)
+    assigned = {entry.slug: entry.command for entry in table.entries}
+    payload = {
+        item["slug"]: item["console"]
+        for item in sections_payload(sections, commands=assigned)
+    }
+    assert payload["led"]["command"] == "l"
+    assert payload["sht20"]["command"] == "t", "让位后的字符才是页面上该敲的那一个"
+    assert payload["sht20"]["description"] == "复测 SHT20"
+    # 不给分配结果 = 照旧读配方首选（老调用方零改动，判据仍只有一处）
+    assert [item["console"]["command"] for item in sections_payload(sections)] == ["l", "l"]
+
+
+def test_parse_reads_the_candidate_characters_of_a_console_command():
+    """`console` 段可以声明**候选字符**（工单 hwcheck-specialize/01）。
+
+    首选（`console.command`）是"这一件最想用的字符"，候选是"首选被别的器件占了
+    时按顺序让位到哪几个"——所以解析必须**保序**（让位顺序就是声明顺序），并且
+    只判形状、不判"这个字符库内让不让用"（命令空间归 `hwcheck_console`，
+    配方这一层不必知道库内既有命令叫什么）。
+    """
+    recipes = parse_recipes(_document((
+        "sht20", PLATFORM_STM32,
+        _section(console={"command": "t", "candidates": ["w", "z"],
+                          "description": "复测 SHT20"}),
+    )))
+    assert recipes["sht20"][PLATFORM_STM32].console == RecipeConsole(
+        command="t", description="复测 SHT20", candidates=("w", "z"))
+
+
+def test_parse_keeps_old_recipes_candidate_free():
+    """不带候选的老配方解析结果**逐字不变**（`candidates` 缺省 = 空元组）。
+
+    向后兼容是这一单的硬要求：库内 17 格老配方一个字节都不用改。
+    """
+    recipes = parse_recipes(_document((
+        "led", PLATFORM_STM32, _section(console={"command": "l", "description": "复测 LED"}),
+    )))
+    assert recipes["led"][PLATFORM_STM32].console == RecipeConsole(
+        command="l", description="复测 LED")
+
+
+@pytest.mark.parametrize(
+    "candidates",
+    ["wz", ["wz"], [""], [1], [None]],
+)
+def test_parse_rejects_a_malformed_candidate_list(candidates):
+    """候选字符的形状判据与首选同款：**单个字符**，数组，不许静默丢。
+
+    `[""]` 这类空串若被静默丢掉，"写了候选却一直不生效"就会变成一条查不出来的
+    怪现象（学生只看到反复撞车）；点名字段才是能改得动的报错。
+    """
+    with pytest.raises(HwCheckError) as exc:
+        parse_recipes(_document((
+            "sht20", PLATFORM_STM32,
+            _section(console={"command": "t", "candidates": candidates,
+                              "description": "复测 SHT20"}),
+        )))
+    assert "console.candidates" in str(exc.value)
 
 
 @pytest.mark.parametrize("bad", [None, [], "not-an-object", 42])
