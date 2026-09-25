@@ -1,18 +1,28 @@
 # -*- coding: utf-8 -*-
-"""工单 03 的反证：**撤掉一条本轮专精化的配方**，扩张地板断言必须红。
+"""专精面扩张的**反证**：**撤掉一条本轮专精化的配方**，扩张地板断言必须红。
 
-判据（spec「反证要求」①）：把 `sht30` 那两格（stm32 / mspm0）从
+判据（spec「反证要求」①）：把被点名的那一件的两格（stm32 / mspm0）从
 `library/hwcheck_recipes.json` 里临时拿掉 → `tests/test_hwcheck_recipe.py` 的
 扩张地板（逐格 + 条数）必须**当场红**；拿回来 → 又全绿。两条读数都要有，
 否则"地板钉住了这一格"只是一句承诺。
+
+**每批跑一次、各留各的读数**（工单 03 起）：被撤的件与输出文件都从命令行给，
+缺省仍是批次 A 的 `sht30` / `probe-expansion-floor.txt`——这样后一批不会把前一批
+的证据覆写掉（批次 A 的记录仍对得上它跑出来的那份文件）。
+本仓的每批读数：
+  * 批次 A（工单 03）`sht30`  → `probe-expansion-floor.txt`
+  * 批次 B（工单 04）`bh1750` → `probe-expansion-floor-04.txt`
 
 回滚纪律与 `probe-sample-decouple.py` 同款：**只在文件仍逐字节等于我们写进去的那份时**
 才写回原字节；窗口期内被外力改动就不碰它并大声报错（宁可不还原，也不回滚别人的改动）。
 退出码 0 = 反证成立（撤掉必红 + 还原必绿 + 文件逐字节还原）。
 
 用法：`py -3 .scratch/hwcheck-specialize/probe-expansion-floor.py`
-读数先落盘 `probe-expansion-floor.txt` 再打印。
+      `py -3 .scratch/hwcheck-specialize/probe-expansion-floor.py --victim bh1750 \\
+          --out probe-expansion-floor-04.txt`
+读数先落盘再打印。
 """
+import argparse
 import hashlib
 import json
 import subprocess
@@ -25,8 +35,17 @@ sys.path.insert(0, str(REPO / "src"))
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 RECIPES = REPO / "library" / "hwcheck_recipes.json"
-VICTIM = "sht30"
-LINES: list[str] = ["=== 工单 03 反证：撤掉一条新配方 → 扩张地板必须红 ===", ""]
+
+_parser = argparse.ArgumentParser()
+_parser.add_argument("--victim", default="sht30",
+                     help="被撤掉的那一件（缺省 = 批次 A 的 sht30）")
+_parser.add_argument("--out", default="probe-expansion-floor.txt",
+                     help="读数文件名（落在本目录；缺省 = 批次 A 的那份）")
+_args = _parser.parse_args()
+
+VICTIM = _args.victim
+OUT = REPO / ".scratch" / "hwcheck-specialize" / _args.out
+LINES: list[str] = [f"=== 反证：撤掉 {VICTIM} 那两格配方 → 扩张地板必须红 ===", ""]
 FAILURES: list[str] = []
 FLOOR = "tests/test_hwcheck_recipe.py"
 
@@ -63,8 +82,14 @@ LINES.append("")
 patched_bytes: bytes | None = None
 restored = False
 try:
-    victim = document.pop(VICTIM)
-    patched_bytes = (json.dumps(document, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    document.pop(VICTIM)
+    # 换行形态跟原文件走：配方文件在盘上是 **CRLF**，反证窗口期内若被强杀，
+    # 留下的也得是同一种换行（LF 半成品会被 git 当成整文件改写，也让"逐字节复原"难判）。
+    _newline = "\r\n" if "\r\n" in original.decode("utf-8") else "\n"
+    patched_bytes = (
+        json.dumps(document, ensure_ascii=False, indent=2).replace("\n", _newline)
+        + _newline
+    ).encode("utf-8")
     RECIPES.write_bytes(patched_bytes)
     rc_after, tail_after, out_after = _run_floor()
     LINES.append(f"2) 撤掉 {VICTIM} 之后：地板 rc={rc_after}（{tail_after[:110]}）")
@@ -101,7 +126,6 @@ LINES.append("结论：" + ("✓ 反证成立——撤掉必红、拿回来必�
                         if verdict else "✗ 反证不成立：" + "；".join(FAILURES)))
 
 text = "\n".join(LINES) + "\n"
-(REPO / ".scratch" / "hwcheck-specialize" / "probe-expansion-floor.txt").write_text(
-    text, encoding="utf-8")
+OUT.write_text(text, encoding="utf-8")
 print(text)
 raise SystemExit(0 if verdict else 1)

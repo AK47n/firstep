@@ -7,31 +7,31 @@
 
 **被谁阻塞：** 01（命令字符让位）、02（未专精样本夹具解耦）。
 
-**状态：** ready-for-agent
+**状态：** resolved
 
-- [ ] 六格配方写进 `library/hwcheck_recipes.json`，事实底稿 =
+- [x] 六格配方写进 `library/hwcheck_recipes.json`，事实底稿 =
       `.scratch/hwcheck-specialize/recon-01-env-sensors.md` §4–§6
-- [ ] `include` 用该平台真头名（`bh1750.h` / `bh1750_stm32.h` …）
-- [ ] **`bh1750` 的测量序列整条写进 `prereq`**：`bh1750_init()` → `bh1750_start_measure()` →
+- [x] `include` 用该平台真头名（`bh1750.h` / `bh1750_stm32.h` …）
+- [x] **`bh1750` 的测量序列整条写进 `prereq`**：`bh1750_init()` → `bh1750_start_measure()` →
       `delay_ms(BH1750_MEASURE_DELAY_MS)`；**不写 `init` 段**。
       理由（侦察实测）：mspm0 母版没有 .h，`init/probe/read` 只认本模块头里的名字，
       `delay_ms` 出现在这几段会**构建期红**；`prereq` 是唯一按"库内任何模块 ∪ 母版"判的段。
       少了这句等待，读回的是上电默认值（通常 0 lx）——这是**形状被 schema 逼出来的**，不是随手选择，
       工单要在配方注记里写明理由（下一个人照抄才不会再踩）
-- [ ] `bmp180` / `ms5611` 写 `init_expect: "0"`（0 = 11 个校准字 / 复位 + 8 字 PROM 全部 ACK），
+- [x] `bmp180` / `ms5611` 写 `init_expect: "0"`（0 = 11 个校准字 / 复位 + 8 字 PROM 全部 ACK），
       同时 note 里写清**这不是身份校验**（BMP180 的 0xD0=0x55 读法没公开、MS5611 无 ID 寄存器）
-- [ ] `probe`：`bh1750_read_lux(&lux) == 0` / `bmp180_read(&t,&p) == 0` / `ms5611_read(&t,&p) == 0`
-- [ ] `read`：光照两行（整数 + 小数第一位）、气压 `(int)p`（**单位 Pa，写清 101325 ≈ 1 标准大气压**）、
+- [x] `probe`：`bh1750_read_lux(&lux) == 0` / `bmp180_read(&t,&p) == 0` / `ms5611_read(&t,&p) == 0`
+- [x] `read`：光照两行（整数 + 小数第一位）、气压 `(int)p`（**单位 Pa，写清 101325 ≈ 1 标准大气压**）、
       海拔 `(int)xxx_read_altitude(p)`、温度两行；`locals` 登记对应 float
-- [ ] `note` 至少覆盖：① 每件**判 FAIL 时按返回码怎么排查**；② "海拔不是 0 是正常的（海平面参考值固定
+- [x] `note` 至少覆盖：① 每件**判 FAIL 时按返回码怎么排查**；② "海拔不是 0 是正常的（海平面参考值固定
       101325 Pa）"；③ `bmp180` 与 `ms5611` 互替且 **stm32 侧同址 0xEE**（同选必冲突）；
       ④ `ms5611` 一次 init 停约 0.4 秒不是卡死；⑤ `bh1750` 的 ALT ADDRESS 必须接地
-- [ ] `console`：`bh1750` 首选 `f`、`bmp180` 首选 `c`、`ms5611` 首选 `q`（两件气压件**不许同字符**——
+- [x] `console`：`bh1750` 首选 `f`、`bmp180` 首选 `c`、`ms5611` 首选 `q`（两件气压件**不许同字符**——
       互斥组只是 UI 软单选，绕过 UI 同选就撞车；这正是 01 要解决的问题）
-- [ ] 检测页实测：三件两平台显示 `[专精]`；`bh1750` 那格真能编过（prereq 形状的验收）
-- [ ] **扩张地板**追加 6 格（新常量 + 新用例，`PILOT` 常量不动）；未专精基线如实下调
-- [ ] **真编译矩阵**：`probe-compile-matrix.py --slugs bh1750,bmp180,ms5611` → 六格全 `[PASS]`
-- [ ] **反证**：把 `bh1750` 的 prereq 里那句 `delay_ms(...)` 删掉 → 产物里必须看不到等待
+- [x] 检测页实测：三件两平台显示 `[专精]`；`bh1750` 那格真能编过（prereq 形状的验收）
+- [x] **扩张地板**追加 6 格（新常量 + 新用例，`PILOT` 常量不动）；未专精基线如实下调
+- [x] **真编译矩阵**：`probe-compile-matrix.py --slugs bh1750,bmp180,ms5611` → 六格全 `[PASS]`
+- [x] **反证**：把 `bh1750` 的 prereq 里那句 `delay_ms(...)` 删掉 → 产物里必须看不到等待
       （或编译/行为对不上），证明这一条不是装饰
 
 ---
@@ -48,3 +48,101 @@
 - 驱动缺陷（**本单不修**，note 如实提示）：`bh1750_init()` 吞掉写命令返回值（bh1750.c:173）；
   `ms5611` 读了 PROM CRC 却不校验（ms5611.c:236-263）；`bmp180` 的 ID 读法被 static 挡住
   （bmp180.c:179,203）。
+
+### 2026-09-25 落地记录（实现 + 读数）
+
+**配方**：6 格写进 `library/hwcheck_recipes.json`（`bh1750` / `bmp180` / `ms5611` × 两平台），
+事实底稿 = `recon-01-env-sensors.md` §4–§6：
+
+- `bh1750`（两平台同形）：**没有 `init` 段**；`prereq` = `bh1750_init()` →
+  `bh1750_start_measure()` → `delay_ms(BH1750_MEASURE_DELAY_MS)`；probe =
+  `bh1750_read_lux(&lux)` == `0`；`locals` = `float lux = 0`；read = 光照两行（整数 + 小数第一位）。
+  配方注记第 2 条把"为什么整条序列在 prereq"写给了下一个照抄的人。
+- `bmp180` / `ms5611`：`init` + `init_expect: "0"`（**这不是身份校验**，note 第 1 条写明）；
+  probe = `xxx_read(&t, &p)` == `0`；`locals` = `float t = 0` / `float p = 0`；
+  read 四行 = 温度两行 + `(int)p`（Pa，海平面 101325 的说明在单位里）+ `(int)xxx_read_altitude(p)`。
+- `console`：`bh1750` 首选 `f`（候选 `n`/`w`）、`bmp180` 首选 `c`（候选 `n`/`z`）、
+  `ms5611` 首选 `q`（候选 `w`/`i`）——**两件气压件不同字符**。
+- note 每格 6 行，工单点名的五条（返回码分段 / 海拔不是 0 / 互替 + 同址 0xEE / ms5611 的 0.4 秒 /
+  bh1750 的 ALT ADDRESS 接地）逐格齐备。
+
+**命令表实测**（真库真配方，`build_console_table`）：两平台分配结果 = 各自首选
+（stm32 13 条 / mspm0 16 条，全表无重复字符）；帮助行里本批三行 = **74 / 81 / 81 字节**，
+都远在 `hwcheck_line[128]` 之内（全表最长的是既有的 `xunji × mspm0` 131 字节 —— 见下"新用例"段）。
+
+**扩张地板**：`tests/test_hwcheck_recipe.py` 的 `EXPANSION` **只追加**这 6 格
+（`bh1750` / `bmp180` / `ms5611` × 两平台），`EXPANSION_CELL_COUNT` **6 → 12**（手写字面量，
+不是 `len(EXPANSION)`）；`PILOT` 一个字没动。
+宽读一处如实记：工单原文写"新常量 + 新用例"，而新常量与三条地板用例是工单 03 立的，本批按 spec
+「只追加、不改写」扩格——**"新用例"另由下面那条行缓冲守卫补上**（它不属于地板）。
+
+**未专精基线**：`tests/test_hwcheck_generic.py` **153 / 128 → 147 / 122**（实测读数 =
+`planned=147` / `with_init=122`，与 `probe-batch-cells.txt` 的【04】段算式一致：本批 6 格
+每格都拿得到无参初始化 `bh1750_init` / `bmp180_init` / `ms5611_init`，所以两个数各降 6）。
+
+**真编译矩阵**（`probe-compile-matrix-04.txt`，`--out` 单独落盘，**不覆写批次 A 的那份**）：
+
+| 平台 | bh1750 | bmp180 | ms5611 |
+|---|---|---|---|
+| mspm0 | `[PASS]` 页面标记 `[专精]` 0/0 | `[PASS]` 同上 | `[PASS]` 同上 |
+| stm32 | `[PASS]` 页面标记 `[专精]` 0/0 | `[PASS]` 同上 | `[PASS]` 同上 |
+
+六格全部 exit=0、编译器 0 error / 0 warning、**链接器 0 告警**（口径漏洞那条这次没撞上，如实为 0）；
+页面标记逐格 = `[专精]`（配方真的生效，不是悄悄退回通用降级）。
+
+**反证（两处，都成立）**：
+
+1. **撤一格 → 地板必红**（`probe-expansion-floor-04.txt`；该探针本批加了 `--victim` / `--out`，
+   缺省仍是批次 A 的 `sht30` / `probe-expansion-floor.txt`，它那份读数不受影响）：
+   撤掉 `bh1750` 两格 → rc 0 → **1（4 failed，红因点名 `bh1750`）** → 拿回来 0；
+   配方文件按原字节回滚，sha256 前后一致（4 failed = 2 条地板 + 2 条新的行缓冲守卫）。
+2. **那句等待是承重的**（`probe-bh1750-wait.txt`）：把同一句 `delay_ms(...)` 从 `prereq`
+   **搬进 `init`** 喂真校验器 → **mspm0 构建期红**（"引用了不存在的接口 `delay_ms`"）、
+   **stm32 照样 PASS**（母版有 `ml_delay.h`）⇒ "形状被 schema 逼到 prereq"这句话是可伪证的；
+   再把它从 prereq 删掉 → 渲染产物里等待消失、**其余语句逐条不变**（这条是断言不是打印）；
+   随后按原字节还原、产物逐行复原。
+
+**新用例（本批立的守卫，也补上了工单要的"新用例"）**：
+`tests/test_hwcheck_recipe.py::test_expansion_read_lines_fit_the_device_line_buffer` ——
+扩张格的每一条读数行都要放得进板上 `hwcheck_line[128]`（值宽取 int32 极端写法 11 字符作上界）。
+**它是被一次真自查逼出来的**：本批照工单 03 的先例核对行宽时抓到 **4 行超宽**
+（光照整数行 146、气压行 127、海拔行 **171** 字节）——中文一字 3 字节，截在字中间就是半个乱码。
+把单位改短（细节挪进 note）后全部落到 **≤112 字节、余量 ≥16**，与批次 A 的最宽行同档。
+反证 = `probe-line-buffer.txt`：把 `bmp180` 两平台的单位各撑宽 → 用例 **rc 0 → 1**（红因点名该格）
+→ 回滚 → rc 0，文件逐字节还原。
+
+**结论**：完成。三件的"能判 / 不能判"按工单要求分了层，六格真编译 + 地板 + 三处反证都成立；
+⚠ 上板状态照旧如实写**「未上板」**（`verified: true / hardware_bound: false`）——编译绿不是板上证据。
+
+### 2026-09-25 双轴评审整改（固定点 `a8c56d7a`）
+
+**两轴点名 / 硬错（已改）**：
+
+1. **stm32 格的 note 引用了 mspm0 的文件行号**（批次 A 评审修过同款）：`bh1750 × stm32` 原引
+   `bh1750.c:173`，本平台真出处是 `bh1750_stm32.c:157`（`(void)bh1750_write_cmd(BH1750_CMD_POWER_ON);`）；
+   `bmp180` / `ms5611` 的 init 段与 static 读原语同理，已按平台各写各的
+   （`bmp180_stm32.c:228-285` / `:153/178`、`ms5611_stm32.c:216-243`）。
+2. **两平台 note 逐字相同 6/6** 正是①把错误行号搬过界的通道 → 把"引用出处"与"本平台接线"两条
+   拆成平台各自一份，重复度降到 4/6（批次 A 的 aht10 是 3/6）。
+3. **`ms5611` note 的"敲一次复测约 0.02 秒"是错的**：`case 'q'` 分派的是整节函数
+   `hwcheck_check_ms5611()`，里面**照样先跑一遍 `ms5611_init()`**（含 `delay_ms(300)`）
+   ⇒ 复测也要 0.3 秒上下。已改成"复测也一样不快……两遍都慢是驱动形状，不是卡死"，
+   免得把学生引向"复测应当秒回"。
+
+**判据 / 体例侧（已改）**：
+
+4. **反证原来是同义反复**：渲染器把 `prereq` 逐字输出（`hwcheck_recipe.py:1304-1305`），
+   "删一行 JSON → 产物里没有它"原理上不可能失败 ⇒ 已加**可伪证的那一半**（同一句搬进 `init`
+   时 mspm0 构建期红、stm32 过），并把"其余语句不变""还原后逐行复原"从打印升成断言；
+   `raise SystemExit` 也从 `try` 里挪出去（原先会让 `finally` 误报"未回滚"）。
+5. **探针的换行纪律**：`probe-expansion-floor.py` 改写配方文件时原来写 LF，而盘上是 **CRLF**
+   ——窗口期内被强杀会留下 LF 半成品。已改为跟原文件形态走（与 `probe-bh1750-wait.py` 一致）。
+6. **证据不许覆写**：本批的编译矩阵读数改用 `--out probe-compile-matrix-04.txt` 单独落盘；
+   批次 A 的 `probe-compile-matrix.txt` 已按 HEAD 还原（工单 03 的引用仍对得上）。
+7. `docs/agents/local-environment.md` §0 交接区同步更新（04 已 resolved；**用户已明确点头
+   从 04 一路推到 frontier**，后续批次不再逐批等点头；两处量具纪律与跨批挂账一并写进去）。
+
+**本单记录、未修的既有账**（已进 `.scratch/backlog.md` §21）：`debug_uart × stm32` 的读数行
+约 **247 字节**，超 `hwcheck_line[128]` ⇒ 板上会截成半个汉字。它是 v1 pilot 的配方内容，
+本单射程只有批次 B 六格，spec 也明说已 resolved 的块只允许被动适配——所以**只记账、不动它**；
+新的行缓冲守卫刻意只覆盖 `EXPANSION`、不吃 pilot，**不会把这条账悄悄判绿**。

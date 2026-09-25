@@ -1,0 +1,27 @@
+=== 工单 04 反证：bh1750 那句等待只能住 prereq，且它是承重的 ===
+
+   stm32 母版 .h 个数 = 22；bh1750 判据面里有 delay_ms 吗 = True
+   mspm0 母版 .h 个数 = 0；bh1750 判据面里有 delay_ms 吗 = False
+
+0) 前置：配方文件 sha256 = a2ae5c81c6853c90…；bh1750 的 prereq（两平台）= ['bh1750_init()', 'bh1750_start_measure()', 'delay_ms(BH1750_MEASURE_DELAY_MS)'] / ['bh1750_init()', 'bh1750_start_measure()', 'delay_ms(BH1750_MEASURE_DELAY_MS)']
+   渲染 bh1750 × stm32：等待 1 条 → ['delay_ms(BH1750_MEASURE_DELAY_MS);']
+   语句顺序 = ['int r;', 'float lux = 0;', 'bh1750_init();', 'bh1750_start_measure();', 'delay_ms(BH1750_MEASURE_DELAY_MS);', 'r = bh1750_read_lux(&lux);', 'hwcheck_newline();', 'hwcheck_newline();']
+   渲染 bh1750 × mspm0：等待 1 条 → ['delay_ms(BH1750_MEASURE_DELAY_MS);']
+   语句顺序 = ['int r;', 'float lux = 0;', 'bh1750_init();', 'bh1750_start_measure();', 'delay_ms(BH1750_MEASURE_DELAY_MS);', 'r = bh1750_read_lux(&lux);', 'hwcheck_newline();', 'hwcheck_newline();']
+
+1) 形状实验：把同一句 `delay_ms(...)` 搬进 **init** 段（不碰文件），喂真校验器：
+   stm32：✓ PASS（这一侧本来就放行 delay_ms）
+   mspm0：✗ 构建期红 → hwcheck_recipes.json 的 'bh1750' × mspm0 的初始化段引用了不存在的接口 'delay_ms'（表达式：delay_ms(BH1750_MEASURE_DELAY_MS)）——该模块 mspm0 侧的头文件里没有这个名字，请改用真实接口（配方写错就该当场红，不学骨架兜底把它改成注释）
+
+2) 只删掉 prereq 里那一句（其余一字不动）之后：
+   stm32：等待 0 条 → []
+   语句顺序 = ['int r;', 'float lux = 0;', 'bh1750_init();', 'bh1750_start_measure();', 'r = bh1750_read_lux(&lux);', 'hwcheck_newline();', 'hwcheck_newline();']
+   mspm0：等待 0 条 → []
+   语句顺序 = ['int r;', 'float lux = 0;', 'bh1750_init();', 'bh1750_start_measure();', 'r = bh1750_read_lux(&lux);', 'hwcheck_newline();', 'hwcheck_newline();']
+
+3) 回滚：✓ 按原字节写回，sha256 与前置一致（a2ae5c81c6853c90…）
+4) 拿回来之后：
+   stm32：等待 1 条 → ['delay_ms(BH1750_MEASURE_DELAY_MS);']
+   mspm0：等待 1 条 → ['delay_ms(BH1750_MEASURE_DELAY_MS);']
+
+结论：✓ 反证成立——① 同一句搬进 init 时 mspm0 构建期红、stm32 照样过（形状确实被 schema 逼到 prereq）；② 删掉它，渲染产物里的等待消失而其余语句逐条不变；③ 按原字节还原、产物逐行复原

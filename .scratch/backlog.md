@@ -663,3 +663,26 @@ workspace（那是绕开 CCS 工程模型的副产品，不是有意设计）。
 `.cproject` / `targetConfigs/*.ccxml` 自引用，得配一次 CCS 真机实测才敢拍（它也是
 `architecture-deepening-v5/08`「明确不动」段划走的「生成工程赛题级重命名」）。**本项至此不算待办。**
 
+## 21. `debug_uart × stm32` 的读数行超出板上行缓冲（2026-09-25 记，未开单）
+
+**来源**：工单 `hwcheck-specialize/04`（批次 B：bh1750/bmp180/ms5611）落地时，为核对本批六格的
+读数行宽而做的一次自查——顺手把**整份配方文件**都量了一遍，撞出这一条。读数与算式见
+`.scratch/hwcheck-specialize/probe-compile-matrix-04.txt` 同目录的工单落地记录。
+
+**现象**：板上报告缓冲是 `hwcheck_line[128]`（`src/contest_generator/hwcheck.py` 渲染的
+`static char hwcheck_line[128]`，超长**静默截断**——溢出保护是刻意的，宁可截一行也不踩内存）。
+一条读数行 = `  <表达式> = <值> <单位>`。`debug_uart × stm32` 那条的表达式是
+`gpio_get(DEBUG_UART_RX_GPIO, DEBUG_UART_RX_Pin)`，加上那段长说明，**约 247 字节** ⇒ 超出的
+部分在板上被丢掉，而中文一字 3 字节，**截在字中间就是半个乱码**——学生看到的是"读数那行尾巴花了"，
+不是一条能自查的报错。同一量法下 `xunji × mspm0` 是 117 字节（贴着上限但没超）。
+
+**为什么记而不在本单修**：它是 v1 pilot 的配方内容，而 `hwcheck-specialize/04` 射程只有批次 B
+六格；spec 明说已 resolved 的两块**只允许被动适配**，不借这批改它们的内容。工单 04 立的新守卫
+`test_expansion_read_lines_fit_the_device_line_buffer` **只覆盖 `EXPANSION`**（扩张格），
+刻意不吃 pilot——所以这条账不会被那条守卫悄悄判绿。
+
+**出路**（要修时）：把 `debug_uart × stm32` 那条 `unit` 写短（细节挪进 `note`，note 是页面文本、
+不进板上的行缓冲），再考虑把守卫的射程从 `EXPANSION` 扩到全量配方。代价：会动到 pilot 配方，
+得单独一张工单 + 一次两平台编译矩阵复跑。
+
+

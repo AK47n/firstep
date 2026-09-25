@@ -82,7 +82,10 @@ PILOT = (("led", PLATFORM_STM32), ("led", PLATFORM_MSPM0),
 #   批次 F（工单 08）hx711 / joystick / servo / relay      → 扩张 40，总 57
 EXPANSION = (("aht10", PLATFORM_STM32), ("aht10", PLATFORM_MSPM0),
              ("sht20", PLATFORM_STM32), ("sht20", PLATFORM_MSPM0),
-             ("sht30", PLATFORM_STM32), ("sht30", PLATFORM_MSPM0))
+             ("sht30", PLATFORM_STM32), ("sht30", PLATFORM_MSPM0),
+             ("bh1750", PLATFORM_STM32), ("bh1750", PLATFORM_MSPM0),
+             ("bmp180", PLATFORM_STM32), ("bmp180", PLATFORM_MSPM0),
+             ("ms5611", PLATFORM_STM32), ("ms5611", PLATFORM_MSPM0))
 
 # 扩张清单的**精确条数**（= `len(EXPANSION)`；每批长一次：追加了几格就改成几）。
 # 判据不是"至少"，是"就是这么多"——有人悄悄删一行 `EXPANSION`，逐格断言就少跑一格、
@@ -90,7 +93,7 @@ EXPANSION = (("aht10", PLATFORM_STM32), ("aht10", PLATFORM_MSPM0),
 # 数字改小"三处一起动仍然会全绿（`PILOT` 当年正是为这个洞加了按**配方文件实数**判的
 # 第三条地板）；本 spec 明说既有的文件级下限断言（`>= 17` 格 / `>= 10` 件）属 v1 那 17 格、
 # **不改**，所以这条残留的洞如实记在这里，不靠措辞掩盖。
-EXPANSION_CELL_COUNT = 6
+EXPANSION_CELL_COUNT = 12
 
 
 def _unescape_c(code: str) -> str:
@@ -822,6 +825,52 @@ def test_expansion_floor_does_not_borrow_pilot_cells():
     （两件事本来就不该互相顶替：`PILOT` 那 17 格的冻结值不变，扩张是它之外新长出来的。）
     """
     assert not (set(EXPANSION) & set(PILOT))
+
+
+# 板上行缓冲：`hwcheck.py` 渲的 `static char hwcheck_line[128]`——报告文本先攒一行、
+# 遇换行才整行送出，**超长静默截断**（溢出保护是刻意的：宁可截一行，也不踩内存）。
+# 一条读数行 = `  <表达式> = <值> <单位>`；值的宽度取 int32 的极端写法
+# `-2147483648`（11 字符）作上界——比任何真实读数都宽，所以这条判据不依赖
+# "这个量大概几位数"的猜测。
+_LINE_BUFFER_BYTES = 128
+_INT32_MAX_CHARS = 11
+
+
+@pytest.mark.parametrize("slug,platform", EXPANSION)
+def test_expansion_read_lines_fit_the_device_line_buffer(slug, platform):
+    """**扩张格**的每一条读数行都放得进板上的 128 字节行缓冲（工单 04 立的用例）。
+
+    为什么本单要新立一条：截断发生在**字节**层面，中文一字 3 字节，截在字中间就是
+    半个乱码——学生看到的是"读数那行尾巴花了"，而不是一条能自查的报错。既有的
+    `test_every_reported_line_fits_the_line_buffer` 吃的是**手搓小节 + 通用件**、
+    **不读真配方**，所以扩张批次的读数行宽一直靠"每批自行核对一次"（工单 03 的落地
+    记录里就有这么一条），没有守卫。工单 04 落地时正是这次自查抓到 **4 行超宽**
+    （最宽 171 字节：海拔那行），改完宽度再把它立成用例——反证见
+    `.scratch/hwcheck-specialize/probe-line-buffer.txt`（把某一格的单位撑宽 → 本用例必红）。
+
+    ⚠ **射程 = `EXPANSION` 这些格，不含 v1 `PILOT`**：pilot 的 `debug_uart × stm32`
+    那一行**本来就超**（表达式 `gpio_get(DEBUG_UART_RX_GPIO, DEBUG_UART_RX_Pin)`
+    加一段长说明 ≈ 247 字节，属既有的另一笔账）——本单只如实记账、不动它
+    （见 `.scratch/backlog.md`）。新批次往 `EXPANSION` 追加即自动吃到这条守卫。
+    """
+    from contest_generator.library import list_modules
+
+    manifests = list_modules(REAL_LIBRARY)
+    interfaces = _library_interfaces_all(REAL_LIBRARY, manifests)
+    recipes = load_recipes(REAL_LIBRARY, manifests, interfaces)
+    section = recipes[slug].for_platform(platform)
+    assert section is not None, f"真实库缺配方：{slug} × {platform}"
+    too_wide: list[str] = []
+    for item in section.read:
+        line = f"  {item.expression} = " + "9" * _INT32_MAX_CHARS + f" {item.unit}"
+        size = len(line.encode("utf-8"))
+        if size >= _LINE_BUFFER_BYTES:
+            too_wide.append(f"{size} 字节（余 {_LINE_BUFFER_BYTES - size}）：{line}")
+    assert not too_wide, (
+        f"{slug} × {platform} 的读数行放不下板上的行缓冲（可用 "
+        f"{_LINE_BUFFER_BYTES - 1} 字节；中文一字 3 字节，截在字中间就是乱码）——"
+        "把单位写短些，或把说明挪进 note：\n" + "\n".join(too_wide)
+    )
 
 
 def test_recipe_file_itself_keeps_the_floor_cell_count():
