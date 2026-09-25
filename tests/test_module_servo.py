@@ -147,6 +147,71 @@ def test_servo_duty_boundaries_mspm0():
 
 
 # ---------------------------------------------------------------------------
+# driver-defect-fixes/02：mspm0 的 20ms 周期必须能在 16 位计数器里表达
+# ---------------------------------------------------------------------------
+
+# 母版 SYSCTL 是 `forceDefaultClkConfig = true`（MSPM0G3507 复位默认 MCLK = 32MHz
+# SYSOSC）——生成产物里 SERVO_PWM 的输入时钟就是 32000000（`.scratch/b1-adc-servo`
+# 那一轮的 ti_msp_dl_config.h 实测）。
+BUSCLK_HZ = 32_000_000
+# SDK 的 SysConfig PWM 元数据写死了量程：TIMG = **16-bit counter + 8-bit prescaler**，
+# 只有 TIMG12 是 32-bit 且不带预分频；timerCount > 65535 时元数据直接报
+# "Timer Count Exceeds non-TIMG12 bounds"。
+TIMG16_MAX_COUNT = 65535
+
+
+def test_servo_mspm0_period_fits_the_16bit_counter():
+    """driver-defect-fixes/02 判据①：20ms 的计数值落在 SERVO_PWM 那颗粒子的量程内。
+
+    旧实现是 `SERVO_PWM_INST_CLK_FREQ / 50` 直写 LOAD = 640000，而 `DL_Timer_setLoadValue`
+    只做 `COUNTERREGS.LOAD = value`（不钳位）、16 位实例上高 16 位被丢掉
+    ⇒ 周期变成 50176 计数（≈1.57ms ≈638Hz），且 ≈96° 以上的比较值超过周期、输出恒高。
+    这里按 **syscfg 的事实**独立复算一遍（不照抄实现表达式）。
+    """
+    consts = _servo_constants()
+    syscfg = (MSPM0_MASTER / MSPM0_SYSCFG_FILENAME).read_text(encoding="utf-8", newline="")
+    prescale = int(re.search(r"SERVO_PWM\.clockPrescale\s*=\s*(\d+)\s*;", syscfg).group(1))
+    assert prescale >= 1
+
+    count_clock = BUSCLK_HZ // prescale
+    period_counts = count_clock // consts["SERVO_FREQ_HZ"]
+    assert period_counts <= TIMG16_MAX_COUNT, (
+        f"20ms 要 {period_counts} 计数，超过 16 位量程 {TIMG16_MAX_COUNT}"
+        f"（clockPrescale = {prescale} 太小）"
+    )
+    # 180°（角度满量程）的比较值必须严格小于周期值——这条直接钉住「≈96° 以上恒高」
+    assert _pulse_us(consts, consts["SERVO_ANGLE_MAX"]) < consts["SERVO_PERIOD_US"]
+    duty_max = (
+        period_counts * _pulse_us(consts, consts["SERVO_ANGLE_MAX"]) // consts["SERVO_PERIOD_US"]
+    )
+    assert 0 < duty_max < period_counts, (duty_max, period_counts)
+
+
+def test_servo_mspm0_runtime_guards_the_counter_range():
+    """driver-defect-fixes/02 判据②：驱动把量程立成**编译期判据**，而不是靠人记得。
+
+    运行时只写「按 `SERVO_PWM_INST_CLK_FREQ` 算出来的周期与比较值」（那是折过预分频的
+    计数时钟）；母版分频一旦被改小 / 换成 32MHz 直供，`#error` 当场让工程编不过——
+    **不允许「静默钳位」**（钳位会把 50Hz 变成别的频率：不崩，但也不对）。
+    """
+    source = _read("modules/servo/code/servo_mspm0.c")
+    assert re.search(r"^#define\s+SERVO_TIMER_MAX_COUNT\s+65535u", source, re.MULTILINE)
+    assert re.search(
+        r"#if\s+\(\s*SERVO_PWM_INST_CLK_FREQ\s*/\s*SERVO_FREQ_HZ\s*\)\s*>\s*SERVO_TIMER_MAX_COUNT",
+        source,
+    ), "没有把「20ms 放不放得进 16 位量程」立成编译期判据"
+    assert "#error" in source
+    # **不许静默钳位**：判据不是匹配某个字面写法，而是「源码里根本不存在对周期值的比较」
+    # ——只要有 `period < …` / `period > …` 这种形态，就说明有人在悄悄改频率
+    # （钳位会把 50Hz 变成别的频率：不崩，但也不对）。
+    assert not re.search(r"\bperiod\b\s*[<>]=?\s*[\w(]", source), (
+        "出现了对周期值的比较——那正是「静默钳位」的形态"
+    )
+    # EDGE_ALIGN 的语义是 LOAD = period - 1（SDK dl_timer.h），写 period 会差一个计数
+    assert "DL_Timer_setLoadValue(SERVO_PWM_INST, servo_period() - 1u)" in source
+
+
+# ---------------------------------------------------------------------------
 # 母版接线
 # ---------------------------------------------------------------------------
 

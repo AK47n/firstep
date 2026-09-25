@@ -1,6 +1,6 @@
 {
   "slug": "servo",
-  "description": "舵机角度控制：舵机专吃 PWM 信号，按高电平脉宽决定转到哪个角度（20ms 周期、0.5-2.5ms 脉宽对应 0-180°），常见于云台、机械臂关节、打靶转向。接线三线制（VCC 电源 / GND 地 / 信号），只占 1 个 PWM 脚——stm32 默认 PB6、mspm0 默认 PA7（走母版 PWM 实例，周期按实例时钟运行时计算）。驱动接口：servo_init() 初始化、servo_set_angle(angle) 直接给 0-180 的角度值，脉宽换算已在模块内做好。适用于云台转向、打靶角度、机械臂等舵机类赛题功能。",
+  "description": "舵机角度控制：舵机专吃 PWM 信号，按高电平脉宽决定转到哪个角度（20ms 周期、0.5-2.5ms 脉宽对应 0-180°），常见于云台、机械臂关节、打靶转向。接线三线制（VCC 电源 / GND 地 / 信号），只占 1 个 PWM 脚——stm32 默认 PB6、mspm0 默认 PA7（走母版 PWM 实例，周期按实例时钟运行时计算）。驱动接口：servo_init(servo_id, channel) 初始化、servo_set_angle(servo_id, angle) 直接给 0-180 的角度值（两个形参当前都未使用——单路驱动），脉宽换算已在模块内做好。适用于云台转向、打靶角度、机械臂等舵机类赛题功能。",
   "dependencies": [],
   "platforms": {
     "stm32": {
@@ -33,7 +33,7 @@
       ],
       "verified": true,
       "hardware_bound": false,
-      "notes": "母版 syscfg SERVO_PWM 实例（TIMG8 C0 = PA7，b1-adc-servo/02）；周期与脉宽按 SERVO_PWM_INST_CLK_FREQ 运行时计算（照 step_motor 先例，不依赖 ULPCLK 假设）；绑定换引脚 = 改写 ccp0Pin.$assign + peripheral 行（pwm 类型级现成）。**默认 PA7（TIMG8 C0）与 motor BIN2 同脚（电机+舵机同车组合常见、同选经引脚绑定消解）**。",
+      "notes": "母版 syscfg SERVO_PWM 实例（TIMG8 C0 = PA7，b1-adc-servo/02）；周期与脉宽按 SERVO_PWM_INST_CLK_FREQ 运行时计算（照 step_motor 先例，不依赖 ULPCLK 假设）；绑定换引脚 = 改写 ccp0Pin.$assign + peripheral 行（pwm 类型级现成）。**默认 PA7（TIMG8 C0）与 motor BIN2 同脚（电机+舵机同车组合常见、同选经引脚绑定消解）**。\n**量程约束（driver-defect-fixes/02，改母版前必读）**：TIMG8 是 **16 位**计数器（SDK SysConfig 元数据：TIMG = 16-bit counter + 8-bit prescaler，只有 TIMG12 是 32-bit 且不带预分频），而 `DL_Timer_setLoadValue` 不钳位、LOAD 高 16 位被丢掉——所以 `SERVO_PWM.clockPrescale` **不能是 1**：32MHz 直供时 20ms 要 640000 计数，会被截成 50176（≈1.57ms ≈638Hz）且 ≈96° 以上比较值超过周期、输出恒高。现配 **16 ⇒ 计数时钟 2MHz ⇒ 20ms = 40000 计数**；`servo_mspm0.c` 另有编译期 `#error` 守这条量程（改小分频当场编不过）。运行时写 LOAD = period - 1（EDGE_ALIGN 语义，与 stm32 的 ARR = 1000000/fre - 1 对偶）。",
       "kit": "SG90/MG90S 9g 舵机（页面采购链接：天猫 id=615779197448）",
       "source_url": "https://wiki.lckfb.com/zh-hans/dmx/module/control/sg90-steering-engine.html",
       "pins": [

@@ -1,0 +1,8 @@
+=== servo × mspm0：SysConfig 折出来的计数时钟（driver-defect-fixes/02）===
+生成 HTTP 200
+gmake exit=0（这一步会先跑 sysconfig_cli）
+SERVO_PWM_INST_CLK_FREQ = 2000000（期望 2000000）
+.prescale = 15（期望 15，即 clockPrescale = 16）
+.period   = 40000（期望 40000 = 20ms）
+.ccValue  = （生成的私有头部里，非本量具判据）（初值占空比，运行时由 servo_init 覆盖）
+=== 结论：SysConfig 折出的计数时钟与周期与驱动假设一致，且周期在 16 位量程内 ===

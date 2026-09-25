@@ -1,0 +1,25 @@
+=== 判据强度反证：driver-defect-fixes/02（servo × mspm0 周期量程）===
+library\masters\mspm0\mspm0.syscfg sha256 = 86aa0a12511527d56b5c339f33b2fc52b612a9b879bcba33afe8cfedfac90480
+library\modules\servo\code\servo_mspm0.c sha256 = 620eb794887667c1df8ac90569ce2d3541106a7c8e1ce2156a9a80981c6b7675
+
+[注入] A：母版分频改回 1（20ms = 640000 计数，超 16 位量程）
+       目标判据：判据①（20ms 的计数 ≤ 65535）
+       结果：红（符合预期）  —— 1 failed in 0.21s（红了：test_servo_mspm0_period_fits_the_16bit_counter）
+       复原复核：sha256 一致
+
+[注入] B：把编译期量程守卫关掉（阈值改成 0）
+       目标判据：判据②（#if … > SERVO_TIMER_MAX_COUNT + #error）
+       结果：红（符合预期）  —— 1 failed in 0.21s（红了：test_servo_mspm0_runtime_guards_the_counter_range）
+       复原复核：sha256 一致
+
+[注入] C：LOAD 语义退回（EDGE_ALIGN 下少减 1）
+       目标判据：判据②尾巴（LOAD = period - 1，与 stm32 的 ARR = …-1 对偶）
+       结果：红（符合预期）  —— 1 failed in 0.17s（红了：test_servo_mspm0_runtime_guards_the_counter_range）
+       复原复核：sha256 一致
+
+[注入] D：改用「静默钳位」掩盖量程（工单明确否掉的那种修法）
+       目标判据：判据②（源码里不许出现对周期值的比较）
+       结果：红（符合预期）  —— 1 failed in 0.18s（红了：test_servo_mspm0_runtime_guards_the_counter_range）
+       复原复核：sha256 一致
+
+=== 结论：全部符合预期（每条注入都让对应用例变红，且文件逐字节复原） ===

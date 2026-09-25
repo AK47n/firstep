@@ -102,11 +102,21 @@ const PWM     = scripting.addModule("/ti/driverlib/PWM", {}, false);
 const PWMAB   = PWM.addInstance();
 const DCC_100_PWM2 = PWM.addInstance();
 // 舵机（servo 模块：50Hz/20ms 周期，0.5-2.5ms 脉宽映射 0-180°；周期由
-// servo_init 按 SERVO_PWM_INST_CLK_FREQ 运行时配置，此处初值仅保证可编译）
+// servo_init 按 SERVO_PWM_INST_CLK_FREQ 运行时配置——那个常量是**折过预分频**的
+// 计数时钟，所以这里的 clockPrescale **不能是 1**：TIMG8 是 **16 位**计数器
+// （SysConfig 元数据原文：TIMG = 16-bit counter + 8-bit prescaler，只有 TIMG12
+// 是 32-bit 且不带预分频；元数据还会在 timerCount > 65535 时报
+// "Timer Count Exceeds non-TIMG12 bounds"）——32MHz 直供时 20ms 要 640000 计数，
+// 而 LOAD 只有低 16 位有效 ⇒ 被截成 50176（周期 ≈1.57ms ≈638Hz）、比较值在
+// ≈96° 以上超过周期 ⇒ 输出恒高（driver-defect-fixes/02）。
+// 配 16 ⇒ 计数时钟 2MHz ⇒ 20ms = 40000 计数 < 65535；运行时再写
+// LOAD = 40000 - 1（EDGE_ALIGN 的语义是 LOAD = period - 1）与该角度的比较值。
+// 下面 timerCount 的初值同口径给成 50Hz（原值 65535 只是「32MHz 直供下能写的
+// 上限」，只保证可编译、出不来 50Hz））
 const SERVO_PWM = PWM.addInstance();
 SERVO_PWM.$name                      = "SERVO_PWM";
-SERVO_PWM.clockPrescale              = 1;
-SERVO_PWM.timerCount                 = 65535;
+SERVO_PWM.clockPrescale              = 16;
+SERVO_PWM.timerCount                 = 40000;
 SERVO_PWM.peripheral.$assign         = "TIMG8";
 SERVO_PWM.peripheral.ccp0Pin.$assign = "PA7";
 const TIMER   = scripting.addModule("/ti/driverlib/TIMER", {}, false);

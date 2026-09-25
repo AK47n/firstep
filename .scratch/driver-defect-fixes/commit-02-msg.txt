@@ -1,0 +1,30 @@
+工单 driver-defect-fixes/02：servo × mspm0 的 PWM 周期落进 16 位定时器量程
+
+问题：`servo_period()` = `SERVO_PWM_INST_CLK_FREQ / 50` = **640000**，而 SERVO_PWM 是
+TIMG8 = **16 位**计数器（SDK SysConfig 元数据原文：TIMG = 16-bit counter + 8-bit
+prescaler，只有 TIMG12 是 32-bit 且不带预分频），`DL_Timer_setLoadValue` 又不钳位
+⇒ LOAD 被截成 50176、周期 ≈1.568ms（≈638Hz）而不是 20ms，且 ≈96° 以上的比较值超过
+周期 ⇒ **输出恒高**（现象是"舵机不动 / 只在某个角度能动"）。
+
+改法（工单二选一之②：用母版侧配好的分频）：
+- 母版 `SERVO_PWM.clockPrescale` 1 → **16**、`timerCount` 65535 → **40000**
+  ⇒ 计数时钟 2MHz ⇒ 20ms = 40000 计数 < 65535；运行时仍只写周期与比较值。
+- `servo_mspm0.c` 加**编译期 `#error`** 把量程钉死（分频被改小 / 换 32MHz 直供就编不过），
+  **不做静默钳位**——钳位会把 50Hz 变成别的频率（不崩，但也不对）。
+- `LOAD` 改 `servo_period() - 1u`（EDGE_ALIGN 的语义是 LOAD = period-1，与 stm32 的
+  `ARR = 1000000/fre - 1` 对偶）。stm32 侧一字未动。
+
+文档与配方：manifest 的 mspm0 notes 补「量程约束（改母版前必读）」、description 里那句
+与实际双参签名不符的 `servo_init()` / `servo_set_angle(angle)` 改正（recon D6）；
+`servo × mspm0` 配方的 `prereq` 从三段补成四段（0°→90°→180°→0°——当年"先别扫 180°"
+的限制随修复撤掉），两格 note 的段数说明与「本单不修的 D1」那条一并改成修后口径。
+
+判据与读数：
+- 新增两条驱动级判据：按 syscfg 事实独立复算 20ms 计数 ≤ 65535（并断言 180° 比较值
+  严格小于周期）、编译期守卫在位且**源码里不存在对周期值的比较**（反钳位形态判据）。
+- 量具 `probe-02-inst-clk-freq.py`：真生成真编译一份 servo 检测工程，从**生成产物**里
+  读回 `SERVO_PWM_INST_CLK_FREQ = 2000000` / `.prescale = 15` / `.period = 40000`。
+- 反证四条注入全红且逐字节复原：`probe-guard-strength-02.txt`。
+- 真编译矩阵两格全 [PASS]：`probe-compile-matrix-02.txt`。
+
+上板状态：未上板（50Hz 与脉宽要示波器，归 hwcheck-acceptance/05）。
