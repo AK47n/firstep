@@ -76,9 +76,12 @@ for title, slugs in BATCHES:
 
 LINES.append(f"合计：{total_cells} 格；其中能拿无参初始化的 {total_init} 格、"
              f"拿不到的 {total_cells - total_init} 格（pca9685 / servo 两平台各 2 格）")
-LINES.append("落到测试那条基线上：本 spec 全部落完后 planned ≈ 159-40、with_init ≈ 134-36"
-             "（落地时以当场实测为准——这个文件是「每批该降多少」的算式，"
-             "不是替代实测的常数）。")
+LINES.append("落到测试那条基线上（`tests/test_hwcheck_generic.py:423-424` 一带）："
+             "从本 spec 立项时的 159/134 起算，减去上表每一批的实降数——"
+             "03~06 各 6/6、07 与 08 各 8/6。**已落地的实况**（工单落地时以当场实测为准）："
+             "03 → 153/128、04 → 147/122、05 → 141/116、06 → 135/110、07 → **127/104**；"
+             "08 落地后应为 119/98。")
+LINES.append("（本文件是「每批该降多少」的算式，不替代实测；带 `已专精` 的格就是已落地的批次。）")
 
 text = "\n".join(LINES) + "\n"
 (REPO / ".scratch" / "hwcheck-specialize" / "probe-batch-cells.txt").write_text(

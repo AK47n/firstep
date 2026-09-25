@@ -11,16 +11,16 @@
 **合成**一个通用小节、绕开配方文件（见工单 02 的核查表），所以它们本来就不会红——
 02 做掉之后，"专精化任意件都不动既有用例"这条对后续每一批都成立）。
 
-**状态：** ready-for-agent
+**状态：** resolved
 
-- [ ] 八格配方（`ads1115` / `pca9685` / `dht11` / `ds18b20` × `stm32` / `mspm0`）写进
+- [x] 八格配方（`ads1115` / `pca9685` / `dht11` / `ds18b20` × `stm32` / `mspm0`）写进
       `library/hwcheck_recipes.json`，事实底稿 = `.scratch/hwcheck-specialize/recon-02-i2c-generic-1wire.md`
       §2 的 `ads1115` / `pca9685` / `dht11` / `ds18b20` 四小节（逐件结论）+ §4 驱动缺陷 + §5 共同坑
-- [ ] `include` 用**该平台真头名**：mspm0 = `ads1115.h` / `pca9685.h` / `dht11.h` / `ds18b20.h`；
+- [x] `include` 用**该平台真头名**：mspm0 = `ads1115.h` / `pca9685.h` / `dht11.h` / `ds18b20.h`；
       stm32 = `ads1115_stm32.h` / `pca9685_stm32.h` / `dht11_stm32.h` / `ds18b20_stm32.h`，
       **stm32 四格各再带 `pin_config.h`**（recon-02 §2 逐件表都列了它；
       `headfile.h` 不带它、生成器只在有通用降级件时才自动 include，见 `hwcheck.py:845-849`）
-- [ ] **`ads1115` 的探头只能是一条写事务的 ACK 返回码**：
+- [x] **`ads1115` 的探头只能是一条写事务的 ACK 返回码**：
       `probe = {"calls":["ads1115_write_config(ADS1115_DEFAULT_CONFIG)"],"expect":"0"}`
       （实现证据：地址无应答返 1、寄存器指针无应答返 2、都 ACK 才返 0，`ads1115.c:161-178`）；
       驱动**没有任何寄存器读回接口** → 这是弱于读回的探头，但真的基于 ACK，note 要如实写这一点。
@@ -29,17 +29,17 @@
       `(v = ads1115_read_voltage(0), (int)v)` = V 的整数部分、
       `(int)((v - (int)v) * 10)` = V 的小数第一位（两行拼起来读）]，
       locals `float v = 0`（初值只能是数字字面量，`0.0` 过不了校验）
-- [ ] **`pca9685` 探头如实写"无"**：两个头文件里**一个读接口都没有**（全是 void，
+- [x] **`pca9685` 探头如实写"无"**：两个头文件里**一个读接口都没有**（全是 void，
       `pca9685.h:39-55` 只有 init/set_pwm/set_angle/set_freq/set_address）→ **不写 `probe` 段**，
       渲染出来的就是"这一件没有读取型探头…只看现象"；`read` 只有一条能力回显：
       `{"items":[{"expression":"PCA9685_DEFAULT_FREQ_HZ","unit":"Hz（初始化写的时基，50 = 标准舵机 20ms 周期；**不是测量值**）"}]}`
-- [ ] **`dht11` 探头 = `dht11_read()` 返 0**（0 = 模块应答 + 40bit 校验和通过，单总线件能做到的强自证）：
+- [x] **`dht11` 探头 = `dht11_read()` 返 0**（0 = 模块应答 + 40bit 校验和通过，单总线件能做到的强自证）：
       `{"calls":["dht11_read(&temp, &humi)"],"expect":"0"}`，locals `float temp = 0` / `float humi = 0`
-- [ ] **`ds18b20` 探头 = `ds18b20_init()` 返 0**（0 = 复位应答脉冲；stm32 头注释 `ds18b20_stm32.h:19`
+- [x] **`ds18b20` 探头 = `ds18b20_init()` 返 0**（0 = 复位应答脉冲；stm32 头注释 `ds18b20_stm32.h:19`
       "无应答/释放超时 → 返回 1"）：init 与 probe **可写同一句**（同 mpu6050 mspm0 的两级先例），
       但 note 里必须说明「**这是同一次物理检查，不是测了两件事**」，且它会记两笔判定（spec 硬约束⑥）；
       库内**没有** 0x28 家族码 / 64 位 ROM / CRC 接口（recon-02 §2）——要 ROM ID 得自己写驱动
-- [ ] 逐件 `init` / `init_expect` / `probe` / `read` / `locals` 形状按 recon-02 §2 实测结论写：
+- [x] 逐件 `init` / `init_expect` / `probe` / `read` / `locals` 形状按 recon-02 §2 实测结论写：
       `ads1115` / `pca9685` / `dht11` 三件 `init` 是 **void** → **不写 `init_expect`**
       （写了会渲染 `r = ads1115_init();` 编译错）；**`ds18b20` 例外：`ds18b20_init()` 返回
       `uint8_t`（0 = 复位应答脉冲），可以写 `init_expect: "0"`**——但那样它与 probe 的
@@ -50,13 +50,13 @@
       `ds18b20` = `(t = ds18b20_read_temp(), (int)t)` + 小数位一行（逗号表达式避免调两次，
       **每次调用阻塞 750ms**）；stm32 侧可加 `DS18B20_CONVERT_MS`(750)；
       **read 表达式禁用十六进制字面量**（`0x00` 会被切成 `x00`）、**不能碰结构体成员**
-- [ ] `console`：`ads1115` 首选 `v`、候选 `n`/`c`；`pca9685` 首选 `c`、候选 `f`/`n`；
+- [x] `console`：`ads1115` 首选 `v`、候选 `n`/`c`；`pca9685` 首选 `c`、候选 `f`/`n`；
       `dht11` 首选 `h`、候选 `i`/`n`；`ds18b20` 首选 `t`、候选 `n`/`i`（每格一句说明，
       说明 ≤ 约 40 字节——板上是 `hwcheck_line[128]` 行缓冲，中文一字 3 字节）；
       候选按 recon-02 §3 的可用池挑（保留字 `r/y/g/o/b/?` 一个不碰；
       mspm0 已占 `a d j k l m p s u x`、stm32 已占 `a d k l m p u`）；
       `ads1115` 的 `v` 与批次 F 的 `servo` 是**同一字符**——谁先分配谁拿，另一件走候选
-- [ ] `note` 至少覆盖：① **探头到底证明了什么**（`ads1115` = 写事务 ACK ≠ 读回 ≠ 数据准；
+- [x] `note` 至少覆盖：① **探头到底证明了什么**（`ads1115` = 写事务 ACK ≠ 读回 ≠ 数据准；
       `dht11` = 应答 + 校验和 ≠ 型号对；`ds18b20` = 复位应答 = 单总线件唯一的自证；
       `pca9685` = 板上打不了 OK/FAIL，只能看现象）；② 判 FAIL 时按**返回码**怎么排查
       （`ads1115`：1 = 地址没应答 / 2 = 寄存器指针没应答；`dht11`：非 0 = 没等到应答或校验不过；
@@ -67,29 +67,29 @@
       SDA 同脚、stm32 PB1 与 MOTOR_B_DIR2 重叠、mspm0 DATA=PA7 与 SERVO_PWM/DC_MOTOR/RC522 重叠）；
       ⑥ 平台差异（`dht11` 的 mspm0 头**没有任何时序宏**（stm32 头有 7 个）→ 名字不能照抄；
       mspm0 配方**不能**写 `delay_ms` / `gpio_get` / `DL_*`——母版没有 .h）
-- [ ] `note` **另须如实提示、本单不修的驱动缺陷**（recon-02 §4，只提示不改库）：
+- [x] `note` **另须如实提示、本单不修的驱动缺陷**（recon-02 §4，只提示不改库）：
       `ads1115` 无法读回任何寄存器、`read()` 把 4 种失败折叠成 0（§4-3）；`pca9685` 内部 `read_reg`
       与寄存器宏全在 .c 私有、void API 吞掉 NACK（§4-4）；`dht11` 位循环超时不报错（靠 1/256 的
       校验和兜底）、**上电 1s 稳定期内不发指令而检测程序上电就跑 → 第一遍可能 FAIL，敲 `h` 复测**
       （§4-7）；`ds18b20` 无 ROM/家族码/CRC 接口、stm32 的 `read_temp` **器件缺席也不报错**
       （→ `-0.0625℃` 假值，§4-8）；**stm32 全库没有释放 JTAG 的代码，而 `dht11` 默认脚 PB3 = JTDO
       → 默认脚很可能收不到应答，最省事的出路是改引脚绑定**（§4-9）
-- [ ] 检测页实测：四件两平台都显示 `[专精]`（不是「未专精」），命令表里是各自声明的字符
-- [ ] **扩张地板**追加这 8 格到 `EXPANSION`（工单 03 立的那一处：`EXPANSION` 只装**扩张**格；
+- [x] 检测页实测：四件两平台都显示 `[专精]`（不是「未专精」），命令表里是各自声明的字符
+- [x] **扩张地板**追加这 8 格到 `EXPANSION`（工单 03 立的那一处：`EXPANSION` 只装**扩张**格；
       `EXPANSION_CELL_COUNT` 是**手写字面量**——别写成 `len(EXPANSION)`，那是恒真断言）：
       落地后 `EXPANSION_CELL_COUNT` 改成 **32**（+ `PILOT` 那 17 格 = 总覆盖 **49**）；
       **只追加、不改写**已有行；`PILOT` 常量**不动**（有 `len(PILOT) == 17` 的精确断言，
       见 spec「覆盖记录与地板」）
-- [ ] `tests/test_hwcheck_generic.py` 的未专精基线（写单时是 `planned >= 157` / `with_init >= 132`；
+- [x] `tests/test_hwcheck_generic.py` 的未专精基线（写单时是 `planned >= 157` / `with_init >= 132`；
       **批次 A 落地后已降到 153 / 128**——以你落地当时的实数为准），
       `test_hwcheck_generic.py:423-424`）**按实数如实下调并写原因**：本批 8 格转专精，
       其中 **6 格**现在拿得到无参初始化（`pca9685` × 2 格拿不到——`pca9685_init(freq)`
       要参数，通用降级只好如实说"不调、不编参数"）⇒ 两个数**各降 8 / 6**
       （读数 = `.scratch/hwcheck-specialize/probe-batch-cells.txt`；落地时仍以当场实测为准）
-- [ ] **真编译矩阵**：`py -3 .scratch/hwcheck-specialize/probe-compile-matrix.py --slugs ads1115,pca9685,dht11,ds18b20`
+- [x] **真编译矩阵**：`py -3 .scratch/hwcheck-specialize/probe-compile-matrix.py --slugs ads1115,pca9685,dht11,ds18b20`
       → 八格全部 `[PASS]`（exit=0、编译器 0 error / 0 warning；链接器形态告警（`warning #10210-D:`）
       另记进读数，见 spec「补充说明」的口径漏洞）
-- [ ] **反证**：把 `ds18b20` × `mspm0` 那一格撤掉 → 扩张地板断言必须红
+- [x] **反证**：把 `ds18b20` × `mspm0` 那一格撤掉 → 扩张地板断言必须红
       （四件里它事实链最全：init = probe = 复位应答、read 带 `locals` + 小数位两行，
       撤了它地板必须少一格）
 
@@ -116,3 +116,36 @@
   代价是这块板"什么都没发生"，note 要如实说清楚（recon-02 §2 `pca9685` 小节）。
 - 字面上最省事的一格是 `ds18b20`（init 与 probe 同句），但它是**两笔判定**——spec 硬约束⑥
   要求这种"知情选择"写进 note，别让学生把"同一件事报了两遍"读成"两级自证"。
+
+### 2026-09-25 落地结论（含双轴评审整改）
+
+**验收读数**（全部先落盘再打印，读数文件名按批分）：
+
+| 验收项 | 命令 | 结果 |
+|---|---|---|
+| 两平台真编译矩阵 | `probe-compile-matrix.py --slugs ads1115,pca9685,dht11,ds18b20 --out …-07.txt` | **八格全 `[PASS]`**：exit=0、编译器 0 error / 0 warning、**链接器形态告警也是 0**、每格页面标记 `[专精]` |
+| 反证 A（撤一格） | `probe-expansion-floor.py --victim ds18b20 --platform mspm0 --out …-07.txt` | 撤掉 → 地板 rc=1 且**红因点名该格**；拿回来 → rc=0；文件 sha256 逐字节还原 |
+| 反证 B（撤共享候选池） | `probe-console-pool.py` | 撤掉 → 新守卫 rc=1 且红因对；补回 → rc=0；sha256 逐字节还原 |
+| 每批纪律④（字符组合穷举） | `probe-console-combos.py` | `|S| <= 6` 全子集（stm32 **145475** 组 / mspm0 **313885** 组）**零撞车**；`|S|` 7~14 的抽样也全绿 |
+| 地板与基线 | `tests/test_hwcheck_recipe.py` / `tests/test_hwcheck_generic.py` | `EXPANSION_CELL_COUNT` 24 → **32**（手写字面量）；基线 135/110 → **127/104** |
+| 全套回归 | `pytest tests/` | 全绿 |
+
+**落地时撞出来、顺手修掉的一条既有缺陷**（本单射程内的连带项，记账见 `backlog.md` §22）：
+`|S| <= 6` 曾出现 **3 组真撞车**（最典型：`ads1115 + at24c02 + bmp180 + pca9685 + sgp30 + sht30`
+——`sht30` 的首选被 `at24c02` 拿走、两个候选又分别被 `pca9685` / `sgp30` 拿走）。根因是
+**候选池整体太浅**，修法 = 给每条已声明 `console` 的配方补一个共享后备池 `n z i 0 1 2 3`
+（纯追加、已有候选一个不删），并立守卫
+`test_any_small_selection_of_real_recipes_builds_one_console_table`。
+**把库里专精件全勾上的容量天花板仍未修**（26 件 > 25 个可用字符，属既有边界）。
+
+**双轴评审整改 3 条**（定点 `5fd29e9e`；完整清单见 `07-落地记录.md` §7）：
+
+1. **真编译矩阵要在最终字节上复跑**——首次矩阵早于配方最后一次写入，已复跑（仍八格全 `[PASS]`）；
+2. **`ads1115` / `ds18b20` 的 mspm0 格混进了 stm32 引脚事实**（把 mspm0 学生指向 PA6/PA7、
+   PB1）——已按平台分开写实（mspm0 = PA16/PA17、PA7）；
+3. **`ds18b20` 的失败签名学生看不到**（`(int)` 截断让屏幕显示 0.0℃ 而不是 -0.0625℃）——
+   note 已改成如实说明截断。
+
+另：共享池落地时**打绿了一条既有守卫**
+（`test_preview_400_when_two_devices_claim_the_same_command`——`oled` 走候选就不撞了），
+已按"判据要测的是没有候选可让时仍然大声红"整改（注入时清空两件的候选）。

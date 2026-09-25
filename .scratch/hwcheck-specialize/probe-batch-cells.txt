@@ -1,52 +1,52 @@
 === 首批 20 件逐格清点：通用降级能给什么（基线该降多少） ===
 
-现状：配方文件里 10 件 / 17 格已专精
+现状：配方文件里 26 件 / 49 格已专精
 
 【03 温湿度】
-   aht10      stm32  init=aht10_init               scan=yes 
-   aht10      mspm0  init=aht10_init               scan=no  
-   sht20      stm32  init=sht20_init               scan=yes 
-   sht20      mspm0  init=sht20_init               scan=no  
-   sht30      stm32  init=sht30_init               scan=yes 
-   sht30      mspm0  init=sht30_init               scan=no  
+   aht10      stm32  init=aht10_init               scan=yes 已专精
+   aht10      mspm0  init=aht10_init               scan=no  已专精
+   sht20      stm32  init=sht20_init               scan=yes 已专精
+   sht20      mspm0  init=sht20_init               scan=no  已专精
+   sht30      stm32  init=sht30_init               scan=yes 已专精
+   sht30      mspm0  init=sht30_init               scan=no  已专精
    → 本批 6 格；转专精后基线各降 6 / 6（拿不到 init 的 0 格只降 planned）
 
 【04 光照气压】
-   bh1750     stm32  init=bh1750_init              scan=yes 
-   bh1750     mspm0  init=bh1750_init              scan=no  
-   bmp180     stm32  init=bmp180_init              scan=yes 
-   bmp180     mspm0  init=bmp180_init              scan=no  
-   ms5611     stm32  init=ms5611_init              scan=yes 
-   ms5611     mspm0  init=ms5611_init              scan=no  
+   bh1750     stm32  init=bh1750_init              scan=yes 已专精
+   bh1750     mspm0  init=bh1750_init              scan=no  已专精
+   bmp180     stm32  init=bmp180_init              scan=yes 已专精
+   bmp180     mspm0  init=bmp180_init              scan=no  已专精
+   ms5611     stm32  init=ms5611_init              scan=yes 已专精
+   ms5611     mspm0  init=ms5611_init              scan=no  已专精
    → 本批 6 格；转专精后基线各降 6 / 6（拿不到 init 的 0 格只降 planned）
 
 【05 姿态光色】
-   hmc5883l   stm32  init=hmc5883l_init            scan=yes 
-   hmc5883l   mspm0  init=hmc5883l_init            scan=no  
-   qmc5883l   stm32  init=qmc5883l_init            scan=yes 
-   qmc5883l   mspm0  init=qmc5883l_init            scan=no  
-   tcs34725   stm32  init=tcs34725_init            scan=yes 
-   tcs34725   mspm0  init=tcs34725_init            scan=no  
+   hmc5883l   stm32  init=hmc5883l_init            scan=yes 已专精
+   hmc5883l   mspm0  init=hmc5883l_init            scan=no  已专精
+   qmc5883l   stm32  init=qmc5883l_init            scan=yes 已专精
+   qmc5883l   mspm0  init=qmc5883l_init            scan=no  已专精
+   tcs34725   stm32  init=tcs34725_init            scan=yes 已专精
+   tcs34725   mspm0  init=tcs34725_init            scan=no  已专精
    → 本批 6 格；转专精后基线各降 6 / 6（拿不到 init 的 0 格只降 planned）
 
 【06 红外气体存储】
-   mlx90614   stm32  init=mlx90614_init            scan=yes 
-   mlx90614   mspm0  init=mlx90614_init            scan=no  
-   sgp30      stm32  init=sgp30_init               scan=yes 
-   sgp30      mspm0  init=sgp30_init               scan=no  
-   at24c02    stm32  init=at24c02_init             scan=yes 
-   at24c02    mspm0  init=at24c02_init             scan=no  
+   mlx90614   stm32  init=mlx90614_init            scan=yes 已专精
+   mlx90614   mspm0  init=mlx90614_init            scan=no  已专精
+   sgp30      stm32  init=sgp30_init               scan=yes 已专精
+   sgp30      mspm0  init=sgp30_init               scan=no  已专精
+   at24c02    stm32  init=at24c02_init             scan=yes 已专精
+   at24c02    mspm0  init=at24c02_init             scan=no  已专精
    → 本批 6 格；转专精后基线各降 6 / 6（拿不到 init 的 0 格只降 planned）
 
 【07 数字外设单总线】
-   ads1115    stm32  init=ads1115_init             scan=yes 
-   ads1115    mspm0  init=ads1115_init             scan=no  
-   pca9685    stm32  init=（拿不到）                    scan=yes 
-   pca9685    mspm0  init=（拿不到）                    scan=no  
-   dht11      stm32  init=dht11_init               scan=no  
-   dht11      mspm0  init=dht11_init               scan=no  
-   ds18b20    stm32  init=ds18b20_init             scan=no  
-   ds18b20    mspm0  init=ds18b20_init             scan=no  
+   ads1115    stm32  init=ads1115_init             scan=yes 已专精
+   ads1115    mspm0  init=ads1115_init             scan=no  已专精
+   pca9685    stm32  init=（拿不到）                    scan=yes 已专精
+   pca9685    mspm0  init=（拿不到）                    scan=no  已专精
+   dht11      stm32  init=dht11_init               scan=no  已专精
+   dht11      mspm0  init=dht11_init               scan=no  已专精
+   ds18b20    stm32  init=ds18b20_init             scan=no  已专精
+   ds18b20    mspm0  init=ds18b20_init             scan=no  已专精
    → 本批 8 格；转专精后基线各降 8 / 6（拿不到 init 的 2 格只降 planned）
 
 【08 称重人机执行】
@@ -61,4 +61,5 @@
    → 本批 8 格；转专精后基线各降 8 / 6（拿不到 init 的 2 格只降 planned）
 
 合计：40 格；其中能拿无参初始化的 36 格、拿不到的 4 格（pca9685 / servo 两平台各 2 格）
-落到测试那条基线上：本 spec 全部落完后 planned ≈ 159-40、with_init ≈ 134-36（落地时以当场实测为准——这个文件是「每批该降多少」的算式，不是替代实测的常数）。
+落到测试那条基线上（`tests/test_hwcheck_generic.py:423-424` 一带）：从本 spec 立项时的 159/134 起算，减去上表每一批的实降数——03~06 各 6/6、07 与 08 各 8/6。**已落地的实况**（工单落地时以当场实测为准）：03 → 153/128、04 → 147/122、05 → 141/116、06 → 135/110、07 → **127/104**；08 落地后应为 119/98。
+（本文件是「每批该降多少」的算式，不替代实测；带 `已专精` 的格就是已落地的批次。）

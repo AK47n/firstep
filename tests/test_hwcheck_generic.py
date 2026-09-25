@@ -388,8 +388,8 @@ def test_generic_message_names_the_label_and_the_plan():
 def test_real_library_every_unspecialized_slot_can_be_planned():
     """**地板断言**：真实库每个未专精格都规划得出来（不报错、不拒绝）。
 
-    同时把实测基线钉住：未专精格不许少于 **135**、能拿到无参初始化的格不许少于 **110**
-    （2026-09-25 实测：planned 135 / with_init 110）——哪天库内改名把初始化判据
+    同时把实测基线钉住：未专精格不许少于 **127**、能拿到无参初始化的格不许少于 **104**
+    （2026-09-25 实测：planned 127 / with_init 104）——哪天库内改名把初始化判据
     打瘸了，这里当场红，而不是让学生上板才发现"这一节什么都不做"。
 
     ⚠ **这两个数随专精面推进而下降**（工单 09 把 v1 清单补到 17 格 → 168/140 变 157/132；
@@ -398,8 +398,12 @@ def test_real_library_every_unspecialized_slot_can_be_planned():
     × 两平台这 6 格转专精 → 153/128 变 147/122；工单 `hwcheck-specialize/05` 把
     `hmc5883l` / `qmc5883l` / `tcs34725` × 两平台这 6 格转专精 → 147/122 变 141/116；
     工单 `hwcheck-specialize/06` 把 `mlx90614` / `sgp30` / `at24c02` × 两平台这 6 格转专精
-    → 141/116 变 **135/110**——这 6 格原本每格都能拿到无参初始化（`mlx90614_init` /
-    `sgp30_init` / `at24c02_init`，见 `probe-batch-cells.txt` 的【06】段），所以两个数各降 6）。
+    → 141/116 变 135/110——这 6 格原本每格都能拿到无参初始化（`mlx90614_init` /
+    `sgp30_init` / `at24c02_init`，见 `probe-batch-cells.txt` 的【06】段），所以两个数各降 6；
+    工单 `hwcheck-specialize/07` 把 `ads1115` / `pca9685` / `dht11` / `ds18b20` × 两平台
+    这 8 格转专精 → 135/110 变 **127/104**——其中 `pca9685` 两格**本来也拿不到**无参初始化
+    （`pca9685_init(freq_hz)` 要参数，通用降级如实说"不调、不编参数"，见同文件【07】段），
+    所以 planned 降 8、with_init 只降 6）。
     降的时候要**如实改这里并写清为什么**，别顺手删断言：它挡的是"初始化判据悄悄失灵"，
     不是"配方变多了"；每批该降多少的实测算式见
     `.scratch/hwcheck-specialize/probe-batch-cells.txt`。
@@ -428,8 +432,8 @@ def test_real_library_every_unspecialized_slot_can_be_planned():
                 with_init += 1
             else:
                 assert section.init.reason, f"{manifest.slug} × {platform} 没给出理由"
-    assert planned >= 135, f"未专精格少于实测基线 135：{planned}"
-    assert with_init >= 110, f"能无参初始化的格少于实测基线 110：{with_init}"
+    assert planned >= 127, f"未专精格少于实测基线 127：{planned}"
+    assert with_init >= 104, f"能无参初始化的格少于实测基线 104：{with_init}"
 
 
 # ---------------------------------------------------------------------------

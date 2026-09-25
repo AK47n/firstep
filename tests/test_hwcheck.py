@@ -693,15 +693,31 @@ def test_preview_400_when_two_devices_claim_the_same_command(
 
     注入只写 tmp 副本（不动真库那一份——`-n auto` 下别的 worker 正在读它，
     照 `test_preview_still_fails_loudly_when_the_recipe_file_is_broken` 的记账）。
+
+    ⚠ **注入必须同时清掉 `console.candidates`**（工单 `hwcheck-specialize/07`）：
+    让位机制（工单 01）会在首选被占时按候选往下找，而真库每条配方现在都带一组
+    共享后备池（`n z i 0 1 2 3`）——只改首选的话，第二件改走候选就**不再撞车**，
+    这条用例会变成假绿（实测踩过一次：本用例当时返回 200）。所以这里把**两件**
+    的候选都清空：判据要测的是"没有候选可让时仍然大声红"，那才是让位机制之前的
+    老行为、也是"候选也用完"这条路的入口。
     """
+    import json
+
     from contest_generator.hwcheck_recipe import RECIPE_FILENAME
 
     client, ctx = real_library_client
     repo = Path(__file__).resolve().parents[1]
     original = (repo / "library" / RECIPE_FILENAME).read_text(encoding="utf-8")
+    document = json.loads(original)
+    document["oled"]["stm32"]["console"] = {
+        "command": "l",                       # 与 led 撞车
+        "description": document["oled"]["stm32"]["console"]["description"],
+        "candidates": [],                     # 没有候选可让 ⇒ 必须当场红
+    }
+    document["led"]["stm32"]["console"]["candidates"] = []
     target = tmp_path / "recipes-command-clash.json"
     target.write_text(
-        original.replace('"command": "d"', '"command": "l"', 1), encoding="utf-8"
+        json.dumps(document, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     ctx.hwcheck_recipe_path = target
     response = client.post(

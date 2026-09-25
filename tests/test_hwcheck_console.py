@@ -1125,3 +1125,103 @@ def test_real_library_recipes_and_a_custom_device_share_one_table(platform):
         assert entry.custom is False and entry.func_name == ""
 
 
+# ---------------------------------------------------------------------------
+# 组合下的字符分配（工单 hwcheck-specialize/07 立的守卫）
+# ---------------------------------------------------------------------------
+#
+# 为什么单独立一条：`build_console_table` 的让位是**逐件**分配的，"两件不撞"不等于
+# "三件不撞"。批次 E（工单 07）落地时把**六件**一起勾就撞死过一组真组合
+# （`ads1115` + `at24c02` + `bmp180` + `pca9685` + `sgp30` + `sht30`：`sht30` 的
+# 首选 `e` 被 `at24c02` 拿走、候选 `n` / `z` 又分别被 `pca9685` / `sgp30` 拿走 ⇒
+# 构建期 400）。根因不是哪一件写错，而是**候选池整体太浅**——修法 = 每条配方补一个
+# 共享后备池（`probe-console-combos.py` 的第 1 问就是这条守卫的量具）。
+#
+# 射程取 `|S| <= 3` 全子集 + 固定种子的更大组合抽样：全子集穷举到 6 要跑 45 万组、
+# 单条用例跑不完（那件事归探针），而**任何**一组的撞车都要能被这一条抓住——
+# 抽样是固定种子的，红了就是可复现的红，不是随机闪。
+#
+# ⚠ **抽样规模封顶 8 件，不跟着库内专精件数长**：字符池一共 31 个（还要扣掉 6 个保留字），
+# "把库里二十几件全勾上"这条**容量天花板**是既有边界（本批前就撞，见 `backlog.md`
+# 的字符池账），不是这条守卫该断言的事——把封顶写成 `len(slugs)` 会让用例随库长大的
+# 某一天突然红在一个与本条无关的理由上。
+
+_CONSOLE_MATRIX_MAX = 3        # 全子集穷举的规模上界
+_CONSOLE_MATRIX_SAMPLE_MAX = 8  # 抽样组合的规模上界（见下）
+_CONSOLE_MATRIX_TRIALS = 60    # 更大组合的抽样次数（固定种子）
+_CONSOLE_MATRIX_SEED = 20260925
+
+
+def _real_catalog():
+    """真库 → （配方目录, manifest 清单）。两平台共用，加载一次。"""
+    from contest_generator.hwcheck_recipe import load_recipes
+    from contest_generator.library import list_modules
+
+    modules = REPO / "library" / "modules"
+    manifests = list_modules(modules)
+    return load_recipes(modules, manifests), manifests
+
+
+def _specialized(platform: str, catalog, manifests) -> list[str]:
+    from contest_generator.hwcheck_recipe import resolve_sections
+
+    every = [m.slug for m in manifests]
+    return [section.slug for section in resolve_sections(platform, every, catalog, manifests)]
+
+
+@pytest.mark.parametrize("platform", [PLATFORM_STM32, PLATFORM_MSPM0])
+def test_any_small_selection_of_real_recipes_builds_one_console_table(platform):
+    """真库**任意小组合**（|S| <= 3 全子集）都建得出命令表，且分配自洽。
+
+    自洽的三条（任一不成立都是"页面上写着敲 x、板上不认 x"这类错位）：
+
+    1. 一表之内字符互不相同；
+    2. 每件拿到的字符在**它自己声明的**首选 / 候选里（让位只在声明面内让）；
+    3. 页面载荷（`console_payload`）与板上分派（`render_console_runtime` 的 `case`）
+       读到的是**同一个**分配后的字符。
+    """
+    import itertools
+    import random
+
+    from contest_generator.hwcheck_recipe import resolve_sections
+
+    catalog, manifests = _real_catalog()
+    slugs = _specialized(platform, catalog, manifests)
+    assert len(slugs) >= 3, f"{platform} 专精件太少（{len(slugs)}），这条守卫没意义了"
+
+    rng = random.Random(_CONSOLE_MATRIX_SEED)
+    picks = [list(combo) for size in range(2, _CONSOLE_MATRIX_MAX + 1)
+             for combo in itertools.combinations(slugs, size)]
+    for _ in range(_CONSOLE_MATRIX_TRIALS):
+        size = rng.randint(_CONSOLE_MATRIX_MAX + 1,
+                           min(_CONSOLE_MATRIX_SAMPLE_MAX, len(slugs)))
+        picks.append(rng.sample(slugs, size))
+
+    for picked in picks:
+        sections = resolve_sections(platform, picked, catalog, manifests)
+        table = build_console_table(sections)           # 撞车 = 这里当场抛 HwCheckError
+        commands = [entry.command for entry in table.entries]
+        assert len(set(commands)) == len(commands), (
+            f"{platform} 组合 {'、'.join(picked)} 里有两件分到同一个字符：{commands}"
+        )
+        shown = {item["slug"]: item["command"]
+                 for item in console_payload(True, table)["commands"]}
+        code = "\n".join(render_console_runtime(table))
+        for entry in table.entries:
+            declared = entry.slug
+            section = next(s for s in sections if s.slug == declared)
+            allowed = {section.console.command.lower(),
+                       *(c.lower() for c in section.console.candidates)}
+            assert entry.command in allowed, (
+                f"{platform} 组合 {'、'.join(picked)}：{entry.slug} 拿到 {entry.command!r}，"
+                f"不在它声明的 {sorted(allowed)} 里"
+            )
+            assert shown[entry.slug] == entry.command, (
+                f"{platform} 组合 {'、'.join(picked)}：{entry.slug} 页面显示 "
+                f"{shown[entry.slug]!r}、板上认 {entry.command!r}"
+            )
+            assert f"case '{entry.command}':" in code, (
+                f"{platform} 组合 {'、'.join(picked)}：{entry.slug} 的 {entry.command!r} "
+                "在板上分派里没有对应的 case（敲了不会认）"
+            )
+
+
