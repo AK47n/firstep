@@ -11,8 +11,9 @@
 
 /* 双轴摇杆按键驱动（mspm0 纯驱动，ADR 0009）：
  * - X/Y 两轴：ADC12_0 实例共享（b1-adc-servo/01 的 adc 模块同实例，sequence
- *   四通道模式——MEM3 归 ir_distance，wiki-modules-batch2/04）：JOYSTICK_X =
- *   MEM1（default PA26/A0_1）、JOYSTICK_Y = MEM2（default PA25/A0_2），
+ *   **八槽**模式 startAdd=0 / endAdd=7，槽位 8/8 用满——MEM3 归 ir_distance、
+ *   MEM4-7 归 mq135/mq5/flame/soil，wiki-modules-batch2/04 与 batch7/8）：
+ *   JOYSTICK_X = MEM1（default PA26/A0_1）、JOYSTICK_Y = MEM2（default PA25/A0_2），
  *   轮询读取 + 4 次快速平均，12bit 原始值（0-4095），
  *   percent 版按 4095 归一 0-100%；
  * - SW 按键：JOYSTICK_SW 上拉输入（default PA9），按下接地低电平。
@@ -23,11 +24,20 @@
 
 #define JOYSTICK_SW_PRESSED_LEVEL 0 /* 1=按下（低有效） */
 
+/* 本次采样无效（driver-defect-fixes/01）：read_x / read_y 与两个 percent 版
+ * 在**一圈都没采到**时返回它——含义是「这次没读到」，**不是读数**。
+ * 为什么非要有这个值：0 是合法读数（raw 0 = 杆推到端点，percent 0 = 0%），
+ * 拿 0 当失败标记就分不开「坏了」与「推到端点」；而 raw 满量程 4095、
+ * percent 满量程 100，65535 两者都到不了。
+ * ⚠ 只有 mspm0 侧有这个概念：stm32 侧读母版 ml_adc 的 adc_get（无显式超时），
+ * 不存在「等到超时」这条路径，故那侧的行为一字未动。 */
+#define JOYSTICK_ADC_INVALID 0xFFFFu
+
 void joystick_init(void);
-uint16_t joystick_read_x(void);          /* X 轴 12bit 原始值（0-4095） */
-uint16_t joystick_read_y(void);          /* Y 轴 12bit 原始值（0-4095） */
-uint16_t joystick_read_x_percent(void);  /* X 轴 0-100% */
-uint16_t joystick_read_y_percent(void);  /* Y 轴 0-100% */
+uint16_t joystick_read_x(void);          /* X 轴 12bit 原始值（0-4095；65535=本次无效） */
+uint16_t joystick_read_y(void);          /* Y 轴 12bit 原始值（0-4095；65535=本次无效） */
+uint16_t joystick_read_x_percent(void);  /* X 轴 0-100%（65535=本次无效） */
+uint16_t joystick_read_y_percent(void);  /* Y 轴 0-100%（65535=本次无效） */
 uint8_t joystick_read_sw(void);          /* 1=按下，0=松开 */
 
 #endif /* JOYSTICK_H */

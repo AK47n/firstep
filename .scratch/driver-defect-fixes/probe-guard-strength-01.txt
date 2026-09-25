@@ -1,0 +1,32 @@
+=== 判据强度反证：driver-defect-fixes/01（joystick × mspm0 超时判据）===
+目标文件：library\modules\joystick\code\joystick.c
+注入前 sha256：7c37fccee1b8c3e5b9c46767eefd0b334d295f19f15c21cdb826599f0fb4f732
+
+[对照] 未注入：PASS  —— 2 passed in 0.06s（无红）
+
+[注入] A：超时上限只等半次序列（安全系数 4 → /2）
+       目标判据：判据①（超时 ≥ 一次完整转换 × 安全系数）
+       结果：红（符合预期）  —— 1 failed, 1 passed in 0.12s（红了：test_joystick_mspm0_timeout_is_a_time_budget_not_a_spin_count）
+       复原复核：sha256 一致
+
+[注入] A2：槽数常量脱离 syscfg 事实（8 → 4）
+       目标判据：判据①（槽数常量 == syscfg 的 endAdd-startAdd+1）
+       结果：红（符合预期）  —— 1 failed, 1 passed in 0.11s（红了：test_joystick_mspm0_timeout_is_a_time_budget_not_a_spin_count）
+       复原复核：sha256 一致
+
+[注入] B：一圈都没采到时又拿 0 冒充读数
+       目标判据：判据②（不许 return 0，必须报「本次无效」）
+       结果：红（符合预期）  —— 1 failed, 1 passed in 0.11s（红了：test_joystick_mspm0_timeout_never_masquerades_as_a_reading）
+       复原复核：sha256 一致
+
+[注入] C：退出界换成字面量 50（常量算对了、循环里没等）
+       目标判据：判据①尾巴（循环的退出界必须是 JOYSTICK_ADC_TIMEOUT_US）
+       结果：红（符合预期）  —— 1 failed, 1 passed in 0.12s（红了：test_joystick_mspm0_timeout_is_a_time_budget_not_a_spin_count）
+       复原复核：sha256 一致
+
+[注入] D：整体退回旧形态（50 圈自旋 + 首圈 return sum/(i?i:1)）——工单点名的那条反证
+       目标判据：判据②（返回出口只许有「均值」与「本次无效」两个）
+       结果：红（符合预期）  —— 2 failed in 0.13s（红了：test_joystick_mspm0_timeout_is_a_time_budget_not_a_spin_count、test_joystick_mspm0_timeout_never_masquerades_as_a_reading）
+       复原复核：sha256 一致
+
+=== 结论：全部符合预期（每条注入都让对应用例变红，且文件逐字节复原） ===

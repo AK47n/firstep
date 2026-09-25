@@ -8,7 +8,7 @@ main.c 调 init/读轴/读键过静态门禁）与 stm32 单选生成（wiki-stm
 MEM2=PA25/A0_2；MEM3 归 ir_distance，wiki-modules-batch2/04；MEM4=PB20/A0_6
 归 mq135、MEM5=PB24/A0_5 归 mq5，wiki-modules-batch7/01/02；MEM6=PA22/A0_7
 归 flame、MEM7=PA14/A0_12 归 soil——槽位 8/8 用满，wiki-modules-batch8/01/02），
-SW 独立 GPIO 输入（PA9）。stm32：API 全套 6 函数与 mspm0 joystick.h L26-31
+SW 独立 GPIO 输入（PA9）。stm32：API 全套 6 函数与 mspm0 joystick.h 的六个声明
 同名同型（read_x/read_y = uint16_t 12bit raw、read_x_percent/y_percent =
 uint16_t 整数 0-100%——非 float、read_sw = uint8_t）+ JOYSTICK_SW_PRESSED_LEVEL 0
 宏沿名；守卫无 MQ2 字面量/SW 低有效注释/无 printf/GPIO_Init/RCC_。
@@ -35,6 +35,11 @@ from contest_generator.platforms import (  # noqa: E402
     PLATFORM_STM32,
 )
 from contest_generator.selection import resolve_selection  # noqa: E402
+
+def _read(rel: str) -> str:
+    """读库内相对路径的文本（照 test_module_servo.py 同款小助手）。"""
+    return (LIBRARY_ROOT / rel).read_text(encoding="utf-8", errors="replace")
+
 
 MAIN_C_MSPM0 = (
     '#include "ti_msp_dl_config.h"\n'
@@ -135,6 +140,158 @@ def test_joystick_mspm0_untouched():
 
 
 # ---------------------------------------------------------------------------
+# driver-defect-fixes/01：mspm0 侧 ADC 超时判据 = 时间，不是自旋圈数
+# ---------------------------------------------------------------------------
+
+JOYSTICK_C = "modules/joystick/code/joystick.c"
+JOYSTICK_H = "modules/joystick/code/joystick.h"
+
+
+def _c_defines(text: str) -> dict[str, str]:
+    """抓 C 源里 `#define NAME <表达式>`（行尾注释剥掉），供独立复算。"""
+    found: dict[str, str] = {}
+    for match in re.finditer(
+        r"^[ \t]*#define[ \t]+([A-Za-z_]\w*)[ \t]+(.+?)[ \t]*$", text, re.MULTILINE
+    ):
+        found[match.group(1)] = match.group(2).split("/*")[0].strip()
+    return found
+
+
+def _c_functions(text: str) -> dict[str, str]:
+    """按函数名切出**顶层函数体**（从签名行到顶格 `}`）。
+
+    量具要有量具：早先那版用 `code.split(名字, 1)[1]` 取「名字之后的全部文本」，
+    于是 y 函数里的守卫能喂绿 x 函数的断言（两轴不可分辨）。这里按签名行锚定，
+    每个函数体只包含它自己。
+    """
+    found: dict[str, str] = {}
+    for match in re.finditer(
+        r"^[A-Za-z_][\w \t\*]*?\b(\w+)\s*\([^;{]*\)\s*\{", text, re.MULTILINE
+    ):
+        end = text.find("\n}", match.end())
+        if end != -1:
+            found[match.group(1)] = text[match.start():end]
+    return found
+
+
+def _c_int(defines: dict[str, str], name: str, rounds: int = 8) -> int:
+    """把 `#define` 的整数算术表达式算成整数（**测试自己算**，不照抄实现）。
+
+    只解引用同一个字典里的宏名，十六进制/无符号后缀先归一，最后过一遍字符白名单
+    再求值——判据要能独立复算，喂进来的表达式只可能是四则运算。
+    """
+    expr = defines[name]
+    for _ in range(rounds):
+        for ident in sorted(defines, key=len, reverse=True):
+            if ident == name:
+                continue
+            expr = re.sub(rf"\b{ident}\b", f"({defines[ident]})", expr)
+    expr = re.sub(
+        r"\b0[xX][0-9A-Fa-f]+[uUlL]*",
+        lambda m: str(int(m.group(0).rstrip("uUlL"), 16)),
+        expr,
+    )
+    expr = re.sub(r"(?<=[0-9])[uUlL]+\b", "", expr)
+    expr = expr.replace(" ", "")
+    assert re.fullmatch(r"[0-9+\-*/()]+", expr), f"{name} 的表达式不是纯算术：{expr!r}"
+    return int(eval(expr))  # noqa: S307 —— 上面已白名单校验，只可能喂算术字面量
+
+
+def _syscfg_adc_facts() -> tuple[int, int]:
+    """→ (ADC12_0 的槽数, 每槽采样时间 µs)——判据取自母版 syscfg 的事实。"""
+    text = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
+    start = int(re.search(r"ADC12_0\.startAdd\s*=\s*(\d+)\s*;", text).group(1))
+    end = int(re.search(r"ADC12_0\.endAdd\s*=\s*(\d+)\s*;", text).group(1))
+    sample_us = int(
+        re.search(r'ADC12_0\.sampleTime0\s*=\s*"(\d+)\s*us"', text).group(1)
+    )
+    assert end >= start
+    return end - start + 1, sample_us
+
+
+def test_joystick_mspm0_timeout_is_a_time_budget_not_a_spin_count():
+    """driver-defect-fixes/01 判据①：超时上限是**时间**（≥ 一次完整 sequence
+    转换时间 × 安全系数），且算式里的槽数 / 每槽时间就是 syscfg 的事实。
+
+    旧实现是「50 次寄存器轮询」——几微秒~几十微秒，远小于一次序列的 ~1000µs
+    ⇒ 按常量核算每轮都在第一轮就提前超时。这里独立复算一遍，量具本身不照抄
+    实现表达式。
+    """
+    slots, sample_us = _syscfg_adc_facts()
+    defines = _c_defines(_read(JOYSTICK_C))
+
+    conversion_us = slots * sample_us  # 判据面：一次 startConversion 跑满整个序列
+    assert conversion_us >= 1000, "母版 ADC12_0 的序列时长不该短于 1ms"
+
+    assert _c_int(defines, "JOYSTICK_ADC_SEQ_SLOTS") == slots, "槽数常量与 syscfg 不符"
+    assert _c_int(defines, "JOYSTICK_ADC_SLOT_US") == sample_us, "每槽时长与 syscfg 不符"
+    timeout_us = _c_int(defines, "JOYSTICK_ADC_TIMEOUT_US")
+    assert timeout_us >= conversion_us * 2, (
+        f"超时上限 {timeout_us}µs 不够一次完整序列（{conversion_us}µs）的安全系数"
+    )
+    # 轮询步长必须是「时间」：由 SysConfig 生成的 CPU 频率折出 1µs 的周期数
+    assert "DL_Common_delayCycles(JOYSTICK_ADC_CYCLES_PER_US)" in _read(JOYSTICK_C)
+    assert re.search(
+        r"#define\s+JOYSTICK_ADC_CYCLES_PER_US\s+\(\s*CPUCLK_FREQ\s*/", _read(JOYSTICK_C)
+    ), "轮询步长没有挂在 SysConfig 的 CPUCLK_FREQ 上"
+    # **循环的退出界必须是这个时间预算**：常量算对了但循环里写别的数（例如老病的
+    # 字面量 50）等于没修——这一条把「算式」与「真的等」绑在一起。
+    wait_loop = _c_functions(strip_comments(_read(JOYSTICK_C), keep_preprocessor=True))[
+        "_joystick_adc_read"
+    ]
+    assert re.search(
+        r"waited_us\s*>=\s*JOYSTICK_ADC_TIMEOUT_US", wait_loop
+    ), "等 ADC 的循环没有拿 JOYSTICK_ADC_TIMEOUT_US 当退出界"
+    assert re.search(
+        r"waited_us\s*\+\+", wait_loop
+    ), "等 ADC 的循环没有按「µs 步进」计数（那样等待就不是时间）"
+
+
+def test_joystick_mspm0_timeout_never_masquerades_as_a_reading():
+    """driver-defect-fixes/01 判据②：超时分支不再把「没采到」当成「采到 0」。
+
+    0 是合法读数（raw 0 = 杆推到端点 / percent 0 = 0%），所以失败必须另有出口：
+    本实现**先重试**（一圈没采到换下一圈），**一圈都没采到时返回
+    `JOYSTICK_ADC_INVALID`**——它在 raw(0-4095) 与 percent(0-100) 两个合法域之外。
+    """
+    source = _read(JOYSTICK_C)
+    header = _read(JOYSTICK_H)
+    code_only = strip_comments(source, keep_preprocessor=True)
+    functions = _c_functions(code_only)
+    defines = _c_defines(header)
+
+    # 旧判据不许回来：没有「50 圈自旋」这回事了
+    assert not re.search(r"JOYSTICK_ADC_TIMEOUT\b(?!_US)", code_only)
+    # 采样函数的返回出口**只许有两个**：本次无效哨兵 + 真采到样本时的均值。
+    # 只查 `return 0` 是不够的——老实现写的是 `return sum / (i ? i : 1)`，
+    # 首圈（i=0）算出来同样是 0，照样是「拿 0 冒充读数」。
+    sampler = functions["_joystick_adc_read"]
+    assert "return 0" not in sampler, "超时分支仍在用 0 冒充读数"
+    returns = {expr.strip() for expr in re.findall(r"\breturn\s+([^;]+);", sampler)}
+    assert returns == {"(uint16_t)(sum / got_samples)", "JOYSTICK_ADC_INVALID"}, (
+        f"采样函数的返回出口应当只有「均值」与「本次无效哨兵」，实得 {sorted(returns)}"
+    )
+
+    sentinel = _c_int(defines, "JOYSTICK_ADC_INVALID")
+    assert sentinel > _c_int(_c_defines(source), "JOYSTICK_ADC_MAX"), "哨兵值落在 raw 合法域内"
+    assert sentinel > 100, "哨兵值落在 percent 合法域内"
+    assert "JOYSTICK_ADC_INVALID" in functions["_joystick_adc_read"], (
+        "没采到样时没有如实上报「本次无效」"
+    )
+
+    # 百分比换算**只有一处出口**，它必须带哨兵守卫；两个 _percent 入口都必须走到它
+    conv = {name: body for name, body in functions.items() if "* 100u" in body}
+    assert len(conv) == 1, f"百分比换算应当只有一处，实得 {sorted(conv)}"
+    conv_name, conv_body = next(iter(conv.items()))
+    assert "JOYSTICK_ADC_INVALID" in conv_body, f"{conv_name} 把「本次无效」算成了数字"
+    for fn in ("joystick_read_x_percent", "joystick_read_y_percent"):
+        assert fn in functions, f"缺函数 {fn}"
+        assert "JOYSTICK_ADC_INVALID" in functions[fn] or conv_name in functions[fn], (
+            f"{fn} 没走到带守卫的换算出口"
+        )
+
+
+# ---------------------------------------------------------------------------
 # wiki-stm32-batch7/03：stm32 平台条目（页面 ADC 序列收敛 ml_adc + SW gpio_in）
 # ---------------------------------------------------------------------------
 
@@ -166,7 +323,7 @@ BANNED_CODE_PATTERNS = [
     (r"stm32f10x\.h", "stm32f10x.h"),
     (r"\bdelay_1ms\b", "delay_1ms（ml_delay 无此 API）"),
     (r"\bIRQHandler\b", "IRQHandler（页面 ADC 中断改轮询）"),
-    (r"\bMQ2\b", "MQ2（页面 L149 注释串台——不落码）"),
+    (r"\bMQ2\b", "MQ2（页面注释串台——不落码）"),
 ]
 
 
@@ -238,7 +395,7 @@ def test_joystick_stm32_single_select_generation(tmp_path):
 
 
 def test_joystick_stm32_code_guards():
-    """stm32 代码层守卫：API 全套 6 函数与 mspm0 joystick.h L26-31 同名同型
+    """stm32 代码层守卫：API 全套 6 函数与 mspm0 joystick.h 的六个声明同名同型
     （read_x/read_y = uint16_t raw、percent = uint16_t 整数——非 float、read_sw
     = uint8_t）+ JOYSTICK_SW_PRESSED_LEVEL 0 宏沿名；换算口径照 mspm0
     joystick.c 逐行（整数 percent = raw×100/4095、SW 低有效）。"""
@@ -246,7 +403,7 @@ def test_joystick_stm32_code_guards():
     h = (MODULES / "joystick" / "code" / "joystick_stm32.h").read_text(encoding="utf-8")
     full = c + "\n" + h
 
-    assert "MQ2" in c  # 页面缺陷记录（注释：L149 串台）
+    assert "MQ2" in c  # 页面缺陷记录（注释：原页注释串台）
     code_only = strip_comments(full, keep_preprocessor=True)
     for pattern, label in BANNED_CODE_PATTERNS:
         assert not re.search(pattern, code_only), f"代码残留 {label}"
@@ -254,14 +411,14 @@ def test_joystick_stm32_code_guards():
     assert re.search(r"#define\s+JOYSTICK_ADC_MAX\s+4095u", h)
     assert re.search(r"#define\s+JOYSTICK_ADC_SAMPLES\s+4u", h)
     assert re.search(r"#define\s+JOYSTICK_SW_PRESSED_LEVEL\s+0\b", h)
-    # API 全套 6 函数（同名同型 mspm0 joystick.h L26-31）
+    # API 全套 6 函数（同名同型 mspm0 joystick.h 的六个声明）
     assert re.search(r"void joystick_init\(void\);", h)
     assert re.search(r"uint16_t joystick_read_x\(void\);", h)
     assert re.search(r"uint16_t joystick_read_y\(void\);", h)
     assert re.search(r"uint16_t joystick_read_x_percent\(void\);", h)
     assert re.search(r"uint16_t joystick_read_y_percent\(void\);", h)
     assert re.search(r"uint8_t joystick_read_sw\(void\);", h)
-    # 实现：整数 percent 换算（照 mspm0 joystick.c L53-61 逐行——非 float 100.0f）
+    # 实现：整数 percent 换算（照 mspm0 joystick.c 的换算出口逐行——非 float 100.0f）
     assert "* 100u" in code_only and "/ JOYSTICK_ADC_MAX" in code_only
     assert "100.0f" not in code_only
     # 4 次快平均 + SW 低有效（1=按下）

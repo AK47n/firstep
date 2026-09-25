@@ -64,7 +64,11 @@
   `ads1115` 无法读回寄存器、`pca9685` 板上不可自证、`dht11` 位循环超时不报错、
   stm32 全库没有释放 JTAG 的代码、`tcs34725` × mspm0 假通过……）——它们**没有**在本 spec 的三张单里。
 - 上板实测（本机没有板子：落地时照仓库惯例写"未上板"，或由用户按 `docs/agents/local-environment.md` 安排）。
-- 配方内容本身（`library/hwcheck_recipes.json` 一个字不动；配方随修复而简化属另一单）。
+- **配方段结构与格数不动**（`library/hwcheck_recipes.json` 的 `include` / `prereq` / `init` /
+  `probe` / `read` / `console` 各段形状与格数一个不改；**但三张单各自点名了「回来改配方口径」
+  的那几处文案要跟着改**——修好之后配方不该再说「本单不修的驱动缺陷」，读数行也要认新出现的
+  「本次无效」哨兵值。2026-09-25 落地按这条执行：改动只落 `read` 的 `unit` 与 `note` 行，
+  并由 `tests/test_hwcheck_recipe.py` 的读数行宽 / 扩张地板 / locals 三条既有守卫兜住）。
 - 发版动作。
 
 ## 补充说明
