@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=82f450a6ddadc94c3f7e778ddcf1a7f04ef48042 -->
+<!-- changelog-auto: last-commit=2f98097eb039bb60a900ecd4aa67505575da4e03 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -21,6 +21,7 @@
 - 16:53 工单 hwcheck-specialize/06：专精化批次 D —— 红外 / 气体 / 存储三件（mlx90614 / sgp30 / at24c02）六格配方
 - 18:33 工单 hwcheck-specialize/07：专精化批次 E —— 数字外设与单总线四件（ads1115 / pca9685 / dht11 / ds18b20）八格配方
 - 18:33 收尾：专精面扩张 07（批次 E）记账进交接区，并补两条量具纪律（CRLF 编辑坑 / 组合穷举量具）
+- 19:35 工单 hwcheck-specialize/08：专精化批次 F —— 称重与人机执行四件（hx711 / joystick / servo / relay）八格配方
 
 ## 2026-09-24
 - 00:39 工单 hwcheck-unknown-device/12：自建件 id 文法收紧到 C 标识符（连字符建不出坏工程）
