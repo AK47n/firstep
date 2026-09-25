@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=b55dac14b2476e78e733dacccf2c28a0abadd0ba -->
+<!-- changelog-auto: last-commit=0ea76e188a990e5a7a25b838a3f4b3745e2b8a70 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -26,6 +26,7 @@
 - 21:26 工单 driver-defect-fixes/02：servo × mspm0 的 PWM 周期落进 16 位定时器量程
 - 21:29 工单 driver-defect-fixes/03：hx711 的就绪窗口按转换周期算，「0」的歧义有出口
 - 21:42 发版：三处版本号同步到 v1.3.0 + VERSIONS.md 新区块 + 修一处把发版闸门拖红的既有缺陷
+- 22:18 发版 v1.3.0（一）：版本同步已提交、两件套已打包核对；推送被网络挡住，收尾留一条命令
 
 ## 2026-09-24
 - 00:39 工单 hwcheck-unknown-device/12：自建件 id 文法收紧到 C 标识符（连字符建不出坏工程）
