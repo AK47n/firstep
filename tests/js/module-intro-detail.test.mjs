@@ -164,9 +164,10 @@ test("generate-recommend.js：展开并发收口——排队 + 令牌作废旧�
     "ui 层又出现「pending || !ok」合并重跑 = 失败也被重跑（自激根因，工单 09）");
   // 选择集变化后必须重跑展开（否则停在「已选（未展开依赖）」）
   // 锚点避开"写死的换行+缩进"（工单 ci-gate-fixes/03）：原写 `\n  `，CI 的 windows 腿
-  // 是 CRLF 检出 ⇒ 这条在 CI 上必红、在本机（LF）必绿。`[^\n]*\n\s*` 仍要求二者按序
-  // 落在不同行上，判的还是"重跑展开紧随渲染"这件事。
-  assert.match(src, /renderRecommendResult\(lastRecommend, false\);[^\n]*\n\s*runExpand\(\);/);
+  // 是 CRLF 检出 ⇒ 这条在 CI 上必红、在本机（LF）必绿。`[^\n]*\r?\n[ \t]*` = 行尾任意内容
+  // + 两种换行都吃 + **只吃同行缩进**（不用 `\s*`：它能跨空行，等于把断言放宽）。
+  // 判的仍是"重跑展开紧随渲染、落在相邻两行"。
+  assert.match(src, /renderRecommendResult\(lastRecommend, false\);[^\n]*\r?\n[ \t]*runExpand\(\);/);
 });
 
 test("generate-recommend.js：chip 渲染带选择态 + 点击是双向开关（工单 06）", () => {

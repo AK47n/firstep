@@ -1,0 +1,35 @@
+工单 ci-gate-fixes/02+03 评审整改：夹具种子配置补死端口 base_url、断言锚点收紧、两单收口
+
+双轴评审的整改一次落。三件**改行为**的：
+
+- `tests/browser/server.mjs`：种子配置补 `base_url = http://127.0.0.1:9/v1`（死端口）。
+  评审抓到的问题是真的——原种子配置漏写 base_url ⇒ 落到 `DEFAULT_BASE_URL =
+  https://api.deepseek.com`，于是**一条没被 spec 的 `page.route` 拦住的 LLM 路径会真出网**
+  （假 key 换回 401）。并纠正一处失准注释：**拦截不在夹具里**，那是各 spec 自己的
+  `page.route`（module-intro / code-tree-click）；夹具没有"拦端点"这个职责。
+- 同文件：两个种子目录先 `existsSync` 校验——布局改名时当场报"种子库不存在"，
+  而不是后端起得来、库端点 400、哨兵误报「端口上是旧后端」。
+- 同文件：清理钩子加 `SIGINT`/`SIGTERM`（Ctrl-C / 被强杀；排查时正是在反复 Ctrl-C）；
+  **`SIGKILL` 覆盖不到**，在工单里如实记下这条限度，不假称已覆盖。
+- 两处 CRLF 断言锚点从 `[^\n]*\n\s*` 收紧成 `[^\n]*\r?\n[ \t]*`：`\s*` 能跨空行，
+  等于把"两处相邻"放宽成"隔多远都行"（工单 03「断言强度不缩水」那条）。
+
+文档与账：
+
+- 工单 `03` 补 resolved + 六条勾 + 落地事实（含反向验证读数 1794/2 → 1796/0、LF 方向读数）。
+  评审判为**流程硬违规**：代码随 `fbfa2357` 提交了，工单当时还停在 `ready-for-agent`、
+  勾全空——违反 workflow.md Step 4「先 claim、干完置 resolved」。
+- 工单 `02` 按事实重写证据段：删掉三处站不住的表述——①「本夹具拦掉了 /api/recommend」不实；
+  ② 拿"旧夹具也红"当"非本单引入"的证据是**错的**（那是空 HOME 无配置这个**另一个已定性**
+  的根因，签名不同）；③ 明确写下"42 passed / 空 HOME"**不蕴含 CI 必绿**（n=1，且本机 158s
+  仍贴着 pre-push 的 180s 预算），真判据是推上去让 CI 自己跑。
+- `docs/agents/local-environment.md`：更正那条已过期的环境事实（原写这两条"CRLF 检出下必红"
+  ——工单 03 已修好，两种检出都绿），并留下"本机 LF / CI CRLF 这条差异骗过一次发布"的教训。
+- 新开 `05`：`launcher-reload` 在"复用过的临时 HOME"下出现整支红（A = `page.reload` 30s 超时，
+  B–E = `ERR_CONNECTION_REFUSED`），**只记现场、不定性**——评审指出该签名在本仓老偶发里有前科，
+  先稳定复现再谈修。
+- `webapp.py`：删掉 `_current_config` docstring 里与 `__post_init__` 直接矛盾的旧句子
+  （它照字面读正好描述刚修掉的那个 bug）。
+
+读数：pytest -n auto **5532 passed + 11 skipped**；前端门禁 LF **1796/0**、CRLF **1796/0**；
+浏览器门禁空 HOME **42 passed / 0 fail**、临时目录无残留。

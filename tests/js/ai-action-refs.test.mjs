@@ -137,8 +137,9 @@ test("生成骨架/生成工程收尾路径含 aiActionStop（finally 内）", (
   assert.match(coreSrc, /stopStage\(\);\s*releaseBanner\(\);   \/\/ 首段请求已终态/);
   // 锚点避开"写死的换行+缩进"（工单 ci-gate-fixes/03）：这里原写 `\n\s*`，而 CI 的
   // windows 腿是 CRLF 检出、本机（LF）不是 ⇒ 这条在 CI 上必红、在本机必绿。
-  // `[^\n]*` 仍要求两处按序落在**不同行**上，判的还是"成对"这件事。
-  assert.match(coreSrc, /bannerReleased = false;   \/\/ 重发 = 新一对 start\/stop[^\n]*\n\s*aiActionStart\("生成工程"\);/);
+  // `[^\n]*\r?\n[ \t]*` = 行尾任意内容 + 两种换行都吃 + **只吃同行缩进**（不用 `\s*`：
+  // 它能跨空行，会把"两处相邻"放宽成"隔多远都行"）。判的仍是"两处按序落在相邻两行"。
+  assert.match(coreSrc, /bannerReleased = false;   \/\/ 重发 = 新一对 start\/stop[^\n]*\r?\n[ \t]*aiActionStart\("生成工程"\);/);
 });
 
 test("母版提炼终态收口：finishProgress 与 failProgress 各带 aiActionStop", () => {

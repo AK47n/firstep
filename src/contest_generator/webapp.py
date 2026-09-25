@@ -696,13 +696,12 @@ class AppContext:
 def _current_config(ctx: AppContext) -> AppConfig | None:
     """返回当前配置；未配置（文件缺失 / 损坏 / 缺 key）返回 None。
 
-    判断"调用方有没有指过路径"用 `ctx.config_path == config_path()` 而不是
-    `isinstance(..., _DefaultConfigPath)`：`AppContext()` 走的是 dataclass 生成的
-    `__init__`，**没有任何东西把哨兵换成真 Path**，所以 `ctx.config_path` 里留着的
-    就是那个哨兵本身，而 `config_path()` 此刻解析出来的才是"缺省位置"——
-    两者相等 ⟺ 调用方没指过路径。**判据必须只有这一处**（早先 `__post_init__`
-    里另做一次解析、这里再 isinstance 一次，两处口径不一致 ⇒ 回退在生产路径上
-    完全不可达，而单测只直调 `load_config()` 所以全绿：评审 2026-09-25 实测抓到）。
+    判断"调用方有没有指过路径"用 `ctx.config_path == config_path()`：`__post_init__`
+    已经把关哨兵换成了缺省位置，而 `config_path()` 此刻解析出来的也正是缺省位置——
+    两者相等 ⟺ 调用方没指过路径。**判据必须只有这一处**：早先这里另用
+    `isinstance(..., _DefaultConfigPath)` 判，而那与 `__post_init__` 的赋值口径不一致
+    ⇒ `is_default` 恒 False、回退在生产路径上完全不可达，而单测只直调 `load_config()`
+    所以全绿（评审 2026-09-25 实测抓到）。
 
     相等 ⇒ 传 `None`，允许 `load_config` 在"文件不在 + 随包库在场"时回退；
     不等 ⇒ 是显式路径，照旧抛 ConfigError（测试用 `config_path=…/"never-written.json"`

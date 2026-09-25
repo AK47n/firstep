@@ -9,13 +9,71 @@
 // 唯一被拦的端点 = /api/recommend（见 spec）：跑一次真推荐要花 LLM 额度，
 // 验收不该有额度成本。
 import { spawn } from "node:child_process";
-import { createWriteStream } from "node:fs";
+import { createWriteStream, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// seedConfig()：给子进程写一份**指向检出内库**的配置文件，并返回它的路径
+// （工单 ci-gate-fixes/02）。
+//
+// **为什么必须有它**：后端只从 `~/.contest_generator/config.json` 取"库在哪"。开发机上那份
+// 配置指到本仓 `library/`，所以本机全绿；而 CI runner 上**没有那份文件** ⇒ 库解析不出来 ⇒
+// 库相关的只读端点答 400「未配置 AI API」⇒ 端点哨兵如实判"端口上是旧后端"并把刚起的后端
+// 杀掉。于是这条 CI 腿从加上那天起就没真跑过（`ui-dom-contract-gate/03` 之后 main 一直没推，
+// 直到 v1.3.0 才第一次跑，run 36154463953 当场红）。
+//
+// **做法**：写临时配置 + 用产品的显式覆盖口 `FIRSTEP_CONFIG_PATH` 指过去（工单
+// ci-gate-fixes/01 引入）。刻意**不伪造 `HOME` / `USERPROFILE`**——那会连带改掉数据目录、
+// 最近工程等一串路径推导，把一个显式契约换成全局副作用。
+//
+// **api_key 给一个夹具专用的假值**：`_require_config`（工单 ci-gate-fixes/01 收紧判据后）
+// 要求非空 key 才放行，而库端点与 AI 端点共用那道闸。
+//
+// **base_url 指向本机一个没人听的端口**（本单评审整改）：种子配置漏写它就会落到
+// `DEFAULT_BASE_URL = https://api.deepseek.com`，于是一条**没被 spec 的 `page.route` 拦住**的
+// LLM 路径会真出网（拿假 key 换回 401）。注意**拦截不在本夹具里**——`/api/recommend` 是各 spec
+// 自己 `page.route` 挡的（`module-intro.spec.mjs` / `code-tree-click.spec.mjs`），夹具没有、
+// 也不该有"拦端点"这个职责。指到死端口后，漏拦的路径**立刻连接被拒**：既不出网，也大声失败。
+let seededConfigPath = null;
+
+function seedConfig() {
+  if (seededConfigPath) return seededConfigPath;
+  const modules = join(REPO_ROOT, "library", "modules");
+  const masters = join(REPO_ROOT, "library", "masters");
+  // 布局改名 / 检出里没有库时**当场大声失败**：否则后端起得来但库解析不出来 ⇒ 库相关端点答 400
+  // ⇒ 端点哨兵误报「端口上是旧后端」——正是这段注释开头最怕的那种误导性假红。
+  for (const dir of [modules, masters]) {
+    if (!existsSync(dir)) {
+      throw new Error(`夹具种子配置指向的目录不存在：${dir}`
+        + `（检出里没有 library/？布局改名了？）`);
+    }
+  }
+  const dir = mkdtempSync(join(tmpdir(), "firstep-browser-fixture-"));
+  const path = join(dir, "config.json");
+  writeFileSync(path, JSON.stringify({
+    api_key: "sk-browser-fixture",           // 夹具专用假 key（见上）
+    base_url: "http://127.0.0.1:9/v1",       // 死端口：漏拦的 LLM 路径立刻连接被拒（见上）
+    module_library_dir: modules,
+    masters_dir: masters,
+  }, null, 2), "utf8");
+  seededConfigPath = path;
+  // 收临时目录：`exit` 覆盖正常结束，信号覆盖 Ctrl-C / 被强杀（排查时正是在反复 Ctrl-C）。
+  // 两个钩子里都只做同步事（来不及做异步）。
+  const cleanup = () => {
+    try { rmSync(dir, { recursive: true, force: true }); } catch { /* 收不掉不影响验收结论 */ }
+  };
+  process.on("exit", cleanup);
+  for (const sig of ["SIGINT", "SIGTERM"]) {
+    process.on(sig, () => { cleanup(); process.exit(130); });
+  }
+  return path;
+}
 
 /** 服务在答话吗（`/api/health` 200）。**导出**给 spec 用：用例要判"服务还活着吗"，
  *  各自再抄一份 fetch + try/catch 就是第二份同形实现（工单 launcher-exit-race/04 评审）。
@@ -175,6 +233,9 @@ async function spawnServer({ port, url, timeoutMs, launcher }) {
     PYTHONPATH: "src",
     PYTHONIOENCODING: "utf-8",
     FIRSTEP_LAUNCHER_PORT: String(port),
+    // 库指向**检出内**那份，而不是操作用户主目录里可能存在的真配置（工单 ci-gate-fixes/02）：
+    // 验收结果因此与"这台机器上装过什么"解耦，干净 runner 上也一样跑得起来。
+    FIRSTEP_CONFIG_PATH: seedConfig(),
     // 不缓冲：**服务被自己关掉**（或崩掉）时，uvicorn 的 access log 若还压在块缓冲里，
     // 就随进程一起没了——而那正是这套日志最要被读到的时候（工单 launcher-exit-race/04
     // 实测：`FIRSTEP_BROWSER_SERVER_LOG` 只收到 8 行、一条请求都没有）。
