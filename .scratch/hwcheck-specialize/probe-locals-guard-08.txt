@@ -1,0 +1,11 @@
+=== 反证 C：把 hx711 × stm32 的探头改回写错的样子 → 局部变量守卫必须红 ===
+
+0) 前置：sha256 = 149f0654baf720a9…；判据 = 每格声明的 locals 必须真被写过
+1) 改之前：守卫 rc=0（30 passed, 10 skipped, 173 deselected in 18.38s）
+2) 改成 `r = hx711_read_raw()`（采样不再落进 raw）之后：守卫 rc=1（1 failed, 29 passed, 10 skipped, 173 deselected in 18.15s）
+   红因里点名了 raw 与 hx711 吗：✓ 点名了
+
+3) 回滚：✓ 按原字节写回，sha256 一致
+4) 改回之后：守卫 rc=0（30 passed, 10 skipped, 173 deselected in 18.10s）
+
+结论：✓ 反证成立——写错必红、改回必绿、文件逐字节还原

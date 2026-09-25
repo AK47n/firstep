@@ -34,6 +34,7 @@ from contest_generator.hwcheck_recipe import (
     c_string,
     escape_c_string,
     load_recipes,
+    local_names,
     parse_recipes,
     recipe_library_path,
     render_recipe_section,
@@ -95,7 +96,11 @@ EXPANSION = (("aht10", PLATFORM_STM32), ("aht10", PLATFORM_MSPM0),
              ("ads1115", PLATFORM_STM32), ("ads1115", PLATFORM_MSPM0),
              ("pca9685", PLATFORM_STM32), ("pca9685", PLATFORM_MSPM0),
              ("dht11", PLATFORM_STM32), ("dht11", PLATFORM_MSPM0),
-             ("ds18b20", PLATFORM_STM32), ("ds18b20", PLATFORM_MSPM0))
+             ("ds18b20", PLATFORM_STM32), ("ds18b20", PLATFORM_MSPM0),
+             ("hx711", PLATFORM_STM32), ("hx711", PLATFORM_MSPM0),
+             ("joystick", PLATFORM_STM32), ("joystick", PLATFORM_MSPM0),
+             ("servo", PLATFORM_STM32), ("servo", PLATFORM_MSPM0),
+             ("relay", PLATFORM_STM32), ("relay", PLATFORM_MSPM0))
 
 # 扩张清单的**精确条数**（= `len(EXPANSION)`；每批长一次：追加了几格就改成几）。
 # 判据不是"至少"，是"就是这么多"——有人悄悄删一行 `EXPANSION`，逐格断言就少跑一格、
@@ -103,7 +108,7 @@ EXPANSION = (("aht10", PLATFORM_STM32), ("aht10", PLATFORM_MSPM0),
 # 数字改小"三处一起动仍然会全绿（`PILOT` 当年正是为这个洞加了按**配方文件实数**判的
 # 第三条地板）；本 spec 明说既有的文件级下限断言（`>= 17` 格 / `>= 10` 件）属 v1 那 17 格、
 # **不改**，所以这条残留的洞如实记在这里，不靠措辞掩盖。
-EXPANSION_CELL_COUNT = 32
+EXPANSION_CELL_COUNT = 40
 
 
 def _unescape_c(code: str) -> str:
@@ -880,6 +885,131 @@ def test_expansion_read_lines_fit_the_device_line_buffer(slug, platform):
         f"{slug} × {platform} 的读数行放不下板上的行缓冲（可用 "
         f"{_LINE_BUFFER_BYTES - 1} 字节；中文一字 3 字节，截在字中间就是乱码）——"
         "把单位写短些，或把说明挪进 note：\n" + "\n".join(too_wide)
+    )
+
+
+def _locals_written_by(declarations, code: str) -> list[str]:
+    """→ 在这段渲染产物里**从没被赋值**的局部变量名（空列表 = 都被赋过值）。
+
+    **判据（工单 08 立的守卫）**：`locals` 的唯一用途是「把采样存下来给读数段复用」，
+    所以每个声明的局部变量都必须在渲染出的 C 里**被赋值过一次**——否则读数段读到的是初值，
+    现象是「探头判 OK、读数恒 0」，这是最像"测过了"的假绿。
+
+    实现上刻意**只认 `名字 =` 这一个形态**，先把两类"也长得像赋值"的行踢掉：
+
+    * **声明行**：渲染器把每条 `locals` 原样写成 `    <声明>;`（`类型 名字 = 初值;`）；
+    * **读数标签行**：渲染器把读数标签写成 `    hwcheck_report("  raw = ");`。
+
+    然后逐行找 `名字`，检查它后面是不是**赋值号**（`=`，且不是 `==` / `!=` / `<=` / `>=`、
+    也不是语句尾 / 传参 / 括号收尾 / 引号）。步骤分开做（先剥行、再逐行扫）是为了
+    **不依赖正则的变长回溯**——上一版用 lookahead 写在整段文本上扫，被 `\\s*` 的回溯
+    骗成了恒真（反证时才发现），这一版把每一步都做成"看得见"的形态判断。
+    """
+    body = code
+    for declaration in declarations:
+        body = body.replace(f"    {declaration};", "")
+    lines = [
+        line for line in body.splitlines()
+        if line.strip() and not line.strip().startswith(("/*", "//", "hwcheck_report("))
+    ]
+    unwritten: list[str] = []
+    for name in sorted(local_names(declarations)):
+        found = False
+        for line in lines:
+            for match in re.finditer(re.escape(name), line):
+                before = line[match.start() - 1] if match.start() else ""
+                if before and (before.isalnum() or before in "_.\"'\\"):
+                    continue
+                tail = line[match.end():]
+                # 结构体成员赋值：`.c = 0`
+                if re.match(r"[ \t]*\.[ \t]*\w+[ \t]*=(?!=)", tail):
+                    found = True
+                    break
+                assignment = re.match(r"[ \t]*=(?!=)", tail)
+                if assignment is None:
+                    continue
+                # 排除 `!=` / `<=` / `>=`：`=` 前面那个非空字符是运算符
+                if tail[:assignment.end() - 1].strip(" \t").startswith(("!", "<", ">")):
+                    continue
+                after = tail[assignment.end():assignment.end() + 1]
+                if after and after not in "=;,)\"":
+                    found = True
+                    break
+            if found:
+                break
+        # 出参取地址也算"写过"：`&raw`
+        if not found and re.search(rf"&[ \t]*{re.escape(name)}(?![A-Za-z0-9_])", body):
+            found = True
+        if not found:
+            unwritten.append(name)
+    return unwritten
+
+
+def test_locals_guard_tells_a_write_from_a_mere_read():
+    """**判据自检**：`_locals_written_by` 分得清「写」与「读 / 比较 / 声明 / 标签」。
+
+    为什么单独立一条：这一条用例上一版的判据用 lookahead 写，被 `\\s*` 的回溯骗成恒真
+    ——整条守卫绿着，而它本该抓的那个缺陷（`hx711 × stm32` 把采样存进 `r`）就在眼前。
+    判据本身也要有判据，所以这里用**手写片段**把七种形态一次钉死。
+    """
+    def renders(declarations, *lines: str) -> str:
+        """合成一段渲染产物（声明行 + 若干语句行）——形态与渲染器一致。"""
+        return "\n".join([*(f"    {d};" for d in declarations), *lines])
+
+    good = _locals_written_by(["uint32_t raw = 0"], renders(
+        ["uint32_t raw = 0"], "    raw = hx711_read_raw();"))
+    broken = _locals_written_by(["uint32_t raw = 0"], renders(
+        ["uint32_t raw = 0"], "    r = hx711_read_raw();"))
+    comma = _locals_written_by(["uint32_t raw = 0"], renders(
+        ["uint32_t raw = 0"], "    r = (delay_ms(500), raw = hx711_read_raw(), 1);"))
+    member = _locals_written_by(["TCS34725_RGBC rgb"], renders(
+        ["TCS34725_RGBC rgb"], "    rgb.c = 0;"))
+    address = _locals_written_by(["TCS34725_RGBC rgb"], renders(
+        ["TCS34725_RGBC rgb"], "    tcs34725_read_rgb(&rgb);"))
+    compare_only_code = renders(
+        ["uint32_t raw = 0"], "    r = (raw != 0) ? 1 : 0;",
+        '    hwcheck_report("  raw = ");', "    hwcheck_report_int(raw);")
+    compare_only = _locals_written_by(["uint32_t raw = 0"], compare_only_code)
+    other_name = _locals_written_by(["uint32_t raw = 0"], renders(
+        ["uint32_t raw = 0"], "    r = hx711_read_raw();",
+        "    /* note 里写着 `raw` 这个词 */"))
+
+    assert good == [], good
+    assert comma == [], comma
+    assert member == [], member
+    assert address == [], address
+    assert broken == ["raw"], broken
+    assert compare_only == ["raw"], compare_only
+    assert other_name == ["raw"], other_name
+
+
+@pytest.mark.parametrize("slug,platform", EXPANSION)
+def test_expansion_cells_that_declare_locals_actually_write_them(slug, platform):
+    """**扩张格**里声明了 `locals` 的，必须在渲染出的 C 里真被写过（工单 08 立的守卫）。
+
+    为什么单独立一条：`locals` 的唯一用途是「把采样存下来给读数段复用」，而**判据段**的
+    每条调用都会被渲染器加壳成 `r = <call>;`——写配方的人很容易在那一句里顺手把赋值目标
+    写成 `r`（外层那个判定变量），于是局部变量**永远停在初值**：
+    编译过、校验过、探头也判 OK，**但读数两行恒为 0 / -8388608**，学生在板上看到的是
+    「探头 OK、读数是零」。工单 08 落地时正是这么写错的（`hx711 × stm32` 的探头把采样
+    存进了 `r`），双轴评审用渲染产物抓出来——所以这里把它钉成判据。
+
+    判据本体在 `_locals_written_by`（另有一条它自己的自检用例）。
+    """
+    from contest_generator.library import list_modules
+
+    manifests = list_modules(REAL_LIBRARY)
+    interfaces = _library_interfaces_all(REAL_LIBRARY, manifests)
+    recipes = load_recipes(REAL_LIBRARY, manifests, interfaces)
+    section = recipes[slug].for_platform(platform)
+    assert section is not None, f"真实库缺配方：{slug} × {platform}"
+    if not section.locals:
+        pytest.skip(f"{slug} × {platform} 没有 locals 段（本用例对它无话可说）")
+    unwritten = _locals_written_by(section.locals, "\n".join(render_recipe_section(section)))
+    assert not unwritten, (
+        f"{slug} × {platform} 声明了局部变量 {unwritten}，但渲染出的 C 里从没给它赋过值"
+        "（读出来会恒是初值）——检查配方里那句「把采样存进 locals」是不是顺手写成了 `r = …`："
+        "判据段的调用会被渲染器加壳成 `r = <call>;`，赋值目标必须是局部变量名"
     )
 
 
