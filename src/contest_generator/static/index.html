@@ -1040,8 +1040,13 @@
   /* 「我的器件」（库外件，工单 hwcheck-unknown-device/02）：列表 + 表单。
      与库内器件挑选区分开（左边竖条 + 浅底）：一眼看出哪些结论是"按我确认的事实"
      试的、哪些是库内验证过的。 */
-  .hwcheck-my-devices { border: 1px solid var(--border); border-left: 3px solid var(--accent);
-    border-radius: var(--radius-md); padding: var(--space-2); margin-bottom: var(--space-2); }
+  /* 「我的器件」/ 自建件计划面板 / 带入生成页 三块的**共同外壳**（左边一道竖条：
+     「这一块讲的是另一类东西」——库内那批之外的自建件、以及"对上面选择的动作"）。
+     形状单源在下面这条，各自的排版差异（padding）留在自己那条里。 */
+  .hwcheck-my-devices, .hwcheck-custom-plan, .hwcheck-handoff {
+    border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    border-radius: var(--radius-md); margin-bottom: var(--space-2); }
+  .hwcheck-my-devices { padding: var(--space-2); }
   .hwcheck-my-device { border-bottom: 1px solid var(--border); padding: var(--space-1) 0; }
   .hwcheck-my-device:last-child { border-bottom: none; }
   .hwcheck-my-device-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
@@ -1078,6 +1083,11 @@
   .hwcheck-device-search { min-width: 320px; flex: 1 1 320px; }
   .hwcheck-device-count { color: var(--muted); font-size: 12.5px; align-self: center; }
   #hwcheck-device-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: var(--space-2); }
+  /* 带入生成页（工单 hwcheck-acceptance/04）：一个动作 + 几句如实说明（带哪几件 /
+     为什么不带 / 引脚不带）。外壳与「我的器件」同一形状（见上面那条共用规则）。 */
+  .hwcheck-handoff { padding: var(--space-2); }
+  .hwcheck-handoff button { margin-bottom: var(--space-1); }
+  .hwcheck-handoff .slug { margin: 0 2px; }
   #hwcheck-device-grid { max-height: 340px; overflow: auto; margin-top: var(--space-2); }
   .hwcheck-table { width: 100%; border-collapse: collapse; font-size: 13px;
                    margin-bottom: var(--space-2); }
@@ -1132,9 +1142,7 @@
      它做什么。与库内两批外观**都不一样**（自己一组类名，不套 .hwcheck-section）：
      库内件是"验证过的"，这一批是"按你确认的事实试的"，学生一眼要分得清。
      空集时容器里什么都不写（既有页面逐字不变）。 */
-  .hwcheck-custom-plan { border: 1px solid var(--border); border-left: 3px solid var(--accent);
-                         border-radius: var(--radius-md); padding: 8px 10px;
-                         margin-bottom: var(--space-2); }
+  .hwcheck-custom-plan { padding: 8px 10px; }
   .hwcheck-section-tag.custom { color: var(--accent); border-color: var(--accent); }
   .hwcheck-custom-name { font-size: 13px; overflow-wrap: break-word; }
   .hwcheck-custom-wiring { font-size: 12.5px; color: var(--muted);
@@ -3239,7 +3247,7 @@
   <nav>
     <div class="tab-group" role="tablist" aria-label="做题">
       <button data-tab="generate" class="active" role="tab" aria-selected="true" aria-controls="tab-generate" tabindex="0" title="主流程：粘贴赛题 → AI 推荐 → 引脚配置 → 生成工程 → 编译修复。">生成</button>
-      <button data-tab="hwcheck" role="tab" aria-selected="false" aria-controls="tab-hwcheck" tabindex="-1" title="硬件检测：手上这件器件通不通——选平台（后续可选器件）→ 生成检测工程 → 照清单上板确认。不用赛题。">硬件检测</button>
+      <button data-tab="hwcheck" role="tab" aria-selected="false" aria-controls="tab-hwcheck" tabindex="-1" title="硬件检测：手上这件器件通不通——选平台、选器件（库内件与库外自建件）→ 接线表与默认脚冲突 → 生成检测工程 → 照清单上板确认。不用赛题。">硬件检测</button>
       <button data-tab="topic" role="tab" aria-selected="false" aria-controls="tab-topic" tabindex="-1" title="历年真题（题面 + 附带程序），点「取题面」可一键填入生成页。">赛题库</button>
       <button data-tab="code" role="tab" aria-selected="false" aria-controls="tab-code" tabindex="-1" title="IDE 式代码编辑器：文件树 + 多标签编辑 + 保存（Ctrl+S）+ 大纲 + 搜索。">代码</button>
       <button data-tab="settings" role="tab" aria-selected="false" aria-controls="tab-settings" tabindex="-1" title="配置 AI API key、环境体检、工具链路径与库设置——第一次使用先来这里。">设置</button>
@@ -4006,14 +4014,17 @@
   </section>
 
   <!-- ============================ 硬件检测（工单 module-hwcheck/01 + 02） ============================
-       顶级栏目、完全独立于赛题工作流：选平台 →（后续工单：选器件）→ 生成检测工程
+       顶级栏目、独立于赛题工作流：选平台 → 选器件 → 生成检测工程
        → 编译烧录 → 照清单上板确认。工单 02 起真的上板：生成走既有生成内核
        （新子目录 hwcheck-平台-时间，不覆盖、不进最近工程记录），编译 / 烧录
        复用既有面板与工具探测，清单勾选态本地备忘、刷新回显。
-       ⚠ 本栏目不读题面、不读已选模块、不写最近工程记录——检测工程与赛题工程互不干扰。 -->
+       ⚠ 不读题面、不写最近工程记录——检测工程与赛题工程互不干扰。
+       与生成页的唯一接口是**单向**的「把验过的器件带进生成页」（工单
+       hwcheck-acceptance/04，容器 #hwcheck-handoff）：只搬器件集，引脚 / 通道 /
+       检测工程目录都不进生成链。 -->
   <section id="tab-hwcheck" class="page">
     <div class="card">
-      <h2>硬件检测 <span class="muted">（手上这件器件通不通——不用赛题、不用先选模块；本版先做「板子活着」最小自检）</span></h2>
+      <h2>硬件检测 <span class="muted">（手上这件器件通不通——不用赛题、不用先选模块；选平台 + 选器件 → 接线表与默认脚冲突预警 → 生成检测工程逐件判通断 → 串口复测 → 现象回填让 AI 排障）</span></h2>
       <p class="card-details">先选平台和输出通道，再点「预览检测程序」看这一趟要烧进板子的 main.c，
         或直接「生成检测工程」——生成后会给你编译、烧录按钮和一张「应看到什么 / 不对先查哪里」的清单。
         没有器件也能生成：那是先确认板子和烧录链路是好的。</p>
@@ -4029,6 +4040,10 @@
       <div id="hwcheck-device-chips" class="row"></div>
       <div id="hwcheck-device-missing"></div>
       <div id="hwcheck-device-groups"></div>
+      <!-- 带入生成页（工单 hwcheck-acceptance/04）：把当前选中的库内器件并进生成页的
+           已选清单（只带器件、不带引脚；库外自建件带不过去并说明原因）。内容全部由
+           fx/hwcheck.js 的 hwcheckHandoffHTML 渲染，这里只是落点。 -->
+      <div id="hwcheck-handoff"></div>
       <!-- 「我的器件」（库外件，工单 hwcheck-unknown-device/02）：手上这件不在模块库里
            也能填进来——名称 / 总线 / 7 位地址 / 身份寄存器 / 期望值 / 备注。
            件与平台无关（切平台不丢）；这一版先打通"事实"这条路，不生成任何代码。 -->

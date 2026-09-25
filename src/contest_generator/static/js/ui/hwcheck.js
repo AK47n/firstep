@@ -1,7 +1,12 @@
 // ui/hwcheck.js — 硬件检测栏目的 DOM 胶水（工单 module-hwcheck/01 + 02）。
 //
 // 单向依赖：ui → fx / app（纯件在 fx/hwcheck.js，本文件只读状态、写 DOM、
-// 发请求）。栏目独立于赛题工作流：不读题面、不读已选模块、不写最近工程记录。
+// 发请求）。栏目独立于赛题工作流：不读题面、不写最近工程记录。
+//
+// **与生成页的关系只有一条，而且是单向的**（工单 hwcheck-acceptance/04）：检测页
+// 把验过的**器件集**带进生成页的已选清单（读全局当前平台只为提前讲明平台不一致，
+// 写只经推荐簇 A 的 addModulesFromHandoff 入口）。除此之外两边的状态互不相干：
+// 引脚、通道、检测工程目录都不进生成链，生成页的选择也不会回流到这一栏。
 //
 // 工单 02 起这个栏目从"预览文本"走到"真的上板"：
 //   生成 POST /api/hwcheck/generate（复用生成内核，新子目录不覆盖）
@@ -13,6 +18,11 @@
 import { $, apiGet, apiPost, apiDelete, handle, state, toast, toastError } from "/js/app.js";
 import { chosenPlatform } from "/js/ui/generate-recommend.js";
 import { bindModuleInfoEntry, openModuleInfo } from "/js/ui/generate-recommend.js";
+// 带入生成页的批量并入入口（工单 hwcheck-acceptance/04）：selectedSlugs 的唯一写者
+// 在推荐簇 A，这里只调它的入口——不自己写选择集（那会绕过重绘与依赖展开的收口）。
+import { addModulesFromHandoff } from "/js/ui/generate-recommend.js";
+// 切页签原语（工单 ux-walkthrough-02/06）：带过去之后落到生成页的已选清单上
+import { gotoNavTab } from "/js/ui/goto-nav.js";
 import { flashRunShared } from "/js/ui/flash.js";
 import { runCompileOnceCore } from "/js/ui/fix-center-core.js";
 import {
@@ -43,6 +53,7 @@ import {
   hwcheckCanTriage, hwcheckTriagePayload, hwcheckChecklistPayload,
   hwcheckAdviceState, hwcheckRecordState, hwcheckTriageErrorHTML,
   hwcheckAdviceHTML, hwcheckChecklistState,
+  hwcheckHandoffPlan, hwcheckHandoffHTML, hwcheckHandoffResultText,
   HWCHECK_PARENT_KEY, HWCHECK_LAST_DIR_KEY,
 } from "/js/fx/hwcheck.js";
 // 「我的器件」（库外件，工单 hwcheck-unknown-device/02）：纯件在 fx/my-devices.js，
@@ -252,6 +263,50 @@ function renderHwcheckDevices() {
   // 表单必须原样留着（整块重绘会把正在填的字刷掉——见 syncMyDeviceForm 的说明）。
   const myList = $("my-devices-list");
   if (myList) myList.innerHTML = myDeviceListHTML(hwcheckUI.myDevices, hwcheckUI.devices);
+  renderHwcheckHandoff();
+}
+
+// —— 带入生成页（工单 hwcheck-acceptance/04）：判据全在 fx，本层只喂数据 ——
+//
+// 库内词表取自 /api/modules 载荷（生成页模块池与检测页器件网格吃的是同一份）——
+// **刻意不用** hwcheckUI.knownSlugs：那份来自 /api/my-devices，读不到时是空集，
+// 会把所有器件都判成"词表外"（一次读盘失败就变成"谁都带不过去"）。
+// 反过来，"是不是库外件"只认 /api/my-devices 那份清单（判据不写成 id 前缀）。
+function hwcheckHandoff() {
+  return hwcheckHandoffPlan(
+    hwcheckUI.devices,
+    hwcheckModules().map((m) => m && m.slug),
+    hwcheckUI.myDevices,
+  );
+}
+
+function renderHwcheckHandoff() {
+  const box = $("hwcheck-handoff");
+  if (!box) return;
+  box.innerHTML = hwcheckHandoffHTML(hwcheckHandoff(), {
+    pinFixes: ((hwcheckUI.wiring || {}).pin_fixes || []).length,
+    platforms: hwcheckPlatforms(),
+    from: hwcheckUI.platform,
+    to: chosenPlatform || "",
+  });
+}
+
+// handoffToGenerate()：把这批器件并进生成页的已选清单，再切到生成页。
+//
+// 三步的顺序本身是判据：**先算计划**（带入块上那几句理由说的就是这一批）→
+// **再并入**（走推荐簇 A 的入口——选择集只有它一个写者）→ **最后切页签**并落到
+// 已选清单上（不切的话用户在检测页看着像没反应）。
+// 一件都带不过去时**留在本页**：理由已经写在带入块里，不切走、也不弹"成功"。
+// 那句话本身也由 fx 拼（`hwcheckHandoffResultText`）——本层不自己写文案。
+function handoffToGenerate() {
+  const plan = hwcheckHandoff();
+  if (!plan.carry.length) {
+    renderHwcheckHandoff();   // 兜底重画：按钮本来是灰的，状态变了也得跟得上
+    return;
+  }
+  const { added, already } = addModulesFromHandoff(plan.carry);
+  gotoNavTab("generate", "selected-list");
+  toast("ok", hwcheckHandoffResultText(added, already));
 }
 
 // —— 「我的器件」（库外件，工单 02）：列表 + 表单 ——
@@ -450,6 +505,7 @@ async function loadMyDevices() {
     hwcheckUI.myError = e && e.message ? e.message : String(e);
   }
   renderMyDevices();
+  renderHwcheckHandoff();   // 带入块的分类要这份清单（哪几件是库外自建件）
 }
 
 // saveMyDevice()：提交这一件（按 id 幂等）。失败 = 服务端 400 的中文原样带出
@@ -1010,6 +1066,14 @@ export function initHwcheck() {
   if (preview) preview.addEventListener("click", previewHwcheck);
   const generate = $("btn-hwcheck-generate");
   if (generate) generate.addEventListener("click", generateHwcheck);
+  // 带入生成页（工单 hwcheck-acceptance/04）：容器级委托（innerHTML 全量重绘后
+  // 仍有效，与器件网格 / chips 同一套纪律）。按钮置灰时不触发（浏览器不发 click）。
+  const handoff = $("hwcheck-handoff");
+  if (handoff) {
+    handoff.addEventListener("click", (e) => {
+      if (e.target.closest("[data-hwcheck-handoff]")) handoffToGenerate();
+    });
+  }
 
   if (parentInput) {
     parentInput.addEventListener("change", () => {

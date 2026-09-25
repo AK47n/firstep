@@ -948,3 +948,112 @@ test("装不下时的出路点名这一页的控件：照着它做（取消勾�
   assert.match(path, /hwcheck-mspm0-\d{8}-\d{6}/, "目录名形态固定");
   await page.check('input[data-hwcheck-channel="oled"]');
 });
+
+// ---------------------------------------------------------------------------
+// 工单 hwcheck-acceptance/04：检测页 → 生成页的衔接（只带器件、不带引脚）
+//
+// 一句话判据：在检测页选中的**库内**器件，点一下就真的出现在生成页的已选清单里
+// （并触发依赖展开）；库外自建件**没有**跟过去，而页面在点之前就把原因说清了。
+//
+// 为什么必须真浏览器：`tests/js/hwcheck.test.mjs` 能证 fx 算得对、接线写了，但
+// "点下去真的进了**另一个栏目**的选择集"是跨模块的运行时行为（页签切换 + 生成页
+// 状态 + 真 /api/selection/expand）——只有真浏览器 + 真后端能作证。
+//
+// ⚠ **排在文件最后**：这一条会动生成页的选择集，而上面几条靠"上一次生成的目录"
+// 回读（同 03 那条的理由）。
+// ---------------------------------------------------------------------------
+const HANDOFF_DEVICE_ID = `mine_handoff${Date.now().toString().slice(-6)}`;
+
+test("检测页 → 生成页：库内件一键带过去并置为选中态；库外自建件不带并说明原因", async () => {
+  await openTab();
+  // ① 生成页先选定平台：不选的话带过去只会停在「已选（未展开依赖）」那一行，
+  //    验不到依赖展开这一跳（而"带过去之后能直接配引脚"正是这个入口的意义）。
+  await page.click('nav button[data-tab="generate"]');
+  await page.waitForSelector("#platforms .platform-card:not(.disabled)");
+  await page.click("#platforms .platform-card:not(.disabled)");
+  await page.waitForSelector("#platforms .platform-card.selected");
+
+  // ② 回检测页：选一件库内件 + 建一件库外自建件并选上
+  await page.click(HWCHECK_TAB);
+  await page.waitForSelector("#tab-hwcheck", { state: "visible" });
+  await clearDevices();                      // 上一次检测回读来的器件先清掉
+  await pickDevice("led");
+  await page.waitForSelector('#hwcheck-device-chips [data-remove="led"]');
+  await myDeviceFill({
+    name: "验收用的库外件（带过去那条路不该认它）", bus: "i2c", address: "0x68",
+    register: "0x75", expect: "0x68", notes: "验收造的一件", id: HANDOFF_DEVICE_ID,
+  });
+  await page.click("[data-my-device-save]");
+  await page.waitForSelector(`[data-my-device-row="${HANDOFF_DEVICE_ID}"]`);
+  await page.click(`[data-my-device-pick="${HANDOFF_DEVICE_ID}"]`);
+  await page.waitForSelector(`#hwcheck-device-chips [data-remove="${HANDOFF_DEVICE_ID}"]`);
+
+  // ③ **点之前**页面就把话说全了：带哪几件、哪件不带（为什么）、引脚不带
+  const box = await page.textContent("#hwcheck-handoff");
+  assert.ok(box.includes("只带器件、不带引脚"), "引脚那一句必须在：" + box);
+  assert.ok(box.includes("led"), "要点名带哪几件：" + box);
+  assert.ok(box.includes("验收用的库外件"), "要点名是哪一件自建件：" + box);
+  assert.ok(box.includes("不在模块库里"), "要说清自建件为什么带不过去：" + box);
+  const label = (await page.textContent("[data-hwcheck-handoff]")).trim();
+  assert.equal(label, "把这 1 件带进生成页", "只有库内那一件算数：" + label);
+  assert.equal(await page.isDisabled("[data-hwcheck-handoff]"), false, "有可带的就该可点");
+
+  // ④ 真点：落到生成页，已选清单里真的有 led（且**没有**那件自建件）。
+  //    顺手**数一次请求**：这一批只许打一次 /api/selection/expand（逐件并入会连打
+  //    N 次）——这是行为判据，不该去数源码里 runExpand() 出现了几次（双轴评审整改）。
+  const expandCalls = [];
+  page.on("request", (req) => {
+    if (req.method() === "POST" && req.url().includes("/api/selection/expand")) {
+      expandCalls.push(req.url());
+    }
+  });
+  await page.click("[data-hwcheck-handoff]");
+  await page.waitForSelector("#tab-generate", { state: "visible" });
+  await page.waitForFunction(
+    () => document.querySelector("#selected-count").textContent.includes("已展开"),
+    undefined, { timeout: 30000 });
+  const selected = await page.textContent("#selected-list");
+  assert.ok(selected.includes("led"), "带过去的那件要在已选清单里：" + selected);
+  assert.ok(!selected.includes(HANDOFF_DEVICE_ID),
+    "库外自建件不许进生成载荷（它没有 manifest、不进 slugs）：" + selected);
+  assert.equal(expandCalls.length, 1,
+    "并入一批只许展开一次（实际 " + expandCalls.length + " 次 /api/selection/expand）");
+  // ⚠ 读**最新那条** toast（#toast-root 里最多并存 3 条：上一步"已存进我的器件"那条
+  // 还在，读整个容器会把两次点击的文案混在一起 —— 本机实测踩到）
+  const toast = await page.textContent("#toast-root .toast:last-child");
+  assert.ok(toast.includes("已带进生成页 1 件"), "要给一句「带过去了几件」：" + toast);
+  assert.ok(toast.includes("引脚"), "顺带再说一次引脚不带：" + toast);
+
+  // ④b 再点一次同一批：**不重复加、不再展开**，页面上如实说"本来就在工程里"
+  await page.click(HWCHECK_TAB);
+  await page.waitForSelector("#tab-hwcheck", { state: "visible" });
+  expandCalls.length = 0;
+  await page.click("[data-hwcheck-handoff]");
+  await page.waitForSelector("#tab-generate", { state: "visible" });
+  const toast2 = await page.textContent("#toast-root .toast:last-child");
+  assert.ok(toast2.includes("本来就在工程里"), "第二次点要说清它已经在工程里：" + toast2);
+  assert.ok(!toast2.includes("已带进生成页"), "没新加就不许说带过去了：" + toast2);
+  const listed = await page.textContent("#selected-list");
+  assert.equal((listed.match(/\bled\b/g) || []).length, 1, "不许加出第二份：" + listed);
+
+  // ⑤ 只剩库外件时：按钮置灰 + 理由留在页面上（不是"点了没反应"）
+  await page.click(HWCHECK_TAB);
+  await page.waitForSelector("#tab-hwcheck", { state: "visible" });
+  await page.evaluate((slug) => {
+    document.querySelector(`#hwcheck-device-chips [data-remove="${slug}"]`)
+      .dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+  }, "led");
+  await page.waitForFunction(() => {
+    const box = document.querySelector("#hwcheck-handoff");
+    const btn = box && box.querySelector("[data-hwcheck-handoff]");
+    return !!btn && btn.disabled;
+  }, undefined, { timeout: 10000 });
+  const box2 = await page.textContent("#hwcheck-handoff");
+  assert.ok(box2.includes("都带不过去"), box2);
+  assert.ok(box2.includes("验收用的库外件"), box2);
+  assert.equal(expandCalls.length, 0, "只有库外件时一次展开都不该发：" + expandCalls.length);
+
+  // 收尾：删掉这件自建件（它住在用户数据目录里，不该留下）
+  await myDeviceCleanup([HANDOFF_DEVICE_ID]);
+  await clearDevices();
+});

@@ -1,0 +1,31 @@
+=== 前端判据强度自检（工单 hwcheck-acceptance/04）===
+① 前置干净性：注入前跑一次门禁 → 绿（符合预期）
+
+  PASS  A · 库内词表校验被拿掉（src/contest_generator/static/js/fx/hwcheck.js）
+        `hwcheckHandoffPlan` 不再查词表 —— 词表外的 slug（已删除的模块）也会被塞进生成载荷
+        门禁退出码 1，红 13 条，首条红：✖ 带入计划：库内件进 carry（保序去重）、自建件进 custom、词表外进 unknown (0.8527ms)
+  PASS  B · 库外自建件也照样带过去（src/contest_generator/static/js/fx/hwcheck.js）
+        分类里去掉「自建件」这一支 —— 不走生成链的 id 直接进生成载荷（生成时必 400）
+        门禁退出码 1，红 13 条，首条红：✖ 带入计划：库内件进 carry（保序去重）、自建件进 custom、词表外进 unknown (1.0847ms)
+  PASS  C · 页面上不再说「引脚不带」（src/contest_generator/static/js/fx/hwcheck.js）
+        带入块里那一句引脚说明被删（`hwcheckHandoffPinNote()` 不再进块）——学生以为生成页会用检测页这组脚
+        门禁退出码 1，红 5 条，首条红：✖ 带入块：「引脚不带」与「自动消解过的线也不带」两句永远在（与有没有取到接线表无关） (0.4504ms)
+  PASS  D · ui 侧不再走 fx（src/contest_generator/static/js/ui/hwcheck.js）
+        带入块不再由 fx 渲染（本层自己拼）—— 理由文案变成第二份实现
+        门禁退出码 1，红 3 条，首条红：✖ 结构钉：ui 侧走 fx（不手拼理由与回报文案）+ 并入入口在生成页那侧 (0.6541ms)
+  PASS  E · 并入时把生成页已选的丢掉（src/contest_generator/static/js/fx/hwcheck.js）
+        `hwcheckHandoffMerge` 每次并入都从空集重算 —— 带一件过去就把用户已选的模块洗掉
+        门禁退出码 1，红 3 条，首条红：✖ 并入判据：不重复加、保持原顺序，且如实回报哪几件本来就在 (0.928ms)
+  PASS  F · 拒收理由退回「它就是被删了」（src/contest_generator/static/js/fx/hwcheck.js）
+        词表外的件只说一个成因（清单读失败时这句话是假的）—— 评审整改的回归
+        门禁退出码 1，红 3 条，首条红：✖ 带入块：既不在词表也不在自建件清单的一律拒收，且两个成因都说（不武断说「已删除」） (0.3734ms)
+  PASS  G · 副标题退回陈旧文案（src/contest_generator/static/index.html）
+        检测页头那句「本版先做「板子活着」最小自检」回来 —— 学生以为这一栏测不了器件
+        门禁退出码 1，红 3 条，首条红：✖ 结构钉：检测页头副标题如实说明这一栏能做什么（陈旧的最小自检文案已删） (0.5108ms)
+
+✓ 逐字节复原 src/contest_generator/static/js/fx/hwcheck.js
+✓ 逐字节复原 src/contest_generator/static/js/ui/hwcheck.js
+✓ 逐字节复原 src/contest_generator/static/js/ui/generate-recommend.js
+✓ 逐字节复原 src/contest_generator/static/index.html
+
+**强度自检：PASS**（7 条注入都让前端门禁按预期变红，源码逐字节复原）

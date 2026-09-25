@@ -34,6 +34,8 @@ import {
   hwcheckChecklistState, hwcheckTriageErrorHTML, hwcheckAdviceHTML,
   hwcheckAdviceEmptyHTML,
   hwcheckCustomState, hwcheckCustomPlanHTML, hwcheckCustomWiringHTML,
+  hwcheckHandoffPlan, hwcheckHandoffHTML, hwcheckHandoffMerge,
+  hwcheckHandoffPinNote, hwcheckHandoffResultText,
 } from "../../src/contest_generator/static/js/fx/hwcheck.js";
 // 转义单源（判定渲染出的 HTML 里有没有把用户文本原样吐出去）
 import { esc } from "../../src/contest_generator/static/js/fx/core.js";
@@ -1756,3 +1758,226 @@ test("结构钉：表单收起 / 切换必须清掉资料与草稿（跨件来�
   assert.ok(/if \(device\) \{[\s\S]*?myMaterial[\s\S]*?myDraft/.test(openBody[1]),
     "编辑已有器件时不带任何残留的资料 / 草稿");
 });
+
+// ---------------------------------------------------------------------------
+// 工单 hwcheck-acceptance/04：检测页 → 生成页的衔接（只带器件、不带引脚）
+//
+// 判据全在 fx 纯函数里：该带哪几件（库内词表）、不该带哪几件（库外自建件 /
+// 词表外）各给一句中文理由；页面上那句"引脚不带"永远在。ui 侧只喂数据与落 DOM。
+// ---------------------------------------------------------------------------
+const LIB_SLUGS = ["led", "ml_mpu6050", "delay", "filter"];
+const MY_DEVICES = [
+  { id: "mine_gyro", name: "卖家给的六轴模块" },
+  { id: "mine_lcd", name: "二手小屏" },
+];
+
+test("带入计划：库内件进 carry（保序去重）、自建件进 custom、词表外进 unknown", () => {
+  const plan = hwcheckHandoffPlan(
+    ["ml_mpu6050", "mine_gyro", "led", "ml_mpu6050", "ghost", "mine_lcd"],
+    LIB_SLUGS, MY_DEVICES);
+  assert.deepEqual(plan.carry, ["ml_mpu6050", "led"], "库内件按选中顺序、去重");
+  assert.deepEqual(plan.custom, [
+    { id: "mine_gyro", name: "卖家给的六轴模块" },
+    { id: "mine_lcd", name: "二手小屏" },
+  ], "自建件带人读名（页面上要点名是哪一件）");
+  assert.deepEqual(plan.unknown, ["ghost"], "词表里没有的一件都不许进生成载荷");
+});
+
+test("带入计划：一件都没选 = 三类都空（不是错误状态）", () => {
+  assert.deepEqual(hwcheckHandoffPlan([], LIB_SLUGS, MY_DEVICES),
+    { carry: [], custom: [], unknown: [] });
+  assert.deepEqual(hwcheckHandoffPlan(null, null, null),
+    { carry: [], custom: [], unknown: [] });
+});
+
+test("带入计划：「库外件」的判据是**自建件清单**，不是 id 前缀", () => {
+  // mine_ 前缀是 my_devices.DEVICE_ID_PATTERN 的事，页面再判一遍就是第二份实现。
+  // 不在自建件清单里的 mine_xxx（已删除 / 换过输入）落 unknown，如实拒收。
+  const plan = hwcheckHandoffPlan(["mine_gone"], LIB_SLUGS, MY_DEVICES);
+  assert.deepEqual(plan.custom, []);
+  assert.deepEqual(plan.unknown, ["mine_gone"]);
+});
+
+test("带入计划：slug 同时在词表与自建清单里 → 按库内算（分类顺序钉死）", () => {
+  const plan = hwcheckHandoffPlan(["led"], LIB_SLUGS, [{ id: "led", name: "撞名的自建件" }]);
+  assert.deepEqual(plan.carry, ["led"]);
+  assert.deepEqual(plan.custom, []);
+});
+
+test("带入块：可带时按钮可点、点名要带哪几件；不可带时按钮置灰（不是点了没反应）", () => {
+  const on = hwcheckHandoffHTML(hwcheckHandoffPlan(["led", "delay"], LIB_SLUGS, []), {});
+  assert.ok(on.includes("data-hwcheck-handoff"), on);
+  assert.ok(!on.includes("data-hwcheck-handoff disabled"), "有可带的件就不该置灰：" + on);
+  assert.ok(on.includes("把这 2 件带进生成页"), on);
+  assert.ok(on.includes("led") && on.includes("delay"), "要点名是哪几件：" + on);
+  assert.ok(on.includes("已选过的不会重复加"), "说清与生成页既有选择的关系：" + on);
+
+  const off = hwcheckHandoffHTML(
+    hwcheckHandoffPlan(["mine_gyro"], LIB_SLUGS, MY_DEVICES), {});
+  assert.ok(off.includes("data-hwcheck-handoff disabled"), "没有可带的就置灰：" + off);
+  assert.ok(off.includes("都带不过去"), "置灰必须带理由（不让人对着灰按钮猜）：" + off);
+});
+
+test("带入块：一件都没选时的空态（不是「点了没反应」，也不是错误）", () => {
+  const out = hwcheckHandoffHTML(hwcheckHandoffPlan([], LIB_SLUGS, []), {});
+  assert.ok(out.includes("还没选器件"), out);
+  assert.ok(out.includes("data-hwcheck-handoff disabled"), out);
+});
+
+test("带入块：「引脚不带」与「自动消解过的线也不带」两句永远在（与有没有取到接线表无关）", () => {
+  const plan = hwcheckHandoffPlan(["led"], LIB_SLUGS, []);
+  for (const opts of [{}, { pinFixes: 0 }, { pinFixes: 2 }]) {
+    const out = hwcheckHandoffHTML(plan, opts);
+    assert.ok(out.includes("只带器件、不带引脚"), JSON.stringify(opts) + "：" + out);
+    assert.ok(out.includes("引脚到生成页第 7 步再配"), out);
+    // 接线表还没取到时（pinFixes 恒 0）也**不许**把"自动移开过的线"说没了：
+    // 那张表是异步来的，而"不替用户做这个决定"这句话与它取没取到无关。
+    assert.ok(out.includes("不是你的选择"), JSON.stringify(opts) + "：" + out);
+  }
+  const plain = hwcheckHandoffHTML(plan, {});
+  assert.ok(plain.includes("（如果有）"), "没数的时候如实说「如果有」：" + plain);
+  assert.ok(!plain.includes("处默认脚冲突"), "没数就不许编一个处数：" + plain);
+
+  const moved = hwcheckHandoffHTML(plan, { pinFixes: 2 });
+  assert.ok(moved.includes("自动移开了 2 处默认脚冲突"), moved);
+  assert.ok(moved.includes("那几根也不带过去"), moved);
+});
+
+test("带入块：库外自建件逐件给理由（点名 + 为什么不带）", () => {
+  const out = hwcheckHandoffHTML(
+    hwcheckHandoffPlan(["led", "mine_gyro"], LIB_SLUGS, MY_DEVICES), {});
+  assert.ok(out.includes("卖家给的六轴模块"), "要认得出是哪一件（给人读名）：" + out);
+  assert.ok(out.includes("mine_gyro"), out);
+  assert.ok(out.includes("不在模块库里"), out);
+  assert.ok(out.includes("不进 slugs"), "理由要说到点上（生成链不认它）：" + out);
+  // 「我的器件」里没选的那些不出现（理由只针对选中的）
+  assert.ok(!out.includes("二手小屏"), out);
+});
+
+test("带入块：既不在词表也不在自建件清单的一律拒收，且两个成因都说（不武断说「已删除」）", () => {
+  const out = hwcheckHandoffHTML(
+    hwcheckHandoffPlan(["ghost"], LIB_SLUGS, MY_DEVICES), {});
+  assert.ok(out.includes("ghost"), out);
+  assert.ok(out.includes("没有带过去"), out);
+  // 两份清单各自读失败时都是空集——那时说"这件已经被删了"是句假话（双轴评审）
+  assert.ok(out.includes("模块库清单里"), out);
+  assert.ok(out.includes("「我的器件」里"), out);
+  assert.ok(out.includes("没读出来"), "要给「清单可能没读到」这个成因：" + out);
+  assert.ok(out.includes("已经删了"), "另一个成因也要给：" + out);
+  assert.ok(out.includes("生成时被拒"), "说清为什么不硬塞（生成链不认）：" + out);
+});
+
+test("带入块：两个栏目平台不一致时提前讲明（展示名取自平台清单；一致就不出这句）", () => {
+  const platforms = [
+    { id: "stm32", name: "STM32F103C8T6 最小系统板 · Keil5" },
+    { id: "mspm0", name: "地猛星 MSPM0G3507 · CCS" },
+  ];
+  const plan = hwcheckHandoffPlan(["led"], LIB_SLUGS, []);
+  const same = hwcheckHandoffHTML(plan, { platforms, from: "mspm0", to: "mspm0" });
+  assert.ok(!same.includes("检测页选的是"), "平台一致就不许编一句：" + same);
+  const diff = hwcheckHandoffHTML(plan, { platforms, from: "mspm0", to: "stm32" });
+  assert.ok(diff.includes("检测页选的是"), diff);
+  assert.ok(diff.includes("地猛星 MSPM0G3507 · CCS"), "展示名单源 = 平台清单：" + diff);
+  assert.ok(diff.includes("STM32F103C8T6 最小系统板 · Keil5"), diff);
+  assert.ok(diff.includes("按生成页的平台校验"), diff);
+  const half = hwcheckHandoffHTML(plan, { platforms, from: "mspm0", to: "" });
+  assert.ok(!half.includes("检测页选的是"), "生成页还没选平台时不预告（那是那边的提示）：" + half);
+});
+
+test("带入块：自建件名称是用户随手填的，一律 esc", () => {
+  const out = hwcheckHandoffHTML(
+    hwcheckHandoffPlan(["mine_x"], LIB_SLUGS,
+      [{ id: "mine_x", name: "<img src=x onerror=alert(1)>" }]), {});
+  assert.ok(!out.includes("<img"), out);
+  assert.ok(out.includes("&lt;img"), out);
+});
+
+test("并入判据：不重复加、保持原顺序，且如实回报哪几件本来就在", () => {
+  assert.deepEqual(
+    hwcheckHandoffMerge(["ai_rec"], ["led", "ai_rec", "led", "delay"]),
+    { selected: ["ai_rec", "led", "delay"], added: ["led", "delay"], already: ["ai_rec"] },
+    "重复的入参只算一次，已经选过的那件进 already（不进 added）");
+  assert.deepEqual(hwcheckHandoffMerge([], ["led"]),
+    { selected: ["led"], added: ["led"], already: [] });
+  // 一件都没带（第二次点同一个按钮）= 选择集**一个字节不动**（不许把已选的洗掉）
+  const same = hwcheckHandoffMerge(["led"], ["led"]);
+  assert.deepEqual(same, { selected: ["led"], added: [], already: ["led"] });
+  // 坏入参（null / 空串）不制造一个空 slug
+  assert.deepEqual(hwcheckHandoffMerge(null, [null, "", "led", "led"]),
+    { selected: ["led"], added: ["led"], already: [] });
+});
+
+test("回报文案：带了几件 / 几件本来就在 / 引脚那句恒在（单源在 fx）", () => {
+  const both = hwcheckHandoffResultText(["led", "delay"], ["ai_rec"]);
+  assert.ok(both.includes("已带进生成页 2 件：led、delay"), both);
+  assert.ok(both.includes("另有 1 件本来就在工程里：ai_rec"), both);
+  assert.ok(both.includes(hwcheckHandoffPinNote()), both);
+  const none = hwcheckHandoffResultText([], ["led"]);
+  assert.ok(!none.includes("已带进生成页"), "一件都没新加就不许说带过去了：" + none);
+  assert.ok(none.includes("本来就在工程里"), none);
+  assert.ok(none.includes(hwcheckHandoffPinNote()), none);
+  // 引脚那一句**唯一出处**：块里那句与回报那句都以它开头——改口径只改 hwcheckHandoffPinNote
+  const note = hwcheckHandoffPinNote();
+  assert.ok(note.includes("只带器件、不带引脚"), note);
+  assert.ok(note.includes("第 7 步"), note);
+  const block = hwcheckHandoffHTML(hwcheckHandoffPlan(["led"], LIB_SLUGS, []), {});
+  assert.ok(block.includes(note), "块里那句要含同一份文案：" + block);
+});
+
+test("结构钉：检测页有带入块容器（在卡片正文里，不在注释里）", () => {
+  const at = html.indexOf('id="hwcheck-handoff"');
+  assert.ok(at > 0, "缺少带入块容器 #hwcheck-handoff");
+  const cardAt = html.lastIndexOf('<div class="card">', at);
+  assert.ok(cardAt > 0 && cardAt < at, "找不到带入块所在的卡片");
+  assert.ok(!/<!--[\s\S]*id="hwcheck-handoff"[\s\S]*?-->/.test(html.slice(cardAt, at + 40)),
+    "带入块容器落在注释里了 —— 那等于没有这个控件");
+  // 与它管的那个选择集在同一张卡里（器件清单）：chips 之后、保存位置之前
+  const chipsAt = html.indexOf('id="hwcheck-device-chips"');
+  const parentAt = html.indexOf('id="hwcheck-parent"');
+  assert.ok(chipsAt < at && at < parentAt,
+    `带入块应排在已选 chips 之后、保存位置之前：${chipsAt} / ${at} / ${parentAt}`);
+});
+
+test("结构钉：ui 侧走 fx（不手拼理由与回报文案）+ 并入入口在生成页那侧", () => {
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  for (const fn of ["hwcheckHandoffPlan(", "hwcheckHandoffHTML(", "hwcheckHandoffResultText("]) {
+    assert.ok(ui.includes(fn), "ui 应调用 fx 的 " + fn);
+  }
+  assert.ok(ui.includes('$("hwcheck-handoff")'), "带入块要有渲染落点");
+  // 文案（理由 + 回报）单源在 fx：ui 不许再写一遍（两处各写一遍必然分叉）
+  for (const sentence of ["不在模块库里", "没有带过去", "只带器件、不带引脚",
+    "引脚到生成页第 7 步再配", "已带进生成页", "本来就在工程里"]) {
+    assert.ok(!ui.includes(sentence), "ui 不得手拼文案：" + sentence);
+  }
+  // 生成页那侧：selectedSlugs 的唯一写者提供**一个**批量入口（工单 04）。
+  // 只钉"这个入口存在、ui 调的是它"（接口面）；"只展开一次 / 回报 added·already"
+  // 属行为，判据在 fx 的 hwcheckHandoffMerge 与真浏览器用例里，不在这里数源码。
+  const rec = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/generate-recommend.js", import.meta.url),
+    "utf8");
+  assert.ok(rec.includes("export function addModulesFromHandoff("),
+    "ui/generate-recommend.js 应导出 addModulesFromHandoff（selectedSlugs 的唯一写者）");
+  assert.ok(ui.includes("addModulesFromHandoff("), "检测页应调这个入口（不自己写状态）");
+});
+
+test("结构钉：检测页头副标题如实说明这一栏能做什么（陈旧的最小自检文案已删）", () => {
+  const h2 = html.match(/<h2>硬件检测([\s\S]*?)<\/h2>/);
+  assert.ok(h2, "找不到检测页头副标题");
+  const flat = h2[1].replace(/\s+/g, "");
+  // 旧文案说的是「本版先做「板子活着」最小自检」——功能早扩到器件选择 / 配方 /
+  // 命令台 / 库外件，留着会让学生以为这一栏测不了器件（核查报告第 6 条）。
+  assert.ok(!flat.includes("本版先做"), "陈旧文案还在：" + flat);
+  assert.ok(!flat.includes("最小自检"), "陈旧文案还在：" + flat);
+  // 能做什么：不逐字钉措辞，钉覆盖面（选平台 / 选器件 → 接线表 / 冲突 → 判通断 →
+  // 复测 → 排障）——少说一块就等于回到那次核查里的"说小了"。
+  for (const kw of ["不用赛题", "选器件", "接线表", "复测", "排障"]) {
+    assert.ok(flat.includes(kw), "副标题应说到「" + kw + "」—— 实际：" + flat);
+  }
+  // 导航 tab 的 title 是同一处口径（「后续可选器件」是同一句陈旧假设）
+  const navBtn = html.match(/<button[^>]*data-tab="hwcheck"[^>]*>/);
+  assert.ok(navBtn, "找不到硬件检测的导航按钮");
+  assert.ok(!navBtn[0].includes("后续可选器件"), "导航 title 陈旧：" + navBtn[0]);
+  assert.ok(navBtn[0].includes("器件"), "导航 title 应说到能选器件：" + navBtn[0]);
+});
+

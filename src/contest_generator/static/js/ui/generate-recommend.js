@@ -28,6 +28,9 @@ import { platformClickAction } from "/js/fx/platform.js";
 import { platformSwitchConfirmMessage } from "/js/fx/danger.js";  // 切平台清空下游确认文案（工单 ux-walkthrough-02/01）
 import { confirmModal } from "/js/ui/confirm.js";
 import { moduleBadges, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, applyGroupChoices, recordGroupChoice, clearGroupChoiceForSlug, pruneGroupChoices, groupChoiceGapText, moduleGridCountText, moduleGridHTML, moduleInfoHTML, recommendChipHTML, moduleInfoBtnHTML } from "/js/fx/module.js";
+// 检测页 → 生成页的**并入判据**（工单 hwcheck-acceptance/04）：不重复加 / 保序 /
+// 哪几件本来就在——纯函数住在 fx（可直测），本模块只把结果写进 selectedSlugs。
+import { hwcheckHandoffMerge } from "/js/fx/hwcheck.js";
 import { bindModuleSource } from "/js/ui/module-source.js";  // 模块源码区（mainc-codeview-bridge/05）：弹窗文件行懒加载
 import { referencePlatformChip } from "/js/fx/reference.js";
 import {
@@ -1034,14 +1037,43 @@ function initModuleGrid() {
   });
 }
 
+// refreshSelectionViews()：**选择集变了之后要重绘哪几块**的唯一出处（展开结果作废 +
+// 已选清单 / 平台警告 / 模块池三块重画）。**不含展开本身**——展开的时机由调用方定
+// （addModule 加完立刻展开；批量并入也只展开一次），两处各抄一遍必然有一处漏改。
+function refreshSelectionViews() {
+  expanded = []; warnings = [];
+  renderSelected(); renderWarnings(); renderModulePool();
+}
+
 function addModule(slug, expand = true) {
   if (!slug || selectedSlugs.includes(slug)) return;
   selectedSlugs.push(slug);
-  expanded = []; warnings = [];
-  renderSelected(); renderWarnings(); renderModulePool();
+  refreshSelectionViews();
   // expand=false：调用方会自己走 reRenderAfterSelectionChange（推荐 chip 双向开关
   // 加回时用，工单 module-intro-detail/06）——两处都跑会打两次 /api/selection/expand
   if (expand) runExpand();  // 添加后直接展开，步骤 7 立即可配置引脚
+}
+
+// addModulesFromHandoff(slugs)：把一批 slug **并入**已选清单，并展开一次依赖
+// （工单 hwcheck-acceptance/04：检测页把验通的那几件带过来）。
+//
+// 为什么由本模块出一个入口、不让调用方自己写 selectedSlugs：本模块是 selectedSlugs
+// 的**唯一写者**（见文件头的状态所有权表）。"不重复加 / 保序 / 哪几件本来就在"这三条
+// 判据在 `fx/hwcheck.js` 的 `hwcheckHandoffMerge`（纯函数、可直测；检测页 → 生成页
+// 是它唯一的调用场景，所以住在那边，本模块只消费它算出来的结果）。
+//
+// 与逐件 addModule 的差别只有一条：**只展开一次**——逐件调会连打 N 次
+// /api/selection/expand（内部虽会排队，仍要空跑一轮），而这一批是同一时刻的一个意图。
+//
+// 返回 { added, already }：调用方据此说清"带过去几件、几件本来就在工程里"。
+export function addModulesFromHandoff(slugs) {
+  const { selected, added, already } = hwcheckHandoffMerge(selectedSlugs, slugs);
+  if (added.length) {
+    selectedSlugs = selected;
+    refreshSelectionViews();
+    runExpand();   // 一次展开（在途时由 runExpand 自己排队，不丢这次意图）
+  }
+  return { added, already };
 }
 
 // —— 展开（/api/selection/expand）的并发收口（工单 module-intro-detail/07）——
