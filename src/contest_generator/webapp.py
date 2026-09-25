@@ -66,9 +66,9 @@ from .compile_runner import (
     run_compile,
 )
 from .config import (
-    DEFAULT_CONFIG_PATH,
     AppConfig,
     ConfigError,
+    config_path as resolve_config_path,
     load_config,
     materials_dir,
     pdf_trash_dir,
@@ -606,11 +606,28 @@ def _tkinter_pick_directory() -> str | None:
         root.destroy()
 
 
+class _DefaultConfigPath(Path):
+    """哨兵路径：`AppContext.config_path` 没被显式指定（= 用本机缺省位置）。
+
+    存在的唯一理由：**把缺省路径的求值从导入期推迟到构造期**，好让
+    `FIRSTEP_CONFIG_PATH` 这类环境变量对 `create_app()` 造的 ctx 也生效
+    （工单 ci-gate-fixes/01）。dataclass 字段默认值在导入期求值，写
+    `= DEFAULT_CONFIG_PATH` 就等于把环境变量永久屏蔽掉。
+
+    继承 `Path` 是为了**不引入第二种类型**：`__post_init__` 之后字段里是缺省位置
+    的真 `Path`，而"谁是缺省位置"由 `_current_config` 跟 `config_path()` 比一次
+    得出（`PurePath` 的相等只比字符串，跨类也比得对）。模块级单例 `_DEFAULT_CONFIG_PATH`。
+    """
+
+
+_DEFAULT_CONFIG_PATH = _DefaultConfigPath()
+
+
 @dataclass
 class AppContext:
     """服务上下文：配置路径 + 当前配置（写入后即时生效）+ LLM 工厂（测试注入）。"""
 
-    config_path: Path = DEFAULT_CONFIG_PATH
+    config_path: Path = _DEFAULT_CONFIG_PATH
     config: AppConfig | None = None  # None → 按需从配置文件加载
     llm_factory: Callable[..., LLM] = build_llm
     tab_registry: TabRegistry = field(default_factory=TabRegistry)
@@ -656,6 +673,20 @@ class AppContext:
     # 不改真库那一份（并行跑用例时别的 worker 会读到半截，2026-09-19 踩过）。
     hwcheck_recipe_path: Path | None = None
 
+    def __post_init__(self) -> None:
+        """哨兵 → 此刻解析成缺省位置的真路径（工单 ci-gate-fixes/01）。
+
+        为什么不能直接写 `= DEFAULT_CONFIG_PATH`：dataclass 字段默认值在**导入期**
+        求值，于是 `FIRSTEP_CONFIG_PATH`（浏览器夹具 / CI 指配置的显式口子）对
+        `create_app()` 造出来的 ctx 永远不生效——实测就是这样静默读回用户主目录。
+
+        解析后落成真 Path：100+ 处 `ctx.config_path.parent` 靠它推数据目录，不判空。
+        **"这是不是缺省位置"不在这里记账**——`_current_config` 拿 `config_path()`
+        现比一次即可（两处各记一份账正是回退不可达的成因）。
+        """
+        if self.config_path is _DEFAULT_CONFIG_PATH:
+            self.config_path = resolve_config_path()
+
 
 # ---------------------------------------------------------------------------
 # 上下文：配置 / LLM
@@ -663,10 +694,29 @@ class AppContext:
 
 
 def _current_config(ctx: AppContext) -> AppConfig | None:
-    """返回当前配置；未配置（文件缺失 / 损坏 / 缺 key）返回 None。"""
+    """返回当前配置；未配置（文件缺失 / 损坏 / 缺 key）返回 None。
+
+    判断"调用方有没有指过路径"用 `ctx.config_path == config_path()` 而不是
+    `isinstance(..., _DefaultConfigPath)`：`AppContext()` 走的是 dataclass 生成的
+    `__init__`，**没有任何东西把哨兵换成真 Path**，所以 `ctx.config_path` 里留着的
+    就是那个哨兵本身，而 `config_path()` 此刻解析出来的才是"缺省位置"——
+    两者相等 ⟺ 调用方没指过路径。**判据必须只有这一处**（早先 `__post_init__`
+    里另做一次解析、这里再 isinstance 一次，两处口径不一致 ⇒ 回退在生产路径上
+    完全不可达，而单测只直调 `load_config()` 所以全绿：评审 2026-09-25 实测抓到）。
+
+    相等 ⇒ 传 `None`，允许 `load_config` 在"文件不在 + 随包库在场"时回退；
+    不等 ⇒ 是显式路径，照旧抛 ConfigError（测试用 `config_path=…/"never-written.json"`
+    表达"这台机器没配置"，那条路必须保持抛错）。
+
+    **没 key 的配置照样返回**：随包库回退（以及 install.bat 写的引导配置）给的是
+    "库在哪"，`api_key` 是空串。库相关的只读端点**只依赖"库在哪"**，不该被 AI 的
+    key 挡住——本单要修的正是"干净机器上看不见库"。AI 端点照旧在缺 key 时中文拒绝
+    （判据在各自端点，不在这一层）。
+    """
     if ctx.config is None:
+        is_default = ctx.config_path == resolve_config_path()
         try:
-            ctx.config = load_config(ctx.config_path)
+            ctx.config = load_config(None if is_default else ctx.config_path)
         except ConfigError:
             ctx.config = None  # 未配置：各端点给出"请先到设置页配置"提示
     return ctx.config
@@ -689,8 +739,16 @@ def _flash_auto_tools() -> dict:
 
 
 def _require_config(ctx: AppContext) -> AppConfig:
+    """AI 端点用的配置闸：没有**可用的 key** 就中文 400。
+
+    判据是 `config.api_key`，不是 `config is not None`（工单 ci-gate-fixes/01）：
+    随包库回退（以及 install.bat 写的引导配置）会给出一份**库路径齐全但 api_key
+    为空串**的 AppConfig——那是"库在这台机器上、AI 还没配"的引导态，AI 端点必须
+    照旧拒绝。早先只看 `is not None`，于是干净机器上起服务后 `/api/recommend`
+    直接 200 往下跑（拿着空 key 去请求），既是误导也真会打出去。
+    """
     config = _current_config(ctx)
-    if config is None:
+    if config is None or not config.api_key:
         raise HTTPException(
             400, "未配置 AI API：请先到设置页填写 API 后再使用 AI 功能"
         )
@@ -1833,7 +1891,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         uv4 = find_uv4(dirs.uv4_path)
         make = find_make(dirs.gmake_path)
         return {
-            "api_configured": config is not None,
+            # 「AI 配好了吗」看的是**有没有可用的 key**，不是「手上有没有 AppConfig」
+            # （工单 ci-gate-fixes/01）：随包库回退 / install.bat 引导配置给的是
+            # 库路径 + 空 key 的引导态，AI 面等同未配置——与 _require_config 同一判据，
+            # 否则会出现「api_configured 说 True 而 /api/recommend 答 400」的自相矛盾。
+            "api_configured": config is not None and bool(config.api_key),
             "toolchains": {
                 PLATFORM_STM32: uv4 is not None,
                 PLATFORM_MSPM0: make is not None,
@@ -1900,7 +1962,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             }
 
         return {
-            "api_configured": config is not None,
+            # 「AI 配好了吗」看的是**有没有可用的 key**，不是「手上有没有 AppConfig」
+            # （工单 ci-gate-fixes/01）：随包库回退 / install.bat 引导配置给的是
+            # 库路径 + 空 key 的引导态，AI 面等同未配置——与 _require_config 同一判据，
+            # 否则会出现「api_configured 说 True 而 /api/recommend 答 400」的自相矛盾。
+            "api_configured": config is not None and bool(config.api_key),
             "llm": (
                 {
                     "base_url": config.base_url,

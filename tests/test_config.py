@@ -5,20 +5,27 @@ AI API key 存用户主目录下的配置文件（版本库之外，不入库）
 """
 
 import json
+import os
+import subprocess
+import sys
 
 import pytest
 
 from contest_generator.config import (
     DEFAULT_BASE_URL,
+    DEFAULT_CONFIG_PATH,
     DEFAULT_MASTERS_DIR,
     DEFAULT_MODEL,
     DEFAULT_MODULE_LIBRARY_DIR,
     AppConfig,
     ConfigError,
+    bundled_library_dirs,
+    config_path,
     load_config,
     materials_dir,
     save_config,
 )
+from contest_generator.tool_root import find_tool_root
 
 
 def test_save_then_load_roundtrip_preserves_config(tmp_path):
@@ -57,7 +64,16 @@ def test_load_applies_defaults_for_optional_fields(tmp_path):
     assert loaded.masters_dir == DEFAULT_MASTERS_DIR
 
 
-def test_load_missing_file_raises_with_hint(tmp_path):
+def test_load_missing_file_raises_with_hint(tmp_path, monkeypatch):
+    """随包库也不在时，缺配置仍报「不存在」并给出提示（工单 ci-gate-fixes/01）。
+
+    这条原先直接 `load_config(tmp_path / "no-config.json")` 就期望抛错，隐含前提是
+    「配置缺失一律报错」。本单给了一个**唯一例外**：配置缺失 + 随包库在场 → 用随包库
+    （干净检出直接起服务）。所以这里显式把随包库也拿掉，判的仍是原来那件事；
+    「随包库在场 → 回退」由 `test_load_missing_config_falls_back_to_bundled_library` 判。
+    """
+    monkeypatch.setattr("contest_generator.config.find_tool_root", _FakeToolRoot(tmp_path))
+
     with pytest.raises(ConfigError, match="不存在"):
         load_config(tmp_path / "no-config.json")
 
@@ -325,6 +341,188 @@ def test_materials_dir_missing_everywhere_returns_sibling(tmp_path):
     """两处都没有 = 返回优先候选（文件服务端对缺失文件抛 ReferenceError → 400）。"""
     module_library_dir = tmp_path / "modules"
     assert materials_dir(module_library_dir) == tmp_path / "sources" / "materials"
+
+
+# ---------------------------------------------------------------------------
+# 干净检出直接起服务（spec ci-gate-fixes/01）：
+# 配置缺失时回退随包库 + 配置路径覆盖口
+# ---------------------------------------------------------------------------
+
+
+class _FakeToolRoot:
+    """把「随包库」伪造成 tmp 下一对目录（猴补 tool_root.find_tool_root 用）。"""
+
+    def __init__(self, root):
+        self.root = root
+
+    def __call__(self, *_args, **_kwargs):
+        return self.root
+
+
+def _make_bundled_library(tool_root):
+    """造一份像样的随包库：<工具根>/library/{modules,masters}。"""
+    modules = tool_root / "library" / "modules"
+    masters = tool_root / "library" / "masters"
+    modules.mkdir(parents=True)
+    masters.mkdir(parents=True)
+    return modules, masters
+
+
+def test_load_missing_config_falls_back_to_bundled_library(tmp_path, monkeypatch):
+    """缺省位置（未指定路径）+ 随包库在场 → 用随包库，而不是报「未配置」。
+
+    干净 clone 直接起服务就是这条路：用户还没配 API，但库随软件分发（ADR 0008），
+    起服务就该看得见库。夹具则改用 `FIRSTEP_CONFIG_PATH` 显式指配置（另测）。
+    """
+    modules, masters = _make_bundled_library(tmp_path / "tool")
+    monkeypatch.setattr("contest_generator.config.find_tool_root", _FakeToolRoot(tmp_path / "tool"))
+    # 缺省位置指向一个不存在的文件，才走得到回退
+    monkeypatch.setenv("FIRSTEP_CONFIG_PATH", str(tmp_path / "nowhere" / "config.json"))
+
+    loaded = load_config()
+
+    assert loaded.module_library_dir == modules
+    assert loaded.masters_dir == masters
+    assert loaded.api_key == ""  # 引导态：AI 功能仍不可用，但那由「未配置 AI API」那条路说
+    assert loaded.base_url == DEFAULT_BASE_URL
+    assert loaded.model == DEFAULT_MODEL
+
+
+def test_load_missing_config_without_bundled_library_still_raises(tmp_path, monkeypatch):
+    """缺省位置 + 随包库也不在（站点包安装等）→ 保持既有行为，不假装有库。"""
+    tool_root = tmp_path / "tool"
+    tool_root.mkdir()  # 没有 library/
+    monkeypatch.setattr("contest_generator.config.find_tool_root", _FakeToolRoot(tool_root))
+    monkeypatch.setenv("FIRSTEP_CONFIG_PATH", str(tmp_path / "nowhere" / "config.json"))
+
+    with pytest.raises(ConfigError, match="不存在"):
+        load_config()
+
+
+def test_explicit_path_never_falls_back_to_bundled_library(tmp_path, monkeypatch):
+    """**显式给了 path 就是显式意图**：文件不在照旧抛错，不拿随包库去替。
+
+    这条是那个坑的守卫：测试用 `AppContext(config_path=…/"never-written.json")`
+    表达「这台机器没配置」，若显式路径也回退，9 条「未配置」用例会集体静默翻向
+    反方向（实测 `api_configured` 从 False 变 True）。
+    """
+    _make_bundled_library(tmp_path / "tool")  # 随包库**在场**
+    monkeypatch.setattr("contest_generator.config.find_tool_root", _FakeToolRoot(tmp_path / "tool"))
+
+    with pytest.raises(ConfigError, match="不存在"):
+        load_config(tmp_path / "never-written.json")
+
+
+def test_load_existing_config_ignores_bundled_library(tmp_path, monkeypatch):
+    """配置存在就一律按配置走——不静默覆盖用户写的东西。"""
+    modules, _masters = _make_bundled_library(tmp_path / "tool")
+    monkeypatch.setattr("contest_generator.config.find_tool_root", _FakeToolRoot(tmp_path / "tool"))
+    path = tmp_path / "config.json"
+    mine = tmp_path / "my-own-lib"
+    path.write_text(
+        json.dumps({"api_key": "sk-test", "module_library_dir": str(mine)}),
+        encoding="utf-8",
+    )
+
+    loaded = load_config(path)
+
+    assert loaded.module_library_dir == mine != modules
+
+
+def test_bundled_library_dirs_absent_when_no_library(tmp_path, monkeypatch):
+    monkeypatch.setattr("contest_generator.config.find_tool_root", _FakeToolRoot(tmp_path))
+    assert bundled_library_dirs() is None
+
+
+def test_bundled_library_dirs_points_at_tool_root_library(tmp_path, monkeypatch):
+    """判据 = 工具根单源下的 library/（与 install.bat 写给用户的是同一对路径）。"""
+    modules, masters = _make_bundled_library(tmp_path / "tool")
+    monkeypatch.setattr("contest_generator.config.find_tool_root", _FakeToolRoot(tmp_path / "tool"))
+
+    assert bundled_library_dirs() == (modules, masters)
+
+
+def test_config_path_env_override(monkeypatch, tmp_path):
+    """显式覆盖口：夹具 / CI 指到自己的配置，不必伪造 HOME。"""
+    mine = tmp_path / "elsewhere.json"
+    monkeypatch.setenv("FIRSTEP_CONFIG_PATH", str(mine))
+    assert config_path() == mine
+
+    # 空串 / 纯空白 = 没设（回退缺省）
+    monkeypatch.setenv("FIRSTEP_CONFIG_PATH", "   ")
+    assert config_path() == DEFAULT_CONFIG_PATH
+
+
+def test_load_config_default_path_follows_env_override(tmp_path, monkeypatch):
+    """缺省路径必须**调用期**解析，否则子进程里设的环境变量不生效。"""
+    mine = tmp_path / "seeded.json"
+    mine.write_text(json.dumps({"api_key": "sk-seeded"}), encoding="utf-8")
+    monkeypatch.setenv("FIRSTEP_CONFIG_PATH", str(mine))
+
+    assert load_config().api_key == "sk-seeded"
+
+
+def test_app_context_resolves_default_path_at_construction(tmp_path):
+    """**走真实应用路径**（不猴补）：`AppContext()` → `create_app()` 也认得环境变量。
+
+    这条是本单唯一盖得住主路径的判据，补它的原因值得写下来（2026-09-25 评审实测
+    抓到的一条假绿）：早先的实现让"这是不是缺省位置"**在两处各记一次账**——
+    `__post_init__` 里解析一次、`_current_config` 里再 `isinstance` 判一次，
+    两处口径不一致 ⇒ 回退在生产路径上**完全不可达**，而其余用例只直调
+    `load_config()`，于是整组全绿、CI 那条红却原封不动。判据必须钉在
+    **服务真的答得出来**上，不是钉在"某个函数被调过"。
+
+    子进程内跑：`config_path()` 是进程级环境读取，且 `AppContext()` 的解析发生在
+    构造期——同一进程里已被 import 的模块不好干净地重来一遍（也会干扰同进程的
+    其它用例）。
+    """
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    missing = tmp_path / "never-written.json"
+    script = (
+        "import json\n"
+        "from contest_generator.webapp import AppContext, create_app\n"
+        "from fastapi.testclient import TestClient\n"
+        "ctx = AppContext()\n"
+        "client = TestClient(create_app(ctx))\n"
+        "print(json.dumps({\n"
+        "    'modules_status': client.get('/api/modules').status_code,\n"
+        "    'modules_dir': client.get('/api/settings').json()['module_library_dir'],\n"
+        "    'api_configured': client.get('/api/env/status').json()['api_configured'],\n"
+        "    'recommend_status': client.post('/api/recommend',\n"
+        "                                    json={'problem_text': 'x'}).status_code,\n"
+        "}))\n"
+    )
+    env = {
+        **os.environ,
+        "FIRSTEP_CONFIG_PATH": str(missing),
+        "USERPROFILE": str(fake_home),
+        "HOME": str(fake_home),
+        "PYTHONIOENCODING": "utf-8",
+        # PYTHONPATH 钉成**本仓** src：本机全局 site-packages 里那份 editable 安装
+        # 可能指向另一个 clone（`.githooks/pre-push` 为此也钉过同一处），
+        # 不钉就会测到别人的代码。
+        "PYTHONPATH": str(find_tool_root(__file__) / "src"),
+    }
+    out = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True,
+        encoding="utf-8", errors="replace", env=env, timeout=120,
+    )
+    assert out.returncode == 0, f"子进程失败：{out.stderr[-800:]}"
+    result = json.loads(out.stdout.strip().splitlines()[-1])
+
+    # ① 主目标：干净机器上**库的位置**从缺省位置也认得出来（本单修的就是这条）。
+    #    机器上没有任何 ~/.contest_generator，也没有显式指过路径。
+    tool_root = find_tool_root(__file__)
+    assert result["modules_dir"] == str(tool_root / "library" / "modules"), result
+    # ② AI 面如实：key 是空的 ⇒ 未配置 + AI 端点中文拒绝（不再是拿空 key 往下跑）
+    assert result["api_configured"] is False, result
+    assert result["recommend_status"] == 400, result
+    # ③ 已知边界（**本单不修**，另行开单）：库相关的只读端点（`/api/modules` 等）
+    #    共用 `_require_config` 那道"先配 API"的闸，所以空 key 下仍答 400——
+    #    本单给的是"库在哪"，不是"没配 key 也能浏览库"。这条钉住现状，
+    #    等那张单把它改开时这里必须跟着改（它红了 = 那条产品决策落地了）。
+    assert result["modules_status"] == 400, result
 
 
 # ---------------------------------------------------------------------------

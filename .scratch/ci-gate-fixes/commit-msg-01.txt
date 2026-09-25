@@ -1,0 +1,28 @@
+工单 ci-gate-fixes/01：配置缺失时回退随包库 + 配置路径覆盖口
+
+CI run 36154463953 在 windows-latest 上两条腿红，本条修的是**浏览器门禁**那条的产品侧根因：
+夹具 spawn 的裸 `python -m contest_generator.webapp` 只从 `~/.contest_generator/config.json`
+取库目录，干净 runner 上没有它 ⇒ `POST /api/bindings/matrix` 答 400「未配置 AI API」⇒
+夹具的端点哨兵如实判「端口上是旧后端」并杀掉自己刚起的进程。
+
+- `config_path()` + `FIRSTEP_CONFIG_PATH`：缺省路径改成**调用期**解析（dataclass 字段默认值
+  在导入期求值，会把环境变量永久屏蔽掉——实测就是静默读回用户主目录）。夹具因此能指到自己的
+  种子配置，不必伪造 HOME。
+- `bundled_library_dirs()`：复用 `tool_root.find_tool_root` 单源给出 `<工具根>/library/{modules,masters}`，
+  与 install.bat 写给用户的是同一对路径；`load_config` 在「缺省位置 + 文件不在 + 随包库在场」时回退到它。
+- 回退**只认"文件不在"**（判据 `path.is_file()`）：配置存在但坏 JSON / 缺 key 照旧大声抛错，
+  不静默换成随包库。显式传 path 一律不回退（9 条「未配置」用例靠这条边界）。
+
+顺带修掉同一发版链上的两处半截口子：
+- `save_config` / `raw_library_dirs` 缺省参数改用 `config_path()`，否则设了环境变量会读一处写另一处；
+- `_require_config` 判据从 `config is not None` 收紧到「且有非空 api_key」——随包库回退给的是
+  「库路径齐全 + key 空串」的引导态，只看 is not None 会让 `/api/recommend` 拿空 key 直接 200
+  往下跑；`api_configured` 同步用同一判据，消掉与 AI 端点自相矛盾。
+
+评审（双轴）实测抓到我写错的一处：回退在生产路径上**完全不可达**——"是不是缺省位置"在两处各记了
+一次账、口径不一致，而单测只直调 `load_config()` 所以全绿。已改成单处判据，并补一条**不猴补、
+真走 `AppContext()` + `create_app()`** 的用例钉住主路径。
+
+读数：pytest -n auto **5532 passed + 11 skipped**（改动前 5523）；test_config.py 31 passed。
+边界如实记账并另开 `ci-gate-fixes/04`：库的**位置**认得出 ≠ 库**浏览得了**（库相关只读端点仍被
+「先配 API」那道闸挡着，实测四件全 400）。

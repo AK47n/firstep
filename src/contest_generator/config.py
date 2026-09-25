@@ -13,11 +13,46 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from .tool_root import find_tool_root
 from .vision import DEFAULT_VISION_BASE_URL, DEFAULT_VISION_MODEL
 
 CONFIG_DIRNAME = ".contest_generator"
 CONFIG_FILENAME = "config.json"
 DEFAULT_CONFIG_PATH = Path.home() / CONFIG_DIRNAME / CONFIG_FILENAME
+
+# 配置文件路径覆盖口（工单 ci-gate-fixes/01）：浏览器门禁夹具 / CI / 高级用户
+# 指到自己的配置，不必伪造 HOME（伪造 HOME 会连带改掉数据目录、最近工程等一串
+# 路径推导——那会把一个显式契约换成全局副作用）。合法值 = 非空字符串。
+CONFIG_PATH_ENV = "FIRSTEP_CONFIG_PATH"
+
+
+def config_path() -> Path:
+    """本机配置文件路径：`FIRSTEP_CONFIG_PATH` 覆盖，否则缺省位置。
+
+    **必须调用期解析**：缺省参数若写成 `path: Path = DEFAULT_CONFIG_PATH`，
+    取值发生在**导入期**——子进程里设的环境变量对已经导入的模块不生效，
+    夹具那条路就会静默地读回用户主目录（正是本单要修的那个假绿）。
+    """
+    override = os.environ.get(CONFIG_PATH_ENV, "").strip()
+    return Path(override) if override else DEFAULT_CONFIG_PATH
+
+
+def bundled_library_dirs() -> tuple[Path, Path] | None:
+    """随软件分发的库目录（模块库 / 母版库）；不在 = None。
+
+    判据复用工具根单源 `tool_root.find_tool_root`：库随软件仓库走（ADR 0008），
+    故 `<工具根>/library/{modules,masters}` 就是**同一对**路径——`install.bat`
+    首次安装时写给用户的正是它（工单 beginner-guide-enrich/03）。
+
+    站点包安装等场景工具根下没有 `library/` → 返回 None，调用方按「没有随包库」
+    处理（不假装有库）。
+    """
+    root = find_tool_root(__file__)
+    modules = root / "library" / "modules"
+    masters = root / "library" / "masters"
+    if modules.is_dir() and masters.is_dir():
+        return (modules, masters)
+    return None
 
 DEFAULT_BASE_URL = "https://api.deepseek.com"
 DEFAULT_MODEL = "deepseek-flash"
@@ -86,8 +121,42 @@ class AppConfig:
     recommend_max_rounds: int = 4
 
 
-def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
-    """读取配置文件；缺失 / 损坏 / 缺 api_key 抛 ConfigError。"""
+def load_config(path: Path | None = None) -> AppConfig:
+    """读取配置文件；缺失 / 损坏 / 缺 api_key 抛 ConfigError。
+
+    **唯一的例外——调用方没指定路径（`path=None`，即"用本机的缺省位置"）且
+    随包库在场**（工单 ci-gate-fixes/01）：此时用随包库而不是抛错。理由：库随软件
+    分发（ADR 0008），而首次安装本来就要把库指向随包那一份（`write_bootstrap_config`
+    / `install.bat`）——没跑过 install.bat 的机器（CI runner、新 clone）此前**起服务
+    必然答不出任何库相关的只读端点**，浏览器门禁的端点哨兵就是这么在 CI 上红的。
+
+    契约边界（踩过一次，别再合）：**显式给了 path 就是显式意图**——文件不在就照旧
+    抛错，不拿随包库去替。测试用 `AppContext(config_path=…/"never-written.json")`
+    表达「这台机器没配置」，若显式路径也回退，那 9 条「未配置」用例会集体静默变绿
+    到反方向（实测：`api_configured` 从 False 变 True）。
+
+    回退**只认"文件不在"这一种**（判据 = `path.is_file()`，不是 `except ConfigError`）：
+    配置存在但坏 JSON / 缺 api_key 照旧大声抛错——否则用户手上那份写坏的配置会被
+    静默换成随包库，"用户写了什么就是什么"就没了（评审 2026-09-25 抓到的过宽判据）。
+
+    `api_key` 仍是空串 → 应用照旧停在「未配置 AI API」引导态（与
+    `write_bootstrap_config` 写出来的状态一致，本次不改）。
+    """
+    if path is None:
+        path = config_path()
+        if not path.is_file():
+            bundled = bundled_library_dirs()
+            if bundled is None:
+                raise ConfigError(
+                    f"配置文件不存在：{path}（请先在设置里配置 AI API）"
+                ) from None
+            modules, masters = bundled
+            return AppConfig(module_library_dir=modules, masters_dir=masters)
+    return _read_config(path)
+
+
+def _read_config(path: Path) -> AppConfig:
+    """按给定路径读配置（显式路径的唯一入口，不含任何回退）。"""
     try:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -224,12 +293,18 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     )
 
 
-def save_config(config: AppConfig, path: Path = DEFAULT_CONFIG_PATH) -> None:
+def save_config(config: AppConfig, path: Path | None = None) -> None:
     """写入配置文件；父目录不存在时创建。
+
+    缺省路径走 `config_path()`（**调用期**解析 `FIRSTEP_CONFIG_PATH`）：否则设了
+    那个环境变量时"读一处、写另一处"——设置页保存会把改动写回用户主目录，
+    而应用读的是指过去的那份（评审 2026-09-25 抓到的半截口子）。
 
     llm_prices 为 None（未覆盖）时不写键——缺省语义与 load 一致，配置文件
     保持最小（既有精确 JSON 断言不受新字段扰动）。
     """
+    if path is None:
+        path = config_path()
     data: dict = {
         "base_url": config.base_url,
         "api_key": config.api_key,
@@ -274,10 +349,14 @@ def write_bootstrap_config(
     path: Path = DEFAULT_CONFIG_PATH,
 ) -> bool:
     """首次安装引导配置（工单 beginner-guide-enrich/03）：配置文件不存在时
-    写入最小配置——api_key 空串（应用保持「未配置」引导态，load_config 仍抛
-    ConfigError），模块库 / 母版库指向随包 library。已存在一律不动（幂等、
-    尊重用户已有配置）。返回 True=已写入；False=已存在跳过。写入失败抛
-    OSError，由调用方决定处理。"""
+    写入最小配置——api_key 空串（应用保持「未配置 AI API」引导态，AI 功能不可用），
+    模块库 / 母版库指向随包 library。已存在一律不动（幂等、尊重用户已有配置）。
+    返回 True=已写入；False=已存在跳过。写入失败抛 OSError，由调用方决定处理。
+
+    这里**刻意写死 `DEFAULT_CONFIG_PATH`**（不走 `config_path()`）：它是 install.bat
+    给**这台机器的用户**装配置的那一步，不是"当前进程该读哪份配置"——被
+    `FIRSTEP_CONFIG_PATH`（夹具 / CI 用的口子）带走就会把引导配置写进临时目录。
+    """
     if path.exists():
         return False
     data = {
@@ -290,14 +369,19 @@ def write_bootstrap_config(
     return True
 
 
-def raw_library_dirs(path: Path = DEFAULT_CONFIG_PATH) -> tuple[Path | None, Path | None]:
+def raw_library_dirs(path: Path | None = None) -> tuple[Path | None, Path | None]:
     """从配置文件原始字段取模块库 / 母版目录（工单 beginner-guide-enrich/03）。
+
+    缺省路径走 `config_path()`（**调用期**解析），与 `load_config` / `save_config`
+    同一口径——设了 `FIRSTEP_CONFIG_PATH` 时读 / 写 / 取原始字段指向同一份文件。
 
     只解析原始 JSON（无 key 的引导配置也可读）；两字段都必须是 JSON 对象里
     的非空字符串，缺一 / 非法 = 该项 None（调用方回退默认）。供设置读取接口
     使用：配置存在但未配 key（load_config 抛 ConfigError）时仍返回磁盘目录，
     避免首次保存设置把 install.bat 自动指向的库目录覆盖成默认值。
     """
+    if path is None:
+        path = config_path()
     if not path.is_file():
         return (None, None)
     try:

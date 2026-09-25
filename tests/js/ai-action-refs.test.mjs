@@ -135,7 +135,10 @@ test("生成骨架/生成工程收尾路径含 aiActionStop（finally 内）", (
   assert.match(coreSrc, /\} finally \{ releaseBanner\(\); \$\("btn-generate"\)\.disabled = false; \}/);
   // 覆盖确认弹窗等待期不显示横幅：catch 哨兵 stop + 重发前 reset/start（一 start 一 stop）
   assert.match(coreSrc, /stopStage\(\);\s*releaseBanner\(\);   \/\/ 首段请求已终态/);
-  assert.match(coreSrc, /bannerReleased = false;   \/\/ 重发 = 新一对 start\/stop\n\s*aiActionStart\("生成工程"\);/);
+  // 锚点避开"写死的换行+缩进"（工单 ci-gate-fixes/03）：这里原写 `\n\s*`，而 CI 的
+  // windows 腿是 CRLF 检出、本机（LF）不是 ⇒ 这条在 CI 上必红、在本机必绿。
+  // `[^\n]*` 仍要求两处按序落在**不同行**上，判的还是"成对"这件事。
+  assert.match(coreSrc, /bannerReleased = false;   \/\/ 重发 = 新一对 start\/stop[^\n]*\n\s*aiActionStart\("生成工程"\);/);
 });
 
 test("母版提炼终态收口：finishProgress 与 failProgress 各带 aiActionStop", () => {
