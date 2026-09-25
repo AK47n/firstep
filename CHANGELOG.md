@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=c7bb826aba6f8e1d0e37a27b274ce1b9f00abacf -->
+<!-- changelog-auto: last-commit=8d8b50b1e7b2c8e428934c9c25750c851823130a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -24,6 +24,7 @@
 - 19:35 工单 hwcheck-specialize/08：专精化批次 F —— 称重与人机执行四件（hx711 / joystick / servo / relay）八格配方
 - 21:02 工单 driver-defect-fixes/01：joystick × mspm0 的 ADC 超时判据从「50 圈自旋」改成时间
 - 21:26 工单 driver-defect-fixes/02：servo × mspm0 的 PWM 周期落进 16 位定时器量程
+- 21:29 工单 driver-defect-fixes/03：hx711 的就绪窗口按转换周期算，「0」的歧义有出口
 
 ## 2026-09-24
 - 00:39 工单 hwcheck-unknown-device/12：自建件 id 文法收紧到 C 标识符（连字符建不出坏工程）
