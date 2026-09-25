@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=7eec44e857f263f05f749b7c8383c9fde97726ad -->
+<!-- changelog-auto: last-commit=c7bb826aba6f8e1d0e37a27b274ce1b9f00abacf -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -23,6 +23,7 @@
 - 18:33 收尾：专精面扩张 07（批次 E）记账进交接区，并补两条量具纪律（CRLF 编辑坑 / 组合穷举量具）
 - 19:35 工单 hwcheck-specialize/08：专精化批次 F —— 称重与人机执行四件（hx711 / joystick / servo / relay）八格配方
 - 21:02 工单 driver-defect-fixes/01：joystick × mspm0 的 ADC 超时判据从「50 圈自旋」改成时间
+- 21:26 工单 driver-defect-fixes/02：servo × mspm0 的 PWM 周期落进 16 位定时器量程
 
 ## 2026-09-24
 - 00:39 工单 hwcheck-unknown-device/12：自建件 id 文法收紧到 C 标识符（连字符建不出坏工程）
