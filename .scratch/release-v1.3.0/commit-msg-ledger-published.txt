@@ -1,0 +1,23 @@
+发版 v1.3.0（二）：已发布上线、落差归零；账本与两张工单按事实改写
+
+v1.3.0 的推送 / 建 Release / 传八件资产在本轮真做完（`finish-publish.ps1` 退出码 0），
+本提交只落**发布之后的账**：
+
+- `docs/agents/local-environment.md` 第 0 节：从「就差推送」改写成「**已发布 v1.3.0，落差归零**」
+  ——远端 `main` `606494b1`（与本地 0/0）、annotated tag `v1.3.0` → `e47d9a8c`、Release 八件资产
+  服务端 size 与本地逐件相同（8/8）、`check-download-docs.py` PASS。v1.2.2 那张落差表降格留档。
+- 同节新增**「本机网络事实」**段，把上一轮记错的「瞬时故障」更正掉：真凶是 hosts 把 25+ 个
+  GitHub 域名指到 `127.0.0.1`（Steam++ 加速器在 0.0.0.0:443 用自签证书冒充），于是纯 TCP 探测与
+  `curl` 都「成功」却一次都没到真 GitHub；出路 = `http.https://github.com/.resolve` 钉真实 IP
+  （不改 hosts、不降 TLS 校验），跑完已清掉该配置。并记下验收纪律：**只认 git ref 与 Release API**。
+- `.scratch/release-v1.3.0/issues/02`：补「推送成功 + Release 上线」段（四步读数 + 服务端独立复核），
+  并更正一条事前预测——tag 实际指向 `e47d9a8c`（打包那一刻），`606494b1` 是 tag 之后 post-commit
+  生成的 CHANGELOG 提交。
+- `.scratch/release-v1.3.0/issues/03`：**口径更正**——它此前在发布尚未发生时就被标成 resolved、
+  四条勾全打（其中「线上最新改成 v1.3.0」当时是假的），故按事实重述 Status 与勾的含义，
+  并留下三条判据（工单是事实的记账不是路线图；同一天的两个「落地事实」要标明动作先后；
+  以账本为准、工单跟着账本走）。
+- `.scratch/release-v1.3.0/post-publish-check.txt`：联网自检读数入库（UTF-8 无 BOM）。
+
+复核口径：全部结论取自服务端（`gh api .../git/refs/...`、`.../releases/latest`、八件资产 size），
+两个 zip 的本地 sha256 重算与 `sha256.txt` 记录一致。

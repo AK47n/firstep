@@ -5,7 +5,7 @@
 
 **被谁阻塞：** 01（版本号与自检就位才能打包打 tag）。
 
-**状态：** resolved（第八件资产上传见 Comments 的「网络中断」段）
+**状态：** resolved（打包与核对 2026-09-25 早先完成；**推送 + 建 Release + 传八件资产已在同日收尾轮真做完**）
 
 - [x] 打小发版包：`tools\pack-update.ps1 -Tag v1.3.0 -Baseline <v1.2.2 files.txt>`
 - [x] 打完整包：`tools\pack-full.ps1 -Tag v1.3.0 -Baseline <v1.2.2 manifest.json>`
@@ -42,3 +42,30 @@
 > **处置**：不绕过、不伪造——tag 已在本地打好，等网络恢复后 `git push origin main v1.3.0`
 > 重试即可；**在推送成功之前不建 Release**（`gh release create` 会在服务端按**远端默认分支的
 > HEAD**建 tag，远端还没有 main 的新提交时，那会把 tag 打到 v1.2.2 那个提交上）。
+
+### 推送成功 + Release 上线（2026-09-25 收尾轮）
+
+`github.com:443` 恢复可达后跑 `.scratch\release-v1.3.0\finish-publish.ps1`（退出码 **0**），四步全过：
+
+| 步 | 读数 |
+|---|---|
+| ① 推 main + tag（带整套 pre-push 闸门） | `b96a9f4a..606494b1  main -> main` / `* [new tag] v1.3.0 -> v1.3.0`；闸门读数：前端门禁 **1796 passed / 0 fail**、浏览器门禁 **42 passed / 0 fail / 191.5s**、pytest **5523 passed + 11 skipped / 203.7s** |
+| ② 建 Release | `https://github.com/AK47n/firstep/releases/tag/v1.3.0`（draft=false / prerelease=false） |
+| ③ 传八件资产 | `gh release view` 列出八件齐全 |
+| ④ 联网自检 | `python tools\check-download-docs.py` 三项全 `[OK]` → **PASS**，退出码 0（读数存 `.scratch/release-v1.3.0/post-publish-check.txt`） |
+
+**独立复核（服务端口径，不是脚本自己的话）**：
+
+- `gh api repos/AK47n/firstep/git/refs/heads/main` → `606494b1253c8974cbed674c8d9e7987546e824b`
+  （= 本地 HEAD，`git rev-list --left-right --count origin/main...main` = `0 0`）；
+- `gh api repos/AK47n/firstep/releases/latest` → `tag=v1.3.0`、`assets=8`；
+- 八件资产**逐件对账「服务端 size = 本地文件 size」**：**8/8 相同、0 处不一致**
+  （full zip 791,495,348 / update zip 301,635,963）；
+- 两个 zip 的 sha256 **本地重算 = `sha256.txt` 记录**（`3c26c155…` / `29f5d55f…`），
+  而服务端记录的字节数与本地逐字节相同——完整性这一环闭合。
+
+**一条要更正的事前预测**：本文件此前把「tag 指向」写成 `606494b1`。实际
+`git cat-file -p v1.3.0` 显示 **annotated tag 指向 `e47d9a8c`**（打包那一刻的 CHANGELOG 提交，
+也正是本文件「落地事实」段记的那个），而 `606494b1` 是**其后**由 `0ea76e18` 的 post-commit
+钩子生成的 `chore: 自动更新 CHANGELOG`——它按设计落在 tag 之后（「先打包打 tag，再落账本」）。
+所以 tag 打在对的提交上，**没有落到 v1.2.2 那个提交上**。

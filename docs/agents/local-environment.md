@@ -5,36 +5,57 @@
 >
 > 更新纪律：改动了这里描述的东西（删沙箱、发新版、换端口），**当场回来改这份文件**。
 
-## 0. 交接区：main 上有什么还没到用户手上（2026-09-25 更新 · **v1.3.0 已打包打 tag，差最后一步推送**）
+## 0. 交接区：main 上有什么还没到用户手上（2026-09-25 更新 · **已发布 v1.3.0，落差归零**）
 
-> ### ⚠ 当前状态（2026-09-25，下一轮接手先读这一段）
+> ### ✅ 当前状态（2026-09-25 收尾轮，下一轮接手先读这一段）
 >
-> **v1.3.0 的发版动作做到「就差推送」**：
+> **`main` 与线上发布包没有落差了——v1.3.0 已真上线**：
 >
-> | 项 | 状态 |
+> | 项 | 值 |
 > |---|---|
-> | 版本号三处 + `VERSIONS.md` + README 版本行 | ✅ 已同步到 **1.3.0** 并提交（`b55dac14`） |
-> | `tools\preflight.ps1` | ✅ 全绿（三处版本号 1.3.0 / 母版编码钉 / 下载文档 offline / README 版本行） |
-> | 发版闸门 | ✅ 全套 pytest **5523 passed + 11 skipped**、前端门禁 **1796 passed**、浏览器门禁 **42 passed** |
-> | 两件套（本机 `Desktop\firstep-pack\`） | ✅ 已打好并核对：update `301,635,963` B / full `791,495,348` B；两个 zip 的 sha256 **实算 = 记录**；`00-START-HERE.txt` 在完整包里；两个 `removed.txt` 非空 |
-> | Release 说明 | ✅ `firstep-pack\release-notes-v1.3.0.md` |
-> | 本地 tag | ✅ `v1.3.0`（annotated，指向 `e47d9a8c`） |
-> | **推送 / 建 Release / 上传** | ❌ **没做——网络挡住**：`github.com:443` 连不上（`curl` 20s 超时；同一时刻 `api.github.com` 200、`codeload.github.com` 与 `ssh.github.com:443` 都通），`git push` 报 `RPC failed; curl 56 Recv failure: Connection was reset`，**12 次重试（约 12 分钟）全失败**。`github.com:22` 探测通但本机 `ssh.exe` 根本起不来（`ssh -V` 都返回 255、零输出），所以 SSH 路线也不可用 |
+> | 线上最新 | **v1.3.0**（2026-09-25 发布），八件套齐全，`/releases/latest` 指向它 |
+> | 远端 `main` | `606494b1`（= 本地 HEAD；`origin/main...main` = `0 0`） |
+> | tag | annotated `v1.3.0` → **`e47d9a8c`**（打包那一刻的 CHANGELOG 提交；**不是** `606494b1`——后者是 tag 之后由 post-commit 生成的 `chore: 自动更新 CHANGELOG`，见 `.scratch/release-v1.3.0/issues/02` 的更正） |
+> | Release | `https://github.com/AK47n/firstep/releases/tag/v1.3.0`；八件资产服务端 size 与本地**逐件相同（8/8）** |
+> | 联网自检 | `tools\check-download-docs.py` **PASS**（读数 `.scratch/release-v1.3.0/post-publish-check.txt`） |
+> | 发版产物（本机留档） | `firstep-pack\firstep-{update,full}-v1.3.0.*` 全套 + `release-notes-v1.3.0.md`；**下一版基线 = 这两个清单**（update `301,635,963` B / full `791,495,348` B） |
 >
-> **收尾只有一条命令**（网络恢复后跑；它会跑 pre-push 闸门 → 建 Release → 传八件资产 → 联网自检）：
+> 收尾那一轮走的就是交接区留的那条命令（`powershell -File .scratch\release-v1.3.0\finish-publish.ps1`），
+> 退出码 0：推 main + tag（带整套 pre-push 闸门）→ 建 Release → 传八件资产 → 联网自检。
+> 闸门读数：前端门禁 **1796 passed / 0 fail**、浏览器门禁 **42 passed / 0 fail**、
+> pytest **5523 passed + 11 skipped**。
 >
-> ```powershell
-> powershell -File .scratch\release-v1.3.0\finish-publish.ps1
-> ```
+> ### ⚠ 本机网络事实（2026-09-25 量准；**下次发版会再撞上**）
 >
-> **两条纪律**：① **推送成功之前不要建 Release**——`gh release create` 会在服务端按**远端默认分支的
-> HEAD** 建 tag，远端还没收到 main 的新提交时会把 tag 打到 v1.2.2 那个提交上；② 推完记得回来把
-> 本节改写成「已发布 v1.3.0 / 落差归零」，并把 `.scratch\release-v1.3.0\issues\03` 落 resolved。
+> **此前把推送失败记成「瞬时故障、重试即好」是错的。真凶是本机 hosts + 一个本地代理**：
 >
-> **上板验收仍没做**：`hwcheck-acceptance/05` 保持 `ready-for-agent`（本机没有板子）。页面上凡涉及
-> 实测现象的地方都标着「未上板」——**不拿编译绿当板上证据**。
+> - `C:\Windows\System32\drivers\etc\hosts` 里有 **25+ 行 `127.0.0.1 <github 域名>`**
+>   （`github.com` / `api.github.com` / `objects.githubusercontent.com` / `raw.githubusercontent.com` …），
+>   本机 **Steam++ 加速器在 `0.0.0.0:443` 用自签证书（`Issuer=CN=SteamTools Certificate`）冒充这些域名**。
+> - 后果：**`Test-NetConnection github.com -Port 443` 返回 True、`curl` 也能拿 200——但一次都没到真 GitHub**。
+>   于是"网络通了"这个前提本身不可信（本轮的第一次探测就是这么被骗过去的）。
+> - 上一次 `git push` 报 `RPC failed; curl 56 Recv failure: Connection was reset` 就出在这条中间人链路上
+>   （小请求能过、大 body 被掐），不是 GitHub 挂了，也不是 gh 认证问题。
+> - **可用的出路**（本轮实测通过）：把真实 IP 钉给 git，**不动 hosts、不关加速器、不降 TLS 校验**：
+>
+>   ```powershell
+>   git -c "http.https://github.com/.resolve=github.com:443:140.82.113.3" push origin main v1.3.0
+>   ```
+>
+>   本轮把它写进**仓库级 `.git/config`** 后跑 `finish-publish.ps1`（`gh` 走 `api.github.com` 照旧可用），
+>   **跑完已 `git config --unset` 清掉**——现在 `.git/config` 里没有这条。GitHub 的 IP 会轮换，
+>   下次先按 `curl --resolve` 试几个候选再钉。
+> - **验收纪律**：真推上去没有，只能看 **git ref（`git ls-remote` / `gh api .../git/refs/...`）与
+>   Release API**；TCP 可达、`curl` 200、浏览器能开页面**都不算数**——
+>   `api.github.com` 也在 hosts 名单里，也可能由那个加速器作答。
+>
+> ### ⚠ 上板验收仍没做
+>
+> `hwcheck-acceptance/05` 保持 `ready-for-agent`（本机没有板子）。页面上凡涉及实测现象的地方都标着
+> 「未上板」——**不拿编译绿当板上证据**。这一版是「硬件检测」整块能力的第一次发布，而它的
+> **板上行为从未被真人验过**；下一轮若拿到板子，先做这单。
 
-### 历史：v1.2.2 那一轮的落差表（2026-09-24 口径，**本版 v1.3.0 已把七批一起带走**）
+### 历史：v1.2.2 那一轮的落差表（2026-09-24 口径，**v1.3.0 已把七批一起带走，2026-09-25 发布**）
 
 **当时状态：线上最新 = v1.2.2；main 上已比它多出七批未发布改动**（下表最后一行）。
 > 七批的内容 = ① 硬件检测栏目本身 + 检测页引脚出口 ② 完整包会话态进 `AppContext`（纯内部）
@@ -52,16 +73,17 @@
 | 发版产物（本机留档） | `firstep-pack\firstep-{update,full}-v1.2.2.*` 全套 + `release-notes-v1.2.2.md`；**下一版的基线就是这两个清单** |
 | **main 上还没到用户手上的（七批）** | ① **硬件检测栏目本身**（`module-hwcheck/01-09`，2026-09-20 起）＋ **检测页引脚出口**（`hwcheck-pin-conflict-exit/01`：默认脚撞脚提前解开）——v1.2.2 的用户看不到「硬件检测」这一栏；② **完整包会话态进 `AppContext` ＋ `_full_task_lock`**（`full-update-state-into-ctx/01-04`，2026-09-22，账见 `.scratch/backlog.md` §18：纯内部换归属 + 修「并发 apply 建出两个任务」的竞态，**前端零字节**）；③ **陌生器件（库外件）探测**（`hwcheck-unknown-device`，2026-09-22 起：规格 + 12 张工单已落 `.scratch/hwcheck-unknown-device/`，**12 张全部 resolved**（支点模块 `i2c_probe` / 「我的器件」库外件定义与数据目录 / 探测小节渲染（stm32 真编译 + mspm0 分支 + 两平台编译矩阵）/ 检测页计划投影 / 串口复测命令台接入自建件 / mspm0 引脚符号重名拦下 / 自建件 id 文法收紧到 C 标识符 / 资料 → 事实草稿 / 工程内快照与回读 / 排障带自建件事实 / 闸门与真机验收收口）；④ **bfcache 后退回来补登记 + 「应用服务已停止」可见态**（`bfcache-return-register/01`，2026-09-24：前端三处——`index.html` 内联脚本 + 可见态标记 + CSS、新 `ui/service-stopped.js`、`boot.js` 接线；**服务端 / 打包器 / 库零改动**）。⑤ **生成工程 README 的 mspm0「打开姿势」修正**（`a0602718`，2026-09-24：CCS Theia 只把工作区的**子目录**认成工程，原话术「`File → Open Project` 选择工程目录」按字面做 `Build Project` 是灰的 → 改成实测姿势 + 「两份 mspm0 工程别放进同一个工作区」警告；账见 `.scratch/backlog.md` §20）。⑥ **母版 mspm0 引脚符号全局去重**（`hwcheck-acceptance/02`，2026-09-24：14 组同名符号 / 68 个符号 / 35 个实例全部改成 `<实例名>_<原符号>`，生成宏随之变成 `<实例>_<实例>_<符号>_<后缀>`；35 个模块的 mspm0 源码（36 个文件）+ 27 个 manifest 的 mspm0 段 notes 同批改，**stm32 零改动**；建了构建期守卫「母版引脚符号全局唯一」）——**这条对用户可见的影响是"OLED 屏 + I2C 器件"等 10 组此前必 400 的组合能生成、能编译了**。⑦ **mspm0 生成链认下 SysConfig 构建期接口面**（`hwcheck-acceptance/01`，2026-09-24：`SYSCFG_DL_init()` 那一行从**注释占位**变**活代码**——骨架 / 赛题 / 检测三条路都保证它在 main() 里、生成门禁按"恒有四个 + 裁剪后**外设**实例"精确放行（GPIO 实例不放行，实测 0/109）；检测页那条"上板前取消注释"清单项与两处配方文案随之删改）——**用户可见影响：地猛星上生成的工程烧进去外设真的初始化了**（此前"灯不闪、串口一个字没有"，最像板子坏）。**七批都只在本机工作树 / main 上，任何发布包里都没有**——下次发版要一起带上 |
 | **硬件检测验收补齐（本批）进度** | `.scratch/hwcheck-acceptance/`：**01、02、03、04 已 resolved 并提交**（`e80d40d8` / `bb7c3816` / `91a4d270` / 见 `issues/04-*.md`）；**05（真机上板）未开工**——它要真板子，等用户在场。**发版动作（v1.3.0）未启动**，见下条。**2026-09-25 复测**（账 + 读数落 `.scratch/hwcheck-acceptance/报告-复测.md` 与 `recheck-*.txt`）：01–04 的产出**全部成立**（12/12 组合能生成、三路 mspm0 真编译 0 error、页面 11 场景无一被拦、浏览器 21 用例过）；复测另抓到两处**既有**问题——`library/hwcheck_recipes.json` 的 `key` 条目仍写着"上板前取消注释"（工单 01 漏改一处），以及 `parse_compile_errors` 看不见链接器形态告警（`warning #10210-D:`）导致面板对 `ml_mpu6050` 那格误报 0 warning |
-| **硬件检测专精面扩张（新 spec，2026-09-25 立项）** | `.scratch/hwcheck-specialize/`：射程 = 首批 20 件从「未专精」升到「专精」（身份探头 + 读数 + 复测命令）；**01 命令字符让位、02 未专精样本解耦、03 批次 A（aht10/sht20/sht30）、04 批次 B（bh1750/bmp180/ms5611）、05 批次 C（hmc5883l/qmc5883l/tcs34725）、06 批次 D（mlx90614/sgp30/at24c02）、07 批次 E（ads1115/pca9685/dht11/ds18b20）七批已全部 resolved 并提交**（`cfa83607` / `f5072abd` / `01f6b066` / `a75b3279` / `2ed04caa` / 06 见 `git log` / 07 = `1e6bb9e5`，各带双轴评审整改）；**——**首批 20 件全部专精化完毕（30 件 / 57 格），本 spec 只剩发版动作（v1.3.0）没做**。**2026-09-25 用户已明确点头「从 04 一路推到 frontier」**（原「做完 03 停下汇报」的口径已被这条覆盖），后续批次不必再逐批等点头，做完一批接着下一批。每批判据 = 两平台真编译矩阵六/八格全 `[PASS]` + 扩张地板（`EXPANSION` 只追加 + `EXPANSION_CELL_COUNT` 是手写字面量）+ 未专精基线如实下调 + 反证（`probe-expansion-floor.py` 现已支持 `--victim/--platform/--out`，可只撤一格）。**五条量具纪律**：① 读数**按批分文件**（`probe-compile-matrix.txt` 属批次 A，B/C/D/E 起用 `--out …-04.txt` / `-05.txt` / `-06.txt` / `-07.txt`），别覆写前一批的证据；② 配方文件在盘上是 **LF**（**不是 CRLF——07 时按 CRLF 处理过一版是错的**：`.gitattributes` 只声明 `.githooks/*` 与 `*.bat`，这个 JSON 进 blob 是 LF、checkout 出来还是 LF）；反证探针改写与回滚按**原字节**走，编辑时用 `newline=""`，别让文本模式换行归一制造整档重写；③ **会让配方文件变的探针不许与任何"读配方"的验证并行**（05 踩过：矩阵与撤格反证同时跑，读到 `页面标记=未专精` 的假读数）；④ **每批都要穷举一遍"新件 + 既有件"的控制台字符组合**（06 踩过：新件的首选撞掉旧件的首选、而旧件的候选又都是别人的首选 ⇒ 一个四件组合直接 400；**07 起量具 = `probe-console-combos.py`——`|S| <= 6` 全子集穷举 + 容量天花板读数**，并给每条配方补了共享后备池 `n z i 0 1 2 3`；08 已复跑，两个平台全子集（39.8 万 / 76.8 万组）仍零撞车）；⑤ **声明了 `locals` 的格子必须有一条「locals 真被赋值」的判据**（08 踩过最险的一次：`hx711 × stm32` 的探头把采样存进了判定变量 `r` ⇒ **编译过、校验过、探头判 OK、读数恒 0**——守卫 `test_expansion_cells_that_declare_locals_actually_write_them` + 它自己的自检用例 + `probe-locals-guard.py` 反证就是为此立的）。**写配方时的三条新增口径（05/06 起）**：① **`console.candidates` 只从"既不是保留字、也不是任何一件首选"的字符里挑**（06 起再带数字尾巴当兜底）——挑了别人的首选，就会在勾到那一件时把它挤成构建期 400（05 实测 tcs34725 的 `e`/`f` 挤掉 sht30；06 实测 at24c02 的 `e` 撞 sht30 的首选、而 sht30 的候选 `f`/`c` 又都是别人的首选，**已把 sht30 候选改成 `n`/`z`**）；② **note 里不许写死复测字符**（字符是分配后的，勾件不同就不一样；写"敲复测字符"）；③ **recon 是二手来源**：把 recon 的结论写进学生可见文案前，回驱动源码核一遍（06 实测 recon-02 §4.1 把 stm32 头的一句话安到了 mspm0 头上，工单照抄、配方也照抄 ⇒ 已更正 recon 并改文案）。**跨批挂账（04 发现，未修）**：`debug_uart × stm32` 的那条读数行约 **247 字节**、超过板上 `hwcheck_line[128]`，会截成半个汉字——属 v1 pilot 的既有账，见 `.scratch/backlog.md` §21；同文件 §22 = 复测字符池的**容量天花板**（把 26/30 件全勾上必撞，部分已修）、§23 = 库里三处**模块头注释与 syscfg 不一致**（未修）。同批另立 `.scratch/driver-defect-fixes/`：侦察撞出来的三条驱动缺陷各一张 ready-for-agent 修复单（joystick × mspm0 自旋超时 → 读数恒 0、servo × mspm0 周期超 16 位量程、hx711 的 20ms 窗口短于 10SPS 的 100ms） |
+| **硬件检测专精面扩张（新 spec，2026-09-25 立项）** | `.scratch/hwcheck-specialize/`：射程 = 首批 20 件从「未专精」升到「专精」（身份探头 + 读数 + 复测命令）；**01 命令字符让位、02 未专精样本解耦、03 批次 A（aht10/sht20/sht30）、04 批次 B（bh1750/bmp180/ms5611）、05 批次 C（hmc5883l/qmc5883l/tcs34725）、06 批次 D（mlx90614/sgp30/at24c02）、07 批次 E（ads1115/pca9685/dht11/ds18b20）七批已全部 resolved 并提交**（`cfa83607` / `f5072abd` / `01f6b066` / `a75b3279` / `2ed04caa` / 06 见 `git log` / 07 = `1e6bb9e5`，各带双轴评审整改）；**——**首批 20 件全部专精化完毕（30 件 / 57 格），本 spec 的收尾（发版动作 v1.3.0）**已于 2026-09-25 完成并上线**。**2026-09-25 用户已明确点头「从 04 一路推到 frontier」**（原「做完 03 停下汇报」的口径已被这条覆盖），后续批次不必再逐批等点头，做完一批接着下一批。每批判据 = 两平台真编译矩阵六/八格全 `[PASS]` + 扩张地板（`EXPANSION` 只追加 + `EXPANSION_CELL_COUNT` 是手写字面量）+ 未专精基线如实下调 + 反证（`probe-expansion-floor.py` 现已支持 `--victim/--platform/--out`，可只撤一格）。**五条量具纪律**：① 读数**按批分文件**（`probe-compile-matrix.txt` 属批次 A，B/C/D/E 起用 `--out …-04.txt` / `-05.txt` / `-06.txt` / `-07.txt`），别覆写前一批的证据；② 配方文件在盘上是 **LF**（**不是 CRLF——07 时按 CRLF 处理过一版是错的**：`.gitattributes` 只声明 `.githooks/*` 与 `*.bat`，这个 JSON 进 blob 是 LF、checkout 出来还是 LF）；反证探针改写与回滚按**原字节**走，编辑时用 `newline=""`，别让文本模式换行归一制造整档重写；③ **会让配方文件变的探针不许与任何"读配方"的验证并行**（05 踩过：矩阵与撤格反证同时跑，读到 `页面标记=未专精` 的假读数）；④ **每批都要穷举一遍"新件 + 既有件"的控制台字符组合**（06 踩过：新件的首选撞掉旧件的首选、而旧件的候选又都是别人的首选 ⇒ 一个四件组合直接 400；**07 起量具 = `probe-console-combos.py`——`|S| <= 6` 全子集穷举 + 容量天花板读数**，并给每条配方补了共享后备池 `n z i 0 1 2 3`；08 已复跑，两个平台全子集（39.8 万 / 76.8 万组）仍零撞车）；⑤ **声明了 `locals` 的格子必须有一条「locals 真被赋值」的判据**（08 踩过最险的一次：`hx711 × stm32` 的探头把采样存进了判定变量 `r` ⇒ **编译过、校验过、探头判 OK、读数恒 0**——守卫 `test_expansion_cells_that_declare_locals_actually_write_them` + 它自己的自检用例 + `probe-locals-guard.py` 反证就是为此立的）。**写配方时的三条新增口径（05/06 起）**：① **`console.candidates` 只从"既不是保留字、也不是任何一件首选"的字符里挑**（06 起再带数字尾巴当兜底）——挑了别人的首选，就会在勾到那一件时把它挤成构建期 400（05 实测 tcs34725 的 `e`/`f` 挤掉 sht30；06 实测 at24c02 的 `e` 撞 sht30 的首选、而 sht30 的候选 `f`/`c` 又都是别人的首选，**已把 sht30 候选改成 `n`/`z`**）；② **note 里不许写死复测字符**（字符是分配后的，勾件不同就不一样；写"敲复测字符"）；③ **recon 是二手来源**：把 recon 的结论写进学生可见文案前，回驱动源码核一遍（06 实测 recon-02 §4.1 把 stm32 头的一句话安到了 mspm0 头上，工单照抄、配方也照抄 ⇒ 已更正 recon 并改文案）。**跨批挂账（04 发现，未修）**：`debug_uart × stm32` 的那条读数行约 **247 字节**、超过板上 `hwcheck_line[128]`，会截成半个汉字——属 v1 pilot 的既有账，见 `.scratch/backlog.md` §21；同文件 §22 = 复测字符池的**容量天花板**（把 26/30 件全勾上必撞，部分已修）、§23 = 库里三处**模块头注释与 syscfg 不一致**（未修）。同批另立 `.scratch/driver-defect-fixes/`：侦察撞出来的三条驱动缺陷各一张 ready-for-agent 修复单（joystick × mspm0 自旋超时 → 读数恒 0、servo × mspm0 周期超 16 位量程、hx711 的 20ms 窗口短于 10SPS 的 100ms） |
 
-**发版尚未启动（2026-09-22 22:0x 实测）**：这一轮只走到「决定要发」就停了——**版本号仍 `1.2.2`、
-没打包、没打 tag、没建 Release**（用户要先继续改动再发，所以别把这份落差当成"发过了"）。
-恢复发版的现成条件：`tools\preflight.ps1` 在 `1.2.2` 上**全绿**（改完版本号必须重跑）；上一版
-基线都在本机 `Desktop\firstep-pack\`（`firstep-update-v1.2.2.files.txt` 给 `pack-update.ps1`、
-`firstep-full-v1.2.2.manifest.json` 给 `pack-full.ps1`、`release-notes-v1.2.2.md` 当模板）；
-`gh` 认证可用（当天撞过一次瞬时 TLS 握手超时，同一条命令重试即好）；线上 `latest` 仍是 v1.2.2。
-**版本号未拍板**：建议 `v1.3.0`（硬件检测是整块新栏目 → SemVer 次版本 +1），若后面再塞新功能
-还要往上走；流程与口径见 `docs/agents/releasing.md`。
+**历史：发版尚未启动（2026-09-22 22:0x 实测）** ——**该状态已于 2026-09-25 结清：版本号按建议的
+`v1.3.0` 拍板并三处同步、两件套已打、tag 已打、Release 已上线**（见本节开头）。下面只作历史对照保留：
+
+> 这一轮只走到「决定要发」就停了——**版本号仍 `1.2.2`、没打包、没打 tag、没建 Release**。
+> 恢复发版的现成条件：`tools\preflight.ps1` 在 `1.2.2` 上**全绿**（改完版本号必须重跑）；上一版
+> 基线都在本机 `Desktop\firstep-pack\`（`firstep-update-v1.2.2.files.txt` 给 `pack-update.ps1`、
+> `firstep-full-v1.2.2.manifest.json` 给 `pack-full.ps1`、`release-notes-v1.2.2.md` 当模板）；
+> `gh` 认证可用；线上 `latest` 仍是 v1.2.2。**版本号当时未拍板**：建议 `v1.3.0`（硬件检测是整块
+> 新栏目 → SemVer 次版本 +1）——**这条建议后来被采纳**；流程与口径见 `docs/agents/releasing.md`。
 
 **下一轮动手前必须知道的三件事（都是本轮实测踩出来的）**：
 
