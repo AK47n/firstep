@@ -129,9 +129,13 @@
       那样说清各看什么：**`joystick` 看推杆时百分比变不变 / `servo` 盯舵机臂动不动 /
       `relay` 听咔哒声与模块指示灯**
 - [ ] 检测页实测：四件两平台都显示 `[专精]`（不是「未专精」），命令表里是各自声明的字符
-- [ ] **扩张地板**追加这 8 格（新常量 + 新用例，条数精确；`PILOT` 常量**不动**——它钉的是 v1 清单，
-      有 `len(PILOT) == 17` 的精确断言，见 spec「覆盖记录与地板」）
-- [ ] `tests/test_hwcheck_generic.py` 的未专精基线（`planned >= 157` / `with_init >= 132`，
+- [ ] **扩张地板**追加这 8 格到 `EXPANSION`（工单 03 立的那一处：`EXPANSION` 只装**扩张**格；
+      `EXPANSION_CELL_COUNT` 是**手写字面量**——别写成 `len(EXPANSION)`，那是恒真断言）：
+      落地后 `EXPANSION_CELL_COUNT` 改成 **40**（+ `PILOT` 那 17 格 = 总覆盖 **57**）；
+      **只追加、不改写**已有行；`PILOT` 常量**不动**（有 `len(PILOT) == 17` 的精确断言，
+      见 spec「覆盖记录与地板」）
+- [ ] `tests/test_hwcheck_generic.py` 的未专精基线（写单时是 `planned >= 157` / `with_init >= 132`；
+      **批次 A 落地后已降到 153 / 128**——以你落地当时的实数为准），
       `test_hwcheck_generic.py:423-424`）**按实数如实下调并写原因**：本批 8 格转专精，
       其中 **6 格**现在拿得到无参初始化（`servo` × 2 格拿不到——`servo_init(servo_id,
       channel)` 是两个参数，通用降级给不出参数 ⇒ 如实说"不调"）⇒ 两个数**各降 8 / 6**

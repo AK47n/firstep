@@ -1,0 +1,19 @@
+=== 专精面扩张：两平台真编译矩阵 + 配方生效核对 ===
+gmake：C:\ti\ccs2050\ccs\utils\bin\gmake.exe
+UV4：C:\Keil5\Core\UV4\UV4.exe
+CCS 三件套：CcsTools(sdk_dir=WindowsPath('C:/ti/ccs2051/mspm0_sdk_2_10_00_04'), compiler_dir=WindowsPath('C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-armllvm_4.0.4.LTS'), sysconfig_cli=WindowsPath('C:/ti/ccs2051/sysconfig_1.26.2/sysconfig_cli.bat'))
+格数：3 件 × 2 平台（OLED 通道 开）
+
+判据：exit=0 且 编译器 0 error / 0 warning；`PASS*` = 编过了但带链接器形态告警（如实记账，见复测发现的口径漏洞）；`[拦下]` = 生成前拦下（如引脚装不下）；`[——]` = 库内这一件本平台没有条目（不是失败，也不算通过）。页面标记 = 预览载荷里这一件挂的是 `[专精]` 还是 `未专精`（配方真的生效没有）。
+
+## mspm0
+[PASS] mspm0/aht10  页面标记=[专精]  exit=0  编译器 error 0 / warning 0  链接器 error 0 / warning 0
+[PASS] mspm0/sht20  页面标记=[专精]  exit=0  编译器 error 0 / warning 0  链接器 error 0 / warning 0
+[PASS] mspm0/sht30  页面标记=[专精]  exit=0  编译器 error 0 / warning 0  链接器 error 0 / warning 0
+
+## stm32
+[PASS] stm32/aht10  页面标记=[专精]  exit=0  编译器 error 0 / warning 0  链接器 error 0 / warning 0
+[PASS] stm32/sht20  页面标记=[专精]  exit=0  编译器 error 0 / warning 0  链接器 error 0 / warning 0
+[PASS] stm32/sht30  页面标记=[专精]  exit=0  编译器 error 0 / warning 0  链接器 error 0 / warning 0
+
+=== 结论：全绿（编译器 0 error / 0 warning，无链接器告警）；被拦下 0 格；本平台没有这一格 0 格 ===

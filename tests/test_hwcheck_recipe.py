@@ -65,6 +65,33 @@ PILOT = (("led", PLATFORM_STM32), ("led", PLATFORM_MSPM0),
          ("adc", PLATFORM_STM32), ("adc", PLATFORM_MSPM0),
          ("ml_mpu6050", PLATFORM_STM32), ("ml_mpu6050", PLATFORM_MSPM0))
 
+# **专精面扩张**（spec `.scratch/hwcheck-specialize/`）：v1 清单之外**逐批**长出来的格。
+# 与 `PILOT` 分工：`PILOT` 钉的是「v1 清单不许改小」（等号断言 17 格，**一个字都不许动**），
+# 这一条钉的是「扩张成果不许悄悄缩水」——每落一批就在这里追加那几格，并把下面的
+# `EXPANSION_CELL_COUNT` 一起改大（**条数精确**：少一格当场红，防"删一格没人发现"）。
+#
+# 每批落地时**只追加、不改写**已有的行（改写等于把上一批的成果从地板里抹掉）。
+# 两个数各有各的用处，别混：`len(EXPANSION)` = **扩张部分自己的格数**；
+# `len(PILOT) + len(EXPANSION)` = 配方文件里应有的**总覆盖格数**。
+#
+#   批次 A（工单 03）aht10 / sht20 / sht30 × 2 平台        → 扩张 6，总 23
+#   批次 B（工单 04）bh1750 / bmp180 / ms5611 × 2 平台     → 扩张 12，总 29
+#   批次 C（工单 05）hmc5883l / qmc5883l / tcs34725 × 2    → 扩张 18，总 35
+#   批次 D（工单 06）mlx90614 / sgp30 / at24c02 × 2        → 扩张 24，总 41
+#   批次 E（工单 07）ads1115 / pca9685 / dht11 / ds18b20   → 扩张 32，总 49
+#   批次 F（工单 08）hx711 / joystick / servo / relay      → 扩张 40，总 57
+EXPANSION = (("aht10", PLATFORM_STM32), ("aht10", PLATFORM_MSPM0),
+             ("sht20", PLATFORM_STM32), ("sht20", PLATFORM_MSPM0),
+             ("sht30", PLATFORM_STM32), ("sht30", PLATFORM_MSPM0))
+
+# 扩张清单的**精确条数**（= `len(EXPANSION)`；每批长一次：追加了几格就改成几）。
+# 判据不是"至少"，是"就是这么多"——有人悄悄删一行 `EXPANSION`，逐格断言就少跑一格、
+# 静默放行。⚠ 这一条与逐格断言**都读同一个常量**：连"删一行 + 删配方那一格 + 把这里的
+# 数字改小"三处一起动仍然会全绿（`PILOT` 当年正是为这个洞加了按**配方文件实数**判的
+# 第三条地板）；本 spec 明说既有的文件级下限断言（`>= 17` 格 / `>= 10` 件）属 v1 那 17 格、
+# **不改**，所以这条残留的洞如实记在这里，不靠措辞掩盖。
+EXPANSION_CELL_COUNT = 6
+
 
 def _unescape_c(code: str) -> str:
     """渲染产物 → 人能读的文本（把 ASCII 转义还原成字符）。
@@ -755,6 +782,46 @@ def test_pilot_floor_covers_every_v1_slot():
     """
     assert len(PILOT) == 17, f"pilot 清单格数变了：{len(PILOT)}（spec v1 清单 = 17 格）"
     assert len({slug for slug, _ in PILOT}) == 10, "pilot 清单件数应是 10 件"
+
+
+@pytest.mark.parametrize("slug,platform", EXPANSION)
+def test_real_library_has_a_recipe_for_every_expansion_slot(slug, platform):
+    """**扩张地板**（spec `hwcheck-specialize`「覆盖记录与地板」）：逐格钉住。
+
+    与 `PILOT` 那条同款判据、**另一条清单**：`PILOT` 管"v1 清单不许改小"，
+    这条管"扩张成果不许悄悄缩水"。分开的理由写在 `EXPANSION` 上方的注释里。
+    """
+    from contest_generator.library import list_modules
+
+    manifests = list_modules(REAL_LIBRARY)
+    interfaces = _library_interfaces_all(REAL_LIBRARY, manifests)
+    recipes = load_recipes(REAL_LIBRARY, manifests, interfaces)
+    catalog = recipes.get(slug)
+    assert catalog is not None, f"真实库缺配方：{slug}"
+    hit = catalog.for_platform(platform)
+    assert hit is not None, f"真实库缺配方：{slug} × {platform}"
+    assert hit.usable, f"{slug} × {platform} 的配方是空壳"
+
+
+def test_expansion_floor_keeps_its_cell_count():
+    """扩张清单的**条数**精确（每批长一次）：删一行就红。
+
+    为什么条数与逐格断言要分开：只留逐格断言时，"同步删一行 EXPANSION + 删配方文件里
+    那一格"两条都静默变绿——这正是 spec 要挡的那种缩水。`PILOT` 那边同样两条并存。
+    """
+    assert len(EXPANSION) == EXPANSION_CELL_COUNT, (
+        f"扩张清单格数变了：{len(EXPANSION)}（冻结值 {EXPANSION_CELL_COUNT}）——"
+        "每落一批内容工单要同时改 EXPANSION 与 EXPANSION_CELL_COUNT，"
+        "并且只追加、不改写已有的行"
+    )
+
+
+def test_expansion_floor_does_not_borrow_pilot_cells():
+    """扩张清单与 v1 清单**不许重叠**：拿 pilot 的格冒充扩张成果 = 地板虚长。
+
+    （两件事本来就不该互相顶替：`PILOT` 那 17 格的冻结值不变，扩张是它之外新长出来的。）
+    """
+    assert not (set(EXPANSION) & set(PILOT))
 
 
 def test_recipe_file_itself_keeps_the_floor_cell_count():
