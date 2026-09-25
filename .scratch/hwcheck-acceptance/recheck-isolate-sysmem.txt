@@ -1,0 +1,14 @@
+=== 复测插曲：`.sysmem` 告警（#10210-D）隔离测量 ===
+gmake：C:\ti\ccs2050\ccs\utils\bin\gmake.exe
+CCS 三件套：CcsTools(sdk_dir=WindowsPath('C:/ti/ccs2051/mspm0_sdk_2_10_00_04'), compiler_dir=WindowsPath('C:/ti/ccs2050/ccs/tools/compiler/ti-cgt-armllvm_4.0.4.LTS'), sysconfig_cli=WindowsPath('C:/ti/ccs2051/sysconfig_1.26.2/sysconfig_cli.bat'))
+
+判据：先看每格的 error / warning 计数，再看告警原文归谁。
+
+[PASS] 1-oled-only（器件=无、OLED=True）：exit=0、error 0、warning 0
+[PASS] 2-mpu6050-无OLED（器件=['ml_mpu6050']、OLED=False）：exit=0、error 0、warning 1
+        warning #10210-D: creating ".sysmem" section with default size of 0x800; use the -heap option to change the default size
+[PASS] 3-mpu6050-带OLED（器件=['ml_mpu6050']、OLED=True）：exit=0、error 0、warning 1
+        warning #10210-D: creating ".sysmem" section with default size of 0x800; use the -heap option to change the default size
+[PASS] 4-jy61p-带OLED（器件=['jy61p']、OLED=True）：exit=0、error 0、warning 0
+[PASS] 5-aht10-带OLED（器件=['aht10']、OLED=True）：exit=0、error 0、warning 0
+
