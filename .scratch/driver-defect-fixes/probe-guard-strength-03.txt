@@ -1,0 +1,33 @@
+=== 判据强度反证：driver-defect-fixes/03（hx711 就绪窗口 + 0 的歧义）===
+library\modules\hx711\code\hx711.c sha256 = 18e3a4905378ce01611076db1b243f894b9571218b499930257d97bfa45fb04c
+library\modules\hx711\code\hx711.h sha256 = 3cd0eaaec3bcfa2666bcd2ffcf1481345aaebe780c4d8b596242ae0c8892f7bd
+library\modules\hx711\code\hx711_stm32.c sha256 = 7aa685e2add8f7369595b1d00cc875586c786d4587ec3515a116e22517b1d72d
+
+[对照] 未注入：PASS  —— 5 passed in 0.10s
+
+[注入] A：窗口缩回 1/10 个转换周期（老病：20ms < 100ms）
+       目标判据：判据①（窗口 ≥ 一个转换周期）
+       结果：红（符合预期）  —— 1 failed, 1 passed in 0.16s（红了：test_hx711_ready_window_covers_a_conversion_period[modules/hx711/code/hx711.c]）
+       复原复核：sha256 一致
+
+[注入] B：超时又拿 0 冒充读数
+       目标判据：判据②（不许 return 0，必须报哨兵值）
+       结果：红（符合预期）  —— 1 failed, 1 passed in 0.17s（红了：test_hx711_timeout_is_never_disguised_as_a_zero_reading[modules/hx711/code/hx711.c]）
+       复原复核：sha256 一致
+
+[注入] C：哨兵值落回 24 位合法域内（0x800000 = 空秤零点）
+       目标判据：判据②（哨兵必须 > 0xFFFFFF）
+       结果：红（符合预期）  —— 1 failed, 1 passed in 0.15s（红了：test_hx711_timeout_is_never_disguised_as_a_zero_reading[modules/hx711/code/hx711.c]）
+       复原复核：sha256 一致
+
+[注入] D：只改 stm32 的轮询步长（两平台悄悄分叉）
+       目标判据：判据③（双平台常量对拍）
+       结果：红（符合预期）  —— 1 failed in 0.16s（红了：test_hx711_window_and_sentinel_are_identical_on_both_platforms）
+       复原复核：sha256 一致
+
+[注入] E：去皮又把可能超时的读直接存成零点（评审抓出来的那处真缺陷）
+       目标判据：判据②尾巴（去皮的赋值必须过哨兵判断）
+       结果：红（符合预期）  —— 1 failed, 1 passed in 0.16s（红了：test_hx711_tare_never_stores_a_timeout_as_the_zero_point[modules/hx711/code/hx711.c]）
+       复原复核：sha256 一致
+
+=== 结论：全部符合预期（每条注入都让对应用例变红，且文件逐字节复原） ===

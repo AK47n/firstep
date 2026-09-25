@@ -36,6 +36,8 @@ from contest_generator.platforms import (  # noqa: E402
 )
 from contest_generator.selection import resolve_selection  # noqa: E402
 
+from tests._c_macros import c_defines, c_functions, c_int
+
 def _read(rel: str) -> str:
     """读库内相对路径的文本（照 test_module_servo.py 同款小助手）。"""
     return (LIBRARY_ROOT / rel).read_text(encoding="utf-8", errors="replace")
@@ -147,56 +149,6 @@ JOYSTICK_C = "modules/joystick/code/joystick.c"
 JOYSTICK_H = "modules/joystick/code/joystick.h"
 
 
-def _c_defines(text: str) -> dict[str, str]:
-    """抓 C 源里 `#define NAME <表达式>`（行尾注释剥掉），供独立复算。"""
-    found: dict[str, str] = {}
-    for match in re.finditer(
-        r"^[ \t]*#define[ \t]+([A-Za-z_]\w*)[ \t]+(.+?)[ \t]*$", text, re.MULTILINE
-    ):
-        found[match.group(1)] = match.group(2).split("/*")[0].strip()
-    return found
-
-
-def _c_functions(text: str) -> dict[str, str]:
-    """按函数名切出**顶层函数体**（从签名行到顶格 `}`）。
-
-    量具要有量具：早先那版用 `code.split(名字, 1)[1]` 取「名字之后的全部文本」，
-    于是 y 函数里的守卫能喂绿 x 函数的断言（两轴不可分辨）。这里按签名行锚定，
-    每个函数体只包含它自己。
-    """
-    found: dict[str, str] = {}
-    for match in re.finditer(
-        r"^[A-Za-z_][\w \t\*]*?\b(\w+)\s*\([^;{]*\)\s*\{", text, re.MULTILINE
-    ):
-        end = text.find("\n}", match.end())
-        if end != -1:
-            found[match.group(1)] = text[match.start():end]
-    return found
-
-
-def _c_int(defines: dict[str, str], name: str, rounds: int = 8) -> int:
-    """把 `#define` 的整数算术表达式算成整数（**测试自己算**，不照抄实现）。
-
-    只解引用同一个字典里的宏名，十六进制/无符号后缀先归一，最后过一遍字符白名单
-    再求值——判据要能独立复算，喂进来的表达式只可能是四则运算。
-    """
-    expr = defines[name]
-    for _ in range(rounds):
-        for ident in sorted(defines, key=len, reverse=True):
-            if ident == name:
-                continue
-            expr = re.sub(rf"\b{ident}\b", f"({defines[ident]})", expr)
-    expr = re.sub(
-        r"\b0[xX][0-9A-Fa-f]+[uUlL]*",
-        lambda m: str(int(m.group(0).rstrip("uUlL"), 16)),
-        expr,
-    )
-    expr = re.sub(r"(?<=[0-9])[uUlL]+\b", "", expr)
-    expr = expr.replace(" ", "")
-    assert re.fullmatch(r"[0-9+\-*/()]+", expr), f"{name} 的表达式不是纯算术：{expr!r}"
-    return int(eval(expr))  # noqa: S307 —— 上面已白名单校验，只可能喂算术字面量
-
-
 def _syscfg_adc_facts() -> tuple[int, int]:
     """→ (ADC12_0 的槽数, 每槽采样时间 µs)——判据取自母版 syscfg 的事实。"""
     text = (MSPM0_MASTER / "mspm0.syscfg").read_text(encoding="utf-8", newline="")
@@ -218,14 +170,14 @@ def test_joystick_mspm0_timeout_is_a_time_budget_not_a_spin_count():
     实现表达式。
     """
     slots, sample_us = _syscfg_adc_facts()
-    defines = _c_defines(_read(JOYSTICK_C))
+    defines = c_defines(_read(JOYSTICK_C))
 
     conversion_us = slots * sample_us  # 判据面：一次 startConversion 跑满整个序列
     assert conversion_us >= 1000, "母版 ADC12_0 的序列时长不该短于 1ms"
 
-    assert _c_int(defines, "JOYSTICK_ADC_SEQ_SLOTS") == slots, "槽数常量与 syscfg 不符"
-    assert _c_int(defines, "JOYSTICK_ADC_SLOT_US") == sample_us, "每槽时长与 syscfg 不符"
-    timeout_us = _c_int(defines, "JOYSTICK_ADC_TIMEOUT_US")
+    assert c_int(defines, "JOYSTICK_ADC_SEQ_SLOTS") == slots, "槽数常量与 syscfg 不符"
+    assert c_int(defines, "JOYSTICK_ADC_SLOT_US") == sample_us, "每槽时长与 syscfg 不符"
+    timeout_us = c_int(defines, "JOYSTICK_ADC_TIMEOUT_US")
     assert timeout_us >= conversion_us * 2, (
         f"超时上限 {timeout_us}µs 不够一次完整序列（{conversion_us}µs）的安全系数"
     )
@@ -236,7 +188,7 @@ def test_joystick_mspm0_timeout_is_a_time_budget_not_a_spin_count():
     ), "轮询步长没有挂在 SysConfig 的 CPUCLK_FREQ 上"
     # **循环的退出界必须是这个时间预算**：常量算对了但循环里写别的数（例如老病的
     # 字面量 50）等于没修——这一条把「算式」与「真的等」绑在一起。
-    wait_loop = _c_functions(strip_comments(_read(JOYSTICK_C), keep_preprocessor=True))[
+    wait_loop = c_functions(strip_comments(_read(JOYSTICK_C), keep_preprocessor=True))[
         "_joystick_adc_read"
     ]
     assert re.search(
@@ -257,8 +209,8 @@ def test_joystick_mspm0_timeout_never_masquerades_as_a_reading():
     source = _read(JOYSTICK_C)
     header = _read(JOYSTICK_H)
     code_only = strip_comments(source, keep_preprocessor=True)
-    functions = _c_functions(code_only)
-    defines = _c_defines(header)
+    functions = c_functions(code_only)
+    defines = c_defines(header)
 
     # 旧判据不许回来：没有「50 圈自旋」这回事了
     assert not re.search(r"JOYSTICK_ADC_TIMEOUT\b(?!_US)", code_only)
@@ -272,8 +224,8 @@ def test_joystick_mspm0_timeout_never_masquerades_as_a_reading():
         f"采样函数的返回出口应当只有「均值」与「本次无效哨兵」，实得 {sorted(returns)}"
     )
 
-    sentinel = _c_int(defines, "JOYSTICK_ADC_INVALID")
-    assert sentinel > _c_int(_c_defines(source), "JOYSTICK_ADC_MAX"), "哨兵值落在 raw 合法域内"
+    sentinel = c_int(defines, "JOYSTICK_ADC_INVALID")
+    assert sentinel > c_int(c_defines(source), "JOYSTICK_ADC_MAX"), "哨兵值落在 raw 合法域内"
     assert sentinel > 100, "哨兵值落在 percent 合法域内"
     assert "JOYSTICK_ADC_INVALID" in functions["_joystick_adc_read"], (
         "没采到样时没有如实上报「本次无效」"

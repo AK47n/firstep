@@ -1,0 +1,41 @@
+=== hx711 两格的读数实际印成什么（判据：hwcheck_report_int 的形参类型）===
+## stm32  预览 HTTP 200
+  读数段原文：
+        hwcheck_report("  raw = ");
+        hwcheck_report_int(raw);
+        hwcheck_report("  (int)raw - 8388608 = ");
+        hwcheck_report_int((int)raw - 8388608);
+  hwcheck_report_int 实现摘录：
+    static void hwcheck_report_int(int value)
+    {
+        char buf[12];
+        int i = 0;
+        int neg = (value < 0);
+        unsigned int v = neg ? (unsigned int)(-value) : (unsigned int)value;
+        if (v == 0)
+        {
+            buf[i++] = '0';
+        }
+        while (v > 0)
+        {
+
+## mspm0  预览 HTTP 200
+  读数段原文：
+        hwcheck_report("  raw = ");
+        hwcheck_report_int(raw);
+        hwcheck_report("  (int)raw - 8388608 = ");
+        hwcheck_report_int((int)raw - 8388608);
+  hwcheck_report_int 实现摘录：
+    static void hwcheck_report_int(int value)
+    {
+        char buf[12];
+        int i = 0;
+        int neg = (value < 0);
+        unsigned int v = neg ? (unsigned int)(-value) : (unsigned int)value;
+        if (v == 0)
+        {
+            buf[i++] = '0';
+        }
+        while (v > 0)
+        {
+
