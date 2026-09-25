@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=01f6b066f875b95daf40ab1fbaf7ec040d6897c5 -->
+<!-- changelog-auto: last-commit=84ae59000ab15bba769ebe439e0ae82784d938de -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -15,6 +15,7 @@
 - 14:24 工单 hwcheck-specialize/01：标 resolved（结论与留给后续批次的口径）
 - 14:38 工单 hwcheck-specialize/02：未专精样本夹具解耦（样本现挑，不再绑死某一件）
 - 14:49 工单 hwcheck-specialize/03：专精化批次 A —— 三件温湿度（aht10 / sht20 / sht30）六格配方
+- 14:53 收尾：专精面扩张 01–03 记账进交接区，并落盘复测轮遗留的登记与读数
 
 ## 2026-09-24
 - 00:39 工单 hwcheck-unknown-device/12：自建件 id 文法收紧到 C 标识符（连字符建不出坏工程）
