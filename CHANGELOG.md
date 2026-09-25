@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=a75b327966989daa37501b4a4faffdc955eef38d -->
+<!-- changelog-auto: last-commit=2ed04caa4f01fb649435a385ca6cca267957e872 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -17,6 +17,7 @@
 - 14:49 工单 hwcheck-specialize/03：专精化批次 A —— 三件温湿度（aht10 / sht20 / sht30）六格配方
 - 14:53 收尾：专精面扩张 01–03 记账进交接区，并落盘复测轮遗留的登记与读数
 - 15:49 工单 hwcheck-specialize/04：专精化批次 B —— 光照与气压三件（bh1750 / bmp180 / ms5611）六格配方
+- 16:21 工单 hwcheck-specialize/05：专精化批次 C —— 姿态与光色三件（hmc5883l / qmc5883l / tcs34725）六格配方
 
 ## 2026-09-24
 - 00:39 工单 hwcheck-unknown-device/12：自建件 id 文法收紧到 C 标识符（连字符建不出坏工程）
