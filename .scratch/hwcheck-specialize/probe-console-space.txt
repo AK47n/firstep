@@ -1,0 +1,10 @@
+=== 专精面扩张前置测量：配方命令字符空间 ===
+
+1) 现状：17 格声明了命令字符 → adc=a、adc=a、beep=p、beep=p、debug_uart=u、debug_uart=u、jy61p=j、key=k、key=k、led=l、led=l、ml_mpu6050=m、ml_mpu6050=m、oled=d、oled=d、sr04=s、xunji=x
+   撞车：['a:adc', 'a:adc', 'p:beep', 'p:beep', 'u:debug_uart', 'u:debug_uart', 'k:key', 'k:key', 'l:led', 'l:led', 'm:ml_mpu6050', 'm:ml_mpu6050', 'd:oled', 'd:oled']
+
+2) 反证：取 ml_mpu6050（命令 m）+ jy61p（命令 j）两节，把后者改成 m
+   ✓ 构建期红：控制台命令字符 'm' 被 'ml_mpu6050' 与 'jy61p' 同时声明——命令循环按字符分派，重复会让其中一件永远测不到（运行期静默覆盖，正是本单要防的）：请给其中一件换一个字符
+
+3) 容量：可用字符池 31 个（acdefhijklmnpqstuvwxz0123456789）；保留字 ?bgory
+   现状已占用 10 个；若扩到 30 件专精件、每件 1 个字符 → 剩 1 个（够，但撞车概率极高）

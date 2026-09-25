@@ -1,0 +1,64 @@
+=== 首批 20 件逐格清点：通用降级能给什么（基线该降多少） ===
+
+现状：配方文件里 10 件 / 17 格已专精
+
+【03 温湿度】
+   aht10      stm32  init=aht10_init               scan=yes 
+   aht10      mspm0  init=aht10_init               scan=no  
+   sht20      stm32  init=sht20_init               scan=yes 
+   sht20      mspm0  init=sht20_init               scan=no  
+   sht30      stm32  init=sht30_init               scan=yes 
+   sht30      mspm0  init=sht30_init               scan=no  
+   → 本批 6 格；转专精后基线各降 6 / 6（拿不到 init 的 0 格只降 planned）
+
+【04 光照气压】
+   bh1750     stm32  init=bh1750_init              scan=yes 
+   bh1750     mspm0  init=bh1750_init              scan=no  
+   bmp180     stm32  init=bmp180_init              scan=yes 
+   bmp180     mspm0  init=bmp180_init              scan=no  
+   ms5611     stm32  init=ms5611_init              scan=yes 
+   ms5611     mspm0  init=ms5611_init              scan=no  
+   → 本批 6 格；转专精后基线各降 6 / 6（拿不到 init 的 0 格只降 planned）
+
+【05 姿态光色】
+   hmc5883l   stm32  init=hmc5883l_init            scan=yes 
+   hmc5883l   mspm0  init=hmc5883l_init            scan=no  
+   qmc5883l   stm32  init=qmc5883l_init            scan=yes 
+   qmc5883l   mspm0  init=qmc5883l_init            scan=no  
+   tcs34725   stm32  init=tcs34725_init            scan=yes 
+   tcs34725   mspm0  init=tcs34725_init            scan=no  
+   → 本批 6 格；转专精后基线各降 6 / 6（拿不到 init 的 0 格只降 planned）
+
+【06 红外气体存储】
+   mlx90614   stm32  init=mlx90614_init            scan=yes 
+   mlx90614   mspm0  init=mlx90614_init            scan=no  
+   sgp30      stm32  init=sgp30_init               scan=yes 
+   sgp30      mspm0  init=sgp30_init               scan=no  
+   at24c02    stm32  init=at24c02_init             scan=yes 
+   at24c02    mspm0  init=at24c02_init             scan=no  
+   → 本批 6 格；转专精后基线各降 6 / 6（拿不到 init 的 0 格只降 planned）
+
+【07 数字外设单总线】
+   ads1115    stm32  init=ads1115_init             scan=yes 
+   ads1115    mspm0  init=ads1115_init             scan=no  
+   pca9685    stm32  init=（拿不到）                    scan=yes 
+   pca9685    mspm0  init=（拿不到）                    scan=no  
+   dht11      stm32  init=dht11_init               scan=no  
+   dht11      mspm0  init=dht11_init               scan=no  
+   ds18b20    stm32  init=ds18b20_init             scan=no  
+   ds18b20    mspm0  init=ds18b20_init             scan=no  
+   → 本批 8 格；转专精后基线各降 8 / 6（拿不到 init 的 2 格只降 planned）
+
+【08 称重人机执行】
+   hx711      stm32  init=hx711_init               scan=no  
+   hx711      mspm0  init=hx711_init               scan=no  
+   joystick   stm32  init=joystick_init            scan=no  
+   joystick   mspm0  init=joystick_init            scan=no  
+   servo      stm32  init=（拿不到）                    scan=no  
+   servo      mspm0  init=（拿不到）                    scan=no  
+   relay      stm32  init=relay_init               scan=no  
+   relay      mspm0  init=relay_init               scan=no  
+   → 本批 8 格；转专精后基线各降 8 / 6（拿不到 init 的 2 格只降 planned）
+
+合计：40 格；其中能拿无参初始化的 36 格、拿不到的 4 格（pca9685 / servo 两平台各 2 格）
+落到测试那条基线上：本 spec 全部落完后 planned ≈ 159-40、with_init ≈ 134-36（落地时以当场实测为准——这个文件是「每批该降多少」的算式，不是替代实测的常数）。

@@ -1,0 +1,72 @@
+=== 工单 05–08 形状底稿：mspm0 侧的 delay_ms 只能进 prereq ===
+
+mspm0 母版 .h 个数：0（0 = 母版没有头，配方段只认本模块头）
+servo × mspm0 可用名字数：10、relay：4、hx711：6
+servo × mspm0 名单里有 delay_ms 吗：False
+
+A) servo × mspm0：delay_ms 放进 probe（recon-03 §2 的推荐形状）→ 预期红
+   ✗ 构建期红：hwcheck_recipes.json 的 'servo' × mspm0 的通信探头段引用了不存在的接口 'delay_ms'（表达式：delay_ms(600)）——该模块 mspm0 侧的头文件里没有这个名字，请改用真实接口（配方写错就该当场红，不学骨架兜底把它改成注释）
+
+B) servo × mspm0：整条序列放进 prereq、不写 init（bh1750 先例）→ 预期 PASS
+   ✓ PASS —— 渲染出的 C：
+      hwcheck_section("[\344\270\223\347\262\276] servo");
+      servo_init(0, 0);
+      delay_ms(600);
+      servo_set_angle(0, 90);
+      delay_ms(600);
+      servo_set_angle(0, 0);
+      hwcheck_verdict_probe_none("servo\357\274\232\350\277\231\344\270\200\344\273\266\346\262\241\346\234\211\350\257\273\34
+      hwcheck_detail("\346\234\254\344\273\266\346\262\241\346\234\211\345\217\257\350\257\273\347\232\204\350\272\253\344\273
+      hwcheck_report("  SERVO_ANGLE_MAX = ");
+      hwcheck_report_int(SERVO_ANGLE_MAX);
+      hwcheck_newline();
+      hwcheck_report("  SERVO_FREQ_HZ = ");
+      hwcheck_report_int(SERVO_FREQ_HZ);
+      hwcheck_newline();
+      hwcheck_report("  SERVO_PULSE_US(90) = ");
+      hwcheck_report_int(SERVO_PULSE_US(90));
+      hwcheck_newline();
+
+C) relay × mspm0：relay 同款 prereq 形状 → 预期 PASS
+   ✓ PASS —— 渲染出的 C：
+      hwcheck_section("[\344\270\223\347\262\276] relay");
+      relay_init();
+      relay_set(1);
+      delay_ms(500);
+      relay_set(0);
+      hwcheck_verdict_probe_none("relay\357\274\232\350\277\231\344\270\200\344\273\266\346\262\241\346\234\211\350\257\273\34
+      hwcheck_detail("\346\234\254\344\273\266\346\262\241\346\234\211\345\217\257\350\257\273\347\232\204\350\272\253\344\273
+      hwcheck_report("  RELAY_ON_LEVEL = ");
+      hwcheck_report_int(RELAY_ON_LEVEL);
+      hwcheck_newline();
+
+D) hx711 × mspm0：hx711：prereq 里 init + 等 500ms，探头单读（可选替代，gram 可用）→ 预期 PASS
+   ✓ PASS —— 渲染出的 C：
+      hwcheck_section("[\344\270\223\347\262\276] hx711");
+      int r;
+      uint32_t raw = 0;
+      hx711_init();
+      delay_ms(500);
+      r = (raw = hx711_read_raw(), (raw != 0) ? 1 : 0);
+      hwcheck_report("  \351\200\232\344\277\241\346\216\242\345\244\264\357\274\232");
+      hwcheck_report((r == 1) ? "OK" : "FAIL");
+      if (r != 1)
+      {
+      hwcheck_detail("\351\200\232\344\277\241\345\244\261\350\264\245\357\274\232\345\205\210\346\237\245\344\276\233\347\224
+      hwcheck_verdict(0, "hx711\357\274\232\351\200\232\344\277\241\345\244\261\350\264\245\357\274\210\345\205\210\346\237\24
+      return;   /* 不通就不再打一堆无意义读数 */
+      }
+      hwcheck_verdict(1, "hx711\357\274\232\351\200\232\344\277\241\346\255\243\345\270\270");
+      hwcheck_report("  raw = ");
+      hwcheck_report_int(raw);
+      hwcheck_report(" 24bit \345\201\217\347\247\273\345\200\274");
+      hwcheck_newline();
+      hwcheck_report("  (int)raw - 8388608 = ");
+      hwcheck_report_int((int)raw - 8388608);
+      hwcheck_report(" \346\234\211\347\254\246\345\217\267\350\256\241\346\225\260");
+      hwcheck_newline();
+
+E) servo × mspm0：delay_ms 放进 init（第三种写法）→ 预期同样红
+   ✗ 构建期红：hwcheck_recipes.json 的 'servo' × mspm0 的初始化段引用了不存在的接口 'delay_ms'（表达式：delay_ms(600)）——该模块 mspm0 侧的头文件里没有这个名字，请改用真实接口（配方写错就该当场红，不学骨架兜底把它改成注释）
+
+结论（工单 05–08 照它写）：mspm0 侧 init/probe/read 里出现 delay_ms 一律红；要「动作 + 等待」就只能整条进 prereq（不写 init 段）。

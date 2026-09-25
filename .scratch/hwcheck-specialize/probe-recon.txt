@@ -1,0 +1,111 @@
+=== 专精面扩张（首批 20 件）侦察：先量后定 ===
+
+判据三列：平台 / 可调用函数（init 与 read 各列一条）／身份常量（有则板上可判 OK/FAIL）
+
+## aht10  [mspm0, stm32]  （I2C 类）
+   init : aht10_init, aht10_init
+   read : aht10_read() -> uint8_t, aht10_read_temperature() -> float, aht10_read_humidity() -> float, aht10_read() -> uint8_t, aht10_read_temperature() -> float, aht10_read_humidity() -> float
+   ⚠ 浮点读数：aht10_read_temperature -> float, aht10_read_humidity -> float, aht10_read_temperature -> float, aht10_read_humidity -> float（配方 read 只收整数，要拆两行）
+   身份 : （头文件里没有身份 / 地址常量）
+
+## sht20  [mspm0, stm32]  （I2C 类）
+   init : sht20_init, sht20_init
+   read : sht20_read() -> uint8_t, sht20_read() -> uint8_t
+   身份 : SHT20_ADDR=0x40u, SHT20_ADDR=0x40u
+
+## sht30  [mspm0, stm32]  （I2C 类）
+   init : sht30_init, sht30_init
+   read : sht30_read() -> uint8_t, sht30_read_temperature() -> uint8_t, sht30_read_humidity() -> uint8_t, sht30_read() -> uint8_t, sht30_read_temperature() -> uint8_t, sht30_read_humidity() -> uint8_t
+   身份 : SHT30_ADDR=0x44u, SHT30_ADDR=0x44u
+
+## bh1750  [mspm0, stm32]  （I2C 类）
+   init : bh1750_init, bh1750_init
+   read : bh1750_start_measure() -> uint8_t, bh1750_read_lux() -> uint8_t, bh1750_start_measure() -> uint8_t, bh1750_read_lux() -> uint8_t
+   身份 : （头文件里没有身份 / 地址常量）
+
+## bmp180  [mspm0, stm32]  （I2C 类）
+   init : bmp180_init, bmp180_init
+   read : bmp180_read() -> uint8_t, bmp180_read_altitude() -> float, bmp180_read() -> uint8_t, bmp180_read_altitude() -> float
+   ⚠ 浮点读数：bmp180_read_altitude -> float, bmp180_read_altitude -> float（配方 read 只收整数，要拆两行）
+   身份 : BMP180_ADDR_W=0xEEu, BMP180_ADDR_R=0xEFu, BMP180_ADDR_W=0xEEu, BMP180_ADDR_R=0xEFu
+
+## ms5611  [mspm0, stm32]  （I2C 类）
+   init : ms5611_init, ms5611_init
+   read : ms5611_read() -> uint8_t, ms5611_read_altitude() -> float, ms5611_read() -> uint8_t, ms5611_read_altitude() -> float
+   ⚠ 浮点读数：ms5611_read_altitude -> float, ms5611_read_altitude -> float（配方 read 只收整数，要拆两行）
+   身份 : MS5611_ADDR_W=0xEEu, MS5611_ADDR_R=0xEFu, MS5611_ADDR_W=0xEEu, MS5611_ADDR_R=0xEFu
+
+## hmc5883l  [mspm0, stm32]  （I2C 类）
+   init : hmc5883l_init, hmc5883l_init
+   read : hmc5883l_read() -> uint8_t, hmc5883l_read_heading() -> uint8_t, hmc5883l_read() -> uint8_t, hmc5883l_read_heading() -> uint8_t
+   身份 : HMC5883L_ADDR_WRITE=0x3C, HMC5883L_ADDR_READ=0x3D, HMC5883L_REG_ID_A=0x0A, HMC5883L_REG_ID_B=0x0B, HMC5883L_REG_ID_C=0x0C, HMC5883L_ID_A_VALUE=0x48, HMC5883L_ID_B_VALUE=0x34, HMC5883L_ID_C_VALUE=0x33, HMC5883L_ADDR_WRITE=0x3C, HMC5883L_ADDR_READ=0x3D, HMC5883L_REG_ID_A=0x0A, HMC5883L_REG_ID_B=0x0B, HMC5883L_REG_ID_C=0x0C, HMC5883L_ID_A_VALUE=0x48, HMC5883L_ID_B_VALUE=0x34, HMC5883L_ID_C_VALUE=0x33
+
+## qmc5883l  [mspm0, stm32]  （I2C 类）
+   init : qmc5883l_init, qmc5883l_init
+   read : qmc5883l_read() -> uint8_t, qmc5883l_read_heading() -> uint8_t, qmc5883l_read() -> uint8_t, qmc5883l_read_heading() -> uint8_t
+   身份 : QMC5883L_CHIP_ID=0xFFu, QMC5883L_ADDR_WRITE=0x0Du, QMC5883L_ADDR_READ=0x0Eu, QMC5883L_REG_CHIP_ID=0x0Du, QMC5883L_CHIP_ID=0xFFu, QMC5883L_ADDR_WRITE=0x0Du, QMC5883L_ADDR_READ=0x0Eu, QMC5883L_REG_CHIP_ID=0x0Du
+
+## mlx90614  [mspm0, stm32]  （I2C 类）
+   init : mlx90614_init, mlx90614_init
+   read : mlx90614_read_object_temp() -> uint8_t, mlx90614_read_ambient_temp() -> uint8_t, mlx90614_read_object_temp() -> uint8_t, mlx90614_read_ambient_temp() -> uint8_t
+   身份 : MLX90614_ADDR=0x5A, MLX90614_ADDR=0x5A
+
+## sgp30  [mspm0, stm32]  （I2C 类）
+   init : sgp30_init, sgp30_init
+   read : sgp30_read() -> uint8_t, sgp30_read() -> uint8_t
+   身份 : SGP30_ADDR=0x58u, SGP30_ADDR=0x58u
+
+## tcs34725  [mspm0, stm32]  （I2C 类）
+   init : tcs34725_init, tcs34725_init
+   read : tcs34725_read_rgb() -> uint8_t, tcs34725_read_reg() -> void, tcs34725_read_rgb() -> uint8_t, tcs34725_read_reg() -> void
+   身份 : TCS34725_ADDR=(0x29u), TCS34725_ID=(0x12u), TCS34725_ADDR=(0x29u), TCS34725_ID=(0x12u)
+
+## at24c02  [mspm0, stm32]  （I2C 类）
+   init : at24c02_init, at24c02_init
+   read : at24c02_read_byte() -> uint8_t, at24c02_read_block() -> uint8_t, at24c02_read_byte() -> uint8_t, at24c02_read_block() -> uint8_t
+   身份 : AT24C02_ADDR=(0x50u), AT24C02_ADDR_WRITE=(AT24C02_ADDR, AT24C02_ADDR_READ=((AT24C02_ADDR, AT24C02_ADDR=(0x50u), AT24C02_ADDR_WRITE=(AT24C02_ADDR, AT24C02_ADDR_READ=((AT24C02_ADDR
+
+## ads1115  [mspm0, stm32]  （I2C 类）
+   init : ads1115_init, ads1115_init
+   read : ads1115_read() -> int16_t, ads1115_read_voltage() -> float, ads1115_set_data_rate() -> uint8_t, ads1115_read() -> int16_t, ads1115_read_voltage() -> float, ads1115_set_data_rate() -> uint8_t
+   ⚠ 浮点读数：ads1115_read_voltage -> float, ads1115_read_voltage -> float（配方 read 只收整数，要拆两行）
+   身份 : ADS1115_ADDR_DEFAULT=0x90, ADS1115_ADDR_DEFAULT=0x90
+
+## pca9685  [mspm0, stm32]  （I2C 类）
+   init : pca9685_init, pca9685_init
+   read : （头文件里没有 read/get 类声明）
+   身份 : （头文件里没有身份 / 地址常量）
+
+## dht11  [mspm0, stm32]  （I2C 类）
+   init : dht11_init, dht11_init
+   read : dht11_read() -> uint8_t, dht11_read_temperature() -> float, dht11_read_humidity() -> float, dht11_read() -> uint8_t, dht11_read_temperature() -> float, dht11_read_humidity() -> float
+   ⚠ 浮点读数：dht11_read_temperature -> float, dht11_read_humidity -> float, dht11_read_temperature -> float, dht11_read_humidity -> float（配方 read 只收整数，要拆两行）
+   身份 : （头文件里没有身份 / 地址常量）
+
+## ds18b20  [mspm0, stm32]  （I2C 类）
+   init : ds18b20_init, ds18b20_init
+   read : ds18b20_read_temp() -> float, ds18b20_read_temp() -> float
+   ⚠ 浮点读数：ds18b20_read_temp -> float, ds18b20_read_temp -> float（配方 read 只收整数，要拆两行）
+   身份 : （头文件里没有身份 / 地址常量）
+
+## hx711  [mspm0, stm32]  （I2C 类）
+   init : hx711_init, hx711_init
+   read : hx711_read_raw() -> uint32_t, hx711_get_gram() -> float, hx711_read_raw() -> uint32_t, hx711_get_gram() -> float
+   ⚠ 浮点读数：hx711_get_gram -> float, hx711_get_gram -> float（配方 read 只收整数，要拆两行）
+   身份 : （头文件里没有身份 / 地址常量）
+
+## joystick  [mspm0, stm32]
+   init : joystick_init, joystick_init
+   read : joystick_read_x() -> uint16_t, joystick_read_y() -> uint16_t, joystick_read_x_percent() -> uint16_t, joystick_read_y_percent() -> uint16_t, joystick_read_sw() -> uint8_t, joystick_read_x() -> uint16_t, joystick_read_y() -> uint16_t, joystick_read_x_percent() -> uint16_t, joystick_read_y_percent() -> uint16_t, joystick_read_sw() -> uint8_t
+   身份 : （头文件里没有身份 / 地址常量）
+
+## servo  [stm32, mspm0]
+   init : servo_init
+   read : （头文件里没有 read/get 类声明）
+   身份 : （头文件里没有身份 / 地址常量）
+
+## relay  [mspm0, stm32]
+   init : relay_init, relay_init
+   read : （头文件里没有 read/get 类声明）
+   身份 : （头文件里没有身份 / 地址常量）
+
