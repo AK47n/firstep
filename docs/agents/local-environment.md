@@ -5,9 +5,44 @@
 >
 > 更新纪律：改动了这里描述的东西（删沙箱、发新版、换端口），**当场回来改这份文件**。
 
-## 0. 交接区：main 上有什么还没到用户手上（2026-09-24 更新 · 线上最新仍是 v1.2.2）
+## 0. 交接区：main 上有什么还没到用户手上（2026-09-25 更新 · **v1.3.0 已打包打 tag，差最后一步推送**）
 
-**当前状态：线上最新 = v1.2.2；但 main 上已比它多出五批未发布改动**（见下表最后一行）。
+> ### ⚠ 当前状态（2026-09-25，下一轮接手先读这一段）
+>
+> **v1.3.0 的发版动作做到「就差推送」**：
+>
+> | 项 | 状态 |
+> |---|---|
+> | 版本号三处 + `VERSIONS.md` + README 版本行 | ✅ 已同步到 **1.3.0** 并提交（`b55dac14`） |
+> | `tools\preflight.ps1` | ✅ 全绿（三处版本号 1.3.0 / 母版编码钉 / 下载文档 offline / README 版本行） |
+> | 发版闸门 | ✅ 全套 pytest **5523 passed + 11 skipped**、前端门禁 **1796 passed**、浏览器门禁 **42 passed** |
+> | 两件套（本机 `Desktop\firstep-pack\`） | ✅ 已打好并核对：update `301,635,963` B / full `791,495,348` B；两个 zip 的 sha256 **实算 = 记录**；`00-START-HERE.txt` 在完整包里；两个 `removed.txt` 非空 |
+> | Release 说明 | ✅ `firstep-pack\release-notes-v1.3.0.md` |
+> | 本地 tag | ✅ `v1.3.0`（annotated，指向 `e47d9a8c`） |
+> | **推送 / 建 Release / 上传** | ❌ **没做——网络挡住**：`github.com:443` 连不上（`curl` 20s 超时；同一时刻 `api.github.com` 200、`codeload.github.com` 与 `ssh.github.com:443` 都通），`git push` 报 `RPC failed; curl 56 Recv failure: Connection was reset`，**12 次重试（约 12 分钟）全失败**。`github.com:22` 探测通但本机 `ssh.exe` 根本起不来（`ssh -V` 都返回 255、零输出），所以 SSH 路线也不可用 |
+>
+> **收尾只有一条命令**（网络恢复后跑；它会跑 pre-push 闸门 → 建 Release → 传八件资产 → 联网自检）：
+>
+> ```powershell
+> powershell -File .scratch\release-v1.3.0\finish-publish.ps1
+> ```
+>
+> **两条纪律**：① **推送成功之前不要建 Release**——`gh release create` 会在服务端按**远端默认分支的
+> HEAD** 建 tag，远端还没收到 main 的新提交时会把 tag 打到 v1.2.2 那个提交上；② 推完记得回来把
+> 本节改写成「已发布 v1.3.0 / 落差归零」，并把 `.scratch\release-v1.3.0\issues\03` 落 resolved。
+>
+> **上板验收仍没做**：`hwcheck-acceptance/05` 保持 `ready-for-agent`（本机没有板子）。页面上凡涉及
+> 实测现象的地方都标着「未上板」——**不拿编译绿当板上证据**。
+
+### 历史：v1.2.2 那一轮的落差表（2026-09-24 口径，**本版 v1.3.0 已把七批一起带走**）
+
+**当时状态：线上最新 = v1.2.2；main 上已比它多出七批未发布改动**（下表最后一行）。
+> 七批的内容 = ① 硬件检测栏目本身 + 检测页引脚出口 ② 完整包会话态进 `AppContext`（纯内部）
+> ③ 陌生器件（库外件）探测 ④ bfcache 后退回来补登记 ⑤ 生成工程 README 的 mspm0 打开姿势
+> ⑥ 母版 mspm0 引脚符号全局去重 ⑦ mspm0 生成链认下 SysConfig 构建期接口面；
+> 本版另加 ⑧ 专精面扩张（30 件 / 57 格）与 ⑨ 三处库内驱动缺陷修复（`driver-defect-fixes/01-03`）。
+> 下面这张表保留原样，只作历史对照——**别再当成待办清单读**。
+
 | 项 | 值 |
 |---|---|
 | 线上最新 | **v1.2.2**（2026-09-19 发布）八件套齐全，`/releases/latest` 指向本版 |
