@@ -39,6 +39,7 @@ from contest_generator.hwcheck_generic import (
     GENERIC_LABEL,
     GenericSection,
     plan_generic_section,
+    read_module_headers,
 )
 from contest_generator.hwcheck_recipe import (
     SECTION_TAG,
@@ -1772,16 +1773,138 @@ def test_sections_require_an_output_channel_to_be_rendered():
 # ---------------------------------------------------------------------------
 
 
-def _generic_stm32(slug: str = "sht20") -> list[GenericSection]:
-    """真实库的一格通用件（sht20 × stm32，含总线扫描）——判据用真数据。"""
+def _module_headers(slug: str, platform: str) -> tuple[tuple[str, str], ...]:
+    """某模块**在该平台上自己那份**头文件 —— **直接调生产侧那一处**
+    （`read_module_headers`，读盘口径与通用降级完全同一份：`errors="replace"` +
+    文件不在就跳过）。测试侧重写一遍读盘就是第二个真相来源。"""
     library = Path(__file__).resolve().parents[1] / "library" / "modules"
     manifest = next(m for m in list_modules(library) if m.slug == slug)
-    entry = manifest.platforms[PLATFORM_STM32]
-    headers = [
-        (rel, (library / slug / rel).read_text(encoding="utf-8"))
-        for rel in entry.files if rel.lower().endswith(".h")
-    ]
-    return [plan_generic_section(PLATFORM_STM32, manifest, headers)]
+    return read_module_headers(library, manifest, platform)
+
+
+def _generic_stm32(slug: str = "sht20") -> list[GenericSection]:
+    """真实库的一格通用件（含总线扫描）——判据用真数据。"""
+    library = Path(__file__).resolve().parents[1] / "library" / "modules"
+    manifest = next(m for m in list_modules(library) if m.slug == slug)
+    return [plan_generic_section(
+        PLATFORM_STM32, manifest, _module_headers(slug, PLATFORM_STM32))]
+
+
+# ---------------------------------------------------------------------------
+# 未专精样本（工单 hwcheck-specialize/02）：**现挑**，不写死某一件
+#
+# 这套夹具已经因为专精面推进被改过两次（工单 05 起 ml_mpu6050 专精、工单 09 又补了
+# beep）：拿一件专精件当"未专精"样本就是一条假红。所以样本从真实库里**按判据现挑**，
+# 并且挑不到时大声失败（而不是静默换一件、更不是挑一件专精件凑数）。
+# ---------------------------------------------------------------------------
+
+
+def _unspecialized_candidates(
+    platform: str = PLATFORM_STM32,
+    *,
+    extra_specialized: frozenset[str] = frozenset(),
+) -> list[GenericSection]:
+    """当前**真的还没有配方**、且当样本用得上的格（按 slug 排序，挑件结果可见）。
+
+    判据三条，缺一不可：
+
+    1. 库内**有**该平台条目（没有的那一件走 `missing` 那条路，不是"未专精"）；
+    2. 该 `slug × 平台` **没有配方**（判据 = 生产侧同一个 `catalog.for_platform`，
+       与板侧那句 `specialized = {section.slug …}` 同一口径，不另写一套）；
+    3. 是 **I2C 类件**且通用降级能给它一个**无参初始化**——既有断言要吃
+       `hwcheck_i2c_scan(` / `hwcheck_generic_<slug>` / `<slug>_init()` 这几样。
+
+    `extra_specialized` = **额外当作"已专精"的 slug**（与真实配方集合**取并集**，不是
+    取代它）——反证用：模拟"某一件刚被专精化"或"样本被专精光"，**不写盘**。里面有
+    库内不存在的 slug 会当场红：静默无效会让反证给出假的"没有样本件了"。
+    """
+    library = Path(__file__).resolve().parents[1] / "library" / "modules"
+    manifests = list_modules(library)
+    unknown = sorted(set(extra_specialized) - {m.slug for m in manifests})
+    assert not unknown, f"extra_specialized 里有库内不存在的 slug：{unknown}"
+
+    from contest_generator.hwcheck_recipe import load_recipes
+
+    recipes = load_recipes(library, manifests)
+    specialized = {
+        slug for slug, catalog in recipes.items()
+        if catalog.for_platform(platform) is not None
+    } | set(extra_specialized)
+    picked: list[GenericSection] = []
+    for manifest in sorted(manifests, key=lambda m: m.slug):
+        if platform not in manifest.platforms or manifest.slug in specialized:
+            continue
+        section = plan_generic_section(
+            platform, manifest, _module_headers(manifest.slug, platform))
+        if section.scan is None or not section.init.name:
+            continue
+        picked.append(section)
+    return picked
+
+
+def _unspecialized_sample(
+    platform: str = PLATFORM_STM32,
+    *,
+    extra_specialized: frozenset[str] = frozenset(),
+) -> GenericSection:
+    """现挑一个未专精样本（它的通用小节）；**挑不到 = 大声失败**。
+
+    静默返回空串 / 换一件专精件凑数的后果同一条：用例看起来在测"未专精那一路"，
+    其实测的是别的东西（甚至直接测不了）。所以这里给的是"请留一件别专精"。
+    """
+    candidates = _unspecialized_candidates(
+        platform, extra_specialized=extra_specialized)
+    assert candidates, (
+        "真实库里已经没有「未专精 + 有该平台条目 + 能出总线扫描 + 有可调用的无参初始化」"
+        "的样本件了——这几条用例要一个**当趟真的没有配方**的件当样本："
+        "请留一件不专精它（挑件规则在 `_unspecialized_candidates`），"
+        "别把样本件写死回某一个 slug（那就是这套夹具被改过两次的老路）"
+    )
+    return candidates[0]
+
+
+def test_unspecialized_sample_really_has_no_recipe_on_that_platform():
+    """现挑的样本必须**当趟真的没有配方**，且当样本用得上的三样都在。
+
+    这条与下面那条反证一起，把"夹具不再绑死某一件"钉成判据：写死 slug 的实现过不了
+    反证第一条，而"挑不到就静默凑数"的实现过不了反证第二条。
+    """
+    from contest_generator.hwcheck_recipe import load_recipes
+
+    library = Path(__file__).resolve().parents[1] / "library" / "modules"
+    recipes = load_recipes(library, list_modules(library))
+    section = _unspecialized_sample()
+    catalog = recipes.get(section.slug)
+    hit = catalog.for_platform(PLATFORM_STM32) if catalog is not None else None
+    assert hit is None, f"样本 {section.slug} 在这一趟已经有配方了（挑件规则漏了它）"
+    assert section.scan is not None, "样本要能出总线扫描（既有断言吃那几行）"
+    assert section.init.name, "样本要有一个无参初始化可调（既有断言吃那行调用）"
+    assert section.plan_text, "样本的'这一趟对它做什么'必须非空（页面上要印）"
+
+
+def test_unspecialized_picker_survives_losing_its_current_sample():
+    """**反证**（工单 02 的验收线）：样本"被专精化"之后自动换人；全被专精光则大声失败。
+
+    第一条模拟"下一批把这一件也专精了"——写死 slug 的实现会继续拿它当样本（假红），
+    现挑的实现自动换到下一件；第二条模拟"库里的样本件被专精光了"——这时候必须
+    大声失败（点名"请留一件"），而不是静默返回一件专精件或空值。
+    """
+    sample = _unspecialized_sample()
+    still = _unspecialized_candidates()
+    assert len(still) > 1, "库里应当不止一件可用样本（否则下面的'换人'无从验起）"
+    # ① 把当前样本标成"已专精" → 必须自动换人（写死 slug 的实现过不了这一条）
+    next_up = _unspecialized_candidates(extra_specialized=frozenset({sample.slug}))
+    assert next_up, "库里应当还有别的样本件"
+    assert next_up[0].slug != sample.slug, "样本被专精化之后没有换人（夹具还绑在旧样本上）"
+    # ② 候选被专精光 → 挑件为空 + 大声失败（静默凑数的实现过不了这一条）
+    others = frozenset(section.slug for section in still)
+    assert sample.slug in others
+    after = _unspecialized_candidates(extra_specialized=others)
+    assert after == [], "把候选全标成已专精之后不该还有样本"
+    with pytest.raises(AssertionError) as excinfo:
+        _unspecialized_sample(extra_specialized=others)
+    message = str(excinfo.value)
+    assert "没有" in message and "留一件" in message, message
 
 
 def test_generic_sections_render_with_their_own_header_and_no_specialized_tag():
@@ -2146,10 +2269,11 @@ def test_preview_reports_devices_without_a_recipe_as_unspecialized(
 ):
     """没配方的器件如实标"未专精"，并说清这一趟对它做什么。
 
-    ⚠ 夹具用的未专精件要挑**这一版真的还没有配方**的：工单 05 起
-    `ml_mpu6050` 已经专精了（它正是那一单要闭环的器件），工单 09 又把 v1 清单
-    补到 17 格（`beep` 也专精了）——拿专精件当"未专精"的样本会变成一条假红。
-    本用例改用 `sht20`（stm32 有条目、至今没有配方，工单 07 的通用降级样本）。
+    ⚠ 样本件**现挑**（工单 hwcheck-specialize/02）：判据是"这一趟真的还没有配方"，
+    写死 slug 的那件一旦被专精化，这条用例就变成假红——这套夹具已经因为专精面推进
+    被改过两次（工单 05 起 `ml_mpu6050` 专精、工单 09 又补了 `beep`）。挑件规则与
+    "挑不到就大声失败"都在 `_unspecialized_candidates` / `_unspecialized_sample`
+    （就在本区段上方）——那两处的 docstring 是它的家。
 
     ⚠ 工单 07 改了这条的口径：04 那一版这里钉的是"**不渲染**它的小节"
     （通用降级还没做，`unspecialized_message` 明说"本版检测程序不会给它出检测
@@ -2157,46 +2281,57 @@ def test_preview_reports_devices_without_a_recipe_as_unspecialized(
     新的实话：官方标注 + 这一趟的真动作，且措辞与产物注释同一句（单源）。
     """
     client, _ = real_library_client
+    section = _unspecialized_sample()
+    sample = section.slug
     body = client.post(
         "/api/hwcheck/preview",
         json={"platform": PLATFORM_STM32, "debug_uart": False, "oled": False,
-              "devices": ["led", "sht20"]},
+              "devices": ["led", sample]},
     ).json()
     assert [item["slug"] for item in body["sections"]] == ["led"]
-    assert [item["slug"] for item in body["unspecialized"]] == ["sht20"]
+    assert [item["slug"] for item in body["unspecialized"]] == [sample]
     entry = body["unspecialized"][0]
     assert entry["label"] == GENERIC_LABEL
     assert GENERIC_LABEL in entry["message"]
-    assert "sht20_init()" in entry["plan"]                # 真动作，不是走过场话术
+    assert section.init.name in entry["plan"]              # 真动作，不是走过场话术
     # 没有输出通道 → 通用小节不渲染（渲染了也没人看得见，与专精件同一条判据）
-    assert "hwcheck_generic_sht20" not in body["main_c"]
+    assert f"hwcheck_generic_{sample}" not in body["main_c"]
     # 有串口那一趟：小节真进产物，检测页那句标注与产物注释**同一句**（单源）
     serial = client.post(
         "/api/hwcheck/preview",
         json={"platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
-              "devices": ["led", "sht20"]},
+              "devices": ["led", sample]},
     ).json()
     code = serial["main_c"]
     assert c_string(GENERIC_LABEL) in code
-    assert "hwcheck_generic_sht20" in code
-    assert "sht20_init();" in code
-    assert SECTION_TAG not in code.split("hwcheck_generic_sht20")[1]
+    assert f"hwcheck_generic_{sample}" in code
+    assert f"{section.init.name}();" in code
+    assert SECTION_TAG not in code.split(f"hwcheck_generic_{sample}")[1]
 
 
 def test_preview_generic_i2c_device_carries_its_bus_scan(real_library_client):
-    """端点这一层：软 I2C 件选进来就有"扫这一件那条总线"的小节与载荷。"""
+    """端点这一层：软 I2C 件选进来就有"扫这一件那条总线"的小节与载荷。
+
+    样本件同为**现挑**（工单 02）；那一条总线的引脚宏名从挑到的样本自己的
+    `GenericSection.scan` 取（判据不写死 `SHT20_SCL_GPIO` 这类字样）。
+    """
     client, _ = real_library_client
+    section = _unspecialized_sample()
+    sample = section.slug
     body = client.post(
         "/api/hwcheck/preview",
         json={"platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
-              "devices": ["sht20"]},
+              "devices": [sample]},
     ).json()
     assert body["sections"] == []
     entry = body["unspecialized"][0]
-    assert entry["slug"] == "sht20"
+    assert entry["slug"] == sample
     assert "总线地址扫描" in entry["plan"]
     assert "hwcheck_i2c_scan(" in body["main_c"]
-    assert "SHT20_SCL_GPIO" in body["main_c"]
+    # 判据**不取自被测的那次调用**：那几根线的宏名按库内命名约定钉一眼
+    # （`<件>_SCL_GPIO` / `<件>_SDA_GPIO`），再用挑到的样本自己的 scan 对一次
+    assert re.search(r"[A-Z0-9_]+_SCL_GPIO", body["main_c"])
+    assert section.scan is not None and section.scan.scl_port in body["main_c"]
     # 命令表里没有它（通用件没有配方 → 没有命令字符，06 的接口备忘）
     assert body["console"]["commands"] == []
 
@@ -2206,44 +2341,46 @@ def test_generate_writes_the_generic_sections_into_main_c(
 ):
     """真生成：盘上的 main.c 里有通用小节，且与载荷逐字一致。
 
-    样本件用 `sht20`（至今没有配方）——工单 09 起 `beep` 已专精，拿它当通用件
-    会变成假红（与上一条同款记账）。
+    样本件同为**现挑**（工单 02）——工单 09 起 `beep` 已专精，拿它当通用件会变成
+    假红（与上一条同款记账）。
     """
     client, _ = real_library_client
+    sample = _unspecialized_sample().slug
     parent = tmp_path / "out"
     parent.mkdir()
     response = client.post(
         "/api/hwcheck/generate",
         json={"platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
-              "devices": ["sht20"], "parent_dir": str(parent)},
+              "devices": [sample], "parent_dir": str(parent)},
     )
     assert response.status_code == 200, response.text
     body = response.json()
     on_disk = (Path(body["output_dir"]) / "main.c").read_text(encoding="utf-8")
     assert on_disk == body["main_c"]
-    assert body["main_c"].count("hwcheck_generic_sht20();") == 1
+    assert body["main_c"].count(f"hwcheck_generic_{sample}();") == 1
     assert GENERIC_LABEL in unescape_c_string(body["main_c"])
     # 未专精件仍进工程（接线表与 README 同源的前提）
-    assert "sht20" in body["modules"]
+    assert sample in body["modules"]
 
 
 def test_project_endpoint_reads_back_the_generic_sections(
     real_library_client, tmp_path
 ):
-    """回读也带通用小节：刷新页面后"这一趟对它做什么"不丢。"""
+    """回读也带通用小节：刷新页面后"这一趟对它做什么"不丢（样本现挑，工单 02）。"""
     client, _ = real_library_client
+    sample = _unspecialized_sample().slug
     parent = tmp_path / "out"
     parent.mkdir()
     generated = client.post(
         "/api/hwcheck/generate",
         json={"platform": PLATFORM_STM32, "debug_uart": True, "oled": False,
-              "devices": ["sht20"], "parent_dir": str(parent)},
+              "devices": [sample], "parent_dir": str(parent)},
     ).json()
     body = client.get(
         "/api/hwcheck/project", params={"output_dir": generated["output_dir"]},
     ).json()
-    assert [item["slug"] for item in body["unspecialized"]] == ["sht20"]
-    assert "hwcheck_generic_sht20" in body["main_c"]
+    assert [item["slug"] for item in body["unspecialized"]] == [sample]
+    assert f"hwcheck_generic_{sample}" in body["main_c"]
 
 
 def _strip_comments_keep_literals(code: str) -> str:

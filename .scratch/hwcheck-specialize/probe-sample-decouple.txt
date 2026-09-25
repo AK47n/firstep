@@ -1,0 +1,17 @@
+=== 工单 02 反证：样本件被专精化之后，夹具自动换人 ===
+
+1) 前置：配方文件 sha256 = 00a22893edc3943e…；候选样本 13 件，挑到的是 'ads1115'（无参初始化 ads1115_init）
+
+   （临时配方用的命令字符 = 'c'：真库此刻没占、也不是保留字）
+2) 临时把 'ads1115' 写进配方（真头名 ['ads1115_stm32.h']）之后：候选 12 件，挑到 'ags10'
+   ✓ 换人了
+
+3) 跑走真实配方路径的那几条用例（preview / generate / project / 挑件规则）：
+   from starlette.testclient import TestClient as TestClient  # noqa
+   -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+   10 passed, 117 deselected, 1 warning in 26.61s
+   → 退出码 0（0 = 换了样本仍然全绿；非 0 = 用例还绑死在旧样本上）
+
+4) 回滚：✓ 已按原字节写回，sha256 与改动前一致（00a22893edc3943e…）
+
+结论：✓ 反证成立——样本被专精化后夹具自动换人且全绿，文件已还原
