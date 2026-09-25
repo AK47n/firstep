@@ -233,12 +233,23 @@ def test_main_returns_nonzero_when_js_gate_fails(prepush, monkeypatch):
 
 
 def test_full_mode_runs_js_gate_and_pytest(prepush, monkeypatch):
-    """--full 两支都跑（发版 / 推 tag 时的口径：前端门禁不许被整套 pytest 顶掉）。"""
+    """--full 三支都跑（发版 / 推 tag 口径：前端门禁与浏览器门禁都不许被整套 pytest 顶掉）。
+
+    ⚠ **浏览器门禁那一支必须一起 stub**：`--full` 会把 `selection.browser` 也置真，
+    不 stub 就是真跑整支真浏览器套件——本机实测 **184 秒**，比 `pyproject.toml` 里
+    pytest 的全局 `timeout = 180`（thread，超时中止整场）还长 ⇒ 这条用例必红。
+    2026-09-25 发版时正是这么撞的（`ui-dom-contract-gate/03` 给 prepush 加了第三支，
+    这条用例只 stub 了前两支）。「浏览器门禁真被执行 / dry-run 不执行」的判据在
+    `tests/test_prepush.py`。
+    """
     calls: list[str] = []
     monkeypatch.setattr(prepush, "run_js_tests", lambda: calls.append("js") or 0)
     monkeypatch.setattr(prepush, "run_pytest", lambda paths, *, full: calls.append("pytest") or 0)
+    monkeypatch.setattr(prepush, "run_browser_tests", lambda: calls.append("browser") or 0)
     assert prepush.main(["--full"]) == 0
-    assert calls == ["js", "pytest"]
+    # 顺序 = 前端门禁 → 浏览器门禁 → pytest（见 tools/prepush.py 的注释：
+    # 浏览器那支最贵，前端红了就不必付这份成本；pytest 无论前两支如何都跑完）
+    assert calls == ["js", "browser", "pytest"]
 
 
 def test_no_js_flag_skips_the_gate(prepush, monkeypatch):

@@ -1,0 +1,29 @@
+发版：三处版本号同步到 v1.3.0 + VERSIONS.md 新区块 + 修一处把发版闸门拖红的既有缺陷
+
+三处版本号（`docs/agents/releasing.md` 的口径）：
+- `src/contest_generator/__init__.py`（唯一可信来源）/ `pyproject.toml` / `README.md`
+  的当前版本行 + `VERSIONS.md` 顶部新增 `## v1.3.0 (2026-09-25)` 区块。
+- `tests/test_changelog.py` 的版本列表夹具按它自己的说明**追加** v1.3.0（不替换既有项），
+  最新版日期同步成 2026-09-25。
+
+这一版带上的东西（归纳自 CHANGELOG）：「硬件检测」栏目本身 + 30 件器件的专精检测 +
+库外自建件登记与探测 + 地猛星 SysConfig 初始化变活代码 + 母版引脚符号全局去重 +
+三处库内驱动缺陷修复（driver-defect-fixes 01–03）+ bfcache 与 CCS 打开姿势两处修复。
+
+顺手修掉一处**既有**缺陷（与本次改动无关，但会把发版闸门拖红）：
+`tests/test_js_gate.py::test_full_mode_runs_js_gate_and_pytest` 的 docstring 与断言停在
+「--full 两支都跑」，而 `tools/prepush.py` 自工单 ui-dom-contract-gate/03 起已经有**第三支**
+`run_browser_tests`；`--full` 会置 `selection.browser=True`，那条用例没 stub 它 ⇒ 真跑整支
+真浏览器套件。本机实测该套件 **42 条 / 183.7 秒**，比 `pyproject.toml` 的全局
+`timeout = 180`（thread，超时中止整场）还长 ⇒ 这条用例必红（`-n auto` 下表现为 worker 崩）。
+改法：把第三支也 stub 掉并断言调用顺序 `js → browser → pytest`；「浏览器门禁真被执行 /
+dry-run 不执行」的判据仍在 `tests/test_prepush.py`，覆盖不减。
+修前：`tests/test_js_gate.py` 单跑超时（180s）；修后 **29 passed / 0.43s**。
+
+读数（本机）：
+- `powershell -File tools\preflight.ps1` → 全绿（三处版本号 1.3.0 一致 / 母版 `.settings/`
+  编码钉在盘且在库 / 下载文档一致性 offline / README 版本行）。
+- `python -m pytest -n auto -q` → **5522 passed + 1 skipped**，唯一红是上面那条闸门用例
+  （本提交修掉）。
+- `node --test "tests/js/*.test.mjs"` → **1796 passed / 0 fail**。
+- `node --test --test-concurrency=1 "tests/browser/*.spec.mjs"` → **42 passed / 0 fail / 183.7s**。
