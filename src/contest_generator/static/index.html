@@ -4052,6 +4052,11 @@
       <p class="card-details">先选平台和输出通道，再点「预览检测程序」看这一趟要烧进板子的 main.c，
         或直接「生成检测工程」——生成后会给你编译、烧录按钮和一张「应看到什么 / 不对先查哪里」的清单。
         没有器件也能生成：那是先确认板子和烧录链路是好的。</p>
+      <!-- 全栏目的总口径（工单 hwcheck-hardening/02）：配方与探测小节尚未在真板上验证过。
+           各格自己的平台说明里也逐格写着「未上板」，但学生不一定读到某一格；
+           这句保证"第一眼就知道这批结论的分量"。文案在 fx/hwcheck.js 的
+           hwcheckUnverifiedNoteHTML，这里只是落点，只在初始化时渲染一次。 -->
+      <div id="hwcheck-unverified-note"></div>
       <h3>1. 目标平台</h3>
       <div id="hwcheck-platforms" class="row"></div>
       <h3>2. 输出通道</h3>

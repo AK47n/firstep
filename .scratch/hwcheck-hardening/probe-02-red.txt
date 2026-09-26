@@ -1,0 +1,18 @@
+ui/hwcheck.js sha256（跑之前）= 55e652d21ee356a79e65fc476c3666c8e43e5bf17d4154f85e7d88825d3c6fe4
+✓ 前置干净性检查：初始化路径上确实调了 renderHwcheckUnverifiedNote()
+撤掉渲染后跑前端用例：exit=1
+—— node --test 输出（尾部 10 行）——
+      at Test.postRun (node:internal/test_runner/test:1330:19)
+      at Test.run (node:internal/test_runner/test:1258:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+判据结论 = ✓ 用例红了（结构钉有强度）
+ui/hwcheck.js sha256（复原后）= 55e652d21ee356a79e65fc476c3666c8e43e5bf17d4154f85e7d88825d3c6fe4
+复原复核 = ✓ 逐字节相同
+复原后跑前端用例：exit=0（应为 0）

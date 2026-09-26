@@ -336,6 +336,21 @@ export function hwcheckChannelNoteHTML(platform, debugUart, oled) {
     + "若这套器件组合真的装不下（板子脚不够），页面会点明是哪几件、建议去掉哪一件。</div>";
 }
 
+// hwcheckUnverifiedNoteHTML()：全栏目的**总口径**（工单 hwcheck-hardening/02）。
+//
+// 为什么必须有这一句：库内所有配方与探测小节**都还没在真板上跑过**（`library/modules/*/manifest.json`
+// 里 170 条「未上板」是同一件事）。各格自己的平台说明里虽然逐格写着「未上板」，但
+//   ① 学生不一定读到某一格的说明；② 页面上没有任何一句话交代"整块能力"的分量。
+// 于是"板上判 FAIL"很容易被读成"我的线接错了/器件坏了"，而检测页的设计前提恰恰是
+// 「检测没过 = 正常结果，先自查接线」——那就更需要先告诉他这个前提。
+//
+// 措辞与配方数据里那句**同源**（同一个事实、两种粒度），别在这里另编一种说法。
+export function hwcheckUnverifiedNoteHTML() {
+  return '<div class="hwcheck-warn">⚠ 本栏目的配方与探测小节尚未在真板上验证过：'
+    + "现有证据只到「能生成 + 能编译」。板上判 FAIL 先按下面的清单查接线；"
+    + "判 OK 也只说明通信走通了，不等于型号对、读数准。</div>";
+}
+
 // hwcheckActionsHTML(outputDir, opts)：动作行 + 状态位 + 结果容器。
 // opts = {compileReady, note}：compileReady=false 时编译按钮置灰（并已由
 // hwcheckToolchainNote 说清原因）——按钮不假装能编译。
@@ -1312,6 +1327,7 @@ if (typeof window !== "undefined") {
     hwcheckChecklistToggle, hwcheckChecklistHTML, hwcheckChecklistProgressHTML,
     hwcheckProjectState, hwcheckChannelText, hwcheckProjectInfoHTML,
     hwcheckToolchainNote, hwcheckChannelNoteHTML, hwcheckActionsHTML,
+    hwcheckUnverifiedNoteHTML,
     hwcheckProjectPanelHTML,
     hwcheckRecentHTML, hwcheckRecentEmptyHTML, hwcheckProjectEmptyHTML,
     HWCHECK_PARENT_KEY, HWCHECK_LAST_DIR_KEY,

@@ -40,6 +40,7 @@ import {
   hwcheckChecklistToggle, hwcheckChecklistHTML, hwcheckChecklistProgressHTML,
   hwcheckProjectState, hwcheckProjectPanelHTML, hwcheckProjectEmptyHTML,
   hwcheckRecentHTML, hwcheckRecentEmptyHTML, hwcheckChannelNoteHTML,
+  hwcheckUnverifiedNoteHTML,
   hwcheckDevicePick, hwcheckDevicePool, hwcheckDeviceChipsHTML,
   hwcheckDeviceEmptyHTML, hwcheckMissingDevicesHTML, hwcheckWiringTableHTML,
   hwcheckDeviceGroupNoticeHTML,
@@ -172,6 +173,15 @@ function renderHwcheckChannelNote() {
   if (!box) return;
   box.innerHTML = hwcheckChannelNoteHTML(
     hwcheckUI.platform, hwcheckUI.debug_uart, hwcheckUI.oled);
+}
+
+// renderHwcheckUnverifiedNote()：栏目顶部的**总口径**（工单 hwcheck-hardening/02）——
+// 「配方与探测小节尚未在真板上验证过」。文案在 fx，本层只放进容器；它不随选择变化，
+// 所以只在初始化时渲染一次。
+function renderHwcheckUnverifiedNote() {
+  const box = $("hwcheck-unverified-note");
+  if (!box) return;
+  box.innerHTML = hwcheckUnverifiedNoteHTML();
 }
 
 function renderHwcheckOutput() {
@@ -1266,6 +1276,7 @@ export function initHwcheck() {
     });
   }
 
+  renderHwcheckUnverifiedNote();
   renderHwcheckPanel();
   // 「我的器件」拉一次（与平台无关，所以不随换平台重取）；刷新回显：上次看的那个
   // 检测工程按服务端真源读回来（清单内容与勾选态都回来）

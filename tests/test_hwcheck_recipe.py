@@ -1088,6 +1088,51 @@ def test_key_recipe_note_says_the_init_line_is_already_live():
     )
 
 
+def test_every_real_recipe_cell_discloses_its_on_board_status():
+    """**57/57 格**都必须在平台说明的**最后一条**如实写「**未上板**」（工单 hwcheck-hardening/02）。
+
+    为什么要这条：`hwcheck-specialize` 那一批把这句话写进了自己新增的格，但 **v1 pilot 那 16 格**
+    （`led / oled / debug_uart / key / beep / sr04 / jy61p / adc / ml_mpu6050` × 两平台）没有——
+    其中 `ml_mpu6050` 是旗舰件，说明里还写着"板上判 FAIL 就是通信真的没通"这种**从未在真板上验证过**
+    的断言。学生看不到这句，就会把"配方没验过"读成"我线接错了"。
+
+    判据取**最后一条**而不是"任意一条"：这句话是结论性自述，位置飘在中间会被后续内容盖住；
+    40 格已经是这个形态，本条把它变成对**全部格**成立的不变量。
+    """
+    from contest_generator.library import list_modules
+
+    manifests = list_modules(REAL_LIBRARY)
+    recipes = load_recipes(
+        REAL_LIBRARY, manifests, _library_interfaces_all(REAL_LIBRARY, manifests))
+    no_note: list[str] = []
+    buried: list[str] = []
+    missing: list[str] = []
+    total = 0
+    for slug, catalog in recipes.items():
+        for platform, section in catalog.sections.items():
+            if not section.usable:
+                continue
+            total += 1
+            notes = list(section.note)
+            where = f"{slug} × {platform}"
+            if not notes:
+                no_note.append(where)
+            elif "**未上板**" in notes[-1]:
+                continue
+            elif any("**未上板**" in note for note in notes):
+                buried.append(where)
+            else:
+                missing.append(where)
+    assert total >= 57, f"真实库的可动作配方格少于地板 57（现在 {total}）——地板要跟着扩张批上调"
+    assert not no_note, f"这些格没有平台说明，学生读不到任何自述：{no_note}"
+    assert not buried, f"「未上板」那句不在最后一条（会被后面的内容盖住）：{buried}"
+    assert not missing, (
+        f"这些格没说自己在真板上的状态：{missing}——照扩张批的措辞补一条放在最末："
+        "「**未上板**：本格的结论只到「…」，真机上板验证还没做（与库内 manifest 的口径一致）。"
+        "实测差异优先于本页参考值。」（本件没有可判的板端返回码时，中间那句换成如实的静态核对）"
+    )
+
+
 @pytest.mark.parametrize("slug", ["sr04", "jy61p", "xunji"])
 def test_single_platform_pilot_modules_have_no_other_platform_recipe(slug):
     """单平台件（工单 09 的验收项之一）：**只有 mspm0 条目**的件不许出现 stm32 格。

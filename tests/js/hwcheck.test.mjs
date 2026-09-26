@@ -18,6 +18,7 @@ import {
   hwcheckChecklistToggle, hwcheckChecklistHTML, hwcheckChecklistProgressHTML,
   hwcheckProjectState, hwcheckChannelText, hwcheckProjectInfoHTML,
   hwcheckToolchainNote, hwcheckChannelNoteHTML, hwcheckActionsHTML,
+  hwcheckUnverifiedNoteHTML,
   hwcheckProjectPanelHTML,
   hwcheckRecentHTML, hwcheckRecentEmptyHTML, hwcheckProjectEmptyHTML,
   HWCHECK_PARENT_KEY, HWCHECK_LAST_DIR_KEY,
@@ -348,6 +349,25 @@ test("hwcheckToolchainNote：缺工具链要大声明说「未经验证」；齐
   assert.ok(hwcheckToolchainNote("mspm0", false, "地猛星").includes("gmake"));
   assert.ok(hwcheckToolchainNote("未知平台", false, "").includes("编译工具链"),
     "平台词表外也要有话说（不拼出 undefined）");
+});
+
+test("hwcheckUnverifiedNoteHTML：栏目顶部要把「尚未在真板上验证过」说出来（工单 hardening/02）", () => {
+  // 为什么这条要在前端钉：页面上原先**一句都没有**交代这批检测的分量——
+  // 各格自己的平台说明里有「未上板」，但那是"读到某一格"才看得到的东西。
+  const html = hwcheckUnverifiedNoteHTML();
+  assert.ok(html.includes("hwcheck-warn"), "要显眼，不是一句灰字");
+  assert.ok(html.includes("尚未在真板上验证过"), "总口径的核心那句不许改写成别的说法");
+  assert.ok(html.includes("能生成 + 能编译"), "如实说清现有证据到哪一步");
+  assert.ok(html.includes("先按下面的清单查接线"), "判 FAIL 时的第一步指向页面已有的清单");
+  assert.ok(!html.includes("**"), "HTML 串里不许出现 markdown 粗体标记（会原样显示成星号）");
+});
+
+test("hwcheckUnverifiedNoteHTML：与配方数据里那句同一个事实（两种粒度，不许互相矛盾）", () => {
+  // 数据侧那句在 library/hwcheck_recipes.json 的每格 note 末条（57/57，pytest 侧有守卫）。
+  const recipes = readFileSync(
+    new URL("../../library/hwcheck_recipes.json", import.meta.url), "utf8");
+  assert.ok(recipes.includes("**未上板**：本格的结论只到"), "配方侧的自述形态变了——本条前提要跟着改");
+  assert.ok(hwcheckUnverifiedNoteHTML().includes("尚未在真板上验证过"));
 });
 
 test("hwcheckChannelNoteHTML：mspm0 双通道说清「会自动移开」（工单 pin-conflict-exit）", () => {
@@ -1957,6 +1977,25 @@ test("结构钉：检测页有带入块容器（在卡片正文里，不在注�
   const parentAt = html.indexOf('id="hwcheck-parent"');
   assert.ok(chipsAt < at && at < parentAt,
     `带入块应排在已选 chips 之后、保存位置之前：${chipsAt} / ${at} / ${parentAt}`);
+});
+
+test("结构钉：总口径那句真的被渲染出来（容器在卡片正文里 + ui 调了 fx）", () => {
+  // 「函数写好了但没人调用」是这一栏出过的坏法（点了没反应/首帧空白）。
+  // 判据两条腿：页面里有落点（且不在注释里）+ ui 在初始化路径上调它。
+  const at = html.indexOf('id="hwcheck-unverified-note"');
+  assert.ok(at > 0, "缺少总口径容器 #hwcheck-unverified-note");
+  const cardAt = html.lastIndexOf('<div class="card">', at);
+  assert.ok(cardAt > 0 && cardAt < at, "找不到总口径所在的卡片");
+  assert.ok(!/<!--[\s\S]*id="hwcheck-unverified-note"[\s\S]*?-->/.test(html.slice(cardAt, at + 60)),
+    "容器落在注释里了 —— 那等于没有这句话");
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  assert.ok(ui.includes('$("hwcheck-unverified-note")'), "总口径要有渲染落点");
+  assert.ok(ui.includes("renderHwcheckUnverifiedNote();"), "初始化路径上要真的调它");
+  // ui 不许自己再写一遍文案（单源在 fx）。判据**先剥注释**再查：ui 里那句注释引用了
+  // 同一句话做说明（不是文案），直接子串匹配会被注释骗过——本仓库既有教训。
+  const uiCode = ui.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+  assert.ok(!uiCode.includes("尚未在真板上验证过"), "文案单源在 fx/hwcheck.js，ui 只渲染");
 });
 
 test("结构钉：ui 侧走 fx（不手拼理由与回报文案）+ 并入入口在生成页那侧", () => {
