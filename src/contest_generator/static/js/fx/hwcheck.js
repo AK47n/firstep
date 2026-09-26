@@ -846,7 +846,20 @@ export function hwcheckConsoleState(state, payload) {
     console: (next && typeof next === "object")
       ? next
       : ((state && state.console) || null),
+    // 复测字符余量提示（工单 hwcheck-hardening/05）：由服务端给（空串 = 不吭声）。
+    // 判据不在这里——"还剩几个字符"是分配器的账，前端算不了也不该算。
+    consoleNote: typeof data.console_note === "string"
+      ? data.console_note
+      : ((state && state.consoleNote) || ""),
   };
+}
+
+// hwcheckConsoleNoteHTML(text)：复测字符余量的事前提示（工单 hwcheck-hardening/05）。
+// 空串 = 不渲染任何东西（平时别把一句警告常驻在页面上）。
+export function hwcheckConsoleNoteHTML(text) {
+  const message = String(text || "");
+  if (!message) return "";
+  return `<div class="hwcheck-warn">${esc(message)}</div>`;
 }
 
 // hwcheckConsoleHTML(console)：命令台面板。
@@ -1339,7 +1352,7 @@ if (typeof window !== "undefined") {
     hwcheckDeviceSlugs, hwcheckBoardState,
     hwcheckSectionsState, hwcheckSectionsHTML, hwcheckUnspecializedHTML,
     hwcheckSectionsEmptyHTML, hwcheckSectionPlanText, hwcheckSectionNoteHTML,
-    hwcheckConsoleState, hwcheckConsoleHTML,
+    hwcheckConsoleState, hwcheckConsoleHTML, hwcheckConsoleNoteHTML,
     hwcheckSymptomText, hwcheckCanTriage, hwcheckTriagePayload,
     hwcheckChecklistPayload, hwcheckAdviceState, hwcheckRecordState,
     hwcheckChecklistState,

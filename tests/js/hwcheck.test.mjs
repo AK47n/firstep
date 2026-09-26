@@ -30,7 +30,7 @@ import {
   hwcheckPinFixHTML,
   hwcheckSectionsState, hwcheckSectionsHTML, hwcheckUnspecializedHTML,
   hwcheckSectionPlanText, hwcheckSectionNoteHTML,
-  hwcheckConsoleState, hwcheckConsoleHTML,
+  hwcheckConsoleState, hwcheckConsoleHTML, hwcheckConsoleNoteHTML,
   hwcheckSymptomText, hwcheckCanTriage, hwcheckTriagePayload,
   hwcheckChecklistPayload, hwcheckAdviceState, hwcheckRecordState,
   hwcheckChecklistState, hwcheckTriageErrorHTML, hwcheckAdviceHTML,
@@ -1140,6 +1140,32 @@ test("hwcheckConsoleState：载荷缺键 = 保留当前状态（旧后端不抹�
   const replaced = hwcheckConsoleState({ console: CONSOLE_PAYLOAD },
     { console: { ...CONSOLE_PAYLOAD, available: false } });
   assert.equal(replaced.console.available, false, "明确给了新表就用新的");
+});
+
+test("hwcheckConsoleNoteHTML / hwcheckConsoleState：余量提示由服务端给，空串不吭声（工单 hardening/05）", () => {
+  // 为什么钉这两条：字符分不出来是**生成前 400**，学生在那之前没有任何信号；
+  // 但也不能常驻一句警告——空串必须什么都不渲染。判据不在前端（分配器的账在服务端）。
+  assert.equal(hwcheckConsoleNoteHTML(""), "");
+  assert.equal(hwcheckConsoleNoteHTML(null), "");
+  assert.equal(hwcheckConsoleNoteHTML(undefined), "");
+  const note = hwcheckConsoleNoteHTML("⚠ 复测字符快用完了：只剩 1 个");
+  assert.ok(note.includes("hwcheck-warn"), "要显眼（与其它警告同款外观）");
+  assert.ok(note.includes("只剩 1 个"), "服务端那句原样带出（前端不拼数）");
+
+  const state = hwcheckConsoleState({ console: null, consoleNote: "旧" }, { console_note: "新一句" });
+  assert.equal(state.consoleNote, "新一句");
+  assert.equal(hwcheckConsoleState({ consoleNote: "旧" }, {}).consoleNote, "旧",
+    "载荷缺键 = 保留当前状态（旧后端不抹掉已有提示）");
+  assert.equal(hwcheckConsoleState({}, {}).consoleNote, "", "从没有过就是空串，不是 undefined");
+});
+
+test("结构钉：余量提示有渲染落点 + ui 真调它（工单 hardening/05）", () => {
+  const at = html.indexOf('id="hwcheck-console-note"');
+  assert.ok(at > 0, "缺少余量提示容器 #hwcheck-console-note");
+  const ui = readFileSync(
+    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  assert.ok(ui.includes('$("hwcheck-console-note")'), "余量提示要有渲染落点");
+  assert.ok(ui.includes("hwcheckConsoleNoteHTML(hwcheckUI.consoleNote)"), "要真的把服务端那句渲染出来");
 });
 
 test("hwcheckProjectState：回读把命令表一起带回来", () => {

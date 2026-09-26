@@ -69,6 +69,20 @@ def _view(platform: str, slugs: list[str], devices: list[str] | None = None):
     )
 
 
+def test_board_payload_carries_the_console_capacity_note_key():
+    """载荷里必须有 `console_note`，且平时是**空串**（工单 hwcheck-hardening/05）。
+
+    为什么单独立一条：前端靠这个键渲染"复测字符快用完了"那句，**缺键时前端会静默退化成
+    永远不提示**——那正是这一单要消灭的"只有按了生成才吃 400"。键名是跨语言契约。
+
+    两条腿：① 键在（契约）；② 常见小组合下是空串（平时不许常驻一句警告）。
+    """
+    view = _page_view(PLATFORM_STM32, devices=["ml_mpu6050"])
+    assert "console_note" in view.board, "board 载荷缺 console_note（前端会永远不提示）"
+    assert isinstance(view.board["console_note"], str)
+    assert view.board["console_note"] == "", "只勾一件时不该挂一句「字符快用完了」"
+
+
 def _config(
     platform: str = PLATFORM_MSPM0,
     *,
@@ -711,8 +725,8 @@ def test_hwcheck_view_projects_the_page_payload_without_http():
     view = _page_view(PLATFORM_STM32, devices=["ml_mpu6050"])
     assert isinstance(view, HwCheckView)
     assert set(view.board) == {
-        "wiring", "sections", "console", "unspecialized", "exclusive_groups",
-        "custom",
+        "wiring", "sections", "console", "console_note", "unspecialized",
+        "exclusive_groups", "custom",
     }, "载荷键是前端契约（多一个少一个都是破坏）"
     assert "pin_fixes" in view.board["wiring"], (
         "「动了哪几根线」住在 wiring 里（前端读的也是 wiring.pin_fixes）"
@@ -806,8 +820,8 @@ def test_hwcheck_view_reads_the_recipe_override_path(tmp_path):
     assert "不是合法 JSON" in str(excinfo.value)
     # 缺省（库内那份）= 正常装载：响应里照旧有那几个键
     assert set(_page_view(PLATFORM_STM32, devices=[]).board) == {
-        "wiring", "sections", "console", "unspecialized", "exclusive_groups",
-        "custom",
+        "wiring", "sections", "console", "console_note", "unspecialized",
+        "exclusive_groups", "custom",
     }
 
 

@@ -1,0 +1,17 @@
+配方文件 sha256（跑之前）= 1369d667b4ac4db95805d815742738847bab75b4e8ade6a4e4ef0e6640122b9b
+✓ 前置干净性检查：追加过的池位在候选面里
+撤掉 342 处追加的池位（应当 = 57 格 × 6 个字符）
+撤掉池位后跑「全勾满」守卫：exit=1
+—— pytest 输出（尾部 8 行）——
+        )
+E       contest_generator.hwcheck_errors.HwCheckError: 配方件 'servo' 的控制台命令字符分不出来了：它声明要用的字符 'd'、'v'、'i'、'n'、'z'、'0'、'1'、'2'、'3'（首选 'd'，候选 ['v', 'i', 'n', 'z', '0', '1', '2', '3']）这一趟都已被占用：'d'（'oled'）、'v'（'ads1115'）、'i'（'dht11'）、'n'（'hmc5883l'）、'z'（'joystick'）、'0'（'mlx90614'）、'1'（'pca9685'）、'2'（'qmc5883l'）、'3'（'relay'）；可用字符一共 31 个（字母数字里除去既有命令 ?/b/g/o/r/y），这一趟表里已经占了 23 个。出路：给这一件多加几个候选字符（`console.candidates`）、给首选换一个字符，或者去掉几件器件再生成一次
+
+src\contest_generator\hwcheck_console.py:679: HwCheckError
+=========================== short test summary info ===========================
+FAILED tests/test_hwcheck_console.py::test_the_whole_specialized_set_of_one_platform_builds_one_console_table[stm32]
+FAILED tests/test_hwcheck_console.py::test_the_whole_specialized_set_of_one_platform_builds_one_console_table[mspm0]
+2 failed in 0.20s
+判据结论 = ✓ 用例红了（守卫有强度）
+配方文件 sha256（复原后）= 1369d667b4ac4db95805d815742738847bab75b4e8ade6a4e4ef0e6640122b9b
+复原复核 = ✓ 逐字节相同
+复原后跑守卫：exit=0（应为 0）

@@ -4145,6 +4145,9 @@
     <div class="card">
       <h2>串口命令台 <span class="muted">（上电跑完一遍后敲一个字符就复测，不用重烧）</span></h2>
       <div id="hwcheck-console"></div>
+      <!-- 复测字符的余量提示（工单 hwcheck-hardening/05）：接近上限时先说一句，
+           不必等按了「生成」才吃 400。文案在服务端（hwcheck_console），前端只渲染。 -->
+      <div id="hwcheck-console-note"></div>
     </div>
 
     <div class="card">

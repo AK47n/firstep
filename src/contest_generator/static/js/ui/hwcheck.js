@@ -50,7 +50,7 @@ import {
   hwcheckSectionsState, hwcheckSectionsHTML, hwcheckUnspecializedHTML,
   hwcheckSectionsEmptyHTML,
   hwcheckCustomState, hwcheckCustomPlanHTML, hwcheckCustomWiringHTML,
-  hwcheckConsoleState, hwcheckConsoleHTML,
+  hwcheckConsoleState, hwcheckConsoleHTML, hwcheckConsoleNoteHTML,
   hwcheckDroppedNoteHTML,
   hwcheckCanTriage, hwcheckTriagePayload, hwcheckChecklistPayload,
   hwcheckAdviceState, hwcheckRecordState, hwcheckTriageErrorHTML,
@@ -88,6 +88,7 @@ const hwcheckUI = {
   unspecialized: [],  // 走通用降级的器件（未专精：只验总线和初始化，工单 07）
   custom: [],         // 自建件的检测计划（服务端投影：标注 / 接线 / 出不出小节，工单 05）
   console: null,      // 串口命令台载荷（配方命令 + 既有命令 + 能不能复测，工单 06）
+  consoleNote: "",    // 复测字符余量提示（服务端给；空 = 不吭声，工单 hardening/05）
   dropped: [],        // 选中的自建件里**已经不在器件库**的那些（工单 ci-gate-fixes/09）
   project: null,      // 当前正在看的检测工程（生成或回读来的）
   checklistChecked: [],
@@ -661,6 +662,10 @@ function renderHwcheckConsole() {
     || '<div class="muted">选好器件后点「预览检测程序」：这里会列出这一趟的串口'
       + "复测命令（库内器件按配方、自建件按它自己的探测小节），"
       + "以及没有串口时为什么不能交互复测。</div>";
+  // 复测字符余量的事前提示（工单 hwcheck-hardening/05）：文案由服务端给（空 = 不吭声），
+  // 前端不自己算"还剩几个字符"——那等于把分配判据抄一份到浏览器里。
+  const note = $("hwcheck-console-note");
+  if (note) note.innerHTML = hwcheckConsoleNoteHTML(hwcheckUI.consoleNote);
 }
 
 // renderHwcheckAdvice()：现象回填 + AI 排障面板（工单 08）。
@@ -785,6 +790,7 @@ async function refreshHwcheckView() {
       hwcheckUI.unspecialized = [];
       hwcheckUI.custom = [];
       hwcheckUI.console = null;
+      hwcheckUI.consoleNote = "";
       hwcheckUI.wiringError = e && e.message ? e.message : String(e);
     }
   } finally {

@@ -80,6 +80,7 @@ __all__ = [
     "ConsoleEntry",
     "ConsoleTable",
     "build_console_table",
+    "console_capacity_note",
     "console_hint",
     "console_payload",
     "parse_console_command",
@@ -154,9 +155,51 @@ def _pool_description() -> str:
 
     两处各写一遍的后果不是"啰嗦"：其中一个数改了、另一个没改，报错就会给出自相
     矛盾的读数（工单 06 评审已经抓过一次"只扣保留字、不扣已占用"的假读数）。
+
+    ⚠ 这个数**必须是真能分配的字符数**（工单 hwcheck-hardening/05）：池子大小本身不等于
+    可分配数——分配只能在各配方**声明过的**首选 / 候选里挑。本单之前池里 `4 5 6 7 8 9`
+    六个字符没有任何配方声明过，于是这句话把可分配数说大了 6 个，正好把人往"还能再勾"引。
+    今天两边的并集已经对齐，`tests/test_hwcheck_console.py` 有一条守卫盯着这层对齐。
     """
     return (f"可用字符一共 {len(COMMAND_POOL)} 个"
             f"（字母数字里除去既有命令 {'/'.join(sorted(RESERVED_COMMANDS))}）")
+
+
+# 剩余多少个字符时开始**事前**提示（工单 hwcheck-hardening/05）。取 3：再勾两件就会排不上号，
+# 而学生此刻在页面上还能改（去掉一件 / 换组合），不必等到按了生成才吃一个 400。
+CONSOLE_CAPACITY_WARN_REMAINING = 3
+
+
+def console_capacity_note(
+    sections: Sequence[RecipeSection], custom: Sequence[CustomSection] = ()
+) -> str:
+    """还剩几个复测字符可用——接近上限时给一句**事前**提示（工单 hwcheck-hardening/05）。
+
+    为什么要有它：字符分配失败是**生成前 400**（`build_console_table` 当场点名谁排不上号），
+    而学生在这之前拿不到任何信号——只有按了「生成」才知道。页面需要的不是"能不能分配"，
+    而是"离装不下还有多远"，所以这里报**剩余数**。
+
+    三条口径：
+
+    * 建得出表 → 剩余 = 池子 − 已占；超过阈值（`CONSOLE_CAPACITY_WARN_REMAINING`）返回空串
+      （平时不吭声，别把一句警告常驻在页面上）；
+    * **建不出表 → 返回空串**：那条路端点会给 400 的完整点名（谁排不上号、被谁占了、出路），
+      页面再说一句就是两个口径；
+    * 文案只报事实（占了几件 / 池子多大 / 还剩几个），出路交给 400 那份文案，不在这里重写。
+    """
+    try:
+        table = build_console_table(sections, custom)
+    except HwCheckError:
+        return ""
+    used = len(table.entries)
+    remaining = len(COMMAND_POOL) - used
+    if remaining > CONSOLE_CAPACITY_WARN_REMAINING:
+        return ""
+    return (
+        f"⚠ 复测字符快用完了：这一趟 {used} 件已经占掉 {used} 个字符，"
+        f"{_pool_description()}，只剩 {remaining} 个——再加器件可能排不上号"
+        "（那时这一页会点名是哪一件，去掉它或者换一组再生成）。"
+    )
 
 
 @dataclass(frozen=True)

@@ -32,6 +32,8 @@ from contest_generator.hwcheck_console import (
     ConsoleEntry,
     ConsoleTable,
     build_console_table,
+    console_capacity_note,
+    CONSOLE_CAPACITY_WARN_REMAINING,
     console_hint,
     console_payload,
     parse_console_command,
@@ -1166,6 +1168,114 @@ def _specialized(platform: str, catalog, manifests) -> list[str]:
 
     every = [m.slug for m in manifests]
     return [section.slug for section in resolve_sections(platform, every, catalog, manifests)]
+
+
+@pytest.mark.parametrize("platform", [PLATFORM_STM32, PLATFORM_MSPM0])
+def test_the_whole_specialized_set_of_one_platform_builds_one_console_table(platform):
+    """**全勾满**也要建得出命令表（工单 hwcheck-hardening/05）。
+
+    为什么单独立一条：上面那条只穷举 `|S| <= 3` + 固定种子抽样到 8 件——小规模全绿，
+    而"把库里该平台的专精件**一次全勾上**"这一档**必然撞车**（实测 stm32 到第 23 件、
+    mspm0 到第 26 件就排不上号，报错只说"去掉几件"），学生连一次验完整套硬件都做不到。
+
+    根因不是哪一件写错：命令空间 31 个字符里，**只有 25 个**被任何配方声明过
+    （`4 5 6 7 8 9` 六个池位没人用过）——本单把没人用过的池位**纯追加**进候选面，
+    这一档从此建得出表。判据 = 全平台专精件一次全选，表内字符互不相同、
+    且**每一件**都拿到字符（不是"前面几件有、后面几件没有"）。
+    """
+    from contest_generator.hwcheck_recipe import resolve_sections
+
+    catalog, manifests = _real_catalog()
+    slugs = _specialized(platform, catalog, manifests)
+    assert len(slugs) >= 25, f"{platform} 专精件太少（{len(slugs)}），这条守卫没意义了"
+    sections = resolve_sections(platform, list(slugs), catalog, manifests)
+    table = build_console_table(sections)
+    commands = [entry.command for entry in table.entries]
+    assert len(commands) == len(slugs), (
+        f"{platform} 全勾 {len(slugs)} 件，只有 {len(commands)} 件拿到字符"
+    )
+    assert len(set(commands)) == len(commands), f"{platform} 全勾时字符撞车：{commands}"
+
+
+def test_command_pool_size_in_the_error_copy_is_the_real_allocatable_count():
+    """报错文案里那个「可用字符一共 N 个」的 N，必须是**真能分配**的字符数（工单 hwcheck-hardening/05）。
+
+    为什么单独立一条：`_pool_description()` 报的是 `len(COMMAND_POOL)`（31），而分配只能在
+    **各配方声明过的**首选 / 候选里挑——本单之前只声明了 25 个，于是那句话把池子说大了 6 个，
+    正好把人往"还能再勾几件"引（实测撞车就在第 23 / 26 件）。
+
+    判据 = 真库全部配方的声明面并集 == 命令池本身。少一个字符当场红：不是"配方写错了"，
+    而是**那句文案在撒谎**——要么把这个池位写进某条配方的候选，要么把文案改成实报可分配数。
+    """
+    catalog, _manifests = _real_catalog()
+    declared: set[str] = set()
+    for catalog_entry in catalog.values():
+        for section in catalog_entry.sections.values():
+            if section.console is None:
+                continue
+            declared.add(section.console.command.lower())
+            declared.update(char.lower() for char in section.console.candidates)
+    pool = set(COMMAND_POOL)
+    assert declared <= pool, f"配方声明了池子外的字符：{sorted(declared - pool)}"
+    missing = sorted(pool - declared)
+    assert not missing, (
+        f"命令池里有 {len(missing)} 个字符从没被任何配方声明过：{missing}——"
+        "报错文案说的「可用字符一共 N 个」会因此比实际能分配的多，学生照着它判断还能不能加件"
+    )
+
+
+@pytest.mark.parametrize("platform", [PLATFORM_STM32, PLATFORM_MSPM0])
+def test_console_capacity_note_speaks_only_when_the_pool_is_nearly_used_up(platform):
+    """余量提示三条口径（工单 hwcheck-hardening/05）：平时不吭声 / 快满时说真数 / 分不出来时不说话。
+
+    为什么要有这一句：字符分不出来是**生成前 400**，学生在那之前没有任何信号——
+    只有按了「生成」才知道。但也不能常驻一句警告：平时它必须是空串。
+    """
+    from contest_generator.hwcheck_recipe import resolve_sections
+
+    catalog, manifests = _real_catalog()
+    slugs = _specialized(platform, catalog, manifests)
+
+    # ① 小组合（两件）：离上限很远 → 不吭声
+    few = resolve_sections(platform, list(slugs[:2]), catalog, manifests)
+    assert console_capacity_note(few) == ""
+
+    # ② 全勾满：提示的有无严格跟着阈值走，且出现时四个数都如实（占了几件 / 池子多大 / 还剩几个）
+    every = resolve_sections(platform, list(slugs), catalog, manifests)
+    table = build_console_table(every)
+    used = len(table.entries)
+    remaining = len(COMMAND_POOL) - used
+    note = console_capacity_note(every)
+    if remaining > CONSOLE_CAPACITY_WARN_REMAINING:
+        assert note == "", f"还剩 {remaining} 个字符（阈值 {CONSOLE_CAPACITY_WARN_REMAINING}）不该吭声"
+    else:
+        assert note, f"{platform} 全勾 {used} 件、只剩 {remaining} 个字符，应当事前提示"
+        assert f"这一趟 {used} 件" in note and f"只剩 {remaining} 个" in note
+        assert f"可用字符一共 {len(COMMAND_POOL)} 个" in note
+        assert "去掉" in note or "换一组" in note, "要给一条出路（点名留给 400 那份文案）"
+
+    # ③ 阈值本身要**小**：不然每勾一件都挂着一句警告，学生会当噪音
+    assert 1 <= CONSOLE_CAPACITY_WARN_REMAINING <= 4
+
+
+def test_console_capacity_note_is_silent_when_allocation_itself_fails():
+    """分不出来时**不吭声**：端点会走 400 的完整点名（谁排不上号 / 被谁占 / 出路）。
+
+    构造：两件都声明同一个字符、都没有候选 → 分配必然失败（`build_console_table` 抛红）。
+    页面这时候不该再说一句"字符快用完了"——那会与 400 那份文案变成两个口径。
+    """
+    def only(char: str, slug: str) -> RecipeSection:
+        return RecipeSection(
+            slug=slug, platform=PLATFORM_STM32,
+            console=RecipeConsole(command=char, description="复测"),
+        )
+
+    sections = [only("l", "led"), only("l", "beep")]
+    with pytest.raises(HwCheckError):
+        build_console_table(sections)
+    assert console_capacity_note(sections) == "", (
+        "分不出来的时候页面不该再说一句——400 那份文案已经把谁排不上号、被谁占、出路都点名了"
+    )
 
 
 @pytest.mark.parametrize("platform", [PLATFORM_STM32, PLATFORM_MSPM0])

@@ -50,7 +50,7 @@ from .hwcheck import (
     hwcheck_modules,
     require_known_platform,
 )
-from .hwcheck_console import build_console_table, console_payload
+from .hwcheck_console import build_console_table, console_capacity_note, console_payload
 from .hwcheck_custom import (
     PROBE_MODULE_SLUG,
     CustomPlanEntry,
@@ -849,6 +849,9 @@ def hwcheck_view(
                 },
             ),
             "console": console_payload(config.debug_uart, console),
+            # 复测字符的**事前**余量提示（工单 hwcheck-hardening/05）：接近上限时页面先吭一声，
+            # 不必等按了「生成」才吃 400。文案单源在 hwcheck_console，前端只渲染。
+            "console_note": console_capacity_note(sections, custom_sections),
             "unspecialized": [
                 {
                     "slug": section.slug,
