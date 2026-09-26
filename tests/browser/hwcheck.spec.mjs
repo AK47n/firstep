@@ -698,6 +698,49 @@ test("MPU6050 专精小节：板上判定 + 平台差异如实印在页面上（
   await page.fill("#hwcheck-device-search", "");
 });
 
+test("预览失败：专用文案 + 不留下上一次的 main.c（工单 hwcheck-hardening/07）", async () => {
+  await openTab();
+  await setParent(parentDir);
+
+  // ① 先正常预览一次：页面上有了一份真的 main.c（下面要证它会消失）
+  await page.click("#btn-hwcheck-preview");
+  await page.waitForFunction(
+    () => document.querySelector("#hwcheck-output").textContent.includes("hwcheck_"));
+  const before = await page.textContent("#hwcheck-output");
+  assert.ok(before.includes("hwcheck_"), "先要有一份真的预览产物，这条判据才有意义");
+
+  // ② 让下一次预览**真的失败**（拦在浏览器层，回一个 400 中文理由）
+  const REASON = "预览测试用的假失败：库中不存在模块 nope";
+  await page.route("**/api/hwcheck/preview", (route) => route.fulfill({
+    status: 400,
+    contentType: "application/json",
+    body: JSON.stringify({ detail: REASON }),
+  }));
+  try {
+    await page.click("#btn-hwcheck-preview");
+    // 专用文案出现（**不是**"接线表与冲突暂时取不到"——那句会把学生引去查线）
+    await page.waitForFunction(
+      () => document.querySelector("#hwcheck-output").textContent.includes("检测程序预览失败"));
+    const failed = await page.textContent("#hwcheck-output");
+    assert.ok(failed.includes("库中不存在模块 nope"), "服务端给的中文理由要原样带出");
+    assert.ok(!failed.includes("接线表"), "失败文案不许再把用户引去查接线表");
+    // 关键：**上一次的 main.c 必须不在了**（那份属于上一组器件，留着就会被照着烧）
+    assert.ok(!failed.includes("hwcheck_write_serial"),
+      "预览失败之后还留着上一次的 main.c —— 学生照它编译烧录就是烧错东西：\n"
+      + failed.slice(0, 800));
+  } finally {
+    await page.unroute("**/api/hwcheck/preview");
+  }
+
+  // ③ 解除拦截后能正常渲染回来（错误提示也不残留）
+  await page.click("#btn-hwcheck-preview");
+  await page.waitForFunction(
+    () => !document.querySelector("#hwcheck-output").textContent.includes("检测程序预览失败")
+      && document.querySelector("#hwcheck-output").textContent.includes("hwcheck_"));
+  const recovered = await page.textContent("#hwcheck-output");
+  assert.ok(recovered.includes("hwcheck_"), "恢复后要重新渲染出检测程序");
+});
+
 test("同组互斥 = 单选交换：mspm0 上点第二件姿态件会自动换掉第一件并说明", async () => {
   await openTab();
   await page.click('[data-hwcheck-platform="mspm0"]');
@@ -994,21 +1037,25 @@ test("装不下时的出路点名这一页的控件：照着它做（取消勾�
   await pickDevice("rc522");
   await page.waitForSelector('#hwcheck-device-chips [data-remove="rc522"]');
 
-  // 选齐两件就被拦下：**生成之前**接线区就给出 400 原文（不是等点了生成才知道）
+  // 选齐两件就被拦下：**生成之前**就把 400 原文显示出来（不是等点了生成才知道）。
+  // ⚠ 落点是**产物区**（工单 hwcheck-hardening/07）：这段文案以前挂在接线区、顶着
+  // 「接线表与冲突暂时取不到」的标题——那句会把学生引去查线；现在它归到
+  // `previewError`（标题是"检测程序预览失败"），接线区在失败时留空。
   try {
     await page.waitForFunction(
-      () => document.querySelector("#hwcheck-wiring").textContent
+      () => document.querySelector("#hwcheck-output").textContent
         .includes("【检测页出路】"), undefined, { timeout: 30000 });
   } catch (e) {
-    throw new Error(`等接线区的「【检测页出路】」超时：${e.message}\n` + await previewDiag());
+    throw new Error(`等产物区的「【检测页出路】」超时：${e.message}\n` + await previewDiag());
   }
-  const wiring = await page.textContent("#hwcheck-wiring");
-  assert.ok(wiring.includes("取消勾选「2. 输出通道」里的「OLED 屏」"),
-    "通道带进来的那一方要点名那个勾选框：\n" + wiring);
-  assert.ok(wiring.includes("去掉「3. 要测的器件」里勾上的 rc522"),
-    "器件带进来的那一方要点名器件清单里那一件：\n" + wiring);
-  assert.ok(!wiring.includes("回到上面的器件选择"),
-    "旧文案把人支去器件列表——oled 不在那儿（票面反例）：\n" + wiring);
+  const copy = await page.textContent("#hwcheck-output");
+  assert.ok(copy.includes("检测程序预览失败"), "标题要说清是哪一步失败：\n" + copy.slice(0, 300));
+  assert.ok(copy.includes("取消勾选「2. 输出通道」里的「OLED 屏」"),
+    "通道带进来的那一方要点名那个勾选框：\n" + copy);
+  assert.ok(copy.includes("去掉「3. 要测的器件」里勾上的 rc522"),
+    "器件带进来的那一方要点名器件清单里那一件：\n" + copy);
+  assert.ok(!copy.includes("回到上面的器件选择"),
+    "旧文案把人支去器件列表——oled 不在那儿（票面反例）：\n" + copy);
 
   // 点「生成检测工程」是同一句话（预览 / 生成同一判据，都 400）
   await setParent(parentDir);

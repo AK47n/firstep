@@ -46,7 +46,7 @@ import {
   hwcheckDeviceGroupNoticeHTML,
   hwcheckPinGroupsHTML, hwcheckBoardSharesHTML, hwcheckOrderHTML,
   hwcheckPinFixHTML,
-  hwcheckBoardState, hwcheckWiringErrorHTML,
+  hwcheckBoardState,
   hwcheckSectionsState, hwcheckSectionsHTML, hwcheckUnspecializedHTML,
   hwcheckSectionsEmptyHTML,
   hwcheckCustomState, hwcheckCustomPlanHTML, hwcheckCustomWiringHTML,
@@ -99,7 +99,7 @@ const hwcheckUI = {
   triageError: "",    // 排障**请求**失败（网络 / 400）——与"模型失败"不是一回事
   recent: [],
   generateError: "",
-  wiringError: "",
+  previewError: "",   // 预览失败（工单 hardening/07）：专用文案，与"接线表取不到"分开
   busy: false,
   seeded: false,
   // —— 「我的器件」（库外件，工单 02）：件与平台无关，所以这些键不随平台清空 ——
@@ -187,15 +187,20 @@ function renderHwcheckUnverifiedNote() {
 
 function renderHwcheckOutput() {
   const box = $("hwcheck-output");
+  // 预览失败（工单 hwcheck-hardening/07）：这里显示**说得对**的那句（"检测程序预览失败"），
+  // 而不是把用户引去查接线表；同时上面已经把上一次的 main.c 清掉了——失败之后还留着
+  // 上一组器件的程序，是最容易让人烧错东西的一种"静默过期产物"。
+  const error = hwcheckUI.previewError
+    ? hwcheckErrorHTML(hwcheckUI.previewError) : "";
   const shell = hwcheckPanelHTML(hwcheckUI.preview, hwcheckUI.outputHint);
   if (shell) {
     // 产物区壳由 fx/hwcheck.js 单源给出；main.c 文本走 textContent（天然不解释 HTML）
-    box.innerHTML = shell;
+    box.innerHTML = error + shell;
     const code = hwcheckCodeTarget(box);
     if (code) code.textContent = hwcheckUI.preview;
     return;
   }
-  box.innerHTML = hwcheckEmptyHTML(
+  box.innerHTML = error || hwcheckEmptyHTML(
     "选好平台后点「预览检测程序」——这里会显示这一趟要烧进板子的 main.c"
     + "（LED 心跳 + 输出通道自报，还没有选任何器件）。");
 }
@@ -582,29 +587,33 @@ function renderHwcheckWiring() {
   const wiringBox = $("hwcheck-wiring");
   const conflictBox = $("hwcheck-conflicts");
   const orderBox = $("hwcheck-order");
-  const error = hwcheckUI.wiringError;
-  if (wiringBox) {
-    wiringBox.innerHTML = error
-      ? hwcheckWiringErrorHTML(error)
-      : (hwcheckUI.wiring
-        ? hwcheckPinFixHTML(hwcheckUI.wiring.pin_fixes)
-          + hwcheckWiringTableHTML(hwcheckUI.wiring.rows, hwcheckUI.wiring.footnote)
-          // 自建件那一行接在表**下面**（"你的器件 … 接到上面接线表里 i2c_probe 的
-          // 那对脚"——那句话指的就是刚读完的这张表）。空 = 空串（既有页面不变）。
-          + hwcheckCustomWiringHTML(hwcheckUI.custom)
-        : '<div class="muted">选好平台后点「预览检测程序」（或选一件器件），'
-          + "这里会出现这一趟要接的线与默认脚冲突。</div>");
-  }
+  // 预览整份失败时（previewError）：这里**什么都不说**——错误已经在产物区用专用文案说清了，
+  // 再摆一句"选好平台后点预览"等于让刚点过的学生以为自己没点。
+  // 注意没有"接线表单独取不到"这一档了（工单 hwcheck-hardening/07）：接线表与主程序**同一次
+  // 请求**回来，那档文案（hwcheckWiringErrorHTML）依据的前提本来就不成立，已删。
+  const empty = hwcheckUI.previewError
+    ? ""
+    : (hwcheckUI.wiring
+      ? hwcheckPinFixHTML(hwcheckUI.wiring.pin_fixes)
+        + hwcheckWiringTableHTML(hwcheckUI.wiring.rows, hwcheckUI.wiring.footnote)
+        // 自建件那一行接在表**下面**（"你的器件 … 接到上面接线表里 i2c_probe 的
+        // 那对脚"——那句话指的就是刚读完的这张表）。空 = 空串（既有页面不变）。
+        + hwcheckCustomWiringHTML(hwcheckUI.custom)
+      : '<div class="muted">选好平台后点「预览检测程序」（或选一件器件），'
+        + "这里会出现这一趟要接的线与默认脚冲突。</div>");
+  if (wiringBox) wiringBox.innerHTML = empty;
   if (conflictBox) {
-    conflictBox.innerHTML = (error || !hwcheckUI.wiring)
-      ? "" : hwcheckPinGroupsHTML(hwcheckUI.wiring.groups, hwcheckUI.wiring.rows)
+    conflictBox.innerHTML = hwcheckUI.wiring
+      ? hwcheckPinGroupsHTML(hwcheckUI.wiring.groups, hwcheckUI.wiring.rows)
         + hwcheckBoardSharesHTML(
-          hwcheckUI.wiring.board_shares, hwcheckUI.wiring.rows);
+          hwcheckUI.wiring.board_shares, hwcheckUI.wiring.rows)
+      : "";
   }
   if (orderBox) {
-    orderBox.innerHTML = (error || !hwcheckUI.wiring)
-      ? "" : hwcheckOrderHTML(
-        hwcheckUI.wiring.order, hwcheckUI.wiring.guide, hwcheckUI.wiring.reason);
+    orderBox.innerHTML = hwcheckUI.wiring
+      ? hwcheckOrderHTML(
+        hwcheckUI.wiring.order, hwcheckUI.wiring.guide, hwcheckUI.wiring.reason)
+      : "";
   }
 }
 
@@ -658,10 +667,11 @@ function renderHwcheckDropped() {
 function renderHwcheckConsole() {
   const box = $("hwcheck-console");
   if (!box) return;
-  box.innerHTML = hwcheckConsoleHTML(hwcheckUI.console)
+  // 预览整份失败时：命令台也不摆那句"选好器件后点预览"（错误已在产物区说清，见 07 单）。
+  box.innerHTML = hwcheckUI.previewError ? "" : (hwcheckConsoleHTML(hwcheckUI.console)
     || '<div class="muted">选好器件后点「预览检测程序」：这里会列出这一趟的串口'
       + "复测命令（库内器件按配方、自建件按它自己的探测小节），"
-      + "以及没有串口时为什么不能交互复测。</div>";
+      + "以及没有串口时为什么不能交互复测。</div>");
   // 复测字符余量的事前提示（工单 hwcheck-hardening/05）：文案由服务端给（空 = 不吭声），
   // 前端不自己算"还剩几个字符"——那等于把分配判据抄一份到浏览器里。
   const note = $("hwcheck-console-note");
@@ -738,7 +748,6 @@ function adoptProject(payload, dir, { keepSelection = false } = {}) {
   if (symptomBox) symptomBox.value = hwcheckUI.symptom || "";
   hwcheckUI.triageError = "";
   hwcheckUI.generateError = "";
-  hwcheckUI.wiringError = "";
   writeStored(HWCHECK_LAST_DIR_KEY, dir);
 }
 
@@ -751,8 +760,10 @@ function adoptProject(payload, dir, { keepSelection = false } = {}) {
 // 回来就把刚选的那件抹掉了。三条：
 //   ① 在途时的触发记 pending，收尾用**当前**选择集重跑一次（不静默丢弃）；
 //   ② 落地前比请求体快照，选择集变了 = 这次结果属于旧选择，不写状态；
-//   ③ 失败只清板侧视图，**不清 main.c**——检测程序只依赖平台与通道（选器件不到
-//      一分钟前刚渲染过的那份仍然有效），别让接线表取不到连坐预览（工单 03 评审）。
+//   ③ 失败清**整份**（板侧视图 + main.c）并归到 `previewError`（工单 hwcheck-hardening/07）：
+//      主程序是**按所选器件**渲染的（`render_main_c(config, sections, generic, custom)`），
+//      所以失败之后留着的那份属于上一组器件——照它去编译烧录就是烧错东西。
+//      （旧注释说"检测程序只依赖平台与通道"，那个前提不成立，已更正。）
 let hwcheckViewBusy = false;
 let hwcheckViewPending = false;
 
@@ -781,17 +792,26 @@ async function refreshHwcheckView() {
       // 已被删掉的自建件：服务端这一趟摘掉了谁（工单 ci-gate-fixes/09）——先对齐选择集，
       // 下面那串 render 才会画出一致的 chips 与说明条。
       applyDroppedDevices(payload);
-      hwcheckUI.wiringError = "";
+      hwcheckUI.previewError = "";
     }
   } catch (e) {
     if (hwcheckSelectionKey() === requestKey) {
+      // 这一趟**整份**都没拿到（预览 = 主程序 + 板侧视图 + 逐件小节 + 命令表，同一个请求）：
+      // 板侧视图清空，但错误归到 `previewError`——它是"检测程序预览失败"，不是"接线表取不到"
+      // （把那句写在这里会把学生引去查线，见工单 hwcheck-hardening/07）。
       hwcheckUI.wiring = null;
       hwcheckUI.sections = [];
       hwcheckUI.unspecialized = [];
       hwcheckUI.custom = [];
       hwcheckUI.console = null;
       hwcheckUI.consoleNote = "";
-      hwcheckUI.wiringError = e && e.message ? e.message : String(e);
+      // ⚠ 上次的 main.c 必须一起清掉（工单 hwcheck-hardening/07 更正）：主程序是**按所选器件**
+      // 渲染的（`render_main_c(config, sections, generic, custom)`），所以失败之后留着的那份
+      // 属于**上一组器件**——照它去编译烧录就是烧错东西。此前这里不清，理由是"检测程序只依赖
+      // 平台与通道"，那个前提不成立。
+      hwcheckUI.preview = "";
+      hwcheckUI.outputHint = "";
+      hwcheckUI.previewError = e && e.message ? e.message : String(e);
     }
   } finally {
     hwcheckViewBusy = false;
@@ -1040,7 +1060,6 @@ export function initHwcheck() {
         hwcheckUI.sections = [];          // 换板 = 旧检测计划作废（配方按平台分）
         hwcheckUI.unspecialized = [];
         hwcheckUI.console = null;         // 同理：命令字符也按平台 / 配方给
-        hwcheckUI.wiringError = "";
       }
       renderHwcheckPanel();
       refreshHwcheckView();               // 新平台的接线表 / 冲突立刻跟上
@@ -1069,7 +1088,7 @@ export function initHwcheck() {
       hwcheckUI.sections = [];          // 通道变了 = 工程模块集变了，计划重取
       hwcheckUI.unspecialized = [];
       hwcheckUI.console = null;         // 命令表也一样（有没有串口决定能不能复测）
-      hwcheckUI.wiringError = "";
+      hwcheckUI.previewError = "";      // 换通道 = 重新渲染输入，旧错误不再适用
       // 通道变了：生成前引导（mspm0 双通道会撞脚）要跟着变
       renderHwcheckChannelNote();
       renderHwcheckOutput();

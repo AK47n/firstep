@@ -25,7 +25,7 @@ import {
   hwcheckDevicePick, hwcheckDeviceSlugs, hwcheckDevicePool, hwcheckDeviceKit,
   hwcheckDeviceChipsHTML, hwcheckDeviceEmptyHTML, hwcheckMissingDevicesHTML,
   hwcheckDeviceGroupNoticeHTML,
-  hwcheckWiringErrorHTML, hwcheckWiringTableHTML, hwcheckPinGroupsHTML,
+  hwcheckWiringTableHTML, hwcheckPinGroupsHTML,
   hwcheckBoardSharesHTML, hwcheckOrderHTML, hwcheckOrderDesc, hwcheckBoardState,
   hwcheckPinFixHTML,
   hwcheckSectionsState, hwcheckSectionsHTML, hwcheckUnspecializedHTML,
@@ -692,7 +692,6 @@ test("hwcheckMissingDevicesHTML：本平台没有条目 = 点名（不静默省�
   assert.equal(hwcheckMissingDevicesHTML([]), "");
   assert.equal(hwcheckMissingDevicesHTML(null), "");
   assert.ok(hwcheckMissingDevicesHTML([{ slug: "<x>" }]).includes("&lt;x&gt;"));
-  assert.ok(hwcheckWiringErrorHTML("库中不存在模块 nope").includes("接线表"));
 });
 
 test("hwcheckBoardState：板侧载荷归一（缺键 = 保留当前选择，不抹掉用户刚选的）", () => {
@@ -785,13 +784,19 @@ test("ui 的自动回读不抹掉用户刚动的选择（工单 06 会话实测�
     .test(ui), "adoptProject 要能只带工程本体、不碰器件");
 });
 
-test("ui 的接线表失败不连坐预览（main.c 只依赖平台与通道）", () => {
+test("ui 的三处清预览：换平台 / 换通道 / **预览失败**（工单 hardening/07 更正）", () => {
+  // 这条守卫原来写的是"接线表取不到不许把 main.c 预览抹掉"，依据是"检测程序只依赖平台与通道"。
+  // 那个前提**不成立**：主程序是按所选器件渲染的（render_main_c(config, sections, generic, custom)），
+  // 所以预览失败之后留着的那份属于**上一组器件**——照它去编译烧录就是烧错东西。
   const ui = readFileSync(
     new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
   const clears = ui.match(/hwcheckUI\.preview = ""/g) || [];
-  assert.equal(clears.length, 2,
-    "只允许「换平台」「换通道」两处清预览（那两处渲染输入真的变了）；"
-    + "接线表取不到不许把 02 已交付的 main.c 预览抹掉");
+  assert.equal(clears.length, 3,
+    "三处清预览：换平台 / 换通道（渲染输入变了）+ 预览失败（那份属于上一组器件）");
+  // 失败路径必须用专用文案，且不再借用"接线表取不到"
+  assert.ok(ui.includes("hwcheckErrorHTML(hwcheckUI.previewError)"),
+    "预览失败要显示「检测程序预览失败」那句（专用文案），别把学生引去查接线");
+  assert.ok(!ui.includes("wiringError"), "wiringError 这条老路已删（它当年表达的正是「预览失败」）");
 });
 
 // ---------------------------------------------------------------------------

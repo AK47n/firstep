@@ -543,13 +543,6 @@ export function hwcheckMissingDevicesHTML(missing) {
   }).join("");
 }
 
-// hwcheckWiringErrorHTML(message)：接线表取不到时的提示。与"预览失败"分开写一句
-// ——取不到表的原因（模块库没配好 / 库外 slug）跟"检测程序渲染失败"是两回事，
-// 说成一句会把用户引到错的地方去查。
-export function hwcheckWiringErrorHTML(message) {
-  return `<div class="error">接线表与冲突暂时取不到：${esc(message || "")}</div>`;
-}
-
 // hwcheckPinFixHTML(pinFixes)：生成前**自动移开的默认脚撞脚**（工单
 // hwcheck-pin-conflict-exit/01）。为什么必须明说：检测页没有引脚配置入口，学生
 // 照"原厂默认脚"接好线却生成了另一组脚，是最难查的一类不一致——所以页面把动过的
@@ -1347,7 +1340,7 @@ if (typeof window !== "undefined") {
     hwcheckDevicePick, hwcheckDevicePool, hwcheckDeviceKit,
     hwcheckDeviceChipsHTML, hwcheckDeviceEmptyHTML, hwcheckMissingDevicesHTML,
     hwcheckDeviceGroupNoticeHTML,
-    hwcheckWiringErrorHTML, hwcheckWiringTableHTML, hwcheckPinGroupsHTML,
+    hwcheckWiringTableHTML, hwcheckPinGroupsHTML,
     hwcheckBoardSharesHTML, hwcheckOrderHTML, hwcheckOrderDesc,
     hwcheckDeviceSlugs, hwcheckBoardState,
     hwcheckSectionsState, hwcheckSectionsHTML, hwcheckUnspecializedHTML,

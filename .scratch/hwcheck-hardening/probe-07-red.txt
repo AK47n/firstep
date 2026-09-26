@@ -1,0 +1,18 @@
+ui/hwcheck.js sha256（跑之前）= e583e3e6c8a5cbc500598bb67fb61faa0cce6820dd3aed304a54f745b29fe914
+✓ 前置干净性检查：失败分支确实清了 main.c（唯一一处）
+撤掉清预览后跑前端用例：exit=1
+—— node --test 输出（尾部 10 行）——
+      at Test.postRun (node:internal/test_runner/test:1330:19)
+      at Test.run (node:internal/test_runner/test:1258:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 3,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+判据结论 = ✓ 用例红了（结构钉有强度）
+ui/hwcheck.js sha256（复原后）= e583e3e6c8a5cbc500598bb67fb61faa0cce6820dd3aed304a54f745b29fe914
+复原复核 = ✓ 逐字节相同
+复原后跑前端用例：exit=0（应为 0）
