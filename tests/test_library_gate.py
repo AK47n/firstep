@@ -24,13 +24,37 @@ from __future__ import annotations
 
 import ast
 import json
+from dataclasses import replace
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
-from contest_generator.config import AppConfig
+from contest_generator.config import AppConfig, reference_library_dir
+from contest_generator.master import (
+    distill_master,
+    main_c_template,
+    requests_archive,
+    scan_project,
+)
+from contest_generator.master_store import MasterError
+from contest_generator.platforms import PLATFORM_STM32
+from contest_generator.report import (
+    ACTION_EXCLUDE,
+    ACTION_KEEP,
+    ACTION_MERGE,
+    ArchiveDecision,
+    DistillationReport,
+    FileDecision,
+    ReportError,
+)
 from contest_generator.webapp import AppContext, create_app
-from tests.fakes import DHT11_H, make_fake_module_library
+from tests.fakes import (
+    DHT11_H,
+    FakeLLM,
+    make_fake_module_library,
+    make_fake_stm32_projects,
+)
 
 #: 本仓 src（结构判据读源码真身；`find_tool_root` 那套在测试里另有先例，这里只需定位）
 REPO_SRC = Path(__file__).resolve().parents[1] / "src"
@@ -260,6 +284,227 @@ def test_keyless_config_without_library_fields_is_not_a_library_source(tmp_path)
 
     assert resp.status_code == 400, resp.text
     assert LIBRARY_REJECTION in resp.json()["detail"], resp.text
+
+
+# ---------------------------------------------------------------------------
+# 蒸馏确认的 AI 闸：有归档动作才要 key，且拦在事务开始之前（工单 ci-gate-fixes/06）
+# ---------------------------------------------------------------------------
+
+
+#: 假工程对的典型 AI 判定（与 tests/test_webapp.py / test_reference_library.py
+#: 同一套素材）：公共 keep × 2、独有 keep / exclude、冲突 merge。
+_CONFIRM_DECISIONS = (
+    FileDecision("inc/stm32f10x_conf.h", ACTION_KEEP, reason="官方库配置头，基础必需"),
+    FileDecision("src/system_stm32f10x.c", ACTION_KEEP, reason="系统初始化，基础必需"),
+    FileDecision("sensors/dht11.c", ACTION_KEEP, reason="通用传感器驱动"),
+    FileDecision("ui/oled_fonts.c", ACTION_EXCLUDE, reason="上场比赛残留"),
+    FileDecision(
+        "src/oled.c",
+        ACTION_MERGE,
+        content="/* 通用 OLED 驱动（整合版） */\n",
+        explanation="两版接口一致，整合去重",
+        source="proj-b",
+        reason="B 版本较新",
+    ),
+)
+
+
+def _confirm_payload(
+    tmp_path: Path, *, archive: tuple[ArchiveDecision, ...] = ()
+) -> dict:
+    """一份可提交的确认载荷（不经 AI、不落盘：报告由 distill_master 纯函数出）。
+
+    归档条目取 `ui/oled_fonts.c`（本来就是剔除件）——与既有归档用例同一形状
+    （`test_confirm_archives_excluded_file_with_transaction`）：归档是一档独立动作，
+    归档了就**从剔除段移出**（同一路径两处都写 = 报告自相矛盾，事务会为别的原因
+    400——那会让本文件的判据说不清是谁给的 400）。
+    """
+    projects = make_fake_stm32_projects(tmp_path / "old_projects")
+    report = distill_master(
+        FakeLLM(distillation=_CONFIRM_DECISIONS),
+        PLATFORM_STM32,
+        [scan_project(project) for project in projects],
+    )
+    if archive:
+        archived = {decision.path for decision in archive}
+        report = replace(
+            report,
+            exclude=tuple(d for d in report.exclude if d.path not in archived),
+            archive=archive,
+        )
+    return {**report.to_dict(), "project_dirs": [str(p) for p in projects]}
+
+
+def _tree_state(root: Path) -> dict[str, bytes]:
+    """目录树的逐文件快照（相对路径 → 字节）：事务原子性的判据本体。
+
+    比"目录还在不在"强一档：文件名一样而字节变了（改写 / 截断）也算变化。
+    """
+    if not root.exists():
+        return {}
+    return {
+        str(path.relative_to(root)): path.read_bytes()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+
+@pytest.mark.parametrize(
+    "empty_form", [{}, {"archive": []}], ids=["键不在", "空列表"]
+)
+def test_confirm_without_archive_needs_no_ai_key_and_really_imports(
+    tmp_path, empty_form
+):
+    """无归档动作 + 空 key → 200，且母版**真的入库**（不是"看起来 200"）。
+
+    这是函数 docstring 那句「无归档动作的确认不要求 AI 配置」的行为面：判据与
+    库端点同一道闸（「库在哪」定得出来就放行），不派发任何模型。
+    「无归档动作」的两种 wire 形状都过一遍——**页面发的是空列表**
+    （`ui/master.js` 每次都带 `archive` 键），脚本 / 旧客户端可能整段不带
+    （`to_dict` 只在非空时带出该键）。
+    """
+    library, masters = _seed_library(tmp_path)
+    client = _bootstrap_client(tmp_path, library, masters)
+
+    resp = client.post(
+        "/api/masters/confirm", json={**_confirm_payload(tmp_path), **empty_form}
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["platform"] == PLATFORM_STM32
+    stored = masters / PLATFORM_STM32
+    # 母版 main.c = 确定性模板（ADR 0002），保留件真落盘、剔除件真没落
+    assert (stored / "main.c").read_text(encoding="utf-8") == main_c_template(
+        PLATFORM_STM32
+    )
+    assert (stored / "inc" / "stm32f10x_conf.h").is_file()
+    assert (stored / "sensors" / "dht11.c").is_file()
+    assert not (stored / "ui" / "oled_fonts.c").exists()
+    # 列表端点也真看得见这条母版（入库 ≠ 只写了目录）
+    assert [m["platform"] for m in client.get("/api/masters").json()] == [
+        PLATFORM_STM32
+    ]
+
+
+def test_confirm_with_archive_without_key_is_refused_before_any_write(tmp_path):
+    """有归档动作 + 空 key → 400 中文，且**磁盘零变化**（母版库与参考库都比前后）。
+
+    早先这条 400 落在事务内部的中途（归档那一步才懒取 `llm_factory`）：判据要的
+    不是"最终没写"而是"动手之前就拒绝"——闸门提到事务前，磁盘一个字节都不动。
+    """
+    library, masters = _seed_library(tmp_path)
+    client = _bootstrap_client(tmp_path, library, masters)
+    payload = _confirm_payload(
+        tmp_path, archive=(ArchiveDecision(path="ui/oled_fonts.c", topic="2026C"),)
+    )
+    references = reference_library_dir(library)
+    before = (_tree_state(masters), _tree_state(references))
+    assert before == ({}, {})  # 前提：两个库本来就是空的（否则"零变化"自证不了）
+
+    resp = client.post("/api/masters/confirm", json=payload)
+
+    assert resp.status_code == 400, resp.text
+    assert AI_REJECTION in resp.json()["detail"], resp.text
+    assert (_tree_state(masters), _tree_state(references)) == before
+    assert client.get("/api/masters").json() == []
+
+
+def test_confirm_with_archive_without_key_is_the_gate_talking(tmp_path):
+    """那声 400 必须是**闸门**给的：「动手之前」的判据靠"事务还没被碰过"证。
+
+    做法：给同一份归档载荷换一个**事务一碰就炸**的工程目录（不存在 → 事务第一步
+    `scan_project` 就 `MasterError("工程目录不存在…")`）。于是两条出路泾渭分明——
+    闸门在前 ⇒ 报的是「未配置 AI API」；闸门被挪进事务（或干脆摘掉）⇒ 报的是
+    「工程目录不存在」。磁盘零变化这一条分辨不出这两种形态（事务的中途 400 也
+    可能不留痕），所以这条判据单独钉"什么时候拒绝"。
+    """
+    library, masters = _seed_library(tmp_path)
+    client = _bootstrap_client(tmp_path, library, masters)
+    payload = _confirm_payload(
+        tmp_path, archive=(ArchiveDecision(path="ui/oled_fonts.c", topic="2026C"),)
+    )
+    payload["project_dirs"] = [str(tmp_path / "no-such-project")]
+
+    resp = client.post("/api/masters/confirm", json=payload)
+
+    assert resp.status_code == 400, resp.text
+    detail = resp.json()["detail"]
+    assert AI_REJECTION in detail, detail
+    assert "工程目录不存在" not in detail, detail  # 事务一次都没开跑
+    assert _tree_state(masters) == {}
+
+
+def test_confirm_with_archive_without_key_never_enters_the_transaction(
+    tmp_path, monkeypatch
+):
+    """那条「事务开始前」的最后一层：`confirm_distillation` **一次都没被进过**。
+
+    与上一条合起来才是工单那句"动手之前"的完整判据——上一条证的是"事务**第一步**
+    之前"（把闸门挪到事务首行，它照样绿），这一条把"没进过事务函数"也钉死。
+    缝合在路由 → 域函数那一层：判据是**顺序**，除了"它有没有被调"没有别的可观测量。
+    """
+    library, masters = _seed_library(tmp_path)
+    client = _bootstrap_client(tmp_path, library, masters)
+    entered: list[tuple] = []
+    monkeypatch.setattr(
+        "contest_generator.webapp.confirm_distillation",
+        lambda *args, **kwargs: entered.append((args, kwargs)),
+    )
+    payload = _confirm_payload(
+        tmp_path, archive=(ArchiveDecision(path="ui/oled_fonts.c", topic="2026C"),)
+    )
+
+    resp = client.post("/api/masters/confirm", json=payload)
+
+    assert resp.status_code == 400, resp.text
+    assert AI_REJECTION in resp.json()["detail"], resp.text
+    assert entered == []  # 事务函数没被进过（进了就会被上面那个替身记录到）
+    assert _tree_state(masters) == {}
+
+
+@pytest.mark.parametrize(
+    "archive_section",
+    [
+        {},  # 键不在：`to_dict` 只在非空时带出 archive
+        {"archive": []},  # 空列表：页面发出来的形状（ui/master.js 每次都带这个键）
+        {"archive": [{"path": "ui/oled_fonts.c", "topic": "2026C", "reason": ""}]},
+        {"archive": [{"path": "ui/oled_fonts.c", "topic": "2026C", "reason": "残留"}]},
+    ],
+    ids=["键不在", "空列表", "一条", "一条带理由"],
+)
+def test_archive_gate_judgment_matches_the_report_the_transaction_rebuilds(
+    tmp_path, archive_section
+):
+    """闸门判据 = 事务里重建的 `DistillationReport.archive`（同一段解析，单源）。
+
+    两处各写一遍"什么算归档动作"是本单最容易漂的地方：闸门认"没有归档"而事务
+    认出归档，就会走进 `prepare_archive` 拿 None 去建条目。判据钉在**两个方向的
+    一致性**上（`requests_archive` ↔ `from_dict(...).archive`），四种 wire 形状
+    逐个过。
+    """
+    payload = {**_confirm_payload(tmp_path), **archive_section}
+
+    rebuilt = DistillationReport.from_dict(payload, main_c_preview="预览")
+
+    assert (
+        requests_archive(payload)
+        == bool(rebuilt.archive)
+        == bool(archive_section.get("archive"))
+    )
+
+
+def test_archive_gate_and_report_agree_on_a_malformed_archive_section(tmp_path):
+    """归档段形状非法时两处一起拒（同一段解析）：闸门给 400 中文，不是裸 500。
+
+    `ReportError` 未登记在错误表里（它是模型层内部异常，事务里翻成 MasterError）
+    ——闸门若原样抛它，路由兜底就是 500。
+    """
+    payload = {**_confirm_payload(tmp_path), "archive": "2026C"}  # 不是列表
+
+    with pytest.raises(ReportError, match="archive 必须是列表"):
+        DistillationReport.from_dict(payload, main_c_preview="预览")
+    with pytest.raises(MasterError, match="archive 必须是列表"):
+        requests_archive(payload)
 
 
 # ---------------------------------------------------------------------------

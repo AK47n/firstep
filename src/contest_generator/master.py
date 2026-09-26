@@ -78,6 +78,7 @@ from .report import (
     ProjectComparison,
     ProjectStructure,
     ReportError,
+    parse_archive_section,
 )
 
 # 模板 main.c（ADR 0002）：母版 = 空的最小系统板工程，main.c 由确定性平台模板
@@ -676,6 +677,25 @@ def _source_project(decision: FileDecision, comparison: ProjectComparison) -> st
     raise MasterError(f"没有任何工程含文件 {decision.path}")
 
 
+def requests_archive(payload: dict[str, Any]) -> bool:
+    """确认请求里有没有归档动作（工单 ci-gate-fixes/06：确认端点的**事务前**判据）。
+
+    判据就是描述归档形状的那一段解析本身（`report.parse_archive_section`）——
+    与 `confirm_distillation` 重建 `DistillationReport.archive` 用的是**同一个
+    函数**。两处各写一遍"什么算归档动作"是这条链上最容易漂的地方：闸门按
+    "没有归档"放行、事务却认出归档，就会拿着 None 的 llm_factory / 参考库目录
+    走进归档（而这两样从前正是靠调用方"无条件要 AI 配置"兜住的）。
+
+    形状非法在这里翻成 MasterError——与事务里同一条 400 中文：`ReportError` 是
+    模型层内部异常、未登记在错误表里（兜底按真 bug 500），不能让排雷判据把它
+    漏到 HTTP 层。
+    """
+    try:
+        return bool(parse_archive_section(payload))
+    except ReportError as exc:
+        raise MasterError(str(exc)) from exc
+
+
 def confirm_distillation(
     masters_dir: Path,
     project_dirs: Sequence[Path],
@@ -699,7 +719,8 @@ def confirm_distillation(
     原子，批量失败回滚本批已建条目并大声报错：母版已入库、可重试——import
     幂等，归档重跑是全新条目）。归档步骤在 archive.py（工单 C3：master 不
     import 参考库族，防 import 链）。llm_factory / reference_library_dir 只在
-    报告含归档动作时按需取用（无归档的确认不要求 AI 配置，与现状一致）。
+    报告含归档动作时按需取用；调用方（确认端点）按**同一个判据** `requests_archive`
+    在事务开始之前就把这两样要到手（缺 AI 配置当场 400，工单 ci-gate-fixes/06）。
     """
     # 函数级延迟导入：归档辅助要 import 参考库族与赛题库文法（master 不 import
     # 它们），模块级导入会经 archive 拉入参考库族、破坏 import 链收敛（工单 C3；

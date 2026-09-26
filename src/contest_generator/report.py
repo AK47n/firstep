@@ -160,6 +160,31 @@ class ArchiveDecision:
         return cls(path=path, topic=topic, reason=reason)
 
 
+def parse_archive_section(data: Mapping[str, Any]) -> tuple[ArchiveDecision, ...]:
+    """报告载荷的 archive 段 → 归档动作（形状校验唯一实现）。
+
+    单源的意义有两层：① `DistillationReport.from_dict`（确认事务重建报告）与
+    ② **确认端点的"有没有归档动作"排雷判据**（`master.requests_archive`，工单
+    ci-gate-fixes/06）必须对同一份载荷给出同一个答案——各写一遍，闸门认"没有
+    归档"而事务认出归档，就会拿着 None 的 llm_factory / 参考库目录走进归档；
+    缺省（键不在）= 无归档动作，与 `to_dict` 只在非空时带出该键对称。
+
+    与 `from_dict` 里那个 `decisions(key)` 闭包同形是**刻意的**（评审点过一
+    次）：两者只差"键不在算不算合法"——keep / merge / exclude 是必填段（缺键 =
+    报告不完整，400），archive 缺键 = 没有归档动作。参数化共享要添一个布尔开关
+    把这个语义差藏进参数里，本仓在语义确有差异时取清晰重复（CONTEXT「条目库
+    原语」同款取舍）；真正必须单源的是**archive 这一段**（两处消费方），它已经
+    是单源了。
+    """
+    raw = data.get("archive", [])
+    if not isinstance(raw, list):
+        raise ReportError("archive 必须是列表")
+    try:
+        return tuple(ArchiveDecision.from_dict(item) for item in raw)
+    except ReportError as exc:
+        raise ReportError(f"报告 archive 条目非法：{exc}") from exc
+
+
 @dataclass(frozen=True)
 class DistillationReport:
     """提炼报告容器：保留 / 整合 / 剔除清单 + 归档清单 + 模板 main.c 预览 + .uvprojx 预览。
@@ -242,15 +267,6 @@ class DistillationReport:
             except ReportError as exc:
                 raise ReportError(f"报告 {key} 条目非法：{exc}") from exc
 
-        def archive_entries(key: str) -> tuple[ArchiveDecision, ...]:
-            raw = data.get(key, [])
-            if not isinstance(raw, list):
-                raise ReportError(f"{key} 必须是列表")
-            try:
-                return tuple(ArchiveDecision.from_dict(item) for item in raw)
-            except ReportError as exc:
-                raise ReportError(f"报告 {key} 条目非法：{exc}") from exc
-
         return cls(
             platform=platform,
             projects=tuple(projects),
@@ -259,7 +275,7 @@ class DistillationReport:
             exclude=decisions("exclude"),
             main_c_preview=main_c_preview,
             uvprojx_preview=uvprojx_preview,
-            archive=archive_entries("archive"),
+            archive=parse_archive_section(data),
         )
 
 

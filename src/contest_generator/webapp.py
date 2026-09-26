@@ -257,6 +257,7 @@ from .recommend_cache import (
 from .master import (
     confirm_distillation,
     distill_master,
+    requests_archive,
     scan_project,
 )
 from .master_store import (
@@ -5622,10 +5623,26 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
         报告含归档动作（工单 02）时，归档条目随确认事务一起提交（LLM 判定 +
         复制入库、锚定该题）；AI 服务与参考文件库目录按需取用——无归档动作的
-        确认不要求 AI 配置（与现状一致）。
+        确认不要求 AI 配置。
+
+        **闸门按需、且在事务开始之前**（工单 ci-gate-fixes/06）：判据 = 这份请求
+        里有没有归档动作（`master.requests_archive`，与事务里重建的
+        `DistillationReport.archive` 同一段解析）。有归档才要 AI 配置，缺 key
+        当场中文 400——事务（暂存 / 落盘 / 入库）一个字节都还没动；无归档动作
+        只要「库在哪」定得出来（`_library_config`，与库端点同一道闸，不看
+        `api_key`），没配 key 的机器上不归档的确认照旧把母版入库。
         """
         project_dirs = [Path(d) for d in _require_str_list(payload, "project_dirs")]
-        config = _require_config(context)
+        # 闸门按需、且都必须落在事务开始之前（见 docstring）：参考库根默认不推
+        # ——无归档动作时 confirm_distillation 根本不取它
+        reference_dir = None
+        if requests_archive(payload):
+            config = _require_config(context)
+            reference_dir = reference_library_dir(config.module_library_dir)
+        else:
+            # 无归档动作 = 这一趟一个模型都不派发：闸门只看「库在哪」（与库端点
+            # 同一道闸，不看 api_key）——返回值用不上，这一句本身就是闸门
+            _library_config(context)
         llm_run = LLMRun(context, "masters-confirm")
 
         def archive_llm_factory() -> LLM:
@@ -5637,7 +5654,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 project_dirs,
                 payload,
                 llm_factory=archive_llm_factory,
-                reference_library_dir=reference_library_dir(config.module_library_dir),
+                reference_library_dir=reference_dir,
             )
         finally:
             llm_run.settle()

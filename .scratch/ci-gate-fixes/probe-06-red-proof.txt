@@ -1,0 +1,17 @@
+webapp.py sha256（注入前）=54c14db1c836adc968851df12a8561b20fc368a1998fe8ce9254753f1a47b89c
+--- 注入态 A 无条件要 AI 配置（本单开工前的形状） —— 期望 test_confirm_without_archive_needs_no_ai_key_and_really_imports 变红 ---
+exit=1
+FAILED tests/test_library_gate.py::test_confirm_without_archive_needs_no_ai_key_and_really_imports[\u952e\u4e0d\u5728]
+FAILED tests/test_library_gate.py::test_confirm_without_archive_needs_no_ai_key_and_really_imports[\u7a7a\u5217\u8868]
+2 failed, 3 passed, 1 warning in 1.22s
+--- 注入态 B 只做「按需」那一半（闸门摘掉，留给事务里懒取） —— 期望 test_confirm_with_archive_without_key_is_the_gate_talking 变红 ---
+exit=1
+ERROR    contest_generator.errors:errors.py:354 δ�Ǽ��쳣���û��ɼ� 500 ���ף���AttributeError("'NoneType' object has no attribute 'platform'")
+FAILED tests/test_library_gate.py::test_confirm_with_archive_without_key_is_the_gate_talking
+FAILED tests/test_library_gate.py::test_confirm_with_archive_without_key_never_enters_the_transaction
+2 failed, 3 passed, 1 warning in 1.27s
+webapp.py sha256（复原后）=54c14db1c836adc968851df12a8561b20fc368a1998fe8ce9254753f1a47b89c
+逐字节复原=是
+--- 复原后 —— 三条用例应全绿 ---
+exit=0
+5 passed, 1 warning in 1.31s
