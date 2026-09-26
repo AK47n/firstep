@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=5c97fdc42cfe8086c917feb2134b1f83471ed454 -->
+<!-- changelog-auto: last-commit=7073e85b40c0a18a937a6f44966a81a804d6bd09 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -21,6 +21,7 @@
 - 13:04 账本：CI 已转绿（run 36219392088 三腿全绿）、ci-gate-fixes 01-11 收口与最值钱的那条方法论
 - 13:09 工单 ci-gate-fixes/05：复现并推翻「复用 HOME」前提（~1/3 偶发），定性为宽限竞态换了一条更慢的到达路径
 - 16:44 ﻿工单 ci-gate-fixes/05：F5 偶发全红定性为「新文档那一发 register 丢在传输层」，两处修掉（连续 12 轮全绿）
+- 16:45 ﻿账本：ci-gate-fixes/05 收口——本机那条 launcher-reload 偶发已定性并修掉，另记三条本机事实
 
 ## 2026-09-25
 - 00:21 工单 hwcheck-acceptance/01：mspm0 生成链认下 SysConfig 构建期接口面（那一行从注释占位变活代码）
