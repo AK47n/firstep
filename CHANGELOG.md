@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=eb48e9d4cd73a49b358e32332c2d174290692e07 -->
+<!-- changelog-auto: last-commit=fb6f9e98c51d11b90ba9ad86bb1629d0f66cd6a2 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -46,6 +46,7 @@
 - 21:55 工单 hwcheck-hygiene/03：检测记录的写 = 唯一临时名 + 原子替换 + 短临界区（并发两处入口不丢更新）
 - 22:19 工单 hwcheck-hygiene/04：两处「失败」不许伪装成「没问题」（母版配置读不出来 / 检测记录读不出来）
 - 22:41 工单 hwcheck-hygiene/05：板级事实单源——LED 引脚与排障引脚白名单都从选型数据取
+- 23:21 工单 hwcheck-hygiene/06：焦点与可达性——勾完还在原位、键盘能用、长任务有话说
 
 ## 2026-09-25
 - 00:21 工单 hwcheck-acceptance/01：mspm0 生成链认下 SysConfig 构建期接口面（那一行从注释占位变活代码）
