@@ -653,6 +653,53 @@ def test_render_recipe_section_marks_it_specialized_and_counts_a_verdict():
         assert all(ord(ch) < 128 for ch in line), line
 
 
+# 板上行缓冲：渲染产物里的 `static char hwcheck_line[128]`——写入判据是
+# `len < sizeof - 1`，所以一行的**可用字节是 127**；本守卫按 128 卡（既有那条扩张格
+# 守卫也是这个口径：`size < buffer_bytes`）。
+HWCHECK_LINE_BYTES = 128
+# `hwcheck_report_int` 打的是 int：最坏 32 位十进制含符号 11 位，留 1 位余量。
+_WORST_INT_DIGITS = 12
+
+
+def _read_line_bytes(expression: str, unit: str) -> int:
+    """渲染出的读数行**最坏**字节数（与 `render_recipe_section` 同形：值 → 单位 →（表达式））。"""
+    text = "x" * _WORST_INT_DIGITS + (f" {unit}" if unit else "") + f" ({expression})"
+    return len(text.encode("utf-8"))
+
+
+def test_every_real_read_line_fits_the_device_line_buffer():
+    """**全量配方**的每条读数行都要塞得进板上那 128 字节的行缓冲（工单 hwcheck-hardening/04）。
+
+    为什么单独立一条：既有的 `test_expansion_read_lines_fit_the_device_line_buffer` 只吃
+    `EXPANSION`（扩张格），**pilot 那批刻意不吃**（`.scratch/backlog.md` §21 就是这么记的），
+    而实测超限的正好**全在 pilot**：`debug_uart × stm32` 249B、`adc × mspm0` 162B、
+    `beep × stm32` 156B、`adc × stm32` 149B、`adc × mspm0` 149B（比 §21 记的那 1 条多 4 条）。
+
+    溢出保护是刻意的（宁可截一行，不让程序跑飞），但中文一字 3 字节——**截在字中间就是半个乱码**，
+    学生看到的是"读数那行尾巴花了"，而不是一条能自查的报错。
+    """
+    from contest_generator.library import list_modules
+
+    manifests = list_modules(REAL_LIBRARY)
+    recipes = load_recipes(
+        REAL_LIBRARY, manifests, _library_interfaces_all(REAL_LIBRARY, manifests))
+    total = 0
+    too_long: list[tuple[int, str, str]] = []
+    for slug, catalog in recipes.items():
+        for platform, section in catalog.sections.items():
+            for item in section.read:
+                total += 1
+                size = _read_line_bytes(item.expression, item.unit)
+                if size >= HWCHECK_LINE_BYTES:
+                    too_long.append((size, f"{slug} × {platform}", item.expression))
+    assert total >= 165, f"全量读数行少于地板 165（现在 {total}）——地板要跟着扩张批上调"
+    assert not too_long, (
+        "这些读数行会撞上 128 字节的行缓冲（板上静默截断，中文截半就是乱码）："
+        + "；".join(f"{size}B {where} [{expr}]" for size, where, expr in sorted(too_long, reverse=True))
+        + "——把长说明挪进该格的平台说明（note 是页面文本、不进板上缓冲），行上只留短量纲"
+    )
+
+
 def test_read_line_puts_the_value_before_the_source_expression():
     """读数行**值优先**（工单 hwcheck-hardening/03）：`<值> <单位> (<表达式>)`。
 

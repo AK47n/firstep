@@ -1,0 +1,17 @@
+配方文件 sha256（跑之前）= 60df164f55061f065f5e16dd6ad69d42f1450b50aa94bf57b400e26c1b71815a
+换行形态 = LF（逐字节读写，不改换行）
+✓ 前置干净性检查：行上是短量纲；长口径只剩平台说明里那一处
+塞回长量纲后跑守卫：exit=1
+—— pytest 输出（尾部 8 行）——
+        )
+E       AssertionError: 这些读数行会撞上 128 字节的行缓冲（板上静默截断，中文截半就是乱码）：249B debug_uart × stm32 [gpio_get(DEBUG_UART_RX_GPIO, DEBUG_UART_RX_Pin)]——把长说明挪进该格的平台说明（note 是页面文本、不进板上缓冲），行上只留短量纲
+E       assert not [(249, 'debug_uart × stm32', 'gpio_get(DEBUG_UART_RX_GPIO, DEBUG_UART_RX_Pin)')]
+
+tests\test_hwcheck_recipe.py:696: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_hwcheck_recipe.py::test_every_real_read_line_fits_the_device_line_buffer
+1 failed in 0.60s
+判据结论 = ✓ 用例红了（守卫有强度）
+配方文件 sha256（复原后）= 60df164f55061f065f5e16dd6ad69d42f1450b50aa94bf57b400e26c1b71815a
+复原复核 = ✓ 逐字节相同
+复原后跑守卫：exit=0（应为 0）

@@ -5,16 +5,20 @@
 
 **被谁阻塞：** **03**（03 收窄表达式横幅，行宽清单会变；先落 03 再量）。
 
-**状态：** ready-for-agent
+**状态：** claimed
 
-- [ ] 逐格重量全量读数行（算式 + 数值位数 + 单位），列出超 128 字节的格。
-      立项时的读数（03 之前）：`debug_uart × stm32` 239B、`adc × mspm0` 152B、`beep × stm32` 146B、
-      `adc × stm32` 139B、`adc × mspm0` 139B——**落 03 之后要重新量一遍**，以新读数为准。
-- [ ] 超限格的长说明挪进该格的平台说明（note 是页面文本，**不进板上行缓冲**），行上只留短单位。
-- [ ] 新增守卫吃**全量配方（含 pilot）**：最坏行宽 ≤ 128 字节。
-      既有那条扩张格守卫（`..._read_lines_fit_the_device_line_buffer`）**保留不缩小**。
-- [ ] **反证**：把长单位塞回一行 → 新用例必须红；复原后逐字节相同
-      （读数落 `.scratch/hwcheck-hardening/probe-04-red.txt`，量具脚本一并落本目录）。
-- [ ] 两平台真编译矩阵复跑（改的是配方文本，必须证"还能编"）：
-      stm32 走 UV4、mspm0 走 gmake，判据 0 error；告警如实统计（**06 单修好之前，链接器形态告警另行手工计**）。
-- [ ] 相关面全绿：`tests/test_hwcheck_recipe.py tests/test_hwcheck.py -q`。
+- [x] 逐格重量全量读数行（按 03 落地的**值优先**格式：`<值> <单位> (<表达式>)`，数值按 12 位十进制算）。
+      实测超限 **5 条**（全在 pilot，与立项读数一致）：`debug_uart × stm32` 249B、`adc × mspm0` 162B、
+      `beep × stm32` 156B、`adc × stm32` 149B、`adc × mspm0` 149B——比 `.scratch/backlog.md` §21 记的
+      1 条多 4 条（§21 是逐格自查时顺手撞到的，只记了 `debug_uart`）。
+- [x] 5 条的长说明挪进该格平台说明（**倒数第二条**，末条仍留给「未上板」自述），行上留短量纲：
+      debug_uart→110B、adc×mspm0→87B/74B、beep→93B、adc×stm32→82B。落地脚本 = `apply-04-units.py`
+      （纯文本替换 + 锚点唯一性校验，不重排 JSON；复核 57/57 格的末条仍是「未上板」）。
+- [x] 新守卫吃**全量配方（含 pilot）**：`test_every_real_read_line_fits_the_device_line_buffer`
+      （地板 165 条读数行 + 逐条最坏宽度 < 128 字节）。既有那条扩张格守卫**保留不缩小**。
+- [x] **反证**：`probe-04-red.py` → 把 `debug_uart` 那条 249B 长量纲塞回行上 → 守卫 exit=1（红）；
+      复原后 sha256 逐字节相同、再跑 exit=0。读数 `probe-04-red.txt`。
+- [x] 两平台真编译矩阵复跑（改的是配方文本，必须证"还能编"）：`--slugs adc,beep,debug_uart`
+      = **6 格全 PASS**（编译器 0 error / 0 warning、链接器告警 0），页面标记 `[专精]` 仍在。
+      读数 `.scratch/hwcheck-hardening/probe-04-compile-matrix.txt`。
+- [x] 相关面全绿：见提交信息里的 pytest 读数。
