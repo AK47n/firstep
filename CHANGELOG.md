@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=7c9e71e73ea87e332e98b990b348355f1897b679 -->
+<!-- changelog-auto: last-commit=4af040f2bc7d1a7cf39446975f5ac9d6529412aa -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -41,6 +41,7 @@
 - 20:33 工单 hwcheck-hardening/11：边界口径更正 + 读数行地板订正 + 浏览器读数落盘（Spec 轴）
 - 20:35 账本：双轴评审结论与三张整改单（09–11）收口
 - 20:53 工单面：硬件检测栏目工程卫生（评审 P2 七项 + 前端守卫补洞 + 两个大文件按职责拆分）
+- 21:10 工单 hwcheck-hygiene/01：模块正文不许再靠 window 全局桥解析名字（并把该方向立成守卫）
 
 ## 2026-09-25
 - 00:21 工单 hwcheck-acceptance/01：mspm0 生成链认下 SysConfig 构建期接口面（那一行从注释占位变活代码）
