@@ -7,6 +7,41 @@
 
 ## 0. 交接区：main 上有什么还没到用户手上（2026-09-26 更新 · **已发布 v1.3.0；涨落以 `git log` 为准**）
 
+> ### 🔄 进行中（2026-09-26 深夜，`hwcheck-hygiene` 会话）——**01–06 已落 main、未发布；07–13 未开工**
+>
+> **这一批是什么**：`docs/improvement-review-hwcheck.md` 的 **P2 七项** + 前端守卫补洞 +
+> 两个大文件按职责拆分，spec / 工单 / 反证读数全在 **`.scratch/hwcheck-hygiene/`**（13 张工单）。
+>
+> **已完成并各自提交（中文提交 + post-commit 自动补 CHANGELOG）**：
+> `01` 全局桥守卫（`tests/js/window-bridge-guard.test.mjs` + 判据 ⑧）/ `02` 字面星号归零
+> （`bold-marker-guard` + 判据 ⑨）/ `03` 检测记录写（唯一临时名 + 短临界区 + 按字段合并）/
+> `04` 两处「失败」说真话（母版配置读不出来 → 400；记录读不出来 ≠ 损坏）/
+> `05` 板级事实单源（LED 脚从 `selection` 取）/ `06` 焦点与可达性（+3 条真浏览器用例）。
+> **每单都跑过双轴 code-review 并整改，票尾有「结论（读数与账）」表。**
+>
+> **下一单是 `07`**（多实例只验首路：如实说 + 守卫），随后 `08`（账本收口 + 浏览器 afterEach 告警
+> 诊断），再 `09`→`10`（拆 fx 两步）与 `11`→`12`（拆 ui 两步），最后 `13` 收口。
+> **`13` 收口之后才发 v1.3.1**（本批不发版）。
+>
+> **接班要用的三条本机事实**（都是本轮新踩/新立的）：
+> ① **读数落盘用 `.scratch/hwcheck-hygiene/readings.py`**（`python readings.py <名> -- <命令>`）——
+>    PowerShell 的 `>` / `Tee-Object` 写 UTF-16LE（`read` 工具拒读）、`Select-Object -First N`
+>    会掐断上游留下孤儿后端；它收全量、剥 ANSI、写 UTF-8 带命令/时间/退出码头。
+> ② **反证探针的锚点要按文件实际换行编码**：本工作树 LF / CRLF 混装
+>    （`webapp.py` / `hwcheck_board.py` / `index.html` / `ui/hwcheck.js` 是 CRLF，
+>    `hwcheck_triage.py` / `tests/**` 是 LF）——按 LF 写死锚点会在 CRLF 文件上**静默不中**
+>    （探针会打印"注入后 sha256 与前置相同"，本轮踩过两次，`.scratch/hwcheck-hygiene/probe-0{4,5,6}-red.*`
+>    里都有现成的 `encode_anchor` / `encode` 写法可抄）。
+> ③ **浏览器门禁现在是 6 个 spec / 48 条**（新增 `tests/browser/hwcheck-capacity-note.spec.mjs`），
+>    跑法仍是 `node --test --test-concurrency=1 "tests/browser/*.spec.mjs"`（≈4 分钟）。
+>    改 `static/js/**` 时**必须**跑它——ui 行为只由真浏览器作证（本批 spec 的测试决策）。
+>
+> **本轮读数基线**（会随提交变，**别写死**）：全套 pytest **5600 passed + 11 skipped**；
+> 前端门禁 **1818 / 0**；浏览器门禁 **48 / 0**；两平台真编译矩阵 6 格全 PASS。
+>
+> **推之前**：`main` 已比 `origin/main` 多出十余笔未推；推法见本节「本机网络事实」
+> （要 `git -c http.https://github.com/.resolve=…` 钉 IP，**别按"重试即好"记**）。
+
 > ### 📌 最新（2026-09-26 晚，`hwcheck-hardening` 会话）—— 硬件检测加固七单全落 main，**未发布**
 >
 > **一句话**：先把 `docs/improvement-review-hwcheck.md`（同日评审）的 **P0+P1 七项**做完了，
