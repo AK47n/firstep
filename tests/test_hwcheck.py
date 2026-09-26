@@ -511,6 +511,28 @@ def test_output_hint_names_the_channels_that_exist():
     assert render_output_hint(OLED_ONLY) == OUTPUT_HINT_OLED
 
 
+def test_oled_copy_never_promises_more_than_the_screen_can_do():
+    """OLED 的说法必须与框架真做的事一致（工单 hwcheck-hardening/03）。
+
+    框架的 OLED 出口是 `oled_show_text(0, 0, s)`——**每一行都刷新在同一位置**，屏上只留得住
+    最后一行；屏 16 列宽，长行被屏自己截断。所以「结果分屏显示」「OLED 上也能看到同样的分段内容」
+    这类话今天做不到：学生没有 USB-TTL 线时只能靠屏，看到的是"一行行闪过去、最后什么都不剩"，
+    最容易得出的错结论是"板子坏了"。判据两条：**不许再承诺**，且**必须换成实话**。
+    """
+    for hint in (OUTPUT_HINT_OLED, OUTPUT_HINT_SERIAL_OLED):
+        for banned in ("分屏", "同样的分段内容", "不接串口也能看"):
+            assert banned not in hint, f"这句做不到的话不许留在通道说明里：{banned}"
+        assert "只留得住最后一行" in hint, "要说清屏上只留得住最后一行"
+        assert "16 列" in hint, "要说清长行会被屏宽截断"
+
+    oled_only = render_checklist(OLED_ONLY)
+    oled_item = next(item for item in oled_only if item.id == "oled")
+    assert "最近一行" in oled_item.expect, "上板清单里那条也要如实（屏只显示最近一行）"
+    assert "调试串口" in oled_item.check, "给出路：要看完整结果就勾调试串口"
+    # 只有串口的形态不该冒出一句 OLED 的话（清单按形态变，别把两平台/两通道说成一样）
+    assert all("OLED" not in item.expect for item in render_checklist(SERIAL_ONLY))
+
+
 def test_output_hint_says_lamp_only_when_no_channel():
     """两个通道都没有：明示「只能看灯闪」，且**不是报错**（照常渲染）。"""
     hint = render_output_hint(LAMP_ONLY)

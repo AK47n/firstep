@@ -1,0 +1,16 @@
+hwcheck.py sha256（跑之前）= 6ba1ab33174f1eb99ebb37769fb49bf55ead95caa92a6a4cb675e3df0ba7dd10
+✓ 前置干净性检查：旧话术当前不在产品文案里
+塞回旧话术后跑口径守卫：exit=1
+—— pytest 输出（尾部 8 行）——
+E                 '分屏' is contained here:
+E                   输出通道：只有 OLED 屏。结果分屏显示在屏幕上，不接串口也能看。
+E                 ?                  ++
+
+tests\test_hwcheck.py:524: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_hwcheck.py::test_oled_copy_never_promises_more_than_the_screen_can_do
+1 failed in 0.16s
+判据结论 = ✓ 用例红了（守卫有强度）
+hwcheck.py sha256（复原后）= 6ba1ab33174f1eb99ebb37769fb49bf55ead95caa92a6a4cb675e3df0ba7dd10
+复原复核 = ✓ 逐字节相同
+复原后跑口径守卫：exit=0（应为 0）

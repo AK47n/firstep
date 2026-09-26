@@ -653,6 +653,36 @@ def test_render_recipe_section_marks_it_specialized_and_counts_a_verdict():
         assert all(ord(ch) < 128 for ch in line), line
 
 
+def test_read_line_puts_the_value_before_the_source_expression():
+    """读数行**值优先**（工单 hwcheck-hardening/03）：`<值> <单位> (<表达式>)`。
+
+    为什么改顺序：OLED 出口是单行刷新、屏宽只有 16 列，而原来那一行是
+    `  <表达式> = <值> <单位>`——横幅在数值之前，实测 165 条读数里 **53% 光横幅就超 16 列**，
+    数值根本进不了屏。改后数与量纲落在最前面（屏上看得见），表达式退成行尾括注
+    （串口上照样读得出"这个数从哪来"）。
+
+    表达式**不截断**：宽度交给构建期守卫（逐格量整行字节数）兜，运行期截断只会静默丢信息。
+    """
+    report = {}
+    code = "\n".join(render_recipe_section(
+        RecipeSection(
+            slug="led", platform=PLATFORM_STM32,
+            init=("led_init(LED_RED)",), init_expect="0",
+            read=(RecipeRead(expression="LED_CHANNEL_COUNT", unit="通道"),),
+        ),
+        report,
+    ))
+    idx_value = code.index("hwcheck_report_int(LED_CHANNEL_COUNT);")
+    idx_unit = code.index(c_string(" 通道"))
+    idx_source = code.index(c_string(" (LED_CHANNEL_COUNT)"))
+    assert idx_value < idx_unit < idx_source, (
+        "读数行的顺序应当是「值 → 单位 → （表达式）」，让学生（尤其是只看 OLED 的）先看到数"
+    )
+    # 旧的"横幅在前"形态不许回来
+    assert c_string("  LED_CHANNEL_COUNT = ") not in code
+    assert "hwcheck_report_int" in code
+
+
 def test_render_recipe_section_without_probe_says_it_is_not_judged():
     """**不假装测过**：没有探头的件，板上说"无法判定通断"，不许打 OK。
 
@@ -898,7 +928,8 @@ def _locals_written_by(declarations, code: str) -> list[str]:
     实现上刻意**只认 `名字 =` 这一个形态**，先把两类"也长得像赋值"的行踢掉：
 
     * **声明行**：渲染器把每条 `locals` 原样写成 `    <声明>;`（`类型 名字 = 初值;`）；
-    * **读数标签行**：渲染器把读数标签写成 `    hwcheck_report("  raw = ");`。
+    * **读数标签行**：渲染器把读数的"来源表达式"写成行尾括注的 `hwcheck_report(" (raw)")`
+      （工单 hwcheck-hardening/03 起值优先，标签里照样含变量名）。
 
     然后逐行找 `名字`，检查它后面是不是**赋值号**（`=`，且不是 `==` / `!=` / `<=` / `>=`、
     也不是语句尾 / 传参 / 括号收尾 / 引号）。步骤分开做（先剥行、再逐行扫）是为了

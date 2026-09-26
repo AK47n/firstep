@@ -1376,11 +1376,15 @@ def render_recipe_section(
         )
 
     for item in section.read:
-        label = item.expression[:60] + ("…" if len(item.expression) > 60 else "")
-        out.append(f"    hwcheck_report({c_string(f'  {label} = ')});")
+        # **值优先**（工单 hwcheck-hardening/03）：OLED 只有 16 列宽，横幅写在数值之前会把
+        # 数值整个挤出屏幕（实测 165 条读数里 53% 光"表达式 = "就超 16 列）。所以这一行改写成
+        # `<值> <单位> (<表达式>)`——数和量纲落在最前面（屏上看得见），表达式退成行尾括注
+        # （串口上照样读得出"这个数从哪来"）。表达式**不截断**：宽度由构建期守卫兜
+        # （逐格量整行字节数），运行期截断只会静默丢掉信息。
         out.append(f"    hwcheck_report_int({item.expression});")
         if item.unit:
             out.append(f"    hwcheck_report({c_string(f' {item.unit}')});")
+        out.append(f"    hwcheck_report({c_string(f' ({item.expression})')});")
         out.append("    hwcheck_newline();")
 
     if report is not None:
