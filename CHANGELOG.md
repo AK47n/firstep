@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=8430623d30d36a899be1303bd60afabd93573c0b -->
+<!-- changelog-auto: last-commit=796bbc722aedc279f6a2a8c66a8910b6120d7439 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-09-27
+- 00:05 工单 hwcheck-hygiene/07：多实例只验首路——四格配方如实说，判据钉到渲染产物
 
 ## 2026-09-26
 - 00:21 工单 ci-gate-fixes/01：配置缺失时回退随包库 + 配置路径覆盖口
