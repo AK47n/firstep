@@ -102,11 +102,26 @@ test("mdSubdir：批次内子目录；批次根为空串", () => {
   assert.equal(mdSubdir(""), "");
 });
 
-test("formatMtime：缺失/非法 → —；合法 → YYYY-MM-DD HH:mm", () => {
+// 期望值**按本机时区现算**，不写死时刻（工单 ci-gate-fixes/07）。
+//
+// 为什么：`formatMtime` 按定义渲染的是**本地**时区，所以"epoch 0 长什么样"是随机器变的
+// ——CI runner 是 UTC（`1970-01-01 00:00`）、开发机是东八（`08:00`）。此前这里写死
+// `"1970-01-01 08:00"`，于是本机永远绿、CI 上必红（run 36213107191 前端门禁唯一那条红）。
+// 对偶的 `pdf-library.test.mjs` 早就是现算口径（同一件函数的两个复刻，见 fx/md.js 的
+// 注释"实现一致"）——本文件跟它对齐，判据强度不变：时区算错（拿 UTC 取值）、补零、
+// 分隔符、月偏移任何一处不对，这条都照样红。
+test("formatMtime：缺失/非法 → —；合法 → YYYY-MM-DD HH:mm（本地时区）", () => {
+  const fmtLocal = (ts) => {
+    const d = new Date(ts * 1000);
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
   assert.equal(formatMtime(null), "—");
   assert.equal(formatMtime(undefined), "—");
   assert.equal(formatMtime("not-a-number"), "—");
-  assert.equal(formatMtime(0), "1970-01-01 08:00"); // 本地时区（东八）
+  // 0 是合法 epoch（1970-01-01），不是非法值
+  assert.equal(formatMtime(0), fmtLocal(0));
+  assert.equal(formatMtime(1725000000), fmtLocal(1725000000));
   assert.match(formatMtime(1725000000), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
 });
 
