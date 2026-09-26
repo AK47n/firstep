@@ -50,6 +50,7 @@ import {
   hwcheckSectionsEmptyHTML,
   hwcheckCustomState, hwcheckCustomPlanHTML, hwcheckCustomWiringHTML,
   hwcheckConsoleState, hwcheckConsoleHTML,
+  hwcheckDroppedNoteHTML,
   hwcheckCanTriage, hwcheckTriagePayload, hwcheckChecklistPayload,
   hwcheckAdviceState, hwcheckRecordState, hwcheckTriageErrorHTML,
   hwcheckAdviceHTML, hwcheckChecklistState,
@@ -86,6 +87,7 @@ const hwcheckUI = {
   unspecialized: [],  // 走通用降级的器件（未专精：只验总线和初始化，工单 07）
   custom: [],         // 自建件的检测计划（服务端投影：标注 / 接线 / 出不出小节，工单 05）
   console: null,      // 串口命令台载荷（配方命令 + 既有命令 + 能不能复测，工单 06）
+  dropped: [],        // 选中的自建件里**已经不在器件库**的那些（工单 ci-gate-fixes/09）
   project: null,      // 当前正在看的检测工程（生成或回读来的）
   checklistChecked: [],
   symptom: "",        // 学生填的"实际现象"（工单 08：AI 排障的输入）
@@ -616,6 +618,28 @@ function renderHwcheckCustom() {
   box.innerHTML = hwcheckCustomPlanHTML(hwcheckUI.custom);
 }
 
+// applyDroppedDevices(payload)：这一趟服务端**摘掉了哪几件"已经不在器件库里"的自建件**
+// （工单 ci-gate-fixes/09）——两件事一起做：
+// ① 如实记下（说明条由 renderHwcheckDropped 渲染，文案在 fx）；
+// ② **把本地选择集对齐**：摘掉的件不再算"已选"（置灰回「加进这次检测」）——不然界面
+//    显示已选、这一趟却没带它，两边不一致，用户会以为"选了没用"。
+// 只认服务端载荷：前端不自己拿"我的器件"清单去猜哪件还在（那是第二份判据）。
+function applyDroppedDevices(payload) {
+  const dropped = (payload && Array.isArray(payload.dropped_devices))
+    ? payload.dropped_devices.map(String) : [];
+  hwcheckUI.dropped = dropped;
+  if (dropped.length) {
+    const away = new Set(dropped);
+    hwcheckUI.devices = (hwcheckUI.devices || []).filter((slug) => !away.has(slug));
+  }
+}
+
+// renderHwcheckDropped()：说明条（判据与文案在 fx，本层只放进容器）。
+function renderHwcheckDropped() {
+  const box = $("hwcheck-dropped");
+  if (box) box.innerHTML = hwcheckDroppedNoteHTML(hwcheckUI.dropped);
+}
+
 // —— 串口命令台（工单 module-hwcheck/06）：只渲染服务端载荷（命令表 = 库内配方
 // + 自建件那几件）——
 // 前端不判"哪个字符是谁的"：判重与保留字都在服务端（两件抢字符 = 构建期 400），
@@ -656,6 +680,7 @@ export function renderHwcheckPanel() {
   renderHwcheckPlatforms();
   renderHwcheckChannelNote();
   renderMyDevices();
+  renderHwcheckDropped();
   renderHwcheckOutput();
   renderHwcheckDevices();
   renderHwcheckWiring();
@@ -738,6 +763,9 @@ async function refreshHwcheckView() {
       Object.assign(hwcheckUI, hwcheckSectionsState(hwcheckUI, payload));
       Object.assign(hwcheckUI, hwcheckCustomState(hwcheckUI, payload));
       Object.assign(hwcheckUI, hwcheckConsoleState(hwcheckUI, payload));
+      // 已被删掉的自建件：服务端这一趟摘掉了谁（工单 ci-gate-fixes/09）——先对齐选择集，
+      // 下面那串 render 才会画出一致的 chips 与说明条。
+      applyDroppedDevices(payload);
       hwcheckUI.wiringError = "";
     }
   } catch (e) {
@@ -804,6 +832,9 @@ async function generateHwcheck() {
     hwcheckUI.adviceDegraded = false;
     hwcheckUI.triageError = "";
     adoptProject(payload, dir);
+    // 生成这一趟同样可能摘掉"已经不在器件库"的自建件（工单 ci-gate-fixes/09）：
+    // adoptProject 会按工程上下文回填器件集（可能又把它带回来），所以**排在它之后**。
+    applyDroppedDevices(payload);
     writeStored(HWCHECK_PARENT_KEY, hwcheckUI.parentDir);
     toast("ok", "检测工程已生成：" + dir);
     renderHwcheckPanel();

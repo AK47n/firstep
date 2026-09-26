@@ -1319,10 +1319,12 @@ def test_preview_payload_equals_the_domain_projection(real_library_client):
         recipe_path=ctx.hwcheck_recipe_path,
     )
     body = response.json()
-    # 键集合也要逐字对：端点载荷 = 板侧视图的五键 ∪ 它自己那六个字段
-    # （`pin_fixes` 住在 `wiring` 里，不是顶层键——前端读的也是 wiring.pin_fixes）
+    # 键集合也要逐字对：端点载荷 = 板侧视图的五键 ∪ 它自己那七个字段
+    # （`pin_fixes` 住在 `wiring` 里，不是顶层键——前端读的也是 wiring.pin_fixes；
+    # `dropped_devices` 是工单 ci-gate-fixes/09 加的：被摘掉的已删自建件）
     assert set(body) == set(view.board) | {
         "platform", "debug_uart", "oled", "devices", "main_c", "output_hint",
+        "dropped_devices",
     }
     for key, value in view.board.items():
         assert body[key] == value, f"{key} 与域层投影不一致（两处各拼一遍就会漂）"

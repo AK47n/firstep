@@ -1,0 +1,15 @@
+目标文件: src\contest_generator\compile_runner.py
+注入前 sha256: 00b4c2f86d611e269004f19b219a6fd7cd1a4121b69887bcc7fed437e95489e3
+
+[基线：本机有 CCS]
+  exit=0
+  1 passed, 1 warning in 1.75s
+
+[注入：把 CCS 扫描根指到不存在的目录 = 本机没装 CCS]
+  exit=0
+  SKIPPED [1] tests\test_my_devices_endpoint.py:691: ����û�� CCS ��������SDK / ������ / SysConfig ����������`Debug/makefile` ������ʱ�����ںõģ������Ǽ����оݣ��Խ���С�ڽ� main.c / `i2c_probe.h` / ĸ�� `I2C_0` �� `$assign` ���������Ѿ��ܹ���װ�� CCS ���� config.json �� `ccs_sdk_dir` / `ccs_compiler_dir` / `ccs_sysconfig_cli` ����ܣ�CI runner �ϲ�װ CCS��
+  1 skipped, 1 warning in 1.68s
+
+复原后 sha256: 00b4c2f86d611e269004f19b219a6fd7cd1a4121b69887bcc7fed437e95489e3
+逐字节复原: OK
+结论: [PASS] 没有 CCS 时该用例 skip（0 failed）、有 CCS 时真跑真断言

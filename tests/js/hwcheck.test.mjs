@@ -10,6 +10,7 @@ import {
   hwcheckPlatformState, hwcheckSelectPlatform, hwcheckPickState,
   hwcheckRequestPayload, hwcheckCanPreview, hwcheckPlatformCardsHTML,
   hwcheckHintHTML, hwcheckErrorHTML, hwcheckGenerateErrorHTML, hwcheckEmptyHTML,
+  hwcheckDroppedNoteHTML,
   hwcheckPanelHTML,
   hwcheckCodeTarget, hwcheckPreviewState, hwcheckPlatformLabel,
   HWCHECK_CHANNEL_KEYS,
@@ -431,6 +432,26 @@ test("生成失败的提示与预览失败分开写（原因常是引擎如实�
   assert.ok(generate.includes("检测工程") && generate.includes("没有生成成功"));
   assert.ok(generate.includes("PA22"));
   assert.ok(hwcheckGenerateErrorHTML("冲突 <a>").includes("&lt;a&gt;"), "必须转义");
+});
+
+// 工单 ci-gate-fixes/09：**已经不在器件库里**的自建件被服务端摘掉时，页面要如实说一句。
+// 为什么不能静默：页面上少了一件，用户只看到"我明明选着它"；为什么不是错误文案：
+// 那是用户自己删的件，不是他做错了什么。
+test("被摘掉的自建件说明：点名 slug + 说清已摘掉；空清单/缺字段不渲染", () => {
+  const note = hwcheckDroppedNoteHTML(["mine_gyro"]);
+  assert.ok(note.includes("mine_gyro"), note);
+  assert.ok(note.includes("已经不在你的器件里"), note);
+  assert.ok(note.includes("摘掉"), note);
+  assert.ok(!note.includes("错误") && !note.includes("失败"), "中性提示，不是报错：" + note);
+  // 多件各说各的（一件一行），不合并成一句
+  const two = hwcheckDroppedNoteHTML(["mine_a", "mine_b"]);
+  assert.equal(two.split("hwcheck-dropped-note").length - 1, 2, two);
+  // 空 / 缺字段（旧载荷）→ 空串：与从前逐字节一致
+  assert.equal(hwcheckDroppedNoteHTML([]), "");
+  assert.equal(hwcheckDroppedNoteHTML(undefined), "");
+  assert.equal(hwcheckDroppedNoteHTML(null), "");
+  // 转义（id 文法只允许 [A-Za-z0-9_]，但渲染层不该赌上游）
+  assert.ok(hwcheckDroppedNoteHTML(["mine_<x>"]).includes("&lt;x&gt;"), "必须转义");
 });
 
 // ---------------------------------------------------------------------------

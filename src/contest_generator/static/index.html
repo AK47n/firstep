@@ -1083,6 +1083,9 @@
   .hwcheck-device-search { min-width: 320px; flex: 1 1 320px; }
   .hwcheck-device-count { color: var(--muted); font-size: 12.5px; align-self: center; }
   #hwcheck-device-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: var(--space-2); }
+  /* 「已经被删掉的自建件被摘掉」那句（工单 ci-gate-fixes/09）：中性提示，不是错误
+     ——用户自己删的件，页面只需说清"它不在你的器件里了、这次检测已摘掉"。 */
+  .hwcheck-dropped-note { font-size: 12.5px; color: var(--muted); margin: 0 0 var(--space-1); }
   /* 带入生成页（工单 hwcheck-acceptance/04）：一个动作 + 几句如实说明（带哪几件 /
      为什么不带 / 引脚不带）。外壳与「我的器件」同一形状（见上面那条共用规则）。 */
   .hwcheck-handoff { padding: var(--space-2); }
@@ -4038,6 +4041,10 @@
       <div id="hwcheck-channel-note"></div>
       <h3>3. 要测的器件 <span class="muted">（选上就看得见接线表与默认脚冲突）</span></h3>
       <div id="hwcheck-device-chips" class="row"></div>
+      <!-- 已被删掉、却仍留在选择集里的自建件说明（工单 ci-gate-fixes/09）：服务端
+           装配时把那几件摘掉了（否则整页 400「库中不存在模块：mine_xxx」），这里如实
+           说一句"已不在你的器件里"。文案在 fx/hwcheck.js 的 hwcheckDroppedNoteHTML。 -->
+      <div id="hwcheck-dropped"></div>
       <div id="hwcheck-device-missing"></div>
       <div id="hwcheck-device-groups"></div>
       <!-- 带入生成页（工单 hwcheck-acceptance/04）：把当前选中的库内器件并进生成页的

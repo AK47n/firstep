@@ -2676,6 +2676,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "devices": list(hwcheck_devices(config)),
             "main_c": render_main_c(config, view.sections, view.generic, view.custom),
             "output_hint": render_output_hint(config),
+            # 已被删掉、却仍留在选择集里的自建件（工单 ci-gate-fixes/09）：装配时已摘掉
+            # （否则整页 400「库中不存在模块：mine_xxx」），这里如实带给页面说一句。
+            "dropped_devices": list(view.dropped_devices),
             **view.board,
         }
 
@@ -2775,6 +2778,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             "output_dir": str(summary.output_dir),
             "main_c": main_c,
             "output_hint": render_output_hint(config),
+            # 与预览同一个键（工单 ci-gate-fixes/09）：已被删掉的自建件这次被摘掉了，
+            # 页面据此说一句——生成这条路同样不能带着它走（它会让整趟 400）。
+            "dropped_devices": list(view.dropped_devices),
             **view.board,
             # 上板清单吃**这一趟的自建件计划**（工单 hwcheck-unknown-device/05）：
             # 出小节的件加三类（有应答 / 期望值不符 / 无应答），不出小节的件加一条

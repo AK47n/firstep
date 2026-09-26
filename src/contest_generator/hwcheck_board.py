@@ -678,6 +678,9 @@ class HwCheckView:
     pin_bindings: dict[str, str]
     known_slugs: tuple[str, ...]
     generation_slugs: tuple[str, ...]
+    # 选中的自建件里**已经从器件库消失**的那些（工单 ci-gate-fixes/09）：装配时摘掉
+    # （否则整页 400），端点把这份清单带给页面，页面如实说一句"已不在你的器件里"。
+    dropped_devices: tuple[str, ...] = ()
 
 
 def hwcheck_view(
@@ -739,9 +742,26 @@ def hwcheck_view(
     # 选中的自建件**全体**都要从模块集里摘掉（不只是"出了小节"的那几件）：
     # 它们不是模块（没有 manifest），漏一件就会在 `resolve_dependencies` 那里
     # 报"库中没有这个模块"——非 I2C 件与"没勾输出通道"的形态正是这样漏出去的。
+    #
+    # ⚠ **「全体」包含"已经被删掉的那几件"**（工单 ci-gate-fixes/09）：选择集是从前端
+    # （以及"回读上一次检测工程"那条路）来的，用户完全可能先把自建件删了、选择集里
+    # 还留着它。旧写法取的是**交集**（`known_custom & set(selected)`）——只摘掉"还在
+    # 器件库里"的那些，于是已删的那件一路滑进 `resolve_dependencies`，报出
+    # 「库中不存在模块：mine_xxx」：那句话**指错了地方**（`mine_*` 从来不是库内模块，
+    # 用户也没处去"库里"找它），整页预览就此卡死，唯一出路是手动把那个 chip 去掉。
+    # 现在**摘掉并如实报出**（`dropped_devices` → 页面写明"已不在你的器件里"）。
+    # 守卫**不放松**：非 `mine_` 前缀的库外 slug 照旧大声 400（那是手滑写错，不是删除）。
     selected = hwcheck_devices(config)
-    custom = {device.id for device in custom_devices} & set(selected)
-    module_slugs = [slug for slug in hwcheck_modules(config) if slug not in custom]
+    known_custom = {device.id for device in custom_devices}
+    dropped_custom = tuple(
+        slug for slug in selected
+        if slug.startswith(DEVICE_ID_PREFIX)
+        and slug not in by_slug
+        and slug not in known_custom
+    )
+    custom = known_custom & set(selected)
+    excluded = custom | set(dropped_custom)
+    module_slugs = [slug for slug in hwcheck_modules(config) if slug not in excluded]
     # 有自建件小节 → 探测代码要调 `i2c_probe` 的接口，它必须在模块集里（否则
     # 生成门禁判"调了不存在的函数"，mspm0 上更是连编译都过不去）。
     if custom_sections and PROBE_MODULE_SLUG not in module_slugs:
@@ -768,7 +788,11 @@ def hwcheck_view(
         devices=devices,
         resolved_bindings=plan.resolved,
         pin_fixes=plan.fixed,
-        custom_device_ids=custom,
+        # 自建件的豁免集 = **还在库里的 ∪ 已经被删掉的**（工单 ci-gate-fixes/09）：
+        # `_missing_devices` 拿它把"自建件"从"本平台没有条目的库内模块"里摘出来——
+        # 已删的那件同样是"还不是模块"，不摘就会在这里抛「库中不存在模块」，
+        # 整页照样 400（这是本单的第二处，第一处是上面的 `module_slugs`）。
+        custom_device_ids=excluded,
     )
     # 自建件的**检测页计划**（工单 05）：选中的每一件都在，出不出的来小节由
     # `hwcheck_custom` 那一处判（`resolve_custom_plan` → `_probes`，与上面 `custom`
@@ -865,4 +889,7 @@ def hwcheck_view(
         # 生成端点要吃的那个 slug 集（与上面 manifests 同源——页面接线表、main.c、
         # 工程里进哪些模块，三处因此是同一个集合）。
         generation_slugs=tuple(module_slugs),
+        # 已被删掉、但仍留在选择集里的自建件（工单 ci-gate-fixes/09）：端点带给页面，
+        # 页面如实说一句"已不在你的器件里"（这里摘掉是**装配**动作，不是判据来源）。
+        dropped_devices=dropped_custom,
     )

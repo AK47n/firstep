@@ -112,6 +112,23 @@ export function hwcheckGenerateErrorHTML(message) {
   return `<div class="error">检测工程没有生成成功：${esc(message || "")}</div>`;
 }
 
+// hwcheckDroppedNoteHTML(dropped)：选择集里那些**已经从器件库消失**的自建件说明
+// （工单 ci-gate-fixes/09）。
+//
+// 为什么要有它：用户会走这条路——选上自己的器件 → 回「我的器件」把它删了 → 再回来
+// 预览。服务端现在把这种"已经不在库里"的件**从这次检测里摘掉**（不摘就是整页
+// 400「库中不存在模块：mine_xxx」，那句话还指错了地方：`mine_*` 从来不是库内模块），
+// 摘掉就必须**说出来**——不然页面上少了一件，用户只看到"我明明选着它"。
+// 空清单 / 缺字段（旧载荷）→ 空串，与从前逐字节一致。
+export function hwcheckDroppedNoteHTML(dropped) {
+  const slots = Array.isArray(dropped) ? dropped.filter(Boolean).map(String) : [];
+  if (!slots.length) return "";
+  return slots.map((slug) =>
+    `<div class="hwcheck-dropped-note">「${esc(slug)}」已经不在你的器件里了`
+    + `——这次检测已把它摘掉（要留着它就回「我的器件」重新登记，再选上）。</div>`
+  ).join("");
+}
+
 // hwcheckEmptyHTML(reason)：还没有产物时的占位。
 export function hwcheckEmptyHTML(reason) {
   return `<div class="empty-state"><div class="es-icon">🔌</div>`
@@ -1287,6 +1304,7 @@ if (typeof window !== "undefined") {
     hwcheckPlatformState, hwcheckSelectPlatform, hwcheckPickState,
     hwcheckRequestPayload, hwcheckCanPreview, hwcheckPlatformCardsHTML,
     hwcheckHintHTML, hwcheckErrorHTML, hwcheckGenerateErrorHTML,
+    hwcheckDroppedNoteHTML,
     hwcheckEmptyHTML, hwcheckPanelHTML,
     hwcheckCodeTarget, hwcheckPreviewState, hwcheckPlatformLabel,
     HWCHECK_CHANNEL_KEYS,

@@ -446,6 +446,69 @@ def test_passing_a_custom_device_id_as_a_device_does_not_400(devices_client):
     assert "0x68" in body["main_c"], "ping 的是它自己的地址"
 
 
+def test_a_deleted_custom_device_is_dropped_and_reported_not_400(devices_client):
+    """选中的自建件**已经被删掉**时：摘掉并如实报出，不是整页 400（工单 ci-gate-fixes/09）。
+
+    现场（CI run `36216009452`，浏览器门禁那两条红就是它）：上一条用例「生成检测工程」
+    的工程上下文记着某件自建件，收尾时把这件**删了**；下一条用例打开栏目时按
+    `HWCHECK_LAST_DIR_KEY` 回读那个工程 ⇒ 这件已消失的件又回到选择集 ⇒ 预览整页 400
+    「库中不存在模块：mine_probe692113」——那句话还**指错了地方**（`mine_*` 从来不是
+    库内模块，用户没处去"库里"找它），页面就此卡死。
+
+    判据两条：① 预览不再 400，且这件**真的被摘掉**（产物里没有它的小节）；
+    ② `dropped_devices` 如实点名（页面据此说一句"已不在你的器件里"）。
+    **守卫不放松**：非 `mine_` 前缀的库外 slug 照旧大声 400（那是手滑写错，不是删除），
+    由 `tests/test_hwcheck_custom.py` 那条"预览照绿、生成在生成链上游抛"的对照盯着。
+    """
+    client, _ = devices_client
+    client.post("/api/my-devices", json={"device": DEVICE_BODY})
+    deleted = client.delete("/api/my-devices/mine_gyro")
+    assert deleted.status_code == 200, deleted.text
+
+    response = client.post(
+        "/api/hwcheck/preview",
+        json={"platform": PLATFORM_STM32, "devices": ["mine_gyro"]},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["dropped_devices"] == ["mine_gyro"], (
+        "摘掉的那几件要如实下发（页面就说这一句）：" + str(body.get("dropped_devices"))
+    )
+    assert "hwcheck_custom_mine_gyro" not in body["main_c"], (
+        "已经不在器件库里的件不许再渲染探测小节：\n" + body["main_c"][:400]
+    )
+    assert body["custom"] == [], "检测计划里也不该还有它"
+
+
+def test_a_deleted_custom_device_no_longer_blocks_generate(generate_client, tmp_path):
+    """生成这条路同样不许被"已删掉的自建件"整趟 400（工单 ci-gate-fixes/09）。
+
+    与预览共用 `hwcheck_view` 的装配，所以判据落在这里：摘掉 → 生成照常成功，
+    工程照常落盘（并如实报 `dropped_devices`）。
+    """
+    client, _ = generate_client
+    client.post("/api/my-devices", json={"device": DEVICE_BODY})
+    assert client.delete("/api/my-devices/mine_gyro").status_code == 200
+
+    output_parent = tmp_path / "out-dropped"
+    output_parent.mkdir()
+    response = client.post(
+        "/api/hwcheck/generate",
+        json={
+            "platform": PLATFORM_STM32,
+            "debug_uart": True,
+            "oled": False,
+            "devices": ["mine_gyro"],
+            "parent_dir": str(output_parent),
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["dropped_devices"] == ["mine_gyro"], body.get("dropped_devices")
+    assert "hwcheck_custom_mine_gyro" not in body["main_c"], body["main_c"][:400]
+    assert (Path(body["output_dir"]) / "main.c").is_file(), "工程照常落盘"
+
+
 def test_the_probe_module_rides_along_with_a_custom_device(devices_client, tmp_path):
     """有自建件 → 模块集**自动带上 `i2c_probe`**（探测代码要调它的接口）。"""
     client, _ = devices_client
@@ -613,6 +676,24 @@ def test_generate_on_mspm0_keeps_the_i2c_instance_alive(generate_client, tmp_pat
     # 那一步**生成的，不是生成端点产出的：生成端点只负责把 Debug/makefile 摆好
     # （编译链的入口）。所以这里判到 makefile 为止，`I2C_0_INST` 那条判据归真编译
     # 探针（`check_mspm0`，它跑在 gmake 之后）——两处各判各的，不越界。
+    #
+    # ⚠ **这一条的前提是 CCS 工具链**（工单 ci-gate-fixes/10）：`Debug/makefile` 由
+    # 生成端点用 CCS 三件套摆好，没有它只出 `build_hint`、不阻断生成（产品语义，见
+    # `/api/hwcheck/generate` 的 docstring）——也就是说这条断言在**没有 CCS 的机器上
+    # 从来不成立**。CI runner 上正是如此，而它此前被前端门禁那一步挡着**从没跑过**；
+    # 前端门禁修好之后它第一次真跑就红。所以缺工具链时**显式 skip 并说明怎么补**：
+    # 跳过在摘要里看得见，也不假装上面那几条判据没跑过（它们已经跑完了）。
+    from contest_generator.compile_runner import find_ccs_tools
+
+    # 夹具的 AppConfig 三个 ccs_* 都是空串 = 让产品走**自动探测**，所以这里用同一个
+    # 函数问同一件事（判据单源，不另写一份"本机有没有 CCS"的猜测）。
+    if find_ccs_tools("", "", "") is None:
+        pytest.skip(
+            "本机没有 CCS 工具链（SDK / 编译器 / SysConfig 三件）——`Debug/makefile` 是"
+            "生成时由它摆好的；上面那几条判据（自建件小节进 main.c / `i2c_probe.h` / "
+            "母版 `I2C_0` 的 `$assign` 活下来）已经跑过。装上 CCS 或配 config.json 的 "
+            "`ccs_sdk_dir` / `ccs_compiler_dir` / `ccs_sysconfig_cli` 后可跑（CI runner 上不装 CCS）"
+        )
     assert (project / "Debug" / "makefile").is_file(), (
         "编译链入口（Debug/makefile）要摆好，否则这一份工程在检测页点不动「编译」"
     )
@@ -734,7 +815,18 @@ def test_an_unknown_slug_is_still_a_loud_failure(devices_client):
 
 
 def test_deleting_a_device_makes_its_id_an_unknown_slug_again(devices_client):
-    """"自建件"这个身份是**当下的数据**，不是一份写死的名单。"""
+    """"自建件"这个身份是**当下的数据**，不是一份写死的名单。
+
+    ⚠ **本条的行为在工单 ci-gate-fixes/09 改过**（原来是"删掉之后预览 400"）：
+    现在删掉之后，**选择集里那个 id 会被摘掉并如实报出**（`dropped_devices`），
+    预览 200——因为"选择集里留着一个已删的件"是用户真会走到的路（选上 → 回
+    「我的器件」删掉 → 再预览），拿整页 400「库中不存在模块：mine_gyro」相待
+    既卡死页面、那句话还指错了地方（`mine_*` 从来不是库内模块）。
+
+    **身份那条不变量照旧**（这才是本条用例的本体）：它不再是自建件——不进检测计划、
+    产物里没有它的小节、也不再算"选中的器件"。**守卫也没放松**：不是 `mine_` 前缀的
+    库外 slug 照旧大声 400（那条对照在 `tests/test_hwcheck_custom.py`）。
+    """
     client, _ = devices_client
     client.post("/api/my-devices", json={"device": DEVICE_BODY})
     assert client.delete("/api/my-devices/mine_gyro").status_code == 200
@@ -742,7 +834,13 @@ def test_deleting_a_device_makes_its_id_an_unknown_slug_again(devices_client):
         "/api/hwcheck/preview",
         json={"platform": PLATFORM_STM32, "devices": ["mine_gyro"]},
     )
-    assert response.status_code == 400, response.text
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["dropped_devices"] == ["mine_gyro"], body.get("dropped_devices")
+    assert body["custom"] == [], "删掉之后它不再是自建件（检测计划里没有它）"
+    assert "hwcheck_custom_mine_gyro" not in body["main_c"], (
+        "也不再进产物（身份是当下的数据）：\n" + body["main_c"][:400]
+    )
 
 
 # ---------------------------------------------------------------------------
