@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=fd1e9c3be62e33d2b0155aae21363ae8bac83c19 -->
+<!-- changelog-auto: last-commit=eefe03f9333f7009d4c1072d3405430eee9ec3de -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -37,6 +37,7 @@
 - 20:21 账本：hwcheck-hardening 七单收口——backlog §21/§22 记上结果，评审报告加处置状态
 - 20:22 账本：hwcheck-hardening 03–07 五单收口为 resolved
 - 20:32 工单 hwcheck-hardening/09：同一条事实的三处副本收成「一句 + 双端断言」
+- 20:32 工单 hwcheck-hardening/10：守卫强度与反证基础设施整改（Standards 轴）
 
 ## 2026-09-25
 - 00:21 工单 hwcheck-acceptance/01：mspm0 生成链认下 SysConfig 构建期接口面（那一行从注释占位变活代码）
