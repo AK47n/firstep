@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=6f25c6205caf4c86c5d1d09c67d388be8de6b01a -->
+<!-- changelog-auto: last-commit=ce158d374df8e8756441998f46c448c4dc97821d -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -15,6 +15,7 @@
 - 11:24 工单 ci-gate-fixes/07 评审整改：更正审计证据与判据强度说法、补往返判据、探针加前置干净性检查
 - 11:43 工单 ci-gate-fixes/08：无工具链时编译用例显式 skip；夹具可造出 CI 前提；两处预览等待加诊断
 - 11:57 账本：CI 两轮读数与三张新单（07 已绿前端门禁、08 编译用例显式 skip、09/10 由 CI 逐字证据立项）
+- 11:58 账本：落差那句改成按 git log 读，不把「零落差」写死
 
 ## 2026-09-25
 - 00:21 工单 hwcheck-acceptance/01：mspm0 生成链认下 SysConfig 构建期接口面（那一行从注释占位变活代码）
