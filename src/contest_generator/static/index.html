@@ -1937,6 +1937,11 @@
   .code-compile-error-conflict { cursor: default; color: var(--danger); }
   .code-compile-error-conflict .code-compile-path { color: var(--danger); flex: none; }
   .code-compile-error-conflict .code-compile-msg { white-space: normal; }
+  /* 工具链形态诊断行（工单 hwcheck-hardening/06）：同样**不可跳转**（没有文件引用），
+     但与"配置冲突"分开配色——它是编译/链接器自己说的话，不是工程配置错了 */
+  .code-compile-error-toolchain { cursor: default; color: var(--warn); }
+  .code-compile-error-toolchain .code-compile-path { color: var(--muted); flex: none; }
+  .code-compile-error-toolchain .code-compile-msg { white-space: normal; }
   /* 三栏 grid（bug 修复）：中栏 minmax(150px, 1fr) 硬保底——树/侧栏固定宽在
      窄视口（如 565px）下曾把中栏挤到 15px（编辑器几乎不可见）；现改为空间
      不足时树/侧栏对称收缩、中栏至少 150px，宽视口布局不变。

@@ -112,6 +112,20 @@ SYSCFG_CONFLICT_KIND = "syscfg_conflict"
 # 名单内，且工程内不存在该相对路径的文件，双重不入选）。
 SYSCFG_CONFLICT_PATH = "mspm0.syscfg"
 
+# 工具链形态诊断（工单 hwcheck-hardening/06）：**没有文件引用**的编译器 / 链接器诊断，
+# 真例（复测抓到的 `.sysmem` 告警，逐字）：
+#   `warning #10210-D: creating ".sysmem" section with default size of 0x800; use the -heap …`
+# 它没有 `文件(行):` 前缀，此前两条路都认不出：解析器跳过、汇总按"行级条目里含 warning
+# 的条数"计数 ⇒ 编译面板对这条告警报「0 warning」（而矩阵判它 FAIL，判据与读数脱钩）。
+# 形状：`<warning|error> #<数字>-<字母>: <原文>`——**严重度按行首那个词判**，不按尾巴的
+# 字母猜（字母是工具链自己的分类位）。path 留空串、line = 0：没有文件可跳（前端据此
+# 渲染成不可点击行，与配置级冲突同一套"不可跳转"待遇）。
+TOOLCHAIN_DIAG_KIND = "toolchain_diag"
+_TOOLCHAIN_DIAG_RE = re.compile(
+    r"^(?P<level>warning|error)\s+#(?P<code>\d+)-[A-Za-z]:\s*(?P<text>\S.*)$",
+    re.IGNORECASE,
+)
+
 # 配置级冲突的人话指路（工单 02 修复方向③）：**载荷文案单源**——修复轮 done 的
 # notice 字段与本仓 CLI 验收脚本（generate_check.py）打印的指引都用它，改文案只
 # 改这里。前端不方便逐字同源（core 模块不 import 静态常量），
@@ -299,6 +313,20 @@ def parse_compile_errors(error_text: str) -> tuple[CompileError, ...]:
                 occupied = _SYSCFG_OCCUPY_RE.match(lines[index + 1])
             parsed.append(_syscfg_conflict_entry(conflict, occupied, lines, index))
             index += 2 if occupied is not None else 1
+            continue
+        # 工具链形态诊断（没有文件引用）——放在 UV4 / CCS 之前试：它天生带 `file(line):`
+        # 前缀的形态接不到，先试不会抢走既有两类（工单 hwcheck-hardening/06）。
+        diag = _TOOLCHAIN_DIAG_RE.match(stripped)
+        if diag is not None:
+            parsed.append(
+                CompileError(
+                    path="",
+                    line=0,
+                    message=stripped,
+                    kind=TOOLCHAIN_DIAG_KIND,
+                )
+            )
+            index += 1
             continue
         match = _UV4_ERROR_RE.search(stripped) or _CCS_ERROR_RE.search(stripped)
         if match is None:

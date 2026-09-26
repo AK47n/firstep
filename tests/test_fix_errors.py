@@ -27,6 +27,7 @@ from contest_generator.events import (
 from contest_generator.fix_errors import (
     FIX_BACKUPS_DIRNAME,
     SYSCFG_CONFLICT_PATH,
+    TOOLCHAIN_DIAG_KIND,
     CompileError,
     FixError,
     FixResult,
@@ -136,6 +137,37 @@ def test_parse_no_file_reference_degrades():
         "*** Target not created ***\n"
     )
     assert parse_compile_errors(text) == ()
+
+
+def test_parse_linker_form_diagnostic_without_file_reference():
+    """链接器形态的诊断（**没有文件引用**）不再被丢掉（工单 hwcheck-hardening/06）。
+
+    真例（`.scratch/hwcheck-acceptance/recheck-compile-matrix.txt` 抓到的 `.sysmem` 告警）：
+    `warning #10210-D: creating ".sysmem" section with default size of 0x800; …`
+    —— 它没有 `文件(行):` 前缀，此前两条路都认不出：解析器跳过、汇总在没有 UV4 汇总行时
+    按"行级条目里含 warning 的条数"计数，于是编译面板对这条告警**报 0 warning**。
+    实测已经有一格踩在这上面（`ml_mpu6050 × mspm0`），矩阵判 FAIL 而面板说 0 warning。
+    """
+    text = ('warning #10210-D: creating ".sysmem" section with default size of 0x800; '
+            "use the -heap option to change the default size\n")
+    parsed = parse_compile_errors(text)
+    assert len(parsed) == 1, f"链接器形态的诊断被丢掉了：{parsed}"
+    entry = parsed[0]
+    assert entry.kind == TOOLCHAIN_DIAG_KIND, "要能一眼认出这是工具链诊断（前端据此渲染不可跳转行）"
+    assert entry.path == "" and entry.line == 0, "没有文件引用 → 无路径无行号（不可跳转）"
+    assert "10210" in entry.message and "sysmem" in entry.message, "原文要逐字留着（可贴给 AI / 搜）"
+    assert summarize_compile_output(text, parsed) == {"errors": 0, "warnings": 1}, (
+        "面板的数字要跟着如实——这条正是「报了 0 warning」的那一格"
+    )
+
+
+def test_parse_linker_form_diagnostic_keeps_error_severity():
+    """同一形态的 **error** 也要收，且严重度按行首那个词判（不是按尾巴的字母猜）。"""
+    text = "error #10010-E: symbol not defined\n"
+    parsed = parse_compile_errors(text)
+    assert len(parsed) == 1
+    assert parsed[0].kind == TOOLCHAIN_DIAG_KIND
+    assert summarize_compile_output(text, parsed) == {"errors": 1, "warnings": 0}
 
 
 def test_parse_garbage_text_does_not_crash():

@@ -10,6 +10,8 @@ import {
   compileErrorPathNorm,
   compileErrorPathBase,
   isSyscfgConflict,
+  isToolchainDiag,
+  isUnjumpable,
 } from "../../src/contest_generator/static/js/fx/code-compile.js";
 
 test("compileStatusText：成功/失败/超时状态行（单源 = fx/generate.js 同文案）", () => {
@@ -87,6 +89,43 @@ test("compileErrorRowsHTML：源码级与配置级混排互不影响", () => {
   assert.match(html, /data-compile-path="main\.c" data-compile-line="45"/);
   assert.equal((html.match(/data-compile-path=/g) || []).length, 1);
   assert.ok(html.includes("配置冲突"));
+});
+
+test("compileErrorRowsHTML：工具链诊断行不可跳转 + 标注（工单 hwcheck-hardening/06）", () => {
+  // 后端收进来的链接器 / 编译器诊断**没有文件引用**（path 空、line 0）——
+  // 渲染成可点击按钮只会让学生点了打不开，还以为是自己环境的问题。
+  const DIAG = {
+    path: "", line: 0, kind: "toolchain_diag",
+    message: 'warning #10210-D: creating ".sysmem" section with default size of 0x800; use the -heap option',
+  };
+  assert.equal(isToolchainDiag(DIAG), true);
+  assert.equal(isToolchainDiag(SYSCFG_ERR), false);
+  assert.equal(isToolchainDiag({ path: "main.c", line: 3, message: "x" }), false);
+  assert.equal(isToolchainDiag(null), false);
+  // isUnjumpable：两类"没有源码可跳"的条目合成一条判据（下一个新 kind 不会再漏改一处）
+  assert.equal(isUnjumpable(DIAG), true);
+  assert.equal(isUnjumpable(SYSCFG_ERR), true);
+  assert.equal(isUnjumpable({ path: "main.c", line: 3, message: "x" }), false);
+  assert.equal(isUnjumpable(null), false);
+
+  const html = compileErrorRowsHTML([DIAG]);
+  assert.ok(!html.includes("data-compile-path"), "没有文件引用 → 不许给一个打不开的跳转按钮");
+  assert.ok(html.includes("工具链诊断"), "要标明这是工具链自己说的话");
+  assert.ok(html.includes("code-compile-error-toolchain"));
+  assert.ok(html.includes("10210"), "原文逐字带出（可搜 / 可贴给 AI）");
+
+  // 与源码级混排：只有源码级那一行可跳
+  const mixed = compileErrorRowsHTML([
+    { path: "main.c", line: 45, message: "use of undeclared identifier 'y'" }, DIAG,
+  ]);
+  assert.equal((mixed.match(/data-compile-path=/g) || []).length, 1);
+  assert.ok(mixed.includes("工具链诊断"));
+});
+
+test("compileErrorLinesForFile：工具链诊断不标源码行（无路径 + line 0）", () => {
+  const DIAG = { path: "", line: 0, kind: "toolchain_diag", message: "warning #10210-D: x" };
+  assert.deepEqual(compileErrorLinesForFile([DIAG], "Core/Src/main.c"), []);
+  assert.deepEqual(compileErrorLinesForFile([DIAG], ""), []);
 });
 
 test("compileErrorLinesForFile：配置级冲突不标源码行（line 0 + 伪路径不误配）", () => {

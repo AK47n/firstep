@@ -32,6 +32,24 @@ export function compileStatusClass(done) {
 // 旧载荷 / 源码级条目不带 kind（缺省语义 = 源码级，向后兼容）。
 const SYSCFG_CONFLICT_KIND = "syscfg_conflict";
 
+// TOOLCHAIN_DIAG_KIND：工具链形态诊断条目的 kind 值（工单 hwcheck-hardening/06，
+// 与后端 fix_errors.TOOLCHAIN_DIAG_KIND 逐字一致）——**没有文件引用**的编译 / 链接器
+// 诊断（如 `warning #10210-D: creating ".sysmem" section …`）。此前这类行解析不出来，
+// 面板对它们报"0 warning"；收进来之后它们同样**没有源码可跳**（path 空、line 0），
+// 渲染成不可点击行 + 「工具链」标签——别让按钮指向一个打不开的路径。
+const TOOLCHAIN_DIAG_KIND = "toolchain_diag";
+
+// isToolchainDiag(entry)：条目是否工具链形态诊断（载荷同型）。非对象 / 无 kind → false。
+export function isToolchainDiag(entry) {
+  return !!entry && entry.kind === TOOLCHAIN_DIAG_KIND;
+}
+
+// isUnjumpable(entry)：条目是否**没有源码可跳**（配置级冲突 / 工具链诊断）——
+// 错误列表据此渲染成不可点击行。两处判据合成一条，免得下一个新 kind 漏改一处。
+export function isUnjumpable(entry) {
+  return isSyscfgConflict(entry) || isToolchainDiag(entry);
+}
+
 // isSyscfgConflict(entry)：条目是否配置级冲突（parsed_errors / parsed 同型
 // [{path, line, message, kind?}]）。非对象 / 无 kind → false（源码级缺省）。
 export function isSyscfgConflict(entry) {
@@ -54,10 +72,18 @@ export function compileErrorRowsHTML(errors) {
     const line = Number(er.line) || 0;
     const loc = path ? path + ":" + line : String(line || "");
     const msg = esc(er.message || "");
-    if (isSyscfgConflict(er)) {
-      return '<div class="code-compile-error code-compile-error-conflict">'
-        + '<span class="code-compile-path">配置冲突'
-        + (path ? "（来自 " + esc(path) + "）" : "") + "</span>"
+    if (isUnjumpable(er)) {
+      // 两类都**没有源码可跳**（配置级冲突 / 工具链诊断）：渲染成只读行 + 各自的标签。
+      // 分支只决定"叫什么、什么配色"，"不可点击"这件事由 isUnjumpable 一处判——
+      // 下一个新 kind 不会再漏改一处。
+      const conflict = isSyscfgConflict(er);
+      const label = conflict
+        ? "配置冲突" + (path ? "（来自 " + esc(path) + "）" : "")
+        : "工具链诊断";
+      const cls = conflict
+        ? "code-compile-error-conflict" : "code-compile-error-toolchain";
+      return '<div class="code-compile-error ' + cls + '">'
+        + '<span class="code-compile-path">' + label + "</span>"
         + '<span class="code-compile-msg">' + msg + "</span>"
         + "</div>";
     }
@@ -122,6 +148,9 @@ if (typeof window !== "undefined") {
     compileErrorPathBase,
     isSyscfgConflict,
     SYSCFG_CONFLICT_KIND,
+    isToolchainDiag,
+    isUnjumpable,
+    TOOLCHAIN_DIAG_KIND,
     AUTO_COMPILE_KEY,
   });
 }

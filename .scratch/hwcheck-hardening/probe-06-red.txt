@@ -1,0 +1,16 @@
+fix_errors.py sha256（跑之前）= e33a2922e0f8a25531e2b86b8c9c412ae0dcd91ae4c6abbc864771a21428e43b
+✓ 前置干净性检查：新形态的识别在现场且唯一
+停用识别后跑用例：exit=1
+—— pytest 输出（尾部 8 行）——
+E       AssertionError: 链接器形态的诊断被丢掉了：()
+E       assert 0 == 1
+E        +  where 0 = len(())
+
+tests\test_fix_errors.py:154: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_fix_errors.py::test_parse_linker_form_diagnostic_without_file_reference
+1 failed in 0.15s
+判据结论 = ✓ 用例红了（守卫有强度）
+fix_errors.py sha256（复原后）= e33a2922e0f8a25531e2b86b8c9c412ae0dcd91ae4c6abbc864771a21428e43b
+复原复核 = ✓ 逐字节相同
+复原后跑用例：exit=0（应为 0）
