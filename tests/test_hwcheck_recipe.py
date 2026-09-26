@@ -1038,6 +1038,56 @@ def test_recipe_file_itself_keeps_the_floor_cell_count():
     assert len(slugs) >= 10, f"配方文件覆盖的件数少于地板 10：{sorted(slugs)}"
 
 
+# 配方数据里**不许**再出现的措辞（工单 hwcheck-hardening/01）：这类句子会教学生去改
+# 生成出来的 main.c，而那一行初始化从 hwcheck-acceptance/01 起**已经是活代码**——
+# 学生照做会找不到那一行，而且它与检测页清单自相矛盾（清单里那条早已删掉）。
+_FORBIDDEN_EDIT_INSTRUCTIONS = ("取消注释", "注释去掉", "注释状态")
+
+
+def test_real_recipe_file_never_asks_students_to_edit_generated_code():
+    """真库配方**全文**不许出现"去改生成代码"的指令（工单 hwcheck-hardening/01）。
+
+    为什么读全文而不是逐字段：这句措辞会在 note / unit / description 之间搬家，
+    按字段枚举总有漏网；它对学生的危害与它落在哪个字段无关。
+
+    为什么单独立一条：`tests/test_hwcheck.py` 里那条同类断言只吃**页面清单**的渲染结果，
+    **管不到配方数据**——2026-09-25 的复测（`.scratch/hwcheck-acceptance/报告-复测.md` 的 N1）
+    正是在这个缺口上漏掉一处：清单项删了、文案改了，`key × mspm0` 那格原样留着。
+    """
+    text = recipe_library_path(REAL_LIBRARY).read_text(encoding="utf-8")
+    hits = sorted({word for word in _FORBIDDEN_EDIT_INSTRUCTIONS if word in text})
+    assert not hits, (
+        f"配方文件里出现了教学生改生成代码的措辞 {hits}——那一行从 hwcheck-acceptance/01 "
+        "起已经是活代码，学生照做会找不到。改写口径照 `xunji × mspm0` / `adc × mspm0`："
+        "「…检测程序开头已经调了它（那一行是活代码，不需要你改 main.c）」"
+    )
+
+
+def test_key_recipe_note_says_the_init_line_is_already_live():
+    """删掉旧指令之后，那句话要**真的换成实话**（防"删干净了但没换上"）。
+
+    与上一条配对：上一条只管"不该在的没了"，这一条管"该在的在了"——
+    只有一条时，把整段文案删空也能变绿。
+    """
+    from contest_generator.library import list_modules
+
+    manifests = list_modules(REAL_LIBRARY)
+    recipes = load_recipes(
+        REAL_LIBRARY, manifests, _library_interfaces_all(REAL_LIBRARY, manifests))
+    section = recipes["key"].for_platform(PLATFORM_MSPM0)
+    assert section is not None, "真实库缺 `key × mspm0` 配方"
+    note = "\n".join(section.note)
+    assert "不需要你改 main.c" in note, f"`key × mspm0` 的平台说明没换成实话：{note}"
+    assert "读数不可信" in note, (
+        "原先那半句有效信息（这一行不生效 = 输入配置没配上、读数不可信）不该跟着旧指令一起删掉"
+    )
+    # 它真的会印到检测页：页面读的就是 `sections_payload`（hwcheck_board 的视图载荷）。
+    payload = sections_payload([section])
+    assert any("不需要你改 main.c" in line for line in payload[0]["note"]), (
+        "这句实话没进页面载荷——学生就还是看不到它"
+    )
+
+
 @pytest.mark.parametrize("slug", ["sr04", "jy61p", "xunji"])
 def test_single_platform_pilot_modules_have_no_other_platform_recipe(slug):
     """单平台件（工单 09 的验收项之一）：**只有 mspm0 条目**的件不许出现 stm32 格。

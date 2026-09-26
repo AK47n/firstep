@@ -1,0 +1,21 @@
+配方文件 sha256（跑之前）= 886d9d09bc82a2ab9e9cbc3f5cd0f49b749301633282a325edab664280ee8165
+换行形态 = LF，字节数 = 219959
+✓ 前置干净性检查：旧形态当前不在配方文件里
+注入后跑守卫用例：exit=1
+—— pytest 输出（尾部 12 行）——
+>       assert not hits, (
+            f"配方文件里出现了教学生改生成代码的措辞 {hits}——那一行从 hwcheck-acceptance/01 "
+            "起已经是活代码，学生照做会找不到。改写口径照 `xunji × mspm0` / `adc × mspm0`："
+            "「…检测程序开头已经调了它（那一行是活代码，不需要你改 main.c）」"
+        )
+E       AssertionError: 配方文件里出现了教学生改生成代码的措辞 ['注释去掉']——那一行从 hwcheck-acceptance/01 起已经是活代码，学生照做会找不到。改写口径照 `xunji × mspm0` / `adc × mspm0`：「…检测程序开头已经调了它（那一行是活代码，不需要你改 main.c）」
+E       assert not ['注释去掉']
+
+tests\test_hwcheck_recipe.py:1059: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_hwcheck_recipe.py::test_real_recipe_file_never_asks_students_to_edit_generated_code
+1 failed in 0.14s
+判据结论 = ✓ 用例红了（守卫有强度）
+配方文件 sha256（复原后）= 886d9d09bc82a2ab9e9cbc3f5cd0f49b749301633282a325edab664280ee8165
+复原复核 = ✓ 逐字节相同
+复原后跑守卫用例：exit=0（应为 0）
