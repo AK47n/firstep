@@ -57,6 +57,11 @@ export const INPUT_A11Y_LABELS = {
   "set-vision-base-url": "视觉 base_url",
   "set-vision-model": "视觉模型",
   "set-vision-api-key": "视觉 API key（跟随上方选择自动填）",
+  // 硬件检测栏目（工单 hwcheck-hygiene/06）：这三个以前只有 placeholder——
+  // placeholder 不是可访问名（读屏不一定念，念了也是"提示"不是"标签"）。
+  "hwcheck-device-search": "搜索要测的器件",
+  "hwcheck-parent": "检测工程的输出父目录（留空 = 桌面）",
+  "hwcheck-symptom": "实际现象（写给 AI 排障）",
 };
 
 export function applyInputA11y(root) {

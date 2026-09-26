@@ -307,6 +307,7 @@ export function myDeviceFormHTML(form, error = "") {
     <div class="row">
       <label class="hwcheck-my-device-field">id
         <input type="text" data-my-device-field="id" value="${esc(f.id)}"
+               aria-describedby="my-device-form-error"
                placeholder="mine_gyro（必须 mine_ 开头）"></label>
       <label class="hwcheck-my-device-field">名称
         <input type="text" data-my-device-field="name" value="${esc(f.name)}"
@@ -317,6 +318,7 @@ export function myDeviceFormHTML(form, error = "") {
     <div class="row">
       <label class="hwcheck-my-device-field">7 位地址
         <input type="text" data-my-device-field="address" value="${esc(f.address)}"
+               aria-describedby="my-device-form-error"
                placeholder="0x68（I2C 必填）"></label>
       <label class="hwcheck-my-device-field">身份寄存器
         <input type="text" data-my-device-field="register" value="${esc(f.register)}"
@@ -332,7 +334,8 @@ export function myDeviceFormHTML(form, error = "") {
     <div class="row" style="margin-top: var(--space-2)">
       <button type="button" class="primary"${error ? " disabled" : ""} data-my-device-save>保存这件</button>
       <button type="button" data-my-device-cancel>取消</button>
-      <span class="hwcheck-hint" data-my-device-form-error>${esc(error)}</span>
+      <span class="hwcheck-hint" id="my-device-form-error" data-my-device-form-error
+            role="status">${esc(error)}</span>
     </div>
     <div class="hwcheck-hint">件与平台无关：同一件在两个平台上都能测（地址与寄存器
       是器件的事实，总线脚由平台决定）。备注里那句「卖家页写的 WHO_AM_I」将来会

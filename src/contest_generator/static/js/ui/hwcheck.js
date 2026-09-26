@@ -162,7 +162,10 @@ function renderHwcheckPlatforms() {
     hwcheckPlatforms(), hwcheckUI.platform);
   const canGo = hwcheckCanPreview(hwcheckUI);
   const preview = $("btn-hwcheck-preview");
-  if (preview) preview.disabled = !canGo;
+  // 进行中禁用（工单 hwcheck-hygiene/06）：与「生成」按钮同一条规矩——预览也是要等的
+  // 动作（零工具链但要走一遍装配），按住时按钮必须是**看得见的**不可点状态，
+  // 而不是"点了没反应"（函数内部那道 busy 早退是兜底，不是给人看的）。
+  if (preview) preview.disabled = !canGo || hwcheckUI.busy;
   const generate = $("btn-hwcheck-generate");
   if (generate) generate.disabled = !canGo || hwcheckUI.busy;
 }
@@ -220,17 +223,42 @@ function renderHwcheckProject() {
   else if (panel) box.innerHTML = panel;
 }
 
+// 焦点恢复（工单 hwcheck-hygiene/06）：勾选类整块重绘后，把焦点送回"刚操作的那一项"。
+//
+// 为什么要它：这些区块都是 `innerHTML = …` 全量重绘，刚按下的复选框 / 刚点的那张卡
+// 会被替换掉、焦点掉回 body——学生连续勾十几项时每次都要重新用鼠标找位置。
+// 口径：**谁触发的重绘谁负责写 `pendingFocusSelector`**，渲染函数收尾统一 `applyPendingFocus()`；
+// 找不到目标（比如那一项被移除了）就什么都不做（不抢焦点、不报错）。
+let pendingFocusSelector = "";
+
+function selectorValue(value) {
+  // 属性选择器里的值转义（slug / 清单 id 都是普通词，这里只兜住引号与反斜杠）
+  return String(value == null ? "" : value).replace(/["\\]/g, "\\$&");
+}
+
+function applyPendingFocus() {
+  const selector = pendingFocusSelector;
+  pendingFocusSelector = "";
+  if (!selector) return;
+  const el = document.querySelector(selector);
+  if (el && typeof el.focus === "function") el.focus();
+}
+
 function renderHwcheckChecklist() {
   const box = $("hwcheck-checklist");
   if (!box) return;
   const items = (hwcheckUI.project && hwcheckUI.project.checklist) || [];
   if (!items.length) {
+    // 空清单这条早退也要把待办焦点清掉（评审整改）：否则一个陈旧选择器会等到
+    // **下一次无关重绘**才被消费，焦点莫名其妙跳到别处。
+    pendingFocusSelector = "";
     box.innerHTML = '<div class="muted">生成检测工程后，这里会出现这次要逐项核对的清单'
       + '（应看到什么 / 不对先查哪里）。</div>';
     return;
   }
   box.innerHTML = hwcheckChecklistProgressHTML(items, hwcheckUI.checklistChecked)
     + hwcheckChecklistHTML(items, hwcheckUI.checklistChecked);
+  applyPendingFocus();
 }
 
 function renderHwcheckRecent() {
@@ -281,6 +309,7 @@ function renderHwcheckDevices() {
   // 表单必须原样留着（整块重绘会把正在填的字刷掉——见 syncMyDeviceForm 的说明）。
   const myList = $("my-devices-list");
   if (myList) myList.innerHTML = myDeviceListHTML(hwcheckUI.myDevices, hwcheckUI.devices);
+  applyPendingFocus();
   renderHwcheckHandoff();
 }
 
@@ -359,6 +388,7 @@ function renderMyDevices() {
   }
   const open = $("btn-my-device-new");
   if (open) open.disabled = !!hwcheckUI.myBusy;
+  applyPendingFocus();
 }
 
 // myDeviceFormError(form)：按当前表单算一次校验理由（保存按钮与提示共用同一句）。
@@ -833,10 +863,19 @@ async function refreshHwcheckView() {
 }
 
 async function previewHwcheck() {
-  if (!hwcheckCanPreview(hwcheckUI)) return;
+  if (!hwcheckCanPreview(hwcheckUI) || hwcheckUI.busy) return;
   const box = $("hwcheck-output");
   if (box) box.innerHTML = '<div class="muted">正在渲染检测程序…</div>';
-  await refreshHwcheckView();
+  // 进行中禁用（工单 hwcheck-hygiene/06）：与生成那条路同款——按钮按住时看得出来，
+  // 不是"点了没反应"（上面那道 busy 早退是兜底，不是给人看的）。
+  hwcheckUI.busy = true;
+  renderHwcheckPlatforms();
+  try {
+    await refreshHwcheckView();
+  } finally {
+    hwcheckUI.busy = false;
+    renderHwcheckPlatforms();
+  }
 }
 
 // addHwcheckDevice(slug, on)：加 / 去一件器件 → 重绘挑选面 + 重取板侧视图。
@@ -1111,15 +1150,29 @@ export function initHwcheck() {
   if (deviceGrid) {
     // 与生成页模块网格同一套委托语义：详情按钮优先（开说明弹窗），
     // 卡片本体 = 加一件器件。平台用**本栏目自己的**（生成页的平台可能不同）。
+    const activate = (target) => {
+      const card = target.closest("[data-add]");
+      if (!card) return;
+      // 重绘后把焦点送到**这一件的结果**上（工单 hwcheck-hygiene/06）：加进之后它
+      // 在 chips 里（卡片本身会从"还没选"的池子里消失），所以在 chip 上落焦点。
+      pendingFocusSelector = `#hwcheck-device-chips [data-remove="${selectorValue(card.dataset.add)}"]`;
+      addHwcheckDevice(card.dataset.add);
+    };
     deviceGrid.addEventListener("click", (e) => {
       const infoBtn = e.target.closest(".mc-info");
       if (infoBtn) {
         openModuleInfo(infoBtn.dataset.info, hwcheckUI.platform);
         return;
       }
-      const card = e.target.closest("[data-add]");
-      if (!card) return;
-      addHwcheckDevice(card.dataset.add);
+      if (e.target.closest("[data-add]")) activate(e.target);
+    });
+    // 键盘同等可达（工单 06）：卡片是 role="button" tabindex="0"。
+    // 详情按钮是真 <button>（浏览器自己把 Enter/Space 变成 click），排掉免得开两次。
+    deviceGrid.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " " && e.key !== "Spacebar") return;
+      if (e.target.closest && e.target.closest(".mc-info")) return;
+      e.preventDefault();
+      if (e.target.closest("[data-add]")) activate(e.target);
     });
   }
   const deviceChips = $("hwcheck-device-chips");
@@ -1128,7 +1181,21 @@ export function initHwcheck() {
     bindModuleInfoEntry(deviceChips, () => hwcheckUI.platform);
     deviceChips.addEventListener("click", (e) => {
       const chip = e.target.closest("[data-remove]");
-      if (chip) addHwcheckDevice(chip.dataset.remove, false);
+      if (chip) {
+        // 移除之后 chip 就不在了：焦点落到**网格里那张卡**上（它刚回到"还没选"的池子）
+        pendingFocusSelector = `#hwcheck-device-grid [data-add="${selectorValue(chip.dataset.remove)}"]`;
+        addHwcheckDevice(chip.dataset.remove, false);
+      }
+    });
+    // chip 是 role="button" tabindex="0"（工单 hwcheck-hygiene/06）：Enter / Space 同义
+    deviceChips.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " " && e.key !== "Spacebar") return;
+      if (e.target.closest && e.target.closest("[data-mod-info]")) return;   // 说明按钮自己会响应
+      const chip = e.target.closest("[data-remove]");
+      if (!chip) return;
+      e.preventDefault();
+      pendingFocusSelector = `#hwcheck-device-grid [data-add="${selectorValue(chip.dataset.remove)}"]`;
+      addHwcheckDevice(chip.dataset.remove, false);
     });
   }
   const preview = $("btn-hwcheck-preview");
@@ -1180,6 +1247,9 @@ export function initHwcheck() {
       const pick = e.target.closest("[data-my-device-pick]");
       if (pick) {
         const id = pick.dataset.myDevicePick;
+        // 重绘后焦点回这一行（工单 hwcheck-hygiene/06）：`renderMyDevices()` 换掉整块
+        // innerHTML，不回焦点的话键盘 / 连续点选都会掉回 body。
+        pendingFocusSelector = `[data-my-device-pick="${selectorValue(id)}"]`;
         addHwcheckDevice(id, !(hwcheckUI.devices || []).includes(id));
         renderMyDevices();   // 按钮两态跟着选择变（chip 那边由 addHwcheckDevice 重绘）
         return;
@@ -1191,6 +1261,8 @@ export function initHwcheck() {
       }
       const del = e.target.closest("[data-my-device-del]");
       if (del) {
+        // 删掉之后那一行**不在了**：焦点落到"新建"按钮上（不回 body，键盘还能继续走）
+        pendingFocusSelector = "#btn-my-device-new";
         deleteMyDevice(del.dataset.myDeviceDel);
         return;
       }
@@ -1278,6 +1350,9 @@ export function initHwcheck() {
       const input = e.target.closest("[data-hwcheck-check]");
       if (!input || !hwcheckUI.project) return;
       const key = hwcheckChecklistKey(hwcheckUI.project.outputDir);
+      // 重绘后焦点回**刚勾的那一项**（工单 hwcheck-hygiene/06）：清单整块 innerHTML
+      // 重绘会把复选框换掉、焦点掉回 body——学生连续勾十几项时每次都要重新找位置。
+      pendingFocusSelector = `[data-hwcheck-check="${selectorValue(input.dataset.hwcheckCheck)}"]`;
       writeStored(key, hwcheckChecklistToggle(
         readStored(key), input.dataset.hwcheckCheck, input.checked));
       hwcheckUI.checklistChecked = hwcheckCheckedIds(readStored(key));

@@ -657,6 +657,16 @@ export function renderRecommendResult(data, autoAdd = true) {
       addModule(slug, false);
       reRenderAfterSelectionChange();
     }));
+  // chip 现在是 `role="button" tabindex="0"`（工单 hwcheck-hygiene/06）：键盘用户
+  // 到得了它，就得按得动它——Enter / Space 与点一下同义（复用同一个 click 路径）。
+  box.querySelectorAll("[data-remove]").forEach((b) =>
+    b.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter" && ev.key !== " " && ev.key !== "Spacebar") return;
+      if (ev.target.closest && ev.target.closest("[data-mod-info]")) return;  // 说明按钮自己会响应
+      ev.preventDefault();                       // Space 默认滚页
+      ev.stopPropagation();                      // 别让外层容器的委托再处理一次
+      b.click();
+    }));
   // 组卡单选交互（工单 04 / group-choice-required/01）：点击 radio = **由用户做出这一组的选择**
   // ——记账进 groupChoices（草稿持久化）+ 用选择重算集合（同组其他成员被顶替）。
   // 用 click 而非 change：再点已选 radio 不触发 change。
@@ -1021,11 +1031,8 @@ export function bindModuleInfoEntry(root, platformOf) {
 function initModuleGrid() {
   const box = $("module-grid");
   if (!box) return;
-  box.addEventListener("click", (ev) => {
-    // 详情按钮优先（工单 module-info-dialog/01）：先判 .mc-info，卡片本体仍添加模块
-    const infoBtn = ev.target.closest ? ev.target.closest(".mc-info") : null;
-    if (infoBtn) { openModuleInfo(infoBtn.dataset.info); return; }
-    const card = ev.target.closest ? ev.target.closest(".module-card") : null;
+  const activate = (target) => {
+    const card = target.closest ? target.closest(".module-card") : null;
     if (!card) return;
     const slug = card.dataset.add;
     if (!slug) return;
@@ -1034,6 +1041,21 @@ function initModuleGrid() {
       return;
     }
     addModule(slug);
+  };
+  box.addEventListener("click", (ev) => {
+    // 详情按钮优先（工单 module-info-dialog/01）：先判 .mc-info，卡片本体仍添加模块
+    const infoBtn = ev.target.closest ? ev.target.closest(".mc-info") : null;
+    if (infoBtn) { openModuleInfo(infoBtn.dataset.info); return; }
+    activate(ev.target);
+  });
+  // 键盘同等可达（工单 hwcheck-hygiene/06）：卡片是 role="button" tabindex="0"，
+  // Enter / Space 与点它同义。详情按钮是真 <button>，浏览器自己会把它变成 click
+  // （Enter/Space 都算），所以这里要把它排掉，否则一次按键会开两次弹窗。
+  box.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter" && ev.key !== " " && ev.key !== "Spacebar") return;
+    if (ev.target.closest && ev.target.closest(".mc-info")) return;
+    ev.preventDefault();          // Space 默认会滚页
+    activate(ev.target);
   });
 }
 

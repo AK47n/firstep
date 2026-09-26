@@ -370,9 +370,12 @@ export function hwcheckActionsHTML(outputDir, opts) {
     + ' title="stm32 优先拉起 Keil（UV4），兜底打开文件夹；mspm0 打开文件夹（CCS 手动导入）"'
     + ">打开工程</button>"
     + "</div>"
-    + '<div id="hwcheck-compile-status" class="code-compile-status"></div>'
+    // 状态行可被读屏念出（工单 hwcheck-hygiene/06）：编译 / 烧录是"要等"的动作，
+    // 页面在跑没有不能靠猜。role=status 等价 aria-live="polite"（读屏会在空档里念
+    // 变化），不动观感、不加视觉噪音。
+    + '<div id="hwcheck-compile-status" class="code-compile-status" role="status"></div>'
     + '<div id="hwcheck-compile-errors"></div>'
-    + '<div id="hwcheck-flash-status" class="muted"></div>'
+    + '<div id="hwcheck-flash-status" class="muted" role="status"></div>'
     + '<div id="hwcheck-flash-result"></div>';
 }
 

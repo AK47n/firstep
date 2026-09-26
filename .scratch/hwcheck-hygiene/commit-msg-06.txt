@@ -1,0 +1,15 @@
+工单 hwcheck-hygiene/06：焦点与可达性——勾完还在原位、键盘能用、长任务有话说
+
+- 焦点恢复：ui/hwcheck.js 新增 pendingFocusSelector / applyPendingFocus（谁触发重绘谁写目标，
+  渲染收尾统一落焦点），覆盖三处——上板清单勾选、检测页器件集（加进→chip / 移除→网格卡）、
+  我的器件行（加选→那一行 / 删除→「新建」按钮）
+- 键盘可达：模块卡与 chip 加 role=button + tabindex=0（生成页网格 / 推荐 chip / 检测页器件网格 /
+  器件 chip 各加 keydown 委托）；说明按钮是真按钮，排掉免得一次按键开两次
+- 无障碍标签：三个只有 placeholder 的输入进 INPUT_A11Y_LABELS；我的器件表单错误与输入
+  aria-describedby 关联（不加 aria-invalid——只有一句校验理由，无差别标两个字段是错的）
+- 长任务有话说：编译/烧录状态行 role=status；预览与生成同一套 busy 规矩（按钮可见地不可点）
+- 真浏览器用例 3 条（进 tests/browser/hwcheck.spec.mjs）：无障碍名 / 焦点与可达性（勾选保焦点 +
+  从搜索框真按 Tab 走到器件卡 + Enter/Space）/ 动作进行中按钮禁用；两条自带前提（各生成一遍工程）
+- 反证三处注入（撤焦点恢复 / 撤卡片 role+tabindex / 撤一条标签）：各自点名变红，复原 sha256 逐字节相同
+- 读数：前端门禁 1818 / 0；浏览器门禁 48 / 0（+3）；全套 pytest 5600 passed + 11 skipped
+- 评审两条硬违规（aria-invalid 无差别标注、给结果容器多加了 role=status）与四条判断题全部处置

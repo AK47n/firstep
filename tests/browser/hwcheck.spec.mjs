@@ -1184,3 +1184,133 @@ test("检测页 → 生成页：库内件一键带过去并置为选中态；库
   await myDeviceCleanup([HANDOFF_DEVICE_ID]);
   await clearDevices();
 });
+
+// ---------------------------------------------------------------------------
+// 焦点与可达性（工单 hwcheck-hygiene/06）
+//
+// 为什么只有真浏览器能作证：`document.activeElement` 是**运行时**事实——源码里写了
+// `.focus()` 不等于焦点真落在那一项上（整块 innerHTML 重绘会把节点换掉），
+// 可访问名也只有在真 DOM 里查才算数。断言一律按**外部行为**：焦点在哪、按了键会怎样。
+// ---------------------------------------------------------------------------
+
+test("无障碍名：三个只有 placeholder 的输入都有可访问名（按可访问名断言）", async () => {
+  await openTab();
+  const names = await page.evaluate(() => {
+    const read = (id) => {
+      const el = document.getElementById(id);
+      if (!el) return null;
+      return el.getAttribute("aria-label")
+        || (el.labels && el.labels.length ? el.labels[0].textContent.trim() : "");
+    };
+    return {
+      search: read("hwcheck-device-search"),
+      parent: read("hwcheck-parent"),
+      symptom: read("hwcheck-symptom"),
+    };
+  });
+  for (const [key, value] of Object.entries(names)) {
+    assert.ok(value && value.trim().length > 0, `${key} 没有可访问名（只有 placeholder）：${value}`);
+  }
+});
+
+test("焦点与可达性：勾选保焦点 / 器件卡键盘可加 / 状态位是 live region（工单 06）", async () => {
+  // 这一条**自带前提**（本文件的用例共用一张页面，前面几条会清器件集 / 换平台）：
+  // 自己生成一个新检测工程，再从干净状态验焦点与可达性。
+  await openTab();
+  await setParent(parentDir);
+  await page.waitForSelector("#hwcheck-platforms .platform-card");
+  await page.click('[data-hwcheck-platform="stm32"]');
+  await page.click("#btn-hwcheck-generate");
+  await page.waitForSelector("[data-hwcheck-compile]", { timeout: 120000 });
+
+  // ① 勾一项 → 焦点仍在那一项上（整块 innerHTML 重绘不许把焦点甩回 body）
+  // 注意 `.hwcheck-check` 是**外层 label**，真正可聚焦的是它里面的 checkbox
+  // （`[data-hwcheck-check]`）——焦点恢复的判据也落在那个 input 上。
+  await page.waitForSelector("#hwcheck-checklist input[data-hwcheck-check]");
+  const itemId = await page.evaluate(() => {
+    const box = document.querySelector("#hwcheck-checklist input[data-hwcheck-check]");
+    box.focus();
+    return box.dataset.hwcheckCheck;
+  });
+  await page.locator("#hwcheck-checklist input[data-hwcheck-check]").first().click();
+  await page.waitForFunction(
+    (id) => {
+      const el = document.querySelector(`input[data-hwcheck-check="${id}"]`);
+      return !!el && document.activeElement === el;
+    }, itemId, { timeout: 10000 });
+  assert.notEqual(await page.evaluate(() => document.activeElement.tagName), "BODY",
+    "重绘后焦点掉回 body 了");
+  await page.locator("#hwcheck-checklist input[data-hwcheck-check]").first().click();   // 勾回去
+
+  // ② 器件卡是键盘可达的按钮：Tab 走得到它，Enter / Space 与点它同义
+  await page.waitForSelector("#hwcheck-device-grid .module-card");
+  // 从搜索框（器件区里它前面最近的可聚焦元素）起按 Tab，走到第一张卡片为止——
+  // 真按键盘、不自己 `.focus()`（自己聚焦等于把"够不够得着"那条判据绕过去了）
+  await page.focus("#hwcheck-device-search");
+  let tabbed = false;
+  for (let i = 0; i < 12 && !tabbed; i += 1) {
+    await page.keyboard.press("Tab");
+    tabbed = await page.evaluate(() => {
+      const el = document.activeElement;
+      return !!el && el.classList && el.classList.contains("module-card");
+    });
+  }
+  assert.ok(tabbed, "按 Tab 走不到器件卡（键盘用户到不了）");
+  const slug = await page.evaluate(() => document.activeElement.dataset.add);
+  assert.equal(await page.evaluate(() => document.activeElement.getAttribute("role")), "button",
+    "器件卡不是可聚焦的按钮角色");
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(
+    (s) => !!document.querySelector(`#hwcheck-device-chips [data-remove="${s}"]`),
+    slug, { timeout: 30000 });
+  // 加进去之后焦点落到**它的 chip** 上（卡片已从"还没选"的池子里消失，chip 才是这一件）
+  await page.waitForFunction((s) => {
+    const chip = document.querySelector(`#hwcheck-device-chips [data-remove="${s}"]`);
+    return !!chip && document.activeElement === chip;
+  }, slug, { timeout: 10000 });
+  await page.keyboard.press(" ");
+  await page.waitForFunction(
+    (s) => !document.querySelector(`#hwcheck-device-chips [data-remove="${s}"]`),
+    slug, { timeout: 30000 });
+  // 移除之后焦点回到网格里那张卡（它刚回到"还没选"的池子）
+  await page.waitForFunction((s) => {
+    const card = document.querySelector(`#hwcheck-device-grid [data-add="${s}"]`);
+    return !!card && document.activeElement === card;
+  }, slug, { timeout: 10000 });
+
+  // ③ 编译 / 烧录状态位是 live region（读屏会念）
+  const regions = await page.evaluate(() => ["hwcheck-compile-status", "hwcheck-flash-status"]
+    .map((id) => {
+      const el = document.getElementById(id);
+      return el ? { id, role: el.getAttribute("role"), live: el.getAttribute("aria-live") } : null;
+    }));
+  for (const region of regions) {
+    assert.ok(region, "状态位应该存在（工程面板渲染后）");
+    assert.ok(region.role === "status" || region.live,
+      `${region.id} 不是 live region：${JSON.stringify(region)}`);
+  }
+});
+
+test("动作进行中按钮禁用：预览按住时「预览」按钮是看得见的不可点（工单 06）", async () => {
+  // 为什么单独一条、且要自己生成一遍工程：上一条留下的器件增删在途时会触发
+  // `refreshHwcheckView` 的"在途排队"（那次预览会**立刻**返回，按钮的禁用窗口短到
+  // 抓不住）——那是产品正确的行为（不重复发请求），不是缺陷。这条判据要的是
+  // **真正在等的那一刻**，所以从"没有在途请求"的状态出发。
+  await openTab();
+  await setParent(parentDir);
+  await page.waitForSelector("#hwcheck-platforms .platform-card");
+  await page.click('[data-hwcheck-platform="stm32"]');
+  await page.click("#btn-hwcheck-generate");
+  await page.waitForSelector("[data-hwcheck-compile]", { timeout: 120000 });
+
+  await page.route("**/api/hwcheck/preview", async (route) => {
+    await new Promise((r) => setTimeout(r, 1500));
+    await route.continue();
+  });
+  await page.click("#btn-hwcheck-preview");
+  await page.waitForFunction(
+    () => document.getElementById("btn-hwcheck-preview").disabled, undefined, { timeout: 10000 });
+  await page.unroute("**/api/hwcheck/preview");
+  await page.waitForFunction(
+    () => !document.getElementById("btn-hwcheck-preview").disabled, undefined, { timeout: 30000 });
+});

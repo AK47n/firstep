@@ -1,0 +1,25 @@
+=== A 撤掉焦点恢复（重绘后不再回焦点） ===
+目标：src/contest_generator/static/js/ui/hwcheck.js  前置 sha256：dff5d8b171b781020301b93f55079515b8abf40eff5f4a38e9cb839150520783
+注入后 sha256：7843ab2eda91d4ee787797208aa82e548a8f20ba13b4ac1a5430b967ee4fca6f（应不等于前置值）
+注入态：退出码 1 / fail 1；「焦点与可达性」那条报红：✓
+  ✖ 焦点与可达性：勾选保焦点 / 器件卡键盘可加 / 状态位是 live region（工单 06） (15878.5231ms)
+复原 sha256：dff5d8b171b781020301b93f55079515b8abf40eff5f4a38e9cb839150520783  逐字节相同：✓
+复原态：退出码 0  回绿：✓
+
+=== B 撤掉器件卡的键盘可达（role/tabindex 拿掉） ===
+目标：src/contest_generator/static/js/fx/module.js  前置 sha256：851cf02d6a8a33db878e76e01519f80d304fa5f6805db898006a557130a97330
+注入后 sha256：18c430064447deccc139c446efeabf2ca953d2563fb85804a2aec636734bfd4f（应不等于前置值）
+注入态：退出码 1 / fail 1；「焦点与可达性」那条报红：✓
+  ✖ 焦点与可达性：勾选保焦点 / 器件卡键盘可加 / 状态位是 live region（工单 06） (14848.8394ms)
+复原 sha256：851cf02d6a8a33db878e76e01519f80d304fa5f6805db898006a557130a97330  逐字节相同：✓
+复原态：退出码 0  回绿：✓
+
+=== C 撤掉一个输入的可访问名（标签表里去掉搜索框那条） ===
+目标：src/contest_generator/static/js/ui/a11y.js  前置 sha256：4c45ab592189cf8e11e87394a1bea43f437632f3ea714507731937ca5a463345
+注入后 sha256：fe52b9ec8b4c3f87dc35bacd7c3b13a9b4182b575bf23136c64ef33ce9cfca2c（应不等于前置值）
+注入态：退出码 1 / fail 1；「无障碍名」那条报红：✓
+  ✖ 无障碍名：三个只有 placeholder 的输入都有可访问名（按可访问名断言） (11429.2693ms)
+复原 sha256：4c45ab592189cf8e11e87394a1bea43f437632f3ea714507731937ca5a463345  逐字节相同：✓
+复原态：退出码 0  回绿：✓
+
+结论：PASS —— 两处判据都有强度，且探针未留下任何改动

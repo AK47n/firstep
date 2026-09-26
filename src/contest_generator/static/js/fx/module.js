@@ -330,7 +330,12 @@ export function moduleGridHTML(modules, selectedSet, query, platform) {
     const deps = (m.dependencies || []).length
       ? '<span class="mc-deps">依赖：' + escHtml(m.dependencies.join("、")) + "</span>" : "";
     const pa = m.python_artifact ? '<span class="mc-pa">副产物</span>' : "";
+    // 卡片 = 一个**可聚焦的按钮**（工单 hwcheck-hygiene/06）：以前只有 click 委托，
+    // 键盘用户到不了（平台卡早就有 role/tabindex/keydown，同一页两套标准）。
+    // 不写 `aria-pressed`：网格里只会出现**还没选**的模块（`moduleGridFilter` 把已选
+    // 的剔掉了），那个属性在这里恒为 false、只会误导（chip 才有两态，见 recommendChipHTML）。
     return '<div class="module-card' + (off ? " off" : "") + '" data-add="' + escHtml(m.slug) + '"'
+      + ' role="button" tabindex="0"'
       + ' title="' + escHtml(desc) + '">'
       + '<div class="mc-head"><span class="slug">' + escHtml(m.slug) + "</span>"
       + '<button class="mc-info" data-info="' + escHtml(m.slug) + '" title="查看模块详情">详情</button>'
@@ -393,6 +398,7 @@ export function recommendChipHTML(slug, reason, selected) {
   const title = on ? "点击从工程里移除" : "已从工程移除，点击加回";
   const mark = on ? "✕" : "＋";
   return '<span class="chip rec' + state + '" data-remove="' + escHtml(slug) + '"'
+    + ' role="button" tabindex="0" aria-pressed="' + (on ? "true" : "false") + '"'
     + ' title="' + escHtml(title) + '">' + escHtml(slug)
     + (reason ? '<span class="reason">' + escHtml(reason) + "</span>" : "")
     + moduleInfoBtnHTML(slug)
