@@ -1,0 +1,16 @@
+工单 hwcheck-hygiene/05：板级事实单源——LED 引脚与排障引脚白名单都从选型数据取
+
+- selection 新增两个投影（_led_policy / led_builtin_pins / led_first_pin）：板载 LED 脚的单源，
+  与多实例展开读同一张 INSTANCE_POLICIES
+- hwcheck.py：上板清单那句「灯在哪几个脚」不再写死 PC13/PC14/PC15/PA15，改由 _heartbeat_led_hint
+  从数据渲染；取不到时整条不出现、序号接着排（不留悬空的「② ③」）
+- hwcheck_triage.py：引脚白名单从「清单文案里出现过」改成**四处数据**——接线行 / 板上共享脚 /
+  选型数据平台默认脚 / 检测计划那几段（_plan_texts）+ 学生自己写的现象；上板清单那段手写散文
+  移出判据来源（文案与判据互为因果 = 评审 P2-11 的原缺陷）
+- 自述同步：hwcheck_triage 文件头 / 段标题 / build_triage_facts docstring + CONTEXT.md 四处
+- 用例：改数据 → 文案跟着变（单源判据）；只在文案里出现的脚不算事实；计划里的脚仍算事实；
+  取不到数据时不留悬空序号
+- 反证逐条点名：写死引脚 → 红；把清单文案并回 plan_texts → 红；两次复原 sha256 逐字节相同
+- 读数：全套 pytest 5600 passed + 11 skipped；定向 876 + 10；前端门禁 1818 / 0；
+  真编译矩阵两平台 6 格全 PASS（0 error / 0 warning）
+- 双轴评审两条硬违规（自述未同步、第一版把检测计划的脚一起踢出白名单）+ 三条判断题全部处置

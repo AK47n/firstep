@@ -140,10 +140,14 @@ def test_context_text_carries_wiring_plan_checklist_checked_and_symptom():
     assert "串口一行字都没有，灯也不闪" in text
 
 
-def test_context_facts_whitelist_is_built_from_the_same_material():
-    """白名单 = 本次接线表里的脚 + 本次工程模块集；整库词表另存一份。"""
+def test_context_facts_whitelist_is_built_from_board_and_selection_data():
+    """白名单 = 本次接线行 + 板上共享脚 + **选型数据的平台默认脚**；整库词表另存一份。
+
+    工单 hwcheck-hygiene/05：`PC14`/`PC15` 现在来自**数据**（led 在 stm32 上的板载
+    三色通道），不再来自"清单文案里写过"。
+    """
     context = _context()
-    assert context.facts.pins == {"PC13", "PB6", "PB7", "PA15"}  # 含板上共享脚
+    assert context.facts.pins == {"PC13", "PC14", "PC15", "PB6", "PB7", "PA15"}
     assert {"led", "ml_mpu6050", "sr04"} <= context.facts.modules
     assert "delay" in context.facts.modules  # 框架件没有接线行，仍属本次工程
     assert "jy61p" in context.facts.known_modules  # 库内有、本次没选
@@ -156,20 +160,30 @@ def test_context_rejects_empty_symptom():
         _context(symptom="   ")
 
 
-def test_pins_quoted_from_the_material_are_allowed():
-    """**材料里出现过的脚 = 上下文事实**（评审抓到的真缺陷）。
+def test_pin_from_the_selection_data_is_a_fact_even_if_the_copy_omits_it():
+    """**数据里有**的脚就算事实——不再看文案写没写（工单 hwcheck-hygiene/05）。
 
-    上板清单的「不对先查」里就写着「stm32 板载三色 LED 在 PC13/PC14/PC15」
-    （`hwcheck.render_checklist` 的原文），材料原样喂给模型——模型复述材料里
-    的 `PC14` 却被白名单判非法，就会走成"重问 → 兜底降级"。判据必须与材料
-    同一处装配：材料里出现过的脚放行，材料里没有的（`PA9`）照旧拒收。
-
-    夹具里接线表只用了 `PC13`，所以 `PC14` 正是"只在材料里出现过"的那个脚。
+    旧口径的由来（评审抓到的真缺陷）仍然要挡住：模型复述材料里的 `PC14` 不该被判非法。
+    区别在于**依据换了**——现在是"选型数据说 stm32 的板载 LED 有 PC14"，
+    而不是"我们那句文案里碰巧写了 PC14"（文案与判据互为因果：改一句话就悄悄改了判据）。
     """
-    baseline = _context()
+    context = _context()
+    assert "PC14" in context.facts.pins, "选型数据里的板载 LED 脚没进白名单"
+    advice = parse_triage_advice(_advice(causes=["绿灯那一路（PC14）没接对"]), context)
+    assert advice.causes
+    # 判据没被放宽成"什么脚都行"：数据里没有、接线表里也没有的脚照旧拒收
+    with pytest.raises(TriageFactError):
+        parse_triage_advice(_advice(causes=["PA9 上的线松了"]), context)
+
+
+def test_pin_that_only_appears_in_the_copy_is_not_a_fact():
+    """**只在文案里出现过**、不在数据里的脚，不再算上下文事实（工单 05）。
+
+    这条是"文案不再当判据来源"的正面判据：把 `PX9` 写进清单文案，白名单**不该**跟着涨。
+    """
     ladder = dict(_CHECKLIST[1])
-    ladder["check"] = "① 先按一次复位；② 板载三色 LED 在 PC13/PC14/PC15（本程序用红灯）"
-    with_material = build_triage_context(
+    ladder["check"] = "② 板载指示灯在 PX9 那一排（文案里写的，数据里没有）"
+    context = build_triage_context(
         platform=PLATFORM_STM32,
         devices=("led", "ml_mpu6050", "sr04"),
         modules=_PROJECT_MODULES,
@@ -181,17 +195,57 @@ def test_pins_quoted_from_the_material_are_allowed():
         symptom="灯不亮",
         known_modules=_KNOWN_MODULES,
     )
-    assert "PC14" in with_material.facts.pins      # 材料里写了，就算事实
-    assert "PC14" not in baseline.facts.pins       # 材料里没写，就不算
-    advice = parse_triage_advice(
-        _advice(causes=["绿灯那一路（PC14）没接对"]), with_material
+    assert "PX9" not in context.facts.pins, (
+        "文案里写过的脚被当成了上下文事实 —— 判据的来源又回到文案上去了"
     )
+    with pytest.raises(TriageFactError):
+        parse_triage_advice(_advice(causes=["PX9 那一排没插好"]), context)
+
+
+def test_pin_from_the_detection_plan_is_still_a_fact():
+    """**检测计划**里的脚仍算事实（工单 05 只授权把「上板清单文案」移出判据来源）。
+
+    为什么这条必须钉住：计划那几段（逐件小节 plan / 通用件 plan / 顺序说明 / 自建件
+    plan 与备注）来自**库内配方与器件数据**，而且原样印进 `triage_context_text` 给模型
+    看。第一版整改把它们连同清单一起踢出白名单，模型复述自己看过的计划就会被判非法
+    ——正是 `hwcheck-unknown-device/09` 修过的"材料说得的、判据说不得"（双轴评审当场
+    证伪：计划里写 `PA2`，`facts.pins` 里没有它）。
+    """
+    planned = dict(_SECTIONS[1])
+    planned["plan"] = "读 WHO_AM_I（I2C：PA2 = SCL / PA3 = SDA）"
+    context = build_triage_context(
+        platform=PLATFORM_STM32,
+        devices=("led", "ml_mpu6050", "sr04"),
+        modules=_PROJECT_MODULES,
+        wiring=_WIRING,
+        sections=(_SECTIONS[0], planned),
+        unspecialized=_UNSPECIALIZED,
+        checklist=_CHECKLIST,
+        checked_ids=("flash",),
+        symptom="读不到数据",
+        known_modules=_KNOWN_MODULES,
+    )
+    assert {"PA2", "PA3"} <= context.facts.pins, "计划里的脚被判非法了（材料说得的、判据说不得）"
+    advice = parse_triage_advice(_advice(causes=["PA3 那根 SDA 没接好"]), context)
     assert advice.causes
-    # 材料里没有的脚照旧拒收（判据没被放宽成"什么脚都行"）
-    with pytest.raises(TriageFactError):
-        parse_triage_advice(_advice(causes=["PA9 上的线松了"]), with_material)
-    with pytest.raises(TriageFactError):
-        parse_triage_advice(_advice(causes=["绿灯那一路（PC14）没接对"]), baseline)
+
+
+def test_heartbeat_check_has_no_dangling_number_when_the_led_hint_is_missing():
+    """取不到板载 LED 数据时，那一条**整条不出现**（不留悬空的「② ③」）。
+
+    spec「实现决策」：取不到时的行为必须明说——印个空位等于既没说、又把序号错位。
+    这里直接喂一个数据里没有的平台（`require_known_platform` 挡住真实配置，所以从
+    域层辅助函数进）。
+    """
+    from contest_generator.hwcheck import _heartbeat_check_text
+
+    text = _heartbeat_check_text("没有这块板")
+    assert "② ③" not in text and "②③" not in text, f"留了悬空序号：{text}"
+    assert "③" not in text, f"只剩两条时不该出现 ③：{text}"
+    assert text.startswith("① ") and "② " in text, f"序号没重排：{text}"
+    # 有数据的平台照旧三条（灯那一句在里面）
+    full = _heartbeat_check_text(PLATFORM_STM32)
+    assert "③" in full and "PC13" in full
 
 
 def test_pin_mentioned_in_the_symptom_is_allowed():
@@ -218,7 +272,11 @@ def test_context_without_devices_still_renders_the_lamp_only_path():
     text = triage_context_text(context)
     assert "一件器件都没选" in text
     assert "什么都没看到" in text
-    assert context.facts.pins == frozenset()
+    # 一件器件不选时，白名单里只剩**板子自己的事实**（工单 hwcheck-hygiene/05：
+    # 板载 LED 那几个脚来自选型数据，与学生接没接线无关）——不再是空的。
+    assert context.facts.pins == {"PC13", "PC14", "PC15"}, (
+        "板载 LED 的脚是板子的事实，不该随「选没选器件」消失"
+    )
 
 
 # ---------------------------------------------------------------------------

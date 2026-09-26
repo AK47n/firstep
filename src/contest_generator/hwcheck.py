@@ -150,6 +150,7 @@ from .hwcheck_recipe import (
     render_recipe_summary,
 )
 from .platforms import KNOWN_PLATFORMS, PLATFORM_MSPM0, PLATFORM_STM32
+from .selection import led_builtin_pins, led_first_pin
 from .syscfg_model import MSPM0_SYSCFG_INIT_NAME
 
 __all__ = [
@@ -463,6 +464,42 @@ class ChecklistItem:
         return {"id": self.id, "expect": self.expect, "check": self.check}
 
 
+def _heartbeat_led_hint(platform: str) -> str:
+    """上板清单里「灯在哪几个脚」那一句（工单 hwcheck-hygiene/05：**数据单源**）。
+
+    脚来自 `selection`（`led_builtin_pins` / `led_first_pin` —— 多实例展开读的同一张
+    策略表），通道宏来自本文件的 `_LED_CHANNEL`（检测程序真的初始化的那一路）。于是
+    **改板定义那句话跟着改**，没有第二份字面量。
+    两种板型两种说法，语义与旧文案一致：给三色通道的板子点明**本程序用红灯通道**，
+    只给一个用户 LED 的板子直说那个脚。
+    **取不到（平台没登记）返回空串**——调用方 `_heartbeat_check_text` 会把这一条
+    整条去掉并重排序号，不留悬空的「② ③」（spec：取不到时的行为要明说，别印半句）。
+    """
+    channels = led_builtin_pins(platform)
+    if channels:
+        pins = "/".join(channels)
+        return f"板载三色 LED 在 {pins}（本程序用红灯通道 {_LED_CHANNEL}）；"
+    first = led_first_pin(platform)
+    if first:
+        return f"板载用户 LED 是 {first}；"
+    return ""
+
+
+def _heartbeat_check_text(platform: str) -> str:
+    """heartbeat 那条的「不对先查」（**灯那一句取不到就整条不出现**，序号接着排）。
+
+    为什么单独一个函数：把"取不到"处理成"印个空位"会渲染成「② ③ 灯常亮…」那种
+    悬空序号（评审实测指出的形态）——取不到时那条**不存在**，而不是存在但为空。
+    """
+    hints = ["先按一次复位，看是不是根本没跑起来；"]
+    led_hint = _heartbeat_led_hint(platform)
+    if led_hint:
+        hints.append(led_hint)
+    hints.append("灯常亮或常灭不动 = 程序卡住了（多半卡在外设初始化）")
+    marks = "①②③④⑤"
+    return "".join(f"{marks[i]} {hint}" for i, hint in enumerate(hints))
+
+
 def render_checklist(
     config: HwCheckConfig,
     custom: Sequence["CustomPlanEntry"] = (),
@@ -492,12 +529,7 @@ def render_checklist(
         ChecklistItem(
             id="heartbeat",
             expect=f"板载 LED 按约 {HEARTBEAT_MS} 毫秒的节奏规律闪烁（一亮一灭，不是常亮也不是全灭）",
-            check=(
-                "① 先按一次复位，看是不是根本没跑起来；"
-                "② stm32 板载三色 LED 在 PC13/PC14/PC15（本程序用红灯通道 LED_RED），"
-                "地猛星用户 LED 是 PA15；"
-                "③ 灯常亮或常灭不动 = 程序卡住了（多半卡在外设初始化）"
-            ),
+            check=_heartbeat_check_text(config.platform),
         ),
     ]
     if config.debug_uart:

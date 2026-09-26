@@ -3140,6 +3140,41 @@ def test_hwcheck_event_constant_is_registered_in_the_single_source():
     assert events.EVENT_HWCHECK_TRIAGE == "hwcheck_triage"
 
 
+def test_heartbeat_checklist_pins_come_from_the_selection_data(monkeypatch):
+    """上板清单里「灯在哪几个脚」从**选型数据**取（工单 hwcheck-hygiene/05）。
+
+    判据是"**改数据 → 文案跟着变**"（单源），不是"文案里含 PC13"——后者是把同一件事
+    写成第二份字面量，改板定义不会改这句话（评审 P2-11 的原缺陷）。
+    语义不变的判据：stm32 那句仍要点明**红灯通道**、mspm0 那句仍要说**用户 LED**。
+    """
+    from contest_generator import selection
+    from contest_generator.hwcheck import HwCheckConfig, render_checklist
+
+    def heartbeat_check(platform):
+        items = render_checklist(
+            HwCheckConfig(platform=platform, debug_uart=False, oled=False), ()
+        )
+        return next(item.check for item in items if item.id == "heartbeat")
+
+    baseline = heartbeat_check(PLATFORM_STM32)
+    for pin in ("PC13", "PC14", "PC15"):
+        assert pin in baseline, f"stm32 的板载三色 LED {pin} 没印出来：{baseline}"
+    assert "LED_RED" in baseline, f"「本程序用红灯通道」这层意思不能丢：{baseline}"
+    assert "PA15" in heartbeat_check(PLATFORM_MSPM0), "地猛星用户 LED 的脚没印出来"
+
+    # 单源判据：改选型数据里的一个值 → 渲染出来的文案跟着变
+    monkeypatch.setitem(
+        selection.INSTANCE_POLICIES["led"].builtin_pins[PLATFORM_STM32], "red", "PQ0"
+    )
+    moved = heartbeat_check(PLATFORM_STM32)
+    assert "PQ0" in moved, f"改了选型数据、文案没跟着变（硬编码了第二份）：{moved}"
+    assert "PC13" not in moved, f"旧值还留在文案里（两根来源各写一份）：{moved}"
+    monkeypatch.setitem(
+        selection.INSTANCE_POLICIES["led"].first_pin, PLATFORM_MSPM0, "PQ1"
+    )
+    assert "PQ1" in heartbeat_check(PLATFORM_MSPM0), "mspm0 那句也必须是数据投影"
+
+
 def _raise_when_reading(monkeypatch, filename: str, exc: OSError) -> None:
     """让**只有这个文件名**的读盘失败（其余照常）——注入"存在但读不出来"。"""
     real_read_text = Path.read_text

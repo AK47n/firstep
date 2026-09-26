@@ -6,6 +6,9 @@
   这一趟的检测计划（专精小节 + 通用降级件）、上板清单与**勾选状态**、学生填的现象。
   上下文与白名单**同一处装配**——判据（"这句话能不能说"）与材料（"模型看到什么"）
   分成两个来源，迟早漂（`wiring.py` 那条"引用白名单 = 材料本身"的先例）。
+  **"材料"的射程有边界**（工单 hwcheck-hygiene/05）：喂给模型的**计划类文本**
+  （来自库内配方与器件数据）算事实来源；而**上板清单那段手写散文不算**——
+  板载 LED 那几个脚由**选型数据**供（`build_triage_facts` 的说明写了四处来源）。
 * **出来的东西**（`parse_triage_advice`）：机械形状 + **事实约束查表**。板上的
   引脚名与库内模块名是**可查表**的两类话题词，模型说了不在本次上下文里的那种
   （例：只选了 led 却让你去查 `ml_mpu6050`、或点出一个本次接线表里没有的 `PA9`），
@@ -37,6 +40,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from .hwcheck_custom import PROBE_MODULE_SLUG
 from .hwcheck_errors import HwCheckError
 from .my_devices import DEVICE_ID_PREFIX
+from .selection import led_builtin_pins, led_first_pin
 
 __all__ = [
     "ADVICE_VERDICTS",
@@ -422,32 +426,43 @@ def update_hwcheck_record(
 
 
 # ---------------------------------------------------------------------------
-# 上下文装配（材料 + 白名单同一处）
+# 上下文装配（材料 + 白名单同一处；"材料"的射程见文件头与 build_triage_facts）
 # ---------------------------------------------------------------------------
 
 
 def build_triage_facts(
     *,
+    platform: str,
     rows: Sequence[Mapping[str, Any]],
     board_shares: Sequence[Mapping[str, Any]],
     modules: Sequence[str],
     known_modules: Sequence[str],
-    material_texts: Sequence[str] = (),
+    plan_texts: Sequence[str] = (),
+    symptom: str = "",
     customs: Sequence[str] = (),
     custom_words: Sequence[str] = (),
 ) -> TriageFacts:
-    """白名单装配（纯函数）：引脚名来自**本次接线行 + 板上共享脚 + 材料里出现过的
-    脚**，模块名来自本次检测的模块集与整库词表，自建件 id 与"件名里的词"各一张
-    表（工单 09）。
+    """白名单装配（纯函数）：引脚名来自**板上数据 + 这一趟的检测计划 + 学生写的现象**，
+    模块名来自本次检测的模块集与整库词表，自建件 id 与"件名里的词"各一张表（工单 09）。
 
-    引脚判据取"接线表里出现的脚"而不是"板定义全部脚"：模型点出一个本次
-    材料里根本没有的脚（`PA9`），那正是"编造接线"——放行它比拒收坏处大。
+    引脚判据取"这次真的要接的脚"而不是"板定义全部脚"：模型点出一个本次材料里根本
+    没有的脚（`PA9`），那正是"编造接线"——放行它比拒收坏处大。
 
-    `material_texts` = 模型**看得到的那些字**（上板清单的「应看到 / 不对先查」、
-    逐件检测计划、现象本身）——评审抓到的真缺陷：上板清单里就写着「stm32 板载
-    三色 LED 在 PC13/PC14/PC15」「地猛星用户 LED 是 PA15」（`hwcheck.render_checklist`），
-    模型复述材料里的 `PC13` 反被白名单判非法 → 重问 → 兜底降级。判据与材料必须
-    同一处装配：**材料里出现过的脚就是上下文事实**，允许引用。
+    引脚的四处来源（工单 hwcheck-hygiene/05 **定死**，改之前先读为什么）：
+
+    * 本次**接线行**（`rows`）与**板上共享脚**（`board_shares`）——这一趟真接的；
+    * **选型数据的平台默认脚**（`selection.led_builtin_pins` / `led_first_pin`）——
+      板载 LED 那几个脚本来就是"板子上的事实"，与学生接没接无关；
+    * **检测计划那几段**（`plan_texts`：逐件小节 plan / 通用件 plan 与 message /
+      顺序说明 / 自建件 plan 与备注）——它们来自**库内配方与器件数据**，原样印进
+      `triage_context_text` 给模型看；模型复述里面的脚必须放行，否则就是
+      "材料说得的、判据说不得"（`hwcheck-unknown-device/09` 修过一次的那条）；
+    * **学生自己写的现象**（`symptom`）——他说"我把线插到 PB7 了"，那就是一条事实。
+
+    **唯独不再从「上板清单文案」里刮脚**（旧口径 `material_texts` 把清单的
+    `expect` / `check` 也扫进来）：那是**手写散文**当判据来源的地方——改一句文案
+    就悄悄改了判据（工单 05 的由来）。清单里那几个板载 LED 脚现在由**选型数据**供
+    （上面第二条），所以"模型复述 PC14 被判非法"那条老缺陷照样挡着，依据却是数据。
     """
     pins: set[str] = set()
     for row in rows:
@@ -458,9 +473,15 @@ def build_triage_facts(
         pin = item.get("pin")
         if isinstance(pin, str) and pin:
             pins.add(pin)
-    for text in material_texts:
+    pins.update(led_builtin_pins(platform))
+    first_pin = led_first_pin(platform)
+    if first_pin:
+        pins.add(first_pin)
+    for text in plan_texts:
         if isinstance(text, str) and text:
             pins.update(_PIN_TOKEN_RE.findall(text))
+    if isinstance(symptom, str) and symptom:
+        pins.update(_PIN_TOKEN_RE.findall(symptom))
     return TriageFacts(
         pins=frozenset(pins),
         modules=frozenset(str(slug) for slug in modules if slug),
@@ -540,16 +561,21 @@ def build_triage_context(
         checked_ids=_dedup_str(checked_ids),
         symptom=text,
         facts=build_triage_facts(
+            platform=platform,
             rows=rows,
             board_shares=wiring.get("board_shares", ()) or (),
             modules=modules_in_play,
             known_modules=known_modules,
-            # 材料里出现过的脚也算上下文事实（清单的「不对先查」里就写着
-            # PC13/PC14/PC15 这类板载 LED 脚——模型复述它不该被判非法）
-            material_texts=_material_texts(
-                checklist_rows, section_rows, generic_rows, order,
-                customs_rows, text,
+            # 检测计划那几段仍是事实来源（它们来自**库内配方与器件数据**，原样印进
+            # 材料给模型看——模型复述里面的脚必须放行）；**上板清单文案不在其列**
+            # （工单 hwcheck-hygiene/05：那是手写散文当判据来源的地方，改一句话就
+            # 悄悄改了判据）。清单里那几个板载 LED 脚改由**选型数据**供
+            # （`build_triage_facts` 里的 `led_builtin_pins` / `led_first_pin`）。
+            plan_texts=_plan_texts(
+                section_rows, generic_rows, order, customs_rows
             ),
+            # 学生自己写的现象同样是事实来源（他说"我把线插到 PB7 了"）
+            symptom=text,
             # 自建件 id 与"件名里的词"各一张表（工单 09）：库内词表判不到 mine_*，
             # 件名又可能正好含库内 slug（"卖家给的 oled 模块"），两张表各管一条判据
             customs=[row.get("slug") for row in customs_rows],
@@ -563,25 +589,22 @@ def build_triage_context(
     )
 
 
-def _material_texts(
-    checklist: Sequence[Mapping[str, Any]],
+def _plan_texts(
     sections: Sequence[Mapping[str, Any]],
     unspecialized: Sequence[Mapping[str, Any]],
     order: Sequence[Mapping[str, Any]],
     customs: Sequence[Mapping[str, Any]],
-    symptom: str,
 ) -> tuple[str, ...]:
-    """模型看得到的那些自由文本（引脚白名单的补充来源，见 build_triage_facts）。
+    """**检测计划**那几段自由文本（引脚白名单的来源之一，见 `build_triage_facts`）。
 
-    只收**会印进 `triage_context_text` 的字段**：清单的 expect / check、小节的
-    plan、通用件计划、顺序里的 description、自建件的 plan / 备注（工单 09）、
-    以及学生填的现象——收多了会放行模型没见过的脚，收少了就是评审抓到的那条
-    "材料说得的、判据说不得"。
+    只收计划性质、且**来自数据**的那几段：逐件小节的 plan、通用件的 plan 与 message、
+    建议顺序的 description、自建件的 plan 与备注（工单 `hwcheck-unknown-device/09`
+    把它收进来的理由：模型复述"卖家给的模块接在 PA5"不该被判非法）。
+
+    **不收上板清单的 expect / check**（工单 hwcheck-hygiene/05）：那是手写散文，
+    把它当判据来源就是"文案与判据互为因果"——旧实现（`_material_texts`）正是这么做的。
     """
-    chunks: list[str] = [symptom]
-    for item in checklist:
-        chunks.append(str(item.get("expect", "")))
-        chunks.append(str(item.get("check", "")))
+    chunks: list[str] = []
     for item in sections:
         chunks.append(str(item.get("plan", "")))
     for item in unspecialized:

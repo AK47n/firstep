@@ -2418,6 +2418,43 @@ def multi_instance_pin_capability(slug: str) -> str:
     return policy.pin_capability
 
 
+def _led_policy() -> MultiInstancePolicy | None:
+    """led 的多实例策略（上面那张表的投影；没登记 = None）。**内部件**。
+
+    两个消费方（检测页上板清单那句 / 排障引脚白名单）都从这里取，免得各自
+    `INSTANCE_POLICIES.get("led")` 抄一遍守卫（工单 hwcheck-hygiene/05 评审整改）。
+    """
+    return INSTANCE_POLICIES.get("led")
+
+
+def led_builtin_pins(platform: str) -> tuple[str, ...]:
+    """led 在**本平台**的板载默认通道脚 → (`"PC13", "PC14", "PC15"`)；没登记 = 空元组。
+
+    数据单源 = `INSTANCE_POLICIES["led"].builtin_pins`。**两个消费方共用它**
+    （工单 hwcheck-hygiene/05）：检测页上板清单那句"板载 LED 在哪几个脚"与排障侧的
+    引脚白名单——两处曾经各写一份（前者是硬编码字面量、后者是"清单文案里出现过就算
+    事实"，互为因果）。只要脚、不要通道宏：两个消费方都不需要宏（检测页那句的宏名
+    走 `hwcheck._LED_CHANNEL` 单源，那是**检测程序真的初始化的那一路**）。
+    """
+    policy = _led_policy()
+    if policy is None:
+        return ()
+    pins = policy.builtin_pins.get(platform) or {}
+    return tuple(pins.values())
+
+
+def led_first_pin(platform: str) -> str:
+    """led 在本平台的**首实例脚**（mspm0 = PA15 的用户 LED）；没登记 = 空串。
+
+    与 `led_builtin_pins` 同源同族：板子只给一个用户 LED 的平台（地猛星）走这一条，
+    给三色通道的平台走那一条。两个消费方都按"两者取其一"读它。
+    """
+    policy = _led_policy()
+    if policy is None:
+        return ""
+    return policy.first_pin.get(platform, "")
+
+
 @dataclass(frozen=True)
 class ExpandedInstance:
     """实例展开计划的一行：一个具体实例的通道宏名 + 默认脚。
