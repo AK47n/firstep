@@ -316,7 +316,7 @@ export function hwcheckProjectInfoHTML(project, platformLabel) {
 export function hwcheckToolchainNote(platform, ready, platformLabel) {
   if (ready) return "";
   const name = TOOLCHAIN_NAMES[platform] || "编译工具链";
-  return `<div class="hwcheck-warn">⚠ 本机没探测到 ${esc(name)}：这一趟工程**未经验证**`
+  return `<div class="hwcheck-warn">⚠ 本机没探测到 ${esc(name)}：这一趟工程<strong>未经验证</strong>`
     + `（编译这一步做不了，不等于代码有问题）。装好后可到设置页填路径，`
     + `或先按清单上板试——${esc(platformLabel || platform)} 的检测结果只有编译过才算数。</div>`;
 }
@@ -331,7 +331,7 @@ export function hwcheckToolchainNote(platform, ready, platformLabel) {
 export function hwcheckChannelNoteHTML(platform, debugUart, oled) {
   if (platform !== "mspm0" || !debugUart || !oled) return "";
   return '<div class="hwcheck-warn">注意：地猛星（mspm0）上「调试串口 + OLED」这两路的'
-    + "默认脚在原厂例程里是重叠的。**不用你自己改**——生成检测工程前，检测页会按"
+    + "默认脚在原厂例程里是重叠的。<strong>不用你自己改</strong>——生成检测工程前，检测页会按"
     + "同一套判据自动把它移开（移了哪几根见下面接线表上方的提示，接线表已经是新脚）。"
     + "若这套器件组合真的装不下（板子脚不够），页面会点明是哪几件、建议去掉哪一件。</div>";
 }
@@ -559,7 +559,7 @@ export function hwcheckPinFixHTML(pinFixes) {
     .filter((item) => item);
   if (!list.length) return "";
   return '<div class="hwcheck-warn">⚠ 生成前自动移开了 '
-    + `${list.length} 处默认脚冲突（这几根线**不按原厂默认脚**，按下面接线表接）：`
+    + `${list.length} 处默认脚冲突（这几根线<strong>不按原厂默认脚</strong>，按下面接线表接）：`
     + list.map((item) => `<div class="hwcheck-pin-fix">· ${esc(item)}</div>`).join("")
     + "</div>";
 }

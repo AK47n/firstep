@@ -1027,7 +1027,7 @@ function bindRole(key, pinName) {
   const famInfo = pinMacroFamilies(roles).get(key);
   pinHint(famInfo
     ? `已绑 ${r.decl.label || r.decl.id} → ${pinName}：与同族角色 ${famInfo.siblings.join("、")} 共享宏 ${famInfo.macro}——改线会同步影响同族其它角色的共享宏，请确认接线。`
-    : (mateMoves ? `${r.decl.label || r.decl.id} 与 ${mateRole.decl.label || mateRole.decl.id} 是成对外设脚，已**成对搬**：${key} → ${pinName}、${follow.mate} → ${follow.to}（同一实例，缺一必被后端拒）。要换位置请再点一次——成对脚会一起跟。` : ""));
+    : (mateMoves ? `${r.decl.label || r.decl.id} 与 ${mateRole.decl.label || mateRole.decl.id} 是成对外设脚，已成对搬：${key} → ${pinName}、${follow.mate} → ${follow.to}（同一实例，缺一必被后端拒）。要换位置请再点一次——成对脚会一起跟。` : ""));
 }
 
 // ---- 引脚锚定浮层菜单（复用 .ref-files-overlay 模式） ----

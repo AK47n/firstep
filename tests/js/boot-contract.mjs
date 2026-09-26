@@ -1,18 +1,19 @@
 // boot-contract.mjs — 装载根契约的**判据单源**（工单 frontend-boot-module/01；判据⑥ 由
 // 工单 launcher-exit-race/01 加入，判据⑦ 由工单 bfcache-return-register/01 加入，
-// 判据⑧ 由工单 hwcheck-hygiene/01 加入）。
+// 判据⑧ 由工单 hwcheck-hygiene/01 加入，判据⑨ 由工单 hwcheck-hygiene/02 加入）。
 //
 // 为什么单独一个文件（照 import-usage.mjs / ui-dom-contract.mjs 先例）：判据要被三处用——
 //   1. 守卫本体（fx-guard / static-import-guard / import-usage-guard / ui-dom-contract /
-//      tab-register-guard / export-surface-guard / window-bridge-guard）
+//      tab-register-guard / export-surface-guard / window-bridge-guard / bold-marker-guard）
 //   2. 红证脚本（`.scratch/frontend-boot-module/probe-01-red-proof.mjs`、
 //      `.scratch/launcher-exit-race/probe-01-red-proof.mjs`、
-//      `.scratch/hwcheck-hygiene/probe-01-bridge-count.mjs`）
+//      `.scratch/hwcheck-hygiene/probe-01-bridge-count.mjs`、
+//      `.scratch/hwcheck-hygiene/probe-02-red.py`）
 //      （同一套判据作用在**收走前 / 修复前那个提交**的源码上）
 //   3. 探针的判据强度自检（内存注入）
 // 放在 `.test.mjs` 里会让 import 方顺带注册并运行那批用例。
 //
-// ## 八类不变量（判据全部是纯函数：源码文本 / 模块表进，违规清单出）
+// ## 九类不变量（判据全部是纯函数：源码文本 / 模块表进，违规清单出）
 //
 //   ① `indexHtmlImports(html)` = 0    —— 装载根不在 HTML 里（判据 ①）
 //   ② `inlineDefinitions(html)` = 0   —— HTML 里零顶层 JS 定义（判据 ②）
@@ -33,6 +34,10 @@
 //      （工单 hwcheck-hygiene/01）：`Object.assign(window, { … })` 那条老式全局出口让
 //      "用了却没 import"的名字在运行态**真的能跑**（真浏览器用例照样绿），却在导出面判据 D
 //      眼里仍是死导出。缘由、口径与已知边界见⑧那节。
+//   ⑨ `boldMarkerProblems(modules)` = 0 —— **产品串里不许出现 markdown 粗体标记**
+//      （工单 hwcheck-hygiene/02）：文案里的 `**加粗**` 到了页面上是两个**字面星号**；
+//      只判字符串 / 模板文本段的内容（注释、正则、幂运算符不算），唯一例外是
+//      `fx/markdown.js`（解析器本体，`**` 就是语法）。缘由见⑨那节。
 //
 // ## 三个必须踩住的坑（都写进实现里了）
 //
@@ -1643,6 +1648,149 @@ export function bridgeDependencyProblems(modules) {
     }
   }
   return problems.sort((a, b) => (a.key === b.key ? a.name.localeCompare(b.name) : a.key.localeCompare(b.key)));
+}
+
+// ---------------------------------------------------------------------------
+// ⑨ 产品串里不许出现 markdown 粗体标记（工单 hwcheck-hygiene/02）
+//
+// ## 为什么这条不变量值得一条判据
+//
+// 提示文案里写 `**加粗**`，到了页面上就是**两个字面星号**——学生看到的是 `**未经验证**`，
+// 而不是加粗的"未经验证"。这类回潮没有任何东西挡着：文案住在字符串里，`includes("未经验证")`
+// 那种断言照样绿（星号在短语**外面**），而真浏览器用例只看行为。
+// 实测 5 处 / 3 个文件、跨 `innerHTML` 与 `textContent` 两条渲染路径（其中一处在 **`textContent`**
+// 上——所以这不是"只有 innerHTML 才有"的问题，见工单的现状表）。
+//
+// ## 判据（纯函数：模块表进，违规清单出）
+//
+//   · 只判**字符串字面量与模板字面量的文本段**的内容。注释里的 `**`（本仓满屏的 `/** */`
+//     与中文强调）不算；正则字面量里的 `**` 不算；代码里的幂运算符 `2 ** 3` 不算。
+//   · 模板串的 `${…}` **表达式段**按代码算：`${a ** b}` 不是产品串，不判。
+//   · 判据面 = `static/js/{fx,ui}/**`（与判据 ⑧ 同面）。
+//
+// ## 取数面怎么切的（不重写分词器）
+//
+// 分词只有一份（本文件的 `mask`）。这里借它**两次**：
+//   · `maskNonCode(text)`：字符串与模板**文本段**的内容变空白、**定界符保留**、`${…}` 保留为代码。
+//     于是"某个引号/反引号在掩码文本里**原样还在**" ⟺ "它是真的定界符"（注释里的、正则里的、
+//     以及字符串内容里的同名字符都被掩成空白）。闭合定界符同样：内容已全成空白 ⇒ 掩码文本里
+//     下一个同名字符就是收尾（转义过的 `\"` 在内容里，也已被掩掉）。
+//   · `${` 的识别：`$` 在掩码文本里是空白、`{` 原样（掩码件对模板替换的 `$` 就是这么处理的），
+//     所以 `text[k] === "$" && code[k] !== "$" && text[k + 1] === "{" && code[k + 1] === "{"`
+//     精确命中表达式起点；配对 `}` 按花括号深度在掩码文本上数（模板文本段里的花括号已被掩掉，
+//     不会来捣乱）。
+//
+// ## 唯一一处显式例外
+//
+// `fx/markdown.js` **是 markdown 解析器本体**：那里 `**` 是**语法本身**（`startsWith("**")` /
+// `indexOf("**")` 就是粗体标记的判定），不是"产品串里漏了渲染的字面星号"——把星号去掉等于把
+// 解析器拆了。例外写成**一条具名常量 + 守卫里的自检**（自检要求：那个文件真的存在、真的导出
+// markdown 解析器、且真的还含 `**`），**不是一张可以随手加行的名单**：要加第二处，就得连同这段
+// 理由一起改，评审会问"它也是语法吗"。
+//
+// **例外的粒度是"语法 token"、不是整个文件**（评审整改）：在 `fx/markdown.js` 里也**只有**
+// 整段就是 `**` 的那些串被放行（解析器的语法 token）；同一个文件里写出 `**加粗**` 这样的
+// 产品文案**照样报**——"语法即业务"这条理由覆盖不到第二种用法。
+//
+// ## 已知边界（如实记账）
+//
+//   · 分词器的既有口径决定了两类**漏报**（方向保守，不假红）：① `}` 之后的 `/` 被判成正则开头
+//     （`REGEX_ALLOWED_BEFORE` 含 `}`），同行后面的字符串会被连带掩掉
+//     （`const x = {a:1} / 2, s = "**粗**";` 实测不报）；② 判据面是 `fx/**` 与 `ui/**`
+//     （`app.js` 与 `index.html` 内联脚本不在面内——实测今日 0 命中，属边界非违规）。
+//   · 改 `**` 为 `<strong>` 的那三处，**标签开闭**不在本判据射程里（现有断言只到
+//     `includes("未经验证")` 这一层）。这是"源码串断言"的既有盲区，归工单 12 处理。
+// ---------------------------------------------------------------------------
+
+/** 判据 ⑨ 的唯一例外（理由见本节头）。**不是名单表**：加第二处必须改这段理由。 */
+export const BOLD_MARKER_EXEMPT_KEY = "fx/markdown.js";
+
+/** 例外文件的"它真是解析器"判据（自检用）：它必须导出这个函数。 */
+export const BOLD_MARKER_EXEMPT_EXPORT = "parseMarkdownBlocks";
+
+/** 例外放行的**唯一形态**：整段就是 markdown 的粗体标记本体（`**`），不是"这个文件随便写"。 */
+export function isBoldSyntaxToken(value) {
+  return value === "**";
+}
+
+/** 定位偏移所在的行号（1 基）。 */
+function lineAt(text, index) {
+  let line = 1;
+  for (let i = 0; i < index && i < text.length; i++) if (text[i] === "\n") line++;
+  return line;
+}
+
+/**
+ * 字符串 / 模板字面量的**文本段** → [{ value, index, line }]（判据 ⑨ 的取数面）。
+ *
+ * `code` 必须是 `maskNonCode(text)` 的产物（见本节头：借它识别定界符与 `${…}`）。
+ * 模板串的 `${…}` 表达式段**不进** `value`，但**表达式内部**的字符串 / 嵌套模板**照扫**
+ * （递归进表达式区间）——`${cond ? "**粗**" : \`…**粗**…\`}` 这种形态漏掉就是一个洞
+ * （本仓模板里套三元、三元里套模板是常态）。
+ *
+ * `index` = 该段在 `text` 里的起始偏移（判据用它把行号指到 `**` 真正所在的那一行）；
+ * 未闭合的字面量按掩码件的止损口径收尾。
+ */
+export function stringTextSegments(text, code) {
+  const out = [];
+  const scanRange = (from, to) => {
+    let i = from;
+    while (i < to) {
+      const ch = text[i];
+      if ((ch !== '"' && ch !== "'" && ch !== "`") || code[i] !== ch) { i++; continue; }
+      if (ch !== "`") {                                 // '…' / "…"：单段，遇换行止损（掩码件同款）
+        let k = i + 1;
+        while (k < to && code[k] !== ch && text[k] !== "\n") k++;
+        out.push({ value: text.slice(i + 1, k), index: i + 1, line: lineAt(text, i) });
+        i = code[k] === ch ? k + 1 : k;
+        continue;
+      }
+      let segStart = i + 1;                             // 模板：按 ${…} 切文本段
+      let k = i + 1;
+      let closed = false;
+      while (k < to) {
+        if (text[k] === "$" && code[k] !== "$" && text[k + 1] === "{" && code[k + 1] === "{") {
+          out.push({ value: text.slice(segStart, k), index: segStart, line: lineAt(text, segStart) });
+          let depth = 0;
+          let m = k + 1;
+          for (; m < to; m++) {
+            if (code[m] === "{") depth++;
+            else if (code[m] === "}" && --depth === 0) break;
+          }
+          scanRange(k + 2, m);                          // 表达式段按代码扫（里面的串照收）
+          k = m + 1;
+          segStart = k;
+          continue;
+        }
+        if (code[k] === "`") { closed = true; break; }
+        k++;
+      }
+      out.push({ value: text.slice(segStart, closed ? k : to), index: segStart, line: lineAt(text, segStart) });
+      i = closed ? k + 1 : to;
+    }
+  };
+  scanRange(0, text.length);
+  return out;
+}
+
+/**
+ * 判据 ⑨：产品串（字符串 / 模板文本段）里出现 markdown 粗体标记 → [{ key, line, value }]；
+ * 空数组 = 页面上不会再冒出字面星号。
+ */
+export function boldMarkerProblems(modules) {
+  const out = [];
+  for (const mod of modules) {
+    if (!/^(fx|ui)\//.test(mod.key)) continue;
+    const exempt = mod.key === BOLD_MARKER_EXEMPT_KEY;  // 唯一例外：解析器本体（见本节头）
+    const code = maskNonCode(mod.text);
+    for (const seg of stringTextSegments(mod.text, code)) {
+      if (!seg.value.includes("**")) continue;
+      if (exempt && isBoldSyntaxToken(seg.value)) continue;   // 例外只放行语法 token 本体
+      const at = seg.index + seg.value.indexOf("**");
+      out.push({ key: mod.key, line: lineAt(mod.text, at), value: seg.value.trim() });
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
