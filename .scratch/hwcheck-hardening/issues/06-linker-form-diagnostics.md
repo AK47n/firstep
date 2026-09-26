@@ -5,7 +5,7 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** claimed
+**状态：** resolved
 
 - [x] 解析器新增一类「**没有文件引用的工具链诊断**」：`<warning|error> #<数字>-<字母>:` 形态，
       warning 与 error 都收（真例 `warning #10210-D: creating ".sysmem" section …`）。
