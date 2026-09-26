@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=fd82f9728280f7fe0cb8a36fcb55587ae69de173 -->
+<!-- changelog-auto: last-commit=f70cc00fbf150f29edbaaed985248cd40880b720 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -8,6 +8,7 @@
 - 00:21 工单 ci-gate-fixes/01：配置缺失时回退随包库 + 配置路径覆盖口
 - 00:40 工单 ci-gate-fixes/02+03 评审整改：夹具种子配置补死端口 base_url、断言锚点收紧、两单收口
 - 09:31 工单 ci-gate-fixes/04：库相关端点改用「库在哪」闸，没配 key 也能浏览库
+- 09:31 账本：local-environment 第 0 节按事实更新——main 比线上多 8 个待推提交、CI 仍红在 606494b1
 
 ## 2026-09-25
 - 00:21 工单 hwcheck-acceptance/01：mspm0 生成链认下 SysConfig 构建期接口面（那一行从注释占位变活代码）
