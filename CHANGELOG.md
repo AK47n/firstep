@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=0efee892a22e87df34bec9aba73fe7c314bda648 -->
+<!-- changelog-auto: last-commit=a0783ab728fbaeceb20555dd3c36284a950d8ca8 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -31,6 +31,7 @@
 - 19:44 工单 hwcheck-hardening/02：「未上板」说到每一格 + 页面上有一句总口径
 - 19:58 工单 hwcheck-hardening/03：OLED 只说它真能做到的 + 读数行改成值优先
 - 20:01 工单 hwcheck-hardening/04：5 条超限读数行修掉，行缓冲守卫扩到全量配方
+- 20:07 工单 hwcheck-hardening/05：勾满专精件也能生成 + 报错说真数 + 页面事前提醒
 
 ## 2026-09-25
 - 00:21 工单 hwcheck-acceptance/01：mspm0 生成链认下 SysConfig 构建期接口面（那一行从注释占位变活代码）
