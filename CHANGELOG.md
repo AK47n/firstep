@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=b1048a4b67f13048ab9c9929b99642c042f07071 -->
+<!-- changelog-auto: last-commit=e361eb2d156a9ade94bb2d9d8d39cfc3819d1aa3 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -10,6 +10,7 @@
 - 09:31 工单 ci-gate-fixes/04：库相关端点改用「库在哪」闸，没配 key 也能浏览库
 - 09:31 账本：local-environment 第 0 节按事实更新——main 比线上多 8 个待推提交、CI 仍红在 606494b1
 - 09:32 账本：第 0 节的提交计数改按「实质提交」写，免得被自动 CHANGELOG 提交逐次作废
+- 09:32 账本：第 0 节去掉会过期的提交计数，改成「跑 git log 看准」
 
 ## 2026-09-25
 - 00:21 工单 hwcheck-acceptance/01：mspm0 生成链认下 SysConfig 构建期接口面（那一行从注释占位变活代码）
