@@ -345,10 +345,16 @@ export function hwcheckChannelNoteHTML(platform, debugUart, oled) {
 // 「检测没过 = 正常结果，先自查接线」——那就更需要先告诉他这个前提。
 //
 // 措辞与配方数据里那句**同源**（同一个事实、两种粒度），别在这里另编一种说法。
+// 措辞与 README 的 FAQ 条目、配方数据里那句**同一条规范句**（工单 hwcheck-hardening/09）：
+// 「本栏目的配方与探测小节尚未在真板上验证过：现有证据只到「能生成 + 能编译」这一步。」
+// 三个落点在三个运行时里（Markdown / JS / JSON 数据），做不到真单源——本仓库的既有做法是
+// **刻意同文 + 双端断言**（先例：fix_errors.SYSCFG_CONFLICT_NOTICE 与 syscfgConflictStateText）。
+// `tests/test_hwcheck.py::test_unverified_sentence_is_verbatim_the_same_on_page_and_readme` 盯着它：
+// 改一处漏一处，用例当场红。
 export function hwcheckUnverifiedNoteHTML() {
   return '<div class="hwcheck-warn">⚠ 本栏目的配方与探测小节尚未在真板上验证过：'
-    + "现有证据只到「能生成 + 能编译」。板上判 FAIL 先按下面的清单查接线；"
-    + "判 OK 也只说明通信走通了，不等于型号对、读数准。</div>";
+    + "现有证据只到「能生成 + 能编译」这一步。"
+    + "板上判 FAIL 先按下面的清单查接线；判 OK 也只说明通信走通了，不等于型号对、读数准。</div>";
 }
 
 // hwcheckActionsHTML(outputDir, opts)：动作行 + 状态位 + 结果容器。

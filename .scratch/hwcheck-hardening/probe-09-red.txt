@@ -1,0 +1,30 @@
+—— 撤「页面那句」（hwcheck.js，sha256 b0bc4a6d2f69…）——
+   注入后跑用例：exit=1（锚点在文件里出现 1 次，只改第一处）
+   tests\test_hwcheck.py:567: AssertionError
+   =========================== short test summary info ===========================
+   FAILED tests/test_hwcheck.py::test_unverified_sentence_is_verbatim_the_same_on_page_and_readme
+   1 failed in 0.18s
+   判据结论 = ✓ 用例红了（守卫有强度）
+   复原复核 = ✓ 逐字节相同
+   复原后跑用例：exit=0（应为 0）
+
+—— 撤「README 那句」（README.md，sha256 9138dc017a55…）——
+   注入后跑用例：exit=1（锚点在文件里出现 1 次，只改第一处）
+   tests\test_hwcheck.py:571: AssertionError
+   =========================== short test summary info ===========================
+   FAILED tests/test_hwcheck.py::test_unverified_sentence_is_verbatim_the_same_on_page_and_readme
+   1 failed in 0.17s
+   判据结论 = ✓ 用例红了（守卫有强度）
+   复原复核 = ✓ 逐字节相同
+   复原后跑用例：exit=0（应为 0）
+
+—— 撤「配方末条子句」（hwcheck_recipes.json，sha256 1e521244eb24…）——
+   注入后跑用例：exit=1（锚点在文件里出现 57 次，只改第一处）
+   tests\test_hwcheck_recipe.py:1235: AssertionError
+   =========================== short test summary info ===========================
+   FAILED tests/test_hwcheck_recipe.py::test_every_real_recipe_note_marks_unverified_with_the_same_clause
+   1 failed in 0.62s
+   判据结论 = ✓ 用例红了（守卫有强度）
+   复原复核 = ✓ 逐字节相同
+   复原后跑用例：exit=0（应为 0）
+

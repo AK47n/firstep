@@ -540,6 +540,39 @@ def test_output_hint_says_lamp_only_when_no_channel():
     assert "灯" in hint
 
 
+def test_unverified_sentence_is_verbatim_the_same_on_page_and_readme():
+    """同一个事实在同一句话里：页面（fx）与 README **逐字**同源（工单 hwcheck-hardening/09）。
+
+    为什么要有这条：这条事实有三个落点、且在**三个运行时**里——Markdown（README，静态文本）、
+    JS（页面文案）、JSON（库内配方数据）。做不到真单源，本仓库的既有做法是**刻意同文 + 双端断言**
+    （先例：`fix_errors.SYSCFG_CONFLICT_NOTICE` 与 `ui/fix-center-core.js` 的 `syscfgConflictStateText`）。
+    没有这条断言时，三处就是**平行副本**——Standards 轴评审实测三份互不相等，
+    而 spec 明写"同一句措辞，别再写第二种"。
+
+    判据 = 规范句在两边**规范化后逐字存在**；规范化只做"去掉换行/缩进与 JS 的字符串拼接符、
+    去掉强调标记"，**不做同义改写**——所以改了措辞必然红，而不是"看着差不多就过"。
+    """
+    sentence = (
+        "本栏目的配方与探测小节尚未在真板上验证过：现有证据只到「能生成 + 能编译」这一步。"
+    )
+    repo = Path(__file__).resolve().parents[1]
+    js = (repo / "src" / "contest_generator" / "static" / "js" / "fx" / "hwcheck.js").read_text(
+        encoding="utf-8")
+    readme = (repo / "README.md").read_text(encoding="utf-8")
+
+    def normalized(text: str) -> str:
+        text = text.replace('" +', "").replace('+"', "").replace("**", "")
+        return "".join(text.split())
+
+    assert normalized(sentence) in normalized(js), (
+        "页面那句（fx/hwcheck.js 的 hwcheckUnverifiedNoteHTML）与规范句不同源了——"
+        "它和 README 必须逐字同句，改一处就要改另一处"
+    )
+    assert normalized(sentence) in normalized(readme), (
+        "README 的 FAQ 条目与规范句不同源了——它是学生最先读到的那一份"
+    )
+
+
 def test_every_hint_is_chinese_and_nonempty():
     for config in (BOTH, SERIAL_ONLY, OLED_ONLY, LAMP_ONLY):
         hint = render_output_hint(config)

@@ -661,10 +661,42 @@ HWCHECK_LINE_BYTES = 128
 _WORST_INT_DIGITS = 12
 
 
-def _read_line_bytes(expression: str, unit: str) -> int:
-    """渲染出的读数行**最坏**字节数（与 `render_recipe_section` 同形：值 → 单位 →（表达式））。"""
-    text = "x" * _WORST_INT_DIGITS + (f" {unit}" if unit else "") + f" ({expression})"
-    return len(text.encode("utf-8"))
+def _rendered_read_line_bytes(section) -> list[int]:
+    """这一格**真渲染出来**的每一条读数行有多少字节（工单 hwcheck-hardening/10 补的格式钉）。
+
+    为什么不按格式手拼一个估算：那等于把渲染格式**抄第二份**——渲染器改了顺序 / 括号 / 分隔符，
+    估算会静默失守（Standards 轴评审点名的判断题 4）。这里直接读渲染产物：
+
+    * 读数段 = 一组连续语句、以 `hwcheck_newline()` 收尾；
+    * 段的开头必然是 `hwcheck_report_int(<表达式>);`——数字部分按**最坏宽度**（32 位十进制
+      含符号 11 位，留 1 位余量）算；
+    * 其余 `hwcheck_report("<字面量>");` 按**转义还原后的原文**数字节（中文一字 3 字节）；
+    * 段里出现别的语句形态 → **当场红**：那说明渲染器变了，本守卫的假设要跟着更新
+      （这就是"格式钉"本身，别让它悄悄漂过去）。
+    """
+    code = "\n".join(render_recipe_section(section, {}))
+    sizes: list[int] = []
+    current: int | None = None
+    for raw in code.splitlines():
+        line = raw.strip()
+        if line.startswith("hwcheck_report_int("):
+            assert current is None, f"读数段里出现第二条 report_int（渲染器形态变了）：{line}"
+            current = _WORST_INT_DIGITS
+            continue
+        if current is None:
+            continue
+        if line.startswith("hwcheck_report("):
+            literal = re.match(r'hwcheck_report\(("(?:[^"\\]|\\.)*")\);', line)
+            assert literal, f"读数段里的 report 不是单字面量形态（渲染器形态变了）：{line}"
+            current += len(decode_c_string(literal.group(1).strip('"')).encode("utf-8"))
+            continue
+        if line.startswith("hwcheck_newline()"):
+            sizes.append(current)
+            current = None
+            continue
+        raise AssertionError(f"读数段里出现没预期的语句（渲染器形态变了）：{line}")
+    assert current is None, "读数段没有以 hwcheck_newline() 收尾（渲染器形态变了）"
+    return sizes
 
 
 def test_every_real_read_line_fits_the_device_line_buffer():
@@ -677,6 +709,8 @@ def test_every_real_read_line_fits_the_device_line_buffer():
 
     溢出保护是刻意的（宁可截一行，不让程序跑飞），但中文一字 3 字节——**截在字中间就是半个乱码**，
     学生看到的是"读数那行尾巴花了"，而不是一条能自查的报错。
+
+    宽度**从渲染产物量**（`_rendered_read_line_bytes`），不手抄格式——渲染器改了形态当场红。
     """
     from contest_generator.library import list_modules
 
@@ -687,12 +721,16 @@ def test_every_real_read_line_fits_the_device_line_buffer():
     too_long: list[tuple[int, str, str]] = []
     for slug, catalog in recipes.items():
         for platform, section in catalog.sections.items():
-            for item in section.read:
+            if not section.usable:
+                continue
+            for size, item in zip(_rendered_read_line_bytes(section), section.read):
                 total += 1
-                size = _read_line_bytes(item.expression, item.unit)
                 if size >= HWCHECK_LINE_BYTES:
                     too_long.append((size, f"{slug} × {platform}", item.expression))
-    assert total >= 165, f"全量读数行少于地板 165（现在 {total}）——地板要跟着扩张批上调"
+    # 地板 167：`section.read` 实测合计 167——其中 2 条走旧的 `expressions`（复数）形态
+    # （`led × 两平台`）。解析器已经把它们并进 `section.read`，所以宽度判据本来就算到了；
+    # 失真的只是这个数字与措辞（见工单 hwcheck-hardening/11）。
+    assert total >= 167, f"全量读数行少于地板 167（现在 {total}）——地板要跟着扩张批上调"
     assert not too_long, (
         "这些读数行会撞上 128 字节的行缓冲（板上静默截断，中文截半就是乱码）："
         + "；".join(f"{size}B {where} [{expr}]" for size, where, expr in sorted(too_long, reverse=True))
@@ -1208,6 +1246,32 @@ def test_every_real_recipe_cell_discloses_its_on_board_status():
         f"这些格没说自己在真板上的状态：{missing}——照扩张批的措辞补一条放在最末："
         "「**未上板**：本格的结论只到「…」，真机上板验证还没做（与库内 manifest 的口径一致）。"
         "实测差异优先于本页参考值。」（本件没有可判的板端返回码时，中间那句换成如实的静态核对）"
+    )
+
+
+def test_every_real_recipe_note_marks_unverified_with_the_same_clause():
+    """真库 57 格的末条自述必须是**同一条子句**（工单 hwcheck-hardening/09）。
+
+    与上面那条 57/57 守卫分工：那条管"有没有这句自述、在不在最后一条"，
+    这条管"**是不是同一种说法**"——`servo` 那两格原先写的是"manifest 没有上板验证记录"，
+    是第二种说法；补上规范子句之后，全都含「真机上板验证还没做」。
+    """
+    from contest_generator.library import list_modules
+
+    manifests = list_modules(REAL_LIBRARY)
+    recipes = load_recipes(
+        REAL_LIBRARY, manifests, _library_interfaces_all(REAL_LIBRARY, manifests))
+    missing: list[str] = []
+    for slug, catalog in recipes.items():
+        for platform, section in catalog.sections.items():
+            if not section.usable:
+                continue
+            notes = list(section.note)
+            line = notes[-1] if notes else ""
+            if "**未上板**" not in line or "真机上板验证还没做" not in line:
+                missing.append(f"{slug} × {platform}")
+    assert not missing, (
+        f"这些格的末条自述不是同一条说法（缺「**未上板**」或「真机上板验证还没做」）：{missing}"
     )
 
 
