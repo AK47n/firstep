@@ -15,7 +15,7 @@
       debug_uart→110B、adc×mspm0→87B/74B、beep→93B、adc×stm32→82B。落地脚本 = `apply-04-units.py`
       （纯文本替换 + 锚点唯一性校验，不重排 JSON；复核 57/57 格的末条仍是「未上板」）。
 - [x] 新守卫吃**全量配方（含 pilot）**：`test_every_real_read_line_fits_the_device_line_buffer`
-      （地板 165 条读数行 + 逐条最坏宽度 < 128 字节）。既有那条扩张格守卫**保留不缩小**。
+      （地板 **167** 条读数行 + 逐条最坏宽度 < 128 字节；167 = 165 条 `read.items` + 2 条旧的 `expressions` 形态，见工单 11）。既有那条扩张格守卫**保留不缩小**。
 - [x] **反证**：`probe-04-red.py` → 把 `debug_uart` 那条 249B 长量纲塞回行上 → 守卫 exit=1（红）；
       复原后 sha256 逐字节相同、再跑 exit=0。读数 `probe-04-red.txt`。
 - [x] 两平台真编译矩阵复跑（改的是配方文本，必须证"还能编"）：`--slugs adc,beep,debug_uart`
