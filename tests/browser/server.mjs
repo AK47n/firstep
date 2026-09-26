@@ -47,6 +47,35 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // 也不该有"拦端点"这个职责。指到死端口后，漏拦的路径**立刻连接被拒**：既不出网，也大声失败。
 let seededConfigPath = null;
 
+// extraConfigKeys()：`FIRSTEP_BROWSER_CONFIG_EXTRA`（JSON 对象）里那几个键**并进**种子配置
+// （工单 ci-gate-fixes/08）。
+//
+// **为什么要有它**：CI runner 上没有 Keil UV4、也没有 CCS 自带的 gmake，而开发机上两件都有
+// ——于是"**没有工具链**"这个前提在本机**造不出来**，依赖它的那条门在本机永远绿、一推上去
+// 才红（本单就是 CI 上 3 条红暴露出来的）。工具链的探测本来就有**配置覆盖口**
+// （`config.json` 的 `uv4_path` / `gmake_path`，`compile_runner.find_uv4` 明写"非空但指向
+// 不存在的文件按未找到处理"），所以造这个前提不需要新概念，只要把这两个键指到不存在的路径：
+//
+//     FIRSTEP_BROWSER_CONFIG_EXTRA='{"uv4_path":"C:/__none__/UV4.exe",
+//                                    "gmake_path":"C:/__none__/gmake.exe"}'
+//
+// **缺省（未设 / 空串）= 与从前逐字节一致**；**解析失败大声失败**——静默忽略会让人以为
+// "前提造出来了"，而实际跑的还是普通那一态，那正是本单最怕的假绿。
+function extraConfigKeys() {
+  const raw = (process.env.FIRSTEP_BROWSER_CONFIG_EXTRA || "").trim();
+  if (!raw) return {};
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    throw new Error(`FIRSTEP_BROWSER_CONFIG_EXTRA 不是合法 JSON：${e.message}`);
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("FIRSTEP_BROWSER_CONFIG_EXTRA 必须是 JSON 对象（例：{\"uv4_path\":\"…\"}）");
+  }
+  return parsed;
+}
+
 function seedConfig() {
   if (seededConfigPath) return seededConfigPath;
   const modules = join(REPO_ROOT, "library", "modules");
@@ -66,6 +95,7 @@ function seedConfig() {
     base_url: "http://127.0.0.1:9/v1",       // 死端口：漏拦的 LLM 路径立刻连接被拒（见上）
     module_library_dir: modules,
     masters_dir: masters,
+    ...extraConfigKeys(),                    // 本机造 CI 前提的口（见 extraConfigKeys）
   }, null, 2), "utf8");
   seededConfigPath = path;
   // 收临时目录：`exit` 覆盖正常结束，信号覆盖 Ctrl-C / 被强杀（排查时正是在反复 Ctrl-C）。

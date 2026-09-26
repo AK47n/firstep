@@ -1,0 +1,20 @@
+目标文件: tests\browser\hwcheck.spec.mjs
+注入前 sha256: d4af6f214d2873f7a7da8d14ce4a3de696cf6aa8f89e1e3420d7f5af4357e270
+
+[注入不存在的选择器] exit=1
+红的用例：
+  ✖ 自建件的串口复测：页面给出字符与说明，产物里那条 case 认同一个函数 (32453.3989ms)
+  ✖ failing tests:
+  ✖ 自建件的串口复测：页面给出字符与说明，产物里那条 case 认同一个函数 (32453.3989ms)
+诊断输出：
+  [诊断] 接线区 #hwcheck-wiring → 模块角色引脚说明configLED_REDPC13gpio_out⚠ 板载共享：板载 LED 共用（低电平点亮）configLED_YELLOWPC14gpio_outconfigLED_GREENPC15gpio_outconfigBUZZERPA15gpio_outconfigDIP0PB12gpio_inconfigDIP1PB13gpio_inconfigDIP2PB14gpio_inconfigDIP3PB15gpio_indebug_uartDEBUG_UART_TXPA2uart_tx（必接）debug_uartDEBUG_UART_RXPA3uart_rx（必接）oledOLED_SCLPB8i2c_scl（必接）oledOLED_SDAPB9i2c_sda（必接）oledOLED_SPI_SCLPB4gpio_out（必接）⚠ 板载共享：NJTRST（复位后可用）oledOLED_SPI_SDAPB5gpio_out（必接）oledOLED_SPI_DCPB6gpio_out（必接）oledOLED_SPI_CSPB7gpio_out（必接）oledOLED_SPI_RESPA5gpio_out（必接）i2c_probeI2C_PROBE_SCLPA6i2c_scl（必接）i2c_probeI2C_PROBE_SDAPA7i2c_sda（必接）这张表与生成出来的工
+  [诊断] 命令台 #hwcheck-console → 有串口 = 能交互式复测：程序跑完上电那一遍后进命令循环，敲下面任一个字符就复测那一件（不用重烧、边动线边看现象）；敲 ? 看全部命令（含既有的 r / y / g / o / b<N>）。敲这个哪一件复测什么pmine_probe090468rt 验收用的复测件 自建件ping 地址 + 读身份寄存器并与期望值比较：板上判 OK / FAIL既有命令（库内 debug_cmd_poll 执行，语义没变）：r 红灯亮，其余灭 / y 黄灯亮，其余灭 / g 绿灯亮，其余灭 / o 全灭 / b 蜂鸣器响 N 毫秒（如 b50）帮助：敲 ? 列出全部命令。
+  [诊断] 末几次 /api/hwcheck/preview 响应 → [{"status":400,"body":"{\"detail\":\"库中不存在模块：mine_probe090468spi\"}"},{"status":200,"body":"{\"platform\":\"stm32\",\"debug_uart\":true,\"oled\":true,\"devices\":[],\"main_c\":\"/**\\n * @file main.c\\n * @brief 硬件检测程序 —— 确定性渲染，非 AI 生成\\n *\\n * 这一趟用来确认「板子活着 + 烧录链路通」：\\n * 1. 板载 LED 按固定周期闪烁（心跳，肉眼可见）；\\n * 2. 上电先报一句「板子活着」，随后逐件跑检测小节。\\n *\\n * 上电跑完一遍后进**串口命令台**（复测不用重烧，边动线边看现象）：\\n * - 这一趟没有配方命令（选的器件都没声明复测字符）：\\n * 命令循环里只有帮助与下面那几条既有命令。\\n * - ? 显示全部命令（含下面那几条既有命令）\\n * 既有 r / y / g / o / b<N>（点灯 / 蜂鸣）**语义不变**——它们仍由库内 debug_cmd_poll() 执行。\\n *\\n * 这一趟**一件器件都没测**：只确认板子与烧录链路是活的。\\n * （选中的器件若不在本平台，会在检测页被点名，不在这里。）\\n *\\n "},{"status":200,"body":"{\"platform\":\"stm32\",\"debug_uart\":true,\"oled\":true,\"devices\":[\"mine_probe090468rt\"],\"main_c\":\"/**\\n * @file main.c\\n * @brief 硬件检测程序 —— 确定性渲染，非 AI 生成\\n *\\n * 这一趟用来确认「板子活着 + 烧录链路通」：\\n * 1. 板载 LED 按固定周期闪烁（心跳，肉眼可见）；\\n * 2. 上电先报一句「板子活着」，随后逐件跑检测小节。\\n *\\n * 上电跑完一遍后进**串口命令台**（复测不用重烧，边动线边看现象）：\\n * - p 复测 mine_probe090468rt（自建件）：ping 地址 + 读身份寄存器并与期望值比较：板上判 OK / FAIL\\n * - ? 显示全部命令（含下面那几条既有命令）\\n * 既有 r / y / g / o / b<N>（点灯 / 蜂鸣）**语义不变**——它们仍由库内 debug_cmd_poll() 执行。\\n *\\n * 这一趟**一件器件都没测**：只确认板子与烧录链路是活的。\\n "}]
+汇总：
+  ℹ pass 20
+  ℹ fail 1
+  ℹ skipped 0
+
+复原后 sha256: d4af6f214d2873f7a7da8d14ce4a3de696cf6aa8f89e1e3420d7f5af4357e270
+逐字节复原: OK
+结论: [PASS] 诊断真的会打印（三段都在），红只落在被注入那一条

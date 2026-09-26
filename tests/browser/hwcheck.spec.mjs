@@ -36,11 +36,24 @@ const MY_DEVICE_ID = `mine_probe${Date.now().toString().slice(-6)}`;
 
 const HWCHECK_TAB = 'nav button[data-tab="hwcheck"]';
 
+// 末几次 `/api/hwcheck/preview` 的**状态码 + 响应体**（工单 ci-gate-fixes/08 的诊断用）：
+// `previewDiag()` 拿它回答"服务端到底答了什么"——CI 上那两条红卡在"等预览载荷渲染出来的
+// 东西"，而 playwright 超时里看不出是 400 了、还是 200 但载荷里没这一条。只在诊断里读，
+// 不参与任何判据（判据仍是页面上看得见的行为）。
+const previewResponses = [];
+
 test.before(async () => {
   parentDir = mkdtempSync(join(tmpdir(), "firstep-hwcheck-"));
   server = await startServer();
   browser = await chromium.launch();
   page = await browser.newPage();
+  page.on("response", (resp) => {
+    if (!resp.url().includes("/api/hwcheck/preview")) return;
+    resp.text().then((body) => {
+      previewResponses.push({ status: resp.status(), body: body.replace(/\s+/g, " ").slice(0, 500) });
+      if (previewResponses.length > 3) previewResponses.shift();
+    }).catch(() => { /* 诊断用，取不到就算了 */ });
+  });
 });
 
 test.after(async () => {
@@ -395,7 +408,52 @@ test("勾选态本地备忘 + 刷新回显（清单是给人照着比的，不�
     () => document.querySelectorAll("#hwcheck-checklist .hwcheck-check.done").length === 0);
 });
 
-test("编译复用既有面板与判读：真 UV4 编译绿（工具链缺失时本用例如实红）", async () => {
+// previewDiag()：**预览载荷**类等待失败时，把"页面那边现在是什么样"一起带进错误里
+// （工单 ci-gate-fixes/08）。
+//
+// 为什么需要它：CI run `36213107191` 上 `:818`/`:914` 两条都死在"等预览载荷渲染出来的东西"
+// 上，而错误里只有一句 playwright 超时——分不清是"预览 400 了（后端那句中文原因就亮在接线区）"、
+// "载荷里没有这一条"还是"渲染根本没跑"。本机四种条件（缺工具链 / 满载 / CRLF 检出 / UTC）
+// 都复现不出来（读数在工单里），所以与其猜，不如让下一次 CI 把答案**带回来**。
+async function previewDiag() {
+  // ⚠ 响应那一段在 **Node 侧**拼（`previewResponses` 住在测试进程里）——把它放进
+  // `page.evaluate` 的闭包里会 `ReferenceError`（浏览器上下文没有这个变量）。
+  // 红证 `probe-08-diag-redproof.py` 当场抓到的就是这个：诊断自己炸了、什么都没打出来。
+  const responses = `[诊断] 末几次 /api/hwcheck/preview 响应 → ${JSON.stringify(previewResponses)}`;
+  try {
+    const pageText = await page.evaluate(() => {
+      const text = (sel) => {
+        const el = document.querySelector(sel);
+        return el
+          ? el.textContent.replace(/\s+/g, " ").trim().slice(0, 600)
+          : `(${sel} 不存在)`;
+      };
+      return `[诊断] 接线区 #hwcheck-wiring → ${text("#hwcheck-wiring")}\n`
+        + `[诊断] 命令台 #hwcheck-console → ${text("#hwcheck-console")}`;
+    });
+    return `${pageText}\n${responses}`;
+  } catch (e) {
+    return `[诊断] 连页面文本都没取到：${e.message}\n${responses}`;
+  }
+}
+
+test("编译复用既有面板与判读：真 UV4 编译绿（工具链缺失时如实 skip）", async (t) => {
+  // 工单 ci-gate-fixes/08：这条用例的**前提是真工具链**——`fx/hwcheck.js` 的 `ready` 门
+  // （读 `/api/state` 的 `toolchains.<platform>`）为 false 时，编译按钮按产品设计**置灰**，
+  // 点它只会 30 秒超时（CI run 36213107191 的现场：locator 解析到了元素但 element is not
+  // enabled）。开发机装着 Keil 所以这条一直绿，CI runner 上既没有、也不该有 Keil。
+  //
+  // 缺前提时**显式 skip 并写明原因**：跳过在摘要里看得见，不静默变绿，也不拿"超时"冒充
+  // "产品坏了"。本机装了 Keil（或在 config.json 配了 `uv4_path`）就跑得到这一条，
+  // 判据强度不变。
+  const toolchains = await page.evaluate(() => fetch("/api/state")
+    .then((r) => r.json()).then((s) => s.toolchains || {}).catch(() => ({})));
+  if (toolchains.stm32 === false) {
+    t.skip("本机没有 Keil UV4（/api/state.toolchains.stm32=false）——这条要真编译才成立，"
+      + "编译按钮此时按产品设计置灰。装上 Keil 或配 config.json 的 uv4_path 后可跑；"
+      + "CI runner 上不装 Keil（见工单 ci-gate-fixes/08）");
+    return;
+  }
   await page.click("[data-hwcheck-compile]");
   await page.waitForSelector("#hwcheck-compile-status.ok", { timeout: 180000 });
   const status = await page.textContent("#hwcheck-compile-status");
@@ -830,7 +888,12 @@ test("自建件的串口复测：页面给出字符与说明，产物里那条 c
   await page.waitForSelector(`#hwcheck-device-chips [data-remove="${ID}"]`);
 
   // ① 命令区：自建件那一行有字符 / 名称 / 标注词 / 说明（全部来自服务端载荷）
-  await page.waitForSelector("#hwcheck-console .hwcheck-table");
+  try {
+    await page.waitForSelector("#hwcheck-console .hwcheck-table");
+  } catch (e) {
+    throw new Error(`等命令表超时（#hwcheck-console .hwcheck-table）：${e.message}\n`
+      + await previewDiag());
+  }
   const row = await page.evaluate((id) => {
     const rows = [...document.querySelectorAll("#hwcheck-console .hwcheck-table tbody tr")];
     const hit = rows.find((r) => r.textContent.includes(id));
@@ -919,9 +982,13 @@ test("装不下时的出路点名这一页的控件：照着它做（取消勾�
   await page.waitForSelector('#hwcheck-device-chips [data-remove="rc522"]');
 
   // 选齐两件就被拦下：**生成之前**接线区就给出 400 原文（不是等点了生成才知道）
-  await page.waitForFunction(
-    () => document.querySelector("#hwcheck-wiring").textContent
-      .includes("【检测页出路】"), undefined, { timeout: 30000 });
+  try {
+    await page.waitForFunction(
+      () => document.querySelector("#hwcheck-wiring").textContent
+        .includes("【检测页出路】"), undefined, { timeout: 30000 });
+  } catch (e) {
+    throw new Error(`等接线区的「【检测页出路】」超时：${e.message}\n` + await previewDiag());
+  }
   const wiring = await page.textContent("#hwcheck-wiring");
   assert.ok(wiring.includes("取消勾选「2. 输出通道」里的「OLED 屏」"),
     "通道带进来的那一方要点名那个勾选框：\n" + wiring);
