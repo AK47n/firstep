@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=e88b2c9f8b601c4537ae31302eee0a14db05a63e -->
+<!-- changelog-auto: last-commit=e0b412619a56b83dd757266d51b1d1711c770403 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -17,6 +17,7 @@
 - 11:57 账本：CI 两轮读数与三张新单（07 已绿前端门禁、08 编译用例显式 skip、09/10 由 CI 逐字证据立项）
 - 11:58 账本：落差那句改成按 git log 读，不把「零落差」写死
 - 12:32 工单 ci-gate-fixes/09+10：已删自建件自愈并如实报出；mspm0 makefile 断言缺 CCS 时显式 skip
+- 12:46 工单 ci-gate-fixes/11：清器件集改成重试派发（事件会落在被重绘换掉的节点上），CI 上不再偶发红
 
 ## 2026-09-25
 - 00:21 工单 hwcheck-acceptance/01：mspm0 生成链认下 SysConfig 构建期接口面（那一行从注释占位变活代码）
