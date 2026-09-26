@@ -74,17 +74,30 @@ test.after(async () => {
 // 不稳定（本文件下面那条用例的注释记着这个坑，实测卡满 30s）；事件委托挂在容器上，
 // 派发事件同样走真实的产品路径。
 async function clearDevices() {
-  const removed = await page.evaluate(() => {
-    const chips = [...document.querySelectorAll("#hwcheck-device-chips [data-remove]")];
-    for (const chip of chips) {
-      chip.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    }
-    return chips.map((c) => c.getAttribute("data-remove"));
-  });
-  if (!removed.length) return;
-  await page.waitForFunction(
-    () => document.querySelectorAll("#hwcheck-device-chips [data-remove]").length === 0,
-    undefined, { timeout: 10000 });
+  // **重试派发**（工单 ci-gate-fixes/11）：chip 容器每次选择变化都会被整块重绘
+  // （`box.innerHTML = …`），在途的那次重绘会把刚派发的事件连同节点一起换掉 —— 那次点击
+  // 等于白点，而"等 10 秒仍不空"在慢机器上就会变成一条红（CI 实测：这条先是每次都在
+  // afterEach 里记一行，run 36218384073 里第一次从用例体内的 `:1046` 冒出来、把
+  // 「检测页 → 生成页」整条判红；同一条用例上一跑是绿的 = 偶发）。
+  // 所以：派发 → 等空 → 还空不了就**再派发一次**（最多 5 轮）。真清不干净仍然抛错，
+  // 判据没被削弱——只是把"白点一次"从必然失败变成可重试。
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const dispatched = await page.evaluate(() => {
+      const chips = [...document.querySelectorAll("#hwcheck-device-chips [data-remove]")];
+      for (const chip of chips) {
+        chip.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      }
+      return chips.length;
+    });
+    if (!dispatched) return;
+    try {
+      await page.waitForFunction(
+        () => document.querySelectorAll("#hwcheck-device-chips [data-remove]").length === 0,
+        undefined, { timeout: 10000 });
+      return;
+    } catch (e) { /* 这一轮没清干净：下一轮重派发（别把这一轮的错误吞掉结论） */ }
+  }
+  throw new Error("器件集清不干净：连续 5 轮派发移除都没等到空集");
 }
 
 // 每条用例**收尾兜底**清一次（红了也清——`afterEach` 在用例失败后照样跑）。
