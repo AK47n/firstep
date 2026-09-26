@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=2d1245ffaa0427457f8bf4c463511c3a5101c2a9 -->
+<!-- changelog-auto: last-commit=5c941698b21d3bce5bdf0600ca9657773e2b3392 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -12,6 +12,7 @@
 - 09:32 账本：第 0 节的提交计数改按「实质提交」写，免得被自动 CHANGELOG 提交逐次作废
 - 09:32 账本：第 0 节去掉会过期的提交计数，改成「跑 git log 看准」
 - 11:20 工单 ci-gate-fixes/07：formatMtime 断言改成按本机时区现算，不再写死东八
+- 11:24 工单 ci-gate-fixes/07 评审整改：更正审计证据与判据强度说法、补往返判据、探针加前置干净性检查
 
 ## 2026-09-25
 - 00:21 工单 hwcheck-acceptance/01：mspm0 生成链认下 SysConfig 构建期接口面（那一行从注释占位变活代码）
