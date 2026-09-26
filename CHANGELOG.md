@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=fbeaf57889226661a9c1aafe221c5a455e4527ae -->
+<!-- changelog-auto: last-commit=651a58b2daea43f6df97a82d5d5ce1789bdab47e -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -34,6 +34,7 @@
 - 20:07 工单 hwcheck-hardening/05：勾满专精件也能生成 + 报错说真数 + 页面事前提醒
 - 20:10 工单 hwcheck-hardening/06：链接器形态的诊断看得见了，"0 warning" 不再漏
 - 20:18 工单 hwcheck-hardening/07：预览失败说真话，并且不留上一次的旧程序
+- 20:21 账本：hwcheck-hardening 七单收口——backlog §21/§22 记上结果，评审报告加处置状态
 
 ## 2026-09-25
 - 00:21 工单 hwcheck-acceptance/01：mspm0 生成链认下 SysConfig 构建期接口面（那一行从注释占位变活代码）
