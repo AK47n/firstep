@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=efa7e4e637a970d73f09fe795c4b155f19ed030b -->
+<!-- changelog-auto: last-commit=39d6ca4616c61354173d43556cfd860c87bb55e1 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -39,6 +39,7 @@
 - 20:32 工单 hwcheck-hardening/09：同一条事实的三处副本收成「一句 + 双端断言」
 - 20:32 工单 hwcheck-hardening/10：守卫强度与反证基础设施整改（Standards 轴）
 - 20:33 工单 hwcheck-hardening/11：边界口径更正 + 读数行地板订正 + 浏览器读数落盘（Spec 轴）
+- 20:35 账本：双轴评审结论与三张整改单（09–11）收口
 
 ## 2026-09-25
 - 00:21 工单 hwcheck-acceptance/01：mspm0 生成链认下 SysConfig 构建期接口面（那一行从注释占位变活代码）
