@@ -1,0 +1,15 @@
+工单 hwcheck-hygiene/01：模块正文不许再靠 window 全局桥解析名字（并把该方向立成守卫）
+
+- 4 处调用位改成显式 import（页面行为零变化，桥本身按 spec 保留）：ui/hwcheck.js 的
+  hwcheckErrorHTML、ui/codeeditor.js 的 esc 与 moveTab
+- 新增守卫 tests/js/window-bridge-guard.test.mjs（5 条用例），判据本体 = boot-contract.mjs 判据 ⑧：
+  调用位的自由标识符不得命中「Object.assign(window, { … }) 发布的名字」；桥清单**从源码现算**、
+  不写死名单（现算 611 个名字 / 66 个模块——立项探针报的 609 是按未掩码原文切分，被 fx/task.js
+  桥块里的行尾注释吞掉 taskDetailsSnapshot / taskDetailsRestore 两条，对账量具已落盘）
+- 反证：撤掉 ui/hwcheck.js 那条 import → 前端门禁 1812/1811 pass、1 fail 且点名 hwcheckErrorHTML；
+  复原后 sha256 逐字节相同、门禁回绿（探针与读数在 .scratch/hwcheck-hygiene/）
+- 读数：前端门禁 1812 passed / 0 fail（基线 1807，+5 即本单新守卫）；浏览器门禁 44 passed / 0 fail
+- 双轴评审（两条硬违规 + 若干判断题）全部整改：文件头「七类」改「八类」并补 ⑧、写清本判据与
+  判据 T 那支「调用位」扫描器的口径差异、补 ?.( 可选调用、掩码自检补字符串那一半、去死分支、
+  已知边界补三条（window.X = 形态 / 再导出名 / 参数遮蔽）
+- 新增读数落盘小工具 readings.py（绕开 PowerShell 写 UTF-16LE 与截断管道两个坑）

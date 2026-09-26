@@ -13,6 +13,7 @@ import { $, apiGet, apiPost, toast, toastError } from "/js/app.js";
 import { languageOf, lineStatesOf, lineStatesRefresh, highlightLineHTML } from "/js/fx/highlight.js";
 import { codeGutterLineHTML } from "/js/fx/codeview.js";
 import { codeFindRanges, codeMarksHTML, codeWordAt, codeWordRanges, codeIndentGuideMarks } from "/js/fx/code-marks.js";  // 标记层纯件（工单 code-editor-vscode-polish/04-06：查找/选中词/括号共用；07 缩进引导线）
+import { esc } from "/js/fx/core.js";  // 全局桥收口（工单 hwcheck-hygiene/01）：正文用过的名字必须有 import 边，不许靠 Object.assign(window, …) 解析
 import {
   BRACKET_OPEN,
   BRACKET_CLOSE,
@@ -26,6 +27,7 @@ import {
 } from "/js/fx/code-brackets.js";  // 括号配对与自动闭合纯件（工单 code-editor-vscode-polish/06）+ 彩虹深度标记（code-editor-refine/04）+ 配对扫描缓存（code-editor-opt/02）
 import {
   codeTabStripHTML,
+  moveTab,
   codeEditorHTML,
   codeWindowRange,
   codeWindowSpacerHTML,

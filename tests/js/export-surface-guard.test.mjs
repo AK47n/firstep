@@ -20,6 +20,23 @@
 //
 // 两条都**零名单**：新增模块、改导出名都不需要登记。红证与 9 条强度自检见
 // `.scratch/export-surface-guard/probe-04-red-proof.mjs` / `red-proof.txt`。
+//
+// ## 消费者集合**不许**排除 `tests/js`（工单 hwcheck-hygiene/01 记账，**只记账、不改口径**）
+//
+// 评审 P2-12 的建议是"把 `tests/js` 从判据 D 的消费者集合里排除"，理由是那些断言大多是
+// 源码串匹配（`readFileSync` + `includes`），算不上"产品侧消费者"。**照字面做会当场红 171 处**：
+// 立项前实测（`.scratch/hwcheck-hygiene/probe-dead-exports.mjs` / `.txt`）——
+// 消费者全量 **169** 个 → 只留 `tests/browser` 时剩 **11** 个；零消费者导出 **0 → 171**
+// （`fx/task.js` 18 / `fx/module.js` 16 / `fx/hwcheck.js` 15 …）。
+// 也就是说：判据 D 今天能成立，靠的正是 `tests/js` 那 150+ 条 import 边。
+//
+// 判据 D 的**产品侧口径**（"每条导出都有一条产品侧 import 边"）要成立，前提是**桥依赖归零**——
+// 在那之前，靠 `Object.assign(window, …)` 解析的调用位（`ui/hwcheck.js` 调 `hwcheckErrorHTML`、
+// `ui/codeeditor.js` 调 `esc` / `moveTab`）**行为上算消费、判据上不算**，于是"改一处、守一处"的账
+// 两处同时对不上。那个方向由 `tests/js/window-bridge-guard.test.mjs` 看着（判据 ⑧）；
+// 等这类依赖清零之后，再谈要不要收窄消费者集合。
+//
+// **别把计数写进判据**：它们是立项那一刻的读数，随每次提交变动。
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";

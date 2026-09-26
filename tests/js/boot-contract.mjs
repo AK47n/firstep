@@ -1,16 +1,18 @@
 // boot-contract.mjs — 装载根契约的**判据单源**（工单 frontend-boot-module/01；判据⑥ 由
-// 工单 launcher-exit-race/01 加入，判据⑦ 由工单 bfcache-return-register/01 加入）。
+// 工单 launcher-exit-race/01 加入，判据⑦ 由工单 bfcache-return-register/01 加入，
+// 判据⑧ 由工单 hwcheck-hygiene/01 加入）。
 //
 // 为什么单独一个文件（照 import-usage.mjs / ui-dom-contract.mjs 先例）：判据要被三处用——
 //   1. 守卫本体（fx-guard / static-import-guard / import-usage-guard / ui-dom-contract /
-//      tab-register-guard）
+//      tab-register-guard / export-surface-guard / window-bridge-guard）
 //   2. 红证脚本（`.scratch/frontend-boot-module/probe-01-red-proof.mjs`、
-//      `.scratch/launcher-exit-race/probe-01-red-proof.mjs`）
+//      `.scratch/launcher-exit-race/probe-01-red-proof.mjs`、
+//      `.scratch/hwcheck-hygiene/probe-01-bridge-count.mjs`）
 //      （同一套判据作用在**收走前 / 修复前那个提交**的源码上）
 //   3. 探针的判据强度自检（内存注入）
 // 放在 `.test.mjs` 里会让 import 方顺带注册并运行那批用例。
 //
-// ## 七类不变量（判据全部是纯函数：源码文本 / 模块表进，违规清单出）
+// ## 八类不变量（判据全部是纯函数：源码文本 / 模块表进，违规清单出）
 //
 //   ① `indexHtmlImports(html)` = 0    —— 装载根不在 HTML 里（判据 ①）
 //   ② `inlineDefinitions(html)` = 0   —— HTML 里零顶层 JS 定义（判据 ②）
@@ -27,6 +29,10 @@
 //      bfcache-return-register/01）：⑥ 管"新文档要早报到"，⑦ 管"被浏览器冻结的老文档
 //      回来时要再报到一次"——两半合起来才挡住"最后一个页面离开 = 停服务"误伤"只是导航走了"。
 //      缘由与四条子判据见⑦那节。
+//   ⑧ `bridgeDependencyProblems(modules)` = 0 —— **模块正文不许靠 window 全局桥解析名字**
+//      （工单 hwcheck-hygiene/01）：`Object.assign(window, { … })` 那条老式全局出口让
+//      "用了却没 import"的名字在运行态**真的能跑**（真浏览器用例照样绿），却在导出面判据 D
+//      眼里仍是死导出。缘由、口径与已知边界见⑧那节。
 //
 // ## 三个必须踩住的坑（都写进实现里了）
 //
@@ -1481,6 +1487,162 @@ export function restoreRegisterProblems(html, uiJs) {
     }
   }
   return problems;
+}
+
+// ---------------------------------------------------------------------------
+// ⑧ 全局桥依赖：模块正文的**调用位自由标识符**不得命中 window 桥发布的名字
+//    （工单 hwcheck-hygiene/01）
+//
+// ## 为什么这条不变量值得一条判据
+//
+// `Object.assign(window, { … })` 是老式的全局桥：全仓 **611 个名字经 66 个模块**挂上 `window`
+// （现算读数；量具 `.scratch/hwcheck-hygiene/probe-01-bridge-count.mjs` / `.txt`——立项探针
+// `probe-bridge-callsites.mjs` 报的是 609，它按**未掩码原文**切分，被 `fx/task.js` 桥块里的
+// 行尾注释吞掉了 `taskDetailsSnapshot` / `taskDetailsRestore` 两条，本判据按掩码切分、不漏）。
+// 桥本身不删（浏览器探针与 `index.html` 内联脚本还在用它），但**模块正文不该依赖它**——
+// 模块之间只有 import 一条边。
+//
+// 危险不在于"风格"：靠桥解析的名字在运行态**真的能跑**，所以真浏览器用例照样绿，而它在
+// 「导出面判据 D」（每条导出必须有一条 import 边消费）眼里是**死导出**。工单
+// `hwcheck-hardening/07` 的产物 `ui/hwcheck.js` 调 `hwcheckErrorHTML` 就是这一形态：
+// 行为在运行态成立、在守卫眼里不成立——"改一处、守一处"的账两处同时对不上。
+//
+// 现有守卫只管**反方向**（`import-usage-guard`：「import 了没用」）；这个方向此前**零守卫**。
+//
+// ## 判据（纯函数：模块表进，违规清单出）
+//
+//   · **桥的发布清单从源码现算**（`windowBridgeNames` 解析每个模块的
+//     `Object.assign(window, { … })` 对象字面量键），**不写死名单**——写死就会随库增长腐烂。
+//   · **调用位的自由标识符**（`callPositionNames`）：前面不是标识符字符 / `$` / `.`，
+//     后面（可隔空白）是 `(` 或可选调用 `?.(`，且**配对的 `)` 之后不是 `{`**（那一形态是
+//     方法定义 / 函数声明，不是调用）。三条合起来把"属性名"（`obj.foo(`）与"定义"
+//     （`function foo(…) {`）摘出去。
+//   · **排除三样**：本模块 import 的**本地名**（`locals`）、本模块自身的声明
+//     （`function` / `const` / `let` / `var` / `class`）、本模块自身的导出；再加一条
+//     "这个名字就是这个模块自己发布的桥条目"（自产自用不算外部依赖）。
+//   · 判据面 = `static/js/{fx,ui}/**`（`boot.js` 是装载根、`app.js` 是页面胶水，都不在这条
+//     不变量的射程里——它们本来就不 import 别的模块之外的桥）。
+//
+// ## 为什么这里另有一支"调用位"扫描器（与判据 T 那支口径**故意不同**）
+//
+// 判据 T / 取数面体检走的 `callPositionEdges` 取数面是**import 边的本地名**、掩码口径是
+// `maskCommentsAndStrings`（模板串整串掩掉，`${…}` 里的调用看不见）。本条要的是**整段正文里
+// 的自由标识符**、掩码口径必须是 `maskNonCode`（`${esc(x)}` 里的调用算真依赖——`import-usage`
+// 那条"用 maskCommentsAndStrings 会误判 33 处"的先例在这里同款成立，照那个口径删 import 就是
+// 运行时 ReferenceError）。两支合并 = 把其中一个改错，所以各留各的，**口径差异写在这里**。
+//
+// ## 已知边界（如实记账，不假装完整）
+//
+//   · 参数名与桥同名（`function f(esc) { esc(x) }`）会被算成桥依赖——静态看不出遮蔽。
+//     实测 0 处；真撞上时把参数改名即可（判据宁可多报也不放过真依赖）。
+//   · **只认 `Object.assign(window, { … })` 这一种发布形态**：`window.X = …` 形式的赋值
+//     （`ui/settings.js` 的 `__priceRef`）不在桥清单里。那一处目前是**同模块自写自读**的
+//     模块级缓存、没有跨模块消费，不算桥依赖；将来真被别的模块用了，这里是个已知出口
+//     （要扩就得连"哪些 `window.X =` 是发布、哪些是自用"一起定）。
+//   · 本模块**再导出**的名字（`export { x } from "…"`）按"本模块自身的导出"排除——它并不在
+//     本模块绑定本地名，理论上"再导出 + 同文件调用"是一条免检路径（实测 0 处）。
+//   · 模板串 `${…}` 里的调用**算**（`maskNonCode` 的口径），这是有意的：那里是真代码。
+// ---------------------------------------------------------------------------
+
+/** 调用位扫描时要排除的关键字（`if (` / `typeof (` / `function foo(` 都不是自由标识符被调用）。 */
+const CALL_KEYWORDS = new Set([
+  "if", "for", "while", "switch", "catch", "return", "typeof", "function", "new",
+  "await", "delete", "void", "in", "of", "do", "else", "case", "yield", "instanceof",
+  "super", "this", "class", "throw", "with", "try", "finally", "import", "export",
+  "var", "let", "const", "null", "true", "false", "undefined",
+]);
+
+/**
+ * **掩码后**的模块代码里处于**调用位**的自由标识符 → [{ name, line }]。
+ *
+ * 口径见本节头部（三条）。传入的 `code` 必须是 `maskNonCode` 或 `maskCommentsAndStrings`
+ * 的产物（注释 / 字符串内容已成空白，括号平衡才可信）。
+ */
+export function callPositionNames(code) {
+  const out = [];
+  const re = /(?<![\w$.])([A-Za-z_$][\w$]*)\s*(?:\?\.)?\(/g;   // `foo(` 与可选调用 `foo?.(`
+  let m;
+  let nl = 0;
+  let cursor = 0;
+  while ((m = re.exec(code)) !== null) {
+    for (let k = cursor; k < m.index; k++) if (code[k] === "\n") nl++;
+    cursor = m.index;
+    const name = m[1];
+    if (CALL_KEYWORDS.has(name)) continue;
+    // 配对 `)`：从实参表开头数括号（掩码件保长度、字符串内容已成空白）
+    let depth = 0;
+    let end = -1;
+    for (let i = m.index + m[0].length - 1; i < code.length; i++) {
+      if (code[i] === "(") depth++;
+      else if (code[i] === ")" && --depth === 0) { end = i; break; }
+    }
+    // `)` 之后紧跟 `{` = 方法定义 / 函数声明，不是调用（把"属性名"从调用位里摘出去）
+    if (end >= 0 && /^\s*\{/.test(code.slice(end + 1, end + 40))) continue;
+    out.push({ name, line: nl + 1 });
+  }
+  return out;
+}
+
+/**
+ * 一段源码里 `Object.assign(window, { … })` 发布的**名字** → Set<名字>。
+ *
+ * 配对与切分都在**掩码文本**上做（注释 / 字符串内容已成空白）：字面量里带 `,` / `}` 的字符串
+ * 不会把切分带偏，注释里举例的 `Object.assign(window, …)` 也不会被当成真发布。
+ */
+export function windowBridgeNames(text) {
+  const masked = maskCommentsAndStrings(text);
+  const names = new Set();
+  const re = /Object\.assign\(\s*window\s*,\s*\{/g;
+  let m;
+  while ((m = re.exec(masked)) !== null) {
+    let depth = 1;
+    let j = m.index + m[0].length;                       // 停在 `{` 之后
+    for (; j < masked.length && depth > 0; j++) {
+      if (masked[j] === "{") depth++;
+      else if (masked[j] === "}") depth--;
+    }
+    const body = masked.slice(m.index + m[0].length, j - 1);
+    for (const part of body.split(",")) {
+      const kv = /^\s*([A-Za-z_$][\w$]*)\s*:/.exec(part);           // `key: value` → window 上是 key
+      const shorthand = /^\s*([A-Za-z_$][\w$]*)\s*$/.exec(part);    // 简写 → 名字本身
+      if (kv) names.add(kv[1]);
+      else if (shorthand) names.add(shorthand[1]);
+    }
+  }
+  return names;
+}
+
+/**
+ * 判据 ⑧：模块正文的调用位自由标识符命中了 window 桥 → [{ key, name, from, sites }]；
+ * 空数组 = 没有模块靠全局桥解析名字。
+ *
+ * `from` = 桥的发布方（哪个模块把它挂上 `window` 的）——报错时要能一眼看出"该 import 谁"。
+ */
+export function bridgeDependencyProblems(modules) {
+  const bridged = new Map();                             // 名字 → 首个发布它的模块键
+  for (const mod of modules) {
+    for (const name of windowBridgeNames(mod.text)) if (!bridged.has(name)) bridged.set(name, mod.key);
+  }
+  const problems = [];
+  for (const mod of modules) {
+    if (!/^(fx|ui)\//.test(mod.key)) continue;           // 判据面：fx 与 ui 两层
+    const locals = new Set(parseModuleImports(mod.text).flatMap((e) => e.locals));
+    const code = maskNonCode(mod.text);
+    const declared = new Set(
+      [...code.matchAll(/\b(?:function|const|let|var|class)\s+([A-Za-z_$][\w$]*)/g)].map((d) => d[1]));
+    const own = parseModuleExports(mod.text);
+    const byName = new Map();
+    for (const { name, line } of callPositionNames(code)) {
+      if (!bridged.has(name) || bridged.get(name) === mod.key) continue;
+      if (locals.has(name) || declared.has(name) || own.has(name)) continue;
+      if (!byName.has(name)) byName.set(name, []);
+      byName.get(name).push(line);
+    }
+    for (const [name, lines] of byName) {
+      problems.push({ key: mod.key, name, from: bridged.get(name), sites: lines.sort((a, b) => a - b) });
+    }
+  }
+  return problems.sort((a, b) => (a.key === b.key ? a.name.localeCompare(b.name) : a.key.localeCompare(b.key)));
 }
 
 // ---------------------------------------------------------------------------

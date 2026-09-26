@@ -34,7 +34,7 @@ import {
 import {
   hwcheckPlatformState, hwcheckSelectPlatform, hwcheckPickState,
   hwcheckRequestPayload, hwcheckCanPreview, hwcheckPlatformCardsHTML,
-  hwcheckGenerateErrorHTML, hwcheckEmptyHTML, hwcheckPanelHTML,
+  hwcheckGenerateErrorHTML, hwcheckErrorHTML, hwcheckEmptyHTML, hwcheckPanelHTML,
   hwcheckCodeTarget, hwcheckPreviewState, hwcheckPlatformLabel,
   hwcheckGeneratePayload, hwcheckChecklistKey, hwcheckCheckedIds,
   hwcheckChecklistToggle, hwcheckChecklistHTML, hwcheckChecklistProgressHTML,
