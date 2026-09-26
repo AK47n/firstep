@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=916c2d1b2491bf98ce62bc3be0d040bb068aecbb -->
+<!-- changelog-auto: last-commit=d695a87b575f5a15744cc8c8373f325433f692ae -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -43,6 +43,7 @@
 - 20:53 工单面：硬件检测栏目工程卫生（评审 P2 七项 + 前端守卫补洞 + 两个大文件按职责拆分）
 - 21:10 工单 hwcheck-hygiene/01：模块正文不许再靠 window 全局桥解析名字（并把该方向立成守卫）
 - 21:17 工单 hwcheck-hygiene/02：页面上的字面星号归零（并把"产品串里不许出现 markdown 粗体"立成守卫）
+- 21:55 工单 hwcheck-hygiene/03：检测记录的写 = 唯一临时名 + 原子替换 + 短临界区（并发两处入口不丢更新）
 
 ## 2026-09-25
 - 00:21 工单 hwcheck-acceptance/01：mspm0 生成链认下 SysConfig 构建期接口面（那一行从注释占位变活代码）
