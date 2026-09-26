@@ -1,0 +1,170 @@
+﻿# [摘录] 只留 [P5]/[P5D] 行（全量服务端日志由 probe-05-inject.py 重跑生成）
+[P5D] 1790410220.260 页面请求已记 page_at=446894.528 布防=False
+[P5] 1790410220.337 register 收到 tab=7bb2d82c epoch=1790410220254.8 注册表=0
+[P5] 1790410220.337 register 已登记 注册表=1
+[P5D] 1790410220.948 页面请求已记 page_at=446895.216 布防=False
+[P5] 1790410220.960 bye 收到 tab=7bb2d82c epoch=1790410220254.8 注销后空=True
+[P5] 1790410220.961 schedule_exit 布防=True
+[P5] 1790410220.973 register 收到 tab=7bb2d82c epoch=1790410220942.4 注册表=0
+[P5] 1790410220.973 register 已登记 注册表=1
+[P5D] 1790410221.471 页面请求已记 page_at=446895.739 布防=False
+[P5] 1790410221.484 bye 收到 tab=7bb2d82c epoch=1790410220942.4 注销后空=True
+[P5] 1790410221.485 schedule_exit 布防=True
+[P5] 1790410221.497 register 收到 tab=7bb2d82c epoch=1790410221464.4 注册表=0
+[P5] 1790410221.498 register 已登记 注册表=1
+[P5D] 1790410222.006 页面请求已记 page_at=446896.274 布防=False
+[P5] 1790410222.018 bye 收到 tab=7bb2d82c epoch=1790410221464.4 注销后空=True
+[P5] 1790410222.018 schedule_exit 布防=True
+[P5] 1790410222.027 register 收到 tab=7bb2d82c epoch=1790410222000.5 注册表=0
+[P5] 1790410222.027 register 已登记 注册表=1
+[P5D] 1790410222.462 exit_if_due 布防=False 标签=1 page_at=446896.274 page_grace=3.0
+[P5] 1790410222.462 醒 真退出=False page_at=446896.274
+[P5D] 1790410222.550 页面请求已记 page_at=446896.818 布防=False
+[P5] 1790410222.559 bye 收到 tab=7bb2d82c epoch=1790410222000.5 注销后空=True
+[P5] 1790410222.560 schedule_exit 布防=True
+[P5] 1790410222.568 register 收到 tab=7bb2d82c epoch=1790410222540.2 注册表=0
+[P5] 1790410222.568 register 已登记 注册表=1
+[P5D] 1790410222.986 exit_if_due 布防=False 标签=1 page_at=446896.818 page_grace=3.0
+[P5] 1790410222.989 醒 真退出=False page_at=446896.818
+[P5D] 1790410223.243 页面请求已记 page_at=446897.511 布防=False
+[P5] 1790410223.254 bye 收到 tab=7bb2d82c epoch=1790410222540.2 注销后空=True
+[P5] 1790410223.255 schedule_exit 布防=True
+[P5] 1790410223.266 register 收到 tab=7bb2d82c epoch=1790410223234.1 注册表=0
+[P5] 1790410223.266 register 已登记 注册表=1
+[P5D] 1790410223.519 exit_if_due 布防=False 标签=1 page_at=446897.511 page_grace=3.0
+[P5] 1790410223.519 醒 真退出=False page_at=446897.511
+[P5D] 1790410223.941 页面请求已记 page_at=446898.209 布防=False
+[P5] 1790410223.953 bye 收到 tab=7bb2d82c epoch=1790410223234.1 注销后空=True
+[P5] 1790410223.953 schedule_exit 布防=True
+[P5] 1790410223.963 register 收到 tab=7bb2d82c epoch=1790410223935.5 注册表=0
+[P5] 1790410223.963 register 已登记 注册表=1
+[P5D] 1790410224.061 exit_if_due 布防=False 标签=1 page_at=446898.209 page_grace=3.0
+[P5] 1790410224.061 醒 真退出=False page_at=446898.209
+[P5D] 1790410224.716 页面请求已记 page_at=446898.984 布防=False
+[P5] 1790410224.728 bye 收到 tab=7bb2d82c epoch=1790410223935.5 注销后空=True
+[P5] 1790410224.729 schedule_exit 布防=True
+[P5] 1790410224.742 register 收到 tab=7bb2d82c epoch=1790410224707.9 注册表=0
+[P5] 1790410224.743 register 已登记 注册表=1
+[P5D] 1790410224.756 exit_if_due 布防=False 标签=1 page_at=446898.984 page_grace=3.0
+[P5] 1790410224.756 醒 真退出=False page_at=446898.984
+[P5D] 1790410225.008 exit_if_due 布防=False 标签=1 page_at=446898.984 page_grace=3.0
+[P5] 1790410225.008 醒 真退出=False page_at=446898.984
+[P5D] 1790410225.454 exit_if_due 布防=False 标签=1 page_at=446898.984 page_grace=3.0
+[P5] 1790410225.455 醒 真退出=False page_at=446898.984
+[P5D] 1790410225.539 页面请求已记 page_at=446899.807 布防=False
+[P5D] 1790410225.551 exit_if_due 布防=False 标签=1 page_at=446899.807 page_grace=3.0
+[P5] 1790410225.551 醒 真退出=False page_at=446899.807
+[P5] 1790410225.553 bye 收到 tab=7bb2d82c epoch=1790410224707.9 注销后空=True
+[P5] 1790410225.553 schedule_exit 布防=True
+[P5] 1790410225.561 register 收到 tab=7bb2d82c epoch=1790410225529.6 注册表=0
+[P5] 1790410225.562 register 已登记 注册表=1
+[P5D] 1790410226.230 exit_if_due 布防=False 标签=1 page_at=446899.807 page_grace=3.0
+[P5] 1790410226.230 醒 真退出=False page_at=446899.807
+[P5D] 1790410226.244 exit_if_due 布防=False 标签=1 page_at=446899.807 page_grace=3.0
+[P5] 1790410226.244 醒 真退出=False page_at=446899.807
+[P5D] 1790410226.400 页面请求已记 page_at=446900.668 布防=False
+[P5] 1790410226.410 bye 收到 tab=7bb2d82c epoch=1790410225529.6 注销后空=True
+[P5] 1790410226.411 schedule_exit 布防=True
+[P5] 1790410226.422 register 收到 tab=7bb2d82c epoch=1790410226390.1 注册表=0
+[P5] 1790410226.422 register 已登记 注册表=1
+[P5D] 1790410226.942 exit_if_due 布防=False 标签=1 page_at=446900.668 page_grace=3.0
+[P5] 1790410226.942 醒 真退出=False page_at=446900.668
+[P5D] 1790410227.055 exit_if_due 布防=False 标签=1 page_at=446900.668 page_grace=3.0
+[P5] 1790410227.055 醒 真退出=False page_at=446900.668
+[P5D] 1790410227.237 页面请求已记 page_at=446901.505 布防=False
+[P5] 1790410227.256 bye 收到 tab=7bb2d82c epoch=1790410226390.1 注销后空=True
+[P5] 1790410227.257 schedule_exit 布防=True
+[P5] 1790410227.274 register 收到 tab=7bb2d82c epoch=1790410227225.9 注册表=0
+[P5] 1790410227.274 register 已登记 注册表=1
+[P5D] 1790410227.716 exit_if_due 布防=False 标签=1 page_at=446901.505 page_grace=3.0
+[P5] 1790410227.717 醒 真退出=False page_at=446901.505
+[P5D] 1790410227.717 exit_if_due 布防=False 标签=1 page_at=446901.505 page_grace=3.0
+[P5] 1790410227.717 醒 真退出=False page_at=446901.505
+[P5D] 1790410227.717 exit_if_due 布防=False 标签=1 page_at=446901.505 page_grace=3.0
+[P5] 1790410227.717 醒 真退出=False page_at=446901.505
+[P5D] 1790410227.912 exit_if_due 布防=False 标签=1 page_at=446901.505 page_grace=3.0
+[P5] 1790410227.912 醒 真退出=False page_at=446901.505
+[P5D] 1790410228.539 exit_if_due 布防=False 标签=1 page_at=446901.505 page_grace=3.0
+[P5] 1790410228.539 醒 真退出=False page_at=446901.505
+[P5D] 1790410228.539 exit_if_due 布防=False 标签=1 page_at=446901.505 page_grace=3.0
+[P5] 1790410228.539 醒 真退出=False page_at=446901.505
+[P5D] 1790410228.540 exit_if_due 布防=False 标签=1 page_at=446901.505 page_grace=3.0
+[P5] 1790410228.540 醒 真退出=False page_at=446901.505
+[P5D] 1790410228.760 exit_if_due 布防=False 标签=1 page_at=446901.505 page_grace=3.0
+[P5] 1790410228.760 醒 真退出=False page_at=446901.505
+[P5D] 1790410229.401 exit_if_due 布防=False 标签=1 page_at=446901.505 page_grace=3.0
+[P5] 1790410229.401 醒 真退出=False page_at=446901.505[P5D] 1790410229.402 exit_if_due 布防=False 标签=1 page_at=446901.505 page_grace=3.0
+[P5] 1790410229.402 醒 真退出=False page_at=446901.505
+[P5D] 1790410230.238 exit_if_due 布防=False 标签=1 page_at=446901.505 page_grace=3.0
+[P5] 1790410230.238 醒 真退出=False page_at=446901.505[P5D] 1790410230.238 exit_if_due 布防=False 标签=1 page_at=446901.505 page_grace=3.0
+[P5] 1790410230.238 醒 真退出=False page_at=446901.505
+[P5D] 1790410230.238 exit_if_due 布防=False 标签=1 page_at=446901.505 page_grace=3.0
+[P5] 1790410230.238 醒 真退出=False page_at=446901.505[P5D] 1790410230.238 exit_if_due 布防=False 标签=1 page_at=446901.505 page_grace=3.0
+[P5] 1790410230.238 醒 真退出=False page_at=446901.505[P5D] 1790410230.238 exit_if_due 布防=False 标签=1 page_at=446901.505 page_grace=3.0
+[P5] 1790410230.238 醒 真退出=False page_at=446901.505
+[P5D] 1790410230.239 exit_if_due 布防=False 标签=1 page_at=446901.505 page_grace=3.0
+[P5] 1790410230.239 醒 真退出=False page_at=446901.505[P5D] 1790410230.239 exit_if_due 布防=False 标签=1 page_at=446901.505 page_grace=3.0
+[P5D] 1790410230.239 exit_if_due 布防=False 标签=1 page_at=446901.505 page_grace=3.0
+[P5D] 1790410230.239 exit_if_due 布防=False 标签=1 page_at=446901.505 page_grace=3.0
+[P5] 1790410230.239 醒 真退出=False page_at=446901.505
+[P5D] 1790410230.239 exit_if_due 布防=False 标签=1 page_at=446901.505 page_grace=3.0
+[P5] 1790410230.239 醒 真退出=False page_at=446901.505[P5] 1790410230.239 醒 真退出=False page_at=446901.505
+[P5] 1790410230.240 醒 真退出=False page_at=446901.505
+[P5D] 1790410232.289 页面请求已记 page_at=446906.557 布防=False
+[P5] 1790410232.302 bye 收到 tab=7bb2d82c epoch=1790410227225.9 注销后空=True
+[P5] 1790410232.302 schedule_exit 布防=True
+[P5] 1790410232.316 register 收到 tab=7bb2d82c epoch=1790410232276 注册表=0
+[P5] 1790410232.316 register 已登记 注册表=1
+[P5D] 1790410232.810 页面请求已记 page_at=446907.078 布防=False
+[P5] 1790410232.820 bye 收到 tab=7bb2d82c epoch=1790410232276 注销后空=True
+[P5] 1790410232.820 schedule_exit 布防=True
+[P5] 1790410233.187 register 收到 tab=7bb2d82c epoch=1790410232804.5 注册表=0
+[P5] 1790410233.187 register 已登记 注册表=1
+[P5D] 1790410233.803 exit_if_due 布防=False 标签=1 page_at=446907.078 page_grace=3.0
+[P5] 1790410233.803 醒 真退出=False page_at=446907.078
+[P5D] 1790410234.320 exit_if_due 布防=False 标签=1 page_at=446907.078 page_grace=3.0
+[P5] 1790410234.320 醒 真退出=False page_at=446907.078
+[P5D] 1790410235.810 exit_if_due 布防=False 标签=1 page_at=446907.078 page_grace=3.0
+[P5] 1790410235.810 醒 真退出=False page_at=446907.078
+[P5D] 1790410235.810 exit_if_due 布防=False 标签=1 page_at=446907.078 page_grace=3.0
+[P5] 1790410235.810 醒 真退出=False page_at=446907.078
+[P5D] 1790410236.355 页面请求已记 page_at=446910.623 布防=False
+[P5] 1790410236.368 bye 收到 tab=7bb2d82c epoch=1790410232804.5 注销后空=True
+[P5] 1790410236.368 schedule_exit 布防=True
+[P5] 1790410236.383 register 收到 tab=7bb2d82c epoch=1790410236351.1 注册表=0
+[P5] 1790410236.383 register 已登记 注册表=1
+[P5] 1790410236.875 bye 收到 tab=7bb2d82c epoch=1790410236351.1 注销后空=True
+[P5] 1790410236.875 schedule_exit 布防=True
+[P5] 1790410236.981 register 收到 tab=7bb2d82c epoch=1790410236351.1 注册表=0
+[P5] 1790410236.981 register 已登记 注册表=1
+[P5D] 1790410237.869 exit_if_due 布防=False 标签=1 page_at=446910.623 page_grace=3.0
+[P5] 1790410237.869 醒 真退出=False page_at=446910.623
+[P5D] 1790410238.376 exit_if_due 布防=False 标签=1 page_at=446910.623 page_grace=3.0
+[P5] 1790410238.376 醒 真退出=False page_at=446910.623
+[P5D] 1790410239.356 exit_if_due 布防=False 标签=1 page_at=446910.623 page_grace=3.0
+[P5] 1790410239.356 醒 真退出=False page_at=446910.623[P5D] 1790410239.356 exit_if_due 布防=False 标签=1 page_at=446910.623 page_grace=3.0
+[P5] 1790410239.356 醒 真退出=False page_at=446910.623
+[P5D] 1790410240.116 页面请求已记 page_at=446914.384 布防=False
+[P5] 1790410240.127 bye 收到 tab=7bb2d82c epoch=1790410236351.1 注销后空=True
+[P5] 1790410240.127 schedule_exit 布防=True
+[P5] 1790410240.140 register 收到 tab=7bb2d82c epoch=1790410240108.7 注册表=0
+[P5] 1790410240.140 register 已登记 注册表=1
+[P5] 1790410240.582 bye 收到 tab=7bb2d82c epoch=1790410240108.7 注销后空=True
+[P5] 1790410240.583 schedule_exit 布防=True
+[P5D] 1790410241.628 exit_if_due 布防=True 标签=0 page_at=446914.384 page_grace=3.0
+[P5] 1790410241.628 醒 真退出=False page_at=446914.384
+[P5D] 1790410242.083 exit_if_due 布防=True 标签=0 page_at=446914.384 page_grace=3.0
+[P5] 1790410242.083 醒 真退出=False page_at=446914.384
+[P5D] 1790410243.116 exit_if_due 布防=True 标签=0 page_at=446914.384 page_grace=3.0
+[P5D] 1790410245.227 页面请求已记 page_at=446919.495 布防=False
+[P5] 1790410245.292 bye 收到 tab=7bb2d82c epoch=1790410240108.7 注销后空=True
+[P5] 1790410245.292 schedule_exit 布防=True
+[P5] 1790410245.308 register 收到 tab=7bb2d82c epoch=1790410245221.6 注册表=0
+[P5] 1790410245.308 register 已登记 注册表=1
+[P5] 1790410245.784 bye 收到 tab=7bb2d82c epoch=1790410245221.6 注销后空=True
+[P5] 1790410245.784 schedule_exit 布防=True
+[P5D] 1790410246.792 exit_if_due 布防=True 标签=0 page_at=446919.495 page_grace=3.0
+[P5] 1790410246.792 醒 真退出=False page_at=446919.495
+[P5D] 1790410247.284 exit_if_due 布防=True 标签=0 page_at=446919.495 page_grace=3.0
+[P5] 1790410247.284 醒 真退出=False page_at=446919.495
+[P5D] 1790410248.228 exit_if_due 布防=True 标签=0 page_at=446919.495 page_grace=3.0

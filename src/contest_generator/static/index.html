@@ -28,9 +28,30 @@
     if (!sessionStorage.getItem("firstep_tab_id")) {
       sessionStorage.setItem("firstep_tab_id", crypto.randomUUID());
     }
-    fetch("/api/tabs/register", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tab_id: sessionStorage.getItem("firstep_tab_id"),
-        epoch: performance.timeOrigin }) }).catch(() => {});
+    // 这一发**要重试一次**（工单 ci-gate-fixes/05）。它不是"尽力而为"的通知：丢了它，
+    // 服务端就停在"注册表空"，1.5 秒宽限（webapp._EXIT_GRACE）到点把服务自己关掉，
+    // 用户看到的是 F5 之后一片连不上的死页面（现场：.scratch/ci-gate-fixes/probe-05-catch2-logs/）。
+    // 真实的丢法**不是**"服务停了"，而是这一发**派发在一条不可用的连接上**——多次连续 reload
+    // 之后，浏览器从连接池里取到旧文档留下的空闲连接，而那一条已被服务端按 keep-alive 关掉，
+    // 于是当场 `ERR_CONNECTION_REFUSED` / `ERR_CONNECTION_RESET`（resource timing 记
+    // `status 0 / size 0`）。这种失败**换一条连接就能成**，所以重试恰好对症；
+    // 5xx 同理（服务活着但这一发没被受理）。**4xx 不重试**：那是我们自己的载荷不对，
+    // 再发一百次也一样（顺手把"服务已退出"那条路留给下面的 pageshow 补登记：那时 fetch
+    // 直接 reject，重试只会白等）。
+    // 重试预算刻意压得很短（300ms）：宽限只有 1.5 秒，第二轮要落在窗口里才有意义。
+    // 写法约束：本段不许有**顶层**定义（判据②）——所以重试递归在 IIFE 里，用表达式写。
+    (function attemptRegister(left) {
+      fetch("/api/tabs/register", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tab_id: sessionStorage.getItem("firstep_tab_id"),
+          epoch: performance.timeOrigin }) })
+        .then(function (r) {
+          if (r.ok || (r.status < 500 && r.status >= 400)) return null;   // 4xx = 载荷问题
+          throw new Error("register failed: " + r.status);
+        })
+        .catch(function () {
+          if (left > 0) setTimeout(function () { attemptRegister(left - 1); }, 300);
+        });
+    })(1);
     // bfcache 恢复补登记（工单 bfcache-return-register/01）：用户从本应用**导航走**时，
     // 浏览器可能把本文档冻结进 bfcache —— 那一下同样触发 pagehide，app.js 照发告别，
     // 服务端见注册表空了就开始 1.5 秒倒计时；而用户**按后退**回来时文档从 bfcache 恢复、

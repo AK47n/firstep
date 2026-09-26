@@ -97,7 +97,9 @@ from contest_generator.master import distill_master, main_c_template, scan_proje
 from contest_generator.master_store import import_master
 from contest_generator.platforms import PLATFORM_MSPM0, PLATFORM_STM32
 from contest_generator.webapp import (
+    STATIC_DIR,
     __version__,
+    _EXIT_GRACE,
     AppContext,
     create_app,
 )
@@ -6980,6 +6982,139 @@ def test_tabs_register_within_grace_cancels_scheduled_exit(client, context, monk
     time.sleep(0.5)                                                          # 睡过宽限（负向断言）
     assert len(ctx.tab_registry) == 1
     assert exits == [], "宽限内 register 到达了，服务还是退了"
+
+
+# ---------------------------------------------------------------------------
+# 「页面正在来」这条追加判据（工单 ci-gate-fixes/05）：F5 时新文档那一发 register 可能
+# **丢在传输层**（浏览器从池里取到一条已被服务端关掉的空闲连接 ⇒ ECONNREFUSED / RESET，
+# 现场读数 `.scratch/ci-gate-fixes/probe-05-catch2-logs/`）。丢了就没人撤防 ⇒ 宽限到点
+# 把正在装载的新页面拦腰掐断。出路：**发页面这件事本身也算"有人在来"**——`GET /` 记一笔，
+# 退出判据据此**至多多等一轮**（`_EXIT_PAGE_GRACE`），而不是把 1.5 秒改大
+# （改大是拿"真关浏览器"那条路陪绑，用例 C 拿 1.53–1.65 秒当契约）。
+# ---------------------------------------------------------------------------
+
+
+def test_tabs_page_request_defers_exit_once(context, monkeypatch):
+    """宽限窗口之内到的页面请求 → 到点**不出手**（要么等它、要么等满 `page_grace`）。"""
+    ctx, _ = context
+    exits = _launcher_exits(monkeypatch)
+    registry = ctx.tab_registry
+    arm = time.monotonic()
+    assert registry.arm_exit() is True
+    registry.mark_page_request()                       # 新文档正在来（它的 register 丢了）
+    assert registry.exit_if_due(exits.append, page_grace=0.05, armed_before=arm) is False, \
+        "有页面在路上，宽限到点不该把服务关掉"
+    assert exits == []
+    time.sleep(0.1)                                    # 睡过那一档
+    assert registry.exit_if_due(exits.append, page_grace=0.05, armed_before=arm) is True, \
+        "等过一轮之后（页面始终没来登记）应当照旧退出"
+    assert exits == [0]
+
+
+def test_tabs_page_request_before_the_window_does_not_hold_the_exit(context, monkeypatch):
+    """⚠ 判据的**下界**要卡死：落在本次退出这一段**之前**的页面请求不算数。少了它，
+    用户在这个页面上关浏览器时（它的 `GET /` 就在一两秒前）会被无端推迟——本机实测：
+    不坐下界时用例 C 的停服从 1.3 秒变成 6.5 秒超时（`_EXIT_GRACE` 那条契约当场破）。
+    真调用方传的下界是"布防时刻 − 宽限"（把同一次导航整段算进来），所以这里也照那个口径喂。"""
+    ctx, _ = context
+    exits = _launcher_exits(monkeypatch)
+    registry = ctx.tab_registry
+    registry.mark_page_request()                       # 页面早就在（打开这一页时取的）
+    time.sleep(0.02)
+    armed = time.monotonic()
+    assert registry.arm_exit() is True
+    # 下界比那次页面请求更晚（= 它在窗口之外：用户早就在这一页上了，现在才关）
+    assert registry.exit_if_due(exits.append, page_grace=0.5,
+                                armed_before=armed + 0.5) is True, \
+        "窗口之前的页面请求把退出推迟了——真关浏览器会变慢（用例 C 拿 1.5 秒当契约）"
+    assert exits == [0]
+
+
+def test_tabs_page_request_just_before_arming_within_grace_defers(context, monkeypatch):
+    """⚠ **同一导航的两侧**：实测 `page_at` 比布防时刻**早 10ms**（`[P5D]` 读数
+    `.scratch/ci-gate-fixes/probe-05-inject-p5.txt`）——真调用方因此把下界取成
+    "布防时刻 − 宽限"，这种交错才兜得住。这一条钉住那个口径。"""
+    ctx, _ = context
+    exits = _launcher_exits(monkeypatch)
+    registry = ctx.tab_registry
+    registry.mark_page_request()                       # 同一个导航的另一侧，比布防早一点点
+    time.sleep(0.02)
+    armed = time.monotonic()
+    assert registry.arm_exit() is True
+    # 真调用方的下界口径：布防时刻 − 宽限 ⇒ 那发页面请求在窗口之内 ⇒ 不出手
+    assert registry.exit_if_due(exits.append, page_grace=5.0,
+                                armed_before=armed - 1.5) is False, \
+        "同一个导航的两侧被交错到——判据该把这种情形兜住（否则等于没修）"
+    assert exits == []
+    # 等满那一档（下界推到页面之后）⇒ 这才出手
+    assert registry.exit_if_due(exits.append, page_grace=5.0,
+                                armed_before=armed + 5.0) is True
+    assert exits == [0]
+
+
+def test_tabs_close_keeps_the_old_exit_time(context, monkeypatch):
+    """关标签那条路**不受影响**：没有页面请求 ⇒ 判据不成立 ⇒ 到点即退（宽限不变）。"""
+    ctx, _ = context
+    exits = _launcher_exits(monkeypatch)
+    registry = ctx.tab_registry
+    registry.register("t1", 1.0)
+    assert registry.unregister("t1", 1.0) is True
+    arm = time.monotonic()
+    assert registry.arm_exit() is True
+    assert registry.exit_if_due(exits.append, page_grace=0.5, armed_before=arm) is True, \
+        "没有页面在路上却把退出推迟了——真关浏览器会变慢（用例 C 拿 1.5 秒当契约）"
+    assert exits == [0]
+
+
+def test_tabs_index_route_records_page_request(client, context):
+    """`GET /` 真的会记那一笔（判据的入参不是空中楼阁）。"""
+    ctx, _ = context
+    assert ctx.tab_registry.page_requested_at() == 0.0
+    assert client.get("/").status_code == 200
+    assert ctx.tab_registry.page_requested_at() > 0.0
+
+
+def test_inline_register_retry_budget_fits_inside_the_grace():
+    """跨语言口径：内联登记那一发的**重试预算**必须落在 `_EXIT_GRACE` 之内。
+
+    这是两侧的**唯一**耦合点，所以钉在 Python 侧（那边读得到的宽限是真值，HTML 侧读不到）：
+    重试等得比宽限还久 = 重试落在窗口之后，等于没重试——那一发丢了，服务照样自杀。
+    判据取**源码事实**（抠重试的延时与次数），不是行为断言：这里没有跑浏览器的缝，
+    行为由 `tests/browser/launcher-reload.spec.mjs` 的 B2 用例真跑。
+    """
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    delays = [int(m) for m in re.findall(
+        r"setTimeout\(function \(\) \{ attemptRegister\(left - 1\); \}, (\d+)\)", html)]
+    seed = re.search(r"\}\)\s*\(\s*(\d+)\s*\)\s*;", html)
+    assert delays, "index.html 里抠不到登记的重试延时——重试被拿掉了？（判据要看一眼）"
+    assert seed, "index.html 里抠不到重试次数（写法变了？）"
+    attempts = int(seed.group(1)) + 1
+    budget_ms = sum(delays[:max(attempts - 1, len(delays))])
+    assert budget_ms < _EXIT_GRACE * 1000, (
+        f"登记的重试预算 {budget_ms}ms 不比宽限 {_EXIT_GRACE}s 短——重试落在窗口之外，"
+        "等于没重试（那一发丢了服务就自杀）")
+
+
+def test_tabs_exit_deferral_is_bounded_by_page_grace(client, context, monkeypatch):
+    """路由级（端到端）：bye 之后页面请求来了、登记却没来 —— 服务**多等一轮**才退，不是永不退。
+
+    页面请求要落在**窗口之内**（真实情形：F5 时新文档的 `GET /` 与旧文档的 bye 是同一个导航
+    的两侧，差几毫秒）。⚠ 时序断言要**松**：`pytest -n auto` 下并行负载会把两次 `client` 调用
+    之间的间隔拉到几十毫秒（本机实测：卡死在 0.05/0.15 那一档上）。所以这一条只钉
+    "最终**确实还退**（bounded）"，"多等一轮"由注册表级的
+    `test_tabs_page_request_defers_exit_once` 精确钉住（那一层不受负载影响）。
+    """
+    ctx, _ = context
+    exits = _launcher_exits(monkeypatch, grace=0.15)
+    import contest_generator.webapp as webapp
+    monkeypatch.setattr(webapp, "_EXIT_PAGE_GRACE", 1.2)
+    client.post("/api/tabs/register", json={"tab_id": "t1", "epoch": 1.0})
+    client.post("/api/tabs/bye", json={"tab_id": "t1", "epoch": 1.0})       # 布防
+    client.get("/")                                                        # 新页面在路上
+    assert ctx.tab_registry.page_requested_at() > 0.0, "GET / 没记下那一笔（判据的入参没了）"
+    _wait_for_exit(exits)                                                  # 等它落地（bounded）
+    assert exits == [0], "追加等待没有上限——'最后离开 → 自停'被无限续命了"
+    assert len(ctx.tab_registry) == 0
 
 
 def test_tabs_close_again_after_cancel_rearms_exit(client, context, monkeypatch):

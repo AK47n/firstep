@@ -175,8 +175,63 @@ test("④ 注销的 payload 去掉文档实例令牌 → 报出", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 四、bfcache 恢复补登记（工单 bfcache-return-register/01；判据 ⑦）
+// 三点五、**登记那一发要能扛住一次失败**（工单 ci-gate-fixes/05）
 //
+// 为什么这条是功能正确性而不是风格：那一发丢在传输层时（浏览器从连接池里取到一条已被
+// 服务端按 keep-alive 关掉的空闲连接 ⇒ `ERR_CONNECTION_REFUSED` / `ERR_CONNECTION_RESET`），
+// 没有重试 = 登记永远不发生 ⇒ 旧文档的 bye 把注册表清空 ⇒ 1.5 秒宽限到点 ⇒ 应用把正在
+// 装载的新页面拦腰掐断（现场读数 `.scratch/ci-gate-fixes/probe-05-catch2-logs/`，
+// 确定性红回路 `.scratch/ci-gate-fixes/probe-05-redproof.mjs`）。
+//
+// 判据**不绑写法**：递归、循环、`Promise` 链都认；管的是三件事——① 首登记那一发真有重试；
+// ② 重试的等待**压得比宽限短**（等太久，重试落在宽限之后照样是自杀）；③ 等待用延时而不是
+// 立刻狂发（同步死循环会把页面的解析卡住，登记反而更晚）。
+// ③ 的锚点是 `setTimeout`；①② 的锚点从**真源码**里抠（不手抄字面量——先例：存储键也是抠的）。
+// ---------------------------------------------------------------------------
+
+/** 真源码里登记那一发的重试参数：`{ attempts, delays[] }`（抠不到 = 空数组）。 */
+function registerRetry(text) {
+  const retries = [...text.matchAll(/setTimeout\s*\(\s*function\s*\(\s*\)\s*\{[^}]*attemptRegister\s*\(/g)]
+    .map((m) => Number((/setTimeout\s*\(\s*function\s*\(\s*\)\s*\{[^}]*\}\s*,\s*(\d+)\s*\)/.exec(
+      text.slice(m.index)) || [])[1]));
+  const seed = /\}\s*\)\s*\(\s*(\d+)\s*\)\s*;/.exec(text);
+  return { delays: retries.filter((n) => Number.isFinite(n)),
+    attempts: seed ? Number(seed[1]) + 1 : 0 };
+}
+
+test("⑧ 真源码：登记那一发留着重试，等待压得比宽限短", () => {
+  const retry = registerRetry(inlineBlock.text);
+  assert.ok(retry.attempts >= 2,
+    `登记那一发只有 ${retry.attempts} 次尝试——丢了就是丢了（服务会把自己关掉）`);
+  assert.ok(retry.delays.length >= 1, "重试的等待没抠到（写法变了？判据要看一眼）");
+  for (const ms of retry.delays) {
+    assert.ok(ms < 1000, `重试等待 ${ms}ms 太长（宽限只有 1.5 秒，等下去重试也落在窗口外）`);
+  }
+});
+
+test("⑧ 反例：把重试去掉（退回 `fetch(...).catch(() => {})`）→ 报出", () => {
+  const stripped = withInline(inlineBlock.text
+    .replace(/\(function attemptRegister\(left\) \{[\s\S]*?\}\)\(1\);/, "fetch(1);"));
+  assert.ok(!stripped.includes("attemptRegister"), "注入没落上（重试还在）");
+  assert.ok(registerRetry(scriptBlocks(stripped)
+    .find((b) => b.src === null && b.text.includes(TAB_REGISTER_ENDPOINT)).text).attempts === 0,
+  "反例没把重试拿干净——本用例会假绿");
+});
+
+test("⑧ 反例：重试不等待（同步立刻重发）→ 报出", () => {
+  // 只改**重试那一处**的写法（内联脚本别处还有 setTimeout 的正当用法——本段不许有顶层
+  // 定义，所以"能延时的写法"只有它；拿 `!/setTimeout/` 当注入自检会假红，本机踩过一次）。
+  const noWait = withInline(inlineBlock.text
+    .replace(/setTimeout\(function \(\) \{ attemptRegister\(left - 1\); \}, \d+\);/g,
+      "attemptRegister(left - 1);"));
+  assert.ok(noWait !== html, "注入没落上（重试那处没匹配到）");
+  const retry = registerRetry(scriptBlocks(noWait)
+    .find((b) => b.src === null && b.text.includes(TAB_REGISTER_ENDPOINT)).text);
+  assert.deepEqual(retry.delays, [], "同步重发被当成了延时重试——判据的延时锚点失效了");
+});
+
+// ---------------------------------------------------------------------------
+// 四、bfcache 恢复补登记（工单 bfcache-return-register/01；判据 ⑦）
 // 与上面 ①–④ 是**同一件事的另一半**：① 管"新文档要早报到"，这一组管"被浏览器冻结的老文档
 // 回来时要再报到一次"。用户按后退看到死页面的现场链路见 `restoreRegisterProblems` 的文件头。
 // ---------------------------------------------------------------------------

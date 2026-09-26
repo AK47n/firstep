@@ -463,6 +463,12 @@ _LAUNCHER_ENV = "FIRSTEP_LAUNCHER"  # 启动器置 1：启用"关浏览器 = 停
 # 它**不再**覆盖模块图装载时间——那是 0.4–1.5s⁺、随机器负载走的尾长（修复前正是它把应用
 # 自己的服务关掉的）。
 _EXIT_GRACE = 1.5
+# 秒：**页面正在来**时允许的追加等待（工单 ci-gate-fixes/05）。宽限窗口里若又来过一次页面
+# 导航请求（`GET /`），说明新文档在路上、它的 register 可能只是丢了一发 ⇒ 退出判据再等这一档
+# （至多一轮，见 `_schedule_exit_if_idle`）。刻意**不是**"把 1.5 秒改大"：改大是拿所有
+# 关窗场景陪绑（真关浏览器那条路实测 1.53–1.65 秒停服，用例 C 拿它当契约）；
+# 这一档只在"真有页面在来"时参与，正常关标签根本走不到。
+_EXIT_PAGE_GRACE = 3.0
 _EXIT: Callable[[int], Any] = os._exit  # 可注入（测试断言调度，不真自杀）
 
 
@@ -502,7 +508,24 @@ class TabRegistry:
     def __init__(self) -> None:
         self._tabs: dict[str, float | None] = {}
         self._exit_armed = False          # 在途退出：宽限窗口内等新页面自报家门
+        self._page_at = 0.0               # 最近一次**页面导航**请求的时刻（单调钟；见 mark_page_request）
+        self._page_deferred_at = 0.0      # 已经为哪一发页面等过一轮（一发至多换一轮，见 exit_if_due）
         self._lock = threading.Lock()
+
+    def mark_page_request(self) -> None:
+        """记下发页面（`GET /`）：**"马上会有一个新文档来登记"**这条事实的唯一出处。
+
+        为什么要它（工单 ci-gate-fixes/05）：F5 时旧文档的 `bye` 一到，注册表就是空的，宽限
+        开始倒计时；而新文档那一发 `register` 可能**丢在传输层**（浏览器从连接池里取到一条
+        已被服务端关掉的空闲连接 ⇒ `ERR_CONNECTION_REFUSED` / `ERR_CONNECTION_RESET`，
+        现场读数 `.scratch/ci-gate-fixes/probe-05-catch2-logs/`）。丢了就没人来撤销退出，
+        应用把正在装载的新页面拦腰掐断（用户看到 30 秒白屏 + 死页面）。
+        页面请求比登记**更早**且更可靠（它是导航本身，浏览器不会把它派发在坏连接上还失败），
+        所以"刚刚有页面在来"足以让退出判据多等一轮（`exit_if_due` 的 `page_grace`）。
+        **它不登记标签**（登记仍归 `register`）：只把"页面正在来"这件事记成一个时刻。
+        """
+        with self._lock:
+            self._page_at = time.monotonic()
 
     def register(self, tab_id: str, epoch: float | None = None) -> None:
         """登记（或刷新）一个标签的文档实例（同一个 tab 重新加载 = 新 epoch 覆盖旧的）。
@@ -538,23 +561,115 @@ class TabRegistry:
             self._exit_armed = True
             return True
 
-    def exit_if_due(self, exit_fn: Callable[[int], Any]) -> bool:
-        """宽限到点的**最终判据**：仍布防 且 仍空 → 取走布防、**在同一把锁里** `exit_fn(0)`。
+    def exit_if_due(self, exit_fn: Callable[[int], Any],
+                    page_grace: float = 0.0,
+                    armed_before: float = 0.0) -> bool:
+        """宽限到点的**最终判据**：仍布防 且 仍空 且 **没有页面正在来** → 取走布防、
+        **在同一把锁里** `exit_fn(0)`。
 
         返回是否真的退了（`True` 只可能来自"这一次真的调用了 `exit_fn`"）。取走（清零）而不是
         留着：注入桩的测试里"退出"不会真发生，留着布防会让下一轮关闭永远布不了防
         ——功能会**静默**坏掉。
+
+        `page_grace > 0` 时多一条判据（工单 ci-gate-fixes/05）：最近一次页面导航请求落在
+        **本次退出这一段**里（`armed_before` 之后）且不算太旧（不早于"现在 − `page_grace`"）
+        ⇒ 那个新文档正在路上，它的 `register` 可能只是丢了一发 ⇒ 不出手。
+
+        **下界为什么要"布防时刻 − 宽限"**（量出来的，不是想出来的）：现场里 `bye` 与新文档的
+        `GET /` 是**同一个导航的两侧**，谁先到不由我们定——实测 `page_at` 比布防时刻**早 10ms**
+        （`[P5D]` 读数 `.scratch/ci-gate-fixes/probe-05-inject-p5.txt`）。只判"布防之后"会把
+        这种最常见的情形漏掉，等于没修；而不坐下界又会让"用户在这个页面上关浏览器"
+        （那个 `GET /` 就在一两秒前）被无端推迟（本机实测：不坐下界时用例 C 的停服从 1.3 秒
+        变成 6.5 秒超时）。取"布防时刻 − `_EXIT_GRACE`"= 把同一次导航整段算进来。
+        默认值 = 与从前逐字节同语义（只有 `_schedule_exit_if_idle` 那条路会传它们）。
+
+        消费方要看"为什么没退"时用 `page_defer_until()`——别把这段判据在调用方再写一遍
+        （两处判定必然分叉：本机实测那条循环第一版就分叉出"到点又变回等待"的死循环）。
+        **一发页面至多换一轮等待**（见 `page_defer_until_locked`），否则同一个页面会被反复判
+        "还在等"，退出被无限续命（本机实测：用例 C/D 的停服被卡住）。
         """
         with self._lock:
             if not self._exit_armed or self._tabs:
+                return False
+            if self.page_defer_until_locked(time.monotonic(), page_grace, armed_before) > 0.0:
                 return False
             self._exit_armed = False
             exit_fn(0)
             return True
 
+    def exit_via(self, exit_fn: Callable[[int], Any],
+                 page_grace: float = 0.0,
+                 armed_before: float = 0.0) -> float:
+        """到点这一步的**唯一判据**，一次调用给全两个答案：
+
+        · 正数 = **先别退**，睡到这个时刻（单调钟）再看（"新文档正在来"，见
+          `page_defer_until_locked` 的三侧判据）；
+        · `0.0` = **退了**（或本来就轮不到它退：没布防 / 还有标签在开）。
+
+        **为什么合成一个方法**（本机实测踩了两次）：判据要"记下这一发已经等过"，而调用方还要
+        知道"那睡到几点"——拆成两个方法时，第一次调用会把"等过"记上，第二次再问就得到 `0.0`
+        （像是在说"不用等"）⇒ 循环当场返回、**应用根本不停服**（用例 C/D 卡住，红的读数是
+        `.scratch/ci-gate-fixes/probe-05-pytest-full.txt`）。一个方法一次判定，状态与答案同源。
+        """
+        with self._lock:
+            if not self._exit_armed or self._tabs:
+                return 0.0
+            until = self.page_defer_until_locked(time.monotonic(), page_grace, armed_before)
+            if until > 0.0:
+                return until
+            self._exit_armed = False
+            exit_fn(0)
+            return 0.0
+
+    def page_defer_until_locked(self, now: float, page_grace: float,
+                               armed_before: float) -> float:
+        """**锁内**（唯一判据出处）：要不要为"正在来的页面"再等一轮？返回等到什么时刻（单调钟）；
+        不等 → 0.0。**首次**判定时把"这一发页面已经等过"记下来（`_page_deferred_at`）——
+        所以**一发页面至多换一轮等待**（否则同一个页面会被反复判"还在等"，退出被无限续命，
+        本机实测：用例 C/D 的停服被卡住），而下一发页面（用户又刷了一次）可以再换一轮。
+
+        判据三侧：① 那一发页面落在本次退出这一段里（`armed_before` 之后）；② 还没为它等过；
+        ③ 它离 `now` 还不到 `page_grace`（那一档过去就不再等，等也白等）。
+        `now` 由调用方传：本方法在锁内被调，自己再取一次钟会让"等多久"与判据用的时刻错位。
+        """
+        if page_grace <= 0 or self._page_at < armed_before:
+            return 0.0
+        until = self._page_at + page_grace
+        if until <= now:
+            return 0.0                   # 那一档已经过去
+        if self._page_at <= self._page_deferred_at:
+            return 0.0                   # 这一发已经等过了
+        self._page_deferred_at = self._page_at
+        return until
+
+    def page_defer_until(self, page_grace: float, armed_before: float) -> float:
+        """**只读**问一句："现在要不要为正在来的页面等？等到几点？"（0.0 = 不用等）。
+
+        ⚠ 运行时那条路**不要**用它（`_schedule_exit_if_idle` 走 `exit_via`）：判据带
+        "这一发已经等过"的状态，分两次问会得到两个互相打架的答案——本机实测这么写过，
+        应用当场不停服（用例 C/D 卡住，红的读数 `probe-05-pytest-full.txt`）。
+        它是给测试 / 排查用的读方（不消耗状态，与 `exit_if_due` 的判据同源）。
+        """
+        with self._lock:
+            if page_grace <= 0 or self._page_at < armed_before:
+                return 0.0
+            if self._page_at <= self._page_deferred_at:
+                return 0.0
+            until = self._page_at + page_grace
+            return until if until > time.monotonic() else 0.0
+
     def __len__(self) -> int:
         with self._lock:
             return len(self._tabs)
+
+    def page_requested_at(self) -> float:
+        """最近一次页面导航请求的时刻（单调钟）；从没有过 = 0.0。
+
+        消费方是 `_schedule_exit_if_idle` 的那个循环：它据此算"还要再等多久"。
+        读数走方法而不是公开属性——注册表的状态只在锁内改（与其余访问同一纪律）。
+        """
+        with self._lock:
+            return self._page_at
 
 
 def _launcher_managed() -> bool:
@@ -567,18 +682,36 @@ def _schedule_exit_if_idle(registry: TabRegistry) -> None:
 
     非启动器模式直接返回（正常开发 / 测试运行不受影响）；daemon 线程不阻塞请求。
     `arm_exit()` 保证**不重复调度**（多标签同时关 / 重复与迟到的 bye）；宽限到点以
-    `exit_if_due(_EXIT)` 为**最终判据**——窗口内 register 到达过（撤防）就不再退出，
-    且"决定退出"与"register 能被受理"由注册表那把锁线性化（见 `TabRegistry` 的 docstring）。
+    `exit_if_due(_EXIT, _EXIT_PAGE_GRACE)` 为**最终判据**——窗口内 register 到达过（撤防）
+    就不再退出，且"决定退出"与"register 能被受理"由注册表那把锁线性化（见 `TabRegistry`
+    的 docstring）。
+
+    **为什么要多等一轮**（工单 ci-gate-fixes/05）：`exit_if_due` 在"最近 `_EXIT_PAGE_GRACE`
+    之内来过页面导航请求"时不出手——那个新文档正在路上，它的 `register` 可能只是丢了一发
+    （现场：丢在传输层。读数 `.scratch/ci-gate-fixes/probe-05-catch3-logs/round-12.log`
+    与 `[P5D]` 注入读数）。于是这一轮睡满也没退，要再睡到"那次页面 + `_EXIT_PAGE_GRACE`"；
+    等过去之后再调一次判据，那时"最近"已不成立 ⇒ **至多一轮**，不是"只要有人刷页面就
+    永远关不掉"。关掉最后一个标签那种正常情形下根本没有新页面请求，这条判据不参与，
+    停服时刻与从前一样是"bye + `_EXIT_GRACE`"（真关浏览器实测 1.53–1.65 秒，用例 C 拿它当契约）。
     本地无状态工具，退出即 os._exit（端口随之释放，双击重启）。
     """
     if not _launcher_managed():
         return
+    armed_at = time.monotonic()
     if not registry.arm_exit():
         return
 
     def delayed() -> None:
-        time.sleep(_EXIT_GRACE)
-        registry.exit_if_due(_EXIT)
+        # 下界 = 布防时刻 − 宽限：把"同一次导航"整段算进来（`bye` 与页面的 `GET /` 谁先到
+        # 不由我们定，实测能差到 10ms——见 exit_via 的 docstring）。
+        lower = armed_at - _EXIT_GRACE
+        while True:
+            time.sleep(max(0.0, armed_at + _EXIT_GRACE - time.monotonic()))
+            # 一次调用给全两个答案（正数 = 先别退、睡到那一刻；0.0 = 退了）——见 exit_via。
+            until = registry.exit_via(_EXIT, _EXIT_PAGE_GRACE, lower)
+            if until <= 0.0:
+                return
+            time.sleep(max(0.0, until - time.monotonic()))
 
     threading.Thread(target=delayed, daemon=True).start()
 
@@ -1589,6 +1722,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     # 生成流程页（单页应用）
     @app.get("/")
     def index() -> FileResponse:
+        # 发页面 = "马上会有一个新文档来登记"（工单 ci-gate-fixes/05）：F5 时旧文档的 bye
+        # 一到注册表就空，而新文档那一发 register 可能丢在传输层——这一笔让退出判据
+        # 知道"还有页面在路上"，再多等一轮（见 TabRegistry.mark_page_request）。
+        # 非启动器模式下注册表不参与任何决定，记这一笔零影响。
+        context.tab_registry.mark_page_request()
         return FileResponse(STATIC_DIR / "index.html")
 
     # 前端纯函数模块（工单 frontend-es-modules/01）：/js/fx/*.js 静态直挂，

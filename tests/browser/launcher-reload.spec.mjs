@@ -11,12 +11,15 @@
 // `boot.js` 整张模块图装载完才发（住在 `app.js` 里）→ 宽限内没到 → `os._exit(0)`
 // → **应用把自己的服务关了**，后面每次请求都是 `ERR_CONNECTION_REFUSED`。
 //
-// ## 五条用例（各自钉一件事）
+// ## 六条用例（各自钉一件事）
 //
 //   A. **连续 reload N ≥ 8**（覆盖现场"第 7 次命中"的量级）：服务始终活着 + 页面每次都能用。
 //   B. **确定性用例**：把 `boot.js` 的响应拖到宽限之外（2s > 1.5s）—— 修复前 `register` 要等
 //      它 ⇒ 服务自杀（**必红**）；修复后登记住在 `index.html` head 的内联脚本里，与模块图
 //      无关 ⇒ 服务活着、页面最终仍装载可用。
+//   B2. **登记那一发被丢一次**（工单 ci-gate-fixes/05）：把新文档那一发 register 在传输层打掉
+//      （现场真凶：浏览器从池里取到旧文档留下的**已被服务端按 keep-alive 关掉**的空闲连接）
+//      ⇒ 修复前登记永远不发生 ⇒ 宽限到点自杀（**必红**）；修复后重试落在新连接上 ⇒ 服务活着。
 //   C. **最后一个页面离开 → 服务自己停**：把"关浏览器 = 停服务"这个功能钉进闸门
 //      ——修竞态最容易顺手弄丢的就是它。（必须是**最后一条**：它把服务关掉。）
 //   D. **bfcache 回来补登记**（工单 bfcache-return-register/01）：冻结再恢复那一跳要补登记，
@@ -199,6 +202,62 @@ test("B：模块图被拖到宽限之外，登记仍然早到——服务活着�
       + `（服务端日志尾段：\n${logTail(server)}\n）`);
   } finally {
     await page.unroute("**/js/boot.js");
+  }
+});
+
+test("B2：登记那一发被丢一次（坏连接）——重试救回，服务活着", async () => {
+  // 工单 ci-gate-fixes/05 的**确定性红回路**（现场读数
+  // `.scratch/ci-gate-fixes/probe-05-catch2-logs/suite-05-red.txt`）：
+  //
+  // 真凶不是"宽限太短"，是那一发 `POST /api/tabs/register` **发出去即失败**——多次连续
+  // reload 之后，浏览器从连接池里取到旧文档留下的空闲连接，而那一条已被服务端按
+  // keep-alive 关掉，于是当场 `ERR_CONNECTION_REFUSED` / `ERR_CONNECTION_RESET`
+  // （resource timing 记 `status 0 / size 0`）。head 内联脚本**当时没有重试**，
+  // 于是登记永远没发生 ⇒ 旧文档的 `bye` 清空注册表（那一下照旧发生）⇒ 1.5 秒宽限到点
+  // ⇒ 应用自杀 ⇒ 页面 30 秒超时、后续用例全是 `ERR_CONNECTION_REFUSED`。
+  //
+  // 本用例把"那一发失败"确定性地造出来（`route.abort("failed")` = 传输层失败，
+  // 与现场同签名），只丢 **reload 之后的第一发**：
+  //   · reload 之前那一发照常放行 ⇒ 旧文档的 bye 之前注册表里**有**登记，
+  //     所以"服务自杀"只可能来自"新文档那发丢 + 旧文档 bye"这一条链；
+  //   · 修复前：宽限到点服务自杀 ⇒ 本用例红（`page.reload` 30 秒超时或断言失败）；
+  //   · 修复后：重试那一发落在**新连接**上 ⇒ 登记成立 ⇒ 服务活着。
+  //
+  // **它不动"最后离开 → 自停"**：那条不变量归下面的用例 C 验（本用例结束后服务照旧活着，
+  // C 照旧把它关掉）。
+  await openApp(page, server);
+  let dropped = 0;
+  let attempts = 0;                                    // 浏览器一共发了几发（判据用这个）
+  let dropNext = false;
+  await page.route("**/api/tabs/register", async (route) => {
+    attempts++;
+    if (dropNext) {
+      dropNext = false;
+      dropped++;
+      await route.abort("failed");
+      return;
+    }
+    await route.continue().catch(() => {});
+  });
+  try {
+    const prevEpoch = await documentEpoch(page);       // 先取旧文档的实例令牌
+    const attemptsBefore = attempts;
+    dropNext = true;                                   // 只丢新文档那一发
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
+    await waitNewDocument(page, server, prevEpoch, "reload（丢一发登记）");
+    await waitReady(page, server);
+    assert.equal(dropped, 1, "注入没落上——本用例没有牙齿（一发登记都没被丢掉）");
+    // 判据取**浏览器发了几发**（`page.route` 数的是请求，不是服务端收到几发）：
+    // 重试若没发生，这一轮只会有 1 发（那 1 发还是被丢掉的那一发）。
+    assert.ok(attempts - attemptsBefore >= 2,
+      `新文档那一发登记被丢掉之后只有 ${attempts - attemptsBefore} 发请求——重试没发生`);
+    await sleep(GRACE_MS + 1500);                      // 让整个宽限窗口过去
+    assert.equal(server.proc.exitCode, null,
+      `一发登记被丢掉之后服务退出了（exit ${server.proc.exitCode}）——登记的失败没有被重试`
+      + `（服务端日志尾段：\n${logTail(server)}\n）`);
+    assert.ok(await serverAlive(server.url), "登记重试之后服务不健康");
+  } finally {
+    await page.unroute("**/api/tabs/register");
   }
 });
 

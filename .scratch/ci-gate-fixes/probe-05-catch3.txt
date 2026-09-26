@@ -1,0 +1,12 @@
+轮  1: pass=6 fail=0 用时=33s
+轮  2: pass=6 fail=0 用时=27s
+轮  3: pass=6 fail=0 用时=28s
+轮  4: pass=6 fail=0 用时=27s
+轮  5: pass=6 fail=0 用时=28s
+轮  6: pass=6 fail=0 用时=28s
+轮  7: pass=6 fail=0 用时=28s
+轮  8: pass=6 fail=0 用时=27s
+轮  9: pass=6 fail=0 用时=27s
+轮 10: pass=6 fail=0 用时=27s
+轮 11: pass=6 fail=0 用时=28s
+轮 12: pass=6 fail=0 用时=28s

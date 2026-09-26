@@ -1,0 +1,164 @@
+
+=== 套件 1：6/8 次 reload，**红**（后端 已退出 code=0）===
+  末轮 Node 侧时间轴（宽限 1500ms）：
+         0ms  —— 第 6 次 reload 开始 ——
+         4ms  GET / 发出
+        29ms  register 发出
+        30ms  /api/tabs/register 请求失败：net::ERR_CONNECTION_REFUSED
+        30ms  / 请求失败：net::ERR_CONNECTION_RESET
+     30009ms  reload 失败：page.reload: Timeout 30000ms exceeded.
+  末轮独立通道（health / 裸 TCP）：
+    +     3ms  health=200 tcp=1ms（探测耗时 3ms）
+    +   217ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    +   419ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    +   639ms  health=ERR:TypeError tcp=连不上（探测耗时 4ms）
+    +   853ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    +  1071ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    +  1289ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    +  1503ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    +  1720ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    +  1937ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    +  2140ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    +  2356ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    +  2570ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    +  2786ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    +  3005ms  health=ERR:TypeError tcp=连不上（探测耗时 4ms）
+    +  3220ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    +  3435ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    +  3651ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    +  3868ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    +  4084ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    +  4301ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    +  4503ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    +  4719ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    +  4935ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    +  5152ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    +  5354ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    +  5573ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    +  5789ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    +  6005ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    +  6222ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    +  6441ms  health=ERR:TypeError tcp=连不上（探测耗时 4ms）
+    +  6657ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    +  6861ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    +  7077ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    +  7294ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    +  7511ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    +  7726ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    +  7942ms  health=ERR:TypeError tcp=连不上（探测耗时 4ms）
+    +  8158ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    +  8377ms  health=ERR:TypeError tcp=连不上（探测耗时 5ms）
+    +  8591ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    +  8795ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    +  9013ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    +  9228ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    +  9430ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    +  9637ms  health=ERR:TypeError tcp=连不上（探测耗时 5ms）
+    +  9851ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 10067ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 10285ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 10502ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 10704ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 10920ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 11140ms  health=ERR:TypeError tcp=连不上（探测耗时 5ms）
+    + 11354ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 11570ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 11774ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 11990ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 12193ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 12407ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 12624ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 12841ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 13059ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 13262ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 13465ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 13668ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 13884ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 14100ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 14317ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 14520ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 14723ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 14939ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 15142ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 15359ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 15576ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 15792ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 15995ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 16211ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 16415ms  health=ERR:TypeError tcp=连不上（探测耗时 4ms）
+    + 16628ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 16845ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 17049ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 17265ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 17482ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 17699ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 17916ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 18133ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 18347ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 18564ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 18780ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 18997ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 19216ms  health=ERR:TypeError tcp=连不上（探测耗时 4ms）
+    + 19430ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 19648ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 19865ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 20082ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 20298ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 20515ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 20718ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 20933ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 21148ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 21365ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 21581ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 21798ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 22014ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 22230ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 22446ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 22664ms  health=ERR:TypeError tcp=连不上（探测耗时 4ms）
+    + 22867ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 23082ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 23299ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 23502ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 23719ms  health=ERR:TypeError tcp=连不上（探测耗时 4ms）
+    + 23934ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 24149ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 24366ms  health=ERR:TypeError tcp=连不上（探测耗时 4ms）
+    + 24570ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 24786ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 25001ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 25204ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 25408ms  health=ERR:TypeError tcp=连不上（探测耗时 4ms）
+    + 25625ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 25841ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 26055ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 26257ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 26474ms  health=ERR:TypeError tcp=连不上（探测耗时 4ms）
+    + 26689ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 26905ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 27121ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 27325ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 27538ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 27756ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 27974ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 28188ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 28392ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 28610ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 28828ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 29045ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 29248ms  health=ERR:TypeError tcp=连不上（探测耗时 3ms）
+    + 29465ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 29682ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+    + 29900ms  health=ERR:TypeError tcp=连不上（探测耗时 2ms）
+  服务端 /api/tabs/* 顺序: register → bye → register → bye → register → bye → register → bye → register → bye → register → bye
+  页面侧文档/请求记录: [["document-start",1790407661203.6],["fetch register",1790407661203.6,{"start":66,"end":69,"size":311,"status":200}],["pagehide",1790407661203.6],["document-start",1790407661753],["fetch register",1790407661753,{"start":22,"end":26,"size":311,"status":200}],["pagehide",1790407661753],["document-start",1790407662171.2],["fetch register",1790407662171.2,{"start":21,"end":24,"size":311,"status":200}],["pagehide",1790407662171.2],["document-start",1790407662818.5],["fetch register",1790407662818.5,{"start":29,"end":33,"size":311,"status":200}],["pagehide",1790407662818.5],["document-start",1790407663452],["fetch register",1790407663452,{"start":15,"end":18,"size":311,"status":200}],["pagehide",1790407663452],["document-start",1790407664090.6],["fetch register",1790407664090.6,{"start":16,"end":21,"size":311,"status":200}],["pagehide",1790407664090.6],["document-start",1790407664945.4],["fetch register",1790407664945.4,{"start":20,"end":24,"size":0,"status":0}]]
+  后端日志尾段:
+INFO:     127.0.0.1:13644 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:13644 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:13645 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:2376 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:10148 - "POST /api/tabs/bye HTTP/1.1" 200 OK
+
+[fixture] 后端进程退出（端口 7531）code=0 signal=null
+
+
+=== 小结：1/1 套件红 ===
