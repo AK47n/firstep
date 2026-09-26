@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=b5a9a3cbc34506646db8418f06125592388b5048 -->
+<!-- changelog-auto: last-commit=4cb67cc6b3791ab37b55c5ebc628f3b1e738f3fd -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -28,6 +28,7 @@
 - 17:41 ﻿账本：订正 v1.2.2 落差表里那句过期的「服务端零改动」（工单 05 收尾回执）
 - 19:40 账本：硬件检测评审报告 + 加固 spec 与工单面（P0+P1 七项）
 - 19:41 工单 hwcheck-hardening/01：配方不许再教学生改生成代码，守卫扩到整个配方文件
+- 19:44 工单 hwcheck-hardening/02：「未上板」说到每一格 + 页面上有一句总口径
 
 ## 2026-09-25
 - 00:21 工单 hwcheck-acceptance/01：mspm0 生成链认下 SysConfig 构建期接口面（那一行从注释占位变活代码）
