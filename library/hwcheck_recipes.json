@@ -33,7 +33,7 @@
       },
       "note": {
         "lines": [
-          "stm32 板载三色 LED 在 PC13 / PC14 / PC15，通道宏 LED_RED / LED_YELLOW / LED_GREEN 各占一路（led_instances.h 默认三通道）——三路都要看：灯在闪 = 程序在跑，灭的那一路说明那一路没接对。",
+          "stm32 板载三色 LED 在 PC13 / PC14 / PC15，通道宏 LED_RED / LED_YELLOW / LED_GREEN 各占一路（led_instances.h 默认三通道）——三路都要看：灯在闪 = 程序在跑，灭的那一路说明那一路没接对。多实例只验第一路：工程里配了 4 路 LED 时（生成器覆写 led_instances.h，通道数会大于 1），检测程序这一趟只驱动第一路（LED_RED）——通道数不是「每一路都验过」的意思，另外几路这一趟一个动作都没有。",
           "led_init() 是 void（没有返回值），所以本件**不判初始化返回值**；LED 又是纯输出件（没有可读的身份寄存器），板上判不了通断——本件的结论只看现象：灯按节奏闪就是好的。",
           "**未上板**：本格的结论只到「编译矩阵绿 + 页面清单与探头调用的静态核对」（本件不在板上打 OK / FAIL），真机上板验证还没做（与库内 manifest 的口径一致）。实测差异优先于本页参考值。"
         ]
@@ -72,7 +72,7 @@
       "note": {
         "lines": [
           "地猛星用户 LED 只有 PA15 一个（LED_BEEP 组，高电平点亮）。**本平台的驱动会把越界通道静默钳回通道 0**，所以这一版只测通道 0（LED_RED）——这里不写 LED_YELLOW / LED_GREEN，那两路在本平台其实还是同一颗灯，写了会让人以为板上有三路。",
-          "LED_CHANNEL_COUNT 就是本平台实际存在的通道数（单实例默认 1）：它小于宏里那三个别名是正常的，不是没测到。led_init() 是 void，本件不判返回值、也不判通断——只看灯闪不闪。",
+          "LED_CHANNEL_COUNT 就是本平台实际存在的通道数（单实例默认 1）：它小于宏里那三个别名是正常的，不是没测到。多实例只验第一路：就算工程里配了多路 LED，这一趟也只测第一路（通道 0）——回显的通道数说的是本工程有几路，不是「每一路都验过」。led_init() 是 void，本件不判返回值、也不判通断——只看灯闪不闪。",
           "**未上板**：本格的结论只到「编译矩阵绿 + 页面清单与探头调用的静态核对」（本件不在板上打 OK / FAIL），真机上板验证还没做（与库内 manifest 的口径一致）。实测差异优先于本页参考值。"
         ]
       }
@@ -490,7 +490,7 @@
           "默认引脚 = **PB3**（KEY_GPIO / KEY_PIN，母版 pin_config.h 单源；蓝药丸板上没有按键，这个脚要自己接一个按键到 GND，或在生成器里改绑）。key_init() 逐通道调用 gpio_init(端口, 脚, IU) 把它配成**内部上拉输入**——松开是高电平，按下被按键拉到低电平。",
           "key_init() 是 **void**（没有返回值）→ 本件**不判初始化返回值**（初始化那行只会显示「已调用（本件不判返回值）」）。它不返回东西 ≠ 没做事：上拉输入就是它配的。",
           "⚠ PB3 在 F103 上是 **JTDO / JTAG 复用脚**：库内代码只把它配成上拉输入，**没有动 SWJ_CFG**（「作 GPIO 需 SWJ_CFG 释放 JTAG」这条约束库内记在 pin_config.h 与 tests/test_default_layout.py 的注释里，key(PB3) / relay(PB4) / hc05(PB4) 同一口径）。万一读数**怎么按都不变**，除了查接线，把按键换到一个**普通 GPIO 脚**（改 pin_config.h 的 KEY_GPIO / KEY_PIN）再试一次——这一步最省事。",
-          "多通道：KEY_CHANNEL_COUNT 就是本工程真实的按键通道数（默认单实例 = 1）。默认下 KEY_STOP / KEY_MODE / KEY_SET 全是首通道的**别名**（越界通道被钳回首通道，见 key_instances.h 的注释），所以本件只读首通道；工程里配了多路按键时（生成器覆写 key_instances.h，KEY_CHANNEL_COUNT 会大于 1）同一函数换实参就是另一路：get_key_state(KEY_STOP) 读第 2 路。",
+          "多通道：KEY_CHANNEL_COUNT 就是本工程真实的按键通道数（默认单实例 = 1）。默认下 KEY_STOP / KEY_MODE / KEY_SET 全是首通道的**别名**（越界通道被钳回首通道，见 key_instances.h 的注释），所以本件只读首通道；多实例只验第一路（检测程序这一趟只驱动第一路，另外几路一个动作都没有）。工程里配了多路按键时（生成器覆写 key_instances.h，KEY_CHANNEL_COUNT 会大于 1）同一函数换实参就是另一路：get_key_state(KEY_STOP) 读第 2 路。",
           "**未上板**：本格的结论只到「编译矩阵绿 + 页面清单与探头调用的静态核对」（本件不在板上打 OK / FAIL），真机上板验证还没做（与库内 manifest 的口径一致）。实测差异优先于本页参考值。"
         ]
       }
@@ -544,7 +544,7 @@
           "检测程序开头**已经调了** `SYSCFG_DL_init()`（那一行是活代码，不需要你改 main.c）：它负责把 KEY 的输入方向配好——没配上的话读数不可信，那不是按键坏。",
           "key_init() 在本平台是**空实现**（头文件里声明成 void，key.c 里什么都不做——输入方向由 SysConfig 配、SYSCFG_DL_init 生效）；没有返回值可判，所以本件**不判初始化返回值**（初始化那行只显示「已调用（本件不判返回值）」）。",
           "母版 syscfg 里 KEY 实例只声明了 direction = INPUT、**没有配内部上拉**（对比 IR_BEAM / TTP224 / HX711 那些带 PULL_UP 的输入实例），多实例追加的 KEY_<实例号> 实例同样不配内部电阻——偏置靠板载（本件口径：PA2 板载偏置）。**改引脚改 mspm0.syscfg，不改 key_instances.h**。",
-          "多通道：KEY_CHANNEL_COUNT 就是本工程真实的按键通道数（默认单实例 = 1）。默认下 KEY_STOP / KEY_MODE / KEY_SET 全是首通道的**别名**（越界通道被钳回首通道，见 key_instances.h 的注释），所以本件只读首通道；工程里配了多路按键时（生成器改写 key_instances.h 与 syscfg，KEY_CHANNEL_COUNT 会大于 1）同一函数换实参就是另一路：get_key_state(KEY_STOP) 读第 2 路。",
+          "多通道：KEY_CHANNEL_COUNT 就是本工程真实的按键通道数（默认单实例 = 1）。默认下 KEY_STOP / KEY_MODE / KEY_SET 全是首通道的**别名**（越界通道被钳回首通道，见 key_instances.h 的注释），所以本件只读首通道；多实例只验第一路（检测程序这一趟只驱动第一路，另外几路一个动作都没有）。工程里配了多路按键时（生成器改写 key_instances.h 与 syscfg，KEY_CHANNEL_COUNT 会大于 1）同一函数换实参就是另一路：get_key_state(KEY_STOP) 读第 2 路。",
           "**未上板**：本格的结论只到「编译矩阵绿 + 页面清单与探头调用的静态核对」（本件不在板上打 OK / FAIL），真机上板验证还没做（与库内 manifest 的口径一致）。实测差异优先于本页参考值。"
         ]
       }

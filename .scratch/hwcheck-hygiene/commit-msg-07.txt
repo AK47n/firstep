@@ -1,0 +1,18 @@
+工单 hwcheck-hygiene/07：多实例只验首路——四格配方如实说，判据钉到渲染产物
+
+- library/hwcheck_recipes.json 四格（led / key × 两平台）各补一句自述：检测程序这一趟只驱动
+  第一路，回显的通道数不是「每一路都验过」的意思（逐字节锚点改，盘上仍是 LF / 3857 行）
+- 守卫（tests/test_hwcheck_recipe.py，4 条用例）：凡 multi_instance.max > 1 的格，
+  sections_payload（页面那份）与 render_recipe_section（产物那份）都要含「第一路」，
+  格清单精确等于四格；另有两条判据自证（否定式不许误报 / 肯定式必须报）
+- 载荷 → DOM 那一跳由前端门禁作证（hwcheck.test.mjs 真调 hwcheckSectionNoteHTML 读真配方）
+- 真浏览器那条既有用例补一句断言（读真 DOM 文本）——工单要的是「页面渲染出来的文本」
+- 反证三处（probe-07-red.py）：撤自述 → pytest 守卫红；把自述说成「每一路都验过了」→ 红；
+  撤自述 → 真浏览器用例红（test at tests\browser\hwcheck.spec.mjs:628）；三次复原 sha256 逐字节相同
+- 读数：全套 pytest 5603 passed + 11 skipped；前端门禁 1819 / 0；浏览器门禁 48 / 0；
+  两平台真编译矩阵 led/key 4 格全 PASS（0 error / 0 warning）
+- 双轴评审整改：判据与话术统一到两个常量（原「首通道也算数」与只认「第一路」自相矛盾）、
+  否定窗口从 6 字放宽到 12 字并单列常量、本单新写的四句去掉 markdown 标记（页面上就是字面星号）、
+  两份 .scratch 脚本的重复实现提成 patch_bytes.py
+- 记而不修：配方 note 里 354 条存量 markdown 标记（工单 02 只扫了 static/js，没扫库内数据）——
+  另开一张单，票尾写明

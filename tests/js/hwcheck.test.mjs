@@ -879,6 +879,31 @@ test("hwcheckSectionsHTML：文案转义（配方里出现 < > 也不破页面�
   assert.ok(out.includes("&lt;img&gt;"));
 });
 
+test("hwcheckSectionNoteHTML：多实例的实话说进 DOM，且本单新写的那句不带 markdown 标记（工单 07）", () => {
+  // 为什么这条在**前端**：工单 07 的判据要求"页面渲染出来的文本里"必须有一句"只验第一路"。
+  // pytest 那支（`tests/test_hwcheck_recipe.py`）只能看到服务端**载荷**（`sections_payload`），
+  // 载荷 → HTML 这最后一跳只有这里跑得动（`ui` 件进不了 python）。两跳都钉住，链条才算闭合。
+  //
+  // 数据取**真配方**（`library/hwcheck_recipes.json` 的 led × stm32）：判据要的是"学生
+  // 真会看到的那句话"，不是测试自己编的一句——编的那句绿了，真数据少一句照样漏。
+  const doc = JSON.parse(readFileSync(
+    new URL("../../library/hwcheck_recipes.json", import.meta.url), "utf8"));
+  const note = doc.led.stm32.note.lines;
+  const disclosure = note.filter((line) => line.includes("多实例只验"));
+  assert.equal(disclosure.length, 1, "led × stm32 应当有且只有一条多实例自述");
+  assert.ok(disclosure[0].includes("第一路"),
+    "自述要含「第一路」这一层意思（「通道数」那半句正是误导的来源）：\n" + disclosure[0]);
+  assert.ok(!disclosure[0].includes("**"),
+    "本单新写的这句带了 markdown 标记——`esc()` 之后就是两个字面星号：\n" + disclosure[0]);
+
+  const html = hwcheckSectionNoteHTML({ slug: "led", note });
+  assert.ok(html.includes("第一路"), "自述没进渲染产物：\n" + html);
+  assert.ok(html.includes("hwcheck-hint"), "平台说明按既有观感逐条印（不折叠）：\n" + html);
+  // 负向自证：渲染件读的是载荷，不编句子（换个 note 就不该有那句话）
+  assert.ok(!hwcheckSectionNoteHTML({ slug: "led", note: ["别的说明"] }).includes("第一路"));
+  assert.equal(hwcheckSectionNoteHTML({ slug: "led", note: [] }), "");
+});
+
 test("hwcheckUnspecializedHTML：没配方的件逐条点名 + 说清这一趟做什么（工单 07）", () => {
   const out = hwcheckUnspecializedHTML([
     {

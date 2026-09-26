@@ -1,0 +1,33 @@
+目标：library/hwcheck_recipes.json  前置 sha256：2519a0bf1a89bab9ffdc44a0cce619a4b5b4227268c2fcb2c01d46b864f7e9df  换行：LF
+判据用例：pytest → tests/test_hwcheck_recipe.py::test_every_multi_instance_recipe_cell_discloses_it_only_tests_the_first_channel
+判据用例：browser → tests/browser/hwcheck.spec.mjs（「专精小节：选上 led…」那条）
+前置检查：三处新形态锚点各命中预期次数 ✓
+
+=== A 自述整句撤掉（老形态）→ pytest 守卫 ===
+注入：1 处；注入后 sha256：2b3d06d58607e6c4f29c173a3b80cd54e1a2c8971c419fdadb891eb50e0ba33b（应不等于前置值）
+注入态读数：1 failed in 1.15s  退出码：1
+实得红（1 条）：
+  · tests/test_hwcheck_recipe.py::test_every_multi_instance_recipe_cell_discloses_it_only_tests_the_first_channel
+声明的用例红了 ✓
+复原 sha256：2519a0bf1a89bab9ffdc44a0cce619a4b5b4227268c2fcb2c01d46b864f7e9df  逐字节相同：✓
+复原态读数：1 passed in 1.10s  退出码：0  回绿：✓
+
+=== B 自述反过来（说成全验了）→ pytest 守卫 ===
+注入：2 处；注入后 sha256：499bc3e5765d04c625dafdb97038302ef0b17289c81f0527bac5a623ea3c1743（应不等于前置值）
+注入态读数：1 failed in 1.06s  退出码：1
+实得红（1 条）：
+  · tests/test_hwcheck_recipe.py::test_every_multi_instance_recipe_cell_discloses_it_only_tests_the_first_channel
+声明的用例红了 ✓
+复原 sha256：2519a0bf1a89bab9ffdc44a0cce619a4b5b4227268c2fcb2c01d46b864f7e9df  逐字节相同：✓
+复原态读数：1 passed in 0.92s  退出码：0  回绿：✓
+
+=== C 自述撤掉 → 真浏览器用例 ===
+注入：1 处；注入后 sha256：2b3d06d58607e6c4f29c173a3b80cd54e1a2c8971c419fdadb891eb50e0ba33b（应不等于前置值）
+注入态读数：ℹ fail 1  退出码：1
+实得红（1 条）：
+  · 专精小节：选上 led 就在检测计划里出 [专精] 小节（未专精件不在这里）
+声明的用例红了 ✓
+复原 sha256：2519a0bf1a89bab9ffdc44a0cce619a4b5b4227268c2fcb2c01d46b864f7e9df  逐字节相同：✓
+复原态读数：ℹ fail 0  退出码：0  回绿：✓
+
+结论：PASS —— 载荷侧与页面侧的判据都有强度，且探针未留下任何改动

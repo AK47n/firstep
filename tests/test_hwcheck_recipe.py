@@ -49,6 +49,16 @@ from tests._c_escape import decode_c_string
 REAL_LIBRARY = Path(__file__).resolve().parents[1] / "library" / "modules"
 REAL_MASTERS = Path(__file__).resolve().parents[1] / "library" / "masters"
 
+# 多实例格的如实自述（工单 hwcheck-hygiene/07）——判据与数据共用的两个串。
+# `_MULTI_INSTANCE_MARKER` = 学生必须看到的那一层意思（判据只认这两个字，
+# **不许**把断言放松成"含『通道』就行"，那句话已经在页面上、正是误导的来源）；
+# `_MULTI_INSTANCE_PHRASE` = 本单写的整句开头（用来定位"这一句"，
+# 好把它与存量 354 条带 markdown 标记的 note 分开判）。
+# 三者（数据 / 判据 / 报错话术）现在说的是同一件事；上一版报错里写"「首通道」也算数"
+# 而判据只认"第一路"，是双轴评审抓到的一处自相矛盾。
+_MULTI_INSTANCE_MARKER = "第一路"
+_MULTI_INSTANCE_PHRASE = "多实例只验"
+
 # 真实库的 pilot 清单（spec「v1 专精范围」）——地板断言的判据。
 # 工单 05 起加上 ml_mpu6050 × 两个平台（**平台不对称**：stm32 只有原始六轴、
 # mspm0 走官方 DMP 出角度）；工单 09 起把 v1 清单**补齐并全部钉死**（10 件 /
@@ -1273,6 +1283,145 @@ def test_every_real_recipe_note_marks_unverified_with_the_same_clause():
     assert not missing, (
         f"这些格的末条自述不是同一条说法（缺「**未上板**」或「真机上板验证还没做」）：{missing}"
     )
+
+
+def _multi_instance_overclaims(text: str) -> list[str]:
+    """一段**页面文本**里把"只验第一路"说成"全验了"的肯定式命中（判据本体）。
+
+    单独立函数是为了能**单独自证**（`test_multi_instance_overclaim_predicate_*`）：
+    这条判据有两处容易写歪的地方，都拿合成文本钉住——
+
+    * 半截词整串匹配会把**否定式**判成违规：本轮那两句实话正是
+      "通道数不是「每一路都验过」的意思"（产品文案必须能这么写）；
+    * 只列完整断言又会让"每一路都测过了"这种说法漏网（它不是"验过"）。
+
+    ⚠ **它是一条绊线，不是语义判据**：只认这几个词组、只在**断言前那一段**（到上一个小句
+    边界为止，封顶 `_NEGATION_WINDOW` 字）里找否定词，换个说法（"四路都验过了"）照样能溜
+    过去。真要"任何措辞都抓得住"得判语义，那不是测试该干的事——所以另一条腿是**正向**的
+    （必须出现自述），这条只负责拦住最像的几种反话。
+    """
+    claims = ("已验全部", "全部通道", "每一路都验过", "每一路都测过")
+    hits: list[str] = []
+    for claim in claims:
+        start = text.find(claim)
+        while start != -1:
+            # 否定词的判据窗口 = 断言**往前一整句**（到上一个小句边界为止，再用
+            # _NEGATION_WINDOW 封顶）：只看"紧挨着的 6 个字"会在「并不能说明每一路都验过」
+            # 这种写法上漏判——而那正是这条判据存在的理由（评审实测）。
+            head = text[max(0, start - _NEGATION_WINDOW):start]
+            if not any(neg in head for neg in _NEGATIONS):
+                hits.append(f"…{text[max(0, start - 8):start]}{claim}…")
+            start = text.find(claim, start + 1)
+    return hits
+
+
+# 否定词的判据窗口（断言前多少字之内找否定词）。单列成常量是为了让"我放宽到多少"这件事
+# 在文件里看得见（原先写死 `start - 6`，评审判为无出处的魔数）：**12 字**刚好覆盖本轮那两种
+# 写法（"不是「" / "并不能说明"），再放宽就会把"这不是第一路的问题，四路都验过了"这种
+# **同句反话**也豁免掉——绊线宜紧不宜松，宁可偶发误报（报错了改文案）也不漏报。
+_NEGATION_WINDOW = 12
+_NEGATIONS = ("不是", "并非", "不等于", "非", "不", "没", "未")
+
+
+def test_multi_instance_overclaim_predicate_accepts_the_honest_negation():
+    """判据自证①：**否定式**（"通道数不是「每一路都验过」的意思"）不算违规。
+
+    为什么值得单独钉：这条判据整串匹配"每一路都验过"时，本轮那两句实话会被自己
+    判红——判据写歪了却表现得像数据有问题，最费时间的一种红。
+    """
+    assert _multi_instance_overclaims(
+        "多实例只验第一路：回显的通道数不是「每一路都验过」的意思。") == []
+    assert _multi_instance_overclaims(
+        "多实例只验第一路：通道数并非每一路都验过。") == []
+    # 否定词与断言之间夹着别的字（评审实测的那一处写法）也要认出来
+    assert _multi_instance_overclaims(
+        "多实例只验第一路：通道数并不能说明每一路都验过。") == []
+    assert _multi_instance_overclaims(
+        "多实例只验第一路：这四个字不等于每一路都验过。") == []
+
+
+def test_multi_instance_overclaim_predicate_rejects_the_positive_claim():
+    """判据自证②：**肯定式**必须报出来（含"测过"这一支，别只认"验过"）。"""
+    assert _multi_instance_overclaims("本件已验全部通道，放心用。")
+    assert _multi_instance_overclaims("多实例每一路都验过了。")
+    assert _multi_instance_overclaims("多实例每一路都测过了。")
+    assert _multi_instance_overclaims("全部通道都测了。")
+    assert _multi_instance_overclaims("只验第一路，别的都好好的。") == []
+
+
+def test_every_multi_instance_recipe_cell_discloses_it_only_tests_the_first_channel():
+    """凡声明多实例（`multi_instance.max > 1`）的格，**页面拿到的文本**必须如实说"只验第一路"
+    （工单 hwcheck-hygiene/07）。
+
+    为什么要这条：`led` / `key` 的 manifest 声明了 `max = 8`（生成页能给 8 路实例），
+    而检测配方只有"通道"这一维——`led_init(LED_RED)` / `get_key_state(KEY_START)`
+    **只驱动第一路**，另外几路这一趟一个动作都没有。页面上却照旧回显 `LED_CHANNEL_COUNT` /
+    `KEY_CHANNEL_COUNT`（"本工程有 4 路"）——学生装了 4 个 LED，只看见 1 个被验过，
+    而回显的通道数让他以为 4 个都验了。这不是配方写漏，是**能力缺口**（按实例展开要动
+    配方 schema，见 spec「范围外」），所以本轮只把这句缺口如实写出来。
+
+    判据取**渲染产物**而不是 JSON 字段（照 `test_every_real_recipe_cell_discloses_its_on_board_status`
+    的先例）：`sections_payload` 是页面读的那一份，`render_recipe_section` 是检测程序那一份——
+    note 里写了、却没进这两个出口，学生照样看不到。（载荷 → DOM 那最后一跳由前端门禁
+    `tests/js/hwcheck.test.mjs::hwcheckSectionNoteHTML…多实例` 作证，那支才跑得动 `ui` 件。）
+
+    与「未上板」那条**不许互相顶替**：那条说"没上过板"，这条说"只验了第一路"，
+    两件事各自说自己那件；把「未上板」那句抄过来当自述不算数，页顶那条总口径
+    （`fx/hwcheck.js` 的 `hwcheckUnverifiedNoteHTML`）同理——它一个字都不含 `_MULTI_INSTANCE_MARKER`。
+
+    ⚠ 判据面是**声明了多实例、且这一格可用**的格（与「未上板」那条同款 `usable` 门）。
+    不可用 = 配方残缺（`validate_recipes` 在加载期就红了），不是本条的判据面。
+    """
+    from contest_generator.library import list_modules
+
+    manifests = list_modules(REAL_LIBRARY)
+    recipes = load_recipes(
+        REAL_LIBRARY, manifests, _library_interfaces_all(REAL_LIBRARY, manifests))
+    multi = [m for m in manifests if m.multi_instance and m.multi_instance.max > 1]
+    assert multi, "库内一件多实例模块都没有——本条前提变了（判据要跟着改，不是删掉）"
+
+    missing: list[str] = []
+    overstated: list[str] = []
+    marked_up: list[str] = []
+    covered: list[str] = []
+    for manifest in multi:
+        catalog = recipes.get(manifest.slug)
+        assert catalog is not None, (
+            f"{manifest.slug} 声明了多实例（max = {manifest.multi_instance.max}）"
+            "却没有配方——页面连「这一件测不测得了」都说不出")
+        for platform, section in catalog.sections.items():
+            if not section.usable:
+                continue
+            where = f"{manifest.slug} × {platform}"
+            # 两个出口都要：`sections_payload` = 页面读的那一份（前端逐条印成 `.hwcheck-hint`），
+            # `render_recipe_section` = 检测程序那一份（注释块）。
+            notes = [line for row in sections_payload([section]) for line in row["note"]]
+            page = "\n".join(notes)
+            program = "\n".join(render_recipe_section(section))
+            covered.append(where)
+            if _MULTI_INSTANCE_MARKER not in page or _MULTI_INSTANCE_MARKER not in program:
+                missing.append(where)
+            # 本单新写的那一句不许带 markdown 标记：前端 `esc()` 之后就是两个字面星号
+            # （工单 02 的口径）。存量 354 条 note 都带标记，那是**另一张单**的账——
+            # 这里只钉自己新写的（自述起点之后的那一句），别把整条 note 判成违规。
+            honest = [line for line in notes if _MULTI_INSTANCE_PHRASE in line]
+            assert honest, f"{where}：自述不在任何一条 note 里（下面的 missing 会说）"
+            marked_up += [where] if any(
+                "**" in line[line.index(_MULTI_INSTANCE_PHRASE):] for line in honest) else []
+            overstated += [f"{where}：{hit}" for hit in _multi_instance_overclaims(page)]
+    assert set(covered) == {"led × stm32", "led × mspm0", "key × stm32", "key × mspm0"}, (
+        f"多实例格的清单变了（现在 {sorted(covered)}）——判据要按实况核一遍，"
+        "不是把断言删掉")
+    assert not marked_up, (
+        "本单新写的那句带了 markdown 标记（页面上就是两个字面星号）：" + str(marked_up))
+    assert not missing, (
+        "这些格声明了多实例，页面上却没说「" + _MULTI_INSTANCE_MARKER + "」：" + str(missing)
+        + "——补一条放在平台说明里（页面与检测程序都会印出来），整句要含"
+          "「只验第一路」这一层意思，别只写「通道数」（那正是让人误读成"
+          "「每一路都验过」的半句）"
+    )
+    assert not overstated, (
+        "这些格把「只验一路」说成了「全验了」：" + str(overstated))
 
 
 @pytest.mark.parametrize("slug", ["sr04", "jy61p", "xunji"])
