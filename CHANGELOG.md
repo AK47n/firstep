@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=aa288b358cf38b98846f1f6fae51e2a53ce15b24 -->
+<!-- changelog-auto: last-commit=be30123035536ac73e2b1219ace8b7950854f6ba -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -26,6 +26,7 @@
 - 17:34 账本：ci-gate-fixes/06 收口——本 spec 的 01–11 全部 resolved，没有单留在 frontier 上
 - 17:34 账本：把「多两笔」改成「别把数量写死」（写完就被自己的 CHANGELOG 提交作废——本轮踩到的正是这条）
 - 17:41 ﻿账本：订正 v1.2.2 落差表里那句过期的「服务端零改动」（工单 05 收尾回执）
+- 19:40 账本：硬件检测评审报告 + 加固 spec 与工单面（P0+P1 七项）
 
 ## 2026-09-25
 - 00:21 工单 hwcheck-acceptance/01：mspm0 生成链认下 SysConfig 构建期接口面（那一行从注释占位变活代码）
