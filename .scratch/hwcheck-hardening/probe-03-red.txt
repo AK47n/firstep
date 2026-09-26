@@ -1,4 +1,4 @@
-hwcheck.py sha256（跑之前）= 6ba1ab33174f1eb99ebb37769fb49bf55ead95caa92a6a4cb675e3df0ba7dd10
+hwcheck.py sha256（跑之前）= 0ad49c1e2e2642e312f32de60b4b1ad7e32f0a0e34785332ec86ecac898413aa
 ✓ 前置干净性检查：旧话术当前不在产品文案里
 塞回旧话术后跑口径守卫：exit=1
 —— pytest 输出（尾部 8 行）——
@@ -9,8 +9,8 @@ E                 ?                  ++
 tests\test_hwcheck.py:524: AssertionError
 =========================== short test summary info ===========================
 FAILED tests/test_hwcheck.py::test_oled_copy_never_promises_more_than_the_screen_can_do
-1 failed in 0.16s
+1 failed in 0.19s
 判据结论 = ✓ 用例红了（守卫有强度）
-hwcheck.py sha256（复原后）= 6ba1ab33174f1eb99ebb37769fb49bf55ead95caa92a6a4cb675e3df0ba7dd10
+hwcheck.py sha256（复原后）= 0ad49c1e2e2642e312f32de60b4b1ad7e32f0a0e34785332ec86ecac898413aa
 复原复核 = ✓ 逐字节相同
 复原后跑口径守卫：exit=0（应为 0）

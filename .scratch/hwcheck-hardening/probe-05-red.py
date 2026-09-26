@@ -30,7 +30,7 @@ BLOCK = re.compile(r'("candidates": \[)(?P<body>[^\]]*?)(?P<closing>\n(?P<indent
 def _run_test() -> tuple[int, str]:
     done = subprocess.run(
         [os.sys.executable, "-m", "pytest", TEST, "-q"],
-        cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
+        cwd=ROOT, capture_output=True, text=True, encoding="utf-8", timeout=180,
         env={**os.environ, "PYTHONIOENCODING": "utf-8"},
     )
     return done.returncode, (done.stdout or "") + (done.stderr or "")
@@ -80,8 +80,8 @@ def main() -> int:
         lines.append(f'撤掉池位后跑「全勾满」守卫：exit={code}')
         lines.append("—— pytest 输出（尾部 8 行）——")
         lines.extend(output.strip().splitlines()[-8:])
-        lines.append("判据结论 = " + ("✓ 用例红了（守卫有强度）" if code != 0 else "✗ 用例照样绿（守卫是摆设）"))
-        if code == 0:
+        lines.append("判据结论 = " + ("✓ 用例红了（守卫有强度）" if (code == 1 and "fail" in output) else "✗ 用例照样绿（守卫是摆设）"))
+        if not (code == 1 and "fail" in output):
             verdict = 1
     finally:
         RECIPE.write_bytes(original)

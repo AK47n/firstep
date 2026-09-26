@@ -1,4 +1,4 @@
-配方文件 sha256（跑之前）= 60df164f55061f065f5e16dd6ad69d42f1450b50aa94bf57b400e26c1b71815a
+配方文件 sha256（跑之前）= 1e521244eb24053aee1ad9e66e3d748a461491a0dd404695b92da71f6468fa27
 换行形态 = LF（逐字节读写，不改换行）
 ✓ 前置干净性检查：行上是短量纲；长口径只剩平台说明里那一处
 塞回长量纲后跑守卫：exit=1
@@ -10,8 +10,8 @@ E       assert not [(249, 'debug_uart × stm32', 'gpio_get(DEBUG_UART_RX_GPIO, D
 tests\test_hwcheck_recipe.py:696: AssertionError
 =========================== short test summary info ===========================
 FAILED tests/test_hwcheck_recipe.py::test_every_real_read_line_fits_the_device_line_buffer
-1 failed in 0.60s
+1 failed in 0.63s
 判据结论 = ✓ 用例红了（守卫有强度）
-配方文件 sha256（复原后）= 60df164f55061f065f5e16dd6ad69d42f1450b50aa94bf57b400e26c1b71815a
+配方文件 sha256（复原后）= 1e521244eb24053aee1ad9e66e3d748a461491a0dd404695b92da71f6468fa27
 复原复核 = ✓ 逐字节相同
 复原后跑守卫：exit=0（应为 0）

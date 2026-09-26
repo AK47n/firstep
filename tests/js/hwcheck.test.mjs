@@ -790,7 +790,10 @@ test("ui 的三处清预览：换平台 / 换通道 / **预览失败**（工单 
   // 所以预览失败之后留着的那份属于**上一组器件**——照它去编译烧录就是烧错东西。
   const ui = readFileSync(
     new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
-  const clears = ui.match(/hwcheckUI\.preview = ""/g) || [];
+  // **先剥注释再数**（工单 hwcheck-hardening/10）：直接数原文的话，留一句注释就能凑数——
+  // 同一批新写的那条结构钉已经这么做了，这条是补课。
+  const code = ui.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+  const clears = code.match(/hwcheckUI\.preview = ""/g) || [];
   assert.equal(clears.length, 3,
     "三处清预览：换平台 / 换通道（渲染输入变了）+ 预览失败（那份属于上一组器件）");
   // 失败路径必须用专用文案，且不再借用"接线表取不到"

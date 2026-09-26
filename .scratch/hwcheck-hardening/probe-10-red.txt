@@ -1,0 +1,23 @@
+=== 工单 hwcheck-hardening/10：两条守卫的补课反证 ===
+
+—— 撤「数据守卫：撤掉一格的「未上板」标记」（hwcheck_recipes.json，sha256 1e521244eb24…）——
+   撤掉修复后跑守卫：exit=1
+   tests\test_hwcheck_recipe.py:1245: AssertionError
+   =========================== short test summary info ===========================
+   FAILED tests/test_hwcheck_recipe.py::test_every_real_recipe_cell_discloses_its_on_board_status
+   1 failed in 0.63s
+   判据结论 = ✓ 用例红了（守卫有强度）
+   复原复核 = ✓ 逐字节相同
+   复原后跑守卫：exit=0（应为 0）
+
+—— 撤「顺序守卫：把读数行换回「横幅在前」」（hwcheck_recipe.py，sha256 8f34298a6dab…）——
+   撤掉修复后跑守卫：exit=1
+   tests\test_hwcheck_recipe.py:763: AssertionError
+   =========================== short test summary info ===========================
+   FAILED tests/test_hwcheck_recipe.py::test_read_line_puts_the_value_before_the_source_expression
+   1 failed in 0.14s
+   判据结论 = ✓ 用例红了（守卫有强度）
+   复原复核 = ✓ 逐字节相同
+   复原后跑守卫：exit=0（应为 0）
+
+总结论 = ✓ 两条守卫都真红、都逐字节复原

@@ -34,7 +34,7 @@ NEEDLE = re.compile(
 
 def _run_js() -> tuple[int, str]:
     done = subprocess.run(
-        CMD, cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
+        CMD, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", timeout=180,
         env={**os.environ, "PYTHONIOENCODING": "utf-8"}, shell=True,
     )
     return done.returncode, (done.stdout or "") + (done.stderr or "")
@@ -65,8 +65,8 @@ def main() -> int:
         lines.append(f"撤掉清预览后跑前端用例：exit={code}")
         lines.append("—— node --test 输出（尾部 10 行）——")
         lines.extend(output.strip().splitlines()[-10:])
-        lines.append("判据结论 = " + ("✓ 用例红了（结构钉有强度）" if code != 0 else "✗ 用例照样绿（守卫是摆设）"))
-        if code == 0:
+        lines.append("判据结论 = " + ("✓ 用例红了（结构钉有强度）" if (code == 1 and "fail" in output) else "✗ 用例照样绿（守卫是摆设）"))
+        if not (code == 1 and "fail" in output):
             verdict = 1
     finally:
         UI.write_bytes(original)

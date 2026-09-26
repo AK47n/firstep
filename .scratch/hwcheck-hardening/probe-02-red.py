@@ -13,18 +13,19 @@ from __future__ import annotations
 import hashlib
 import os
 import pathlib
+import re
 import subprocess
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 UI = ROOT / "src" / "contest_generator" / "static" / "js" / "ui" / "hwcheck.js"
 OUT = pathlib.Path(__file__).with_name("probe-02-red.txt")
-CALL = "  renderHwcheckUnverifiedNote();\n"
+CALL = re.compile(r"  renderHwcheckUnverifiedNote\(\);\r?\n")
 
 
 def _run_js() -> tuple[int, str]:
     done = subprocess.run(
         ["node", "--test", "tests/js/hwcheck.test.mjs"],
-        cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
+        cwd=ROOT, capture_output=True, text=True, encoding="utf-8", timeout=180,
         env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         shell=True,
     )
@@ -38,7 +39,7 @@ def main() -> int:
     text = original.decode("utf-8")
     lines.append(f"ui/hwcheck.js sha256（跑之前）= {before}")
 
-    if CALL not in text:
+    if not CALL.search(text):
         lines.append("✗ 前置干净性检查失败：那一行调用本来就不在，反证没有意义。")
         OUT.write_text("\n".join(lines), encoding="utf-8")
         return 2
@@ -46,13 +47,13 @@ def main() -> int:
 
     verdict = 0
     try:
-        UI.write_bytes(text.replace(CALL, "", 1).encode("utf-8"))
+        UI.write_bytes(CALL.sub("", text, count=1).encode("utf-8"))
         code, output = _run_js()
         lines.append(f"撤掉渲染后跑前端用例：exit={code}")
         lines.append("—— node --test 输出（尾部 10 行）——")
         lines.extend(output.strip().splitlines()[-10:])
-        lines.append("判据结论 = " + ("✓ 用例红了（结构钉有强度）" if code != 0 else "✗ 用例照样绿（守卫是摆设）"))
-        if code == 0:
+        lines.append("判据结论 = " + ("✓ 用例红了（结构钉有强度）" if (code == 1 and "fail" in output) else "✗ 用例照样绿（守卫是摆设）"))
+        if not (code == 1 and "fail" in output):
             verdict = 1
     finally:
         UI.write_bytes(original)
