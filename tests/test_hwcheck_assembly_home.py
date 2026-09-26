@@ -39,8 +39,11 @@ _ALLOWED_HWCHECK_IMPORTS: dict[str, frozenset[str]] = {
     }),
     "hwcheck_triage": frozenset({
         "build_triage_context", "fallback_advice", "read_hwcheck_record",
-        "record_with_advice", "record_with_checked", "record_with_symptom",
-        "write_hwcheck_record",
+        "record_with_checked", "record_with_triage", "update_hwcheck_record",
+        # 记录的读写原语与上面 `archive_custom_devices` 同族（工单 hwcheck-hygiene/03
+        # 起写侧收敛成 `update_hwcheck_record` + 按字段合并 `record_with_triage`：
+        # 两个端点都走"读-改-写整段进短临界区"，`write_hwcheck_record` / `record_with_symptom`
+        # / `record_with_advice` 从此不该再直接出现在 webapp 的 import 面上）。
     }),
 }
 

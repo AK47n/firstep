@@ -942,7 +942,9 @@ export function hwcheckCanTriage(state) {
 }
 
 // hwcheckTriagePayload(state)：排障请求体（工程目录 / 现象 / 当前勾选）。
-// 勾选随请求走（与页面上显示的是同一份）——服务端据此落盘，刷新后回显。
+// 勾选随请求走（与页面上显示的是同一份）——服务端把它当**上下文**用（模型看得到
+// 哪些还验），并在"这几秒里没人动过记录"时顺带落盘（工单 hwcheck-hygiene/03：
+// 排障期间学生在页面上勾的那几条由清单端点写，比这份快照新，不许被盖掉）。
 export function hwcheckTriagePayload(state) {
   return {
     output_dir: String((state && state.project && state.project.outputDir) || ""),

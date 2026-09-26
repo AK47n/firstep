@@ -17,10 +17,14 @@
 from __future__ import annotations
 
 import json
+import os
+import threading
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from contest_generator import hwcheck_triage
 from contest_generator.hwcheck_errors import HwCheckError
 from contest_generator.hwcheck_triage import (
     ADVICE_VERDICTS,
@@ -37,7 +41,9 @@ from contest_generator.hwcheck_triage import (
     record_with_advice,
     record_with_checked,
     record_with_symptom,
+    record_with_triage,
     triage_context_text,
+    update_hwcheck_record,
     write_hwcheck_record,
 )
 from contest_generator.platforms import PLATFORM_STM32
@@ -459,9 +465,14 @@ def test_record_advice_survives_unknown_extra_fields(tmp_path):
 
 
 def test_record_write_is_atomic_and_leaves_no_tmp(tmp_path):
-    """原子写：落盘后不留 .tmp 半成品。"""
+    """原子写：落盘后不留 .tmp 半成品。
+
+    判据用"目录里除记录文件外一个文件都没有"（工单 hwcheck-hygiene/03 起临时名带
+    pid + 计数，`glob("*.tmp")` 那版匹配不到新名字 = 断言空转）。
+    """
     write_hwcheck_record(tmp_path, record_with_symptom(empty_record(), "现象"))
-    assert list(tmp_path.glob("*.tmp")) == []
+    leftovers = [p.name for p in tmp_path.iterdir() if p.name != HWCHECK_RECORD_FILENAME]
+    assert leftovers == [], f"落盘后留下了临时文件：{leftovers}"
 
 
 def test_record_path_is_relative_to_the_project_dir(tmp_path):
@@ -471,6 +482,142 @@ def test_record_path_is_relative_to_the_project_dir(tmp_path):
     )
     assert written.parent == Path(tmp_path)
     assert written.name == HWCHECK_RECORD_FILENAME
+
+
+# ---------------------------------------------------------------------------
+# 记录写的正确性形状：唯一临时名 + 原子替换 + 短临界区（工单 hwcheck-hygiene/03）
+#
+# 收走前的形状（本单要挡的）：固定临时名 `…json.tmp` + 无锁的"读-改-写"。
+# 后果两条：① 两个写者抢同一个 `.tmp`（一个刚写完、另一个把同一文件截断，
+# `replace` 落盘的可能就是半成品，或后一个的 `replace` 直接失败）；
+# ② 两处入口各自读一份旧记录再整份写回 → 后写的那笔把先写的那笔盖掉。
+# ---------------------------------------------------------------------------
+
+
+def test_record_write_failure_leaves_no_tmp_residue(tmp_path):
+    """坏写不许留半成品：替换失败时 `.tmp` 必须被清掉（收走前会留在工程根里）。"""
+    with pytest.raises(OSError):
+        # 目标是个**目录** → 替换必然失败（不管实现用 os.replace 还是 Path.replace）
+        (tmp_path / HWCHECK_RECORD_FILENAME).mkdir()
+        write_hwcheck_record(tmp_path, record_with_symptom(empty_record(), "现象"))
+    leftovers = [p.name for p in tmp_path.iterdir() if p.name != HWCHECK_RECORD_FILENAME]
+    assert leftovers == [], f"写失败后留下了临时文件：{leftovers}"
+
+
+def test_concurrent_record_writes_share_no_tmp_file(tmp_path, monkeypatch):
+    """两个写者并发：**不许抢同一个临时名**——收走前抢了，先来的那个 `replace` 会落空。
+
+    确定性做法：把**第一个** `replace` 卡住（此刻它的临时文件还在盘上），让第二个写者
+    从头走完一遍。
+    · 收走前（固定名 `…json.tmp`）：第二个写者把**同一个**临时文件截断重写成自己的内容并
+      替换掉；第一个放行后 `replace` 的源文件已经不在 → 报错（学生看到的就是"勾选存不上"）；
+    · 收走后（pid + 计数）：各写各的临时文件，两个都落盘成功，目录里零残留。
+
+    补丁**只打在目标模块看到的 `os` 上**（不是全局 `os.replace`）：本机同时跑着别的
+    测试线程时，全局补丁会被"第一发 `replace`"这种跨用例的噪音消费掉（实测过一次偶发）。
+    """
+    first_inside = threading.Event()
+    release = threading.Event()
+    calls = {"n": 0}
+    real_replace = os.replace
+
+    def slow_replace(src, dst):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            first_inside.set()
+            assert release.wait(timeout=30), "等不到放行——判据自己失败，别挂住整场"
+        return real_replace(src, dst)
+
+    # 目标模块用的是 `os.replace` / `os.path` / `os.getpid`：整份换成一个"只看得到本模块"的替身
+    monkeypatch.setattr(
+        hwcheck_triage,
+        "os",
+        SimpleNamespace(path=os.path, getpid=os.getpid, replace=slow_replace),
+    )
+
+    errors: list[BaseException] = []
+
+    def writer(tag: str) -> None:
+        try:
+            write_hwcheck_record(tmp_path, record_with_symptom(empty_record(), tag))
+        except BaseException as exc:  # noqa: BLE001 —— 线程里的异常要带回主线程断言
+            errors.append(exc)
+
+    first = threading.Thread(target=writer, args=("先到的",), daemon=True)
+    first.start()
+    assert first_inside.wait(timeout=30), "第一个写者没走到替换那一步"
+    second = threading.Thread(target=writer, args=("后到的",), daemon=True)
+    second.start()
+    release.set()
+    first.join(timeout=30)
+    second.join(timeout=30)
+
+    assert errors == [], f"并发写报错（临时名互抢）：{errors!r}"
+    leftovers = [p.name for p in tmp_path.iterdir() if p.name != HWCHECK_RECORD_FILENAME]
+    assert leftovers == [], f"并发写留下了残留：{leftovers}"
+    assert read_hwcheck_record(tmp_path).symptom in {"先到的", "后到的"}
+
+
+def test_update_hwcheck_record_does_not_lose_a_concurrent_field_write(tmp_path):
+    """读-改-写整段在临界区里：A 写现象、B 写勾选同时进行 → **两笔都在**。
+
+    确定性做法（照 `tests/test_full_task.py` 的并发先例）：把 A 卡在它自己的合并里
+    （已进临界区），B 这时候进来。
+    · 收走前（无锁、各自读一份再整份写回）：B 读到的是**空记录**（A 还没写），
+      于是 B 落盘的只有勾选；A 随后落盘只有现象 → B 那笔丢了；
+    · 收走后：B 在锁上等，A 写完它才**重读**——勾选与现象两笔都在。
+    """
+    entered = threading.Event()
+    release = threading.Event()
+
+    def slow_symptom(record):
+        entered.set()
+        assert release.wait(timeout=30), "等不到放行——判据自己失败，别挂住整场"
+        return record_with_symptom(record, "灯常亮不闪")
+
+    first = threading.Thread(
+        target=lambda: update_hwcheck_record(tmp_path, slow_symptom), daemon=True
+    )
+    first.start()
+    assert entered.wait(timeout=30), "第一个写者没进临界区"
+
+    second = threading.Thread(
+        target=lambda: update_hwcheck_record(
+            tmp_path, lambda r: record_with_checked(r, ["heartbeat", "flash"])
+        ),
+        daemon=True,
+    )
+    second.start()
+    release.set()
+    first.join(timeout=30)
+    second.join(timeout=30)
+
+    on_disk = read_hwcheck_record(tmp_path)
+    assert on_disk.symptom == "灯常亮不闪", "现象那笔丢了"
+    assert on_disk.checked_ids == ("heartbeat", "flash"), "勾选那笔丢了（后写的盖掉了先写的）"
+
+
+def test_record_with_triage_skips_the_stale_checked_snapshot(tmp_path):
+    """排障那笔按字段合并：LLM 窗口里别人改过勾选 → **不写**我们手上那份旧快照。
+
+    `base` = 调模型**之前**读到的那份；临界区里重读到的不等于它 = 这几秒里有人写过。
+    """
+    advice = parse_triage_advice(_advice(), _context())
+    base = record_with_checked(empty_record(), ["flash"])
+    fresh = record_with_checked(base, ["flash", "heartbeat"])  # 别人在窗口里又勾了一条
+
+    merged = record_with_triage(
+        fresh, base=base, symptom="灯常亮不闪", checked_ids=["flash"], advice=advice
+    )
+    assert merged.checked_ids == ("flash", "heartbeat"), "旧快照盖掉了别人的新勾选"
+    assert merged.symptom == "灯常亮不闪"
+    assert merged.advice == advice
+
+    # 反向：窗口里**没人动过**（重读到的就是 base）→ 我们这份勾选仍是最新的，照写
+    same = record_with_triage(
+        base, base=base, symptom="灯常亮不闪", checked_ids=["flash", "oled"], advice=advice
+    )
+    assert same.checked_ids == ("flash", "oled")
 
 
 # ---------------------------------------------------------------------------

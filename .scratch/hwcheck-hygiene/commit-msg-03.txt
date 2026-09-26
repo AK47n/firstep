@@ -1,0 +1,15 @@
+工单 hwcheck-hygiene/03：检测记录的写 = 唯一临时名 + 原子替换 + 短临界区（并发两处入口不丢更新）
+
+- 唯一临时名：write_hwcheck_record 改 `…json.tmp-<pid>-<进程内计数>` + os.replace + finally 清残渣
+  （仓内先例 codeview.py 只带 pid；同进程两个写者也要不同名）
+- 短临界区：新增 _record_lock（按记录路径，键 normcase(abspath()) 归一）+ update_hwcheck_record
+  （重读 → 合并 → 写）；清单端点与排障端点都改走它
+- 按字段合并：新增 record_with_triage —— 现象/建议是本笔的，勾选只有在"模型思考那几秒里没人
+  动过记录"时才照写（旧快照不许盖掉学生在窗口里勾的那几条）
+- 排障端点：LLM 调用移到临界区之外；调用前读一次 base（兼作"记录坏当场 400、不白花一次调用"）
+- 不照 _generation_guard（那是每键互斥 + 409，用在记录写上会让学生生成期间连勾选都存不了）
+- 反证逐条点名：固定临时名 → 2 条红；撤临界区 → 2 条红；两次复原 sha256 逐字节相同
+- 读数：全套 pytest 5587 passed + 11 skipped；定向 657 passed + 10 skipped
+- 双轴评审两条硬违规（漏 claim、反证读数与结论不符）与六条判断题全部处置：既有 glob("*.tmp")
+  空转守卫修好、补一条锁敏感的端点用例、并发用例的补丁从全局 os.replace 收敛到模块内
+- 票里记了"另三处同构写未修"，并按评审补记第四处 master_store._write_meta

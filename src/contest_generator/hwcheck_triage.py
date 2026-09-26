@@ -24,12 +24,15 @@
 
 from __future__ import annotations
 
+import itertools
 import json
+import os
 import re
+import threading
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from .hwcheck_custom import PROBE_MODULE_SLUG
 from .hwcheck_errors import HwCheckError
@@ -57,7 +60,9 @@ __all__ = [
     "record_with_advice",
     "record_with_checked",
     "record_with_symptom",
+    "record_with_triage",
     "triage_context_text",
+    "update_hwcheck_record",
     "write_hwcheck_record",
 ]
 
@@ -66,6 +71,9 @@ HWCHECK_RECORD_FILENAME = ".contest_hwcheck_record.json"
 
 # 记录版本（向后兼容读：未知版本按已知字段读，缺省补默认）
 HWCHECK_RECORD_VERSION = 1
+
+# 唯一临时名的**进程内**单调计数（跨进程靠 pid 区分；同进程两个写者靠它区分）
+_TMP_COUNTER = itertools.count(1)
 
 # 定性词表（单源）：模型必须先判"这更像哪一类问题"，页面按它上标签。
 # unknown = 证据不足（允许——比硬凑一个分类诚实）。
@@ -335,6 +343,82 @@ def record_with_advice(record: HwCheckRecord, advice: TriageAdvice) -> HwCheckRe
         _stamped(record),
         advice=advice,
     )
+
+
+def record_with_triage(
+    record: HwCheckRecord,
+    *,
+    base: HwCheckRecord,
+    symptom: str,
+    checked_ids: Sequence[str],
+    advice: TriageAdvice,
+) -> HwCheckRecord:
+    """排障那一笔的**按字段合并**（纯函数；工单 hwcheck-hygiene/03）。
+
+    三个字段的归属不一样，所以合并规则也不一样：
+
+    * **现象 / 建议是本笔的**——用户刚提交的那句话与刚算出来的建议，无条件是它；
+    * **勾选不是本笔的**（它归清单端点，勾一条写一次）。`base` = 调模型**之前**读到的那份：
+      临界区里重读到的 `record` 与它相同 = 这几秒里没人动过 → 我们手上那份勾选还是最新的，
+      照写；**不同 = 清单端点刚写过**（比我们这份新）→ 跳过勾选，旧快照不许盖掉别人的新值。
+
+    这正是"丢更新"最真实的形态：LLM 那几秒正是学生继续勾清单的时候。
+    """
+    merged = record_with_symptom(record, symptom)
+    merged = record_with_advice(merged, advice)
+    if record == base:
+        merged = record_with_checked(merged, checked_ids)
+    return merged
+
+
+# ---------------------------------------------------------------------------
+# 读-改-写的**短临界区**（工单 hwcheck-hygiene/03）
+#
+# 两处入口（清单勾选 / 排障回填）都走"读 → 合并 → 写"，中间没有锁时后写的那笔
+# 会把先写的那笔盖掉。形状上刻意**不照** `webapp._generation_guard`（那是"每键互斥 +
+# 冲突 409"）：记录写是"勾一条写一次"的高频轻动作，409 会让学生在生成期间连勾选都存不了。
+# 一把**按记录路径**的进程内锁（锁只护"重读到落盘"这几毫秒，LLM 那条路径的调用留在锁外）。
+# ---------------------------------------------------------------------------
+
+_RECORD_LOCKS: dict[str, threading.Lock] = {}
+_RECORD_LOCKS_GUARD = threading.Lock()
+# 记账：这张表**只增不减**（每个见过的记录路径一把锁）。本地工具一次会话见过的检测工程
+# 数量有限（几十到几百），每把锁几十字节；不值得为它引弱引用——弱引用会把"锁还被某个写者
+# 持有时被回收、下一个写者拿到另一把锁"变成真竞态（比这点常驻内存坏得多）。
+
+
+def _record_lock(path: Path) -> threading.Lock:
+    """取这条记录路径对应的锁（同一路径恒同一把；首用才建）。
+
+    键按 `normcase(abspath(...))` 归一：Windows 上盘符大小写 / 正反斜杠的两种写法指的是
+    同一个文件，用原样字符串当键会给它们各发一把锁 = 等于没锁。
+    """
+    key = os.path.normcase(os.path.abspath(path))
+    with _RECORD_LOCKS_GUARD:
+        lock = _RECORD_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _RECORD_LOCKS[key] = lock
+        return lock
+
+
+def update_hwcheck_record(
+    output_dir: Path, merge: Callable[[HwCheckRecord], HwCheckRecord]
+) -> HwCheckRecord:
+    """读-改-写整段进**短临界区**：重读 → 合并 → 写；返回落盘后的记录。
+
+    `merge` 是纯函数（`record_with_*` 那一族），**只碰自己那几个字段**——这就是
+    "不丢更新"的形状：临界区里那份是**重读**的，别人在临界区外改过的字段原样带过去。
+
+    **跨 LLM 时延的路径必须把调用留在临界区之外**（排障端点：先算建议，再拿
+    `record_with_triage` 进来合并）——否则学生填一次现象，锁要按住一整次模型调用，
+    期间勾选全在门外排队。
+    """
+    path = output_dir / HWCHECK_RECORD_FILENAME
+    with _record_lock(path):
+        record = merge(read_hwcheck_record(output_dir))
+        write_hwcheck_record(output_dir, record)
+        return record
 
 
 # ---------------------------------------------------------------------------
@@ -774,14 +858,28 @@ def read_hwcheck_record(output_dir: Path) -> HwCheckRecord:
 
 
 def write_hwcheck_record(output_dir: Path, record: HwCheckRecord) -> Path:
-    """写记录（原子写：先写 .tmp 再替换，坏写不落半成品）。"""
+    """写记录（原子写：**唯一临时名** → `os.replace`；坏写不落半成品也不留残渣）。
+
+    临时名带 **pid + 进程内单调计数**（工单 hwcheck-hygiene/03，照 `codeview.py` 的
+    `f".tmp-{os.getpid()}"` 先例再进一步）：固定名 `.tmp` 在两个写者并发时会互抢——
+    一个刚写完、另一个把同一文件截断，`replace` 落盘的可能就是半成品，或者后一个
+    `replace` 直接失败（源文件已经不在）。同进程内两个写者也必须不同名，所以加计数。
+    """
     path = output_dir / HWCHECK_RECORD_FILENAME
-    tmp = path.with_name(HWCHECK_RECORD_FILENAME + ".tmp")
-    tmp.write_text(
-        json.dumps(record.to_dict(), ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    tmp.replace(path)
+    tmp = path.with_name(f"{path.name}.tmp-{os.getpid()}-{next(_TMP_COUNTER)}")
+    try:
+        tmp.write_text(
+            json.dumps(record.to_dict(), ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(tmp, path)
+    finally:
+        # 异常路径不留残渣（`replace` 成功时 tmp 已经不在了；失败时它还在）
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:  # pragma: no cover —— 清不掉也不该把原异常盖掉
+                pass
     return path
 
 

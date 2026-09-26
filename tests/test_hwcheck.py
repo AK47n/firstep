@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import threading
 from dataclasses import replace
 from pathlib import Path
 
@@ -3137,5 +3138,143 @@ def test_hwcheck_event_constant_is_registered_in_the_single_source():
     from contest_generator import events
 
     assert events.EVENT_HWCHECK_TRIAGE == "hwcheck_triage"
+
+
+def test_triage_keeps_checked_ids_written_while_the_model_was_thinking(
+    triage_client, monkeypatch, tmp_path
+):
+    """LLM 那几秒里学生还在勾清单：回填**不许**拿调用前的旧快照把新勾选盖掉（工单 03）。
+
+    确定性做法：把假模型的排障调用卡住（此刻端点已经读过记录、还没写回），期间由
+    **清单端点**写入新的勾选，再放行。
+    · 收走前（调用前读一份 → 调用后整份写回）：落盘的是那份旧快照，窗口里勾的那条丢；
+    · 收走后：临界区里重读，发现记录在窗口里被改过 → 跳过勾选，只落本笔的现象与建议。
+    """
+    from contest_generator.hwcheck_triage import HWCHECK_RECORD_FILENAME
+
+    client, _, holder = triage_client
+    parent = tmp_path / "out"
+    parent.mkdir()
+    output_dir = _generate_hwcheck_project(client, parent)["output_dir"]
+
+    entered = threading.Event()
+    release = threading.Event()
+    llm = holder["llm"]
+    original = llm.triage_hwcheck_symptom
+
+    def blocking_triage(context):
+        entered.set()
+        assert release.wait(timeout=30), "等不到放行——判据自己失败，别挂住整场"
+        return original(context)
+
+    monkeypatch.setattr(llm, "triage_hwcheck_symptom", blocking_triage)
+
+    results: dict[str, object] = {}
+
+    def _triage() -> None:
+        results["triage"] = client.post(
+            "/api/hwcheck/triage",
+            json={
+                "output_dir": output_dir,
+                "symptom": "灯常亮不闪",
+                "checked_ids": ["flash"],          # 学生点排障那一刻的勾选快照
+            },
+        )
+
+    triage = threading.Thread(target=_triage, daemon=True)
+    triage.start()
+    assert entered.wait(timeout=30), "排障请求没进模型调用"
+
+    # 模型还没答：清单端点写进一条**新的**勾选（学生继续勾）
+    ticked = client.post(
+        "/api/hwcheck/checklist",
+        json={"output_dir": output_dir, "checked_ids": ["flash", "heartbeat"]},
+    )
+    assert ticked.status_code == 200, ticked.text
+
+    release.set()
+    triage.join(timeout=30)
+    assert results["triage"].status_code == 200, results["triage"].text
+
+    on_disk = json.loads(
+        (Path(output_dir) / HWCHECK_RECORD_FILENAME).read_text(encoding="utf-8")
+    )
+    assert on_disk["checked_ids"] == ["flash", "heartbeat"], "窗口里勾的那条被旧快照盖掉了"
+    assert on_disk["symptom"] == "灯常亮不闪", "现象是本笔的，必须落上"
+    assert on_disk["advice"]["verdict"] == "wiring", "建议是本笔的，必须落上"
+    assert results["triage"].json()["record"]["checked_ids"] == ["flash", "heartbeat"]
+
+
+def test_two_endpoints_serialise_their_record_writes(triage_client, monkeypatch, tmp_path):
+    """两个端点写同一份记录时**串行**：排障在临界区里时，清单那笔进不来（工单 03）。
+
+    判据取**最终落盘**而不是响应体：撤掉临界区之后，清单那笔会在排障"已经重读到旧值、
+    还没来得及写"的那条缝里落盘，随后被排障整份盖掉——落盘的勾选少一条。
+
+    确定性做法：把排障那笔卡在合并里（此刻它已经在临界区内），清单请求同时发出去。
+    · 有锁：清单请求在锁上等，排障写完它才进来（重读到排障那份）→ 落盘是**两笔都在**；
+    · 无锁：清单请求当场写完，排障放行后盖掉它 → 落盘只剩排障那份勾选。
+    中间那次 `check_done.wait(timeout=…)` 只为在**无锁**那一格把顺序钉死（有锁那一格它
+    必然等不到，判据不依赖这一跳）。
+    """
+    from contest_generator import webapp as webapp_module
+    from contest_generator.hwcheck_triage import HWCHECK_RECORD_FILENAME
+
+    client, _, _ = triage_client
+    parent = tmp_path / "out"
+    parent.mkdir()
+    output_dir = _generate_hwcheck_project(client, parent)["output_dir"]
+
+    inside = threading.Event()
+    release = threading.Event()
+    real_merge = webapp_module.record_with_triage
+
+    def blocking_merge(*args, **kwargs):
+        inside.set()
+        assert release.wait(timeout=30), "等不到放行——判据自己失败，别挂住整场"
+        return real_merge(*args, **kwargs)
+
+    monkeypatch.setattr(webapp_module, "record_with_triage", blocking_merge)
+
+    results: dict[str, object] = {}
+
+    def _triage() -> None:
+        results["triage"] = client.post(
+            "/api/hwcheck/triage",
+            json={"output_dir": output_dir, "symptom": "灯常亮不闪", "checked_ids": ["flash"]},
+        )
+
+    check_started = threading.Event()
+    check_done = threading.Event()
+
+    def _checklist() -> None:
+        check_started.set()
+        results["check"] = client.post(
+            "/api/hwcheck/checklist",
+            json={"output_dir": output_dir, "checked_ids": ["flash", "heartbeat"]},
+        )
+        check_done.set()
+
+    triage = threading.Thread(target=_triage, daemon=True)
+    triage.start()
+    assert inside.wait(timeout=30), "排障请求没进合并（临界区）"
+
+    checklist = threading.Thread(target=_checklist, daemon=True)
+    checklist.start()
+    assert check_started.wait(timeout=30), "清单请求没发出去"
+    check_done.wait(timeout=1.0)          # 无锁那一格：这里会先写完；有锁那一格：等不到
+    release.set()
+    triage.join(timeout=30)
+    checklist.join(timeout=30)
+
+    assert results["triage"].status_code == 200, results["triage"].text
+    assert results["check"].status_code == 200, results["check"].text
+    on_disk = json.loads(
+        (Path(output_dir) / HWCHECK_RECORD_FILENAME).read_text(encoding="utf-8")
+    )
+    assert on_disk["checked_ids"] == ["flash", "heartbeat"], (
+        "两次写没串行：清单那笔落在排障的读-写缝里，被整份盖掉了"
+    )
+    assert on_disk["symptom"] == "灯常亮不闪"
 
 

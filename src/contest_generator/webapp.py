@@ -187,10 +187,9 @@ from .hwcheck_triage import (
     build_triage_context,
     fallback_advice,
     read_hwcheck_record,
-    record_with_advice,
     record_with_checked,
-    record_with_symptom,
-    write_hwcheck_record,
+    record_with_triage,
+    update_hwcheck_record,
 )
 from .impact import run_impact_analysis
 from .library import (
@@ -3177,7 +3176,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
         payload：output_dir（必填，已有的检测工程目录；不是检测工程 → 400 中文）、
         symptom（必填非空，学生填的实际现象）、checked_ids（可选，页面当前的清单
-        勾选状态——与检测页显示的同一份，落盘后刷新仍回显）。
+        勾选状态——与检测页显示的同一份）。
 
         上下文（接线表 / 引脚绑定 / 检测计划 / 清单与勾选 / 现象）由
         `hwcheck_triage.build_triage_context` 一处装配；**事实白名单与 prompt
@@ -3186,6 +3185,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         仍不行走兜底。返回 {advice, degraded, message, record}——degraded=True
         时 advice 是确定性兜底文案（message = 模型失败原因），页面显示"可重试"，
         不把它当模型结论。
+
+        **落盘的按字段口径**（工单 hwcheck-hygiene/03）：现象与建议是本笔的；勾选只有
+        在模型思考那几秒里**没人动过记录**时才照写——期间学生在页面上继续勾的清单
+        （走 `/api/hwcheck/checklist`）比手上这份快照新，不许被盖掉。
         """
         output_dir = _hwcheck_record_dir(payload)
         symptom = _require_str(payload, "symptom")
@@ -3223,8 +3226,6 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             customs=board["custom"],
         )
         record = read_hwcheck_record(output_dir)
-        record = record_with_checked(record, checked_ids)
-        record = record_with_symptom(record, symptom)
         llm_run = LLMRun(context, "hwcheck-triage")
         message = ""
         try:
@@ -3240,8 +3241,20 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         finally:
             # 观测收尾：漏调则观察面板 recent_llm_workflows 看不到这一轮
             llm_run.settle()
-        record = record_with_advice(record, advice)
-        write_hwcheck_record(output_dir, record)
+        # 落盘（工单 hwcheck-hygiene/03）：**LLM 调用在临界区之外**，临界区里只做
+        # "重读 → 按字段合并 → 写"。`record` 是**调模型之前**读到的那份，传进去当合并
+        # 基准（`base`）——这几秒正是学生继续勾清单的时候，旧快照不许盖掉别人的新值。
+        # 读这一份还有第二个用处：记录文件坏时**当场 400**，不白花一次模型调用。
+        record = update_hwcheck_record(
+            output_dir,
+            lambda fresh: record_with_triage(
+                fresh,
+                base=record,
+                symptom=symptom,
+                checked_ids=checked_ids,
+                advice=advice,
+            ),
+        )
         return {
             "advice": advice.to_dict(),
             "degraded": degraded,
@@ -3261,9 +3274,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         哪个文件（静默重置会把学生填过的现象抹掉）。
         """
         output_dir = _hwcheck_record_dir(payload)
-        record = read_hwcheck_record(output_dir)
-        record = record_with_checked(record, tuple(_require_str_list(payload, "checked_ids")))
-        write_hwcheck_record(output_dir, record)
+        checked_ids = tuple(_require_str_list(payload, "checked_ids"))
+        # 读-改-写整段进**短临界区**（工单 hwcheck-hygiene/03）：勾选只有本端点这一个写者，
+        # 但排障回填会同时往同一份记录里写现象与建议——两边都在锁里重读，谁也不盖谁。
+        record = update_hwcheck_record(
+            output_dir, lambda current: record_with_checked(current, checked_ids)
+        )
         return {"record": record.to_dict()}
 
     @app.post("/api/pick-directory")
