@@ -2,7 +2,7 @@
 注入前 sha256: c2374e5b3bfc3ef9db47a6f3d5dd1f9eae36ded9cb38cb803e65bd2cadb791d3
 [基线 东八 未注入] exit=0 :: ℹ pass 23 | ℹ fail 0
 [注入 UTC 取值 东八] exit=1 :: ℹ pass 22 | ℹ fail 1
-[注入 UTC 取值 UTC ] exit=0 :: ℹ pass 23 | ℹ fail 0（对照：UTC 下这实现是对的，应当绿）
+[注入 UTC 取值 UTC ] exit=0 :: ℹ pass 23 | ℹ fail 0（对照：UTC 下本地与 UTC 行为相同、无可区分差，应当绿——牙齿长在非 UTC 一侧）
 复原后 sha256: c2374e5b3bfc3ef9db47a6f3d5dd1f9eae36ded9cb38cb803e65bd2cadb791d3
 逐字节复原: OK
-结论: [PASS] 判据有牙齿（东八下 UTC 取值必红，UTC 下同一实现绿）
+结论: [PASS] 东八下 UTC 取值必红；UTC 下同一实现绿（对照成立）

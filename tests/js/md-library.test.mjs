@@ -108,8 +108,12 @@ test("mdSubdir：批次内子目录；批次根为空串", () => {
 // ——CI runner 是 UTC（`1970-01-01 00:00`）、开发机是东八（`08:00`）。此前这里写死
 // `"1970-01-01 08:00"`，于是本机永远绿、CI 上必红（run 36213107191 前端门禁唯一那条红）。
 // 对偶的 `pdf-library.test.mjs` 早就是现算口径（同一件函数的两个复刻，见 fx/md.js 的
-// 注释"实现一致"）——本文件跟它对齐，判据强度不变：时区算错（拿 UTC 取值）、补零、
-// 分隔符、月偏移任何一处不对，这条都照样红。
+// 注释"实现一致"）——本文件跟它对齐。
+//
+// **判据强度说到哪儿为止**（别过度声称）：现算口径能钉住补零、分隔符、月偏移、秒/毫秒混淆，
+// 也能钉住"把本地分量错写成 UTC 分量"——但**只在非 UTC 的机器上**。在 UTC 环境里本地与 UTC
+// 取值行为**完全相同**，任何断言都区分不了这两者（这不是本条的缺陷，是那台机器上没有可区分
+// 的行为差）。所以本条的牙齿长在开发机（东八）一侧；UTC 一侧的保护来自"根本不写死时区"。
 test("formatMtime：缺失/非法 → —；合法 → YYYY-MM-DD HH:mm（本地时区）", () => {
   const fmtLocal = (ts) => {
     const d = new Date(ts * 1000);
@@ -123,6 +127,14 @@ test("formatMtime：缺失/非法 → —；合法 → YYYY-MM-DD HH:mm（本地
   assert.equal(formatMtime(0), fmtLocal(0));
   assert.equal(formatMtime(1725000000), fmtLocal(1725000000));
   assert.match(formatMtime(1725000000), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+
+  // 往返判据（比"等于本机自算的一份副本"更硬一层）：渲染出来的**本地**时刻按本地时区
+  // 解析回去，必须还是同一个瞬间——取的是本地分量而不是 UTC 分量，这条就成立。
+  // 1725000000 秒整（秒位为 0），所以截到分钟是精确的、不是近似。
+  const [datePart, timePart] = formatMtime(1725000000).split(" ");
+  const [y, mo, da] = datePart.split("-").map(Number);
+  const [hh, mm] = timePart.split(":").map(Number);
+  assert.equal(new Date(y, mo - 1, da, hh, mm).getTime(), 1725000000 * 1000);
 });
 
 // ================= 过滤 =================
