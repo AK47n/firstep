@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=7073e85b40c0a18a937a6f44966a81a804d6bd09 -->
+<!-- changelog-auto: last-commit=9709587ca0581ed39e189f02a9aa3c547488b226 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -22,6 +22,7 @@
 - 13:09 工单 ci-gate-fixes/05：复现并推翻「复用 HOME」前提（~1/3 偶发），定性为宽限竞态换了一条更慢的到达路径
 - 16:44 ﻿工单 ci-gate-fixes/05：F5 偶发全红定性为「新文档那一发 register 丢在传输层」，两处修掉（连续 12 轮全绿）
 - 16:45 ﻿账本：ci-gate-fixes/05 收口——本机那条 launcher-reload 偶发已定性并修掉，另记三条本机事实
+- 17:33 工单 ci-gate-fixes/06：蒸馏确认的 AI 闸改成「按需 + 事务之前」——无归档动作走「库在哪」那道闸，有归档缺 key 当场中文拒绝
 
 ## 2026-09-25
 - 00:21 工单 hwcheck-acceptance/01：mspm0 生成链认下 SysConfig 构建期接口面（那一行从注释占位变活代码）
