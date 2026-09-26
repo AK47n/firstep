@@ -24,10 +24,11 @@
 >
 > **`ci-gate-fixes` 工单面收口**：`01`–`04`（前一轮）+ `07`（时区断言）+ `08`（缺工具链时显式 skip +
 > 夹具能造 CI 前提 + 两处预览等待带诊断）+ `09`（已删自建件自愈并如实报出）+ `10`（msp0 的
-> `Debug/makefile` 断言缺 CCS 时 skip）+ `11`（清器件集改重试派发）**全部 resolved**。
-> **仍在 frontier 上**：`05`（`launcher-reload` 在**复用过的临时 HOME** 下会红——注意它**没有**在
-> 这四轮 CI 上出现过：CI 每跑都是全新环境，`launcher-reload` 5 条**始终绿**；所以它是**本机闸门**的
-> 假红源，不是 CI 问题）、`06`（`masters_confirm` 闸门与 docstring 不一致）。
+> `Debug/makefile` 断言缺 CCS 时 skip）+ `11`（清器件集改重试派发）+ **`05`（`launcher-reload`
+> 的 F5 偶发，2026-09-26 本轮定性并修掉：新文档那一发 `register` 丢在传输层 ⇒ 产品侧补重试 +
+> 退出判据多一条"页面真在装载中就再等一轮"（`webapp.mark_page_request` / `exit_via`），
+> 连跑 12 轮全绿）全部 resolved。**仍在 frontier 上**：`06`（`masters_confirm` 闸门与
+> docstring 不一致）。
 >
 > **本轮最值钱的一条方法论**（写进账本）：**本机复现不出来时，别靠形态猜**——
 > `08` 加的那两处诊断（页面可见文本 + 末几次 `/api/hwcheck/preview` 的**状态码与响应体**）
@@ -45,6 +46,26 @@
 > `core.autocrlf=true` 而两种形态同时在盘上——写锚点正则、写注入探针都得按**文件实际形态**走；
 > ③ 浏览器夹具新增 `FIRSTEP_BROWSER_CONFIG_EXTRA`（JSON 并进种子配置）：本机唯一能造出
 > "没有工具链"这个前提的口。
+>
+> **2026-09-26 追加（工单 `ci-gate-fixes/05` 收口轮）——第四条本机事实 + 两条读数口径**：
+> ④ **`launcher-reload` 的偶发在本机**（不是 CI）：`node --test --test-concurrency=1
+>    tests/browser/launcher-reload.spec.mjs` 连跑 10 轮会红 2–3 轮（A = `page.reload` 30 秒
+>    超时、B–E 秒级 `ERR_CONNECTION_REFUSED`），CI 上（全新环境）5 条始终绿。红那几轮的
+>    服务端日志与注入读数留在 `.scratch/ci-gate-fixes/probe-05-catch*-logs/`，
+>    复跑回路是 `.scratch/ci-gate-fixes/probe-05-catch3.py`（连跑 + 红的轮留未筛日志）、
+>    确定性红证是 `.scratch/ci-gate-fixes/probe-05-redproof.mjs`（约 7 秒）。
+>    **故障根因**：多次连续 reload 之后，浏览器从连接池里取到旧文档留下的、已被服务端按
+>    keep-alive 关掉的空闲连接，新文档那一发 `register` 当场失败（`status 0 / size 0`），
+>    于是登记丢失 ⇒ 1.5 秒宽限到点自杀。**修法**：产品侧给登记补一次重试 +
+>    退出判据多一条"页面真在装载中就再等一轮"（`GET /` 记一笔；`_EXIT_GRACE` 未改）。
+>    ⚠ 这条偶发**与"复用过的 HOME"无关**（本单标题那个前提已推翻：那个目录跑完是空的）。
+> ⑤ **`node --test` 的摘要行在 stderr 且带 ANSI**：用 PowerShell 的 `>` / `Tee-Object` 抓
+>    stdout 会一行都拿不到（读到的是空），但**重定向 stderr 进同一文件**就有——本轮的
+>    "留现场"脚本一律用 `subprocess.run(capture_output=True)` 再落盘 UTF-8 文件
+>    （PowerShell 的 `>` 还会写 UTF-16LE，`read` 工具当二进制拒读）。
+> ⑥ **注入探针要按文件实际换行换算锚点**：`webapp.py` / `index.html` 在这个检出里是
+>    **CRLF**（`.gitattributes` 只声明 `.githooks/*` 与 `*.bat`）——锚点按 LF 写、注入前后换算，
+>    否则 `old not in text` 当场失败（本轮踩到两次）。
 >
 > ### 📌 上一轮（2026-09-25 深夜，`ci-gate-fixes/04` 会话）—— 保留原样，作历史对照
 
