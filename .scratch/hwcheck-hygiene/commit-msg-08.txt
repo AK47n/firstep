@@ -1,0 +1,38 @@
+工单 hwcheck-hygiene/08：账本收口 + 三条判据侧诊断（afterEach / 工单号 / B2 抢跑）
+
+一、账本与自述四处订正（旧内容一律保留，只加"已过期"头）
+- module-hwcheck/09 编译矩阵那行 16 → 18 形态（以读数文件结论行为准）；相邻两行
+  「拦下 3 格」「已编译的 16 格」各自标成"本单当时那一跑"的读数
+- hwcheck-acceptance/报告.md 加「⚠ 已过期」块；报告-复测.md 只留一句转述 + 指向那份表
+  （两张逐条对照表本来逐行重复，写两遍就是下一个过期点）
+- hwcheck.py 那段 docstring 标题写"两件事"却列到第 3 条、且第 1/2 条逐字重复
+  （git blame：hwcheck-acceptance/01 改这段时改错了行）→ 订正为两条
+
+二、用户可见面去掉内部工单号（学生读不懂也查不到）
+- 400 文案「要改母版的引脚符号，见工单 11」→「改绑这一页做不到（撞的是符号名，不是脚…）」
+  （旧话还与"母版引脚符号已全局去重"自相矛盾——那条已经发布）
+- 产物注释里另外 9 处（4 个文件）+ generator.py 那处漏网的「已记在工单 11」一并清掉；
+  新守卫 test_generated_program_never_names_an_internal_work_order 先红后绿抓到这几处
+  （判据面只到产物：源码 docstring 里 400+ 处是给维护者的"为什么"，该留）
+
+三、afterEach 告警诊断（diagnosing-bugs 走一轮，机制用读数钉住）
+- 第一版压测每轮只加一件 → 零命中却什么也没证明（评审抓到形状错）
+- 第二版按夹具的真实形状（一拍点掉一批 chip）：两件 + 只派发一次 → 10/10 与 24/24 清不掉
+  （每次只剩最后一件）；同一形状走重试派发 → 10/10 收敛（p50 7ms）
+- 真因 = 第 1 件的 click 触发整块重绘，其余 chip 的节点当场被摘掉、那几次 click 白点
+  → 夹具缺陷（修法已在 ci-gate-fixes/11 的 e0b41261），不新开产品缺陷单
+
+四、顺带抓到并修掉 B2 的判据抢跑（本机 8 轮红 5）
+- 产品的登记重试预算 = setTimeout(…, 300)，而断言的等待链 waitNewDocument + waitReady
+  实测 322–372ms 就返回 —— 判据读的是一个"还没发生的事"
+- 改法：断言前轮询等那个可观测事实（浏览器又发了一发 register，50ms 一次、上限 5s）
+- 反证 probe-08-red-b2.py：注入"重试关掉"→ 3/3 红且都红在点上；复原 → 3/3 绿，sha256 逐字节相同
+- 修后连跑 8 轮全绿；它不是本批引入的，是这条门禁第一次在本机跑得够快才露出来
+
+五、markdown 标记（同族，顺手量干净）
+- hwcheck_board / generator / webapp 的 400、CONSOLE_HINT_NONE 改成 <strong>；
+  既有用例 test_page_facing_copy_carries_no_markdown_markers 扩到这些串
+- 判为内部校验文案、不进页面的（hwcheck_console / hwcheck_recipe 的几处）如实记账不改
+
+读数：全套 pytest 5604 passed + 11 skipped；前端门禁 1819 / 0；浏览器门禁 48 / 0
+（零 [afterEach] 告警）；两平台真编译矩阵 led/key 4 格全 PASS

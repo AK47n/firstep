@@ -560,6 +560,28 @@ def test_page_facing_copy_carries_no_markdown_markers(tmp_path, monkeypatch):
         "PIN_CAPACITY_SKIPPED_NOTE": PIN_CAPACITY_SKIPPED_NOTE,
         "PIN_CAPACITY_UNREADABLE_NOTE": PIN_CAPACITY_UNREADABLE_NOTE,
     }
+    # 「装不下」那份 400 文案的两支（工单 08 复量时抓到：重名那一支的两处标记还留着
+    # ——这条注释当时写着"全靠注释与评审盯住"，评审确实盯住了，但注释不是判据）
+    from contest_generator.hwcheck_board import hwcheck_pin_message
+    from contest_generator.syscfg_prune import SyscfgPinConflictReport
+
+    same_pin = SyscfgPinConflictReport(
+        lines=("  · PA7：oled(SPI_CLK) 与 jy61p(JY61P) 都要用",),
+        capacity="", name_lines=(),
+        pin_instances=("OLED_SPI", "JY61P"),
+    )
+    same_name = SyscfgPinConflictReport(
+        lines=(), capacity="",
+        name_lines=("  · SCL：oled(SCL) 与 aht10(SCL)",),
+        name_instances=("OLED_SPI", "AHT10"),
+    )
+    page_copy["引脚撞脚（同脚那支）"] = hwcheck_pin_message(same_pin, "地猛星 MSPM0G3507", _config())
+    page_copy["引脚撞脚（重名那支）"] = hwcheck_pin_message(
+        same_name, "地猛星 MSPM0G3507", _config())
+    # 「这一趟不能交互式复测」那句（命令表提示，页面上原样显示）
+    from contest_generator.hwcheck_console import CONSOLE_HINT_NONE
+
+    page_copy["CONSOLE_HINT_NONE"] = CONSOLE_HINT_NONE
     # 母版配置读不出来那句（页面上原样显示）
     masters = tmp_path / "masters"
     (masters / "mspm0").mkdir(parents=True)

@@ -1,0 +1,17 @@
+# 读数：probe-08-clear-race-2chips-noslow
+# 命令：node .scratch/hwcheck-hygiene/probe-08-clear-race.mjs 10 --single --chips=2
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T01:33:55+08:00
+# 退出码：0
+轮 1/10 [led+ml_mpu6050]：⚠ 10 秒没清掉，剩 ml_mpu6050（派发前 chips=2 / 派发后 chips=1）
+轮 2/10 [ml_mpu6050+photoresistance]：⚠ 10 秒没清掉，剩 photoresistance（派发前 chips=2 / 派发后 chips=1）
+轮 3/10 [photoresistance+led]：⚠ 10 秒没清掉，剩 led（派发前 chips=2 / 派发后 chips=1）
+轮 4/10 [led+ml_mpu6050]：⚠ 10 秒没清掉，剩 ml_mpu6050（派发前 chips=2 / 派发后 chips=1）
+轮 5/10 [ml_mpu6050+photoresistance]：⚠ 10 秒没清掉，剩 photoresistance（派发前 chips=2 / 派发后 chips=1）
+轮 6/10 [photoresistance+led]：⚠ 10 秒没清掉，剩 led（派发前 chips=2 / 派发后 chips=1）
+轮 7/10 [led+ml_mpu6050]：⚠ 10 秒没清掉，剩 ml_mpu6050（派发前 chips=2 / 派发后 chips=1）
+轮 8/10 [ml_mpu6050+photoresistance]：⚠ 10 秒没清掉，剩 photoresistance（派发前 chips=2 / 派发后 chips=1）
+轮 9/10 [photoresistance+led]：⚠ 10 秒没清掉，剩 led（派发前 chips=2 / 派发后 chips=1）
+轮 10/10 [led+ml_mpu6050]：⚠ 10 秒没清掉，剩 ml_mpu6050（派发前 chips=2 / 派发后 chips=1）
+
+=== 10 轮（只派发一次）：清不掉 10 轮；清空耗时 p50=-1ms p90=-1ms max=-1ms ===

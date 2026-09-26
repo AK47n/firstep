@@ -1294,6 +1294,10 @@ def test_syscfg_pin_name_collision_is_a_loud_failure(
     assert "SCL" in message and "SDA" in message, message
     for slug in ("oled", "jy61p"):
         assert slug in message, f"要点名撞车的模块 {slug}：{message}"
+    # 这份 400 是**页面上原样显示**的（经 toast / 错误框 → innerHTML），所以不许带
+    # markdown 标记（工单 hwcheck-hygiene/02 的口径：`**…**` 到了页面上就是字面星号）
+    # ——工单 08 复量时抓到这一支漏网（同族的 `hwcheck_pin_message` 也一样）。
+    assert "**" not in message, f"面板文案里出现了 markdown 标记：{message}"
 
     # 第四跳：真母版（02 之后）+ 同一组选择 → 放行
     real = _real_mspm0_syscfg_corpus(tmp_path)

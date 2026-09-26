@@ -2073,6 +2073,44 @@ def test_every_reported_line_fits_the_line_buffer():
             )
 
 
+def test_generated_program_never_names_an_internal_work_order():
+    """产物里**不许出现内部工单号**（工单 hwcheck-hygiene/08）。
+
+    为什么要这条：检出的 `main.c` 是**给学生读**的（他要在 CCS / Keil 里打开它、
+    照着注释看这一节在干什么）。里面出现「工单 module-hwcheck/04」「工单 07」这类
+    内部编号，学生既不知道那是什么、也没法查——它只对写它的人有意义。
+    同一类问题在**页面可见文案**里已被评审点名一次（那条 400 里印着「见工单 11」），
+    所以这里把判据立到**产物**上：整份文本（含注释）零命中。
+
+    形态取**最全的一趟**（专精件 + 通用件 + 自建件 + 命令台全在场）：那些注释块
+    分头住在 `hwcheck.py` / `hwcheck_console.py` / `hwcheck_generic.py` /
+    `hwcheck_recipe.py`，只渲一种形态会漏掉另外几处（本单实测：一跑就抓出 4 个文件
+    的 9 处）。
+
+    ⚠ **判据面只到产物**：源码里的 docstring / 注释**该留**——它们记的是"为什么"，
+    是给维护者读的。别把这条测试扩成"全仓 grep 工单"（那会误伤 400+ 处正当注释）。
+    """
+    from contest_generator.hwcheck_custom import CustomSection
+    from contest_generator.my_devices import BUS_I2C, CustomDevice
+
+    custom = CustomSection(
+        device=CustomDevice(id="mine_probe01", name="自建件样本", bus=BUS_I2C,
+                            address=0x68, register=0x75, expect=0x68),
+        plan="ping 一次地址、读回身份寄存器（这一趟只验应答与回读）",
+    )
+    variants = (
+        ("只框架", SERIAL_ONLY, (), (), ()),
+        ("专精件", BOTH, (LED_STM32,), (), ()),
+        ("专精 + 通用件", SERIAL_ONLY, (LED_STM32,), _generic_stm32(), ()),
+        ("三批全在场", BOTH, (LED_STM32,), _generic_stm32(), (custom,)),
+    )
+    for label, config, sections, generic, customs in variants:
+        code = render_main_c(config, sections, generic, customs)
+        hits = [ln.strip() for ln in code.splitlines() if "工单" in ln]
+        assert not hits, (
+            f"产物里印出了内部工单号（学生读不懂、也查不到）——形态：{label}：" + str(hits))
+
+
 def test_generic_sections_require_an_output_channel_too():
     """没有输出通道时通用小节同样不渲染（渲染了也没人看得见，见 04 的同款判据）。"""
     code = render_main_c(LAMP_ONLY, (), _generic_stm32())

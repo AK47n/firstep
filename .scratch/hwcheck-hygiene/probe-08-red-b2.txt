@@ -1,0 +1,16 @@
+目标：src/contest_generator/static/index.html  前置 sha256：4b7b201dbda5244caa2aa552ed57a0a8827369089d202374a0157b5c038fc241  换行：CRLF
+前置检查：重试那段锚点唯一命中 ✓
+
+=== 注入态（重试关掉）：连跑 3 轮 tests/browser/launcher-reload.spec.mjs ===
+  第 1 轮：退出码 1  红（重试没发生——正是要抓的那一句）
+  第 2 轮：退出码 1  红（重试没发生——正是要抓的那一句）
+  第 3 轮：退出码 1  红（重试没发生——正是要抓的那一句）
+  复原 sha256：4b7b201dbda5244caa2aa552ed57a0a8827369089d202374a0157b5c038fc241  逐字节相同：✓
+
+=== 复原态（逐字节还原）：连跑 3 轮 tests/browser/launcher-reload.spec.mjs ===
+  第 1 轮：退出码 0  绿
+  第 2 轮：退出码 0  绿
+  第 3 轮：退出码 0  绿
+  复原 sha256：4b7b201dbda5244caa2aa552ed57a0a8827369089d202374a0157b5c038fc241  逐字节相同：✓
+
+结论：PASS —— 注入重试关掉时 B2 稳定红且红在点上，复原后稳定绿

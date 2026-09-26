@@ -7,7 +7,7 @@
 
 ## 0. 交接区：main 上有什么还没到用户手上（2026-09-26 更新 · **已发布 v1.3.0；涨落以 `git log` 为准**）
 
-> ### 🔄 进行中（2026-09-26 深夜，`hwcheck-hygiene` 会话）——**01–06 已落 main、未发布；07–13 未开工**
+> ### 🔄 进行中（2026-09-27 深夜，`hwcheck-hygiene` 会话）——**01–08 已落 main、未发布；09–13 未开工**
 >
 > **这一批是什么**：`docs/improvement-review-hwcheck.md` 的 **P2 七项** + 前端守卫补洞 +
 > 两个大文件按职责拆分，spec / 工单 / 反证读数全在 **`.scratch/hwcheck-hygiene/`**（13 张工单）。
@@ -16,14 +16,17 @@
 > `01` 全局桥守卫（`tests/js/window-bridge-guard.test.mjs` + 判据 ⑧）/ `02` 字面星号归零
 > （`bold-marker-guard` + 判据 ⑨）/ `03` 检测记录写（唯一临时名 + 短临界区 + 按字段合并）/
 > `04` 两处「失败」说真话（母版配置读不出来 → 400；记录读不出来 ≠ 损坏）/
-> `05` 板级事实单源（LED 脚从 `selection` 取）/ `06` 焦点与可达性（+3 条真浏览器用例）。
+> `05` 板级事实单源（LED 脚从 `selection` 取）/ `06` 焦点与可达性（+3 条真浏览器用例）/
+> `07` 多实例只验首路（四格配方如实说 + 判据钉到渲染产物）/ `08` 账本收口 + 三条**判据侧**诊断
+> （`[afterEach]` 告警 = 夹具在一拍里点掉一批 chip，产品没毛病；产物与页面里的内部工单号归零；
+> `launcher-reload` 的 B2 **判据抢跑**——产品的重试预算是 300ms，而断言 322–372ms 就返回，
+> 本机 8 轮红 5，已改成轮询等"那一发真的发出去了"）。
 > **每单都跑过双轴 code-review 并整改，票尾有「结论（读数与账）」表。**
 >
-> **下一单是 `07`**（多实例只验首路：如实说 + 守卫），随后 `08`（账本收口 + 浏览器 afterEach 告警
-> 诊断），再 `09`→`10`（拆 fx 两步）与 `11`→`12`（拆 ui 两步），最后 `13` 收口。
+> **下一单是 `09`**（拆 fx 第一步），随后 `10`（拆 fx 第二步）→ `11`→`12`（拆 ui 两步）→ `13` 收口。
 > **`13` 收口之后才发 v1.3.1**（本批不发版）。
 >
-> **接班要用的三条本机事实**（都是本轮新踩/新立的）：
+> **接班要用的六条本机事实**（都是本轮新踩/新立的）：
 > ① **读数落盘用 `.scratch/hwcheck-hygiene/readings.py`**（`python readings.py <名> -- <命令>`）——
 >    PowerShell 的 `>` / `Tee-Object` 写 UTF-16LE（`read` 工具拒读）、`Select-Object -First N`
 >    会掐断上游留下孤儿后端；它收全量、剥 ANSI、写 UTF-8 带命令/时间/退出码头。
@@ -31,13 +34,24 @@
 >    （`webapp.py` / `hwcheck_board.py` / `index.html` / `ui/hwcheck.js` 是 CRLF，
 >    `hwcheck_triage.py` / `tests/**` 是 LF）——按 LF 写死锚点会在 CRLF 文件上**静默不中**
 >    （探针会打印"注入后 sha256 与前置相同"，本轮踩过两次，`.scratch/hwcheck-hygiene/probe-0{4,5,6}-red.*`
->    里都有现成的 `encode_anchor` / `encode` 写法可抄）。
+>    里都有现成的 `encode_anchor` / `encode` 写法可抄；07 起这份小工具提成了
+>    `.scratch/hwcheck-hygiene/patch_bytes.py`）。
 > ③ **浏览器门禁现在是 6 个 spec / 48 条**（新增 `tests/browser/hwcheck-capacity-note.spec.mjs`），
 >    跑法仍是 `node --test --test-concurrency=1 "tests/browser/*.spec.mjs"`（≈4 分钟）。
 >    改 `static/js/**` 时**必须**跑它——ui 行为只由真浏览器作证（本批 spec 的测试决策）。
+> ④ **会让配方文件变的探针不许与任何读数并行**（07 第二次踩到：浏览器门禁与注入探针同时跑，
+>    读数红在"页面上没有那句话"——那不是产品红，是读到了注入态）。**探针跑完再跑门禁。**
+> ⑤ **判据也会抢跑**（08 抓到，比产品缺陷更常见的一类假红）：`launcher-reload` 的 B2 断言
+>    "登记重试发生了"，而产品的重试是 `setTimeout(…, 300)`、等待链 322–372ms 就返回——
+>    **判据读的是一个还没发生的事**，本机 8 轮红 5。判据要么轮询等那个可观测事实，
+>    要么把窗口设得**明显**大于被测的延迟；别用"刚好越过阈值"的数。
+> ⑥ **探针崩了会留孤儿后端**（08 踩到：`--chips=2` 那支第一版在第 2 轮挂掉，留下两个
+>    `contest_generator.webapp` 进程）。它们会抢端口、也会让后面门禁的读数不可信
+>    ——**读数前先看一眼**：`Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
+>    Where-Object { $_.CommandLine -like '*contest_generator*' }`。
 >
-> **本轮读数基线**（会随提交变，**别写死**）：全套 pytest **5600 passed + 11 skipped**；
-> 前端门禁 **1818 / 0**；浏览器门禁 **48 / 0**；两平台真编译矩阵 6 格全 PASS。
+> **本轮读数基线**（会随提交变，**别写死**）：全套 pytest **5604 passed + 11 skipped**；
+> 前端门禁 **1819 / 0**；浏览器门禁 **48 / 0**；两平台真编译矩阵 6 格全 PASS。
 >
 > **推之前**：`main` 已比 `origin/main` 多出十余笔未推；推法见本节「本机网络事实」
 > （要 `git -c http.https://github.com/.resolve=…` 钉 IP，**别按"重试即好"记**）。

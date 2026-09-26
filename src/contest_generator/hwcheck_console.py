@@ -430,7 +430,7 @@ def render_console_runtime(table: ConsoleTable) -> list[str]:
     排在前面就是隐式声明（真机口径下 ARMCC 报 `#223-D`，验收线是 0 warning）。
     """
     out: list[str] = [
-        "/* ---- 串口命令台（配方驱动的复测；工单 module-hwcheck/06）----",
+        "/* ---- 串口命令台（配方驱动的复测）----",
         " * 既有 r/y/g/o/b 由库内 debug_cmd_poll() 原样执行：这里只 peek 一眼收到的",
         " * 字符，是配方命令 / 帮助才处理并 consume，其余一律不碰（既有语义一个字节",
         " * 不动）。复测不用重烧——边动线边看现象。 */",
@@ -510,7 +510,7 @@ CONSOLE_HINT_SERIAL_NO_COMMAND = (
     f"命令循环里敲 {HELP_COMMAND} 看帮助，既有的 r / y / g / o / b<N> 照旧可用。"
 )
 CONSOLE_HINT_NONE = (
-    "**没有串口 = 不能交互式复测**：这一趟只跑上电那一遍"
+    "<strong>没有串口 = 不能交互式复测</strong>：这一趟只跑上电那一遍"
     "（LED 心跳 + 逐件自报各一次），不能边动线边看现象。"
     "想反复复测，请在上面勾上「调试串口」再生成一次。"
 )

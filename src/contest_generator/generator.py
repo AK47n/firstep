@@ -1776,12 +1776,12 @@ def _check_syscfg_pin_conflicts(
         # 且**不许**再把用户支去"改绑"——那是做不到的动作。
         raise SyscfgPinConflictError(
             f"mspm0 引脚符号重名：落盘后的 {MSPM0_SYSCFG_FILENAME} 里，"
-            f"{report.name_count} 个引脚**符号**被两只实例同时使用，"
+            f"{report.name_count} 个引脚<strong>符号</strong>被两只实例同时使用，"
             "SysConfig 会直接报 Duplicate name（工程编不过）：\n"
             + "\n".join(report.name_lines)
-            + "\n这一条**改绑引脚解不开**（撞的是符号名，不是脚）：去掉其中一件模块"
+            + "\n这一条<strong>改绑引脚解不开</strong>（撞的是符号名，不是脚）：去掉其中一件模块"
             "后重新生成。母版给这些实例起的引脚符号本来就同名（如库内 17 件 I2C "
-            "器件共用 SCL/SDA），要两件同用只能改母版——已记在工单 11。"
+            "器件共用 SCL/SDA），要两件同用只能改母版里的引脚符号。"
         )
     raise SyscfgPinConflictError(
         f"mspm0 引脚冲突：落盘后的 {MSPM0_SYSCFG_FILENAME} 有 {report.pin_count} 个引脚"

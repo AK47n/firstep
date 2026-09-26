@@ -1,0 +1,17 @@
+# 读数：probe-08-clear-race-slow
+# 命令：node .scratch/hwcheck-hygiene/probe-08-clear-race.mjs 40 --slow=6 --variants
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T00:33:42+08:00
+# 退出码：0
+# CPU 压慢 6×
+轮 1/40 led：清空用了 169ms（派发前 chips=1 / 派发后 chips=0）
+轮 6/40 photoresistance：清空用了 171ms（派发前 chips=1 / 派发后 chips=0 / 切平台→mspm0）
+轮 11/40 ml_mpu6050：清空用了 167ms（派发前 chips=1 / 派发后 chips=0 / 搜索=s）
+轮 16/40 led：清空用了 180ms（派发前 chips=1 / 派发后 chips=0 / 点了预览）
+轮 21/40 photoresistance：清空用了 201ms（派发前 chips=1 / 派发后 chips=0）
+轮 26/40 ml_mpu6050：清空用了 151ms（派发前 chips=1 / 派发后 chips=0 / 切平台→mspm0）
+轮 31/40 led：清空用了 193ms（派发前 chips=1 / 派发后 chips=0 / 搜索=s）
+轮 36/40 photoresistance：清空用了 153ms（派发前 chips=1 / 派发后 chips=0 / 点了预览）
+轮 40/40 led：清空用了 169ms（派发前 chips=1 / 派发后 chips=0 / 点了预览）
+
+=== 40 轮（CPU 6×）（每轮换前置动作）：清不掉 0 轮；清空耗时 p50=169ms p90=205ms max=218ms ===

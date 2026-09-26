@@ -333,15 +333,16 @@ def hwcheck_pin_message(
     if not report.lines:
         return (
             f"这套选择在「{board_name}」上装不下：落盘后的 mspm0.syscfg 里 "
-            f"{report.name_count} 个引脚**符号**被两只实例同时使用，SysConfig 会"
+            f"{report.name_count} 个引脚<strong>符号</strong>被两只实例同时使用，SysConfig 会"
             "直接报 Duplicate name（工程编不过）：\n"
             + "\n".join(report.name_lines)
-            + "\n这一条**改绑引脚解不开**（撞的是符号名，不是脚——母版给这些实例起的"
+            + "\n这一条<strong>改绑引脚解不开</strong>（撞的是符号名，不是脚——母版给这些实例起的"
             "引脚符号本来就同名；实测换四种绑定 `name_count` 恒为 2）。"
             + f"\n{HWCHECK_PIN_EXIT_MARKER} 检测页能做到的出路（挑一条）：\n"
             + numbered
-            + f"\n{last}上面这些都要 → 这一版做不到（要改母版的引脚符号，见工单 11）"
-            "——别去引脚配置里试，改绑解不开它。"
+            + f"\n{last}上面这些都要 → 改绑这一页做不到（撞的是<strong>符号名</strong>，不是脚；"
+            "母版里的符号名得改成每个实例各不相同才行）——别去引脚配置里试，"
+            "改绑解不开它。"
         )
     return (
         f"这套选择在「{board_name}」上装不下：落盘后的 mspm0.syscfg 有 "

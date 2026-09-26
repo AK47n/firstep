@@ -3324,7 +3324,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             return {
                 "ok": False,
                 "error": (
-                    "这一组选择编不过：mspm0 的引脚**符号**重名（SysConfig 会报 "
+                    "这一组选择编不过：mspm0 的引脚<strong>符号</strong>重名（SysConfig 会报 "
                     "Duplicate name），改绑引脚解不开——去掉其中一件模块：\n"
                     + clash
                 ),
@@ -3406,7 +3406,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             return {
                 "ok": False,
                 "error": (
-                    "这一组选择编不过：mspm0 的引脚**符号**重名（SysConfig 会报 "
+                    "这一组选择编不过：mspm0 的引脚<strong>符号</strong>重名（SysConfig 会报 "
                     "Duplicate name），改绑引脚解不开——去掉其中一件模块：\n"
                     + clash
                 ),

@@ -249,8 +249,19 @@ test("B2：登记那一发被丢一次（坏连接）——重试救回，服务
     assert.equal(dropped, 1, "注入没落上——本用例没有牙齿（一发登记都没被丢掉）");
     // 判据取**浏览器发了几发**（`page.route` 数的是请求，不是服务端收到几发）：
     // 重试若没发生，这一轮只会有 1 发（那 1 发还是被丢掉的那一发）。
+    //
+    // ⚠ **必须轮询等它发生，不能"等页面就绪了就断言"**（工单 hwcheck-hygiene/08 定位：
+    // 本机连跑 8 轮红 5 轮）。产品的重试写在 `setTimeout(…, 300)` 里（`index.html` 的
+    // 登记 IIFE，预算 300ms），而 `waitNewDocument + waitReady` 实测 **322–372ms** 就返回了
+    // ——落在 300ms 这个阈值**两侧**，于是同一份代码一半轮次红、一半绿（判据读的是一个
+    // **还没发生的事**）。CI 上不红是因为那里每次都比 300ms 慢（warm-up 慢），
+    // 本机快了之后才露出来：**这不是产品不稳，是判据抢跑**。
+    // 等的是**这个可观测事实**（浏览器又发了一发），不是"再睡一会儿"。
+    const retryDeadline = Date.now() + 5000;
+    while (attempts - attemptsBefore < 2 && Date.now() < retryDeadline) await sleep(50);
     assert.ok(attempts - attemptsBefore >= 2,
-      `新文档那一发登记被丢掉之后只有 ${attempts - attemptsBefore} 发请求——重试没发生`);
+      `新文档那一发登记被丢掉之后只有 ${attempts - attemptsBefore} 发请求——重试没发生`
+      + `（等了 5 秒仍只有这一发）`);
     await sleep(GRACE_MS + 1500);                      // 让整个宽限窗口过去
     assert.equal(server.proc.exitCode, null,
       `一发登记被丢掉之后服务退出了（exit ${server.proc.exitCode}）——登记的失败没有被重试`

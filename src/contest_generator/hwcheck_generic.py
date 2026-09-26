@@ -505,7 +505,7 @@ def render_generic_runtime(sections: Sequence[GenericSection]) -> list[str]:
         return []
     first, last = SCAN_ADDRESS_FIRST, SCAN_ADDRESS_LAST
     return [
-        "/* ---- 通用降级运行时（未专精件；工单 module-hwcheck/07）----",
+        "/* ---- 通用降级运行时（未专精件）----",
         " * 只 ping 地址，不读任何寄存器：通用降级**不猜读函数**（猜出来的垃圾值",
         " * 比不测更坏）。引脚走 manifest 声明的宏（值在 pin_config.h）。 */",
         "/** 发一个起始位 + 地址字节，读第 9 拍的应答；1 = 这一地址有器件应答。 */",
@@ -609,7 +609,7 @@ def render_generic_section(section: GenericSection) -> list[str]:
     label = section.label
     out: list[str] = [
         f"    /* ---- {label} ---- */",
-        "    /* 通用降级（工单 module-hwcheck/07）：这一件没有专精配方——只做",
+        "    /* 通用降级：这一件没有专精配方——只做",
         "     * 初始化 +（声明了 I2C 脚才做）总线地址扫描，**不猜读函数**"
         "（猜出来的垃圾值比不测更坏）。 */",
         f"    hwcheck_section({c_string(section.slug)});",

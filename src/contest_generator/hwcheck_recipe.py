@@ -1291,7 +1291,7 @@ def render_recipe_section(
         out.append(f"    /* 平台说明：{note} */")
     out.append(
         "    /* 专精件：这一节真的会驱动它 / 读它（库内配方给的动作）。"
-        "未专精件走通用降级，出的是另一套小节（工单 07，不带 [专精] 标记）。 */"
+        "未专精件走通用降级，出的是另一套小节（不带 [专精] 标记）。 */"
     )
     out.append(f"    hwcheck_section({c_string(f'{SECTION_TAG} {section.slug}')});")
 

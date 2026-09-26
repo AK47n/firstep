@@ -41,9 +41,9 @@
 
 | 项 | 读数 |
 |---|---|
-| 编译矩阵（`.scratch/module-hwcheck/probe-09-compile-matrix.py`） | pilot 17 格 + 2 格全选（清单**单源**取自地板断言的 `PILOT`）：**16 种形态真编译，判红 0**，全部 0 error / 0 warning（stm32 走 UV4 `C:\Keil5\Core\UV4\UV4.exe`；mspm0 走 gmake `C:\ti\ccs2050\…\gmake.exe`）。逐格用的通道形态是「只串口 → 只 OLED → 都不开」里第一个能生成的那个，**每行末尾都记着**——它和检测页默认的"两个都开"不同（那个形态在 mspm0 上必 400，正是另开单那条） |
-| 生成前拦下（3 格，不混进"编译通过"） | `mspm0 adc` / `mspm0 xunji`（只有"都不开"能生成，而那一形态按设计不渲染逐件小节 → 到不了板）、`mspm0 全选 9 件`（三种通道形态都 400） |
-| 上板 | **未上板**：本单没有真板子跑过，按 spec「没跑过就写未上板，不假装」——已编译的那 16 格可烧可跑（0 error / 0 warning），但"板上现象"这一轮留给用户实机（步骤见指南栏「第一次拿到一件新模块」一节） |
+| 编译矩阵（`.scratch/module-hwcheck/probe-09-compile-matrix.py`） | pilot 17 格 + 2 格全选（清单**单源**取自地板断言的 `PILOT`）：**18 种形态真编译，判红 0**，全部 0 error / 0 warning（stm32 走 UV4 `C:\Keil5\Core\UV4\UV4.exe`；mspm0 走 gmake `C:\ti\ccs2050\…\gmake.exe`）。逐格用的通道形态是「只串口 → 只 OLED → 都不开」里第一个能生成的那个，**每行末尾都记着**——它和检测页默认的"两个都开"不同（那个形态在 mspm0 上必 400，正是另开单那条）。**⚠ 形态数是读数文件的事，不是本单的文字**：本单落盘时是 **16 种 / 生成前拦下 3 种**，后面 `hwcheck-pin-conflict-exit/01` 复跑同一支探针时变成 **18 种 / 生成前拦下 0 种 / 如实拦下 1 种**（那一跑打开了原先被拦下的形态）。**以读数文件为准**：`.scratch/module-hwcheck/probe-09-compile-matrix.txt` 的结论行（2026-09-26 实读 = 18 种）。 |
+| 生成前拦下（本单当时 3 格，不混进"编译通过"） | `mspm0 adc` / `mspm0 xunji`（只有"都不开"能生成，而那一形态按设计不渲染逐件小节 → 到不了板）、`mspm0 全选 9 件`（三种通道形态都 400）。**⚠ 这是本单当时那一跑的读数**；`hwcheck-pin-conflict-exit/01` 复跑后只剩 **1 格如实拦下**（同一个 `mspm0 全选 9 件`，页面已给出出路），前两格能生成了——**以读数文件的结论行为准** |
+| 上板 | **未上板**：本单没有真板子跑过，按 spec「没跑过就写未上板，不假装」——本单当时编译过的 **16 格**可烧可跑（0 error / 0 warning；后来复跑到 18 格），但"板上现象"这一轮留给用户实机（步骤见指南栏「第一次拿到一件新模块」一节） |
 | 判据强度探针（`.scratch/module-hwcheck/probe-09-guard-strength.py`） | **4/4 PASS**：配方少一格 / 地板清单被改小 / 枚举名不进白名单（停用的是母版头与模块头**共用的那个提取器入口**）/ 给单平台件补别的平台——四处停用都让点名用例变红，且源码逐字节复原 |
 | 配方 ↔ 真库校验器（`.scratch/module-hwcheck/validate-recipes.py`） | **17 格全过**（随时可复跑；单平台件只校验有条目那一格） |
 | 测试读数 | 相关面 pytest **1241 passed**（`test_hwcheck*` / `test_llm` / `test_webapp` / `test_library*` / `test_context_manifest` / `test_preflight` / `test_changelog` / `test_repo_language` / `test_errors`）；前端门禁 **1682 passed** |

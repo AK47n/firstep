@@ -102,19 +102,22 @@ SysTick 服务函数，而库内 DMP 端口会自己打开 SysTick 中断——�
 1. **include 按平台的真实工程认**。stm32 侧 `oled.h` / `delay.h` **不存在**
    （delay / led / oled 由母版聚合头 `headfile.h` 拉齐 `ml_*.h`），工单 01
    照 mspm0 的名字渲染 stm32，喂真生成内核直接 UnresolvedIncludeError。
-2. **include 按平台的真实工程认**。stm32 侧 `oled.h` / `delay.h` **不存在**
-   （delay / led / oled 由母版聚合头 `headfile.h` 拉齐 `ml_*.h`），工单 01
-   照 mspm0 的名字渲染 stm32，喂真生成内核直接 UnresolvedIncludeError。
-3. **mspm0 的 SysConfig 初始化是活调用**（工单 hwcheck-acceptance/01 起）。
-   这里曾经只能输出 `/* SYSCFG_DL_init(); */` 注释占位，因为 `SYSCFG_DL_init`
-   不在任何头文件里（`ti_msp_dl_config.h` 构建期生成），生成内核的「main.c
-   不许调不存在的接口」门禁会判它未定义。现在那条生成链的限制已经修掉
-   （母版 syscfg 现算出构建期接口面，骨架 sanitize 与生成门禁认同一份），
-   所以检测程序**直接输出活调用**——"上板前先取消注释"这一步连同它的失败形态
-   （"灯不闪、串口一个字没有"）一起消失。**边界如实说**：本单证的是"那一行在
-   产物里是活代码 + 工程真编译 0 error / 0 warning"（读数
+2. **mspm0 的 SysConfig 初始化**（这一条分两段读，别只看前半句）：工单 02 当时
+   只能输出注释占位 `/* SYSCFG_DL_init(); */`，因为 `SYSCFG_DL_init` 不在任何头
+   文件里（`ti_msp_dl_config.h` 构建期生成），生成内核的「main.c 不许调不存在的
+   接口」门禁会判它未定义——那时如实输出占位 + 说明（文件头、清单第一条都写明
+   "上板前取消注释"）。**从工单 hwcheck-acceptance/01 起那半句已经翻过来了**：
+   生成链的那处限制修掉之后（母版 syscfg 现算出构建期接口面，骨架 sanitize 与
+   生成门禁认同一份），检测程序**直接输出活调用**——"上板前先取消注释"这一步
+   连同它的失败形态（"灯不闪、串口一个字没有"）一起消失。**边界如实说**：本单
+   证的是"那一行在产物里是活代码 + 工程真编译 0 error / 0 warning"（读数
    `.scratch/hwcheck-acceptance/probe-01-compile-matrix.txt`）；板上真的动起来
    要真机上板，见工单 hwcheck-acceptance/05（**未上板**）。
+
+> ⚠ 这一段曾经**两处逐字重复**（第 1 条与第 2 条），且标题写"两件事"而下面列到
+> 第 3 条——那是工单 hwcheck-acceptance/01 改这一段时**改错了行**（把第 2 条换成了
+> 第 1 条的副本，另起一条写新事实）；工单 hwcheck-hygiene/08 已订正这一段——现在标题、
+> 条数、内容三者一致（两条），历史（占位）与现状（活调用）收在第 2 条里。
 """
 
 from __future__ import annotations
@@ -675,7 +678,7 @@ def _recipe_runtime(
     （真机判例见 `hwcheck_recipe.escape_c_string`）。
     """
     out: list[str] = [
-        "/* ---- 逐件小节运行时（判定在板上算，工单 module-hwcheck/04）---- */",
+        "/* ---- 逐件小节运行时（判定在板上算）---- */",
         "static int hwcheck_summary_ok;",
     ]
     if needs_verdict:
@@ -983,7 +986,7 @@ def render_main_c(
     # 通用降级小节（工单 07）：排在专精小节之后（见 docstring「顺序」），
     # 且必须在 `render_generic_runtime` 之后——C 要求调用点之前有定义。
     if generic and config.has_output_channel:
-        lines.append(f"/* ---- 通用降级小节（{GENERIC_LABEL}；工单 07）---- */")
+        lines.append(f"/* ---- 通用降级小节（{GENERIC_LABEL}）---- */")
         for section in generic:
             lines.append(f"static void hwcheck_generic_{section.slug}(void)")
             lines.append("{")
@@ -994,7 +997,7 @@ def render_main_c(
     # 自建件小节（工单 03）：排在库内两批**之后**——它的判据来自用户确认的事实、
     # 不是库内配方，所以学生在页面上读到的顺序是"库内验证过的 → 按你给的事实试的"。
     if custom and config.has_output_channel:
-        lines.append(f"/* ---- 自建件小节（{CUSTOM_TAG_TEXT}；工单 03）---- */")
+        lines.append(f"/* ---- 自建件小节（{CUSTOM_TAG_TEXT}）---- */")
         for section in custom:
             lines.append(f"static void {section.func_name}(void)")
             lines.append("{")
@@ -1207,7 +1210,7 @@ def _report_outputs(config: HwCheckConfig) -> list[str]:
         lines.extend([
             "static void hwcheck_write_serial(const char *s)",
             "{",
-            "    /* 每行补 CRLF（行尾策略，工单 06）：串口助手上裸 LF 不回列，",
+            "    /* 每行补 CRLF（行尾策略）：串口助手上裸 LF 不回列，",
             "     * 下一行会接着上一行的尾巴写。库内既有消息也是 \\r\\n 结尾。 */",
             '    DEBUG_PRINTF("%s\\r\\n", s);',
             "}",
@@ -1219,7 +1222,7 @@ def _report_outputs(config: HwCheckConfig) -> list[str]:
             "{",
             "    /* 本屏 16×8 字符网格、可见 4 行：整行从头写，保证每次都看得见。",
             "     * 超过 16 列的整行会被屏自己截掉尾部（屏就这么宽）——读数行已按「值优先」",
-            "     * 排（工单 hwcheck-hardening/03：值与量纲在最前，表达式退成行尾括注），",
+            "     * 排（值与量纲在最前，表达式退成行尾括注），",
             "     * 所以屏上至少看得见数与量纲；但长行仍会被截，完整结果以串口那份为准",
             "     * （页面通道说明里就是这么写的）。 */",
             "    oled_show_text(0, 0, s);",

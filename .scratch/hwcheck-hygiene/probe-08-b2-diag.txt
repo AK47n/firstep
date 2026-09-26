@@ -1,0 +1,16 @@
+# 读数：probe-08-b2-diag
+# 命令：node .scratch/hwcheck-hygiene/probe-08-b2-diag.mjs
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T01:52:23+08:00
+# 退出码：0
+[DEBUG-b2] +  1181ms 服务已起 http://127.0.0.1:10130
+[DEBUG-b2] +  1423ms 请求 #1  drop=false  url=register
+[DEBUG-b2] +  3059ms reload 前 attempts=1
+[DEBUG-b2] +  3059ms dropNext=true，准备 reload
+[DEBUG-b2] +  3084ms 请求 #2  drop=true  url=register
+[DEBUG-b2] +  3086ms 请求 #2 已 abort(failed)
+[DEBUG-b2] +  3283ms reload 返回（domcontentloaded）
+[DEBUG-b2] +  3402ms 请求 #3  drop=false  url=register
+[DEBUG-b2] +  7289ms reload 后 attempts=3（本段 2 发）
+[DEBUG-b2] +  7293ms 新文档 epoch=1790445146298.9
+[DEBUG-b2] +  7343ms 收尾：服务还活着=true
