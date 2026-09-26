@@ -32,8 +32,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // ci-gate-fixes/01 引入）。刻意**不伪造 `HOME` / `USERPROFILE`**——那会连带改掉数据目录、
 // 最近工程等一串路径推导，把一个显式契约换成全局副作用。
 //
-// **api_key 给一个夹具专用的假值**：`_require_config`（工单 ci-gate-fixes/01 收紧判据后）
-// 要求非空 key 才放行，而库端点与 AI 端点共用那道闸。
+// **api_key 给一个夹具专用的假值**：库端点已经不再需要它（工单 ci-gate-fixes/04 把
+// 「库在哪」与「AI 配了没」拆成两道闸，上面那条 400 从此不会再出现）；现在它保的是
+// **AI 面与前端读到的「已配置」态**——`api_configured` 为真时，设置页环境体检那行显示
+// 「已保存（模型 …）」而不是「未保存主 API key」、欢迎卡走"已配置"分支
+// （`fx/env.js` / `ui/welcome.js`），验收跑的才是"用户已配好"那条路
+// （spec 自己 `page.route` 挡掉真调用）。**它保不了 `#gen-banner`**：那条横幅只在
+// 保存设置后被 toggle，首屏本来就不出现（工单 04 探针的既有观察）。
 //
 // **base_url 指向本机一个没人听的端口**（本单评审整改）：种子配置漏写它就会落到
 // `DEFAULT_BASE_URL = https://api.deepseek.com`，于是一条**没被 spec 的 `page.route` 拦住**的

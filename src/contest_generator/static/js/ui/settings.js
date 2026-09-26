@@ -532,7 +532,8 @@ $("btn-save-connect").addEventListener("click", async () => {
 async function refreshState() {
   setState(await apiGet("/api/state"));
   $("gen-banner").classList.toggle("hidden", !!state.api_configured);
-  // 未配置时模块库读不到：保留旧列表（可能为空），不能让渲染中断
+  // 出错时保留旧列表（可能为空），不能让渲染中断——**没配 AI key 仍读得到库**
+  // （工单 ci-gate-fixes/04），所以这里不再拿"未配置"当读库失败的预期形态
   try { state.modules = await apiGet("/api/modules"); }
   catch (e) { state.modules = state.modules || []; }
   // 工具链可用性（工单 autocompile-loop/01）：一键编译修复按钮的置灰依据

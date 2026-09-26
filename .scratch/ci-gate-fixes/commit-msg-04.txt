@@ -1,0 +1,54 @@
+工单 ci-gate-fixes/04：库相关端点改用「库在哪」闸，没配 key 也能浏览库
+
+要做什么
+--------
+把「库在哪」与「AI 配了没」拆成两道闸。此前 webapp.py 里 49 处 `_require_config`
+共用一个判据（**要有非空 api_key**），于是干净检出上 `/api/modules` 等库端点一律
+400「未配置 AI API」——用户拿到工具的第一件事（看看库里有什么模块）被一件与 AI
+无关的事挡住。现在：库端点只看「库在哪」，真派发模型的端点照旧缺 key 就中文 400。
+
+盘点（分类是判据，不只是代码）
+------------------------------
+量具 `.scratch/ci-gate-fixes/survey-04-require-config.py`（三张表：调用点归属 /
+端点闸门来源矩阵 / 调用图传递闭包）。**实测 49 处调用（工单立项时写 46 处）**，
+落在 48 个函数里：**22 处留 AI、27 处改库闸**，两张表逐条记进工单 Comments。
+
+安全边界：既碰库又派发模型的端点都在碰库之前先取 LLM（`module_add` 的
+`_llm(context)` 是首个实参、`module_description` 同理）；9 个"经辅助函数才走到 LLM"
+的端点闸门在 `_llm` / `LLMRun().llm()` 上，本单没动那条路。
+
+设计
+----
+- `_resolve_library_config(ctx)`：「库在哪」的唯一解析处（不看 api_key）——
+  ① `_current_config`（含"配置文件不在 + 随包库在场"的回退）；②
+  `_bootstrap_library_config`（install.bat 写的引导态：库路径齐全 + key 空串，
+  `load_config` 按缺 key 拒绝，而库的位置写在文件里 → 读 `raw_library_dirs`）。
+- `_library_config` = 上面那个 + 400 中文（文案单源 `_LIBRARY_UNCONFIGURED`，
+  不再借 AI 那句）；`_library_dir` / `_masters_dir` 是它的两个薄访问器。
+- 三个调用方共用同一处解析、只在最后一步分道：库端点与检测页 → 400 指路；
+  设置页 GET（不能 400，表单总得渲染）→ 兜底缺省位置。
+- 判据与生成链同源的那条不变量补了结构判据：`_require_config` 调用点 = frozen AI 表
+  （两向都判）、库访问器不许出现 `_require_config` / `api_key`。
+
+评审整改（两轴评审）
+--------------------
+① 补第三道库闸：`_hwcheck_library_config`（检测页）原先只走 `_current_config`，
+   引导态下与库端点**两套说法**（它自己 docstring 就写着"硬件检测不需要 AI"）；
+② 抽出 `_resolve_library_config`，消掉 `_library_config` 与设置页 GET 各写一遍的两级控制流；
+③ B 表漏列 `pdf_refs` 已补；`tests/test_config.py` 的"非空"护栏改成同一份响应读数；
+④ 同类陈旧注释更正（`test_module_intro.py` / `test_module_i2c_probe.py` / 夹具
+   `tests/browser/server.mjs` 的假 key 理由）。
+
+读数（本机 LF 检出）
+--------------------
+- `python -m pytest -n auto -q` **5544 passed + 11 skipped**；
+- 前端门禁 **1796 passed / 0 fail**；浏览器门禁 **42 passed / 0 fail**；
+- 真机探针（真后端 + 真 Chromium，引导态 + 检出内真库）改前/改后：
+  四库 400→200、模块池「共 0 个可用模块」→「共 96 个可用模块」、
+  模块库 tab 真数据格 0→480；
+- 判据强度反证三格注入全红 + `webapp.py` 逐字节复原。
+
+另开单
+------
+`issues/06`：`masters_confirm` 的 docstring（"无归档动作的确认不要求 AI 配置"）
+与代码（无条件 `_require_config`）不一致——事务语义要重新论证，不在本单夹带。

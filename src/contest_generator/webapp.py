@@ -930,8 +930,73 @@ class LLMRun:
         self._context.recent_llm_workflows.add_completed(self.collector)
 
 
+#: 库相关端点的出路文案：判据是「库在哪」，不是「AI 配了没」——两条闸门说两句
+#: 不同的话（工单 ci-gate-fixes/04）。借 AI 那句会把用户指去填一个与"看不见库"
+#: 无关的 key；而"没有库"这件事实在设置页上本来就有对应的两栏。
+_LIBRARY_UNCONFIGURED = (
+    "还没配置模块库目录：请先到设置页完成配置"
+    "（浏览库不需要 AI，但得先告诉工具库在哪）"
+)
+
+
+def _bootstrap_library_config(ctx: AppContext) -> AppConfig | None:
+    """**引导态**的配置（`install.bat` 写的那份：库路径齐全 + `api_key` 空串）；
+    没有 = None。
+
+    为什么它读得到而 `_current_config` 读不到：`load_config` 按「缺 api_key」大声
+    拒绝（那是 AI 面的正确判据），可**库的位置**就写在同一个文件里——`raw_library_dirs`
+    就是为这一档开的同源口子（工单 beginner-guide-enrich/03，设置页一直在用）。
+
+    缺哪一项就用该项的缺省位置（与设置页原先的内联写法逐字等价：表单总得显示点什么）。
+    """
+    raw_mod, raw_mas = raw_library_dirs(ctx.config_path)
+    if raw_mod is None and raw_mas is None:
+        return None
+    defaults = AppConfig()
+    return AppConfig(
+        module_library_dir=raw_mod or defaults.module_library_dir,
+        masters_dir=raw_mas or defaults.masters_dir,
+    )
+
+
+def _resolve_library_config(ctx: AppContext) -> AppConfig | None:
+    """「库在哪」的唯一解析处（**不看 `api_key`**）；定不出来 = None。
+
+    两级（工单 ci-gate-fixes/04：引导态与随包库回退**不许各走各的**）：
+
+    ① `_current_config` —— 有可用的配置就用它。含"配置文件不在 + 随包库在场"的回退
+       （那条路在 `config.load_config` 里，返回的也是库路径齐全的 AppConfig）；
+    ② `_bootstrap_library_config` —— 配置在、key 空串的**引导态**（`install.bat`
+       写的那份）。
+
+    三个调用方只在**最后一步**分道：库端点与检测页定不出来就 400 指路（各说各的
+    那句文案），设置页 GET 不能 400（表单总得渲染出两栏），兜底缺省位置显示。
+    """
+    config = _current_config(ctx)
+    if config is None:
+        config = _bootstrap_library_config(ctx)
+    return config
+
+
+def _library_config(ctx: AppContext) -> AppConfig:
+    """库相关端点要的配置闸：只要「库在哪」定得出来就放行，**不看 `api_key`**。
+
+    与 `_require_config`（AI 端点）的分工就是本单（ci-gate-fixes/04）的全部内容：
+    「库路径齐全 + key 空串」是 install.bat 写出来的**引导态**，不是"什么都没配"
+    ——用户拿到工具的第一件事是看库里有什么模块，而不是先被要求填 key。
+    真派发模型的端点仍然走 `_require_config`，判据在各自端点（`_llm` 那条路也
+    照旧过它），本函数不替它们做决定。
+
+    判据本体在 `_resolve_library_config`；这里只把"定不出来"翻成 400 中文。
+    """
+    config = _resolve_library_config(ctx)
+    if config is None:
+        raise HTTPException(400, _LIBRARY_UNCONFIGURED)
+    return config
+
+
 def _library_dir(ctx: AppContext) -> Path:
-    return _require_config(ctx).module_library_dir
+    return _library_config(ctx).module_library_dir
 
 
 def _hwcheck_devices(payload: dict) -> tuple[str, ...]:
@@ -983,8 +1048,14 @@ def _hwcheck_library_config(ctx: AppContext) -> AppConfig:
     装配本身归域层（`hwcheck_board.hwcheck_view`，工单 webapp-consolidation/01）：
     本函数只做「AppContext → AppConfig」这一层的翻译，各端点调它一次拿显式路径，
     再直调域函数——检测页装配那条链上不再有 AppContext。
+
+    **判据与库端点同源**（工单 ci-gate-fixes/04 评审补口）：走
+    `_resolve_library_config`——只看"库在哪"，不看 `api_key`。早先它只走
+    `_current_config`，于是**引导态**（库路径齐全 + key 空串）下检测页答 400
+    而库端点答 200：同一台机器上两套说法，且与它自己 docstring 的「硬件检测
+    不需要 AI」相抵。文案仍按检测页这一处（预览 / 生成 / 回读 / 排障四处共用）。
     """
-    app_config = _current_config(ctx)
+    app_config = _resolve_library_config(ctx)
     if app_config is None:
         raise HwCheckError(
             "还没配置模块库 / 母版库目录：请先到设置页完成配置"
@@ -1005,7 +1076,7 @@ def _instance_known_slugs(module_library_dir: Path, slugs: Sequence[str]) -> lis
 
 
 def _masters_dir(ctx: AppContext) -> Path:
-    return _require_config(ctx).masters_dir
+    return _library_config(ctx).masters_dir
 
 
 def _assemble_topic_context(
@@ -1440,8 +1511,7 @@ def _desktop_topic_title(context: AppContext, topic_id: str | None) -> str | Non
     检查），生成路由照旧调用。"""
     if not topic_id:
         return None
-    config = _require_config(context)
-    entry = resolve_number(topic_library_dir(config.module_library_dir), topic_id)
+    entry = resolve_number(topic_library_dir(_library_dir(context)), topic_id)
     return topic_dir_title(entry.key, entry.problem_text)
 
 
@@ -3480,8 +3550,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         output_dir = Path(_require_str(payload, "output_dir"))
         if not output_dir.is_dir():
             raise ContextError(f"输出目录不存在：{output_dir}")
-        config = _require_config(context)
-        module_library_dir = config.module_library_dir
+        module_library_dir = _library_dir(context)   # 只读盘：库外模块校验要库在哪
 
         source, fields = _load_revision_context(output_dir, module_library_dir)
         return {
@@ -3679,7 +3748,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         output_dir = Path(_require_str(payload, "output_dir"))
         backup_id = _require_str(payload, "backup_id")
         restored = restore_revision(
-            revise_backup_root(_require_config(context).masters_dir.parent),
+            revise_backup_root(_masters_dir(context).parent),
             backup_id,
             output_dir,
         )
@@ -4244,12 +4313,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         seq = payload.get("seq")
         if isinstance(seq, bool) or not isinstance(seq, int) or seq < 1:
             raise TaskError("seq 必须是正整数（轮次序号）")
-        config = _require_config(context)
+        # 轮次回滚只恢复文件 + 改清单状态，一个模型都不派发——闸门是「库在哪」
         return rollback_task_iteration(
             output_dir,
             task_id,
             seq,
-            revise_backup_root(config.masters_dir.parent),
+            revise_backup_root(_masters_dir(context).parent),
         )
 
     # ------------------------------------------------------------------
@@ -4995,7 +5064,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         output_dir = Path(_require_str(payload, "output_dir"))
         backup_id = _require_str(payload, "backup_id")
         restored = restore_backup(
-            fix_backup_root(_require_config(context).masters_dir.parent),
+            fix_backup_root(_masters_dir(context).parent),
             backup_id,
             output_dir,
         )
@@ -5698,23 +5767,20 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         api_key = config.api_key if config is not None else ""
         defaults = AppConfig()
         # 工单 beginner-guide-enrich/03：未配 key（config=None）时仍返回磁盘文件
-        # 里的库目录——install.bat 首次写入的引导配置不被首次保存设置覆盖
-        raw_mod, raw_mas = raw_library_dirs(context.config_path) if config is None else (None, None)
+        # 里的库目录——install.bat 首次写入的引导配置不被首次保存设置覆盖。
+        # 解析走「库在哪」的唯一处（工单 ci-gate-fixes/04 抽出的
+        # `_resolve_library_config`）：这里**不能** 400（表单总得渲染出两栏），
+        # 所以定不出来时兜底缺省位置——与库端点那边只差最后一步，两级判据同一处。
+        lib_config = _resolve_library_config(context)
+        if lib_config is None:
+            lib_config = defaults
         return {
             "configured": config is not None,
             "base_url": (config.base_url if config is not None else ""),
             "model": (config.model if config is not None else ""),
             "api_key": _mask_api_key_display(api_key),
-            "module_library_dir": str(
-                config.module_library_dir
-                if config is not None
-                else (raw_mod or defaults.module_library_dir)
-            ),
-            "masters_dir": str(
-                config.masters_dir
-                if config is not None
-                else (raw_mas or defaults.masters_dir)
-            ),
+            "module_library_dir": str(lib_config.module_library_dir),
+            "masters_dir": str(lib_config.masters_dir),
             # 工具链可选覆盖（工单 autocompile-loop/01）：空串 = 自动探测
             "uv4_path": config.uv4_path if config is not None else "",
             "gmake_path": config.gmake_path if config is not None else "",
@@ -5975,8 +6041,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         本体在 sources/materials 镜像的二进制件——file_count / size_bytes 是
         条目目录磁盘实况，看不见它们，两口径分别呈现，前端相加即总量）。
         """
-        config = _require_config(context)
-        reference_root = reference_library_dir(config.module_library_dir)
+        reference_root = reference_library_dir(_library_dir(context))
         entries = []
         for entry in search_references(
             reference_root,
@@ -6024,9 +6089,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         files = payload.get("files")
         if not isinstance(files, dict):
             raise HTTPException(400, "files 必须是 {文件名: 内容} 对象")
-        config = _require_config(context)
+        library_dir = _library_dir(context)   # 入库是写库，不是 AI 动作（草稿那条才要 AI）
         entry = add_reference(
-            reference_library_dir(config.module_library_dir),
+            reference_library_dir(library_dir),
             title=_require_str(payload, "title"),
             type=_require_str(payload, "type"),
             description=_require_str(payload, "description"),
@@ -6034,7 +6099,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             # 未锚定条目提交空串是合法（anchor_value 允许空，非空由域校验裁决）
             anchor_value=_require_str(payload, "anchor_value", allow_empty=True),
             files=files,
-            kit_vocabulary=module_kit_vocabulary(config.module_library_dir),
+            kit_vocabulary=module_kit_vocabulary(library_dir),
             # 平台属性（工单 01）：缺省 / 空 = any（平台无关，向后兼容）；
             # 词表外值由 add_reference 大声失败（400）
             platform=_optional_str(payload, "platform") or PLATFORM_ANY,
@@ -6049,7 +6114,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     def reference_delete(entry_id: str) -> dict:
         """删除参考文件条目：整个目录移除。"""
         delete_reference(
-            reference_library_dir(_require_config(context).module_library_dir),
+            reference_library_dir(_library_dir(context)),
             entry_id,
         )
         return {"ok": True}
@@ -6079,9 +6144,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             isinstance(item, str) for item in remove_files
         ):
             raise HTTPException(400, "remove_files 必须是字符串列表")
-        config = _require_config(context)
+        library_dir = _library_dir(context)   # 编辑条目同样是写库，不派发模型
         entry = update_reference(
-            reference_library_dir(config.module_library_dir),
+            reference_library_dir(library_dir),
             entry_id,
             title=_require_str(payload, "title"),
             type=_require_str(payload, "type"),
@@ -6090,7 +6155,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             anchor_value=_require_str(payload, "anchor_value", allow_empty=True),
             add_files=add_files,
             remove_files=tuple(remove_files),
-            kit_vocabulary=module_kit_vocabulary(config.module_library_dir),
+            kit_vocabulary=module_kit_vocabulary(library_dir),
             platform=_require_str(payload, "platform"),
             # 题型标记（工单 topic-framework/01）：可选，缺省 = 未标记（与 POST
             # 同语义）；词表外值由 update_reference 大声失败（400）
@@ -6102,9 +6167,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @_map_errors
     def reference_files(entry_id: str) -> list[dict]:
         """条目文件清单：素材清单.txt 记录 + 条目目录实际文件（size 取实况）。"""
-        config = _require_config(context)
         return list_entry_files(
-            reference_library_dir(config.module_library_dir), entry_id
+            reference_library_dir(_library_dir(context)), entry_id
         )
 
     @app.get("/api/references/{entry_id}/files/{rel_path:path}")
@@ -6113,10 +6177,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         """条目文件服务：条目目录命中 = 文本内联；materials 镜像命中 = PDF 预览 /
         扩展名下载；两处都找不到抛 ReferenceError（映射 400，与条目不存在同通道，
         不再有内联 404）。路径安全校验在库内（is_unsafe_path → 400）。"""
-        config = _require_config(context)
+        library_dir = _library_dir(context)
         path, media_type = resolve_entry_file(
-            reference_library_dir(config.module_library_dir),
-            materials_dir(config.module_library_dir),
+            reference_library_dir(library_dir),
+            materials_dir(library_dir),
             entry_id,
             rel_path,
         )
@@ -6130,8 +6194,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @_map_errors
     def pdfs(name: str = "") -> list[dict]:
         """浏览素材库 PDF：全量清单（批次 / 文件名 / 大小 / 修改时间），名字串过滤。"""
-        config = _require_config(context)
-        return list_pdfs(materials_dir(config.module_library_dir), name=name)
+        return list_pdfs(materials_dir(_library_dir(context)), name=name)
 
     # 注意：/pages 必须注册在 /api/pdfs/{rel_path:path}（贪婪 path 匹配）之前，
     # 否则 GET `xxx.pdf/pages` 会被文件预览路由吞掉（解析出 `xxx.pdf/pages`
@@ -6142,15 +6205,13 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @_map_errors
     def pdf_pages_count(rel_path: str) -> dict:
         """单文件页数（PyMuPDF 按需读取）：损坏 / 0 字节 / 非法路径 → 400。"""
-        config = _require_config(context)
-        return {"pages": pdf_page_count(materials_dir(config.module_library_dir), rel_path)}
+        return {"pages": pdf_page_count(materials_dir(_library_dir(context)), rel_path)}
 
     @app.post("/api/pdfs/{rel_path:path}/trash")
     @_map_errors
     def pdf_trash(rel_path: str) -> dict:
         """回收疑似重复组文件：移入 sources/.trash-pdf/<日期>/（不真删，git 忽略）。"""
-        config = _require_config(context)
-        materials = materials_dir(config.module_library_dir)
+        materials = materials_dir(_library_dir(context))
         return {
             "rel_path": rel_path,
             "to": trash_pdf(materials, rel_path, pdf_trash_dir(materials)),
@@ -6161,10 +6222,10 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     def pdf_refs(rel_path: str) -> dict:
         """删除确认的影响说明（工单 ux-walkthrough-02/16）：引用同名文件的
         参考条目标题列表——前端据此决定「条目将无法打开」或「可恢复」文案。"""
-        config = _require_config(context)
+        library_dir = _library_dir(context)
         return {
             "titles": pdf_referenced_by(
-                reference_library_dir(config.module_library_dir), rel_path,
+                reference_library_dir(library_dir), rel_path,
             ),
         }
 
@@ -6172,9 +6233,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @_map_errors
     def pdf_file(rel_path: str) -> FileResponse:
         """PDF 直开：application/pdf 返回供浏览器原生预览（路径安全在库内）。"""
-        config = _require_config(context)
         return FileResponse(
-            resolve_pdf(materials_dir(config.module_library_dir), rel_path),
+            resolve_pdf(materials_dir(_library_dir(context)), rel_path),
             media_type="application/pdf",
         )
 
@@ -6186,23 +6246,20 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @_map_errors
     def materials_md(name: str = "") -> list[dict]:
         """浏览素材库 Markdown：全量清单（批次 / 文件名 / 大小 / 修改时间），名字串过滤。"""
-        config = _require_config(context)
-        return list_markdowns(materials_dir(config.module_library_dir), name=name)
+        return list_markdowns(materials_dir(_library_dir(context)), name=name)
 
     @app.get("/api/materials-md/{rel_path:path}")
     @_map_errors
     def materials_md_file(rel_path: str) -> dict:
         """Markdown 全文（前端拿文本页内渲染预览）：路径安全 / 超限 / 缺失 → 400。"""
-        config = _require_config(context)
-        return read_markdown(materials_dir(config.module_library_dir), rel_path)
+        return read_markdown(materials_dir(_library_dir(context)), rel_path)
 
     @app.get("/api/materials-md-assets/{rel_path:path}")
     @_map_errors
     def materials_md_asset(rel_path: str) -> FileResponse:
         """Markdown 手册的附属资源（图片等）：路径安全 / 超限 / 缺失 → 400，
         按扩展名回 Content-Type（webapp 只透传，语义在 md_library）。"""
-        config = _require_config(context)
-        path = resolve_md_asset(materials_dir(config.module_library_dir), rel_path)
+        path = resolve_md_asset(materials_dir(_library_dir(context)), rel_path)
         return FileResponse(path, media_type=asset_media_type(path))
 
     # ------------------------------------------------------------------
@@ -6238,8 +6295,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         列表一次性算好返回，前端不再按条回查——单条 GET /api/topics/{key}
         是生成入口素材（不带 health，字段现状保持），与浏览列表各司其职。
         """
-        config = _require_config(context)
-        topics_dir = topic_library_dir(config.module_library_dir)
+        topics_dir = topic_library_dir(_library_dir(context))
         return [
             {**entry.to_dict(), "health": topic_health(topics_dir, entry).to_dict()}
             for entry in list_topics(topics_dir)
@@ -6336,7 +6392,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         tmp_path = await _save_upload(pdf)
         try:
             stored = confirm_topics(
-                topic_library_dir(_require_config(context).module_library_dir),
+                topic_library_dir(_library_dir(context)),
                 tmp_path,
                 entries,
                 program_dirs=program_dirs,
@@ -6382,9 +6438,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         category = payload.get("category", "")
         if not isinstance(category, str):
             raise HTTPException(400, "category 必须是字符串")
-        config = _require_config(context)
         entry = update_topic(
-            topic_library_dir(config.module_library_dir),
+            topic_library_dir(_library_dir(context)),
             key,
             problem_text=_require_str(payload, "problem_text"),
             programs=tuple(programs),
@@ -6406,7 +6461,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
         查无此条明确报错（不猜测编造）。
         """
-        config = _require_config(context)
+        config = _library_config(context)   # 库在哪 = 放行线；视觉增强另有可用性判据
         topics_dir = topic_library_dir(config.module_library_dir)
         entry = resolve_number(topics_dir, key)
         vision_base_url, vision_api_key, vision_model = _resolve_vision(config)
@@ -6443,8 +6498,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         渲染全失败 → 400 中文错误（各自说明原因），文字框照常可用。查无
         此条与取题面同一编号解析契约（明确报错，不猜测编造）。
         """
-        config = _require_config(context)
-        topics_dir = topic_library_dir(config.module_library_dir)
+        topics_dir = topic_library_dir(_library_dir(context))
         entry = resolve_number(topics_dir, key)
         if not entry.original_pdf:
             raise HTTPException(400, "该赛题条目没有原 PDF 文件")
@@ -6481,7 +6535,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         查无此条明确报错（不猜测编造）；编号格式非法先拒绝（入口拦截路径
         穿越）。
         """
-        delete_topic(topic_library_dir(_require_config(context).module_library_dir), key)
+        delete_topic(topic_library_dir(_library_dir(context)), key)
         return {"ok": True}
 
     return app

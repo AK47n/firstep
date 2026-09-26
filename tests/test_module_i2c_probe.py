@@ -476,7 +476,8 @@ def test_api_modules_lists_i2c_probe_as_an_internal_module(tmp_path):
 
     判据面 = 真端点（注入配置的 app，照 `test_module_intro.py` 的夹具姿势——
     裸 `create_app()` 会去读本机 `~/.contest_generator/config.json`，CI 上没有
-    → 400「未配置 AI API」，那是把「本机装过工具」当夹具）。载荷里
+    → 当时答 400「未配置 AI API」，那是把「本机装过工具」当夹具；`ci-gate-fixes/04`
+    起库端点不再看 key，但"用例自己注入配置"这条纪律不变）。载荷里
     `kind=internal` + `requires_identity=false` = 「不要求 kit / source_url」，
     页面因此不会给它渲染两行「待补」的购买信息。
     """

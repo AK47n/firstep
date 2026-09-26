@@ -468,8 +468,10 @@ setSettingsDeps({ applyToolchains: (ts) => { setToolchains(ts); renderToolchainS
     $("gen-banner").classList.remove("hidden");
     return;
   }
-  // 未配置 AI API 时模块库读不到（400 提示去设置）——平台卡片必须照常渲染，
-  // 首次使用流程（设置 → 导入母版 → 生成）不能死在启动上
+  // 模块库读不到（连"库在哪"都定不出来时才 400）——平台卡片必须照常渲染，
+  // 首次使用流程（设置 → 导入母版 → 生成）不能死在启动上。
+  // **没配 AI key 不是读不到库的理由**（工单 ci-gate-fixes/04）：那种情况下这
+  // 一行拿到的是真清单；空列表只留给出错的那几种。
   try { state.modules = await apiGet("/api/modules"); }
   catch (e) { state.modules = []; }
   // 工具链可用性（工单 autocompile-loop/01）：一键编译修复按钮的置灰依据

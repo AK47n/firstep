@@ -248,8 +248,10 @@ def client(tmp_path_factory) -> TestClient:
     """带**注入配置**的 app（不能裸 `create_app()`）。
 
     2026-09-16 CI 抓到的环境耦合：裸 `create_app()` 会去读 `~/.contest_generator/config.json`，
-    本机有配置（所以全绿），CI / 新 clone 上没有 → `/api/modules` 直接 **400「未配置 AI API」**，
-    看起来像产品坏了，其实是用例把「本机装过工具」当成了夹具。
+    本机有配置（所以全绿），CI / 新 clone 上没有（当时）→ `/api/modules` 直接
+    **400「未配置 AI API」**，看起来像产品坏了，其实是用例把「本机装过工具」当成了夹具。
+    （`ci-gate-fixes/04` 起那 400 不再是这条路的形态——库端点只看"库在哪"，随包库在场
+    就答 200；但**注入配置这条纪律不变**：用例不该依赖"跑它的这台机器上装过什么"。）
     这里改成注入最小配置（真库目录 + 临时配置路径 + 假 key），与 `test_webapp.py` 同一姿势。
     """
     from contest_generator.config import AppConfig

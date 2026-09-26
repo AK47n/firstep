@@ -485,8 +485,14 @@ def test_app_context_resolves_default_path_at_construction(tmp_path):
         "from fastapi.testclient import TestClient\n"
         "ctx = AppContext()\n"
         "client = TestClient(create_app(ctx))\n"
+        "modules = client.get('/api/modules')\n"   # 只打一发：状态与非空从同一份响应读
         "print(json.dumps({\n"
-        "    'modules_status': client.get('/api/modules').status_code,\n"
+        "    'modules_status': modules.status_code,\n"
+        "    'modules_count': (\n"
+        "        len(modules.json()) if modules.status_code == 200 else None),\n"
+        "    'masters_status': client.get('/api/masters').status_code,\n"
+        "    'topics_status': client.get('/api/topics').status_code,\n"
+        "    'references_status': client.get('/api/references').status_code,\n"
         "    'modules_dir': client.get('/api/settings').json()['module_library_dir'],\n"
         "    'api_configured': client.get('/api/env/status').json()['api_configured'],\n"
         "    'recommend_status': client.post('/api/recommend',\n"
@@ -511,18 +517,22 @@ def test_app_context_resolves_default_path_at_construction(tmp_path):
     assert out.returncode == 0, f"子进程失败：{out.stderr[-800:]}"
     result = json.loads(out.stdout.strip().splitlines()[-1])
 
-    # ① 主目标：干净机器上**库的位置**从缺省位置也认得出来（本单修的就是这条）。
+    # ① 主目标：干净机器上**库的位置**从缺省位置也认得出来（工单 ci-gate-fixes/01）。
     #    机器上没有任何 ~/.contest_generator，也没有显式指过路径。
     tool_root = find_tool_root(__file__)
     assert result["modules_dir"] == str(tool_root / "library" / "modules"), result
     # ② AI 面如实：key 是空的 ⇒ 未配置 + AI 端点中文拒绝（不再是拿空 key 往下跑）
     assert result["api_configured"] is False, result
     assert result["recommend_status"] == 400, result
-    # ③ 已知边界（**本单不修**，另行开单）：库相关的只读端点（`/api/modules` 等）
-    #    共用 `_require_config` 那道"先配 API"的闸，所以空 key 下仍答 400——
-    #    本单给的是"库在哪"，不是"没配 key 也能浏览库"。这条钉住现状，
-    #    等那张单把它改开时这里必须跟着改（它红了 = 那条产品决策落地了）。
-    assert result["modules_status"] == 400, result
+    # ③ 库面可用（工单 ci-gate-fixes/04）：库的位置认得出来 ⇒ 库相关的只读端点
+    #    就该读得出来。② 与 ③ 并立正是这单的形状——「没配 AI」不等于「没有库」。
+    #    四库各打一发，模块库另判**非空**（本仓 library/modules 真有模块；
+    #    只判 200 的话，"空目录也算答得出来"会把回退到错位置放过去）。
+    assert result["modules_status"] == 200, result
+    assert result["modules_count"] > 0, result
+    assert result["masters_status"] == 200, result
+    assert result["topics_status"] == 200, result
+    assert result["references_status"] == 200, result
 
 
 # ---------------------------------------------------------------------------
