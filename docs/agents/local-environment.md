@@ -24,11 +24,19 @@
 >
 > **`ci-gate-fixes` 工单面收口**：`01`–`04`（前一轮）+ `07`（时区断言）+ `08`（缺工具链时显式 skip +
 > 夹具能造 CI 前提 + 两处预览等待带诊断）+ `09`（已删自建件自愈并如实报出）+ `10`（msp0 的
-> `Debug/makefile` 断言缺 CCS 时 skip）+ `11`（清器件集改重试派发）+ **`05`（`launcher-reload`
+> `Debug/makefile` 断言缺 CCS 时 skip）+ `11`（清器件集改重试派发）+ `05`（`launcher-reload`
 > 的 F5 偶发，2026-09-26 本轮定性并修掉：新文档那一发 `register` 丢在传输层 ⇒ 产品侧补重试 +
 > 退出判据多一条"页面真在装载中就再等一轮"（`webapp.mark_page_request` / `exit_via`），
-> 连跑 12 轮全绿）全部 resolved。**仍在 frontier 上**：`06`（`masters_confirm` 闸门与
-> docstring 不一致）。
+> 连跑 12 轮全绿）+ **`06`（2026-09-26 深夜补完，`9709587c` + CHANGELOG `bc1fd127`）：
+> `masters_confirm` 的 AI 闸改成「按需 + 事务之前」——无归档动作走 04 那道「库在哪」闸
+> （`_library_config`，不看 `api_key`）、有归档缺 key 在**调用事务之前**中文 400；
+> 判据单源 = `report.parse_archive_section`（事务与闸门共用）+ `master.requests_archive`；
+> 读数：全套 pytest **5564 passed + 11 skipped**（基线 5565 → 5575 collected，净增 10 条
+> 用例）、`test_library_gate.py` 13 → **23 passed**、判据强度反证
+> `.scratch/ci-gate-fixes/probe-06-gate-red-proof.py`（注入旧形态两条各红、复原逐字节相同）**。
+> **至此本 spec 的 `01`–`11` 全部 resolved，没有单留在 frontier 上。**
+> `main` 比 `origin/main` 多两笔（`efa819de` → `bc1fd127`），**未推**——推法见本节
+> 「本机网络事实」（要 `git -c http.https://github.com/.resolve=…`）。
 >
 > **本轮最值钱的一条方法论**（写进账本）：**本机复现不出来时，别靠形态猜**——
 > `08` 加的那两处诊断（页面可见文本 + 末几次 `/api/hwcheck/preview` 的**状态码与响应体**）
