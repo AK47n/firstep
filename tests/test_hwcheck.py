@@ -3140,6 +3140,66 @@ def test_hwcheck_event_constant_is_registered_in_the_single_source():
     assert events.EVENT_HWCHECK_TRIAGE == "hwcheck_triage"
 
 
+def _raise_when_reading(monkeypatch, filename: str, exc: OSError) -> None:
+    """让**只有这个文件名**的读盘失败（其余照常）——注入"存在但读不出来"。"""
+    real_read_text = Path.read_text
+
+    def boom(self, *args, **kwargs):
+        if self.name == filename:
+            raise exc
+        return real_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", boom)
+
+
+def test_preview_400s_when_the_master_syscfg_cannot_be_read(triage_client, monkeypatch, tmp_path):
+    """母版配置**存在但读不出来** → 预览当场 400 中文（工单 hwcheck-hygiene/04）。
+
+    旧行为：`except OSError: return None` —— 与"母版没导入"挤成同一档静默降级，
+    容量判定整段跳过、预览照常放行，学生点「生成」才吃 400 且不知道是为什么。
+    """
+    client, _, _ = triage_client
+    parent = tmp_path / "out"
+    parent.mkdir()
+    _raise_when_reading(monkeypatch, "mspm0.syscfg",
+                        PermissionError(13, "另一个程序正在使用此文件，进程无法访问。"))
+
+    response = client.post("/api/hwcheck/preview", json={
+        "platform": PLATFORM_MSPM0, "debug_uart": True, "oled": True, "devices": ["led"],
+    })
+    assert response.status_code == 400, response.text
+    detail = response.json()["detail"]
+    assert "读不出来" in detail, detail
+    assert "占用" in detail or "权限" in detail, detail
+
+
+def test_checklist_endpoint_says_it_could_not_read_the_record(triage_client, monkeypatch, tmp_path):
+    """记录**读不出来** → 400 说"读不出来"，**不许**引导删记录（工单 04）。"""
+    client, _, _ = triage_client
+    parent = tmp_path / "out"
+    parent.mkdir()
+    output_dir = _generate_hwcheck_project(client, parent)["output_dir"]
+    from contest_generator.hwcheck_triage import HWCHECK_RECORD_FILENAME
+
+    # 先真写一次记录（没文件就谈不上"读不出来"：那一路是无记录 = 空记录，正常状态）
+    first = client.post(
+        "/api/hwcheck/checklist",
+        json={"output_dir": output_dir, "checked_ids": ["flash"]},
+    )
+    assert first.status_code == 200, first.text
+
+    _raise_when_reading(monkeypatch, HWCHECK_RECORD_FILENAME,
+                        PermissionError(13, "另一个程序正在使用此文件，进程无法访问。"))
+    response = client.post(
+        "/api/hwcheck/checklist",
+        json={"output_dir": output_dir, "checked_ids": ["flash", "heartbeat"]},
+    )
+    assert response.status_code == 400, response.text
+    detail = response.json()["detail"]
+    assert "读不出来" in detail, detail
+    assert "删" not in detail, f"读不出来时引导用户删记录：{detail}"
+
+
 def test_triage_keeps_checked_ids_written_while_the_model_was_thinking(
     triage_client, monkeypatch, tmp_path
 ):

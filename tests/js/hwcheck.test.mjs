@@ -28,6 +28,7 @@ import {
   hwcheckWiringTableHTML, hwcheckPinGroupsHTML,
   hwcheckBoardSharesHTML, hwcheckOrderHTML, hwcheckOrderDesc, hwcheckBoardState,
   hwcheckPinFixHTML,
+  hwcheckPinCapacityNoteHTML,
   hwcheckSectionsState, hwcheckSectionsHTML, hwcheckUnspecializedHTML,
   hwcheckSectionPlanText, hwcheckSectionNoteHTML,
   hwcheckConsoleState, hwcheckConsoleHTML, hwcheckConsoleNoteHTML,
@@ -398,6 +399,23 @@ test("hwcheckPinFixHTML：自动移开的脚逐根如实打出（接线表已是
   assert.equal(hwcheckPinFixHTML(null), "");
   assert.equal(hwcheckPinFixHTML(["", null]), "");
   assert.ok(hwcheckPinFixHTML(["<x> → PA0"]).includes("&lt;x&gt;"), "转义");
+});
+
+test("hwcheckPinCapacityNoteHTML：没判容量就把原因说出来；判过了不渲染", () => {
+  // 工单 hwcheck-hygiene/04：母版没导入时容量判定整段跳过——页面一声不吭就像
+  // "检查过了、没问题"，而学生点到「生成」才吃 400。文案由服务端给（这里只渲染）。
+  const note = "没导入 mspm0 母版（或母版里没有 mspm0.syscfg）：这一趟没判「装不装得下」";
+  const html = hwcheckPinCapacityNoteHTML(note);
+  assert.ok(html.includes("hwcheck-warn"), "要与其它警告同一视觉档");
+  assert.ok(html.includes("没判"), "原话说的是「没判」");
+  // 服务端那句文案本身**不许带 markdown 标记**（工单 02 的口径：产品串里的 `**…**`
+  // 到了页面上就是两个字面星号；这里顺带把"前端不解释标记"这件事钉住——
+  // 前端只渲染，标记该由服务端不写）
+  assert.ok(!html.includes("**"), "渲染产物里出现了字面星号");
+  assert.equal(hwcheckPinCapacityNoteHTML(""), "", "判过了 = 不渲染");
+  assert.equal(hwcheckPinCapacityNoteHTML(null), "");
+  assert.equal(hwcheckPinCapacityNoteHTML("   "), "");
+  assert.ok(hwcheckPinCapacityNoteHTML("<b>x</b>").includes("&lt;b&gt;"), "转义");
 });
 
 test("hwcheckActionsHTML：三个动作带工程目录；编译不可用时按钮置灰", () => {

@@ -396,11 +396,12 @@ def test_payload_is_plain_json_shapes():
                     ["ml_mpu6050"]).to_dict()
     assert set(payload) == {
         "rows", "groups", "board_shares", "order", "missing", "pin_fixes",
-        "guide", "reason", "footnote",
+        "capacity_note", "guide", "reason", "footnote",
     }
     assert json.loads(json.dumps(payload, ensure_ascii=False)) == payload
     assert all(isinstance(row, dict) for row in payload["rows"])
     assert isinstance(payload["pin_fixes"], list)
+    assert isinstance(payload["capacity_note"], str)
 
 
 # ---------------------------------------------------------------------------
@@ -460,6 +461,170 @@ def test_pin_plan_stm32_untouched():
     )
     assert plan.ok
     assert plan.bindings == {} and plan.resolved == () and plan.fixed == ()
+
+
+# ---------------------------------------------------------------------------
+# 「判不了」不许伪装成「判过了」（工单 hwcheck-hygiene/04）
+#
+# 两种语义完全不同的情况在旧实现里被抹平成同一个 None：**母版没导入**（平台本来就
+# 不可用，页面有状态可依）与**母版在、读不出来**（占用 / 权限 / IO = 失败）。
+# 后者静默降级 ⇒ 容量判定整段跳过 ⇒ 预览放行、点「生成」才 400，学生看不到任何理由。
+# ---------------------------------------------------------------------------
+
+
+def test_master_syscfg_missing_is_none_but_unreadable_is_loud(tmp_path, monkeypatch):
+    """没导入 = None（判不了就不判）；**存在但读不出来 = 大声 400 中文**。"""
+    from contest_generator.hwcheck_board import read_master_syscfg
+
+    masters = tmp_path / "masters"
+    (masters / "mspm0").mkdir(parents=True)
+    syscfg = masters / "mspm0" / "mspm0.syscfg"
+
+    # ① 没导入：文件不在 → None（平台不可用是页面已有的状态，不是失败）
+    assert read_master_syscfg(masters, PLATFORM_MSPM0) is None
+
+    # ② 文件在、读不出来：占用 / 权限 / IO → 中文 400，不许返回 None
+    syscfg.write_text("// 母版\n", encoding="utf-8")
+    real_read_text = Path.read_text
+
+    def boom(self, *args, **kwargs):
+        if self.name == syscfg.name:
+            raise PermissionError(13, "另一个程序正在使用此文件，进程无法访问。")
+        return real_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", boom)
+    with pytest.raises(HwCheckError) as excinfo:
+        read_master_syscfg(masters, PLATFORM_MSPM0)
+    message = str(excinfo.value)
+    assert "读不出来" in message, f"没说是「读不出来」：{message}"
+    assert "占用" in message or "权限" in message, f"没给下一步（占用 / 权限）：{message}"
+    assert syscfg.name in message, "没点名是哪个文件"
+
+
+def test_missing_master_syscfg_skips_capacity_but_says_so():
+    """母版没导入 → 容量判定跳过，但**不无声**：计划里带一句人话。"""
+    manifests = _manifests(["led", "delay", "debug_uart", "oled"])
+    plan = hwcheck_pin_plan(
+        PLATFORM_MSPM0, manifests, board_for_platform(PLATFORM_MSPM0), None, _config()
+    )
+    assert plan.ok
+    assert plan.capacity_note, "跳过容量判定却不吭声 = 把「判不了」伪装成「判过了」"
+    assert "没判" in plan.capacity_note or "判不了" in plan.capacity_note
+
+
+def test_capacity_note_is_empty_when_the_check_really_ran():
+    """真判过（母版在）就不能挂那句"没判"——否则页面会为一趟正常的检查报警。"""
+    manifests = _manifests(["led", "delay", "debug_uart", "oled"])
+    plan = hwcheck_pin_plan(
+        PLATFORM_MSPM0, manifests, board_for_platform(PLATFORM_MSPM0),
+        _master_syscfg(), _config(),
+    )
+    assert plan.ok and plan.capacity_note == ""
+    # stm32 压根不做这一步（不是"跳过了"）——同样不挂
+    stm32 = hwcheck_pin_plan(
+        PLATFORM_STM32, manifests, board_for_platform(PLATFORM_STM32), None,
+        _config(PLATFORM_STM32),
+    )
+    assert stm32.capacity_note == ""
+
+
+def test_view_payload_discloses_the_skipped_capacity_check(tmp_path):
+    """页面上看得见：跳过容量判定那句话进 `wiring` 载荷（前端只渲染不判）。"""
+    from contest_generator.hwcheck_board import hwcheck_view
+
+    view = hwcheck_view(
+        _config(),
+        module_library_dir=LIBRARY,
+        masters_dir=tmp_path / "还没导入母版",
+    )
+    wiring = view.board["wiring"]
+    assert wiring["capacity_note"], "载荷里没有这句话 —— 页面上就看不出来"
+    assert "没判" in wiring["capacity_note"]
+
+
+def test_page_facing_copy_carries_no_markdown_markers(tmp_path, monkeypatch):
+    """**页面上要显示的**域层文案不许带 markdown 标记（工单 hwcheck-hygiene/02 的口径）。
+
+    为什么单独一条：那条守卫（`tests/js/bold-marker-guard.test.mjs` 判据 ⑨）的面只切
+    `static/js/{fx,ui}/**`——**管不到域层的 Python 文案**，而这些文案经前端 `esc()`
+    直接进 innerHTML（本单新增的 `capacity_note` 就是这一路；评审当场抓到过一笔）。
+    所以这里把本单碰过的四处页面文案一起钉住。
+    """
+    from contest_generator.hwcheck_board import (
+        PIN_CAPACITY_SKIPPED_NOTE,
+        PIN_CAPACITY_UNREADABLE_NOTE,
+    )
+    from contest_generator.hwcheck_triage import HWCHECK_RECORD_FILENAME, read_hwcheck_record
+
+    page_copy = {
+        "PIN_CAPACITY_SKIPPED_NOTE": PIN_CAPACITY_SKIPPED_NOTE,
+        "PIN_CAPACITY_UNREADABLE_NOTE": PIN_CAPACITY_UNREADABLE_NOTE,
+    }
+    # 母版配置读不出来那句（页面上原样显示）
+    masters = tmp_path / "masters"
+    (masters / "mspm0").mkdir(parents=True)
+    (masters / "mspm0" / "mspm0.syscfg").write_text("// 母版\n", encoding="utf-8")
+    real_read_text = Path.read_text
+
+    def boom_syscfg(self, *args, **kwargs):
+        if self.name == "mspm0.syscfg":
+            raise PermissionError(13, "另一个程序正在使用此文件，进程无法访问。")
+        return real_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", boom_syscfg)
+    with pytest.raises(HwCheckError) as syscfg_error:
+        hwcheck_view(_config(), module_library_dir=LIBRARY, masters_dir=masters)
+    page_copy["母版配置读不出来"] = str(syscfg_error.value)
+
+    # 记录读不出来那句
+    (tmp_path / HWCHECK_RECORD_FILENAME).write_text("{}", encoding="utf-8")
+
+    def boom_record(self, *args, **kwargs):
+        if self.name == HWCHECK_RECORD_FILENAME:
+            raise PermissionError(13, "另一个程序正在使用此文件，进程无法访问。")
+        return real_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", boom_record)
+    with pytest.raises(HwCheckError) as record_error:
+        read_hwcheck_record(tmp_path)
+    page_copy["记录读不出来"] = str(record_error.value)
+
+    bad = {name: text for name, text in page_copy.items() if "**" in text}
+    assert bad == {}, (
+        "这些页面文案里带着 markdown 粗体标记 —— 到了页面上就是两个字面星号"
+        f"（判据 ⑨ 的面只切 static/js，管不到这里）：{bad}"
+    )
+
+
+def test_readback_still_opens_when_the_master_syscfg_is_locked(tmp_path, monkeypatch):
+    """回读 / 排障（`require_pins=False`）不因为母版被占用就打不开工程（工单 04）。
+
+    这两条路回放的是**已经生成成功的那一次**，容量早就判过了：读不出来按"判不了就不判"
+    走，但**照样把那句原因带给页面**（跳过不无声）。预览 / 生成（`require_pins=True`）
+    才是"当场 400"的那条路。
+    """
+    from contest_generator.hwcheck_board import hwcheck_view
+
+    masters = tmp_path / "masters"
+    (masters / "mspm0").mkdir(parents=True)
+    (masters / "mspm0" / "mspm0.syscfg").write_text("// 母版\n", encoding="utf-8")
+    real_read_text = Path.read_text
+
+    def boom(self, *args, **kwargs):
+        if self.name == "mspm0.syscfg":
+            raise PermissionError(13, "另一个程序正在使用此文件，进程无法访问。")
+        return real_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", boom)
+    view = hwcheck_view(
+        _config(), module_library_dir=LIBRARY, masters_dir=masters, require_pins=False
+    )
+    note = view.board["wiring"]["capacity_note"]
+    assert "读不出来" in note, f"回读路径跳过了容量判定却不说原因：{note!r}"
+    # 同一条路在"要判容量"的那一侧（预览 / 生成）必须 400
+    with pytest.raises(HwCheckError) as excinfo:
+        hwcheck_view(_config(), module_library_dir=LIBRARY, masters_dir=masters)
+    assert "读不出来" in str(excinfo.value)
 
 
 def test_pin_plan_unsolvable_gets_page_actionable_message():

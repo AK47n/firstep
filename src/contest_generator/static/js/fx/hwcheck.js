@@ -564,6 +564,16 @@ export function hwcheckPinFixHTML(pinFixes) {
     + "</div>";
 }
 
+// hwcheckPinCapacityNoteHTML(note)：**这一趟没判**「装不装得下」的原因（工单
+// hwcheck-hygiene/04）。为什么必须显示：母版没导入时容量判定整段跳过，页面若一声不吭
+// 就像"检查过了、没问题"，而学生点到「生成」才吃 400。空 = 判过了（或这一步不适用），
+// 不渲染任何东西。文案由服务端给（`PIN_CAPACITY_SKIPPED_NOTE` 单源），前端只渲染。
+export function hwcheckPinCapacityNoteHTML(note) {
+  const text = String(note || "").trim();
+  if (!text) return "";
+  return `<div class="hwcheck-warn">⚠ ${esc(text)}</div>`;
+}
+
 // hwcheckWiringTableHTML(rows, footnote)：接线表（列与工程 README「引脚接线表」
 // 同序：模块 / 角色 / 引脚 / 说明）。pin_note = 板上共享注记（如地猛星 PA0/PA1 的
 // 「板载 LED 共用」）——挂在同一行上：学生照着表和板子对线时才看得见这条暗雷。

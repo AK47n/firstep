@@ -138,12 +138,19 @@ HWCHECK_PIN_EXIT_MARKER = "【检测页出路】"
 
 
 def read_master_syscfg(masters_dir: Path | str, platform: str) -> str | None:
-    """母版 mspm0.syscfg 全文（检测页引脚消解用；该平台无此文件 / 读不了 = None）。
+    """母版 mspm0.syscfg 全文（检测页引脚消解用）。
 
     为什么要读母版这一份：装不装得下的判据 = **落盘后的 syscfg**
     （`prune(选中集) → rewrite(绑定)`），而那份文本的起点就是母版文件。
-    读不到按"判不了就不判"处理（`hwcheck_pin_plan` 只做自动解冲突那一步）——
-    不静默放行：生成内核那一刻的门禁照旧。
+
+    **两种"没有这份配置"必须分开**（工单 hwcheck-hygiene/04）：
+
+    * **平台本来就没有这份配置**（非 mspm0）／**母版没导入**（文件不在）→ `None`：
+      平台不可用是页面已有的状态（导入母版那条路），容量判定跳过——但**不许无声**，
+      由 `hwcheck_pin_plan` 把"没判"写进 `HwCheckPinPlan.capacity_note` 带给页面。
+    * **文件在、但读不出来**（占用 / 权限 / IO）→ `HwCheckError` 400 中文：这是**失败**，
+      旧实现把它也并进上面那一档 `return None`，于是"读不出来"被当成"没有这份配置"，
+      预览放行、生成才 400，学生看不到任何理由——**判不了不许伪装成判过了**。
     """
     if platform != PLATFORM_MSPM0:
         return None
@@ -152,8 +159,55 @@ def read_master_syscfg(masters_dir: Path | str, platform: str) -> str | None:
         return None
     try:
         return path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return None
+    except OSError as exc:
+        raise HwCheckError(
+            f"母版配置 {path.name} 读不出来：{exc} —— "
+            "它可能正被别的程序占用（编辑器 / 资源管理器预览），或当前账户没有读权限；"
+            "先把占用它的程序关掉（或把母版换一处放置）再试。"
+        ) from exc
+
+
+def _master_syscfg_for(
+    masters_dir: Path | str, platform: str, *, loud: bool
+) -> tuple[str | None, str]:
+    """→ (母版 syscfg 文本 | None, 容量判定跳过时的人话原因)。
+
+    `loud=True`（预览 / 生成：这一趟真要判容量）时，母版**在、读不出来** → 直接
+    `HwCheckError` 400（`read_master_syscfg` 抛出）。
+
+    `loud=False`（回读 / 排障：回放的是**已经生成成功的那一次**，容量早就判过）时，
+    读不出来按"判不了就不判"走，但**照样把原因说出来**（`PIN_CAPACITY_UNREADABLE_NOTE`）
+    ——母版文件被编辑器占着不该让人打不开自己的检测工程；反过来，跳过也绝不无声
+    （工单 hwcheck-hygiene/04 的两条一起满足）。
+    """
+    try:
+        text = read_master_syscfg(masters_dir, platform)
+    except HwCheckError:
+        if loud:
+            raise
+        return None, PIN_CAPACITY_UNREADABLE_NOTE
+    return text, ""
+
+
+# 「这一趟**没判**装不装得下」的人话说明（工单 hwcheck-hygiene/04）：母版没导入时
+# 容量判定整段跳过——跳过得说出来，否则页面看起来像"检查过了、没问题"。文案归域层
+# （与 `hwcheck_pin_message` 同族），前端只渲染。
+#
+# ⚠ 这是**页面上要显示的**话（前端 `esc()` 之后进 innerHTML）——**不许写 markdown 标记**
+# （工单 hwcheck-hygiene/02 的口径：产品串里的 `**…**` 到了页面上就是两个字面星号；
+# 那条守卫的面只切 `static/js/**`，**管不到这里**，所以全靠这条注释与评审盯住）。
+PIN_CAPACITY_SKIPPED_NOTE = (
+    "没导入 mspm0 母版（或母版里没有 mspm0.syscfg）：这一趟没判「装不装得下」"
+    "——先到「母版库」把 mspm0 母版导入，再回来看这一步的结论。"
+)
+
+# 同上一句的另一种成因（工单 04）：母版**在**、但这次读不出来。回读 / 排障那条路
+# （`require_pins=False`，工程已经生成成功了）按"判不了就不判"走，但**照样说出来**：
+# 学生不至于因为母版文件被编辑器占着就打不开自己的检测工程。
+PIN_CAPACITY_UNREADABLE_NOTE = (
+    "母版 mspm0.syscfg 这次读不出来（可能被别的程序占用）：这一趟没判「装不装得下」"
+    "——关掉占用它的程序再刷新，这一句就没了。"
+)
 
 
 @dataclass(frozen=True)
@@ -163,13 +217,15 @@ class HwCheckPinPlan:
     `bindings` = 增量（自动让位的角色 → 新脚），原样喂生成内核（工程 README /
     接线快照因此与页面同源）；`resolved` = 校验后的绑定（接线表 / 冲突组按它渲染）；
     `fixed` = 「动了哪几根线」的人话说明行；`conflict` = 装不下时的页面文案
-    （空串 = 这一趟能生成）。
+    （空串 = 这一趟能生成）；`capacity_note` = 「这一趟没判容量」的原因
+    （非空 = 判不了，且**页面看得见**；工单 hwcheck-hygiene/04）。
     """
 
     bindings: dict[str, str] = field(default_factory=dict)
     resolved: tuple[ResolvedBinding, ...] = ()
     fixed: tuple[str, ...] = ()
     conflict: str = ""
+    capacity_note: str = ""
 
     @property
     def ok(self) -> bool:
@@ -182,6 +238,8 @@ def hwcheck_pin_plan(
     board: Board,
     master_syscfg: str | None,
     config: HwCheckConfig,
+    *,
+    capacity_note: str = "",
 ) -> HwCheckPinPlan:
     """检测页生成前的引脚消解（纯函数：吃已解析的 manifest / 板 / 母版 syscfg 文本）。
 
@@ -201,7 +259,11 @@ def hwcheck_pin_plan(
 
     **只对 mspm0 自动搬**：stm32 的默认脚重叠按 ADR 0010 是提示语义、不拦生成，
     搬了反而改掉既有工程（逐字节回归），故 stm32 返回空计划。
-    `master_syscfg` 缺失（母版没导入 / 假母版）= 判不了就不判，只做第 1 步。
+    `master_syscfg` 缺失（母版没导入 / 假母版）= 判不了就不判，只做第 1 步——
+    但**跳过得说出来**：`capacity_note` 默认取 `PIN_CAPACITY_SKIPPED_NOTE`（母版没导入），
+    调用方有更精确的成因就传进来（回读 / 排障那条路传"读不出来"那一句）。
+    而"母版在、读不出来"在**需要判容量**的路径上（`require_pins=True`）于
+    `read_master_syscfg` 那一步就 400 了，不会走到这里。
     """
     if platform != PLATFORM_MSPM0:
         return HwCheckPinPlan()
@@ -214,7 +276,10 @@ def hwcheck_pin_plan(
         else ()
     )
     if not master_syscfg:
-        return HwCheckPinPlan(dict(solved.bindings), resolved, solved.fixed)
+        return HwCheckPinPlan(
+            dict(solved.bindings), resolved, solved.fixed,
+            capacity_note=capacity_note or PIN_CAPACITY_SKIPPED_NOTE,
+        )
     report = syscfg_pin_conflict_report(
         master_syscfg=master_syscfg,
         manifests=manifests,
@@ -440,6 +505,9 @@ class HwCheckBoardView:
     reason: str = HWCHECK_ORDER_REASON
     footnote: str = PIN_TABLE_FOOTNOTE
     pin_fixes: tuple[str, ...] = ()
+    # 「这一趟没判装不装得下」的原因（工单 hwcheck-hygiene/04）：非空 = 判不了。
+    # 与 `pin_fixes` 同层（都在 `wiring` 载荷里），页面在同一块里渲染。
+    capacity_note: str = ""
 
     def to_dict(self) -> dict:
         """JSON 载荷形态（preview / generate / project 三个端点共用一处投影）。"""
@@ -450,6 +518,7 @@ class HwCheckBoardView:
             "order": [dict(item) for item in self.order],
             "missing": [dict(item) for item in self.missing],
             "pin_fixes": list(self.pin_fixes),
+            "capacity_note": self.capacity_note,
             "guide": self.guide,
             "reason": self.reason,
             "footnote": self.footnote,
@@ -464,6 +533,7 @@ def hwcheck_board_view(
     devices: Sequence[str] = (),
     resolved_bindings: Sequence[ResolvedBinding] = (),
     pin_fixes: Sequence[str] = (),
+    capacity_note: str = "",
     custom_device_ids: Sequence[str] = (),
 ) -> HwCheckBoardView:
     """投影一次（纯函数：吃已解析的 manifest 集与板定义，不碰盘）。
@@ -511,6 +581,7 @@ def hwcheck_board_view(
             platform, manifests, devices, custom_device_ids=custom_device_ids
         ),
         pin_fixes=_pin_fixes(pin_fixes, resolved_bindings, pins),
+        capacity_note=str(capacity_note or ""),
     )
 
 
@@ -772,12 +843,16 @@ def hwcheck_view(
     )
     devices = selected
     board = board_for_platform(config.platform)
+    master_syscfg, capacity_note = _master_syscfg_for(
+        masters_dir, config.platform, loud=require_pins
+    )
     plan = hwcheck_pin_plan(
         config.platform,
         manifests,
         board,
-        read_master_syscfg(masters_dir, config.platform),
+        master_syscfg,
         config,
+        capacity_note=capacity_note,
     )
     if require_pins and not plan.ok:
         raise HwCheckError(plan.conflict)
@@ -788,6 +863,9 @@ def hwcheck_view(
         devices=devices,
         resolved_bindings=plan.resolved,
         pin_fixes=plan.fixed,
+        # 「这一趟没判装不装得下」交给页面说（工单 hwcheck-hygiene/04）：跳过得说出来
+        # ——否则页面看起来像"检查过了、没问题"，而学生点到「生成」才吃 400。
+        capacity_note=plan.capacity_note,
         # 自建件的豁免集 = **还在库里的 ∪ 已经被删掉的**（工单 ci-gate-fixes/09）：
         # `_missing_devices` 拿它把"自建件"从"本平台没有条目的库内模块"里摘出来——
         # 已删的那件同样是"还不是模块"，不摘就会在这里抛「库中不存在模块」，

@@ -839,15 +839,28 @@ def fallback_advice(context: TriageContext) -> TriageAdvice:
 def read_hwcheck_record(output_dir: Path) -> HwCheckRecord:
     """读一次检测的记录；无文件 = 空记录（还没填过，不 400）。
 
-    坏 JSON / 非对象 / version 非法 → `HwCheckError` 400 中文（点名该删哪个
-    文件）：静默重置会把学生填过的现象与勾选悄悄抹掉，那比报错坏得多。
+    **两支失败要分开说**（工单 hwcheck-hygiene/04，旧实现把两者挤进同一句）：
+
+    * **读不出来**（`OSError`：被别的程序占用 / 权限 / IO）→ 说"读不出来"与下一步
+      （谁占着 / 权限），并**明确不许**引导"删掉重填"——照那句做就是删掉学生填过的
+      现象与勾选；
+    * **内容坏了**（`json.JSONDecodeError` / 非对象 / version 非法）→ 保留既有的
+      "可删可修"引导：那是**内容**的问题，删掉重填确实是出路之一。
     """
     path = output_dir / HWCHECK_RECORD_FILENAME
     if not path.is_file():
         return empty_record()
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        raw_text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise HwCheckError(
+            f"检测记录 {HWCHECK_RECORD_FILENAME} 读不出来：{exc} —— "
+            "它可能正被别的程序占用（编辑器 / 同步盘），或当前账户没有读权限；"
+            "先把占用它的程序关掉再试。"
+        ) from exc
+    try:
+        data = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
         raise HwCheckError(
             f"检测记录 {HWCHECK_RECORD_FILENAME} 损坏（不是合法 JSON）：{exc} —— "
             "可以把它删掉重填，或修好 JSON 再看"

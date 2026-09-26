@@ -1,0 +1,16 @@
+工单 hwcheck-hygiene/04：两处「失败」不许伪装成「没问题」（母版配置读不出来 / 检测记录读不出来）
+
+- read_master_syscfg：`except OSError: return None` 改成中文 400（说清「读不出来」+ 谁占着 / 权限
+  + 下一步）——旧形态把「读不出来」与「母版没导入」抹平成同一档静默降级
+- 容量判定的跳过不再无声：新增 PIN_CAPACITY_SKIPPED_NOTE / PIN_CAPACITY_UNREADABLE_NOTE 两句，
+  经 HwCheckPinPlan.capacity_note → wiring.capacity_note 载荷 → 页面接线区渲染
+- 按评审改细一处口径：读不出来时的 400 只在**需要判容量**的路（预览 / 生成，require_pins=True）
+  大声；回读与排障（回放已生成成功的那一次）按「判不了就不判」走但**照样说出原因**
+  ——母版文件被占着不该让人打不开自己的检测工程，而没有一条路是无声的
+- read_hwcheck_record：两支话术拆开——「读不出来」（不提删）与「内容坏了」（保留可删可修）
+- 新增真浏览器 spec（tests/browser/hwcheck-capacity-note.spec.mjs）：造「母版在、没有 syscfg」
+  的库根，页面上真的渲染出那句（并钉住页面上无字面星号）
+- 评审抓到的一处真回归：域层新文案里写了字面 ** —— 判据 ⑨ 的面只切 static/js、管不到 Python
+  文案；已去掉星号并补守卫 test_page_facing_copy_carries_no_markdown_markers
+- 读数：全套 pytest 5596 passed + 11 skipped；前端门禁 1818 / 0；浏览器门禁 45 / 0；
+  反证三处注入各自点名变红、复原 sha256 逐字节相同

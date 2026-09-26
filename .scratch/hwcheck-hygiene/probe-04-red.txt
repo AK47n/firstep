@@ -1,0 +1,44 @@
+目标：src/contest_generator/hwcheck_triage.py  前置 sha256：917222433ddc51b43e9fd0296a5bf964e9cd37555940d31c40b797ee462a37ec
+目标：src/contest_generator/hwcheck_board.py  前置 sha256：b85fad9226d1eaa07038ab56a9c3149fe7b5b4d3016f4c90a74e6eb8add5aa08
+前置检查：三处新形态锚点各唯一命中 ✓
+
+=== A 记录读失败的两支话术合回一处 ===
+声明必须变红的用例（1 条）：
+  · tests/test_hwcheck_triage.py::test_record_read_failure_is_not_reported_as_corruption
+注入后 sha256：22632cda170a0f978244b0d3a4836f26437e15b1971de157d200e5f0fd52a432（应不等于前置值）
+注入态读数：1 failed in 0.31s  退出码：1
+实得 FAILED（1 条）：
+  · tests/test_hwcheck_triage.py::test_record_read_failure_is_not_reported_as_corruption
+声明要红的逐条都红了 ✓
+复原 sha256：917222433ddc51b43e9fd0296a5bf964e9cd37555940d31c40b797ee462a37ec  逐字节相同：✓
+复原态读数：1 passed in 0.13s  退出码：0  回绿：✓
+
+=== B 母版配置的静默降级放回去 ===
+声明必须变红的用例（3 条）：
+  · tests/test_hwcheck_board.py::test_master_syscfg_missing_is_none_but_unreadable_is_loud
+  · tests/test_hwcheck_board.py::test_readback_still_opens_when_the_master_syscfg_is_locked
+  · tests/test_hwcheck.py::test_preview_400s_when_the_master_syscfg_cannot_be_read
+注入后 sha256：f0a0ce413cf10f598729fb246e4d99054af12962b83a981437ca063db37d2896（应不等于前置值）
+注入态读数：3 failed, 1 warning in 2.62s  退出码：1
+实得 FAILED（3 条）：
+  · tests/test_hwcheck.py::test_preview_400s_when_the_master_syscfg_cannot_be_read
+  · tests/test_hwcheck_board.py::test_master_syscfg_missing_is_none_but_unreadable_is_loud
+  · tests/test_hwcheck_board.py::test_readback_still_opens_when_the_master_syscfg_is_locked
+声明要红的逐条都红了 ✓
+复原 sha256：b85fad9226d1eaa07038ab56a9c3149fe7b5b4d3016f4c90a74e6eb8add5aa08  逐字节相同：✓
+复原态读数：3 passed, 1 warning in 1.86s  退出码：0  回绿：✓
+
+=== C 容量跳过那句话撤掉 ===
+声明必须变红的用例（2 条）：
+  · tests/test_hwcheck_board.py::test_missing_master_syscfg_skips_capacity_but_says_so
+  · tests/test_hwcheck_board.py::test_view_payload_discloses_the_skipped_capacity_check
+注入后 sha256：53586a39862024a2e25d00f594e482e1d97394c91256cee846afed83712fbc48（应不等于前置值）
+注入态读数：2 failed in 0.35s  退出码：1
+实得 FAILED（2 条）：
+  · tests/test_hwcheck_board.py::test_missing_master_syscfg_skips_capacity_but_says_so
+  · tests/test_hwcheck_board.py::test_view_payload_discloses_the_skipped_capacity_check
+声明要红的逐条都红了 ✓
+复原 sha256：b85fad9226d1eaa07038ab56a9c3149fe7b5b4d3016f4c90a74e6eb8add5aa08  逐字节相同：✓
+复原态读数：2 passed in 0.21s  退出码：0  回绿：✓
+
+结论：PASS —— 三处判据都有强度，且探针未留下任何改动

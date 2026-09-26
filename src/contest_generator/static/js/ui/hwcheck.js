@@ -45,7 +45,7 @@ import {
   hwcheckDeviceEmptyHTML, hwcheckMissingDevicesHTML, hwcheckWiringTableHTML,
   hwcheckDeviceGroupNoticeHTML,
   hwcheckPinGroupsHTML, hwcheckBoardSharesHTML, hwcheckOrderHTML,
-  hwcheckPinFixHTML,
+  hwcheckPinFixHTML, hwcheckPinCapacityNoteHTML,
   hwcheckBoardState,
   hwcheckSectionsState, hwcheckSectionsHTML, hwcheckUnspecializedHTML,
   hwcheckSectionsEmptyHTML,
@@ -595,6 +595,9 @@ function renderHwcheckWiring() {
     ? ""
     : (hwcheckUI.wiring
       ? hwcheckPinFixHTML(hwcheckUI.wiring.pin_fixes)
+        // 「这一趟没判装不装得下」紧随其后（工单 hwcheck-hygiene/04）：母版没导入时
+        // 容量判定跳过，页面必须说出来——不然看起来像"检查过了、没问题"。
+        + hwcheckPinCapacityNoteHTML(hwcheckUI.wiring.capacity_note)
         + hwcheckWiringTableHTML(hwcheckUI.wiring.rows, hwcheckUI.wiring.footnote)
         // 自建件那一行接在表**下面**（"你的器件 … 接到上面接线表里 i2c_probe 的
         // 那对脚"——那句话指的就是刚读完的这张表）。空 = 空串（既有页面不变）。

@@ -404,6 +404,35 @@ def test_record_corrupt_json_fails_loudly_with_the_filename(tmp_path):
     with pytest.raises(HwCheckError) as exc_info:
         read_hwcheck_record(tmp_path)
     assert HWCHECK_RECORD_FILENAME in str(exc_info.value)
+    # 坏 JSON 这一支照旧给"可删可修"的引导（工单 hwcheck-hygiene/04 明确保留）：
+    # 它是**内容**坏了，删掉重填确实是出路；而"读不出来"那一支不许这么说。
+    assert "删掉重填" in str(exc_info.value)
+
+
+def test_record_read_failure_is_not_reported_as_corruption(tmp_path, monkeypatch):
+    """**读不出来**（占用 / 权限 / IO）≠ 记录坏了：说真话，且**不许**让人删记录。
+
+    照旧实现那句话术做就是**删掉自己填过的现象与勾选**——本单要挡的正是这个。
+    """
+    path = tmp_path / HWCHECK_RECORD_FILENAME
+    path.write_text("{}", encoding="utf-8")
+    real_read_text = Path.read_text
+
+    def boom(self, *args, **kwargs):
+        if self.name == HWCHECK_RECORD_FILENAME:
+            raise PermissionError(13, "另一个程序正在使用此文件，进程无法访问。")
+        return real_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", boom)
+    with pytest.raises(HwCheckError) as exc_info:
+        read_hwcheck_record(tmp_path)
+    message = str(exc_info.value)
+    assert "读不出来" in message, f"没说是「读不出来」：{message}"
+    assert "占用" in message or "权限" in message, f"没给下一步（占用 / 权限）：{message}"
+    assert "损坏" not in message, "把「读不出来」说成「损坏」= 又一次把失败伪装成别的东西"
+    assert "删掉重填" not in message and "删" not in message, (
+        f"读不出来时引导用户删记录 —— 照做就是删掉自己的现象与勾选：{message}"
+    )
 
 
 def test_record_rejects_non_object_and_bad_version(tmp_path):
