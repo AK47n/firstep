@@ -35,8 +35,10 @@
 > 用例）、`test_library_gate.py` 13 → **23 passed**、判据强度反证
 > `.scratch/ci-gate-fixes/probe-06-gate-red-proof.py`（注入旧形态两条各红、复原逐字节相同）**。
 > **至此本 spec 的 `01`–`11` 全部 resolved，没有单留在 frontier 上。**
-> `main` 比 `origin/main` 多两笔（`efa819de` → `bc1fd127`），**未推**——推法见本节
-> 「本机网络事实」（要 `git -c http.https://github.com/.resolve=…`）。
+> `main` 已比 `origin/main`（`efa819de`）多出若干笔，**未推**——**别把数量写死**
+> （每笔后面还跟着一个 `chore: 自动更新 CHANGELOG`，写完就变），要看准就跑
+> `git log --oneline origin/main..main`；推法见本节「本机网络事实」
+> （要 `git -c http.https://github.com/.resolve=…`）。
 >
 > **本轮最值钱的一条方法论**（写进账本）：**本机复现不出来时，别靠形态猜**——
 > `08` 加的那两处诊断（页面可见文本 + 末几次 `/api/hwcheck/preview` 的**状态码与响应体**）
