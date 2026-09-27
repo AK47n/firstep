@@ -1,0 +1,33 @@
+# 读数：probe-02-red
+# 命令：python .scratch/record-write-hardening/probe-02-red.py
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T17:17:44+08:00
+# 退出码：0
+# 被撤的源码：src/contest_generator/atomic_io.py sha256=d80ba0f58a333279baacfd933b2aeb56224917138b23dde8f57357f4f6e31189 行尾=CRLF
+# 被撤的源码：src/contest_generator/drafts.py sha256=1a7db2aded0bd61b55d2ae077a823df5e75ad75e07ddc2542de74b1dc8fab208 行尾=LF
+# 被撤的源码：src/contest_generator/webapp.py sha256=ff1f7681edae83822009c30d86b89ec0e5102b415b6fb97556b809016d0e985f 行尾=CRLF
+# 判据文件：tests/test_drafts.py sha256=757439a705a28b518142853b50ffe54ea551fddf65a138cd6a4c3d2174a32803
+
+== A 撤掉临界区 ==
+   声明必须红：['tests/test_drafts.py::test_two_drafts_endpoints_do_not_clobber_each_other', 'tests/test_drafts.py::test_update_drafts_does_not_lose_a_concurrent_add', 'tests/test_drafts.py::test_update_drafts_does_not_lose_a_concurrent_delete']
+   实得 FAILED：['tests/test_drafts.py::test_two_drafts_endpoints_do_not_clobber_each_other', 'tests/test_drafts.py::test_update_drafts_does_not_lose_a_concurrent_add', 'tests/test_drafts.py::test_update_drafts_does_not_lose_a_concurrent_delete']
+   pytest 尾行：3 failed, 12 passed, 1 warning in 0.56s
+   复原 sha256 逐字节相同：True
+
+== B 撤掉共享原语（唯一临时名 + 清残渣） ==
+   声明必须红：['tests/test_drafts.py::test_concurrent_drafts_writes_share_no_tmp_file', 'tests/test_drafts.py::test_drafts_write_failure_leaves_no_residue_and_keeps_the_original_error']
+   实得 FAILED：['tests/test_drafts.py::test_concurrent_drafts_writes_share_no_tmp_file', 'tests/test_drafts.py::test_drafts_write_failure_leaves_no_residue_and_keeps_the_original_error']
+   pytest 尾行：2 failed, 13 passed, 1 warning in 1.55s
+   复原 sha256 逐字节相同：True
+
+== C 端点退回旧形状（绕开 update_drafts） ==
+   声明必须红：['tests/test_drafts.py::test_two_drafts_endpoints_do_not_clobber_each_other']
+   实得 FAILED：['tests/test_drafts.py::test_two_drafts_endpoints_do_not_clobber_each_other']
+   pytest 尾行：1 failed, 14 passed, 1 warning in 0.59s
+   复原 sha256 逐字节相同：True
+
+== 复原后必须回绿 ==
+   实得 FAILED：（无）
+   pytest 尾行：15 passed, 1 warning in 1.59s
+
+结论：PASS（三段反证全成立）

@@ -4922,17 +4922,15 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         """存草稿（同步端点，工单 idea-suite/05）：{output_dir, text} → {drafts}。
 
         text 空 / 纯空白 → 400；同文本已存在 → 不重复插入（去重，返回原
-        集合）；落盘 = 原子写（.tmp → replace——增删草稿是小步操作，原子写
-        已保证不写碎文件，不再另设 .bak；对照清单文件 .bak 仅用于整份覆盖
-        场景）。"""
-        from .drafts import add_draft, read_drafts, write_drafts
+        集合）；落盘走 `update_drafts`（读-改-写整段在一把按记录路径的锁里，
+        见工单 record-write-hardening/02——两个标签页同时存，两笔都在）。"""
+        from .drafts import add_draft, update_drafts
 
         output_dir = Path(_require_str(payload, "output_dir"))
         if not output_dir.is_dir():
             raise TaskError(f"输出目录不存在：{output_dir}")
         text = payload.get("text")  # 非空校验在 add_draft（照 dialog-adopt 先例）
-        updated = add_draft(read_drafts(output_dir), text)
-        write_drafts(output_dir, updated)
+        updated = update_drafts(output_dir, lambda latest: add_draft(latest, text))
         return {"drafts": [draft.to_dict() for draft in updated.drafts]}
 
     @app.post("/api/tasks/idea/drafts/delete")
@@ -4940,8 +4938,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     def tasks_idea_drafts_delete(payload: dict) -> dict:
         """删草稿（同步端点，工单 idea-suite/05）：{output_dir, id} → {drafts}。
 
-        未知 id 静默（幂等——双击删除按钮不是错误）；id 非字符串 → 400。"""
-        from .drafts import delete_draft, read_drafts, write_drafts
+        未知 id 静默（幂等——双击删除按钮不是错误）；id 非字符串 → 400。
+        落盘同 add：走 `update_drafts`（读-改-写整段在锁里）。"""
+        from .drafts import delete_draft, update_drafts
 
         output_dir = Path(_require_str(payload, "output_dir"))
         if not output_dir.is_dir():
@@ -4949,8 +4948,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         draft_id = payload.get("id")
         if not isinstance(draft_id, str) or not draft_id.strip():
             raise TaskError("id 必须是非空字符串")
-        updated = delete_draft(read_drafts(output_dir), draft_id)
-        write_drafts(output_dir, updated)
+        updated = update_drafts(output_dir, lambda latest: delete_draft(latest, draft_id))
         return {"drafts": [draft.to_dict() for draft in updated.drafts]}
 
     @app.post("/api/tasks/idea/fix")

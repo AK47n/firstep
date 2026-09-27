@@ -14,8 +14,9 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
+from .atomic_io import atomic_write_text, path_lock
 from .task_progress import TaskError
 
 IDEA_DRAFTS_FILENAME = ".contest_ideas.json"
@@ -112,16 +113,36 @@ def read_drafts(output_dir: Path) -> IdeaDrafts:
 
 
 def write_drafts(output_dir: Path, drafts: IdeaDrafts) -> Path:
-    """草稿落盘（原子写 .tmp → replace，照 idea_chat.py；目录损坏风险与
-    文件级坏 JSON 不同——写碎文件比写坏文件更不易自愈）。"""
+    """草稿落盘（原子写：**唯一临时名** → `os.replace` → `finally` 清残渣）。
+
+    写实现归共享原语 `atomic_io.atomic_write_text`（工单 record-write-hardening/02）：
+    收走前是固定临时名 `…json.tmp` + 无 `finally` 的手搓版——两个写者抢同一个临时名，
+    写失败还会在工程根留下 `.tmp`。字节格式**逐字不动**（`ensure_ascii=False`、
+    `indent=2`、尾换行）。
+    """
     path = output_dir / IDEA_DRAFTS_FILENAME
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(
-        json.dumps(drafts.to_dict(), ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    tmp.replace(path)
+    atomic_write_text(path, json.dumps(drafts.to_dict(), ensure_ascii=False, indent=2) + "\n")
     return path
+
+
+def update_drafts(
+    output_dir: Path, merge: Callable[[IdeaDrafts], IdeaDrafts]
+) -> IdeaDrafts:
+    """读-改-写整段进**短临界区**：重读 → 合并 → 写；返回落盘后的草稿集合。
+
+    `merge` 是纯函数（`add_draft` / `delete_draft`），临界区里那份是**重读**的——
+    这就是"两个标签页同时增删、两笔都在"的形状：并发的另一笔已经落盘的改动会被读到、
+    一起带进合并结果，不会被我们手上那份旧快照盖回去。
+
+    窗口本来只有微秒级（调用方全在 `webapp.py`，中间只夹纯函数），加锁买的是
+    "两个入口交错"这条（双击 / 双标签页很常见）；真正横跨秒级的同类病在想法商量那条路
+    （工单 record-write-hardening/03 要建的 `update_idea_chat`，本单尚未存在）。
+    """
+    path = output_dir / IDEA_DRAFTS_FILENAME
+    with path_lock(path):
+        drafts = merge(read_drafts(output_dir))
+        write_drafts(output_dir, drafts)
+        return drafts
 
 
 def _now_stamp() -> str:
