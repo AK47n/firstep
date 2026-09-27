@@ -44,6 +44,7 @@ from contest_generator.topic_library import (
 
 
 from contest_generator.webapp import AppContext, create_app
+from tests._meta_write_failure import Boom, Killed, break_write, files_under
 from tests.fakes import (
     FakeLLM,
     make_fake_module_library,
@@ -1156,13 +1157,16 @@ def test_update_topic_restores_problem_text_on_write_failure(
     topic_root, pdf, tmp_path, monkeypatch
 ):
     """写盘中途失败（manifest 写失败）→ 题面恢复旧值、manifest 原值保留
-    （对偶 update_reference 写入期清理契约）。"""
+    （对偶 update_reference 写入期清理契约）。注入点 = manifest 的原子写入口
+    （工单 backlog-closeout/05 起它写 manifest；异常期恢复逻辑照旧）。"""
     import contest_generator.topic_library as topic_library
 
     _confirm_editable(topic_root, pdf, tmp_path)
     before_manifest = (topic_root / KEY_2026C / MANIFEST_FILENAME).read_text(encoding="utf-8")
     monkeypatch.setattr(
-        topic_library, "write_json", lambda *a, **k: (_ for _ in ()).throw(OSError("磁盘满"))
+        topic_library,
+        "write_json_atomic",
+        lambda *a, **k: (_ for _ in ()).throw(OSError("磁盘满")),
     )
 
     with pytest.raises(OSError, match="磁盘满"):
@@ -1172,6 +1176,65 @@ def test_update_topic_restores_problem_text_on_write_failure(
 
     assert (topic_root / KEY_2026C / TOPIC_MD_FILENAME).read_text(encoding="utf-8") == "2026C 原题面"
     assert (topic_root / KEY_2026C / MANIFEST_FILENAME).read_text(encoding="utf-8") == before_manifest
+
+
+# ---------------------------------------------------------------------------
+# 更新路径的元数据写盘是原子的（工单 backlog-closeout/05）：写的是**活着的**
+# 条目目录——半截 manifest.json 会让该赛题从此打不开（异常期恢复管不了强杀）。
+# ---------------------------------------------------------------------------
+
+
+def test_update_topic_meta_write_failure_leaves_entry_intact(
+    topic_root, pdf, tmp_path, monkeypatch
+):
+    """写元数据那一步失败（边写边炸）：旧 manifest 逐字节不动、条目目录零杂散，
+    异常期恢复照旧把题面回滚。
+
+    裸 `write_text` 的实现上这条会红：半截 JSON 落在 `manifest.json` 上。
+    """
+    _confirm_editable(topic_root, pdf, tmp_path)
+    entry_dir = topic_root / KEY_2026C
+    manifest_path = entry_dir / MANIFEST_FILENAME
+    before_bytes = manifest_path.read_bytes()
+    before_files = files_under(entry_dir)
+    boom = Boom("磁盘满")
+
+    break_write(monkeypatch, MANIFEST_FILENAME, boom)
+    with pytest.raises(Boom) as raised:
+        update_topic(
+            topic_root, KEY_2026C, problem_text="新题面", programs=[], hint_module_groups=[]
+        )
+
+    assert raised.value is boom, "照抛的不是原异常"
+    assert manifest_path.read_bytes() == before_bytes, "失败时旧元数据被写坏了"
+    assert files_under(entry_dir) == before_files, "失败留下了残渣"
+    assert (entry_dir / TOPIC_MD_FILENAME).read_text(encoding="utf-8") == "2026C 原题面"
+
+
+def test_update_topic_survives_a_kill_mid_meta_write(
+    topic_root, pdf, tmp_path, monkeypatch
+):
+    """强杀模拟（恢复块不会跑）：半截内容只落在临时文件里，赛题仍读得出来。
+
+    裸 `write_text` 的实现上这条会红：`read_json` 撞上半截 JSON 抛 StoreParseError，
+    该赛题在界面上就是一个打不开的坏条目。
+    """
+    _confirm_editable(topic_root, pdf, tmp_path)
+    entry_dir = topic_root / KEY_2026C
+    manifest_path = entry_dir / MANIFEST_FILENAME
+    before_bytes = manifest_path.read_bytes()
+    killed = Killed("进程被杀")
+
+    break_write(monkeypatch, MANIFEST_FILENAME, killed)
+    with pytest.raises(Killed) as raised:
+        update_topic(
+            topic_root, KEY_2026C, problem_text="新题面", programs=[], hint_module_groups=[]
+        )
+
+    assert raised.value is killed
+    assert manifest_path.read_bytes() == before_bytes, "半截写入动了旧元数据"
+    # 条目仍读得出来（损坏的 manifest 会在读侧大声失败）
+    assert resolve_number(topic_root, KEY_2026C).key == KEY_2026C
 
 
 def test_update_topic_missing_entry_raises(topic_root):

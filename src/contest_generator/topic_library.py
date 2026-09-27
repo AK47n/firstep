@@ -41,6 +41,7 @@ from .entry_store import (
     require_str,
     validate_store_key,
     write_json,
+    write_json_atomic,
 )
 from .extraction import (
     locate_topic_pages,
@@ -494,12 +495,15 @@ def update_topic(
     entry_dir = _entry_dir(topic_library_root, key)
     # 落盘：先写题面再写 manifest；写盘失败恢复题面旧值（manifest 保持原值）
     # ——对偶 update_reference「写入期失败清理已写内容」契约（本函数无新增
-    # 文件，被改的就是题面与 manifest，恢复题面即尽清理职责）
+    # 文件，被改的就是题面与 manifest，恢复题面即尽清理职责）。
+    # manifest 那一步走**原子写**（工单 backlog-closeout/05）：本函数改的是
+    # 活着的条目目录，而上面的恢复块在**强杀**时根本跑不到——只有原子写能
+    # 保证盘上不会留下半截 manifest（题面仍是裸写，射程见工单 05 的备注）。
     old_problem_text = entry.problem_text
     try:
         (entry_dir / entry.problem_md).write_text(problem_text, encoding="utf-8")
         data = read_json(entry_dir, MANIFEST_FILENAME)
-        write_json(
+        write_json_atomic(
             entry_dir,
             MANIFEST_FILENAME,
             {

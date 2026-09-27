@@ -44,6 +44,7 @@ from .entry_store import (
     require_str,
     validate_store_key,
     write_json,
+    write_json_atomic,
 )
 from .library import file_label, list_modules, truncate_content
 from .manifest import collect_kits
@@ -1071,6 +1072,10 @@ def update_reference(
     # 「磁盘零变化」契约，参照 topic_library 的同款恢复范式）→ 删实体（先改
     # 引用再删实体：元数据写失败不丢已删除的文件；删除失败只留清单外散文件
     # ——与浏览/统计「磁盘目录即数据库」容忍语义一致）
+    # 元数据那一步走**原子写**（工单 backlog-closeout/05）：本函数改的是活着的
+    # 条目目录，而下面的恢复块在**强杀**时根本跑不到——只有原子写能保证盘上
+    # 不会留下半截 reference.json（新增/覆盖的内容文件仍是裸写，射程见工单 05
+    # 的备注）。
     written: list[Path] = []
     overwritten: dict[Path, str] = {}
     try:
@@ -1082,7 +1087,7 @@ def update_reference(
             else:
                 written.append(path)
             path.write_text(content, encoding="utf-8")
-        write_json(entry_dir, REFERENCE_META_FILENAME, new_entry.to_dict())
+        write_json_atomic(entry_dir, REFERENCE_META_FILENAME, new_entry.to_dict())
     except Exception:
         for path in written:
             path.unlink(missing_ok=True)

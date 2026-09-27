@@ -73,6 +73,7 @@ from contest_generator.report import (
     ReportError,
 )
 from contest_generator.webapp import AppContext, create_app
+from tests._meta_write_failure import Boom, Killed, break_write, files_under
 from tests.fakes import FakeLLM, make_fake_stm32_projects
 from tests.generate_wiring_fakes import (
     KIT_REFERENCE_ID,
@@ -3071,13 +3072,14 @@ def test_update_reference_cleans_added_files_on_write_failure(tmp_path, monkeypa
 def test_update_reference_cleans_added_files_on_meta_write_failure(
     tmp_path, monkeypatch
 ):
-    """元数据写入失败：已写的新增文件同样清理、元数据保持原样。"""
+    """元数据写入失败：已写的新增文件同样清理、元数据保持原样。注入点 =
+    reference.json 的原子写入口（工单 backlog-closeout/05 起它写元数据）。"""
     root = _reference_root(tmp_path)
     entry = _edit_sample_entry(tmp_path)
     meta_before = (root / entry.id / "reference.json").read_text(encoding="utf-8")
     monkeypatch.setattr(
         reference_library,
-        "write_json",
+        "write_json_atomic",
         lambda *args, **kwargs: (_ for _ in ()).throw(OSError("磁盘写失败")),
     )
 
@@ -3098,6 +3100,78 @@ def test_update_reference_cleans_added_files_on_meta_write_failure(
     assert not (root / entry.id / "ok.c").exists()
     assert (root / entry.id / "example.c").is_file()
     assert (root / entry.id / "reference.json").read_text(encoding="utf-8") == meta_before
+
+
+# ---------------------------------------------------------------------------
+# 更新路径的元数据写盘是原子的（工单 backlog-closeout/05）：写的是**活着的**
+# 条目目录——半截 reference.json 会让该条目从此打不开。判据取最终盘上。
+# ---------------------------------------------------------------------------
+
+
+def test_update_reference_meta_write_failure_leaves_entry_intact(tmp_path, monkeypatch):
+    """写元数据那一步失败（边写边炸）：旧 reference.json 逐字节不动、条目目录零杂散。
+
+    裸 `write_text` 的实现上这条会红：半截 JSON 落在 `reference.json` 上。
+    """
+    root = _reference_root(tmp_path)
+    entry = _edit_sample_entry(tmp_path)
+    entry_dir = root / entry.id
+    meta_path = entry_dir / reference_library.REFERENCE_META_FILENAME
+    before_bytes = meta_path.read_bytes()
+    before_files = files_under(entry_dir)
+    boom = Boom("磁盘满")
+
+    break_write(monkeypatch, reference_library.REFERENCE_META_FILENAME, boom)
+    with pytest.raises(Boom) as raised:
+        update_reference(
+            root,
+            entry.id,
+            title="改过的标题",
+            type=entry.type,
+            description=entry.description,
+            anchor_kind=ANCHOR_KIND_NONE,
+            anchor_value="",
+            add_files={},
+            remove_files=(),
+            kit_vocabulary=(),
+        )
+
+    assert raised.value is boom, "照抛的不是原异常"
+    assert meta_path.read_bytes() == before_bytes, "失败时旧元数据被写坏了"
+    assert files_under(entry_dir) == before_files, "失败留下了残渣"
+
+
+def test_update_reference_survives_a_kill_mid_meta_write(tmp_path, monkeypatch):
+    """强杀模拟（恢复块不会跑）：半截内容只落在临时文件里，条目仍读得出来。
+
+    裸 `write_text` 的实现上这条会红：`read_json` 撞上半截 JSON 抛 StoreParseError，
+    该条目在界面上就是一个打不开的坏条目。
+    """
+    root = _reference_root(tmp_path)
+    entry = _edit_sample_entry(tmp_path)
+    entry_dir = root / entry.id
+    meta_path = entry_dir / reference_library.REFERENCE_META_FILENAME
+    before_bytes = meta_path.read_bytes()
+    killed = Killed("进程被杀")
+
+    break_write(monkeypatch, reference_library.REFERENCE_META_FILENAME, killed)
+    with pytest.raises(Killed) as raised:
+        update_reference(
+            root,
+            entry.id,
+            title="改过的标题",
+            type=entry.type,
+            description=entry.description,
+            anchor_kind=ANCHOR_KIND_NONE,
+            anchor_value="",
+            add_files={},
+            remove_files=(),
+            kit_vocabulary=(),
+        )
+
+    assert raised.value is killed
+    assert meta_path.read_bytes() == before_bytes, "半截写入动了旧元数据"
+    assert get_reference(root, entry.id).title == entry.title  # 条目仍读得出来
 
 
 def test_update_reference_missing_entry(tmp_path):

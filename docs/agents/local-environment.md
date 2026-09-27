@@ -9,13 +9,16 @@
 
 > ### 📌 最新（2026-09-27 晚，`backlog-closeout` 会话）—— **backlog 剩余项收口批在 main 上，未发布；用户可见影响：更新面板的数字**
 >
-> **这一批是什么**：`.scratch/backlog-closeout/`（spec + 工单 `01`–`04`，另开 `05` 待做）。
-> 逐节读完 `backlog.md` 全部 25 节后收口**真还开着的三条** + 一条只核实：
+> **这一批是什么**：`.scratch/backlog-closeout/`（spec + 工单 `01`–`05`，**全 resolved**）。
+> 逐节读完 `backlog.md` 全部 25 节后收口**真还开着的三条** + 一条只核实 + 它核出来的那张修单：
 > ① 更新面板三处体量与实测不符（6.2 GB / 5 GB+ / 约 1 GB → 约 800 MB / 约 0.7 GB / 约 800 MB），
 > 守卫扩到产品界面文本面（`static/index.html` + `static/js/**/*.js`）；
 > ② MQ 系九件词表 note 口径统一（并把手册里没有的「预热 3-5 分钟」退回有据措辞）；
 > ③ 资料库解包走 `atomic_io.atomic_write_via`（流式不变）+ 清单写回原子化；
-> ④ `entry_store.write_json` 逐调用点核实 → **新建靠事务、更新是裸写** → 开单 `05`。
+> ④ `entry_store.write_json` 逐调用点核实 → **新建靠事务、更新是裸写** → 开单 `05`；
+> ⑤ `05`：那三处**更新**入口（`_write_manifest` / `update_reference` / `update_topic`）改走
+> `entry_store.write_json_atomic`（唯一临时名 + 换入 + 清残渣），异常期恢复逻辑原样；
+> **残留**：这三处的读-改-写仍不持锁（`backlog.md` §26 记了为什么不开单）。
 >
 > **与线上发布包的落差**：`main` 比 v1.3.1 多出「记录写加固」+ 这一批（**别把提交数写死**；
 > 看准就跑 `git log --oneline origin/main..main`）。

@@ -389,13 +389,14 @@ def test_archive_batch_single_commit(tmp_path, default_on_config):
 
 # 写原语标记：read 类函数源码含任一即红（新写函数漏挂自动提交的判据）。
 # 覆盖五模块全部落盘出口：事务（entry_transaction）、删除（delete_entry /
-# rmtree / unlink / discard_entry_dirs）、写文件（write_json / write_text /
-# _write_manifest / _write_meta / _write_files / _write_source_files）、
+# rmtree / unlink / discard_entry_dirs）、写文件（write_json / write_json_atomic
+# / write_text / _write_manifest / _write_meta / _write_files / _write_source_files）、
 # 复制（copy2 / copytree）、改名（os.replace）、建目录（mkdir）、open。
 _WRITE_MARKERS = (
     "entry_transaction(",
     "delete_entry(",
     "write_json(",
+    "write_json_atomic(",
     "write_text(",
     "rmtree(",
     "copy2(",

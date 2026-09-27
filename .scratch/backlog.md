@@ -876,7 +876,7 @@ spec 的口径，**修库内驱动（含其注释）属另一张单**，且改�
 **仍未做**：`hwcheck-acceptance/05`（真机上板）保持 `ready-for-human`——**本版没有任何板上行为
 被验证**，`hwcheck-hardening/08` 同样阻塞于真板子。
 
-## 26. backlog 剩余项收口（2026-09-27，工单 `backlog-closeout/01–04`）
+## 26. backlog 剩余项收口（2026-09-27，工单 `backlog-closeout/01–05`）
 
 **来源**：用户「把 backlog 剩余没做的做了」。全 25 节逐节读完，**真还开着的只有三条**
 （其余要么已 resolved、要么是人为阻塞、要么是 spec 明确划走的边界），加一条"只核实不改"。
@@ -888,18 +888,26 @@ spec 的口径，**修库内驱动（含其注释）属另一张单**，且改�
 | `02` MQ 词表口径统一 | 九条 MQ 方案 note 同一套口径（补「正向映射」+ 预热口径）；**把手册里没有的「3-5 分钟」退回有据措辞**；两条不变量守卫 | ❌（选购方案说明的措辞） | 定向 93 / 全量 5643 passed |
 | `03` 解包走共享原语 | `atomic_io.atomic_write_via` 收成唯一实现；`materials_apply` 解包改走它（流式不变）+ **清单写回也原子化**；守卫例外清单删一条 | ❌（失败时的残渣/半截清单） | 定向 84 / 全量 5650 passed；mypy Success |
 | `04` `entry_store` 核实 | 逐调用点核实"靠目录级事务兜底"这句话——**只对"新建"成立**；新开 `05` | ❌ | `src/` 零改动 |
+| `05` 更新路径元数据原子写 | `entry_store.write_json_atomic`（唯一临时名 + 换入 + 清残渣）收口三处更新入口（`_write_manifest` / `update_reference` / `update_topic`）；异常期恢复逻辑原样；判据六条（三库 × 写失败零残渣/强杀仍可读） | ❌（强杀/写失败时的半截 JSON） | 定向 473 / 全量 5656 passed；mypy 本单文件零错；探针五段 PASS |
 
 **本批产生的两条账（都写清了为什么不是待办或要另开单）：**
 
-1. **`backlog-closeout/05`（`ready-for-agent`）**：三个库的**更新**路径（`library._write_manifest` /
-   `reference_library.update_reference` / `topic_library.update_topic`）把元数据**裸写**进活条目目录，
-   强杀会留半截 JSON（异常期恢复挡不住强杀）。这是 `record-write-hardening` 那族里
-   **唯一被"靠事务兜底"一句放过**的地方。
+1. **`backlog-closeout/05`**：已 resolved（见上表）。它治的是三个库的**更新**路径
+   （`library._write_manifest` / `reference_library.update_reference` / `topic_library.update_topic`）
+   把元数据**裸写**进活条目目录——那是 `record-write-hardening` 那族里**唯一被"靠事务兜底"一句
+   放过**的地方。**残留一条**（见下「顺带量到、不动」第 1 条）：这三处的读-改-写仍不持锁。
 2. **库层预热口径没动**（`library/modules/mq*/**`）：mq3/4/6/7/8/9 的 manifest/code 注释仍写
    「预热 3-5 分钟」（同样无出处）、mq2/mq135/mq5 写「几分钟级」——**词表与库层两套口径**。
    改库内容要跟一次两平台编译矩阵（§21/§23 的口径），属另一张单。
 
-**另外两条"顺带量到、不动"的事实**（免得下轮当新发现）：
+**另外三条"顺带量到、不动"的事实**（免得下轮当新发现）：
+- **三库更新路径的"读-改-写"仍不持锁**（`05` 只做了"落盘这一步是原子的"）：两个写者同时改
+  **同一条目**时是"后写的赢"，还可能撞上 Windows 对同一目标并发 `os.replace` 的 `WinError 5`。
+  要做对得给 6 个 `update_*`（`library` 四个 + `update_reference` + `update_topic`）在**外层**持
+  `path_lock(entry_dir / <元数据名>)`；**不能**塞进 `entry_store.write_json_atomic`（`path_lock`
+  不可重入 → 将来外层持同一把锁时自死锁，那条边界写在该函数 docstring 里）。本单**不开单**：
+  失败面是"后写的赢 / 一次报错"，不是"条目变坏"（半截 JSON 已经绝了），而单用户本地工具里
+  两个写者改同一条目要人为并发。
 - `tools/update-app.py:208-220` 有逐字同形的固定 `.update-tmp` + 无 `finally`（独立脚本，
   不 import `contest_generator`；结构守卫只扫 `src/`）；
 - 浏览器门禁 `launcher-reload` 在**本机负载下**仍会偶发红（本批实测一次 54/6，空闲重跑 60/60；

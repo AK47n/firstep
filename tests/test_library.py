@@ -26,6 +26,7 @@ from contest_generator.library import (
 )
 from contest_generator.library import ValidationResult
 from contest_generator.manifest import MANIFEST_FILENAME, ModuleManifest, PlatformEntry
+from tests._meta_write_failure import Boom, Killed, break_write, files_under
 from tests.fakes import FakeLLM
 
 DHT11_FILES = {
@@ -1195,6 +1196,59 @@ def test_update_platform_identity_missing_platform_entry_raises(fake_module_libr
 def test_update_platform_identity_missing_module_raises(fake_module_library):
     with pytest.raises(LibraryError, match="不存在"):
         update_platform_identity(fake_module_library, "wifi", "stm32", kit=KIT_STM32)
+
+
+# ---------------------------------------------------------------------------
+# 更新路径的元数据写盘是原子的（工单 backlog-closeout/05）：这半边**不在**
+# entry_transaction 里——写的是**活着的**模块目录，半截 JSON 会让该模块从此
+# 打不开。判据取最终盘上：旧元数据逐字节不动、目录零杂散、条目仍读得出来。
+# ---------------------------------------------------------------------------
+
+
+def test_update_platform_identity_meta_write_failure_leaves_module_intact(
+    fake_module_library, monkeypatch
+):
+    """写元数据那一步失败（边写边炸）：旧 manifest 逐字节不动、目录零杂散、原异常照抛。
+
+    裸 `write_text` 的实现上这条会红：半截 JSON 落在 `manifest.json` 上
+    （工单 05 的反证探针实测）。
+    """
+    module_dir = fake_module_library / "dht11"
+    manifest_path = module_dir / MANIFEST_FILENAME
+    before_bytes = manifest_path.read_bytes()
+    before_files = files_under(module_dir)
+    boom = Boom("磁盘满")
+
+    break_write(monkeypatch, MANIFEST_FILENAME, boom)
+    with pytest.raises(Boom) as raised:
+        update_platform_identity(fake_module_library, "dht11", "stm32", kit=KIT_STM32)
+
+    assert raised.value is boom, "照抛的不是原异常"
+    assert manifest_path.read_bytes() == before_bytes, "失败时旧元数据被写坏了"
+    assert files_under(module_dir) == before_files, "失败留下了残渣"
+
+
+def test_update_platform_identity_survives_a_kill_mid_write(
+    fake_module_library, monkeypatch
+):
+    """强杀模拟（恢复块不会跑、原异常照抛）：半截内容只落在临时文件里，模块仍可读。
+
+    裸 `write_text` 的实现上这条会红：`read_json` 撞上半截 JSON 抛 StoreParseError，
+    模块在界面上就是一个打不开的坏条目。
+    """
+    module_dir = fake_module_library / "dht11"
+    manifest_path = module_dir / MANIFEST_FILENAME
+    before_bytes = manifest_path.read_bytes()
+    killed = Killed("进程被杀")
+
+    break_write(monkeypatch, MANIFEST_FILENAME, killed)
+    with pytest.raises(Killed) as raised:
+        update_platform_identity(fake_module_library, "dht11", "stm32", kit=KIT_STM32)
+
+    assert raised.value is killed
+    assert manifest_path.read_bytes() == before_bytes, "半截写入动了旧元数据"
+    # 条目仍读得出来（损坏的 manifest 会在读侧大声失败）
+    assert get_module(fake_module_library, "dht11").platforms["stm32"].notes == "PA0"
 
 
 # ---------------------------------------------------------------------------

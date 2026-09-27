@@ -1,0 +1,15 @@
+# 读数：probe-05-mypy
+# 命令：python -m mypy src/contest_generator/entry_store.py src/contest_generator/library.py src/contest_generator/reference_library.py src/contest_generator/topic_library.py
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T20:08:46+08:00
+# 退出码：1
+src\contest_generator\pin_bindings.py:552: error: Argument 1 to "tuple" has incompatible type "list[tuple[str, str]]"; expected "Iterable[str]"  [arg-type]
+src\contest_generator\pin_bindings.py:584: error: Invalid index type "str" for "Mapping[tuple[str, str], PinDeclaration]"; expected type "tuple[str, str]"  [index]
+src\contest_generator\pin_bindings.py:822: error: Incompatible types in assignment (expression has type "set[str] | None", variable has type "tuple[str, ...] | None")  [assignment]
+src\contest_generator\pin_bindings.py:840: error: Incompatible types in assignment (expression has type "set[str] | None", variable has type "tuple[str, ...] | None")  [assignment]
+src\contest_generator\pin_bindings.py:871: error: Item "None" of "PinDeclaration | None" has no attribute "id"  [union-attr]
+src\contest_generator\pin_bindings.py:873: error: Item "None" of "PinDeclaration | None" has no attribute "id"  [union-attr]
+src\contest_generator\syscfg_prune.py:248: error: Argument 4 to "diagnose_pin_capacity" has incompatible type "Mapping[str, str] | None"; expected "Mapping[str, str]"  [arg-type]
+src\contest_generator\skeleton.py:203: error: Argument 1 to "syscfg_interface_block" has incompatible type "Path | None"; expected "Path"  [arg-type]
+src\contest_generator\hwcheck_triage.py:559: error: List comprehension has incompatible type List[Any | None]; expected List[str]  [misc]
+Found 9 errors in 4 files (checked 4 source files)

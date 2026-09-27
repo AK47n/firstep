@@ -19,6 +19,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Pattern, Sequence
 
+from .atomic_io import atomic_write_text
+
 
 class StoreError(ValueError):
     """条目库原语失败（读盘 / 键非法 / 查无此条 / 字段缺失）。
@@ -86,11 +88,38 @@ def entry_transaction(root: Path, names: Sequence[str]) -> Iterator[list[Path]]:
         raise
 
 
+def _json_text(data: Mapping[str, Any]) -> str:
+    """条目元数据的统一序列化（ensure_ascii=False + indent=2，三库同款）。"""
+    return json.dumps(data, ensure_ascii=False, indent=2)
+
+
 def write_json(entry_dir: Path, filename: str, data: Mapping[str, Any]) -> None:
-    """条目目录内写 JSON 元数据（ensure_ascii=False + indent=2，三库同款）。"""
-    (entry_dir / filename).write_text(
-        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    """条目目录内写 JSON 元数据（ensure_ascii=False + indent=2，三库同款）。
+
+    **只给「目录刚建、外面还读不到」的写者用**（`entry_transaction` 里的新建路径：
+    写坏了整个目录都会被事务清掉）。**活着的**条目目录上的更新走 `write_json_atomic`
+    ——那里半截 JSON 会被 `read_json` 判成坏条目（工单 backlog-closeout/04 的账、
+    05 的修复）。
+    """
+    (entry_dir / filename).write_text(_json_text(data), encoding="utf-8")
+
+
+def write_json_atomic(entry_dir: Path, filename: str, data: Mapping[str, Any]) -> None:
+    """条目目录内**原子**写 JSON 元数据（工单 backlog-closeout/05）：唯一临时名 →
+    换入 → `finally` 清残渣（走 `atomic_io.atomic_write_text`，实现只有那一份）。
+
+    给「更新活条目」用：进程被**强杀**（不是抛异常）时既有的异常期恢复跑不到，
+    裸写会在盘上留下半截 JSON ⇒ 该条目从此读不出来。序列化与 `write_json` 同一份
+    （`_json_text`），两只只差「落的这一步」。
+
+    **不内置锁**（照 `atomic_io` 的同款边界）：这里只保证「落盘这一步是原子的」，
+    「读-改-写」的串行化仍归调用方（`path_lock`）。三处调用点当前都**没持锁**——
+    两个写者同时改**同一条目**时是「后写的赢」，还可能撞上 Windows 对同一目标
+    并发 `os.replace` 的 `WinError 5`（不再有半截 JSON，但会报错）；这是工单
+    backlog-closeout/05 如实留下的残留（见该票的「账」）。往本函数里塞锁是**错的**
+    解法：将来调用方在外面按同一路径持锁时会自死锁（`path_lock` 不是可重入锁）。
+    """
+    atomic_write_text(entry_dir / filename, _json_text(data))
 
 
 def read_json(entry_dir: Path, filename: str) -> dict[str, Any]:

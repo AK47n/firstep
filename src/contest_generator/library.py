@@ -31,6 +31,7 @@ from .entry_store import (
     iter_entry_dirs,
     validate_store_key,
     write_json,
+    write_json_atomic,
 )
 from .manifest import (
     MANIFEST_FILENAME,
@@ -708,8 +709,13 @@ def _write_source_files(module_dir: Path, files: Mapping[str, str]) -> None:
 
 
 def _write_manifest(module_dir: Path, manifest: ModuleManifest) -> None:
-    """写 manifest（JSON 序列化走 entry_store 原语，与赛题库 / 参考库同款）。"""
-    write_json(module_dir, MANIFEST_FILENAME, manifest.to_dict())
+    """写 manifest（JSON 序列化走 entry_store 原语，与赛题库 / 参考库同款）。
+
+    走**原子**那只（工单 backlog-closeout/05）：这里写的是活着的模块目录
+    （`save_manifest` 的各更新入口）——事务只盖住「新建」那半边，半截 JSON
+    会让该模块从此读不出来。
+    """
+    write_json_atomic(module_dir, MANIFEST_FILENAME, manifest.to_dict())
 
 
 def file_label(name: str, note: str = "") -> str:
