@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=d0bc143f6313c9709f899e02489e960b64ecfa4b -->
+<!-- changelog-auto: last-commit=0b0788ee97e6e8dfaa0a49c414f1e5f5401ef039 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -22,6 +22,7 @@
 - 13:47 账本：v1.3.1 交接区不钉 HEAD 的 sha（每写一次账它就动一次）
 - 16:53 台账：ascii-project-name §02 按在盘代码翻 resolved、backlog §23 收口、硬件检测上板单标签更正
 - 16:53 立项：记录写加固 spec 与 01-06 六张工单（backlog §24 固定临时名 + 无锁记录写）
+- 16:55 记录写加固 01：共享原子写原语 atomic_io（唯一临时名 + finally 清残渣 + 按路径锁）
 
 ## 2026-09-26
 - 00:21 工单 ci-gate-fixes/01：配置缺失时回退随包库 + 配置路径覆盖口
