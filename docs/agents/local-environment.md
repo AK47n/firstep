@@ -15,8 +15,8 @@
 > | 项 | 值 |
 > |---|---|
 > | 线上最新 | **v1.3.1**（2026-09-27 发布），八件套齐全，`/releases/latest` 指向它 |
-> | 远端 `main` | `1bea22a1`（= 本地 HEAD；`git rev-list --left-right --count origin/main...main` = `0 0`） |
-> | tag | annotated `v1.3.1` → **`1bea22a1`**（打包那一刻的 CHANGELOG 提交；tag 对象 `e95be162`） |
+> | 远端 `main` | 发布那一刻是 `1bea22a1`；其后两笔账本提交（`54a0960c` 收口 / `5e61fdf5` 读数落盘）也已推上去。**别把 HEAD 的 sha 写死**——每写一次账它就动一次；要看准就跑 `git rev-list --left-right --count origin/main...main`（本轮收尾时 = `0 0`） |
+> | tag | annotated `v1.3.1` → **`1bea22a1`**（打包那一刻的 CHANGELOG 提交；tag 对象 `e95be162`）——**tag 之后的账本提交不在 tag 里**，这是老规矩（先打包打 tag，再落账本） |
 > | Release | `https://github.com/AK47n/firstep/releases/tag/v1.3.1`；**八件资产服务端 size 与本地逐件相同（8/8、0 处不一致）** |
 > | 联网自检 | `python tools\check-download-docs.py` **PASS**（三组全 `[OK]`；读数 `.scratch/release-v1.3.1/post-publish-check.txt`） |
 > | 发版产物（本机留档） | `firstep-pack\firstep-{update,full}-v1.3.1.*` 全套 + `release-notes-v1.3.1.md`；**下一版基线 = 这两个清单**（update **`301,813,614`** B / sha256 `bb573332…`；full **`791,672,980`** B / sha256 `dcba7726…`） |
