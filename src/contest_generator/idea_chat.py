@@ -28,8 +28,9 @@ import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
+from .atomic_io import atomic_write_text, path_lock
 from .task_progress import TaskError
 
 # 聊天文件名（写侧单源，webapp / 前端共用）
@@ -164,14 +165,41 @@ def read_idea_chat(
 def write_idea_chat(
     output_dir: Path, chat: IdeaChat, filename: str = IDEA_CHAT_FILENAME
 ) -> Path:
-    """写聊天记录（原子写：先写 .tmp 再替换，坏写不落半成品）。"""
+    """写聊天记录（原子写：**唯一临时名** → `os.replace` → `finally` 清残渣）。
+
+    写实现归共享原语 `atomic_io.atomic_write_text`（工单 record-write-hardening/03）：
+    收走前是固定临时名 `…json.tmp` + 无 `finally` 的手搓版。字节格式**逐字不动**——
+    注意本模块写的两个文件（`.contest_idea_chat.json` / `.contest_params_chat.json`）
+    **都没有尾换行**，与 `drafts` / `params` 那两个记录文件（各加一个 `"\n"`）不同，照旧不加。
+    """
     path = output_dir / filename
-    tmp = path.with_name(filename + ".tmp")
-    tmp.write_text(
-        json.dumps(chat.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    tmp.replace(path)
+    atomic_write_text(path, json.dumps(chat.to_dict(), ensure_ascii=False, indent=2))
     return path
+
+
+def update_idea_chat(
+    output_dir: Path,
+    merge: Callable[[IdeaChat], IdeaChat],
+    filename: str = IDEA_CHAT_FILENAME,
+) -> IdeaChat:
+    """读-改-写整段进**短临界区**：重读 → 合并 → 写；返回落盘后的记录。
+
+    合并语义 = 在重读到的记录上**追加 / 覆盖自己那几个字段**（不是
+    `hwcheck-hygiene/03` 那种"base 变了就不写"）：聊天是**追加型日志**——
+    两个 send 并发时，追加重放能同时保住两笔；而"base 变了就不写"会让后到的那轮
+    整个丢掉（学生这一轮问答白问）。adopt 只碰 note，重读后覆盖同理。
+
+    `filename` 参数化（照 read / write）：两份历史（全局商量 / 参数商量）各拿一把
+    `path_lock`（键含文件名），互不阻塞、也不互抢临时名。
+
+    **跨模型调用的路径必须把调用留在临界区之外**（两个 send 端点：先喂 history 调
+    LLM，再拿"追加本轮两条"的 merge 进来）——否则学生填一条，锁要按住一整次模型调用。
+    """
+    path = output_dir / filename
+    with path_lock(path):
+        chat = merge(read_idea_chat(output_dir, filename))
+        write_idea_chat(output_dir, chat, filename)
+        return chat
 
 
 def append_chat_message(chat: IdeaChat, role: str, content: str) -> IdeaChat:
@@ -187,6 +215,16 @@ def append_chat_message(chat: IdeaChat, role: str, content: str) -> IdeaChat:
         messages=chat.messages + (message,),
         note=chat.note,
     )
+
+
+def append_chat_round(chat: IdeaChat, user_content: str, reply: str) -> IdeaChat:
+    """追加一轮问答（纯函数）：本轮用户原话 + AI 回复两条，顺序固定。
+
+    两个 send 端点共用（全局商量 / 参数商量）——"一轮 = 两条、先 user 后 assistant"
+    这件事只写一处，免得两处各自拼一遍再慢慢走样。
+    """
+    chat = append_chat_message(chat, "user", user_content)
+    return append_chat_message(chat, "assistant", reply)
 
 
 def set_chat_note(chat: IdeaChat, text: str) -> IdeaChat:

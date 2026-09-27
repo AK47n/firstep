@@ -4375,9 +4375,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         """
         from .idea_chat import (
             PARAMS_CHAT_FILENAME,
-            append_chat_message,
+            append_chat_round,
             read_idea_chat,
-            write_idea_chat,
+            update_idea_chat,
         )
         from .params import params_with_valid, read_params
         from .task_progress import read_task_plan
@@ -4395,7 +4395,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         main_c = read_project_main_c(output_dir) or ""
         params_out = params_with_valid(param_list, main_c)
         plan = read_task_plan(output_dir)
-        chat = read_idea_chat(output_dir, PARAMS_CHAT_FILENAME)
+        # 先读一遍：坏记录在读侧就 400（别先花掉一次模型调用）——与全局商量那条同构
+        read_idea_chat(output_dir, PARAMS_CHAT_FILENAME)
 
         llm_run = LLMRun(context, "params-chat")
         try:
@@ -4408,11 +4409,14 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             )
         finally:
             llm_run.settle()
-        # 原子轮次：LLM 成功才追加两条消息落盘（失败 = 502，历史不动）
-        chat = append_chat_message(chat, "user", history[-1][1])
-        chat = append_chat_message(chat, "assistant", discussion.reply)
-        write_idea_chat(output_dir, chat, PARAMS_CHAT_FILENAME)
-        return {"reply": discussion.reply, "chat": chat.to_dict()}
+        # 原子轮次：LLM 成功才追加两条消息落盘（失败 = 502，历史不动）。
+        # 模型调用留在锁外；临界区里在**新读到的记录**上追加本轮两条（工单 03）。
+        updated = update_idea_chat(
+            output_dir,
+            lambda latest: append_chat_round(latest, history[-1][1], discussion.reply),
+            PARAMS_CHAT_FILENAME,
+        )
+        return {"reply": discussion.reply, "chat": updated.to_dict()}
 
     # ------------------------------------------------------------------
     # 任务推进 · 人工改标（工单 task-progress/03）：跳过 / 重做 / 上板
@@ -4642,7 +4646,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
         缺题面 → 400（商量需要题面证据）。
         """
-        from .idea_chat import append_chat_message, read_idea_chat, write_idea_chat
+        from .idea_chat import append_chat_round, read_idea_chat, update_idea_chat
         from .skeleton import build_skeleton_interfaces
         from .task_progress import read_task_plan
 
@@ -4686,11 +4690,15 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             )
         finally:
             llm_run.settle()
-        # 原子轮次：LLM 成功才追加两条消息落盘（失败 = 502，历史不动）
-        chat = append_chat_message(chat, "user", history[-1][1])
-        chat = append_chat_message(chat, "assistant", discussion.reply)
-        write_idea_chat(output_dir, chat)
-        return {"reply": discussion.reply, "chat": chat.to_dict()}
+        # 原子轮次：LLM 成功才追加两条消息落盘（失败 = 502，历史不动）。
+        # **模型调用留在锁外**：临界区只有"重读 → 追加本轮两条 → 落盘"这几毫秒——
+        # 这几秒里别人采纳的结论 / 别的一轮商量都不会被我们手上那份旧快照盖掉
+        # （工单 record-write-hardening/03：聊天是追加型日志，追加重放能同时保住两笔）。
+        updated = update_idea_chat(
+            output_dir,
+            lambda latest: append_chat_round(latest, history[-1][1], discussion.reply),
+        )
+        return {"reply": discussion.reply, "chat": updated.to_dict()}
 
     @app.post("/api/tasks/idea/chat/adopt")
     @_map_errors
@@ -4701,7 +4709,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         （最新覆盖），后续每步任务执行与直接修正注入 prompt。text 非字符串
         由本路由校验（照 dialog-adopt 先例）；返回 {chat}。
         """
-        from .idea_chat import read_idea_chat, set_chat_note, write_idea_chat
+        from .idea_chat import set_chat_note, update_idea_chat
 
         output_dir = Path(_require_str(payload, "output_dir"))
         if not output_dir.is_dir():
@@ -4709,9 +4717,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         text = payload.get("text")
         if not isinstance(text, str):
             raise TaskError("text 必须是字符串（空串 = 清除采纳）")
-        chat = read_idea_chat(output_dir)
-        updated = set_chat_note(chat, text)
-        write_idea_chat(output_dir, updated)
+        # 读-改-写整段在短临界区里（工单 record-write-hardening/03）：这几毫秒里
+        # 别人发的那轮商量的消息不会被我们手上那份旧快照盖掉，我们这条 note 也不会被它盖掉
+        updated = update_idea_chat(output_dir, lambda latest: set_chat_note(latest, text))
         return {"chat": updated.to_dict()}
 
     # ------------------------------------------------------------------

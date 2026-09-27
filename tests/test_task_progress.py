@@ -9,6 +9,7 @@ webapp /api/tasks/plan 端点（SSE 事件序列 + 错误路径）。
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -3211,6 +3212,145 @@ def test_tasks_idea_chat_send_read_adopt_flow(tasks_client):
     )
     assert resp.status_code == 502
     assert len(read_idea_chat(Path(output_dir)).messages) == before
+
+
+def test_idea_chat_send_keeps_an_adopt_that_landed_during_the_model_call(tasks_client):
+    """模型调用那几秒里别人采纳结论：send 结束后 **note 与本轮两条消息都在**（工单 03）。
+
+    确定性做法（照 `tests/test_hwcheck.py` 的端点级先例）：把假 LLM 的
+    `discuss_global_idea` 卡住（此刻 send 已读完旧记录、正在模型调用里），adopt 请求同时
+    发出去，再放行模型调用。
+    · 收走前（send 拿的是模型调用**之前**那份旧快照，最后整份写回）：note 被盖回空串；
+    · 收走后（模型调用留在锁外、落盘前重读 + 追加）：note 与本轮两条消息都在。
+
+    `adopt_done.wait(timeout=10)` 顺带钉住"模型调用没进临界区"——真进去了的话，采纳请求
+    会被挡在锁外，这里直接红（比整场挂到超时好）。
+    """
+    from contest_generator.idea_chat import read_idea_chat
+
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    base = FakeLLM(global_discussion=TaskDiscussion(reply="先加一阶低通，再接 PID。"))
+    entered = threading.Event()
+    release = threading.Event()
+
+    class _SlowGlobal:
+        def discuss_global_idea(self, **kwargs):
+            entered.set()
+            assert release.wait(timeout=30), "等不到放行——判据自己失败，别挂住整场"
+            return base.discuss_global_idea(**kwargs)
+
+    holder["llm"] = _SlowGlobal()
+    results: dict[str, object] = {}
+
+    def send() -> None:
+        results["send"] = client.post(
+            "/api/tasks/idea/chat/send",
+            json={
+                "output_dir": output_dir,
+                "history": [{"role": "user", "content": "整体架构要不要加滤波？"}],
+            },
+        )
+
+    sender = threading.Thread(target=send, daemon=True)
+    sender.start()
+    assert entered.wait(timeout=30), "商量请求没进模型调用"
+
+    adopt_done = threading.Event()
+
+    def adopt() -> None:
+        results["adopt"] = client.post(
+            "/api/tasks/idea/chat/adopt",
+            json={"output_dir": output_dir, "text": "全局结论：先保证循迹稳定"},
+        )
+        adopt_done.set()
+
+    adopter = threading.Thread(target=adopt, daemon=True)
+    adopter.start()
+    assert adopt_done.wait(timeout=10), "采纳请求被模型调用挡住了（模型调用进了临界区）"
+    release.set()
+    sender.join(timeout=30)
+    adopter.join(timeout=30)
+
+    assert results["send"].status_code == 200, results["send"].text
+    assert results["adopt"].status_code == 200, results["adopt"].text
+    on_disk = read_idea_chat(Path(output_dir))
+    assert on_disk.note == "全局结论：先保证循迹稳定", "窗口里采纳的结论被旧快照盖掉了"
+    assert [m.content for m in on_disk.messages] == [
+        "整体架构要不要加滤波？",
+        "先加一阶低通，再接 PID。",
+    ], "本轮两条消息没落上"
+
+
+def test_idea_chat_send_and_adopt_serialise_their_record_writes(
+    tasks_client, monkeypatch
+):
+    """send 与 adopt 写同一份记录时**串行**：send 卡在自己合并里时，adopt 进不来（工单 03）。
+
+    判据取**最终落盘**（不取响应体）：撤掉临界区之后，adopt 会在 send"已经读完旧记录、
+    还没写"的那条缝里落盘，随后被 send 整份盖回旧快照——落盘的 note 没了。
+    这条是"撤锁必须变红"的端点判据（`hwcheck-hygiene/03` 被评审抓过"端点用例撤锁照样绿"）。
+
+    确定性做法（照 `tests/test_hwcheck.py:3343`）：把 send 的合并（第一条 `append_chat_message`）
+    卡住——此刻它已经在临界区里；`adopt_done.wait(timeout=1.0)` 只为在**无锁**那一格把顺序
+    钉死（有锁那一格它必然等不到，判据不依赖这一跳）。
+    """
+    from contest_generator import idea_chat as idea_chat_module
+    from contest_generator.idea_chat import read_idea_chat
+
+    client, holder, tmp_path = tasks_client
+    output_dir = _generate_project(client, tmp_path)
+    holder["llm"] = FakeLLM(global_discussion=TaskDiscussion(reply="先加一阶低通。"))
+    inside = threading.Event()
+    release = threading.Event()
+    real_append = idea_chat_module.append_chat_message
+
+    def blocking_append(chat, role, content):
+        if role == "user":
+            inside.set()
+            assert release.wait(timeout=30), "等不到放行——判据自己失败，别挂住整场"
+        return real_append(chat, role, content)
+
+    monkeypatch.setattr(idea_chat_module, "append_chat_message", blocking_append)
+    results: dict[str, object] = {}
+
+    def send() -> None:
+        results["send"] = client.post(
+            "/api/tasks/idea/chat/send",
+            json={
+                "output_dir": output_dir,
+                "history": [{"role": "user", "content": "整体架构要不要加滤波？"}],
+            },
+        )
+
+    sender = threading.Thread(target=send, daemon=True)
+    sender.start()
+    assert inside.wait(timeout=30), "商量请求没进合并（临界区）"
+
+    adopt_done = threading.Event()
+
+    def adopt() -> None:
+        results["adopt"] = client.post(
+            "/api/tasks/idea/chat/adopt",
+            json={"output_dir": output_dir, "text": "全局结论：先保证循迹稳定"},
+        )
+        adopt_done.set()
+
+    adopter = threading.Thread(target=adopt, daemon=True)
+    adopter.start()
+    adopt_done.wait(timeout=1.0)  # 无锁那一格：这里会先写完；有锁那一格：等不到
+    release.set()
+    sender.join(timeout=30)
+    adopter.join(timeout=30)
+
+    assert results["send"].status_code == 200, results["send"].text
+    assert results["adopt"].status_code == 200, results["adopt"].text
+    on_disk = read_idea_chat(Path(output_dir))
+    assert on_disk.note == "全局结论：先保证循迹稳定", "窗口里采纳的那条被整份盖掉了"
+    assert [m.content for m in on_disk.messages] == [
+        "整体架构要不要加滤波？",
+        "先加一阶低通。",
+    ], "本轮两条消息没落上"
 
 
 def test_tasks_execute_injects_global_note(tasks_client, monkeypatch):

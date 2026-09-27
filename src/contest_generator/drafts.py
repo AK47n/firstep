@@ -136,7 +136,7 @@ def update_drafts(
 
     窗口本来只有微秒级（调用方全在 `webapp.py`，中间只夹纯函数），加锁买的是
     "两个入口交错"这条（双击 / 双标签页很常见）；真正横跨秒级的同类病在想法商量那条路
-    （工单 record-write-hardening/03 要建的 `update_idea_chat`，本单尚未存在）。
+    （`idea_chat.update_idea_chat`，工单 record-write-hardening/03）。
     """
     path = output_dir / IDEA_DRAFTS_FILENAME
     with path_lock(path):
