@@ -808,16 +808,7 @@ test("ui 的接线表 / 冲突 / 顺序 / chips 都走 fx 单源（不手拼表�
   assert.ok(!/class="module-card/.test(ui), "ui 不得手拼模块卡（双源）");
 });
 
-test("ui 的说明弹窗走既有委托（捕获阶段拦，否则点说明会把器件去掉）", () => {
-  const ui = hwcheckUiText();
-  assert.ok(ui.includes("bindModuleInfoEntry("), "chip 里的说明按钮要用既有委托");
-  assert.ok(ui.includes("openModuleInfo("), "模块卡片的详情按钮走既有弹窗入口");
-  const recommend = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/generate-recommend.js", import.meta.url),
-    "utf8");
-  assert.ok(/export function bindModuleInfoEntry\(root, platformOf\)/.test(recommend),
-    "既有委托要能带「用哪个平台展示」（检测页有自己的平台选择）");
-});
+
 
 test("ui 的视图刷新守并发纪律（过期响应不写状态 + 在途触发排队）", () => {
   // CONTEXT.md「展开收口」同款：响应里带着 devices 回显，慢响应回来会把刚选的
@@ -1489,16 +1480,7 @@ test("ui 回读勾选的判据是「这次带没带记录」而不是「记录�
 // 工单 module-hwcheck/09：单平台件不误导（选它时页面不许像"另一平台也能测"）
 // ---------------------------------------------------------------------------
 
-test("单平台件不误导：器件挑选面按**本栏目当前平台**标记「需切换平台」", () => {
-  // 判据在既有网格渲染里（fx/module.js moduleGridHTML：platform 参数决定
-  // 卡片是否带 .off + 「需切换平台」）——检测页要做的只有"把当前平台传进去"。
-  // 不传 = sr04 / jy61p / xunji 这类只有 mspm0 条目的件在 stm32 页面上看着能测。
-  const ui = uiModuleText("hwcheck-core.js");
-  const call = ui.match(/moduleGridHTML\(\s*([^)]*)\)/);
-  assert.ok(call, "ui 应复用既有网格渲染 moduleGridHTML");
-  assert.ok(call[1].includes("hwcheckUI.platform"),
-    "器件卡片必须带上本栏目当前平台（否则单平台件不会标「需切换平台」）：" + call[0]);
-});
+
 
 test("单平台件不误导：**行为**上，未选中的卡片就被标成需切换平台", () => {
   // 上一条是源码文本判据（挡"忘了传平台"），这条真跑一遍挑选面的组合：
@@ -1572,80 +1554,17 @@ test("ui 读写端点走既有 apiGet / apiPost / apiDelete（不自造 fetch）
   assert.ok(!/fetch\(\s*["']\/api\/my-devices/.test(ui), "不得绕开 app.js 的 api* 辅助");
 });
 
-test("ui 删掉一件时把它从**这次检测的选择**里去掉（否则下次预览 400 未知模块）", () => {
-  // 删掉之后那个 id 既不在库里、也不再是自建件 —— 而页面上 chip 还挂着，
-  // 学生根本不知道是自己刚删的那件（这是最容易变成"莫名其妙打不开"的一处）。
-  const ui = uiModuleText("hwcheck-devices.js");
-  const delAt = ui.indexOf("async function deleteMyDevice");
-  assert.ok(delAt > 0, "应有 deleteMyDevice");
-  const body = ui.slice(delAt, delAt + 1100);
-  assert.ok(body.includes("hwcheckUI.devices.filter"),
-    "删除后要把它从选中集合里摘掉：\n" + body);
-});
 
-test("ui 的 id 建议不覆盖用户手填的 id（只在空 / 还是建议值时补）", () => {
-  const ui = uiModuleText("hwcheck-devices.js");
-  const at = ui.indexOf("myDeviceSlugFromName(");
-  assert.ok(at > 0, "应按名称给一个 id 建议");
-  const body = ui.slice(Math.max(0, at - 700), at + 200);
-  assert.ok(/current/.test(body) && /mine_/.test(body),
-    "补建议前要先看用户填过没有：\n" + body);
-});
 
-test("ui 的 id 建议也只改那一个输入框（不许整块重绘把在填的字段清掉）", () => {
-  // 同一个坑的另一处：`blur` 时按名称补 id 建议，若顺手整块重绘，用户刚填的
-  // 地址 / 寄存器全被换成初值（浏览器验收实测：地址填了却报「必须填地址」）。
-  const ui = uiModuleText("hwcheck-devices.js");
-  const at = ui.indexOf("function suggestMyDeviceId(");
-  assert.ok(at > 0, "应有按名称补 id 建议的 suggestMyDeviceId");
-  const body = ui.slice(at, at + 900);
-  assert.ok(body.includes("syncMyDeviceForm()"),
-    "补完建议要走就地同步：\n" + body);
-  assert.ok(!body.includes("renderMyDevices("),
-    "补建议不得整块重绘表单：\n" + body);
-});
 
-test("「我的器件」的行随选择集重绘（从 chip 侧取消加选后，行上按钮不许还说「已在」）", () => {
-  // 两个容器（#hwcheck-device-chips 与 #my-devices-list）显示同一份选择集——
-  // 只重绘一个就是界面自相矛盾：chip 没了、行上还写着「✓ 已在这次检测里」。
-  const ui = uiModuleText("hwcheck-core.js");
-  const at = ui.indexOf("function renderHwcheckDevices()");
-  assert.ok(at > 0);
-  const body = ui.slice(at, ui.indexOf("\n}", at) + 2);
-  assert.ok(body.includes("myDeviceListHTML(hwcheckUI.myDevices, hwcheckUI.devices)"),
-    "器件面重绘时要带上选中集重绘「我的器件」列表：\n" + body);
-  assert.ok(!/renderMyDevices\(/.test(body),
-    "不许整块 renderMyDevices（它会把正在填的表单刷掉）：\n" + body);
-});
 
-test("ui 打字期间**不整块重绘表单**（重绘 = 正在打字的输入框被换掉，字全丢）", () => {
-  // 本单浏览器验收当场抓到的 bug：`input` 委托里调了整块 `renderMyDevices()`，
-  // 于是用户刚敲进去的字符所在的 `<input>` 被 innerHTML 换掉——现象是"打一个字
-  // 表单就清空"，而按钮与地址预览看着还正常。判据：syncMyDeviceForm 里一个
-  // `innerHTML` 都不许有（就地更新那两个小节点），整块重绘只走显式动作。
-  const ui = uiModuleText("hwcheck-devices.js");
-  const at = ui.indexOf("function syncMyDeviceForm()");
-  assert.ok(at > 0);
-  const body = ui.slice(at, ui.indexOf("\n}", at) + 2);
-  assert.ok(!/\brenderMyDevices\s*\(/.test(body),
-    "syncMyDeviceForm 不得整块重绘表单：\n" + body);
-  assert.ok(!/box\.innerHTML\s*=/.test(body),
-    "syncMyDeviceForm 不得写 box.innerHTML：\n" + body);
-  assert.ok(body.includes("data-my-device-address-preview-slot")
-    && body.includes("data-my-device-form-error"),
-    "预览与校验理由要就地更新（不重绘也要跟着走）：\n" + body);
-});
 
-test("「我的器件」不随平台清空（件与平台无关：切平台不该把用户填的件弄丢）", () => {
-  const ui = uiModuleText("hwcheck-actions.js");
-  const at = ui.indexOf('const card = e.target.closest("[data-hwcheck-platform]")');
-  assert.ok(at > 0);
-  const body = ui.slice(at, at + 900);
-  for (const key of ["myDevices", "myForm", "knownSlugs"]) {
-    assert.ok(!body.includes("hwcheckUI." + key + " = []") && !body.includes("hwcheckUI." + key + " = null"),
-      `换平台不该清掉 hwcheckUI.${key}：\n` + body);
-  }
-});
+
+
+
+
+
+
 
 // ===========================================================================
 // 工单 hwcheck-unknown-device/05：自建件的**检测计划**面板（接线行 / 标注 /
@@ -1824,12 +1743,7 @@ test("命令表：自建件的名称是用户随手填的，一律 esc", () => {
   assert.ok(out.includes("&lt;img"), out);
 });
 
-test("ui 的空态文案把自建件也算进「哪些能复测」（否则页面在说谎）", () => {
-  const ui = uiModuleText("hwcheck-core.js");
-  // 判据落在**整段字面量**上（不截窗口：占位文案本身就是一句话，截窗口改措辞就误红）
-  assert.ok(ui.includes("复测命令（库内器件按配方、自建件按它自己的探测小节）"),
-    "自建件也有复测命令了，占位文案不能只说「由库内配方决定」");
-});
+
 
 
 
@@ -2070,23 +1984,7 @@ test("结构钉：检测页有带入块容器（在卡片正文里，不在注�
     `带入块应排在已选 chips 之后、保存位置之前：${chipsAt} / ${at} / ${parentAt}`);
 });
 
-test("结构钉：总口径那句真的被渲染出来（容器在卡片正文里 + ui 调了 fx）", () => {
-  // 「函数写好了但没人调用」是这一栏出过的坏法（点了没反应/首帧空白）。
-  // 判据两条腿：页面里有落点（且不在注释里）+ ui 在初始化路径上调它。
-  const at = html.indexOf('id="hwcheck-unverified-note"');
-  assert.ok(at > 0, "缺少总口径容器 #hwcheck-unverified-note");
-  const cardAt = html.lastIndexOf('<div class="card">', at);
-  assert.ok(cardAt > 0 && cardAt < at, "找不到总口径所在的卡片");
-  assert.ok(!/<!--[\s\S]*id="hwcheck-unverified-note"[\s\S]*?-->/.test(html.slice(cardAt, at + 60)),
-    "容器落在注释里了 —— 那等于没有这句话");
-  const ui = hwcheckUiText();
-  assert.ok(ui.includes('$("hwcheck-unverified-note")'), "总口径要有渲染落点");
-  assert.ok(ui.includes("renderHwcheckUnverifiedNote();"), "初始化路径上要真的调它");
-  // ui 不许自己再写一遍文案（单源在 fx）。判据**先剥注释**再查：ui 里那句注释引用了
-  // 同一句话做说明（不是文案），直接子串匹配会被注释骗过——本仓库既有教训。
-  const uiCode = ui.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
-  assert.ok(!uiCode.includes("尚未在真板上验证过"), "文案单源在 fx/hwcheck-project.js，ui 只渲染");
-});
+
 
 test("结构钉：ui 侧走 fx（不手拼理由与回报文案）+ 并入入口在生成页那侧", () => {
   const ui = hwcheckUiText();

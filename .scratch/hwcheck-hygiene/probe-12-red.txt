@@ -1,0 +1,19 @@
+# 读数：probe-12-red
+# 命令：python .scratch\hwcheck-hygiene\probe-12-red.py
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T12:31:45+08:00
+# 退出码：0
+前置（① 输入回调改回整块重绘（就地同步那一步撤掉） 的用例，未注入）：退出码 0 —— 绿
+[PASS] ① 输入回调改回整块重绘（就地同步那一步撤掉）（src/contest_generator/static/js/ui/hwcheck-devices.js）
+        注入态退出码 1（文件换行 CRLF），点名了「AssertionError [ERR_ASSERTION]: 打字被整块重绘吞掉了」；复原 sha256 dece4d771a38f828（与前置相同）
+前置（② 初始化里不再渲染顶部总口径 的用例，未注入）：退出码 0 —— 绿
+[PASS] ② 初始化里不再渲染顶部总口径（src/contest_generator/static/js/ui/hwcheck.js）
+        注入态退出码 1（文件换行 CRLF），点名了「AssertionError [ERR_ASSERTION]: 总口径没渲染出来：」；复原 sha256 3479b82ac9b4bca5（与前置相同）
+前置（③ 删自建件时不再从选择集里摘掉 的用例，未注入）：退出码 0 —— 绿
+[PASS] ③ 删自建件时不再从选择集里摘掉（src/contest_generator/static/js/ui/hwcheck-devices.js）
+        注入态退出码 1（文件换行 CRLF），点名了「AssertionError [ERR_ASSERTION]: 删掉之后 chips 里还挂着它（下次预览就是 400 」；复原 sha256 dece4d771a38f828（与前置相同）
+前置（④ 空态文案换回旧版（只提库内配方） 的用例，未注入）：退出码 0 —— 绿
+[PASS] ④ 空态文案换回旧版（只提库内配方）（src/contest_generator/static/js/ui/hwcheck-core.js）
+        注入态退出码 1（文件换行 CRLF），点名了「AssertionError [ERR_ASSERTION]: 空态文案没把自建件算进「哪些能复测」：选好器件后点「预览」；复原 sha256 2d28ed526a5c990b（与前置相同）
+
+结论：4/4 段成立（每段都是「注入即红、复原逐字节相同」）

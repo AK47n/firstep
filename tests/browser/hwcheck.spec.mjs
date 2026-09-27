@@ -1203,6 +1203,226 @@ test("检测页 → 生成页：库内件一键带过去并置为选中态；库
 });
 
 // ---------------------------------------------------------------------------
+// 工单 hwcheck-hygiene/12：把「源码里有这行」换成「点下去会怎样」
+//
+// 11 号单把 `ui/hwcheck.js` 拆成四件时，35 条读源码串的断言跟着搬了家。本单逐条判它们
+// 测的是**纯函数行为**还是 **ui 接线**：接线的那些**删掉**，改成这里的行为用例——
+// 断言的对象从"源码某处写着 `renderMyDevices()`"变成"点了之后页面上真的变了"。
+// 每条用例的注释里点名它替掉的是哪一条（票尾有整张对照表）。
+//
+// 这一组自带前提（本文件用例共用一张页面）：能清 localStorage 的先清，再 `openTab()`——
+// 「上次看的检测工程」那份备忘会让首帧就回读出一份工程，空态类断言会被上一条的残留喂绿。
+// ---------------------------------------------------------------------------
+
+// freshTab()：清掉本地备忘（最近看的检测工程 / 勾选态）再打开本栏目——空态判据的前提。
+async function freshTab() {
+  await page.goto(server.url + "/", { waitUntil: "domcontentloaded" });
+  await page.evaluate(() => localStorage.clear());
+  await openTab();
+}
+
+// myDeviceValues()：当前表单的字段现值（按 data-my-device-field 逐项取）。
+const myDeviceValues = () => page.evaluate(() => Object.fromEntries(
+  [...document.querySelectorAll("[data-my-device-field]")]
+    .map((el) => [el.dataset.myDeviceField, el.value])));
+
+test("「我的器件」：手填过 id 就不被「名称 → id 建议」覆盖（替掉「ui 的 id 建议不覆盖用户手填的 id」）", async () => {
+  await freshTab();
+  await page.click("#btn-my-device-new");
+  await page.waitForSelector("[data-my-device-form]");
+
+  // ① 先手动定下 id，再回来改名称并失焦 —— 手填的 id 必须原样留着
+  await myDeviceType('[data-my-device-field="id"]', MY_DEVICE_ID);
+  await myDeviceType('[data-my-device-field="name"]', "手填过 id 的件");
+  assert.equal(await page.inputValue('[data-my-device-field="id"]'), MY_DEVICE_ID,
+    "手填的 id 被名称建议覆盖了");
+
+  // ② 反向对照：id 还是自动建议值时，改名称**应当**跟着更新
+  //    （没有这一半，上一条"两边都不动"也能绿）
+  await page.fill('[data-my-device-field="id"]', "");
+  await myDeviceType('[data-my-device-field="name"]', "gyro module");
+  assert.equal(await page.inputValue('[data-my-device-field="id"]'), "mine_gyro_module",
+    "id 为空时该按名称给建议");
+  await page.click("[data-my-device-cancel]");
+});
+
+test("「我的器件」：逐字打字不被整块重绘吞掉，补 id 建议也不清空别的字段（替掉两条源码串断言）", async () => {
+  await freshTab();
+  await page.click("#btn-my-device-new");
+  await page.waitForSelector("[data-my-device-form]");
+
+  // ① 逐字打地址：每敲一个字符都会触发一次表单同步 —— 那次同步若整块重绘，
+  //    正在打字的 `<input>` 会被换掉，现象就是"打一个字表单就清空"
+  await page.click('[data-my-device-field="address"]');
+  await page.keyboard.type("0x68");
+  assert.equal(await page.inputValue('[data-my-device-field="address"]'), "0x68",
+    "打字被整块重绘吞掉了");
+
+  // ② 先填好地址 / 寄存器 / 期望值，再改名称并失焦（失焦会按名称补 id 建议）——
+  //    补建议只许动 id 那一个框，别把刚填的字段一起刷回初值
+  await myDeviceType('[data-my-device-field="register"]', "0x75");
+  await myDeviceType('[data-my-device-field="expect"]', "0x68");
+  await myDeviceType('[data-my-device-field="name"]', "卖家给的六轴模块");
+  const values = await myDeviceValues();
+  assert.equal(values.address, "0x68", "补 id 建议把地址清了：" + JSON.stringify(values));
+  assert.equal(values.register, "0x75", "补 id 建议把寄存器清了：" + JSON.stringify(values));
+  assert.equal(values.expect, "0x68", "补 id 建议把期望值清了：" + JSON.stringify(values));
+  assert.equal(values.id, "mine_device", "中文名派生不出 slug 时该给 mine_device：" + values.id);
+  await page.click("[data-my-device-cancel]");
+});
+
+test("「我的器件」：切平台不丢正在填的表单（件与平台无关；替掉「不随平台清空」）", async () => {
+  await freshTab();
+  await page.click("#btn-my-device-new");
+  await page.waitForSelector("[data-my-device-form]");
+  await myDeviceType('[data-my-device-field="name"]', "填到一半的件");
+  await myDeviceType('[data-my-device-field="address"]', "0x68");
+  const before = await myDeviceValues();
+
+  await page.click('[data-hwcheck-platform="mspm0"]');
+  await page.waitForFunction(
+    () => document.querySelector('[data-hwcheck-platform="mspm0"]').classList.contains("selected"));
+  const after = await myDeviceValues();
+  assert.deepEqual(after, before, "换平台把正在填的表单清了");
+  assert.ok(await page.$("[data-my-device-form]"), "换平台不该把表单收起来");
+  await page.click("[data-my-device-cancel]");
+});
+
+test("顶部总口径真的在页面上（未上板那句；替掉「结构钉：总口径那句真的被渲染出来」）", async () => {
+  await freshTab();
+  const text = await page.textContent("#hwcheck-unverified-note");
+  assert.ok(text.includes("尚未在真板上验证过"), "总口径没渲染出来：" + text);
+  assert.ok(text.includes("能生成 + 能编译"), "总口径该说清证据到哪一步：" + text);
+  assert.ok(!text.includes("**"), "总口径里出现了字面星号：" + text);
+});
+
+test("空态：串口复测那句把自建件也算进去（替掉「ui 的空态文案把自建件也算进」）", async () => {
+  await freshTab();
+  const text = await page.textContent("#hwcheck-console");
+  assert.ok(text.includes("库内器件按配方、自建件按它自己的探测小节"),
+    "空态文案没把自建件算进「哪些能复测」：" + text);
+  assert.ok(!text.includes("**"), "空态文案里出现了字面星号：" + text);
+});
+
+test("器件卡「说明」：开弹窗，且**不**把这一件加进 / 移出这次检测（替掉「ui 的说明弹窗走既有委托」）", async () => {
+  await freshTab();
+  await clearDevices();
+  await page.waitForSelector("#hwcheck-device-grid .module-card .mc-info");
+  const slug = await page.evaluate(
+    () => document.querySelector("#hwcheck-device-grid .module-card").dataset.add);
+  await page.click(`#hwcheck-device-grid [data-add="${slug}"] .mc-info`);
+  await page.locator(".module-info-overlay").waitFor({ state: "visible" });
+  const head = await page.textContent(".module-info-overlay .module-info-head");
+  assert.ok(head.includes(slug), "弹窗里该是这一件：" + head);
+  const devices = await page.evaluate(() => [...document.querySelectorAll(
+    "#hwcheck-device-chips [data-remove]")].map((el) => el.dataset.remove));
+  assert.ok(!devices.includes(slug), "点「说明」把这一件加进选择集了：" + devices.join(","));
+  await page.keyboard.press("Escape");
+  await page.locator(".module-info-overlay").waitFor({ state: "detached" });
+});
+
+test("单平台件在错平台上标「需切换平台」（替掉「器件挑选面按当前平台标记」那条源码串断言）", async () => {
+  await freshTab();
+  await page.click('[data-hwcheck-platform="stm32"]');
+  await page.waitForSelector("#hwcheck-device-grid .module-card");
+  const off = await page.evaluate(() => [...document.querySelectorAll(
+    "#hwcheck-device-grid .module-card.off")].map((el) => ({
+    slug: el.dataset.add, text: el.textContent.replace(/\s+/g, " "),
+  })));
+  assert.ok(off.length > 0,
+    "stm32 页面上应当有「本平台没有条目」的卡片（sr04 这类只有 mspm0 条目）");
+  const bad = off.filter((c) => !c.text.includes("需切换平台"));
+  assert.deepEqual(bad, [], "这些单平台件没标「需切换平台」：" + JSON.stringify(bad));
+});
+
+test("「我的器件」删掉一件时，它同时从这次检测的选择里去掉（替掉同名源码串断言）", async () => {
+  await freshTab();
+  await myDeviceFill({
+    name: "删掉要连坐的件", bus: "i2c", address: "0x68", id: MY_DEVICE_ID,
+  });
+  await page.click("[data-my-device-save]");
+  await page.waitForSelector(`[data-my-device-row="${MY_DEVICE_ID}"]`);
+  await page.click(`[data-my-device-pick="${MY_DEVICE_ID}"]`);
+  await page.waitForSelector(`#hwcheck-device-chips [data-remove="${MY_DEVICE_ID}"]`);
+
+  await page.click(`[data-my-device-del="${MY_DEVICE_ID}"]`);
+  // 先等一等（产品是"删完再对齐选择集"）：等不到不算通过，**下面的断言说了算**——
+  // 直接让 waitForFunction 抛超时，红点就落在一句泛泛的 Timeout 上，读的人看不出是哪一步。
+  await page.waitForFunction(
+    (id) => !document.querySelector(`#hwcheck-device-chips [data-remove="${id}"]`),
+    MY_DEVICE_ID, { timeout: 15000 }).catch(() => { /* 交给下面那句断言点名 */ });
+  const chips = await page.evaluate(() => [...document.querySelectorAll(
+    "#hwcheck-device-chips [data-remove]")].map((el) => el.dataset.remove));
+  assert.ok(!chips.includes(MY_DEVICE_ID),
+    "删掉之后 chips 里还挂着它（下次预览就是 400 未知模块）：" + chips.join(","));
+  const listed = await page.evaluate(async () => {
+    const body = await (await fetch("/api/my-devices")).json();
+    return body.devices.map((d) => d.id);
+  });
+  assert.ok(!listed.includes(MY_DEVICE_ID), "服务端也该没有这件：" + listed.join(","));
+});
+
+test("生成检测工程时，上一次填的现象一起归零（替掉「生成新工程时清掉现象与建议」）", async () => {
+  await freshTab();
+  await setParent(parentDir);
+  await page.click('[data-hwcheck-platform="stm32"]');
+  await page.fill("#hwcheck-symptom", "上一趟的现象：灯也不闪");
+  await page.click("#btn-hwcheck-generate");
+  await page.waitForSelector("[data-hwcheck-compile]", { timeout: 120000 });
+  assert.equal(await page.inputValue("#hwcheck-symptom"), "",
+    "生成新工程后，现象框该清空（那句话属于上一个工程）");
+});
+
+test("栏目里**产品自己写的**文案零字面星号（工单 02 的产物在浏览器这一层的那一半）", async () => {
+  // 02 号单修的是"提示文案里写 `**加粗**`，到页面上就是两个字面星号"。
+  // 前端门禁那一半是 `bold-marker-guard` 判据 ⑨（只判 JS 产品串）；真页面这一半此前没有。
+  //
+  // ⚠ 判据面 = **产品模板写出来的那几个容器**（下面逐个点名）：它们的文案住在 fx 里，
+  // 判据 ⑨ 与这一条因此是同一件事的两半。**库数据**（配方 `note` / manifest 简介）里的
+  // `**` 不在这条判据面里——本单实测那是一处**既有缺陷**（配方 2434 处 / 74 个 manifest
+  // 1850 处，`esc()` 之后原样进页面），已另开工单记账，别在这里混着判。
+  const PRODUCT_COPY = [
+    "#hwcheck-unverified-note", "#hwcheck-channel-note", "#hwcheck-wiring",
+    "#hwcheck-conflicts", "#hwcheck-order", "#hwcheck-console", "#hwcheck-console-note",
+    "#hwcheck-custom", "#hwcheck-handoff", "#hwcheck-project", "#hwcheck-checklist",
+    "#hwcheck-advice", "#hwcheck-device-missing", "#hwcheck-device-groups",
+  ];
+  await freshTab();
+  await setParent(parentDir);
+  await page.click('[data-hwcheck-platform="stm32"]');
+  await page.click("#btn-hwcheck-generate");
+  await page.waitForSelector("[data-hwcheck-compile]", { timeout: 120000 });
+  await page.waitForSelector("#hwcheck-device-grid .module-card");
+  await page.click("#hwcheck-device-grid .module-card");
+  await page.click("#btn-hwcheck-preview");
+  await page.waitForSelector("[data-hwcheck-code]", { timeout: 60000 });
+
+  const found = await page.evaluate((selectors) => selectors.flatMap((sel) => {
+    const el = document.querySelector(sel);
+    const text = el ? el.textContent : "";
+    if (!text.includes("**")) return [];
+    return [`${sel}：…${text.slice(Math.max(0, text.indexOf("**") - 60), text.indexOf("**") + 60)}…`];
+  }), PRODUCT_COPY);
+  assert.deepEqual(found, [],
+    "产品文案里出现了字面星号（学生看到的是两个星号，不是加粗）：\n  " + found.join("\n  "));
+});
+
+test("地猛星双通道撞脚：修法说明与移脚提示里零字面星号（02 号单实测的那一处）", async () => {
+  // 02 号单实测的五处里，这一处最容易撞上：地猛星默认双通道就撞脚，几乎必现。
+  await freshTab();
+  await page.click('[data-hwcheck-platform="mspm0"]');
+  await page.waitForFunction(
+    () => document.querySelector('[data-hwcheck-platform="mspm0"]').classList.contains("selected"));
+  const note = await page.textContent("#hwcheck-channel-note");
+  assert.ok(note.includes("不用你自己改"), "生成前引导没渲染出来：" + note);
+  assert.ok(!note.includes("**"), "引导里出现了字面星号：" + note);
+  await page.click("#btn-hwcheck-preview");
+  await page.waitForSelector("[data-hwcheck-code]", { timeout: 60000 });
+  const wiring = await page.textContent("#hwcheck-wiring");
+  assert.ok(!wiring.includes("**"), "接线区出现了字面星号：\n" + wiring.slice(0, 400));
+});
+
+// ---------------------------------------------------------------------------
 // 焦点与可达性（工单 hwcheck-hygiene/06）
 //
 // 为什么只有真浏览器能作证：`document.activeElement` 是**运行时**事实——源码里写了
