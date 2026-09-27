@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from contest_generator.wordlist import (
@@ -203,6 +205,84 @@ def test_default_wordlist_lib_modules_references_exist():
     }
     assert referenced, "词表应有方案声明 lib_modules（本特性迁移后）"
     assert referenced <= slugs, f"词表引用了库中不存在的模块 slug：{referenced - slugs}"
+
+
+# ---------------------------------------------------------------------------
+# MQ 系方案 note 的口径（工单 backlog-closeout/02）
+#
+# 九件同一族：同一份页面/手册证据（「电导率随浓度增加而增大」；mq2 页面另写
+# 「烟雾浓度越大…输出的模拟信号就越大」）、同一式子 `percent = value/4095×100`。
+# 但 mq2 / mq135 / mq5 三条 note 少了「正向映射」那句、预热写法也在
+# 「（几分钟级）」与「3-5 分钟」之间摇摆——学生选到哪一件，读到的口径就不一样。
+#
+# 判据只认两件事：**写明映射方向**（正向/反向二选一）、**预热口径同一句**。
+# 口径取手册支持的措辞：**不给数字**——MQ 九件的手册页里根本没有时长
+# （`mq-2.md:42` 只写「使用之前必须加热一段时间」；`mq-135.md` / `mq-5.md` 连加热都没提），
+# 全仓唯一写「3-5 分钟」的原文是 ms1100（`ms1100.md:46`），与 mq3/4/6/7/8/9 同批入库——
+# 评审判定疑串台，故本单把九件统一成手册措辞并要求它们**不许**再写那个数字。
+# ---------------------------------------------------------------------------
+
+_MQ_FAMILY_RE = re.compile(r"^mq\d+$")
+_MQ_PREHEAT_PHRASE = "模块上电必须预热（手册只说「加热一段时间」，一般几分钟）否则输出不准"
+# 无据的时长：手册没写分钟数，谁写回来谁红（ms1100 那份有原文，是它自己的事）
+_MQ_UNSOURCED_PREHEAT_RE = re.compile(r"预热\s*\d+\s*[-~－]\s*\d+\s*分钟")
+
+
+def _mq_family_solutions() -> list[tuple[str, SolutionOption]]:
+    """MQ 系方案：`lib_modules` 挂 mq* 的，**或**方案名以 `MQ-` 开头的。
+
+    两条都认的理由：判据面不能被"改个 slug"绕过（例如把 `mq2` 改名成 `mq2_adc`），
+    而方案名是学生看到的那一层（`MQ-2 …`）。`>= 9` 是减项金丝雀。
+    """
+    from contest_generator.wordlist import DEFAULT_WORDLIST
+
+    return [
+        (group.category, solution)
+        for group in DEFAULT_WORDLIST
+        for solution in group.solutions
+        if any(_MQ_FAMILY_RE.match(slug) for slug in solution.lib_modules)
+        or solution.name.startswith("MQ-")
+    ]
+
+
+def test_default_wordlist_mq_family_notes_state_mapping_direction():
+    """MQ 系方案的 note 必须写明**映射方向**（工单 backlog-closeout/02）：
+
+    「正向映射」（浓度越高 ADC 值越高）或「反向映射」二选一——同一族的说明不该
+    因为选了哪一件而少一句话。新加 MQ 系器件时忘了写 → 这条红。
+    """
+    solutions = _mq_family_solutions()
+    assert len(solutions) >= 9, f"MQ 系方案少于 9 条（{len(solutions)}）——判据面要复核"
+    missing = [
+        solution.name
+        for _category, solution in solutions
+        if "正向映射" not in solution.note and "反向映射" not in solution.note
+    ]
+    assert not missing, f"MQ 系方案 note 没写明映射方向：{missing}"
+
+
+def test_default_wordlist_mq_family_notes_share_the_preheat_wording():
+    """MQ 系方案的预热口径同一句、且**有据**（工单 backlog-closeout/02）：
+
+    手册只说「使用之前必须加热一段时间」——所以九件统一写
+    `模块上电必须预热（手册只说「加热一段时间」，一般几分钟）否则输出不准`，
+    并且**不许**再出现「预热 3-5 分钟」这类没出处的时长（那是 ms1100 页面的数字，
+    与 MQ 系同批入库时疑串台）。
+    """
+    solutions = _mq_family_solutions()
+    assert solutions, "MQ 系方案一条都没扫到——判据面要复核"
+    wrong = [
+        solution.name
+        for _category, solution in solutions
+        if _MQ_PREHEAT_PHRASE not in solution.note
+    ]
+    assert not wrong, f"MQ 系方案的预热写法不统一（应含「{_MQ_PREHEAT_PHRASE}」）：{wrong}"
+    unsourced = [
+        solution.name
+        for _category, solution in solutions
+        if _MQ_UNSOURCED_PREHEAT_RE.search(solution.note)
+    ]
+    assert not unsourced, f"MQ 系方案写了手册没有的预热时长：{unsourced}"
 
 
 def test_default_wordlist_wireless_group_has_zigbee_lib():

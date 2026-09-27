@@ -1,0 +1,31 @@
+# 读数：probe-02-red
+# 命令：python .scratch/backlog-closeout/probe-02-red.py
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T19:40:36+08:00
+# 退出码：0
+# 被撤的源码：src/contest_generator/wordlist.json sha256=a5f138b309d5ed10e50f7ff538a28f82afcd8af26667d75a387c58ecee95d9e0
+# 判据文件：tests/test_wordlist.py sha256=08f5dcf3b9183a8358394d142d94bcb17786fd35a9d3ad261bd8216be26a5f89
+
+== A 撤 mq2 的「正向映射」 ==
+   声明必须红：['tests/test_wordlist.py::test_default_wordlist_mq_family_notes_state_mapping_direction']
+   实得 FAILED：['tests/test_wordlist.py::test_default_wordlist_mq_family_notes_state_mapping_direction']
+   pytest 尾行：1 failed, 22 passed in 0.14s
+   复原 sha256 逐字节相同：True
+
+== B 撤 mq135 的「正向映射」 ==
+   声明必须红：['tests/test_wordlist.py::test_default_wordlist_mq_family_notes_state_mapping_direction']
+   实得 FAILED：['tests/test_wordlist.py::test_default_wordlist_mq_family_notes_state_mapping_direction']
+   pytest 尾行：1 failed, 22 passed in 0.13s
+   复原 sha256 逐字节相同：True
+
+== C 撤 mq5 的预热口径 ==
+   声明必须红：['tests/test_wordlist.py::test_default_wordlist_mq_family_notes_share_the_preheat_wording']
+   实得 FAILED：['tests/test_wordlist.py::test_default_wordlist_mq_family_notes_share_the_preheat_wording']
+   pytest 尾行：1 failed, 22 passed in 0.14s
+   复原 sha256 逐字节相同：True
+
+== 复原后必须回绿 ==
+   实得 FAILED：（无）
+   pytest 尾行：23 passed in 0.14s
+
+结论：PASS（三段反证全成立）

@@ -1,0 +1,8 @@
+# 读数：probe-02-tests
+# 命令：python -m pytest tests/test_wordlist.py tests/test_manifest.py tests/test_llm.py::test_select_segment_ledger_matches_measured_segments -q
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T19:40:39+08:00
+# 退出码：0
+........................................................................ [ 77%]
+.....................                                                    [100%]
+93 passed in 0.37s
