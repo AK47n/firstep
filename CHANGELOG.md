@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=c7bdd2047f5dd7029ce9d3c487bc44bbb925d83b -->
+<!-- changelog-auto: last-commit=97f7077e53bacede4785f55ca6935ec94bb44ca1 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -20,6 +20,7 @@
 - 13:44 发版 v1.3.1（二）：已发布上线、落差归零；账本与三张工单按事实改写（含钉 IP 键名更正）
 - 13:46 账本：v1.3.1 收尾推送的读数落盘（闸门 92 passed、main 推到 2f01a387）
 - 13:47 账本：v1.3.1 交接区不钉 HEAD 的 sha（每写一次账它就动一次）
+- 16:53 台账：ascii-project-name §02 按在盘代码翻 resolved、backlog §23 收口、硬件检测上板单标签更正
 
 ## 2026-09-26
 - 00:21 工单 ci-gate-fixes/01：配置缺失时回退随包库 + 配置路径覆盖口
