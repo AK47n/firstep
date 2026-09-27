@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=374d2e660b073005fa438ab699c0b77fa5b34613 -->
+<!-- changelog-auto: last-commit=6402839be2fe7ada8d580e0bfcb94dc724013e5d -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -15,6 +15,7 @@
 - 12:36 工单 hwcheck-hygiene/12：把 10 条源码串断言换成真浏览器用例（能改行为断言的改行为）
 - 12:45 工单 hwcheck-hygiene/14：库数据里的 markdown 粗体标记改在渲染层转 <strong>
 - 12:45 工单 hwcheck-hygiene/14：置 resolved（读数与账、口径收窄记账都写进票尾）
+- 12:53 工单 hwcheck-hygiene/13：收口——三道闸门读数落盘、评审逐项处置、账本按事实更新
 
 ## 2026-09-26
 - 00:21 工单 ci-gate-fixes/01：配置缺失时回退随包库 + 配置路径覆盖口
