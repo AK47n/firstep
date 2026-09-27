@@ -45,15 +45,17 @@ TIMEOUT = 60
 # 已下线 / 线上不存在的下载形态。与 `tests/test_onboarding_docs.py` 的守卫同口径
 # （那边是"测试时"的硬门禁，这里是"发版前"的自检；两处判据要保持一致，
 #   改一处记得改另一处——判据本身很短，不值得为共享它引入跨目录导入）。
+# 测试期那份还多扫一处：**产品界面文本**（`static/index.html`，工单 backlog-closeout/01）；
+# 这里只管 README（发版前那条路不依赖静态文件位置）。
 DEAD_TOOL_PATTERNS: tuple[tuple[str, str], ...] = (
-    (r"7-?[Zz]ip", "还在提第三方解压工具 7-Zip"),
-    (r"Bandizip", "还在提第三方解压工具 Bandizip"),
-    (r"WinRAR", "还在提第三方解压工具 WinRAR"),
+    (r"7-?[Zz]ip", "仍在提第三方解压工具 7-Zip"),
+    (r"Bandizip", "仍在提第三方解压工具 Bandizip"),
+    (r"WinRAR", "仍在提第三方解压工具 WinRAR"),
 )
 DEAD_CHANNEL_PATTERNS: tuple[tuple[str, str], ...] = (
-    (r"firstep-full\.7z", "还在提 v1.0.0 那个 7z 分卷形态"),
-    (r"7z\.001", "还在引用 7z 分卷文件名"),
-    (r"解压\s*`?\.001", "还在教解压 7z 分卷"),
+    (r"firstep-full\.7z", "仍在提 v1.0.0 那个 7z 分卷形态"),
+    (r"7z\.001", "仍引用 7z 分卷文件名"),
+    (r"解压\s*`?\.001", "在教解压 7z 分卷"),
 )
 # 否定词 → 与工具名的最大允许距离（「不用装 7-Zip」这类防坑提醒要放行）
 NEGATION_WINDOWS: tuple[tuple[str, int], ...] = (
@@ -61,20 +63,30 @@ NEGATION_WINDOWS: tuple[tuple[str, int], ...] = (
     ("不要", 10), ("别", 8), ("免", 8), ("不", 5), ("没", 4),
 )
 NEGATION_LOOKBACK = 20
+# 回看只在**同一个分句**里生效（与 tests/test_onboarding_docs.py 同口径，工单 backlog-closeout/01）：
+# `…不用手动下分卷、需要装 7-Zip` 里的「不用」离工具名正好 10 个字（= 窗口上限），
+# 会把一句**真推荐**当成"不用它"的提醒放过去。分句分隔符之后重新起算。
+CLAUSE_BREAKS = "，。；、！？,;!?（）()：:\n"
 TAIL_NEGATION_RE = re.compile(r"\s*(?:不用|不必|不需要|无需|不需|免|别)")
 
 
 def dead_channel_hits(text: str) -> list[str]:
-    """文本里「已下线渠道」的真实命中（原因列表）；否定式提醒不算命中。"""
+    """文本里「已下线渠道」的真实命中（原因列表）；否定式提醒不算命中。
+
+    与 `tests/test_onboarding_docs.py::dead_channel_hits` 同一份判据（那边加了一条
+    分句边界，这里同步）——改一处记得改另一处。
+    """
     hits: list[str] = []
     for pattern, why in DEAD_TOOL_PATTERNS:
         for m in re.finditer(pattern, text):
             prefix = text[max(0, m.start() - NEGATION_LOOKBACK): m.start()]
+            cut = max(prefix.rfind(ch) for ch in CLAUSE_BREAKS)
+            clause = prefix[cut + 1:]
             negated = False
             for word, window in NEGATION_WINDOWS:
-                at = prefix.rfind(word)
+                at = clause.rfind(word)
                 if at >= 0:
-                    negated = len(prefix) - (at + len(word)) <= window
+                    negated = len(clause) - (at + len(word)) <= window
                     break
             if not negated:
                 negated = bool(TAIL_NEGATION_RE.match(text[m.end(): m.end() + 4]))
@@ -139,6 +151,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="check-download-docs", description=__doc__)
     parser.add_argument("--offline", action="store_true", help="跳过联网检查（只查包内一致性）")
     args = parser.parse_args(argv)
+
+    # 本机 stdout 默认 GBK：中文输出一旦被重定向（或经 readings.py 收）就会成乱码
+    # （工单 backlog-closeout/01 实测：读数里 143 个 U+FFFD）。显式钉 UTF-8，与
+    # tools/preflight.py 同一口径。
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     problems: list[str] = []
     print("=== 1. README「获取方式」 ===")

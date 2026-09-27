@@ -32,15 +32,16 @@ _README_DOWNLOAD_HEADING = "## 获取方式"
 #      （不用正则写变长否定回看：Python 的 look-behind 不支持变长，而「可选否定前缀」写法会被
 #       引擎从动词处另起一次空前缀匹配，反而把否定式判成命中——踩过。）
 #   B) 7z 分卷文件名：本身就只可能出现在已下线渠道里，直接钉死。
+# 注：`why` 文案**不带文件名**（同一份判据既扫 README、也扫产品界面文本，写死"README"会指错地方）。
 _DEAD_TOOL_PATTERNS: tuple[tuple[str, str], ...] = (
-    (r"7-?[Zz]ip", "README 仍在提第三方解压工具 7-Zip"),
-    (r"Bandizip", "README 仍在提第三方解压工具 Bandizip"),
-    (r"WinRAR", "README 仍在提第三方解压工具 WinRAR"),
+    (r"7-?[Zz]ip", "仍在提第三方解压工具 7-Zip"),
+    (r"Bandizip", "仍在提第三方解压工具 Bandizip"),
+    (r"WinRAR", "仍在提第三方解压工具 WinRAR"),
 )
 _DEAD_CHANNEL_PATTERNS: tuple[tuple[str, str], ...] = (
-    (r"firstep-full\.7z", "README 仍在提 v1.0.0 那个 7z 分卷形态（最新 release 上不存在）"),
-    (r"7z\.001", "README 仍引用 7z 分卷文件名（已下线渠道）"),
-    (r"解压\s*`?\.001", "README 在教解压 7z 分卷（已下线渠道）"),
+    (r"firstep-full\.7z", "仍在提 v1.0.0 那个 7z 分卷形态（最新 release 上不存在）"),
+    (r"7z\.001", "仍引用 7z 分卷文件名（已下线渠道）"),
+    (r"解压\s*`?\.001", "在教解压 7z 分卷（已下线渠道）"),
 )
 # 否定词 → 「工具名与它的最大允许距离」。短否定词容易误判成正文里的「不」，窗口收紧；
 # 长否定词不会误判，窗口放宽（否定 + 动词 + 工具名可能相隔十几个字）。
@@ -56,6 +57,11 @@ _NEGATION_WINDOWS: tuple[tuple[str, int], ...] = (
     ("没", 4),
 )
 _NEGATION_LOOKBACK = 20
+# 回看只在**同一个分句**里生效（工单 backlog-closeout/01 实测的假阴性）：
+# `…不用手动下分卷、需要装 7-Zip` 里的「不用」离工具名正好 10 个字（= 窗口上限），
+# 会把一句**真推荐**当成"不用它"的提醒放过去。分句分隔符之后重新起算。
+# 冒号与换行也算边界（`…下分卷：需要装 7-Zip` / 跨行相邻的两句都该重新起算）。
+_CLAUSE_BREAKS = "，。；、！？,;!?（）()：:\n"
 # 工具名**之后**的窗口只给这么宽：再远就可能是与工具无关的话（`用 7-Zip 打开，不用装插件`）。
 # 收紧的代价是漏掉「7-Zip 也完全不需要装」这种（实测 5 字）绕嘴写法——可接受。
 _NEGATION_TAIL_WINDOW = 4
@@ -78,17 +84,23 @@ def dead_channel_hits(text: str) -> list[tuple[str, str]]:
     A 类（第三方解压工具名）回看 `_NEGATION_LOOKBACK` 个字符，取**最近**一个否定词，
     距离在其允许窗口内 = 「不用它」的提醒，放行（长否定词窗口宽、短否定词窗口窄，
     见 `_NEGATION_WINDOWS`）；B 类（7z 分卷文件名）直接命中。
+
+    **回看只在同一个分句里**（`_CLAUSE_BREAKS`）：跨过分句的否定词不算数——
+    实测 `…不用手动下分卷、需要装 7-Zip` 里的「不用」离工具名 10 个字，
+    正好落在窗口内，会把一句**真推荐**当成提醒放过去（`backlog-closeout/probe-01` C 段）。
     探针 `.scratch/newuser-download/probe-01-guard-effectiveness.py` 对本函数做红/绿两向验证。
     """
     hits: list[tuple[str, str]] = []
     for pattern, why in _DEAD_TOOL_PATTERNS:
         for m in re.finditer(pattern, text):
             prefix = text[max(0, m.start() - _NEGATION_LOOKBACK): m.start()]
+            cut = max(prefix.rfind(ch) for ch in _CLAUSE_BREAKS)
+            clause = prefix[cut + 1:]  # 只看最后一个分句分隔符之后的那些字
             negated = False
             for word, window in _NEGATION_WINDOWS:
-                at = prefix.rfind(word)
+                at = clause.rfind(word)
                 if at >= 0:
-                    negated = len(prefix) - (at + len(word)) <= window
+                    negated = len(clause) - (at + len(word)) <= window
                     break  # 只看最近的那个否定词
             if not negated:
                 tail = text[m.end(): m.end() + _NEGATION_TAIL_WINDOW]
@@ -110,6 +122,112 @@ def _readme_download_section() -> str:
     rest = text[start + len(_README_DOWNLOAD_HEADING):]
     end = rest.find("\n## ")
     return rest if end < 0 else rest[:end]
+
+
+# ---------------------------------------------------------------------------
+# 产品界面的下载体量声明（工单 backlog-closeout/01）
+#
+# 为什么单列一条：README 与 Release 说明有门禁，**产品界面没有**——更新面板里
+# 「不用重下 6.2 GB 完整包」这句话因此活了很久（6.2 GB 是已下线的 7z 分卷形态）；
+# 确认弹窗里还另有一处「6 GB 资料库」（`static/js/ui/update.js`）。真值：
+# **完整包 792 MB、用户装完的资料库约 0.7 GB**（发布包里的 `sources/materials`
+# = 0.65 GiB / 5066 文件）——README 的「5 GB 以上」说的是**故意不进包的第三方装机件**
+# （CCS 安装包 / K230 资料 / VSCode），不是资料库。
+#
+# 判据面（写清楚，别以为它管全部体量）：
+# - 扫 `static/index.html` + `static/js/**/*.js`（产品界面文本面）；
+# - 按**行**看：行里同时出现「完整包 / 资料库 / 更新包」与 `N GB`，且 `N >= 2` → 红
+#   （真值都 < 1 GB；2 GB 是"把装机件那类量混进来"的粗线）；
+# - 带「装机件 / 第三方安装包 / 不进包」的行**豁免**（那些量本来就是 5 GB 级，说的是另一回事）；
+# - **MB 级偏差不管**（例如「约 1 GB」写成 800 MB 是精度问题，本地没有发布产物的真值可比，
+#   拿不到机器判据；README 侧的 `tools/check-download-docs.py` 联网才比得了）。
+# ---------------------------------------------------------------------------
+
+_UI_SIZE_TEXT_GLOBS = ("static/index.html", "static/js/**/*.js")
+# 真值都 < 1 GB（完整包 792 MB / 资料库 ~0.7 GB）：2 GB 是"混进了别的量"的粗线
+_UI_GB_CEILING = 2.0
+_UI_GB_RE = re.compile(r"(\d+(?:\.\d+)?)\s*GB")
+_UI_SIZE_LINE_KEYWORDS = ("完整包", "资料库", "更新包")
+# 说的是"故意不进包的那批装机件"的行不算（那些量本来就是 5 GB 级）
+_UI_SIZE_LINE_EXEMPT = ("装机件", "第三方安装包", "不进包")
+
+
+def _ui_size_text_files() -> list[Path]:
+    """产品界面的文本面：`static/index.html` + `static/js/**/*.js`（相对 `src/contest_generator`）。"""
+    base = ROOT / "src" / "contest_generator"
+    files: list[Path] = []
+    for pattern in _UI_SIZE_TEXT_GLOBS:
+        files.extend(sorted(base.glob(pattern)))
+    return files
+
+
+def ui_size_claim_problems(text: str) -> list[str]:
+    """产品界面里「完整包 / 资料库 / 更新包」的体量声明：超过真值量级（≥2 GB）逐行报出。"""
+    problems: list[str] = []
+    for number, line in enumerate(text.splitlines(), 1):
+        if not any(keyword in line for keyword in _UI_SIZE_LINE_KEYWORDS):
+            continue
+        if any(exempt in line for exempt in _UI_SIZE_LINE_EXEMPT):
+            continue
+        for match in _UI_GB_RE.finditer(line):
+            if float(match.group(1)) >= _UI_GB_CEILING:
+                problems.append(
+                    f"第 {number} 行把体量写成「{match.group(0)}」：{line.strip()[:70]}"
+                )
+    return problems
+
+
+def test_ui_download_size_claims_are_live_shape():
+    """产品界面的下载声明必须与线上真实形态一致（工单 backlog-closeout/01）：
+
+    ① 不许出现已下线渠道的写法（7z 分卷 / 第三方解压工具——同一份 `dead_channel_hits`）；
+    ② 「完整包 / 资料库 / 更新包」的体量不许写成 ≥2 GB（那只有"故意不进包的装机件"才那么大）。
+    扫描面 = `static/index.html` + `static/js/**/*.js`。
+    """
+    files = _ui_size_text_files()
+    assert files, f"产品界面文本一个都没扫到（落点写错了？）：{_UI_SIZE_TEXT_GLOBS}"
+    problems: list[str] = []
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        text = path.read_text(encoding="utf-8", errors="replace")
+        hits = dead_channel_hits(text)
+        if hits:
+            problems.append(f"{rel} 出现已下线/不存在的下载形态：{hits}")
+        problems.extend(f"{rel} {p}" for p in ui_size_claim_problems(text))
+
+    index = ROOT / "src" / "contest_generator" / "static" / "index.html"
+    assert "完整包" in index.read_text(encoding="utf-8", errors="replace"), (
+        "界面更新面板没提完整包（面板结构变了？门禁要跟着改）"
+    )
+    assert not problems, (
+        "界面体量声明与真值不符（真值：完整包 792 MB / 资料库约 0.7 GB）：\n- "
+        + "\n- ".join(problems)
+    )
+
+
+def test_ui_size_guard_catches_the_retired_numbers():
+    """正向对照：把那两句不实体量塞进合成文本 → 判据必须逐条红；真值写法必须绿。"""
+    stale = (
+        "…发现新版可一键更新（轻量更新包，几百 MB），不用重下 6.2 GB 完整包…\n"
+        "电赛资料库（sources\\materials，5 GB+）随大发版更新…\n"
+    )
+    problems = ui_size_claim_problems(stale)
+    assert len(problems) == 2, f"两条不实体量没被逐条抓住：{problems}"
+
+    fresh = (
+        "…不用重下完整包（约 800 MB）…\n"
+        "电赛资料库（sources\\materials，约 0.7 GB）随大发版更新…\n"
+        "…下载完自动替换并重启，不用手动下分卷、不用装 7-Zip…\n"
+        "…完整包里没有那批第三方安装包：装机件占 5 GB 以上，故意不进包…\n"
+    )
+    assert ui_size_claim_problems(fresh) == [], "真值写法被误伤"
+    assert dead_channel_hits(fresh) == [], "「不用装 7-Zip」这种提醒被误判成命中"
+
+    # 否定式回看只在同一个分句里（工单 backlog-closeout/01 实测的假阴性：
+    # 前一分句的「不用」把后一分句的真推荐放了过去）
+    assert dead_channel_hits("…不用手动下分卷、需要装 7-Zip…"), "跨分句的否定词把真推荐放行了"
+    assert dead_channel_hits("…不用手动下分卷：需要装 7-Zip…"), "冒号也该算分句边界"
+    assert dead_channel_hits("…（不用装 7-Zip / Bandizip 之类）…") == [], "同分句的提醒被误判"
 
 
 def _cjk_count(text: str) -> int:

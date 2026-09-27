@@ -1,0 +1,14 @@
+# 读数：probe-01-offline-docs
+# 命令：python tools/check-download-docs.py --offline
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T19:20:24+08:00
+# 退出码：0
+=== 1. README「获取方式」 ===
+  [OK] 没有已下线形态（7z 分卷 / 需第三方解压工具 / 约 6 GB 那套）
+  [OK] 指向 https://github.com/AK47n/firstep/releases/latest
+  [OK] 点名的包内文件都在包里：00-START-HERE.txt
+
+（--offline：只查了第 1 组「README 与包内文件」，**没有**校验线上资产与 Release 说明）
+
+=== 结论 ===
+  PASS（离线）：README 与包内文件一致——**线上那一半没查**，发版前再跑一次完整版

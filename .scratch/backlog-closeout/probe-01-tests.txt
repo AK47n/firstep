@@ -1,0 +1,7 @@
+# 读数：probe-01-tests
+# 命令：python -m pytest tests/test_onboarding_docs.py tests/test_repo_language.py -q
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T19:28:41+08:00
+# 退出码：0
+..................                                                       [100%]
+18 passed in 1.44s

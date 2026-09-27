@@ -44,7 +44,7 @@ async function runCheck() {
 async function runApply(check) {
   if (!await confirmModal({
     title: "确认一键更新？",
-    message: "将下载更新包并停服替换、完成后自动重启。DeepSeek key、任务状态与 6 GB 资料库都不受影响；更新失败会保留备份。",
+    message: "将下载更新包并停服替换、完成后自动重启。DeepSeek key、任务状态与电赛资料库都不受影响；更新失败会保留备份。",
     confirmText: "开始更新",
   })) return;
   const box = $("update-results");

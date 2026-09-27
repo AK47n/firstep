@@ -1,0 +1,20 @@
+# 读数：probe-01-browser-launcher-recheck
+# 命令：node --test --test-concurrency=1 tests/browser/launcher-reload.spec.mjs
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T19:24:39+08:00
+# 退出码：0
+✔ A：启动器模式下连续 reload 8 次——服务始终活着、页面每次都能用 (5659.8296ms)
+✔ B：模块图被拖到宽限之外，登记仍然早到——服务活着且页面最终可用 (5601.1817ms)
+✔ B2：登记那一发被丢一次（坏连接）——重试救回，服务活着 (3869.2836ms)
+✔ D：文档被冻结（bfcache）后按后退回来——补登记救回服务与页面 (3627.1086ms)
+✔ E：回来时服务已经退出——给中文可见态，服务回来后自动接回 (4388.4448ms)
+[读数] 最后一个页面离开 → 服务自己退出用时 1632ms（宽限 1500ms + 进程退出）
+✔ C：最后一个页面离开 → 服务自己停（关浏览器 = 停服务没被弄丢） (1632.7712ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 25129.9967
