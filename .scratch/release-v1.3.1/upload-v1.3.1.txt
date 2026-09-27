@@ -1,0 +1,40 @@
+# 读数：upload-v1.3.1
+# 命令：powershell -File .scratch\release-v1.3.1\upload-assets.ps1
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T13:39:53+08:00
+# 退出码：0
+[1/2] 小发版四件套…
+[2/2] 完整包四件套（约 755 MB，慢）…
+资产清单：
+title:	firstep 电赛工程生成器 · v1.3.1（页面文字与可达性小修）
+tag:	v1.3.1
+draft:	false
+prerelease:	false
+immutable:	false
+author:	AK47n
+created:	2026-09-27T05:18:31Z
+published:	2026-09-27T05:39:38Z
+url:	https://github.com/AK47n/firstep/releases/tag/v1.3.1
+asset:	firstep-full-v1.3.1.manifest.json
+asset:	firstep-full-v1.3.1.removed.txt
+asset:	firstep-full-v1.3.1.sha256.txt
+asset:	firstep-full-v1.3.1.zip
+asset:	firstep-update-v1.3.1.files.txt
+asset:	firstep-update-v1.3.1.removed.txt
+asset:	firstep-update-v1.3.1.sha256.txt
+asset:	firstep-update-v1.3.1.zip
+--
+> **新用户**：只下 `firstep-full-v1.3.1.zip`（约 770 MB），Windows 自带解压即可，解压后照包里的 `00-START-HERE.txt` 走。
+> **已装用户**：不用看这里——打开工具「设置 → 软件更新 → 检查更新 → 一键更新」。
+
+## 这一版有什么变化
+
+**页面上那些「星号」擦干净了，几处「检测页说不清」的话也说清了。**
+
+- **页面上的星号记号没了**：以前在检测页的配方说明、模块简介、平台备注里，成对的双星号标记会原样显示出来——你看到的是 `**未上板**`，而不是加粗的「未上板」；现在它们真的显示成加粗（页面自己的文字 5 处、库数据里 4278 处，一起修掉）。
+- **两处「失败」各说各的实话**：母版配置读不出来时给一句中文原因（不再含糊其辞）；检测记录读不出来时，不再被说成「记录坏了、删掉重填」——这两件事以前长得一样，现在分得开。
+- **板载 LED 脚以你的选型数据为源**：你改了板定义，检测页上的板载 LED 脚跟着变（此前写死在页面里，改了板定义页面对不上）。
+- **多实例件（LED / 按键）如实说「只验第一路」**：勾了多路 LED 或按键时，检测只验第一路——以前一个字都不说，现在页面直接讲明。
+- **键盘与读屏用户走得通了**：勾完器件焦点留在原位（不再跳走）、器件卡能用 Tab 到达、编译与烧录状态能被读屏念出。
+
+> **上板状态如实说**：这一版改的是页面文字与可达性，不涉及器件探测逻辑；检测工程与配方的证据仍到「两平台真编译矩阵 0 error / 0 warning + 驱动级判据」为止，**真机上板验收还没做**，页面里凡涉及实测现象的地方都标着「未上板」。

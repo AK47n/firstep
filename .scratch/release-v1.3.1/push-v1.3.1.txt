@@ -1,0 +1,6 @@
+# 读数：push-v1.3.1
+# 命令：git -c http.curloptResolve=github.com:443:140.82.113.3 push origin main v1.3.1
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T13:18:35+08:00
+# 退出码：128
+fatal: unable to access 'https://github.com/AK47n/firstep.git/': Recv failure: Connection was reset

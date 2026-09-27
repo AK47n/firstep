@@ -1,4 +1,4 @@
-﻿# 待办计划（backlog）
+# 待办计划（backlog）
 
 后续可做的优化清单（2026-08-19 记录，按需立项走 workflow）。
 
@@ -777,3 +777,28 @@ spec 的口径，**修库内驱动（含其注释）属另一张单**，且改�
 
 **另一类"未做"**：`hwcheck-acceptance/05`（真机上板）与 `hwcheck-hardening/08`（OLED 分页 / 逐件汇总）
 仍阻塞于真板子——本批一律标注"未上板"。
+
+## 25. v1.3.1 发版收口（2026-09-27，**不带新代码**）
+
+**这一版只带版本号与文档**：`hwcheck-hygiene` 那一批（`01`–`14`）的代码早在 main 上，这次是把它
+送到用户手上。工单是 `.scratch/release-v1.3.1/`（`01` 版本同步与自检 / `02` 打包发布 / `03` 账本收口），
+发布产物、闸门读数、服务端对账全在 `issues/02`；落差已在 `local-environment` §0 归零。
+
+**四条下一轮直接照做的本机事实**（发版那一刻真撞到的）：
+
+| 事 | 为什么重要 |
+|---|---|
+| **`http.https://github.com/.resolve` 是个不生效的键** | git 2.54.0.windows.1 上它**不被认**（git 仍按 hosts 解析 → 约 21 秒后超时）。v1.3.0 那次"钉了就通"很可能是巧合。有效键 = **`http.curloptResolve`** |
+| **候选 IP 按内容验，不按 HTTP 码** | 本机中间人对任意域名都可能答 200；判据 = 拿回来的真是 `001e# service=git-upload-pack…` + 真 ref。且**同一个 IP 的成功率会变** |
+| **推送被掐不是"重试即好"** | 第一次 `Recv failure: Connection was reset`（exit 128，一个字节没上去，钩子都没跑）→ 换验过的 IP **并加 `-c http.postBuffer=524288000`**（默认 1 MiB 之上 git 走 chunked 编码，中间人更容易掐）之后一次过 |
+| **新写的 `.ps1` 必须当场补 BOM** | `.scratch/release-v1.3.1/finish-publish.ps1` 由编辑工具写出来是**无 BOM** 的，pre-push 的 `tests/test_ps1_encoding.py` 当场红两条、**推送被拒一次**（白等 ≈5 分钟重跑整套闸门） |
+
+**记而不修（本轮顺手量到，未开单）**：设置页「软件更新」那行仍写着
+**「不用重下 6.2 GB 完整包」**（`src/contest_generator/static/index.html:4785`）——那个 6.2 GB 形态是
+**已下线的 7z 渠道**，现在的完整包是 755–792 MB（v1.3.1 实测 `791,672,980` B）。
+`tools/check-download-docs.py` 只扫 README 与 Release 说明（还在提 7z / 6 GB 才红），
+**扫不到产品界面里的字**，所以它一直没报。修它要动 `index.html`（浏览器门禁的落点），
+得连带跑那 60 条真浏览器用例——留一件小事给下一批。
+
+**仍未做**：`hwcheck-acceptance/05`（真机上板）保持 `ready-for-human`——**本版没有任何板上行为
+被验证**，`hwcheck-hardening/08` 同样阻塞于真板子。

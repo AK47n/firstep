@@ -5,9 +5,57 @@
 >
 > 更新纪律：改动了这里描述的东西（删沙箱、发新版、换端口），**当场回来改这份文件**。
 
-## 0. 交接区：main 上有什么还没到用户手上（2026-09-26 更新 · **已发布 v1.3.0；涨落以 `git log` 为准**）
+## 0. 交接区：main 上有什么还没到用户手上（2026-09-27 更新 · **已发布 v1.3.1，落差归零；涨落以 `git log` 为准**）
 
-> ### ✅ 最新（2026-09-27，`hwcheck-hygiene` 会话）——**01–14 全部 resolved 并落 main，未发布**
+> ### ✅ 最新（2026-09-27，`release-v1.3.1` 会话）—— **`hwcheck-hygiene` 整批已随 v1.3.1 上线，落差归零**
+>
+> **发版动作走的是 `.scratch/release-v1.3.1/`**（spec + 三张单：`01` 版本同步与自检 / `02` 打包发布 /
+> `03` 账本收口，全 resolved；读数与证据都在那个目录）。流程没变，见 `docs/agents/releasing.md`。
+>
+> | 项 | 值 |
+> |---|---|
+> | 线上最新 | **v1.3.1**（2026-09-27 发布），八件套齐全，`/releases/latest` 指向它 |
+> | 远端 `main` | `1bea22a1`（= 本地 HEAD；`git rev-list --left-right --count origin/main...main` = `0 0`） |
+> | tag | annotated `v1.3.1` → **`1bea22a1`**（打包那一刻的 CHANGELOG 提交；tag 对象 `e95be162`） |
+> | Release | `https://github.com/AK47n/firstep/releases/tag/v1.3.1`；**八件资产服务端 size 与本地逐件相同（8/8、0 处不一致）** |
+> | 联网自检 | `python tools\check-download-docs.py` **PASS**（三组全 `[OK]`；读数 `.scratch/release-v1.3.1/post-publish-check.txt`） |
+> | 发版产物（本机留档） | `firstep-pack\firstep-{update,full}-v1.3.1.*` 全套 + `release-notes-v1.3.1.md`；**下一版基线 = 这两个清单**（update **`301,813,614`** B / sha256 `bb573332…`；full **`791,672,980`** B / sha256 `dcba7726…`） |
+>
+> **这一版带给用户的五条**（Release 说明与 `VERSIONS.md` 同口径）：
+> ① 页面上的字面星号没了（JS 产品串 5 处 **＋ 库数据那一层**：配方说明 2434 处 / 模块简介与平台备注
+> 1844 处的成对标记现在渲染成加粗）；② 母版配置读不出来 → 中文 400、检测记录读不出来 ≠
+> 「记录坏了、删掉重填」；③ 板载 LED 脚以选型数据为源；④ 多实例件（LED / 按键）如实说「只验第一路」；
+> ⑤ 勾选后焦点留在原地、器件卡键盘可达、编译/烧录状态可被读屏念出。
+>
+> **本轮量到的四条新本机事实**（下次发版直接照做，别再踩）：
+> ① **钉 IP 的 git config 键与本节原来写的不一样**——`http.https://github.com/.resolve=…`
+>    在 **git 2.54.0.windows.1 上不生效**（`ls-remote` 仍按 hosts 解析、约 21 秒后
+>    `Failed to connect to github.com port 443`）。**有效的键是 `http.curloptResolve`**：
+>
+>    ```powershell
+>    git -c http.curloptResolve=github.com:443:140.82.114.3 push origin main v1.3.1
+>    ```
+>
+>    （v1.3.0 那次"钉了 IP 就通了"很可能是**巧合**：那个键一直没被 git 认。）
+> ② **候选 IP 要按内容验，不能看 HTTP 码**：本机中间人对任意域名都可能答 200。
+>    判据 = 拿回来的真是 git 智能 HTTP 广告（`001e# service=git-upload-pack…` + 真 ref）。
+>    本轮实测通过的：`140.82.113.3` / `140.82.114.3` / `140.82.116.3` / `20.27.177.113` /
+>    `20.200.245.247` / `4.208.26.197`；**同一个 IP 的成功率会变**（113.3 一会儿 OK 一会儿 `000`）。
+> ③ **第一次推送仍被掐断**（`Recv failure: Connection was reset`，exit 128，一个字节没上去）——
+>    不是"重试即好"：换验过的 IP **并加 `-c http.postBuffer=524288000`**（默认 1 MiB 之上走
+>    chunked 编码，中间人更容易掐）之后一次过。
+> ④ **新写的 `.ps1` 必须当场补 BOM**：本轮 `finish-publish.ps1` 由编辑工具写出来是**无 BOM** 的，
+>    pre-push 闸门的 `tests/test_ps1_encoding.py` 当场红两条、**推送被拒一次**（白等 ~5 分钟）。
+>    补 BOM 一条命令：
+>    `[System.IO.File]::WriteAllBytes($p, [byte[]](0xEF,0xBB,0xBF) + [System.IO.File]::ReadAllBytes($p))`。
+>
+> **闸门读数（推送那一刻真跑的，与 13 号单的基线一致）**：pytest **5604 passed + 11 skipped**、
+> 前端门禁 **1830 / 0**、浏览器门禁 **60 / 0**。
+>
+> **仍未做**：本版**没有任何板上行为被验证**——`hwcheck-acceptance/05` 保持 `ready-for-human`
+> （本机没有板子），**不拿编译绿当板上证据**。
+>
+> ### 📌 上一轮（2026-09-27，`hwcheck-hygiene` 会话）—— **01–14 全部 resolved 并落 main，已随 v1.3.1 发布**
 >
 > **⚠ 交接口径（2026-09-27，13 号单收口后写全）**：
 > **本批做完了，下一件事是发版 v1.3.1**（版本号已拍板；三处同步、`tools/preflight.ps1`、两个包、
@@ -81,8 +129,9 @@
 > **本轮读数基线**（会随提交变，**别写死**）：全套 pytest **5604 passed + 11 skipped**；
 > 前端门禁 **1830 / 0**；浏览器门禁 **60 / 0**；两平台真编译矩阵 6 格全 PASS。
 >
-> **推之前**：`main` 已比 `origin/main` 多出二十余笔未推；推法见本节「本机网络事实」
-> （要 `git -c http.https://github.com/.resolve=…` 钉 IP，**别按"重试即好"记**）。
+> **推之前**（⚠ **这一条已过期**：那二十余笔已随 v1.3.1 推上去了，见本节开头）：
+> 推法见本节「本机网络事实」——**键名已更正为 `http.curloptResolve`**（原来写的
+> `http.https://github.com/.resolve` 在 git 2.54 上**不生效**，见本节开头第 ① 条）。
 
 > ### 📌 最新（2026-09-26 晚，`hwcheck-hardening` 会话）—— 硬件检测加固七单全落 main，**未发布**
 >
@@ -150,7 +199,8 @@
 > `main` 已比 `origin/main`（`efa819de`）多出若干笔，**未推**——**别把数量写死**
 > （每笔后面还跟着一个 `chore: 自动更新 CHANGELOG`，写完就变），要看准就跑
 > `git log --oneline origin/main..main`；推法见本节「本机网络事实」
-> （要 `git -c http.https://github.com/.resolve=…`）。
+> （⚠ 键名以本节开头的更正规为准：**`http.curloptResolve`**，不是 `.resolve`）。
+> **这一段的状态已过期**：那些提交之后又攒了 `hwcheck-hygiene` 一整批，全部随 v1.3.1 上线了。
 >
 > **2026-09-26 追加（05 收尾之后：一句过期的账已订正）**：本节下面那张 v1.2.2 落差表里
 > `bfcache-return-register/01` 那条第 ④ 项原写「**服务端 / 打包器 / 库零改动**」——
@@ -218,7 +268,7 @@
 > `36154463953`（head `606494b1`，failure，2026-09-25T15:29Z），没有更新的 run——
 > 修它的 `01–04` 全在本地。**推之前值得一读的**：`01` 修了夹具在干净机器上起不来的根因，
 > `04` 顺手把「CI 夹具撞见 400」那个端点的闸门也拆了（`/api/bindings/matrix`）。
-> 推法见本节「本机网络事实」（要 `git -c http.https://github.com/.resolve=…`）。
+> 推法见本节「本机网络事实」（⚠ 键名已更正为 **`http.curloptResolve`**，见本节开头第 ① 条）。
 >
 > **`ci-gate-fixes` 工单面（`.scratch/ci-gate-fixes/`）**：`01`–`04` 已 resolved 并提交；
 > **`05`（`launcher-reload` 在复用 HOME 下会红，现场记录未定性）与 `06`（`masters_confirm`
@@ -244,7 +294,7 @@
 > 闸门读数：前端门禁 **1796 passed / 0 fail**、浏览器门禁 **42 passed / 0 fail**、
 > pytest **5523 passed + 11 skipped**。
 >
-> ### ⚠ 本机网络事实（2026-09-25 量准；**下次发版会再撞上**）
+> ### ⚠ 本机网络事实（2026-09-25 量准；2026-09-27 更正了「钉 IP」的键名；**每次发版都会再撞上**）
 >
 > **此前把推送失败记成「瞬时故障、重试即好」是错的。真凶是本机 hosts + 一个本地代理**：
 >
@@ -255,15 +305,25 @@
 >   于是"网络通了"这个前提本身不可信（本轮的第一次探测就是这么被骗过去的）。
 > - 上一次 `git push` 报 `RPC failed; curl 56 Recv failure: Connection was reset` 就出在这条中间人链路上
 >   （小请求能过、大 body 被掐），不是 GitHub 挂了，也不是 gh 认证问题。
-> - **可用的出路**（本轮实测通过）：把真实 IP 钉给 git，**不动 hosts、不关加速器、不降 TLS 校验**：
+> - **可用的出路**（把真实 IP 钉给 git，**不动 hosts、不关加速器、不降 TLS 校验**）：
+>
+>   ⚠ **2026-09-27 更正——下面这个键名是错的**（当时"钉了就通"是巧合）：
+>   `http.https://github.com/.resolve=…` 在 **git 2.54.0.windows.1 上不生效**，
+>   `ls-remote` 照样按 hosts 解析到 127.0.0.1、约 21 秒后
+>   `Failed to connect to github.com port 443`。**有效的键是 `http.curloptResolve`**
+>   （v1.3.1 那一轮实测通过）：
 >
 >   ```powershell
->   git -c "http.https://github.com/.resolve=github.com:443:140.82.113.3" push origin main v1.3.0
+>   git -c http.curloptResolve=github.com:443:140.82.114.3 -c http.postBuffer=524288000 push origin main v1.3.1
 >   ```
 >
->   本轮把它写进**仓库级 `.git/config`** 后跑 `finish-publish.ps1`（`gh` 走 `api.github.com` 照旧可用），
->   **跑完已 `git config --unset` 清掉**——现在 `.git/config` 里没有这条。GitHub 的 IP 会轮换，
->   下次先按 `curl --resolve` 试几个候选再钉。
+>   （`postBuffer` 是顺手加的：默认 1 MiB 之上 git 走 chunked 编码，中间人更容易掐；
+>   第一次推被掐成 `Recv failure: Connection was reset`，换 IP + 加它之后一次过。）
+>   候选 IP **按内容验**（拿回来的得是 `001e# service=git-upload-pack…` + 真 ref，
+>   不能看 HTTP 码）——本轮可用的有 `140.82.113.3` / `140.82.114.3` / `140.82.116.3` /
+>   `20.27.177.113` / `20.200.245.247` / `4.208.26.197`，且**同一 IP 的成功率会变**。
+>   也可以像 v1.3.0 那次一样写进**仓库级 `.git/config`** 再 `git config --unset` 清掉
+>   （`gh` 走 `api.github.com` 照旧可用）。
 > - **验收纪律**：真推上去没有，只能看 **git ref（`git ls-remote` / `gh api .../git/refs/...`）与
 >   Release API**；TCP 可达、`curl` 200、浏览器能开页面**都不算数**——
 >   `api.github.com` 也在 hosts 名单里，也可能由那个加速器作答。

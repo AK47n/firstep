@@ -1,0 +1,15 @@
+# 读数：pack-update-v1.3.1
+# 命令：powershell -File tools\pack-update.ps1 -Tag v1.3.1 -Baseline C:\Users\luoji\Desktop\firstep-pack\firstep-update-v1.3.0.files.txt
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T13:14:23+08:00
+# 退出码：0
+更新包已生成：C:\Users\luoji\Desktop\firstep-pack\firstep-update-v1.3.1.zip
+  候选 6484 条 → 产品文件 2933 条（筛掉 3551 条：本地备份目录 / 安装包 / 缓存 / 白名单外）
+  删除清单：2231 条（累计口径：历史发过、本版不发）
+  zip 大小：287.8 MB
+  SHA256：bb57333271cb362a358e6bd431a99f296e9d8c7f5d951cd6fc8081fb33995cc5
+更新包已生成：C:\Users\luoji\Desktop\firstep-pack\firstep-update-v1.3.1.zip（287.8 MB，产品文件 2933 个 / 候选 6484 条）
+  文件清单：C:\Users\luoji\Desktop\firstep-pack\firstep-update-v1.3.1.files.txt
+  删除清单：C:\Users\luoji\Desktop\firstep-pack\firstep-update-v1.3.1.removed.txt （基线 C:\Users\luoji\Desktop\firstep-pack\firstep-update-v1.3.0.files.txt）
+  SHA256：C:\Users\luoji\Desktop\firstep-pack\firstep-update-v1.3.1.sha256.txt
+  字节口径：与完整包同源（核心内 git archive 已钉 core.autocrlf=false）

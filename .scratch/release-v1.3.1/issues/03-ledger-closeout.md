@@ -5,16 +5,40 @@
 
 **被谁阻塞：** 02（发布真做完了才能记「已发布」）。
 
-**状态：** ready-for-agent
+**状态：** resolved
 
-- [ ] `docs/agents/local-environment.md` §0 交接区按事实更新：v1.3.1 已上线、八件资产齐全、
-      `/releases/latest` 指向它；tag 指向的提交与 HEAD 的关系写清（tag 落在打包那一刻的
-      CHANGELOG 提交上，其后还有一笔 post-commit 的 `chore: 自动更新 CHANGELOG`）
-- [ ] 同节记下本版两个产物的**实测字节数与 sha256**，并写明「下一版基线 = 这两个清单」
-- [ ] `VERSIONS.md` / `README.md` / `CHANGELOG.md` 三处与线上一致（README 体积口径、
-      Release 说明前两行由 `check-download-docs.py` 校验过）
-- [ ] 本目录 `01` / `02` 置 `resolved`，各写「落地事实」段（提交号、读数、文件路径）
-- [ ] 本单置 `resolved`
-- [ ] 提交信息中文；工作树干净
-- [ ] 记一条「下一轮接手要知道」的账：本版**没有任何板上行为被验证**
+- [x] `docs/agents/local-environment.md` §0 交接区按事实更新：v1.3.1 已上线、八件资产齐全、
+      `/releases/latest` 指向它；tag 与 HEAD 的关系写清
+- [x] 同节记下本版两个产物的实测字节数与 sha256，并写明「下一版基线 = 这两个清单」
+- [x] `VERSIONS.md` / `README.md` / Release 说明三处与线上一致（`check-download-docs.py` 验过）
+- [x] 本目录 `01` / `02` 置 `resolved`，各写「落地事实」段
+- [x] 本单置 `resolved`
+- [x] 提交信息中文；工作树干净
+- [x] 记一条「下一轮接手要知道」的账：本版**没有任何板上行为被验证**
       （`hwcheck-acceptance/05` 仍 `ready-for-human`）
+
+## Comments
+
+### 落地事实（2026-09-27）
+
+- **§0 交接区**：标题行改成「已发布 v1.3.1，落差归零」，新增一整块「✅ 最新（`release-v1.3.1` 会话）」
+  （发布表 + 带给用户的五条 + 四条新本机事实 + 闸门读数 + 「仍未做」），原来的 `hwcheck-hygiene` 块
+  降级为「📌 上一轮（已随 v1.3.1 发布）」，`ci-gate-fixes` 之前那几块照旧留档。
+- **就地更正了三处过期指令**（不是只在新块里提一句，老块的命令也改了，免得下次照着旧的抄）：
+  §0 里三处「推法见本节『本机网络事实』（要 `git -c http.https://github.com/.resolve=…`）」，
+  以及「本机网络事实」小节里那段代码块本身——现在写着**有效的键是 `http.curloptResolve`**，
+  并注明「v1.3.0 那次钉了就通很可能是巧合」。
+- 三张单的读数与证据全在本目录（`preflight-01.txt` / `pack-*.txt` / `push-v1.3.1-try*.txt` /
+  `upload-v1.3.1.txt` / `post-publish-check.txt`）。
+
+### 一条留给下一轮的判断
+
+本版**只带版本号与文档**（`spec.md`「实现决策」就是这么定的），所以**没有重跑**三道闸门之外的
+任何读数——13 号单落盘的三道闸门读数仍是这一批的证据基线；而**推送那一刻 pre-push 真跑的**那套
+（pytest 5604+11 / 前端 1830 / 浏览器 60）与基线逐字相同，等于又独立复核了一次。
+两平台真编译矩阵**没有重跑**：本版零代码改动，13 号单的 6/6 PASS 仍成立。
+
+### 仍未做（下一轮接手先看这条）
+
+**本版没有任何板上行为被验证**——`hwcheck-acceptance/05` 保持 `ready-for-human`，本机没有板子。
+用户可见文案里凡涉及实测现象的地方都标着「未上板」，**不拿编译绿当板上证据**。
