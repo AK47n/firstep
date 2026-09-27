@@ -21,6 +21,14 @@
 > 因为是纯内部加固，**下一版发布说明不必为它单列条目**（顺手提一句"并发写更稳"即可）。
 > 本机端口 / 沙箱 / 落点都没动，故本节其余事实照旧。
 >
+> **⚠ 一条本机偶发（不是这一批引入的，别误判）**：`tests/test_hwcheck_triage.py::test_concurrent_record_writes_share_no_tmp_file`
+> 在**机器忙**的时候会以 `PermissionError(13, 拒绝访问)` 红——两个线程对**同一目标**并发真实
+> `os.replace`，Windows 会拒绝（`src/contest_generator/atomic_io.py` 的 docstring 里记着这条实测）。
+> 07 号单的评审用同一编排在固定点与工作树上交替各跑 400 次做对照：**老 25/400（6.3%） /
+> 新 30/400（7.5%）**，无统计差别；空闲时复跑 `tests/test_hwcheck_triage.py tests/test_hwcheck.py`
+> **187 passed** 全绿。要根治得给那条用例的两次真实替换**排序**（本批 02–05 的新并发用例就是
+> 那么写的：第二个先落盘、再放行第一个）——属另开单。
+>
 > ### ✅ 上一版发布（2026-09-27，`release-v1.3.1` 会话）—— **`hwcheck-hygiene` 整批已随 v1.3.1 上线**
 >
 > **发版动作走的是 `.scratch/release-v1.3.1/`**（spec + 三张单：`01` 版本同步与自检 / `02` 打包发布 /

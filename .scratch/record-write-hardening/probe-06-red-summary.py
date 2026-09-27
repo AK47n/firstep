@@ -20,22 +20,32 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 OUT_DIR = ROOT / ".scratch" / "record-write-hardening"
 READINGS = ROOT / ".scratch" / "hwcheck-hygiene" / "readings.py"
 PROBES = [
-    ("probe-01-red", "01 共享原语"),
-    ("probe-02-red", "02 想法草稿"),
-    ("probe-03-red", "03 想法商量"),
-    ("probe-04-red", "04 参数表"),
-    ("probe-05-red", "05 母版元数据"),
+    ("probe-01-red", "01 共享原语", 3),
+    ("probe-02-red", "02 想法草稿", 3),
+    ("probe-03-red", "03 想法商量", 5),
+    ("probe-04-red", "04 参数表", 6),
+    ("probe-05-red", "05 母版元数据", 3),
 ]
 
 
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    head = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"], cwd=str(ROOT), capture_output=True, text=True
+    ).stdout.strip()
+    dirty = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=str(ROOT), capture_output=True, text=True
+    ).stdout.strip()
     print("# 反证汇总（工单 record-write-hardening/06 收口）")
     print("# 每张单都是三段式：逐条声明必须红 + 与实得 FAILED 对账 + 每段复原 sha256 逐字节相同；")
     print("# 每份读数头部记着被撤源码与判据文件的 sha256（下面逐份贴出）。")
+    print(
+        f"# 仓库状态：HEAD={head}；工作树{'有' if dirty else '无'}未提交改动"
+        f"（{len(dirty.splitlines())} 个文件）——读数绑的是**此刻盘上的字节**，改完代码要重跑本脚本。"
+    )
     print()
     verdicts: list[tuple[str, str, bool]] = []
-    for name, issue in PROBES:
+    for name, issue, expected_segments in PROBES:
         printed = subprocess.run(
             [
                 sys.executable,
@@ -61,26 +71,35 @@ def main() -> int:
             for line in lines
             if not line.startswith(("# 命令：", "# 工作树：", "# 开始：", "# 退出码："))
         ]
-        print(f"===== {name}（工单 {issue}）· readings.py 退出码 {printed.returncode} =====")
+        print(f"===== {name}（工单 {issue}）· 探针退出码 {printed.returncode} =====")
         print("\n".join(lines).strip())
         print()
         conclusion = next(
             (line for line in lines if line.startswith("结论：")), "（没找到结论行）"
         )
-        mismatched = [
-            line
-            for line in lines
-            if line.strip().startswith(("[x]"))
+        mismatched = [line for line in lines if line.strip().startswith(("[x]"))]
+        # 段数也要核：探针被删掉几段、"其余仍 PASS" 不能算过
+        segment_headers = [
+            line for line in lines if line.startswith("== ") and "复原后必须回绿" not in line
         ]
-        ok = printed.returncode == 0 and "PASS" in conclusion and not mismatched
+        covered = len(segment_headers) == expected_segments
+        ok = printed.returncode == 0 and "PASS" in conclusion and not mismatched and covered
+        if not covered:
+            print(
+                f"   [x] 段数对不上：实得 {len(segment_headers)} 段，脚本记的是 {expected_segments} 段"
+                "——探针被改过就要复核覆盖"
+            )
         verdicts.append((name, conclusion.strip(), ok))
 
-    print("===== 判定表（只看各探针自己的结论行 + 有没有对账不上的段） =====")
+    print("===== 判定表（各探针自己的结论行 + 段数 + 有没有对账不上的段） =====")
     for name, conclusion, ok in verdicts:
         print(f"{'[OK]  ' if ok else '[FAIL]'} {name}：{conclusion}")
     print()
     all_ok = all(ok for _name, _conclusion, ok in verdicts)
-    print("汇总结论：" + ("五张单的反证全部成立、读数已绑当前字节" if all_ok else "有单不成立，见上"))
+    print(
+        "汇总结论："
+        + ("五张单的反证全部成立、段数齐、读数已绑当前字节" if all_ok else "有单不成立，见上")
+    )
     return 0 if all_ok else 1
 
 

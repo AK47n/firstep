@@ -189,23 +189,34 @@ SHARED_PRIMITIVE_SITES = 2  # 造临时名 + 换入：就是这一个实现本�
 ATOMIC_WRITE_EXCEPTIONS: dict[str, tuple[int, str]] = {
     "codeview.py": (4, "两对「pid 后缀临时名 + 换入」；编辑保存路径另带 mtime 冲突检查"),
     "recent_jobs.py": (2, "tempfile.mkstemp 唯一名 + finally 清理"),
-    "hwcheck_triage.py": (
-        2,
-        "本批共享原语的来源、已是正确实现——工单 record-write-hardening/07 会迁走它",
-    ),
     "materials_apply.py": (2, "解包被更新任务锁串行化（.update-tmp）"),
     "master_store.py": (3, "3 处全是**目录**换入（os.replace(<xx>_dir, …)），不是文件写"),
     "my_devices.py": (1, "自建件落盘是**目录**级 staging + rename（.tmp 只是那个暂存目录名）"),
 }
+# 记账：`hwcheck_triage.py` 那条例外在工单 record-write-hardening/07 里删掉了——
+# 它的私有副本迁到了 `atomic_io`、站点归零；清单发霉时守卫会点名要你移出。
 
 _TMP_LITERAL = re.compile(r"""['"][^'"]*tmp[^'"]*['"]""")
+# 纯常量赋值（`TMP_SUFFIX = ".tmp"` / `TMP_SUFFIX: str = ".tmp"`）：不是站点
+_TMP_CONSTANT = re.compile(r"""^[\w.]+\s*(?::\s*[\w\[\], ]+)?=\s*['"][^'"]*tmp[^'"]*['"]\s*$""")
 
 
 def _atomic_write_sites(source: str) -> list[tuple[int, str]]:
     """一个源文件里的手搓原子写站点（行号 + 行文本）。
 
-    不算的三种：注释行、文档行（`\"\"\"` 开头的举例写法）、以及后缀表 / 过滤器里的
-    `".tmp"`（`categories.py` 与 `delivery.py` 那种：没有赋值，只是字符串比对）。
+    **判据面**（收口评审后写清楚，别再以为它抓 `Path.replace` 的任意写法）：
+    - 造临时路径那一行：赋值行里出现带 `tmp` 的字符串字面量（`… + ".tmp"` /
+      `mkstemp(suffix=".tmp")` / `root / f".{id}.tmp"`）；
+    - 换入那一行：`os.replace(`。
+    `X.replace(` / `X.rename(` 这类**只在接收者名字里带 tmp / staging 时**才与上面那行成对，
+    所以不单独抓——判据是"临时名 + 换入"这对搭配，只抓半边会淹在 `str.replace` 里。
+
+    不算的四种：注释行、文档行（`\"\"\"` 开头的举例写法）、后缀表 / 过滤器里的 `".tmp"`
+    （没有赋值，只是字符串比对）、以及**纯粹的常量赋值**（`TMP_SUFFIX = ".tmp"`）。
+
+    **已知盲区**（如实记着）：棘轮比的是"每文件站点数"，同文件里坏站点换掉一个好站点、
+    数量不变时看不出来；`os.rename(` 一类的目录级换名也不在判据面里（`my_devices.py`
+    靠它那条"造临时目录"的站点 + 白名单理由兜着）。
     """
     sites: list[tuple[int, str]] = []
     for number, raw in enumerate(source.splitlines(), 1):
@@ -214,8 +225,14 @@ def _atomic_write_sites(source: str) -> list[tuple[int, str]]:
             continue
         if line.startswith('"""') or line.startswith("'''"):
             continue
-        if "os.replace(" in line or ("=" in line and _TMP_LITERAL.search(line)):
+        if "os.replace(" in line:
             sites.append((number, raw))
+            continue
+        if "=" not in line or not _TMP_LITERAL.search(line):
+            continue
+        if _TMP_CONSTANT.match(line):
+            continue  # `TMP_SUFFIX = ".tmp"` 这种纯常量不是站点
+        sites.append((number, raw))
     return sites
 
 

@@ -24,7 +24,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from contest_generator import hwcheck_triage
+from contest_generator import atomic_io, hwcheck_triage
 from contest_generator.hwcheck_errors import HwCheckError
 from contest_generator.hwcheck_triage import (
     ADVICE_VERDICTS,
@@ -602,6 +602,8 @@ def test_concurrent_record_writes_share_no_tmp_file(tmp_path, monkeypatch):
 
     补丁**只打在目标模块看到的 `os` 上**（不是全局 `os.replace`）：本机同时跑着别的
     测试线程时，全局补丁会被"第一发 `replace`"这种跨用例的噪音消费掉（实测过一次偶发）。
+    写实现归共享原语之后（工单 record-write-hardening/07），"目标模块"就是 `atomic_io`——
+    注入点跟着搬家，**判据一字未动**（照样卡住第一发真实 `replace`）。
     """
     first_inside = threading.Event()
     release = threading.Event()
@@ -615,9 +617,9 @@ def test_concurrent_record_writes_share_no_tmp_file(tmp_path, monkeypatch):
             assert release.wait(timeout=30), "等不到放行——判据自己失败，别挂住整场"
         return real_replace(src, dst)
 
-    # 目标模块用的是 `os.replace` / `os.path` / `os.getpid`：整份换成一个"只看得到本模块"的替身
+    # 共享原语用的是 `os.replace` / `os.path` / `os.getpid`：整份换成一个"只看得到它"的替身
     monkeypatch.setattr(
-        hwcheck_triage,
+        atomic_io,
         "os",
         SimpleNamespace(path=os.path, getpid=os.getpid, replace=slow_replace),
     )

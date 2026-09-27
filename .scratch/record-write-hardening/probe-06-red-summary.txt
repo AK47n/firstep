@@ -1,33 +1,34 @@
 # 读数：probe-06-red-summary
 # 命令：python .scratch/record-write-hardening/probe-06-red-summary.py
 # 工作树：C:\Users\luoji\Desktop\firstep
-# 开始：2026-09-27T18:16:22+08:00
+# 开始：2026-09-27T18:40:55+08:00
 # 退出码：0
 # 反证汇总（工单 record-write-hardening/06 收口）
 # 每张单都是三段式：逐条声明必须红 + 与实得 FAILED 对账 + 每段复原 sha256 逐字节相同；
 # 每份读数头部记着被撤源码与判据文件的 sha256（下面逐份贴出）。
+# 仓库状态：HEAD=c8d39dc2；工作树有未提交改动（16 个文件）——读数绑的是**此刻盘上的字节**，改完代码要重跑本脚本。
 
-===== probe-01-red（工单 01 共享原语）· readings.py 退出码 0 =====
+===== probe-01-red（工单 01 共享原语）· 探针退出码 0 =====
 # 被撤的源码：src/contest_generator/atomic_io.py sha256=3b0f86d15d7b2a577786128395b0bb95d3cf78ca5c8da8e3e1ed350a33ce9824
-# 判据文件：tests/test_atomic_io.py sha256=b284b29426ff044575072eb005b0c3ca700a932a422d4752376126dd5e63848a
+# 判据文件：tests/test_atomic_io.py sha256=cad7e3ed5f067c03ea4a981ff5de0886a92fb1a4d24d684bec7d80495496f21e
 # 源码行尾：CRLF
 
 == A 固定临时名 ==
    声明必须红：['tests/test_atomic_io.py::test_concurrent_writes_share_no_tmp_file']
    实得 FAILED：['tests/test_atomic_io.py::test_concurrent_writes_share_no_tmp_file']
-   pytest 尾行：1 failed, 8 passed in 0.14s
+   pytest 尾行：1 failed, 8 passed in 0.11s
    复原 sha256 逐字节相同：True
 
 == B 撤掉清残渣 ==
    声明必须红：['tests/test_atomic_io.py::test_atomic_write_text_replace_failure_leaves_no_residue', 'tests/test_atomic_io.py::test_atomic_write_text_write_failure_leaves_no_residue']
    实得 FAILED：['tests/test_atomic_io.py::test_atomic_write_text_replace_failure_leaves_no_residue', 'tests/test_atomic_io.py::test_atomic_write_text_write_failure_leaves_no_residue']
-   pytest 尾行：2 failed, 7 passed in 0.14s
+   pytest 尾行：2 failed, 7 passed in 0.11s
    复原 sha256 逐字节相同：True
 
 == C 锁键不归一 ==
    声明必须红：['tests/test_atomic_io.py::test_path_lock_is_shared_for_normalised_spellings_of_one_path']
    实得 FAILED：['tests/test_atomic_io.py::test_path_lock_is_shared_for_normalised_spellings_of_one_path']
-   pytest 尾行：1 failed, 8 passed in 0.15s
+   pytest 尾行：1 failed, 8 passed in 0.12s
    复原 sha256 逐字节相同：True
 
 == 复原后必须回绿 ==
@@ -36,7 +37,7 @@
 
 结论：PASS（三段反证全成立）
 
-===== probe-02-red（工单 02 想法草稿）· readings.py 退出码 0 =====
+===== probe-02-red（工单 02 想法草稿）· 探针退出码 0 =====
 # 被撤的源码：src/contest_generator/atomic_io.py sha256=3b0f86d15d7b2a577786128395b0bb95d3cf78ca5c8da8e3e1ed350a33ce9824 行尾=CRLF
 # 被撤的源码：src/contest_generator/drafts.py sha256=3fd598e946a9de7421a794ae309b77615b4fd25f74b04668183e3b9d1cbdf986 行尾=LF
 # 被撤的源码：src/contest_generator/webapp.py sha256=17340e690c3009ac31b470ddf0ec9eda2395fc1757b95c6508788828c9d7075b 行尾=CRLF
@@ -45,7 +46,7 @@
 == A 撤掉临界区 ==
    声明必须红：['tests/test_drafts.py::test_two_drafts_endpoints_do_not_clobber_each_other', 'tests/test_drafts.py::test_update_drafts_does_not_lose_a_concurrent_add', 'tests/test_drafts.py::test_update_drafts_does_not_lose_a_concurrent_delete']
    实得 FAILED：['tests/test_drafts.py::test_two_drafts_endpoints_do_not_clobber_each_other', 'tests/test_drafts.py::test_update_drafts_does_not_lose_a_concurrent_add', 'tests/test_drafts.py::test_update_drafts_does_not_lose_a_concurrent_delete']
-   pytest 尾行：3 failed, 12 passed, 1 warning in 0.57s
+   pytest 尾行：3 failed, 12 passed, 1 warning in 0.59s
    复原 sha256 逐字节相同：True
 
 == B 撤掉共享原语（唯一临时名 + 清残渣） ==
@@ -62,11 +63,11 @@
 
 == 复原后必须回绿 ==
    实得 FAILED：（无）
-   pytest 尾行：15 passed, 1 warning in 1.59s
+   pytest 尾行：15 passed, 1 warning in 1.62s
 
 结论：PASS（三段反证全成立）
 
-===== probe-03-red（工单 03 想法商量）· readings.py 退出码 0 =====
+===== probe-03-red（工单 03 想法商量）· 探针退出码 0 =====
 # 被撤的源码：src/contest_generator/atomic_io.py sha256=3b0f86d15d7b2a577786128395b0bb95d3cf78ca5c8da8e3e1ed350a33ce9824 行尾=CRLF
 # 被撤的源码：src/contest_generator/idea_chat.py sha256=8c6111f74d2c4010f87b4fd73bb68bb32d25b00651b289c5cfeef899e07835f1 行尾=LF
 # 被撤的源码：src/contest_generator/webapp.py sha256=17340e690c3009ac31b470ddf0ec9eda2395fc1757b95c6508788828c9d7075b 行尾=CRLF
@@ -76,87 +77,87 @@
 == A 撤掉临界区 ==
    声明必须红：['tests/test_idea_chat.py::test_update_idea_chat_keeps_an_adopt_that_landed_in_the_slow_window', 'tests/test_task_progress.py::test_idea_chat_send_and_adopt_serialise_their_record_writes']
    实得 FAILED：['tests/test_idea_chat.py::test_update_idea_chat_keeps_an_adopt_that_landed_in_the_slow_window', 'tests/test_task_progress.py::test_idea_chat_send_and_adopt_serialise_their_record_writes']
-   pytest 尾行：2 failed, 112 passed, 1 warning in 6.66s
+   pytest 尾行：2 failed, 112 passed, 1 warning in 7.18s
    复原 sha256 逐字节相同：True
 
 == B 锁键去掉文件名 ==
    声明必须红：['tests/test_idea_chat.py::test_two_chat_files_do_not_share_a_lock']
    实得 FAILED：['tests/test_idea_chat.py::test_two_chat_files_do_not_share_a_lock']
-   pytest 尾行：1 failed, 113 passed, 1 warning in 14.39s
+   pytest 尾行：1 failed, 113 passed, 1 warning in 14.51s
    复原 sha256 逐字节相同：True
 
 == C 端点退回旧形状（读旧快照 → 整份写） ==
    声明必须红：['tests/test_task_progress.py::test_idea_chat_send_and_adopt_serialise_their_record_writes', 'tests/test_task_progress.py::test_idea_chat_send_keeps_an_adopt_that_landed_during_the_model_call']
    实得 FAILED：['tests/test_task_progress.py::test_idea_chat_send_and_adopt_serialise_their_record_writes', 'tests/test_task_progress.py::test_idea_chat_send_keeps_an_adopt_that_landed_during_the_model_call']
-   pytest 尾行：2 failed, 112 passed, 1 warning in 8.02s
+   pytest 尾行：2 failed, 112 passed, 1 warning in 9.44s
    复原 sha256 逐字节相同：True
 
 == D 重读挪到锁外 ==
    声明必须红：['tests/test_idea_chat.py::test_update_idea_chat_keeps_an_adopt_that_landed_in_the_slow_window', 'tests/test_task_progress.py::test_idea_chat_send_and_adopt_serialise_their_record_writes']
    实得 FAILED：['tests/test_idea_chat.py::test_update_idea_chat_keeps_an_adopt_that_landed_in_the_slow_window', 'tests/test_task_progress.py::test_idea_chat_send_and_adopt_serialise_their_record_writes']
-   pytest 尾行：2 failed, 112 passed, 1 warning in 9.69s
+   pytest 尾行：2 failed, 112 passed, 1 warning in 10.17s
    复原 sha256 逐字节相同：True
 
 == E 撤掉共享原语（唯一临时名 + 清残渣） ==
    声明必须红：['tests/test_idea_chat.py::test_concurrent_idea_chat_writes_share_no_tmp_file', 'tests/test_idea_chat.py::test_idea_chat_write_failure_leaves_no_residue_and_keeps_the_original_error']
    实得 FAILED：['tests/test_idea_chat.py::test_concurrent_idea_chat_writes_share_no_tmp_file', 'tests/test_idea_chat.py::test_idea_chat_write_failure_leaves_no_residue_and_keeps_the_original_error']
-   pytest 尾行：2 failed, 112 passed, 1 warning in 9.53s
+   pytest 尾行：2 failed, 112 passed, 1 warning in 9.18s
    复原 sha256 逐字节相同：True
 
 == 复原后必须回绿 ==
    实得 FAILED：（无）
-   pytest 尾行：114 passed, 1 warning in 9.36s
+   pytest 尾行：114 passed, 1 warning in 10.43s
 
 结论：PASS（五段反证全成立）
 
-===== probe-04-red（工单 04 参数表）· readings.py 退出码 0 =====
+===== probe-04-red（工单 04 参数表）· 探针退出码 0 =====
 # 被撤的源码：src/contest_generator/atomic_io.py sha256=3b0f86d15d7b2a577786128395b0bb95d3cf78ca5c8da8e3e1ed350a33ce9824 行尾=CRLF
-# 被撤的源码：src/contest_generator/params.py sha256=0d7c40064fbfb543a8a9f01f32d07f54cb6052985fac366912eb75bacb91ae84 行尾=LF
+# 被撤的源码：src/contest_generator/params.py sha256=b09d826cf6d88ec3e99e39da1edcd6d064ca85f42469afbf8bf3152171caea72 行尾=LF
 # 判据文件：tests/test_params.py sha256=9c018b372350f631243290ac7e6ad4a5d21bc808842d4dd2c986b7a543d26b6e
 
 == A 撤掉临界区 ==
    声明必须红：['tests/test_params.py::test_param_scan_write_does_not_land_inside_a_refresh_critical_section', 'tests/test_params.py::test_params_apply_sse_flow_serialises_with_another_refresh', 'tests/test_params.py::test_update_params_does_not_lose_a_concurrent_refresh']
    实得 FAILED：['tests/test_params.py::test_param_scan_write_does_not_land_inside_a_refresh_critical_section', 'tests/test_params.py::test_params_apply_sse_flow_serialises_with_another_refresh', 'tests/test_params.py::test_update_params_does_not_lose_a_concurrent_refresh']
-   pytest 尾行：3 failed, 32 passed, 1 warning in 1.58s
+   pytest 尾行：3 failed, 32 passed, 1 warning in 1.76s
    复原 sha256 逐字节相同：True
 
 == B 重读挪到锁外 ==
    声明必须红：['tests/test_params.py::test_params_apply_sse_flow_serialises_with_another_refresh', 'tests/test_params.py::test_update_params_does_not_lose_a_concurrent_refresh']
    实得 FAILED：['tests/test_params.py::test_params_apply_sse_flow_serialises_with_another_refresh', 'tests/test_params.py::test_update_params_does_not_lose_a_concurrent_refresh']
-   pytest 尾行：2 failed, 33 passed, 1 warning in 4.88s
+   pytest 尾行：2 failed, 33 passed, 1 warning in 4.58s
    复原 sha256 逐字节相同：True
 
 == C 刷新退回旧形状（拿开头那份快照整份写回） ==
    声明必须红：['tests/test_params.py::test_params_apply_sse_flow_serialises_with_another_refresh', 'tests/test_params.py::test_persist_applied_param_refreshes_on_a_table_that_landed_after_the_read']
    实得 FAILED：['tests/test_params.py::test_params_apply_sse_flow_serialises_with_another_refresh', 'tests/test_params.py::test_persist_applied_param_refreshes_on_a_table_that_landed_after_the_read']
-   pytest 尾行：2 failed, 33 passed, 1 warning in 3.88s
+   pytest 尾行：2 failed, 33 passed, 1 warning in 3.80s
    复原 sha256 逐字节相同：True
 
 == D 撤掉共享原语（唯一临时名 + 清残渣） ==
    声明必须红：['tests/test_params.py::test_concurrent_params_writes_share_no_tmp_file', 'tests/test_params.py::test_params_write_failure_leaves_no_residue_and_keeps_the_original_error']
    实得 FAILED：['tests/test_params.py::test_concurrent_params_writes_share_no_tmp_file', 'tests/test_params.py::test_params_write_failure_leaves_no_residue_and_keeps_the_original_error']
-   pytest 尾行：2 failed, 33 passed, 1 warning in 4.11s
+   pytest 尾行：2 failed, 33 passed, 1 warning in 4.09s
    复原 sha256 逐字节相同：True
 
 == E 撤掉「无变化不写」短路 ==
    声明必须红：['tests/test_params.py::test_persist_applied_param_does_not_create_a_table_that_vanished']
    实得 FAILED：['tests/test_params.py::test_persist_applied_param_does_not_create_a_table_that_vanished']
-   pytest 尾行：1 failed, 34 passed, 1 warning in 4.11s
+   pytest 尾行：1 failed, 34 passed, 1 warning in 4.14s
    复原 sha256 逐字节相同：True
 
 == F 撤掉扫描那笔的锁（工单 06 收口：整份盲写又落回临界区里） ==
    声明必须红：['tests/test_params.py::test_param_scan_write_does_not_land_inside_a_refresh_critical_section']
    实得 FAILED：['tests/test_params.py::test_param_scan_write_does_not_land_inside_a_refresh_critical_section']
-   pytest 尾行：1 failed, 34 passed, 1 warning in 3.06s
+   pytest 尾行：1 failed, 34 passed, 1 warning in 3.09s
    复原 sha256 逐字节相同：True
 
 == 复原后必须回绿 ==
    实得 FAILED：（无）
-   pytest 尾行：35 passed, 1 warning in 4.06s
+   pytest 尾行：35 passed, 1 warning in 4.44s
 
 结论：PASS（六段反证全成立）
 
-===== probe-05-red（工单 05 母版元数据）· readings.py 退出码 0 =====
+===== probe-05-red（工单 05 母版元数据）· 探针退出码 0 =====
 # 被撤的源码：src/contest_generator/atomic_io.py sha256=3b0f86d15d7b2a577786128395b0bb95d3cf78ca5c8da8e3e1ed350a33ce9824 行尾=CRLF
 # 被撤的源码：src/contest_generator/master_store.py sha256=19bce8f4adf64ae2b40eb80a6a7ce6e49ce1ad7e7a9abcb1a5e0309d27b020e4 行尾=CRLF
 # 判据文件：tests/test_master_store.py sha256=9e856d9d6adc59cfb68a2de570bd9457b5b701896c5246bc0030e4a8ae363080
@@ -165,32 +166,32 @@
 == A 撤掉「同一把锁」（写 meta 与删 meta 各自为政） ==
    声明必须红：['tests/test_master_store.py::test_delete_master_interleaved_with_a_meta_write_leaves_no_dangling_meta', 'tests/test_webapp.py::test_masters_import_and_delete_do_not_leave_a_dangling_meta']
    实得 FAILED：['tests/test_master_store.py::test_delete_master_interleaved_with_a_meta_write_leaves_no_dangling_meta', 'tests/test_webapp.py::test_masters_import_and_delete_do_not_leave_a_dangling_meta']
-   pytest 尾行：2 failed, 448 passed, 1 warning in 43.68s
+   pytest 尾行：2 failed, 448 passed, 1 warning in 46.19s
    复原 sha256 逐字节相同：True
 
 == B 撤掉共享原语的清残渣（唯一临时名 → 固定名、finally → pass） ==
    声明必须红：['tests/test_master_store.py::test_master_meta_write_failure_leaves_no_dot_temp_and_keeps_the_original_error']
    实得 FAILED：['tests/test_master_store.py::test_master_meta_write_failure_leaves_no_dot_temp_and_keeps_the_original_error']
-   pytest 尾行：1 failed, 449 passed, 1 warning in 46.11s
+   pytest 尾行：1 failed, 449 passed, 1 warning in 47.88s
    复原 sha256 逐字节相同：True
 
 == C 撤回收走前的完整形状（锁 + 唯一临时名一起撤） ==
    声明必须红：['tests/test_master_store.py::test_concurrent_master_meta_writes_share_no_dot_temp', 'tests/test_master_store.py::test_delete_master_interleaved_with_a_meta_write_leaves_no_dangling_meta', 'tests/test_webapp.py::test_masters_import_and_delete_do_not_leave_a_dangling_meta']
    实得 FAILED：['tests/test_master_store.py::test_concurrent_master_meta_writes_share_no_dot_temp', 'tests/test_master_store.py::test_delete_master_interleaved_with_a_meta_write_leaves_no_dangling_meta', 'tests/test_webapp.py::test_masters_import_and_delete_do_not_leave_a_dangling_meta']
-   pytest 尾行：3 failed, 447 passed, 1 warning in 42.58s
+   pytest 尾行：3 failed, 447 passed, 1 warning in 44.35s
    复原 sha256 逐字节相同：True
 
 == 复原后必须回绿 ==
    实得 FAILED：（无）
-   pytest 尾行：450 passed, 1 warning in 48.53s
+   pytest 尾行：450 passed, 1 warning in 50.20s
 
 结论：PASS（三段反证全成立）
 
-===== 判定表（只看各探针自己的结论行 + 有没有对账不上的段） =====
+===== 判定表（各探针自己的结论行 + 段数 + 有没有对账不上的段） =====
 [OK]   probe-01-red：结论：PASS（三段反证全成立）
 [OK]   probe-02-red：结论：PASS（三段反证全成立）
 [OK]   probe-03-red：结论：PASS（五段反证全成立）
 [OK]   probe-04-red：结论：PASS（六段反证全成立）
 [OK]   probe-05-red：结论：PASS（三段反证全成立）
 
-汇总结论：五张单的反证全部成立、读数已绑当前字节
+汇总结论：五张单的反证全部成立、段数齐、读数已绑当前字节

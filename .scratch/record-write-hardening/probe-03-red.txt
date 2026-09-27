@@ -1,7 +1,7 @@
 # 读数：probe-03-red
 # 命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe C:\Users\luoji\Desktop\firstep\.scratch\record-write-hardening\probe-03-red.py
 # 工作树：C:\Users\luoji\Desktop\firstep
-# 开始：2026-09-27T18:16:32+08:00
+# 开始：2026-09-27T18:41:06+08:00
 # 退出码：0
 # 被撤的源码：src/contest_generator/atomic_io.py sha256=3b0f86d15d7b2a577786128395b0bb95d3cf78ca5c8da8e3e1ed350a33ce9824 行尾=CRLF
 # 被撤的源码：src/contest_generator/idea_chat.py sha256=8c6111f74d2c4010f87b4fd73bb68bb32d25b00651b289c5cfeef899e07835f1 行尾=LF
@@ -12,35 +12,35 @@
 == A 撤掉临界区 ==
    声明必须红：['tests/test_idea_chat.py::test_update_idea_chat_keeps_an_adopt_that_landed_in_the_slow_window', 'tests/test_task_progress.py::test_idea_chat_send_and_adopt_serialise_their_record_writes']
    实得 FAILED：['tests/test_idea_chat.py::test_update_idea_chat_keeps_an_adopt_that_landed_in_the_slow_window', 'tests/test_task_progress.py::test_idea_chat_send_and_adopt_serialise_their_record_writes']
-   pytest 尾行：2 failed, 112 passed, 1 warning in 6.66s
+   pytest 尾行：2 failed, 112 passed, 1 warning in 7.18s
    复原 sha256 逐字节相同：True
 
 == B 锁键去掉文件名 ==
    声明必须红：['tests/test_idea_chat.py::test_two_chat_files_do_not_share_a_lock']
    实得 FAILED：['tests/test_idea_chat.py::test_two_chat_files_do_not_share_a_lock']
-   pytest 尾行：1 failed, 113 passed, 1 warning in 14.39s
+   pytest 尾行：1 failed, 113 passed, 1 warning in 14.51s
    复原 sha256 逐字节相同：True
 
 == C 端点退回旧形状（读旧快照 → 整份写） ==
    声明必须红：['tests/test_task_progress.py::test_idea_chat_send_and_adopt_serialise_their_record_writes', 'tests/test_task_progress.py::test_idea_chat_send_keeps_an_adopt_that_landed_during_the_model_call']
    实得 FAILED：['tests/test_task_progress.py::test_idea_chat_send_and_adopt_serialise_their_record_writes', 'tests/test_task_progress.py::test_idea_chat_send_keeps_an_adopt_that_landed_during_the_model_call']
-   pytest 尾行：2 failed, 112 passed, 1 warning in 8.02s
+   pytest 尾行：2 failed, 112 passed, 1 warning in 9.44s
    复原 sha256 逐字节相同：True
 
 == D 重读挪到锁外 ==
    声明必须红：['tests/test_idea_chat.py::test_update_idea_chat_keeps_an_adopt_that_landed_in_the_slow_window', 'tests/test_task_progress.py::test_idea_chat_send_and_adopt_serialise_their_record_writes']
    实得 FAILED：['tests/test_idea_chat.py::test_update_idea_chat_keeps_an_adopt_that_landed_in_the_slow_window', 'tests/test_task_progress.py::test_idea_chat_send_and_adopt_serialise_their_record_writes']
-   pytest 尾行：2 failed, 112 passed, 1 warning in 9.69s
+   pytest 尾行：2 failed, 112 passed, 1 warning in 10.17s
    复原 sha256 逐字节相同：True
 
 == E 撤掉共享原语（唯一临时名 + 清残渣） ==
    声明必须红：['tests/test_idea_chat.py::test_concurrent_idea_chat_writes_share_no_tmp_file', 'tests/test_idea_chat.py::test_idea_chat_write_failure_leaves_no_residue_and_keeps_the_original_error']
    实得 FAILED：['tests/test_idea_chat.py::test_concurrent_idea_chat_writes_share_no_tmp_file', 'tests/test_idea_chat.py::test_idea_chat_write_failure_leaves_no_residue_and_keeps_the_original_error']
-   pytest 尾行：2 failed, 112 passed, 1 warning in 9.53s
+   pytest 尾行：2 failed, 112 passed, 1 warning in 9.18s
    复原 sha256 逐字节相同：True
 
 == 复原后必须回绿 ==
    实得 FAILED：（无）
-   pytest 尾行：114 passed, 1 warning in 9.36s
+   pytest 尾行：114 passed, 1 warning in 10.43s
 
 结论：PASS（五段反证全成立）
