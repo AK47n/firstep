@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=aa1cc59bbf282056693b60658ff3ad85d6ddf3b7 -->
+<!-- changelog-auto: last-commit=0906f6d3aa9e587558df8f154789208fca201e1c -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -9,6 +9,7 @@
 - 02:08 工单 hwcheck-hygiene/08：账本收口 + 三条判据侧诊断（afterEach / 工单号 / B2 抢跑）
 - 10:28 工单 hwcheck-hygiene/09：拆 fx 第一步——1380 行按职责拆成六件，旧文件转 barrel
 - 10:49 工单 hwcheck-hygiene/10：拆 fx 第二步——消费者迁到六件、删掉过渡态 barrel
+- 10:50 账本：hwcheck-hygiene 09–10 落 main（未发布），交接区改指下一单 11
 
 ## 2026-09-26
 - 00:21 工单 ci-gate-fixes/01：配置缺失时回退随包库 + 配置路径覆盖口
