@@ -4,7 +4,7 @@
 // 模块约定与六件的依赖方向见 `fx/hwcheck-state.js` 头部——那份是**单源**，
 // 别在这里再抄一遍（抄六遍就是六份会各自漂移的散文）。
 
-import { esc } from "./core.js";
+import { esc, escRich } from "./core.js";
 // chip 渲染取自模块库既有纯件（器件选择复用既有载荷与卡片/chip 渲染，
 // 不另造一套模块清单协议）。
 import { recommendChipHTML } from "./module.js";
@@ -286,7 +286,7 @@ export function hwcheckOrderHTML(order, guide, reason) {
     return '<li class="hwcheck-order-row">'
       + `<span class="hwcheck-order-index">${index + 1}</span>`
       + `<span class="slug">${esc(one.slug || "")}</span>${tag}${custom}`
-      + `<span class="hwcheck-order-desc">${esc(hwcheckOrderDesc(one.description))}</span>`
+      + `<span class="hwcheck-order-desc">${escRich(hwcheckOrderDesc(one.description))}</span>`
       + "</li>";
   }).join("");
   return `<div class="hwcheck-hint">${esc(guide || "")}</div>`

@@ -64,6 +64,19 @@ const MODULES = [
 ];
 const BEFORE = "（搬前快照）";
 
+/**
+ * **搬迁之后被别的工单合法改过的声明**（名字 → 改它的工单）。
+ *
+ * 为什么需要这张表：② 判的是"与搬前快照逐字相同"，而搬迁完成不等于代码从此不许动——
+ * 后续工单动了这些函数就会被它判红（工单 hwcheck-hygiene/14 首例：`**粗**` 的渲染）。
+ * 口径是**逐条记账**，不是放行：没登记进这张表的改动照旧报（下面的正向对照钉着这一点），
+ * 且每条登记都要能在四件/六件里找到同名声明（防表腐烂）。
+ */
+const LATER_EDITS = new Map([
+  ["hwcheckSectionNoteHTML", "hwcheck-hygiene/14"],   // 配方说明行改用 escRich
+  ["hwcheckOrderHTML", "hwcheck-hygiene/14"],         // 建议顺序那一行改用 escRich
+]);
+
 // ---------------------------------------------------------------------------
 // 抽取器：声明单元 / 桥 / 声明名 / 调用位
 // ---------------------------------------------------------------------------
@@ -171,6 +184,7 @@ function auditProblems(files) {
       }
       continue;
     }
+    if (LATER_EDITS.has(name)) continue;      // 搬迁后依法改过的：见 LATER_EDITS 的说明
     if (norm(want) !== norm(got.body)) {
       problems.push({
         code: "②",
@@ -264,8 +278,26 @@ test("搬迁完整：① 导出名集合 ② 声明单元逐字 ③ 桥并集 �
     "搬迁与搬前快照对不上（每一条都是「搬的时候丢了东西」的形态）：\n  " + report.join("\n  "));
 });
 
-test("① 正向对照：摘掉一个导出必须报出（判据不是靠「两边都空」绿的）", () => {
-  const patched = withPatch(FILES, "hwcheck-triage.js",
+test("LATER_EDITS 体检：登记的名字真的在六件/四件里，且**没登记的改动照旧报**", () => {
+  // 反方向的牙齿：这张表只能逐条豁免，不能变成"谁都别判我"的挡箭牌
+  const names = new Set([...FILES.get(BEFORE).matchAll(DECL_RE)].map((m) => m[2]));
+  const seen = new Set([...uiUnits(UI_FILES.get(UI_BEFORE)).keys(),
+    ...[...FILES.values()].flatMap((t) => [...declaredNames(t)])]);
+  for (const [name, why] of LATER_EDITS) {
+    assert.ok(names.has(name), `LATER_EDITS 里的 ${name} 不在搬前快照里（表腐烂了，${why}）`);
+    assert.ok(seen.has(name), `LATER_EDITS 里的 ${name} 在六件/四件里找不到（表腐烂了，${why}）`);
+  }
+  // 正向对照：改一个**没登记**的声明的函数体（不改名——改名归 ①），② 必须报
+  const anchor = "这个输出位置下还没有检测工程。";
+  const patched = withPatch(FILES, "hwcheck-project.js", (t) => {
+    assert.ok(t.includes(anchor), "锚点变了 —— 这条自检会静默空转");
+    return t.replace(anchor, "这个输出位置下还没有检测工程哦。");
+  });
+  const hits = REPORT(patched).filter((l) => l.startsWith("②") && l.includes("hwcheckRecentEmptyHTML"));
+  assert.equal(hits.length, 1, `未登记的改动没被报出：${JSON.stringify(REPORT(patched))}`);
+});
+
+test("① 正向对照：摘掉一个导出必须报出（判据不是靠「两边都空」绿的）", () => {  const patched = withPatch(FILES, "hwcheck-triage.js",
     (t) => t.replace("export function hwcheckAdviceHTML(", "function hwcheckAdviceHTML("));
   assert.ok(patched.get("hwcheck-triage.js").includes("\nfunction hwcheckAdviceHTML("),
     "注入没落上（锚点变了？）—— 这条自检会静默空转");
@@ -533,6 +565,7 @@ function uiAuditProblems(files) {
     if (name === UI_REWRITTEN) continue;
     const got = afterUnits.get(name);
     if (!got) continue;                                  // ① 已报
+    if (LATER_EDITS.has(name)) continue;                 // 搬迁后依法改过的
     if (norm(stripExport(want)) !== norm(stripExport(got.body))) {
       problems.push({ code: "②", detail: `${name}（${got.key}）的声明单元与搬前不是逐字相同` });
     }

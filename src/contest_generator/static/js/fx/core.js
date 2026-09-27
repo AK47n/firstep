@@ -22,6 +22,31 @@ export function esc(text) {
   })[c]);
 }
 
+// escRich(text) / escPlain(text)：库数据里的 markdown 粗体标记（工单 hwcheck-hygiene/14）。
+//
+// **要解决的问题**：库数据（配方 `note.lines`、manifest 的 `description` 与 `platforms.*.notes`）
+// 是按 markdown 写的，里面成对出现 `**…**`；而页面用 `esc()` 把它们原样送进 innerHTML ——
+// 学生看到的是 `**本件必须接个已知电压才有意义**`，不是加粗的那句话。02 号单修的是 **JS 产品串**
+// 里的这一类（判据 ⑨ 只扫 JS 字面量），库数据这一层从此前没有任何判据看着。
+//
+// **顺序不许反**：先 `esc` 再替换。反过来做的话，库里/用户填的 `<script>` 会被当标签。
+// 替换出来的 `<strong>` 才是标签。
+//
+// **孤立标记一律剥掉**：行级截断（检测页建议顺序 60 字、模块卡简介 26 字）会从成对标记
+// 中间切开——只做成对替换的话，截断处会留半截星号，而"页面上不出现字面星号"正是本单的判据。
+//
+// 两个入口按**去处**分：正文用 `escRich`（标记变标签）；`title="…"` / 输入框 value 用
+// `escPlain`（那里 `<strong>` 只会被当字面量显示，所以只剥标记）。
+export function escRich(text) {
+  return esc(text)
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*\*/g, "");
+}
+
+export function escPlain(text) {
+  return esc(text).replace(/\*\*/g, "");
+}
+
 export function formatSize(bytes) {
   if (!Number.isFinite(bytes)) return "";
   const units = ["B", "KB", "MB", "GB", "TB"];

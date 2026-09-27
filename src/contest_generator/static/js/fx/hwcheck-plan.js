@@ -4,7 +4,7 @@
 // 模块约定与六件的依赖方向见 `fx/hwcheck-state.js` 头部——那份是**单源**，
 // 别在这里再抄一遍（抄六遍就是六份会各自漂移的散文）。
 
-import { esc } from "./core.js";
+import { esc, escRich } from "./core.js";
 
 // ===========================================================================
 // 工单 module-hwcheck/04：这一趟**真测哪几件**（配方驱动的小节）+ 未专精点名
@@ -54,7 +54,7 @@ export function hwcheckSectionPlanText(section) {
 export function hwcheckSectionNoteHTML(section) {
   const notes = ((section && section.note) || []).filter(Boolean);
   if (!notes.length) return "";
-  return notes.map((line) => `<div class="hwcheck-hint">▸ ${esc(line)}</div>`).join("");
+  return notes.map((line) => `<div class="hwcheck-hint">▸ ${escRich(line)}</div>`).join("");
 }
 
 // hwcheckSectionsHTML(sections)：逐件专精小节清单。

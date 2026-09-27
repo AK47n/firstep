@@ -1,0 +1,26 @@
+st7789_para stm32 58
+ili9488 stm32 44
+qmc5883l mspm0 44
+vl53l0x stm32 44
+i2c_probe mspm0 40
+ili9341 stm32 40
+l298n stm32 32
+ec01g stm32 30
+hx711 stm32 30
+neo_6m stm32 30
+fingerprint stm32 28
+gp2y1014au stm32 28
+lcd stm32 28
+ms5611 stm32 28
+i2c_probe stm32 26
+mlx90614 stm32 26
+qmc5883l stm32 26
+sgp30 stm32 26
+ws2812 stm32 26
+at24c02 stm32 24
+bmp180 stm32 24
+esp01s stm32 24
+hc05 stm32 24
+nrf24l01 stm32 24
+pca9685 stm32 24
+stm32 侧有标记的：68 件；最多的是 ('st7789_para', 'stm32', 58)

@@ -6,7 +6,7 @@
 // 已在注释标注）；multiInstanceModules / instancePayload / ensureDefaultInstances
 // 原引用主体脚本模块级状态（expanded / instances），迁入后改为显式参数传递
 //（行为零变化，调用点同步传参）。模块约定见 fx/core.js 头部。
-import { esc } from "./core.js";
+import { esc, escRich, escPlain } from "./core.js";
 
 export function moduleBadges(m) {
   const badges = [];
@@ -336,10 +336,11 @@ export function moduleGridHTML(modules, selectedSet, query, platform) {
     // 的剔掉了），那个属性在这里恒为 false、只会误导（chip 才有两态，见 recommendChipHTML）。
     return '<div class="module-card' + (off ? " off" : "") + '" data-add="' + escHtml(m.slug) + '"'
       + ' role="button" tabindex="0"'
-      + ' title="' + escHtml(desc) + '">'
+      // title 是**属性**：标签进不去（会被当字面量显示），只剥标记（工单 hwcheck-hygiene/14）
+      + ' title="' + escPlain(desc) + '">'
       + '<div class="mc-head"><span class="slug">' + escHtml(m.slug) + "</span>"
       + '<button class="mc-info" data-info="' + escHtml(m.slug) + '" title="查看模块详情">详情</button>'
-      + (off ? '<span class="mc-offtag">需切换平台</span>' : "") + "</div>"      + '<div class="mc-desc">' + escHtml(short) + "</div>"
+      + (off ? '<span class="mc-offtag">需切换平台</span>' : "") + "</div>"      + '<div class="mc-desc">' + escRich(short) + "</div>"
       + '<div class="mc-meta">' + badges + deps + pa + "</div></div>";
   }).join("");
 }
@@ -418,7 +419,9 @@ export function moduleIntroHTML(intro) {
   if (!sections.length) return "";
   return '<div class="mi-intro">' + sections.map((s) =>
     '<div class="mi-intro-sec"><div class="mi-intro-label">' + escHtml(s.label)
-    + '</div><div class="mi-intro-text">' + escHtml(s.text) + "</div></div>"
+    // 四问正文来自库内简介（manifest.description 拆段）：按 markdown 写的 `**粗**`
+      // 在这里转成 <strong>（工单 hwcheck-hygiene/14；escRich 先转义再替换）
+    + '</div><div class="mi-intro-text">' + escRich(s.text) + "</div></div>"
   ).join("") + "</div>";
 }
 
@@ -483,7 +486,9 @@ export function moduleInfoHTML(module, platform, reason) {
       ? e.files.map((f) => '<li><button type="button" class="mi-file" data-mi-file="'
         + escHtml(f) + '" title="查看源码（只读）">' + escHtml(f) + "</button></li>").join("")
       : '<li class="muted">实现内嵌母版（随母版进工程，不复制文件、不重复）</li>';
-    const notes = e.notes ? '<div class="mi-note">备注：' + escHtml(e.notes) + "</div>" : "";
+    // 平台备注来自 manifest 的 `platforms.*.notes`（库数据，按 markdown 写）：
+    // 成对 `**粗**` 转 <strong>（工单 hwcheck-hygiene/14）
+    const notes = e.notes ? '<div class="mi-note">备注：' + escRich(e.notes) + "</div>" : "";
     // 身份字段（工单 identity-fields/05）：器件 = 有值才显示「套件：」/来源行；
     // 内部件 / 协议切片 = 不显示两行空内容，改标「无需购买链接」（空值语义是
     // 「不适用」而非「待补」，见 library.MODULE_KIND）。判据取自载荷 kind，本文件
@@ -529,7 +534,7 @@ export function moduleInfoHTML(module, platform, reason) {
   const intro = moduleIntroHTML(m.intro);
   return '<div class="module-info-body">'
     + '<div class="module-info-title"><span class="slug">' + escHtml(m.slug || "") + "</span>"
-    + (intro ? "" : '<div class="desc">' + escHtml(m.description || "") + "</div>") + "</div>"
+    + (intro ? "" : '<div class="desc">' + escRich(m.description || "") + "</div>") + "</div>"
     + intro
     + moduleReasonHTML(reason)
     + (off ? '<div class="module-info-off">当前平台 ' + escHtml(moduleGridPlatformLabel(platform))
@@ -717,7 +722,7 @@ export function moduleRowHTML(m, dangling) {
   }).join("、") || "—";
   return `<tr>
     <td class="slug">${esc(m.slug || "")}</td>
-    <td class="desc-cell" title="${esc(description)}">${esc(description)}</td>
+    <td class="desc-cell" title="${escPlain(description)}">${escRich(description)}</td>
     <td class="muted">${deps}${pythonArtifactSummary(m)}</td>
     <td>${moduleBadges(m)}</td>
     <td>

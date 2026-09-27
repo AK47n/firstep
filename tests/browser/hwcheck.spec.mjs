@@ -1373,6 +1373,60 @@ test("生成检测工程时，上一次填的现象一起归零（替掉「生�
     "生成新工程后，现象框该清空（那句话属于上一个工程）");
 });
 
+test("库数据里的说明文字零字面星号（配方 note / 模块简介 / 平台备注；工单 14）", async () => {
+  // 12 号单把"零字面星号"的浏览器半**收窄到产品模板文案**，因为当场抓到一处既有缺陷：
+  // 库数据里的 markdown 粗体标记经 esc() 原样进页面（配方 note 2434 处 / 74 个 manifest
+  // 1844 处）。14 号单在渲染层支持 `**粗**` → <strong>，这一条就是**放开后的那一半**：
+  // 判的是**库数据**渲染出来的说明文字。
+  await freshTab();
+  await page.click('[data-hwcheck-platform="stm32"]');
+
+  // ① 配方说明：选上 adc（stm32/mspm0 两格的 note 里都有成对标记）→ 专精小节的说明行
+  await page.fill("#hwcheck-device-search", "adc");
+  await page.waitForSelector('#hwcheck-device-grid [data-add="adc"]');
+  await page.click('#hwcheck-device-grid [data-add="adc"]');
+  await page.waitForFunction(
+    () => {
+      const box = document.querySelector("#hwcheck-sections");
+      return !!box && box.textContent.includes("本件必须接个已知电压才有意义");
+    }, undefined, { timeout: 60000 });
+  const sections = await page.textContent("#hwcheck-sections");
+  const starsInSections = sections.indexOf("**");
+  assert.equal(starsInSections, -1,
+    "配方说明里的字面星号没转掉：…"
+    + sections.slice(Math.max(0, starsInSections - 60), starsInSections + 60) + "…");
+  assert.ok(sections.includes("本件必须接个已知电压才有意义"),
+    "那句话本身还得在（转换不许把内容吃掉）");
+  assert.ok(await page.evaluate(() => !!document.querySelector(
+    "#hwcheck-sections .hwcheck-hint strong")),
+    "成对标记该渲染成 <strong>（不是被剥掉了）");
+
+  // ② 模块简介 + 平台备注：说明弹窗里的文本来自 manifest（vl53l0x 的 stm32 notes 有 44 处标记）
+  await page.fill("#hwcheck-device-search", "vl53l0x");
+  await page.waitForSelector('#hwcheck-device-grid [data-add="vl53l0x"] .mc-info');
+  await page.click('#hwcheck-device-grid [data-add="vl53l0x"] .mc-info');
+  await page.locator(".module-info-overlay").waitFor({ state: "visible" });
+  const dialog = await page.textContent(".module-info-overlay");
+  const starsInDialog = dialog.indexOf("**");
+  assert.equal(starsInDialog, -1,
+    "说明弹窗里的字面星号没转掉：…"
+    + dialog.slice(Math.max(0, starsInDialog - 60), starsInDialog + 60) + "…");
+  assert.ok(dialog.includes("备注："), "弹窗里该有平台备注那一行（否则这条判据面是空的）");
+  await page.keyboard.press("Escape");
+  await page.locator(".module-info-overlay").waitFor({ state: "detached" });
+
+  // ③ 模块卡简介（正文 + title 属性两条路：正文转标签、属性只剥标记）
+  const card = await page.evaluate(() => {
+    const el = document.querySelector('#hwcheck-device-grid [data-add="vl53l0x"]');
+    return el ? { text: el.querySelector(".mc-desc").textContent, title: el.getAttribute("title") } : null;
+  });
+  assert.ok(card, "找不到 vl53l0x 的卡片");
+  assert.ok(!card.text.includes("**"), "卡片简介正文里有字面星号：" + card.text);
+  assert.ok(!card.text.includes("<strong>"), "卡片简介正文里出现了**转义后的**标签字面量：" + card.text);
+  assert.ok(!card.title.includes("**"), "卡片 title 属性里有字面星号：" + card.title);
+  assert.ok(!card.title.includes("<strong>"), "title 属性里被塞了标签：" + card.title);
+});
+
 test("栏目里**产品自己写的**文案零字面星号（工单 02 的产物在浏览器这一层的那一半）", async () => {
   // 02 号单修的是"提示文案里写 `**加粗**`，到页面上就是两个字面星号"。
   // 前端门禁那一半是 `bold-marker-guard` 判据 ⑨（只判 JS 产品串）；真页面这一半此前没有。

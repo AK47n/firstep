@@ -1,0 +1,16 @@
+# 读数：probe-14-red
+# 命令：python .scratch\hwcheck-hygiene\probe-14-red.py
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T12:39:26+08:00
+# 退出码：0
+前置（① 配方说明那一行退回 esc() 的用例，未注入）：退出码 0 —— 绿
+[PASS] ① 配方说明那一行退回 esc()（src/contest_generator/static/js/fx/hwcheck-plan.js）
+        注入态退出码 1（文件换行 LF），点名了「AssertionError [ERR_ASSERTION]: 配方说明里的字面星号没转掉：…内数据，不是 AI 写的）」；复原 sha256 893ece0519934c80（与前置相同）
+前置（② 说明弹窗的备注行退回 escHtml() 的用例，未注入）：退出码 0 —— 绿
+[PASS] ② 说明弹窗的备注行退回 escHtml()（src/contest_generator/static/js/fx/module.js）
+        注入态退出码 1（文件换行 LF），点名了「AssertionError [ERR_ASSERTION]: 说明弹窗里的字面星号没转掉：…de/vl53l0x_co」；复原 sha256 16805b37150be5cd（与前置相同）
+前置（③ 帮助函数退回「只转义不转换」 的用例，未注入）：退出码 0 —— 绿
+[PASS] ③ 帮助函数退回「只转义不转换」（src/contest_generator/static/js/fx/core.js）
+        注入态退出码 1（文件换行 LF），点名了「AssertionError [ERR_ASSERTION]: 配方说明里的字面星号没转掉：…内数据，不是 AI 写的）」；复原 sha256 2ca116347670f27b（与前置相同）
+
+结论：3/3 段成立（每段都是「注入即红、复原逐字节相同」）

@@ -1,0 +1,3 @@
+  1370  .platforms.stm32.notes
+   474  .platforms.mspm0.notes
+     6  .description

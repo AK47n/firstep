@@ -1,0 +1,14 @@
+# 读数：probe-14-browser-one
+# 命令：node --test --test-concurrency=1 --test-name-pattern=库数据里的说明文字零字面星号 tests/browser/hwcheck.spec.mjs
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T12:39:04+08:00
+# 退出码：0
+✔ 库数据里的说明文字零字面星号（配方 note / 模块简介 / 平台备注；工单 14） (3232.2366ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8565.1128
