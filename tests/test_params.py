@@ -9,6 +9,8 @@
 from __future__ import annotations
 
 import json
+import os
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -28,6 +30,7 @@ from contest_generator.params import (
     read_params,
     run_param_apply,
     run_param_scan,
+    update_params,
     write_params,
 )
 from contest_generator.platforms import PLATFORM_STM32
@@ -221,7 +224,8 @@ def test_params_write_read_roundtrip(tmp_path):
     param_list = _param_list(_item())
     path = write_params(tmp_path, param_list)
     assert path.name == PARAMS_FILENAME
-    assert not (tmp_path / (PARAMS_FILENAME + ".tmp")).exists()  # 原子写不残留
+    # 原子写同构：落盘后目录里除参数表外一个文件都没有（判据见下面 iterdir 那几条）
+    assert [p.name for p in tmp_path.iterdir()] == [PARAMS_FILENAME]
     loaded = read_params(tmp_path)
     assert loaded.params[0].name == "THRESHOLD"
     assert loaded.params[0].anchor == "#define THRESHOLD 800"
@@ -534,6 +538,78 @@ def test_params_apply_sse_flow(tmp_path, monkeypatch):
     assert resp.json()["params"][0]["valid"] is True
 
 
+def test_params_apply_sse_flow_serialises_with_another_refresh(tmp_path, monkeypatch):
+    """apply 的落表与另一笔刷新并发：**两笔都留在盘上**（工单 04）。
+
+    判据取**最终落盘**（不取 SSE 事件）。确定性做法（照 `tests/test_hwcheck.py` 的端点级先例）：
+    把 apply 那笔的刷新卡在它自己的合并里（此刻它已进临界区），另一笔刷新（同一个
+    `update_params`——另一个 apply、或扫描之后的那次重放，都是这一族写者）同时发出去。
+    · 有锁：另一笔在锁上等，apply 写完它才**重读** → 两笔都在；
+    · 撤锁：另一笔拿旧表整份写回，apply 随后盖掉它 → 必丢一笔。
+    `other_done.wait(timeout=1.0)` 只为在**无锁**那一格把顺序钉死（有锁那一格必然等不到）。
+    """
+    from contest_generator import params as params_module
+
+    _green_toolchain(monkeypatch, tmp_path)
+    client, _, _ = _params_client(tmp_path)
+    output_dir = _generate_project(client, tmp_path)
+    write_params(Path(output_dir), _two_param_table())
+    disk_main_c = MAIN_WITH_PARAM.replace("800", "900", 1).replace("120", "150", 1)
+
+    inside = threading.Event()
+    release = threading.Event()
+    real_refresh = params_module._refresh_param_after_apply
+    calls = {"n": 0}
+
+    def blocking_refresh(latest, name, new_value, main_c):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            inside.set()
+            assert release.wait(timeout=30), "等不到放行——判据自己失败，别挂住整场"
+        return real_refresh(latest, name, new_value, main_c)
+
+    monkeypatch.setattr(params_module, "_refresh_param_after_apply", blocking_refresh)
+    results: dict[str, Any] = {}
+
+    def apply_threshold() -> None:
+        results["apply"] = client.post(
+            "/api/tasks/params/apply",
+            json={"output_dir": output_dir, "name": "THRESHOLD", "value": "900"},
+        )
+
+    applier = threading.Thread(target=apply_threshold, daemon=True)
+    applier.start()
+    assert inside.wait(timeout=30), "apply 请求没进刷新（临界区）"
+
+    other_started = threading.Event()
+    other_done = threading.Event()
+
+    def other_refresh() -> None:
+        other_started.set()
+        params_module.update_params(
+            Path(output_dir),
+            lambda latest: real_refresh(latest, "SPEED", "150", disk_main_c),
+        )
+        other_done.set()
+
+    other = threading.Thread(target=other_refresh, daemon=True)
+    other.start()
+    assert other_started.wait(timeout=30), "另一笔刷新没发出去"
+    other_done.wait(timeout=1.0)  # 无锁那一格：这里会先写完；有锁那一格：等不到
+    release.set()
+    applier.join(timeout=30)
+    other.join(timeout=30)
+
+    assert results["apply"].status_code == 200, results["apply"].text
+    events = _sse_events(results["apply"])
+    assert [t for t, _ in events][-1] == "done"
+    on_disk = read_params(Path(output_dir))
+    assert {p.name: p.old_value for p in on_disk.params} == {
+        "THRESHOLD": "900",
+        "SPEED": "150",
+    }, "有一笔刷新被盖掉了"
+
+
 def test_params_read_endpoint(tmp_path):
     client, _, _ = _params_client(tmp_path)
     output_dir = _generate_project(client, tmp_path)
@@ -611,3 +687,250 @@ def test_params_with_valid():
 
     # 空表 → 空列表
     assert params_with_valid(empty_params(), "int main(void) {}") == []
+
+
+# ---------------------------------------------------------------------------
+# 记录写的正确性形状：唯一临时名 + 原子替换 + 按记录路径的短临界区（工单 04）
+#
+# 收走前的形状（本单要挡的）：固定临时名 `…json.tmp` + 无锁的"读-改-写"。
+# 疼法：`_persist_applied_param` 先读一份旧表再整份写回——两个 apply 交叠、
+# 或扫描（整份盲写）刚写进一张新表时，后写的那份会把先落盘的那笔盖掉。
+# ---------------------------------------------------------------------------
+
+
+def _run_in_thread(errors: list[BaseException], work) -> threading.Thread:
+    """起一个守护线程跑 `work`，异常带回主线程断言。
+
+    形状照 `tests/test_hwcheck_triage.py:625-645` 那段并发先例（本批三份同形：
+    `test_drafts.py` / `test_idea_chat.py` / 这里——收成一处这件事记在工单 06）。
+    """
+
+    def body() -> None:
+        try:
+            work()
+        except BaseException as exc:  # noqa: BLE001 —— 线程里的异常要带回主线程断言
+            errors.append(exc)
+
+    thread = threading.Thread(target=body, daemon=True)
+    thread.start()
+    return thread
+
+
+def _two_param_table() -> ParamList:
+    """THRESHOLD 与 SPEED 两条（两段锚都在 MAIN_WITH_PARAM 里）。"""
+    return _param_list(
+        _item(),
+        _item(name="SPEED", label="车速", old_value="120", anchor="#define SPEED 120"),
+    )
+
+
+class _SentinelReplaceError(OSError):
+    """注入用的哨兵异常：断言"抛出来的就是它"，而不是"抛了某个 OSError"。"""
+
+
+def _residue(directory: Path) -> list[str]:
+    """目录里除参数表外的东西（`iterdir` 而不是 `glob("*.tmp")`——临时名带 pid + 计数后
+    那个 glob 匹配不到新名字 = 断言空转；形状照 `tests/test_atomic_io.py:29`）。"""
+    return [p.name for p in directory.iterdir() if p.name != PARAMS_FILENAME]
+
+
+def test_params_write_leaves_no_tmp_behind(tmp_path):
+    """原子写：落盘后除参数表外**一个文件都没有**（成功路径也不许留残渣）。"""
+    write_params(tmp_path, _param_list(_item()))
+    assert _residue(tmp_path) == [], f"落盘后留下了临时文件：{_residue(tmp_path)}"
+
+
+def test_params_write_failure_leaves_no_residue_and_keeps_the_original_error(
+    tmp_path, monkeypatch
+):
+    """坏写：临时文件必须被清掉，且**原异常照抛**（不许被清理动作掩盖成另一个异常）。
+
+    注入点打在共享原语看到的 `os` 上（写实现归 `atomic_io`）：`replace` 抛哨兵异常，
+    此刻临时文件**真的在盘上**（上一步刚写完）——不这样造，`finally` 里没东西可清 = 判据空转。
+    """
+    import contest_generator.atomic_io as atomic_io
+
+    boom = _SentinelReplaceError("替换失败")
+
+    def failing_replace(src, dst):
+        raise boom
+
+    monkeypatch.setattr(
+        atomic_io,
+        "os",
+        SimpleNamespace(path=os.path, getpid=os.getpid, replace=failing_replace),
+    )
+    with pytest.raises(_SentinelReplaceError) as caught:
+        write_params(tmp_path, _param_list(_item()))
+    assert caught.value is boom, "抛出来的不是原异常（被清理动作掩盖了）"
+    assert _residue(tmp_path) == [], "写失败后留下了临时文件"
+
+
+def test_concurrent_params_writes_share_no_tmp_file(tmp_path, monkeypatch):
+    """两个写者并发：**不许抢同一个临时名**——收走前抢了，先来的那个 `replace` 会落空。
+
+    确定性做法（照 `tests/test_hwcheck_triage.py`）：把**第一个** `replace` 卡住
+    （此刻它的临时文件还在盘上），让第二个写者从头走完一遍，再放行第一个。
+    两次**真实** `replace` 刻意不重叠（第二个先落盘再放行第一个）：Windows 上并发替换
+    同一目标会以 `WinError 5` 失败，那是"谁先落盘"的另一回事。
+    """
+    import contest_generator.atomic_io as atomic_io
+
+    first_inside = threading.Event()
+    release = threading.Event()
+    calls = {"n": 0}
+    real_replace = os.replace
+
+    def slow_replace(src, dst):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            first_inside.set()
+            assert release.wait(timeout=30), "等不到放行——判据自己失败，别挂住整场"
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(
+        atomic_io,
+        "os",
+        SimpleNamespace(path=os.path, getpid=os.getpid, replace=slow_replace),
+    )
+    errors: list[BaseException] = []
+    tables = {
+        "先到的": _param_list(_item()),
+        "后到的": _param_list(_item(name="SPEED", old_value="120", anchor="#define SPEED 120")),
+    }
+
+    first = _run_in_thread(errors, lambda: write_params(tmp_path, tables["先到的"]))
+    assert first_inside.wait(timeout=30), "第一个写者没走到替换那一步"
+    second = _run_in_thread(errors, lambda: write_params(tmp_path, tables["后到的"]))
+    second.join(timeout=30)
+    release.set()
+    first.join(timeout=30)
+
+    assert errors == [], f"并发写报错（临时名互抢）：{errors!r}"
+    assert _residue(tmp_path) == [], f"并发写留下了残留：{_residue(tmp_path)}"
+    assert [p.name for p in read_params(tmp_path).params] in (
+        ["THRESHOLD"],
+        ["SPEED"],
+    )
+
+
+def test_update_params_does_not_lose_a_concurrent_refresh(tmp_path):
+    """两个 apply 交叠：A 卡在自己的刷新里、B 刷新另一条 → **两条都刷新到位**。
+
+    判据取最终盘上内容（不取返回值）。
+    · 撤掉临界区 / 把重读挪到锁外：后一笔拿旧快照整份写回，前一笔的刷新被盖掉；
+    · 收走后：B 在锁上等，A 写完它才**重读** → 两条都是新值。
+    """
+    from contest_generator.params import _refresh_param_after_apply
+
+    write_params(tmp_path, _two_param_table())
+    disk_main_c = MAIN_WITH_PARAM.replace("800", "900", 1).replace("120", "150", 1)
+    entered = threading.Event()
+    release = threading.Event()
+    errors: list[BaseException] = []
+
+    def slow_refresh(latest):
+        entered.set()
+        assert release.wait(timeout=30), "等不到放行——判据自己失败，别挂住整场"
+        return _refresh_param_after_apply(latest, "THRESHOLD", "900", disk_main_c)
+
+    first = _run_in_thread(errors, lambda: update_params(tmp_path, slow_refresh))
+    assert entered.wait(timeout=30), "第一笔刷新没进临界区"
+    second_started = threading.Event()
+    second_done = threading.Event()
+
+    def other_refresh() -> None:
+        second_started.set()
+        update_params(
+            tmp_path,
+            lambda latest: _refresh_param_after_apply(latest, "SPEED", "150", disk_main_c),
+        )
+        second_done.set()
+
+    second = _run_in_thread(errors, other_refresh)
+    assert second_started.wait(timeout=30), "第二笔刷新没发出去"
+    second_done.wait(timeout=1.0)  # 无锁那一格：这里会先写完；有锁那一格：等不到
+    release.set()
+    first.join(timeout=30)
+    second.join(timeout=30)
+
+    assert errors == [], f"并发写报错：{errors!r}"
+    on_disk = read_params(tmp_path)
+    assert [p.old_value for p in on_disk.params] == ["900", "150"], "有一笔刷新被盖掉了"
+
+
+def test_persist_applied_param_refreshes_on_a_table_that_landed_after_the_read(
+    tmp_path, monkeypatch
+):
+    """刷新路径读完旧表之后、落表之前，扫描刚写进一张**新表** → 新表不许被盖回旧快照。
+
+    形状 = 真实窗口：`_persist_applied_param` 先读一份（判"有没有表 / 表坏没坏"），
+    紧接着扫描（整份盲写，不读旧表也不走锁）写进一张新表；本次刷新必须在**最新盘**上重放。
+    · 收走前（拿开头那份快照算刷新、整份写回）：新表连同它新增的 SPEED 一起被盖掉；
+    · 收走后（落表前重读 + 在最新盘上重放）：SPEED 在，THRESHOLD 也刷新到位。
+    """
+    from contest_generator import params as params_module
+
+    (tmp_path / "main.c").write_text(
+        MAIN_WITH_PARAM.replace("800", "900", 1), encoding="utf-8"
+    )
+    write_params(tmp_path, _param_list(_item()))  # 旧表：只有 THRESHOLD
+    real_load = params_module.load_params_file
+    calls = {"n": 0}
+
+    def load_then_scan(dir_path):
+        calls["n"] += 1
+        loaded = real_load(dir_path)  # 刷新路径这一次读到的是旧表
+        if calls["n"] == 1:
+            # 扫描紧接着整份写进一张新表（多了 SPEED 一条）
+            write_params(
+                dir_path,
+                _param_list(
+                    _item(),
+                    _item(
+                        name="SPEED",
+                        label="车速",
+                        old_value="150",
+                        anchor="#define SPEED 150",
+                    ),
+                ),
+            )
+        return loaded
+
+    monkeypatch.setattr(params_module, "load_params_file", load_then_scan)
+    params_module._persist_applied_param(tmp_path, _item(), "900")
+
+    on_disk = read_params(tmp_path)
+    assert [p.name for p in on_disk.params] == [
+        "THRESHOLD",
+        "SPEED",
+    ], "扫描刚写的新表被盖回旧快照了"
+    assert on_disk.params[0].old_value == "900", "本次刷新没落到盘上"
+
+
+def test_persist_applied_param_does_not_create_a_table_that_vanished(
+    tmp_path, monkeypatch
+):
+    """表在两次读之间没了（用户手删 / 别处清理）→ **不许凭空造一张空表落盘**。
+
+    "无文件 = 未识别过"是既有契约（空表落盘会让「尚未识别」与「已识别无参数」两态
+    没法区分）。判据取**目录里最终有没有那张表**。
+    """
+    from contest_generator import params as params_module
+
+    (tmp_path / "main.c").write_text(MAIN_WITH_PARAM, encoding="utf-8")
+    write_params(tmp_path, _param_list(_item()))
+    real_load = params_module.load_params_file
+    calls = {"n": 0}
+
+    def load_then_delete(dir_path):
+        calls["n"] += 1
+        loaded = real_load(dir_path)
+        if calls["n"] == 1:
+            (dir_path / PARAMS_FILENAME).unlink()  # 窗口里表没了
+        return loaded
+
+    monkeypatch.setattr(params_module, "load_params_file", load_then_delete)
+    params_module._persist_applied_param(tmp_path, _item(), "900")
+
+    assert not (tmp_path / PARAMS_FILENAME).exists(), "凭空造了一张空表"

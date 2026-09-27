@@ -1,0 +1,44 @@
+# 读数：probe-04-red
+# 命令：python .scratch/record-write-hardening/probe-04-red.py
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T17:42:49+08:00
+# 退出码：0
+# 被撤的源码：src/contest_generator/atomic_io.py sha256=d80ba0f58a333279baacfd933b2aeb56224917138b23dde8f57357f4f6e31189 行尾=CRLF
+# 被撤的源码：src/contest_generator/params.py sha256=f4cf2c448d2084af28a30d1cfcaf80ce14fb2ad915a6ecbb9d6cf42115ff7dce 行尾=LF
+# 判据文件：tests/test_params.py sha256=abe652093d73fd17efd6aa2aeba4390bf9c355b468d216da57ad09c101e89f40
+
+== A 撤掉临界区 ==
+   声明必须红：['tests/test_params.py::test_params_apply_sse_flow_serialises_with_another_refresh', 'tests/test_params.py::test_update_params_does_not_lose_a_concurrent_refresh']
+   实得 FAILED：['tests/test_params.py::test_params_apply_sse_flow_serialises_with_another_refresh', 'tests/test_params.py::test_update_params_does_not_lose_a_concurrent_refresh']
+   pytest 尾行：2 failed, 32 passed, 1 warning in 1.06s
+   复原 sha256 逐字节相同：True
+
+== B 重读挪到锁外 ==
+   声明必须红：['tests/test_params.py::test_params_apply_sse_flow_serialises_with_another_refresh', 'tests/test_params.py::test_update_params_does_not_lose_a_concurrent_refresh']
+   实得 FAILED：['tests/test_params.py::test_params_apply_sse_flow_serialises_with_another_refresh', 'tests/test_params.py::test_update_params_does_not_lose_a_concurrent_refresh']
+   pytest 尾行：2 failed, 32 passed, 1 warning in 3.23s
+   复原 sha256 逐字节相同：True
+
+== C 刷新退回旧形状（拿开头那份快照整份写回） ==
+   声明必须红：['tests/test_params.py::test_params_apply_sse_flow_serialises_with_another_refresh', 'tests/test_params.py::test_persist_applied_param_refreshes_on_a_table_that_landed_after_the_read']
+   实得 FAILED：['tests/test_params.py::test_params_apply_sse_flow_serialises_with_another_refresh', 'tests/test_params.py::test_persist_applied_param_refreshes_on_a_table_that_landed_after_the_read']
+   pytest 尾行：2 failed, 32 passed, 1 warning in 2.12s
+   复原 sha256 逐字节相同：True
+
+== D 撤掉共享原语（唯一临时名 + 清残渣） ==
+   声明必须红：['tests/test_params.py::test_concurrent_params_writes_share_no_tmp_file', 'tests/test_params.py::test_params_write_failure_leaves_no_residue_and_keeps_the_original_error']
+   实得 FAILED：['tests/test_params.py::test_concurrent_params_writes_share_no_tmp_file', 'tests/test_params.py::test_params_write_failure_leaves_no_residue_and_keeps_the_original_error']
+   pytest 尾行：2 failed, 32 passed, 1 warning in 3.12s
+   复原 sha256 逐字节相同：True
+
+== E 撤掉「无变化不写」短路 ==
+   声明必须红：['tests/test_params.py::test_persist_applied_param_does_not_create_a_table_that_vanished']
+   实得 FAILED：['tests/test_params.py::test_persist_applied_param_does_not_create_a_table_that_vanished']
+   pytest 尾行：1 failed, 33 passed, 1 warning in 3.13s
+   复原 sha256 逐字节相同：True
+
+== 复原后必须回绿 ==
+   实得 FAILED：（无）
+   pytest 尾行：34 passed, 1 warning in 3.13s
+
+结论：PASS（五段反证全成立）

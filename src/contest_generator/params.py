@@ -20,8 +20,9 @@ import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Sequence
 
+from .atomic_io import atomic_write_text, path_lock
 from .events import EVENT_PARAM_APPLYING, EVENT_PARAM_SCANNING, ProgressEvent
 from .task_progress import TaskError
 
@@ -281,15 +282,43 @@ def params_with_valid(param_list: ParamList, main_c: str) -> list[dict[str, Any]
 
 
 def write_params(output_dir: Path, param_list: ParamList) -> Path:
-    """原子写参数表（.tmp → replace，与 idea_chat/drafts 同构）；返回文件路径。"""
+    """原子写参数表（**唯一临时名** → `os.replace` → `finally` 清残渣）。
+
+    写实现归共享原语 `atomic_io.atomic_write_text`（工单 record-write-hardening/04）：
+    收走前是固定临时名 `…json.tmp` + 无 `finally` 的手搓版。字节格式**逐字不动**
+    （`ensure_ascii=False`、`indent=2`、尾换行）。
+    """
     path = params_path(output_dir)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(
-        json.dumps(param_list.to_dict(), ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
+    atomic_write_text(
+        path, json.dumps(param_list.to_dict(), ensure_ascii=False, indent=2) + "\n"
     )
-    tmp.replace(path)
     return path
+
+
+def update_params(
+    output_dir: Path, merge: Callable[[ParamList], ParamList]
+) -> ParamList:
+    """读-改-写整段进**短临界区**：重读 → 合并 → 写；返回落盘后的参数表。
+
+    `merge` 是纯函数（本处只有 `_refresh_param_after_apply`）——临界区里那份是**重读**的：
+    "应用后刷新"因此在**最新盘**上重放，扫描刚写进来的新表、另一个 apply 刚落的刷新
+    都不会被我们手上那份旧快照盖回去（工单 record-write-hardening/04）。
+
+    **`merge` 返回原对象 = 这次没什么可改（表已不在 / 锚已失效 / 值没变）→ 不落盘**：
+    无表就不该被我们凭空造出一张空表（"无文件 = 未识别过"这条契约照旧，
+    `_refresh_param_after_apply` 无事可做时正是返回原对象）。
+
+    扫描那一路（`run_param_scan`）是**整份盲写**（不读旧表、也就无合并可言），照旧直接
+    `write_params`、**不取锁**——它的盲写仍可能落在本函数的"锁内读完 → 写之前"那几微秒里
+    被盖掉；这条残留与"要不要给它也套同一把锁"记在工单 04 的结论段，留给工单 06 定夺。
+    """
+    path = params_path(output_dir)
+    with path_lock(path):
+        latest = read_params(output_dir)
+        param_list = merge(latest)
+        if param_list is not latest:
+            write_params(output_dir, param_list)
+        return param_list
 
 
 def find_param(param_list: ParamList, name: str) -> ParamItem | None:
@@ -354,7 +383,7 @@ def _refresh_param_after_apply(
     main.c** 才更新该项（old_value=new_value、anchor=new_anchor）——编译失败
     的 AI 修复轮可能改写了该值，此时读盘重验失败 → 保持旧表（前端标失效 =
     诚实提示重新识别）；其余项原样。找不到 name / 无变化 → 返回原对象引用，
-    调用方无需写盘（写盘前判 is 或逐字段比较由调用方决定）。
+    调用方（`update_params`）按 `is` 判要不要落盘。
     """
     changed = False
     items: list[ParamItem] = []
@@ -483,10 +512,19 @@ def _persist_applied_param(
     except TaskError:
         return  # 表损坏：不覆盖坏文件（保持原样，前端标失效/提示重新识别）
     if param_list is None:
-        return
-    refreshed = _refresh_param_after_apply(param_list, param.name, new_value, disk_main_c)
-    if refreshed is not param_list:
-        try:
-            write_params(output_dir, refreshed)
-        except OSError:
-            pass  # 写盘失败不阻断主流程
+        return  # 无表 = 未识别过：不凭空造一张空表
+    try:
+        # 落表前在**最新盘**上重放本次刷新（工单 04）：上面那次读只用来判"有没有表 /
+        # 表坏没坏"——它不是落表依据，所以窗口里别人写的新表不会被这份旧快照盖掉。
+        # 表在这两次读之间被删掉 → 合并无事可做（返回原对象）→ `update_params` 不落盘，
+        # 不会凭空造出一张空表。
+        update_params(
+            output_dir,
+            lambda latest: _refresh_param_after_apply(
+                latest, param.name, new_value, disk_main_c
+            ),
+        )
+    except OSError:
+        pass  # 写盘失败不阻断主流程
+    except TaskError:
+        pass  # 表在两次读之间变坏：不覆盖坏文件（与上面那次早退同一口径）
