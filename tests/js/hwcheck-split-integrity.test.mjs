@@ -1,31 +1,30 @@
-// hwcheck-split-integrity.test.mjs — **搬迁完整性自检**（工单 hwcheck-hygiene/09）。
+// hwcheck-split-integrity.test.mjs — **搬迁完整性自检**（工单 hwcheck-hygiene/09-10）。
 //
 // ## 这条判据要挡的是什么
 //
 // 09 号单把 1380 行的 `fx/hwcheck.js`（78 个导出 ＋ 4 个未导出的私有件 ＋ 1 条 window 桥）
-// 按职责整段搬进六件。这类改动的失败方式不是"报错"，
-// 而是**静默少东西**：漏搬一个导出、搬的时候手抖改了一个字、某件少 import 了一个兄弟函数、
-// 桥条目落了一件没发。四种都不会让整页崩（前三种在真浏览器里照样跑，因为 window 桥兜住了），
-// 所以"门禁全绿"证明不了搬全了——它只能证明**没搬坏**。
+// 按职责整段搬进六件；10 号单把消费者改指六件、删掉那个过渡态 barrel。这类改动的失败方式
+// 不是"报错"，而是**静默少东西**：漏搬一个导出、搬的时候手抖改了一个字、某件少 import 了
+// 一个兄弟函数、桥条目落了一件没发。四种都不会让整页崩（前三种在真浏览器里照样跑，因为
+// window 桥兜住了），所以"门禁全绿"证明不了搬全了——它只能证明**没搬坏**。
 //
 // 于是这里按**搬前快照**逐名逐字对账。快照是搬那一刻的逐字节副本
 // （`.scratch/hwcheck-hygiene/fx-hwcheck-before-split.js`，由 `apply-09-split.py` 在
-// 第一次 `--write` 时落盘、之后不再覆盖）。
+// 第一次 `--write` 时落盘、之后不再覆盖；与当时 HEAD 那一份逐字节相同）。
 //
 // ## 为什么另一侧不是"旧文件"
 //
-// 10 号单会把旧文件与 barrel 一起删掉，而这条自检**必须在那之后仍然可跑**
-// （09 的验收标准明写）。所以两侧都是磁盘上的**文件**、与旧路径存不存在无关：
-//   搬前 = 快照；搬后 = 六件。
+// 10 号单已经把旧文件与 barrel 一起删了，而这条自检**必须在那之后仍然可跑**（09 的验收标准
+// 明写）。所以两侧都是磁盘上的**文件**、与旧路径存不存在无关：搬前 = 快照；搬后 = 六件。
 //
 // ## 四条断言
 //
 //   ① **导出名集合相等**：快照的导出清单 ＝ 六件并集（逐名，多一个少一个都报）；
-//   ② **声明单元逐字**：每个导出的「紧邻上方注释块 ＋ 声明本体」规范化空白后逐字相同
-//      ——搬迁允许的变化只有 import/export 语句与文件头说明，函数体与它自己的注释
-//      一个字都不许动；
-//   ③ **window 桥并集相等**，且 **barrel 自己一个都不发布**（桥按声明的归属拆到六件里，
-//      页面内联脚本与浏览器探针仍取到同样的全局名）；
+//   ② **声明单元逐字**：**每个顶层声明**（导出 ＋ 4 个未导出的私有件）的「紧邻上方注释块 ＋
+//      声明本体」规范化空白后逐字相同——搬迁允许的变化只有 import/export 语句与文件头说明，
+//      函数体与它自己的注释一个字都不许动；
+//   ③ **window 桥并集相等**（桥按声明的归属拆到六件里，页面内联脚本与浏览器探针仍取到同样的
+//      全局名）；另：**过渡态 barrel 不许回来**（`fx/hwcheck.js` 必须已不存在）；
 //   ④ **跨件调用必须有 import**：某件正文里调用了**兄弟件声明的名字**，它就必须在本件
 //      import 或声明过。判据本体（`boot-contract.mjs` 判据 ⑧）只覆盖"挂在 window 桥上的
 //      名字"，而桥只发 77 个名字、导出有 78 个（`hwcheckPinFixHTML` /
@@ -35,12 +34,12 @@
 //
 // ## 抽取器不静默失效（"那种绿比红更坏"）
 //
-// 断言为空的判据必须能报：文件头几条自检往真源码里注入四种破坏（摘一个导出 / 改一个字 /
-// 摘一条桥 / 摘一条 import），每条都必须被**对号**报出来；另有一条下限体检
-// （快照的导出数、六件的声明数），目录搬走或抽取器失效时当场红。
+// 断言为空的判据必须能报：几条自检往真源码里注入五种破坏（摘一个导出 / 改函数体一个字 /
+// 改**私有件**一个字 / 摘一条桥 / 摘一条 import），每条都必须被**对号**报出来；另有一条
+// 下限体检（快照的导出数与声明单元数、六件的字节数），目录搬走或抽取器失效时当场红。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   maskCommentsAndStrings, maskNonCode, parseModuleExports, windowBridgeNames, callPositionNames,
@@ -49,13 +48,14 @@ import {
 const FX_DIR = fileURLToPath(new URL("../../src/contest_generator/static/js/fx/", import.meta.url));
 const SNAPSHOT = fileURLToPath(
   new URL("../../.scratch/hwcheck-hygiene/fx-hwcheck-before-split.js", import.meta.url));
+/** 过渡态 barrel 的路径（09 留、10 删）：它出现在磁盘上就是"过渡态没收拾干净"。 */
+const BARREL = FX_DIR + "hwcheck.js";
 
-/** 六件（**不含** barrel）：搬迁的产物面。顺序 = 职责顺序（快照里的声明顺序）。 */
+/** 六件：搬迁的产物面。顺序 = 职责顺序（快照里的声明顺序）。 */
 const MODULES = [
   "hwcheck-state.js", "hwcheck-project.js", "hwcheck-wiring.js",
   "hwcheck-plan.js", "hwcheck-triage.js", "hwcheck-handoff.js",
 ];
-const BARREL = "hwcheck.js";
 const BEFORE = "（搬前快照）";
 
 // ---------------------------------------------------------------------------
@@ -170,17 +170,13 @@ function auditProblems(files) {
     }
   }
 
-  // ③ window 桥：并集相等，且 barrel 一个都不发布
+  // ③ window 桥：并集相等（且过渡态 barrel 不许回来——见下面那条用例）
   const bridgeBefore = [...windowBridgeNames(before)].sort();
   const bridgeAfter = [...new Set(after.flatMap((m) => [...windowBridgeNames(m.text)]))].sort();
-  const bridgeBarrel = [...windowBridgeNames(files.get(BARREL))];
   const bridgeLost = bridgeBefore.filter((n) => !bridgeAfter.includes(n));
   const bridgeAdded = bridgeAfter.filter((n) => !bridgeBefore.includes(n));
   if (bridgeLost.length) problems.push({ code: "③", detail: `桥丢了这些名字：${bridgeLost.join(", ")}` });
   if (bridgeAdded.length) problems.push({ code: "③", detail: `桥多出这些名字：${bridgeAdded.join(", ")}` });
-  if (bridgeBarrel.length) {
-    problems.push({ code: "③", detail: `barrel 自己发布了桥条目（应归六件）：${bridgeBarrel.join(", ")}` });
-  }
 
   // ④ 跨件调用必须有 import / 本件声明
   const owner = new Map();                               // 声明名 → 它所在的件
@@ -221,7 +217,7 @@ function maskedImportLocals(text) {
 function readAll() {
   const files = new Map();
   files.set(BEFORE, readFileSync(SNAPSHOT, "utf8"));
-  for (const name of [BARREL, ...MODULES]) {
+  for (const name of MODULES) {
     files.set(name, readFileSync(FX_DIR + name, "utf8"));
   }
   return files;
@@ -244,11 +240,13 @@ test("取数面体检：快照与六件都读到了，且判据面够大（那�
   assert.ok(units.size > names.length,
     `快照的声明单元只抽到 ${units.size} 个、导出 ${names.length} 个 —— `
     + "私有件（未导出的顶层声明）没被判据面覆盖，② 会漏一整类");
-  for (const key of [BARREL, ...MODULES]) {
+  for (const key of MODULES) {
     assert.ok(FILES.get(key).length > 200, `${key} 读出来只有 ${FILES.get(key).length} 字节`);
   }
   const bridge = [...windowBridgeNames(FILES.get(BEFORE))];
   assert.ok(bridge.length >= 60, `快照的桥只抽到 ${bridge.length} 个名字（下限 60）`);
+  assert.ok(!existsSync(BARREL),
+    "过渡态 barrel（fx/hwcheck.js）还在 —— 10 号单已经把消费者改指六件，它不该留在这棵树上");
 });
 
 test("搬迁完整：① 导出名集合 ② 声明单元逐字 ③ 桥并集 ④ 跨件 import —— 零问题", () => {
@@ -286,7 +284,7 @@ test("② 正向对照：改**私有件**一个字必须报出（只判导出的
   assert.equal(hits.length, 1, `改了私有件没被报出：${JSON.stringify(REPORT(patched))}`);
 });
 
-test("③ 正向对照：摘掉一条桥必须报出；barrel 自己发布桥也要报出", () => {
+test("③ 正向对照：摘掉一条桥必须报出", () => {
   const drop = withPatch(FILES, "hwcheck-plan.js",
     (t) => t.replace("hwcheckConsoleState, hwcheckConsoleHTML, hwcheckConsoleNoteHTML,",
       "hwcheckConsoleState, hwcheckConsoleNoteHTML,"));
@@ -294,10 +292,6 @@ test("③ 正向对照：摘掉一条桥必须报出；barrel 自己发布桥也
     "注入没落上（锚点变了？）—— 这条自检会静默空转");
   assert.ok(REPORT(drop).some((line) => line.startsWith("③") && line.includes("hwcheckConsoleHTML")),
     `摘掉桥条目没被报出：${JSON.stringify(REPORT(drop))}`);
-  const barrelBridge = withPatch(FILES, BARREL,
-    (t) => t + '\nif (typeof window !== "undefined") { Object.assign(window, { hwcheckHintHTML }); }\n');
-  assert.ok(REPORT(barrelBridge).some((line) => line.startsWith("③") && line.includes("barrel")),
-    `barrel 发布桥条目没被报出：${JSON.stringify(REPORT(barrelBridge))}`);
 });
 
 test("④ 正向对照：摘掉一条跨件 import 必须报出（09 实测抓到过的那个形态）", () => {
@@ -308,4 +302,37 @@ test("④ 正向对照：摘掉一条跨件 import 必须报出（09 实测抓�
   });
   const hits = REPORT(patched).filter((line) => line.startsWith("④") && line.includes("hwcheckDeviceSlugs"));
   assert.equal(hits.length, 1, `摘掉跨件 import 没被报出：${JSON.stringify(REPORT(patched))}`);
+});
+
+test("过渡态不留痕：barrel 已删，且没有任何 import 边再指向旧路径", () => {
+  // 10 号单的验收线。**口径**（与票面的 `grep 零命中` 差一点，理由在票尾）：
+  // 判的是**有没有边指向它**——`from "…/fx/hwcheck.js"` 这类 import 一旦留在树上，
+  // 浏览器解析时整页 SyntaxError；而**墓碑注释**（"由 fx/hwcheck.js 搬来"）是本仓既有体裁
+  //（`boot.js` 里满是这样的话，守卫也按"注释不是消费者"处理），留着才解释得清这批文件的来历。
+  assert.ok(!existsSync(BARREL), "fx/hwcheck.js 还在（它是 09 的过渡态 barrel）");
+  const roots = ["../../src/contest_generator/", "../../tests/"]
+    .map((rel) => fileURLToPath(new URL(rel, import.meta.url)));
+  const hits = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = dir + entry.name;
+      if (entry.isDirectory()) { walk(full + "/"); continue; }
+      if (!/\.(js|mjs|py|html)$/.test(entry.name)) continue;
+      // 本文件自己豁免：它的判据正则是**字面写着那个路径**的（不自指就没法判"别人有没有用"）。
+      if (entry.name === "hwcheck-split-integrity.test.mjs") continue;
+      const text = readFileSync(full, "utf8");
+      // 边：`from "…/fx/hwcheck.js"` / 裸装载 `import "…/fx/hwcheck.js"` / `…src="…/fx/hwcheck.js"`
+      for (const re of [/from\s+["'][^"']*fx\/hwcheck\.js["']/g,
+        /import\s+["'][^"']*fx\/hwcheck\.js["']/g,
+        /(?:src|href)\s*=\s*["'][^"']*fx\/hwcheck\.js["']/g]) {
+        for (const m of text.matchAll(re)) {
+          hits.push(`${full.slice(full.indexOf("firstep") + 8)}: ${m[0].slice(0, 60)}`);
+        }
+      }
+    }
+  };
+  for (const root of roots) walk(root);
+  assert.deepEqual(hits, [],
+    "还有 import 边指向已删除的旧路径 `fx/hwcheck.js`（那会让整页脚本解析失败）：\n  "
+    + hits.join("\n  "));
 });

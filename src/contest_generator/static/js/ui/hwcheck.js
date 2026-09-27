@@ -1,6 +1,7 @@
 // ui/hwcheck.js — 硬件检测栏目的 DOM 胶水（工单 module-hwcheck/01 + 02）。
 //
-// 单向依赖：ui → fx / app（纯件在 fx/hwcheck.js，本文件只读状态、写 DOM、
+// 单向依赖：ui → fx / app（纯件在 fx/hwcheck-{state,project,wiring,plan,triage,handoff}.js，
+// 本文件只读状态、写 DOM、
 // 发请求）。栏目独立于赛题工作流：不读题面、不写最近工程记录。
 //
 // **与生成页的关系只有一条，而且是单向的**（工单 hwcheck-acceptance/04）：检测页
@@ -31,33 +32,43 @@ import {
 import {
   moduleGridHTML, moduleGridCountText,
 } from "/js/fx/module.js";
+// 纯件按职责分六件（工单 hwcheck-hygiene/09–10 拆的）：状态 / 工程 / 器件与接线 /
+// 计划 / 排障 / 衔接——每一件的职责与依赖方向见它自己的文件头。
 import {
   hwcheckPlatformState, hwcheckSelectPlatform, hwcheckPickState,
   hwcheckRequestPayload, hwcheckCanPreview, hwcheckPlatformCardsHTML,
-  hwcheckGenerateErrorHTML, hwcheckErrorHTML, hwcheckEmptyHTML, hwcheckPanelHTML,
-  hwcheckCodeTarget, hwcheckPreviewState, hwcheckPlatformLabel,
+  hwcheckGenerateErrorHTML, hwcheckErrorHTML, hwcheckEmptyHTML,
+  hwcheckPanelHTML, hwcheckCodeTarget, hwcheckPreviewState,
+  hwcheckPlatformLabel, hwcheckDroppedNoteHTML,
+} from "/js/fx/hwcheck-state.js";
+import {
   hwcheckGeneratePayload, hwcheckChecklistKey, hwcheckCheckedIds,
   hwcheckChecklistToggle, hwcheckChecklistHTML, hwcheckChecklistProgressHTML,
   hwcheckProjectState, hwcheckProjectPanelHTML, hwcheckProjectEmptyHTML,
   hwcheckRecentHTML, hwcheckRecentEmptyHTML, hwcheckChannelNoteHTML,
-  hwcheckUnverifiedNoteHTML,
+  hwcheckUnverifiedNoteHTML, hwcheckBoardState, HWCHECK_PARENT_KEY,
+  HWCHECK_LAST_DIR_KEY,
+} from "/js/fx/hwcheck-project.js";
+import {
   hwcheckDevicePick, hwcheckDevicePool, hwcheckDeviceChipsHTML,
   hwcheckDeviceEmptyHTML, hwcheckMissingDevicesHTML, hwcheckWiringTableHTML,
-  hwcheckDeviceGroupNoticeHTML,
-  hwcheckPinGroupsHTML, hwcheckBoardSharesHTML, hwcheckOrderHTML,
-  hwcheckPinFixHTML, hwcheckPinCapacityNoteHTML,
-  hwcheckBoardState,
+  hwcheckDeviceGroupNoticeHTML, hwcheckPinGroupsHTML, hwcheckBoardSharesHTML,
+  hwcheckOrderHTML, hwcheckPinFixHTML, hwcheckPinCapacityNoteHTML,
+} from "/js/fx/hwcheck-wiring.js";
+import {
   hwcheckSectionsState, hwcheckSectionsHTML, hwcheckUnspecializedHTML,
-  hwcheckSectionsEmptyHTML,
-  hwcheckCustomState, hwcheckCustomPlanHTML, hwcheckCustomWiringHTML,
-  hwcheckConsoleState, hwcheckConsoleHTML, hwcheckConsoleNoteHTML,
-  hwcheckDroppedNoteHTML,
+  hwcheckSectionsEmptyHTML, hwcheckCustomState, hwcheckCustomPlanHTML,
+  hwcheckCustomWiringHTML, hwcheckConsoleState, hwcheckConsoleHTML,
+  hwcheckConsoleNoteHTML,
+} from "/js/fx/hwcheck-plan.js";
+import {
   hwcheckCanTriage, hwcheckTriagePayload, hwcheckChecklistPayload,
   hwcheckAdviceState, hwcheckRecordState, hwcheckTriageErrorHTML,
   hwcheckAdviceHTML, hwcheckChecklistState,
+} from "/js/fx/hwcheck-triage.js";
+import {
   hwcheckHandoffPlan, hwcheckHandoffHTML, hwcheckHandoffResultText,
-  HWCHECK_PARENT_KEY, HWCHECK_LAST_DIR_KEY,
-} from "/js/fx/hwcheck.js";
+} from "/js/fx/hwcheck-handoff.js";
 // 「我的器件」（库外件，工单 hwcheck-unknown-device/02）：纯件在 fx/my-devices.js，
 // 本模块只做"读状态 / 写 DOM / 发请求"。**这一版不生成任何代码**——自建件先能被
 // 建、被列、被选、被改、被删（接进检测计划是工单 03–06）。
@@ -197,7 +208,7 @@ function renderHwcheckOutput() {
     ? hwcheckErrorHTML(hwcheckUI.previewError) : "";
   const shell = hwcheckPanelHTML(hwcheckUI.preview, hwcheckUI.outputHint);
   if (shell) {
-    // 产物区壳由 fx/hwcheck.js 单源给出；main.c 文本走 textContent（天然不解释 HTML）
+    // 产物区壳由 fx/hwcheck-state.js 单源给出；main.c 文本走 textContent（天然不解释 HTML）
     box.innerHTML = error + shell;
     const code = hwcheckCodeTarget(box);
     if (code) code.textContent = hwcheckUI.preview;

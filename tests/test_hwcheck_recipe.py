@@ -1367,7 +1367,7 @@ def test_every_multi_instance_recipe_cell_discloses_it_only_tests_the_first_chan
 
     与「未上板」那条**不许互相顶替**：那条说"没上过板"，这条说"只验了第一路"，
     两件事各自说自己那件；把「未上板」那句抄过来当自述不算数，页顶那条总口径
-    （`fx/hwcheck.js` 的 `hwcheckUnverifiedNoteHTML`）同理——它一个字都不含 `_MULTI_INSTANCE_MARKER`。
+    （`fx/hwcheck-project.js` 的 `hwcheckUnverifiedNoteHTML`）同理——它一个字都不含 `_MULTI_INSTANCE_MARKER`。
 
     ⚠ 判据面是**声明了多实例、且这一格可用**的格（与「未上板」那条同款 `usable` 门）。
     不可用 = 配方残缺（`validate_recipes` 在加载期就红了），不是本条的判据面。

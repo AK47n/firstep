@@ -6,52 +6,59 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+// 六件纯函数（工单 hwcheck-hygiene/09–10 把原 fx/hwcheck.js 按职责拆开）
 import {
   hwcheckPlatformState, hwcheckSelectPlatform, hwcheckPickState,
   hwcheckRequestPayload, hwcheckCanPreview, hwcheckPlatformCardsHTML,
-  hwcheckHintHTML, hwcheckErrorHTML, hwcheckGenerateErrorHTML, hwcheckEmptyHTML,
-  hwcheckDroppedNoteHTML,
-  hwcheckPanelHTML,
+  hwcheckHintHTML, hwcheckErrorHTML, hwcheckGenerateErrorHTML,
+  hwcheckEmptyHTML, hwcheckDroppedNoteHTML, hwcheckPanelHTML,
   hwcheckCodeTarget, hwcheckPreviewState, hwcheckPlatformLabel,
-  HWCHECK_CHANNEL_KEYS,
+  HWCHECK_CHANNEL_KEYS, hwcheckDeviceSlugs,
+} from "../../src/contest_generator/static/js/fx/hwcheck-state.js";
+import {
   hwcheckGeneratePayload, hwcheckChecklistKey, hwcheckCheckedIds,
   hwcheckChecklistToggle, hwcheckChecklistHTML, hwcheckChecklistProgressHTML,
   hwcheckProjectState, hwcheckChannelText, hwcheckProjectInfoHTML,
   hwcheckToolchainNote, hwcheckChannelNoteHTML, hwcheckActionsHTML,
-  hwcheckUnverifiedNoteHTML,
-  hwcheckProjectPanelHTML,
-  hwcheckRecentHTML, hwcheckRecentEmptyHTML, hwcheckProjectEmptyHTML,
-  HWCHECK_PARENT_KEY, HWCHECK_LAST_DIR_KEY,
-  hwcheckDevicePick, hwcheckDeviceSlugs, hwcheckDevicePool, hwcheckDeviceKit,
+  hwcheckUnverifiedNoteHTML, hwcheckProjectPanelHTML, hwcheckRecentHTML,
+  hwcheckRecentEmptyHTML, hwcheckProjectEmptyHTML, HWCHECK_PARENT_KEY,
+  HWCHECK_LAST_DIR_KEY, hwcheckBoardState,
+} from "../../src/contest_generator/static/js/fx/hwcheck-project.js";
+import {
+  hwcheckDevicePick, hwcheckDevicePool, hwcheckDeviceKit,
   hwcheckDeviceChipsHTML, hwcheckDeviceEmptyHTML, hwcheckMissingDevicesHTML,
-  hwcheckDeviceGroupNoticeHTML,
-  hwcheckWiringTableHTML, hwcheckPinGroupsHTML,
-  hwcheckBoardSharesHTML, hwcheckOrderHTML, hwcheckOrderDesc, hwcheckBoardState,
-  hwcheckPinFixHTML,
-  hwcheckPinCapacityNoteHTML,
+  hwcheckDeviceGroupNoticeHTML, hwcheckWiringTableHTML, hwcheckPinGroupsHTML,
+  hwcheckBoardSharesHTML, hwcheckOrderHTML, hwcheckOrderDesc,
+  hwcheckPinFixHTML, hwcheckPinCapacityNoteHTML,
+} from "../../src/contest_generator/static/js/fx/hwcheck-wiring.js";
+import {
   hwcheckSectionsState, hwcheckSectionsHTML, hwcheckUnspecializedHTML,
-  hwcheckSectionPlanText, hwcheckSectionNoteHTML,
-  hwcheckConsoleState, hwcheckConsoleHTML, hwcheckConsoleNoteHTML,
+  hwcheckSectionPlanText, hwcheckSectionNoteHTML, hwcheckConsoleState,
+  hwcheckConsoleHTML, hwcheckConsoleNoteHTML, hwcheckCustomState,
+  hwcheckCustomPlanHTML, hwcheckCustomWiringHTML,
+} from "../../src/contest_generator/static/js/fx/hwcheck-plan.js";
+import {
   hwcheckSymptomText, hwcheckCanTriage, hwcheckTriagePayload,
   hwcheckChecklistPayload, hwcheckAdviceState, hwcheckRecordState,
   hwcheckChecklistState, hwcheckTriageErrorHTML, hwcheckAdviceHTML,
   hwcheckAdviceEmptyHTML,
-  hwcheckCustomState, hwcheckCustomPlanHTML, hwcheckCustomWiringHTML,
+} from "../../src/contest_generator/static/js/fx/hwcheck-triage.js";
+import {
   hwcheckHandoffPlan, hwcheckHandoffHTML, hwcheckHandoffMerge,
   hwcheckHandoffPinNote, hwcheckHandoffResultText,
-} from "../../src/contest_generator/static/js/fx/hwcheck.js";
+} from "../../src/contest_generator/static/js/fx/hwcheck-handoff.js";
 // 转义单源（判定渲染出的 HTML 里有没有把用户文本原样吐出去）
 import { esc } from "../../src/contest_generator/static/js/fx/core.js";
 // 单平台件的「需切换平台」标记落在既有网格渲染上（工单 09 的行为判据要真跑它）
 import { moduleGridHTML } from "../../src/contest_generator/static/js/fx/module.js";
 
-// 工单 hwcheck-hygiene/09：纯函数层按职责拆成六件（`hwcheck.js` 只剩过渡态 barrel，10 号单删除）。
+// 工单 hwcheck-hygiene/09–10：纯函数层按职责拆成六件（`hwcheck.js` 那个过渡态 barrel 已删）。
 // 凡"对 fx 这一层成立"的判据都作用在**整个层**上——钉某个路径的写法在搬迁后要么读到空壳
 // （断言恒真）、要么读不到文件（报错或静默跳过），两种都是"守卫闭眼"。
 const HWCHECK_FX_DIR = new URL("../../src/contest_generator/static/js/fx/", import.meta.url);
 const HWCHECK_FX_FILES = [
-  "hwcheck.js", "hwcheck-state.js", "hwcheck-project.js",
-  "hwcheck-wiring.js", "hwcheck-plan.js", "hwcheck-triage.js", "hwcheck-handoff.js",
+  "hwcheck-state.js", "hwcheck-project.js", "hwcheck-wiring.js",
+  "hwcheck-plan.js", "hwcheck-triage.js", "hwcheck-handoff.js",
 ];
 const hwcheckFxSources = () =>
   HWCHECK_FX_FILES.map((name) => [name, readFileSync(new URL(name, HWCHECK_FX_DIR), "utf8")]);
@@ -169,7 +176,7 @@ test("产物区壳在 fx 单源：ui/hwcheck.js 不得手拼 hwcheck-hint / data
   assert.ok(!/["'`]<div class="hwcheck-hint"/.test(ui),
     "ui 不得手拼 hwcheck-hint 壳（双源漂移 + 丢 esc）");
   assert.ok(!/data-hwcheck-code/.test(ui),
-    "ui 不得手写 data-hwcheck-code 标记（壳的单源在 fx/hwcheck.js）");
+    "ui 不得手写 data-hwcheck-code 标记（壳的单源在 fx/hwcheck-state.js）");
 });
 
 test("hwcheckPreviewState：记下文本与通道说明（重绘不重发请求）", () => {
@@ -230,11 +237,18 @@ test("纯件留在 fx：ui/hwcheck.js 不得重复定义 fx 里的函数（防�
     assert.ok(!new RegExp("function\\s+" + name + "\\s*\\(").test(ui),
       "ui/hwcheck.js 不应重新定义 " + name + "（双源漂移）");
   }
-  assert.ok(ui.includes('from "/js/fx/hwcheck.js"'), "ui/hwcheck.js 应从 fx/hwcheck.js 导入纯件");
+  // 工单 hwcheck-hygiene/10：纯件层是六件（09 拆的、barrel 已删）——六条边**逐条**点名，
+  // 少一条就是"那一类纯件没人取"（fx-guard 判据④ 也会红，这里先指到具体哪一件）。
+  // ⚠ 这仍是**源码串**断言（结构守卫，不是行为断言）：12 号单重算"源码串断言"基线时按
+  // 1 → 6 条记，别再按老数起算。
+  for (const key of ["state", "project", "wiring", "plan", "triage", "handoff"]) {
+    assert.ok(ui.includes(`from "/js/fx/hwcheck-${key}.js"`),
+      `ui/hwcheck.js 应从 fx/hwcheck-${key}.js 导入纯件`);
+  }
 });
 
 test("单向 import：ui → fx（fx 那六件都不得反向 import ui 或 app）", () => {
-  // 工单 hwcheck-hygiene/09 把纯函数层拆成六件（barrel 是过渡态、由 10 号单删除）。
+  // 工单 hwcheck-hygiene/09–10 把纯函数层拆成六件（barrel 是过渡态、10 号单已删除）。
   // 判据**不许钉在某一个文件上**：钉路径的写法在搬迁后要么读到 barrel 那种空壳（断言恒真）、
   // 要么读不到文件——两种都是"守卫闭眼"，而这条不变量（fx 不碰 DOM、不发请求、不反向依赖）
   // 要对**每一件**成立。
@@ -541,7 +555,7 @@ test("ui 的清单勾选态走 fx 的键与编解码单源（不手拼 localStor
   assert.ok(!/firstep\.hwcheck\./.test(ui), "ui 不得手写 firstep.hwcheck.* 键名（双源）");
 });
 
-test("ui 不手拼工程面板 / 清单 / 最近的壳（壳的单源在 fx/hwcheck.js）", () => {
+test("ui 不手拼工程面板 / 清单 / 最近的壳（壳的单源在 fx/hwcheck-project.js）", () => {
   const ui = readFileSync(
     new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
   assert.ok(ui.includes("hwcheckProjectPanelHTML("));
@@ -549,12 +563,12 @@ test("ui 不手拼工程面板 / 清单 / 最近的壳（壳的单源在 fx/hwch
   assert.ok(ui.includes("hwcheckRecentHTML("));
   // 壳体的样式标记不许在 ui 里手写（双源漂移 + 丢 esc，工单 01 评审同款）
   assert.ok(!/class="hwcheck-(check|recent-row|actions|path|warn)/.test(ui),
-    "ui 不得手拼这些壳的样式标记（单源在 fx/hwcheck.js）");
+    "ui 不得手拼这些壳的样式标记（单源在 fx/hwcheck-project.js）");
   // 带值的 data-* 标记只允许出现在 querySelector 的选择器里（取按钮用）
   const markers = ui.match(/data-hwcheck-(compile|check|open-project|flash)="/g) || [];
   const inSelector = ui.match(/\[data-hwcheck-(compile|check|open-project|flash)="/g) || [];
   assert.equal(markers.length, inSelector.length,
-    "带值的 data-* 标记只许出现在选择器里（壳的唯一出处是 fx/hwcheck.js）");
+    "带值的 data-* 标记只许出现在选择器里（壳的唯一出处是 fx/hwcheck-project.js）");
 });
 
 // ---------------------------------------------------------------------------
@@ -773,8 +787,8 @@ test("ui 的接线表 / 冲突 / 顺序 / chips 都走 fx 单源（不手拼表�
     "hwcheckDevicePick(", "hwcheckDevicePool("]) {
     assert.ok(ui.includes(name), "ui 应调用 fx 的 " + name + "）");
   }
-  assert.ok(!ui.includes("<table"), "ui 不得手拼接线表（单源在 fx/hwcheck.js）");
-  assert.ok(!ui.includes("板载共享"), "板载共享标记的单源在 fx/hwcheck.js");
+  assert.ok(!ui.includes("<table"), "ui 不得手拼接线表（单源在 fx/hwcheck-wiring.js）");
+  assert.ok(!ui.includes("板载共享"), "板载共享标记的单源在 fx/hwcheck-wiring.js");
   // 器件选择复用既有卡片 / chip 渲染，不自造模块清单渲染器
   assert.ok(ui.includes("moduleGridHTML("), "模块卡片应复用模块库既有渲染");
   assert.ok(ui.includes('from "/js/fx/module.js"'), "器件池与卡片渲染取自既有纯件");
@@ -1018,7 +1032,7 @@ test("ui 的小节渲染走 fx 单源（不手拼 [专精] 标记与徽章）", 
     "hwcheckSectionsState("]) {
     assert.ok(ui.includes(name), "ui 应调用 fx 的 " + name + "）");
   }
-  assert.ok(!ui.includes("[专精]"), "[专精] 标记的单源在 fx/hwcheck.js");
+  assert.ok(!ui.includes("[专精]"), "[专精] 标记的单源在 fx/hwcheck-plan.js");
   assert.ok(!/class="hwcheck-section/.test(ui), "ui 不得手拼小节壳（双源漂移）");
 });
 
@@ -2087,7 +2101,7 @@ test("结构钉：总口径那句真的被渲染出来（容器在卡片正文�
   // ui 不许自己再写一遍文案（单源在 fx）。判据**先剥注释**再查：ui 里那句注释引用了
   // 同一句话做说明（不是文案），直接子串匹配会被注释骗过——本仓库既有教训。
   const uiCode = ui.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
-  assert.ok(!uiCode.includes("尚未在真板上验证过"), "文案单源在 fx/hwcheck.js，ui 只渲染");
+  assert.ok(!uiCode.includes("尚未在真板上验证过"), "文案单源在 fx/hwcheck-project.js，ui 只渲染");
 });
 
 test("结构钉：ui 侧走 fx（不手拼理由与回报文案）+ 并入入口在生成页那侧", () => {

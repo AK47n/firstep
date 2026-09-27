@@ -4059,7 +4059,7 @@
         没有器件也能生成：那是先确认板子和烧录链路是好的。</p>
       <!-- 全栏目的总口径（工单 hwcheck-hardening/02）：配方与探测小节尚未在真板上验证过。
            各格自己的平台说明里也逐格写着「未上板」，但学生不一定读到某一格；
-           这句保证"第一眼就知道这批结论的分量"。文案在 fx/hwcheck.js 的
+           这句保证"第一眼就知道这批结论的分量"。文案在 fx/hwcheck-project.js 的
            hwcheckUnverifiedNoteHTML，这里只是落点，只在初始化时渲染一次。 -->
       <div id="hwcheck-unverified-note"></div>
       <h3>1. 目标平台</h3>
@@ -4074,13 +4074,13 @@
       <div id="hwcheck-device-chips" class="row"></div>
       <!-- 已被删掉、却仍留在选择集里的自建件说明（工单 ci-gate-fixes/09）：服务端
            装配时把那几件摘掉了（否则整页 400「库中不存在模块：mine_xxx」），这里如实
-           说一句"已不在你的器件里"。文案在 fx/hwcheck.js 的 hwcheckDroppedNoteHTML。 -->
+           说一句"已不在你的器件里"。文案在 fx/hwcheck-state.js 的 hwcheckDroppedNoteHTML。 -->
       <div id="hwcheck-dropped"></div>
       <div id="hwcheck-device-missing"></div>
       <div id="hwcheck-device-groups"></div>
       <!-- 带入生成页（工单 hwcheck-acceptance/04）：把当前选中的库内器件并进生成页的
            已选清单（只带器件、不带引脚；库外自建件带不过去并说明原因）。内容全部由
-           fx/hwcheck.js 的 hwcheckHandoffHTML 渲染，这里只是落点。 -->
+           fx/hwcheck-handoff.js 的 hwcheckHandoffHTML 渲染，这里只是落点。 -->
       <div id="hwcheck-handoff"></div>
       <!-- 「我的器件」（库外件，工单 hwcheck-unknown-device/02）：手上这件不在模块库里
            也能填进来——名称 / 总线 / 7 位地址 / 身份寄存器 / 期望值 / 备注。

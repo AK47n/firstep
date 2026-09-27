@@ -1,0 +1,48 @@
+工单 hwcheck-hygiene/10：拆 fx 第二步——消费者迁到六件、删掉过渡态 barrel
+
+一、迁移（barrel 的 fan-in 全部改指六件）
+- ui/hwcheck.js：那条 90 来名的大 import 按**名字的归属**劈成六条（state / project /
+  wiring / plan / triage / handoff），每件一条、块首一句说明；行尾注释体裁照旧
+- tests/js/hwcheck.test.mjs：同样劈成六条；「ui 应从 fx/hwcheck.js 导入纯件」改成对**六条边
+  逐条**断言（少一条就点名缺哪一件）
+- ui/generate-recommend.js：hwcheckHandoffMerge → /js/fx/hwcheck-handoff.js
+- 另 20 处**注释与文档里的旧路径**（index.html 三处 / webapp.py / hwcheck.py /
+  tests/test_hwcheck_board.py / tests/test_hwcheck_recipe.py / tests/browser/hwcheck.spec.mjs
+  / tests/test_js_gate.py 的路径字面量等）一并改指新家——留着就是下一处文档漂移
+- fx/hwcheck.js（barrel，09 留的过渡态）**删除**
+
+二、判据面跟着收口
+- tests/js/hwcheck-split-integrity.test.mjs：取数面去掉 barrel；③ 的"barrel 零发布"改成
+  独立用例「过渡态不留痕」——判 **① barrel 必须不存在 ② 没有任何 import 边指向旧路径**
+  （扫 src/ + tests/ 的 .js/.mjs/.py/.html；本文件自己豁免，它的判据正则字面写着那个路径）
+- FWCHECK_FX_FILES 去掉 "hwcheck.js"（否则读不到文件直接抛）
+- 口径记账：票面写的是 `grep -r "fx/hwcheck.js" static tests` **零命中**，实现判的是
+  **import 边**——六件自己的文件头与别处留着"由 fx/hwcheck.js 搬来"这种**墓碑注释**（现 14 处），
+  那是本仓既有体裁（boot.js 里满是这样的话，守卫明确按"注释不是消费者"处理）；
+  真会炸的是 import 边（SyntaxError + 整页不亮），所以判据盯边、注释留着解释来历
+
+三、反证（probe-10-red.py / probe-10-red.txt，三段各自注入即红、复原逐字节相同）
+- ① 漏迁一整件（ui 指向 hwcheck-plan.js 的 import 整条删掉）→ window-bridge-guard 判据 ⑧
+  点名 hwcheckSectionsState（**桥兜住了运行态**，所以这类漏迁只有这条判据看得出来）
+- ② 漏迁用例侧（test 指向 hwcheck-handoff.js 的 import 整条删掉）→ 前端门禁红，
+  点名 ReferenceError: hwcheckHandoffPlan is not defined
+- ③ 漏迁一整条边（把 ui 的 state import 改回**已删除的 barrel**）→ static-import-guard
+  判据③（全图对账）报"文件不存在"——票面点名的那条守卫
+- 记账：票面字面写的"漏迁一个名字"其实**两条点名守卫都不会红**（graphBreaks 只判名字有没有出处、
+  import-usage 只判导了没用），等价形态是上面第 ③ 段，票尾写明了
+
+四、记账（脚本踩的坑与双轴整改）
+- apply-10-migrate.py 第一版把 import 迁移与注释替换各算一份、按列表顺序写盘 → 同一文件被
+  写两遍、后一遍覆盖前一遍（干跑看不出来，--write 后才现形）；第二版合成一次写，但 dict 键
+  在 Windows 上是 src\...（反斜杠）而替换表写 src/...（正斜杠）→ 又写了两遍；键统一 as_posix()
+- 第三版按 Standards 轴意见改成**逐字节读、按原换行写回**：文本模式 I/O 会把 CRLF 归一成 LF，
+  读数报的是"剥掉 CRLF 的字符数"（盘上 68129 B 报 50857），复现不出来；现在报字节数
+  （68129 → 68469 B（换行 CRLF））
+- 探针锚点按**文件实际换行**换算：ui/hwcheck.js 是 CRLF、tests/js/*.test.mjs 是 LF
+  （本批第 ② 条本机事实，probe-10-red.py 的 encode()/newline_of()）
+- 块首注释截断（「…计划 /」后断）补成完整两句，并同步进脚本的 CONSUMERS
+
+读数：全套 pytest 5604 passed + 11 skipped；前端门禁 1827 / 0；浏览器门禁 48 / 0；
+独立复核 10-reachability.txt（零掉队模块 / 桥 77=77 逐名 / barrel 已不在 / 导出并集 78）
+
+未上板：本单是纯搬迁收口，零板上行为被验证（本机没有板子）。

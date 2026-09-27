@@ -298,7 +298,7 @@ HWCHECK_FRAMEWORK_MODULES: tuple[str, ...] = ("led", "delay")
 
 # 通道 → 该通道要带进工程的模块（顺序 = 进工程顺序，依赖展开由生成内核做）。
 # 通道**词表**（= 前端勾选框的键）单源从这里投影：`HWCHECK_CHANNELS` 由前端
-# `fx/hwcheck.js` 的 `HWCHECK_CHANNEL_KEYS` 镜像（跨语言守卫用例钉住，
+# `fx/hwcheck-state.js` 的 `HWCHECK_CHANNEL_KEYS` 镜像（跨语言守卫用例钉住，
 # 照 library.MODULE_KIND 的镜像先例）——两边各写一份会让"勾了没反应"成为静默失效。
 #
 # 工单 hwcheck-acceptance/03 起这张表还多一个消费方：**出口文案**要说清"这个实例

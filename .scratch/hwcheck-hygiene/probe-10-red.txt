@@ -1,0 +1,16 @@
+# 读数：probe-10-red
+# 命令：python .scratch/hwcheck-hygiene/probe-10-red.py
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T10:43:55+08:00
+# 退出码：0
+前置（① 漏迁一整件（ui → plan） 的判据，未注入）：退出码 0 —— 绿
+[PASS] ① 漏迁一整件（ui → plan）（src/contest_generator/static/js/ui/hwcheck.js）
+        注入态退出码 1（文件换行 CRLF），点名了「ui/hwcheck.js:827 用了 hwcheckSectionsState（只挂在 window 上，由 fx/」；复原 sha256 65ae5e85e79ab392（与前置相同）
+前置（② 漏迁用例侧（test → handoff） 的判据，未注入）：退出码 0 —— 绿
+[PASS] ② 漏迁用例侧（test → handoff）（tests/js/hwcheck.test.mjs）
+        注入态退出码 1（文件换行 CRLF），点名了「ReferenceError: hwcheckHandoffPlan is not defined」；复原 sha256 fde6413491d99419（与前置相同）
+前置（③ 漏迁一整条边（把 import 指回已删除的 barrel） 的判据，未注入）：退出码 0 —— 绿
+[PASS] ③ 漏迁一整条边（把 import 指回已删除的 barrel）（src/contest_generator/static/js/ui/hwcheck.js）
+        注入态退出码 1（文件换行 CRLF），点名了「ui/hwcheck.js → /js/fx/hwcheck.js：文件不存在」；复原 sha256 65ae5e85e79ab392（与前置相同）
+
+结论：3/3 段成立（每段都是「注入即红、复原逐字节相同」）

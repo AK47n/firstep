@@ -30,7 +30,9 @@ import { confirmModal } from "/js/ui/confirm.js";
 import { moduleBadges, autoAddDedup, groupConflicts, renderGroupCards, groupRequirementNote, applyGroupChoices, recordGroupChoice, clearGroupChoiceForSlug, pruneGroupChoices, groupChoiceGapText, moduleGridCountText, moduleGridHTML, moduleInfoHTML, recommendChipHTML, moduleInfoBtnHTML } from "/js/fx/module.js";
 // 检测页 → 生成页的**并入判据**（工单 hwcheck-acceptance/04）：不重复加 / 保序 /
 // 哪几件本来就在——纯函数住在 fx（可直测），本模块只把结果写进 selectedSlugs。
-import { hwcheckHandoffMerge } from "/js/fx/hwcheck.js";
+import {
+  hwcheckHandoffMerge,
+} from "/js/fx/hwcheck-handoff.js";
 import { bindModuleSource } from "/js/ui/module-source.js";  // 模块源码区（mainc-codeview-bridge/05）：弹窗文件行懒加载
 import { referencePlatformChip } from "/js/fx/reference.js";
 import {
@@ -1081,7 +1083,7 @@ function addModule(slug, expand = true) {
 //
 // 为什么由本模块出一个入口、不让调用方自己写 selectedSlugs：本模块是 selectedSlugs
 // 的**唯一写者**（见文件头的状态所有权表）。"不重复加 / 保序 / 哪几件本来就在"这三条
-// 判据在 `fx/hwcheck.js` 的 `hwcheckHandoffMerge`（纯函数、可直测；检测页 → 生成页
+// 判据在 `fx/hwcheck-handoff.js` 的 `hwcheckHandoffMerge`（纯函数、可直测；检测页 → 生成页
 // 是它唯一的调用场景，所以住在那边，本模块只消费它算出来的结果）。
 //
 // 与逐件 addModule 的差别只有一条：**只展开一次**——逐件调会连打 N 次

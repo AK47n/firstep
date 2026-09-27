@@ -1,0 +1,43 @@
+# 读数：10-migrate-write
+# 命令：python .scratch/hwcheck-hygiene/apply-10-migrate.py --write
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T10:43:02+08:00
+# 退出码：0
+归属表（从六件现算）：78 个导出
+  hwcheck-state.js       17 个
+  hwcheck-project.js     20 个
+  hwcheck-wiring.js      14 个
+  hwcheck-plan.js        12 个
+  hwcheck-triage.js      10 个
+  hwcheck-handoff.js      5 个
+
+消费者：
+  src/contest_generator/static/js/ui/hwcheck.js             68129 →  68469 B  （换行 '\r\n'）
+  tests/js/hwcheck.test.mjs                                123080 → 123567 B  （换行 '\r\n'）
+  src/contest_generator/static/js/ui/generate-recommend.js  71523 →  71536 B  （换行 '\r\n'）
+
+注释 / 文档里的旧路径：
+  src/contest_generator/static/js/ui/hwcheck.js
+  src/contest_generator/static/js/ui/hwcheck.js
+  src/contest_generator/static/js/ui/generate-recommend.js
+  tests/js/hwcheck.test.mjs
+  tests/js/hwcheck.test.mjs
+  tests/js/hwcheck.test.mjs
+  tests/js/hwcheck.test.mjs
+  tests/js/hwcheck.test.mjs
+  tests/js/hwcheck.test.mjs
+  tests/js/hwcheck.test.mjs
+  tests/js/hwcheck.test.mjs
+  tests/browser/hwcheck.spec.mjs
+  src/contest_generator/static/index.html
+  src/contest_generator/static/index.html
+  src/contest_generator/static/index.html
+  src/contest_generator/webapp.py
+  src/contest_generator/hwcheck.py
+  tests/test_hwcheck_board.py
+  tests/test_hwcheck_recipe.py
+  tests/test_js_gate.py
+
+barrel：src\contest_generator\static\js\fx\hwcheck.js（3007 B，6 条再导出） —— 待删除
+
+[落盘] 10 个文件（import 迁移 ＋ 注释替换合成一次写、按原换行逐字节写回）、已删除 fx/hwcheck.js

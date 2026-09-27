@@ -2783,7 +2783,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         返回 main_c 文本 + output_hint（「应看到什么」的输出通道部分）+ 通道形态
         与器件回显 + wiring（接线行 / 同脚组 / 建议顺序 / 本平台无条目的器件 /
         pin_fixes 生成前自动移开的脚）。
-        前端一律显式带上这些字段（见 fx/hwcheck.js hwcheckRequestPayload）——
+        前端一律显式带上这些字段（见 fx/hwcheck-state.js hwcheckRequestPayload）——
         缺省分支只是给脚本 / 手工调用兜底。
 
         **判据与生成同源**（工单 hwcheck-pin-conflict-exit/01）：预览也跑引脚消解

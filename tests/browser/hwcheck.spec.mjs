@@ -463,7 +463,7 @@ async function previewDiag() {
 }
 
 test("编译复用既有面板与判读：真 UV4 编译绿（工具链缺失时如实 skip）", async (t) => {
-  // 工单 ci-gate-fixes/08：这条用例的**前提是真工具链**——`fx/hwcheck.js` 的 `ready` 门
+  // 工单 ci-gate-fixes/08：这条用例的**前提是真工具链**——`fx/hwcheck-project.js` 的 `ready` 门
   // （读 `/api/state` 的 `toolchains.<platform>`）为 false 时，编译按钮按产品设计**置灰**，
   // 点它只会 30 秒超时（CI run 36213107191 的现场：locator 解析到了元素但 element is not
   // enabled）。开发机装着 Keil 所以这条一直绿，CI runner 上既没有、也不该有 Keil。

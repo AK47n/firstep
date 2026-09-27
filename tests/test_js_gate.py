@@ -50,7 +50,7 @@ def prepush():
     "path",
     [
         "src/contest_generator/static/index.html",
-        "src/contest_generator/static/js/fx/hwcheck.js",
+        "src/contest_generator/static/js/fx/hwcheck-state.js",   # 前端资产（09 拆出的六件之一）
         "src/contest_generator/static/js/ui/hwcheck.js",
         "src/contest_generator/static/js/app.js",
         "tests/js/nav-tabs-shared.mjs",
