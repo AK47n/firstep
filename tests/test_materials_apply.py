@@ -227,3 +227,155 @@ def test_apply_whole_batch_deleted_removes_files(tmp_path: Path) -> None:
     )
     assert not (materials / "gone" / "x.bin").exists()
     assert (materials / "k230资料/keep.bin").exists()
+
+
+# ---------------------------------------------------------------------------
+# 解包的原子性（工单 backlog-closeout/03）：解包走共享原语之后
+# ——成功不留 `.update-tmp`、失败也不留（收走前是「固定临时名 + 无 finally」）
+# ---------------------------------------------------------------------------
+
+
+def _stray_files(materials: Path, known: set[Path]) -> list[str]:
+    """资料库里除 `known` 之外的文件（`rglob` 逐条看，不猜临时名形状）。"""
+    return [
+        path.relative_to(materials).as_posix()
+        for path in materials.rglob("*")
+        if path.is_file() and path not in known
+    ]
+
+
+def test_apply_leaves_no_stray_files(tmp_path: Path) -> None:
+    """解包成功后资料库里只有「解出来的文件 + 新清单」——没有任何临时文件。"""
+    materials = tmp_path / "materials"
+    _make_tree(materials, {"k230资料/keep.bin": b"keep"})
+    zip_dir = tmp_path / "zips"
+    zip_dir.mkdir()
+    _make_zip(zip_dir / "k230.zip", {
+        "k230资料/keep.bin": b"keep2",
+        "k230资料/new.bin": b"hello",
+    })
+    batch = _batch("k230", "k230资料", [
+        _file("k230资料/keep.bin", 5, "y"),
+        _file("k230资料/new.bin", 5, "z"),
+    ], parts=[{"zip_name": "k230.zip", "size": 100, "sha256": ""}])
+
+    apply_materials_update(
+        materials_root=materials,
+        manifest=_manifest("v1.1.0", [batch]),
+        zip_dir=zip_dir,
+        backup_dir=tmp_path / "backup",
+    )
+
+    known = {
+        materials / "k230资料/keep.bin",
+        materials / "k230资料/new.bin",
+        materials / ".materials-manifest.json",
+    }
+    assert _stray_files(materials, known) == [], "解包后留下了杂散文件"
+    assert (materials / "k230资料/new.bin").read_bytes() == b"hello"
+
+
+def test_apply_write_failure_cleans_the_partial_tmp(tmp_path: Path, monkeypatch) -> None:
+    """**边写边炸**（不是换入那一步）：已落下的半截临时文件也要清掉、哨兵照抛。
+
+    注入点打在 `materials_apply.shutil.copyfileobj` 上（解包的流式写就在这一句）——
+    先真写半截再抛哨兵，否则 `finally` 里没东西可清、判据空转
+    （双轴评审 2026-09-27 点出：本单初稿只做了换入失败这一半）。
+    """
+    materials = tmp_path / "materials"
+    _make_tree(materials, {"k230资料/keep.bin": b"keep"})
+    zip_dir = tmp_path / "zips"
+    zip_dir.mkdir()
+    _make_zip(zip_dir / "k230.zip", {"k230资料/new.bin": b"payload"})
+    batch = _batch("k230", "k230资料", [
+        _file("k230资料/new.bin", 7, "z"),
+    ], parts=[{"zip_name": "k230.zip", "size": 100, "sha256": ""}])
+
+    from contest_generator import materials_apply
+
+    boom = RuntimeError("磁盘满")
+
+    def partial_then_boom(source, dest):
+        dest.write(b"half")  # 真落一个半截文件
+        raise boom
+
+    monkeypatch.setattr(materials_apply.shutil, "copyfileobj", partial_then_boom)
+    with pytest.raises(RuntimeError) as raised:
+        apply_materials_update(
+            materials_root=materials,
+            manifest=_manifest("v1.1.0", [batch]),
+            zip_dir=zip_dir,
+            backup_dir=tmp_path / "backup",
+        )
+
+    assert raised.value is boom, "照抛的不是原异常"
+    known = {materials / "k230资料/keep.bin"}
+    assert _stray_files(materials, known) == [], "写失败留下了半截临时文件"
+    assert not (materials / "k230资料/new.bin").exists(), "没换入的文件不该出现"
+
+
+def test_apply_manifest_write_is_atomic(tmp_path: Path, monkeypatch) -> None:
+    """清单写回也是原子的（这条链上唯一能留下**截断清单**的地方）。
+
+    注入法：清单路径先占一个**目录**——裸 `write_text` 会抛 `IsADirectoryError` 而
+    **不动**目录里的东西，原子写还会额外保证"不留半截文件"；两种实现都不该在库根
+    留下杂散文件（旧清单文件保持原样）。
+    """
+    materials = tmp_path / "materials"
+    _make_tree(materials, {
+        "k230资料/keep.bin": b"keep",
+        ".materials-manifest.json": b'{"version": "v1.0.0", "batches": []}',
+    })
+    zip_dir = tmp_path / "zips"
+    zip_dir.mkdir()
+    _make_zip(zip_dir / "k230.zip", {"k230资料/keep.bin": b"keep2"})
+    batch = _batch("k230", "k230资料", [
+        _file("k230资料/keep.bin", 5, "y"),
+    ], parts=[{"zip_name": "k230.zip", "size": 100, "sha256": ""}])
+
+    # 让清单那一步失败：把清单文件改成**目录**
+    manifest_path = materials / ".materials-manifest.json"
+    manifest_path.unlink()
+    manifest_path.mkdir()
+    (manifest_path / "blocker").write_bytes(b"x")
+
+    with pytest.raises(OSError):
+        apply_materials_update(
+            materials_root=materials,
+            manifest=_manifest("v1.1.0", [batch]),
+            zip_dir=zip_dir,
+            backup_dir=tmp_path / "backup",
+        )
+
+    known = {materials / "k230资料/keep.bin", manifest_path / "blocker"}
+    assert _stray_files(materials, known) == [], "清单写失败留下了杂散文件"
+    assert sorted(p.name for p in manifest_path.iterdir()) == ["blocker"], "占位目录被动过"
+
+
+def test_apply_failure_leaves_no_update_tmp(tmp_path: Path) -> None:
+    """换入失败（目标位置是个目录）：临时文件必须被清掉、原异常照抛。
+
+    收走前是固定名 `.update-tmp` + 无 `finally`——失败会在资料库里留下那个文件；
+    现在它归共享原语（唯一临时名 + `finally` 清残渣），判据就是"一个杂散文件都没有"。
+    """
+    materials = tmp_path / "materials"
+    _make_tree(materials, {"k230资料/keep.bin": b"keep"})
+    (materials / "k230资料" / "blocked.bin").mkdir()  # 目标位置是目录 → 换入必然失败
+    zip_dir = tmp_path / "zips"
+    zip_dir.mkdir()
+    _make_zip(zip_dir / "k230.zip", {"k230资料/blocked.bin": b"payload"})
+    batch = _batch("k230", "k230资料", [
+        _file("k230资料/blocked.bin", 7, "z"),
+    ], parts=[{"zip_name": "k230.zip", "size": 100, "sha256": ""}])
+
+    with pytest.raises(OSError):
+        apply_materials_update(
+            materials_root=materials,
+            manifest=_manifest("v1.1.0", [batch]),
+            zip_dir=zip_dir,
+            backup_dir=tmp_path / "backup",
+        )
+
+    known = {materials / "k230资料/keep.bin"}
+    assert _stray_files(materials, known) == [], "解包失败留下了临时文件"
+    assert (materials / "k230资料/keep.bin").read_bytes() == b"keep"  # 既有文件没被动

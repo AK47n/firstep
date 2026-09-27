@@ -23,8 +23,9 @@ import itertools
 import os
 import threading
 from pathlib import Path
+from typing import Callable
 
-__all__ = ["atomic_write_text", "path_lock"]
+__all__ = ["atomic_write_text", "atomic_write_via", "path_lock"]
 
 _TMP_COUNTER = itertools.count(1)
 
@@ -52,19 +53,22 @@ def path_lock(path: Path) -> threading.Lock:
         return lock
 
 
-def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None:
-    """原子写文本：唯一临时名 → `os.replace`；坏写不落半成品也不留残渣。
+def atomic_write_via(path: Path, write: Callable[[Path], None]) -> None:
+    """原子写「你自己写临时文件」：`write(tmp)` 把内容写进临时路径，本函数负责换入。
 
+    这是本模块**唯一的实现**（`atomic_write_text` 是它的薄壳，工单 backlog-closeout/03 收的）：
     临时名带 **pid + 进程内单调计数**（照 `hwcheck_triage.py:896-919`，比 `codeview.py:362`
-    的只带 pid 更进一步）：固定名 `.tmp` 在两个写者并发时会互抢——一个刚写完、另一个把
+    的只带 pid 更进一步）——固定名 `.tmp` 在两个写者并发时会互抢：一个刚写完、另一个把
     同一文件截断，`replace` 落盘的可能就是半成品，或者后一个 `replace` 直接失败。
     同进程内两个写者也必须不同名，所以加计数。
 
-    异常路径清残渣，且**清理动作不许掩盖原异常**（`unlink` 失败静默放过）。
+    `write` 拿到的是**临时路径**（此刻目标文件还没出现）——大文件（资料库解包）靠它
+    **流式**写，别改成"先读进内存再传字节"。异常路径清残渣，且**清理动作不许掩盖原异常**
+    （`unlink` 失败静默放过）。
     """
     tmp = path.with_name(f"{path.name}.tmp-{os.getpid()}-{next(_TMP_COUNTER)}")
     try:
-        tmp.write_text(text, encoding=encoding)
+        write(tmp)
         os.replace(tmp, path)
     finally:
         # `replace` 成功时 tmp 已经不在了；失败时它还在，清掉它
@@ -73,3 +77,15 @@ def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None
                 tmp.unlink()
             except OSError:  # pragma: no cover —— 清不掉也不该把原异常盖掉
                 pass
+
+
+def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None:
+    """原子写文本：唯一临时名 → `os.replace`；坏写不落半成品也不留残渣。
+
+    实现走 `atomic_write_via`（临时名 / 换入 / 清残渣只有那一份），这里只交代"怎么写"。
+    """
+
+    def write(tmp: Path) -> None:
+        tmp.write_text(text, encoding=encoding)
+
+    atomic_write_via(path, write)

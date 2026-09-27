@@ -21,7 +21,7 @@ from typing import Mapping
 import pytest
 
 from contest_generator import atomic_io
-from contest_generator.atomic_io import atomic_write_text, path_lock
+from contest_generator.atomic_io import atomic_write_text, atomic_write_via, path_lock
 
 
 class _Sentinel(OSError):
@@ -68,6 +68,78 @@ def test_atomic_write_text_write_failure_leaves_no_residue(tmp_path, monkeypatch
     with pytest.raises(OSError) as raised:
         atomic_write_text(target, "{}")
     assert isinstance(raised.value, _Sentinel), f"照抛的不是原异常：{raised.value!r}"
+    assert _residue(tmp_path, target.name) == []
+
+
+def test_atomic_write_via_streams_through_a_temp_file(tmp_path):
+    """流式入口（工单 backlog-closeout/03）：`write(tmp)` 拿到的是**临时路径**，
+    写完由本函数换入——大文件解包靠它流式写，不能改成"先读进内存"。
+
+    判据取最终内容 + 零残渣 + 回调期间目标文件**还没出现**（原子性的外部行为），
+    不断言临时名的形状。
+    """
+    target = tmp_path / "blob.bin"
+    seen: list[str] = []
+
+    def write(tmp: Path) -> None:
+        assert tmp != target, "回调拿到的必须是临时路径（否则不成其为原子写）"
+        assert not target.exists(), "回调还没跑完，目标文件不该已经出现"
+        seen.append(tmp.name)
+        with open(tmp, "wb") as dest:
+            dest.write(b"chunk-1")
+            dest.write(b"chunk-2")
+
+    atomic_write_via(target, write)
+
+    assert target.read_bytes() == b"chunk-1chunk-2"
+    assert len(seen) == 1
+    assert _residue(tmp_path, target.name) == []
+
+
+def test_atomic_write_via_write_failure_cleans_the_partial_tmp(tmp_path):
+    """**写临时文件**这一步失败（不是替换那一步）：已经落下的半截临时文件也要清掉。
+
+    注入方式刻意"先真写出半截再抛"——只抛不写的话 `finally` 里没东西可清，判据就是空转
+    （与文本入口那条同款，双轴评审 2026-09-27 点出的缺口：本单初稿只做了换入失败）。
+    """
+    target = tmp_path / "blob.bin"
+    boom = _Sentinel("边写边炸")
+
+    def write_then_boom(tmp: Path) -> None:
+        tmp.write_bytes(b"half")  # 真落一个半截文件
+        raise boom
+
+    with pytest.raises(_Sentinel) as caught:
+        atomic_write_via(target, write_then_boom)
+    assert caught.value is boom, "照抛的不是原异常"
+    assert not target.exists(), "还没换入，目标文件不该出现"
+    assert _residue(tmp_path, target.name) == []
+
+
+def test_atomic_write_via_failure_keeps_the_original_error_and_no_residue(
+    tmp_path, monkeypatch
+):
+    """流式入口的失败路径与文本入口同一套：清残渣、原异常照抛（哨兵同一性）。
+
+    注入点打在共享原语看到的 `os` 上：`replace` 抛哨兵——此刻临时文件真的在盘上
+    （回调刚写完），不这样造 `finally` 里没东西可清 = 判据空转。
+    """
+    boom = _Sentinel("替换失败")
+
+    def failing_replace(src, dst):
+        raise boom
+
+    monkeypatch.setattr(
+        atomic_io, "os", SimpleNamespace(path=os.path, getpid=os.getpid, replace=failing_replace)
+    )
+    target = tmp_path / "blob.bin"
+
+    def write(tmp: Path) -> None:
+        tmp.write_bytes(b"payload")
+
+    with pytest.raises(_Sentinel) as caught:
+        atomic_write_via(target, write)
+    assert caught.value is boom, "照抛的不是原异常"
     assert _residue(tmp_path, target.name) == []
 
 
@@ -189,12 +261,12 @@ SHARED_PRIMITIVE_SITES = 2  # 造临时名 + 换入：就是这一个实现本�
 ATOMIC_WRITE_EXCEPTIONS: dict[str, tuple[int, str]] = {
     "codeview.py": (4, "两对「pid 后缀临时名 + 换入」；编辑保存路径另带 mtime 冲突检查"),
     "recent_jobs.py": (2, "tempfile.mkstemp 唯一名 + finally 清理"),
-    "materials_apply.py": (2, "解包被更新任务锁串行化（.update-tmp）"),
     "master_store.py": (3, "3 处全是**目录**换入（os.replace(<xx>_dir, …)），不是文件写"),
     "my_devices.py": (1, "自建件落盘是**目录**级 staging + rename（.tmp 只是那个暂存目录名）"),
 }
-# 记账：`hwcheck_triage.py` 那条例外在工单 record-write-hardening/07 里删掉了——
-# 它的私有副本迁到了 `atomic_io`、站点归零；清单发霉时守卫会点名要你移出。
+# 记账：`hwcheck_triage.py` 那条例外在工单 record-write-hardening/07 删掉（私有副本迁到
+# `atomic_io`、站点归零）；`materials_apply.py` 那条在 backlog-closeout/03 删掉（解包改走
+# `atomic_write_via`、站点同样归零）——清单发霉时守卫会点名要你移出。
 
 _TMP_LITERAL = re.compile(r"""['"][^'"]*tmp[^'"]*['"]""")
 # 纯常量赋值（`TMP_SUFFIX = ".tmp"` / `TMP_SUFFIX: str = ".tmp"`）：不是站点

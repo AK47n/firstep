@@ -18,12 +18,13 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import zipfile
+from functools import partial
 from pathlib import Path
-from typing import Any, Sequence
+from typing import IO, Any, Sequence
 
+from .atomic_io import atomic_write_text, atomic_write_via
 from .materials_pack import MANIFEST_FILENAME
 
 
@@ -91,7 +92,13 @@ def _backup_entries(root: Path, rel_paths: Sequence[str], backup_dir: Path) -> N
 
 
 def _extract_zip(zip_path: Path, root: Path) -> None:
-    """逐条目解压覆盖：先写 `.update-tmp` 再 os.replace（不半写）。"""
+    """逐条目解压覆盖：落盘走**唯一临时名 + 换入 + 清残渣**（共享原语 `atomic_io`）。
+
+    **流式**写（`shutil.copyfileobj`）：资料库里有大文件，别读进内存——
+    `atomic_write_via` 把临时路径交给回调，正好承接这种写法。
+    收走前是固定名 `.update-tmp` + 无 `finally`：两个写者互抢同一个临时名、
+    失败还会在资料库里留下 `.update-tmp`（工单 backlog-closeout/03）。
+    """
     try:
         members = _validate_zip_members(zip_path, root)
     except zipfile.BadZipFile:
@@ -100,10 +107,14 @@ def _extract_zip(zip_path: Path, root: Path) -> None:
         for member in members:
             target = safe_join(root, member.filename)
             target.parent.mkdir(parents=True, exist_ok=True)
-            tmp = target.with_name(target.name + ".update-tmp")
-            with archive.open(member) as source, open(tmp, "wb") as dest:
-                shutil.copyfileobj(source, dest)
-            os.replace(tmp, target)
+            with archive.open(member) as source:
+                atomic_write_via(target, partial(_copy_stream_to, source))
+
+
+def _copy_stream_to(source: IO[bytes], tmp: Path) -> None:
+    """把 zip 条目**流式**写进临时文件（`atomic_write_via` 的回调）。"""
+    with open(tmp, "wb") as dest:
+        shutil.copyfileobj(source, dest)
 
 
 def _remove_paths(root: Path, rel_paths: Sequence[str]) -> None:
@@ -173,11 +184,10 @@ def apply_materials_update(
     # 3. 删除（removed + 整批删除推导）
     _remove_paths(materials_root, removed_paths)
 
-    # 4. 写回新清单
+    # 4. 写回新清单（同样走共享原语：这一步失败会留下**截断的清单**，
+    #    是这条链上比解包更疼的一处——清单是资料库的基线）
     manifest_path = materials_root / MANIFEST_FILENAME
-    manifest_path.write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    atomic_write_text(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2))
     return manifest
 
 
