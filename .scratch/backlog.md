@@ -784,9 +784,23 @@ spec 的口径，**修库内驱动（含其注释）属另一张单**，且改�
 | **库数据里的 markdown 粗体标记**（14 号单） | 评审的 Y6 只看到 JS 产品串（实测 5 处），**库数据那一层没人看**：配方 `note.lines` 2434 处、74 个 manifest 的 `platforms.*.notes` 1844 处，学生看到的是 `**本件必须接个已知电压才有意义**`。处置 = 渲染层 `escRich`/`escPlain`（先 esc 再转），**不动库数据** |
 | **浏览器判据的判据面要说清边界**（12 号单） | 「页面上零字面星号」第一版判整栏，当场红在库数据上（真缺陷但不属那一单）→ 收窄到产品模板容器并在用例注释里写明为什么；14 号单再把库数据那一半补上。**判据面收窄必须留话，否则下一个人以为"整栏都判过了"** |
 
-**另三处同构的"固定临时名 + 无锁记录写"仍未修**（03 号单的记账）：想法对话（`.contest_idea_chat.json`）、
-草稿（`.contest_ideas.json`）、参数表（`.contest_params.json`）——它们与检测记录同形，但各有自己的
-行为判据与回滚面，改它们要各自的行为判据与回滚面，留给下一批。
+**✅ 已收口（2026-09-27，`record-write-hardening` 批）**：上面那三处「固定临时名 + 无锁记录写」
+（想法对话 / 草稿 / 参数表）连同评审当时补出的第四处（母版元数据 `master_store._write_meta`）
+已经全部改掉——统一走 `src/contest_generator/atomic_io.py`（唯一临时名 + `finally` 清残渣 +
+按记录路径的进程内锁）；工单 `01`–`06` 在 `.scratch/record-write-hardening/`（07 号单把
+`hwcheck_triage` 的私有副本也迁到同一原语）。结构守卫
+`tests/test_atomic_io.py::test_only_one_atomic_write_implementation_in_src` 盯着
+"新写的记录文件又手搓一个固定临时名"。
+
+**这一批明确没修的**（如实列出，别当成已修）：
+- `materials_apply._extract_zip` 的固定 `.update-tmp`（解包被更新任务锁串行化，风险低一档）；
+- `entry_store.write_json` 的裸 `write_text`（靠目录级事务兜底，不是这一族）；
+- **跨进程并发**（本应用是单进程 `uvicorn.run`，锁是进程内的；多开两个实例写同一工程不在射程）；
+- **强杀残留清扫**（只清本进程本次写失败留下的临时文件）；
+- 母版**目录换入**与 `delete_master` 删除动作之间那条窄缝（`record-write-hardening/05` 的账；
+  要闭得把锁提到目录换入之前、并把 `delete_entry` 也包进来）。
+
+**下次复核按"直接读盘核对"的模式，不信本节旧标记**（§23 那个坑：修完没人回改标记）。
 
 **另一类"未做"**：`hwcheck-acceptance/05`（真机上板）与 `hwcheck-hardening/08`（OLED 分页 / 逐件汇总）
 仍阻塞于真板子——本批一律标注"未上板"。

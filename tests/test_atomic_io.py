@@ -12,9 +12,11 @@
 from __future__ import annotations
 
 import os
+import re
 import threading
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Mapping
 
 import pytest
 
@@ -166,3 +168,125 @@ def test_path_lock_distinguishes_filenames_in_the_same_directory(tmp_path):
     assert path_lock(tmp_path / "idea_chat.json") is not path_lock(
         tmp_path / "params_chat.json"
     )
+
+
+# ---------------------------------------------------------------------------
+# 结构守卫（工单 record-write-hardening/06）：全仓只有**一个**原子写实现
+#
+# 判据 = 每个源文件里"手搓原子写"的**站点数**必须交代清楚：要么就是共享原语本身，
+# 要么在例外清单里逐条带中文理由（棘轮，形状照
+# `tests/test_library_invariants.py::SINGLE_PLATFORM_REASONS` 先例）。新写的记录文件
+# 再手搓一个固定临时名 → 数量对不上 → 红，逼显式决定。
+# 站点两种形态都算：**造临时路径**那一行（`… + ".tmp"` / `mkstemp(suffix=".tmp")`）
+# 与**换入**那一行（`os.replace(`）——它们是一对，缺一不成原子写。
+# ---------------------------------------------------------------------------
+
+SRC_ROOT = Path(__file__).resolve().parents[1] / "src" / "contest_generator"
+SHARED_PRIMITIVE = "atomic_io.py"
+SHARED_PRIMITIVE_SITES = 2  # 造临时名 + 换入：就是这一个实现本身
+
+# 模块 → (站点数, 中文理由)
+ATOMIC_WRITE_EXCEPTIONS: dict[str, tuple[int, str]] = {
+    "codeview.py": (4, "两对「pid 后缀临时名 + 换入」；编辑保存路径另带 mtime 冲突检查"),
+    "recent_jobs.py": (2, "tempfile.mkstemp 唯一名 + finally 清理"),
+    "hwcheck_triage.py": (
+        2,
+        "本批共享原语的来源、已是正确实现——工单 record-write-hardening/07 会迁走它",
+    ),
+    "materials_apply.py": (2, "解包被更新任务锁串行化（.update-tmp）"),
+    "master_store.py": (3, "3 处全是**目录**换入（os.replace(<xx>_dir, …)），不是文件写"),
+    "my_devices.py": (1, "自建件落盘是**目录**级 staging + rename（.tmp 只是那个暂存目录名）"),
+}
+
+_TMP_LITERAL = re.compile(r"""['"][^'"]*tmp[^'"]*['"]""")
+
+
+def _atomic_write_sites(source: str) -> list[tuple[int, str]]:
+    """一个源文件里的手搓原子写站点（行号 + 行文本）。
+
+    不算的三种：注释行、文档行（`\"\"\"` 开头的举例写法）、以及后缀表 / 过滤器里的
+    `".tmp"`（`categories.py` 与 `delivery.py` 那种：没有赋值，只是字符串比对）。
+    """
+    sites: list[tuple[int, str]] = []
+    for number, raw in enumerate(source.splitlines(), 1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith('"""') or line.startswith("'''"):
+            continue
+        if "os.replace(" in line or ("=" in line and _TMP_LITERAL.search(line)):
+            sites.append((number, raw))
+    return sites
+
+
+def _undeclared_atomic_write_sites(files: Mapping[str, str]) -> list[str]:
+    """把"没交代清楚"的文件说明列出来（空列表 = 全交代了）。"""
+    problems: list[str] = []
+    seen: set[str] = set()
+    for name, source in sorted(files.items()):
+        count = len(_atomic_write_sites(source))
+        if count:
+            seen.add(name)
+        if name == SHARED_PRIMITIVE:
+            if count != SHARED_PRIMITIVE_SITES:
+                problems.append(
+                    f"{SHARED_PRIMITIVE}: 共享原语自身的站点数变成 {count}"
+                    f"（应为 {SHARED_PRIMITIVE_SITES}：造临时名 + 换入）"
+                )
+            continue
+        if count == 0:
+            continue
+        declared = ATOMIC_WRITE_EXCEPTIONS.get(name)
+        if declared is None:
+            problems.append(
+                f"{name}: {count} 处手搓原子写不在例外清单里"
+                "（要么改走 atomic_io.atomic_write_text，要么在清单里逐条给中文理由）"
+            )
+        elif declared[0] != count:
+            problems.append(
+                f"{name}: 站点数 {count} ≠ 清单记的 {declared[0]}——新增 / 删除站点要复核理由"
+            )
+    stale = sorted(set(ATOMIC_WRITE_EXCEPTIONS) - seen)
+    if stale:
+        problems.append(f"例外清单里的站点已经没了，请移出：{stale}")
+    empty_reason = [
+        name for name, (_count, reason) in ATOMIC_WRITE_EXCEPTIONS.items() if not reason.strip()
+    ]
+    if empty_reason:
+        problems.append(f"例外清单缺理由：{empty_reason}")
+    return problems
+
+
+def test_only_one_atomic_write_implementation_in_src():
+    """结构守卫：`src/contest_generator/**` 里的手搓原子写站点全部交代清楚。
+
+    要么是共享原语自己（`atomic_io.py`），要么在 `ATOMIC_WRITE_EXCEPTIONS` 里
+    逐条带中文理由，且**站点数对得上**——新写的记录文件再手搓一个固定临时名，
+    这里就会红。
+    """
+    files = {
+        path.relative_to(SRC_ROOT).as_posix(): path.read_text(encoding="utf-8")
+        for path in SRC_ROOT.rglob("*.py")
+    }
+    assert len(files) > 50, f"源文件没扫到（{len(files)} 个）——守卫的扫描根可能写错了"
+    problems = _undeclared_atomic_write_sites(files)
+    assert not problems, "手搓原子写的站点没交代清楚：\n- " + "\n- ".join(problems)
+
+
+def test_atomic_write_guard_catches_a_new_hand_rolled_site():
+    """正向对照：新写的记录文件又手搓一个固定临时名 → 守卫**必须**红。"""
+    counterexample = (
+        "from pathlib import Path\n"
+        "\n"
+        "\n"
+        "def write_record(path: Path, text: str) -> None:\n"
+        "    tmp = path.with_name(path.name + '.tmp')\n"
+        "    tmp.write_text(text, encoding='utf-8')\n"
+        "    os.replace(tmp, path)\n"
+    )
+    problems = _undeclared_atomic_write_sites({"brand_new_record.py": counterexample})
+    assert problems, "手搓固定临时名的新站点没被抓住——守卫成了摆设"
+    assert any("brand_new_record.py" in line for line in problems), problems
+    # 反向对照：例外清单里的文件**不在**扫描结果里时，也要能报出来（清单不许发霉）
+    stale = _undeclared_atomic_write_sites({"brand_new_record.py": "x = 1\n"})
+    assert any("已经没了" in line for line in stale), stale

@@ -51,8 +51,10 @@
   两份记录（全局商量 / 参数商量）天然各拿一把锁。
 - **不提供通用 `update_json`**：四个域的读侧错误语义不同（各自抛带文件名的中文 `TaskError`），
   共享的只有「锁 + 原子写」两个缝；域级 `update_*` 各写六行。
-- **字节格式归调用方**：原语只写字符串。`master_store._write_meta` 现在**没有尾换行**（逐字节保持），
-  三个记录文件**有**尾换行（保持）。
+- **字节格式归调用方**：原语只写字符串。实测（收口时逐字节核过）**没有**尾换行的是
+  `master_store._write_meta` 的 `{platform}.json` 与两份聊天记录（`.contest_idea_chat.json` /
+  `.contest_params_chat.json`）；**有**尾换行的是 `.contest_ideas.json`、`.contest_params.json`
+  与 `.hwcheck_record.json`。原文这句「三个记录文件有尾换行」把聊天记录算错了，按实际字节为准。
 
 ### 域级改动（四处）
 
@@ -60,7 +62,7 @@
 |---|---|---|---|
 | 想法草稿 | `update_drafts(output_dir, merge)` | 增 / 删两个端点改走它（merge = 既有纯函数 `add_draft` / `delete_draft`） | 窗口本来只有微秒级，锁是防交错 + 换唯一临时名 |
 | 想法商量 | `update_idea_chat(output_dir, merge, filename=…)` | 两个 send：**模型调用留在锁外**；临界区里在**新读到的记录上追加**本轮两条；adopt 改走它 | 合并语义定案：**追加而非"base 变了就不写"**——聊天是追加型日志，追加重放能同时保住两笔（与 `hwcheck-hygiene/03` 的 `record_with_triage` 口径不同，理由写进工单 03） |
-| 参数表 | `update_params(output_dir, merge)` | `params.py` 的「应用后刷新」改走它（在最新盘上重放单参数刷新）；LLM 扫描那条**整份盲写**只换写实现 | 扫描不读旧表，加锁无意义；但它会被刷新路径的快照盖掉，故刷新必须走 update |
+| 参数表 | `update_params(output_dir, merge)` | `params.py` 的「应用后刷新」改走它（在最新盘上重放单参数刷新）；LLM 扫描那条**整份盲写**只换写实现**＋取同一把锁**（06 收口时加的：它不读旧表，加锁只让它多等临界区那几微秒，却关掉了"刚落盘的新表被刷新的旧快照盖掉"那条缝） | 扫描不读旧表，本身无合并可言；但它的落盘与刷新必须在同一把锁里排队 |
 | 母版元数据 | 无（整份重写） | `_write_meta` 换原语 + `finally` + 按路径锁；`delete_master` 的 meta 删除也归同一把锁 | 实测确认是**整份重写**（调用方现场造 meta，不读旧文件），故不上"读-改-写" |
 
 ### 不变量（不许变的东西）
@@ -100,6 +102,13 @@
 - **强杀残留清扫**：只清本进程本次写失败留下的临时文件；进程被强杀留下的不扫。
 - 把 `hwcheck_triage` 的私有副本（`_record_lock` / `write_hwcheck_record`）迁到共享原语：
   属纯重构，**另开单 = 工单 07**（否则两份锁表 + 两份原子写长期并存——双轴评审 2026-09-27 点名的重复）。
+- **母版"目录换入 × 删 meta"的窄缝**（工单 05 的账，收口时**明确承认为已接受的残留**）：
+  `import_master` 的目录换入在 `path_lock({platform}.json)` 之外，与 `delete_master` 的
+  `delete_entry` 之间还留着一条缝——按"导入钉在目录换入之后、删除先跑完"的时序能造出
+  "有 meta、没目录"的悬空状态（`list_masters` 看不见它）。要闭得把锁提到目录换入之前、
+  并把 `delete_entry` 也包进来（还要权衡 `rmtree(backup_dir)` 期间持锁的代价）；
+  当前判断是**收益不抵风险**（窗口毫秒级、后果只是库目录里一份没人读的 json），故不改、只记账；
+  真要改就另开单。
 
 ## 补充说明
 
@@ -108,3 +117,7 @@
   在本次**直接沿用**，不重犯。
 - 记账纪律：本批收口时必须把「未修的其他站点」写进 `backlog.md` §24，
   否则下一个人会以为全库只有这四处（这正是 §23 那条"修完没人回改标记"的同一个坑）。
+- **收口（工单 06）补上的机器**：结构守卫
+  `tests/test_atomic_io.py::test_only_one_atomic_write_implementation_in_src`（扫全仓手搓原子写站点，
+  例外清单逐条带中文理由 + 站点数棘轮 + 新站点的正向对照）；反证汇总
+  `.scratch/record-write-hardening/probe-06-red-summary.txt`（五张单的探针在当前字节上重跑一遍）。

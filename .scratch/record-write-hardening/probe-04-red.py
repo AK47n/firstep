@@ -1,6 +1,6 @@
 """反证探针（工单 record-write-hardening/04）：逐段撤掉修 → 对应判据必须**点名红**。
 
-五段（每段一类机制，逐条声明必须红 + 与实得 FAILED 对账 + 复原 sha256 逐字节）：
+六段（每段一类机制，逐条声明必须红 + 与实得 FAILED 对账 + 复原 sha256 逐字节）：
 - **A 撤掉临界区**：`params.update_params` 里 `with path_lock(path):` → `if True:`
   （"两个 apply 交叠两条都在"的域层判据与端点判据必须红）
 - **B 重读挪到锁外**：`update_params` 先把表读进 `stale`，锁里 `merge(stale)`
@@ -62,6 +62,13 @@ NO_CHANGE_SHORTCUT = [
 ALWAYS_WRITE = [
     "        if True:",
     "            write_params(output_dir, param_list)",
+]
+SCAN_LOCKED = [
+    "        with path_lock(params_path(output_dir)):",
+    "            write_params(output_dir, param_list)",
+]
+SCAN_UNLOCKED = [
+    "        write_params(output_dir, param_list)",
 ]
 REFRESH_OLD = [
     "        update_params(",
@@ -144,7 +151,12 @@ def main() -> int:
             "A 撤掉临界区",
             PARAMS,
             [(lines(LOCK_BLOCK, PARAMS), lines(NO_LOCK_BLOCK, PARAMS))],
-            set(both),
+            # 撤掉临界区后扫描那笔也不再被串行化 → 工单 06 收口的那条同样红
+            set(both)
+            | {
+                PREFIX
+                + "test_param_scan_write_does_not_land_inside_a_refresh_critical_section"
+            },
         ),
         (
             "B 重读挪到锁外",
@@ -186,6 +198,15 @@ def main() -> int:
             {
                 PREFIX
                 + "test_persist_applied_param_does_not_create_a_table_that_vanished",
+            },
+        ),
+        (
+            "F 撤掉扫描那笔的锁（工单 06 收口：整份盲写又落回临界区里）",
+            PARAMS,
+            [(lines(SCAN_LOCKED, PARAMS), lines(SCAN_UNLOCKED, PARAMS))],
+            {
+                PREFIX
+                + "test_param_scan_write_does_not_land_inside_a_refresh_critical_section",
             },
         ),
     ]
@@ -239,7 +260,7 @@ def main() -> int:
     print()
 
     ok = all(verdicts) and not green_failed
-    print("结论：" + ("PASS（五段反证全成立）" if ok else "不成立，见上"))
+    print("结论：" + ("PASS（六段反证全成立）" if ok else "不成立，见上"))
     return 0 if ok else 1
 
 

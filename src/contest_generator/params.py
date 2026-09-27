@@ -428,6 +428,11 @@ def run_param_scan(
     事件序列：param_scanning（LLM 识别中，分钟级）；param_result 由 webapp
     路由在 done 前发射（与 idea_result 同款：分析端点序列 idea_analyzing →
     idea_result → done，idea_result 在路由层）。
+
+    落盘仍是**整份盲写**（不读旧表 → 不上合并），但**取同一把按路径的锁**
+    （工单 record-write-hardening/06 收口）：扫描若正好落在刷新那次
+    "锁内读完 → 写之前"的几微秒里，刚扫出来的新表会被刷新那份旧快照盖掉
+    （评审实测复现过）。它不读旧表，加锁只让它多等临界区那几微秒。
     """
     emit.progress(ProgressEvent(type=EVENT_PARAM_SCANNING))
     param_list = llm.scan_params(main_c=main_c, module_interfaces=tuple(module_interfaces))
@@ -438,7 +443,9 @@ def run_param_scan(
     if param_list.params:
         # 空表不落盘（spec 用户故事 6 + 评审整改）：无文件 = 未识别过，
         # 空表落盘会让 /read 的 valid 重验与「尚未识别」文案两态无法区分。
-        write_params(output_dir, param_list)
+        # 整份盲写，但取同一把按路径的锁（工单 06 收口）：别落在刷新那几微秒的临界区里。
+        with path_lock(params_path(output_dir)):
+            write_params(output_dir, param_list)
     return param_list
 
 

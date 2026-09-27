@@ -24,6 +24,7 @@ from contest_generator.idea_chat import (
     write_idea_chat,
 )
 from contest_generator.task_progress import TaskError
+from tests.concurrency import run_in_thread
 
 
 class _SentinelReplaceError(OSError):
@@ -165,19 +166,6 @@ def test_bad_params_chat_file_message_names_file(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def _run_in_thread(errors: list[BaseException], work) -> threading.Thread:
-    """起一个守护线程跑 `work`，异常带回主线程断言（照 `tests/test_hwcheck_triage.py` 先例）。"""
-
-    def body() -> None:
-        try:
-            work()
-        except BaseException as exc:  # noqa: BLE001 —— 线程里的异常要带回主线程断言
-            errors.append(exc)
-
-    thread = threading.Thread(target=body, daemon=True)
-    thread.start()
-    return thread
-
 
 def test_idea_chat_write_leaves_no_tmp_behind(tmp_path):
     """原子写：落盘后除记录文件外**一个文件都没有**（成功路径也不许留残渣）。"""
@@ -288,10 +276,10 @@ def test_two_chat_files_do_not_share_a_lock(tmp_path):
         )
         params_done.set()
 
-    first = _run_in_thread(errors, lambda: update_idea_chat(tmp_path, slow_merge))
+    first = run_in_thread(errors, lambda: update_idea_chat(tmp_path, slow_merge))
     assert entered.wait(timeout=30), "全局商量那一路没进临界区"
 
-    second = _run_in_thread(errors, params_round)
+    second = run_in_thread(errors, params_round)
     assert params_done.wait(timeout=5), "两份历史共锁了：参数商量被全局商量挡在门外"
     release.set()
     first.join(timeout=30)
@@ -337,10 +325,10 @@ def test_update_idea_chat_keeps_an_adopt_that_landed_in_the_slow_window(tmp_path
         )
         adopt_done.set()
 
-    first = _run_in_thread(errors, lambda: update_idea_chat(tmp_path, slow_merge))
+    first = run_in_thread(errors, lambda: update_idea_chat(tmp_path, slow_merge))
     assert entered.wait(timeout=30), "商量那一路没进临界区"
 
-    second = _run_in_thread(errors, adopt)
+    second = run_in_thread(errors, adopt)
     adopt_done.wait(timeout=1.0)  # 无锁那一格：这里会先写完；有锁那一格：等不到
     release.set()
     first.join(timeout=30)

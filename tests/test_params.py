@@ -36,6 +36,7 @@ from contest_generator.params import (
 from contest_generator.platforms import PLATFORM_STM32
 from contest_generator.task_progress import TaskError
 from contest_generator.webapp import AppContext, AppConfig, create_app
+from tests.concurrency import run_in_thread
 from tests.fakes import (
     FakeLLM,
     make_fake_master_project,
@@ -698,23 +699,6 @@ def test_params_with_valid():
 # ---------------------------------------------------------------------------
 
 
-def _run_in_thread(errors: list[BaseException], work) -> threading.Thread:
-    """起一个守护线程跑 `work`，异常带回主线程断言。
-
-    形状照 `tests/test_hwcheck_triage.py:625-645` 那段并发先例（本批三份同形：
-    `test_drafts.py` / `test_idea_chat.py` / 这里——收成一处这件事记在工单 06）。
-    """
-
-    def body() -> None:
-        try:
-            work()
-        except BaseException as exc:  # noqa: BLE001 —— 线程里的异常要带回主线程断言
-            errors.append(exc)
-
-    thread = threading.Thread(target=body, daemon=True)
-    thread.start()
-    return thread
-
 
 def _two_param_table() -> ParamList:
     """THRESHOLD 与 SPEED 两条（两段锚都在 MAIN_WITH_PARAM 里）。"""
@@ -799,9 +783,9 @@ def test_concurrent_params_writes_share_no_tmp_file(tmp_path, monkeypatch):
         "后到的": _param_list(_item(name="SPEED", old_value="120", anchor="#define SPEED 120")),
     }
 
-    first = _run_in_thread(errors, lambda: write_params(tmp_path, tables["先到的"]))
+    first = run_in_thread(errors, lambda: write_params(tmp_path, tables["先到的"]))
     assert first_inside.wait(timeout=30), "第一个写者没走到替换那一步"
-    second = _run_in_thread(errors, lambda: write_params(tmp_path, tables["后到的"]))
+    second = run_in_thread(errors, lambda: write_params(tmp_path, tables["后到的"]))
     second.join(timeout=30)
     release.set()
     first.join(timeout=30)
@@ -834,7 +818,7 @@ def test_update_params_does_not_lose_a_concurrent_refresh(tmp_path):
         assert release.wait(timeout=30), "等不到放行——判据自己失败，别挂住整场"
         return _refresh_param_after_apply(latest, "THRESHOLD", "900", disk_main_c)
 
-    first = _run_in_thread(errors, lambda: update_params(tmp_path, slow_refresh))
+    first = run_in_thread(errors, lambda: update_params(tmp_path, slow_refresh))
     assert entered.wait(timeout=30), "第一笔刷新没进临界区"
     second_started = threading.Event()
     second_done = threading.Event()
@@ -847,7 +831,7 @@ def test_update_params_does_not_lose_a_concurrent_refresh(tmp_path):
         )
         second_done.set()
 
-    second = _run_in_thread(errors, other_refresh)
+    second = run_in_thread(errors, other_refresh)
     assert second_started.wait(timeout=30), "第二笔刷新没发出去"
     second_done.wait(timeout=1.0)  # 无锁那一格：这里会先写完；有锁那一格：等不到
     release.set()
@@ -934,3 +918,56 @@ def test_persist_applied_param_does_not_create_a_table_that_vanished(
     params_module._persist_applied_param(tmp_path, _item(), "900")
 
     assert not (tmp_path / PARAMS_FILENAME).exists(), "凭空造了一张空表"
+
+
+def test_param_scan_write_does_not_land_inside_a_refresh_critical_section(tmp_path):
+    """扫描的整份盲写与刷新的临界区并发：**扫描刚写的新表不许被刷新的旧快照盖掉**。
+
+    形状 = 工单 06 收口的那条缝：刷新那笔已经"锁内读完、还没写"，扫描这时候落盘。
+    · 扫描的盲写不取锁（撤锁注入）：它当场写下去，刷新放行后拿入口读到的旧表整份盖回
+      —— 刚扫出来的 SPEED 整条丢；
+    · 取同一把按路径的锁（收走后）：扫描在锁上等，刷新写完它才落盘 → 新表在
+      （扫描是后到的写者、整份重识别，本来就该它赢）。
+    判据取最终盘上内容。
+    """
+    from contest_generator.params import _refresh_param_after_apply
+
+    write_params(tmp_path, _param_list(_item()))  # 旧表：只有 THRESHOLD
+    scanned = _param_list(
+        _item(),
+        _item(name="SPEED", label="车速", old_value="120", anchor="#define SPEED 120"),
+    )
+    entered = threading.Event()
+    release = threading.Event()
+    errors: list[BaseException] = []
+    disk_main_c = MAIN_WITH_PARAM.replace("800", "900", 1)
+
+    def slow_refresh(latest):
+        entered.set()
+        assert release.wait(timeout=30), "等不到放行——判据自己失败，别挂住整场"
+        return _refresh_param_after_apply(latest, "THRESHOLD", "900", disk_main_c)
+
+    first = run_in_thread(errors, lambda: update_params(tmp_path, slow_refresh))
+    assert entered.wait(timeout=30), "刷新那笔没进临界区"
+
+    def scan() -> None:
+        run_param_scan(
+            llm=FakeLLM(param_list=scanned),
+            main_c=MAIN_WITH_PARAM,
+            module_interfaces=(),
+            output_dir=tmp_path,
+            emit=SimpleNamespace(progress=lambda event: None),  # type: ignore[arg-type]
+        )
+
+    second = run_in_thread(errors, scan)
+    second.join(timeout=1.0)  # 盲写不取锁那一格：这里会先写完；取锁那一格：等不到
+    release.set()
+    first.join(timeout=30)
+    second.join(timeout=30)
+
+    assert errors == [], f"并发时报错：{errors!r}"
+    on_disk = read_params(tmp_path)
+    assert [p.name for p in on_disk.params] == [
+        "THRESHOLD",
+        "SPEED",
+    ], "扫描刚写的新表被刷新的旧快照盖掉了"

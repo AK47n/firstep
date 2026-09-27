@@ -105,6 +105,7 @@ from contest_generator.webapp import (
     AppContext,
     create_app,
 )
+from tests.concurrency import run_in_thread
 from tests.fakes import (
     FAKE_DISTILL_UVPROJX_A,
     FakeLLM,
@@ -4611,24 +4612,13 @@ def test_masters_import_and_delete_do_not_leave_a_dangling_meta(
     results: dict[str, Any] = {}
     errors: list[BaseException] = []
 
-    def run(work) -> threading.Thread:
-        def body() -> None:
-            try:
-                work()
-            except BaseException as exc:  # noqa: BLE001 —— 线程里的异常要带回主线程断言
-                errors.append(exc)
-
-        thread = threading.Thread(target=body, daemon=True)
-        thread.start()
-        return thread
-
     def reimport() -> None:
         results["import"] = client.post(
             "/api/masters/import",
             json={"platform": PLATFORM_STM32, "project_dir": str(source)},
         )
 
-    importer = run(reimport)
+    importer = run_in_thread(errors, reimport)
     assert inside.wait(timeout=30), "导入请求没走到写 meta 那一步"
 
     deleted = threading.Event()
@@ -4637,7 +4627,7 @@ def test_masters_import_and_delete_do_not_leave_a_dangling_meta(
         results["delete"] = client.delete(f"/api/masters/{PLATFORM_STM32}")
         deleted.set()
 
-    remover = run(remove)
+    remover = run_in_thread(errors, remove)
     deleted.wait(timeout=1.0)  # 不共锁那一格：这里会先删完；共锁那一格：等不到
     release.set()
     importer.join(timeout=30)

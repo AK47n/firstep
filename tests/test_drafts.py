@@ -28,6 +28,7 @@ from contest_generator.drafts import (
 )
 from contest_generator.task_progress import TaskError
 from contest_generator.webapp import AppContext, AppConfig, create_app
+from tests.concurrency import run_in_thread
 
 
 class _SentinelReplaceError(OSError):
@@ -41,19 +42,6 @@ def _residue(directory: Path) -> list[str]:
         p.name for p in directory.iterdir() if p.name != IDEA_DRAFTS_FILENAME
     ]
 
-
-def _run_in_thread(errors: list[BaseException], work) -> threading.Thread:
-    """起一个守护线程跑 `work`，异常带回主线程断言（照 `tests/test_hwcheck_triage.py` 先例）。"""
-
-    def run() -> None:
-        try:
-            work()
-        except BaseException as exc:  # noqa: BLE001 —— 线程里的异常要带回主线程断言
-            errors.append(exc)
-
-    thread = threading.Thread(target=run, daemon=True)
-    thread.start()
-    return thread
 
 
 def test_empty_drafts_shape():
@@ -222,11 +210,11 @@ def test_concurrent_drafts_writes_share_no_tmp_file(tmp_path, monkeypatch):
 
     errors: list[BaseException] = []
 
-    first = _run_in_thread(
+    first = run_in_thread(
         errors, lambda: write_drafts(tmp_path, add_draft(empty_drafts(), "先到的"))
     )
     assert first_inside.wait(timeout=30), "第一个写者没走到替换那一步"
-    second = _run_in_thread(
+    second = run_in_thread(
         errors, lambda: write_drafts(tmp_path, add_draft(empty_drafts(), "后到的"))
     )
     second.join(timeout=30)
@@ -260,10 +248,10 @@ def test_update_drafts_does_not_lose_a_concurrent_add(tmp_path):
         assert release.wait(timeout=30), "等不到放行——判据自己失败，别挂住整场"
         return add_draft(latest, "循迹阈值太高")
 
-    first = _run_in_thread(errors, lambda: update_drafts(tmp_path, slow_add))
+    first = run_in_thread(errors, lambda: update_drafts(tmp_path, slow_add))
     assert entered.wait(timeout=30), "第一个写者没进临界区"
 
-    second = _run_in_thread(
+    second = run_in_thread(
         errors,
         lambda: update_drafts(tmp_path, lambda d: add_draft(d, "进弯道前先减速")),
     )
@@ -296,10 +284,10 @@ def test_update_drafts_does_not_lose_a_concurrent_delete(tmp_path):
         assert release.wait(timeout=30), "等不到放行——判据自己失败，别挂住整场"
         return add_draft(latest, "循迹阈值太高")
 
-    first = _run_in_thread(errors, lambda: update_drafts(tmp_path, slow_add))
+    first = run_in_thread(errors, lambda: update_drafts(tmp_path, slow_add))
     assert entered.wait(timeout=30), "第一个写者没进临界区"
 
-    second = _run_in_thread(
+    second = run_in_thread(
         errors,
         lambda: update_drafts(tmp_path, lambda d: delete_draft(d, target_id)),
     )

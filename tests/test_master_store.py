@@ -43,6 +43,7 @@ from contest_generator.report import (
     ACTION_MERGE,
     FileDecision,
 )
+from tests.concurrency import run_in_thread
 from tests.fakes import (
     FAKE_DISTILL_UVPROJX_A,
     FakeLLM,
@@ -819,19 +820,6 @@ def _stray_entries(directory: Path) -> list[str]:
     return [p.name for p in directory.iterdir() if p.name not in keep]
 
 
-def _run_in_thread(errors: list[BaseException], work) -> threading.Thread:
-    """起一个守护线程跑 `work`，异常带回主线程断言（形状照 `tests/test_hwcheck_triage.py:625-645`）。"""
-
-    def body() -> None:
-        try:
-            work()
-        except BaseException as exc:  # noqa: BLE001 —— 线程里的异常要带回主线程断言
-            errors.append(exc)
-
-    thread = threading.Thread(target=body, daemon=True)
-    thread.start()
-    return thread
-
 
 def test_master_meta_write_leaves_no_dot_temp_behind(fake_masters_dir):
     """原子写：留盘后库目录里除平台目录与 `<platform>.json` 外**什么都没有**。"""
@@ -906,9 +894,9 @@ def test_concurrent_master_meta_writes_share_no_dot_temp(fake_masters_dir, monke
         if done is not None:
             done.set()
 
-    first = _run_in_thread(errors, lambda: write(("先到的",)))
+    first = run_in_thread(errors, lambda: write(("先到的",)))
     assert first_inside.wait(timeout=30), "第一个写者没走到替换那一步"
-    second = _run_in_thread(errors, lambda: write(("后到的",), second_done))
+    second = run_in_thread(errors, lambda: write(("后到的",), second_done))
     second_done.wait(timeout=1.0)  # 无锁那一格：这里会先写完；共锁那一格：等不到
     release.set()
     first.join(timeout=30)
@@ -951,7 +939,7 @@ def test_delete_master_interleaved_with_a_meta_write_leaves_no_dangling_meta(
         "os",
         SimpleNamespace(path=os.path, getpid=os.getpid, replace=slow_replace),
     )
-    writer = _run_in_thread(errors, lambda: _write_meta(fake_masters_dir, _meta()))
+    writer = run_in_thread(errors, lambda: _write_meta(fake_masters_dir, _meta()))
     assert first_inside.wait(timeout=30), "写元数据那笔没走到替换那一步"
 
     deleted = threading.Event()
@@ -960,7 +948,7 @@ def test_delete_master_interleaved_with_a_meta_write_leaves_no_dangling_meta(
         delete_master(fake_masters_dir, PLATFORM_STM32)
         deleted.set()
 
-    remover = _run_in_thread(errors, remove)
+    remover = run_in_thread(errors, remove)
     deleted.wait(timeout=1.0)  # 不共锁那一格：这里会先删完；共锁那一格：等不到
     release.set()
     writer.join(timeout=30)

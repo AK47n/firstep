@@ -1,32 +1,32 @@
 # 读数：probe-01-red
-# 命令：python .scratch/record-write-hardening/probe-01-red.py
+# 命令：C:\Users\luoji\AppData\Local\Python\pythoncore-3.14-64\python.exe C:\Users\luoji\Desktop\firstep\.scratch\record-write-hardening\probe-01-red.py
 # 工作树：C:\Users\luoji\Desktop\firstep
-# 开始：2026-09-27T17:00:17+08:00
+# 开始：2026-09-27T18:16:22+08:00
 # 退出码：0
-# 被撤的源码：src/contest_generator/atomic_io.py sha256=d80ba0f58a333279baacfd933b2aeb56224917138b23dde8f57357f4f6e31189
-# 判据文件：tests/test_atomic_io.py sha256=405e0bcf6afb2eb2d3581272d4b725989ed14dd392c59fb8971f8acb4d41adf1
+# 被撤的源码：src/contest_generator/atomic_io.py sha256=3b0f86d15d7b2a577786128395b0bb95d3cf78ca5c8da8e3e1ed350a33ce9824
+# 判据文件：tests/test_atomic_io.py sha256=b284b29426ff044575072eb005b0c3ca700a932a422d4752376126dd5e63848a
 # 源码行尾：CRLF
 
 == A 固定临时名 ==
    声明必须红：['tests/test_atomic_io.py::test_concurrent_writes_share_no_tmp_file']
    实得 FAILED：['tests/test_atomic_io.py::test_concurrent_writes_share_no_tmp_file']
-   pytest 尾行：1 failed, 6 passed in 0.14s
+   pytest 尾行：1 failed, 8 passed in 0.14s
    复原 sha256 逐字节相同：True
 
 == B 撤掉清残渣 ==
    声明必须红：['tests/test_atomic_io.py::test_atomic_write_text_replace_failure_leaves_no_residue', 'tests/test_atomic_io.py::test_atomic_write_text_write_failure_leaves_no_residue']
    实得 FAILED：['tests/test_atomic_io.py::test_atomic_write_text_replace_failure_leaves_no_residue', 'tests/test_atomic_io.py::test_atomic_write_text_write_failure_leaves_no_residue']
-   pytest 尾行：2 failed, 5 passed in 0.10s
+   pytest 尾行：2 failed, 7 passed in 0.14s
    复原 sha256 逐字节相同：True
 
 == C 锁键不归一 ==
    声明必须红：['tests/test_atomic_io.py::test_path_lock_is_shared_for_normalised_spellings_of_one_path']
    实得 FAILED：['tests/test_atomic_io.py::test_path_lock_is_shared_for_normalised_spellings_of_one_path']
-   pytest 尾行：1 failed, 6 passed in 0.10s
+   pytest 尾行：1 failed, 8 passed in 0.15s
    复原 sha256 逐字节相同：True
 
 == 复原后必须回绿 ==
    实得 FAILED：（无）
-   pytest 尾行：7 passed in 0.10s
+   pytest 尾行：9 passed in 0.10s
 
 结论：PASS（三段反证全成立）
