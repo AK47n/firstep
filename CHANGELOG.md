@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=28d7321e0d42df2a4d411de86b9f077490ea5642 -->
+<!-- changelog-auto: last-commit=54f2b542cf0dde2a3336322e2ecd4b1f410b5c02 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -13,6 +13,7 @@
 - 11:51 工单 hwcheck-hygiene/11：拆 ui 第一步——1401 行按职责拆成四件（入口 / 核心渲染 / 我的器件 / 动作与请求）
 - 11:51 工单 hwcheck-hygiene/11：置 resolved（读数与账、双轴评审整改都写进票尾）
 - 12:36 工单 hwcheck-hygiene/12：把 10 条源码串断言换成真浏览器用例（能改行为断言的改行为）
+- 12:45 工单 hwcheck-hygiene/14：库数据里的 markdown 粗体标记改在渲染层转 <strong>
 
 ## 2026-09-26
 - 00:21 工单 ci-gate-fixes/01：配置缺失时回退随包库 + 配置路径覆盖口
