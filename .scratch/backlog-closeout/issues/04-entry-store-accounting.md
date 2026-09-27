@@ -6,7 +6,38 @@
 
 **被谁阻塞：** 无——可立即开始。
 
-**状态：** ready-for-agent
+**状态：** resolved（2026-09-27；结论 = 有绕过事务的调用点，已开单 05）
+
+## 结论（结论是「② 有绕过事务的调用点」——已开单 05，本单不改代码）
+
+**取证方式**：读 `entry_store.py:65-93`（`entry_transaction` / `discard_entry_dirs` /
+`write_json` 的实现）+ 全仓 grep `write_json(` 的 7 个调用点，逐个看它是否在一个
+`with entry_transaction(...)` 里（不是看注释、不是看文档承诺）。
+
+**结论：那句话只对"新建"成立。**
+
+| 调用点 | 在事务里吗 | 依据 |
+|---|---|---|
+| `library.py:454`（`add_module`） | ✅ | `with entry_transaction(library_root, [slug])` 在 `:437` |
+| `reference_library.py:985`（`add_reference`） | ✅ | `:983` |
+| `reference_library.py:1148`（`archive_reference`） | ✅ | `:1144` |
+| `topic_library.py:229`（`confirm_topics`） | ✅ | `:223` |
+| `my_devices.py:306` | ✅ | 目录级 staging + rename（`my_devices` 自己的事务形状） |
+| **`library.py:712`（`_write_manifest`）** | ❌ | 调用链 `save_manifest:335` ← `update_platform_identity:367` / `update_module_description:484` / `add_platform_files:545` / `remove_platform_files:586`——全在活模块目录上写 |
+| **`reference_library.py:1085`（`update_reference`）** | ❌ | 活条目目录上直接写元数据 |
+| **`topic_library.py:502`（`update_topic`）** | ❌ | 同上 |
+
+**为什么那三处是真的隐患**：它们都有**异常期恢复**（`except` 里删新文件 / 写回旧文本，
+见 `reference_library.py:1086-1091`、`topic_library.py:512-514`、`library.py` 各更新函数的同款），
+但 `write_text` 被**强杀/断电**打断时 `except` 不会跑——盘上是半截 JSON，
+`read_json` 抛 `StoreParseError`，条目变坏。**与 `record-write-hardening` 治的是同一类病**。
+
+**处置**：**本单不修**（照验收标准：只核实、只开单）——
+已开 `.scratch/backlog-closeout/issues/05-library-meta-atomic.md`（`ready-for-agent`），
+file:line 与后果都写在里面；`backlog.md` §24 的对应条目同时改写（把"靠目录级事务兜底"
+更正成"**新建**靠事务兜底、**更新**那三处是裸写"）。
+
+**反向对照**：本单 `src/` 与 `tests/` **零改动**（`git status` 里只有本工单文件与 `backlog.md`）。
 
 ## 现状（待核实，带 file:line）
 
@@ -21,15 +52,15 @@
 
 ## 验收标准
 
-- [ ] 逐条取证（读代码 + 必要时写一个**只读探针**或小用例）：
+- [x] 逐条取证（读代码 + 必要时写一个**只读探针**或小用例）：
       `write_json` 的全部调用点、各自是否在事务里、暂存目录与换入点在哪；
       **结论二选一**：① 全在事务里 → 记为"设计如此，改动无收益"；
       ② 有绕过事务的调用点 → **本单不修**，但把它落成一张新工单的候选（写清 file:line 与后果）。
-- [ ] 结论写进 `backlog.md` §24 的那条（把"明确没修"改成"已核实：为什么不需要修/或已开单"），
+- [x] 结论写进 `backlog.md` §24 的那条（把"明确没修"改成"已核实：为什么不需要修/或已开单"），
       附一句**复现方式**（下一个人怎么自己核）。
-- [ ] 若发现"绕过事务"的调用点，开单（`.scratch/backlog-closeout/issues/05-*.md`，`ready-for-agent`），
+- [x] 若发现"绕过事务"的调用点，开单（`.scratch/backlog-closeout/issues/05-*.md`，`ready-for-agent`），
       本票结论段点名它。
-- [ ] 反向对照：**不做**任何产品代码改动（`git status` 里 `src/` 零改动）；若最终认为该修，
+- [x] 反向对照：**不做**任何产品代码改动（`git status` 里 `src/` 零改动）；若最终认为该修，
       在本票结论段写明理由并另开单，别在本单里顺手改。
 
 ## 备注

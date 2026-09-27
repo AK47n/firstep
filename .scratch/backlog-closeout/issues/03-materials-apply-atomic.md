@@ -30,7 +30,7 @@
 | 定向 pytest | `python -m pytest tests/test_atomic_io.py tests/test_materials_apply.py tests/test_materials_update.py tests/test_materials_pack.py tests/test_materials_task.py -q` | **84 passed** | `probe-03-tests.txt` |
 | 反证（三段） | `python .scratch/backlog-closeout/probe-03-red.py` | **PASS**：A 撤唯一临时名 → 1 条并发判据红；B 撤清残渣 → **7 条**残渣判据红（新旧入口 + 域层 + 清单）；C 解包退回手搓固定临时名 → 3 条红（域层两条 + 结构守卫）；逐条声明与实得全等、复原 sha256 逐字节、复原后 28 passed | `probe-03-red.txt` |
 | mypy | `python -m mypy src/contest_generator/atomic_io.py src/contest_generator/materials_apply.py` | **Success**（收走了评审实测的 3 条新错：lambda 返回值不匹配 ×2 + `partial` 推不出 ×1） | 本段 |
-| 全量 pytest | `python -m pytest -n auto -q` | **5649 passed + 11 skipped**（基线 5643 + 6 条新守卫/判据） | `probe-03-pytest.txt` |
+| 全量 pytest | `python -m pytest -n auto -q` | **5650 passed + 11 skipped**（基线 5643 + 7 条新守卫/判据） | `probe-03-pytest.txt` |
 | 结构守卫 | `python -m pytest tests/test_atomic_io.py -q` | 12 passed；例外清单剩 4 条（`codeview`/`recent_jobs`/`master_store`/`my_devices`），站点数与理由实测属实 | `probe-03-tests.txt` |
 
 **双轴评审（2026-09-27，跑在工作树 vs `71dee2fc`）与处置。**

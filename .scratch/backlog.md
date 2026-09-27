@@ -10,6 +10,20 @@
 > 另：§5.5 里「mq4-9 描述措辞未统一」「77 条目全部未上板真机验证」两条**未被该节 ✅ 段明说收口**，
 > 本轮如实标出（前者是措辞问题、后者是真机面，都不阻塞发版）。本轮同时按工单实况改正了两处陈旧标记：
 > §6.5 的 `full-download/07` 行（已 resolved）与 §7 标题（A 已落地）。
+>
+> **台账现状（2026-09-27，`backlog-closeout` 批收口后）**：可做的净待办**再度清零**——
+> §25 的「记而不修」（界面体量）与 §5.5 的「mq4-9 措辞」两条已落地；§24 那两条"明确没修"
+> 一条已修、一条核实后**开了新单**（`backlog-closeout/05`，库更新路径的元数据裸写）。
+> 现在悬着的是四类，**逐条写清"为什么不是待办"**（免得下一轮又当新发现重开）：
+> ① **人为阻塞**：§5.4 的 6 slug / 11 条身份字段（要用户给实物链接）、§5.5 的「77 条目未上板」
+> 与 `hwcheck-acceptance/05` / `hwcheck-hardening/08`（要真板子）——机器代不了；
+> ② **明确划走的边界**：跨进程并发（单进程应用）、强杀残留清扫、母版"目录换入 × 删 meta"窄缝
+> （已承认残留）——`record-write-hardening` spec 的「范围外」，本批不翻案；
+> ③ **尺子不是功能**：§15 的 C7（73 个私有符号公开化，量"测试还翻不翻墙"的进展）；
+> ④ **有条件才能做**：§20 候选①（生成工程赛题级重命名，要一次 CCS 真机实测）、
+> `tools/update-app.py` 的同款临时名（要先把结构守卫的扫描面扩到 `tools/`）。
+> **本批自己产生的两条新账**（都是"要另开单"的性质）：`backlog-closeout/05`（元数据原子写）
+> 与 §26 记的库层预热口径（改库内容要跟两平台编译矩阵）。
 
 ## 1. 推荐缓存加模块库指纹校验 —— ✅ 已实现（工单 recommend-cache-fingerprint/01，2026-08-19）
 
@@ -87,6 +101,15 @@
 ### 5.5 已知遗留（CONTEXT 自记，本次复核仍在）
 
 mq4-9 描述措辞未统一；77 条目全部未上板真机验证；oled 词表方案级缺口；A 类 3 页 mspm0-only 例外 —— ✅ **已收口（2026-09-09）**：例外成立（stm32 侧由 pid/us016 承接），不再算待办；单平台例外清单 + 逐条理由单源 = `tests/test_library_invariants.py::SINGLE_PLATFORM_REASONS`（新增单平台模块即红、承接者须真有 stm32 条目也机检）；README 原本指向的 `.scratch/materials-wiki/dkx-map.tsv` 未随仓库保存（映射轮次工作产物）→ 引用改指 `dkx-map-summary.md` + 重生成配方，三个读表脚本补缺失提示。
+
+> **两条尾巴的现状（2026-09-27，`backlog-closeout` 批复核）：**
+> - ~~**mq4-9 描述措辞未统一**~~ → **✅ 已收口**（工单 `backlog-closeout/02`）：九条 MQ 系方案 note 收成
+>   同一套口径（补「正向映射」、预热口径统一）；顺带把「预热 3-5 分钟」这个**手册里没有的数字**
+>   退回有据措辞（评审自读盘发现那数字的出处是 `ms1100.md`，与 MQ 系同批入库疑串台）。
+>   新守卫 `tests/test_wordlist.py::test_default_wordlist_mq_family_notes_*`（两条不变量）。
+>   **仍在的账**：库层（`library/modules/mq*/**` 的 manifest/code 注释）还写着两组不同口径，
+>   要改得跟一次两平台编译矩阵——见 §26。
+> - **77 条目全部未上板真机验证** → **维持挂账**（要真板子，机器代不了；与 §5 的真机面同一条）。
 
 ## 6. 真机验收第十六轮（2026-09-10）验出/记下的待修项 —— ✅ 全部落地（02–11 十一张工单均 resolved，2026-09-18 复核）
 
@@ -792,13 +815,25 @@ spec 的口径，**修库内驱动（含其注释）属另一张单**，且改�
 `tests/test_atomic_io.py::test_only_one_atomic_write_implementation_in_src` 盯着
 "新写的记录文件又手搓一个固定临时名"。
 
-**这一批明确没修的**（如实列出，别当成已修）：
-- `materials_apply._extract_zip` 的固定 `.update-tmp`（解包被更新任务锁串行化，风险低一档）；
-- `entry_store.write_json` 的裸 `write_text`（靠目录级事务兜底，不是这一族）；
-- **跨进程并发**（本应用是单进程 `uvicorn.run`，锁是进程内的；多开两个实例写同一工程不在射程）；
-- **强杀残留清扫**（只清本进程本次写失败留下的临时文件）；
+**这一批明确没修的**（如实列出，别当成已修）——**逐条现状已由 `backlog-closeout` 批复核（2026-09-27）**：
+
+- ~~`materials_apply._extract_zip` 的固定 `.update-tmp`~~ → **✅ 已修**（工单 `backlog-closeout/03`：
+  解包改走 `atomic_io.atomic_write_via`，唯一临时名 + 清残渣；顺带把同一条链上的
+  `.materials-manifest.json` 写回也改原子写）。
+- ~~`entry_store.write_json` 的裸 `write_text`（靠目录级事务兜底，不是这一族）~~ →
+  **⚠ 那句只对"新建"成立**（工单 `backlog-closeout/04` 逐调用点核实）：新建那半边确实在事务里，
+  **更新那半边不在**——`library.py:712`（`_write_manifest` ← 四个更新函数）、
+  `reference_library.py:1085`（`update_reference`）、`topic_library.py:502`（`update_topic`）
+  都是**活条目目录上的裸写**，强杀会留半截 JSON。**已开单**
+  `.scratch/backlog-closeout/issues/05-library-meta-atomic.md`（`ready-for-agent`）。
+- **跨进程并发**（本应用是单进程 `uvicorn.run`，锁是进程内的；多开两个实例写同一工程不在射程）
+  —— 维持不动。
+- **强杀残留清扫**（只清本进程本次写失败留下的临时文件）—— 维持不动。
 - 母版**目录换入**与 `delete_master` 删除动作之间那条窄缝（`record-write-hardening/05` 的账；
-  要闭得把锁提到目录换入之前、并把 `delete_entry` 也包进来）。
+  要闭得把锁提到目录换入之前、并把 `delete_entry` 也包进来）—— 维持不动（已承认残留）。
+- **新发现（同一族，本批不改）**：`tools/update-app.py:208-220` 有逐字同形的固定 `.update-tmp`
+  + 无 `finally`——它是**独立脚本**（跑在应用被替换之前、不 import `contest_generator`），
+  风险低一档但"中断留残渣"一样成立；结构守卫的扫描面是 `src/`，收它得先决定要不要扫 `tools/`。
 
 **下次复核按"直接读盘核对"的模式，不信本节旧标记**（§23 那个坑：修完没人回改标记）。
 
@@ -827,5 +862,45 @@ spec 的口径，**修库内驱动（含其注释）属另一张单**，且改�
 **扫不到产品界面里的字**，所以它一直没报。修它要动 `index.html`（浏览器门禁的落点），
 得连带跑那 60 条真浏览器用例——留一件小事给下一批。
 
+> **✅ 已收口（2026-09-27，工单 `backlog-closeout/01`）**：三处体量按实测改（`:4785` 6.2 GB →
+> 「约 800 MB」、`:4794` 「5 GB+ / 几 GB 级更新」→「约 0.7 GB / 5000+ 个文件」、`:4803` 「约 1 GB」
+> →「约 800 MB」），确认弹窗那句「6 GB 资料库」（`static/js/ui/update.js:47`）也去掉数字；
+> **守卫从"只扫 README/Release 说明"扩到产品界面文本面**（`static/index.html` + `static/js/**/*.js`，
+> 判据：与「完整包/资料库」同行的 GB ≥ 2 即红），并顺手修掉守卫自身一个假阴性
+> （否定式回看跨分句——`…不用手动下分卷、需要装 7-Zip` 会被放行）。
+> 读数：前端门禁 1830 passed、浏览器门禁 60 passed、全量 pytest 5641 passed。
+> **顺带更正两处旧账**：①`index.html:4794` 的「5 GB+」**本来就错**（装完的资料库实测 ≈0.67 GiB；
+> 5 GB 那句在 README 里说的是"故意不进包的第三方装机件"）；②README 三处「约 770 MB」→「约 800 MB」
+> （两条渠道口径对齐）。
+
 **仍未做**：`hwcheck-acceptance/05`（真机上板）保持 `ready-for-human`——**本版没有任何板上行为
 被验证**，`hwcheck-hardening/08` 同样阻塞于真板子。
+
+## 26. backlog 剩余项收口（2026-09-27，工单 `backlog-closeout/01–04`）
+
+**来源**：用户「把 backlog 剩余没做的做了」。全 25 节逐节读完，**真还开着的只有三条**
+（其余要么已 resolved、要么是人为阻塞、要么是 spec 明确划走的边界），加一条"只核实不改"。
+批 spec 与四张单在 `.scratch/backlog-closeout/`。
+
+| 单 | 做了什么 | 用户可见吗 | 读数 |
+|---|---|---|---|
+| `01` 界面体量说实话 | 更新面板三处体量按实测改；守卫扩到**产品界面文本面**；修掉守卫自身一个假阴性 | ✅ 用户可见（面板数字变了） | 前端 1830 / 浏览器 60 / 全量 5641 passed |
+| `02` MQ 词表口径统一 | 九条 MQ 方案 note 同一套口径（补「正向映射」+ 预热口径）；**把手册里没有的「3-5 分钟」退回有据措辞**；两条不变量守卫 | ❌（选购方案说明的措辞） | 定向 93 / 全量 5643 passed |
+| `03` 解包走共享原语 | `atomic_io.atomic_write_via` 收成唯一实现；`materials_apply` 解包改走它（流式不变）+ **清单写回也原子化**；守卫例外清单删一条 | ❌（失败时的残渣/半截清单） | 定向 84 / 全量 5650 passed；mypy Success |
+| `04` `entry_store` 核实 | 逐调用点核实"靠目录级事务兜底"这句话——**只对"新建"成立**；新开 `05` | ❌ | `src/` 零改动 |
+
+**本批产生的两条账（都写清了为什么不是待办或要另开单）：**
+
+1. **`backlog-closeout/05`（`ready-for-agent`）**：三个库的**更新**路径（`library._write_manifest` /
+   `reference_library.update_reference` / `topic_library.update_topic`）把元数据**裸写**进活条目目录，
+   强杀会留半截 JSON（异常期恢复挡不住强杀）。这是 `record-write-hardening` 那族里
+   **唯一被"靠事务兜底"一句放过**的地方。
+2. **库层预热口径没动**（`library/modules/mq*/**`）：mq3/4/6/7/8/9 的 manifest/code 注释仍写
+   「预热 3-5 分钟」（同样无出处）、mq2/mq135/mq5 写「几分钟级」——**词表与库层两套口径**。
+   改库内容要跟一次两平台编译矩阵（§21/§23 的口径），属另一张单。
+
+**另外两条"顺带量到、不动"的事实**（免得下轮当新发现）：
+- `tools/update-app.py:208-220` 有逐字同形的固定 `.update-tmp` + 无 `finally`（独立脚本，
+  不 import `contest_generator`；结构守卫只扫 `src/`）；
+- 浏览器门禁 `launcher-reload` 在**本机负载下**仍会偶发红（本批实测一次 54/6，空闲重跑 60/60；
+  已补进 `docs/agents/local-environment.md`）。
