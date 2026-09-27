@@ -1,7 +1,12 @@
 """共享原子写原语（工单 record-write-hardening/01）的判据。
 
 形状照同一族的先例 `tests/test_hwcheck_triage.py:554-645`：判据取**最终落盘内容**与
-**目录里有没有多余文件**，不断言内部实现。
+**目录里有没有多余文件**。
+
+口径说明（双轴评审 2026-09-27 指出 spec 与工单打架，这里记账）：spec「测试决策」写的是
+"不断言锁对象"，而工单 01 明写要判"同一路径同一把锁 / 不同文件名不同锁"——`is` 同一性
+断言就是 `path_lock` 的**契约本身**（不是内部实现细节，调用方靠它互斥），故**按工单执行**，
+并在 `spec.md` 的「测试决策」里补了例外说明。
 """
 
 from __future__ import annotations
@@ -15,6 +20,10 @@ import pytest
 
 from contest_generator import atomic_io
 from contest_generator.atomic_io import atomic_write_text, path_lock
+
+
+class _Sentinel(OSError):
+    """注入用的哨兵：断言"照抛的是原异常"，而不是"抛了某个 OSError"（后者清理异常也满足）。"""
 
 
 def _residue(directory: Path, keep: str) -> list[str]:
@@ -31,13 +40,61 @@ def test_atomic_write_text_leaves_no_tmp(tmp_path):
     assert _residue(tmp_path, target.name) == []
 
 
-def test_atomic_write_text_failure_leaves_no_residue(tmp_path):
-    """坏写不许留半成品：替换失败时临时文件必须被清掉，且**原异常照抛**。"""
+def test_atomic_write_text_replace_failure_leaves_no_residue(tmp_path):
+    """替换这一步失败：临时文件必须被清掉，且**原异常照抛**。"""
     target = tmp_path / "record.json"
     target.mkdir()  # 目标是**目录** → 替换必然失败
     with pytest.raises(OSError):
         atomic_write_text(target, "{}")
     assert _residue(tmp_path, target.name) == []
+
+
+def test_atomic_write_text_write_failure_leaves_no_residue(tmp_path, monkeypatch):
+    """**写临时文件**这一步失败（不是替换那一步）：已经落下的半截临时文件同样要清掉。
+
+    注入方式刻意"先真写出一个临时文件再抛"——如果只抛不写，`finally` 里根本没东西可清，
+    这条判据就是空转（双轴评审 2026-09-27 指出的缺口）。
+    """
+    target = tmp_path / "record.json"
+    real_write_text = Path.write_text
+
+    def partial_then_boom(self, data, *args, **kwargs):
+        real_write_text(self, str(data)[:1], *args, **kwargs)  # 真落一个半截文件
+        raise _Sentinel("磁盘满")
+
+    monkeypatch.setattr(Path, "write_text", partial_then_boom)
+    with pytest.raises(OSError) as raised:
+        atomic_write_text(target, "{}")
+    assert isinstance(raised.value, _Sentinel), f"照抛的不是原异常：{raised.value!r}"
+    assert _residue(tmp_path, target.name) == []
+
+
+def test_atomic_write_text_surfaces_the_original_error_even_if_cleanup_fails(
+    tmp_path, monkeypatch
+):
+    """**清理动作失败不许掩盖原异常**：`except OSError: pass` 那条路径要真被走到。
+
+    构造：替换抛哨兵 + 清残渣也抛（模拟杀毒把临时文件锁住）。判据 = 抛出来的仍是哨兵。
+    本用例**故意允许残留**（清理就是被注入成失败的），所以这里不查目录干净。
+    """
+    target = tmp_path / "record.json"
+
+    def boom_replace(src, dst):
+        raise _Sentinel("替换失败")
+
+    monkeypatch.setattr(
+        atomic_io,
+        "os",
+        SimpleNamespace(path=os.path, getpid=os.getpid, replace=boom_replace),
+    )
+
+    def boom_unlink(self, *args, **kwargs):
+        raise OSError("清不掉（模拟被锁住）")
+
+    monkeypatch.setattr(Path, "unlink", boom_unlink)
+    with pytest.raises(OSError) as raised:
+        atomic_write_text(target, "{}")
+    assert isinstance(raised.value, _Sentinel), f"清理异常把原异常盖掉了：{raised.value!r}"
 
 
 def test_concurrent_writes_share_no_tmp_file(tmp_path, monkeypatch):
@@ -79,10 +136,11 @@ def test_concurrent_writes_share_no_tmp_file(tmp_path, monkeypatch):
     second = threading.Thread(target=writer, args=("后到的\n",), daemon=True)
     second.start()
     # 先让第二个写者**整趟走完**（它不卡，直接落盘），再放行第一个：
-    # 这样两次**真实** `os.replace` 不重叠——Windows 上并发 replace 同一个目标本身会抛
-    # `PermissionError`（共享冲突），那是"谁先落盘"的另一回事，混进来这条判据就测不准了。
-    # 本用例要测的是"临时名互抢"：固定名时第二个写者会把第一个的临时文件挪走/截断，
+    # 本用例要测的是"临时名互抢"——固定名时第二个写者会把第一个的临时文件挪走，
     # 第一个放行后 `replace` 的源文件已经不在 → 报错。
+    # 刻意**不**让两次真实 replace 重叠：Windows 上并发 replace 同一目标本身会以
+    # `WinError 5（拒绝访问）` 失败（评审轮实测：400 轮对撞里 147 次），那是"谁先落盘"
+    # 的另一回事，混进来这条判据就测不准了——那件事由各域 `update_*` 的锁挡住。
     second.join(timeout=30)
     assert not second.is_alive(), "第二个写者没跑完——判据自己失败，别挂住整场"
     release.set()

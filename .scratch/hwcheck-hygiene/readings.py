@@ -10,10 +10,12 @@
 
 用法：
     python .scratch/hwcheck-hygiene/readings.py <读数名> -- <命令…>
+    python .scratch/hwcheck-hygiene/readings.py <读数名> --out-dir <目录> -- <命令…>
 例：
     python .scratch/hwcheck-hygiene/readings.py probe-01-browser -- node --test --test-concurrency=1 "tests/browser/*.spec.mjs"
     python .scratch/hwcheck-hygiene/readings.py probe-01-js -- node --test "tests/js/*.test.mjs"
-输出：`.scratch/hwcheck-hygiene/<读数名>.txt`（**整份**输出 + 头部），控制台回摘要与退出码。
+输出：`<目录>/<读数名>.txt`（**整份**输出 + 头部；默认目录 = 本脚本所在目录，
+`--out-dir` 可指到别的批次目录——其他批次不必再抄一份这个脚本）。
 """
 
 from __future__ import annotations
@@ -32,6 +34,14 @@ SUMMARY_PREFIX = ("ℹ tests", "ℹ suites", "ℹ pass", "ℹ fail", "ℹ cancel
 
 
 def main(argv: list[str]) -> int:
+    out_dir = OUT_DIR
+    if "--out-dir" in argv:
+        at = argv.index("--out-dir")
+        if at + 1 >= len(argv):
+            print("--out-dir 后面要跟一个目录")
+            return 2
+        out_dir = pathlib.Path(argv[at + 1]).resolve()
+        del argv[at:at + 2]
     if "--" not in argv or len(argv) < 3:
         print(__doc__)
         return 2
@@ -52,7 +62,7 @@ def main(argv: list[str]) -> int:
         f"# 退出码：{proc.returncode}",
         "",
     ])
-    out = OUT_DIR / f"{name}.txt"
+    out = out_dir / f"{name}.txt"
     out.write_text(header + body, encoding="utf-8", newline="")
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     for line in body.splitlines():

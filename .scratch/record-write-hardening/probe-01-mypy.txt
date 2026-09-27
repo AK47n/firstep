@@ -1,0 +1,6 @@
+# 读数：probe-01-mypy
+# 命令：python -m mypy src/contest_generator/atomic_io.py
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T16:59:17+08:00
+# 退出码：0
+Success: no issues found in 1 source file

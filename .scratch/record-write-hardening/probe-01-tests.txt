@@ -1,0 +1,7 @@
+# 读数：probe-01-tests
+# 命令：python -m pytest tests/test_atomic_io.py -q
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T16:59:16+08:00
+# 退出码：0
+.......                                                                  [100%]
+7 passed in 0.08s
