@@ -160,3 +160,8 @@ DebugConfig/
 # 的原文在一次写盘事故里被替换字符（U+FFFD）毁掉，git 历史里也从未有过完好版本，
 # 故是**按上下文重写**；另 3 行（worktree / 真机验收 / fix-errors）逐字还原自历史。
 # **忽略规则一行未改**（改前后规则清单逐行比对相同）。
+
+# ui-density 的**整页**截图（每张约 0.5 MB，可由 probe-02-shot.mjs 一条命令重出；
+# 首屏那 8 张是"改了什么"的证据，入库）。判断标准照 .scratch/real-run 那条先例：
+# 人要长期回看的入库，能从库里一条命令重建的不入库。
+.scratch/ui-density/shots/*-full.png

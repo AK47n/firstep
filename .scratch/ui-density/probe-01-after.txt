@@ -1,0 +1,40 @@
+[来源] 工作树 src/contest_generator/static/index.html
+
+== 全站字号分布（index.html 内联样式）==
+       8 px  x1
+      11 px  x60
+    11.5 px  x23
+      12 px  x164
+    12.5 px  x49
+      13 px  x63
+      14 px  x16
+      15 px  x3
+      16 px  x2
+    16.5 px  x1
+      18 px  x2
+      20 px  x2
+      30 px  x1
+  小计：13 种取值 / 387 处声明；其中 ≤13px 共 360 处（占 93.0%）
+
+== 全站间距令牌引用 ==
+  --space-1 (4px 档)  x66
+  --space-2 (8px 档)  x162
+  --space-3 (12px 档)  x79
+  --space-4 (16px 档)  x34
+  --space-5 (20px 档)  x8
+  --space-6 (24px 档)  x1
+
+== 检测页样式段（选择器含 hwcheck / my-device 的规则）==
+  字号：
+    （无）
+  ✅ 裸 px 字号 = 0（全部走 --fs-* 令牌）
+  间距：
+  --space-1  x2
+  --space-2  x18
+  --space-3  x16
+  --space-4  x9
+  --space-5  x1
+  --space-6  x1
+
+== 页面清单（section id，用于确认量的是同一份文件）==
+  code / generate / hwcheck / library / reference / pdf / md / topic / master / changelog / settings / guide

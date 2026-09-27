@@ -1,0 +1,69 @@
+[来源] git HEAD:src/contest_generator/static/index.html
+
+== 全站字号分布（index.html 内联样式）==
+       8 px  x1
+      11 px  x60
+    11.5 px  x25
+      12 px  x168
+    12.5 px  x62
+      13 px  x74
+      14 px  x16
+      15 px  x3
+      16 px  x2
+    16.5 px  x1
+      18 px  x2
+      20 px  x2
+      30 px  x1
+  小计：13 种取值 / 417 处声明；其中 ≤13px 共 390 处（占 93.5%）
+
+== 全站间距令牌引用 ==
+  --space-1 (4px 档)  x82
+  --space-2 (8px 档)  x168
+  --space-3 (12px 档)  x65
+  --space-4 (16px 档)  x23
+  --space-5 (20px 档)  x7
+
+== 检测页样式段（选择器含 hwcheck / my-device 的规则）==
+  字号：
+    11.5 px  x2
+      12 px  x4
+    12.5 px  x13
+      13 px  x11
+  ⚠ 仍在用裸 px 字号的规则（改后应为空）：
+    .hwcheck-advice-block li → font-size: 13px
+    .hwcheck-advice-summary → font-size: 13px
+    .hwcheck-advice-title → font-size: 12px
+    .hwcheck-channel → font-size: 13px
+    .hwcheck-check-expect → font-size: 13px
+    .hwcheck-check-tip → font-size: 12.5px
+    .hwcheck-custom-name → font-size: 13px
+    .hwcheck-custom-wiring → font-size: 12.5px
+    .hwcheck-device-count → font-size: 12.5px
+    .hwcheck-group → font-size: 12.5px
+    .hwcheck-hint → font-size: 12.5px
+    .hwcheck-my-device-field → font-size: 12.5px
+    .hwcheck-my-device-name → font-size: 13px
+    .hwcheck-ok → font-size: 12.5px
+    .hwcheck-order-index → font-size: 11.5px
+    .hwcheck-order-name → font-size: 12.5px
+    .hwcheck-order-row → font-size: 13px
+    .hwcheck-path → font-size: 13px
+    .hwcheck-recent-time → font-size: 12.5px
+    .hwcheck-section-tag → font-size: 11.5px
+    .hwcheck-share → font-size: 12px
+    .hwcheck-table th → font-size: 12px
+    .hwcheck-table → font-size: 13px
+    .my-device-draft → font-size: 12.5px
+    /* 「已经被删掉的自建件被摘掉」那句（工单 ci-gate-fixes/09）：中性提示，不是错误 ——用户自己删的件，页面只需说清"它不在你的器件里了、这次检测已摘掉"。 */ .hwcheck-dropped-note → font-size: 12.5px
+    /* 工具链缺失 = 大声降级（说清"未验证"，不假装编译过） */ .hwcheck-warn → font-size: 12.5px
+    /* 最近几次检测：点一行 = 回读那次检测 */ .hwcheck-recent-row → font-size: 13px
+    /* 现象回填 + AI 排障（工单 module-hwcheck/08）：输入框 + 建议面板。 建议面板刻意与"清单一句话"区分开：定性标签 + 两个列表（可能原因 / 下一步）， degraded（兜底文案）时用虚线描边 + 徽章，不让人把它当成模型结论。 */ .hwcheck-symptom → font-size: 13px
+    /* 生成前自动移开的默认脚撞脚：一根线一行（工单 hwcheck-pin-conflict-exit/01） */ .hwcheck-pin-fix → font-size: 12px
+    /* 资料 → 事实草稿（工单 hwcheck-unknown-device/07）：AI 只填草稿，判据在服务端。 出处片段 = "AI 没编"的可见证据（逐字引用，用户能对回原文）。 */ .my-device-material → font-size: 12.5px
+  间距：
+  --space-1  x18
+  --space-2  x22
+  --space-3  x1
+
+== 页面清单（section id，用于确认量的是同一份文件）==
+  code / generate / hwcheck / library / reference / pdf / md / topic / master / changelog / settings / guide
