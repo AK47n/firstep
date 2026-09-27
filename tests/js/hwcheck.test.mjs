@@ -52,6 +52,25 @@ import { esc } from "../../src/contest_generator/static/js/fx/core.js";
 // 单平台件的「需切换平台」标记落在既有网格渲染上（工单 09 的行为判据要真跑它）
 import { moduleGridHTML } from "../../src/contest_generator/static/js/fx/module.js";
 
+// 工单 hwcheck-hygiene/11：DOM 层那一个 1401 行的文件按职责拆成四件——入口
+// `ui/hwcheck.js`（只剩接线 + 两个导出）／核心渲染 `ui/hwcheck-core.js`／「我的器件」
+// `ui/hwcheck-devices.js`／动作与请求 `ui/hwcheck-actions.js`。
+//
+// 下面这些"ui 走 fx 单源 / ui 不得手拼 XX"的判据原本读那一个大文件。搬迁之后**钉死某一个
+// 路径**必然变成两种"守卫闭眼"：读不到那段代码（断言恒假或直接报错），或读到空壳（恒真）。
+// 所以按断言的对象分两种落点：
+//   · `hwcheckUiText()`  —— 判"这一层有没有做某件事"（四件并集）；
+//   · `uiModuleText(名)` —— 判"某个具体函数的身体"（读它所在的那一件）。
+// 逐条判定与"能改成行为断言的改行为"归 12 号单；本单只保证断言的对象跟着代码走。
+const HWCHECK_UI_DIR = new URL("../../src/contest_generator/static/js/ui/", import.meta.url);
+const HWCHECK_UI_FILES = [
+  "hwcheck.js", "hwcheck-core.js", "hwcheck-devices.js", "hwcheck-actions.js",
+];
+const hwcheckUiText = () => HWCHECK_UI_FILES
+  .map((name) => readFileSync(new URL(name, HWCHECK_UI_DIR), "utf8")).join("\n");
+const uiModuleText = (name) => readFileSync(new URL(name, HWCHECK_UI_DIR), "utf8");
+
+
 // 工单 hwcheck-hygiene/09–10：纯函数层按职责拆成六件（`hwcheck.js` 那个过渡态 barrel 已删）。
 // 凡"对 fx 这一层成立"的判据都作用在**整个层**上——钉某个路径的写法在搬迁后要么读到空壳
 // （断言恒真）、要么读不到文件（报错或静默跳过），两种都是"守卫闭眼"。
@@ -169,8 +188,7 @@ test("hwcheckCodeTarget：产物区壳的唯一出处（ui 不手拼同一段 HT
 });
 
 test("产物区壳在 fx 单源：ui/hwcheck.js 不得手拼 hwcheck-hint / data-hwcheck-code", () => {
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = hwcheckUiText();
   assert.ok(ui.includes("hwcheckPanelHTML"), "ui 应调用 fx 的 hwcheckPanelHTML");
   assert.ok(ui.includes("hwcheckCodeTarget"), "ui 应经 hwcheckCodeTarget 取容器");
   assert.ok(!/["'`]<div class="hwcheck-hint"/.test(ui),
@@ -230,12 +248,11 @@ test("本栏目 section 容器与平台 / 通道 / 预览控件齐备", () => {
   }
 });
 
-test("纯件留在 fx：ui/hwcheck.js 不得重复定义 fx 里的函数（防双源漂移）", () => {
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+test("纯件留在 fx：ui 这几件都不得重复定义 fx 里的函数（防双源漂移）", () => {
+  const ui = hwcheckUiText();
   for (const name of ["hwcheckPlatformState", "hwcheckPlatformCardsHTML", "hwcheckRequestPayload"]) {
     assert.ok(!new RegExp("function\\s+" + name + "\\s*\\(").test(ui),
-      "ui/hwcheck.js 不应重新定义 " + name + "（双源漂移）");
+      "ui 不应重新定义 " + name + "（双源漂移）");
   }
   // 工单 hwcheck-hygiene/10：纯件层是六件（09 拆的、barrel 已删）——六条边**逐条**点名，
   // 少一条就是"那一类纯件没人取"（fx-guard 判据④ 也会红，这里先指到具体哪一件）。
@@ -243,7 +260,7 @@ test("纯件留在 fx：ui/hwcheck.js 不得重复定义 fx 里的函数（防�
   // 1 → 6 条记，别再按老数起算。
   for (const key of ["state", "project", "wiring", "plan", "triage", "handoff"]) {
     assert.ok(ui.includes(`from "/js/fx/hwcheck-${key}.js"`),
-      `ui/hwcheck.js 应从 fx/hwcheck-${key}.js 导入纯件`);
+      `ui 这一层应从 fx/hwcheck-${key}.js 导入纯件`);
   }
 });
 
@@ -534,8 +551,7 @@ test("新控件齐备：父目录输入 / 选择文件夹 / 生成按钮 / 工�
 });
 
 test("ui 复用既有编译与烧录执行体（不写第三个 SSE 编译消费器）", () => {
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = hwcheckUiText();
   assert.ok(ui.includes('from "/js/ui/fix-center-core.js"'),
     "编译应复用既有执行体 runCompileOnceCore");
   assert.ok(ui.includes("runCompileOnceCore("), "应真的调用它");
@@ -548,16 +564,14 @@ test("ui 复用既有编译与烧录执行体（不写第三个 SSE 编译消费
 });
 
 test("ui 的清单勾选态走 fx 的键与编解码单源（不手拼 localStorage 键名）", () => {
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = hwcheckUiText();
   assert.ok(ui.includes("hwcheckChecklistKey("), "键名应来自 fx");
   assert.ok(ui.includes("hwcheckChecklistToggle("), "编解码应来自 fx");
   assert.ok(!/firstep\.hwcheck\./.test(ui), "ui 不得手写 firstep.hwcheck.* 键名（双源）");
 });
 
 test("ui 不手拼工程面板 / 清单 / 最近的壳（壳的单源在 fx/hwcheck-project.js）", () => {
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = hwcheckUiText();
   assert.ok(ui.includes("hwcheckProjectPanelHTML("));
   assert.ok(ui.includes("hwcheckChecklistHTML("));
   assert.ok(ui.includes("hwcheckRecentHTML("));
@@ -780,8 +794,7 @@ test("新控件齐备：器件搜索 / 计数 / chips / 网格 / 接线表 / 冲
 });
 
 test("ui 的接线表 / 冲突 / 顺序 / chips 都走 fx 单源（不手拼表格与标记）", () => {
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = hwcheckUiText();
   for (const name of ["hwcheckWiringTableHTML(", "hwcheckPinGroupsHTML(",
     "hwcheckOrderHTML(", "hwcheckDeviceChipsHTML(", "hwcheckMissingDevicesHTML(",
     "hwcheckDevicePick(", "hwcheckDevicePool("]) {
@@ -796,8 +809,7 @@ test("ui 的接线表 / 冲突 / 顺序 / chips 都走 fx 单源（不手拼表�
 });
 
 test("ui 的说明弹窗走既有委托（捕获阶段拦，否则点说明会把器件去掉）", () => {
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = hwcheckUiText();
   assert.ok(ui.includes("bindModuleInfoEntry("), "chip 里的说明按钮要用既有委托");
   assert.ok(ui.includes("openModuleInfo("), "模块卡片的详情按钮走既有弹窗入口");
   const recommend = readFileSync(
@@ -810,8 +822,7 @@ test("ui 的说明弹窗走既有委托（捕获阶段拦，否则点说明会�
 test("ui 的视图刷新守并发纪律（过期响应不写状态 + 在途触发排队）", () => {
   // CONTEXT.md「展开收口」同款：响应里带着 devices 回显，慢响应回来会把刚选的
   // 那件抹掉。这条钉住三条纪律在（改坏了只有真机连点才看得出来）。
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = uiModuleText("hwcheck-actions.js");
   assert.ok(ui.includes("hwcheckViewBusy") && ui.includes("hwcheckViewPending"),
     "在途触发要记 pending（不是静默丢弃）");
   assert.ok(ui.includes("hwcheckSelectionKey()"),
@@ -824,8 +835,7 @@ test("ui 的自动回读不抹掉用户刚动的选择（工单 06 会话实测�
   // 页面加载时的自动回读是异步的；用户可能已经点了平台 / 加了器件。旧工程里的
   // 器件集（常见是空的）一到就把刚选的那件抹掉——页面上看着像"点了没反应"，
   // 真机验收连着五条用例超时才暴露出来。判据同上：比选择集快照，变了就不覆盖。
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = uiModuleText("hwcheck-actions.js");
   assert.ok(/keepSelection: hwcheckSelectionKey\(\) !== requestKey/.test(ui),
     "自动回读落地前要比选择集快照（变了 = 用户已动过，别覆盖）");
   assert.ok(/adoptProject\(payload, dir, \{[\s\S]{0,80}?keepSelection/
@@ -836,8 +846,7 @@ test("ui 的三处清预览：换平台 / 换通道 / **预览失败**（工单 
   // 这条守卫原来写的是"接线表取不到不许把 main.c 预览抹掉"，依据是"检测程序只依赖平台与通道"。
   // 那个前提**不成立**：主程序是按所选器件渲染的（render_main_c(config, sections, generic, custom)），
   // 所以预览失败之后留着的那份属于**上一组器件**——照它去编译烧录就是烧错东西。
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = hwcheckUiText();
   // **先剥注释再数**（工单 hwcheck-hardening/10）：直接数原文的话，留一句注释就能凑数——
   // 同一批新写的那条结构钉已经这么做了，这条是补课。
   const code = ui.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
@@ -1026,8 +1035,7 @@ test("新控件齐备：专精小节容器在检测页（在顺序之后、工�
 });
 
 test("ui 的小节渲染走 fx 单源（不手拼 [专精] 标记与徽章）", () => {
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = hwcheckUiText();
   for (const name of ["hwcheckSectionsHTML(", "hwcheckUnspecializedHTML(",
     "hwcheckSectionsState("]) {
     assert.ok(ui.includes(name), "ui 应调用 fx 的 " + name + "）");
@@ -1037,8 +1045,7 @@ test("ui 的小节渲染走 fx 单源（不手拼 [专精] 标记与徽章）", 
 });
 
 test("ui 换平台 / 换通道时清掉旧检测计划（配方按平台分，留着会误导）", () => {
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = uiModuleText("hwcheck-actions.js");
   const clears = ui.match(/hwcheckUI\.sections = \[\]/g) || [];
   assert.equal(clears.length, 3,
     "三处该清：换平台 / 换通道 / 取视图失败（清 failed 视图时一并清计划）");
@@ -1126,9 +1133,7 @@ test("hwcheckBoardState：接纳 exclusive_groups，缺键时保留旧值", () =
 });
 
 test("ui：器件挑选把组清单喂给单选交换，并渲染互斥提示", () => {
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url),
-    "utf8");
+  const ui = hwcheckUiText();
   assert.ok(ui.includes("hwcheckDeviceGroupNoticeHTML("),
     "同组互斥提示的渲染要走 fx 单源");
   assert.ok(/hwcheckDevicePick\([^)]*exclusiveGroups/.test(ui),
@@ -1243,8 +1248,7 @@ test("hwcheckConsoleNoteHTML / hwcheckConsoleState：余量提示由服务端给
 test("结构钉：余量提示有渲染落点 + ui 真调它（工单 hardening/05）", () => {
   const at = html.indexOf('id="hwcheck-console-note"');
   assert.ok(at > 0, "缺少余量提示容器 #hwcheck-console-note");
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = uiModuleText("hwcheck-core.js");
   assert.ok(ui.includes('$("hwcheck-console-note")'), "余量提示要有渲染落点");
   assert.ok(ui.includes("hwcheckConsoleNoteHTML(hwcheckUI.consoleNote)"), "要真的把服务端那句渲染出来");
 });
@@ -1267,16 +1271,14 @@ test("新控件齐备：命令台容器在检测页（在小节之后、工程�
 });
 
 test("ui 的命令台渲染走 fx 单源（不手拼命令表）", () => {
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = hwcheckUiText();
   assert.ok(ui.includes("hwcheckConsoleHTML("), "ui 应调用 fx 的 hwcheckConsoleHTML(");
   assert.ok(ui.includes("hwcheckConsoleState("), "载荷归一走 fx 的 hwcheckConsoleState(");
   assert.ok(!ui.includes("<table"), "ui 不得手拼表格（双源漂移）");
 });
 
 test("ui 换平台 / 换通道时清掉旧命令表（配方按平台分，留着会误导）", () => {
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = uiModuleText("hwcheck-actions.js");
   const clears = ui.match(/hwcheckUI\.console = null/g) || [];
   assert.equal(clears.length, 3,
     "三处该清：换平台 / 换通道 / 取视图失败（与 sections 同处置）");
@@ -1445,8 +1447,7 @@ test("新控件齐备：现象输入框 / 分析按钮 / 状态行 / 建议容�
 });
 
 test("ui 的建议渲染走 fx 单源 + 勾选落服务端（不手拼建议 HTML）", () => {
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = hwcheckUiText();
   assert.ok(ui.includes("hwcheckAdviceHTML("), "ui 应调用 fx 的 hwcheckAdviceHTML(");
   assert.ok(ui.includes("hwcheckAdviceState(") && ui.includes("hwcheckRecordState("));
   assert.ok(ui.includes("hwcheckChecklistState("),
@@ -1456,8 +1457,7 @@ test("ui 的建议渲染走 fx 单源 + 勾选落服务端（不手拼建议 HTM
 });
 
 test("ui 提交现象前先读输入框（现象的真源是 DOM，不是可能过期的 state）", () => {
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = uiModuleText("hwcheck-actions.js");
   const submitAt = ui.indexOf("async function submitHwcheckTriage");
   assert.ok(submitAt > 0);
   const body = ui.slice(submitAt, submitAt + 600);
@@ -1466,8 +1466,7 @@ test("ui 提交现象前先读输入框（现象的真源是 DOM，不是可能�
 });
 
 test("ui 生成新工程时清掉上一次的现象与建议（旧建议属于另一个工程）", () => {
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = uiModuleText("hwcheck-actions.js");
   const genAt = ui.indexOf("async function generateHwcheck");
   const body = ui.slice(genAt, genAt + 1200);
   assert.ok(body.includes("hwcheckUI.symptom = \"\"") && body.includes("hwcheckUI.advice = null"),
@@ -1477,8 +1476,7 @@ test("ui 生成新工程时清掉上一次的现象与建议（旧建议属于�
 test("ui 回读勾选的判据是「这次带没带记录」而不是「记录里的勾选空不空」", () => {
   // 评审整改：服务端把勾选全清空也是**有效状态**，拿"空"当"没有记录"会让
   // localStorage 里的旧勾选复活（同一个页面两份真源，谁也说不清哪份对）。
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = uiModuleText("hwcheck-actions.js");
   const adoptAt = ui.indexOf("function adoptProject");
   const body = ui.slice(adoptAt, adoptAt + 1400);
   assert.ok(body.includes("payload && payload.record"),
@@ -1495,8 +1493,7 @@ test("单平台件不误导：器件挑选面按**本栏目当前平台**标记�
   // 判据在既有网格渲染里（fx/module.js moduleGridHTML：platform 参数决定
   // 卡片是否带 .off + 「需切换平台」）——检测页要做的只有"把当前平台传进去"。
   // 不传 = sr04 / jy61p / xunji 这类只有 mspm0 条目的件在 stm32 页面上看着能测。
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = uiModuleText("hwcheck-core.js");
   const call = ui.match(/moduleGridHTML\(\s*([^)]*)\)/);
   assert.ok(call, "ui 应复用既有网格渲染 moduleGridHTML");
   assert.ok(call[1].includes("hwcheckUI.platform"),
@@ -1524,8 +1521,7 @@ test("单平台件不误导：**行为**上，未选中的卡片就被标成需�
 });
 
 test("单平台件不误导：已选中的单平台件由服务端载荷点名，前端只渲染不另写文案", () => {
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = uiModuleText("hwcheck-core.js");
   const panel = hwcheckFxText();
   assert.ok(ui.includes("hwcheckMissingDevicesHTML("),
     "「本平台无条目」的逐条点名走 fx 单源（判据在服务端 wiring.missing）");
@@ -1557,10 +1553,9 @@ test("新控件齐备：「+ 我的器件」按钮 / 列表容器 / 表单容器
 });
 
 test("ui 静态 import fx/my-devices.js（不 import = 点开表单就报 undefined）", () => {
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = hwcheckUiText();
   assert.ok(ui.includes('from "/js/fx/my-devices.js"'),
-    "ui/hwcheck.js 应静态 import fx/my-devices.js");
+    "ui 应静态 import fx/my-devices.js");
   for (const fn of ["myDeviceFormHTML(", "myDeviceFormCheck(", "myDevicePayload(",
     "myDeviceListHTML("]) {
     assert.ok(ui.includes(fn), "ui 应调用 fx 的 " + fn);
@@ -1570,8 +1565,7 @@ test("ui 静态 import fx/my-devices.js（不 import = 点开表单就报 undefi
 });
 
 test("ui 读写端点走既有 apiGet / apiPost / apiDelete（不自造 fetch）", () => {
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = uiModuleText("hwcheck-devices.js");
   assert.ok(ui.includes('apiGet("/api/my-devices")'));
   assert.ok(ui.includes('apiPost("/api/my-devices"'));
   assert.ok(ui.includes('apiDelete("/api/my-devices/"'));
@@ -1581,8 +1575,7 @@ test("ui 读写端点走既有 apiGet / apiPost / apiDelete（不自造 fetch）
 test("ui 删掉一件时把它从**这次检测的选择**里去掉（否则下次预览 400 未知模块）", () => {
   // 删掉之后那个 id 既不在库里、也不再是自建件 —— 而页面上 chip 还挂着，
   // 学生根本不知道是自己刚删的那件（这是最容易变成"莫名其妙打不开"的一处）。
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = uiModuleText("hwcheck-devices.js");
   const delAt = ui.indexOf("async function deleteMyDevice");
   assert.ok(delAt > 0, "应有 deleteMyDevice");
   const body = ui.slice(delAt, delAt + 1100);
@@ -1591,8 +1584,7 @@ test("ui 删掉一件时把它从**这次检测的选择**里去掉（否则下�
 });
 
 test("ui 的 id 建议不覆盖用户手填的 id（只在空 / 还是建议值时补）", () => {
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = uiModuleText("hwcheck-devices.js");
   const at = ui.indexOf("myDeviceSlugFromName(");
   assert.ok(at > 0, "应按名称给一个 id 建议");
   const body = ui.slice(Math.max(0, at - 700), at + 200);
@@ -1603,10 +1595,9 @@ test("ui 的 id 建议不覆盖用户手填的 id（只在空 / 还是建议值�
 test("ui 的 id 建议也只改那一个输入框（不许整块重绘把在填的字段清掉）", () => {
   // 同一个坑的另一处：`blur` 时按名称补 id 建议，若顺手整块重绘，用户刚填的
   // 地址 / 寄存器全被换成初值（浏览器验收实测：地址填了却报「必须填地址」）。
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
-  const at = ui.indexOf('myBox.addEventListener("blur"');
-  assert.ok(at > 0, "应有按名称补 id 建议的 blur 委托");
+  const ui = uiModuleText("hwcheck-devices.js");
+  const at = ui.indexOf("function suggestMyDeviceId(");
+  assert.ok(at > 0, "应有按名称补 id 建议的 suggestMyDeviceId");
   const body = ui.slice(at, at + 900);
   assert.ok(body.includes("syncMyDeviceForm()"),
     "补完建议要走就地同步：\n" + body);
@@ -1617,8 +1608,7 @@ test("ui 的 id 建议也只改那一个输入框（不许整块重绘把在填�
 test("「我的器件」的行随选择集重绘（从 chip 侧取消加选后，行上按钮不许还说「已在」）", () => {
   // 两个容器（#hwcheck-device-chips 与 #my-devices-list）显示同一份选择集——
   // 只重绘一个就是界面自相矛盾：chip 没了、行上还写着「✓ 已在这次检测里」。
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = uiModuleText("hwcheck-core.js");
   const at = ui.indexOf("function renderHwcheckDevices()");
   assert.ok(at > 0);
   const body = ui.slice(at, ui.indexOf("\n}", at) + 2);
@@ -1633,8 +1623,7 @@ test("ui 打字期间**不整块重绘表单**（重绘 = 正在打字的输入�
   // 于是用户刚敲进去的字符所在的 `<input>` 被 innerHTML 换掉——现象是"打一个字
   // 表单就清空"，而按钮与地址预览看着还正常。判据：syncMyDeviceForm 里一个
   // `innerHTML` 都不许有（就地更新那两个小节点），整块重绘只走显式动作。
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = uiModuleText("hwcheck-devices.js");
   const at = ui.indexOf("function syncMyDeviceForm()");
   assert.ok(at > 0);
   const body = ui.slice(at, ui.indexOf("\n}", at) + 2);
@@ -1648,8 +1637,7 @@ test("ui 打字期间**不整块重绘表单**（重绘 = 正在打字的输入�
 });
 
 test("「我的器件」不随平台清空（件与平台无关：切平台不该把用户填的件弄丢）", () => {
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = uiModuleText("hwcheck-actions.js");
   const at = ui.indexOf('const card = e.target.closest("[data-hwcheck-platform]")');
   assert.ok(at > 0);
   const body = ui.slice(at, at + 900);
@@ -1775,8 +1763,7 @@ test("新控件齐备：计划容器在检测页里，紧跟在「这一趟真�
 });
 
 test("ui 接线：载荷 → 计划容器 + 接线区（fx 单源，不手拼 HTML）", () => {
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = hwcheckUiText();
   for (const fn of ["hwcheckCustomState(", "hwcheckCustomPlanHTML(", "hwcheckCustomWiringHTML("]) {
     assert.ok(ui.includes(fn), "ui 应调用 fx 的 " + fn);
   }
@@ -1838,8 +1825,7 @@ test("命令表：自建件的名称是用户随手填的，一律 esc", () => {
 });
 
 test("ui 的空态文案把自建件也算进「哪些能复测」（否则页面在说谎）", () => {
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = uiModuleText("hwcheck-core.js");
   // 判据落在**整段字面量**上（不截窗口：占位文案本身就是一句话，截窗口改措辞就误红）
   assert.ok(ui.includes("复测命令（库内器件按配方、自建件按它自己的探测小节）"),
     "自建件也有复测命令了，占位文案不能只说「由库内配方决定」");
@@ -1892,16 +1878,15 @@ test("计划面板：现读行（预览 / 08 之前的工程）不画快照标�
 test("结构钉：表单收起 / 切换必须清掉资料与草稿（跨件来源污染的正面防线）", () => {
   // 评审 🔴：给 A 抽了草稿 → 改编辑 B → 保存会把 A 的资料 / 草稿写进 B 的条目。
   // 判据 = closeMyDeviceForm / openMyDeviceForm 的编辑分支都清 myMaterial 与 myDraft。
-  const source = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const source = uiModuleText("hwcheck-devices.js");
   const closeBody = source.match(
     /function closeMyDeviceForm\(\) \{([\s\S]*?)\n\}/);
-  assert.ok(closeBody, "ui/hwcheck.js 里应有 closeMyDeviceForm");
+  assert.ok(closeBody, "器件件里应有 closeMyDeviceForm");
   assert.ok(closeBody[1].includes("myMaterial"), "收起表单要清资料原文");
   assert.ok(closeBody[1].includes("myDraft"), "收起表单要清草稿");
   const openBody = source.match(
     /function openMyDeviceForm\(device\) \{([\s\S]*?)\n\}/);
-  assert.ok(openBody, "ui/hwcheck.js 里应有 openMyDeviceForm");
+  assert.ok(openBody, "器件件里应有 openMyDeviceForm");
   assert.ok(/if \(device\) \{[\s\S]*?myMaterial[\s\S]*?myDraft/.test(openBody[1]),
     "编辑已有器件时不带任何残留的资料 / 草稿");
 });
@@ -2094,8 +2079,7 @@ test("结构钉：总口径那句真的被渲染出来（容器在卡片正文�
   assert.ok(cardAt > 0 && cardAt < at, "找不到总口径所在的卡片");
   assert.ok(!/<!--[\s\S]*id="hwcheck-unverified-note"[\s\S]*?-->/.test(html.slice(cardAt, at + 60)),
     "容器落在注释里了 —— 那等于没有这句话");
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = hwcheckUiText();
   assert.ok(ui.includes('$("hwcheck-unverified-note")'), "总口径要有渲染落点");
   assert.ok(ui.includes("renderHwcheckUnverifiedNote();"), "初始化路径上要真的调它");
   // ui 不许自己再写一遍文案（单源在 fx）。判据**先剥注释**再查：ui 里那句注释引用了
@@ -2105,8 +2089,7 @@ test("结构钉：总口径那句真的被渲染出来（容器在卡片正文�
 });
 
 test("结构钉：ui 侧走 fx（不手拼理由与回报文案）+ 并入入口在生成页那侧", () => {
-  const ui = readFileSync(
-    new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
+  const ui = hwcheckUiText();
   for (const fn of ["hwcheckHandoffPlan(", "hwcheckHandoffHTML(", "hwcheckHandoffResultText("]) {
     assert.ok(ui.includes(fn), "ui 应调用 fx 的 " + fn);
   }

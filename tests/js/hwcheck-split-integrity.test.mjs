@@ -1,4 +1,9 @@
-// hwcheck-split-integrity.test.mjs — **搬迁完整性自检**（工单 hwcheck-hygiene/09-10）。
+// hwcheck-split-integrity.test.mjs — 本批**两次拆分的搬迁完整性自检**
+// （工单 hwcheck-hygiene/09-10 拆 fx、11 拆 ui；这是本批唯一为拆分新造的判据）。
+//
+// 第一部分：`fx/hwcheck.js`（1380 行）按职责拆成六件（09 搬、10 迁消费者并删 barrel）。
+// 第二部分：`ui/hwcheck.js`（1401 行）按职责拆成四件（11）。两半各读**自己那份搬前快照**，
+// 判据面互相独立（见文件尾那一段的分工说明）。
 //
 // ## 这条判据要挡的是什么
 //
@@ -42,7 +47,8 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
-  maskCommentsAndStrings, maskNonCode, parseModuleExports, windowBridgeNames, callPositionNames,
+  maskCommentsAndStrings, maskNonCode, parseModuleExports, parseModuleImports,
+  windowBridgeNames, callPositionNames,
 } from "./boot-contract.mjs";
 
 const FX_DIR = fileURLToPath(new URL("../../src/contest_generator/static/js/fx/", import.meta.url));
@@ -83,11 +89,14 @@ function declaredNames(text) {
 /**
  * 声明名 → 声明单元原文（**紧邻上方**的连续 `//` 注释块 ＋ 声明本体）。
  * 中间隔空行的注释不算（那是"间隙"里的段落表头，如 `// ==== 工单 … ====`）。
+ *
+ * `declRe` 可换（工单 hwcheck-hygiene/11）：fx 那一半只认 `function|const`；
+ * DOM 层那一半还要认 `async function` 与 `let`（模块级 `let` 是它的状态）。
  */
-function unitsOf(text) {
+function unitsOf(text, declRe = DECL_RE) {
   const masked = maskCommentsAndStrings(text);
   const out = new Map();
-  const re = new RegExp(DECL_RE.source, "gm");
+  const re = new RegExp(declRe.source, "gm");
   let m;
   while ((m = re.exec(masked)) !== null) {
     const name = m[2];
@@ -335,4 +344,356 @@ test("过渡态不留痕：barrel 已删，且没有任何 import 边再指向�
   assert.deepEqual(hits, [],
     "还有 import 边指向已删除的旧路径 `fx/hwcheck.js`（那会让整页脚本解析失败）：\n  "
     + hits.join("\n  "));
+});
+
+// ===========================================================================
+// 第二部分：DOM 层那次拆分（工单 hwcheck-hygiene/11）
+//
+// `ui/hwcheck.js`（1401 行 / **59 个顶层声明**）按职责拆成四件——入口（接线 + 两个导出）／
+// 核心渲染／「我的器件」／动作与请求。失败方式与 fx 那次同型：**静默少东西**（漏搬一个
+// 函数、搬的时候手抖改一个字、某件少 import 一个兄弟函数、一段委托分支两边都不在）。
+// 四种都不会让整页崩，所以"门禁全绿"只能证明**没搬坏**，证明不了搬全了。
+//
+// 与第一部分的两点不同（列得出，不许模糊）：
+//   · 搬迁顺带做了三张**可数**的改造——15 段事件委托的匿名回调整段下沉成具名函数
+//     （`UI_HANDLERS`：11 段进动作件、4 段进器件件），6 处跨件写入口
+//     `pendingFocusSelector = X` → `setPendingFocus(X)`（ESM 的导入绑定只读，跨件写不了
+//     `let`，所以核心件开了一个写入口），以及那个网格助手改名后**调用位**跟着改的 2 处
+//     （`activate(e.target)` → `activateHwcheckDeviceCard(e.target)`）。故 ② 的"逐字"面
+//     排除 `initHwcheck`，它由 ③ 按**代码行多重集**单独对账；三张表各有条数断言。
+//     这就是工单 11 允许的"只搬不改 + 跨件调用方向在实施时定死"的全部形变，**没有第四张**：
+//     谁能多改一处，这条自检就当场报（实测过：第一版漏改那两个调用位，③ 立刻点名）。
+//   · 快照 `ui-hwcheck-before-split.js` 由 `apply-11-split.py` 第一次 `--write` 时落盘
+//     （与该次 HEAD 那一份逐字节相同，指纹写死在脚本里）。
+//
+// ## 这**不是**工单 11 禁的那种"源码串断言"
+//
+// 工单 11 的验收写着"不新增源码串断言——新增的 ui 行为断言一律进真浏览器门禁"。它禁的是
+// `readFileSync` + `includes("源码里有这行")` 那一类：那种断言看见 `**` 也照样绿（评审
+// 三、工程卫生那一节的盲区）。本文件判的是**结构不变量**（名字集合 / 声明单元逐字 / 行级
+// 分解 / 导出契约 / 调用位在场），**没有任何一条**是"某行源码在不在"；而且
+// spec「测试决策」明写"这条自检是本轮唯一为拆分新造的判据"——09 为 fx 那一半造了它，
+// 11 把同一件判据扩到 ui 那一半（同一个文件、同一套取数面），不是第二件新判据。
+// 它挡的坏法**真浏览器用例看不见**：漏搬一段分支 / 搬的时候改一个字 / 少一条跨件 import，
+// 三种都不会让整页崩，跑起来照样"能用"（第一版那段 `activate` 就是被真浏览器用例抓到的，
+// 而这三类里没有一类能靠浏览器门禁用例穷举）。
+// ===========================================================================
+
+const UI_DIR = fileURLToPath(new URL("../../src/contest_generator/static/js/ui/", import.meta.url));
+const UI_SNAPSHOT = fileURLToPath(
+  new URL("../../.scratch/hwcheck-hygiene/ui-hwcheck-before-split.js", import.meta.url));
+const UI_MODULES = ["hwcheck-core.js", "hwcheck-devices.js", "hwcheck-actions.js", "hwcheck.js"];
+const UI_ENTRY = "hwcheck.js";
+const UI_BEFORE = "（ui 搬前快照）";
+/** 被改造过的声明：只有 `initHwcheck`（委托分支下沉 + 跨件写入口改写都发生在它内部）。 */
+const UI_REWRITTEN = "initHwcheck";
+/** 对外契约（票面：入口仍只有这两个导出）。 */
+const UI_ENTRY_EXPORTS = ["initHwcheck", "renderHwcheckPanel"];
+/** 下沉成具名函数的 15 段事件委托（名字 → 它现在住的那一件）。 */
+const UI_HANDLERS = {
+  "hwcheck-actions.js": [
+    "handlePlatformClick", "handleChannelChange", "activateHwcheckDeviceCard",
+    "handleDeviceGridClick", "handleDeviceGridKeydown", "handleDeviceChipsClick",
+    "handleDeviceChipsKeydown", "handleParentChange", "pickHwcheckParent",
+    "handleProjectClick", "handleChecklistChange",
+  ],
+  "hwcheck-devices.js": [
+    "handleMyDeviceClick", "handleMyDeviceInput", "handleMyDeviceChange", "suggestMyDeviceId",
+  ],
+};
+/** 拆分**新加**的名字（15 个处理分支 + 一个焦点写入口）——四件里多出来的只能是这些。 */
+const UI_NEW_NAMES = ["setPendingFocus", ...Object.values(UI_HANDLERS).flat()];
+/** 声明行（DOM 层还要认 `async function` 与 `let`）。 */
+const UI_DECL_RE = /^(?:export )?(?:async )?(function|const|let|var) ([A-Za-z_$][\w$]*)/gm;
+/** 被下沉的回调头（应恰好消失 14 行）：`x.addEventListener("evt", (e) => {`。 */
+const UI_CALLBACK_HEAD_RE = /addEventListener\("[^"]+", (?:async )?\([^)]*\) => \{$/;
+/**
+ * **搬移的包装行**——两边一起丢掉，它们不承载信息，留着只会淹没差异：
+ *   · 纯括号行（`}` / `});`）；
+ *   · 捕获阶段回调的尾巴（`}, true);`）；
+ *   · 下沉的具名助手头（`const activate = (target) => {` —— 它变成 `function …(target) {`，
+ *     而函数签名行在 `uiBodyLines` 里本来就被丢掉）。
+ */
+const UI_WRAPPER_LINE = [/^[)}\];,]+$/, /^\}, true\);$/, /^const \w+ = \([^)]*\) => \{$/];
+/** 三段**不是**事件委托的下沉（`activate` 是网格里的具名助手，入口没有它的接线）。 */
+const UI_NO_WIRING = new Set(["activateHwcheckDeviceCard"]);
+const UI_WIRING_COUNT = 15 - UI_NO_WIRING.size;
+/** 跨件写入口（`pendingFocusSelector = X` → `setPendingFocus(X)`）——ESM 导入绑定只读。 */
+const UI_FOCUS_REWRITES = 6;
+
+const uiUnits = (text) => unitsOf(text, UI_DECL_RE);
+const unitsIn = (text, name) => uiUnits(text).get(name);
+
+/**
+ * 代码行（去空行 / 去注释 / 归一空白 / 丢掉包装行）——多重集对账的取数面。
+ */
+function uiCodeLines(text) {
+  return text
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter((line) => line && !line.startsWith("//")
+      && !UI_WRAPPER_LINE.some((re) => re.test(line)));
+}
+
+/** 声明单元的**正文行**（丢掉签名行——`function x(...) {` 是包装，注释与空行已在上一步滤掉）。 */
+function uiBodyLines(unit) {
+  return uiCodeLines(unit)
+    .filter((line) => !/^(?:export )?(?:async )?(?:function|const|let|var) [A-Za-z_$][\w$]*/.test(line));
+}
+
+/** 逐字面比较前的归一：拆分的唯一允许增量是声明行前面的 `export `（跨件要用它）。 */
+const stripExport = (text) =>
+  text.replace(/(^|\n)[ \t]*export[ \t]+(?=(?:async )?(?:function|const|let|var) )/g, "$1");
+
+/**
+ * 判据 ⑥ 的豁免面：**语言内置 + 浏览器平台对象**（清单里不许出现本栏目自己的名字——
+ * 那会把"搬丢一个函数"喂成绿；由下面的自检钉住）。
+ */
+const UI_GLOBALS = new Set([
+  "Object", "Array", "String", "Number", "Boolean", "JSON", "Math", "Date", "RegExp",
+  "Set", "Map", "Promise", "Error", "parseInt", "parseFloat", "isNaN",
+  "encodeURIComponent", "decodeURIComponent", "setTimeout", "clearTimeout",
+  "document", "window", "localStorage", "fetch", "FormData", "console",
+]);
+
+/**
+ * 判据 ⑥：**每个调用位的自由标识符都必须在场**（本件声明 ∪ 本件 import ∪ 上面那几个全局）。
+ *
+ * 这一条是为一类真实事故立的：网格助手 `activate` 下沉成 `activateHwcheckDeviceCard` 时，
+ * 两个处理分支里的**调用位**没跟着改（第一版实测）。`activate` 既不在本件声明、也不在任何
+ * import 里、更不在 `window` 桥上——前端门禁与结构守卫**全绿**，只有"点器件卡片"那几条
+ * 真浏览器用例红（9 条 30s 超时）。守卫 ⑧（桥依赖）只看桥上的名字，管不到这种"谁都没有的名字"。
+ */
+function uiDanglingCalls(files) {
+  const problems = [];
+  for (const key of UI_MODULES) {
+    const text = files.get(key);
+    const declared = new Set(uiUnits(text).keys());
+    const imported = new Set(parseModuleImports(text).flatMap((edge) => edge.locals));
+    for (const { name, line } of callPositionNames(maskNonCode(text))) {
+      if (declared.has(name) || imported.has(name) || UI_GLOBALS.has(name)) continue;
+      problems.push({ code: "⑥", detail: `${key}:${line} 调用了 ${name}（本件没声明、也没 import）` });
+    }
+  }
+  return problems;
+}
+
+const uiAllFiles = () => {
+  const files = new Map();
+  files.set(UI_BEFORE, readFileSync(UI_SNAPSHOT, "utf8"));
+  for (const name of UI_MODULES) files.set(name, readFileSync(UI_DIR + name, "utf8"));
+  return files;
+};
+
+/** 多重集（Map<行, 条数>）——行级对账要走它，"集合"会把重复行吃掉。 */
+function multiset(lines) {
+  const out = new Map();
+  for (const line of lines) out.set(line, (out.get(line) || 0) + 1);
+  return out;
+}
+
+const multisetDiff = (a, b) => {
+  const out = [];
+  for (const [line, count] of a) {
+    const rest = count - (b.get(line) || 0);
+    for (let i = 0; i < rest; i++) out.push(line);
+  }
+  return out;
+};
+
+/** files = Map<名字, 源码>（含 UI_BEFORE 那一份快照）。→ [{ code, detail }]；空 = 搬迁完整。 */
+function uiAuditProblems(files) {
+  const problems = [];
+  const before = files.get(UI_BEFORE);
+  const beforeUnits = uiUnits(before);
+  const afterUnits = new Map();
+  for (const key of UI_MODULES) {
+    for (const [name, body] of uiUnits(files.get(key))) {
+      if (afterUnits.has(name)) problems.push({ code: "①", detail: `${name} 在四件里出现了两次` });
+      afterUnits.set(name, { key, body });
+    }
+  }
+
+  // ① 声明名集合（快照有 59 个：导出 ＋ 私有件 ＋ 模块级 `let`）
+  for (const name of beforeUnits.keys()) {
+    if (!afterUnits.has(name)) problems.push({ code: "①", detail: `搬前有、四件里没有：${name}` });
+  }
+  const extra = [...afterUnits.keys()].filter((n) => !beforeUnits.has(n));
+  const unexpected = extra.filter((n) => !UI_NEW_NAMES.includes(n));
+  if (unexpected.length) {
+    problems.push({ code: "①", detail: `四件多出未登记的名字：${unexpected.join(", ")}` });
+  }
+  const lostNew = UI_NEW_NAMES.filter((n) => !afterUnits.has(n));
+  if (lostNew.length) problems.push({ code: "①", detail: `登记过的新名字不见了：${lostNew.join(", ")}` });
+
+  // ② 声明单元逐字（含紧邻上方的注释块）——`initHwcheck` 除外（它被改造，由 ③ 对）。
+  //    唯一允许的增量是声明行前面的 `export `（跨件要用它；09 那半同理）。
+  for (const [name, want] of beforeUnits) {
+    if (name === UI_REWRITTEN) continue;
+    const got = afterUnits.get(name);
+    if (!got) continue;                                  // ① 已报
+    if (norm(stripExport(want)) !== norm(stripExport(got.body))) {
+      problems.push({ code: "②", detail: `${name}（${got.key}）的声明单元与搬前不是逐字相同` });
+    }
+  }
+
+  // ③ `initHwcheck` 的行级分解：搬前 = 入口 ＋ 15 段下沉分支 − 三张改造表
+  const rawBefore = uiBodyLines(unitsIn(before, UI_REWRITTEN));
+  let beforeLines = rawBefore;
+  const lineRewrites = [
+    { re: /^pendingFocusSelector = (.+);$/, to: "setPendingFocus($1);",
+      count: UI_FOCUS_REWRITES, what: "跨件写入口（`pendingFocusSelector = …`）" },
+    { re: /(?<![\w$.])activate\(e\.target\)/, to: "activateHwcheckDeviceCard(e.target)",
+      count: 2, what: "下沉助手的**调用位**改名（`activate(e.target)`）" },
+  ];
+  for (const rw of lineRewrites) {
+    const hit = beforeLines.filter((line) => rw.re.test(line)).length;
+    if (hit !== rw.count) {
+      problems.push({ code: "③", detail: `${rw.what} 应恰为 ${rw.count} 处，实测 ${hit}` });
+    }
+    beforeLines = beforeLines.map((line) => line.replace(rw.re, rw.to));
+  }
+  const entryLines = uiBodyLines(unitsIn(files.get(UI_ENTRY), UI_REWRITTEN));
+  const handlerLines = Object.entries(UI_HANDLERS).flatMap(([key, names]) =>
+    names.flatMap((name) => {
+      const unit = unitsIn(files.get(key), name);
+      return unit === undefined ? [] : uiBodyLines(unit);
+    }));
+  const right = multiset([...entryLines, ...handlerLines]);
+  const missing = multisetDiff(multiset(beforeLines), right);
+  const added = multisetDiff(right, multiset(beforeLines));
+  const badMissing = missing.filter((line) => !UI_CALLBACK_HEAD_RE.test(line));
+  if (missing.length !== UI_WIRING_COUNT || badMissing.length) {
+    problems.push({
+      code: "③",
+      detail: `入口 + 15 段分支对不上搬前的 initHwcheck：少 ${missing.length} 行`
+        + `（应恰为 ${UI_WIRING_COUNT} 条回调头）、其中不像是回调头的 ${badMissing.length} 行`
+        + `${badMissing.length ? "：" + badMissing.slice(0, 3).join(" ｜ ") : ""}`,
+    });
+  }
+  const wiringLines = added.filter((line) => line.includes("addEventListener("));
+  const badAdded = added.filter((line) => !wiringLines.includes(line));
+  if (wiringLines.length !== UI_WIRING_COUNT || badAdded.length) {
+    problems.push({
+      code: "③",
+      detail: `多出来的行只该是那 ${UI_WIRING_COUNT} 条接线：实测接线 ${wiringLines.length}、`
+        + `其它 ${badAdded.length} 行${badAdded.length ? "：" + badAdded.slice(0, 3).join(" ｜ ") : ""}`,
+    });
+  }
+
+  // ④ 对外契约：入口的导出仍只有那两个
+  const entryExports = [...parseModuleExports(files.get(UI_ENTRY))].sort();
+  if (JSON.stringify(entryExports) !== JSON.stringify(UI_ENTRY_EXPORTS)) {
+    problems.push({
+      code: "④",
+      detail: `入口的导出面变了：${entryExports.join(", ")}（应 ${UI_ENTRY_EXPORTS.join(", ")}）`,
+    });
+  }
+
+  // ⑤ 15 段分支**两头都在**：本件声明了它，入口有一条接线调它（`activate` 那段不是委托，
+  //    它是网格里的具名助手，入口没有它的接线——那一条按名单豁免）。
+  const entryText = files.get(UI_ENTRY);
+  for (const [key, names] of Object.entries(UI_HANDLERS)) {
+    for (const name of names) {
+      if (!afterUnits.has(name) || afterUnits.get(name).key !== key) {
+        problems.push({ code: "⑤", detail: `${name} 不在 ${key} 里` });
+        continue;
+      }
+      if (UI_NO_WIRING.has(name)) continue;
+      const wired = new RegExp(`addEventListener\\("[^"]+", (?:\\([^)]*\\) => )?${name}\\b`)
+        .test(entryText);
+      if (!wired) problems.push({ code: "⑤", detail: `入口没有指向 ${name} 的接线` });
+    }
+  }
+
+  // ⑥ 调用位的自由标识符必须在场（上面那段说明：这是第一版真踩到的那一类）
+  problems.push(...uiDanglingCalls(files));
+  return problems;
+}
+
+const UI_FILES = uiAllFiles();
+const uiReport = (files) => uiAuditProblems(files).map((p) => `${p.code} ${p.detail}`);
+const uiPatch = (files, key, fn) =>
+  new Map([...files].map(([k, text]) => [k, k === key ? fn(text) : text]));
+const UI_HANDLER_COUNT = Object.keys(UI_HANDLERS).flatMap((k) => UI_HANDLERS[k]).length;
+
+test("ui 拆分体检：快照与四件都读到了，且判据面够大（那种绿比红更坏）", () => {
+  const names = [...uiUnits(UI_FILES.get(UI_BEFORE)).keys()];
+  assert.ok(names.length >= 55, `快照的声明只抽到 ${names.length} 个（下限 55）——抽取器失效？`);
+  assert.equal(UI_HANDLER_COUNT, 15, "下沉的处理分支应恰为 15 段");
+  assert.equal(UI_NEW_NAMES.length, 16, "新名字应是 15 段分支 + setPendingFocus");
+  for (const key of UI_MODULES) {
+    assert.ok(UI_FILES.get(key).length > 200, `${key} 读出来只有 ${UI_FILES.get(key).length} 字节`);
+  }
+  const lines = uiBodyLines(unitsIn(UI_FILES.get(UI_BEFORE), UI_REWRITTEN));
+  assert.ok(lines.length >= 150, `搬前的 initHwcheck 只抽到 ${lines.length} 行代码`);
+  // ⑥ 的豁免面不许掺进本栏目自己的名字（否则"搬丢一个函数"会被它喂绿）
+  const own = new Set(UI_MODULES.flatMap((key) => [...uiUnits(UI_FILES.get(key)).keys()]));
+  const overlap = [...UI_GLOBALS].filter((n) => own.has(n));
+  assert.deepEqual(overlap, [], `判据 ⑥ 的豁免面里有本栏目自己的名字：${overlap.join(", ")}`);
+  // ⑥ 的判据面非空自检：四件里至少扫得出一批调用位
+  const calls = UI_MODULES.flatMap((key) => callPositionNames(maskNonCode(UI_FILES.get(key))));
+  assert.ok(calls.length >= 150, `四件只扫出 ${calls.length} 个调用位（取数面失效？）`);
+});
+
+test("ui 搬迁完整：① 声明名 ② 声明单元逐字 ③ initHwcheck 行级分解 ④ 契约 ⑤ 两头都在 ⑥ 调用位在场", () => {
+  const report = uiReport(UI_FILES);
+  assert.deepEqual(report, [],
+    "DOM 层搬迁与搬前快照对不上（每条都是「搬的时候丢了东西」的形态）：\n  " + report.join("\n  "));
+});
+
+test("ui ⑥ 正向对照：调用位冒出一个谁都没有的名字必须报出（第一版真踩到的形态）", () => {
+  const anchor = "  addHwcheckDevice(card.dataset.add);";
+  const patched = uiPatch(UI_FILES, "hwcheck-actions.js", (t) => {
+    assert.ok(t.includes(anchor), `锚点变了（${anchor}）—— 这条自检会静默空转`);
+    return t.replace(anchor, "  activateProbeGhost(card.dataset.add);");
+  });
+  const hits = uiReport(patched).filter((l) => l.startsWith("⑥"));
+  assert.ok(hits.some((l) => l.includes("activateProbeGhost")),
+    `调用位冒出幽灵名字没被报出：${JSON.stringify(uiReport(patched))}`);
+});
+
+test("ui ② 正向对照：改一个未改造声明的一个字必须报出", () => {
+  const anchor = "return hwcheckPlatformLabel(hwcheckPlatforms(), id);";
+  const patched = uiPatch(UI_FILES, "hwcheck-core.js", (t) => {
+    assert.ok(t.includes(anchor), `锚点变了（${anchor}）—— 这条自检会静默空转`);
+    return t.replace(anchor, "return hwcheckPlatformLabel(hwcheckPlatforms(), id + \"\");");
+  });
+  assert.ok(uiReport(patched).some((l) => l.startsWith("②") && l.includes("platformLabel")),
+    `改了函数体没被报出：${JSON.stringify(uiReport(patched))}`);
+});
+
+test("ui ③ 正向对照：入口把一条接线改回匿名回调（分支就没人管了）必须报出", () => {
+  const anchor = 'platforms.addEventListener("click", handlePlatformClick);';
+  const patched = uiPatch(UI_FILES, UI_ENTRY, (t) => {
+    assert.ok(t.includes(anchor), `锚点变了（${anchor}）—— 这条自检会静默空转`);
+    // 注入成**多行**的匿名回调：单行写法既不改行多重集、也摸不到"回调头"那条判据
+    return t.replace(anchor,
+      'platforms.addEventListener("click", (e) => {\r\n      handlePlatformClick(e);\r\n    });');
+  });
+  const hits = uiReport(patched);
+  assert.ok(hits.some((l) => l.startsWith("③")), `行级分解没报出：${JSON.stringify(hits)}`);
+  assert.ok(hits.some((l) => l.startsWith("⑤") && l.includes("handlePlatformClick")),
+    `"入口没有指向它的接线"没报出：${JSON.stringify(hits)}`);
+});
+
+test("ui ① 正向对照：删掉一段下沉分支必须报出（两个方向各报一次）", () => {
+  const patched = uiPatch(UI_FILES, "hwcheck-devices.js",
+    (t) => t.replace(/\/\/ suggestMyDeviceId[\s\S]*?\r?\n\}\r?\n/, "\r\n"));
+  assert.ok(!patched.get("hwcheck-devices.js").includes("function suggestMyDeviceId"),
+    "注入没落上（锚点变了？）—— 这条自检会静默空转");
+  const hits = uiReport(patched);
+  assert.ok(hits.some((l) => l.startsWith("①") && l.includes("suggestMyDeviceId")),
+    `新名字丢了没被报出：${JSON.stringify(hits)}`);
+  assert.ok(hits.some((l) => l.startsWith("③") || l.startsWith("⑤")),
+    `分支两头缺一头没被报出：${JSON.stringify(hits)}`);
+});
+
+test("ui ④ 正向对照：入口多一个导出必须报出（对外契约就这两个）", () => {
+  const patched = uiPatch(UI_FILES, UI_ENTRY, (t) => `${t}\nexport function probeExtraExport() {}\n`);
+  const hits = uiReport(patched);
+  assert.ok(hits.some((l) => l.startsWith("④")), `导出面变了没被报出：${JSON.stringify(hits)}`);
+  assert.ok(hits.some((l) => l.startsWith("①") && l.includes("probeExtraExport")),
+    `未登记的声明没被报出：${JSON.stringify(hits)}`);
 });

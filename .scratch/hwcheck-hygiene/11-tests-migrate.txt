@@ -1,0 +1,42 @@
+# 读数：11-tests-migrate
+# 命令：python .scratch\hwcheck-hygiene\apply-11-tests.py --write
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T11:31:19+08:00
+# 退出码：0
+  layer                ← ui 不手拼工程面板 / 清单 / 最近的壳
+  hwcheck-devices.js   ← ui 删掉一件时把它从
+  hwcheck-actions.js   ← ui 回读勾选的判据
+  layer                ← ui 复用既有编译与烧录执行体
+  hwcheck-devices.js   ← ui 打字期间**不整块重绘表单**
+  hwcheck-actions.js   ← ui 换平台 / 换通道时清掉旧命令表
+  hwcheck-actions.js   ← ui 换平台 / 换通道时清掉旧检测计划
+  layer                ← ui 接线：载荷 → 计划容器 + 接线区
+  hwcheck-actions.js   ← ui 提交现象前先读输入框
+  hwcheck-actions.js   ← ui 生成新工程时清掉上一次的现象与建议
+  hwcheck-devices.js   ← ui 的 id 建议不覆盖用户手填的 id
+  hwcheck-devices.js   ← ui 的 id 建议也只改那一个输入框
+  layer                ← ui 的三处清预览
+  layer                ← ui 的命令台渲染走 fx 单源
+  layer                ← ui 的小节渲染走 fx 单源
+  layer                ← ui 的建议渲染走 fx 单源
+  layer                ← ui 的接线表 / 冲突 / 顺序 / chips 都走 fx 单源
+  layer                ← ui 的清单勾选态走 fx 的键与编解码单源
+  hwcheck-core.js      ← ui 的空态文案把自建件也算进
+  hwcheck-actions.js   ← ui 的自动回读不抹掉用户刚动的选择
+  hwcheck-actions.js   ← ui 的视图刷新守并发纪律
+  layer                ← ui 的说明弹窗走既有委托
+  hwcheck-devices.js   ← ui 读写端点走既有 apiGet / apiPost / apiDelete
+  layer                ← ui 静态 import fx/my-devices.js
+  layer                ← ui：器件挑选把组清单喂给单选交换
+  hwcheck-actions.js   ← 「我的器件」不随平台清空
+  hwcheck-core.js      ← 「我的器件」的行随选择集重绘
+  layer                ← 产物区壳在 fx 单源
+  hwcheck-core.js      ← 单平台件不误导：器件挑选面按
+  hwcheck-core.js      ← 单平台件不误导：已选中的单平台件由服务端载荷点名
+  layer                ← 纯件留在 fx
+  layer                ← 结构钉：ui 侧走 fx
+  hwcheck-core.js      ← 结构钉：余量提示有渲染落点
+  layer                ← 结构钉：总口径那句真的被渲染出来
+  hwcheck-devices.js   ← 结构钉：表单收起 / 切换必须清掉资料与草稿
+共迁 35 条；措辞订正 6 处
+已写：tests/js/hwcheck.test.mjs

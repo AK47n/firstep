@@ -1,0 +1,1401 @@
+// ui/hwcheck.js — 硬件检测栏目的 DOM 胶水（工单 module-hwcheck/01 + 02）。
+//
+// 单向依赖：ui → fx / app（纯件在 fx/hwcheck-{state,project,wiring,plan,triage,handoff}.js，
+// 本文件只读状态、写 DOM、
+// 发请求）。栏目独立于赛题工作流：不读题面、不写最近工程记录。
+//
+// **与生成页的关系只有一条，而且是单向的**（工单 hwcheck-acceptance/04）：检测页
+// 把验过的**器件集**带进生成页的已选清单（读全局当前平台只为提前讲明平台不一致，
+// 写只经推荐簇 A 的 addModulesFromHandoff 入口）。除此之外两边的状态互不相干：
+// 引脚、通道、检测工程目录都不进生成链，生成页的选择也不会回流到这一栏。
+//
+// 工单 02 起这个栏目从"预览文本"走到"真的上板"：
+//   生成 POST /api/hwcheck/generate（复用生成内核，新子目录不覆盖）
+//   → 编译复用既有执行体 ui/fix-center-core.runCompileOnceCore（不写第四个
+//     SSE 编译消费器）+ 既有判读纯件 fx/code-compile
+//   → 烧录复用既有共享执行体 ui/flash.js flashRunShared（400 出中文指引卡）
+//   → 上板清单勾选态存 localStorage（按检测工程目录分），刷新回显走
+//     GET /api/hwcheck/project 的服务端真源。
+import { $, apiGet, apiPost, apiDelete, handle, state, toast, toastError } from "/js/app.js";
+import { chosenPlatform } from "/js/ui/generate-recommend.js";
+import { bindModuleInfoEntry, openModuleInfo } from "/js/ui/generate-recommend.js";
+// 带入生成页的批量并入入口（工单 hwcheck-acceptance/04）：selectedSlugs 的唯一写者
+// 在推荐簇 A，这里只调它的入口——不自己写选择集（那会绕过重绘与依赖展开的收口）。
+import { addModulesFromHandoff } from "/js/ui/generate-recommend.js";
+// 切页签原语（工单 ux-walkthrough-02/06）：带过去之后落到生成页的已选清单上
+import { gotoNavTab } from "/js/ui/goto-nav.js";
+import { flashRunShared } from "/js/ui/flash.js";
+import { runCompileOnceCore } from "/js/ui/fix-center-core.js";
+import {
+  compileStatusText, compileStatusClass, compileErrorRowsHTML,
+} from "/js/fx/code-compile.js";
+import {
+  moduleGridHTML, moduleGridCountText,
+} from "/js/fx/module.js";
+// 纯件按职责分六件（工单 hwcheck-hygiene/09–10 拆的）：状态 / 工程 / 器件与接线 /
+// 计划 / 排障 / 衔接——每一件的职责与依赖方向见它自己的文件头。
+import {
+  hwcheckPlatformState, hwcheckSelectPlatform, hwcheckPickState,
+  hwcheckRequestPayload, hwcheckCanPreview, hwcheckPlatformCardsHTML,
+  hwcheckGenerateErrorHTML, hwcheckErrorHTML, hwcheckEmptyHTML,
+  hwcheckPanelHTML, hwcheckCodeTarget, hwcheckPreviewState,
+  hwcheckPlatformLabel, hwcheckDroppedNoteHTML,
+} from "/js/fx/hwcheck-state.js";
+import {
+  hwcheckGeneratePayload, hwcheckChecklistKey, hwcheckCheckedIds,
+  hwcheckChecklistToggle, hwcheckChecklistHTML, hwcheckChecklistProgressHTML,
+  hwcheckProjectState, hwcheckProjectPanelHTML, hwcheckProjectEmptyHTML,
+  hwcheckRecentHTML, hwcheckRecentEmptyHTML, hwcheckChannelNoteHTML,
+  hwcheckUnverifiedNoteHTML, hwcheckBoardState, HWCHECK_PARENT_KEY,
+  HWCHECK_LAST_DIR_KEY,
+} from "/js/fx/hwcheck-project.js";
+import {
+  hwcheckDevicePick, hwcheckDevicePool, hwcheckDeviceChipsHTML,
+  hwcheckDeviceEmptyHTML, hwcheckMissingDevicesHTML, hwcheckWiringTableHTML,
+  hwcheckDeviceGroupNoticeHTML, hwcheckPinGroupsHTML, hwcheckBoardSharesHTML,
+  hwcheckOrderHTML, hwcheckPinFixHTML, hwcheckPinCapacityNoteHTML,
+} from "/js/fx/hwcheck-wiring.js";
+import {
+  hwcheckSectionsState, hwcheckSectionsHTML, hwcheckUnspecializedHTML,
+  hwcheckSectionsEmptyHTML, hwcheckCustomState, hwcheckCustomPlanHTML,
+  hwcheckCustomWiringHTML, hwcheckConsoleState, hwcheckConsoleHTML,
+  hwcheckConsoleNoteHTML,
+} from "/js/fx/hwcheck-plan.js";
+import {
+  hwcheckCanTriage, hwcheckTriagePayload, hwcheckChecklistPayload,
+  hwcheckAdviceState, hwcheckRecordState, hwcheckTriageErrorHTML,
+  hwcheckAdviceHTML, hwcheckChecklistState,
+} from "/js/fx/hwcheck-triage.js";
+import {
+  hwcheckHandoffPlan, hwcheckHandoffHTML, hwcheckHandoffResultText,
+} from "/js/fx/hwcheck-handoff.js";
+// 「我的器件」（库外件，工单 hwcheck-unknown-device/02）：纯件在 fx/my-devices.js，
+// 本模块只做"读状态 / 写 DOM / 发请求"。**这一版不生成任何代码**——自建件先能被
+// 建、被列、被选、被改、被删（接进检测计划是工单 03–06）。
+import {
+  myDeviceFormBlank, myDeviceFormFromPayload, myDeviceAddressPreviewHTML,
+  myDeviceFormCheck, myDevicePayload, myDeviceSlugFromName,
+  myDeviceListHTML, myDeviceFormHTML, myDeviceKnownSlugs, myDeviceList,
+  myDeviceSavedDevice, myDeviceEditTarget,
+  myDeviceMaterialHTML, myDeviceDraftPanelHTML, myDeviceDraftToForm,
+} from "/js/fx/my-devices.js";
+
+// 本栏目自己的状态（与生成流程零共享）：选中平台 + 两个输出通道开关 +
+// 选中的器件 + 器件搜索词 + 输出父目录 + 板侧视图（接线 / 冲突 / 顺序）+
+// 这一趟的检测计划（逐件专精小节 + 未专精点名，工单 04）+ 最近一次预览/生成
+// 的结果 + 上板清单勾选态。
+const hwcheckUI = {
+  platform: "",
+  debug_uart: true,
+  oled: true,
+  devices: [],
+  deviceQuery: "",
+  parentDir: "",
+  preview: "",
+  outputHint: "",
+  wiring: null,       // 板侧视图（服务端投影：接线行 / 同脚组 / 顺序 / 缺条目）
+  exclusiveGroups: [], // 库级互斥组（服务端按平台投影，工单 05：单选交换的判据）
+  sections: [],       // 逐件专精小节（服务端按库内配方解析，工单 04）
+  unspecialized: [],  // 走通用降级的器件（未专精：只验总线和初始化，工单 07）
+  custom: [],         // 自建件的检测计划（服务端投影：标注 / 接线 / 出不出小节，工单 05）
+  console: null,      // 串口命令台载荷（配方命令 + 既有命令 + 能不能复测，工单 06）
+  consoleNote: "",    // 复测字符余量提示（服务端给；空 = 不吭声，工单 hardening/05）
+  dropped: [],        // 选中的自建件里**已经不在器件库**的那些（工单 ci-gate-fixes/09）
+  project: null,      // 当前正在看的检测工程（生成或回读来的）
+  checklistChecked: [],
+  symptom: "",        // 学生填的"实际现象"（工单 08：AI 排障的输入）
+  advice: null,       // 最近一次排障建议（服务端给；degraded = 兜底文案）
+  adviceMessage: "",  // 模型失败原因（只在降级时非空；与建议正文分开显示）
+  adviceDegraded: false,
+  triageError: "",    // 排障**请求**失败（网络 / 400）——与"模型失败"不是一回事
+  recent: [],
+  generateError: "",
+  previewError: "",   // 预览失败（工单 hardening/07）：专用文案，与"接线表取不到"分开
+  busy: false,
+  seeded: false,
+  // —— 「我的器件」（库外件，工单 02）：件与平台无关，所以这些键不随平台清空 ——
+  myDevices: [],        // 现有自建件（服务端真源；页面不自己记账）
+  knownSlugs: [],       // 库内 slug 集（页面据此在提交前拦住撞名的 id）
+  myForm: null,         // 正在编辑 / 新建的表单值（null = 表单收起）
+  myEditId: "",         // 正在编辑的那一件的 id（新建 = 空串；校验"撞已有件"时要排除自己）
+  myFormError: "",      // 表单校验理由（服务端 400 的中文原样带出）
+  myError: "",          // 列表读不出来的理由（坏条目等）
+  myBusy: false,
+  myMaterial: "",       // 资料文本框里的字（工单 07：贴的文字 / 文件抽出的文本）
+  myMaterialBusy: false, // 抽取进行中（按钮置灰）
+  myMaterialMessage: "", // 资料入口的提示（本地提示或降级原因）
+  myDraft: null,        // 最近一次草稿载荷（未确认前不落盘——它只是表单预填）
+  myDraftApplied: false, // 草稿已填进表单（面板按钮换成核对提示）
+};
+
+function hwcheckPlatforms() {
+  return (state && state.platforms) || [];
+}
+
+// 模块库载荷（/api/modules 由启动区拉进全局 state，与模块库页 / 生成页同一份）
+function hwcheckModules() {
+  return (state && state.modules) || [];
+}
+
+function platformLabel(id) {
+  return hwcheckPlatformLabel(hwcheckPlatforms(), id);
+}
+
+// 本地备忘（隐私模式 / 禁用存储时静默降级：勾选态存不下不该让栏目不可用）
+function readStored(key) {
+  try { return localStorage.getItem(key) || ""; } catch { return ""; }
+}
+
+function writeStored(key, value) {
+  try { localStorage.setItem(key, value); } catch { /* 存不下就算了 */ }
+}
+
+// 编译能力（/api/state 的 toolchains）：状态还没到 = 不预先唱衰（真缺工具链时
+// 后端 400 给准话）；明确 false = 编译按钮置灰 + 大声说明"未验证"。
+function compileReady() {
+  const platform = hwcheckUI.project && hwcheckUI.project.platform;
+  if (!platform) return true;
+  const toolchains = (state && state.toolchains) || {};
+  return toolchains[platform] !== false;
+}
+
+function renderHwcheckPlatforms() {
+  if (!hwcheckUI.seeded) {
+    // 首次进入（或全局状态刚到位）：继承全局当前平台 → 之后以栏目自己的选择为准
+    hwcheckUI.platform = hwcheckPlatformState(
+      hwcheckPlatforms(), chosenPlatform, hwcheckUI.platform).platform;
+    hwcheckUI.seeded = true;
+  } else if (!hwcheckUI.platform) {
+    hwcheckUI.platform = hwcheckPlatformState(
+      hwcheckPlatforms(), chosenPlatform, "").platform;
+  }
+  $("hwcheck-platforms").innerHTML = hwcheckPlatformCardsHTML(
+    hwcheckPlatforms(), hwcheckUI.platform);
+  const canGo = hwcheckCanPreview(hwcheckUI);
+  const preview = $("btn-hwcheck-preview");
+  // 进行中禁用（工单 hwcheck-hygiene/06）：与「生成」按钮同一条规矩——预览也是要等的
+  // 动作（零工具链但要走一遍装配），按住时按钮必须是**看得见的**不可点状态，
+  // 而不是"点了没反应"（函数内部那道 busy 早退是兜底，不是给人看的）。
+  if (preview) preview.disabled = !canGo || hwcheckUI.busy;
+  const generate = $("btn-hwcheck-generate");
+  if (generate) generate.disabled = !canGo || hwcheckUI.busy;
+}
+
+// renderHwcheckChannelNote()：「这两路默认撞脚」的**生成前**引导（mspm0 双通道）——
+// 文案与判据都在 fx（hwcheckChannelNoteHTML），本层只放进容器。
+function renderHwcheckChannelNote() {
+  const box = $("hwcheck-channel-note");
+  if (!box) return;
+  box.innerHTML = hwcheckChannelNoteHTML(
+    hwcheckUI.platform, hwcheckUI.debug_uart, hwcheckUI.oled);
+}
+
+// renderHwcheckUnverifiedNote()：栏目顶部的**总口径**（工单 hwcheck-hardening/02）——
+// 「配方与探测小节尚未在真板上验证过」。文案在 fx，本层只放进容器；它不随选择变化，
+// 所以只在初始化时渲染一次。
+function renderHwcheckUnverifiedNote() {
+  const box = $("hwcheck-unverified-note");
+  if (!box) return;
+  box.innerHTML = hwcheckUnverifiedNoteHTML();
+}
+
+function renderHwcheckOutput() {
+  const box = $("hwcheck-output");
+  // 预览失败（工单 hwcheck-hardening/07）：这里显示**说得对**的那句（"检测程序预览失败"），
+  // 而不是把用户引去查接线表；同时上面已经把上一次的 main.c 清掉了——失败之后还留着
+  // 上一组器件的程序，是最容易让人烧错东西的一种"静默过期产物"。
+  const error = hwcheckUI.previewError
+    ? hwcheckErrorHTML(hwcheckUI.previewError) : "";
+  const shell = hwcheckPanelHTML(hwcheckUI.preview, hwcheckUI.outputHint);
+  if (shell) {
+    // 产物区壳由 fx/hwcheck-state.js 单源给出；main.c 文本走 textContent（天然不解释 HTML）
+    box.innerHTML = error + shell;
+    const code = hwcheckCodeTarget(box);
+    if (code) code.textContent = hwcheckUI.preview;
+    return;
+  }
+  box.innerHTML = error || hwcheckEmptyHTML(
+    "选好平台后点「预览检测程序」——这里会显示这一趟要烧进板子的 main.c"
+    + "（LED 心跳 + 输出通道自报，还没有选任何器件）。");
+}
+
+function renderHwcheckProject() {
+  const box = $("hwcheck-project");
+  if (!box) return;
+  const error = hwcheckUI.generateError
+    ? hwcheckGenerateErrorHTML(hwcheckUI.generateError) : "";
+  const panel = hwcheckUI.project
+    ? hwcheckProjectPanelHTML(hwcheckUI.project, {
+      platformLabel: platformLabel(hwcheckUI.project.platform),
+      compileReady: compileReady(),
+    })
+    : hwcheckProjectEmptyHTML();
+  if (error) box.innerHTML = error + panel;
+  else if (panel) box.innerHTML = panel;
+}
+
+// 焦点恢复（工单 hwcheck-hygiene/06）：勾选类整块重绘后，把焦点送回"刚操作的那一项"。
+//
+// 为什么要它：这些区块都是 `innerHTML = …` 全量重绘，刚按下的复选框 / 刚点的那张卡
+// 会被替换掉、焦点掉回 body——学生连续勾十几项时每次都要重新用鼠标找位置。
+// 口径：**谁触发的重绘谁负责写 `pendingFocusSelector`**，渲染函数收尾统一 `applyPendingFocus()`；
+// 找不到目标（比如那一项被移除了）就什么都不做（不抢焦点、不报错）。
+let pendingFocusSelector = "";
+
+function selectorValue(value) {
+  // 属性选择器里的值转义（slug / 清单 id 都是普通词，这里只兜住引号与反斜杠）
+  return String(value == null ? "" : value).replace(/["\\]/g, "\\$&");
+}
+
+function applyPendingFocus() {
+  const selector = pendingFocusSelector;
+  pendingFocusSelector = "";
+  if (!selector) return;
+  const el = document.querySelector(selector);
+  if (el && typeof el.focus === "function") el.focus();
+}
+
+function renderHwcheckChecklist() {
+  const box = $("hwcheck-checklist");
+  if (!box) return;
+  const items = (hwcheckUI.project && hwcheckUI.project.checklist) || [];
+  if (!items.length) {
+    // 空清单这条早退也要把待办焦点清掉（评审整改）：否则一个陈旧选择器会等到
+    // **下一次无关重绘**才被消费，焦点莫名其妙跳到别处。
+    pendingFocusSelector = "";
+    box.innerHTML = '<div class="muted">生成检测工程后，这里会出现这次要逐项核对的清单'
+      + '（应看到什么 / 不对先查哪里）。</div>';
+    return;
+  }
+  box.innerHTML = hwcheckChecklistProgressHTML(items, hwcheckUI.checklistChecked)
+    + hwcheckChecklistHTML(items, hwcheckUI.checklistChecked);
+  applyPendingFocus();
+}
+
+function renderHwcheckRecent() {
+  const box = $("hwcheck-recent");
+  if (!box) return;
+  const html = hwcheckRecentHTML(
+    hwcheckUI.recent, hwcheckUI.project ? hwcheckUI.project.outputDir : "");
+  box.innerHTML = html || hwcheckRecentEmptyHTML();
+}
+
+// —— 器件挑选（工单 03）：chips（已选）+ 缺条目点名 + 卡片网格（可搜索） ——
+// 三块都只渲染服务端载荷与 fx 纯件：chips 复用推荐区 chip 渲染、网格复用模块库
+// 卡片渲染（moduleGridHTML），本层不判"哪个器件能测"。
+function renderHwcheckDevices() {
+  const modules = hwcheckModules();
+  const chips = $("hwcheck-device-chips");
+  if (chips) {
+    const html = hwcheckDeviceChipsHTML(
+      hwcheckUI.devices, modules, hwcheckUI.platform);
+    chips.innerHTML = html || hwcheckDeviceEmptyHTML();
+  }
+  const missing = $("hwcheck-device-missing");
+  if (missing) {
+    missing.innerHTML = hwcheckMissingDevicesHTML(
+      hwcheckUI.wiring ? hwcheckUI.wiring.missing : []);
+  }
+  // 同组互斥提示（工单 05）：组清单来自服务端载荷（库内 exclusive_group 单源），
+  // 本层只渲染——"这一组只能选一件"与"再点谁会自动换掉谁"都由 fx 纯件说清。
+  const groups = $("hwcheck-device-groups");
+  if (groups) {
+    groups.innerHTML = hwcheckDeviceGroupNoticeHTML(
+      hwcheckUI.exclusiveGroups, hwcheckUI.devices);
+  }
+  const grid = $("hwcheck-device-grid");
+  if (grid) {
+    const pool = hwcheckDevicePool(modules);
+    grid.innerHTML = moduleGridHTML(
+      pool, hwcheckUI.devices, hwcheckUI.deviceQuery, hwcheckUI.platform);
+    const count = $("hwcheck-device-count");
+    if (count) {
+      count.textContent = moduleGridCountText(
+        pool, hwcheckUI.devices, hwcheckUI.deviceQuery);
+    }
+  }
+  // 「我的器件」的行也随选择集重绘：它那行的加选按钮是**两态**的（加进 / 已在），
+  // 而它跟 chips 是两个容器——只重绘 chips 的话，从 chip 那侧取消加选后，
+  // 行上还写着「✓ 已在这次检测里」（界面自相矛盾）。这里刻意只换列表那一块：
+  // 表单必须原样留着（整块重绘会把正在填的字刷掉——见 syncMyDeviceForm 的说明）。
+  const myList = $("my-devices-list");
+  if (myList) myList.innerHTML = myDeviceListHTML(hwcheckUI.myDevices, hwcheckUI.devices);
+  applyPendingFocus();
+  renderHwcheckHandoff();
+}
+
+// —— 带入生成页（工单 hwcheck-acceptance/04）：判据全在 fx，本层只喂数据 ——
+//
+// 库内词表取自 /api/modules 载荷（生成页模块池与检测页器件网格吃的是同一份）——
+// **刻意不用** hwcheckUI.knownSlugs：那份来自 /api/my-devices，读不到时是空集，
+// 会把所有器件都判成"词表外"（一次读盘失败就变成"谁都带不过去"）。
+// 反过来，"是不是库外件"只认 /api/my-devices 那份清单（判据不写成 id 前缀）。
+function hwcheckHandoff() {
+  return hwcheckHandoffPlan(
+    hwcheckUI.devices,
+    hwcheckModules().map((m) => m && m.slug),
+    hwcheckUI.myDevices,
+  );
+}
+
+function renderHwcheckHandoff() {
+  const box = $("hwcheck-handoff");
+  if (!box) return;
+  box.innerHTML = hwcheckHandoffHTML(hwcheckHandoff(), {
+    pinFixes: ((hwcheckUI.wiring || {}).pin_fixes || []).length,
+    platforms: hwcheckPlatforms(),
+    from: hwcheckUI.platform,
+    to: chosenPlatform || "",
+  });
+}
+
+// handoffToGenerate()：把这批器件并进生成页的已选清单，再切到生成页。
+//
+// 三步的顺序本身是判据：**先算计划**（带入块上那几句理由说的就是这一批）→
+// **再并入**（走推荐簇 A 的入口——选择集只有它一个写者）→ **最后切页签**并落到
+// 已选清单上（不切的话用户在检测页看着像没反应）。
+// 一件都带不过去时**留在本页**：理由已经写在带入块里，不切走、也不弹"成功"。
+// 那句话本身也由 fx 拼（`hwcheckHandoffResultText`）——本层不自己写文案。
+function handoffToGenerate() {
+  const plan = hwcheckHandoff();
+  if (!plan.carry.length) {
+    renderHwcheckHandoff();   // 兜底重画：按钮本来是灰的，状态变了也得跟得上
+    return;
+  }
+  const { added, already } = addModulesFromHandoff(plan.carry);
+  gotoNavTab("generate", "selected-list");
+  toast("ok", hwcheckHandoffResultText(added, already));
+}
+
+// —— 「我的器件」（库外件，工单 02）：列表 + 表单 ——
+// 三块都只渲染服务端载荷与 fx 纯件：判据（id 文法等）在服务端，表单那个校验只是
+// "别让用户白跑一趟"（同一个函数也用来给保存按钮置灰的理由）。
+function renderMyDevices() {
+  const listBox = $("my-devices-list");
+  if (listBox) {
+    listBox.innerHTML = hwcheckUI.myError
+      ? `<div class="error">「我的器件」读不出来：${hwcheckUI.myError}</div>`
+      : myDeviceListHTML(hwcheckUI.myDevices, hwcheckUI.devices);
+  }
+  const formBox = $("my-devices-form");
+  if (formBox) {
+    formBox.innerHTML = hwcheckUI.myForm
+      ? myDeviceFormHTML(hwcheckUI.myForm, hwcheckUI.myFormError) : "";
+  }
+  // 资料入口与草稿面板（工单 07）：只在显式动作后整块重绘——文本框打字只同步
+  // state（见下面的 input 委托），不打断输入。
+  const materialBox = $("my-devices-material");
+  if (materialBox) {
+    materialBox.innerHTML = myDeviceMaterialHTML({
+      text: hwcheckUI.myMaterial,
+      busy: hwcheckUI.myMaterialBusy,
+      message: hwcheckUI.myMaterialMessage,
+    });
+  }
+  const draftBox = $("my-devices-draft");
+  if (draftBox) {
+    draftBox.innerHTML = hwcheckUI.myDraft
+      ? myDeviceDraftPanelHTML(hwcheckUI.myDraft, hwcheckUI.myDraftApplied) : "";
+  }
+  const open = $("btn-my-device-new");
+  if (open) open.disabled = !!hwcheckUI.myBusy;
+  applyPendingFocus();
+}
+
+// myDeviceFormError(form)：按当前表单算一次校验理由（保存按钮与提示共用同一句）。
+// `myEditId` = 正在编辑的那一件的 id（新建时空串）——**必须传**：不传的话编辑
+// 自己那件会被判成"撞已有件"，保存按钮永远灰着（编辑功能整个用不了）。
+function myDeviceFormError(form) {
+  return myDeviceFormCheck(
+    form,
+    hwcheckUI.knownSlugs,
+    hwcheckUI.myDevices.map((d) => (d && d.id) || "").filter(Boolean),
+    hwcheckUI.myEditId,
+  );
+}
+
+// syncMyDeviceForm()：**就地把输入框里的字交给 state**，并只更新那两个小节点
+// （地址预览 + 校验理由/保存按钮）。
+//
+// ⚠ 这里**绝不能整块重绘表单**（本单浏览器验收当场抓到的 bug）：整块重绘 =
+// 用户正在打字的那个 `<input>` 被换掉——浏览器里看着就是"打一个字表单就清空、
+// 后面的字全丢"，而按钮与预览还像是正常的。所以本函数一个 `innerHTML =` 都不做
+// （整块重绘只发生在"打开 / 编辑 / 保存 / 取消"这类显式动作上）。
+function syncMyDeviceForm() {
+  const box = $("my-devices-form");
+  if (!box || !hwcheckUI.myForm) return;
+  const form = { ...hwcheckUI.myForm };
+  box.querySelectorAll("[data-my-device-field]").forEach((el) => {
+    form[el.dataset.myDeviceField] = el.value;
+  });
+  hwcheckUI.myForm = form;
+  hwcheckUI.myFormError = myDeviceFormError(form);
+  const preview = box.querySelector("[data-my-device-address-preview-slot]");
+  if (preview) {
+    preview.innerHTML = myDeviceAddressPreviewHTML(form.address, form.bus);
+  }
+  const save = box.querySelector("[data-my-device-save]");
+  if (save) save.disabled = !!hwcheckUI.myFormError;
+  const errorBox = box.querySelector("[data-my-device-form-error]");
+  if (errorBox) errorBox.textContent = hwcheckUI.myFormError;
+}
+
+// closeMyDeviceForm()：收起表单——**唯一出口**（新建 / 编辑共用一份表单状态，
+// 三处（保存成功 / 取消 / 删掉的正是编辑对象）都必须连 `myEditId` 一起清掉：
+// 漏清一处，下次"新建"就会被上一条的 id 顶掉"撞已有件"判据）。
+// 资料原文与草稿**一起清**（工单 08）：它们是"这一件"的来源记录——留着的话，
+// 下一件（尤其是编辑另一件）保存时会把上一件的资料 / 草稿悄悄写进它的条目。
+function closeMyDeviceForm() {
+  hwcheckUI.myForm = null;
+  hwcheckUI.myEditId = "";
+  hwcheckUI.myFormError = "";
+  hwcheckUI.myMaterial = "";
+  hwcheckUI.myMaterialMessage = "";
+  hwcheckUI.myDraft = null;
+  hwcheckUI.myDraftApplied = false;
+}
+
+function openMyDeviceForm(device) {
+  hwcheckUI.myForm = device
+    ? myDeviceFormFromPayload(device) : myDeviceFormBlank();
+  // 正在编辑的那一件（新建 = 空串）：校验"撞已有件"时要把自己排除在外
+  hwcheckUI.myEditId = device ? String(device.id || "") : "";
+  hwcheckUI.myFormError = myDeviceFormError(hwcheckUI.myForm);
+  if (device) hwcheckUI.myDraftApplied = false;  // 表单换成编辑态了，"已填进表单"那句不再成立
+  if (device) {
+    // 编辑已有器件时不带任何残留的资料 / 草稿（跨件来源污染的另一半：
+    // 表单侧 applyMyDraft 挡了"填"，保存侧这里挡"发"）
+    hwcheckUI.myMaterial = "";
+    hwcheckUI.myDraft = null;
+  }
+  renderMyDevices();
+}
+
+// —— 资料 → 事实草稿（工单 hwcheck-unknown-device/07）——
+// 抽取 / 填表都在服务端判过形状了；这里只管发请求、把载荷交给 fx、把降级原因
+// 说成人话。**草稿永远不会自己保存**：它只变成表单预填，保存走既有的
+// saveMyDevice（服务端照旧全量校验）。
+
+// applyDraftResponse(payload)：抽取响应 → 状态（成功 = 草稿 + 填进表单；
+// 降级 = 不报错，说清"直接手填"——票面硬要求：AI 不可用流程不阻断）。
+function applyDraftResponse(payload) {
+  if (payload && payload.degraded) {
+    hwcheckUI.myDraft = null;
+    hwcheckUI.myDraftApplied = false;
+    hwcheckUI.myMaterialMessage =
+      "AI 没接上（" + String(payload.message || "原因不明") + "）——直接手填，一样能测";
+    return;
+  }
+  hwcheckUI.myDraft = payload ? payload.draft : null;
+  hwcheckUI.myDraftApplied = false;
+  if (hwcheckUI.myDraft) applyMyDraft();
+}
+
+// applyMyDraft()：把草稿填进表单（可再改）。**只用于新建**：正在编辑已有器件时
+// 草稿不许覆盖（编辑态保存按 id 幂等覆盖，填错一件会冲掉那件的原事实）。
+function applyMyDraft() {
+  if (!hwcheckUI.myDraft) return;
+  if (hwcheckUI.myEditId) {
+    hwcheckUI.myMaterialMessage =
+      "正在编辑已有的器件——草稿只用于新建；先「取消」再抽一次";
+    return;
+  }
+  hwcheckUI.myForm = myDeviceDraftToForm(hwcheckUI.myDraft, hwcheckUI.myForm);
+  hwcheckUI.myFormError = myDeviceFormError(hwcheckUI.myForm);
+  hwcheckUI.myDraftApplied = true;
+}
+
+async function draftMyDevice() {
+  if (hwcheckUI.myMaterialBusy) return;
+  const text = String(hwcheckUI.myMaterial || "").trim();
+  if (!text) {
+    hwcheckUI.myMaterialMessage = "先贴一段资料文字（或选一个文件）——没有资料就直接手填";
+    renderMyDevices();
+    return;
+  }
+  hwcheckUI.myMaterialBusy = true;
+  hwcheckUI.myMaterialMessage = "";
+  renderMyDevices();
+  try {
+    applyDraftResponse(await apiPost("/api/my-devices/draft", { text }));
+  } catch (e) {
+    hwcheckUI.myMaterialMessage = e && e.message ? e.message : String(e);
+  } finally {
+    hwcheckUI.myMaterialBusy = false;
+  }
+  renderMyDevices();
+}
+
+// draftFromMyDeviceFile(file)：文件先走**既有抽取通道**（/api/extract，赛题页
+// 同一条路——不新开第二条抽取路），拿回文本再进草稿端点。抽出的文字回填到
+// 文本框：用户看得到送出去的是什么（知情权）。
+async function draftFromMyDeviceFile(file) {
+  if (!file || hwcheckUI.myMaterialBusy) return;
+  hwcheckUI.myMaterialBusy = true;
+  hwcheckUI.myMaterialMessage = "";
+  renderMyDevices();
+  try {
+    const form = new FormData();
+    form.append("upload", file);
+    const data = await handle(await fetch("/api/extract", { method: "POST", body: form }));
+    const text = String((data && data.text) || "");
+    if (!text.trim()) {
+      hwcheckUI.myMaterialMessage = "这份文件抽不出文字——换个文件，或直接手填";
+      return;
+    }
+    hwcheckUI.myMaterial = text;
+    applyDraftResponse(await apiPost("/api/my-devices/draft", { text }));
+  } catch (e) {
+    hwcheckUI.myMaterialMessage = e && e.message ? e.message : String(e);
+  } finally {
+    hwcheckUI.myMaterialBusy = false;
+  }
+  renderMyDevices();
+}
+
+async function loadMyDevices() {
+  try {
+    const payload = await apiGet("/api/my-devices");
+    hwcheckUI.myDevices = myDeviceList(payload);
+    hwcheckUI.knownSlugs = myDeviceKnownSlugs(payload);
+    hwcheckUI.myError = "";
+  } catch (e) {
+    hwcheckUI.myDevices = [];
+    hwcheckUI.myError = e && e.message ? e.message : String(e);
+  }
+  renderMyDevices();
+  renderHwcheckHandoff();   // 带入块的分类要这份清单（哪几件是库外自建件）
+}
+
+// saveMyDevice()：提交这一件（按 id 幂等）。失败 = 服务端 400 的中文原样带出
+// （表单不关、用户填的东西一个字不丢——这正是"当场点名要求改名"那条判据的用法）。
+async function saveMyDevice() {
+  if (!hwcheckUI.myForm || hwcheckUI.myBusy) return;
+  hwcheckUI.myFormError = myDeviceFormError(hwcheckUI.myForm);
+  if (hwcheckUI.myFormError) {
+    renderMyDevices();
+    return;
+  }
+  hwcheckUI.myBusy = true;
+  try {
+    const payload = myDevicePayload(hwcheckUI.myForm);
+    // 资料原文与抽取草稿随保存落进条目（工单 08：归档的源头）。没给 = 服务端
+    // 保留旧的那份——改个名字不该抹掉"当时凭什么填了那个地址"。
+    if (String(hwcheckUI.myMaterial || "").trim()) {
+      payload.material_text = hwcheckUI.myMaterial;
+    }
+    if (hwcheckUI.myDraft) payload.draft = hwcheckUI.myDraft;
+    const saved = await apiPost("/api/my-devices", payload);
+    const savedDevice = myDeviceSavedDevice(saved);
+    closeMyDeviceForm();
+    await loadMyDevices();
+    toast("ok", "已存进「我的器件」：" + ((savedDevice && savedDevice.name) || ""));
+  } catch (e) {
+    hwcheckUI.myFormError = e && e.message ? e.message : String(e);
+  } finally {
+    hwcheckUI.myBusy = false;
+  }
+  renderMyDevices();
+}
+
+// deleteMyDevice(id)：删掉一件；同时把它从**这次检测的选择**里去掉。
+// 为什么不"直接不管"：删掉之后那个 id 既不在库里、也不再是自建件，下次预览就是
+// 400「未知模块」——而页面上那个 chip 还挂着，学生根本不知道是自己刚删的那件。
+async function deleteMyDevice(id) {
+  if (!id || hwcheckUI.myBusy) return;
+  hwcheckUI.myBusy = true;
+  try {
+    await apiDelete("/api/my-devices/" + encodeURIComponent(id));
+    if (hwcheckUI.myForm && hwcheckUI.myForm.id === id) closeMyDeviceForm();
+    if ((hwcheckUI.devices || []).includes(id)) {
+      hwcheckUI.devices = hwcheckUI.devices.filter((slug) => slug !== id);
+      renderHwcheckDevices();
+      refreshHwcheckView();
+    }
+    await loadMyDevices();
+    toast("ok", "已删掉这件：" + id);
+  } catch (e) {
+    toastError(e, "删不掉这件器件");
+  } finally {
+    hwcheckUI.myBusy = false;
+  }
+  renderMyDevices();
+}
+
+// —— 接线表 / 默认脚冲突 / 建议顺序（工单 03）：三块全部来自服务端板侧视图 ——
+// 前端一个字都不判：撞不撞脚、能不能共享、谁先测，都是既有判据算出来的。
+function renderHwcheckWiring() {
+  const wiringBox = $("hwcheck-wiring");
+  const conflictBox = $("hwcheck-conflicts");
+  const orderBox = $("hwcheck-order");
+  // 预览整份失败时（previewError）：这里**什么都不说**——错误已经在产物区用专用文案说清了，
+  // 再摆一句"选好平台后点预览"等于让刚点过的学生以为自己没点。
+  // 注意没有"接线表单独取不到"这一档了（工单 hwcheck-hardening/07）：接线表与主程序**同一次
+  // 请求**回来，那档文案（hwcheckWiringErrorHTML）依据的前提本来就不成立，已删。
+  const empty = hwcheckUI.previewError
+    ? ""
+    : (hwcheckUI.wiring
+      ? hwcheckPinFixHTML(hwcheckUI.wiring.pin_fixes)
+        // 「这一趟没判装不装得下」紧随其后（工单 hwcheck-hygiene/04）：母版没导入时
+        // 容量判定跳过，页面必须说出来——不然看起来像"检查过了、没问题"。
+        + hwcheckPinCapacityNoteHTML(hwcheckUI.wiring.capacity_note)
+        + hwcheckWiringTableHTML(hwcheckUI.wiring.rows, hwcheckUI.wiring.footnote)
+        // 自建件那一行接在表**下面**（"你的器件 … 接到上面接线表里 i2c_probe 的
+        // 那对脚"——那句话指的就是刚读完的这张表）。空 = 空串（既有页面不变）。
+        + hwcheckCustomWiringHTML(hwcheckUI.custom)
+      : '<div class="muted">选好平台后点「预览检测程序」（或选一件器件），'
+        + "这里会出现这一趟要接的线与默认脚冲突。</div>");
+  if (wiringBox) wiringBox.innerHTML = empty;
+  if (conflictBox) {
+    conflictBox.innerHTML = hwcheckUI.wiring
+      ? hwcheckPinGroupsHTML(hwcheckUI.wiring.groups, hwcheckUI.wiring.rows)
+        + hwcheckBoardSharesHTML(
+          hwcheckUI.wiring.board_shares, hwcheckUI.wiring.rows)
+      : "";
+  }
+  if (orderBox) {
+    orderBox.innerHTML = hwcheckUI.wiring
+      ? hwcheckOrderHTML(
+        hwcheckUI.wiring.order, hwcheckUI.wiring.guide, hwcheckUI.wiring.reason)
+      : "";
+  }
+}
+
+// —— 逐件专精小节 / 未专精点名（工单 04）：两块都只渲染服务端载荷 ——
+// 判据（这件的配方在不在、引用的接口真不真）全在服务端；前端一个字都不判。
+function renderHwcheckSections() {
+  const box = $("hwcheck-sections");
+  if (!box) return;
+  // 一件专精件都没有时说清"为什么这条是空的"（不是错误状态，但也不留空白）
+  const panel = hwcheckSectionsHTML(hwcheckUI.sections);
+  box.innerHTML = (panel || hwcheckSectionsEmptyHTML())
+    + hwcheckUnspecializedHTML(hwcheckUI.unspecialized);
+}
+
+// —— 自建件的检测计划（工单 hwcheck-unknown-device/05）：只渲染服务端载荷 ——
+// 标注词 / 接线那一行 / "这一趟对它做什么" / 出不出小节的判据全部在服务端
+// （`hwcheck_custom` 单源）；前端一个字都不判，也**不自己判总线**——那会让页面与
+// 产物两处各说各话。一件自建件都没有时写空串（既有页面逐字不变）。
+function renderHwcheckCustom() {
+  const box = $("hwcheck-custom");
+  if (!box) return;
+  box.innerHTML = hwcheckCustomPlanHTML(hwcheckUI.custom);
+}
+
+// applyDroppedDevices(payload)：这一趟服务端**摘掉了哪几件"已经不在器件库里"的自建件**
+// （工单 ci-gate-fixes/09）——两件事一起做：
+// ① 如实记下（说明条由 renderHwcheckDropped 渲染，文案在 fx）；
+// ② **把本地选择集对齐**：摘掉的件不再算"已选"（置灰回「加进这次检测」）——不然界面
+//    显示已选、这一趟却没带它，两边不一致，用户会以为"选了没用"。
+// 只认服务端载荷：前端不自己拿"我的器件"清单去猜哪件还在（那是第二份判据）。
+function applyDroppedDevices(payload) {
+  const dropped = (payload && Array.isArray(payload.dropped_devices))
+    ? payload.dropped_devices.map(String) : [];
+  hwcheckUI.dropped = dropped;
+  if (dropped.length) {
+    const away = new Set(dropped);
+    hwcheckUI.devices = (hwcheckUI.devices || []).filter((slug) => !away.has(slug));
+  }
+}
+
+// renderHwcheckDropped()：说明条（判据与文案在 fx，本层只放进容器）。
+function renderHwcheckDropped() {
+  const box = $("hwcheck-dropped");
+  if (box) box.innerHTML = hwcheckDroppedNoteHTML(hwcheckUI.dropped);
+}
+
+// —— 串口命令台（工单 module-hwcheck/06）：只渲染服务端载荷（命令表 = 库内配方
+// + 自建件那几件）——
+// 前端不判"哪个字符是谁的"：判重与保留字都在服务端（两件抢字符 = 构建期 400），
+// 自建件的字符也是服务端分配的（工单 hwcheck-unknown-device/06）。
+function renderHwcheckConsole() {
+  const box = $("hwcheck-console");
+  if (!box) return;
+  // 预览整份失败时：命令台也不摆那句"选好器件后点预览"（错误已在产物区说清，见 07 单）。
+  box.innerHTML = hwcheckUI.previewError ? "" : (hwcheckConsoleHTML(hwcheckUI.console)
+    || '<div class="muted">选好器件后点「预览检测程序」：这里会列出这一趟的串口'
+      + "复测命令（库内器件按配方、自建件按它自己的探测小节），"
+      + "以及没有串口时为什么不能交互复测。</div>");
+  // 复测字符余量的事前提示（工单 hwcheck-hardening/05）：文案由服务端给（空 = 不吭声），
+  // 前端不自己算"还剩几个字符"——那等于把分配判据抄一份到浏览器里。
+  const note = $("hwcheck-console-note");
+  if (note) note.innerHTML = hwcheckConsoleNoteHTML(hwcheckUI.consoleNote);
+}
+
+// renderHwcheckAdvice()：现象回填 + AI 排障面板（工单 08）。
+// 三种内容分开放：**请求失败**（triageError，红字）/ **模型失败**（兜底建议 +
+// message 一句）/ **模型结论**（建议正文）——把"模型没答上来"说成"检测失败"
+// 会把学生引到错的地方去查。
+function renderHwcheckAdvice() {
+  const box = $("hwcheck-advice");
+  const button = $("btn-hwcheck-triage");
+  if (button) {
+    button.disabled = !hwcheckCanTriage(hwcheckUI) || hwcheckUI.busy;
+    button.textContent = hwcheckUI.busy ? "分析中…" : "让 AI 分析";
+  }
+  const status = $("hwcheck-triage-status");
+  if (status) {
+    status.textContent = hwcheckUI.adviceMessage
+      ? "AI 这次没给出来：" + hwcheckUI.adviceMessage
+      : "";
+  }
+  if (!box) return;
+  box.innerHTML = (hwcheckUI.triageError
+    ? hwcheckTriageErrorHTML(hwcheckUI.triageError) : "")
+    + hwcheckAdviceHTML(hwcheckUI.advice);
+}
+
+export function renderHwcheckPanel() {
+  renderHwcheckPlatforms();
+  renderHwcheckChannelNote();
+  renderMyDevices();
+  renderHwcheckDropped();
+  renderHwcheckOutput();
+  renderHwcheckDevices();
+  renderHwcheckWiring();
+  renderHwcheckSections();
+  renderHwcheckCustom();
+  renderHwcheckConsole();
+  renderHwcheckProject();
+  renderHwcheckChecklist();
+  renderHwcheckAdvice();
+  renderHwcheckRecent();
+}
+
+// adoptProject(payload, dir, opts)：把一次生成 / 回读的结果放到页面上——同时记住
+// "上次看的是哪个目录"，并按该目录取出本地勾选态。
+//
+// `keepSelection=true`：**只带工程本体**（main.c / 清单 / 通道 / 预览），不覆盖
+// 用户当前的器件与板侧视图。什么时候用：**自动回读**（页面加载时按上次目录回显）
+// 撞上用户已经动过选择——他那一下才是最新意图，用旧工程里的器件集覆盖就是静默
+// 抹掉他刚点的东西（照 refreshHwcheckView 的同一条并发纪律"过期响应绝不写状态"）。
+function adoptProject(payload, dir, { keepSelection = false } = {}) {
+  const adopted = hwcheckProjectState(hwcheckUI, payload);
+  if (keepSelection) {
+    Object.assign(hwcheckUI, hwcheckPreviewState(hwcheckUI, payload));
+    hwcheckUI.project = adopted.project;
+  } else {
+    Object.assign(hwcheckUI, adopted);
+    Object.assign(hwcheckUI, hwcheckPreviewState(hwcheckUI, payload));
+  }
+  const recordState = hwcheckRecordState(hwcheckUI, payload);
+  Object.assign(hwcheckUI, recordState);
+  // 勾选态：**服务端记录优先**（工单 08 起勾选也落盘）。判据是"这次回读**带没带
+  // 记录**"（record 键在不在），不是"记录里的勾选空不空"——服务端把勾选全清空
+  // 也是一种有效状态，拿空当"没有记录"会让本地备忘里的旧勾选复活（评审整改）。
+  const hasRecord = !!(payload && payload.record);
+  if (!hasRecord) {
+    hwcheckUI.checklistChecked = hwcheckCheckedIds(
+      readStored(hwcheckChecklistKey(dir)));
+  }
+  const symptomBox = $("hwcheck-symptom");
+  if (symptomBox) symptomBox.value = hwcheckUI.symptom || "";
+  hwcheckUI.triageError = "";
+  hwcheckUI.generateError = "";
+  writeStored(HWCHECK_LAST_DIR_KEY, dir);
+}
+
+// refreshHwcheckView()：按**当前选择**重取一次板侧视图（接线 / 冲突 / 顺序）+
+// 检测程序文本。选平台、勾通道、增删器件都走这一条路——判据在服务端，前端
+// 不做增量更新（增量更新等于把判据抄一份到浏览器里）。
+//
+// 并发纪律（照 CONTEXT.md「展开收口」那条先例）：**过期响应绝不写状态，在途触发
+// 一律排队**。连点两件器件会连发两次请求，而响应里带着 devices 回显——慢的那个
+// 回来就把刚选的那件抹掉了。三条：
+//   ① 在途时的触发记 pending，收尾用**当前**选择集重跑一次（不静默丢弃）；
+//   ② 落地前比请求体快照，选择集变了 = 这次结果属于旧选择，不写状态；
+//   ③ 失败清**整份**（板侧视图 + main.c）并归到 `previewError`（工单 hwcheck-hardening/07）：
+//      主程序是**按所选器件**渲染的（`render_main_c(config, sections, generic, custom)`），
+//      所以失败之后留着的那份属于上一组器件——照它去编译烧录就是烧错东西。
+//      （旧注释说"检测程序只依赖平台与通道"，那个前提不成立，已更正。）
+let hwcheckViewBusy = false;
+let hwcheckViewPending = false;
+
+function hwcheckSelectionKey() {
+  return JSON.stringify(hwcheckRequestPayload(hwcheckUI));
+}
+
+async function refreshHwcheckView() {
+  if (!hwcheckCanPreview(hwcheckUI)) return;
+  if (hwcheckViewBusy) {
+    hwcheckViewPending = true;
+    return;
+  }
+  hwcheckViewBusy = true;
+  const requestKey = hwcheckSelectionKey();
+  try {
+    const payload = await apiPost("/api/hwcheck/preview", hwcheckRequestPayload(hwcheckUI));
+    if (hwcheckSelectionKey() !== requestKey) {
+      // 选择集在途中又变了：这次结果属于旧选择，丢掉（排队的那次会补上）
+    } else {
+      Object.assign(hwcheckUI, hwcheckPreviewState(hwcheckUI, payload));
+      Object.assign(hwcheckUI, hwcheckBoardState(hwcheckUI, payload));
+      Object.assign(hwcheckUI, hwcheckSectionsState(hwcheckUI, payload));
+      Object.assign(hwcheckUI, hwcheckCustomState(hwcheckUI, payload));
+      Object.assign(hwcheckUI, hwcheckConsoleState(hwcheckUI, payload));
+      // 已被删掉的自建件：服务端这一趟摘掉了谁（工单 ci-gate-fixes/09）——先对齐选择集，
+      // 下面那串 render 才会画出一致的 chips 与说明条。
+      applyDroppedDevices(payload);
+      hwcheckUI.previewError = "";
+    }
+  } catch (e) {
+    if (hwcheckSelectionKey() === requestKey) {
+      // 这一趟**整份**都没拿到（预览 = 主程序 + 板侧视图 + 逐件小节 + 命令表，同一个请求）：
+      // 板侧视图清空，但错误归到 `previewError`——它是"检测程序预览失败"，不是"接线表取不到"
+      // （把那句写在这里会把学生引去查线，见工单 hwcheck-hardening/07）。
+      hwcheckUI.wiring = null;
+      hwcheckUI.sections = [];
+      hwcheckUI.unspecialized = [];
+      hwcheckUI.custom = [];
+      hwcheckUI.console = null;
+      hwcheckUI.consoleNote = "";
+      // ⚠ 上次的 main.c 必须一起清掉（工单 hwcheck-hardening/07 更正）：主程序是**按所选器件**
+      // 渲染的（`render_main_c(config, sections, generic, custom)`），所以失败之后留着的那份
+      // 属于**上一组器件**——照它去编译烧录就是烧错东西。此前这里不清，理由是"检测程序只依赖
+      // 平台与通道"，那个前提不成立。
+      hwcheckUI.preview = "";
+      hwcheckUI.outputHint = "";
+      hwcheckUI.previewError = e && e.message ? e.message : String(e);
+    }
+  } finally {
+    hwcheckViewBusy = false;
+    if (hwcheckViewPending) {
+      hwcheckViewPending = false;
+      await refreshHwcheckView();
+      return;   // 排队那次已经渲染过，别再渲染一遍
+    }
+  }
+  renderHwcheckOutput();
+  renderHwcheckDevices();
+  renderHwcheckWiring();
+  renderHwcheckSections();
+  renderHwcheckCustom();
+  renderHwcheckConsole();   // 命令表也随载荷更新（真机验收抓到的漏渲染）
+}
+
+async function previewHwcheck() {
+  if (!hwcheckCanPreview(hwcheckUI) || hwcheckUI.busy) return;
+  const box = $("hwcheck-output");
+  if (box) box.innerHTML = '<div class="muted">正在渲染检测程序…</div>';
+  // 进行中禁用（工单 hwcheck-hygiene/06）：与生成那条路同款——按钮按住时看得出来，
+  // 不是"点了没反应"（上面那道 busy 早退是兜底，不是给人看的）。
+  hwcheckUI.busy = true;
+  renderHwcheckPlatforms();
+  try {
+    await refreshHwcheckView();
+  } finally {
+    hwcheckUI.busy = false;
+    renderHwcheckPlatforms();
+  }
+}
+
+// addHwcheckDevice(slug, on)：加 / 去一件器件 → 重绘挑选面 + 重取板侧视图。
+// 选器件本身就是"我想看它怎么接"——所以这里顺手刷新一次（本地请求，零 LLM）。
+// 组清单一起带上：同组互斥 = 单选交换（工单 05），判据来自服务端载荷的
+// exclusive_groups（还没拿到时为空数组 = 老行为"只加不换"，提示会兜底说明）。
+function addHwcheckDevice(slug, on = true) {
+  Object.assign(hwcheckUI, hwcheckDevicePick(
+    hwcheckUI, slug, on, hwcheckUI.exclusiveGroups));
+  renderHwcheckDevices();
+  refreshHwcheckView();
+}
+
+// generateHwcheck()：生成检测工程（后端确定性渲染 + 既有生成内核）。
+// 成功 = 新子目录 + 一块工程面板 + 一份上板清单；失败 = 中文理由原样带出
+// （含 mspm0 默认撞脚这类"引擎如实拒绝"）。
+async function generateHwcheck() {
+  if (!hwcheckCanPreview(hwcheckUI) || hwcheckUI.busy) return;
+  hwcheckUI.busy = true;
+  hwcheckUI.generateError = "";
+  const box = $("hwcheck-project");
+  if (box) box.innerHTML = '<div class="muted">正在生成检测工程（复制母版 + 写入检测程序）…</div>';
+  renderHwcheckPlatforms();   // 生成期间两个按钮都置灰（防连点攒目录）
+  try {
+    const payload = await apiPost("/api/hwcheck/generate", hwcheckGeneratePayload(hwcheckUI));
+    const dir = String(payload.output_dir || "");
+    // 新工程 = 新的一次检测：现象与上一次的建议都归零（旧建议属于另一个工程，
+    // 留着会让人以为"这个工程已经分析过了"）
+    hwcheckUI.symptom = "";
+    hwcheckUI.advice = null;
+    hwcheckUI.adviceMessage = "";
+    hwcheckUI.adviceDegraded = false;
+    hwcheckUI.triageError = "";
+    adoptProject(payload, dir);
+    // 生成这一趟同样可能摘掉"已经不在器件库"的自建件（工单 ci-gate-fixes/09）：
+    // adoptProject 会按工程上下文回填器件集（可能又把它带回来），所以**排在它之后**。
+    applyDroppedDevices(payload);
+    writeStored(HWCHECK_PARENT_KEY, hwcheckUI.parentDir);
+    toast("ok", "检测工程已生成：" + dir);
+    renderHwcheckPanel();
+    loadHwcheckRecent();
+  } catch (e) {
+    hwcheckUI.generateError = e && e.message ? e.message : String(e);
+    renderHwcheckProject();
+  } finally {
+    hwcheckUI.busy = false;
+    renderHwcheckPlatforms();
+  }
+}
+
+// restoreHwcheckProject(dir)：回读一次已有检测（刷新回显 / 点最近一次）。
+//
+// ⚠ **回读在途时用户动过选择就不覆盖他的器件**（工单 06 会话实测的静默抹除）：
+// 页面加载的自动回读是异步的，而用户可能已经点了平台 / 加了器件——旧工程里的
+// 器件集（常见是空的）一到就把刚选的那件抹掉，页面上看着像"点了没反应"。
+// 判据用与 refreshHwcheckView 同一个选择集快照。
+async function restoreHwcheckProject(dir) {
+  if (!dir) return;
+  const requestKey = hwcheckSelectionKey();
+  try {
+    const payload = await apiGet(
+      "/api/hwcheck/project?output_dir=" + encodeURIComponent(dir));
+    adoptProject(payload, dir, {
+      keepSelection: hwcheckSelectionKey() !== requestKey,
+    });
+    renderHwcheckPanel();
+  } catch (e) {
+    // 上次那个工程被删了 / 不是检测工程：清掉备忘，不留下一个永远报错的入口
+    writeStored(HWCHECK_LAST_DIR_KEY, "");
+    hwcheckUI.project = null;
+    hwcheckUI.generateError = "";
+    renderHwcheckPanel();
+    toastError(e, "上次的检测工程读不出来了");
+  }
+}
+
+async function loadHwcheckRecent() {
+  try {
+    const payload = await apiGet(
+      "/api/hwcheck/recent?parent_dir=" + encodeURIComponent(hwcheckUI.parentDir || ""));
+    hwcheckUI.recent = (payload && payload.items) || [];
+  } catch {
+    hwcheckUI.recent = [];   // 最近列表读不到不影响检测本身
+  }
+  renderHwcheckRecent();
+}
+
+// —— 现象回填 + AI 排障（工单 08）：本栏目唯一的 LLM 入口 ——
+//
+// 两条独立的失败通道，分开显示（票面：LLM 失败不阻断 + 可重试）：
+//   * 请求失败（网络 / 400：目录不在、记录文件坏）→ triageError 红字；
+//   * 模型失败（服务端 200 + degraded）→ 兜底建议 + 一句失败原因（message），
+//     现象与勾选**已经落盘**，学生改完现象再点一次就是重试。
+async function submitHwcheckTriage() {
+  if (!hwcheckCanTriage(hwcheckUI) || hwcheckUI.busy) return;
+  // 现象的真源是**输入框**（不是 state 里那份可能过期的回显）：提交前先取一次
+  const symptomBox = $("hwcheck-symptom");
+  if (symptomBox) hwcheckUI.symptom = symptomBox.value;
+  hwcheckUI.busy = true;
+  hwcheckUI.triageError = "";
+  renderHwcheckAdvice();
+  try {
+    const payload = await apiPost("/api/hwcheck/triage", hwcheckTriagePayload(hwcheckUI));
+    Object.assign(hwcheckUI, hwcheckAdviceState(hwcheckUI, payload));
+  } catch (e) {
+    hwcheckUI.triageError = e && e.message ? e.message : String(e);
+  } finally {
+    hwcheckUI.busy = false;
+  }
+  renderHwcheckAdvice();
+}
+
+// syncHwcheckChecklist()：勾选落盘（零 LLM 轻端点）。本地备忘照旧写一份
+// （离线 / 服务端读不到时的兜底）；服务端那份是"刷新 / 换机器也回显"的真源。
+// 失败了只提示一句，不回滚勾选——学生刚点的那一下是有效输入。
+async function syncHwcheckChecklist() {
+  if (!hwcheckUI.project || !hwcheckUI.project.outputDir) return;
+  try {
+    const payload = await apiPost(
+      "/api/hwcheck/checklist", hwcheckChecklistPayload(hwcheckUI));
+    // 只认勾选（hwcheckChecklistState 的说明：整份采纳会吃掉还没提交的现象）
+    Object.assign(hwcheckUI, hwcheckChecklistState(hwcheckUI, payload));
+  } catch (e) {
+    toastError(e, "清单勾选没能存进工程目录");
+  }
+}
+
+// —— 编译 / 烧录 / 打开工程：三个动作都复用既有能力，本模块只接 DOM ——
+
+function setCompileStatus(text, cls) {
+  const el = $("hwcheck-compile-status");
+  if (!el) return;
+  el.textContent = text || "";
+  el.className = "code-compile-status" + (cls ? " " + cls : "");
+}
+
+function setCompileErrors(html) {
+  const el = $("hwcheck-compile-errors");
+  if (el) el.innerHTML = html || "";
+}
+
+// runHwcheckCompile(dir, btn)：按钮由调用方（事件委托）传进来——**不要**用
+// `querySelector('[data-hwcheck-compile="' + dir + '"]')` 反查：Windows 路径里的
+// `\U` / `\u` 在 JS 字符串字面量里是非法/转义序列（会静默变成 `U`），选择器
+// 永远匹配不上，表现为"按钮点了没反应"。
+async function runHwcheckCompile(dir, btn) {
+  if (!dir || hwcheckUI.busy) return;
+  hwcheckUI.busy = true;
+  if (btn) { btn.disabled = true; btn.textContent = "编译中…"; }
+  setCompileErrors("");
+  try {
+    const done = await runCompileOnceCore({
+      platform: hwcheckUI.project ? hwcheckUI.project.platform : "",
+      outputDir: dir,
+      callbacks: {
+        onBanner: (stateName, text) => setCompileStatus(
+          text, stateName === "success" ? "ok" : stateName === "fail" ? "err" : ""),
+        onCompiled: (payload) => setCompileErrors(
+          compileErrorRowsHTML((payload && payload.parsed_errors) || [])),
+      },
+    });
+    setCompileStatus(compileStatusText(done), compileStatusClass(done));
+  } catch (e) {
+    // 工具链缺失 / 工程结构异常：后端 400 的中文理由原样带出（编译不调 LLM）
+    setCompileStatus(e && e.message ? e.message : String(e), "err");
+  } finally {
+    hwcheckUI.busy = false;
+    if (btn) { btn.disabled = false; btn.textContent = "编译验证"; }
+  }
+}
+
+async function runHwcheckFlash(dir, btn) {
+  if (!dir || hwcheckUI.busy) return;
+  hwcheckUI.busy = true;
+  if (btn) { btn.disabled = true; btn.textContent = "烧录中…"; }
+  try {
+    // 共享执行体：busy 文案 / 结果行 / 400 指引卡（工具缺失的中文安装指引）都在里面。
+    // 它**自己吞掉失败**（400 → 指引卡、失败 → 结果行，返回 null 不抛），所以这里
+    // 没有 catch——写了也只是死码（工单 02 评审整改）。
+    await flashRunShared({
+      dir,
+      platform: hwcheckUI.project ? hwcheckUI.project.platform : "",
+      statusEl: $("hwcheck-flash-status"),
+      resultEl: $("hwcheck-flash-result"),
+      setBusy: () => { /* 本层已置 busy（按钮防重） */ },
+    });
+  } finally {
+    hwcheckUI.busy = false;
+    if (btn) { btn.disabled = false; btn.textContent = "烧录到板子"; }
+  }
+}
+
+async function openHwcheckFolder(dir) {
+  if (!dir) return;
+  try {
+    // 既有交付端点（工单 delivery-suite/01）：stm32 优先拉起 Keil、兜底文件夹；
+    // mspm0 打开文件夹（CCS 手动导入）——文案与 fx/delivery.js 同一口径
+    const data = await apiPost("/api/delivery/open-ide", { output_dir: dir });
+    toast("info", (data && data.message) || "已打开工程");
+  } catch (e) {
+    toastError(e, "打开工程失败");
+  }
+}
+
+export function initHwcheck() {
+  hwcheckUI.parentDir = readStored(HWCHECK_PARENT_KEY);
+  const parentInput = $("hwcheck-parent");
+  if (parentInput) parentInput.value = hwcheckUI.parentDir;
+
+  const platforms = $("hwcheck-platforms");
+  if (platforms) {
+    // 事件委托（innerHTML 全量重绘后仍有效）：点平台卡 → 换平台并清掉旧产物
+    // （旧产物是另一块板子的 main.c，留着会误导）。
+    platforms.addEventListener("click", (e) => {
+      const card = e.target.closest("[data-hwcheck-platform]");
+      if (!card) return;
+      const before = hwcheckUI.platform;
+      Object.assign(hwcheckUI, hwcheckSelectPlatform(
+        hwcheckPlatforms(), hwcheckUI, card.dataset.hwcheckPlatform));
+      if (hwcheckUI.platform !== before) {
+        hwcheckUI.preview = "";
+        hwcheckUI.outputHint = "";
+        hwcheckUI.wiring = null;          // 换板 = 旧接线表作废（脚不一样）
+        hwcheckUI.sections = [];          // 换板 = 旧检测计划作废（配方按平台分）
+        hwcheckUI.unspecialized = [];
+        hwcheckUI.console = null;         // 同理：命令字符也按平台 / 配方给
+      }
+      renderHwcheckPanel();
+      refreshHwcheckView();               // 新平台的接线表 / 冲突立刻跟上
+    });
+    platforms.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const card = e.target.closest("[data-hwcheck-platform]");
+      if (!card) return;
+      e.preventDefault();
+      card.click();
+    });
+  }
+  const channels = $("hwcheck-channels");
+  if (channels) {
+    // 通道勾选走委托（工单 02 起通道清单可能变长，逐个绑定会漏）；
+    // 通道是渲染输入 → 改了就把旧预览清掉（旧文本是另一种形态的 main.c），
+    // 并重取板侧视图（通道模块自己也会占脚、也会撞脚）。
+    channels.addEventListener("change", (e) => {
+      const input = e.target.closest("[data-hwcheck-channel]");
+      if (!input) return;
+      Object.assign(hwcheckUI, hwcheckPickState(
+        hwcheckUI, input.dataset.hwcheckChannel, input.checked));
+      hwcheckUI.preview = "";
+      hwcheckUI.outputHint = "";
+      hwcheckUI.wiring = null;
+      hwcheckUI.sections = [];          // 通道变了 = 工程模块集变了，计划重取
+      hwcheckUI.unspecialized = [];
+      hwcheckUI.console = null;         // 命令表也一样（有没有串口决定能不能复测）
+      hwcheckUI.previewError = "";      // 换通道 = 重新渲染输入，旧错误不再适用
+      // 通道变了：生成前引导（mspm0 双通道会撞脚）要跟着变
+      renderHwcheckChannelNote();
+      renderHwcheckOutput();
+      refreshHwcheckView();
+    });
+  }
+
+  // —— 器件挑选（工单 03）：搜索框 / 卡片网格（点卡片 = 加一件）/ chips（点 = 去掉）——
+  const deviceSearch = $("hwcheck-device-search");
+  if (deviceSearch) {
+    deviceSearch.addEventListener("input", () => {
+      hwcheckUI.deviceQuery = deviceSearch.value || "";
+      renderHwcheckDevices();
+    });
+  }
+  const deviceGrid = $("hwcheck-device-grid");
+  if (deviceGrid) {
+    // 与生成页模块网格同一套委托语义：详情按钮优先（开说明弹窗），
+    // 卡片本体 = 加一件器件。平台用**本栏目自己的**（生成页的平台可能不同）。
+    const activate = (target) => {
+      const card = target.closest("[data-add]");
+      if (!card) return;
+      // 重绘后把焦点送到**这一件的结果**上（工单 hwcheck-hygiene/06）：加进之后它
+      // 在 chips 里（卡片本身会从"还没选"的池子里消失），所以在 chip 上落焦点。
+      pendingFocusSelector = `#hwcheck-device-chips [data-remove="${selectorValue(card.dataset.add)}"]`;
+      addHwcheckDevice(card.dataset.add);
+    };
+    deviceGrid.addEventListener("click", (e) => {
+      const infoBtn = e.target.closest(".mc-info");
+      if (infoBtn) {
+        openModuleInfo(infoBtn.dataset.info, hwcheckUI.platform);
+        return;
+      }
+      if (e.target.closest("[data-add]")) activate(e.target);
+    });
+    // 键盘同等可达（工单 06）：卡片是 role="button" tabindex="0"。
+    // 详情按钮是真 <button>（浏览器自己把 Enter/Space 变成 click），排掉免得开两次。
+    deviceGrid.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " " && e.key !== "Spacebar") return;
+      if (e.target.closest && e.target.closest(".mc-info")) return;
+      e.preventDefault();
+      if (e.target.closest("[data-add]")) activate(e.target);
+    });
+  }
+  const deviceChips = $("hwcheck-device-chips");
+  if (deviceChips) {
+    // 说明按钮走既有委托（捕获阶段拦，否则会连带把 chip 从工程里移除）
+    bindModuleInfoEntry(deviceChips, () => hwcheckUI.platform);
+    deviceChips.addEventListener("click", (e) => {
+      const chip = e.target.closest("[data-remove]");
+      if (chip) {
+        // 移除之后 chip 就不在了：焦点落到**网格里那张卡**上（它刚回到"还没选"的池子）
+        pendingFocusSelector = `#hwcheck-device-grid [data-add="${selectorValue(chip.dataset.remove)}"]`;
+        addHwcheckDevice(chip.dataset.remove, false);
+      }
+    });
+    // chip 是 role="button" tabindex="0"（工单 hwcheck-hygiene/06）：Enter / Space 同义
+    deviceChips.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " " && e.key !== "Spacebar") return;
+      if (e.target.closest && e.target.closest("[data-mod-info]")) return;   // 说明按钮自己会响应
+      const chip = e.target.closest("[data-remove]");
+      if (!chip) return;
+      e.preventDefault();
+      pendingFocusSelector = `#hwcheck-device-grid [data-add="${selectorValue(chip.dataset.remove)}"]`;
+      addHwcheckDevice(chip.dataset.remove, false);
+    });
+  }
+  const preview = $("btn-hwcheck-preview");
+  if (preview) preview.addEventListener("click", previewHwcheck);
+  const generate = $("btn-hwcheck-generate");
+  if (generate) generate.addEventListener("click", generateHwcheck);
+  // 带入生成页（工单 hwcheck-acceptance/04）：容器级委托（innerHTML 全量重绘后
+  // 仍有效，与器件网格 / chips 同一套纪律）。按钮置灰时不触发（浏览器不发 click）。
+  const handoff = $("hwcheck-handoff");
+  if (handoff) {
+    handoff.addEventListener("click", (e) => {
+      if (e.target.closest("[data-hwcheck-handoff]")) handoffToGenerate();
+    });
+  }
+
+  if (parentInput) {
+    parentInput.addEventListener("change", () => {
+      hwcheckUI.parentDir = parentInput.value.trim();
+      writeStored(HWCHECK_PARENT_KEY, hwcheckUI.parentDir);
+      loadHwcheckRecent();
+    });
+  }
+  const pick = $("btn-hwcheck-pick-parent");
+  if (pick) {
+    pick.addEventListener("click", async () => {
+      try {
+        const data = await apiPost("/api/pick-directory", {});
+        if (!data || !data.path) return;   // 用户取消：不覆盖输入框
+        hwcheckUI.parentDir = String(data.path);
+        if (parentInput) parentInput.value = hwcheckUI.parentDir;
+        writeStored(HWCHECK_PARENT_KEY, hwcheckUI.parentDir);
+        loadHwcheckRecent();
+      } catch (e) {
+        toastError(e, "选择文件夹失败");
+      }
+    });
+  }
+
+  // —— 「我的器件」（库外件，工单 02）：新建 / 编辑 / 删除 / 保存 / 取消 ——
+  // 全部走容器级委托（innerHTML 全量重绘后仍有效，与器件网格同一套纪律）。
+  const myNew = $("btn-my-device-new");
+  if (myNew) myNew.addEventListener("click", () => openMyDeviceForm(null));
+  const myBox = $("my-devices");
+  if (myBox) {
+    myBox.addEventListener("click", (e) => {
+      // 加选 / 取消（工单验收第 6 条「能选」）：走**库内器件同一条路**
+      // （addHwcheckDevice → hwcheckUI.devices → 既有 chip / 检测计划 / 生成都认它），
+      // 不另造一套"自建件的选择"。
+      const pick = e.target.closest("[data-my-device-pick]");
+      if (pick) {
+        const id = pick.dataset.myDevicePick;
+        // 重绘后焦点回这一行（工单 hwcheck-hygiene/06）：`renderMyDevices()` 换掉整块
+        // innerHTML，不回焦点的话键盘 / 连续点选都会掉回 body。
+        pendingFocusSelector = `[data-my-device-pick="${selectorValue(id)}"]`;
+        addHwcheckDevice(id, !(hwcheckUI.devices || []).includes(id));
+        renderMyDevices();   // 按钮两态跟着选择变（chip 那边由 addHwcheckDevice 重绘）
+        return;
+      }
+      const edit = e.target.closest("[data-my-device-edit]");
+      if (edit) {
+        openMyDeviceForm(myDeviceEditTarget(hwcheckUI.myDevices, edit.dataset.myDeviceEdit));
+        return;
+      }
+      const del = e.target.closest("[data-my-device-del]");
+      if (del) {
+        // 删掉之后那一行**不在了**：焦点落到"新建"按钮上（不回 body，键盘还能继续走）
+        pendingFocusSelector = "#btn-my-device-new";
+        deleteMyDevice(del.dataset.myDeviceDel);
+        return;
+      }
+      if (e.target.closest("[data-my-device-save]")) {
+        saveMyDevice();
+        return;
+      }
+      if (e.target.closest("[data-my-device-draft]")) {
+        draftMyDevice();
+        return;
+      }
+      if (e.target.closest("[data-my-device-draft-apply]")) {
+        applyMyDraft();
+        renderMyDevices();
+        return;
+      }
+      if (e.target.closest("[data-my-device-draft-dismiss]")) {
+        hwcheckUI.myDraft = null;
+        hwcheckUI.myDraftApplied = false;
+        renderMyDevices();
+        return;
+      }
+      if (e.target.closest("[data-my-device-cancel]")) {
+        closeMyDeviceForm();
+        renderMyDevices();
+      }
+    });
+    // 表单输入：`input` 覆盖打字（地址预览与校验理由实时跟上），`change` 单独
+    // 接一次是为了 `<select>`（总线下拉在部分浏览器上不触发 input）。
+    // 资料文本框（工单 07）只同步 state —— **不许重绘**（正在打字，同表单纪律）。
+    myBox.addEventListener("input", (e) => {
+      if (e.target.matches("[data-my-device-material]")) {
+        hwcheckUI.myMaterial = e.target.value;
+        return;
+      }
+      if (e.target.closest("[data-my-device-field]")) syncMyDeviceForm();
+    });
+    myBox.addEventListener("change", (e) => {
+      const fileInput = e.target.closest("[data-my-device-file]");
+      if (fileInput) {
+        const file = fileInput.files && fileInput.files[0];
+        if (file) draftFromMyDeviceFile(file);
+        fileInput.value = "";   // 清掉选择：允许重复选同一个文件再抽一次
+        return;
+      }
+      if (e.target.closest("[data-my-device-field]")) syncMyDeviceForm();
+    });
+    // 名称 → id 建议：只在 id 还是空 / 还是上一次自动填的那值时补一下，
+    // 用户手填过 id 就不动它（不覆盖用户输入）。
+    // ⚠ 只改 id 那个输入框的 value 再 syncMyDeviceForm —— **不许整块重绘**：
+    // 用户正在表单里往下填（或刚填完其它字段），整块重绘会把它们一起清掉
+    // （与 syncMyDeviceForm 那条同一个坑：真正在编辑的表单不能被替换）。
+    myBox.addEventListener("blur", (e) => {
+      const el = e.target.closest('[data-my-device-field="name"]');
+      if (!el || !hwcheckUI.myForm) return;
+      const current = String(hwcheckUI.myForm.id || "");
+      if (current && !/^mine_(device)?$/.test(current)) return;
+      const idBox = myBox.querySelector('[data-my-device-field="id"]');
+      if (!idBox) return;
+      idBox.value = myDeviceSlugFromName(el.value);
+      syncMyDeviceForm();
+    }, true);
+  }
+
+  const project = $("hwcheck-project");
+  if (project) {
+    project.addEventListener("click", (e) => {
+      const compile = e.target.closest("[data-hwcheck-compile]");
+      if (compile) {
+        runHwcheckCompile(compile.dataset.hwcheckCompile, compile);
+        return;
+      }
+      const flash = e.target.closest("[data-hwcheck-flash]");
+      if (flash) {
+        runHwcheckFlash(flash.dataset.hwcheckFlash, flash);
+        return;
+      }
+      const open = e.target.closest("[data-hwcheck-open]");
+      if (open) openHwcheckFolder(open.dataset.hwcheckOpen);
+    });
+  }
+  const checklist = $("hwcheck-checklist");
+  if (checklist) {
+    checklist.addEventListener("change", (e) => {
+      const input = e.target.closest("[data-hwcheck-check]");
+      if (!input || !hwcheckUI.project) return;
+      const key = hwcheckChecklistKey(hwcheckUI.project.outputDir);
+      // 重绘后焦点回**刚勾的那一项**（工单 hwcheck-hygiene/06）：清单整块 innerHTML
+      // 重绘会把复选框换掉、焦点掉回 body——学生连续勾十几项时每次都要重新找位置。
+      pendingFocusSelector = `[data-hwcheck-check="${selectorValue(input.dataset.hwcheckCheck)}"]`;
+      writeStored(key, hwcheckChecklistToggle(
+        readStored(key), input.dataset.hwcheckCheck, input.checked));
+      hwcheckUI.checklistChecked = hwcheckCheckedIds(readStored(key));
+      renderHwcheckChecklist();
+      // 落服务端一份（工单 08）：刷新 / 换机器回显靠它；本地备忘退成兜底
+      syncHwcheckChecklist();
+    });
+  }
+  // —— 现象回填 + AI 排障（工单 08）：唯一的 LLM 入口 ——
+  const symptom = $("hwcheck-symptom");
+  if (symptom) {
+    symptom.addEventListener("input", () => {
+      hwcheckUI.symptom = symptom.value;
+      renderHwcheckAdvice();   // 按钮的可用性跟着"填没填"变
+    });
+  }
+  const triage = $("btn-hwcheck-triage");
+  if (triage) triage.addEventListener("click", submitHwcheckTriage);
+  const recent = $("hwcheck-recent");
+  if (recent) {
+    recent.addEventListener("click", (e) => {
+      const row = e.target.closest("[data-hwcheck-open-project]");
+      if (row) restoreHwcheckProject(row.dataset.hwcheckOpenProject);
+    });
+  }
+
+  renderHwcheckUnverifiedNote();
+  renderHwcheckPanel();
+  // 「我的器件」拉一次（与平台无关，所以不随换平台重取）；刷新回显：上次看的那个
+  // 检测工程按服务端真源读回来（清单内容与勾选态都回来）
+  loadMyDevices();
+  const last = readStored(HWCHECK_LAST_DIR_KEY);
+  if (last) restoreHwcheckProject(last);
+  loadHwcheckRecent();
+}

@@ -1,0 +1,16 @@
+# 读数：probe-11-red
+# 命令：python .scratch\hwcheck-hygiene\probe-11-red.py
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T11:39:41+08:00
+# 退出码：0
+前置（① 跨件反向依赖（核心 → 动作）制造 ui 环 的判据，未注入）：退出码 0 —— 绿
+[PASS] ① 跨件反向依赖（核心 → 动作）制造 ui 环
+        注入态退出码 1（文件换行 CRLF），点名了「AssertionError [ERR_ASSERTION]: ui 模块存在 import 环：ai-banner.js, confirm」；复原 sha256 4bd24733dc89419f（与前置相同）
+前置（② 名字搬丢（动作件里那段分支改了名，入口的接线还指着旧名） 的判据，未注入）：退出码 0 —— 绿
+[PASS] ② 名字搬丢（动作件里那段分支改了名，入口的接线还指着旧名）
+        注入态退出码 1（文件换行 CRLF），点名了「ui/hwcheck.js → /js/ui/hwcheck-actions.js：未导出 pickHwcheckParent」；复原 sha256 c03c73235cb12e76（与前置相同）
+前置（③ 用了没 import（核心件少一条 fx 的 import 边） 的判据，未注入）：退出码 0 —— 绿
+[PASS] ③ 用了没 import（核心件少一条 fx 的 import 边）
+        注入态退出码 1（文件换行 CRLF），点名了「ui/hwcheck-core.js:174 用了 hwcheckPlatformCardsHTML（只挂在 window 上，由 fx/h」；复原 sha256 4bd24733dc89419f（与前置相同）
+
+结论：3/3 段成立（每段都是「注入即红、复原逐字节相同」）

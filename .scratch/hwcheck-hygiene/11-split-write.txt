@@ -1,0 +1,21 @@
+# 读数：11-split-write
+# 命令：python .scratch\hwcheck-hygiene\apply-11-split.py --write
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T11:44:14+08:00
+# 退出码：0
+搬前快照/源文件：68618 B / sha256 65ae5e85e79ab392c2b9adc08e8262bf53963ee2162818082b22ef95fcfebb9b
+四件：
+  hwcheck-core.js: 27075 B / 540 行
+  hwcheck-devices.js: 15198 B / 355 行
+  hwcheck-actions.js: 27523 B / 575 行
+  hwcheck.js: 8868 B / 185 行
+  core: 24 个导出
+  devices: 6 个导出
+  actions: 18 个导出
+  entry: 0 个导出
+分区完备：原文件头 3947 B + 59 个声明单元 = 原文逐字节相同 ✓
+委托下沉：15 段处理分支搬进两件；入口接线 23 处（与搬前同数，其中 15 处只留一行「挂哪个函数」）
+已写：src/contest_generator/static/js/ui/hwcheck-core.js
+已写：src/contest_generator/static/js/ui/hwcheck-devices.js
+已写：src/contest_generator/static/js/ui/hwcheck-actions.js
+已写：src/contest_generator/static/js/ui/hwcheck.js
