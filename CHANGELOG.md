@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=670817bd68a0e491a41279f6ee83fa4782df5490 -->
+<!-- changelog-auto: last-commit=cd212aae9798bd7c0040bf3aacb4f7d85af4df6d -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -11,6 +11,7 @@
 - 10:49 工单 hwcheck-hygiene/10：拆 fx 第二步——消费者迁到六件、删掉过渡态 barrel
 - 10:50 账本：hwcheck-hygiene 09–10 落 main（未发布），交接区改指下一单 11
 - 11:51 工单 hwcheck-hygiene/11：拆 ui 第一步——1401 行按职责拆成四件（入口 / 核心渲染 / 我的器件 / 动作与请求）
+- 11:51 工单 hwcheck-hygiene/11：置 resolved（读数与账、双轴评审整改都写进票尾）
 
 ## 2026-09-26
 - 00:21 工单 ci-gate-fixes/01：配置缺失时回退随包库 + 配置路径覆盖口
