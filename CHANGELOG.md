@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=9cb8b9ee8cd73f1a655e9c62e821fb65768b7d99 -->
+<!-- changelog-auto: last-commit=eef0cd4eda81dd538924b1a67ae1e1a0d49e9f9d -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -34,6 +34,7 @@
 - 19:43 backlog 收尾 02：MQ 系九件词表口径统一（补正向映射；预热退回手册措辞，不写无据时长）
 - 19:56 backlog 收尾 03：资料库解包改走共享原语（流式原子写）＋ 清单写回也收进同一条链
 - 19:57 backlog 收尾 04：entry_store 裸写逐调用点核实（新建靠事务、更新裸写）＋ 开单 05 ＋ 台账翻牌
+- 20:13 backlog 收尾 05：三个库的更新路径元数据改原子写（强杀不再留半截 JSON）
 
 ## 2026-09-26
 - 00:21 工单 ci-gate-fixes/01：配置缺失时回退随包库 + 配置路径覆盖口
