@@ -4,9 +4,12 @@
 master_store.py；蒸馏编排用例留在 test_master.py。
 """
 
+import json
 import os
 import sys
+import threading
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -18,6 +21,8 @@ from contest_generator.master import (
 )
 from contest_generator.master_store import (
     MasterError,
+    MasterMeta,
+    _write_meta,
     analyze_structure,
     delete_master,
     get_master,
@@ -785,3 +790,184 @@ def test_master_store_no_config_file_suffix_table():
     import contest_generator.master_store as master_store
 
     assert not hasattr(master_store, "PLATFORM_CONFIG_FILES")
+
+
+# ---------------------------------------------------------------------------
+# 记录写的正确性形状：唯一临时名 + 原子替换 + 按路径锁（工单 record-write-hardening/05）
+#
+# 收走前的形状（本单要挡的）：固定临时名 `.{platform}.json.tmp` + 无锁、无 finally。
+# 疼法：两个写者互抢同一个临时名；写失败在库目录里留下 `.` 开头的残渣
+# （`list_masters` 跳过点开头的条目，这种垃圾没人会发现）。
+# ---------------------------------------------------------------------------
+
+
+class _SentinelReplaceError(OSError):
+    """注入用的哨兵异常：断言"抛出来的就是它"，而不是"抛了某个 OSError"。"""
+
+
+def _meta(*, warnings: tuple[str, ...] = ()) -> MasterMeta:
+    """一份最小合法母版元数据（照 import_master 现场造的那份形状）。"""
+    return MasterMeta(
+        platform=PLATFORM_STM32, sources=("proj-a",), warnings=warnings
+    )
+
+
+def _stray_entries(directory: Path) -> list[str]:
+    """库目录里除平台目录与 `<platform>.json` 之外的东西（`iterdir` 逐条看——
+    别用 `glob("*.tmp")`：临时名带 pid + 计数后那个 glob 匹配不到新名字 = 断言空转）。"""
+    keep = {PLATFORM_STM32, f"{PLATFORM_STM32}.json"}
+    return [p.name for p in directory.iterdir() if p.name not in keep]
+
+
+def _run_in_thread(errors: list[BaseException], work) -> threading.Thread:
+    """起一个守护线程跑 `work`，异常带回主线程断言（形状照 `tests/test_hwcheck_triage.py:625-645`）。"""
+
+    def body() -> None:
+        try:
+            work()
+        except BaseException as exc:  # noqa: BLE001 —— 线程里的异常要带回主线程断言
+            errors.append(exc)
+
+    thread = threading.Thread(target=body, daemon=True)
+    thread.start()
+    return thread
+
+
+def test_master_meta_write_leaves_no_dot_temp_behind(fake_masters_dir):
+    """原子写：留盘后库目录里除平台目录与 `<platform>.json` 外**什么都没有**。"""
+    fake_masters_dir.mkdir()
+    _write_meta(fake_masters_dir, _meta())
+
+    assert _stray_entries(fake_masters_dir) == [], f"留下了杂散文件：{_stray_entries(fake_masters_dir)}"
+    assert (fake_masters_dir / "stm32.json").is_file()
+
+
+def test_master_meta_write_failure_leaves_no_dot_temp_and_keeps_the_original_error(
+    fake_masters_dir, monkeypatch
+):
+    """坏写：临时文件必须被清掉，且**原异常照抛**（收走前会留下 `.stm32.json.tmp`）。
+
+    注入点打在共享原语看到的 `os` 上（写实现归 `atomic_io`）：`replace` 抛哨兵异常，
+    此刻临时文件**真的在盘上**（上一步刚写完）——不这样造，`finally` 里没东西可清 = 判据空转。
+    """
+    import contest_generator.atomic_io as atomic_io
+
+    fake_masters_dir.mkdir()
+    boom = _SentinelReplaceError("替换失败")
+
+    def failing_replace(src, dst):
+        raise boom
+
+    monkeypatch.setattr(
+        atomic_io,
+        "os",
+        SimpleNamespace(path=os.path, getpid=os.getpid, replace=failing_replace),
+    )
+    with pytest.raises(_SentinelReplaceError) as caught:
+        _write_meta(fake_masters_dir, _meta())
+    assert caught.value is boom, "抛出来的不是原异常（被清理动作掩盖了）"
+    assert _stray_entries(fake_masters_dir) == [], "写失败后留下了杂散文件"
+
+
+def test_concurrent_master_meta_writes_share_no_dot_temp(fake_masters_dir, monkeypatch):
+    """两个线程同平台写元数据：无异常、库目录里零 `.` 残渣、最终 meta 合法可解析。
+
+    确定性做法：把**第一个**替换卡住（此刻它的临时文件还在盘上），第二个写者同时发出去。
+    · 收走前（固定临时名 + 无锁）：第二个写者把**同一个**临时文件截断换走，第一个放行后
+      `replace` 的源文件已经不在 → 报错；
+    · 收走后（唯一临时名 + 同一把锁）：第二个在锁上等，第一个写完它才动 → 两个都落盘成功。
+    `second_done.wait(timeout=1.0)` 只为在**无锁**那一格把顺序钉死（共锁那一格必然等不到）。
+    """
+    import contest_generator.atomic_io as atomic_io
+
+    fake_masters_dir.mkdir()
+    first_inside = threading.Event()
+    release = threading.Event()
+    second_done = threading.Event()
+    calls = {"n": 0}
+    real_replace = os.replace
+
+    def slow_replace(src, dst):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            first_inside.set()
+            assert release.wait(timeout=30), "等不到放行——判据自己失败，别挂住整场"
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(
+        atomic_io,
+        "os",
+        SimpleNamespace(path=os.path, getpid=os.getpid, replace=slow_replace),
+    )
+    errors: list[BaseException] = []
+
+    def write(warnings: tuple[str, ...], done: threading.Event | None = None) -> None:
+        _write_meta(fake_masters_dir, _meta(warnings=warnings))
+        if done is not None:
+            done.set()
+
+    first = _run_in_thread(errors, lambda: write(("先到的",)))
+    assert first_inside.wait(timeout=30), "第一个写者没走到替换那一步"
+    second = _run_in_thread(errors, lambda: write(("后到的",), second_done))
+    second_done.wait(timeout=1.0)  # 无锁那一格：这里会先写完；共锁那一格：等不到
+    release.set()
+    first.join(timeout=30)
+    second.join(timeout=30)
+
+    assert errors == [], f"并发写报错（临时名互抢）：{errors!r}"
+    assert _stray_entries(fake_masters_dir) == [], "并发写留下了杂散文件"
+    data = json.loads((fake_masters_dir / "stm32.json").read_text(encoding="utf-8"))
+    assert data["warnings"] in (["先到的"], ["后到的"]), "最终 meta 不是两个写者之一"
+
+
+def test_delete_master_interleaved_with_a_meta_write_leaves_no_dangling_meta(
+    fake_masters_dir, tmp_path, monkeypatch
+):
+    """删除与写元数据交错：**不许留下"有 meta、没目录"的悬空母版**。
+
+    确定性做法：把写那笔的替换卡住（此刻它已进临界区），删除同时发出去。
+    · 收走前（两者不共锁）：删除先跑完（目录与 meta 都没了），随后那笔替换把 meta
+      又落回库目录 → `list_masters` 看到没有目录的母版；
+    · 收走后（同一把按路径的锁）：删除在锁上等，写完它才进来 → 目录与 meta 一起消失。
+    判据只取"状态自洽 + 不留残渣"，**不**判删除与导入谁该赢（那不在本单射程）。
+    """
+    import contest_generator.atomic_io as atomic_io
+
+    fake_masters_dir.mkdir()
+    import_master(fake_masters_dir, PLATFORM_STM32, make_fake_master_project(tmp_path / "src"))
+    first_inside = threading.Event()
+    release = threading.Event()
+    errors: list[BaseException] = []
+    real_replace = os.replace
+
+    def slow_replace(src, dst):
+        if not first_inside.is_set():
+            first_inside.set()
+            assert release.wait(timeout=30), "等不到放行——判据自己失败，别挂住整场"
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(
+        atomic_io,
+        "os",
+        SimpleNamespace(path=os.path, getpid=os.getpid, replace=slow_replace),
+    )
+    writer = _run_in_thread(errors, lambda: _write_meta(fake_masters_dir, _meta()))
+    assert first_inside.wait(timeout=30), "写元数据那笔没走到替换那一步"
+
+    deleted = threading.Event()
+
+    def remove() -> None:
+        delete_master(fake_masters_dir, PLATFORM_STM32)
+        deleted.set()
+
+    remover = _run_in_thread(errors, remove)
+    deleted.wait(timeout=1.0)  # 不共锁那一格：这里会先删完；共锁那一格：等不到
+    release.set()
+    writer.join(timeout=30)
+    remover.join(timeout=30)
+
+    assert errors == [], f"交错时报错：{errors!r}"
+    assert _stray_entries(fake_masters_dir) == [], "交错后留下了杂散文件"
+    has_dir = (fake_masters_dir / "stm32").is_dir()
+    has_meta = (fake_masters_dir / "stm32.json").is_file()
+    assert has_dir == has_meta, f"留下了悬空状态：目录={has_dir} / meta={has_meta}"

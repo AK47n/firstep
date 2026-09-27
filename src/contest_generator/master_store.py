@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
+from .atomic_io import atomic_write_text, path_lock
 from .autocommit import commit_after_write
 from .entry_store import (
     SLUG_PATTERN,
@@ -600,13 +601,22 @@ def get_master(masters_dir: Path, platform: str) -> MasterMeta:
 
 
 def delete_master(masters_dir: Path, platform: str) -> None:
-    """删除母版：工程目录与元数据文件一并移除（目录存在校验走 entry_store 原语）。"""
+    """删除母版：工程目录与元数据文件一并移除（目录存在校验走 entry_store 原语）。
+
+    删 meta 那一步与 `_write_meta` **归同一把按路径的锁**（工单 05）：两者交错时
+    会留下"有 meta、没目录"的悬空母版（导入那笔的替换正好落在删除之后）。
+    **只护 meta 这一个文件本身**：`import_master` 的**目录换入**在那把锁之外，
+    它与本函数的删除动作之间还留着一条窄缝——工单 05「账」第 1 条如实记着，
+    要不要把锁提到目录换入之前留给工单 06 定夺。
+    """
     _validate_store_key(platform)
     try:
         delete_entry(masters_dir, platform)
     except StoreError:
         raise MasterError(f"母版 {platform!r} 不存在") from None
-    (masters_dir / f"{platform}.json").unlink(missing_ok=True)
+    meta_path = masters_dir / f"{platform}.json"
+    with path_lock(meta_path):
+        meta_path.unlink(missing_ok=True)
     commit_after_write(masters_dir, f"lib: delete master {platform}")
 
 
@@ -635,14 +645,21 @@ def _validate_known_platform(platform: str) -> None:
 
 
 def _write_meta(masters_dir: Path, meta: MasterMeta) -> None:
-    """写元数据：先写临时文件再原子换入，写失败不会留下损坏的 json。"""
+    """写元数据：**唯一临时名** → 原子换入 → `finally` 清残渣（工单 record-write-hardening/05）。
+
+    收走前是**固定临时名** `.{platform}.json.tmp` + 无锁、无 `finally` 的手搓版：
+    两个写者抢同一个临时名，写失败还会在库目录留下 `.` 开头的残渣——
+    而 `list_masters` 那一行（`not entry.is_dir()` 与点开头**都**跳过）看不见它，
+    这种垃圾没人会发现。
+    这里是**整份重写**（调用方现场造 meta，不读旧文件），所以不上"读-改-写"，
+    只上共享原语 + 按**目标路径**的锁（与 `delete_master` 删同一个文件时同一把）。
+    字节格式**逐字不动**：`ensure_ascii=False`、`indent=2`、**没有尾换行**。
+    """
     target = masters_dir / f"{meta.platform}.json"
-    temp = masters_dir / f".{meta.platform}.json.tmp"
-    temp.write_text(
-        json.dumps(meta.to_dict(), ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    os.replace(temp, target)
+    with path_lock(target):
+        atomic_write_text(
+            target, json.dumps(meta.to_dict(), ensure_ascii=False, indent=2)
+        )
 
 
 def _require_str(data: dict[str, Any], key: str) -> str:

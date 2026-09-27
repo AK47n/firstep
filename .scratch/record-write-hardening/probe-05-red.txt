@@ -1,0 +1,33 @@
+# 读数：probe-05-red
+# 命令：python .scratch/record-write-hardening/probe-05-red.py
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T18:04:18+08:00
+# 退出码：0
+# 被撤的源码：src/contest_generator/atomic_io.py sha256=d80ba0f58a333279baacfd933b2aeb56224917138b23dde8f57357f4f6e31189 行尾=CRLF
+# 被撤的源码：src/contest_generator/master_store.py sha256=19bce8f4adf64ae2b40eb80a6a7ce6e49ce1ad7e7a9abcb1a5e0309d27b020e4 行尾=CRLF
+# 判据文件：tests/test_master_store.py sha256=2320007d5f3cdbf1a96d4637ca2b7bb23b6c286ccf73b368a769af3f3f3c7fa0
+# 判据文件：tests/test_webapp.py sha256=7aa009bc82387b4a55e24dc5ef736972a1cdb6791b7e12b66e15b49c1f668896
+
+== A 撤掉「同一把锁」（写 meta 与删 meta 各自为政） ==
+   声明必须红：['tests/test_master_store.py::test_delete_master_interleaved_with_a_meta_write_leaves_no_dangling_meta', 'tests/test_webapp.py::test_masters_import_and_delete_do_not_leave_a_dangling_meta']
+   实得 FAILED：['tests/test_master_store.py::test_delete_master_interleaved_with_a_meta_write_leaves_no_dangling_meta', 'tests/test_webapp.py::test_masters_import_and_delete_do_not_leave_a_dangling_meta']
+   pytest 尾行：2 failed, 448 passed, 1 warning in 42.82s
+   复原 sha256 逐字节相同：True
+
+== B 撤掉共享原语的清残渣（唯一临时名 → 固定名、finally → pass） ==
+   声明必须红：['tests/test_master_store.py::test_master_meta_write_failure_leaves_no_dot_temp_and_keeps_the_original_error']
+   实得 FAILED：['tests/test_master_store.py::test_master_meta_write_failure_leaves_no_dot_temp_and_keeps_the_original_error']
+   pytest 尾行：1 failed, 449 passed, 1 warning in 49.45s
+   复原 sha256 逐字节相同：True
+
+== C 撤回收走前的完整形状（锁 + 唯一临时名一起撤） ==
+   声明必须红：['tests/test_master_store.py::test_concurrent_master_meta_writes_share_no_dot_temp', 'tests/test_master_store.py::test_delete_master_interleaved_with_a_meta_write_leaves_no_dangling_meta', 'tests/test_webapp.py::test_masters_import_and_delete_do_not_leave_a_dangling_meta']
+   实得 FAILED：['tests/test_master_store.py::test_concurrent_master_meta_writes_share_no_dot_temp', 'tests/test_master_store.py::test_delete_master_interleaved_with_a_meta_write_leaves_no_dangling_meta', 'tests/test_webapp.py::test_masters_import_and_delete_do_not_leave_a_dangling_meta']
+   pytest 尾行：3 failed, 447 passed, 1 warning in 43.70s
+   复原 sha256 逐字节相同：True
+
+== 复原后必须回绿 ==
+   实得 FAILED：（无）
+   pytest 尾行：450 passed, 1 warning in 49.54s
+
+结论：PASS（三段反证全成立）

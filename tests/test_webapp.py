@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import re
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Mapping, Sequence
 from urllib.parse import quote
 
@@ -4563,6 +4565,96 @@ def test_masters_import_direct_ok(client, context, tmp_path):
     masters = client.get("/api/masters").json()
     assert [m["platform"] for m in masters] == [PLATFORM_STM32]
     assert masters[0]["sources"] == ["official_template"]
+
+
+def test_masters_import_and_delete_do_not_leave_a_dangling_meta(
+    client, context, tmp_path, monkeypatch
+):
+    """并发导入与删除同一平台：判据取**最终盘上状态**——母版目录与 meta 要么都在、要么都不在。
+
+    确定性做法（照 `tests/test_hwcheck.py` 的端点级先例）：把导入那笔写 meta 的替换卡住
+    （此刻它已进临界区），删除请求同时发出去。
+    · 收走前（两者不共锁）：删除先跑完（目录与 meta 都没了），随后那笔替换把 meta 又落回
+      库目录 → 留下"有 meta、没目录"的悬空母版（`GET /api/masters` 看不见它，也没人清）；
+    · 收走后（同一把按路径的锁）：删除在锁上等，写完它才进来 → 状态自洽。
+    只判"自洽 + 不留残渣"，**不**判删除与导入谁该赢（那不在本单射程）。
+
+    覆盖边界（工单 05「账」第 1 条）：这条钉的是"删除与**写 meta** 互斥"这一种交错；
+    导入的**目录换入**在那把锁之外，它与删除之间还留着一条窄缝——不在本单射程，
+    要闭得把锁提到目录换入之前（留给工单 06 定夺）。
+    """
+    import contest_generator.atomic_io as atomic_io
+
+    masters_dir = context[0].config.masters_dir
+    source = make_fake_master_project(tmp_path / "official_template")
+    first = client.post(
+        "/api/masters/import",
+        json={"platform": PLATFORM_STM32, "project_dir": str(source)},
+    )
+    assert first.status_code == 200, first.text
+
+    inside = threading.Event()
+    release = threading.Event()
+    real_replace = os.replace
+
+    def slow_replace(src, dst):
+        if not inside.is_set():
+            inside.set()
+            assert release.wait(timeout=30), "等不到放行——判据自己失败，别挂住整场"
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(
+        atomic_io,
+        "os",
+        SimpleNamespace(path=os.path, getpid=os.getpid, replace=slow_replace),
+    )
+    results: dict[str, Any] = {}
+    errors: list[BaseException] = []
+
+    def run(work) -> threading.Thread:
+        def body() -> None:
+            try:
+                work()
+            except BaseException as exc:  # noqa: BLE001 —— 线程里的异常要带回主线程断言
+                errors.append(exc)
+
+        thread = threading.Thread(target=body, daemon=True)
+        thread.start()
+        return thread
+
+    def reimport() -> None:
+        results["import"] = client.post(
+            "/api/masters/import",
+            json={"platform": PLATFORM_STM32, "project_dir": str(source)},
+        )
+
+    importer = run(reimport)
+    assert inside.wait(timeout=30), "导入请求没走到写 meta 那一步"
+
+    deleted = threading.Event()
+
+    def remove() -> None:
+        results["delete"] = client.delete(f"/api/masters/{PLATFORM_STM32}")
+        deleted.set()
+
+    remover = run(remove)
+    deleted.wait(timeout=1.0)  # 不共锁那一格：这里会先删完；共锁那一格：等不到
+    release.set()
+    importer.join(timeout=30)
+    remover.join(timeout=30)
+
+    assert errors == [], f"并发时报错：{errors!r}"
+    assert results["import"].status_code == 200, results["import"].text
+    assert results["delete"].status_code == 200, results["delete"].text
+    leftovers = [
+        p.name
+        for p in masters_dir.iterdir()
+        if p.name not in {PLATFORM_STM32, f"{PLATFORM_STM32}.json"}
+    ]
+    assert leftovers == [], f"留下了杂散文件：{leftovers}"
+    has_dir = (masters_dir / PLATFORM_STM32).is_dir()
+    has_meta = (masters_dir / f"{PLATFORM_STM32}.json").is_file()
+    assert has_dir == has_meta, f"留下了悬空状态：目录={has_dir} / meta={has_meta}"
 
 
 def test_masters_import_direct_bad_platform_400(client, context, tmp_path):
