@@ -557,8 +557,10 @@ def test_unverified_sentence_is_verbatim_the_same_on_page_and_readme():
         "本栏目的配方与探测小节尚未在真板上验证过：现有证据只到「能生成 + 能编译」这一步。"
     )
     repo = Path(__file__).resolve().parents[1]
-    js = (repo / "src" / "contest_generator" / "static" / "js" / "fx" / "hwcheck.js").read_text(
-        encoding="utf-8")
+    # 落点跟着搬迁走（工单 hwcheck-hygiene/09 把纯函数按职责拆成六件：
+    # `hwcheckUnverifiedNoteHTML` 住在 project 那件，`HWCHECK_CHANNEL_KEYS` 住在 state 那件）。
+    js = (repo / "src" / "contest_generator" / "static" / "js" / "fx"
+          / "hwcheck-project.js").read_text(encoding="utf-8")
     readme = (repo / "README.md").read_text(encoding="utf-8")
 
     def normalized(text: str) -> str:
@@ -566,7 +568,7 @@ def test_unverified_sentence_is_verbatim_the_same_on_page_and_readme():
         return "".join(text.split())
 
     assert normalized(sentence) in normalized(js), (
-        "页面那句（fx/hwcheck.js 的 hwcheckUnverifiedNoteHTML）与规范句不同源了——"
+        "页面那句（fx/hwcheck-project.js 的 hwcheckUnverifiedNoteHTML）与规范句不同源了——"
         "它和 README 必须逐字同句，改一处就要改另一处"
     )
     assert normalized(sentence) in normalized(readme), (
@@ -850,16 +852,16 @@ def test_hwcheck_modules_are_framework_plus_selected_channels():
 def test_channel_vocabulary_mirrors_the_frontend():
     """通道词表跨语言镜像（照 library.MODULE_KIND 的 JS 镜像守卫先例）。
 
-    前端 `fx/hwcheck.js` 的 `HWCHECK_CHANNEL_KEYS` 是勾选框的键（`hwcheckPickState`
+    前端 `fx/hwcheck-state.js` 的 `HWCHECK_CHANNEL_KEYS` 是勾选框的键（`hwcheckPickState`
     按它过滤），后端按同一套通道名推导模块集。**两边各写一份而无人对账**的话，
     改了一边另一边会静默失效（勾了没反应 / 勾了不进工程）——故读真源码对账。
     """
     fx = (
         Path(__file__).resolve().parents[1]
-        / "src" / "contest_generator" / "static" / "js" / "fx" / "hwcheck.js"
+        / "src" / "contest_generator" / "static" / "js" / "fx" / "hwcheck-state.js"
     ).read_text(encoding="utf-8")
     match = re.search(r"HWCHECK_CHANNEL_KEYS\s*=\s*\[([^\]]*)\]", fx)
-    assert match, "fx/hwcheck.js 里应有 HWCHECK_CHANNEL_KEYS 字面量"
+    assert match, "fx/hwcheck-state.js 里应有 HWCHECK_CHANNEL_KEYS 字面量"
     js_keys = tuple(re.findall(r'"([a-z_]+)"', match.group(1)))
     assert js_keys == HWCHECK_CHANNELS, (
         f"前端通道词表 {js_keys} 与后端 {HWCHECK_CHANNELS} 不一致"

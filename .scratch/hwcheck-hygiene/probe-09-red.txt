@@ -1,0 +1,16 @@
+# 读数：probe-09-red
+# 命令：python .scratch/hwcheck-hygiene/probe-09-red.py
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T10:23:07+08:00
+# 退出码：0
+前置（未注入）：退出码 0 —— 绿，可以往下走
+[PASS] ① 摘掉一个导出（hwcheck-triage.js）
+        注入态退出码 1；失败用例 3 条，点名了「① 搬前有、六件里没有：hwcheckAdviceHTML」；复原 sha256 7e51d8940b057e23（与前置相同）
+[PASS] ② 函数体改一个字（hwcheck-state.js）
+        注入态退出码 1；失败用例 5 条，点名了「② hwcheckSelectPlatform（hwcheck-state.js）的声明单元与搬前不是逐字相同」；复原 sha256 3faee5c780859ba0（与前置相同）
+[PASS] ③ 摘掉一条桥（hwcheck-plan.js）
+        注入态退出码 1；失败用例 3 条，点名了「③ 桥丢了这些名字：hwcheckConsoleHTML」；复原 sha256 a2aa3278965138d3（与前置相同）
+[PASS] ④ 摘掉一条跨件 import（hwcheck-project.js）
+        注入态退出码 1；失败用例 5 条，点名了「④ hwcheck-project.js 调用了 hwcheckDeviceSlugs（声明在 hwcheck-state.js）却没 im」；复原 sha256 143f6b357e4d5de6（与前置相同）
+
+结论：4/4 段成立（每段都是「注入即红、复原逐字节相同」）

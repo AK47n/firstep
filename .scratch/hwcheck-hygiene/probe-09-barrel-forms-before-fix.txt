@@ -1,0 +1,29 @@
+# 读数：probe-09-barrel-forms
+# 命令：node .scratch/hwcheck-hygiene/probe-09-barrel-forms.mjs
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T10:08:50+08:00
+# 退出码：0
+语料：boot.js 从 barrel import { alpha, beta, gamma }，三个都在调用位 → barrel → mod.js
+
+== A export{…}from（纯再导出）
+   导出名         : alpha, beta, gamma
+   import-usage   : ["./mod.js → alpha,beta,gamma"]
+   判据 D 死导出  : （零违规）
+   判据 T 形态    : （零违规）
+   图对账         : （零违规）
+== B import + export{…}（本地再导出）
+   导出名         : alpha, beta, gamma
+   import-usage   : （零违规）
+   判据 D 死导出  : （零违规）
+   判据 T 形态    : ["fx/barrel.js::alpha=解不开","fx/barrel.js::beta=解不开","fx/barrel.js::gamma=解不开"]
+   图对账         : （零违规）
+== C 再导出 + 在正文里真用（ui/nav-jump.js 那一形态）
+   导出名         : allThree, alpha, beta, gamma
+   import-usage   : （零违规）
+   判据 D 死导出  : ["fx/barrel.js::allThree"]
+   判据 T 形态    : （零违规）
+   图对账         : （零违规）
+
+自证：
+   参考实现（C）四条全绿        : OK
+   注入一个零消费者导出 → D 报出 : OK

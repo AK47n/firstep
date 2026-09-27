@@ -1,0 +1,9 @@
+# 读数：probe-09-reachability
+# 命令：node .scratch/hwcheck-hygiene/probe-09-reachability.mjs
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T10:25:37+08:00
+# 退出码：0
+掉出模块图的模块: []
+桥：搬前 77 名 / 六件并集 77 名 / 逐名相同 = true
+barrel 发布桥 0 条；barrel 导出 78 名
+六件导出并集 78 名 / 搬前 78 名

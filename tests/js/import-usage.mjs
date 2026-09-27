@@ -24,6 +24,16 @@
 //   · **按本地名判**（`locals`）：`import { A as B } from "M"` 里正文该出现的是 `B`。
 //     按**源名** A 判会误报——实测 5 处 `WRITE_GUARD_ACTIONS as WG` 全被旧口径判成死的（假红）。
 //   · **裸装载（`import "./x.js"`，零具名）永远合法**：判据不碰它。
+//   · **再导出边（`export { … } from "M"`）同样不碰**（工单 hwcheck-hygiene/09）：它是一条
+//     "把 M 里的名字直接转给外面"的边，本模块作用域里**没有**这个绑定——"导入了却没用"
+//     对它不成立。判定走 `boot-contract.mjs` 的 `isReexportEdge`（**单源**：判据 T 的形态链
+//     用的是同一个判定，别在这里再写一遍正则）。为什么必须显式豁免：barrel（过渡态再导出文件）
+//     通篇都是这种边，旧口径会把每一条都报成"未使用"（实测：`.scratch/hwcheck-hygiene/
+//     probe-09-barrel-forms.mjs` 的 A 形态），可这种文件在 `export-surface-guard` 的判据 D/T 下
+//     完全合规——两条守卫对同一份源码给出相反结论，错的只能是这一条。豁免**不削弱牙齿**：
+//     `import { x } …;` 那一条边照旧逐名判（`export { x } from "别处"` 不能给 import 边当挡箭牌，
+//     用例表两条对照）；再导出的名字在目标模块不存在由**判据③ 图对账**抓，再导出没人消费
+//     由**判据 D** 抓。
 //   · **模板替换的 `$` 不算使用**：`${` 那两个字符是语法、不是标识符，正文里一并掩掉——
 //     不掩的话，任何含模板串的模块里名为 `$` 的 import 都会被喂绿（本轮实测过的假绿）。
 //   · 取数面：宿主可以是**装载根**（`boot.js`）也可以是**任意模块**——同一核心，根不再特殊。
@@ -32,7 +42,7 @@
 //
 // `parseImports` 现在是 `tests/js/boot-contract.mjs` 的 `parseModuleImports`（唯一一份，
 // 注释感知）的薄适配器——它多给 `locals`（本地名）与 `raw`（语句原文切片，供剥语句用）。
-import { parseModuleImports, maskNonCode } from "./boot-contract.mjs";
+import { parseModuleImports, maskNonCode, isReexportEdge } from "./boot-contract.mjs";
 
 /** 切出 index.html 里 `<script type="module">` 块（读旧版源码用；找不到返回空串）。 */
 export function hostScript(source) {
@@ -98,8 +108,10 @@ export function unusedImports(script) {
   const imports = parseImports(script);
   const body = criterionBody(script, imports);
   const problems = [];
-  for (const { spec, names, locals } of imports) {
+  for (const edge of imports) {
+    const { spec, names, locals } = edge;
     if (!names.length) continue;                       // 裸装载：零具名，永远合法
+    if (isReexportEdge(edge)) continue;                // 再导出边：不绑本地名（口径见文件头）
     if (locals.length !== names.length) {
       // 两个平行数组不等长 = 解析器破了；**大声失败**（退回按源名判会静默误报，见文件头第 3 条口径）
       throw new Error(`import-usage：${spec} 的 names/locals 不等长（${names.length}/${locals.length}）`);

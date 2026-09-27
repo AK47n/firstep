@@ -1,0 +1,59 @@
+工单 hwcheck-hygiene/09：拆 fx 第一步——1380 行按职责拆成六件，旧文件转 barrel
+
+一、搬迁（只搬不改）
+- fx/hwcheck.js（1380 行 / 78 个导出 / 4 个私有件 / 77 条 window 桥）按职责整段搬进六件：
+  hwcheck-state（状态归一 / 载荷 / 平台卡 / 文案）、hwcheck-project（生成 / 编译降级 /
+  上板清单 / 最近 / 工程面板）、hwcheck-wiring（器件选择 / 接线表 / 撞脚 / 顺序）、
+  hwcheck-plan（逐件小节 / 未专精 / 命令台 / 自建件计划）、hwcheck-triage（现象回填 /
+  AI 排障）、hwcheck-handoff（检测页 → 生成页衔接）
+- 迁移量有据：apply-09-split.py 做**分区完备**校验（文件头 ＋ 78 个声明单元 ＋ 桥块拼回来
+  与原文件逐字节相同）；单元 = 声明 ＋ 紧邻上方的注释块；四个非导出私有件按"间隙跟下一个
+  声明单元走"落到 wiring（3）与 triage（1）
+- 每个模块发布自己那一段的 window 桥条目，barrel 一条都不发布（并集 77 名逐名相同）
+- fx/hwcheck.js 转 barrel：只有 export { … } from "…" 六条 + 文件头（写清是过渡态、10 号单删）
+
+二、新增判据：tests/js/hwcheck-split-integrity.test.mjs（本批唯一为拆分新造的判据）
+- 四条：① 导出名集合相等 ② **全部顶层声明**（导出 ＋ 私有件）的"声明单元"归一化空白后
+  逐字相同 ③ 桥并集相等且 barrel 零发布 ④ 跨件调用必须有 import/本件声明（把判据 ⑧ 从
+  "桥上的 77 个名字"扩到**全部声明**——hwcheckPinFixHTML / hwcheckPinCapacityNoteHTML
+  不在桥上）
+- 取数面两侧都是文件：搬前 = 快照（.scratch/hwcheck-hygiene/fx-hwcheck-before-split.js，
+  与 HEAD 那一份逐字节相同、sha256 6f2591af…），搬后 = 六件 —— 10 号单删掉旧文件后照样可跑
+- 自带五条正向对照（摘导出 / 改函数体一个字 / **改私有件一个字** / 摘一条桥 / 摘一条 import
+  都必须被点名）＋ 两条下限体检（声明单元数必须多于导出数）
+
+三、判据先红后绿抓到的两个真问题（都不是"搬完才发现"，是判据当场报的）
+- 判据 ⑧（window 桥守卫）：hwcheck-project.js 用了 hwcheckDeviceSlugs 却没 import
+  —— 漏掉它的后果是"点了生成就 ReferenceError"
+- 自检 ③：HWCHECK_VERDICT_FALLBACK 是**未导出**的私有桥条目，第一版按"导出名"认领桥
+  会把它漏掉；改成按**声明**认领，并在搬迁脚本里加了"每条桥有且只有一个家"的断言
+
+四、为让 barrel 成立而动的一处既有判据口径（两份读数都留着）
+- probe-09-barrel-forms.mjs 量了三种再导出形态对四条守卫的结果（-before-fix.txt 是改口径前）：
+  A（export {…} from）D/T/图对账全绿、旧口径的 import-usage 逐条报"未使用"；B（import +
+  export {}）反过来 T 解不开；C（再导出 + 正文真用）是 ui/nav-jump.js 的既有形态、四条全绿
+- 纯 barrel 只有 A 可行，而 A 与 import-usage 的旧口径直接冲突（两条守卫对同一份源码结论
+  相反）→ import-usage 不再把**再导出边**当"导入的名字必须被使用"（它不绑本地名），
+  判定复用 boot-contract.mjs 导出的 isReexportEdge（**单源**，不再写第二遍正则）
+- 牙齿没拔：用例表补两条对照（再导出边走免检；`import { x } …; export { x } from 别处`
+  的 import 边照旧报），口径注释写明"名字不存在归判据③ / 没人消费归判据 D"
+
+五、跟着搬迁走的两处读路径与两处源码串断言（不钉死单文件）
+- tests/test_hwcheck.py 两处读 fx/hwcheck.js 的用例改指新家（hwcheck-project / hwcheck-state）
+- tests/js/hwcheck.test.mjs：「fx 不得 import ui / 碰 DOM / 发请求」改成对**六件逐个**断言
+  （否则钉在 barrel 上恒真 = 守卫闭眼）；「单平台件不误导」改成读整层文本（判据面确实放宽了
+  一处，12 号单重算「56 处」基线时按新的两处算）
+- 其余源码串断言的批量迁移归 12 号单
+
+六、双轴评审整改（Standards 0 硬违规 / Spec 3 硬缺口，逐条已改）
+- Spec：判据面从"只判导出"扩到"全部顶层声明"（私有件原先没有任何判据看着）
+- Spec：barrel 文件头自述「消费者与用例一个字没动」与同笔改动矛盾 → 改成事实陈述
+- Spec：票面「现状」表 77 导出 / wiring 13 / 1365 行与实测不符 → 票面加「核实过的现场更正」块
+- Standards：isReexportEdge 单源、快照 sha256 写死并断言、六件文件头的约定块只写一份
+  （hwcheck-state.js 头部＝单源，其余五件转引）、行数/口径数字统一为 1380 / 78 / 77
+
+读数：全套 pytest 5604 passed + 11 skipped；前端门禁 1826 / 0（+7 = 新自检）；
+浏览器门禁 48 / 0（零 afterEach 告警）；反证 probe-09-red.py 四段全 PASS（注入即红、
+复原 sha256 逐字节相同）；独立复核 probe-09-reachability（零掉队模块、桥 77=77、barrel 零发布）
+
+未上板：本单是纯搬迁，零板上行为被验证（本机没有板子）。

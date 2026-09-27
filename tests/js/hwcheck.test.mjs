@@ -45,6 +45,18 @@ import { esc } from "../../src/contest_generator/static/js/fx/core.js";
 // 单平台件的「需切换平台」标记落在既有网格渲染上（工单 09 的行为判据要真跑它）
 import { moduleGridHTML } from "../../src/contest_generator/static/js/fx/module.js";
 
+// 工单 hwcheck-hygiene/09：纯函数层按职责拆成六件（`hwcheck.js` 只剩过渡态 barrel，10 号单删除）。
+// 凡"对 fx 这一层成立"的判据都作用在**整个层**上——钉某个路径的写法在搬迁后要么读到空壳
+// （断言恒真）、要么读不到文件（报错或静默跳过），两种都是"守卫闭眼"。
+const HWCHECK_FX_DIR = new URL("../../src/contest_generator/static/js/fx/", import.meta.url);
+const HWCHECK_FX_FILES = [
+  "hwcheck.js", "hwcheck-state.js", "hwcheck-project.js",
+  "hwcheck-wiring.js", "hwcheck-plan.js", "hwcheck-triage.js", "hwcheck-handoff.js",
+];
+const hwcheckFxSources = () =>
+  HWCHECK_FX_FILES.map((name) => [name, readFileSync(new URL(name, HWCHECK_FX_DIR), "utf8")]);
+const hwcheckFxText = () => hwcheckFxSources().map(([, text]) => text).join("\n");
+
 const html = readFileSync(
   new URL("../../src/contest_generator/static/index.html", import.meta.url),
   "utf8",
@@ -221,13 +233,17 @@ test("纯件留在 fx：ui/hwcheck.js 不得重复定义 fx 里的函数（防�
   assert.ok(ui.includes('from "/js/fx/hwcheck.js"'), "ui/hwcheck.js 应从 fx/hwcheck.js 导入纯件");
 });
 
-test("单向 import：ui → fx（fx/hwcheck.js 不得反向 import ui 或 app）", () => {
-  const fx = readFileSync(
-    new URL("../../src/contest_generator/static/js/fx/hwcheck.js", import.meta.url), "utf8");
-  assert.ok(!/from\s+"\/js\/ui\//.test(fx), "fx 不得 import ui（单向依赖）");
-  assert.ok(!/from\s+"\/js\/app\.js"/.test(fx), "fx 不得 import app（DOM/状态层）");
-  assert.ok(!/\bdocument\./.test(fx), "fx 不得碰 DOM");
-  assert.ok(!/\bfetch\(/.test(fx), "fx 不得发请求");
+test("单向 import：ui → fx（fx 那六件都不得反向 import ui 或 app）", () => {
+  // 工单 hwcheck-hygiene/09 把纯函数层拆成六件（barrel 是过渡态、由 10 号单删除）。
+  // 判据**不许钉在某一个文件上**：钉路径的写法在搬迁后要么读到 barrel 那种空壳（断言恒真）、
+  // 要么读不到文件——两种都是"守卫闭眼"，而这条不变量（fx 不碰 DOM、不发请求、不反向依赖）
+  // 要对**每一件**成立。
+  for (const [name, fx] of hwcheckFxSources()) {
+    assert.ok(!/from\s+"\/js\/ui\//.test(fx), `${name}：fx 不得 import ui（单向依赖）`);
+    assert.ok(!/from\s+"\/js\/app\.js"/.test(fx), `${name}：fx 不得 import app（DOM/状态层）`);
+    assert.ok(!/\bdocument\./.test(fx), `${name}：fx 不得碰 DOM`);
+    assert.ok(!/\bfetch\(/.test(fx), `${name}：fx 不得发请求`);
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -1496,8 +1512,7 @@ test("单平台件不误导：**行为**上，未选中的卡片就被标成需�
 test("单平台件不误导：已选中的单平台件由服务端载荷点名，前端只渲染不另写文案", () => {
   const ui = readFileSync(
     new URL("../../src/contest_generator/static/js/ui/hwcheck.js", import.meta.url), "utf8");
-  const panel = readFileSync(
-    new URL("../../src/contest_generator/static/js/fx/hwcheck.js", import.meta.url), "utf8");
+  const panel = hwcheckFxText();
   assert.ok(ui.includes("hwcheckMissingDevicesHTML("),
     "「本平台无条目」的逐条点名走 fx 单源（判据在服务端 wiring.missing）");
   assert.ok(panel.includes("item.message"),

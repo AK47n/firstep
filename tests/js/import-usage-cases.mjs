@@ -207,6 +207,20 @@ export const CASES = [
     expect: [], bodyIncludes: ["esc"], oldCaliber: [],
   },
   {
+    id: "reexport-from-binds-nothing",
+    why: "再导出边不绑本地名：`export { esc } from \"M\"` —— 它在正文里一次都没出现（本来就不该出现），"
+      + "判据不许报它「未使用」；barrel（过渡态再导出文件）通篇是这一形态（工单 hwcheck-hygiene/09）",
+    src: 'export { esc } from "./core.js";\n',
+    expect: [], bodyIncludes: [], oldCaliber: ["esc"], naiveMask: ["esc"],
+  },
+  {
+    id: "reexport-from-does-not-excuse-an-import",
+    why: "豁免只到再导出边为止：`import { esc } …` 之后又 `export { esc } from 别处`，"
+      + "esc 在正文里一次都没出现 —— **import 边照旧报**（别让跳过再导出边变成一张免检通行证）",
+    src: 'import { esc } from "./core.js";\nexport { esc } from "./other.js";\nconst a = 1;\n',
+    expect: ["esc"], bodyIncludes: [], oldCaliber: ["esc", "esc"],
+  },
+  {
     id: "alias-local-used",
     why: "`import { A as B }` 里**本地名 B** 被用（按源名判会假红——旧口径的 5 处误报都是这种）",
     src: mk("if (!guard(WG.fix)) return;", { names: "WRITE_GUARD_ACTIONS as WG", spec: "/js/fx/write-guard.js" }),

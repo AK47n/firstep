@@ -912,8 +912,14 @@ const DECL_ANY_RE = (name) => new RegExp(
 const DECL_ALIAS_RE = (name) => new RegExp(
   `(?:^|\\n)[ \\t]*(?:export\\s+)?(?:const|let|var)\\s+${escapeRe(name)}\\s*=\\s*([A-Za-z_$][\\w$]*)\\s*;`);
 
-/** `edge` 是不是**再导出**（`export { … } from "…"` / `export { … };`），而不是 `import`。 */
-function isReexportEdge(edge) {
+/**
+ * `edge` 是不是**再导出**（`export { … } from "…"` / `export { … };`），而不是 `import`。
+ *
+ * **导出**（工单 hwcheck-hygiene/09）：判据抄两份必然分叉（本文件 560 行那段教训），
+ * 而这条判定现在有两个消费方——判据 T 的形态链（本文件）与「零未使用具名 import」
+ * （`import-usage.mjs`：再导出边不绑本地名，判据不碰它）。别在那边再写一遍正则。
+ */
+export function isReexportEdge(edge) {
   return /^export/.test(edge.raw.trimStart());
 }
 

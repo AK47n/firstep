@@ -1,0 +1,30 @@
+# 读数：09-split-write
+# 命令：python .scratch/hwcheck-hygiene/apply-09-split.py --write
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-27T10:22:05+08:00
+# 退出码：0
+源文件 （快照）src\contest_generator\static\js\fx\hwcheck.js：76041 B / 78 个导出声明 / 桥 77 个名字
+分区完备：文件头 418 B ＋ 78 个声明单元 ＋ 桥块 1902 B = 原文（逐字节相等 OK）
+
+间隙表（非导出私有件住在这里，跟着**下一个**声明单元走）：
+  hwcheck-wiring.js      ← hwcheckDevicePick                  间隙里的代码：['function hwcheckSameExclusiveGroup(groups, a, b) {', 'const x = String(a == null ? "" : a);', 'const y = String(b == null ? "" : b);', 'if (!x || !y || x === y) return false;', 'return (Array.isArray(groups) ? groups : []).some((group) => {', 'const members = (group && group.members) || [];', 'return members.includes(x) && members.includes(y);', '});', '}']
+  hwcheck-wiring.js      ← hwcheckBoardSharesHTML             间隙里的代码：['function hwcheckRoleLabeler(rows) {', 'const by = new Map();', '(Array.isArray(rows) ? rows : []).forEach((row) => {', 'if (row && row.slug && row.role_id) {', 'by.set(row.slug + "." + row.role_id, String(row.role || row.role_id));', '}', '});', 'return (key) => {', 'const text = String(key == null ? "" : key);', 'const role = by.get(text);', 'if (!role) return esc(text);', 'return esc(text.split(".")[0] + "·" + role);', '};', '}']
+  hwcheck-wiring.js      ← hwcheckOrderDesc                   间隙里的代码：['const HWCHECK_ORDER_DESC_CHARS = 60;']
+  hwcheck-triage.js      ← hwcheckSymptomText                 间隙里的代码：['const HWCHECK_VERDICT_FALLBACK = "先按下面的线索查";']
+
+各件：
+  fx/hwcheck-state.js       17 个导出    9549 B  —— 状态归一 / 请求载荷 / 平台卡 / 提示与错误文案
+  fx/hwcheck-project.js     20 个导出   16111 B  —— 生成请求 / 编译降级 / 上板清单 / 最近几次检测 / 工程面板
+  fx/hwcheck-wiring.js      14 个导出   17342 B  —— 器件选择 / 接线表 / 默认脚冲突 / 建议顺序
+  fx/hwcheck-plan.js        12 个导出   17368 B  —— 逐件小节 / 未专精点名 / 串口命令台 / 自建件的检测计划
+  fx/hwcheck-triage.js      10 个导出    8352 B  —— 现象回填 / AI 排障（本栏目唯一的 LLM 入口）
+  fx/hwcheck-handoff.js      5 个导出   11457 B  —— 检测页 → 生成页衔接（只带器件，不带引脚）
+  fx/hwcheck.js（barrel）    78 条再导出  3745 B
+[快照] 已在（不覆盖）：.scratch\hwcheck-hygiene\fx-hwcheck-before-split.js
+[落盘] fx/hwcheck-state.js  9549 B  sha256=3faee5c780859ba0
+[落盘] fx/hwcheck-project.js  16111 B  sha256=143f6b357e4d5de6
+[落盘] fx/hwcheck-wiring.js  17342 B  sha256=145da8c95d31d327
+[落盘] fx/hwcheck-plan.js  17368 B  sha256=a2aa3278965138d3
+[落盘] fx/hwcheck-triage.js  8352 B  sha256=7e51d8940b057e23
+[落盘] fx/hwcheck-handoff.js  11457 B  sha256=083877953221341f
+[落盘] fx/hwcheck.js  3745 B  sha256=b900ea252ac3e598
