@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=0b0788ee97e6e8dfaa0a49c414f1e5f5401ef039 -->
+<!-- changelog-auto: last-commit=7874dd6d3e147acc2497e38408487ced4d69898b -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -23,6 +23,7 @@
 - 16:53 台账：ascii-project-name §02 按在盘代码翻 resolved、backlog §23 收口、硬件检测上板单标签更正
 - 16:53 立项：记录写加固 spec 与 01-06 六张工单（backlog §24 固定临时名 + 无锁记录写）
 - 16:55 记录写加固 01：共享原子写原语 atomic_io（唯一临时名 + finally 清残渣 + 按路径锁）
+- 17:01 记录写加固 01 评审整改：补 write_text 失败与清理失败判据、探针扩三段、读数改 UTF-8 落盘
 
 ## 2026-09-26
 - 00:21 工单 ci-gate-fixes/01：配置缺失时回退随包库 + 配置路径覆盖口
