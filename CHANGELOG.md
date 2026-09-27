@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=a8afd59f9541a56651edae54b1ff0a69000cee1e -->
+<!-- changelog-auto: last-commit=750d13246a1958c8a8ba2e6ee7c1083495e778fb -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -7,6 +7,7 @@
 ## 2026-09-27
 - 00:05 工单 hwcheck-hygiene/07：多实例只验首路——四格配方如实说，判据钉到渲染产物
 - 02:08 工单 hwcheck-hygiene/08：账本收口 + 三条判据侧诊断（afterEach / 工单号 / B2 抢跑）
+- 10:28 工单 hwcheck-hygiene/09：拆 fx 第一步——1380 行按职责拆成六件，旧文件转 barrel
 
 ## 2026-09-26
 - 00:21 工单 ci-gate-fixes/01：配置缺失时回退随包库 + 配置路径覆盖口
