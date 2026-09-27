@@ -7,17 +7,18 @@
 
 ## 0. 交接区：main 上有什么还没到用户手上（2026-09-26 更新 · **已发布 v1.3.0；涨落以 `git log` 为准**）
 
-> ### 🔄 进行中（2026-09-27，`hwcheck-hygiene` 会话）——**01–10 已落 main、未发布；11–13 未开工**
+> ### ✅ 最新（2026-09-27，`hwcheck-hygiene` 会话）——**01–14 全部 resolved 并落 main，未发布**
 >
-> **⚠ 交接口径（2026-09-27 晚，09/10 收口后补写；13 号单会做完整版）**：
-> **下一单是 `11`**（拆 ui 第一步），随后 `12`（迁移源码串断言）→ `13` 收口；**13 之后才发 v1.3.1**。
-> `09`（六件 ＋ 过渡态 barrel，`750d1324`）与 `10`（消费者迁移 ＋ 删 barrel，`aa1cc59b`）都已 resolved
-> 并各自提交。**另一条本机事实**：`git checkout` 之后工作树里的文本文件是 **CRLF**
+> **⚠ 交接口径（2026-09-27，13 号单收口后写全）**：
+> **本批做完了，下一件事是发版 v1.3.1**（版本号已拍板；三处同步、`tools/preflight.ps1`、两个包、
+> tag、Release 见 `docs/agents/releasing.md`；**本机推送要按本节「本机网络事实」钉 IP**）。
+> 13 号单（收口）的读数与账在 `.scratch/hwcheck-hygiene/issues/13-closeout.md`；
+> **另一条本机事实**：`git checkout` 之后工作树里的文本文件是 **CRLF**
 > （`core.autocrlf=true`，blob 里仍是 LF）——写探针锚点**一律按文件实际换行换算**
-> （`probe-10-red.py` 的 `encode()` / `newline_of()` 是现成写法），别按 LF 写死。
+> （`probe-10-red.py` / `probe-11-red.py` 的 `encode()` / `newline_of()` 是现成写法），别按 LF 写死。
 >
 > **这一批是什么**：`docs/improvement-review-hwcheck.md` 的 **P2 七项** + 前端守卫补洞 +
-> 两个大文件按职责拆分，spec / 工单 / 反证读数全在 **`.scratch/hwcheck-hygiene/`**（13 张工单）。
+> 两个大文件按职责拆分，spec / 工单 / 反证读数全在 **`.scratch/hwcheck-hygiene/`**（**14 张工单**）。
 >
 > **已完成并各自提交（中文提交 + post-commit 自动补 CHANGELOG）**：
 > `01` 全局桥守卫（`tests/js/window-bridge-guard.test.mjs` + 判据 ⑧）/ `02` 字面星号归零
@@ -27,47 +28,60 @@
 > `07` 多实例只验首路（四格配方如实说 + 判据钉到渲染产物）/ `08` 账本收口 + 三条**判据侧**诊断
 > （`[afterEach]` 告警 = 夹具在一拍里点掉一批 chip，产品没毛病；产物与页面里的内部工单号归零；
 > `launcher-reload` 的 B2 **判据抢跑**——产品的重试预算是 300ms，而断言 322–372ms 就返回，
-> 本机 8 轮红 5，已改成轮询等"那一发真的发出去了"）。
+> 本机 8 轮红 5，已改成轮询等"那一发真的发出去了"）/
+> **`09`+`10` 拆 fx**（1380 行 → 六件，barrel 只活一笔提交）/ **`11`+`12` 拆 ui**（1401 行 → 四件：
+> 入口 / 核心渲染 / 我的器件 / 动作与请求；10 条源码串断言换成 11 条真浏览器用例）/
+> **`14` 库数据里的 `**粗**` 改在渲染层转 `<strong>`**（12 号单当场抓到的既有缺陷：配方 note 2434 处 +
+> 74 个 manifest 1844 处经 `esc()` 原样进页面）。
 > **每单都跑过双轴 code-review 并整改，票尾有「结论（读数与账）」表。**
 >
-> **下一单是 `11`**（拆 ui 第一步：入口 / 核心渲染 / 我的器件 / 动作与请求），随后 `12`
-> （迁移 56 处源码串断言，能改成行为断言的改行为）→ `13` 收口。
-> **`13` 收口之后才发 v1.3.1**（本批不发版）。
+> **下一步是发版 v1.3.1**（本批不发版）：版本号三处同步、`tools/preflight.ps1`、两个包、tag、
+> Release 见 `docs/agents/releasing.md`；本批要进发布说明的**用户可见行为变化**：
+> ① 页面上的字面星号没了（JS 产品串 5 处 + **库数据那一层**：配方说明 / 模块简介 / 平台备注）；
+> ② 母版配置读不出来与检测记录读不出来各说各的实话；③ 板载 LED 脚以选型数据为源；
+> ④ 多实例件如实说"只验第一路"；⑤ 勾选后焦点留在原地、键盘可达、编译/烧录状态可被读屏念出。
 >
-> **接班要用的六条本机事实**（都是本轮新踩/新立的）：
+> **接班要用的七条本机事实**（都是本轮新踩/新立的）：
 > ① **读数落盘用 `.scratch/hwcheck-hygiene/readings.py`**（`python readings.py <名> -- <命令>`）——
 >    PowerShell 的 `>` / `Tee-Object` 写 UTF-16LE（`read` 工具拒读）、`Select-Object -First N`
 >    会掐断上游留下孤儿后端；它收全量、剥 ANSI、写 UTF-8 带命令/时间/退出码头。
 > ② **反证探针的锚点要按文件实际换行编码**：本工作树 LF / CRLF 混装
->    （`webapp.py` / `hwcheck_board.py` / `index.html` / `ui/hwcheck.js` 是 CRLF，
->    `hwcheck_triage.py` / `tests/**` 是 LF）——按 LF 写死锚点会在 CRLF 文件上**静默不中**
->    （探针会打印"注入后 sha256 与前置相同"，本轮踩过两次，`.scratch/hwcheck-hygiene/probe-0{4,5,6}-red.*`
->    里都有现成的 `encode_anchor` / `encode` 写法可抄；07 起这份小工具提成了
->    `.scratch/hwcheck-hygiene/patch_bytes.py`）。
+>    （`webapp.py` / `hwcheck_board.py` / `index.html` / `ui/hwcheck*.js` 是 CRLF，
+>    `hwcheck_triage.py` / `tests/**` / **`fx/*.js` 是 LF**）——按 LF 写死锚点会在 CRLF 文件上
+>    **静默不中**（探针会打印"注入后 sha256 与前置相同"，本轮踩过两次，
+>    `.scratch/hwcheck-hygiene/probe-0{4,5,6}-red.*` 里都有现成的 `encode_anchor` / `encode` 写法可抄；
+>    07 起这份小工具提成了 `.scratch/hwcheck-hygiene/patch_bytes.py`）。
 >    **2026-09-27 补充（10 号单实测）**：`git checkout` 之后文本文件是 **CRLF**（blob 仍是 LF），
->    所以「哪个文件是哪种换行」**跑一次 checkout 就会变**——最稳的写法是 `probe-10-red.py`
->    的 `newline_of()`（读文件现算，不写死），锚点一律按 `\n` 写给 `encode()` 换算。
+>    所以「哪个文件是哪种换行」**跑一次 checkout 就会变**——最稳的写法是 `probe-10-red.py` /
+>    `probe-11-red.py` 的 `newline_of()`（读文件现算，不写死），锚点一律按 `\n` 写给 `encode()` 换算。
 >    另外：Python 的 `Path.read_text/write_text` 会把 CRLF 归一成 LF 再还原（平台相关），
 >    **读数要报字节数就用 `read_bytes()`**——10 号单的迁移脚本第一版报的是"剥掉 CRLF 的字符数"，
 >    从盘上复现不出来（双轴评审实测抓到）。
-> ③ **浏览器门禁现在是 6 个 spec / 48 条**（新增 `tests/browser/hwcheck-capacity-note.spec.mjs`），
->    跑法仍是 `node --test --test-concurrency=1 "tests/browser/*.spec.mjs"`（≈4 分钟）。
+> ③ **浏览器门禁现在是 6 个 spec / 60 条**（11 号单 +11、14 号单 +1），
+>    跑法仍是 `node --test --test-concurrency=1 "tests/browser/*.spec.mjs"`（≈3.5 分钟）。
 >    改 `static/js/**` 时**必须**跑它——ui 行为只由真浏览器作证（本批 spec 的测试决策）。
+>    **只跑一条**用 `--test-name-pattern="<用例名>"`（真夹具照起，一条十几秒）——12/14 的反证探针
+>    就是这么把四段/三段的运行时间压到分钟级的。
 > ④ **会让配方文件变的探针不许与任何读数并行**（07 第二次踩到：浏览器门禁与注入探针同时跑，
 >    读数红在"页面上没有那句话"——那不是产品红，是读到了注入态）。**探针跑完再跑门禁。**
 > ⑤ **判据也会抢跑**（08 抓到，比产品缺陷更常见的一类假红）：`launcher-reload` 的 B2 断言
 >    "登记重试发生了"，而产品的重试是 `setTimeout(…, 300)`、等待链 322–372ms 就返回——
 >    **判据读的是一个还没发生的事**，本机 8 轮红 5。判据要么轮询等那个可观测事实，
 >    要么把窗口设得**明显**大于被测的延迟；别用"刚好越过阈值"的数。
+>    12 号单的补充：**反证要对着"当年那个 bug 的机制"注入**——把"blur 里的就地同步"换成整块重绘
+>    不会红（blur 前状态已同步），真咬人的是**输入回调**那一路。
 > ⑥ **探针崩了会留孤儿后端**（08 踩到：`--chips=2` 那支第一版在第 2 轮挂掉，留下两个
 >    `contest_generator.webapp` 进程）。它们会抢端口、也会让后面门禁的读数不可信
 >    ——**读数前先看一眼**：`Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
 >    Where-Object { $_.CommandLine -like '*contest_generator*' }`。
+> ⑦ **`tests/js` 不许从导出面判据的消费者集合里排除**（01 号单实测）：照评审 P2-12 字面做会当场红
+>    **171 处**（消费者 169 → 只留 `tests/browser` 时剩 11）——判据 D 今天能成立，靠的正是那 150+ 条
+>    测试侧 import 边。改写进 `.scratch/backlog.md` 与本批 spec 的「范围外」。
 >
 > **本轮读数基线**（会随提交变，**别写死**）：全套 pytest **5604 passed + 11 skipped**；
-> 前端门禁 **1819 / 0**；浏览器门禁 **48 / 0**；两平台真编译矩阵 6 格全 PASS。
+> 前端门禁 **1830 / 0**；浏览器门禁 **60 / 0**；两平台真编译矩阵 6 格全 PASS。
 >
-> **推之前**：`main` 已比 `origin/main` 多出十余笔未推；推法见本节「本机网络事实」
+> **推之前**：`main` 已比 `origin/main` 多出二十余笔未推；推法见本节「本机网络事实」
 > （要 `git -c http.https://github.com/.resolve=…` 钉 IP，**别按"重试即好"记**）。
 
 > ### 📌 最新（2026-09-26 晚，`hwcheck-hardening` 会话）—— 硬件检测加固七单全落 main，**未发布**
