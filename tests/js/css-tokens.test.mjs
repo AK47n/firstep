@@ -16,17 +16,45 @@ const html = readFileSync(
 );
 
 function jsSources() {
+  // 08 单评审 Standards 点名：这两个函数走同一棵树 = Duplicated Code。
+  // 现在 `jsSources()` 直接站在 `jsFiles()` 上（带路径那份是单一出处）。
+  return jsFiles().map(([, text]) => text).join("\n");
+}
+
+/** 同上，但带路径——08 单的"内联字号"那条腿要能指出是哪个文件哪一行。 */
+function jsFiles() {
   const dir = fileURLToPath(new URL("../../src/contest_generator/static/js/", import.meta.url));
   const out = [];
-  const walk = (d) => {
+  const walk = (d, prefix) => {
     for (const f of readdirSync(d)) {
       const p = join(d, f);
-      if (statSync(p).isDirectory()) walk(p);
-      else if (f.endsWith(".js")) out.push(readFileSync(p, "utf8"));
+      if (statSync(p).isDirectory()) walk(p, prefix + f + "/");
+      else if (f.endsWith(".js")) out.push([prefix + f, readFileSync(p, "utf8")]);
     }
   };
-  walk(dir);
-  return out.join("\n");
+  walk(dir, "");
+  return out;
+}
+
+/**
+ * 腿⑤（08 单）：渲染方（`static/js/**`）里**内联写的裸 px 字号**。
+ *
+ * 两种拼法都要抓（评审 Standards 点名第一版只认第一种）：
+ *   · CSS 语法：`style="…font-size: 12px…"` / `cssText = "…font-size:12px…"`（冒号两侧空格随意）；
+ *   · JS 驼峰：`el.style.fontSize = "11px"`。
+ * ⚠ 已知留白：**跨行拼起来的** `cssText` 字符串抓不到（本仓库没有这种写法；
+ *    真要抓得靠 AST——那是 09 或独立一笔的事，记在 08 票尾的账里）。
+ * ⚠ `font-size="8.5"` 那种 **SVG 用户单位**不算（矢量图里的字号属性，随图缩放）。
+ */
+function jsInlineFontOffenders(files = jsFiles()) {
+  const re = /font-size\s*:\s*[0-9.]+px|fontSize\s*=\s*["'][0-9.]+px/i;
+  const out = [];
+  for (const [rel, text] of files) {
+    text.split("\n").forEach((line, i) => {
+      if (re.test(line)) out.push(`${rel}:${i + 1}  ${line.trim().slice(0, 90)}`);
+    });
+  }
+  return out;
 }
 
 test(":root 含令牌 --radius-xs/sm/md/lg/full 与 --space-1..6", () => {
@@ -192,9 +220,9 @@ const FONT_ROLES = [
  */
 const PAGE_SCOPES = [
   ["code", /#tab-code|#code-|\.code-|\.codeeditor|\.cx-|\.change-|\.diff-|\.line-|\.tok-|\.quick-/],
-  ["master", /#tab-master|\.master-|\.prog-|\.decision|\.distill|\.stepper|\.rel-tag|\.import-platform-field/],
+  ["master", /#tab-master|\.master-|\.prog-|\.decision|\.distill|\.stepper|\.import-platform-field/],
   ["settings", /#tab-settings|\.settings-|\.env-|\.delivery|\.materials-|\.update-|\.disk-|\.recent-wf-/],
-  ["changelog", /#tab-changelog|\.release-/],
+  ["changelog", /#tab-changelog|\.release-|\.rel-tag/],
   ["guide", /#tab-guide|\.guide-|\.glossary/],
   ["library", /#tab-library|\.lib-|\.module-|\.mc-|\.mi-|\.add-|\.file-row/],
   ["reference", /#tab-reference|\.ref-/],
@@ -454,6 +482,16 @@ test("全站推广：已完工作用域里等于令牌的间距值不许裸写",
     + doneScopeOffenders(bareTokenSpacesInScope).join("\n"));
 });
 
+test("全站推广：渲染方（static/js/**）里也不许有内联裸 px 字号（08 单新增的第五条腿）", () => {
+  // 08 单把最后 7 处内联取值（`style="font-size:11px"` / `cssText = "…font-size:12px"`）
+  // 收进了令牌。这条腿让"JS 侧不许回潮"有机器看着——原先只有**探针**看得到这一层，
+  // 而探针是取证、不是闸门（README 坑 3：标记里有、守卫不管的，只有人眼看得见）。
+  // 判据见 `jsInlineFontOffenders`（含两种拼法与已知留白）；红证在这个文件末尾那条合成用例里。
+  const offenders = jsInlineFontOffenders();
+  assert.deepEqual(offenders, [],
+    "static/js/** 里又有内联裸 px 字号了（请改用 var(--fs-*) 令牌）：\n" + offenders.join("\n"));
+});
+
 test("工单 03：全站裸字号集合只许减不许增（冻结清单）", () => {
   const added = bareFontSizesSitewide(html).filter((v) => !FROZEN_FONT_SIZES.has(v));
   assert.deepEqual(added, [],
@@ -468,7 +506,7 @@ test("全站推广：动作三级的口径**单源**（主实心 / 危险红描�
     "ghost 类要真的被元素用到——否则'补实一个类'就只是又造了一个死类");
 });
 
-test("全站推广合成红证：四条腿各自都判得红（防'永远绿'的守卫）", () => {
+test("全站推广合成红证：五条腿各自都判得红（防'永远绿'的守卫）", () => {
   // ① 已完工作用域各塞一个越界字号——**锚点只取规则头（不带令牌值）**，锚变了就当场报，
   //    不让这条自检静默空转。三个作用域：
   //      · `hwcheck` = 上一轮的样板页（腿③最早看着的那一页）；
@@ -523,7 +561,14 @@ test("全站推广合成红证：四条腿各自都判得红（防'永远绿'的
     "危险动作退回'只有红字'没被判出");
   assert.ok(actionWeightProblems(html + "\n  #tab-hwcheck button.danger { color: red; }\n").length > 0,
     "带页面前缀的 danger 副本没被判出");
-  // ⑥ 复原后转绿（四条腿都回到空/子集）
+  // ⑥ 第五条腿（08 单加的"渲染方里不许有内联裸 px 字号"）也必须判得红——
+  //    照 05/06/07 的先例：**新加的腿要自证**，不然它就是一条"永远绿"的摆设。
+  assert.deepEqual(jsInlineFontOffenders(), [], "盘上 static/js/** 本来就不该有内联裸 px 字号");
+  const fakeJs = [["ui/whatever.js", '  el.style.cssText = "padding:2px;font-size:12px;";']];
+  assert.equal(jsInlineFontOffenders(fakeJs).length, 1, "塞进去的内联裸 px 字号没被判出");
+  assert.equal(jsInlineFontOffenders([["ui/ok.js", '  el.style.cssText = "font-size:var(--fs-tag);";']]).length, 0,
+    "令牌形态被误判成裸值");
+  // ⑦ 复原后转绿（五条腿都回到空/子集）
   assert.deepEqual(bareFontSizesInScope(html, "hwcheck"), []);
   assert.deepEqual(bareTokenSpacesInScope(html, "hwcheck"), []);
   assert.deepEqual(bareFontSizesSitewide(html).filter((v) => !FROZEN_FONT_SIZES.has(v)), []);

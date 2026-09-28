@@ -1087,7 +1087,7 @@ function showPinMenu(pinEl, pinName) {
       <span class="muted">${esc(pin.notes || "IO 引脚")}</span>
       <button class="ref-files-close" title="关闭">×</button>
     </div>
-    <div class="muted" style="padding:6px 14px;font-size:12px;font-family:var(--mono);word-break:break-all">能力：${esc((pin.capabilities || []).join("、") || "无")}</div>
+    <div class="muted" style="padding:6px 14px;font-size:var(--fs-tag);font-family:var(--mono);word-break:break-all">能力：${esc((pin.capabilities || []).join("、") || "无")}</div>
     <ul class="pin-menu-list">${rows}</ul>`;
   overlay.appendChild(menu);
   document.body.appendChild(overlay);

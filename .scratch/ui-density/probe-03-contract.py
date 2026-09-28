@@ -97,6 +97,22 @@ def blank_inline_styles(text: str) -> str:
     return re.sub(r'style="[^"]*"', 'style=""', text)
 
 
+def strip_inline_fontsize(text: str) -> str:
+    """把 `font-size: <n>px` **整条声明**去掉（08 单补）。
+
+    为什么：08 单把 `static/js/**` 里最后 7 处内联取值收进了令牌（`var(--fs-tag)`）——
+    这是"全站零裸 px 字号"这条线收口时**明确允许**的观感改动。原先那条判据是
+    "前端 JS 一个字节没动"，在 08 单之后必须换成**更准的一句**：
+    「**剥掉内联 `font-size: <n>px` 之后逐字节相同**」——除此之外任何一处改动都还算违约。
+    （`style="…"` 与 `el.style.cssText = "…"` 两种写法都在射程里：本函数只认声明本身，
+    不关心它写在哪。）
+
+    ⚠ **两侧都要抹**：老形态是 `font-size:11px`、新形态是 `font-size:var(--fs-tag)`——
+    只抹 px 那一侧会让两边永远不相等（08 单第一版就这么写的，当场报出"JS 被改了"）。
+    """
+    return re.sub(r"font-size:\s*(?:[0-9.]+px|var\(--fs-[\w-]+\));?", "", text)
+
+
 def strip_class_attrs(text: str) -> str:
     """把 `class="…"` **整个属性**去掉（工单 ui-density-sitewide/05 补）。
 
@@ -225,11 +241,25 @@ def main() -> int:
     evidence = [p for p in changed if p.startswith(".scratch/")]
     out.append(f"  · 产品面改动文件（{len(product)} 个）：{product or '（无）'}")
     # 真正要守的不是"只有 index.html"（那只是 01 那一单当时的实况），而是
-    # **前端 JS 一个字节没动**——它是"这一轮只改观感、没碰行为"的那条契约。
+    # **前端 JS 没有夹带行为改动**——它是"这一轮只改观感、没碰行为"的那条契约。
+    # 口径（08 单更新）：**剥掉内联 `font-size: <n>px` 之后逐字节相同**——
+    # 08 单把最后 7 处内联取值收进了令牌（`var(--fs-tag)`），那是本轮明确允许的观感改动；
+    # 除它之外任何一处改动都仍然算违约（逐文件比对，不只看文件名）。
     js_touched = [p for p in product if p.startswith("src/contest_generator/static/js/")]
-    if js_touched:
-        out.append(f"    ⚠ 前端 JS 被改了：{js_touched}——本轮契约是「只改观感」，请核对")
+    js_bad: list[str] = []
+    for rel in js_touched:
+        old = subprocess.run(["git", "show", f"{BASE_REV}:{rel}"], cwd=ROOT,
+                             capture_output=True, text=True, encoding="utf-8").stdout
+        new = (ROOT / rel).read_text(encoding="utf-8")
+        if strip_inline_fontsize(old) != strip_inline_fontsize(new):
+            js_bad.append(rel)
+    if js_bad:
+        out.append(f"    ⚠ 前端 JS 被改了（不是内联字号那一类）：{js_bad}——"
+                   "本轮契约是「只改观感」，请核对")
         failed = True
+    elif js_touched:
+        out.append(f"    ✓ 前端 JS（static/js/**）{len(js_touched)} 个文件**只动了内联字号**"
+                   "（剥掉 `font-size: <n>px` 之后逐字节相同）——没有夹带行为改动")
     else:
         out.append("    ✓ 前端 JS（static/js/**）一个字节没动——观感改动没有夹带行为改动")
     out.append(f"  · 本目录证据件改动（{len(evidence)} 个）：{evidence or '（无）'}"

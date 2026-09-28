@@ -221,7 +221,7 @@ function renderArtifacts(structure, outputDir) {
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = "badge";
-    chip.style.cssText = "margin-left:6px;padding:2px 8px;font-size:12px;cursor:pointer";
+    chip.style.cssText = "margin-left:6px;padding:2px 8px;font-size:var(--fs-tag);cursor:pointer";
     chip.textContent = f;
     chip.title = "点击在「代码」tab 打开此文件（可预览 / 编辑）";
     chip.addEventListener("click", () => openCodeViewer(outputDir, f));

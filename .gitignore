@@ -235,3 +235,34 @@ DebugConfig/
 !.scratch/ui-density-sitewide/shots/07-after-dark-master-full.png
 !.scratch/ui-density-sitewide/shots/07-after-dark-guide-full.png
 !.scratch/ui-density-sitewide/shots/07-after-dark-changelog-full.png
+# 08 单（收尾巡检）：12 个页签 × 浅色 + 暗色整页图（各取 `-full` 那一版；`-top` 不入库）
+# 拍法：`node .scratch/ui-density-sitewide/probe-02-shot.mjs 08-light light <全部页签>`
+#       `node .scratch/ui-density-sitewide/probe-02-shot.mjs 08-dark dark <全部页签>`
+# 页签顺序（= 顶部导航从左到右）：generate,hwcheck,topic,code,settings,library,reference,pdf,md,master,guide,changelog
+# ⚠ 文件名是 `08-<主题>-<主题>-<页>-full.png`（`probe-02-shot.mjs` 的输出名 = `${TAG}-${THEME}-${tab}`，
+#   而 TAG 里已经带了主题）——08 单第一版白名单按"一个主题段"写，**24 条一条都没命中**，
+#   图全被上面的 `shots/*` 吞掉（`git check-ignore -v` 一跑就露；README 坑 8 重演，两轴评审同时抓到）。
+!.scratch/ui-density-sitewide/shots/08-light-light-generate-full.png
+!.scratch/ui-density-sitewide/shots/08-light-light-hwcheck-full.png
+!.scratch/ui-density-sitewide/shots/08-light-light-topic-full.png
+!.scratch/ui-density-sitewide/shots/08-light-light-code-full.png
+!.scratch/ui-density-sitewide/shots/08-light-light-settings-full.png
+!.scratch/ui-density-sitewide/shots/08-light-light-library-full.png
+!.scratch/ui-density-sitewide/shots/08-light-light-reference-full.png
+!.scratch/ui-density-sitewide/shots/08-light-light-pdf-full.png
+!.scratch/ui-density-sitewide/shots/08-light-light-md-full.png
+!.scratch/ui-density-sitewide/shots/08-light-light-master-full.png
+!.scratch/ui-density-sitewide/shots/08-light-light-guide-full.png
+!.scratch/ui-density-sitewide/shots/08-light-light-changelog-full.png
+!.scratch/ui-density-sitewide/shots/08-dark-dark-generate-full.png
+!.scratch/ui-density-sitewide/shots/08-dark-dark-hwcheck-full.png
+!.scratch/ui-density-sitewide/shots/08-dark-dark-topic-full.png
+!.scratch/ui-density-sitewide/shots/08-dark-dark-code-full.png
+!.scratch/ui-density-sitewide/shots/08-dark-dark-settings-full.png
+!.scratch/ui-density-sitewide/shots/08-dark-dark-library-full.png
+!.scratch/ui-density-sitewide/shots/08-dark-dark-reference-full.png
+!.scratch/ui-density-sitewide/shots/08-dark-dark-pdf-full.png
+!.scratch/ui-density-sitewide/shots/08-dark-dark-md-full.png
+!.scratch/ui-density-sitewide/shots/08-dark-dark-master-full.png
+!.scratch/ui-density-sitewide/shots/08-dark-dark-guide-full.png
+!.scratch/ui-density-sitewide/shots/08-dark-dark-changelog-full.png

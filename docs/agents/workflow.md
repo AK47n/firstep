@@ -157,6 +157,23 @@ For each ticket:
 4. **Resolve** the ticket: append any answer/notes, set `Status: resolved`, then commit your work to the current branch.
 5. Move to the next unblocked ticket. Do not batch tickets.
 
+### 三条纪律（`ui-density-sitewide` 轮用血换的，2026-09-28 固化）
+
+这三条来自**一页一单、连做十四页**的那一轮（`.scratch/ui-density-sitewide/`）；它们通用，
+凡"读数/门禁/注释里的数"参与判断的工单都适用：
+
+1. **读数每轮重跑，整改过一轮还要再跑一遍。** 读数（探针输出、截图、门禁结果）是**照片**，
+   不是"结论"——盘上改一个字节，它就可能过期。**整改之后忘了重跑**是那一轮最常见的一种
+   "绿得可疑"（07 单评审 Standards 抓到：`apply-07d` 改完，三份读数还是旧树的）。
+   → 判据：**提交前，每份落盘读数的时间戳必须晚于最后一次改产品面的时间**。
+2. **浏览器门禁单独跑，不与全量 `pytest` 并行。** 两套都要抢 CPU + 端口，
+   并行时浏览器用例会随机超时（那一轮实测过一次假红）。顺序：先浏览器门禁（~190s），
+   再全量 `pytest`（~120s）。
+3. **注释里的数按脚本复算，不按记忆写。** 票面、守卫注释、README 索引里的每个数字都要能
+   用一条命令复现（`probe-00` / `probe-01` / `probe-04`）；**票面最初那次 recon 的数常常是错的**
+   （07 单三个口径全对不上）。写进口径时连"这个数是哪个口径"一起写——两个口径混着读
+   （"border 声明" vs "整圈完整框"）是那一轮第二常见的误判。
+
 ## Relationship to the original skills
 
 This document bakes the essential instructions of Matt Pocock's user-invoked skills into the repo so they are followed even when the runtime does not expose those skills to the model. The full skill set is installed on this machine at both:

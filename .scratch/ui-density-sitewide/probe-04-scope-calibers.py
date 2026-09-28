@@ -35,18 +35,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from scope_lib import (PAGE, bare_fonts, bare_token_spaces, full_borders,  # noqa: E402
+from scope_lib import (load_backlog, PAGE, bare_fonts, bare_token_spaces, full_borders,  # noqa: E402
                        load_scopes, read_page, rules_in)
-
-
-def load_backlog() -> list[str]:
-    """进度清单（页面尺）——条目数本身就是进度（单一出处 = 守卫源码）。"""
-    import re
-    text = (HERE.parents[1] / "tests" / "js" / "css-tokens.test.mjs").read_text(encoding="utf-8")
-    block = re.search(r"const SITEWIDE_BACKLOG = new Set\(\[(.*?)\]\);", text, re.S)
-    if not block:
-        raise SystemExit("守卫里找不到 SITEWIDE_BACKLOG —— 格式变了")
-    return re.findall(r'"([\w-]+)"', block.group(1))
 
 
 def main() -> int:

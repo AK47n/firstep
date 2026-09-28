@@ -155,7 +155,7 @@ def main() -> int:
     out.append(f"          已完工 = {len(done)} 条：{', '.join(done)}")
     inline = len(re.findall(r'style="[^"]*font-size:\s*[0-9.]+px', text))
     out.append(f"另有内联 style 属性里的裸字号 {inline} 处（不在样式块里，见 --kind inline）")
-    out.append(f"全站 font-size 声明总处数（样式块 + 内联）: "
+    out.append(f"全站**裸 px** font-size 声明处数（0 = 这条线收口；样式块里的 `--fs-*` 引用另计）（样式块 + 内联）: "
                f"{len(FONT_RE.findall(text))}；裸样式块内 {sum(counters[n]['fonts'] for n, _ in scopes)}")
 
     report = "\n".join(out)

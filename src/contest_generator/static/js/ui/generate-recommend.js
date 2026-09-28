@@ -243,7 +243,7 @@ function showTopicPdfViewer(data) {
   if (data.total_pages && data.total_pages > data.pages.length) {
     const hint = document.createElement("div");
     hint.className = "muted";
-    hint.style.cssText = "text-align:center;font-size:12px;margin:4px 0 8px";
+    hint.style.cssText = "text-align:center;font-size:var(--fs-tag);margin:4px 0 8px";
     hint.textContent = "共 " + data.total_pages + " 页，已显示前 "
       + data.pages.length + " 页（其余页未展示）。";
     pagesEl.appendChild(hint);
@@ -1213,8 +1213,8 @@ export function renderSelected() {
     const hints = pa.templates.map((t) => `${t.name || t.id}：${t.description || ""}`).join("\n");
     return `
       <div class="row" style="margin:6px 0 0;align-items:center;gap:6px">
-        <label style="font-size:12px;color:var(--muted)">副产物模板</label>
-        <select data-template="${esc(m.slug)}" title="${esc(hints)}" style="font-size:12px;max-width:260px">${options}</select>
+        <label style="font-size:var(--fs-tag);color:var(--muted)">副产物模板</label>
+        <select data-template="${esc(m.slug)}" title="${esc(hints)}" style="font-size:var(--fs-tag);max-width:260px">${options}</select>
       </div>`;
   };
   box.innerHTML = expanded.map((m) => {

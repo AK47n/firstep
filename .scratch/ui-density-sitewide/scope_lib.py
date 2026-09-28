@@ -137,6 +137,23 @@ def tokenize_space_decl(decl: str) -> str | None:
     return decl[:m.start(1)] + changed + decl[m.end(1):]
 
 
+def load_backlog() -> list[str]:
+    """进度清单（页面尺）——**条目数本身就是进度**；单一出处 = 守卫源码。
+
+    08 单从 `probe-01` / `probe-04` 两份逐字相同的实现里提上来的（07 单评审点的名：
+    同一段解析抄两份）。⚠ 解析的是 `new Set([ … ])` 里的**引号串**——所以守卫注释里
+    写作用域名别用 ASCII 双引号（07 单踩过，见 README 坑 29）。
+    """
+    text = GUARD.read_text(encoding="utf-8")
+    block = re.search(r"const SITEWIDE_BACKLOG = new Set\(\[(.*?)\]\);", text, re.S)
+    if not block:
+        raise SystemExit("守卫里找不到 SITEWIDE_BACKLOG —— 格式变了，改 scope_lib")
+    # **先剥注释再抽引号串**（08 单评审 Standards：坑 29 的病根是"注释里也抽"。
+    # 07 单是靠"注释里改用「」"绕过去的，这里把机制拆掉——注释里写什么都不再算条目）
+    body = re.sub(r"//[^\n]*", "", block.group(1))
+    return re.findall(r'"([\w-]+)"', body)
+
+
 def full_borders(text: str, scope: str | None = None) -> list[tuple[int, str, str]]:
     """**整圈完整框**：完整 `border:` 声明且值不是 none/0 → [(行号, 选择器, 取值)]。
 
