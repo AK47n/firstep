@@ -1,0 +1,309 @@
+L1418  .decision button
+        margin-left: 8px;
+        padding: 1px 8px;
+        font-size: 12px;
+L1419  .decision input[data-topic]
+        width: 160px;
+        margin-left: 8px;
+        padding: 2px 6px;
+        font-size: 12px;
+L1420  .decision
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 6px 10px;
+        margin-bottom: var(--space-2);
+        font-size: 14px;
+        background: var(--panel-2);
+L1422  .decision .path
+        font-family: var(--mono);
+        font-weight: 600;
+L1423  .decision .reason
+        color: var(--muted);
+        margin-top: var(--space-1);
+L1424  .decision select
+        width: auto;
+        margin-left: 8px;
+        padding: 2px 6px 2px 18px;
+        font-size: 12px;
+        background-position: right 5px center;
+L1457  /* ---- 提炼进度区（工单 03：stepper + 批进度 + 双计时器 + 补问徽标 + 可折叠日志） ---- */ .distill-progress
+        margin-top: var(--space-4);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 10px 14px;
+        background: var(--panel-2);
+L1460  .stepper
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        margin-bottom: var(--space-2);
+L1461  .stepper .step
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--muted);
+        white-space: nowrap;
+L1463  .stepper .step .dot
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        border: 2px solid var(--border);
+        background: var(--panel);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        flex: none;
+L1466  .stepper .step.done
+        color: var(--ok);
+L1467  .stepper .step.done .dot
+        border-color: var(--ok);
+        background: var(--ok);
+        color: #fff;
+L1468  .stepper .step.active
+        color: var(--accent);
+        font-weight: 600;
+L1469  .stepper .step.active .dot
+        border-color: var(--accent);
+L1470  .stepper .connector
+        flex: 1;
+        height: 2px;
+        background: var(--border);
+        min-width: 10px;
+L1471  .stepper .connector.done
+        background: var(--ok);
+L1472  .prog-batch
+        display: flex;
+        gap: 10px;
+        align-items: baseline;
+        flex-wrap: wrap;
+        font-size: 13px;
+L1473  .prog-bar
+        height: 6px;
+        background: var(--border);
+        border-radius: var(--radius-xs);
+        overflow: hidden;
+        margin: 6px 0 8px;
+L1475  .prog-bar > div
+        height: 100%;
+        width: 0;
+        background: var(--accent);
+        transition: width var(--dur-slow);
+L1476  .prog-timers
+        display: flex;
+        gap: 16px;
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: var(--space-2);
+        font-variant-numeric: tabular-nums;
+L1478  .prog-badge
+        display: inline-block;
+        background: var(--warn-dim);
+        color: var(--warn);
+        border: 1px solid var(--warn-border);
+        border-radius: var(--radius-md);
+        font-size: 11px;
+        padding: 0 8px;
+L1481  .prog-log-head
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        margin-top: var(--space-2);
+        cursor: pointer;
+        user-select: none;
+        font-size: 12px;
+        color: var(--muted);
+L1483  .prog-log-head:hover
+        color: var(--accent);
+L1484  .prog-log
+        margin-top: var(--space-2);
+        max-height: 220px;
+        overflow-y: auto;
+        font-size: 12px;
+        font-family: var(--mono);
+        border-top: 1px dashed var(--border);
+        padding-top: 6px;
+L1487  .prog-log .line
+        padding: 2px 0;
+        color: var(--text);
+        word-break: break-all;
+L1488  .prog-log .line .t
+        color: var(--muted);
+        margin-right: 6px;
+L1489  .prog-log .line.batch
+        cursor: pointer;
+L1490  .prog-log .line.batch:hover
+        color: var(--accent);
+L1491  .prog-log .line.error
+        color: var(--danger);
+        font-weight: 600;
+L1492  .prog-log .file-list
+        margin: 0 0 4px 22px;
+        color: var(--muted);
+        white-space: pre-wrap;
+        word-break: break-all;
+L1494  .prog-done
+        font-size: 13px;
+        color: var(--ok);
+        font-weight: 600;
+L1765  /* ---- UI 打磨（工单 ui-polish/01）：过渡 / 渐变 / 微光 / 空状态 ---- */ button, input, textarea, select, .card, .item, .platform-card, .chip, .fix-row, .pin-role, .decision, .ref-pick-row, .instance-mod, .score-panel
+        transition: border-color var(--dur-fast) var(--ease-ui),
+                color var(--dur-fast) var(--ease-ui),
+                background-color var(--dur-fast) var(--ease-ui),
+                box-shadow var(--dur-fast) var(--ease-ui),
+                transform var(--dur-fast) var(--ease-ui);
+L1839  .rel-tag
+        flex: none;
+        font-size: var(--fs-tag);
+        font-weight: 600;
+        padding: 1px 7px;
+        border-radius: var(--radius-xs);
+        white-space: nowrap;
+L1841  .rel-tag.tag-new
+        color: var(--ok);
+        background: var(--ok-dim);
+L1842  .rel-tag.tag-imp
+        color: var(--info);
+        background: var(--info-dim);
+L1843  .rel-tag.tag-fix
+        color: var(--warn);
+        background: var(--warn-dim);
+L1844  .rel-tag.tag-perf
+        color: var(--purple-grad);
+        background: var(--purple-dim);
+L1845  .rel-tag.tag-other
+        color: var(--muted);
+        background: transparent;
+        border: 1px solid var(--border);
+L1898  /* 母版详情弹窗（工单 master-library-ui/04）：关键文件清单行 + 内容 pre-wrap */ .master-modal
+        max-width: 860px;
+L1900  .master-detail-files
+        list-style: none;
+        margin: 6px 0 0;
+        padding: 0;
+        max-height: 30vh;
+        overflow-y: auto;
+L1902  .master-detail-files li
+        margin: 4px 0;
+L1903  .master-file-btn
+        width: 100%;
+        text-align: left;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        padding: 8px 10px;
+        background: var(--panel-2);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        font-size: 13px;
+L1906  .master-file-btn:hover:not(:disabled)
+        border-color: var(--accent);
+L1907  .master-file-btn:disabled
+        opacity: .55;
+        cursor: not-allowed;
+L1908  .master-file-btn.on
+        border-color: var(--accent);
+        box-shadow: 0 0 0 1px var(--accent-dim);
+L1909  /* 母版健康徽章（工单 master-library-ui-2/01）：表格行体检直观化，悬停看明细 */ .master-health-pill
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: var(--radius-full);
+        border: 1px solid transparent;
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
+        cursor: help;
+        user-select: none;
+L1913  .master-health-ok
+        background: var(--ok-dim);
+        color: var(--ok-bright);
+        border-color: rgba(63, 185, 80, .3);
+L1915  .master-health-warn
+        background: var(--warn-dim);
+        color: var(--warn);
+        border-color: var(--warn-border);
+L1917  /* 母版文件树（工单 master-library-ui-2/02）：原生 details 收起，行按钮紧凑 */ .master-tree
+        list-style: none;
+        margin: 6px 0 0;
+        padding: 0 0 0 14px;
+L1919  .master-tree .master-tree
+        border-left: 1px solid var(--border);
+        padding-left: 8px;
+L1920  .master-tree-dir summary
+        cursor: pointer;
+        font-weight: 600;
+        padding: 2px 4px;
+        font-size: 12.5px;
+        border-radius: var(--radius-xs);
+L1922  .master-tree-dir summary:hover
+        background: var(--panel-2);
+L1923  .master-tree-file button
+        width: 100%;
+        text-align: left;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        padding: 3px 8px;
+        background: none;
+        color: var(--text);
+        border: 0;
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        font-size: 12.5px;
+L1926  .master-tree-file button:hover
+        background: var(--panel-2);
+L1927  .master-tree-file button.on
+        background: var(--accent-dim);
+        color: var(--accent);
+L1928  .master-tree-name
+        font-family: var(--mono);
+        font-size: 12px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+L1930  /* 内容箱复制条（工单 master-library-ui-2/03）：预留在 pre 上方，右对齐 */ .master-content-bar
+        display: flex;
+        justify-content: flex-end;
+        margin-top: var(--space-2);
+L1932  .master-copy-btn
+        padding: 3px 12px;
+        font-size: 12px;
+L1933  /* 母版库工具栏 + 导入确认弹窗（工单 master-library-ui-2/04） */ .master-lib-toolbar
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin: 6px 0 10px;
+L1938  .import-platform-field
+        margin-top: var(--space-3);
+L1939  .import-platform-field label
+        font-size: var(--fs-body);
+        font-weight: 600;
+        display: block;
+        margin-bottom: var(--space-1);
+L1941  .import-platform-field select
+        width: 100%;
+        box-sizing: border-box;
+L1942  .master-file-name
+        font-family: var(--mono);
+        font-size: 12.5px;
+L1943  .master-file-pre
+        white-space: pre-wrap;
+        word-break: break-all;
+        font-size: 12.5px;
+        line-height: 1.7;
+        max-height: min(52vh, 560px);
+        overflow-y: auto;
+        padding: 12px 14px;
+        margin: 6px 0 0;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        font-family: var(--mono);
+
+[共 64 条]

@@ -228,3 +228,10 @@ DebugConfig/
 !.scratch/ui-density-sitewide/shots/06-after-dark-md-full.png
 !.scratch/ui-density-sitewide/shots/06-after-dark-topic-full.png
 !.scratch/ui-density-sitewide/shots/06-after-dark-library-modal.png
+# 07 单（母版库 / 使用指南 / 版本更新记录）：三页各一张整页图
+# （`probe-02-shot.mjs 07-after dark master,guide,changelog` —— 指南与版本记录本身有内容；
+#  **母版库的提炼进度区默认 `hidden`，这一趟没进截图**：要拍 stepper 得在 08 单用夹具驱动一次，
+#  照 05 单 probe-05c 的写法。票面「账」第 5 条记着这条缺口。）
+!.scratch/ui-density-sitewide/shots/07-after-dark-master-full.png
+!.scratch/ui-density-sitewide/shots/07-after-dark-guide-full.png
+!.scratch/ui-density-sitewide/shots/07-after-dark-changelog-full.png

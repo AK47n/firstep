@@ -1,0 +1,119 @@
+L391  /* 生成页底部新手词表（工单 newcomer-glossary/01）：复用 .card-details 折叠样式，容器只负责与步骤列对齐；词条间距在 .glossary-item 上。 */ .glossary-card
+        margin-top: var(--space-5);
+L394  .glossary-card .glossary-item
+        margin-top: var(--space-2);
+        line-height: 1.65;
+L2736  .gen-sidebar .glossary-card
+        margin-top: var(--space-4);
+L2737  .gen-sidebar .glossary-card .card-details-body
+        max-height: max(120px, min(calc(100vh - 640px), 460px));
+        overflow: auto;
+L2941  /* 新手指引页（工单 beginner-guide/01）：页头 + 四子页签（同 .revise-tab 胶囊协议） + 面板显隐；正文内容复用 .card / .card-details / .btn 令牌 */ .guide-head
+        margin: 4px 0 14px;
+L2944  .guide-head h2
+        font-size: 20px;
+        margin: 0 0 4px;
+L2945  .guide-tabs
+        display: flex;
+        gap: 6px;
+        margin: 0 0 14px;
+        padding: 4px;
+L2947  .guide-tabs
+        overflow-x: auto;
+        scrollbar-width: thin;
+L2960  .guide-tab
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 12px;
+        border-radius: var(--radius-full);
+        cursor: pointer;
+        flex: none;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--muted);
+        font-size: 12.5px;
+        transition: all var(--dur-base) var(--ease-ui);
+        user-select: none;
+L2965  .guide-tab:hover
+        border-color: var(--accent);
+        color: var(--text);
+L2966  .guide-tab.active
+        border-color: rgba(var(--accent-rgb), .45);
+        background: var(--accent-dim);
+        color: var(--text);
+        font-weight: 600;
+L2968  .guide-tab.active:hover
+        border-color: rgba(var(--accent-rgb), .45);
+L2969  .guide-tab:focus-visible
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+L2970  .guide-panel
+        margin-top: var(--space-1);
+L2971  .guide-empty-hint
+        padding: 10px 14px;
+        border: 1px dashed var(--border);
+        border-radius: var(--radius-md);
+        color: var(--muted);
+        font-size: 12.5px;
+        background: var(--panel-2);
+        margin: 0 0 12px;
+L2974  /* 新手指引正文（工单 beginner-guide/02）：章节标题 / 提醒框 / 表格 / 跳转按钮—— 文本走 var 令牌，窄屏表格横向滚动 */ .guide-chapter-title
+        font-size: 16.5px;
+        margin: 2px 0 6px;
+        color: var(--text);
+L2977  .guide-chapter-intro
+        color: var(--muted);
+        font-size: 13px;
+        margin: 0 0 14px;
+        line-height: 1.7;
+L2978  .guide-sec-title
+        font-size: 14px;
+        margin: 16px 0 4px;
+        color: var(--text);
+L2979  #tab-guide .guide-panel p, #tab-guide .guide-panel li
+        font-size: 13px;
+        line-height: 1.75;
+L2980  #tab-guide .guide-panel p
+        margin: 6px 0;
+L2981  #tab-guide .guide-panel ul, #tab-guide .guide-panel ol
+        margin: 6px 0;
+        padding-left: 22px;
+L2982  #tab-guide .guide-panel li
+        margin: 3px 0;
+L2983  .guide-note
+        padding: 8px 12px;
+        border: 1px dashed var(--border);
+        border-left: 3px solid var(--accent);
+        border-radius: var(--radius-md);
+        background: var(--panel-2);
+        font-size: 12.5px;
+        line-height: 1.7;
+        margin: 10px 0;
+        color: var(--text);
+L2987  .guide-note strong
+        color: var(--accent);
+L2988  .guide-table-scroll
+        overflow-x: auto;
+        margin: 8px 0;
+L2989  .guide-table
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12.5px;
+L2990  .guide-table th
+        text-align: left;
+        padding: 6px 10px;
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        font-weight: 600;
+        color: var(--text);
+L2992  .guide-table td
+        padding: 6px 10px;
+        border: 1px solid var(--border);
+        color: var(--text);
+L2993  .guide-jump
+        font-size: 12.5px;
+        padding: 4px 12px;
+        margin: 8px 12px 8px 0;
+
+[共 29 条]
