@@ -70,14 +70,25 @@ def class_counts(text: str) -> Counter[str]:
     return out
 
 
+def strip_style(text: str) -> str:
+    """去掉 `<style>…</style>` 整块。
+
+    为什么：判据是"**给用户看的文案**一个字没删"，而样式块里的**中文注释**也含中文——
+    按整文件挑中文删除行会把"改了一条 CSS 注释"误报成"删了文案"（本轮实测：两条 CSS
+    注释被当成违规）。文案只在标记里，所以对账只在标记面上做。"""
+    return re.sub(r"<style>.*?</style>", "", text, flags=re.S)
+
+
 def diff_removed_lines(before: str, after: str) -> list[str]:
-    """改前后逐行 diff 里"被删掉且含中文"的行（文案零删除的判据）。"""
-    proc = subprocess.run(
-        ["git", "diff", "--no-color", "-U0", BASE_REV, "--", REL],
-        cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
-    )
-    removed = []
-    for line in proc.stdout.splitlines():
+    """改前后逐行 diff 里"被删掉且含中文"的**标记行**（文案零删除的判据）。
+
+    样式块先剥掉（见 `strip_style`），因此这里剩下的中文只可能是页面文案。"""
+    import difflib
+
+    removed: list[str] = []
+    b = strip_style(before).splitlines()
+    a = strip_style(after).splitlines()
+    for line in difflib.unified_diff(b, a, lineterm="", n=0):
         if not line.startswith("-") or line.startswith("---"):
             continue
         body = line[1:]
@@ -105,22 +116,35 @@ def main() -> int:
     if only_before or only_after:
         failed = True
 
-    seq_before = tag_sequence(hwcheck_slice(before))
-    seq_after = tag_sequence(hwcheck_slice(after))
+    # 判据 = **既有元素的 id 出现顺序**（"没被重排"），不是"标签序列逐项相等"。
+    # 口径为什么改（工单 02）：02 要往页面里**插入**三个分组标题带（`.hwcheck-band`），
+    # 那是"新增元素"而不是"重排既有元素"——按旧口径（全长标签序列相等）它会假红，
+    # 而旧口径真正想守的是"既有元素一个没动、顺序没变"。新增/删除的元素单独如实报数。
+    ids_seq_before = ID_RE.findall(hwcheck_slice(before))
+    ids_seq_after = ID_RE.findall(hwcheck_slice(after))
     out.append("")
-    out.append("== 2. 检测页 DOM 标签顺序 ==")
-    out.append(f"  改前 {len(seq_before)} 个标签 / 改后 {len(seq_after)} 个")
-    if seq_before == seq_after:
-        out.append("  逐项相等 ✅")
+    out.append("== 2. 检测页既有元素的 id 出现顺序（没被重排）==")
+    out.append(f"  改前 {len(ids_seq_before)} 个 id / 改后 {len(ids_seq_after)} 个")
+    if ids_seq_before == ids_seq_after:
+        out.append("  逐项相等 ✅（既有元素一个没动、顺序没变）")
     else:
         failed = True
         out.append("  **不相等**——第一处差异：")
-        for i, (a, b) in enumerate(zip(seq_before, seq_after)):
+        for i, (a, b) in enumerate(zip(ids_seq_before, ids_seq_after)):
             if a != b:
                 out.append(f"    第 {i + 1} 项：改前 {a} / 改后 {b}")
                 break
-        if len(seq_before) != len(seq_after):
-            out.append(f"    （长度不同：{len(seq_before)} vs {len(seq_after)}）")
+        if len(ids_seq_before) != len(ids_seq_after):
+            out.append(f"    （长度不同：{len(ids_seq_before)} vs {len(ids_seq_after)}）")
+
+    tag_before = Counter(tag_sequence(hwcheck_slice(before)))
+    tag_after = Counter(tag_sequence(hwcheck_slice(after)))
+    added = {k: tag_after[k] - tag_before.get(k, 0) for k in tag_after}
+    added = {k: v for k, v in added.items() if v > 0}
+    removed_tags = {k: tag_before[k] - tag_after.get(k, 0) for k in tag_before}
+    removed_tags = {k: v for k, v in removed_tags.items() if v > 0}
+    out.append(f"  本轮**新增**标签：{added or '（无）'}")
+    out.append(f"  本轮**删除**标签：{removed_tags or '（无）'}")
 
     out.append("")
     out.append("== 3. 被点名的类名出现次数 ==")
@@ -152,9 +176,14 @@ def main() -> int:
     out.append("    （见下一条），所以它们天然不变。")
     changed = subprocess.run(["git", "diff", "--name-only", BASE_REV], cwd=ROOT,
                              capture_output=True, text=True, encoding="utf-8").stdout.split()
-    out.append(f"  · 本轮改动文件（{len(changed)} 个）：{changed or '（无）'}")
-    if changed != [REL]:
+    product = [p for p in changed if not p.startswith(".scratch/")]
+    evidence = [p for p in changed if p.startswith(".scratch/")]
+    out.append(f"  · 产品面改动文件（{len(product)} 个）：{product or '（无）'}")
+    if product != [REL]:
         out.append("    ⚠ 与「只改 index.html」不符——请核对是否夹带了别的改动")
+        failed = True
+    out.append(f"  · 本目录证据件改动（{len(evidence)} 个）：{evidence or '（无）'}"
+               "——探针自己也会被改，不算产品改动")
 
     report = "\n".join(out)
     print(report)
