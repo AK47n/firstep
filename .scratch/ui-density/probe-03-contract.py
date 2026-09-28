@@ -97,6 +97,20 @@ def blank_inline_styles(text: str) -> str:
     return re.sub(r'style="[^"]*"', 'style=""', text)
 
 
+def strip_class_attrs(text: str) -> str:
+    """把 `class="…"` **整个属性**去掉（工单 ui-density-sitewide/05 补）。
+
+    为什么：05 单给「清空本地记录」那个按钮补了一个 `class="danger"`（不可逆动作的重量——
+    **只新增类名**、文案一个字没动），而本探针按**原始行** diff —— 那一行当场被报成
+    "删了一行中文"（契约对账 **失败**）。与 03 账第 8 条（内联 `style=`）同一类口径漏：
+    **文案有没有删**要看文字，不看属性。
+    注意两点：① 是**整个属性**去掉，不是把取值抹空——新增一个属性时两者仍然不等（本轮第一版
+    就踩了这个：`blank` 成 `class=""` 之后 `data-ico` 前面多了一段，行照样对不上）；
+    ② 类名的变动由第 3 节"被点名的类名出现次数"看着（那一节比的是计数，不受这里影响），
+    而"删掉一个元素"会把整行带走，照样报得出来。"""
+    return re.sub(r'\s+class="[^"]*"', "", text)
+
+
 def strip_comments(text: str) -> str:
     """去掉 HTML 注释。
 
@@ -109,13 +123,13 @@ def strip_comments(text: str) -> str:
 def diff_removed_lines(before: str, after: str) -> list[str]:
     """改前后逐行 diff 里"被删掉且含中文"的**标记行**（文案零删除的判据）。
 
-    样式块先剥掉（见 `strip_style`）、内联 `style=` 的取值先抹平（见 `blank_inline_styles`），
-    因此这里剩下的中文只可能是页面文案。"""
+    样式块先剥掉（见 `strip_style`）、内联 `style=` 的取值先抹平、`class=` 整条属性先去掉
+    （见 `blank_inline_styles` / `strip_class_attrs`），因此这里剩下的中文只可能是页面文案。"""
     import difflib
 
     removed: list[str] = []
-    b = blank_inline_styles(strip_style(before)).splitlines()
-    a = blank_inline_styles(strip_style(after)).splitlines()
+    b = strip_class_attrs(blank_inline_styles(strip_style(before))).splitlines()
+    a = strip_class_attrs(blank_inline_styles(strip_style(after))).splitlines()
     for line in difflib.unified_diff(b, a, lineterm="", n=0):
         if not line.startswith("-") or line.startswith("---"):
             continue

@@ -360,16 +360,22 @@
   .muted { color: var(--muted); font-size: var(--fs-note); }
   .error { color: var(--danger); font-size: var(--fs-body); margin-top: var(--space-2); white-space: pre-wrap; }
   .ok { color: var(--ok); }
-  .env-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .env-row { display: flex; align-items: baseline; gap: var(--space-2); padding: 5px 0; border-bottom: 1px solid var(--border); font-size: var(--fs-body); }
   .env-row:last-child { border-bottom: none; }
-  .env-badge { flex: 0 0 auto; align-self: center; width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; }
+  /* 体检行的三档重量（工单 ui-density-sitewide/05）：通过 = 安静（只有绿徽章）、
+     警告 = 徽章、**失败 = 整行淡红底 + 左条**——"哪几条要动手"一眼可见。
+     `:has()` 老浏览器不支持时整条忽略（页面照旧可用，只是不安静），先例 = `#tab-hwcheck .card:has(…)`；
+     左条走 `box-shadow: inset` 而**不是** `border-left`——后者会把这一行的内容推 3px，行与行就不齐了。 */
+  .env-row:has(.env-badge.env-err) { background: var(--danger-dim);
+    box-shadow: inset 3px 0 0 var(--danger); border-radius: var(--radius-xs); }
+  .env-badge { flex: 0 0 auto; align-self: center; width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: var(--fs-tag); font-weight: 700; color: #fff; }
   .env-badge.env-ok { background: var(--ok); }
   .env-badge.env-warn { background: var(--warn); }
   .env-badge.env-err { background: var(--danger); }
   .env-name { flex: 0 0 118px; color: var(--muted); }
   .env-detail { flex: 1; white-space: pre-wrap; word-break: break-all; }
   /* 体检行「去设置填」跳转按钮（工单 ux-walkthrough-02/06）：缺失项一键跳转 */
-  .env-jump { margin-left: 8px; padding: 2px 10px; font-size: 11px;
+  .env-jump { margin-left: var(--space-2); padding: 2px 10px; font-size: var(--fs-tag);
               border-radius: var(--radius-full); border: 1px solid var(--border);
               background: var(--panel); color: var(--accent); cursor: pointer; }
   .env-jump:hover { border-color: var(--accent); }
@@ -1481,14 +1487,14 @@
   .llm-telemetry { margin-top: var(--space-2); font-size: var(--fs-note); color: var(--muted);
                    font-family: var(--mono); line-height: 1.6; }
   /* ---- 最近 LLM 工作流（llm-observability-dashboard/03）：设置页只读仪表盘 ---- */
-  .recent-wf-list { display: flex; flex-direction: column; gap: 8px; }
-  .recent-wf-summary { border: 1px solid var(--border); border-radius: var(--radius-md);
-                       padding: 8px 10px; font-size: 12px; font-family: var(--mono);
+  .recent-wf-list { display: flex; flex-direction: column; gap: var(--space-2); }
+  .recent-wf-summary { border: none; border-radius: var(--radius-md);
+                       padding: var(--space-2) 10px; font-size: var(--fs-note); font-family: var(--mono);
                        line-height: 1.7; background: var(--code-bg); }
   .recent-wf-summary .wf-name { font-weight: 600; }
   .recent-wf-summary .wf-status-ok { color: var(--ok); font-weight: 600; }
   .recent-wf-summary .wf-status-error { color: var(--danger); font-weight: 600; }
-  .recent-wf-calls { margin: 4px 0 0 10px; padding-left: 10px;
+  .recent-wf-calls { margin: var(--space-1) 0 0 10px; padding-left: 10px;
                      border-left: 1px dashed var(--border); color: var(--muted); }
   .recent-wf-calls .call-row { white-space: normal; word-break: break-all; }
   /* ---- 参考文件查看弹层（文件名搜索 + 文件打开工单）：清单 + 文本内联 ---- */
@@ -1514,22 +1520,36 @@
                           white-space: pre-wrap; word-break: break-all; }
   /* ---- 资料库更新（工单 materials-update/06）：批次勾选弹窗 + 下载进度 ---- */
   .materials-pick-list { max-height: 300px; overflow-y: auto; margin: var(--space-2) 0;
-                         border: 1px solid var(--border); border-radius: var(--radius-sm); }
-  .materials-batch-row { display: flex; align-items: baseline; gap: 8px; padding: 6px 10px;
-                         font-size: 13px; cursor: pointer; border-bottom: 1px solid var(--border); }
+                         border: none; border-radius: var(--radius-sm); }
+  .materials-batch-row { display: flex; align-items: baseline; gap: var(--space-2); padding: 6px 10px;
+                         font-size: var(--fs-body); cursor: pointer; border-bottom: 1px solid var(--border); }
   .materials-batch-row:last-child { border-bottom: none; }
   .materials-batch-row:hover { background: var(--panel-2); }
   .materials-batch-name { font-weight: 600; }
-  .materials-batch-meta { color: var(--muted); font-size: 12px; margin-left: auto; }
+  .materials-batch-meta { color: var(--muted); font-size: var(--fs-note); margin-left: auto; }
   .materials-pick-footer { display: flex; align-items: center; gap: 10px;
                            justify-content: flex-end; margin-top: var(--space-2); }
   .materials-progress .progress { height: 10px; border-radius: var(--radius-xs); overflow: hidden;
                                   background: var(--panel-2); margin: var(--space-1) 0; }
   .materials-progress .progress-fill { height: 100%; background: var(--accent); transition: width .5s; }
-  .materials-part-row { display: flex; justify-content: space-between; font-size: 12px;
+  .materials-part-row { display: flex; justify-content: space-between; font-size: var(--fs-note);
                         color: var(--muted); font-family: var(--mono); padding: 2px 0; }
+  /* 更新 / 下载结果块（工单 ui-density-sitewide/05）：三处信息的主次——
+     **版本号抬到 --fs-block + accent、体量跟着整块从 muted 13 提到正文色 14**（`<b>` 之外的数字
+     在渲染方是裸文本节点：`fx/update.js` 的"更新包约 12 MB"CSS 够不着——不动 JS，如实记账；
+     `fx/full-update.js` 的体量在 `<b>` 里，走同一条规则）；整块走淡底、不画框（一屏一层）。
+     `color: var(--text)` 是必需的：容器 `#update-results` 带 `.muted`，不覆盖整块就一直是灰的。 */
+  .update-result, .materials-progress { background: var(--panel-2); border-radius: var(--radius-md);
+    padding: var(--space-3) var(--space-4); margin-top: var(--space-2); font-size: var(--fs-body);
+    line-height: 1.7; color: var(--text); }
+  .update-result b { font-size: var(--fs-block); color: var(--accent); }
+  .materials-progress .muted { color: var(--text); }
   .ref-matched { margin-top: var(--space-1); font-size: 12px; font-family: var(--mono);
                  line-height: 1.7; }
+  /* 弱网重试 / 整批移除的提示（`.warning`）：`fx/materials-update.js` 与
+     `fx/full-update.js` 一直在渲染它，而全站**从来没有过** `.warning` 规则（死类，README 坑 3）
+     ——补一条最小样式：语义提示那一档用警示色**文字**，框留给"失败"那一档。 */
+  .update-result .warning, .materials-progress .warning { color: var(--warn); }
   .ref-matched a { color: var(--accent); text-decoration: none; cursor: pointer;
                    display: block; word-break: break-all; }
   .ref-files-filter { margin: 8px 14px 0; padding: 5px 8px; border: 1px solid var(--border);
@@ -1585,13 +1605,13 @@
   /* 设置页卡内小节（工单 ui-polish-9/03）：muted 小标题 + 虚线分隔 */
   .settings-section { margin-top: var(--space-4); padding-top: 10px;
                       border-top: 1px dashed var(--border);
-                      font-size: 12px; font-weight: 600; color: var(--muted); }
+                      font-size: var(--fs-block); font-weight: 600; color: var(--text); }
   /* 设置页计费小节折叠（工单 settings-infoarch/02）：头部按钮即包装块标题；
      hover 与 ▾ 旋转 transition 沿 .card-collapse 既有惯例 */
   .settings-collapse-head { display: flex; align-items: center; gap: 6px;
                             width: 100%; margin: 0; padding: 0;
                             border: none; background: none;
-                            font: inherit; color: var(--muted);
+                            font: inherit; color: var(--text);
                             cursor: pointer; text-align: left; }
   .settings-collapse-head:hover { color: var(--accent); }
   .settings-collapse .collapse-ico { transition: transform var(--dur-slow) var(--ease-ui); }
@@ -1599,18 +1619,38 @@
   .settings-collapse.collapsed > :not(.settings-collapse-head) { display: none !important; }
   /* 设置页折叠总开关（工单 settings-infoarch/03）：页首工具栏两端对齐 */
   .settings-toolbar { display: flex; align-items: center; justify-content: space-between;
-                      gap: 12px; margin-bottom: var(--space-4); }
+                      gap: var(--space-3); margin-bottom: var(--space-4); }
+  /* 设置页分组带（工单 ui-density-sitewide/05）：14 张卡读成五段——**只插入标题元素**，
+     DOM 顺序与既有 id 一个不动（照 02 单 `#tab-hwcheck .hwcheck-band` 的先例）。
+     标题 + 一条横线（`::after`）把"组"与"卡"两级分开；组间大间距 = 卡间距 20px + 这里 24px。
+     （hwcheck 那条 `:first-child { margin-top: 0 }` 这里**不加**：本条带前面还有页首工具栏，
+     永远不是第一个子元素——照抄就成了死规则，坑 5。） */
+  .settings-band { display: flex; align-items: center; gap: var(--space-2);
+    margin: var(--space-6) 0 var(--space-3); font-size: var(--fs-block);
+    font-weight: 650; color: var(--text); }
+  .settings-band::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--border); }
   /* 设置页悬浮保存按钮（原 sticky 全宽保存条——滚动时整条盖住下方表单，
      用户反馈不美观、挡视野；改 fixed 右下角紧凑胶囊：不占文档流、只贴视口
      右下角，任意滚动位置可见，不遮表单主体；「有未保存的修改」提示随胶囊
      内联；与 #toast-root（右上）不冲突。类名沿用 settings-stickybar（JS 只
      依赖内部 id，不随布局更名）。 */
   .settings-stickybar { position: fixed; right: 20px; bottom: 20px; z-index: 60;
-    display: flex; align-items: center; gap: 8px; width: max-content;
+    display: flex; align-items: center; gap: var(--space-2); width: max-content;
     max-width: calc(100vw - 40px);
     background: var(--panel); border: 1px solid var(--border);
-    border-radius: var(--radius-full); padding: 8px 12px;
+    border-radius: var(--radius-full); padding: var(--space-2) var(--space-3);
     box-shadow: var(--shadow-card); }
+  /* 设置页的失败提示（工单 ui-density-sitewide/05）：更新 / 资料库 / 保存失败都是
+     **语义告警块**（例外①：保留它那一条描边）——全局 `.error` 不动（别处是行内红字），
+     这里按页作用域给形状。配色照 `.hwcheck-warn` 那一类（描边用主色，不用淡色边框）。
+     ⚠ 两个 `:not(…)` 都是必需的——**读渲染方 + 看默认态**才知道：
+       · `:not(.ok)`：`ui/settings.js` 保存成功时只 `classList.add("ok")`、**不摘 `error`**
+         （`#settings-msg` 的初始类就是 error），不排除它就会把"已保存，立即生效。"装进红框；
+       · `:not(:empty)`：`#settings-msg` **默认就是空 div + class="error"**，不排除它页面一打开
+         就挂着一条整宽红框（评审实测 1358×18，到第一次保存成功才消失）。
+     JS 一行不动，只好在 CSS 里认这两态。 */
+  #tab-settings .error:not(.ok):not(:empty) { background: var(--danger-dim); border: 1px solid var(--danger);
+    border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); }
   /* 按钮内联图标（工单 ui-polish-9/04） */
   button .btn-ico { display: inline-block; width: 15px; height: 15px;
                     vertical-align: -2px; margin-right: 6px; }
@@ -3178,8 +3218,8 @@
   .delivery-ok { margin-top: var(--space-2); color: var(--ok); font-weight: 600; }
   .delivery-warn { margin-top: var(--space-2); color: var(--warn); font-weight: 600; }
   .delivery-stat-row { margin-top: var(--space-2); display: flex; gap: 6px; }
-  .delivery-incomplete { margin-top: var(--space-1); font-size: 13px; color: var(--text); }
-  .delivery-zip { margin-top: var(--space-2); font-family: var(--mono); font-size: 12px;
+  .delivery-incomplete { margin-top: var(--space-1); font-size: var(--fs-note); color: var(--text); }
+  .delivery-zip { margin-top: var(--space-2); font-family: var(--mono); font-size: var(--fs-note);
                   color: var(--text); word-break: break-all; }
   /* 想法结果卡（工单 idea-fix/02）：复用 .item/.badge/.row 既有样式，
      无新视觉——落地按钮与任务卡操作行同款；分类徽章用既有 badge 色 */
@@ -4735,6 +4775,7 @@
       <button id="btn-save-settings-sticky" class="primary breathe" type="button" data-ico="save">保存设置</button>
       <span id="settings-dirty-hint" class="muted hidden">有未保存的修改</span>
     </div>
+    <div class="settings-band">应用与 AI</div>
     <div class="card" data-collapse-id="app">
       <h2>应用设置</h2>
       <div class="muted" style="margin-bottom: var(--space-3)">保存后即时生效，无需重启。</div>
@@ -4820,6 +4861,7 @@
       </div>
     </div>
 
+    <div class="settings-band">库与工具链</div>
     <div class="card" data-collapse-id="libs">
       <h2>库目录</h2>
       <div class="settings-section">模块库 / 母版库（可编辑）</div>
@@ -4869,6 +4911,7 @@
       <div class="muted" id="set-dslite-status"></div>
     </div>
 
+    <div class="settings-band">模型与通道</div>
     <div class="card" data-collapse-id="local-llm">
       <h2>本地模型（可选）</h2>
       <div class="row">
@@ -4920,6 +4963,7 @@
       <div id="vision-banner" class="banner hidden" style="margin-top: var(--space-2)">视觉通道当前未启用：识别 PDF 嵌入图 / 上传图片会跳过视觉描述（其余功能不受影响）。DeepSeek 模式可留空 key 复用主 key，配好主 key 后保存即生效。</div>
     </div>
 
+    <div class="settings-band">体检与观测</div>
     <div class="card" data-collapse-id="env-check">
       <h2>环境体检</h2>
       <div class="row" style="margin-bottom: var(--space-2);align-items:center">
@@ -4951,6 +4995,7 @@
       <div class="muted" style="margin-top: var(--space-2)">token 数为模型服务商上报（provider-reported）；费用 = 按上方单价估算的参考值，以官方账单为准；本地默认 0 成本。</div>
     </div>
 
+    <div class="settings-band">更新与维护</div>
     <div class="card" data-collapse-id="software-update">
       <h2>软件更新</h2>
       <div class="row" style="align-items:center;margin-bottom:var(--space-2)">
@@ -4981,7 +5026,7 @@
     <div class="card" data-collapse-id="reset-records">
       <h2>重置本地记录</h2>
       <div class="row" style="align-items:center">
-        <button id="btn-reset-records" type="button" data-ico="trash">清空本地记录</button>
+        <button id="btn-reset-records" type="button" class="danger" data-ico="trash">清空本地记录</button>
         <span class="muted" style="flex:1">换题前一键清空 firstep 留下的全部题相关记录与缓存（任务自检勾选 / 题面草稿 / 评分核对 / 购买决策 / 最近工程列表 / AI 推荐缓存），恢复到第一次打开的状态。API 配置、主题等界面偏好与磁盘上的工程文件不受影响。</span>
       </div>
       <div class="muted" style="margin-top: var(--space-2)">适合每道题做完后、开新题之前按一下；清理不可撤销。</div>

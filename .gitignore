@@ -208,3 +208,14 @@ DebugConfig/
 !.scratch/ui-density-sitewide/shots/04-before-dark-code-open-full.png
 !.scratch/ui-density-sitewide/shots/04-after-dark-code-open-full.png
 !.scratch/ui-density-sitewide/shots/04-after-dark-code-open-shortcuts.png
+# 05 单（设置页）：首屏 / 整页 + 「有内容」态的整页与三段证据
+# （有内容那几张由 probe-05c-shot-settings-content.mjs 调**产品自己的纯渲染函数**＋夹具数据拍出来，
+#  零网络；`-saved` 那张是"保存成功"态——`ui/settings.js` 成功时只 add("ok")、不摘 error，
+#  CSS 靠 `:not(.ok)` 认这一态，这张图就是它的证据）
+!.scratch/ui-density-sitewide/shots/05-after-dark-settings-top.png
+!.scratch/ui-density-sitewide/shots/05-after-dark-settings-full.png
+!.scratch/ui-density-sitewide/shots/05-after-dark-settings-content-full.png
+!.scratch/ui-density-sitewide/shots/05-after-dark-settings-content-seg1.png
+!.scratch/ui-density-sitewide/shots/05-after-dark-settings-content-seg2.png
+!.scratch/ui-density-sitewide/shots/05-after-dark-settings-content-seg3.png
+!.scratch/ui-density-sitewide/shots/05-after-dark-settings-content-saved.png

@@ -30,6 +30,7 @@ GUARD = ROOT / "tests" / "js" / "css-tokens.test.mjs"
 
 FONT_RE = re.compile(r"font-size:\s*([0-9.]+)px")
 SPACE_RE = re.compile(r"(?:padding|margin|gap)(?:-top|-right|-bottom|-left)?:\s*([^;]+);")
+SPACE_NUM_RE = re.compile(r"(?<![\w.-])(\d+)px")
 SPACE_TOKEN = {4: "--space-1", 8: "--space-2", 12: "--space-3",
                16: "--space-4", 20: "--space-5", 24: "--space-6"}
 # **整圈完整框**（03 单立的施工口径）：完整 `border:` 声明、值不是 none/0。
@@ -114,6 +115,26 @@ def bare_token_spaces(text: str, scope: str) -> list[tuple[int, str, str]]:
                 if int(n) in SPACE_TOKEN:
                     out.append((line, sel, n))
     return out
+
+
+def tokenize_space_decl(decl: str) -> str | None:
+    """把一条 `padding` / `margin` / `gap` 声明里等于令牌的裸 px 换成 `var(--space-N)`。
+
+    **单一出处**：04b 与 05b 各有一份逐字相同的实现（`NUM_RE` + `tokenize()`）——05 单评审
+    按 README「公共件从 `scope_lib.py` import，别再各抄一份（03 单评审的账）」点了名。
+    那两支**已执行完、锚点已消费**（03 账第 6 条），不回头改写；**06 起的新脚本用这个**。
+    没有可换的返回 `None`；`calc(` 的值一律不碰——要例外就**逐条点名**，别留恒空的表
+    （05b 原来那个恒空的 `CALC_ALLOW` 就是反面例子，评审点名后已删）。
+    """
+    m = SPACE_RE.match(decl)
+    if not m or "calc(" in m.group(1):
+        return None
+    body = m.group(1)
+    changed = SPACE_NUM_RE.sub(lambda mm: f"var({SPACE_TOKEN[int(mm.group(1))]})"
+                               if int(mm.group(1)) in SPACE_TOKEN else mm.group(0), body)
+    if changed == body:
+        return None
+    return decl[:m.start(1)] + changed + decl[m.end(1):]
 
 
 def full_borders(text: str, scope: str | None = None) -> list[tuple[int, str, str]]:
