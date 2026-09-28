@@ -332,13 +332,18 @@
   button:hover { border-color: var(--accent); color: var(--accent); }
   button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
   button.primary:hover { background: var(--accent-dark); color: var(--on-accent); }
-  button.danger { color: var(--danger); }
-  button.danger:hover { border-color: var(--danger); }
+  button.danger { border-color: var(--danger); background: var(--danger-dim); color: var(--danger); }
+  button.danger:hover { background: var(--danger); color: #fff; }
   button.pin-overview-on { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
   /* 强调按钮（工单 newcomer-glossary/03）：accent 描边 + 淡底；欢迎卡
      「去配置 API key」与本卡「去任务推进」共用该形态（仅用既有令牌）。 */
   button.accent { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
   button.accent:hover { background: var(--accent); color: var(--on-accent); }
+  /* 幽灵按钮（次要动作的第三形态，工单 ui-density-sitewide/02）：透明底 + 随文色描边。
+     标记里两处 class="ghost"（顶部提示条里的「去设置 / 去填写」）此前**没有对应规则**，
+     渲染成默认实心按钮、在琥珀提示条里很重——这条把那个意图补实。 */
+  button.ghost { background: transparent; border-color: currentColor; color: inherit; }
+  button.ghost:hover { background: rgba(var(--accent-rgb), .12); color: inherit; border-color: currentColor; }
   button:disabled { opacity: .45; cursor: not-allowed; }
   button:disabled:hover { border-color: var(--border); color: var(--text); }   /* 禁用态不响应悬停 */
   textarea:disabled, input:disabled, select:disabled { opacity: .6; cursor: not-allowed; }
@@ -349,9 +354,9 @@
      （.primary/.danger/.accent）与这三类自由组合 */
   .btn { padding: 7px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm);
          background: var(--panel-2); cursor: pointer; font: inherit; color: var(--text); }
-  .btn-pill--sm { font-size: 12px; padding: 2px 8px; border-radius: var(--radius-full); }
+  .btn-pill--sm { font-size: var(--fs-tag); padding: 2px var(--space-2); border-radius: var(--radius-full); }
   .btn-pill--md { border-radius: var(--radius-full); }
-  .btn-icon { padding: 4px 8px; line-height: 1; border-radius: var(--radius-sm); }
+  .btn-icon { padding: var(--space-1) var(--space-2); line-height: 1; border-radius: var(--radius-sm); }
   .muted { color: var(--muted); font-size: var(--fs-note); }
   .error { color: var(--danger); font-size: var(--fs-body); margin-top: var(--space-2); white-space: pre-wrap; }
   .ok { color: var(--ok); }
@@ -396,7 +401,7 @@
   .platform-card.selected { border-color: var(--accent); background: var(--accent-dim); }
   .platform-card.disabled { opacity: .5; cursor: not-allowed; background: var(--panel-2); }
   .platform-card .name { font-weight: 600; }
-  .badge { display: inline-block; padding: 1px 8px; border-radius: var(--radius-md); font-size: 11px;
+  .badge { display: inline-block; padding: 1px var(--space-2); border-radius: var(--radius-md); font-size: var(--fs-tag);
            margin-left: 6px; vertical-align: 1px; }
   .badge.plat { white-space: nowrap; text-align: center; line-height: 1.3; }
   .badge.missing { background: var(--danger-dim); color: var(--danger); }
@@ -409,12 +414,12 @@
      夹在彩色平台胶囊之间像「没套样式的裸文字」——「内嵌母版」这类
      纯说明性徽章给中性底（同 .badge.ref-none 写法，随主题切换）。 */
   .badge.neutral { background: rgba(139, 148, 158, .15); color: var(--muted); }
-  .item { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px 16px;
+  .item { border-radius: var(--radius-md); padding: var(--space-3) var(--space-4);
           margin-bottom: var(--space-3); background: var(--panel-2);
           box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03), var(--shadow-item); }
-  .item .head { display: flex; gap: 8px; align-items: center; }
+  .item .head { display: flex; gap: var(--space-2); align-items: center; }
   .item .slug { font-weight: 600; font-family: var(--mono); }
-  .item .reason { color: var(--muted); font-size: 14px; margin-top: var(--space-2); line-height: 1.7; }
+  .item .reason { color: var(--muted); font-size: var(--fs-body); margin-top: var(--space-2); line-height: 1.7; }
   /* 步骤 6 紧凑清单（工单 step6-ui）：滚动 + 两行布局 + 搜索 */
   .selected-scroll { max-height: 240px; overflow-y: auto; overflow-x: hidden;
                      border-radius: var(--radius-md);
@@ -604,13 +609,13 @@
   .rec-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); align-items: center; }
   /* 零库外建议主动提示（工单 recommend-covered-note/01）：信息性说明，不引警示色 */
   .rec-covered-note { margin-top: var(--space-4); font-size: var(--fs-note); }
-  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px;
-          border-radius: var(--radius-lg); font-size: 13px; font-family: var(--mono);
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: var(--space-1) var(--space-3);
+          border-radius: var(--radius-lg); font-size: var(--fs-note); font-family: var(--mono);
           border: 1px solid var(--border); }
   .chip .reason { font-family: inherit; margin: 0; }
   .chip.rec { background: var(--ok-dim); color: var(--ok-bright); cursor: pointer; }
   .chip.rec .reason { color: var(--muted); }
-  .chip.rec .chip-x { font-size: 11px; opacity: .6; }
+  .chip.rec .chip-x { font-size: var(--fs-tag); opacity: .6; }
   .chip.rec:hover { border-color: var(--danger); }
   .chip.rec:hover .chip-x { color: var(--danger); opacity: 1; }
   /* 未选态的推荐 chip（工单 module-intro-detail/06）：用户点掉了它 —— 灰显 + 虚线框，
@@ -704,8 +709,8 @@
                      background: var(--panel); border-radius: var(--radius-lg);
                      padding: 10px 12px; }
   .task-dialog-box .sugg-discuss-msgs { max-height: 240px; }
-  .btn-task-dialog-adopt, .btn-task-dialog-clear { font-size: 12px;
-                     padding: 1px 8px; margin-left: 6px; border-radius: var(--radius-full);
+  .btn-task-dialog-adopt, .btn-task-dialog-clear { font-size: var(--fs-tag);
+                     padding: 1px var(--space-2); margin-left: 6px; border-radius: var(--radius-full);
                      background: var(--panel-2); }
   /* 全局商量按钮（工单 idea-suite/02）：AI 回复三按钮 + 发送 + 清除，
      与任务卡对话按钮同款小字（.sugg-discuss 面板共用——参数速调咨询按钮
@@ -747,9 +752,9 @@
   .task-edit-form input, .task-edit-form textarea, .task-edit-form select {
                      width: 100%; margin-top: var(--space-1); }
   .task-edit-form .row { justify-content: flex-start; }
-  .btn-task-edit-save, .btn-task-edit-cancel { font-size: 12px; padding: 1px 8px; }
+  .btn-task-edit-save, .btn-task-edit-cancel { font-size: var(--fs-tag); padding: 1px var(--space-2); }
   .task-more-details { position: relative; }
-  .btn-task-more { font-size: 12px; padding: 1px 8px; cursor: pointer;
+  .btn-task-more { font-size: var(--fs-tag); padding: 1px var(--space-2); cursor: pointer;
                      color: var(--muted); list-style: none; }
   .btn-task-more::-webkit-details-marker { display: none; }
   .btn-task-more:hover { color: var(--text); }
@@ -770,8 +775,8 @@
   .draft-item:last-of-type { border-bottom: none; }
   .draft-text { flex: 1; overflow: hidden; text-overflow: ellipsis;
                      white-space: nowrap; }
-  .btn-draft-analyze, .btn-draft-delete, .btn-draft-all { font-size: 12px;
-                     padding: 1px 8px; }
+  .btn-draft-analyze, .btn-draft-delete, .btn-draft-all { font-size: var(--fs-tag);
+                     padding: 1px var(--space-2); }
   /* 参数速调（工单 param-tune/02 + param-grid/01）：参数表网格卡片流
      （名称 / 含义截断 / 改值输入 / 建议范围 / 应用按钮）+ 失效标记；
      响应式（宽屏 3 列 / 窄屏 2 列 / 手机 1 列自适应），变量色零新硬编码 */
@@ -795,8 +800,8 @@
   .param-stale { opacity: .65; }
   .param-stale-badge { background: var(--warn-dim); color: var(--warn);
                      font-size: 12px; padding: 1px 8px; }
-  .btn-params-apply { font-size: 12px; padding: 2px 10px; }
-  .btn-params-rollback { font-size: 12px; padding: 2px 10px; }
+  .btn-params-apply { font-size: var(--fs-tag); padding: 2px 10px; }
+  .btn-params-rollback { font-size: var(--fs-tag); padding: 2px 10px; }
   /* 参数卡呈现优化（工单 step11-tabs-ui/03）：单位 chip / 「当前值」小标签 /
      卡脚（↺ 恢复旧值 + 范围/单位提示行）——金属性与提示弱化为 muted 层级 */
   .param-card-head .param-unit-chip { font-size: 11px; color: var(--muted);
@@ -807,7 +812,7 @@
   .param-card-foot { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .param-card-foot .param-hint { flex: 1; min-width: 0; display: flex; gap: 8px;
       flex-wrap: wrap; }
-  .btn-params-reset { font-size: 11.5px; padding: 1px 8px; color: var(--muted);
+  .btn-params-reset { font-size: var(--fs-tag); padding: 1px var(--space-2); color: var(--muted);
       background: transparent; border: 1px dashed var(--border); white-space: nowrap; }
   .btn-params-reset:hover { color: var(--text); border-color: var(--accent); }
   /* 修订模块集 diff 卡（工单 revise-deepen/05）：added 绿 / removed 红 / unchanged 灰 */
@@ -1302,9 +1307,9 @@
     margin-top: 0.25em; width: 3px; height: 0.85em; border-radius: var(--radius-full);
     background: var(--hwcheck-title-mark); }
 
-  /* 动作三级：主（.primary 实心）/ 不可逆（.danger 红描边 + 淡红底）/ 次要（默认） */
-  #tab-hwcheck button.danger { border-color: var(--danger); background: var(--danger-dim); }
-  #tab-hwcheck button.danger:hover { background: var(--danger); color: #fff; }
+  /* 动作三级（主实心 / 危险红描边淡红底 / 次要幽灵）的口径**单源在全局那三条**
+     （工单 ui-density-sitewide/02）：这里的两条覆盖与本条逐字相同，已删——
+     两处说同一件事，将来只会改一处。 */
 
   /* 嵌在"左条 + 淡底"面板里的说明块：只换**底色**（面板本身已是 panel-2，同底会糊在一起，
      换 input-bg 才有"凹进去"的分层）并把下边距收窄——形状与外面那条共用同一份声明。 */
@@ -1383,7 +1388,7 @@
   .file-row-x { position: absolute; right: 4px; top: 4px; font-size: var(--fs-tag);
                 padding: 2px 6px; border-radius: var(--radius-sm); }
   /* 通用小按钮（polish-v2/01）：列表内「移除/删除 ✕」类小动作，统一迷你胶囊 */
-  .btn-mini { font-size: 12px; padding: 2px 8px; border-radius: var(--radius-full); }
+  .btn-mini { font-size: var(--fs-tag); padding: 2px var(--space-2); border-radius: var(--radius-full); }
   /* ---- 赛题库拆条校对表（工单 05 + topics-control-2023-2025/01）：年份 /
   题号 / 分类 / 题面四字段 + 删条目 ---- */
   .proofread-row { display: flex; gap: var(--space-2); margin-bottom: var(--space-2); align-items: flex-start; }
@@ -1749,16 +1754,16 @@
     50% { text-shadow: 0 0 24px rgba(var(--accent-rgb), .85); } }
   /* 空状态（表格行 / 独立区块两用） */
   .empty-state { display: flex; flex-direction: column; align-items: center; gap: 6px;
-                 padding: 30px 16px; text-align: center; color: var(--muted); }
+                 padding: 30px var(--space-4); text-align: center; color: var(--muted); }
   /* PDF 资料库空态撑高（工单 pdf-layout-flicker/01）：加载/空态不足一屏 →
      页面滚动条拇指消失→内容达到再出现（PDF 页是唯一空态不满屏的栏），
      视口内「内容变大→左栏被挤→闪一下」（用户反馈）；占位撑高接近视口，
      拇指常驻、空态与满表高度差不再触发滚动条切换。 */
   #pdf-rows .empty-state { min-height: calc(100vh - var(--header-h) - 210px); }
-  .empty-state .es-icon { font-size: 30px; line-height: 1; opacity: .8;
+  .empty-state .es-icon { font-size: var(--fs-icon); line-height: 1; opacity: .5;
                           filter: drop-shadow(0 0 10px rgba(var(--accent-rgb), .3)); }
-  .empty-state .es-title { font-size: 13px; font-weight: 600; color: var(--text); }
-  .empty-state .es-hint { font-size: 12px; line-height: 1.8; max-width: 400px; }
+  .empty-state .es-title { font-size: var(--fs-body); font-weight: 600; color: var(--text); }
+  .empty-state .es-hint { font-size: var(--fs-note); line-height: 1.8; max-width: 400px; }
   /* 版本更新记录卡片（工单 version-changelog/04）：版本徽章 + 日期 + 主题 +
      带语义标签的要点列表；默认只展开最新版，其余折叠（点击头部切换，折叠
      指示线 = 面板高光 + 头部 hover 用 accent-dim，与设置页折叠同族） */
@@ -1880,7 +1885,7 @@
   /* 母版库工具栏 + 导入确认弹窗（工单 master-library-ui-2/04） */
   .master-lib-toolbar { display: flex; gap: 8px; align-items: center; margin: 6px 0 10px; }
   .confirm-modal { max-width: 460px; }
-  .confirm-message { font-size: 13px; line-height: 1.7; white-space: pre-wrap;
+  .confirm-message { font-size: var(--fs-body); line-height: 1.7; white-space: pre-wrap;
                      padding: 10px 14px; }
   .import-platform-field { margin-top: var(--space-3); }
   .import-platform-field label { font-size: var(--fs-body); font-weight: 600; display: block;
@@ -3246,12 +3251,12 @@
                      align-items: center; justify-content: center; padding: var(--space-6);
                      background: rgba(4, 8, 12, .82); }
   #service-stopped[hidden] { display: none; }   /* display:flex 会盖掉 [hidden] 的默认值 */
-  .service-stopped-box { max-width: 540px; padding: 20px 22px; border: 1px solid var(--border-strong);
+  .service-stopped-box { max-width: 540px; padding: var(--space-5) 22px; border: 1px solid var(--border-strong);
                      border-radius: var(--radius-md); background: var(--panel);
                      box-shadow: var(--shadow-pop); }
-  .service-stopped-box h2 { margin: 0 0 10px; font-size: 16px; color: var(--text); }
-  .service-stopped-box p { margin: 0 0 10px; font-size: 13px; line-height: 1.7; color: var(--text); }
-  .service-stopped-box code { font-family: var(--mono); font-size: 12px;
+  .service-stopped-box h2 { margin: 0 0 10px; font-size: var(--fs-page); color: var(--text); }
+  .service-stopped-box p { margin: 0 0 10px; font-size: var(--fs-body); line-height: 1.7; color: var(--text); }
+  .service-stopped-box code { font-family: var(--mono); font-size: var(--fs-note);
                      padding: 1px 5px; border-radius: var(--radius-xs); background: var(--code-bg); color: var(--code-text); }
   .service-stopped-box .muted { margin-bottom: 0; }
   /* Toast 轻通知（工单 ui-polish-3/03）：右上角堆叠，2.5s 自动淡出。
@@ -3260,28 +3265,28 @@
   #toast-root { position: fixed; top: calc(var(--header-h) + 14px); right: 14px; z-index: 200;
                 display: flex; flex-direction: column; gap: var(--space-2);
                 max-width: 340px; }
-  .toast { display: flex; align-items: center; gap: 8px; padding: 9px 12px;
-           border-radius: var(--radius-md); font-size: 13px; background: var(--panel);
+  .toast { display: flex; align-items: center; gap: var(--space-2); padding: 9px var(--space-3);
+           border-radius: var(--radius-md); font-size: var(--fs-body); background: var(--panel);
            border: 1px solid var(--border); color: var(--text);
            box-shadow: var(--shadow-toast);
            animation: toast-in var(--dur-slow) var(--ease-ui),
                       toast-out var(--dur-slow) var(--ease-ui) 2.2s forwards; }
   /* 长错误 toast 的「复制」按钮（工单 ux-walkthrough-02/11）：点击写入剪贴板 */
-  .toast-copy { flex: none; margin-left: 2px; padding: 2px 10px; font-size: 11px;
+  .toast-copy { flex: none; margin-left: 2px; padding: 2px 10px; font-size: var(--fs-tag);
                 border-radius: var(--radius-full); border: 1px solid var(--border);
                 background: var(--panel); color: var(--accent); cursor: pointer; }
   .toast-copy:hover { border-color: var(--accent); }
   /* 删除类操作「撤销」按钮（工单 ux-walkthrough-02/15）：点击执行并收起 */
-  .toast-action { flex: none; margin-left: 2px; padding: 2px 10px; font-size: 11px;
+  .toast-action { flex: none; margin-left: 2px; padding: 2px 10px; font-size: var(--fs-tag);
                   border-radius: var(--radius-full); border: 1px solid var(--border);
                   background: var(--panel); color: var(--ok); cursor: pointer; }
   .toast-action:hover { border-color: var(--ok); }
   /* 长任务秒表（工单 ux-walkthrough-02/12）：状态行后「已等待 mm:ss」 */
-  .wait-clock { display: inline-block; margin-left: 6px; font-size: 11px;
+  .wait-clock { display: inline-block; margin-left: 6px; font-size: var(--fs-tag);
                 color: var(--muted); white-space: nowrap; }
   /* 长任务取消按钮（工单 ux-walkthrough-02/14）：状态行旁胶囊，点击中止请求 */
-  .wait-cancel { display: inline-block; margin-left: 8px; padding: 2px 10px;
-                 font-size: 11px; border-radius: var(--radius-full);
+  .wait-cancel { display: inline-block; margin-left: var(--space-2); padding: 2px 10px;
+                 font-size: var(--fs-tag); border-radius: var(--radius-full);
                  border: 1px solid var(--border); background: var(--panel);
                  color: var(--warn); cursor: pointer; }
   .wait-cancel:hover { border-color: var(--warn); }
@@ -3293,10 +3298,10 @@
   .toast.error .toast-ico { color: var(--danger); }
   .toast.info { border-left: 3px solid var(--accent); background: var(--accent-dim); }
   .toast.info .toast-ico { color: var(--accent); }
-  .toast .toast-ico { font-weight: 700; font-size: 14px; flex: none; }
+  .toast .toast-ico { font-weight: 700; font-size: var(--fs-body); flex: none; }
   .toast .toast-text { flex: 1; }
   .toast .toast-close { border: none; background: none; cursor: pointer;
-                        color: var(--muted); font-size: 14px; padding: 0 2px; }
+                        color: var(--muted); font-size: var(--fs-body); padding: 0 2px; }
   .toast .toast-close:hover { color: var(--text); }
   @keyframes toast-in { from { opacity: 0; transform: translateX(16px); }
                         to { opacity: 1; transform: none; } }

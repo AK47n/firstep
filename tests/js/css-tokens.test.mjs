@@ -162,7 +162,7 @@ const FONT_ROLES = [
   ["--fs-body", "14px", "正文 / 表单 / 表格 / 行内主字"],
   ["--fs-note", "13px", "次要说明 / .muted / 时间戳 / 表头"],
   ["--fs-tag", "12px", "徽章 / 标签 / 极小字"],
-  ["--fs-icon", "22px", "装饰性图标（空态 emoji、关闭 ✕）"],
+  ["--fs-icon", "22px", "**大号**装饰图标（空态 emoji）——行内小图标随正文走 --fs-body"],
 ];
 
 /**
@@ -199,11 +199,12 @@ const PAGE_SCOPES = [
  * **页面尺**：还没做完的作用域。每 resole 一单摘掉对应的一条（合并单一次摘几条）。
  * 摘完 = 全站推广完成——**这张表空掉的时候，"全站一套台阶"才成立**。
  *
- * 已摘：`shell`（工单 01，全局文本基类 + 外壳）。
+ * 已摘：`shell`（工单 01，全局文本基类 + 外壳）、`components`（工单 02，按钮 / 徽章 / chip /
+ * 提示条 / 空态 / 弹层外壳）。
  */
 const SITEWIDE_BACKLOG = new Set([
   "code", "master", "settings", "changelog", "guide", "library", "reference",
-  "pdf", "md", "topic", "generate", "components",
+  "pdf", "md", "topic", "generate",
 ]);
 
 /**
@@ -307,6 +308,23 @@ function bareFontSizesSitewide(css) {
   return [...new Set([...css.matchAll(/font-size:\s*([0-9.]+)px/g)].map((m) => m[1]))];
 }
 
+/** 去掉选择器**前面**那段块注释（这个样式块里大量规则是"注释 + 选择器"同段写的）。 */
+function stripLeadComments(sel) {
+  return sel.replace(/^(\/\*[\s\S]*?\*\/\s*)+/, "").trim();
+}
+
+/** 某条规则的选择器 → 声明块**列表**（有的选择器被有意覆盖多次，如 `button.primary` 的渐变版）。 */
+function ruleBodies(css, selector) {
+  const hit = cssRulesCached(css).filter(({ sel }) => stripLeadComments(sel) === selector);
+  assert.ok(hit.length > 0, `找不到规则 \`${selector}\``);
+  return hit.map(({ body }) => body);
+}
+
+/** 该选择器下**至少有一条**规则满足此判据。 */
+function ruleMatches(css, selector, re) {
+  return ruleBodies(css, selector).some((body) => re.test(body));
+}
+
 test("全站推广：字号角色表是**有限六档**，且页面里的 --fs-* 定义与它逐条一致", () => {
   const defined = [...html.matchAll(/(--fs-[a-z-]+):\s*([0-9.]+px)/g)].map((m) => [m[1], m[2]]);
   const names = defined.map(([n]) => n);
@@ -348,6 +366,28 @@ test("工单 03：全站裸字号集合只许减不许增（冻结清单）", ()
   assert.deepEqual(added, [],
     "出现了冻结清单外的裸字号。要么改用 --fs-* 令牌，要么把它登记进 FROZEN_FONT_SIZES "
     + "并写清为什么非它不可：" + added.join(", "));
+});
+
+test("全站推广：动作三级的口径**单源**（主实心 / 危险红描边淡红底 / 次要幽灵）", () => {
+  // 口径来自检测页样板（ui-density/02），全站推广轮（02 单）把它升到全局
+  assert.ok(ruleMatches(html, "button.primary", /background: var\(--accent\)/),
+    "主操作 = 实心 accent");
+  assert.ok(ruleMatches(html, "button.danger", /border-color: var\(--danger\)/),
+    "不可逆动作 = 红描边");
+  assert.ok(ruleMatches(html, "button.danger", /background: var\(--danger-dim\)/),
+    "不可逆动作 = 淡红底");
+  assert.ok(ruleMatches(html, "button.danger:hover", /background: var\(--danger\)/),
+    "不可逆动作悬停 = 实心红");
+  assert.ok(ruleMatches(html, "button.ghost", /background: transparent/),
+    "次要动作 = 幽灵（透明底）");
+  assert.ok(/class="[^"]*\bghost\b/.test(html), "ghost 类要真的被元素用到——否则又是死类");
+  // **单源**：不许再出现"带页面前缀的 danger 覆盖"（两处说同一件事，将来只会改一处）。
+  // 先剥掉选择器前那段注释——这文件里大量规则是"注释 + 选择器"同段写的，
+  // 注释里提到 `#tab-xxx` 或 danger 会**假红**（本轮实测踩过一次）。
+  const scoped = cssRulesCached(html)
+    .map(({ sel }) => stripLeadComments(sel))
+    .filter((sel) => /\bdanger\b/.test(sel) && /#tab-/.test(sel));
+  assert.deepEqual(scoped, [], "危险动作的口径只该有一处（全局那三条）");
 });
 
 test("全站推广合成红证：四条腿各自都判得红（防'永远绿'的守卫）", () => {
