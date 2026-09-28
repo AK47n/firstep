@@ -1,0 +1,21 @@
+scope         rules  bareFont  borders  bareSpace
+code            365        66       67         84
+master           64        20       11         20
+settings         40        10        8         10
+changelog        13         6        2          4
+guide            29        10        6         15
+library          98        32       19         24
+reference        46        14        7          8
+pdf              14         1        0          1
+md               15         2        1          3
+topic            45        14        4         15
+generate        409         0       58          0
+hwcheck         122         0       19          0
+components       95         0       13          0
+shell           228         0       26          0
+合计             1583       175      241        184
+
+页面尺 SITEWIDE_BACKLOG = 10 条（还剩这些没做完）：code, master, settings, changelog, guide, library, reference, pdf, md, topic
+          已完工 = 4 条：generate, hwcheck, components, shell
+另有内联 style 属性里的裸字号 0 处（不在样式块里，见 --kind inline）
+全站 font-size 声明总处数（样式块 + 内联）: 175；裸样式块内 175

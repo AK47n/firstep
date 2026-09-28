@@ -84,6 +84,19 @@ def strip_style(text: str) -> str:
     return re.sub(r"<style>.*?</style>", "", text, flags=re.S)
 
 
+def blank_inline_styles(text: str) -> str:
+    """把**内联 `style="…"` 的属性值**抹成空串（标签、类名、文案一律不动）。
+
+    为什么（工单 ui-density-sitewide/03 补）：spec 把"文案零删除"的口径写得很准——
+    **剥掉内联 `style=` 串之后逐字节相同**（改动面明确允许动 `static/js/**` 与标记里那
+    31 处内联取值）。而本探针原先按**原始行**做 diff：01 单把那 31 处内联 `font-size`
+    换成令牌之后，凡是"同一行里既有中文文案又有内联取值"的行都被报成"删了文案"
+    （14 行，01/02 两份读数里都挂着"契约对账 **失败**"，而票尾写的是"0 行"——
+    两者对不上，是探针口径漏了这一层，不是产品删了字）。
+    抹掉取值之后，"文案真的少了一句"照样会以"被删行"冒出来，判据没有被削弱。"""
+    return re.sub(r'style="[^"]*"', 'style=""', text)
+
+
 def strip_comments(text: str) -> str:
     """去掉 HTML 注释。
 
@@ -96,12 +109,13 @@ def strip_comments(text: str) -> str:
 def diff_removed_lines(before: str, after: str) -> list[str]:
     """改前后逐行 diff 里"被删掉且含中文"的**标记行**（文案零删除的判据）。
 
-    样式块先剥掉（见 `strip_style`），因此这里剩下的中文只可能是页面文案。"""
+    样式块先剥掉（见 `strip_style`）、内联 `style=` 的取值先抹平（见 `blank_inline_styles`），
+    因此这里剩下的中文只可能是页面文案。"""
     import difflib
 
     removed: list[str] = []
-    b = strip_style(before).splitlines()
-    a = strip_style(after).splitlines()
+    b = blank_inline_styles(strip_style(before)).splitlines()
+    a = blank_inline_styles(strip_style(after)).splitlines()
     for line in difflib.unified_diff(b, a, lineterm="", n=0):
         if not line.startswith("-") or line.startswith("---"):
             continue

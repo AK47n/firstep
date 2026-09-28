@@ -39,7 +39,9 @@ test("窄屏 ≤900px 媒体查询：顶栏分组换行 + 生成卡收紧 + 工�
   assert.ok(narrow, "应存在基础窄屏媒体块");
   const css = narrow[1];
   assert.match(css, /\.tab-group \{ flex-wrap: wrap; \}/, "顶栏分组换行");
-  assert.match(css, /#tab-generate \.gen-steps > \.card \{ padding: 14px 16px; \}/, "生成卡收紧");
+  // 口径随全站推广轮改（ui-density-sitewide/03）：16px 就是 --space-4，裸写等于令牌的
+  // 数值在本轮被守卫判红（css-tokens.test.mjs 的逐页腿），故按令牌形式认——**语义没变**。
+  assert.match(css, /#tab-generate \.gen-steps > \.card \{ padding: 14px var\(--space-4\); \}/, "生成卡收紧");
   assert.match(css, /\.lib-toolbar \{ gap: 6px; \}/, "库工具栏收窄");
   // 口径随全站推广轮改（ui-density-sitewide/01）：12px 就是 --space-3，
   // 裸写等于令牌的数值在本轮被守卫判红（css-tokens.test.mjs 的逐页腿），

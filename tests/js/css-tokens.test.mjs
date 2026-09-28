@@ -173,23 +173,32 @@ const FONT_ROLES = [
  * 谓词按**这族类名是谁渲染的**写（拿 `static/js/**` 里出现的位置核），别按"看着像哪页"猜：
  * 兜底会把猜错的那些悄悄吞进 `shell`，而 `shell` 一旦做完，它们就再没人看着（评审实测：
  * 第一版漏了 `.tok-*`/`.gp-*`/`.rec-*`/`.card-group`/`.proofread-*` 等十余族）。
+ * 03 单再审一遍（**按渲染方逐族核过**）：
+ *   · `\.recent-` 把**设置页**「最近 LLM 工作流」的 `.recent-wf-*`（渲染方 = `ui/settings.js`）
+ *     吞进了生成页 —— 改成 `\.recent-(?!wf-)`，`\.recent-wf-` 挂到 `settings`；
+ *   · `\.quick-*`（Ctrl+P 快速打开浮层）渲染方是**代码页**（`ui/quick-open.js` 的
+ *     `if (!codeTabActive()) return`）—— 从生成页挪到 `code`；
+ *   · `\.topic-` 把**生成页第 2 步**那块预读面板（`#topic-preread-box`，渲染方 =
+ *     `ui/generate-recommend.js` + `fx/topic-preread.js`）判给了赛题库 ——
+ *     改成 `\.topic-(?!preread)`，`\.topic-preread` 挂到 `generate`。
+ *   （类名前缀不是归属判据："这块讲的是赛题"和"这块在赛题库页"是两件事。）
  *
  * 格式固定（`["id", /正则/],` 一行一条，正则里不出现 `/`）：
  * `.scratch/ui-density-sitewide/probe-01-scope-draft.py` 按同一份表解析出读数，
  * 改这里就等于改读数的尺子（两处不一致会当场看出来）。
  */
 const PAGE_SCOPES = [
-  ["code", /#tab-code|#code-|\.code-|\.codeeditor|\.cx-|\.change-|\.diff-|\.line-|\.tok-/],
+  ["code", /#tab-code|#code-|\.code-|\.codeeditor|\.cx-|\.change-|\.diff-|\.line-|\.tok-|\.quick-/],
   ["master", /#tab-master|\.master-|\.prog-|\.decision|\.distill|\.stepper|\.rel-tag|\.import-platform-field/],
-  ["settings", /#tab-settings|\.settings-|\.env-|\.delivery|\.materials-|\.update-|\.disk-/],
+  ["settings", /#tab-settings|\.settings-|\.env-|\.delivery|\.materials-|\.update-|\.disk-|\.recent-wf-/],
   ["changelog", /#tab-changelog|\.release-/],
   ["guide", /#tab-guide|\.guide-|\.glossary/],
   ["library", /#tab-library|\.lib-|\.module-|\.mc-|\.mi-|\.add-|\.file-row/],
   ["reference", /#tab-reference|\.ref-/],
   ["pdf", /#tab-pdf|\.pdf-/],
   ["md", /#tab-md|\.md-/],
-  ["topic", /#tab-topic|\.topic-|\.proofread/],
-  ["generate", /\.step-|\.task-|\.tasks-|\.res-|\.pin-|\.sugg-|\.ov-|\.score-|\.param|\.group-|\.card-group|\.mainc-|\.revise|\.quick-|\.wiring|\.gen-|\.gp-|\.preread|\.recent-|\.rec-|\.rc-|\.sp-|\.draft-|\.skeleton|\.llm-|\.fix-|\.slug|\.instance-|\.readiness-check/],
+  ["topic", /#tab-topic|\.topic-(?!preread)|\.proofread/],
+  ["generate", /\.step-|\.task-|\.tasks-|\.res-|\.pin-|\.sugg-|\.ov-|\.score-|\.param|\.group-|\.card-group|\.mainc-|\.revise|\.wiring|\.gen-|\.gp-|\.preread|\.topic-preread|\.recent-(?!wf-)|\.rec-|\.rc-|\.sp-|\.draft-|\.skeleton|\.llm-|\.fix-|\.slug|\.instance-|\.readiness-check/],
   ["hwcheck", /#tab-hwcheck|\.hwcheck-|\.my-device-/],
   ["components", /\.btn|\.badge|\.chip|\.toast|\.item\b|\.spinner|\.wait-|\.service-stopped|\.empty-state|\.es-|\.overlay|\.confirm|\.modal|\.dialog/],
   ["shell", /./],
@@ -200,11 +209,14 @@ const PAGE_SCOPES = [
  * 摘完 = 全站推广完成——**这张表空掉的时候，"全站一套台阶"才成立**。
  *
  * 已摘：`shell`（工单 01，全局文本基类 + 外壳）、`components`（工单 02，按钮 / 徽章 / chip /
- * 提示条 / 空态 / 弹层外壳）。
+ * 提示条 / 空态 / 弹层外壳）、`generate`（工单 03，生成页：**110** 处裸字号 / **106** 处
+ * 裸令牌间距清零 + 24 处内层完整描边改语言——整圈完整描边 53 → 31，31 条全在申报的例外里）。
+ * （`generate` 的两处计数与本文件头上那句「111 处」差在 `.recent-wf-*` 那一处：它归设置页，
+ * 03 单把谓词按渲染方改对之后就不再算在生成页头上。）
  */
 const SITEWIDE_BACKLOG = new Set([
   "code", "master", "settings", "changelog", "guide", "library", "reference",
-  "pdf", "md", "topic", "generate",
+  "pdf", "md", "topic",
 ]);
 
 /**

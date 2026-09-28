@@ -193,3 +193,10 @@ DebugConfig/
 !.scratch/ui-density-sitewide/shots/02b-after-dark-settings-top.png
 !.scratch/ui-density-sitewide/shots/02b-after-dark-topic-top.png
 !.scratch/ui-density-sitewide/shots/02b-after-dark-topic-full.png
+# 03 单（生成页）：改前 / 改后整页对照 + 首屏 + 「已生成」态（后三张由
+# probe-02b-shot-generated.mjs 真发一次生成拍出来，题面留空 = 零 LLM）
+!.scratch/ui-density-sitewide/shots/03-before-dark-generate-full.png
+!.scratch/ui-density-sitewide/shots/03-after-dark-generate-top.png
+!.scratch/ui-density-sitewide/shots/03-after-dark-generate-full.png
+!.scratch/ui-density-sitewide/shots/03-after-dark-generate-generated-result.png
+!.scratch/ui-density-sitewide/shots/03-after-dark-generate-generated-full.png

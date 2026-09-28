@@ -41,7 +41,10 @@ test("直接修正面板 renderIdeaFixResult 保留（不绑任务卡，网格�
 });
 
 test("index.html 含 .task-changes 样式（details 容器 + 背景 + summary 指针）", () => {
-  assert.match(html, /\.task-changes \{ margin-top: var\(--space-2\); border: 1px solid var\(--border\);/);
+  // 口径随全站推广轮改（ui-density-sitewide/03）：`.task-changes` 是任务卡**内层**的
+  // 折叠面板，"一屏一层完整描边"要求内层去框（留 --panel-2 淡底）——断言的"details 容器
+  // 存在 + 有背景 + summary 有指针"这三件事没变，只是整圈描边换成了 `border: none`。
+  assert.match(html, /\.task-changes \{ margin-top: var\(--space-2\); border: none;/);
   assert.match(html, /\.task-changes > summary \{ cursor: pointer;/);
   assert.match(html, /\.task-changes-body \{/);
 });
