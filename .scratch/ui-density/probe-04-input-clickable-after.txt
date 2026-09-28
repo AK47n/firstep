@@ -1,0 +1,26 @@
+--- [generate] 扫到控件样本 177 次（去重 12 个）
+--- [hwcheck] 扫到控件样本 10 次（去重 5 个）
+--- [library] 扫到控件样本 16 次（去重 9 个）
+--- [reference] 扫到控件样本 2 次（去重 2 个）
+--- [pdf] 扫到控件样本 2 次（去重 2 个）
+--- [md] 扫到控件样本 2 次（去重 2 个）
+--- [topic] 扫到控件样本 5 次（去重 4 个）
+--- [master] 扫到控件样本 1 次（去重 1 个）
+--- [settings] 扫到控件样本 5 次（去重 5 个）
+--- [changelog] 扫到控件样本 0 次（去重 0 个）
+--- [guide] 扫到控件样本 0 次（去重 0 个）
+--- [code] 扫到控件样本 2 次（去重 1 个）
+
+== 打开编辑态后再扫 ==
+  「+ 我的器件」表单打开后，视口内控件 7 个
+
+== ① 被盖住的控件 ==
+  ✗ generate|input#.|
+      取样点 (298,941) 最上层是 <div id="" class="card" pointer-events=auto>
+      3 个取样点里被盖 3 个
+
+== ③ readonly / disabled（不是「点不动」，但用户看到的现象一样）==
+  · generate|input#output-dir.|例如 D:\contest\demo [disabled]
+
+== 结论（after）==
+  去重控件 50 个 / 被盖住 1 个 / readonly|disabled 1 个

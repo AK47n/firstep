@@ -2028,3 +2028,40 @@ test("结构钉：检测页头副标题如实说明这一栏能做什么（陈�
   assert.ok(navBtn[0].includes("器件"), "导航 title 应说到能选器件：" + navBtn[0]);
 });
 
+// ---------------------------------------------------------------------------
+// 两个入口锚（工单 ui-density/04）：用户「想代入选器件 / 引入自己创建的模块，
+// 找了才发现原来在下面」。判据三条腿——**入口在不在、指向对不对、跳得准不准**；
+// 第三条（跳得准）在浏览器用例 `tests/browser/hwcheck.spec.mjs` 里，这里管前两条。
+// ---------------------------------------------------------------------------
+
+test("工单 04：步骤 3 顶上两个入口锚存在，且 href 指向真有的目标 id", () => {
+  const at = html.indexOf('class="hwcheck-jump-row"');
+  assert.ok(at > 0, "缺少两个入口锚 .hwcheck-jump-row");
+  // 位置：必须在「3. 要测的器件」标题之下——用户就是在那一步找不到入口的
+  const h3 = html.indexOf("3. 要测的器件");
+  assert.ok(h3 > 0 && h3 < at, "两个入口锚应在「3. 要测的器件」标题之下");
+  const row = html.slice(at, html.indexOf("</div>", at));
+  for (const [href, label] of [["#hwcheck-device-search", "挑库内器件"],
+    ["#my-devices", "登记我的器件"]]) {
+    assert.ok(row.includes(`href="${href}"`), `入口锚应指向 ${href}——实际：${row}`);
+    assert.ok(row.includes(label), `入口锚应有「${label}」字样——实际：${row}`);
+    assert.ok(html.includes(`id="${href.slice(1)}"`), `目标 id ${href} 必须在页面里存在`);
+  }
+});
+
+test("工单 04：跳转尊重黏顶栏（scroll-margin-top），高亮由 :target 纯 CSS 给出", () => {
+  // 黏顶栏会盖住滚动目标：不设 scroll-margin-top 的话，跳过去正好被 header 压住
+  assert.match(html, /#hwcheck-device-search[^{]*\{[^}]*scroll-margin-top/,
+    "目标应有 scroll-margin-top（给黏顶栏留位）");
+  for (const id of ["hwcheck-device-search", "my-devices", "hwcheck-device-grid"]) {
+    assert.ok(new RegExp(`#${id}:target`).test(html), `${id} 应有 :target 高亮规则`);
+  }
+  // 原生 href 打底：无 JS / 键盘 / 读屏都能跳
+  assert.ok(html.includes('href="#hwcheck-device-search"')
+    && html.includes('href="#my-devices"'), "两个入口必须是原生 <a href=\"#id\">");
+  // **刻意不写 JS**：`:target` 与原生锚点就能给的东西，不该往 ui 四件里塞分支——
+  // 那四件有"接线 + 两个导出"的形状钉，与一份按行对账的搬迁台账（hwcheck-split-integrity）。
+  assert.ok(!hwcheckUiText().includes("hwcheck-jump"),
+    "入口锚不该需要 JS：原生 href + CSS :target 就够（见 index.html 那条注释）");
+});
+

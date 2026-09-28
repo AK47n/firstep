@@ -12,12 +12,16 @@
 | `issues/01-type-and-space-scale.md` | 工单 01：字台阶梯 + 间距阶梯（检测页落地） |
 | `issues/02-unbox-and-emphasis.md` | 工单 02：拆「框套框」+ 让重点会跳 |
 | `issues/03-guard-and-evidence.md` | 工单 03：防回退守卫 + 前后对照证据 |
+| `issues/04-find-device-entry.md` | 工单 04：「挑器件 / 登记我的器件」入口藏太深（用户报的"点不动"结案在这张） |
 | `probe-01-type-census.py` | 排版碎片化读数（字号分布 / 间距令牌引用），改前改后同一把尺子 |
 | `probe-01-before.txt` / `probe-01-after.txt` | 上面那支探针的两次读数 |
-| `probe-03-contract.py` | 契约机械对账（id 集合 / DOM 标签顺序 / 中文文案零删除） |
-| `probe-03-contract.txt` | 对账读数 |
+| `probe-03-contract.py` | 契约机械对账（id 集合 / 既有元素顺序 / 中文文案零删除） |
+| `probe-03-contract.txt` / `probe-03-contract-02.txt` | 对账读数（01 / 02 两轮） |
+| `probe-04-input-clickable.mjs` | 「输入框点不动」的判据：12 页签滚到底，每个控件三点取样 + 真打字 |
+| `probe-04-input-clickable-*.txt` | 上面那支探针的读数（结论：**点击面没坏**，是入口藏太深 → 工单 04） |
+| `probe-05-covered-detail.mjs` | 把唯一那个"被盖住"的控件挖开看（一次性诊断件） |
 | `probe-02-shot.mjs` | 真浏览器整页截图（真后端夹具，端口内核分配、跑完自收） |
-| `shots/` | `before-*` / `after-*` × 暗/亮 × 空态/选了器件 × 首屏/整页 |
+| `shots/` | `before-*` / `02b-after-*` / `04-after-*` × 暗/亮 × 空态/选了器件 × 首屏/整页 |
 
 ## 怎么复跑
 

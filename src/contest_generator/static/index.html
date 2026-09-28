@@ -1306,6 +1306,30 @@
                                #hwcheck-project, #hwcheck-checklist, #hwcheck-recent)
                            > :is(.muted, .empty-state, .hwcheck-hint):only-child) h2::before {
     background: var(--border-strong); }
+  /* 两个入口锚（工单 ui-density/04）：把「从哪挑件 / 从哪登记自己的件」放到步骤 3 顶上。
+     为什么不是又写一句说明：可发现性问题的正解是**看得见的入口**，不是让人往下找。 */
+  #tab-hwcheck .hwcheck-jump-row { display: flex; flex-wrap: wrap; align-items: center;
+    gap: var(--space-2); margin: var(--space-2) 0; }
+  #tab-hwcheck .hwcheck-jump { display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border: 1px solid var(--border-strong);
+    border-radius: var(--radius-full); background: var(--panel-2); color: var(--accent);
+    font-size: var(--fs-note); text-decoration: none; cursor: pointer; }
+  #tab-hwcheck .hwcheck-jump:hover { border-color: var(--accent); background: var(--accent-dim); }
+  /* 跳过去之后目标块短暂高亮：光滚过去，用户不一定认得出"就是这一块"。
+     **纯 CSS 的 `:target`**——锚点导航本来就是浏览器原生的，这里一行 JS 都不加
+     （理由：`ui/hwcheck.js` 的"接线 + 两个导出"形状有结构钉守着，为一个呈现效果
+     塞一个新分支，等于给那份搬迁台账动手脚；原生能给的东西就不写代码）。 */
+  #tab-hwcheck #hwcheck-device-search:target,
+  #tab-hwcheck #my-devices:target,
+  #tab-hwcheck #hwcheck-device-grid:target { animation: hwcheck-flash 1.6s var(--ease-ui); }
+  @keyframes hwcheck-flash {
+    0% { box-shadow: 0 0 0 3px var(--accent-dim); }
+    100% { box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0); }
+  }
+  /* 黏顶栏会盖住滚动目标：锚点跳转与 scrollIntoView 都要给顶栏留出那一条 */
+  #tab-hwcheck #hwcheck-device-search, #tab-hwcheck #my-devices,
+  #tab-hwcheck #hwcheck-device-grid { scroll-margin-top: calc(var(--header-h) + 16px); }
+
   /* 评分点核对清单（工单 score-checklist/01）：逐条 checkbox + 进度 +
      复制核对表；done 行弱化描边表示已核对 */
   .sp-actions { display: flex; align-items: center; gap: 10px; margin-bottom: var(--space-2); }
@@ -4177,6 +4201,15 @@
       </div>
       <div id="hwcheck-channel-note"></div>
       <h3>3. 要测的器件 <span class="muted">（选上就看得见接线表与默认脚冲突）</span></h3>
+      <!-- 两个入口锚（工单 ui-density/04）：用户原话「想代入选器件 / 引入自己创建的模块，
+           找了才发现原来在下面」——「挑器件」那一整块（搜索 + 器件网格）在卡片最下面，
+           还在「带进生成页」下面；「+ 我的器件」也夹在中间。这里给两个**看得见的入口**：
+           纯原生 `<a href="#id">`（无 JS / 键盘 / 读屏都能跳）+ CSS `:target` 高亮，
+           **一行 JS 都不加**——理由见样式块里那条注释。 -->
+      <div class="hwcheck-jump-row">
+        <a class="hwcheck-jump" href="#hwcheck-device-search">↓ 挑库内器件</a>
+        <a class="hwcheck-jump" href="#my-devices">↓ 登记我的器件</a>
+      </div>
       <div id="hwcheck-device-chips" class="row"></div>
       <!-- 已被删掉、却仍留在选择集里的自建件说明（工单 ci-gate-fixes/09）：服务端
            装配时把那几件摘掉了（否则整页 400「库中不存在模块：mine_xxx」），这里如实

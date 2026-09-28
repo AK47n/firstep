@@ -1605,3 +1605,59 @@ test("动作进行中按钮禁用：预览按住时「预览」按钮是看得�
   await page.waitForFunction(
     () => !document.getElementById("btn-hwcheck-preview").disabled, undefined, { timeout: 30000 });
 });
+
+test("两个入口锚（工单 ui-density/04）：首屏就看得见，点了真跳到目标块并高亮一下", async () => {
+  // 这一条为什么必须有：用户报的是「输入框点不动」，查下来**点击面没坏**——是
+  // 「挑器件 / 登记我的器件」两块在卡片最下面，他往下翻了半天才找到。判据只能是
+  // 真浏览器里的**几何**：① 不滚动就能看见；② 点了目标块真进视口（且在黏顶栏之下）；
+  // ③ 高亮由 `:target` 那条 CSS 给出（不写 JS——原生锚点就够）。
+  //
+  // ⚠ **刻意不调 `openTab()`**（本文件其余用例都用它开新页）：这个文件共用一张 page，
+  // 而一次整页 `goto` 会**打断上一条用例里尚未结算的路由桩**——实测：那会让本文件在收尾时
+  // 抛 `route.continue: Route is already handled!`（unhandledRejection → **文件级**判红，
+  // 而每条用例自己都是绿的，最容易被读成"随机红"）。这里只切页签 + 回顶部。
+  if (!(await page.isVisible("#tab-hwcheck"))) {
+    await page.click(HWCHECK_TAB);
+    await page.waitForSelector("#tab-hwcheck", { state: "visible" });
+  }
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForSelector(".hwcheck-jump-row .hwcheck-jump");
+
+  // ① 首屏可见（在黏顶栏之下、视口之内）
+  const seen = await page.evaluate(() => {
+    const headerBottom = document.querySelector("header").getBoundingClientRect().bottom;
+    return [...document.querySelectorAll(".hwcheck-jump-row .hwcheck-jump")].map((a) => {
+      const r = a.getBoundingClientRect();
+      return { text: a.textContent.trim(),
+        inView: r.top >= headerBottom && r.bottom <= innerHeight && r.height > 0 };
+    });
+  });
+  assert.equal(seen.length, 2, "应有两个入口锚，实际：" + JSON.stringify(seen));
+  for (const one of seen) {
+    assert.ok(one.inView, `「${one.text}」应在首屏可见区内（用户不必往下翻）`);
+  }
+
+  // ② 点了真跳 + ③ 高亮由 `:target` 那条 CSS 给出（不写 JS——原生锚点就够）
+  for (const [label, sel] of [["挑库内器件", "#hwcheck-device-search"],
+    ["登记我的器件", "#my-devices"]]) {
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(150);
+    await page.click(`.hwcheck-jump-row .hwcheck-jump:has-text("${label}")`);
+    // ① 目标成为 URL 片段目标（`:target` 命中 = 浏览器确实把这一跳给了它）
+    await page.waitForFunction((s) => {
+      const el = document.querySelector(s);
+      return !!el && el.matches(":target");
+    }, sel, { timeout: 5000 });
+    // ② 高亮规则真的作用在它身上（钉"规则命中"，不钉"动画跑过没有"——后者会看时序脸）
+    const anim = await page.evaluate((s) => getComputedStyle(document.querySelector(s)).animationName, sel);
+    assert.equal(anim, "hwcheck-flash", `${sel} 应有 :target 高亮，实测 animationName=${anim}`);
+    // ③ 目标进视口，且**不被黏顶栏压住**（scroll-margin-top 那条规矩）
+    await page.waitForFunction((s) => {
+      const el = document.querySelector(s);
+      if (!el) return false;
+      const r = el.getBoundingClientRect();
+      const headerBottom = document.querySelector("header").getBoundingClientRect().bottom;
+      return r.top >= headerBottom - 2 && r.top < innerHeight - 40;
+    }, sel, { timeout: 5000 });
+  }
+});
