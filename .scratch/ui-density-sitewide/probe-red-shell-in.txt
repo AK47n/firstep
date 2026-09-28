@@ -1,0 +1,105 @@
+# 读数：probe-red-shell-in
+# 命令：node --test tests/js/css-tokens.test.mjs
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-28T19:35:04+08:00
+# 退出码：1
+✔ :root 含令牌 --radius-xs/sm/md/lg/full 与 --space-1..6 (1.2388ms)
+✔ 可见字号无 13.5 / 10.5 / 10px 裸值（12.5/11/11.5 保留） (0.6027ms)
+✔ border-radius 全走令牌：无裸 3/4/6/8/10/12/99/999px（50% 与 0 保留） (14.7595ms)
+✔ 工具类 .mt-2/4/6/8 与 .flex-1 已定义 (1.2078ms)
+✔ 按钮四类（.btn 基类 + 三类形态）已定义且有实际使用 (0.6777ms)
+✔ 主题裸色已令牌化：绿完成族 / 渐变端 / 深字 / 紫端 / 电源 / tok 全族无裸值（仅允许出现在令牌定义行） (3.2545ms)
+✔ 令牌无自引用循环（评审整改：--accent-hi 等曾被脚本写成 var(自身) → 计算值失效） (0.3694ms)
+✔ 间距魔法值收敛：margin-top / margin-bottom 无 2/3/5/7/9/10/14px 裸值（1px 发丝线例外） (14.4665ms)
+✔ 全站推广：字号角色表是**有限六档**，且页面里的 --fs-* 定义与它逐条一致 (0.3434ms)
+✔ 全站推广：分区表是全覆盖、不重叠的划分（兜底在最后、每条谓词都真的命中） (3676.1807ms)
+✖ 全站推广：已完工作用域裸 px 字号 = 0（逐页过腿） (372.5269ms)
+✔ 全站推广：已完工作用域里等于令牌的间距值不许裸写 (2.5745ms)
+✖ 工单 03：全站裸字号集合只许减不许增（冻结清单） (0.4842ms)
+✖ 全站推广合成红证：四条腿各自都判得红（防'永远绿'的守卫） (647.6355ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 11
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4807.1087
+
+✖ failing tests:
+
+test at tests\js\css-tokens.test.mjs:303:1
+✖ 全站推广：已完工作用域裸 px 字号 = 0（逐页过腿） (372.5269ms)
+  AssertionError [ERR_ASSERTION]: 这些已完工的作用域又出现裸 px 字号了（新写的请改用 --fs-* 令牌）：
+  [shell] .card h3 → 17px
+  + actual - expected
+  
+  + [
+  +   '[shell] .card h3 → 17px'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file:///C:/Users/luoji/Desktop/firstep/tests/js/css-tokens.test.mjs:308:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+      at Test.postRun (node:internal/test_runner/test:1330:19)
+      at Test.run (node:internal/test_runner/test:1258:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ '[shell] .card h3 → 17px' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests\js\css-tokens.test.mjs:321:1
+✖ 工单 03：全站裸字号集合只许减不许增（冻结清单） (0.4842ms)
+  AssertionError [ERR_ASSERTION]: 出现了冻结清单外的裸字号。要么改用 --fs-* 令牌，要么把它登记进 FROZEN_FONT_SIZES 并写清为什么非它不可：17
+  + actual - expected
+  
+  + [
+  +   '17'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file:///C:/Users/luoji/Desktop/firstep/tests/js/css-tokens.test.mjs:323:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+      at Test.postRun (node:internal/test_runner/test:1330:19)
+      at Test.run (node:internal/test_runner/test:1258:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ '17' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests\js\css-tokens.test.mjs:328:1
+✖ 全站推广合成红证：四条腿各自都判得红（防'永远绿'的守卫） (647.6355ms)
+  AssertionError [ERR_ASSERTION]: 冻结清单外的新字号没被判出
+  + actual - expected
+  
+    [
+  +   '17',
+      '13.75'
+    ]
+  
+      at TestContext.<anonymous> (file:///C:/Users/luoji/Desktop/firstep/tests/js/css-tokens.test.mjs:344:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+      at Test.postRun (node:internal/test_runner/test:1330:19)
+      at Test.run (node:internal/test_runner/test:1258:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ '17', '13.75' ],
+    expected: [ '13.75' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

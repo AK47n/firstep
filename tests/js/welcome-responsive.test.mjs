@@ -41,7 +41,10 @@ test("窄屏 ≤900px 媒体查询：顶栏分组换行 + 生成卡收紧 + 工�
   assert.match(css, /\.tab-group \{ flex-wrap: wrap; \}/, "顶栏分组换行");
   assert.match(css, /#tab-generate \.gen-steps > \.card \{ padding: 14px 16px; \}/, "生成卡收紧");
   assert.match(css, /\.lib-toolbar \{ gap: 6px; \}/, "库工具栏收窄");
-  assert.match(css, /main \{ padding: 0 12px; \}/, "内容边距减小");
+  // 口径随全站推广轮改（ui-density-sitewide/01）：12px 就是 --space-3，
+  // 裸写等于令牌的数值在本轮被守卫判红（css-tokens.test.mjs 的逐页腿），
+  // 所以这里断言的"边距减小"改按令牌形式认——**语义没变**。
+  assert.match(css, /main \{ padding: 0 var\(--space-3\); \}/, "内容边距减小");
   // 评审整改：全局 .card 收紧属越界（窄屏只保生成区与导航），不得出现
   assert.doesNotMatch(css, /^\s*\.card \{ padding:/m, "不改全站 .card");
 });

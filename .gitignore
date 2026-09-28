@@ -170,3 +170,19 @@ DebugConfig/
 !.scratch/ui-density/shots/before-light-picked-full.png
 !.scratch/ui-density/shots/06-after-dark-picked-full.png
 !.scratch/ui-density/shots/06-after-light-picked-full.png
+
+# ui-density-**全站推广轮**（`.scratch/ui-density-sitewide/`）的逐页截图：
+# 一键可重出（`probe-02-shot.mjs`，真浏览器 + 真后端夹具），首屏 ~150 KB / 整页 ~500 KB；
+# 12 个页签 × 明暗 × 前后全量会有几 MB —— **默认不入库**，
+# 只留每单结论里点名的那几张（逐条白名单，别写成"这轮截图入库"那种一句概括）。
+.scratch/ui-density-sitewide/shots/*
+!.scratch/ui-density-sitewide/shots/00-before-dark-generate-top.png
+!.scratch/ui-density-sitewide/shots/01-after-dark-generate-top.png
+!.scratch/ui-density-sitewide/shots/00-before-dark-settings-top.png
+!.scratch/ui-density-sitewide/shots/01-after-dark-settings-top.png
+!.scratch/ui-density-sitewide/shots/00-before-dark-library-top.png
+!.scratch/ui-density-sitewide/shots/01-after-dark-library-top.png
+!.scratch/ui-density-sitewide/shots/00-before-dark-code-top.png
+!.scratch/ui-density-sitewide/shots/01-after-dark-code-top.png
+!.scratch/ui-density-sitewide/shots/01-after-dark-generate-full.png
+!.scratch/ui-density-sitewide/shots/01-after-dark-settings-full.png

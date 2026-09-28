@@ -1,7 +1,9 @@
 // tests/js/css-tokens.test.mjs — CSS 令牌化守卫（工单 ux-walkthrough-02/20/21）：
 // ①:root 定义 --radius-*/--space-*；②可见文本字号无 13.5/10.5/10px 裸值；
 // ③border-radius 全部走令牌（var(--radius-*)）或圆形 50%/0（无裸 3/4/6/8/10/12/99/999）；
-// ④工具类 .mt-2/4/6/8/.flex-1 已定义。静态标记守卫，直接读 index.html。
+// ④工具类 .mt-2/4/6/8/.flex-1 已定义。
+// ⑤排版契约：字号角色表（六档）+ 页面分区表 + 逐页腿 + 进度尺（SITEWIDE_BACKLOG /
+//   FROZEN_FONT_SIZES）——见文件下半部分那两段说明块。静态标记守卫，直接读 index.html。
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -109,27 +111,92 @@ test("间距魔法值收敛：margin-top / margin-bottom 无 2/3/5/7/9/10/14px �
 });
 
 // ===========================================================================
-// 检测页排版契约（工单 ui-density/03）
+// 排版契约：令牌纪律 + 逐页腿（检测页 ui-density/03 → 全站 ui-density-sitewide/01）
 //
 // **为什么加在这里、不另起一个文件**：这一族守的就是"取值必须走令牌"（圆角 / margin /
-// 字号），字号那条腿属于同一族。02 实测过：本轮我一写裸 `border-radius: 2px` 就被本文件
+// 字号），字号那条腿属于同一族。上一轮 02 实测过：一写裸 `border-radius: 2px` 就被本文件
 // 当场判红——那正是它该干的事；把字号另立一个文件，等于把"令牌纪律"劈成两处。
 //
 // **它挡的坏法**（都是真实发生过的，不是假想）：
-//   · 02 在 `#tab-hwcheck` 里写了 `font-size: 22px`（空态图标）——**当场把 01 已勾选的
+//   · 上一轮 02 在 `#tab-hwcheck` 里写了 `font-size: 22px`（空态图标）——**当场把 01 已勾选的
 //     「检测页样式段里不再出现一次性字号」打假**，而当时没有守卫看着这一类；
-//   · 04 写了 `#tab-hwcheck .card { padding: 20px 24px }` / `.hwcheck-jump { padding: 5px 12px }`
+//   · 上一轮 04 写了 `#tab-hwcheck .card { padding: 20px 24px }` / `.hwcheck-jump { padding: 5px 12px }`
 //     ——数值明明等于 `--space-5/6/3`，裸写之后"间距六档"这句话就不是机器可验的了。
 //
-// **它不判什么**（边界写清，免得被当成"什么都管"）：不判"好不好看"，不判非令牌取值的
-// 多寡（这一页本来就有 9/10/14px 这类细内边距，属既有习惯），只判"该走令牌的走了没有"。
+// **它不判什么**（边界写清，免得被当成"什么都管"）：不判"好不好看"，不判"一屏一层描边"，
+// 不判非令牌取值的多寡（页面上本来就有 9/10/14px 这类细内边距，属既有习惯），
+// 只判"该走令牌的走了没有"。
 // ===========================================================================
 
 /** 令牌数值集（单源 = `:root` 的 --space-1..6）。 */
 const SPACE_TOKEN_VALUES = new Set([4, 8, 12, 16, 20, 24]);
 
-/** 检测页那一面：`#tab-hwcheck` 作用域，或这一栏自己那两个类名前缀。 */
-const HWCHECK_SCOPE_RE = /#tab-hwcheck|\.hwcheck-|\.my-device-/;
+// ===========================================================================
+// 全站推广轮：字号角色表 + 页面分区表 + 逐页腿（工单 ui-density-sitewide/01）
+//
+// **为什么要有分区表**：上一轮的守卫只有一条腿——`#tab-hwcheck|.hwcheck-|.my-device-`
+// （检测页样板那 30 处）。全站还有 12 个页签、356 处裸字号，而"**哪一页还没做、
+// 哪一页退化了**"没有任何机器判据——上一轮 02 就是在这个缝里写下 `font-size: 22px`，
+// 把 01 已勾选的验收打假的。所以这一轮先立尺子再动手。
+//
+// **两条进度尺，各自单调**：
+//   · **页面尺** `SITEWIDE_BACKLOG`：还没做完的作用域，每 resole 一单摘一条；
+//   · **取值尺** `FROZEN_FONT_SIZES`：全站裸字号取值集合——某个取值**在全站彻底消失**
+//     才摘得掉，所以它主要在收尾单清零；清零即"全站零裸 px 字号"。
+//
+// **它不判什么**：不判"好不好看"；不判"一屏一层描边"（一条边框是分组框还是可点控件 /
+// 语义告警块，机器判不了——那条靠每单的逐层清单 + 人眼看图）；也不判非令牌取值的多寡。
+// ===========================================================================
+
+/**
+ * 字号角色表（**单源**）：一档一个角色，改这里 = 改全站台阶。
+ * 与 `.scratch/ui-density-sitewide/spec.md` 的「字号角色表」一节必须一致。
+ */
+const FONT_ROLES = [
+  ["--fs-page", "20px", "页面 / 卡片标题、弹层大标题"],
+  ["--fs-block", "16px", "小节标题、主按钮字、欢迎语标题"],
+  ["--fs-body", "14px", "正文 / 表单 / 表格 / 行内主字"],
+  ["--fs-note", "13px", "次要说明 / .muted / 时间戳 / 表头"],
+  ["--fs-tag", "12px", "徽章 / 标签 / 极小字"],
+  ["--fs-icon", "22px", "装饰性图标（空态 emoji、关闭 ✕）"],
+];
+
+/**
+ * **有序分区表**：`[作用域 id, 谓词]`。**页面在前、兜底在后**，第一条命中的赢；
+ * 最后一条是 catch-all（`/./`），因此这张表是样式块的一个**全覆盖、不重叠**的划分
+ * ——"哪一页归哪一单"因此是单源、可复核的。
+ *
+ * 格式固定（`["id", /正则/],` 一行一条，正则里不出现 `/`）：
+ * `.scratch/ui-density-sitewide/probe-01-scope-draft.py` 按同一份表解析出读数，
+ * 改这里就等于改读数的尺子（两处不一致会当场看出来）。
+ */
+const PAGE_SCOPES = [
+  ["code", /#tab-code|\.code-|\.codeeditor|\.cx-|\.change-|\.diff-|\.line-/],
+  ["master", /#tab-master|\.master-|\.prog-|\.decision|\.distill|\.stepper/],
+  ["settings", /#tab-settings|\.settings-|\.env-|\.delivery|\.materials-|\.update-|\.disk-/],
+  ["changelog", /#tab-changelog|\.release-/],
+  ["guide", /#tab-guide|\.guide-|\.glossary/],
+  ["library", /#tab-library|\.lib-|\.module-|\.mc-|\.mi-|\.add-/],
+  ["reference", /#tab-reference|\.ref-/],
+  ["pdf", /#tab-pdf|\.pdf-/],
+  ["md", /#tab-md|\.md-/],
+  ["topic", /#tab-topic|\.topic-/],
+  ["generate", /\.step-|\.task-|\.res-|\.pin-|\.sugg-|\.ov-|\.score-|\.param|\.group-|\.mainc-|\.revise|\.quick-|\.wiring|\.gen-|\.preread|\.recent-|\.rc-|\.sp-|\.draft-|\.skeleton|\.llm-|\.fix-|\.slug/],
+  ["hwcheck", /#tab-hwcheck|\.hwcheck-|\.my-device-/],
+  ["components", /\.btn|\.badge|\.chip|\.toast|\.item\b|\.spinner|\.wait-|\.service-stopped|\.empty-state|\.es-|\.overlay|\.confirm|\.modal|\.dialog/],
+  ["shell", /./],
+];
+
+/**
+ * **页面尺**：还没做完的作用域。每 resole 一单摘掉对应的一条（合并单一次摘几条）。
+ * 摘完 = 全站推广完成——**这张表空掉的时候，"全站一套台阶"才成立**。
+ *
+ * 已摘：`shell`（工单 01，全局文本基类 + 外壳）。
+ */
+const SITEWIDE_BACKLOG = new Set([
+  "code", "master", "settings", "changelog", "guide", "library", "reference",
+  "pdf", "md", "topic", "generate", "components",
+]);
 
 /**
  * 全站裸 px 字号的**冻结清单**（工单 03 落地那一刻的实况：13 种）。
@@ -149,23 +216,42 @@ function cssRules(css) {
   return out;
 }
 
-const inHwcheckScope = (sel) => HWCHECK_SCOPE_RE.test(sel);
+/** 同一份源码只解析一次（分区表那条自检要按作用域反复取规则，1581 条 × 14 次太慢）。 */
+const _rulesCache = new Map();
+function cssRulesCached(css) {
+  if (!_rulesCache.has(css)) _rulesCache.set(css, cssRules(css));
+  return _rulesCache.get(css);
+}
 
-/** 检测页那一段里**裸写的 px 字号**（应为空——全部走 `--fs-*`）。 */
-function bareFontSizesInHwcheck(css) {
+/** 规则归谁：分区表里**第一条命中的**作用域（兜底 = 表最后一条，因此恒有归属）。 */
+function scopeOf(sel) {
+  for (const [id, re] of PAGE_SCOPES) if (re.test(sel)) return id;
+  return PAGE_SCOPES[PAGE_SCOPES.length - 1][0];
+}
+
+/** 某个作用域名下的规则（做完了的作用域要逐条过腿）。 */
+function rulesInScope(css, id) {
+  return cssRulesCached(css).filter(({ sel }) => scopeOf(sel) === id);
+}
+
+/** 已完工的作用域（= 分区表里不在进度清单上的那些）；上一轮的检测页走的是这里。 */
+function doneScopes() {
+  return PAGE_SCOPES.map(([id]) => id).filter((id) => !SITEWIDE_BACKLOG.has(id));
+}
+
+/** 某个作用域里**裸写的 px 字号**（做完的作用域应为空——全部走 `--fs-*`）。 */
+function bareFontSizesInScope(css, id) {
   const out = [];
-  for (const { sel, body } of cssRules(css)) {
-    if (!inHwcheckScope(sel)) continue;
+  for (const { sel, body } of rulesInScope(css, id)) {
     for (const m of body.matchAll(/font-size:\s*([0-9.]+)px/g)) out.push(`${sel} → ${m[1]}px`);
   }
   return out;
 }
 
-/** 检测页那一段里**等于令牌却裸写**的 padding / margin / gap 值（应为空）。 */
-function bareTokenSpacesInHwcheck(css) {
+/** 某个作用域里**等于令牌却裸写**的 padding / margin / gap 值（做完的作用域应为空）。 */
+function bareTokenSpacesInScope(css, id) {
   const out = [];
-  for (const { sel, body } of cssRules(css)) {
-    if (!inHwcheckScope(sel)) continue;
+  for (const { sel, body } of rulesInScope(css, id)) {
     for (const m of body.matchAll(/(?:padding|margin|gap)(?:-top|-right|-bottom|-left)?:\s*([^;]+);/g)) {
       for (const n of m[1].matchAll(/(\d+)px/g)) {
         if (SPACE_TOKEN_VALUES.has(Number(n[1]))) out.push(`${sel} → ${n[1]}px（应走 --space-*）`);
@@ -180,16 +266,56 @@ function bareFontSizesSitewide(css) {
   return [...new Set([...css.matchAll(/font-size:\s*([0-9.]+)px/g)].map((m) => m[1]))];
 }
 
-test("工单 03：检测页样式段裸 px 字号 = 0（全部走 --fs-* 令牌）", () => {
-  assert.deepEqual(bareFontSizesInHwcheck(html), [],
-    "检测页段还有裸 px 字号——02 的 `font-size: 22px` 就是这么把 01 的验收打假的："
-    + bareFontSizesInHwcheck(html).join(" ｜ "));
+test("全站推广：字号角色表是**有限六档**，且页面里的 --fs-* 定义与它逐条一致", () => {
+  const defined = [...html.matchAll(/(--fs-[a-z-]+):\s*([0-9.]+px)/g)].map((m) => [m[1], m[2]]);
+  const names = defined.map(([n]) => n);
+  assert.equal(new Set(names).size, names.length, "同一个 --fs-* 定义了两次：" + names.join(", "));
+  assert.deepEqual(
+    names.slice().sort(),
+    FONT_ROLES.map(([n]) => n).slice().sort(),
+    "页面里的 --fs-* 与角色表对不上——加档位要先改角色表（并写清为什么六档不够），"
+    + "否则'有限台阶'这句话就不是机器可验的了",
+  );
+  for (const [name, value] of FONT_ROLES) {
+    const hit = defined.find(([n]) => n === name);
+    assert.equal(hit && hit[1], value, `${name} 的值应是 ${value}（实际 ${hit && hit[1]}）`);
+  }
 });
 
-test("工单 03：检测页样式段里等于令牌的间距值不许裸写", () => {
-  assert.deepEqual(bareTokenSpacesInHwcheck(html), [],
-    "这些值等于 --space-* 却裸写，'间距走令牌'就不是机器可验的了："
-    + bareTokenSpacesInHwcheck(html).join(" ｜ "));
+test("全站推广：分区表是全覆盖、不重叠的划分（兜底在最后、每条谓词都真的命中）", () => {
+  const ids = PAGE_SCOPES.map(([id]) => id);
+  assert.equal(new Set(ids).size, ids.length, "作用域 id 重复：" + ids.join(", "));
+  const last = PAGE_SCOPES[PAGE_SCOPES.length - 1];
+  assert.equal(last[0], "shell", "最后一条必须是兜底（shell）");
+  assert.ok(last[1].test("随便一个选择器"), "兜底谓词必须命中任意选择器");
+  for (const id of SITEWIDE_BACKLOG) {
+    assert.ok(ids.includes(id), "进度清单里有分区表不认识的作用域：" + id);
+  }
+  // 每条非兜底谓词都要真的命中规则——否则它守的那条腿会**静默空转**
+  // （类名被改名 / 谓词写错时，腿照样绿，而它本该看着的东西没人看）
+  for (const [id, re] of PAGE_SCOPES) {
+    if (id === "shell") continue;
+    const n = cssRules(html).filter(({ sel }) => re.test(sel)).length;
+    assert.ok(n > 0, `作用域 ${id} 一条规则都没命中——谓词写错了，或者它守的类名被改名了`);
+  }
+});
+
+test("全站推广：已完工作用域裸 px 字号 = 0（逐页过腿）", () => {
+  const bad = [];
+  for (const id of doneScopes()) {
+    for (const line of bareFontSizesInScope(html, id)) bad.push(`[${id}] ${line}`);
+  }
+  assert.deepEqual(bad, [],
+    "这些已完工的作用域又出现裸 px 字号了（新写的请改用 --fs-* 令牌）：\n" + bad.join("\n"));
+});
+
+test("全站推广：已完工作用域里等于令牌的间距值不许裸写", () => {
+  const bad = [];
+  for (const id of doneScopes()) {
+    for (const line of bareTokenSpacesInScope(html, id)) bad.push(`[${id}] ${line}`);
+  }
+  assert.deepEqual(bad, [],
+    "这些值等于 --space-* 却裸写（'间距走令牌'在已完工的页面上必须成立）：\n" + bad.join("\n"));
 });
 
 test("工单 03：全站裸字号集合只许减不许增（冻结清单）", () => {
@@ -199,25 +325,30 @@ test("工单 03：全站裸字号集合只许减不许增（冻结清单）", ()
     + "并写清为什么非它不可：" + added.join(", "));
 });
 
-test("工单 03 合成红证：三条腿各自都判得红（防'永远绿'的守卫）", () => {
-  // ① 检测页段塞一个越界字号（锚点取自真实源码；锚变了就当场报——不让自检静默空转）
+test("全站推广合成红证：四条腿各自都判得红（防'永远绿'的守卫）", () => {
+  // ① 已完工作用域（检测页）塞一个越界字号——锚点取自真实源码，锚变了就当场报，
+  //    不让这条自检静默空转
   const fontAnchor = "#tab-hwcheck .card h2 { font-size: var(--fs-page);";
   assert.ok(html.includes(fontAnchor), `锚点变了（${fontAnchor}）—— 这条自检会静默空转`);
   const badFont = html.replace(fontAnchor, "#tab-hwcheck .card h2 { font-size: 19px;");
-  assert.equal(bareFontSizesInHwcheck(badFont).length, 1, "越界字号没被判出");
+  assert.ok(bareFontSizesInScope(badFont, "hwcheck").length === 1, "越界字号没被判出");
   // ② 把卡片内边距改回裸写
   const spaceAnchor = "padding: var(--space-5) var(--space-6);";
   assert.ok(html.includes(spaceAnchor), `锚点变了（${spaceAnchor}）—— 这条自检会静默空转`);
   const badSpace = html.replace(spaceAnchor, "padding: 20px 24px;");
-  assert.equal(bareTokenSpacesInHwcheck(badSpace).length, 2, "裸的令牌值没被判出（应报 20 与 24 两处）");
-  // ③ 全站新字号
-  const newFontAnchor = ".muted { color: var(--muted); font-size: 12px; }";
+  assert.equal(bareTokenSpacesInScope(badSpace, "hwcheck").length, 2, "裸的令牌值没被判出（应报 20 与 24 两处）");
+  // ③ 全站新字号（走 .muted 那条规则：改后它是 var(--fs-note)，注入一个清单外的裸值）
+  const newFontAnchor = ".muted { color: var(--muted); font-size: var(--fs-note); }";
   assert.ok(html.includes(newFontAnchor), `锚点变了（${newFontAnchor}）—— 这条自检会静默空转`);
   const badNew = html.replace(newFontAnchor, ".muted { color: var(--muted); font-size: 13.75px; }");
   assert.deepEqual(bareFontSizesSitewide(badNew).filter((v) => !FROZEN_FONT_SIZES.has(v)),
     ["13.75"], "冻结清单外的新字号没被判出");
-  // ④ 复原后转绿（三条腿都回到空/子集）
-  assert.deepEqual(bareFontSizesInHwcheck(html), []);
-  assert.deepEqual(bareTokenSpacesInHwcheck(html), []);
+  // ④ 分区表自检：把兜底挪到最前面，非兜底作用域就再也分不到规则（形状自检必须红）
+  const movedBackdrop = PAGE_SCOPES.slice(0, -1).every(([, re]) => !re.test("zzz-nothing"));
+  assert.ok(movedBackdrop, "非兜底谓词不该命中任意选择器——它们必须是有区分度的");
+  // ⑤ 复原后转绿（四条腿都回到空/子集）
+  assert.deepEqual(badFont && bareFontSizesInScope(html, "hwcheck"), []);
+  assert.deepEqual(bareTokenSpacesInScope(html, "hwcheck"), []);
   assert.deepEqual(bareFontSizesSitewide(html).filter((v) => !FROZEN_FONT_SIZES.has(v)), []);
+  for (const id of doneScopes()) assert.deepEqual(bareFontSizesInScope(html, id), []);
 });
