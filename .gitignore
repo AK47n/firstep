@@ -200,3 +200,11 @@ DebugConfig/
 !.scratch/ui-density-sitewide/shots/03-after-dark-generate-full.png
 !.scratch/ui-density-sitewide/shots/03-after-dark-generate-generated-result.png
 !.scratch/ui-density-sitewide/shots/03-after-dark-generate-generated-full.png
+# 04 单（代码页）：空态首屏 / 整页 + 「打开了一个工程」态的改前 / 改后整页对照
+# （有内容那两张由 probe-02c-shot-code-open.mjs 真生成一个最小工程再 openCodeViewer 拍出来，
+#  题面留空 = 零 LLM；改前那张是同一支脚本跑在 76daca48 的 index.html 上拍的）
+!.scratch/ui-density-sitewide/shots/04-after-dark-code-top.png
+!.scratch/ui-density-sitewide/shots/04-after-dark-code-full.png
+!.scratch/ui-density-sitewide/shots/04-before-dark-code-open-full.png
+!.scratch/ui-density-sitewide/shots/04-after-dark-code-open-full.png
+!.scratch/ui-density-sitewide/shots/04-after-dark-code-open-shortcuts.png

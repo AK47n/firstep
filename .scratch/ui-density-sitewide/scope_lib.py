@@ -14,7 +14,8 @@ Duplicated Code。**03 那四支已经跑完、锚点已被消费掉**，回头�
 用法：
     import sys, pathlib
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-    from scope_lib import PAGE, GUARD, SCOPE_GENERATE, load_scopes, scope_of, rules_of, bare_fonts
+    from scope_lib import (PAGE, GUARD, load_scopes, scope_of, rules_of, rules_in,
+                           read_page, write_page, bare_fonts, bare_token_spaces, full_borders)
 """
 
 from __future__ import annotations
@@ -31,6 +32,11 @@ FONT_RE = re.compile(r"font-size:\s*([0-9.]+)px")
 SPACE_RE = re.compile(r"(?:padding|margin|gap)(?:-top|-right|-bottom|-left)?:\s*([^;]+);")
 SPACE_TOKEN = {4: "--space-1", 8: "--space-2", 12: "--space-3",
                16: "--space-4", 20: "--space-5", 24: "--space-6"}
+# **整圈完整框**（03 单立的施工口径）：完整 `border:` 声明、值不是 none/0。
+# ⚠ 它**不是**探针 `--kind borders` 那一栏：那边把单边分隔线（`border-top: 1px dashed`）
+# 与 `border: 0` 也算进去，所以"74 处描边"从来不是"74 个盒子"（03 单账第 1 条）。
+FULL_BORDER_RE = re.compile(r"(?<![\w-])border:\s*([^;]+);")
+DEAD_BORDER = ("none", "0")
 
 
 def load_scopes() -> list[tuple[str, re.Pattern[str]]]:
@@ -107,4 +113,25 @@ def bare_token_spaces(text: str, scope: str) -> list[tuple[int, str, str]]:
             for n in re.findall(r"(\d+)px", m.group(1)):
                 if int(n) in SPACE_TOKEN:
                     out.append((line, sel, n))
+    return out
+
+
+def full_borders(text: str, scope: str | None = None) -> list[tuple[int, str, str]]:
+    """**整圈完整框**：完整 `border:` 声明且值不是 none/0 → [(行号, 选择器, 取值)]。
+
+    `scope=None` = 全站（跨作用域）。施工脚本（FIX/KEEP 两张表的对账）与取证探针
+    **共用这一处**——03 单的 apply-03c 把它写在脚本里、04 单的取证脚本又抄了一份，
+    04 单评审按 README「公共件从 scope_lib import」把口径提到这里（apply-04c 已执行完、
+    不回头改写；05–07 起的新脚本一律用本函数）。
+    """
+    scopes = load_scopes()
+    out: list[tuple[int, str, str]] = []
+    for line, sel, b0, b1 in rules_of(text):
+        if scope is not None and scope_of(sel, scopes) != scope:
+            continue
+        for m in FULL_BORDER_RE.finditer(text[b0:b1]):
+            value = m.group(1).strip()
+            if value.split()[0] in DEAD_BORDER:
+                continue
+            out.append((line, sel, value))
     return out

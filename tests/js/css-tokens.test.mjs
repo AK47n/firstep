@@ -152,8 +152,11 @@ const SPACE_TOKEN_VALUES = new Set([4, 8, 12, 16, 20, 24]);
  * 字号角色表（**单源**）：一档一个角色，改这里 = 改全站台阶。
  * 与 `.scratch/ui-density-sitewide/spec.md` 的「字号角色表」一节必须一致。
  *
- * **唯一的相对单位例外**：装饰性字形（行号 gutter 的上标、✕ 这类）写 `em`（随父级缩放），
- * 不进令牌表——上标的正确写法本来就是相对的。本守卫按 **px 取值**判，em 天然不在它射程内：
+ * **相对单位例外（写 `em`，随父级缩放）——两例，都是装饰性字形**（与 spec 同一份口径）：
+ * ① `.badge` 邻域那个 8px 上标星号（上标的正确写法本来就是相对的）；
+ * ② 编译错误行的 ● 色点 `.code-gutter-line.code-err-line::after`（04 单，`8px → .62em`）
+ *    ——gutter 字号是 `--code-font-size`、跟着 Ctrl+滚轮缩放，写死 px 放大后会缩成一个小点。
+ * 不进令牌表。本守卫按 **px 取值**判，em 天然不在它射程内：
  * 这条边界是刻意写下的，**不是**给裸 px 留后门（写 `font-size: 8px` 照样判红）。
  */
 const FONT_ROLES = [
@@ -210,12 +213,19 @@ const PAGE_SCOPES = [
  *
  * 已摘：`shell`（工单 01，全局文本基类 + 外壳）、`components`（工单 02，按钮 / 徽章 / chip /
  * 提示条 / 空态 / 弹层外壳）、`generate`（工单 03，生成页：**110** 处裸字号 / **106** 处
- * 裸令牌间距清零 + 24 处内层完整描边改语言——整圈完整描边 53 → 31，31 条全在申报的例外里）。
+ * 裸令牌间距清零 + 24 处内层完整描边改语言——整圈完整描边 53 → 31，31 条全在申报的例外里）、
+ * `code`（工单 04，代码页：**66** 处裸字号 / **84** 处取值（64 条声明）裸令牌间距清零，
+ * 另把编辑器字号基准 `--code-font-size` 改成从 `--fs-note` 派生、md 预览根字号从 `--fs-body`
+ * 派生；整圈完整描边 **24 → 19**，5 处内层盒去框，19 条全在申报的例外里）。
  * （`generate` 的两处计数与本文件头上那句「111 处」差在 `.recent-wf-*` 那一处：它归设置页，
  * 03 单把谓词按渲染方改对之后就不再算在生成页头上。）
+ * （`code` 的 66 处里含 **5 处渲染方其实在生成页**（`.code-wrap` / `.code-zoom`，main.c 编辑器
+ * 与它的缩放工具条）与 **2 处跨页共享件**（`.diff-*`：代码页 + 生成页都用）—— 谓词按
+ * "第一命名页"归了 `code`，04 单把它们就地令牌化、**没有改谓词**（改了会当场把 `generate`
+ * 那条腿打红）；它们照样在腿③的射程里（`code` 已完工）。细则见工单 04 的「账」。）
  */
 const SITEWIDE_BACKLOG = new Set([
-  "code", "master", "settings", "changelog", "guide", "library", "reference",
+  "master", "settings", "changelog", "guide", "library", "reference",
   "pdf", "md", "topic",
 ]);
 
@@ -227,9 +237,11 @@ const SITEWIDE_BACKLOG = new Set([
  * 的闸）。已摘：
  *   · `16`（02 单：`.card h2` → `--fs-page`、`.service-stopped-box h2` → `--fs-page`）
  *   · `30`（02 单：`.empty-state .es-icon` → `--fs-icon`）
+ *   · `8`（04 单：代码页 gutter 的 ● 编译错误色点 `8px` → `.62em`——装饰字形随行号缩放；
+ *     它是全站最后一处 `8px`，改完实测 0 处）
  */
 const FROZEN_FONT_SIZES = new Set([
-  "8", "11", "11.5", "12", "12.5", "13", "14", "15", "16.5", "18", "20",
+  "11", "11.5", "12", "12.5", "13", "14", "15", "16.5", "18", "20",
 ]);
 
 /** 规则块（`选择器 { 声明 }`）：返回 [{ sel, body }]。 */
@@ -416,12 +428,20 @@ test("全站推广：动作三级的口径**单源**（主实心 / 危险红描�
 });
 
 test("全站推广合成红证：四条腿各自都判得红（防'永远绿'的守卫）", () => {
-  // ① 已完工作用域（检测页）塞一个越界字号——锚点取自真实源码，锚变了就当场报，
-  //    不让这条自检静默空转
-  const fontAnchor = "#tab-hwcheck .card h2 { font-size: var(--fs-page);";
-  assert.ok(html.includes(fontAnchor), `锚点变了（${fontAnchor}）—— 这条自检会静默空转`);
-  const badFont = html.replace(fontAnchor, "#tab-hwcheck .card h2 { font-size: 19px;");
-  assert.equal(bareFontSizesInScope(badFont, "hwcheck").length, 1, "越界字号没被判出");
+  // ① 已完工作用域各塞一个越界字号——**锚点只取规则头（不带令牌值）**，锚变了就当场报，
+  //    不让这条自检静默空转。两个作用域：
+  //      · `hwcheck` = 上一轮的样板页（腿③最早看着的那一页）；
+  //      · `code` = 04 单刚摘掉进度尺的那一页——**摘尺 ≠ 腿跟着走**，它得真在射程里。
+  //    ⚠ 锚点**别带令牌值**：04 单的整改把 `.code-pane-title` 的 `--fs-block` 换成 `--fs-note`，
+  //    带令牌的锚点当场判红（"这条自检会静默空转"）——它做得对，但下一次换令牌还会误报。
+  for (const [scope, head] of [
+    ["hwcheck", "#tab-hwcheck .card h2 {"],
+    ["code", ".code-pane-title { font-weight: 650;"],
+  ]) {
+    assert.ok(html.includes(head), `锚点变了（${head}）—— 这条自检会静默空转`);
+    const bad = html.replace(head, `${head} font-size: 19px;`);
+    assert.equal(bareFontSizesInScope(bad, scope).length, 1, `${scope} 作用域的越界字号没被判出`);
+  }
   // ② 把卡片内边距改回裸写
   const spaceAnchor = "padding: var(--space-5) var(--space-6);";
   assert.ok(html.includes(spaceAnchor), `锚点变了（${spaceAnchor}）—— 这条自检会静默空转`);
