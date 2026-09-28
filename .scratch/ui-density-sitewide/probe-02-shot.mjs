@@ -14,6 +14,7 @@
 //     node .scratch/ui-density-sitewide/probe-02-shot.mjs 01-after            # 暗色，全部页签
 //     node .scratch/ui-density-sitewide/probe-02-shot.mjs 09-light light      # 浅色，全部页签
 //     node .scratch/ui-density-sitewide/probe-02-shot.mjs 03-dark dark generate,topic
+//     $env:SHOT_WIDTH=1024; node .scratch/ui-density-sitewide/probe-02-shot.mjs 01-narrow dark generate,settings
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,7 +25,7 @@ const HERE = fileURLToPath(new URL("./", import.meta.url));
 const OUT = join(HERE, "shots");
 const TAG = process.argv[2] || "shot";
 const THEME = process.argv[3] || "dark";
-const VIEWPORT = { width: 1600, height: 1000 };
+const VIEWPORT = { width: Number(process.env.SHOT_WIDTH || 1600), height: 1000 };
 const ALL_TABS = [
   "generate", "hwcheck", "topic", "code", "settings",
   "library", "reference", "pdf", "md", "master", "guide", "changelog",

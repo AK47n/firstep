@@ -151,6 +151,10 @@ const SPACE_TOKEN_VALUES = new Set([4, 8, 12, 16, 20, 24]);
 /**
  * 字号角色表（**单源**）：一档一个角色，改这里 = 改全站台阶。
  * 与 `.scratch/ui-density-sitewide/spec.md` 的「字号角色表」一节必须一致。
+ *
+ * **唯一的相对单位例外**：装饰性字形（行号 gutter 的上标、✕ 这类）写 `em`（随父级缩放），
+ * 不进令牌表——上标的正确写法本来就是相对的。本守卫按 **px 取值**判，em 天然不在它射程内：
+ * 这条边界是刻意写下的，**不是**给裸 px 留后门（写 `font-size: 8px` 照样判红）。
  */
 const FONT_ROLES = [
   ["--fs-page", "20px", "页面 / 卡片标题、弹层大标题"],
@@ -166,22 +170,26 @@ const FONT_ROLES = [
  * 最后一条是 catch-all（`/./`），因此这张表是样式块的一个**全覆盖、不重叠**的划分
  * ——"哪一页归哪一单"因此是单源、可复核的。
  *
+ * 谓词按**这族类名是谁渲染的**写（拿 `static/js/**` 里出现的位置核），别按"看着像哪页"猜：
+ * 兜底会把猜错的那些悄悄吞进 `shell`，而 `shell` 一旦做完，它们就再没人看着（评审实测：
+ * 第一版漏了 `.tok-*`/`.gp-*`/`.rec-*`/`.card-group`/`.proofread-*` 等十余族）。
+ *
  * 格式固定（`["id", /正则/],` 一行一条，正则里不出现 `/`）：
  * `.scratch/ui-density-sitewide/probe-01-scope-draft.py` 按同一份表解析出读数，
  * 改这里就等于改读数的尺子（两处不一致会当场看出来）。
  */
 const PAGE_SCOPES = [
-  ["code", /#tab-code|\.code-|\.codeeditor|\.cx-|\.change-|\.diff-|\.line-/],
-  ["master", /#tab-master|\.master-|\.prog-|\.decision|\.distill|\.stepper/],
+  ["code", /#tab-code|#code-|\.code-|\.codeeditor|\.cx-|\.change-|\.diff-|\.line-|\.tok-/],
+  ["master", /#tab-master|\.master-|\.prog-|\.decision|\.distill|\.stepper|\.rel-tag|\.import-platform-field/],
   ["settings", /#tab-settings|\.settings-|\.env-|\.delivery|\.materials-|\.update-|\.disk-/],
   ["changelog", /#tab-changelog|\.release-/],
   ["guide", /#tab-guide|\.guide-|\.glossary/],
-  ["library", /#tab-library|\.lib-|\.module-|\.mc-|\.mi-|\.add-/],
+  ["library", /#tab-library|\.lib-|\.module-|\.mc-|\.mi-|\.add-|\.file-row/],
   ["reference", /#tab-reference|\.ref-/],
   ["pdf", /#tab-pdf|\.pdf-/],
   ["md", /#tab-md|\.md-/],
-  ["topic", /#tab-topic|\.topic-/],
-  ["generate", /\.step-|\.task-|\.res-|\.pin-|\.sugg-|\.ov-|\.score-|\.param|\.group-|\.mainc-|\.revise|\.quick-|\.wiring|\.gen-|\.preread|\.recent-|\.rc-|\.sp-|\.draft-|\.skeleton|\.llm-|\.fix-|\.slug/],
+  ["topic", /#tab-topic|\.topic-|\.proofread/],
+  ["generate", /\.step-|\.task-|\.tasks-|\.res-|\.pin-|\.sugg-|\.ov-|\.score-|\.param|\.group-|\.card-group|\.mainc-|\.revise|\.quick-|\.wiring|\.gen-|\.gp-|\.preread|\.recent-|\.rec-|\.rc-|\.sp-|\.draft-|\.skeleton|\.llm-|\.fix-|\.slug|\.instance-|\.readiness-check/],
   ["hwcheck", /#tab-hwcheck|\.hwcheck-|\.my-device-/],
   ["components", /\.btn|\.badge|\.chip|\.toast|\.item\b|\.spinner|\.wait-|\.service-stopped|\.empty-state|\.es-|\.overlay|\.confirm|\.modal|\.dialog/],
   ["shell", /./],
@@ -239,6 +247,39 @@ function doneScopes() {
   return PAGE_SCOPES.map(([id]) => id).filter((id) => !SITEWIDE_BACKLOG.has(id));
 }
 
+/**
+ * 分区表的**形状问题**（纯函数，好让"表坏了能不能判出来"有合成红证）。
+ * 为什么要判：谓词写错或类名被改名时，那条腿会**静默空转**——它照样绿，
+ * 而它本该看着的东西没人看（评审实测：第一版兜底悄悄吞了十余族页面类名）。
+ */
+function scopeTableProblems(scopes, css) {
+  const out = [];
+  const ids = scopes.map(([id]) => id);
+  if (new Set(ids).size !== ids.length) out.push("作用域 id 重复：" + ids.join(", "));
+  const last = scopes[scopes.length - 1];
+  if (!last || last[0] !== "shell") {
+    out.push("最后一条必须是兜底（shell）");
+  } else if (!last[1].test("随便一个选择器")) {
+    out.push("兜底谓词必须命中任意选择器");
+  }
+  for (const [id, re] of scopes) {
+    if (last && id === last[0]) continue;
+    if (cssRulesCached(css).filter(({ sel }) => re.test(sel)).length === 0) {
+      out.push(`作用域 ${id} 一条规则都没命中——谓词写错了，或者它守的类名被改名了`);
+    }
+  }
+  return out;
+}
+
+/** 已完工作用域在某个判据下的违规清单（逐页过腿；字号 / 间距两条腿共用这套循环）。 */
+function doneScopeOffenders(find) {
+  const bad = [];
+  for (const id of doneScopes()) {
+    for (const line of find(html, id)) bad.push(`[${id}] ${line}`);
+  }
+  return bad;
+}
+
 /** 某个作用域里**裸写的 px 字号**（做完的作用域应为空——全部走 `--fs-*`）。 */
 function bareFontSizesInScope(css, id) {
   const out = [];
@@ -283,39 +324,23 @@ test("全站推广：字号角色表是**有限六档**，且页面里的 --fs-*
 });
 
 test("全站推广：分区表是全覆盖、不重叠的划分（兜底在最后、每条谓词都真的命中）", () => {
+  assert.deepEqual(scopeTableProblems(PAGE_SCOPES, html), []);
   const ids = PAGE_SCOPES.map(([id]) => id);
-  assert.equal(new Set(ids).size, ids.length, "作用域 id 重复：" + ids.join(", "));
-  const last = PAGE_SCOPES[PAGE_SCOPES.length - 1];
-  assert.equal(last[0], "shell", "最后一条必须是兜底（shell）");
-  assert.ok(last[1].test("随便一个选择器"), "兜底谓词必须命中任意选择器");
   for (const id of SITEWIDE_BACKLOG) {
     assert.ok(ids.includes(id), "进度清单里有分区表不认识的作用域：" + id);
-  }
-  // 每条非兜底谓词都要真的命中规则——否则它守的那条腿会**静默空转**
-  // （类名被改名 / 谓词写错时，腿照样绿，而它本该看着的东西没人看）
-  for (const [id, re] of PAGE_SCOPES) {
-    if (id === "shell") continue;
-    const n = cssRules(html).filter(({ sel }) => re.test(sel)).length;
-    assert.ok(n > 0, `作用域 ${id} 一条规则都没命中——谓词写错了，或者它守的类名被改名了`);
   }
 });
 
 test("全站推广：已完工作用域裸 px 字号 = 0（逐页过腿）", () => {
-  const bad = [];
-  for (const id of doneScopes()) {
-    for (const line of bareFontSizesInScope(html, id)) bad.push(`[${id}] ${line}`);
-  }
-  assert.deepEqual(bad, [],
-    "这些已完工的作用域又出现裸 px 字号了（新写的请改用 --fs-* 令牌）：\n" + bad.join("\n"));
+  assert.deepEqual(doneScopeOffenders(bareFontSizesInScope), [],
+    "这些已完工的作用域又出现裸 px 字号了（新写的请改用 --fs-* 令牌）：\n"
+    + doneScopeOffenders(bareFontSizesInScope).join("\n"));
 });
 
 test("全站推广：已完工作用域里等于令牌的间距值不许裸写", () => {
-  const bad = [];
-  for (const id of doneScopes()) {
-    for (const line of bareTokenSpacesInScope(html, id)) bad.push(`[${id}] ${line}`);
-  }
-  assert.deepEqual(bad, [],
-    "这些值等于 --space-* 却裸写（'间距走令牌'在已完工的页面上必须成立）：\n" + bad.join("\n"));
+  assert.deepEqual(doneScopeOffenders(bareTokenSpacesInScope), [],
+    "这些值等于 --space-* 却裸写（'间距走令牌'在已完工的页面上必须成立）：\n"
+    + doneScopeOffenders(bareTokenSpacesInScope).join("\n"));
 });
 
 test("工单 03：全站裸字号集合只许减不许增（冻结清单）", () => {
@@ -331,7 +356,7 @@ test("全站推广合成红证：四条腿各自都判得红（防'永远绿'的
   const fontAnchor = "#tab-hwcheck .card h2 { font-size: var(--fs-page);";
   assert.ok(html.includes(fontAnchor), `锚点变了（${fontAnchor}）—— 这条自检会静默空转`);
   const badFont = html.replace(fontAnchor, "#tab-hwcheck .card h2 { font-size: 19px;");
-  assert.ok(bareFontSizesInScope(badFont, "hwcheck").length === 1, "越界字号没被判出");
+  assert.equal(bareFontSizesInScope(badFont, "hwcheck").length, 1, "越界字号没被判出");
   // ② 把卡片内边距改回裸写
   const spaceAnchor = "padding: var(--space-5) var(--space-6);";
   assert.ok(html.includes(spaceAnchor), `锚点变了（${spaceAnchor}）—— 这条自检会静默空转`);
@@ -343,12 +368,19 @@ test("全站推广合成红证：四条腿各自都判得红（防'永远绿'的
   const badNew = html.replace(newFontAnchor, ".muted { color: var(--muted); font-size: 13.75px; }");
   assert.deepEqual(bareFontSizesSitewide(badNew).filter((v) => !FROZEN_FONT_SIZES.has(v)),
     ["13.75"], "冻结清单外的新字号没被判出");
-  // ④ 分区表自检：把兜底挪到最前面，非兜底作用域就再也分不到规则（形状自检必须红）
-  const movedBackdrop = PAGE_SCOPES.slice(0, -1).every(([, re]) => !re.test("zzz-nothing"));
-  assert.ok(movedBackdrop, "非兜底谓词不该命中任意选择器——它们必须是有区分度的");
+  // ④ **分区表形状自检本身要判得红**：拿三张坏表各喂一次（这才是"注入 → 判红"，
+  //    不是"看一眼真实表觉得没问题"——第一版就是后者，等于没自证）
+  const tail = PAGE_SCOPES[PAGE_SCOPES.length - 1];
+  assert.ok(scopeTableProblems(PAGE_SCOPES, html).length === 0, "真实分区表本身就有形状问题");
+  assert.ok(scopeTableProblems([...PAGE_SCOPES, tail], html).length > 0, "重复 id 没被判出");
+  assert.ok(scopeTableProblems(PAGE_SCOPES.slice(0, -1), html).length > 0, "缺兜底没被判出");
+  assert.ok(
+    scopeTableProblems([["ghost", /zzz-这个谓词一条都命不中/], tail], html).length > 0,
+    "空转的谓词没被判出（它守的那条腿会静默绿）",
+  );
   // ⑤ 复原后转绿（四条腿都回到空/子集）
-  assert.deepEqual(badFont && bareFontSizesInScope(html, "hwcheck"), []);
+  assert.deepEqual(bareFontSizesInScope(html, "hwcheck"), []);
   assert.deepEqual(bareTokenSpacesInScope(html, "hwcheck"), []);
   assert.deepEqual(bareFontSizesSitewide(html).filter((v) => !FROZEN_FONT_SIZES.has(v)), []);
-  for (const id of doneScopes()) assert.deepEqual(bareFontSizesInScope(html, id), []);
+  assert.deepEqual(doneScopeOffenders(bareFontSizesInScope), []);
 });

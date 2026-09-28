@@ -22,10 +22,15 @@
 | `issues/06-material-and-library-pages.md` | 模块库 + 参考文件库 + PDF + Markdown + 赛题库 |
 | `issues/07-master-guide-changelog.md` | 母版库 + 使用指南 + 版本更新记录 |
 | `issues/08-closeout.md` | 收尾：冻结清单清零 + 全站读数 + 浅色巡检 |
-| `probe-00-survey.py` | 家底普查（按页面作用域分组：规则数 / 裸字号 / 裸令牌间距 / 描边） |
-| `probe-00-before.txt` | 上面那支探针的改前读数 |
-| `baseline-pytest.txt` / `baseline-js.txt` | 改前门禁基线（读数小工具落的盘） |
-| `shots/` | 对照图（每单该页暗色整页 + 收尾浅色巡检） |
+| `probe-00-survey.py` | 家底普查（字号 / 间距取值分布 + 内联 style 口径） |
+| `probe-01-scope-draft.py` | **分区读数与明细**（总账 / 某作用域的字号·间距·描边明细 / 内联取值）——分区表从守卫源码解析，单一出处 |
+| `probe-02-shot.mjs` | 逐页截图（真浏览器 + 真后端夹具；`node probe-02-shot.mjs <tag> <dark\|light> [页签,页签]`） |
+| `probe-red-shell.py` | 判据强度自证：往 shell 塞越界字号 → 守卫必须红 → 复原转绿 |
+| `apply-01a-fonts.py` / `apply-01b-spaces.py` / `apply-01c-borders.py` | 工单 01 的三支施工脚本（逐条显式锚点 + 断言，改完打印逐行摘要） |
+| `probe-00-{before,after-01}.txt` / `probe-01-scope-{draft,after-01}.txt` | 读数落盘（**每轮改动后重跑**，不是结论是照片） |
+| `probe-red-shell-{in,out}.txt` | 守卫判据强度的红/绿读数 |
+| `baseline-*.txt` | 改前门禁基线（读数小工具落的盘） |
+| `shots/` | 对照图（每单该页暗色整页 + 收尾浅色巡检；**只入库结论点名的那几张**，见 `.gitignore` 白名单） |
 | `readings.py` | 读数落盘小工具（照 `.scratch/hwcheck-hygiene/readings.py` 复制：剥 ANSI、UTF-8、带命令/时间/退出码头） |
 
 ## 改前基线（2026-09-28 实测）

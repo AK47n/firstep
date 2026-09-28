@@ -1,7 +1,8 @@
 r"""分区读数 + 明细（工单 ui-density-sitewide 每单施工用，只读）。
 
-**单一出处**：分区表从守卫 `tests/js/css-tests.test.mjs` 的 `PAGE_SCOPES` 解析
-（格式固定 `["id", /正则/],` 一行一条）——改守卫就等于改这把尺子，两处不会各说各话。
+**单一出处**：分区表与进度清单从守卫 `tests/js/css-tokens.test.mjs` 解析
+（`PAGE_SCOPES` 格式固定 `["id", /正则/],` 一行一条；`SITEWIDE_BACKLOG` 是 id 字符串列表）
+——改守卫就等于改这把尺子，两处不会各说各话。
 
 三种用法：
 
@@ -48,6 +49,15 @@ def load_scopes() -> list[tuple[str, re.Pattern[str]]]:
     if not scopes:
         raise SystemExit("PAGE_SCOPES 解析出 0 条 —— 格式变了，改本探针")
     return scopes
+
+
+def load_backlog() -> list[str]:
+    """进度清单（页面尺）——**条目数本身就是进度**，读数里必须带上它。"""
+    text = GUARD.read_text(encoding="utf-8")
+    block = re.search(r"const SITEWIDE_BACKLOG = new Set\(\[(.*?)\]\);", text, re.S)
+    if not block:
+        raise SystemExit("守卫里找不到 SITEWIDE_BACKLOG —— 格式变了，改本探针")
+    return re.findall(r'"([\w-]+)"', block.group(1))
 
 
 def scope_of(sel: str, scopes: list[tuple[str, re.Pattern[str]]]) -> str:
@@ -131,7 +141,11 @@ def main() -> int:
         out.append(f"{name:<12}{c['rules']:>7}{c['fonts']:>10}{c['borders']:>9}{c['spaces']:>11}")
         tot.update(c)
     out.append(f"{'合计':<12}{tot['rules']:>7}{tot['fonts']:>10}{tot['borders']:>9}{tot['spaces']:>11}")
+    backlog = load_backlog()
+    done = [n for n, _ in scopes if n not in backlog]
     out.append("")
+    out.append(f"页面尺 SITEWIDE_BACKLOG = {len(backlog)} 条（还剩这些没做完）：{', '.join(backlog)}")
+    out.append(f"          已完工 = {len(done)} 条：{', '.join(done)}")
     inline = len(re.findall(r'style="[^"]*font-size:\s*[0-9.]+px', text))
     out.append(f"另有内联 style 属性里的裸字号 {inline} 处（不在样式块里，见 --kind inline）")
     out.append(f"全站 font-size 声明总处数（样式块 + 内联）: "

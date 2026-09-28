@@ -1,0 +1,16 @@
+ui-density-sitewide/01（收口）：按双轴评审整改，工单结账
+
+- 分区表按**渲染方**重写谓词：上一版兜底悄悄吞了十余族页面类名
+  （.tok-* / .gp-* / .rec-* / .tasks-* / .card-group / .proofread-* / .file-row* /
+  .instance-* / .rel-tag / .import-platform-field / #readiness-check / #code-*），
+  "哪一页归哪一单"因此不成立。修正后 shell 289 → 222 条规则。
+- 红证④由恒真式改成**三张坏表各注入一次**（重复 id / 缺兜底 / 空转谓词）；
+  删掉死表达式；两条逐页腿的重复循环提成 doneScopeOffenders()；形状判据提成纯函数。
+- em 例外（装饰性字形走相对单位）写进守卫文件头。
+- probe-01 读数新增「页面尺 = N 条 / 已完工 M 条」；docstring 文件名改正；
+  probe-red-shell.py 双向 newline=""（逐字节保真）+ 备份件移出产品目录。
+- 读数落盘：after-01-{js,browser,pytest}.txt、probe-03-contract-01.txt、
+  probe-00/01-after-01、浅色整页图两张。
+- 门禁：前端 1838 / 0、浏览器 61 / 0（190s，单独跑）、全量 pytest 5656 + 11 skipped。
+- 工单 01 标 resolved 并结账（逐层清单 / 双轴评审处置表 / 六条账）；
+  工单 03 票面按评审修正家族归属并点名移交 .card-group。
