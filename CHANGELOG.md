@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=b5ce71263735116a88dedb04f1292203b918c791 -->
+<!-- changelog-auto: last-commit=1a76d7aa87a578a000b1022f0ba7264644973312 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -15,6 +15,7 @@
 - 20:01 ui-density-sitewide/02（收口）：按双轴评审整改，工单结账
 - 20:02 ui-density-sitewide：更新轮次 README（进度表 / 下一单五步套路 / 本轮新踩的三条坑）
 - 20:39 ui-density-sitewide/03：生成页复用同一套（110 处裸字号清零 + 24 处内层描边换语言）
+- 21:18 ui-density-sitewide/04：代码页复用同一套（66 处裸字号 + 84 处取值间距清零，编辑器字号基准改从台阶派生）
 
 ## 2026-09-27
 - 00:05 工单 hwcheck-hygiene/07：多实例只验首路——四格配方如实说，判据钉到渲染产物
