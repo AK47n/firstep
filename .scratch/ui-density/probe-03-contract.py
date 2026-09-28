@@ -60,6 +60,27 @@ def hwcheck_slice(text: str) -> str:
     return text[start:end]
 
 
+#: 12 个页签（顺序 = 顶部导航从左到右）。09 单把"每页一节"补上：
+#: 按页签切片逐段比 id 顺序 / 元素顺序 / 类名计数（spec L171 早就要求）。
+TABS = ["generate", "hwcheck", "topic", "code", "settings", "library",
+        "reference", "pdf", "md", "master", "guide", "changelog"]
+
+
+def tab_slice(text: str, tab: str) -> str:
+    """切出某个页签的 `<section>` 段（从它自己的 section 到下一个页签 section 之前）。
+
+    为什么不用 `</section>` 收尾：这些 section 里**还有嵌套的 section**（页面内部的块），
+    非贪婪匹配会提前截断；而十二个页签的 section 在文件里是**兄弟**、依次排列，
+    按"下一个页签 section"切最稳（这一段的判据是"页面级 DOM 没被重排"，不需要精确闭合）。
+    """
+    start = text.find(f'<section id="tab-{tab}"')
+    if start < 0:
+        return ""
+    nxt = [text.find(f'<section id="tab-{t}"', start + 1) for t in TABS]
+    nxt = [p for p in nxt if p > start]
+    return text[start:min(nxt)] if nxt else text[start:]
+
+
 def tag_sequence(text: str) -> list[str]:
     """标签序列（开/闭都记），去掉属性——只关心结构与顺序。"""
     return [f"{'/' if close else ''}{name}" for close, name in TAG_RE.findall(text)]
@@ -208,7 +229,59 @@ def main() -> int:
     out.append(f"  本轮**删除**标签：{removed_tags or '（无）'}")
 
     out.append("")
-    out.append("== 3. 被点名的类名出现次数 ==")
+    out.append("== 2b. 每页一节：12 个页签各自的 id 顺序 / 元素与类名多重集（09 单补，spec L171）==")
+    out.append("  （口径：把 `index.html` 按 `<section id=\"tab-…\">` 切成 12 段，逐段与基线比三项；")
+    out.append("    这一节是**逐页**的细粒度检查——第 2 节只覆盖检测页那一段。）")
+    out.append("  ⚠ **说清这一节看什么、不看什么**（09 单评审 Standards 抓过标题名不副实）：")
+    out.append("    · `id` **按顺序**比（既有 id 一个不许动、顺序不许变）——这一项是真的顺序检查；")
+    out.append("    · 元素与类名按**多重集**比：本轮的契约是**只新增**，所以新增报成事实、")
+    out.append("      删除才判红（与第 2 节对 hwcheck 的口径同源）。**无 id 的兄弟元素之间对调**")
+    out.append("      这一节看不出来（红证实测过：pdf 段两个 `<th>` 对调仍判 ✅）——")
+    out.append("      要连那种也看住，得给它们加 id 或另立一笔逐标签序列比对。")
+    for tab in TABS:
+        b, a = tab_slice(markup_before, tab), tab_slice(markup_after, tab)
+        if not b or not a:
+            failed = True
+            out.append(f"  ✗ {tab:<10} 页签切片为空（改前 {len(b)} / 改后 {len(a)} 字符）——先查选择器")
+            continue
+        ids_b = re.findall(r'\bid="([^"]+)"', b)
+        ids_a = re.findall(r'\bid="([^"]+)"', a)
+        # 元素与类名按**多重集**比：本轮的契约是"只新增"（只新增类名 / 分组带元素），
+        # 所以**新增**报成事实、**删除**才算违约（同第 2 节对 hwcheck 的口径）。
+        tag_b, tag_a = Counter(tag_sequence(b)), Counter(tag_sequence(a))
+        cls_b, cls_a = class_counts(b), class_counts(a)
+        tag_gone = {k: tag_b[k] - tag_a.get(k, 0) for k in tag_b}
+        tag_gone = {k: v for k, v in tag_gone.items() if v > 0}
+        tag_new = {k: tag_a[k] - tag_b.get(k, 0) for k in tag_a}
+        tag_new = {k: v for k, v in tag_new.items() if v > 0}
+        cls_gone = {k: cls_b[k] - cls_a.get(k, 0) for k in cls_b}
+        cls_gone = {k: v for k, v in cls_gone.items() if v > 0}
+        cls_new = {k: cls_a[k] - cls_b.get(k, 0) for k in cls_a}
+        cls_new = {k: v for k, v in cls_new.items() if v > 0}
+        ok = (ids_b == ids_a) and not tag_gone and not cls_gone
+        out.append(f"  {'✅' if ok else '**变了**'} {tab:<10}"
+                   f" id {len(ids_a):>3} 个（{'既有 id 顺序一致' if ids_b == ids_a else '**顺序/个数变了**'}）"
+                   f" · 元素 {sum(tag_a.values()):>4} 个（新 {sum(tag_new.values())} / 删 {sum(tag_gone.values())}）"
+                   f" · 类名 {len(cls_a):>3} 种（新 {sum(cls_new.values())} / 删 {sum(cls_gone.values())}）")
+        if not ok:
+            failed = True
+            if ids_b != ids_a:
+                for i, (p, q) in enumerate(zip(ids_b, ids_a)):
+                    if p != q:
+                        out.append(f"      id 顺序第 {i + 1} 项：改前 {p} / 改后 {q}")
+                        break
+                if len(ids_b) != len(ids_a):
+                    out.append(f"      id 个数不同：{len(ids_b)} vs {len(ids_a)}")
+            for label, gone in (("元素", tag_gone), ("类名", cls_gone)):
+                if gone:
+                    out.append(f"      **{label}被删**：{gone}")
+            if cls_new:
+                out.append(f"      （本轮新增类名：{cls_new}）")
+            if tag_new:
+                out.append(f"      （本轮新增元素：{tag_new}）")
+
+    out.append("")
+    out.append("== 3. 被点名的类名出现次数（整文件口径）==")
     cb, ca = class_counts(before), class_counts(after)
     for name in WATCHED_CLASSES:
         mark = "✅" if cb[name] == ca[name] else "**变了**"

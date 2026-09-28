@@ -31,47 +31,15 @@ ROOT = Path(__file__).resolve().parents[2]
 PAGE = ROOT / "src" / "contest_generator" / "static" / "index.html"
 GUARD = ROOT / "tests" / "js" / "css-tokens.test.mjs"
 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from scope_lib import load_backlog, load_scopes, scope_of  # 单一出处（09 单对齐）
+
 TOKEN_VALUES = {4, 8, 12, 16, 20, 24}
 RULE_RE = re.compile(r"([^{}]+)\{([^{}]*)\}", re.S)
 FONT_RE = re.compile(r"font-size:\s*([0-9.]+)px")
 SPACE_RE = re.compile(r"(?:padding|margin|gap)(?:-top|-right|-bottom|-left)?:\s*([^;]+);")
 BORDER_RE = re.compile(r"(?<![\w-])border(?:-(?:top|right|bottom|left))?:\s*([^;]+);")
-
-
-def load_scopes() -> list[tuple[str, re.Pattern[str]]]:
-    """从守卫源码解析分区表（单一出处；守卫那边格式是 `["id", /正则/],`）。"""
-    text = GUARD.read_text(encoding="utf-8")
-    block = re.search(r"const PAGE_SCOPES = \[(.*?)\n\];", text, re.S)
-    if not block:
-        raise SystemExit("守卫里找不到 PAGE_SCOPES —— 解析失败，别拿空表当读数")
-    scopes = [(m.group(1), re.compile(m.group(2)))
-              for m in re.finditer(r'\["([\w-]+)", /(.*?)/\]', block.group(1))]
-    if not scopes:
-        raise SystemExit("PAGE_SCOPES 解析出 0 条 —— 格式变了，改本探针")
-    return scopes
-
-
-def load_backlog() -> list[str]:
-    """进度清单（页面尺）——**条目数本身就是进度**，读数里必须带上它。"""
-    text = GUARD.read_text(encoding="utf-8")
-    block = re.search(r"const SITEWIDE_BACKLOG = new Set\(\[(.*?)\]\);", text, re.S)
-    if not block:
-        raise SystemExit("守卫里找不到 SITEWIDE_BACKLOG —— 格式变了，改本探针")
-    return re.findall(r'"([\w-]+)"', block.group(1))
-
-
-def scope_of(sel: str, scopes: list[tuple[str, re.Pattern[str]]]) -> str:
-    """归谁：先剥掉选择器前面那段块注释（与守卫 `scopeOf` 同一口径）。
-
-    为什么必须剥：这文件里大量规则写成「注释 + 选择器」，注释正文常提到**别的页**的类名
-    （`.btn-param-ref` 的注释里写着 `.task-dialog-box`）——按原始文本判会把规则判到
-    注释里那个词命中的页，那一页的读数就是有水分的绿（02 单评审抓到）。
-    """
-    clean = re.sub(r"^(?:/\*.*?\*/\s*)+", "", sel, flags=re.S).strip()
-    for name, rx in scopes:
-        if rx.search(clean):
-            return name
-    return scopes[-1][0]
 
 
 def main() -> int:

@@ -266,3 +266,10 @@ DebugConfig/
 !.scratch/ui-density-sitewide/shots/08-dark-dark-master-full.png
 !.scratch/ui-density-sitewide/shots/08-dark-dark-guide-full.png
 !.scratch/ui-density-sitewide/shots/08-dark-dark-changelog-full.png
+# 09 单（巡检补课）：整页图**看不见**的那两块，夹具驱动拍出来（浅色 + 暗色）
+# 拍法：`node .scratch/ui-density-sitewide/probe-09-shot-content.mjs 09 light,dark`
+# （文件名同样是 `${TAG}-${THEME}-<名字>` → 两个主题段；加完白名单记得 `git check-ignore -v` 验一下）
+!.scratch/ui-density-sitewide/shots/09-light-light-reference-detail-modal.png
+!.scratch/ui-density-sitewide/shots/09-dark-dark-reference-detail-modal.png
+!.scratch/ui-density-sitewide/shots/09-light-light-distill-progress.png
+!.scratch/ui-density-sitewide/shots/09-dark-dark-distill-progress.png
