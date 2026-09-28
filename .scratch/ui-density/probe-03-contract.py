@@ -24,6 +24,7 @@ import argparse
 import re
 import subprocess
 import sys
+from html.parser import HTMLParser   # 2b 的"既有兄弟相对顺序"检查（10 单）
 from collections import Counter
 from pathlib import Path
 
@@ -96,6 +97,91 @@ def class_counts(text: str) -> Counter[str]:
     return out
 
 
+class _ChildOrder(HTMLParser):
+    """收集"每个父元素下的子元素顺序"（工单 10 的 2b 增强）。
+
+    只要三样东西：父路径（用 (标签, id, 第几个同类) 组成）与子元素的签名
+    （`标签#id.首类`）。**不建完整 DOM**——判据只关心"既有兄弟的相对顺序"。"""
+
+    VOID = {"br", "img", "input", "meta", "link", "hr", "source", "area", "base",
+            "col", "embed", "param", "track", "wbr"}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.stack: list[str] = []
+        self.last: tuple[list[str], int, int] | None = None
+        self.children: dict[str, list[str]] = {}
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        d = dict(attrs)
+        ident = d.get("id", "")
+        # ⚠ 签名**不含 class**：本轮允许"只新增类名"（05 单给按钮补 `danger` 就是这一类），
+        # 带 class 会把那种正当改动报成"顺序变了"（10 单第一版实测踩到）。
+        # 区分同层兄弟靠 **id + 文本**（文本在 handle_data 里并进来）。
+        sig = f"{tag}#{ident}"
+        kids = self.children.setdefault("/".join(self.stack), [])
+        kids.append(sig)
+        if tag not in self.VOID:
+            # 父路径**不带序号**（带了序号的话，插一个新元素会把后面所有路径都移位，
+            # 两侧对不上 → 满屏假红；10 单第一版实测 249 处假红，就是这个原因）。
+            # 代价：同层的匿名兄弟会被并进同一个桶（限制写在 docstring 里）。
+            self.stack.append(sig)
+            self.last = (kids, len(kids) - 1, len(self.stack))
+
+    def handle_endtag(self, tag: str) -> None:
+        if self.stack and self.stack[-1].startswith(tag + "#"):
+            self.stack.pop()
+
+    def handle_data(self, data: str) -> None:
+        """把文本并进"上一个开标签"的签名里。
+
+        为什么需要它：`<th>文件名</th>` 与 `<th>批次</th>` 的 (标签, id, 类) 一模一样——
+        不并文本就**看不出这两个对调**（10 单的红证第一次正是这么失败的）。
+        文本只取前 20 字（够区分同层兄弟，又不会被长段落拖累）。
+        """
+        text = data.strip()
+        if not text or not self.stack or self.last is None:
+            return
+        kids, idx, depth = self.last
+        # 只在"刚开的那个元素仍是当前最内层"时并入文本——否则会把文本挂到**别的兄弟**头上
+        # （匿名兄弟共用一个父路径时就会这样：10 单第二版实测一处假红，就是它）。
+        if len(self.stack) != depth:
+            return
+        kids[idx] += f":{text[:20]}"
+
+
+def sibling_order_problems(before: str, after: str) -> list[str]:
+    """既有兄弟的相对顺序（插进新兄弟不算，重排 / 搬走才算）——2b 的第三项检查。
+
+    口径：对每个"两侧都在"的父路径，把**改前**的子元素签名序列当成一个**子序列**去
+    在改后的序列里找。找得到 = 既有兄弟没被重排也没被搬走（新插入的随便插）；
+    找不到 = 有人动了顺序，报出来。
+    ⚠ 签名相同的重复兄弟（例如连着两个 `<th class="x">`）算同一类，**互相之间对调看不出来**
+    ——要连那种也看住，得给它们加 id（这条限制写在票尾的账里）。
+    """
+    a, b = _ChildOrder(), _ChildOrder()
+    a.feed(before)
+    b.feed(after)
+    out: list[str] = []
+    for parent, kids_a in a.children.items():
+        kids_b = b.children.get(parent)
+        if kids_b is None:
+            out.append(f"父节点 {parent or '(根)'} 在改后整块不见了")
+            continue
+        # kids_a 是不是 kids_b 的子序列
+        it = iter(kids_b)
+        if all(any(x == y for y in it) for x in kids_a):
+            continue
+        for i, x in enumerate(kids_a):
+            if i < len(kids_b) and kids_b[i] != x:
+                out.append(f"父节点 {parent or '(根)'}：第 {i + 1} 个子元素 改前 {x} / 改后 {kids_b[i]}")
+                break
+        else:
+            out.append(f"父节点 {parent or '(根)'}：既有子元素的相对顺序变了"
+                       f"（改前 {len(kids_a)} 个 / 改后 {len(kids_b)} 个）")
+    return out
+
+
 def strip_style(text: str) -> str:
     """去掉 `<style>…</style>` 整块。
 
@@ -132,6 +218,21 @@ def strip_inline_fontsize(text: str) -> str:
     只抹 px 那一侧会让两边永远不相等（08 单第一版就这么写的，当场报出"JS 被改了"）。
     """
     return re.sub(r"font-size:\s*(?:[0-9.]+px|var\(--fs-[\w-]+\));?", "", text)
+
+
+def strip_test_hooks(text: str) -> str:
+    """把 `// [test-hook]` … `// [test-hook] 结束` 之间的**整块**去掉（10 单补）。
+
+    为什么：10 单给进度区开了测试钩子（`ui/master.js` 的 `masterProgressHooks`、
+    `ui/generate-recommend.js` 的 `recProgressHooks`）——那是**产品面改动**，
+    但只是"多挂了一个只读入口"、不改任何既有行为。契约判据相应放宽成
+    "**钩子块之外**逐字节相同"。
+    用**显式标记**而不是"允许这些函数名"：模糊判据会让下一轮的任意改动都溜过去。
+    ⚠ 剥完还要**收掉结尾多出来的空行**（钩子块插在文件末尾时，剥掉它会留下一个空行——
+    10 单第一版就因此报"JS 被改了"，逐行 diff 才看出来只差一个 `\\n`）。
+    """
+    out = re.sub(r"[ \t]*// \[test-hook\][^\n]*\n.*?[ \t]*// \[test-hook\] 结束[^\n]*\n", "", text, flags=re.S)
+    return re.sub(r"\n{2,}\Z", "\n", out)
 
 
 def strip_class_attrs(text: str) -> str:
@@ -281,6 +382,22 @@ def main() -> int:
                 out.append(f"      （本轮新增元素：{tag_new}）")
 
     out.append("")
+    out.append("== 2c. 既有兄弟的相对顺序（10 单补：2b 的多重集看不出「无 id 兄弟对调」）==")
+    sib = sibling_order_problems(markup_before, markup_after)
+    if sib:
+        failed = True
+        out.append(f"  **{len(sib)} 处**不符合「既有兄弟的顺序不变」：")
+        for line in sib[:12]:
+            out.append("    " + line)
+    else:
+        out.append("  ✅ 每个父节点下、**改前就有的**子元素在改后仍是同样顺序（允许插入新兄弟）")
+    # 自证：拿一对调过的输入喂一次，必须判红（工单 10 的要求：这条检查自带红证）
+    probe_bad = markup_before.replace('<th>文件名</th><th>批次</th>',
+                                      '<th>批次</th><th>文件名</th>', 1)
+    out.append(f"  （红证：把 pdf 段两个无 id 的 <th>（文件名 / 批次）对调 → "
+               f"{'判红 ✅' if sibling_order_problems(markup_before, probe_bad) else '**没判红 ✗**'}）")
+
+    out.append("")
     out.append("== 3. 被点名的类名出现次数（整文件口径）==")
     cb, ca = class_counts(before), class_counts(after)
     for name in WATCHED_CLASSES:
@@ -324,15 +441,17 @@ def main() -> int:
         old = subprocess.run(["git", "show", f"{BASE_REV}:{rel}"], cwd=ROOT,
                              capture_output=True, text=True, encoding="utf-8").stdout
         new = (ROOT / rel).read_text(encoding="utf-8")
-        if strip_inline_fontsize(old) != strip_inline_fontsize(new):
+        if strip_inline_fontsize(old) != strip_inline_fontsize(new) and \
+           strip_test_hooks(strip_inline_fontsize(old)) != strip_test_hooks(strip_inline_fontsize(new)):
             js_bad.append(rel)
     if js_bad:
         out.append(f"    ⚠ 前端 JS 被改了（不是内联字号那一类）：{js_bad}——"
                    "本轮契约是「只改观感」，请核对")
         failed = True
     elif js_touched:
-        out.append(f"    ✓ 前端 JS（static/js/**）{len(js_touched)} 个文件**只动了内联字号**"
-                   "（剥掉 `font-size: <n>px` 之后逐字节相同）——没有夹带行为改动")
+        out.append(f"    ✓ 前端 JS（static/js/**）{len(js_touched)} 个文件**只动了内联字号与标记过的"
+                   "测试钩子块**（`strip_inline_fontsize` + `strip_test_hooks` 之后逐字节相同）"
+                   "——没有夹带行为改动")
     else:
         out.append("    ✓ 前端 JS（static/js/**）一个字节没动——观感改动没有夹带行为改动")
     out.append(f"  · 本目录证据件改动（{len(evidence)} 个）：{evidence or '（无）'}"

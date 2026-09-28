@@ -931,6 +931,22 @@ function renderReferenceResult(data) {
 // 生成页：5. 模块清单（增删 + 依赖展开 + 平台警告）
 // ---------------------------------------------------------------------------
 export function renderModulePool() {
+  // [test-hook] 推荐进度区（#rec-progress）的测试钩子（工单 ui-density-sitewide/10）：它的 DOM
+  // 更新写在**事件表**里（start / round / converged / cache_hit…），所以暴露的是
+  // handleEvent——取证探针喂**合成的 SSE 事件**，产品的事件→DOM 路径自己跑（零网络）。
+  // ⚠ 挂在 boot 会调用的导出函数里（不是模块顶层）：ui-dom-contract.test.mjs 钉着
+  // 「ui 模块求值期零接线」——10 单第一版挂在顶层，当场判红。
+  // 产品代码不调用它；state 是面板的 p 对象。
+  // [test-hook] 标记成对出现：契约探针（probe-03）按标记剥掉整块再比 JS。
+  Object.assign(window, {
+    recProgressHooks: {
+      start: startRecProgress,
+      stop: stopRecProgress,
+      handleEvent: recPanel.handleEvent,
+      state: recPanel.p,
+    },
+  });
+  // [test-hook] 结束
   const box = $("module-grid");
   if (!box) return;
   const q = ($("module-search") ? $("module-search").value : "") || "";

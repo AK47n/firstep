@@ -533,6 +533,25 @@ function toggleReleaseCard(head) {
  * 语句顺序 = 原文件里的先后顺序；绑定的 target 与事件类型一字未改。
  */
 export function initMasterWorkflow() {
+  // [test-hook] 进度区的测试钩子（工单 ui-density-sitewide/10）：把**进度区的入口与 DOM 更新
+  // 函数**挂出去，供取证探针（.scratch/ui-density-sitewide/probe-09-shot-content.mjs）用夹具
+  // 数据驱动**产品自己的渲染路径**——09 单只能"照产品写下的 DOM 形态复现"，那张图只是夹具态。
+  // ⚠ 挂在**导出的 init*() 里**而不是模块顶层：`ui-dom-contract.test.mjs` 钉着
+  // "ui 模块求值期零接线"，顶层赋值会被它当场判红（10 单第一版就这么栽的）。
+  // 照仓库既有惯例（`Object.assign(window, {…})`）。**产品代码不调用它**；
+  // `state` 是面板的 `p` 对象（探针往里塞阶段 / 批次等夹具数据）。
+  // [test-hook] 标记成对出现：契约探针（probe-03）按标记剥掉整块再比 JS。
+  Object.assign(window, {
+    masterProgressHooks: {
+      start: startProgress,
+      setStep,
+      updateBatch,
+      addLogLine,
+      finish: finishProgress,
+      state: distPanel.p,
+    },
+  });
+  // [test-hook] 结束
   $("btn-pick-dirs").addEventListener("click", () => $("pick-dirs").click());
   $("pick-dirs").addEventListener("change", async () => {
     const input = $("pick-dirs");

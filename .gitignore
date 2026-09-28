@@ -273,3 +273,12 @@ DebugConfig/
 !.scratch/ui-density-sitewide/shots/09-dark-dark-reference-detail-modal.png
 !.scratch/ui-density-sitewide/shots/09-light-light-distill-progress.png
 !.scratch/ui-density-sitewide/shots/09-dark-dark-distill-progress.png
+# 10 单（进度测试钩子）：走**产品自己的渲染路径**再拍一遍那三块（浅/暗共 6 张）
+# 拍法：`node .scratch/ui-density-sitewide/probe-09-shot-content.mjs 10 light,dark`
+# （提炼与推荐两个进度区走 10 单开的钩子；推荐那块是**喂合成 SSE 事件**、产品事件表自己写 DOM）
+!.scratch/ui-density-sitewide/shots/10-light-light-reference-detail-modal.png
+!.scratch/ui-density-sitewide/shots/10-dark-dark-reference-detail-modal.png
+!.scratch/ui-density-sitewide/shots/10-light-light-distill-progress.png
+!.scratch/ui-density-sitewide/shots/10-dark-dark-distill-progress.png
+!.scratch/ui-density-sitewide/shots/10-light-light-rec-progress.png
+!.scratch/ui-density-sitewide/shots/10-dark-dark-rec-progress.png
