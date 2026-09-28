@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=ceb7ebec42eeab91d54c00f927d52c5927eab869 -->
+<!-- changelog-auto: last-commit=f1a1ab621c8297679d1eda94520eb946ef43446b -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -23,6 +23,7 @@
 - 23:01 ui-density-sitewide/08：收尾（样式块与渲染方裸字号双双归零，两张尺清空，24 张浅色/暗色巡检图入库）
 - 23:18 ui-density-sitewide/09：巡检补课（两块看不见的东西拍出来、probe-03 每页一节、probe-01 对齐 scope_lib）
 - 23:18 ui-density-sitewide/09：票面状态改 resolved（收口）
+- 23:34 ui-density-sitewide/10：进度测试钩子（走产品渲染路径）+ probe-03 2c 兄弟顺序（带红证）
 
 ## 2026-09-27
 - 00:05 工单 hwcheck-hygiene/07：多实例只验首路——四格配方如实说，判据钉到渲染产物
