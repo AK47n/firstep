@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=7cf97afdee7dd8d0876d14d3512b1b47d1376e7f -->
+<!-- changelog-auto: last-commit=fe4690ed068595ea99911f94db852b51f317167a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -19,6 +19,7 @@
 - 21:19 ui-density-sitewide/04：票面日期按提交时间更正（2026-09-28），并记一条读账口径
 - 21:49 ui-density-sitewide/05：设置页复用同一套（10 处裸字号 + 10 处取值间距清零，补 5 条分组带与 8 条新规则）
 - 22:10 ui-density-sitewide/06：素材与库五页复用同一套（63 处裸字号 + 51 处取值间距清零，整圈框 20 → 13）
+- 22:47 ui-density-sitewide/07：最后三页复用同一套（36 处裸字号清零，页面尺与取值尺双双清空）
 
 ## 2026-09-27
 - 00:05 工单 hwcheck-hygiene/07：多实例只验首路——四格配方如实说，判据钉到渲染产物
