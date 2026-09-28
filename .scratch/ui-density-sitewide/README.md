@@ -38,6 +38,9 @@
 | `apply-04a-fonts.py` / `apply-04b-spaces.py` / `apply-04c-borders.py` / `apply-04d-review-fixups.py` | 工单 04 的四支施工脚本（字号 + 两处派生 / 间距 / 描边 / 评审与自查整改）。**`apply-04a` 的 docstring 记着一条教训：锚点唯一 ≠ 编辑区间不打架**（它第一版写出过 `;m;`） |
 | `probe-05c-shot-settings-content.mjs` | **设置页「有内容」态整页图**（05 单立）：调**产品自己的纯渲染函数**（`fx/env.js` / `fx/update.js` / `fx/materials-update.js` / `fx/full-update.js`）+ 夹具数据，**零网络**造出体检三档 / 更新结果块 / 下载进度；保存成功态也拍一张（`:not(.ok)` 的证据） |
 | `apply-05a-fonts.py` / `apply-05b-spaces.py` / `apply-05c-borders.py` / `apply-05d-new-rules.py` / `apply-05e-review-fixups.py` | 工单 05 的五支施工脚本（字号 / 间距 / 描边 / **新增规则与口径** / 整改）。`apply-05c` 是 04c 的加严版：对账**连取值一起比**、认人按选择器片段、口径用 `scope_lib.full_borders`；`apply-05e` 是"05d 之后再纠正它"的那一支（分组带 / 不可逆按钮的 `danger` / 空告警块的 `:not(:empty)` / 死类 `.warning`） |
+| `apply-06a-fonts.py` / `apply-06b-spaces.py` / `apply-06c-borders.py` / `apply-06d-new-rules.py` | 工单 06 的四支施工脚本（五页字号 63 处 / 间距 47 条声明 / 描边 20 处 / 行内警示标统一）。**`apply-06b` 是 05b 的加严版**：带**覆盖率断言**（每页取值数必须与申报一致），间距口径走 `scope_lib.tokenize_space_decl` |
+| `probe-06-dead-classes.py` | 五页**死类普查**（渲染方在输出、CSS 里从未出现的类名）——本轮从 05 的 `.warning` 学到的那一课 |
+| `probe-06-shot-modal.mjs` | **模块详情弹层**那一张（06 单）：点真表格行的「详情」打开，断言"四问分段有内容 + 平台小卡已去框"再按快门 |
 | `probe-00-{before,after-01..05}.txt` / `probe-01-scope-{draft,after-01..05}.txt` / `probe-03-contract-{01..05}.txt` | 读数落盘（**每轮改动后重跑**，不是结论是照片） |
 | `probe-red-shell-{in,out}.txt` | 守卫判据强度的红/绿读数 |
 | `baseline-*.txt` | 改前门禁基线（读数小工具落的盘） |
@@ -83,16 +86,17 @@ python .scratch\ui-density-sitewide\readings.py pytest -- python -m pytest -n au
 | 03 生成页 | **resolved**（2026-09-29） | 最大一单：110 处裸字号 + 106 处裸令牌间距清零、24 处内层整圈框换语言；02 移交的 `.btn-*` 另一半与 `.task-dialog-box` 落地；双轴评审又揪出**两处分区表漏判**与**三处语义回归** | 裸字号 288 → 175；`--fs-*` 130 → 245；页面尺 11 → **10**；取值尺 11 → 11 |
 | 04 代码页 | **resolved**（2026-09-29） | `.code-*` 一族 66 处裸字号清零（+ 编辑器字号基准 `--code-font-size` 与 md 预览根字号改从台阶派生）、84 处取值（64 条声明）裸令牌间距清零、**5 处内层整圈框去框**（整圈完整框 24 → 19，19 条全在申报的例外里）；**另接 03 挪过来的 `.quick-open-*`**——它们早就是令牌形态，本单只把它们算进本页的账 | 裸字号 175 → **109**；`--fs-*` 245 → **314**；页面尺 10 → **9**；取值尺 11 → **10**（摘掉 `8`） |
 | 05 设置页 | **resolved** | 10 处裸字号 / 9 条声明（10 处取值）裸令牌间距清零；卡内小节标题升到 `--fs-block` 并转正文色；**2 处内层整圈框去框** + **1 条新告警块**（整圈完整框 4 → 3 = 例外①）；**8 条新规则**（体检失败行重量 / 更新与进度结果块 / 失败告警块 / 死类 `.warning` 补实 / 分组带）+ **5 条分组标题元素** + 不可逆按钮补 `class="danger"` | 裸字号 109 → **99**；`--fs-*` 314 → **327**；页面尺 9 → **8** |
-| 06 素材与库五页 | 待做 | 模块库 / 参考 / PDF / MD / 赛题库共用一套列表与弹层 | — |
-| 07 母版 + 指南 + 版本记录 | 待做 | 顺带把 `16.5px` 这类"只剩一页在用"的取值清掉 | — |
+| 06 素材与库五页 | **resolved** | 模块库 / 参考 / PDF / MD / 赛题 **一次做完**（63 处裸字号 / 47 条声明（51 处取值）间距清零）——它们共用同一套列表骨架（全局 `table` + `.lib-*`）与详情弹层（`.ref-files-*` / `.module-info-*` / `.mi-*`）；整圈完整框 **20 → 13**（去 7 留 13）；行内 ⚠ 警示标一族（`.dangling-tag` / `.ref-dangling-tag` / `.topic-warn`）对齐成同一套表达 | 裸字号 99 → **36**；取值尺 10 → **7**（摘 `11.5` / `15` / `18`）；`--fs-*` 327 → **391**；页面尺 8 → **3** |
+| 07 母版库 + 使用指南 + 版本记录 | 待做 | 三页同族（`.master-` / `.guide-` / `.release-`），含 `.prog-llm-telemetry` 那处跨页共享；顺带把 `16.5px` 这类"只剩一页在用"的取值清掉 | — |
 | 08 收尾 | 待做 | 冻结清单清零 + JS 内联 7 处 + 浅色全站巡检 + 双轴评审收口 | — |
 
-**当前读数（改到哪儿了，一目了然）**：全站裸字号 **99 处 / 10 种**（起点 387 / 13）；
-页面尺 **8 条**（起点 13）；取值尺 **10 条**（起点 13）；`--fs-*` 引用 **327 处**（起点 45）。
+**当前读数（改到哪儿了，一目了然）**：全站裸字号 **36 处 / 7 种**（起点 387 / 13）；
+页面尺 **3 条**（起点 13，剩 `master` / `changelog` / `guide`）；取值尺 **7 条**（起点 13）；
+`--fs-*` 引用 **391 处**（起点 45）。
 
-> 05 单之后**仍然停在 12px 以下或等于令牌的裸值**都只剩未开工的页：`library` 32 / `master` 20 /
-> `topic` 14 / `reference` 14 / `guide` 10 / `changelog` 6 / `md` 2 / `pdf` 1
-> ——**已完工的六个作用域（`code` / `settings` / `generate` / `hwcheck` / `components` / `shell`）全是 0/0**。
+> 06 单之后**仍然停在 12px 以下或等于令牌的裸值**只剩未开工的三页：`master` 20 / `guide` 10 /
+> `changelog` 6。**已完工的十一个作用域**（`code` / `settings` / `library` / `reference` / `pdf` /
+> `md` / `topic` / `generate` / `hwcheck` / `components` / `shell`）全是 0/0。
 > （按页数一遍：`python .scratch\ui-density-sitewide\probe-04-scope-calibers.py`。）
 
 ## 下一单怎么开工（五步套路，01/02/03 都是这么走的）
@@ -243,4 +247,19 @@ python .scratch\ui-density-sitewide\readings.py pytest -- python -m pytest -n au
     （纠正）两步合出来的：`git checkout HEAD -- index.html` 之后按 a→e 顺序重跑，产物与工作树
     **逐字节相同**（CRLF 5089 行、裸 LF 0）。**别只重放一半**——04 单是"a→c 之后只差 d 一处"，
     05 单是"a→e 全链一致"，两种说清都行，含糊不行。
+
+## 06 单又添的三条（下一单直接用）
+
+25. **一次改五页靠的是"共用骨架"，先把共用关系量清楚再动手。** 五个素材/库页共用：全局 `table`
+    基类（`font-size: var(--fs-body)` + `th, td` 单边分隔 + `thead th` 底纹，**全在 shell 作用域**）、
+    `.lib-table`/`.lib-toolbar`/`.lib-stats`（库页家族）、`.ref-files-*`（6 个 `ui/*.js` 共用的弹层壳）、
+    `.module-info-*`/`.mi-*`（模块详情，模块库 + 生成页 + 检测页三处渲染）、`.dangling-tag`/`.ref-dangling-tag`。
+    → **先 `grep` 渲染方把"谁被几处用"列出来**，再决定"改一处"能不能覆盖五页；不然会漏掉
+    `.mi-plat .mc-plat` 这种"弹窗里复用卡片小胶囊"的跨文件复用。
+26. **覆盖率要断言，不要打印。** 05b 只打印"盘上现算 N 处 / 改了 M 条"，评审点名；`apply-06b`
+    改成**每页取值数必须与申报一致**（`EXPECT_VALUES`），多一处少一处都停手。字号表那头
+    （`06a`）沿用 `Counter` 多重集对账 ✅。
+27. **锚点里别带换行——CRLF 会在那儿咬人。** `apply-06d` 第一版把"注释 + 选择器"整段当锚点写
+    在 Python 里（`\n`），而盘上是 CRLF ⇒ 锚点永远命不中（脚本"停下"了，没写坏）。**锚点取单行**
+    （选择器那一行），换行只出现在**替换串**里、并统一换算成 CRLF。
 

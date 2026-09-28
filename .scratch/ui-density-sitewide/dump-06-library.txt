@@ -1,0 +1,473 @@
+L439  /* 模块选择网格（工单 module-grid/01）：卡片网格 + 平台不兼容置灰 */ .module-grid
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 10px;
+L442  .module-card
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 10px 12px;
+        background: var(--panel-2);
+        cursor: pointer;
+        box-shadow: var(--shadow-item);
+        transition: border-color var(--dur-fast) var(--ease-ui),
+                             transform var(--dur-fast) var(--ease-ui);
+L446  .module-card:hover
+        border-color: var(--accent);
+        transform: translateY(-1px);
+L447  .module-card.off
+        opacity: .55;
+        cursor: not-allowed;
+L448  .module-card.off:hover
+        border-color: var(--border);
+        transform: none;
+L449  .module-card .mc-head
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+L450  .module-card .mc-head .slug
+        font-weight: 600;
+        font-family: var(--mono);
+        font-size: 13px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+L452  .module-card .mc-offtag
+        flex: none;
+        font-size: 11px;
+        padding: 1px 6px;
+        border-radius: var(--radius-full);
+        background: var(--warn-dim);
+        color: var(--warn);
+        border: 1px solid var(--warn-border);
+L455  .module-card .mc-desc
+        margin-top: var(--space-2);
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
+        min-height: 36px;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+L458  .module-card .mc-meta
+        margin-top: var(--space-2);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+L459  .module-card .mc-plat
+        font-size: 11px;
+        padding: 1px 6px;
+        border-radius: var(--radius-full);
+        white-space: nowrap;
+L460  .module-card .mc-plat.ok
+        background: var(--ok-dim);
+        color: var(--ok-bright);
+L461  .module-card .mc-plat.hw
+        background: var(--info-dim);
+        color: var(--info);
+L462  .module-card .mc-plat.un
+        background: rgba(139, 148, 158, .15);
+        color: var(--muted);
+L463  .module-card .mc-plat.embed
+        background: var(--accent-dim);
+        color: var(--accent);
+L464  .module-card .mc-deps
+        font-size: 11px;
+        padding: 1px 6px;
+        border-radius: var(--radius-full);
+        background: rgba(139, 148, 158, .12);
+        color: var(--muted);
+L466  .module-card .mc-pa
+        font-size: 11px;
+        padding: 1px 6px;
+        border-radius: var(--radius-full);
+        background: var(--accent-dim);
+        color: var(--accent);
+L468  /* 模块详情按钮（工单 module-info-dialog/01）：卡头右侧，卡片点击仍添加模块 */ .module-card .mc-info
+        flex: none;
+        margin-left: auto;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        color: var(--accent);
+        font-size: 11px;
+        padding: 1px 7px;
+        border-radius: var(--radius-full);
+        cursor: pointer;
+L472  .module-card .mc-info:hover
+        border-color: var(--accent);
+        background: var(--accent-dim);
+L473  /* 模块详情弹窗（工单 module-info-dialog/01）：复用 .ref-files-overlay 模式 （遮罩 + 居中卡 + ✕），新建 module-info-* 前缀——不动既有 ref-files 类 */ .module-info-overlay
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, .6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        /* 全屏遮罩统一层：高于置顶目录(100)、低于 toast(200) */
+                         z-index: 150;
+        padding: 40px 16px;
+L479  .module-info-modal
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-pop);
+        max-width: 760px;
+        width: 100%;
+        max-height: 80vh;
+        display: flex;
+        flex-direction: column;
+L483  .module-info-head
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+L485  .module-info-scroll
+        overflow-y: auto;
+L486  .module-info-body
+        padding: 12px 14px;
+        font-size: 13px;
+L487  .module-info-title .slug
+        font-family: var(--mono);
+        font-weight: 600;
+        font-size: 14px;
+L488  .module-info-title .desc
+        margin-top: var(--space-1);
+        color: var(--text);
+        line-height: 1.5;
+        word-break: break-all;
+L490  .module-info-off
+        margin-top: var(--space-2);
+        padding: 5px 10px;
+        border-radius: var(--radius-sm);
+        background: var(--warn-dim);
+        color: var(--warn);
+        border: 1px solid var(--warn-border);
+        font-size: 12px;
+L493  /* 简介四问分段（工单 module-intro-detail/03）：推荐区点「说明」进来的人第一眼 要看「这是个什么东西」——分段块在 slug/简介之后、内部字段之前。 */ .mi-intro
+        margin-top: var(--space-3);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+L496  .mi-intro-sec
+        border-left: 2px solid var(--accent);
+        padding: 2px 0 2px 10px;
+L497  .mi-intro-label
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--accent);
+L498  .mi-intro-text
+        margin-top: var(--space-1);
+        color: var(--text);
+        line-height: 1.6;
+        word-break: break-word;
+L499  /* 推荐理由段（工单 03）：chip 上那句短线代号在弹窗里有上下文——「为什么推荐它」 */ .mi-reason
+        margin-top: var(--space-3);
+        padding: 6px 10px;
+        border-radius: var(--radius-sm);
+        background: var(--ok-dim);
+        border: 1px solid var(--border);
+        font-size: 12.5px;
+L502  .mi-reason-k
+        color: var(--ok-bright);
+        margin-right: 6px;
+        font-weight: 600;
+L503  .module-info-rows
+        list-style: none;
+        margin: 10px 0 0;
+        padding: 0;
+L504  .module-info-rows .mi-row
+        display: flex;
+        gap: 10px;
+        padding: 3px 0;
+        font-size: 12px;
+        color: var(--muted);
+L506  .module-info-rows .mi-k
+        flex: none;
+        color: var(--text);
+L507  .module-info-platforms
+        margin-top: var(--space-3);
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+L508  .mi-plat
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 10px 12px;
+        background: var(--panel-2);
+L510  .mi-plat h4
+        margin: 0 0 6px;
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+L511  .mi-plat .mc-plat
+        font-size: 11px;
+        padding: 1px 6px;
+        border-radius: var(--radius-full);
+        white-space: nowrap;
+L512  .mi-plat .mc-plat.ok
+        background: var(--ok-dim);
+        color: var(--ok-bright);
+L513  .mi-plat .mc-plat.hw
+        background: var(--info-dim);
+        color: var(--info);
+L514  .mi-plat .mc-plat.un
+        background: rgba(139, 148, 158, .15);
+        color: var(--muted);
+L515  .mi-files
+        list-style: none;
+        margin: 0 0 6px;
+        padding: 0;
+        font-family: var(--mono);
+        font-size: 12px;
+L517  .mi-files li
+        padding: 1px 0;
+        word-break: break-all;
+L518  /* 模块源码区（工单 mainc-codeview-bridge/05）：文件行点击看源码—— 行号 + 高亮复用代码查看器同观感（.code-view 容器 + .code-gutter/.code-pre） */ .mi-file
+        background: none;
+        border: 0;
+        padding: 0;
+        color: var(--accent);
+        cursor: pointer;
+        font-family: var(--mono);
+        font-size: 12.5px;
+L522  .mi-file:hover
+        text-decoration: underline;
+L523  .module-info-source
+        margin-top: var(--space-2);
+        border-top: 1px solid var(--border);
+        padding-top: var(--space-2);
+L526  .module-source-head
+        font-family: var(--mono);
+        font-size: 12px;
+        margin-bottom: var(--space-1);
+L527  .module-source-error
+        margin: 4px 0;
+L528  .mi-note
+        font-size: 12px;
+        color: var(--muted);
+        margin: 2px 0;
+L529  .mi-note a
+        color: var(--accent);
+        text-decoration: none;
+L530  .mi-pins
+        margin-top: var(--space-2);
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 12px;
+L531  .mi-pins th, .mi-pins td
+        border: 1px solid var(--border);
+        padding: 3px 8px;
+        text-align: left;
+L533  .mi-pins th
+        background: var(--panel);
+        color: var(--muted);
+        font-weight: 600;
+L534  .mi-pin-id
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 11px;
+L535  /* 改简介模态（library-edit-description/05）：复用详情弹窗遮罩/居中卡模式， 新建 .lib-edit-* 前缀，不动既有 module-info / ref-files 类 */ .lib-edit-overlay
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, .6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 150;
+        padding: 40px 16px;
+L540  .lib-edit-modal
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-pop);
+        max-width: 560px;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        max-height: calc(100vh - 80px);
+L544  .lib-edit-head
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+        flex: none;
+L546  .lib-edit-body
+        padding: 12px 14px;
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+L547  .lib-edit-old
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--panel-2);
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+        word-break: break-all;
+        margin-bottom: var(--space-3);
+L550  .lib-edit-body textarea
+        width: 100%;
+        min-height: 96px;
+        resize: vertical;
+L551  .lib-edit-msg
+        color: var(--danger);
+        font-size: 12.5px;
+        margin-top: var(--space-2);
+        min-height: 1em;
+L552  .lib-edit-foot
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        padding: 10px 14px;
+        border-top: 1px solid var(--border);
+        flex: none;
+L554  /* 编辑弹窗（library-edit-dialog/06）：复用 .lib-edit-* 模态骨架，内部 .lib-mod-* 字段区 */ .lib-mod-status
+        font-size: 12px;
+        color: var(--muted);
+        margin: 6px 0 10px;
+L556  .lib-mod-files
+        list-style: none;
+        margin: 4px 0 8px;
+        padding: 0;
+        font-family: var(--mono);
+        font-size: 12.5px;
+        overflow-y: auto;
+        max-height: 200px;
+L558  .lib-mod-files li
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        padding: 3px 0;
+        border-bottom: 1px dashed var(--border);
+L560  .lib-mod-files .fname
+        word-break: break-all;
+L561  .lib-mod-files .file-del
+        font-size: 11px;
+        padding: 1px 6px;
+        flex: none;
+L562  .lib-mod-files .muted
+        font-family: inherit;
+L563  .lib-mod-msg
+        color: var(--danger);
+        font-size: 12.5px;
+        margin-top: var(--space-2);
+        min-height: 1em;
+L564  .lib-mod-msg.ok
+        color: var(--ok);
+L565  /* 添加模块分区折叠（library-add-collapse/07）：折叠视觉与设置页整卡折叠同一语言 （分区块头常驻 + ▾ 旋转 + 内容区 display:none——不销毁 DOM，收起不丢状态） */ .add-section
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        margin: 8px 0;
+        background: var(--panel-2);
+L569  .add-section-head
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 9px 12px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text);
+L572  .add-section-head:hover
+        color: var(--accent);
+L573  .add-section-head .add-section-arrow
+        transition: transform var(--dur-fast) var(--ease-ui);
+        font-size: 11px;
+        color: var(--muted);
+L575  .add-section.collapsed .add-section-head .add-section-arrow
+        transform: rotate(-90deg);
+L576  .add-section-body
+        padding: 2px 12px 10px;
+L577  .add-section.collapsed .add-section-body
+        display: none;
+L911  .lib-table td.slug
+        font-family: var(--mono);
+        font-weight: 600;
+        white-space: nowrap;
+L912  .lib-table .desc-cell
+        max-width: 340px;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+L918  /* 模块库工具栏（library-toolbar/02）：搜索 / 排序 / 过滤 chips / 统计条。 全部客户端过滤（GET /api/modules 数据已全量在手）；样式沿用既有令牌 （--panel-2 / --border / --accent / --accent-dim / --muted），不新造颜色值 */ .lib-toolbar
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        margin: 12px 0 8px;
+L922  .lib-toolbar input[type="search"]
+        flex: 1 1 220px;
+        min-width: 180px;
+        margin: 0;
+L923  .lib-toolbar select
+        flex: none;
+        width: auto;
+        padding: 7px 10px;
+        margin: 0;
+L924  .lib-chips-row
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 6px 0 2px;
+L925  .lib-chip
+        padding: 3px 10px;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border);
+        background: var(--panel-2);
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 12.5px;
+        cursor: pointer;
+L928  .lib-chip:hover
+        border-color: var(--accent);
+        color: var(--text);
+L929  .lib-chip.on
+        background: var(--accent-dim);
+        border-color: var(--accent);
+        color: var(--accent);
+L930  .lib-stats
+        margin: 8px 0 4px;
+        font-size: 12.5px;
+        color: var(--muted);
+L931  .lib-dangling-count
+        color: var(--danger);
+        font-weight: 600;
+L932  /* 统计条红段（可点击过滤 toggle）：lib 系列共享类；ref 库悬空计数沿用 .ref-dangling-count 旧名（选择器组共用一条规则，不重复定义） */ .lib-stats-red, .ref-dangling-count
+        color: var(--danger);
+        font-weight: 600;
+        cursor: pointer;
+L936  .lib-stats-red.on
+        text-decoration: underline;
+L1389  .file-row
+        display: grid;
+        grid-template-columns: 180px 1fr;
+        gap: var(--space-2);
+        margin-bottom: var(--space-2);
+L1390  .file-row textarea
+        min-height: 120px;
+L1391  /* 文件行删除 ✕（polish-v2/01）：原 ui/files.js 内联定位/尺寸 → 类化 */ .file-row-body
+        position: relative;
+L1393  .file-row-x
+        position: absolute;
+        right: 4px;
+        top: 4px;
+        font-size: var(--fs-tag);
+        padding: 2px 6px;
+        border-radius: var(--radius-sm);
+L2948  .lib-toolbar
+        gap: 6px;
+L3032  /* 库页统计条可点击提示（工单 ux-polish-02/08）：问题计数可点击筛选的可见提示 */ .lib-stats .lib-stats-hint
+        color: var(--muted);
+        font-size: 12px;
+
+[共 98 条]

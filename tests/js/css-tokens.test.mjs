@@ -234,10 +234,18 @@ const PAGE_SCOPES = [
  * 那条腿打红）；它们照样在腿③的射程里（`code` 已完工）。细则见工单 04 的「账」。）
  * （`settings` 的三处 `.recent-wf-*`（1 字号 + 1 整圈框 + 3 处令牌间距）是 03 单按渲染方
  * 归还给本页的——05 单接手时它们还在原地，本单一并收进账里。）
+ * `library` / `reference` / `pdf` / `md` / `topic`（工单 06，素材与库五页：**63** 处裸字号 /
+ * **51** 处取值（47 条声明）裸令牌间距清零，五页一次做完——它们共用同一套列表骨架
+ * （全局 `table` + `.lib-*`）与同一套详情弹层（`.ref-files-*` / `.module-info-*` / `.mi-*`），
+ * 所以"改一处、五页同时生效"；整圈完整描边 **20 → 13**：去框 7 条
+ * （`.mi-reason` / `.mi-plat` / `.lib-edit-old` / `.add-section` 左条 / `.ref-scroll` /
+ * `.md-preview-body` / `.topic-detail-problem`），留 13 条（可点卡片与控件 / 语义告警 /
+ * 弹层外壳 / 表格网格与图片框——逐条理由在工单 06 的逐层清单里）。
+ * 另把**行内 ⚠ 警示标**一族（`.dangling-tag` / `.ref-dangling-tag` / `.topic-warn`）的
+ * 字号 / 字重 / 颜色对齐成同一套表达（`--fs-tag` / 600 / `--danger`）。）
  */
 const SITEWIDE_BACKLOG = new Set([
-  "master", "changelog", "guide", "library", "reference",
-  "pdf", "md", "topic",
+  "master", "changelog", "guide",
 ]);
 
 /**
@@ -250,9 +258,12 @@ const SITEWIDE_BACKLOG = new Set([
  *   · `30`（02 单：`.empty-state .es-icon` → `--fs-icon`）
  *   · `8`（04 单：代码页 gutter 的 ● 编译错误色点 `8px` → `.62em`——装饰字形随行号缩放；
  *     它是全站最后一处 `8px`，改完实测 0 处）
+ *   · `11.5` / `15` / `18`（06 单：素材与库五页——赛题的元数据行与警示标 11.5 → `--fs-note` /
+ *     `--fs-tag`；参考库详情弹窗标题 15 → `--fs-block`；弹层关闭 ✕ 18 → `--fs-body`
+ *     （行内图标随所附那一面）。三个取值都是**全站最后一处**，改完实测 0 处）
  */
 const FROZEN_FONT_SIZES = new Set([
-  "11", "11.5", "12", "12.5", "13", "14", "15", "16.5", "18", "20",
+  "11", "12", "12.5", "13", "14", "16.5", "20",
 ]);
 
 /** 规则块（`选择器 { 声明 }`）：返回 [{ sel, body }]。 */
@@ -450,6 +461,12 @@ test("全站推广合成红证：四条腿各自都判得红（防'永远绿'的
     ["hwcheck", "#tab-hwcheck .card h2 {"],
     ["code", ".code-pane-title { font-weight: 650;"],
     ["settings", ".settings-section { margin-top: var(--space-4);"],
+    // 06 单一次摘掉五页（素材与库）——照 05 的先例**逐页补一行**：摘尺 ≠ 腿跟着走。
+    ["library", ".module-card { border: 1px solid var(--border);"],
+    ["reference", ".ref-pick-head {"],
+    ["pdf", "#tab-pdf table {"],
+    ["md", "#tab-md table {"],
+    ["topic", ".topic-card { border: 1px solid var(--border);"],
   ]) {
     assert.ok(html.includes(head), `锚点变了（${head}）—— 这条自检会静默空转`);
     const bad = html.replace(head, `${head} font-size: 19px;`);

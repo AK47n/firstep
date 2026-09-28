@@ -219,3 +219,12 @@ DebugConfig/
 !.scratch/ui-density-sitewide/shots/05-after-dark-settings-content-seg2.png
 !.scratch/ui-density-sitewide/shots/05-after-dark-settings-content-seg3.png
 !.scratch/ui-density-sitewide/shots/05-after-dark-settings-content-saved.png
+# 06 单（素材与库五页）：五页各一张整页图 + 模块详情弹层那一张
+# （五页共用同一套列表骨架与详情弹层，`probe-02-shot.mjs` 一次拍齐；弹层由
+#  probe-06-shot-modal.mjs 点真行的「详情」打开，断言"四问分段有内容 + 平台小卡已去框"）
+!.scratch/ui-density-sitewide/shots/06-after-dark-library-full.png
+!.scratch/ui-density-sitewide/shots/06-after-dark-reference-full.png
+!.scratch/ui-density-sitewide/shots/06-after-dark-pdf-full.png
+!.scratch/ui-density-sitewide/shots/06-after-dark-md-full.png
+!.scratch/ui-density-sitewide/shots/06-after-dark-topic-full.png
+!.scratch/ui-density-sitewide/shots/06-after-dark-library-modal.png
