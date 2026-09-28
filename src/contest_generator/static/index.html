@@ -256,7 +256,7 @@
      其 step-dot 有自己的圆点样式，不能给它们套胶囊 */
   header nav button { border: 1px solid var(--border); background: var(--panel-2);
                padding: 6px 13px; cursor: pointer;
-               font-size: 14px; font-weight: 500; color: var(--muted); border-radius: var(--radius-full);
+               font-size: var(--fs-body); font-weight: 500; color: var(--muted); border-radius: var(--radius-full);
                line-height: 1.5; transition: color var(--dur-base) var(--ease-ui),
                    background-color var(--dur-base) var(--ease-ui),
                    border-color var(--dur-base) var(--ease-ui); }
@@ -343,7 +343,7 @@
      标记里两处 class="ghost"（顶部提示条里的「去设置 / 去填写」）此前**没有对应规则**，
      渲染成默认实心按钮、在琥珀提示条里很重——这条把那个意图补实。 */
   button.ghost { background: transparent; border-color: currentColor; color: inherit; }
-  button.ghost:hover { background: rgba(var(--accent-rgb), .12); color: inherit; border-color: currentColor; }
+  button.ghost:hover { background: var(--accent-dim); color: inherit; border-color: currentColor; }
   button:disabled { opacity: .45; cursor: not-allowed; }
   button:disabled:hover { border-color: var(--border); color: var(--text); }   /* 禁用态不响应悬停 */
   textarea:disabled, input:disabled, select:disabled { opacity: .6; cursor: not-allowed; }
@@ -716,7 +716,7 @@
      与任务卡对话按钮同款小字（.sugg-discuss 面板共用——参数速调咨询按钮
      也并进本规则，工单 params-chat-ai/02 评审整改：去重复规则） */
   .btn-global-chat-action, .btn-global-chat-send, .btn-params-chat-send {
-                     font-size: 12px; padding: 1px 8px; margin-left: 6px; }
+                     font-size: var(--fs-tag); padding: 1px var(--space-2); margin-left: 6px; }
   .btn-global-chat-action { border-radius: var(--radius-full); }  /* 次要动作胶囊（底/边沿用 base button） */
   /* 对话发送按钮统一为强调色胶囊（输入行；覆盖上方小字规则） */
   .btn-task-dialog-send, .btn-global-chat-send, .btn-params-chat-send,
@@ -731,7 +731,7 @@
   /* 参数速调 AI 咨询（工单 params-chat-ai/02）：AI 回复里的参数名 chip
      （accent 描边 pill，hover 提亮）+ 定位参数卡高亮动画；对话区本体复用
      .sugg-discuss-* / .task-dialog-box，零新容器样式 */
-  .btn-param-ref { font-size: 12px; padding: 1px 7px; margin: 0 2px;
+  .btn-param-ref { font-size: var(--fs-tag); padding: 1px 7px; margin: 0 2px;
                      border: 1px solid var(--accent); border-radius: var(--radius-full);
                      background: var(--accent-dim); color: var(--text);
                      cursor: pointer; vertical-align: baseline; }
@@ -1762,7 +1762,7 @@
   #pdf-rows .empty-state { min-height: calc(100vh - var(--header-h) - 210px); }
   .empty-state .es-icon { font-size: var(--fs-icon); line-height: 1; opacity: .5;
                           filter: drop-shadow(0 0 10px rgba(var(--accent-rgb), .3)); }
-  .empty-state .es-title { font-size: var(--fs-body); font-weight: 600; color: var(--text); }
+  .empty-state .es-title { font-size: var(--fs-body); font-weight: 600; color: var(--muted); }
   .empty-state .es-hint { font-size: var(--fs-note); line-height: 1.8; max-width: 400px; }
   /* 版本更新记录卡片（工单 version-changelog/04）：版本徽章 + 日期 + 主题 +
      带语义标签的要点列表；默认只展开最新版，其余折叠（点击头部切换，折叠
@@ -2944,7 +2944,7 @@
   /* 卡内说明折叠（工单 generate-ui-polish/01，由 .revise-details 通用化）：
      长文案瘦身为一行，细节收进 details——summary 主打一句摘要，展开看完整说明。
      全页 1-12 步统一说明形态。 */
-  .card-details { font-size: 12.5px; color: var(--muted); margin-bottom: var(--space-3); }
+  .card-details { font-size: var(--fs-note); color: var(--muted); margin-bottom: var(--space-3); }
   .card-details > summary { cursor: pointer; user-select: none;
       list-style: none; line-height: 1.55; }
   .card-details > summary::-webkit-details-marker { display: none; }
@@ -3271,26 +3271,23 @@
            box-shadow: var(--shadow-toast);
            animation: toast-in var(--dur-slow) var(--ease-ui),
                       toast-out var(--dur-slow) var(--ease-ui) 2.2s forwards; }
-  /* 长错误 toast 的「复制」按钮（工单 ux-walkthrough-02/11）：点击写入剪贴板 */
-  .toast-copy { flex: none; margin-left: 2px; padding: 2px 10px; font-size: var(--fs-tag);
-                border-radius: var(--radius-full); border: 1px solid var(--border);
-                background: var(--panel); color: var(--accent); cursor: pointer; }
+  /* toast / 长任务行内的小胶囊按钮（工单 ui-density-sitewide/02 评审整改）：
+     原先三段近乎逐字重复，现在**形状单源**——各自只留"位置 + 颜色"两笔差异。
+     形状：2px 10px 内边距 / --fs-tag / 全圆角 / 一条描边 / panel 底。 */
+  .toast-copy, .toast-action, .wait-cancel {
+    padding: 2px 10px; font-size: var(--fs-tag); border-radius: var(--radius-full);
+    border: 1px solid var(--border); background: var(--panel); cursor: pointer; }
+  .toast-copy, .toast-action { flex: none; margin-left: 2px; }
+  .toast-copy { color: var(--accent); }
+  .toast-action { color: var(--ok); }
+  .wait-cancel { display: inline-block; margin-left: var(--space-2); color: var(--warn); }
   .toast-copy:hover { border-color: var(--accent); }
-  /* 删除类操作「撤销」按钮（工单 ux-walkthrough-02/15）：点击执行并收起 */
-  .toast-action { flex: none; margin-left: 2px; padding: 2px 10px; font-size: var(--fs-tag);
-                  border-radius: var(--radius-full); border: 1px solid var(--border);
-                  background: var(--panel); color: var(--ok); cursor: pointer; }
   .toast-action:hover { border-color: var(--ok); }
+  .wait-cancel:hover { border-color: var(--warn); }
+  .wait-cancel:disabled { opacity: .6; cursor: default; }
   /* 长任务秒表（工单 ux-walkthrough-02/12）：状态行后「已等待 mm:ss」 */
   .wait-clock { display: inline-block; margin-left: 6px; font-size: var(--fs-tag);
                 color: var(--muted); white-space: nowrap; }
-  /* 长任务取消按钮（工单 ux-walkthrough-02/14）：状态行旁胶囊，点击中止请求 */
-  .wait-cancel { display: inline-block; margin-left: var(--space-2); padding: 2px 10px;
-                 font-size: var(--fs-tag); border-radius: var(--radius-full);
-                 border: 1px solid var(--border); background: var(--panel);
-                 color: var(--warn); cursor: pointer; }
-  .wait-cancel:hover { border-color: var(--warn); }
-  .wait-cancel:disabled { opacity: .6; cursor: default; }
   /* 类型左边框 + 背景微染（工单 ui-polish-8/03）：ok 绿 / error 红 / info 青 */
   .toast.ok { border-left: 3px solid var(--ok); background: var(--ok-dim); }
   .toast.ok .toast-ico { color: var(--ok); }

@@ -1,0 +1,44 @@
+== 1. 页面（section id）体量 ==
+  tab-code           10996 B    158 行
+  tab-generate       45238 B    590 行
+  tab-hwcheck        10141 B    151 行
+  tab-library         4880 B     83 行
+  tab-reference       6404 B    102 行
+  tab-pdf             1470 B     27 行
+  tab-md              1476 B     27 行
+  tab-topic           2409 B     44 行
+  tab-master          4310 B     74 行
+  tab-changelog        408 B      8 行
+  tab-settings       20911 B    275 行
+  tab-guide           2776 B     41 行
+  合计 1580 行 / 文件 5043 行
+
+== 2. 样式块 1 个，合计 471919 B ==
+
+== 3. 按作用域的规则数 / 裸 px 字号 / 裸令牌间距（改前家底）==
+  （无页面前缀）                      规则 1505  裸字号 287  裸令牌间距 289
+  tab-guide                    规则    4  裸字号   1  裸令牌间距   0
+  tab-code                     规则    5  裸字号   0  裸令牌间距   0
+  tab-generate                 规则    5  裸字号   0  裸令牌间距   2
+  tab-topic                    规则    8  裸字号   0  裸令牌间距   0
+  tab-reference                规则   10  裸字号   0  裸令牌间距   0
+  tab-pdf                      规则   10  裸字号   0  裸令牌间距   0
+  tab-md                       规则   10  裸字号   0  裸令牌间距   0
+  tab-hwcheck                  规则   26  裸字号   0  裸令牌间距   0
+
+  其中**不带任何 `#tab-` 前缀**的规则里的裸字号：287 处（全局基类 / 组件，属全站轮的核心）
+
+== 4. 全站裸字号取值分布（对照 FROZEN_FONT_SIZES）==
+       8px  x1
+      11px  x45
+    11.5px  x21
+      12px  x116
+    12.5px  x46
+      13px  x48
+      14px  x6
+      15px  x1
+    16.5px  x1
+      18px  x2
+      20px  x1
+  取值 11 种；清单外：（无）
+  --fs-* 令牌引用：130 处

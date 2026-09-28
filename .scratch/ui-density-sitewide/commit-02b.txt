@@ -1,0 +1,19 @@
+ui-density-sitewide/02（收口）：按双轴评审整改，工单结账
+
+- **修掉守卫的一个真漏洞**：scopeOf 原先按**原始选择器**判归属，而这段样式块大量规则写成
+  "注释 + 选择器"，注释里提到别的页类名（.btn-param-ref 的注释里写着 .task-dialog-box）——
+  规则被判到那一页，那一页的"裸字号 = 0"成了有水分的绿。现在先剥注释再判；
+  剥完 components 与 shell 各露出 2 处裸字号，当场补掉（apply-02d）。Python 探针同口径。
+- CRLF 损伤归一：施工脚本只在匹配侧写了 \r?\n，替换串用了 \n → 8 行裸 LF 混进 CRLF 文件；
+  新增 fix-crlf.py（实测 8 行 → 0），教训写进票尾账。
+- 去重与令牌纪律：三段近乎逐字重复的行内小胶囊按钮（.toast-copy/.toast-action/.wait-cancel）
+  收成形状单源；button.ghost:hover 的裸 rgba 改用 var(--accent-dim)；
+  空态标题颜色退到 --muted（评审抓到"比改前更响"）。
+- 守卫：动作三级判据重构成纯函数 actionWeightProblems + 两条合成红证（退回"只有红字"/
+  冒出带页面前缀的副本）；--fs-icon 口径修正并回写 spec.md。
+- 读数：全站裸字号 319 → 288（11 种）；components 裸字号 0 / 令牌间距 0；页面尺 12 → 11；
+  取值尺 13 → 11（摘掉 16 / 30）。
+- 门禁：前端 1839 / 0、浏览器 61 / 0（188s，单独跑）、全量 pytest 5656 + 11 skipped；
+  契约对账 id 569=569、文案零删除。
+- 工单 02 标 resolved 并结账（逐层清单 / 双轴评审处置表 / 六条账）；工单 03 票面记下
+  02 移交的两笔（.btn 一族的另一半、.task-dialog-box 去框）。

@@ -61,8 +61,15 @@ def load_backlog() -> list[str]:
 
 
 def scope_of(sel: str, scopes: list[tuple[str, re.Pattern[str]]]) -> str:
+    """归谁：先剥掉选择器前面那段块注释（与守卫 `scopeOf` 同一口径）。
+
+    为什么必须剥：这文件里大量规则写成「注释 + 选择器」，注释正文常提到**别的页**的类名
+    （`.btn-param-ref` 的注释里写着 `.task-dialog-box`）——按原始文本判会把规则判到
+    注释里那个词命中的页，那一页的读数就是有水分的绿（02 单评审抓到）。
+    """
+    clean = re.sub(r"^(?:/\*.*?\*/\s*)+", "", sel, flags=re.S).strip()
     for name, rx in scopes:
-        if rx.search(sel):
+        if rx.search(clean):
             return name
     return scopes[-1][0]
 
