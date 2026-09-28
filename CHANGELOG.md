@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=1d313e99f58dc2d6667257edd84bdd16dd766dca -->
+<!-- changelog-auto: last-commit=a73c22ce016f87e49d60c077c02d8bcfc30b2f90 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -10,6 +10,7 @@
 - 18:41 ui-density 03+05：补上防回退守卫，并按双轴评审 + 设计面自查逐条整改
 - 19:24 ui-density-sitewide：全站推广轮立项（spec + 8 张工单 + 家底读数）
 - 19:36 ui-density-sitewide/01：立起字号角色表与逐页守卫，全局外壳与文本基类落地
+- 19:44 ui-density-sitewide/01（收口）：按双轴评审整改，工单结账
 
 ## 2026-09-27
 - 00:05 工单 hwcheck-hygiene/07：多实例只验首路——四格配方如实说，判据钉到渲染产物
