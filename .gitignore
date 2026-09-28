@@ -161,7 +161,12 @@ DebugConfig/
 # 故是**按上下文重写**；另 3 行（worktree / 真机验收 / fix-errors）逐字还原自历史。
 # **忽略规则一行未改**（改前后规则清单逐行比对相同）。
 
-# ui-density 的**整页**截图（每张约 0.5 MB，可由 probe-02-shot.mjs 一条命令重出；
-# 首屏那 8 张是"改了什么"的证据，入库）。判断标准照 .scratch/real-run 那条先例：
-# 人要长期回看的入库，能从库里一条命令重建的不入库。
+# ui-density 的**整页**截图：每张约 0.5 MB，且可由 `probe-02-shot.mjs` 一条命令重出，
+# 默认不入库；**只留 spec 的「测试决策」点名要的那四张对照**（暗/亮 × 改造前/最终版），
+# 它们是"整页节奏改了没有"唯一的人眼证据——白名单逐条列出，别写成"首屏 8 张入库"
+# 那种一句概括（工单 05 复查抓到：那句注释与实际入库的 20 张对不上）。
 .scratch/ui-density/shots/*-full.png
+!.scratch/ui-density/shots/before-dark-picked-full.png
+!.scratch/ui-density/shots/before-light-picked-full.png
+!.scratch/ui-density/shots/06-after-dark-picked-full.png
+!.scratch/ui-density/shots/06-after-light-picked-full.png

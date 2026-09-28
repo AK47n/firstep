@@ -30,7 +30,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 REL = "src/contest_generator/static/index.html"
 PAGE = ROOT / REL
-BASE_REV = "HEAD"
+# 基线**钉死在本轮改造开始之前那一版**（bd478720），不是 "HEAD"。
+#
+# 为什么（工单 05 复查抓到的自毁）：基线写 HEAD 时，改动一提交，探针就变成"量本轮没改什么"
+# ——读数永远"零差异"，谁也复核不了 01/02/04 的契约结论。钉死之后，任何人在任何时刻
+# 跑它，量的都是"相对改造前那一版"的累计差异。
+BASE_REV = "bd478720"
 
 ID_RE = re.compile(r'\bid="([^"]+)"')
 TAG_RE = re.compile(r"<(/?)([a-zA-Z][a-zA-Z0-9-]*)")
@@ -79,6 +84,15 @@ def strip_style(text: str) -> str:
     return re.sub(r"<style>.*?</style>", "", text, flags=re.S)
 
 
+def strip_comments(text: str) -> str:
+    """去掉 HTML 注释。
+
+    为什么：标记计数要只数**真元素**。注释里出现 `<a href="#id">`（本轮那两个入口锚的
+    说明就写了一个）会被标签正则当成一个开标签，于是"新增标签"多算一个、开闭还配不平
+    （实测：`a: 3 / /a: 2`，看着像有标签没闭合）。"""
+    return re.sub(r"<!--.*?-->", "", text, flags=re.S)
+
+
 def diff_removed_lines(before: str, after: str) -> list[str]:
     """改前后逐行 diff 里"被删掉且含中文"的**标记行**（文案零删除的判据）。
 
@@ -120,8 +134,11 @@ def main() -> int:
     # 口径为什么改（工单 02）：02 要往页面里**插入**三个分组标题带（`.hwcheck-band`），
     # 那是"新增元素"而不是"重排既有元素"——按旧口径（全长标签序列相等）它会假红，
     # 而旧口径真正想守的是"既有元素一个没动、顺序没变"。新增/删除的元素单独如实报数。
-    ids_seq_before = ID_RE.findall(hwcheck_slice(before))
-    ids_seq_after = ID_RE.findall(hwcheck_slice(after))
+    # 标记面：**去注释**之后再数（注释里写 `<a href="#id">` 会被当成一个元素）
+    markup_before = strip_comments(before)
+    markup_after = strip_comments(after)
+    ids_seq_before = ID_RE.findall(hwcheck_slice(markup_before))
+    ids_seq_after = ID_RE.findall(hwcheck_slice(markup_after))
     out.append("")
     out.append("== 2. 检测页既有元素的 id 出现顺序（没被重排）==")
     out.append(f"  改前 {len(ids_seq_before)} 个 id / 改后 {len(ids_seq_after)} 个")
@@ -137,8 +154,8 @@ def main() -> int:
         if len(ids_seq_before) != len(ids_seq_after):
             out.append(f"    （长度不同：{len(ids_seq_before)} vs {len(ids_seq_after)}）")
 
-    tag_before = Counter(tag_sequence(hwcheck_slice(before)))
-    tag_after = Counter(tag_sequence(hwcheck_slice(after)))
+    tag_before = Counter(tag_sequence(hwcheck_slice(markup_before)))
+    tag_after = Counter(tag_sequence(hwcheck_slice(markup_after)))
     added = {k: tag_after[k] - tag_before.get(k, 0) for k in tag_after}
     added = {k: v for k, v in added.items() if v > 0}
     removed_tags = {k: tag_before[k] - tag_after.get(k, 0) for k in tag_before}
@@ -179,11 +196,16 @@ def main() -> int:
     product = [p for p in changed if not p.startswith(".scratch/")]
     evidence = [p for p in changed if p.startswith(".scratch/")]
     out.append(f"  · 产品面改动文件（{len(product)} 个）：{product or '（无）'}")
-    if product != [REL]:
-        out.append("    ⚠ 与「只改 index.html」不符——请核对是否夹带了别的改动")
+    # 真正要守的不是"只有 index.html"（那只是 01 那一单当时的实况），而是
+    # **前端 JS 一个字节没动**——它是"这一轮只改观感、没碰行为"的那条契约。
+    js_touched = [p for p in product if p.startswith("src/contest_generator/static/js/")]
+    if js_touched:
+        out.append(f"    ⚠ 前端 JS 被改了：{js_touched}——本轮契约是「只改观感」，请核对")
         failed = True
+    else:
+        out.append("    ✓ 前端 JS（static/js/**）一个字节没动——观感改动没有夹带行为改动")
     out.append(f"  · 本目录证据件改动（{len(evidence)} 个）：{evidence or '（无）'}"
-               "——探针自己也会被改，不算产品改动")
+               "——探针与证据自己也会被改，不算产品改动")
 
     report = "\n".join(out)
     print(report)

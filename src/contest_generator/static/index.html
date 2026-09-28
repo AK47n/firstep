@@ -140,6 +140,8 @@
     --fs-body: 14px;    /* 正文：表单 / 器件名 / 表格 / 说明主体（= 全站 body） */
     --fs-note: 13px;    /* 次要说明（原 12 / 12.5） */
     --fs-tag: 12px;     /* 徽章 / 标签 / 极小字（原 11 / 11.5） */
+    --fs-icon: 22px;    /* 装饰性图标（空态那个 emoji）——不是文本，但同样不许裸写
+                           （工单 05 复查抓到：02 曾在这里裸写 22px，把 01 的"裸 px = 0"打假了） */
     /* 主题相关裸色令牌（工单 ux-walkthrough-02/21）：accent 青 rgba 分通道
        （rgba(var(--accent-rgb), a) 双主题自动切换）、渐变亮/暗端、青/绿底
        深色文字、紫渐变端、电源琥珀、ok 光晕、语法高亮 .tok-* 全族 */
@@ -318,6 +320,10 @@
   textarea { resize: vertical; font-family: var(--mono); font-size: 14px; }
   textarea:focus, input:focus, select:focus, button:focus-visible {
     outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+  /* 链接的键盘焦点（工单 ui-density/05 复查补的口）：应用里唯一的 <a> 是检测页那两个入口锚，
+     而它们此前拿到的是**浏览器默认的那道 1px 灰圈**，与全站焦点语言不一致。
+     这里沿用的是同类控制的既有写法（`.revise-tab` / `.guide-tab` / `.res-view-btn` 同一句）。 */
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   input:-webkit-autofill {
     -webkit-box-shadow: 0 0 0 1000px var(--input-bg) inset; -webkit-text-fill-color: var(--text); }
   .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
@@ -1031,13 +1037,18 @@
   /* 硬件检测栏目（工单 module-hwcheck/01 + 02）：输出通道勾选 + 通道说明 + main.c 预览
      + 工程面板 + 上板清单 + 最近几次检测。main.c 复用 .result 的代码观感
      （等宽 / code-bg / 可滚），这里只放宽高度。 */
-  .hwcheck-channels { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: var(--space-2); }
+  .hwcheck-channels { display: flex; flex-wrap: wrap; gap: var(--space-2) 22px; margin-top: var(--space-2); }
   .hwcheck-channel { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-body);
                      color: var(--text); cursor: pointer; }
   .hwcheck-channel input { width: auto; margin: 0; }
+  /* 说明块（工单 ui-density/05 复查后统一形状）：**并入全页那一套"左条 + 淡底"的语言**，
+     不再自己画一个整圈框——它是页面上最后一类"又一个小盒子"（复查实测：卡片里还剩 4 个
+     四边描边的 `.hwcheck-hint`）。这一改之后，"一屏一层完整描边"只剩：
+     卡片那一层 + 可点控件 + 语义告警块（`.hwcheck-warn`）。 */
   .hwcheck-hint { font-size: var(--fs-note); line-height: 1.8; color: var(--muted);
-                  background: var(--panel-2); border: 1px solid var(--border);
-                  border-radius: var(--radius-md); padding: 10px 14px; margin-bottom: var(--space-3); }
+                  background: var(--panel-2); border-left: 3px solid var(--border-strong);
+                  border-radius: var(--radius-sm); padding: 10px 14px;
+                  margin-bottom: var(--space-3); }
   pre.hwcheck-code { max-height: 520px; margin: 0; }
   .hwcheck-parent { min-width: 320px; flex: 1 1 320px; }
   .hwcheck-path { font-size: var(--fs-body); margin-bottom: var(--space-2); overflow-wrap: break-word; }
@@ -1049,7 +1060,7 @@
   /* 生成前自动移开的默认脚撞脚：一根线一行（工单 hwcheck-pin-conflict-exit/01） */
   .hwcheck-pin-fix { font-family: var(--mono); font-size: var(--fs-note); color: var(--text); }
   /* 上板清单：一条 = 一个勾选框 + 「应看到什么 / 不对先查哪里」两行 */
-  .hwcheck-check { display: flex; gap: 12px; align-items: flex-start; padding: 10px 14px;
+  .hwcheck-check { display: flex; gap: var(--space-3); align-items: flex-start; padding: 10px 14px;
                    border: 1px solid transparent; border-radius: var(--radius-sm);
                    margin-bottom: var(--space-1); cursor: pointer; }
   .hwcheck-check:hover { background: var(--panel-2); border-color: var(--border); }
@@ -1057,14 +1068,14 @@
   /* 勾过的：淡绿底（不再用 opacity 糊掉整行——那会把勾选态也一起糊了） */
   .hwcheck-check.done { background: var(--ok-dim); border-color: transparent; }
   .hwcheck-check.done .hwcheck-check-expect { color: var(--muted); }
-  .hwcheck-check-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .hwcheck-check-body { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
   .hwcheck-check-expect { font-size: var(--fs-body); line-height: 1.7; color: var(--text); }
   .hwcheck-check-tip { font-size: var(--fs-note); line-height: 1.7; color: var(--muted); }
   /* 最近几次检测：点一行 = 回读那次检测 */
-  .hwcheck-recent-row { display: flex; align-items: center; gap: 12px; width: 100%;
+  .hwcheck-recent-row { display: flex; align-items: center; gap: var(--space-3); width: 100%;
                         text-align: left; background: transparent; color: var(--text);
                         border: 1px solid transparent; border-radius: var(--radius-sm);
-                        padding: 8px 14px; margin-bottom: var(--space-1); cursor: pointer;
+                        padding: var(--space-2) 14px; margin-bottom: var(--space-1); cursor: pointer;
                         font-size: var(--fs-body); }
   /* 列表行平时不描边（一屏只有卡片那一层框），只在**指到 / 正在看的那一次**才出框 */
   .hwcheck-recent-row:hover { border-color: var(--border); background: var(--panel-2); }
@@ -1104,8 +1115,11 @@
   .my-device-material-actions { display: flex; align-items: center; gap: var(--space-2);
     margin-top: var(--space-2); }
   .my-device-material-message { color: var(--muted); margin-top: var(--space-2); }
-  .my-device-draft { border: 1px dashed var(--border-strong); border-radius: var(--radius-md);
-    padding: var(--space-3); margin-top: var(--space-3); font-size: var(--fs-note); }
+  /* AI 草稿面板：**虚线左条 + 淡底**（"还没确认"用虚线说，不用一整圈虚线框）。
+     复查抓到：它此前是整圈 `dashed`，是 02「一屏一层完整描边」清单里漏掉的第七处。 */
+  .my-device-draft { background: var(--panel-2); border-left: 3px dashed var(--border-strong);
+    border-radius: var(--radius-sm); padding: var(--space-3); margin-top: var(--space-3);
+    font-size: var(--fs-note); }
   .my-device-draft-title { font-weight: 600; font-size: var(--fs-body);
     margin-bottom: var(--space-2); }
   .my-device-draft-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px;
@@ -1120,7 +1134,7 @@
      接线表与工程 README 的引脚接线表同一份推导；冲突行 ⚠ 红 / 可共享行 ✓ 绿。 */
   .hwcheck-device-search { min-width: 320px; flex: 1 1 320px; }
   .hwcheck-device-count { color: var(--muted); font-size: var(--fs-note); align-self: center; }
-  #hwcheck-device-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: var(--space-3); }
+  #hwcheck-device-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-3); }
   /* 「已经被删掉的自建件被摘掉」那句（工单 ci-gate-fixes/09）：中性提示，不是错误
      ——用户自己删的件，页面只需说清"它不在你的器件里了、这次检测已摘掉"。 */
   .hwcheck-dropped-note { font-size: var(--fs-note); color: var(--muted); margin: 0 0 var(--space-2); }
@@ -1135,11 +1149,11 @@
   .hwcheck-table th { text-align: left; font-size: var(--fs-note); color: var(--muted);
                       border-bottom: 1px solid var(--border); padding: 6px 10px;
                       font-weight: 600; }
-  .hwcheck-table td { border-bottom: 1px solid var(--border); padding: 8px 10px;
+  .hwcheck-table td { border-bottom: 1px solid var(--border); padding: var(--space-2) 10px;
                       vertical-align: top; line-height: 1.7; }
   .hwcheck-pin { font-family: var(--mono); font-weight: 600; }
   .hwcheck-share { display: block; color: var(--warn); font-size: var(--fs-note); }
-  .hwcheck-group { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px;
+  .hwcheck-group { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2);
                    padding: 9px 14px; background: var(--panel-2);
                    border-left: 3px solid var(--border-strong);
                    border-radius: var(--radius-sm); margin-bottom: var(--space-2);
@@ -1157,7 +1171,7 @@
   .hwcheck-group-reason { color: var(--muted); }
   .hwcheck-ok { font-size: var(--fs-note); color: var(--ok); margin-bottom: var(--space-3); }
   .hwcheck-order { list-style: none; margin: 0 0 var(--space-3); padding: 0; }
-  .hwcheck-order-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px;
+  .hwcheck-order-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2);
                        padding: 6px 0; font-size: var(--fs-body); }
   .hwcheck-order-index { flex: 0 0 auto; width: 22px; height: 22px; line-height: 22px;
                          text-align: center; border-radius: var(--radius-full);
@@ -1167,30 +1181,30 @@
   /* 逐件专精小节（工单 module-hwcheck/04）：[专精] 徽章 + 这一节测什么 + 平台差异。
      外观刻意与"通用降级小节"（.hwcheck-generic，工单 07）分开——一眼看出哪件真测了。 */
   .hwcheck-section { background: var(--panel-2); border-left: 3px solid var(--ok);
-                     border-radius: var(--radius-sm); padding: 12px 14px;
+                     border-radius: var(--radius-sm); padding: var(--space-3) 14px;
                      margin-bottom: var(--space-4); }
-  .hwcheck-section-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px;
+  .hwcheck-section-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2);
                           margin-bottom: var(--space-2); }
   .hwcheck-section-tag { font-size: var(--fs-tag); font-weight: 600; color: var(--ok);
                          border: 1px solid var(--ok); border-radius: var(--radius-full);
-                         padding: 0 8px; }
+                         padding: 0 var(--space-2); }
   /* 通用降级小节（工单 module-hwcheck/07）：虚框 + 灰描边徽章（不是实心"专精"）。
      配色刻意比专精件弱一档——它是"走过场"，不能看起来跟真测过一样。
      类名刻意不是 .hwcheck-section：那个类是"专精小节"的选择器（页面与验收按它
      数"这一趟真测了几件"）。 */
   .hwcheck-generic { background: var(--panel-2); border-left: 3px dashed var(--muted);
-                     border-radius: var(--radius-sm); padding: 12px 14px;
+                     border-radius: var(--radius-sm); padding: var(--space-3) 14px;
                      margin-bottom: var(--space-4); }
   .hwcheck-section-tag.generic { color: var(--muted); border-color: var(--muted); }
   /* 自建件的检测计划（工单 hwcheck-unknown-device/05）：标注词 + 名称 + 这一趟对
      它做什么。与库内两批外观**都不一样**（自己一组类名，不套 .hwcheck-section）：
      库内件是"验证过的"，这一批是"按你确认的事实试的"，学生一眼要分得清。
      空集时容器里什么都不写（既有页面逐字不变）。 */
-  .hwcheck-custom-plan { padding: 12px 14px; }
+  .hwcheck-custom-plan { padding: var(--space-3) 14px; }
   .hwcheck-section-tag.custom { color: var(--accent); border-color: var(--accent); }
   .hwcheck-custom-name { font-size: var(--fs-body); overflow-wrap: break-word; }
   .hwcheck-custom-wiring { font-size: var(--fs-note); color: var(--muted);
-                           padding: 6px 0 8px; overflow-wrap: break-word; }
+                           padding: 6px 0 var(--space-2); overflow-wrap: break-word; }
   .hwcheck-custom-wiring .hwcheck-section-tag { margin-right: 6px; }
   .hwcheck-order-name { font-size: var(--fs-note); color: var(--muted); }
   /* 顺序表里自建件那几行的标注词（与计划面板同一句话，`.badge` 的描边变体）——
@@ -1205,15 +1219,15 @@
      degraded（兜底文案）时用虚线描边 + 徽章，不让人把它当成模型结论。 */
   .hwcheck-symptom { width: 100%; min-height: 72px; margin-top: var(--space-3);
                      font-family: inherit; font-size: var(--fs-body); line-height: 1.7;
-                     padding: 10px 12px; border: 1px solid var(--border-strong);
+                     padding: 10px var(--space-3); border: 1px solid var(--border-strong);
                      border-radius: var(--radius-md); background: var(--panel);
                      color: var(--text); resize: vertical; }
   .hwcheck-advice { margin-top: var(--space-4); background: var(--panel-2);
                     border-left: 3px solid var(--accent); border-radius: var(--radius-sm);
-                    padding: 12px 14px; }
+                    padding: var(--space-3) 14px; }
   .hwcheck-advice.degraded { border-left: 3px dashed var(--warn); }
   .hwcheck-advice-head { display: flex; flex-wrap: wrap; align-items: baseline;
-                         gap: 8px; margin-bottom: var(--space-2); }
+                         gap: var(--space-2); margin-bottom: var(--space-2); }
   .hwcheck-advice-verdict { font-weight: 600; color: var(--accent); }
   .hwcheck-advice.degraded .hwcheck-advice-verdict { color: var(--warn); }
   .hwcheck-advice-summary { font-size: var(--fs-body); line-height: 1.7;
@@ -1221,12 +1235,16 @@
   .hwcheck-advice-block { margin-bottom: var(--space-3); }
   .hwcheck-advice-title { font-size: var(--fs-note); color: var(--muted);
                           margin-bottom: var(--space-2); }
-  .hwcheck-advice-block ul, .hwcheck-advice-block ol { margin: 0; padding-left: 20px; }
+  .hwcheck-advice-block ul, .hwcheck-advice-block ol { margin: 0; padding-left: var(--space-5); }
   .hwcheck-advice-block li { font-size: var(--fs-body); line-height: 1.7;
                              overflow-wrap: break-word; }
   /* ==== 检测页排版：字台阶梯 + 间距阶梯（工单 ui-density/01）====================
-     为什么单独一段：本轮只拿检测页做样板（全站推广另立一轮），规则全部收在
-     `#tab-hwcheck` 作用域内——页外零影响；id / DOM 顺序 / 既有类名语义一字未动。
+     这一段的规则分两类，**别把两类混着读**（工单 05 复查改正了这条注释的旧说法）：
+       · **带 `#tab-hwcheck` 作用域的**：共用基类（card / h2 / h3 / .muted / label / .badge）
+         与去框/重点那一批——页外零影响，这是"样板只动这一页"的边界；
+       · **就地改的 `.hwcheck-*` / `.my-device-*`**：这些类名本来就是**全局选择器**，
+         但它们只被这一栏的元素使用（`static/js/fx/hwcheck-*.js` 与 `my-devices.js` 渲染），
+         所以"页外零影响"是靠**使用面**成立的，不是靠选择器作用域——改它们时仍要 grep 一遍用量。
 
      改前读数（探针 .scratch/ui-density/probe-01-before.txt，可复跑）：这一页自己只用了
      11 / 11.5 / 12 / 12.5 / 13px 五档字号，间距只用 4 / 8 / 12px 三档 —— 正文被压到
@@ -1235,7 +1253,7 @@
 
      间距三档：区块之间 --space-6(24px) / 小节与列表之间 --space-4(16px) /
      行内 --space-2(8px)～--space-3(12px)。 */
-  #tab-hwcheck .card { padding: 20px 24px; margin-bottom: var(--space-6); }
+  #tab-hwcheck .card { padding: var(--space-5) var(--space-6); margin-bottom: var(--space-6); }
   #tab-hwcheck .card h2 { font-size: var(--fs-page); font-weight: 650; line-height: 1.35;
                           margin: 0 0 var(--space-4); flex-wrap: wrap;
                           align-items: baseline; gap: 2px 10px; }
@@ -1273,45 +1291,55 @@
 
   /* 卡片标题的记号：给"卡片"这一级补上第二条可见差异（字号之外还有色/形）。
      为什么需要：中文只有 Regular/Bold 两档，h2(20px) 与 h3(16px) 之间**没有字重轴**
-     可用，只靠字号一条维度分等级（工单 01 的账第 3 条）。 */
-  #tab-hwcheck .card h2::before { content: ""; flex: 0 0 auto; align-self: center;
-    width: 3px; height: 17px; border-radius: var(--radius-full); background: var(--accent); }
+     可用，只靠字号一条维度分等级（工单 01 的账第 3 条）。
+
+     尺寸走 **em**（相对标题字号），不写死 px：① 字号台阶将来整体调大，记号跟着长；
+     ② `margin-top` 那条守卫只允许 1px 发丝线裸值（工单 05 复查时我写 `5px` 被它当场判红），
+     而 `0.25em` 恰好 = 20px 字下的 5px，是"把记号对齐到第一行"的那点偏移。
+     颜色走 `--hwcheck-title-mark`：空卡降级要把它调灰，用**一个变量**而不是把那串 `:has()` 抄第二遍。 */
+  #tab-hwcheck .card { --hwcheck-title-mark: var(--accent); }
+  #tab-hwcheck .card h2::before { content: ""; flex: 0 0 auto; align-self: flex-start;
+    margin-top: 0.25em; width: 3px; height: 0.85em; border-radius: var(--radius-full);
+    background: var(--hwcheck-title-mark); }
 
   /* 动作三级：主（.primary 实心）/ 不可逆（.danger 红描边 + 淡红底）/ 次要（默认） */
   #tab-hwcheck button.danger { border-color: var(--danger); background: var(--danger-dim); }
   #tab-hwcheck button.danger:hover { background: var(--danger); color: #fff; }
 
-  /* 面板里再套一个带框提示 = 又一层框。嵌在"左条 + 淡底"面板里的提示改成**凹陷底、
-     不带描边**——它只负责分行，不负责再画一个盒子。 */
+  /* 嵌在"左条 + 淡底"面板里的说明块：只换**底色**（面板本身已是 panel-2，同底会糊在一起，
+     换 input-bg 才有"凹进去"的分层）并把下边距收窄——形状与外面那条共用同一份声明。 */
   #tab-hwcheck .hwcheck-my-devices .hwcheck-hint,
   #tab-hwcheck .hwcheck-handoff .hwcheck-hint,
   #tab-hwcheck .hwcheck-custom-plan .hwcheck-hint {
-    background: var(--input-bg); border: none; margin-bottom: var(--space-2); }
+    background: var(--input-bg); margin-bottom: var(--space-2); }
 
   /* 空态安静下来：图标小一档、标题降一级、颜色退到 muted（**不删文案**，只降呈现） */
   #tab-hwcheck .empty-state { gap: var(--space-1); padding: var(--space-1) 0; }
-  #tab-hwcheck .empty-state .es-icon { font-size: 22px; opacity: .5; }
+  #tab-hwcheck .empty-state .es-icon { font-size: var(--fs-icon); opacity: .5; }
   #tab-hwcheck .empty-state .es-title { font-size: var(--fs-body); font-weight: 600;
     color: var(--muted); }
   #tab-hwcheck .empty-state .es-hint { font-size: var(--fs-note); color: var(--muted); }
 
-  /* 整张卡还空着时，卡片本身也安静：标题退成 muted、去掉顶光与阴影——**描边保留**
-     （它是"唯一那一层"）。判据 = 六个结果卡的占位里**只有一个孩子**，且那孩子是空态文本。
+  /* 整张卡还空着时，卡片本身也安静：标题退成 muted、去掉顶光与阴影、记号调灰——**描边保留**
+     （它是"唯一那一层"）。
+
+     空卡判据（**单源，只在这里写一遍**；工单 05 复查抓到它此前抄了两遍，加一张结果卡要改两处）：
+       ① 占位里**只有一个孩子**，且那孩子是空态文本（`.muted` / `.empty-state` / `.hwcheck-hint`）；
+       ② 或者占位**一个孩子都没有**——`#hwcheck-conflicts` / `#hwcheck-order` 在没有板侧视图时
+          渲染的是空串（`hwcheck-core.js:426/436`），旧判据漏了这两张卡（复查实测）。
      `:has()` 老浏览器不支持时整条忽略（页面照旧可用，只是不安静）——纯增强，不是依赖。 */
   #tab-hwcheck .card:has(> :is(#hwcheck-wiring, #hwcheck-sections, #hwcheck-console,
                                #hwcheck-project, #hwcheck-checklist, #hwcheck-recent)
-                           > :is(.muted, .empty-state, .hwcheck-hint):only-child) {
-    box-shadow: none; background-image: none; color: var(--muted); }
-  #tab-hwcheck .card:has(> :is(#hwcheck-wiring, #hwcheck-sections, #hwcheck-console,
-                               #hwcheck-project, #hwcheck-checklist, #hwcheck-recent)
-                           > :is(.muted, .empty-state, .hwcheck-hint):only-child) h2::before {
-    background: var(--border-strong); }
+                           > :is(.muted, .empty-state, .hwcheck-hint):only-child),
+  #tab-hwcheck .card:has(> :is(#hwcheck-conflicts, #hwcheck-order):empty) {
+    box-shadow: none; background-image: none; color: var(--muted);
+    --hwcheck-title-mark: var(--border-strong); }
   /* 两个入口锚（工单 ui-density/04）：把「从哪挑件 / 从哪登记自己的件」放到步骤 3 顶上。
      为什么不是又写一句说明：可发现性问题的正解是**看得见的入口**，不是让人往下找。 */
   #tab-hwcheck .hwcheck-jump-row { display: flex; flex-wrap: wrap; align-items: center;
     gap: var(--space-2); margin: var(--space-2) 0; }
   #tab-hwcheck .hwcheck-jump { display: inline-flex; align-items: center; gap: 6px;
-    padding: 5px 12px; border: 1px solid var(--border-strong);
+    padding: var(--space-1) var(--space-3); border: 1px solid var(--border-strong);
     border-radius: var(--radius-full); background: var(--panel-2); color: var(--accent);
     font-size: var(--fs-note); text-decoration: none; cursor: pointer; }
   #tab-hwcheck .hwcheck-jump:hover { border-color: var(--accent); background: var(--accent-dim); }
@@ -1328,7 +1356,7 @@
   }
   /* 黏顶栏会盖住滚动目标：锚点跳转与 scrollIntoView 都要给顶栏留出那一条 */
   #tab-hwcheck #hwcheck-device-search, #tab-hwcheck #my-devices,
-  #tab-hwcheck #hwcheck-device-grid { scroll-margin-top: calc(var(--header-h) + 16px); }
+  #tab-hwcheck #hwcheck-device-grid { scroll-margin-top: calc(var(--header-h) + var(--space-4)); }
 
   /* 评分点核对清单（工单 score-checklist/01）：逐条 checkbox + 进度 +
      复制核对表；done 行弱化描边表示已核对 */

@@ -1,0 +1,29 @@
+== ① 窄屏（检测页）==
+  1600×1000：文档宽 1600 / 视口 1600 ✓ 无横向滚动 ｜ 卡片标题 20px（高 27px） ｜ 入口锚换行：否 ｜ 器件网格 max-height 360px
+  1366×900：文档宽 1366 / 视口 1366 ✓ 无横向滚动 ｜ 卡片标题 20px（高 27px） ｜ 入口锚换行：否 ｜ 器件网格 max-height 360px
+  1280×800：文档宽 1280 / 视口 1280 ✓ 无横向滚动 ｜ 卡片标题 20px（高 27px） ｜ 入口锚换行：否 ｜ 器件网格 max-height 360px
+  1024×768：文档宽 1024 / 视口 1024 ✓ 无横向滚动 ｜ 卡片标题 20px（高 64px） ｜ 入口锚换行：否 ｜ 器件网格 max-height 360px
+
+== ② 空卡降级（`:has()` 命中与否）==
+  有内容的卡（第 1 张）：标题 rgb(230, 237, 243) ｜ 记号码 rgb(0, 212, 255)
+  #hwcheck-wiring     孩子 1 个（muted） ｜ 标题 rgb(139, 148, 158) ✓ 已降级 ｜ 阴影 无 ｜ 记号码 rgb(61, 68, 77)
+  #hwcheck-conflicts  孩子 0 个（-） ｜ 标题 rgb(139, 148, 158) ✓ 已降级 ｜ 阴影 无 ｜ 记号码 rgb(61, 68, 77)
+  #hwcheck-order      孩子 0 个（-） ｜ 标题 rgb(139, 148, 158) ✓ 已降级 ｜ 阴影 无 ｜ 记号码 rgb(61, 68, 77)
+  #hwcheck-sections   孩子 1 个（muted） ｜ 标题 rgb(139, 148, 158) ✓ 已降级 ｜ 阴影 无 ｜ 记号码 rgb(61, 68, 77)
+  #hwcheck-console    孩子 1 个（muted） ｜ 标题 rgb(139, 148, 158) ✓ 已降级 ｜ 阴影 无 ｜ 记号码 rgb(61, 68, 77)
+  #hwcheck-project    孩子 1 个（empty-state） ｜ 标题 rgb(139, 148, 158) ✓ 已降级 ｜ 阴影 无 ｜ 记号码 rgb(61, 68, 77)
+  #hwcheck-checklist  孩子 1 个（muted） ｜ 标题 rgb(139, 148, 158) ✓ 已降级 ｜ 阴影 无 ｜ 记号码 rgb(61, 68, 77)
+  #hwcheck-recent     孩子 1 个（muted） ｜ 标题 rgb(139, 148, 158) ✓ 已降级 ｜ 阴影 无 ｜ 记号码 rgb(61, 68, 77)
+
+== ③ 入口锚的键盘焦点 ==
+  「↓ 挑库内器件」焦点可见：是 ｜ outline=solid 2px rgb(0, 212, 255) ｜ box-shadow=none
+
+== ④ 卡片内部残余的完整描边（四边都有 1px+ 实线）==
+  div.hwcheck-warn ｜ div.platform-card ｜ div.platform-card ｜ a.hwcheck-jump ｜ a.hwcheck-jump ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ span.mc-offtag ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ span.mc-offtag ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ span.mc-offtag ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ span.mc-offtag ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ span.mc-offtag ｜ div.module-card ｜ div.module-card ｜ span.mc-offtag ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ div.module-card ｜ span.mc-offtag ｜ div.module-card ｜ div.module-card ｜ div.module-card
+
+== ⑤ 竖向节奏（相邻块的实际间隙）==
+  分组带 → 卡片：12px ｜ 卡片 → 分组带：24px ｜ 分组带 → 卡片：12px ｜ 卡片 → 卡片：24px ｜ 卡片 → 卡片：24px ｜ 卡片 → 卡片：24px ｜ 卡片 → 分组带：24px ｜ 分组带 → 卡片：12px ｜ 卡片 → 卡片：24px ｜ 卡片 → 卡片：24px ｜ 卡片 → 卡片：24px ｜ 卡片 → 卡片：24px
+
+== ⑥ `h2::before` 记号码的对齐（窄屏标题换行时）==
+  1600px：h2 高 27px / 行高 27px / 字号 20px ｜ 记号码 align-self=flex-start
+  1024px：h2 高 64px / 行高 27px / 字号 20px ｜ 记号码 align-self=flex-start
