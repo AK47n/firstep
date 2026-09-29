@@ -1596,7 +1596,13 @@ test("动作进行中按钮禁用：预览按住时「预览」按钮是看得�
 
   await page.route("**/api/hwcheck/preview", async (route) => {
     await new Promise((r) => setTimeout(r, 1500));
-    await route.continue();
+    // sleepy 的这 1.5 秒里，这一发请求可能已经被别的通路结算掉（`unroute` 之后的默认通路，
+    // 或后续整页 goto 把它废掉）——那时 `continue()` 抛 `route.continue: Route is already handled!`，
+    // 而它落在**文件级**的异步上下文里 ⇒ node:test 报「before 钩子产生了测试结束后的异步活动」
+    // ⇒ **整份 spec 判红，而 41 条用例自己全绿**（2026-09-29 CI 实测 run 36526949726；
+    // 同一份代码本机两次整支 61/61 全绿）。处置照 `launcher-reload.spec.mjs` 的既有先例：
+    // 把这一次「迟到」吞掉——它不改变任何语义（请求该走哪条路早走完了）。
+    await route.continue().catch(() => {});
   });
   await page.click("#btn-hwcheck-preview");
   await page.waitForFunction(
