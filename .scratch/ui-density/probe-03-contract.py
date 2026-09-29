@@ -97,88 +97,119 @@ def class_counts(text: str) -> Counter[str]:
     return out
 
 
-class _ChildOrder(HTMLParser):
-    """收集"每个父元素下的子元素顺序"（工单 10 的 2b 增强）。
+class _Node:
+    """DOM 树的一个元素实例（只留判据要用的三样：标签 / id / **直接文本**）。"""
 
-    只要三样东西：父路径（用 (标签, id, 第几个同类) 组成）与子元素的签名
-    （`标签#id.首类`）。**不建完整 DOM**——判据只关心"既有兄弟的相对顺序"。"""
+    __slots__ = ("tag", "ident", "text", "kids")
+
+    def __init__(self, tag: str, ident: str) -> None:
+        self.tag = tag
+        self.ident = ident
+        self.text = ""
+        self.kids: list["_Node"] = []
+
+
+class _TreeBuilder(HTMLParser):
+    """把 HTML 解析成 `_Node` 树（宽容版：闭合标签对不上就往上找，找不到就忽略）。
+
+    ⚠ **不追求 HTML5 级正确**：两侧用同一把尺子解析、比的是"同一份文件的先后两版"，
+    解析器只要**稳定**就够（不稳定的话两侧一起错，判据也就不成立——所以红证是必须的）。
+    """
 
     VOID = {"br", "img", "input", "meta", "link", "hr", "source", "area", "base",
             "col", "embed", "param", "track", "wbr"}
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
-        self.stack: list[str] = []
-        self.last: tuple[list[str], int, int] | None = None
-        self.children: dict[str, list[str]] = {}
+        self.root = _Node("#document", "")
+        self.stack = [self.root]
+        self.last: _Node | None = None
 
     def handle_starttag(self, tag: str, attrs) -> None:
-        d = dict(attrs)
-        ident = d.get("id", "")
-        # ⚠ 签名**不含 class**：本轮允许"只新增类名"（05 单给按钮补 `danger` 就是这一类），
-        # 带 class 会把那种正当改动报成"顺序变了"（10 单第一版实测踩到）。
-        # 区分同层兄弟靠 **id + 文本**（文本在 handle_data 里并进来）。
-        sig = f"{tag}#{ident}"
-        kids = self.children.setdefault("/".join(self.stack), [])
-        kids.append(sig)
+        node = _Node(tag, dict(attrs).get("id", ""))
+        self.stack[-1].kids.append(node)
         if tag not in self.VOID:
-            # 父路径**不带序号**（带了序号的话，插一个新元素会把后面所有路径都移位，
-            # 两侧对不上 → 满屏假红；10 单第一版实测 249 处假红，就是这个原因）。
-            # 代价：同层的匿名兄弟会被并进同一个桶（限制写在 docstring 里）。
-            self.stack.append(sig)
-            self.last = (kids, len(kids) - 1, len(self.stack))
+            self.stack.append(node)
+            self.last = node
+
+    def handle_startendtag(self, tag: str, attrs) -> None:
+        self.handle_starttag(tag, attrs)
+        if tag not in self.VOID:
+            self.handle_endtag(tag)
 
     def handle_endtag(self, tag: str) -> None:
-        if self.stack and self.stack[-1].startswith(tag + "#"):
-            self.stack.pop()
+        for i in range(len(self.stack) - 1, 0, -1):
+            if self.stack[i].tag == tag:
+                del self.stack[i:]
+                return
 
     def handle_data(self, data: str) -> None:
-        """把文本并进"上一个开标签"的签名里。
+        text = " ".join(data.split())
+        if not text:
+            return
+        # 文本只并进"当前最内层元素"——这样匿名兄弟之间不会互相挂错（10 单第二版踩过）
+        node = self.stack[-1]
+        node.text = (node.text + " " + text).strip() if node.text else text
 
-        为什么需要它：`<th>文件名</th>` 与 `<th>批次</th>` 的 (标签, id, 类) 一模一样——
-        不并文本就**看不出这两个对调**（10 单的红证第一次正是这么失败的）。
-        文本只取前 20 字（够区分同层兄弟，又不会被长段落拖累）。
-        """
-        text = data.strip()
-        if not text or not self.stack or self.last is None:
-            return
-        kids, idx, depth = self.last
-        # 只在"刚开的那个元素仍是当前最内层"时并入文本——否则会把文本挂到**别的兄弟**头上
-        # （匿名兄弟共用一个父路径时就会这样：10 单第二版实测一处假红，就是它）。
-        if len(self.stack) != depth:
-            return
-        kids[idx] += f":{text[:20]}"
+
+def _key(node: "_Node") -> tuple[str, str, str]:
+    """对齐键：标签 + id + 直接文本前 24 字（够区分同层兄弟，又不被长段落拖累）。"""
+    return (node.tag, node.ident, node.text[:24])
+
+
+def _path(stack: list["_Node"]) -> str:
+    return "/".join(f"{n.tag}#{n.ident}" if n.ident else n.tag for n in stack if n.tag != "#document")
+
+
+def _align(old: list["_Node"], new: list["_Node"]) -> list[tuple[int, int]]:
+    """LCS：返回配上的 (旧下标, 新下标) 对（保序）。"""
+    n, m = len(old), len(new)
+    dp = [[0] * (m + 1) for _ in range(n + 1)]
+    for i in range(n - 1, -1, -1):
+        for j in range(m - 1, -1, -1):
+            dp[i][j] = (dp[i + 1][j + 1] + 1 if _key(old[i]) == _key(new[j])
+                        else max(dp[i + 1][j], dp[i][j + 1]))
+    out, i, j = [], 0, 0
+    while i < n and j < m:
+        if _key(old[i]) == _key(new[j]):
+            out.append((i, j)); i += 1; j += 1
+        elif dp[i + 1][j] >= dp[i][j + 1]:
+            i += 1
+        else:
+            j += 1
+    return out
 
 
 def sibling_order_problems(before: str, after: str) -> list[str]:
-    """既有兄弟的相对顺序（插进新兄弟不算，重排 / 搬走才算）——2b 的第三项检查。
+    """**既有元素的顺序与去留**（11 单：真树 + 逐层 LCS 对齐）。
 
-    口径：对每个"两侧都在"的父路径，把**改前**的子元素签名序列当成一个**子序列**去
-    在改后的序列里找。找得到 = 既有兄弟没被重排也没被搬走（新插入的随便插）；
-    找不到 = 有人动了顺序，报出来。
-    ⚠ 签名相同的重复兄弟（例如连着两个 `<th class="x">`）算同一类，**互相之间对调看不出来**
-    ——要连那种也看住，得给它们加 id（这条限制写在票尾的账里）。
+    判据：对每一对"配上的父节点"，把两侧子节点用 `_key` 做 LCS 对齐；
+      · 旧的有、新的没配上 ⇒ 既有元素**被删或被搬走** ⇒ 报出来（判红）；
+      · 新的有、旧的没有 ⇒ 新增（本轮允许）⇒ 只记数量；
+      · 配上的继续递归（更深一层的顺序照样要看）。
+    **两个 `_key` 完全相同的兄弟必然整棵子树一致**（否则它们的 `_key` 会在某一层不同）——
+    所以它们互换在语义上是恒等变换，不是"看不见"，是**没有可看的东西**（10 单的账第 1 条结了）。
     """
-    a, b = _ChildOrder(), _ChildOrder()
-    a.feed(before)
-    b.feed(after)
+    ta, tb = _TreeBuilder(), _TreeBuilder()
+    ta.feed(before)
+    tb.feed(after)
     out: list[str] = []
-    for parent, kids_a in a.children.items():
-        kids_b = b.children.get(parent)
-        if kids_b is None:
-            out.append(f"父节点 {parent or '(根)'} 在改后整块不见了")
-            continue
-        # kids_a 是不是 kids_b 的子序列
-        it = iter(kids_b)
-        if all(any(x == y for y in it) for x in kids_a):
-            continue
-        for i, x in enumerate(kids_a):
-            if i < len(kids_b) and kids_b[i] != x:
-                out.append(f"父节点 {parent or '(根)'}：第 {i + 1} 个子元素 改前 {x} / 改后 {kids_b[i]}")
-                break
-        else:
-            out.append(f"父节点 {parent or '(根)'}：既有子元素的相对顺序变了"
-                       f"（改前 {len(kids_a)} 个 / 改后 {len(kids_b)} 个）")
+    added = [0]
+
+    def walk(a: _Node, b: _Node, stack: list[_Node]) -> None:
+        pairs = _align(a.kids, b.kids)
+        matched_old = {i for i, _ in pairs}
+        matched_new = {j for _, j in pairs}
+        for idx, kid in enumerate(a.kids):
+            if idx not in matched_old:
+                out.append(f"{_path(stack + [kid])}：改前有、改后不见了（被删或被搬走）")
+        added[0] += len(b.kids) - len(matched_new)
+        for i, j in pairs:
+            walk(a.kids[i], b.kids[j], stack + [a.kids[i]])
+
+    walk(ta.root, tb.root, [])
+    if added[0]:
+        out.append(f"（本轮新增元素 {added[0]} 个——契约允许，不算问题）")
     return out
 
 
@@ -275,6 +306,36 @@ def diff_removed_lines(before: str, after: str) -> list[str]:
         if CJK_RE.search(body):
             removed.append(body.strip())
     return removed
+
+
+def _self_test_2c(markup: str, out: list[str], failed_flag: list[bool]) -> None:
+    """2c 的自证：三条红证 + 一条绿证（11 单要求——判据换了实现，红证必须跟着换）。"""
+    ok_th = "<th>文件名</th><th>批次</th>"
+    cases = [
+        ("对调两个无 id 兄弟 <th>（文件名 / 批次）",
+         markup.replace(ok_th, "<th>批次</th><th>文件名</th>", 1) if ok_th in markup else "",
+         True),
+        ("删掉一个既有元素（lib-search 那个 input）",
+         markup.replace('<input type="search" id="lib-search"', '<input type="search" id="lib-search-x"', 1),
+         True),
+        ("把一个既有元素的 id 改掉（= 旧的消失 + 新的出现；与「搬到别的父节点」同一路径）",
+         markup.replace('<button id="btn-scan">', '<button id="btn-scan-moved">', 1),
+         True),
+        ("插入一个新兄弟（绿证：契约允许）",
+         markup.replace(ok_th, "<th>新列</th>" + ok_th, 1) if ok_th in markup else "",
+         False),
+    ]
+    for name, bad, want_red in cases:
+        if not bad:
+            out.append(f"  （红证「{name}」跳过：锚点不在盘上）")
+            continue
+        got = [p for p in sibling_order_problems(markup, bad) if not p.startswith("（本轮新增")]
+        red = bool(got)
+        mark = "✅" if red == want_red else "**✗ 不符合预期**"
+        if red != want_red:
+            failed_flag[0] = True
+        out.append(f"  （自证「{name}」→ {'判红' if red else '未判红'}"
+                   f"，期望 {'判红' if want_red else '不判红'} {mark}）")
 
 
 def main() -> int:
@@ -382,22 +443,23 @@ def main() -> int:
                 out.append(f"      （本轮新增元素：{tag_new}）")
 
     out.append("")
-    out.append("== 2c. 既有兄弟的相对顺序（10 单补：2b 的多重集看不出「无 id 兄弟对调」）==")
-    sib = sibling_order_problems(markup_before, markup_after)
+    _FAILED = [failed]
+    out.append("== 2c. 既有元素的存在与顺序（11 单：真树 + 逐层 LCS 对齐）==")
+    sib_all = sibling_order_problems(markup_before, markup_after)
+    sib = [p for p in sib_all if not p.startswith("（本轮新增")]
+    facts = [p for p in sib_all if p.startswith("（本轮新增")]
     if sib:
         failed = True
-        out.append(f"  **{len(sib)} 处**不符合「既有兄弟的顺序不变」：")
+        out.append(f"  **{len(sib)} 处**既有元素不见了 / 被搬走了：")
         for line in sib[:12]:
             out.append("    " + line)
     else:
-        out.append("  ✅ 每个父节点下、**改前就有的**子元素在改后仍是同样顺序（允许插入新兄弟）")
-    # 自证：拿一对调过的输入喂一次，必须判红（工单 10 的要求：这条检查自带红证）
-    probe_bad = markup_before.replace('<th>文件名</th><th>批次</th>',
-                                      '<th>批次</th><th>文件名</th>', 1)
-    out.append(f"  （红证：把 pdf 段两个无 id 的 <th>（文件名 / 批次）对调 → "
-               f"{'判红 ✅' if sibling_order_problems(markup_before, probe_bad) else '**没判红 ✗**'}）")
+        out.append("  ✅ 改前就有的元素**一个都没少、也没被搬走**；同一父节点下的相对顺序不变")
+    for line in facts:
+        out.append("  " + line)
+    _self_test_2c(markup_before, out, _FAILED)
 
-    out.append("")
+    failed = _FAILED[0]
     out.append("== 3. 被点名的类名出现次数（整文件口径）==")
     cb, ca = class_counts(before), class_counts(after)
     for name in WATCHED_CLASSES:
