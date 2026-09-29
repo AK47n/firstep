@@ -1,0 +1,42 @@
+# 读数：描边守卫轮 · 渲染方登记簿 ↔ 盘上双向对账
+# 命令：python .scratch/border-guard/probe-04-js-register.py
+# 口径：scope_lib.js_inline_border_entries（逐行扫 border: 简写，取值终止符 ; 或 "）
+# 时间：2026-09-29T21:46:01+08:00
+
+盘上渲染方内联整圈框：10 条
+渲染方登记簿登记项　：10 条
+双向差　　　　　　　：盘上未登记 0 条 / 登记项过期 0 条 / 锚点歧义 0 条
+
+## 每类条数（与样式块面共用 BORDER_KINDS）
+  tag          2   徽章与标签（不可点）：身份 / 计数 / 图例胶囊，用一条边把自己从正文里拎出来
+  alert        3   语义告示块：带警示或状态语义的告示（编译条 / 未选功能组 / 未上板 / 服务已停止 / 保存失败）
+  float        1   浮在内容之上的自己的面：悬浮保存条 / 只读标注 / 缩放浮标（不然与背后的字糊在一起）
+  doc          1   文档与表格语法：表格网格线 / md 预览的表格与图片框 / 指南表——去掉文档就散了
+  nonbox       3   不是框：用 border 画的圆点 / 对勾字形 / 转圈环 / 滚动条 thumb——画得出像素，但不是盒子
+
+## 逐条清单（文件 / 行号 / 取值 / 认领它的锚点）
+  fx/flash.js:52  1px solid var(--warn)             ← style="border:1px solid var(--warn);
+  fx/task.js:935  1px solid var(--border)           ← border:1px solid var(--border);border-radius:var(--radius-md);ba
+  ui/codeeditor.js:2823  1px solid #888                    ← border:1px solid #888
+  ui/generate-pins.js:618  1px solid var(--border-strong)    ← background:var(--pin-pad);border:1px solid var(--border-strong)
+  ui/generate-pins.js:619  1px dashed var(--warn)            ← border:1px dashed var(--warn)"
+  ui/generate-pins.js:620  1px solid var(--border)           ← background:var(--pin-fixed-pad);border:1px solid var(--border)"
+  ui/generate-pins.js:866  1px solid ${st[0]}                ← class="role-type" style="color:${st[0]};background:${st[1]};bord
+  ui/generate-pins.js:1075  1px solid ${st[0]}                ← class="role-type" style="color:${st[0]};background:${st[1]};bord
+  ui/generate-recommend.js:234  1px solid var(--border,#ccc)      ← border:1px solid var(--border,#ccc)
+  ui/generate-recommend.js:705  1px solid var(--border)           ← class="warn-box" style="border:1px solid var(--border)"
+
+## 脚注：渲染方里的单边分隔线（不在口径内，别读成漏网）
+  fx/task.js:604  1px dashed var(--border)
+  ui/generate-pins.js:1067  1px dashed var(--border)
+  ui/settings.js:326  1px solid var(--border,#333)'>
+  ui/settings.js:327  1px solid var(--border,#333)'>
+  ui/settings.js:328  1px solid var(--border,#333)'>
+  合计 5 条——`border-top` / `border-bottom` 是**一条分隔线**，不是「整圈完整框」；`full_borders` / 本口径都只认 `border:` 简写。
+
+## 覆盖审计（`border…:` 的每一处都归了类，没有「没归类的」）
+  行次（含 border…: 的行）：15
+  整圈完整框（入册）：10
+  撤框（none / 0 开头）：0
+  单边分隔线：5
+  ✅ 每一处 `border…:` 都落在「入册 / 撤框 / 单边」三类里，没有漏扫的写法。

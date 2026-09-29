@@ -6,7 +6,10 @@
 //   FROZEN_FONT_SIZES）——见文件下半部分那两段说明块。
 // ⑥**描边登记簿**（工单 border-guard/01）：`BORDER_KINDS`（10 类）+ `BORDER_REGISTER`（115 条）
 //   + 腿⑥（盘上 ↔ 登记簿双向对账 + 透明不变量 + 类别表形状）——见那两张表的说明块。
-//   **描边与字号两条线都是"不许回潮"的闸**：字号那条的尺是取值集合，描边这条的尺是逐条登记簿。
+// ⑦**渲染方描边登记簿**（工单 border-guard/02）：`JS_BORDER_REGISTER`（10 条）
+//   + 腿⑦（`static/js/**` 内联整圈框的双向对账，认人键 = 文件 + 行内锚点）。
+//   **描边与字号两条线都是"不许回潮"的闸**：字号那条的尺是取值集合，描边这条的尺是逐条登记簿，
+//   而且**样式块面与渲染方面各有一张**（08 单给内联字号补第五条腿的同一条理由）。
 // 静态标记守卫，直接读 index.html。
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -513,6 +516,42 @@ const BORDER_REGISTER = [
   ["guide", ".guide-table th", "doc"],
   ["guide", ".guide-table td", "doc"],
 ];
+
+/**
+ * **渲染方描边登记簿**（工单 border-guard/02）：`static/js/**` 里**内联写出来的**整圈完整框。
+ *
+ * 为什么另起一张（而不是并进上面那张）：08 单给「内联字号」补第五条腿时就是"样式块面先做、
+ * 渲染方面后补"两步——两面的**认人键根本不同**（那边是 CSS 选择器，这边是模板串里的一行），
+ * 混进一张表只会让两边都读不清。这一面对称地补上：**内联写出来的框也不许绕过守卫**。
+ *
+ * **认人键 = `(文件, 锚点)`**，锚点取**该行的一段可认片段**：
+ *   · **不取行号**——行号随插行漂，锚点不漂；
+ *   · **同一锚点登记两次 = 盘上真有两条逐字相同的行**（`.role-type` 那条，
+ *     `generate-pins.js` 里两个渲染函数各写了一遍），所以对账是**多重集**不是集合；
+ *   · 锚点必须**足够独特**：一行只许命中一条登记项，一条登记项只许命中它该命中的那几行
+ *     （施工脚本 `.scratch/border-guard/generate-02-js-register.py` 逐个验过；不独特它当场停手）。
+ *
+ * **口径与样式块面差一处（明写）**：内联样式写在 HTML 属性里，取值可能以 `"` 收尾而不是 `;`
+ * （`style="…border:1px dashed var(--warn)">`），所以取值终止符是 **`;` 或 `"`**。
+ * 样式块面那条要求 `;` 收尾——**两条正则不是同一条**，别互抄（`test_border_register_mirror.py`
+ * 分别钉住它们各自跨语言的镜像）。
+ *
+ * **腿⑦ 两条判据**（本体在 `jsBorderRegisterProblems`）：盘上 ⊆ 本表（新增内联框判红）/
+ * 本表 ⊆ 盘上（改名 / 删掉那一行会让登记项过期）。红证在文件末尾那条合成用例里。
+ */
+const JS_BORDER_REGISTER = [
+  ["fx/flash.js", 'style="border:1px solid var(--warn);', "alert"],
+  ["fx/task.js", 'border:1px solid var(--border);border-radius:var(--radius-md);background:var(--panel-2)', "alert"],
+  ["ui/codeeditor.js", 'border:1px solid #888', "float"],
+  ["ui/generate-recommend.js", 'border:1px solid var(--border,#ccc)', "doc"],
+  ["ui/generate-recommend.js", 'class="warn-box" style="border:1px solid var(--border)"', "alert"],
+  ["ui/generate-pins.js", 'background:var(--pin-pad);border:1px solid var(--border-strong)', "nonbox"],
+  ["ui/generate-pins.js", 'border:1px dashed var(--warn)"', "nonbox"],
+  ["ui/generate-pins.js", 'background:var(--pin-fixed-pad);border:1px solid var(--border)"', "nonbox"],
+  ["ui/generate-pins.js", 'class="role-type" style="color:${st[0]};background:${st[1]};border:1px solid ${st[0]}"', "tag"],
+  ["ui/generate-pins.js", 'class="role-type" style="color:${st[0]};background:${st[1]};border:1px solid ${st[0]}"', "tag"],
+];
+
 /** 规则块（`选择器 { 声明 }`）：返回 [{ sel, body }]。 */
 function cssRules(css) {
   const out = [];
@@ -650,9 +689,122 @@ function fullBorderEntries(css) {
   return out;
 }
 
-/** 登记簿 / 类别表里的键——用 `\u0000` 拼，免得选择器里的空格与作用域名撞车。 */
-function borderKey(scope, sel) {
-  return scope + "\u0000" + sel;
+/** 登记簿里的复合键（JS 的 Map 只吃字符串键）。**只用于查表，不许再拆回来**——
+ * 印给人看的那一行跟着数据走（`{count, label}`），见 `multisetBorderProblems`。 */
+function borderKey(a, b) {
+  return a + "\u0000" + b;
+}
+
+/** 登记项的**类别值**校验（腿⑥ / 腿⑦ **共用同一张 `BORDER_KINDS`**——"这是什么"是一回事）。 */
+function borderKindProblems(kinds, register) {
+  const ids = new Set(kinds.map(([id]) => id));
+  return register.flatMap((entry) => {
+    const kind = entry[2];
+    return ids.has(kind) ? [] : [`登记项用了类别表里没有的类别：${entry[1]} → ${kind}`];
+  });
+}
+
+/**
+ * **登记簿对账的公共骨架**（腿⑥ 描边登记簿 / 腿⑦ 渲染方登记簿共用）。
+ *
+ * `want` / `got` 都是 `Map<键, {count, label}>`（`label` = 印给人看的那一行）。
+ * 按**多重集**比，三类都报（少报哪一类都是洞）：
+ *   · 盘上有、登记侧没有 → 新写的东西必须**显式登记**；
+ *   · 两边都有但**条数不等** → 盘上多一条（同一个认人键被复制了一份）/ 少一条（改名或删了）；
+ *   · 登记侧有、盘上没有 → 登记项**过期**。
+ *
+ * ⚠ 条数不等必须**两个方向都报**：只判 `m < n`（第一版就是）会放过"盘上多出一条"——
+ * 而那正是"同一个选择器/锚点又写了一遍"这种最像意外的坏法（01 单双轴评审点过同一个洞）。
+ *
+ * `talk` 提供三句**对症**的中文：两条腿的处置建议不一样，所以文案由调用方给——
+ * 抽成一句通用话会让被拦下的人不知道该改哪一边。
+ */
+function multisetBorderProblems(want, got, talk) {
+  const out = [];
+  for (const [key, g] of got) {
+    if (!want.has(key)) out.push(talk.unregistered(g.label));
+  }
+  for (const [key, w] of want) {
+    const g = got.get(key);
+    if (!g) out.push(talk.stale(w.label));
+    else if (g.count !== w.count) out.push(talk.countMismatch(w.label, w.count, g.count));
+  }
+  return out;
+}
+
+/** 往 `Map<键, {count, label}>` 里加一条（键相同就只加计数）。 */
+function bump(map, key, label) {
+  const hit = map.get(key);
+  if (hit) hit.count += 1;
+  else map.set(key, { count: 1, label });
+}
+
+/**
+ * 盘上渲染方（`static/js/**`）里**内联写出来的整圈完整框**：一行一条。
+ *
+ * **两种拼法都抓**（照第五条腿 `jsInlineFontOffenders` 的先例——那条腿的教训就是
+ * "只认一种拼法"漏了一半）：
+ *   · CSS 语法：`style="…border:1px solid var(--border)…"` / `cssText = "…border:…"`（冒号两侧空格随意）；
+ *   · JS 属性语法：`el.style.border = "1px solid var(--red)"`。
+ * 盘上今天这两种写法**各 0 处**（`probe-04-js-register.py` 的「覆盖审计」那一节盯着）——
+ * 认它们是为了"以后写了也进得来"，不是为了现在有货。
+ *
+ * **口径与样式块面差一处（明写）**：内联样式写在 HTML 属性里，取值可能以 `"` 收尾而不是 `;`
+ * （`style="…border:1px dashed var(--warn)">`），所以取值终止符是 **`;` 或 `"`**。
+ * `DEAD_BORDER`（`none` / `0` 开头的算撤框）两边共用。
+ *
+ * **不跨行拼**：`'…' + 'border:…'` 那种拼接在本仓库都是**一条声明独占一行**，
+ * 所以逐行扫就够；真出现跨行拼的写法时这条腿会**看不见**它（与第五条腿的已知留白同一类，
+ * 那一条记在 08 账第 3 条里）。探针的「覆盖审计」把每一处 `border…:` 都归了类，专门盯这个留白。
+ */
+function jsInlineBorderEntries(files = jsFiles()) {
+  const out = [];
+  for (const [rel, text] of files) {
+    text.split("\n").forEach((raw, i) => {
+      for (const m of raw.matchAll(/(?<![\w-])border\s*:\s*([^;"]+)|\.border\s*=\s*["\u0027]([^"\u0027]+)["\u0027]/g)) {
+        const value = (m[1] || m[2] || "").trim();
+        if (!value || DEAD_BORDER.includes(value.split(/\s+/)[0])) continue;
+        out.push({ file: rel, line: i + 1, raw, value });
+      }
+    });
+  }
+  return out;
+}
+
+/**
+ * **腿⑦ 的判据**（纯函数，三条；锚点语义见 `JS_BORDER_REGISTER` 的说明块）：
+ *   ① 盘上每一条内联整圈框都要被**恰好一条**登记项认领（锚点是那行的一段片段）；
+ *      一行命中 0 条 = 没登记；命中 >1 条 = 锚点不够独特（那会让对账悄悄失真，也得报）；
+ *   ② 每条登记项都要有行认领它，且**条数相等**（多重集：同一锚点登记 N 次就得有 N 行）；
+ *   ③ 类别值必须在 `BORDER_KINDS` 里（与样式块面共用同一张类别表）。
+ */
+function jsBorderRegisterProblems(files = jsFiles(), register = JS_BORDER_REGISTER, kinds = BORDER_KINDS) {
+  const out = borderKindProblems(kinds, register);
+  const labelOf = ([file, anchor]) => `${file} / ${anchor}`;
+  const want = new Map();
+  for (const entry of register) bump(want, borderKey(entry[0], entry[1]), labelOf(entry));
+  const got = new Map();
+  for (const e of jsInlineBorderEntries(files)) {
+    const hits = [...want.keys()].filter((key) => {
+      const [file, anchor] = key.split("\u0000");
+      return file === e.file && e.raw.includes(anchor);
+    });
+    if (hits.length === 0) {
+      bump(got, `\u0000${e.file}:${e.line}`, `static/js/${e.file}:${e.line} → ${e.value}`);
+    } else if (hits.length > 1) {
+      out.push(`static/js/${e.file}:${e.line} 同时命中 ${hits.length} 条登记项（锚点不够独特，`
+        + `对账会失真）：${hits.map((k) => want.get(k).label).join(" ｜ ")}`);
+    } else {
+      bump(got, hits[0], want.get(hits[0]).label);
+    }
+  }
+  out.push(...multisetBorderProblems(want, got, {
+    unregistered: (label) => `渲染方这条内联整圈框没有登记：${label}`,
+    stale: (label) => `渲染方登记项在盘上一条都找不到（改名 / 删行之后忘了同步）：${label}`,
+    countMismatch: (label, n, m) => `渲染方这条登记了 ${n} 条、盘上有 ${m} 条`
+      + `（同一个锚点被复制 / 少了一份）：${label}`,
+  }));
+  return out;
 }
 
 /**
@@ -667,8 +819,7 @@ function borderKey(scope, sel) {
  * 那是 08 账第 1 条说的判据问题）、不判好不好看、不判取值该用哪个令牌。
  */
 function borderRegisterProblems(css, register = BORDER_REGISTER, kinds = BORDER_KINDS) {
-  const out = [];
-  const kindIds = new Set(kinds.map(([id]) => id));
+  let out = borderKindProblems(kinds, register);
   const registered = new Map();
   for (const entry of register) {
     if (!Array.isArray(entry) || entry.length !== 3) {
@@ -676,41 +827,31 @@ function borderRegisterProblems(css, register = BORDER_REGISTER, kinds = BORDER_
       continue;
     }
     const [scope, sel, kind] = entry;
-    if (!kindIds.has(kind)) out.push(`登记项用了类别表里没有的类别：[${scope}] ${sel} → ${kind}`);
     const key = borderKey(scope, sel);
     if (registered.has(key)) out.push(`同一条登记了两次：[${scope}] ${sel}`);
-    registered.set(key, { scope, sel, kind });
+    registered.set(key, { scope, sel, kind, label: `[${scope}] ${sel}` });
   }
   for (const [id] of kinds) {
     if (![...registered.values()].some((e) => e.kind === id)) {
       out.push(`类别 ${id} 一条登记都没有——判据退化成摆设`);
     }
   }
+  const want = new Map();
+  for (const [key, e] of registered) want.set(key, { count: 1, label: e.label });
   const onDisk = new Map();
-  const diskCount = new Map();
+  const got = new Map();
   for (const e of fullBorderEntries(css)) {
     const key = borderKey(e.scope, e.sel);
-    // ⚠ **盘上这一边是多重集，不是集合**：同一作用域里同一个选择器可以写出**两条**带框的规则
-    //   （交错在别处的同名规则），按 Map 收会把它折成一条 —— 那样 ① 和 ② 两条对账都判不出来，
-    //   只剩条数断言兜底。这里显式报出来（`probe-03` 现在实测 0 处，但判据得先站得住）。
-    diskCount.set(key, (diskCount.get(key) || 0) + 1);
-    if (diskCount.get(key) > 1) {
-      out.push(`同一作用域里同一个选择器有不止一条整圈完整框声明（认人键会折叠它们）：`
-        + `[${e.scope}] ${e.sel} → ${e.value}`);
-    }
     onDisk.set(key, e);
+    bump(got, key, `[${e.scope}] ${e.sel} → ${e.value}`);
   }
-  for (const [key, e] of onDisk) {
-    if (!registered.has(key)) {
-      out.push(`盘上这条整圈完整框没有登记（要留就加进 BORDER_REGISTER 并挑一个类别，`
-        + `不然请改成留白 / 单条分隔线 / 淡底）：[${e.scope}] ${e.sel} → ${e.value}`);
-    }
-  }
-  for (const [key, e] of registered) {
-    if (!onDisk.has(key)) {
-      out.push(`登记簿里这条在盘上找不到了（改名 / 删规则之后忘了同步）：[${e.scope}] ${e.sel}`);
-    }
-  }
+  out = out.concat(multisetBorderProblems(want, got, {
+    unregistered: (label) => `盘上这条整圈完整框没有登记（要留就加进 BORDER_REGISTER 并挑一个类别，`
+      + `不然请改成留白 / 单条分隔线 / 淡底）：${label}`,
+    stale: (label) => `登记簿里这条在盘上找不到了（改名 / 删规则之后忘了同步）：${label}`,
+    countMismatch: (label, n, m) => `盘上这条有 ${m} 条整圈完整框声明、登记簿里 ${n} 条`
+      + `（同一作用域里同一个选择器写了不止一条带框规则，认人键会把它们折叠成一条）：${label}`,
+  }));
   for (const [key, e] of onDisk) {
     const reg = registered.get(key);
     if (!reg) continue;
@@ -831,6 +972,20 @@ test("描边（工单 01，第六条腿）：整圈完整框逐条登记，盘�
     "盘上声明数与登记簿条数不等——上面的对账会指出差在哪几条；若它没报，就是有两条声明撞了同一个认人键");
 });
 
+test("描边（工单 02，第七条腿）：渲染方内联整圈框逐条登记，盘上 ↔ 登记簿双向对账", () => {
+  // 08 单给「内联字号」补第五条腿的先例：**样式块做完了不等于渲染方也干净**。
+  // 这一面对称地补上——`static/js/**` 里那 10 处内联 `border:` 简写（指引卡 / 提示块 /
+  // 诊断浮标 / 题面图片框 / 警示块 / 图例色块 / 角色标记）逐条登记（认人键 = 文件 + 行内锚点），
+  // 判据见 `jsBorderRegisterProblems`，红证在文件末尾那条合成用例里。
+  const problems = jsBorderRegisterProblems();
+  assert.deepEqual(problems, [],
+    "渲染方描边登记簿与盘上对不上（新增内联框就登记它、去掉就摘掉登记项）：\n" + problems.join("\n"));
+  assert.equal(JS_BORDER_REGISTER.length, 10,
+    "渲染方登记条数变了（应为 10）。真去掉了一条就同步改这个数，并在票尾写清是哪一条、为什么");
+  assert.equal(jsInlineBorderEntries().length, JS_BORDER_REGISTER.length,
+    "盘上内联框数与登记条数不等——上面的对账会指出差在哪几条");
+});
+
 test("全站推广：动作三级的口径**单源**（主实心 / 危险红描边淡红底 / 次要幽灵）", () => {
   // 口径来自检测页样板（ui-density/02），全站推广轮（02 单）把它升到全局
   assert.deepEqual(actionWeightProblems(html), []);
@@ -838,7 +993,7 @@ test("全站推广：动作三级的口径**单源**（主实心 / 危险红描�
     "ghost 类要真的被元素用到——否则'补实一个类'就只是又造了一个死类");
 });
 
-test("全站推广合成红证：六条腿各自都判得红（防'永远绿'的守卫）", () => {
+test("全站推广合成红证：七条腿各自都判得红（防'永远绿'的守卫）", () => {
   // ① 已完工作用域各塞一个越界字号——**锚点只取规则头（不带令牌值）**，锚变了就当场报，
   //    不让这条自检静默空转。三个作用域：
   //      · `hwcheck` = 上一轮的样板页（腿③最早看着的那一页）；
@@ -972,13 +1127,58 @@ test("全站推广合成红证：六条腿各自都判得红（防'永远绿'的
   //        这是 Standards 轴点名的"Map 折叠"洞——判据自己得先站得住，红证才不是摆设。
   const dupKey = html.replace(".card {", ".card { border: 1px solid var(--danger);");
   assert.notEqual(dupKey, html, "注入没生效（锚点没命中）");
-  assert.ok(borderRegisterProblems(dupKey).some((p) => p.includes("不止一条整圈完整框声明")),
+  assert.ok(borderRegisterProblems(dupKey).some((p) => p.includes("有 2 条整圈完整框声明、登记簿里 1 条")),
     "同一作用域里同选择器的第二条框没被判出（多重集分支失效）");
-  // ⑧ 复原后转绿（六条腿都回到空/子集）
+  // ⑧ **第七条腿（渲染方内联框）的坏法各判一次红**——判据吃 `files` 参数，所以注入走内存
+  //    （照 08 单第五条腿用假 JS 源的先例：这一面本来就是"逐行文本"，不必碰真文件）。
+  assert.deepEqual(jsBorderRegisterProblems(), [], "盘上渲染方本来就不该有对账问题");
+  const fakeBorderJs = (line) => [["ui/whatever.js", line]];
+  //    (a) 新写一条**没登记**的内联框 → 判红
+  assert.ok(
+    jsBorderRegisterProblems(fakeBorderJs('  el.style.cssText = "padding:2px;border:1px solid var(--border);";'))
+      .some((p) => p.includes("没有登记") && p.includes("ui/whatever.js")),
+    "塞进去的未登记内联框没被判出",
+  );
+  //    (b) 登记项的锚点改坏（盘上那一行还在，只是没人认领）→ 判红
+  const brokenAnchor = JS_BORDER_REGISTER.map(([f, a, k]) =>
+    (a === "border:1px solid #888" ? [f, "border:1px solid #999", k] : [f, a, k]));
+  assert.ok(jsBorderRegisterProblems(jsFiles(), brokenAnchor).some((p) => p.includes("ui/codeeditor.js") && p.includes("没有登记")),
+    "锚点改坏之后盘上那条没被判成未登记");
+  assert.ok(jsBorderRegisterProblems(jsFiles(), brokenAnchor).some((p) => p.includes("一条都找不到")),
+    "锚点改坏之后登记项没被判成过期");
+  //    (c) 锚点**不够独特**（一行命中两条登记项）→ 判红（那会让对账悄悄失真）
+  const loose = [...JS_BORDER_REGISTER, ["ui/codeeditor.js", "border:1px solid", "float"]];
+  assert.ok(jsBorderRegisterProblems(jsFiles(), loose).some((p) => p.includes("锚点不够独特")),
+    "过宽的锚点没被判出（它会让一条登记项去认领别人的行）");
+  //    (e) **口径边界要自证**：单边分隔线（`border-top:`）与撤框（`border: none` / `0`）都不算。
+  //        这里断言**判据本身**（`jsInlineBorderEntries`），不喂登记簿——喂合成文件会让
+  //        每一条真实登记项都"过期"，那是另一件事，会把这条边界证明淹掉。
+  //        ⚠ 注入串里必须**真有 `border-top:`**：第一版写的是 `x.style.borderTop = "…"`，
+  //        那串里根本没有 `border:`，对任何正则都返回空 —— **空断言**，什么都没证明
+  //        （02 单双轴评审点名；边界本身成立，但用例得真的把它钉住）。
+  assert.deepEqual(jsInlineBorderEntries(fakeBorderJs('  el.style.cssText = "border-top:1px dashed var(--border);";')), [],
+    "单边分隔线被误判成整圈完整框（口径写宽了）");
+  assert.deepEqual(jsInlineBorderEntries(fakeBorderJs('  el.style.cssText = "border:none;border-top:0";')), [],
+    "撤框声明（none / 0）被误判成整圈完整框（DEAD_BORDER 没生效）");
+  //    正例：真有一条内联框时它得认出来（否则上面两条"不判红"可能只是整个判据不工作）
+  assert.equal(jsInlineBorderEntries(fakeBorderJs('  el.style.cssText = "border:2px dashed var(--ok)";')).length, 1,
+    "真有一条内联整圈框时判据没认出来（上一条的'不判红'因此不算证据）");
+  //    **两种拼法都要抓**（照第五条腿的先例）：JS 属性写法也得进得来
+  assert.equal(jsInlineBorderEntries(fakeBorderJs('  el.style.border = "1px solid var(--danger)";')).length, 1,
+    "JS 属性拼法（`el.style.border = \"…\"`）没被抓到——那就是第五条腿踩过的'只认一种拼法'");
+  //    (d2) **条数"变多"那个方向也要判红**：同一个锚点被复制了一份（有人复制粘贴了那段渲染）
+  //         —— 只判"盘上比登记少"会静默放过它（01 单双评点过同一个洞）。
+  const dupedJs = jsFiles().map(([rel, text]) =>
+    rel === "ui/codeeditor.js" ? [rel, text + '\n  d.style.cssText = "border:1px solid #888;";\n'] : [rel, text]);
+  assert.equal(jsInlineBorderEntries(dupedJs).length, 11, "注入没生效（复制那一行没被算进盘上）");
+  assert.ok(jsBorderRegisterProblems(dupedJs).some((p) => p.includes("登记了 1 条、盘上有 2 条")),
+    "盘上同锚点多出一条时没被判出（条数不等只判了'少'这一个方向）");
+  // ⑨ 复原后转绿（七条腿都回到空/子集）
   assert.deepEqual(bareFontSizesInScope(html, "hwcheck"), []);
   assert.deepEqual(bareTokenSpacesInScope(html, "hwcheck"), []);
   assert.deepEqual(bareFontSizesSitewide(html).filter((v) => !FROZEN_FONT_SIZES.has(v)), []);
   assert.deepEqual(doneScopeOffenders(bareFontSizesInScope), []);
   assert.deepEqual(actionWeightProblems(html), []);
   assert.deepEqual(borderRegisterProblems(html), []);
+  assert.deepEqual(jsBorderRegisterProblems(), []);
 });

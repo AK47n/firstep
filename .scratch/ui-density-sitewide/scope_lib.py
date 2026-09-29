@@ -20,7 +20,8 @@ Duplicated Code。**03 那四支已经跑完、锚点已被消费掉**，回头�
     from scope_lib import (PAGE, GUARD, load_scopes, scope_of, rules_of, rules_in,
                            read_page, write_page, bare_fonts, bare_token_spaces, full_borders,
                            strip_lead_comments, full_border_entries,
-                           load_border_kinds, load_border_register)
+                           load_border_kinds, load_border_register,
+                           js_files, js_inline_border_entries, load_js_border_register)
 """
 
 from __future__ import annotations
@@ -254,4 +255,57 @@ def full_border_entries(text: str) -> list[dict[str, object]]:
             "value": value,
             "transparent": bool(BORDER_TRANSPARENT_RE.search(value)),
         })
+    return out
+
+
+# ---------------------------------------------------------------------------
+# 渲染方（`static/js/**`）内联整圈框（工单 border-guard/02）：认人键 = `(文件, 行内锚点)`。
+# 判据仍住在守卫里，这里只是它的 Python 镜像 + 登记簿读回（探针复算用）。
+# ---------------------------------------------------------------------------
+
+JS_DIR = ROOT / "src" / "contest_generator" / "static" / "js"
+# ⚠ **与样式块面那条不是同一条**：内联样式写在 HTML 属性里，取值可能以 `"` 收尾而不是 `;`
+#   （`style="…border:1px dashed var(--warn)">`）；而且**两种拼法都认**（CSS 串 + JS 属性，
+#   照守卫第五条腿 `jsInlineFontOffenders` 的先例）。两侧由 test_border_register_mirror.py 钉住。
+#   单引号写成 `\u0027` 是为了让这条正则的**正文在两个语言里逐字相同**（能直接对拍）。
+JS_BORDER_LINE_RE = re.compile(
+    r'(?<![\w-])border\s*:\s*([^;"]+)|\.border\s*=\s*["\u0027]([^"\u0027]+)["\u0027]')
+JS_BORDER_ENTRY_RE = re.compile(r'^\s*\["([^"]+)",\s\'(.*)\',\s*"([a-z-]+)"\],\s*$', re.M)
+
+
+def js_files() -> list[tuple[str, str]]:
+    """`static/js/**` 全部 .js → [(相对路径, 全文)]，按路径排序（确定性）。"""
+    out: list[tuple[str, str]] = []
+    for p in sorted(JS_DIR.rglob("*.js")):
+        out.append((p.relative_to(JS_DIR).as_posix(),
+                    p.read_text(encoding="utf-8", newline="")))
+    return out
+
+
+def js_inline_border_entries(files: list[tuple[str, str]] | None = None) -> list[dict[str, object]]:
+    """渲染方里**内联写出来的**整圈完整框：`{file, line, raw, value}`（逐行扫，不跨行拼）。"""
+    out: list[dict[str, object]] = []
+    for rel, text in (js_files() if files is None else files):
+        for i, raw in enumerate(text.split("\n"), start=1):
+            for m in JS_BORDER_LINE_RE.finditer(raw):
+                value = (m.group(1) or m.group(2) or "").strip()
+                if not value or value.split()[0] in DEAD_BORDER:
+                    continue
+                out.append({"file": rel, "line": i, "raw": raw, "value": value})
+    return out
+
+
+def load_js_border_register() -> list[tuple[str, str, str]]:
+    """渲染方登记簿 → [(文件, 锚点, 类别)]；**逐行严格**，坏行大声失败。"""
+    body = _guard_block("JS_BORDER_REGISTER")
+    out: list[tuple[str, str, str]] = []
+    for i, line in enumerate(body.splitlines(), start=1):
+        if not line.strip() or line.strip().startswith("//"):
+            continue
+        m = JS_BORDER_ENTRY_RE.match(line)
+        if not m:
+            raise SystemExit(f"JS_BORDER_REGISTER 第 {i} 行不是登记项形状：{line!r}")
+        out.append((m.group(1), m.group(2), m.group(3)))
+    if not out:
+        raise SystemExit("JS_BORDER_REGISTER 解析出 0 条 —— 格式变了")
     return out

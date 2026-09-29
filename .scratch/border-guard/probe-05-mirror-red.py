@@ -33,6 +33,9 @@ INJECTIONS = [
     ("剥前导注释：不剥了",
      r'return sel.replace(/^(\/\*[\s\S]*?\*\/\s*)+/, "").trim();',
      r"return sel.trim();"),
+    ("渲染方内联框正则（02 单那条）：把取值终止符收窄成只认分号",
+     r"""raw.matchAll(/(?<![\w-])border\s*:\s*([^;"]+)|\.border\s*=\s*["\u0027]([^"\u0027]+)["\u0027]/g)""",
+     r'raw.matchAll(/(?<![\w-])border:\s*([^;]+);/g)'),
 ]
 
 

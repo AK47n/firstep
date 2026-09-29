@@ -1,0 +1,15 @@
+const JS_BORDER_REGISTER = [
+  // ⚠ 本表由 `.scratch/border-guard/generate-02-js-register.py` 生成过一次（`--check` 可复核生成关系）；
+  //   **真源就是这张表本身**——那个脚本与 `register-js-block.js.txt` 是已消费的一次性产物，别拿它们当判据。
+  // ⚠ 同一条锚点登记两次 = 盘上真有两条逐字相同的行（`.role-type` 那条）；锚点是**该行的一段可认片段**，不是行号。
+  ["fx/flash.js", 'style="border:1px solid var(--warn);', "alert"],
+  ["fx/task.js", 'border:1px solid var(--border);border-radius:var(--radius-md);background:var(--panel-2)', "alert"],
+  ["ui/codeeditor.js", 'border:1px solid #888', "float"],
+  ["ui/generate-recommend.js", 'border:1px solid var(--border,#ccc)', "doc"],
+  ["ui/generate-recommend.js", 'class="warn-box" style="border:1px solid var(--border)"', "alert"],
+  ["ui/generate-pins.js", 'background:var(--pin-pad);border:1px solid var(--border-strong)', "nonbox"],
+  ["ui/generate-pins.js", 'border:1px dashed var(--warn)"', "nonbox"],
+  ["ui/generate-pins.js", 'background:var(--pin-fixed-pad);border:1px solid var(--border)"', "nonbox"],
+  ["ui/generate-pins.js", 'class="role-type" style="color:${st[0]};background:${st[1]};border:1px solid ${st[0]}"', "tag"],
+  ["ui/generate-pins.js", 'class="role-type" style="color:${st[0]};background:${st[1]};border:1px solid ${st[0]}"', "tag"],
+];

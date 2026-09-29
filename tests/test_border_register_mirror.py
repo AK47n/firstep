@@ -19,12 +19,17 @@
 
 ## 它判什么
 
-四条（口径的每一块都点到）：
+五条（口径的每一块都点到）：
 
 1. `DEAD_BORDER` 的取值列表（"什么算撤框"）；
-2. 整圈完整框那条正则（"什么算一条整圈完整框"）；
+2. **样式块面**那条整圈完整框正则（"什么算一条整圈完整框"）；
 3. `transparent` 那条正则（`placeholder` 不变量的两半之一）；
-4. 剥前导块注释那条正则（认人键稳不稳，全看它俩一致不一致）。
+4. 剥前导块注释那条正则（认人键稳不稳，全看它俩一致不一致）；
+5. **渲染方面**那条整圈完整框正则（`static/js/**` 的内联框）。
+
+第 2 与第 5 **不是同一条**：样式块面的取值以 `;` 收尾，而内联样式写在 HTML 属性里、
+可能以 `"` 收尾（`style="…border:1px dashed var(--warn)">`）。两条各自钉自己的镜像——
+把它们当成一条抄来抄去，正是"腿绿而读数红"的经典成因。
 
 **它不判**：不跑 JS、不跑 node（前端门禁才是跑它的地方，见
 `docs/agents/workflow.md` 的闸门表）——这里只钉"两侧写的是不是同一把尺"。
@@ -134,4 +139,18 @@ def test_lead_comment_regex_matches_across_languages(js):
         "剥前导块注释那条正则两侧不一致——**认人键**会在两侧分叉：\n"
         f"  JS     : {js_src!r}\n  Python : {py_src!r}\n"
         f"  归一后 : {norm(js_src)!r} vs {norm(py_src)!r}"
+    )
+
+
+def test_js_inline_border_regex_matches_across_languages(js):
+    """⑤ 渲染方面（工单 02）那条内联框正则：两侧必须逐字相同。
+
+    ⚠ 它与第 ② 条**不是同一条**（取值终止符 `;` vs `;`或`"`）——所以这里比的是
+    `jsInlineBorderEntries` 里那一处，别把两条正则互抄。
+    """
+    js_src = _js_regex_source(js, "function jsInlineBorderEntries(")
+    py_src = _load_scope_lib().JS_BORDER_LINE_RE.pattern
+    assert js_src == py_src, (
+        "渲染方内联框那条正则两侧不一致：\n"
+        f"  JS     : {js_src!r}\n  Python : {py_src!r}"
     )

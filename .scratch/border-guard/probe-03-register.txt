@@ -1,7 +1,7 @@
 # 读数：描边守卫轮 · 登记簿 ↔ 盘上双向对账
 # 命令：python .scratch/border-guard/probe-03-register.py
 # 口径：scope_lib.full_border_entries（站在 full_borders 上）；登记簿从守卫源码解析
-# 时间：2026-09-29T21:33:40+08:00
+# 时间：2026-09-29T21:46:01+08:00
 
 盘上整圈完整框：115 条
 登记簿登记项　：115 条

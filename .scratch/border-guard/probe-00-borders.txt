@@ -2,7 +2,7 @@
 # 命令：python .scratch/border-guard/probe-00-borders.py
 # 口径：.scratch/ui-density-sitewide/scope_lib.py 的 full_borders（完整 border: 声明、值非 none/0）
 # 文件：src/contest_generator/static/index.html
-# 时间：2026-09-29T21:33:35+08:00
+# 时间：2026-09-29T21:45:57+08:00
 # 总计：115 处
 # 按作用域：shell 22 / components 9 / settings 3 / library 8 / generate 33 / hwcheck 8 / master 4 / reference 2 / changelog 1 / topic 3 / code 19 / guide 3
 
