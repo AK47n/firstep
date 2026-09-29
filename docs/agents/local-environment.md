@@ -62,7 +62,7 @@
 > guide 33 / reference 31 / library 20 / master 14 / topic 9 / code 9 / pdf 7 / md 7 / changelog 1）——
 > **口径是 DOM 元素，与 `probe-04` 的 115（样式规则数）不是同一把尺，别混着读**。
 >
-> ⚠ **发布后当场逮到的一条 CI 红（同一提交，已修，等 CI 复核）**：发布提交 `d527c65c` 的 CI 里
+> ⚠ **发布后当场逮到的一条 CI 红（已修 + CI 已复核转绿）**：发布提交 `d527c65c` 的 CI 里
 > **浏览器门禁 job 判红**（run `36526949726`：60 passed ＋ **1 条文件级红**），而**同一份代码本机两次
 > 整支 61/61 全绿**（发版前一轮 ＋ 推 tag 时 pre-push 一轮）。日志原文是
 > `Test hook "before" at tests\browser\hwcheck.spec.mjs:45:6 generated asynchronous activity after
@@ -72,12 +72,16 @@
 > 后续整页 `goto` 废掉它）⇒ 迟到的那次 `continue()` 抛错，落在**文件级**异步上下文里 ⇒ 整份 spec 判红。
 > **处置**：照 `launcher-reload.spec.mjs` 的既有先例改成 `await route.continue().catch(() => {})`，
 > 并把这次 CI 现场写进用例注释（工单 `.scratch/release-v1.4.0/issues/05-ci-browser-flake.md`）。
-> 本机复跑该 spec **38 / 0**（115.5s，读数 `hwcheck-spec-after-fix.txt`）。
-> **本机复现不出来**（两次整支 61/61），所以这条是"按机制去掉"、不是"按复现验证"——**下一次 CI 跑绿才算数**；
-> 若同一形态再出现，按"文件级 `unhandledRejection`"这条线查（先看没结算的 `route.*` / `resp.text()`），
-> **别去查产品**。
+> 本机复跑该 spec **38 / 0**（115.5s，读数 `hwcheck-spec-after-fix.txt`）；**CI 复跑 `36528528319` 三腿全绿**
+> （快速守卫 37s ／ 全套 pytest 6m32s ／ 浏览器门禁 **7m4s**）。
+> **口径更正（比"偶发"更准）**：这条在 CI 上**改前 2/2 稳定复现**（`36526949726` 与 `36527629698` 两次
+> run 的错误行**逐字相同**）、在本机 **2/2 稳定不出现**——差异在 CI 的机器与时序，**不是随机性**；
+> 所以"本机 61/61 全绿"**不足以**否证它，判据只能是 **CI 复跑绿**。
+> 下次遇到"文件级 `unhandledRejection`、而每条用例自己全绿"，先按这条线查（没结算的 `route.*` /
+> `resp.text()`），**别去查产品**。
 >
-> **本轮量到的三条本机事实（下次发版直接照做）**：> ① **钉 IP 的键名照旧是 `http.curloptResolve`，但"同一个 IP 的成功率会变"这次量得更清楚**：
+> **本轮量到的三条本机事实（下次发版直接照做）**：
+> ① **钉 IP 的键名照旧是 `http.curloptResolve`，但"同一个 IP 的成功率会变"这次量得更清楚**：
 >    推送前一次性验了 6 个候选——`140.82.114.3` / `140.82.113.3` / `140.82.116.3` / `20.27.177.113` /
 >    `20.200.245.247` 五个**按内容验通过**（拿回来的都是 `001e# service=git-upload-pack…` + 真 ref），
 >    `4.208.26.197` **54 秒后 `Connection was reset`**；而推送用的 `140.82.114.3` 在推送后复验时
