@@ -3,7 +3,11 @@
 // ③border-radius 全部走令牌（var(--radius-*)）或圆形 50%/0（无裸 3/4/6/8/10/12/99/999）；
 // ④工具类 .mt-2/4/6/8/.flex-1 已定义。
 // ⑤排版契约：字号角色表（六档）+ 页面分区表 + 逐页腿 + 进度尺（SITEWIDE_BACKLOG /
-//   FROZEN_FONT_SIZES）——见文件下半部分那两段说明块。静态标记守卫，直接读 index.html。
+//   FROZEN_FONT_SIZES）——见文件下半部分那两段说明块。
+// ⑥**描边登记簿**（工单 border-guard/01）：`BORDER_KINDS`（10 类）+ `BORDER_REGISTER`（115 条）
+//   + 腿⑥（盘上 ↔ 登记簿双向对账 + 透明不变量 + 类别表形状）——见那两张表的说明块。
+//   **描边与字号两条线都是"不许回潮"的闸**：字号那条的尺是取值集合，描边这条的尺是逐条登记簿。
+// 静态标记守卫，直接读 index.html。
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -159,6 +163,14 @@ test("间距魔法值收敛：margin-top / margin-bottom 无 2/3/5/7/9/10/14px �
 /** 令牌数值集（单源 = `:root` 的 --space-1..6）。 */
 const SPACE_TOKEN_VALUES = new Set([4, 8, 12, 16, 20, 24]);
 
+/**
+ * 「整圈完整框」口径里算**死声明**的首段取值（与 `scope_lib.DEAD_BORDER` 逐字相同）。
+ * 只比**第一段**：`border: none` / `border: 0` 是撤框，`border: 0 solid red` 也算撤框；
+ * 而 `transparent` **不在这里**——它是"占位"（登记簿里那一类），不是"撤框"
+ * （`border: 1px solid transparent` 仍然是一条完整声明，占着位置、随时可以变成真框）。
+ */
+const DEAD_BORDER = ["none", "0"];
+
 // ===========================================================================
 // 全站推广轮：字号角色表 + 页面分区表 + 逐页腿（工单 ui-density-sitewide/01）
 //
@@ -313,6 +325,194 @@ const FROZEN_FONT_SIZES = new Set([
   // 加回任何一个取值 = 加回一处裸字号。
 ]);
 
+/**
+ * **描边类别表**（工单 border-guard/01，单源）：回答「这条框为什么可以留」。
+ *
+ * **它不重推类别**——机器判不了"这是语义告示还是内层框"（那正是 08 账第 1 条说的判据问题）。
+ * 类别是**人判过一次、写进 BORDER_REGISTER 的数据**；守卫只保证：
+ *   · 每条登记项的类别值在**本表**里（新造一个类别把框塞进来这条路走不通）；
+ *   · **每个类别至少有一条**（类别表不长出空档——空类别 = 判据退化成摆设）。
+ *
+ * 类别出处 = `.scratch/ui-density-sitewide/spec.md` 的例外 ①–⑥ 与那张轮的逐层清单；
+ * 本表把它们机械化。**判据边界**：不判"该不该留"、不判好不好看。
+ * 格式固定（`["id", "判据"],` 一行一条，判据里**不写 ASCII 双引号**）——
+ * `.scratch/border-guard/probe-03-register.py` 与 `scope_lib.load_border_kinds()` 按同一格式解析。
+ */
+const BORDER_KINDS = [
+  ["block", "顶层块：一屏里自成一块的容器（页面主体卡 / 页级汇总条）——「一屏一层」要留的就是它"],
+  ["control", "可点控件：按钮 / 输入 / 下拉 / 勾选框 / 可点卡片 / 可点 chip / 标签页——那是控件的形状"],
+  ["tag", "徽章与标签（不可点）：身份 / 计数 / 图例胶囊，用一条边把自己从正文里拎出来"],
+  ["alert", "语义告示块：带警示或状态语义的告示（编译条 / 未选功能组 / 未上板 / 服务已停止 / 保存失败）"],
+  ["modal", "弹层外壳：弹层 / 菜单 / toast——它自己是一屏，那一条要留"],
+  ["float", "浮在内容之上的自己的面：悬浮保存条 / 只读标注 / 缩放浮标（不然与背后的字糊在一起）"],
+  ["doc", "文档与表格语法：表格网格线 / md 预览的表格与图片框 / 指南表——去掉文档就散了"],
+  ["editor", "编辑器形状：代码编辑器本体与它的悬浮工具条"],
+  ["nonbox", "不是框：用 border 画的圆点 / 对勾字形 / 转圈环 / 滚动条 thumb——画得出像素，但不是盒子"],
+  ["placeholder", "透明占位（★ 唯一带机器不变量）：取值含 transparent、默认态画不出框——要么是给悬停 / 选中态留的位置，要么是浏览器 chrome（滚动条 thumb）的透明声明"],
+];
+
+/**
+ * **描边登记簿**（工单 border-guard/01）：`index.html` 样式块里**允许留框**的整圈完整框，逐条登记。
+ *
+ * **认人键 = `(作用域, 选择器)`**（选择器是**剥掉前导块注释、空白归一**后的形态，与 `scopeOf` 同口径
+ * ——那条样式块大量规则写成「注释 + 选择器」，最长的一段前导注释有 **465 字符**
+ * （`#tab-settings .error:not(.ok):not(:empty)`），拿原始选择器当键等于把注释一起冻进表里）。
+ * 取值**不进键**：换个描边色 / 换令牌不该动这张表（那轮"守卫不判好不好看"的边界）。
+ *
+ * **腿⑥ 四条判据**（判据本体在 `borderRegisterProblems`，红证在文件末尾那条合成用例里）：
+ *   ① 盘上 ⊆ 本表（新增一条框必须**显式登记**，否则当场判红）；
+ *   ② 本表 ⊆ 盘上（改名 / 删规则会让登记项**过期**——反向对账，这份数据因此不会烂）；
+ *   ③ `placeholder` ⟺ 取值含 `transparent`（**抓"透明占位偷偷变成真框"**）；
+ *   ④ 类别表形状（类别值必须在 `BORDER_KINDS` 里、每类至少一条）。
+ *
+ * **口径分列（别混着读）**：本表 115 条 = **94 条可见框** + **21 条非框**
+ * （12 `placeholder` + 9 `nonbox`）。"整圈完整框 115"是**声明数**口径（`scope_lib.full_borders`），
+ * 与"渲染出来的框元素数"不是同一把尺——那一条 `local-environment` 记过。
+ *
+ * **两条容易贴错、已经核过一遍的**（写在这里，免得下一轮又有人按类名想当然）：
+ *   · `.code-view::-webkit-scrollbar-thumb`（`3px solid transparent`）登记为 `placeholder` **不是**
+ *     `nonbox`——透明不变量是"`placeholder` ⟺ 取值含 transparent"，它含 transparent，
+ *     所以按不变量归 `placeholder`；它的"滚动条"身份是次要的（那条声明本来就画不出东西）。
+ *   · `.gen-recent` 登记为 `block` **不是** `control`——它是 `<div id="gen-recent" class="gen-recent hidden">`
+ *     这个容器（`recent.js` 只读写它内部的 `#gen-recent-list`），本身**不可点**。
+ *     类名前缀/语义像什么不算判据，"渲染出来点不点得动"才算（那轮"类名前缀不是归属判据"的同一条教训）。
+ *
+ * **不在射程内（明写的边界）**：`border-color` 这类**单声明**不是"完整框"，
+ * 所以悬停 / 选中态才出现的框**本来就不在这个口径里**（`.code-tab` 那族占位的意义正是这个）；
+ * `border-top` / `border-bottom` 的单边分隔线同理不在射程。
+ *
+ * 格式固定（`["作用域", "选择器", "类别"],` 一行一条，`// ---- <作用域> ----` 是分组注释）——
+ * 探针与 `scope_lib.load_border_register()` 按同一格式解析，格式变了会**大声失败**。
+ */
+const BORDER_REGISTER = [
+  // ---- shell（22 条）----
+  ["shell", "header nav button", "control"],
+  ["shell", ".card", "block"],
+  ["shell", "textarea, input[type=text], input[type=password], select", "control"],
+  ["shell", "input[type=search]", "control"],
+  ["shell", "button", "control"],
+  ["shell", ".banner", "alert"],
+  ["shell", ".welcome-card", "alert"],
+  ["shell", ".platform-card", "control"],
+  ["shell", "#compile-banner.running", "alert"],
+  ["shell", "#compile-banner.success", "alert"],
+  ["shell", "#compile-banner.fail", "alert"],
+  ["shell", "#compile-banner.notool", "alert"],
+  ["shell", ".mod-info-btn", "control"],
+  ["shell", "#btn-score-export", "control"],
+  ["shell", "input[type=checkbox], input[type=radio]", "control"],
+  ["shell", "input[type=checkbox]:checked::after", "nonbox"],
+  ["shell", "input[type=file]", "control"],
+  ["shell", "input[type=file]::file-selector-button", "control"],
+  ["shell", "::-webkit-scrollbar-thumb", "nonbox"],
+  ["shell", "#btn-code-ai-send", "control"],
+  ["shell", "#btn-recent-refresh", "control"],
+  ["shell", ".card-step-status", "placeholder"],
+  // ---- components（9 条）----
+  ["components", ".btn", "control"],
+  ["components", ".chip", "control"],
+  ["components", ".btn-param-ref", "control"],
+  ["components", ".btn-params-reset", "control"],
+  ["components", ".badge.needs-choice-badge", "alert"],
+  ["components", ".spinner", "nonbox"],
+  ["components", ".service-stopped-box", "alert"],
+  ["components", ".toast", "modal"],
+  ["components", ".toast-copy, .toast-action, .wait-cancel", "control"],
+  // ---- settings（3 条）----
+  ["settings", ".env-jump", "control"],
+  ["settings", ".settings-stickybar", "float"],
+  ["settings", "#tab-settings .error:not(.ok):not(:empty)", "alert"],
+  // ---- library（8 条）----
+  ["library", ".module-card", "control"],
+  ["library", ".module-card .mc-offtag", "alert"],
+  ["library", ".module-card .mc-info", "control"],
+  ["library", ".module-info-modal", "modal"],
+  ["library", ".module-info-off", "alert"],
+  ["library", ".mi-pins th, .mi-pins td", "doc"],
+  ["library", ".lib-edit-modal", "modal"],
+  ["library", ".lib-chip", "control"],
+  // ---- generate（33 条）----
+  ["generate", ".fix-row", "placeholder"],
+  ["generate", ".task-more-menu", "modal"],
+  ["generate", ".param-card-head .param-unit-chip", "tag"],
+  ["generate", ".group-card.needs-choice", "alert"],
+  ["generate", ".topic-preread", "alert"],
+  ["generate", ".preread-slot", "alert"],
+  ["generate", ".sp-item", "placeholder"],
+  ["generate", ".pin-role", "placeholder"],
+  ["generate", ".pin-fixed-list .fx", "tag"],
+  ["generate", ".pin-warn-list .wx", "alert"],
+  ["generate", ".pin-legend .lg", "tag"],
+  ["generate", ".pin-menu", "modal"],
+  ["generate", ".step-nav .step-dot", "placeholder"],
+  ["generate", ".step-nav .step-dot .dot", "nonbox"],
+  ["generate", ".gen-overview", "block"],
+  ["generate", ".ov-chip", "control"],
+  ["generate", ".ov-chip .ov-dot", "nonbox"],
+  ["generate", ".ov-actions .ov-fill", "control"],
+  ["generate", ".gen-recent", "block"],
+  ["generate", ".recent-chip", "placeholder"],
+  ["generate", ".recent-platform", "tag"],
+  ["generate", ".revise-tab", "control"],
+  ["generate", ".revise-tab-badge", "tag"],
+  ["generate", ".task-phase", "alert"],
+  ["generate", ".task-phase .task-spinner", "nonbox"],
+  ["generate", ".tasks-done-line .btn-task-goto-delivery", "control"],
+  ["generate", ".res-chip", "tag"],
+  ["generate", ".res-view-btn", "control"],
+  ["generate", ".res-board-legend .dot", "nonbox"],
+  ["generate", ".res-board-legend .res-legend-conflict", "nonbox"],
+  ["generate", ".score-chip", "tag"],
+  ["generate", ".task-next-hint", "alert"],
+  ["generate", ".rc-summary", "block"],
+  // ---- hwcheck（8 条）----
+  ["hwcheck", ".hwcheck-warn", "alert"],
+  ["hwcheck", ".hwcheck-check", "placeholder"],
+  ["hwcheck", ".hwcheck-recent-row", "placeholder"],
+  ["hwcheck", ".hwcheck-order-index", "tag"],
+  ["hwcheck", ".hwcheck-section-tag", "tag"],
+  ["hwcheck", ".hwcheck-symptom", "control"],
+  ["hwcheck", "#tab-hwcheck .hwcheck-band-num", "tag"],
+  ["hwcheck", "#tab-hwcheck .hwcheck-jump", "control"],
+  // ---- master（4 条）----
+  ["master", ".stepper .step .dot", "nonbox"],
+  ["master", ".prog-badge", "alert"],
+  ["master", ".master-file-btn", "control"],
+  ["master", ".master-health-pill", "placeholder"],
+  // ---- reference（2 条）----
+  ["reference", ".ref-files-modal", "modal"],
+  ["reference", ".ref-files-filter", "control"],
+  // ---- changelog（1 条）----
+  ["changelog", ".rel-tag.tag-other", "tag"],
+  // ---- topic（3 条）----
+  ["topic", ".topic-card", "control"],
+  ["topic", ".topic-year", "tag"],
+  ["topic", ".topic-page img", "doc"],
+  // ---- code（19 条）----
+  ["code", ".code-pane-action, .code-compile-head button, .code-statusbar button", "control"],
+  ["code", ".code-kbd", "tag"],
+  ["code", ".code-bottom-tab", "placeholder"],
+  ["code", ".code-ai-preview-btn", "control"],
+  ["code", ".code-ai-chat-input", "control"],
+  ["code", ".code-change-badge.b-removed", "tag"],
+  ["code", ".code-tab", "placeholder"],
+  ["code", ".code-tab-ro", "tag"],
+  ["code", ".code-back-preview, .code-md-edit", "control"],
+  ["code", ".code-view::-webkit-scrollbar-thumb", "placeholder"],
+  ["code", ".code-ro-note", "float"],
+  ["code", ".code-zoom-badge", "float"],
+  ["code", ".code-ctx-menu", "modal"],
+  ["code", ".quick-open-box", "modal"],
+  ["code", ".code-tree-name-input", "control"],
+  ["code", ".code-md-preview th, .code-md-preview td", "doc"],
+  ["code", ".code-md-preview img", "doc"],
+  ["code", ".code-wrap", "editor"],
+  ["code", ".code-zoom", "editor"],
+  // ---- guide（3 条）----
+  ["guide", ".guide-tab", "control"],
+  ["guide", ".guide-table th", "doc"],
+  ["guide", ".guide-table td", "doc"],
+];
 /** 规则块（`选择器 { 声明 }`）：返回 [{ sel, body }]。 */
 function cssRules(css) {
   const out = [];
@@ -419,6 +619,114 @@ function bareFontSizesSitewide(css) {
 }
 
 /**
+ * 盘上的**整圈完整框**：完整 `border:` 声明、值不是 `none` / `0`。
+ *
+ * 这是 `.scratch/ui-density-sitewide/scope_lib.py` 的 `full_borders` 的**跨语言镜像**
+ * （判据一字不差：同一条正则 + 同一个 DEAD 前缀判定）。为什么要镜像而不是"另定一套"：
+ * 那条轮的读数（**115 处**）就是按那个口径量的，腿⑥ 与读数必须是同一把尺，
+ * 否则"腿绿而读数红"（或反过来）就是新的假账。
+ *
+ * ⚠ **两个解析口径在描边这一面已实测逐条相同**（`.scratch/border-guard/probe-02-caliber-styleblock.py`）：
+ * 本函数吃的是 `cssRulesCached(css)`，它按**整文件**跑正则（`<style>` 之外那 14 段
+ * 内联脚本的 `{}` 也会配成"规则"），而 Python 侧只在 `<style>` 块里跑——
+ * 规则数差 14 条，但**都不含完整 `border:` 声明**，所以描边这一面 115 ↔ 115、双向 0 差。
+ * （那条探针就是为这件事立的；将来若谁把内联脚本写出 `border:`，这里会当场露出来。）
+ *
+ * 选择器取**剥掉前导块注释 + 空白归一**后的形态——认人键必须是稳定的那一部分：
+ * 115 条里有规则的前导注释长达 **465 字符**（`#tab-settings .error:not(.ok):not(:empty)` 那条，
+ * 写满了两个 `:not()` 为什么必需；条数/长度按 `probe-03-register.py` 复算，别按记忆写），
+ * 拿原始选择器当键等于把那段注释一起冻进表里。
+ */
+function fullBorderEntries(css) {
+  const out = [];
+  for (const { sel, body } of cssRulesCached(css)) {
+    for (const m of body.matchAll(/(?<![\w-])border:\s*([^;]+);/g)) {
+      const value = m[1].trim();
+      if (DEAD_BORDER.includes(value.split(/\s+/)[0])) continue;
+      const clean = stripLeadComments(sel);
+      out.push({ scope: scopeOf(sel), sel: clean, value });
+    }
+  }
+  return out;
+}
+
+/** 登记簿 / 类别表里的键——用 `\u0000` 拼，免得选择器里的空格与作用域名撞车。 */
+function borderKey(scope, sel) {
+  return scope + "\u0000" + sel;
+}
+
+/**
+ * **腿⑥ 的判据**（纯函数，四条；照本文件"判据返回问题清单"的既有形状写，
+ * 好让"判据被改坏能不能判出来"有合成红证）：
+ *   ① 盘上 ⊆ 登记簿 —— 新写一条整圈框必须**显式登记**并挑一个类别；
+ *   ② 登记簿 ⊆ 盘上 —— 改名 / 删规则会让登记项**过期**（反向对账；这条是"防腐烂"的本体）；
+ *   ③ `placeholder` ⟺ 取值含 `transparent` —— **抓"透明占位偷偷变成真框"**（两个方向都判）；
+ *   ④ 类别表形状 —— 登记项的类别必须在 `kinds` 里、每个类别至少一条、同一条不重复登记。
+ *
+ * **它不判什么**（边界，免得被当成"什么都管"）：不判"这条框该不该留"（机器判不了，
+ * 那是 08 账第 1 条说的判据问题）、不判好不好看、不判取值该用哪个令牌。
+ */
+function borderRegisterProblems(css, register = BORDER_REGISTER, kinds = BORDER_KINDS) {
+  const out = [];
+  const kindIds = new Set(kinds.map(([id]) => id));
+  const registered = new Map();
+  for (const entry of register) {
+    if (!Array.isArray(entry) || entry.length !== 3) {
+      out.push("登记项形状不对（应为 [作用域, 选择器, 类别]）：" + JSON.stringify(entry));
+      continue;
+    }
+    const [scope, sel, kind] = entry;
+    if (!kindIds.has(kind)) out.push(`登记项用了类别表里没有的类别：[${scope}] ${sel} → ${kind}`);
+    const key = borderKey(scope, sel);
+    if (registered.has(key)) out.push(`同一条登记了两次：[${scope}] ${sel}`);
+    registered.set(key, { scope, sel, kind });
+  }
+  for (const [id] of kinds) {
+    if (![...registered.values()].some((e) => e.kind === id)) {
+      out.push(`类别 ${id} 一条登记都没有——判据退化成摆设`);
+    }
+  }
+  const onDisk = new Map();
+  const diskCount = new Map();
+  for (const e of fullBorderEntries(css)) {
+    const key = borderKey(e.scope, e.sel);
+    // ⚠ **盘上这一边是多重集，不是集合**：同一作用域里同一个选择器可以写出**两条**带框的规则
+    //   （交错在别处的同名规则），按 Map 收会把它折成一条 —— 那样 ① 和 ② 两条对账都判不出来，
+    //   只剩条数断言兜底。这里显式报出来（`probe-03` 现在实测 0 处，但判据得先站得住）。
+    diskCount.set(key, (diskCount.get(key) || 0) + 1);
+    if (diskCount.get(key) > 1) {
+      out.push(`同一作用域里同一个选择器有不止一条整圈完整框声明（认人键会折叠它们）：`
+        + `[${e.scope}] ${e.sel} → ${e.value}`);
+    }
+    onDisk.set(key, e);
+  }
+  for (const [key, e] of onDisk) {
+    if (!registered.has(key)) {
+      out.push(`盘上这条整圈完整框没有登记（要留就加进 BORDER_REGISTER 并挑一个类别，`
+        + `不然请改成留白 / 单条分隔线 / 淡底）：[${e.scope}] ${e.sel} → ${e.value}`);
+    }
+  }
+  for (const [key, e] of registered) {
+    if (!onDisk.has(key)) {
+      out.push(`登记簿里这条在盘上找不到了（改名 / 删规则之后忘了同步）：[${e.scope}] ${e.sel}`);
+    }
+  }
+  for (const [key, e] of onDisk) {
+    const reg = registered.get(key);
+    if (!reg) continue;
+    const transparent = /(?:^|\s)transparent(?:\s|$)/.test(e.value);
+    if (reg.kind === "placeholder" && !transparent) {
+      out.push(`登记为 placeholder（透明占位）但取值已不是透明——占位变成真框了：`
+        + `[${e.scope}] ${e.sel} → ${e.value}`);
+    } else if (reg.kind !== "placeholder" && transparent) {
+      out.push(`取值是 transparent（默认态画不出框）却登记成了 ${reg.kind}：`
+        + `[${e.scope}] ${e.sel} → ${e.value}（画不出框的请登记为 placeholder）`);
+    }
+  }
+  return out;
+}
+
+/**
  * 动作三级的**口径问题**（纯函数——照本文件"判据返回问题清单"的既有形状写，
  * 好让"口径被改坏能不能判出来"有合成红证）：
  * 主 = 实心 accent；不可逆 = 红描边 + 淡红底、悬停实心红；次要 = 幽灵（透明底）。
@@ -499,6 +807,30 @@ test("工单 03：全站裸字号集合只许减不许增（冻结清单）", ()
     + "并写清为什么非它不可：" + added.join(", "));
 });
 
+test("描边（工单 01，第六条腿）：整圈完整框逐条登记，盘上 ↔ 登记簿双向对账 + 透明不变量", () => {
+  // 为什么要有这条腿（08 账第 1 条）：字号那条线到收尾单为止是干净的，**描边那条没有**——
+  // 115 处例外只活在七张工单的散文清单里，机器读不出来。于是谁往样式块里新写一条
+  // `border: 1px solid var(--border)`，115 就安静地变成 116，没有任何东西会红。
+  //
+  // 这一轮不判"这条框该不该留"（机器判不了），改判"**这条框是不是被登记过的**"：
+  // 登记簿（BORDER_REGISTER，115 条）+ 四条对账判据见 `borderRegisterProblems`。
+  // 判据的强度由文件末尾那条合成用例自证（塞新框 / 改名 / 删规则 / 占位变真框 / 未知类别 /
+  // 掏空类别，六种注入各判一次红，复原转绿）。
+  const problems = borderRegisterProblems(html);
+  assert.deepEqual(problems, [],
+    "描边登记簿与盘上对不上（新增框就登记它、去掉框就摘掉登记项、"
+    + "透明占位别改成真框——三条各有各的改法）：\n" + problems.join("\n"));
+  // 登记簿是**数据**：115 条这个数本身就是进度/规模读数，别让它悄悄缩水
+  // （缩水会让上面的"⊆"判据永远绿——那是最容易发生的一种假绿）。
+  assert.equal(BORDER_REGISTER.length, 115,
+    "登记簿条数变了（应为 115 = 94 可见框 + 21 非框）。真去掉了一条框就同步改这个数，"
+    + "并在票尾写清去掉的是哪一条、为什么");
+  // 这条是**条数**口径的独立兜底：`borderRegisterProblems` 按 (作用域, 选择器) 认人，
+  // 万一有两条声明撞成同一个键，对账会把它折成一条而漏报——条数断言就是那一处的第二道。
+  assert.equal(fullBorderEntries(html).length, BORDER_REGISTER.length,
+    "盘上声明数与登记簿条数不等——上面的对账会指出差在哪几条；若它没报，就是有两条声明撞了同一个认人键");
+});
+
 test("全站推广：动作三级的口径**单源**（主实心 / 危险红描边淡红底 / 次要幽灵）", () => {
   // 口径来自检测页样板（ui-density/02），全站推广轮（02 单）把它升到全局
   assert.deepEqual(actionWeightProblems(html), []);
@@ -506,7 +838,7 @@ test("全站推广：动作三级的口径**单源**（主实心 / 危险红描�
     "ghost 类要真的被元素用到——否则'补实一个类'就只是又造了一个死类");
 });
 
-test("全站推广合成红证：五条腿各自都判得红（防'永远绿'的守卫）", () => {
+test("全站推广合成红证：六条腿各自都判得红（防'永远绿'的守卫）", () => {
   // ① 已完工作用域各塞一个越界字号——**锚点只取规则头（不带令牌值）**，锚变了就当场报，
   //    不让这条自检静默空转。三个作用域：
   //      · `hwcheck` = 上一轮的样板页（腿③最早看着的那一页）；
@@ -568,10 +900,85 @@ test("全站推广合成红证：五条腿各自都判得红（防'永远绿'的
   assert.equal(jsInlineFontOffenders(fakeJs).length, 1, "塞进去的内联裸 px 字号没被判出");
   assert.equal(jsInlineFontOffenders([["ui/ok.js", '  el.style.cssText = "font-size:var(--fs-tag);";']]).length, 0,
     "令牌形态被误判成裸值");
-  // ⑦ 复原后转绿（五条腿都回到空/子集）
+  // ⑦ **第六条腿（描边登记簿）的坏法各判一次红**——01 单加的腿，照 05/06/07 的先例自证。
+  //    判据的"注入点"取**真实源码里的锚点**并断言锚点还在（锚变了就当场报，别静默空转）。
+  //    ⚠ 每条必须是**真注入**：spec 点名的六种坏法各对应一次真改动。
+  //    第一版有两条是假的（"塞新框"其实只改了选择器名、"删规则"其实只往表里加了一条），
+  //    双轴评审当场点了名——改名与删表**都不是**"往页面里加了一条框"那条主路径。
+  assert.deepEqual(borderRegisterProblems(html), [], "盘上本来就不该有对账问题");
+  //    (a) 往一条**原本没有框**的规则里真加一条 `border:` 声明 → 判红（这是主路径：
+  //        有人新写了一个内层面板）。锚点 = `.gen-recent-head`（真实规则，原本没有 border）。
+  const noBorderAnchor = ".gen-recent-head { display: flex; align-items: center; gap: var(--space-2); }";
+  assert.ok(html.includes(noBorderAnchor), `锚点变了（.gen-recent-head）—— 这条自检会静默空转`);
+  const injectedBorder = html.replace(noBorderAnchor,
+    ".gen-recent-head { display: flex; align-items: center; gap: var(--space-2); border: 1px solid var(--border); }");
+  assert.notEqual(injectedBorder, html, "注入没生效（锚点没命中）");
+  assert.equal(fullBorderEntries(injectedBorder).length, 116, "注入的那条完整框没被盘上侧认出来");
+  assert.ok(
+    borderRegisterProblems(injectedBorder).some((p) => p.includes("没有登记") && p.includes(".gen-recent-head")),
+    "往没有框的规则里新加一条 border 没被判出（这是本腿最该抓的坏法）",
+  );
+  //    (b) 把一个**已登记**的选择器改名 → 两个方向都要报（盘上没登记 + 登记簿过期）
+  //    ⚠ 锚点必须**唯一命中那条带框的规则**：`.mod-info-btn {` 全文第一处是
+  //    `.chip.rec.unsel .mod-info-btn {`（一条没有框的规则）——按它注入等于什么都没改，
+  //    这条自检第一版就是这么假绿的（正是那轮"按行号挑规则会挑错人"的同一个坑）。
+  const renameAnchor = ".mod-info-btn { flex: none;";
+  assert.ok(html.includes(renameAnchor), `锚点变了（${renameAnchor}）—— 这条自检会静默空转`);
+  const renamed = html.replace(renameAnchor, ".mod-info-btn-x { flex: none;");
+  assert.notEqual(renamed, html, "注入没生效（锚点没命中）");
+  assert.ok(borderRegisterProblems(renamed).some((p) => p.includes("没有登记") && p.includes(".mod-info-btn-x")),
+    "改名之后盘上那条没被判成未登记");
+  assert.ok(borderRegisterProblems(renamed).some((p) => p.includes("[shell] .mod-info-btn") && p.includes("找不到了")),
+    "改名之后登记簿里那条没被判成过期");
+  //    (c) **真把一条已登记的规则从盘上删掉** → 登记项过期判红（不是"往表里塞一条"）
+  const delAnchor = ".env-jump {";
+  const delRule = html.slice(html.indexOf(".env-jump {"), html.indexOf("}", html.indexOf(".env-jump {")) + 1);
+  const deleted = html.replace(delRule, ".env-jump-renamed-placeholder { }");
+  assert.notEqual(deleted, html, "注入没生效（锚点没命中）");
+  assert.equal(fullBorderEntries(deleted).length, 114, "删掉的那条完整框没从盘上侧消失");
+  assert.ok(borderRegisterProblems(deleted).some((p) => p.includes("[settings] .env-jump") && p.includes("找不到了")),
+    "真删掉一条已登记规则之后，登记项没被判成过期");
+  //    (c2) **登记项过期**的另一半：给表里塞一条盘上根本没有的登记项，也要判红
+  const extraRegister = [...BORDER_REGISTER, ["guide", ".guide-table caption", "doc"]];
+  assert.ok(borderRegisterProblems(html, extraRegister).some((p) => p.includes(".guide-table caption") && p.includes("找不到了")),
+    "登记簿里多出一条盘上没有的登记项时没被判出（反向对账失效）");
+  //    (d) **透明占位偷偷变成真框** → 判红；反方向（真框登记成 placeholder）也要判红
+  const phAnchor = "font-weight: 600; border: 1px solid transparent;";
+  assert.ok(html.includes(phAnchor), `锚点变了（${phAnchor}）—— 这条自检会静默空转`);
+  assert.ok(
+    borderRegisterProblems(html.replace(phAnchor, "font-weight: 600; border: 1px solid var(--border);"))
+      .some((p) => p.includes("占位变成真框了")),
+    "透明占位被改成可见框时没被判出",
+  );
+  const wrongKind = BORDER_REGISTER.map((e) => (e[1] === ".card-step-status" ? [e[0], e[1], "control"] : e));
+  assert.ok(
+    borderRegisterProblems(html, wrongKind).some((p) => p.includes("却登记成了 control")),
+    "画不出框的声明被登记成可见类别时没被判出",
+  );
+  //    (e) 类别表形状：未知类别 / 掏空一个类别 → 都要判红
+  const bogusKind = BORDER_REGISTER.map((e) => (e[1] === ".card" ? [e[0], e[1], "内层框"] : e));
+  assert.ok(borderRegisterProblems(html, bogusKind).some((p) => p.includes("类别表里没有的类别")),
+    "新造一个类别把框塞进去这条后门没被堵住");
+  const emptied = BORDER_REGISTER.filter((e) => e[2] !== "editor");
+  assert.ok(borderRegisterProblems(html, emptied).some((p) => p.includes("类别 editor 一条登记都没有")),
+    "空类别没被判出（判据退化成摆设）");
+  //    (f) 判据自己的两个防御分支也要自证（它们是 01 单加在 spec 四条之外的）：
+  //        登记项形状不对 / 同一条登记两次
+  assert.ok(borderRegisterProblems(html, [...BORDER_REGISTER, ["shell", ".card"]]).some((p) => p.includes("形状不对")),
+    "登记项形状不对时没被判出");
+  assert.ok(borderRegisterProblems(html, [...BORDER_REGISTER, ["shell", ".card", "block"]]).some((p) => p.includes("登记了两次")),
+    "同一条登记了两次没被判出");
+  //    (g) 盘上侧的多重集分支：同一个选择器再来一条带框规则（认人键会折叠它）→ 判红。
+  //        这是 Standards 轴点名的"Map 折叠"洞——判据自己得先站得住，红证才不是摆设。
+  const dupKey = html.replace(".card {", ".card { border: 1px solid var(--danger);");
+  assert.notEqual(dupKey, html, "注入没生效（锚点没命中）");
+  assert.ok(borderRegisterProblems(dupKey).some((p) => p.includes("不止一条整圈完整框声明")),
+    "同一作用域里同选择器的第二条框没被判出（多重集分支失效）");
+  // ⑧ 复原后转绿（六条腿都回到空/子集）
   assert.deepEqual(bareFontSizesInScope(html, "hwcheck"), []);
   assert.deepEqual(bareTokenSpacesInScope(html, "hwcheck"), []);
   assert.deepEqual(bareFontSizesSitewide(html).filter((v) => !FROZEN_FONT_SIZES.has(v)), []);
   assert.deepEqual(doneScopeOffenders(bareFontSizesInScope), []);
   assert.deepEqual(actionWeightProblems(html), []);
+  assert.deepEqual(borderRegisterProblems(html), []);
 });

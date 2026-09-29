@@ -1,0 +1,146 @@
+# 读数：描边守卫轮 · 整圈完整框逐条登记（施工前）
+# 命令：python .scratch/border-guard/probe-00-borders.py
+# 口径：.scratch/ui-density-sitewide/scope_lib.py 的 full_borders（完整 border: 声明、值非 none/0）
+# 文件：src/contest_generator/static/index.html
+# 时间：2026-09-29T21:33:35+08:00
+# 总计：115 处
+# 按作用域：shell 22 / components 9 / settings 3 / library 8 / generate 33 / hwcheck 8 / master 4 / reference 2 / changelog 1 / topic 3 / code 19 / guide 3
+
+### shell（22 处）
+     252  1px solid var(--border)             /* 顶栏导航胶囊（工单 tab-grouping/01 重构）：圆角胶囊按钮 + hover 淡青底 + 激活项青→紫渐变底（深色字，与 step-no 徽章同协议）；组标签去掉， 组间用细分隔线保持分区。限定 header 内——生成页 .step-nav 也是 <nav>， 其 step-dot 有自己的圆点样式，不能给它们套胶囊 */ header nav button
+     301  1px solid var(--border)             .card
+     311  1px solid var(--border)             textarea, input[type=text], input[type=password], select
+     314  1px solid var(--border)             input[type=search]
+     329  1px solid var(--border)             button
+     381  1px solid var(--warn-border)        .banner
+     383  1px solid var(--info-border)        .welcome-card
+     410  1px solid var(--border)             .platform-card
+     588  1px solid var(--info-border)        #compile-banner.running
+     590  1px solid var(--ok)                 #compile-banner.success
+     592  1px solid var(--danger)             #compile-banner.fail
+     594  1px dashed var(--border-strong)     #compile-banner.notool
+     641  1px solid var(--border)             /* 模块说明入口（工单 module-intro-detail/03）：推荐 chip / 功能组卡成员行 / 已选清单行三处共用。**不是 chip 本体**——点它开说明，点 chip 仍是移除模块。 chip 内的样式按 chip 前景色走（chip.rec 是绿字，独立配色会突兀）。 */ .mod-info-btn
+    1390  1px solid var(--border-strong)      #btn-score-export
+    1578  1px solid var(--border-strong)      input[type=checkbox], input[type=radio]
+    1586  solid var(--on-accent)              input[type=checkbox]:checked::after
+    1595  1px solid var(--border)             input[type=file]
+    1599  1px solid var(--border)             input[type=file]::file-selector-button
+    1615  2px solid var(--bg)                 ::-webkit-scrollbar-thumb
+    2099  1px solid var(--border)             #btn-code-ai-send
+    2867  1px solid var(--border-strong)      #btn-recent-refresh
+    2893  1px solid transparent               /* 卡片标题状态徽章（工单 gen-overview/02） */ .card-step-status
+
+### components（9 处）
+     350  1px solid var(--border)             /* 按钮内 spinner 垂直居中 */ /* 按钮三类（工单 ux-walkthrough-02/20）：.btn 基类（= 默认按钮外观）、 .btn-pill--sm 小胶囊（= btn-mini 尺寸）、.btn-pill--md 标准胶囊（默认 按钮 + 全圆）、.btn-icon 图标按钮（紧凑方寸）；语义色类 （.primary/.danger/.accent）与这三类自由组合 */ .btn
+     624  1px solid var(--border)             .chip
+     743  1px solid var(--accent)             /* 参数速调 AI 咨询（工单 params-chat-ai/02）：AI 回复里的参数名 chip （accent 描边 pill，hover 提亮）+ 定位参数卡高亮动画；对话区本体复用 .sugg-discuss-* / .task-dialog-box，零新容器样式 */ .btn-param-ref
+     827  1px dashed var(--border)            .btn-params-reset
+     842  1px solid rgba(210,153,34,.45)      .badge.needs-choice-badge
+    1440  2px solid var(--border)             .spinner
+    3311  1px solid var(--border-strong)      /* display:flex 会盖掉 [hidden] 的默认值 */ .service-stopped-box
+    3325  1px solid var(--border)             .toast
+    3331  1px solid var(--border)             /* toast / 长任务行内的小胶囊按钮（工单 ui-density-sitewide/02 评审整改）： 原先三段近乎逐字重复，现在**形状单源**——各自只留"位置 + 颜色"两笔差异。 形状：2px 10px 内边距 / --fs-tag / 全圆角 / 一条描边 / panel 底。 */ .toast-copy, .toast-action, .wait-cancel
+
+### settings（3 处）
+     376  1px solid var(--border)             /* 体检行「去设置填」跳转按钮（工单 ux-walkthrough-02/06）：缺失项一键跳转 */ .env-jump
+    1647  1px solid var(--border)             /* 设置页悬浮保存按钮（原 sticky 全宽保存条——滚动时整条盖住下方表单， 用户反馈不美观、挡视野；改 fixed 右下角紧凑胶囊：不占文档流、只贴视口 右下角，任意滚动位置可见，不遮表单主体；「有未保存的修改」提示随胶囊 内联；与 #toast-root（右上）不冲突。类名沿用 settings-stickybar（JS 只 依赖内部 id，不随布局更名）。 */ .settings-stickybar
+    1658  1px solid var(--danger)             /* 设置页的失败提示（工单 ui-density-sitewide/05）：更新 / 资料库 / 保存失败都是 **语义告警块**（例外①：保留它那一条描边）——全局 `.error` 不动（别处是行内红字）， 这里按页作用域给形状。配色照 `.hwcheck-warn` 那一类（描边用主色，不用淡色边框）。 ⚠ 两个 `:not(…)` 都是必需的——**读渲染方 + 看默认态**才知道： · `:not(.ok)`：`ui/settings.js` 保存成功时只 `classList.add("ok")`、**不摘 `error`** （`#settings-msg` 的初始类就是 error），不排除它就会把"已保存，立即生效。"装进红框； · `:not(:empty)`：`#settings-msg` **默认就是空 div + class="error"**，不排除它页面一打开 就挂着一条整宽红框（评审实测 1358×18，到第一次保存成功才消失）。 JS 一行不动，只好在 CSS 里认这两态。 */ #tab-settings .error:not(.ok):not(:empty)
+
+### library（8 处）
+     449  1px solid var(--border)             .module-card
+     459  1px solid var(--warn-border)        .module-card .mc-offtag
+     475  1px solid var(--border)             /* 模块详情按钮（工单 module-info-dialog/01）：卡头右侧，卡片点击仍添加模块 */ .module-card .mc-info
+     486  1px solid var(--border)             .module-info-modal
+     497  1px solid var(--warn-border)        .module-info-off
+     538  1px solid var(--border)             .mi-pins th, .mi-pins td
+     547  1px solid var(--border)             .lib-edit-modal
+     938  1px solid var(--border)             .lib-chip
+
+### generate（33 处）
+     597  1px solid transparent               /* 结构化错误列表（工单 compile-experience-ui/01）：可点击条目 + 展开源码行 */ .fix-row
+     773  1px solid var(--border)             .task-more-menu
+     817  1px solid var(--border)             /* 参数卡呈现优化（工单 step11-tabs-ui/03）：单位 chip / 「当前值」小标签 / 卡脚（↺ 恢复旧值 + 范围/单位提示行）——金属性与提示弱化为 muted 层级 */ .param-card-head .param-unit-chip
+     839  1px solid var(--warn-border, rgba(210,153,34,.55))  /* 功能组选择卡（工单 recommend-exclusive-groups/04）：同功能互斥模块单选 */ /* 功能组「必须由用户显式选择」（工单 group-choice-required/01）：卡不预选 + 待选提示 */ .group-card.needs-choice
+     872  1px solid var(--info-border)        /* 步骤 2 赛题预读（工单 topic-preread/02）：一句话总览 + 按步骤分组提醒 + 题面引用小字，深底信息框 */ .topic-preread
+     884  1px solid var(--warn-border)        /* 步骤卡顶部题面提醒横幅（工单 topic-preread/03）：amber 色调与 error 红色区分 */ .preread-slot
+    1394  1px solid transparent               .sp-item
+    1694  1px solid transparent               .pin-role
+    1705  1px dashed var(--border-strong)     .pin-fixed-list .fx
+    1709  1px solid var(--warn)               .pin-warn-list .wx
+    1718  1px solid var(--border)             .pin-legend .lg
+    1736  1px solid var(--border)             .pin-menu
+    2746  1px solid transparent               .step-nav .step-dot
+    2751  1px solid var(--border)             .step-nav .step-dot .dot
+    2791  1px solid var(--border)             /* 生成页就绪总览条（工单 gen-overview/01）：顶部步骤 chips + 摘要；状态与 左侧 step-nav / stepDoneSet 同源（done ✓ 绿 / current 青 / warn ⚠ 黄）， 窄屏（step-nav 隐藏）时兼作唯一步骤导航。 宽屏去重：≥1180px 左侧 step-nav 可见时隐藏 chips——每一步骤导航只留一处；窄屏 step-nav 隐藏、chips 兼作 唯一步骤导航，仍显示 */ .gen-overview
+    2803  1px solid var(--border)             .ov-chip
+    2810  1px solid var(--border)             .ov-chip .ov-dot
+    2848  1px solid var(--border-strong)      .ov-actions .ov-fill
+    2860  1px solid var(--border)             /* 最近生成（工单 recent-jobs/01）：生成成功自动落盘 recent.json 的历史 条目条——时间 / 平台徽章 / 模块数 / 状态点 / 目录名；点击复制路径 */ .gen-recent
+    2872  1px solid transparent               .recent-chip
+    2882  1px solid var(--border-strong)      .recent-platform
+    2925  1px solid var(--border)             .revise-tab
+    2935  1px solid var(--border)             .revise-tab-badge
+    3033  1px solid rgba(var(--accent-rgb), .35)  /* 执行中卡内阶段槽（工单 ux-polish-02/06）：spinner + 阶段文案——滚动到 任意卡都能看到当前进度，不必盯面板顶部状态行 */ .task-phase
+    3039  2px solid rgba(var(--accent-rgb), .25)  .task-phase .task-spinner
+    3044  1px solid var(--ok)                 .tasks-done-line .btn-task-goto-delivery
+    3058  1px solid var(--border)             .res-chip
+    3076  1px solid var(--border)             .res-view-btn
+    3099  1px solid var(--border-strong)      .res-board-legend .dot
+    3101  1px dashed var(--warn)              .res-board-legend .res-legend-conflict
+    3139  1px solid var(--border)             .score-chip
+    3165  1px solid color-mix(in srgb, var(--accent) 30%, transparent)  /* 下一步引导（工单 step-next-guide/01）：当前卡内提示行 + 下一张待执行卡 高亮脉冲（做完一步自动定位；瞬态，不落盘） */ .task-next-hint
+    3272  1px solid var(--border)             .rc-summary
+
+### hwcheck（8 处）
+    1082  1px solid var(--warn)               /* 工具链缺失 = 大声降级（说清"未验证"，不假装编译过） */ .hwcheck-warn
+    1088  1px solid transparent               /* 上板清单：一条 = 一个勾选框 + 「应看到什么 / 不对先查哪里」两行 */ .hwcheck-check
+    1100  1px solid transparent               /* 最近几次检测：点一行 = 回读那次检测 */ .hwcheck-recent-row
+    1202  1px solid var(--border)             .hwcheck-order-index
+    1214  1px solid var(--ok)                 .hwcheck-section-tag
+    1243  1px solid var(--border-strong)      /* 现象回填 + AI 排障（工单 module-hwcheck/08）：输入框 + 建议面板。 建议面板刻意与"清单一句话"区分开：定性标签 + 两个列表（可能原因 / 下一步）， degraded（兜底文案）时用虚线描边 + 徽章，不让人把它当成模型结论。 */ .hwcheck-symptom
+    1313  1px solid var(--accent)             #tab-hwcheck .hwcheck-band-num
+    1367  1px solid var(--border-strong)      #tab-hwcheck .hwcheck-jump
+
+### master（4 处）
+    1470  2px solid var(--border)             .stepper .step .dot
+    1485  1px solid var(--warn-border)        .prog-badge
+    1910  1px solid var(--border)             .master-file-btn
+    1916  1px solid transparent               /* 母版健康徽章（工单 master-library-ui-2/01）：表格行体检直观化，悬停看明细 */ .master-health-pill
+
+### reference（2 处）
+    1519  1px solid var(--border)             .ref-files-modal
+    1570  1px solid var(--border)             .ref-files-filter
+
+### changelog（1 处）
+    1852  1px solid var(--border)             .rel-tag.tag-other
+
+### topic（3 处）
+    1858  1px solid var(--border)             .topic-card
+    1869  1px solid var(--border)             .topic-year
+    1902  1px solid var(--border)             .topic-page img
+
+### code（19 处）
+    1980  1px solid var(--border)             /* 状态栏按钮（工单 code-editor-vscode-polish/08）：与信息条钮/面板头动作 同一观感——panel 底 + 1px 边框 + radius-sm + hover accent（原先为纯文本 按钮，无边框无圆角）。底样式与 hover 与 .code-pane-action / .code-compile-head button 合并为共享规则（评审整改 08：防三份逐字节拷贝 漂移）。 */ .code-pane-action, .code-compile-head button, .code-statusbar button
+    2024  1px solid var(--border)             .code-kbd
+    2038  1px solid transparent               .code-bottom-tab
+    2085  1px solid var(--accent)             /* 「预览改动」按钮（工单 code-ide-ai/04）：AI 回复气泡尾部的 diff 入口； 正文按钮样式与 .code-ai-preview-body（预览模态内容滚动区）。 */ .code-ai-preview-btn
+    2094  1px solid var(--border)             .code-ai-chat-input
+    2133  1px solid var(--border)             .code-change-badge.b-removed
+    2248  1px solid transparent               .code-tab
+    2260  1px solid var(--border)             .code-tab-ro
+    2294  1px solid var(--border)             /* 信息条小按钮（工单 code-viewer-editor/02、/05）：「返回预览」与「编辑 源码」共用观感（不同功能不共用语义类名——评审整改拆开，样式并列）；* 隐藏态 display:none（.hidden 全局）。 */ .code-back-preview, .code-md-edit
+    2443  3px solid transparent               .code-view::-webkit-scrollbar-thumb
+    2450  1px solid var(--border)             /* 只读标注（工单 code-viewer-editor/02）：非 UTF-8 文件编辑器右上方提示 （.code-view 已 position:relative 锚定，不随内容滚动）；观感与信息条小 按钮统一（工单 code-editor-vscode-polish/02：radius-sm、panel-2 底）。 */ .code-ro-note
+    2473  1px solid var(--border)             .code-zoom-badge
+    2535  1px solid var(--border)             /* 文件树右键菜单（工单 code-editor-refine/06）：fixed 浮层——样式 token 与 confirmModal 浮层同族（--panel 底 / --border / --shadow-pop，深浅主题自 适应）；防视口溢出由 JS 布局（fx ctxMenuClamp）负责；关闭三通道：外部 mousedown / 任意滚动（capture）/ Esc。 */ .code-ctx-menu
+    2555  1px solid var(--border)             .quick-open-box
+    2576  1px solid var(--border)             /* 树操作输入模态（工单 code-tree-ops/02）：新建/重命名单行文本框 */ .code-tree-name-input
+    2685  1px solid var(--border)             .code-md-preview th, .code-md-preview td
+    2689  1px solid var(--border)             .code-md-preview img
+    3378  1px solid var(--border)             /* main.c 行号 + 语法着色（工单 ui-polish-8/01）：textarea 透明文字 + 行号列 + 高亮层三明治；滚动三同步。字号缩放（工单 code-zoom/01）：.code-wrap 为 字号基准，三明治子元素全部 1em / em 尺寸——一处改 font-size 三层同缩， 行号列宽 / 缩进随字号联动，不会错位 */ .code-wrap
+    3425  1px solid var(--border)             /* 字号缩放工具条（工单 code-zoom/01）：浮在代码框右上角，面板背景防压字 */ .code-zoom
+
+### guide（3 处）
+    2967  1px solid var(--border)             .guide-tab
+    2997  1px solid var(--border)             .guide-table th
+    2999  1px solid var(--border)             .guide-table td

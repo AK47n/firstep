@@ -1,0 +1,42 @@
+# 读数：描边守卫轮 · 登记簿 ↔ 盘上双向对账
+# 命令：python .scratch/border-guard/probe-03-register.py
+# 口径：scope_lib.full_border_entries（站在 full_borders 上）；登记簿从守卫源码解析
+# 时间：2026-09-29T21:33:40+08:00
+
+盘上整圈完整框：115 条
+登记簿登记项　：115 条
+双向差　　　　：盘上未登记 0 条 / 登记项过期 0 条
+
+## 每类条数（类别表形状）
+  block          4   顶层块：一屏里自成一块的容器（页面主体卡 / 页级汇总条）——「一屏一层」要留的就是它
+  control       37   可点控件：按钮 / 输入 / 下拉 / 勾选框 / 可点卡片 / 可点 chip / 标签页——那是控件的形状
+  tag           15   徽章与标签（不可点）：身份 / 计数 / 图例胶囊，用一条边把自己从正文里拎出来
+  alert         19   语义告示块：带警示或状态语义的告示（编译条 / 未选功能组 / 未上板 / 服务已停止 / 保存失败）
+  modal          8   弹层外壳：弹层 / 菜单 / toast——它自己是一屏，那一条要留
+  float          3   浮在内容之上的自己的面：悬浮保存条 / 只读标注 / 缩放浮标（不然与背后的字糊在一起）
+  doc            6   文档与表格语法：表格网格线 / md 预览的表格与图片框 / 指南表——去掉文档就散了
+  editor         2   编辑器形状：代码编辑器本体与它的悬浮工具条
+  nonbox         9   不是框：用 border 画的圆点 / 对勾字形 / 转圈环 / 滚动条 thumb——画得出像素，但不是盒子
+  placeholder   12   透明占位（★ 唯一带机器不变量）：取值含 transparent、默认态画不出框——要么是给悬停 / 选中态留的位置，要么是浏览器 chrome（滚动条 thumb）的透明声明
+
+## 口径分列（别混着读）
+  115 条完整框 = **94 条可见框** + **21 条非框**（12 placeholder + 9 nonbox）
+  「整圈完整框 N」是**声明数**口径（样式规则里的完整 border: 声明），
+  与「渲染出来的框元素数」不是同一把尺（local-environment 记过这条）。
+
+## 脚注：非框那 21 条里，有几条在状态态里会拿到框（单声明不在口径内）
+（扫描面 = placeholder + nonbox 全部 21 条——第一版只扫了 12 条 placeholder，
+  双轴评审点名「覆盖面只有一半」；nonbox 9 条实测 0 条有状态上色，结论不变但扫描面得铺满。）
+  placeholder  .card-step-status                              → 状态规则 1 条（行 2906）
+  placeholder  .fix-row                                       → 状态规则 1 条（行 602）
+  placeholder  .sp-item                                       → 状态规则 1 条（行 1396）
+  placeholder  .pin-role                                      → 状态规则 1 条（行 1696）
+  placeholder  .step-nav .step-dot                            → 状态规则 4 条（行 2760, 2761, 2764, 2766）
+  placeholder  .recent-chip                                   → 状态规则 1 条（行 2875）
+  placeholder  .hwcheck-check                                 → 状态规则 1 条（行 1092）
+  placeholder  .hwcheck-recent-row                            → 状态规则 2 条（行 1106, 1108）
+  placeholder  .code-bottom-tab                               → 状态规则 1 条（行 2043）
+  placeholder  .code-tab                                      → 状态规则 1 条（行 2255）
+  合计：21 条非框里 **10 条**在悬停 / 选中态会拿到 `border-color`
+  → 那是「一屏一层」的合法逃逸（选中态本来就该有框），**不是漏网**：
+    `border-color` 是单声明、不是完整框，本来就不在 `full_borders` 口径里。

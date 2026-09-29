@@ -1,0 +1,11 @@
+# 读数：描边守卫轮 · 解析口径对账（整文件 vs `<style>` 块）
+# 命令：python .scratch/border-guard/probe-02-caliber-styleblock.py
+# 守卫 cssRules() 的原式 = /([^{}]+)\{([^{}]*)\}/g；scope_lib.rules_of 只在 <style> 里跑
+# 时间：2026-09-29T21:33:38+08:00
+
+整文件解析   ：规则  1607  整圈完整框   115
+<style> 块解析：规则  1593  整圈完整框   115
+scope_lib.full_borders（口径锚）：115
+
+## 整文件多出来的那几条
+  （无——两个口径在描边这一面逐条相同）

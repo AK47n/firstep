@@ -9,13 +9,18 @@ Duplicated Code。**03 那四支已经跑完、锚点已被消费掉**，回头�
 口径与守卫 `tests/js/css-tokens.test.mjs` **同一处**：
   · 分区表 `PAGE_SCOPES` 从守卫源码解析（`["id", /正则/],` 一行一条）；
   · 归属先剥选择器前面的块注释（02 单评审抓到的真漏洞：注释里提到别的页的类名会把规则判走）；
-  · 规则行号 = 守卫/探针口径（规则起点前那个换行所在的行号），**与 `probe-01` 的读数一致**。
+  · 规则行号 = 守卫/探针口径（规则起点前那个换行所在的行号），**与 `probe-01` 的读数一致**；
+  · **描边登记簿**（border-guard/01）也在这里读：`load_border_kinds()` / `load_border_register()`
+    从守卫源码解析那两张表，`full_border_entries()` 给"盘上那一边"的认人形态
+    ——腿⑥ 与读数因此共用一份数据、一套判据。
 
 用法：
     import sys, pathlib
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
     from scope_lib import (PAGE, GUARD, load_scopes, scope_of, rules_of, rules_in,
-                           read_page, write_page, bare_fonts, bare_token_spaces, full_borders)
+                           read_page, write_page, bare_fonts, bare_token_spaces, full_borders,
+                           strip_lead_comments, full_border_entries,
+                           load_border_kinds, load_border_register)
 """
 
 from __future__ import annotations
@@ -161,6 +166,10 @@ def full_borders(text: str, scope: str | None = None) -> list[tuple[int, str, st
     **共用这一处**——03 单的 apply-03c 把它写在脚本里、04 单的取证脚本又抄了一份，
     04 单评审按 README「公共件从 scope_lib import」把口径提到这里（apply-04c 已执行完、
     不回头改写；05–07 起的新脚本一律用本函数）。
+
+    ⚠ 返回的选择器**带前导块注释**（这条样式块大量规则写成「注释 + 选择器」）——
+    它适合"给人看 / 按行号施工"，**不适合当认人键**。要认人用 `full_border_entries()`
+    （border-guard/01 加的：剥注释 + 空白归一 + 带作用域与类别）。
     """
     scopes = load_scopes()
     out: list[tuple[int, str, str]] = []
@@ -172,4 +181,77 @@ def full_borders(text: str, scope: str | None = None) -> list[tuple[int, str, st
             if value.split()[0] in DEAD_BORDER:
                 continue
             out.append((line, sel, value))
+    return out
+
+
+# ---------------------------------------------------------------------------
+# 描边登记簿（工单 border-guard/01）：**判据仍住在 `tests/js/css-tokens.test.mjs`**，
+# 这里只做"从守卫源码把那张数据表读回来"——单一出处，探针不另抄一份
+# （照 `load_scopes()` / `load_backlog()` 的既有形状；格式变了就大声失败）。
+# ---------------------------------------------------------------------------
+
+LEAD_COMMENT_RE = re.compile(r"^(?:/\*.*?\*/\s*)+", re.S)
+BORDER_TRANSPARENT_RE = re.compile(r"(?:^|\s)transparent(?:\s|$)")
+# 登记项固定形状：一行一条 `["作用域", "选择器", "类别"],`（分组注释与空行一律忽略）
+# ⚠ 必须带 `re.M`：不带 MULTILINE 时 `^` / `$` 只认整串首尾，一条都匹配不上（第一版就踩了）。
+BORDER_ENTRY_RE = re.compile(r'^\s*\["([\w-]+)",\s*"([^"]+)",\s*"([a-z-]+)"\],\s*$', re.M)
+BORDER_KIND_RE = re.compile(r'^\s*\["([a-z-]+)",\s*"([^"]+)"\],\s*$', re.M)
+
+
+def strip_lead_comments(sel: str) -> str:
+    """剥掉选择器**前面**那段块注释（与守卫 `stripLeadComments` 逐字同口径）。"""
+    return LEAD_COMMENT_RE.sub("", sel).strip()
+
+
+def _guard_block(name: str) -> str:
+    """把守卫里 `const <name> = [ … ];` 之间的正文抠出来（找不到就大声失败）。"""
+    text = GUARD.read_text(encoding="utf-8")
+    m = re.search(rf"const {name} = \[(.*?)\n\];", text, re.S)
+    if not m:
+        raise SystemExit(f"守卫里找不到 {name} —— 格式变了，改 scope_lib 的解析")
+    return m.group(1)
+
+
+def load_border_kinds() -> list[tuple[str, str]]:
+    """描边类别表 → [(id, 判据)]；解析不出任何一条就大声失败（别拿空表当读数）。"""
+    out = [(m.group(1), m.group(2)) for m in BORDER_KIND_RE.finditer(_guard_block("BORDER_KINDS"))]
+    if not out:
+        raise SystemExit("BORDER_KINDS 解析出 0 条 —— 格式变了")
+    return out
+
+
+def load_border_register() -> list[tuple[str, str, str]]:
+    """描边登记簿 → [(作用域, 剥注释的选择器, 类别)]；**逐行严格**，坏行大声失败。"""
+    body = _guard_block("BORDER_REGISTER")
+    out: list[tuple[str, str, str]] = []
+    for i, line in enumerate(body.splitlines(), start=1):
+        if not line.strip() or line.strip().startswith("//"):
+            continue
+        m = BORDER_ENTRY_RE.match(line)
+        if not m:
+            raise SystemExit(f"BORDER_REGISTER 第 {i} 行不是登记项形状：{line!r}")
+        out.append((m.group(1), m.group(2), m.group(3)))
+    if not out:
+        raise SystemExit("BORDER_REGISTER 解析出 0 条 —— 格式变了")
+    return out
+
+
+def full_border_entries(text: str) -> list[dict[str, object]]:
+    """盘上的整圈完整框，**带认人键**：`{line, scope, sel, value, transparent}`。
+
+    与 `full_borders()` 同一判据（站在它上面，不另立一套），只多两步：
+      · 选择器剥掉前导块注释 + 空白归一（守卫 `fullBorderEntries` 的同口径镜像）；
+      · 附上作用域归属与"取值含不含 transparent"（`placeholder` 不变量要用的那一位）。
+    行号仍是 `full_borders()` 的行号口径（规则起点前那个换行所在的行）。
+    """
+    scopes = load_scopes()
+    out: list[dict[str, object]] = []
+    for line, sel, value in full_borders(text):
+        out.append({
+            "line": line,
+            "scope": scope_of(sel, scopes),
+            "sel": " ".join(strip_lead_comments(sel).split()),
+            "value": value,
+            "transparent": bool(BORDER_TRANSPARENT_RE.search(value)),
+        })
     return out
