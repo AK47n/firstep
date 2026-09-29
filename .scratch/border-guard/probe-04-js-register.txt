@@ -1,7 +1,7 @@
 # 读数：描边守卫轮 · 渲染方登记簿 ↔ 盘上双向对账
 # 命令：python .scratch/border-guard/probe-04-js-register.py
 # 口径：scope_lib.js_inline_border_entries（逐行扫 border: 简写，取值终止符 ; 或 "）
-# 时间：2026-09-29T21:46:01+08:00
+# 时间：2026-09-29T22:01:01+08:00
 
 盘上渲染方内联整圈框：10 条
 渲染方登记簿登记项　：10 条

@@ -1,0 +1,28 @@
+# 读数：after-03-probe-01
+# 命令：python .scratch\ui-density-sitewide\probe-01-scope-draft.py --out C:\Users\luoji\Desktop\firstep\.scratch\border-guard\after-03-probe-01-body.txt
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-29T22:08:54+08:00
+# 退出码：0
+scope         rules  bareFont  borders  bareSpace
+code            365         0       62          0
+master           57         0        6          0
+settings         48         0        7          0
+changelog        19         0        2          0
+guide            30         0        5          0
+library          98         0       16          0
+reference        47         0        6          0
+pdf              14         0        0          0
+md               15         0        0          0
+topic            45         0        3          0
+generate        409         0       58          0
+hwcheck         123         0       19          0
+components       95         0       13          0
+shell           228         0       26          0
+合计             1593         0      223          0
+
+页面尺 SITEWIDE_BACKLOG = 0 条（还剩这些没做完）：
+          已完工 = 14 条：code, master, settings, changelog, guide, library, reference, pdf, md, topic, generate, hwcheck, components, shell
+另有内联 style 属性里的裸字号 0 处（不在样式块里，见 --kind inline）
+全站**裸 px** font-size 声明处数（0 = 这条线收口；样式块里的 `--fs-*` 引用另计）（样式块 + 内联）: 0；裸样式块内 0
+
+[落盘] C:\Users\luoji\Desktop\firstep\.scratch\border-guard\after-03-probe-01-body.txt

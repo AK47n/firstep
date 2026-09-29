@@ -9,15 +9,17 @@ r"""反证探针：**跨语言镜像守卫自己判得红吗**（工单 border-g
 
 from __future__ import annotations
 
-import hashlib
 import pathlib
 import subprocess
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]
-GUARD = ROOT / "tests" / "js" / "css-tokens.test.mjs"
-TEST = "tests/test_border_register_mirror.py"
+HERE = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+
+from probe_lib import GUARD, ROOT, inject_and_check, sha256  # noqa: E402
+
 PY = sys.executable
+TEST = "tests/test_border_register_mirror.py"
 
 # (名字, 锚点, 替换成什么) —— 每一处都对应镜子里的一条口径
 INJECTIONS = [
@@ -42,39 +44,28 @@ INJECTIONS = [
 def run_pytest() -> tuple[int, str]:
     proc = subprocess.run([PY, "-m", "pytest", TEST, "-q"], cwd=ROOT, capture_output=True,
                           text=True, encoding="utf-8", errors="replace")
-    return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
+    out = (proc.stdout or "") + (proc.stderr or "")
+    bad = [ln for ln in out.splitlines() if ln.startswith("FAILED")]
+    return proc.returncode, (bad[0].split("::")[-1] if bad else out.strip().splitlines()[-1] if out.strip() else "")
 
 
 def main() -> int:
-    original = GUARD.read_bytes()
-    before = hashlib.sha256(original).hexdigest()
-    text = original.decode("utf-8")
+    before = sha256(GUARD)
     print(f"前置：{TEST} 在干净树上必须绿")
-    code, out = run_pytest()
-    print(f"  → 退出码 {code}（{out.strip().splitlines()[-1] if out.strip() else '无输出'}）")
+    code, note = run_pytest()
+    print(f"  → 退出码 {code}（{note}）")
     if code != 0:
         print("干净树上就不绿——先修守卫，别往下走")
         return 1
 
     failures = 0
     for name, anchor, repl in INJECTIONS:
-        if text.count(anchor) != 1:
-            print(f"[跳过] {name}：锚点命中 {text.count(anchor)} 次（应为 1）")
-            failures += 1
-            continue
-        GUARD.write_bytes(text.replace(anchor, repl).encode("utf-8"))
-        code, out = run_pytest()
-        bad = [ln for ln in out.splitlines() if ln.startswith("FAILED")]
-        verdict = "红 ✅" if code != 0 else "**没红 ❌**"
-        print(f"[{verdict}] {name}" + (f"  （{bad[0].split('::')[-1]}）" if bad else ""))
-        if code == 0:
-            failures += 1
+        failures += inject_and_check(GUARD, name, anchor.encode("utf-8"), repl.encode("utf-8"), run_pytest)
 
-    GUARD.write_bytes(original)
-    after = hashlib.sha256(GUARD.read_bytes()).hexdigest()
+    after = sha256(GUARD)
     print(f"\n复原：sha256 {'逐字节相同 ✅' if before == after else '**不同 ❌**'}（{before[:12]}…）")
-    code, out = run_pytest()
-    print(f"复原后复跑：退出码 {code}" + ("（绿 ✅）" if code == 0 else "（**红 ❌**）"))
+    code, note = run_pytest()
+    print(f"复原后复跑：退出码 {code}" + ("（绿 ✅）" if code == 0 else f"（**红 ❌** {note}）"))
     if before != after or code != 0:
         failures += 1
     print(f"\n结论：{'全部按预期 ✅' if failures == 0 else f'有 {failures} 处不符预期 ❌'}")

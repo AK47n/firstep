@@ -120,6 +120,13 @@ python .scratch\ui-density-sitewide\readings.py pytest -- python -m pytest -n au
 - **判断边界（别把这几条读成"没做完"）**：
   ① **整圈完整框 115 处不是漏网**——那是逐条申报过的例外（可点控件 / 语义告示 / 弹层外壳 /
   非框 / 表格网格与文档渲染 / 顶层块），守卫明文不判描边，靠每单的逐层清单 + 人眼看图；
+  > ✅ **已结清（2026-09-29，工单 `border-guard/01`–`02`）**：那 115 处现在是**可对账的数据**——
+  > `tests/js/css-tokens.test.mjs` 里的 `BORDER_REGISTER`（115 条 `[作用域, 剥注释的选择器, 类别]`
+  > + 10 类 `BORDER_KINDS`）+ **腿⑥**（双向对账 / `placeholder` ⟺ 含 `transparent` / 类别表形状）；
+  > `static/js/**` 那 10 处内联框另立 `JS_BORDER_REGISTER` + **腿⑦**。这一条**不再是待办**。
+  > 顺带量清了口径：115 = **94 条可见框 + 21 条非框**（12 透明占位 + 9 圆点/字形/滚动条），
+  > 非框里 10 条在悬停/选中态会拿到 `border-color`（合法逃逸，不在口径内）。
+  > 读数与复跑：`.scratch/border-guard/README.md`。
   ② **`static/js/**` 里那些 `font-size="8.5"` 是 SVG 用户单位**（矢量图字号属性，随图缩放），
   不在"裸 px 字号"口径里（守卫与 `apply-08a` 都注明）；③ 本轮只动观感：JS 侧**只允许**
   内联字号的 px↔令牌变化（`probe-03` 逐文件核），其余任何 JS 改动都算违约。

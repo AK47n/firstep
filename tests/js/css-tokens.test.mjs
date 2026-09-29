@@ -340,6 +340,11 @@ const FROZEN_FONT_SIZES = new Set([
  * 本表把它们机械化。**判据边界**：不判"该不该留"、不判好不好看。
  * 格式固定（`["id", "判据"],` 一行一条，判据里**不写 ASCII 双引号**）——
  * `.scratch/border-guard/probe-03-register.py` 与 `scope_lib.load_border_kinds()` 按同一格式解析。
+ *
+ * ⚠ **两个 id 与 CSS / HTML 的同名词不是一回事**（03 单评审点过）：这里的 `float` 是
+ * "浮在内容之上的自己的面"（悬浮保存条 / 只读标注 / 缩放浮标），**不是 CSS 的 `float`**；
+ * 这里的 `placeholder` 是"透明占位"，**不是 HTML 的 `placeholder` 属性**。
+ * 它们是**这一列**（登记项第三格）的取值——读的时候按本表那一行的判据读，别按 CSS/HTML 的语感读。
  */
 const BORDER_KINDS = [
   ["block", "顶层块：一屏里自成一块的容器（页面主体卡 / 页级汇总条）——「一屏一层」要留的就是它"],

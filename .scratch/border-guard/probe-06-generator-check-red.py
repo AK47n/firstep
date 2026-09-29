@@ -12,13 +12,15 @@ r"""反证探针：两支生成器的 `--check` **判不判得红**（工单 bor
 
 from __future__ import annotations
 
-import hashlib
 import pathlib
 import subprocess
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]
-GUARD = ROOT / "tests" / "js" / "css-tokens.test.mjs"
+HERE = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+
+from probe_lib import GUARD, ROOT, inject_and_check, sha256  # noqa: E402
+
 PY = sys.executable
 
 # (生成器, [(名字, 锚点, 替换成什么)]) —— 每支两处漂移：改类别 + 改选择器/锚点
@@ -50,8 +52,7 @@ def run_check(gen: str) -> tuple[int, str]:
 
 
 def main() -> int:
-    original = GUARD.read_bytes()
-    before = hashlib.sha256(original).hexdigest()
+    before = sha256(GUARD)
     failures = 0
 
     for gen, injections in TARGETS:
@@ -63,19 +64,9 @@ def main() -> int:
             print("干净树上就不绿——先修生成器，别往下走")
             return 1
         for name, anchor, repl in injections:
-            if original.count(anchor) != 1:
-                print(f"[跳过] {name}：锚点命中 {original.count(anchor)} 次（应为 1）")
-                failures += 1
-                continue
-            GUARD.write_bytes(original.replace(anchor, repl))
-            code, last = run_check(gen)
-            print(f"[{'红 ✅' if code != 0 else '**没红 ❌**'}] {name}（退出码 {code}）{last}")
-            if code == 0:
-                failures += 1
-            GUARD.write_bytes(original)
+            failures += inject_and_check(GUARD, name, anchor, repl, lambda g=gen: run_check(g))
 
-    GUARD.write_bytes(original)
-    after = hashlib.sha256(GUARD.read_bytes()).hexdigest()
+    after = sha256(GUARD)
     print(f"\n复原：sha256 {'逐字节相同 ✅' if before == after else '**不同 ❌**'}（{before[:12]}…）")
     for gen, _inj in TARGETS:
         code, last = run_check(gen)
