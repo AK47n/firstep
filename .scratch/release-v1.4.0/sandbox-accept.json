@@ -1,0 +1,664 @@
+{
+  "base": "http://127.0.0.1:8020",
+  "health": {
+    "app": "contest-generator",
+    "version": "1.4.0",
+    "ok": true
+  },
+  "report": {
+    "generate": {
+      "sizes": {
+        "12": {
+          "count": 40,
+          "sample": "button.ov-fill"
+        },
+        "13": {
+          "count": 85,
+          "sample": "span.ov-ready"
+        },
+        "14": {
+          "count": 84,
+          "sample": "div.welcome-sub"
+        },
+        "16": {
+          "count": 2,
+          "sample": "div.welcome-title"
+        },
+        "20": {
+          "count": 12,
+          "sample": "h2"
+        }
+      },
+      "rawSizes": {
+        "12": {
+          "count": 52,
+          "sample": "button.ov-fill"
+        },
+        "13": {
+          "count": 103,
+          "sample": "div.ov-summary"
+        },
+        "14": {
+          "count": 148,
+          "sample": "div.welcome-card"
+        },
+        "16": {
+          "count": 2,
+          "sample": "div.welcome-title"
+        },
+        "20": {
+          "count": 12,
+          "sample": "h2"
+        },
+        "13.3333": {
+          "count": 1,
+          "sample": "input"
+        }
+      },
+      "fullBoxes": 91,
+      "boxSamples": [
+        "div.welcome-card",
+        "button.accent",
+        "button.accent"
+      ],
+      "rootSize": "14px"
+    },
+    "hwcheck": {
+      "sizes": {
+        "12": {
+          "count": 5,
+          "sample": "span.hwcheck-band-num"
+        },
+        "13": {
+          "count": 35,
+          "sample": "span.muted"
+        },
+        "14": {
+          "count": 19,
+          "sample": "p.card-details"
+        },
+        "16": {
+          "count": 7,
+          "sample": "div.hwcheck-band"
+        },
+        "20": {
+          "count": 10,
+          "sample": "h2"
+        },
+        "22": {
+          "count": 2,
+          "sample": "div.es-icon"
+        }
+      },
+      "rawSizes": {
+        "12": {
+          "count": 5,
+          "sample": "span.hwcheck-band-num"
+        },
+        "13": {
+          "count": 38,
+          "sample": "span.muted"
+        },
+        "14": {
+          "count": 68,
+          "sample": "div.card"
+        },
+        "16": {
+          "count": 7,
+          "sample": "div.hwcheck-band"
+        },
+        "20": {
+          "count": 10,
+          "sample": "h2"
+        },
+        "22": {
+          "count": 2,
+          "sample": "div.es-icon"
+        },
+        "13.3333": {
+          "count": 2,
+          "sample": "input"
+        }
+      },
+      "fullBoxes": 32,
+      "boxSamples": [
+        "span.hwcheck-band-num",
+        "div.card",
+        "div.hwcheck-warn"
+      ],
+      "rootSize": "14px"
+    },
+    "topic": {
+      "sizes": {
+        "13": {
+          "count": 4,
+          "sample": "span.muted"
+        },
+        "14": {
+          "count": 7,
+          "sample": "input"
+        },
+        "20": {
+          "count": 2,
+          "sample": "h2"
+        },
+        "22": {
+          "count": 1,
+          "sample": "div.es-icon"
+        }
+      },
+      "rawSizes": {
+        "13": {
+          "count": 5,
+          "sample": "span.muted"
+        },
+        "14": {
+          "count": 18,
+          "sample": "div.card"
+        },
+        "20": {
+          "count": 2,
+          "sample": "h2"
+        },
+        "22": {
+          "count": 1,
+          "sample": "div.es-icon"
+        }
+      },
+      "fullBoxes": 9,
+      "boxSamples": [
+        "div.card",
+        "input.",
+        "select."
+      ],
+      "rootSize": "14px"
+    },
+    "code": {
+      "sizes": {
+        "12": {
+          "count": 3,
+          "sample": "button.code-pane-action"
+        },
+        "13": {
+          "count": 15,
+          "sample": "span"
+        },
+        "14": {
+          "count": 1,
+          "sample": "input"
+        }
+      },
+      "rawSizes": {
+        "12": {
+          "count": 3,
+          "sample": "button.code-pane-action"
+        },
+        "13": {
+          "count": 18,
+          "sample": "div.code-pane-title"
+        },
+        "14": {
+          "count": 14,
+          "sample": "div.card"
+        }
+      },
+      "fullBoxes": 9,
+      "boxSamples": [
+        "button.code-pane-action",
+        "button.code-pane-action",
+        "button.code-pane-action"
+      ],
+      "rootSize": "14px"
+    },
+    "settings": {
+      "sizes": {
+        "12": {
+          "count": 3,
+          "sample": "button.ghost"
+        },
+        "13": {
+          "count": 36,
+          "sample": "span.muted"
+        },
+        "14": {
+          "count": 22,
+          "sample": "button"
+        },
+        "16": {
+          "count": 8,
+          "sample": "div.settings-band"
+        },
+        "20": {
+          "count": 13,
+          "sample": "h2"
+        },
+        "22": {
+          "count": 1,
+          "sample": "div.es-icon"
+        }
+      },
+      "rawSizes": {
+        "12": {
+          "count": 3,
+          "sample": "button.ghost"
+        },
+        "13": {
+          "count": 41,
+          "sample": "span.muted"
+        },
+        "14": {
+          "count": 60,
+          "sample": "div.settings-toolbar"
+        },
+        "16": {
+          "count": 9,
+          "sample": "div.settings-band"
+        },
+        "20": {
+          "count": 13,
+          "sample": "h2"
+        },
+        "22": {
+          "count": 1,
+          "sample": "div.es-icon"
+        },
+        "13.3333": {
+          "count": 1,
+          "sample": "input"
+        }
+      },
+      "fullBoxes": 35,
+      "boxSamples": [
+        "button.",
+        "div.settings-stickybar",
+        "button.primary"
+      ],
+      "rootSize": "14px"
+    },
+    "library": {
+      "sizes": {
+        "12": {
+          "count": 8,
+          "sample": "button.lib-chip.on"
+        },
+        "13": {
+          "count": 5,
+          "sample": "span.muted"
+        },
+        "14": {
+          "count": 24,
+          "sample": "input"
+        },
+        "16": {
+          "count": 3,
+          "sample": "button.add-section-head"
+        },
+        "20": {
+          "count": 2,
+          "sample": "h2"
+        },
+        "22": {
+          "count": 1,
+          "sample": "div.es-icon"
+        }
+      },
+      "rawSizes": {
+        "12": {
+          "count": 8,
+          "sample": "button.lib-chip.on"
+        },
+        "13": {
+          "count": 5,
+          "sample": "span.muted"
+        },
+        "14": {
+          "count": 54,
+          "sample": "div.card"
+        },
+        "16": {
+          "count": 3,
+          "sample": "button.add-section-head"
+        },
+        "20": {
+          "count": 2,
+          "sample": "h2"
+        },
+        "22": {
+          "count": 1,
+          "sample": "div.es-icon"
+        },
+        "13.3333": {
+          "count": 2,
+          "sample": "input"
+        }
+      },
+      "fullBoxes": 20,
+      "boxSamples": [
+        "div.card",
+        "input.",
+        "select."
+      ],
+      "rootSize": "14px"
+    },
+    "reference": {
+      "sizes": {
+        "12": {
+          "count": 12,
+          "sample": "button.lib-chip.on"
+        },
+        "13": {
+          "count": 5,
+          "sample": "span.muted"
+        },
+        "14": {
+          "count": 34,
+          "sample": "input"
+        },
+        "16": {
+          "count": 4,
+          "sample": "button.add-section-head"
+        },
+        "20": {
+          "count": 2,
+          "sample": "h2"
+        },
+        "22": {
+          "count": 1,
+          "sample": "div.es-icon"
+        }
+      },
+      "rawSizes": {
+        "12": {
+          "count": 12,
+          "sample": "button.lib-chip.on"
+        },
+        "13": {
+          "count": 5,
+          "sample": "span.muted"
+        },
+        "14": {
+          "count": 74,
+          "sample": "div.card"
+        },
+        "16": {
+          "count": 4,
+          "sample": "button.add-section-head"
+        },
+        "20": {
+          "count": 2,
+          "sample": "h2"
+        },
+        "22": {
+          "count": 1,
+          "sample": "div.es-icon"
+        },
+        "13.3333": {
+          "count": 3,
+          "sample": "input"
+        }
+      },
+      "fullBoxes": 31,
+      "boxSamples": [
+        "div.card",
+        "input.",
+        "select."
+      ],
+      "rootSize": "14px"
+    },
+    "pdf": {
+      "sizes": {
+        "12": {
+          "count": 1,
+          "sample": "button.lib-chip.on"
+        },
+        "13": {
+          "count": 4,
+          "sample": "span.muted"
+        },
+        "14": {
+          "count": 12,
+          "sample": "input"
+        },
+        "20": {
+          "count": 1,
+          "sample": "h2"
+        },
+        "22": {
+          "count": 1,
+          "sample": "div.es-icon"
+        }
+      },
+      "rawSizes": {
+        "12": {
+          "count": 1,
+          "sample": "button.lib-chip.on"
+        },
+        "13": {
+          "count": 4,
+          "sample": "span.muted"
+        },
+        "14": {
+          "count": 24,
+          "sample": "div.card"
+        },
+        "20": {
+          "count": 1,
+          "sample": "h2"
+        },
+        "22": {
+          "count": 1,
+          "sample": "div.es-icon"
+        }
+      },
+      "fullBoxes": 7,
+      "boxSamples": [
+        "div.card",
+        "input.",
+        "select."
+      ],
+      "rootSize": "14px"
+    },
+    "md": {
+      "sizes": {
+        "12": {
+          "count": 1,
+          "sample": "button.lib-chip.on"
+        },
+        "13": {
+          "count": 4,
+          "sample": "span.muted"
+        },
+        "14": {
+          "count": 12,
+          "sample": "input"
+        },
+        "20": {
+          "count": 1,
+          "sample": "h2"
+        },
+        "22": {
+          "count": 1,
+          "sample": "div.es-icon"
+        }
+      },
+      "rawSizes": {
+        "12": {
+          "count": 1,
+          "sample": "button.lib-chip.on"
+        },
+        "13": {
+          "count": 4,
+          "sample": "span.muted"
+        },
+        "14": {
+          "count": 24,
+          "sample": "div.card"
+        },
+        "20": {
+          "count": 1,
+          "sample": "h2"
+        },
+        "22": {
+          "count": 1,
+          "sample": "div.es-icon"
+        }
+      },
+      "fullBoxes": 7,
+      "boxSamples": [
+        "div.card",
+        "input.",
+        "select."
+      ],
+      "rootSize": "14px"
+    },
+    "master": {
+      "sizes": {
+        "12": {
+          "count": 7,
+          "sample": "button.btn-pill--sm"
+        },
+        "13": {
+          "count": 6,
+          "sample": "span.muted"
+        },
+        "14": {
+          "count": 13,
+          "sample": "label"
+        },
+        "20": {
+          "count": 2,
+          "sample": "h2"
+        }
+      },
+      "rawSizes": {
+        "12": {
+          "count": 7,
+          "sample": "button.btn-pill--sm"
+        },
+        "13": {
+          "count": 6,
+          "sample": "span.muted"
+        },
+        "14": {
+          "count": 33,
+          "sample": "div.card"
+        },
+        "20": {
+          "count": 2,
+          "sample": "h2"
+        }
+      },
+      "fullBoxes": 14,
+      "boxSamples": [
+        "div.card",
+        "textarea.",
+        "button."
+      ],
+      "rootSize": "14px"
+    },
+    "guide": {
+      "sizes": {
+        "12": {
+          "count": 6,
+          "sample": "button.guide-tab.active"
+        },
+        "13": {
+          "count": 9,
+          "sample": "p.muted"
+        },
+        "14": {
+          "count": 45,
+          "sample": "p.guide-chapter-intro"
+        },
+        "16": {
+          "count": 1,
+          "sample": "h3.guide-chapter-title"
+        },
+        "20": {
+          "count": 1,
+          "sample": "h2"
+        }
+      },
+      "rawSizes": {
+        "12": {
+          "count": 6,
+          "sample": "button.guide-tab.active"
+        },
+        "13": {
+          "count": 9,
+          "sample": "p.muted"
+        },
+        "14": {
+          "count": 68,
+          "sample": "div.guide-head"
+        },
+        "16": {
+          "count": 1,
+          "sample": "h3.guide-chapter-title"
+        },
+        "20": {
+          "count": 1,
+          "sample": "h2"
+        }
+      },
+      "fullBoxes": 33,
+      "boxSamples": [
+        "button.guide-tab",
+        "button.guide-tab",
+        "button.guide-tab"
+      ],
+      "rootSize": "14px"
+    },
+    "changelog": {
+      "sizes": {
+        "12": {
+          "count": 15,
+          "sample": "span.collapse-ico"
+        },
+        "13": {
+          "count": 19,
+          "sample": "span.muted"
+        },
+        "14": {
+          "count": 16,
+          "sample": "button.release-head"
+        },
+        "16": {
+          "count": 9,
+          "sample": "span.release-ver"
+        },
+        "20": {
+          "count": 1,
+          "sample": "h2"
+        }
+      },
+      "rawSizes": {
+        "12": {
+          "count": 15,
+          "sample": "span.collapse-ico"
+        },
+        "13": {
+          "count": 19,
+          "sample": "span.muted"
+        },
+        "14": {
+          "count": 35,
+          "sample": "div.card"
+        },
+        "16": {
+          "count": 9,
+          "sample": "span.release-ver"
+        },
+        "20": {
+          "count": 1,
+          "sample": "h2"
+        }
+      },
+      "fullBoxes": 1,
+      "boxSamples": [
+        "div.card"
+      ],
+      "rootSize": "14px"
+    }
+  }
+}

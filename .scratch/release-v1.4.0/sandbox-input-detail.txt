@@ -1,0 +1,24 @@
+# 读数：sandbox-input-detail
+# 命令：node .scratch\release-v1.4.0\probe-input-font-detail.mjs
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-29T13:26:09+08:00
+# 退出码：0
+
+[generate] 例外 1 个：
+  input[type=checkbox]#desktop-topic-output → 13.3333px ｜ 自己的文字：「」｜ 含子元素文字长度=0
+
+[hwcheck] 例外 2 个：
+  input[type=checkbox] → 13.3333px ｜ 自己的文字：「」｜ 含子元素文字长度=0
+  input[type=checkbox] → 13.3333px ｜ 自己的文字：「」｜ 含子元素文字长度=0
+
+[settings] 例外 1 个：
+  input[type=checkbox]#set-recommend-cache → 13.3333px ｜ 自己的文字：「」｜ 含子元素文字长度=0
+
+[library] 例外 2 个：
+  input[type=checkbox]#new-hw → 13.3333px ｜ 自己的文字：「」｜ 含子元素文字长度=0
+  input[type=checkbox]#new-verified → 13.3333px ｜ 自己的文字：「」｜ 含子元素文字长度=0
+
+[reference] 例外 3 个：
+  input[type=radio] → 13.3333px ｜ 自己的文字：「」｜ 含子元素文字长度=0
+  input[type=radio] → 13.3333px ｜ 自己的文字：「」｜ 含子元素文字长度=0
+  input[type=radio] → 13.3333px ｜ 自己的文字：「」｜ 含子元素文字长度=0

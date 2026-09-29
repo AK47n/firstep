@@ -1,0 +1,21 @@
+# 读数：sandbox-rebuild
+# 命令：python .scratch\full-download\make_sim_sandbox.py
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-29T13:25:18+08:00
+# 退出码：0
+沙箱已存在，先删除：C:\Users\luoji\Desktop\firstep-sim
+  src            256 个文件
+  library       1873 个文件
+  docs            30 个文件
+  assets           5 个文件
+  tools           12 个文件
+  tests          410 个文件
+  .githooks        3 个文件
+  根级文件     12 个
+  资料库        2026_08_MSPM0G3507与常用芯片手册/MSPM0G3507用户指南(中文).pdf（17.8 MB）
+  资料库        2026_08_STM32F103手册/STM32F103C8T6引脚定义.xlsx（0.0 MB）
+  干扰件        01_CCS_20.5.0.00028_win.zip（69 B）
+  用户数据      C:\Users\luoji\.contest_generator_sim（config.json + recent.json + tasks-simulated.json）
+
+沙箱就绪：C:\Users\luoji\Desktop\firstep-sim（2604 个文件 / 289.1 MB）
+沙箱数据目录：C:\Users\luoji\.contest_generator_sim

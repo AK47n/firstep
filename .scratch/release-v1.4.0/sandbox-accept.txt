@@ -1,0 +1,63 @@
+# 读数：sandbox-accept
+# 命令：node .scratch\release-v1.4.0\probe-sandbox-accept.mjs --json .scratch\release-v1.4.0\sandbox-accept.json
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-29T13:27:17+08:00
+# 退出码：0
+
+== ① 版本 ==
+/api/health → {"app":"contest-generator","version":"1.4.0","ok":true}
+✅ /api/health 版本 = 1.4.0（要发的版本 1.4.0）
+
+== ② 十二个页签的字号档位（计算样式）==
+  generate   基准 14px   文字取值 {12×40 13×85 14×84 16×2 20×12} 整圈框 91
+✅ [generate] 页签正文基准 = 14px（应为 14px = --fs-body）
+✅ [generate] 全部字号取值都在六档角色内
+  hwcheck    基准 14px   文字取值 {12×5 13×35 14×19 16×7 20×10 22×2} 整圈框 32
+✅ [hwcheck] 页签正文基准 = 14px（应为 14px = --fs-body）
+✅ [hwcheck] 全部字号取值都在六档角色内
+  topic      基准 14px   文字取值 {13×4 14×7 20×2 22×1} 整圈框 9
+✅ [topic] 页签正文基准 = 14px（应为 14px = --fs-body）
+✅ [topic] 全部字号取值都在六档角色内
+  code       基准 14px   文字取值 {12×3 13×15 14×1} 整圈框 9
+✅ [code] 页签正文基准 = 14px（应为 14px = --fs-body）
+✅ [code] 全部字号取值都在六档角色内
+  settings   基准 14px   文字取值 {12×3 13×36 14×22 16×8 20×13 22×1} 整圈框 35
+✅ [settings] 页签正文基准 = 14px（应为 14px = --fs-body）
+✅ [settings] 全部字号取值都在六档角色内
+  library    基准 14px   文字取值 {12×8 13×5 14×24 16×3 20×2 22×1} 整圈框 20
+✅ [library] 页签正文基准 = 14px（应为 14px = --fs-body）
+✅ [library] 全部字号取值都在六档角色内
+  reference  基准 14px   文字取值 {12×12 13×5 14×34 16×4 20×2 22×1} 整圈框 31
+✅ [reference] 页签正文基准 = 14px（应为 14px = --fs-body）
+✅ [reference] 全部字号取值都在六档角色内
+  pdf        基准 14px   文字取值 {12×1 13×4 14×12 20×1 22×1} 整圈框 7
+✅ [pdf] 页签正文基准 = 14px（应为 14px = --fs-body）
+✅ [pdf] 全部字号取值都在六档角色内
+  md         基准 14px   文字取值 {12×1 13×4 14×12 20×1 22×1} 整圈框 7
+✅ [md] 页签正文基准 = 14px（应为 14px = --fs-body）
+✅ [md] 全部字号取值都在六档角色内
+  master     基准 14px   文字取值 {12×7 13×6 14×13 20×2} 整圈框 14
+✅ [master] 页签正文基准 = 14px（应为 14px = --fs-body）
+✅ [master] 全部字号取值都在六档角色内
+  guide      基准 14px   文字取值 {12×6 13×9 14×45 16×1 20×1} 整圈框 33
+✅ [guide] 页签正文基准 = 14px（应为 14px = --fs-body）
+✅ [guide] 全部字号取值都在六档角色内
+  changelog  基准 14px   文字取值 {12×15 13×19 14×16 16×9 20×1} 整圈框 1
+✅ [changelog] 页签正文基准 = 14px（应为 14px = --fs-body）
+✅ [changelog] 全部字号取值都在六档角色内
+
+== ③ 设置页：版本与体积文案 ==
+✅ 设置页显示的版本 = v1.4.0（应为 v1.4.0）
+✅ 设置页文案含「约800MB」
+✅ 设置页文案含「约0.7GB」
+✅ 设置页文案不含「6.2GB」
+✅ 设置页文案不含「5GB+」
+✅ 设置页文案不含「约1GB」
+
+== ④ 版本更新记录页：首块就是本版 ==
+✅ 版本记录页出现 v1.4.0
+✅ 版本记录页首块主题句 = VERSIONS.md 里写的那句
+
+读数已落盘：.scratch\release-v1.4.0\sandbox-accept.json
+
+全部通过（共 33 条判据）
