@@ -282,3 +282,12 @@ DebugConfig/
 !.scratch/ui-density-sitewide/shots/10-dark-dark-distill-progress.png
 !.scratch/ui-density-sitewide/shots/10-light-light-rec-progress.png
 !.scratch/ui-density-sitewide/shots/10-dark-dark-rec-progress.png
+# 12 单（浅色人眼复核）：**补拍**的浅色内容态（原来这些只有暗色版，或只有空态版）
+#   · settings 内容态：`probe-05c-shot-settings-content.mjs 12-light light`（含三档体检行 / 更新与进度块）
+#   · 模块详情弹层：`probe-06-shot-modal.mjs 12-light light`
+#   · 代码页打开态：`probe-02c-shot-code-open.mjs 12-light light`（12 单前这一页的浅色只有空态）
+!.scratch/ui-density-sitewide/shots/12-light-light-settings-content-full.png
+!.scratch/ui-density-sitewide/shots/12-light-light-settings-content-seg1.png
+!.scratch/ui-density-sitewide/shots/12-light-light-settings-content-seg2.png
+!.scratch/ui-density-sitewide/shots/12-light-light-library-modal.png
+!.scratch/ui-density-sitewide/shots/12-light-light-code-open-full.png

@@ -93,6 +93,7 @@ python .scratch\ui-density-sitewide\readings.py pytest -- python -m pytest -n au
 | 09 巡检补课 | **resolved** | 两块"整页图里看不见"的东西夹具驱动拍出来（`.distill-progress` × 浅/暗、`.ref-files-*` 详情弹层 × 浅/暗，四张图带 computedStyle 断言）；`probe-03` 补 **2b 节「每页一节」**（12 个页签逐个比 id 顺序 + 元素/类名多重集，并写明它看不出"无 id 兄弟对调"）；`probe-01` 三份本地副本换成 `import scope_lib`（改前/改后输出**逐字节相同**）；spec 补跨页前缀口径。**产品面零改动** | 读数不退化（两张尺 0/0、裸字号 0、整圈框 115） |
 | 10 进度测试钩子 | **resolved** | `ui/master.js` / `ui/generate-recommend.js` 各加一个 **`// [test-hook]` 标记的钩子块**（挂在导出的 init / boot 调用的函数里——顶层会被 `ui-dom-contract` 的"求值期零接线"判红）；`probe-09` 改走钩子并新增生成页 `#rec-progress` 两张图（**喂合成 SSE 事件**，产品事件表自己写 DOM）；`probe-03` 新增 **2c 节「既有兄弟的相对顺序」**（改前子序列在改后仍是子序列 = 通过，**自带红证**）；契约口径放宽为"**钩子块之外**逐字节相同" | 契约仍全通过；门禁 1840 / 61 / 5656+11 |
 | 11 2c 彻底版 | **resolved** | 2c 判据从"路径桶 + 子序列"换成**真树 + 逐层 LCS 对齐**（`_Node` / `_TreeBuilder` / `_align`）：同层匿名兄弟不再并桶（改成逐父节点实例递归），"相同签名兄弟对调"从**判据的洞**变成**判据的性质**（对齐键含直接文本 ⇒ 键相同的兄弟子树必然逐字节相同，互换是恒等变换）；**四条自证**随读数一起跑（对调 `<th>` / 删元素 / 改 id 判红，插新兄弟不判红） | 真盘 0 处问题 + "新增元素 9 个（允许）"；契约仍全通过 |
+| 12 浅色人眼复核 | **resolved** | 逐张看过 **20 张**（12 页签浅色整页图 + 3 张内容态 + **补拍 5 张**：代码页打开态、settings 内容态、模块弹层——这三处原来浅色只有空态或只有暗色）；另立一支**量具** `probe-12-measure-light.mjs`（对比度 / 面板与底的亮度比 / 列间重叠像素，浅暗各跑一遍）。**没改一行 CSS** | 关键数字：`.ref-none` 6.11 / `.ref-kit` 5.19 ✅，**`.ref-topic` 3.39 ❌（浅色专有，accent 小字）**；淡底 ×1.06（暗 ×1.17）；列间重叠 0 px |
 
 **09 单补的四张"看不见的那两块"**（`shots/09-{light-light,dark-dark}-{reference-detail-modal,distill-progress}.png`）：
 `.distill-progress` 与 `.ref-files-*` 在任何整页图里都拍不到（前者默认 `hidden`、后者只在弹层里），
