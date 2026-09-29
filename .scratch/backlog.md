@@ -910,6 +910,8 @@ spec 的口径，**修库内驱动（含其注释）属另一张单**，且改�
   两个写者改同一条目要人为并发。
 - `tools/update-app.py:208-220` 有逐字同形的固定 `.update-tmp` + 无 `finally`（独立脚本，
   不 import `contest_generator`；结构守卫只扫 `src/`）；
+  > ✅ **2026-09-29 已修**（工单 `backlog-agent-sweep/02`，见 §28）：唯一临时名（`pid` + 进程内计数）
+  > + `finally` 清残渣（清理失败不掩盖原异常），三条新判据 + 反证（旧形态两条按预期红）。
 - 浏览器门禁 `launcher-reload` 在**本机负载下**仍会偶发红（本批实测一次 54/6，空闲重跑 60/60；
   已补进 `docs/agents/local-environment.md`）。
 
@@ -939,8 +941,36 @@ spec 与全套读数同目录；落差已在 `local-environment` **§0** 归零�
 
 - **描边那条线没有机器守卫**（115 处是逐条申报的例外）——要加腿得先解决"哪些框算例外"的判据问题；
 - **`--accent` 小字在浅色下 3.39:1**（低于 AA）与"去框留淡底"×1.06——调色板级决定，改它要过颜色守卫；
-- `probe-01` 仍是草稿探针（要么整支对齐 `scope_lib`、要么弃用）；生成页 `#rec-progress` 那张图还没拍；
+- ~~`probe-01` 仍是草稿探针（要么整支对齐 `scope_lib`、要么弃用）；生成页 `#rec-progress` 那张图还没拍；~~
+  ✅ **两条都早做完了、只是没人回改标记**（2026-09-29 读盘核实并更正措辞，工单 `backlog-agent-sweep/03`，见 §28）：
+  `probe-01-scope-draft.py:36` 已是 `from scope_lib import …`（09 单对齐）；`shots/10-{light-light,dark-dark}-rec-progress.png`
+  在盘且在库（10 单拍的）；同段的"7 处内联字号留给 08 收尾单"也早已由 08 单收口。
 - 三库更新路径的**读-改-写仍不持锁**、`tools/update-app.py` 的固定 `.update-tmp`、库层 MQ 预热口径
   （mq3/4/6/7/8/9 仍写"预热 3-5 分钟"）——三条都在 **§26** 记着，各自写明了为什么不开单；
 - `hwcheck-acceptance/05`（真机上板）与 `hwcheck-hardening/08`（OLED 分页）仍 `ready-for-human`：
   **本版同样没有任何板上行为被验证**；`identity-fields/06`、`real-acceptance/01` 也是等人的单。
+
+## 28. backlog 机器侧小账清扫（2026-09-29，工单 `backlog-agent-sweep/01–03`）
+
+**来源**：用户「哪些机器自己做的先做了」。把 §27 那串"仍未做"按**要不要人 / 要不要板子**分了三类，
+先把**既不用等人也不用等板子**的三件做掉（spec + 三张单在 `.scratch/backlog-agent-sweep/`）。
+
+| 单 | 做了什么 | 判据 / 反证 | 读数 |
+|---|---|---|---|
+| `01` 并发用例排序 | `test_concurrent_record_writes_share_no_tmp_file`：第二个写者**整条走完**再放行第一个（两次真实 `os.replace` 重叠 = Windows 平台行为，会让它在机器忙时假红） | 判据三条**一条没动**；反证 = 注入固定临时名 → 该用例照样红（红在"源临时文件被吃掉"） | 该用例连跑 **20 轮全绿**；全量 **5659 passed + 11 skipped** |
+| `02` 更新器解压临时名 | `tools/update-app.py::extract_zip`：`<目标>.update-tmp` → **`<目标>.<pid>-<计数>.update-tmp`** + `finally` 清残渣（清不掉不掩盖原异常）；**保持"不 import `contest_generator`"的独立脚本边界** | 新 3 条判据（正常零残渣 / 失败零残渣且不碰目标 / 同进程两次临时名不撞）；反证 = 旧形态 → **2 条按预期红** | `tests/test_update_app.py` **10 passed**；全量同上（+3 条用例） |
+| `03` 过期账措辞 | 读盘核实后更正三处：08 账第 9 条（`probe-01` 已由 09 单对齐 `scope_lib`）、`ui-density-sitewide/README` 的巡检图索引段与「当前读数」段（`#rec-progress` 图已由 10 单拍、7 处内联字号已由 08 单收） | 纯文档；核实手段 = `git ls-files` / `git check-ignore -v` / 读源码第 36 行 | 产品面零改动 |
+
+**本轮新立的两条经验**：
+
+1. **反证探针要"红在机制上"，不是"红就行"**（`01` 的探针第一版把替换串带上了缩进 → 注入出来是
+   `IndentationError`：红是红了，但红在语法上）。探针里那条"失败要指向被测机制"的判据当场把它拦下来——
+   **判据强度探针自己也要有判据**。
+2. **"记而不修"的另一个变体：修完了没人回改标记**（`03`）。本轮我自己就先按 §27 的旧账把
+   `probe-01` 与那张进度图列进了待办，**读盘才发现两件都早做完了**——与 §23 的坑同一个形状。
+   下轮复核照旧：**直接读盘，不信账上的旧标记**。
+
+**仍开着的（本轮明确不做，都写明了去向）**：描边那条线的机器守卫（要先定"哪些框算例外"的判据）、
+`--accent` 小字浅色 3.39:1 与"去框留淡底"×1.06（调色板级）、库层 MQ 预热口径（改库内容要跟两平台编译矩阵）、
+三库更新路径读-改-写持锁（§26 已判不开单）、`launcher-reload` 负载下偶发（要专门一轮压测），
+以及等人的 `hwcheck-acceptance/05` / `hwcheck-hardening/08` / `identity-fields/06` / `real-acceptance/01`。

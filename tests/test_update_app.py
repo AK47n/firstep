@@ -245,3 +245,75 @@ def test_safe_join_accepts_normal_nested(tmp_path, updater) -> None:
     root = tmp_path / "root"
     target = updater.safe_join(root, "sub/dir/file.c")
     assert target == (root / "sub" / "dir" / "file.c").resolve()
+
+
+# ---------------------------------------------------------------------------
+# 解压的临时名（工单 backlog-agent-sweep/02）
+#
+# 收走前的形状：固定临时名 `<目标>.update-tmp` + **没有 `finally`** —— 解压中途异常/被杀
+# 就在工具根里留下 `*.update-tmp`（会被"产品文件与全新安装是否一致"那类判据读成"多出来的
+# 文件"），同进程内两个解压者也会互抢同一个临时名。
+# 收走后：`<目标>.<pid>-<计数>.update-tmp` + 失败清残渣（照 `atomic_io` 的纪律）。
+# ---------------------------------------------------------------------------
+
+
+def _tmp_leftovers(root: Path) -> list[str]:
+    return [p.name for p in root.rglob("*.update-tmp")]
+
+
+def test_extract_zip_writes_content_and_leaves_no_tmp(tmp_path, updater) -> None:
+    """正常路径：内容落对、目录里零 `*.update-tmp`。"""
+    root = tmp_path / "root"
+    root.mkdir()
+    zip_path = _make_zip(tmp_path, {"a.txt": "new-a", "sub/b.txt": "new-b"})
+    members = updater.validate_zip_members(zip_path, root)
+    assert updater.extract_zip(zip_path, root, members) == 2
+    assert (root / "a.txt").read_text(encoding="utf-8") == "new-a"
+    assert (root / "sub" / "b.txt").read_text(encoding="utf-8") == "new-b"
+    assert _tmp_leftovers(root) == []
+
+
+def test_extract_zip_failure_leaves_no_tmp_and_keeps_old_content(tmp_path, updater) -> None:
+    """坏路径：替换失败时临时文件必须被清掉，且**没被写坏的那条**保持原样。
+
+    造法照 `tests/test_hwcheck_triage.py` 的同族先例：把第二个目标做成**目录** →
+    `os.replace(文件, 目录)` 必然失败（不管实现用哪个 API）。
+    """
+    root = tmp_path / "root"
+    root.mkdir()
+    (root / "a.txt").write_text("old-a", encoding="utf-8")
+    (root / "b.txt").mkdir()  # 目标是个目录 → 换入必然失败
+    zip_path = _make_zip(tmp_path, {"a.txt": "new-a", "b.txt": "new-b"})
+    members = updater.validate_zip_members(zip_path, root)
+
+    with pytest.raises(OSError):
+        updater.extract_zip(zip_path, root, members)
+
+    assert _tmp_leftovers(root) == [], "解压失败后留下了临时文件"
+    assert (root / "a.txt").read_text(encoding="utf-8") == "new-a", "失败前已换入的那条应已生效"
+    assert (root / "b.txt").is_dir(), "失败的那条不许被动过"
+
+
+def test_extract_zip_temp_names_do_not_collide_within_one_process(tmp_path, updater, monkeypatch) -> None:
+    """同一进程里两次解压**不许**用同一个临时名（固定名形态在这里就会撞）。
+
+    判据直接盯"两次替换的源文件名"——比"跑完看结果"更早、更准。
+    """
+    root = tmp_path / "root"
+    root.mkdir()
+    seen: list[str] = []
+    real_replace = updater.os.replace
+
+    def recording_replace(src, dst):
+        seen.append(Path(src).name)
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(updater.os, "replace", recording_replace)
+    for content in ("v1", "v2"):
+        zip_path = _make_zip(tmp_path, {"a.txt": content}, name=f"z-{content}.zip")
+        members = updater.validate_zip_members(zip_path, root)
+        updater.extract_zip(zip_path, root, members)
+
+    assert len(seen) == 2, f"应记录两次替换：{seen}"
+    assert seen[0] != seen[1], f"两次解压用了同一个临时名：{seen}"
+    assert all(name.endswith(".update-tmp") for name in seen), seen

@@ -595,7 +595,8 @@ def test_concurrent_record_writes_share_no_tmp_file(tmp_path, monkeypatch):
     """两个写者并发：**不许抢同一个临时名**——收走前抢了，先来的那个 `replace` 会落空。
 
     确定性做法：把**第一个** `replace` 卡住（此刻它的临时文件还在盘上），让第二个写者
-    从头走完一遍。
+    从头走完一遍；**第二个整条结算完**才放行第一个（`backlog-agent-sweep/01` 加的排序——
+    两次真实 `os.replace` 重叠是 Windows 平台行为，会让这条用例在机器忙时假红）。
     · 收走前（固定名 `…json.tmp`）：第二个写者把**同一个**临时文件截断重写成自己的内容并
       替换掉；第一个放行后 `replace` 的源文件已经不在 → 报错（学生看到的就是"勾选存不上"）；
     · 收走后（pid + 计数）：各写各的临时文件，两个都落盘成功，目录里零残留。
@@ -637,6 +638,15 @@ def test_concurrent_record_writes_share_no_tmp_file(tmp_path, monkeypatch):
     assert first_inside.wait(timeout=30), "第一个写者没走到替换那一步"
     second = threading.Thread(target=writer, args=("后到的",), daemon=True)
     second.start()
+    # ⚠ **让第二个整条走完（含它自己那发真实 `replace`）再放行第一个**（工单 backlog-agent-sweep/01）：
+    # 两次真实 `os.replace` 一旦重叠，Windows 会对**同一目标**回 `PermissionError(13)` / `WinError 5`
+    # ——那是**平台行为**，不是被测实现的缺陷（`record-write-hardening/07` 的对照读数：
+    # 固定名实现 25/400、唯一临时名实现 30/400，两边无统计差别；本机负载下约 7% 命中）。
+    # 排序之后这条用例只测"临时名互抢"这一件事，**判据一条没放宽**：
+    # 固定临时名的实现里，第二个写者会把**同一个**临时文件吃掉（截断重写 + 换入），
+    # 第一个放行后 `replace` 的源文件已经不在 → 报错照样红（反向验证读数见票尾）。
+    second.join(timeout=30)
+    assert not second.is_alive(), "第二个写者没在 30 秒内走完——判据自己失败，别挂住整场"
     release.set()
     first.join(timeout=30)
     second.join(timeout=30)

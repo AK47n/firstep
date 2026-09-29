@@ -1,0 +1,16 @@
+# 读数：probe-01-reverse
+# 命令：python .scratch\backlog-agent-sweep\probe-01-reverse.py
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-29T20:54:24+08:00
+# 退出码：0
+前置：atomic_io.py sha256 = 097628cee1d8f83a…（换行 LF）
+已注入旧形态：tmp = path.with_name(f"{path.name}.tmp")
+注入后 pytest 退出码 = 1（红 = True；失败指向被测机制 = True）
+    E         Left contains one more item: FileNotFoundError(2, '系统找不到指定的文件。')
+    E         Use -v to get more diff
+    tests\test_hwcheck_triage.py:654: AssertionError
+    =========================== short test summary info ===========================
+    FAILED tests/test_hwcheck_triage.py::test_concurrent_record_writes_share_no_tmp_file
+    1 failed in 0.15s
+✅ 反证成立：固定临时名形态下这条用例判红
+复原复核：sha256 一致 ✅（097628cee1d8f83a…）

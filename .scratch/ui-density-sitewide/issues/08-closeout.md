@@ -112,6 +112,11 @@
 9. **`probe-01` 仍是 01 单立的草稿探针**（自带一份 `rules_of` / `scope_of` / `load_backlog`）：
    本单只纠了它的标题词、**没重写内部**（`probe-04` 是它的加严版）。下一轮要么整支对齐
    `scope_lib`、要么直接弃用——**别在两支探针之间来回抄**。
+   > ✅ **已结清（2026-09-29 按盘复核，工单 `backlog-agent-sweep/03`）**：**09 单**已经把它整支对齐
+   > `scope_lib` —— `probe-01-scope-draft.py:36` 现在是
+   > `from scope_lib import load_backlog, load_scopes, scope_of  # 单一出处（09 单对齐）`，
+   > 它自带的那三份副本已经不存在了（09 单账记着"改前/改后输出逐字节相同"）。
+   > **本项不算待办**；`probe-04` 仍是它的加严版（三条口径一次算清）。
 10. **票面日期按 git 提交时间写**（`git log -1 --format=%ci`）。
 
 ## 备注

@@ -1,0 +1,12 @@
+# 读数：probe-02-reverse
+# 命令：python .scratch\backlog-agent-sweep\probe-02-reverse.py
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-29T20:54:25+08:00
+# 退出码：0
+前置：update-app.py sha256 = 981ab01c51610623…（换行 LF）
+已注入旧形态：固定 `<目标>.update-tmp` + 无 finally
+注入后 pytest 退出码 = 1；红 2 条：
+    FAILED tests/test_update_app.py::test_extract_zip_failure_leaves_no_tmp_and_keeps_old_content
+    FAILED tests/test_update_app.py::test_extract_zip_temp_names_do_not_collide_within_one_process
+✅ 反证成立：旧形态下新判据按预期红（残渣 + 临时名相撞）
+复原复核：sha256 一致 ✅（981ab01c51610623…）

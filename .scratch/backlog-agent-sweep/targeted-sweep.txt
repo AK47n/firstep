@@ -1,0 +1,7 @@
+# 读数：targeted-sweep
+# 命令：python -m pytest tests/test_update_app.py tests/test_hwcheck_triage.py::test_concurrent_record_writes_share_no_tmp_file -q -p no:cacheprovider
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-29T20:54:26+08:00
+# 退出码：0
+...........                                                              [100%]
+11 passed in 14.02s

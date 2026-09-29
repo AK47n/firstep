@@ -130,17 +130,24 @@ python .scratch\ui-density-sitewide\readings.py pytest -- python -m pytest -n au
   （TAG 里已带主题）——**08 单第一版白名单照一个主题段写，24 条一条都没命中，图全被
   `shots/*` 吞掉**（两轴评审同时抓到；README 坑 8 重演）。**加图白名单之后务必
   `git check-ignore -v <图>` 验一下**。
-  ⚠ 两张图看不见的东西（07 账第 2 条点名要看的两处）：`.distill-progress` 默认 `hidden`、
-  `.ref-files-*` 只在弹层里——**浅色版也拍不到它们**，留给下一轮用夹具驱动（照 `probe-05c` 的写法）。
+  ✅ **那两处已经拍到了（09 / 10 两单；2026-09-29 按盘复核）**：07 账第 2 条点名要看的两处——
+  `.distill-progress`（默认 `hidden`）与 `.ref-files-*`（只在弹层里）——**09 单**用夹具驱动拍了
+  `shots/09-{light-light,dark-dark}-{distill-progress,reference-detail-modal}.png`，**10 单**又补了
+  生成页同族的 `#rec-progress`：`shots/10-{light-light,dark-dark}-rec-progress.png`。
+  四张图都带 computedStyle 断言；本行是 2026-09-29 用 `git ls-files` + `git check-ignore -v`
+  复核过的（在盘 / 已入库 / 不被 ignore）。
 
 **当前读数（改到哪儿了，一目了然）**：`index.html` 样式块里的裸字号 **0 处 / 0 种**（起点 387 / 13）；
 页面尺 **0 条**（起点 13）；取值尺 **0 条**（起点 13）；`--fs-*` 引用 **428 处**（起点 45）。
-**另有 `static/js/**` 里 7 处内联 `font-size: 11/12px`**——那不在本守卫口径里，留给 08 收尾单。
+**`static/js/**` 里那 7 处内联 `font-size: 11/12px` 已由 08 收尾单收进 `var(--fs-tag)`**
+（当时的原话是"不在本守卫口径里，留给 08 收尾单"——**08 单做完了**，并给守卫加了第五条腿：
+渲染方里也不许有内联裸 px 字号）。
 
 > **页面尺与取值尺在 07 单清空了**——十四个作用域全部 0/0。**这不是"关掉守卫"**：腿② 仍逐页核
 > "已完工的作用域在盘上真的是 0"，腿③ 仍核"新建的规则不许再落裸 px"，腿① 是"盘上出现的裸字号
-> 取值必须都在清单里"（清单空了 ⇒ **任何一处新裸字号当场判红**）。剩下的是 **08 收尾单**：
-> 浅色主题全站巡检 + 真实浏览器里的观感复核 + 把这一轮的三条纪律固化进 `docs/`。
+> 取值必须都在清单里"（清单空了 ⇒ **任何一处新裸字号当场判红**）。**08 收尾单也已经做完**：
+> 浅色主题全站巡检（24 张图）+ 真实浏览器里的观感复核（12 单）+ 三条纪律固化进
+> `docs/agents/workflow.md`；本轮的 `01`–`12` 全部 `resolved`。
 > （按页数一遍：`python .scratch\ui-density-sitewide\probe-04-scope-calibers.py`。）
 
 ## 下一单怎么开工（五步套路，01/02/03 都是这么走的）

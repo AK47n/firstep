@@ -22,6 +22,7 @@ pyproject.toml SHA256 对比，变了才 pip install -e .）→ 清
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 import logging
 import os
@@ -40,6 +41,10 @@ APP_ID = "contest-generator"
 HEALTH_PATH = "/api/health"
 DEFAULT_PORT = 8000
 DEFAULT_DATA_DIR = Path.home() / ".contest_generator"
+
+# 解压用的临时名计数（工单 `backlog-agent-sweep/02`）：与 pid 一起保证**同进程内**两个
+# 解压者也不会撞名。进程重启后从 1 重来也没关系——pid 变了。
+_TMP_COUNTER = itertools.count(1)
 
 
 class UpdateError(RuntimeError):
@@ -206,16 +211,38 @@ def backup_overwritten(
 
 
 def extract_zip(zip_path: Path, root: Path, members: Sequence[zipfile.ZipInfo]) -> int:
-    """逐条目解压覆盖：先写 `<目标>.update-tmp` 再 os.replace（不半写）。"""
+    """逐条目解压覆盖：先写**唯一临时名**再 os.replace（不半写、也不留残渣）。
+
+    临时名带 pid + 进程内计数（工单 `backlog-agent-sweep/02`）。收走前的形态是**固定**的
+    `<目标>.update-tmp` 且**没有 `finally`**：解压中途异常 / 进程被杀就在工具根里留下
+    `*.update-tmp`（那些会被"产品文件与全新安装是否一致"那类判据读成"多出来的文件"），
+    同一进程里两个解压者也会互抢同一个临时名。
+
+    本脚本**不 import `contest_generator`**（它跑在应用被替换之前，包可能还没装好），
+    所以这里是照 `src/contest_generator/atomic_io.py::atomic_write_via` 的同一套纪律就地写的
+    一份：唯一临时名 / 换入 / `finally` 清残渣 / **清理失败不许掩盖原异常**。
+    改这里时别顺手 import 那个模块（会把"更新器依赖工具包"这条边界破掉）。
+    """
     count = 0
     with zipfile.ZipFile(zip_path) as archive:
         for member in members:
             target = safe_join(root, member.filename)
             target.parent.mkdir(parents=True, exist_ok=True)
-            tmp = target.with_name(target.name + ".update-tmp")
-            with archive.open(member) as source, open(tmp, "wb") as dest:
-                shutil.copyfileobj(source, dest)
-            os.replace(tmp, target)
+            tmp = target.with_name(
+                f"{target.name}.{os.getpid()}-{next(_TMP_COUNTER)}.update-tmp"
+            )
+            try:
+                with archive.open(member) as source, open(tmp, "wb") as dest:
+                    shutil.copyfileobj(source, dest)
+                os.replace(tmp, target)
+            finally:
+                # `replace` 成功时 tmp 已经不在了；失败时它还在，清掉它。
+                # 清不掉也**不许**把原异常盖掉（照 atomic_io 的同一条边界）。
+                if tmp.exists():
+                    try:
+                        tmp.unlink()
+                    except OSError:  # pragma: no cover —— 盘被占住这类
+                        pass
             count += 1
     return count
 
