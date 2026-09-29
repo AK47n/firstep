@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=f1a1ab621c8297679d1eda94520eb946ef43446b -->
+<!-- changelog-auto: last-commit=38afcf23789b9b5dd3922301a110742c5226e947 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-09-29
+- 12:40 ui-density-sitewide/11：2c 彻底版（真树 + 逐层 LCS 对齐，四条自证随读数跑）
 
 ## 2026-09-28
 - 12:13 ui-density 02：检测页拆「框套框」+ 让重点会跳（一屏一层描边，契约零变化）
