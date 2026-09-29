@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=38afcf23789b9b5dd3922301a110742c5226e947 -->
+<!-- changelog-auto: last-commit=d715d7641f6121b242b71d433607dfd174a1ab62 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -6,6 +6,7 @@
 
 ## 2026-09-29
 - 12:40 ui-density-sitewide/11：2c 彻底版（真树 + 逐层 LCS 对齐，四条自证随读数跑）
+- 12:47 ui-density-sitewide/12：浅色主题人眼复核（逐张看过 20 张 + 量具三条数字，产品面零改动）
 
 ## 2026-09-28
 - 12:13 ui-density 02：检测页拆「框套框」+ 让重点会跳（一屏一层描边，契约零变化）
