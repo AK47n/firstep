@@ -1,0 +1,23 @@
+﻿# 服务端验收读数（只认 git ref 与 Release API；2026-09-29）
+
+## refs
+refs/heads/main = d527c65c83da5bfadfb0865ba70c4d8846290733（= 本地 HEAD）
+refs/tags/v1.4.0 = 686e83766bbd31365e5cec908df400527c3d0c8f（annotated；解引用 = d527c65c）
+
+## Release（gh api releases/latest）
+tag = v1.4.0 / assets = 8 / draft = false / prerelease = false
+
+## 八件资产：服务端 size vs 本地
+firstep-full-v1.4.0.manifest.json    服务端      3721786 本地      3721786 OK
+firstep-full-v1.4.0.removed.txt      服务端       155237 本地       155237 OK
+firstep-full-v1.4.0.sha256.txt       服务端           91 本地           91 OK
+firstep-full-v1.4.0.zip              服务端    791754929 本地    791754929 OK
+firstep-update-v1.4.0.files.txt      服务端       168552 本地       168552 OK
+firstep-update-v1.4.0.removed.txt    服务端       153006 本地       153006 OK
+firstep-update-v1.4.0.sha256.txt     服务端           92 本地           92 OK
+firstep-update-v1.4.0.zip            服务端    301895533 本地    301895533 OK
+
+对账：相同 8 / 不一致 0
+
+## 联网自检（tools/check-download-docs.py，打包上传后）
+PASS：三组全 [OK]（README 指向 releases/latest、点名 00-START-HERE.txt、体积口径 792 MB / 302 MB / clone 291 MiB 同量级、Release 说明前两行有新旧用户指引）——完整读数见 publish.txt 第 2059 行起。
