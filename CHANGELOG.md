@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=69d79055ca9b305fdcbae00cc4d07fcf3ae848dd -->
+<!-- changelog-auto: last-commit=f398acd005a5eae0441cf14161b5e1b48c7da8a7 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -12,6 +12,7 @@
 - 13:42 发版 v1.4.0（三）：发布账本——线上最新 v1.4.0 八件套齐全、落差归零；第 0/2/3 节按事实改写
 - 13:50 发布后修一条 CI 红：hwcheck spec 路由桩的迟到 continue() 吞掉（文件级 unhandledRejection，工单 05）
 - 18:30 发布后 CI 复核转绿：工单 05 结账 + 交接区按事实改写（改前 CI 2/2 稳定复现、本机 2/2 不出现）
+- 20:24 backlog 27：v1.4.0 发版收口记账（四条本机事实 + 沙箱验收口径 + 仍未做的清单）
 
 ## 2026-09-28
 - 12:13 ui-density 02：检测页拆「框套框」+ 让重点会跳（一屏一层描边，契约零变化）
