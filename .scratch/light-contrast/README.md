@@ -22,11 +22,15 @@
 | `issues/03-panel2-and-dark.md` | `--panel-2` 加深（×1.18）+ 暗色 16 处 + 非文字 3:1 |
 | `issues/04-render-side-leg9.md` | 腿⑨：`static/js/**` 19 处内联取色入册 |
 | `issues/05-closeout.md` | 收口：量具跨页重跑 + 三套门禁 + 人眼复核 + 文档回改 |
-| `probe_lib.py` | **口径单源**（阈值 / 亮度公式 / 合成 / 规则切分 / 族表）+ 从守卫源码解析例外表 |
-| `probe-01-inventory.py` | 侦察：机械配对清单（376 对，两主题）+ 候选值格网（`--accent-text` × `--panel-2`） || `probe-02-js-inline.py` | 侦察：渲染方内联取色（19 处令牌 + 5 处裸值/透明 + 0 处跨行拼接） |
-| `probe-03-contrast.py` | **读数**：例外表 ↔ 盘上双向对账 + 族面最坏格 + **覆盖审计**（跨规则配对） |
-| `probe-04-family-candidates.py` | 选值：六族各自"改文字令牌还是改淡底 alpha"（两条路的数都算出来） |
+| `probe_lib.py` | **口径单源**（阈值 / 亮度公式 / 合成 / 规则切分 / 族表 / 令牌表）+ 从守卫源码解析三张表 |
+| `probe-01-inventory.py` | 侦察：机械配对清单（376 对，两主题）+ 候选值格网（`--accent-text` × `--panel-2`） |
+| `probe-02-js-inline.py` | 侦察 + **覆盖审计**：渲染方内联取色（19 处令牌 + 5 处裸值/透明 + 0 处跨行拼接）逐处清单 |
+| `probe-03-contrast.py` | **读数**：例外表 ↔ 盘上双向对账（三面）+ 族/令牌最坏格 + 覆盖审计（跨规则配对） |
+| `probe-04-family-candidates.py` | 选值：六族各自的 `-text` 解（严格口径：真实 dim × 三类底，余量 0.30） |
 | `probe-05-mirror-and-check-red.py` | **反证**：镜像守卫与生成器 `--check` 判不判得红（八处注入，复原走 sha256 校验） |
+| `probe-06-migration-audit.py` | 审计：02 单那 223 处迁移**逐处在册**（规则体 219 + 行内 2 + 带兜底 2；反向残留 0） |
+| `probe-07-rendered-sweep.mjs` | **渲染面全站扫描**：真 Chromium × 十二页签 × 两主题，量真元素的对比度（底 = 从根往下把祖先背景按 alpha 合成） |
+| `apply-0{2a,2b,2c,2d,3a,5a,5b}-*.py` | 施工脚本（各带 `--check`：后置条件式复核，数可一条命令复算） |
 | `generate-01-contrast-register.py` | 例外表的**生成器**（`--write` 写入守卫 / `--check` 复核"还是生成时那张吗"） |
 | `probe-0*.txt` / `after-0*.txt` | 读数（**照片，不是结论**——每轮改动后重跑） |
 
