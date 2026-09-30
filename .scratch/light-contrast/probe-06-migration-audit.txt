@@ -1,7 +1,7 @@
 # 读数：probe-06-migration-audit
 # 命令：python .scratch\light-contrast\probe-06-migration-audit.py
 # 工作树：C:\Users\luoji\Desktop\firstep
-# 开始：2026-09-30T13:25:33+08:00
+# 开始：2026-09-30T13:51:20+08:00
 # 退出码：0
 ==============================================================================
 浅色调色板轮 · 审计读数（probe-06：02 单迁移逐处在册）
@@ -9,7 +9,7 @@
 
 ## ① 迁移清单（规则体内的 `color: var(--X-text)`，逐处分类）
 
-合计 **219** 处；分类分布 {'text': 194, 'hover': 22, 'glyph': 3}；令牌分布 {'accent-text': 85, 'danger-text': 37, 'ok-text': 41, 'warn-text': 42, 'info-text': 13, 'purple-text': 1}
+合计 **220** 处；分类分布 {'text': 195, 'hover': 22, 'glyph': 3}；令牌分布 {'accent-text': 86, 'danger-text': 37, 'ok-text': 41, 'warn-text': 42, 'info-text': 13, 'purple-text': 1}
 
   glyph accent-text       .diff-hunk > summary::before
   glyph accent-text       .task-check-details > summary::before
@@ -63,6 +63,7 @@
   text  accent-text       .code-tree-badge.b-new
   text  accent-text       .code-tree-file button.on
   text  accent-text       .code-zoom-badge
+  text  accent-text       .desc-cell a
   text  accent-text       .env-jump
   text  accent-text       .glossary-card .glossary-item b
   text  accent-text       .guide-note strong
@@ -234,8 +235,8 @@
 ## ② 行内写法（`style="color: var(--X-text)"`，不在规则体内）
 
 合计 **2** 处：{'info-text': 1, 'warn-text': 1}
-  L3697: style="display:flex;gap:10px;align-items:center;background:var(--info-dim);border:1px so
-  L4001: style="color: var(--warn-text)"
+  L3700: style="display:flex;gap:10px;align-items:center;background:var(--info-dim);border:1px so
+  L4004: style="color: var(--warn-text)"
 
 ## ③ 反向：还有没有**主令牌当文字色**（应为 0）
 
@@ -249,7 +250,7 @@
 
 ## ⑤ 与 HTML 里那 223 处的对账
 
-HEAD 里主令牌当文字色：**0** 处 → 现在 **0** 处；迁移 219（规则体）+ 2（行内）= **221**
+HEAD 里主令牌当文字色：**0** 处 → 现在 **0** 处；迁移 220（规则体）+ 2（行内）= **222**
   ⚠ 这里按「`var(--令牌)` 或带兜底的 `var(--令牌, 兜底)`」两种写法计；
     本审计 ① 的清单只收前一种形态（后一种 2 处在 ③ 的零残留里已被证明迁过）。
   ⚠ `before` 数比迁移数多，是因为**同名声明在注释里**也计数（HEAD 口径按全文正则）；

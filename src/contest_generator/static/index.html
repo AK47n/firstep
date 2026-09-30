@@ -103,7 +103,7 @@
     --bg: #0d1117; --panel: #161b22; --panel-2: #1c2128;
     --border: #30363d; --border-strong: #3d444d;
     --input-bg: #0d1117; --code-bg: #0a0e14; --code-text: #e2e8f0;
-    --text: #e6edf3; --muted: #8b949e;
+    --text: #e6edf3; --muted: #919aa4;
     --accent: #00d4ff; --accent-dark: #00a8cc; --accent-dim: rgba(var(--accent-rgb), .12);
     --on-accent: #04222b;  /* accent 底上的文字色（button.primary 协议，polish-v2/02 令牌化） */
     --danger: #f85149; --danger-dim: rgba(248, 81, 73, .15);
@@ -149,7 +149,7 @@
     /* 文字档（工单 light-contrast/02）：同一个语义色的「当文字用」变体。
        主令牌管描边 / 淡底 / 实心块 / 图标；文字走 `-text`（浅色压暗到 AA 以上，
        暗色 = 主令牌现值；判据 = 守卫腿⑧ 的令牌面与机械面）。 */
-    --accent-text: #00d4ff; --ok-text: #3fb950; --warn-text: #e3a341; --danger-text: #ff685e; --info-text: #58a6ff; --purple-text: #b175ff;
+    --accent-text: #00d4ff; --ok-text: #43c455; --warn-text: #e3a341; --danger-text: #ff685e; --info-text: #58a6ff; --purple-text: #b175ff;
     --accent-rgb: 0, 212, 255;
     --accent-hi: #33dcff; --accent-lo: #00b8de;
     --on-accent-deep: #001018; --on-ok: #04170c;
@@ -176,7 +176,7 @@
     --bg: #f6f8fa; --panel: #ffffff; --panel-2: #e1e6ec;
     --border: #d0d7de; --border-strong: #afb8c1;
     --input-bg: #ffffff; --code-bg: #f6f8fa; --code-text: #1f2328;
-    --text: #1f2328; --muted: #59636e;
+    --text: #1f2328; --muted: #555e68;
     --accent: #0096c7; --accent-dark: #00607f; --accent-dim: rgba(var(--accent-rgb), .12);
     --on-accent: #04222b;
     --danger: #cf222e; --danger-dim: rgba(207, 34, 46, .12);
@@ -1542,6 +1542,9 @@
                        font-size: var(--fs-body); font-family: var(--mono); word-break: break-all; }
   .ref-files-list li:hover { background: var(--panel-2); }
   .ref-files-list a { color: var(--accent-text); text-decoration: none; cursor: pointer; }
+  /* 表格里的「文件名 / 打开」链接（工单 05：人眼复核逮到 topic / md / pdf 三页仍是
+     浏览器默认蓝 #0000EE，而同一功能在参考文件库走 --accent-text——同屏两种链接色）。 */
+  .desc-cell a { color: var(--accent-text); text-decoration: none; }
   .ref-files-viewer { border-top: 1px solid var(--border); }
   .ref-files-viewer pre { margin: 0; padding: var(--space-3) 14px; max-height: 320px; overflow: auto;
                           font-size: var(--fs-note); font-family: var(--mono); background: var(--code-bg);

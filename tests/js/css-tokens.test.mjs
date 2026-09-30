@@ -1977,7 +1977,7 @@ test("全站推广合成红证：九条腿各自都判得红（防'永远绿'的
   assert.deepEqual(contrastProblems(html), [], "盘上本来就不该有对比度问题");
   //    (a) **令牌改浅**：一条原本过线的配对掉到线下（未登记）→ 红。
   //        锚点 = `--muted` 的浅色定义行（真实令牌）；改浅后 `.lib-chip`（muted on panel-2）掉线。
-  const ctMutedAnchor = "--text: #1f2328; --muted: #59636e;";
+  const ctMutedAnchor = "--text: #1f2328; --muted: #555e68;";
   assert.ok(html.includes(ctMutedAnchor), `锚点变了（${ctMutedAnchor}）—— 这条自检会静默空转`);
   const ctPaleMuted = html.replace(ctMutedAnchor, "--text: #1f2328; --muted: #a9b1bb;");
   assert.notEqual(ctPaleMuted, html, "注入没生效（锚点没命中）");
@@ -2015,7 +2015,7 @@ test("全站推广合成红证：九条腿各自都判得红（防'永远绿'的
     "债务静默恶化（现算值与冻结值不一致）没被判出",
   );
   //    (e) **反向那一半**：一条已经过线的配对还留在例外表里 → 红（"修好了忘了摘登记项"）
-  const ctStale = [...CONTRAST_EXCEPTIONS, ["light", ".lib-chip", "debt", "故意登记的过线项", 5.39]];
+  const ctStale = [...CONTRAST_EXCEPTIONS, ["light", ".lib-chip", "debt", "故意登记的过线项", 5.32]];
   assert.ok(
     contrastProblems(html, ctStale).some((p) => p.includes(".lib-chip") && p.includes("过线了")),
     "已过线却还留着债务登记没被判出（表会烂成'修好了还挂账'）",

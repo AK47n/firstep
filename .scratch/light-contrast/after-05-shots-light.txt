@@ -1,0 +1,17 @@
+# 读数：after-05-shots-light
+# 命令：node .scratch\ui-density-sitewide\probe-02-shot.mjs 05-light light
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-30T13:34:13+08:00
+# 退出码：0
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05-light-light-generate
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05-light-light-hwcheck
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05-light-light-topic
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05-light-light-code
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05-light-light-settings
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05-light-light-library
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05-light-light-reference
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05-light-light-pdf
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05-light-light-md
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05-light-light-master
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05-light-light-guide
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05-light-light-changelog

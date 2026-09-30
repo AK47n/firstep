@@ -1,0 +1,17 @@
+# 读数：after-05-shots-dark
+# 命令：node .scratch\ui-density-sitewide\probe-02-shot.mjs 05-dark dark
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-30T13:34:49+08:00
+# 退出码：0
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05-dark-dark-generate
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05-dark-dark-hwcheck
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05-dark-dark-topic
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05-dark-dark-code
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05-dark-dark-settings
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05-dark-dark-library
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05-dark-dark-reference
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05-dark-dark-pdf
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05-dark-dark-md
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05-dark-dark-master
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05-dark-dark-guide
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05-dark-dark-changelog

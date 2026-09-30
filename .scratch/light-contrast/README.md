@@ -68,6 +68,27 @@ python .scratch\ui-density-sitewide\readings.py re-pytest  --out-dir .scratch\li
 ⚠ 落盘读数请走 `.scratch/ui-density-sitewide/readings.py`：PowerShell 的 `>` / `Tee-Object` 写 UTF-16LE
 （`read` 工具当二进制拒读），`Select-Object -First N` 会掐断上游留下孤儿后端。
 
+## 当前读数（2026-09-30 收口）
+
+| 面 | 读数 | 出处 |
+|---|---|---|
+| 机械配对（两主题） | **376** 对（dark 188 / light 188） | `probe-03-contrast.txt` ① |
+| 不达标 | **浅色 1**（`::selection` 的 `skip`）／**暗色 0**（改前 99 / 16） | 同上 |
+| 例外表 | **9** 条 = 机械 1 + 族 3 + 令牌 5（改前 128） | 同上 ② |
+| **双向差** | 漏登记 **0** / 死条 **0** / 修好仍挂账 **0** | 同上 ③ |
+| 家族最坏格 | `--tok-*` 浅 2.22 / 暗 3.05；`--accent` 控件描边浅 **2.70**（记债） | 同上 ④ |
+| 令牌面（第三面） | 无底规则里 **28** 个文字令牌 = 表 28 行 | 同上 ⑤ |
+| 覆盖审计（同选择器跨规则） | 组合 376 / 不达标 115，与机械面**两向差集 0** | 同上 ⑥ |
+| 迁移在册 | 规则体 **219** + 行内 **2** = 221（另 2 处是带兜底写法）；`color: var(--主令牌)` 残留 **0** | `probe-06-migration-audit.txt` |
+| 渲染方内联取色 | **19** 处入册（双向差 0） | `probe-02-js-inline.txt` |
+| **渲染面扫描**（十二页签 × 两主题） | 浅 **2** / 暗 **2**（全是已登记的装饰分隔符 ·）；改前 266 / 170 | probe-07-rendered-sweep.txt |
+| 渲染量具（真元素） | `.ref-topic` **6.94** / `.ref-kit` 7.13 / `.ref-none` 6.11（浅）；淡底 **×1.18**（暗色不变） | `after-03-measure.txt` |
+| 反证探针 | 镜像 + 生成器 `--check` **8/8 判红** | `probe-05-mirror-and-check-red.txt` |
+| 前端门禁 | **1845 / 0**（起点 1842） | `after-04-js.txt` |
+| 浏览器门禁 | **61 / 0**（单独跑） | `after-04-browser.txt` |
+| 全量 pytest | **5686 passed + 11 skipped**（起点 5664） | `after-04-pytest.txt` |
+| 描边线不退化 | `fullBoxes` **115**、两面登记簿 115 / 10 逐条不变 | `after-03-probe-04.txt` |
+
 ## 判断边界（别误读）
 
 1. **三面都只登记不达标与不适用**（达标的现算即可）——这与描边那轮"115 条全登记"**不是同一把尺**；
