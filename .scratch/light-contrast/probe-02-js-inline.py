@@ -68,7 +68,11 @@ def main() -> None:
     cnt = Counter(v.split(")")[0] + ")" for _, _, _, v in token_only)
     for tok, n in cnt.most_common():
         print(f"  {tok:<34} × {n}")
-    print("\n  （只列令牌计数；逐条清单要看时把上面 `decl` 改成 `token_only` 再跑）")
+    print("\n### 逐处清单（腿⑨ 的认人键 = 文件 + **行内锚点**；这栏就是覆盖审计）\n")
+    for f, i, prop, val in sorted(token_only):
+        # 锚点 = 该行里一段可认片段（声明本身 + 紧随其后的可见文字/类名），**不取行号**
+        src = (ROOT / f).read_text(encoding="utf-8").splitlines()[i - 1].strip()
+        print(f"  {f}:{i:<5}{prop:<12}{val:<22}{src[:74]}")
 
     print(f"\n## ③ 跨行拼接出来的取色声明 —— 共 **{len(concat)}** 处（**静态守卫抓不到**，与描边留白同类）\n")
     for f, i, nxt in concat[:40]:

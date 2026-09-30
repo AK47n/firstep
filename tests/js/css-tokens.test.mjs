@@ -15,6 +15,9 @@
 //   （**只登记不达标与不适用**，达标的现算即可）+ 腿⑧（五条判据，含"债务不许静默恶化"）。
 //   与描边那条腿的区别：那条是"逐条登记 115 个例外"，这条是"**现算 + 只记债**"——
 //   闸门强度靠"抽得到、算得出"，不靠表的规模。口径见那段说明块。
+// ⑨**渲染方内联取色登记簿**（工单 light-contrast/04）：`JS_CONTRAST_REGISTER`（19 条）
+//   + 腿⑨（`static/js/**` 里 `style="color:var(--x)"` 那类内联取色的双向对账 +
+//   按"假定底"判比值；认人键 = 文件 + **行内锚点**，不取行号）。
 // 静态标记守卫，直接读 index.html。
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -1505,6 +1508,134 @@ function contrastProblems(source, exceptions = CONTRAST_EXCEPTIONS, families = C
   return out;
 }
 
+// ===========================================================================
+// 腿⑨：渲染方内联取色登记簿（工单 light-contrast/04）
+//
+// **为什么要这条腿**（描边那轮的先例）：样式块面干净**不等于**渲染方干净。
+// `static/js/**` 里用模板串拼出来的 `style="color:var(--x)"` 有 19 处——
+// 门禁此前只 `readFileSync(index.html)`，**看不见它们**：把某处换成不过线的令牌、
+// 或者新拼一处内联色，样式块那三面都不会红。
+//
+// **形状**：`[文件, 锚点, 前景令牌, 假定底, 类别]`
+//   · **锚点 = 该行的一段可认片段**，**不取行号**（行号会随插行漂；本机
+//     `Get-Content` 不带 `-Encoding UTF8` 还会把行数读错——描边那轮踩过）；
+//   · **假定底 = 这块钱被插进哪层底**（多为 `--panel`）——假定是**登记内容的一部分**，
+//     静态判不了真实层叠（`<span>` 进哪张卡由调用方决定）；
+//   · **类别**：`text`（文字，4.5）/ `nontext`（色点这类图形，3.0）/
+//     `surface`（**面 vs 面**：`background` 那一类，判"看得出分层"≥1.10，不是 3:1）/
+//     `skip`（静态判不了：令牌定义在页面作用域块里，不在 `:root`/亮色块）。
+//
+// **三面之外还有两处明文不判**（边界写清，免得当地毯）：① 值不是纯令牌的
+// 5 处（`#111`/`#eee` 那对高对比浮标、三处 `transparent`）——不构成缺陷，探针每轮盯着；
+// ② **跨行拼出来的**取色声明（本仓 0 处，与描边第五条腿的已知留白同类）
+// ===========================================================================
+
+/** 面的分层下限（`surface` 类别）：不是 WCAG 的 3:1，而是"看得出是两块"的粗线。 */
+const CONTRAST_SURFACE_MIN = 1.10;
+/** 渲染方登记项允许的类别（`text` / `nontext` 判比值，`surface` 判分层，`skip` 只登记）。 */
+const JS_CONTRAST_KINDS = ["text", "nontext", "surface", "surface-bordered", "skip"];
+
+const JS_CONTRAST_REGISTER = [
+  ["fx/flash.js", 'color:var(--danger-text);font-weight:600">✗ 烧录未成功', "--danger-text", "--panel", "text"],
+  ["fx/flash.js", 'color:var(--warn-text);font-weight:600">烧录未就绪', "--warn-text", "--panel", "text"],
+  ["fx/task.js", 'const summary = "已完成 <b style=\\"color:var(--ok-text)\\"', "--ok-text", "--panel", "text"],
+  ["fx/task.js", 'class="tasks-done-line"', "--ok-text", "--panel", "text"],
+  ["fx/task.js", 'border-radius:var(--radius-md);background:var(--panel-2)', "--panel-2", "--panel", "surface-bordered"],
+  ["fx/task.js", 'color:var(--warn-text);font-weight:600">⚠ 未验证（上板确认）', "--warn-text", "--panel", "text"],
+  ["fx/task.js", 'color:var(--warn-text);font-weight:600">⚠ 未验证（无工具链降级）', "--warn-text", "--panel", "text"],
+  ["fx/task.js", 'color:var(--danger-text);font-weight:600">✗ 未通过', "--danger-text", "--panel", "text"],
+  ["ui/generate-pins.js", 'class="muted" style="color:var(--warn-text)">已达上限', "--warn-text", "--panel", "text"],
+  ["ui/generate-pins.js", 'font-family:var(--mono);color:var(--accent-text)', "--accent-text", "--panel", "text"],
+  ["ui/generate-pins.js", 'class="dot" style="background:var(--pin-pad)', "--pin-pad", "--panel", "skip"],
+  ["ui/generate-pins.js", 'class="dot" style="background:var(--pin-fixed-pad)', "--pin-fixed-pad", "--panel", "skip"],
+  ["ui/generate-pins.js", 'style="color:var(--danger-text)">未绑定', "--danger-text", "--panel", "text"],
+  ["ui/generate-pins.js", 'style="color:var(--warn-text)">默认板外', "--warn-text", "--panel", "text"],
+  ["ui/generate-pins.js", 'style="color:var(--warn-text)">默认 ${esc(r.decl.default)} 与', "--warn-text", "--panel", "text"],
+  ["ui/generate-pins.js", 'style="color:var(--warn-text)">默认 ${esc(r.decl.default)} 已被', "--warn-text", "--panel", "text"],
+  ["ui/generate-pins.js", 'class="role-status" style="color:var(--warn-text)">共享宏族', "--warn-text", "--panel", "text"],
+  ["ui/generate-recommend.js", 'color:var(--muted)">副产物模板', "--muted", "--panel", "text"],
+  ["ui/step-state.js", 'toggleBtn.style.cssText = "margin-top: var(--space-2)', "--muted", "--panel", "text"],
+];
+
+/** 渲染方内联令牌取色：`[{ file, line, prop, token, text }]`（按文件、行序）。 */
+function jsInlineColorEntries(files = jsFiles()) {
+  const re = /(?<![\w-])(color|background|background-color)\s*:\s*var\((--[a-z0-9-]+)\)/;
+  const out = [];
+  for (const [rel, text] of files) {
+    text.split("\n").forEach((line, i) => {
+      const m = re.exec(line);
+      if (m) out.push({ file: rel, line: i + 1, prop: m[1], token: m[2], text: line });
+    });
+  }
+  return out;
+}
+
+/** 腿⑨ 的三条判据（纯函数，吃 `files` 与 `register`，红证要喂坏的）。 */
+function jsContrastRegisterProblems(files = jsFiles(), register = JS_CONTRAST_REGISTER) {
+  const out = [];
+  const entries = jsInlineColorEntries(files);
+  // ① 盘上每一处都要被登记项认领（同一文件 + 锚点出现在该行 + 令牌一致）
+  const claimed = new Set();
+  for (const row of register) {
+    if (!Array.isArray(row) || row.length !== 5) {
+      out.push(`渲染方登记项形状不对（应为 [文件, 锚点, 前景令牌, 假定底, 类别]）：${JSON.stringify(row)}`);
+      continue;
+    }
+    const [file, anchor, token, base, kind] = row;
+    if (!JS_CONTRAST_KINDS.includes(kind)) {
+      out.push(`渲染方登记项类别只能是 ${JS_CONTRAST_KINDS.join(" / ")}：${file} ${anchor}`);
+    }
+    const hits = entries.filter((e) => e.file === file && e.text.includes(anchor));
+    if (hits.length === 0) {
+      out.push(`渲染方登记项在盘上一条都找不到（锚点过期 / 文件改名）：${file} —— ${anchor}`);
+      continue;
+    }
+    if (hits.length > 1) {
+      out.push(`渲染方登记项锚点不够独特（命中 ${hits.length} 行）：${file} —— ${anchor}`);
+      continue;
+    }
+    const hit = hits[0];
+    if (hit.token !== token) {
+      out.push(`渲染方登记项的令牌与盘上不一致：${file}:${hit.line} 盘上 ${hit.token} / 登记 ${token}`);
+      continue;
+    }
+    claimed.add(`${file}|${hit.line}`);
+    // `skip` = 静态判不了（令牌在页面作用域块里）；
+    // `surface-bordered` = 面本身的分层**由同一串里的描边承担**，填充只作陪衬
+    // （描边那一层另有 `nontext` 家族看着）——两者都只登记、不判比值。
+    if (kind === "skip" || kind === "surface-bordered") continue;
+    // ③ 判据：text / nontext 判比值，surface 判分层
+    const themes = ["dark", "light"];
+    for (const theme of themes) {
+      const tables = contrastTokenTables(contrastCss(html));
+      const fg = tokenValue(token, theme, tables);
+      const bg = tokenValue(base, theme, tables);
+      if (!fg || !bg) {
+        out.push(`渲染方登记项解不出颜色（令牌改名了？）：${file} ${token} on ${base}（${theme}）`);
+        continue;
+      }
+      const ratio = contrastRatio(compositeOver(fg, bg), bg);
+      const need = kind === "nontext" ? CONTRAST_THRESHOLDS.large
+        : (kind === "surface" ? CONTRAST_SURFACE_MIN : CONTRAST_THRESHOLDS.small);
+      if (ratio < need) {
+        out.push(kind === "surface"
+          ? `渲染方的面 ${file}：${token} 压在 ${base} 上只有 ×${ratio.toFixed(3)}（要 ≥×${need}）`
+            + "——分层太弱（这是「面 vs 面」的口径，不是 3:1）"
+          : `渲染方 ${file} 的 ${token} 压在 ${base} 上只有 ${ratio.toFixed(2)}:1（要 ≥${need}）`
+            + "——改令牌或改它的底（这一面静态判不了真实层叠，假定底写在这条登记里）");
+      }
+    }
+  }
+  // ② 盘上每一处都要被登记（反向）
+  for (const e of entries) {
+    if (!claimed.has(`${e.file}|${e.line}`)) {
+      out.push(`渲染方新出现一处没登记的内联取色：${e.file}:${e.line} —— ${e.text.trim().slice(0, 80)}`
+        + "（把它加进 JS_CONTRAST_REGISTER：锚点取该行一段可认片段 + 假定底 + 类别）");
+    }
+  }
+  return out;
+}
+
 test("对比度（工单 01，第八条腿）：文字色 × 底现算比值，不达标的必须在例外表里登记过", () => {
   // 为什么要有这条腿：守卫此前只管"裸色必须令牌化"——一个比值都不算。于是往样式块里写一条
   // `color: var(--warn)` 压在自己的淡底上（浅色 4.17，低于 AA 4.5），没有任何东西会红。
@@ -1544,6 +1675,21 @@ test("对比度（工单 01）：族的细节矩阵可复算（`--tok-*` 那笔�
   const worstLight = tok.filter((c) => c.theme === "light").reduce((a, b) => (b.ratio < a.ratio ? b : a));
   assert.ok(worstLight.ratio < CONTRAST_THRESHOLDS.small,
     "浅色代码底上语法高亮族的已知债不见了？——若真修好了，请把族表与例外表一起改掉");
+});
+
+test("对比度（工单 04，第九条腿）：渲染方内联取色逐条登记，盘上 ↔ 登记表双向对账", () => {
+  // 描边那轮的先例：样式块面干净**不等于**渲染方干净。这一面把 `static/js/**` 里那 19 处
+  // 内联令牌取色逐条登记（认人键 = 文件 + 行内锚点），三条判据见 `jsContrastRegisterProblems`。
+  const problems = jsContrastRegisterProblems();
+  assert.deepEqual(problems, [],
+    "渲染方内联取色登记表与盘上对不上（新增内联色就登记它、去掉就摘掉登记项、"
+    + "令牌改了就同步改登记）：\n" + problems.join("\n"));
+  // 抽取面必须真的抽到东西（正则一坏，上面那条会静默变绿）
+  const entries = jsInlineColorEntries();
+  assert.equal(entries.length, JS_CONTRAST_REGISTER.length,
+    `盘上 ${entries.length} 处内联取色 / 登记 ${JS_CONTRAST_REGISTER.length} 条——`
+    + "数目不等时上面的对账会指出差在哪几条；若它没报，就是有两条撞了同一个认人键");
+  assert.ok(entries.length >= 19, `只抽到 ${entries.length} 处（落地时 19）——抽取面坏了`);
 });
 
 test("全站推广：字号角色表是**有限六档**，且页面里的 --fs-* 定义与它逐条一致", () => {
@@ -1644,7 +1790,7 @@ test("全站推广：动作三级的口径**单源**（主实心 / 危险红描�
     "ghost 类要真的被元素用到——否则'补实一个类'就只是又造了一个死类");
 });
 
-test("全站推广合成红证：八条腿各自都判得红（防'永远绿'的守卫）", () => {
+test("全站推广合成红证：九条腿各自都判得红（防'永远绿'的守卫）", () => {
   // ① 已完工作用域各塞一个越界字号——**锚点只取规则头（不带令牌值）**，锚变了就当场报，
   //    不让这条自检静默空转。三个作用域：
   //      · `hwcheck` = 上一轮的样板页（腿③最早看着的那一页）；
@@ -1985,7 +2131,30 @@ test("全站推广合成红证：八条腿各自都判得红（防'永远绿'的
     contrastProblems(ctPaleOkText).some((p) => p.includes("--on-ok 压在 --ok-text")),
     "ok 渐变的端点掉线没被判出（渐变那一格又回到射程外了）",
   );
-  // ⑨ 复原后转绿（八条腿都回到空/子集）
+  //    (m) **第九条腿（渲染方内联取色）**的坏法各判一次红——判据吃 `files` 与 `register`，
+  //        所以注入走内存（照描边腿⑦ 用假 JS 源的先例）。
+  assert.deepEqual(jsContrastRegisterProblems(), [], "盘上渲染方本来就不该有对账问题");
+  const fakeColorJs = (line) => [["ui/whatever.js", line]];
+  assert.ok(
+    jsContrastRegisterProblems(fakeColorJs('  el.style.cssText = "color:var(--warn-text);";'))
+      .some((p) => p.includes("没登记") && p.includes("ui/whatever.js")),
+    "塞进去的未登记内联取色没被判出",
+  );
+  const colorBrokenAnchor = JS_CONTRAST_REGISTER.map(([f, a, t, b, k]) =>
+    (a.startsWith('class="dot" style="background:var(--pin-pad)') ? [f, "锚点根本没这串", t, b, k] : [f, a, t, b, k]));
+  assert.ok(jsContrastRegisterProblems(jsFiles(), colorBrokenAnchor)
+    .some((p) => p.includes("一条都找不到")), "锚点过期没被判出");
+  const looseColor = [...JS_CONTRAST_REGISTER, ["ui/generate-pins.js", 'class="dot"', "--pin-pad", "--panel", "text"]];
+  assert.ok(jsContrastRegisterProblems(jsFiles(), looseColor)
+    .some((p) => p.includes("锚点不够独特")), "过宽的锚点没被判出（它会去认领别人的行）");
+  const badColorToken = JS_CONTRAST_REGISTER.map(([f, a, t, b, k]) =>
+    (t === "--muted" ? [f, a, "--border-strong", b, k] : [f, a, t, b, k]));
+  assert.ok(jsContrastRegisterProblems(jsFiles(), badColorToken)
+    .some((p) => p.includes("令牌与盘上不一致")), "登记项的令牌与盘上不一致没被判出");
+  const bogusColorKind = [...JS_CONTRAST_REGISTER, ["ui/step-state.js", "toggleBtn.style.cssText", "--muted", "--panel", "看着挺清楚"]];
+  assert.ok(jsContrastRegisterProblems(jsFiles(), bogusColorKind)
+    .some((p) => p.includes("类别只能是")), "未知类别没被判出");
+  // ⑨ 复原后转绿（九条腿都回到空/子集）
   assert.deepEqual(bareFontSizesInScope(html, "hwcheck"), []);
   assert.deepEqual(bareTokenSpacesInScope(html, "hwcheck"), []);
   assert.deepEqual(bareFontSizesSitewide(html).filter((v) => !FROZEN_FONT_SIZES.has(v)), []);

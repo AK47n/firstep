@@ -1,7 +1,7 @@
 # 读数：probe-02-js-inline
 # 命令：python .scratch\light-contrast\probe-02-js-inline.py
 # 工作树：C:\Users\luoji\Desktop\firstep
-# 开始：2026-09-30T13:25:32+08:00
+# 开始：2026-09-30T13:26:23+08:00
 # 退出码：0
 ==============================================================================
 浅色调色板轮 · 侦察读数（probe-02：渲染方内联取色声明）
@@ -27,7 +27,27 @@
   var(--pin-pad)                     × 1
   var(--pin-fixed-pad)               × 1
 
-  （只列令牌计数；逐条清单要看时把上面 `decl` 改成 `token_only` 再跑）
+### 逐处清单（腿⑨ 的认人键 = 文件 + **行内锚点**；这栏就是覆盖审计）
+
+  src/contest_generator/static/js/fx/flash.js:39   color       var(--danger-text)    + '<span style="color:var(--danger-text);font-weight:600">✗ 烧录未成功</span> '
+  src/contest_generator/static/js/fx/flash.js:54   color       var(--warn-text)      + '<span style="color:var(--warn-text);font-weight:600">烧录未就绪</span> '
+  src/contest_generator/static/js/fx/task.js:327  color       var(--ok-text)\       const summary = "已完成 <b style=\"color:var(--ok-text)\">" + verified + "</b
+  src/contest_generator/static/js/fx/task.js:338  color       var(--ok-text)        ? '<div class="tasks-done-line" style="margin-top: var(--space-2)"><span c
+  src/contest_generator/static/js/fx/task.js:935  background  var(--panel-2)        + 'border:1px solid var(--border);border-radius:var(--radius-md);backgroun
+  src/contest_generator/static/js/fx/task.js:1010 color       var(--warn-text)      ? '<span style="color:var(--warn-text);font-weight:600">⚠ 未验证（上板确认）</span>
+  src/contest_generator/static/js/fx/task.js:1011 color       var(--warn-text)      : '<span style="color:var(--warn-text);font-weight:600">⚠ 未验证（无工具链降级）</spa
+  src/contest_generator/static/js/fx/task.js:1018 color       var(--danger-text)    badge: '<span style="color:var(--danger-text);font-weight:600">✗ 未通过（编译验证失
+  src/contest_generator/static/js/ui/generate-pins.js:177  color       var(--warn-text)      ${atMax ? `<span class="muted" style="color:var(--warn-text)">已达上限 ${max}<
+  src/contest_generator/static/js/ui/generate-pins.js:200  color       var(--accent-text)    ? `<span style="font-family:var(--mono);color:var(--accent-text)">${esc(in
+  src/contest_generator/static/js/ui/generate-pins.js:618  background  var(--pin-pad)        html += `<span class="lg"><span class="dot" style="background:var(--pin-pa
+  src/contest_generator/static/js/ui/generate-pins.js:620  background  var(--pin-fixed-pad)  html += `<span class="lg"><span class="dot" style="background:var(--pin-fi
+  src/contest_generator/static/js/ui/generate-pins.js:846  color       var(--danger-text)    status = `<span style="color:var(--danger-text)">未绑定</span>` +
+  src/contest_generator/static/js/ui/generate-pins.js:850  color       var(--warn-text)      status = `<span style="color:var(--warn-text)">默认板外（排针未引出）——仍可绑到板内空闲脚</spa
+  src/contest_generator/static/js/ui/generate-pins.js:852  color       var(--warn-text)      status = `<span style="color:var(--warn-text)">默认 ${esc(r.decl.default)} 与
+  src/contest_generator/static/js/ui/generate-pins.js:858  color       var(--warn-text)      : `<span style="color:var(--warn-text)">默认 ${esc(r.decl.default)} 已被 ${byN
+  src/contest_generator/static/js/ui/generate-pins.js:872  color       var(--warn-text)      ${famInfo ? `<div class="role-status" style="color:var(--warn-text)">共享宏族 
+  src/contest_generator/static/js/ui/generate-recommend.js:1232 color       var(--muted)          <label style="font-size:var(--fs-tag);color:var(--muted)">副产物模板</label>
+  src/contest_generator/static/js/ui/step-state.js:186  color       var(--muted)          toggleBtn.style.cssText = "margin-top: var(--space-2);padding:2px 8px;font
 
 ## ③ 跨行拼接出来的取色声明 —— 共 **0** 处（**静态守卫抓不到**，与描边留白同类）
 
