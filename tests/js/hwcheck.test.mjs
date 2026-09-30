@@ -1498,6 +1498,12 @@ test("单平台件不误导：**行为**上，未选中的卡片就被标成需�
     "stm32 页面上 sr04 应被标「需切换平台」：" + stm32View);
   assert.ok(moduleGridHTML([onlyMspm0], [], "", "stm32").includes("module-card off"),
     "单平台件在无条目平台上应带 .off 样式");
+  // 不可选形态的语义由 aria 承担（工单 disabled-forms/01）：类名继续表示"这个组合不成立"，
+  // 读屏要知道它"不可用"（否则用户得先点一次、再听那句 toast）。
+  assert.ok(moduleGridHTML([onlyMspm0], [], "", "stm32").includes('aria-disabled="true"'),
+    "带 .off 的模块卡应带 aria-disabled=\"true\"（读屏用户要知道它不可用）");
+  assert.ok(!moduleGridHTML([onlyMspm0], [], "", "mspm0").includes("aria-disabled"),
+    "可用卡不许带 aria-disabled（那不是禁用态语义）");
   assert.ok(!moduleGridHTML([onlyMspm0], [], "", "mspm0").includes("需切换平台"),
     "它有 mspm0 条目，在 mspm0 页面上不该标");
 });

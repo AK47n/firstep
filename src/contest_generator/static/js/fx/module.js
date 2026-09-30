@@ -334,8 +334,13 @@ export function moduleGridHTML(modules, selectedSet, query, platform) {
     // 键盘用户到不了（平台卡早就有 role/tabindex/keydown，同一页两套标准）。
     // 不写 `aria-pressed`：网格里只会出现**还没选**的模块（`moduleGridFilter` 把已选
     // 的剔掉了），那个属性在这里恒为 false、只会误导（chip 才有两态，见 recommendChipHTML）。
+    // **不可用由 aria 承担**（工单 disabled-forms/01）：`.off` 卡仍可聚焦、仍可点（点了弹
+    // 「请先切换目标平台」那句解释），所以**不用** `disabled`（那会把它变成真禁用、键盘路径断掉、
+    // 解释也弹不出来）；`aria-disabled="true"` 只让读屏念出"不可用"。类名 `.off` 继续表示
+    // "这个组合不成立"，形态改由虚线描边 + 退到背景里的灰底承担（不再用 opacity 洗淡文字）。
     return '<div class="module-card' + (off ? " off" : "") + '" data-add="' + escHtml(m.slug) + '"'
       + ' role="button" tabindex="0"'
+      + (off ? ' aria-disabled="true"' : "")
       // title 是**属性**：标签进不去（会被当字面量显示），只剥标记（工单 hwcheck-hygiene/14）
       + ' title="' + escPlain(desc) + '">'
       + '<div class="mc-head"><span class="slug">' + escHtml(m.slug) + "</span>"

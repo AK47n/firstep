@@ -18,20 +18,24 @@
 
 ## 它判什么
 
-九组（口径的每一块都点到）：
+十组（口径的每一块都点到）：
 
 1. `CONTRAST_THRESHOLDS`（小字 / 大字两档）；
 2. `LARGE_TEXT`（24px / 18.66px+bold 那三个常量）；
 3. `CONTRAST_LUM`（亮度公式的九个数：255 / 0.03928 / 12.92 / 0.055 / 1.055 / 2.4 / 三通道系数）；
 4. `CONTRAST_RATIO_OFFSET` 与 `CONTRAST_BASE_TOKEN`（合成基色 = `--panel` 这条口径本身）；
-5. **十三条解析正则**（`<style>` 块 / 剥注释 / 切规则 / 取声明 / 令牌 / 两个主题块 / 三元组 /
-   两种十六进制 / rgba / var（含兜底）/ 字号）——认人键、合成底与阈值分档全建立在它们上面；
+5. **十五条正则**（`<style>` 块 / 剥注释 / 切规则 / 取声明 / 令牌 / 两个主题块 / 三元组 /
+   两种十六进制 / rgba / var（含兜底）/ 字号 / **关键帧选择器** / **`:disabled` 认人面**）——
+   认人键、合成底、阈值分档与"这条 `opacity` 算不算活规则 / 算不算禁用形态"全建立在它们上面；
 6. `CODE_LAYERS`（代码页那五层底的名字与 alpha）；
 7. `CONTRAST_FAMILIES`（族表的标签 / 令牌选取 / 底列表 / 阈值档位）；
 8. `CONTRAST_FAMILY_KINDS` 与 `CONTRAST_TOKEN_KINDS`（阈值档位词表）；
 9. `CONTRAST_TOKEN_BASES`（**第三面**：无底规则里的文字令牌 + 假定底 + 档位）——
    两张表今天各有一份副本，任何一侧单独改都是漂移。
    再加一条 **`--check` 的同源断言**：守卫里那张例外表必须等于生成器**现在**算出来的那张。
+10. `CONTRAST_DISABLED_FORMS` / `CONTRAST_DISABLED_HINTS` / `CONTRAST_DISABLED_FORM_KINDS`
+   （不可选形态的**认人面**，工单 `disabled-forms/01`）——登记表逐条一致：只改一侧的话，
+   探针会算出"这条嫌疑规则没在册"而守卫说"在册"，正是最难查的那种假账。
 
 **它不判**：不跑 JS、不跑 node（前端门禁才是跑它的地方，见 `docs/agents/workflow.md` 的闸门表）
 ——这里只钉"两侧写的是不是同一把尺"。
@@ -147,9 +151,13 @@ def test_ratio_offset_and_base_token_match(js, py):
     ("CONTRAST_RGBA_RE", "RGBA_RE"),
     ("CONTRAST_VAR_RE", "VAR_RE"),
     ("CONTRAST_SIZE_RE", "SIZE_RE"),
+    ("CONTRAST_KEYFRAME_SEL_RE", "KEYFRAME_SEL_RE"),
+    ("CONTRAST_DISABLED_RE", "CONTRAST_DISABLED_RE"),
 ])
 def test_parse_regexes_match(js, py, js_name, py_attr):
-    """⑤ 十三条解析正则：认人键（切规则 / 取声明）、合成底（令牌 / 色值）与阈值分档（字号）全建立在它们上面。"""
+    """⑤ 十五条正则：认人键（切规则 / 取声明）、合成底（令牌 / 色值）、阈值分档（字号）、
+    "这条 `opacity` 算不算活规则"（关键帧）与"这条规则算不算禁用形态"（`:disabled` / `.disabled`）
+    全建立在它们上面。"""
     js_src = _norm(_js_regex(js, js_name))
     py_src = _norm(getattr(py, py_attr).pattern)
     assert js_src == py_src, (
@@ -280,6 +288,41 @@ def test_token_bases_match(js, py):
     )
 
 
+def test_disabled_forms_register_matches(js, py):
+    """⑫ **不可选形态的认人面**（工单 `disabled-forms/01`）：登记表的逐条一致 + 词法与类别表一致。
+
+    为什么单列一条：这张表是判据⑥扩面后的**认人键**——两侧各写一份、只改一侧，
+    就会出现"守卫说这条嫌疑规则在册、探针算出来它不在册"（或反过来）的假账，
+    而这种假账**两边各自内部都自洽**（腿绿而读数红，正是本文件存在的理由）。
+    理由文本**不参与**比对（它是给人读的，两侧措辞可以不同），但必须非空。
+    """
+    js_rows = _js_rows(js, "CONTRAST_DISABLED_FORMS")
+    assert js_rows, "守卫里解析不出 CONTRAST_DISABLED_FORMS 的行——格式变了"
+    js_keys = [(r[0], r[1], r[2]) for r in js_rows]
+    py_keys = [(scope, sel, kind) for scope, sel, kind, _why in py.CONTRAST_DISABLED_FORMS]
+    assert js_keys == py_keys, (
+        "不可选形态登记表两侧不一致（作用域 / 选择器 / 类别）：\n"
+        + "\n".join(f"  JS {a}  vs  Python {b}" for a, b in zip(js_keys, py_keys) if a != b)
+    )
+    assert all(r[3].strip() for r in js_rows), "不可选形态登记项必须写理由（两侧都要有）"
+    assert all(why.strip() for _s, _sel, _k, why in py.CONTRAST_DISABLED_FORMS), "同上（Python 侧）"
+
+    m = re.search(r"const CONTRAST_DISABLED_HINTS = \[([\s\S]*?)\];", js)
+    assert m, "守卫里找不到 `const CONTRAST_DISABLED_HINTS = [...];`"
+    js_hints = re.findall(r'"([^"]+)"', m.group(1))
+    assert js_hints == list(py.CONTRAST_DISABLED_HINTS), (
+        f"反向嫌疑词法两侧不一致：JS {js_hints} / Python {list(py.CONTRAST_DISABLED_HINTS)}——"
+        "只改一侧就等于换了一把尺（一侧要求登记、另一侧不要求）"
+    )
+
+    m = re.search(r"const CONTRAST_DISABLED_FORM_KINDS = \[([\s\S]*?)\n\];", js)
+    assert m, "守卫里找不到 `const CONTRAST_DISABLED_FORM_KINDS = [...];`"
+    js_kinds = re.findall(r'\["([^"]+)"', m.group(1))
+    assert js_kinds == [k for k, _why in py.CONTRAST_DISABLED_FORM_KINDS], (
+        f"形态类别表两侧不一致：JS {js_kinds} / Python {[k for k, _ in py.CONTRAST_DISABLED_FORM_KINDS]}"
+    )
+
+
 def test_gradient_ends_match(js, py):
     """⑪ **渐变端点**表：主题 / 前景令牌 / 底列表 三格逐条一致（02 单补的盲区检查）。"""
     m = re.search(r"const CONTRAST_GRADIENT_ENDS = \[([\s\S]*?)\n\];", js)
@@ -353,6 +396,23 @@ def test_tok_worst_freeze_matches_python(js, py):
             f"（{worst['token']} on {worst['layer']}）——层表/族表/几何/令牌值有一处被改过；"
             "确实该改就两侧一起改并在票尾写清"
         )
+
+
+def test_pair_count_freeze_matches_python(js, py):
+    """⑦‴ 守卫里冻结的**机械面配对数**必须等于 Python 侧现在抽出来的那一份。
+
+    与 ⑦′（族面格数）同一物种、同一条理由：`CONTRAST_PAIR_COUNT` 拦的是"抽取面变了、判据在空转"，
+    而抽取面本身有**两份实现**（JS 的 `contrastPairsFromStylesheet` / Python 的 `contrast_pairs`）。
+    两侧的正则虽由 ⑤ 钉住，遍历与"哪条规则算一对"的判断仍是各自写的——只改一侧，
+    就会出现"守卫说 394、探针说 393"这种腿绿而读数红的账（工单 `disabled-forms/01` 把 392 改成 394 时立的）。
+    """
+    m = re.search(r"const CONTRAST_PAIR_COUNT = ([0-9]+);", js)
+    assert m, "守卫里找不到 `const CONTRAST_PAIR_COUNT = ...;`"
+    pairs = py.contrast_pairs(py.read_page())
+    assert int(m.group(1)) == len(pairs), (
+        f"冻结的机械面配对数 {m.group(1)} ≠ Python 现算 {len(pairs)}——"
+        "要么同步 CONTRAST_PAIR_COUNT（并在票尾写清改了哪条规则），要么两侧的抽取逻辑漂了"
+    )
 
 
 def test_exception_table_matches_generator(js, py):

@@ -107,6 +107,102 @@ CODE_LAYERS_NAMES = [n for n, _a, _g in CODE_LAYERS]
 #: 名字里写数字不算数（要临时改档就换层表：`layer_colors(..., layers=...)`）。
 LAYER_RE = re.compile(r"^(--[a-z0-9-]+)\+(hl|--[a-z0-9-]+)(?:\..+)?$")
 
+#: `@keyframes` 的关键帧选择器（`from` / `to` / `50%` / `50%, 100%`）。
+#: 朴素切分（`RULE_RE`）看不见 `@keyframes` 那层外壳——帧**自己**会被切成规则，
+#: 所以"这行规则是不是动画帧"只能按选择器认。**与 JS 的 `CONTRAST_KEYFRAME_SEL_RE` 逐字同源**
+#: （镜像守卫钉住）：两侧口径一旦分叉，"这条 opacity 算不算活规则"就会各答各的（腿绿而读数红）。
+KEYFRAME_SEL_RE = re.compile(r"^\s*(?:from|to|[\d.]+%)\s*(?:,|$)")
+
+#: **不可选形态**的类别两档（与守卫 `CONTRAST_DISABLED_FORM_KINDS` 逐项同源）。
+#: 形状同 `CONTRAST_KINDS`：`(id, 说明)`。
+CONTRAST_DISABLED_FORM_KINDS = [
+    ("disabled", "不可选形态：整块表达「这个组合不成立」——不许用 opacity 弱化（灰底灰字 / 形状信号才是它）"),
+    ("dim", "合法弱化：允许 opacity，但理由必须写清（非文字装饰 / 仍可点的只读标记）"),
+]
+
+#: 认人面的**第一半**（老那半）：`:disabled` 伪类与 `.disabled` 类名。
+#: **与 JS 的 `CONTRAST_DISABLED_RE` 逐字同源**（镜像守卫钉住）。
+#: `:not(…)` 先剥掉再判——`:not(:disabled)` 是"**非**禁用"，不是禁用态。
+CONTRAST_DISABLED_RE = re.compile(r"(?::disabled\b|\.disabled\b)")
+
+#: **反向嫌疑词法**（与守卫 `CONTRAST_DISABLED_HINTS` 逐项同源）：类名 **等于**该词、或以 `-<词>` 结尾
+#: ⇒ 这条规则"看起来在表达不可选/弱化"。命中就**必须**登记进 `CONTRAST_DISABLED_FORMS`
+#: （登记成 `dim` 也接受）——词法是**代理信号**，宁可过宽，方向是"逼人登记"。
+CONTRAST_DISABLED_HINTS = ["disabled", "off", "cant", "stale", "inactive", "unavailable",
+                           "locked", "dim", "ro", "na"]
+
+#: **不可选形态的认人面（登记表）**（工单 disabled-forms/01）。
+#: 形状 `[作用域, 剥注释的选择器, 类别, 理由]`；类别取值见 `CONTRAST_DISABLED_FORM_KINDS`。
+#: 认人键 = **剥注释的选择器**（`css_rules` 切出来的那个形态）——`作用域` 只作分组与可读性。
+#: **与 JS 守卫的 `CONTRAST_DISABLED_FORMS` 逐项同源**（镜像守卫钉住）：只改一侧，
+#: 探针会算出"这条嫌疑规则没在册"而守卫说"在册"，那种假账最难查。
+CONTRAST_DISABLED_FORMS = [
+    ("modules", ".module-card.off", "disabled",
+     "模块卡：当前平台没有这个模块的条目（点它弹「请先切换目标平台」）——虚线描边走 --border 那条，"
+     "卡面退到 --panel（与所在 .card 同底），卡内文字各自声明色"),
+    ("pins", ".pin-menu-list li.cant", "disabled",
+     "引脚菜单：这根脚接不了这个角色（整行不可点，带「不兼容：…」原因）——"
+     "与按钮禁用态同一格：底 --panel-2 + 字 --muted"),
+    ("params", ".param-stale", "disabled",
+     "参数卡：main.c 改过、锚可能失效（输入与应用已禁用，带「位置已变」徽章）——"
+     "卡面本来就是 --panel-2，卡内文字走 --muted，形状信号是 outline 虚线"),
+    ("pins", ".pin-dim", "dim",
+     "SVG 引脚圆点：非文字图形，「这根脚没接」的弱化——引脚本身仍可点，不是不可选形态"),
+    ("wiring", ".wiring-dot-dim", "dim",
+     "接线图图例里「其它接线」的圆点：非文字装饰（底 --border-strong）"),
+    ("wiring", ".wiring-line.wiring-dim", "dim",
+     "接线图未高亮的连线：非文字装饰（SVG stroke）"),
+    ("code", ".code-tab.ro .code-tab-name", "dim",
+     "只读页签的名字：弱化的是「只读」不是「不可用」，页签仍可点"
+     "（真正的信号是 .code-tab-ro 那个「只读」小标）"),
+]
+
+
+def class_hint_hits(selector: str, hints=None) -> list[str]:
+    """选择器里的类名命中了哪些嫌疑词（**与 JS 的 `classHintHits` 同一口径**）。
+
+    命中口径 = 类名**等于**该词、或以 `-<词>` 结尾（`.x-disabled` 算、`.disabledness` 不算）。
+    `:not(…)` 先剥掉：`:not(.off)` 是"**非** off"，不是"命中 off"。
+    """
+    words = CONTRAST_DISABLED_HINTS if hints is None else hints
+    bare = re.sub(r":not\([^()]*\)", "", selector)
+    names = [n.lower() for n in re.findall(r"\.([A-Za-z][\w-]*)", bare)]
+    hits = [w for w in words if any(n == w or n.endswith("-" + w) for n in names)]
+    return hits
+
+
+def disabled_form_kind(selector: str, register=None):
+    """登记表里这条选择器的类别（不在册 → `None`）。"""
+    rows = CONTRAST_DISABLED_FORMS if register is None else register
+    for _scope, sel, kind, _why in rows:
+        if sel == selector:
+            return kind
+    return None
+
+
+def targets_disabled_state(selector: str) -> bool:
+    """`:not(…)` 剥掉后是否命中 `:disabled` / `.disabled`（与 JS `targetsDisabledState` 同一口径）。"""
+    return bool(CONTRAST_DISABLED_RE.search(re.sub(r":not\([^()]*\)", "", selector)))
+
+
+def in_disabled_face(selector: str, register=None) -> bool:
+    """选择器是否**落在反向认人面里**（正则那一半 + 登记表那一半，两档类别都算）
+    ——与 JS `inDisabledFace` 同一口径。
+
+    探针的"嫌疑面是否全部在册"必须走这一条：拿"在登记表里"当判据会把 `button:disabled`
+    这类**由正则认人**的规则误报成"未在册"（那种假读数最费时间）。
+    """
+    return targets_disabled_state(selector) or disabled_form_kind(selector, register) is not None
+
+
+def never_dims_form(selector: str, register=None) -> bool:
+    """选择器是否**落在正向认人面里**（正则那一半 + 登记表 `disabled` 档）——与 JS `neverDimsForm` 同一口径。
+
+    这一半**不许**出现 `opacity < 1`；`dim` 那档是"允许弱化"，**不在**正向面里
+    （两半分开是本单的要害：合成一个的话，`.pin-dim` 这类登记在案的合法弱化会被误判成红）。
+    """
+    return targets_disabled_state(selector) or disabled_form_kind(selector, register) == "disabled"
+
 #: **第三面**：无底规则（`color:` 有、底在基类或祖先）里当文字色用的令牌。
 #: 形状 `[令牌字面, 假定底列表, 阈值档位, 理由]`；空底列表 = 静态判不了（登记理由后跳过判据）。
 #: **与 JS 守卫的 `CONTRAST_TOKEN_BASES` 逐项同源**（镜像守卫钉住）。

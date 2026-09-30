@@ -13,7 +13,9 @@
 // ⑧**对比度契约**（工单 light-contrast/01）：阈值两档（4.5 / 3.0）+ 机械抽取「同规则
 //   color × background」+ `CONTRAST_FAMILIES`（机械抓不到的已知族）+ `CONTRAST_EXCEPTIONS`
 //   （**只登记不达标与不适用**，达标的现算即可）+ 腿⑧（**七条**判据，含"债务不许静默恶化"
-//   与禁用态那两条结构判据）。
+//   与"禁用态 / 不可选形态不许用 `opacity` 表达"——后者在工单 `disabled-forms/01` 从
+//   "写死 `:disabled` / `.disabled` 两个类名"扩成 `CONTRAST_DISABLED_FORMS` 登记表
+//   + 反向嫌疑面，见那张表的说明块）。
 //   与描边那条腿的区别：那条是"逐条登记 115 个例外"，这条是"**现算 + 只记债**"——
 //   闸门强度靠"抽得到、算得出"，不靠表的规模。口径见那段说明块。
 // ⑨**渲染方内联取色登记簿**（工单 light-contrast/04）：`JS_CONTRAST_REGISTER`（19 条）
@@ -926,7 +928,11 @@ function actionWeightProblems(css) {
 //   ③ 例外表每条都要在盘上（或族表里）认到人——反向对账，防死条；
 //   ④ 类别值必须在 `CONTRAST_KINDS` 里、每类至少一条；
 //   ⑤ 族表（`CONTRAST_FAMILIES`，机械抓不到的已知族）每族最坏格现算值同样要对上冻结值；
-//   ⑥ **禁用态不许用 `opacity` 表达**（工单 code-contrast/03，口径见 `CONTRAST_DISABLED_RE`）；
+//   ⑥ **禁用态 / 不可选形态不许用 `opacity` 表达**（工单 code-contrast/03 立、`disabled-forms/01` 扩面）：
+//      认人面 = `:disabled` / `.disabled`（正则）+ `CONTRAST_DISABLED_FORMS`（登记表，7 条）；
+//      四条判据 = 正向（认人面里不许 `opacity: <1`）/ 反向（`cursor: not-allowed` 或类名词法命中的
+//      **活规则**必须登记）/ 登记表 ↔ 盘上双向对账 / 类别表形状——本体在 `disabledFormProblems`，
+//      与"什么叫不可选形态"一起写在 `CONTRAST_DISABLED_FORMS` 的注释里；
 //   ⑦ **涂色的形态规则必须表态**（`:not(:disabled)` / `:disabled`，见 `undeclaredFormRules`）
 //      ——不然它自己的底色会盖掉禁用态的灰底灰字。
 //
@@ -973,8 +979,11 @@ const CONTRAST_BASE_TOKEN = "--panel";
 /** 机械面的配对数（**冻结**：样式块里"既有字色又有底"的规则数）。
  *  改令牌值不动它；**新增/删掉这类规则**才动——那时同步改这里并在票尾写清。
  *  376 → **392**（工单 code-contrast/03：八条禁用态规则从"只改不透明度"变成"声明灰底灰字"，
- *  每条两主题各一对：`button:disabled` 那一组选择器算一条规则）。 */
-const CONTRAST_PAIR_COUNT = 392;
+ *  每条两主题各一对：`button:disabled` 那一组选择器算一条规则）；
+ *  392 → **394**（工单 disabled-forms/01：`.pin-menu-list li.cant` 从"只有 `opacity`"变成
+ *  "既有 `color: var(--muted)` 又有 `background: var(--panel-2)`" = 两主题各多一对）。
+ *  复算口径：`.scratch/disabled-forms/probe-00-inventory.py` §4（Python 侧同一把尺）。 */
+const CONTRAST_PAIR_COUNT = 394;
 
 /** 族面的**总格数**（**冻结**：`contrastFamilyCells` 现算出来的格子总数）。
  *  为什么冻结它：族面判据只把**最坏格**纳入对账，一旦有人从 `CODE_LAYERS` 或某条族里
@@ -1028,14 +1037,209 @@ const CONTRAST_CODE_HL_TOKEN = "--code-hl-rgb";
  *
  * ⚠ **`:not(:disabled)` 不算**（那是"**非**禁用"）：`targetsDisabledState` 先把 `:not(…)`
  * 剥掉再认——悬停/选中效果里的 `opacity` 不是禁用态，别把它误判成红。
- * ⚠ **类名以 `-disabled` 结尾也不算**（`\b` 只认前面是 `.` 的那种，如 `.module-card.off`
- * 这类"另一个名字的禁用形态"**不在本判据射程**——要收得先给它们改名，另开单）。
+ * ⚠ **认人面在 `disabled-forms/01` 扩过一次**（这条注记原来写的是"`.module-card.off` 这类
+ * '另一个名字的禁用形态'不在本判据射程——要收得先给它们改名"）：那些形态**没有改名**
+ * （不改名是用户拍板：`.off` / `.cant` 的语义是"这个组合不成立"，不是控件禁用），
+ * 改的是**认人面**——见下面的 `CONTRAST_DISABLED_FORMS`（登记表）与 `disabledFormProblems`
+ * （正向 + 反向 + 双向对账）。这条正则仍是认人面的**第一半**（`.disabled` 这个类名与
+ * `:disabled` 这个伪类），登记表是**第二半**。
  */
 const CONTRAST_DISABLED_RE = /(?::disabled\b|\.disabled\b)/;
 
 /** 选择器是不是**指向禁用态**（`:not(:disabled)` = 非禁用 → 不算）。 */
 function targetsDisabledState(sel) {
   return CONTRAST_DISABLED_RE.test(sel.replace(/:not\([^()]*\)/g, ""));
+}
+
+/**
+ * `@keyframes` 的关键帧选择器（`from` / `to` / `50%` / `50%, 100%`）。
+ *
+ * 朴素切分（`CONTRAST_RULE_RE`）**看不见 `@keyframes` 那层外壳**——帧自己会被切成规则
+ * （`sel = "from"` / `"50% "`）。所以"这行规则是不是动画帧"只能按选择器认。
+ * **与探针侧 `probe_lib.KEYFRAME_SEL_RE` 逐字同源**（`tests/test_contrast_mirror.py` 钉住）：
+ * 两侧分叉就会出现"这条 `opacity` 算不算活规则"各答各的（腿绿而读数红）。
+ *
+ * **为什么帧里的 `opacity` 不判**：帧是**动画的一拍**，不是"某个状态下的形态"——
+ * 淡入淡出的起止帧天然带 `opacity`（本仓 5 条），要求它们登记等于把动画逐帧登记。
+ */
+const CONTRAST_KEYFRAME_SEL_RE = /^\s*(?:from|to|[\d.]+%)\s*(?:,|$)/;
+
+/**
+ * **不可选形态**的类别两档（工单 `disabled-forms/01`，照 `CONTRAST_KINDS` 的既有写法）。
+ *   · `disabled` = 不可选形态 ⇒ **不许**出现 `opacity: <1`；
+ *   · `dim` = 合法弱化 ⇒ 允许 `opacity`，但理由必须写清（非文字装饰 / 仍可点的只读标记）。
+ * **与探针侧 `probe_lib.CONTRAST_DISABLED_FORM_KINDS` 逐项同源**（镜像守卫钉住）。
+ */
+const CONTRAST_DISABLED_FORM_KINDS = [
+  ["disabled", "不可选形态：整块表达「这个组合不成立」——不许用 opacity 弱化（灰底灰字 / 形状信号才是它）"],
+  ["dim", "合法弱化：允许 opacity，但理由必须写清（非文字装饰 / 仍可点的只读标记）"],
+];
+
+/**
+ * **反向嫌疑词法**（工单 `disabled-forms/01`）：类名**等于**该词、或以 `-<词>` 结尾
+ * ⇒ 这条规则"看起来在表达不可选/弱化"。命中就**必须**登记进 `CONTRAST_DISABLED_FORMS`
+ * （登记成 `dim` 也接受）。
+ *
+ * **它是代理信号，不是判据本身**：词法够不着"用别的名字、又不用 `cursor: not-allowed`"
+ * 的新形态——真正的闭合是**全量登记**（腿⑩），见 `backlog.md` §33。这里**宁可过宽**：
+ * 误报的方向是"逼人登记"（有人看一眼、写一行理由），漏报的方向是"又一处低于 AA 没人管"。
+ * **与探针侧 `probe_lib.CONTRAST_DISABLED_HINTS` 逐项同源**（镜像守卫钉住）。
+ */
+const CONTRAST_DISABLED_HINTS = ["disabled", "off", "cant", "stale", "inactive", "unavailable",
+  "locked", "dim", "ro", "na"];
+
+/**
+ * **不可选形态的认人面（登记表）**（工单 `disabled-forms/01`）：`[作用域, 剥注释的选择器, 类别, 理由]`。
+ *
+ * **为什么要有它**：判据⑥按**类名**认人（`:disabled` / `.disabled`），于是"用别的类名表达不可选"
+ * 的形态（`.module-card.off` / `.pin-menu-list li.cant` / `.param-stale`）两头都看不见——
+ * 静态面算不出 `opacity` 的比值（那是合成运算），全站扫描面又会被祖先渐变滤掉。
+ * 结果是一边浅色下只有 **2.16–3.40**（**模型 A**（整块连底压到祖先底）2.16–3.22 /
+ * **模型 B**（字往自己声明的底上拉平）2.24–3.40，两模型别混着读，见 probe-00 §2）、一边没有任何门禁
+ * （`code-contrast/03` 票尾第 8 条记的就是它）。
+ * 这一轮把三处改成**灰底灰字**（与按钮禁用态同一格：`--muted` × `--panel-2` / `--panel`），
+ * 并把"哪些选择器算不可选形态"变成**可对账的数据**。
+ *
+ * **认人键 = 剥注释的选择器**（`contrastRules` 切出来的那个形态，空白已归一）；
+ * `作用域` 只作分组与可读性，**不参与匹配**（这一面只有一条样式块、选择器本身唯一——
+ * 与描边登记簿那条 `(作用域, 选择器)` 的键**故意不同**，那边有 115 条、同名选择器分属不同区块）。
+ *
+ * **四条判据**（本体在 `disabledFormProblems`，红证在文件末尾那条合成用例里）：
+ *   ① **正向**：**不许弱化**的认人面（这条正则 + 本表 `disabled` 类）里出现 `opacity: <1` ⇒ 红；
+ *   ② **反向**：**活规则**（排除 `@keyframes` 帧）里出现 `opacity: <1` 且命中任一嫌疑信号
+ *      （同规则 `cursor: not-allowed`，或类名词法命中）⇒ **必须**落在认人面里（两档类别都算），否则红；
+ *   ③ **双向对账**：本表每条都要在盘上认到人（选择器真的存在），否则红（防死条）；
+ *   ④ 类别表形状（取值在 `CONTRAST_DISABLED_FORM_KINDS` 里、每类至少一条、不重复登记、理由非空）。
+ *
+ * ⚠ **正反两半的认人面不是同一张**（本单的要害，改的时候别合并）：正向面只收 `disabled` 档，
+ * 反向面两档都收——合并成一个的话，`.pin-dim` 这类**登记在案的合法弱化**会被①误判成红。
+ *
+ * **够不着的那 14 条（明写的边界）**：**recon 那一刻**（本单落地前，`probe-00-inventory.py` 的
+ * `RECON_BASELINE`）样式块里 `opacity: <1` 共 **26** 条 = 动画帧 5 条 + 活规则 21 条，
+ * 其中命中嫌疑信号的 **7** 条（本表全在这 7 条里）；**本单落地后现算** = 总 23 / 动画帧 5 /
+ * 活规则 18 / 嫌疑面 4（三处目标不再有 `opacity`，各减 3——**这是改对了的样子，不是探针坏了**）。
+ * 两种读法下"不命中信号"的都是 **14 条**（21 − 7 = 18 − 4）：装饰图标 / 折叠箭头 / 瞬态动画 /
+ * 轻微弱化的次要字（`.welcome-sub` `.92`、`.sugg-count` `.85`）——**它们不在射程**。
+ * **别把"腿绿"读成"全站 `opacity` 都干净了"**——真正的闭合是全量登记（腿⑩），见 `backlog.md` §33
+ * （本单 03 号单开的节；开之前这两处指路是悬空的）。
+ */
+const CONTRAST_DISABLED_FORMS = [
+  ["modules", ".module-card.off", "disabled",
+    "模块卡：当前平台没有这个模块的条目（点它弹「请先切换目标平台」）——虚线描边走 --border 那条，卡面退到 --panel（与所在 .card 同底），卡内文字各自声明色"],
+  ["pins", ".pin-menu-list li.cant", "disabled",
+    "引脚菜单：这根脚接不了这个角色（整行不可点，带「不兼容：…」原因）——与按钮禁用态同一格：底 --panel-2 + 字 --muted"],
+  ["params", ".param-stale", "disabled",
+    "参数卡：main.c 改过、锚可能失效（输入与应用已禁用，带「位置已变」徽章）——卡面本来就是 --panel-2，卡内文字走 --muted，形状信号是 outline 虚线"],
+  ["pins", ".pin-dim", "dim",
+    "SVG 引脚圆点：非文字图形，「这根脚没接」的弱化——引脚本身仍可点，不是不可选形态"],
+  ["wiring", ".wiring-dot-dim", "dim",
+    "接线图图例里「其它接线」的圆点：非文字装饰（底 --border-strong）"],
+  ["wiring", ".wiring-line.wiring-dim", "dim",
+    "接线图未高亮的连线：非文字装饰（SVG stroke）"],
+  ["code", ".code-tab.ro .code-tab-name", "dim",
+    "只读页签的名字：弱化的是「只读」不是「不可用」，页签仍可点（真正的信号是 .code-tab-ro 那个「只读」小标）"],
+];
+
+/** 选择器里的类名命中了哪些嫌疑词（**与探针侧 `probe_lib.class_hint_hits` 同一口径**）。
+ *  命中口径 = 类名**等于**该词、或以 `-<词>` 结尾（`.x-disabled` 算、`.disabledness` 不算）。
+ *  `:not(…)` 先剥掉：`:not(.off)` 是"**非** off"，不是"命中 off"（与 `targetsDisabledState` 同一条纪律）。 */
+function classHintHits(sel, hints = CONTRAST_DISABLED_HINTS) {
+  const bare = sel.replace(/:not\([^()]*\)/g, "");
+  const names = [...bare.matchAll(/\.([A-Za-z][\w-]*)/g)].map((m) => m[1].toLowerCase());
+  return hints.filter((w) => names.some((n) => n === w || n.endsWith("-" + w)));
+}
+
+/** 登记表里这条选择器的类别（不在册 → `null`）。 */
+function disabledFormKind(sel, register = CONTRAST_DISABLED_FORMS) {
+  const row = register.find((r) => r[1] === sel);
+  return row ? row[2] : null;
+}
+
+/** 选择器是否**落在反向认人面里**（`:disabled` / `.disabled` 正则这一半 + 登记表那一半，
+ *  两档类别都算）：反向判据只要求"有人看过、登记过"，不要求它算不可选形态。 */
+function inDisabledFace(sel, register = CONTRAST_DISABLED_FORMS) {
+  return targetsDisabledState(sel) || disabledFormKind(sel, register) !== null;
+}
+
+/** 选择器是否**落在正向认人面里**（正则那一半 + 登记表里类别为 `disabled` 的那些）：
+ *  这一半**不许**出现 `opacity: <1`。`dim` 那档是"允许弱化"——它**不在**正向面里
+ *  （分两半是本单的要害：合成一个判据的话，`.pin-dim` 这类合法弱化会被误判成红）。 */
+function neverDimsForm(sel, register = CONTRAST_DISABLED_FORMS) {
+  return targetsDisabledState(sel) || disabledFormKind(sel, register) === "disabled";
+}
+
+/**
+ * 不可选形态的四条判据（见 `CONTRAST_DISABLED_FORMS` 的注释）。吃源码文本 → 返回问题清单。
+ * `register` / `hints` / `kinds` 可注入（红证要喂坏表）。
+ */
+function disabledFormProblems(source, register = CONTRAST_DISABLED_FORMS,
+  hints = CONTRAST_DISABLED_HINTS, kinds = CONTRAST_DISABLED_FORM_KINDS) {
+  const out = [];
+  const rules = contrastRules(source);
+  const onDisk = rules.map((r) => r.sel);
+  // ④ 类别表形状（照例外表那套：取值、每类至少一条、理由非空、不重复登记）
+  const kindIds = kinds.map(([id]) => id);
+  for (const [id] of kinds) {
+    if (!register.some((r) => r[2] === id)) {
+      out.push(`不可选形态的类别 ${id} 一条登记都没有——认人面退化成摆设`);
+    }
+  }
+  const seen = new Set();
+  for (const row of register) {
+    if (!Array.isArray(row) || row.length !== 4) {
+      out.push(`不可选形态登记项形状不对（应为 [作用域, 选择器, 类别, 理由]）：${JSON.stringify(row)}`);
+      continue;
+    }
+    const [scope, sel, kind, why] = row;
+    if (!kindIds.includes(kind)) {
+      out.push(`不可选形态登记项的类别 ${kind} 不在 CONTRAST_DISABLED_FORM_KINDS 里：${sel}`);
+    }
+    if (!why || !String(why).trim()) {
+      out.push(`不可选形态登记项必须写理由（"它为什么算这一类"）：${sel}`);
+    }
+    if (!scope || !String(scope).trim()) out.push(`不可选形态登记项必须写作用域（分组用）：${sel}`);
+    if (seen.has(sel)) out.push(`同一个选择器在不可选形态登记表里登记了两次：${sel}`);
+    seen.add(sel);
+    // ③ 双向对账（本表 ⊆ 盘上）：改名 / 删规则会让登记项**过期**
+    if (!onDisk.includes(sel)) {
+      out.push(`不可选形态登记表里这条在盘上找不到了（改名 / 删规则？）：${sel}——`
+        + "要么把选择器改回盘上那个形态，要么删掉这一行");
+    }
+  }
+  for (const { sel, body } of rules) {
+    const d = firstDecl(body);
+    const opRaw = d.opacity;
+    const op = opRaw === undefined ? null : Number.parseFloat(opRaw);
+    const dimming = op !== null && Number.isFinite(op) && op < 1;
+    if (!dimming) continue;
+    // ① 正向：**不许弱化**的那一半（正则 + 登记表 `disabled` 类）里不许用 opacity
+    //（文案按"哪一半认到的人"定：正则 vs 登记表）
+    if (neverDimsForm(sel, register)) {
+      const face = targetsDisabledState(sel)
+        ? "禁用态不许用 opacity 表达"                     // 老那半：`:disabled` / `.disabled` 类名
+        : "不可选形态不许用 opacity 表达";                 // 新那半：CONTRAST_DISABLED_FORMS 登记过的
+      out.push(`${face}：${sel}（opacity: ${opRaw}）——`
+        + "灰底灰字（background: var(--panel-2) + color: var(--muted) + border-color: var(--border)，"
+        + "或退到 --panel 那种「与容器同底」的写法）+ 形状信号（虚线 / cursor: not-allowed）"
+        + "才是可现算、可守卫的形态：opacity 的比值取决于它压在谁身上（静态算不出、"
+        + "全站扫描又会被祖先渐变滤掉，见 .scratch/code-contrast/probe-08-disabled-state.mjs）");
+      continue;
+    }
+    // ② 反向：动画帧不是状态，不判；**登记过的**（两档都算）也无话可说；
+    // 剩下的"看起来不可选"的活规则必须登记
+    if (CONTRAST_KEYFRAME_SEL_RE.test(sel)) continue;
+    if (inDisabledFace(sel, register)) continue;
+    const hits = classHintHits(sel, hints);
+    const signals = [];
+    if (d.cursor === "not-allowed") signals.push("同规则 cursor: not-allowed");
+    if (hits.length) signals.push("类名词法命中 " + hits.join("/"));
+    if (!signals.length) continue;
+    out.push(`不可选形态的嫌疑规则没有登记：${sel}（opacity: ${opRaw}，命中 ${signals.join("；")}）——`
+      + "把它登记进 CONTRAST_DISABLED_FORMS：算不可选形态就写 disabled（并改成灰底灰字 / 形状信号），"
+      + "只是合法弱化就写 dim 并说明理由（非文字装饰？仍可点？）。"
+      + "判据宁可过宽：词法是代理信号，命中就得有人看一眼（见 backlog.md §33 的边界）");
+  }
+  return out;
 }
 
 /**
@@ -1614,18 +1818,12 @@ function contrastProblems(source, exceptions = CONTRAST_EXCEPTIONS, families = C
       }
     }
   }
-  // **禁用态的结构判据**（工单 code-contrast/03）：`opacity` 形式的禁用态一律判红。
+  // **禁用态 / 不可选形态的结构判据**（工单 code-contrast/03 立、disabled-forms/01 扩面）：
   // 它为什么不归前五条：那五条都建立在"比值"上，而 `opacity` 的比值静态算不出（见上面那段口径）。
-  for (const { sel, body } of contrastRules(source)) {
-    if (!targetsDisabledState(sel)) continue;
-    const d = firstDecl(body);
-    if ("opacity" in d) {
-      out.push(`禁用态不许用 opacity 表达：${sel}（opacity: ${d.opacity}）——`
-        + "灰底灰字（background: var(--panel-2) + color: var(--muted) + border-color: var(--border)）"
-        + "才是可现算、可守卫的禁用态：opacity 的比值取决于它压在谁身上（静态算不出、"
-        + "全站扫描又会被祖先渐变滤掉，见 .scratch/code-contrast/probe-08-disabled-state.mjs）");
-    }
-  }
+  // ① 认人面（`:disabled` / `.disabled` 正则 + `CONTRAST_DISABLED_FORMS` 登记表）里不许有 `opacity: <1`；
+  // ② 反向：看起来在表达不可选（`cursor: not-allowed` / 类名词法）的活规则必须登记；
+  // ③ 登记表与盘上双向对账；④ 类别表形状。四条都在 `disabledFormProblems` 里。
+  out.push(...disabledFormProblems(source));
   // **形态规则要表态**（同上，第二条结构判据）：涂色的 `button.<形态>` 必须带 `:disabled`。
   out.push(...undeclaredFormRules(source));
   for (const [label, , , kind] of families) {
@@ -2546,6 +2744,76 @@ test("全站推广合成红证：九条腿各自都判得红（防'永远绿'的
   assert.ok(
     !contrastProblems(disBareFormPlain).some((p) => p.includes("没有表态")),
     "不涂色（`background: transparent`）的形态规则也被要求表态了（判据过宽）",
+  );
+  //    (o) **不可选形态**（工单 disabled-forms/01；票面点名的那六条红证）：判据⑥扩面后的四条
+  //        各判一次红，另加三条**边界**证明它没过宽（动画帧 / `:not(…)` / 登记为 `dim` 的条目）。
+  //        每条都先断言锚点还在、注入真的生效——锚漂了要当场报，别让它静默空转。
+  assert.deepEqual(disabledFormProblems(html), [], "盘上本来就不该有不可选形态的问题");
+  //        n1 把 `opacity: .55` 放回 `.module-card.off` → 正向红（它就是本单要治的那个形态）
+  const dfAnchor = "  .module-card.off { background: var(--panel); border-style: dashed; cursor: not-allowed; }";
+  assert.ok(html.includes(dfAnchor), "锚点变了（.module-card.off 的那条形态规则）—— 这条自检会静默空转");
+  const dfOpacity = html.replace(dfAnchor,
+    "  .module-card.off { opacity: .55; background: var(--panel); border-style: dashed; cursor: not-allowed; }");
+  assert.notEqual(dfOpacity, html, "注入没生效（锚点没命中）");
+  assert.ok(
+    contrastProblems(dfOpacity).some((p) => p.includes("不可选形态不许用 opacity 表达")
+      && p.includes(".module-card.off")),
+    "把 opacity 放回 .module-card.off 之后没被判出（正向判据在空转）",
+  );
+  //        n2 注入 `.tmp-probe.off { opacity: .4 }`（不在表里、**词法**命中）→ 反向红
+  const dfHinted = html.replace("<style>", "<style>\n  .tmp-probe.off { opacity: .4; }");
+  assert.notEqual(dfHinted, html, "注入没生效（找不到 <style>）");
+  assert.ok(
+    contrastProblems(dfHinted).some((p) => p.includes(".tmp-probe.off") && p.includes("没有登记")),
+    "类名词法命中（.off）的 opacity 没被判出（反向判据在空转）",
+  );
+  //        n3 注入 `.tmp-probe.k { opacity: .4; cursor: not-allowed }`（词法不命中、**光标**命中）→ 反向红
+  const dfCursor = html.replace("<style>", "<style>\n  .tmp-probe.k { opacity: .4; cursor: not-allowed; }");
+  assert.notEqual(dfCursor, html, "注入没生效（找不到 <style>）");
+  assert.ok(
+    contrastProblems(dfCursor).some((p) => p.includes(".tmp-probe.k") && p.includes("cursor: not-allowed")),
+    "同规则 cursor: not-allowed 的 opacity 没被判出（反向判据只认了词法那一半）",
+  );
+  //        n4 表里塞一条盘上不存在的选择器 → 双向对账红（死条会烂在表里）
+  assert.ok(
+    disabledFormProblems(html, [...CONTRAST_DISABLED_FORMS, ["probe", ".tmp-probe-nope", "dim", "盘上没有这条"]])
+      .some((p) => p.includes(".tmp-probe-nope") && p.includes("找不到了")),
+    "登记表里塞一条盘上没有的选择器没被判出（双向对账在空转）",
+  );
+  //        n5 两条**边界**：`:not(.off)` 里的 `opacity` 与 `@keyframes` 帧里的 `opacity` 都**不**红
+  //        （前者是"非 off"，后者是动画的一拍——都不是"某个状态下的形态"）
+  const dfNot = html.replace("<style>", "<style>\n  .tmp-probe:not(.off) { opacity: .4; }");
+  assert.notEqual(dfNot, html, "注入没生效（找不到 <style>）—— 这条边界会静默空转");
+  assert.ok(
+    contrastRules(dfNot).some((r) => r.sel === ".tmp-probe:not(.off)"),
+    "注入的 `:not(.off)` 规则没被切出来——下一条断言会静默空转",
+  );
+  assert.ok(
+    !contrastProblems(dfNot).some((p) => p.includes(".tmp-probe:not")),
+    "`:not(.off)`（非 off）里的 opacity 被误判成不可选形态了",
+  );
+  const dfKf = html.replace("<style>",
+    "<style>\n  @keyframes tmp-kf { from { opacity: 0; } to { opacity: 1; } }");
+  assert.notEqual(dfKf, html, "注入没生效（找不到 <style>）—— 这条边界会静默空转");
+  assert.ok(
+    contrastRules(dfKf).some((r) => r.sel === "from" && r.body.includes("opacity")),
+    "注入的 @keyframes 帧没被切成 `from` 规则——下一条断言会静默空转（这条边界是本单新加的坑）",
+  );
+  assert.ok(
+    !contrastProblems(dfKf).some((p) => p.includes("from") && p.includes("没有登记")),
+    "@keyframes 帧里的 opacity 被当成活规则判了（动画不是状态）",
+  );
+  //        n6 边界：登记为 `dim` 的条目带 `opacity` **不**红（两半认人面不是同一张）；
+  //        把 `.pin-dim` 改登成 `disabled` → 当场红（证明"类别那一格"真的被读了，不是摆设）
+  assert.ok(
+    !contrastProblems(html).some((p) => p.includes(".pin-dim")),
+    "登记为 dim 的 .pin-dim 带 opacity 被误判成红（正反两半的认人面被合成一个了）",
+  );
+  const dfReKind = CONTRAST_DISABLED_FORMS.map((r) =>
+    (r[1] === ".pin-dim" ? [r[0], r[1], "disabled", r[3]] : r));
+  assert.ok(
+    disabledFormProblems(html, dfReKind).some((p) => p.includes(".pin-dim")),
+    "把 .pin-dim 从 dim 改登成 disabled 之后没红（类别那一格没被读）",
   );
   // ⑨ 复原后转绿（九条腿都回到空/子集）
   assert.deepEqual(bareFontSizesInScope(html, "hwcheck"), []);

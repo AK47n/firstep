@@ -609,7 +609,12 @@ test("本平台没有条目的器件：点名「无法检测」，不静默省�
   await page.click('[data-hwcheck-platform="stm32"]');
   await page.fill("#hwcheck-device-search", "sr04");
   await page.waitForSelector('#hwcheck-device-grid [data-add="sr04"]');
-  await page.click('#hwcheck-device-grid [data-add="sr04"]');
+  // ⚠ `force: true` 是**必须的**（工单 disabled-forms/01）：这张卡现在带 `aria-disabled="true"`
+  // （读屏要念出"不可用"），而 Playwright 的 actionability 检查把 `aria-disabled` 当"不可点"——
+  // 不 force 就 30 s 超时（本机实测：`element is not enabled`）。**真人点击与键盘回车都不受影响**
+  // （`aria-disabled` 不像 `disabled` 属性那样拦事件，产品侧照旧弹那句解释）——这条用例要证的
+  // 正是"点了会点名「无法检测」"，所以这里放行到点击那一步，断言一个字不放宽。
+  await page.click('#hwcheck-device-grid [data-add="sr04"]', { force: true });
   await page.waitForSelector("#hwcheck-device-missing .hwcheck-warn");
   const missing = await page.textContent("#hwcheck-device-missing");
   assert.ok(missing.includes("sr04") && missing.includes("无本平台版本")

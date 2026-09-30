@@ -494,7 +494,9 @@
                  transition: border-color var(--dur-fast) var(--ease-ui),
                              transform var(--dur-fast) var(--ease-ui); }
   .module-card:hover { border-color: var(--accent); transform: translateY(-1px); }
-  .module-card.off { opacity: .55; cursor: not-allowed; }
+  /* 不可选形态（工单 disabled-forms/01）：不再用 opacity 把整块拉淡（浅色下说明字只有 2.16–2.24，
+     低于 AA）——改成"退到背景里"的灰底 + 虚线形状信号；文字色由卡内各元素自己声明（.mc-desc 走 --muted）。 */
+  .module-card.off { background: var(--panel); border-style: dashed; cursor: not-allowed; }
   .module-card.off:hover { border-color: var(--border); transform: none; }
   .module-card .mc-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .module-card .mc-head .slug { font-weight: 600; font-family: var(--mono); font-size: var(--fs-note);
@@ -519,6 +521,10 @@
   .module-card .mc-info { flex: none; margin-left: auto; border: 1px solid var(--border);
                           background: var(--panel); color: var(--accent-text); font-size: var(--fs-tag);
                           padding: 1px 7px; border-radius: var(--radius-full); cursor: pointer; }
+  /* off 卡上的「详情」按钮：卡面已退到 --panel，按钮得让到 --panel-2（不然糊成一片）——
+     它**仍是可用**的（看模块说明与"能不能用"无关），不许跟着一起弱化。
+     位置在这条 hover 之前是有意的：两条同权重 (0,3,0)，靠后者胜，悬停反馈要留给 hover。 */
+  .module-card.off .mc-info { background: var(--panel-2); }
   .module-card .mc-info:hover { border-color: var(--accent); background: var(--accent-dim); }
   /* 模块详情弹窗（工单 module-info-dialog/01）：复用 .ref-files-overlay 模式
      （遮罩 + 居中卡 + ✕），新建 module-info-* 前缀——不动既有 ref-files 类 */
@@ -852,7 +858,9 @@
                      font-family: var(--mono); }
   .param-card .btn-params-apply { white-space: nowrap; }
   .param-hint { font-size: var(--fs-note); color: var(--muted); }
-  .param-stale { opacity: .65; }
+  /* 参数卡锚失效（工单 disabled-forms/01）：去掉 opacity .65（提示行浅色只有 2.59–2.65），
+     卡面本来就是 --panel-2、卡内文字各自声明色；形状信号用 outline 虚线（不吃布局、不入描边登记簿）。 */
+  .param-stale { outline: 1px dashed var(--warn-border); }
   .param-stale-badge { background: var(--warn-dim); color: var(--warn-text);
                      font-size: var(--fs-tag); padding: 1px var(--space-2); }
   .btn-params-apply { font-size: var(--fs-tag); padding: 2px 10px; }
@@ -1790,8 +1798,11 @@
   .pin-menu-list li { padding: 6px 14px; border-bottom: 1px solid var(--border); }
   .pin-menu-list li:last-child { border-bottom: none; }
   .pin-menu-list li.can { cursor: pointer; }
-  .pin-menu-list li.can:hover { background: var(--panel-2); }
-  .pin-menu-list li.cant { opacity: .5; }
+  .pin-menu-list li.can:hover { background: var(--accent-dim); }
+  /* 不可选行（工单 disabled-forms/01）：与按钮禁用态**同一对色**（--panel-2 底 + --muted 字，浅 5.25 /
+     暗 5.67），不再用 opacity .5；"不可点"由 cursor 与既有的「不兼容：…」原因行承担。
+     可绑行 hover 用 --accent-dim（不再与不可选行的静底同色——否则悬停读起来像"这行也不能点"）。 */
+  .pin-menu-list li.cant { background: var(--panel-2); color: var(--muted); cursor: not-allowed; }
   .pin-menu-list li .why, .pin-menu-list li .fam { display: block; font-size: var(--fs-tag);
                                                    margin-top: var(--space-1); }
   .pin-menu-list li .why { color: var(--muted); }

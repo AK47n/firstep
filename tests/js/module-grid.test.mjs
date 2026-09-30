@@ -81,10 +81,17 @@ test("moduleGridHTML 卡片结构 + 平台置灰", () => {
   assert.equal((out.match(/class="module-card off"/g) || []).length, 1);
   assert.equal(out.includes("data-add=\"oled-display\""), true);
   assert.equal(out.includes("需切换平台"), true);
+  // 不可选形态的语义由 aria 承担（工单 disabled-forms/01）：类名**不改**（它表示"这个组合不成立"），
+  // 但读屏要能听到"不可用"——卡片仍可聚焦、仍可点（点了弹解释），所以是 aria-disabled 不是 disabled。
+  assert.equal((out.match(/aria-disabled="true"/g) || []).length, 1);
   const out3 = moduleGridHTML(MODULES, [], "", "mspm0");
   // motor-driver 在 mspm0 无平台条目 → off
   assert.equal((out3.match(/class="module-card off"/g) || []).length, 1);
+  assert.equal((out3.match(/aria-disabled="true"/g) || []).length, 1);
   assert.equal(out3.includes("需切换平台"), true);
+  // 全都可选时一个 aria-disabled 都不许有（别把"可用"也标成不可用）
+  const allOk = MODULES.map((m) => ({ ...m, platforms: { ...(m.platforms || {}), stm32: { files: [] } } }));
+  assert.equal((moduleGridHTML(allOk, [], "", "stm32").match(/aria-disabled/g) || []).length, 0);
 });
 
 test("moduleGridHTML 徽章与描述", () => {
