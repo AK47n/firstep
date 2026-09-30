@@ -1,8 +1,9 @@
 # 读数：probe-07-rendered-sweep
 # 命令：node .scratch\light-contrast\probe-07-rendered-sweep.mjs
 # 工作树：C:\Users\luoji\Desktop\firstep
-# 开始：2026-09-30T13:51:26+08:00
+# 开始：2026-09-30T13:55:32+08:00
 # 退出码：0
+口径（从守卫源码解析）：小字 ≥ 4.5 / 大字（≥24px 或 ≥18.66px+bold）≥ 3
 
 ===== light =====
   generate   有文字元素 1207　不达标 2

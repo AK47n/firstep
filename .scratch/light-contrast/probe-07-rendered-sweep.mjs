@@ -13,13 +13,29 @@
 // 跑法（仓库根）：
 //     node .scratch/light-contrast/probe-07-rendered-sweep.mjs
 // ⚠ 不要与全量 pytest 同时跑（本机负载下浏览器用例会抖）。
+import { readFileSync } from "node:fs";
 import { chromium } from "playwright";
 import { startServer } from "../../tests/browser/server.mjs";
+
+// 阈值与大字判据**从守卫源码解析**（单源：不另抄一份口径——本仓纪律"注释里的数按脚本复算"）。
+const GUARD = readFileSync(new URL("../../tests/js/css-tokens.test.mjs", import.meta.url), "utf8");
+const grab = (re, what) => {
+  const m = GUARD.match(re);
+  if (!m) throw new Error("守卫里解析不到 " + what + "——口径变了就改这里");
+  return m;
+};
+const TH = grab(/const CONTRAST_THRESHOLDS = \{([^}]*)\};/, "CONTRAST_THRESHOLDS");
+const SMALL = Number(/small:\s*([0-9.]+)/.exec(TH[1])[1]);
+const LARGE = Number(/large:\s*([0-9.]+)/.exec(TH[1])[1]);
+const LT = grab(/const LARGE_TEXT = \{([^}]*)\};/, "LARGE_TEXT");
+const LARGE_PX = Number(/px:\s*([0-9.]+)/.exec(LT[1])[1]);
+const BOLD_PX = Number(/bold_px:\s*([0-9.]+)/.exec(LT[1])[1]);
 
 const TABS = ["generate", "hwcheck", "settings", "guide", "changelog", "code",
   "master", "library", "reference", "pdf", "md", "topic"];
 
-const SWEEP = (TABS) => {   // 参数化：page.evaluate 里看不到模块作用域的常量
+const SWEEP = (payload) => {   // 参数化：page.evaluate 只吃**一个**入参（且看不到模块作用域）
+  const { tabs: TABS, th: THRESH } = payload;
   const lin = (v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
   const lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
   const ratio = (a, b) => { const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
@@ -79,7 +95,7 @@ const SWEEP = (TABS) => {   // 参数化：page.evaluate 里看不到模块作�
       const fgEff = fg[3] < 1 ? [0, 1, 2].map((i) => Math.round(fg[3] * fg[i] + (1 - fg[3]) * bg[i])) : fg.slice(0, 3);
       const px = parseFloat(cs.fontSize);
       const bold = Number(cs.fontWeight) >= 700;
-      const need = (px >= 24 || (px >= 18.66 && bold)) ? 3.0 : 4.5;
+      const need = (px >= THRESH.largePx || (px >= THRESH.boldPx && bold)) ? THRESH.large : THRESH.small;
       const r = ratio(fgEff, bg);
       if (r < need - 1e-9) {
         bad.push({ sel: path(el), ratio: Math.round(r * 100) / 100, need, px,
@@ -99,13 +115,16 @@ try {
   page.on("dialog", (d) => d.dismiss());
   await page.goto(server.url + "/", { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(800);
+  console.log("口径（从守卫源码解析）：小字 ≥ " + SMALL + " / 大字（≥" + LARGE_PX + "px 或 ≥"
+    + BOLD_PX + "px+bold）≥ " + LARGE);
   let grand = 0;
   for (const theme of ["light", "dark"]) {
     await page.evaluate((t) => { document.documentElement.dataset.theme = t; }, theme);
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.evaluate((t) => { document.documentElement.dataset.theme = t; }, theme);
     await page.waitForTimeout(600);
-    const data = await page.evaluate(SWEEP, TABS);
+    const data = await page.evaluate(SWEEP, { tabs: TABS,
+    th: { small: SMALL, large: LARGE, largePx: LARGE_PX, boldPx: BOLD_PX } });
     console.log(`\n===== ${theme} =====`);
     for (const t of data.tabs) {
       if (t.missing || t.panel === false) { console.log(`  ${t.tab.padEnd(11)}（没找到页签按钮 / 面板）`); continue; }
