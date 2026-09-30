@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=769ab934eca359bb8e9a6a37948ead0f70bcd425 -->
+<!-- changelog-auto: last-commit=5a21b4a9544fde81442811c4389ff0c33907972a -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -6,6 +6,7 @@
 
 ## 2026-09-30
 - 12:42 浅色调色板 01：对比度契约变成可对账的数据 + 守卫腿⑧ + 跨语言镜像（light-contrast/01）
+- 13:18 浅色调色板 02：六族 -text 令牌落地 + 223 处迁移 + 渐变盲区修补（light-contrast/02）
 
 ## 2026-09-29
 - 12:40 ui-density-sitewide/11：2c 彻底版（真树 + 逐层 LCS 对齐，四条自证随读数跑）
