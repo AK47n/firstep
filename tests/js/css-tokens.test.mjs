@@ -932,6 +932,15 @@ function actionWeightProblems(css) {
 //   2. 阈值按该规则自己的 `font-size` / `font-weight` 定（≥24px 或 ≥18.66px+bold ⇒ 3.0，否则 4.5）；
 //   3. 认人键 = `(主题, 剥注释后的选择器)`；解析面 = **剥掉 CSS 注释的 `<style>` 块**
 //      （注释里含 `{}` 会把朴素切分带偏，注释正文里的伪声明也会骗过判据）。
+//
+// **口径更正（工单 code-contrast/01）：几何**——代码页的高亮层**压在字上**（真像素实测，
+// 见 `CODE_LAYERS` 的注释），所以族面的比值对 `over` 层是
+// `contrast(over(tint,fg), over(tint,base))`，不是"文字压在合成底上"。
+// **边界（明写）**：口径是**每层单独**算；真实使用里层会叠（双击选词 = 词命中 .12 + 选区，
+// 合成 alpha = `1-∏(1-α)`）。读数量过（令牌按单层解好之后，见 probe-00 §6）：
+// 落定档（选区 .20 / 当前命中 .24）= 叠词命中 **浅 4.15 / 暗 4.02**、叠搜索命中 浅 3.75 / 暗 3.55、
+// 叠当前命中 浅 3.42 / 暗 3.11；层侧不动的现状是 4.36 / 4.31、3.97 / 3.80、**2.77 / 2.53**。
+// **不在判据内**：要收它得让所有高亮淡到几乎看不见（选区 α ≈ .12 量级），属另一轮的定价。
 // ===========================================================================
 
 /** 阈值两档（小字 4.5 / 大字 3.0）。 */
@@ -951,6 +960,13 @@ const CONTRAST_BASE_TOKEN = "--panel";
  *  改令牌值不动它；**新增/删掉这类规则**才动——那时同步改这里并在票尾写清。 */
 const CONTRAST_PAIR_COUNT = 376;
 
+/** 族面的**总格数**（**冻结**：`contrastFamilyCells` 现算出来的格子总数）。
+ *  为什么冻结它：族面判据只把**最坏格**纳入对账，一旦有人从 `CODE_LAYERS` 或某条族里
+ *  悄悄摘掉一层/一个令牌，最坏格会**变好**——腿照样绿，而它其实少算了一整排。
+ *  复算：`python .scratch/code-contrast/probe-00-inventory.py` 的 §8 直接打印这个数
+ *  （`tests/test_contrast_mirror.py` 每跑一次也会现算复核一遍）。 */
+const CONTRAST_FAMILY_CELL_COUNT = 168;
+
 /**
  * 例外**两类**。`text` 是族表里的**阈值选取**（默认类），不是例外类别——
  * 机械抽取出来的每一对都算它、**不用登记**；能进例外表的只有：
@@ -969,16 +985,37 @@ const CONTRAST_FAMILY_KINDS = ["text", "nontext"];
 const CONTRAST_TOKEN_KINDS = [...CONTRAST_FAMILY_KINDS, "skip"];
 
 /**
- * 代码页那几层底：`[底名, rgba(var(--accent-rgb), a) 的 alpha]`（alpha = null 表示原样）。
- * `--tok-*` 族与选区、命中高亮都压在这几层上（`probe-01` §8 量过整张矩阵）。
+ * 代码页高亮色的 **rgb 令牌**（配方 `<底>+hl.<角色>` 用它）。
+ * **与探针的 `probe_lib.CONTRAST_CODE_HL_TOKEN` 同源**（`tests/test_contrast_mirror.py` 钉住）。
+ */
+const CONTRAST_CODE_HL_TOKEN = "--code-hl-rgb";
+
+/**
+ * 代码页上「文字会压到的底」：`[名字, alpha, 几何]`。**七层**（工单 code-contrast/01）。
+ *
+ * 名字用**语义**（`hl.选区`）而不是 alpha 数字——改 alpha 不该动认人键。
+ * `alpha = null`：`--code-bg` 那条是底本身；`+--danger-dim` 那条用令牌自带的 alpha。
+ *
+ * **几何**（`behind` = 垫在字下 / `over` = 压在字上）是真像素实测出来的
+ * （`.scratch/code-contrast/probe-02-paint-order.mjs`）：选区（textarea，z-index 1）与
+ * 标记层（`.code-marks`，z-index 0）**都画在 `.code-hl` 文字之上**，半透明色把**字形本身**
+ * 也染了（浅色实测 `#1a7f37 → #118665`，正是"青压在字上"的合成值）；只有行元素自己那两层
+ * （`.active` / `.flash`）垫在字下。所以 `over` 层的判据是
+ * `contrast(over(tint,fg), over(tint,base))`——**比"压在合成底上"更严**。
  */
 const CODE_LAYERS = [
-  ["--code-bg", null],
-  ["--code-bg+accent.07", 0.07],
-  ["--code-bg+accent.12", 0.12],
-  ["--code-bg+accent.18", 0.18],
-  ["--code-bg+accent.32", 0.32],
+  ["--code-bg", null, "behind"],
+  ["--code-bg+hl.当前行", 0.07, "behind"],
+  ["--code-bg+hl.词命中", 0.12, "over"],
+  ["--code-bg+hl.搜索命中", 0.18, "over"],
+  ["--code-bg+hl.选区", 0.32, "over"],
+  ["--code-bg+hl.当前命中", 0.38, "over"],
+  ["--code-bg+--danger-dim", null, "over"],
 ];
+
+/** 层配方：`<底>+hl.<角色>` / `<底>+<rgba 令牌>`（**与探针的 `probe_lib.LAYER_RE` 逐字同源**）。
+ *  尾段是**角色名**（`选区` / `当前命中`…），只作可读性——**alpha 一律查层表**。 */
+const CONTRAST_LAYER_RE = /^(--[a-z0-9-]+)\+(hl|--[a-z0-9-]+)(?:\..+)?$/;
 
 /**
  * 族表：机械抽取**抓不到**的已知族（它们的底来自祖先或图形属性，不是同规则的 `background:`）。
@@ -986,8 +1023,10 @@ const CODE_LAYERS = [
  * 形状：`[标签, 令牌选取, 底列表, 类别, 理由]`；令牌选取 = 前缀，或 `=` 开头的精确令牌名。
  */
 const CONTRAST_FAMILIES = [
-  ["--tok-* × 代码底（含 4 层 accent 合成）", "--tok-", CODE_LAYERS.map(([n]) => n), "text",
-    "语法高亮族：本轮只量不修（改它 = 改代码长什么样，属另一件事）。见 probe-01 §8 的整张矩阵"],
+  ["--tok-* × 代码底（含 5 层高亮 + 错误行）", "--tok-", CODE_LAYERS.map(([n]) => n), "text",
+    "语法高亮族：十个令牌 × 七层，**几何感知**（压在字上的层连字形一起染）。见 probe-00 的整张矩阵"],
+  ["--code-text × 括号彩虹底（8 色）", "=--code-text", ["--code-bg+--bracket-rainbow-0", "--code-bg+--bracket-rainbow-1", "--code-bg+--bracket-rainbow-2", "--code-bg+--bracket-rainbow-3", "--code-bg+--bracket-rainbow-4", "--code-bg+--bracket-rainbow-5", "--code-bg+--bracket-rainbow-6", "--code-bg+--bracket-rainbow-7"], "text",
+    "括号彩虹只压括号字形（括号在语法高亮里没有 token 类，字色是 --code-text）——实测全过，登记为覆盖"],
   ["--accent-text 焦点环 / 定位环", "=--accent-text", ["--bg", "--panel", "--panel-2"], "nontext",
     "键盘焦点环与定位环（03 单提到 3:1 以上）：看不见焦点环 = 键盘用户找不到焦点"],
   ["--accent 控件描边 / 语义左条", "=--accent", ["--bg", "--panel", "--panel-2"], "nontext",
@@ -1197,14 +1236,76 @@ function tokenValue(name, theme, tables, seen = []) {
   return resolveToken(raw, theme, tables, [...seen, name]);
 }
 
-/** 底的配方名 → 颜色：`--code-bg+accent.12` = `rgba(var(--accent-rgb), .12)` 叠在 `--code-bg` 上。 */
-function layerColor(name, theme, tables) {
-  const m = /^(.*)\+accent\.(\d+)$/.exec(name);
-  if (!m) return tokenValue(name, theme, tables);
+/** 层名 → 表里登记的 alpha（`--code-bg` 那种"底本身" → `null`）。 */
+function layerAlphaOf(name, layers = CODE_LAYERS) {
+  const row = layers.find(([n]) => n === name);
+  return row && typeof row[1] === "number" ? row[1] : null;
+}
+
+/**
+ * 层名 → 几何。
+ *
+ * · 表里登记过的按表（**表是已知层的单源**）；
+ * · **带 tint 的配方**（`<底>+hl…` / `<底>+--某令牌`）但表里没有 → 按 **`over`**：
+ *   没分类的高亮一律假设它**压在字上**。默认取严格那一侧是这一轮买的教训——
+ *   乐观的默认（`behind`）会让"没登记进层表的一层"静默变好看：括号彩虹 8 层就是这么错的
+ *   （按 `behind` 算 7.70–10.03，实测压在字上是 **6.57–7.37**，偏乐观 ≈2.5 且不报红）；
+ * · 其余（纯令牌名、根本没有 tint）→ `behind`（没有 tint 就没有染色这件事）。
+ */
+function layerGeometry(name, layers = CODE_LAYERS) {
+  const row = layers.find(([n]) => n === name);
+  if (row) return row[2];
+  return CONTRAST_LAYER_RE.test(name) ? "over" : "behind";
+}
+
+/**
+ * 层名 → `{ base, bg, tint, geometry }`。
+ * · `base` = 底令牌本身（不过 tint）；`bg` = 合成后的**不透明**底；
+ * · `tint` = 层自己的 rgba（不是层配方的名字 → `null`）；`geometry` = `behind` / `over`。
+ *
+ * ⚠ **alpha 不在名字里**：尾段只是**角色名**（`hl.当前行`），alpha 查 `CODE_LAYERS` 那一行。
+ * 要临时改档就换层表（`layers` 形参）——名字里写 `.20` 不算数（省得两侧各写一套数字谓词：
+ * Python 的 `str.isdigit()` 认全角/阿拉伯数字，`/^\d+$/` 不认，那种分叉会让同一条层名
+ * 在两侧算出不同的格）。
+ */
+function layerParts(name, theme, tables, layers = CODE_LAYERS) {
+  const row = layers.find(([n]) => n === name);
+  const m = CONTRAST_LAYER_RE.exec(name);
+  if (!m) {
+    const v = tokenValue(name, theme, tables);
+    return { base: v, bg: v, tint: null, geometry: "behind" };
+  }
   const base = tokenValue(m[1], theme, tables);
-  const accent = tokenValue("--accent", theme, tables);
-  if (!base || !accent) return null;
-  return compositeOver([accent[0], accent[1], accent[2], Number(`0.${m[2]}`)], base.slice(0, 3));
+  let tint = null;
+  if (m[2] === "hl") {
+    const hl = tokenValue(CONTRAST_CODE_HL_TOKEN, theme, tables);
+    const alpha = layerAlphaOf(name, layers);
+    if (hl && alpha !== null) tint = [hl[0], hl[1], hl[2], alpha];
+  } else {
+    tint = tokenValue(m[2], theme, tables);   // `--danger-dim` 这类自带 alpha 的令牌
+  }
+  const geometry = layerGeometry(name, layers);
+  if (!base || !tint) return { base, bg: null, tint, geometry };
+  return { base, bg: compositeOver(tint, base.slice(0, 3)), tint, geometry };
+}
+
+/** 层的**不透明**合成底（旧调用点沿用这个名字；不是层配方 = 普通令牌取值）。 */
+function layerColor(name, theme, tables, layers = CODE_LAYERS) {
+  return layerParts(name, theme, tables, layers).bg;
+}
+
+/**
+ * **几何感知**的层内比值。
+ * · `behind` 层：字形不动，只换底 → `contrast(fg, bg)`；
+ * · `over` 层：字形先落到**不过 tint 的底**上、再被同一层半透明色染一遍
+ *   → `contrast(over(tint, over(fg, base)), bg)`（`compositeOver` 顺手把带 alpha 的字色收进来）。
+ */
+function contrastOnLayer(fg, name, theme, tables, layers = CODE_LAYERS) {
+  const { base, bg, tint, geometry } = layerParts(name, theme, tables, layers);
+  if (!fg || !bg) return null;
+  let fgEff = base ? compositeOver(fg, base.slice(0, 3)) : fg.slice(0, 3);
+  if (geometry === "over" && tint) fgEff = compositeOver(tint, fgEff);
+  return contrastRatio(fgEff, bg);
 }
 
 /** 规则里声明的底（渐变 / none / transparent / url → `null` = "底不在这条规则里"）。 */
@@ -1260,24 +1361,25 @@ function contrastPairsFromStylesheet(source) {
 }
 
 /** 族表展开成的逐格检查：`[{ theme, label, token, layer, ratio, need, kind }]`。
- *  `onlyLabel` 只取某一族（判据按族逐条对账用）；`families` 可注入（红证要喂坏族表）。 */
-function contrastFamilyCells(source, onlyLabel = null, families = CONTRAST_FAMILIES) {
+ *  `onlyLabel` 只取某一族（判据按族逐条对账用）；`families` / `layers` 可注入（红证要喂坏表）。 */
+function contrastFamilyCells(source, onlyLabel = null, families = CONTRAST_FAMILIES,
+  layers = CODE_LAYERS) {
   const css = contrastCss(source);
   const tables = contrastTokenTables(css);
   const names = Object.keys(tables.dark);
   const out = [];
-  for (const [label, pick, layers, kind, why] of families) {
+  for (const [label, pick, famLayers, kind, why] of families) {   // ⚠ 别叫 `layers`：会盖住上面那个形参
     if (onlyLabel !== null && label !== onlyLabel) continue;
     const tokens = pick.startsWith("=") ? [pick.slice(1)] : names.filter((n) => n.startsWith(pick));
     for (const theme of ["dark", "light"]) {
       for (const token of tokens) {
-        for (const layer of layers) {
+        for (const layer of famLayers) {
           const fg = tokenValue(token, theme, tables);
-          const bg = layerColor(layer, theme, tables);
-          if (!fg || !bg) continue;
+          const r = contrastOnLayer(fg, layer, theme, tables, layers);
+          if (!fg || r === null) continue;
           out.push({
             theme, label, token, layer, kind, why,
-            ratio: contrastRatio(compositeOver(fg, bg), bg),
+            ratio: r,
             need: kind === "nontext" ? CONTRAST_THRESHOLDS.large : CONTRAST_THRESHOLDS.small,
           });
         }
@@ -1332,19 +1434,19 @@ function unbasedColorTokens(source) {
 }
 
 /** 令牌面展开成的逐格检查：`[{ theme, literal, layer, ratio, need, kind }]`。 */
-function contrastTokenCells(source, table = CONTRAST_TOKEN_BASES) {
+function contrastTokenCells(source, table = CONTRAST_TOKEN_BASES, layers = CODE_LAYERS) {
   const css = contrastCss(source);
   const tables = contrastTokenTables(css);
   const out = [];
-  for (const [literal, layers, kind] of table) {
+  for (const [literal, layersOfToken, kind] of table) {
     for (const theme of ["dark", "light"]) {
-      for (const layer of layers) {
+      for (const layer of layersOfToken) {
         const fg = resolveToken(literal, theme, tables);
-        const bg = layerColor(layer, theme, tables);
-        if (!fg || !bg) continue;
+        const r = contrastOnLayer(fg, layer, theme, tables, layers);
+        if (!fg || r === null) continue;
         out.push({
           theme, literal, layer, kind,
-          ratio: contrastRatio(compositeOver(fg, bg), bg),
+          ratio: r,
           need: kind === "nontext" ? CONTRAST_THRESHOLDS.large : CONTRAST_THRESHOLDS.small,
         });
       }
@@ -1365,11 +1467,11 @@ const CONTRAST_EXCEPTIONS = [
   ["dark", "令牌：var(--accent-dim)", "debt", "最坏格压 --code-bg：1.23，低于 3.0（非文字图形 3:1）——代码 gutter 的折叠占位字形（装饰性，alpha .12 叠在代码底上）", 1.23],
   ["dark", "令牌：var(--border-strong)", "debt", "最坏格压 --panel：1.76，低于 3.0（非文字图形 3:1）——装饰分隔符 ·（描边色当字形用）：非文字档 3:1", 1.76],
   ["dark", "令牌：#fff", "debt", "最坏格压 --warn：2.19，低于 4.5（文字 4.5:1）——语义实心底上的白字（.env-badge）：底不是卡片，而是那三种实心语义色", 2.19],
-  ["dark", "族：--tok-* × 代码底（含 4 层 accent 合成）", "debt", "最坏格 --tok-pre on --code-bg+accent.32：3.05，低于 4.5（文字 4.5:1）——语法高亮族：本轮只量不修（改它 = 改代码长什么样，属另一件事）。见 probe-01 §8 的整张矩阵", 3.05],
+  ["dark", "族：--tok-* × 代码底（含 5 层高亮 + 错误行）", "debt", "最坏格 --tok-pre on --code-bg+hl.当前命中：3.04，低于 4.5（文字 4.5:1）——语法高亮族：十个令牌 × 七层，**几何感知**（压在字上的层连字形一起染）。见 probe-00 的整张矩阵", 3.04],
   ["light", "#main-c::selection", "skip", "选区反白块不是「文字压底」：静态口径不适用（跳过判据，只留登记）", 1.38],
   ["light", "令牌：var(--accent-dim)", "debt", "最坏格压 --code-bg：1.15，低于 3.0（非文字图形 3:1）——代码 gutter 的折叠占位字形（装饰性，alpha .12 叠在代码底上）", 1.15],
   ["light", "令牌：var(--border-strong)", "debt", "最坏格压 --bg：1.89，低于 3.0（非文字图形 3:1）——装饰分隔符 ·（描边色当字形用）：非文字档 3:1", 1.89],
-  ["light", "族：--tok-* × 代码底（含 4 层 accent 合成）", "debt", "最坏格 --tok-kw on --code-bg+accent.32：2.22，低于 4.5（文字 4.5:1）——语法高亮族：本轮只量不修（改它 = 改代码长什么样，属另一件事）。见 probe-01 §8 的整张矩阵", 2.22],
+  ["light", "族：--tok-* × 代码底（含 5 层高亮 + 错误行）", "debt", "最坏格 --tok-kw on --code-bg+hl.当前命中：2.07，低于 4.5（文字 4.5:1）——语法高亮族：十个令牌 × 七层，**几何感知**（压在字上的层连字形一起染）。见 probe-00 的整张矩阵", 2.07],
   ["light", "族：--accent 控件描边 / 语义左条", "debt", "最坏格 --accent on --panel-2：2.70，低于 3.0（非文字图形 3:1）——控件普通描边与语义左条：装饰性强于信息性，**大面积改深会动整页观感**——记债不修（03 单的判断）", 2.7],
 
 ];
@@ -1383,7 +1485,7 @@ const CONTRAST_EXCEPTIONS = [
  * 只做前一半的话，表会烂成"盘上修好了、表里还留着一堆过期债务"。
  */
 function contrastProblems(source, exceptions = CONTRAST_EXCEPTIONS, families = CONTRAST_FAMILIES,
-  tokenTable = CONTRAST_TOKEN_BASES) {
+  tokenTable = CONTRAST_TOKEN_BASES, layers = CODE_LAYERS) {
   const out = [];
   const reg = new Map();
   for (const e of exceptions) {
@@ -1439,7 +1541,23 @@ function contrastProblems(source, exceptions = CONTRAST_EXCEPTIONS, families = C
     check(p.theme, p.sel, p.ratio, p.need, `${p.sel}（${p.fgHex} on ${p.bgHex}）`);
   }
   // 族面的一次性展开（**算一次**给所有族用：按族各算一遍会把整个抽取面重复 N 遍）
-  const familyCells = contrastFamilyCells(source, null, families);
+  const familyCells = contrastFamilyCells(source, null, families, layers);
+  // 族表里的**层名**必须在这两主题下都解得出色：解不出 = 那一格静默消失（判据偏乐观、
+  // 而"最坏格"可能因此换人）。这一条是评审逮到的真洞（`hl.选区.20` 这种名字两侧都不认）。
+  {
+    const css = contrastCss(source);
+    const tables = contrastTokenTables(css);
+    for (const [label, , famLayers] of families) {
+      for (const layer of famLayers) {
+        for (const theme of ["dark", "light"]) {
+          if (!layerColor(layer, theme, tables, layers)) {
+            out.push(`族「${label}」的层「${layer}」在 ${theme} 下解不出色——`
+              + "层名/配方写错了（那一格会静默消失，族的最坏格会偏乐观）");
+          }
+        }
+      }
+    }
+  }
   for (const [label, , , , ] of families) {
     for (const theme of ["dark", "light"]) {
       const cells = familyCells.filter((c) => c.label === label && c.theme === theme);
@@ -1467,7 +1585,7 @@ function contrastProblems(source, exceptions = CONTRAST_EXCEPTIONS, families = C
     if (litSeen.has(literal)) out.push(`令牌表里同一条登记了两次：${literal}（删掉多余那条）`);
     litSeen.add(literal);
   }
-  const tokenCells = contrastTokenCells(source, tokenTable);
+  const tokenCells = contrastTokenCells(source, tokenTable, layers);
   const usedTokens = unbasedColorTokens(source);
   for (const literal of usedTokens) {
     const decl = declared.get(literal);
@@ -1670,8 +1788,17 @@ test("对比度（工单 01）：族的细节矩阵可复算（`--tok-*` 那笔�
   // 族面只把**最坏格**纳入判据（细节矩阵在探针读数里）。这条用例保证"最坏格"本身算得出来、
   // 且有量级——免得族定义写错时，`contrastProblems` 里那句"一格都没算出来"成了唯一防线。
   const cells = contrastFamilyCells(html);
+  assert.equal(cells.length, CONTRAST_FAMILY_CELL_COUNT,
+    `族面现算 ${cells.length} 格（冻结值 ${CONTRAST_FAMILY_CELL_COUNT}）——`
+    + "层表/族表被动过了：**从表里摘掉一层会让最坏格变好、腿却照绿**，所以这里是硬数。"
+    + "确实该改就同步改 CONTRAST_FAMILY_CELL_COUNT 并在票尾写清改了哪张表");
   const tok = cells.filter((c) => c.label.startsWith("--tok-"));
-  assert.equal(tok.length, 100, `--tok-* 族应有 10 令牌 × 5 层 × 2 主题 = 100 格（实际 ${tok.length}）`);
+  assert.equal(tok.length, 10 * CODE_LAYERS.length * 2,
+    `--tok-* 族应有 10 令牌 × ${CODE_LAYERS.length} 层 × 2 主题 = ${10 * CODE_LAYERS.length * 2} 格`
+    + `（实际 ${tok.length}）`);
+  const layers = [...new Set(tok.map((c) => c.layer))];
+  assert.deepEqual(layers, CODE_LAYERS.map(([n]) => n),
+    "--tok-* 族展开的层与 CODE_LAYERS 对不上（层表与族表漂了）");
   const worstLight = tok.filter((c) => c.theme === "light").reduce((a, b) => (b.ratio < a.ratio ? b : a));
   assert.ok(worstLight.ratio < CONTRAST_THRESHOLDS.small,
     "浅色代码底上语法高亮族的已知债不见了？——若真修好了，请把族表与例外表一起改掉");
@@ -2040,6 +2167,44 @@ test("全站推广合成红证：九条腿各自都判得红（防'永远绿'的
   assert.ok(
     contrastProblems(ctPaleTok).some((p) => p.includes("族「--tok-*") && p.includes("与冻结值")),
     "语法高亮族的最坏格改坏之后没被判出（族面判据失效）",
+  );
+  //    (g2) **层表少一层**（本轮补的那层被悄悄摘掉）→ 族的最坏格会**变好**：
+  //         现算值 ≠ 冻结值 → 红；格数也少一排（`CONTRAST_FAMILY_CELL_COUNT` 那条硬数抓它）。
+  const ctFewerLayers = CODE_LAYERS.filter(([n]) => n !== "--code-bg+hl.当前命中");
+  assert.equal(ctFewerLayers.length, CODE_LAYERS.length - 1, "层表锚点变了——这条自检会静默空转");
+  assert.ok(
+    contrastProblems(html, CONTRAST_EXCEPTIONS, CONTRAST_FAMILIES, CONTRAST_TOKEN_BASES, ctFewerLayers)
+      .some((p) => p.includes("族「--tok-*") && p.includes("与冻结值")),
+    "从层表里摘掉一层之后没被判出（族面会在'少算一层'时静默变绿）",
+  );
+  assert.notEqual(contrastFamilyCells(html, null, CONTRAST_FAMILIES, ctFewerLayers).length,
+    CONTRAST_FAMILY_CELL_COUNT, "层表少一层之后格数没变——冻结值那条硬数失去意义");
+  //    (g3) **几何写反**（把压在字上的层改成垫在字下）→ 比值变乐观 → 现算值 ≠ 冻结值 → 红。
+  //         注意**格数不变**：这比"少一层"更隐蔽（口径错，不是表短）。
+  const ctWrongGeom = CODE_LAYERS.map(([n, a, g]) => (n === "--code-bg+hl.当前命中" ? [n, a, "behind"] : [n, a, g]));
+  assert.ok(
+    contrastProblems(html, CONTRAST_EXCEPTIONS, CONTRAST_FAMILIES, CONTRAST_TOKEN_BASES, ctWrongGeom)
+      .some((p) => p.includes("与冻结值")),
+    "几何写反（over → behind）之后没被判出——那会让所有压在字上的层静默变乐观",
+  );
+  //    (g4) **`--code-hl-rgb` 从盘上消失**（令牌改名 / 漏定义）→ 那五层解不出色：
+  //         族面格数塌一块 + 最坏格换人 → 与冻结值不一致 → 红。
+  const ctNoHl = html.replace(/--code-hl-rgb: [^;]+;/g, "");
+  assert.notEqual(ctNoHl, html, "注入没生效（找不到 --code-hl-rgb 的定义行）");
+  assert.ok(contrastFamilyCells(ctNoHl).length < CONTRAST_FAMILY_CELL_COUNT,
+    "代码页高亮色令牌缺失后族面格数没塌——说明那几层根本没进判据（静默空转）");
+  assert.ok(
+    contrastProblems(ctNoHl).some((p) => p.includes("与冻结值")),
+    "代码页高亮色令牌缺失时没被判出（族面最坏格换人却没有对账）",
+  );
+  //    (g5) **族表里的层名解不出色**（配方写错 / 名字多带了一截 alpha）→ 红：
+  //         那一格会**静默消失**、族的最坏格偏乐观（评审逮到的真洞）。
+  const ctBadLayerFamily = CONTRAST_FAMILIES.map((f) => (f[0].startsWith("--tok-*")
+    ? [f[0], f[1], [...f[2], "--code-bg+hl.选区.20"], f[3], f[4]] : f));
+  assert.ok(
+    contrastProblems(html, CONTRAST_EXCEPTIONS, ctBadLayerFamily)
+      .some((p) => p.includes("解不出色")),
+    "族表里塞一个解不出色的层名之后没被判出（那一格会静默消失、最坏格偏乐观）",
   );
   //    (h) 族定义写错（令牌选取命中不到任何令牌）→ 红（否则那条族判据静默空转）
   const ctEmptyFamily = CONTRAST_FAMILIES.map((f) => (f[0] === "--accent-text 焦点环 / 定位环"

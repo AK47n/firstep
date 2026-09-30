@@ -110,12 +110,12 @@ def main() -> None:
         print(f"{c:<12}{L.contrast(rgb, bg_light):>10.3f}{L.contrast(rgb, panel_light):>9.3f}"
               f"{L.contrast(text_light, rgb):>9.2f}{L.contrast(muted_light, rgb):>9.2f}")
 
-    # --- 8. 代码配色族（只量不修） -------------------------------------------
-    print("\n## 8. 代码配色族 `--tok-*` × 代码底（本轮**只量不修**，数字进登记表）\n")
+    # --- 8. 代码配色族（本轮只量不修） -------------------------------------------
+    print("\n## 8. 代码配色族 `--tok-*` × 代码底（00 轮起：**七层 + 几何感知**）\n")
     matrix = L.tok_family_matrix(tok)
     for theme in ("dark", "light"):
         print(f"\n### {theme}\n")
-        layers = [n for n, _ in L.CODE_LAYERS]
+        layers = [n for n, _a, _g in L.CODE_LAYERS]
         print(f"{'令牌':<14}" + "".join(f"{n:>20}" for n in layers))
         for tname in [n for n in tok.names() if n.startswith("--tok-")]:
             cells = [matrix.get((theme, ly, tname)) for ly in layers]

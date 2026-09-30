@@ -1,0 +1,12 @@
+# 读数：after-01-probe-02
+# 命令：node .scratch\code-contrast\probe-02-paint-order.mjs
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-30T20:42:13+08:00
+# 退出码：0
+[light/com] 字形「// 行一：注释（tok-com）」起点 0 长 17；双击后标记数 {"word":0,"hit":0,"current":0}
+[light/str] 字形「"字符串（tok-str）"」起点 53 长 14；双击后标记数 {"word":2,"hit":0,"current":0}
+[light/brace] 括号字色 rgb(31, 35, 40)；标记层 span 数 13
+[dark/com] 字形「// 行一：注释（tok-com）」起点 0 长 17；双击后标记数 {"word":0,"hit":0,"current":0}
+[dark/str] 字形「"字符串（tok-str）"」起点 53 长 14；双击后标记数 {"word":2,"hit":0,"current":0}
+[dark/brace] 括号字色 rgb(226, 232, 240)；标记层 span 数 13
+已落盘 probe-02-shots.json（三个画面各一张 PNG）

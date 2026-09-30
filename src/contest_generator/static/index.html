@@ -151,6 +151,12 @@
        暗色 = 主令牌现值；判据 = 守卫腿⑧ 的令牌面与机械面）。 */
     --accent-text: #00d4ff; --ok-text: #43c455; --warn-text: #e3a341; --danger-text: #ff685e; --info-text: #58a6ff; --purple-text: #b175ff;
     --accent-rgb: 0, 212, 255;
+    /* 代码页高亮色（工单 code-contrast/01）：代码页那几层**压在字上/垫在字下**的淡底统一走它，
+       与全站 accent 解耦——本轮实测它就是「语法色能有多亮」的第一约束（α 越大，压字上的层
+       把字形拉得越狠，比值越低）。**只有高亮填充用它**：`caret-color`、括号描边 ring、
+       滚动条 thumb 仍走 `--accent`（那是控件与前景，不是代码高亮）。
+       判据 = 守卫腿⑧ 的族面（`CODE_LAYERS` 七层，含几何）。 */
+    --code-hl-rgb: 0, 212, 255;
     --accent-hi: #33dcff; --accent-lo: #00b8de;
     --on-accent-deep: #001018; --on-ok: #04170c;
     --ok-fill: linear-gradient(135deg, var(--ok-bright), var(--ok));
@@ -199,6 +205,7 @@
     --accent-text: #006181; --ok-text: #15672d; --warn-text: #7a5100; --danger-text: #a81c25; --info-text: #0755b1; --purple-text: #6840b2;
     /* 主题相关裸色令牌（亮色配套，工单 ux-walkthrough-02/21） */
     --accent-rgb: 0, 150, 199;
+    --code-hl-rgb: 0, 150, 199;   /* 代码页高亮色（工单 code-contrast/01）：浅色 = accent 现值 */
     --accent-hi: #33dcff; --accent-lo: #00b8de;   /* 渐变亮/暗端沿用（深底对比换 accent 主色） */
     --on-accent-deep: #001018; --on-ok: #ffffff;   /* 浅色实心块是暗的 → 块上改白字 */
     /* 浅色 ok 渐变：亮端压到 --ok、暗端到 --ok-text —— 白字两端都过（原渐变两端太接近，没有单色字能同时过） */
@@ -2343,10 +2350,11 @@
   .code-gutter-line .code-fold-arrow:hover { color: var(--accent-text); }
   .code-gutter-ph { color: var(--accent-dim); cursor: pointer; }
   .code-gutter-ph:hover { color: var(--accent-text); }
-  .code-gutter-line.flash { background: var(--accent-dim); color: var(--accent-text); }
+  .code-gutter-line.flash { background: rgba(var(--code-hl-rgb), .12); color: var(--accent-text); }
   /* 当前行（工单 code-viewer-polish/02）：内容行 + 行号同 data 键 active——
-     active = 持续淡色（rgba accent .07 双主题自适应），flash = 瞬态略强
-     （--accent-dim .12）；不新造颜色值（:root 允许 rgba(var(--accent-rgb), a)）。 */
+     active = 持续淡色（`rgba(var(--code-hl-rgb), .07)` 双主题自适应），flash = 瞬态略强
+     （同一令牌 .12）。ⓘ 工单 code-contrast/01 起代码页的这几层淡底统一走
+     `--code-hl-rgb`（代码页高亮色 = 自己的旋钮），不再直接引 accent-rgb。 */
   .code-gutter-line.active { color: var(--accent-text); font-weight: 600; }
   /* 编译错误行号（工单 code-editor-refine/05）：红字加粗 + ● 色点（::after
      拼在行号文本后，right 对齐不换行）；title=错误消息由 JS 设（winRenderGutterErrors），
@@ -2364,13 +2372,13 @@
      无效）；flash = 跳行内容行高亮（整行宽，与 gutter 同排）。 */
   .code-pre-line { display: block; }
   .code-pre-line:empty { min-height: 1.6em; }
-  .code-pre-line.flash { background: var(--accent-dim); }
-  /* 当前行（重设计）：整行淡 accent 底（VSCode active line 观感）；行号
-     accent 加粗（.code-gutter-line.active 同行）。不画左侧 accent 竖线——
+  .code-pre-line.flash { background: rgba(var(--code-hl-rgb), .12); }
+  /* 当前行（重设计）：整行淡代码页高亮底（`--code-hl-rgb` .07，VSCode active line 观感）；
+     行号 accent 加粗（.code-gutter-line.active 同行）。不画左侧 accent 竖线——
      与 textarea 的光标（caret-color: var(--accent)，同为细 accent 竖线）
      过于相像，用户反馈「高亮行首竖线像闪烁光标、视觉不舒服」（原为
      box-shadow: inset 2px 0 0 var(--accent)，已移除）。 */
-  .code-pre-line.active { background: rgba(var(--accent-rgb), .07); }
+  .code-pre-line.active { background: rgba(var(--code-hl-rgb), .07); }
   /* 空态（工单 code-editor-vscode-polish/02）：编辑器空态文本在滚动容器内
      居中——.code-view 是 flex 滚动容器，唯一子元素 margin:auto 双向居中；
      muted 小字 + 留白，观感贴近 VSCode 欢迎页（保持轻量，不引入图标）。 */
@@ -2399,8 +2407,8 @@
     white-space: pre; tab-size: 4; color: var(--code-text); }
   .code-hl-line { display: block; }
   .code-hl-line:empty { min-height: 1.6em; }
-  .code-hl-line.flash { background: var(--accent-dim); }
-  .code-hl-line.active { background: rgba(var(--accent-rgb), .07); }
+  .code-hl-line.flash { background: rgba(var(--code-hl-rgb), .12); }
+  .code-hl-line.active { background: rgba(var(--code-hl-rgb), .07); }
   .code-ta { position: absolute; inset: 0; z-index: 1; display: block; width: 100%;
     height: 100%; padding: var(--space-2) var(--space-6) var(--space-2) var(--space-3); border: 0; margin: 0; background: transparent;
     color: transparent; caret-color: var(--accent); font-family: var(--mono);
@@ -2420,14 +2428,14 @@
     pointer-events: none; }
   .code-marks-line { display: block; }
   .code-marks-line:empty { min-height: 1.6em; }
-  .code-mark-hit { background: rgba(var(--accent-rgb), .18); }
-  .code-mark-current { background: rgba(var(--accent-rgb), .38);
+  .code-mark-hit { background: rgba(var(--code-hl-rgb), .18); }
+  .code-mark-current { background: rgba(var(--code-hl-rgb), .38);
     box-shadow: inset 2px 0 0 var(--accent); }
-  .code-mark-word { background: rgba(var(--accent-rgb), .12); }
+  .code-mark-word { background: rgba(var(--code-hl-rgb), .12); }
   /* 括号配对（工单 code-page-vscode-overhaul/07）：下划线 → VSCode 式描边框
-     （1.5px 内描边 + 2px 圆角 + 6% 淡底），双主题随 --accent 自适应。 */
+     （1.5px 内描边 + 2px 圆角 + 6% 淡底），描边随 --accent、淡底随 --code-hl-rgb 自适应。 */
   .code-mark-bracket { box-shadow: inset 0 0 0 1.5px var(--accent);
-    border-radius: var(--radius-xs); background: rgba(var(--accent-rgb), .06); }
+    border-radius: var(--radius-xs); background: rgba(var(--code-hl-rgb), .06); }
   /* 编译错误行（工单 code-editor-refine/05）：全行淡红底 + 红色波浪下划线
      （text-decoration-color 独立于透明文字色，可见）；title=错误消息由 JS 设
      （codeMarksHTML 转义）；优先级最高（MARK_PRIORITY.error=4），与查找/当前
@@ -2449,8 +2457,8 @@
   /* 缩进引导线（工单 07）：1ch 宽 span 内渐变画 1.5px 居中竖线（对齐 4ch
      列位、只画行首空白区不覆盖文字）；alpha .32 双主题自适应。 */
   .code-mark-guide { background: linear-gradient(90deg, transparent 0,
-    transparent calc(50% - 1px), rgba(var(--accent-rgb), .32)
-    calc(50% - 1px), rgba(var(--accent-rgb), .32) calc(50% + 1px),
+    transparent calc(50% - 1px), rgba(var(--code-hl-rgb), .32)
+    calc(50% - 1px), rgba(var(--code-hl-rgb), .32) calc(50% + 1px),
     transparent calc(50% + 1px)); }
   /* 滚动条（工单 07）：VSCode 式细滚动条——thumb accent 半透明圆角、轨道
      透明、角透明；hover 加深。 */
@@ -2462,7 +2470,7 @@
   .code-view::-webkit-scrollbar-corner { background: transparent; }
   /* 选区（工单 code-editor-vscode-polish/02）：alpha .28 → .32——深浅主题下
      选区更可辨（VSCode 选区观感）；文字仍透明（文字由高亮层绘制）。 */
-  .code-ta::selection { background: rgba(var(--accent-rgb), .32); color: transparent; }
+  .code-ta::selection { background: rgba(var(--code-hl-rgb), .32); color: transparent; }
   /* 只读标注（工单 code-viewer-editor/02）：非 UTF-8 文件编辑器右上方提示
      （.code-view 已 position:relative 锚定，不随内容滚动）；观感与信息条小
      按钮统一（工单 code-editor-vscode-polish/02：radius-sm、panel-2 底）。 */
@@ -2727,7 +2735,7 @@
   .code-md-preview .md-img-fallback { color: var(--muted); font-style: italic;
     background: var(--panel-2); padding: 2px var(--space-2); border-radius: var(--radius-sm); }
   .code-md-preview [data-md-line] { scroll-margin-top: var(--space-2); }
-  .code-md-preview [data-md-line].flash { background: var(--accent-dim);
+  .code-md-preview [data-md-line].flash { background: rgba(var(--code-hl-rgb), .12);
     border-radius: var(--radius-xs); }
   /* 编辑弹窗（工单 topic-library-ui/05）：表单字段 / 功能组勾选 */
   .topic-edit-field { margin-top: var(--space-3); }

@@ -74,14 +74,38 @@ CONTRAST_KINDS = [
 CONTRAST_FAMILY_KINDS = ["text", "nontext"]
 CONTRAST_TOKEN_KINDS = CONTRAST_FAMILY_KINDS + ["skip"]
 
-#: 代码页那几层合成底的配方（`--tok-*` 族用；名字 → `rgba(var(--accent-rgb), a)` 的 alpha）
+#: 代码页高亮色的 **rgb 令牌**（配方 `<底>+hl.<角色>` 用它）。
+#: **与 JS 守卫的 `CONTRAST_CODE_HL_TOKEN` 同源**（镜像守卫钉住）。
+CONTRAST_CODE_HL_TOKEN = "--code-hl-rgb"
+
+#: 代码页上「文字会压到的底」：`(名字, alpha, 几何)`。
+#: **与 JS 守卫的 `CODE_LAYERS` 逐项同源**（镜像守卫钉住）。
+#:
+#: 名字用**语义**（`hl.选区`）而不是 alpha 数字——改 alpha 不该动认人键。
+#: `alpha = None`：`--code-bg` 那条是底本身；`+--danger-dim` 那条用令牌自带的 alpha。
+#:
+#: **几何**（`behind` = 垫在字下 / `over` = 压在字上）是本轮补的：
+#: `.scratch/code-contrast/probe-02-paint-order.mjs` 用真 Chromium 像素实测——选区（textarea，
+#: z-index 1）与标记层（`.code-marks`，z-index 0）**都画在 `.code-hl` 文字之上**，
+#: 半透明色把**字形本身**也染了；只有行元素自己那两层（`.active` / `.flash`）垫在字下。
+#: `over` 层的判据因此是 `contrast(over(tint,fg), over(tint,base))`——比"压在合成底上"更严。
 CODE_LAYERS = [
-    ("--code-bg", None),
-    ("--code-bg+accent.07", 0.07),
-    ("--code-bg+accent.12", 0.12),
-    ("--code-bg+accent.18", 0.18),
-    ("--code-bg+accent.32", 0.32),
+    ("--code-bg", None, "behind"),
+    ("--code-bg+hl.当前行", 0.07, "behind"),
+    ("--code-bg+hl.词命中", 0.12, "over"),
+    ("--code-bg+hl.搜索命中", 0.18, "over"),
+    ("--code-bg+hl.选区", 0.32, "over"),
+    ("--code-bg+hl.当前命中", 0.38, "over"),
+    ("--code-bg+--danger-dim", None, "over"),
 ]
+
+#: 代码页那几层底的**名字**（JS 侧族表用 `CODE_LAYERS.map(([n]) => n)` 复用，不另抄一份）
+CODE_LAYERS_NAMES = [n for n, _a, _g in CODE_LAYERS]
+
+#: 层配方：`<底>+hl.<角色>` / `<底>+<rgba 令牌>`（**与 JS 的 `CONTRAST_LAYER_RE` 逐字同源**）。
+#: 尾段是**角色名**（`选区` / `当前命中`…），只作可读性——**alpha 一律查层表**，
+#: 名字里写数字不算数（要临时改档就换层表：`layer_colors(..., layers=...)`）。
+LAYER_RE = re.compile(r"^(--[a-z0-9-]+)\+(hl|--[a-z0-9-]+)(?:\..+)?$")
 
 #: **第三面**：无底规则（`color:` 有、底在基类或祖先）里当文字色用的令牌。
 #: 形状 `[令牌字面, 假定底列表, 阈值档位, 理由]`；空底列表 = 静态判不了（登记理由后跳过判据）。
@@ -119,8 +143,11 @@ for _t in ("com", "str", "pre", "kw", "num", "tag", "attr", "val", "fn", "const"
 #: 形状 `[标签, 令牌选取, 底列表, 阈值档位, 理由]`；令牌选取 = 前缀，或 `=` 开头的精确令牌名。
 #: **与 JS 守卫的 `CONTRAST_FAMILIES` 逐项同源**（镜像守卫钉住）。
 CONTRAST_FAMILIES = [
-    ("--tok-* × 代码底（含 4 层 accent 合成）", "--tok-", [n for n, _ in CODE_LAYERS], "text",
-     "语法高亮族：本轮只量不修（改它 = 改代码长什么样，属另一件事）。见 probe-01 §8 的整张矩阵"),
+    ("--tok-* × 代码底（含 5 层高亮 + 错误行）", "--tok-", list(CODE_LAYERS_NAMES), "text",
+     "语法高亮族：十个令牌 × 七层，**几何感知**（压在字上的层连字形一起染）。见 probe-00 的整张矩阵"),
+    ("--code-text × 括号彩虹底（8 色）", "=--code-text",
+     [f"--code-bg+--bracket-rainbow-{i}" for i in range(8)], "text",
+     "括号彩虹只压括号字形（括号在语法高亮里没有 token 类，字色是 --code-text）——实测全过，登记为覆盖"),
     ("--accent-text 焦点环 / 定位环", "=--accent-text", ["--bg", "--panel", "--panel-2"], "nontext",
      "键盘焦点环与定位环（03 单提到 3:1 以上）：看不见焦点环 = 键盘用户找不到焦点"),
     ("--accent 控件描边 / 语义左条", "=--accent", ["--bg", "--panel", "--panel-2"], "nontext",
@@ -381,53 +408,129 @@ def contrast_pairs(text: str, tok: Tokens | None = None):
 
 
 def tok_family_matrix(tok: Tokens):
-    """`--tok-*` 族 × 代码页那几层合成底 → {(theme, layer, token): ratio}（本轮只量不修）。"""
+    """`--tok-*` 族 × 代码页各层 → {(theme, layer, token): ratio}（**几何感知**）。"""
     out = {}
     for theme in ("dark", "light"):
-        code_bg = tok.value("--code-bg", theme)
-        accent = tok.value("--accent", theme)
-        if code_bg is None or accent is None:
-            continue
-        for name, alpha in CODE_LAYERS:
-            base = code_bg[:3] if alpha is None else over(
-                (accent[0], accent[1], accent[2], alpha), code_bg[:3])
+        for name, _a, _g in CODE_LAYERS:
             for token in [n for n in tok.names() if n.startswith("--tok-")]:
                 v = tok.value(token, theme)
                 if v is None:
                     continue
-                out[(theme, name, token)] = contrast(over(v, base), base)
+                r = contrast_on_layer(v, name, theme, tok)
+                if r is not None:
+                    out[(theme, name, token)] = r
     return out
 
 
-def layer_color(name: str, theme: str, tok: Tokens):
-    """底的配方名 → 颜色：`--code-bg+accent.12` = `rgba(var(--accent-rgb), .12)` 叠在 `--code-bg` 上。"""
-    m = re.match(r"^(.*)\+accent\.(\d+)$", name)
+def layer_parts(name: str):
+    """层名 → 配方两段（`None` = 这个名字不是层配方，是个普通令牌名）。
+
+    ⚠ **alpha 不在名字里**：名字里的尾段只是**角色名**（`hl.当前行`），alpha 查 `CODE_LAYERS`
+    那一行。要临时改档就换层表（`layers=` 参数）——名字里写 `.20` 不算数（省得两侧各写一套
+    数字谓词：Python 的 `str.isdigit()` 认全角/阿拉伯数字，JS 的 `/^\\d+$/` 不认，那种分叉
+    会让同一条层名在两侧算出不同的格）。
+    """
+    m = LAYER_RE.match(name)
     if not m:
-        return tok.value(name, theme)
-    base = tok.value(m.group(1), theme)
-    accent = tok.value("--accent", theme)
-    if base is None or accent is None:
         return None
-    return over((accent[0], accent[1], accent[2], float("0." + m.group(2))), base[:3])
+    return {"base": m.group(1), "color": m.group(2)}
 
 
-def contrast_family_cells(text: str, tok: Tokens | None = None):
-    """族表展开成逐格检查：`[{theme, label, token, layer, kind, why, ratio, need}]`。"""
+def layer_alpha_of(name: str, layers=None):
+    """层名 → 表里登记的 alpha（不是浮点数、或不在表里 → `None`）。"""
+    for n, a, _g in (CODE_LAYERS if layers is None else layers):
+        if n == name:
+            return a if isinstance(a, float) else None
+    return None
+
+
+def layer_geometry(name: str, layers=None) -> str:
+    """层名 → 几何。
+
+    · 表里登记过的按表（**表是已知层的单源**）；
+    · **带 tint 的配方**（`<底>+hl…` / `<底>+--某令牌`）但表里没有 → 按 **`over`**：
+      没分类的高亮一律假设它**压在字上**。默认值取严格那一侧是这一轮买的教训——
+      乐观的默认（`behind`）会让"没登记进来的一层"静默变好看（括号彩虹就是这么错了 2.5）；
+    · 其余（纯令牌名、根本没有 tint）→ `behind`（没有 tint 就没有染色这件事）。
+    """
+    for n, _a, g in (CODE_LAYERS if layers is None else layers):
+        if n == name:
+            return g
+    return "over" if layer_parts(name) else "behind"
+
+
+def layer_tint(name: str, theme: str, tok: Tokens, layers=None):
+    """层的 tint（rgba 四元组）：`hl` → `rgba(var(--code-hl-rgb), α)`；`--x` → 该令牌自带 alpha。"""
+    p = layer_parts(name)
+    if p is None:
+        return None
+    if p["color"] != "hl":
+        return tok.value(p["color"], theme)
+    v = tok.value(CONTRAST_CODE_HL_TOKEN, theme)
+    if v is None:
+        return None
+    alpha = layer_alpha_of(name, layers)
+    if alpha is None:
+        return None
+    return (v[0], v[1], v[2], alpha)
+
+
+def layer_colors(name: str, theme: str, tok: Tokens, layers=None):
+    """层名 → `(base, bg, tint, geometry)`。
+
+    · `base` = 底令牌本身（不过 tint）；`bg` = 合成后的**不透明**底；
+    · `tint` = 层的 rgba（没有层的名字 → `None`）；`geometry` = `behind` / `over`。
+    """
+    p = layer_parts(name)
+    if p is None:
+        return tok.value(name, theme), tok.value(name, theme), None, "behind"
+    base = tok.value(p["base"], theme)
+    tint = layer_tint(name, theme, tok, layers)
+    if base is None or tint is None:
+        return base, None, tint, layer_geometry(name, layers)
+    return base, over(tint, base[:3]), tint, layer_geometry(name, layers)
+
+
+def layer_color(name: str, theme: str, tok: Tokens, layers=None):
+    """层的**不透明**合成底（旧调用点沿用这个名字；不认识的层名 = 普通令牌取值）。"""
+    return layer_colors(name, theme, tok, layers)[1]
+
+
+def contrast_on_layer(fg, name: str, theme: str, tok: Tokens, layers=None):
+    """**几何感知**的层内比值。
+
+    · `behind` 层：字形不动，只换底 → `contrast(fg, bg)`；
+    · `over` 层：字形先落到**不过 tint 的底**上、再被同一层半透明色染一遍
+      → `contrast(over(tint, over(fg, base)), bg)`（`over` 负责把带 alpha 的字色也收进来）。
+    """
+    base, bg, tint, geom = layer_colors(name, theme, tok, layers)
+    if bg is None or fg is None:
+        return None
+    fg_eff = over(fg, base[:3]) if base is not None else tuple(fg[:3])
+    if geom == "over" and tint is not None:
+        fg_eff = over(tint, fg_eff)
+    return contrast(fg_eff, bg)
+
+
+def contrast_family_cells(text: str, tok: Tokens | None = None, families=None):
+    """族表展开成逐格检查：`[{theme, label, token, layer, kind, why, ratio, need}]`。
+
+    ⚠ 比值走 `contrast_on_layer`（**几何感知**）：压在字上的层连字形一起染。
+    """
     tok = tok or Tokens(text)
     names = tok.names()
     out = []
-    for label, pick, layers, kind, why in CONTRAST_FAMILIES:
+    for label, pick, layers, kind, why in (CONTRAST_FAMILIES if families is None else families):
         tokens = [pick[1:]] if pick.startswith("=") else [n for n in names if n.startswith(pick)]
         for theme in ("dark", "light"):
             for token in tokens:
                 for layer in layers:
                     fg = tok.value(token, theme)
-                    bg = layer_color(layer, theme, tok)
-                    if fg is None or bg is None:
+                    r = contrast_on_layer(fg, layer, theme, tok)
+                    if fg is None or r is None:
                         continue
                     out.append(dict(theme=theme, label=label, token=token, layer=layer,
-                                    kind=kind, why=why,
-                                    ratio=contrast(over(fg, bg), bg),
+                                    kind=kind, why=why, ratio=r,
                                     need=CONTRAST_THRESHOLDS["large"] if kind == "nontext"
                                     else CONTRAST_THRESHOLDS["small"]))
     return out
@@ -465,11 +568,11 @@ def contrast_token_cells(text: str, tok: Tokens | None = None,
         for theme in ("dark", "light"):
             for layer in layers:
                 fg = tok.parse(literal, theme)
-                bg = layer_color(layer, theme, tok)
-                if fg is None or bg is None:
+                r = contrast_on_layer(fg, layer, theme, tok)
+                if fg is None or r is None:
                     continue
                 out.append(dict(theme=theme, literal=literal, layer=layer, kind=kind,
-                                ratio=contrast(over(fg, bg), bg),
+                                ratio=r,
                                 need=CONTRAST_THRESHOLDS["large"] if kind == "nontext"
                                 else CONTRAST_THRESHOLDS["small"]))
     return out
@@ -554,10 +657,6 @@ def load_families() -> list[list[str]]:
     if not rows:
         raise SystemExit("族表解析出 0 条——格式变了，别拿空表当读数")
     return rows
-
-
-#: 代码页那几层底的**名字**（从守卫的 `CODE_LAYERS` 解析族表时要用）
-CODE_LAYERS_NAMES = [n for n, _ in CODE_LAYERS]
 
 
 def contrast_gradient_key(fg: str, bg: str) -> str:

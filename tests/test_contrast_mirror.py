@@ -158,14 +158,37 @@ def test_parse_regexes_match(js, py, js_name, py_attr):
     )
 
 
-def test_code_layers_match(js, py):
-    """⑥ 代码页那五层底：名字与 alpha 两侧一致（`--tok-*` 族的最坏格靠它算）。"""
+def _js_code_layers(js: str):
+    """抠出 `CODE_LAYERS` 的三元组：`[(名字, alpha 或 None, 几何), …]`。"""
     m = re.search(r"const CODE_LAYERS = \[([\s\S]*?)\n\];", js)
     assert m, "守卫里找不到 `const CODE_LAYERS = [...];`"
-    js_rows = [(n, None if a == "null" else float(a))
-               for n, a in re.findall(r'\["([^"]+)",\s*(null|[0-9.]+)\]', m.group(1))]
-    py_rows = [(n, None if a is None else float(a)) for n, a in py.CODE_LAYERS]
+    return [(n, None if a == "null" else float(a), g)
+            for n, a, g in re.findall(r'\["([^"]+)",\s*(null|[0-9.]+),\s*"([a-z]+)"\]', m.group(1))]
+
+
+def test_code_layers_match(js, py):
+    """⑥ 代码页那**七层**底：名字 / alpha / **几何** 三元组两侧一致。
+
+    几何（`behind` = 垫在字下 / `over` = 压在字上）是本轮补的口径——真像素实测出来的
+    （`.scratch/code-contrast/probe-02-paint-order.mjs`）。两侧漂移就会出现"腿绿而读数红"：
+    一边按"压在合成底上"算（乐观），一边按"字形也被染"算（真实），而两边各自内部都自洽。
+    """
+    js_rows = _js_code_layers(js)
+    py_rows = [(n, None if a is None else float(a), g) for n, a, g in py.CODE_LAYERS]
     assert js_rows == py_rows, f"代码页那几层底两侧不一致：\n  JS {js_rows}\n  Python {py_rows}"
+    assert len(js_rows) == 7, f"代码页的层数应为 7（实际 {len(js_rows)}）——层表被动过就同步这里"
+    assert {g for _n, _a, g in js_rows} == {"behind", "over"}, "几何词表只能是 behind / over"
+
+
+def test_code_hl_token_and_layer_recipe_match(js, py):
+    """⑥′ 代码页高亮色令牌名 + 层配方正则：两侧同源（配方认不出名字 → 整排格子静默消失）。"""
+    m = re.search(r'const CONTRAST_CODE_HL_TOKEN = "([^"]+)";', js)
+    assert m, "守卫里找不到 `const CONTRAST_CODE_HL_TOKEN = \"...\";`"
+    assert m.group(1) == py.CONTRAST_CODE_HL_TOKEN, "代码页高亮色令牌名两侧不一致"
+    assert _norm(_js_regex(js, "CONTRAST_LAYER_RE")) == py.LAYER_RE.pattern, (
+        "层配方正则两侧不一致（尾段既收角色名也收显式 alpha）：\n"
+        f"  JS     : {_norm(_js_regex(js, 'CONTRAST_LAYER_RE'))!r}\n  Python : {py.LAYER_RE.pattern!r}"
+    )
 
 
 def _js_family_rows(js: str):
@@ -177,9 +200,7 @@ def _js_family_rows(js: str):
     """
     m = re.search(r"const CONTRAST_FAMILIES = \[([\s\S]*?)\n\];", js)
     assert m, "守卫里找不到 `const CONTRAST_FAMILIES = [...];`"
-    code_layers = re.search(r"const CODE_LAYERS = \[([\s\S]*?)\n\];", js)
-    assert code_layers, "守卫里找不到 `const CODE_LAYERS = [...];`"
-    layer_names = [n for n, _a in re.findall(r'\["([^"]+)",\s*(null|[0-9.]+)\]', code_layers.group(1))]
+    layer_names = [n for n, _a, _g in _js_code_layers(js)]
     rows = []
     for row in re.split(r"\n\s*(?=\[\")", m.group(1)):   # 一行不够：有的族行折了行
         if not row.strip().startswith("["):
@@ -276,6 +297,29 @@ def test_gradient_ends_match(js, py):
     assert js_rows == py_rows, (
         "渐变端点表两侧不一致：\n"
         + "\n".join(f"  JS {a}  vs  Python {b}" for a, b in zip(js_rows, py_rows) if a != b)
+    )
+
+
+def test_family_cell_count_freeze_matches_python(js, py):
+    """⑦′ 守卫里冻结的**族面总格数**必须等于 Python 侧现在算出来的那一份。
+
+    为什么单列一条：族面只把**最坏格**纳入对账——从 `CODE_LAYERS` 或某条族里摘掉一层，
+    最坏格会**变好**、腿照样绿。冻结值是这个"少算一排"的唯一防线，而它自己也要有人看着
+    （改了两侧任一张表却忘了改它 → 这里红）。
+    """
+    m = re.search(r"const CONTRAST_FAMILY_CELL_COUNT = ([0-9]+);", js)
+    assert m, "守卫里找不到 `const CONTRAST_FAMILY_CELL_COUNT = ...;`"
+    cells = py.contrast_family_cells(py.read_page())
+    assert int(m.group(1)) == len(cells), (
+        f"冻结的族面格数 {m.group(1)} ≠ 现算 {len(cells)}——两张表里有一侧被改过，"
+        "同步 CONTRAST_FAMILY_CELL_COUNT 并在票尾写清改了哪张表"
+    )
+    per_family = {}
+    for c in cells:
+        per_family[c["label"]] = per_family.get(c["label"], 0) + 1
+    assert len(py.CONTRAST_FAMILIES) == 4, f"族数应为 4（实际 {len(py.CONTRAST_FAMILIES)}）"
+    assert per_family.get("--tok-* × 代码底（含 5 层高亮 + 错误行）") == 10 * 7 * 2, (
+        f"--tok-* 族应有 10 × 7 × 2 = 140 格（实际 {per_family.get('--tok-* × 代码底（含 5 层高亮 + 错误行）')}）"
     )
 
 

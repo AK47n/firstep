@@ -1,0 +1,149 @@
+{
+  "tag": "after",
+  "shots": [
+    {
+      "theme": "light",
+      "name": "com",
+      "box": {
+        "x": 297.8125,
+        "y": 176.984375,
+        "width": 176,
+        "height": 17
+      },
+      "info": {
+        "start": 0,
+        "len": 17,
+        "text": "// 行一：注释（tok-com）"
+      },
+      "marks": {
+        "word": 0,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-light-com-before.png",
+        "selection": "probe-02-after-light-com-selection.png",
+        "dblclick": "probe-02-after-light-com-dblclick.png"
+      }
+    },
+    {
+      "theme": "light",
+      "name": "str",
+      "box": {
+        "x": 453.84375,
+        "y": 218.578125,
+        "width": 140.203125,
+        "height": 17
+      },
+      "info": {
+        "start": 53,
+        "len": 14,
+        "text": "\"字符串（tok-str）\""
+      },
+      "marks": {
+        "word": 2,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-light-str-before.png",
+        "selection": "probe-02-after-light-str-selection.png",
+        "dblclick": "probe-02-after-light-str-dblclick.png"
+      }
+    },
+    {
+      "theme": "light",
+      "name": "brace",
+      "box": {
+        "x": 414.84375,
+        "y": 197.78125,
+        "width": 7.8125,
+        "height": 17,
+        "color": "rgb(31, 35, 40)",
+        "marks": 13
+      },
+      "info": {
+        "text": "{",
+        "color": "rgb(31, 35, 40)"
+      },
+      "marks": {
+        "marksLayerSpans": 13
+      },
+      "files": {
+        "before": "probe-02-after-light-brace.png"
+      }
+    },
+    {
+      "theme": "dark",
+      "name": "com",
+      "box": {
+        "x": 297.8125,
+        "y": 176.984375,
+        "width": 176,
+        "height": 17
+      },
+      "info": {
+        "start": 0,
+        "len": 17,
+        "text": "// 行一：注释（tok-com）"
+      },
+      "marks": {
+        "word": 0,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-dark-com-before.png",
+        "selection": "probe-02-after-dark-com-selection.png",
+        "dblclick": "probe-02-after-dark-com-dblclick.png"
+      }
+    },
+    {
+      "theme": "dark",
+      "name": "str",
+      "box": {
+        "x": 453.84375,
+        "y": 218.578125,
+        "width": 140.203125,
+        "height": 17
+      },
+      "info": {
+        "start": 53,
+        "len": 14,
+        "text": "\"字符串（tok-str）\""
+      },
+      "marks": {
+        "word": 2,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-dark-str-before.png",
+        "selection": "probe-02-after-dark-str-selection.png",
+        "dblclick": "probe-02-after-dark-str-dblclick.png"
+      }
+    },
+    {
+      "theme": "dark",
+      "name": "brace",
+      "box": {
+        "x": 414.84375,
+        "y": 197.78125,
+        "width": 7.8125,
+        "height": 17,
+        "color": "rgb(226, 232, 240)",
+        "marks": 13
+      },
+      "info": {
+        "text": "{",
+        "color": "rgb(226, 232, 240)"
+      },
+      "marks": {
+        "marksLayerSpans": 13
+      },
+      "files": {
+        "before": "probe-02-after-dark-brace.png"
+      }
+    }
+  ]
+}

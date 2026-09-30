@@ -1,0 +1,151 @@
+"""代码配色族轮 · 像素读数（probe-02 的第二半）：把截图里的颜色分布读出来，
+与「高亮层压在字上（over）」/「垫在字下（behind）」两个模型的预测逐条对比；
+多个 `--tag` 的读数还会**逐格对照**（工单 01 的"观感零变化"取证）。
+
+**口径不另起一套**：颜色数学 / 令牌 / 层配方 / alpha 全部走 `probe_lib`
+（与守卫腿⑧ 同源）——本文件只做"读 PNG + 拼预测 + 对差"。
+
+跑法（仓库根；先跑 probe-02-paint-order.mjs --tag before / --tag after）：
+    python .scratch\\code-contrast\\probe-02-paint-order-read.py            # 读全部 tag
+    python .scratch\\code-contrast\\probe-02-paint-order-read.py --tag after
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from collections import Counter
+from pathlib import Path
+
+import fitz
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent / "light-contrast"))
+
+import probe_lib as L  # noqa: E402
+
+WORD_LAYER = "--code-bg+hl.词命中"
+SEL_LAYER = "--code-bg+hl.选区"
+
+
+def hx(c):
+    return "#%02x%02x%02x" % tuple(c[:3])
+
+
+def dist(a, b):
+    return sum(abs(a[i] - b[i]) for i in range(3))
+
+
+def top_colors(path: Path, n=6):
+    pix = fitz.Pixmap(str(path))
+    if pix.n > 3:
+        pix = fitz.Pixmap(fitz.csRGB, pix)
+    cnt = Counter()
+    for y in range(pix.height):
+        for x in range(pix.width):
+            cnt[pix.pixel(x, y)[:3]] += 1
+    return cnt.most_common(n), pix.width * pix.height
+
+
+def glyph_core(top):
+    """字形核心 = 离「主色（底）」最远的那个高频色（浅色主题下它最暗、暗色主题下它最亮）。"""
+    bg = top[0][0]
+    return max((c for c, _n in top), key=lambda c: dist(c, bg))
+
+
+def predictions(tok, theme, shot, base):
+    """两个模型的预测（**走 probe_lib 的层配方与 alpha**，不在这里另抄一份数字）。"""
+    if shot["name"] == "brace":
+        layer = "--code-bg+--bracket-rainbow-0"
+        fg = tok.value("--code-text", theme)
+    else:
+        layer = SEL_LAYER
+        fg = base
+    _b, bg, tint, geom = L.layer_colors(layer, theme, tok)
+    if geom == "behind":
+        over_pred = tuple(fg[:3])                      # 垫在字下：字形不变
+    else:
+        over_pred = L.over(tint, fg)                   # 压在字上：字形被染一遍
+    return {
+        "over（压在字上）": over_pred,
+        "behind（垫在字下）": tuple(fg[:3]),
+        "两层都压（词命中 + 选区）": L.over(L.layer_tint(SEL_LAYER, theme, tok),
+                                       L.over(L.layer_tint(WORD_LAYER, theme, tok), fg)),
+    }
+
+
+def main() -> None:
+    args = sys.argv[1:]
+    only = args[args.index("--tag") + 1] if "--tag" in args else None
+    files = sorted(HERE.glob("probe-02-shots-*.json"))
+    if only:
+        files = [f for f in files if f.name.endswith(f"-{only}.json")]
+    if not files:
+        raise SystemExit("一个 probe-02-shots-*.json 都没有——先跑 probe-02-paint-order.mjs")
+
+    text = L.read_page()
+    tok = L.Tokens(text)
+    print("=" * 100)
+    print("代码配色族轮 · 像素读数（probe-02：高亮层压在字上还是垫在字下）")
+    print(f"口径单源 = probe_lib；页面上 --code-hl-rgb = "
+          f"{L.hexs(tok.value(L.CONTRAST_CODE_HL_TOKEN, 'dark'))}（暗）/ "
+          f"{L.hexs(tok.value(L.CONTRAST_CODE_HL_TOKEN, 'light'))}（浅）")
+    print("=" * 100)
+
+    summary = {}      # tag → {(theme, name, state): glyph 色}
+    for f in files:
+        data = json.loads(f.read_text(encoding="utf-8"))
+        tag = data.get("tag", f.stem)
+        print(f"\n{'#' * 100}\n# tag = {tag}（{f.name}）\n{'#' * 100}")
+        for s in data["shots"]:
+            theme = s["theme"]
+            print(f"\n### [{tag}] {theme} / {s['name']}（{s['info'].get('text', '')}）\n")
+            cols, tops = {}, {}
+            for key, fn in s["files"].items():
+                top, total = top_colors(HERE / fn)
+                tops[key] = top
+                cols[key] = glyph_core(top)
+                summary[(tag, theme, s["name"], key)] = cols[key]
+                print(f"  {key:<9}{total:>6} px  主色 {hx(top[0][0])}  字形 {hx(cols[key])}"
+                      f"  （前 4 高频：" + " ".join(hx(c) for c, _n in top[:4]) + "）")
+            base = cols["before"]
+            preds = predictions(tok, theme, s, base)
+            for label, p in preds.items():
+                print(f"    预测 {label:<26}{hx(p)}")
+            for key in s["files"]:
+                if key == "before":
+                    continue
+                obs = cols[key]
+                gap = {label: dist(obs, p) for label, p in preds.items()}
+                best = min(gap, key=gap.get)
+                print(f"    实测 {key:<9}= {hx(obs)} → 最贴近：**{best}**（曼哈顿距离 {gap[best]}）")
+
+    # --- 多 tag 逐格对照（观感零变化取证） ----------------------------------
+    tags = sorted({k[0] for k in summary})
+    if len(tags) >= 2:
+        print(f"\n{'=' * 100}\n## 逐格对照（{tags[0]} vs {tags[1]}）——工单 01 的「观感零变化」取证\n")
+        keys = sorted({k[1:] for k in summary if k[0] == tags[0]})
+        bad = 0
+        for k in keys:
+            a = summary.get((tags[0],) + k)
+            b = summary.get((tags[1],) + k)
+            if a is None or b is None:
+                print(f"  {k}  只在一侧有（跳过）")
+                continue
+            same = a == b
+            bad += 0 if same else 1
+            print(f"  {str(k):<44}{hx(a):<10}{hx(b):<10}{'✅ 相同' if same else '❌ 有差异'}")
+        print(f"\n  合计 **{len(keys) - bad}/{len(keys)}** 格逐字节相同"
+              + ("——**观感零变化成立**" if bad == 0 else "——**有差异，别当零变化**"))
+
+    print("\n" + "=" * 100)
+    print("怎么读：实测字形像素贴近哪条预测，就是哪种叠法；多 tag 那一节是「改前/改后」的真像素对照。")
+    print("=" * 100)
+
+
+if __name__ == "__main__":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+    main()
