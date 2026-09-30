@@ -14,7 +14,8 @@
       **文字子元素**各拍一张（整块只告诉你"最强的字"，票面要的是"说明字 / 原因行 / 提示字"）。
       另加 `--out <目录>`：读数可以落到本单目录，**不覆盖**上一轮的证据。
 - [x] **改前那一发要真跑**：`git checkout HEAD~2 -- src/contest_generator/static/index.html`
-      （`HEAD~2` = **`0d313294`**，01 落地前的那棵树）→ 跑 `--tag forms-before` → 读完整复原。
+      （**当时**的 `HEAD~2` = **`0d313294`**，01 落地前的那棵树；相对名会随提交变，以 sha 为准）
+      → 跑 `--tag forms-before` → 读完整复原。
       **复原证据**：盘上 sha256 `3A1EC757…`（改前改后同值）、`git status --porcelain` 该路径 0 行。
 - [x] **改后那一发**：`--tag forms-after`（01 落地后的树）。
 - [x] **逐格对照**：`probe-08-disabled-state-read.py --tag forms --dir .scratch/disabled-forms` →

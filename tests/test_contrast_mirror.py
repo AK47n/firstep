@@ -36,6 +36,8 @@
 10. `CONTRAST_DISABLED_FORMS` / `CONTRAST_DISABLED_HINTS` / `CONTRAST_DISABLED_FORM_KINDS`
    （不可选形态的**认人面**，工单 `disabled-forms/01`）——登记表逐条一致：只改一侧的话，
    探针会算出"这条嫌疑规则没在册"而守卫说"在册"，正是最难查的那种假账。
+   再加 **`CONTRAST_HINT_VECTORS`**（同轮补审）：词法**规则本身**的行为向量表两侧共用
+   （数据一致 ≠ 行为一致）。
 
 **它不判**：不跑 JS、不跑 node（前端门禁才是跑它的地方，见 `docs/agents/workflow.md` 的闸门表）
 ——这里只钉"两侧写的是不是同一把尺"。
@@ -321,6 +323,29 @@ def test_disabled_forms_register_matches(js, py):
     assert js_kinds == [k for k, _why in py.CONTRAST_DISABLED_FORM_KINDS], (
         f"形态类别表两侧不一致：JS {js_kinds} / Python {[k for k, _ in py.CONTRAST_DISABLED_FORM_KINDS]}"
     )
+
+
+def test_hint_vectors_match(js, py):
+    """⑬ **类名词法规则的"行为向量表"**（工单 `disabled-forms/03` 补审点名）：
+
+    镜像此前只比**数据**（正则 / 词表 / 类别表 / 登记表前三格）——而"类名等于该词或以 `-<词>` 结尾"
+    "`:not(…)` 先剥掉"这些**行为**，两侧各写了一份实现（JS `classHintHits` / Python
+    `probe_lib.class_hint_hits`）。行为漂了两边都不红：腿说"都登记过"、探针说"这几条没在册"
+    （正是本文件开头那段"腿绿而读数红"）。所以这张表**两侧共用**：JS 侧由守卫的
+    `disabledFormProblems` 先自证（向量表不符即红），这里解析同一张表再喂给 Python 侧。
+    理由文本不参与比对（跟登记表一样），**选择器与期望命中**必须逐条一致。
+    """
+    m = re.search(r"const CONTRAST_HINT_VECTORS = \[([\s\S]*?)\n\];", js)
+    assert m, "守卫里找不到 `const CONTRAST_HINT_VECTORS = [...];`"
+    rows = [(sel, re.findall(r'"([^"]+)"', inner))
+            for sel, inner in re.findall(r'\["((?:[^"\\]|\\.)*)",\s*\[([^\]]*)\]\],', m.group(1))]
+    assert len(rows) >= 10, f"向量表只解析出 {len(rows)} 条（守卫里那张表被删/改了格式？）"
+    for sel, want in rows:
+        got = py.class_hint_hits(sel)
+        assert got == want, (
+            f"类名词法规则两侧给出不同答案：{sel} → JS/want {want} / Python {got}——"
+            "这类漂移不会让任何一条腿变红，只会让读数与守卫各说各话"
+        )
 
 
 def test_gradient_ends_match(js, py):

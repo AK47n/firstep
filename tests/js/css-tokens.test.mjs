@@ -1121,7 +1121,7 @@ const CONTRAST_DISABLED_HINTS = ["disabled", "off", "cant", "stale", "inactive",
  * 两种读法下"不命中信号"的都是 **14 条**（21 − 7 = 18 − 4）：装饰图标 / 折叠箭头 / 瞬态动画 /
  * 轻微弱化的次要字（`.welcome-sub` `.92`、`.sugg-count` `.85`）——**它们不在射程**。
  * **别把"腿绿"读成"全站 `opacity` 都干净了"**——真正的闭合是全量登记（腿⑩），见 `backlog.md` §33
- * （本单 03 号单开的节；开之前这两处指路是悬空的）。
+ * （`backlog.md` §33 已开，边界写在那一节）。
  */
 const CONTRAST_DISABLED_FORMS = [
   ["modules", ".module-card.off", "disabled",
@@ -1149,6 +1149,34 @@ function classHintHits(sel, hints = CONTRAST_DISABLED_HINTS) {
   return hints.filter((w) => names.some((n) => n === w || n.endsWith("-" + w)));
 }
 
+/**
+ * **类名词法规则的"行为向量表"**：`[选择器, 期望命中的词（按词表顺序）]`。
+ *
+ * **为什么要它**（`disabled-forms/03` 补审点名）：镜像守卫此前只比"正则 / 词表 / 类别表 / 登记表前三格"
+ * ——那些是**数据**；而"类名等于该词或以 `-<词>` 结尾""`:not(…)` 先剥掉"这些**行为**，
+ * 两侧各写了一份实现（JS 的 `classHintHits` / Python 的 `probe_lib.class_hint_hits`），
+ * 行为漂了**两边都不红**：腿说"这些规则都登记过"、探针说"这几条没在册"——正是本仓最怕的
+ * "腿绿而读数红"。所以这张表**两侧共用**：本文件的用例断言 JS 侧，
+ * `tests/test_contrast_mirror.py` 解析同一张表再断言 Python 侧。
+ *
+ * 每条vector都带一个**边界**：后缀不算（`.disabledness` / `.offx` / `.tmp-probe-delayed`）、
+ * `:not(…)` 剥掉、无关类名不误伤、以及"一次命中两个词时的顺序 = 词表顺序"。
+ */
+const CONTRAST_HINT_VECTORS = [
+  [".module-card.off", ["off"]],
+  [".pin-menu-list li.cant", ["cant"]],
+  [".param-stale", ["stale"]],
+  [".code-tab.ro .code-tab-name", ["ro"]],
+  [".wiring-line.wiring-dim", ["dim"]],
+  [".x-disabled", ["disabled"]],
+  [".a-off.b-dim", ["off", "dim"]],
+  [".disabledness", []],
+  [".offx", []],
+  [".tmp-probe-delayed", []],
+  [".tmp-probe:not(.off)", []],
+  [".chip.rec.unsel .reason", []],
+];
+
 /** 登记表里这条选择器的类别（不在册 → `null`）。 */
 function disabledFormKind(sel, register = CONTRAST_DISABLED_FORMS) {
   const row = register.find((r) => r[1] === sel);
@@ -1175,6 +1203,15 @@ function neverDimsForm(sel, register = CONTRAST_DISABLED_FORMS) {
 function disabledFormProblems(source, register = CONTRAST_DISABLED_FORMS,
   hints = CONTRAST_DISABLED_HINTS, kinds = CONTRAST_DISABLED_FORM_KINDS) {
   const out = [];
+  // ⓪ **先自证词法规则本身**（行为向量表，`disabled-forms/03` 补审加的）：表里每条都要求
+  //    两侧算出同一个答案；漂了就在这里红，而不是等"某条规则该登记却没登记"那种间接症状。
+  for (const [sel, want] of CONTRAST_HINT_VECTORS) {
+    const got = classHintHits(sel, hints);
+    if (JSON.stringify(got) !== JSON.stringify(want)) {
+      out.push(`类名词法规则与向量表不符：${sel} 算出 [${got}]，表里要求 [${want}]——`
+        + "这张表两侧共用（Python 侧 probe_lib.class_hint_hits 也按它判），改规则要一起改表");
+    }
+  }
   const rules = contrastRules(source);
   const onDisk = rules.map((r) => r.sel);
   // ④ 类别表形状（照例外表那套：取值、每类至少一条、理由非空、不重复登记）
@@ -2814,6 +2851,14 @@ test("全站推广合成红证：九条腿各自都判得红（防'永远绿'的
   assert.ok(
     disabledFormProblems(html, dfReKind).some((p) => p.includes(".pin-dim")),
     "把 .pin-dim 从 dim 改登成 disabled 之后没红（类别那一格没被读）",
+  );
+  //        n7 **词法规则的行为向量表**（`disabled-forms/03` 补审加的）：把规则改坏一次，
+  //        向量表必须当场红——不然它只是一张"看着挺全"的清单（负向自证，照 n5 的先例）。
+  assert.equal(CONTRAST_HINT_VECTORS.length >= 10, true, "向量表被删空了？");
+  const dfBadHint = disabledFormProblems(html, CONTRAST_DISABLED_FORMS, ["off", "dim"]);
+  assert.ok(
+    dfBadHint.some((p) => p.includes("类名词法规则与向量表不符")),
+    "词表被换掉之后向量表没红——这条自证在空转（它正是防'两侧行为漂移'的那道闸）",
   );
   // ⑨ 复原后转绿（九条腿都回到空/子集）
   assert.deepEqual(bareFontSizesInScope(html, "hwcheck"), []);
