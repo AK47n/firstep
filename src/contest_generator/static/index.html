@@ -156,7 +156,7 @@
        把字形拉得越狠，比值越低）。**只有高亮填充用它**：`caret-color`、括号描边 ring、
        滚动条 thumb 仍走 `--accent`（那是控件与前景，不是代码高亮）。
        判据 = 守卫腿⑧ 的族面（`CODE_LAYERS` 七层，含几何）。 */
-    --code-hl-rgb: 0, 212, 255;
+    --code-hl-rgb: 0, 190, 230;   /* 代码页高亮色（工单 code-contrast/02）：比 accent 略深一档 */
     --accent-hi: #33dcff; --accent-lo: #00b8de;
     --on-accent-deep: #001018; --on-ok: #04170c;
     --ok-fill: linear-gradient(135deg, var(--ok-bright), var(--ok));
@@ -165,10 +165,15 @@
     --purple-dim: rgba(139, 92, 246, .12);  /* 紫色淡底（版本记录「性能」标签等，亮色同族换值） */
     --power: #f59e0b;
     --ok-glow: rgba(126, 231, 135, .25);
-    --tok-com: #3fb950; --tok-str: #d29922; --tok-pre: #8b949e;
+    /* 语法高亮族（工单 code-contrast/02）：十个令牌要在**七层底**（代码底 / 当前行 .07 /
+       词命中 .12 / 搜索命中 .18 / 选区 .20 / 当前命中 .24 / 错误行）上全部 ≥ 4.5:1。
+       暗色只动两个（`--tok-pre` / `--tok-const`，压在字上的层把中间亮度的色拉下来），
+       其余保持 GitHub Dark 观感；浅色八个压深一档（压字上的层把字形也染一遍，见
+       `.scratch/code-contrast/probe-02-*` 的真像素实测）。判据 = 守卫腿⑧ 的族面。 */
+    --tok-com: #3fb950; --tok-str: #d29922; --tok-pre: #939da7;
     --tok-kw: #00d4ff; --tok-num: #bc8cff; --tok-tag: #00d4ff;
     --tok-attr: #bc8cff; --tok-val: #d29922;
-    --tok-fn: #dcdcaa; --tok-const: #c586c0;
+    --tok-fn: #dcdcaa; --tok-const: #cd8bc8;
     /* 括号彩虹（工单 code-editor-refine/04）：--bracket-rainbow-0..7 八色环深色套
        ——衬托 #0a0e14 代码底，alpha .33 淡底；亮色套由 html[data-theme="light"] 覆盖 */
     --bracket-rainbow-0: rgba(248, 81, 73, .33);  --bracket-rainbow-1: rgba(255, 166, 87, .33);
@@ -215,9 +220,12 @@
     --purple-dim: rgba(130, 80, 223, .12);  /* 亮色套：紫色淡底随 #8250df 换值 */
     --power: #d97706;
     --ok-glow: rgba(45, 164, 78, .18);
-    --tok-com: #1a7f37; --tok-str: #9a6700; --tok-pre: #59636e;
-    --tok-kw: #0096c7; --tok-num: #8250df; --tok-tag: #0096c7;
-    --tok-attr: #8250df; --tok-val: #9a6700;
+    /* 语法高亮族浅色档（工单 code-contrast/02）：代码底原样下只有 kw/tag 不达标（3.19），
+       但叠上高亮层（它们**压在字上**，字形也被染）之后十个全掉线——所以浅色整体压深一档。
+       `--tok-fn` / `--tok-const` 现值已达标（5.24 / 4.72），不动。 */
+    --tok-com: #135c28; --tok-str: #785000; --tok-pre: #4b535d;
+    --tok-kw: #005673; --tok-num: #663eae; --tok-tag: #005673;
+    --tok-attr: #663eae; --tok-val: #785000;
     --tok-fn: #953800; --tok-const: #6639ba;
     /* 括号彩虹亮色套：GitHub 亮系深色相，alpha .30 浅底可见 */
     --bracket-rainbow-0: rgba(207, 34, 46, .30);  --bracket-rainbow-1: rgba(188, 76, 0, .30);
@@ -2429,7 +2437,7 @@
   .code-marks-line { display: block; }
   .code-marks-line:empty { min-height: 1.6em; }
   .code-mark-hit { background: rgba(var(--code-hl-rgb), .18); }
-  .code-mark-current { background: rgba(var(--code-hl-rgb), .38);
+  .code-mark-current { background: rgba(var(--code-hl-rgb), .24);
     box-shadow: inset 2px 0 0 var(--accent); }
   .code-mark-word { background: rgba(var(--code-hl-rgb), .12); }
   /* 括号配对（工单 code-page-vscode-overhaul/07）：下划线 → VSCode 式描边框
@@ -2470,7 +2478,7 @@
   .code-view::-webkit-scrollbar-corner { background: transparent; }
   /* 选区（工单 code-editor-vscode-polish/02）：alpha .28 → .32——深浅主题下
      选区更可辨（VSCode 选区观感）；文字仍透明（文字由高亮层绘制）。 */
-  .code-ta::selection { background: rgba(var(--code-hl-rgb), .32); color: transparent; }
+  .code-ta::selection { background: rgba(var(--code-hl-rgb), .20); color: transparent; }
   /* 只读标注（工单 code-viewer-editor/02）：非 UTF-8 文件编辑器右上方提示
      （.code-view 已 position:relative 锚定，不随内容滚动）；观感与信息条小
      按钮统一（工单 code-editor-vscode-polish/02：radius-sm、panel-2 底）。 */

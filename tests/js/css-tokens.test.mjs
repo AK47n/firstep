@@ -967,6 +967,13 @@ const CONTRAST_PAIR_COUNT = 376;
  *  （`tests/test_contrast_mirror.py` 每跑一次也会现算复核一遍）。 */
 const CONTRAST_FAMILY_CELL_COUNT = 168;
 
+/** `--tok-*` 族在两主题下的**最坏格**（**冻结**，±0.01）。
+ *  02 单把这笔债还清之后，族面不再有 `debt` 行可对账——"少一层 / 几何写反"这类坏法
+ *  只会让最坏格**变好**，`contrastProblems` 反而无话可说。这一对数是那道闸：
+ *  层表、族表、令牌值、几何任何一处被改宽，它就对不上。
+ *  复算：`python .scratch/code-contrast/probe-00-inventory.py` 的 §3（矩阵）+ §8（格数）。 */
+const CONTRAST_TOK_WORST = { dark: 4.65, light: 4.66 };
+
 /**
  * 例外**两类**。`text` 是族表里的**阈值选取**（默认类），不是例外类别——
  * 机械抽取出来的每一对都算它、**不用登记**；能进例外表的只有：
@@ -1008,8 +1015,8 @@ const CODE_LAYERS = [
   ["--code-bg+hl.当前行", 0.07, "behind"],
   ["--code-bg+hl.词命中", 0.12, "over"],
   ["--code-bg+hl.搜索命中", 0.18, "over"],
-  ["--code-bg+hl.选区", 0.32, "over"],
-  ["--code-bg+hl.当前命中", 0.38, "over"],
+  ["--code-bg+hl.选区", 0.20, "over"],
+  ["--code-bg+hl.当前命中", 0.24, "over"],
   ["--code-bg+--danger-dim", null, "over"],
 ];
 
@@ -1467,11 +1474,9 @@ const CONTRAST_EXCEPTIONS = [
   ["dark", "令牌：var(--accent-dim)", "debt", "最坏格压 --code-bg：1.23，低于 3.0（非文字图形 3:1）——代码 gutter 的折叠占位字形（装饰性，alpha .12 叠在代码底上）", 1.23],
   ["dark", "令牌：var(--border-strong)", "debt", "最坏格压 --panel：1.76，低于 3.0（非文字图形 3:1）——装饰分隔符 ·（描边色当字形用）：非文字档 3:1", 1.76],
   ["dark", "令牌：#fff", "debt", "最坏格压 --warn：2.19，低于 4.5（文字 4.5:1）——语义实心底上的白字（.env-badge）：底不是卡片，而是那三种实心语义色", 2.19],
-  ["dark", "族：--tok-* × 代码底（含 5 层高亮 + 错误行）", "debt", "最坏格 --tok-pre on --code-bg+hl.当前命中：3.04，低于 4.5（文字 4.5:1）——语法高亮族：十个令牌 × 七层，**几何感知**（压在字上的层连字形一起染）。见 probe-00 的整张矩阵", 3.04],
   ["light", "#main-c::selection", "skip", "选区反白块不是「文字压底」：静态口径不适用（跳过判据，只留登记）", 1.38],
   ["light", "令牌：var(--accent-dim)", "debt", "最坏格压 --code-bg：1.15，低于 3.0（非文字图形 3:1）——代码 gutter 的折叠占位字形（装饰性，alpha .12 叠在代码底上）", 1.15],
   ["light", "令牌：var(--border-strong)", "debt", "最坏格压 --bg：1.89，低于 3.0（非文字图形 3:1）——装饰分隔符 ·（描边色当字形用）：非文字档 3:1", 1.89],
-  ["light", "族：--tok-* × 代码底（含 5 层高亮 + 错误行）", "debt", "最坏格 --tok-kw on --code-bg+hl.当前命中：2.07，低于 4.5（文字 4.5:1）——语法高亮族：十个令牌 × 七层，**几何感知**（压在字上的层连字形一起染）。见 probe-00 的整张矩阵", 2.07],
   ["light", "族：--accent 控件描边 / 语义左条", "debt", "最坏格 --accent on --panel-2：2.70，低于 3.0（非文字图形 3:1）——控件普通描边与语义左条：装饰性强于信息性，**大面积改深会动整页观感**——记债不修（03 单的判断）", 2.7],
 
 ];
@@ -1800,8 +1805,21 @@ test("对比度（工单 01）：族的细节矩阵可复算（`--tok-*` 那笔�
   assert.deepEqual(layers, CODE_LAYERS.map(([n]) => n),
     "--tok-* 族展开的层与 CODE_LAYERS 对不上（层表与族表漂了）");
   const worstLight = tok.filter((c) => c.theme === "light").reduce((a, b) => (b.ratio < a.ratio ? b : a));
-  assert.ok(worstLight.ratio < CONTRAST_THRESHOLDS.small,
-    "浅色代码底上语法高亮族的已知债不见了？——若真修好了，请把族表与例外表一起改掉");
+  assert.ok(worstLight.ratio >= CONTRAST_THRESHOLDS.small,
+    `浅色代码底上语法高亮族的最坏格只有 ${worstLight.ratio.toFixed(2)}（02 单已还清这笔债：`
+    + "十个令牌 × 七层全过——它再掉下来说明有人把令牌改浅了或加了新的高亮层）");
+  const worstDark = tok.filter((c) => c.theme === "dark").reduce((a, b) => (b.ratio < a.ratio ? b : a));
+  assert.ok(worstDark.ratio >= CONTRAST_THRESHOLDS.small,
+    `暗色代码底上语法高亮族的最坏格只有 ${worstDark.ratio.toFixed(2)}（同上）`);
+  // **还清之后仍要有人看着**：最坏格冻结（±0.01）。少了层 / 几何写成 behind / 令牌被改浅，
+  // 它都会变——债还清之前靠"与冻结值不一致"那条对账，现在靠这两行。
+  assert.ok(Math.abs(worstLight.ratio - CONTRAST_TOK_WORST.light) <= 0.01,
+    `浅色最坏格 ${worstLight.ratio.toFixed(2)} ≠ 冻结 ${CONTRAST_TOK_WORST.light}`
+    + `（${worstLight.token} on ${worstLight.layer}）——层表/族表/几何/令牌值有一处被改过；`
+    + "确实该改就同步 CONTRAST_TOK_WORST 并在票尾写清");
+  assert.ok(Math.abs(worstDark.ratio - CONTRAST_TOK_WORST.dark) <= 0.01,
+    `暗色最坏格 ${worstDark.ratio.toFixed(2)} ≠ 冻结 ${CONTRAST_TOK_WORST.dark}`
+    + `（${worstDark.token} on ${worstDark.layer}）——同上`);
 });
 
 test("对比度（工单 04，第九条腿）：渲染方内联取色逐条登记，盘上 ↔ 登记表双向对账", () => {
@@ -2159,42 +2177,47 @@ test("全站推广合成红证：九条腿各自都判得红（防'永远绿'的
   const ctTwice = [...CONTRAST_EXCEPTIONS, ctVictim];
   assert.ok(contrastProblems(html, ctTwice).some((p) => p.includes("登记了两次")),
     "同一条例外登记两次没被判出");
-  //    (g) **族面**：把 `--tok-*` 里最坏那格改坏（令牌值变浅）→ 族的最坏格与冻结值不一致 → 红
-  const ctTokAnchor = "--tok-kw: #0096c7; --tok-num: #8250df; --tok-tag: #0096c7;";
+  //    (g) **族面**：把 `--tok-*` 里最坏那格改坏（令牌值变浅）→ 族的最坏格掉线 → 红。
+  //         ⚠ 02 单还清债之后族面**没有 debt 行**，所以红在"没有登记"那条分支上
+  //         （不再是"与冻结值不一致"）。
+  const ctTokAnchor = "--tok-kw: #005673; --tok-num: #663eae; --tok-tag: #005673;";
   assert.ok(html.includes(ctTokAnchor), `锚点变了（${ctTokAnchor}）—— 这条自检会静默空转`);
-  const ctPaleTok = html.replace(ctTokAnchor, "--tok-kw: #bfe9f5; --tok-num: #8250df; --tok-tag: #bfe9f5;");
+  const ctPaleTok = html.replace(ctTokAnchor, "--tok-kw: #bfe9f5; --tok-num: #663eae; --tok-tag: #bfe9f5;");
   assert.notEqual(ctPaleTok, html, "注入没生效（锚点没命中）");
   assert.ok(
-    contrastProblems(ctPaleTok).some((p) => p.includes("族「--tok-*") && p.includes("与冻结值")),
+    contrastProblems(ctPaleTok).some((p) => p.includes("族「--tok-*")),
     "语法高亮族的最坏格改坏之后没被判出（族面判据失效）",
   );
-  //    (g2) **层表少一层**（本轮补的那层被悄悄摘掉）→ 族的最坏格会**变好**：
-  //         现算值 ≠ 冻结值 → 红；格数也少一排（`CONTRAST_FAMILY_CELL_COUNT` 那条硬数抓它）。
+  //    (g2) **层表少一层**（本轮补的那层被悄悄摘掉）→ 最坏格**变好**：债还清之后
+  //         `contrastProblems` 对"变好"无话可说，**闸在冻结值那一对**（见 1760 行的用例）：
+  //         格数少一排 + 最坏格显著变好。这里就按那两把尺子断言。
+  const ctWorstOf = (layers) => {
+    const cells = contrastFamilyCells(html, null, CONTRAST_FAMILIES, layers)
+      .filter((c) => c.label.startsWith("--tok-*") && c.theme === "light");
+    return cells.reduce((a, b) => (b.ratio < a.ratio ? b : a)).ratio;
+  };
+  const ctBaseWorst = ctWorstOf(CODE_LAYERS);
   const ctFewerLayers = CODE_LAYERS.filter(([n]) => n !== "--code-bg+hl.当前命中");
   assert.equal(ctFewerLayers.length, CODE_LAYERS.length - 1, "层表锚点变了——这条自检会静默空转");
-  assert.ok(
-    contrastProblems(html, CONTRAST_EXCEPTIONS, CONTRAST_FAMILIES, CONTRAST_TOKEN_BASES, ctFewerLayers)
-      .some((p) => p.includes("族「--tok-*") && p.includes("与冻结值")),
-    "从层表里摘掉一层之后没被判出（族面会在'少算一层'时静默变绿）",
-  );
   assert.notEqual(contrastFamilyCells(html, null, CONTRAST_FAMILIES, ctFewerLayers).length,
     CONTRAST_FAMILY_CELL_COUNT, "层表少一层之后格数没变——冻结值那条硬数失去意义");
-  //    (g3) **几何写反**（把压在字上的层改成垫在字下）→ 比值变乐观 → 现算值 ≠ 冻结值 → 红。
-  //         注意**格数不变**：这比"少一层"更隐蔽（口径错，不是表短）。
+  assert.ok(ctWorstOf(ctFewerLayers) > ctBaseWorst + 0.01,
+    "从层表里摘掉最狠那层之后最坏格没变好——冻结值那对数字失去意义（'少算一层'会静默变绿）");
+  //    (g3) **几何写反**（把压在字上的层改成垫在字下）→ 比值变乐观 → 最坏格变好。
+  //         注意**格数不变**：这比"少一层"更隐蔽（口径错，不是表短），所以它只能靠冻结值抓。
   const ctWrongGeom = CODE_LAYERS.map(([n, a, g]) => (n === "--code-bg+hl.当前命中" ? [n, a, "behind"] : [n, a, g]));
-  assert.ok(
-    contrastProblems(html, CONTRAST_EXCEPTIONS, CONTRAST_FAMILIES, CONTRAST_TOKEN_BASES, ctWrongGeom)
-      .some((p) => p.includes("与冻结值")),
-    "几何写反（over → behind）之后没被判出——那会让所有压在字上的层静默变乐观",
-  );
+  assert.equal(contrastFamilyCells(html, null, CONTRAST_FAMILIES, ctWrongGeom).length,
+    CONTRAST_FAMILY_CELL_COUNT, "几何写反不该改格数——这条自检的前提变了");
+  assert.ok(ctWorstOf(ctWrongGeom) > ctBaseWorst + 0.01,
+    "几何写反（over → behind）之后最坏格没变好——没有东西在看几何（冻结值那对数字是唯一的一道闸）");
   //    (g4) **`--code-hl-rgb` 从盘上消失**（令牌改名 / 漏定义）→ 那五层解不出色：
-  //         族面格数塌一块 + 最坏格换人 → 与冻结值不一致 → 红。
+  //         族面格数塌一块 + 最坏格换人（`contrastProblems` 现在也会点名"解不出色"）。
   const ctNoHl = html.replace(/--code-hl-rgb: [^;]+;/g, "");
   assert.notEqual(ctNoHl, html, "注入没生效（找不到 --code-hl-rgb 的定义行）");
   assert.ok(contrastFamilyCells(ctNoHl).length < CONTRAST_FAMILY_CELL_COUNT,
     "代码页高亮色令牌缺失后族面格数没塌——说明那几层根本没进判据（静默空转）");
   assert.ok(
-    contrastProblems(ctNoHl).some((p) => p.includes("与冻结值")),
+    contrastProblems(ctNoHl).some((p) => p.includes("解不出色")),
     "代码页高亮色令牌缺失时没被判出（族面最坏格换人却没有对账）",
   );
   //    (g5) **族表里的层名解不出色**（配方写错 / 名字多带了一截 alpha）→ 红：

@@ -119,6 +119,16 @@ def main() -> None:
                 gap = {label: dist(obs, p) for label, p in preds.items()}
                 best = min(gap, key=gap.get)
                 print(f"    实测 {key:<9}= {hx(obs)} → 最贴近：**{best}**（曼哈顿距离 {gap[best]}）")
+            # **屏幕上量出来的比值**（02 单的验收：过线要有真像素那一份）。
+            # 底 = 该画面里出现最多的颜色（选区那一发就是合成后的选区底）。
+            print("    实测比值（字形 vs 该画面的主色底）：")
+            for key in s["files"]:
+                bg = tops[key][0][0]
+                r = L.contrast(cols[key], bg)
+                tier = "（**叠加态 = 口径边界**）" if key == "dblclick" else ""
+                mark = "✅" if r >= L.CONTRAST_THRESHOLDS["small"] else (
+                    "·边界" if key == "dblclick" else "❌")
+                print(f"      {key:<9}{hx(cols[key])} on {hx(bg)}  **{r:.2f}**  {mark}{tier}")
 
     # --- 多 tag 逐格对照（观感零变化取证） ----------------------------------
     tags = sorted({k[0] for k in summary})

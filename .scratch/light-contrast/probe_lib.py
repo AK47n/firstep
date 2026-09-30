@@ -94,8 +94,8 @@ CODE_LAYERS = [
     ("--code-bg+hl.当前行", 0.07, "behind"),
     ("--code-bg+hl.词命中", 0.12, "over"),
     ("--code-bg+hl.搜索命中", 0.18, "over"),
-    ("--code-bg+hl.选区", 0.32, "over"),
-    ("--code-bg+hl.当前命中", 0.38, "over"),
+    ("--code-bg+hl.选区", 0.20, "over"),
+    ("--code-bg+hl.当前命中", 0.24, "over"),
     ("--code-bg+--danger-dim", None, "over"),
 ]
 
