@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=673c3142c0683700f300d476255fa54fe836d3e8 -->
+<!-- changelog-auto: last-commit=d01b03c14cd79df0f2ad77fd4dcb83bfffe6b257 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -28,6 +28,7 @@
 - 22:37 代码配色族 03：禁用态改灰底灰字（去掉 opacity）+ 两条结构判据与真像素量具
 - 22:41 发版 v1.4.1：三处版本号同步 + VERSIONS/README 版本行 + 发版自检读数
 - 23:02 发版 v1.4.1 账本：打包与发布读数 + 交接区与 backlog 回改
+- 23:03 发版 v1.4.1：Release 说明的体积口径改回「约 800 MB」（与 README/实测一致），联网自检复跑 PASS
 
 ## 2026-09-29
 - 12:40 ui-density-sitewide/11：2c 彻底版（真树 + 逐层 LCS 对齐，四条自证随读数跑）
