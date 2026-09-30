@@ -1,7 +1,7 @@
 # 读数：post-publish-check
 # 命令：python tools\check-download-docs.py
 # 工作树：C:\Users\luoji\Desktop\firstep
-# 开始：2026-09-30T23:01:07+08:00
+# 开始：2026-09-30T23:03:44+08:00
 # 退出码：0
 === 1. README「获取方式」 ===
   [OK] 没有已下线形态（7z 分卷 / 需第三方解压工具 / 约 6 GB 那套）
