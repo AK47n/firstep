@@ -1,0 +1,305 @@
+{
+  "tag": "before",
+  "shots": [
+    {
+      "theme": "light",
+      "key": "0",
+      "tab": "generate",
+      "idx": 0,
+      "sel": ".card > .row > #output-dir",
+      "slug": "card-row-output-dir",
+      "text": "",
+      "tag": "input",
+      "how": "disabled 属性",
+      "color": "rgb(31, 35, 40)",
+      "background": "rgb(255, 255, 255)",
+      "border": "rgb(208, 215, 222)",
+      "opacity": 0.6,
+      "fontSize": "14px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        255,
+        255,
+        255
+      ],
+      "box": {
+        "x": 325,
+        "y": 7026,
+        "width": 953,
+        "height": 40
+      },
+      "file": "probe-08-before-light-generate-0-card-row-output-dir.png"
+    },
+    {
+      "theme": "light",
+      "key": "1",
+      "tab": "generate",
+      "idx": 1,
+      "sel": ".card > .row > #btn-pick-output-dir",
+      "slug": "card-row-btn-pick-output-dir",
+      "text": "选择文件夹…",
+      "tag": "button",
+      "how": "disabled 属性",
+      "color": "rgb(31, 35, 40)",
+      "background": "rgb(225, 230, 236)",
+      "border": "rgb(208, 215, 222)",
+      "opacity": 0.45,
+      "fontSize": "14px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        255,
+        255,
+        255
+      ],
+      "box": {
+        "x": 1290,
+        "y": 7027,
+        "width": 111,
+        "height": 38
+      },
+      "file": "probe-08-before-light-generate-1-card-row-btn-pick-output-dir.png"
+    },
+    {
+      "theme": "light",
+      "key": "0",
+      "tab": "hwcheck",
+      "idx": 0,
+      "sel": "#hwcheck-handoff > .hwcheck-handoff > button",
+      "slug": "hwcheck-handoff-hwcheck-hand",
+      "text": "带进生成页",
+      "tag": "button",
+      "how": "disabled 属性",
+      "color": "rgb(31, 35, 40)",
+      "background": "rgb(225, 230, 236)",
+      "border": "rgb(208, 215, 222)",
+      "opacity": 0.45,
+      "fontSize": "14px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        225,
+        230,
+        236
+      ],
+      "box": {
+        "x": 154,
+        "y": 651,
+        "width": 100,
+        "height": 38
+      },
+      "file": "probe-08-before-light-hwcheck-0-hwcheck-handoff-hwcheck-hand.png"
+    },
+    {
+      "theme": "light",
+      "key": "1",
+      "tab": "hwcheck",
+      "idx": 1,
+      "sel": ".card > .row > #btn-hwcheck-triage",
+      "slug": "card-row-btn-hwcheck-triage",
+      "text": "让 AI 分析",
+      "tag": "button",
+      "how": "disabled 属性",
+      "color": "rgb(31, 35, 40)",
+      "background": "rgb(225, 230, 236)",
+      "border": "rgb(208, 215, 222)",
+      "opacity": 0.45,
+      "fontSize": "14px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        255,
+        255,
+        255
+      ],
+      "box": {
+        "x": 135,
+        "y": 3244,
+        "width": 94,
+        "height": 38
+      },
+      "file": "probe-08-before-light-hwcheck-1-card-row-btn-hwcheck-triage.png"
+    },
+    {
+      "theme": "light",
+      "key": "0",
+      "tab": "master",
+      "idx": 0,
+      "sel": ".card > .row > #btn-distill",
+      "slug": "card-row-btn-distill",
+      "text": "AI 提炼报告",
+      "tag": "button",
+      "how": "disabled 属性",
+      "color": "rgb(4, 34, 43)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgba(0, 0, 0, 0)",
+      "opacity": 0.45,
+      "fontSize": "14px",
+      "ownGradient": true,
+      "ancestorGradient": true,
+      "behind": [
+        255,
+        255,
+        255
+      ],
+      "box": {
+        "x": 229,
+        "y": 329,
+        "width": 125,
+        "height": 38
+      },
+      "file": "probe-08-before-light-master-0-card-row-btn-distill.png"
+    },
+    {
+      "theme": "dark",
+      "key": "0",
+      "tab": "generate",
+      "idx": 0,
+      "sel": ".card > .row > #output-dir",
+      "slug": "card-row-output-dir",
+      "text": "",
+      "tag": "input",
+      "how": "disabled 属性",
+      "color": "rgb(230, 237, 243)",
+      "background": "rgb(13, 17, 23)",
+      "border": "rgb(48, 54, 61)",
+      "opacity": 0.6,
+      "fontSize": "14px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        22,
+        27,
+        34
+      ],
+      "box": {
+        "x": 325,
+        "y": 6785,
+        "width": 953,
+        "height": 40
+      },
+      "file": "probe-08-before-dark-generate-0-card-row-output-dir.png"
+    },
+    {
+      "theme": "dark",
+      "key": "1",
+      "tab": "generate",
+      "idx": 1,
+      "sel": ".card > .row > #btn-pick-output-dir",
+      "slug": "card-row-btn-pick-output-dir",
+      "text": "选择文件夹…",
+      "tag": "button",
+      "how": "disabled 属性",
+      "color": "rgb(230, 237, 243)",
+      "background": "rgb(28, 33, 40)",
+      "border": "rgb(48, 54, 61)",
+      "opacity": 0.45,
+      "fontSize": "14px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        22,
+        27,
+        34
+      ],
+      "box": {
+        "x": 1290,
+        "y": 6786,
+        "width": 111,
+        "height": 38
+      },
+      "file": "probe-08-before-dark-generate-1-card-row-btn-pick-output-dir.png"
+    },
+    {
+      "theme": "dark",
+      "key": "0",
+      "tab": "hwcheck",
+      "idx": 0,
+      "sel": "#hwcheck-handoff > .hwcheck-handoff > button",
+      "slug": "hwcheck-handoff-hwcheck-hand",
+      "text": "带进生成页",
+      "tag": "button",
+      "how": "disabled 属性",
+      "color": "rgb(230, 237, 243)",
+      "background": "rgb(28, 33, 40)",
+      "border": "rgb(48, 54, 61)",
+      "opacity": 0.45,
+      "fontSize": "14px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        28,
+        33,
+        40
+      ],
+      "box": {
+        "x": 154,
+        "y": 651,
+        "width": 100,
+        "height": 38
+      },
+      "file": "probe-08-before-dark-hwcheck-0-hwcheck-handoff-hwcheck-hand.png"
+    },
+    {
+      "theme": "dark",
+      "key": "1",
+      "tab": "hwcheck",
+      "idx": 1,
+      "sel": ".card > .row > #btn-hwcheck-triage",
+      "slug": "card-row-btn-hwcheck-triage",
+      "text": "让 AI 分析",
+      "tag": "button",
+      "how": "disabled 属性",
+      "color": "rgb(230, 237, 243)",
+      "background": "rgb(28, 33, 40)",
+      "border": "rgb(48, 54, 61)",
+      "opacity": 0.45,
+      "fontSize": "14px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        22,
+        27,
+        34
+      ],
+      "box": {
+        "x": 135,
+        "y": 3244,
+        "width": 94,
+        "height": 38
+      },
+      "file": "probe-08-before-dark-hwcheck-1-card-row-btn-hwcheck-triage.png"
+    },
+    {
+      "theme": "dark",
+      "key": "0",
+      "tab": "master",
+      "idx": 0,
+      "sel": ".card > .row > #btn-distill",
+      "slug": "card-row-btn-distill",
+      "text": "AI 提炼报告",
+      "tag": "button",
+      "how": "disabled 属性",
+      "color": "rgb(4, 34, 43)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgba(0, 0, 0, 0)",
+      "opacity": 0.45,
+      "fontSize": "14px",
+      "ownGradient": true,
+      "ancestorGradient": true,
+      "behind": [
+        22,
+        27,
+        34
+      ],
+      "box": {
+        "x": 229,
+        "y": 329,
+        "width": 125,
+        "height": 38
+      },
+      "file": "probe-08-before-dark-master-0-card-row-btn-distill.png"
+    }
+  ]
+}

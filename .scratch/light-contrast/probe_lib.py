@@ -152,6 +152,9 @@ CONTRAST_FAMILIES = [
      "键盘焦点环与定位环（03 单提到 3:1 以上）：看不见焦点环 = 键盘用户找不到焦点"),
     ("--accent 控件描边 / 语义左条", "=--accent", ["--bg", "--panel", "--panel-2"], "nontext",
      "控件普通描边与语义左条：装饰性强于信息性，**大面积改深会动整页观感**——记债不修（03 单的判断）"),
+    ("--muted × 禁用态底（panel-2 / panel）", "=--muted", ["--panel-2", "--panel"], "text",
+     "禁用控件（工单 code-contrast/03）：灰底灰字——文字 --muted、底 --panel-2（也可能坐在 --panel 上）。"
+     "禁用态从此可现算，不再靠 opacity 整体变淡（结构判据 targetsDisabledState 在同一条腿里）"),
 ]
 
 

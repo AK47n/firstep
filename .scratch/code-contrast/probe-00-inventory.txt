@@ -1,7 +1,7 @@
 # 读数：probe-00-inventory
 # 命令：python .scratch\code-contrast\probe-00-inventory.py
 # 工作树：C:\Users\luoji\Desktop\firstep
-# 开始：2026-09-30T21:05:06+08:00
+# 开始：2026-09-30T22:27:50+08:00
 # 退出码：0
 ============================================================================================================
 代码配色族轮 · 侦察读数（probe-00：层清单 + 叠放几何 + 选值预算）
@@ -222,9 +222,10 @@ dark --code-hl-rgb  .20 合成    .24 合成         可见度    要改/10  解
 
 ## 8. 族面格数（守卫 `CONTRAST_FAMILY_CELL_COUNT` 的复算口）
 
-  合计 **168**
+  合计 **172**
      140  --tok-* × 代码底（含 5 层高亮 + 错误行）
       16  --code-text × 括号彩虹底（8 色）
        6  --accent-text 焦点环 / 定位环
        6  --accent 控件描边 / 语义左条
+       4  --muted × 禁用态底（panel-2 / panel）
   —— 守卫里那个常量必须等于上面这一行的合计；`tests/test_contrast_mirror.py` 每次跑都会现算复核。

@@ -1,0 +1,113 @@
+# 读数：probe-03-contrast
+# 命令：python .scratch\light-contrast\probe-03-contrast.py
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-30T22:27:50+08:00
+# 退出码：0
+==============================================================================
+浅色调色板轮 · 读数（probe-03：例外表 ↔ 盘上双向对账）
+页面：src\contest_generator\static\index.html；守卫：tests\js\css-tokens.test.mjs
+==============================================================================
+
+## ① 机械配对（同规则 `color:` × `background:`，两主题各算一遍）
+
+总数 **392**
+  dark   196 对，不达标 **0**
+  light  196 对，不达标 **1**
+
+主题         比值    需  选择器 / 色对
+light    1.38  4.5  #main-c::selection  [#ffffff on #b8e2ef]
+
+## ② 例外表（守卫源码解析；单源）
+
+条数 **7**；类别分布 {'debt': 6, 'skip': 1}；主题分布 {'dark': 3, 'light': 4}
+机械面 1 条 / 族面 1 条 / 令牌面 5 条
+
+主题     类别         冻结  认人键
+dark   debt     1.23  令牌：var(--accent-dim)
+dark   debt     1.76  令牌：var(--border-strong)
+dark   debt     2.19  令牌：#fff
+light  debt     1.15  令牌：var(--accent-dim)
+light  debt     1.89  令牌：var(--border-strong)
+light  debt     2.70  族：--accent 控件描边 / 语义左条
+light  skip     1.38  #main-c::selection
+
+## ③ 双向差（本探针的核心读数）
+
+盘上不达标 / 冻结值对不上的：**0** 条
+
+表里有、盘上认不到的（死条）：**0** 条
+
+已经过线却还挂着登记的（该摘掉）：**0** 条
+
+## ④ 族面：每族每主题的最坏格 ↔ 冻结值
+
+（族表**从守卫源码解析**；逐格矩阵看 `probe-01-inventory.txt` §8——这里只报最坏格，免得同一张 100 行矩阵在两张读数里各抄一份）
+
+族                                       主题     最坏格                                    比值    需     冻结
+--tok-* × 代码底（含 5 层高亮 + 错误行）            dark   --tok-const on --code-bg+hl.当前命中     4.65  4.5—（过线，未登记）
+--tok-* × 代码底（含 5 层高亮 + 错误行）            light  --tok-pre on --code-bg+hl.当前命中       4.66  4.5—（过线，未登记）
+--code-text × 括号彩虹底（8 色）                dark   --code-text on --code-bg+--bracket-rainbow-4   6.56  4.5—（过线，未登记）
+--code-text × 括号彩虹底（8 色）                light  --code-text on --code-bg+--bracket-rainbow-4   7.25  4.5—（过线，未登记）
+--accent-text 焦点环 / 定位环                 dark   --accent-text on --panel-2           9.14  3.0—（过线，未登记）
+--accent-text 焦点环 / 定位环                 light  --accent-text on --panel-2           5.53  3.0—（过线，未登记）
+--accent 控件描边 / 语义左条                    dark   --accent on --panel-2                9.14  3.0—（过线，未登记）
+--accent 控件描边 / 语义左条                    light  --accent on --panel-2                2.70  3.0   2.70
+--muted × 禁用态底（panel-2 / panel）         dark   --muted on --panel-2                 5.67  4.5—（过线，未登记）
+--muted × 禁用态底（panel-2 / panel）         light  --muted on --panel-2                 5.25  4.5—（过线，未登记）
+
+## ⑤ 令牌面（第三面）：无底规则里的文字令牌 ↔ 冻结值
+
+（令牌表同样从守卫源码解析；这一面是 01 单双轴评审点名的覆盖缺口——
+ 584 条含 `color:` 的规则里 390 条底在基类/祖先，机械面看不见它们）
+
+无底规则里当文字色用的令牌：**27** 个；令牌表 **27** 行（其中空底的 skip 行 13 行）
+
+令牌字面                      主题     最坏格压                   比值    需     冻结
+var(--text)               dark   --panel-2           13.70  4.5—（过线，未登记）
+var(--text)               light  --panel-2           12.59  4.5—（过线，未登记）
+var(--accent-text)        dark   --panel-2            9.14  4.5—（过线，未登记）
+var(--accent-text)        light  --panel-2            5.53  4.5—（过线，未登记）
+var(--on-accent)          dark   --accent             9.35  4.5—（过线，未登记）
+var(--on-accent)          light  --accent             4.88  4.5—（过线，未登记）
+var(--muted)              dark   --panel-2            5.67  4.5—（过线，未登记）
+var(--muted)              light  --panel-2            5.25  4.5—（过线，未登记）
+var(--danger-text)        dark   --panel-2            5.70  4.5—（过线，未登记）
+var(--danger-text)        light  --panel-2            5.85  4.5—（过线，未登记）
+var(--danger-text, #e5484d)dark   --panel-2            5.70  4.5—（过线，未登记）
+var(--danger-text, #e5484d)light  --panel-2            5.85  4.5—（过线，未登记）
+var(--ok-text)            dark   --panel-2            7.14  4.5—（过线，未登记）
+var(--ok-text)            light  --panel-2            5.56  4.5—（过线，未登记）
+var(--warn-text)          dark   --panel-2            7.38  4.5—（过线，未登记）
+var(--warn-text)          light  --panel-2            5.57  4.5—（过线，未登记）
+var(--info-text)          dark   --panel-2            6.41  4.5—（过线，未登记）
+var(--info-text)          light  --panel-2            5.68  4.5—（过线，未登记）
+var(--code-text)          dark   --code-bg           15.69  4.5—（过线，未登记）
+var(--code-text)          light  --code-bg           14.84  4.5—（过线，未登记）
+#fff                      dark   --warn               2.19  4.5   2.19
+#fff                      light  --warn               4.87  4.5—（过线，未登记）
+var(--on-accent-deep)     dark   --accent            10.91  4.5—（过线，未登记）
+var(--on-accent-deep)     light  --accent             5.69  4.5—（过线，未登记）
+var(--border-strong)      dark   --panel              1.76  3.0   1.76
+var(--border-strong)      light  --bg                 1.89  3.0   1.89
+var(--accent-dim)         dark   --code-bg            1.23  3.0   1.23
+var(--accent-dim)         light  --code-bg            1.15  3.0   1.15
+
+## ⑥ 覆盖审计：机械面会不会漏掉「同选择器、跨规则」的配对？
+
+机械面按「**同一条规则**里既有 `color:` 又有 `background:`」配对。样式块里还存在另一种写法——
+同一个选择器拆成两条规则，一条给字色、一条给底。这一栏把那种写法也配一遍，与机械面对差集：
+
+跨规则组合数 **392**；其中不达标 **1**
+机械面不达标 **1**
+**只在跨规则面**（机械面漏掉）：0 条
+**只在机械面**：0 条
+
+（两向差集都为 0 = 在这个文件上，两种口径**逐条相同**——机械面没有漏掉跨规则那种写法；哪天真漏了，这一栏会先红。）
+
+## ⑦ 底部口径（别混着读）
+
+  · 底 = **元素自己那层背景合成到 `--panel` 上**——上一轮那三个乐观数（6.11 / 5.19 / 3.39）量的是祖先底，本轮口径已更正；
+  · 阈值两档：小字 4.5 / 大字（≥24px 或 ≥18.66px+bold）3.0；族面 `nontext` 用 3.0；
+  · **三面各管一段**：机械面 = 同规则带底的配对；族面 = 底在代码页那几层的族；
+    令牌面 = 无底规则里的文字令牌（票面口径：底在基类/祖先，选择器级判不了）。
+  · 三面都**只登记不达标与不适用**（达标的现算即可）——这与描边那轮『115 条全登记』不是同一把尺。

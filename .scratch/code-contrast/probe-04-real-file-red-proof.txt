@@ -1,0 +1,37 @@
+# 读数：probe-04-real-file-red-proof
+# 命令：python .scratch\code-contrast\probe-04-real-file-red-proof.py
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-30T22:28:10+08:00
+# 退出码：0
+================================================================================================
+代码配色族轮 · 真文件反证（禁用态：闸门在盘上的真文件里也会响）
+目标：src\contest_generator\static\index.html；注入 → 跑前端门禁 → 原字节复原 → sha256 校验
+================================================================================================
+
+================================================================================================
+## ① 把 `opacity: .45` 放回禁用态（`:disabled` 那一半）
+
+  门禁退出码 1（要 ≠ 0）　文案命中「禁用态不许用 opacity 表达」：是
+  复原后 sha256 与注入前一致 ✅（d27fe23341135b4f…）
+  闸门原文：禁用态不许用 opacity 表达：button:disabled, button:disabled:hover, .btn:disabled（opacity: .45）——灰底灰字（background: var(--panel-2) + color: var(--muted) + border-color: var(--border)）才是可现算、可守卫的禁用态：opacity 的比值取决于它
+  闸门原文：+   '禁用态不许用 opacity 表达：button:disabled, button:disabled:hover, .btn:disabled（opacity: .45）——灰底灰字（background: var(--panel-2) + color: var(--muted) + border-color: var(--border)）才是可现算、可守卫的禁用态：opacity 的比
+  闸门原文：actual: [ '禁用态不许用 opacity 表达：button:disabled, button:disabled:hover, .btn:disabled（opacity: .45）——灰底灰字（background: var(--panel-2) + color: var(--muted) + border-color: var(--border)）才是可现算、可守卫的禁用态：opac
+  闸门原文：+   '禁用态不许用 opacity 表达：button:disabled, button:disabled:hover, .btn:disabled（opacity: .45）——灰底灰字（background: var(--panel-2) + color: var(--muted) + border-color: var(--border)）才是可现算、可守卫的禁用态：opacity 的比
+  闸门原文：actual: [ '禁用态不许用 opacity 表达：button:disabled, button:disabled:hover, .btn:disabled（opacity: .45）——灰底灰字（background: var(--panel-2) + color: var(--muted) + border-color: var(--border)）才是可现算、可守卫的禁用态：opac
+  —— 这条反证**成立**
+
+================================================================================================
+## ③ 注入一条 `.disabled` 类形态的假规则（类那一半）
+
+  门禁退出码 1（要 ≠ 0）　文案命中「禁用态不许用 opacity 表达」：是
+  复原后 sha256 与注入前一致 ✅（d27fe23341135b4f…）
+  闸门原文：禁用态不许用 opacity 表达：.tmp-probe.disabled（opacity: .5）——灰底灰字（background: var(--panel-2) + color: var(--muted) + border-color: var(--border)）才是可现算、可守卫的禁用态：opacity 的比值取决于它压在谁身上（静态算不出、全站扫描又会被祖先渐变滤掉，见 .scratc
+  闸门原文：+   '禁用态不许用 opacity 表达：.tmp-probe.disabled（opacity: .5）——灰底灰字（background: var(--panel-2) + color: var(--muted) + border-color: var(--border)）才是可现算、可守卫的禁用态：opacity 的比值取决于它压在谁身上（静态算不出、全站扫描又会被祖先渐变滤掉，见 .s
+  闸门原文：actual: [ '禁用态不许用 opacity 表达：.tmp-probe.disabled（opacity: .5）——灰底灰字（background: var(--panel-2) + color: var(--muted) + border-color: var(--border)）才是可现算、可守卫的禁用态：opacity 的比值取决于它压在谁身上（静态算不出、全站扫描又会被祖先渐变滤
+  闸门原文：+   '禁用态不许用 opacity 表达：.tmp-probe.disabled（opacity: .5）——灰底灰字（background: var(--panel-2) + color: var(--muted) + border-color: var(--border)）才是可现算、可守卫的禁用态：opacity 的比值取决于它压在谁身上（静态算不出、全站扫描又会被祖先渐变滤掉，见 .s
+  闸门原文：actual: [ '禁用态不许用 opacity 表达：.tmp-probe.disabled（opacity: .5）——灰底灰字（background: var(--panel-2) + color: var(--muted) + border-color: var(--border)）才是可现算、可守卫的禁用态：opacity 的比值取决于它压在谁身上（静态算不出、全站扫描又会被祖先渐变滤
+  —— 这条反证**成立**
+
+================================================================================================
+合计 **2/2** 条真文件反证成立——闸门在真文件上也会响
+================================================================================================

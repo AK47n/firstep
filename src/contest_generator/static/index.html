@@ -357,23 +357,36 @@
   button { padding: 7px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm);
            background: var(--panel-2); cursor: pointer; font: inherit; color: var(--text); }
   button:hover { border-color: var(--accent); color: var(--accent-text); }
-  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-  button.primary:hover { background: var(--accent-dark); color: var(--on-accent-dark); }
-  button.danger { border-color: var(--danger); background: var(--danger-dim); color: var(--danger-text); }
-  button.danger:hover { background: var(--danger); color: var(--on-danger); }
-  button.pin-overview-on { border-color: var(--accent); color: var(--accent-text); background: var(--accent-dim); }
+  button.primary:not(:disabled) { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  button.primary:not(:disabled):hover { background: var(--accent-dark); color: var(--on-accent-dark); }
+  button.danger:not(:disabled) { border-color: var(--danger); background: var(--danger-dim); color: var(--danger-text); }
+  button.danger:not(:disabled):hover { background: var(--danger); color: var(--on-danger); }
+  button.pin-overview-on:not(:disabled) { border-color: var(--accent); color: var(--accent-text); background: var(--accent-dim); }
   /* 强调按钮（工单 newcomer-glossary/03）：accent 描边 + 淡底；欢迎卡
      「去配置 API key」与本卡「去任务推进」共用该形态（仅用既有令牌）。 */
-  button.accent { border-color: var(--accent); color: var(--accent-text); background: var(--accent-dim); }
-  button.accent:hover { background: var(--accent); color: var(--on-accent); }
+  button.accent:not(:disabled) { border-color: var(--accent); color: var(--accent-text); background: var(--accent-dim); }
+  button.accent:not(:disabled):hover { background: var(--accent); color: var(--on-accent); }
   /* 幽灵按钮（次要动作的第三形态，工单 ui-density-sitewide/02）：透明底 + 随文色描边。
      标记里两处 class="ghost"（顶部提示条里的「去设置 / 去填写」）此前**没有对应规则**，
      渲染成默认实心按钮、在琥珀提示条里很重——这条把那个意图补实。 */
   button.ghost { background: transparent; border-color: currentColor; color: inherit; }
-  button.ghost:hover { background: var(--accent-dim); color: inherit; border-color: currentColor; }
-  button:disabled { opacity: .45; cursor: not-allowed; }
-  button:disabled:hover { border-color: var(--border); color: var(--text); }   /* 禁用态不响应悬停 */
-  textarea:disabled, input:disabled, select:disabled { opacity: .6; cursor: not-allowed; }
+  button.ghost:hover:not(:disabled) { background: var(--accent-dim); color: inherit; border-color: currentColor; }
+  /* 禁用态（工单 code-contrast/03）：**灰底灰字**——不再靠 `opacity` 整体变淡。
+     为什么：`opacity` 让比值取决于"它压在谁身上"（人眼复核实测 hwcheck「带进生成页」**2.66**、
+     master「AI 提炼报告」**2.06**），而灰底灰字是**可现算、可守卫**的：文字 `--muted`、
+     底 `--panel-2`、描边 `--border`（腿⑧ 族面「--muted × 禁用态底」逐主题 ≥ 4.5）。
+     ⚠ **禁用态只有这一条**：形态（`.primary` / `.danger` / `.accent` / `.ghost` / `.btn-task-*`）
+     各自用 `:not(:disabled)` 声明"那是**启用态**的外观"。理由：`button:disabled` 与 `button.primary`
+     权重同为 (0,1,1)，只靠这一条压不住**更靠后或更具体**的形态规则——`.primary` 那个渐变块
+     （权重相同但更靠后）与 `.task-card .btn-*`（(0,2,0) 更具体）就是这么漏的。
+     新增形态照这个写法即可，**不必回来改这里**；守卫 `tests/js/css-tokens.test.mjs` 腿⑧
+     有一条结构判据钉住"以 `button.` 开头的上色规则必须带 `:disabled`"。 */
+  button:disabled, button:disabled:hover, .btn:disabled {
+    background: var(--panel-2); color: var(--muted); border-color: var(--border);
+    box-shadow: none; cursor: not-allowed; }
+  textarea:disabled, input:disabled, select:disabled {
+    background: var(--panel-2); color: var(--muted); border-color: var(--border);
+    cursor: not-allowed; }
   button .spinner { vertical-align: middle; }                                 /* 按钮内 spinner 垂直居中 */
   /* 按钮三类（工单 ux-walkthrough-02/20）：.btn 基类（= 默认按钮外观）、
      .btn-pill--sm 小胶囊（= btn-mini 尺寸）、.btn-pill--md 标准胶囊（默认
@@ -439,7 +452,9 @@
                    cursor: pointer; flex: 1; min-width: 220px; background: var(--panel); }
   .platform-card:hover { border-color: var(--border-strong); }
   .platform-card.selected { border-color: var(--accent); background: var(--accent-dim); }
-  .platform-card.disabled { opacity: .5; cursor: not-allowed; background: var(--panel-2); }
+  /* 不可选的卡片不是按钮，但**文字同样走 `--muted`**（工单 code-contrast/03：禁用态一视同仁） */
+  .platform-card.disabled { cursor: not-allowed; background: var(--panel-2);
+                            color: var(--muted); border-color: var(--border); }
   .platform-card .name { font-weight: 600; }
   .badge { display: inline-block; padding: 1px var(--space-2); border-radius: var(--radius-md); font-size: var(--fs-tag);
            margin-left: 6px; vertical-align: 1px; }
@@ -1812,15 +1827,15 @@
                 box-shadow: var(--shadow-card-hover); }
   .item:hover, .score-panel:hover, .fix-row:hover, .group-card:hover { border-color: var(--border-strong); border-left-color: var(--accent); border-left-color: var(--accent); }
   .fix-row:hover { transform: translateY(-1px); }
-  button.primary {
+  button.primary:not(:disabled) {
     background: linear-gradient(135deg, #00d4ff 0%, #00a8cc 100%);
     border-color: transparent;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 2px 10px rgba(var(--accent-rgb), .16); }
-  button.primary:hover {
+  button.primary:not(:disabled):hover {
     background: linear-gradient(135deg, var(--accent-hi) 0%, var(--accent-lo) 100%);
     box-shadow: 0 0 18px rgba(var(--accent-rgb), .45), 0 2px 10px rgba(var(--accent-rgb), .22);
     transform: translateY(-1px); }
-  button.primary:active { transform: translateY(0); box-shadow: 0 0 8px rgba(var(--accent-rgb), .3); }
+  button.primary:not(:disabled):active { transform: translateY(0); box-shadow: 0 0 8px rgba(var(--accent-rgb), .3); }
   /* 主按钮呼吸微光（工单 ui-polish-9/01；ui-polish-11/04 收敛为关键 CTA 专属）：
      只有 .primary.breathe（生成工程/让 AI 推荐/一键编译修复/确认入库/保存设置）
      常态青色外光循环，disabled 无光，hover 暂停让增强阴影生效；只动 box-shadow
@@ -1942,7 +1957,8 @@
     gap: 1px; padding: var(--space-2) 10px; background: var(--panel-2); color: var(--text);
     border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer; font-size: var(--fs-body); }
   .master-file-btn:hover:not(:disabled) { border-color: var(--accent); }
-  .master-file-btn:disabled { opacity: .55; cursor: not-allowed; }
+  .master-file-btn:disabled { background: var(--panel-2); color: var(--muted);
+    border-color: var(--border); cursor: not-allowed; }
   .master-file-btn.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-dim); }
   /* 母版健康徽章（工单 master-library-ui-2/01）：表格行体检直观化，悬停看明细 */
   .master-health-pill { display: inline-flex; align-items: center; gap: var(--space-1); padding: 2px var(--space-2);
@@ -2021,7 +2037,8 @@
   .code-statusbar button { padding: 3px 10px; }
   .code-statusbar button.on { color: var(--accent-text); border-color: var(--accent);
     background: var(--accent-dim); }
-  .code-statusbar button:disabled { opacity: .55; cursor: default; }
+  .code-statusbar button:disabled { background: var(--panel-2); color: var(--muted);
+    border-color: var(--border); cursor: default; }
   /* 状态栏信息区（工单 code-editor-vscode-polish/01）：VSCode 式右侧动态信息
      段——光标行列 / 语言徽标 / 编码 / 缩进 / 缩放；等宽小字 muted，行列值
      text 色突出；空态（无活动文件）内容为空串、容器天然零宽不占位；窄视口
@@ -2130,7 +2147,8 @@
   #btn-code-ai-send { font-size: var(--fs-tag); line-height: 1; padding: 6px 10px;
     border: 1px solid var(--border); border-radius: var(--radius-sm);
     background: var(--accent); color: var(--on-accent); cursor: pointer; flex: none; }
-  #btn-code-ai-send:disabled { opacity: .5; cursor: default; }
+  #btn-code-ai-send:disabled { background: var(--panel-2); color: var(--muted);
+    border-color: var(--border); cursor: default; }
   /* 选区浮动按钮：挂 .code-edit 内容坐标系（absolute 随滚动天然跟随选区行）
      ——z-index 高于 textarea（.code-ta z-index 1）；定位由 ui/code-ai-chat.js
      以选区末行 .code-hl-line rect 计算。 */
@@ -2155,8 +2173,9 @@
     text-align: left; padding: 3px var(--space-2); width: 100%; box-sizing: border-box; }
   button.code-change-item { border: 0; background: transparent; color: var(--text);
     font-size: var(--fs-note); cursor: pointer; }
-  button.code-change-item:hover { background: var(--accent-dim); color: var(--accent-text); }
-  .code-change-item.disabled { color: var(--muted); opacity: .65; cursor: default; }
+  button.code-change-item:hover:not(:disabled) { background: var(--accent-dim); color: var(--accent-text); }
+  .code-change-item.disabled { color: var(--muted); background: var(--panel-2);
+    border-color: var(--border); cursor: default; }
   .code-change-badge { flex: none; font-size: var(--fs-tag); line-height: 1; padding: 2px 6px;
     border-radius: var(--radius-xs); font-weight: 650; }
   .code-change-badge.b-added { background: var(--accent-dim); color: var(--accent-text); }
@@ -3232,10 +3251,12 @@
   /* 任务卡按钮层级（工单 task-card-polish/01）：主操作「做这一步」accent 实底；
      物理动作「烧录到板子」与咨询「有不懂的？问这里」accent 描边；其余 base 统一 */
   .task-card .row { gap: var(--space-2); }
-  .task-card .btn-task-run { background: var(--accent); border-color: var(--accent);
+  /* 任务卡上这三个动作补 `:not(:disabled)`（工单 code-contrast/03）：它们的选择器比
+     `button:disabled`（(0,1,1)）更具体（(0,2,0)），禁用时会盖掉灰底灰字——同 `.primary` 那两条。 */
+  .task-card .btn-task-run:not(:disabled) { background: var(--accent); border-color: var(--accent);
                              color: var(--on-accent); }
   .task-card .btn-task-run:not(:disabled):hover { background: var(--accent-dark); color: var(--on-accent-dark); }
-  .task-card .btn-task-flash, .task-card .btn-task-dialog {
+  .task-card .btn-task-flash:not(:disabled), .task-card .btn-task-dialog:not(:disabled) {
                              border-color: var(--accent); color: var(--accent-text); }
   .task-card .btn-task-flash:not(:disabled):hover, .task-card .btn-task-dialog:not(:disabled):hover {
                              background: var(--accent-dim); color: var(--accent-text); }
@@ -3373,7 +3394,8 @@
   .toast-copy:hover { border-color: var(--accent); }
   .toast-action:hover { border-color: var(--ok); }
   .wait-cancel:hover { border-color: var(--warn); }
-  .wait-cancel:disabled { opacity: .6; cursor: default; }
+  .wait-cancel:disabled { background: var(--panel-2); color: var(--muted);
+    border-color: var(--border); cursor: default; }
   /* 长任务秒表（工单 ux-walkthrough-02/12）：状态行后「已等待 mm:ss」 */
   .wait-clock { display: inline-block; margin-left: 6px; font-size: var(--fs-tag);
                 color: var(--muted); white-space: nowrap; }

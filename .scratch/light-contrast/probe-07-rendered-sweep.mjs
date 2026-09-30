@@ -8,7 +8,13 @@
 //   · 文字 = 有直接文本子节点的元素（文本型 input/select/textarea/button 也算）；
 //     自绘控件（checkbox/radio）**没有文字**，不算——那是 v1.4.0 验收踩过的假红口径；
 //   · 阈值 = 小字 4.5 / 大字（≥24px 或 ≥18.66px+bold）3.0，与静态面同一套；
-//   · 每个页签先**展开所有 `<details>`**（折叠区里的字也是字）。
+//   · 每个页签先**展开所有 `<details>`**（折叠区里的字也是字）；
+//   · **禁用控件单列一桶、不被"祖先渐变"滤掉**（工单 code-contrast/03 改）：禁用态是全站最低的
+//     那一类，而改之前它们坐在 `.card` 的渐变里、整批命中"祖先渐变跳过"⇒ 那个桶**实测永远是空的**。
+//     现在禁用控件的底是**元素自己的** `--panel-2`（不透明），祖先渐变影响不到这个比值，
+//     所以这一类照样量（达标 ✅ / 掉线 ❌ 都打出来），并如实标 `ancestorGradient`。
+//     ⚠ 禁用控件**不进**「有文字元素」那个计数（它们在禁用桶里单列）——这样"不达标 N"与
+//     "有文字元素 M"仍然指同一批元素，也与改动前的读数可比。
 //
 // 跑法（仓库根）：
 //     node .scratch/light-contrast/probe-07-rendered-sweep.mjs
@@ -36,6 +42,9 @@ const TABS = ["generate", "hwcheck", "settings", "guide", "changelog", "code",
   "master", "library", "reference", "pdf", "md", "topic"];
 
 const SWEEP = (payload) => {   // 参数化：page.evaluate 只吃**一个**入参（且看不到模块作用域）
+  // ⚠ 下面这几个助手（`lin` / `lum` / `ratio` / `parse` / `effBg` / `hasText` / `path`）**必须
+  //   写在这里面**：`SWEEP` 会被序列化后丢进浏览器执行，看不到模块作用域——`probe-08` 里那
+  //   一份同样的助手是结构使然（Python 读数半那边能共用，已抽进 `pixel_lib.py`）。
   const { tabs: TABS, th: THRESH } = payload;
   const lin = (v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
   const lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
@@ -84,8 +93,13 @@ const SWEEP = (payload) => {   // 参数化：page.evaluate 只吃**一个**入�
       if (cs.display === "none" || cs.visibility === "hidden" || Number(cs.opacity) < 0.15) continue;
       const box = el.getBoundingClientRect();
       if (box.width < 1 || box.height < 1) { skips.零尺寸++; continue; }   // 零尺寸（不可见）
-      const isDisabled = el.disabled === true;                // 禁用控件：WCAG 明文豁免——
-      // **另记一桶**而不是丢掉（不然"全站最低的禁用态"在扫描里永远看不见，读数就是失真的）
+      // 禁用控件：WCAG 明文豁免——但**另记一桶、且照样量比值**（工单 code-contrast/03 改的）。
+      // 改之前它们先撞上"祖先渐变跳过"，于是禁用桶**实测永远是空的**（坐在 `.card` 渐变里的
+      // 那些按钮整批消失）——而禁用态恰恰是全站最低的那一类，"扫描看不见"绝不能当达标。
+      // 现在禁用控件的底是**元素自己的** `--panel-2`（不透明）⇒ 祖先渐变不影响这个比值，
+      // 所以这一类不放行那一条跳过（见下面 `ancGrad && !isDisabled`）。
+      const isDisabled = el.disabled === true
+        || (typeof el.className === "string" && el.classList.contains("disabled"));
       // **渐变底**（background-image 不是 none）：ackgroundColor 是 transparent，
       // 静态面会把它算到祖先底上（假红）。渐变有专项判据（CONTRAST_GRADIENT_ENDS），
       // 这里只**记账不判**——数量一并报出来。
@@ -95,9 +109,8 @@ const SWEEP = (payload) => {   // 参数化：page.evaluate 只吃**一个**入�
       for (let n = el.parentElement; n; n = n.parentElement) {
         if (getComputedStyle(n).backgroundImage !== "none") { ancGrad = true; break; }
       }
-      if (ancGrad) { grad++; skips.祖先渐变++; continue; }
+      if (ancGrad && !isDisabled) { grad++; skips.祖先渐变++; continue; }
       if (!hasText(el)) continue;
-      total++;
       const fg = parse(cs.color);
       if (fg[3] === 0) { skips.透明字++; continue; }      // 全透明字（高亮层那类）不算
       const bg = effBg(el);
@@ -106,12 +119,14 @@ const SWEEP = (payload) => {   // 参数化：page.evaluate 只吃**一个**入�
       const bold = Number(cs.fontWeight) >= THRESH.boldWeight;
       const need = (px >= THRESH.largePx || (px >= THRESH.boldPx && bold)) ? THRESH.large : THRESH.small;
       const r = ratio(fgEff, bg);
-      if (r < need - 1e-9) {
-        const rec = { sel: path(el), ratio: Math.round(r * 100) / 100, need, px,
-          color: cs.color, bg: `rgb(${bg.join(",")})`, text: (el.textContent || "").trim().slice(0, 24) };
-        // 禁用控件：WCAG 明文豁免——**另记一桶**而不是丢掉（不然"全站最低的禁用态"在扫描里永远看不见）
-        if (isDisabled) disabled.push(rec); else bad.push(rec);
-      }
+      const rec = { sel: path(el), ratio: Math.round(r * 100) / 100, need, px,
+        color: cs.color, bg: `rgb(${bg.join(",")})`, text: (el.textContent || "").trim().slice(0, 24) };
+      // 禁用控件：WCAG 明文豁免（**不进"不达标"桶**）——但**照样量**、**不看是否达标**都记进来
+      // （工单 code-contrast/03）：它曾经被"祖先渐变"整批滤掉，"扫描看不见"不能当达标；
+      // 而"达标了"也要看得见（读数里逐条打 ✅/❌），否则下一次回退没人知道。
+      if (isDisabled) { disabled.push({ ...rec, ancestorGradient: ancGrad }); continue; }
+      total++;   // ⚠ 禁用的**不进这个计数**（它们在禁用桶里单列）——口径与改动前的读数可比
+      if (r < need - 1e-9) bad.push(rec);
     }
     out.tabs.push({ tab, total, bad: bad.length, grad, disabled: disabled.length, skips });
     out.disabled.push(...disabled.map((d) => ({ tab, ...d })));
@@ -143,12 +158,19 @@ try {
       console.log(`  ${t.tab.padEnd(11)}有文字元素 ${String(t.total).padStart(4)}　不达标 ${t.bad}`);
     }
     console.log(`  —— ${theme} 合计不达标 **${data.bad.length}**`);
+    // 禁用桶（工单 code-contrast/03 起**必非空**，除非那一页真的没有禁用控件）：
+    // 逐条把比值打出来——达标 ✅ / 掉线 ❌ 都看得见，不再只记"不达标的那几个"。
     if (data.disabled.length) {
-      console.log("  —— 禁用态（WCAG 豁免，但记数）：**" + data.disabled.length + "** 处，最低几个：");
-      for (const b of data.disabled.sort((x, y) => x.ratio - y.ratio).slice(0, 5)) {
-        console.log("     " + b.ratio + "/" + b.need + "  [" + b.tab + "] " + b.sel
-          + "  「" + b.text + "」 " + b.color + " on " + b.bg);
+      const under = data.disabled.filter((d) => d.ratio < d.need - 1e-9).length;
+      console.log("  —— 禁用态（WCAG 豁免，但**照样量**）：**" + data.disabled.length
+        + "** 处，其中低于阈值 **" + under + "** 处；最低几个：");
+      for (const b of [...data.disabled].sort((x, y) => x.ratio - y.ratio).slice(0, 8)) {
+        console.log("     " + (b.ratio < b.need - 1e-9 ? "❌" : "✅") + " " + b.ratio + "/" + b.need
+          + "  [" + b.tab + "] " + b.sel + "  「" + b.text + "」 " + b.color + " on " + b.bg
+          + (b.ancestorGradient ? "  ⚠祖先渐变（禁用控件的底是自己那层，故仍算数）" : ""));
       }
+    } else {
+      console.log("  —— 禁用态：**0 处**（这一轮扫描里没有禁用控件；不等于'达标'）");
     }
     for (const b of data.bad.slice(0, 40)) {
       console.log(`     ${b.ratio.toFixed(2)}/${b.need}  [${b.tab}] ${b.sel}`);

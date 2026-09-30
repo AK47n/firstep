@@ -1,0 +1,45 @@
+# 读数：tmp-probe-08-before
+# 命令：node .scratch\code-contrast\probe-08-disabled-state.mjs --tag before
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-30T22:04:05+08:00
+# 退出码：0
+
+===== light =====
+  generate  禁用元素  2　拍得 2
+    disabled 属性  opacity 0.6  rgb(31, 35, 40) on rgb(255, 255, 255)  「」  ⚠祖先渐变  → probe-08-before-light-generate-0-card-row-output-dir.png
+    disabled 属性  opacity 0.45  rgb(31, 35, 40) on rgb(225, 230, 236)  「选择文件夹…」  ⚠祖先渐变  → probe-08-before-light-generate-1-card-row-btn-pick-output-dir.png
+  hwcheck   禁用元素  2　拍得 2
+    disabled 属性  opacity 0.45  rgb(31, 35, 40) on rgb(225, 230, 236)  「带进生成页」  ⚠祖先渐变  → probe-08-before-light-hwcheck-0-hwcheck-handoff-hwcheck-hand.png
+    disabled 属性  opacity 0.45  rgb(31, 35, 40) on rgb(225, 230, 236)  「让 AI 分析」  ⚠祖先渐变  → probe-08-before-light-hwcheck-1-card-row-btn-hwcheck-triage.png
+  settings  禁用元素  0　拍得 0
+  guide     禁用元素  0　拍得 0
+  changelog 禁用元素  0　拍得 0
+  code      禁用元素  4　拍得 0
+  master    禁用元素  1　拍得 1
+    disabled 属性  opacity 0.45  rgb(4, 34, 43) on rgba(0, 0, 0, 0)  「AI 提炼报告」  ⚠祖先渐变  → probe-08-before-light-master-0-card-row-btn-distill.png
+  library   禁用元素  0　拍得 0
+  reference 禁用元素  0　拍得 0
+  pdf       禁用元素  0　拍得 0
+  md        禁用元素  0　拍得 0
+  topic     禁用元素  0　拍得 0
+
+===== dark =====
+  generate  禁用元素  2　拍得 2
+    disabled 属性  opacity 0.6  rgb(230, 237, 243) on rgb(13, 17, 23)  「」  ⚠祖先渐变  → probe-08-before-dark-generate-0-card-row-output-dir.png
+    disabled 属性  opacity 0.45  rgb(230, 237, 243) on rgb(28, 33, 40)  「选择文件夹…」  ⚠祖先渐变  → probe-08-before-dark-generate-1-card-row-btn-pick-output-dir.png
+  hwcheck   禁用元素  2　拍得 2
+    disabled 属性  opacity 0.45  rgb(230, 237, 243) on rgb(28, 33, 40)  「带进生成页」  ⚠祖先渐变  → probe-08-before-dark-hwcheck-0-hwcheck-handoff-hwcheck-hand.png
+    disabled 属性  opacity 0.45  rgb(230, 237, 243) on rgb(28, 33, 40)  「让 AI 分析」  ⚠祖先渐变  → probe-08-before-dark-hwcheck-1-card-row-btn-hwcheck-triage.png
+  settings  禁用元素  0　拍得 0
+  guide     禁用元素  0　拍得 0
+  changelog 禁用元素  0　拍得 0
+  code      禁用元素  4　拍得 0
+  master    禁用元素  1　拍得 1
+    disabled 属性  opacity 0.45  rgb(4, 34, 43) on rgba(0, 0, 0, 0)  「AI 提炼报告」  ⚠祖先渐变  → probe-08-before-dark-master-0-card-row-btn-distill.png
+  library   禁用元素  0　拍得 0
+  reference 禁用元素  0　拍得 0
+  pdf       禁用元素  0　拍得 0
+  md        禁用元素  0　拍得 0
+  topic     禁用元素  0　拍得 0
+
+已落盘 probe-08-shots-before.json（10 格）

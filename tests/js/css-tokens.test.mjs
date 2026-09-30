@@ -12,7 +12,8 @@
 //   而且**样式块面与渲染方面各有一张**（08 单给内联字号补第五条腿的同一条理由）。
 // ⑧**对比度契约**（工单 light-contrast/01）：阈值两档（4.5 / 3.0）+ 机械抽取「同规则
 //   color × background」+ `CONTRAST_FAMILIES`（机械抓不到的已知族）+ `CONTRAST_EXCEPTIONS`
-//   （**只登记不达标与不适用**，达标的现算即可）+ 腿⑧（五条判据，含"债务不许静默恶化"）。
+//   （**只登记不达标与不适用**，达标的现算即可）+ 腿⑧（**七条**判据，含"债务不许静默恶化"
+//   与禁用态那两条结构判据）。
 //   与描边那条腿的区别：那条是"逐条登记 115 个例外"，这条是"**现算 + 只记债**"——
 //   闸门强度靠"抽得到、算得出"，不靠表的规模。口径见那段说明块。
 // ⑨**渲染方内联取色登记簿**（工单 light-contrast/04）：`JS_CONTRAST_REGISTER`（19 条）
@@ -888,8 +889,11 @@ function borderRegisterProblems(css, register = BORDER_REGISTER, kinds = BORDER_
  */
 function actionWeightProblems(css) {
   const out = [];
+  // 认人时剥掉 `:not(:disabled)`（禁用态那一轮的限定，工单 code-contrast/03）：**这一条腿只问
+  // "三级形态在不在"**，形态规则有没有表态由 `undeclaredFormRules` 单独管（两条腿各管各的，
+  // 免得一处改动在两个地方报同一件事）。
   const bodies = (selector) => cssRulesCached(css)
-    .filter(({ sel }) => stripLeadComments(sel) === selector)
+    .filter(({ sel }) => stripLeadComments(sel).replace(/:not\(:disabled\)/g, "") === selector)
     .map(({ body }) => body);
   const need = (selector, re, why) => {
     const all = bodies(selector);
@@ -915,13 +919,16 @@ function actionWeightProblems(css) {
 // 于是往样式块里写一条 `color: var(--warn)` 压在自己的淡底上（浅色 **4.17**，低于 AA 4.5），
 // 没有任何东西会红。这条腿把「哪些颜色对算达标」变成可现算、可对账的数据。
 //
-// **它判什么（五条，见 `contrastProblems`）**：
+// **它判什么（七条，见 `contrastProblems`）**：
 //   ① 机械抽取的每一对（同规则 `color:` × `background:`，两主题各算一遍）现算比值 ≥ 阈值，
 //      或在 `CONTRAST_EXCEPTIONS` 里登记过；
 //   ② `debt` 项的现算比值必须与**冻结值**一致（±0.01）——**债务不许静默恶化**；
 //   ③ 例外表每条都要在盘上（或族表里）认到人——反向对账，防死条；
 //   ④ 类别值必须在 `CONTRAST_KINDS` 里、每类至少一条；
-//   ⑤ 族表（`CONTRAST_FAMILIES`，机械抓不到的已知族）每族最坏格现算值同样要对上冻结值。
+//   ⑤ 族表（`CONTRAST_FAMILIES`，机械抓不到的已知族）每族最坏格现算值同样要对上冻结值；
+//   ⑥ **禁用态不许用 `opacity` 表达**（工单 code-contrast/03，口径见 `CONTRAST_DISABLED_RE`）；
+//   ⑦ **涂色的形态规则必须表态**（`:not(:disabled)` / `:disabled`，见 `undeclaredFormRules`）
+//      ——不然它自己的底色会盖掉禁用态的灰底灰字。
 //
 // **它不判什么**：不判"这个颜色好不好看"、不判字号与描边（那是前七条腿的事）、
 // 不判渲染后 DOM 的实际层叠（那是探针与量具的事，静态只能算"声明的底"）。
@@ -936,6 +943,13 @@ function actionWeightProblems(css) {
 // **口径更正（工单 code-contrast/01）：几何**——代码页的高亮层**压在字上**（真像素实测，
 // 见 `CODE_LAYERS` 的注释），所以族面的比值对 `over` 层是
 // `contrast(over(tint,fg), over(tint,base))`，不是"文字压在合成底上"。
+//
+// **禁用态（工单 code-contrast/03）**：口径 = 灰底灰字（`--panel-2` 底 + `--muted` 字 +
+// `--border` 描边），判据**三条**——族面「--muted × 禁用态底」两格（两主题各算一遍，4.5）+
+// 「不许出现 `opacity` 形式的禁用态」+「涂色的形态规则必须表态（`:not(:disabled)`）」两条结构判据。
+// 渲染面证据在 `.scratch/code-contrast/probe-08-disabled-state.mjs`（真元素截图 + 读像素）：
+// 全站扫描（`probe-07`）的禁用桶曾经**实测为空**（那些按钮坐在带渐变的容器里被滤掉），
+// 所以禁用态**不许**拿"扫描看不见"当达标。
 // **边界（明写）**：口径是**每层单独**算；真实使用里层会叠（双击选词 = 词命中 .12 + 选区，
 // 合成 alpha = `1-∏(1-α)`）。读数量过（令牌按单层解好之后，见 probe-00 §6）：
 // 落定档（选区 .20 / 当前命中 .24）= 叠词命中 **浅 4.15 / 暗 4.02**、叠搜索命中 浅 3.75 / 暗 3.55、
@@ -957,15 +971,18 @@ const CONTRAST_RATIO_OFFSET = 0.05;
 /** 合成基色：`rgba` 淡底叠到它上面（卡片底）。 */
 const CONTRAST_BASE_TOKEN = "--panel";
 /** 机械面的配对数（**冻结**：样式块里"既有字色又有底"的规则数）。
- *  改令牌值不动它；**新增/删掉这类规则**才动——那时同步改这里并在票尾写清。 */
-const CONTRAST_PAIR_COUNT = 376;
+ *  改令牌值不动它；**新增/删掉这类规则**才动——那时同步改这里并在票尾写清。
+ *  376 → **392**（工单 code-contrast/03：八条禁用态规则从"只改不透明度"变成"声明灰底灰字"，
+ *  每条两主题各一对：`button:disabled` 那一组选择器算一条规则）。 */
+const CONTRAST_PAIR_COUNT = 392;
 
 /** 族面的**总格数**（**冻结**：`contrastFamilyCells` 现算出来的格子总数）。
  *  为什么冻结它：族面判据只把**最坏格**纳入对账，一旦有人从 `CODE_LAYERS` 或某条族里
  *  悄悄摘掉一层/一个令牌，最坏格会**变好**——腿照样绿，而它其实少算了一整排。
  *  复算：`python .scratch/code-contrast/probe-00-inventory.py` 的 §8 直接打印这个数
- *  （`tests/test_contrast_mirror.py` 每跑一次也会现算复核一遍）。 */
-const CONTRAST_FAMILY_CELL_COUNT = 168;
+ *  （`tests/test_contrast_mirror.py` 每跑一次也会现算复核一遍）。
+ *  168 → **172**（工单 code-contrast/03：+「--muted × 禁用态底」1 令牌 × 2 层 × 2 主题）。 */
+const CONTRAST_FAMILY_CELL_COUNT = 172;
 
 /** `--tok-*` 族在两主题下的**最坏格**（**冻结**，±0.01）。
  *  02 单把这笔债还清之后，族面不再有 `debt` 行可对账——"少一层 / 几何写反"这类坏法
@@ -996,6 +1013,62 @@ const CONTRAST_TOKEN_KINDS = [...CONTRAST_FAMILY_KINDS, "skip"];
  * **与探针的 `probe_lib.CONTRAST_CODE_HL_TOKEN` 同源**（`tests/test_contrast_mirror.py` 钉住）。
  */
 const CONTRAST_CODE_HL_TOKEN = "--code-hl-rgb";
+
+/**
+ * **禁用态的结构判据**（工单 code-contrast/03）：选择器里含 `:disabled` / `.disabled` 的规则
+ * **不许出现 `opacity:`**。
+ *
+ * **为什么单独立一条**：`opacity` 把禁用态的比值变成"取决于它压在谁身上"——同一颗按钮坐在
+ * 不同的容器里可以差出好几个比值（人眼复核实测 hwcheck「带进生成页」**2.66**、
+ * master「AI 提炼报告」**2.06**，根因就是全局 `button:disabled { opacity: .45 }`）。
+ * 静态面**算不出**它（那是个合成运算，不在"同规则 color × background"里），全站扫描面又曾被
+ * "祖先渐变跳过"滤掉过（禁用桶实测为空）——两头都看不见，所以它得有一条自己的判据。
+ * 口径 = 灰底灰字：`background: var(--panel-2)` + `color: var(--muted)` + `border-color: var(--border)`，
+ * 比值由族面「--muted × 禁用态底」逐主题现算。
+ *
+ * ⚠ **`:not(:disabled)` 不算**（那是"**非**禁用"）：`targetsDisabledState` 先把 `:not(…)`
+ * 剥掉再认——悬停/选中效果里的 `opacity` 不是禁用态，别把它误判成红。
+ * ⚠ **类名以 `-disabled` 结尾也不算**（`\b` 只认前面是 `.` 的那种，如 `.module-card.off`
+ * 这类"另一个名字的禁用形态"**不在本判据射程**——要收得先给它们改名，另开单）。
+ */
+const CONTRAST_DISABLED_RE = /(?::disabled\b|\.disabled\b)/;
+
+/** 选择器是不是**指向禁用态**（`:not(:disabled)` = 非禁用 → 不算）。 */
+function targetsDisabledState(sel) {
+  return CONTRAST_DISABLED_RE.test(sel.replace(/:not\([^()]*\)/g, ""));
+}
+
+/**
+ * **形态规则必须自己"表态"**（工单 `code-contrast/03` 的第二条结构判据）：以 `button.` 开头、
+ * 且会**往按钮上涂色**（`background` / `background-color` / `box-shadow`，`transparent` / `none`
+ * 不算）的规则，选择器里必须带 `:disabled`——`:not(:disabled)`（启用态的外观）或 `:disabled`
+ * （禁用态自己那条）都算。
+ *
+ * **为什么**：禁用态只有一条通用规则 `button:disabled`（权重 (0,1,1)）。形态规则只要**更靠后**
+ * （同权重时靠后的胜——`.primary` 那个渐变块就是这样）或**更具体**（`.task-card .btn-task-run`
+ * 是 (0,2,0)），它自己的底色/字色就会盖掉灰底灰字："禁用按钮看起来跟能点一样"。
+ * 实施期两轴评审 Spec 轴点名"这条边界无门禁"，故补上。
+ *
+ * ⚠ **射程 = 以 `button.` 开头的选择器**。不以 `button.` 开头的形态规则（本仓目前只有
+ * `.task-card .btn-task-*` 三条）不在射程内——它们在 CSS 注释里被点名，改的时候要一起看。
+ */
+function undeclaredFormRules(source) {
+  const out = [];
+  for (const { sel, body } of contrastRules(source)) {
+    const d = firstDecl(body);
+    const paints = ["background", "background-color", "box-shadow"]
+      .some((prop) => d[prop] && !["none", "transparent", "inherit"].includes(d[prop]));
+    if (!paints) continue;
+    for (const part of sel.split(",").map((s) => s.trim())) {
+      if (!part.startsWith("button.")) continue;            // 只认"形态规则"
+      if (CONTRAST_DISABLED_RE.test(part)) continue;        // `:not(:disabled)` / `:disabled` 都算表过态
+      out.push(`形态规则「${part}」没有表态：它会给按钮涂色，却既没写 \`:not(:disabled)\``
+        + "（= 这是启用态的外观）也没写 `:disabled`。禁用态只有一条通用规则，"
+        + "形态规则更靠后或更具体时就会盖掉灰底灰字（工单 code-contrast/03）");
+    }
+  }
+  return out;
+}
 
 /**
  * 代码页上「文字会压到的底」：`[名字, alpha, 几何]`。**七层**（工单 code-contrast/01）。
@@ -1038,6 +1111,8 @@ const CONTRAST_FAMILIES = [
     "键盘焦点环与定位环（03 单提到 3:1 以上）：看不见焦点环 = 键盘用户找不到焦点"],
   ["--accent 控件描边 / 语义左条", "=--accent", ["--bg", "--panel", "--panel-2"], "nontext",
     "控件普通描边与语义左条：装饰性强于信息性，**大面积改深会动整页观感**——记债不修（03 单的判断）"],
+  ["--muted × 禁用态底（panel-2 / panel）", "=--muted", ["--panel-2", "--panel"], "text",
+    "禁用控件（工单 code-contrast/03）：灰底灰字——文字 --muted、底 --panel-2（也可能坐在 --panel 上）。禁用态从此可现算，不再靠 opacity 整体变淡（结构判据 targetsDisabledState 在同一条腿里）"],
 ];
 
 /**
@@ -1539,6 +1614,20 @@ function contrastProblems(source, exceptions = CONTRAST_EXCEPTIONS, families = C
       }
     }
   }
+  // **禁用态的结构判据**（工单 code-contrast/03）：`opacity` 形式的禁用态一律判红。
+  // 它为什么不归前五条：那五条都建立在"比值"上，而 `opacity` 的比值静态算不出（见上面那段口径）。
+  for (const { sel, body } of contrastRules(source)) {
+    if (!targetsDisabledState(sel)) continue;
+    const d = firstDecl(body);
+    if ("opacity" in d) {
+      out.push(`禁用态不许用 opacity 表达：${sel}（opacity: ${d.opacity}）——`
+        + "灰底灰字（background: var(--panel-2) + color: var(--muted) + border-color: var(--border)）"
+        + "才是可现算、可守卫的禁用态：opacity 的比值取决于它压在谁身上（静态算不出、"
+        + "全站扫描又会被祖先渐变滤掉，见 .scratch/code-contrast/probe-08-disabled-state.mjs）");
+    }
+  }
+  // **形态规则要表态**（同上，第二条结构判据）：涂色的 `button.<形态>` 必须带 `:disabled`。
+  out.push(...undeclaredFormRules(source));
   for (const [label, , , kind] of families) {
     if (!CONTRAST_FAMILY_KINDS.includes(kind)) {
       out.push(`族「${label}」的阈值选取 ${kind} 不在 CONTRAST_FAMILY_KINDS 里（阈值会算错）`);
@@ -2010,9 +2099,10 @@ test("全站推广合成红证：九条腿各自都判得红（防'永远绿'的
     "空转的谓词没被判出（它守的那条腿会静默绿）",
   );
   // ⑤ 动作三级的口径：退回"只有红字"、或又冒出带页面前缀的副本，都必须判得红
-  const dangerFull = "button.danger { border-color: var(--danger); background: var(--danger-dim); color: var(--danger-text); }";
+  const dangerFull = "button.danger:not(:disabled) { border-color: var(--danger); background: var(--danger-dim); color: var(--danger-text); }";
   assert.ok(html.includes(dangerFull), `锚点变了（${dangerFull}）—— 这条自检会静默空转`);
-  assert.ok(actionWeightProblems(html.replace(dangerFull, "button.danger { color: var(--danger-text); }")).length > 0,
+  assert.ok(actionWeightProblems(html.replace(dangerFull,
+    "button.danger:not(:disabled) { color: var(--danger-text); }")).length > 0,
     "危险动作退回'只有红字'没被判出");
   assert.ok(actionWeightProblems(html + "\n  #tab-hwcheck button.danger { color: red; }\n").length > 0,
     "带页面前缀的 danger 副本没被判出");
@@ -2396,6 +2486,67 @@ test("全站推广合成红证：九条腿各自都判得红（防'永远绿'的
   const bogusColorKind = [...JS_CONTRAST_REGISTER, ["ui/step-state.js", "toggleBtn.style.cssText", "--muted", "--panel", "看着挺清楚"]];
   assert.ok(jsContrastRegisterProblems(jsFiles(), bogusColorKind)
     .some((p) => p.includes("类别只能是")), "未知类别没被判出");
+  //    (n) **禁用态**（工单 code-contrast/03）：三条坏法各自判红 + 两条边界证明判据没过宽。
+  //        (n1) 把 `opacity: .45` 放回禁用态 → 结构判据红（它就是本单要治的那个形态）；
+  const disAnchor = "box-shadow: none; cursor: not-allowed; }";
+  assert.ok(html.includes(disAnchor), `锚点变了（${disAnchor}）—— 这条自检会静默空转`);
+  const disOpacity = html.replace(disAnchor, "box-shadow: none; opacity: .45; cursor: not-allowed; }");
+  assert.notEqual(disOpacity, html, "注入没生效（锚点没命中）");
+  assert.ok(
+    contrastProblems(disOpacity).some((p) => p.includes("禁用态不许用 opacity 表达")
+      && p.includes(":disabled")),
+    "把 `opacity: .45` 放回禁用态之后没被判出（禁用态又回到'算不出来'的状态）",
+  );
+  //        (n2) `--muted` 改浅 → 族面「--muted × 禁用态底」掉线 → 红（比值那条判据的牙）
+  const disPale = html.replace("--muted: #555e68;", "--muted: #9aa3ac;");
+  assert.notEqual(disPale, html, "注入没生效（找不到亮色 --muted 的定义行）");
+  assert.ok(
+    contrastProblems(disPale).some((p) => p.includes("族「--muted × 禁用态底")),
+    "把 `--muted` 改浅之后禁用态那两格没被判出（族面那条判据在空转）",
+  );
+  //        (n3) `.disabled` 类形态（不是 `:disabled`）带 opacity → 红——判据的两半都得有牙
+  const disClassOpacity = html.replace("<style>", "<style>\n  .tmp-probe.disabled { opacity: .5; }");
+  assert.notEqual(disClassOpacity, html, "注入没生效（找不到 <style>）");
+  assert.ok(
+    contrastProblems(disClassOpacity).some((p) => p.includes(".tmp-probe.disabled")),
+    "`.disabled` 类选择器带 opacity 没被判出（只认了 `:disabled` 那一半）",
+  );
+  //        (n4/n5) 两条**边界**（判据不许过宽）：`:not(:disabled)` 是"非禁用"、
+  //        `.x-disabled` 是另一个类名——两者的 `opacity` 都不是禁用态，误判会把悬停/选中效果一起判红。
+  const disNot = html.replace("<style>", "<style>\n  .tmp-probe:not(:disabled) { opacity: .6; }");
+  assert.notEqual(disNot, html, "注入没生效（找不到 <style>）—— 这条边界会静默空转");
+  assert.ok(
+    !contrastProblems(disNot).some((p) => p.includes("禁用态不许用 opacity")),
+    "`:not(:disabled)`（非禁用）里的 opacity 被误判成禁用态了",
+  );
+  const disNamed = html.replace("<style>", "<style>\n  .tmp-probe-disabled { opacity: .6; }");
+  assert.notEqual(disNamed, html, "注入没生效（找不到 <style>）—— 这条边界会静默空转");
+  assert.ok(
+    !contrastProblems(disNamed).some((p) => p.includes("禁用态不许用 opacity")),
+    "类名以 `-disabled` 结尾（不是 `.disabled` 那个类）也被误判了",
+  );
+  //        (n6) **形态规则要表态**（第二条结构判据）：新加一条涂色的形态规则、又没写
+  //        `:not(:disabled)` → 红（它会在禁用时盖掉灰底灰字）；写了 `:not(:disabled)` → 不红；
+  //        只写 `background: transparent`（不涂色）→ 不红（判据不许过宽）。
+  const disBareForm = html.replace("<style>",
+    "<style>\n  button.warn { background: var(--warn-dim); color: var(--warn-text); }");
+  assert.notEqual(disBareForm, html, "注入没生效（找不到 <style>）—— 这条自检会静默空转");
+  assert.ok(
+    contrastProblems(disBareForm).some((p) => p.includes("button.warn") && p.includes("没有表态")),
+    "新加一条涂色形态规则、又没表态（`:not(:disabled)`）时没被判出——禁用时会盖掉灰底灰字",
+  );
+  const disDeclaredForm = html.replace("<style>",
+    "<style>\n  button.warn:not(:disabled) { background: var(--warn-dim); color: var(--warn-text); }");
+  assert.ok(
+    !contrastProblems(disDeclaredForm).some((p) => p.includes("没有表态")),
+    "写了 `:not(:disabled)` 的形态规则仍被判红（判据过宽）",
+  );
+  const disBareFormPlain = html.replace("<style>",
+    "<style>\n  button.warn { background: transparent; color: var(--warn-text); }");
+  assert.ok(
+    !contrastProblems(disBareFormPlain).some((p) => p.includes("没有表态")),
+    "不涂色（`background: transparent`）的形态规则也被要求表态了（判据过宽）",
+  );
   // ⑨ 复原后转绿（九条腿都回到空/子集）
   assert.deepEqual(bareFontSizesInScope(html, "hwcheck"), []);
   assert.deepEqual(bareTokenSpacesInScope(html, "hwcheck"), []);

@@ -317,9 +317,15 @@ def test_family_cell_count_freeze_matches_python(js, py):
     per_family = {}
     for c in cells:
         per_family[c["label"]] = per_family.get(c["label"], 0) + 1
-    assert len(py.CONTRAST_FAMILIES) == 4, f"族数应为 4（实际 {len(py.CONTRAST_FAMILIES)}）"
+    assert len(py.CONTRAST_FAMILIES) == 5, f"族数应为 5（实际 {len(py.CONTRAST_FAMILIES)}）"
     assert per_family.get("--tok-* × 代码底（含 5 层高亮 + 错误行）") == 10 * 7 * 2, (
         f"--tok-* 族应有 10 × 7 × 2 = 140 格（实际 {per_family.get('--tok-* × 代码底（含 5 层高亮 + 错误行）')}）"
+    )
+    # 禁用态那族（工单 code-contrast/03）：1 令牌（--muted）× 2 底（panel-2 / panel）× 2 主题。
+    assert per_family.get("--muted × 禁用态底（panel-2 / panel）") == 1 * 2 * 2, (
+        "禁用态族应有 1 × 2 × 2 = 4 格（实际 "
+        f"{per_family.get('--muted × 禁用态底（panel-2 / panel）')}）——"
+        "少一格就等于「禁用态坐在另一种底上」没人看（那是本单的判据面）"
     )
 
 

@@ -14,55 +14,20 @@ from __future__ import annotations
 
 import json
 import sys
-from collections import Counter
 from pathlib import Path
 
-import fitz
-
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))                        # 读像素的公共半（pixel_lib）与本文件同级
 sys.path.insert(0, str(HERE.parent / "light-contrast"))
 
-import probe_lib as L  # noqa: E402
+import pixel_lib as PX  # noqa: E402  （读像素的口径：直方图 / 主色 / 字形核心）
+import probe_lib as L  # noqa: E402  （颜色数学与令牌的口径单源）
 
 WORD_LAYER = "--code-bg+hl.词命中"
 SEL_LAYER = "--code-bg+hl.选区"
 
-
-def hx(c):
-    return "#%02x%02x%02x" % tuple(c[:3])
-
-
-def dist(a, b):
-    return sum(abs(a[i] - b[i]) for i in range(3))
-
-
-def histogram(path: Path):
-    """整张图的颜色直方图（**全量**，不只前几名——字形核心常常不是最高频那几个）。"""
-    pix = fitz.Pixmap(str(path))
-    if pix.n > 3:
-        pix = fitz.Pixmap(fitz.csRGB, pix)
-    cnt = Counter()
-    for y in range(pix.height):
-        for x in range(pix.width):
-            cnt[pix.pixel(x, y)[:3]] += 1
-    return cnt
-
-
-def dominant(cnt: Counter):
-    return cnt.most_common(1)[0]
-
-
-def glyph_core(cnt: Counter):
-    """字形核心 = **够多像素**的那些颜色里，离主色（底）最远的那个。
-
-    ⚠ 只在"前 6 高频"里挑会挑到**抗锯齿混色**（本轮实测：小字号样本的真核心像素数
-    比混色像素少，于是量出来偏亮、比值偏低）——所以这里用全量直方图 + 一个像素数门槛。
-    """
-    bg, _n = dominant(cnt)
-    total = sum(cnt.values())
-    floor = max(3, int(total * 0.005))
-    cands = [c for c, n in cnt.items() if n >= floor]
-    return max(cands or [bg], key=lambda c: dist(c, bg))
+hx, dist, histogram, dominant, glyph_core = (
+    PX.hx, PX.dist, PX.histogram, PX.dominant, PX.glyph_core)
 
 
 def predictions(tok, theme, shot, base):
