@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=80a098883e0b44abaac0b8f10929678efcb3630c -->
+<!-- changelog-auto: last-commit=096b62c1fc5de533a2743c5af4b4811094a1121b -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -26,6 +26,7 @@
 - 21:27 代码配色族：双轴评审整改（强度门禁 / 像素取样口径 / 冻结值复核）+ 收口读数与文档
 - 21:27 账本：交接区更新（code-contrast 01/02/04 收口，03 禁用态为 frontier）
 - 22:37 代码配色族 03：禁用态改灰底灰字（去掉 opacity）+ 两条结构判据与真像素量具
+- 22:41 发版 v1.4.1：三处版本号同步 + VERSIONS/README 版本行 + 发版自检读数
 
 ## 2026-09-29
 - 12:40 ui-density-sitewide/11：2c 彻底版（真树 + 逐层 LCS 对齐，四条自证随读数跑）
