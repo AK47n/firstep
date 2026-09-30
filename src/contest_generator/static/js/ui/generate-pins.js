@@ -174,7 +174,7 @@ function instanceBlock(m) {
       ${rows}
       <div class="instance-actions">
         <button data-add="${esc(slug)}" ${atMax ? "disabled" : ""}>添加实例</button>
-        ${atMax ? `<span class="muted" style="color:var(--warn)">已达上限 ${max}</span>` : ""}
+        ${atMax ? `<span class="muted" style="color:var(--warn-text)">已达上限 ${max}</span>` : ""}
         ${list.length ? "" : `<span class="muted">（未配置实例 = 默认单实例）</span>`}
       </div>
     </div>`;
@@ -197,7 +197,7 @@ function instanceRow(slug, i, inst) {
   const colors = `<input list="${listId}" data-field="variant" data-slug="${esc(slug)}" data-index="${i}" value="${esc(inst.variant)}" placeholder="内置变体或留空">`
     + `<datalist id="${listId}">${datalistItems}</datalist>`;
   const pinShow = inst.pin
-    ? `<span style="font-family:var(--mono);color:var(--accent)">${esc(inst.pin)}</span>`
+    ? `<span style="font-family:var(--mono);color:var(--accent-text)">${esc(inst.pin)}</span>`
     : '<span class="muted">自动分配</span>';
   return `
     <div class="instance-row${picking ? " instance-picking" : ""}">
@@ -843,19 +843,19 @@ function renderPinRoles(roles, fam) {
         (bound !== r.decl.default ? ` <span class="muted">（默认 ${esc(r.decl.default)}）</span>` : "") +
         ' <button class="pin-role-unbind">还原默认</button>';
     } else if (unbound) {
-      status = `<span style="color:var(--danger)">未绑定</span>` +
+      status = `<span style="color:var(--danger-text)">未绑定</span>` +
         `<span class="muted">（生成仍按默认 ${esc(r.decl.default)} 走）</span>` +
         ' <button class="pin-role-restore">清除红显</button>';
     } else if (!defOnBoard) {
-      status = `<span style="color:var(--warn)">默认板外（排针未引出）——仍可绑到板内空闲脚</span>`;
+      status = `<span style="color:var(--warn-text)">默认板外（排针未引出）——仍可绑到板内空闲脚</span>`;
     } else if (overlap && overlap.kind === "conflict") {
-      status = `<span style="color:var(--warn)">默认 ${esc(r.decl.default)} 与 ${esc(overlap.others)} 冲突（同脚分属不同外设）——未绑定时生成会资源冲突，建议改线</span>`;
+      status = `<span style="color:var(--warn-text)">默认 ${esc(r.decl.default)} 与 ${esc(overlap.others)} 冲突（同脚分属不同外设）——未绑定时生成会资源冲突，建议改线</span>`;
     } else if (Object.values(pinBindings).includes(r.decl.default)) {
       const by = Object.entries(pinBindings).find(([k, v]) => v === r.decl.default && k !== r.key);
       const byName = esc((by && by[0]) || "其它角色");
       status = overlap && overlap.kind === "share"
         ? `<span class="muted">默认 ${esc(r.decl.default)} 已被 ${byName} 占用（同一外设/总线，合法共享）</span>`
-        : `<span style="color:var(--warn)">默认 ${esc(r.decl.default)} 已被 ${byName} 占用——未绑定时生成可能资源冲突，建议改线</span>`;
+        : `<span style="color:var(--warn-text)">默认 ${esc(r.decl.default)} 已被 ${byName} 占用——未绑定时生成可能资源冲突，建议改线</span>`;
     } else if (overlap && overlap.kind === "share") {
       status = `<span class="muted">默认 ${esc(r.decl.default)}（与 ${esc(overlap.others)} 共用同一外设/总线，合法共享）</span>`;
     } else {
@@ -869,7 +869,7 @@ function renderPinRoles(roles, fam) {
         ${r.decl.required ? '<span class="badge hw">必接</span>' : '<span class="badge dep">可选</span>'}
       </div>
       <div class="role-status">${status}</div>
-      ${famInfo ? `<div class="role-status" style="color:var(--warn)">共享宏族 ${esc(famInfo.macro)}：同族 ${esc(famInfo.siblings.join("、"))}</div>` : ""}
+      ${famInfo ? `<div class="role-status" style="color:var(--warn-text)">共享宏族 ${esc(famInfo.macro)}：同族 ${esc(famInfo.siblings.join("、"))}</div>` : ""}
     </div>`;
   };
   const requiredRoles = roles.filter((r) => r.decl.required);

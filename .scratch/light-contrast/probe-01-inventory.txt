@@ -1,7 +1,7 @@
 # 读数：probe-01-inventory
 # 命令：python .scratch\light-contrast\probe-01-inventory.py
 # 工作树：C:\Users\luoji\Desktop\firstep
-# 开始：2026-09-30T12:38:29+08:00
+# 开始：2026-09-30T12:55:14+08:00
 # 退出码：0
 ==============================================================================
 浅色调色板轮 · 侦察读数（probe-01：对比度清单 + 候选值扫描）
@@ -24,7 +24,7 @@
 --text                #e6edf3                           #1f2328                           
 --muted               #8b949e                           #59636e                           
 --accent              #00d4ff                           #0096c7                           
---accent-dark         #00a8cc                           #007ea8                           
+--accent-dark         #00a8cc                           #00607f                           
 --accent-dim          rgba(var(--accent-rgb), .12)      rgba(var(--accent-rgb), .12)      
 --on-accent           #04222b                           #04222b                           
 --danger              #f85149                           #cf222e                           
@@ -41,11 +41,19 @@
 --mono                "JetBrains Mono", Consolas, "Courier New", monospace—                                 
 --ambient-glow        rgba(var(--accent-rgb), .07)      rgba(var(--accent-rgb), .06)      
 --card-sheen          rgba(255, 255, 255, .02)          rgba(31, 35, 40, .015)            
+--accent-text         #00d4ff                           #006181                           
+--ok-text             #3fb950                           #1c6630                           
+--warn-text           #e3a341                           #7a5100                           
+--danger-text         #ff685e                           #a81c25                           
+--info-text           #58a6ff                           #0755b1                           
+--purple-text         #b175ff                           #6840b2                           
 --accent-rgb          0, 212, 255                       0, 150, 199                       
 --accent-hi           #33dcff                           #33dcff                           
 --accent-lo           #00b8de                           #00b8de                           
 --on-accent-deep      #001018                           #001018                           
---on-ok-deep          #04170c                           #04170c                           
+--on-ok-deep          #04170c                           #ffffff                           
+--on-danger           #04170c                           #ffffff                           
+--on-accent-hover     #04222b                           #ffffff                           
 --purple-grad         #8b5cf6                           #8250df                           
 --purple-dim          rgba(139, 92, 246, .12)           rgba(130, 80, 223, .12)           
 --power               #f59e0b                           #d97706                           
@@ -73,25 +81,8 @@
 
 总配对数：376（两主题各算一遍）
 
-### dark：188 对，不达标 **16**，贴线（+0.6 内）11
+### dark：188 对，不达标 **0**，贴线（+0.6 内）12
 
-    比值     需  选择器 / 色对
-  1.77   4.5  #btn-code-ai-send  [#ffffff on #00d4ff]
-  1.77   4.5  .code-ai-selection-btn  [#ffffff on #00d4ff]
-  2.54   4.5  .stepper .step.done .dot  [#ffffff on #3fb950]
-  3.35   4.5  button.danger:hover  [#ffffff on #f85149]
-  3.60   4.5  .rel-tag.tag-perf  [#8b5cf6 on #24233b]
-  4.35   4.5  button.danger  [#f85149 on #382328]
-  4.35   4.5  .badge.missing  [#f85149 on #382328]
-  4.35   4.5  #compile-banner.fail  [#f85149 on #382328]
-  4.35   4.5  .fix-tag.conflict  [#f85149 on #382328]
-  4.35   4.5  .badge.sugg-review-infeasible  [#f85149 on #382328]
-  4.35   4.5  .chip.del  [#f85149 on #382328]
-  4.35   4.5  .warn-box.missing  [#f85149 on #382328]
-  4.35   4.5  .badge.pdf-broken  [#f85149 on #382328]
-  4.35   4.5  .code-tab-disk  [#f85149 on #382328]
-  4.35   4.5  .code-ctx-item-danger:hover  [#f85149 on #382328]
-  4.35   4.5  .recent-del:hover  [#f85149 on #382328]
   —— 贴线：
     4.50   4.5  .badge.no-master  [#8b949e on #282d35]
     4.50   4.5  .badge.neutral  [#8b949e on #282d35]
@@ -104,197 +95,29 @@
     4.71   4.5  .badge.dep  [#8b949e on #242a31]
     4.71   4.5  .module-card .mc-deps  [#8b949e on #242a31]
     4.71   4.5  #compile-banner.notool  [#8b949e on #242a31]
+    4.97   4.5  .rel-tag.tag-perf  [#b175ff on #24233b]
 
-### light：188 对，不达标 **99**，贴线（+0.6 内）8
+### light：188 对，不达标 **1**，贴线（+0.6 内）11
 
     比值     需  选择器 / 色对
   1.38   4.5  #main-c::selection  [#ffffff on #b8e2ef]
-  2.74   4.5  .badge.ok  [#2da44e on #e4f0e7]
-  2.74   4.5  .module-card .mc-plat.ok  [#2da44e on #e4f0e7]
-  2.74   4.5  .mi-plat .mc-plat.ok  [#2da44e on #e4f0e7]
-  2.74   4.5  #compile-banner.success  [#2da44e on #e4f0e7]
-  2.74   4.5  .fix-tag.fixed  [#2da44e on #e4f0e7]
-  2.74   4.5  .chip.rec  [#2da44e on #e4f0e7]
-  2.74   4.5  .badge.sugg-rec, .badge.sugg-lib, .badge.sugg-decided  [#2da44e on #e4f0e7]
-  2.74   4.5  .badge.sugg-review-feasible  [#2da44e on #e4f0e7]
-  2.74   4.5  .chip.add  [#2da44e on #e4f0e7]
-  2.74   4.5  .warn-box.ok  [#2da44e on #e4f0e7]
-  2.74   4.5  .master-health-ok  [#2da44e on #e4f0e7]
-  2.95   4.5  button.pin-overview-on  [#0096c7 on #e0f2f8]
-  2.95   4.5  button.accent  [#0096c7 on #e0f2f8]
-  2.95   4.5  .module-card .mc-plat.embed  [#0096c7 on #e0f2f8]
-  2.95   4.5  .module-card .mc-pa  [#0096c7 on #e0f2f8]
-  2.95   4.5  .lib-chip.on  [#0096c7 on #e0f2f8]
-  2.95   4.5  .badge.ref-topic  [#0096c7 on #e0f2f8]
-  2.95   4.5  #tab-hwcheck .hwcheck-band-num  [#0096c7 on #e0f2f8]
-  2.95   4.5  .topic-key  [#0096c7 on #e0f2f8]
-  2.95   4.5  .master-tree-file button.on  [#0096c7 on #e0f2f8]
-  2.95   4.5  .code-statusbar button.on  [#0096c7 on #e0f2f8]
-  2.95   4.5  .code-ai-preview-btn  [#0096c7 on #e0f2f8]
-  2.95   4.5  button.code-change-item:hover  [#0096c7 on #e0f2f8]
-  2.95   4.5  .code-change-badge.b-added  [#0096c7 on #e0f2f8]
-  2.95   4.5  .code-compile-error:hover  [#0096c7 on #e0f2f8]
-  2.95   4.5  .code-tab-badge  [#0096c7 on #e0f2f8]
-  2.95   4.5  .code-tab-close:hover  [#0096c7 on #e0f2f8]
-  2.95   4.5  .code-gutter-line.flash  [#0096c7 on #e0f2f8]
-  2.95   4.5  .code-tree-file button.on  [#0096c7 on #e0f2f8]
-  2.95   4.5  .code-tree-badge.b-new  [#0096c7 on #e0f2f8]
-  2.95   4.5  .code-tree-act:hover  [#0096c7 on #e0f2f8]
-  2.95   4.5  .quick-open-item.on  [#0096c7 on #e0f2f8]
-  2.95   4.5  .code-outline-item.on  [#0096c7 on #e0f2f8]
-  2.95   4.5  .code-search-hit.on  [#0096c7 on #e0f2f8]
-  2.95   4.5  .card-step-status.wire  [#0096c7 on #e0f2f8]
-  2.95   4.5  .card-step-status.current  [#0096c7 on #e0f2f8]
-  2.95   4.5  .task-phase  [#0096c7 on #e0f2f8]
-  2.95   4.5  .task-next-hint  [#0096c7 on #e0f2f8]
-  2.95   4.5  .task-card .btn-task-flash:not(:disabled):hover, .task-card .b  [#0096c7 on #e0f2f8]
-  2.99   4.5  #tab-hwcheck .hwcheck-jump  [#0096c7 on #eef1f4]
-  2.99   4.5  .code-back-preview, .code-md-edit  [#0096c7 on #eef1f4]
-  2.99   4.5  .code-zoom-badge  [#0096c7 on #eef1f4]
-  2.99   4.5  .code-ctx-item:hover  [#0096c7 on #eef1f4]
-  2.99   4.5  .code-side-rail-btn.on  [#0096c7 on #eef1f4]
-  3.39   4.5  .env-jump  [#0096c7 on #ffffff]
-  3.39   4.5  .module-card .mc-info  [#0096c7 on #ffffff]
-  3.39   4.5  .mod-info-btn  [#0096c7 on #ffffff]
-  3.39   4.5  .sugg-discuss-toggle:hover  [#ffffff on #0096c7]
-  3.39   4.5  .btn-param-ref:hover  [#ffffff on #0096c7]
-  3.39   4.5  .code-pane-action, .code-compile-head button, .code-statusbar   [#0096c7 on #ffffff]
-  3.39   4.5  #btn-code-ai-send  [#ffffff on #0096c7]
-  3.39   4.5  .code-ai-selection-btn  [#ffffff on #0096c7]
-  3.59   4.5  button.primary:hover  [#04222b on #007ea8]
-  3.59   4.5  .btn-task-dialog-send:hover, .btn-global-chat-send:hover, .btn  [#04222b on #007ea8]
-  3.59   4.5  .task-card .btn-task-run:not(:disabled):hover  [#04222b on #007ea8]
-  4.17   4.5  .banner  [#9a6700 on #f3ede0]
-  4.17   4.5  .badge.unverified  [#9a6700 on #f3ede0]
-  4.17   4.5  .module-card .mc-offtag  [#9a6700 on #f3ede0]
-  4.17   4.5  .module-info-off  [#9a6700 on #f3ede0]
-  4.17   4.5  .fix-tag.pending  [#9a6700 on #f3ede0]
-  4.17   4.5  .badge.sugg-review-risky  [#9a6700 on #f3ede0]
-  4.17   4.5  .param-stale-badge  [#9a6700 on #f3ede0]
-  4.17   4.5  .warn-box.unverified  [#9a6700 on #f3ede0]
-  4.17   4.5  .warn-box.group  [#9a6700 on #f3ede0]
-  4.17   4.5  .badge.pdf-dup  [#9a6700 on #f3ede0]
-  4.17   4.5  .prog-badge  [#9a6700 on #f3ede0]
-  4.17   4.5  .rel-tag.tag-fix  [#9a6700 on #f3ede0]
-  4.17   4.5  .master-health-warn  [#9a6700 on #f3ede0]
-  4.17   4.5  .code-change-badge.b-modified  [#9a6700 on #f3ede0]
-  4.17   4.5  .code-tree-badge.b-mod  [#9a6700 on #f3ede0]
-  4.17   4.5  .card-step-status.warn  [#9a6700 on #f3ede0]
-  4.17   4.5  .task-redo-badge  [#9a6700 on #f3ede0]
-  4.29   4.5  .rel-tag.tag-perf  [#8250df on #f0eafb]
-  4.33   4.5  .rel-tag.tag-new  [#1a7f37 on #e4f0e7]
-  4.33   4.5  .card-step-status.done  [#1a7f37 on #e4f0e7]
-  4.33   4.5  .tasks-done-line .btn-task-goto-delivery  [#1a7f37 on #e4f0e7]
-  4.38   4.5  .welcome-card  [#0969da on #e1edfb]
-  4.38   4.5  .badge.hw  [#0969da on #e1edfb]
-  4.38   4.5  .module-card .mc-plat.hw  [#0969da on #e1edfb]
-  4.38   4.5  .mi-plat .mc-plat.hw  [#0969da on #e1edfb]
-  4.38   4.5  #compile-banner.running  [#0969da on #e1edfb]
-  4.38   4.5  .fix-tag.new  [#0969da on #e1edfb]
-  4.38   4.5  .badge.sugg-ai  [#0969da on #e1edfb]
-  4.38   4.5  .warn-box.hardware_bound  [#0969da on #e1edfb]
-  4.38   4.5  .badge.ref-kit  [#0969da on #e1edfb]
-  4.38   4.5  .ai-action-banner  [#0969da on #e1edfb]
-  4.38   4.5  .rel-tag.tag-imp  [#0969da on #e1edfb]
-  4.40   4.5  button.danger  [#cf222e on #f9e4e6]
-  4.40   4.5  .badge.missing  [#cf222e on #f9e4e6]
-  4.40   4.5  #compile-banner.fail  [#cf222e on #f9e4e6]
-  4.40   4.5  .fix-tag.conflict  [#cf222e on #f9e4e6]
-  4.40   4.5  .badge.sugg-review-infeasible  [#cf222e on #f9e4e6]
-  4.40   4.5  .chip.del  [#cf222e on #f9e4e6]
-  4.40   4.5  .warn-box.missing  [#cf222e on #f9e4e6]
-  4.40   4.5  .badge.pdf-broken  [#cf222e on #f9e4e6]
-  4.40   4.5  .code-tab-disk  [#cf222e on #f9e4e6]
-  4.40   4.5  .code-ctx-item-danger:hover  [#cf222e on #f9e4e6]
-  4.40   4.5  .recent-del:hover  [#cf222e on #f9e4e6]
   —— 贴线：
-    4.72   4.5  .rc-summary.ok  [#1a7f37 on #f0f9f1]
     4.88   4.5  .step-no  [#04222b on #0096c7]
     4.88   4.5  button.primary  [#04222b on #0096c7]
     4.88   4.5  button.accent:hover  [#04222b on #0096c7]
+    4.88   4.5  .sugg-discuss-toggle:hover  [#04222b on #0096c7]
     4.88   4.5  .btn-task-dialog-send, .btn-global-chat-send, .btn-params-chat  [#04222b on #0096c7]
+    4.88   4.5  .btn-param-ref:hover  [#04222b on #0096c7]
     4.88   4.5  .release-ver  [#04222b on #0096c7]
+    4.88   4.5  #btn-code-ai-send  [#04222b on #0096c7]
+    4.88   4.5  .code-ai-selection-btn  [#04222b on #0096c7]
     4.88   4.5  .task-card .btn-task-run  [#04222b on #0096c7]
     5.08   4.5  .stepper .step.done .dot  [#ffffff on #1a7f37]
 
 ## 3. `--accent` 当**文字色**用的地方（同规则里带 own 底的配对）
 
-共 **74** 处带自己那层底；另有 `color: var(--accent)` 但底在祖先的规则（要迁移时要逐条看）——总数见守卫那条腿的读数。
+共 **0** 处带自己那层底；另有 `color: var(--accent)` 但底在祖先的规则（要迁移时要逐条看）——总数见守卫那条腿的读数。
 
-  dark    7.73  button.pin-overview-on                                       #00d4ff on #13313d
-  light   2.95  button.pin-overview-on                                       #0096c7 on #e0f2f8
-  dark    7.73  button.accent                                                #00d4ff on #13313d
-  light   2.95  button.accent                                                #0096c7 on #e0f2f8
-  dark    9.77  .env-jump                                                    #00d4ff on #161b22
-  light   3.39  .env-jump                                                    #0096c7 on #ffffff
-  dark    7.73  .module-card .mc-plat.embed                                  #00d4ff on #13313d
-  light   2.95  .module-card .mc-plat.embed                                  #0096c7 on #e0f2f8
-  dark    7.73  .module-card .mc-pa                                          #00d4ff on #13313d
-  light   2.95  .module-card .mc-pa                                          #0096c7 on #e0f2f8
-  dark    9.77  .module-card .mc-info                                        #00d4ff on #161b22
-  light   3.39  .module-card .mc-info                                        #0096c7 on #ffffff
-  dark    9.77  .mod-info-btn                                                #00d4ff on #161b22
-  light   3.39  .mod-info-btn                                                #0096c7 on #ffffff
-  dark    7.73  .lib-chip.on                                                 #00d4ff on #13313d
-  light   2.95  .lib-chip.on                                                 #0096c7 on #e0f2f8
-  dark    7.73  .badge.ref-topic                                             #00d4ff on #13313d
-  light   2.95  .badge.ref-topic                                             #0096c7 on #e0f2f8
-  dark    7.73  #tab-hwcheck .hwcheck-band-num                               #00d4ff on #13313d
-  light   2.95  #tab-hwcheck .hwcheck-band-num                               #0096c7 on #e0f2f8
-  dark    9.14  #tab-hwcheck .hwcheck-jump                                   #00d4ff on #1c2128
-  light   2.99  #tab-hwcheck .hwcheck-jump                                   #0096c7 on #eef1f4
-  dark    7.73  .topic-key                                                   #00d4ff on #13313d
-  light   2.95  .topic-key                                                   #0096c7 on #e0f2f8
-  dark    7.73  .master-tree-file button.on                                  #00d4ff on #13313d
-  light   2.95  .master-tree-file button.on                                  #0096c7 on #e0f2f8
-  dark    9.77  .code-pane-action, .code-compile-head button, .code-statusba #00d4ff on #161b22
-  light   3.39  .code-pane-action, .code-compile-head button, .code-statusba #0096c7 on #ffffff
-  dark    7.73  .code-statusbar button.on                                    #00d4ff on #13313d
-  light   2.95  .code-statusbar button.on                                    #0096c7 on #e0f2f8
-  dark    7.73  .code-ai-preview-btn                                         #00d4ff on #13313d
-  light   2.95  .code-ai-preview-btn                                         #0096c7 on #e0f2f8
-  dark    7.73  button.code-change-item:hover                                #00d4ff on #13313d
-  light   2.95  button.code-change-item:hover                                #0096c7 on #e0f2f8
-  dark    7.73  .code-change-badge.b-added                                   #00d4ff on #13313d
-  light   2.95  .code-change-badge.b-added                                   #0096c7 on #e0f2f8
-  dark    7.73  .code-compile-error:hover                                    #00d4ff on #13313d
-  light   2.95  .code-compile-error:hover                                    #0096c7 on #e0f2f8
-  dark    7.73  .code-tab-badge                                              #00d4ff on #13313d
-  light   2.95  .code-tab-badge                                              #0096c7 on #e0f2f8
-  dark    7.73  .code-tab-close:hover                                        #00d4ff on #13313d
-  light   2.95  .code-tab-close:hover                                        #0096c7 on #e0f2f8
-  dark    9.14  .code-back-preview, .code-md-edit                            #00d4ff on #1c2128
-  light   2.99  .code-back-preview, .code-md-edit                            #0096c7 on #eef1f4
-  dark    7.73  .code-gutter-line.flash                                      #00d4ff on #13313d
-  light   2.95  .code-gutter-line.flash                                      #0096c7 on #e0f2f8
-  dark    9.14  .code-zoom-badge                                             #00d4ff on #1c2128
-  light   2.99  .code-zoom-badge                                             #0096c7 on #eef1f4
-  dark    7.73  .code-tree-file button.on                                    #00d4ff on #13313d
-  light   2.95  .code-tree-file button.on                                    #0096c7 on #e0f2f8
-  dark    7.73  .code-tree-badge.b-new                                       #00d4ff on #13313d
-  light   2.95  .code-tree-badge.b-new                                       #0096c7 on #e0f2f8
-  dark    7.73  .code-tree-act:hover                                         #00d4ff on #13313d
-  light   2.95  .code-tree-act:hover                                         #0096c7 on #e0f2f8
-  dark    9.14  .code-ctx-item:hover                                         #00d4ff on #1c2128
-  light   2.99  .code-ctx-item:hover                                         #0096c7 on #eef1f4
-  dark    7.73  .quick-open-item.on                                          #00d4ff on #13313d
-  light   2.95  .quick-open-item.on                                          #0096c7 on #e0f2f8
-  dark    9.14  .code-side-rail-btn.on                                       #00d4ff on #1c2128
-  light   2.99  .code-side-rail-btn.on                                       #0096c7 on #eef1f4
-  dark    7.73  .code-outline-item.on                                        #00d4ff on #13313d
-  light   2.95  .code-outline-item.on                                        #0096c7 on #e0f2f8
-  dark    7.73  .code-search-hit.on                                          #00d4ff on #13313d
-  light   2.95  .code-search-hit.on                                          #0096c7 on #e0f2f8
-  dark    7.73  .card-step-status.wire                                       #00d4ff on #13313d
-  light   2.95  .card-step-status.wire                                       #0096c7 on #e0f2f8
-  dark    7.73  .card-step-status.current                                    #00d4ff on #13313d
-  light   2.95  .card-step-status.current                                    #0096c7 on #e0f2f8
-  dark    7.73  .task-phase                                                  #00d4ff on #13313d
-  light   2.95  .task-phase                                                  #0096c7 on #e0f2f8
-  dark    7.73  .task-next-hint                                              #00d4ff on #13313d
-  light   2.95  .task-next-hint                                              #0096c7 on #e0f2f8
-  dark    7.73  .task-card .btn-task-flash:not(:disabled):hover, .task-card  #00d4ff on #13313d
-  light   2.95  .task-card .btn-task-flash:not(:disabled):hover, .task-card  #0096c7 on #e0f2f8
 
 ## 4. `--panel-2` 当底的地方
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -116,6 +117,15 @@ def main() -> None:
         '["--accent 焦点环 / 语义左条", "=--accent", ["--bg", "--panel"], "nontext",',
         mirror_cmd))
 
+    # ⑧ 的锚点**从当前表里现算**（写死某一行会在它被修好后失效——02 单就修掉了 `.badge.ok`）
+    cur_table = L.load_exceptions_raw()
+    row_re = re.compile(r'^(\s*\["(?:dark|light)", .*?, "(?:debt|skip)", .*?, )([0-9.]+)\],\s*$', re.M)
+    row = row_re.search(cur_table)
+    if not row:
+        raise SystemExit("例外表里找不到可改的 debt 行——(8) 这条反证失去对象")
+    old_frozen = f"{row.group(1)}{row.group(2)}],"
+    new_frozen = f"{row.group(1)}{float(row.group(2)) + 3.0}],"
+
     print("\n## 生成器 --check：两处数据漂移各注入一次（期望每次判红）\n")
     ok.append(inject_and_check(
         "⑦ 例外表多出一条假登记", guard,
@@ -124,10 +134,8 @@ def main() -> None:
         '  ["light", "#main-c::selection", "skip",',
         check_cmd))
     ok.append(inject_and_check(
-        "⑧ 例外表的冻结值被改坏（2.74 → 9.99）", guard,
-        '"--ok-bright 压 --ok-dim：2.74，低于 4.5——02 单（六族微调）", 2.74]',
-        '"--ok-bright 压 --ok-dim：2.74，低于 4.5——02 单（六族微调）", 9.99]',
-        check_cmd))
+        f"⑧ 例外表的冻结值被改坏（{row.group(2)} → +3.0）", guard,
+        old_frozen, new_frozen, check_cmd))
 
     print("\n## 复原校验\n")
     code1, _ = run(mirror_cmd)

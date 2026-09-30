@@ -101,9 +101,17 @@ def build_rows():
                          f"最坏格压 {worst['layer']}：{worst['ratio']:.2f}，低于 {worst['need']}"
                          f"（{tier}）——{why}",
                          round(worst["ratio"], 2)))
+    # **渐变端点面**（02 单评审补的盲区）：逐端点算，不达标的登记
+    for cell in L.contrast_gradient_cells(text, tok):
+        if cell["ratio"] >= cell["need"] - 1e-9:
+            continue
+        rows.append((cell["theme"], L.contrast_gradient_key(cell["fg"], cell["layer"]), "debt",
+                     f"{cell['fg']} 压在 {cell['layer']}：{cell['ratio']:.2f}，低于 {cell['need']}"
+                     f"——{cell['why']}",
+                     round(cell["ratio"], 2)))
+
     rows.sort(key=lambda r: (r[0] != "dark", r[2] != "skip", r[4]))
     return rows
-
 
 def render(rows) -> str:
     out = []

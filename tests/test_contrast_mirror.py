@@ -259,6 +259,26 @@ def test_token_bases_match(js, py):
     )
 
 
+def test_gradient_ends_match(js, py):
+    """⑪ **渐变端点**表：主题 / 前景令牌 / 底列表 三格逐条一致（02 单补的盲区检查）。"""
+    m = re.search(r"const CONTRAST_GRADIENT_ENDS = \[([\s\S]*?)\n\];", js)
+    assert m, "守卫里找不到 `const CONTRAST_GRADIENT_ENDS = [...];`"
+    block = "\n".join(ln.split("//")[0].rstrip() for ln in m.group(1).splitlines())
+    js_rows = []
+    for row in re.split(r"\n\s*(?=\[\")", block):
+        if not row.strip().startswith("["):
+            continue
+        items = re.findall(r'"((?:[^"\\]|\\.)*)"', row)
+        inner = re.findall(r"\[([^\[\]]*)\]", row)
+        layers = re.findall(r'"([^"]+)"', inner[0]) if inner else []
+        js_rows.append((items[0], items[1], layers))
+    py_rows = [(t, fg, list(layers)) for t, fg, layers, _why in py.CONTRAST_GRADIENT_ENDS]
+    assert js_rows == py_rows, (
+        "渐变端点表两侧不一致：\n"
+        + "\n".join(f"  JS {a}  vs  Python {b}" for a, b in zip(js_rows, py_rows) if a != b)
+    )
+
+
 def test_exception_table_matches_generator(js, py):
     """⑩ 守卫里那张例外表必须等于生成器**现在**算出来的那张（`--check` 的同源断言）。
 

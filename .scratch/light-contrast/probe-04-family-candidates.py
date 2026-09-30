@@ -22,9 +22,11 @@ sys.path.insert(0, str(HERE))
 import probe_lib as L  # noqa: E402
 
 AA = L.CONTRAST_THRESHOLDS["small"]
-#: 选值时的**余量口径**（不是判据）：过线还不够，要留出 0.15 的余地，
+#: 选值时的**余量口径**（不是判据）：过线还不够，要留出 0.30 的余地，
 #: 免得后续任何一点微调（比如 03 单加深淡底）立刻把它推回线下。
-HEADROOM = 0.15
+#: ⚠ **口径要与落盘值一致**（02 单双轴评审点名：曾出现"脚本按 0.15 算、值按 0.30 落"，
+#: 于是树里没有任何读数能复现那六个值）——改这里就要重跑并核对落盘值。
+HEADROOM = 0.30
 PANEL2_TARGET = "#e1e6ec"          # 03 单要落的值（spec 拍的）
 
 #: 六族：`(族名, 浅色文字令牌, 浅色淡底令牌, 暗色文字令牌, 暗色淡底令牌)`
@@ -58,8 +60,35 @@ def worst_ratio(fg, dim, theme, tok, p2_override=None):
     return min(ratios)
 
 
-def darken(rgb, k):
-    return tuple(max(0, round(c * k)) for c in rgb[:3]) + (1.0,)
+def worst_with_real_dim(fg, dim_token, theme, tok, p2_override=None):
+    """**严格口径**：dim 用**真实令牌值**（不是拿 fg 的色相当 dim），三类底各算一遍。
+
+    落定 `-text` 令牌的值要用这个——`worst_ratio` 是侦察期的近似（把 dim 当同色相），
+    它会把"别的色相的淡底"漏掉（例如 `--purple-dim` 是紫底、`--warn-dim` 是琥珀底）。
+    """
+    dim = tok.value(dim_token, theme)
+    if dim is None:
+        return None
+    bases = [tok.value("--bg", theme)[:3], tok.value("--panel", theme)[:3],
+             (p2_override if (p2_override is not None and theme == "light")
+              else tok.value("--panel-2", theme)[:3])]
+    vals = []
+    for base in bases:
+        vals.append(L.contrast(fg, L.over(dim, base)))   # 压在淡底上
+        vals.append(L.contrast(fg, base))                # 压在纯底上
+    return min(vals)
+
+
+#: 六族：`(族名, 浅色文字令牌, 淡底令牌, 暗色文字令牌, 暗色淡底令牌, 目标 -text 令牌名)`
+FAMILIES = [
+    ("accent", "--accent", "--accent-dim", "--accent", "--accent-dim", "--accent-text"),
+    ("ok", "--ok", "--ok-dim", "--ok", "--ok-dim", "--ok-text"),
+    ("ok-bright", "--ok-bright", "--ok-dim", "--ok-bright", "--ok-dim", "--ok-text"),
+    ("warn", "--warn", "--warn-dim", "--warn", "--warn-dim", "--warn-text"),
+    ("danger", "--danger", "--danger-dim", "--danger", "--danger-dim", "--danger-text"),
+    ("info", "--info", "--info-dim", "--info", "--info-dim", "--info-text"),
+    ("purple", "--purple-grad", "--purple-dim", "--purple-grad", "--purple-dim", "--purple-text"),
+]
 
 
 def main() -> None:
@@ -71,7 +100,64 @@ def main() -> None:
     print(f"判据：四种底上 ≥ {AA} 且余量 ≥ {HEADROOM}（= ≥ {AA + HEADROOM:.2f}）；淡底目标 {PANEL2_TARGET}")
     print("=" * 78)
 
-    for label, fg_name, dim_name, dfg_name, ddim_name in FAMILIES:
+    print("\n## 落定候选：每族解一个 `-text` 令牌值（严格口径：真实 dim × 三类底）\n")
+    print("做法：沿「把文字色按比例压暗/提亮」这条线扫，取**第一个**满足最坏格 ≥ "
+          f"{AA + HEADROOM:.2f} 的值；暗色侧若现值已达标，`-text` 就取**现值**（暗色零变化）。\n")
+    print(f"{'族':<11}{'主题':<7}{'现值':<10}{'现值最坏':>9}{'-text 候选':<12}{'候选最坏':>9}  说明")
+    solved: dict[tuple[str, str], tuple] = {}
+    for label, fg_name, dim_name, dfg_name, ddim_name, text_name in FAMILIES:
+        for theme, fgn, dmn in (("light", fg_name, dim_name), ("dark", dfg_name, ddim_name)):
+            fg = tok.value(fgn, theme)
+            if fg is None:
+                continue
+            p2 = p2_target if theme == "light" else None
+            cur = worst_with_real_dim(fg, dmn, theme, tok, p2)
+            best, best_r = None, cur
+            if cur < AA + HEADROOM - 1e-9:
+                step = 0.01
+                k = 1.0
+                while k > 0.25:
+                    k -= step
+                    cand = tuple(max(0, min(255, round(c * k))) for c in fg[:3]) + (1.0,)
+                    r = worst_with_real_dim(cand, dmn, theme, tok, p2)
+                    if r is not None and r >= AA + HEADROOM:
+                        best, best_r = cand, r
+                        break
+                if best is None:   # 压暗不够 → 试**提亮**（暗色主题的路子）
+                    k = 1.0
+                    while k < 1.9:
+                        k += step
+                        cand = tuple(max(0, min(255, round(c * k))) for c in fg[:3]) + (1.0,)
+                        r = worst_with_real_dim(cand, dmn, theme, tok, p2)
+                        if r is not None and r >= AA + HEADROOM:
+                            best, best_r = cand, r
+                            break
+            else:
+                best, best_r = fg, cur
+            note = "现值已达标 → -text 取现值" if best is fg else (
+                "压暗" if (best and best[0] <= fg[0]) else "提亮")
+            print(f"{label:<11}{theme:<7}{L.hexs(fg):<10}{cur:>9.2f}  "
+                  f"{(L.hexs(best) if best else '（扫不出来）'):<12}{best_r:>9.2f}  {note}")
+            if best is not None:
+                solved[(label, theme)] = (text_name, best, best_r)
+
+    print("\n## 落定值（可以直接抄进 :root / light 两块）\n")
+    print("⚠ 同一个 `-text` 可能被**多族共用**（`--ok-text` 同时服务 `--ok` 与 `--ok-bright`）——"
+          "落定取**最保守**的那一档（两主题都取**更暗**的那个：在浅底上更暗 = 更保守，"
+          "在深底上更暗 = 对比更低 = 也更保守），否则严的那一族仍会掉线。\n")
+    for text_name in sorted({v[0] for v in solved.values()}):
+        rows = [(k[1], v[1], v[2]) for k, v in solved.items() if v[0] == text_name]
+        light_rows = [r for r in rows if r[0] == "light"]
+        dark_rows = [r for r in rows if r[0] == "dark"]
+        light = min(light_rows, key=lambda r: sum(r[1][:3])) if light_rows else None
+        dark = min(dark_rows, key=lambda r: sum(r[1][:3])) if dark_rows else None
+        shared = "（多族共用，取最保守）" if len(rows) > 2 else ""
+        print(f"  {text_name:<16} 暗色 = {L.hexs(dark[1]) if dark else '—':<10}"
+              f"亮色 = {L.hexs(light[1]) if light else '—':<10}"
+              f"（最坏 {light[2]:.2f} / {dark[2]:.2f}）{shared}")
+
+    print("\n## 近似口径的老表（侦察期用；落定值以上面的严格口径为准）\n")
+    for label, fg_name, dim_name, dfg_name, ddim_name, _text_name in FAMILIES:
         print(f"\n## 族「{label}」：文字 {fg_name} × 淡底 {dim_name}\n")
         for theme, fgn, dmn in (("light", fg_name, dim_name), ("dark", dfg_name, ddim_name)):
             fg = tok.value(fgn, theme)
@@ -84,10 +170,10 @@ def main() -> None:
             print(f"  {theme:<6} 现值：{L.hexs(fg)} × dim α={dim[3]:.2f}"
                   f"（dim={L.hexs(L.over((fg[0], fg[1], fg[2], dim[3]), tok.value('--panel', theme)[:3]))}）"
                   f"→ 最坏 **{cur:.2f}** {'✅' if cur >= AA else '❌'}")
-            # 路①：压暗文字令牌（按 5% 步长找第一个达标的）
+            # 路①：压暗文字令牌（按 2% 步长找第一个达标的）
             k = 1.0
-            while k > 0.3:
-                cand = darken(fg, k)
+            while k > 0.25:
+                cand = tuple(max(0, round(c * k)) for c in fg[:3]) + (1.0,)
                 r = worst_ratio(cand, dim, theme, tok, p2)
                 if r >= AA + HEADROOM:
                     print(f"        路① 文字压暗 ×{k:.2f} → {L.hexs(cand)}：最坏 {r:.2f} ✅")

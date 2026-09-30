@@ -1005,23 +1005,21 @@ const CONTRAST_FAMILIES = [
  */
 const CONTRAST_TOKEN_BASES = [
   ["var(--text)", ["--bg", "--panel", "--panel-2"], "text", "正文色：三种底都过"],
-  ["var(--accent)", ["--bg", "--panel", "--panel-2"], "text",
+  ["var(--accent-text)", ["--bg", "--panel", "--panel-2"], "text",
     "accent 当文字色：浅色 2.99——02 单改走 --accent-text"],
   ["var(--on-accent)", ["--accent"], "text", "实心 accent 块上的字（底就是 accent）"],
   ["var(--muted)", ["--bg", "--panel", "--panel-2"], "text", "次要说明色"],
-  ["var(--danger)", ["--bg", "--panel", "--panel-2"], "text", "危险语义色当文字"],
-  ["var(--danger, #e5484d)", ["--bg", "--panel", "--panel-2"], "text",
+  ["var(--danger-text)", ["--bg", "--panel", "--panel-2"], "text", "危险语义色当文字"],
+  ["var(--danger-text, #e5484d)", ["--bg", "--panel", "--panel-2"], "text",
     "带兜底值的 var()：兜底不生效（--danger 存在），按 --danger 算"],
-  ["var(--ok)", ["--bg", "--panel", "--panel-2"], "text", "完成语义色当文字"],
-  ["var(--ok-bright)", ["--bg", "--panel", "--panel-2"], "text",
-    "完成亮色当文字：浅色 2.84——02 单"],
-  ["var(--warn)", ["--bg", "--panel", "--panel-2"], "text", "警示语义色当文字"],
-  ["var(--info)", ["--bg", "--panel", "--panel-2"], "text", "信息语义色当文字"],
+  ["var(--ok-text)", ["--bg", "--panel", "--panel-2"], "text",
+    "完成语义色当文字（`--ok` 与 `--ok-bright` 两族共用这一档——02 单合并）"],
+  ["var(--warn-text)", ["--bg", "--panel", "--panel-2"], "text", "警示语义色当文字"],
+  ["var(--info-text)", ["--bg", "--panel", "--panel-2"], "text", "信息语义色当文字"],
   ["var(--code-text)", ["--code-bg"], "text", "代码正文色（底是代码底）"],
   ["#fff", ["--ok", "--warn", "--danger"], "text",
     "语义实心底上的白字（.env-badge）：底不是卡片，而是那三种实心语义色"],
   ["var(--on-accent-deep)", ["--accent"], "text", "实心 accent 上的深字（步骤点）"],
-  ["var(--on-ok-deep)", ["--ok"], "text", "实心 ok 上的深字（步骤点）"],
   ["var(--border-strong)", ["--bg", "--panel"], "nontext",
     "装饰分隔符 ·（描边色当字形用）：非文字档 3:1"],
   ["var(--accent-dim)", ["--code-bg"], "nontext",
@@ -1041,6 +1039,21 @@ const CONTRAST_TOKEN_BASES = [
   ["var(--tok-val)", [], "skip", "已由族面 `--tok-* × 代码底` 覆盖"],
   ["var(--tok-fn)", [], "skip", "已由族面 `--tok-* × 代码底` 覆盖"],
   ["var(--tok-const)", [], "skip", "已由族面 `--tok-* × 代码底` 覆盖"],
+];
+
+/**
+ * **渐变端点检查**（02 单双轴评审 Spec 轴补的盲区）：
+ * `ruleBackground()` 对渐变返回 `null` ⇒ **机械面看不见"文字压在渐变上"这一格**。
+ * 而渐变两端的亮度可能差很远（02 单实测：浅色 `--ok-bright → --ok` 两端只差一点点，
+ * 白字在亮端 3.22、深墨在暗端 3.65——**没有单色字能同时过**，只能改填充）。
+ * 所以这一格**逐端点**算：每个端点都要 ≥ 阈值。
+ * 形状：`[主题, 前景令牌, 底令牌列表, 理由]`。
+ */
+const CONTRAST_GRADIENT_ENDS = [
+  ["light", "--on-ok", ["--ok", "--ok-text"], "步骤点 / 阶号压在 ok 渐变上（亮色那档）"],
+  ["dark", "--on-ok", ["--ok-bright", "--ok"], "同上（暗色那档：渐变两端与亮色不同）"],
+  ["light", "--on-accent-deep", ["--accent-hi", "--accent-lo"], "当前步骤点压在 accent 渐变上"],
+  ["dark", "--on-accent-deep", ["--accent-hi", "--accent-lo"], "同上（两主题同款渐变）"],
 ];
 
 // --- 解析面（与探针同一套变换；镜像守卫钉住这三条正则） ----------------------
@@ -1278,6 +1291,30 @@ function contrastTokenKey(literal) {
   return "令牌：" + literal;
 }
 
+function contrastGradientKey(fg, bg) {
+  return `渐变：${fg} on ${bg}`;
+}
+
+/** 渐变端点展开成逐格检查（形状同族面：每端点一格）。 */
+function contrastGradientCells(source, table = CONTRAST_GRADIENT_ENDS) {
+  const css = contrastCss(source);
+  const tables = contrastTokenTables(css);
+  const out = [];
+  for (const [theme, fgName, layers, why] of table) {
+    for (const layer of layers) {
+      const fg = resolveToken(`var(${fgName})`, theme, tables);
+      const bg = tokenValue(layer, theme, tables);
+      if (!fg || !bg) continue;
+      out.push({
+        theme, fg: fgName, layer, why,
+        ratio: contrastRatio(compositeOver(fg, bg), bg),
+        need: CONTRAST_THRESHOLDS.small,
+      });
+    }
+  }
+  return out;
+}
+
 /** 无底规则（有 `color:`、底在基类或祖先）里当文字色用的令牌字面（去重、保序）。 */
 function unbasedColorTokens(source) {
   const out = [];
@@ -1322,132 +1359,13 @@ function contrastTokenCells(source, table = CONTRAST_TOKEN_BASES) {
 const CONTRAST_EXCEPTIONS = [
   ["dark", "令牌：var(--accent-dim)", "debt", "最坏格压 --code-bg：1.23，低于 3.0（非文字图形 3:1）——代码 gutter 的折叠占位字形（装饰性，alpha .12 叠在代码底上）", 1.23],
   ["dark", "令牌：var(--border-strong)", "debt", "最坏格压 --panel：1.76，低于 3.0（非文字图形 3:1）——装饰分隔符 ·（描边色当字形用）：非文字档 3:1", 1.76],
-  ["dark", "#btn-code-ai-send", "debt", "#fff 压 --accent：1.77，低于 4.5——03 单（暗色顺手修）", 1.77],
-  ["dark", ".code-ai-selection-btn", "debt", "#fff 压 --accent：1.77，低于 4.5——03 单（暗色顺手修）", 1.77],
   ["dark", "令牌：#fff", "debt", "最坏格压 --warn：2.19，低于 4.5（文字 4.5:1）——语义实心底上的白字（.env-badge）：底不是卡片，而是那三种实心语义色", 2.19],
-  ["dark", ".stepper .step.done .dot", "debt", "#fff 压 --ok：2.54，低于 4.5——03 单（暗色顺手修）", 2.54],
   ["dark", "族：--tok-* × 代码底（含 4 层 accent 合成）", "debt", "最坏格 --tok-pre on --code-bg+accent.32：3.05，低于 4.5（文字 4.5:1）——语法高亮族：本轮只量不修（改它 = 改代码长什么样，属另一件事）。见 probe-01 §8 的整张矩阵", 3.05],
-  ["dark", "button.danger:hover", "debt", "#fff 压 --danger：3.35，低于 4.5——03 单（暗色顺手修）", 3.35],
-  ["dark", ".rel-tag.tag-perf", "debt", "--purple-grad 压 --purple-dim：3.60，低于 4.5——03 单（暗色顺手修）", 3.6],
-  ["dark", "button.danger", "debt", "--danger 压 --danger-dim：4.35，低于 4.5——03 单（暗色顺手修）", 4.35],
-  ["dark", ".badge.missing", "debt", "--danger 压 --danger-dim：4.35，低于 4.5——03 单（暗色顺手修）", 4.35],
-  ["dark", "#compile-banner.fail", "debt", "--danger 压 --danger-dim：4.35，低于 4.5——03 单（暗色顺手修）", 4.35],
-  ["dark", ".fix-tag.conflict", "debt", "--danger 压 --danger-dim：4.35，低于 4.5——03 单（暗色顺手修）", 4.35],
-  ["dark", ".badge.sugg-review-infeasible", "debt", "--danger 压 --danger-dim：4.35，低于 4.5——03 单（暗色顺手修）", 4.35],
-  ["dark", ".chip.del", "debt", "--danger 压 --danger-dim：4.35，低于 4.5——03 单（暗色顺手修）", 4.35],
-  ["dark", ".warn-box.missing", "debt", "--danger 压 --danger-dim：4.35，低于 4.5——03 单（暗色顺手修）", 4.35],
-  ["dark", ".badge.pdf-broken", "debt", "--danger 压 --danger-dim：4.35，低于 4.5——03 单（暗色顺手修）", 4.35],
-  ["dark", ".code-tab-disk", "debt", "--danger 压 --danger-dim：4.35，低于 4.5——03 单（暗色顺手修）", 4.35],
-  ["dark", ".code-ctx-item-danger:hover", "debt", "--danger 压 --danger-dim：4.35，低于 4.5——03 单（暗色顺手修）", 4.35],
-  ["dark", ".recent-del:hover", "debt", "--danger 压 --danger-dim：4.35，低于 4.5——03 单（暗色顺手修）", 4.35],
   ["light", "#main-c::selection", "skip", "选区反白块不是「文字压底」：静态口径不适用（跳过判据，只留登记）", 1.38],
   ["light", "令牌：var(--accent-dim)", "debt", "最坏格压 --code-bg：1.15，低于 3.0（非文字图形 3:1）——代码 gutter 的折叠占位字形（装饰性，alpha .12 叠在代码底上）", 1.15],
   ["light", "令牌：var(--border-strong)", "debt", "最坏格压 --bg：1.89，低于 3.0（非文字图形 3:1）——装饰分隔符 ·（描边色当字形用）：非文字档 3:1", 1.89],
   ["light", "族：--tok-* × 代码底（含 4 层 accent 合成）", "debt", "最坏格 --tok-kw on --code-bg+accent.32：2.22，低于 4.5（文字 4.5:1）——语法高亮族：本轮只量不修（改它 = 改代码长什么样，属另一件事）。见 probe-01 §8 的整张矩阵", 2.22],
-  ["light", ".badge.ok", "debt", "--ok-bright 压 --ok-dim：2.74，低于 4.5——02 单（六族微调）", 2.74],
-  ["light", ".module-card .mc-plat.ok", "debt", "--ok-bright 压 --ok-dim：2.74，低于 4.5——02 单（六族微调）", 2.74],
-  ["light", ".mi-plat .mc-plat.ok", "debt", "--ok-bright 压 --ok-dim：2.74，低于 4.5——02 单（六族微调）", 2.74],
-  ["light", "#compile-banner.success", "debt", "--ok-bright 压 --ok-dim：2.74，低于 4.5——02 单（六族微调）", 2.74],
-  ["light", ".fix-tag.fixed", "debt", "--ok-bright 压 --ok-dim：2.74，低于 4.5——02 单（六族微调）", 2.74],
-  ["light", ".chip.rec", "debt", "--ok-bright 压 --ok-dim：2.74，低于 4.5——02 单（六族微调）", 2.74],
-  ["light", ".badge.sugg-rec, .badge.sugg-lib, .badge.sugg-decided", "debt", "--ok-bright 压 --ok-dim：2.74，低于 4.5——02 单（六族微调）", 2.74],
-  ["light", ".badge.sugg-review-feasible", "debt", "--ok-bright 压 --ok-dim：2.74，低于 4.5——02 单（六族微调）", 2.74],
-  ["light", ".chip.add", "debt", "--ok-bright 压 --ok-dim：2.74，低于 4.5——02 单（六族微调）", 2.74],
-  ["light", ".warn-box.ok", "debt", "--ok-bright 压 --ok-dim：2.74，低于 4.5——02 单（六族微调）", 2.74],
-  ["light", ".master-health-ok", "debt", "--ok-bright 压 --ok-dim：2.74，低于 4.5——02 单（六族微调）", 2.74],
-  ["light", "令牌：var(--ok-bright)", "debt", "最坏格压 --panel-2：2.84，低于 4.5（文字 4.5:1）——完成亮色当文字：浅色 2.84——02 单", 2.84],
-  ["light", "button.pin-overview-on", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", "button.accent", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", ".module-card .mc-plat.embed", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", ".module-card .mc-pa", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", ".lib-chip.on", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", ".badge.ref-topic", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", "#tab-hwcheck .hwcheck-band-num", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", ".topic-key", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", ".master-tree-file button.on", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", ".code-statusbar button.on", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", ".code-ai-preview-btn", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", "button.code-change-item:hover", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", ".code-change-badge.b-added", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", ".code-compile-error:hover", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", ".code-tab-badge", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", ".code-tab-close:hover", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", ".code-gutter-line.flash", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", ".code-tree-file button.on", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", ".code-tree-badge.b-new", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", ".code-tree-act:hover", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", ".quick-open-item.on", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", ".code-outline-item.on", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", ".code-search-hit.on", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", ".card-step-status.wire", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", ".card-step-status.current", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", ".task-phase", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", ".task-next-hint", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", ".task-card .btn-task-flash:not(:disabled):hover, .task-card .btn-task-dialog:not(:disabled):hover", "debt", "--accent 压 --accent-dim：2.95，低于 4.5——02 单（--accent-text / 两处白字）", 2.95],
-  ["light", "#tab-hwcheck .hwcheck-jump", "debt", "--accent 压 --panel-2：2.99，低于 4.5——02 单（--accent-text / 两处白字）", 2.99],
-  ["light", ".code-back-preview, .code-md-edit", "debt", "--accent 压 --panel-2：2.99，低于 4.5——02 单（--accent-text / 两处白字）", 2.99],
-  ["light", ".code-zoom-badge", "debt", "--accent 压 --panel-2：2.99，低于 4.5——02 单（--accent-text / 两处白字）", 2.99],
-  ["light", ".code-ctx-item:hover", "debt", "--accent 压 --panel-2：2.99，低于 4.5——02 单（--accent-text / 两处白字）", 2.99],
-  ["light", ".code-side-rail-btn.on", "debt", "--accent 压 --panel-2：2.99，低于 4.5——02 单（--accent-text / 两处白字）", 2.99],
   ["light", "族：--accent 焦点环 / 语义左条", "debt", "最坏格 --accent on --panel-2：2.99，低于 3.0（非文字图形 3:1）——非文字图形：键盘焦点环与语义左条要 ≥3:1（看不见焦点环 = 键盘用户找不到焦点）", 2.99],
-  ["light", "令牌：var(--accent)", "debt", "最坏格压 --panel-2：2.99，低于 4.5（文字 4.5:1）——accent 当文字色：浅色 2.99——02 单改走 --accent-text", 2.99],
-  ["light", ".env-jump", "debt", "--accent 压 --panel：3.39，低于 4.5——02 单（--accent-text / 两处白字）", 3.39],
-  ["light", ".module-card .mc-info", "debt", "--accent 压 --panel：3.39，低于 4.5——02 单（--accent-text / 两处白字）", 3.39],
-  ["light", ".mod-info-btn", "debt", "--accent 压 --panel：3.39，低于 4.5——02 单（--accent-text / 两处白字）", 3.39],
-  ["light", ".sugg-discuss-toggle:hover", "debt", "--panel 压 --accent：3.39，低于 4.5——02 单", 3.39],
-  ["light", ".btn-param-ref:hover", "debt", "--panel 压 --accent：3.39，低于 4.5——02 单", 3.39],
-  ["light", ".code-pane-action, .code-compile-head button, .code-statusbar button", "debt", "--accent 压 --panel：3.39，低于 4.5——02 单（--accent-text / 两处白字）", 3.39],
-  ["light", "#btn-code-ai-send", "debt", "#fff 压 --accent：3.39，低于 4.5——02 单（--accent-text / 两处白字）", 3.39],
-  ["light", ".code-ai-selection-btn", "debt", "#fff 压 --accent：3.39，低于 4.5——02 单（--accent-text / 两处白字）", 3.39],
-  ["light", "button.primary:hover", "debt", "--on-accent 压 --accent-dark：3.59，低于 4.5——02 单（--accent-text / 两处白字）", 3.59],
-  ["light", ".btn-task-dialog-send:hover, .btn-global-chat-send:hover, .btn-params-chat-send:hover, .sugg-discuss-send:hover", "debt", "--on-accent 压 --accent-dark：3.59，低于 4.5——02 单（--accent-text / 两处白字）", 3.59],
-  ["light", ".task-card .btn-task-run:not(:disabled):hover", "debt", "--on-accent 压 --accent-dark：3.59，低于 4.5——02 单（--accent-text / 两处白字）", 3.59],
-  ["light", "令牌：var(--on-ok-deep)", "debt", "最坏格压 --ok：3.65，低于 4.5（文字 4.5:1）——实心 ok 上的深字（步骤点）", 3.65],
-  ["light", ".banner", "debt", "--warn 压 --warn-dim：4.17，低于 4.5——02 单（六族微调）", 4.17],
-  ["light", ".badge.unverified", "debt", "--warn 压 --warn-dim：4.17，低于 4.5——02 单（六族微调）", 4.17],
-  ["light", ".module-card .mc-offtag", "debt", "--warn 压 --warn-dim：4.17，低于 4.5——02 单（六族微调）", 4.17],
-  ["light", ".module-info-off", "debt", "--warn 压 --warn-dim：4.17，低于 4.5——02 单（六族微调）", 4.17],
-  ["light", ".fix-tag.pending", "debt", "--warn 压 --warn-dim：4.17，低于 4.5——02 单（六族微调）", 4.17],
-  ["light", ".badge.sugg-review-risky", "debt", "--warn 压 --warn-dim：4.17，低于 4.5——02 单（六族微调）", 4.17],
-  ["light", ".param-stale-badge", "debt", "--warn 压 --warn-dim：4.17，低于 4.5——02 单（六族微调）", 4.17],
-  ["light", ".warn-box.unverified", "debt", "--warn 压 --warn-dim：4.17，低于 4.5——02 单（六族微调）", 4.17],
-  ["light", ".warn-box.group", "debt", "--warn 压 --warn-dim：4.17，低于 4.5——02 单（六族微调）", 4.17],
-  ["light", ".badge.pdf-dup", "debt", "--warn 压 --warn-dim：4.17，低于 4.5——02 单（六族微调）", 4.17],
-  ["light", ".prog-badge", "debt", "--warn 压 --warn-dim：4.17，低于 4.5——02 单（六族微调）", 4.17],
-  ["light", ".rel-tag.tag-fix", "debt", "--warn 压 --warn-dim：4.17，低于 4.5——02 单（六族微调）", 4.17],
-  ["light", ".master-health-warn", "debt", "--warn 压 --warn-dim：4.17，低于 4.5——02 单（六族微调）", 4.17],
-  ["light", ".code-change-badge.b-modified", "debt", "--warn 压 --warn-dim：4.17，低于 4.5——02 单（六族微调）", 4.17],
-  ["light", ".code-tree-badge.b-mod", "debt", "--warn 压 --warn-dim：4.17，低于 4.5——02 单（六族微调）", 4.17],
-  ["light", ".card-step-status.warn", "debt", "--warn 压 --warn-dim：4.17，低于 4.5——02 单（六族微调）", 4.17],
-  ["light", ".task-redo-badge", "debt", "--warn 压 --warn-dim：4.17，低于 4.5——02 单（六族微调）", 4.17],
-  ["light", ".rel-tag.tag-perf", "debt", "--purple-grad 压 --purple-dim：4.29，低于 4.5——02 单（六族微调）", 4.29],
-  ["light", "令牌：var(--warn)", "debt", "最坏格压 --panel-2：4.29，低于 4.5（文字 4.5:1）——警示语义色当文字", 4.29],
-  ["light", ".rel-tag.tag-new", "debt", "--ok 压 --ok-dim：4.33，低于 4.5——02 单（六族微调）", 4.33],
-  ["light", ".card-step-status.done", "debt", "--ok 压 --ok-dim：4.33，低于 4.5——02 单（六族微调）", 4.33],
-  ["light", ".tasks-done-line .btn-task-goto-delivery", "debt", "--ok 压 --ok-dim：4.33，低于 4.5——02 单（六族微调）", 4.33],
-  ["light", ".welcome-card", "debt", "--info 压 --info-dim：4.38，低于 4.5——02 单（六族微调）", 4.38],
-  ["light", ".badge.hw", "debt", "--info 压 --info-dim：4.38，低于 4.5——02 单（六族微调）", 4.38],
-  ["light", ".module-card .mc-plat.hw", "debt", "--info 压 --info-dim：4.38，低于 4.5——02 单（六族微调）", 4.38],
-  ["light", ".mi-plat .mc-plat.hw", "debt", "--info 压 --info-dim：4.38，低于 4.5——02 单（六族微调）", 4.38],
-  ["light", "#compile-banner.running", "debt", "--info 压 --info-dim：4.38，低于 4.5——02 单（六族微调）", 4.38],
-  ["light", ".fix-tag.new", "debt", "--info 压 --info-dim：4.38，低于 4.5——02 单（六族微调）", 4.38],
-  ["light", ".badge.sugg-ai", "debt", "--info 压 --info-dim：4.38，低于 4.5——02 单（六族微调）", 4.38],
-  ["light", ".warn-box.hardware_bound", "debt", "--info 压 --info-dim：4.38，低于 4.5——02 单（六族微调）", 4.38],
-  ["light", ".badge.ref-kit", "debt", "--info 压 --info-dim：4.38，低于 4.5——02 单（六族微调）", 4.38],
-  ["light", ".ai-action-banner", "debt", "--info 压 --info-dim：4.38，低于 4.5——02 单（六族微调）", 4.38],
-  ["light", ".rel-tag.tag-imp", "debt", "--info 压 --info-dim：4.38，低于 4.5——02 单（六族微调）", 4.38],
-  ["light", "button.danger", "debt", "--danger 压 --danger-dim：4.40，低于 4.5——02 单（六族微调）", 4.4],
-  ["light", ".badge.missing", "debt", "--danger 压 --danger-dim：4.40，低于 4.5——02 单（六族微调）", 4.4],
-  ["light", "#compile-banner.fail", "debt", "--danger 压 --danger-dim：4.40，低于 4.5——02 单（六族微调）", 4.4],
-  ["light", ".fix-tag.conflict", "debt", "--danger 压 --danger-dim：4.40，低于 4.5——02 单（六族微调）", 4.4],
-  ["light", ".badge.sugg-review-infeasible", "debt", "--danger 压 --danger-dim：4.40，低于 4.5——02 单（六族微调）", 4.4],
-  ["light", ".chip.del", "debt", "--danger 压 --danger-dim：4.40，低于 4.5——02 单（六族微调）", 4.4],
-  ["light", ".warn-box.missing", "debt", "--danger 压 --danger-dim：4.40，低于 4.5——02 单（六族微调）", 4.4],
-  ["light", ".badge.pdf-broken", "debt", "--danger 压 --danger-dim：4.40，低于 4.5——02 单（六族微调）", 4.4],
-  ["light", ".code-tab-disk", "debt", "--danger 压 --danger-dim：4.40，低于 4.5——02 单（六族微调）", 4.4],
-  ["light", ".code-ctx-item-danger:hover", "debt", "--danger 压 --danger-dim：4.40，低于 4.5——02 单（六族微调）", 4.4],
-  ["light", ".recent-del:hover", "debt", "--danger 压 --danger-dim：4.40，低于 4.5——02 单（六族微调）", 4.4],
-  ["light", "令牌：var(--ok)", "debt", "最坏格压 --panel-2：4.48，低于 4.5（文字 4.5:1）——完成语义色当文字", 4.48],
 
 ];
 
@@ -1537,6 +1455,13 @@ function contrastProblems(source, exceptions = CONTRAST_EXCEPTIONS, families = C
       out.push(`令牌表的阈值档位 ${kind} 不在 CONTRAST_TOKEN_KINDS 里（阈值会算错）`);
     }
   }
+  // 同一条令牌登记两次 = 表里有一条是死条，而"盘上有没有用它"这一问照样答"有"——
+  // 反向对账抓不到它（02 单自查：`--ok-text` 就是被两条旧行改名撞出来的），故单列一条。
+  const litSeen = new Set();
+  for (const [literal] of tokenTable) {
+    if (litSeen.has(literal)) out.push(`令牌表里同一条登记了两次：${literal}（删掉多余那条）`);
+    litSeen.add(literal);
+  }
   const tokenCells = contrastTokenCells(source, tokenTable);
   const usedTokens = unbasedColorTokens(source);
   for (const literal of usedTokens) {
@@ -1564,6 +1489,12 @@ function contrastProblems(source, exceptions = CONTRAST_EXCEPTIONS, families = C
       out.push(`CONTRAST_TOKEN_BASES 里这条盘上已经不用了（令牌改名 / 规则删了）：`
         + `${literal}（${decl.kind}）——删掉这一行`);
     }
+  }
+
+  // **渐变端点**：机械面对渐变返回 null ⇒ 单独逐端点算（02 单评审补的盲区）
+  for (const cell of contrastGradientCells(source)) {
+    check(cell.theme, contrastGradientKey(cell.fg, cell.layer), cell.ratio, cell.need,
+      `${cell.fg} 压在 ${cell.layer}（渐变端点）`);
   }
 
   for (const [id, e] of reg) {
@@ -1760,9 +1691,9 @@ test("全站推广合成红证：八条腿各自都判得红（防'永远绿'的
     "空转的谓词没被判出（它守的那条腿会静默绿）",
   );
   // ⑤ 动作三级的口径：退回"只有红字"、或又冒出带页面前缀的副本，都必须判得红
-  const dangerFull = "button.danger { border-color: var(--danger); background: var(--danger-dim); color: var(--danger); }";
+  const dangerFull = "button.danger { border-color: var(--danger); background: var(--danger-dim); color: var(--danger-text); }";
   assert.ok(html.includes(dangerFull), `锚点变了（${dangerFull}）—— 这条自检会静默空转`);
-  assert.ok(actionWeightProblems(html.replace(dangerFull, "button.danger { color: var(--danger); }")).length > 0,
+  assert.ok(actionWeightProblems(html.replace(dangerFull, "button.danger { color: var(--danger-text); }")).length > 0,
     "危险动作退回'只有红字'没被判出");
   assert.ok(actionWeightProblems(html + "\n  #tab-hwcheck button.danger { color: red; }\n").length > 0,
     "带页面前缀的 danger 副本没被判出");
@@ -1915,18 +1846,24 @@ test("全站推广合成红证：八条腿各自都判得红（防'永远绿'的
     contrastProblems(ctInjectedPair).some((p) => p.includes(".param-card-body")),
     "新写的一条不达标配对没被判出（这是本腿最该抓的坏法）",
   );
-  //    (c) **摘掉一条 debt 登记** → 红（盘上那条还在、表里没了）
-  const ctDropped = CONTRAST_EXCEPTIONS.filter((e) => !(e[0] === "light" && e[1] === ".badge.ok"));
+  //    (c) **摘掉一条 debt 登记** → 红（盘上那条还在、表里没了）。
+  //        ⚠ 从**当前表里现挑**一条（别写死 `.badge.ok`：02 单修好之后那条就不在表里了，
+  //        写死会让这条红证变成"注入没生效"的假红——它自己先红，等于什么都没证明）。
+  const ctVictim = CONTRAST_EXCEPTIONS.find((e) => e[2] === "debt");
+  assert.ok(ctVictim, "例外表里一条 debt 都没有——(c)/(d) 两条红证失去了对象（判据已无敌可打？）");
+  // 认人键在判据文案里的形态：机械面 = 选择器原文；族面 / 令牌面 = 去掉 `族：`/`令牌：` 前缀后的标签
+  const ctVictimText = ctVictim[1].replace(/^(族：|令牌：)/, "");
+  const ctDropped = CONTRAST_EXCEPTIONS.filter((e) => e !== ctVictim);
   assert.equal(ctDropped.length, CONTRAST_EXCEPTIONS.length - 1, "注入没生效（没摘掉那条）");
   assert.ok(
-    contrastProblems(html, ctDropped).some((p) => p.includes(".badge.ok") && p.includes("没有登记")),
+    contrastProblems(html, ctDropped).some((p) => p.includes(ctVictimText) && p.includes("没有登记")),
     "摘掉一条债务登记之后没被判成未登记",
   );
   //    (d) **债务静默恶化**（表里的冻结值与现算值不一致）→ 红。这是"债可以存在、但不许烂"的唯一抓手。
-  const ctRotten = CONTRAST_EXCEPTIONS.map((e) => (e[0] === "light" && e[1] === ".badge.ok"
+  const ctRotten = CONTRAST_EXCEPTIONS.map((e) => (e === ctVictim
     ? [e[0], e[1], e[2], e[3], Number(e[4]) - 0.4] : e));
   assert.ok(
-    contrastProblems(html, ctRotten).some((p) => p.includes("与冻结值") && p.includes(".badge.ok")),
+    contrastProblems(html, ctRotten).some((p) => p.includes("与冻结值") && p.includes(ctVictimText)),
     "债务静默恶化（现算值与冻结值不一致）没被判出",
   );
   //    (e) **反向那一半**：一条已经过线的配对还留在例外表里 → 红（"修好了忘了摘登记项"）
@@ -1944,7 +1881,7 @@ test("全站推广合成红证：八条腿各自都判得红（防'永远绿'的
     "空类别没被判出（判据退化成摆设）");
   assert.ok(contrastProblems(html, [...CONTRAST_EXCEPTIONS, ["light", ".x"]])
     .some((p) => p.includes("形状不对")), "例外项形状不对时没被判出");
-  const ctTwice = [...CONTRAST_EXCEPTIONS, CONTRAST_EXCEPTIONS.find((e) => e[1] === ".badge.ok")];
+  const ctTwice = [...CONTRAST_EXCEPTIONS, ctVictim];
   assert.ok(contrastProblems(html, ctTwice).some((p) => p.includes("登记了两次")),
     "同一条例外登记两次没被判出");
   //    (g) **族面**：把 `--tok-*` 里最坏那格改坏（令牌值变浅）→ 族的最坏格与冻结值不一致 → 红
@@ -1990,15 +1927,18 @@ test("全站推广合成红证：八条腿各自都判得红（防'永远绿'的
       .some((p) => p.includes("已经不用了")),
     "令牌表里的死条没被判出（反向对账失效）",
   );
-  //        (j3) 令牌面的债务静默恶化（把某个达标令牌的值改坏，最坏格与冻结值不一致）→ 红。
-  //             锚点 = `--warn` 的浅色定义行；改浅后 `var(--warn)` 的最坏格掉线。
-  const warnAnchor = "--warn: #9a6700; --warn-dim: rgba(154, 103, 0, .12); --warn-border: rgba(154, 103, 0, .35);";
-  assert.ok(html.includes(warnAnchor), `锚点变了（${warnAnchor}）—— 这条自检会静默空转`);
-  const paleWarn = html.replace(warnAnchor,
-    "--warn: #d9b075; --warn-dim: rgba(154, 103, 0, .12); --warn-border: rgba(154, 103, 0, .35);");
-  assert.notEqual(paleWarn, html, "注入没生效（锚点没命中）");
+  //        (j3) 令牌面的债务静默恶化（把某条**已记账**的令牌改坏 → 现算值与冻结值不一致）→ 红。
+  //             ⚠ 从当前表里**现挑**一条（02 单把大部分债都还了，写死 `--warn` 会失去对象）。
+  const ctTokVictim = CONTRAST_EXCEPTIONS.find((e) => e[1].startsWith("令牌：var("));
+  assert.ok(ctTokVictim, "令牌面一条 var() 债都没有——(j3) 失去对象（判据已无敌可打？）");
+  const ctTokName = ctTokVictim[1].match(/var\((--[a-z0-9-]+)/)[1];
+  const ctTokRe = new RegExp("(" + ctTokName + ": )[^;]+;");
+  assert.ok(ctTokRe.test(html), `锚点变了（找不到 ${ctTokName} 的定义行）—— 这条自检会静默空转`);
+  const ctPaleTok2 = html.replace(ctTokRe, "$1rgba(127, 127, 127, .02);");
+  assert.notEqual(ctPaleTok2, html, "注入没生效（锚点没命中）");
   assert.ok(
-    contrastProblems(paleWarn).some((p) => p.includes("令牌 var(--warn)") && p.includes("与冻结值")),
+    contrastProblems(ctPaleTok2)
+      .some((p) => p.includes("令牌 " + ctTokVictim[1].slice(3)) && p.includes("与冻结值")),
     "令牌面的债务恶化（现算值与冻结值不一致）没被判出",
   );
   //        (j4) 令牌表的阈值档位写错 → 红
@@ -2008,6 +1948,13 @@ test("全站推广合成红证：八条腿各自都判得红（防'永远绿'的
     contrastProblems(html, CONTRAST_EXCEPTIONS, CONTRAST_FAMILIES, badTokenKind)
       .some((p) => p.includes("不在 CONTRAST_TOKEN_KINDS 里")),
     "令牌表的阈值档位写错时没被判出",
+  );
+  //        (j5) 令牌表里同一条登记两次 → 红（02 单自查逮到的洞：反向对账答"有在用"，抓不到重复）
+  assert.ok(
+    contrastProblems(html, CONTRAST_EXCEPTIONS, CONTRAST_FAMILIES,
+      [...CONTRAST_TOKEN_BASES, CONTRAST_TOKEN_BASES[0]])
+      .some((p) => p.includes("登记了两次")),
+    "令牌表里的重复行没被判出（那会让表里留一条永远不生效的死条）",
   );
   //    (k) **大字分档要真被走过一遍**（Spec 轴评审实测：376 对里 need=3.0 的条数为 0——
   //        这条分支从来没被命中过，等于没验证）。造一条 24px 的规则：同一对色在**小字**下必红、
@@ -2026,6 +1973,16 @@ test("全站推广合成红证：八条腿各自都判得红（防'永远绿'的
     `${largeHead} font-size: 19px; font-weight: 400; }`));
   assert.ok(largeBoldBad.some((p) => p.includes(".param-card-body")),
     "19px **不加粗**被判成大字了——那会把小字的门槛偷偷降到 3.0");
+  //    (l) **渐变端点面**（02 单 Spec 轴评审补的盲区）也要自证：机械面对渐变返回 null，
+  //        所以这一格只能靠 `CONTRAST_GRADIENT_ENDS` 看着。把亮色 ok 渐变的**暗端**改浅 → 判红。
+  const ctOkTextAnchor = "--ok-text: #15672d;";
+  assert.ok(html.includes(ctOkTextAnchor), `锚点变了（${ctOkTextAnchor}）—— 这条自检会静默空转`);
+  const ctPaleOkText = html.replace(ctOkTextAnchor, "--ok-text: #7fd39a;");
+  assert.notEqual(ctPaleOkText, html, "注入没生效（锚点没命中）");
+  assert.ok(
+    contrastProblems(ctPaleOkText).some((p) => p.includes("--on-ok 压在 --ok-text")),
+    "ok 渐变的端点掉线没被判出（渐变那一格又回到射程外了）",
+  );
   // ⑨ 复原后转绿（八条腿都回到空/子集）
   assert.deepEqual(bareFontSizesInScope(html, "hwcheck"), []);
   assert.deepEqual(bareTokenSpacesInScope(html, "hwcheck"), []);

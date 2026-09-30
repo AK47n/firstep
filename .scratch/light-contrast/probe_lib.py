@@ -88,23 +88,21 @@ CODE_LAYERS = [
 #: **与 JS 守卫的 `CONTRAST_TOKEN_BASES` 逐项同源**（镜像守卫钉住）。
 CONTRAST_TOKEN_BASES = [
     ("var(--text)", ["--bg", "--panel", "--panel-2"], "text", "正文色：三种底都过"),
-    ("var(--accent)", ["--bg", "--panel", "--panel-2"], "text",
+    ("var(--accent-text)", ["--bg", "--panel", "--panel-2"], "text",
      "accent 当文字色：浅色 2.99——02 单改走 --accent-text"),
     ("var(--on-accent)", ["--accent"], "text", "实心 accent 块上的字（底就是 accent）"),
     ("var(--muted)", ["--bg", "--panel", "--panel-2"], "text", "次要说明色"),
-    ("var(--danger)", ["--bg", "--panel", "--panel-2"], "text", "危险语义色当文字"),
-    ("var(--danger, #e5484d)", ["--bg", "--panel", "--panel-2"], "text",
+    ("var(--danger-text)", ["--bg", "--panel", "--panel-2"], "text", "危险语义色当文字"),
+    ("var(--danger-text, #e5484d)", ["--bg", "--panel", "--panel-2"], "text",
      "带兜底值的 var()：兜底不生效（--danger 存在），按 --danger 算"),
-    ("var(--ok)", ["--bg", "--panel", "--panel-2"], "text", "完成语义色当文字"),
-    ("var(--ok-bright)", ["--bg", "--panel", "--panel-2"], "text",
-     "完成亮色当文字：浅色 2.84——02 单"),
-    ("var(--warn)", ["--bg", "--panel", "--panel-2"], "text", "警示语义色当文字"),
-    ("var(--info)", ["--bg", "--panel", "--panel-2"], "text", "信息语义色当文字"),
+    ("var(--ok-text)", ["--bg", "--panel", "--panel-2"], "text",
+     "完成语义色当文字（--ok 与 --ok-bright 两族共用这一档——02 单合并）"),
+    ("var(--warn-text)", ["--bg", "--panel", "--panel-2"], "text", "警示语义色当文字"),
+    ("var(--info-text)", ["--bg", "--panel", "--panel-2"], "text", "信息语义色当文字"),
     ("var(--code-text)", ["--code-bg"], "text", "代码正文色（底是代码底）"),
     ("#fff", ["--ok", "--warn", "--danger"], "text",
      "语义实心底上的白字（.env-badge）：底不是卡片，而是那三种实心语义色"),
     ("var(--on-accent-deep)", ["--accent"], "text", "实心 accent 上的深字（步骤点）"),
-    ("var(--on-ok-deep)", ["--ok"], "text", "实心 ok 上的深字（步骤点）"),
     ("var(--border-strong)", ["--bg", "--panel"], "nontext",
      "装饰分隔符 ·（描边色当字形用）：非文字档 3:1"),
     ("var(--accent-dim)", ["--code-bg"], "nontext",
@@ -558,6 +556,42 @@ def load_families() -> list[list[str]]:
 
 #: 代码页那几层底的**名字**（从守卫的 `CODE_LAYERS` 解析族表时要用）
 CODE_LAYERS_NAMES = [n for n, _ in CODE_LAYERS]
+
+
+def contrast_gradient_key(fg: str, bg: str) -> str:
+    """渐变端点面的认人键（与 JS `contrastGradientKey` 同一形态）。"""
+    return f"渐变：{fg} on {bg}"
+
+
+def contrast_gradient_cells(text: str, tok: Tokens | None = None, table=None):
+    """**渐变端点**展开成逐格检查（形状同族面：每端点一格）。
+
+    `bg_of_rule` 对渐变返回 None ⇒ 机械面看不见"文字压在渐变上"这一格；
+    这一面按 `CONTRAST_GRADIENT_ENDS` 逐端点算（表与 JS 侧逐项同源）。
+    """
+    tok = tok or Tokens(text)
+    table = CONTRAST_GRADIENT_ENDS if table is None else table
+    out = []
+    for theme, fg_name, layers, why in table:
+        for layer in layers:
+            fg = tok.parse(f"var({fg_name})", theme)
+            bg = tok.value(layer, theme)
+            if fg is None or bg is None:
+                continue
+            out.append(dict(theme=theme, fg=fg_name, layer=layer, why=why,
+                            ratio=contrast(over(fg, bg[:3]), bg[:3]),
+                            need=CONTRAST_THRESHOLDS["small"]))
+    return out
+
+
+#: **渐变端点检查**（02 单 Spec 轴评审补的盲区）：形状 `[主题, 前景令牌, 底令牌列表, 理由]`；
+#: **与 JS 的 `CONTRAST_GRADIENT_ENDS` 逐项同源**（镜像守卫钉住）。
+CONTRAST_GRADIENT_ENDS = [
+    ("light", "--on-ok", ["--ok", "--ok-text"], "步骤点 / 阶号压在 ok 渐变上（亮色那档）"),
+    ("dark", "--on-ok", ["--ok-bright", "--ok"], "同上（暗色那档：渐变两端与亮色不同）"),
+    ("light", "--on-accent-deep", ["--accent-hi", "--accent-lo"], "当前步骤点压在 accent 渐变上"),
+    ("dark", "--on-accent-deep", ["--accent-hi", "--accent-lo"], "同上（两主题同款渐变）"),
+]
 
 
 def load_token_bases() -> list[list[str]]:

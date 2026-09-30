@@ -36,7 +36,7 @@ export function flashResultHTML(data) {
       + "</div>";
   }
   return '<div class="reason">'
-    + '<span style="color:var(--danger);font-weight:600">✗ 烧录未成功</span> '
+    + '<span style="color:var(--danger-text);font-weight:600">✗ 烧录未成功</span> '
     + esc(data.message || "烧录失败，请查看下方输出")
     + (data.timed_out ? ' <span class="muted">（超时）</span>' : "")
     + flashOutputHTML(data.output)
@@ -51,7 +51,7 @@ export function flashResultHTML(data) {
 export function flashGuideHTML(message) {
   return '<div class="reason" style="border:1px solid var(--warn);'
     + 'border-radius:var(--radius-md);padding:8px 10px">'
-    + '<span style="color:var(--warn);font-weight:600">烧录未就绪</span> '
+    + '<span style="color:var(--warn-text);font-weight:600">烧录未就绪</span> '
     + esc(message || "烧录前置条件未就绪，请查看提示")
     + ' <button class="btn-flash-goto-settings">去设置页配置</button>'
     + "</div>";

@@ -436,7 +436,7 @@ test("tasksOverviewHTML: 分段进度条 + 状态汇总（已跳过单列不计�
     { id: "t7", status: "skipped" },
   ] };
   const html = tasksOverviewHTML(plan);
-  assert.ok(html.includes("已完成 <b style=\"color:var(--ok-bright)\">2</b>/7"));
+  assert.ok(html.includes("已完成 <b style=\"color:var(--ok-text)\">2</b>/7"));
   assert.ok(html.includes("待上板 1"));
   assert.ok(html.includes("失败 1"));
   assert.ok(html.includes("进行中 1"));

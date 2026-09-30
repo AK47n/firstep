@@ -1,0 +1,23 @@
+# 读数：after-02-measure
+# 命令：node .scratch\ui-density-sitewide\probe-12-measure-light.mjs
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-30T12:58:47+08:00
+# 退出码：0
+
+===== light =====
+表格 #ref-rows：40 行里 **溢出 40 行 / 重叠 0 行**
+   样例： {"heads":"标题/类型/题型/锚定/简介/体量/操作","bad":[{"i":4,"name":"简介","over":2632,"text":"磁力计（电子罗盘）驱动移植笔记：设备侧两"}],"overlapPx":0}
+   样例： {"heads":"标题/类型/题型/锚定/简介/体量/操作","bad":[{"i":4,"name":"简介","over":2279,"text":"无线串口透传模块资料（DL-20 / D"},{"i":5,"name":"体量","over":111,"text":"3 个文件 · 25.7 MB（另含 2"}],"overlapPx":0}
+   样例： {"heads":"标题/类型/题型/锚定/简介/体量/操作","bad":[{"i":4,"name":"简介","over":2953,"text":"ALX-AOA-FIT 跟随套件官方资料"},{"i":5,"name":"体量","over":111,"text":"2 个文件 · 33.4 MB（另含 1"}],"overlapPx":0}
+徽章对比度： {"refNone":{"color":"rgb(89, 99, 110)","bg":"rgb(255,255,255)","ratio":6.11},"refKit":{"color":"rgb(7, 85, 177)","bg":"rgb(255,255,255)","ratio":7.13},"refTopic":{"color":"rgb(0, 97, 129)","bg":"rgb(255,255,255)","ratio":6.94}}
+面板 vs 页面底： body rgb(246,248,250) ×1  |  .card rgb(246,248,250) ×1  |  .guide-note rgb(238,241,244) ×1.06  |  .card-details-body rgb(238,241,244) ×1.06
+指南页面板： body rgb(246,248,250) ×1  |  .card rgb(246,248,250) ×1  |  .guide-note rgb(238,241,244) ×1.06  |  .card-details-body rgb(238,241,244) ×1.06
+
+===== dark =====
+表格 #ref-rows：40 行里 **溢出 40 行 / 重叠 0 行**
+   样例： {"heads":"标题/类型/题型/锚定/简介/体量/操作","bad":[{"i":4,"name":"简介","over":2632,"text":"磁力计（电子罗盘）驱动移植笔记：设备侧两"}],"overlapPx":0}
+   样例： {"heads":"标题/类型/题型/锚定/简介/体量/操作","bad":[{"i":4,"name":"简介","over":2279,"text":"无线串口透传模块资料（DL-20 / D"},{"i":5,"name":"体量","over":111,"text":"3 个文件 · 25.7 MB（另含 2"}],"overlapPx":0}
+   样例： {"heads":"标题/类型/题型/锚定/简介/体量/操作","bad":[{"i":4,"name":"简介","over":2953,"text":"ALX-AOA-FIT 跟随套件官方资料"},{"i":5,"name":"体量","over":111,"text":"2 个文件 · 33.4 MB（另含 1"}],"overlapPx":0}
+徽章对比度： {"refNone":{"color":"rgb(139, 148, 158)","bg":"rgb(22,27,34)","ratio":5.62},"refKit":{"color":"rgb(88, 166, 255)","bg":"rgb(22,27,34)","ratio":6.85},"refTopic":{"color":"rgb(0, 212, 255)","bg":"rgb(22,27,34)","ratio":9.77}}
+面板 vs 页面底： body rgb(13,17,23) ×1  |  .card rgb(13,17,23) ×1  |  .guide-note rgb(28,33,40) ×1.17  |  .card-details-body rgb(28,33,40) ×1.17
+指南页面板： body rgb(13,17,23) ×1  |  .card rgb(13,17,23) ×1  |  .guide-note rgb(28,33,40) ×1.17  |  .card-details-body rgb(28,33,40) ×1.17

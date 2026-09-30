@@ -324,7 +324,7 @@ export function tasksOverviewHTML(plan) {
     + seg(unverified, "seg-unverified", "待上板") + seg(failed, "seg-failed", "失败")
     + seg(pending, "seg-pending", "待做") + seg(skipped, "seg-skipped", "已跳过")
     + "</div>";
-  const summary = "已完成 <b style=\"color:var(--ok-bright)\">" + verified + "</b>/" + total
+  const summary = "已完成 <b style=\"color:var(--ok-text)\">" + verified + "</b>/" + total
     + (doing ? " · 进行中 " + doing : "")
     + (unverified ? " · 待上板 " + unverified : "")
     + (failed ? " · 失败 " + failed : "")
@@ -335,7 +335,7 @@ export function tasksOverviewHTML(plan) {
   const allDone = !["pending", "failed", "doing", "unverified"].some(
     (s) => tasks.some((t) => t.status === s));
   const doneLine = allDone
-    ? '<div class="tasks-done-line" style="margin-top: var(--space-2)"><span class="muted" style="color:var(--ok-bright)">全部完成 🎉</span>'
+    ? '<div class="tasks-done-line" style="margin-top: var(--space-2)"><span class="muted" style="color:var(--ok-text)">全部完成 🎉</span>'
       + ' <button type="button" class="btn-task-goto-delivery" data-action="goto-delivery">去交付</button></div>'
     : "";
   return bar + '<div class="muted" style="margin-top: var(--space-1)">' + summary + "</div>" + doneLine;
@@ -1007,15 +1007,15 @@ export function verifyStatusMarkup(data, fallbacks) {
     const manual = data.verify_cause === "manual";
     return {
       badge: manual
-        ? '<span style="color:var(--warn);font-weight:600">⚠ 未验证（上板确认）</span>'
-        : '<span style="color:var(--warn);font-weight:600">⚠ 未验证（无工具链降级）</span>',
+        ? '<span style="color:var(--warn-text);font-weight:600">⚠ 未验证（上板确认）</span>'
+        : '<span style="color:var(--warn-text);font-weight:600">⚠ 未验证（无工具链降级）</span>',
       detail: esc((data && data.message) || (manual ? fb.manual
         : fb.unverified)
         || "未检测到编译工具链：结果已写入 main.c，但未经编译验证——请配置工具链后手动编译（上板类任务可直接人工标记为上板通过）。"),
     };
   }
   return {
-    badge: '<span style="color:var(--danger);font-weight:600">✗ 未通过（编译验证失败）</span>',
+    badge: '<span style="color:var(--danger-text);font-weight:600">✗ 未通过（编译验证失败）</span>',
     detail: esc((data && data.message) || fb.failed
       || "编译验证未通过，结果已写入 main.c（已备份，可回滚）。"),
   };
