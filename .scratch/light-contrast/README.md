@@ -54,6 +54,8 @@
 python .scratch\light-contrast\probe-01-inventory.py     # 机械清单 + 候选值格网
 python .scratch\light-contrast\probe-02-js-inline.py     # 渲染方内联取色
 python .scratch\light-contrast\probe-03-contrast.py      # 例外表 ↔ 盘上双向对账 + 覆盖审计
+python .scratch\light-contrast\probe-06-migration-audit.py   # 02 单那 223 处迁移逐处在册
+node   .scratch\light-contrast\probe-07-rendered-sweep.mjs  # **渲染面全站扫描**（真 Chromium × 十二页签 × 两主题）
 
 # 例外表的生成关系（读 + 可选写）
 python .scratch\light-contrast\generate-01-contrast-register.py           # 打印表
