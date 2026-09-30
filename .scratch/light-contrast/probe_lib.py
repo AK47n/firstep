@@ -121,8 +121,10 @@ for _t in ("com", "str", "pre", "kw", "num", "tag", "attr", "val", "fn", "const"
 CONTRAST_FAMILIES = [
     ("--tok-* × 代码底（含 4 层 accent 合成）", "--tok-", [n for n, _ in CODE_LAYERS], "text",
      "语法高亮族：本轮只量不修（改它 = 改代码长什么样，属另一件事）。见 probe-01 §8 的整张矩阵"),
-    ("--accent 焦点环 / 语义左条", "=--accent", ["--bg", "--panel", "--panel-2"], "nontext",
-     "非文字图形：键盘焦点环与语义左条要 ≥3:1（看不见焦点环 = 键盘用户找不到焦点）"),
+    ("--accent-text 焦点环 / 定位环", "=--accent-text", ["--bg", "--panel", "--panel-2"], "nontext",
+     "键盘焦点环与定位环（03 单提到 3:1 以上）：看不见焦点环 = 键盘用户找不到焦点"),
+    ("--accent 控件描边 / 语义左条", "=--accent", ["--bg", "--panel", "--panel-2"], "nontext",
+     "控件普通描边与语义左条：装饰性强于信息性，**大面积改深会动整页观感**——记债不修（03 单的判断）"),
 ]
 
 

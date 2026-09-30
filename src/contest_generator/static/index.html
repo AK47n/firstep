@@ -173,7 +173,7 @@
   /* 亮色主题（工单 ui-polish-5/01）：GitHub 亮色系，强调色加深保证浅底对比 */
   html[data-theme="light"] {
     color-scheme: light;
-    --bg: #f6f8fa; --panel: #ffffff; --panel-2: #eef1f4;
+    --bg: #f6f8fa; --panel: #ffffff; --panel-2: #e1e6ec;
     --border: #d0d7de; --border-strong: #afb8c1;
     --input-bg: #ffffff; --code-bg: #f6f8fa; --code-text: #1f2328;
     --text: #1f2328; --muted: #59636e;
@@ -335,7 +335,7 @@
   /* 链接的键盘焦点（工单 ui-density/05 复查补的口）：应用里唯一的 <a> 是检测页那两个入口锚，
      而它们此前拿到的是**浏览器默认的那道 1px 灰圈**，与全站焦点语言不一致。
      这里沿用的是同类控制的既有写法（`.revise-tab` / `.guide-tab` / `.res-view-btn` 同一句）。 */
-  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
   input:-webkit-autofill {
     -webkit-box-shadow: 0 0 0 1000px var(--input-bg) inset; -webkit-text-fill-color: var(--text); }
   .row { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; }
@@ -415,7 +415,7 @@
   /* 跳转目标高亮（工单 guide-jump-flash/01）：gotoNavTab 聚焦目标（卡片等
      非交互元素无默认焦点样式）后加 .jump-flash——accent 描边 + 脉冲微光，
      CSS 动画驱动，JS 1.8s 后移除类（见 ui/goto-nav.js）。 */
-  .jump-flash { outline: 2px solid var(--accent); outline-offset: 2px;
+  .jump-flash { outline: 2px solid var(--accent-text); outline-offset: 2px;
                 animation: jump-flash-pulse .5s ease-in-out 1; }
   @keyframes jump-flash-pulse {
     0% { box-shadow: 0 0 0 4px rgba(var(--accent-rgb), .55); }
@@ -761,10 +761,10 @@
                      background: var(--accent-dim); color: var(--text);
                      cursor: pointer; vertical-align: baseline; }
   .btn-param-ref:hover { background: var(--accent); color: var(--on-accent); }
-  .param-card-locate { outline: 2px solid var(--accent); outline-offset: 2px;
+  .param-card-locate { outline: 2px solid var(--accent-text); outline-offset: 2px;
                      animation: param-locate-flash 0.8s ease-in-out 2; }
   @keyframes param-locate-flash {
-     0%, 100% { outline-color: var(--accent); }
+     0%, 100% { outline-color: var(--accent-text); }
      50% { outline-color: var(--accent-dim); }
   }
   /* 任务卡微编辑 + 调序（工单 idea-suite/04，收编为「⋯ 更多」下拉）：卡内表单
@@ -2204,7 +2204,7 @@
   .code-md-edit:focus-visible, .code-back-preview:focus-visible,
   .code-tree-btn:focus-visible, .code-tree-act:focus-visible,
   #btn-code-save:focus-visible {
-    outline: 2px solid var(--accent); outline-offset: 2px; }
+    outline: 2px solid var(--accent-text); outline-offset: 2px; }
   .code-tree-box { flex: 1; overflow: auto; min-height: 0; }
   /* 树/侧栏空态（工单 code-editor-vscode-polish/08）：与编辑器 .code-empty
      同类观感——muted 小字、行内留白（块级占位；侧栏结果/查找空态在更深一层
@@ -2226,7 +2226,7 @@
   .code-tree-resize-handle:hover::before,
   .code-tree-resize-handle:focus-visible::before,
   body.code-resizing .code-tree-resize-handle::before { background: var(--accent); }
-  .code-tree-resize-handle:focus-visible { outline: 2px solid var(--accent);
+  .code-tree-resize-handle:focus-visible { outline: 2px solid var(--accent-text);
     outline-offset: 2px; }
   body.code-resizing { user-select: none; cursor: col-resize; }
   /* 标签条（工单 code-viewer-editor/02，CCS/VS Code 式多文件标签）：editor
@@ -2864,10 +2864,10 @@
                          cursor: pointer; }
   .ov-actions .ov-fill:hover { border-color: var(--accent); color: var(--accent-text); }
   .ov-actions .ov-generate { padding: 5px var(--space-4); border-radius: var(--radius-full); font-size: var(--fs-tag); }
-  .ov-fill-target { outline: 2px solid var(--accent); outline-offset: 2px;
+  .ov-fill-target { outline: 2px solid var(--accent-text); outline-offset: 2px;
                     animation: ovFillPulse 1.2s ease-in-out; }
   @keyframes ovFillPulse {
-    0%, 100% { outline-color: var(--accent); }
+    0%, 100% { outline-color: var(--accent-text); }
     50% { outline-color: var(--warn); }
   }
   /* 最近生成（工单 recent-jobs/01）：生成成功自动落盘 recent.json 的历史
@@ -2944,7 +2944,7 @@
   .revise-tab.active { border-color: rgba(var(--accent-rgb), .45); background: var(--accent-dim);
                        color: var(--text); font-weight: 600; }
   .revise-tab.active:hover { border-color: rgba(var(--accent-rgb), .45); }
-  .revise-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .revise-tab:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
   .revise-tab-badge { padding: 1px 7px; border-radius: var(--radius-full); font-size: var(--fs-tag);
                       font-weight: 700; background: var(--panel-2);
                       border: 1px solid var(--border); color: var(--muted);
@@ -2986,7 +2986,7 @@
   .guide-tab.active { border-color: rgba(var(--accent-rgb), .45); background: var(--accent-dim);
                        color: var(--text); font-weight: 600; }
   .guide-tab.active:hover { border-color: rgba(var(--accent-rgb), .45); }
-  .guide-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .guide-tab:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
   .guide-panel { margin-top: var(--space-1); }
   .guide-empty-hint { padding: 10px 14px; border: none; border-left: 3px dashed var(--border-strong);
       border-radius: var(--radius-md); color: var(--muted); font-size: var(--fs-note);
@@ -3090,7 +3090,7 @@
                   background: var(--panel-2); color: var(--muted); font-size: var(--fs-tag); cursor: pointer; }
   .res-view-btn:hover { color: var(--text); border-color: var(--accent); }
   .res-view-btn.active { background: var(--accent-dim); border-color: var(--accent); color: var(--text); }
-  .res-view-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .res-view-btn:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
   .res-group { margin-bottom: var(--space-1); }
   .res-group-title { font-size: var(--fs-tag); font-weight: 600; color: var(--muted);
                      letter-spacing: .4px; padding: var(--space-1) 0 2px;

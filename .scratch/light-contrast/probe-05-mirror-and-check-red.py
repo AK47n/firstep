@@ -113,8 +113,8 @@ def main() -> None:
         mirror_cmd))
     ok.append(inject_and_check(
         "⑥ 族表底列表（焦点环那族去掉 --panel-2）", guard,
-        '["--accent 焦点环 / 语义左条", "=--accent", ["--bg", "--panel", "--panel-2"], "nontext",',
-        '["--accent 焦点环 / 语义左条", "=--accent", ["--bg", "--panel"], "nontext",',
+        '["--accent 控件描边 / 语义左条", "=--accent", ["--bg", "--panel", "--panel-2"], "nontext",',
+        '["--accent 控件描边 / 语义左条", "=--accent", ["--bg", "--panel"], "nontext",',
         mirror_cmd))
 
     # ⑧ 的锚点**从当前表里现算**（写死某一行会在它被修好后失效——02 单就修掉了 `.badge.ok`）

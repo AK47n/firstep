@@ -1,7 +1,7 @@
 # 读数：probe-04-family-candidates
 # 命令：python .scratch\light-contrast\probe-04-family-candidates.py
 # 工作树：C:\Users\luoji\Desktop\firstep
-# 开始：2026-09-30T13:04:21+08:00
+# 开始：2026-09-30T13:25:33+08:00
 # 退出码：0
 ==============================================================================
 浅色调色板轮 · 选值读数（probe-04：六族改哪一侧）

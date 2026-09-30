@@ -985,8 +985,10 @@ const CODE_LAYERS = [
 const CONTRAST_FAMILIES = [
   ["--tok-* × 代码底（含 4 层 accent 合成）", "--tok-", CODE_LAYERS.map(([n]) => n), "text",
     "语法高亮族：本轮只量不修（改它 = 改代码长什么样，属另一件事）。见 probe-01 §8 的整张矩阵"],
-  ["--accent 焦点环 / 语义左条", "=--accent", ["--bg", "--panel", "--panel-2"], "nontext",
-    "非文字图形：键盘焦点环与语义左条要 ≥3:1（看不见焦点环 = 键盘用户找不到焦点）"],
+  ["--accent-text 焦点环 / 定位环", "=--accent-text", ["--bg", "--panel", "--panel-2"], "nontext",
+    "键盘焦点环与定位环（03 单提到 3:1 以上）：看不见焦点环 = 键盘用户找不到焦点"],
+  ["--accent 控件描边 / 语义左条", "=--accent", ["--bg", "--panel", "--panel-2"], "nontext",
+    "控件普通描边与语义左条：装饰性强于信息性，**大面积改深会动整页观感**——记债不修（03 单的判断）"],
 ];
 
 /**
@@ -1365,7 +1367,7 @@ const CONTRAST_EXCEPTIONS = [
   ["light", "令牌：var(--accent-dim)", "debt", "最坏格压 --code-bg：1.15，低于 3.0（非文字图形 3:1）——代码 gutter 的折叠占位字形（装饰性，alpha .12 叠在代码底上）", 1.15],
   ["light", "令牌：var(--border-strong)", "debt", "最坏格压 --bg：1.89，低于 3.0（非文字图形 3:1）——装饰分隔符 ·（描边色当字形用）：非文字档 3:1", 1.89],
   ["light", "族：--tok-* × 代码底（含 4 层 accent 合成）", "debt", "最坏格 --tok-kw on --code-bg+accent.32：2.22，低于 4.5（文字 4.5:1）——语法高亮族：本轮只量不修（改它 = 改代码长什么样，属另一件事）。见 probe-01 §8 的整张矩阵", 2.22],
-  ["light", "族：--accent 焦点环 / 语义左条", "debt", "最坏格 --accent on --panel-2：2.99，低于 3.0（非文字图形 3:1）——非文字图形：键盘焦点环与语义左条要 ≥3:1（看不见焦点环 = 键盘用户找不到焦点）", 2.99],
+  ["light", "族：--accent 控件描边 / 语义左条", "debt", "最坏格 --accent on --panel-2：2.70，低于 3.0（非文字图形 3:1）——控件普通描边与语义左条：装饰性强于信息性，**大面积改深会动整页观感**——记债不修（03 单的判断）", 2.7],
 
 ];
 
@@ -1894,7 +1896,7 @@ test("全站推广合成红证：八条腿各自都判得红（防'永远绿'的
     "语法高亮族的最坏格改坏之后没被判出（族面判据失效）",
   );
   //    (h) 族定义写错（令牌选取命中不到任何令牌）→ 红（否则那条族判据静默空转）
-  const ctEmptyFamily = CONTRAST_FAMILIES.map((f) => (f[0] === "--accent 焦点环 / 语义左条"
+  const ctEmptyFamily = CONTRAST_FAMILIES.map((f) => (f[0] === "--accent-text 焦点环 / 定位环"
     ? [f[0], "=--nope-这个令牌不存在", f[2], f[3], f[4]] : f));
   assert.ok(
     contrastProblems(html, CONTRAST_EXCEPTIONS, ctEmptyFamily).some((p) => p.includes("一格都没算出来")),

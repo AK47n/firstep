@@ -1,7 +1,7 @@
 # 读数：probe-01-inventory
 # 命令：python .scratch\light-contrast\probe-01-inventory.py
 # 工作树：C:\Users\luoji\Desktop\firstep
-# 开始：2026-09-30T12:55:14+08:00
+# 开始：2026-09-30T13:25:32+08:00
 # 退出码：0
 ==============================================================================
 浅色调色板轮 · 侦察读数（probe-01：对比度清单 + 候选值扫描）
@@ -15,7 +15,7 @@
 --header-h            58px                              —                                 
 --bg                  #0d1117                           #f6f8fa                           
 --panel               #161b22                           #ffffff                           
---panel-2             #1c2128                           #eef1f4                           
+--panel-2             #1c2128                           #e1e6ec                           
 --border              #30363d                           #d0d7de                           
 --border-strong       #3d444d                           #afb8c1                           
 --input-bg            #0d1117                           #ffffff                           
@@ -42,7 +42,7 @@
 --ambient-glow        rgba(var(--accent-rgb), .07)      rgba(var(--accent-rgb), .06)      
 --card-sheen          rgba(255, 255, 255, .02)          rgba(31, 35, 40, .015)            
 --accent-text         #00d4ff                           #006181                           
---ok-text             #3fb950                           #1c6630                           
+--ok-text             #3fb950                           #15672d                           
 --warn-text           #e3a341                           #7a5100                           
 --danger-text         #ff685e                           #a81c25                           
 --info-text           #58a6ff                           #0755b1                           
@@ -51,9 +51,10 @@
 --accent-hi           #33dcff                           #33dcff                           
 --accent-lo           #00b8de                           #00b8de                           
 --on-accent-deep      #001018                           #001018                           
---on-ok-deep          #04170c                           #ffffff                           
+--on-ok               #04170c                           #ffffff                           
+--ok-fill             linear-gradient(135deg, var(--ok-bright), var(--ok))linear-gradient(135deg, var(--ok), var(--ok-text))
 --on-danger           #04170c                           #ffffff                           
---on-accent-hover     #04222b                           #ffffff                           
+--on-accent-dark      #04222b                           #ffffff                           
 --purple-grad         #8b5cf6                           #8250df                           
 --purple-dim          rgba(139, 92, 246, .12)           rgba(130, 80, 223, .12)           
 --power               #f59e0b                           #d97706                           
@@ -97,11 +98,30 @@
     4.71   4.5  #compile-banner.notool  [#8b949e on #242a31]
     4.97   4.5  .rel-tag.tag-perf  [#b175ff on #24233b]
 
-### light：188 对，不达标 **1**，贴线（+0.6 内）11
+### light：188 对，不达标 **1**，贴线（+0.6 内）30
 
     比值     需  选择器 / 色对
   1.38   4.5  #main-c::selection  [#ffffff on #b8e2ef]
   —— 贴线：
+    4.87   4.5  header h1 .brand-cn  [#59636e on #e1e6ec]
+    4.87   4.5  header nav button  [#59636e on #e1e6ec]
+    4.87   4.5  .lib-edit-old  [#59636e on #e1e6ec]
+    4.87   4.5  .lib-chip  [#59636e on #e1e6ec]
+    4.87   4.5  .hwcheck-hint  [#59636e on #e1e6ec]
+    4.87   4.5  .hwcheck-order-index  [#59636e on #e1e6ec]
+    4.87   4.5  input[type=file]  [#59636e on #e1e6ec]
+    4.87   4.5  .pin-legend .lg  [#59636e on #e1e6ec]
+    4.87   4.5  .code-pane-title  [#59636e on #e1e6ec]
+    4.87   4.5  .code-file-path  [#59636e on #e1e6ec]
+    4.87   4.5  .code-ro-note  [#59636e on #e1e6ec]
+    4.87   4.5  .code-conflict-col-title  [#59636e on #e1e6ec]
+    4.87   4.5  .code-md-preview blockquote  [#59636e on #e1e6ec]
+    4.87   4.5  .code-md-preview .md-img-fallback  [#59636e on #e1e6ec]
+    4.87   4.5  .revise-tab-badge  [#59636e on #e1e6ec]
+    4.87   4.5  .revise-empty-hint  [#59636e on #e1e6ec]
+    4.87   4.5  .guide-empty-hint  [#59636e on #e1e6ec]
+    4.87   4.5  .res-view-btn  [#59636e on #e1e6ec]
+    4.87   4.5  .code-wrap .line-nums  [#59636e on #e1e6ec]
     4.88   4.5  .step-no  [#04222b on #0096c7]
     4.88   4.5  button.primary  [#04222b on #0096c7]
     4.88   4.5  button.accent:hover  [#04222b on #0096c7]
@@ -128,22 +148,22 @@
 现值 `--accent` = #0096c7（暗色 = #00d4ff）
 
 候选                页面底       卡片       淡底     dim@卡片     dim@淡底
-#0096c7          3.19     3.39     2.99       2.95       2.63
-#0089b6          3.75     4.00     3.53       3.47       3.10
-#007ea8          4.34     4.62     4.07       4.01       3.58
-#00759c          4.90     5.22     4.60       4.53       4.04
-#006d92          5.48     5.83     5.14       5.06       4.52 ✅
-#00668a          6.04     6.43     5.67       5.58       4.98 ✅
-#005f80          6.69     7.12     6.28       6.18       5.52 ✅
-#005877          7.41     7.89     6.96       6.85       6.11 ✅
-#00526e          8.11     8.63     7.62       7.49       6.69 ✅
-#004c66          8.86     9.44     8.32       8.19       7.31 ✅
-#00465e          9.68    10.31     9.09       8.94       7.99 ✅
-#004056         10.56    11.24     9.92       9.76       8.71 ✅
+#0096c7          3.19     3.39     2.70       2.95       2.39
+#0089b6          3.75     4.00     3.18       3.47       2.82
+#007ea8          4.34     4.62     3.68       4.01       3.25
+#00759c          4.90     5.22     4.16       4.53       3.68
+#006d92          5.48     5.83     4.64       5.06       4.11
+#00668a          6.04     6.43     5.12       5.58       4.53 ✅
+#005f80          6.69     7.12     5.67       6.18       5.02 ✅
+#005877          7.41     7.89     6.28       6.85       5.56 ✅
+#00526e          8.11     8.63     6.88       7.49       6.09 ✅
+#004c66          8.86     9.44     7.52       8.19       6.65 ✅
+#00465e          9.68    10.31     8.21       8.94       7.26 ✅
+#004056         10.56    11.24     8.96       9.76       7.93 ✅
 
 ## 6. 候选：`--panel-2`（浅色加深；目标 = 与页面底分得开）
 
-现值 `--panel-2` = #eef1f4，与页面底 #f6f8fa 比值 ×1.065
+现值 `--panel-2` = #e1e6ec，与页面底 #f6f8fa 比值 ×1.179
 
 候选              vs 页面底    vs 卡片   --text  --muted
 #eef1f4          1.065    1.134    13.93     5.39
