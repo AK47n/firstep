@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=4b9ef7fa6fc2c4c911befe1c67595acb75e596a8 -->
+<!-- changelog-auto: last-commit=769ab934eca359bb8e9a6a37948ead0f70bcd425 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-09-30
+- 12:42 浅色调色板 01：对比度契约变成可对账的数据 + 守卫腿⑧ + 跨语言镜像（light-contrast/01）
 
 ## 2026-09-29
 - 12:40 ui-density-sitewide/11：2c 彻底版（真树 + 逐层 LCS 对齐，四条自证随读数跑）
