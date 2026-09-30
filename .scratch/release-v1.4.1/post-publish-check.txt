@@ -1,0 +1,23 @@
+# 读数：post-publish-check
+# 命令：python tools\check-download-docs.py
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-30T23:01:07+08:00
+# 退出码：0
+=== 1. README「获取方式」 ===
+  [OK] 没有已下线形态（7z 分卷 / 需第三方解压工具 / 约 6 GB 那套）
+  [OK] 指向 https://github.com/AK47n/firstep/releases/latest
+  [OK] 点名的包内文件都在包里：00-START-HERE.txt
+
+=== 2. 线上最新版 ===
+  最新 tag：v1.4.1；资产 8 件
+  [OK] firstep-full-v1.4.1.zip = 791,826,449 字节（792 MB）
+  [OK] 「约 800 MB」对应 firstep-full-v1.4.1.zip 的线上 792 MB
+  [OK] 「约 296 MB」对应 firstep-update-v1.4.1.zip 的线上 302 MB
+  [OK] clone「约 270 MB」与 git pack 291 MiB 同量级
+
+=== 3. Release 说明的前几行 ===
+  [OK] 开头有面向新用户的指引
+  [OK] 开头有面向已装用户的指引
+
+=== 结论 ===
+  PASS：README / Release 说明 / 包内文件三处讲的是同一个故事

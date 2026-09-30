@@ -5,9 +5,43 @@
 >
 > 更新纪律：改动了这里描述的东西（删沙箱、发新版、换端口），**当场回来改这份文件**。
 
-## 0. 交接区：main 上有什么还没到用户手上（2026-09-29 更新 · **v1.4.0 已发布（2026-09-29）——v1.3.1 之后攒的四批（记录写加固 / backlog 收尾 / ui-density 检测页轮 / ui-density-sitewide 全站轮）全部到用户手上了，`main` 与线上落差归零；涨落以 `git log` 为准**）
+## 0. 交接区：main 上有什么还没到用户手上（2026-09-30 更新 · **v1.4.1 已发布（2026-09-30）——v1.4.0 之后攒的三批（border-guard / light-contrast / code-contrast）全部到用户手上了，`main` 与线上落差归零；涨落以 `git log` 为准**）
 
-> ### ✅ 最新发布（2026-09-29，`release-v1.4.0` 会话）—— **v1.4.0 已上线**：八件套齐全、`/releases/latest` 指向它、`main` 与线上**落差归零**
+> ### ✅ 最新发布（2026-09-30，`release-v1.4.1` 会话）—— **v1.4.1 已上线**：八件套齐全、`/releases/latest` 指向它、`main` 与线上**落差归零**
+>
+> **这一版带走的三批**（发布那一刻 `main` = `288e2907`，tag 也是它）：
+> ① `border-guard`（01–03；**产品面零改动**）② `light-contrast`（01–05；全站颜色，浅色为主）
+> ③ `code-contrast`（01–04；**代码页语法色与高亮强度** + 禁用态灰底灰字）。
+>
+> | 项 | 值 |
+> |---|---|
+> | 线上最新 | **v1.4.1**（2026-09-30 发布），八件套齐全，`/releases/latest` 指向它 |
+> | 远端 `main` | **`288e2907`**（= 本地 HEAD，发布那一刻；推送报告 `08e5d524..288e2907` 实测） |
+> | tag | annotated `v1.4.1` → 对象 `8537534f`，解引用 = **`288e2907`**（打包那一刻的 CHANGELOG 提交；**tag 之后的账本提交不在 tag 里**，老规矩） |
+> | Release | `https://github.com/AK47n/firstep/releases/tag/v1.4.1`；**八件资产服务端 size 与本地逐件相同（8/8、0 处不一致）** |
+> | 联网自检 | `python tools\check-download-docs.py` **PASS**（三组全 `[OK]`；读数 `.scratch/release-v1.4.1/post-publish-check.txt`） |
+> | 发版产物（本机留档） | `firstep-pack\firstep-{update,full}-v1.4.1.*` 全套 + `release-notes-v1.4.1.md`；**下一版基线 = 这两个清单**（update **`301,967,062`** B / sha256 `c846a380…`；full **`791,826,449`** B / sha256 `dc499d35…`） |
+>
+> **发版前的三道关（读数都在 `.scratch/release-v1.4.1/`）**：
+>
+> | 步骤 | 读数 |
+> |---|---|
+> | 三处版本号同步 | `__init__.py` / `pyproject.toml` / `VERSIONS.md` 首块 `## v1.4.1 (2026-09-30)`；`README.md` 当前/上一版行同批改；`preflight.ps1` **四项全绿**（`preflight-01.txt`） |
+> | 版本相关单测 | `pytest tests/test_changelog.py tests/test_readme.py tests/test_preflight.py -q` → **86 passed**（`pytest-version-01.txt`；含 `VERSIONS.md` 版本清单断言追加 v1.4.1） |
+> | pre-push 闸门（打 tag 时那一发跑的） | 前端 + 浏览器 + 全量 pytest **整套跑完并全绿**（输出尾 `5689 passed + 11 skipped`）——**闸门过后被网络掐断**；换 IP 重推时用 `FIRSTEP_PREPUSH=select-only` **明写**跳过重跑（同一棵树、零提交，见 `issues/02` 第 4 条） |
+> | 打包抽检 | 更新包 2939 文件（无 `.scratch` / `.venv` / `sources/materials`）、`VERSIONS.md` 首块 = v1.4.1、`__version__ = 1.4.1`；完整包单卷 755.1 MB、`00-START-HERE.txt` 在包内 |
+>
+> **⚠ 本轮量到的三条本机事实（下次发版直接用）**：
+> ① **`git rev-parse v1.4.1^{commit}` 在 PowerShell 里必踩**：`^` 是 PowerShell 的转义符，
+>    实测报 `ambiguous argument`（还带出一串 base64 乱码）。看 tag 指向谁用 **`git rev-list -n 1 <tag>`**，
+>    或把整个参数用**单引号**包起来。
+> ② **`gh --jq` 里带 `\(…)` 插值的表达式会被 PowerShell 拆成多个参数**（`accepts at most 1 arg(s)`）——
+>    要读资产清单就走 `gh release view --json assets` 再解析（本轮用 Python 逐件对账 size）。
+> ③ 网络那条照旧：**6 个候选 IP 本轮全通过 `ls-remote`**，但第一次推送仍被掐断
+>    （`curl 55 Send failure: Connection was reset`）；换 `20.27.177.113` 一次过。
+>    **验过的 IP 只保证那一刻**。
+
+> ### ✅ 上一版发布（2026-09-29，`release-v1.4.0` 会话）—— **v1.4.0 已上线**：八件套齐全、`/releases/latest` 指向它（v1.4.1 之后不再是最新，账本原样保留）
 >
 > **这一版带走的四批**（发布那一刻 `main` = `d527c65c`；`origin/main..main` 之后 = `0 0`）：
 > ① `d0bc143f`–`9c74d564` **记录写加固**（01–07；纯内部——用户可见影响只有"并发写更稳"）
@@ -92,7 +126,7 @@
 >    抛 `ValueError`（`out.relative_to(REPO)`）——文件是好的、退出码却被带成 1。要么指仓库内目录，
 >    要么忽略那条尾部的报错。本轮打包那两条读数就是这么落到 `%TEMP%` 再拷回来的。
 >
-> ### 📌 最新（2026-09-30 深夜，`code-contrast` 会话）—— **代码配色族修到 WCAG AA + 禁用态改灰底灰字，未发布；用户可见影响：代码页的语法色深浅与高亮强度、**禁用按钮/输入框的样子****
+> ### 📌 上一批（2026-09-30 深夜，`code-contrast` 会话）—— **代码配色族修到 WCAG AA + 禁用态改灰底灰字；已随 v1.4.1 上线**
 >
 > **这一批是什么**：`.scratch/code-contrast/`（spec + 工单 `01`–`04`，**04 张全 resolved**）。上游是
 > `light-contrast` 留下的那笔债（`--tok-*` 语法高亮族**只量不修**）。
