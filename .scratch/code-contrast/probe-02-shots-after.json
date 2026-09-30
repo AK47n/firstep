@@ -3,17 +3,32 @@
   "shots": [
     {
       "theme": "light",
+      "file": "sample-c",
       "name": "com",
       "box": {
         "x": 297.8125,
         "y": 176.984375,
-        "width": 176,
+        "width": 286.609375,
         "height": 17
+      },
+      "clip": {
+        "x": 297.8125,
+        "y": 181.984375,
+        "width": 286.609375,
+        "height": 7
       },
       "info": {
         "start": 0,
-        "len": 17,
-        "text": "// 行一：注释（tok-com）"
+        "len": 28,
+        "end": 28,
+        "text": "/* 块注释：tok-com —— 电赛工程生成器 */",
+        "line": 1,
+        "span": [
+          0,
+          30
+        ],
+        "nextLine": true,
+        "lineActive": true
       },
       "marks": {
         "word": 0,
@@ -21,96 +36,308 @@
         "current": 0
       },
       "files": {
-        "before": "probe-02-after-light-com-before.png",
-        "selection": "probe-02-after-light-com-selection.png",
-        "dblclick": "probe-02-after-light-com-dblclick.png"
+        "before": "probe-02-after-light-sample-c-com-before.png",
+        "selection": "probe-02-after-light-sample-c-com-selection.png",
+        "dblclick": "probe-02-after-light-sample-c-com-dblclick.png"
       }
     },
     {
       "theme": "light",
-      "name": "str",
+      "file": "sample-c",
+      "name": "pre",
       "box": {
-        "x": 453.84375,
-        "y": 218.578125,
-        "width": 140.203125,
+        "x": 297.8125,
+        "y": 197.78125,
+        "width": 148.203125,
         "height": 17
       },
+      "clip": {
+        "x": 297.8125,
+        "y": 202.78125,
+        "width": 148.203125,
+        "height": 7
+      },
       "info": {
-        "start": 53,
-        "len": 14,
-        "text": "\"字符串（tok-str）\""
+        "start": 29,
+        "len": 19,
+        "end": 48,
+        "text": "#include <stdint.h>",
+        "line": 2,
+        "span": [
+          0,
+          50
+        ],
+        "nextLine": true,
+        "lineActive": false
       },
       "marks": {
-        "word": 2,
+        "word": 1,
         "hit": 0,
         "current": 0
       },
       "files": {
-        "before": "probe-02-after-light-str-before.png",
-        "selection": "probe-02-after-light-str-selection.png",
-        "dblclick": "probe-02-after-light-str-dblclick.png"
+        "before": "probe-02-after-light-sample-c-pre-before.png",
+        "selection": "probe-02-after-light-sample-c-pre-selection.png",
+        "dblclick": "probe-02-after-light-sample-c-pre-dblclick.png"
       }
     },
     {
       "theme": "light",
+      "file": "sample-c",
+      "name": "kw",
+      "box": {
+        "x": 297.8125,
+        "y": 239.375,
+        "width": 46.8125,
+        "height": 17
+      },
+      "clip": {
+        "x": 297.8125,
+        "y": 244.375,
+        "width": 46.8125,
+        "height": 7
+      },
+      "info": {
+        "start": 68,
+        "len": 6,
+        "end": 74,
+        "text": "static",
+        "line": 4,
+        "span": [
+          49,
+          105
+        ],
+        "nextLine": true,
+        "lineActive": false
+      },
+      "marks": {
+        "word": 1,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-light-sample-c-kw-before.png",
+        "selection": "probe-02-after-light-sample-c-kw-selection.png",
+        "dblclick": "probe-02-after-light-sample-c-kw-dblclick.png"
+      }
+    },
+    {
+      "theme": "light",
+      "file": "sample-c",
+      "name": "num",
+      "box": {
+        "x": 500.65625,
+        "y": 239.375,
+        "width": 62.40625,
+        "height": 17
+      },
+      "clip": {
+        "x": 500.65625,
+        "y": 244.375,
+        "width": 62.40625,
+        "height": 7
+      },
+      "info": {
+        "start": 94,
+        "len": 8,
+        "end": 102,
+        "text": "3.14159f",
+        "line": 4,
+        "span": [
+          49,
+          105
+        ],
+        "nextLine": true,
+        "lineActive": false
+      },
+      "marks": {
+        "word": 1,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-light-sample-c-num-before.png",
+        "selection": "probe-02-after-light-sample-c-num-selection.png",
+        "dblclick": "probe-02-after-light-sample-c-num-dblclick.png"
+      }
+    },
+    {
+      "theme": "light",
+      "file": "sample-c",
+      "name": "fn",
+      "box": {
+        "x": 329.03125,
+        "y": 260.171875,
+        "width": 31.203125,
+        "height": 17
+      },
+      "clip": {
+        "x": 329.03125,
+        "y": 265.171875,
+        "width": 31.203125,
+        "height": 7
+      },
+      "info": {
+        "start": 108,
+        "len": 4,
+        "end": 112,
+        "text": "main",
+        "line": 5,
+        "span": [
+          68,
+          122
+        ],
+        "nextLine": true,
+        "lineActive": false
+      },
+      "marks": {
+        "word": 1,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-light-sample-c-fn-before.png",
+        "selection": "probe-02-after-light-sample-c-fn-selection.png",
+        "dblclick": "probe-02-after-light-sample-c-fn-dblclick.png"
+      }
+    },
+    {
+      "theme": "light",
+      "file": "sample-c",
+      "name": "const",
+      "box": {
+        "x": 360.21875,
+        "y": 218.578125,
+        "width": 54.609375,
+        "height": 17
+      },
+      "clip": {
+        "x": 360.21875,
+        "y": 223.578125,
+        "width": 54.609375,
+        "height": 7
+      },
+      "info": {
+        "start": 57,
+        "len": 7,
+        "end": 64,
+        "text": "LED_PIN",
+        "line": 3,
+        "span": [
+          29,
+          69
+        ],
+        "nextLine": true,
+        "lineActive": false
+      },
+      "marks": {
+        "word": 1,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-light-sample-c-const-before.png",
+        "selection": "probe-02-after-light-sample-c-const-selection.png",
+        "dblclick": "probe-02-after-light-sample-c-const-dblclick.png"
+      }
+    },
+    {
+      "theme": "light",
+      "file": "sample-c",
+      "name": "str",
+      "box": {
+        "x": 422.625,
+        "y": 280.96875,
+        "width": 90.40625,
+        "height": 17
+      },
+      "clip": {
+        "x": 422.625,
+        "y": 285.96875,
+        "width": 90.40625,
+        "height": 7
+      },
+      "info": {
+        "start": 137,
+        "len": 10,
+        "end": 147,
+        "text": "\"hello 电赛\"",
+        "line": 6,
+        "span": [
+          104,
+          150
+        ],
+        "nextLine": true,
+        "lineActive": false
+      },
+      "marks": {
+        "word": 1,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-light-sample-c-str-before.png",
+        "selection": "probe-02-after-light-sample-c-str-selection.png",
+        "dblclick": "probe-02-after-light-sample-c-str-dblclick.png"
+      }
+    },
+    {
+      "theme": "light",
+      "file": "sample-c",
       "name": "brace",
       "box": {
         "x": 414.84375,
-        "y": 197.78125,
+        "y": 260.171875,
         "width": 7.8125,
         "height": 17,
         "color": "rgb(31, 35, 40)",
-        "marks": 13
+        "marks": 17
+      },
+      "clip": {
+        "x": 414.84375,
+        "y": 265.171875,
+        "width": 7.8125,
+        "height": 7
       },
       "info": {
         "text": "{",
         "color": "rgb(31, 35, 40)"
       },
       "marks": {
-        "marksLayerSpans": 13
+        "marksLayerSpans": 17
       },
       "files": {
-        "before": "probe-02-after-light-brace.png"
+        "before": "probe-02-after-light-sample-c-brace.png"
       }
     },
     {
-      "theme": "dark",
-      "name": "com",
+      "theme": "light",
+      "file": "sample-syscfg",
+      "name": "tag",
       "box": {
-        "x": 297.8125,
-        "y": 176.984375,
-        "width": 176,
-        "height": 17
-      },
-      "info": {
-        "start": 0,
-        "len": 17,
-        "text": "// 行一：注释（tok-com）"
-      },
-      "marks": {
-        "word": 0,
-        "hit": 0,
-        "current": 0
-      },
-      "files": {
-        "before": "probe-02-after-dark-com-before.png",
-        "selection": "probe-02-after-dark-com-selection.png",
-        "dblclick": "probe-02-after-dark-com-dblclick.png"
-      }
-    },
-    {
-      "theme": "dark",
-      "name": "str",
-      "box": {
-        "x": 453.84375,
+        "x": 283.8125,
         "y": 218.578125,
-        "width": 140.203125,
+        "width": 54.609375,
         "height": 17
       },
+      "clip": {
+        "x": 283.8125,
+        "y": 223.578125,
+        "width": 54.609375,
+        "height": 7
+      },
       "info": {
-        "start": 53,
-        "len": 14,
-        "text": "\"字符串（tok-str）\""
+        "start": 69,
+        "len": 7,
+        "end": 76,
+        "text": "<config",
+        "line": 3,
+        "span": [
+          39,
+          110
+        ],
+        "nextLine": true,
+        "lineActive": false
       },
       "marks": {
         "word": 2,
@@ -118,31 +345,678 @@
         "current": 0
       },
       "files": {
-        "before": "probe-02-after-dark-str-before.png",
-        "selection": "probe-02-after-dark-str-selection.png",
-        "dblclick": "probe-02-after-dark-str-dblclick.png"
+        "before": "probe-02-after-light-sample-syscfg-tag-before.png",
+        "selection": "probe-02-after-light-sample-syscfg-tag-selection.png",
+        "dblclick": "probe-02-after-light-sample-syscfg-tag-dblclick.png"
+      }
+    },
+    {
+      "theme": "light",
+      "file": "sample-syscfg",
+      "name": "attr",
+      "box": {
+        "x": 346.234375,
+        "y": 218.578125,
+        "width": 31.203125,
+        "height": 17
+      },
+      "clip": {
+        "x": 346.234375,
+        "y": 223.578125,
+        "width": 31.203125,
+        "height": 7
+      },
+      "info": {
+        "start": 77,
+        "len": 4,
+        "end": 81,
+        "text": "name",
+        "line": 3,
+        "span": [
+          39,
+          110
+        ],
+        "nextLine": true,
+        "lineActive": false
+      },
+      "marks": {
+        "word": 3,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-light-sample-syscfg-attr-before.png",
+        "selection": "probe-02-after-light-sample-syscfg-attr-selection.png",
+        "dblclick": "probe-02-after-light-sample-syscfg-attr-dblclick.png"
+      }
+    },
+    {
+      "theme": "light",
+      "file": "sample-syscfg",
+      "name": "val",
+      "box": {
+        "x": 385.25,
+        "y": 218.578125,
+        "width": 70.203125,
+        "height": 17
+      },
+      "clip": {
+        "x": 385.25,
+        "y": 223.578125,
+        "width": 70.203125,
+        "height": 7
+      },
+      "info": {
+        "start": 82,
+        "len": 9,
+        "end": 91,
+        "text": "\"ADC12_0\"",
+        "line": 3,
+        "span": [
+          39,
+          110
+        ],
+        "nextLine": true,
+        "lineActive": false
+      },
+      "marks": {
+        "word": 1,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-light-sample-syscfg-val-before.png",
+        "selection": "probe-02-after-light-sample-syscfg-val-selection.png",
+        "dblclick": "probe-02-after-light-sample-syscfg-val-dblclick.png"
+      }
+    },
+    {
+      "theme": "light",
+      "file": "sample-syscfg",
+      "name": "com",
+      "box": {
+        "x": 283.8125,
+        "y": 197.78125,
+        "width": 244.8125,
+        "height": 17
+      },
+      "clip": {
+        "x": 283.8125,
+        "y": 202.78125,
+        "width": 244.8125,
+        "height": 7
+      },
+      "info": {
+        "start": 39,
+        "len": 29,
+        "end": 68,
+        "text": "<!-- SysConfig 片段：tok-com -->",
+        "line": 2,
+        "span": [
+          0,
+          70
+        ],
+        "nextLine": true,
+        "lineActive": false
+      },
+      "marks": {
+        "word": 0,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-light-sample-syscfg-com-before.png",
+        "selection": "probe-02-after-light-sample-syscfg-com-selection.png",
+        "dblclick": "probe-02-after-light-sample-syscfg-com-dblclick.png"
+      }
+    },
+    {
+      "theme": "light",
+      "file": "sample-syscfg",
+      "name": "pre",
+      "box": {
+        "x": 283.8125,
+        "y": 176.984375,
+        "width": 296.40625,
+        "height": 17
+      },
+      "clip": {
+        "x": 283.8125,
+        "y": 181.984375,
+        "width": 296.40625,
+        "height": 7
+      },
+      "info": {
+        "start": 0,
+        "len": 38,
+        "end": 38,
+        "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
+        "line": 1,
+        "span": [
+          0,
+          40
+        ],
+        "nextLine": true,
+        "lineActive": true
+      },
+      "marks": {
+        "word": 0,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-light-sample-syscfg-pre-before.png",
+        "selection": "probe-02-after-light-sample-syscfg-pre-selection.png",
+        "dblclick": "probe-02-after-light-sample-syscfg-pre-dblclick.png"
       }
     },
     {
       "theme": "dark",
+      "file": "sample-c",
+      "name": "com",
+      "box": {
+        "x": 297.8125,
+        "y": 176.984375,
+        "width": 286.609375,
+        "height": 17
+      },
+      "clip": {
+        "x": 297.8125,
+        "y": 181.984375,
+        "width": 286.609375,
+        "height": 7
+      },
+      "info": {
+        "start": 0,
+        "len": 28,
+        "end": 28,
+        "text": "/* 块注释：tok-com —— 电赛工程生成器 */",
+        "line": 1,
+        "span": [
+          0,
+          30
+        ],
+        "nextLine": true,
+        "lineActive": true
+      },
+      "marks": {
+        "word": 0,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-dark-sample-c-com-before.png",
+        "selection": "probe-02-after-dark-sample-c-com-selection.png",
+        "dblclick": "probe-02-after-dark-sample-c-com-dblclick.png"
+      }
+    },
+    {
+      "theme": "dark",
+      "file": "sample-c",
+      "name": "pre",
+      "box": {
+        "x": 297.8125,
+        "y": 197.78125,
+        "width": 148.203125,
+        "height": 17
+      },
+      "clip": {
+        "x": 297.8125,
+        "y": 202.78125,
+        "width": 148.203125,
+        "height": 7
+      },
+      "info": {
+        "start": 29,
+        "len": 19,
+        "end": 48,
+        "text": "#include <stdint.h>",
+        "line": 2,
+        "span": [
+          0,
+          50
+        ],
+        "nextLine": true,
+        "lineActive": false
+      },
+      "marks": {
+        "word": 1,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-dark-sample-c-pre-before.png",
+        "selection": "probe-02-after-dark-sample-c-pre-selection.png",
+        "dblclick": "probe-02-after-dark-sample-c-pre-dblclick.png"
+      }
+    },
+    {
+      "theme": "dark",
+      "file": "sample-c",
+      "name": "kw",
+      "box": {
+        "x": 297.8125,
+        "y": 239.375,
+        "width": 46.8125,
+        "height": 17
+      },
+      "clip": {
+        "x": 297.8125,
+        "y": 244.375,
+        "width": 46.8125,
+        "height": 7
+      },
+      "info": {
+        "start": 68,
+        "len": 6,
+        "end": 74,
+        "text": "static",
+        "line": 4,
+        "span": [
+          49,
+          105
+        ],
+        "nextLine": true,
+        "lineActive": false
+      },
+      "marks": {
+        "word": 1,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-dark-sample-c-kw-before.png",
+        "selection": "probe-02-after-dark-sample-c-kw-selection.png",
+        "dblclick": "probe-02-after-dark-sample-c-kw-dblclick.png"
+      }
+    },
+    {
+      "theme": "dark",
+      "file": "sample-c",
+      "name": "num",
+      "box": {
+        "x": 500.65625,
+        "y": 239.375,
+        "width": 62.40625,
+        "height": 17
+      },
+      "clip": {
+        "x": 500.65625,
+        "y": 244.375,
+        "width": 62.40625,
+        "height": 7
+      },
+      "info": {
+        "start": 94,
+        "len": 8,
+        "end": 102,
+        "text": "3.14159f",
+        "line": 4,
+        "span": [
+          49,
+          105
+        ],
+        "nextLine": true,
+        "lineActive": false
+      },
+      "marks": {
+        "word": 1,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-dark-sample-c-num-before.png",
+        "selection": "probe-02-after-dark-sample-c-num-selection.png",
+        "dblclick": "probe-02-after-dark-sample-c-num-dblclick.png"
+      }
+    },
+    {
+      "theme": "dark",
+      "file": "sample-c",
+      "name": "fn",
+      "box": {
+        "x": 329.03125,
+        "y": 260.171875,
+        "width": 31.203125,
+        "height": 17
+      },
+      "clip": {
+        "x": 329.03125,
+        "y": 265.171875,
+        "width": 31.203125,
+        "height": 7
+      },
+      "info": {
+        "start": 108,
+        "len": 4,
+        "end": 112,
+        "text": "main",
+        "line": 5,
+        "span": [
+          68,
+          122
+        ],
+        "nextLine": true,
+        "lineActive": false
+      },
+      "marks": {
+        "word": 1,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-dark-sample-c-fn-before.png",
+        "selection": "probe-02-after-dark-sample-c-fn-selection.png",
+        "dblclick": "probe-02-after-dark-sample-c-fn-dblclick.png"
+      }
+    },
+    {
+      "theme": "dark",
+      "file": "sample-c",
+      "name": "const",
+      "box": {
+        "x": 360.21875,
+        "y": 218.578125,
+        "width": 54.609375,
+        "height": 17
+      },
+      "clip": {
+        "x": 360.21875,
+        "y": 223.578125,
+        "width": 54.609375,
+        "height": 7
+      },
+      "info": {
+        "start": 57,
+        "len": 7,
+        "end": 64,
+        "text": "LED_PIN",
+        "line": 3,
+        "span": [
+          29,
+          69
+        ],
+        "nextLine": true,
+        "lineActive": false
+      },
+      "marks": {
+        "word": 1,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-dark-sample-c-const-before.png",
+        "selection": "probe-02-after-dark-sample-c-const-selection.png",
+        "dblclick": "probe-02-after-dark-sample-c-const-dblclick.png"
+      }
+    },
+    {
+      "theme": "dark",
+      "file": "sample-c",
+      "name": "str",
+      "box": {
+        "x": 422.625,
+        "y": 280.96875,
+        "width": 90.40625,
+        "height": 17
+      },
+      "clip": {
+        "x": 422.625,
+        "y": 285.96875,
+        "width": 90.40625,
+        "height": 7
+      },
+      "info": {
+        "start": 137,
+        "len": 10,
+        "end": 147,
+        "text": "\"hello 电赛\"",
+        "line": 6,
+        "span": [
+          104,
+          150
+        ],
+        "nextLine": true,
+        "lineActive": false
+      },
+      "marks": {
+        "word": 1,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-dark-sample-c-str-before.png",
+        "selection": "probe-02-after-dark-sample-c-str-selection.png",
+        "dblclick": "probe-02-after-dark-sample-c-str-dblclick.png"
+      }
+    },
+    {
+      "theme": "dark",
+      "file": "sample-c",
       "name": "brace",
       "box": {
         "x": 414.84375,
-        "y": 197.78125,
+        "y": 260.171875,
         "width": 7.8125,
         "height": 17,
         "color": "rgb(226, 232, 240)",
-        "marks": 13
+        "marks": 17
+      },
+      "clip": {
+        "x": 414.84375,
+        "y": 265.171875,
+        "width": 7.8125,
+        "height": 7
       },
       "info": {
         "text": "{",
         "color": "rgb(226, 232, 240)"
       },
       "marks": {
-        "marksLayerSpans": 13
+        "marksLayerSpans": 17
       },
       "files": {
-        "before": "probe-02-after-dark-brace.png"
+        "before": "probe-02-after-dark-sample-c-brace.png"
+      }
+    },
+    {
+      "theme": "dark",
+      "file": "sample-syscfg",
+      "name": "tag",
+      "box": {
+        "x": 283.8125,
+        "y": 218.578125,
+        "width": 54.609375,
+        "height": 17
+      },
+      "clip": {
+        "x": 283.8125,
+        "y": 223.578125,
+        "width": 54.609375,
+        "height": 7
+      },
+      "info": {
+        "start": 69,
+        "len": 7,
+        "end": 76,
+        "text": "<config",
+        "line": 3,
+        "span": [
+          39,
+          110
+        ],
+        "nextLine": true,
+        "lineActive": false
+      },
+      "marks": {
+        "word": 2,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-dark-sample-syscfg-tag-before.png",
+        "selection": "probe-02-after-dark-sample-syscfg-tag-selection.png",
+        "dblclick": "probe-02-after-dark-sample-syscfg-tag-dblclick.png"
+      }
+    },
+    {
+      "theme": "dark",
+      "file": "sample-syscfg",
+      "name": "attr",
+      "box": {
+        "x": 346.234375,
+        "y": 218.578125,
+        "width": 31.203125,
+        "height": 17
+      },
+      "clip": {
+        "x": 346.234375,
+        "y": 223.578125,
+        "width": 31.203125,
+        "height": 7
+      },
+      "info": {
+        "start": 77,
+        "len": 4,
+        "end": 81,
+        "text": "name",
+        "line": 3,
+        "span": [
+          39,
+          110
+        ],
+        "nextLine": true,
+        "lineActive": false
+      },
+      "marks": {
+        "word": 3,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-dark-sample-syscfg-attr-before.png",
+        "selection": "probe-02-after-dark-sample-syscfg-attr-selection.png",
+        "dblclick": "probe-02-after-dark-sample-syscfg-attr-dblclick.png"
+      }
+    },
+    {
+      "theme": "dark",
+      "file": "sample-syscfg",
+      "name": "val",
+      "box": {
+        "x": 385.25,
+        "y": 218.578125,
+        "width": 70.203125,
+        "height": 17
+      },
+      "clip": {
+        "x": 385.25,
+        "y": 223.578125,
+        "width": 70.203125,
+        "height": 7
+      },
+      "info": {
+        "start": 82,
+        "len": 9,
+        "end": 91,
+        "text": "\"ADC12_0\"",
+        "line": 3,
+        "span": [
+          39,
+          110
+        ],
+        "nextLine": true,
+        "lineActive": false
+      },
+      "marks": {
+        "word": 1,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-dark-sample-syscfg-val-before.png",
+        "selection": "probe-02-after-dark-sample-syscfg-val-selection.png",
+        "dblclick": "probe-02-after-dark-sample-syscfg-val-dblclick.png"
+      }
+    },
+    {
+      "theme": "dark",
+      "file": "sample-syscfg",
+      "name": "com",
+      "box": {
+        "x": 283.8125,
+        "y": 197.78125,
+        "width": 244.8125,
+        "height": 17
+      },
+      "clip": {
+        "x": 283.8125,
+        "y": 202.78125,
+        "width": 244.8125,
+        "height": 7
+      },
+      "info": {
+        "start": 39,
+        "len": 29,
+        "end": 68,
+        "text": "<!-- SysConfig 片段：tok-com -->",
+        "line": 2,
+        "span": [
+          0,
+          70
+        ],
+        "nextLine": true,
+        "lineActive": false
+      },
+      "marks": {
+        "word": 0,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-dark-sample-syscfg-com-before.png",
+        "selection": "probe-02-after-dark-sample-syscfg-com-selection.png",
+        "dblclick": "probe-02-after-dark-sample-syscfg-com-dblclick.png"
+      }
+    },
+    {
+      "theme": "dark",
+      "file": "sample-syscfg",
+      "name": "pre",
+      "box": {
+        "x": 283.8125,
+        "y": 176.984375,
+        "width": 296.40625,
+        "height": 17
+      },
+      "clip": {
+        "x": 283.8125,
+        "y": 181.984375,
+        "width": 296.40625,
+        "height": 7
+      },
+      "info": {
+        "start": 0,
+        "len": 38,
+        "end": 38,
+        "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
+        "line": 1,
+        "span": [
+          0,
+          40
+        ],
+        "nextLine": true,
+        "lineActive": true
+      },
+      "marks": {
+        "word": 0,
+        "hit": 0,
+        "current": 0
+      },
+      "files": {
+        "before": "probe-02-after-dark-sample-syscfg-pre-before.png",
+        "selection": "probe-02-after-dark-sample-syscfg-pre-selection.png",
+        "dblclick": "probe-02-after-dark-sample-syscfg-pre-dblclick.png"
       }
     }
   ]

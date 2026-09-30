@@ -323,6 +323,32 @@ def test_family_cell_count_freeze_matches_python(js, py):
     )
 
 
+def test_tok_worst_freeze_matches_python(js, py):
+    """⑦″ `--tok-*` 族的**最坏格冻结值**必须等于 Python 侧现在算出来的那一对（±0.01）。
+
+    它与 `CONTRAST_PAIR_COUNT` / `CONTRAST_FAMILY_CELL_COUNT` **不是同一物种**：那两个是**形状数**
+    （表的结构对不对），这一对是**读数快照**——02 单把债还清之后，族面不再有 `debt` 行可对账，
+    "少一层 / 几何写反 / 强度回退"这类坏法只会让最坏格**变好**，`contrastProblems` 反而无话可说；
+    这一对就是那道闸，所以它自己也要有人现算复核（Standards 轴评审点名）。
+    """
+    m = re.search(r"const CONTRAST_TOK_WORST = \{([^}]*)\};", js)
+    assert m, "守卫里找不到 `const CONTRAST_TOK_WORST = {...};`"
+    js_vals = {k: float(v) for k, v in re.findall(r"([a-z]+):\s*([0-9.]+)", m.group(1))}
+    assert set(js_vals) == {"dark", "light"}, f"CONTRAST_TOK_WORST 的键应为 dark / light：{js_vals}"
+    text = py.read_page()
+    tok = py.Tokens(text)
+    cells = [c for c in py.contrast_family_cells(text, tok) if c["label"].startswith("--tok-")]
+    for theme in ("dark", "light"):
+        sub = [c for c in cells if c["theme"] == theme]
+        assert sub, f"--tok-* 族在 {theme} 下一格都没有——判据在空转"
+        worst = min(sub, key=lambda c: c["ratio"])
+        assert abs(js_vals[theme] - worst["ratio"]) <= 0.01, (
+            f"{theme} 最坏格冻结 {js_vals[theme]} ≠ Python 现算 {worst['ratio']:.3f}"
+            f"（{worst['token']} on {worst['layer']}）——层表/族表/几何/令牌值有一处被改过；"
+            "确实该改就两侧一起改并在票尾写清"
+        )
+
+
 def test_exception_table_matches_generator(js, py):
     """⑩ 守卫里那张例外表必须等于生成器**现在**算出来的那张（`--check` 的同源断言）。
 

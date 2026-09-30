@@ -1,7 +1,7 @@
 # 读数：probe-02-pixels
 # 命令：python .scratch\code-contrast\probe-02-paint-order-read.py
 # 工作树：C:\Users\luoji\Desktop\firstep
-# 开始：2026-09-30T21:04:50+08:00
+# 开始：2026-09-30T21:21:30+08:00
 # 退出码：0
 ====================================================================================================
 代码配色族轮 · 像素读数（probe-02：高亮层压在字上还是垫在字下）
@@ -12,83 +12,383 @@
 # tag = after（probe-02-shots-after.json）
 ####################################################################################################
 
-### [after] light / com（// 行一：注释（tok-com））
+### [after] light / com（/* 块注释：tok-com —— 电赛工程生成器 */）
 
-  before     2992 px  主色 #e4f1f6  字形 #135c28  （前 4 高频：#e4f1f6 #135c28 #5ac2f6 #e4f1dc）
-  selection  2992 px  主色 #b6deec  字形 #0f6748  （前 4 高频：#b6deec #0f6748 #48b9ec #b6ded8）
-  dblclick   2992 px  主色 #e4f1f6  字形 #135c28  （前 4 高频：#e4f1f6 #b6deec #135c28 #5ac2f6）
+  before     2002 px  主色 #e4f1f6  字形 #135c28  （前 4 高频：#e4f1f6 #135c28 #d0e3e2 #5ac2f6）
+  selection  2002 px  主色 #b6deec  字形 #0f6748  （前 4 高频：#b6deec #0f6748 #a6d3dc #48b9ec）
+  dblclick   2002 px  主色 #e4f1f6  字形 #135c28  （前 4 高频：#e4f1f6 #135c28 #b6deec #5ac2f6）
     预测 over（压在字上）                #0f6848
     预测 behind（垫在字下）              #135c28
     预测 两层都压（词命中 + 选区）            #0e6d57
     实测 selection= #0f6748 → 最贴近：**over（压在字上）**（曼哈顿距离 1）
     实测 dblclick = #135c28 → 最贴近：**behind（垫在字下）**（曼哈顿距离 0）
     实测比值（字形 vs 该画面的主色底）：
-      before   #135c28 on #e4f1f6  **7.03**  ✅
-      selection#0f6748 on #b6deec  **4.80**  ✅
-      dblclick #135c28 on #e4f1f6  **7.03**  ✅（**叠加态 = 口径边界**）
+      before   #135c28 on #e4f1f6  **7.03**  （底占 66%）  ✅
+      selection该行同时是当前行（掺了 `.07`）——**跳过比值**
+      dblclick 该行同时是当前行（掺了 `.07`）——**跳过比值**（**叠加态 = 口径边界**）
 
-### [after] light / str（"字符串（tok-str）"）
+### [after] light / pre（#include <stdint.h>）
 
-  before     2380 px  主色 #f6f8fa  字形 #785000  （前 4 高频：#f6f8fa #785000 #e2a927 #7889b3）
-  selection  2380 px  主色 #b6deec  字形 #605e28  （前 4 高频：#b6deec #e4f1f6 #605e28 #a8a246）
-  dblclick   2380 px  主色 #e4f1f6  字形 #785000  （前 4 高频：#e4f1f6 #a0d5e8 #785000 #a0b175）
+  before     1036 px  主色 #f6f8fa  字形 #4b535d  （前 4 高频：#f6f8fa #a5defa #4b535d #f6c492）
+  selection  1036 px  主色 #c4e4f0  字形 #3c6072  （前 4 高频：#c4e4f0 #84cff0 #3c6072 #c4ba9c）
+  dblclick   1036 px  主色 #e4f1f6  字形 #4b535d  （前 4 高频：#e4f1f6 #a0d5e8 #e4bf91 #9cd8f6）
+    预测 over（压在字上）                #3c6072
+    预测 behind（垫在字下）              #4b535d
+    预测 两层都压（词命中 + 选区）            #35677d
+    实测 selection= #3c6072 → 最贴近：**over（压在字上）**（曼哈顿距离 0）
+    实测 dblclick = #4b535d → 最贴近：**behind（垫在字下）**（曼哈顿距离 0）
+    实测比值（字形 vs 该画面的主色底）：
+      before   #4b535d on #f6f8fa  **7.32**  （底占 41%）  ✅
+      selection#3c6072 on #c4e4f0  **5.05**  （底占 41%）  ✅
+      dblclick 底与单层预测不符（实测 #e4f1f6 / 预测 #c5e4f0）——**掺层或混色，跳过比值**（**叠加态 = 口径边界**）
+
+### [after] light / kw（static）
+
+  before      322 px  主色 #f6f8fa  字形 #005673  （前 4 高频：#f6f8fa #005673 #dee8ed #8adefa）
+  selection   322 px  主色 #c4e4f0  字形 #006284  （前 4 高频：#c4e4f0 #006284 #b1d7e5 #6ecff0）
+  dblclick    322 px  主色 #a0d5e8  字形 #00688c  （前 4 高频：#a0d5e8 #00688c #90cade #59c3e8）
+    预测 over（压在字上）                #006384
+    预测 behind（垫在字下）              #005673
+    预测 两层都压（词命中 + 选区）            #00698c
+    实测 selection= #006284 → 最贴近：**over（压在字上）**（曼哈顿距离 1）
+    实测 dblclick = #00688c → 最贴近：**两层都压（词命中 + 选区）**（曼哈顿距离 1）
+    实测比值（字形 vs 该画面的主色底）：
+      before   #005673 on #f6f8fa  **7.65**  （底占 34%）  ✅
+      selection#006284 on #c4e4f0  **5.10**  （底占 34%）  ✅
+      dblclick 底与单层预测不符（实测 #a0d5e8 / 预测 #c5e4f0）——**掺层或混色，跳过比值**（**叠加态 = 口径边界**）
+
+### [after] light / num（3.14159f）
+
+  before      434 px  主色 #f6f8fa  字形 #663eae  （前 4 高频：#f6f8fa #663eae #f6f8e4 #8ec3fa）
+  selection   434 px  主色 #c4e4f0  字形 #514fb3  （前 4 高频：#c4e4f0 #514fb3 #c4e4de #71baf0）
+  dblclick    434 px  主色 #b6deec  字形 #514fb3  （前 4 高频：#b6deec #a0d5e8 #514fb3 #b6dedc）
+    预测 over（压在字上）                #5250b3
+    预测 behind（垫在字下）              #663eae
+    预测 两层都压（词命中 + 选区）            #4858b5
+    实测 selection= #514fb3 → 最贴近：**over（压在字上）**（曼哈顿距离 2）
+    实测 dblclick = #514fb3 → 最贴近：**over（压在字上）**（曼哈顿距离 2）
+    实测比值（字形 vs 该画面的主色底）：
+      before   #663eae on #f6f8fa  **6.88**  （底占 48%）  ✅
+      selection#514fb3 on #c4e4f0  **5.03**  （底占 48%）  ✅
+      dblclick 底与单层预测不符（实测 #b6deec / 预测 #c5e4f0）——**掺层或混色，跳过比值**（**叠加态 = 口径边界**）
+
+### [after] light / fn（main）
+
+  before      217 px  主色 #f6f8fa  字形 #953800  （前 4 高频：#f6f8fa #e0f8fa #e0a427 #f6f8b3）
+  selection   217 px  主色 #c4e4f0  字形 #774a28  （前 4 高频：#c4e4f0 #b3e4f0 #b3a147 #c4e4b7）
+  dblclick    217 px  主色 #a0d5e8  字形 #68533b  （前 4 高频：#a0d5e8 #93d5e8 #939c55 #a0d5b6）
+    预测 over（压在字上）                #774b28
+    预测 behind（垫在字下）              #953800
+    预测 两层都压（词命中 + 选区）            #69543b
+    实测 selection= #774a28 → 最贴近：**over（压在字上）**（曼哈顿距离 1）
+    实测 dblclick = #68533b → 最贴近：**两层都压（词命中 + 选区）**（曼哈顿距离 2）
+    实测比值（字形 vs 该画面的主色底）：
+      before   底不单一（主色只占 24%）——**跳过比值**，只留像素
+      selection底不单一（主色只占 24%）——**跳过比值**，只留像素
+      dblclick 底与单层预测不符（实测 #a0d5e8 / 预测 #c5e4f0）——**掺层或混色，跳过比值**（**叠加态 = 口径边界**）
+
+### [after] light / const（LED_PIN）
+
+  before      378 px  主色 #f6f8fa  字形 #6639ba  （前 4 高频：#f6f8fa #f6f8dc #8e39c0 #a9e0fa）
+  selection   378 px  主色 #c4e4f0  字形 #514bbc  （前 4 高频：#c4e4f0 #c4e4d8 #714bc1 #87d1f0）
+  dblclick    378 px  主色 #a0d5e8  字形 #4754bd  （前 4 高频：#a0d5e8 #a0d5d3 #6054c0 #70c5e8）
+    预测 over（压在字上）                #524cbd
+    预测 behind（垫在字下）              #6639ba
+    预测 两层都压（词命中 + 选区）            #4854be
+    实测 selection= #514bbc → 最贴近：**over（压在字上）**（曼哈顿距离 3）
+    实测 dblclick = #4754bd → 最贴近：**两层都压（词命中 + 选区）**（曼哈顿距离 2）
+    实测比值（字形 vs 该画面的主色底）：
+      before   #6639ba on #f6f8fa  **6.90**  （底占 48%）  ✅
+      selection#514bbc on #c4e4f0  **5.09**  （底占 48%）  ✅
+      dblclick 底与单层预测不符（实测 #a0d5e8 / 预测 #c5e4f0）——**掺层或混色，跳过比值**（**叠加态 = 口径边界**）
+
+### [after] light / str（"hello 电赛"）
+
+  before      630 px  主色 #f6f8fa  字形 #785000  （前 4 高频：#f6f8fa #785000 #f6c355 #786a8c）
+  selection   630 px  主色 #c4e4f0  字形 #605e28  （前 4 高频：#c4e4f0 #605e28 #c4ba6c #607298）
+  dblclick    630 px  主色 #e4f1f6  字形 #785000  （前 4 高频：#e4f1f6 #c8e5f0 #785000 #b6deec）
     预测 over（压在字上）                #605e28
     预测 behind（垫在字下）              #785000
     预测 两层都压（词命中 + 选区）            #55643b
     实测 selection= #605e28 → 最贴近：**over（压在字上）**（曼哈顿距离 0）
     实测 dblclick = #785000 → 最贴近：**behind（垫在字下）**（曼哈顿距离 0）
     实测比值（字形 vs 该画面的主色底）：
-      before   #785000 on #f6f8fa  **6.70**  ✅
-      selection#605e28 on #b6deec  **4.68**  ✅
-      dblclick #785000 on #e4f1f6  **6.18**  ✅（**叠加态 = 口径边界**）
+      before   #785000 on #f6f8fa  **6.70**  （底占 57%）  ✅
+      selection#605e28 on #c4e4f0  **5.02**  （底占 57%）  ✅
+      dblclick 底与单层预测不符（实测 #e4f1f6 / 预测 #c5e4f0）——**掺层或混色，跳过比值**（**叠加态 = 口径边界**）
 
 ### [after] light / brace（{）
 
-  before      119 px  主色 #ebb7bc  字形 #542229  （前 4 高频：#ebb7bc #542229 #d87545 #ce673c）
+  before       49 px  主色 #ebb7bc  字形 #ebb7bc  （前 4 高频：#ebb7bc #e68357 #544785 #dcb7bc）
     预测 over（压在字上）                #54232a
     预测 behind（垫在字下）              #1f2328
     预测 两层都压（词命中 + 选区）            #164557
     实测比值（字形 vs 该画面的主色底）：
-      before   #542229 on #ebb7bc  **7.35**  ✅
+      before   #ebb7bc on #ebb7bc  **1.00**  （底占 55%）  ❌
 
-### [after] dark / com（// 行一：注释（tok-com））
+### [after] light / tag（<config）
 
-  before     2992 px  主色 #091a22  字形 #3fb950  （前 4 高频：#091a22 #3fb950 #2c6422 #091a29）
-  selection  2992 px  主色 #073a49  字形 #32ba6e  （前 4 高频：#073a49 #32ba6e #237649 #073a4e）
-  dblclick   2992 px  主色 #091a22  字形 #3fb950  （前 4 高频：#091a22 #073a49 #3fb950 #2c6422）
+  before      378 px  主色 #f6f8fa  字形 #005673  （前 4 高频：#f6f8fa #f6c598 #d7ac83 #8adefa）
+  selection   378 px  主色 #c4e4f0  字形 #006284  （前 4 高频：#c4e4f0 #c4bba1 #aca790 #6ecff0）
+  dblclick    378 px  主色 #a0d5e8  字形 #00688c  （前 4 高频：#a0d5e8 #e4f1f6 #a0b2a4 #8ba297）
+    预测 over（压在字上）                #006384
+    预测 behind（垫在字下）              #005673
+    预测 两层都压（词命中 + 选区）            #00698c
+    实测 selection= #006284 → 最贴近：**over（压在字上）**（曼哈顿距离 1）
+    实测 dblclick = #00688c → 最贴近：**两层都压（词命中 + 选区）**（曼哈顿距离 1）
+    实测比值（字形 vs 该画面的主色底）：
+      before   #005673 on #f6f8fa  **7.65**  （底占 35%）  ✅
+      selection#006284 on #c4e4f0  **5.10**  （底占 35%）  ✅
+      dblclick 底与单层预测不符（实测 #a0d5e8 / 预测 #c5e4f0）——**掺层或混色，跳过比值**（**叠加态 = 口径边界**）
+
+### [after] light / attr（name）
+
+  before      217 px  主色 #f6f8fa  字形 #663eae  （前 4 高频：#f6f8fa #667dd6 #f6e0c8 #663eae）
+  selection   217 px  主色 #c4e4f0  字形 #514fb3  （前 4 高频：#c4e4f0 #5182d3 #c4d1c8 #514fb3）
+  dblclick    217 px  主色 #a0d5e8  字形 #4757b4  （前 4 高频：#a0d5e8 #4782d0 #a0c5c6 #4757b4）
+    预测 over（压在字上）                #5250b3
+    预测 behind（垫在字下）              #663eae
+    预测 两层都压（词命中 + 选区）            #4858b5
+    实测 selection= #514fb3 → 最贴近：**over（压在字上）**（曼哈顿距离 2）
+    实测 dblclick = #4757b4 → 最贴近：**两层都压（词命中 + 选区）**（曼哈顿距离 3）
+    实测比值（字形 vs 该画面的主色底）：
+      before   底不单一（主色只占 21%）——**跳过比值**，只留像素
+      selection底不单一（主色只占 21%）——**跳过比值**，只留像素
+      dblclick 底与单层预测不符（实测 #a0d5e8 / 预测 #c5e4f0）——**掺层或混色，跳过比值**（**叠加态 = 口径边界**）
+
+### [after] light / val（"ADC12_0"）
+
+  before      490 px  主色 #f6f8fa  字形 #785000  （前 4 高频：#f6f8fa #f6f8b3 #b3ddfa #9b5027）
+  selection   490 px  主色 #c4e4f0  字形 #605e28  （前 4 高频：#c4e4f0 #c4e4b7 #8fcef0 #7c5e47）
+  dblclick    490 px  主色 #a0d5e8  字形 #54643b  （前 4 高频：#a0d5e8 #e4f1f6 #a0d5b6 #77c2e8）
+    预测 over（压在字上）                #605e28
+    预测 behind（垫在字下）              #785000
+    预测 两层都压（词命中 + 选区）            #55643b
+    实测 selection= #605e28 → 最贴近：**over（压在字上）**（曼哈顿距离 0）
+    实测 dblclick = #54643b → 最贴近：**两层都压（词命中 + 选区）**（曼哈顿距离 1）
+    实测比值（字形 vs 该画面的主色底）：
+      before   #785000 on #f6f8fa  **6.70**  （底占 54%）  ✅
+      selection#605e28 on #c4e4f0  **5.02**  （底占 54%）  ✅
+      dblclick 底与单层预测不符（实测 #a0d5e8 / 预测 #c5e4f0）——**掺层或混色，跳过比值**（**叠加态 = 口径边界**）
+
+### [after] light / com（<!-- SysConfig 片段：tok-com -->）
+
+  before     1708 px  主色 #f6f8fa  字形 #135c28  （前 4 高频：#f6f8fa #135c28 #e0e9e6 #f6f8be）
+  selection  1708 px  主色 #c4e4f0  字形 #0f6748  （前 4 高频：#c4e4f0 #0f6748 #b3d8e0 #c4e4c0）
+  dblclick   1708 px  主色 #e4f1f6  字形 #135c28  （前 4 高频：#e4f1f6 #b6deec #135c28 #0f6748）
+    预测 over（压在字上）                #0f6848
+    预测 behind（垫在字下）              #135c28
+    预测 两层都压（词命中 + 选区）            #0e6d57
+    实测 selection= #0f6748 → 最贴近：**over（压在字上）**（曼哈顿距离 1）
+    实测 dblclick = #135c28 → 最贴近：**behind（垫在字下）**（曼哈顿距离 0）
+    实测比值（字形 vs 该画面的主色底）：
+      before   #135c28 on #f6f8fa  **7.62**  （底占 56%）  ✅
+      selection#0f6748 on #c4e4f0  **5.14**  （底占 56%）  ✅
+      dblclick 底与单层预测不符（实测 #e4f1f6 / 预测 #c5e4f0）——**掺层或混色，跳过比值**（**叠加态 = 口径边界**）
+
+### [after] light / pre（<?xml version="1.0" encoding="UTF-8"?>）
+
+  before     2072 px  主色 #e4f1f6  字形 #4b535d  （前 4 高频：#e4f1f6 #e4bf91 #4b535d #9cd8f6）
+  selection  2072 px  主色 #b6deec  字形 #3c6072  （前 4 高频：#b6deec #b6b69c #3c6072 #7ccaec）
+  dblclick   2072 px  主色 #e4f1f6  字形 #4b535d  （前 4 高频：#e4f1f6 #b6deec #e4bf91 #4b535d）
+    预测 over（压在字上）                #3c6072
+    预测 behind（垫在字下）              #4b535d
+    预测 两层都压（词命中 + 选区）            #35677d
+    实测 selection= #3c6072 → 最贴近：**over（压在字上）**（曼哈顿距离 0）
+    实测 dblclick = #4b535d → 最贴近：**behind（垫在字下）**（曼哈顿距离 0）
+    实测比值（字形 vs 该画面的主色底）：
+      before   #4b535d on #e4f1f6  **6.76**  （底占 47%）  ✅
+      selection该行同时是当前行（掺了 `.07`）——**跳过比值**
+      dblclick 该行同时是当前行（掺了 `.07`）——**跳过比值**（**叠加态 = 口径边界**）
+
+### [after] dark / com（/* 块注释：tok-com —— 电赛工程生成器 */）
+
+  before     2002 px  主色 #091a22  字形 #3fb950  （前 4 高频：#091a22 #3fb950 #0e3726 #2c6422）
+  selection  2002 px  主色 #073a49  字形 #32ba6e  （前 4 高频：#073a49 #32ba6e #0b524c #237649）
+  dblclick   2002 px  主色 #091a22  字形 #3fb950  （前 4 高频：#091a22 #3fb950 #073a49 #2c6422）
     预测 over（压在字上）                #32ba6e
     预测 behind（垫在字下）              #3fb950
     预测 两层都压（词命中 + 选区）            #2cbb7c
     实测 selection= #32ba6e → 最贴近：**over（压在字上）**（曼哈顿距离 0）
     实测 dblclick = #3fb950 → 最贴近：**behind（垫在字下）**（曼哈顿距离 0）
     实测比值（字形 vs 该画面的主色底）：
-      before   #3fb950 on #091a22  **6.99**  ✅
-      selection#32ba6e on #073a49  **4.90**  ✅
-      dblclick #3fb950 on #091a22  **6.99**  ✅（**叠加态 = 口径边界**）
+      before   #3fb950 on #091a22  **6.99**  （底占 66%）  ✅
+      selection该行同时是当前行（掺了 `.07`）——**跳过比值**
+      dblclick 该行同时是当前行（掺了 `.07`）——**跳过比值**（**叠加态 = 口径边界**）
 
-### [after] dark / str（"字符串（tok-str）"）
+### [after] dark / pre（#include <stdint.h>）
 
-  before     2380 px  主色 #0a0e14  字形 #d29922  （前 4 高频：#0a0e14 #d29922 #4e601f #d27617）
-  selection  2380 px  主色 #073a49  字形 #a8a049  （前 4 高频：#073a49 #091a22 #a8a049 #3e7649）
-  dblclick   2380 px  主色 #091a22  字形 #d29922  （前 4 高频：#091a22 #054a5b #d29922 #056e5b）
+  before     1036 px  主色 #0a0e14  字形 #939da7  （前 4 高频：#0a0e14 #5b2d14 #939da7 #0a4886）
+  selection  1036 px  主色 #08313e  字形 #75a3b3  （前 4 高频：#08313e #484a3e #75a3b3 #085f99）
+  dblclick   1036 px  主色 #091a22  字形 #939da7  （前 4 高频：#091a22 #054a5b #094f89 #5a3622）
+    预测 over（压在字上）                #76a4b4
+    预测 behind（垫在字下）              #939da7
+    预测 两层都压（词命中 + 选区）            #67a7ba
+    实测 selection= #75a3b3 → 最贴近：**over（压在字上）**（曼哈顿距离 3）
+    实测 dblclick = #939da7 → 最贴近：**behind（垫在字下）**（曼哈顿距离 0）
+    实测比值（字形 vs 该画面的主色底）：
+      before   #939da7 on #0a0e14  **7.02**  （底占 40%）  ✅
+      selection#75a3b3 on #08313e  **5.03**  （底占 40%）  ✅
+      dblclick 底与单层预测不符（实测 #091a22 / 预测 #08313e）——**掺层或混色，跳过比值**（**叠加态 = 口径边界**）
+
+### [after] dark / kw（static）
+
+  before      322 px  主色 #0a0e14  字形 #00d4ff  （前 4 高频：#0a0e14 #00d4ff #093f64 #055214）
+  selection   322 px  主色 #08313e  字形 #00cffa  （前 4 高频：#08313e #00cffa #07587e #04673e）
+  dblclick    322 px  主色 #054a5b  字形 #00cdf7  （前 4 高频：#054a5b #00cdf7 #056a90 #03765b）
+    预测 over（压在字上）                #00d0fa
+    预测 behind（垫在字下）              #00d4ff
+    预测 两层都压（词命中 + 选区）            #00cdf8
+    实测 selection= #00cffa → 最贴近：**over（压在字上）**（曼哈顿距离 1）
+    实测 dblclick = #00cdf7 → 最贴近：**两层都压（词命中 + 选区）**（曼哈顿距离 1）
+    实测比值（字形 vs 该画面的主色底）：
+      before   #00d4ff on #0a0e14  **10.92**  （底占 33%）  ✅
+      selection#00cffa on #08313e  **7.44**  （底占 33%）  ✅
+      dblclick 底与单层预测不符（实测 #054a5b / 预测 #08313e）——**掺层或混色，跳过比值**（**叠加态 = 口径边界**）
+
+### [after] dark / num（3.14159f）
+
+  before      434 px  主色 #0a0e14  字形 #bc8cff  （前 4 高频：#0a0e14 #bc8cff #0a0e7a #954114）
+  selection   434 px  主色 #08313e  字形 #9696fa  （前 4 高频：#08313e #9696fa #08318f #775a3e）
+  dblclick    434 px  主色 #073a49  字形 #9696fa  （前 4 高频：#073a49 #054a5b #9696fa #073a96）
+    预测 over（压在字上）                #9696fa
+    预测 behind（垫在字下）              #bc8cff
+    预测 两层都压（词命中 + 选区）            #849bf8
+    实测 selection= #9696fa → 最贴近：**over（压在字上）**（曼哈顿距离 0）
+    实测 dblclick = #9696fa → 最贴近：**over（压在字上）**（曼哈顿距离 0）
+    实测比值（字形 vs 该画面的主色底）：
+      before   #bc8cff on #0a0e14  **7.67**  （底占 47%）  ✅
+      selection#9696fa on #08313e  **5.29**  （底占 47%）  ✅
+      dblclick 底与单层预测不符（实测 #073a49 / 预测 #08313e）——**掺层或混色，跳过比值**（**叠加态 = 口径边界**）
+
+### [after] dark / fn（main）
+
+  before      217 px  主色 #0a0e14  字形 #dcdcaa  （前 4 高频：#0a0e14 #520e14 #52a29b #0a0e5a）
+  selection   217 px  主色 #08313e  字形 #b0d6b6  （前 4 高频：#08313e #41313e #41a7aa #083176）
+  dblclick    217 px  主色 #054a5b  字形 #9ad2bb  （前 4 高频：#054a5b #384a5b #38acb2 #054a88）
+    预测 over（压在字上）                #b0d6b6
+    预测 behind（垫在字下）              #dcdcaa
+    预测 两层都压（词命中 + 选区）            #9bd3bc
+    实测 selection= #b0d6b6 → 最贴近：**over（压在字上）**（曼哈顿距离 0）
+    实测 dblclick = #9ad2bb → 最贴近：**两层都压（词命中 + 选区）**（曼哈顿距离 3）
+    实测比值（字形 vs 该画面的主色底）：
+      before   底不单一（主色只占 23%）——**跳过比值**，只留像素
+      selection底不单一（主色只占 23%）——**跳过比值**，只留像素
+      dblclick 底与单层预测不符（实测 #054a5b / 预测 #08313e）——**掺层或混色，跳过比值**（**叠加态 = 口径边界**）
+
+### [after] dark / const（LED_PIN）
+
+  before      378 px  主色 #0a0e14  字形 #cd8bc8  （前 4 高频：#0a0e14 #0a0e79 #a88bbc #962914）
+  selection   378 px  主色 #08313e  字形 #a495ce  （前 4 高频：#08313e #08318e #8695c4 #78463e）
+  dblclick    378 px  主色 #054a5b  字形 #909ad0  （前 4 高频：#054a5b #054a9d #759ac9 #685a5b）
+    预测 over（压在字上）                #a495ce
+    预测 behind（垫在字下）              #cd8bc8
+    预测 两层都压（词命中 + 选区）            #909ad1
+    实测 selection= #a495ce → 最贴近：**over（压在字上）**（曼哈顿距离 0）
+    实测 dblclick = #909ad0 → 最贴近：**两层都压（词命中 + 选区）**（曼哈顿距离 1）
+    实测比值（字形 vs 该画面的主色底）：
+      before   #cd8bc8 on #0a0e14  **7.48**  （底占 48%）  ✅
+      selection#a495ce on #08313e  **5.11**  （底占 48%）  ✅
+      dblclick 底与单层预测不符（实测 #054a5b / 预测 #08313e）——**掺层或混色，跳过比值**（**叠加态 = 口径边界**）
+
+### [after] dark / str（"hello 电赛"）
+
+  before      630 px  主色 #0a0e14  字形 #d29922  （前 4 高频：#0a0e14 #d29922 #0a461d #d2871a）
+  selection   630 px  主色 #08313e  字形 #a8a049  （前 4 高频：#08313e #a8a049 #085e45 #a89242）
+  dblclick    630 px  主色 #091a22  字形 #b89d39  （前 4 高频：#091a22 #072d39 #d29922 #073a49）
     预测 over（压在字上）                #a8a049
     预测 behind（垫在字下）              #d29922
     预测 两层都压（词命中 + 选区）            #94a45c
     实测 selection= #a8a049 → 最贴近：**over（压在字上）**（曼哈顿距离 0）
-    实测 dblclick = #d29922 → 最贴近：**behind（垫在字下）**（曼哈顿距离 0）
+    实测 dblclick = #b89d39 → 最贴近：**over（压在字上）**（曼哈顿距离 35）
     实测比值（字形 vs 该画面的主色底）：
-      before   #d29922 on #0a0e14  **7.66**  ✅
-      selection#a8a049 on #073a49  **4.55**  ✅
-      dblclick #d29922 on #091a22  **7.04**  ✅（**叠加态 = 口径边界**）
+      before   #d29922 on #0a0e14  **7.66**  （底占 57%）  ✅
+      selection#a8a049 on #08313e  **5.13**  （底占 57%）  ✅
+      dblclick 底与单层预测不符（实测 #091a22 / 预测 #08313e）——**掺层或混色，跳过比值**（**叠加态 = 口径边界**）
 
 ### [after] dark / brace（{）
 
-  before      119 px  主色 #582425  字形 #e9b6b9  （前 4 高频：#582425 #9791af #e9b6b9 #a596b4）
+  before       49 px  主色 #582425  字形 #582425  （前 4 高频：#582425 #9791af #e99f81 #7d88a6）
     预测 over（压在字上）                #e9b6b9
     预测 behind（垫在字下）              #e2e8f0
     预测 两层都压（词命中 + 选区）            #9fdced
     实测比值（字形 vs 该画面的主色底）：
-      before   #e9b6b9 on #582425  **7.00**  ✅
+      before   #582425 on #582425  **1.00**  （底占 51%）  ❌
+
+### [after] dark / tag（<config）
+
+  before      378 px  主色 #0a0e14  字形 #00d4ff  （前 4 高频：#0a0e14 #080e14 #0a7dda #00c7c4）
+  selection   378 px  主色 #08313e  字形 #00cffa  （前 4 高频：#08313e #06313e #088adc #00c5ca）
+  dblclick    378 px  主色 #054a5b  字形 #00cdf7  （前 4 高频：#054a5b #091a22 #044a5b #0593de）
+    预测 over（压在字上）                #00d0fa
+    预测 behind（垫在字下）              #00d4ff
+    预测 两层都压（词命中 + 选区）            #00cdf8
+    实测 selection= #00cffa → 最贴近：**over（压在字上）**（曼哈顿距离 1）
+    实测 dblclick = #00cdf7 → 最贴近：**两层都压（词命中 + 选区）**（曼哈顿距离 1）
+    实测比值（字形 vs 该画面的主色底）：
+      before   #00d4ff on #0a0e14  **10.92**  （底占 35%）  ✅
+      selection#00cffa on #08313e  **7.44**  （底占 35%）  ✅
+      dblclick 底与单层预测不符（实测 #054a5b / 预测 #08313e）——**掺层或混色，跳过比值**（**叠加态 = 口径边界**）
+
+### [after] dark / attr（name）
+
+  before      217 px  主色 #0a0e14  字形 #bc8cff  （前 4 高频：#0a0e14 #bc6ca6 #bc8cff #0a29c4）
+  selection   217 px  主色 #08313e  字形 #9696fa  （前 4 高频：#08313e #967cb2 #9696fa #0846ca）
+  dblclick    217 px  主色 #054a5b  字形 #849af7  （前 4 高频：#054a5b #8486bd #849af7 #055acf）
+    预测 over（压在字上）                #9696fa
+    预测 behind（垫在字下）              #bc8cff
+    预测 两层都压（词命中 + 选区）            #849bf8
+    实测 selection= #9696fa → 最贴近：**over（压在字上）**（曼哈顿距离 0）
+    实测 dblclick = #849af7 → 最贴近：**两层都压（词命中 + 选区）**（曼哈顿距离 2）
+    实测比值（字形 vs 该画面的主色底）：
+      before   底不单一（主色只占 20%）——**跳过比值**，只留像素
+      selection底不单一（主色只占 20%）——**跳过比值**，只留像素
+      dblclick 底与单层预测不符（实测 #054a5b / 预测 #08313e）——**掺层或混色，跳过比值**（**叠加态 = 口径边界**）
+
+### [after] dark / val（"ADC12_0"）
+
+  before      490 px  主色 #0a0e14  字形 #d29922  （前 4 高频：#0a0e14 #0a0e17 #ac991f #992c14）
+  selection   490 px  主色 #08313e  字形 #a8a049  （前 4 高频：#08313e #083140 #89a046 #7a493e）
+  dblclick    490 px  主色 #054a5b  字形 #93a35b  （前 4 高频：#054a5b #091a22 #78a35b #6b5d5b）
+    预测 over（压在字上）                #a8a049
+    预测 behind（垫在字下）              #d29922
+    预测 两层都压（词命中 + 选区）            #94a45c
+    实测 selection= #a8a049 → 最贴近：**over（压在字上）**（曼哈顿距离 0）
+    实测 dblclick = #93a35b → 最贴近：**两层都压（词命中 + 选区）**（曼哈顿距离 3）
+    实测比值（字形 vs 该画面的主色底）：
+      before   #d29922 on #0a0e14  **7.66**  （底占 56%）  ✅
+      selection#a8a049 on #08313e  **5.13**  （底占 57%）  ✅
+      dblclick 底与单层预测不符（实测 #054a5b / 预测 #08313e）——**掺层或混色，跳过比值**（**叠加态 = 口径边界**）
+
+### [after] dark / com（<!-- SysConfig 片段：tok-com -->）
+
+  before     1708 px  主色 #0a0e14  字形 #3fb950  （前 4 高频：#0a0e14 #3fb950 #0e2e19 #0a0e26）
+  selection  1708 px  主色 #08313e  字形 #32ba6e  （前 4 高频：#08313e #32ba6e #0b4a42 #08314c）
+  dblclick   1708 px  主色 #091a22  字形 #32ba6e  （前 4 高频：#091a22 #073a49 #3fb950 #32ba6e）
+    预测 over（压在字上）                #32ba6e
+    预测 behind（垫在字下）              #3fb950
+    预测 两层都压（词命中 + 选区）            #2cbb7c
+    实测 selection= #32ba6e → 最贴近：**over（压在字上）**（曼哈顿距离 0）
+    实测 dblclick = #32ba6e → 最贴近：**over（压在字上）**（曼哈顿距离 0）
+    实测比值（字形 vs 该画面的主色底）：
+      before   #3fb950 on #0a0e14  **7.61**  （底占 55%）  ✅
+      selection#32ba6e on #08313e  **5.52**  （底占 56%）  ✅
+      dblclick 底与单层预测不符（实测 #091a22 / 预测 #08313e）——**掺层或混色，跳过比值**（**叠加态 = 口径边界**）
+
+### [after] dark / pre（<?xml version="1.0" encoding="UTF-8"?>）
+
+  before     2072 px  主色 #091a22  字形 #939da7  （前 4 高频：#091a22 #939da7 #094f89 #5a3622）
+  selection  2072 px  主色 #073a49  字形 #75a3b3  （前 4 高频：#073a49 #75a3b3 #07659b #485149）
+  dblclick   2072 px  主色 #091a22  字形 #939da7  （前 4 高频：#091a22 #073a49 #939da7 #094f89）
+    预测 over（压在字上）                #76a4b4
+    预测 behind（垫在字下）              #939da7
+    预测 两层都压（词命中 + 选区）            #67a7ba
+    实测 selection= #75a3b3 → 最贴近：**over（压在字上）**（曼哈顿距离 3）
+    实测 dblclick = #939da7 → 最贴近：**behind（垫在字下）**（曼哈顿距离 0）
+    实测比值（字形 vs 该画面的主色底）：
+      before   #939da7 on #091a22  **6.45**  （底占 47%）  ✅
+      selection该行同时是当前行（掺了 `.07`）——**跳过比值**
+      dblclick 该行同时是当前行（掺了 `.07`）——**跳过比值**（**叠加态 = 口径边界**）
 
 ####################################################################################################
 # tag = before（probe-02-shots-before.json）
@@ -105,9 +405,9 @@
     实测 selection= #118665 → 最贴近：**两层都压（词命中 + 选区）**（曼哈顿距离 5）
     实测 dblclick = #1a7f37 → 最贴近：**behind（垫在字下）**（曼哈顿距离 0）
     实测比值（字形 vs 该画面的主色底）：
-      before   #1a7f37 on #e4f1f6  **4.40**  ❌
-      selection#118665 on #9ad3e7  **2.78**  ❌
-      dblclick #1a7f37 on #e4f1f6  **4.40**  ·边界（**叠加态 = 口径边界**）
+      before   #1a7f37 on #e4f1f6  **4.40**  （底占 82%）  ❌
+      selection底与单层预测不符（实测 #9ad3e7 / 预测 #c5e4f0）——**掺层或混色，跳过比值**
+      dblclick 底与单层预测不符（实测 #e4f1f6 / 预测 #c5e4f0）——**掺层或混色，跳过比值**（**叠加态 = 口径边界**）
 
 ### [before] light / str（"字符串（tok-str）"）
 
@@ -120,9 +420,9 @@
     实测 selection= #687640 → 最贴近：**两层都压（词命中 + 选区）**（曼哈顿距离 11）
     实测 dblclick = #9a6700 → 最贴近：**behind（垫在字下）**（曼哈顿距离 0）
     实测比值（字形 vs 该画面的主色底）：
-      before   #9a6700 on #f6f8fa  **4.57**  ✅
-      selection#687640 on #9ad3e7  **3.02**  ❌
-      dblclick #9a6700 on #e4f1f6  **4.22**  ·边界（**叠加态 = 口径边界**）
+      before   #9a6700 on #f6f8fa  **4.57**  （底占 80%）  ✅
+      selection底与单层预测不符（实测 #9ad3e7 / 预测 #c5e4f0）——**掺层或混色，跳过比值**
+      dblclick 底与单层预测不符（实测 #e4f1f6 / 预测 #c5e4f0）——**掺层或混色，跳过比值**（**叠加态 = 口径边界**）
 
 ### [before] light / brace（{）
 
@@ -131,7 +431,7 @@
     预测 behind（垫在字下）              #1f2328
     预测 两层都压（词命中 + 选区）            #164557
     实测比值（字形 vs 该画面的主色底）：
-      before   #542229 on #ebb7bc  **7.35**  ✅
+      before   #542229 on #ebb7bc  **7.35**  （底占 64%）  ✅
 
 ### [before] dark / com（// 行一：注释（tok-com））
 
@@ -144,24 +444,24 @@
     实测 selection= #2ac188 → 最贴近：**两层都压（词命中 + 选区）**（曼哈顿距离 20）
     实测 dblclick = #3fb950 → 最贴近：**behind（垫在字下）**（曼哈顿距离 0）
     实测比值（字形 vs 该画面的主色底）：
-      before   #3fb950 on #091c24  **6.87**  ✅
-      selection#2ac188 on #06576a  **3.52**  ❌
-      dblclick #3fb950 on #091c24  **6.87**  ✅（**叠加态 = 口径边界**）
+      before   #3fb950 on #091c24  **6.87**  （底占 82%）  ✅
+      selection底与单层预测不符（实测 #06576a / 预测 #08313e）——**掺层或混色，跳过比值**
+      dblclick 底与单层预测不符（实测 #091c24 / 预测 #08313e）——**掺层或混色，跳过比值**（**叠加态 = 口径边界**）
 
 ### [before] dark / str（"字符串（tok-str）"）
 
   before     2380 px  主色 #0a0e14  字形 #d29922  （前 4 高频：#0a0e14 #d29922 #4e601f #d27617）
   selection  2380 px  主色 #06576a  字形 #8eab69  （前 4 高频：#06576a #091c24 #8eab69 #065769）
-  dblclick   2380 px  主色 #091c24  字形 #7da77b  （前 4 高频：#091c24 #04657c #d29922 #091c23）
+  dblclick   2380 px  主色 #091c24  字形 #7db07a  （前 4 高频：#091c24 #04657c #d29922 #091c23）
     预测 over（压在字上）                #a8a049
     预测 behind（垫在字下）              #d29922
     预测 两层都压（词命中 + 选区）            #94a45c
     实测 selection= #8eab69 → 最贴近：**两层都压（词命中 + 选区）**（曼哈顿距离 26）
-    实测 dblclick = #7da77b → 最贴近：**两层都压（词命中 + 选区）**（曼哈顿距离 57）
+    实测 dblclick = #7db07a → 最贴近：**两层都压（词命中 + 选区）**（曼哈顿距离 65）
     实测比值（字形 vs 该画面的主色底）：
-      before   #d29922 on #0a0e14  **7.66**  ✅
-      selection#8eab69 on #06576a  **3.17**  ❌
-      dblclick #7da77b on #091c24  **6.39**  ✅（**叠加态 = 口径边界**）
+      before   #d29922 on #0a0e14  **7.66**  （底占 80%）  ✅
+      selection底与单层预测不符（实测 #06576a / 预测 #08313e）——**掺层或混色，跳过比值**
+      dblclick 底与单层预测不符（实测 #091c24 / 预测 #08313e）——**掺层或混色，跳过比值**（**叠加态 = 口径边界**）
 
 ### [before] dark / brace（{）
 
@@ -170,27 +470,75 @@
     预测 behind（垫在字下）              #e2e8f0
     预测 两层都压（词命中 + 选区）            #9fdced
     实测比值（字形 vs 该画面的主色底）：
-      before   #e9b6b9 on #582425  **7.00**  ✅
+      before   #e9b6b9 on #582425  **7.00**  （底占 61%）  ✅
 
 ====================================================================================================
 ## 逐格对照（after vs before）——工单 01 的「观感零变化」取证
 
-  ('dark', 'brace', 'before')                 #e9b6b9   #e9b6b9   ✅ 相同
+  ('dark', 'attr', 'before')  只在一侧有（跳过）
+  ('dark', 'attr', 'dblclick')  只在一侧有（跳过）
+  ('dark', 'attr', 'selection')  只在一侧有（跳过）
+  ('dark', 'brace', 'before')                 #582425   #e9b6b9   ❌ 有差异
   ('dark', 'com', 'before')                   #3fb950   #3fb950   ✅ 相同
-  ('dark', 'com', 'dblclick')                 #3fb950   #3fb950   ✅ 相同
+  ('dark', 'com', 'dblclick')                 #32ba6e   #3fb950   ❌ 有差异
   ('dark', 'com', 'selection')                #32ba6e   #2ac188   ❌ 有差异
+  ('dark', 'const', 'before')  只在一侧有（跳过）
+  ('dark', 'const', 'dblclick')  只在一侧有（跳过）
+  ('dark', 'const', 'selection')  只在一侧有（跳过）
+  ('dark', 'fn', 'before')  只在一侧有（跳过）
+  ('dark', 'fn', 'dblclick')  只在一侧有（跳过）
+  ('dark', 'fn', 'selection')  只在一侧有（跳过）
+  ('dark', 'kw', 'before')  只在一侧有（跳过）
+  ('dark', 'kw', 'dblclick')  只在一侧有（跳过）
+  ('dark', 'kw', 'selection')  只在一侧有（跳过）
+  ('dark', 'num', 'before')  只在一侧有（跳过）
+  ('dark', 'num', 'dblclick')  只在一侧有（跳过）
+  ('dark', 'num', 'selection')  只在一侧有（跳过）
+  ('dark', 'pre', 'before')  只在一侧有（跳过）
+  ('dark', 'pre', 'dblclick')  只在一侧有（跳过）
+  ('dark', 'pre', 'selection')  只在一侧有（跳过）
   ('dark', 'str', 'before')                   #d29922   #d29922   ✅ 相同
-  ('dark', 'str', 'dblclick')                 #d29922   #7da77b   ❌ 有差异
+  ('dark', 'str', 'dblclick')                 #b89d39   #7db07a   ❌ 有差异
   ('dark', 'str', 'selection')                #a8a049   #8eab69   ❌ 有差异
-  ('light', 'brace', 'before')                #542229   #542229   ✅ 相同
+  ('dark', 'tag', 'before')  只在一侧有（跳过）
+  ('dark', 'tag', 'dblclick')  只在一侧有（跳过）
+  ('dark', 'tag', 'selection')  只在一侧有（跳过）
+  ('dark', 'val', 'before')  只在一侧有（跳过）
+  ('dark', 'val', 'dblclick')  只在一侧有（跳过）
+  ('dark', 'val', 'selection')  只在一侧有（跳过）
+  ('light', 'attr', 'before')  只在一侧有（跳过）
+  ('light', 'attr', 'dblclick')  只在一侧有（跳过）
+  ('light', 'attr', 'selection')  只在一侧有（跳过）
+  ('light', 'brace', 'before')                #ebb7bc   #542229   ❌ 有差异
   ('light', 'com', 'before')                  #135c28   #1a7f37   ❌ 有差异
   ('light', 'com', 'dblclick')                #135c28   #1a7f37   ❌ 有差异
   ('light', 'com', 'selection')               #0f6748   #118665   ❌ 有差异
+  ('light', 'const', 'before')  只在一侧有（跳过）
+  ('light', 'const', 'dblclick')  只在一侧有（跳过）
+  ('light', 'const', 'selection')  只在一侧有（跳过）
+  ('light', 'fn', 'before')  只在一侧有（跳过）
+  ('light', 'fn', 'dblclick')  只在一侧有（跳过）
+  ('light', 'fn', 'selection')  只在一侧有（跳过）
+  ('light', 'kw', 'before')  只在一侧有（跳过）
+  ('light', 'kw', 'dblclick')  只在一侧有（跳过）
+  ('light', 'kw', 'selection')  只在一侧有（跳过）
+  ('light', 'num', 'before')  只在一侧有（跳过）
+  ('light', 'num', 'dblclick')  只在一侧有（跳过）
+  ('light', 'num', 'selection')  只在一侧有（跳过）
+  ('light', 'pre', 'before')  只在一侧有（跳过）
+  ('light', 'pre', 'dblclick')  只在一侧有（跳过）
+  ('light', 'pre', 'selection')  只在一侧有（跳过）
   ('light', 'str', 'before')                  #785000   #9a6700   ❌ 有差异
   ('light', 'str', 'dblclick')                #785000   #9a6700   ❌ 有差异
   ('light', 'str', 'selection')               #605e28   #687640   ❌ 有差异
+  ('light', 'tag', 'before')  只在一侧有（跳过）
+  ('light', 'tag', 'dblclick')  只在一侧有（跳过）
+  ('light', 'tag', 'selection')  只在一侧有（跳过）
+  ('light', 'val', 'before')  只在一侧有（跳过）
+  ('light', 'val', 'dblclick')  只在一侧有（跳过）
+  ('light', 'val', 'selection')  只在一侧有（跳过）
 
-  合计 **5/14** 格逐字节相同——**有差异，别当零变化**
+  合计 **50/62** 格逐字节相同——**有差异，别当零变化**
 
 ====================================================================================================
 怎么读：实测字形像素贴近哪条预测，就是哪种叠法；多 tag 那一节是「改前/改后」的真像素对照。

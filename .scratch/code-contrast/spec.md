@@ -89,7 +89,7 @@ master「AI 提炼报告」**2.06**，根因是全局 `button:disabled { opacity
 7. **禁用态（有余力）**：`button:disabled` 去掉 `opacity`，改 `--panel-2` 底 + `--muted` 字 +
    `--border` 描边；组件级那几处 `.5/.55/.6/.65` 一并收掉。
 
-### 落定值表（`probe-00` §10/§11 现算，余量 ≥ 0.15）
+### 落定值表（`probe-00` §7/§7b/§8 现算，余量 ≥ 0.15）
 
 | 令牌 | 主题 | 现值 | 落定 | 改动 |
 |---|---|---|---|---|
@@ -100,12 +100,17 @@ master「AI 提炼报告」**2.06**，根因是全局 `button:disabled { opacity
 | `--tok-num` / `--tok-attr` | light | `#8250df` | **`#663eae`** | ×0.781 |
 | `--tok-fn` | light | `#953800` | 不变 | 现值 5.24 ✅ |
 | `--tok-const` | light | `#6639ba` | 不变 | 现值 4.72 ✅ |
-| `--tok-pre` | dark | `#8b949e` | **`#909aa4`** | ×1.038 |
-| `--tok-const` | dark | `#c586c0` | **`#c788c2`** | ×1.012 |
+| `--tok-pre` | dark | `#8b949e` | **`#939da7`** | ×1.057（**随暗色高亮色一起定**） |
+| `--tok-const` | dark | `#c586c0` | **`#cd8bc8`** | ×1.058（同上） |
 | 其余 8 个 | dark | —— | **不变** | 均 ≥ 4.91 ✅ |
-| `--code-hl-rgb`（**新增**） | light / dark | —— | **`0, 150, 199` / `0, 190, 230`** | 浅色 = 现值 accent-rgb |
+| `--code-hl-rgb`（**新增**） | light / dark | —— | **`0, 150, 199` / `0, 190, 230`** | 浅色 = 现值 accent-rgb；暗色略深一档 |
 | `.code-ta::selection` α | 两主题 | `.32` | **`.20`** | 层侧降档 |
 | `.code-mark-current` α | 两主题 | `.38` | **`.24`** | 层侧降档 |
+
+> ⚠ **暗色那两个值随"暗色高亮色取哪一支"变**：spec 初稿按 `0, 120, 150` 解出 `#909aa4` / `#c788c2`；
+> 实测（`probe-00` §7b）在 `0, 120, 150` 下**可见度只剩 1.24**（选区几乎看不出），而 `0, 190, 230`
+> 可见度 1.53、要改的令牌数一样是 2 个——所以取后者，那两个令牌的值随之变成
+> `#939da7` / `#cd8bc8`。**照初稿那两个值落盘会让暗色最坏格掉到 4.492**（两轴评审现算复核过）。
 
 ## 用户故事
 
@@ -155,8 +160,11 @@ master「AI 提炼报告」**2.06**，根因是全局 `button:disabled { opacity
   `<底>+--<rgba令牌>` = 该令牌按自带 alpha 叠在底上。两条都由 `layerColor`（JS）/
   `layer_color`（Python）实现，**镜面**。
 - `over` 层的判据：`contrast(over(tint, fg), over(tint, base))`；`behind` 层：`contrast(fg, over(tint, base))`。
-- **家族格数冻结** `CONTRAST_FAMILY_CELLS`（= 令牌数 × 层数 × 主题数的现算值）：
+- **家族格数冻结** `CONTRAST_FAMILY_CELL_COUNT`（= 令牌数 × 层数 × 主题数的现算值）：
   与 `CONTRAST_PAIR_COUNT` 同一条纪律——判据不许在"表里少了一层"的情况下照绿。
+  **实施期补**（`code-contrast/02` 双轴评审）：债还清之后族面不再有 `debt` 行可对账，
+  "少一层 / 几何写反 / 强度回退"只会让最坏格**变好**、`contrastProblems` 反而无话可说——
+  故再冻一对 `CONTRAST_TOK_WORST`（两主题最坏格 ±0.01），并由镜像守卫现算复核。
 
 ### 二、产品面的接线（观感与值的改动分开做）
 

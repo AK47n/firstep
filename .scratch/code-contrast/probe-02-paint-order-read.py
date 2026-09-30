@@ -36,7 +36,8 @@ def dist(a, b):
     return sum(abs(a[i] - b[i]) for i in range(3))
 
 
-def top_colors(path: Path, n=6):
+def histogram(path: Path):
+    """整张图的颜色直方图（**全量**，不只前几名——字形核心常常不是最高频那几个）。"""
     pix = fitz.Pixmap(str(path))
     if pix.n > 3:
         pix = fitz.Pixmap(fitz.csRGB, pix)
@@ -44,13 +45,24 @@ def top_colors(path: Path, n=6):
     for y in range(pix.height):
         for x in range(pix.width):
             cnt[pix.pixel(x, y)[:3]] += 1
-    return cnt.most_common(n), pix.width * pix.height
+    return cnt
 
 
-def glyph_core(top):
-    """字形核心 = 离「主色（底）」最远的那个高频色（浅色主题下它最暗、暗色主题下它最亮）。"""
-    bg = top[0][0]
-    return max((c for c, _n in top), key=lambda c: dist(c, bg))
+def dominant(cnt: Counter):
+    return cnt.most_common(1)[0]
+
+
+def glyph_core(cnt: Counter):
+    """字形核心 = **够多像素**的那些颜色里，离主色（底）最远的那个。
+
+    ⚠ 只在"前 6 高频"里挑会挑到**抗锯齿混色**（本轮实测：小字号样本的真核心像素数
+    比混色像素少，于是量出来偏亮、比值偏低）——所以这里用全量直方图 + 一个像素数门槛。
+    """
+    bg, _n = dominant(cnt)
+    total = sum(cnt.values())
+    floor = max(3, int(total * 0.005))
+    cands = [c for c, n in cnt.items() if n >= floor]
+    return max(cands or [bg], key=lambda c: dist(c, bg))
 
 
 def predictions(tok, theme, shot, base):
@@ -100,16 +112,22 @@ def main() -> None:
         for s in data["shots"]:
             theme = s["theme"]
             print(f"\n### [{tag}] {theme} / {s['name']}（{s['info'].get('text', '')}）\n")
-            cols, tops = {}, {}
+            cols, cnts, tops = {}, {}, {}
             for key, fn in s["files"].items():
-                top, total = top_colors(HERE / fn)
-                tops[key] = top
-                cols[key] = glyph_core(top)
+                cnt = histogram(HERE / fn)
+                cnts[key] = cnt
+                tops[key] = cnt.most_common(4)
+                cols[key] = glyph_core(cnt)
                 summary[(tag, theme, s["name"], key)] = cols[key]
-                print(f"  {key:<9}{total:>6} px  主色 {hx(top[0][0])}  字形 {hx(cols[key])}"
-                      f"  （前 4 高频：" + " ".join(hx(c) for c, _n in top[:4]) + "）")
+                total = sum(cnt.values())
+                print(f"  {key:<9}{total:>6} px  主色 {hx(cnt.most_common(1)[0][0])}  字形 {hx(cols[key])}"
+                      f"  （前 4 高频：" + " ".join(hx(c) for c, _n in tops[key]) + "）")
             base = cols["before"]
             preds = predictions(tok, theme, s, base)
+            # **单层底预测**（这一发本该只有它）：选区态 = `over(选区 tint, 代码底)`；
+            # 括号那一发 = `over(彩虹, 代码底)`。实测主色与它不符 ⇒ 掺了别的层/混色，不当证据。
+            want_layer = ("--code-bg+--bracket-rainbow-0" if s["name"] == "brace" else SEL_LAYER)
+            _b, want_bg, _t, _g = L.layer_colors(want_layer, theme, tok)
             for label, p in preds.items():
                 print(f"    预测 {label:<26}{hx(p)}")
             for key in s["files"]:
@@ -120,15 +138,31 @@ def main() -> None:
                 best = min(gap, key=gap.get)
                 print(f"    实测 {key:<9}= {hx(obs)} → 最贴近：**{best}**（曼哈顿距离 {gap[best]}）")
             # **屏幕上量出来的比值**（02 单的验收：过线要有真像素那一份）。
-            # 底 = 该画面里出现最多的颜色（选区那一发就是合成后的选区底）。
+            # 只有当取样盒里**主色占绝对多数**（单一底）时才算——掺了别的层（相邻行 / 叠加态）
+            # 就不当"过线证据"，如实标出来（评审点名：底不单一时的数不能混着读）。
             print("    实测比值（字形 vs 该画面的主色底）：")
             for key in s["files"]:
-                bg = tops[key][0][0]
+                cnt = cnts[key]
+                bg, n_bg = dominant(cnt)
+                cover = n_bg / sum(cnt.values())
                 r = L.contrast(cols[key], bg)
                 tier = "（**叠加态 = 口径边界**）" if key == "dblclick" else ""
+                if key != "before" and s.get("info", {}).get("lineActive"):
+                    print(f"      {key:<9}该行同时是当前行（掺了 `.07`）——**跳过比值**{tier}")
+                    continue
+                if key != "before" and dist(bg, want_bg) > 12:
+                    print(f"      {key:<9}底与单层预测不符（实测 {hx(bg)} / 预测 {hx(want_bg)}）"
+                          f"——**掺层或混色，跳过比值**"
+                          + "（⚠ 若这一发来自**旧 tag**，对不上是**预期**的：像素是当时的强度拍的、"
+                            "预测按现行口径算）" + f"{tier}")
+                    continue
+                if cover < 0.30:
+                    print(f"      {key:<9}底不单一（主色只占 {cover:.0%}）——**跳过比值**，只留像素{tier}")
+                    continue
                 mark = "✅" if r >= L.CONTRAST_THRESHOLDS["small"] else (
                     "·边界" if key == "dblclick" else "❌")
-                print(f"      {key:<9}{hx(cols[key])} on {hx(bg)}  **{r:.2f}**  {mark}{tier}")
+                print(f"      {key:<9}{hx(cols[key])} on {hx(bg)}  **{r:.2f}**  "
+                      f"（底占 {cover:.0%}）  {mark}{tier}")
 
     # --- 多 tag 逐格对照（观感零变化取证） ----------------------------------
     tags = sorted({k[0] for k in summary})

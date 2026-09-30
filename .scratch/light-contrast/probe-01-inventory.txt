@@ -1,7 +1,7 @@
 # 读数：probe-01-inventory
 # 命令：python .scratch\light-contrast\probe-01-inventory.py
 # 工作树：C:\Users\luoji\Desktop\firstep
-# 开始：2026-09-30T13:51:20+08:00
+# 开始：2026-09-30T21:14:44+08:00
 # 退出码：0
 ==============================================================================
 浅色调色板轮 · 侦察读数（probe-01：对比度清单 + 候选值扫描）
@@ -48,6 +48,7 @@
 --info-text           #58a6ff                           #0755b1                           
 --purple-text         #b175ff                           #6840b2                           
 --accent-rgb          0, 212, 255                       0, 150, 199                       
+--code-hl-rgb         0, 190, 230                       0, 150, 199                       
 --accent-hi           #33dcff                           #33dcff                           
 --accent-lo           #00b8de                           #00b8de                           
 --on-accent-deep      #001018                           #001018                           
@@ -59,16 +60,16 @@
 --purple-dim          rgba(139, 92, 246, .12)           rgba(130, 80, 223, .12)           
 --power               #f59e0b                           #d97706                           
 --ok-glow             rgba(126, 231, 135, .25)          rgba(45, 164, 78, .18)            
---tok-com             #3fb950                           #1a7f37                           
---tok-str             #d29922                           #9a6700                           
---tok-pre             #8b949e                           #59636e                           
---tok-kw              #00d4ff                           #0096c7                           
---tok-num             #bc8cff                           #8250df                           
---tok-tag             #00d4ff                           #0096c7                           
---tok-attr            #bc8cff                           #8250df                           
---tok-val             #d29922                           #9a6700                           
+--tok-com             #3fb950                           #135c28                           
+--tok-str             #d29922                           #785000                           
+--tok-pre             #939da7                           #4b535d                           
+--tok-kw              #00d4ff                           #005673                           
+--tok-num             #bc8cff                           #663eae                           
+--tok-tag             #00d4ff                           #005673                           
+--tok-attr            #bc8cff                           #663eae                           
+--tok-val             #d29922                           #785000                           
 --tok-fn              #dcdcaa                           #953800                           
---tok-const           #c586c0                           #6639ba                           
+--tok-const           #cd8bc8                           #6639ba                           
 --bracket-rainbow-0   rgba(248, 81, 73, .33)            rgba(207, 34, 46, .30)            
 --bracket-rainbow-1   rgba(255, 166, 87, .33)           rgba(188, 76, 0, .30)             
 --bracket-rainbow-2   rgba(227, 179, 65, .33)           rgba(154, 103, 0, .30)            
@@ -154,36 +155,36 @@
 #dee4ea          1.203    1.281    12.33     5.14
 #dbe1e8          1.237    1.317    12.00     5.00
 
-## 8. 代码配色族 `--tok-*` × 代码底（本轮**只量不修**，数字进登记表）
+## 8. 代码配色族 `--tok-*` × 代码底（00 轮起：**七层 + 几何感知**）
 
 
 ### dark
 
-令牌                       --code-bg --code-bg+accent.07 --code-bg+accent.12 --code-bg+accent.18 --code-bg+accent.32
---tok-com                     7.61                6.87                6.21                5.38                3.70  ❌
---tok-str                     7.66                6.91                6.25                5.42                3.72  ❌
---tok-pre                     6.29                5.67                5.13                4.44                3.05  ❌
---tok-kw                     10.92                9.86                8.91                7.72                5.31  ✅
---tok-num                     7.67                6.93                6.26                5.43                3.73  ❌
---tok-tag                    10.92                9.86                8.91                7.72                5.31  ✅
---tok-attr                    7.67                6.93                6.26                5.43                3.73  ❌
---tok-val                     7.66                6.91                6.25                5.42                3.72  ❌
---tok-fn                     13.69               12.35               11.16                9.67                6.65  ✅
---tok-const                   6.95                6.27                5.67                4.91                3.37  ❌
+令牌                       --code-bg    --code-bg+hl.当前行    --code-bg+hl.词命中   --code-bg+hl.搜索命中     --code-bg+hl.选区   --code-bg+hl.当前命中--code-bg+--danger-dim
+--tok-com                     7.61                6.98                6.48                5.73                5.52                5.05                5.72  ✅
+--tok-str                     7.66                7.03                6.16                5.38                5.13                4.68                6.19  ✅
+--tok-pre                     7.02                6.44                5.93                5.26                5.09                4.65                5.63  ✅
+--tok-kw                     10.92               10.02                8.94                7.81                7.51                6.78                7.71  ✅
+--tok-num                     7.67                7.04                6.29                5.52                5.29                4.82                6.13  ✅
+--tok-tag                    10.92               10.02                8.94                7.81                7.51                6.78                7.71  ✅
+--tok-attr                    7.67                7.04                6.29                5.52                5.29                4.82                6.13  ✅
+--tok-val                     7.66                7.03                6.16                5.38                5.13                4.68                6.19  ✅
+--tok-fn                     13.69               12.56               10.66                9.11                8.65                7.72               10.14  ✅
+--tok-const                   7.48                6.86                6.10                5.32                5.11                4.65                6.04  ✅
 
 ### light
 
-令牌                       --code-bg --code-bg+accent.07 --code-bg+accent.12 --code-bg+accent.18 --code-bg+accent.32
---tok-com                     4.77                4.41                4.17                3.89                3.33  ❌
---tok-str                     4.57                4.23                3.99                3.73                3.19  ❌
---tok-pre                     5.74                5.31                5.01                4.69                4.01  ❌
---tok-kw                      3.19                2.95                2.78                2.60                2.22  ❌
---tok-num                     4.74                4.38                4.14                3.87                3.31  ❌
---tok-tag                     3.19                2.95                2.78                2.60                2.22  ❌
---tok-attr                    4.74                4.38                4.14                3.87                3.31  ❌
---tok-val                     4.57                4.23                3.99                3.73                3.19  ❌
---tok-fn                      6.94                6.42                6.06                5.66                4.84  ✅
---tok-const                   6.90                6.38                6.02                5.63                4.81  ✅
+令牌                       --code-bg    --code-bg+hl.当前行    --code-bg+hl.词命中   --code-bg+hl.搜索命中     --code-bg+hl.选区   --code-bg+hl.当前命中--code-bg+--danger-dim
+--tok-com                     7.62                7.05                6.00                5.35                5.08                4.70                6.70  ✅
+--tok-str                     6.70                6.19                5.70                5.18                5.03                4.69                5.56  ✅
+--tok-pre                     7.32                6.77                5.87                5.23                5.06                4.66                6.16  ✅
+--tok-kw                      7.65                7.08                5.95                5.25                5.04                4.67                6.78  ✅
+--tok-num                     6.88                6.37                5.70                5.16                4.98                4.66                5.70  ✅
+--tok-tag                     7.65                7.08                5.95                5.25                5.04                4.67                6.78  ✅
+--tok-attr                    6.88                6.37                5.70                5.16                4.98                4.66                5.70  ✅
+--tok-val                     6.70                6.19                5.70                5.18                5.03                4.69                5.56  ✅
+--tok-fn                      6.94                6.42                6.19                5.74                5.58                5.24                5.57  ✅
+--tok-const                   6.90                6.38                5.76                5.22                5.03                4.72                5.76  ✅
 
 ## 10. 选型格网：`--accent-text` × `--panel-2`（单元格 = 最坏比值：accent-text 压在 dim 合成底上）
 

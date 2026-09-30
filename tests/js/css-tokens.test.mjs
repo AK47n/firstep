@@ -1396,7 +1396,14 @@ function contrastFamilyCells(source, onlyLabel = null, families = CONTRAST_FAMIL
   return out;
 }
 
-/** 例外表的认人键：机械面 = 选择器；族面 = `族：<标签>`；令牌面 = `令牌：<字面>`。 */
+/** 某一主题下的**最坏格**（族面判据与冻结值都用它——只此一处求法）。 */
+function tokWorst(cells, theme) {
+  const sub = cells.filter((c) => c.theme === theme);
+  if (!sub.length) throw new Error(`族面在 ${theme} 下一格都没有——别拿空表当读数`);
+  return sub.reduce((a, b) => (b.ratio < a.ratio ? b : a));
+}
+
+/** 族面的认人键：机械面 = 选择器；族面 = `族：<标签>`；令牌面 = `令牌：<字面>`。 */
 function contrastFamilyKey(label) {
   return "族：" + label;
 }
@@ -1511,6 +1518,25 @@ function contrastProblems(source, exceptions = CONTRAST_EXCEPTIONS, families = C
   for (const [id] of CONTRAST_KINDS) {
     if (!exceptions.some((e) => Array.isArray(e) && e[2] === id)) {
       out.push(`类别 ${id} 一条登记都没有——判据退化成摆设`);
+    }
+  }
+  // **产品面 ↔ 层表**：代码页高亮的**强度**（`.20` / `.24`）有三份副本——CSS、`CODE_LAYERS`、
+  // `probe_lib.CODE_LAYERS`。后两者有镜像守卫，**CSS 那份此前没有任何门禁**：改了 CSS 不改层表
+  // ⇒ 判据按旧强度算（偏乐观）而全绿。这里把两个数从样式块里抠出来与层表逐条对账。
+  {
+    const rules = contrastRules(source);
+    for (const [selName, layerName] of [[".code-ta::selection", "--code-bg+hl.选区"],
+      [".code-mark-current", "--code-bg+hl.当前命中"]]) {
+      const row = layers.find(([n]) => n === layerName);
+      const want = row ? row[1] : null;
+      const body = (rules.find((r) => r.sel === selName) || {}).body || "";
+      const m = /rgba\(var\(--code-hl-rgb\),\s*\.(\d+)\)/.exec(body);
+      const got = m ? Number(`0.${m[1]}`) : null;
+      if (want === null || got === null || Math.abs(got - want) > 1e-9) {
+        out.push(`代码页高亮的强度与层表对不上：${selName} 盘上是 `
+          + `${got === null ? "（抠不出 rgba(var(--code-hl-rgb), .NN)）" : got}，层表登记 ${want}`
+          + "——CSS 与 CODE_LAYERS / probe_lib 三处必须一起改");
+      }
     }
   }
   for (const [label, , , kind] of families) {
@@ -1804,11 +1830,11 @@ test("对比度（工单 01）：族的细节矩阵可复算（`--tok-*` 那笔�
   const layers = [...new Set(tok.map((c) => c.layer))];
   assert.deepEqual(layers, CODE_LAYERS.map(([n]) => n),
     "--tok-* 族展开的层与 CODE_LAYERS 对不上（层表与族表漂了）");
-  const worstLight = tok.filter((c) => c.theme === "light").reduce((a, b) => (b.ratio < a.ratio ? b : a));
+  const worstLight = tokWorst(tok, "light");
   assert.ok(worstLight.ratio >= CONTRAST_THRESHOLDS.small,
     `浅色代码底上语法高亮族的最坏格只有 ${worstLight.ratio.toFixed(2)}（02 单已还清这笔债：`
     + "十个令牌 × 七层全过——它再掉下来说明有人把令牌改浅了或加了新的高亮层）");
-  const worstDark = tok.filter((c) => c.theme === "dark").reduce((a, b) => (b.ratio < a.ratio ? b : a));
+  const worstDark = tokWorst(tok, "dark");
   assert.ok(worstDark.ratio >= CONTRAST_THRESHOLDS.small,
     `暗色代码底上语法高亮族的最坏格只有 ${worstDark.ratio.toFixed(2)}（同上）`);
   // **还清之后仍要有人看着**：最坏格冻结（±0.01）。少了层 / 几何写成 behind / 令牌被改浅，
@@ -2193,8 +2219,8 @@ test("全站推广合成红证：九条腿各自都判得红（防'永远绿'的
   //         格数少一排 + 最坏格显著变好。这里就按那两把尺子断言。
   const ctWorstOf = (layers) => {
     const cells = contrastFamilyCells(html, null, CONTRAST_FAMILIES, layers)
-      .filter((c) => c.label.startsWith("--tok-*") && c.theme === "light");
-    return cells.reduce((a, b) => (b.ratio < a.ratio ? b : a)).ratio;
+      .filter((c) => c.label.startsWith("--tok-*"));
+    return tokWorst(cells, "light").ratio;
   };
   const ctBaseWorst = ctWorstOf(CODE_LAYERS);
   const ctFewerLayers = CODE_LAYERS.filter(([n]) => n !== "--code-bg+hl.当前命中");
@@ -2203,13 +2229,34 @@ test("全站推广合成红证：九条腿各自都判得红（防'永远绿'的
     CONTRAST_FAMILY_CELL_COUNT, "层表少一层之后格数没变——冻结值那条硬数失去意义");
   assert.ok(ctWorstOf(ctFewerLayers) > ctBaseWorst + 0.01,
     "从层表里摘掉最狠那层之后最坏格没变好——冻结值那对数字失去意义（'少算一层'会静默变绿）");
-  //    (g3) **几何写反**（把压在字上的层改成垫在字下）→ 比值变乐观 → 最坏格变好。
-  //         注意**格数不变**：这比"少一层"更隐蔽（口径错，不是表短），所以它只能靠冻结值抓。
+  //    (g3) **几何写反**（把压在字上的层改成垫在字下）→ 比值变乐观。⚠ 与 (g2) 的区别要立住：
+  //         这里断言的是**同一格**（同名令牌 × 同层）的比值被改宽，而 (g2) 是"那一格整个消失"。
+  const ctCellOf = (layersTable, layerName) => contrastFamilyCells(html, null, CONTRAST_FAMILIES, layersTable)
+    .find((c) => c.label.startsWith("--tok-*") && c.layer === layerName && c.theme === "light");
+  const ctHonest = ctCellOf(CODE_LAYERS, "--code-bg+hl.当前命中");
+  assert.ok(ctHonest && ctHonest.ratio < 9,
+    "锚点变了（取不到'当前命中'那一格）——这条自检会静默空转");
   const ctWrongGeom = CODE_LAYERS.map(([n, a, g]) => (n === "--code-bg+hl.当前命中" ? [n, a, "behind"] : [n, a, g]));
   assert.equal(contrastFamilyCells(html, null, CONTRAST_FAMILIES, ctWrongGeom).length,
     CONTRAST_FAMILY_CELL_COUNT, "几何写反不该改格数——这条自检的前提变了");
+  const ctLoose = ctCellOf(ctWrongGeom, "--code-bg+hl.当前命中");
+  assert.ok(ctLoose && ctLoose.ratio > ctHonest.ratio + 0.01,
+    "几何写反（over → behind）之后**同一格**的比值没变乐观——没有东西在看几何");
   assert.ok(ctWorstOf(ctWrongGeom) > ctBaseWorst + 0.01,
-    "几何写反（over → behind）之后最坏格没变好——没有东西在看几何（冻结值那对数字是唯一的一道闸）");
+    "几何写反之后最坏格没变好——冻结值那对数字是唯一的一道闸");
+  //    (g6) **强度回退**（把选区 alpha 改回 .32）→ 族面掉线（冻结值那对数字抓它）。
+  const ctOldAlpha = CODE_LAYERS.map(([n, a, g]) => (n === "--code-bg+hl.选区" ? [n, 0.32, g] : [n, a, g]));
+  assert.ok(ctWorstOf(ctOldAlpha) < CONTRAST_THRESHOLDS.small,
+    "把选区 alpha 改回 .32 之后族面居然还过线——那说明令牌值留的余量远远超出预期（或层没被真读到）");
+  //    (g7) **暗色高亮色回退**（`--code-hl-rgb` 改回亮青 `0, 212, 255`）→ 暗色族面**最坏格变差**
+  //         （实测：那几个令牌的余量被吃掉，回到 4.65 那条线以下）。断言在"同一族的最坏格"上，
+  //         不依赖"它恰好跌破 4.5"——那取决于令牌留了多少余量。
+  const ctDarkWorstOf = (src) => tokWorst(
+    contrastFamilyCells(src, null, CONTRAST_FAMILIES).filter((c) => c.label.startsWith("--tok-*")), "dark").ratio;
+  const ctBrightHl = html.replace("--code-hl-rgb: 0, 190, 230;", "--code-hl-rgb: 0, 212, 255;");
+  assert.notEqual(ctBrightHl, html, "注入没生效（找不到暗色 --code-hl-rgb 的定义行）");
+  assert.ok(ctDarkWorstOf(ctBrightHl) < ctDarkWorstOf(html) - 0.01,
+    "暗色高亮色改回亮青之后最坏格没变差——那说明判据根本没在看 `--code-hl-rgb`（暗色那两个令牌白调了）");
   //    (g4) **`--code-hl-rgb` 从盘上消失**（令牌改名 / 漏定义）→ 那五层解不出色：
   //         族面格数塌一块 + 最坏格换人（`contrastProblems` 现在也会点名"解不出色"）。
   const ctNoHl = html.replace(/--code-hl-rgb: [^;]+;/g, "");
