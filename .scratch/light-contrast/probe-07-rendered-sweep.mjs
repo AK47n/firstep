@@ -30,6 +30,7 @@ const LARGE = Number(/large:\s*([0-9.]+)/.exec(TH[1])[1]);
 const LT = grab(/const LARGE_TEXT = \{([^}]*)\};/, "LARGE_TEXT");
 const LARGE_PX = Number(/px:\s*([0-9.]+)/.exec(LT[1])[1]);
 const BOLD_PX = Number(/bold_px:\s*([0-9.]+)/.exec(LT[1])[1]);
+const BOLD_WEIGHT = Number(/bold_weight:\s*([0-9]+)/.exec(LT[1])[1]);
 
 const TABS = ["generate", "hwcheck", "settings", "guide", "changelog", "code",
   "master", "library", "reference", "pdf", "md", "topic"];
@@ -67,7 +68,7 @@ const SWEEP = (payload) => {   // 参数化：page.evaluate 只吃**一个**入�
     }
     return bits.join(" > ");
   };
-  const out = { theme: document.documentElement.dataset.theme || "dark", tabs: [], bad: [] };
+  const out = { theme: document.documentElement.dataset.theme || "dark", tabs: [], bad: [], disabled: [] };
   for (const tab of TABS) {
     const btn = document.querySelector(`nav button[data-tab="${tab}"]`);
     if (!btn) { out.tabs.push({ tab, missing: true }); continue; }
@@ -76,33 +77,44 @@ const SWEEP = (payload) => {   // 参数化：page.evaluate 只吃**一个**入�
     const panel = document.getElementById(`tab-${tab}`);
     if (!panel) { out.tabs.push({ tab, panel: false }); continue; }
     let total = 0, grad = 0;
-    const bad = [];
+    const skips = { 零尺寸: 0, 自身渐变: 0, 祖先渐变: 0, 透明字: 0, 禁用: 0, 无文字: 0 };
+    const bad = [], disabled = [];
     for (const el of panel.querySelectorAll("*")) {
       const cs = getComputedStyle(el);
       if (cs.display === "none" || cs.visibility === "hidden" || Number(cs.opacity) < 0.15) continue;
       const box = el.getBoundingClientRect();
-      if (box.width < 1 || box.height < 1) continue;          // 零尺寸（不可见）
-      if (el.disabled === true) continue;                     // 禁用控件：WCAG 明文豁免
+      if (box.width < 1 || box.height < 1) { skips.零尺寸++; continue; }   // 零尺寸（不可见）
+      const isDisabled = el.disabled === true;                // 禁用控件：WCAG 明文豁免——
+      // **另记一桶**而不是丢掉（不然"全站最低的禁用态"在扫描里永远看不见，读数就是失真的）
       // **渐变底**（background-image 不是 none）：ackgroundColor 是 transparent，
       // 静态面会把它算到祖先底上（假红）。渐变有专项判据（CONTRAST_GRADIENT_ENDS），
       // 这里只**记账不判**——数量一并报出来。
-      if (cs.backgroundImage !== "none") { grad++; continue; }
+      if (cs.backgroundImage !== "none") { grad++; skips.自身渐变++; continue; }
+      // 祖先带渐变：effBg 只合成 backgroundColor，会把渐变当透明 → 假红，跳过并记账
+      let ancGrad = false;
+      for (let n = el.parentElement; n; n = n.parentElement) {
+        if (getComputedStyle(n).backgroundImage !== "none") { ancGrad = true; break; }
+      }
+      if (ancGrad) { grad++; skips.祖先渐变++; continue; }
       if (!hasText(el)) continue;
       total++;
       const fg = parse(cs.color);
-      if (fg[3] === 0) continue;                       // 全透明字（高亮层那类）不算
+      if (fg[3] === 0) { skips.透明字++; continue; }      // 全透明字（高亮层那类）不算
       const bg = effBg(el);
       const fgEff = fg[3] < 1 ? [0, 1, 2].map((i) => Math.round(fg[3] * fg[i] + (1 - fg[3]) * bg[i])) : fg.slice(0, 3);
       const px = parseFloat(cs.fontSize);
-      const bold = Number(cs.fontWeight) >= 700;
+      const bold = Number(cs.fontWeight) >= THRESH.boldWeight;
       const need = (px >= THRESH.largePx || (px >= THRESH.boldPx && bold)) ? THRESH.large : THRESH.small;
       const r = ratio(fgEff, bg);
       if (r < need - 1e-9) {
-        bad.push({ sel: path(el), ratio: Math.round(r * 100) / 100, need, px,
-          color: cs.color, bg: `rgb(${bg.join(",")})`, text: (el.textContent || "").trim().slice(0, 24) });
+        const rec = { sel: path(el), ratio: Math.round(r * 100) / 100, need, px,
+          color: cs.color, bg: `rgb(${bg.join(",")})`, text: (el.textContent || "").trim().slice(0, 24) };
+        // 禁用控件：WCAG 明文豁免——**另记一桶**而不是丢掉（不然"全站最低的禁用态"在扫描里永远看不见）
+        if (isDisabled) disabled.push(rec); else bad.push(rec);
       }
     }
-    out.tabs.push({ tab, total, bad: bad.length, grad });
+    out.tabs.push({ tab, total, bad: bad.length, grad, disabled: disabled.length, skips });
+    out.disabled.push(...disabled.map((d) => ({ tab, ...d })));
     out.bad.push(...bad.map((b) => ({ tab, ...b })));
   }
   return out;
@@ -124,13 +136,20 @@ try {
     await page.evaluate((t) => { document.documentElement.dataset.theme = t; }, theme);
     await page.waitForTimeout(600);
     const data = await page.evaluate(SWEEP, { tabs: TABS,
-    th: { small: SMALL, large: LARGE, largePx: LARGE_PX, boldPx: BOLD_PX } });
+    th: { small: SMALL, large: LARGE, largePx: LARGE_PX, boldPx: BOLD_PX, boldWeight: BOLD_WEIGHT } });
     console.log(`\n===== ${theme} =====`);
     for (const t of data.tabs) {
       if (t.missing || t.panel === false) { console.log(`  ${t.tab.padEnd(11)}（没找到页签按钮 / 面板）`); continue; }
       console.log(`  ${t.tab.padEnd(11)}有文字元素 ${String(t.total).padStart(4)}　不达标 ${t.bad}`);
     }
     console.log(`  —— ${theme} 合计不达标 **${data.bad.length}**`);
+    if (data.disabled.length) {
+      console.log("  —— 禁用态（WCAG 豁免，但记数）：**" + data.disabled.length + "** 处，最低几个：");
+      for (const b of data.disabled.sort((x, y) => x.ratio - y.ratio).slice(0, 5)) {
+        console.log("     " + b.ratio + "/" + b.need + "  [" + b.tab + "] " + b.sel
+          + "  「" + b.text + "」 " + b.color + " on " + b.bg);
+      }
+    }
     for (const b of data.bad.slice(0, 40)) {
       console.log(`     ${b.ratio.toFixed(2)}/${b.need}  [${b.tab}] ${b.sel}`);
       console.log(`         ${b.color} on ${b.bg}  ${b.px}px  「${b.text}」`);

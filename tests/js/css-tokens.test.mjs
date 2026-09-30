@@ -1530,10 +1530,14 @@ function contrastProblems(source, exceptions = CONTRAST_EXCEPTIONS, families = C
 // ② **跨行拼出来的**取色声明（本仓 0 处，与描边第五条腿的已知留白同类）
 // ===========================================================================
 
-/** 面的分层下限（`surface` 类别）：不是 WCAG 的 3:1，而是"看得出是两块"的粗线。 */
-const CONTRAST_SURFACE_MIN = 1.10;
-/** 渲染方登记项允许的类别（`text` / `nontext` 判比值，`surface` 判分层，`skip` 只登记）。 */
-const JS_CONTRAST_KINDS = ["text", "nontext", "surface", "surface-bordered", "skip"];
+/**
+ * 渲染方登记项允许的类别（**只留用得上的**：紧凑评审点过"零实例的档位 = Speculative Generality"）。
+ *   · `text` —— 判比值（4.5）；
+ *   · `surface-bordered` —— 面本身的分层由同串描边承担，填充不判；
+ *   · `skip` —— 静态判不了（令牌定义在页面作用域块里）。
+ * 以后真出现"非文字图形"或"纯面 vs 面"的实例，**那时再加档位并同步票面**（别先立空档）。
+ */
+const JS_CONTRAST_KINDS = ["text", "surface-bordered", "skip"];
 
 const JS_CONTRAST_REGISTER = [
   ["fx/flash.js", 'color:var(--danger-text);font-weight:600">✗ 烧录未成功', "--danger-text", "--panel", "text"],
@@ -1615,14 +1619,10 @@ function jsContrastRegisterProblems(files = jsFiles(), register = JS_CONTRAST_RE
         continue;
       }
       const ratio = contrastRatio(compositeOver(fg, bg), bg);
-      const need = kind === "nontext" ? CONTRAST_THRESHOLDS.large
-        : (kind === "surface" ? CONTRAST_SURFACE_MIN : CONTRAST_THRESHOLDS.small);
+      const need = CONTRAST_THRESHOLDS.small;   // 登记在册的都当文字用（图形档没实例前不立空档）
       if (ratio < need) {
-        out.push(kind === "surface"
-          ? `渲染方的面 ${file}：${token} 压在 ${base} 上只有 ×${ratio.toFixed(3)}（要 ≥×${need}）`
-            + "——分层太弱（这是「面 vs 面」的口径，不是 3:1）"
-          : `渲染方 ${file} 的 ${token} 压在 ${base} 上只有 ${ratio.toFixed(2)}:1（要 ≥${need}）`
-            + "——改令牌或改它的底（这一面静态判不了真实层叠，假定底写在这条登记里）");
+        out.push(`渲染方 ${file} 的 ${token} 压在 ${base} 上只有 ${ratio.toFixed(2)}:1（要 ≥${need}）`
+          + "——改令牌或改它的底（这一面静态判不了真实层叠，假定底写在这条登记里）");
       }
     }
   }
@@ -2151,6 +2151,13 @@ test("全站推广合成红证：九条腿各自都判得红（防'永远绿'的
     (t === "--muted" ? [f, a, "--border-strong", b, k] : [f, a, t, b, k]));
   assert.ok(jsContrastRegisterProblems(jsFiles(), badColorToken)
     .some((p) => p.includes("令牌与盘上不一致")), "登记项的令牌与盘上不一致没被判出");
+  //        **比值分支**要单独自证（评审实测：上面那条命中的是"令牌与盘上不一致"，比值分支从没判红）：
+  //        喂一条"令牌存在但压不过假定底"的登记（--border-strong 当文字压 --panel = 1.77）
+  const badColorRatio = [...JS_CONTRAST_REGISTER,
+    ["ui/step-state.js", "toggleBtn.style.cssText", "--muted", "--accent", "text"]];
+  assert.ok(jsContrastRegisterProblems(jsFiles(), badColorRatio)
+    .some((p) => p.includes("只有 1.") && p.includes("要 ≥4.5")),
+    "比值不够的登记项没被判出（腿⑨ 的比值分支在空转）");
   const bogusColorKind = [...JS_CONTRAST_REGISTER, ["ui/step-state.js", "toggleBtn.style.cssText", "--muted", "--panel", "看着挺清楚"]];
   assert.ok(jsContrastRegisterProblems(jsFiles(), bogusColorKind)
     .some((p) => p.includes("类别只能是")), "未知类别没被判出");

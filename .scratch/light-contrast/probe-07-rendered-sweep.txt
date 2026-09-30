@@ -1,23 +1,23 @@
 # 读数：probe-07-rendered-sweep
 # 命令：node .scratch\light-contrast\probe-07-rendered-sweep.mjs
 # 工作树：C:\Users\luoji\Desktop\firstep
-# 开始：2026-09-30T13:55:32+08:00
+# 开始：2026-09-30T14:00:37+08:00
 # 退出码：0
 口径（从守卫源码解析）：小字 ≥ 4.5 / 大字（≥24px 或 ≥18.66px+bold）≥ 3
 
 ===== light =====
-  generate   有文字元素 1207　不达标 2
-  hwcheck    有文字元素  607　不达标 0
-  settings   有文字元素   73　不达标 0
+  generate   有文字元素   88　不达标 2
+  hwcheck    有文字元素   30　不达标 0
+  settings   有文字元素    7　不达标 0
   guide      有文字元素   62　不达标 0
-  changelog  有文字元素    2　不达标 0
+  changelog  有文字元素    0　不达标 0
   code       有文字元素   19　不达标 0
-  master     有文字元素   15　不达标 0
-  library    有文字元素   33　不达标 0
-  reference  有文字元素   44　不达标 0
-  pdf        有文字元素   15　不达标 0
-  md         有文字元素   15　不达标 0
-  topic      有文字元素    8　不达标 0
+  master     有文字元素    0　不达标 0
+  library    有文字元素    0　不达标 0
+  reference  有文字元素    0　不达标 0
+  pdf        有文字元素    0　不达标 0
+  md         有文字元素    0　不达标 0
+  topic      有文字元素    0　不达标 0
   —— light 合计不达标 **2**
      2.01/4.5  [generate] #gen-overview > .ov-summary > .ov-sep
          rgb(175, 184, 193) on rgb(255,255,255)  13px  「·」
@@ -25,18 +25,18 @@
          rgb(175, 184, 193) on rgb(255,255,255)  13px  「·」
 
 ===== dark =====
-  generate   有文字元素  718　不达标 2
-  hwcheck    有文字元素  607　不达标 0
-  settings   有文字元素   73　不达标 0
+  generate   有文字元素   88　不达标 2
+  hwcheck    有文字元素   30　不达标 0
+  settings   有文字元素    7　不达标 0
   guide      有文字元素   62　不达标 0
-  changelog  有文字元素    2　不达标 0
+  changelog  有文字元素    0　不达标 0
   code       有文字元素   19　不达标 0
-  master     有文字元素   15　不达标 0
-  library    有文字元素   33　不达标 0
-  reference  有文字元素   44　不达标 0
-  pdf        有文字元素   15　不达标 0
-  md         有文字元素   15　不达标 0
-  topic      有文字元素    8　不达标 0
+  master     有文字元素    0　不达标 0
+  library    有文字元素    0　不达标 0
+  reference  有文字元素    0　不达标 0
+  pdf        有文字元素    0　不达标 0
+  md         有文字元素    0　不达标 0
+  topic      有文字元素    0　不达标 0
   —— dark 合计不达标 **2**
      1.76/4.5  [generate] #gen-overview > .ov-summary > .ov-sep
          rgb(61, 68, 77) on rgb(22,27,34)  13px  「·」
