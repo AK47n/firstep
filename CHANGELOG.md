@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=5f3cb5a928c6c7a38cedac95430ceb446bf08d47 -->
+<!-- changelog-auto: last-commit=08f30c2a503e31f52b80c0789c52d3cdad92cf15 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -9,6 +9,7 @@
 - 13:18 浅色调色板 02：六族 -text 令牌落地 + 223 处迁移 + 渐变盲区修补（light-contrast/02）
 - 13:18 浅色调色板 03：票面交接更新（暗色那部分已随 02 落地，本单只剩 --panel-2 与非文字 3:1）
 - 13:25 浅色调色板 03：浅色淡底 ×1.065 → ×1.179 + 焦点环提到 3:1 以上（light-contrast/03）
+- 13:34 浅色调色板 04：渲染方内联取色入册 + 守卫腿⑨（light-contrast/04）
 
 ## 2026-09-29
 - 12:40 ui-density-sitewide/11：2c 彻底版（真树 + 逐层 LCS 对齐，四条自证随读数跑）
