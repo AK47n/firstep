@@ -1,0 +1,102 @@
+# 读数：probe-02-probe08-before
+# 命令：node .scratch\code-contrast\probe-08-disabled-state.mjs --tag forms-before --out .scratch/disabled-forms
+# 时间：2026-10-01T02:34:04
+# 退出码：0
+------------------------------------------------------------------------------
+认人面新那半（读自守卫）：.module-card.off  |  .pin-menu-list li.cant  |  .param-stale
+
+===== light =====
+  generate  准备：锚失效的参数表 + 真 `reviseLoad` + 切到卡内页签「参数速调」（`C:\Users\luoji\AppData\Local\Temp\df-probe08-param-stale`）→ `.param-stale`
+  generate  命中 13　拍得 12　**没量到**：无文字 1
+    登记表 .param-stale         opacity 0.65  rgb(31, 35, 40) on rgb(225, 230, 236)  「PROBE_THRESHOLD演示阈值ms当前值位置已变↺ 恢复旧值范围：0–3」  ⚠祖先渐变  → probe-08-forms-before-light-generate-panel-0-params-grid-param-grid-param.png
+    登记表 .param-stale · 文字    opacity 1  rgb(0, 97, 129) on rgba(0, 0, 0, 0)  「PROBE_THRESHOLD」  ⚠祖先渐变  → probe-08-forms-before-light-generate-panel-1-param-card-param-stale-param.png
+    登记表 .param-stale · 文字    opacity 1  rgb(31, 35, 40) on rgba(0, 0, 0, 0)  「演示阈值」  ⚠祖先渐变  → probe-08-forms-before-light-generate-panel-2-param-card-param-stale-param.png
+    登记表 .param-stale · 文字    opacity 1  rgb(85, 94, 104) on rgb(255, 255, 255)  「ms」  ⚠祖先渐变  → probe-08-forms-before-light-generate-panel-3-param-card-param-stale-param.png
+    登记表 .param-stale · 文字    opacity 1  rgb(85, 94, 104) on rgba(0, 0, 0, 0)  「当前值」  ⚠祖先渐变  → probe-08-forms-before-light-generate-panel-4-param-card-param-stale-param.png
+      ⚠ 截图失败（.param-card.param-stale > .param-card-body > #params-input-PROBE_THRESHOLD ｜ <input> ｜ 116×40）——这一格**没量到**，不写进 JSON
+    登记表 .param-stale · 文字    opacity 1  rgb(122, 81, 0) on rgba(154, 103, 0, 0.12)  「位置已变」  ⚠祖先渐变  → probe-08-forms-before-light-generate-panel-6-param-card-param-stale-param.png
+      ⚠ 截图失败（.param-card.param-stale > .param-card-foot > .btn-params-reset ｜ <button> ｜ 79×23）——这一格**没量到**，不写进 JSON
+    登记表 .param-stale · 文字    opacity 1  rgb(85, 94, 104) on rgba(0, 0, 0, 0)  「范围：0–3000」  ⚠祖先渐变  → probe-08-forms-before-light-generate-panel-8-param-card-foot-param-hint-s.png
+    disabled 属性              opacity 1  rgb(85, 94, 104) on rgb(225, 230, 236)  「选择文件夹…」  ⚠祖先渐变  → probe-08-forms-before-light-generate-panel-9-card-row-btn-pick-output-dir.png
+    disabled 属性              opacity 1  rgb(85, 94, 104) on rgb(225, 230, 236)  「800」  ⚠祖先渐变  → probe-08-forms-before-light-generate-panel-10-param-card-param-stale-param.png
+    disabled 属性              opacity 1  rgb(85, 94, 104) on rgb(225, 230, 236)  「↺ 恢复旧值」  ⚠祖先渐变  → probe-08-forms-before-light-generate-panel-11-param-card-param-stale-param.png
+      ⚠ 本轮截图失败 2 格（原因见上；它们不在 JSON 里）
+  generate  准备（浮层）：引脚菜单**能开**（试了 32 根脚，32 次开成、行数正常）但没有一条 `li.cant`——STM32 板模型在这些组合下把列出来的角色都判 `selectable`。**这一处靶子没量到**，替代依据 = 静态族面同一对色（`--muted` × `--panel-2`），见票尾
+  generate  （没有浮层）
+  hwcheck   准备：点了 STM32 + 搜 sr04 → `.module-card.off`（单平台件）
+  hwcheck   命中  9　拍得 9
+    登记表 .module-card.off     opacity 0.55  rgb(31, 35, 40) on rgb(225, 230, 236)  「sr04详情需切换平台HC-SR04 超声波测距模块：板上一对“喇叭”探头…MS」  ⚠祖先渐变  → probe-08-forms-before-light-hwcheck-panel-0-card-hwcheck-device-grid-mod.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(31, 35, 40) on rgba(0, 0, 0, 0)  「sr04」  ⚠祖先渐变  → probe-08-forms-before-light-hwcheck-panel-1-module-card-off-mc-head-slug.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(0, 97, 129) on rgb(255, 255, 255)  「详情」  ⚠祖先渐变  → probe-08-forms-before-light-hwcheck-panel-2-module-card-off-mc-head-mc-i.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(122, 81, 0) on rgba(154, 103, 0, 0.12)  「需切换平台」  ⚠祖先渐变  → probe-08-forms-before-light-hwcheck-panel-3-module-card-off-mc-head-mc-o.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(85, 94, 104) on rgba(0, 0, 0, 0)  「HC-SR04 超声波测距模块：板上一对“喇叭”探头…」  ⚠祖先渐变  → probe-08-forms-before-light-hwcheck-panel-4-hwcheck-device-grid-module-c.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(21, 103, 45) on rgba(26, 127, 55, 0.12)  「MSPM0·已验证」  ⚠祖先渐变  → probe-08-forms-before-light-hwcheck-panel-5-module-card-off-mc-meta-mc-p.png
+      ⚠ 截图失败（.module-card.off > .mc-meta > .mc-deps ｜ <span> ｜ 79×21）——这一格**没量到**，不写进 JSON
+      ⚠ 截图失败（#hwcheck-handoff > .hwcheck-handoff > button ｜ <button> ｜ 100×38）——这一格**没量到**，不写进 JSON
+    disabled 属性              opacity 1  rgb(85, 94, 104) on rgb(225, 230, 236)  「让 AI 分析」  ⚠祖先渐变  → probe-08-forms-before-light-hwcheck-panel-8-card-row-btn-hwcheck-triage.png
+      ⚠ 本轮截图失败 2 格（原因见上；它们不在 JSON 里）
+  settings  命中  0　拍得 0
+  guide     命中  0　拍得 0
+  changelog 命中  0　拍得 0
+  code      命中  4　拍得 0　**没量到**：零尺寸 4
+  master    命中  1　拍得 1
+    disabled 属性              opacity 1  rgb(85, 94, 104) on rgb(225, 230, 236)  「AI 提炼报告」  ⚠祖先渐变  → probe-08-forms-before-light-master-panel-0-card-row-btn-distill.png
+  library   命中  0　拍得 0
+  reference 命中  0　拍得 0
+  pdf       命中  0　拍得 0
+  md        命中  0　拍得 0
+  topic     命中  0　拍得 0
+
+===== dark =====
+  generate  准备：锚失效的参数表 + 真 `reviseLoad` + 切到卡内页签「参数速调」（`C:\Users\luoji\AppData\Local\Temp\df-probe08-param-stale`）→ `.param-stale`
+  generate  命中 59　拍得 22　**没量到**：无文字 1 / 超过上限（登记表） 36
+    登记表 .module-card.off     opacity 0.55  rgb(230, 237, 243) on rgb(28, 33, 40)  「huidu详情需切换平台8 路灰度传感器读取（MSPM0）：huidu_va…M」  ⚠祖先渐变  → probe-08-forms-before-dark-generate-panel-0-card-done-module-grid-module.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(230, 237, 243) on rgba(0, 0, 0, 0)  「huidu」  ⚠祖先渐变  → probe-08-forms-before-dark-generate-panel-1-module-card-off-mc-head-slug.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(0, 212, 255) on rgb(22, 27, 34)  「详情」  ⚠祖先渐变  → probe-08-forms-before-dark-generate-panel-2-module-card-off-mc-head-mc-i.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(227, 163, 65) on rgba(227, 163, 65, 0.12)  「需切换平台」  ⚠祖先渐变  → probe-08-forms-before-dark-generate-panel-3-module-card-off-mc-head-mc-o.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(145, 154, 164) on rgba(0, 0, 0, 0)  「8 路灰度传感器读取（MSPM0）：huidu_va…」  ⚠祖先渐变  → probe-08-forms-before-dark-generate-panel-4-module-grid-module-card-off-.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(67, 196, 85) on rgba(63, 185, 80, 0.15)  「MSPM0·已验证」  ⚠祖先渐变  → probe-08-forms-before-dark-generate-panel-5-module-card-off-mc-meta-mc-p.png
+    登记表 .module-card.off     opacity 0.55  rgb(230, 237, 243) on rgb(28, 33, 40)  「imu_uart详情需切换平台UART 串口陀螺仪（新 IMU 器件）MSPM0」  ⚠祖先渐变  → probe-08-forms-before-dark-generate-panel-6-card-done-module-grid-module.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(230, 237, 243) on rgba(0, 0, 0, 0)  「imu_uart」  ⚠祖先渐变  → probe-08-forms-before-dark-generate-panel-7-module-card-off-mc-head-slug.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(0, 212, 255) on rgb(22, 27, 34)  「详情」  ⚠祖先渐变  → probe-08-forms-before-dark-generate-panel-8-module-card-off-mc-head-mc-i.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(227, 163, 65) on rgba(227, 163, 65, 0.12)  「需切换平台」  ⚠祖先渐变  → probe-08-forms-before-dark-generate-panel-9-module-card-off-mc-head-mc-o.png
+    登记表 .param-stale         opacity 0.65  rgb(230, 237, 243) on rgb(28, 33, 40)  「PROBE_THRESHOLD演示阈值ms当前值位置已变↺ 恢复旧值范围：0–3」  ⚠祖先渐变  → probe-08-forms-before-dark-generate-panel-10-params-grid-param-grid-param.png
+    登记表 .param-stale · 文字    opacity 1  rgb(0, 212, 255) on rgba(0, 0, 0, 0)  「PROBE_THRESHOLD」  ⚠祖先渐变  → probe-08-forms-before-dark-generate-panel-11-param-card-param-stale-param.png
+    登记表 .param-stale · 文字    opacity 1  rgb(230, 237, 243) on rgba(0, 0, 0, 0)  「演示阈值」  ⚠祖先渐变  → probe-08-forms-before-dark-generate-panel-12-param-card-param-stale-param.png
+    登记表 .param-stale · 文字    opacity 1  rgb(145, 154, 164) on rgb(22, 27, 34)  「ms」  ⚠祖先渐变  → probe-08-forms-before-dark-generate-panel-13-param-card-param-stale-param.png
+    登记表 .param-stale · 文字    opacity 1  rgb(145, 154, 164) on rgba(0, 0, 0, 0)  「当前值」  ⚠祖先渐变  → probe-08-forms-before-dark-generate-panel-14-param-card-param-stale-param.png
+      ⚠ 截图失败（.param-card.param-stale > .param-card-body > #params-input-PROBE_THRESHOLD ｜ <input> ｜ 116×40）——这一格**没量到**，不写进 JSON
+    登记表 .param-stale · 文字    opacity 1  rgb(227, 163, 65) on rgba(227, 163, 65, 0.12)  「位置已变」  ⚠祖先渐变  → probe-08-forms-before-dark-generate-panel-16-param-card-param-stale-param.png
+      ⚠ 截图失败（.param-card.param-stale > .param-card-foot > .btn-params-reset ｜ <button> ｜ 79×23）——这一格**没量到**，不写进 JSON
+    登记表 .param-stale · 文字    opacity 1  rgb(145, 154, 164) on rgba(0, 0, 0, 0)  「范围：0–3000」  ⚠祖先渐变  → probe-08-forms-before-dark-generate-panel-18-param-card-foot-param-hint-s.png
+    disabled 属性              opacity 1  rgb(145, 154, 164) on rgb(28, 33, 40)  「选择文件夹…」  ⚠祖先渐变  → probe-08-forms-before-dark-generate-panel-19-card-row-btn-pick-output-dir.png
+    disabled 属性              opacity 1  rgb(145, 154, 164) on rgb(28, 33, 40)  「800」  ⚠祖先渐变  → probe-08-forms-before-dark-generate-panel-20-param-card-param-stale-param.png
+    disabled 属性              opacity 1  rgb(145, 154, 164) on rgb(28, 33, 40)  「↺ 恢复旧值」  ⚠祖先渐变  → probe-08-forms-before-dark-generate-panel-21-param-card-param-stale-param.png
+      ⚠ 本轮截图失败 2 格（原因见上；它们不在 JSON 里）
+  generate  准备（浮层）：引脚菜单**能开**（试了 32 根脚，32 次开成、行数正常）但没有一条 `li.cant`——STM32 板模型在这些组合下把列出来的角色都判 `selectable`。**这一处靶子没量到**，替代依据 = 静态族面同一对色（`--muted` × `--panel-2`），见票尾
+  generate  （没有浮层）
+  hwcheck   准备：点了 STM32 + 搜 sr04 → `.module-card.off`（单平台件）
+  hwcheck   命中  9　拍得 9
+    登记表 .module-card.off     opacity 0.55  rgb(230, 237, 243) on rgb(28, 33, 40)  「sr04详情需切换平台HC-SR04 超声波测距模块：板上一对“喇叭”探头…MS」  ⚠祖先渐变  → probe-08-forms-before-dark-hwcheck-panel-0-card-hwcheck-device-grid-mod.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(230, 237, 243) on rgba(0, 0, 0, 0)  「sr04」  ⚠祖先渐变  → probe-08-forms-before-dark-hwcheck-panel-1-module-card-off-mc-head-slug.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(0, 212, 255) on rgb(22, 27, 34)  「详情」  ⚠祖先渐变  → probe-08-forms-before-dark-hwcheck-panel-2-module-card-off-mc-head-mc-i.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(227, 163, 65) on rgba(227, 163, 65, 0.12)  「需切换平台」  ⚠祖先渐变  → probe-08-forms-before-dark-hwcheck-panel-3-module-card-off-mc-head-mc-o.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(145, 154, 164) on rgba(0, 0, 0, 0)  「HC-SR04 超声波测距模块：板上一对“喇叭”探头…」  ⚠祖先渐变  → probe-08-forms-before-dark-hwcheck-panel-4-hwcheck-device-grid-module-c.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(67, 196, 85) on rgba(63, 185, 80, 0.15)  「MSPM0·已验证」  ⚠祖先渐变  → probe-08-forms-before-dark-hwcheck-panel-5-module-card-off-mc-meta-mc-p.png
+      ⚠ 截图失败（.module-card.off > .mc-meta > .mc-deps ｜ <span> ｜ 79×21）——这一格**没量到**，不写进 JSON
+      ⚠ 截图失败（#hwcheck-handoff > .hwcheck-handoff > button ｜ <button> ｜ 100×38）——这一格**没量到**，不写进 JSON
+    disabled 属性              opacity 1  rgb(145, 154, 164) on rgb(28, 33, 40)  「让 AI 分析」  ⚠祖先渐变  → probe-08-forms-before-dark-hwcheck-panel-8-card-row-btn-hwcheck-triage.png
+      ⚠ 本轮截图失败 2 格（原因见上；它们不在 JSON 里）
+  settings  命中  0　拍得 0
+  guide     命中  0　拍得 0
+  changelog 命中  0　拍得 0
+  code      命中  4　拍得 0　**没量到**：零尺寸 4
+  master    命中  1　拍得 1
+    disabled 属性              opacity 1  rgb(145, 154, 164) on rgb(28, 33, 40)  「AI 提炼报告」  ⚠祖先渐变  → probe-08-forms-before-dark-master-panel-0-card-row-btn-distill.png
+  library   命中  0　拍得 0
+  reference 命中  0　拍得 0
+  pdf       命中  0　拍得 0
+  md        命中  0　拍得 0
+  topic     命中  0　拍得 0
+
+已落盘 C:\Users\luoji\Desktop\firstep\.scratch\disabled-forms\probe-08-shots-forms-before.json（46 格；准备 6 条、"没量到"账 26 条也写进了 JSON）

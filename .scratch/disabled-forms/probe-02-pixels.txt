@@ -1,0 +1,216 @@
+# 读数：probe-02-pixels
+# 命令：python .scratch\code-contrast\probe-08-disabled-state-read.py --tag forms --dir .scratch/disabled-forms
+# 时间：2026-10-01T02:34:33
+# 退出码：0
+------------------------------------------------------------------------------
+========================================================================================================
+代码配色族轮 · 禁用态读数（probe-08：真元素截图 + 读像素）
+读数目录 = .scratch\disabled-forms；文件 = probe-08-shots-forms-after.json, probe-08-shots-forms-before.json
+口径单源 = probe_lib / pixel_lib；静态参照：`--muted` 压 `--panel-2` = 浅 5.25 / 暗 5.67（族面「--muted × 禁用态底」那两格）
+========================================================================================================
+
+########################################################################################################
+# tag = forms-after（probe-08-shots-forms-after.json；47 格）
+########################################################################################################
+  准备[light/generate]：锚失效的参数表 + 真 `reviseLoad` + 切到卡内页签「参数速调」（`C:\Users\luoji\AppData\Local\Temp\df-probe08-param-stale`）→ `.param-stale`
+  准备[light/generate]：（浮层）引脚菜单**能开**（试了 32 根脚，32 次开成、行数正常）但没有一条 `li.cant`——STM32 板模型在这些组合下把列出来的角色都判 `selectable`。**这一处靶子没量到**，替代依据 = 静态族面同一对色（`--muted` × `--panel-2`），见票尾
+  准备[light/hwcheck]：点了 STM32 + 搜 sr04 → `.module-card.off`（单平台件）
+  准备[dark/generate]：锚失效的参数表 + 真 `reviseLoad` + 切到卡内页签「参数速调」（`C:\Users\luoji\AppData\Local\Temp\df-probe08-param-stale`）→ `.param-stale`
+  准备[dark/generate]：（浮层）引脚菜单**能开**（试了 32 根脚，32 次开成、行数正常）但没有一条 `li.cant`——STM32 板模型在这些组合下把列出来的角色都判 `selectable`。**这一处靶子没量到**，替代依据 = 静态族面同一对色（`--muted` × `--panel-2`），见票尾
+  准备[dark/hwcheck]：点了 STM32 + 搜 sr04 → `.module-card.off`（单平台件）
+  没量到[light/generate/panel]：无文字 1
+      · 截图失败：登记表 .param-stale · 文字 @ .param-card.param-stale > .param-card-body > #params-input-PROBE_THRESHOLD <input> 116×40
+      · 截图失败：登记表 .param-stale · 文字 @ .param-card.param-stale > .param-card-foot > .btn-params-reset <button> 79×23
+  没量到[light/generate/overlay]：页签或浮层不存在
+      · 截图失败：登记表 .module-card.off · 文字 @ .module-card.off > .mc-meta > .mc-deps <span> 79×21
+      · 截图失败：disabled 属性 @ #hwcheck-handoff > .hwcheck-handoff > button <button> 100×38
+  没量到[light/code/panel]：零尺寸 4
+  没量到[dark/generate/panel]：无文字 1 / 超过上限（登记表） 36
+      · 截图失败：登记表 .param-stale · 文字 @ .param-card.param-stale > .param-card-body > #params-input-PROBE_THRESHOLD <input> 116×40
+      · 截图失败：登记表 .param-stale · 文字 @ .param-card.param-stale > .param-card-foot > .btn-params-reset <button> 79×23
+  没量到[dark/generate/overlay]：页签或浮层不存在
+      · 截图失败：disabled 属性 @ #hwcheck-handoff > .hwcheck-handoff > button <button> 100×38
+  没量到[dark/code/panel]：零尺寸 4
+主题     页签         形态              op     实测比值底         字形             预测A   差A     预测B   差B  文字
+light  generate   登记表 .param-stale  1.0   5.25✅#e1e6ec   #555e68    #1f2328  177 #1f2328  177  「PROBE_THRESHOLD演示阈值ms当前值位置已变↺ 恢复旧值范围：0–3」  ⚠祖先渐变
+light  generate   登记表 .param-stale · 文字  1.0   5.53✅#e1e6ec   #006181    #006181    0 #006181    0  「PROBE_THRESHOLD」  ⚠祖先渐变
+light  generate   登记表 .param-stale · 文字  1.0  12.59✅#e1e6ec   #1f2328    #1f2328    0 #1f2328    0  「演示阈值」  ⚠祖先渐变
+light  generate   登记表 .param-stale · 文字  1.0   6.59✅#ffffff   #555e68    #555e68    0 #555e68    0  「ms」  ⚠祖先渐变
+light  generate   登记表 .param-stale · 文字  1.0   5.25✅#e1e6ec   #555e68    #555e68    0 #555e68    0  「当前值」  ⚠祖先渐变
+light  generate   登记表 .param-stale · 文字  1.0   4.84✅#d8d7cf   #7a5100    #7a5100    1 #7a5100    1  「位置已变」  ⚠祖先渐变
+light  generate   登记表 .param-stale · 文字  1.0   5.25✅#e1e6ec   #555e68    #555e68    0 #555e68    0  「范围：0–3000」  ⚠祖先渐变
+light  generate   disabled 属性    1.0   5.25✅#e1e6ec   #555e68    #555e68    0 #555e68    0  「选择文件夹…」  ⚠祖先渐变
+light  generate   disabled 属性    1.0   1.16❌#e1e6ec   #d0d7de    #555e68  362 #555e68  362  「800」  ⚠祖先渐变
+light  generate   disabled 属性    1.0   5.25✅#e1e6ec   #555e68    #555e68    0 #555e68    0  「↺ 恢复旧值」  ⚠祖先渐变
+light  hwcheck    登记表 .module-card.off  1.0   1.45❌#ffffff   #d0d7de    #1f2328  539 #1f2328  539  「sr04详情需切换平台HC-SR04 超声波测距模块：板上一对“喇叭”探头…MS」  ⚠祖先渐变
+light  hwcheck    登记表 .module-card.off · 文字  1.0  15.80✅#ffffff   #1f2328    #1f2328    0 #1f2328    0  「sr04」  ⚠祖先渐变
+light  hwcheck    登记表 .module-card.off · 文字  1.0   5.53✅#e1e6ec   #006181    #006181    0 #006181    0  「详情」  ⚠祖先渐变
+light  hwcheck    登记表 .module-card.off · 文字  1.0   5.99✅#f3ede0   #7a5100    #7a5100    0 #7a5100    0  「需切换平台」  ⚠祖先渐变
+light  hwcheck    登记表 .module-card.off · 文字  1.0   6.59✅#ffffff   #555e68    #555e68    0 #555e68    0  「HC-SR04 超声波测距模块：板上一对“喇叭”探头…」  ⚠祖先渐变
+light  hwcheck    登记表 .module-card.off · 文字  1.0   5.90✅#e3efe7   #15672d    #15672d    2 #15672d    2  「MSPM0·已验证」  ⚠祖先渐变
+light  hwcheck    disabled 属性    1.0   5.25✅#e1e6ec   #555e68    #555e68    0 #555e68    0  「让 AI 分析」  ⚠祖先渐变
+light  master     disabled 属性    1.0   5.25✅#e1e6ec   #555e68    #555e68    0 #555e68    0  「AI 提炼报告」  ⚠祖先渐变
+dark   generate   登记表 .module-card.off  1.0   6.06✅#161b22   #919aa4    #e6edf3  247 #e6edf3  247  「huidu详情需切换平台8 路灰度传感器读取（MSPM0）：huidu_va…M」  ⚠祖先渐变
+dark   generate   登记表 .module-card.off · 文字  1.0  14.64✅#161b22   #e6edf3    #e6edf3    0 #e6edf3    0  「huidu」  ⚠祖先渐变
+dark   generate   登记表 .module-card.off · 文字  1.0   9.14✅#1c2128   #00d4ff    #00d4ff    0 #00d4ff    0  「详情」  ⚠祖先渐变
+dark   generate   登记表 .module-card.off · 文字  1.0   6.42✅#2f2b25   #e3a341    #e3a341    1 #e3a341    1  「需切换平台」  ⚠祖先渐变
+dark   generate   登记表 .module-card.off · 文字  1.0   6.06✅#161b22   #919aa4    #919aa4    0 #919aa4    0  「8 路灰度传感器读取（MSPM0）：huidu_va…」  ⚠祖先渐变
+dark   generate   登记表 .module-card.off · 文字  1.0   6.04✅#1b3228   #43c455    #43c455    3 #43c455    3  「MSPM0·已验证」  ⚠祖先渐变
+dark   generate   登记表 .module-card.off  1.0   6.06✅#161b22   #919aa4    #e6edf3  247 #e6edf3  247  「imu_uart详情需切换平台UART 串口陀螺仪（新 IMU 器件）MSPM0」  ⚠祖先渐变
+dark   generate   登记表 .module-card.off · 文字  1.0  14.64✅#161b22   #e6edf3    #e6edf3    0 #e6edf3    0  「imu_uart」  ⚠祖先渐变
+dark   generate   登记表 .module-card.off · 文字  1.0   9.14✅#1c2128   #00d4ff    #00d4ff    0 #00d4ff    0  「详情」  ⚠祖先渐变
+dark   generate   登记表 .module-card.off · 文字  1.0   6.42✅#2f2b25   #e3a341    #e3a341    1 #e3a341    1  「需切换平台」  ⚠祖先渐变
+dark   generate   登记表 .param-stale  1.0   5.67✅#1c2128   #919aa4    #e6edf3  247 #e6edf3  247  「PROBE_THRESHOLD演示阈值ms当前值位置已变↺ 恢复旧值范围：0–3」  ⚠祖先渐变
+dark   generate   登记表 .param-stale · 文字  1.0   9.14✅#1c2128   #00d4ff    #00d4ff    0 #00d4ff    0  「PROBE_THRESHOLD」  ⚠祖先渐变
+dark   generate   登记表 .param-stale · 文字  1.0  13.70✅#1c2128   #e6edf3    #e6edf3    0 #e6edf3    0  「演示阈值」  ⚠祖先渐变
+dark   generate   登记表 .param-stale · 文字  1.0   6.06✅#161b22   #919aa4    #919aa4    0 #919aa4    0  「ms」  ⚠祖先渐变
+dark   generate   登记表 .param-stale · 文字  1.0   5.67✅#1c2128   #919aa4    #919aa4    0 #919aa4    0  「当前值」  ⚠祖先渐变
+dark   generate   登记表 .param-stale · 文字  1.0   5.91✅#34312b   #e3a341    #e3a341    0 #e3a341    0  「位置已变」  ⚠祖先渐变
+dark   generate   登记表 .param-stale · 文字  1.0   5.67✅#1c2128   #919aa4    #919aa4    0 #919aa4    0  「范围：0–3000」  ⚠祖先渐变
+dark   generate   disabled 属性    1.0   5.67✅#1c2128   #919aa4    #919aa4    0 #919aa4    0  「选择文件夹…」  ⚠祖先渐变
+dark   generate   disabled 属性    1.0   1.33❌#1c2128   #30363d    #919aa4  300 #919aa4  300  「800」  ⚠祖先渐变
+dark   generate   disabled 属性    1.0   5.67✅#1c2128   #919aa4    #919aa4    0 #919aa4    0  「↺ 恢复旧值」  ⚠祖先渐变
+dark   hwcheck    登记表 .module-card.off  1.0   1.42❌#161b22   #30363d    #e6edf3  547 #e6edf3  547  「sr04详情需切换平台HC-SR04 超声波测距模块：板上一对“喇叭”探头…MS」  ⚠祖先渐变
+dark   hwcheck    登记表 .module-card.off · 文字  1.0  14.64✅#161b22   #e6edf3    #e6edf3    0 #e6edf3    0  「sr04」  ⚠祖先渐变
+dark   hwcheck    登记表 .module-card.off · 文字  1.0   9.14✅#1c2128   #00d4ff    #00d4ff    0 #00d4ff    0  「详情」  ⚠祖先渐变
+dark   hwcheck    登记表 .module-card.off · 文字  1.0   6.42✅#2f2b25   #e3a341    #e3a341    1 #e3a341    1  「需切换平台」  ⚠祖先渐变
+dark   hwcheck    登记表 .module-card.off · 文字  1.0   6.06✅#161b22   #919aa4    #919aa4    0 #919aa4    0  「HC-SR04 超声波测距模块：板上一对“喇叭”探头…」  ⚠祖先渐变
+dark   hwcheck    登记表 .module-card.off · 文字  1.0   6.04✅#1b3228   #43c455    #43c455    3 #43c455    3  「MSPM0·已验证」  ⚠祖先渐变
+dark   hwcheck    登记表 .module-card.off · 文字  1.0   5.13✅#242930   #919aa4    #919aa4    2 #919aa4    2  「依赖：delay」  ⚠祖先渐变
+dark   hwcheck    disabled 属性    1.0   5.67✅#1c2128   #919aa4    #919aa4    0 #919aa4    0  「让 AI 分析」  ⚠祖先渐变
+dark   master     disabled 属性    1.0   5.67✅#1c2128   #919aa4    #919aa4    0 #919aa4    0  「AI 提炼报告」  ⚠祖先渐变
+  —— forms-after 最低：**1.16**（generate / 800）
+
+########################################################################################################
+# tag = forms-before（probe-08-shots-forms-before.json；46 格）
+########################################################################################################
+  准备[light/generate]：锚失效的参数表 + 真 `reviseLoad` + 切到卡内页签「参数速调」（`C:\Users\luoji\AppData\Local\Temp\df-probe08-param-stale`）→ `.param-stale`
+  准备[light/generate]：（浮层）引脚菜单**能开**（试了 32 根脚，32 次开成、行数正常）但没有一条 `li.cant`——STM32 板模型在这些组合下把列出来的角色都判 `selectable`。**这一处靶子没量到**，替代依据 = 静态族面同一对色（`--muted` × `--panel-2`），见票尾
+  准备[light/hwcheck]：点了 STM32 + 搜 sr04 → `.module-card.off`（单平台件）
+  准备[dark/generate]：锚失效的参数表 + 真 `reviseLoad` + 切到卡内页签「参数速调」（`C:\Users\luoji\AppData\Local\Temp\df-probe08-param-stale`）→ `.param-stale`
+  准备[dark/generate]：（浮层）引脚菜单**能开**（试了 32 根脚，32 次开成、行数正常）但没有一条 `li.cant`——STM32 板模型在这些组合下把列出来的角色都判 `selectable`。**这一处靶子没量到**，替代依据 = 静态族面同一对色（`--muted` × `--panel-2`），见票尾
+  准备[dark/hwcheck]：点了 STM32 + 搜 sr04 → `.module-card.off`（单平台件）
+  没量到[light/generate/panel]：无文字 1
+      · 截图失败：登记表 .param-stale · 文字 @ .param-card.param-stale > .param-card-body > #params-input-PROBE_THRESHOLD <input> 116×40
+      · 截图失败：登记表 .param-stale · 文字 @ .param-card.param-stale > .param-card-foot > .btn-params-reset <button> 79×23
+  没量到[light/generate/overlay]：页签或浮层不存在
+      · 截图失败：登记表 .module-card.off · 文字 @ .module-card.off > .mc-meta > .mc-deps <span> 79×21
+      · 截图失败：disabled 属性 @ #hwcheck-handoff > .hwcheck-handoff > button <button> 100×38
+  没量到[light/code/panel]：零尺寸 4
+  没量到[dark/generate/panel]：无文字 1 / 超过上限（登记表） 36
+      · 截图失败：登记表 .param-stale · 文字 @ .param-card.param-stale > .param-card-body > #params-input-PROBE_THRESHOLD <input> 116×40
+      · 截图失败：登记表 .param-stale · 文字 @ .param-card.param-stale > .param-card-foot > .btn-params-reset <button> 79×23
+  没量到[dark/generate/overlay]：页签或浮层不存在
+      · 截图失败：登记表 .module-card.off · 文字 @ .module-card.off > .mc-meta > .mc-deps <span> 79×21
+      · 截图失败：disabled 属性 @ #hwcheck-handoff > .hwcheck-handoff > button <button> 100×38
+  没量到[dark/code/panel]：零尺寸 4
+主题     页签         形态              op     实测比值底         字形             预测A   差A     预测B   差B  文字
+light  generate   登记表 .param-stale 0.65   2.67❌#e1e6eb   #868d95    #63676d  114 #63676d  114  「PROBE_THRESHOLD演示阈值ms当前值位置已变↺ 恢复旧值范围：0–3」  ⚠祖先渐变
+light  generate   登记表 .param-stale · 文字  1.0   2.88❌#e1e6eb   #4f8fa6    #006181  163 #006181  163  「PROBE_THRESHOLD」  ⚠祖先渐变
+light  generate   登记表 .param-stale · 文字  1.0   4.58✅#e1e6eb   #63666c    #1f2328  204 #1f2328  204  「演示阈值」  ⚠祖先渐变
+light  generate   登记表 .param-stale · 文字  1.0   3.10❌#f5f6f8   #868d95    #555e68  167 #555e68  167  「ms」  ⚠祖先渐变
+light  generate   登记表 .param-stale · 文字  1.0   2.67❌#e1e6eb   #868d95    #555e68  142 #555e68  142  「当前值」  ⚠祖先渐变
+light  generate   登记表 .param-stale · 文字  1.0   2.60❌#dbdcd9   #9e8452    #7a5100  186 #7a5100  186  「位置已变」  ⚠祖先渐变
+light  generate   登记表 .param-stale · 文字  1.0   2.67❌#e1e6eb   #868d95    #555e68  142 #555e68  142  「范围：0–3000」  ⚠祖先渐变
+light  generate   disabled 属性    1.0   5.25✅#e1e6ec   #555e68    #555e68    0 #555e68    0  「选择文件夹…」  ⚠祖先渐变
+light  generate   disabled 属性    1.0   1.10❌#e1e6eb   #d6dce2    #555e68  378 #555e68  378  「800」  ⚠祖先渐变
+light  generate   disabled 属性    1.0   2.67❌#e1e6eb   #868d95    #555e68  142 #555e68  142  「↺ 恢复旧值」  ⚠祖先渐变
+light  hwcheck    登记表 .module-card.off 0.55   1.08❌#eef1f4   #e1eae8    #848689  290 #767b80  354  「sr04详情需切换平台HC-SR04 超声波测距模块：板上一对“喇叭”探头…MS」  ⚠祖先渐变
+light  hwcheck    登记表 .module-card.off · 文字  1.0   3.22❌#eef1f4   #848689    #1f2328  329 #1f2328  329  「sr04」  ⚠祖先渐变
+light  hwcheck    登记表 .module-card.off · 文字  1.0   2.61❌#ffffff   #73a8ba    #006181  243 #006181  243  「详情」  ⚠祖先渐变
+light  hwcheck    登记表 .module-card.off · 文字  1.0   2.10❌#e9e9e5   #b69f73    #7a5100  309 #7a5100  309  「需切换平台」  ⚠祖先渐变
+light  hwcheck    登记表 .module-card.off · 文字  1.0   2.16❌#eef1f4   #a1a6ac    #555e68  248 #555e68  248  「HC-SR04 超声波测距模块：板上一对“喇叭”探头…」  ⚠祖先渐变
+light  hwcheck    登记表 .module-card.off · 文字  1.0   2.12❌#e1eae8   #7eab8b    #15672d  325 #15672d  325  「MSPM0·已验证」  ⚠祖先渐变
+light  hwcheck    disabled 属性    1.0   5.25✅#e1e6ec   #555e68    #555e68    0 #555e68    0  「让 AI 分析」  ⚠祖先渐变
+light  master     disabled 属性    1.0   5.25✅#e1e6ec   #555e68    #555e68    0 #555e68    0  「AI 提炼报告」  ⚠祖先渐变
+dark   generate   登记表 .module-card.off 0.55   2.63❌#191e25   #596069    #888f95  138 #8b9198  155  「huidu详情需切换平台8 路灰度传感器读取（MSPM0）：huidu_va…M」  ⚠祖先渐变
+dark   generate   登记表 .module-card.off · 文字  1.0   5.06✅#191e25   #888e94    #e6edf3  293 #e6edf3  293  「huidu」  ⚠祖先渐变
+dark   generate   登记表 .module-card.off · 文字  1.0   3.80❌#161a21   #0a809b    #00d4ff  196 #00d4ff  196  「详情」  ⚠祖先渐变
+dark   generate   登记表 .module-card.off · 文字  1.0   2.84❌#262626   #876532    #e3a341  199 #e3a341  199  「需切换平台」  ⚠祖先渐变
+dark   generate   登记表 .module-card.off · 文字  1.0   2.63❌#191e25   #596069    #919aa4  182 #919aa4  182  「8 路灰度传感器读取（MSPM0）：huidu_va…」  ⚠祖先渐变
+dark   generate   登记表 .module-card.off · 文字  1.0   2.71❌#1b2a28   #2e773d    #43c455  148 #43c455  148  「MSPM0·已验证」  ⚠祖先渐变
+dark   generate   登记表 .module-card.off 0.55   2.63❌#181e25   #586069    #888f95  140 #8b9198  157  「imu_uart详情需切换平台UART 串口陀螺仪（新 IMU 器件）MSPM0」  ⚠祖先渐变
+dark   generate   登记表 .module-card.off · 文字  1.0   5.06✅#181e25   #878e94    #e6edf3  295 #e6edf3  295  「imu_uart」  ⚠祖先渐变
+dark   generate   登记表 .module-card.off · 文字  1.0   3.81❌#151a21   #09809b    #00d4ff  196 #00d4ff  196  「详情」  ⚠祖先渐变
+dark   generate   登记表 .module-card.off · 文字  1.0   2.83❌#252626   #866532    #e3a341  201 #e3a341  201  「需切换平台」  ⚠祖先渐变
+dark   generate   登记表 .param-stale 0.65   3.21❌#1b2028   #676f78    #9fa6ac  165 #9fa6ac  165  「PROBE_THRESHOLD演示阈值ms当前值位置已变↺ 恢复旧值范围：0–3」  ⚠祖先渐变
+dark   generate   登记表 .param-stale · 文字  1.0   4.65✅#1b2028   #0995b4    #00d4ff  149 #00d4ff  149  「PROBE_THRESHOLD」  ⚠祖先渐变
+dark   generate   登记表 .param-stale · 文字  1.0   6.58✅#1b2028   #9fa5ac    #e6edf3  216 #e6edf3  216  「演示阈值」  ⚠祖先渐变
+dark   generate   登记表 .param-stale · 文字  1.0   3.36❌#171c24   #676f78    #919aa4  133 #919aa4  133  「ms」  ⚠祖先渐变
+dark   generate   登记表 .param-stale · 文字  1.0   3.21❌#1b2028   #676f78    #919aa4  131 #919aa4  131  「当前值」  ⚠祖先渐变
+dark   generate   登记表 .param-stale · 文字  1.0   3.44❌#2a2a2a   #9d7538    #e3a341  143 #e3a341  143  「位置已变」  ⚠祖先渐变
+dark   generate   登记表 .param-stale · 文字  1.0   3.21❌#1b2028   #676f78    #919aa4  131 #919aa4  131  「范围：0–3000」  ⚠祖先渐变
+dark   generate   disabled 属性    1.0   5.67✅#1c2128   #919aa4    #919aa4    0 #919aa4    0  「选择文件夹…」  ⚠祖先渐变
+dark   generate   disabled 属性    1.0   1.19❌#1b2028   #282e35    #919aa4  326 #919aa4  326  「800」  ⚠祖先渐变
+dark   generate   disabled 属性    1.0   3.21❌#1b2028   #676f78    #919aa4  131 #919aa4  131  「↺ 恢复旧值」  ⚠祖先渐变
+dark   hwcheck    登记表 .module-card.off 0.55   1.14❌#181e25   #232930    #888f95  305 #8b9198  322  「sr04详情需切换平台HC-SR04 超声波测距模块：板上一对“喇叭”探头…MS」  ⚠祖先渐变
+dark   hwcheck    登记表 .module-card.off · 文字  1.0   5.06✅#181e25   #878e94    #e6edf3  295 #e6edf3  295  「sr04」  ⚠祖先渐变
+dark   hwcheck    登记表 .module-card.off · 文字  1.0   3.81❌#151a21   #09809b    #00d4ff  196 #00d4ff  196  「详情」  ⚠祖先渐变
+dark   hwcheck    登记表 .module-card.off · 文字  1.0   2.83❌#252626   #866532    #e3a341  201 #e3a341  201  「需切换平台」  ⚠祖先渐变
+dark   hwcheck    登记表 .module-card.off · 文字  1.0   2.63❌#181e25   #586069    #919aa4  184 #919aa4  184  「HC-SR04 超声波测距模块：板上一对“喇叭”探头…」  ⚠祖先渐变
+dark   hwcheck    登记表 .module-card.off · 文字  1.0   2.72❌#1a2a28   #2d773d    #43c455  150 #43c455  150  「MSPM0·已验证」  ⚠祖先渐变
+dark   hwcheck    disabled 属性    1.0   5.67✅#1c2128   #919aa4    #919aa4    0 #919aa4    0  「让 AI 分析」  ⚠祖先渐变
+dark   master     disabled 属性    1.0   5.67✅#1c2128   #919aa4    #919aa4    0 #919aa4    0  「AI 提炼报告」  ⚠祖先渐变
+  —— forms-before 最低：**1.08**（hwcheck / sr04详情需切换平台HC-SR04 超声波测距模块：板上一对“喇叭”探头…MS）
+
+========================================================================================================
+## 逐格对照（forms-before → forms-after）：禁用态改前 / 改后
+
+  ('light', 'generate', 'params-grid-param-grid-param', 'PROBE_THRESHOLD演示阈值ms当前值位置已变↺ 恢复旧值范围：0–3', '0')  2.67 →   5.25   ✅ 变好（opacity 0.65 → 1.0）
+  ('light', 'generate', 'param-card-param-stale-param', 'PROBE_THRESHOLD', '1')  2.88 →   5.53   ✅ 变好（opacity 1.0 → 1.0）
+  ('light', 'generate', 'param-card-param-stale-param', '演示阈值', '2')  4.58 →  12.59   ✅ 变好（opacity 1.0 → 1.0）
+  ('light', 'generate', 'param-card-param-stale-param', 'ms', '3')  3.10 →   6.59   ✅ 变好（opacity 1.0 → 1.0）
+  ('light', 'generate', 'param-card-param-stale-param', '当前值', '4')  2.67 →   5.25   ✅ 变好（opacity 1.0 → 1.0）
+  ('light', 'generate', 'param-card-param-stale-param', '位置已变', '6')  2.60 →   4.84   ✅ 变好（opacity 1.0 → 1.0）
+  ('light', 'generate', 'param-card-foot-param-hint-s', '范围：0–3000', '8')  2.67 →   5.25   ✅ 变好（opacity 1.0 → 1.0）
+  ('light', 'generate', 'card-row-btn-pick-output-dir', '选择文件夹…', '9')  5.25 →   5.25   · 没变（本来就达标 / 没被这一单碰到）（opacity 1.0 → 1.0）
+  ('light', 'generate', 'param-card-param-stale-param', '800', '10')  1.10 →   1.16   ✅ 变好（opacity 1.0 → 1.0）
+  ('light', 'generate', 'param-card-param-stale-param', '↺ 恢复旧值', '11')  2.67 →   5.25   ✅ 变好（opacity 1.0 → 1.0）
+  ('light', 'hwcheck', 'card-hwcheck-device-grid-mod', 'sr04详情需切换平台HC-SR04 超声波测距模块：板上一对“喇叭”探头…MS', '0')  1.08 →   1.45   ✅ 变好（opacity 0.55 → 1.0）
+  ('light', 'hwcheck', 'module-card-off-mc-head-slug', 'sr04', '1')  3.22 →  15.80   ✅ 变好（opacity 1.0 → 1.0）
+  ('light', 'hwcheck', 'module-card-off-mc-head-mc-i', '详情', '2')  2.61 →   5.53   ✅ 变好（opacity 1.0 → 1.0）
+  ('light', 'hwcheck', 'module-card-off-mc-head-mc-o', '需切换平台', '3')  2.10 →   5.99   ✅ 变好（opacity 1.0 → 1.0）
+  ('light', 'hwcheck', 'hwcheck-device-grid-module-c', 'HC-SR04 超声波测距模块：板上一对“喇叭”探头…', '4')  2.16 →   6.59   ✅ 变好（opacity 1.0 → 1.0）
+  ('light', 'hwcheck', 'module-card-off-mc-meta-mc-p', 'MSPM0·已验证', '5')  2.12 →   5.90   ✅ 变好（opacity 1.0 → 1.0）
+  ('light', 'hwcheck', 'card-row-btn-hwcheck-triage', '让 AI 分析', '8')  5.25 →   5.25   · 没变（本来就达标 / 没被这一单碰到）（opacity 1.0 → 1.0）
+  ('light', 'master', 'card-row-btn-distill', 'AI 提炼报告', '0')  5.25 →   5.25   · 没变（本来就达标 / 没被这一单碰到）（opacity 1.0 → 1.0）
+  ('dark', 'generate', 'card-done-module-grid-module', 'huidu详情需切换平台8 路灰度传感器读取（MSPM0）：huidu_va…M', '0')  2.63 →   6.06   ✅ 变好（opacity 0.55 → 1.0）
+  ('dark', 'generate', 'module-card-off-mc-head-slug', 'huidu', '1')  5.06 →  14.64   ✅ 变好（opacity 1.0 → 1.0）
+  ('dark', 'generate', 'module-card-off-mc-head-mc-i', '详情', '2')  3.80 →   9.14   ✅ 变好（opacity 1.0 → 1.0）
+  ('dark', 'generate', 'module-card-off-mc-head-mc-o', '需切换平台', '3')  2.84 →   6.42   ✅ 变好（opacity 1.0 → 1.0）
+  ('dark', 'generate', 'module-grid-module-card-off-', '8 路灰度传感器读取（MSPM0）：huidu_va…', '4')  2.63 →   6.06   ✅ 变好（opacity 1.0 → 1.0）
+  ('dark', 'generate', 'module-card-off-mc-meta-mc-p', 'MSPM0·已验证', '5')  2.71 →   6.04   ✅ 变好（opacity 1.0 → 1.0）
+  ('dark', 'generate', 'card-done-module-grid-module', 'imu_uart详情需切换平台UART 串口陀螺仪（新 IMU 器件）MSPM0', '6')  2.63 →   6.06   ✅ 变好（opacity 0.55 → 1.0）
+  ('dark', 'generate', 'module-card-off-mc-head-slug', 'imu_uart', '7')  5.06 →  14.64   ✅ 变好（opacity 1.0 → 1.0）
+  ('dark', 'generate', 'module-card-off-mc-head-mc-i', '详情', '8')  3.81 →   9.14   ✅ 变好（opacity 1.0 → 1.0）
+  ('dark', 'generate', 'module-card-off-mc-head-mc-o', '需切换平台', '9')  2.83 →   6.42   ✅ 变好（opacity 1.0 → 1.0）
+  ('dark', 'generate', 'params-grid-param-grid-param', 'PROBE_THRESHOLD演示阈值ms当前值位置已变↺ 恢复旧值范围：0–3', '10')  3.21 →   5.67   ✅ 变好（opacity 0.65 → 1.0）
+  ('dark', 'generate', 'param-card-param-stale-param', 'PROBE_THRESHOLD', '11')  4.65 →   9.14   ✅ 变好（opacity 1.0 → 1.0）
+  ('dark', 'generate', 'param-card-param-stale-param', '演示阈值', '12')  6.58 →  13.70   ✅ 变好（opacity 1.0 → 1.0）
+  ('dark', 'generate', 'param-card-param-stale-param', 'ms', '13')  3.36 →   6.06   ✅ 变好（opacity 1.0 → 1.0）
+  ('dark', 'generate', 'param-card-param-stale-param', '当前值', '14')  3.21 →   5.67   ✅ 变好（opacity 1.0 → 1.0）
+  ('dark', 'generate', 'param-card-param-stale-param', '位置已变', '16')  3.44 →   5.91   ✅ 变好（opacity 1.0 → 1.0）
+  ('dark', 'generate', 'param-card-foot-param-hint-s', '范围：0–3000', '18')  3.21 →   5.67   ✅ 变好（opacity 1.0 → 1.0）
+  ('dark', 'generate', 'card-row-btn-pick-output-dir', '选择文件夹…', '19')  5.67 →   5.67   · 没变（本来就达标 / 没被这一单碰到）（opacity 1.0 → 1.0）
+  ('dark', 'generate', 'param-card-param-stale-param', '800', '20')  1.19 →   1.33   ✅ 变好（opacity 1.0 → 1.0）
+  ('dark', 'generate', 'param-card-param-stale-param', '↺ 恢复旧值', '21')  3.21 →   5.67   ✅ 变好（opacity 1.0 → 1.0）
+  ('dark', 'hwcheck', 'card-hwcheck-device-grid-mod', 'sr04详情需切换平台HC-SR04 超声波测距模块：板上一对“喇叭”探头…MS', '0')  1.14 →   1.42   ✅ 变好（opacity 0.55 → 1.0）
+  ('dark', 'hwcheck', 'module-card-off-mc-head-slug', 'sr04', '1')  5.06 →  14.64   ✅ 变好（opacity 1.0 → 1.0）
+  ('dark', 'hwcheck', 'module-card-off-mc-head-mc-i', '详情', '2')  3.81 →   9.14   ✅ 变好（opacity 1.0 → 1.0）
+  ('dark', 'hwcheck', 'module-card-off-mc-head-mc-o', '需切换平台', '3')  2.83 →   6.42   ✅ 变好（opacity 1.0 → 1.0）
+  ('dark', 'hwcheck', 'hwcheck-device-grid-module-c', 'HC-SR04 超声波测距模块：板上一对“喇叭”探头…', '4')  2.63 →   6.06   ✅ 变好（opacity 1.0 → 1.0）
+  ('dark', 'hwcheck', 'module-card-off-mc-meta-mc-p', 'MSPM0·已验证', '5')  2.72 →   6.04   ✅ 变好（opacity 1.0 → 1.0）
+  ('dark', 'hwcheck', 'card-row-btn-hwcheck-triage', '让 AI 分析', '8')  5.67 →   5.67   · 没变（本来就达标 / 没被这一单碰到）（opacity 1.0 → 1.0）
+  ('dark', 'master', 'card-row-btn-distill', 'AI 提炼报告', '0')  5.67 →   5.67   · 没变（本来就达标 / 没被这一单碰到）（opacity 1.0 → 1.0）
+
+  变好 40 / 没变 6 / **变差 0**（共 46 格）
+  —— 两边不是一一对应（键 = 主题/页签/元素/文字/序号）：只有 forms-before 有 0 格、只有 forms-after 有 1 格
+       只在 forms-after：('module-card-off-mc-meta-mc-d', '依赖：delay', '6') = 5.13
+
+========================================================================================================
+怎么读：`实测比值` = 截图里**字形核心像素 vs 主色底**的 WCAG 比值（`pixel_lib`）；
+       `预测A`（整块连底一起压到祖先底上）/ `预测B`（字往元素自己声明的底上拉平、底不动）
+       = 两套静态模型 + opacity 合成；差 = 曼哈顿距离，**几十以上说明那套模型不适用**，
+       看实测、别看预测（`opacity` 写在祖先上时子元素的 opacity 是 1，两套预测都会偏乐观）。
+       `底占` 低说明取样盒里颜色不单一，那一格只当参考。
+========================================================================================================

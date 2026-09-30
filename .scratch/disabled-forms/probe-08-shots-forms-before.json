@@ -1,0 +1,2030 @@
+{
+  "tag": "forms-before",
+  "forms": [
+    {
+      "scope": "modules",
+      "sel": ".module-card.off",
+      "kind": "disabled"
+    },
+    {
+      "scope": "pins",
+      "sel": ".pin-menu-list li.cant",
+      "kind": "disabled"
+    },
+    {
+      "scope": "params",
+      "sel": ".param-stale",
+      "kind": "disabled"
+    }
+  ],
+  "prepares": [
+    {
+      "theme": "light",
+      "tab": "generate",
+      "note": "锚失效的参数表 + 真 `reviseLoad` + 切到卡内页签「参数速调」（`C:\\Users\\luoji\\AppData\\Local\\Temp\\df-probe08-param-stale`）→ `.param-stale`"
+    },
+    {
+      "theme": "light",
+      "tab": "generate",
+      "note": "（浮层）引脚菜单**能开**（试了 32 根脚，32 次开成、行数正常）但没有一条 `li.cant`——STM32 板模型在这些组合下把列出来的角色都判 `selectable`。**这一处靶子没量到**，替代依据 = 静态族面同一对色（`--muted` × `--panel-2`），见票尾"
+    },
+    {
+      "theme": "light",
+      "tab": "hwcheck",
+      "note": "点了 STM32 + 搜 sr04 → `.module-card.off`（单平台件）"
+    },
+    {
+      "theme": "dark",
+      "tab": "generate",
+      "note": "锚失效的参数表 + 真 `reviseLoad` + 切到卡内页签「参数速调」（`C:\\Users\\luoji\\AppData\\Local\\Temp\\df-probe08-param-stale`）→ `.param-stale`"
+    },
+    {
+      "theme": "dark",
+      "tab": "generate",
+      "note": "（浮层）引脚菜单**能开**（试了 32 根脚，32 次开成、行数正常）但没有一条 `li.cant`——STM32 板模型在这些组合下把列出来的角色都判 `selectable`。**这一处靶子没量到**，替代依据 = 静态族面同一对色（`--muted` × `--panel-2`），见票尾"
+    },
+    {
+      "theme": "dark",
+      "tab": "hwcheck",
+      "note": "点了 STM32 + 搜 sr04 → `.module-card.off`（单平台件）"
+    }
+  ],
+  "notes": [
+    {
+      "theme": "light",
+      "tab": "generate",
+      "scope": "panel",
+      "hit": 13,
+      "shot": 12,
+      "skipped": {
+        "不可见": 0,
+        "零尺寸": 0,
+        "无文字": 1,
+        "超过上限（登记表）": 0,
+        "超过上限（老那半）": 0
+      },
+      "skippedDetail": [],
+      "failedShots": [
+        {
+          "sel": ".param-card.param-stale > .param-card-body > #params-input-PROBE_THRESHOLD",
+          "tag": "input",
+          "how": "登记表 .param-stale · 文字",
+          "box": "116×40",
+          "text": "800"
+        },
+        {
+          "sel": ".param-card.param-stale > .param-card-foot > .btn-params-reset",
+          "tag": "button",
+          "how": "登记表 .param-stale · 文字",
+          "box": "79×23",
+          "text": "↺ 恢复旧值"
+        }
+      ]
+    },
+    {
+      "theme": "light",
+      "tab": "generate",
+      "scope": "overlay",
+      "missing": true
+    },
+    {
+      "theme": "light",
+      "tab": "hwcheck",
+      "scope": "panel",
+      "hit": 9,
+      "shot": 9,
+      "skipped": {
+        "不可见": 0,
+        "零尺寸": 0,
+        "无文字": 0,
+        "超过上限（登记表）": 0,
+        "超过上限（老那半）": 0
+      },
+      "skippedDetail": [],
+      "failedShots": [
+        {
+          "sel": ".module-card.off > .mc-meta > .mc-deps",
+          "tag": "span",
+          "how": "登记表 .module-card.off · 文字",
+          "box": "79×21",
+          "text": "依赖：delay"
+        },
+        {
+          "sel": "#hwcheck-handoff > .hwcheck-handoff > button",
+          "tag": "button",
+          "how": "disabled 属性",
+          "box": "100×38",
+          "text": "带进生成页"
+        }
+      ]
+    },
+    {
+      "theme": "light",
+      "tab": "settings",
+      "scope": "panel",
+      "hit": 0,
+      "shot": 0,
+      "skipped": {
+        "不可见": 0,
+        "零尺寸": 0,
+        "无文字": 0,
+        "超过上限（登记表）": 0,
+        "超过上限（老那半）": 0
+      },
+      "skippedDetail": [],
+      "failedShots": []
+    },
+    {
+      "theme": "light",
+      "tab": "guide",
+      "scope": "panel",
+      "hit": 0,
+      "shot": 0,
+      "skipped": {
+        "不可见": 0,
+        "零尺寸": 0,
+        "无文字": 0,
+        "超过上限（登记表）": 0,
+        "超过上限（老那半）": 0
+      },
+      "skippedDetail": [],
+      "failedShots": []
+    },
+    {
+      "theme": "light",
+      "tab": "changelog",
+      "scope": "panel",
+      "hit": 0,
+      "shot": 0,
+      "skipped": {
+        "不可见": 0,
+        "零尺寸": 0,
+        "无文字": 0,
+        "超过上限（登记表）": 0,
+        "超过上限（老那半）": 0
+      },
+      "skippedDetail": [],
+      "failedShots": []
+    },
+    {
+      "theme": "light",
+      "tab": "code",
+      "scope": "panel",
+      "hit": 4,
+      "shot": 0,
+      "skipped": {
+        "不可见": 0,
+        "零尺寸": 4,
+        "无文字": 0,
+        "超过上限（登记表）": 0,
+        "超过上限（老那半）": 0
+      },
+      "skippedDetail": [],
+      "failedShots": []
+    },
+    {
+      "theme": "light",
+      "tab": "master",
+      "scope": "panel",
+      "hit": 1,
+      "shot": 1,
+      "skipped": {
+        "不可见": 0,
+        "零尺寸": 0,
+        "无文字": 0,
+        "超过上限（登记表）": 0,
+        "超过上限（老那半）": 0
+      },
+      "skippedDetail": [],
+      "failedShots": []
+    },
+    {
+      "theme": "light",
+      "tab": "library",
+      "scope": "panel",
+      "hit": 0,
+      "shot": 0,
+      "skipped": {
+        "不可见": 0,
+        "零尺寸": 0,
+        "无文字": 0,
+        "超过上限（登记表）": 0,
+        "超过上限（老那半）": 0
+      },
+      "skippedDetail": [],
+      "failedShots": []
+    },
+    {
+      "theme": "light",
+      "tab": "reference",
+      "scope": "panel",
+      "hit": 0,
+      "shot": 0,
+      "skipped": {
+        "不可见": 0,
+        "零尺寸": 0,
+        "无文字": 0,
+        "超过上限（登记表）": 0,
+        "超过上限（老那半）": 0
+      },
+      "skippedDetail": [],
+      "failedShots": []
+    },
+    {
+      "theme": "light",
+      "tab": "pdf",
+      "scope": "panel",
+      "hit": 0,
+      "shot": 0,
+      "skipped": {
+        "不可见": 0,
+        "零尺寸": 0,
+        "无文字": 0,
+        "超过上限（登记表）": 0,
+        "超过上限（老那半）": 0
+      },
+      "skippedDetail": [],
+      "failedShots": []
+    },
+    {
+      "theme": "light",
+      "tab": "md",
+      "scope": "panel",
+      "hit": 0,
+      "shot": 0,
+      "skipped": {
+        "不可见": 0,
+        "零尺寸": 0,
+        "无文字": 0,
+        "超过上限（登记表）": 0,
+        "超过上限（老那半）": 0
+      },
+      "skippedDetail": [],
+      "failedShots": []
+    },
+    {
+      "theme": "light",
+      "tab": "topic",
+      "scope": "panel",
+      "hit": 0,
+      "shot": 0,
+      "skipped": {
+        "不可见": 0,
+        "零尺寸": 0,
+        "无文字": 0,
+        "超过上限（登记表）": 0,
+        "超过上限（老那半）": 0
+      },
+      "skippedDetail": [],
+      "failedShots": []
+    },
+    {
+      "theme": "dark",
+      "tab": "generate",
+      "scope": "panel",
+      "hit": 59,
+      "shot": 22,
+      "skipped": {
+        "不可见": 0,
+        "零尺寸": 0,
+        "无文字": 1,
+        "超过上限（登记表）": 36,
+        "超过上限（老那半）": 0
+      },
+      "skippedDetail": [],
+      "failedShots": [
+        {
+          "sel": ".param-card.param-stale > .param-card-body > #params-input-PROBE_THRESHOLD",
+          "tag": "input",
+          "how": "登记表 .param-stale · 文字",
+          "box": "116×40",
+          "text": "800"
+        },
+        {
+          "sel": ".param-card.param-stale > .param-card-foot > .btn-params-reset",
+          "tag": "button",
+          "how": "登记表 .param-stale · 文字",
+          "box": "79×23",
+          "text": "↺ 恢复旧值"
+        }
+      ]
+    },
+    {
+      "theme": "dark",
+      "tab": "generate",
+      "scope": "overlay",
+      "missing": true
+    },
+    {
+      "theme": "dark",
+      "tab": "hwcheck",
+      "scope": "panel",
+      "hit": 9,
+      "shot": 9,
+      "skipped": {
+        "不可见": 0,
+        "零尺寸": 0,
+        "无文字": 0,
+        "超过上限（登记表）": 0,
+        "超过上限（老那半）": 0
+      },
+      "skippedDetail": [],
+      "failedShots": [
+        {
+          "sel": ".module-card.off > .mc-meta > .mc-deps",
+          "tag": "span",
+          "how": "登记表 .module-card.off · 文字",
+          "box": "79×21",
+          "text": "依赖：delay"
+        },
+        {
+          "sel": "#hwcheck-handoff > .hwcheck-handoff > button",
+          "tag": "button",
+          "how": "disabled 属性",
+          "box": "100×38",
+          "text": "带进生成页"
+        }
+      ]
+    },
+    {
+      "theme": "dark",
+      "tab": "settings",
+      "scope": "panel",
+      "hit": 0,
+      "shot": 0,
+      "skipped": {
+        "不可见": 0,
+        "零尺寸": 0,
+        "无文字": 0,
+        "超过上限（登记表）": 0,
+        "超过上限（老那半）": 0
+      },
+      "skippedDetail": [],
+      "failedShots": []
+    },
+    {
+      "theme": "dark",
+      "tab": "guide",
+      "scope": "panel",
+      "hit": 0,
+      "shot": 0,
+      "skipped": {
+        "不可见": 0,
+        "零尺寸": 0,
+        "无文字": 0,
+        "超过上限（登记表）": 0,
+        "超过上限（老那半）": 0
+      },
+      "skippedDetail": [],
+      "failedShots": []
+    },
+    {
+      "theme": "dark",
+      "tab": "changelog",
+      "scope": "panel",
+      "hit": 0,
+      "shot": 0,
+      "skipped": {
+        "不可见": 0,
+        "零尺寸": 0,
+        "无文字": 0,
+        "超过上限（登记表）": 0,
+        "超过上限（老那半）": 0
+      },
+      "skippedDetail": [],
+      "failedShots": []
+    },
+    {
+      "theme": "dark",
+      "tab": "code",
+      "scope": "panel",
+      "hit": 4,
+      "shot": 0,
+      "skipped": {
+        "不可见": 0,
+        "零尺寸": 4,
+        "无文字": 0,
+        "超过上限（登记表）": 0,
+        "超过上限（老那半）": 0
+      },
+      "skippedDetail": [],
+      "failedShots": []
+    },
+    {
+      "theme": "dark",
+      "tab": "master",
+      "scope": "panel",
+      "hit": 1,
+      "shot": 1,
+      "skipped": {
+        "不可见": 0,
+        "零尺寸": 0,
+        "无文字": 0,
+        "超过上限（登记表）": 0,
+        "超过上限（老那半）": 0
+      },
+      "skippedDetail": [],
+      "failedShots": []
+    },
+    {
+      "theme": "dark",
+      "tab": "library",
+      "scope": "panel",
+      "hit": 0,
+      "shot": 0,
+      "skipped": {
+        "不可见": 0,
+        "零尺寸": 0,
+        "无文字": 0,
+        "超过上限（登记表）": 0,
+        "超过上限（老那半）": 0
+      },
+      "skippedDetail": [],
+      "failedShots": []
+    },
+    {
+      "theme": "dark",
+      "tab": "reference",
+      "scope": "panel",
+      "hit": 0,
+      "shot": 0,
+      "skipped": {
+        "不可见": 0,
+        "零尺寸": 0,
+        "无文字": 0,
+        "超过上限（登记表）": 0,
+        "超过上限（老那半）": 0
+      },
+      "skippedDetail": [],
+      "failedShots": []
+    },
+    {
+      "theme": "dark",
+      "tab": "pdf",
+      "scope": "panel",
+      "hit": 0,
+      "shot": 0,
+      "skipped": {
+        "不可见": 0,
+        "零尺寸": 0,
+        "无文字": 0,
+        "超过上限（登记表）": 0,
+        "超过上限（老那半）": 0
+      },
+      "skippedDetail": [],
+      "failedShots": []
+    },
+    {
+      "theme": "dark",
+      "tab": "md",
+      "scope": "panel",
+      "hit": 0,
+      "shot": 0,
+      "skipped": {
+        "不可见": 0,
+        "零尺寸": 0,
+        "无文字": 0,
+        "超过上限（登记表）": 0,
+        "超过上限（老那半）": 0
+      },
+      "skippedDetail": [],
+      "failedShots": []
+    },
+    {
+      "theme": "dark",
+      "tab": "topic",
+      "scope": "panel",
+      "hit": 0,
+      "shot": 0,
+      "skipped": {
+        "不可见": 0,
+        "零尺寸": 0,
+        "无文字": 0,
+        "超过上限（登记表）": 0,
+        "超过上限（老那半）": 0
+      },
+      "skippedDetail": [],
+      "failedShots": []
+    }
+  ],
+  "shots": [
+    {
+      "theme": "light",
+      "scope": "panel",
+      "key": "0",
+      "tab": "generate",
+      "idx": 0,
+      "sel": "#params-grid > .param-grid > .param-card.param-stale",
+      "slug": "params-grid-param-grid-param",
+      "form": ".param-stale",
+      "text": "PROBE_THRESHOLD演示阈值ms当前值位置已变↺ 恢复旧值范围：0–3",
+      "tag": "div",
+      "how": "登记表 .param-stale",
+      "subtree": true,
+      "color": "rgb(31, 35, 40)",
+      "background": "rgb(225, 230, 236)",
+      "border": "rgb(31, 35, 40)",
+      "opacity": 0.65,
+      "fontSize": "14px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        225,
+        230,
+        236
+      ],
+      "box": {
+        "x": 342,
+        "y": 8203,
+        "width": 255,
+        "height": 114
+      },
+      "file": "probe-08-forms-before-light-generate-panel-0-params-grid-param-grid-param.png"
+    },
+    {
+      "theme": "light",
+      "scope": "panel",
+      "key": "1",
+      "tab": "generate",
+      "idx": 1,
+      "sel": ".param-card.param-stale > .param-card-head > .slug",
+      "slug": "param-card-param-stale-param",
+      "form": ".param-stale",
+      "text": "PROBE_THRESHOLD",
+      "tag": "span",
+      "how": "登记表 .param-stale · 文字",
+      "subtree": false,
+      "color": "rgb(0, 97, 129)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(0, 97, 129)",
+      "opacity": 1,
+      "fontSize": "12px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        225,
+        230,
+        236
+      ],
+      "box": {
+        "x": 352,
+        "y": 8214,
+        "width": 108,
+        "height": 19
+      },
+      "file": "probe-08-forms-before-light-generate-panel-1-param-card-param-stale-param.png"
+    },
+    {
+      "theme": "light",
+      "scope": "panel",
+      "key": "2",
+      "tab": "generate",
+      "idx": 2,
+      "sel": ".param-card.param-stale > .param-card-head > .param-label",
+      "slug": "param-card-param-stale-param",
+      "form": ".param-stale",
+      "text": "演示阈值",
+      "tag": "span",
+      "how": "登记表 .param-stale · 文字",
+      "subtree": false,
+      "color": "rgb(31, 35, 40)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(31, 35, 40)",
+      "opacity": 1,
+      "fontSize": "14px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        225,
+        230,
+        236
+      ],
+      "box": {
+        "x": 466,
+        "y": 8211,
+        "width": 82,
+        "height": 22
+      },
+      "file": "probe-08-forms-before-light-generate-panel-2-param-card-param-stale-param.png"
+    },
+    {
+      "theme": "light",
+      "scope": "panel",
+      "key": "3",
+      "tab": "generate",
+      "idx": 3,
+      "sel": ".param-card.param-stale > .param-card-head > .param-unit-chip",
+      "slug": "param-card-param-stale-param",
+      "form": ".param-stale",
+      "text": "ms",
+      "tag": "span",
+      "how": "登记表 .param-stale · 文字",
+      "subtree": false,
+      "color": "rgb(85, 94, 104)",
+      "background": "rgb(255, 255, 255)",
+      "border": "rgb(208, 215, 222)",
+      "opacity": 1,
+      "fontSize": "12px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        225,
+        230,
+        236
+      ],
+      "box": {
+        "x": 554,
+        "y": 8212,
+        "width": 33,
+        "height": 21
+      },
+      "file": "probe-08-forms-before-light-generate-panel-3-param-card-param-stale-param.png"
+    },
+    {
+      "theme": "light",
+      "scope": "panel",
+      "key": "4",
+      "tab": "generate",
+      "idx": 4,
+      "sel": ".param-card.param-stale > .param-card-body > .param-current-label",
+      "slug": "param-card-param-stale-param",
+      "form": ".param-stale",
+      "text": "当前值",
+      "tag": "label",
+      "how": "登记表 .param-stale · 文字",
+      "subtree": false,
+      "color": "rgb(85, 94, 104)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(85, 94, 104)",
+      "opacity": 1,
+      "fontSize": "12px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        225,
+        230,
+        236
+      ],
+      "box": {
+        "x": 352,
+        "y": 8253,
+        "width": 37,
+        "height": 19
+      },
+      "file": "probe-08-forms-before-light-generate-panel-4-param-card-param-stale-param.png"
+    },
+    {
+      "theme": "light",
+      "scope": "panel",
+      "key": "6",
+      "tab": "generate",
+      "idx": 6,
+      "sel": ".param-card.param-stale > .param-card-body > .badge.param-stale-badge",
+      "slug": "param-card-param-stale-param",
+      "form": ".param-stale",
+      "text": "位置已变",
+      "tag": "span",
+      "how": "登记表 .param-stale · 文字",
+      "subtree": false,
+      "color": "rgb(122, 81, 0)",
+      "background": "rgba(154, 103, 0, 0.12)",
+      "border": "rgb(122, 81, 0)",
+      "opacity": 1,
+      "fontSize": "12px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        225,
+        230,
+        236
+      ],
+      "box": {
+        "x": 523,
+        "y": 8239,
+        "width": 64,
+        "height": 40
+      },
+      "file": "probe-08-forms-before-light-generate-panel-6-param-card-param-stale-param.png"
+    },
+    {
+      "theme": "light",
+      "scope": "panel",
+      "key": "8",
+      "tab": "generate",
+      "idx": 8,
+      "sel": ".param-card-foot > .param-hint > span",
+      "slug": "param-card-foot-param-hint-s",
+      "form": ".param-stale",
+      "text": "范围：0–3000",
+      "tag": "span",
+      "how": "登记表 .param-stale · 文字",
+      "subtree": false,
+      "color": "rgb(85, 94, 104)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(85, 94, 104)",
+      "opacity": 1,
+      "fontSize": "13px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        225,
+        230,
+        236
+      ],
+      "box": {
+        "x": 439,
+        "y": 8287,
+        "width": 84,
+        "height": 21
+      },
+      "file": "probe-08-forms-before-light-generate-panel-8-param-card-foot-param-hint-s.png"
+    },
+    {
+      "theme": "light",
+      "scope": "panel",
+      "key": "9",
+      "tab": "generate",
+      "idx": 0,
+      "sel": ".card > .row > #btn-pick-output-dir",
+      "slug": "card-row-btn-pick-output-dir",
+      "form": "",
+      "text": "选择文件夹…",
+      "tag": "button",
+      "how": "disabled 属性",
+      "subtree": false,
+      "color": "rgb(85, 94, 104)",
+      "background": "rgb(225, 230, 236)",
+      "border": "rgb(208, 215, 222)",
+      "opacity": 1,
+      "fontSize": "14px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        255,
+        255,
+        255
+      ],
+      "box": {
+        "x": 1290,
+        "y": 7027,
+        "width": 111,
+        "height": 38
+      },
+      "file": "probe-08-forms-before-light-generate-panel-9-card-row-btn-pick-output-dir.png"
+    },
+    {
+      "theme": "light",
+      "scope": "panel",
+      "key": "10",
+      "tab": "generate",
+      "idx": 1,
+      "sel": ".param-card.param-stale > .param-card-body > #params-input-PROBE_THRESHOLD",
+      "slug": "param-card-param-stale-param",
+      "form": "",
+      "text": "800",
+      "tag": "input",
+      "how": "disabled 属性",
+      "subtree": false,
+      "color": "rgb(85, 94, 104)",
+      "background": "rgb(225, 230, 236)",
+      "border": "rgb(208, 215, 222)",
+      "opacity": 1,
+      "fontSize": "14px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        225,
+        230,
+        236
+      ],
+      "box": {
+        "x": 395,
+        "y": 8239,
+        "width": 116,
+        "height": 40
+      },
+      "file": "probe-08-forms-before-light-generate-panel-10-param-card-param-stale-param.png"
+    },
+    {
+      "theme": "light",
+      "scope": "panel",
+      "key": "11",
+      "tab": "generate",
+      "idx": 2,
+      "sel": ".param-card.param-stale > .param-card-foot > .btn-params-reset",
+      "slug": "param-card-param-stale-param",
+      "form": "",
+      "text": "↺ 恢复旧值",
+      "tag": "button",
+      "how": "disabled 属性",
+      "subtree": false,
+      "color": "rgb(85, 94, 104)",
+      "background": "rgb(225, 230, 236)",
+      "border": "rgb(208, 215, 222)",
+      "opacity": 1,
+      "fontSize": "12px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        225,
+        230,
+        236
+      ],
+      "box": {
+        "x": 352,
+        "y": 8286,
+        "width": 79,
+        "height": 23
+      },
+      "file": "probe-08-forms-before-light-generate-panel-11-param-card-param-stale-param.png"
+    },
+    {
+      "theme": "light",
+      "scope": "panel",
+      "key": "0",
+      "tab": "hwcheck",
+      "idx": 0,
+      "sel": ".card > #hwcheck-device-grid > .module-card.off",
+      "slug": "card-hwcheck-device-grid-mod",
+      "form": ".module-card.off",
+      "text": "sr04详情需切换平台HC-SR04 超声波测距模块：板上一对“喇叭”探头…MS",
+      "tag": "div",
+      "how": "登记表 .module-card.off",
+      "subtree": true,
+      "color": "rgb(31, 35, 40)",
+      "background": "rgb(225, 230, 236)",
+      "border": "rgb(208, 215, 222)",
+      "opacity": 0.55,
+      "fontSize": "14px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        255,
+        255,
+        255
+      ],
+      "box": {
+        "x": 135,
+        "y": 1135,
+        "width": 1230,
+        "height": 118
+      },
+      "file": "probe-08-forms-before-light-hwcheck-panel-0-card-hwcheck-device-grid-mod.png"
+    },
+    {
+      "theme": "light",
+      "scope": "panel",
+      "key": "1",
+      "tab": "hwcheck",
+      "idx": 1,
+      "sel": ".module-card.off > .mc-head > .slug",
+      "slug": "module-card-off-mc-head-slug",
+      "form": ".module-card.off",
+      "text": "sr04",
+      "tag": "span",
+      "how": "登记表 .module-card.off · 文字",
+      "subtree": false,
+      "color": "rgb(31, 35, 40)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(31, 35, 40)",
+      "opacity": 1,
+      "fontSize": "13px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        225,
+        230,
+        236
+      ],
+      "box": {
+        "x": 148,
+        "y": 1147,
+        "width": 31,
+        "height": 21
+      },
+      "file": "probe-08-forms-before-light-hwcheck-panel-1-module-card-off-mc-head-slug.png"
+    },
+    {
+      "theme": "light",
+      "scope": "panel",
+      "key": "2",
+      "tab": "hwcheck",
+      "idx": 2,
+      "sel": ".module-card.off > .mc-head > .mc-info",
+      "slug": "module-card-off-mc-head-mc-i",
+      "form": ".module-card.off",
+      "text": "详情",
+      "tag": "button",
+      "how": "登记表 .module-card.off · 文字",
+      "subtree": false,
+      "color": "rgb(0, 97, 129)",
+      "background": "rgb(255, 255, 255)",
+      "border": "rgb(208, 215, 222)",
+      "opacity": 1,
+      "fontSize": "12px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        225,
+        230,
+        236
+      ],
+      "box": {
+        "x": 1232,
+        "y": 1146,
+        "width": 40,
+        "height": 23
+      },
+      "file": "probe-08-forms-before-light-hwcheck-panel-2-module-card-off-mc-head-mc-i.png"
+    },
+    {
+      "theme": "light",
+      "scope": "panel",
+      "key": "3",
+      "tab": "hwcheck",
+      "idx": 3,
+      "sel": ".module-card.off > .mc-head > .mc-offtag",
+      "slug": "module-card-off-mc-head-mc-o",
+      "form": ".module-card.off",
+      "text": "需切换平台",
+      "tag": "span",
+      "how": "登记表 .module-card.off · 文字",
+      "subtree": false,
+      "color": "rgb(122, 81, 0)",
+      "background": "rgba(154, 103, 0, 0.12)",
+      "border": "rgba(154, 103, 0, 0.35)",
+      "opacity": 1,
+      "fontSize": "12px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        225,
+        230,
+        236
+      ],
+      "box": {
+        "x": 1278,
+        "y": 1146,
+        "width": 74,
+        "height": 23
+      },
+      "file": "probe-08-forms-before-light-hwcheck-panel-3-module-card-off-mc-head-mc-o.png"
+    },
+    {
+      "theme": "light",
+      "scope": "panel",
+      "key": "4",
+      "tab": "hwcheck",
+      "idx": 4,
+      "sel": "#hwcheck-device-grid > .module-card.off > .mc-desc",
+      "slug": "hwcheck-device-grid-module-c",
+      "form": ".module-card.off",
+      "text": "HC-SR04 超声波测距模块：板上一对“喇叭”探头…",
+      "tag": "div",
+      "how": "登记表 .module-card.off · 文字",
+      "subtree": false,
+      "color": "rgb(85, 94, 104)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(85, 94, 104)",
+      "opacity": 1,
+      "fontSize": "13px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        225,
+        230,
+        236
+      ],
+      "box": {
+        "x": 148,
+        "y": 1177,
+        "width": 1204,
+        "height": 36
+      },
+      "file": "probe-08-forms-before-light-hwcheck-panel-4-hwcheck-device-grid-module-c.png"
+    },
+    {
+      "theme": "light",
+      "scope": "panel",
+      "key": "5",
+      "tab": "hwcheck",
+      "idx": 5,
+      "sel": ".module-card.off > .mc-meta > .mc-plat.ok",
+      "slug": "module-card-off-mc-meta-mc-p",
+      "form": ".module-card.off",
+      "text": "MSPM0·已验证",
+      "tag": "span",
+      "how": "登记表 .module-card.off · 文字",
+      "subtree": false,
+      "color": "rgb(21, 103, 45)",
+      "background": "rgba(26, 127, 55, 0.12)",
+      "border": "rgb(21, 103, 45)",
+      "opacity": 1,
+      "fontSize": "12px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        225,
+        230,
+        236
+      ],
+      "box": {
+        "x": 148,
+        "y": 1221,
+        "width": 96,
+        "height": 21
+      },
+      "file": "probe-08-forms-before-light-hwcheck-panel-5-module-card-off-mc-meta-mc-p.png"
+    },
+    {
+      "theme": "light",
+      "scope": "panel",
+      "key": "8",
+      "tab": "hwcheck",
+      "idx": 1,
+      "sel": ".card > .row > #btn-hwcheck-triage",
+      "slug": "card-row-btn-hwcheck-triage",
+      "form": "",
+      "text": "让 AI 分析",
+      "tag": "button",
+      "how": "disabled 属性",
+      "subtree": false,
+      "color": "rgb(85, 94, 104)",
+      "background": "rgb(225, 230, 236)",
+      "border": "rgb(208, 215, 222)",
+      "opacity": 1,
+      "fontSize": "14px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        255,
+        255,
+        255
+      ],
+      "box": {
+        "x": 135,
+        "y": 3003,
+        "width": 94,
+        "height": 38
+      },
+      "file": "probe-08-forms-before-light-hwcheck-panel-8-card-row-btn-hwcheck-triage.png"
+    },
+    {
+      "theme": "light",
+      "scope": "panel",
+      "key": "0",
+      "tab": "master",
+      "idx": 0,
+      "sel": ".card > .row > #btn-distill",
+      "slug": "card-row-btn-distill",
+      "form": "",
+      "text": "AI 提炼报告",
+      "tag": "button",
+      "how": "disabled 属性",
+      "subtree": false,
+      "color": "rgb(85, 94, 104)",
+      "background": "rgb(225, 230, 236)",
+      "border": "rgb(208, 215, 222)",
+      "opacity": 1,
+      "fontSize": "14px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        255,
+        255,
+        255
+      ],
+      "box": {
+        "x": 229,
+        "y": 329,
+        "width": 125,
+        "height": 38
+      },
+      "file": "probe-08-forms-before-light-master-panel-0-card-row-btn-distill.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "0",
+      "tab": "generate",
+      "idx": 0,
+      "sel": ".card.done > #module-grid > .module-card.off",
+      "slug": "card-done-module-grid-module",
+      "form": ".module-card.off",
+      "text": "huidu详情需切换平台8 路灰度传感器读取（MSPM0）：huidu_va…M",
+      "tag": "div",
+      "how": "登记表 .module-card.off",
+      "subtree": true,
+      "color": "rgb(230, 237, 243)",
+      "background": "rgb(28, 33, 40)",
+      "border": "rgb(48, 54, 61)",
+      "opacity": 0.55,
+      "fontSize": "14px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        22,
+        27,
+        34
+      ],
+      "box": {
+        "x": 1194,
+        "y": 3170,
+        "width": 207,
+        "height": 176
+      },
+      "file": "probe-08-forms-before-dark-generate-panel-0-card-done-module-grid-module.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "1",
+      "tab": "generate",
+      "idx": 1,
+      "sel": ".module-card.off > .mc-head > .slug",
+      "slug": "module-card-off-mc-head-slug",
+      "form": ".module-card.off",
+      "text": "huidu",
+      "tag": "span",
+      "how": "登记表 .module-card.off · 文字",
+      "subtree": false,
+      "color": "rgb(230, 237, 243)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(230, 237, 243)",
+      "opacity": 1,
+      "fontSize": "13px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        28,
+        33,
+        40
+      ],
+      "box": {
+        "x": 1207,
+        "y": 3182,
+        "width": 39,
+        "height": 21
+      },
+      "file": "probe-08-forms-before-dark-generate-panel-1-module-card-off-mc-head-slug.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "2",
+      "tab": "generate",
+      "idx": 2,
+      "sel": ".module-card.off > .mc-head > .mc-info",
+      "slug": "module-card-off-mc-head-mc-i",
+      "form": ".module-card.off",
+      "text": "详情",
+      "tag": "button",
+      "how": "登记表 .module-card.off · 文字",
+      "subtree": false,
+      "color": "rgb(0, 212, 255)",
+      "background": "rgb(22, 27, 34)",
+      "border": "rgb(48, 54, 61)",
+      "opacity": 1,
+      "fontSize": "12px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        28,
+        33,
+        40
+      ],
+      "box": {
+        "x": 1268,
+        "y": 3181,
+        "width": 40,
+        "height": 23
+      },
+      "file": "probe-08-forms-before-dark-generate-panel-2-module-card-off-mc-head-mc-i.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "3",
+      "tab": "generate",
+      "idx": 3,
+      "sel": ".module-card.off > .mc-head > .mc-offtag",
+      "slug": "module-card-off-mc-head-mc-o",
+      "form": ".module-card.off",
+      "text": "需切换平台",
+      "tag": "span",
+      "how": "登记表 .module-card.off · 文字",
+      "subtree": false,
+      "color": "rgb(227, 163, 65)",
+      "background": "rgba(227, 163, 65, 0.12)",
+      "border": "rgba(227, 163, 65, 0.35)",
+      "opacity": 1,
+      "fontSize": "12px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        28,
+        33,
+        40
+      ],
+      "box": {
+        "x": 1314,
+        "y": 3181,
+        "width": 74,
+        "height": 23
+      },
+      "file": "probe-08-forms-before-dark-generate-panel-3-module-card-off-mc-head-mc-o.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "4",
+      "tab": "generate",
+      "idx": 4,
+      "sel": "#module-grid > .module-card.off > .mc-desc",
+      "slug": "module-grid-module-card-off-",
+      "form": ".module-card.off",
+      "text": "8 路灰度传感器读取（MSPM0）：huidu_va…",
+      "tag": "div",
+      "how": "登记表 .module-card.off · 文字",
+      "subtree": false,
+      "color": "rgb(145, 154, 164)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(145, 154, 164)",
+      "opacity": 1,
+      "fontSize": "13px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        28,
+        33,
+        40
+      ],
+      "box": {
+        "x": 1207,
+        "y": 3212,
+        "width": 181,
+        "height": 39
+      },
+      "file": "probe-08-forms-before-dark-generate-panel-4-module-grid-module-card-off-.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "5",
+      "tab": "generate",
+      "idx": 5,
+      "sel": ".module-card.off > .mc-meta > .mc-plat.ok",
+      "slug": "module-card-off-mc-meta-mc-p",
+      "form": ".module-card.off",
+      "text": "MSPM0·已验证",
+      "tag": "span",
+      "how": "登记表 .module-card.off · 文字",
+      "subtree": false,
+      "color": "rgb(67, 196, 85)",
+      "background": "rgba(63, 185, 80, 0.15)",
+      "border": "rgb(67, 196, 85)",
+      "opacity": 1,
+      "fontSize": "12px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        28,
+        33,
+        40
+      ],
+      "box": {
+        "x": 1207,
+        "y": 3259,
+        "width": 96,
+        "height": 21
+      },
+      "file": "probe-08-forms-before-dark-generate-panel-5-module-card-off-mc-meta-mc-p.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "6",
+      "tab": "generate",
+      "idx": 6,
+      "sel": ".card.done > #module-grid > .module-card.off",
+      "slug": "card-done-module-grid-module",
+      "form": ".module-card.off",
+      "text": "imu_uart详情需切换平台UART 串口陀螺仪（新 IMU 器件）MSPM0",
+      "tag": "div",
+      "how": "登记表 .module-card.off",
+      "subtree": true,
+      "color": "rgb(230, 237, 243)",
+      "background": "rgb(28, 33, 40)",
+      "border": "rgb(48, 54, 61)",
+      "opacity": 0.55,
+      "fontSize": "14px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        22,
+        27,
+        34
+      ],
+      "box": {
+        "x": 325,
+        "y": 3514,
+        "width": 207,
+        "height": 149
+      },
+      "file": "probe-08-forms-before-dark-generate-panel-6-card-done-module-grid-module.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "7",
+      "tab": "generate",
+      "idx": 7,
+      "sel": ".module-card.off > .mc-head > .slug",
+      "slug": "module-card-off-mc-head-slug",
+      "form": ".module-card.off",
+      "text": "imu_uart",
+      "tag": "span",
+      "how": "登记表 .module-card.off · 文字",
+      "subtree": false,
+      "color": "rgb(230, 237, 243)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(230, 237, 243)",
+      "opacity": 1,
+      "fontSize": "13px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        28,
+        33,
+        40
+      ],
+      "box": {
+        "x": 338,
+        "y": 3526,
+        "width": 55,
+        "height": 21
+      },
+      "file": "probe-08-forms-before-dark-generate-panel-7-module-card-off-mc-head-slug.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "8",
+      "tab": "generate",
+      "idx": 8,
+      "sel": ".module-card.off > .mc-head > .mc-info",
+      "slug": "module-card-off-mc-head-mc-i",
+      "form": ".module-card.off",
+      "text": "详情",
+      "tag": "button",
+      "how": "登记表 .module-card.off · 文字",
+      "subtree": false,
+      "color": "rgb(0, 212, 255)",
+      "background": "rgb(22, 27, 34)",
+      "border": "rgb(48, 54, 61)",
+      "opacity": 1,
+      "fontSize": "12px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        28,
+        33,
+        40
+      ],
+      "box": {
+        "x": 399,
+        "y": 3525,
+        "width": 40,
+        "height": 23
+      },
+      "file": "probe-08-forms-before-dark-generate-panel-8-module-card-off-mc-head-mc-i.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "9",
+      "tab": "generate",
+      "idx": 9,
+      "sel": ".module-card.off > .mc-head > .mc-offtag",
+      "slug": "module-card-off-mc-head-mc-o",
+      "form": ".module-card.off",
+      "text": "需切换平台",
+      "tag": "span",
+      "how": "登记表 .module-card.off · 文字",
+      "subtree": false,
+      "color": "rgb(227, 163, 65)",
+      "background": "rgba(227, 163, 65, 0.12)",
+      "border": "rgba(227, 163, 65, 0.35)",
+      "opacity": 1,
+      "fontSize": "12px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        28,
+        33,
+        40
+      ],
+      "box": {
+        "x": 445,
+        "y": 3525,
+        "width": 74,
+        "height": 23
+      },
+      "file": "probe-08-forms-before-dark-generate-panel-9-module-card-off-mc-head-mc-o.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "10",
+      "tab": "generate",
+      "idx": 0,
+      "sel": "#params-grid > .param-grid > .param-card.param-stale",
+      "slug": "params-grid-param-grid-param",
+      "form": ".param-stale",
+      "text": "PROBE_THRESHOLD演示阈值ms当前值位置已变↺ 恢复旧值范围：0–3",
+      "tag": "div",
+      "how": "登记表 .param-stale",
+      "subtree": true,
+      "color": "rgb(230, 237, 243)",
+      "background": "rgb(28, 33, 40)",
+      "border": "rgb(230, 237, 243)",
+      "opacity": 0.65,
+      "fontSize": "14px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        28,
+        33,
+        40
+      ],
+      "box": {
+        "x": 342,
+        "y": 8934,
+        "width": 255,
+        "height": 114
+      },
+      "file": "probe-08-forms-before-dark-generate-panel-10-params-grid-param-grid-param.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "11",
+      "tab": "generate",
+      "idx": 1,
+      "sel": ".param-card.param-stale > .param-card-head > .slug",
+      "slug": "param-card-param-stale-param",
+      "form": ".param-stale",
+      "text": "PROBE_THRESHOLD",
+      "tag": "span",
+      "how": "登记表 .param-stale · 文字",
+      "subtree": false,
+      "color": "rgb(0, 212, 255)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(0, 212, 255)",
+      "opacity": 1,
+      "fontSize": "12px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        28,
+        33,
+        40
+      ],
+      "box": {
+        "x": 352,
+        "y": 8945,
+        "width": 108,
+        "height": 19
+      },
+      "file": "probe-08-forms-before-dark-generate-panel-11-param-card-param-stale-param.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "12",
+      "tab": "generate",
+      "idx": 2,
+      "sel": ".param-card.param-stale > .param-card-head > .param-label",
+      "slug": "param-card-param-stale-param",
+      "form": ".param-stale",
+      "text": "演示阈值",
+      "tag": "span",
+      "how": "登记表 .param-stale · 文字",
+      "subtree": false,
+      "color": "rgb(230, 237, 243)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(230, 237, 243)",
+      "opacity": 1,
+      "fontSize": "14px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        28,
+        33,
+        40
+      ],
+      "box": {
+        "x": 466,
+        "y": 8942,
+        "width": 82,
+        "height": 22
+      },
+      "file": "probe-08-forms-before-dark-generate-panel-12-param-card-param-stale-param.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "13",
+      "tab": "generate",
+      "idx": 3,
+      "sel": ".param-card.param-stale > .param-card-head > .param-unit-chip",
+      "slug": "param-card-param-stale-param",
+      "form": ".param-stale",
+      "text": "ms",
+      "tag": "span",
+      "how": "登记表 .param-stale · 文字",
+      "subtree": false,
+      "color": "rgb(145, 154, 164)",
+      "background": "rgb(22, 27, 34)",
+      "border": "rgb(48, 54, 61)",
+      "opacity": 1,
+      "fontSize": "12px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        28,
+        33,
+        40
+      ],
+      "box": {
+        "x": 554,
+        "y": 8943,
+        "width": 33,
+        "height": 21
+      },
+      "file": "probe-08-forms-before-dark-generate-panel-13-param-card-param-stale-param.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "14",
+      "tab": "generate",
+      "idx": 4,
+      "sel": ".param-card.param-stale > .param-card-body > .param-current-label",
+      "slug": "param-card-param-stale-param",
+      "form": ".param-stale",
+      "text": "当前值",
+      "tag": "label",
+      "how": "登记表 .param-stale · 文字",
+      "subtree": false,
+      "color": "rgb(145, 154, 164)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(145, 154, 164)",
+      "opacity": 1,
+      "fontSize": "12px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        28,
+        33,
+        40
+      ],
+      "box": {
+        "x": 352,
+        "y": 8984,
+        "width": 37,
+        "height": 19
+      },
+      "file": "probe-08-forms-before-dark-generate-panel-14-param-card-param-stale-param.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "16",
+      "tab": "generate",
+      "idx": 6,
+      "sel": ".param-card.param-stale > .param-card-body > .badge.param-stale-badge",
+      "slug": "param-card-param-stale-param",
+      "form": ".param-stale",
+      "text": "位置已变",
+      "tag": "span",
+      "how": "登记表 .param-stale · 文字",
+      "subtree": false,
+      "color": "rgb(227, 163, 65)",
+      "background": "rgba(227, 163, 65, 0.12)",
+      "border": "rgb(227, 163, 65)",
+      "opacity": 1,
+      "fontSize": "12px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        28,
+        33,
+        40
+      ],
+      "box": {
+        "x": 523,
+        "y": 8970,
+        "width": 64,
+        "height": 40
+      },
+      "file": "probe-08-forms-before-dark-generate-panel-16-param-card-param-stale-param.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "18",
+      "tab": "generate",
+      "idx": 8,
+      "sel": ".param-card-foot > .param-hint > span",
+      "slug": "param-card-foot-param-hint-s",
+      "form": ".param-stale",
+      "text": "范围：0–3000",
+      "tag": "span",
+      "how": "登记表 .param-stale · 文字",
+      "subtree": false,
+      "color": "rgb(145, 154, 164)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(145, 154, 164)",
+      "opacity": 1,
+      "fontSize": "13px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        28,
+        33,
+        40
+      ],
+      "box": {
+        "x": 439,
+        "y": 9018,
+        "width": 84,
+        "height": 21
+      },
+      "file": "probe-08-forms-before-dark-generate-panel-18-param-card-foot-param-hint-s.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "19",
+      "tab": "generate",
+      "idx": 0,
+      "sel": ".card > .row > #btn-pick-output-dir",
+      "slug": "card-row-btn-pick-output-dir",
+      "form": "",
+      "text": "选择文件夹…",
+      "tag": "button",
+      "how": "disabled 属性",
+      "subtree": false,
+      "color": "rgb(145, 154, 164)",
+      "background": "rgb(28, 33, 40)",
+      "border": "rgb(48, 54, 61)",
+      "opacity": 1,
+      "fontSize": "14px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        22,
+        27,
+        34
+      ],
+      "box": {
+        "x": 1290,
+        "y": 7758,
+        "width": 111,
+        "height": 38
+      },
+      "file": "probe-08-forms-before-dark-generate-panel-19-card-row-btn-pick-output-dir.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "20",
+      "tab": "generate",
+      "idx": 1,
+      "sel": ".param-card.param-stale > .param-card-body > #params-input-PROBE_THRESHOLD",
+      "slug": "param-card-param-stale-param",
+      "form": "",
+      "text": "800",
+      "tag": "input",
+      "how": "disabled 属性",
+      "subtree": false,
+      "color": "rgb(145, 154, 164)",
+      "background": "rgb(28, 33, 40)",
+      "border": "rgb(48, 54, 61)",
+      "opacity": 1,
+      "fontSize": "14px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        28,
+        33,
+        40
+      ],
+      "box": {
+        "x": 395,
+        "y": 8970,
+        "width": 116,
+        "height": 40
+      },
+      "file": "probe-08-forms-before-dark-generate-panel-20-param-card-param-stale-param.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "21",
+      "tab": "generate",
+      "idx": 2,
+      "sel": ".param-card.param-stale > .param-card-foot > .btn-params-reset",
+      "slug": "param-card-param-stale-param",
+      "form": "",
+      "text": "↺ 恢复旧值",
+      "tag": "button",
+      "how": "disabled 属性",
+      "subtree": false,
+      "color": "rgb(145, 154, 164)",
+      "background": "rgb(28, 33, 40)",
+      "border": "rgb(48, 54, 61)",
+      "opacity": 1,
+      "fontSize": "12px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        28,
+        33,
+        40
+      ],
+      "box": {
+        "x": 352,
+        "y": 9017,
+        "width": 79,
+        "height": 23
+      },
+      "file": "probe-08-forms-before-dark-generate-panel-21-param-card-param-stale-param.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "0",
+      "tab": "hwcheck",
+      "idx": 0,
+      "sel": ".card > #hwcheck-device-grid > .module-card.off",
+      "slug": "card-hwcheck-device-grid-mod",
+      "form": ".module-card.off",
+      "text": "sr04详情需切换平台HC-SR04 超声波测距模块：板上一对“喇叭”探头…MS",
+      "tag": "div",
+      "how": "登记表 .module-card.off",
+      "subtree": true,
+      "color": "rgb(230, 237, 243)",
+      "background": "rgb(28, 33, 40)",
+      "border": "rgb(48, 54, 61)",
+      "opacity": 0.55,
+      "fontSize": "14px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        22,
+        27,
+        34
+      ],
+      "box": {
+        "x": 135,
+        "y": 1135,
+        "width": 1230,
+        "height": 118
+      },
+      "file": "probe-08-forms-before-dark-hwcheck-panel-0-card-hwcheck-device-grid-mod.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "1",
+      "tab": "hwcheck",
+      "idx": 1,
+      "sel": ".module-card.off > .mc-head > .slug",
+      "slug": "module-card-off-mc-head-slug",
+      "form": ".module-card.off",
+      "text": "sr04",
+      "tag": "span",
+      "how": "登记表 .module-card.off · 文字",
+      "subtree": false,
+      "color": "rgb(230, 237, 243)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(230, 237, 243)",
+      "opacity": 1,
+      "fontSize": "13px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        28,
+        33,
+        40
+      ],
+      "box": {
+        "x": 148,
+        "y": 1147,
+        "width": 31,
+        "height": 21
+      },
+      "file": "probe-08-forms-before-dark-hwcheck-panel-1-module-card-off-mc-head-slug.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "2",
+      "tab": "hwcheck",
+      "idx": 2,
+      "sel": ".module-card.off > .mc-head > .mc-info",
+      "slug": "module-card-off-mc-head-mc-i",
+      "form": ".module-card.off",
+      "text": "详情",
+      "tag": "button",
+      "how": "登记表 .module-card.off · 文字",
+      "subtree": false,
+      "color": "rgb(0, 212, 255)",
+      "background": "rgb(22, 27, 34)",
+      "border": "rgb(48, 54, 61)",
+      "opacity": 1,
+      "fontSize": "12px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        28,
+        33,
+        40
+      ],
+      "box": {
+        "x": 1232,
+        "y": 1146,
+        "width": 40,
+        "height": 23
+      },
+      "file": "probe-08-forms-before-dark-hwcheck-panel-2-module-card-off-mc-head-mc-i.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "3",
+      "tab": "hwcheck",
+      "idx": 3,
+      "sel": ".module-card.off > .mc-head > .mc-offtag",
+      "slug": "module-card-off-mc-head-mc-o",
+      "form": ".module-card.off",
+      "text": "需切换平台",
+      "tag": "span",
+      "how": "登记表 .module-card.off · 文字",
+      "subtree": false,
+      "color": "rgb(227, 163, 65)",
+      "background": "rgba(227, 163, 65, 0.12)",
+      "border": "rgba(227, 163, 65, 0.35)",
+      "opacity": 1,
+      "fontSize": "12px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        28,
+        33,
+        40
+      ],
+      "box": {
+        "x": 1278,
+        "y": 1146,
+        "width": 74,
+        "height": 23
+      },
+      "file": "probe-08-forms-before-dark-hwcheck-panel-3-module-card-off-mc-head-mc-o.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "4",
+      "tab": "hwcheck",
+      "idx": 4,
+      "sel": "#hwcheck-device-grid > .module-card.off > .mc-desc",
+      "slug": "hwcheck-device-grid-module-c",
+      "form": ".module-card.off",
+      "text": "HC-SR04 超声波测距模块：板上一对“喇叭”探头…",
+      "tag": "div",
+      "how": "登记表 .module-card.off · 文字",
+      "subtree": false,
+      "color": "rgb(145, 154, 164)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(145, 154, 164)",
+      "opacity": 1,
+      "fontSize": "13px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        28,
+        33,
+        40
+      ],
+      "box": {
+        "x": 148,
+        "y": 1177,
+        "width": 1204,
+        "height": 36
+      },
+      "file": "probe-08-forms-before-dark-hwcheck-panel-4-hwcheck-device-grid-module-c.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "5",
+      "tab": "hwcheck",
+      "idx": 5,
+      "sel": ".module-card.off > .mc-meta > .mc-plat.ok",
+      "slug": "module-card-off-mc-meta-mc-p",
+      "form": ".module-card.off",
+      "text": "MSPM0·已验证",
+      "tag": "span",
+      "how": "登记表 .module-card.off · 文字",
+      "subtree": false,
+      "color": "rgb(67, 196, 85)",
+      "background": "rgba(63, 185, 80, 0.15)",
+      "border": "rgb(67, 196, 85)",
+      "opacity": 1,
+      "fontSize": "12px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        28,
+        33,
+        40
+      ],
+      "box": {
+        "x": 148,
+        "y": 1221,
+        "width": 96,
+        "height": 21
+      },
+      "file": "probe-08-forms-before-dark-hwcheck-panel-5-module-card-off-mc-meta-mc-p.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "8",
+      "tab": "hwcheck",
+      "idx": 1,
+      "sel": ".card > .row > #btn-hwcheck-triage",
+      "slug": "card-row-btn-hwcheck-triage",
+      "form": "",
+      "text": "让 AI 分析",
+      "tag": "button",
+      "how": "disabled 属性",
+      "subtree": false,
+      "color": "rgb(145, 154, 164)",
+      "background": "rgb(28, 33, 40)",
+      "border": "rgb(48, 54, 61)",
+      "opacity": 1,
+      "fontSize": "14px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        22,
+        27,
+        34
+      ],
+      "box": {
+        "x": 135,
+        "y": 3003,
+        "width": 94,
+        "height": 38
+      },
+      "file": "probe-08-forms-before-dark-hwcheck-panel-8-card-row-btn-hwcheck-triage.png"
+    },
+    {
+      "theme": "dark",
+      "scope": "panel",
+      "key": "0",
+      "tab": "master",
+      "idx": 0,
+      "sel": ".card > .row > #btn-distill",
+      "slug": "card-row-btn-distill",
+      "form": "",
+      "text": "AI 提炼报告",
+      "tag": "button",
+      "how": "disabled 属性",
+      "subtree": false,
+      "color": "rgb(145, 154, 164)",
+      "background": "rgb(28, 33, 40)",
+      "border": "rgb(48, 54, 61)",
+      "opacity": 1,
+      "fontSize": "14px",
+      "ownGradient": false,
+      "ancestorGradient": true,
+      "behind": [
+        22,
+        27,
+        34
+      ],
+      "box": {
+        "x": 229,
+        "y": 329,
+        "width": 125,
+        "height": 38
+      },
+      "file": "probe-08-forms-before-dark-master-panel-0-card-row-btn-distill.png"
+    }
+  ]
+}
