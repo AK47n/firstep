@@ -1,0 +1,8 @@
+# 读数：after-05b-shots
+# 命令：node .scratch\ui-density-sitewide\probe-02-shot.mjs 05b-light light topic,md,pdf
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-30T13:52:39+08:00
+# 退出码：0
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05b-light-light-topic
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05b-light-light-md
+shot: C:\Users\luoji\Desktop\firstep\.scratch\ui-density-sitewide\shots\05b-light-light-pdf
