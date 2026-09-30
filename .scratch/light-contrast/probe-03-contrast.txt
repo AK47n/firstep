@@ -1,0 +1,346 @@
+# 读数：probe-03-contrast
+# 命令：python .scratch\light-contrast\probe-03-contrast.py
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-30T12:38:29+08:00
+# 退出码：0
+==============================================================================
+浅色调色板轮 · 读数（probe-03：例外表 ↔ 盘上双向对账）
+页面：src\contest_generator\static\index.html；守卫：tests\js\css-tokens.test.mjs
+==============================================================================
+
+## ① 机械配对（同规则 `color:` × `background:`，两主题各算一遍）
+
+总数 **376**
+  dark   188 对，不达标 **16**
+  light  188 对，不达标 **99**
+
+主题         比值    需  选择器 / 色对
+dark     1.77  4.5  #btn-code-ai-send  [#ffffff on #00d4ff]
+dark     1.77  4.5  .code-ai-selection-btn  [#ffffff on #00d4ff]
+dark     2.54  4.5  .stepper .step.done .dot  [#ffffff on #3fb950]
+dark     3.35  4.5  button.danger:hover  [#ffffff on #f85149]
+dark     3.60  4.5  .rel-tag.tag-perf  [#8b5cf6 on #24233b]
+dark     4.35  4.5  button.danger  [#f85149 on #382328]
+dark     4.35  4.5  .badge.missing  [#f85149 on #382328]
+dark     4.35  4.5  #compile-banner.fail  [#f85149 on #382328]
+dark     4.35  4.5  .fix-tag.conflict  [#f85149 on #382328]
+dark     4.35  4.5  .badge.sugg-review-infeasible  [#f85149 on #382328]
+dark     4.35  4.5  .chip.del  [#f85149 on #382328]
+dark     4.35  4.5  .warn-box.missing  [#f85149 on #382328]
+dark     4.35  4.5  .badge.pdf-broken  [#f85149 on #382328]
+dark     4.35  4.5  .code-tab-disk  [#f85149 on #382328]
+dark     4.35  4.5  .code-ctx-item-danger:hover  [#f85149 on #382328]
+dark     4.35  4.5  .recent-del:hover  [#f85149 on #382328]
+light    1.38  4.5  #main-c::selection  [#ffffff on #b8e2ef]
+light    2.74  4.5  .badge.ok  [#2da44e on #e4f0e7]
+light    2.74  4.5  .module-card .mc-plat.ok  [#2da44e on #e4f0e7]
+light    2.74  4.5  .mi-plat .mc-plat.ok  [#2da44e on #e4f0e7]
+light    2.74  4.5  #compile-banner.success  [#2da44e on #e4f0e7]
+light    2.74  4.5  .fix-tag.fixed  [#2da44e on #e4f0e7]
+light    2.74  4.5  .chip.rec  [#2da44e on #e4f0e7]
+light    2.74  4.5  .badge.sugg-rec, .badge.sugg-lib, .badge.sugg-decided  [#2da44e on #e4f0e7]
+light    2.74  4.5  .badge.sugg-review-feasible  [#2da44e on #e4f0e7]
+light    2.74  4.5  .chip.add  [#2da44e on #e4f0e7]
+light    2.74  4.5  .warn-box.ok  [#2da44e on #e4f0e7]
+light    2.74  4.5  .master-health-ok  [#2da44e on #e4f0e7]
+light    2.95  4.5  button.pin-overview-on  [#0096c7 on #e0f2f8]
+light    2.95  4.5  button.accent  [#0096c7 on #e0f2f8]
+light    2.95  4.5  .module-card .mc-plat.embed  [#0096c7 on #e0f2f8]
+light    2.95  4.5  .module-card .mc-pa  [#0096c7 on #e0f2f8]
+light    2.95  4.5  .lib-chip.on  [#0096c7 on #e0f2f8]
+light    2.95  4.5  .badge.ref-topic  [#0096c7 on #e0f2f8]
+light    2.95  4.5  #tab-hwcheck .hwcheck-band-num  [#0096c7 on #e0f2f8]
+light    2.95  4.5  .topic-key  [#0096c7 on #e0f2f8]
+light    2.95  4.5  .master-tree-file button.on  [#0096c7 on #e0f2f8]
+light    2.95  4.5  .code-statusbar button.on  [#0096c7 on #e0f2f8]
+light    2.95  4.5  .code-ai-preview-btn  [#0096c7 on #e0f2f8]
+light    2.95  4.5  button.code-change-item:hover  [#0096c7 on #e0f2f8]
+light    2.95  4.5  .code-change-badge.b-added  [#0096c7 on #e0f2f8]
+light    2.95  4.5  .code-compile-error:hover  [#0096c7 on #e0f2f8]
+light    2.95  4.5  .code-tab-badge  [#0096c7 on #e0f2f8]
+light    2.95  4.5  .code-tab-close:hover  [#0096c7 on #e0f2f8]
+light    2.95  4.5  .code-gutter-line.flash  [#0096c7 on #e0f2f8]
+light    2.95  4.5  .code-tree-file button.on  [#0096c7 on #e0f2f8]
+light    2.95  4.5  .code-tree-badge.b-new  [#0096c7 on #e0f2f8]
+light    2.95  4.5  .code-tree-act:hover  [#0096c7 on #e0f2f8]
+light    2.95  4.5  .quick-open-item.on  [#0096c7 on #e0f2f8]
+light    2.95  4.5  .code-outline-item.on  [#0096c7 on #e0f2f8]
+light    2.95  4.5  .code-search-hit.on  [#0096c7 on #e0f2f8]
+light    2.95  4.5  .card-step-status.wire  [#0096c7 on #e0f2f8]
+light    2.95  4.5  .card-step-status.current  [#0096c7 on #e0f2f8]
+light    2.95  4.5  .task-phase  [#0096c7 on #e0f2f8]
+light    2.95  4.5  .task-next-hint  [#0096c7 on #e0f2f8]
+light    2.95  4.5  .task-card .btn-task-flash:not(:disabled):hover, .task-car  [#0096c7 on #e0f2f8]
+light    2.99  4.5  #tab-hwcheck .hwcheck-jump  [#0096c7 on #eef1f4]
+light    2.99  4.5  .code-back-preview, .code-md-edit  [#0096c7 on #eef1f4]
+light    2.99  4.5  .code-zoom-badge  [#0096c7 on #eef1f4]
+light    2.99  4.5  .code-ctx-item:hover  [#0096c7 on #eef1f4]
+light    2.99  4.5  .code-side-rail-btn.on  [#0096c7 on #eef1f4]
+light    3.39  4.5  .env-jump  [#0096c7 on #ffffff]
+light    3.39  4.5  .module-card .mc-info  [#0096c7 on #ffffff]
+light    3.39  4.5  .mod-info-btn  [#0096c7 on #ffffff]
+light    3.39  4.5  .sugg-discuss-toggle:hover  [#ffffff on #0096c7]
+light    3.39  4.5  .btn-param-ref:hover  [#ffffff on #0096c7]
+light    3.39  4.5  .code-pane-action, .code-compile-head button, .code-status  [#0096c7 on #ffffff]
+light    3.39  4.5  #btn-code-ai-send  [#ffffff on #0096c7]
+light    3.39  4.5  .code-ai-selection-btn  [#ffffff on #0096c7]
+light    3.59  4.5  button.primary:hover  [#04222b on #007ea8]
+light    3.59  4.5  .btn-task-dialog-send:hover, .btn-global-chat-send:hover,   [#04222b on #007ea8]
+light    3.59  4.5  .task-card .btn-task-run:not(:disabled):hover  [#04222b on #007ea8]
+light    4.17  4.5  .banner  [#9a6700 on #f3ede0]
+light    4.17  4.5  .badge.unverified  [#9a6700 on #f3ede0]
+light    4.17  4.5  .module-card .mc-offtag  [#9a6700 on #f3ede0]
+light    4.17  4.5  .module-info-off  [#9a6700 on #f3ede0]
+light    4.17  4.5  .fix-tag.pending  [#9a6700 on #f3ede0]
+light    4.17  4.5  .badge.sugg-review-risky  [#9a6700 on #f3ede0]
+light    4.17  4.5  .param-stale-badge  [#9a6700 on #f3ede0]
+light    4.17  4.5  .warn-box.unverified  [#9a6700 on #f3ede0]
+light    4.17  4.5  .warn-box.group  [#9a6700 on #f3ede0]
+light    4.17  4.5  .badge.pdf-dup  [#9a6700 on #f3ede0]
+light    4.17  4.5  .prog-badge  [#9a6700 on #f3ede0]
+light    4.17  4.5  .rel-tag.tag-fix  [#9a6700 on #f3ede0]
+light    4.17  4.5  .master-health-warn  [#9a6700 on #f3ede0]
+light    4.17  4.5  .code-change-badge.b-modified  [#9a6700 on #f3ede0]
+light    4.17  4.5  .code-tree-badge.b-mod  [#9a6700 on #f3ede0]
+light    4.17  4.5  .card-step-status.warn  [#9a6700 on #f3ede0]
+light    4.17  4.5  .task-redo-badge  [#9a6700 on #f3ede0]
+light    4.29  4.5  .rel-tag.tag-perf  [#8250df on #f0eafb]
+light    4.33  4.5  .rel-tag.tag-new  [#1a7f37 on #e4f0e7]
+light    4.33  4.5  .card-step-status.done  [#1a7f37 on #e4f0e7]
+light    4.33  4.5  .tasks-done-line .btn-task-goto-delivery  [#1a7f37 on #e4f0e7]
+light    4.38  4.5  .welcome-card  [#0969da on #e1edfb]
+light    4.38  4.5  .badge.hw  [#0969da on #e1edfb]
+light    4.38  4.5  .module-card .mc-plat.hw  [#0969da on #e1edfb]
+light    4.38  4.5  .mi-plat .mc-plat.hw  [#0969da on #e1edfb]
+light    4.38  4.5  #compile-banner.running  [#0969da on #e1edfb]
+light    4.38  4.5  .fix-tag.new  [#0969da on #e1edfb]
+light    4.38  4.5  .badge.sugg-ai  [#0969da on #e1edfb]
+light    4.38  4.5  .warn-box.hardware_bound  [#0969da on #e1edfb]
+light    4.38  4.5  .badge.ref-kit  [#0969da on #e1edfb]
+light    4.38  4.5  .ai-action-banner  [#0969da on #e1edfb]
+light    4.38  4.5  .rel-tag.tag-imp  [#0969da on #e1edfb]
+light    4.40  4.5  button.danger  [#cf222e on #f9e4e6]
+light    4.40  4.5  .badge.missing  [#cf222e on #f9e4e6]
+light    4.40  4.5  #compile-banner.fail  [#cf222e on #f9e4e6]
+light    4.40  4.5  .fix-tag.conflict  [#cf222e on #f9e4e6]
+light    4.40  4.5  .badge.sugg-review-infeasible  [#cf222e on #f9e4e6]
+light    4.40  4.5  .chip.del  [#cf222e on #f9e4e6]
+light    4.40  4.5  .warn-box.missing  [#cf222e on #f9e4e6]
+light    4.40  4.5  .badge.pdf-broken  [#cf222e on #f9e4e6]
+light    4.40  4.5  .code-tab-disk  [#cf222e on #f9e4e6]
+light    4.40  4.5  .code-ctx-item-danger:hover  [#cf222e on #f9e4e6]
+light    4.40  4.5  .recent-del:hover  [#cf222e on #f9e4e6]
+
+## ② 例外表（守卫源码解析；单源）
+
+条数 **128**；类别分布 {'debt': 127, 'skip': 1}；主题分布 {'dark': 20, 'light': 108}
+机械面 115 条 / 族面 3 条 / 令牌面 10 条
+
+主题     类别         冻结  认人键
+dark   debt     1.23  令牌：var(--accent-dim)
+dark   debt     1.76  令牌：var(--border-strong)
+dark   debt     1.77  #btn-code-ai-send
+dark   debt     1.77  .code-ai-selection-btn
+dark   debt     2.19  令牌：#fff
+dark   debt     2.54  .stepper .step.done .dot
+dark   debt     3.05  族：--tok-* × 代码底（含 4 层 accent 合成）
+dark   debt     3.35  button.danger:hover
+dark   debt     3.60  .rel-tag.tag-perf
+dark   debt     4.35  button.danger
+dark   debt     4.35  .badge.missing
+dark   debt     4.35  #compile-banner.fail
+dark   debt     4.35  .fix-tag.conflict
+dark   debt     4.35  .badge.sugg-review-infeasible
+dark   debt     4.35  .chip.del
+dark   debt     4.35  .warn-box.missing
+dark   debt     4.35  .badge.pdf-broken
+dark   debt     4.35  .code-tab-disk
+dark   debt     4.35  .code-ctx-item-danger:hover
+dark   debt     4.35  .recent-del:hover
+light  debt     1.15  令牌：var(--accent-dim)
+light  debt     1.89  令牌：var(--border-strong)
+light  debt     2.22  族：--tok-* × 代码底（含 4 层 accent 合成）
+light  debt     2.74  .badge.ok
+light  debt     2.74  .module-card .mc-plat.ok
+light  debt     2.74  .mi-plat .mc-plat.ok
+light  debt     2.74  #compile-banner.success
+light  debt     2.74  .fix-tag.fixed
+light  debt     2.74  .chip.rec
+light  debt     2.74  .badge.sugg-rec, .badge.sugg-lib, .badge.sugg-decided
+light  debt     2.74  .badge.sugg-review-feasible
+light  debt     2.74  .chip.add
+light  debt     2.74  .warn-box.ok
+light  debt     2.74  .master-health-ok
+light  debt     2.84  令牌：var(--ok-bright)
+light  debt     2.95  button.pin-overview-on
+light  debt     2.95  button.accent
+light  debt     2.95  .module-card .mc-plat.embed
+light  debt     2.95  .module-card .mc-pa
+light  debt     2.95  .lib-chip.on
+light  debt     2.95  .badge.ref-topic
+light  debt     2.95  #tab-hwcheck .hwcheck-band-num
+light  debt     2.95  .topic-key
+light  debt     2.95  .master-tree-file button.on
+light  debt     2.95  .code-statusbar button.on
+light  debt     2.95  .code-ai-preview-btn
+light  debt     2.95  button.code-change-item:hover
+light  debt     2.95  .code-change-badge.b-added
+light  debt     2.95  .code-compile-error:hover
+light  debt     2.95  .code-tab-badge
+light  debt     2.95  .code-tab-close:hover
+light  debt     2.95  .code-gutter-line.flash
+light  debt     2.95  .code-tree-file button.on
+light  debt     2.95  .code-tree-badge.b-new
+light  debt     2.95  .code-tree-act:hover
+light  debt     2.95  .quick-open-item.on
+light  debt     2.95  .code-outline-item.on
+light  debt     2.95  .code-search-hit.on
+light  debt     2.95  .card-step-status.wire
+light  debt     2.95  .card-step-status.current
+light  debt     2.95  .task-phase
+light  debt     2.95  .task-next-hint
+light  debt     2.95  .task-card .btn-task-flash:not(:disabled):hover, .task-card .btn-t
+light  debt     2.99  #tab-hwcheck .hwcheck-jump
+light  debt     2.99  .code-back-preview, .code-md-edit
+light  debt     2.99  .code-zoom-badge
+light  debt     2.99  .code-ctx-item:hover
+light  debt     2.99  .code-side-rail-btn.on
+light  debt     2.99  族：--accent 焦点环 / 语义左条
+light  debt     2.99  令牌：var(--accent)
+light  debt     3.39  .env-jump
+light  debt     3.39  .module-card .mc-info
+light  debt     3.39  .mod-info-btn
+light  debt     3.39  .sugg-discuss-toggle:hover
+light  debt     3.39  .btn-param-ref:hover
+light  debt     3.39  .code-pane-action, .code-compile-head button, .code-statusbar butt
+light  debt     3.39  #btn-code-ai-send
+light  debt     3.39  .code-ai-selection-btn
+light  debt     3.59  button.primary:hover
+light  debt     3.59  .btn-task-dialog-send:hover, .btn-global-chat-send:hover, .btn-par
+light  debt     3.59  .task-card .btn-task-run:not(:disabled):hover
+light  debt     3.65  令牌：var(--on-ok-deep)
+light  debt     4.17  .banner
+light  debt     4.17  .badge.unverified
+light  debt     4.17  .module-card .mc-offtag
+light  debt     4.17  .module-info-off
+light  debt     4.17  .fix-tag.pending
+light  debt     4.17  .badge.sugg-review-risky
+light  debt     4.17  .param-stale-badge
+light  debt     4.17  .warn-box.unverified
+light  debt     4.17  .warn-box.group
+light  debt     4.17  .badge.pdf-dup
+light  debt     4.17  .prog-badge
+light  debt     4.17  .rel-tag.tag-fix
+light  debt     4.17  .master-health-warn
+light  debt     4.17  .code-change-badge.b-modified
+light  debt     4.17  .code-tree-badge.b-mod
+light  debt     4.17  .card-step-status.warn
+light  debt     4.17  .task-redo-badge
+light  debt     4.29  .rel-tag.tag-perf
+light  debt     4.29  令牌：var(--warn)
+light  debt     4.33  .rel-tag.tag-new
+light  debt     4.33  .card-step-status.done
+light  debt     4.33  .tasks-done-line .btn-task-goto-delivery
+light  debt     4.38  .welcome-card
+light  debt     4.38  .badge.hw
+light  debt     4.38  .module-card .mc-plat.hw
+light  debt     4.38  .mi-plat .mc-plat.hw
+light  debt     4.38  #compile-banner.running
+light  debt     4.38  .fix-tag.new
+light  debt     4.38  .badge.sugg-ai
+light  debt     4.38  .warn-box.hardware_bound
+light  debt     4.38  .badge.ref-kit
+light  debt     4.38  .ai-action-banner
+light  debt     4.38  .rel-tag.tag-imp
+light  debt     4.40  button.danger
+light  debt     4.40  .badge.missing
+light  debt     4.40  #compile-banner.fail
+light  debt     4.40  .fix-tag.conflict
+light  debt     4.40  .badge.sugg-review-infeasible
+light  debt     4.40  .chip.del
+light  debt     4.40  .warn-box.missing
+light  debt     4.40  .badge.pdf-broken
+light  debt     4.40  .code-tab-disk
+light  debt     4.40  .code-ctx-item-danger:hover
+light  debt     4.40  .recent-del:hover
+light  debt     4.48  令牌：var(--ok)
+light  skip     1.38  #main-c::selection
+
+## ③ 双向差（本探针的核心读数）
+
+盘上不达标 / 冻结值对不上的：**0** 条
+
+表里有、盘上认不到的（死条）：**0** 条
+
+已经过线却还挂着登记的（该摘掉）：**0** 条
+
+## ④ 族面：每族每主题的最坏格 ↔ 冻结值
+
+（族表**从守卫源码解析**；逐格矩阵看 `probe-01-inventory.txt` §8——这里只报最坏格，免得同一张 100 行矩阵在两张读数里各抄一份）
+
+族                                       主题     最坏格                                    比值    需     冻结
+--tok-* × 代码底（含 4 层 accent 合成）          dark   --tok-pre on --code-bg+accent.32     3.05  4.5   3.05
+--tok-* × 代码底（含 4 层 accent 合成）          light  --tok-kw on --code-bg+accent.32      2.22  4.5   2.22
+--accent 焦点环 / 语义左条                     dark   --accent on --panel-2                9.14  3.0—（过线，未登记）
+--accent 焦点环 / 语义左条                     light  --accent on --panel-2                2.99  3.0   2.99
+
+## ⑤ 令牌面（第三面）：无底规则里的文字令牌 ↔ 冻结值
+
+（令牌表同样从守卫源码解析；这一面是 01 单双轴评审点名的覆盖缺口——
+ 584 条含 `color:` 的规则里 390 条底在基类/祖先，机械面看不见它们）
+
+无底规则里当文字色用的令牌：**29** 个；令牌表 **29** 行（其中空底的 skip 行 13 行）
+
+令牌字面                      主题     最坏格压                   比值    需     冻结
+var(--text)               dark   --panel-2           13.70  4.5—（过线，未登记）
+var(--text)               light  --panel-2           13.93  4.5—（过线，未登记）
+var(--accent)             dark   --panel-2            9.14  4.5—（过线，未登记）
+var(--accent)             light  --panel-2            2.99  4.5   2.99
+var(--on-accent)          dark   --accent             9.35  4.5—（过线，未登记）
+var(--on-accent)          light  --accent             4.88  4.5—（过线，未登记）
+var(--muted)              dark   --panel-2            5.26  4.5—（过线，未登记）
+var(--muted)              light  --panel-2            5.39  4.5—（过线，未登记）
+var(--danger)             dark   --panel-2            4.83  4.5—（过线，未登记）
+var(--danger)             light  --panel-2            4.72  4.5—（过线，未登记）
+var(--danger, #e5484d)    dark   --panel-2            4.83  4.5—（过线，未登记）
+var(--danger, #e5484d)    light  --panel-2            4.72  4.5—（过线，未登记）
+var(--ok)                 dark   --panel-2            6.37  4.5—（过线，未登记）
+var(--ok)                 light  --panel-2            4.48  4.5   4.48
+var(--ok-bright)          dark   --panel-2           10.53  4.5—（过线，未登记）
+var(--ok-bright)          light  --panel-2            2.84  4.5   2.84
+var(--warn)               dark   --panel-2            7.38  4.5—（过线，未登记）
+var(--warn)               light  --panel-2            4.29  4.5   4.29
+var(--info)               dark   --panel-2            6.41  4.5—（过线，未登记）
+var(--info)               light  --panel-2            4.58  4.5—（过线，未登记）
+var(--code-text)          dark   --code-bg           15.69  4.5—（过线，未登记）
+var(--code-text)          light  --code-bg           14.84  4.5—（过线，未登记）
+#fff                      dark   --warn               2.19  4.5   2.19
+#fff                      light  --warn               4.87  4.5—（过线，未登记）
+var(--on-accent-deep)     dark   --accent            10.91  4.5—（过线，未登记）
+var(--on-accent-deep)     light  --accent             5.69  4.5—（过线，未登记）
+var(--on-ok-deep)         dark   --ok                 7.30  4.5—（过线，未登记）
+var(--on-ok-deep)         light  --ok                 3.65  4.5   3.65
+var(--border-strong)      dark   --panel              1.76  3.0   1.76
+var(--border-strong)      light  --bg                 1.89  3.0   1.89
+var(--accent-dim)         dark   --code-bg            1.23  3.0   1.23
+var(--accent-dim)         light  --code-bg            1.15  3.0   1.15
+
+## ⑥ 覆盖审计：机械面会不会漏掉「同选择器、跨规则」的配对？
+
+机械面按「**同一条规则**里既有 `color:` 又有 `background:`」配对。样式块里还存在另一种写法——
+同一个选择器拆成两条规则，一条给字色、一条给底。这一栏把那种写法也配一遍，与机械面对差集：
+
+跨规则组合数 **376**；其中不达标 **115**
+机械面不达标 **115**
+**只在跨规则面**（机械面漏掉）：0 条
+**只在机械面**：0 条
+
+（两向差集都为 0 = 在这个文件上，两种口径**逐条相同**——机械面没有漏掉跨规则那种写法；哪天真漏了，这一栏会先红。）
+
+## ⑦ 底部口径（别混着读）
+
+  · 底 = **元素自己那层背景合成到 `--panel` 上**——上一轮那三个乐观数（6.11 / 5.19 / 3.39）量的是祖先底，本轮口径已更正；
+  · 阈值两档：小字 4.5 / 大字（≥24px 或 ≥18.66px+bold）3.0；族面 `nontext` 用 3.0；
+  · **三面各管一段**：机械面 = 同规则带底的配对；族面 = 底在代码页那几层的族；
+    令牌面 = 无底规则里的文字令牌（票面口径：底在基类/祖先，选择器级判不了）。
+  · 三面都**只登记不达标与不适用**（达标的现算即可）——这与描边那轮『115 条全登记』不是同一把尺。

@@ -1,0 +1,39 @@
+# 读数：probe-02-js-inline
+# 命令：python .scratch\light-contrast\probe-02-js-inline.py
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-09-30T12:38:29+08:00
+# 退出码：0
+==============================================================================
+浅色调色板轮 · 侦察读数（probe-02：渲染方内联取色声明）
+扫描面：src\contest_generator\static\js/**.js
+==============================================================================
+
+## ① 内联取色、值**不是**纯令牌（含裸色值 / rgba / 混写）—— 共 **5** 处
+
+  src/contest_generator/static/js/fx/code-marks.js:5  color: transparent，文字由高亮层绘制），只显示背景；error（工单 05）
+  src/contest_generator/static/js/ui/codeeditor.js:2822  background: #111
+  src/contest_generator/static/js/ui/codeeditor.js:2822  color: #eee
+  src/contest_generator/static/js/ui/generate-pins.js:619  background: transparent
+  src/contest_generator/static/js/ui/generate-recommend.js:234  background: #fff
+
+## ② 内联取色、值就是 `var(--x)` 令牌 —— 共 **19** 处
+
+  var(--warn)                        × 8
+  var(--danger)                      × 3
+  var(--ok-bright)                   × 2
+  var(--muted)                       × 2
+  var(--panel-2)                     × 1
+  var(--accent)                      × 1
+  var(--pin-pad)                     × 1
+  var(--pin-fixed-pad)               × 1
+
+  （只列令牌计数；逐条清单要看时把上面 `decl` 改成 `token_only` 再跑）
+
+## ③ 跨行拼接出来的取色声明 —— 共 **0** 处（**静态守卫抓不到**，与描边留白同类）
+
+
+## 结论口径
+
+  · ① 类 5 处是**真漏网**候选：静态守卫只解析 `<style>` 块，看不见它们；
+  · ② 类 19 处不产生新色对（值仍是令牌），但要判它压在什么底上只能靠渲染测量；
+  · ③ 类 0 处是**已知留白**（守卫明文不判），探针每轮盯着它有没有变多。
