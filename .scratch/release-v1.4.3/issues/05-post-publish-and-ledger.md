@@ -50,8 +50,17 @@
 | 项 | 值 |
 |---|---|
 | `git status --porcelain` | **0 行** |
-| `git rev-list --left-right --count origin/main...main` | **`0 0`**（远端与本地一致） |
-| tag 之后再提交的账本提交 | 本单与 04 单的收尾提交（**不在 tag 里**，老规矩） |
+| `git rev-list --left-right --count origin/main...main` | **`0 0`**（远端与本地一致；**别把 HEAD 的 sha 写死**——每写一次账它就动一次） |
+| tag 之后再提交的账本提交 | 04 / 05 两单的收尾提交（**不在 tag 里**，老规矩） |
+| 远端复验 | `git ls-remote origin`：`refs/heads/main` = 当时 HEAD；`refs/tags/v1.4.3` = `95380bfe`（annotated 对象）→ 解引用 `47067b14` |
+
+**账本这一发的网络插曲（照 04 单那条口径处理）**：`push-02` 第一次用 `20.27.177.113` 被掐
+（`Recv failure: Connection was reset`，退出码 128）；**紧接着 6 个候选 IP 按内容复验 6/6 全 FAIL**
+（`curl` 拿不到 git 广告），等约 3 分钟复验 **4/6 转 OK**，换 `140.82.114.3` **一次过**
+（`47067b14..30674a0a main -> main`，闸门这一发只跑了关联子集 **94 passed**）。
+⇒ 老口径再实锤一次：**验过的 IP 只保证那一刻**；全 FAIL 时先等几分钟，别急着改别的东西。
+**最后一发**（把本读数自己推上去的那一发）输出落在 `%TEMP%\push-final.txt`——**故意不入库**：
+入库就又得为它再推一次，账本会自己追自己。
 
 ### 没做的（如实记）
 

@@ -19,7 +19,7 @@
 > | 项 | 值 |
 > |---|---|
 > | 线上最新 | **v1.4.3**（2026-10-01 发布），八件套齐全，`/releases/latest` 指向它 |
-> | 远端 `main` | **`47067b14`**（= 本地 HEAD，发布那一刻；`git ls-remote` 实测） |
+> | 远端 `main` | **`47067b14`**（= 本地 HEAD，发布那一刻；`git ls-remote` 实测）——其后又推了两笔账本提交（本单收拾 + 读数落盘），**别把 HEAD 的 sha 写死**：要看准就跑 `git rev-list --left-right --count origin/main...main`（收尾时 = **`0 0`**） |
 > | tag | annotated `v1.4.3` → 对象 `95380bfe`，解引用 = **`47067b14`**（打包那一刻的 CHANGELOG 提交；**tag 之后的账本提交不在 tag 里**，老规矩） |
 > | Release | `https://github.com/AK47n/firstep/releases/tag/v1.4.3`；**八件资产服务端 size 与本地逐件相同（8/8、0 处不一致）** |
 > | 联网自检 | `python tools\check-download-docs.py` **PASS**（三组全 `[OK]`；读数 `.scratch/release-v1.4.3/post-publish-check.txt`） |
@@ -1944,7 +1944,7 @@ Keil 要清 `user/Objects/*` + `user/Listings/*`，CCS 要清工程下 `Debug/`�
 
 ## 3. 发布状态：main 与线上包的落差
 
-**2026-10-01 深夜：`main` 与线上资产同步（v1.4.3 已发，远端 `main` = `47067b14`）。**
+**2026-10-01 深夜：`main` 与线上资产同步（v1.4.3 已发，远端 `main` = `47067b14`；其后推的账本提交见第 0 节，**别把 HEAD 的 sha 写死**）。**
 下面这张表是「线上现在有什么」。**本节此前长期停在 v1.4.0 那一行没跟上**（v1.4.1 / v1.4.2
 两轮只更新了第 0 节）——2026-10-01 这次补齐 v1.4.3 / v1.4.2 / v1.4.1 三行。
 （再往前那次补齐是 2026-09-29，补的 v1.4.0 / v1.3.1 / v1.3.0 三行。）
