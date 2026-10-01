@@ -271,21 +271,47 @@ const PREPARE = {
 /** 浮层（引脚菜单）**单开一趟**：它盖住整页，和面板里的元素混在一趟里拍，
  *  面板那几张会被浮层糊掉（本轮实测的设计约束）。菜单挂在 `body` 下、不在 `#tab-generate` 里。
  *
+ *  **2026-10-01 口径修正（工单 `contrast-residue/05`）**——上一版量不到 `li.cant`，原因是三处：
+ *    ① 平台选的是 **STM32**：它的 uart 是纯类型级 selectable、i2c 没有实例 token，
+ *       默认形态下**根本不会出 `cant`**（要人为先占住"同实例的对脚"才行）；
+ *    ② 模块选的是"第一张可点的卡"，未必有单端口宏那一族角色；
+ *    ③ 点圆点前**没有等判据模型**：模型未到时 `pinCanHost` 降级成类型级 ⇒ 一行 `cant` 都不出。
+ *  现在：**MSPM0 + `step_motor` + 点第一根脚**——`step_motor` 的 4 个 gpio_out 角色默认全在 B 口，
+ *  后端因此下发 `{kind:"port", port:"B"}` 约束（`pin_bindings.py`），点 A 口的脚（PA0）当场 4 行
+ *  `li.cant`，**零预备绑定**。等价备选：MSPM0 + `nrf24l01` → 点任意 B 口脚 ⇒ 6 行。
+ *
  *  返回 `{ note, open }`：`open` = 菜单确实开着（可以收一趟）；`note` 里**分开报**两件事
- *  ——"菜单能不能开"与"里面有没有 `li.cant`"（后者本轮实测：**没有**，见票尾）。 */
+ *  ——"菜单能不能开"与"里面有没有 `li.cant`"。 */
 async function prepareOverlay(page, tab) {
   if (tab !== "generate") return null;
   await focusTab(page, "generate");
-  await page.locator("#platforms .platform-card", { hasText: "STM32" }).first()
+  await page.locator("#platforms .platform-card", { hasText: "MSPM0" }).first()
     .click({ timeout: 8000 }).catch(() => {});
   const cards = await page.waitForFunction(
     () => document.querySelectorAll("#module-grid .module-card:not(.off)").length > 0,
     undefined, { timeout: 20000 }).then(() => true).catch(() => false);
   if (!cards) return { note: "**没造出来**：等了 20 s，生成页的模块网格里没有可选的卡", open: false };
-  await page.locator("#module-grid .module-card:not(.off)").first().click({ timeout: 8000 }).catch(() => {});
+  // 判据模型那一发要在**加模块之前**就挂上等（请求由加模块触发）
+  const matrix = page.waitForResponse(
+    (r) => r.url().includes("/api/bindings/matrix") && r.status() === 200,
+    { timeout: 25000 }).catch(() => null);
+  await page.fill("#module-search", "step_motor", { timeout: 8000 }).catch(() => {});
+  const card = page.locator('#module-grid .module-card[data-add="step_motor"]').first();
+  const had = await card.count();
+  if (had) await card.click({ timeout: 8000 }).catch(() => {});
   const pinned = await page.waitForSelector("#pin-board-svg circle[data-pin]", { timeout: 20000 })
     .then(() => true).catch(() => false);
   if (!pinned) return { note: "**没造出来**：选了模块，但 20 s 内引脚图上没有 `circle[data-pin]`", open: false };
+  // ⚠ **等判据模型**：模型未到时 `pinCanHost` 降级成类型级，一行 `cant` 都不会出（假红的主要来源）。
+  // ⚠ 草稿恢复那条路（`had` 为假）**不会再发** `/api/bindings/matrix`——那时模型早就在位，
+  //    拿"等不到新响应"去判它会得到假的"没等到"（第一版就这样冤枉了暗色那一趟）。
+  const gotMatrix = had ? await matrix : true;
+  await page.waitForFunction(() => {
+    const cap = document.getElementById("pin-board-caption");
+    const t = cap ? cap.textContent || "" : "";
+    return !t.includes("正在核对可绑引脚") && !t.includes("判据加载失败");
+  }, undefined, { timeout: 15000 }).catch(() => {});
+  const draftNote = had ? "" : "（`step_motor` 的卡不在网格里 = 草稿已恢复，跳过添加）";
   const circles = await page.locator("#pin-board-svg circle[data-pin]").all();
   let opened = 0, tried = 0;
   for (const c of circles.slice(0, 40)) {
@@ -298,14 +324,17 @@ async function prepareOverlay(page, tab) {
     }));
     if (st.menu) opened++;
     if (st.cant) {
-      return { note: `引脚菜单开出来了，第 ${tried} 根脚上有 ${st.cant} 条 \`li.cant\`（「不兼容」行）`, open: true };
+      return { note: `MSPM0 + step_motor + 第 ${tried} 根脚 → 引脚菜单里有 **${st.cant} 条 \`li.cant\`**`
+        + `（判据模型 ${gotMatrix ? "已到位" : "**没等到**（降级态下也可能有 cant，读数要打折）"}）`
+        + `（第 ${tried} 根脚试中）`,
+      open: true };
     }
     if (st.menu) await page.keyboard.press("Escape").catch(() => {});   // 菜单挡住下一脚：先关掉再试
   }
   return {
-    note: `引脚菜单**能开**（试了 ${tried} 根脚，${opened} 次开成、行数正常）但没有一条 \`li.cant\``
-      + "——STM32 板模型在这些组合下把列出来的角色都判 `selectable`。**这一处靶子没量到**，"
-      + "替代依据 = 静态族面同一对色（`--muted` × `--panel-2`），见票尾",
+    note: `引脚菜单**能开**（试了 ${tried} 根脚，${opened} 次开成）但没有一条 \`li.cant\``
+      + `（判据模型 ${gotMatrix ? "已到位" : "**没等到**——这一发不可信，先查等待那一步"}）`
+      + "。**这一处靶子没量到**",
     open: opened > 0,
   };
 }

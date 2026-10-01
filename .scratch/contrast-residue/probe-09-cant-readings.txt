@@ -1,0 +1,46 @@
+====================================================================================================
+§1 `li.cant` 的真像素（probe-08-shots-cant.json，probe-08 探针；命中 20 格）
+====================================================================================================
+主题    元素                        字色                    底                         比值      文本
+dark  pin-menu-list-cant-badge-hwrgb(88, 166, 255)     rgba(88, 166, 255, 0.15)  4.94    必接
+dark  pin-menu-list-cant-muted  rgb(145, 154, 164)    rgba(0, 0, 0, 0)          5.67    step_motor · 默认 PB24
+dark  pin-menu-list-cant-muted  rgb(145, 154, 164)    rgba(0, 0, 0, 0)          5.67    step_motor · 默认 PB6
+dark  pin-menu-list-cant-role-typergb(88, 166, 255)     rgba(88, 166, 255, 0.15)  4.94    gpio_out
+dark  pin-menu-list-cant-role-typergb(88, 166, 255)     rgba(88, 166, 255, 0.15)  4.94    gpio_out
+dark  pin-menu-list-cant-strong rgb(145, 154, 164)    rgba(0, 0, 0, 0)          5.67    STEP_MOTOR_RST2
+dark  pin-menu-list-cant-strong rgb(145, 154, 164)    rgba(0, 0, 0, 0)          5.67    STEP_MOTOR_SLP2
+dark  pin-menu-list-cant-why    rgb(145, 154, 164)    rgba(0, 0, 0, 0)          5.67    不兼容：step_motor 的 4 个 g
+dark  pin-menu-pin-menu-list-cantrgb(145, 154, 164)    rgb(28, 33, 40)           5.67    gpio_out
+      STEP_MO
+dark  pin-menu-pin-menu-list-cantrgb(145, 154, 164)    rgb(28, 33, 40)           5.67    gpio_out
+      STEP_MO
+light pin-menu-list-cant-badge-hwrgb(7, 85, 177)       rgba(9, 105, 218, 0.12)   4.87    必接
+light pin-menu-list-cant-muted  rgb(85, 94, 104)      rgba(0, 0, 0, 0)          5.25    step_motor · 默认 PB24
+light pin-menu-list-cant-muted  rgb(85, 94, 104)      rgba(0, 0, 0, 0)          5.25    step_motor · 默认 PB6
+light pin-menu-list-cant-role-typergb(9, 105, 218)      rgba(9, 105, 218, 0.12)   3.54    gpio_out
+light pin-menu-list-cant-role-typergb(9, 105, 218)      rgba(9, 105, 218, 0.12)   3.54    gpio_out
+light pin-menu-list-cant-strong rgb(85, 94, 104)      rgba(0, 0, 0, 0)          5.25    STEP_MOTOR_RST2
+light pin-menu-list-cant-strong rgb(85, 94, 104)      rgba(0, 0, 0, 0)          5.25    STEP_MOTOR_SLP2
+light pin-menu-list-cant-why    rgb(85, 94, 104)      rgba(0, 0, 0, 0)          5.25    不兼容：step_motor 的 4 个 g
+light pin-menu-pin-menu-list-cantrgb(85, 94, 104)      rgb(225, 230, 236)        5.25    gpio_out
+      STEP_MO
+light pin-menu-pin-menu-list-cantrgb(85, 94, 104)      rgb(225, 230, 236)        5.25    gpio_out
+      STEP_MO
+
+====================================================================================================
+§2 与静态族面同一对色对账（`--muted` × `--panel-2`）
+====================================================================================================
+  [light] --muted #555e68 × --panel-2 #e1e6ec = 5.25
+  [dark ] --muted #919aa4 × --panel-2 #1c2128 = 5.67
+
+====================================================================================================
+§3 探针自己记的账（准备 / 没量到）
+====================================================================================================
+  [light] 锚失效的参数表 + 真 `reviseLoad` + 切到卡内页签「参数速调」（`C:\Users\luoji\AppData\Local\Temp\df-probe08-param-stale`）→ `.param-stale`
+  [light] （浮层）MSPM0 + step_motor + 第 1 根脚 → 引脚菜单里有 **4 条 `li.cant`**（判据模型 已到位）（第 1 根脚试中）
+  [light] 点了 STM32 + 搜 sr04 → `.module-card.off`（单平台件）
+  [dark] 锚失效的参数表 + 真 `reviseLoad` + 切到卡内页签「参数速调」（`C:\Users\luoji\AppData\Local\Temp\df-probe08-param-stale`）→ `.param-stale`
+  [dark] （浮层）MSPM0 + step_motor + 第 1 根脚 → 引脚菜单里有 **4 条 `li.cant`**（判据模型 已到位）（第 1 根脚试中）
+  [dark] 点了 STM32 + 搜 sr04 → `.module-card.off`（单平台件）
+  没量到（浮层 [light]）：{'不可见': 0, '零尺寸': 0, '无文字': 0, '超过上限（登记表）': 14, '超过上限（老那半）': 0} 格（含 MAX_FORM_SHOTS 上限）
+  没量到（浮层 [dark]）：{'不可见': 0, '零尺寸': 0, '无文字': 0, '超过上限（登记表）': 14, '超过上限（老那半）': 0} 格（含 MAX_FORM_SHOTS 上限）
