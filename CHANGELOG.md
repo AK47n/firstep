@@ -1,8 +1,11 @@
-<!-- changelog-auto: last-commit=bfcf095064fcae947e09269bca8808fec48dd32d -->
+<!-- changelog-auto: last-commit=6d58247fd0f3e78cdd7e7e15baf3e86d8983c9d8 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
 组内条目按时间先后写；`HH:MM` 时间前缀可省略。以下为示例）
+
+## 2026-10-02
+- 00:11 发布 v1.4.3 04：八件资产服务端 8/8 对账一致 + 联网自检 PASS
 
 ## 2026-10-01
 - 02:00 不可选形态 01：三处 opacity 形态改灰底灰字 + 判据⑥认人面扩成登记表与反向嫌疑面
