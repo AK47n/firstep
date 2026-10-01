@@ -5,7 +5,7 @@ Release 说明按模板写（头两行给新用户 / 已装用户），并点名
 
 **被谁阻塞：** 02（门禁三连全绿）、03（沙箱验收过）。
 
-**状态：** ready-for-agent
+**状态：** claimed
 
 - [ ] 更新包：`powershell -File tools\pack-update.ps1 -Tag v1.4.3 -Baseline <…update-v1.4.2.files.txt>`
 - [ ] 完整包：`powershell -File tools\pack-full.ps1 -Tag v1.4.3 -Baseline <…full-v1.4.2.manifest.json>`

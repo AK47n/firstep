@@ -1,0 +1,7 @@
+# 读数：pack-01-update
+# 命令：powershell -File tools\pack-update.ps1 -Tag v1.4.3 -Baseline C:\Users\luoji\Desktop\firstep-pack\firstep-update-v1.4.2.files.txt
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-10-01T22:24:29+08:00
+# 退出码：1
+[错误] 工作树存在未提交的 tracked 变更，拒绝打包（-AllowDirty 可豁免）：
+   M .scratch/release-v1.4.3/issues/04-pack-and-publish.md
