@@ -1,0 +1,89 @@
+====================================================================================================
+§1 内联取色盘点（static/js/**，口径：字面令牌 vs 模板变量）
+====================================================================================================
+A. 字面 `color/background:var(--token)`：19 处（= 现腿⑨ 的认人面，应为 19~21）
+     fx/flash.js: 2
+     fx/task.js: 6
+     ui/generate-pins.js: 9
+     ui/generate-recommend.js: 1
+     ui/step-state.js: 1
+
+B. 模板变量取色（`prop: …${…}`）：7 处
+     ui/generate-pins.js: 7
+
+  逐行明细：
+  ui/generate-pins.js:616  return `<span class="lg"><span class="dot" style="background:${st[0]}"></span>${esc(PIN_TYPE_ZH[t] || t)}</span>`;
+  ui/generate-pins.js:629  `<span class="lg"><span class="dot" style="background:${color}"></span>${esc(slug)}</span>`).join("");
+  ui/generate-pins.js:842  status = `<span style="color:${st[0]}">已绑 ${esc(bound)}</span>` +
+  ui/generate-pins.js:866  <span class="role-type" style="color:${st[0]};background:${st[1]};border:1px solid ${st[0]}">${esc(r.decl.type)}</span>
+  ui/generate-pins.js:1051  return `<li><span class="dot" style="background:${st[0]}"></span>` +
+  ui/generate-pins.js:1075  <span class="role-type" style="color:${st[0]};background:${st[1]};border:1px solid ${st[0]}">${esc(r.decl.type)}</span>
+  ui/generate-pins.js:1079  ${bound ? ` <span style="color:${st[0]}">现绑 ${esc(bound)}</span>` : ""}
+
+====================================================================================================
+§2 PIN_TYPE_STYLE 表盘上实况（角色类型 → 令牌对）
+====================================================================================================
+  gpio_out   --pin-gpio       --pin-gpio-dim
+  gpio_in    --pin-gpio       --pin-gpio-dim
+  pwm        --pin-pwm        --pin-pwm-dim
+  enc        --pin-enc        --pin-enc-dim
+  uart_tx    --pin-uart       --pin-uart-dim
+  uart_rx    --pin-uart       --pin-uart-dim
+  i2c_scl    --pin-i2c        --pin-i2c-dim
+  i2c_sda    --pin-i2c        --pin-i2c-dim
+  spi_mosi   --pin-spi        --pin-spi-dim
+  spi_miso   --pin-spi        --pin-spi-dim
+  spi_sck    --pin-spi        --pin-spi-dim
+  spi_cs     --pin-spi        --pin-spi-dim
+  adc        --pin-adc        --pin-adc-dim
+  exti       --pin-exti       --pin-exti-dim
+  共 14 条（类型 → 色对）；去重后色对数 = 8
+
+====================================================================================================
+§3 该族令牌在两主题下的比值（.role-type 的真几何：字 = 主色，底 = dim 色叠在 --panel-2 上）
+====================================================================================================
+  色对                                      dark     light   （阈值 4.5）
+  --pin-gpio / --pin-gpio-dim             4.94      3.54
+  --pin-pwm / --pin-pwm-dim               4.96      3.50
+  --pin-enc / --pin-enc-dim               3.78      2.45
+  --pin-uart / --pin-uart-dim             3.93      2.33
+  --pin-i2c / --pin-i2c-dim               6.30      1.40
+  --pin-spi / --pin-spi-dim               6.08      1.45
+  --pin-adc / --pin-adc-dim               5.94      3.37
+  --pin-exti / --pin-exti-dim             6.09      1.45
+
+  对照：底换成 --panel（机械面口径）
+  --pin-gpio / --pin-gpio-dim             5.32      4.38
+  --pin-pwm / --pin-pwm-dim               5.33      4.32
+  --pin-enc / --pin-enc-dim               4.05      3.01
+  --pin-uart / --pin-uart-dim             4.22      2.86
+  --pin-i2c / --pin-i2c-dim               6.79      1.70
+  --pin-spi / --pin-spi-dim               6.56      1.77
+  --pin-adc / --pin-adc-dim               6.40      4.17
+  --pin-exti / --pin-exti-dim             6.56      1.77
+
+====================================================================================================
+§4 同一族色当**无底色文字**（`已绑 X` / `现绑 X` 那两个 span，底 = --panel-2）
+====================================================================================================
+  主色                        dark     light   （阈值 4.5）
+  --pin-gpio                6.41      4.14
+  --pin-pwm                 6.37      4.05
+  --pin-enc                 4.50      2.87
+  --pin-uart                4.83      2.67
+  --pin-i2c                 8.60      1.50
+  --pin-spi                 8.32      1.55
+  --pin-adc                 7.38      3.88
+  --pin-exti                8.31      1.55
+
+====================================================================================================
+§5 同族**色点**（图例 / 菜单 dot，非文字：主色 vs --panel-2，阈值 3.0）
+====================================================================================================
+  主色                        dark     light
+  --pin-gpio                6.41      4.14
+  --pin-pwm                 6.37      4.05
+  --pin-enc                 4.50      2.87
+  --pin-uart                4.83      2.67
+  --pin-i2c                 8.60      1.50
+  --pin-spi                 8.32      1.55
+  --pin-adc                 7.38      3.88
+  --pin-exti                8.31      1.55

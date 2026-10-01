@@ -1,0 +1,40 @@
+平台 = mspm0
+================================================================================================
+  adc       （adc）  joystick×2、adc×1、flame×1、gp2y1014au×1、ir_distance×1、mq135×1
+  enc       （enc）  motor×4
+  gpio_in   （gpio）  huidu×8、pid×8、xunji×8、ttp224×4、nrf24l01×2、tp_xpt2046×2
+  gpio_out  （gpio）  lcd×6、oled×5、motor×4、nrf24l01×4、rc522×4、step_motor×4
+  i2c_scl   （i2c）  i2c_probe×1、ml_mpu6050×1、oled×1
+  i2c_sda   （i2c）  i2c_probe×1、ml_mpu6050×1、oled×1
+  pwm       （pwm）  l298n×2、motor×2、servo×1、step_motor×1
+  uart_rx   （uart）  as32×1、coord_detect×1、debug_uart×1、digit_uart×1、fingerprint×1、hc05×1
+  uart_tx   （uart）  as32×1、coord_detect×1、debug_uart×1、digit_uart×1、fingerprint×1、hc05×1
+
+================================================================================================
+§2 色族覆盖：每个族有哪些模块（角色数合计）
+================================================================================================
+  gpio    48 个模块：huidu×8、pid×8、xunji×8、lcd×6、nrf24l01×6、oled×5、rc522×5、tp_xpt2046×5 …
+  pwm      4 个模块：l298n×2、motor×2、servo×1、step_motor×1
+  enc      1 个模块：motor×4
+  uart    12 个模块：as32×2、coord_detect×2、debug_uart×2、digit_uart×2、fingerprint×2、hc05×2、imu_uart×2、open_mv4×2 …
+  i2c      3 个模块：i2c_probe×2、ml_mpu6050×2、oled×2
+  spi      0 个模块：
+  adc     20 个模块：joystick×2、adc×1、flame×1、gp2y1014au×1、ir_distance×1、mq135×1、mq2×1、mq3×1 …
+  exti     0 个模块：
+
+================================================================================================
+§3 贪心最小覆盖集（每次挑「补得最多」的那个模块；并列取字典序小者）
+================================================================================================
+  选中 4 个：motor、adc、as32、i2c_probe
+  仍未覆盖：['exti', 'spi']
+
+  逐个受选模块覆盖的族：
+    motor                  ['enc', 'gpio', 'pwm']
+    adc                    ['adc']
+    as32                   ['uart']
+    i2c_probe              ['i2c']
+
+================================================================================================
+§4 候选大集合（一次选进来，覆盖最稳，但要小心引脚冲突报警）
+================================================================================================
+  单模块就覆盖八族的：（无）
