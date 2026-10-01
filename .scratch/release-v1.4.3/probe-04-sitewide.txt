@@ -1,0 +1,26 @@
+# 读数：probe-04-sitewide
+# 命令：python .scratch\ui-density-sitewide\probe-04-scope-calibers.py
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-10-01T22:16:14+08:00
+# 退出码：0
+scope         rules  bareFont  bareSpace  fullBoxes
+code            365         0          0         19
+master           57         0          0          4
+settings         48         0          0          3
+changelog        19         0          0          1
+guide            30         0          0          3
+library          99         0          0          8
+reference        47         0          0          2
+pdf              14         0          0          0
+md               15         0          0          0
+topic            45         0          0          3
+generate        409         0          0         33
+hwcheck         123         0          0          8
+components       96         0          0          9
+shell           227         0          0         22
+合计             1594         0          0        115
+（`fullBoxes` = **整圈完整框**；探针的 borders 那一栏含单边分隔线与 `border: 0`，两个口径别混着读）
+
+页面尺 SITEWIDE_BACKLOG = 0 条：
+          已完工 = 14 条：code, master, settings, changelog, guide, library, reference, pdf, md, topic, generate, hwcheck, components, shell
+文件：C:\Users\luoji\Desktop\firstep\src\contest_generator\static\index.html

@@ -1,0 +1,128 @@
+# 读数：probe-08-shots-cant
+# 命令：node .scratch/code-contrast/probe-08-disabled-state.mjs --tag cant --out .scratch/release-v1.4.3
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-10-01T22:16:13+08:00
+# 退出码：0
+认人面新那半（读自守卫）：.module-card.off  |  .pin-menu-list li.cant  |  .param-stale
+
+===== light =====
+  generate  准备：锚失效的参数表 + 真 `reviseLoad` + 切到卡内页签「参数速调」（`C:\Users\luoji\AppData\Local\Temp\df-probe08-param-stale`）→ `.param-stale`
+  generate  命中 13　拍得 12　**没量到**：无文字 1
+    登记表 .param-stale         opacity 1  rgb(31, 35, 40) on rgb(225, 230, 236)  「PROBE_THRESHOLD演示阈值ms当前值位置已变↺ 恢复旧值范围：0–3」  ⚠祖先渐变  → probe-08-cant-light-generate-panel-0-params-grid-param-grid-param.png
+    登记表 .param-stale · 文字    opacity 1  rgb(0, 97, 129) on rgba(0, 0, 0, 0)  「PROBE_THRESHOLD」  ⚠祖先渐变  → probe-08-cant-light-generate-panel-1-param-card-param-stale-param.png
+    登记表 .param-stale · 文字    opacity 1  rgb(31, 35, 40) on rgba(0, 0, 0, 0)  「演示阈值」  ⚠祖先渐变  → probe-08-cant-light-generate-panel-2-param-card-param-stale-param.png
+    登记表 .param-stale · 文字    opacity 1  rgb(85, 94, 104) on rgb(255, 255, 255)  「ms」  ⚠祖先渐变  → probe-08-cant-light-generate-panel-3-param-card-param-stale-param.png
+    登记表 .param-stale · 文字    opacity 1  rgb(85, 94, 104) on rgba(0, 0, 0, 0)  「当前值」  ⚠祖先渐变  → probe-08-cant-light-generate-panel-4-param-card-param-stale-param.png
+      ⚠ 截图失败（.param-card.param-stale > .param-card-body > #params-input-PROBE_THRESHOLD ｜ <input> ｜ 116×40）——这一格**没量到**，不写进 JSON
+    登记表 .param-stale · 文字    opacity 1  rgb(122, 81, 0) on rgba(154, 103, 0, 0.12)  「位置已变」  ⚠祖先渐变  → probe-08-cant-light-generate-panel-6-param-card-param-stale-param.png
+      ⚠ 截图失败（.param-card.param-stale > .param-card-foot > .btn-params-reset ｜ <button> ｜ 79×23）——这一格**没量到**，不写进 JSON
+    登记表 .param-stale · 文字    opacity 1  rgb(85, 94, 104) on rgba(0, 0, 0, 0)  「范围：0–3000」  ⚠祖先渐变  → probe-08-cant-light-generate-panel-8-param-card-foot-param-hint-s.png
+    disabled 属性              opacity 1  rgb(85, 94, 104) on rgb(225, 230, 236)  「选择文件夹…」  ⚠祖先渐变  → probe-08-cant-light-generate-panel-9-card-row-btn-pick-output-dir.png
+    disabled 属性              opacity 1  rgb(85, 94, 104) on rgb(225, 230, 236)  「800」  ⚠祖先渐变  → probe-08-cant-light-generate-panel-10-param-card-param-stale-param.png
+    disabled 属性              opacity 1  rgb(85, 94, 104) on rgb(225, 230, 236)  「↺ 恢复旧值」  ⚠祖先渐变  → probe-08-cant-light-generate-panel-11-param-card-param-stale-param.png
+      ⚠ 本轮截图失败 2 格（原因见上；它们不在 JSON 里）
+  generate  准备（浮层）：MSPM0 + step_motor + 第 1 根脚 → 引脚菜单里有 **4 条 `li.cant`**（判据模型 已到位）（第 1 根脚试中）
+  generate  [浮层] 命中 24　拍得 10　**没量到**：超过上限（登记表） 14
+    登记表 .pin-menu-list li.cant opacity 1  rgb(85, 94, 104) on rgb(225, 230, 236)  「gpio_out
+      STEP_MOTOR_RST2
+      ste」  → probe-08-cant-light-generate-overlay-0-pin-menu-pin-menu-list-cant.png
+    登记表 .pin-menu-list li.cant · 文字 opacity 1  rgb(9, 105, 218) on rgba(9, 105, 218, 0.12)  「gpio_out」  → probe-08-cant-light-generate-overlay-1-pin-menu-list-cant-role-type.png
+    登记表 .pin-menu-list li.cant · 文字 opacity 1  rgb(85, 94, 104) on rgba(0, 0, 0, 0)  「STEP_MOTOR_RST2」  → probe-08-cant-light-generate-overlay-2-pin-menu-list-cant-strong.png
+    登记表 .pin-menu-list li.cant · 文字 opacity 1  rgb(85, 94, 104) on rgba(0, 0, 0, 0)  「step_motor · 默认 PB24」  → probe-08-cant-light-generate-overlay-3-pin-menu-list-cant-muted.png
+    登记表 .pin-menu-list li.cant · 文字 opacity 1  rgb(7, 85, 177) on rgba(9, 105, 218, 0.12)  「必接」  → probe-08-cant-light-generate-overlay-4-pin-menu-list-cant-badge-hw.png
+    登记表 .pin-menu-list li.cant · 文字 opacity 1  rgb(85, 94, 104) on rgba(0, 0, 0, 0)  「不兼容：step_motor 的 4 个 gpio_out 角色走单端口宏（如 」  → probe-08-cant-light-generate-overlay-5-pin-menu-list-cant-why.png
+    登记表 .pin-menu-list li.cant opacity 1  rgb(85, 94, 104) on rgb(225, 230, 236)  「gpio_out
+      STEP_MOTOR_SLP2
+      ste」  → probe-08-cant-light-generate-overlay-6-pin-menu-pin-menu-list-cant.png
+    登记表 .pin-menu-list li.cant · 文字 opacity 1  rgb(9, 105, 218) on rgba(9, 105, 218, 0.12)  「gpio_out」  → probe-08-cant-light-generate-overlay-7-pin-menu-list-cant-role-type.png
+    登记表 .pin-menu-list li.cant · 文字 opacity 1  rgb(85, 94, 104) on rgba(0, 0, 0, 0)  「STEP_MOTOR_SLP2」  → probe-08-cant-light-generate-overlay-8-pin-menu-list-cant-strong.png
+    登记表 .pin-menu-list li.cant · 文字 opacity 1  rgb(85, 94, 104) on rgba(0, 0, 0, 0)  「step_motor · 默认 PB6」  → probe-08-cant-light-generate-overlay-9-pin-menu-list-cant-muted.png
+  hwcheck   准备：点了 STM32 + 搜 sr04 → `.module-card.off`（单平台件）
+  hwcheck   命中  9　拍得 9
+    登记表 .module-card.off     opacity 1  rgb(31, 35, 40) on rgb(255, 255, 255)  「sr04详情需切换平台HC-SR04 超声波测距模块：板上一对“喇叭”探头…MS」  ⚠祖先渐变  → probe-08-cant-light-hwcheck-panel-0-card-hwcheck-device-grid-mod.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(31, 35, 40) on rgba(0, 0, 0, 0)  「sr04」  ⚠祖先渐变  → probe-08-cant-light-hwcheck-panel-1-module-card-off-mc-head-slug.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(0, 97, 129) on rgb(225, 230, 236)  「详情」  ⚠祖先渐变  → probe-08-cant-light-hwcheck-panel-2-module-card-off-mc-head-mc-i.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(122, 81, 0) on rgba(154, 103, 0, 0.12)  「需切换平台」  ⚠祖先渐变  → probe-08-cant-light-hwcheck-panel-3-module-card-off-mc-head-mc-o.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(85, 94, 104) on rgba(0, 0, 0, 0)  「HC-SR04 超声波测距模块：板上一对“喇叭”探头…」  ⚠祖先渐变  → probe-08-cant-light-hwcheck-panel-4-hwcheck-device-grid-module-c.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(21, 103, 45) on rgba(26, 127, 55, 0.12)  「MSPM0·已验证」  ⚠祖先渐变  → probe-08-cant-light-hwcheck-panel-5-module-card-off-mc-meta-mc-p.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(85, 94, 104) on rgba(139, 148, 158, 0.12)  「依赖：delay」  ⚠祖先渐变  → probe-08-cant-light-hwcheck-panel-6-module-card-off-mc-meta-mc-d.png
+    disabled 属性              opacity 1  rgb(85, 94, 104) on rgb(225, 230, 236)  「带进生成页」  ⚠祖先渐变  → probe-08-cant-light-hwcheck-panel-7-hwcheck-handoff-hwcheck-hand.png
+    disabled 属性              opacity 1  rgb(85, 94, 104) on rgb(225, 230, 236)  「让 AI 分析」  ⚠祖先渐变  → probe-08-cant-light-hwcheck-panel-8-card-row-btn-hwcheck-triage.png
+  settings  命中  0　拍得 0
+  guide     命中  0　拍得 0
+  changelog 命中  0　拍得 0
+  code      命中  4　拍得 0　**没量到**：零尺寸 4
+  master    命中  1　拍得 1
+    disabled 属性              opacity 1  rgb(85, 94, 104) on rgb(225, 230, 236)  「AI 提炼报告」  ⚠祖先渐变  → probe-08-cant-light-master-panel-0-card-row-btn-distill.png
+  library   命中  0　拍得 0
+  reference 命中  0　拍得 0
+  pdf       命中  0　拍得 0
+  md        命中  0　拍得 0
+  topic     命中  0　拍得 0
+
+===== dark =====
+  generate  准备：锚失效的参数表 + 真 `reviseLoad` + 切到卡内页签「参数速调」（`C:\Users\luoji\AppData\Local\Temp\df-probe08-param-stale`）→ `.param-stale`
+  generate  命中 67　拍得 22　**没量到**：无文字 1 / 超过上限（登记表） 44
+    登记表 .module-card.off     opacity 1  rgb(230, 237, 243) on rgb(22, 27, 34)  「ec01g详情需切换平台EC-01G NB-IoT+GPS 模块驱动（stm…S」  ⚠祖先渐变  → probe-08-cant-dark-generate-panel-0-card-done-module-grid-module.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(230, 237, 243) on rgba(0, 0, 0, 0)  「ec01g」  ⚠祖先渐变  → probe-08-cant-dark-generate-panel-1-module-card-off-mc-head-slug.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(0, 212, 255) on rgb(28, 33, 40)  「详情」  ⚠祖先渐变  → probe-08-cant-dark-generate-panel-2-module-card-off-mc-head-mc-i.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(227, 163, 65) on rgba(227, 163, 65, 0.12)  「需切换平台」  ⚠祖先渐变  → probe-08-cant-dark-generate-panel-3-module-card-off-mc-head-mc-o.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(145, 154, 164) on rgba(0, 0, 0, 0)  「EC-01G NB-IoT+GPS 模块驱动（stm…」  ⚠祖先渐变  → probe-08-cant-dark-generate-panel-4-module-grid-module-card-off-.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(67, 196, 85) on rgba(63, 185, 80, 0.15)  「STM32·已验证」  ⚠祖先渐变  → probe-08-cant-dark-generate-panel-5-module-card-off-mc-meta-mc-p.png
+    登记表 .module-card.off     opacity 1  rgb(230, 237, 243) on rgb(22, 27, 34)  「ec11详情需切换平台EC11 旋转编码器驱动（stm32 纯驱动，B 类…ST」  ⚠祖先渐变  → probe-08-cant-dark-generate-panel-6-card-done-module-grid-module.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(230, 237, 243) on rgba(0, 0, 0, 0)  「ec11」  ⚠祖先渐变  → probe-08-cant-dark-generate-panel-7-module-card-off-mc-head-slug.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(0, 212, 255) on rgb(28, 33, 40)  「详情」  ⚠祖先渐变  → probe-08-cant-dark-generate-panel-8-module-card-off-mc-head-mc-i.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(227, 163, 65) on rgba(227, 163, 65, 0.12)  「需切换平台」  ⚠祖先渐变  → probe-08-cant-dark-generate-panel-9-module-card-off-mc-head-mc-o.png
+    登记表 .param-stale         opacity 1  rgb(230, 237, 243) on rgb(28, 33, 40)  「PROBE_THRESHOLD演示阈值ms当前值位置已变↺ 恢复旧值范围：0–3」  ⚠祖先渐变  → probe-08-cant-dark-generate-panel-10-params-grid-param-grid-param.png
+    登记表 .param-stale · 文字    opacity 1  rgb(0, 212, 255) on rgba(0, 0, 0, 0)  「PROBE_THRESHOLD」  ⚠祖先渐变  → probe-08-cant-dark-generate-panel-11-param-card-param-stale-param.png
+    登记表 .param-stale · 文字    opacity 1  rgb(230, 237, 243) on rgba(0, 0, 0, 0)  「演示阈值」  ⚠祖先渐变  → probe-08-cant-dark-generate-panel-12-param-card-param-stale-param.png
+    登记表 .param-stale · 文字    opacity 1  rgb(145, 154, 164) on rgb(22, 27, 34)  「ms」  ⚠祖先渐变  → probe-08-cant-dark-generate-panel-13-param-card-param-stale-param.png
+    登记表 .param-stale · 文字    opacity 1  rgb(145, 154, 164) on rgba(0, 0, 0, 0)  「当前值」  ⚠祖先渐变  → probe-08-cant-dark-generate-panel-14-param-card-param-stale-param.png
+      ⚠ 截图失败（.param-card.param-stale > .param-card-body > #params-input-PROBE_THRESHOLD ｜ <input> ｜ 116×40）——这一格**没量到**，不写进 JSON
+    登记表 .param-stale · 文字    opacity 1  rgb(227, 163, 65) on rgba(227, 163, 65, 0.12)  「位置已变」  ⚠祖先渐变  → probe-08-cant-dark-generate-panel-16-param-card-param-stale-param.png
+      ⚠ 截图失败（.param-card.param-stale > .param-card-foot > .btn-params-reset ｜ <button> ｜ 79×23）——这一格**没量到**，不写进 JSON
+    登记表 .param-stale · 文字    opacity 1  rgb(145, 154, 164) on rgba(0, 0, 0, 0)  「范围：0–3000」  ⚠祖先渐变  → probe-08-cant-dark-generate-panel-18-param-card-foot-param-hint-s.png
+    disabled 属性              opacity 1  rgb(145, 154, 164) on rgb(28, 33, 40)  「选择文件夹…」  ⚠祖先渐变  → probe-08-cant-dark-generate-panel-19-card-row-btn-pick-output-dir.png
+    disabled 属性              opacity 1  rgb(145, 154, 164) on rgb(28, 33, 40)  「800」  ⚠祖先渐变  → probe-08-cant-dark-generate-panel-20-param-card-param-stale-param.png
+    disabled 属性              opacity 1  rgb(145, 154, 164) on rgb(28, 33, 40)  「↺ 恢复旧值」  ⚠祖先渐变  → probe-08-cant-dark-generate-panel-21-param-card-param-stale-param.png
+      ⚠ 本轮截图失败 2 格（原因见上；它们不在 JSON 里）
+  generate  准备（浮层）：MSPM0 + step_motor + 第 1 根脚 → 引脚菜单里有 **4 条 `li.cant`**（判据模型 已到位）（第 1 根脚试中）
+  generate  [浮层] 命中 24　拍得 10　**没量到**：超过上限（登记表） 14
+    登记表 .pin-menu-list li.cant opacity 1  rgb(145, 154, 164) on rgb(28, 33, 40)  「gpio_out
+      STEP_MOTOR_RST2
+      ste」  → probe-08-cant-dark-generate-overlay-0-pin-menu-pin-menu-list-cant.png
+    登记表 .pin-menu-list li.cant · 文字 opacity 1  rgb(88, 166, 255) on rgba(88, 166, 255, 0.15)  「gpio_out」  → probe-08-cant-dark-generate-overlay-1-pin-menu-list-cant-role-type.png
+    登记表 .pin-menu-list li.cant · 文字 opacity 1  rgb(145, 154, 164) on rgba(0, 0, 0, 0)  「STEP_MOTOR_RST2」  → probe-08-cant-dark-generate-overlay-2-pin-menu-list-cant-strong.png
+    登记表 .pin-menu-list li.cant · 文字 opacity 1  rgb(145, 154, 164) on rgba(0, 0, 0, 0)  「step_motor · 默认 PB24」  → probe-08-cant-dark-generate-overlay-3-pin-menu-list-cant-muted.png
+    登记表 .pin-menu-list li.cant · 文字 opacity 1  rgb(88, 166, 255) on rgba(88, 166, 255, 0.15)  「必接」  → probe-08-cant-dark-generate-overlay-4-pin-menu-list-cant-badge-hw.png
+    登记表 .pin-menu-list li.cant · 文字 opacity 1  rgb(145, 154, 164) on rgba(0, 0, 0, 0)  「不兼容：step_motor 的 4 个 gpio_out 角色走单端口宏（如 」  → probe-08-cant-dark-generate-overlay-5-pin-menu-list-cant-why.png
+    登记表 .pin-menu-list li.cant opacity 1  rgb(145, 154, 164) on rgb(28, 33, 40)  「gpio_out
+      STEP_MOTOR_SLP2
+      ste」  → probe-08-cant-dark-generate-overlay-6-pin-menu-pin-menu-list-cant.png
+    登记表 .pin-menu-list li.cant · 文字 opacity 1  rgb(88, 166, 255) on rgba(88, 166, 255, 0.15)  「gpio_out」  → probe-08-cant-dark-generate-overlay-7-pin-menu-list-cant-role-type.png
+    登记表 .pin-menu-list li.cant · 文字 opacity 1  rgb(145, 154, 164) on rgba(0, 0, 0, 0)  「STEP_MOTOR_SLP2」  → probe-08-cant-dark-generate-overlay-8-pin-menu-list-cant-strong.png
+    登记表 .pin-menu-list li.cant · 文字 opacity 1  rgb(145, 154, 164) on rgba(0, 0, 0, 0)  「step_motor · 默认 PB6」  → probe-08-cant-dark-generate-overlay-9-pin-menu-list-cant-muted.png
+  hwcheck   准备：点了 STM32 + 搜 sr04 → `.module-card.off`（单平台件）
+  hwcheck   命中  9　拍得 9
+    登记表 .module-card.off     opacity 1  rgb(230, 237, 243) on rgb(22, 27, 34)  「sr04详情需切换平台HC-SR04 超声波测距模块：板上一对“喇叭”探头…MS」  ⚠祖先渐变  → probe-08-cant-dark-hwcheck-panel-0-card-hwcheck-device-grid-mod.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(230, 237, 243) on rgba(0, 0, 0, 0)  「sr04」  ⚠祖先渐变  → probe-08-cant-dark-hwcheck-panel-1-module-card-off-mc-head-slug.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(0, 212, 255) on rgb(28, 33, 40)  「详情」  ⚠祖先渐变  → probe-08-cant-dark-hwcheck-panel-2-module-card-off-mc-head-mc-i.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(227, 163, 65) on rgba(227, 163, 65, 0.12)  「需切换平台」  ⚠祖先渐变  → probe-08-cant-dark-hwcheck-panel-3-module-card-off-mc-head-mc-o.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(145, 154, 164) on rgba(0, 0, 0, 0)  「HC-SR04 超声波测距模块：板上一对“喇叭”探头…」  ⚠祖先渐变  → probe-08-cant-dark-hwcheck-panel-4-hwcheck-device-grid-module-c.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(67, 196, 85) on rgba(63, 185, 80, 0.15)  「MSPM0·已验证」  ⚠祖先渐变  → probe-08-cant-dark-hwcheck-panel-5-module-card-off-mc-meta-mc-p.png
+    登记表 .module-card.off · 文字 opacity 1  rgb(145, 154, 164) on rgba(139, 148, 158, 0.12)  「依赖：delay」  ⚠祖先渐变  → probe-08-cant-dark-hwcheck-panel-6-module-card-off-mc-meta-mc-d.png
+    disabled 属性              opacity 1  rgb(145, 154, 164) on rgb(28, 33, 40)  「带进生成页」  ⚠祖先渐变  → probe-08-cant-dark-hwcheck-panel-7-hwcheck-handoff-hwcheck-hand.png
+    disabled 属性              opacity 1  rgb(145, 154, 164) on rgb(28, 33, 40)  「让 AI 分析」  ⚠祖先渐变  → probe-08-cant-dark-hwcheck-panel-8-card-row-btn-hwcheck-triage.png
+  settings  命中  0　拍得 0
+  guide     命中  0　拍得 0
+  changelog 命中  0　拍得 0
+  code      命中  4　拍得 0　**没量到**：零尺寸 4
+  master    命中  1　拍得 1
+    disabled 属性              opacity 1  rgb(145, 154, 164) on rgb(28, 33, 40)  「AI 提炼报告」  ⚠祖先渐变  → probe-08-cant-dark-master-panel-0-card-row-btn-distill.png
+  library   命中  0　拍得 0
+  reference 命中  0　拍得 0
+  pdf       命中  0　拍得 0
+  md        命中  0　拍得 0
+  topic     命中  0　拍得 0
+
+已落盘 C:\Users\luoji\Desktop\firstep\.scratch\release-v1.4.3\probe-08-shots-cant.json（70 格；准备 6 条、"没量到"账 26 条也写进了 JSON）

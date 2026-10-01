@@ -1,0 +1,120 @@
+# 读数：probe-08-opacity-inventory
+# 命令：python .scratch\disabled-forms\probe-00-inventory.py
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-10-01T22:10:02+08:00
+# 退出码：0
+==============================================================================
+§1 样式块里 `opacity < 1` 的规则（`@keyframes` 帧单列）
+==============================================================================
+总 20 条：动画帧内 5 条、活规则 15 条
+
+  0.92  .welcome-card .welcome-sub                                       在册 dim
+  0.92  .welcome-card .welcome-line                                      在册 dim
+  0.6   .chip.rec .chip-x                                                在册 dim
+  0.75  .sugg-msg .muted                                                 在册 dim
+  0.5   #tab-hwcheck .empty-state .es-icon                               在册 dim
+  0.22  .pin-dim                                                         在册 dim
+  0.5   .empty-state .es-icon                                            在册 dim
+  0.55  .code-crumb-sep                                                  在册 dim
+  0.8   .code-tab.ro .code-tab-name                                      在册 dim
+  0.55  .code-tab.dragging                                               在册 dim
+  0.0   .code-zoom-badge                                                 在册 dim
+  0.75  .card-details > summary::before                                  在册 dim
+  0.4   .wiring-dot-dim                                                  在册 dim
+  0.35  .wiring-line.wiring-dim                                          在册 dim
+  0.35  .card-collapse                                                   在册 dim
+
+  —— 动画帧内（判据应排除）：
+  0.0   50%, 100%
+  0.55  0%, 100%
+  0.75  0%, 100%
+  0.0   from
+  0.0   to
+
+  ⇒ 活规则 15 条，其中**未在册 0 条**（全量登记已闭合）
+  · recon 基线（`disabled-forms` 单记的那份，冻结）：总 26 / 动画帧 5 / 活规则 21 / 旧嫌疑面 7；现算差 = 总 -6 / 活规则 -6
+  ⇒ 正向认人面里还带 `opacity < 1` 的规则 = **0 条**（正向判据应当无话可说）
+
+==============================================================================
+§2 三处目标的比值：改前（冻结的 opacity 合成，两模型）× 改后（现算：声明色 × 声明底）
+==============================================================================
+  改前那一列的口径：opacity 是**冻结的 recon 值**（改完之后盘上已经没有它，复算不出来）；
+  改后那一列**每次现算**：读规则现在声明的底（没声明就吃祖先/兜底）。
+
+.module-card.off   （改前 opacity 0.55 / 现盘上 已无 opacity；底 盘上声明 --panel）
+  [light]
+    slug（继承正文色）            --text     改前 A 3.22 (#848689 on #eef1f5) | B 3.40 (#767b80 on #e1e6ec)
+    说明 / 徽章文字              --muted    改前 A 2.16 (#a2a6ac on #eef1f5) | B 2.24 (#949ba3 on #e1e6ec)
+    slug（继承正文色）            --text     改后   15.80 (--text on --panel)
+    说明 / 徽章文字              --muted    改后   6.59 (--muted on --panel)
+  [dark]
+    slug（继承正文色）            --text     改前 A 5.11 (#888f95 on #191e25) | B 5.09 (#8b9198 on #1c2128)
+    说明 / 徽章文字              --muted    改前 A 2.67 (#5a616a on #191e25) | B 2.69 (#5c646c on #1c2128)
+    slug（继承正文色）            --text     改后   14.64 (--text on --panel)
+    说明 / 徽章文字              --muted    改后   6.06 (--muted on --panel)
+
+.pin-menu-list li.cant   （改前 opacity 0.5 / 现盘上 已无 opacity；底 盘上声明 --panel-2）
+  [light]
+    角色名（继承正文色）             --text     改前 A 3.16 (#8f9194 on #ffffff) | B 3.16 (#8f9194 on #ffffff)
+    slug / 「不兼容」说明         --muted    改前 A 2.23 (#aaaeb4 on #ffffff) | B 2.23 (#aaaeb4 on #ffffff)
+    角色名（继承正文色）             --text     改后   12.59 (--text on --panel-2)
+    slug / 「不兼容」说明         --muted    改后   5.25 (--muted on --panel-2)
+  [dark]
+    角色名（继承正文色）             --text     改前 A 4.58 (#7e848a on #161b22) | B 4.58 (#7e848a on #161b22)
+    slug / 「不兼容」说明         --muted    改前 A 2.49 (#545a63 on #161b22) | B 2.49 (#545a63 on #161b22)
+    角色名（继承正文色）             --text     改后   13.70 (--text on --panel-2)
+    slug / 「不兼容」说明         --muted    改后   5.67 (--muted on --panel-2)
+
+.param-stale   （改前 opacity 0.65 / 现盘上 已无 opacity；底 未声明 → 兜底 --panel-2）
+  [light]
+    参数名                    --text     改前 A 4.32 (#6d7073 on #eceff3) | B 4.53 (#63676d on #e1e6ec)
+    提示 / 单位                --muted    改前 A 2.59 (#90969d on #eceff3) | B 2.65 (#868e96 on #e1e6ec)
+    参数名                    --text     改后   12.59 (--text on --panel-2)
+    提示 / 单位                --muted    改后   5.25 (--muted on --panel-2)
+  [dark]
+    参数名                    --text     改前 A 6.57 (#9da4aa on #1a1f26) | B 6.57 (#9fa6ac on #1c2128)
+    提示 / 单位                --muted    改前 A 3.20 (#666e76 on #1a1f26) | B 3.22 (#687079 on #1c2128)
+    参数名                    --text     改后   13.70 (--text on --panel-2)
+    提示 / 单位                --muted    改后   5.67 (--muted on --panel-2)
+
+==============================================================================
+§3 候选落值要用到的基准对（两主题）
+==============================================================================
+  [light] --text         on --panel    = 15.80
+  [light] --text         on --panel-2  = 12.59
+  [light] --muted        on --panel    = 6.59
+  [light] --muted        on --panel-2  = 5.25
+  [light] --accent-text  on --panel    = 6.94
+  [light] --accent-text  on --panel-2  = 5.53
+  [light] --warn-text    on --panel    = 6.99
+  [light] --warn-text    on --panel-2  = 5.57
+  [dark] --text         on --panel    = 14.64
+  [dark] --text         on --panel-2  = 13.70
+  [dark] --muted        on --panel    = 6.06
+  [dark] --muted        on --panel-2  = 5.67
+  [dark] --accent-text  on --panel    = 9.77
+  [dark] --accent-text  on --panel-2  = 9.14
+  [dark] --warn-text    on --panel    = 7.89
+  [dark] --warn-text    on --panel-2  = 7.38
+
+==============================================================================
+§4 两个冻结形状数的现算口（守卫 `CONTRAST_PAIR_COUNT` / `CONTRAST_FAMILY_CELL_COUNT`）
+==============================================================================
+  机械面（同规则 `color:` × `background:`，两主题各一条）= **394** 对
+  族面格数 = **172** 格
+  机械面不达标 = 1 条（light #main-c::selection 1.38）
+
+==============================================================================
+§5 连带调整的比值（off 卡上的「详情」按钮 / 平台徽章坐在两种底上）
+==============================================================================
+  · .mc-info 在 off 卡上改 --panel-2 底（可用控件，不许跟着一起弱化）
+    [light] --accent-text on --panel    = 6.94
+    [light] --accent-text on --panel-2  = 5.53  ← off 卡上用的是这层
+    [dark] --accent-text on --panel    = 9.77
+    [dark] --accent-text on --panel-2  = 9.14  ← off 卡上用的是这层
+  · .mc-plat.un 徽章（底是 rgba(139,148,158,.15)，字 --muted）——off 卡的底从 --panel-2 换成
+    --panel，徽章合成底跟着变；两行都摆出来，免得「换底把徽章压暗了」这种担心没人复算
+    [light] --muted on rgba(139,148,158,.15) over --panel-2  = 4.68 (#d4dae0)
+    [light] --muted on rgba(139,148,158,.15) over --panel    = 5.72 (#eeeff0)
+    [dark] --muted on rgba(139,148,158,.15) over --panel-2  = 4.52 (#2d323a)
+    [dark] --muted on rgba(139,148,158,.15) over --panel    = 4.85 (#282d35)
