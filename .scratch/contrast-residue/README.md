@@ -32,7 +32,16 @@
 | `probe-08-opacity-inventory-after.txt` | `disabled-forms` 那支盘点探针（口径已跟改） | 20 = 帧 5 + 活规则 15；未在册 **0** |
 | `probe-09-cant-readings.py` / `.txt` | `li.cant` 真像素读数 | 整行 5.25 / 5.67；**新账：`.role-type` 浅 3.54** |
 | `run-before-after.py` | 通用「改前/改后」两发跑法（换 HEAD 版页面 + 核 sha256 复原） | —— |
+| `probe-10-closeout-red-proofs.py` / `probe-10-red-proofs.txt` | **收口三发真文件反证**（`opacity` 没登记 / `var(--fg)` / 第二个 `:root` 改名） | 三发全部按预期红、复原 sha256 一致、复原后转绿 |
 | `check-encoding.py` / `tick-ticket.py` | 本机卫生小工具（BOM 体检 / 勾选工单） | 多余 BOM **0** |
+
+## 双轴评审（`code-review`，base `01beebce`）
+
+Spec 轴 5 条 / Standards 轴 5 条：**7 条已改**（补第三类真文件反证 + sha256、删越界杂物
+`.scratch/release-v1.4.2/push-02-ledger.txt`、注释里的数按落盘读数改正、`probe-00-recon.py` 改单源
+并修掉"没剥注释"的假读数、镜像文件头"十组"→"十一组"），**3 条有意保留**（探针脚手架重复、
+5 元位置数组的向量表、`surface-bordered` 的名字）。逐条处置见
+[`issues/06-debt-and-closeout.md`](issues/06-debt-and-closeout.md) 的「双轴评审处置」表。
 
 ## 本轮的三处用户可见变化
 
