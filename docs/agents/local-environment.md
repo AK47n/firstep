@@ -76,10 +76,25 @@
 >    `.scratch/disabled-forms/`（93 张，`before` / `after` 两发）。
 >
 > **留给下一轮（按顺序）**：① ~~**发版**（这一批未发版）~~ ✅ 已发 **v1.4.2**（2026-10-01，见本节顶部）；
-> ② 全站 `opacity` 全量登记（腿⑩，
-> `backlog.md` §33 的「仍开着的①」）；③ `.pin-menu-list li.cant` 的真像素（先造成对角色被挡住的前提）；
-> ④ §31/§32 原有的叠加态定价 / `--accent` 控件描边非文字 3:1 / `.pin-subtitle` 的 `var(--fg)` 笔误 /
-> 图例色点令牌归属。本轮**没有**新增"等人 / 等板子"的单；本机端口 / 沙箱 / 落点都没动，其余事实照旧。
+> ② ~~全站 `opacity` 全量登记（腿⑩）~~ ✅ **已落地**（工单 `contrast-residue/04`：判据②改全量驱动、
+> +11 条登记、三条低于 AA 的真文字去掉 `opacity`、词法嫌疑面退役）；③ ~~`.pin-menu-list li.cant` 的真像素~~
+> ✅ **已量到**（工单 `contrast-residue/05`：配方 = MSPM0 + `step_motor` + 点 PA0；整行 浅 5.25 / 暗 5.67）；
+> ④ ~~§31/§32 原有的四条~~ ✅ **全部收口**（工单 `contrast-residue/02` 修 `var(--fg)`；`03` 定两个图例色点
+> 归属 + 补亮色 `--pin-fixed-pad`；`06` 把叠加态与 `--accent` 非文字两笔写成明账）。
+> **留给下一轮的（新的）**：① **`.role-type` 角色类型标的浅色 3.54**（暗 4.94，低于 AA）——它是
+> `generate-pins.js` 里**模板变量拼出来的内联取色**，腿⑨ 的正则只收 `color:var(--token)` 字面 ⇒
+> **那一族的文字色从没被任何对比度判据看过**（要收先定"模板变量内联取色怎么入判据"）；
+> ② **亮色覆盖完整性要不要立腿**（工单 03 只补了 `--pin-fixed-pad` 一个值，没立"哪些族必须成套"的判据）；
+> ③ **发版**（`contrast-residue` 那一批未发版）。本轮**没有**新增"等人 / 等板子"的单；
+> 本机端口 / 沙箱 / 落点都没动，其余事实照旧。
+>
+> **⚠ 本轮量到的两条本机事实**（写文本 / 抓读数时踩的）：
+> ① **`Out-File -Encoding utf8` 会写 BOM**（PowerShell 5.1）——用它接 Python 的探针输出，
+>   落盘的 `.txt` 带 3 字节 BOM；本轮两支证据文件都剥过一次（`.scratch/contrast-residue/check-encoding.py`
+>   可复跑：它逐文件报 BOM 与字节数）。
+> ② **别在 `pwsh` 里内联多行 Python**（`python -c "…"`）：中文 + 嵌套引号 + `--` 会被 PowerShell 的
+>   解析器与 GBK 控制台一起搞坏（本轮报过 `Missing expression after unary operator '--'`）。
+>   **一律写成脚本文件再跑**（本轮 `.scratch/contrast-residue/` 下那几支 `probe-*.py` 就是这么来的）。
 
 > ### ✅ 上一版发布（2026-09-30，`release-v1.4.1` 会话）—— **v1.4.1 已上线**：八件套齐全、`/releases/latest` 当时指向它（v1.4.2 之后不再是最新，账本原样保留）
 >

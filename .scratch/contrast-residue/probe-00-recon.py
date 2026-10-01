@@ -12,6 +12,7 @@
 """
 from __future__ import annotations
 
+import importlib.util
 import re
 import sys
 from collections import Counter
@@ -25,10 +26,19 @@ if hasattr(sys.stdout, "reconfigure"):
 ROOT = Path(__file__).resolve().parents[2]
 PAGE = ROOT / "src" / "contest_generator" / "static" / "index.html"
 JS_DIR = ROOT / "src" / "contest_generator" / "static" / "js"
+PROBE_LIB = ROOT / ".scratch" / "light-contrast" / "probe_lib.py"
 
-BLOCK_ROOT = re.compile(r"\n {2}:root \{([\s\S]*?)\n {2}\}", re.S)
-BLOCK_LIGHT = re.compile(r'\n {2}html\[data-theme="light"\] \{([\s\S]*?)\n {2}\}', re.S)
-TOKEN_RE = re.compile(r"(--[a-z0-9-]+):\s*([^;]+);")
+# ⚠ **口径单源**（双轴评审 Standards 轴点名）：令牌块正则 / 令牌名正则一律读 `probe_lib`，
+# 探针里**不再抄一份**——上一轮"口径两份拷贝、只改一侧"就是这么踩的
+# （`.scratch/disabled-forms/probe-00-inventory.py` 的注释里也重申过同一条）。
+spec = importlib.util.spec_from_file_location("_contrast_probe_lib", PROBE_LIB)
+plib = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(plib)
+
+BLOCK_ROOT = plib.BLOCK_ROOT
+BLOCK_LIGHT = plib.BLOCK_LIGHT
+TOKEN_RE = plib.TOKEN_RE
+
 #: 取色/取值用法：`var(--name)` 与 `var(--name, 兜底)` 分开记（兜底那条**不算**未定义）。
 VAR_USE = re.compile(r"var\(\s*(--[a-z0-9-]+)\s*(,)?")
 STYLE_BLOCK = re.compile(r"<style>([\s\S]*?)</style>")
@@ -72,10 +82,16 @@ def main() -> None:
     print("=" * 78)
     print("§2 页面/JS 里 `var(--x)` 的未定义面（A5 的规模）")
     print("=" * 78)
+    # ⚠ **注释先剥掉**（双轴评审顺带对出来的）：`plib.contrast_style_text` 剥 CSS 注释；
+    # JS 侧也剥 `/* */` 与整行 `//`——否则"解释这条笔误的注释"本身会被当成用法
+    # （第一版就把 `/* … var(--fg) … */` 数成了 1 处未定义，与守卫腿⑩ 的读数对不上）。
+    js_comment = re.compile(r"/\*[\s\S]*?\*/|^\s*//.*$", re.M)
     style = STYLE_BLOCK.search(text)
-    sources: list[tuple[str, str]] = [("index.html:<style>", style.group(1) if style else "")]
+    sources: list[tuple[str, str]] = [
+        ("index.html:<style>", plib.contrast_style_text(text) if style else "")]
     for p in sorted(JS_DIR.rglob("*.js")):
-        sources.append((str(p.relative_to(ROOT)).replace("\\", "/"), p.read_text(encoding="utf-8")))
+        raw = p.read_text(encoding="utf-8")
+        sources.append((str(p.relative_to(ROOT)).replace("\\", "/"), js_comment.sub(" ", raw)))
 
     defined = set(all_root) | set(light)
     missing: Counter[tuple[str, str]] = Counter()
