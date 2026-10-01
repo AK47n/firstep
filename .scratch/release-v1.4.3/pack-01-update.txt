@@ -1,7 +1,15 @@
 # 读数：pack-01-update
 # 命令：powershell -File tools\pack-update.ps1 -Tag v1.4.3 -Baseline C:\Users\luoji\Desktop\firstep-pack\firstep-update-v1.4.2.files.txt
 # 工作树：C:\Users\luoji\Desktop\firstep
-# 开始：2026-10-01T22:24:29+08:00
-# 退出码：1
-[错误] 工作树存在未提交的 tracked 变更，拒绝打包（-AllowDirty 可豁免）：
-   M .scratch/release-v1.4.3/issues/04-pack-and-publish.md
+# 开始：2026-10-01T22:24:53+08:00
+# 退出码：0
+更新包已生成：C:\Users\luoji\Desktop\firstep-pack\firstep-update-v1.4.3.zip
+  候选 7516 条 → 产品文件 2939 条（筛掉 4577 条：本地备份目录 / 安装包 / 缓存 / 白名单外）
+  删除清单：2231 条（累计口径：历史发过、本版不发）
+  zip 大小：288.0 MB
+  SHA256：edb80903cb7fc5b147901a338be8f2de168437c82abaae455f7a1f8c9167a2bf
+更新包已生成：C:\Users\luoji\Desktop\firstep-pack\firstep-update-v1.4.3.zip（288 MB，产品文件 2939 个 / 候选 7516 条）
+  文件清单：C:\Users\luoji\Desktop\firstep-pack\firstep-update-v1.4.3.files.txt
+  删除清单：C:\Users\luoji\Desktop\firstep-pack\firstep-update-v1.4.3.removed.txt （基线 C:\Users\luoji\Desktop\firstep-pack\firstep-update-v1.4.2.files.txt）
+  SHA256：C:\Users\luoji\Desktop\firstep-pack\firstep-update-v1.4.3.sha256.txt
+  字节口径：与完整包同源（核心内 git archive 已钉 core.autocrlf=false）
