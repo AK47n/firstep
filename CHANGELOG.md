@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=033581b89ada06028da5537189d3e7e30b87ef53 -->
+<!-- changelog-auto: last-commit=d5ec929fab17de1c403fcbd3d71c615fb5685e28 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -12,6 +12,7 @@
 - 10:42 发版 v1.4.2 账本：打包与发布读数 + 交接区与 backlog 回改
 - 20:59 对比度残余面 01：令牌解析面扩到全部定义块（合并 :root + 两侧共用行为向量表）
 - 21:09 对比度残余面 02：修 var(--fg) 笔误 + 立腿⑩（无兜底的 var 必须有定义）
+- 21:19 对比度残余面 03：色点归 surface-bordered（skip 档退役）+ 亮色补 --pin-fixed-pad
 
 ## 2026-09-30
 - 12:42 浅色调色板 01：对比度契约变成可对账的数据 + 守卫腿⑧ + 跨语言镜像（light-contrast/01）
