@@ -1,0 +1,89 @@
+{
+  "tag": "before",
+  "rows": [
+    {
+      "pads": {
+        "io": {
+          "pin": "PA0",
+          "fill": "rgb(208, 215, 222)",
+          "stroke": "rgb(175, 184, 193)",
+          "box": 13.391021728515625
+        },
+        "fixed": {
+          "pin": "",
+          "fill": "rgb(23, 27, 33)",
+          "stroke": "rgb(208, 215, 222)",
+          "box": 13.391021728515625
+        }
+      },
+      "dots": {
+        "legend": [
+          {
+            "bg": "rgb(208, 215, 222)",
+            "border": "rgb(175, 184, 193)",
+            "label": "空闲 IO"
+          },
+          {
+            "bg": "rgba(0, 0, 0, 0)",
+            "border": "rgb(154, 103, 0)",
+            "label": "板载共用（见板图下方警示）"
+          },
+          {
+            "bg": "rgb(23, 27, 33)",
+            "border": "rgb(208, 215, 222)",
+            "label": "固定/电源（不可点）"
+          }
+        ]
+      },
+      "tokens": {
+        "--pin-pad": "#d0d7de",
+        "--pin-fixed-pad": "#171b21"
+      },
+      "theme": "light",
+      "shot": "probe-05-pads-before-light.png",
+      "legendShot": "probe-05-legend-before-light.png"
+    },
+    {
+      "pads": {
+        "io": {
+          "pin": "PA0",
+          "fill": "rgb(33, 38, 45)",
+          "stroke": "rgb(61, 68, 77)",
+          "box": 13.391021728515625
+        },
+        "fixed": {
+          "pin": "",
+          "fill": "rgb(23, 27, 33)",
+          "stroke": "rgb(48, 54, 61)",
+          "box": 13.391021728515625
+        }
+      },
+      "dots": {
+        "legend": [
+          {
+            "bg": "rgb(33, 38, 45)",
+            "border": "rgb(61, 68, 77)",
+            "label": "空闲 IO"
+          },
+          {
+            "bg": "rgba(0, 0, 0, 0)",
+            "border": "rgb(227, 163, 65)",
+            "label": "板载共用（见板图下方警示）"
+          },
+          {
+            "bg": "rgb(23, 27, 33)",
+            "border": "rgb(48, 54, 61)",
+            "label": "固定/电源（不可点）"
+          }
+        ]
+      },
+      "tokens": {
+        "--pin-pad": "#21262d",
+        "--pin-fixed-pad": "#171b21"
+      },
+      "theme": "dark",
+      "shot": "probe-05-pads-before-dark.png",
+      "legendShot": "probe-05-legend-before-dark.png"
+    }
+  ]
+}

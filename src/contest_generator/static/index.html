@@ -194,7 +194,13 @@
     --warn: #9a6700; --warn-dim: rgba(154, 103, 0, .12); --warn-border: rgba(154, 103, 0, .35);
     --ok: #1a7f37; --ok-bright: #2da44e; --ok-dim: rgba(26, 127, 55, .12);
     --info: #0969da; --info-dim: rgba(9, 105, 218, .12); --info-border: rgba(9, 105, 218, .35);
-    --pin-pad: #d0d7de; --pin-pcb: rgba(26, 127, 55, .07);
+    /* 焊盘三件在亮色下**成套**（工单 contrast-residue/03）：`--pin-fixed-pad` 此前漏了亮色覆盖，
+       于是浅色板图里「固定/电源」焊盘一直沿用暗色值 `#171b21`（近黑），而「空闲 IO」焊盘是浅灰
+       ——两块焊盘不是一套。取 `--border-strong` 那一档：比空闲焊盘（`--pin-pad` = `--border`）
+       深一档，与暗色下"固定焊盘比空闲焊盘深"的层次一致。
+       ⚠ **边界**：本处只补这一个值，**没有**立"亮色块必须成套覆盖某些令牌族"的判据——
+       那要先定"哪些族必须两主题成套"，属另一件事（真立之前别以为这条线有守卫看着）。 */
+    --pin-pad: #d0d7de; --pin-fixed-pad: #afb8c1; --pin-pcb: rgba(26, 127, 55, .07);
     /* 亮色阴影（工单 ui-polish-11/01）：GitHub 亮色柔和灰影，避免黑硬影 */
     --shadow-card: 0 1px 0 rgba(31, 35, 40, .04);
     --shadow-card-hover: 0 2px 12px rgba(31, 35, 40, .12), 0 1px 0 rgba(31, 35, 40, .04);

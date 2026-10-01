@@ -2093,9 +2093,11 @@ function contrastProblems(source, exceptions = CONTRAST_EXCEPTIONS, families = C
 //     `Get-Content` 不带 `-Encoding UTF8` 还会把行数读错——描边那轮踩过）；
 //   · **假定底 = 这块钱被插进哪层底**（多为 `--panel`）——假定是**登记内容的一部分**，
 //     静态判不了真实层叠（`<span>` 进哪张卡由调用方决定）；
-//   · **类别**：`text`（文字，4.5）/ `nontext`（色点这类图形，3.0）/
-//     `surface`（**面 vs 面**：`background` 那一类，判"看得出分层"≥1.10，不是 3:1）/
-//     `skip`（静态判不了：令牌定义在页面作用域块里，不在 `:root`/亮色块）。
+//   · **类别**：`text`（文字，4.5）/ `surface-bordered`（**面 / 色样**：分层由同串描边承担，
+//     填充不判比值）。原有的 `skip`（"静态判不了：令牌定义在页面作用域块里"）**已退役**——
+//     工单 `contrast-residue/01` 把解析面扩到全部 `:root` 块之后，那两个色点的令牌
+//     （`--pin-pad` / `--pin-fixed-pad`）解得出来了，它们归 `surface-bordered`
+//     （工单 `contrast-residue/03`）。**零实例的档位不留**，见下面那张表。
 //
 // **三面之外还有两处明文不判**（边界写清，免得当地毯）：① 值不是纯令牌的
 // 5 处（`#111`/`#eee` 那对高对比浮标、三处 `transparent`）——不构成缺陷，探针每轮盯着；
@@ -2105,11 +2107,15 @@ function contrastProblems(source, exceptions = CONTRAST_EXCEPTIONS, families = C
 /**
  * 渲染方登记项允许的类别（**只留用得上的**：紧凑评审点过"零实例的档位 = Speculative Generality"）。
  *   · `text` —— 判比值（4.5）；
- *   · `surface-bordered` —— 面本身的分层由同串描边承担，填充不判；
- *   · `skip` —— 静态判不了（令牌定义在页面作用域块里）。
+ *   · `surface-bordered` —— 面 / **色样**本身的分层由同串描边承担，填充不判。
+ *     ⚠ 归这一档要**真的自带描边**：两个图例色点都是 `border:1px solid var(--border-strong)` /
+ *     `var(--border)`（工单 `contrast-residue/03` 逐条核过）——色点的信息是"这个颜色代表什么"，
+ *     不是"它比底亮多少"，所以判它的填充比值是**问错了问题**。
+ *   · ~~`skip`~~ **本单删掉**：它唯一的两个实例（那两个色点）已归 `surface-bordered`，
+ *     零实例的档位不留（与"别先立空档"同一条纪律）。
  * 以后真出现"非文字图形"或"纯面 vs 面"的实例，**那时再加档位并同步票面**（别先立空档）。
  */
-const JS_CONTRAST_KINDS = ["text", "surface-bordered", "skip"];
+const JS_CONTRAST_KINDS = ["text", "surface-bordered"];
 
 const JS_CONTRAST_REGISTER = [
   ["fx/flash.js", 'color:var(--danger-text);font-weight:600">✗ 烧录未成功', "--danger-text", "--panel", "text"],
@@ -2122,8 +2128,11 @@ const JS_CONTRAST_REGISTER = [
   ["fx/task.js", 'color:var(--danger-text);font-weight:600">✗ 未通过', "--danger-text", "--panel", "text"],
   ["ui/generate-pins.js", 'class="muted" style="color:var(--warn-text)">已达上限', "--warn-text", "--panel", "text"],
   ["ui/generate-pins.js", 'font-family:var(--mono);color:var(--accent-text)', "--accent-text", "--panel", "text"],
-  ["ui/generate-pins.js", 'class="dot" style="background:var(--pin-pad)', "--pin-pad", "--panel", "skip"],
-  ["ui/generate-pins.js", 'class="dot" style="background:var(--pin-fixed-pad)', "--pin-fixed-pad", "--panel", "skip"],
+  // 两个图例色点（工单 contrast-residue/03）：解析面扩到全部块之后令牌解得出来了，
+  // 从 `skip`（"静态判不了"）归到 `surface-bordered`——**色点自带描边**承担"看得出分层"，
+  // 填充是**色样**（它的信息是"这个颜色代表什么"），不判比值。
+  ["ui/generate-pins.js", 'class="dot" style="background:var(--pin-pad)', "--pin-pad", "--panel", "surface-bordered"],
+  ["ui/generate-pins.js", 'class="dot" style="background:var(--pin-fixed-pad)', "--pin-fixed-pad", "--panel", "surface-bordered"],
   ["ui/generate-pins.js", 'style="color:var(--danger-text)">未绑定', "--danger-text", "--panel", "text"],
   ["ui/generate-pins.js", 'style="color:var(--warn-text)">默认板外', "--warn-text", "--panel", "text"],
   ["ui/generate-pins.js", 'style="color:var(--warn-text)">默认 ${esc(r.decl.default)} 与', "--warn-text", "--panel", "text"],
@@ -2176,11 +2185,11 @@ function jsContrastRegisterProblems(files = jsFiles(), register = JS_CONTRAST_RE
       continue;
     }
     claimed.add(`${file}|${hit.line}`);
-    // `skip` = 静态判不了（令牌在页面作用域块里）；
-    // `surface-bordered` = 面本身的分层**由同一串里的描边承担**，填充只作陪衬
-    // （描边那一层另有 `nontext` 家族看着）——两者都只登记、不判比值。
-    if (kind === "skip" || kind === "surface-bordered") continue;
-    // ③ 判据：text / nontext 判比值，surface 判分层
+    // `surface-bordered` = 面 / **色样**本身的分层**由同一串里的描边承担**，填充只作陪衬
+    // （描边那一层另有 `nontext` 家族看着）——登记在案、不判填充比值。
+    // 原来的 `skip` 档已随工单 `contrast-residue/03` 退役（零实例）。
+    if (kind === "surface-bordered") continue;
+    // ③ 判据：`text` 判比值（4.5）
     const themes = ["dark", "light"];
     for (const theme of themes) {
       const tables = contrastTokenTables(contrastCss(html));
@@ -2891,6 +2900,20 @@ test("全站推广合成红证：九条腿各自都判得红（防'永远绿'的
   const bogusColorKind = [...JS_CONTRAST_REGISTER, ["ui/step-state.js", "toggleBtn.style.cssText", "--muted", "--panel", "看着挺清楚"]];
   assert.ok(jsContrastRegisterProblems(jsFiles(), bogusColorKind)
     .some((p) => p.includes("类别只能是")), "未知类别没被判出");
+  //        (m2) **`skip` 档退役**（工单 contrast-residue/03）：两条坏法各自判红。
+  //        ① 把某个色点改回 `skip` → 类别表里已经没有它了（零实例的档位不留）；
+  const backToSkip = JS_CONTRAST_REGISTER.map(([f, a, t, b, k]) =>
+    (a.includes("background:var(--pin-pad)") ? [f, a, t, b, "skip"] : [f, a, t, b, k]));
+  assert.ok(jsContrastRegisterProblems(jsFiles(), backToSkip)
+    .some((p) => p.includes("类别只能是") && p.includes("surface-bordered")),
+    "把色点改回 `skip` 没被判出——退役的档位还能用");
+  //        ② 登记项"令牌解不出"分支（改名 / 令牌被删）→ 必须点名，不许静默跳过。
+  //        构造：喂一行假源（锚点认得上、令牌与登记一致）但令牌**不在任何块里定义**。
+  const fakeDeadJs = [["ui/whatever.js", '<span class="nope" style="color:var(--nope-xyz)">x</span>']];
+  const deadTokenReg = [["ui/whatever.js", 'class="nope"', "--nope-xyz", "--panel", "text"]];
+  assert.ok(jsContrastRegisterProblems(fakeDeadJs, deadTokenReg)
+    .some((p) => p.includes("解不出颜色")),
+    "登记项的令牌解不出时没报出来——这一格会静默空转");
   //    (n) **禁用态**（工单 code-contrast/03）：三条坏法各自判红 + 两条边界证明判据没过宽。
   //        (n1) 把 `opacity: .45` 放回禁用态 → 结构判据红（它就是本单要治的那个形态）；
   const disAnchor = "box-shadow: none; cursor: not-allowed; }";
