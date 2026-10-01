@@ -412,7 +412,10 @@ def test_family_cell_count_freeze_matches_python(js, py):
     per_family = {}
     for c in cells:
         per_family[c["label"]] = per_family.get(c["label"], 0) + 1
-    assert len(py.CONTRAST_FAMILIES) == 5, f"族数应为 5（实际 {len(py.CONTRAST_FAMILIES)}）"
+    assert len(py.CONTRAST_FAMILIES) == 13, (
+        f"族数应为 13（实际 {len(py.CONTRAST_FAMILIES)}）——"
+        "5 条老族 + 工单 pin-type-contrast/02 的 8 条引脚族（一族一行，非文字档 3:1）"
+    )
     assert per_family.get("--tok-* × 代码底（含 5 层高亮 + 错误行）") == 10 * 7 * 2, (
         f"--tok-* 族应有 10 × 7 × 2 = 140 格（实际 {per_family.get('--tok-* × 代码底（含 5 层高亮 + 错误行）')}）"
     )
@@ -422,6 +425,14 @@ def test_family_cell_count_freeze_matches_python(js, py):
         f"{per_family.get('--muted × 禁用态底（panel-2 / panel）')}）——"
         "少一格就等于「禁用态坐在另一种底上」没人看（那是本单的判据面）"
     )
+    # 引脚族（工单 pin-type-contrast/02）：8 族 × 1 令牌 × 1 底（--panel-2）× 2 主题。
+    # 那八族的文字档走**令牌面**（一族一行、三条假定底 = 三种真实几何），不重复进族面。
+    for _fam in ("gpio", "pwm", "enc", "uart", "i2c", "spi", "adc", "exti"):
+        _label = f"--pin-{_fam} 色点 / 焊盘描边"
+        assert per_family.get(_label) == 1 * 1 * 2, (
+            f"引脚族「{_label}」应有 1 × 1 × 2 = 2 格（实际 {per_family.get(_label)}）——"
+            "少一格就等于「色点坐在另一种底上」没人看"
+        )
 
 
 def test_tok_worst_freeze_matches_python(js, py):

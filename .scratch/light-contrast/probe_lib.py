@@ -240,6 +240,25 @@ CONTRAST_TOKEN_BASES = [
     ("transparent", [], "skip", "透明：不参与比值判据"),
     # `var(--fg)` 那条 `skip` 已由工单 `contrast-residue/02` 摘掉（盘上改成 `var(--text)`；
     # 令牌面自己那条"盘上已经不用了 ⇒ 删掉这一行"的反向判据会盯着它）。
+    # **引脚类型配色族**（工单 pin-type-contrast/02）：这一族以前住在渲染方的内联模板串里
+    # （`style="color:${st[0]}"`），任何判据都看不见它；取色还给样式块之后这三个字面就是
+    # 它的文字面。三条假定底 = 三种真实几何（与 JS 守卫逐项同源，镜像守卫钉住）。
+    ("var(--pin-gpio)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-gpio-dim"], "text",
+     "引脚类型色当文字用（状态文字 / 板上引脚名 / 类型标）——色值与文字档见工单 pin-type-contrast/03"),
+    ("var(--pin-pwm)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-pwm-dim"], "text",
+     "同上（PWM 族）"),
+    ("var(--pin-enc)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-enc-dim"], "text",
+     "同上（编码器族）"),
+    ("var(--pin-uart)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-uart-dim"], "text",
+     "同上（UART 族）"),
+    ("var(--pin-i2c)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-i2c-dim"], "text",
+     "同上（I2C 族）"),
+    ("var(--pin-spi)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-spi-dim"], "text",
+     "同上（SPI 族；库内暂无该类型的角色，令牌仍在）"),
+    ("var(--pin-adc)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-adc-dim"], "text",
+     "同上（ADC 族）"),
+    ("var(--pin-exti)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-exti-dim"], "text",
+     "同上（EXTI 族；库内暂无该类型的角色，令牌仍在）"),
 ]
 #: `--tok-*` 那十个：底是代码页那五层，已由族面逐格算过（这里登记为"已覆盖"，不重复判）
 for _t in ("com", "str", "pre", "kw", "num", "tag", "attr", "val", "fn", "const"):
@@ -260,6 +279,20 @@ CONTRAST_FAMILIES = [
     ("--muted × 禁用态底（panel-2 / panel）", "=--muted", ["--panel-2", "--panel"], "text",
      "禁用控件（工单 code-contrast/03）：灰底灰字——文字 --muted、底 --panel-2（也可能坐在 --panel 上）。"
      "禁用态从此可现算，不再靠 opacity 整体变淡（结构判据 targetsDisabledState 在同一条腿里）"),
+    # **引脚类型配色的非文字档**（工单 pin-type-contrast/02）：色点与焊盘描边是"色样 / 图形"，
+    # 阈值 3:1。一族一行、`pick` 用单令牌（前缀 `--pin-` 会把 dim / pad / pcb 拉进无意义的组合里）。
+    # 假定底 `--panel-2`：两主题下都是更不利的那一侧（与 JS 守卫逐项同源）。
+    ("--pin-gpio 色点 / 焊盘描边", "=--pin-gpio", ["--panel-2"], "nontext",
+     "引脚类型色当色样 / 图形用（图例与菜单色点、板图焊盘描边）：非文字 3:1"),
+    ("--pin-pwm 色点 / 焊盘描边", "=--pin-pwm", ["--panel-2"], "nontext", "同上（PWM 族）"),
+    ("--pin-enc 色点 / 焊盘描边", "=--pin-enc", ["--panel-2"], "nontext", "同上（编码器族）"),
+    ("--pin-uart 色点 / 焊盘描边", "=--pin-uart", ["--panel-2"], "nontext", "同上（UART 族）"),
+    ("--pin-i2c 色点 / 焊盘描边", "=--pin-i2c", ["--panel-2"], "nontext", "同上（I2C 族）"),
+    ("--pin-spi 色点 / 焊盘描边", "=--pin-spi", ["--panel-2"], "nontext",
+     "同上（SPI 族；库内暂无该类型的角色，令牌仍在——成套覆盖由腿⑪ 看着）"),
+    ("--pin-adc 色点 / 焊盘描边", "=--pin-adc", ["--panel-2"], "nontext", "同上（ADC 族）"),
+    ("--pin-exti 色点 / 焊盘描边", "=--pin-exti", ["--panel-2"], "nontext",
+     "同上（EXTI 族；库内暂无该类型的角色，令牌仍在）"),
 ]
 
 

@@ -6,8 +6,9 @@
 //   FROZEN_FONT_SIZES）——见文件下半部分那两段说明块。
 // ⑥**描边登记簿**（工单 border-guard/01）：`BORDER_KINDS`（10 类）+ `BORDER_REGISTER`（115 条）
 //   + 腿⑥（盘上 ↔ 登记簿双向对账 + 透明不变量 + 类别表形状）——见那两张表的说明块。
-// ⑦**渲染方描边登记簿**（工单 border-guard/02）：`JS_BORDER_REGISTER`（10 条）
+// ⑦**渲染方描边登记簿**（工单 border-guard/02）：`JS_BORDER_REGISTER`（8 条）
 //   + 腿⑦（`static/js/**` 内联整圈框的双向对账，认人键 = 文件 + 行内锚点）。
+//   ⚠ 10 → **8**（工单 pin-type-contrast/02：`.role-type` 那两条搬进样式块 ⇒ 账挪到腿⑥）。
 //   **描边与字号两条线都是"不许回潮"的闸**：字号那条的尺是取值集合，描边这条的尺是逐条登记簿，
 //   而且**样式块面与渲染方面各有一张**（08 单给内联字号补第五条腿的同一条理由）。
 // ⑧**对比度契约**（工单 light-contrast/01）：阈值两档（4.5 / 3.0）+ 机械抽取「同规则
@@ -21,6 +22,10 @@
 // ⑨**渲染方内联取色登记簿**（工单 light-contrast/04）：`JS_CONTRAST_REGISTER`（19 条）
 //   + 腿⑨（`static/js/**` 里 `style="color:var(--x)"` 那类内联取色的双向对账 +
 //   按"假定底"判比值；认人键 = 文件 + **行内锚点**，不取行号）。
+//   **外加一条正向判据**（工单 pin-type-contrast/02）：内联 `style` 里**不许用模板变量拼取色**
+//   （`style="color:${…}"`）——这类写法此前是腿⑨ 的盲区（正则只认 `var(--x)` 字面），
+//   引脚类型配色整族就是这么"从没被任何判据看过"的。豁免只有一处：总览模式的模块配色
+//   （运行时按序分配的 hex 序列，不是令牌），登记在 `JS_INLINE_TEMPLATE_EXEMPT`。
 // 静态标记守卫，直接读 index.html。
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -384,9 +389,11 @@ const BORDER_KINDS = [
  *   ③ `placeholder` ⟺ 取值含 `transparent`（**抓"透明占位偷偷变成真框"**）；
  *   ④ 类别表形状（类别值必须在 `BORDER_KINDS` 里、每类至少一条）。
  *
- * **口径分列（别混着读）**：本表 115 条 = **94 条可见框** + **21 条非框**
- * （12 `placeholder` + 9 `nonbox`）。"整圈完整框 115"是**声明数**口径（`scope_lib.full_borders`），
+ * **口径分列（别混着读）**：本表 116 条 = **95 条可见框** + **21 条非框**
+ * （12 `placeholder` + 9 `nonbox`）。"整圈完整框 116"是**声明数**口径（`scope_lib.full_borders`），
  * 与"渲染出来的框元素数"不是同一把尺——那一条 `local-environment` 记过。
+ * ⚠ 115 → **116**（工单 pin-type-contrast/02：角色类型标的描边从渲染方内联搬进样式块，
+ * 账从腿⑦ 挪到腿⑥——同一笔框，换了一面）。
  *
  * **两条容易贴错、已经核过一遍的**（写在这里，免得下一轮又有人按类名想当然）：
  *   · `.code-view::-webkit-scrollbar-thumb`（`3px solid transparent`）登记为 `placeholder` **不是**
@@ -404,7 +411,7 @@ const BORDER_KINDS = [
  * 探针与 `scope_lib.load_border_register()` 按同一格式解析，格式变了会**大声失败**。
  */
 const BORDER_REGISTER = [
-  // ---- shell（22 条）----
+  // ---- shell（23 条）----
   ["shell", "header nav button", "control"],
   ["shell", ".card", "block"],
   ["shell", "textarea, input[type=text], input[type=password], select", "control"],
@@ -427,6 +434,10 @@ const BORDER_REGISTER = [
   ["shell", "#btn-code-ai-send", "control"],
   ["shell", "#btn-recent-refresh", "control"],
   ["shell", ".card-step-status", "placeholder"],
+  // 引脚角色类型标（工单 pin-type-contrast/02）：描边从渲染方的内联模板串搬进样式块
+  // （`border: 1px solid currentColor`——颜色跟着被判过的文字色走，不给 8 个色族各写一条 border-color）。
+  // 这条同时是"**账在两面之间搬家**"的实证：它从腿⑦（渲染方内联框）挪到了腿⑥（样式块面）。
+  ["shell", ".role-type", "tag"],
   // ---- components（9 条）----
   ["components", ".btn", "control"],
   ["components", ".chip", "control"],
@@ -542,8 +553,9 @@ const BORDER_REGISTER = [
  *
  * **认人键 = `(文件, 锚点)`**，锚点取**该行的一段可认片段**：
  *   · **不取行号**——行号随插行漂，锚点不漂；
- *   · **同一锚点登记两次 = 盘上真有两条逐字相同的行**（`.role-type` 那条，
- *     `generate-pins.js` 里两个渲染函数各写了一遍），所以对账是**多重集**不是集合；
+ *   · **同一锚点登记两次 = 盘上真有两条逐字相同的行**（对账因此是**多重集**不是集合；
+ *     工单 pin-type-contrast/02 之前 `.role-type` 那条就是这形态的两行，
+ *     它们搬进样式块之后本表不再有重复锚点——**多重集口径留着**，别改成集合）；
  *   · 锚点必须**足够独特**：一行只许命中一条登记项，一条登记项只许命中它该命中的那几行
  *     （施工脚本 `.scratch/border-guard/generate-02-js-register.py` 逐个验过；不独特它当场停手）。
  *
@@ -564,8 +576,9 @@ const JS_BORDER_REGISTER = [
   ["ui/generate-pins.js", 'background:var(--pin-pad);border:1px solid var(--border-strong)', "nonbox"],
   ["ui/generate-pins.js", 'border:1px dashed var(--warn)"', "nonbox"],
   ["ui/generate-pins.js", 'background:var(--pin-fixed-pad);border:1px solid var(--border)"', "nonbox"],
-  ["ui/generate-pins.js", 'class="role-type" style="color:${st[0]};background:${st[1]};border:1px solid ${st[0]}"', "tag"],
-  ["ui/generate-pins.js", 'class="role-type" style="color:${st[0]};background:${st[1]};border:1px solid ${st[0]}"', "tag"],
+  // `.role-type` 那两行（`border:1px solid ${st[0]}`）已由工单 pin-type-contrast/02 搬进样式块：
+  // 账挪到腿⑥ 的 `["shell", ".role-type", "tag"]`。**别再往这里加回来**——
+  // 内联模板串取色现在由腿⑨ 的正向判据直接拦（那才是这类写法的出路）。
 ];
 
 /** 规则块（`选择器 { 声明 }`）：返回 [{ sel, body }]。 */
@@ -981,17 +994,21 @@ const CONTRAST_BASE_TOKEN = "--panel";
  *  376 → **392**（工单 code-contrast/03：八条禁用态规则从"只改不透明度"变成"声明灰底灰字"，
  *  每条两主题各一对：`button:disabled` 那一组选择器算一条规则）；
  *  392 → **394**（工单 disabled-forms/01：`.pin-menu-list li.cant` 从"只有 `opacity`"变成
- *  "既有 `color: var(--muted)` 又有 `background: var(--panel-2)`" = 两主题各多一对）。
+ *  "既有 `color: var(--muted)` 又有 `background: var(--panel-2)`" = 两主题各多一对）；
+ *  394 → **412**（工单 pin-type-contrast/02：引脚类型配色从渲染方内联模板串搬进样式块——
+ *  8 条色族规则 + 1 条 `.role-type` 基类兜底，每条两主题各一对 = +18）。
  *  复算口径：`.scratch/disabled-forms/probe-00-inventory.py` §4（Python 侧同一把尺）。 */
-const CONTRAST_PAIR_COUNT = 394;
+const CONTRAST_PAIR_COUNT = 412;
 
 /** 族面的**总格数**（**冻结**：`contrastFamilyCells` 现算出来的格子总数）。
  *  为什么冻结它：族面判据只把**最坏格**纳入对账，一旦有人从 `CODE_LAYERS` 或某条族里
  *  悄悄摘掉一层/一个令牌，最坏格会**变好**——腿照样绿，而它其实少算了一整排。
  *  复算：`python .scratch/code-contrast/probe-00-inventory.py` 的 §8 直接打印这个数
  *  （`tests/test_contrast_mirror.py` 每跑一次也会现算复核一遍）。
- *  168 → **172**（工单 code-contrast/03：+「--muted × 禁用态底」1 令牌 × 2 层 × 2 主题）。 */
-const CONTRAST_FAMILY_CELL_COUNT = 172;
+ *  168 → **172**（工单 code-contrast/03：+「--muted × 禁用态底」1 令牌 × 2 层 × 2 主题）；
+ *  172 → **188**（工单 pin-type-contrast/02：+ 引脚类型配色的**非文字档** 8 族 × 1 层 × 2 主题
+ *  = +16。那八族的文字档走**令牌面**（一族一行、三条假定底），不重复进族面）。 */
+const CONTRAST_FAMILY_CELL_COUNT = 188;
 
 /** `--tok-*` 族在两主题下的**最坏格**（**冻结**，±0.01）。
  *  02 单把这笔债还清之后，族面不再有 `debt` 行可对账——"少一层 / 几何写反"这类坏法
@@ -1332,6 +1349,30 @@ const CONTRAST_FAMILIES = [
     "控件普通描边与语义左条：装饰性强于信息性，**大面积改深会动整页观感**——记债不修（03 单的判断）"],
   ["--muted × 禁用态底（panel-2 / panel）", "=--muted", ["--panel-2", "--panel"], "text",
     "禁用控件（工单 code-contrast/03）：灰底灰字——文字 --muted、底 --panel-2（也可能坐在 --panel 上）。禁用态从此可现算，不再靠 opacity 整体变淡（结构判据 targetsDisabledState 在同一条腿里）"],
+  // **引脚类型配色的非文字档**（工单 pin-type-contrast/02）：色点（图例 / 菜单）与焊盘描边是
+  // 「色样 / 图形」，阈值走 3:1。一族一行、`pick` 用**单令牌** `=--pin-x`：
+  // **不能用前缀 `--pin-`** —— 那会把 dim / pad / pcb 也拉进来配成 19×19 的无意义格子，
+  // 最坏格会由一对胡说八道的组合决定（算错会盖住真账，比「看不见」更坏）。
+  // 假定底取 `--panel-2`：图例坐在卡片上、菜单那边底是 `--panel`，两主题下 `--panel-2`
+  // 都是**更不利**的那一侧（浅色它比白深、暗色它比 `--panel` 亮），故保守取它。
+  // ⚠ 这段注释里**不许出现英文双引号**：镜像守卫的族表解析是「数引号」的，
+  //   注释里的引号会被算进上一行（实测：`--muted` 那行的档位被读成了这里的词）。
+  ["--pin-gpio 色点 / 焊盘描边", "=--pin-gpio", ["--panel-2"], "nontext",
+    "引脚类型色当色样 / 图形用（图例与菜单色点、板图焊盘描边）：非文字 3:1"],
+  ["--pin-pwm 色点 / 焊盘描边", "=--pin-pwm", ["--panel-2"], "nontext",
+    "同上（PWM 族）"],
+  ["--pin-enc 色点 / 焊盘描边", "=--pin-enc", ["--panel-2"], "nontext",
+    "同上（编码器族）"],
+  ["--pin-uart 色点 / 焊盘描边", "=--pin-uart", ["--panel-2"], "nontext",
+    "同上（UART 族）"],
+  ["--pin-i2c 色点 / 焊盘描边", "=--pin-i2c", ["--panel-2"], "nontext",
+    "同上（I2C 族）"],
+  ["--pin-spi 色点 / 焊盘描边", "=--pin-spi", ["--panel-2"], "nontext",
+    "同上（SPI 族；库内暂无该类型的角色，令牌仍在——成套覆盖由腿⑪ 看着）"],
+  ["--pin-adc 色点 / 焊盘描边", "=--pin-adc", ["--panel-2"], "nontext",
+    "同上（ADC 族）"],
+  ["--pin-exti 色点 / 焊盘描边", "=--pin-exti", ["--panel-2"], "nontext",
+    "同上（EXTI 族；库内暂无该类型的角色，令牌仍在）"],
 ];
 
 /**
@@ -1371,6 +1412,29 @@ const CONTRAST_TOKEN_BASES = [
     "代码 gutter 的折叠占位字形（装饰性，alpha .12 叠在代码底上）"],
   ["inherit", [], "skip", "`color: inherit` 不是取色：不参与比值判据"],
   ["transparent", [], "skip", "透明：不参与比值判据"],
+  // **引脚类型配色族**（工单 pin-type-contrast/02）：这一族以前住在渲染方的内联模板串里
+  // （`style="color:${st[0]}"`），**任何判据都看不见它**；02 单把取色还给样式块之后，
+  // 这三个字面就是它的文字面（状态文字「已绑 / 现绑」、板上引脚名、类型标）。
+  // 三条假定底 = 三种真实几何：卡片底（`--panel-2`）/ PCB 底（`--panel+--pin-pcb`）/
+  // 类型标自带的淡底（`--panel-2+--pin-x-dim`）。
+  // ⚠ 03 单把这些字面换成文字档（`--pin-x-text`）时，**这八行要跟着改**——
+  //   否则"盘上已经不用了 ⇒ 删掉这一行"那条反向判据会当场红（这是设计，不是麻烦）。
+  ["var(--pin-gpio)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-gpio-dim"], "text",
+    "引脚类型色当文字用（状态文字 / 板上引脚名 / 类型标）——色值与文字档见工单 pin-type-contrast/03"],
+  ["var(--pin-pwm)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-pwm-dim"], "text",
+    "同上（PWM 族）"],
+  ["var(--pin-enc)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-enc-dim"], "text",
+    "同上（编码器族）"],
+  ["var(--pin-uart)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-uart-dim"], "text",
+    "同上（UART 族）"],
+  ["var(--pin-i2c)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-i2c-dim"], "text",
+    "同上（I2C 族）"],
+  ["var(--pin-spi)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-spi-dim"], "text",
+    "同上（SPI 族；库内暂无该类型的角色，令牌仍在）"],
+  ["var(--pin-adc)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-adc-dim"], "text",
+    "同上（ADC 族）"],
+  ["var(--pin-exti)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-exti-dim"], "text",
+    "同上（EXTI 族；库内暂无该类型的角色，令牌仍在）"],
   // `var(--fg)` 那条 `skip` 已由工单 `contrast-residue/02` 摘掉：盘上那个字面改成 `var(--text)`，
   // 令牌面自己那条"盘上已经不用了 ⇒ 删掉这一行"的反向判据会盯着它（别再加回来）。
   // `--tok-*` 那十个：底是代码页那五层，已由族面逐格算过（这里登记为"已覆盖"，不重复判）
@@ -1899,10 +1963,35 @@ const CONTRAST_EXCEPTIONS = [
   ["dark", "令牌：var(--accent-dim)", "debt", "最坏格压 --code-bg：1.23，低于 3.0（非文字图形 3:1）——代码 gutter 的折叠占位字形（装饰性，alpha .12 叠在代码底上）", 1.23],
   ["dark", "令牌：var(--border-strong)", "debt", "最坏格压 --panel：1.76，低于 3.0（非文字图形 3:1）——装饰分隔符 ·（描边色当字形用）：非文字档 3:1", 1.76],
   ["dark", "令牌：#fff", "debt", "最坏格压 --warn：2.19，低于 4.5（文字 4.5:1）——语义实心底上的白字（.env-badge）：底不是卡片，而是那三种实心语义色", 2.19],
+  ["dark", "令牌：var(--pin-enc)", "debt", "最坏格压 --panel-2+--pin-enc-dim：3.77，低于 4.5（文字 4.5:1）——同上（编码器族）", 3.77],
+  ["dark", "令牌：var(--pin-uart)", "debt", "最坏格压 --panel-2+--pin-uart-dim：3.93，低于 4.5（文字 4.5:1）——同上（UART 族）", 3.93],
+  ["dark", ".role-type[data-pin-family=\"enc\"]", "debt", "--pin-enc 压 --pin-enc-dim：4.04，低于 4.5——03 单（暗色顺手修）", 4.04],
+  ["dark", ".role-type[data-pin-family=\"uart\"]", "debt", "--pin-uart 压 --pin-uart-dim：4.22，低于 4.5——03 单（暗色顺手修）", 4.22],
   ["light", "#main-c::selection", "skip", "选区反白块不是「文字压底」：静态口径不适用（跳过判据，只留登记）", 1.38],
   ["light", "令牌：var(--accent-dim)", "debt", "最坏格压 --code-bg：1.15，低于 3.0（非文字图形 3:1）——代码 gutter 的折叠占位字形（装饰性，alpha .12 叠在代码底上）", 1.15],
+  ["light", "令牌：var(--pin-i2c)", "debt", "最坏格压 --panel-2+--pin-i2c-dim：1.40，低于 4.5（文字 4.5:1）——同上（I2C 族）", 1.4],
+  ["light", "令牌：var(--pin-spi)", "debt", "最坏格压 --panel-2+--pin-spi-dim：1.45，低于 4.5（文字 4.5:1）——同上（SPI 族；库内暂无该类型的角色，令牌仍在）", 1.45],
+  ["light", "令牌：var(--pin-exti)", "debt", "最坏格压 --panel-2+--pin-exti-dim：1.46，低于 4.5（文字 4.5:1）——同上（EXTI 族；库内暂无该类型的角色，令牌仍在）", 1.46],
+  ["light", "族：--pin-i2c 色点 / 焊盘描边", "debt", "最坏格 --pin-i2c on --panel-2：1.50，低于 3.0（非文字图形 3:1）——同上（I2C 族）", 1.5],
+  ["light", "族：--pin-spi 色点 / 焊盘描边", "debt", "最坏格 --pin-spi on --panel-2：1.55，低于 3.0（非文字图形 3:1）——同上（SPI 族；库内暂无该类型的角色，令牌仍在——成套覆盖由腿⑪ 看着）", 1.55],
+  ["light", "族：--pin-exti 色点 / 焊盘描边", "debt", "最坏格 --pin-exti on --panel-2：1.55，低于 3.0（非文字图形 3:1）——同上（EXTI 族；库内暂无该类型的角色，令牌仍在）", 1.55],
+  ["light", ".role-type[data-pin-family=\"i2c\"]", "debt", "--pin-i2c 压 --pin-i2c-dim：1.70，低于 4.5——引脚配色 03 单（两主题成套 + 文字档 `--pin-*-text`）", 1.7],
+  ["light", ".role-type[data-pin-family=\"spi\"]", "debt", "--pin-spi 压 --pin-spi-dim：1.77，低于 4.5——引脚配色 03 单（两主题成套 + 文字档 `--pin-*-text`）", 1.77],
+  ["light", ".role-type[data-pin-family=\"exti\"]", "debt", "--pin-exti 压 --pin-exti-dim：1.77，低于 4.5——引脚配色 03 单（两主题成套 + 文字档 `--pin-*-text`）", 1.77],
   ["light", "令牌：var(--border-strong)", "debt", "最坏格压 --bg：1.89，低于 3.0（非文字图形 3:1）——装饰分隔符 ·（描边色当字形用）：非文字档 3:1", 1.89],
+  ["light", "令牌：var(--pin-uart)", "debt", "最坏格压 --panel-2+--pin-uart-dim：2.33，低于 4.5（文字 4.5:1）——同上（UART 族）", 2.33],
+  ["light", "令牌：var(--pin-enc)", "debt", "最坏格压 --panel-2+--pin-enc-dim：2.44，低于 4.5（文字 4.5:1）——同上（编码器族）", 2.44],
+  ["light", "族：--pin-uart 色点 / 焊盘描边", "debt", "最坏格 --pin-uart on --panel-2：2.67，低于 3.0（非文字图形 3:1）——同上（UART 族）", 2.67],
   ["light", "族：--accent 控件描边 / 语义左条", "debt", "最坏格 --accent on --panel-2：2.70，低于 3.0（非文字图形 3:1）——控件普通描边与语义左条：装饰性强于信息性，**大面积改深会动整页观感**——记债不修（03 单的判断）", 2.7],
+  ["light", ".role-type[data-pin-family=\"uart\"]", "debt", "--pin-uart 压 --pin-uart-dim：2.86，低于 4.5——引脚配色 03 单（两主题成套 + 文字档 `--pin-*-text`）", 2.86],
+  ["light", "族：--pin-enc 色点 / 焊盘描边", "debt", "最坏格 --pin-enc on --panel-2：2.87，低于 3.0（非文字图形 3:1）——同上（编码器族）", 2.87],
+  ["light", ".role-type[data-pin-family=\"enc\"]", "debt", "--pin-enc 压 --pin-enc-dim：3.02，低于 4.5——引脚配色 03 单（两主题成套 + 文字档 `--pin-*-text`）", 3.02],
+  ["light", "令牌：var(--pin-adc)", "debt", "最坏格压 --panel-2+--pin-adc-dim：3.37，低于 4.5（文字 4.5:1）——同上（ADC 族）", 3.37],
+  ["light", "令牌：var(--pin-pwm)", "debt", "最坏格压 --panel-2+--pin-pwm-dim：3.50，低于 4.5（文字 4.5:1）——同上（PWM 族）", 3.5],
+  ["light", "令牌：var(--pin-gpio)", "debt", "最坏格压 --panel-2+--pin-gpio-dim：3.54，低于 4.5（文字 4.5:1）——引脚类型色当文字用（状态文字 / 板上引脚名 / 类型标）——色值与文字档见工单 pin-type-contrast/03", 3.54],
+  ["light", ".role-type[data-pin-family=\"adc\"]", "debt", "--pin-adc 压 --pin-adc-dim：4.17，低于 4.5——引脚配色 03 单（两主题成套 + 文字档 `--pin-*-text`）", 4.17],
+  ["light", ".role-type[data-pin-family=\"pwm\"]", "debt", "--pin-pwm 压 --pin-pwm-dim：4.33，低于 4.5——引脚配色 03 单（两主题成套 + 文字档 `--pin-*-text`）", 4.33],
+  ["light", ".role-type[data-pin-family=\"gpio\"]", "debt", "--pin-gpio 压 --pin-gpio-dim：4.38，低于 4.5——引脚配色 03 单（两主题成套 + 文字档 `--pin-*-text`）", 4.38],
 
 ];
 
@@ -2158,6 +2247,109 @@ function jsInlineColorEntries(files = jsFiles()) {
   return out;
 }
 
+// ===========================================================================
+// 腿⑨ 的**正向判据**：内联 `style` 里不许用模板变量拼取色（工单 pin-type-contrast/02）
+//
+// **为什么要有它**：上面那张登记簿只能管"**字面**写着 `var(--token)`"的内联色。真实发生过的是
+// 另一种写法——`style="color:${st[0]};background:${st[1]}"`（颜色从一张 JS 表里取、由模板串拼出来）。
+// 正则认不到它 ⇒ 引脚类型配色**整族**（类型标 / 状态文字 / 板图 / 色点）从浅色 1.38 到暗色 6.35
+// 都没进过任何判据（`.scratch/pin-type-contrast/probe-01-readings-before.txt`）。
+// 这一条把"再长出一处 `${…}` 取色"变成当场变红：取色要么写 `var(--token)`（走上面的登记簿），
+// 要么挂属性 + 把规则写进样式块（腿⑧ 的机械面 / token 面就看得见它）。
+//
+// **判据面**：`static/js/**` 里 `style="…"` 这个属性值中**同时**出现 `${` 与取色属性
+// （`color` / `background` / `background-color` / `border`）。
+//   · **三种拼法都抓**（腿⑤/腿⑦ 的教训："只认一种拼法"就是留一条原路）：HTML 属性 `style="…"`、
+//     `el.style.cssText = "…"`（含反引号）、`el.style.<prop> = "…"`；
+//   · 取值里**必须有 `${`**：非模板的静态内联值归上面那张登记簿（`JS_CONTRAST_REGISTER`）管；
+//   · 只看取色属性——模板串里别处的 `${}`（`class="x-${i}"`、`top:${y}px` 这类**非取色**
+//     的内联值）不在射程内：它们不产生颜色，腿⑧ 也不管它们；
+//   · 取色属性白名单里带 `border`：`border:1px solid ${st[0]}` 正是本族原来的写法
+//     （描边颜色就是取色），不拦它等于留一条原路。
+//
+// **豁免**：`JS_INLINE_TEMPLATE_EXEMPT`（文件 + 行内锚点 + 中文理由），双向对账——
+// 盘上每一处命中要么被豁免认领、要么判红；豁免项过期（盘上找不到了）同样判红。
+// ===========================================================================
+
+/** 内联模板串取色的**豁免登记**（`[文件, 行内锚点, 理由]`；认人键不取行号）。 */
+const JS_INLINE_TEMPLATE_EXEMPT = [
+  ["ui/generate-pins.js", 'class="dot" style="background:${color}"', "总览模式按模块着色：`MODULE_COLORS` 是**运行时按出现顺序分配的 hex 序列**（12 色，超了循环复用），不是令牌——它是「哪个模块」的身份色，没有对应的 CSS 令牌可写；这一处的分层由色点旁的模块名承担"],
+];
+
+/** `style="…"` 属性值里**同时**有 `${` 与取色属性的行：`[{ file, line, text, attrs }]`。
+ *
+ *  ⚠ **三种拼法都要抓**（腿⑤/腿⑦ 用血换的那条教训："只认一种拼法"就是留一条原路）：
+ *    · HTML 属性 `style="…"`（模板串里最常见）；
+ *    · `el.style.cssText = "…"`（含反引号写法）；
+ *    · `el.style.<prop> = "…"`（单属性写法）。
+ *  取值里**必须有 `${`** —— 非模板的静态内联值归上面那张登记簿（`JS_CONTRAST_REGISTER`）管。
+ */
+function jsInlineTemplateColorEntries(files = jsFiles()) {
+  // 三种拼法各带一个 `groups(m) → [属性名, 取值]`：`style="…"` / `cssText = "…"` 的属性名在取值里，
+  // 单属性拼法（`el.style.border = "…"`）的属性名在**赋值目标**里（从捕获组取）。
+  const patterns = [
+    { re: /style="([^"]*)"/g, groups: (m) => [null, m[1]] },
+    { re: /cssText\s*=\s*["`]([^"`]*)["`]/g, groups: (m) => [null, m[1]] },
+    { re: /\.style\.([a-zA-Z-]+)\s*=\s*["`]([^"`]*)["`]/g, groups: (m) => [m[1], m[2]] },
+  ];
+  const colorish = /(?<![\w-])(color|background|background-color|border)\s*:/;
+  const colorProps = ["color", "background", "background-color", "border", "border-color"];
+  const out = [];
+  for (const [rel, text] of files) {
+    text.split("\n").forEach((line, i) => {
+      let hit = false;
+      for (const { re, groups } of patterns) {
+        re.lastIndex = 0;
+        for (const m of line.matchAll(re)) {
+          const [prop, value] = groups(m);
+          if (!value.includes("${")) continue;      // 非模板的静态内联值归上面那张登记簿管
+          // 非取色的模板值（宽度 / 坐标 / 光标）不在射程内：属性名写在取值里就查取值，否则查属性名
+          const isColor = prop === null ? colorish.test(value) : colorProps.includes(prop);
+          if (!isColor) continue;
+          hit = true;
+          break;
+        }
+        if (hit) break;
+      }
+      if (hit) out.push({ file: rel, line: i + 1, text: line });
+    });
+  }
+  return out;
+}
+
+/** 腿⑨ 正向判据（吃 `files` 与豁免表 → 返回问题清单；红证要喂坏的）。 */
+function jsInlineTemplateProblems(files = jsFiles(), exempt = JS_INLINE_TEMPLATE_EXEMPT) {
+  const out = [];
+  const entries = jsInlineTemplateColorEntries(files);
+  const claimed = new Set();
+  for (const row of exempt) {
+    if (!Array.isArray(row) || row.length !== 3) {
+      out.push(`内联模板取色豁免项形状不对（应为 [文件, 锚点, 理由]）：${JSON.stringify(row)}`);
+      continue;
+    }
+    const [file, anchor, why] = row;
+    if (!why || !String(why).trim()) out.push(`内联模板取色豁免必须写理由：${file} —— ${anchor}`);
+    const hits = entries.filter((e) => e.file === file && e.text.includes(anchor));
+    if (hits.length === 0) {
+      out.push(`内联模板取色豁免项在盘上一条都找不到（锚点过期 / 已改成样式块）：${file} —— ${anchor}`
+        + "——把它从 JS_INLINE_TEMPLATE_EXEMPT 里删掉");
+      continue;
+    }
+    if (hits.length > 1) {
+      out.push(`内联模板取色豁免项锚点不够独特（命中 ${hits.length} 行）：${file} —— ${anchor}`);
+      continue;
+    }
+    claimed.add(`${file}|${hits[0].line}`);
+  }
+  for (const e of entries) {
+    if (claimed.has(`${e.file}|${e.line}`)) continue;
+    out.push(`渲染方内联 style 里用模板变量拼取色：${e.file}:${e.line} —— ${e.text.trim().slice(0, 80)}`
+      + "（取色要么写 `var(--token)` 字面并登记进 JS_CONTRAST_REGISTER，要么挂属性 + 把规则写进"
+      + "样式块——腿⑧ 才看得见它；确属非令牌的运行时配色就登记进 JS_INLINE_TEMPLATE_EXEMPT）");
+  }
+  return out;
+}
+
 /** 腿⑨ 的三条判据（纯函数，吃 `files` 与 `register`，红证要喂坏的）。 */
 function jsContrastRegisterProblems(files = jsFiles(), register = JS_CONTRAST_REGISTER) {
   const out = [];
@@ -2307,8 +2499,11 @@ test("对比度（工单 01，第八条腿）：文字色 × 底现算比值，�
   const faceCount = (prefix) => CONTRAST_EXCEPTIONS.filter((e) => e[1].startsWith(prefix)).length;
   const mechCount = CONTRAST_EXCEPTIONS.length - faceCount("族：") - faceCount("令牌：");
   assert.ok(mechCount <= 115, `机械面例外涨到 ${mechCount} 条（落地时 115）——新的不达标应该**修掉**`);
-  assert.ok(faceCount("族：") <= 3, `族面例外涨到 ${faceCount("族：")} 条（落地时 3）`);
-  assert.ok(faceCount("令牌：") <= 10, `令牌面例外涨到 ${faceCount("令牌：")} 条（落地时 10）`);
+  // ⚠ 三个上界都是"落地那一刻"的数，随批次走：
+  //   族面 3 → **6**、令牌面 10 → **15**（工单 pin-type-contrast/02：引脚族 8 条族面 + 8 条令牌面
+  //   进判据，不达标的是债；03 单把色值收口之后这两笔要跟着摘回去）。
+  assert.ok(faceCount("族：") <= 6, `族面例外涨到 ${faceCount("族：")} 条（落地时 6）`);
+  assert.ok(faceCount("令牌：") <= 15, `令牌面例外涨到 ${faceCount("令牌：")} 条（落地时 15）`);
   // 机械面必须真的抽到东西：抽取逻辑一坏（正则 / 解析面变了），上面那条判据会静默变绿。
   const pairs = contrastPairsFromStylesheet(html);
   assert.equal(pairs.length, CONTRAST_PAIR_COUNT,
@@ -2367,6 +2562,15 @@ test("对比度（工单 04，第九条腿）：渲染方内联取色逐条登�
     `盘上 ${entries.length} 处内联取色 / 登记 ${JS_CONTRAST_REGISTER.length} 条——`
     + "数目不等时上面的对账会指出差在哪几条；若它没报，就是有两条撞了同一个认人键");
   assert.ok(entries.length >= 19, `只抽到 ${entries.length} 处（落地时 19）——抽取面坏了`);
+  // **正向判据**（工单 pin-type-contrast/02）：内联 `style` 里不许用模板变量拼取色。
+  // 这一条是"引脚类型配色整族从没被看过"那件事的出路——取色要么走上面的登记簿（字面令牌），
+  // 要么搬进样式块（腿⑧ 看得见）；非令牌的运行时配色必须逐条豁免。
+  const tpl = jsInlineTemplateProblems();
+  assert.deepEqual(tpl, [],
+    "渲染方内联 `style` 里出现了模板变量拼的取色（或豁免表过期）：\n" + tpl.join("\n"));
+  assert.equal(jsInlineTemplateColorEntries().length, JS_INLINE_TEMPLATE_EXEMPT.length,
+    `盘上 ${jsInlineTemplateColorEntries().length} 处模板取色 / 豁免 ${JS_INLINE_TEMPLATE_EXEMPT.length} 条`
+    + "——数目不等时上面的对账会指出差在哪几条");
 });
 
 test("全站推广：字号角色表是**有限六档**，且页面里的 --fs-* 定义与它逐条一致", () => {
@@ -2435,10 +2639,11 @@ test("描边（工单 01，第六条腿）：整圈完整框逐条登记，盘�
   assert.deepEqual(problems, [],
     "描边登记簿与盘上对不上（新增框就登记它、去掉框就摘掉登记项、"
     + "透明占位别改成真框——三条各有各的改法）：\n" + problems.join("\n"));
-  // 登记簿是**数据**：115 条这个数本身就是进度/规模读数，别让它悄悄缩水
+  // 登记簿是**数据**：116 条这个数本身就是进度/规模读数，别让它悄悄缩水
   // （缩水会让上面的"⊆"判据永远绿——那是最容易发生的一种假绿）。
-  assert.equal(BORDER_REGISTER.length, 115,
-    "登记簿条数变了（应为 115 = 94 可见框 + 21 非框）。真去掉了一条框就同步改这个数，"
+  // 115 → 116：工单 pin-type-contrast/02 把角色类型标的描边从渲染方内联搬进样式块（账从腿⑦ 挪来）。
+  assert.equal(BORDER_REGISTER.length, 116,
+    "登记簿条数变了（应为 116 = 95 可见框 + 21 非框）。真去掉了一条框就同步改这个数，"
     + "并在票尾写清去掉的是哪一条、为什么");
   // 这条是**条数**口径的独立兜底：`borderRegisterProblems` 按 (作用域, 选择器) 认人，
   // 万一有两条声明撞成同一个键，对账会把它折成一条而漏报——条数断言就是那一处的第二道。
@@ -2454,8 +2659,9 @@ test("描边（工单 02，第七条腿）：渲染方内联整圈框逐条登�
   const problems = jsBorderRegisterProblems();
   assert.deepEqual(problems, [],
     "渲染方描边登记簿与盘上对不上（新增内联框就登记它、去掉就摘掉登记项）：\n" + problems.join("\n"));
-  assert.equal(JS_BORDER_REGISTER.length, 10,
-    "渲染方登记条数变了（应为 10）。真去掉了一条就同步改这个数，并在票尾写清是哪一条、为什么");
+  assert.equal(JS_BORDER_REGISTER.length, 8,
+    "渲染方登记条数变了（应为 8）。真去掉了一条就同步改这个数，并在票尾写清是哪一条、为什么"
+    + "（10 → 8：工单 pin-type-contrast/02 把 `.role-type` 那两条搬进样式块，账挪到腿⑥）");
   assert.equal(jsInlineBorderEntries().length, JS_BORDER_REGISTER.length,
     "盘上内联框数与登记条数不等——上面的对账会指出差在哪几条");
 });
@@ -2543,7 +2749,7 @@ test("全站推广合成红证：九条腿各自都判得红（防'永远绿'的
   const injectedBorder = html.replace(noBorderAnchor,
     ".gen-recent-head { display: flex; align-items: center; gap: var(--space-2); border: 1px solid var(--border); }");
   assert.notEqual(injectedBorder, html, "注入没生效（锚点没命中）");
-  assert.equal(fullBorderEntries(injectedBorder).length, 116, "注入的那条完整框没被盘上侧认出来");
+  assert.equal(fullBorderEntries(injectedBorder).length, 117, "注入的那条完整框没被盘上侧认出来");
   assert.ok(
     borderRegisterProblems(injectedBorder).some((p) => p.includes("没有登记") && p.includes(".gen-recent-head")),
     "往没有框的规则里新加一条 border 没被判出（这是本腿最该抓的坏法）",
@@ -2565,7 +2771,7 @@ test("全站推广合成红证：九条腿各自都判得红（防'永远绿'的
   const delRule = html.slice(html.indexOf(".env-jump {"), html.indexOf("}", html.indexOf(".env-jump {")) + 1);
   const deleted = html.replace(delRule, ".env-jump-renamed-placeholder { }");
   assert.notEqual(deleted, html, "注入没生效（锚点没命中）");
-  assert.equal(fullBorderEntries(deleted).length, 114, "删掉的那条完整框没从盘上侧消失");
+  assert.equal(fullBorderEntries(deleted).length, 115, "删掉的那条完整框没从盘上侧消失");
   assert.ok(borderRegisterProblems(deleted).some((p) => p.includes("[settings] .env-jump") && p.includes("找不到了")),
     "真删掉一条已登记规则之后，登记项没被判成过期");
   //    (c2) **登记项过期**的另一半：给表里塞一条盘上根本没有的登记项，也要判红
@@ -2645,7 +2851,7 @@ test("全站推广合成红证：九条腿各自都判得红（防'永远绿'的
   //         —— 只判"盘上比登记少"会静默放过它（01 单双评点过同一个洞）。
   const dupedJs = jsFiles().map(([rel, text]) =>
     rel === "ui/codeeditor.js" ? [rel, text + '\n  d.style.cssText = "border:1px solid #888;";\n'] : [rel, text]);
-  assert.equal(jsInlineBorderEntries(dupedJs).length, 11, "注入没生效（复制那一行没被算进盘上）");
+  assert.equal(jsInlineBorderEntries(dupedJs).length, 9, "注入没生效（复制那一行没被算进盘上）");
   assert.ok(jsBorderRegisterProblems(dupedJs).some((p) => p.includes("登记了 1 条、盘上有 2 条")),
     "盘上同锚点多出一条时没被判出（条数不等只判了'少'这一个方向）");
   // ⑩ **第八条腿（对比度）的坏法各判一次红**——01 单加的腿，照 05/06/07 的先例自证。
@@ -2917,6 +3123,33 @@ test("全站推广合成红证：九条腿各自都判得红（防'永远绿'的
   assert.ok(jsContrastRegisterProblems(fakeDeadJs, deadTokenReg)
     .some((p) => p.includes("解不出颜色")),
     "登记项的令牌解不出时没报出来——这一格会静默空转");
+  //        (m3) **内联模板取色**（工单 pin-type-contrast/02）：三条坏法 + 一条"没过宽"的边界。
+  //        ⚠ 喂假源那几条要**同时喂空豁免表**：豁免表是按真文件写的，拿假源对账会报"锚点过期"
+  //        （那不是这些用例要证的事）。
+  //        ① 塞一处没豁免的 `style="color:${x}"` → 红（这就是本族原来的写法）；
+  assert.ok(jsInlineTemplateProblems([["ui/whatever.js",
+    '  return `<span class="role-type" style="color:${st[0]};background:${st[1]}">x</span>`;']], [])
+    .some((p) => p.includes("模板变量拼取色") && p.includes("ui/whatever.js")),
+    "没豁免的内联模板取色没被判出——腿⑨ 的正向判据在空转");
+  //        ② 描边取色（`border:1px solid ${…}`）与另两种拼法同样算取色 → 各自判红
+  //        （不拦它们等于留原路：腿⑤/腿⑦ 的"只认一种拼法"就是这么栽的）；
+  for (const bad of [
+    '  el.style.cssText = `border:1px solid ${st[0]}`;',
+    '  el.style.border = `1px solid ${st[0]}`;',
+  ]) {
+    assert.ok(jsInlineTemplateProblems([["ui/whatever.js", bad]], [])
+      .some((p) => p.includes("模板变量拼取色")),
+      `这一种拼法的内联模板取色没被判出：${bad}`);
+  }
+  //        ③ 豁免项锚点过期（盘上已改成样式块）→ 红（反向对账，防死条）；
+  assert.ok(jsInlineTemplateProblems(jsFiles(),
+    [["ui/generate-pins.js", 'style="background:${st[0]}"', "这条已经搬走了"]])
+    .some((p) => p.includes("一条都找不到")),
+    "过期的内联模板取色豁免项没被判出");
+  //        ④ **边界**：非取色的模板值（宽度 / 坐标 / 光标）不在射程内——判据不许过宽。
+  assert.deepEqual(jsInlineTemplateProblems([["ui/whatever.js",
+    '  return `<div style="width:${pct}%;top:${y}px"></div>`;']], []), [],
+    "非取色的内联模板值被判红了——判据过宽（它不产生颜色，腿⑧ 也不管它）");
   //    (n) **禁用态**（工单 code-contrast/03）：三条坏法各自判红 + 两条边界证明判据没过宽。
   //        (n1) 把 `opacity: .45` 放回禁用态 → 结构判据红（它就是本单要治的那个形态）；
   const disAnchor = "box-shadow: none; cursor: not-allowed; }";

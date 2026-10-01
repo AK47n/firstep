@@ -25,6 +25,7 @@ MARK = "// <<CONTRAST_EXCEPTIONS>>"
 
 #: 谁负责修（写进理由，读表的人一眼知道去向）
 OWNER = [
+    (re.compile(r"--pin-"), "引脚配色 03 单（两主题成套 + 文字档 `--pin-*-text`）"),
     (re.compile(r"--accent\b|--on-accent\b|#fff|#ffffff"), "02 单（--accent-text / 两处白字）"),
     (re.compile(r"--ok|--warn|--danger|--info|--purple"), "02 单（六族微调）"),
 ]

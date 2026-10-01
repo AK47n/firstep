@@ -1,0 +1,11 @@
+================================================================================================
+引脚配色 02 · 真文件反证：内联模板取色 → 腿⑨ 正向判据
+靶子 = src\contest_generator\static\js\ui\generate-pins.js；sha256（改前）= 38eb2cbb0672bd7ab99a3509e647f9360aff4d143d1f83701cb2fb50b94b8918
+================================================================================================
+① 基线门禁：exit=0（期望 0）
+② 注入后门禁：exit=1（期望非 0）；命中新判据的报错 = True
+    渲染方内联 style 里用模板变量拼取色：ui/generate-pins.js:867 —— <span class="role-type" style="color:${st[0]};background:${st[1]};border:1px sol（取色要么写 `var(--token)` 字面并登记进 JS
+    +   '渲染方内联 style 里用模板变量拼取色：ui/generate-pins.js:867 —— <span class="role-type" style="color:${st[0]};background:${st[1]};border:1px sol（取色要么写 `var(--token)` 字面并登
+    actual: [ '渲染方内联 style 里用模板变量拼取色：ui/generate-pins.js:867 —— <span class="role-type" style="color:${st[0]};background:${st[1]};border:1px sol（取色要么写 `var(--token)
+③ 复原：sha256 = 38eb2cbb0672bd7ab99a3509e647f9360aff4d143d1f83701cb2fb50b94b8918（与改前一致 = True）；门禁 exit=0（期望 0）
+判定：✅ 反证成立（红→复原→绿，字节一致）

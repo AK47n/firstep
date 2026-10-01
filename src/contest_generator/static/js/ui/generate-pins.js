@@ -291,22 +291,24 @@ let pinHighlight = null;         // 清单条目高亮中的角色 key（板图�
 let pinRotation = 0;             // 板图视角旋转（每次 +90°，纯视图不影响数据）
 let pinOverview = false;         // 总览模式：按模块着色已配置引脚（必接角色 + 可选已显式绑定）
 
-// 角色类型配色（与 CSS :root 引脚令牌一一对应：全色 / 淡化色）
-const PIN_TYPE_STYLE = {
-  gpio_out: ["var(--pin-gpio)", "var(--pin-gpio-dim)"],
-  gpio_in: ["var(--pin-gpio)", "var(--pin-gpio-dim)"],
-  pwm: ["var(--pin-pwm)", "var(--pin-pwm-dim)"],
-  enc: ["var(--pin-enc)", "var(--pin-enc-dim)"],
-  uart_tx: ["var(--pin-uart)", "var(--pin-uart-dim)"],
-  uart_rx: ["var(--pin-uart)", "var(--pin-uart-dim)"],
-  i2c_scl: ["var(--pin-i2c)", "var(--pin-i2c-dim)"],
-  i2c_sda: ["var(--pin-i2c)", "var(--pin-i2c-dim)"],
-  spi_mosi: ["var(--pin-spi)", "var(--pin-spi-dim)"],
-  spi_miso: ["var(--pin-spi)", "var(--pin-spi-dim)"],
-  spi_sck: ["var(--pin-spi)", "var(--pin-spi-dim)"],
-  spi_cs: ["var(--pin-spi)", "var(--pin-spi-dim)"],
-  adc: ["var(--pin-adc)", "var(--pin-adc-dim)"],
-  exti: ["var(--pin-exti)", "var(--pin-exti-dim)"],
+// 角色类型 → **色族**（工单 pin-type-contrast/02）：颜色本身**不再住这里**——它搬进了
+// index.html 的样式块（`.role-type[data-pin-family="…"]` 那几组规则），这里只回答
+// "这个类型属于哪个色族"。取色还给样式块之后，这一族的比值才进得了腿⑧（机械面 + token 面）。
+// 表外的类型（理论上不会有）不挂属性 ⇒ 落到基类那条兜底规则（与旧内联兜底同色）。
+const PIN_TYPE_FAMILY = {
+  gpio_out: "gpio", gpio_in: "gpio",
+  pwm: "pwm",
+  enc: "enc",
+  uart_tx: "uart", uart_rx: "uart",
+  i2c_scl: "i2c", i2c_sda: "i2c",
+  spi_mosi: "spi", spi_miso: "spi", spi_sck: "spi", spi_cs: "spi",
+  adc: "adc",
+  exti: "exti",
+};
+/** 色族属性串（`''` = 表外类型，落到基类兜底）。**取色只走这一条**——别再拼内联色。 */
+const pinFamilyAttr = (type) => {
+  const fam = PIN_TYPE_FAMILY[type];
+  return fam ? ` data-pin-family="${fam}"` : "";
 };
 const PIN_TYPE_ZH = {
   gpio_out: "GPIO输出", gpio_in: "GPIO输入", pwm: "PWM", enc: "编码器",
@@ -611,10 +613,8 @@ async function loadPinBoard() {
 function renderPinLegend(roles) {
   const seen = [];
   for (const r of roles) if (!seen.includes(r.decl.type)) seen.push(r.decl.type);
-  let html = seen.map((t) => {
-    const st = PIN_TYPE_STYLE[t] || ["var(--accent)", "var(--accent-dim)"];
-    return `<span class="lg"><span class="dot" style="background:${st[0]}"></span>${esc(PIN_TYPE_ZH[t] || t)}</span>`;
-  }).join("");
+  let html = seen.map((t) =>
+    `<span class="lg"><span class="dot"${pinFamilyAttr(t)}></span>${esc(PIN_TYPE_ZH[t] || t)}</span>`).join("");
   html += `<span class="lg"><span class="dot" style="background:var(--pin-pad);border:1px solid var(--border-strong)"></span>空闲 IO</span>`;
   html += `<span class="lg"><span class="dot" style="background:transparent;border:1px dashed var(--warn)"></span>板载共用（见板图下方警示）</span>`;
   html += `<span class="lg"><span class="dot" style="background:var(--pin-fixed-pad);border:1px solid var(--border)"></span>固定/电源（不可点）</span>`;
@@ -729,7 +729,7 @@ function svgPin(pin, roles, idx, rotated180) {
   const overviewMods = pinOverview && overview.length ? [...new Set(overview.map((r) => r.slug))] : [];
   const io = pin.kind === "io";
   let fill = "var(--pin-pad)", stroke = "var(--border-strong)", labelFill = "var(--muted)";
-  let fillOpacity = "1", strokeWidth = "1.5", overviewColor = null, pieSvg = "";
+  let fillOpacity = "1", strokeWidth = "1.5", overviewColor = null, pieSvg = "", famAttr = "";
   const overviewColors = overviewMods.map((s) => moduleColorMap(roles).get(s));
   if (!io) { fill = "var(--pin-fixed-pad)"; stroke = "var(--border)"; }
   else if (pinOverview && overview.length) {
@@ -744,8 +744,10 @@ function svgPin(pin, roles, idx, rotated180) {
     }
   }
   else if (bound.length) {
-    const st = PIN_TYPE_STYLE[bound[0].decl.type] || ["var(--accent)", "var(--accent-dim)"];
-    fill = st[1]; stroke = st[0]; labelFill = st[0];
+    // 已绑脚的类型色**走样式块**（工单 pin-type-contrast/02）：这里只挂色族属性，不拼内联色
+    // ——内联 `fill`/`stroke` 正是判据看不见的那种写法（腿⑧ 只看样式块），改由 CSS 规则接管。
+    famAttr = pinFamilyAttr(bound[0].decl.type);
+    fill = ""; stroke = ""; labelFill = "";
   }
   let cls = "", extra = "";
   // 总览模式：单模块整圈同色；多模块焊孔描边（r=7）+ 高亮环（r=10.5）都按模块数均分着色
@@ -779,8 +781,7 @@ function svgPin(pin, roles, idx, rotated180) {
   // 总览的多模块共存由上方 overviewRing 圆周均分弧段表达，不再画小点。
   if (!pinOverview && bound.length > 1) {
     for (let i = 0; i < Math.min(bound.length, 3); i++) {
-      const st = PIN_TYPE_STYLE[bound[i].decl.type] || ["var(--accent)", "var(--accent-dim)"];
-      extra += `<circle cx="${cx - 6 + i * 6}" cy="${cy - 13}" r="3" fill="${st[0]}"/>`;
+      extra += `<circle cx="${cx - 6 + i * 6}" cy="${cy - 13}" r="3" class="pin-type-dot"${pinFamilyAttr(bound[i].decl.type)}/>`;
     }
     if (bound.length > 3) extra += `<text x="${cx + 8}" y="${cy - 9}" font-size="9" fill="var(--muted)">+${bound.length - 3}</text>`;
   }
@@ -798,9 +799,9 @@ function svgPin(pin, roles, idx, rotated180) {
   const anchor = gx === 0 ? "end" : "start";
   const clickable = io ? ` data-pin="${esc(pin.name)}" style="cursor:pointer"` : ' style="pointer-events:none"';
   return pieSvg +
-    `<circle cx="${cx}" cy="${cy}" r="7" fill="${fill}" fill-opacity="${fillOpacity}" stroke="${stroke}" stroke-width="${strokeWidth}"${cls}${clickable}>` +
+    `<circle cx="${cx}" cy="${cy}" r="7"${fill ? ` fill="${fill}"` : ""} fill-opacity="${fillOpacity}"${stroke ? ` stroke="${stroke}"` : ""} stroke-width="${strokeWidth}"${famAttr}${cls}${clickable}>` +
     `<title>${esc(ttl.join(" · "))}</title></circle>${extra}` +
-    `<text x="${labelX}" y="${cy + 4}" text-anchor="${anchor}" font-family="var(--mono)" font-size="11" fill="${labelFill}"${overviewColor ? ' font-weight="700"' : ""}>${esc(pin.name)}</text>`;
+    `<text x="${labelX}" y="${cy + 4}" text-anchor="${anchor}" font-family="var(--mono)" font-size="11"${labelFill ? ` fill="${labelFill}"` : ""}${famAttr}${overviewColor ? ' font-weight="700"' : ""}>${esc(pin.name)}</text>`;
 }
 
 // ---- 角色清单（标签 / 默认值 / 三态绑定；点条目 → 板图高亮可接引脚） ----
@@ -831,7 +832,7 @@ function renderPinRoles(roles, fam) {
     });
   }
   const roleHtml = (r) => {
-    const st = PIN_TYPE_STYLE[r.decl.type] || ["var(--accent)", "var(--accent-dim)"];
+    const famAttr = pinFamilyAttr(r.decl.type);
     const bound = pinBindings[r.key];
     const unbound = pinUnbound.has(r.key);
     const defOnBoard = !!idx[r.decl.default];
@@ -839,7 +840,7 @@ function renderPinRoles(roles, fam) {
     const overlap = defaultOverlap.get(r.key);
     let status;
     if (bound) {
-      status = `<span style="color:${st[0]}">已绑 ${esc(bound)}</span>` +
+      status = `<span class="pin-type-text"${famAttr}>已绑 ${esc(bound)}</span>` +
         (bound !== r.decl.default ? ` <span class="muted">（默认 ${esc(r.decl.default)}）</span>` : "") +
         ' <button class="pin-role-unbind">还原默认</button>';
     } else if (unbound) {
@@ -863,7 +864,7 @@ function renderPinRoles(roles, fam) {
     }
     return `<div class="pin-role ${bound ? "bound" : ""} ${unbound ? "unbound" : ""}" data-role="${esc(r.key)}">
       <div class="role-head">
-        <span class="role-type" style="color:${st[0]};background:${st[1]};border:1px solid ${st[0]}">${esc(r.decl.type)}</span>
+        <span class="role-type"${famAttr}>${esc(r.decl.type)}</span>
         <strong>${esc(r.decl.label || r.decl.id)}</strong>
         <span class="muted">${esc(r.slug)}</span>
         ${r.decl.required ? '<span class="badge hw">必接</span>' : '<span class="badge dep">可选</span>'}
@@ -1047,8 +1048,7 @@ function showPinMenu(pinEl, pinName) {
   if (occupants.length) {
     rows += `<li class="muted" style="font-weight:600">已占用（可直接替换：点下方角色即换绑，原占用角色红显未绑）</li>` +
       occupants.map((r) => {
-        const st = PIN_TYPE_STYLE[r.decl.type] || ["var(--accent)", "var(--accent-dim)"];
-        return `<li><span class="dot" style="background:${st[0]}"></span>` +
+        return `<li><span class="dot"${pinFamilyAttr(r.decl.type)}></span>` +
           `<strong>${esc(r.decl.label || r.decl.id)}</strong> <span class="muted">${esc(r.slug)}</span>` +
           `<button class="pin-menu-unbind" data-key="${esc(r.key)}">解除</button></li>`;
       }).join("");
@@ -1067,16 +1067,16 @@ function showPinMenu(pinEl, pinName) {
   rows += `<li class="muted" style="font-weight:600;border-top:1px dashed var(--border);margin-top: var(--space-1);padding-top:8px">绑定角色到此脚（点条目即绑定）：</li>`;
   rows += roles.filter((r) => pinListsType(pin, r.decl.type)).map((r) => {
     const can = pinCanHost(pin, r.decl);
-    const st = PIN_TYPE_STYLE[r.decl.type] || ["var(--accent)", "var(--accent-dim)"];
+    const famAttr = pinFamilyAttr(r.decl.type);
     const bound = pinBindings[r.key];
     const why = can ? "" : pinMissReason(pin, r.decl);
     const famInfo = fam.get(r.key);
     return `<li class="${can ? "can" : "cant"}" ${can ? `data-bind="${esc(r.key)}"` : ""} title="${esc(why)}">
-      <span class="role-type" style="color:${st[0]};background:${st[1]};border:1px solid ${st[0]}">${esc(r.decl.type)}</span>
+      <span class="role-type"${famAttr}>${esc(r.decl.type)}</span>
       <strong>${esc(r.decl.label || r.decl.id)}</strong>
       <span class="muted">${esc(r.slug)} · 默认 ${esc(r.decl.default)}</span>
       ${r.decl.required ? '<span class="badge hw">必接</span>' : ""}
-      ${bound ? ` <span style="color:${st[0]}">现绑 ${esc(bound)}</span>` : ""}
+      ${bound ? ` <span class="pin-type-text"${famAttr}>现绑 ${esc(bound)}</span>` : ""}
       ${famInfo ? `<span class="fam">共享宏族 ${esc(famInfo.macro)}：绑它会改到同族 ${esc(famInfo.siblings.join("、"))} 的共享宏</span>` : ""}
       ${why ? `<span class="why">不兼容：${esc(why)}</span>` : ""}
     </li>`;
