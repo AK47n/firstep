@@ -1,0 +1,27 @@
+{
+  "tag": "before",
+  "rows": [
+    {
+      "theme": "light",
+      "text": "固定资源",
+      "class": "pin-subtitle",
+      "color": "rgb(31, 35, 40)",
+      "fg": "",
+      "textToken": "#1f2328",
+      "visible": true,
+      "shown": true,
+      "shot": "probe-03-subtitle-before-light.png"
+    },
+    {
+      "theme": "dark",
+      "text": "固定资源",
+      "class": "pin-subtitle",
+      "color": "rgb(230, 237, 243)",
+      "fg": "",
+      "textToken": "#e6edf3",
+      "visible": true,
+      "shown": true,
+      "shot": "probe-03-subtitle-before-dark.png"
+    }
+  ]
+}

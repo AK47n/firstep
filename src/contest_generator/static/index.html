@@ -1774,8 +1774,12 @@
                     border-radius: var(--radius-full); background: var(--panel-2);
                     font-size: var(--fs-tag); color: var(--muted); line-height: 1.6; }
   .pin-legend .lg .dot { margin-right: 2px; }
+  /* 段标题（工单 contrast-residue/02）：`color` 原来写的是 `var(--fg)`——**这个令牌从没定义过**，
+     浏览器按 `inherit` 处理，于是它一直吃的是 `body` 的 `--text`。改成显式 `--text`：
+     真浏览器实测两主题计算样式**逐字节相同**（`probe-03-subtitle-*.json`），只是不再留一处
+     "看着像笔误"的声明；同型笔误现在由守卫腿⑩（无兜底的 `var()` 必须有定义）拦。 */
   .pin-subtitle { margin: 10px 0 var(--space-1); font-size: var(--fs-block); font-weight: 600;
-                  letter-spacing: .3px; color: var(--fg); }
+                  letter-spacing: .3px; color: var(--text); }
   .pin-subtitle.warn { color: var(--warn-text); }
   #pin-board-caption { font-weight: 600; }
   /* SVG 引脚候选高亮（点清单条目 → 板图可接引脚） */

@@ -1393,8 +1393,8 @@ const CONTRAST_TOKEN_BASES = [
     "代码 gutter 的折叠占位字形（装饰性，alpha .12 叠在代码底上）"],
   ["inherit", [], "skip", "`color: inherit` 不是取色：不参与比值判据"],
   ["transparent", [], "skip", "透明：不参与比值判据"],
-  ["var(--fg)", [], "skip",
-    "**未定义的令牌（笔误）**：浏览器按 inherit 处理，实际渲染是继承色——本轮不改观感，记为待办"],
+  // `var(--fg)` 那条 `skip` 已由工单 `contrast-residue/02` 摘掉：盘上那个字面改成 `var(--text)`，
+  // 令牌面自己那条"盘上已经不用了 ⇒ 删掉这一行"的反向判据会盯着它（别再加回来）。
   // `--tok-*` 那十个：底是代码页那五层，已由族面逐格算过（这里登记为"已覆盖"，不重复判）
   ["var(--tok-com)", [], "skip", "已由族面 `--tok-* × 代码底` 覆盖"],
   ["var(--tok-str)", [], "skip", "已由族面 `--tok-* × 代码底` 覆盖"],
@@ -2207,6 +2207,77 @@ function jsContrastRegisterProblems(files = jsFiles(), register = JS_CONTRAST_RE
   }
   return out;
 }
+
+// ===========================================================================
+// 腿⑩：令牌定义面（工单 contrast-residue/02）——无兜底的 `var(--x)` 必须有定义
+// ===========================================================================
+//
+// **为什么要这条腿**：`color: var(--fg)` 这种笔误在浏览器里按 `inherit` 渲染、**看上去没坏**
+// （`.pin-subtitle` 一直吃的是 `body` 的 `--text`，两主题都对）——所以它活到今天，
+// 还挂在 `CONTRAST_TOKEN_BASES` 里当一个 `skip`。全站同型笔误实测只有那一处，
+// 但**下一次不会有任何东西拦**。
+//
+// **口径**（三条边界都有实测依据，改之前先读）：
+//   · **无兜底才算**：`var(--x, 兜底)` 天然合法（兜底即基值）——本仓现有 4 个这类写法
+//     （`--code-zoom` ×5 / `--code-tree-w` / `--code-side-w` / `--warn-fg`），其中
+//     `--code-zoom` / `--code-tree-w` 是**运行时注入**（JS `setProperty`）：运行时注入 +
+//     兜底是合法组合，永远不进判据；
+//   · **定义面 = 任意规则体**（`definedTokenNames`）：类作用域定义（`.card { --x: … }`）是合法写法
+//     ——实测 `--code-font-size`（×6）与 `--hwcheck-title-mark`（×1）就是这一类，
+//     按"只认令牌块"算会得到 **2 处假阳性**；
+//   · **扫描面 = 样式块 + `static/js/**`**（渲染方也写 `var(--x)`，例如 SVG 的 `fill=`）。
+const CONTRAST_VAR_USE_RE = /var\(\s*(--[a-z0-9-]+)\s*\)/g;   // 只认无兜底写法：带 `,` 的写法不匹配
+
+/** 腿⑩ 的判据（吃 css 文本 + 渲染方文件 → 返回问题清单；`defined` 可注入，红证要喂坏的）。 */
+function undefinedTokenProblems(css, files = jsFiles(), defined = definedTokenNames(css)) {
+  const out = [];
+  const check = (label, text) => {
+    text.split("\n").forEach((line, i) => {
+      for (const m of line.matchAll(CONTRAST_VAR_USE_RE)) {
+        if (defined.has(m[1])) continue;
+        out.push(`无兜底的 var(${m[1]}) 指向一个没定义过的令牌：${label} 第 ${i + 1} 行——`
+          + `改对名字 / 补定义（类作用域也算定义）/ 或写成 var(${m[1]}, 兜底)`);
+      }
+    });
+  };
+  check("样式块", css);
+  for (const [rel, text] of files) check(`渲染方 ${rel}`, text);
+  return out;
+}
+
+test("对比度（工单 contrast-residue/02，第十条腿）：无兜底的 `var()` 必须有定义", () => {
+  // 判据本身：盘上（样式块 + 渲染方）每一个无兜底的 `var(--x)` 都要在**任意块**里有定义。
+  const css = contrastCss(html);
+  const problems = undefinedTokenProblems(css);
+  assert.deepEqual(problems, [], "页面上有指向未定义令牌的无兜底 var()：\n" + problems.join("\n"));
+
+  // ① 负向自证：插一处未定义的无兜底 `var(--nope)` → 必须当场红
+  const noFallback = css + "\n  .tmp-probe-nope { color: var(--nope); }\n";
+  assert.ok(undefinedTokenProblems(noFallback, []).some((p) => p.includes("--nope")),
+    "未定义的无兜底 var() 没被判出来——这条腿在空转");
+
+  // ② 边界：**带兜底**的写法合法（哪怕令牌压根不存在）
+  const withFallback = css + "\n  .tmp-probe-fb { color: var(--nope2, #fff); }\n";
+  assert.ok(!undefinedTokenProblems(withFallback, []).some((p) => p.includes("--nope2")),
+    "带兜底的 `var(--x, 兜底)` 被判红了——运行时注入的令牌全靠这种写法");
+
+  // ③ 边界：**类作用域定义**也算定义（按"只认令牌块"算会得到 2 处假阳性，实测）
+  const scoped = css + "\n  .tmp-probe-scope { --nope3: #fff; }\n"
+    + "  .tmp-probe-use { color: var(--nope3); }\n";
+  assert.ok(!undefinedTokenProblems(scoped, []).some((p) => p.includes("--nope3")),
+    "类作用域定义的令牌被当成没定义——这会把 `--code-font-size` 那类合法写法误判成笔误");
+  const tokensOnly = (c) => {
+    const t = contrastTokenTables(c);
+    return new Set([...Object.keys(t.dark), ...Object.keys(t.light)]);
+  };
+  assert.ok(undefinedTokenProblems(scoped, [], tokensOnly(scoped)).some((p) => p.includes("--nope3")),
+    "负向自证失效：把定义面退回「只认令牌块」之后那条类作用域用例竟然没红");
+
+  // ④ 扫描面覆盖**渲染方**（`static/js/**` 里的 `var(--x)` 也算）
+  const jsFile = [["probe.js", "const s = `fill=\"var(--nope4)\"`;\n"]];
+  assert.ok(undefinedTokenProblems(css, jsFile).some((p) => p.includes("渲染方 probe.js")),
+    "渲染方里未定义的无兜底 var() 没被判出来——扫描面漏了 `static/js/**`");
+});
 
 test("对比度（工单 01，第八条腿）：文字色 × 底现算比值，不达标的必须在例外表里登记过", () => {
   // 为什么要有这条腿：守卫此前只管"裸色必须令牌化"——一个比值都不算。于是往样式块里写一条

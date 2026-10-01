@@ -229,8 +229,8 @@ CONTRAST_TOKEN_BASES = [
      "代码 gutter 的折叠占位字形（装饰性，alpha .12 叠在代码底上）"),
     ("inherit", [], "skip", "`color: inherit` 不是取色：不参与比值判据"),
     ("transparent", [], "skip", "透明：不参与比值判据"),
-    ("var(--fg)", [], "skip",
-     "**未定义的令牌（笔误）**：浏览器按 inherit 处理，实际渲染是继承色——本轮不改观感，记为待办"),
+    # `var(--fg)` 那条 `skip` 已由工单 `contrast-residue/02` 摘掉（盘上改成 `var(--text)`；
+    # 令牌面自己那条"盘上已经不用了 ⇒ 删掉这一行"的反向判据会盯着它）。
 ]
 #: `--tok-*` 那十个：底是代码页那五层，已由族面逐格算过（这里登记为"已覆盖"，不重复判）
 for _t in ("com", "str", "pre", "kw", "num", "tag", "attr", "val", "fn", "const"):
