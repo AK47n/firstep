@@ -1,0 +1,5 @@
+# 读数：upload-01
+# 命令：gh release upload v1.4.3 C:\Users\luoji\Desktop\firstep-pack\firstep-update-v1.4.3.zip C:\Users\luoji\Desktop\firstep-pack\firstep-update-v1.4.3.files.txt C:\Users\luoji\Desktop\firstep-pack\firstep-update-v1.4.3.removed.txt C:\Users\luoji\Desktop\firstep-pack\firstep-update-v1.4.3.sha256.txt C:\Users\luoji\Desktop\firstep-pack\firstep-full-v1.4.3.zip C:\Users\luoji\Desktop\firstep-pack\firstep-full-v1.4.3.manifest.json C:\Users\luoji\Desktop\firstep-pack\firstep-full-v1.4.3.removed.txt C:\Users\luoji\Desktop\firstep-pack\firstep-full-v1.4.3.sha256.txt --repo AK47n/firstep
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-10-01T22:34:32+08:00
+# 退出码：0
