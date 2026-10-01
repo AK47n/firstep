@@ -1,7 +1,15 @@
 # 读数：pack-02-full
 # 命令：powershell -File tools\pack-full.ps1 -Tag v1.4.3 -Baseline C:\Users\luoji\Desktop\firstep-pack\firstep-full-v1.4.2.manifest.json
 # 工作树：C:\Users\luoji\Desktop\firstep
-# 开始：2026-10-01T22:25:16+08:00
-# 退出码：1
-[错误] 工作树存在未提交的 tracked 变更，拒绝打包（-AllowDirty 可豁免）：
-   M .scratch/release-v1.4.3/pack-01-update.txt
+# 开始：2026-10-01T22:25:27+08:00
+# 退出码：0
+[打包] 仓库根：C:\Users\luoji\Desktop\firstep
+[打包] 版本：v1.4.3 / 输出：C:\Users\luoji\Desktop\firstep-pack / 单卷上限：1900 MB
+完整包已生成：v1.4.3
+  包内文件：8212 个（原始 1030.6 MB）
+  资料库：12 个批次 / 5066 个文件（已写入基线）
+  zip 分卷：1 卷，共 755.2 MB
+    firstep-full-v1.4.3.zip  755.2 MB
+  清单：C:\Users\luoji\Desktop\firstep-pack\firstep-full-v1.4.3.manifest.json
+清单确认：C:\Users\luoji\Desktop\firstep-pack\firstep-full-v1.4.3.manifest.json（zip 分卷 1 卷）
+下一步：按 docs\agents\releasing.md「完整包（zip 分卷）」上传四件套资产
