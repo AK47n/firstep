@@ -1,0 +1,19 @@
+================================================================================================
+§1 三条真文字：改前（带 opacity 的合成）/ 改后（声明色压底）比值
+================================================================================================
+  [light] .chip.rec.unsel .reason      3.52 → 5.25      opacity 0.8 → 1；底 #e1e6ec
+  [light] .sugg-count                  4.18 → 5.72      opacity 0.85 → 1；底 #eeeff0
+  [light] .res-soft                    没量到              页面上没有 .res-soft
+  [dark ] .chip.rec.unsel .reason      4.10 → 5.67      opacity 0.8 → 1；底 #1c2128
+  [dark ] .sugg-count                  3.91 → 4.85      opacity 0.85 → 1；底 #282d35
+  [dark ] .res-soft                    没量到              页面上没有 .res-soft
+
+================================================================================================
+§2 真像素（改前 / 改后各一张，文件名带 tag）
+================================================================================================
+  [light] unsel probe-07-unsel-reason-before-light.png → probe-07-unsel-reason-after-light.png
+  [light] sugg  probe-07-sugg-count-before-light.png → probe-07-sugg-count-after-light.png
+  [dark] unsel probe-07-unsel-reason-before-dark.png → probe-07-unsel-reason-after-dark.png
+  [dark] sugg  probe-07-sugg-count-before-dark.png → probe-07-sugg-count-after-dark.png
+
+判读：三条里两条（`.chip.rec.unsel .reason` / `.sugg-count`）拿到了真像素；`.res-soft` **没量到**——它要一份带 AI 洞察的任务计划（资源总览是纯前端聚合），本流程到不了那里。替代依据写在工单票尾。

@@ -1,0 +1,55 @@
+{
+  "tag": "after",
+  "rows": [
+    {
+      "theme": "light",
+      "chips": true,
+      "unsel": {
+        "color": "rgb(85, 94, 104)",
+        "opacity": "1",
+        "fontSize": "14px",
+        "backdrop": "rgb(225, 230, 236)",
+        "text": "可选点/起始做辅助",
+        "box": "120×24"
+      },
+      "unselShot": "probe-07-unsel-reason-after-light.png",
+      "sugg": {
+        "color": "rgb(85, 94, 104)",
+        "opacity": "1",
+        "fontSize": "12px",
+        "backdrop": "rgba(139, 148, 158, 0.15)",
+        "text": "⤵ 2 方案",
+        "box": "66×19"
+      },
+      "suggShot": "probe-07-sugg-count-after-light.png",
+      "soft": {
+        "missing": "页面上没有 .res-soft"
+      }
+    },
+    {
+      "theme": "dark",
+      "chips": true,
+      "unsel": {
+        "color": "rgb(145, 154, 164)",
+        "opacity": "1",
+        "fontSize": "14px",
+        "backdrop": "rgb(28, 33, 40)",
+        "text": "可选点/起始做辅助",
+        "box": "120×24"
+      },
+      "unselShot": "probe-07-unsel-reason-after-dark.png",
+      "sugg": {
+        "color": "rgb(145, 154, 164)",
+        "opacity": "1",
+        "fontSize": "12px",
+        "backdrop": "rgba(139, 148, 158, 0.15)",
+        "text": "⤵ 2 方案",
+        "box": "66×19"
+      },
+      "suggShot": "probe-07-sugg-count-after-dark.png",
+      "soft": {
+        "missing": "页面上没有 .res-soft"
+      }
+    }
+  ]
+}

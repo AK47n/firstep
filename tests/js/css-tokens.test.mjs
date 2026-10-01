@@ -1076,20 +1076,8 @@ const CONTRAST_DISABLED_FORM_KINDS = [
 ];
 
 /**
- * **反向嫌疑词法**（工单 `disabled-forms/01`）：类名**等于**该词、或以 `-<词>` 结尾
- * ⇒ 这条规则"看起来在表达不可选/弱化"。命中就**必须**登记进 `CONTRAST_DISABLED_FORMS`
- * （登记成 `dim` 也接受）。
- *
- * **它是代理信号，不是判据本身**：词法够不着"用别的名字、又不用 `cursor: not-allowed`"
- * 的新形态——真正的闭合是**全量登记**（腿⑩），见 `backlog.md` §33。这里**宁可过宽**：
- * 误报的方向是"逼人登记"（有人看一眼、写一行理由），漏报的方向是"又一处低于 AA 没人管"。
- * **与探针侧 `probe_lib.CONTRAST_DISABLED_HINTS` 逐项同源**（镜像守卫钉住）。
- */
-const CONTRAST_DISABLED_HINTS = ["disabled", "off", "cant", "stale", "inactive", "unavailable",
-  "locked", "dim", "ro", "na"];
-
-/**
- * **不可选形态的认人面（登记表）**（工单 `disabled-forms/01`）：`[作用域, 剥注释的选择器, 类别, 理由]`。
+ * **不可选形态 / 弱化的登记表**（工单 `disabled-forms/01` 立；工单 `contrast-residue/04` 改成**全量**）：
+ * `[作用域, 剥注释的选择器, 类别, 理由]`。
  *
  * **为什么要有它**：判据⑥按**类名**认人（`:disabled` / `.disabled`），于是"用别的类名表达不可选"
  * 的形态（`.module-card.off` / `.pin-menu-list li.cant` / `.param-stale`）两头都看不见——
@@ -1097,7 +1085,7 @@ const CONTRAST_DISABLED_HINTS = ["disabled", "off", "cant", "stale", "inactive",
  * 结果是一边浅色下只有 **2.16–3.40**（**模型 A**（整块连底压到祖先底）2.16–3.22 /
  * **模型 B**（字往自己声明的底上拉平）2.24–3.40，两模型别混着读，见 probe-00 §2）、一边没有任何门禁
  * （`code-contrast/03` 票尾第 8 条记的就是它）。
- * 这一轮把三处改成**灰底灰字**（与按钮禁用态同一格：`--muted` × `--panel-2` / `--panel`），
+ * 上一轮把三处改成**灰底灰字**（与按钮禁用态同一格：`--muted` × `--panel-2` / `--panel`），
  * 并把"哪些选择器算不可选形态"变成**可对账的数据**。
  *
  * **认人键 = 剥注释的选择器**（`contrastRules` 切出来的那个形态，空白已归一）；
@@ -1106,22 +1094,22 @@ const CONTRAST_DISABLED_HINTS = ["disabled", "off", "cant", "stale", "inactive",
  *
  * **四条判据**（本体在 `disabledFormProblems`，红证在文件末尾那条合成用例里）：
  *   ① **正向**：**不许弱化**的认人面（这条正则 + 本表 `disabled` 类）里出现 `opacity: <1` ⇒ 红；
- *   ② **反向**：**活规则**（排除 `@keyframes` 帧）里出现 `opacity: <1` 且命中任一嫌疑信号
- *      （同规则 `cursor: not-allowed`，或类名词法命中）⇒ **必须**落在认人面里（两档类别都算），否则红；
+ *   ② **反向（全量口径）**：**活规则**（排除 `@keyframes` 帧）里出现 `opacity: <1` ⇒ **必须**在本表里
+ *      （两档类别都算），否则红。**工单 `contrast-residue/04` 之前**这条还要求"命中嫌疑信号"
+ *      （类名词法 / 同规则 `cursor: not-allowed`）——那一套**已整条退役**（表、函数、两侧镜像腿、
+ *      探针取数口径一起走）：全量之后它不再有判据用途，而它恰恰够不着"换个不命中词法的类名"的新形态。
+ *      （`disabled-forms/03` 补审当年为那套词法加的**行为向量表**也随之退场。）
  *   ③ **双向对账**：本表每条都要在盘上认到人（选择器真的存在），否则红（防死条）；
  *   ④ 类别表形状（取值在 `CONTRAST_DISABLED_FORM_KINDS` 里、每类至少一条、不重复登记、理由非空）。
  *
- * ⚠ **正反两半的认人面不是同一张**（本单的要害，改的时候别合并）：正向面只收 `disabled` 档，
- * 反向面两档都收——合并成一个的话，`.pin-dim` 这类**登记在案的合法弱化**会被①误判成红。
+ * ⚠ **正反两半的认人面不是同一张**（`disabled-forms/01` 的要害，改的时候别合并）：正向面只收
+ * `disabled` 档，反向面两档都收——合并成一个的话，`.pin-dim` 这类**登记在案的合法弱化**会被①误判成红。
  *
- * **够不着的那 14 条（明写的边界）**：**recon 那一刻**（本单落地前，`probe-00-inventory.py` 的
- * `RECON_BASELINE`）样式块里 `opacity: <1` 共 **26** 条 = 动画帧 5 条 + 活规则 21 条，
- * 其中命中嫌疑信号的 **7** 条（本表全在这 7 条里）；**本单落地后现算** = 总 23 / 动画帧 5 /
- * 活规则 18 / 嫌疑面 4（三处目标不再有 `opacity`，各减 3——**这是改对了的样子，不是探针坏了**）。
- * 两种读法下"不命中信号"的都是 **14 条**（21 − 7 = 18 − 4）：装饰图标 / 折叠箭头 / 瞬态动画 /
- * 轻微弱化的次要字（`.welcome-sub` `.92`、`.sugg-count` `.85`）——**它们不在射程**。
- * **别把"腿绿"读成"全站 `opacity` 都干净了"**——真正的闭合是全量登记（腿⑩），见 `backlog.md` §33
- * （`backlog.md` §33 已开，边界写在那一节）。
+ * **全量登记的读数**（工单 `contrast-residue/04` 落地后现算，`probe-00-inventory.py` 可复跑）：
+ * 样式块里 `opacity: <1` 共 **16** 条 = 动画帧 5 条（判据排除）+ 活规则 **11** 条，**全部在册**
+ * （改前是 18 条活规则 / 只有 4 条在册）；其中三条**真文字**（`.res-soft` / `.sugg-count` /
+ * `.chip.rec.unsel .reason`）实测低于 AA，已按拍板**去掉 `opacity`**（不再有那一格，自然也不再登记）。
+ * **别把"腿绿"读成"全站 `opacity` 都干净了"**：干净的是"每一条都有人看过并写了理由"这件事本身。
  */
 const CONTRAST_DISABLED_FORMS = [
   ["modules", ".module-card.off", "disabled",
@@ -1138,43 +1126,36 @@ const CONTRAST_DISABLED_FORMS = [
     "接线图未高亮的连线：非文字装饰（SVG stroke）"],
   ["code", ".code-tab.ro .code-tab-name", "dim",
     "只读页签的名字：弱化的是「只读」不是「不可用」，页签仍可点（真正的信号是 .code-tab-ro 那个「只读」小标）"],
-];
-
-/** 选择器里的类名命中了哪些嫌疑词（**与探针侧 `probe_lib.class_hint_hits` 同一口径**）。
- *  命中口径 = 类名**等于**该词、或以 `-<词>` 结尾（`.x-disabled` 算、`.disabledness` 不算）。
- *  `:not(…)` 先剥掉：`:not(.off)` 是"**非** off"，不是"命中 off"（与 `targetsDisabledState` 同一条纪律）。 */
-function classHintHits(sel, hints = CONTRAST_DISABLED_HINTS) {
-  const bare = sel.replace(/:not\([^()]*\)/g, "");
-  const names = [...bare.matchAll(/\.([A-Za-z][\w-]*)/g)].map((m) => m[1].toLowerCase());
-  return hints.filter((w) => names.some((n) => n === w || n.endsWith("-" + w)));
-}
-
-/**
- * **类名词法规则的"行为向量表"**：`[选择器, 期望命中的词（按词表顺序）]`。
- *
- * **为什么要它**（`disabled-forms/03` 补审点名）：镜像守卫此前只比"正则 / 词表 / 类别表 / 登记表前三格"
- * ——那些是**数据**；而"类名等于该词或以 `-<词>` 结尾""`:not(…)` 先剥掉"这些**行为**，
- * 两侧各写了一份实现（JS 的 `classHintHits` / Python 的 `probe_lib.class_hint_hits`），
- * 行为漂了**两边都不红**：腿说"这些规则都登记过"、探针说"这几条没在册"——正是本仓最怕的
- * "腿绿而读数红"。所以这张表**两侧共用**：本文件的用例断言 JS 侧，
- * `tests/test_contrast_mirror.py` 解析同一张表再断言 Python 侧。
- *
- * 每条vector都带一个**边界**：后缀不算（`.disabledness` / `.offx` / `.tmp-probe-delayed`）、
- * `:not(…)` 剥掉、无关类名不误伤、以及"一次命中两个词时的顺序 = 词表顺序"。
- */
-const CONTRAST_HINT_VECTORS = [
-  [".module-card.off", ["off"]],
-  [".pin-menu-list li.cant", ["cant"]],
-  [".param-stale", ["stale"]],
-  [".code-tab.ro .code-tab-name", ["ro"]],
-  [".wiring-line.wiring-dim", ["dim"]],
-  [".x-disabled", ["disabled"]],
-  [".a-off.b-dim", ["off", "dim"]],
-  [".disabledness", []],
-  [".offx", []],
-  [".tmp-probe-delayed", []],
-  [".tmp-probe:not(.off)", []],
-  [".chip.rec.unsel .reason", []],
+  // —— 工单 `contrast-residue/04` 补的 14 条（全部 `dim`；逐条理由见各行的第四格）——
+  // 分类口径：`disabled` = 整块表达「这个组合不成立」；`dim` = 允许保留 opacity。这 14 条**没有一条**
+  // 是 `disabled`——名字最容易误判的两条已逐条排掉（`.chip.rec.unsel .reason` 是"点一下加回"的
+  // **开关状态**、`.res-soft` 是"AI 误标资源"的降级展示，那里没有任何可选控件）。
+  ["welcome", ".welcome-card .welcome-sub", "dim",
+    "欢迎卡说明副标题：与标题同底的次要文字，.92 只把它压得比标题轻一档（弱化语气不是可用性）——实测仍 ≥AA（浅 4.88–5.16 / 暗 5.30）"],
+  ["welcome", ".welcome-card .welcome-line", "dim",
+    "compact 欢迎卡那一行鼓励语：与上一条同底同字号，同一档轻微弱化（弱化的是语气不是可用性）"],
+  ["modules", ".chip.rec .chip-x", "dim",
+    "已选 chip 尾部的 ✕ **符号**（非文字）：hover 即升到 1 并转 --danger-text，chip 本体才是按钮；静息 .6 弱化的是「可移除」提示"],
+  ["modules", ".sugg-msg .muted", "dim",
+    "气泡尾部**时间戳**：次要小字，颜色继承气泡的 --text（不是 --muted）——实测浅 6.08 / 暗 8.27。⚠ 别与 `.sugg-msg.muted`（引导气泡，无 opacity）混键"],
+  ["hwcheck", "#tab-hwcheck .empty-state .es-icon", "dim",
+    "检测页空态 emoji：非文字装饰（整段意思由同块 .es-title / .es-hint 文字承担）。⚠ 与下面那条**是同一视觉物的两条规则**，各占一行"],
+  ["site", ".empty-state .es-icon", "dim",
+    "全站空态图标（🔍 / 📄 / 📦…）：非文字装饰，底下永远跟着 .es-title + .es-hint 完整文案；.5 只为让空态安静下来"],
+  ["code", ".code-crumb-sep", "dim",
+    "面包屑段间「›」：aria-hidden=\"true\" + user-select:none 的纯标点装饰，相邻段各自是可点 .code-crumb"],
+  ["code", ".code-tab.dragging", "dim",
+    "被拖拽的页签：**瞬态**（半透明 + z-index 置顶，落点由 .drop-before/after 的 accent 竖线表达），松手即消失，不表达「不可用」"],
+  ["code", ".code-zoom-badge", "dim",
+    "缩放浮标：`0` 是**显隐机制不是弱化**——可见态是兄弟规则 `.code-zoom-badge.show { opacity: 1 }`，JS 每次缩放加 .show、1200ms 后摘掉，刷新后不显示。⚠ **绝不能**按 disabled 处置（去掉 opacity 会让浮标常驻右上角）"],
+  ["guide", ".card-details > summary::before", "dim",
+    "可折叠说明行前缀的生成内容「ⓘ 」：`::before` 装饰符号，同行摘要文字走 .card-details 的 --muted 全强度；summary 可点展开，弱化的是图标不是可点性"],
+  ["site", ".card-collapse", "dim",
+    "卡片右上折叠 ▾ 的常驻弱化：▾ 只是「能折」的状态指示，**真正主入口是整行 h2**（两处调用点都挂 h2 点击），hover 即 1 + accent，另有 title / aria-label「折叠·展开该卡片」"],
+  // ⚠ **曾经在这张表里、现在不在的三条**（`.res-soft` / `.sugg-count` / `.chip.rec.unsel .reason`）：
+  // 它们都是**真文字**且实测低于 AA（浅 3.19–4.12 / 暗 3.83–4.37），本单按拍板**去掉了 `opacity`**
+  // （字直接用 `--muted`：浅 5.25 / 暗 5.67）——规则里不再有那一格，**自然也不再登记**
+  // （留着会是个"这条允许弱化"的误导行）。理由与实测值写在 `index.html` 那三条规则上方的注释里。
 ];
 
 /** 登记表里这条选择器的类别（不在册 → `null`）。 */
@@ -1198,20 +1179,14 @@ function neverDimsForm(sel, register = CONTRAST_DISABLED_FORMS) {
 
 /**
  * 不可选形态的四条判据（见 `CONTRAST_DISABLED_FORMS` 的注释）。吃源码文本 → 返回问题清单。
- * `register` / `hints` / `kinds` 可注入（红证要喂坏表）。
+ * `register` / `kinds` 可注入（红证要喂坏表）。
+ *
+ * 工单 `contrast-residue/04` 把**判据②**从"嫌疑面驱动"改成**全量驱动**，并退役了词法那一套
+ * （`CONTRAST_DISABLED_HINTS` / `classHintHits` / `CONTRAST_HINT_VECTORS` 连同两侧的镜像腿一起走）。
  */
 function disabledFormProblems(source, register = CONTRAST_DISABLED_FORMS,
-  hints = CONTRAST_DISABLED_HINTS, kinds = CONTRAST_DISABLED_FORM_KINDS) {
+  kinds = CONTRAST_DISABLED_FORM_KINDS) {
   const out = [];
-  // ⓪ **先自证词法规则本身**（行为向量表，`disabled-forms/03` 补审加的）：表里每条都要求
-  //    两侧算出同一个答案；漂了就在这里红，而不是等"某条规则该登记却没登记"那种间接症状。
-  for (const [sel, want] of CONTRAST_HINT_VECTORS) {
-    const got = classHintHits(sel, hints);
-    if (JSON.stringify(got) !== JSON.stringify(want)) {
-      out.push(`类名词法规则与向量表不符：${sel} 算出 [${got}]，表里要求 [${want}]——`
-        + "这张表两侧共用（Python 侧 probe_lib.class_hint_hits 也按它判），改规则要一起改表");
-    }
-  }
   const rules = contrastRules(source);
   const onDisk = rules.map((r) => r.sel);
   // ④ 类别表形状（照例外表那套：取值、每类至少一条、理由非空、不重复登记）
@@ -1262,19 +1237,16 @@ function disabledFormProblems(source, register = CONTRAST_DISABLED_FORMS,
         + "全站扫描又会被祖先渐变滤掉，见 .scratch/code-contrast/probe-08-disabled-state.mjs）");
       continue;
     }
-    // ② 反向：动画帧不是状态，不判；**登记过的**（两档都算）也无话可说；
-    // 剩下的"看起来不可选"的活规则必须登记
+    // ② 反向（**全量口径**，工单 `contrast-residue/04`）：动画帧不是状态，不判；
+    //    **登记过的**（两档都算）也无话可说；剩下的**任何一条活规则**都必须登记——
+    //    不再要求"命中嫌疑信号"（词法 + `cursor` 那一套已随本单退役：全量之后它不再有判据用途，
+    //    而它够不着"换个不命中词法的类名"的新形态）。
     if (CONTRAST_KEYFRAME_SEL_RE.test(sel)) continue;
     if (inDisabledFace(sel, register)) continue;
-    const hits = classHintHits(sel, hints);
-    const signals = [];
-    if (d.cursor === "not-allowed") signals.push("同规则 cursor: not-allowed");
-    if (hits.length) signals.push("类名词法命中 " + hits.join("/"));
-    if (!signals.length) continue;
-    out.push(`不可选形态的嫌疑规则没有登记：${sel}（opacity: ${opRaw}，命中 ${signals.join("；")}）——`
+    out.push(`这条 \`opacity: ${opRaw}\` 的活规则没有登记：${sel}——`
       + "把它登记进 CONTRAST_DISABLED_FORMS：算不可选形态就写 disabled（并改成灰底灰字 / 形状信号），"
-      + "只是合法弱化就写 dim 并说明理由（非文字装饰？仍可点？）。"
-      + "判据宁可过宽：词法是代理信号，命中就得有人看一眼（见 backlog.md §33 的边界）");
+      + "只是合法弱化就写 dim 并说明理由（非文字装饰？瞬态？显隐开关？次要文字？仍可点？）。"
+      + "**全量登记**是这一面的闭合方式：每一条 `opacity<1` 都得有人看过一眼并留下理由");
   }
   return out;
 }
@@ -2990,19 +2962,30 @@ test("全站推广合成红证：九条腿各自都判得红（防'永远绿'的
       && p.includes(".module-card.off")),
     "把 opacity 放回 .module-card.off 之后没被判出（正向判据在空转）",
   );
-  //        n2 注入 `.tmp-probe.off { opacity: .4 }`（不在表里、**词法**命中）→ 反向红
+  //        n2 注入 `.tmp-probe.off { opacity: .4 }`（不在表里）→ 反向红
+  //        （**全量口径**之下它红在"没登记"这件事上，与名字里有没有嫌疑词无关）
   const dfHinted = html.replace("<style>", "<style>\n  .tmp-probe.off { opacity: .4; }");
   assert.notEqual(dfHinted, html, "注入没生效（找不到 <style>）");
   assert.ok(
     contrastProblems(dfHinted).some((p) => p.includes(".tmp-probe.off") && p.includes("没有登记")),
-    "类名词法命中（.off）的 opacity 没被判出（反向判据在空转）",
+    "没登记的 opacity 规则没被判出（反向判据在空转）",
   );
-  //        n3 注入 `.tmp-probe.k { opacity: .4; cursor: not-allowed }`（词法不命中、**光标**命中）→ 反向红
+  //        n3 注入 `.tmp-probe.k { opacity: .4; cursor: not-allowed }`（名字**完全中性**、
+  //        带禁用光标）→ 反向红。⚠ 这一条是本单的要害：**旧口径下它靠 `cursor` 才够得着**，
+  //        新口径下"够得着"与名字、光标都无关——任何一条活规则都得登记。
   const dfCursor = html.replace("<style>", "<style>\n  .tmp-probe.k { opacity: .4; cursor: not-allowed; }");
   assert.notEqual(dfCursor, html, "注入没生效（找不到 <style>）");
   assert.ok(
-    contrastProblems(dfCursor).some((p) => p.includes(".tmp-probe.k") && p.includes("cursor: not-allowed")),
-    "同规则 cursor: not-allowed 的 opacity 没被判出（反向判据只认了词法那一半）",
+    contrastProblems(dfCursor).some((p) => p.includes(".tmp-probe.k") && p.includes("没有登记")),
+    "带 cursor: not-allowed 的 opacity 规则没被判出",
+  );
+  //        n3b **中性名字 + 无光标**（旧口径的漏网形态）：新口径下照样必须登记——
+  //        这就是"退役词法嫌疑面"之后要保住的那条性质（换个名字不再能躲过判据）。
+  const dfNeutral = html.replace("<style>", "<style>\n  .tmp-probe-quiet { opacity: .4; }");
+  assert.notEqual(dfNeutral, html, "注入没生效（找不到 <style>）");
+  assert.ok(
+    contrastProblems(dfNeutral).some((p) => p.includes(".tmp-probe-quiet") && p.includes("没有登记")),
+    "中性名字的 opacity 规则没被判出——全量口径退回了「看名字」（词法嫌疑面白退役了）",
   );
   //        n4 表里塞一条盘上不存在的选择器 → 双向对账红（死条会烂在表里）
   assert.ok(
@@ -3010,17 +2993,22 @@ test("全站推广合成红证：九条腿各自都判得红（防'永远绿'的
       .some((p) => p.includes(".tmp-probe-nope") && p.includes("找不到了")),
     "登记表里塞一条盘上没有的选择器没被判出（双向对账在空转）",
   );
-  //        n5 两条**边界**：`:not(.off)` 里的 `opacity` 与 `@keyframes` 帧里的 `opacity` 都**不**红
-  //        （前者是"非 off"，后者是动画的一拍——都不是"某个状态下的形态"）
-  const dfNot = html.replace("<style>", "<style>\n  .tmp-probe:not(.off) { opacity: .4; }");
+  //        n5 边界：`@keyframes` 帧里的 `opacity` **不**红（动画的一拍不是"某个状态下的形态"）；
+  //        另一条边界改口径了——`:not(:disabled)`（**非**禁用）在**正向面**里不算禁用态，
+  //        但**全量口径**下它仍要登记（它就是一条普通的弱化规则）。
+  const dfNot = html.replace("<style>", "<style>\n  .tmp-probe:not(:disabled) { opacity: .4; }");
   assert.notEqual(dfNot, html, "注入没生效（找不到 <style>）—— 这条边界会静默空转");
   assert.ok(
-    contrastRules(dfNot).some((r) => r.sel === ".tmp-probe:not(.off)"),
-    "注入的 `:not(.off)` 规则没被切出来——下一条断言会静默空转",
+    contrastRules(dfNot).some((r) => r.sel === ".tmp-probe:not(:disabled)"),
+    "注入的 `:not(:disabled)` 规则没被切出来——下一条断言会静默空转",
   );
   assert.ok(
-    !contrastProblems(dfNot).some((p) => p.includes(".tmp-probe:not")),
-    "`:not(.off)`（非 off）里的 opacity 被误判成不可选形态了",
+    !contrastProblems(dfNot).some((p) => p.includes("禁用态不许用 opacity 表达")),
+    "`:not(:disabled)`（非禁用）被正向判据误判成禁用态了（`targetsDisabledState` 的剥壳坏了）",
+  );
+  assert.ok(
+    contrastProblems(dfNot).some((p) => p.includes(".tmp-probe:not(:disabled)") && p.includes("没有登记")),
+    "`:not(:disabled)` 的 opacity 没有被全量判据要求登记（它只是一条普通弱化规则）",
   );
   const dfKf = html.replace("<style>",
     "<style>\n  @keyframes tmp-kf { from { opacity: 0; } to { opacity: 1; } }");
@@ -3045,13 +3033,21 @@ test("全站推广合成红证：九条腿各自都判得红（防'永远绿'的
     disabledFormProblems(html, dfReKind).some((p) => p.includes(".pin-dim")),
     "把 .pin-dim 从 dim 改登成 disabled 之后没红（类别那一格没被读）",
   );
-  //        n7 **词法规则的行为向量表**（`disabled-forms/03` 补审加的）：把规则改坏一次，
-  //        向量表必须当场红——不然它只是一张"看着挺全"的清单（负向自证，照 n5 的先例）。
-  assert.equal(CONTRAST_HINT_VECTORS.length >= 10, true, "向量表被删空了？");
-  const dfBadHint = disabledFormProblems(html, CONTRAST_DISABLED_FORMS, ["off", "dim"]);
+  //        n7 **全量口径的自证**（工单 `contrast-residue/04`）：把一条**已登记**的规则改名成
+  //        中性名字（不含任何嫌疑词、也不带禁用光标）——登记表里那条随即过期（双向对账红），
+  //        而盘上这条**照样**要被要求登记。旧口径下它两步都躲得掉（名字不命中就没人管），
+  //        这正是本单要钉住的性质。
+  const dfRename = html.replace("  .welcome-card .welcome-sub {",
+    "  .welcome-card .welcome-sub-x {");
+  assert.notEqual(dfRename, html, "注入没生效（找不到 .welcome-card .welcome-sub）");
+  const renameProblems = contrastProblems(dfRename);
   assert.ok(
-    dfBadHint.some((p) => p.includes("类名词法规则与向量表不符")),
-    "词表被换掉之后向量表没红——这条自证在空转（它正是防'两侧行为漂移'的那道闸）",
+    renameProblems.some((p) => p.includes(".welcome-card .welcome-sub-x") && p.includes("没有登记")),
+    "改名成中性名字之后就不要求登记了——全量口径退回了「看名字」",
+  );
+  assert.ok(
+    renameProblems.some((p) => p.includes(".welcome-card .welcome-sub") && p.includes("找不到了")),
+    "旧名字那条登记项没被判成过期（双向对账在空转）",
   );
   // ⑨ 复原后转绿（九条腿都回到空/子集）
   assert.deepEqual(bareFontSizesInScope(html, "hwcheck"), []);

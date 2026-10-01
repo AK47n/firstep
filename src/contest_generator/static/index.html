@@ -689,7 +689,9 @@
      点一下加回工程。与「绿底 = 在工程里」形成可读对比，且不再是「界面说在、实际不在」。 */
   .chip.rec.unsel { background: transparent; border-style: dashed;
                     color: var(--muted); cursor: pointer; }
-  .chip.rec.unsel .reason { color: var(--muted); opacity: .8; }
+  /* ⚠ `opacity: .8` 已由工单 contrast-residue/04 去掉：`.reason` 是**真文字**（推荐理由），
+     被压到浅 4.11 / 暗 4.37（低于 AA 4.5）；"未选"的语义由虚线框 + `--muted` 承担。 */
+  .chip.rec.unsel .reason { color: var(--muted); }
   .chip.rec.unsel .chip-x { color: var(--ok-text); opacity: 1; }
   .chip.rec.unsel:hover { border-color: var(--ok-bright); color: var(--text); }
   .chip.rec.unsel .mod-info-btn { color: var(--accent-text); }
@@ -711,7 +713,9 @@
   .chip.out.sugg-chip { cursor: pointer; }
   .chip.out.sugg-chip:hover { border-color: var(--accent); }
   .chip.out.sugg-chip:hover .reason { color: var(--text); }
-  .sugg-count { font-size: var(--fs-tag); opacity: .85; border: none;
+  /* ⚠ `opacity: .85` 已由工单 contrast-residue/04 去掉：这是「⤵ N 方案」那行**真文字**
+     （`--fs-tag` 最小字号，吃不到大字豁免），被压到浅 4.12 / 暗 3.95（低于 AA 4.5）。 */
+  .sugg-count { font-size: var(--fs-tag); border: none;
                 border-radius: var(--radius-md); padding: 0 6px; margin-left: 2px; }
   .sugg-panel { display: none; flex-basis: 100%; border: none; border-left: 3px dashed var(--border-strong);
                 border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); margin-top: var(--space-2);
@@ -3135,8 +3139,11 @@
                   padding: 3px var(--space-2); }
   .res-conflict-note { color: var(--warn-text); font-size: var(--fs-note); font-weight: 600; }
   /* 非硬件资源（模块名/函数名/宏名，AI 偶发误标——xunji 先例，task-insight/02
-     评审整改）：muted 降级展示，不标黄不算冲突（多任务复用模块 = 正常代码复用） */
-  .res-soft { color: var(--muted); opacity: .75; }
+     评审整改）：muted 降级展示，不标黄不算冲突（多任务复用模块 = 正常代码复用）。
+     ⚠ `opacity: .75` 已由工单 contrast-residue/04 去掉：它是**真文字**（模块名 + 「第 N 步」），
+     实测被压到浅 3.19–3.67 / 暗 3.83–3.98（低于 AA 4.5）——"降级"交给 `--muted` 就够
+     （浅 5.25 / 暗 5.67），不再叠一层透明度。 */
+  .res-soft { color: var(--muted); }
   .res-soft-note { color: var(--muted); font-size: var(--fs-note); }
   /* 资源总览工具栏 + 分组视图（resource-overview-polish/01+02）：标题行 +
      列表/板图切换（同 .revise-tab 胶囊协议）；分组标题小字；合并 chips 组 wrap；

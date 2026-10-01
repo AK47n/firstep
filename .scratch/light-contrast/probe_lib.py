@@ -125,17 +125,13 @@ CONTRAST_DISABLED_FORM_KINDS = [
 #: `:not(…)` 先剥掉再判——`:not(:disabled)` 是"**非**禁用"，不是禁用态。
 CONTRAST_DISABLED_RE = re.compile(r"(?::disabled\b|\.disabled\b)")
 
-#: **反向嫌疑词法**（与守卫 `CONTRAST_DISABLED_HINTS` 逐项同源）：类名 **等于**该词、或以 `-<词>` 结尾
-#: ⇒ 这条规则"看起来在表达不可选/弱化"。命中就**必须**登记进 `CONTRAST_DISABLED_FORMS`
-#: （登记成 `dim` 也接受）——词法是**代理信号**，宁可过宽，方向是"逼人登记"。
-CONTRAST_DISABLED_HINTS = ["disabled", "off", "cant", "stale", "inactive", "unavailable",
-                           "locked", "dim", "ro", "na"]
-
-#: **不可选形态的认人面（登记表）**（工单 disabled-forms/01）。
+#: **不可选形态 / 弱化的登记表**（工单 `disabled-forms/01` 立；工单 `contrast-residue/04` 改成**全量**）。
 #: 形状 `[作用域, 剥注释的选择器, 类别, 理由]`；类别取值见 `CONTRAST_DISABLED_FORM_KINDS`。
 #: 认人键 = **剥注释的选择器**（`css_rules` 切出来的那个形态）——`作用域` 只作分组与可读性。
 #: **与 JS 守卫的 `CONTRAST_DISABLED_FORMS` 逐项同源**（镜像守卫钉住）：只改一侧，
-#: 探针会算出"这条嫌疑规则没在册"而守卫说"在册"，那种假账最难查。
+#: 探针会算出"这条规则没在册"而守卫说"在册"，那种假账最难查。
+#: ⚠ 原"反向嫌疑词法"（`CONTRAST_DISABLED_HINTS` / `class_hint_hits`）已随同一张工单**整条退役**：
+#: 全量登记之后它不再有判据用途，而它够不着"换个不命中词法的类名"的新形态。
 CONTRAST_DISABLED_FORMS = [
     ("modules", ".module-card.off", "disabled",
      "模块卡：当前平台没有这个模块的条目（点它弹「请先切换目标平台」）——虚线描边走 --border 那条，"
@@ -155,20 +151,33 @@ CONTRAST_DISABLED_FORMS = [
     ("code", ".code-tab.ro .code-tab-name", "dim",
      "只读页签的名字：弱化的是「只读」不是「不可用」，页签仍可点"
      "（真正的信号是 .code-tab-ro 那个「只读」小标）"),
+    # —— 工单 `contrast-residue/04` 补的 11 条（全部 `dim`）——
+    ("welcome", ".welcome-card .welcome-sub", "dim",
+     "欢迎卡说明副标题：与标题同底的次要文字，.92 只把它压得比标题轻一档——"
+     "实测仍 ≥AA（浅 4.88–5.16 / 暗 5.30）"),
+    ("welcome", ".welcome-card .welcome-line", "dim",
+     "compact 欢迎卡那一行鼓励语：与上一条同底同字号，同一档轻微弱化"),
+    ("modules", ".chip.rec .chip-x", "dim",
+     "已选 chip 尾部的 ✕ 符号（非文字）：hover 即升到 1 并转 --danger-text，chip 本体才是按钮"),
+    ("modules", ".sugg-msg .muted", "dim",
+     "气泡尾部时间戳：次要小字，颜色继承气泡的 --text（不是 --muted）——实测浅 6.08 / 暗 8.27"),
+    ("hwcheck", "#tab-hwcheck .empty-state .es-icon", "dim",
+     "检测页空态 emoji：非文字装饰（意思由同块 .es-title / .es-hint 承担）；"
+     "与下面那条是同一视觉物的两条规则"),
+    ("site", ".empty-state .es-icon", "dim",
+     "全站空态图标：非文字装饰，底下永远跟着完整文案；.5 只为让空态安静下来"),
+    ("code", ".code-crumb-sep", "dim",
+     "面包屑段间「›」：aria-hidden + user-select:none 的纯标点装饰"),
+    ("code", ".code-tab.dragging", "dim",
+     "被拖拽的页签：瞬态（半透明 + z-index 置顶，落点由 .drop-before/after 的 accent 竖线表达）"),
+    ("code", ".code-zoom-badge", "dim",
+     "缩放浮标：0 是显隐机制不是弱化（可见态是兄弟规则 .show { opacity: 1 }，1200ms 后摘掉）——"
+     "绝不能按 disabled 处置（去掉 opacity 会让浮标常驻右上角）"),
+    ("guide", ".card-details > summary::before", "dim",
+     "可折叠说明行前缀的生成内容「ⓘ 」：::before 装饰符号，同行摘要文字是 --muted 全强度"),
+    ("site", ".card-collapse", "dim",
+     "卡片右上折叠 ▾ 的常驻弱化：真正主入口是整行 h2，hover 即 1 + accent"),
 ]
-
-
-def class_hint_hits(selector: str, hints=None) -> list[str]:
-    """选择器里的类名命中了哪些嫌疑词（**与 JS 的 `classHintHits` 同一口径**）。
-
-    命中口径 = 类名**等于**该词、或以 `-<词>` 结尾（`.x-disabled` 算、`.disabledness` 不算）。
-    `:not(…)` 先剥掉：`:not(.off)` 是"**非** off"，不是"命中 off"。
-    """
-    words = CONTRAST_DISABLED_HINTS if hints is None else hints
-    bare = re.sub(r":not\([^()]*\)", "", selector)
-    names = [n.lower() for n in re.findall(r"\.([A-Za-z][\w-]*)", bare)]
-    hits = [w for w in words if any(n == w or n.endswith("-" + w) for n in names)]
-    return hits
 
 
 def disabled_form_kind(selector: str, register=None):

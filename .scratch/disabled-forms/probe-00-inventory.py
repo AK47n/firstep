@@ -26,14 +26,17 @@ spec.loader.exec_module(plib)
 # 反向嫌疑词法 / 关键帧口径 / 登记表**一律读 probe_lib**（那是单源；JS 守卫同名常量由
 # `tests/test_contrast_mirror.py` 钉住）。探针里**不许**再抄一份——上一轮就是"口径两份拷贝、
 # 只改一侧"踩的坑（`docs/agents/local-environment.md` §0 的 code-contrast 条）。
-HINT_WORDS = plib.CONTRAST_DISABLED_HINTS
+#
+# ⚠ **2026-10-01（工单 `contrast-residue/04`）口径变更**：判据②从"嫌疑面驱动"改成**全量驱动**，
+# 原"反向嫌疑词法"（`CONTRAST_DISABLED_HINTS` / `class_hint_hits`）**整条退役**——本探针的
+# `HINT_WORDS` 与"词法命中"那一列随之删掉；现在只需要"在册 / 未在册"这一个判定。
 KEYFRAME_SEL_RE = plib.KEYFRAME_SEL_RE
 
 OPACITY_RE = re.compile(r"opacity\s*:\s*([\d.]+)")
 
-#: recon 那一刻（工单落定之前）量到的形状数——**冻结**，只作对照。
-#: 本单落地后三处形态不再有 `opacity`，现算的活规则 / 嫌疑面必然比它小 3：这是**改对了**的样子，
-#: 不是探针坏了。票面引用的 `26 / 5 / 21 / 7` 就是这一行。
+#: recon 那一刻（`disabled-forms` 单落定之前）量到的形状数——**冻结**，只作对照。
+#: 票面引用的 `26 / 5 / 21 / 7` 就是这一行（`7` = 当时命中嫌疑信号的条数；全量口径下这个数
+#: 不再有意义，保留只作历史对照）。
 RECON_BASELINE = {"rules": 26, "in_keyframes": 5, "live": 21, "suspect": 7}
 
 
@@ -90,37 +93,33 @@ def main() -> None:
         d = plib.decls(body)
         kf = bool(KEYFRAME_SEL_RE.match(sel))
         cursor = d.get("cursor", "")
-        hits = plib.class_hint_hits(sel)
-        rows.append((sel, op, cursor, hits, kf, d))
-    in_kf = [r for r in rows if r[4]]
-    live = [r for r in rows if not r[4]]
+        rows.append((sel, op, cursor, kf, d))
+    in_kf = [r for r in rows if r[3]]
+    live = [r for r in rows if not r[3]]
     print(f"总 {len(rows)} 条：动画帧内 {len(in_kf)} 条、活规则 {len(live)} 条\n")
-    for sel, op, cursor, hits, _kf, _d in live:
+    for sel, op, cursor, _kf, _d in live:
         flags = []
         if cursor == "not-allowed":
             flags.append("cursor:not-allowed")
-        if hits:
-            flags.append("词法命中 " + "/".join(hits))
         kind = plib.disabled_form_kind(sel)
         flags.append(f"在册 {kind}" if kind else "**未在册**")
         print(f"  {op:<5} {sel[:64]:<64} {'  '.join(flags)}")
     print("\n  —— 动画帧内（判据应排除）：")
-    for sel, op, _c, _h, _kf, _d in in_kf:
+    for sel, op, _c, _kf, _d in in_kf:
         print(f"  {op:<5} {sel[:64]}")
-    suspect = [r for r in live if r[2] == "not-allowed" or r[3]]
-    missing = [r for r in suspect if not plib.in_disabled_face(r[0])]
-    print(f"\n  ⇒ 嫌疑面（cursor:not-allowed 或 词法命中）= **{len(suspect)} 条 / 活规则 {len(live)} 条**"
-          f"，其中在认人面里 {len(suspect) - len(missing)} 条 / 未在册 {len(missing)} 条")
+    # **全量口径**（工单 contrast-residue/04）：活规则**逐条**都必须在册——不再有"嫌疑面"这个中间层。
+    missing = [r for r in live if not plib.in_disabled_face(r[0])]
+    print(f"\n  ⇒ 活规则 {len(live)} 条，其中**未在册 {len(missing)} 条**"
+          + ("（全量口径下这就是红）" if missing else "（全量登记已闭合）"))
     if missing:
         print("     未在册的（守卫的反向判据会逐条点名）：" + "、".join(r[0] for r in missing))
-    # recon 那一刻（改前）的读数——**冻结**：本单给三处形态去掉了 `opacity`，现算的"活规则 / 嫌疑面"
-    # 必然变小（票面引用的 `26 / 5 / 21 / 7` 就是这一行）。两种读数并排摆着，免得下一个人拿改后的数
-    # 去对票面，误以为探针坏了。
-    print(f"  · recon 基线（工单记的那份，冻结）：总 {RECON_BASELINE['rules']} / 动画帧 "
-          f"{RECON_BASELINE['in_keyframes']} / 活规则 {RECON_BASELINE['live']} / 嫌疑面 "
+    # recon 那一刻（`disabled-forms` 单之前）的读数——**冻结**，只作历史对照。
+    # ⚠ 全量口径（`contrast-residue/04`）之下"嫌疑面"这个中间层已经不存在了，
+    # 那一格只按旧定义并列出来，别拿它当判据。
+    print(f"  · recon 基线（`disabled-forms` 单记的那份，冻结）：总 {RECON_BASELINE['rules']} / "
+          f"动画帧 {RECON_BASELINE['in_keyframes']} / 活规则 {RECON_BASELINE['live']} / 旧嫌疑面 "
           f"{RECON_BASELINE['suspect']}；现算差 = 总 {len(rows) - RECON_BASELINE['rules']:+d} / "
-          f"活规则 {len(live) - RECON_BASELINE['live']:+d} / 嫌疑面 "
-          f"{len(suspect) - RECON_BASELINE['suspect']:+d}（本单给三处目标去掉 opacity 的直接结果）")
+          f"活规则 {len(live) - RECON_BASELINE['live']:+d}")
     # 正向面：**不许弱化**的认人面（`:disabled` / `.disabled` 正则 + 登记表 `disabled` 档）
     # 里**还带着 opacity** 的规则——改完之后这里必须是 0 条（它就是票面"三处改灰底灰字"的机器读数）。
     face_dim = []
