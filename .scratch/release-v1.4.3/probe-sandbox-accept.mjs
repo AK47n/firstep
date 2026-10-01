@@ -184,8 +184,16 @@ for (const [key] of RULES) {
     `[规则] ${key} 不再有 opacity 声明${withOpacity.length ? "——仍有：" + withOpacity.join(" | ") : ""}`);
 }
 
-// ⑤-A 计算样式：同款结构挂进真 DOM，两主题各量一遍
-const textProbe = await page.evaluate(() => {
+// ⑤-A 计算样式：同款结构挂进真 DOM（只挂一次），两主题各切一次、**等过渡落定**再读
+//
+// ⚠ 口径（第一版在这里红过一条，已自证是**量具**的问题、不是产品）:`.chip` 一族的 `color` 带
+// `0.15s` 过渡，切完主题**立刻**读会读到过渡中间值——诊断读数 `probe-diag-sugg-count.txt`：
+// `.sugg-count` 在亮色下 +0ms 读到暗色值 / +50ms `rgb(132,141,151)` / +200ms `rgb(95,104,114)` /
+// **+600ms = 亮色 `--muted` `rgb(85,94,104)`**；同一时刻真样式表里给 `.chip.out` 上色的规则
+// 只有一条 `color: var(--muted)`。`.sugg-count` 自己没有 `color` 声明（继承 `.chip.out`），
+// 所以它比同批另外两条（各有自己的 `color` 规则、瞬时切换）更容易撞上这个窗口。
+// ⇒ 量具改成"切主题后等 500ms 再读"（用户看到的就是落定后的样子）。
+await page.evaluate(() => {
   const host = document.createElement("div");
   host.id = "probe-v143-texts";
   host.innerHTML = [
@@ -194,33 +202,42 @@ const textProbe = await page.evaluate(() => {
     '<span class="chip rec unsel" id="p-unsel"><span class="reason" id="p-unsel-reason">推荐理由</span></span>',
   ].join("");
   document.body.appendChild(host);
-  const tokenColor = (name) => {
-    const el = document.createElement("span");
-    el.style.color = `var(${name})`;
-    el.textContent = "x";
-    host.appendChild(el);
-    const c = getComputedStyle(el).color;
-    el.remove();
-    return c;
-  };
-  const read = (id) => {
-    const cs = getComputedStyle(document.getElementById(id));
-    return { color: cs.color, opacity: cs.opacity };
-  };
-  const snapshot = () => ({
-    muted: tokenColor("--muted"),
-    resSoft: read("p-res-soft"),
-    suggCount: read("p-sugg-count"),
-    unselReason: read("p-unsel-reason"),
-  });
-  document.documentElement.removeAttribute("data-theme");           // 暗色 = 默认
-  const dark = snapshot();
-  document.documentElement.setAttribute("data-theme", "light");     // 与产品自己的主题开关同一机制
-  const light = snapshot();
-  document.documentElement.removeAttribute("data-theme");
-  host.remove();
-  return { dark, light };
 });
+
+const snapshotTheme = async (theme) => {
+  await page.evaluate((t) => {
+    if (t === "light") document.documentElement.setAttribute("data-theme", "light");
+    else document.documentElement.removeAttribute("data-theme");
+  }, theme);
+  await page.waitForTimeout(500); // ← 过渡落定（`--dur-base` 0.15s，留足余量）
+  return page.evaluate(() => {
+    const host = document.getElementById("probe-v143-texts");
+    const tokenColor = (name) => {
+      const el = document.createElement("span");
+      el.style.color = `var(${name})`;
+      el.textContent = "x";
+      host.appendChild(el);
+      const c = getComputedStyle(el).color;
+      el.remove();
+      return c;
+    };
+    const read = (id) => {
+      const cs = getComputedStyle(document.getElementById(id));
+      return { color: cs.color, opacity: cs.opacity };
+    };
+    const root = getComputedStyle(document.documentElement);
+    return {
+      muted: tokenColor("--muted"),
+      resSoft: read("p-res-soft"),
+      suggCount: read("p-sugg-count"),
+      unselReason: read("p-unsel-reason"),
+      pads: { pad: root.getPropertyValue("--pin-pad").trim(), fixed: root.getPropertyValue("--pin-fixed-pad").trim() },
+    };
+  });
+};
+
+const textProbe = { dark: await snapshotTheme("dark"), light: await snapshotTheme("light") };
+await page.evaluate(() => document.documentElement.removeAttribute("data-theme"));
 
 for (const theme of ["light", "dark"]) {
   const snap = textProbe[theme];
@@ -231,19 +248,8 @@ for (const theme of ["light", "dark"]) {
   }
 }
 
-// ⑤-B 焊盘令牌：亮色成套、暗色原样
-const pads = await page.evaluate(() => {
-  const read = () => {
-    const cs = getComputedStyle(document.documentElement);
-    return { pad: cs.getPropertyValue("--pin-pad").trim(), fixed: cs.getPropertyValue("--pin-fixed-pad").trim() };
-  };
-  document.documentElement.removeAttribute("data-theme");
-  const dark = read();
-  document.documentElement.setAttribute("data-theme", "light");
-  const light = read();
-  document.documentElement.removeAttribute("data-theme");
-  return { dark, light };
-});
+// ⑤-B 焊盘令牌：亮色成套、暗色原样（同一份快照里读，别另起一次主题切换）
+const pads = { dark: textProbe.dark.pads, light: textProbe.light.pads };
 report.pads = pads;
 const hex = (s) => s.toLowerCase();
 console.log(`  焊盘令牌 亮色 { 空闲 ${pads.light.pad} / 固定 ${pads.light.fixed} }  暗色 { 空闲 ${pads.dark.pad} / 固定 ${pads.dark.fixed} }`);

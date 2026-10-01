@@ -1,0 +1,12 @@
+C:\Users\luoji\Desktop\firstep-sim\src\contest_generator\keil.py:6: SyntaxWarning: "\." is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\."? A raw string is also an option.
+  （Keil 惯例：USER/ 工程里 .\..\sys\delay.c = 工程根的 sys/delay.c）。
+C:\Users\luoji\Desktop\firstep-sim\src\contest_generator\keil.py:84: SyntaxWarning: "\." is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\."? A raw string is also an option.
+  modules/ 下，条目写 .\..\modules\...（工单 09：母版现写后落位 user/，
+C:\Users\luoji\Desktop\firstep-sim\src\contest_generator\keil.py:739: SyntaxWarning: "\m" is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\m"? A raw string is also an option.
+  目录组）、引用 ..\main.c（相对 user/ 的工程根）。启动文件作为保留 .s
+C:\Users\luoji\Desktop\firstep-sim\src\contest_generator\reference_library.py:202: SyntaxWarning: "\d" is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\d"? A raw string is also an option.
+  合法编号完全一致（旧实现独立的 ^\d{4}[A-Za-z]{1,2}$ 会放行 2026c / 2026AB
+INFO:     Started server process [8776]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8020 (Press CTRL+C to quit)
