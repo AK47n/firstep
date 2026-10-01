@@ -1,0 +1,29 @@
+contrast-residue / 01 — 真文件反证读数（2026-10-01）
+=====================================================
+
+工具：.scratch/contrast-residue/probe-02-page-injection.py（inject / restore 两个子命令，两侧都打 sha256）
+
+【注入前】index.html sha256 = 3A1EC75784936DAE2265DF64E86B35FD1A5F35D5A32C7F4C8E2158B99A8E42AA
+
+$ python .scratch\contrast-residue\probe-02-page-injection.py inject
+注入完成：第二个 `:root` → `:root-x`（共 2 处，改的是第 2 处）
+sha256 = 6F2CD82D7D3BFE0AE6A027F4800E7AA6EEC15BBFEED074DE130C027CC3DC3360
+
+$ node --test "tests/js/css-tokens.test.mjs"        # 期望红
+✖ 对比度（工单 contrast-residue/01）：令牌解析面 = 全部定义块，不是「第一个 `:root`」
+  AssertionError [ERR_ASSERTION]: 页面里只解析到 1 个 `:root` 块——第二块（引脚配色那一族）
+  被搬走或改名了，解析面又只剩第一块（本单要修的就是这件事）
+ℹ pass 21
+ℹ fail 1
+
+【注意】这一发**红在页面冻结那一条**（④），符合预期：改名之后盘上真的只剩一个 `:root` 块。
+另一条红证（"把解析面改回只取第一个块"）在守卫内部以合成注入的形式自证（旧口径 face 喂进
+同一张向量表 → 报「后面的 `:root` 覆盖前面的」不符），不依赖盘上文件。
+
+$ python .scratch\contrast-residue\probe-02-page-injection.py restore
+复原完成：`:root-x` → `:root`
+sha256 = 3A1EC75784936DAE2265DF64E86B35FD1A5F35D5A32C7F4C8E2158B99A8E42AA   ← 与注入前逐字节相同
+
+$ node --test "tests/js/css-tokens.test.mjs"        # 期望绿
+ℹ pass 22
+ℹ fail 0

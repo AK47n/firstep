@@ -339,20 +339,24 @@ VAR_RE = re.compile(r"^var\((--[a-z0-9-]+)(?:\s*,[^)]*)?\)$")  # 允许 `var(--x
 
 
 class Tokens:
-    """两主题的令牌表（亮色未覆盖的键沿用 `:root`，与浏览器层叠同语义）。"""
+    """两主题的令牌表（亮色未覆盖的键沿用 `:root`，与浏览器层叠同语义）。
+
+    ⚠ **解析面 = 全部定义块**（工单 `contrast-residue/01`）：页面里有**两处** `:root`
+    （第二处是引脚配色那一族），旧口径只取第一处 ⇒ `--pin-*` 一族 19 个令牌"查无此值"。
+    合并规则 = **后者覆盖前者**（同特异性下 CSS 按源序取胜，与浏览器一致）。
+    与 JS 侧 `contrastTokenTables` 逐字同源；**行为**由两侧共用的向量表钉住
+    （`tests/test_contrast_mirror.py` 解析 JS 里那两张表再断言本实现）。
+    """
 
     def __init__(self, text: str):
         self.raw: dict[str, dict[str, str]] = {"dark": {}, "light": {}}
-        m = BLOCK_ROOT.search(text)
-        if not m:
-            raise SystemExit("解析不到 `:root {` 令牌块——格式变了，别拿空表当读数")
-        for name, val in TOKEN_RE.findall(m.group(1)):
-            self.raw["dark"][name] = val.strip()
-        m = BLOCK_LIGHT.search(text)
-        if not m:
-            raise SystemExit('解析不到 `html[data-theme="light"] {` 令牌块——格式变了')
-        for name, val in TOKEN_RE.findall(m.group(1)):
-            self.raw["light"][name] = val.strip()
+        for theme, block in (("dark", BLOCK_ROOT), ("light", BLOCK_LIGHT)):
+            blocks = block.findall(text)
+            if not blocks:
+                raise SystemExit(f"解析不到 {theme} 令牌块——格式变了，别拿空表当读数")
+            for body in blocks:                      # 源序合并：后者覆盖前者
+                for name, val in TOKEN_RE.findall(body):
+                    self.raw[theme][name] = val.strip()
 
     def names(self) -> list[str]:
         return list(self.raw["dark"])
@@ -409,6 +413,22 @@ class Tokens:
                 return None
             return (int(nums[0]), int(nums[1]), int(nums[2]), float(nums[3]))
         return None
+
+
+def defined_token_names(css: str) -> set[str]:
+    """**定义面**：盘上**任意规则体**里定义过的令牌名（`:root` / 亮色块 / 类作用域规则都算）。
+
+    与 `Tokens` 是**两件事**，别混：那边回答"这个令牌**值**是多少"（只有令牌块进表），
+    这边回答"这个令牌名**有没有人定义**"。类作用域定义（`.card { --x: … }`）是合法写法——
+    实测 `--code-font-size`（×6）与 `--hwcheck-title-mark`（×1）就是这一类，按"只认令牌块"
+    算会得到 **2 处假阳性**。判据在 JS 守卫腿⑩（"无兜底的 `var()` 必须有定义"）；
+    本函数只是那层的取数口，**自身不判**。与 JS 侧 `definedTokenNames` 逐字同源。
+    """
+    out: set[str] = set()
+    for _sel, body in css_rules(CSS_COMMENT_RE.sub(" ", css)):
+        for name, _val in TOKEN_RE.findall(body):
+            out.add(name)
+    return out
 
 
 # ===========================================================================

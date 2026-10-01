@@ -38,6 +38,11 @@
    探针会算出"这条嫌疑规则没在册"而守卫说"在册"，正是最难查的那种假账。
    再加 **`CONTRAST_HINT_VECTORS`**（同轮补审）：词法**规则本身**的行为向量表两侧共用
    （数据一致 ≠ 行为一致）。
+11. **令牌解析面的行为向量表**（工单 `contrast-residue/01`）：`CONTRAST_TOKEN_VALUE_VECTORS`
+   （取值面：**合并全部 `:root` 块**、后者覆盖前者 / 亮色覆盖只对亮色 / 沿用 `:root` /
+   解不出仍是 `null`）与 `CONTRAST_TOKEN_DEFINED_VECTORS`（定义面：类作用域定义算定义、
+   注释里的不算、带兜底的不算定义）。解析面从"只取第一个块"改成"合并全部块"时
+   **正则正文一个字没变、变的是行为**——只有这张表拦得住。
 
 **它不判**：不跑 JS、不跑 node（前端门禁才是跑它的地方，见 `docs/agents/workflow.md` 的闸门表）
 ——这里只钉"两侧写的是不是同一把尺"。
@@ -345,6 +350,55 @@ def test_hint_vectors_match(js, py):
         assert got == want, (
             f"类名词法规则两侧给出不同答案：{sel} → JS/want {want} / Python {got}——"
             "这类漂移不会让任何一条腿变红，只会让读数与守卫各说各话"
+        )
+
+
+def test_token_face_vectors_match(js, py):
+    """⑭ **令牌解析面的行为向量表**（工单 `contrast-residue/01`）：
+
+    本单把解析面从"只取**第一个** `:root`"改成"**合并全部定义块**（后者覆盖前者）"——
+    改的是**行为**。镜像既有那十五条正则只比**正文**（flags 都比不到），挡不住
+    "一边 `findall` 合并、一边还在 `search`"这种漂移；而它的表现正是本文件开头那段
+    "腿绿而读数红"。所以两张表**两侧共用**：JS 侧由守卫自证（`tokenFaceProblems`），
+    这里解析同一张表再喂给 Python 侧（`probe_lib.Tokens` / `probe_lib.defined_token_names`）。
+
+    两张表：`CONTRAST_TOKEN_VALUE_VECTORS`（取值面：覆盖顺序 / 亮色只对亮色 / 沿用 `:root` /
+    解不出仍是 `null`）与 `CONTRAST_TOKEN_DEFINED_VECTORS`（定义面：类作用域算定义、
+    注释里的不算、带兜底的不算定义）。
+    """
+    def rows_of(name: str, row_re: str):
+        m = re.search(rf"const {name} = \[([\s\S]*?)\n\];", js)
+        assert m, f"守卫里找不到 `const {name} = [...];`"
+        return re.findall(row_re, m.group(1), re.S)
+
+    # 行数组里的每条 CSS 行：**单双引号都收**（`html[data-theme="light"]` 那一行用了单引号，
+    # 里面自带 `]`——所以内层数组的收尾只能靠"后面紧跟主题/令牌那一格"来锚，别用 `[^\]]*`）。
+    quoted = r'(?:"((?:[^"\\]|\\.)*)"|\'((?:[^\'\\]|\\.)*)\')'
+
+    def lines_of(inner: str) -> str:
+        got = [a or b for a, b in re.findall(quoted, inner)]
+        return "\n".join(s.replace('\\"', '"') for s in got)
+
+    value_rows = rows_of("CONTRAST_TOKEN_VALUE_VECTORS", (
+        r'\["((?:[^"\\]|\\.)*)",\s*\[([\s\S]*?)\],\s*"(\w+)",\s*"(--[a-z0-9-]+)",\s*'
+        r'(null|"((?:[^"\\]|\\.)*)")\]'))
+    assert len(value_rows) >= 4, f"取值向量表只解析出 {len(value_rows)} 条（格式变了？）"
+    for why, lines_src, theme, token, want_raw, want_lit in value_rows:
+        got = py.Tokens(lines_of(lines_src)).value(token, theme)
+        got_s = None if got is None else ",".join(f"{c:g}" for c in got)
+        want = None if want_raw == "null" else want_lit
+        assert got_s == want, (
+            f"令牌取值面两侧给出不同答案：{why} —— {token} @ {theme} "
+            f"JS/表 {want} / Python {got_s}（合并全部块这个行为漂了）"
+        )
+
+    defined_rows = rows_of("CONTRAST_TOKEN_DEFINED_VECTORS", (
+        r'\["((?:[^"\\]|\\.)*)",\s*\[([\s\S]*?)\],\s*"(--[a-z0-9-]+)",\s*(true|false)\]'))
+    assert len(defined_rows) >= 3, f"定义面向量表只解析出 {len(defined_rows)} 条（格式变了？）"
+    for why, lines_src, token, want in defined_rows:
+        got = token in py.defined_token_names(lines_of(lines_src))
+        assert got == (want == "true"), (
+            f"定义面两侧给出不同答案：{why} —— {token} 表里要求 {want} / Python 判 {got}"
         )
 
 

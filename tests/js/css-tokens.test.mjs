@@ -1487,10 +1487,18 @@ function rgbHex(rgb) {
 }
 
 // --- 令牌表（两主题；亮色未覆盖的键沿用 `:root`，与浏览器层叠同语义） ---------
+//
+// ⚠ **解析面 = 全部定义块，不是"第一个 `:root`"**（工单 `contrast-residue/01`）：
+// 页面里有**两处** `:root`（第二处是引脚配色那一族，住在引脚卡片那一段里），旧口径只读第一处
+// ⇒ `--pin-*` 一族 **19 个令牌"查无此值"**。而"解不出"在本判据里的表现是**静默不判**
+// （渲染方登记表只能把它们写成 `skip`"静态判不了"）——看不见比算错更难查。
+// **合并规则 = 后者覆盖前者**（同特异性下 CSS 按源序取胜，与浏览器一致）。
+// `g` 标志只加在 JS 侧（要用 `matchAll`）；镜像守卫比的是**正则正文**，
+// 两侧的**行为**由下面的向量表钉住（只比正文挡不住"一边合并、一边还在 search"）。
 
 const CONTRAST_TOKEN_RE = /(--[a-z0-9-]+):\s*([^;]+);/g;
-const CONTRAST_ROOT_RE = /\n {2}:root \{([\s\S]*?)\n {2}\}/;
-const CONTRAST_LIGHT_RE = /\n {2}html\[data-theme="light"\] \{([\s\S]*?)\n {2}\}/;
+const CONTRAST_ROOT_RE = /\n {2}:root \{([\s\S]*?)\n {2}\}/g;
+const CONTRAST_LIGHT_RE = /\n {2}html\[data-theme="light"\] \{([\s\S]*?)\n {2}\}/g;
 const CONTRAST_TRIPLET_RE = /^(\d+)\s*,\s*(\d+)\s*,\s*(\d+)$/;
 const CONTRAST_HEX_RE = /^#([0-9a-fA-F]{6})$/;
 const CONTRAST_SHORT_HEX_RE = /^#([0-9a-fA-F]{3})$/;
@@ -1500,16 +1508,107 @@ const CONTRAST_SIZE_RE = /([0-9.]+)px/;                              // 字号 �
 
 function contrastTokenTables(css) {
   const grab = (re, what) => {
-    const m = re.exec(css);
-    if (!m) throw new Error(`解析不到 ${what} 令牌块——格式变了，判据会静默空转`);
+    const blocks = [...css.matchAll(re)];
+    if (!blocks.length) throw new Error(`解析不到 ${what} 令牌块——格式变了，判据会静默空转`);
     const out = {};
-    for (const t of m[1].matchAll(CONTRAST_TOKEN_RE)) out[t[1]] = t[2].trim();
+    for (const m of blocks) {
+      for (const t of m[1].matchAll(CONTRAST_TOKEN_RE)) out[t[1]] = t[2].trim();
+    }
     return out;
   };
   return {
     dark: grab(CONTRAST_ROOT_RE, ":root"),
     light: grab(CONTRAST_LIGHT_RE, 'html[data-theme="light"]'),
   };
+}
+
+/**
+ * **定义面**：盘上**任意规则体**里定义过的令牌名（`:root` / 亮色块 / 类作用域规则都算）。
+ *
+ * 与 `contrastTokenTables` 是**两件事**，别混：
+ *   · 那边回答"这个令牌**值**是多少"（只有令牌块进表）；
+ *   · 这边回答"这个令牌名**有没有人定义**"（类作用域定义也算——`.card { --x: … }` 是合法写法，
+ *     实测 `--code-font-size`（×6）与 `--hwcheck-title-mark`（×1）就是这一类，
+ *     按"只认令牌块"算会得到 **2 处假阳性**）。
+ * 判据在腿⑩（"无兜底的 `var()` 必须有定义"）；本函数只是那层的取数口，**自身不判**。
+ * 输入 = `<style>` 块内容（与 `contrastTokenTables` 同一约定）。
+ */
+function definedTokenNames(css) {
+  const out = new Set();
+  for (const m of css.replace(CONTRAST_COMMENT_RE, " ").matchAll(CONTRAST_RULE_RE)) {
+    for (const t of m[2].matchAll(CONTRAST_TOKEN_RE)) out.add(t[1]);
+  }
+  return out;
+}
+
+/**
+ * **令牌解析面的行为向量表**（工单 `contrast-residue/01`）：两侧共用——JS 侧本文件断言，
+ * `tests/test_contrast_mirror.py` 解析同一张表再断言 Python 侧。
+ *
+ * **为什么单立一张表**：本单改的是**行为**（"只取第一个块" → "合并全部块"），而镜像守卫既有的
+ * 十五条正则只比**正文**——"一边 `findall` 合并、一边还在 `search`"这种漂移它挡不住，
+ * 表现正是本仓最怕的**腿绿而读数红**。
+ *
+ * 形状：`[说明, CSS 行数组, 主题, 令牌, 期望值]`。
+ *   · **行数组**（不是一整串带 `\n` 的字符串）是为了让 Python 侧能用一条正则抠出来
+ *     （照 `CONTRAST_HINT_VECTORS` 的写法）；行首那个空串是为了凑出块正则要的行首 `\n`；
+ *   · **期望值** = 解出的 `r,g,b,a` 四个数逗号相连；解不出写 `null`（**不猜**）。
+ */
+const CONTRAST_TOKEN_VALUE_VECTORS = [
+  ["后面的 `:root` 覆盖前面的（同特异性按源序）",
+    ["", "  :root {", "    --vec-a: #111111;", "  }", "  :root {", "    --vec-a: #222222;", "  }",
+      '  html[data-theme="light"] {', "  }"],
+    "dark", "--vec-a", "34,34,34,1"],
+  ["亮色块覆盖只对亮色生效",
+    ["", "  :root {", "    --vec-b: #111111;", "  }",
+      '  html[data-theme="light"] {', "    --vec-b: #eeeeee;", "  }"],
+    "light", "--vec-b", "238,238,238,1"],
+  ["同上那条的暗色半边（证明覆盖不是全局生效）",
+    ["", "  :root {", "    --vec-b2: #111111;", "  }",
+      '  html[data-theme="light"] {', "    --vec-b2: #eeeeee;", "  }"],
+    "dark", "--vec-b2", "17,17,17,1"],
+  ["亮色未覆盖的键沿用 `:root`（层叠同语义）",
+    ["", "  :root {", "    --vec-c: #123456;", "  }", '  html[data-theme="light"] {', "  }"],
+    "light", "--vec-c", "18,52,86,1"],
+  ["没定义过的令牌仍解不出（**不猜**）",
+    ["", "  :root {", "    --vec-d: #111111;", "  }", '  html[data-theme="light"] {', "  }"],
+    "dark", "--vec-e", null],
+];
+
+/** **定义面**的向量（同上，两侧共用）。形状：`[说明, CSS 行数组, 令牌, 期望(bool)]`。 */
+const CONTRAST_TOKEN_DEFINED_VECTORS = [
+  ["类作用域定义也算定义（合法写法，不许当笔误）",
+    ["", "  #tab-x .card {", "    --vec-scoped: var(--accent);", "  }"], "--vec-scoped", true],
+  ["只被使用、没人定义 ⇒ 不在定义面里",
+    ["", "  .vec-use {", "    color: var(--vec-nowhere);", "  }"], "--vec-nowhere", false],
+  ["注释里的 `--x:` 不算定义",
+    ["", "  .vec-c {", "    /* --vec-comment: #fff; */", "  }"], "--vec-comment", false],
+  ["`var(--x, 兜底)` 不构成定义（兜底是值，不是定义）",
+    ["", "  .vec-fb {", "    color: var(--vec-fb, #fff);", "  }"], "--vec-fb", false],
+];
+
+/** 两张向量表的自证（吃源码文本 → 返回问题清单；表与**解析面**都可注入，红证要喂坏的）。
+ *  `face` = `{ tables(css), defined(css) }`——默认是现算的两个真实现；
+ *  红证把它换成"只取第一个块"的旧口径，向量表必须当场红。 */
+function tokenFaceProblems(valueVectors = CONTRAST_TOKEN_VALUE_VECTORS,
+  definedVectors = CONTRAST_TOKEN_DEFINED_VECTORS,
+  face = { tables: contrastTokenTables, defined: definedTokenNames }) {
+  const out = [];
+  for (const [why, lines, theme, token, want] of valueVectors) {
+    const resolved = tokenValue(token, theme, face.tables(lines.join("\n")));
+    const gotStr = resolved ? resolved.join(",") : null;
+    if (gotStr !== want) {
+      out.push(`令牌取值向量表不符：${why} —— ${token} @ ${theme} 算出 ${gotStr}，表里要求 ${want}`);
+    }
+  }
+  for (const [why, lines, token, want] of definedVectors) {
+    const has = face.defined(lines.join("\n")).has(token);
+    if (has !== want) {
+      out.push(`令牌定义面向量表不符：${why} —— ${token} 判成 ${has ? "有定义" : "没定义"}，`
+        + `表里要求 ${want ? "有定义" : "没定义"}`);
+    }
+  }
+  return out;
 }
 
 /** 令牌 → `[r, g, b, a]`；解不出返回 `null`（**不猜**）。 */
@@ -2869,4 +2968,67 @@ test("全站推广合成红证：九条腿各自都判得红（防'永远绿'的
   assert.deepEqual(borderRegisterProblems(html), []);
   assert.deepEqual(jsBorderRegisterProblems(), []);
   assert.deepEqual(contrastProblems(html), []);
+});
+
+test("对比度（工单 contrast-residue/01）：令牌解析面 = 全部定义块，不是「第一个 `:root`」", () => {
+  // 为什么要有这条腿：页面里有**两处** `:root`（第二处是引脚配色那一族）。旧口径 `re.exec(css)`
+  // 只拿第一处 ⇒ `--pin-*` 一族 19 个令牌"查无此值"，而"解不出"的表现是**静默不判**
+  // （渲染方登记表只能写 `skip`）。看不见比算错更难查——所以这里既钉行为（向量表），
+  // 也钉页面（第二块真的进表了）。
+  //
+  // ① 向量表自证（两侧共用同一张表：Python 侧由 tests/test_contrast_mirror.py 断言）
+  const problems = tokenFaceProblems();
+  assert.deepEqual(problems, [], "令牌解析面的行为向量表不符：\n" + problems.join("\n"));
+  assert.ok(CONTRAST_TOKEN_VALUE_VECTORS.length >= 4 && CONTRAST_TOKEN_DEFINED_VECTORS.length >= 3,
+    "向量表被删空了？（值面至少 4 条：覆盖 / 亮色只对亮色 / 沿用 `:root` / 解不出仍是 null）");
+
+  // ② 负向自证（照 n 系列写法）：把解析面换回**旧口径**（只取第一个块）→ 向量表必须当场红。
+  //    没有这一发，"向量表全绿"就只是"两张表碰巧一致"，证明不了它盯着的是**合并**这个行为。
+  const firstBlockOnly = (name, re) => (css) => {
+    const m = new RegExp(re.source).exec(css);   // ← 旧口径：非全局、只取第一个块
+    if (!m) throw new Error(`解析不到 ${name} 令牌块——这条红证自己失效了`);
+    const out = {};
+    for (const t of m[1].matchAll(CONTRAST_TOKEN_RE)) out[t[1]] = t[2].trim();
+    return out;
+  };
+  const oldFace = {
+    tables: (css) => ({
+      dark: firstBlockOnly(":root", CONTRAST_ROOT_RE)(css),
+      light: firstBlockOnly('html[data-theme="light"]', CONTRAST_LIGHT_RE)(css),
+    }),
+    defined: definedTokenNames,
+  };
+  const oldProblems = tokenFaceProblems(CONTRAST_TOKEN_VALUE_VECTORS, CONTRAST_TOKEN_DEFINED_VECTORS, oldFace);
+  assert.ok(oldProblems.some((p) => p.includes("后面的 `:root` 覆盖前面的")),
+    "把解析面换回「只取第一个块」之后向量表没红——这条自证在空转（它正是防'合并行为被改回去'的闸）");
+
+  // ③ 负向自证之二：定义面退回"只认令牌块" → 类作用域那一条向量必须红
+  //    （实测假阳性：`--code-font-size` ×6 / `--hwcheck-title-mark` ×1 都是类作用域定义）
+  const tokensOnly = (css) => {
+    let t;
+    try {
+      t = contrastTokenTables(css);       // 那层只认令牌块；没有块 ⇒ 什么都看不见
+    } catch {
+      return new Set();
+    }
+    return new Set([...Object.keys(t.dark), ...Object.keys(t.light)]);
+  };
+  const narrowProblems = tokenFaceProblems(CONTRAST_TOKEN_VALUE_VECTORS, CONTRAST_TOKEN_DEFINED_VECTORS,
+    { tables: contrastTokenTables, defined: tokensOnly });
+  assert.ok(narrowProblems.some((p) => p.includes("类作用域定义也算定义")),
+    "定义面退回「只认令牌块」之后向量表没红——那 2 处假阳性（合法写法被当笔误）会重新出现");
+
+  // ④ 页面冻结：第二块 `:root` 真的在解析面里（它被搬走/改名了，本单的覆盖面就回到 0）
+  const css = contrastCss(html);
+  const roots = [...css.matchAll(new RegExp(CONTRAST_ROOT_RE.source, "g"))];
+  assert.ok(roots.length >= 2,
+    `页面里只解析到 ${roots.length} 个 \`:root\` 块——第二块（引脚配色那一族）被搬走或改名了，`
+    + "解析面又只剩第一块（本单要修的就是这件事）");
+  const tables = contrastTokenTables(css);
+  for (const theme of ["dark", "light"]) {
+    for (const token of ["--pin-pad", "--pin-fixed-pad"]) {
+      assert.ok(tokenValue(token, theme, tables),
+        `${token} 在 ${theme} 主题下解不出——第二块 \`:root\` 没进令牌表（解析面又退回旧口径了）`);
+    }
+  }
 });
