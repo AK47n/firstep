@@ -31,7 +31,18 @@
 | `issues/05-post-publish-and-ledger.md` | 发布后对账 ＋ 回改 `local-environment.md` §0/§1/§2/§3 ＋ `backlog.md` §34 |
 | `release-notes-v1.4.3.md` | Release 说明定稿（上传用的就是这一份） |
 
-## 读数（发版那一刻）
+## 读数（发版那一刻，2026-10-01）
 
-见 `issues/04-pack-and-publish.md` 文末的读数表（门禁三连 / 打包体积 / sha256 / 上传件数 / 联网自检）
-与 `issues/03-sandbox-acceptance.md` 文末的真机验收表。
+| 项 | 值 | 落点 |
+|---|---|---|
+| 三处版本号同步 + `preflight` | 四项全绿（当前版本 v1.4.3） | `preflight-01.txt` |
+| 版本相关单测 | **86 passed** | `pytest-version-01.txt` |
+| 门禁三连（本机现跑） | 前端 **1847 / 0**、浏览器 **61 / 0**（单独跑 228.9 s）、pytest **5694 passed + 11 skipped** | `js-gate.txt` / `browser-gate.txt` / `pytest.txt` |
+| 对比度冻结读数 + 全站读数 | 登记 **19** / `skip` **0** / 机械面 **394** / 族面 **172** / `opacity` 活规则 **15**、未在册 **0** / `--fs-*` **428** / 页面尺 **0** / 整圈完整框 **115** | `probe-06-register.txt` 等（见 `issues/02`） |
+| 沙箱真机验收 | **50 / 50**（真进程 + 真 Chromium；含本轮两条可见变化） | `sandbox-accept.{txt,json}` |
+| 打 tag 时 pre-push 闸门 | 前端 **1847 / 0**、浏览器 **61 / 0**、pytest **5694 + 11 skipped** | `push-01.txt` |
+| 打包 | 更新包 **288.0 MB**（2939 文件）/ 完整包 **755.2 MB**（8212 文件） | `pack-01-update.txt` / `pack-02-full.txt` / `pack-03-inspect.txt` |
+| 八件对账 | **8 / 8 一致** | `verify-01-assets.txt` |
+| 联网自检 | **PASS** | `post-publish-check.txt` |
+
+**逐张单的结论与落地事实**在 `issues/01`–`05` 各自的文末；本表只放汇总指针。
