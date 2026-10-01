@@ -1,4 +1,4 @@
-<!-- changelog-auto: last-commit=d5ec929fab17de1c403fcbd3d71c615fb5685e28 -->
+<!-- changelog-auto: last-commit=50eb36fee447e1b62b46b61120125a23ecf25560 -->
 # 更新记录
 
 （格式说明：`## YYYY-MM-DD` + `- HH:MM 描述`，新记录插最前面，日期组倒序、
@@ -13,6 +13,7 @@
 - 20:59 对比度残余面 01：令牌解析面扩到全部定义块（合并 :root + 两侧共用行为向量表）
 - 21:09 对比度残余面 02：修 var(--fg) 笔误 + 立腿⑩（无兜底的 var 必须有定义）
 - 21:19 对比度残余面 03：色点归 surface-bordered（skip 档退役）+ 亮色补 --pin-fixed-pad
+- 21:32 对比度残余面 04：opacity 全量登记（+11 条）+ 三条低于 AA 的真文字抬值 + 词法嫌疑面退役
 
 ## 2026-09-30
 - 12:42 浅色调色板 01：对比度契约变成可对账的数据 + 守卫腿⑧ + 跨语言镜像（light-contrast/01）
