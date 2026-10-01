@@ -130,6 +130,7 @@ def main() -> int:
     # ---- 逐主题：先建「主色 → 族」表，再逐格判 ----
     summary = defaultdict(list)          # (theme, face, fam) → [ratio...]
     mismatches: list[str] = []
+    machine: list[dict] = []             # 机器可读那半（`probe-01-readings-<tag>.json`）
     for theme in ("light", "dark"):
         sub = [r for r in rows if r["theme"] == theme]
         color2fam: dict[str, str] = {}
@@ -192,6 +193,9 @@ def main() -> int:
                        f"{verdict:>7}  {PX.hx(pfg)} on {PX.hx(pbg)} {note}")
             seen[(face, fam)].append((r, static, measured, need))
             summary[(theme, face, fam)].append(measured)
+            machine.append({"theme": theme, "scope": r["scope"], "face": face, "family": fam,
+                            "text": r.get("note") or r.get("text") or "", "static": round(static, 3),
+                            "measured": round(measured, 3), "need": need, "file": r["file"]})
         # 每主题的小结：每族每面取最坏格
         out.append("")
         out.append(f"  【{theme}】按面 × 族的最坏格（文字 ≥4.5 / 非文字 ≥3.0）：")
@@ -218,8 +222,12 @@ def main() -> int:
     body = "\n".join(out)
     dest = where / f"probe-01-readings-{tag}.txt"
     dest.write_text(body + "\n", encoding="utf-8")
+    # **机器可读那半**（工单 pin-type-contrast/03 补）：两发对照脚本不许去解析中文表格
+    # ——列宽/文本里的空格会把键解析错（实测：`已绑 PA1` 这类文本一进列，格数就"对不上"）。
+    (where / f"probe-01-readings-{tag}.json").write_text(
+        json.dumps({"tag": tag, "rows": machine}, ensure_ascii=False, indent=1), encoding="utf-8")
     print(body.encode("utf-8", "replace").decode("utf-8", "replace"))
-    print(f"\n[落盘] {dest}")
+    print(f"\n[落盘] {dest} + {dest.with_suffix('.json').name}")
     return 0
 
 

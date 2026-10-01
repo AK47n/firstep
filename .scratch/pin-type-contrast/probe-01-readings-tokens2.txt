@@ -1,0 +1,172 @@
+============================================================================================================
+引脚类型配色族 · 真像素读数（probe-01：真 Chromium + 真后端 + 逐元素截图）
+读数文件 = probe-01-shots-tokens2.json；tag = tokens2；模块集 = motor、adc、as32、i2c_probe；格数 = 120
+============================================================================================================
+  准备[light]：MSPM0 + 模块 motor、adc、as32、i2c_probe + **没找到「显示可选角色」按钮** → 角色类型 15 个，覆盖族 adc/enc/gpio/i2c/pwm/uart
+  准备[light]：（绑定）自动配置：当前绑定无冲突，无需调整。；第 1 轮：gpio:绑上 pwm:绑上 enc:绑上 uart:绑上 i2c:绑上 adc:绑上；库内零实例：spi、exti；第 2 轮：gpio×1 pwm×2 enc×1 uart×2 i2c×1 adc×1（复验通过）；库内零实例：spi、exti；最终：gpio×1 pwm×2 enc×1 uart×2 i2c×1 spi=零实例 adc×1 exti=零实例
+  准备[light]：（浮层）菜单 16 行 / 5 个类型
+  准备[dark]：MSPM0 + 模块 motor、adc、as32、i2c_probe + **没找到「显示可选角色」按钮** → 角色类型 15 个，覆盖族 adc/enc/gpio/i2c/pwm/uart
+  准备[dark]：（绑定）自动配置：当前绑定无冲突，无需调整。；第 1 轮：gpio:绑上 pwm:绑上 enc:绑上 uart:绑上 i2c:绑上 adc:绑上；库内零实例：spi、exti；第 2 轮：gpio×1 pwm×2 enc×1 uart×2 i2c×1 adc×1（复验通过）；库内零实例：spi、exti；最终：gpio×1 pwm×2 enc×1 uart×2 i2c×1 spi=零实例 adc×1 exti=零实例
+  准备[dark]：（浮层）菜单 16 行 / 5 个类型
+  没量到[light/panel]：非家族色 75
+  没量到[dark/panel]：非家族色 75
+
+------------------------------------------------------------------------------------------------------------
+【light】族认人表（同趟角色类型标的主色 → 族）：rgb(122, 81, 0)→adc、rgb(156, 26, 74)→enc、rgb(7, 85, 177)→gpio、rgb(11, 90, 84)→i2c、rgb(21, 103, 45)→pwm、rgb(102, 57, 186)→uart
+------------------------------------------------------------------------------------------------------------
+  面           族      元素                             静态     实测     判定  备注
+  badge       pwm    pwm                          4.81   4.77      过  #15672d on #c8d9d6 
+  status      pwm    已绑 PA1                       5.56   5.56      过  #15672d on #e1e6ec 
+  badge       pwm    pwm                          4.81   4.77      过  #15672d on #c8d9d6 
+  status      pwm    已绑 PA2                       5.56   5.56      过  #15672d on #e1e6ec 
+  badge       gpio   gpio_out                     4.87   4.86      过  #0755b1 on #c6d7ea 
+  status      gpio   已绑 PA0                       5.68   5.68      过  #0755b1 on #e1e6ec 
+  badge       gpio   gpio_out                     4.87   4.86      过  #0755b1 on #c6d7ea 
+  badge       gpio   gpio_out                     4.87   4.86      过  #0755b1 on #c6d7ea 
+  badge       gpio   gpio_out                     4.87   4.86      过  #0755b1 on #c6d7ea 
+  badge       enc    enc                          5.28   5.23      过  #9c1a4a on #ddcedb 
+  status      enc    已绑 PA28                      6.29   6.29      过  #9c1a4a on #e1e6ec 
+  badge       enc    enc                          5.28   5.23      过  #9c1a4a on #ddcedb 
+  badge       enc    enc                          5.28   5.23      过  #9c1a4a on #ddcedb 
+  badge       enc    enc                          5.28   5.23      过  #9c1a4a on #ddcedb 
+  badge       adc    adc                          4.84   4.84      过  #7a5100 on #d8d7cf 
+  status      adc    已绑 PB24                      5.57   5.57      过  #7a5100 on #e1e6ec 
+  badge       uart   uart_tx                      5.06   5.05      过  #6639ba on #d5d4ea 
+  status      uart   已绑 PA23                      5.85   5.85      过  #6639ba on #e1e6ec 
+  badge       uart   uart_rx                      5.06   5.05      过  #6639ba on #d5d4ea 
+  status      uart   已绑 PB18                      5.85   5.85      过  #6639ba on #e1e6ec 
+  badge       i2c    i2c_scl                      5.54   5.48      过  #0b5a54 on #c7d8dc 
+  status      i2c    已绑 PA31                      6.42   6.42      过  #0b5a54 on #e1e6ec 
+  badge       i2c    i2c_sda                      5.54   5.48      过  #0b5a54 on #c7d8dc 
+  legend-dot  pwm                                 4.05   4.05      过  #e1e6ec on #1a7f37 
+  legend-dot  gpio                                4.14   4.14      过  #e1e6ec on #0969da 
+  legend-dot  enc                                 4.29   4.29      过  #e1e6ec on #c9245f 
+  legend-dot  adc                                 3.88   3.88      过  #e1e6ec on #9a6700 
+  legend-dot  uart                                4.02   4.02      过  #e1e6ec on #8250df 
+  legend-dot  uart                                4.02   4.02      过  #e1e6ec on #8250df 
+  legend-dot  i2c                                 4.36   4.36      过  #e1e6ec on #0f766e 
+  legend-dot  i2c                                 4.36   4.36      过  #e1e6ec on #0f766e 
+  board-pad   gpio   PA0 · IO 引脚 · 已绑：AIN1 ·      4.73   3.97      过  #0969da on #d2e4ed （实测那对 = 环 vs 盘内填充，口径不同）
+  board-pad   pwm    PA1 · IO 引脚 · 已绑：PWMAB_C     4.62   3.90      过  #1a7f37 on #d4e6d9 （实测那对 = 环 vs 盘内填充，口径不同）
+  board-pad   enc    PA28 · IO 引脚 · 已绑：AA · 能     4.90   4.01      过  #c9245f on #e9dbde （实测那对 = 环 vs 盘内填充，口径不同）
+  board-pad   i2c    PA31 · IO 引脚 · 已绑：I2C_0_     4.98   4.18      过  #0f766e on #d3e5df （实测那对 = 环 vs 盘内填充，口径不同）
+  board-pad   pwm    PA2 · IO 引脚 · 已绑：PWMAB_C     4.62   3.94      过  #1a7f37 on #d5e7da （实测那对 = 环 vs 盘内填充，口径不同）
+  board-pad   adc    PB24 · IO 引脚 · 已绑：ADC_CH     4.43   3.82      过  #9a6700 on #e5e5d3 （实测那对 = 环 vs 盘内填充，口径不同）
+  board-pad   uart   PB18 · IO 引脚 · 已绑：AS32_U     4.59   3.93      过  #8250df on #e2e2ee （实测那对 = 环 vs 盘内填充，口径不同）
+  board-pad   uart   PA23 · IO 引脚 · 已绑：AS32_U     4.59   3.93      过  #8250df on #e2e2ee （实测那对 = 环 vs 盘内填充，口径不同）
+  board-label gpio   PA0                          6.50   6.44      过  #0755b1 on #eef5f0 
+  board-label pwm    PA1                          6.35   6.30      过  #15672d on #eef5f0 
+  board-label enc    PA28                         7.19   7.13      过  #9c1a4a on #eef5f0 
+  board-label i2c    PA31                         7.34   7.28      过  #0b5a54 on #eef5f0 
+  board-label pwm    PA2                          6.35   6.35      过  #15672d on #eff6f1 
+  board-label adc    PB24                         6.36   6.36      过  #7a5100 on #eff6f1 
+  board-label uart   PB18                         6.69   6.69      过  #6639ba on #eff6f1 
+  board-label uart   PA23                         6.69   6.69      过  #6639ba on #eff6f1 
+  menu-dot    gpio                                5.19   5.19      过  #ffffff on #0969da 
+  menu-badge  pwm    pwm                          5.95   5.90      过  #15672d on #e3efe7 
+  menu-badge  pwm    pwm                          5.95   5.90      过  #15672d on #e3efe7 
+  menu-badge  gpio   gpio_out                     6.02   6.02      过  #0755b1 on #e1edfb 
+  menu-badge  gpio   gpio_out                     6.02   6.02      过  #0755b1 on #e1edfb 
+  menu-badge  gpio   gpio_out                     6.02   6.02      过  #0755b1 on #e1edfb 
+  menu-badge  gpio   gpio_out                     6.02   6.02      过  #0755b1 on #e1edfb 
+  menu-badge  enc    enc                          6.56   6.50      过  #9c1a4a on #f8e4ec 
+  menu-badge  enc    enc                          6.56   6.50      过  #9c1a4a on #f8e4ec 
+  menu-badge  enc    enc                          6.56   6.50      过  #9c1a4a on #f8e4ec 
+  menu-badge  enc    enc                          6.56   6.50      过  #9c1a4a on #f8e4ec 
+  menu-badge  uart   uart_tx                      5.06   5.05      过  #6639ba on #d5d4ea 
+  menu-badge  i2c    i2c_sda                      6.84   6.79      过  #0b5a54 on #e2eeed 
+
+  【light】按面 × 族的最坏格（文字 ≥4.5 / 非文字 ≥3.0）：
+    面                gpio      pwm      enc     uart      i2c      spi      adc     exti
+    badge            4.86     4.77     5.23     5.05     5.48        —     4.84        —
+    status           5.68     5.56     6.29     5.85     6.42        —     5.57        —
+    board-label      6.44     6.30     7.13     6.69     7.28        —     6.36        —
+    legend-dot       4.14     4.05     4.29     4.02     4.36        —     3.88        —
+    menu-badge       6.02     5.90     6.50     5.05     6.79        —        —        —
+    menu-dot         5.19        —        —        —        —        —        —        —
+    board-pad        3.97     3.90     4.01     3.93     4.18        —     3.82        —
+
+------------------------------------------------------------------------------------------------------------
+【dark】族认人表（同趟角色类型标的主色 → 族）：rgb(227, 163, 65)→adc、rgb(240, 106, 155)→enc、rgb(88, 166, 255)→gpio、rgb(57, 210, 192)→i2c、rgb(67, 196, 85)→pwm、rgb(185, 139, 250)→uart
+------------------------------------------------------------------------------------------------------------
+  面           族      元素                             静态     实测     判定  备注
+  badge       pwm    pwm                          5.55   5.56      过  #43c455 on #20382e 
+  status      pwm    已绑 PA1                       7.14   7.14      过  #43c455 on #1c2128 
+  badge       pwm    pwm                          5.55   5.56      过  #43c455 on #20382e 
+  status      pwm    已绑 PA2                       7.14   7.14      过  #43c455 on #1c2128 
+  badge       gpio   gpio_out                     4.94   4.95      过  #58a6ff on #243548 
+  status      gpio   已绑 PA0                       6.41   6.41      过  #58a6ff on #1c2128 
+  badge       gpio   gpio_out                     4.94   4.95      过  #58a6ff on #243548 
+  badge       gpio   gpio_out                     4.94   4.95      过  #58a6ff on #243548 
+  badge       gpio   gpio_out                     4.94   4.95      过  #58a6ff on #243548 
+  badge       enc    enc                          4.68   4.70      过  #f06a9b on #382937 
+  status      enc    已绑 PA28                      5.58   5.58      过  #f06a9b on #1c2128 
+  badge       enc    enc                          4.68   4.70      过  #f06a9b on #382937 
+  badge       enc    enc                          4.68   4.70      过  #f06a9b on #382937 
+  badge       enc    enc                          4.68   4.70      过  #f06a9b on #382937 
+  badge       adc    adc                          5.91   5.91      过  #e3a341 on #34312b 
+  status      adc    已绑 PB24                      7.38   7.38      过  #e3a341 on #1c2128 
+  badge       uart   uart_tx                      5.11   5.13      过  #b98bfa on #2f2d47 
+  status      uart   已绑 PA23                      6.27   6.27      过  #b98bfa on #1c2128 
+  badge       uart   uart_rx                      5.11   5.13      过  #b98bfa on #2f2d47 
+  status      uart   已绑 PB18                      6.27   6.27      过  #b98bfa on #1c2128 
+  badge       i2c    i2c_scl                      6.27   6.35      过  #39d2c0 on #1f3b3f 
+  status      i2c    已绑 PA31                      8.60   8.60      过  #39d2c0 on #1c2128 
+  badge       i2c    i2c_sda                      6.27   6.35      过  #39d2c0 on #1f3b3f 
+  legend-dot  pwm                                 6.37   6.37      过  #1c2128 on #3fb950 
+  legend-dot  gpio                                6.41   6.41      过  #1c2128 on #58a6ff 
+  legend-dot  enc                                 4.50   4.50      过  #1c2128 on #e0558a 
+  legend-dot  adc                                 7.38   7.38      过  #1c2128 on #e3a341 
+  legend-dot  uart                                4.83   4.83      过  #1c2128 on #a371f7 
+  legend-dot  uart                                4.83   4.83      过  #1c2128 on #a371f7 
+  legend-dot  i2c                                 8.60   8.60      过  #1c2128 on #39d2c0 
+  legend-dot  i2c                                 8.60   8.60      过  #1c2128 on #39d2c0 
+  board-pad   gpio   PA0 · IO 引脚 · 已绑：AIN1 ·      6.37   4.88      过  #58a6ff on #223746 （实测那对 = 环 vs 盘内填充，口径不同）
+  board-pad   pwm    PA1 · IO 引脚 · 已绑：PWMAB_C     6.34   4.87      过  #3fb950 on #1e3a2c （实测那对 = 环 vs 盘内填充，口径不同）
+  board-pad   enc    PA28 · IO 引脚 · 已绑：AA · 能     4.47   3.76      过  #e0558a on #362b35 （实测那对 = 环 vs 盘内填充，口径不同）
+  board-pad   i2c    PA31 · IO 引脚 · 已绑：I2C_0_     8.55   6.33      过  #39d2c0 on #1c3c3c （实测那对 = 环 vs 盘内填充，口径不同）
+  board-pad   pwm    PA2 · IO 引脚 · 已绑：PWMAB_C     6.34   4.94      过  #3fb950 on #1d392b （实测那对 = 环 vs 盘内填充，口径不同）
+  board-pad   adc    PB24 · IO 引脚 · 已绑：ADC_CH     7.34   5.92      过  #e3a341 on #313228 （实测那对 = 环 vs 盘内填充，口径不同）
+  board-pad   uart   PB18 · IO 引脚 · 已绑：AS32_U     4.80   4.02      过  #a371f7 on #2b2d43 （实测那对 = 环 vs 盘内填充，口径不同）
+  board-pad   uart   PA23 · IO 引脚 · 已绑：AS32_U     4.80   3.96      过  #a371f7 on #2c2e44 （实测那对 = 环 vs 盘内填充，口径不同）
+  board-label gpio   PA0                          6.37   6.29      过  #58a6ff on #192426 
+  board-label pwm    PA1                          7.10   7.01      过  #43c455 on #192426 
+  board-label enc    PA28                         5.55   5.48      过  #f06a9b on #192426 
+  board-label i2c    PA31                         8.55   8.54      过  #39d2c0 on #182325 
+  board-label pwm    PA2                          7.10   7.09      过  #43c455 on #182325 
+  board-label adc    PB24                         7.34   7.34      过  #e3a341 on #182325 
+  board-label uart   PB18                         6.24   6.30      过  #b98bfa on #172224 
+  board-label uart   PA23                         6.24   6.23      过  #b98bfa on #182325 
+  menu-dot    gpio                                6.85   6.85      过  #161b22 on #58a6ff 
+  menu-badge  pwm    pwm                          5.96   6.04      过  #43c455 on #1b3228 
+  menu-badge  pwm    pwm                          5.96   6.04      过  #43c455 on #1b3228 
+  menu-badge  gpio   gpio_out                     5.31   5.39      过  #58a6ff on #1f2f42 
+  menu-badge  gpio   gpio_out                     5.31   5.39      过  #58a6ff on #1f2f42 
+  menu-badge  gpio   gpio_out                     5.31   5.39      过  #58a6ff on #1f2f42 
+  menu-badge  gpio   gpio_out                     5.31   5.39      过  #58a6ff on #1f2f42 
+  menu-badge  enc    enc                          5.01   5.08      过  #f06a9b on #332331 
+  menu-badge  enc    enc                          5.01   5.08      过  #f06a9b on #332331 
+  menu-badge  enc    enc                          5.01   5.08      过  #f06a9b on #332331 
+  menu-badge  enc    enc                          5.01   5.08      过  #f06a9b on #332331 
+  menu-badge  uart   uart_tx                      5.11   5.13      过  #b98bfa on #2f2d47 
+  menu-badge  i2c    i2c_sda                      6.82   6.92      过  #39d2c0 on #1a3539 
+
+  【dark】按面 × 族的最坏格（文字 ≥4.5 / 非文字 ≥3.0）：
+    面                gpio      pwm      enc     uart      i2c      spi      adc     exti
+    badge            4.95     5.56     4.70     5.13     6.35        —     5.91        —
+    status           6.41     7.14     5.58     6.27     8.60        —     7.38        —
+    board-label      6.29     7.01     5.48     6.23     8.54        —     7.34        —
+    legend-dot       6.41     6.37     4.50     4.83     8.60        —     7.38        —
+    menu-badge       5.39     6.04     5.08     5.13     6.92        —        —        —
+    menu-dot         6.85        —        —        —        —        —        —        —
+    board-pad        4.88     4.87     3.76     3.96     6.33        —     5.92        —
+
+============================================================================================================
+§ 静态 vs 实测 偏差 > 0.35 的格（先查量具与口径，别先改账）
+============================================================================================================
+  （无）
+
+§ 库内零实例的族（今天造不出角色 → 这一族**没有**渲染面读数）
+============================================================================================================
+  spi：两支 recon（recon-03-mspm0.txt / recon-03-stm32.txt）实测 0 个模块声明该类型；令牌仍在（`--pin-spi*`），只是没有角色能造出来
+  exti：两支 recon（recon-03-mspm0.txt / recon-03-stm32.txt）实测 0 个模块声明该类型；令牌仍在（`--pin-exti*`），只是没有角色能造出来

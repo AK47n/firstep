@@ -201,6 +201,19 @@
        ⚠ **边界**：本处只补这一个值，**没有**立"亮色块必须成套覆盖某些令牌族"的判据——
        那要先定"哪些族必须两主题成套"，属另一件事（真立之前别以为这条线有守卫看着）。 */
     --pin-pad: #d0d7de; --pin-fixed-pad: #afb8c1; --pin-pcb: rgba(26, 127, 55, .07);
+    /* 引脚类型配色三件套（工单 pin-type-contrast/03）：**主色**（色点 / 焊盘描边，非文字 3:1）
+       ＋ **淡化色**（类型标自带淡底）＋ **文字档**（状态文字 / 板上引脚名 / 类型标，≥4.5）。
+       此前这一族在亮色下**一个色值都没有**：五个字面色沿用暗色亮色（spi / exti 1.45、i2c 1.40），
+       gpio / pwm / adc 虽派生自语义令牌、但当文字用仍只有 3.37–3.54。
+       ⚠ **三件套成套**是腿⑪（颜色族亮色覆盖）的判据——别再只补一个值。 */
+    --pin-gpio: var(--info); --pin-gpio-dim: var(--info-dim); --pin-gpio-text: var(--info-text);
+    --pin-pwm: var(--ok); --pin-pwm-dim: var(--ok-dim); --pin-pwm-text: var(--ok-text);
+    --pin-adc: var(--warn); --pin-adc-dim: var(--warn-dim); --pin-adc-text: var(--warn-text);
+    --pin-uart: #8250df; --pin-uart-dim: rgba(130, 80, 223, .12); --pin-uart-text: #6639ba;
+    --pin-i2c: #0f766e; --pin-i2c-dim: rgba(15, 118, 110, .12); --pin-i2c-text: #0b5a54;
+    --pin-spi: #0550ae; --pin-spi-dim: rgba(5, 80, 174, .12); --pin-spi-text: #033d82;
+    --pin-enc: #c9245f; --pin-enc-dim: rgba(201, 36, 95, .12); --pin-enc-text: #9c1a4a;
+    --pin-exti: #6f42c1; --pin-exti-dim: rgba(111, 66, 193, .12); --pin-exti-text: #5a34a0;
     /* 亮色阴影（工单 ui-polish-11/01）：GitHub 亮色柔和灰影，避免黑硬影 */
     --shadow-card: 0 1px 0 rgba(31, 35, 40, .04);
     --shadow-card-hover: 0 2px 12px rgba(31, 35, 40, .12), 0 1px 0 rgba(31, 35, 40, .04);
@@ -1750,6 +1763,13 @@
     --pin-pcb: rgba(63, 185, 80, .05);   /* PCB 本体底色（绿板微染） */
     --pin-pad: #21262d;                   /* 空闲 IO 焊盘 */
     --pin-fixed-pad: #171b21;             /* 固定/电源焊盘（灰色不可点） */
+    /* 引脚类型配色的**文字档**（工单 pin-type-contrast/03）：状态文字 / 板上引脚名 / 类型标用它。
+       与主色分开的理由是老课（light-contrast/02）：**主色只要非文字 3:1，文字要 4.5**，
+       两者不能互相顶替——gpio 那一族浅色 3.54 就是"拿主色当文字"的下场。
+       暗色下六族与主色同值；enc / uart 提亮一档（它们压在自带淡底上只有 3.78 / 3.93）。 */
+    --pin-gpio-text: var(--info-text); --pin-pwm-text: var(--ok-text); --pin-adc-text: var(--warn-text);
+    --pin-uart-text: #b98bfa; --pin-i2c-text: var(--pin-i2c); --pin-spi-text: var(--pin-spi);
+    --pin-enc-text: #f06a9b; --pin-exti-text: var(--pin-exti);
   }
   /* ---- 引脚类型配色：**取色住在样式块里**（工单 pin-type-contrast/02）----
      以前这一族的颜色住在 `generate-pins.js` 的内联模板串里（`style="color:${st[0]}"`），
@@ -1761,23 +1781,23 @@
      这一单（02）**逐字节照搬原值**，验收线是"真像素逐格与改前基线相同"。
      ⚠ 表外的类型不挂属性 ⇒ 落到 `.role-type` 基类那条兜底（与旧内联兜底同色）。 */
   /* ① 角色类型标：字 + 自带淡底（机械面直接算这一对；藏在淡底上的真几何由 token 面兜） */
-  .role-type[data-pin-family="gpio"] { color: var(--pin-gpio); background: var(--pin-gpio-dim); }
-  .role-type[data-pin-family="pwm"] { color: var(--pin-pwm); background: var(--pin-pwm-dim); }
-  .role-type[data-pin-family="enc"] { color: var(--pin-enc); background: var(--pin-enc-dim); }
-  .role-type[data-pin-family="uart"] { color: var(--pin-uart); background: var(--pin-uart-dim); }
-  .role-type[data-pin-family="i2c"] { color: var(--pin-i2c); background: var(--pin-i2c-dim); }
-  .role-type[data-pin-family="spi"] { color: var(--pin-spi); background: var(--pin-spi-dim); }
-  .role-type[data-pin-family="adc"] { color: var(--pin-adc); background: var(--pin-adc-dim); }
-  .role-type[data-pin-family="exti"] { color: var(--pin-exti); background: var(--pin-exti-dim); }
+  .role-type[data-pin-family="gpio"] { color: var(--pin-gpio-text); background: var(--pin-gpio-dim); }
+  .role-type[data-pin-family="pwm"] { color: var(--pin-pwm-text); background: var(--pin-pwm-dim); }
+  .role-type[data-pin-family="enc"] { color: var(--pin-enc-text); background: var(--pin-enc-dim); }
+  .role-type[data-pin-family="uart"] { color: var(--pin-uart-text); background: var(--pin-uart-dim); }
+  .role-type[data-pin-family="i2c"] { color: var(--pin-i2c-text); background: var(--pin-i2c-dim); }
+  .role-type[data-pin-family="spi"] { color: var(--pin-spi-text); background: var(--pin-spi-dim); }
+  .role-type[data-pin-family="adc"] { color: var(--pin-adc-text); background: var(--pin-adc-dim); }
+  .role-type[data-pin-family="exti"] { color: var(--pin-exti-text); background: var(--pin-exti-dim); }
   /* ② 状态文字（「已绑 X」/「现绑 X」）：只有字色，底是它所在的那层（卡片 `--panel-2`） */
-  .pin-type-text[data-pin-family="gpio"] { color: var(--pin-gpio); }
-  .pin-type-text[data-pin-family="pwm"] { color: var(--pin-pwm); }
-  .pin-type-text[data-pin-family="enc"] { color: var(--pin-enc); }
-  .pin-type-text[data-pin-family="uart"] { color: var(--pin-uart); }
-  .pin-type-text[data-pin-family="i2c"] { color: var(--pin-i2c); }
-  .pin-type-text[data-pin-family="spi"] { color: var(--pin-spi); }
-  .pin-type-text[data-pin-family="adc"] { color: var(--pin-adc); }
-  .pin-type-text[data-pin-family="exti"] { color: var(--pin-exti); }
+  .pin-type-text[data-pin-family="gpio"] { color: var(--pin-gpio-text); }
+  .pin-type-text[data-pin-family="pwm"] { color: var(--pin-pwm-text); }
+  .pin-type-text[data-pin-family="enc"] { color: var(--pin-enc-text); }
+  .pin-type-text[data-pin-family="uart"] { color: var(--pin-uart-text); }
+  .pin-type-text[data-pin-family="i2c"] { color: var(--pin-i2c-text); }
+  .pin-type-text[data-pin-family="spi"] { color: var(--pin-spi-text); }
+  .pin-type-text[data-pin-family="adc"] { color: var(--pin-adc-text); }
+  .pin-type-text[data-pin-family="exti"] { color: var(--pin-exti-text); }
   /* ③ 图例 / 菜单色点：填充 = 主色（**色样**，非文字档 3:1——它的信息是"这个颜色代表什么"） */
   .dot[data-pin-family="gpio"] { background: var(--pin-gpio); }
   .dot[data-pin-family="pwm"] { background: var(--pin-pwm); }
@@ -1804,14 +1824,14 @@
   #pin-board-svg circle.pin-type-dot[data-pin-family="spi"] { fill: var(--pin-spi); }
   #pin-board-svg circle.pin-type-dot[data-pin-family="adc"] { fill: var(--pin-adc); }
   #pin-board-svg circle.pin-type-dot[data-pin-family="exti"] { fill: var(--pin-exti); }
-  #pin-board-svg text[data-pin-family="gpio"] { fill: var(--pin-gpio); }
-  #pin-board-svg text[data-pin-family="pwm"] { fill: var(--pin-pwm); }
-  #pin-board-svg text[data-pin-family="enc"] { fill: var(--pin-enc); }
-  #pin-board-svg text[data-pin-family="uart"] { fill: var(--pin-uart); }
-  #pin-board-svg text[data-pin-family="i2c"] { fill: var(--pin-i2c); }
-  #pin-board-svg text[data-pin-family="spi"] { fill: var(--pin-spi); }
-  #pin-board-svg text[data-pin-family="adc"] { fill: var(--pin-adc); }
-  #pin-board-svg text[data-pin-family="exti"] { fill: var(--pin-exti); }
+  #pin-board-svg text[data-pin-family="gpio"] { fill: var(--pin-gpio-text); }
+  #pin-board-svg text[data-pin-family="pwm"] { fill: var(--pin-pwm-text); }
+  #pin-board-svg text[data-pin-family="enc"] { fill: var(--pin-enc-text); }
+  #pin-board-svg text[data-pin-family="uart"] { fill: var(--pin-uart-text); }
+  #pin-board-svg text[data-pin-family="i2c"] { fill: var(--pin-i2c-text); }
+  #pin-board-svg text[data-pin-family="spi"] { fill: var(--pin-spi-text); }
+  #pin-board-svg text[data-pin-family="adc"] { fill: var(--pin-adc-text); }
+  #pin-board-svg text[data-pin-family="exti"] { fill: var(--pin-exti-text); }
   .pin-layout { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }  .pin-board-wrap { flex: none; }
   .pin-legend { display: flex; gap: var(--space-3); flex-wrap: wrap; font-size: var(--fs-tag);
                 color: var(--muted); margin-bottom: var(--space-2); }

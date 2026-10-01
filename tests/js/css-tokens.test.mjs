@@ -1417,23 +1417,26 @@ const CONTRAST_TOKEN_BASES = [
   // 这三个字面就是它的文字面（状态文字「已绑 / 现绑」、板上引脚名、类型标）。
   // 三条假定底 = 三种真实几何：卡片底（`--panel-2`）/ PCB 底（`--panel+--pin-pcb`）/
   // 类型标自带的淡底（`--panel-2+--pin-x-dim`）。
-  // ⚠ 03 单把这些字面换成文字档（`--pin-x-text`）时，**这八行要跟着改**——
-  //   否则"盘上已经不用了 ⇒ 删掉这一行"那条反向判据会当场红（这是设计，不是麻烦）。
-  ["var(--pin-gpio)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-gpio-dim"], "text",
-    "引脚类型色当文字用（状态文字 / 板上引脚名 / 类型标）——色值与文字档见工单 pin-type-contrast/03"],
-  ["var(--pin-pwm)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-pwm-dim"], "text",
+  // ⚠ 这三条假定底就是"这一族的三张脸"：卡片底（`--panel-2`）/ PCB 底（`--panel+--pin-pcb`）/
+  //   类型标自带的淡底（`--panel-2+--pin-x-dim`）。改任何一种几何（比如类型标不再自带淡底），
+  //   这里的底要跟着改——不然判据会按一个不存在的几何算（偏乐观）。
+  // **03 单已按预告把字面从主色换成了文字档**（`var(--pin-x)` → `var(--pin-x-text)`）：
+  //   那次替换是"反向判据逼出来的"（旧字面盘上不再当文字用 ⇒ 死条），正是这条腿该有的样子。
+  ["var(--pin-gpio-text)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-gpio-dim"], "text",
+    "引脚类型**文字档**（状态文字 / 板上引脚名 / 类型标）——03 单把文字从主色拆出来，见 `--pin-gpio-text`"],
+  ["var(--pin-pwm-text)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-pwm-dim"], "text",
     "同上（PWM 族）"],
-  ["var(--pin-enc)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-enc-dim"], "text",
+  ["var(--pin-enc-text)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-enc-dim"], "text",
     "同上（编码器族）"],
-  ["var(--pin-uart)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-uart-dim"], "text",
+  ["var(--pin-uart-text)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-uart-dim"], "text",
     "同上（UART 族）"],
-  ["var(--pin-i2c)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-i2c-dim"], "text",
+  ["var(--pin-i2c-text)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-i2c-dim"], "text",
     "同上（I2C 族）"],
-  ["var(--pin-spi)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-spi-dim"], "text",
+  ["var(--pin-spi-text)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-spi-dim"], "text",
     "同上（SPI 族；库内暂无该类型的角色，令牌仍在）"],
-  ["var(--pin-adc)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-adc-dim"], "text",
+  ["var(--pin-adc-text)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-adc-dim"], "text",
     "同上（ADC 族）"],
-  ["var(--pin-exti)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-exti-dim"], "text",
+  ["var(--pin-exti-text)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-exti-dim"], "text",
     "同上（EXTI 族；库内暂无该类型的角色，令牌仍在）"],
   // `var(--fg)` 那条 `skip` 已由工单 `contrast-residue/02` 摘掉：盘上那个字面改成 `var(--text)`，
   // 令牌面自己那条"盘上已经不用了 ⇒ 删掉这一行"的反向判据会盯着它（别再加回来）。
@@ -1963,35 +1966,10 @@ const CONTRAST_EXCEPTIONS = [
   ["dark", "令牌：var(--accent-dim)", "debt", "最坏格压 --code-bg：1.23，低于 3.0（非文字图形 3:1）——代码 gutter 的折叠占位字形（装饰性，alpha .12 叠在代码底上）", 1.23],
   ["dark", "令牌：var(--border-strong)", "debt", "最坏格压 --panel：1.76，低于 3.0（非文字图形 3:1）——装饰分隔符 ·（描边色当字形用）：非文字档 3:1", 1.76],
   ["dark", "令牌：#fff", "debt", "最坏格压 --warn：2.19，低于 4.5（文字 4.5:1）——语义实心底上的白字（.env-badge）：底不是卡片，而是那三种实心语义色", 2.19],
-  ["dark", "令牌：var(--pin-enc)", "debt", "最坏格压 --panel-2+--pin-enc-dim：3.77，低于 4.5（文字 4.5:1）——同上（编码器族）", 3.77],
-  ["dark", "令牌：var(--pin-uart)", "debt", "最坏格压 --panel-2+--pin-uart-dim：3.93，低于 4.5（文字 4.5:1）——同上（UART 族）", 3.93],
-  ["dark", ".role-type[data-pin-family=\"enc\"]", "debt", "--pin-enc 压 --pin-enc-dim：4.04，低于 4.5——03 单（暗色顺手修）", 4.04],
-  ["dark", ".role-type[data-pin-family=\"uart\"]", "debt", "--pin-uart 压 --pin-uart-dim：4.22，低于 4.5——03 单（暗色顺手修）", 4.22],
   ["light", "#main-c::selection", "skip", "选区反白块不是「文字压底」：静态口径不适用（跳过判据，只留登记）", 1.38],
   ["light", "令牌：var(--accent-dim)", "debt", "最坏格压 --code-bg：1.15，低于 3.0（非文字图形 3:1）——代码 gutter 的折叠占位字形（装饰性，alpha .12 叠在代码底上）", 1.15],
-  ["light", "令牌：var(--pin-i2c)", "debt", "最坏格压 --panel-2+--pin-i2c-dim：1.40，低于 4.5（文字 4.5:1）——同上（I2C 族）", 1.4],
-  ["light", "令牌：var(--pin-spi)", "debt", "最坏格压 --panel-2+--pin-spi-dim：1.45，低于 4.5（文字 4.5:1）——同上（SPI 族；库内暂无该类型的角色，令牌仍在）", 1.45],
-  ["light", "令牌：var(--pin-exti)", "debt", "最坏格压 --panel-2+--pin-exti-dim：1.46，低于 4.5（文字 4.5:1）——同上（EXTI 族；库内暂无该类型的角色，令牌仍在）", 1.46],
-  ["light", "族：--pin-i2c 色点 / 焊盘描边", "debt", "最坏格 --pin-i2c on --panel-2：1.50，低于 3.0（非文字图形 3:1）——同上（I2C 族）", 1.5],
-  ["light", "族：--pin-spi 色点 / 焊盘描边", "debt", "最坏格 --pin-spi on --panel-2：1.55，低于 3.0（非文字图形 3:1）——同上（SPI 族；库内暂无该类型的角色，令牌仍在——成套覆盖由腿⑪ 看着）", 1.55],
-  ["light", "族：--pin-exti 色点 / 焊盘描边", "debt", "最坏格 --pin-exti on --panel-2：1.55，低于 3.0（非文字图形 3:1）——同上（EXTI 族；库内暂无该类型的角色，令牌仍在）", 1.55],
-  ["light", ".role-type[data-pin-family=\"i2c\"]", "debt", "--pin-i2c 压 --pin-i2c-dim：1.70，低于 4.5——引脚配色 03 单（两主题成套 + 文字档 `--pin-*-text`）", 1.7],
-  ["light", ".role-type[data-pin-family=\"spi\"]", "debt", "--pin-spi 压 --pin-spi-dim：1.77，低于 4.5——引脚配色 03 单（两主题成套 + 文字档 `--pin-*-text`）", 1.77],
-  ["light", ".role-type[data-pin-family=\"exti\"]", "debt", "--pin-exti 压 --pin-exti-dim：1.77，低于 4.5——引脚配色 03 单（两主题成套 + 文字档 `--pin-*-text`）", 1.77],
   ["light", "令牌：var(--border-strong)", "debt", "最坏格压 --bg：1.89，低于 3.0（非文字图形 3:1）——装饰分隔符 ·（描边色当字形用）：非文字档 3:1", 1.89],
-  ["light", "令牌：var(--pin-uart)", "debt", "最坏格压 --panel-2+--pin-uart-dim：2.33，低于 4.5（文字 4.5:1）——同上（UART 族）", 2.33],
-  ["light", "令牌：var(--pin-enc)", "debt", "最坏格压 --panel-2+--pin-enc-dim：2.44，低于 4.5（文字 4.5:1）——同上（编码器族）", 2.44],
-  ["light", "族：--pin-uart 色点 / 焊盘描边", "debt", "最坏格 --pin-uart on --panel-2：2.67，低于 3.0（非文字图形 3:1）——同上（UART 族）", 2.67],
   ["light", "族：--accent 控件描边 / 语义左条", "debt", "最坏格 --accent on --panel-2：2.70，低于 3.0（非文字图形 3:1）——控件普通描边与语义左条：装饰性强于信息性，**大面积改深会动整页观感**——记债不修（03 单的判断）", 2.7],
-  ["light", ".role-type[data-pin-family=\"uart\"]", "debt", "--pin-uart 压 --pin-uart-dim：2.86，低于 4.5——引脚配色 03 单（两主题成套 + 文字档 `--pin-*-text`）", 2.86],
-  ["light", "族：--pin-enc 色点 / 焊盘描边", "debt", "最坏格 --pin-enc on --panel-2：2.87，低于 3.0（非文字图形 3:1）——同上（编码器族）", 2.87],
-  ["light", ".role-type[data-pin-family=\"enc\"]", "debt", "--pin-enc 压 --pin-enc-dim：3.02，低于 4.5——引脚配色 03 单（两主题成套 + 文字档 `--pin-*-text`）", 3.02],
-  ["light", "令牌：var(--pin-adc)", "debt", "最坏格压 --panel-2+--pin-adc-dim：3.37，低于 4.5（文字 4.5:1）——同上（ADC 族）", 3.37],
-  ["light", "令牌：var(--pin-pwm)", "debt", "最坏格压 --panel-2+--pin-pwm-dim：3.50，低于 4.5（文字 4.5:1）——同上（PWM 族）", 3.5],
-  ["light", "令牌：var(--pin-gpio)", "debt", "最坏格压 --panel-2+--pin-gpio-dim：3.54，低于 4.5（文字 4.5:1）——引脚类型色当文字用（状态文字 / 板上引脚名 / 类型标）——色值与文字档见工单 pin-type-contrast/03", 3.54],
-  ["light", ".role-type[data-pin-family=\"adc\"]", "debt", "--pin-adc 压 --pin-adc-dim：4.17，低于 4.5——引脚配色 03 单（两主题成套 + 文字档 `--pin-*-text`）", 4.17],
-  ["light", ".role-type[data-pin-family=\"pwm\"]", "debt", "--pin-pwm 压 --pin-pwm-dim：4.33，低于 4.5——引脚配色 03 单（两主题成套 + 文字档 `--pin-*-text`）", 4.33],
-  ["light", ".role-type[data-pin-family=\"gpio\"]", "debt", "--pin-gpio 压 --pin-gpio-dim：4.38，低于 4.5——引脚配色 03 单（两主题成套 + 文字档 `--pin-*-text`）", 4.38],
 
 ];
 
@@ -2500,10 +2478,10 @@ test("对比度（工单 01，第八条腿）：文字色 × 底现算比值，�
   const mechCount = CONTRAST_EXCEPTIONS.length - faceCount("族：") - faceCount("令牌：");
   assert.ok(mechCount <= 115, `机械面例外涨到 ${mechCount} 条（落地时 115）——新的不达标应该**修掉**`);
   // ⚠ 三个上界都是"落地那一刻"的数，随批次走：
-  //   族面 3 → **6**、令牌面 10 → **15**（工单 pin-type-contrast/02：引脚族 8 条族面 + 8 条令牌面
-  //   进判据，不达标的是债；03 单把色值收口之后这两笔要跟着摘回去）。
-  assert.ok(faceCount("族：") <= 6, `族面例外涨到 ${faceCount("族：")} 条（落地时 6）`);
-  assert.ok(faceCount("令牌：") <= 15, `令牌面例外涨到 ${faceCount("令牌：")} 条（落地时 15）`);
+  //   工单 pin-type-contrast/02 立这一族时到过 族面 6 / 令牌面 15；**03 单把色值收口之后
+  //   全部摘回**（引脚八族两主题 24 格全过线）——上界跟着回到落地值。
+  assert.ok(faceCount("族：") <= 3, `族面例外涨到 ${faceCount("族：")} 条（落地时 3）`);
+  assert.ok(faceCount("令牌：") <= 10, `令牌面例外涨到 ${faceCount("令牌：")} 条（落地时 10）`);
   // 机械面必须真的抽到东西：抽取逻辑一坏（正则 / 解析面变了），上面那条判据会静默变绿。
   const pairs = contrastPairsFromStylesheet(html);
   assert.equal(pairs.length, CONTRAST_PAIR_COUNT,

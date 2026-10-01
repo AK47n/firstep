@@ -243,21 +243,21 @@ CONTRAST_TOKEN_BASES = [
     # **引脚类型配色族**（工单 pin-type-contrast/02）：这一族以前住在渲染方的内联模板串里
     # （`style="color:${st[0]}"`），任何判据都看不见它；取色还给样式块之后这三个字面就是
     # 它的文字面。三条假定底 = 三种真实几何（与 JS 守卫逐项同源，镜像守卫钉住）。
-    ("var(--pin-gpio)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-gpio-dim"], "text",
-     "引脚类型色当文字用（状态文字 / 板上引脚名 / 类型标）——色值与文字档见工单 pin-type-contrast/03"),
-    ("var(--pin-pwm)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-pwm-dim"], "text",
+    ("var(--pin-gpio-text)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-gpio-dim"], "text",
+     "引脚类型**文字档**（状态文字 / 板上引脚名 / 类型标）——03 单把文字从主色拆出来，见 `--pin-gpio-text`"),
+    ("var(--pin-pwm-text)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-pwm-dim"], "text",
      "同上（PWM 族）"),
-    ("var(--pin-enc)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-enc-dim"], "text",
+    ("var(--pin-enc-text)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-enc-dim"], "text",
      "同上（编码器族）"),
-    ("var(--pin-uart)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-uart-dim"], "text",
+    ("var(--pin-uart-text)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-uart-dim"], "text",
      "同上（UART 族）"),
-    ("var(--pin-i2c)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-i2c-dim"], "text",
+    ("var(--pin-i2c-text)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-i2c-dim"], "text",
      "同上（I2C 族）"),
-    ("var(--pin-spi)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-spi-dim"], "text",
+    ("var(--pin-spi-text)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-spi-dim"], "text",
      "同上（SPI 族；库内暂无该类型的角色，令牌仍在）"),
-    ("var(--pin-adc)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-adc-dim"], "text",
+    ("var(--pin-adc-text)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-adc-dim"], "text",
      "同上（ADC 族）"),
-    ("var(--pin-exti)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-exti-dim"], "text",
+    ("var(--pin-exti-text)", ["--panel-2", "--panel+--pin-pcb", "--panel-2+--pin-exti-dim"], "text",
      "同上（EXTI 族；库内暂无该类型的角色，令牌仍在）"),
 ]
 #: `--tok-*` 那十个：底是代码页那五层，已由族面逐格算过（这里登记为"已覆盖"，不重复判）

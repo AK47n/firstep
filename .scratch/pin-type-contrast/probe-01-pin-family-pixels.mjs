@@ -148,64 +148,54 @@ const COLLECT = (payload) => {
     key++;
   };
 
-  // ① 角色类型标 + ② 状态文字（同一个 `.pin-role` 里；类型从标上读，状态文字靠它认族）。
-  //    先收标 → 拿到**家族色表**（`st[0]` 的 computed 值）——后面几个面（图例色点 / 板图焊盘与
-  //    引脚名 / 菜单色点）**只有颜色能认族**，用这张表当认人面：非家族色的元素直接不收
-  //    （板图上一堆 `--muted` 的未绑引脚、图例里三个非族色点），免得 500 张 PNG 里挑不出靶子。
-  const familyColors = new Set();
+  // ① 角色类型标 + ② 状态文字（同一个 `.pin-role` 里；类型从标上读，状态文字靠它认族）
+  //    **认族 = 读 `data-pin-family` 属性**（工单 pin-type-contrast/02 之后渲染方就挂着它）：
+  //    比"拿颜色去猜族"可靠得多——03 单把文字档与主色拆开之后，**同族两个颜色**，
+  //    颜色反查会当场失手（实测：色点从 8 格掉到 4 格、焊盘 8 → 3，读数表跟着缩水）。
+  const famOf = (el) => (el && el.dataset && el.dataset.pinFamily) || "";
   if (!OVERLAY_ONLY) {
     for (const role of root.querySelectorAll("#pin-role-items .pin-role")) {
       const badge = role.querySelector(".role-type");
       const type = badge ? String(badge.textContent || "").trim() : "";
-      const fam = FAMILIES.find((f) => type.startsWith(f)) || "";
+      const fam = famOf(badge) || FAMILIES.find((f) => type.startsWith(f)) || "";
       const key2 = role.dataset.role || "";
-      if (badge && fam) familyColors.add(getComputedStyle(badge).color);
       push(badge, "badge", `角色 ${key2}`, type);
       for (const sp of role.querySelectorAll(".role-status span")) {
-        const col = getComputedStyle(sp).color;
-        if (!familyColors.has(col)) {         // 非家族色（`--danger-text` / `--warn-text` / `--muted`）如实记账
+        const famSp = famOf(sp);
+        if (!famSp) {                          // 非家族色（`--danger-text` / `--warn-text` / `--muted`）如实记账
           out.skipped.非家族色++;
           continue;
         }
-        push(sp, "status", `角色 ${key2}`, fam);
+        push(sp, "status", `角色 ${key2}`, famSp);
       }
     }
-    // ③ 图例色点（族由"同趟 badge 的颜色"反查，读数半做；非族色点不收）
+    // ③ 图例色点（含"空闲 IO / 板载共用 / 固定电源"三个非族色点——它们没有属性，如实跳过）
     for (const lg of root.querySelectorAll("#pin-legend .lg")) {
       const dot = lg.querySelector(".dot");
-      if (!dot || !familyColors.has(getComputedStyle(dot).backgroundColor)) { out.skipped.非家族色++; continue; }
-      push(dot, "legend-dot", String(lg.textContent || "").trim(), "");
+      if (!famOf(dot)) { out.skipped.非家族色++; continue; }
+      push(dot, "legend-dot", String(lg.textContent || "").trim(), famOf(dot));
     }
-    // ④ 板图焊盘（填充 = 淡化色、描边 = 主色）+ ⑤ 板图引脚名（fill = 主色，仅已绑脚）
+    // ④ 板图焊盘（填充 = 淡化色、描边 = 主色）+ ⑤ 板图引脚名（fill = 文字档，仅已绑脚）
     for (const c of root.querySelectorAll("#pin-board-svg circle[data-pin]")) {
-      if (!familyColors.has(getComputedStyle(c).stroke)) { out.skipped.非家族色++; continue; }
-      push(c, "board-pad", c.dataset.pin || "", "");
+      if (!famOf(c)) { out.skipped.非家族色++; continue; }
+      push(c, "board-pad", c.dataset.pin || "", famOf(c));
     }
     for (const t of root.querySelectorAll("#pin-board-svg text")) {
-      if (!familyColors.has(getComputedStyle(t).fill)) { out.skipped.非家族色++; continue; }
-      push(t, "board-label", String(t.textContent || "").trim(), "");
+      if (!famOf(t)) { out.skipped.非家族色++; continue; }
+      push(t, "board-label", String(t.textContent || "").trim(), famOf(t));
     }
   }
-  // ⑥ 引脚菜单（浮层那一趟）：**先收类型标**（它给出家族色表），再收色点
+  // ⑥ 引脚菜单（浮层那一趟）：类型标 + 色点
   const menu = document.querySelector(".pin-menu-overlay");
   if (menu) {
     for (const li of menu.querySelectorAll(".pin-menu-list li")) {
       const badge = li.querySelector(".role-type");
       const type = badge ? String(badge.textContent || "").trim() : "";
-      const fam = FAMILIES.find((f) => type.startsWith(f)) || "";
+      const fam = famOf(badge) || FAMILIES.find((f) => type.startsWith(f)) || "";
       const note = li.classList.contains("cant") ? "不兼容行" : "可绑行";
-      if (badge && fam) familyColors.add(getComputedStyle(badge).color);
       push(badge, "menu-badge", `${note} ${type}`, fam);
-    }
-    for (const li of menu.querySelectorAll(".pin-menu-list li")) {
-      const badge = li.querySelector(".role-type");
-      const type = badge ? String(badge.textContent || "").trim() : "";
-      const fam = FAMILIES.find((f) => type.startsWith(f)) || "";
-      const note = li.classList.contains("cant") ? "不兼容行" : "可绑行";
       const dot = li.querySelector(".dot");
-      if (dot && familyColors.has(getComputedStyle(dot).backgroundColor)) {
-        push(dot, "menu-dot", `${note} ${type}`, fam);
-      }
+      if (dot && famOf(dot)) push(dot, "menu-dot", `${note} ${type}`, famOf(dot));
     }
   }
   return out;

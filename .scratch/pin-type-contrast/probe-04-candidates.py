@@ -55,7 +55,7 @@ def main() -> int:
     tok = L.Tokens(text)
     tables = {"dark": {}, "light": {}}
     for theme in tables:
-        tables[theme] = {n: tok.value(n, theme) for n in tok.names}
+        tables[theme] = {n: tok.value(n, theme) for n in tok.names()}
 
     def value(name, theme):
         v = tables[theme].get(name)

@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
-"""引脚配色 02 单的验收：**改前 / 改后真像素逐格相同**（取色来源换了，颜色一个字节没换）。
+"""引脚配色 02 / 03 单的验收：**两发真像素逐格对照**。
 
-## 为什么这是硬判据
+## 两种模式（`--expect`）
 
-02 单做的事是"把取色从内联模板串搬进样式块"——**只换取色来源**。所以
-① 静态那一层（computed `color` / `background` / SVG `fill`·`stroke`）必须**逐字相同**；
-② 真像素那一层（读 PNG 的比值）必须**逐格相同**（留 0.05 的量化余量）。
-任何一格不同都要解释——它要么是搬错了，要么是搬的时候顺手改了颜色（那是 03 单的事）。
+  · `same`（02 单）：取色来源换了、颜色**一个字节没换** ⇒ 静态取值与真像素都必须**逐格相同**。
+  · `improve`（03 单）：色值收口 ⇒ 允许变好、**不许变差**；每格按阈值判一次（文字 4.5 / 非文字 3.0），
+    并统计 变好 / 没变 / 变差。
 
 ## 认人（跨两发配对）
 
@@ -16,6 +15,7 @@
 跑法：
 
     python .scratch\\pin-type-contrast\\probe-02-compare.py --before before --after after
+    python .scratch\\pin-type-contrast\\probe-02-compare.py --before before --after tokens --expect improve
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 STYLE_KEYS = ("color", "background", "fill", "stroke", "border", "behind", "pcbFill")
+TEXT_FACES = {"badge", "status", "board-label", "menu-badge"}
 
 
 def key_of(row):
@@ -49,9 +50,10 @@ def main() -> int:
 
     before = load(opt("--before", "before"))
     after = load(opt("--after", "after"))
+    mode = opt("--expect", "same")
     out: list[str] = []
     out.append("=" * 100)
-    out.append("引脚配色 02 单验收：取色来源换了，颜色逐格相同？")
+    out.append(f"引脚配色验收（--expect {mode}）：{'颜色逐格相同？' if mode == 'same' else '改后不许变差、每格过阈值？'}")
     out.append(f"改前 = probe-01-shots-{opt('--before', 'before')}.json（{len(before['rows'])} 格）"
                f"；改后 = probe-01-shots-{opt('--after', 'after')}.json（{len(after['rows'])} 格）")
     out.append("=" * 100)
@@ -89,57 +91,70 @@ def main() -> int:
             out.append(f"⚠ 同键格数不同（改前 {len(bl)} / 改后 {len(al)}）：{k}")
 
     out.append("")
-    out.append(f"配到 {pairs} 对格；静态取值不同的字段：{len(diffs)} 处")
+    out.append(f"配到 {pairs} 对格；静态取值不同的字段：{len(diffs)} 处"
+               + ("（`--expect same`：应为 0）" if mode == "same" else "（`--expect improve`：色值本来就要变）"))
     for k, field, b, a, bb, ab in diffs[:40]:
         out.append(f"  {k} · {field}: 改前 {b} → 改后 {a}")
 
-    # 真像素那一层：两发的读数表逐格比（读数值由 probe-01-read.py 落盘）
-    read_b = HERE / f"probe-01-readings-{opt('--before', 'before')}.txt"
-    read_a = HERE / f"probe-01-readings-{opt('--after', 'after')}.txt"
+    # 真像素那一层：两发的**机器可读**读数逐格比（`probe-01-readings-<tag>.json`）
+    # ⚠ 不许去解析 `.txt` 的中文表格：列宽与文本里的空格会把键解析错（实测过一次"格数对不上"的假账）。
+    read_b = HERE / f"probe-01-readings-{opt('--before', 'before')}.json"
+    read_a = HERE / f"probe-01-readings-{opt('--after', 'after')}.json"
     if read_b.is_file() and read_a.is_file():
         def ratios(path):
-            got = {}
-            for line in path.read_text(encoding="utf-8").splitlines():
-                if not line.startswith("  ") or line.lstrip().startswith(("面", "【", "准备", "没量到")):
-                    continue
-                parts = line.split()
-                if len(parts) < 5:
-                    continue
-                face, fam, text = parts[0], parts[1], parts[2]
-                try:
-                    static, measured = float(parts[3]), float(parts[4])
-                except ValueError:
-                    continue
-                got.setdefault((face, fam, text), []).append((static, measured))
+            data = json.loads(path.read_text(encoding="utf-8"))
+            got = defaultdict(list)
+            for r in data["rows"]:
+                # ⚠ 键里**必须带主题**：不带的话浅色格与暗色格会撞成同一把键，
+                #    排序配对就会把浅色的那一行配给暗色（实测踩过：报了个不存在的"变差 6.92→6.79"）。
+                got[(r["theme"], r["face"], r["family"], r["text"])].append(
+                    (r["static"], r["measured"], r["need"]))
             return got
 
         rb, ra = ratios(read_b), ratios(read_a)
         keys = sorted(set(rb) | set(ra))
-        worst = []
+        worst, stats = [], {"变好": 0, "没变": 0, "变差": 0, "未达阈值": 0}
         for k in keys:
             vb = sorted(rb.get(k, []))
             va = sorted(ra.get(k, []))
             if len(vb) != len(va):
                 worst.append((k, f"格数不同（改前 {len(vb)} / 改后 {len(va)}）"))
                 continue
-            for (sb, mb), (sa, ma) in zip(vb, va):
-                if abs(sb - sa) > 0.005 or abs(mb - ma) > 0.05:
-                    worst.append((k, f"静态 {sb:.2f}→{sa:.2f} / 实测 {mb:.2f}→{ma:.2f}"))
+            for (sb, mb, _nb), (sa, ma, na) in zip(vb, va):
+                d = ma - mb
+                stats["变好" if d > 0.05 else ("变差" if d < -0.05 else "没变")] += 1
+                need = na
+                if ma < need - 1e-9:
+                    stats["未达阈值"] += 1
+                if mode == "same":
+                    if abs(sb - sa) > 0.005 or abs(mb - ma) > 0.05:
+                        worst.append((k, f"静态 {sb:.2f}→{sa:.2f} / 实测 {mb:.2f}→{ma:.2f}"))
+                else:
+                    if d < -0.05:
+                        worst.append((k, f"**变差**：实测 {mb:.2f}→{ma:.2f}"))
+                    if ma < need - 1e-9:
+                        worst.append((k, f"**仍不达标**：实测 {ma:.2f} < {need}"))
         out.append("")
-        out.append(f"真像素读数逐格对照（{len(keys)} 个键）：不一致 {len(worst)} 处")
+        stats_txt = f"变好 {stats['变好']}、没变 {stats['没变']}、变差 {stats['变差']}"
+        if mode == "improve":
+            stats_txt += f"、未达阈值 {stats['未达阈值']}"
+        out.append(f"真像素读数逐格对照（{len(keys)} 个键）：{stats_txt}")
+        if mode == "improve" and stats["变差"] == 0 and stats["未达阈值"] == 0:
+            out.append("✅ 没有一格变差，且每格都过了各自阈值")
         for k, why in worst[:40]:
             out.append(f"  {k}：{why}")
     else:
         out.append("")
-        out.append("（读数表还没生成——先跑 probe-01-read.py --tag before/after，再重跑本脚本）")
+        out.append("（读数表还没生成——先跑 probe-01-read.py --tag before/<after>，再重跑本脚本）")
 
     body = "\n".join(out)
-    dest = HERE / "probe-02-compare.txt"
+    dest = HERE / f"probe-02-compare-{mode}.txt"
     dest.write_text(body + "\n", encoding="utf-8")
     print(body.encode("utf-8", "replace").decode("utf-8", "replace"))
     print(f"\n[落盘] {dest}")
-    verdict = "✅ 逐格相同" if not diffs and not only_before and not only_after else "⚠ 有差异，见上"
-    print(f"判定：{verdict}")
+    ok = not only_before and not only_after and not diffs and not worst if mode == "same" \
+        else not only_before and not only_after and not worst
+    print(f"判定：{'✅ 通过' if ok else '⚠ 有差异，见上'}")
     return 0
 
 
