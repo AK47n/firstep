@@ -1807,15 +1807,17 @@
   .dot[data-pin-family="spi"] { background: var(--pin-spi); }
   .dot[data-pin-family="adc"] { background: var(--pin-adc); }
   .dot[data-pin-family="exti"] { background: var(--pin-exti); }
-  /* ④ 板图三处：焊盘（填充 = 淡色 / 描边 = 主色）、多角色小色点、已绑引脚的**名字** */
-  #pin-board-svg circle[data-pin-family="gpio"]:not(.pin-type-dot) { fill: var(--pin-gpio-dim); stroke: var(--pin-gpio); }
-  #pin-board-svg circle[data-pin-family="pwm"]:not(.pin-type-dot) { fill: var(--pin-pwm-dim); stroke: var(--pin-pwm); }
-  #pin-board-svg circle[data-pin-family="enc"]:not(.pin-type-dot) { fill: var(--pin-enc-dim); stroke: var(--pin-enc); }
-  #pin-board-svg circle[data-pin-family="uart"]:not(.pin-type-dot) { fill: var(--pin-uart-dim); stroke: var(--pin-uart); }
-  #pin-board-svg circle[data-pin-family="i2c"]:not(.pin-type-dot) { fill: var(--pin-i2c-dim); stroke: var(--pin-i2c); }
-  #pin-board-svg circle[data-pin-family="spi"]:not(.pin-type-dot) { fill: var(--pin-spi-dim); stroke: var(--pin-spi); }
-  #pin-board-svg circle[data-pin-family="adc"]:not(.pin-type-dot) { fill: var(--pin-adc-dim); stroke: var(--pin-adc); }
-  #pin-board-svg circle[data-pin-family="exti"]:not(.pin-type-dot) { fill: var(--pin-exti-dim); stroke: var(--pin-exti); }
+  /* ④ 板图三处：焊盘（填充 = 淡色 / 描边 = 主色）、多角色小色点、已绑引脚的**名字**。
+     ⚠ 焊盘用**正向类** `.pin-glyph` 认（不是"带 data-pin-family 且不是小色点"那种反向定义）：
+     板图上将来再加一种 circle，反向定义会把它误当焊盘染色。 */
+  #pin-board-svg circle.pin-glyph[data-pin-family="gpio"] { fill: var(--pin-gpio-dim); stroke: var(--pin-gpio); }
+  #pin-board-svg circle.pin-glyph[data-pin-family="pwm"] { fill: var(--pin-pwm-dim); stroke: var(--pin-pwm); }
+  #pin-board-svg circle.pin-glyph[data-pin-family="enc"] { fill: var(--pin-enc-dim); stroke: var(--pin-enc); }
+  #pin-board-svg circle.pin-glyph[data-pin-family="uart"] { fill: var(--pin-uart-dim); stroke: var(--pin-uart); }
+  #pin-board-svg circle.pin-glyph[data-pin-family="i2c"] { fill: var(--pin-i2c-dim); stroke: var(--pin-i2c); }
+  #pin-board-svg circle.pin-glyph[data-pin-family="spi"] { fill: var(--pin-spi-dim); stroke: var(--pin-spi); }
+  #pin-board-svg circle.pin-glyph[data-pin-family="adc"] { fill: var(--pin-adc-dim); stroke: var(--pin-adc); }
+  #pin-board-svg circle.pin-glyph[data-pin-family="exti"] { fill: var(--pin-exti-dim); stroke: var(--pin-exti); }
   #pin-board-svg circle.pin-type-dot[data-pin-family="gpio"] { fill: var(--pin-gpio); }
   #pin-board-svg circle.pin-type-dot[data-pin-family="pwm"] { fill: var(--pin-pwm); }
   #pin-board-svg circle.pin-type-dot[data-pin-family="enc"] { fill: var(--pin-enc); }
@@ -1832,7 +1834,8 @@
   #pin-board-svg text[data-pin-family="spi"] { fill: var(--pin-spi-text); }
   #pin-board-svg text[data-pin-family="adc"] { fill: var(--pin-adc-text); }
   #pin-board-svg text[data-pin-family="exti"] { fill: var(--pin-exti-text); }
-  .pin-layout { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }  .pin-board-wrap { flex: none; }
+  .pin-layout { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+  .pin-board-wrap { flex: none; }
   .pin-legend { display: flex; gap: var(--space-3); flex-wrap: wrap; font-size: var(--fs-tag);
                 color: var(--muted); margin-bottom: var(--space-2); }
   .pin-legend .dot { width: 10px; height: 10px; border-radius: var(--radius-xs); display: inline-block;
@@ -1848,8 +1851,11 @@
   .pin-toggle-optional { margin-top: var(--space-2); padding: 3px 10px; font-size: var(--fs-tag); }
   .role-type { display: inline-block; font-size: var(--fs-tag); padding: 0 6px; border-radius: var(--radius-xs);
                font-family: var(--mono); margin-right: 6px;
-               /* 表外类型的兜底（与旧内联兜底同色）+ 描边走 currentColor：颜色跟着字色走，
-                  不必给 8 个色族各写一条 border-color（工单 pin-type-contrast/02） */
+               /* 表外类型的兜底 + 描边走 currentColor：颜色跟着字色走，
+                  不必给 8 个色族各写一条 border-color（工单 pin-type-contrast/02）。
+                  ⚠ 兜底**不是**"与旧内联兜底逐字同色"：旧代码给表外类型的是 `--accent`
+                  （浅色当文字只有 2.99），这里用的是 `--accent-text`（两主题都过线）——
+                  表外类型今天不可达，这处差别只在真出现新类型时才看得见。 */
                color: var(--accent-text); background: var(--accent-dim);
                border: 1px solid currentColor; }
   .pin-fixed-list { margin-top: var(--space-3); max-width: 460px; }

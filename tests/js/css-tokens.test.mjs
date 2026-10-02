@@ -2254,29 +2254,47 @@ function jsInlineColorEntries(files = jsFiles()) {
 // 盘上每一处命中要么被豁免认领、要么判红；豁免项过期（盘上找不到了）同样判红。
 // ===========================================================================
 
-/** 内联模板串取色的**豁免登记**（`[文件, 行内锚点, 理由]`；认人键不取行号）。 */
+/** 内联模板串取色的**豁免登记**（`[文件, 行内锚点, 理由]`；认人键不取行号）。
+ *
+ * 豁免只留给"**不是令牌**的取色"（运行时算出来的配色）与"条件二选一但两边都是令牌"这两类；
+ * 任何一处**能写进样式块**的取色都该搬过去（那才是腿⑧ 看得见的地方）。
+ */
 const JS_INLINE_TEMPLATE_EXEMPT = [
   ["ui/generate-pins.js", 'class="dot" style="background:${color}"', "总览模式按模块着色：`MODULE_COLORS` 是**运行时按出现顺序分配的 hex 序列**（12 色，超了循环复用），不是令牌——它是「哪个模块」的身份色，没有对应的 CSS 令牌可写；这一处的分层由色点旁的模块名承担"],
+  ["ui/generate-pins.js", 'fill="${esc(pinBoard.pcb_color || "var(--pin-pcb)")}"', "PCB 本体底色：**板定义（选型数据）优先**，缺省回退令牌 `--pin-pcb`——两个来源都在运行时才知道，写不进样式块"],
+  ["ui/generate-pins.js", 'r="${r}" fill="none" stroke="${colors[0]}"', "总览高亮环（单模块）：颜色来自模块配色（同 `MODULE_COLORS`），环的半径 / 宽度也是参数"],
+  ["ui/generate-pins.js", 'stroke="${color}" stroke-width="${width}" stroke-dasharray', "总览高亮环（多模块分弧段）：每一段一个模块色（同上）"],
+  ["ui/generate-pins.js", 'stroke="${color}" stroke-width="${r}" stroke-opacity', "总览焊孔分色扇形：同上（厚描边画法，段色 = 模块色）"],
+  ["ui/generate-pins.js", 'r="7"${fill ? ` fill="${fill}"` : ""}', "板图焊盘：三个来源**在运行时才知道取哪个**——未绑定走令牌（`--pin-pad` / `--pin-fixed-pad`）、已绑走样式块的 `data-pin-family` 规则（这里刻意不输出内联色）、总览走模块色。这三个分支写不进一个静态规则里"],
+  ["ui/generate-pins.js", 'font-size="11"${labelFill ? ` fill="${labelFill}"` : ""}', "板图引脚名：同上（未绑定 = `--muted`、已绑走样式块、总览 = 模块色）"],
+  ["fx/resource-board.js", 'fill="${esc(board.pcb_color || "var(--pin-pcb)")}"', "资源页板图 PCB 底色：同 `generate-pins` 那处（板定义优先、令牌回退）"],
+  ["fx/resource-board.js", 'fill="${fill}" fill-opacity=', "资源页板图焊盘：`fill` / `stroke`（同一行两块）是**用 / 未用**两态的条件取值，逐元素算出来再拼属性"],
+  ["fx/resource-board.js", 'fill="${labelFill}"', "同上（资源页板图的引脚名配色，随用 / 未用态变）"],
+  ["fx/wiring.js", 'fill="${esc(board.pcb_color || "var(--pin-pcb)")}"', "接线图 PCB 底色：同上"],
+  ["fx/wiring.js", 'fill="${io ? "var(--pin-pad)" : "var(--pin-fixed-pad)"}"', "接线图焊盘填充：条件二选一，**两边都是令牌**——判据在运行时（`io` 来自图数据），写不进一条静态规则"],
+  ["fx/wiring.js", 'fill="${hl ? "var(--accent)" : "var(--text)"}"', "接线图引脚名：高亮态二选一，两边都是令牌"],
+  ["fx/wiring.js", 'stroke="${line.hl ? "var(--accent)" : "var(--border)"}"', "接线图端子框描边：同上"],
+  ["fx/wiring.js", 'fill="${line.hl ? "var(--text)" : "var(--muted)"}"', "接线图端子名：同上"],
 ];
 
-/** `style="…"` 属性值里**同时**有 `${` 与取色属性的行：`[{ file, line, text, attrs }]`。
+/** 内联模板串取色的**命中面**：四种拼法（HTML 属性 / `cssText` / 单属性赋值 / **SVG 表现属性**）
+ *  里出现 `${…}`，且属性是取色的那一类。
  *
- *  ⚠ **三种拼法都要抓**（腿⑤/腿⑦ 用血换的那条教训："只认一种拼法"就是留一条原路）：
- *    · HTML 属性 `style="…"`（模板串里最常见）；
- *    · `el.style.cssText = "…"`（含反引号写法）；
- *    · `el.style.<prop> = "…"`（单属性写法）。
- *  取值里**必须有 `${`** —— 非模板的静态内联值归上面那张登记簿（`JS_CONTRAST_REGISTER`）管。
- */
+ *  ⚠ **SVG 表现属性必须算**（工单 pin-type-contrast/02 评审整改）：这一族原来的 8 处取色里有
+ *  **2 处是 SVG 属性**（`fill="${st[1]}"` / `stroke="${st[0]}"`）——只认 `style=` 的话，
+ *  "把这道缝焊死"只焊了 6/8，改回去照样不会红。 */
 function jsInlineTemplateColorEntries(files = jsFiles()) {
   // 三种拼法各带一个 `groups(m) → [属性名, 取值]`：`style="…"` / `cssText = "…"` 的属性名在取值里，
-  // 单属性拼法（`el.style.border = "…"`）的属性名在**赋值目标**里（从捕获组取）。
+  // 单属性拼法与 SVG 表现属性的属性名在**赋值目标 / 属性名**里（从捕获组取）。
   const patterns = [
     { re: /style="([^"]*)"/g, groups: (m) => [null, m[1]] },
     { re: /cssText\s*=\s*["`]([^"`]*)["`]/g, groups: (m) => [null, m[1]] },
     { re: /\.style\.([a-zA-Z-]+)\s*=\s*["`]([^"`]*)["`]/g, groups: (m) => [m[1], m[2]] },
+    { re: /(fill|stroke|stop-color|flood-color)="([^"]*)"/g, groups: (m) => [m[1], m[2]] },
   ];
   const colorish = /(?<![\w-])(color|background|background-color|border)\s*:/;
-  const colorProps = ["color", "background", "background-color", "border", "border-color"];
+  const colorProps = ["color", "background", "background-color", "border", "border-color",
+    "fill", "stroke", "stop-color", "flood-color"];
   const out = [];
   for (const [rel, text] of files) {
     text.split("\n").forEach((line, i) => {
@@ -2477,9 +2495,10 @@ test("对比度（工单 contrast-residue/02，第十条腿）：无兜底的 `v
 // **口径三条（写死，别改轻）**：
 //   · **族 = 名字的第一段**（`--pin-gpio-text` → `--pin-*`）——族是"一起换主题的一套色"，
 //     不是单个令牌；
-//   · **颜色令牌 = 值（沿 `var()` 链解到底）是 hex / `rgb()` / `rgba()`，或原串含 `gradient(`**；
-//     尺寸 / 动效 / 字体栈那些族（`--fs-*` / `--space-*` / `--radius-*` / `--dur-*` / `--ease-*` /
-//     `--mono` / `--header-*`）**本来就不该两主题各写一遍**，判据不碰它们；
+//   · **颜色令牌 = 值里出现颜色（hex / `rgb()` / `rgba()` / 渐变）**——是"出现"不是"就是"：
+//     `--shadow-card: 0 1px 0 rgba(…)` 这类复合值同样算带色的族；尺寸 / 动效 / 字体栈那 7 个族
+//     （`--dur` / `--ease` / `--fs` / `--header` / `--mono` / `--radius` / `--space`）
+//     **本来就不该两主题各写一遍**，判据不碰它们；
 //   · **"成套" = 亮色块里**有**这个令牌自己的定义**（靠继承 `:root` 不算）——
 //     这一条正是 `--pin-fixed-pad` 那次漏的形态。
 //
@@ -2490,16 +2509,22 @@ test("对比度（工单 contrast-residue/02，第十条腿）：无兜底的 `v
 //   ④ 豁免项形状（前缀 + 非空中文理由）。
 // ===========================================================================
 
-/** 颜色令牌的取值形态（**沿 `var()` 链解到底**再判，见 `valueLooksLikeColor`）。 */
-const THEME_COLOR_VALUE_RE = /^(#[0-9a-fA-F]{3,8}|rgba?\([^)]*\))$/;
-/** 渐变也算颜色（`linear-gradient(...)` 是画出来的颜色，不是尺寸）。 */
+/** 颜色令牌的取值形态：值里**出现**颜色（hex / `rgb()` / `rgba()` / 渐变）。
+ *
+ *  ⚠ 是"**出现**"不是"**就是**"（工单 pin-type-contrast/04 双轴评审整改）：`--shadow-card: 0 1px 0 rgba(…)`
+ *  与 `--ambient-glow: rgba(var(--accent-rgb), .06)` 都是**带色值的族**，按"整串就是一个颜色"判
+ *  会把它们划进"非颜色族"⇒ 静默不判——正是这条腿要治的那种"看不见"。 */
+const THEME_COLOR_VALUE_RE = /(#[0-9a-fA-F]{3,8}\b|rgba?\(|gradient\()/;
+/** （保留：渐变单独成一条读起来更清楚，判据里与上一条等价） */
 const THEME_GRADIENT_RE = /gradient\(/;
 
 /**
  * **刻意两主题同值**的颜色族（豁免登记，`[族名, 中文理由]`）。
  *
- * 今天是**空的**：盘点过全站 28 个颜色族，没有一族是"两主题同值"的设计意图
- * （不覆盖的那 7 个族全是尺寸 / 动效 / 字体栈，压根不在判据里）。
+ * 今天是**空的**：盘点过全站 **28 个族**，其中**颜色族 21 个**、非颜色族 **7 个**
+ * （`--dur` / `--ease` / `--fs` / `--header` / `--mono` / `--radius` / `--space`——尺寸 / 动效 /
+ * 字体栈，压根不在判据里）。复算：`.scratch/pin-type-contrast/probe-05-light-coverage.py`
+ * （它走 `probe_lib.family_inventory`，**不自己重算**）。
  * 它是**出路**不是档位：真要豁免必须写清"为什么这一族两主题同值"。
  */
 const THEME_INDEPENDENT_FAMILIES = [
@@ -2522,7 +2547,13 @@ function themeBlockTokenNames(css) {
   return { dark: names(CONTRAST_ROOT_RE), light: names(CONTRAST_LIGHT_RE) };
 }
 
-/** 这个取值是不是"颜色"：解得出色 → 是；原串含 `gradient(` → 是；其余（尺寸 / 字体栈）→ 否。 */
+/** 这个取值是不是"颜色"：值里出现颜色（hex / `rgb()` / `rgba()` / 渐变）→ 是；否则看 `var()` 链。
+ *
+ *  ⚠ 两条都试（工单 pin-type-contrast/04 双轴评审整改）：
+ *    · `--shadow-card: 0 1px 0 rgba(…)`、`--ambient-glow: rgba(var(--accent-rgb), .06)` 这类
+ *      **复合值里带色**的，按"整串就是一个颜色"判会漏 ⇒ 划成非颜色族、静默不判；
+ *    · `--pin-gpio: var(--info)` 这类**间接**的，只看字面会漏 ⇒ 解链再判。
+ */
 function valueLooksLikeColor(raw, theme, tables) {
   const s = String(raw == null ? "" : raw).trim();
   if (THEME_COLOR_VALUE_RE.test(s)) return true;
@@ -2599,6 +2630,10 @@ const THEME_COVERAGE_VECTORS = [
     ["", "  :root {", "    --vecc-h: 8px;", "    --vecc-font: monospace;", "  }",
       '  html[data-theme="light"] {', "  }"],
     "", 0],
+  ["**复合值里带色**也算颜色（阴影 / 光晕那类；双轴评审整改）",
+    ["", "  :root {", "    --vecc2-shadow: 0 1px 0 rgba(0, 0, 0, .1);", "  }",
+      '  html[data-theme="light"] {', "  }"],
+    "", 1],
   ["亮色块里独有 ⇒ 畸形",
     ["", "  :root {", "    --vecd: #111111;", "  }",
       '  html[data-theme="light"] {', "    --vecd: #eeeeee;", "    --vecd-extra: #dddddd;", "  }"],
@@ -2637,8 +2672,8 @@ test("对比度（工单 pin-type-contrast/04，第十一条腿）：颜色族�
   const colorFams = [...fams].filter((f) =>
     [...blocks.dark].filter((n) => tokenFamilyOf(n) === f)
       .some((n) => valueLooksLikeColor(tables.dark[n], "dark", tables)));
-  assert.ok(colorFams.length >= 19,
-    `只扫到 ${colorFams.length} 个颜色族（落地时 19；族合计 28，另 9 个是非颜色族）——族扫描坏了（判据在空转）`);
+  assert.ok(colorFams.length >= 21,
+    `只扫到 ${colorFams.length} 个颜色族（落地时 21；族合计 28，另 7 个是非颜色族）——族扫描坏了（判据在空转）`);
   assert.ok(blocks.light.size >= 99,
     `亮色块只扫到 ${blocks.light.size} 个定义（落地时 99）——亮色块解析面坏了`);
   // 行为向量表自证 + 负向自证（把它退回"只按令牌算覆盖"的坏口径 → 向量表必须当场红）
@@ -3302,11 +3337,13 @@ test("全站推广合成红证：各条腿各自都判得红（防'永远绿'的
     '  return `<span class="role-type" style="color:${st[0]};background:${st[1]}">x</span>`;']], [])
     .some((p) => p.includes("模板变量拼取色") && p.includes("ui/whatever.js")),
     "没豁免的内联模板取色没被判出——腿⑨ 的正向判据在空转");
-  //        ② 描边取色（`border:1px solid ${…}`）与另两种拼法同样算取色 → 各自判红
-  //        （不拦它们等于留原路：腿⑤/腿⑦ 的"只认一种拼法"就是这么栽的）；
+  //        ② 描边取色（`border:1px solid ${…}`）、另两种拼法、**SVG 表现属性**同样算取色 → 各自判红
+  //        （不拦它们等于留原路：腿⑤/腿⑦ 的"只认一种拼法"就是这么栽的；SVG 那条是 02 单评审
+  //         点出来的——这一族原来的 8 处取色里有 2 处正是 `fill=`/`stroke=`）；
   for (const bad of [
     '  el.style.cssText = `border:1px solid ${st[0]}`;',
     '  el.style.border = `1px solid ${st[0]}`;',
+    '  const s = `<circle r="7" fill="${st[0]}" stroke="${st[1]}"/>`;',
   ]) {
     assert.ok(jsInlineTemplateProblems([["ui/whatever.js", bad]], [])
       .some((p) => p.includes("模板变量拼取色")),

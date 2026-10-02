@@ -11,7 +11,10 @@
 // 状态所有权（本模块 = 主写簇；host 经顶部 import 活绑定只读，写经导出函数）：
 //   instances / instancePinTarget / pinBoard / pinBoardError / pinBindings /
 //   pinUnbound / pinShowOptional / pinHighlight / pinRotation / pinOverview +
-//   常量 LED_COLORS / PIN_TYPE_STYLE / PIN_TYPE_ZH / MODULE_COLORS。
+//   常量 LED_COLORS / PIN_TYPE_FAMILY / PIN_TYPE_ZH / MODULE_COLORS。
+//   ⚠ 角色类型的**颜色**不在本文件：它住在 index.html 的样式块
+//   （`.role-type[data-pin-family="…"]` 那几组规则）——本文件只回答"哪个类型属于哪个色族"，
+//   取色一律走 `pinFamilyAttr`（工单 pin-type-contrast/02）。
 // host → 本簇：顶部 import 代理（instances / pinBindings / pinUnbound / pinRoles /
 //   renderInstanceConfig / renderPinCard / loadPinBoard——generateMain /
 //   renderGenerateSuccess / btn-generate / handoffPinLines 读点与启动占位渲染）
@@ -294,7 +297,8 @@ let pinOverview = false;         // 总览模式：按模块着色已配置引�
 // 角色类型 → **色族**（工单 pin-type-contrast/02）：颜色本身**不再住这里**——它搬进了
 // index.html 的样式块（`.role-type[data-pin-family="…"]` 那几组规则），这里只回答
 // "这个类型属于哪个色族"。取色还给样式块之后，这一族的比值才进得了腿⑧（机械面 + token 面）。
-// 表外的类型（理论上不会有）不挂属性 ⇒ 落到基类那条兜底规则（与旧内联兜底同色）。
+// 表外的类型（理论上不会有）不挂属性 ⇒ 落到基类那条兜底规则（类型标走 `.role-type` 的
+// `--accent-text` × `--accent-dim`；状态文字没有基类，落到 `.role-status` 的 `--muted`）。
 const PIN_TYPE_FAMILY = {
   gpio_out: "gpio", gpio_in: "gpio",
   pwm: "pwm",
@@ -749,7 +753,10 @@ function svgPin(pin, roles, idx, rotated180) {
     famAttr = pinFamilyAttr(bound[0].decl.type);
     fill = ""; stroke = ""; labelFill = "";
   }
-  let cls = "", extra = "";
+  // 焊盘自己的类 = **正向定义**（工单 pin-type-contrast/02 评审整改）：样式块里用
+  // `circle.pin-glyph[data-pin-family=…]` 认焊盘，而不是"带 family 又不是小色点"那种反向定义
+  // ——板图上将来再加一种 circle，反向定义会把它一起染成焊盘色。
+  let cls = ' class="pin-glyph"', extra = "";
   // 总览模式：单模块整圈同色；多模块焊孔描边（r=7）+ 高亮环（r=10.5）都按模块数均分着色
   if (overviewColor) {
     if (overviewMods.length > 1) extra += overviewRing(cx, cy, 7, overviewColors, 2.5);
@@ -762,8 +769,8 @@ function svgPin(pin, roles, idx, rotated180) {
         extra += `<circle cx="${cx}" cy="${cy}" r="13" fill="none" class="pin-default-cand"/>`;
         extra += `<circle cx="${cx}" cy="${cy}" r="4" class="pin-default-dot"/>`;
       }
-      if (pinCanHost(pin, hl.decl)) cls = ' class="pin-cand"';
-      else if (io) cls = ' class="pin-dim"';
+      if (pinCanHost(pin, hl.decl)) cls = ' class="pin-glyph pin-cand"';
+      else if (io) cls = ' class="pin-glyph pin-dim"';
     }
   }
   // 多实例选脚模式（工单 04 + key-multi-instance/06）：按模块首 pin 能力候选
@@ -771,10 +778,10 @@ function svgPin(pin, roles, idx, rotated180) {
     const assigned = (instances[instancePinTarget.slug] || [])[instancePinTarget.index]
       && instances[instancePinTarget.slug][instancePinTarget.index].pin === pin.name;
     if ((pin.capabilities || []).includes(instancePinCapability(instancePinTarget.slug))) {
-      cls = ' class="pin-cand"';
+      cls = ' class="pin-glyph pin-cand"';
       if (assigned) extra += `<circle cx="${cx}" cy="${cy}" r="13" fill="none" class="pin-default-cand"/>`;
     } else {
-      cls = ' class="pin-dim"';
+      cls = ' class="pin-glyph pin-dim"';
     }
   }
   // 同引脚多角色共享（非总览）→ 焊盘上方叠小色点（按类型色；xunji/huidu 先例）。

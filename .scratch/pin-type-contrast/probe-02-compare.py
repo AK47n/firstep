@@ -66,12 +66,18 @@ def main() -> int:
 
     only_before = sorted(set(bmap) - set(amap))
     only_after = sorted(set(amap) - set(bmap))
+    # ⚠ **配方漂移**：自动绑定的落点会变一格（同一个角色这一发绑上了、那一发是"默认"），
+    #   于是某一格只在改前/改后一侧出现。`improve` 模式下如实记账、**不计入判据**
+    #   （判据看的是"同键的那些格有没有变差"）；`same` 模式下它仍是硬差异（那一单要求逐格可配）。
+    drift_note = (mode == "improve")
     if only_before:
-        out.append(f"⚠ 只在改前出现的键 {len(only_before)} 个（改后没量到同一格）：")
+        out.append(f"{'⚠ 配方漂移' if drift_note else '⚠'} 只在改前出现的键 {len(only_before)} 个"
+                   + ("（不计入判据）" if drift_note else "（改后没量到同一格）") + "：")
         for k in only_before[:12]:
             out.append(f"    {k}")
     if only_after:
-        out.append(f"⚠ 只在改后出现的键 {len(only_after)} 个：")
+        out.append(f"{'⚠ 配方漂移' if drift_note else '⚠'} 只在改后出现的键 {len(only_after)} 个"
+                   + ("（不计入判据）" if drift_note else "") + "：")
         for k in only_after[:12]:
             out.append(f"    {k}")
 
@@ -113,10 +119,15 @@ def main() -> int:
 
         rb, ra = ratios(read_b), ratios(read_a)
         keys = sorted(set(rb) | set(ra))
-        worst, stats = [], {"变好": 0, "没变": 0, "变差": 0, "未达阈值": 0}
+        worst = []
+        drift = []          # 只在改前/改后一侧出现的键：**配方漂移**（自动绑定的落点会变一格），不计入判据
+        stats = {"变好": 0, "没变": 0, "变差": 0, "未达阈值": 0}
         for k in keys:
             vb = sorted(rb.get(k, []))
             va = sorted(ra.get(k, []))
+            if not vb or not va:
+                drift.append(k)
+                continue
             if len(vb) != len(va):
                 worst.append((k, f"格数不同（改前 {len(vb)} / 改后 {len(va)}）"))
                 continue
@@ -139,8 +150,16 @@ def main() -> int:
         if mode == "improve":
             stats_txt += f"、未达阈值 {stats['未达阈值']}"
         out.append(f"真像素读数逐格对照（{len(keys)} 个键）：{stats_txt}")
-        if mode == "improve" and stats["变差"] == 0 and stats["未达阈值"] == 0:
-            out.append("✅ 没有一格变差，且每格都过了各自阈值")
+        if drift:
+            out.append(f"⚠ 配方漂移（只在改前/改后一侧出现的键，**不计入判据**）：{len(drift)} 处")
+            for k in drift[:10]:
+                side = "改前" if k in rb else "改后"
+                out.append(f"  {k}：只在{side}那一发量到（自动绑定的落点变了）")
+        if mode == "improve" and stats["变差"] == 0 and stats["未达阈值"] == 0 and not drift:
+            out.append("✅ 没有一格变差、没有一格未达阈值，且两发量到的是同一批格")
+        elif mode == "improve" and stats["变差"] == 0 and stats["未达阈值"] == 0:
+            out.append("✅ **已量到的格**没有一格变差、没有一格未达阈值"
+                       "（上列配方漂移的那些格这一发没量到——不拿它当通过）")
         for k, why in worst[:40]:
             out.append(f"  {k}：{why}")
     else:
@@ -153,7 +172,7 @@ def main() -> int:
     print(body.encode("utf-8", "replace").decode("utf-8", "replace"))
     print(f"\n[落盘] {dest}")
     ok = not only_before and not only_after and not diffs and not worst if mode == "same" \
-        else not only_before and not only_after and not worst
+        else not worst
     print(f"判定：{'✅ 通过' if ok else '⚠ 有差异，见上'}")
     return 0
 

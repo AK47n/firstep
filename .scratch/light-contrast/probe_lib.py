@@ -483,7 +483,7 @@ def defined_token_names(css: str) -> set[str]:
 # 两侧共用一张**行为向量表**（`THEME_COVERAGE_VECTORS`），由 `tests/test_contrast_mirror.py` 钉住。
 # ===========================================================================
 
-THEME_COLOR_VALUE_RE = re.compile(r"^(#[0-9a-fA-F]{3,8}|rgba?\([^)]*\))$")
+THEME_COLOR_VALUE_RE = re.compile(r"(#[0-9a-fA-F]{3,8}\b|rgba?\(|gradient\()")
 THEME_GRADIENT_RE = re.compile(r"gradient\(")
 #: 刻意两主题同值的颜色族（`[族名, 中文理由]`）：今天为空（盘点过全站颜色族，没有一族是这种意图）
 THEME_INDEPENDENT_FAMILIES: list[tuple[str, str]] = []
@@ -503,9 +503,13 @@ def theme_block_token_names(css: str) -> dict[str, set[str]]:
 
 
 def value_looks_like_color(raw: str | None, theme: str, tok: "Tokens") -> bool:
-    """这个取值是不是"颜色"：解得出色 → 是；原串含 `gradient(` → 是；其余（尺寸 / 字体栈）→ 否。"""
+    """这个取值是不是"颜色"：值里**出现**颜色 → 是；否则看 `var()` 链解不解得出色。
+
+    ⚠ 两条都试（与 JS 侧逐字同源）：复合值里带色的（阴影 / 光晕）不能漏——按"整串就是一个颜色"
+    判会把 `--shadow` / `--ambient` 划进非颜色族，那就是"静默不判"。
+    """
     s = (raw or "").strip()
-    if THEME_COLOR_VALUE_RE.match(s):
+    if THEME_COLOR_VALUE_RE.search(s):
         return True
     if THEME_GRADIENT_RE.search(s):
         return True
@@ -513,14 +517,36 @@ def value_looks_like_color(raw: str | None, theme: str, tok: "Tokens") -> bool:
     return bool(m) and tok.value(m.group(1), theme) is not None
 
 
+def family_inventory(css: str, tok: "Tokens | None" = None) -> dict[str, dict]:
+    """**族盘点**（腿⑪ 的取数口，读数与判据共用同一份）：`{族: {tokens, colors, missing_light}}`。
+
+    `colors` = 这一族里的**颜色令牌**；`missing_light` = 亮色块里没有**自己的**定义的那些。
+    探针与判据都走这一条，**别再自己重算**（双轴评审整改：`probe-05` 曾经自带第三份口径）。
+    """
+    tok = tok or Tokens(css)
+    blocks = theme_block_token_names(css)
+    fams: dict[str, list[str]] = {}
+    for name in sorted(blocks["dark"]):
+        fams.setdefault(token_family_of(name), []).append(name)
+    out: dict[str, dict] = {}
+    for fam, names in sorted(fams.items()):
+        colors = [n for n in names if value_looks_like_color(tok.raw["dark"].get(n), "dark", tok)]
+        out[fam] = {"tokens": names, "colors": colors,
+                    "missing_light": [n for n in colors if n not in blocks["light"]]}
+    return out
+
+
+def color_family_names(css: str, tok: "Tokens | None" = None) -> list[str]:
+    """含颜色令牌的族名（判据的射程）。"""
+    return [f for f, info in family_inventory(css, tok).items() if info["colors"]]
+
+
 def theme_coverage_problems(css: str, exempt=None, tok: "Tokens | None" = None) -> list[str]:
     """腿⑪ 的判据（吃 css 文本 + 豁免表 → 返回问题清单）。与 JS 侧 `themeCoverageProblems` 同源。"""
     out: list[str] = []
     tok = tok or Tokens(css)
+    inv = family_inventory(css, tok)
     blocks = theme_block_token_names(css)
-    fams: dict[str, set[str]] = {}
-    for name in sorted(blocks["dark"]):
-        fams.setdefault(token_family_of(name), set()).add(name)
     exempt_fams: set[str] = set()
     for row in (THEME_INDEPENDENT_FAMILIES if exempt is None else exempt):
         if not isinstance(row, (list, tuple)) or len(row) != 2:
@@ -533,20 +559,19 @@ def theme_coverage_problems(css: str, exempt=None, tok: "Tokens | None" = None) 
             out.append(f"亮色覆盖豁免项写**族名**（不带 *）：{fam}")
         exempt_fams.add(fam)
     for fam in sorted(exempt_fams):
-        if fam not in fams:
+        if fam not in inv:
             out.append(f"亮色覆盖豁免项在盘上找不到这个族：{fam}")
-    for fam, names in sorted(fams.items()):
-        colors = [n for n in sorted(names) if value_looks_like_color(tok.raw["dark"].get(n), "dark", tok)]
-        if not colors:
+    for fam, info in inv.items():
+        if not info["colors"]:
             continue
-        missing = [n for n in colors if n not in blocks["light"]]
+        missing = info["missing_light"]
         if fam in exempt_fams:
             if not missing:
                 out.append(f"亮色覆盖豁免项「{fam}」在盘上已经成套了——摘掉它（豁免只留给真不成套的族）")
             continue
         if missing:
             out.append(f"颜色族「{fam}」在亮色块里没有成套覆盖：漏了 {'、'.join(missing)}"
-                       f"（这一族共 {len(colors)} 个色件）——补上亮色值，或在 "
+                       f"（这一族共 {len(info['colors'])} 个色件）——补上亮色值，或在 "
                        f"THEME_INDEPENDENT_FAMILIES 里登记理由")
     for name in sorted(blocks["light"]):
         if name not in blocks["dark"]:
@@ -569,6 +594,10 @@ THEME_COVERAGE_VECTORS = [
      ["", "  :root {", "    --vecc-h: 8px;", "    --vecc-font: monospace;", "  }",
       '  html[data-theme="light"] {', "  }"],
      "", 0],
+    ["**复合值里带色**也算颜色（阴影 / 光晕那类；双轴评审整改）",
+     ["", "  :root {", "    --vecc2-shadow: 0 1px 0 rgba(0, 0, 0, .1);", "  }",
+      '  html[data-theme="light"] {', "  }"],
+     "", 1],
     ["亮色块里独有 ⇒ 畸形",
      ["", "  :root {", "    --vecd: #111111;", "  }",
       '  html[data-theme="light"] {', "    --vecd: #eeeeee;", "    --vecd-extra: #dddddd;", "  }"],

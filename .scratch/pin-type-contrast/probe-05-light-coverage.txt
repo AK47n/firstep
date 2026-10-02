@@ -2,10 +2,11 @@
 引脚配色 04 · 亮色覆盖盘点（腿⑪：颜色族必须两主题成套）
 ====================================================================================================
   `:root` 令牌 122 个；亮色块另有定义 99 个；亮色独有（畸形）0 个 []
-  族合计 28：颜色族 **19** / 非颜色族 9（不判：--ambient、--dur、--ease、--fs、--header、--mono、--radius、--shadow、--space）
+  族合计 28：颜色族 **21** / 非颜色族 7（不判：--dur、--ease、--fs、--header、--mono、--radius、--space）
 
   颜色族            色件数  成员（⭐ = 亮色块里没有自己的定义）
-  --accent         5  --accent、--accent-dark、--accent-hi、--accent-lo、--accent-text
+  --accent         6  --accent、--accent-dark、--accent-dim、--accent-hi、--accent-lo、--accent-text
+  --ambient        1  --ambient-glow
   --bg             1  --bg
   --border         2  --border、--border-strong
   --bracket        8  --bracket-rainbow-0、--bracket-rainbow-1、--bracket-rainbow-2、--bracket-rainbow-3、--bracket-rainbow-4、--bracket-rainbow-5、--bracket-rainbow-6、--bracket-rainbow-7
@@ -21,6 +22,7 @@
   --pin           27  --pin-adc、--pin-adc-dim、--pin-adc-text、--pin-enc、--pin-enc-dim、--pin-enc-text、--pin-exti、--pin-exti-dim、--pin-exti-text、--pin-fixed-pad、--pin-gpio、--pin-gpio-dim、--pin-gpio-text、--pin-i2c、--pin-i2c-dim、--pin-i2c-text、--pin-pad、--pin-pcb、--pin-pwm、--pin-pwm-dim、--pin-pwm-text、--pin-spi、--pin-spi-dim、--pin-spi-text、--pin-uart、--pin-uart-dim、--pin-uart-text
   --power          1  --power
   --purple         3  --purple-dim、--purple-grad、--purple-text
+  --shadow         8  --shadow-card、--shadow-card-hover、--shadow-header、--shadow-item、--shadow-lift、--shadow-pop、--shadow-summary、--shadow-toast
   --text           1  --text
   --tok           10  --tok-attr、--tok-com、--tok-const、--tok-fn、--tok-kw、--tok-num、--tok-pre、--tok-str、--tok-tag、--tok-val
   --warn           4  --warn、--warn-border、--warn-dim、--warn-text
