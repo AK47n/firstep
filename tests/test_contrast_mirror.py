@@ -375,6 +375,55 @@ def test_token_face_vectors_match(js, py):
         )
 
 
+def test_theme_coverage_match(js, py):
+    """⑮ **腿⑪ 的颜色族亮色覆盖**（工单 `pin-type-contrast/04`）：三条口径两侧同源。
+
+    这一腿判的是"**族**"（名字第一段）与"**成套**"（亮色块里有自己的定义）两件事，
+    两侧只要有一边口径不同（按令牌算 / 合并两块算 / 把尺寸族也算进来），
+    读数与闸门就会各答各的——所以正则、豁免表、**行为向量表**三件都钉住。
+    """
+    import re as _re
+
+    for name in ("THEME_COLOR_VALUE_RE", "THEME_GRADIENT_RE"):
+        js_rx = _norm(_js_regex(js, name))
+        py_rx = _norm(getattr(py, name).pattern)
+        assert js_rx == py_rx, (
+            f"{name} 两侧不一致：「颜色令牌」的判定会分叉（腿绿而读数红）：\n"
+            f"  JS     : {js_rx!r}\n  Python : {py_rx!r}"
+        )
+    # 豁免表（[族名, 理由]）：逐条一致（含"今天为空"这件事）
+    m = _re.search(r"const THEME_INDEPENDENT_FAMILIES = \[([\s\S]*?)\n\];", js)
+    assert m, "守卫里找不到 `const THEME_INDEPENDENT_FAMILIES = [...];`"
+    block = "\n".join(ln.split("//")[0].rstrip() for ln in m.group(1).splitlines())
+    js_rows = [list(r) for r in _re.findall(r'\["([^"]*)",\s*"([^"]*)"\]', block)]
+    py_rows = [list(r) for r in py.THEME_INDEPENDENT_FAMILIES]
+    assert js_rows == py_rows, f"亮色覆盖豁免表两侧不一致：JS {js_rows} / Python {py_rows}"
+    # 行为向量表：说明 / 行数组 / 豁免族 / 期望条数 四格逐条一致，且两侧都算得出同样的结果
+    m = _re.search(r"const THEME_COVERAGE_VECTORS = \[([\s\S]*?)\n\];", js)
+    assert m, "守卫里找不到 `const THEME_COVERAGE_VECTORS = [...];`"
+    # ⚠ 行数组里**自己带方括号**（`html[data-theme="light"]`），所以内层用非贪婪 `[\s\S]*?`
+    #   锚到"后面紧跟着豁免串 + 数字"，别用 `[^\]]*`（那会在第一个 `]` 处断掉）。
+    js_vec = _re.findall(
+        r'\["((?:[^"\\]|\\.)*)",\s*\[([\s\S]*?)\],\s*"([^"]*)",\s*(\d+)\]', m.group(1))
+    quoted = r'(?:"((?:[^"\\]|\\.)*)"|\'((?:[^\'\\]|\\.)*)\')'
+    js_vec = [(why, [a or b for a, b in _re.findall(quoted, lines)], exempt, want)
+              for why, lines, exempt, want in js_vec]
+    py_vec = [(why, list(lines), exempt, str(want))
+              for why, lines, exempt, want in py.THEME_COVERAGE_VECTORS]
+    assert len(js_vec) >= 5, f"亮色覆盖向量表只解析出 {len(js_vec)} 条（格式变了？）"
+    assert [v[0] for v in js_vec] == [v[0] for v in py_vec], "向量表的说明列两侧不一致"
+    assert [v[1] for v in js_vec] == [v[1] for v in py_vec], "向量表的 CSS 行数组两侧不一致"
+    assert [v[2] for v in js_vec] == [v[2] for v in py_vec], "向量表的豁免列两侧不一致"
+    assert [v[3] for v in js_vec] == [v[3] for v in py_vec], "向量表的期望条数两侧不一致"
+    for why, lines, exempt, want in py_vec:
+        got = py.theme_coverage_problems("\n".join(lines),
+                                         [(exempt, "两侧同源自证")] if exempt else [])
+        assert len(got) == int(want), (
+            f"亮色覆盖向量表在 Python 侧算出不同答案：{why} —— 期望 {want} 条，实际 {len(got)} 条"
+            f"（{'；'.join(got) or '无'}）"
+        )
+
+
 def test_gradient_ends_match(js, py):
     """⑪ **渐变端点**表：主题 / 前景令牌 / 底列表 三格逐条一致（02 单补的盲区检查）。"""
     m = re.search(r"const CONTRAST_GRADIENT_ENDS = \[([\s\S]*?)\n\];", js)

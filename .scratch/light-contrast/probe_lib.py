@@ -474,6 +474,128 @@ def defined_token_names(css: str) -> set[str]:
 
 
 # ===========================================================================
+# 腿⑪：颜色族的**亮色覆盖成套**（工单 pin-type-contrast/04，与 JS 守卫逐字同源）
+#
+# 为什么要这条腿：`--pin-fixed-pad` 那次漏是人眼发现的——亮色块只覆盖了焊盘三件，
+# 其余色件沿用暗色值 ⇒ spi / exti 在浅色下只有 1.45。口径三条见 JS 侧那段说明块：
+#   · 族 = 名字第一段；· 颜色令牌 = 值（沿 var 链解到底）是 hex / rgb(a) / 含 gradient；
+#   · **成套 = 亮色块里有它自己的定义**（靠继承不算）。
+# 两侧共用一张**行为向量表**（`THEME_COVERAGE_VECTORS`），由 `tests/test_contrast_mirror.py` 钉住。
+# ===========================================================================
+
+THEME_COLOR_VALUE_RE = re.compile(r"^(#[0-9a-fA-F]{3,8}|rgba?\([^)]*\))$")
+THEME_GRADIENT_RE = re.compile(r"gradient\(")
+#: 刻意两主题同值的颜色族（`[族名, 中文理由]`）：今天为空（盘点过全站颜色族，没有一族是这种意图）
+THEME_INDEPENDENT_FAMILIES: list[tuple[str, str]] = []
+
+
+def token_family_of(name: str) -> str:
+    """令牌名的**族** = 第一段（`--pin-gpio-text` → `--pin`；读数里写成 `--pin-*`）。"""
+    return "--" + name[2:].split("-")[0]
+
+
+def theme_block_token_names(css: str) -> dict[str, set[str]]:
+    """两个令牌块里**各自**定义过的令牌名（**不合并**——"有没有自己的亮色定义"正是腿⑪ 要问的）。"""
+    return {
+        "dark": {n for body in BLOCK_ROOT.findall(css) for n, _v in TOKEN_RE.findall(body)},
+        "light": {n for body in BLOCK_LIGHT.findall(css) for n, _v in TOKEN_RE.findall(body)},
+    }
+
+
+def value_looks_like_color(raw: str | None, theme: str, tok: "Tokens") -> bool:
+    """这个取值是不是"颜色"：解得出色 → 是；原串含 `gradient(` → 是；其余（尺寸 / 字体栈）→ 否。"""
+    s = (raw or "").strip()
+    if THEME_COLOR_VALUE_RE.match(s):
+        return True
+    if THEME_GRADIENT_RE.search(s):
+        return True
+    m = re.match(r"^var\((--[a-z0-9-]+)", s)
+    return bool(m) and tok.value(m.group(1), theme) is not None
+
+
+def theme_coverage_problems(css: str, exempt=None, tok: "Tokens | None" = None) -> list[str]:
+    """腿⑪ 的判据（吃 css 文本 + 豁免表 → 返回问题清单）。与 JS 侧 `themeCoverageProblems` 同源。"""
+    out: list[str] = []
+    tok = tok or Tokens(css)
+    blocks = theme_block_token_names(css)
+    fams: dict[str, set[str]] = {}
+    for name in sorted(blocks["dark"]):
+        fams.setdefault(token_family_of(name), set()).add(name)
+    exempt_fams: set[str] = set()
+    for row in (THEME_INDEPENDENT_FAMILIES if exempt is None else exempt):
+        if not isinstance(row, (list, tuple)) or len(row) != 2:
+            out.append(f"亮色覆盖豁免项形状不对（应为 [族名, 理由]）：{row!r}")
+            continue
+        fam, why = row
+        if not why or not str(why).strip():
+            out.append(f"亮色覆盖豁免项必须写理由：{fam}")
+        if "*" in str(fam):
+            out.append(f"亮色覆盖豁免项写**族名**（不带 *）：{fam}")
+        exempt_fams.add(fam)
+    for fam in sorted(exempt_fams):
+        if fam not in fams:
+            out.append(f"亮色覆盖豁免项在盘上找不到这个族：{fam}")
+    for fam, names in sorted(fams.items()):
+        colors = [n for n in sorted(names) if value_looks_like_color(tok.raw["dark"].get(n), "dark", tok)]
+        if not colors:
+            continue
+        missing = [n for n in colors if n not in blocks["light"]]
+        if fam in exempt_fams:
+            if not missing:
+                out.append(f"亮色覆盖豁免项「{fam}」在盘上已经成套了——摘掉它（豁免只留给真不成套的族）")
+            continue
+        if missing:
+            out.append(f"颜色族「{fam}」在亮色块里没有成套覆盖：漏了 {'、'.join(missing)}"
+                       f"（这一族共 {len(colors)} 个色件）——补上亮色值，或在 "
+                       f"THEME_INDEPENDENT_FAMILIES 里登记理由")
+    for name in sorted(blocks["light"]):
+        if name not in blocks["dark"]:
+            out.append(f"亮色块里定义了 `:root` 里没有的令牌：{name}（两块必须成套——这多半是笔误）")
+    return out
+
+
+#: **行为向量表**（两侧共用，照 `CONTRAST_TOKEN_VALUE_VECTORS` 的先例）：
+#: 形状 `[说明, CSS 行数组, 豁免族名(空串 = 不豁免), 期望问题条数]`。
+THEME_COVERAGE_VECTORS = [
+    ["整族成套 ⇒ 无问题",
+     ["", "  :root {", "    --veca: #111111;", "    --veca-dim: rgba(17, 17, 17, .2);", "  }",
+      '  html[data-theme="light"] {', "    --veca: #eeeeee;", "    --veca-dim: rgba(238, 238, 238, .2);", "  }"],
+     "", 0],
+    ["漏一个色件 ⇒ 一条问题（`--pin-fixed-pad` 那次的形态）",
+     ["", "  :root {", "    --vecb: #111111;", "    --vecb-dim: rgba(17, 17, 17, .2);", "  }",
+      '  html[data-theme="light"] {', "    --vecb: #eeeeee;", "  }"],
+     "", 1],
+    ["非颜色族（尺寸 / 字体栈）不判",
+     ["", "  :root {", "    --vecc-h: 8px;", "    --vecc-font: monospace;", "  }",
+      '  html[data-theme="light"] {', "  }"],
+     "", 0],
+    ["亮色块里独有 ⇒ 畸形",
+     ["", "  :root {", "    --vecd: #111111;", "  }",
+      '  html[data-theme="light"] {', "    --vecd: #eeeeee;", "    --vecd-extra: #dddddd;", "  }"],
+     "", 1],
+    ["豁免命中 ⇒ 不判（刻意两主题同值的族）",
+     ["", "  :root {", "    --vece: #111111;", "  }", '  html[data-theme="light"] {', "  }"],
+     "--vece", 0],
+    ["豁免了却已成套 ⇒ 死条仍判红",
+     ["", "  :root {", "    --vecf: #111111;", "  }",
+      '  html[data-theme="light"] {', "    --vecf: #eeeeee;", "  }"],
+     "--vecf", 1],
+]
+
+
+def theme_coverage_vector_problems(vectors=None) -> list[str]:
+    """向量表的自证（吃向量表 → 返回问题清单；红证要喂坏的）。"""
+    out: list[str] = []
+    for why, lines, exempt_fam, want in (THEME_COVERAGE_VECTORS if vectors is None else vectors):
+        exempt = [(exempt_fam, "向量表：假设这是刻意两主题同值的族")] if exempt_fam else []
+        got = theme_coverage_problems("\n".join(lines), exempt)
+        if len(got) != int(want):
+            out.append(f"亮色覆盖向量表不符：{why} —— 算出 {len(got)} 条问题"
+                       f"（{'；'.join(got) or '无'}），表里要求 {want} 条")
+    return out
+
+
+# ===========================================================================
 # 规则切分与取色对
 # ===========================================================================
 

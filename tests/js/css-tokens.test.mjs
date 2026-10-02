@@ -26,6 +26,11 @@
 //   （`style="color:${…}"`）——这类写法此前是腿⑨ 的盲区（正则只认 `var(--x)` 字面），
 //   引脚类型配色整族就是这么"从没被任何判据看过"的。豁免只有一处：总览模式的模块配色
 //   （运行时按序分配的 hex 序列，不是令牌），登记在 `JS_INLINE_TEMPLATE_EXEMPT`。
+// ⑪**颜色族的亮色覆盖必须成套**（工单 pin-type-contrast/04）：`THEME_INDEPENDENT_FAMILIES`
+//   （刻意两主题同值的族，今天为空）+ 腿⑪（正向：颜色族的每个成员都要在亮色块里有自己的定义 /
+//   反向：亮色块里独有的令牌 = 畸形 / 豁免表双向对账 / 豁免项形状）。
+//   ⚠ **腿⑩ 与腿⑪ 是两件事**：⑩ 管"名字有没有人定义"，⑪ 管"**这一族在亮色下有没有自己的值**"
+//   （`--pin-fixed-pad` 那次漏就是后者：名字有定义、亮色块没有）。
 // 静态标记守卫，直接读 index.html。
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -2461,6 +2466,194 @@ test("对比度（工单 contrast-residue/02，第十条腿）：无兜底的 `v
     "渲染方里未定义的无兜底 var() 没被判出来——扫描面漏了 `static/js/**`");
 });
 
+// ===========================================================================
+// 腿⑪：**颜色族的亮色覆盖必须成套**（工单 pin-type-contrast/04）
+//
+// **为什么要这条腿**：`--pin-fixed-pad` 那次漏（`contrast-residue/03`）是**人眼**发现的——
+// 亮色块只覆盖了焊盘三件，其余 16 个色件沿用暗色值 ⇒ spi / exti 在浅色下压到底上只有 1.45。
+// 当时的边界写进了注释（"没立'哪些族必须成套'的判据"），这一条把它补上：
+// **漏一个色件 = 那一格永远没人算**（"解不出"在判据里的表现是静默不判）。
+//
+// **口径三条（写死，别改轻）**：
+//   · **族 = 名字的第一段**（`--pin-gpio-text` → `--pin-*`）——族是"一起换主题的一套色"，
+//     不是单个令牌；
+//   · **颜色令牌 = 值（沿 `var()` 链解到底）是 hex / `rgb()` / `rgba()`，或原串含 `gradient(`**；
+//     尺寸 / 动效 / 字体栈那些族（`--fs-*` / `--space-*` / `--radius-*` / `--dur-*` / `--ease-*` /
+//     `--mono` / `--header-*`）**本来就不该两主题各写一遍**，判据不碰它们；
+//   · **"成套" = 亮色块里**有**这个令牌自己的定义**（靠继承 `:root` 不算）——
+//     这一条正是 `--pin-fixed-pad` 那次漏的形态。
+//
+// **判据四条**（本体在 `themeCoverageProblems`）：
+//   ① 正向：含颜色令牌的族，每个色件都要在亮色块里有自己的定义；
+//   ② 反向：亮色块里定义了、`:root` 里没有的令牌 = 畸形（两块必须成套）；
+//   ③ 豁免表 `THEME_INDEPENDENT_FAMILIES` 双向对账（登记了却已成套 = 死条，同样判红）；
+//   ④ 豁免项形状（前缀 + 非空中文理由）。
+// ===========================================================================
+
+/** 颜色令牌的取值形态（**沿 `var()` 链解到底**再判，见 `valueLooksLikeColor`）。 */
+const THEME_COLOR_VALUE_RE = /^(#[0-9a-fA-F]{3,8}|rgba?\([^)]*\))$/;
+/** 渐变也算颜色（`linear-gradient(...)` 是画出来的颜色，不是尺寸）。 */
+const THEME_GRADIENT_RE = /gradient\(/;
+
+/**
+ * **刻意两主题同值**的颜色族（豁免登记，`[族名, 中文理由]`）。
+ *
+ * 今天是**空的**：盘点过全站 28 个颜色族，没有一族是"两主题同值"的设计意图
+ * （不覆盖的那 7 个族全是尺寸 / 动效 / 字体栈，压根不在判据里）。
+ * 它是**出路**不是档位：真要豁免必须写清"为什么这一族两主题同值"。
+ */
+const THEME_INDEPENDENT_FAMILIES = [
+];
+
+/** 令牌名的**族** = 第一段（`--pin-gpio-text` → `--pin`；读数里写成 `--pin-*`）。 */
+function tokenFamilyOf(name) {
+  return "--" + name.slice(2).split("-")[0];
+}
+
+/** 两个令牌块里**各自**定义过的令牌名（**不合并**——"有没有自己的亮色定义"正是本腿要问的）。 */
+function themeBlockTokenNames(css) {
+  const names = (re) => {
+    const out = new Set();
+    for (const m of css.matchAll(re)) {
+      for (const t of m[1].matchAll(CONTRAST_TOKEN_RE)) out.add(t[1]);
+    }
+    return out;
+  };
+  return { dark: names(CONTRAST_ROOT_RE), light: names(CONTRAST_LIGHT_RE) };
+}
+
+/** 这个取值是不是"颜色"：解得出色 → 是；原串含 `gradient(` → 是；其余（尺寸 / 字体栈）→ 否。 */
+function valueLooksLikeColor(raw, theme, tables) {
+  const s = String(raw == null ? "" : raw).trim();
+  if (THEME_COLOR_VALUE_RE.test(s)) return true;
+  if (THEME_GRADIENT_RE.test(s)) return true;
+  const m = /^var\((--[a-z0-9-]+)/.exec(s);
+  // `var()` 链解得出色 = 它是个颜色（解不出 = 名字坏死，那是腿⑩ 的事，这里不重复判）
+  return m ? tokenValue(m[1], theme, tables) !== null : false;
+}
+
+/** 腿⑪ 的判据（吃 css 文本 + 豁免表 → 返回问题清单；豁免表可注入，红证要喂坏的）。 */
+function themeCoverageProblems(css, exempt = THEME_INDEPENDENT_FAMILIES) {
+  const out = [];
+  const tables = contrastTokenTables(css);
+  const blocks = themeBlockTokenNames(css);
+  const fams = new Map();                       // 族 → 成员（`:root` 侧的名字）
+  for (const name of blocks.dark) {
+    const fam = tokenFamilyOf(name);
+    if (!fams.has(fam)) fams.set(fam, new Set());
+    fams.get(fam).add(name);
+  }
+  const exemptFams = new Set();
+  for (const row of exempt) {
+    if (!Array.isArray(row) || row.length !== 2) {
+      out.push(`亮色覆盖豁免项形状不对（应为 [族名, 理由]）：${JSON.stringify(row)}`);
+      continue;
+    }
+    const [fam, why] = row;
+    if (!why || !String(why).trim()) out.push(`亮色覆盖豁免项必须写理由：${fam}`);
+    if (String(fam).includes("*")) out.push(`亮色覆盖豁免项写**族名**（不带 *）：${fam}`);
+    exemptFams.add(fam);
+  }
+  for (const fam of exemptFams) {
+    if (!fams.has(fam)) out.push(`亮色覆盖豁免项在盘上找不到这个族：${fam}`);
+  }
+  for (const [fam, names] of fams) {
+    const colors = [...names].filter((n) => valueLooksLikeColor(tables.dark[n], "dark", tables));
+    if (!colors.length) continue;               // 非颜色族：不在射程（尺寸 / 动效 / 字体栈）
+    const missing = colors.filter((n) => !blocks.light.has(n));
+    if (exemptFams.has(fam)) {
+      if (!missing.length) {
+        out.push(`亮色覆盖豁免项「${fam}」在盘上已经成套了——摘掉它（豁免只留给真不成套的族）`);
+      }
+      continue;
+    }
+    if (missing.length) {
+      out.push(`颜色族「${fam}」在亮色块里没有成套覆盖：漏了 ${missing.join("、")}`
+        + `（这一族共 ${colors.length} 个色件）——补上亮色值，或在 THEME_INDEPENDENT_FAMILIES 里登记理由`
+        + "（漏一个色件 = 那一格沿用暗色值、且没有任何判据会看得见它）");
+    }
+  }
+  for (const name of blocks.light) {
+    if (!blocks.dark.has(name)) {
+      out.push(`亮色块里定义了 \`:root\` 里没有的令牌：${name}（两块必须成套——这多半是笔误）`);
+    }
+  }
+  return out;
+}
+
+/**
+ * **行为向量表**（两侧共用，照 `CONTRAST_TOKEN_VALUE_VECTORS` 的先例）：本腿判的是"族 / 覆盖 /
+ * 豁免"三件事的**行为**，只比正则正文挡不住"一边按族算、一边按令牌算"这类漂移。
+ * 形状：`[说明, CSS 行数组, 豁免族名(空串 = 不豁免), 期望问题条数]`。
+ */
+const THEME_COVERAGE_VECTORS = [
+  ["整族成套 ⇒ 无问题",
+    ["", "  :root {", "    --veca: #111111;", "    --veca-dim: rgba(17, 17, 17, .2);", "  }",
+      '  html[data-theme="light"] {', "    --veca: #eeeeee;", "    --veca-dim: rgba(238, 238, 238, .2);", "  }"],
+    "", 0],
+  ["漏一个色件 ⇒ 一条问题（`--pin-fixed-pad` 那次的形态）",
+    ["", "  :root {", "    --vecb: #111111;", "    --vecb-dim: rgba(17, 17, 17, .2);", "  }",
+      '  html[data-theme="light"] {', "    --vecb: #eeeeee;", "  }"],
+    "", 1],
+  ["非颜色族（尺寸 / 字体栈）不判",
+    ["", "  :root {", "    --vecc-h: 8px;", "    --vecc-font: monospace;", "  }",
+      '  html[data-theme="light"] {', "  }"],
+    "", 0],
+  ["亮色块里独有 ⇒ 畸形",
+    ["", "  :root {", "    --vecd: #111111;", "  }",
+      '  html[data-theme="light"] {', "    --vecd: #eeeeee;", "    --vecd-extra: #dddddd;", "  }"],
+    "", 1],
+  ["豁免命中 ⇒ 不判（刻意两主题同值的族）",
+    ["", "  :root {", "    --vece: #111111;", "  }", '  html[data-theme="light"] {', "  }"],
+    "--vece", 0],
+  ["豁免了却已成套 ⇒ 死条仍判红",
+    ["", "  :root {", "    --vecf: #111111;", "  }",
+      '  html[data-theme="light"] {', "    --vecf: #eeeeee;", "  }"],
+    "--vecf", 1],
+];
+
+/** 向量表的自证（吃向量表与**解析面** → 返回问题清单；红证要喂坏的）。 */
+function themeCoverageVectorProblems(vectors = THEME_COVERAGE_VECTORS,
+  face = { coverage: themeCoverageProblems }) {
+  const out = [];
+  for (const [why, lines, exemptFam, want] of vectors) {
+    const exempt = exemptFam ? [[exemptFam, "向量表：假设这是刻意两主题同值的族"]] : [];
+    const got = face.coverage(lines.join("\n"), exempt);
+    if (got.length !== Number(want)) {
+      out.push(`亮色覆盖向量表不符：${why} —— 算出 ${got.length} 条问题`
+        + `（${got.join("；") || "无"}），表里要求 ${want} 条`);
+    }
+  }
+  return out;
+}
+
+test("对比度（工单 pin-type-contrast/04，第十一条腿）：颜色族的亮色覆盖必须成套", () => {
+  const problems = themeCoverageProblems(html);
+  assert.deepEqual(problems, [], "亮色覆盖不成套：\n" + problems.join("\n"));
+  // 抽取面必须真的抽到东西（族扫描一坏，上面那条会静默变绿）
+  const blocks = themeBlockTokenNames(contrastCss(html));
+  const tables = contrastTokenTables(contrastCss(html));
+  const fams = new Set([...blocks.dark].map(tokenFamilyOf));
+  const colorFams = [...fams].filter((f) =>
+    [...blocks.dark].filter((n) => tokenFamilyOf(n) === f)
+      .some((n) => valueLooksLikeColor(tables.dark[n], "dark", tables)));
+  assert.ok(colorFams.length >= 19,
+    `只扫到 ${colorFams.length} 个颜色族（落地时 19；族合计 28，另 9 个是非颜色族）——族扫描坏了（判据在空转）`);
+  assert.ok(blocks.light.size >= 99,
+    `亮色块只扫到 ${blocks.light.size} 个定义（落地时 99）——亮色块解析面坏了`);
+  // 行为向量表自证 + 负向自证（把它退回"只按令牌算覆盖"的坏口径 → 向量表必须当场红）
+  assert.deepEqual(themeCoverageVectorProblems(), [], "亮色覆盖的行为向量表不符");
+  const naive = (css) => {
+    const t = contrastTokenTables(css);
+    const b = themeBlockTokenNames(css);
+    const out = [];
+    for (const n of b.dark) if (!b.light.has(n)) out.push(`缺 ${n}`);
+    return out;
+  };
+  assert.ok(themeCoverageVectorProblems(THEME_COVERAGE_VECTORS, { coverage: naive }).length >= 2,
+    "负向自证失效：把判据换成「所有令牌都要有亮色定义」的坏口径，向量表竟然没红");
+});
+
 test("对比度（工单 01，第八条腿）：文字色 × 底现算比值，不达标的必须在例外表里登记过", () => {
   // 为什么要有这条腿：守卫此前只管"裸色必须令牌化"——一个比值都不算。于是往样式块里写一条
   // `color: var(--warn)` 压在自己的淡底上（浅色 4.17，低于 AA 4.5），没有任何东西会红。
@@ -2651,7 +2844,7 @@ test("全站推广：动作三级的口径**单源**（主实心 / 危险红描�
     "ghost 类要真的被元素用到——否则'补实一个类'就只是又造了一个死类");
 });
 
-test("全站推广合成红证：九条腿各自都判得红（防'永远绿'的守卫）", () => {
+test("全站推广合成红证：各条腿各自都判得红（防'永远绿'的守卫）", () => {
   // ① 已完工作用域各塞一个越界字号——**锚点只取规则头（不带令牌值）**，锚变了就当场报，
   //    不让这条自检静默空转。三个作用域：
   //      · `hwcheck` = 上一轮的样板页（腿③最早看着的那一页）；
@@ -3363,4 +3556,40 @@ test("对比度（工单 contrast-residue/01）：令牌解析面 = 全部定义
         `${token} 在 ${theme} 主题下解不出——第二块 \`:root\` 没进令牌表（解析面又退回旧口径了）`);
     }
   }
+
+  //    (p) **亮色覆盖成套**（工单 pin-type-contrast/04，腿⑪）：三发真注入 + 一发边界。
+  //        判据吃 `(css, exempt)`，注入点取**真实源码里的锚点**并断言锚点还在（锚变了就当场报）。
+  assert.deepEqual(themeCoverageProblems(css), [], "盘上本来就不该有覆盖问题");
+  //        ① 把亮色块里 `--pin-fixed-pad` 那一行删掉（**历史原样**：contrast-residue/03 之前的样子）
+  //           → 必须点名这一族缺了它；
+  const capAnchor = "    --pin-pad: #d0d7de; --pin-fixed-pad: #afb8c1; --pin-pcb: rgba(26, 127, 55, .07);";
+  if (css.includes(capAnchor)) {
+    const dropped = css.replace(capAnchor,
+      "    --pin-pad: #d0d7de; --pin-pcb: rgba(26, 127, 55, .07);");
+    const probs = themeCoverageProblems(dropped);
+    assert.ok(probs.some((p) => p.includes("--pin") && p.includes("--pin-fixed-pad")),
+      "从亮色块里删掉一个色件没被判出——腿⑪ 在空转（那正是 `--pin-fixed-pad` 那次的形态）");
+  } else {
+    // 锚点变了不是失败，但要**当场说清**：新写法下 `--pin-fixed-pad` 的位置换了，这条自检要跟着改
+    const dropped = css.replace(/--pin-fixed-pad:\s*#afb8c1;\s*/, "");
+    assert.notEqual(dropped, css, "锚点变了（`--pin-fixed-pad` 的亮色定义）—— 这条自检会静默空转");
+    assert.ok(themeCoverageProblems(dropped).some((p) => p.includes("--pin-fixed-pad")),
+      "删掉 `--pin-fixed-pad` 的亮色定义没被判出");
+  }
+  //        ② 亮色块里塞一个 `:root` 没有的令牌 → 畸形；
+  const orphan = css.replace("\n  html[data-theme=\"light\"] {", "\n  html[data-theme=\"light\"] {\n    --tmp-orphan: #123456;");
+  assert.ok(themeCoverageProblems(orphan).some((p) => p.includes("--tmp-orphan") && p.includes("没有的令牌")),
+    "亮色块里独有的令牌没被判出（两块必须成套）");
+  //        ③ 豁免表登记一个**已经成套**的族 → 死条同样判红（豁免不是地毯）；
+  assert.ok(themeCoverageProblems(css, [["--pin", "假装它两主题同值"]])
+    .some((p) => p.includes("已经成套了") && p.includes("摘掉它")),
+    "豁免了却已成套的族没被判出——豁免会变成一条没人懂的地毯");
+  //        ④ **边界**：非颜色族（尺寸 / 字体栈）只在 `:root` 定义**不算问题**（判据不许过宽）；
+  //           ⚠ 注入要落在 `:root`（落在亮色块会撞上"亮色独有 = 畸形"那条，测的就不是这件事了）。
+  const sizeOnly = css.replace("\n  :root {", "\n  :root {\n    --tmp-size-h: 12px;");
+  assert.notEqual(sizeOnly, css, "尺寸族边界用例的注入锚点变了——这条自检会静默空转");
+  const sizeProblems = themeCoverageProblems(sizeOnly);
+  assert.ok(!sizeProblems.some((p) => p.includes("--tmp-size-h") && p.includes("没有成套覆盖")),
+    "尺寸族被当成颜色族判了——判据过宽（`--fs-*` / `--space-*` 那类本来就只定义一次）：\n"
+    + sizeProblems.join("\n"));
 });
