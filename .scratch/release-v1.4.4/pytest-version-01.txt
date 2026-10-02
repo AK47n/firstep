@@ -1,0 +1,8 @@
+# 读数：pytest-version-01
+# 命令：python -m pytest tests/test_changelog.py tests/test_readme.py tests/test_preflight.py -q
+# 工作树：C:\Users\luoji\Desktop\firstep
+# 开始：2026-10-02T09:23:27+08:00
+# 退出码：0
+........................................................................ [ 83%]
+..............                                                           [100%]
+86 passed in 15.11s
